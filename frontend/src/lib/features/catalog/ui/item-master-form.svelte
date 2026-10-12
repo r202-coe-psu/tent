@@ -1125,8 +1125,9 @@
 								<Form.Field {form} name="returnable" class={fieldClass}>
 									<Form.Control>
 										{#snippet children({ props })}
+											<Form.Label class="text-sm font-semibold">เงื่อนไขการคืน</Form.Label>
 											<div
-												class="flex h-11 items-center gap-3 rounded-xl border border-border px-3"
+												class="flex h-11 cursor-pointer items-center gap-3 rounded-xl border border-input bg-background px-3 shadow-xs sm:h-10"
 											>
 												<Checkbox
 													{...props}

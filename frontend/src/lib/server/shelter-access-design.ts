@@ -51,6 +51,25 @@ export const REFERRAL_MANGO_INDEXES = [
 	}
 ];
 
+/** Mango indexes for kiosk pre-registration lookup and report-in (FR-KPC-62..65). */
+export const KIOSK_LOOKUP_MANGO_INDEXES = [
+	{
+		index: { fields: ['type', 'phone'] },
+		name: 'evacuee-type-phone-idx',
+		type: 'json' as const
+	},
+	{
+		index: { fields: ['type', 'person_id.number'] },
+		name: 'evacuee-type-person-id-idx',
+		type: 'json' as const
+	},
+	{
+		index: { fields: ['type', 'household_id'] },
+		name: 'evacuee-type-household-idx',
+		type: 'json' as const
+	}
+];
+
 /** Mango index definitions required by stock_transfer list/find (CR-059). */
 export const TRANSFER_MANGO_INDEXES = [
 	{

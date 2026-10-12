@@ -17,10 +17,11 @@ import {
 	seedSecurityQuestion,
 	type TestUser
 } from './couch';
+import { bangkokToday } from '../../src/lib/utils/date';
 import { IS_REMOTE, RATE_LIMIT_ENFORCED } from './e2e-env';
 import { injectSession, routeBrowserCouchThroughApp } from './login';
 import { publicShelter, teardownShelter, waitForProjection } from './public-cleanup';
-import { createShelterViaUi, setRecaptcha } from './staff-ui';
+import { createShelterViaUi, pinActiveShelter, setRecaptcha } from './staff-ui';
 
 /**
  * Shared steps for the full-stack donation specs (`donation-fullstack*.test.ts`,
@@ -405,13 +406,22 @@ export async function bookAsDonor(page: Page, opts: BookingOptions): Promise<Boo
 
 const routedPages = new WeakSet<Page>();
 
-/** Open stock-donations as `staff`. */
+/**
+ * Open stock-donations as `staff`.
+ *
+ * The active shelter is pinned in localStorage first: the back-office layout re-mounts its
+ * children (`{#key shelterStore.selectedShelterCode}`) when the selection flips from
+ * `undefined` to a code after the shelter list loads. Unpinned, that remount lands after the
+ * tab is visible and resets the sub-tab / detaches forms the test is already filling in.
+ */
 export async function openBackOffice(page: Page, staff: Staff) {
 	if (!routedPages.has(page)) {
 		routedPages.add(page);
 		await routeBrowserCouchThroughApp(page);
 	}
 	await injectSession(page, staff, staff.session);
+	const shelterCode = staff.roles.find((r) => r.startsWith('shelter:'))?.slice('shelter:'.length);
+	if (shelterCode) await pinActiveShelter(page, shelterCode);
 	await page.goto('/back-office/stock-donations');
 	await expect(page.getByRole('tab', { name: /รอการประเมิน/ })).toBeVisible({ timeout: 15_000 });
 }
@@ -474,9 +484,9 @@ export async function ledgerRowsFor(shelterCode: string, donationId: string) {
 
 export type SlotWindow = { from: string; to: string };
 
-/** Local YYYY-MM-DD — the wizard and the slot screen both default to it. */
+/** Asia/Bangkok YYYY-MM-DD — the wizard and the slot screen both default to it. */
 export function todayYmd() {
-	return new Date().toLocaleDateString('sv-SE');
+	return bangkokToday();
 }
 
 /** The public board's line for `itemName` at `shelterCode`, if any. */

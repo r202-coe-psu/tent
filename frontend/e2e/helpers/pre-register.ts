@@ -9,7 +9,7 @@ import { expect, type Locator, type Page } from '@playwright/test';
 export const PRE_REGISTER_PATH = '/pre-register?shelter=unassigned';
 export const SUBMIT_LABEL = 'ยืนยันการลงทะเบียน';
 export const UNASSIGNED_OPTION = /ไม่ระบุศูนย์พักพิง/;
-export const DISCLAIMER_LABEL = /ข้าพเจ้ารับทราบเงื่อนไขการใช้งานระบบ/;
+export const DISCLAIMER_LABEL = /ข้าพเจ้ารับทราบข้อตกลงการใช้งาน/;
 export const SUMMARY_TITLE = 'ตรวจสอบข้อมูลก่อนบันทึก';
 export const JUMP_BUTTON = 'ไปยังช่องที่ต้องแก้';
 

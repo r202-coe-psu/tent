@@ -50,13 +50,26 @@ else
     PYTHON_BIN="$(which python3)"
 fi
 
+# 6.1 Re-enable the label printer queue: CUPS stops it after a paper-out/USB error and it stays
+# stopped across reboots. Never block the kiosk when the printer or queue is missing.
+PRINTER_NAME="${PRINTER_NAME:-$(sed -n 's/^PRINTER_NAME=//p' "$SCRIPT_DIR/.env" 2>/dev/null | tail -1 | tr -d '"'\''[:space:]')}"
+PRINTER_NAME="${PRINTER_NAME:-tent_xprinter}"
+# PRINTER_BACKEND=escpos writes straight to /dev/usb/lpN — there is no CUPS queue to enable.
+PRINTER_BACKEND="${PRINTER_BACKEND:-$(sed -n 's/^PRINTER_BACKEND=//p' "$SCRIPT_DIR/.env" 2>/dev/null | tail -1 | tr -d '"'\''[:space:]')}"
+PRINTER_BACKEND="$(printf '%s' "$PRINTER_BACKEND" | tr '[:upper:]' '[:lower:]')"
+if [ "$PRINTER_BACKEND" != "escpos" ] && command -v cupsenable >/dev/null 2>&1 && lpstat -p "$PRINTER_NAME" >/dev/null 2>&1; then
+    cupsenable "$PRINTER_NAME" >> "$LOG_FILE" 2>&1 || echo "[$(date)] cupsenable $PRINTER_NAME failed (user needs lpadmin group)" >> "$LOG_FILE"
+fi
+
 # 7. Supervisor Loop: รัน main.py หากหลุดหรือปิดตัว ให้เปิดใหม่เสมอเพื่อความต่อเนื่องของ Kiosk
 echo "=== Starting SmartShelter Kiosk at $(date) (PID: $$, Python: $PYTHON_BIN, Flags: $EXTRA_ARGS) ===" >> "$LOG_FILE"
 while true; do
     "$PYTHON_BIN" main.py $EXTRA_ARGS "$@" >> "$LOG_FILE" 2>&1
     EXIT_CODE=$?
-    echo "=== SmartShelter Kiosk process exited (code $EXIT_CODE) at $(date). Restarting in 3s... ===" >> "$LOG_FILE"
-    sleep 3
+    if [ "$EXIT_CODE" -eq 78 ] || [ "$EXIT_CODE" -eq 79 ]; then
+        echo "=== SmartShelter Kiosk stopped: permanent configuration/authentication failure (code $EXIT_CODE). Fix .env and restart. ===" >> "$LOG_FILE"
+        exit "$EXIT_CODE"
+    fi
+    echo "=== SmartShelter Kiosk process exited (code $EXIT_CODE) at $(date). Restarting in ${RESTART_DELAY_SEC:-30}s... ===" >> "$LOG_FILE"
+    sleep "${RESTART_DELAY_SEC:-30}"
 done
-
-

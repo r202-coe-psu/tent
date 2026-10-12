@@ -3,23 +3,26 @@ import logging
 import os
 import sys
 
-from dotenv import dotenv_values, load_dotenv
+from app.config import ScannerConfigError, load_and_validate_config
+from app.manager import (
+    BootstrapAuthError,
+    BootstrapUnavailableError,
+    ScannerClientManager,
+)
 
-from app.manager import ScannerClientManager
 
-def main():
+def main() -> int:
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S"
     )
 
-    # Load .env first as base defaults, then allow system environment variables to override
-    env_file_values = dotenv_values(".env") if os.path.exists(".env") else {}
-    config = {
-        **env_file_values,
-        **os.environ,
-    }
+    try:
+        config = load_and_validate_config(".env")
+    except ScannerConfigError as error:
+        logging.error("Scanner configuration invalid: %s", error)
+        return 78
 
     # Support CLI flags to explicitly force mode
     if "--kiosk" in sys.argv:
@@ -39,16 +42,24 @@ def main():
             if os.path.exists(f"/run/user/{uid}"):
                 os.environ["XDG_RUNTIME_DIR"] = f"/run/user/{uid}"
 
-    if not config.get("DEVICE_SECRET"):
-        logging.warning("⚠️  คำเตือน: ยังไม่ได้ระบุ DEVICE_SECRET ในไฟล์ .env โปรดสร้าง Secret จากหน้า Back Office")
-
     manager = ScannerClientManager(config)
     try:
         asyncio.run(manager.run())
     except KeyboardInterrupt:
         logging.info("Exiting Scanner Client...")
-        sys.exit(0)
+        return 0
+    except BootstrapAuthError:
+        logging.error("Scanner bootstrap rejected; check DEVICE_ID and DEVICE_SECRET")
+        return 79
+    except BootstrapUnavailableError:
+        logging.error("Scanner bootstrap unavailable after bounded retries")
+        return 75
+    except Exception:
+        logging.error("Scanner client stopped before operational startup")
+        return 75
+
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

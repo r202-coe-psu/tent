@@ -20,6 +20,7 @@ export type OccupancyTriple = {
  */
 export const FORECAST_OCCUPANCY_STATUSES = [
 	'pre_registered',
+	'kiosk_registered',
 	'arriving',
 	'active',
 	'room_confirmed',
