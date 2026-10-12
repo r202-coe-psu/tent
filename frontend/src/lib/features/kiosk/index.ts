@@ -35,6 +35,12 @@ export {
 	submitWalkIn,
 	walkInCardMismatch
 } from './application/walk-in-registration';
+export {
+	prepareKioskQrImage,
+	printKioskQrLabels,
+	type KioskQrImage,
+	type KioskQrLabel
+} from './application/kiosk-label-print';
 export { loadKioskHardware } from './application/kiosk-qr-input';
 export { cancelKioskFaceCheck } from './data/kiosk-face.api';
 export type { KioskHardware } from './domain/kiosk-hardware';

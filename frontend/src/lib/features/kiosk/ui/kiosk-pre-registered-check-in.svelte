@@ -9,7 +9,6 @@
 	import UsersRound from '@lucide/svelte/icons/users-round';
 	import QrIdCard from '$lib/components/qr-id-card.svelte';
 	import { Button } from '$lib/components/ui/button/index.js';
-	import { generateQrDataUrl, qrModuleCount } from '$lib/utils/qrcode';
 	import KioskCheckInWizard from './kiosk-check-in-wizard.svelte';
 	import KioskLookupErrorActions from './kiosk-lookup-error-actions.svelte';
 	import PhoneHouseholdPicker from './phone-household-picker.svelte';
@@ -28,10 +27,8 @@
 		KIOSK_LABEL_MM,
 		KIOSK_LABEL_OFFSET_X_MM,
 		KIOSK_LABEL_PADDING_MM,
-		KIOSK_QR_COLOR,
 		kioskLabelPageCss,
-		kioskQrBoxMm,
-		kioskQrPrintSize
+		kioskQrBoxMm
 	} from '../domain/print-label';
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 	import {
@@ -46,9 +43,12 @@
 		type KioskEvacueeSummary,
 		type KioskLookupResponse
 	} from '../data/kiosk-check-in.api';
-	import { printKioskLabels } from '../data/kiosk-print.api';
-	import { renderKioskLabelPng } from '../application/kiosk-label-image';
-	import { runKioskPrintFlow } from '../application/kiosk-print-flow';
+	import {
+		prepareKioskQrImage,
+		printKioskQrLabels,
+		type KioskQrImage,
+		type KioskQrLabel
+	} from '../application/kiosk-label-print';
 	import { buildKioskPhotoPayload } from '../application/kiosk-card-photo';
 	import KioskBackButton from './kiosk-back-button.svelte';
 	import KioskWalkInOffer from './kiosk-walk-in-offer.svelte';
@@ -115,7 +115,7 @@
 	let selectedIds = $state<string[]>([]);
 	let results = $state<KioskCheckInMemberResult[]>([]);
 	let retryableIds = $state<string[]>([]);
-	let qrImages = $state<Record<string, { src: string; sizeMm: number }>>({});
+	let qrImages = $state<Record<string, KioskQrImage>>({});
 	let actionError = $state('');
 	let printError = $state('');
 	let printBusy = $state(false);
@@ -382,18 +382,11 @@
 		generation?: number
 	): Promise<boolean> {
 		printError = '';
-		const nextImages: Record<string, { src: string; sizeMm: number }> = { ...qrImages };
+		const nextImages: Record<string, KioskQrImage> = { ...qrImages };
 		try {
 			for (const item of items) {
 				if (!item.qr_payload || nextImages[item.evacuee_id]) continue;
-				const size = kioskQrPrintSize(await qrModuleCount(item.qr_payload));
-				const src = await generateQrDataUrl(item.qr_payload, {
-					width: size.widthPx,
-					margin: size.margin,
-					color: KIOSK_QR_COLOR
-				});
-				if (!src) throw new Error('QR render returned empty');
-				nextImages[item.evacuee_id] = { src, sizeMm: size.sizeMm };
+				nextImages[item.evacuee_id] = await prepareKioskQrImage(item.qr_payload);
 			}
 			if (generation !== undefined && generation !== lookupGeneration) return false;
 			qrImages = nextImages;
@@ -442,16 +435,19 @@
 			const toPrint = printableResults;
 			if (toPrint.length === 0) return;
 			if (!(await prepareQrImages(toPrint))) return;
+			let labels: KioskQrLabel[];
+			try {
+				labels = toLabels(toPrint);
+			} catch {
+				printError = 'สร้าง label สำหรับพิมพ์ไม่สำเร็จ กรุณาลองอีกครั้ง';
+				return;
+			}
 			printedCount = toPrint.length;
 			printPhase = 'printing';
-			const result = await runKioskPrintFlow({
-				renderLabels: () => renderLabels(toPrint),
-				printLabels: printKioskLabels,
-				// No scanner client (dev browser / browser print mode): print the CSS labels instead.
-				fallbackPrint: async () => {
-					await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-					window.print();
-				}
+			// No scanner client (dev browser / browser print mode): print the CSS labels instead.
+			const result = await printKioskQrLabels(labels, async () => {
+				await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+				window.print();
 			});
 			if (result.kind === 'printed') {
 				printPhase = 'done';
@@ -472,19 +468,17 @@
 		}
 	}
 
-	function renderLabels(items: KioskCheckInMemberResult[]): Promise<string[]> {
-		return Promise.all(
-			items.map((result) => {
-				const person = lookup?.members.find((member) => member.evacuee_id === result.evacuee_id);
-				const qr = qrImages[result.evacuee_id];
-				if (!qr) throw new Error('QR image missing');
-				return renderKioskLabelPng({
-					qrSrc: qr.src,
-					name: labelName(result, person),
-					phone: result.label?.phone ?? null
-				});
-			})
-		);
+	function toLabels(items: KioskCheckInMemberResult[]): KioskQrLabel[] {
+		return items.map((result) => {
+			const person = lookup?.members.find((member) => member.evacuee_id === result.evacuee_id);
+			const qr = qrImages[result.evacuee_id];
+			if (!qr) throw new Error('QR image missing');
+			return {
+				qrSrc: qr.src,
+				name: labelName(result, person),
+				phone: result.label?.phone ?? null
+			};
+		});
 	}
 
 	// Print labels must be a direct child of <body> so print CSS can drop the whole kiosk screen with
