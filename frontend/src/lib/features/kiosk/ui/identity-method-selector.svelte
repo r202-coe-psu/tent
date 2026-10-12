@@ -61,7 +61,7 @@
 			id="method-title"
 			class="text-2xl font-extrabold tracking-tight text-[#0A2647] sm:text-3xl kiosk-portrait:text-4xl"
 		>
-			รายงานตัว
+			ลงทะเบียน
 		</h1>
 		<p class="mt-1 text-base font-medium text-slate-700 kiosk-portrait:mt-2 kiosk-portrait:text-xl">
 			เลือกวิธีค้นหา

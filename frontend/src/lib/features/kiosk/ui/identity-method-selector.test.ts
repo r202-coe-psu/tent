@@ -3,6 +3,15 @@ import { render } from 'svelte/server';
 import IdentityMethodSelector from './identity-method-selector.svelte';
 
 describe('IdentityMethodSelector', () => {
+	it('renders the main heading as ลงทะเบียน', () => {
+		const result = render(IdentityMethodSelector, {
+			props: { contextQuery: '', phoneCheckInEnabled: true, thaidCheckInEnabled: true }
+		});
+
+		expect(result.body).toMatch(/<h1[^>]*id="method-title"[^>]*>\s*ลงทะเบียน\s*<\/h1>/);
+		expect(result.body).not.toMatch(/<h1[^>]*>\s*รายงานตัว\s*<\/h1>/);
+	});
+
 	it('renders all four method cards in a two-column grid when phone check-in is enabled', () => {
 		const result = render(IdentityMethodSelector, {
 			props: { contextQuery: '', phoneCheckInEnabled: true, thaidCheckInEnabled: true }
