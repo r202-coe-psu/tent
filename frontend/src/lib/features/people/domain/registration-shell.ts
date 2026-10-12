@@ -1,3 +1,6 @@
+import { formatPersonName, matchesEvacueePhoneSearch } from './people';
+import type { Evacuee, Household } from './people';
+
 /**
  * Pure helpers for Station 1 shared registration shell (Report-in + walk-in).
  * No I/O — unit-tested.
@@ -27,6 +30,45 @@ export type ResidenceMatchCandidate = ResidenceFields & {
 	_id: string;
 	label?: string | null;
 };
+
+export type PhoneHouseholdMatchCandidate = Household & {
+	matched_member_id: string;
+	matched_member_name: string;
+};
+
+/** Find joinable households from any member or emergency-contact phone. */
+export function suggestHouseholdsByPhone(
+	query: string,
+	evacuees: readonly Evacuee[],
+	households: readonly Household[]
+): PhoneHouseholdMatchCandidate[] {
+	if (!query.trim()) return [];
+
+	const matchedMembers = evacuees.filter((member) => matchesEvacueePhoneSearch(member, query));
+	const matchedByMemberId = new Map(matchedMembers.map((member) => [member._id, member]));
+	const matchedByHousehold = new Map<string, Evacuee>();
+	for (const member of matchedMembers) {
+		const householdId = member.household_id;
+		if (!householdId || matchedByHousehold.has(householdId)) continue;
+		matchedByHousehold.set(householdId, member);
+	}
+
+	return households
+		.filter((household) => isJoinableHouseholdStatus(household.status))
+		.flatMap((household) => {
+			const matched =
+				matchedByHousehold.get(household._id) ??
+				(household.head_evacuee_id ? matchedByMemberId.get(household.head_evacuee_id) : undefined);
+			if (!matched) return [];
+			return [
+				{
+					...household,
+					matched_member_id: matched._id,
+					matched_member_name: formatPersonName(matched)
+				}
+			];
+		});
+}
 
 export type JoinCandidateEvacuee = {
 	_id: string;

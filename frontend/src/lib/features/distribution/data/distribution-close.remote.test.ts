@@ -162,7 +162,7 @@ describe('DistributionRemoteRepository closeBatch (Phase A Step 2)', () => {
 	const WAREHOUSE_CTX: AuthorContext = {
 		shelterCode: 'SH001',
 		createdBy: 'ws-1',
-		roles: ['SH001:warehouse_staff']
+		roles: ['shelter:SH001', 'SH001:warehouse_staff']
 	};
 	const ADMIN_CTX: AuthorContext = {
 		shelterCode: 'SH001',
@@ -172,17 +172,22 @@ describe('DistributionRemoteRepository closeBatch (Phase A Step 2)', () => {
 	const MANAGER_CTX: AuthorContext = {
 		shelterCode: 'SH001',
 		createdBy: 'mgr-1',
-		roles: ['SH001:shelter_manager']
+		roles: ['shelter:SH001', 'SH001:shelter_manager']
 	};
 	const REGISTRATION_CTX: AuthorContext = {
 		shelterCode: 'SH001',
 		createdBy: 'reg-1',
-		roles: ['SH001:registration_staff']
+		roles: ['shelter:SH001', 'SH001:registration_staff']
 	};
 	const SUPPLY_CTX: AuthorContext = {
 		shelterCode: 'SH001',
 		createdBy: 'supply-1',
-		roles: ['SH001:supply_coordinator']
+		roles: ['shelter:SH001', 'SH001:supply_coordinator']
+	};
+	const DISTRIBUTION_CTX: AuthorContext = {
+		shelterCode: 'SH001',
+		createdBy: 'dst-1',
+		roles: ['shelter:SH001', 'SH001:distribution_staff']
 	};
 	const CROSS_SHELTER_WS_CTX: AuthorContext = {
 		shelterCode: 'SH001',
@@ -782,7 +787,7 @@ describe('DistributionRemoteRepository closeBatch (Phase A Step 2)', () => {
 						qty: '1',
 						idempotency_key: 'race-key-1'
 					},
-					REGISTRATION_CTX
+					DISTRIBUTION_CTX
 				)
 			).rejects.toThrow(/must be active to issue goods/);
 
@@ -1906,7 +1911,7 @@ describe('DistributionRemoteRepository closeBatch (Phase A Step 2)', () => {
 					qty: '1',
 					idempotency_key: 'gate-issue-wins'
 				},
-				REGISTRATION_CTX
+				DISTRIBUTION_CTX
 			);
 			await reachedPersist;
 			await expect(repo.closeBatch(batch._id, {}, WAREHOUSE_CTX)).rejects.toThrow(
@@ -2072,7 +2077,7 @@ describe('DistributionRemoteRepository closeBatch (Phase A Step 2)', () => {
 						qty: '41',
 						idempotency_key: 'gate-cleanup-failure'
 					},
-					REGISTRATION_CTX
+					DISTRIBUTION_CTX
 				)
 			).rejects.toThrow();
 			const gate = requireIssueGate(await makeIssueGateDocId(batch._id));
@@ -2104,9 +2109,9 @@ describe('DistributionRemoteRepository closeBatch (Phase A Step 2)', () => {
 				qty: '1',
 				idempotency_key: 'gate-post-write-crash'
 			};
-			await expect(repo.createIssue(input, REGISTRATION_CTX)).rejects.toThrow('ETIMEDOUT');
+			await expect(repo.createIssue(input, DISTRIBUTION_CTX)).rejects.toThrow('ETIMEDOUT');
 			putDocHook = null;
-			await expect(repo.createIssue(input, REGISTRATION_CTX)).resolves.toMatchObject({
+			await expect(repo.createIssue(input, DISTRIBUTION_CTX)).resolves.toMatchObject({
 				batch_id: batch._id
 			});
 			expect(requireIssueGate(await makeIssueGateDocId(batch._id)).pending_claims).toEqual([]);
@@ -2145,7 +2150,7 @@ describe('DistributionRemoteRepository closeBatch (Phase A Step 2)', () => {
 						qty: '1',
 						idempotency_key: 'close-race-window'
 					},
-					REGISTRATION_CTX
+					DISTRIBUTION_CTX
 				)
 			).rejects.toThrow(/closing and cannot accept new issues/);
 

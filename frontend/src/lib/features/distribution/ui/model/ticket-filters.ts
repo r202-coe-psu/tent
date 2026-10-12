@@ -230,3 +230,13 @@ export function filterAndSortRequisitionTickets(
 	const filtered = filterRequisitionTickets(tickets, filters);
 	return sortRequisitionTickets(filtered, sort);
 }
+
+/**
+ * Tickets the Distribution Desk works on: food and supplies only. Transfer tickets complete at
+ * the warehouse (`IN_TRANSIT → COMPLETED`) and must not reach the receive or close-out lists.
+ */
+export function filterDeskTickets<T extends Pick<RequisitionTicket, 'requisition_type'>>(
+	tickets: readonly T[]
+): T[] {
+	return tickets.filter((t) => t.requisition_type === 'food' || t.requisition_type === 'supplies');
+}

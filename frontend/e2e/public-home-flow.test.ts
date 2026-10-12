@@ -82,13 +82,15 @@ test.describe('Public landing: setup and urgent need', { tag: ['@public', '@crit
 			});
 		}).toPass({ intervals: [2_000], timeout: 35_000 });
 
-		await expect(
-			page.getByRole('heading', { name: 'ความต้องการบริจาคด่วน', exact: true })
-		).toBeVisible();
+		await expect(page.getByRole('heading', { name: 'รับบริจาคด่วน', exact: true })).toBeVisible();
 		await expect(page.getByText(NEED_ITEM)).toBeVisible();
 		await expect(page.getByText('ขาดอีก 500 จากเป้า 500')).toBeVisible();
 
-		await page.getByRole('link', { name: 'แจ้งบริจาค' }).click();
+		// Scope to THIS run's shelter: a seeded DB has its own urgent needs, so the bare
+		// "แจ้งบริจาค" link name matches several cards (strict-mode violation).
+		const donateLink = page.locator(`a[href="/donations?shelter=${shelterCode}"]`);
+		await expect(donateLink).toHaveText('แจ้งบริจาค');
+		await donateLink.click();
 		await expect(page).toHaveURL(new RegExp(`/donations\\?shelter=${shelterCode}$`));
 	});
 });
@@ -110,9 +112,7 @@ test.describe(
 				page.getByRole('textbox', { name: 'พิมพ์ชื่อ-นามสกุล, เลขประจำตัว' })
 			).toBeVisible();
 			await expect(page.getByRole('button', { name: 'ค้นหา', exact: true })).toBeVisible();
-			await expect(
-				page.getByRole('heading', { name: 'ความต้องการบริจาคด่วน', exact: true })
-			).toBeVisible();
+			await expect(page.getByRole('heading', { name: 'รับบริจาคด่วน', exact: true })).toBeVisible();
 		});
 
 		test('navigates to the shelter directory and back home', async ({ page }) => {
@@ -187,9 +187,7 @@ test.describe('Public landing: smoke extras', { tag: ['@public', '@smoke'] }, ()
 		await expect(page.getByRole('link', { name: 'Home' })).toBeVisible();
 
 		await page.getByRole('button', { name: 'เปลี่ยนเป็นภาษาไทย' }).click();
-		await expect(
-			page.getByRole('heading', { name: 'ความต้องการบริจาคด่วน', exact: true })
-		).toBeVisible();
+		await expect(page.getByRole('heading', { name: 'รับบริจาคด่วน', exact: true })).toBeVisible();
 	});
 });
 

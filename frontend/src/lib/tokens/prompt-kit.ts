@@ -39,24 +39,28 @@ All downstream semantic and domain tokens inherit directly from Base Primitive T
 - **Text Primary**: #0F172A ('text-slate-900') | **Text Body**: #334155 ('text-slate-700') | **Text Muted**: #64748B ('text-slate-500')
 - **Dividers & Borders**: #E2E8F0 ('border-slate-200/80')
 
-#### 2. Public Portal Essential Services Mapping
-- **1. ค้นหาที่พักพิง (Shelters)**: Destructive Red #DC2626 ('portalServices.shelter': border-red-200, bg-red-50 icon container, primary btn-destructive)
-- **2. ผู้พักพิง (Family Tracing)**: Brand Navy #0A2647 & Cerulean #0284C7 ('portalServices.tracing': border-sky-200, bg-sky-50 icon container, primary btn-primary)
-- **3. บริจาค (Donations)**: Warm Amber #EA580C ('portalServices.donation': border-amber-200, bg-amber-50 icon container, primary amber button)
-- **4. อาสาสมัคร (Volunteers)**: Civic Emerald #059669 ('portalServices.volunteer': border-emerald-200, bg-emerald-50 icon container, primary emerald button)
+#### 2. Public Portal Essential Services Mapping (Domain Colors)
+- **1. ค้นหาที่พักพิง (Shelters)**: Registration domain #124481 ('portalServices.shelter': border-domain-registration-border, bg-domain-registration-subtle icon container, primary 'bg-domain-registration-strong') — NOT red (red is reserved for critical status)
+- **2. ผู้พักพิง (Family Tracing)**: Registration domain #124481 ('portalServices.tracing', same family as Shelters)
+- **3. บริจาค (Donations)**: Donation domain #FF5C00 ('portalServices.donation': border-domain-donation-border, bg-domain-donation-subtle icon container, text-bearing button 'bg-domain-donation-strong' #C2410C)
+- **4. อาสาสมัคร (Volunteers)**: Volunteer domain #059669 ('portalServices.volunteer': border-domain-volunteer-border, bg-domain-volunteer-subtle icon container, text-bearing button 'bg-domain-volunteer-strong' #047857)
 - **Floating Emergency Controls**:
   - 1669 Hotline pill: 'bg-red-600' (Destructive Red)
   - Floating Alert Bell pill ("แจ้งเตือนภัย"): **'bg-[#0284C7]' (Secondary Cerulean)** — *Strictly Secondary Cerulean, not red!*
 
-#### 3. Unified Domain Operations (2-Row Layout Architecture)
-Divide the 5 specialized domain operations into 2 rows for cognitive clarity:
-- **Row 1 (3 items, lg:grid-cols-3)**:
-  1. **โรงครัว & พลังงาน (Kitchen & LPG)**: Warm Orange #EA580C ('border-orange-200 bg-orange-50 text-orange-900', '.badge-kitchen', '.card-ops-kitchen')
-  2. **ครอบครัวและกลุ่มเปราะบาง (Family Care)**: Soft Rose #E11D48 ('border-rose-200 bg-rose-50 text-rose-900', '.badge-family', '.card-ops-family')
-  3. **ผู้บริจาค & เสบียงประชาชน (Donors & Public)**: Civic Cerulean #0284C7 ('border-sky-200 bg-sky-50 text-sky-900', '.badge-donor', '.card-ops-donor' — inherits directly from Secondary)
-- **Row 2 (2 items, sm:grid-cols-2)**:
-  4. **อาสาสมัครและทีมแพทย์ (Volunteers & Responders)**: Civic Emerald #059669 ('border-emerald-200 bg-emerald-50 text-emerald-900', '.badge-volunteer', '.card-ops-volunteer')
-  5. **จัดสรรเต็นท์ & คลัง SPHERE (Shelter & Inventory)**: Clean Teal #0D9488 ('border-teal-200 bg-teal-50 text-teal-900', '.badge-inventory', '.card-ops-inventory')
+#### 3. Domain Color Tokens (one work domain = one color family, same on public site and staff app)
+Each domain has 5 steps: base (identity/icons/large text), strong (solid button bg with white text, WCAG AA), subtle (soft bg), border (360° border), text (text on subtle; also the solid-button hover). Classes: 'bg-domain-<id>-strong', 'bg-domain-<id>-subtle', 'border-domain-<id>-border', 'text-domain-<id>-text', 'text-domain-<id>'; CSS vars '--domain-<id>[-strong|-subtle|-border|-text]'; TS 'colors.domain.<id>'; utilities '.badge-domain-<id>' / '.card-domain-<id>'.
+- **registration** (ทะเบียนและศูนย์พักพิง) #124481: public pre-register, shelter/people/family search; staff ฝ่ายทะเบียน
+- **donation** (บริจาค พัสดุและคลัง) #FF5C00 (strong #C2410C): public donations + tracking; staff ฝ่ายพัสดุและคลัง
+- **volunteer** (จิตอาสา) #059669 (strong #047857): public volunteers/job board; staff ฝ่ายอาสาสมัคร
+- **kitchen** (ครัว) #DB2777 pink: staff ฝ่ายครัว
+- **facility** (อาคารสถานที่) #0D9488: staff ฝ่ายอาคารสถานที่
+- **security** (ความปลอดภัย) #7C3AED: staff ฝ่ายรักษาความปลอดภัย
+- **admin** (บริหารและส่วนกลาง) #475569 (strong #334155): staff ฝ่ายบริหารศูนย์ (base) and ส่วนกลาง (strong)
+- Every menu item in a portal department uses its department's domain color (items differ by icon and station number, never by color).
+- Domain colors must NEVER express status (critical red, warning amber, operational green, EOC purple stay reserved). Color is never the only signal — pair with label/icon.
+- Family Care (Maternal & Infant) keeps Soft Rose #E11D48 ('.badge-family', '.card-ops-family'); it is not a work domain.
+- DEPRECATED: '.badge-kitchen/-donor/-volunteer/-inventory', '.card-ops-*', '--ops-*' and 'colors.operations.*' now alias the domain families (donor + inventory → donation); migrate to the domain tokens.
 
 #### 4. 360° Refined Status Matrix
 - **Operational (Green #16A34A)**: 'border border-emerald-200 bg-white shadow-2xs' + 'border border-emerald-200 bg-emerald-50 text-emerald-900 font-semibold'

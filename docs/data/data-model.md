@@ -2,7 +2,7 @@
 title: Smart Shelter — Data Model (CouchDB remote-first) v3
 status: draft for review
 created: 2026-06-11
-updated: 2026-10-09
+updated: 2026-10-12
 note: ออกแบบใหม่ทั้งหมด — ไม่สืบทอดจาก docs/data v2.0 (retired 2026-06-11); decision sync 2026-06-15 เลือก MongoDB projection สำหรับ public tier และ EOC read-model
 ---
 
@@ -212,6 +212,10 @@ design doc เดียวกัน deploy พร้อม db provisioning
   `affiliation_tags: ["volunteer"]` เป็น metadata เท่านั้น ไม่ให้สิทธิ์และไม่เปลี่ยน shelter scope
 - `shelter_{shelter_code}._security.members.roles = ["shelter:{id}"]` + admins = `system_admin` —
   ตั้งเหมือนกันทั้ง central และ edge (provisioning จัดให้)
+- `registry` และ `catalog` `_security.members.roles`: รวม flat roles เดิม (`shelter_manager`, `registration_staff`,
+  `kitchen_staff`, `warehouse_staff`) ∪ `shelter:{code}` ของทุกศูนย์ใน registry (CR-164) เพื่อให้ผู้ใช้ทุก capability
+  ที่มี scope ศูนย์อ่าน DB กลางได้; admins = `system_admin`; การเขียน `registry` จำกัดเฉพาะ `system_admin` เท่านั้น
+  และ `catalog` ควบคุมด้วย `validate_doc_update`
 - `validate_doc_update` ต่อ shelter db บังคับ: type whitelist, append-only types ปฏิเสธ update/delete,
   ตาราง role→type ที่เขียนได้ (ตาม role-permission-matrix; public/API redaction ทำใน service layer) —
   design docs ชุดเดียว deploy ทั้ง central และ edge เพราะ edge อาจรับ write ตอน LAN fallback

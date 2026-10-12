@@ -51,6 +51,25 @@ export const REFERRAL_MANGO_INDEXES = [
 	}
 ];
 
+/** Mango indexes for kiosk pre-registration lookup and report-in (FR-KPC-62..65). */
+export const KIOSK_LOOKUP_MANGO_INDEXES = [
+	{
+		index: { fields: ['type', 'phone'] },
+		name: 'evacuee-type-phone-idx',
+		type: 'json' as const
+	},
+	{
+		index: { fields: ['type', 'person_id.number'] },
+		name: 'evacuee-type-person-id-idx',
+		type: 'json' as const
+	},
+	{
+		index: { fields: ['type', 'household_id'] },
+		name: 'evacuee-type-household-idx',
+		type: 'json' as const
+	}
+];
+
 /** Mango index definitions required by stock_transfer list/find (CR-059). */
 export const TRANSFER_MANGO_INDEXES = [
 	{
@@ -195,11 +214,21 @@ export function buildValidateDocUpdate(code: string): string {
   if (newDoc.type === 'unit_of_measure' || (oldDoc && oldDoc.type === 'unit_of_measure')) {
     throw { forbidden: 'unit_of_measure is central-only' };
   }
-  // Compound Scoped Roles (CR-093): prefer {code}:{cap}, keep legacy bare RoleKey.
+  // Compound Scoped Roles (CR-093): prefer {code}:{cap}. A legacy bare RoleKey counts only when
+  // the user holds exactly one shelter scope and it is this shelter (CR-093, CR-161 R1).
   function isRole(cap) {
-    return userCtx.roles.indexOf('system_admin') !== -1 ||
-      userCtx.roles.indexOf('${code}:' + cap) !== -1 ||
-      userCtx.roles.indexOf(cap) !== -1;
+    if (userCtx.roles.indexOf('system_admin') !== -1) return true;
+    if (userCtx.roles.indexOf('${code}:' + cap) !== -1) return true;
+    if (userCtx.roles.indexOf(cap) === -1) return false;
+    var shelterCount = 0;
+    var hasThisShelter = false;
+    for (var r = 0; r < userCtx.roles.length; r++) {
+      if (userCtx.roles[r].indexOf('shelter:') === 0) {
+        shelterCount++;
+        if (userCtx.roles[r] === 'shelter:${code}') hasThisShelter = true;
+      }
+    }
+    return shelterCount === 1 && hasThisShelter;
   }
   function parseDecimal4(str) {
     if (typeof str !== 'string') return NaN;
@@ -225,11 +254,16 @@ export function buildValidateDocUpdate(code: string): string {
   function canDispatchTicket() {
     return isRole('warehouse_staff') || isRole('supply_coordinator') || isRole('shelter_manager');
   }
+  // CR-161 R3: frontline Step 4/4B/5/6 and BULK / NON_PHYSICAL loan clears are SA, SM, DST.
   function canPerformFrontlineDistribution() {
-    return isRole('registration_staff') || isRole('supply_coordinator') || isRole('shelter_manager');
+    return isRole('distribution_staff') || isRole('shelter_manager');
   }
   function canReceivePhysicalStock() {
     return isRole('warehouse_staff') || isRole('supply_coordinator') || isRole('shelter_manager');
+  }
+  // CR-161 R3: physical loan return (PHYSICAL → receive) is WH, SC, SM, SA + DST.
+  function canReturnLoanPhysical() {
+    return canReceivePhysicalStock() || isRole('distribution_staff');
   }
   function sameObjectExcept(previousObject, nextObject, ignoredFields) {
     var keys = {};
@@ -734,8 +768,38 @@ export function buildValidateDocUpdate(code: string): string {
       isWarehouseOrAdmin ||
       isRole('supply_coordinator') ||
       isRole('shelter_manager');
-    if (!isStaff) {
+    // CR-161 R3: distribution_staff may only receive a physical loan return back into stock.
+    var isLoanReturnReceipt =
+      newDoc.reason === 'receive' &&
+      typeof newDoc.ref_id === 'string' &&
+      /^distribution_log:.+/.test(newDoc.ref_id);
+    if (!isStaff && !(isLoanReturnReceipt && isRole('distribution_staff'))) {
       throw { forbidden: 'Only warehouse staff or managers can write stock ledger' };
+    }
+    // A DST receipt must look exactly like a counter loan return (return-workflow.ts): own actor,
+    // whole positive qty, the counter-return lot note and a deterministic id. The VDU cannot read
+    // the referenced log, so item/qty are not bound to it — that residual risk is accepted by
+    // CR-161 R3 (physical return for DST) and mirrors warehouse receipts.
+    if (!isStaff) {
+      if (newDoc.created_by !== userCtx.name) {
+        throw { forbidden: 'Loan return stock ledger created_by must match the current actor' };
+      }
+      if (typeof newDoc.qty !== 'string' || !/^[1-9]\\d*$/.test(newDoc.qty)) {
+        throw { forbidden: 'Loan return stock ledger qty must be a positive whole number' };
+      }
+      if (!newDoc.lot || newDoc.lot.note !== 'counter_loan_return') {
+        throw { forbidden: 'Loan return stock ledger must carry the counter_loan_return lot note' };
+      }
+      // Only the fields returnLoanAtCounter writes — no expiry or other lot metadata.
+      var loanReturnLotKeys = Object.keys(newDoc.lot);
+      for (var lk = 0; lk < loanReturnLotKeys.length; lk++) {
+        if (['note', 'produced_at'].indexOf(loanReturnLotKeys[lk]) === -1) {
+          throw { forbidden: 'Loan return stock ledger lot may only carry note and produced_at' };
+        }
+      }
+      if (typeof newDoc._id !== 'string' || !/^stock_ledger:[0-9A-HJKMNP-TV-Z]{26}$/.test(newDoc._id)) {
+        throw { forbidden: 'Loan return stock ledger requires a stock_ledger:{26-char id}' };
+      }
     }
     if (newDoc.reason === 'distribution_return' && !isWarehouseOrAdmin) {
       throw { forbidden: 'Only warehouse staff or system admin can write distribution return stock ledger' };
@@ -849,14 +913,14 @@ export function buildValidateDocUpdate(code: string): string {
     }
     var isWarehouseOrAdminReq = isRole('warehouse_staff');
     var isRequestEditor =
-      isRole('registration_staff') ||
+      isRole('distribution_staff') ||
       isRole('shelter_manager');
     if (!oldDoc) {
       if (newDoc.status !== 'pending') {
         throw { forbidden: 'New distribution_request must start pending' };
       }
       if (!isRequestEditor) {
-        throw { forbidden: 'Only registration staff, shelter manager, or system admin can create distribution requests' };
+        throw { forbidden: 'Only distribution staff, shelter manager, or system admin can create distribution requests' };
       }
       if (newDoc.created_by !== userCtx.name) {
         throw { forbidden: 'created_by must match authenticated user' };
@@ -1036,10 +1100,10 @@ export function buildValidateDocUpdate(code: string): string {
   // 7. distribution_issue role and validation rules (CR-059 Phase 3B)
   if (newDoc.type === 'distribution_issue') {
     var isIssueStaff =
-      isRole('registration_staff') ||
+      isRole('distribution_staff') ||
       isRole('shelter_manager');
     if (!isIssueStaff) {
-      throw { forbidden: 'Only registration staff, shelter manager, or system admin can write distribution issues' };
+      throw { forbidden: 'Only distribution staff, shelter manager, or system admin can write distribution issues' };
     }
     if (typeof newDoc._id !== 'string' || !/^distribution_issue:[0-9A-HJKMNP-TV-Z]{26}$/.test(newDoc._id)) {
       throw { forbidden: 'distribution_issue requires valid ULID id distribution_issue:{ulid}' };
@@ -1100,10 +1164,10 @@ export function buildValidateDocUpdate(code: string): string {
   // 8. distribution_issue_idempotency role and validation rules (CR-059 Phase 3B)
   if (newDoc.type === 'distribution_issue_idempotency') {
     var isIssueStaffIdem =
-      isRole('registration_staff') ||
+      isRole('distribution_staff') ||
       isRole('shelter_manager');
     if (!isIssueStaffIdem) {
-      throw { forbidden: 'Only registration staff, shelter manager, or system admin can manage issue idempotency' };
+      throw { forbidden: 'Only distribution staff, shelter manager, or system admin can manage issue idempotency' };
     }
     if (typeof newDoc._id !== 'string' || !/^distribution_issue_idempotency:[0-9a-f]{64}$/.test(newDoc._id)) {
       throw { forbidden: 'distribution_issue_idempotency requires deterministic SHA-256 id' };
@@ -1133,10 +1197,10 @@ export function buildValidateDocUpdate(code: string): string {
   // 9. distribution_issue_capacity role and validation rules (CR-059 Phase 3B)
   if (newDoc.type === 'distribution_issue_capacity') {
     var isIssueStaffCap =
-      isRole('registration_staff') ||
+      isRole('distribution_staff') ||
       isRole('shelter_manager');
     if (!isIssueStaffCap) {
-      throw { forbidden: 'Only registration staff, shelter manager, or system admin can manage issue capacity' };
+      throw { forbidden: 'Only distribution staff, shelter manager, or system admin can manage issue capacity' };
     }
     if (typeof newDoc._id !== 'string' || !/^distribution_issue_capacity:[0-9a-f]{64}$/.test(newDoc._id)) {
       throw { forbidden: 'distribution_issue_capacity requires deterministic SHA-256 id' };
@@ -1176,7 +1240,7 @@ export function buildValidateDocUpdate(code: string): string {
   }
   // 9.5 batch-wide Issue/Close gate: Issue roles mutate open claims; close roles seal/reopen.
   if (newDoc.type === 'distribution_issue_gate') {
-    var isIssueGateStaff = isRole('registration_staff') || isRole('shelter_manager');
+    var isIssueGateStaff = isRole('distribution_staff') || isRole('shelter_manager');
     var isCloseGateStaff = isRole('warehouse_staff');
     if (typeof newDoc._id !== 'string' || !/^distribution_issue_gate:[0-9a-f]{64}$/.test(newDoc._id)) {
       throw { forbidden: 'distribution_issue_gate requires deterministic SHA-256 id' };
@@ -1228,10 +1292,10 @@ export function buildValidateDocUpdate(code: string): string {
   // 10. distribution_one_time_guard role and validation rules (CR-059 Phase 3B)
   if (newDoc.type === 'distribution_one_time_guard') {
     var isIssueStaffGuard =
-      isRole('registration_staff') ||
+      isRole('distribution_staff') ||
       isRole('shelter_manager');
     if (!isIssueStaffGuard) {
-      throw { forbidden: 'Only registration staff, shelter manager, or system admin can manage one-time guard' };
+      throw { forbidden: 'Only distribution staff, shelter manager, or system admin can manage one-time guard' };
     }
     if (typeof newDoc._id !== 'string' || !/^distribution_one_time_guard:[0-9a-f]{64}$/.test(newDoc._id)) {
       throw { forbidden: 'distribution_one_time_guard requires deterministic SHA-256 id' };
@@ -1718,7 +1782,7 @@ export function buildValidateDocUpdate(code: string): string {
         if (!canPerformFrontlineDistribution()) throw { forbidden: 'Only frontline distribution staff can void distribution logs' };
         if (newDoc.voided_by !== userCtx.name) throw { forbidden: 'distribution_log.voided_by must match the current actor' };
       } else if (isRoutineReturn) {
-        if (!canReceivePhysicalStock()) throw { forbidden: 'Only warehouse staff, supply coordinators, shelter managers, or system admins can record routine physical returns' };
+        if (!canReturnLoanPhysical()) throw { forbidden: 'Only warehouse staff, supply coordinators, distribution staff, shelter managers, or system admins can record routine physical returns' };
         if (newDoc.returned_by !== userCtx.name) throw { forbidden: 'distribution_log.returned_by must match the current actor' };
         if (oldStatus === 'partially_returned' && parseDecimal4(newDoc.qty_returned) <= parseDecimal4(oldDoc.qty_returned)) {
           throw { forbidden: 'partially_returned distribution_log qty_returned must increase' };
@@ -1783,7 +1847,7 @@ export function buildValidateDocUpdate(code: string): string {
   // 14. CR-121 / CR-134: bulk_return_pool validation (Rule 14)
   if (newDoc.type === 'bulk_return_pool') {
     var canCreatePool = isRole('warehouse_staff') || isRole('supply_coordinator') || isRole('shelter_manager');
-    var canClaimPool = isRole('registration_staff') || isRole('supply_coordinator') || isRole('shelter_manager');
+    var canClaimPool = isRole('registration_staff') || isRole('distribution_staff') || isRole('supply_coordinator') || isRole('shelter_manager');
     var canClosePool = isRole('warehouse_staff') || isRole('supply_coordinator') || isRole('shelter_manager');
     if (newDoc.schema_v !== 1 && newDoc.schema_v !== 2) {
       throw { forbidden: 'Unsupported bulk_return_pool schema version' };
@@ -1912,11 +1976,12 @@ export function buildValidateDocUpdate(code: string): string {
   if (newDoc.type === 'bulk_return_claim') {
     var canManageClaim =
       isRole('registration_staff') ||
+      isRole('distribution_staff') ||
       isRole('supply_coordinator') ||
       isRole('shelter_manager') ||
       isRole('system_admin');
     if (!canManageClaim) {
-      throw { forbidden: 'Only registration staff, supply coordinator, shelter manager, or system admin can manage bulk return claims' };
+      throw { forbidden: 'Only registration staff, distribution staff, supply coordinator, shelter manager, or system admin can manage bulk return claims' };
     }
     if (newDoc.schema_v !== 1) {
       throw { forbidden: 'Unsupported bulk_return_claim schema version' };
@@ -2032,9 +2097,9 @@ export function buildValidateDocUpdate(code: string): string {
     }
 
     // Mode-specific RBAC enforced on EVERY write/transition
-    var canReservePhysical = isRole('warehouse_staff') || isRole('supply_coordinator') || isRole('shelter_manager') || isRole('system_admin');
-    var canReserveBulk = isRole('registration_staff') || isRole('supply_coordinator') || isRole('shelter_manager') || isRole('system_admin');
-    var canReserveNonPhysical = isRole('registration_staff') || isRole('supply_coordinator') || isRole('shelter_manager') || isRole('system_admin');
+    var canReservePhysical = canReturnLoanPhysical();
+    var canReserveBulk = canPerformFrontlineDistribution();
+    var canReserveNonPhysical = canPerformFrontlineDistribution();
 
     if (newDoc.mode === 'PHYSICAL' && !canReservePhysical) {
       throw { forbidden: 'Role cannot manage loan return reservations in PHYSICAL mode' };

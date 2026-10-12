@@ -1,9 +1,17 @@
+---
+title: Contributing — frontend
+status: active
+created: 2026-06-10
+updated: 2026-10-10
+note: decision sync 2026-10-10 — §4 session expiry — 401 = session expired → `needsReauth` + global non-dismissable login modal; 403 or BFF 401 → `needsReauth` only when `GET /_session` confirms anonymous, otherwise treat as permission denied (no modal); network errors = offline banner only (replaces "on 401/403 set needsReauth")
+---
+
 # Contributing
 
 Working agreement for the **`frontend`** package (the SvelteKit frontend of _tent / CouchDB Lab_).
 Read this before opening a PR. It captures the conventions the codebase already enforces — most
-are checked by ESLint, `svelte-check`, tests, and the **Lefthook pre-commit hook** (§1), so "the
-hook is green" and "this doc is honored" should mean the same thing for lint/check/test.
+are checked by ESLint, `svelte-check`, tests, and the **Lefthook pre-commit/pre-push hooks** (§1),
+so "the hooks are green" and "this doc is honored" should mean the same thing for lint/check/test.
 
 > The stale `agent-role.md` still describes the original sveltekitten template (JWT auth, flat
 > `api.ts`/`queries.ts` features). **This document and the actual `src/` tree win** where they
@@ -48,33 +56,41 @@ proxies and `FASTAPI_INTERNAL_URL` + `EXTERNAL_API_SECRET` for the BFF → FastA
 
 ### Pre-commit quality gate (Lefthook)
 
-[`lefthook.yml`](../lefthook.yml) at the repo root enforces a **basic code-smell check** before
-every commit that stages `frontend/` files. Commands run sequentially (fail-fast), matching
-Jenkins staging CI:
+[`lefthook.yml`](../lefthook.yml) at the repo root is the quality gate for lint, type-check and
+unit tests:
 
-1. `pnpm lint` — Prettier + ESLint
-2. `pnpm check` — `svelte-check`
-3. `pnpm test` — Vitest
+- **pre-commit** (staged files only, fast): `prettier --write` + `eslint --fix` on staged
+  `frontend/` files; fixes are re-staged automatically.
+- **pre-push** (whole project, sequential): `pnpm check` (`svelte-check`), then `pnpm test`
+  (Vitest). Skipped when the pushed commits touch no `frontend/` source files.
 
 Hooks register automatically via the root `prepare` script when you `pnpm install` at the repo
-root. Commits that only touch docs, infra, or other non-`frontend/` paths skip the gate.
+root. Backend/worker get the equivalent `ruff` (pre-commit) and `pytest` (pre-push) jobs.
 
 **Strict Rule — No Verification Bypass:** Do **NOT** use `git commit --no-verify`, `git push --no-verify`, or `LEFTHOOK=0` under any circumstances (ห้าม commit หรือ push แบบ no-verify โดยเด็ดขาด). All quality gates (linting, type-checking, tests) must pass before code is committed or pushed. If a check fails, fix the code.
 
 ## 2. Definition of done
 
-A change is not ready until **all** of these pass locally:
+A change is not ready until **all** of these hold:
 
-1. `pnpm lint` — Prettier (tabs, single quotes, no trailing comma, printWidth 100) **and** ESLint clean.
-2. `pnpm check` — zero `svelte-check` errors.
-3. `pnpm test` — unit tests green; new domain/data logic ships with tests (see §6).
-4. Every `.svelte` file you touched has been run through the **`svelte-autofixer`** (Svelte MCP)
+**Enforced by Lefthook (§1) — do not re-run the full suites by hand before committing:**
+
+1. Lint/format clean — Prettier (tabs, single quotes, no trailing comma, printWidth 100) + ESLint
+   (pre-commit).
+2. Zero `svelte-check` errors — `pnpm check` (pre-push).
+3. Unit tests green — `pnpm test` (pre-push).
+
+While developing, run only the tests for what you changed (`pnpm vitest run <file>`); the
+pre-push hook runs the full `check` + `test` once. A green push means items 1–3 are met.
+
+**Not hooked — your responsibility (reviewers check these):**
+
+4. New domain/data logic ships with tests (see §6). The hook only proves existing tests pass;
+   it cannot tell that new logic has none.
+5. Every `.svelte` file you touched has been run through the **`svelte-autofixer`** (Svelte MCP)
    until it reports no issues.
 
-Items **1–3** run automatically on `git commit` when `frontend/` files are staged (Lefthook
-pre-commit). Run them manually (`pnpm lint`, `pnpm check`, `pnpm test` in `frontend/`) before
-you stage if you want faster feedback. Item **4** is not hooked — verify it yourself before opening
-a PR.
+Never bypass the hooks (`--no-verify`, `LEFTHOOK=0`) — see the Strict Rule in §1.
 
 ## 3. Architecture: feature-sliced, remote-first
 
@@ -287,8 +303,13 @@ that must not be called from the browser.
   origin/remote. Always login central first; edge login is only for central outage.
 - Edge `AuthSession` does **not** grant `/api/v1/*` service access (central-only). When central
   returns, re-validate/re-login against central and fail back the active endpoint to central.
-- On 401/403 from the active endpoint, stop further protected mutations and set `needsReauth` —
-  do not force an unrelated global logout/redirect loop.
+- **Session expiry (decision sync 2026-10-10).** A 401 from the active endpoint means the session
+  expired: stop further protected mutations and set `needsReauth`, which opens the global
+  non-dismissable login modal on the current route. A 403, or a 401 from a BFF `/api/*` route,
+  sets `needsReauth` only after `GET /_session` confirms the user is anonymous. A 403 with a valid
+  session is a permission denial: show it as such and do not open the login modal. Network
+  errors are offline (`ConnectionBanner`), never expiry. Do not force an unrelated global
+  logout/redirect loop.
 - Use the guards in `$lib/guards/auth.ts` (`requireAuth`, `requireAdmin`, `redirectIfAuthenticated`)
   from route `+layout.ts`/`+page.ts` `load` functions. Don't roll your own redirect logic.
 - **Admin credentials (`COUCHDB_ADMIN_URL`) are server-only.** They may only be used in

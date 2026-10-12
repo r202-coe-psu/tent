@@ -28,6 +28,8 @@ export const distributionKeys = {
 		[...distributionKeys.shelter(shelterCode), 'bulk_claims', filter ?? {}] as const,
 	bulkClaim: (shelterCode: string, claimId: string) =>
 		[...distributionKeys.shelter(shelterCode), 'bulk_claim', claimId] as const,
+	dispatchedLotExpiry: (shelterCode: string, ticketId: string, itemId: string) =>
+		[...distributionKeys.shelter(shelterCode), 'dispatched_lot_expiry', ticketId, itemId] as const,
 	shiftReconciliation: (shelterCode: string, ticketId: string) =>
 		[...distributionKeys.shelter(shelterCode), 'shift_reconciliation', ticketId] as const,
 

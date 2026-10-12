@@ -21,7 +21,6 @@
 		errorMessage
 	} from '$lib/utils/errors';
 	import { authStore } from '$lib/stores/auth.svelte';
-	import { backofficeState } from '$lib/stores/backoffice.svelte';
 	import { endpointStore } from '$lib/stores/endpoint.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { useShelter } from '$lib/features/shelters';
@@ -336,9 +335,14 @@
 
 	function handleSaveError(error: unknown, title: string): void {
 		if (error instanceof AuthError) {
-			authStore.markNeedsReauth();
-			backofficeState.requestReauth();
-			toast.error(title, { description: 'Session หมดอายุ กรุณาเข้าสู่ระบบอีกครั้ง' });
+			// Expiry (and 403 confirmation) is handled globally by the query client →
+			// authStore.handleAuthFailure, which opens the login modal. Only message here.
+			toast.error(title, {
+				description:
+					error.status === 403
+						? 'คุณไม่มีสิทธิ์ในการทำรายการนี้'
+						: 'เซสชันหมดอายุ กรุณาเข้าสู่ระบบอีกครั้ง'
+			});
 			return;
 		}
 		if (error instanceof ConflictError) {

@@ -65,7 +65,18 @@
 	import { DatePicker } from '$lib/components/ui/date-picker/index.js';
 	import { toast } from 'svelte-sonner';
 	import CivicCommandPalette from '$lib/components/CivicCommandPalette.svelte';
-	import { AI_STUDIO_SYSTEM_PROMPT } from '$lib/tokens';
+	import { AI_STUDIO_SYSTEM_PROMPT, colors, DOMAIN_IDS, type DomainId } from '$lib/tokens';
+
+	const DOMAIN_USED_FOR: Record<DomainId, string> = {
+		registration:
+			'สาธารณะ: ลงทะเบียนล่วงหน้า ค้นหาศูนย์พักพิง ค้นหาผู้พักพิง/ครอบครัว · เจ้าหน้าที่: ฝ่ายทะเบียน (สถานี 1–3 และเครื่องมือ)',
+		donation: 'สาธารณะ: บริจาคและติดตามสถานะ · เจ้าหน้าที่: ฝ่ายพัสดุและคลัง',
+		volunteer: 'สาธารณะ: จิตอาสา / กระดานงานอาสา · เจ้าหน้าที่: ฝ่ายอาสาสมัคร',
+		kitchen: 'เจ้าหน้าที่: ฝ่ายครัว (หน้าครัวทั้งหมด)',
+		facility: 'เจ้าหน้าที่: ฝ่ายอาคารสถานที่',
+		security: 'เจ้าหน้าที่: ฝ่ายรักษาความปลอดภัย',
+		admin: 'เจ้าหน้าที่: ฝ่ายบริหารศูนย์ (base) และส่วนกลาง (strong)'
+	};
 
 	// Page State
 	let activeTab = $state<'components' | 'prompt-guide'>('components');
@@ -276,18 +287,21 @@
 <div class="border border-[#E2E8F0]">Border Standard #E2E8F0</div>
 <div class="border border-[#CBD5E1]">Border Strong #CBD5E1</div>
 
-<!-- 3. Unified Domain Operations (5 Areas) -->
-<div class="border border-orange-200 bg-orange-50 text-orange-900">Kitchen & Food Supply #EA580C</div>
-<div class="border border-rose-200 bg-rose-50 text-rose-900">Maternal & Infant Care #E11D48</div>
-<div class="border border-sky-200 bg-sky-50 text-sky-900">Donors & Family Tracing #0284C7</div>
-<div class="border border-emerald-200 bg-emerald-50 text-emerald-900">Volunteers & Field Responders #059669</div>
-<div class="border border-teal-200 bg-teal-50 text-teal-900">SPHERE Catalog & Inventory #0D9488</div>
+<!-- 3. Domain Color Tokens (one work domain = one family; steps: base / strong / subtle / border / text) -->
+<div class="border border-domain-registration-border bg-domain-registration-subtle text-domain-registration-text">Registration #124481</div>
+<div class="border border-domain-donation-border bg-domain-donation-subtle text-domain-donation-text">Donation / Supply #FF5C00 (strong #C2410C)</div>
+<div class="border border-domain-volunteer-border bg-domain-volunteer-subtle text-domain-volunteer-text">Volunteer #059669 (strong #047857)</div>
+<div class="border border-domain-kitchen-border bg-domain-kitchen-subtle text-domain-kitchen-text">Kitchen #DB2777</div>
+<div class="border border-domain-facility-border bg-domain-facility-subtle text-domain-facility-text">Facility #0D9488</div>
+<div class="border border-domain-security-border bg-domain-security-subtle text-domain-security-text">Security #7C3AED</div>
+<div class="border border-domain-admin-border bg-domain-admin-subtle text-domain-admin-text">Admin / Central #475569 (strong #334155)</div>
+<!-- Solid button: bg-domain-donation-strong text-white hover:bg-domain-donation-text -->
 
 <!-- 4. Real-world Public Portal Application (4 Service Cards) -->
-<div class="border-2 border-red-200 bg-white">1. ค้นหาศูนย์พักพิง (#DC2626 Destructive)</div>
-<div class="border-2 border-sky-200 bg-white">2. ผู้พักพิง (#0A2647 Navy / #0284C7 Cerulean)</div>
-<div class="border-2 border-amber-200 bg-white">3. บริจาค (#EA580C Kitchen & Food)</div>
-<div class="border-2 border-emerald-200 bg-white">4. อาสาสมัคร (#059669 Volunteers)</div>
+<div class="border-2 border-domain-registration-border bg-white">1. ค้นหาศูนย์พักพิง (registration)</div>
+<div class="border-2 border-domain-registration-border bg-white">2. ผู้พักพิง (registration)</div>
+<div class="border-2 border-domain-donation-border bg-white">3. บริจาค (donation)</div>
+<div class="border-2 border-domain-volunteer-border bg-white">4. อาสาสมัคร (volunteer)</div>
 
 <!-- 5. 360° Refined Status Borders -->
 <div class="border border-emerald-200 bg-white text-emerald-900">Operational Green #16A34A</div>
@@ -383,11 +397,11 @@
   <span class="h-1.5 w-1.5 rounded-full bg-emerald-600"></span>ปกติ (Green)
 </span>
 
-<!-- 2. Domain Operations Badges (Mapped to Palette) -->
-<span class="badge-kitchen">ครัวกลาง & LPG</span>
+<!-- 2. Domain Badges (badge-domain-<id>; badge-family stays rose) -->
+<span class="badge-domain-kitchen">ครัวกลาง & LPG</span>
 <span class="badge-family">แม่และเด็ก / นมผง</span>
-<span class="badge-donor">ของบริจาค & อาสาสมัคร</span>
-<span class="badge-inventory">คลัง SPHERE</span>
+<span class="badge-domain-donation">ของบริจาค & คลัง SPHERE</span>
+<span class="badge-domain-volunteer">จิตอาสา</span>
 
 <!-- 3. Functional Badges -->
 <span class="badge-accent">ไฮไลท์เน้น</span>
@@ -1900,174 +1914,108 @@
 					</div>
 				</div>
 
-				<!-- 2. Unified Domain Operations (5 Areas) -->
+				<!-- 2. Domain Colour Families (one work domain = one colour family) -->
 				<div class="space-y-4 pt-2">
-					<div class="flex items-center justify-between">
+					<div class="flex flex-wrap items-center justify-between gap-2">
 						<h3 class="text-xs font-bold tracking-wider text-slate-500 uppercase">
-							3. Unified Domain Operations (กลุ่มงานเฉพาะทาง 5 ด้าน)
+							3. Domain Color Tokens (สีประจำกลุ่มงาน 7 ด้าน)
 						</h3>
 						<span class="text-xs font-medium text-slate-400"
-							>แบ่ง 2 แถวเพื่อให้อ่านง่าย • บริบทศูนย์พักพิงและพอร์ทัลประชาชน</span
+							>1 กลุ่มงาน = 1 ตระกูลสี ใช้เหมือนกันทั้งเว็บสาธารณะและแอปเจ้าหน้าที่</span
 						>
 					</div>
 
-					<!-- Row 1: Frontline Supplies & Vulnerable Care (3 Areas) -->
-					<div class="space-y-2">
-						<div class="flex items-center justify-between">
-							<span class="flex items-center gap-1.5 text-xs font-semibold text-slate-600">
-								<span class="h-1.5 w-1.5 rounded-full bg-orange-500"></span>
-								แถวที่ 1: กลุ่มงานปัจจัย 4, ดูแลกลุ่มเปราะบาง และการส่งต่อความช่วยเหลือ (3 ด้าน)
-							</span>
-							<span class="font-mono text-xs text-slate-400">3 คอลัมน์</span>
-						</div>
-						<div class="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-3">
-							<!-- 1. Kitchen & Energy / Food Supply -->
-							<div
-								class="space-y-2.5 rounded-xl border-2 border-orange-200/90 bg-white p-4 shadow-2xs transition-all hover:border-orange-300"
-							>
-								<div class="flex items-center justify-between">
-									<div class="flex items-center gap-2">
-										<div
-											class="flex h-8 w-8 items-center justify-center rounded-lg bg-orange-100 text-orange-600"
-										>
-											<Utensils class="h-4 w-4" />
-										</div>
-										<div>
-											<div class="text-xs font-bold text-slate-900">ครัวกลาง & เสบียง</div>
-											<div class="text-xs text-slate-500">Kitchen & Food Supply</div>
-										</div>
-									</div>
-									<span class="badge-kitchen">#EA580C</span>
-								</div>
-								<p class="text-xs text-slate-600">
-									บริหารจัดการอาหารปรุงสุก ถังก๊าซ LPG และการรับมอบเสบียงอาหาร
-								</p>
-								<div class="flex items-center gap-1 pt-1 font-mono text-xs text-slate-400">
-									<span>Token:</span>
-									<code class="font-semibold text-orange-700">operations.kitchen</code>
-								</div>
-							</div>
-
-							<!-- 2. Family Care (Maternal & Infant) -->
-							<div
-								class="space-y-2.5 rounded-xl border-2 border-rose-200/90 bg-white p-4 shadow-2xs transition-all hover:border-rose-300"
-							>
-								<div class="flex items-center justify-between">
-									<div class="flex items-center gap-2">
-										<div
-											class="flex h-8 w-8 items-center justify-center rounded-lg bg-rose-100 text-rose-600"
-										>
-											<Baby class="h-4 w-4" />
-										</div>
-										<div>
-											<div class="text-xs font-bold text-slate-900">แม่และเด็ก / มีครรภ์</div>
-											<div class="text-xs text-slate-500">Maternal & Infant</div>
-										</div>
-									</div>
-									<span class="badge-family">#E11D48</span>
-								</div>
-								<p class="text-xs text-slate-600">
-									นมผงเด็กอ่อน แพมเพิส มุมให้นมแม่ และการดูแลสตรีมีครรภ์
-								</p>
-								<div class="flex items-center gap-1 pt-1 font-mono text-xs text-slate-400">
-									<span>Token:</span>
-									<code class="font-semibold text-rose-700">operations.family</code>
-								</div>
-							</div>
-
-							<!-- 3. Donors & Family Tracing -->
-							<div
-								class="space-y-2.5 rounded-xl border-2 border-sky-200/90 bg-white p-4 shadow-2xs transition-all hover:border-sky-300"
-							>
-								<div class="flex items-center justify-between">
-									<div class="flex items-center gap-2">
-										<div
-											class="flex h-8 w-8 items-center justify-center rounded-lg bg-sky-100 text-sky-600"
-										>
-											<HeartHandshake class="h-4 w-4" />
-										</div>
-										<div>
-											<div class="text-xs font-bold text-slate-900">ผู้บริจาค & ค้นหาญาติ</div>
-											<div class="text-xs text-slate-500">Donors & Tracing</div>
-										</div>
-									</div>
-									<span class="badge-donor">#0284C7</span>
-								</div>
-								<p class="text-xs text-slate-600">
-									ลงทะเบียนของบริจาค ความต้องการสิ่งของ และการติดตามหาญาติ
-								</p>
-								<div class="flex items-center gap-1 pt-1 font-mono text-xs text-slate-400">
-									<span>Token:</span>
-									<code class="font-semibold text-sky-700">operations.donor</code>
-								</div>
-							</div>
-						</div>
+					<div
+						class="rounded-xl border border-slate-200/80 bg-slate-50/60 p-4 text-xs text-slate-600"
+					>
+						<ul class="list-disc space-y-1 pl-4">
+							<li>
+								<strong>base</strong> = ตัวตนกลุ่มงาน / ไอคอน / ตัวอักษรขนาดใหญ่ ·
+								<strong>strong</strong> = พื้นปุ่มทึบ (ตัวอักษรขาว ผ่าน WCAG AA) ·
+								<strong>subtle</strong> = พื้นอ่อน · <strong>border</strong> = กรอบ 360° ·
+								<strong>text</strong> = ตัวอักษรบนพื้น subtle (และสี hover ของปุ่มทึบ)
+							</li>
+							<li>
+								เมนูทุกรายการในฝ่ายเดียวกันใช้สีของฝ่ายนั้น — แยกกันด้วยไอคอนและเลขสถานี ไม่ใช่สี
+							</li>
+							<li>
+								สีกลุ่มงานห้ามใช้สื่อ “สถานะ” — สถานะสงวนไว้: วิกฤต #DC2626 · เฝ้าระวัง #F59E0B ·
+								ปกติ #16A34A · EOC #9333EA และต้องมีข้อความ/ไอคอนกำกับเสมอ
+							</li>
+						</ul>
 					</div>
 
-					<!-- Row 2: Field Force & SPHERE Standards (2 Areas) -->
-					<div class="space-y-2 pt-1">
-						<div class="flex items-center justify-between">
-							<span class="flex items-center gap-1.5 text-xs font-semibold text-slate-600">
-								<span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
-								แถวที่ 2: กลุ่มงานกำลังพลอาสาสมัคร และมาตรฐานสากล SPHERE (2 ด้าน)
-							</span>
-							<span class="font-mono text-xs text-slate-400">2 คอลัมน์</span>
-						</div>
-						<div class="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
-							<!-- 4. Volunteers & Field Responders -->
+					<div class="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-3">
+						{#each DOMAIN_IDS as id (id)}
+							{@const d = colors.domain[id]}
 							<div
-								class="space-y-2.5 rounded-xl border-2 border-emerald-200/90 bg-white p-4 shadow-2xs transition-all hover:border-emerald-300"
+								class="space-y-3 rounded-xl border-2 bg-white p-4 shadow-2xs"
+								style:border-color="var(--domain-{id}-border)"
 							>
-								<div class="flex items-center justify-between">
-									<div class="flex items-center gap-2">
-										<div
-											class="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-100 text-emerald-600"
-										>
-											<UserPlus class="h-4 w-4" />
-										</div>
-										<div>
-											<div class="text-xs font-bold text-slate-900">อาสาสมัคร & การแพทย์</div>
-											<div class="text-xs text-slate-500">Volunteers & Care</div>
-										</div>
+								<div class="flex items-start justify-between gap-2">
+									<div>
+										<div class="text-sm font-bold text-slate-900">{d.name}</div>
+										<code class="font-mono text-xs text-slate-500">domain-{id}</code>
 									</div>
-									<span class="badge-volunteer">#059669</span>
+									<span
+										class={d.badge +
+											' inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs'}
+									>
+										<Tag class="h-3.5 w-3.5" aria-hidden="true" />
+										{d.name}
+									</span>
 								</div>
-								<p class="text-xs text-slate-600">
-									ลงทะเบียนอาสาสมัคร จัดกะการทำงาน และภารกิจแพทย์สนาม
-								</p>
-								<div class="flex items-center gap-1 pt-1 font-mono text-xs text-slate-400">
-									<span>Token:</span>
-									<code class="font-semibold text-emerald-700">operations.volunteer</code>
-								</div>
-							</div>
 
-							<!-- 5. Inventory & SPHERE -->
-							<div
-								class="space-y-2.5 rounded-xl border-2 border-teal-200/90 bg-white p-4 shadow-2xs transition-all hover:border-teal-300"
-							>
-								<div class="flex items-center justify-between">
-									<div class="flex items-center gap-2">
-										<div
-											class="flex h-8 w-8 items-center justify-center rounded-lg bg-teal-100 text-teal-600"
-										>
-											<Package class="h-4 w-4" />
+								<div
+									class="grid grid-cols-5 overflow-hidden rounded-lg border border-slate-200 text-center text-[0px]"
+								>
+									{#each [['base', d.base], ['strong', d.strong], ['subtle', d.subtle], ['border', d.border], ['text', d.text]] as [step, hex] (step)}
+										<div class="space-y-1 pb-1.5">
+											<div
+												class="h-9"
+												style:background-color={step === 'base'
+													? `var(--domain-${id})`
+													: `var(--domain-${id}-${step})`}
+											></div>
+											<div class="text-xs font-semibold text-slate-700">{step}</div>
+											<div class="font-mono text-2xs text-slate-500">{hex}</div>
 										</div>
-										<div>
-											<div class="text-xs font-bold text-slate-900">มาตรฐาน SPHERE</div>
-											<div class="text-xs text-slate-500">Catalog & SPHERE</div>
-										</div>
-									</div>
-									<span class="badge-inventory">#0D9488</span>
+									{/each}
 								</div>
-								<p class="text-xs text-slate-600">
-									สัดส่วนสิ่งของจำเป็นต่อคน/วัน แคตตาล็อกกลาง และพัสดุยังชีพ
-								</p>
-								<div class="flex items-center gap-1 pt-1 font-mono text-xs text-slate-400">
-									<span>Token:</span>
-									<code class="font-semibold text-teal-700">operations.inventory</code>
+
+								<div class="flex flex-wrap items-center gap-2">
+									<span
+										class="inline-flex min-h-11 items-center gap-1.5 rounded-lg px-4 text-xs font-bold shadow-2xs {d.solid}"
+									>
+										<Package class="h-4 w-4" aria-hidden="true" />
+										ปุ่มทึบ (strong)
+									</span>
+									<span
+										class="inline-flex min-h-11 items-center gap-1.5 rounded-lg px-4 text-xs font-semibold {d.subtleBtn}"
+									>
+										ปุ่มอ่อน (subtle)
+									</span>
+									<span class="flex size-11 items-center justify-center rounded-xl {d.iconBox}">
+										<Users class="h-5 w-5" aria-hidden="true" />
+									</span>
+								</div>
+
+								<p class="text-xs leading-relaxed text-slate-600">{DOMAIN_USED_FOR[id]}</p>
+								<div class="font-mono text-xs text-slate-400">
+									<code class="font-semibold text-slate-700">colors.domain.{id}</code> ·
+									<code>bg-domain-{id}-strong</code>
 								</div>
 							</div>
-						</div>
+						{/each}
+					</div>
+
+					<!-- Family Care keeps its own rose family (not a work domain) -->
+					<div class="flex flex-wrap items-center gap-2.5 text-xs text-slate-500">
+						<span class="badge-family">
+							<Baby class="h-3.5 w-3.5" />
+							<span>แม่และเด็ก / สตรีมีครรภ์ (#E11D48)</span>
+						</span>
+						<span>ยังคงโทนกุหลาบเดิม — ไม่ใช่กลุ่มงาน (<code>colors.operations.family</code>)</span>
 					</div>
 				</div>
 
@@ -2144,21 +2092,21 @@
 					</div>
 
 					<div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-						<!-- Card 1: Shelter Search (Red / Destructive-Triage) -->
+						<!-- Card 1: Shelter Search (Registration domain) -->
 						<div
-							class="flex flex-col justify-between space-y-4 rounded-2xl border-2 border-red-200 bg-white p-5 shadow-2xs transition-all hover:border-red-300 hover:shadow-xs"
+							class="flex flex-col justify-between space-y-4 rounded-2xl border-2 border-domain-registration-border bg-white p-5 shadow-2xs transition-all hover:border-domain-registration hover:shadow-xs"
 						>
 							<div class="space-y-3">
 								<div class="flex items-center justify-between">
 									<div
-										class="flex h-11 w-11 items-center justify-center rounded-xl border border-red-100 bg-red-50 text-red-600"
+										class="flex h-11 w-11 items-center justify-center rounded-xl border border-domain-registration-border bg-domain-registration-subtle text-domain-registration"
 									>
 										<ShieldAlert class="h-5 w-5" />
 									</div>
 									<span
-										class="rounded-full border border-red-200 bg-red-50 px-2.5 py-0.5 font-mono text-xs font-bold text-red-700"
+										class="rounded-full border border-domain-registration-border bg-domain-registration-subtle px-2.5 py-0.5 font-mono text-xs font-bold text-domain-registration-text"
 									>
-										#DC2626
+										#124481
 									</span>
 								</div>
 								<div>
@@ -2169,40 +2117,42 @@
 									</p>
 								</div>
 							</div>
-							<div class="space-y-2 border-t border-red-50 pt-1">
+							<div class="space-y-2 border-t border-domain-registration-border pt-1">
 								<button
-									class="flex w-full items-center justify-center gap-1 rounded-xl bg-red-600 px-3 py-2.5 text-xs font-bold text-white shadow-2xs transition-colors hover:bg-red-700"
+									class="flex w-full items-center justify-center gap-1 rounded-xl bg-domain-registration-strong px-3 py-2.5 text-xs font-bold text-white shadow-2xs transition-colors hover:bg-domain-registration-text"
 								>
 									<span>ค้นหาศูนย์พักพิง</span>
 									<ChevronRight class="h-3.5 w-3.5" />
 								</button>
 								<button
-									class="flex w-full items-center justify-center gap-1 rounded-xl border border-red-100/80 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 transition-colors hover:bg-red-100"
+									class="flex w-full items-center justify-center gap-1 rounded-xl border border-domain-registration-border bg-domain-registration-subtle px-3 py-2 text-xs font-semibold text-domain-registration-text transition-colors hover:bg-domain-registration-border/40"
 								>
 									<span>ลงทะเบียนเข้าพักล่วงหน้า</span>
 									<ChevronRight class="h-3.5 w-3.5" />
 								</button>
 								<div class="pt-0.5 text-center font-mono text-xs text-slate-400">
-									Token: <code class="font-semibold text-red-700">portalServices.shelter</code>
+									Token: <code class="font-semibold text-domain-registration-text"
+										>portalServices.shelter</code
+									>
 								</div>
 							</div>
 						</div>
 
-						<!-- Card 2: Family Tracing (Navy & Cerulean) -->
+						<!-- Card 2: Family Tracing (Registration domain) -->
 						<div
-							class="flex flex-col justify-between space-y-4 rounded-2xl border-2 border-sky-200 bg-white p-5 shadow-2xs transition-all hover:border-sky-300 hover:shadow-xs"
+							class="flex flex-col justify-between space-y-4 rounded-2xl border-2 border-domain-registration-border bg-white p-5 shadow-2xs transition-all hover:border-domain-registration hover:shadow-xs"
 						>
 							<div class="space-y-3">
 								<div class="flex items-center justify-between">
 									<div
-										class="flex h-11 w-11 items-center justify-center rounded-xl border border-sky-100 bg-sky-50 text-[#0284C7]"
+										class="flex h-11 w-11 items-center justify-center rounded-xl border border-domain-registration-border bg-domain-registration-subtle text-[#0284C7]"
 									>
 										<Search class="h-5 w-5" />
 									</div>
 									<span
-										class="rounded-full border border-sky-200 bg-sky-50 px-2.5 py-0.5 font-mono text-xs font-bold text-[#0284C7]"
+										class="rounded-full border border-domain-registration-border bg-domain-registration-subtle px-2.5 py-0.5 font-mono text-xs font-bold text-domain-registration-text"
 									>
-										#0A2647
+										#124481
 									</span>
 								</div>
 								<div>
@@ -2213,40 +2163,42 @@
 									</p>
 								</div>
 							</div>
-							<div class="space-y-2 border-t border-sky-50 pt-1">
+							<div class="space-y-2 border-t border-domain-registration-border pt-1">
 								<button
-									class="flex w-full items-center justify-center gap-1 rounded-xl bg-[#0A2647] px-3 py-2.5 text-xs font-bold text-white shadow-2xs transition-colors hover:bg-[#051930]"
+									class="flex w-full items-center justify-center gap-1 rounded-xl bg-[#124481] px-3 py-2.5 text-xs font-bold text-white shadow-2xs transition-colors hover:bg-[#051930]"
 								>
 									<span>ค้นหารายชื่อผู้พักพิง</span>
 									<ArrowRight class="h-3.5 w-3.5" />
 								</button>
 								<button
-									class="flex w-full items-center justify-center gap-1 rounded-xl border border-sky-100/80 bg-sky-50 px-3 py-2 text-xs font-semibold text-sky-800 transition-colors hover:bg-sky-100"
+									class="flex w-full items-center justify-center gap-1 rounded-xl border border-domain-registration-border bg-domain-registration-subtle px-3 py-2 text-xs font-semibold text-domain-registration-text transition-colors hover:bg-domain-registration-border/40"
 								>
-									<MapPin class="h-3.5 w-3.5 text-sky-600" />
+									<MapPin class="h-3.5 w-3.5 text-domain-registration" />
 									<span>ดูแผนที่พิกัดศูนย์พักพิง</span>
 								</button>
 								<div class="pt-0.5 text-center font-mono text-xs text-slate-400">
-									Token: <code class="font-semibold text-sky-700">portalServices.tracing</code>
+									Token: <code class="font-semibold text-domain-registration-text"
+										>portalServices.tracing</code
+									>
 								</div>
 							</div>
 						</div>
 
-						<!-- Card 3: Donors & Supplies (Warm Amber) -->
+						<!-- Card 3: Donors & Supplies (Donation domain) -->
 						<div
-							class="flex flex-col justify-between space-y-4 rounded-2xl border-2 border-amber-200 bg-white p-5 shadow-2xs transition-all hover:border-amber-300 hover:shadow-xs"
+							class="flex flex-col justify-between space-y-4 rounded-2xl border-2 border-domain-donation-border bg-white p-5 shadow-2xs transition-all hover:border-domain-donation hover:shadow-xs"
 						>
 							<div class="space-y-3">
 								<div class="flex items-center justify-between">
 									<div
-										class="flex h-11 w-11 items-center justify-center rounded-xl border border-amber-100 bg-amber-50 text-amber-600"
+										class="flex h-11 w-11 items-center justify-center rounded-xl border border-domain-donation-border bg-domain-donation-subtle text-domain-donation"
 									>
 										<Package class="h-5 w-5" />
 									</div>
 									<span
-										class="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 font-mono text-xs font-bold text-amber-700"
+										class="rounded-full border border-domain-donation-border bg-domain-donation-subtle px-2.5 py-0.5 font-mono text-xs font-bold text-domain-donation-text"
 									>
-										#EA580C
+										#C2410C
 									</span>
 								</div>
 								<div>
@@ -2256,40 +2208,42 @@
 									</p>
 								</div>
 							</div>
-							<div class="space-y-2 border-t border-amber-50 pt-1">
+							<div class="space-y-2 border-t border-domain-donation-border pt-1">
 								<button
-									class="flex w-full items-center justify-center gap-1 rounded-xl bg-amber-600 px-3 py-2.5 text-xs font-bold text-white shadow-2xs transition-colors hover:bg-amber-700"
+									class="flex w-full items-center justify-center gap-1 rounded-xl bg-domain-donation-strong px-3 py-2.5 text-xs font-bold text-white shadow-2xs transition-colors hover:bg-domain-donation-text"
 								>
 									<span>แจ้งความประสงค์บริจาค</span>
 									<ChevronRight class="h-3.5 w-3.5" />
 								</button>
 								<button
-									class="flex w-full items-center justify-center gap-1 rounded-xl border border-amber-100/80 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800 transition-colors hover:bg-amber-100"
+									class="flex w-full items-center justify-center gap-1 rounded-xl border border-domain-donation-border bg-domain-donation-subtle px-3 py-2 text-xs font-semibold text-domain-donation-text transition-colors hover:bg-domain-donation-border/40"
 								>
 									<span>ตรวจสอบสถานะการบริจาค</span>
 									<ArrowRight class="h-3.5 w-3.5" />
 								</button>
 								<div class="pt-0.5 text-center font-mono text-xs text-slate-400">
-									Token: <code class="font-semibold text-amber-700">portalServices.donation</code>
+									Token: <code class="font-semibold text-domain-donation-text"
+										>portalServices.donation</code
+									>
 								</div>
 							</div>
 						</div>
 
-						<!-- Card 4: Volunteers & Community (Emerald Green) -->
+						<!-- Card 4: Volunteers & Community (Volunteer domain) -->
 						<div
-							class="flex flex-col justify-between space-y-4 rounded-2xl border-2 border-emerald-200 bg-white p-5 shadow-2xs transition-all hover:border-emerald-300 hover:shadow-xs"
+							class="flex flex-col justify-between space-y-4 rounded-2xl border-2 border-domain-volunteer-border bg-white p-5 shadow-2xs transition-all hover:border-domain-volunteer hover:shadow-xs"
 						>
 							<div class="space-y-3">
 								<div class="flex items-center justify-between">
 									<div
-										class="flex h-11 w-11 items-center justify-center rounded-xl border border-emerald-100 bg-emerald-50 text-emerald-600"
+										class="flex h-11 w-11 items-center justify-center rounded-xl border border-domain-volunteer-border bg-domain-volunteer-subtle text-domain-volunteer"
 									>
 										<UserPlus class="h-5 w-5" />
 									</div>
 									<span
-										class="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 font-mono text-xs font-bold text-emerald-700"
+										class="rounded-full border border-domain-volunteer-border bg-domain-volunteer-subtle px-2.5 py-0.5 font-mono text-xs font-bold text-domain-volunteer-text"
 									>
-										#059669
+										#047857
 									</span>
 								</div>
 								<div>
@@ -2300,21 +2254,22 @@
 									</p>
 								</div>
 							</div>
-							<div class="space-y-2 border-t border-emerald-50 pt-1">
+							<div class="space-y-2 border-t border-domain-volunteer-border pt-1">
 								<button
-									class="flex w-full items-center justify-center gap-1 rounded-xl bg-emerald-600 px-3 py-2.5 text-xs font-bold text-white shadow-2xs transition-colors hover:bg-emerald-700"
+									class="flex w-full items-center justify-center gap-1 rounded-xl bg-domain-volunteer-strong px-3 py-2.5 text-xs font-bold text-white shadow-2xs transition-colors hover:bg-domain-volunteer-text"
 								>
 									<span>สมัครอาสาสมัคร (เลือกลงกะ)</span>
 									<ChevronRight class="h-3.5 w-3.5" />
 								</button>
 								<button
-									class="flex w-full items-center justify-center gap-1 rounded-xl border border-emerald-100/80 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800 transition-colors hover:bg-emerald-100"
+									class="flex w-full items-center justify-center gap-1 rounded-xl border border-domain-volunteer-border bg-domain-volunteer-subtle px-3 py-2 text-xs font-semibold text-domain-volunteer-text transition-colors hover:bg-domain-volunteer-border/40"
 								>
-									<Home class="h-3.5 w-3.5 text-emerald-600" />
+									<Home class="h-3.5 w-3.5 text-domain-volunteer" />
 									<span>ลงทะเบียนเปิดบ้านพี่เลี้ยง</span>
 								</button>
 								<div class="pt-0.5 text-center font-mono text-xs text-slate-400">
-									Token: <code class="font-semibold text-emerald-700">portalServices.volunteer</code
+									Token: <code class="font-semibold text-domain-volunteer-text"
+										>portalServices.volunteer</code
 									>
 								</div>
 							</div>
@@ -2543,56 +2498,62 @@
 							<tbody class="divide-y divide-slate-100 text-slate-600">
 								<tr class="hover:bg-slate-50/60">
 									<td class="flex items-center gap-2 px-4 py-2.5 font-bold text-slate-900">
-										<span class="h-3 w-3 rounded-full bg-[#DC2626]"></span>
+										<span class="h-3 w-3 rounded-full bg-domain-registration"></span>
 										ค้นหาศูนย์พักพิง (Card 1)
 									</td>
-									<td class="px-4 py-2.5 font-mono text-slate-500">#E7000B</td>
-									<td class="px-4 py-2.5 font-mono font-semibold text-red-700"
-										>portalServices.shelter (#DC2626)</td
+									<td class="px-4 py-2.5 font-mono text-slate-500">#124481</td>
+									<td class="px-4 py-2.5 font-mono font-semibold text-domain-registration-text"
+										>portalServices.shelter (domain-registration)</td
 									>
-									<td class="px-4 py-2.5 font-semibold text-emerald-700">4.8:1 (WCAG AA)</td>
+									<td class="px-4 py-2.5 font-semibold text-emerald-700">9.7:1 (WCAG AAA)</td>
 									<td class="px-4 py-2.5"
-										>ปุ่มแดงสำหรับค้นหาศูนย์พักพิงด่วน กรอบการ์ดสีแดงอ่อน 360°</td
+										>ปุ่ม registration-strong (ไม่ใช้สีแดง — แดงสงวนไว้สำหรับสถานะวิกฤต) กรอบ 360°</td
 									>
 								</tr>
 								<tr class="hover:bg-slate-50/60">
 									<td class="flex items-center gap-2 px-4 py-2.5 font-bold text-slate-900">
-										<span class="h-3 w-3 rounded-full bg-[#0A2647]"></span>
+										<span class="h-3 w-3 rounded-full bg-domain-registration"></span>
 										ผู้พักพิง (Card 2)
 									</td>
-									<td class="px-4 py-2.5 font-mono text-slate-500">#013365 / #0284C7</td>
-									<td class="px-4 py-2.5 font-mono font-semibold text-sky-800"
-										>portalServices.tracing (#0A2647 / #0284C7)</td
+									<td class="px-4 py-2.5 font-mono text-slate-500">#124481</td>
+									<td class="px-4 py-2.5 font-mono font-semibold text-domain-registration-text"
+										>portalServices.tracing (domain-registration)</td
 									>
-									<td class="px-4 py-2.5 font-semibold text-emerald-700">14.2:1 (WCAG AAA)</td>
-									<td class="px-4 py-2.5">ปุ่ม Navy หลักสำหรับค้นหาผู้พักพิง กรอบการ์ดสีฟ้าอ่อน</td>
+									<td class="px-4 py-2.5 font-semibold text-emerald-700">9.7:1 (WCAG AAA)</td>
+									<td class="px-4 py-2.5"
+										>ปุ่ม registration-strong สำหรับค้นหาผู้พักพิง กรอบ 360° สีเดียวกับ Card 1</td
+									>
 								</tr>
 								<tr class="hover:bg-slate-50/60">
 									<td class="flex items-center gap-2 px-4 py-2.5 font-bold text-slate-900">
-										<span class="h-3 w-3 rounded-full bg-[#EA580C]"></span>
+										<span class="h-3 w-3 rounded-full bg-domain-donation"></span>
 										บริจาค (Card 3)
 									</td>
-									<td class="px-4 py-2.5 font-mono text-slate-500">#E17100</td>
-									<td class="px-4 py-2.5 font-mono font-semibold text-amber-700"
-										>portalServices.donation (#EA580C)</td
+									<td class="px-4 py-2.5 font-mono text-slate-500">#FF5C00 / #C2410C</td>
+									<td class="px-4 py-2.5 font-mono font-semibold text-domain-donation-text"
+										>portalServices.donation (domain-donation)</td
 									>
-									<td class="px-4 py-2.5 font-semibold text-emerald-700">5.1:1 (WCAG AA)</td>
+									<td class="px-4 py-2.5 font-semibold text-emerald-700"
+										>5.2:1 (WCAG AA, ขาวบน strong)</td
+									>
 									<td class="px-4 py-2.5"
-										>ปุ่ม Amber สำหรับการบริจาคเสบียง สอดคล้องกับโทนครัวกลาง</td
+										>ไอคอน/ตัวตนใช้ base #FF5C00 ส่วนปุ่มที่มีข้อความใช้ strong #C2410C</td
 									>
 								</tr>
 								<tr class="hover:bg-slate-50/60">
 									<td class="flex items-center gap-2 px-4 py-2.5 font-bold text-slate-900">
-										<span class="h-3 w-3 rounded-full bg-[#059669]"></span>
+										<span class="h-3 w-3 rounded-full bg-domain-volunteer"></span>
 										อาสาสมัคร (Card 4)
 									</td>
-									<td class="px-4 py-2.5 font-mono text-slate-500">#009866</td>
-									<td class="px-4 py-2.5 font-mono font-semibold text-emerald-700"
-										>portalServices.volunteer (#059669)</td
+									<td class="px-4 py-2.5 font-mono text-slate-500">#059669 / #047857</td>
+									<td class="px-4 py-2.5 font-mono font-semibold text-domain-volunteer-text"
+										>portalServices.volunteer (domain-volunteer)</td
 									>
-									<td class="px-4 py-2.5 font-semibold text-emerald-700">4.6:1 (WCAG AA)</td>
+									<td class="px-4 py-2.5 font-semibold text-emerald-700"
+										>5.5:1 (WCAG AA, ขาวบน strong)</td
+									>
 									<td class="px-4 py-2.5"
-										>ปุ่ม Emerald สำหรับงานอาสาสมัคร กรอบการ์ดสีเขียวมิ้นต์อ่อน</td
+										>ไอคอน/ตัวตนใช้ base #059669 ส่วนปุ่มที่มีข้อความใช้ strong #047857</td
 									>
 								</tr>
 								<tr class="hover:bg-slate-50/60">
@@ -3293,9 +3254,9 @@
 						</span>
 						<div class="flex flex-wrap items-center gap-2.5">
 							<!-- Kitchen -->
-							<span class="badge-kitchen">
+							<span class="badge-domain-kitchen">
 								<Utensils class="h-3.5 w-3.5" />
-								<span>ครัวกลาง & ก๊าซ LPG (#EA580C)</span>
+								<span>ครัวกลาง & ก๊าซ LPG (#DB2777)</span>
 							</span>
 
 							<!-- Family -->
@@ -3305,15 +3266,15 @@
 							</span>
 
 							<!-- Donor -->
-							<span class="badge-donor">
+							<span class="badge-domain-donation">
 								<HeartHandshake class="h-3.5 w-3.5" />
-								<span>ผู้บริจาค & ค้นหาญาติ (#0284C7)</span>
+								<span>ผู้บริจาค (#FF5C00)</span>
 							</span>
 
 							<!-- Inventory -->
-							<span class="badge-inventory">
+							<span class="badge-domain-donation">
 								<Package class="h-3.5 w-3.5" />
-								<span>คลังสิ่งของ SPHERE (#0D9488)</span>
+								<span>คลังสิ่งของ SPHERE (#FF5C00)</span>
 							</span>
 
 							<!-- Accent -->

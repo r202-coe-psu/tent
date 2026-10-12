@@ -197,7 +197,7 @@ describe('reconciliation-workflow', () => {
 	const POS_CTX: AuthorContext = {
 		shelterCode: 'SH001',
 		createdBy: 'pos_user',
-		roles: ['shelter:SH001', 'registration_staff']
+		roles: ['shelter:SH001', 'SH001:distribution_staff']
 	};
 	const WH_CTX: AuthorContext = {
 		shelterCode: 'SH001',
