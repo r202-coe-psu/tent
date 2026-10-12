@@ -24,6 +24,7 @@
 	import {
 		KIOSK_LABEL_CHECKLIST,
 		KIOSK_LABEL_GAP_MM,
+		KIOSK_LABEL_LINK,
 		KIOSK_LABEL_MM,
 		KIOSK_LABEL_OFFSET_X_MM,
 		KIOSK_LABEL_PADDING_MM,
@@ -991,6 +992,7 @@
 								alt="QR ประจำตัวสำหรับใช้ภายในศูนย์"
 								name={labelName(result, person)}
 								phone={result.label?.phone}
+								footer={KIOSK_LABEL_LINK}
 								checklist={KIOSK_LABEL_CHECKLIST}
 							/>
 						</div>
