@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { adminFetch } from '$lib/server/couch-admin';
 import { smartCardDataSchema } from '$lib/features/kiosk-devices/domain/scanner.schema';
 import {
@@ -186,6 +186,7 @@ describe('registerKioskWalkIn', () => {
 		const evacuees: unknown[] = [];
 		mockAdminFetch.mockImplementation(async (url, init) => {
 			if (url.endsWith('/_find')) return { docs: [] } as never;
+			if (url.includes('/kiosk_addr_lock%3A')) return { rev: '1-addr', ok: true } as never;
 			if (url.includes('/kiosk_reg_lock%3A')) {
 				const id = url.split('/').pop()!.split('?')[0]!;
 				if (init?.method === 'PUT') {
@@ -225,6 +226,7 @@ describe('registerKioskWalkIn', () => {
 		let lockPutAttempts = 0;
 		mockAdminFetch.mockImplementation(async (url, init) => {
 			if (url.endsWith('/_find')) return { docs: [] } as never;
+			if (url.includes('/kiosk_addr_lock%3A')) return { rev: '1-addr', ok: true } as never;
 			if (url.includes('/kiosk_reg_lock%3A')) {
 				if (init?.method === 'PUT') {
 					lockPutAttempts += 1;
@@ -509,5 +511,180 @@ describe('kiosk walk-in household from the address read', () => {
 			province: null,
 			postal_code: null
 		});
+	});
+});
+
+describe('kiosk walk-in joining the household at the same card address', () => {
+	beforeEach(() => vi.resetAllMocks());
+
+	const address = { village_no: '4', lane: 'ซอย 5', road: 'สุขุมวิท' };
+	const second = { ...card, citizen_id: '2234567890123', first_name_th: 'สมหญิง' };
+	const register = (card_: typeof card, photo_: typeof photo | null = null) =>
+		registerKioskWalkIn('SH001', 'KIOSK-01', 'โต๊ะ 1', card_, photo_, consentedAt);
+
+	it('puts a second walk-in at the same address (spaced differently) in the first one household', async () => {
+		const db = fakeShelterDb();
+		const first = await register({ ...card, ...address });
+		const joined = await register({
+			...second,
+			...address,
+			lane: ' ซอย  5',
+			road: 'สุขุมวิท '
+		});
+
+		const [household] = db.ofType<{ _id: string; head_evacuee_id: string; status: string }>(
+			'household'
+		);
+		expect(db.ofType('household')).toHaveLength(1);
+		expect(joined.household_id).toBe(first.household_id);
+		expect(joined._id).not.toBe(first._id);
+		expect(household).toMatchObject({
+			_id: first.household_id,
+			head_evacuee_id: first._id,
+			status: 'arriving'
+		});
+		expect(db.ofType('evacuee')).toHaveLength(2);
+	});
+
+	it('gives a different road its own household', async () => {
+		const db = fakeShelterDb();
+		const first = await register({ ...card, ...address });
+		const other = await register({ ...second, ...address, road: 'เพชรเกษม' });
+		expect(db.ofType('household')).toHaveLength(2);
+		expect(other.household_id).not.toBe(first.household_id);
+	});
+
+	it('does not group walk-ins whose card has no house number', async () => {
+		const db = fakeShelterDb();
+		const noHouse = { ...card, address_no: null };
+		const first = await register(noHouse);
+		const other = await register({ ...second, address_no: null });
+		expect(db.ofType('household')).toHaveLength(2);
+		expect(other.household_id).not.toBe(first.household_id);
+	});
+
+	const seededHousehold = (overrides: Record<string, unknown> = {}) => [
+		{
+			_id: 'household:01EARLIER',
+			type: 'household',
+			shelter_code: 'SH001',
+			head_evacuee_id: 'evacuee:01EARLIER',
+			status: 'arriving',
+			created_by: 'scanner:KIOSK-02',
+			created_at: '2026-10-01T00:00:00.000Z',
+			...overrides
+		},
+		{
+			_id: 'evacuee:01EARLIER',
+			type: 'evacuee',
+			shelter_code: 'SH001',
+			registered_via: 'kiosk',
+			household_id: 'household:01EARLIER',
+			card_snapshot: { ...card, ...address, citizen_id: '3234567890123' }
+		}
+	];
+
+	it('joins an earlier household made by another kiosk, keeping its head', async () => {
+		const db = fakeShelterDb(seededHousehold());
+		const joined = await register({ ...card, ...address });
+		expect(joined.household_id).toBe('household:01EARLIER');
+		expect(db.ofType('household')).toHaveLength(1);
+		expect(db.ofType('household')[0]).toMatchObject({ head_evacuee_id: 'evacuee:01EARLIER' });
+	});
+
+	it.each([
+		['cancelled', { status: 'cancelled' }],
+		['checked out', { status: 'checked_out' }],
+		['merged', { status: 'merged' }],
+		['made by staff', { created_by: 'user:somchai' }],
+		['headed by someone else', { head_evacuee_id: 'evacuee:01OTHER' }],
+		['in another shelter', { shelter_code: 'SH002' }]
+	])('does not join a household that is %s', async (_name, overrides) => {
+		const db = fakeShelterDb(seededHousehold(overrides));
+		const evacuee = await register({ ...card, ...address });
+		expect(evacuee.household_id).not.toBe('household:01EARLIER');
+		expect(db.ofType('household')).toHaveLength(2);
+	});
+
+	it('joins the oldest of several open households at the address', async () => {
+		const older = seededHousehold({ created_at: '2026-09-01T00:00:00.000Z' }).map((doc) => ({
+			...doc,
+			_id: String(doc._id).replace('01EARLIER', '00OLDEST'),
+			...(doc.type === 'household' ? { head_evacuee_id: 'evacuee:00OLDEST' } : {}),
+			...(doc.type === 'evacuee' ? { household_id: 'household:00OLDEST' } : {})
+		}));
+		fakeShelterDb([...seededHousehold(), ...older]);
+		const evacuee = await register({ ...card, ...address });
+		expect(evacuee.household_id).toBe('household:00OLDEST');
+	});
+
+	it('leaves the existing household untouched and no image behind when the join write fails', async () => {
+		const seed = seededHousehold();
+		const db = fakeShelterDb(seed, { failPutOfType: 'evacuee' });
+		await expect(register({ ...card, ...address }, photo)).rejects.toThrow('evacuee write failed');
+		expect(db.ofType('household')).toEqual(seed.filter((doc) => doc.type === 'household'));
+		expect(db.ofType('image')).toHaveLength(0);
+		expect(db.ofType('kiosk_addr_lock')).toHaveLength(0);
+		expect(db.ofType('kiosk_reg_lock')).toHaveLength(0);
+	});
+
+	describe('while another walk-in holds the address lock', () => {
+		afterEach(() => vi.useRealTimers());
+
+		/** The fake DB, with the address lock PUT answering 409 for the first `heldFor` tries. */
+		function dbWithAddressLockHeld(heldFor: number) {
+			const db = fakeShelterDb();
+			const delegate = mockAdminFetch.getMockImplementation()!;
+			let tries = 0;
+			mockAdminFetch.mockImplementation(async (url, init) => {
+				if (String(url).includes('/kiosk_addr_lock%3A') && init?.method === 'PUT') {
+					tries += 1;
+					if (tries <= heldFor) throw conflictError();
+				}
+				return delegate(url, init);
+			});
+			return { db, tries: () => tries };
+		}
+
+		it('waits for it and then registers', async () => {
+			vi.useFakeTimers();
+			const { db, tries } = dbWithAddressLockHeld(2);
+			const registering = register({ ...card, ...address });
+			await vi.advanceTimersByTimeAsync(1000);
+			const evacuee = await registering;
+			expect(tries()).toBe(3);
+			expect(evacuee.household_id).toBe(db.ofType<{ _id: string }>('household')[0]?._id);
+			expect(db.ofType('kiosk_addr_lock')).toHaveLength(0);
+			expect(db.ofType('kiosk_reg_lock')).toHaveLength(0);
+		});
+
+		it('fails with a retryable error, not "already registered", if it never frees up', async () => {
+			vi.useFakeTimers();
+			const { db } = dbWithAddressLockHeld(Infinity);
+			const registering = register({ ...card, ...address });
+			const outcome = registering.then(
+				() => null,
+				(error: unknown) => error
+			);
+			await vi.advanceTimersByTimeAsync(5000);
+			const error = await outcome;
+			expect(error).toBeInstanceOf(Error);
+			expect(error).not.toBeInstanceOf(KioskRegistrationBlockedError);
+			expect(db.ofType('evacuee')).toHaveLength(0);
+			expect(db.ofType('kiosk_reg_lock')).toHaveLength(0);
+		});
+	});
+
+	it('releases the address lock after a successful registration', async () => {
+		const db = fakeShelterDb();
+		await register({ ...card, ...address });
+		expect(db.ofType('kiosk_addr_lock')).toHaveLength(0);
+		expect(db.ofType('kiosk_reg_lock')).toHaveLength(0);
+	});
+
+	it('releases the address lock when the registration fails', async () => {
+		const db = fakeShelterDb([], { failPutOfType: 'household' });
+		await expect(register({ ...card, ...address })).rejects.toThrow('household write failed');
+		expect(db.ofType('kiosk_addr_lock')).toHaveLength(0);
 	});
 });

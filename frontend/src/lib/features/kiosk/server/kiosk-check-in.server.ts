@@ -624,7 +624,7 @@ export async function checkInSelectedMembers(
 }
 
 /** Keep the legacy household status projection aligned with the member stay records. */
-async function refreshHouseholdStatus(
+export async function refreshHouseholdStatus(
 	dbName: string,
 	householdId: string,
 	shelterCode: string
