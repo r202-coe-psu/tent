@@ -22,7 +22,7 @@ vi.mock('$lib/server/shelters.admin', () => ({
 	findMasterByCode: vi.fn()
 }));
 
-describe('POST /api/v1/scanner/bootstrap', () => {
+describe('POST /api/v1/kiosk/bootstrap', () => {
 	const mockGetDevice = vi.mocked(scannerServerRepository.getDeviceByDeviceId);
 	const mockHeartbeat = vi.mocked(scannerServerRepository.updateDeviceLastSeen);
 	const mockFindShelter = vi.mocked(findMasterByCode);
@@ -54,7 +54,7 @@ describe('POST /api/v1/scanner/bootstrap', () => {
 
 	function request(deviceId = 'kiosk-sh001-01', scannerSecret = secret): RequestEvent {
 		return {
-			request: new Request('http://localhost/api/v1/scanner/bootstrap', {
+			request: new Request('http://localhost/api/v1/kiosk/bootstrap', {
 				method: 'POST',
 				headers: {
 					'x-device-id': deviceId,

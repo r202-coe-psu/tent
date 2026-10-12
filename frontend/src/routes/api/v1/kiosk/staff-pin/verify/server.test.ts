@@ -63,7 +63,7 @@ const secretDoc: StaffPinSecret = {
 
 function request(body: unknown, headers: Record<string, string> = {}): RequestEvent {
 	return {
-		request: new Request('http://localhost/api/v1/scanner/kiosk/staff-pin/verify', {
+		request: new Request('http://localhost/api/v1/kiosk/staff-pin/verify', {
 			method: 'POST',
 			headers: {
 				'content-type': 'application/json',
@@ -83,7 +83,7 @@ async function post(event: RequestEvent): Promise<Response> {
 	return pending;
 }
 
-describe('POST /api/v1/scanner/kiosk/staff-pin/verify', () => {
+describe('POST /api/v1/kiosk/staff-pin/verify', () => {
 	const mockLookup = vi.mocked(scannerServerRepository.getDeviceByDeviceId);
 	const mockSecret = vi.mocked(staffPinSecretStore.get);
 	let info: ReturnType<typeof vi.spyOn>;

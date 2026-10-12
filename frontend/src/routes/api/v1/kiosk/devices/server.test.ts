@@ -20,7 +20,7 @@ vi.mock('$lib/server/scanners/device-repository', () => ({
 	scannerDeviceRepository: { createDevice: vi.fn(), listDevices: vi.fn() }
 }));
 
-describe('POST /api/v1/scanner/devices', () => {
+describe('POST /api/v1/kiosk/devices', () => {
 	const mockSession = vi.mocked(readSessionUserCtx);
 	const mockCreate = vi.mocked(scannerDeviceRepository.createDevice);
 
@@ -58,7 +58,7 @@ describe('POST /api/v1/scanner/devices', () => {
 
 	async function post(body: unknown): Promise<Response> {
 		return POST({
-			request: new Request('http://localhost/api/v1/scanner/devices', {
+			request: new Request('http://localhost/api/v1/kiosk/devices', {
 				method: 'POST',
 				headers: { 'content-type': 'application/json', cookie: 'AuthSession=sa' },
 				body: JSON.stringify(body)
@@ -162,7 +162,7 @@ describe('POST /api/v1/scanner/devices', () => {
 	});
 });
 
-describe('GET /api/v1/scanner/devices', () => {
+describe('GET /api/v1/kiosk/devices', () => {
 	const mockSession = vi.mocked(readSessionUserCtx);
 	const mockList = vi.mocked(scannerDeviceRepository.listDevices);
 
@@ -192,8 +192,8 @@ describe('GET /api/v1/scanner/devices', () => {
 
 	async function get(query = ''): Promise<Response> {
 		return GET({
-			url: new URL(`http://localhost/api/v1/scanner/devices${query}`),
-			request: new Request(`http://localhost/api/v1/scanner/devices${query}`, {
+			url: new URL(`http://localhost/api/v1/kiosk/devices${query}`),
+			request: new Request(`http://localhost/api/v1/kiosk/devices${query}`, {
 				headers: { cookie: 'AuthSession=abc' }
 			})
 		} as unknown as RequestEvent);

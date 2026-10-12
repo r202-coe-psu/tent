@@ -26,7 +26,7 @@ vi.mock('$env/dynamic/private', () => ({ env: {} }));
 const DEVICE_ID = 'kiosk-01';
 const DOC_ID = 'scanner_device:kiosk-01';
 
-describe('POST /api/v1/scanner/devices/[id]/staff-pin', () => {
+describe('POST /api/v1/kiosk/devices/[id]/staff-pin', () => {
 	const mockSession = vi.mocked(readSessionUserCtx);
 	const mockGet = vi.mocked(scannerDeviceRepository.getDevice);
 	const mockSet = vi.mocked(scannerDeviceRepository.setStaffPin);
@@ -51,7 +51,7 @@ describe('POST /api/v1/scanner/devices/[id]/staff-pin', () => {
 	async function post(body: unknown): Promise<Response> {
 		return POST({
 			params: { id: DEVICE_ID },
-			request: new Request(`http://localhost/api/v1/scanner/devices/x/staff-pin`, {
+			request: new Request(`http://localhost/api/v1/kiosk/devices/x/staff-pin`, {
 				method: 'POST',
 				headers: { 'content-type': 'application/json', cookie: 'AuthSession=sa' },
 				body: JSON.stringify(body)

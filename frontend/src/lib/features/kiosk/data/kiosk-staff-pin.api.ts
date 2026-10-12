@@ -1,4 +1,4 @@
-export const KIOSK_STAFF_PIN_VERIFY_PATH = '/api/v1/scanner/kiosk/staff-pin/verify';
+export const KIOSK_STAFF_PIN_VERIFY_PATH = '/api/v1/kiosk/staff-pin/verify';
 export const KIOSK_STAFF_PIN_TIMEOUT_MS = 8_000;
 
 /**

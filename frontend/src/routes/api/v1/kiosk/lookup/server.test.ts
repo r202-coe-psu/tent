@@ -75,7 +75,7 @@ function request(
 	secret = 'test-secret'
 ): RequestEvent {
 	return {
-		request: new Request('http://localhost/api/v1/scanner/kiosk/lookup', {
+		request: new Request('http://localhost/api/v1/kiosk/lookup', {
 			method: 'POST',
 			headers: {
 				...(deviceId ? { 'x-device-id': deviceId } : {}),
@@ -95,7 +95,7 @@ function phoneFor(index: number): string {
 	return `08123456${String(index).padStart(2, '0')}`;
 }
 
-describe('POST /api/v1/scanner/kiosk/lookup', () => {
+describe('POST /api/v1/kiosk/lookup', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
 		mockAuthenticate.mockImplementation(async (deviceId) => {
@@ -285,7 +285,7 @@ describe('POST /api/v1/scanner/kiosk/lookup', () => {
 	});
 });
 
-describe('POST /api/v1/scanner/kiosk/lookup source thaid', () => {
+describe('POST /api/v1/kiosk/lookup source thaid', () => {
 	const pid = '1234567890123';
 	const device = 'thaid-kiosk-a';
 

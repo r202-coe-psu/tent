@@ -30,7 +30,7 @@ describe('fetchKioskConfig', () => {
 			thaidCheckInEnabled: true
 		});
 		expect(fetchFn).toHaveBeenCalledWith(
-			'/api/v1/scanner/kiosk/config',
+			'/api/v1/kiosk/config',
 			expect.objectContaining({
 				method: 'POST',
 				cache: 'no-store',

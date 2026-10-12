@@ -22,7 +22,7 @@ const mockAuthenticate = vi.mocked(authenticateScannerDevice);
 
 function event(body: unknown, deviceId = 'kiosk-a', secret = 'test-secret'): RequestEvent {
 	return {
-		request: new Request('http://localhost/api/v1/scanner/kiosk/thaid/session/status', {
+		request: new Request('http://localhost/api/v1/kiosk/thaid/session/status', {
 			method: 'POST',
 			headers: {
 				...(deviceId ? { 'x-device-id': deviceId } : {}),
@@ -34,7 +34,7 @@ function event(body: unknown, deviceId = 'kiosk-a', secret = 'test-secret'): Req
 	} as unknown as RequestEvent;
 }
 
-describe('POST /api/v1/scanner/kiosk/thaid/session/status', () => {
+describe('POST /api/v1/kiosk/thaid/session/status', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
 		_resetSessionsForTest();

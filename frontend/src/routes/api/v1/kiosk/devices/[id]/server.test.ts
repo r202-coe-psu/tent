@@ -27,7 +27,7 @@ vi.mock('$env/dynamic/private', () => ({ env: {} }));
 const DEVICE_ID = 'kiosk-01';
 const DOC_ID = 'scanner_device:kiosk-01';
 
-describe('DELETE /api/v1/scanner/devices/[id]', () => {
+describe('DELETE /api/v1/kiosk/devices/[id]', () => {
 	const mockSession = vi.mocked(readSessionUserCtx);
 	const mockGet = vi.mocked(scannerDeviceRepository.getDevice);
 	const mockDelete = vi.mocked(scannerDeviceRepository.deleteDevice);
@@ -51,7 +51,7 @@ describe('DELETE /api/v1/scanner/devices/[id]', () => {
 	async function del(id = DEVICE_ID): Promise<Response> {
 		return DELETE({
 			params: { id },
-			request: new Request('http://localhost/api/v1/scanner/devices/x', {
+			request: new Request('http://localhost/api/v1/kiosk/devices/x', {
 				method: 'DELETE',
 				headers: { cookie: 'AuthSession=sa' }
 			})
@@ -126,7 +126,7 @@ describe('DELETE /api/v1/scanner/devices/[id]', () => {
 	});
 });
 
-describe('PATCH /api/v1/scanner/devices/[id]', () => {
+describe('PATCH /api/v1/kiosk/devices/[id]', () => {
 	const mockSession = vi.mocked(readSessionUserCtx);
 	const mockGet = vi.mocked(scannerDeviceRepository.getDevice);
 	const mockUpdate = vi.mocked(scannerDeviceRepository.updateDevice);
@@ -164,7 +164,7 @@ describe('PATCH /api/v1/scanner/devices/[id]', () => {
 	async function patch(body: unknown, id = DEVICE_ID): Promise<Response> {
 		return PATCH({
 			params: { id },
-			request: new Request('http://localhost/api/v1/scanner/devices/x', {
+			request: new Request('http://localhost/api/v1/kiosk/devices/x', {
 				method: 'PATCH',
 				headers: { 'content-type': 'application/json', cookie: 'AuthSession=abc' },
 				body: typeof body === 'string' ? body : JSON.stringify(body)

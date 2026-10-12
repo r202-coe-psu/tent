@@ -46,15 +46,15 @@ SYSTEM_CHROMIUM_PATH = "/usr/bin/chromium"
 # (see _print_labels) so Chromium's print preview is never invoked for labels. --kiosk-printing
 # (_build_browser_args) is unrelated to this path now — it only guards a stray window.print()
 # from ever showing a dialog if something outside this route ever calls it.
-KIOSK_PRINT_PATH = "/api/v1/scanner/kiosk/print"
+KIOSK_PRINT_PATH = "/api/v1/kiosk/print"
 # Per-machine hardware settings for the kiosk page (QR input, camera choice). Answered locally
 # like the print path — never forwarded to the server and never given the device credential.
-KIOSK_HARDWARE_PATH = "/api/v1/scanner/kiosk/hardware"
+KIOSK_HARDWARE_PATH = "/api/v1/kiosk/hardware"
 # Face check (see app/face): the page sends camera frames here and gets only a verdict or a hint
 # back. Answered locally - the server never sees a frame or an embedding. The one image that leaves
 # is the chip photo of a check-in whose face matched: handed to the page once with the verdict, so
 # /check-in can keep it as the person's photo when they have none.
-KIOSK_FACE_PATH_PREFIX = "/api/v1/scanner/kiosk/face/"
+KIOSK_FACE_PATH_PREFIX = "/api/v1/kiosk/face/"
 # Why the page gave up on the camera, the person skipped or staff bypassed it with the device PIN;
 # the only words `face/cancel` will log.
 KIOSK_FACE_END_REASONS = frozenset(
@@ -198,7 +198,7 @@ class ScannerClientManager:
         self.register_face_path = "/kiosk/register/face"
         self.register_path_prefix = "/kiosk/register/"
         self.error_path = "/kiosk/scanner/error"
-        self.bootstrap_api_url = f"{self.tent_base_url}/api/v1/scanner/bootstrap"
+        self.bootstrap_api_url = f"{self.tent_base_url}/api/v1/kiosk/bootstrap"
         self._refresh_kiosk_urls()
 
         self.reader: Optional[ThaiSmartCardReader] = None
@@ -354,14 +354,14 @@ class ScannerClientManager:
         configured_origin = f"{configured_url.scheme}://{configured_url.netloc}"
         request_origin = request.headers.get("origin", "")
         allowed_paths = {
-            "/api/v1/scanner/kiosk/lookup",
-            "/api/v1/scanner/kiosk/check-in",
-            "/api/v1/scanner/kiosk/config",
-            "/api/v1/scanner/kiosk/register",
-            "/api/v1/scanner/kiosk/staff-pin/verify",
-            "/api/v1/scanner/kiosk/thaid/session",
-            "/api/v1/scanner/kiosk/thaid/session/status",
-            "/api/v1/scanner/kiosk/thaid/session/cancel",
+            "/api/v1/kiosk/lookup",
+            "/api/v1/kiosk/check-in",
+            "/api/v1/kiosk/config",
+            "/api/v1/kiosk/register",
+            "/api/v1/kiosk/staff-pin/verify",
+            "/api/v1/kiosk/thaid/session",
+            "/api/v1/kiosk/thaid/session/status",
+            "/api/v1/kiosk/thaid/session/cancel",
         }
 
         headers = dict(request.headers)
@@ -1100,7 +1100,7 @@ class ScannerClientManager:
 
             self.context = context
             await self._grant_camera_permission(context)
-            await context.route("**/api/v1/scanner/kiosk/**", self._route_kiosk_api)
+            await context.route("**/api/v1/kiosk/**", self._route_kiosk_api)
             self.page = context.pages[0] if context.pages else await context.new_page()
 
             # Attach event listeners to catch crashes or closures

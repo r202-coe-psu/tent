@@ -44,13 +44,11 @@ flowchart LR
 2. **Card Engine**: ใช้เลขประจำตัวประชาชน 13 หลักเพื่อค้นหา; ชื่อและที่อยู่จากบัตรไม่ถูกส่งเข้า API ตอนค้นหาหรือรายงานตัว
    ยกเว้นรูปจากชิป: ถ้าเปิด face check และผลเป็น `match` ตอนรายงานตัวด้วยบัตร หน้า kiosk แนบรูปจากชิปไปกับ `/check-in`
    server เก็บเป็นรูปของเจ้าของบัตรเฉพาะเมื่อยังไม่มีรูป (ไม่ทับรูปเดิม; รูปผิดรูปแบบหรือบันทึกไม่ได้ก็รายงานตัวสำเร็จตามปกติ)
-3. **Kiosk API**: Python Client แนบ `X-Device-Id` และ `X-Device-Secret` เฉพาะคำขอ same-origin ไปยัง `/api/v1/scanner/kiosk/lookup`, `/check-in`, `/config`, `/register` และ `/staff-pin/verify`; server ตรวจ device และใช้ศูนย์ที่ผูกกับ device
+3. **Kiosk API**: Python Client แนบ `X-Device-Id` และ `X-Device-Secret` เฉพาะคำขอ same-origin ไปยัง `/api/v1/kiosk/lookup`, `/check-in`, `/config`, `/register` และ `/staff-pin/verify`; server ตรวจ device และใช้ศูนย์ที่ผูกกับ device
 4. **Check-in**: เจ้าหน้าที่เลือกสมาชิกที่มาถึง ระบบเปลี่ยนเฉพาะผู้ที่เลือกจาก `pre_registered` เป็น `arriving` และสร้าง QR แบบไม่มีข้อมูลส่วนบุคคล
 5. **Wristband**: พิมพ์ label 1 ดวงต่อคนออกเครื่องพิมพ์ label ทันที (ไม่มี print dialog) และสั่งพิมพ์ซ้ำจากผลเดิมโดยไม่ส่ง check-in ซ้ำ — ดู [เครื่องพิมพ์ Label XP-365B](#-เครื่องพิมพ์-label-xp-365b-usb-label-printer)
 
 ค่า `shelter_code` ใน URL เป็นข้อมูลแสดงผลเท่านั้น; server ใช้ shelter ที่ผูกกับ device หลังตรวจ `X-Device-Id`/`X-Device-Secret` ทุกคำขอ
-
-Legacy `POST /api/v1/scanner/draft` ถูกปิดเพื่อไม่ให้ scanner สร้าง pre-registration จากการอ่านบัตรอีกต่อไป
 
 ### การยืนยันตัวตนเครื่อง Kiosk
 
@@ -60,7 +58,7 @@ Legacy `POST /api/v1/scanner/draft` ถูกปิดเพื่อไม่�
 2. คัดลอก `.env` snippet จากหน้าต่างที่แสดงหลังสร้างทันที — Scanner Key จะแสดงเป็น plaintext เพียงครั้งเดียว
 3. บันทึกลง `kiosk/.env` บนเครื่อง Kiosk แล้วจำกัดสิทธิ์ไฟล์เป็น `0600`
 4. ตอนเริ่มโปรแกรม Scanner Client จะโหลด `.env` (process environment มีสิทธิ์ override), ตรวจ HTTPS/placeholder และเรียก
-   `POST /api/v1/scanner/bootstrap` ก่อนเปิด Playwright หรือเริ่มเครื่องอ่านบัตร; credential จะไม่อยู่ใน URL หรือ JavaScript
+   `POST /api/v1/kiosk/bootstrap` ก่อนเปิด Playwright หรือเริ่มเครื่องอ่านบัตร; credential จะไม่อยู่ใน URL หรือ JavaScript
 5. เฉพาะ bootstrap ที่สำเร็จเท่านั้นจึงเปิดหน้า `/kiosk`
 
 ห้ามกรอก Device ID หรือ Scanner Key บนหน้าจอที่ประชาชนใช้งาน และห้ามใส่ Scanner Key ใน URL, browser storage หรือ log
@@ -321,13 +319,13 @@ python test_card.py
 python main.py
 ```
 
-- หลังยืนยันอุปกรณ์กับ `POST /api/v1/scanner/bootstrap` สำเร็จ หน้าจอจะเปิด Kiosk ของศูนย์ที่ผูกกับเครื่อง
+- หลังยืนยันอุปกรณ์กับ `POST /api/v1/kiosk/bootstrap` สำเร็จ หน้าจอจะเปิด Kiosk ของศูนย์ที่ผูกกับเครื่อง
 - ผู้ประสบภัยเลือกได้ทั้ง QR ลงทะเบียน, บัตรประชาชน หรือเบอร์โทรศัพท์ที่ใช้ลงทะเบียนล่วงหน้า — ช่องทางเบอร์โทรแสดงเฉพาะเมื่อเปิด「รับรายงานตัวด้วยเบอร์โทรที่ Kiosk」ในหน้าตั้งค่าศูนย์ (Backoffice → ศูนย์พักพิง → แก้ไข หรือ System Management → ศูนย์พักพิง → แก้ไข) หมวด「คุณสมบัติการปฏิบัติการ (Feature Flags)
 - สำหรับ phone gate: แตะ **เบอร์โทรศัพท์**, กรอกเบอร์ แล้วแตะค้นหา; หากพบ 2–5 ครัวเรือนให้เลือกครัวเรือนที่ถูกต้องก่อน ถ้าพบมากกว่า 5 รายการ ให้ติดต่อเจ้าหน้าที่ประจำศูนย์
 - ตรวจรายชื่อสมาชิกที่มาถึงและเลือกผู้ที่ต้องการรายงานตัว จากนั้นยืนยันเพื่อเปลี่ยนสถานะและแสดง QR สำหรับพิมพ์สายรัดข้อมือ; ครัวเรือนที่มีสมาชิกเกิน 20 คนจะยืนยันเป็นชุด ชุดละไม่เกิน 20 คน
 - ชื่อใน phone flow ถูกปิดบางส่วนเพื่อความเป็นส่วนตัว รวมถึงนามสกุลบนสายรัดข้อมือ; รายการที่เจ้าของเลือกไม่ให้ค้นหาจะไม่ปรากฏในผลค้นหา
 - เบอร์ที่กรอกใช้ค้นหารายการจองในศูนย์ของอุปกรณ์เท่านั้น ไม่อยู่ใน URL หรือ browser storage; เมื่อออกจากหน้า/หมดเวลา ระบบล้างช่องกรอก
-- เครื่อง Client แนบ `X-Device-Id` และ `X-Device-Secret` ให้เฉพาะคำขอ `POST` same-origin ไปยัง `/api/v1/scanner/kiosk/lookup`, `/check-in`, `/config`, `/register` และ `/staff-pin/verify`; browser ไม่ได้รับค่า secret
+- เครื่อง Client แนบ `X-Device-Id` และ `X-Device-Secret` ให้เฉพาะคำขอ `POST` same-origin ไปยัง `/api/v1/kiosk/lookup`, `/check-in`, `/config`, `/register` และ `/staff-pin/verify`; browser ไม่ได้รับค่า secret
 
 การทดสอบ `python test_card.py` ในหัวข้อก่อนหน้านี้เป็นการตรวจฮาร์ดแวร์ในเครื่องและแสดงข้อมูลบัตร/บันทึกรูปถ่ายในเครื่องทดสอบเท่านั้น ไม่ใช่ flow ของ Kiosk สำหรับผู้ใช้งานจริง
 
@@ -545,7 +543,7 @@ sudo usermod -aG lp kiosk
 | `KIOSK_CAMERA_FLIP` | `off` \| `on` (กลับภาพกล้องบนจอซ้าย↔ขวา ทั้งหน้าสแกน QR และหน้าตรวจใบหน้า; เปลี่ยนแค่ภาพที่แสดง ไม่กระทบการอ่าน QR / ตรวจใบหน้า) | `off` |
 | `KIOSK_QR_READER_MAX_GAP_MS` | ช่วงห่างสูงสุดระหว่างตัวอักษรที่นับว่าเป็นเครื่องอ่าน 10–100 ms (วัดด้วย `sudo ./inspect_hardware.sh --qr`; ใช้ค่าสูงสุด × 2) | `50` |
 
-เครื่องอ่านต้องพิมพ์แบบ keyboard (US layout) และปิดท้ายด้วย Enter หน้า `/kiosk/qr` จะรับข้อความที่พิมพ์เร็วและยาวอย่างน้อย 8 ตัวอักษรเท่านั้น — แป้นพิมพ์ที่คนกดช้า ๆ ไม่ถูกนับเป็นการสแกน หน้าเว็บอ่านค่าเหล่านี้จาก `kiosk` ในเครื่อง (`POST /api/v1/scanner/kiosk/hardware` ไม่ส่งต่อไป server และไม่มี credential)
+เครื่องอ่านต้องพิมพ์แบบ keyboard (US layout) และปิดท้ายด้วย Enter หน้า `/kiosk/qr` จะรับข้อความที่พิมพ์เร็วและยาวอย่างน้อย 8 ตัวอักษรเท่านั้น — แป้นพิมพ์ที่คนกดช้า ๆ ไม่ถูกนับเป็นการสแกน หน้าเว็บอ่านค่าเหล่านี้จาก `kiosk` ในเครื่อง (`POST /api/v1/kiosk/hardware` ไม่ส่งต่อไป server และไม่มี credential)
 
 ### เครื่องอ่านบัตร RFpro (ตู้ใหญ่)
 
@@ -578,7 +576,7 @@ SFace เทียบหน้า, MiniFASNet ตรวจว่าเป็น�
 เมื่อ `KIOSK_FACE_CHECK=on` ไปต่อเองได้เฉพาะผล `match` ผลอื่นทั้งหมด (`not_confirmed`, ข้าม, ไม่มีรูปในชิป, หมดเวลา,
 กล้องหรือ kiosk เสีย, ไม่ยินยอม) **ต้องให้เจ้าหน้าที่ใส่ PIN 6 หลักของเครื่อง** ก่อน kiosk จะลงทะเบียน (walk-in)
 หรือแสดงรายชื่อสมาชิก (check-in) ระบบไม่ปฏิเสธใครถาวร แต่ให้เจ้าหน้าที่ตรวจบัตรด้วยตาแล้วยืนยันด้วย PIN
-PIN ตั้ง/ดูได้ที่ `/system-management/scanners` (SA เท่านั้น) ตรวจผ่าน `/api/v1/scanner/kiosk/staff-pin/verify`
+PIN ตั้ง/ดูได้ที่ `/system-management/scanners` (SA เท่านั้น) ตรวจผ่าน `/api/v1/kiosk/staff-pin/verify`
 โดย kiosk แนบ device credential ให้ ดู [draft-kiosk-staff-pin-face-bypass](../docs/changes/draft-kiosk-staff-pin-face-bypass.md)
 **ก่อนตั้ง `on` ที่เครื่องใด ต้องให้เครื่องนั้นมี PIN แล้ว** ไม่งั้นจะข้ามด้วย PIN ไม่ได้ (`staff_pin_not_set`)
 เครื่องที่สร้างใหม่ได้ default PIN ทันที ส่วนเครื่องเดิมที่ยังไม่มี PIN ให้ผู้ดูแลรัน `pnpm sync:central --write --confirm` (ใน `frontend/`)

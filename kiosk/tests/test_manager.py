@@ -443,175 +443,189 @@ class KioskApiRouteTests(unittest.IsolatedAsyncioTestCase):
         cases = [
             (
                 "same-origin allowlisted POST",
-                "https://tent.example.go.th/api/v1/scanner/kiosk/lookup",
+                "https://tent.example.go.th/api/v1/kiosk/lookup",
                 "POST",
                 "https://tent.example.go.th",
                 True,
             ),
             (
                 "same-origin kiosk config POST",
-                "https://tent.example.go.th/api/v1/scanner/kiosk/config",
+                "https://tent.example.go.th/api/v1/kiosk/config",
                 "POST",
                 "https://tent.example.go.th",
                 True,
             ),
             (
                 "same-origin kiosk register POST",
-                "https://tent.example.go.th/api/v1/scanner/kiosk/register",
+                "https://tent.example.go.th/api/v1/kiosk/register",
                 "POST",
                 "https://tent.example.go.th",
                 True,
             ),
             (
                 "same-origin staff PIN verify POST",
-                "https://tent.example.go.th/api/v1/scanner/kiosk/staff-pin/verify",
+                "https://tent.example.go.th/api/v1/kiosk/staff-pin/verify",
                 "POST",
                 "https://tent.example.go.th",
                 True,
             ),
             (
                 "staff PIN verify from a foreign Origin header",
-                "https://tent.example.go.th/api/v1/scanner/kiosk/staff-pin/verify",
+                "https://tent.example.go.th/api/v1/kiosk/staff-pin/verify",
                 "POST",
                 "https://attacker.example",
                 False,
             ),
             (
                 "staff PIN verify on a foreign request URL",
-                "https://attacker.example/api/v1/scanner/kiosk/staff-pin/verify",
+                "https://attacker.example/api/v1/kiosk/staff-pin/verify",
                 "POST",
                 "https://tent.example.go.th",
                 False,
             ),
             (
                 "staff PIN verify GET",
-                "https://tent.example.go.th/api/v1/scanner/kiosk/staff-pin/verify",
+                "https://tent.example.go.th/api/v1/kiosk/staff-pin/verify",
                 "GET",
                 "https://tent.example.go.th",
                 False,
             ),
             (
                 "GET",
-                "https://tent.example.go.th/api/v1/scanner/kiosk/lookup",
+                "https://tent.example.go.th/api/v1/kiosk/lookup",
                 "GET",
                 "https://tent.example.go.th",
                 False,
             ),
             (
                 "kiosk config GET",
-                "https://tent.example.go.th/api/v1/scanner/kiosk/config",
+                "https://tent.example.go.th/api/v1/kiosk/config",
                 "GET",
                 "https://tent.example.go.th",
                 False,
             ),
             (
                 "foreign Origin header",
-                "https://tent.example.go.th/api/v1/scanner/kiosk/lookup",
+                "https://tent.example.go.th/api/v1/kiosk/lookup",
                 "POST",
                 "https://attacker.example",
                 False,
             ),
             (
                 "foreign request URL",
-                "https://attacker.example/api/v1/scanner/kiosk/lookup",
+                "https://attacker.example/api/v1/kiosk/lookup",
                 "POST",
                 "https://tent.example.go.th",
                 False,
             ),
             (
                 "non-allowlisted path",
-                "https://tent.example.go.th/api/v1/scanner/draft",
+                "https://tent.example.go.th/api/v1/kiosk/unknown",
+                "POST",
+                "https://tent.example.go.th",
+                False,
+            ),
+            (
+                "admin devices path under the kiosk prefix",
+                "https://tent.example.go.th/api/v1/kiosk/devices",
+                "POST",
+                "https://tent.example.go.th",
+                False,
+            ),
+            (
+                "bootstrap path under the kiosk prefix",
+                "https://tent.example.go.th/api/v1/kiosk/bootstrap",
                 "POST",
                 "https://tent.example.go.th",
                 False,
             ),
             (
                 "ThaiD session same-origin POST",
-                "https://tent.example.go.th/api/v1/scanner/kiosk/thaid/session",
+                "https://tent.example.go.th/api/v1/kiosk/thaid/session",
                 "POST",
                 "https://tent.example.go.th",
                 True,
             ),
             (
                 "ThaiD session GET",
-                "https://tent.example.go.th/api/v1/scanner/kiosk/thaid/session",
+                "https://tent.example.go.th/api/v1/kiosk/thaid/session",
                 "GET",
                 "https://tent.example.go.th",
                 False,
             ),
             (
                 "ThaiD session foreign Origin header",
-                "https://tent.example.go.th/api/v1/scanner/kiosk/thaid/session",
+                "https://tent.example.go.th/api/v1/kiosk/thaid/session",
                 "POST",
                 "https://attacker.example",
                 False,
             ),
             (
                 "ThaiD session foreign request URL",
-                "https://attacker.example/api/v1/scanner/kiosk/thaid/session",
+                "https://attacker.example/api/v1/kiosk/thaid/session",
                 "POST",
                 "https://tent.example.go.th",
                 False,
             ),
             (
                 "ThaiD session status same-origin POST",
-                "https://tent.example.go.th/api/v1/scanner/kiosk/thaid/session/status",
+                "https://tent.example.go.th/api/v1/kiosk/thaid/session/status",
                 "POST",
                 "https://tent.example.go.th",
                 True,
             ),
             (
                 "ThaiD session status GET",
-                "https://tent.example.go.th/api/v1/scanner/kiosk/thaid/session/status",
+                "https://tent.example.go.th/api/v1/kiosk/thaid/session/status",
                 "GET",
                 "https://tent.example.go.th",
                 False,
             ),
             (
                 "ThaiD session status foreign Origin header",
-                "https://tent.example.go.th/api/v1/scanner/kiosk/thaid/session/status",
+                "https://tent.example.go.th/api/v1/kiosk/thaid/session/status",
                 "POST",
                 "https://attacker.example",
                 False,
             ),
             (
                 "ThaiD session status foreign request URL",
-                "https://attacker.example/api/v1/scanner/kiosk/thaid/session/status",
+                "https://attacker.example/api/v1/kiosk/thaid/session/status",
                 "POST",
                 "https://tent.example.go.th",
                 False,
             ),
             (
                 "ThaiD session cancel same-origin POST",
-                "https://tent.example.go.th/api/v1/scanner/kiosk/thaid/session/cancel",
+                "https://tent.example.go.th/api/v1/kiosk/thaid/session/cancel",
                 "POST",
                 "https://tent.example.go.th",
                 True,
             ),
             (
                 "ThaiD session cancel GET",
-                "https://tent.example.go.th/api/v1/scanner/kiosk/thaid/session/cancel",
+                "https://tent.example.go.th/api/v1/kiosk/thaid/session/cancel",
                 "GET",
                 "https://tent.example.go.th",
                 False,
             ),
             (
                 "ThaiD session cancel foreign Origin header",
-                "https://tent.example.go.th/api/v1/scanner/kiosk/thaid/session/cancel",
+                "https://tent.example.go.th/api/v1/kiosk/thaid/session/cancel",
                 "POST",
                 "https://attacker.example",
                 False,
             ),
             (
                 "ThaiD session cancel foreign request URL",
-                "https://attacker.example/api/v1/scanner/kiosk/thaid/session/cancel",
+                "https://attacker.example/api/v1/kiosk/thaid/session/cancel",
                 "POST",
                 "https://tent.example.go.th",
                 False,
             ),
             (
                 "register path suffix",
-                "https://tent.example.go.th/api/v1/scanner/kiosk/register/extra",
+                "https://tent.example.go.th/api/v1/kiosk/register/extra",
                 "POST",
                 "https://tent.example.go.th",
                 False,
@@ -676,7 +690,7 @@ PNG = b"\x89PNG\r\n\x1a\n" + b"label"
 
 
 class FakePrintRoute(FakeRoute):
-    def __init__(self, *, url="https://tent.example.go.th/api/v1/scanner/kiosk/print",
+    def __init__(self, *, url="https://tent.example.go.th/api/v1/kiosk/print",
                  origin="https://tent.example.go.th", body=None):
         super().__init__(url=url, method="POST", headers={"origin": origin})
         self.request.post_data_buffer = body
@@ -1151,7 +1165,7 @@ class EscposPrintRouteTests(unittest.IsolatedAsyncioTestCase):
 
 class FakeHardwareRoute(FakePrintRoute):
     def __init__(self, **kwargs):
-        super().__init__(url="https://tent.example.go.th/api/v1/scanner/kiosk/hardware", **kwargs)
+        super().__init__(url="https://tent.example.go.th/api/v1/kiosk/hardware", **kwargs)
 
 
 class KioskHardwareRouteTests(unittest.IsolatedAsyncioTestCase):
@@ -1428,7 +1442,7 @@ if __name__ == "__main__":
     unittest.main()
 
 
-FACE_URL = "https://tent.example.go.th/api/v1/scanner/kiosk/face/"
+FACE_URL = "https://tent.example.go.th/api/v1/kiosk/face/"
 CID = "1234567890123"
 
 

@@ -77,7 +77,7 @@ const photo = {
 
 function request(body: unknown, deviceId = 'test-kiosk-device'): RequestEvent {
 	return {
-		request: new Request('http://localhost/api/v1/scanner/kiosk/check-in', {
+		request: new Request('http://localhost/api/v1/kiosk/check-in', {
 			method: 'POST',
 			headers: {
 				...(deviceId ? { 'x-device-id': deviceId } : {}),
@@ -93,7 +93,7 @@ async function send(body: unknown, deviceId?: string): Promise<Response> {
 	return POST(request(body, deviceId));
 }
 
-describe('POST /api/v1/scanner/kiosk/check-in', () => {
+describe('POST /api/v1/kiosk/check-in', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
 		mockAuthenticate.mockImplementation(async (deviceId) => {
@@ -248,7 +248,7 @@ describe('POST /api/v1/scanner/kiosk/check-in', () => {
 	});
 });
 
-describe('POST /api/v1/scanner/kiosk/check-in source thaid', () => {
+describe('POST /api/v1/kiosk/check-in source thaid', () => {
 	const sessionInvalid = {
 		error: {
 			code: 'KIOSK_THAID_SESSION_INVALID',

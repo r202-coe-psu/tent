@@ -59,7 +59,7 @@ export interface KioskCheckInBatchResult extends KioskCheckInResult {
 
 function postKioskRegistration(body: Record<string, unknown>): Promise<{ evacuee_id: string }> {
 	return requestWithTimeout(
-		'/api/v1/scanner/kiosk/register',
+		'/api/v1/kiosk/register',
 		{
 			method: 'POST',
 			headers: { 'content-type': 'application/json' },
@@ -198,7 +198,7 @@ export async function lookupPreRegisteredEvacuee(
 	options: { signal?: AbortSignal } = {}
 ): Promise<KioskLookupResponse> {
 	const result = await requestWithTimeout(
-		'/api/v1/scanner/kiosk/lookup',
+		'/api/v1/kiosk/lookup',
 		{
 			method: 'POST',
 			headers: { 'content-type': 'application/json' },
@@ -269,7 +269,7 @@ export async function checkInSelectedMembers(
 					: { source: 'smart-card', citizen_id: options.citizenId, photo: options.photo };
 		try {
 			const result = await requestWithTimeout<KioskCheckInResult>(
-				'/api/v1/scanner/kiosk/check-in',
+				'/api/v1/kiosk/check-in',
 				{
 					method: 'POST',
 					headers: { 'content-type': 'application/json' },

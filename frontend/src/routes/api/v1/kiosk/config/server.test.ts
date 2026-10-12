@@ -24,7 +24,7 @@ const mockThaidAllowed = vi.mocked(isKioskThaidCheckInAllowed);
 
 function request(body: unknown = {}, headers: Record<string, string> = {}): RequestEvent {
 	return {
-		request: new Request('http://localhost/api/v1/scanner/kiosk/config', {
+		request: new Request('http://localhost/api/v1/kiosk/config', {
 			method: 'POST',
 			headers: { 'content-type': 'application/json', ...headers },
 			body: JSON.stringify(body)
@@ -32,7 +32,7 @@ function request(body: unknown = {}, headers: Record<string, string> = {}): Requ
 	} as unknown as RequestEvent;
 }
 
-describe('POST /api/v1/scanner/kiosk/config', () => {
+describe('POST /api/v1/kiosk/config', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
 		mockAuthenticate.mockImplementation(async (deviceId) => {

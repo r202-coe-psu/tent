@@ -29,7 +29,7 @@ describe('scanner staff PIN api', () => {
 			ok: true
 		});
 		const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-		expect(url).toBe('/api/v1/scanner/devices/kiosk-01/staff-pin');
+		expect(url).toBe('/api/v1/kiosk/devices/kiosk-01/staff-pin');
 		expect(init.method).toBe('POST');
 		expect(init.cache).toBe('no-store');
 		expect(JSON.parse(init.body as string)).toEqual({ pin: '482913' });
@@ -48,7 +48,7 @@ describe('scanner staff PIN api', () => {
 		const revealed = await revealScannerStaffPin('kiosk-01');
 		expect(revealed.pin).toBe('482913');
 		const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-		expect(url).toBe('/api/v1/scanner/devices/kiosk-01/staff-pin/reveal');
+		expect(url).toBe('/api/v1/kiosk/devices/kiosk-01/staff-pin/reveal');
 		expect(init.method).toBe('POST');
 
 		fetchMock.mockResolvedValueOnce(respond(200, { pin: 'abc' }));
@@ -85,7 +85,7 @@ describe('deleteScannerDevice', () => {
 		fetchMock.mockResolvedValueOnce(respond(200, { ok: true }));
 		await deleteScannerDevice('kiosk-01');
 		const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-		expect(url).toBe('/api/v1/scanner/devices/kiosk-01');
+		expect(url).toBe('/api/v1/kiosk/devices/kiosk-01');
 		expect(init.method).toBe('DELETE');
 	});
 
@@ -121,14 +121,14 @@ describe('listScannerDevices', () => {
 		fetchMock.mockResolvedValueOnce(respond(200, [summary]));
 		expect(await listScannerDevices()).toEqual([summary]);
 		const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit | undefined];
-		expect(url).toBe('/api/v1/scanner/devices');
+		expect(url).toBe('/api/v1/kiosk/devices');
 		expect(init?.method ?? 'GET').toBe('GET');
 	});
 
 	it('sends the encoded shelter_code when given', async () => {
 		fetchMock.mockResolvedValueOnce(respond(200, [summary]));
 		await listScannerDevices('SH 001');
-		expect(fetchMock.mock.calls[0][0]).toBe('/api/v1/scanner/devices?shelter_code=SH%20001');
+		expect(fetchMock.mock.calls[0][0]).toBe('/api/v1/kiosk/devices?shelter_code=SH%20001');
 	});
 
 	it('rejects a payload that does not match the summary shape', async () => {
@@ -155,7 +155,7 @@ describe('updateScannerDevice', () => {
 		fetchMock.mockResolvedValueOnce(respond(200, updated));
 		expect(await updateScannerDevice('kiosk 01', { status: 'inactive' })).toEqual(updated);
 		const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-		expect(url).toBe('/api/v1/scanner/devices/kiosk%2001');
+		expect(url).toBe('/api/v1/kiosk/devices/kiosk%2001');
 		expect(init.method).toBe('PATCH');
 		expect(new Headers(init.headers).get('content-type')).toBe('application/json');
 		expect(JSON.parse(init.body as string)).toEqual({ status: 'inactive' });

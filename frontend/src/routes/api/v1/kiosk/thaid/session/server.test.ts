@@ -24,18 +24,18 @@ const mockGate = vi.mocked(isKioskThaidCheckInAllowed);
 
 function event(deviceId = 'kiosk-a', secret = 'test-secret'): RequestEvent {
 	return {
-		request: new Request('http://localhost/api/v1/scanner/kiosk/thaid/session', {
+		request: new Request('http://localhost/api/v1/kiosk/thaid/session', {
 			method: 'POST',
 			headers: {
 				...(deviceId ? { 'x-device-id': deviceId } : {}),
 				...(secret ? { 'x-device-secret': secret } : {})
 			}
 		}),
-		url: new URL('http://localhost/api/v1/scanner/kiosk/thaid/session')
+		url: new URL('http://localhost/api/v1/kiosk/thaid/session')
 	} as unknown as RequestEvent;
 }
 
-describe('POST /api/v1/scanner/kiosk/thaid/session', () => {
+describe('POST /api/v1/kiosk/thaid/session', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
 		_resetSessionsForTest();

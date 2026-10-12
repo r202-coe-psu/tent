@@ -54,7 +54,7 @@ const mockThaidAllowed = vi.mocked(isKioskThaidCheckInAllowed);
 
 function request(body: unknown, includeHeaders = true): RequestEvent {
 	return {
-		request: new Request('http://localhost/api/v1/scanner/kiosk/register', {
+		request: new Request('http://localhost/api/v1/kiosk/register', {
 			method: 'POST',
 			headers: {
 				'content-type': 'application/json',
@@ -71,7 +71,7 @@ const validBody = {
 	consented_at: new Date().toISOString()
 };
 
-describe('POST /api/v1/scanner/kiosk/register', () => {
+describe('POST /api/v1/kiosk/register', () => {
 	beforeEach(() => {
 		vi.restoreAllMocks();
 		vi.clearAllMocks();
@@ -207,7 +207,7 @@ describe('POST /api/v1/scanner/kiosk/register', () => {
 	});
 });
 
-describe('POST /api/v1/scanner/kiosk/register source thaid', () => {
+describe('POST /api/v1/kiosk/register source thaid', () => {
 	const DEVICE = 'registry:KIOSK-01';
 	const citizen = { pid: '1234567890123', sub: 'sub-1' };
 

@@ -32,7 +32,7 @@ function errorCode(payload: unknown): string | null {
 export async function createScannerDevice(
 	input: ScannerDeviceInput
 ): Promise<ScannerCreateResponse> {
-	const response = await fetch('/api/v1/scanner/devices', {
+	const response = await fetch('/api/v1/kiosk/devices', {
 		method: 'POST',
 		headers: { 'content-type': 'application/json' },
 		body: JSON.stringify(input)
@@ -48,7 +48,7 @@ export async function createScannerDevice(
  */
 export async function listScannerDevices(shelterCode?: string): Promise<ScannerDevice[]> {
 	const query = shelterCode ? `?shelter_code=${encodeURIComponent(shelterCode)}` : '';
-	const response = await fetch(`/api/v1/scanner/devices${query}`, { cache: 'no-store' });
+	const response = await fetch(`/api/v1/kiosk/devices${query}`, { cache: 'no-store' });
 	const payload: unknown = await response.json().catch(() => null);
 	if (!response.ok) throw new Error(responseMessage(payload, 'ไม่สามารถโหลดรายการเครื่องสแกนได้'));
 	return scannerDeviceListResponseSchema.parse(payload);
@@ -59,7 +59,7 @@ export async function updateScannerDevice(
 	deviceId: string,
 	patch: ScannerDevicePatch
 ): Promise<ScannerDevice> {
-	const response = await fetch(`/api/v1/scanner/devices/${encodeURIComponent(deviceId)}`, {
+	const response = await fetch(`/api/v1/kiosk/devices/${encodeURIComponent(deviceId)}`, {
 		method: 'PATCH',
 		headers: { 'content-type': 'application/json' },
 		body: JSON.stringify(patch)
@@ -71,7 +71,7 @@ export async function updateScannerDevice(
 
 /** Delete a device by `device_id`. Server-side so its staff PIN is removed with it. */
 export async function deleteScannerDevice(deviceId: string): Promise<void> {
-	const response = await fetch(`/api/v1/scanner/devices/${encodeURIComponent(deviceId)}`, {
+	const response = await fetch(`/api/v1/kiosk/devices/${encodeURIComponent(deviceId)}`, {
 		method: 'DELETE',
 		cache: 'no-store'
 	});
@@ -102,7 +102,7 @@ function staffPinErrorMessage(status: number, payload: unknown, fallback: string
 
 /** `[id]` in the path is the `device_id` (`kiosk-01`), not the registry doc `_id`. */
 function staffPinPath(deviceId: string, suffix = ''): string {
-	return `/api/v1/scanner/devices/${encodeURIComponent(deviceId)}/staff-pin${suffix}`;
+	return `/api/v1/kiosk/devices/${encodeURIComponent(deviceId)}/staff-pin${suffix}`;
 }
 
 /** Set a chosen PIN (`{ pin }`) or regenerate one (`{ regenerate: true }` → returns `pin`). */

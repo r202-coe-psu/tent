@@ -163,7 +163,7 @@ describe('thaid-oauth helpers (CR-ThaID)', () => {
 	});
 
 	describe('resolvePublicOrigin', () => {
-		const requestUrl = new URL('http://127.0.0.1:3000/api/v1/scanner/kiosk/thaid/session');
+		const requestUrl = new URL('http://127.0.0.1:3000/api/v1/kiosk/thaid/session');
 
 		it('prefers the configured ORIGIN over the request origin', () => {
 			(env as Record<string, string | undefined>).ORIGIN = 'https://shelter.example.com/';

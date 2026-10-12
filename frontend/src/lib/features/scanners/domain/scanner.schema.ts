@@ -90,7 +90,7 @@ export const setStaffPinFormSchema = z
 	});
 export type SetStaffPinFormValues = z.infer<typeof setStaffPinFormSchema>;
 
-/** Body of `POST /api/v1/scanner/devices/[id]/staff-pin`. */
+/** Body of `POST /api/v1/kiosk/devices/[id]/staff-pin`. */
 export const staffPinUpdateRequestSchema = z.union([
 	z.object({ pin: chosenStaffPinSchema }).strict(),
 	z.object({ regenerate: z.literal(true) }).strict()
@@ -102,7 +102,7 @@ export const staffPinUpdateResponseSchema = z
 	.strict();
 export type StaffPinUpdateResponse = z.infer<typeof staffPinUpdateResponseSchema>;
 
-/** Body of `POST /api/v1/scanner/devices/[id]/staff-pin/reveal` (SA only, no-store). */
+/** Body of `POST /api/v1/kiosk/devices/[id]/staff-pin/reveal` (SA only, no-store). */
 export const staffPinRevealResponseSchema = z
 	.object({
 		pin: staffPinSchema,
@@ -205,11 +205,11 @@ export const scannerDeviceSummarySchema = z
 export type ScannerDeviceSummary = z.infer<typeof scannerDeviceSummarySchema>;
 export type ScannerDevice = ScannerDeviceSummary;
 
-/** Body of `GET /api/v1/scanner/devices`. */
+/** Body of `GET /api/v1/kiosk/devices`. */
 export const scannerDeviceListResponseSchema = z.array(scannerDeviceSummarySchema);
 
 /**
- * Body of `PATCH /api/v1/scanner/devices/[id]` — shelter and id are fixed for a device's life.
+ * Body of `PATCH /api/v1/kiosk/devices/[id]` — shelter and id are fixed for a device's life.
  * No defaults here: a key that is not sent must stay untouched on the stored doc.
  */
 export const scannerDevicePatchSchema = z
