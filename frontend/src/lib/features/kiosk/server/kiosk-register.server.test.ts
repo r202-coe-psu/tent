@@ -53,7 +53,7 @@ function conflictError(): Error & { status: number } {
 describe('registerKioskWalkIn', () => {
 	beforeEach(() => vi.resetAllMocks());
 
-	it('stores a new kiosk_registered record with full snapshot and consent time', async () => {
+	it('stores a new arriving record with full snapshot and consent time', async () => {
 		const db = fakeShelterDb();
 
 		const result = await registerKioskWalkIn(
@@ -95,7 +95,7 @@ describe('registerKioskWalkIn', () => {
 		expect(image?.created_by).toBe('scanner:KIOSK-01');
 		expect(image?.caption).toBe('ภาพจากบัตรประชาชน');
 		expect(saved?._id).toBe(result._id);
-		expect(result.current_stay.status).toBe('kiosk_registered');
+		expect(result.current_stay.status).toBe('arriving');
 		expect(result.schema_v).toBe(11);
 		expect(result.registered_via).toBe('kiosk');
 		expect(result.household_id).toBe(db.ofType('household')[0]?._id);
@@ -246,7 +246,7 @@ describe('registerKioskWalkIn', () => {
 			null,
 			consentedAt
 		);
-		expect(result.current_stay.status).toBe('kiosk_registered');
+		expect(result.current_stay.status).toBe('arriving');
 		expect(lockPutAttempts).toBe(2);
 	});
 
@@ -317,7 +317,7 @@ describe('kiosk walk-in phone and ThaiD', () => {
 		expect(result.birth_year).toBe(2530);
 		expect(result.phone).toBe('0812345678');
 		expect(result.photo).toBeNull();
-		expect(result.current_stay.status).toBe('kiosk_registered');
+		expect(result.current_stay.status).toBe('arriving');
 		expect(saved?.card_snapshot).toMatchObject({
 			citizen_id: citizenId,
 			province: 'เชียงใหม่',
@@ -456,7 +456,7 @@ describe('kiosk walk-in phone already in use', () => {
 describe('kiosk walk-in household from the address read', () => {
 	beforeEach(() => vi.resetAllMocks());
 
-	it('gives a card walk-in their own pre-registered household at the card address', async () => {
+	it('gives a card walk-in their own arriving household at the card address', async () => {
 		const db = fakeShelterDb();
 		const evacuee = await registerKioskWalkIn(
 			'SH001',
@@ -474,7 +474,7 @@ describe('kiosk walk-in household from the address read', () => {
 		expect(household).toMatchObject({
 			label: 'ครอบครัวสมชาย ใจดี',
 			head_evacuee_id: evacuee._id,
-			status: 'pre_registered',
+			status: 'arriving',
 			shelter_code: 'SH001',
 			created_by: 'scanner:KIOSK-01',
 			address_no: '99/1',
@@ -502,7 +502,7 @@ describe('kiosk walk-in household from the address read', () => {
 		expect(household).toMatchObject({
 			label: 'ครอบครัวไม่ระบุชื่อ',
 			head_evacuee_id: evacuee._id,
-			status: 'pre_registered',
+			status: 'arriving',
 			address_no: null,
 			subdistrict: null,
 			district: null,

@@ -1545,7 +1545,11 @@ export function createEvacuee(input: EvacueeInput, ctx: AuthorContext, id?: stri
 	);
 }
 
-/** `phone` is the canonical number the visitor typed at the kiosk (`null` = none given). */
+/**
+ * A kiosk walk-in is created `arriving`, like a web pre-registration that reported in: the visitor
+ * is physically at the shelter, so their QR (the evacuee id) is valid at once.
+ * `phone` is the canonical number the visitor typed at the kiosk (`null` = none given).
+ */
 export function createKioskEvacueeFromCard(
 	cardSnapshot: CardSnapshot,
 	ctx: AuthorContext,
@@ -1587,7 +1591,7 @@ export function createKioskEvacueeFromCard(
 			household_id: null,
 			card_snapshot: persistedCardSnapshot,
 			photo: photoId ?? null,
-			current_stay: { status: 'kiosk_registered', zone: null, since: now() },
+			current_stay: { status: 'arriving', zone: null, since: now() },
 			privacy: { search_excluded: false },
 			registered_via: 'kiosk'
 		},
@@ -1604,9 +1608,10 @@ export function autoHouseholdLabel(personName: string): string {
 }
 
 /**
- * The household a kiosk walk-in gets on registering: theirs alone, headed by them, with the
- * address read from the card or ThaiD as its starting Residence. Station 1 corrects or merges it
- * when confirming. Lane and road stay in `card_snapshot`: a Residence has no field for them.
+ * The household a kiosk walk-in gets on registering (`arriving`, like its head): theirs alone,
+ * headed by them, with the address read from the card or ThaiD as its starting Residence.
+ * Station 1 corrects or merges it when confirming. Lane and road stay in `card_snapshot`: a
+ * Residence has no field for them.
  */
 export function createKioskWalkInHousehold(
 	head: Evacuee,
@@ -1618,7 +1623,7 @@ export function createKioskWalkInHousehold(
 		{
 			label: autoHouseholdLabel(formatPersonName(head)),
 			head_evacuee_id: head._id,
-			status: 'pre_registered',
+			status: 'arriving',
 			address_no: cardSnapshot.address_no ?? null,
 			village_no: cardSnapshot.village_no ?? null,
 			subdistrict: cardSnapshot.subdistrict ?? null,

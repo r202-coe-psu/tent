@@ -1561,6 +1561,7 @@ describe('check-in / check-out', () => {
 			);
 			const evacuee = {
 				...generated,
+				current_stay: { ...generated.current_stay, status: 'kiosk_registered' as const },
 				card_snapshot: {
 					...generated.card_snapshot!,
 					photo_base64: 'data:image/jpeg;base64,AA=='
@@ -2502,7 +2503,10 @@ describe('kiosk walk-in household at Station 1', () => {
 		repo = new PeopleRemoteRepository('shelter_sh001');
 	});
 
-	/** What the kiosk writes for a walk-in: the record and its own household at the card address. */
+	/**
+	 * A legacy walk-in (written before kiosk walk-ins were created `arriving`): the record sits
+	 * `kiosk_registered` in its own `pre_registered` household at the card address.
+	 */
 	async function kioskWalkIn() {
 		const snapshot: CardSnapshot = {
 			citizen_id: '1234567890123',
@@ -2515,8 +2519,15 @@ describe('kiosk walk-in household at Station 1', () => {
 			scanned_at: new Date().toISOString(),
 			device_id: 'KIOSK-01'
 		};
-		const unlinked = createKioskEvacueeFromCard(snapshot, kioskCtx);
-		const walkInHousehold = createKioskWalkInHousehold(unlinked, snapshot, kioskCtx);
+		const created = createKioskEvacueeFromCard(snapshot, kioskCtx);
+		const unlinked = {
+			...created,
+			current_stay: { ...created.current_stay, status: 'kiosk_registered' as const }
+		};
+		const walkInHousehold = {
+			...createKioskWalkInHousehold(unlinked, snapshot, kioskCtx),
+			status: 'pre_registered' as const
+		};
 		await memoryRepo.put(walkInHousehold);
 		const evacuee = await memoryRepo.put({ ...unlinked, household_id: walkInHousehold._id });
 		return { evacuee, householdId: walkInHousehold._id };
