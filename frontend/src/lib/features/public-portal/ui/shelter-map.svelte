@@ -627,10 +627,14 @@
 			type="button"
 			size="sm"
 			variant={placingPin ? 'default' : 'secondary'}
-			class="rounded-full border border-border/80 bg-card/95 px-3.5 py-1.5 text-xs font-bold shadow-md backdrop-blur-md hover:bg-card"
+			class={[
+				'rounded-full border border-border/80 px-3.5 py-1.5 text-xs font-bold shadow-md backdrop-blur-md',
+				// Idle sits on the map as a light chip; placing falls through to the solid primary variant.
+				!placingPin && 'bg-card/95 text-primary hover:bg-card'
+			]}
 			onclick={() => (placingPin = !placingPin)}
 		>
-			<MapPin class="mr-1.5 h-3.5 w-3.5 text-primary" />
+			<MapPin class="mr-1.5 h-3.5 w-3.5" />
 			{placingPin ? t.cancelPlacePin : t.placePin}
 		</Button>
 		{#if placingPin}
