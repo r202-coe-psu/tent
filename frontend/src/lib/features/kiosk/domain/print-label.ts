@@ -12,6 +12,11 @@ export const KIOSK_LABEL_PADDING_MM = 2;
  * tune on the real printer if the XP-365B feeds off-centre.
  */
 export const KIOSK_LABEL_OFFSET_X_MM = 0;
+/**
+ * Extra top space before the name, on top of the padding: the XP-365B clipped the first name
+ * line at the label's top edge. The checklist stays anchored to the bottom.
+ */
+export const KIOSK_LABEL_TEXT_OFFSET_Y_MM = 2;
 /** Space on each side of the divider line between the text column and the QR. */
 export const KIOSK_LABEL_GAP_MM = 2;
 /** Vertical divider between the text column and the QR (the ID card's panel border). */
@@ -177,10 +182,11 @@ export function kioskLabelLayout(qrPx: number): KioskLabelLayout {
 	const qrX = width - padding - qrPx + offset;
 	const dividerX = qrX - gap - dividerWidth;
 	const textX = padding + offset;
+	const textY = padding + Math.round(mmToDots(KIOSK_LABEL_TEXT_OFFSET_Y_MM));
 	return {
 		qr: { x: qrX, y: Math.round((height - qrPx) / 2) },
 		divider: { x: dividerX, y: padding, width: dividerWidth, height: height - padding * 2 },
-		text: { x: textX, y: padding, width: dividerX - gap - textX, bottom: height - padding }
+		text: { x: textX, y: textY, width: dividerX - gap - textX, bottom: height - padding }
 	};
 }
 
