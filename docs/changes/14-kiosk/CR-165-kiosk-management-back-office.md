@@ -1,11 +1,11 @@
 ---
-id: draft
+id: CR-165
 title: ย้ายการจัดการเครื่องสแกน/Kiosk (scanner_device) จาก System Management ไป Back Office — SA ทุกศูนย์ + shelter_manager / kiosk_staff เฉพาะศูนย์ตัวเอง · ย้าย API `/api/v1/scanner/*` → `/api/v1/kiosk/*`
-status: proposed
+status: approved
 date: 2026-10-12
 updated: 2026-10-12
 requested_by: ทีม kiosk
-decided_by: <รอเจ้าของโครงการ>
+decided_by: Soravit Sukkarn (Team LEAD)
 layer: volatile
 supersedes_rules:
   - schema.md §3.11 — การสร้าง/จัดการ scanner_device เป็นของ system_admin เท่านั้น (§3.11 อ้างที่มาเป็น "CR-084" แต่ CR-084 ใน _index.md คือ catalog schema reconciliation — เลขชน ไม่พบไฟล์ CR ต้นทาง)
@@ -37,7 +37,7 @@ affects:
   - frontend/src/lib/features/users/** (grant / revoke `{code}:kiosk_staff` ในหน้าจัดการผู้ใช้เดิม)
   - frontend/src/lib/server/shelter-capability-access.ts (ใหม่ — resolve ผู้เรียก back-office ตาม capability + ศูนย์)
   - frontend/src/lib/server/scanners/{staff-pin-http.ts,device-repository.ts}
-  - frontend/src/routes/api/v1/scanner/devices/{+server.ts,[id]/+server.ts,[id]/staff-pin/+server.ts,[id]/staff-pin/reveal/+server.ts}
+  - frontend/src/routes/api/v1/kiosk/devices/{+server.ts,[id]/+server.ts,[id]/staff-pin/+server.ts,[id]/staff-pin/reveal/+server.ts}
   - frontend/src/lib/features/scanners/** → frontend/src/lib/features/kiosk-devices/** (`git mv` ทั้ง feature · barrel `$lib/features/kiosk-devices` · ชื่อไฟล์ / ชื่อ export ภายในคงเดิม)
   - frontend/src/lib/features/kiosk-devices/{data/scanner.api.ts,data/scanner.remote.ts,application/queries.ts,ui/create-scanner-dialog.svelte,ui/scanner-list.svelte,ui/delete-scanner-dialog.svelte (ใหม่ — confirm dialog ก่อนลบ),index.ts}
   - frontend/src/routes/(protected)/back-office/kiosks/** (ใหม่)
@@ -52,7 +52,7 @@ why: ปัจจุบันการจัดการเครื่องท
 migration: ไม่เปลี่ยนรูปร่าง doc `scanner_device` / `scanner_staff_pin` · ไม่ bump schema_v · ไม่ต้อง backfill · **ตัดทันที** — deploy server กับอัปเดต kiosk client ทุกเครื่องในรอบเดียวกัน ไม่มี alias path เดิม (§6)
 ---
 
-# Draft CR: ย้ายการจัดการเครื่องสแกน/Kiosk ไป Back Office
+# CR-165: ย้ายการจัดการเครื่องสแกน/Kiosk ไป Back Office
 
 > **สรุป (TL;DR):**
 >
@@ -262,7 +262,7 @@ path ในตารางนี้เป็น path หลังย้าย (�
 
 ## 7. Decision log
 
-> ทุกข้อด้านล่างเป็นการตัดสินระดับทีม kiosk (ข้อที่ระบุ Team Lead = ทีม kiosk + Team Lead) — CR ยังเป็น `proposed` รอเจ้าของโครงการ approve
+> ทุกข้อด้านล่างเป็นการตัดสินระดับทีม kiosk (ข้อที่ระบุ Team Lead = ทีม kiosk + Team Lead) — อนุมัติ (approved) โดย Soravit Sukkarn (Team LEAD) เมื่อ 2026-10-12
 
 - 2026-10-12 — proposed · ทีม kiosk เคาะ: SA + SM เห็นและจัดการได้ · SM ทำได้ทุก action รวม reveal PIN · หน้าเดิม redirect ไป back-office
 - ~~2026-10-12 — ทีม kiosk เคาะ: Why = วางฐานก่อนต่อยอด Kiosk Banner (issue #466) · เพิ่มเมนูแม่「จัดการ Kiosk」(FR-SBO-24/26) และตัวกรองศูนย์ (FR-SBO-27) ให้หน้า banner ใช้ต่อ~~ — แทนที่ 2026-10-12: ตัดเรื่อง Kiosk Banner ออกจาก CR นี้
@@ -278,6 +278,7 @@ path ในตารางนี้เป็น path หลังย้าย (�
 - 2026-10-12 — ทีม kiosk เคาะ (หลัง review PR #491): หน้า `/back-office/scanners` → `/back-office/kiosks` · feature `scanners` → `kiosk-devices` (ไม่ใช้ `kiosks` เพราะชื่อใกล้ `$lib/features/kiosk` ของหน้าตู้) · guard ชื่อ `requireKioskManagement` (FR-SBO-20/38)
 - 2026-10-12 — ทีม kiosk เคาะ (หลัง review PR #491): `kiosk_staff` แทน `banner_staff` ของ CR-162 ใน CR นี้ — ใช้ช่องบทบาทที่ 11 เดิม ไม่เพิ่มบทบาทที่ 12 · `kiosk_staff` ได้สิทธิ์หน้าแบนเนอร์ตาม FR-KBN-24 (§3.6, FR-SBO-39..42)
 - 2026-10-12 — ทีม kiosk เคาะ (หลัง review PR #491): คงสิทธิ์ลบเครื่องและ reveal PIN ของ `kiosk_staff` ตามที่ตกลงกับ Team Lead · คงชื่อเมนูลูก「จัดการอุปกรณ์」
+- 2026-10-12 — approved · อนุมัติโดย Soravit Sukkarn (Team LEAD) — กำหนดรหัส CR-165, ย้ายเข้า docs/changes/14-kiosk/CR-165-kiosk-management-back-office.md
 - ทีม kiosk เคาะตัดทิ้ง: ย้ายเฉพาะ `/api/v1/scanner/kiosk/*` (คง `bootstrap`, `draft`, `devices` ไว้ใต้ `scanner`) — API ของระบบเดียวกันจะแยกอยู่สอง prefix
 - ทีม kiosk เคาะตัดทิ้ง: รับทั้ง path เดิมและใหม่ชั่วคราว (alias) ระหว่างอัปเดตตู้
 - ทีม kiosk เคาะตัดทิ้ง: ย้าย `scanner_device` ไปไว้ใน `shelter_{code}` (schema.md §3.11 Future Consideration) — ต้องเปลี่ยน device auth ของ kiosk ทั้งชุด เกินขอบเขตการย้ายสิทธิ์

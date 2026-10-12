@@ -2,7 +2,7 @@
 title: Change Records — Index
 status: active
 created: 2026-06-16
-updated: 2026-10-11 # CR-163 approved (kiosk ThaiD check-in)
+updated: 2026-10-12 # CR-165 approved (kiosk management back office)
 
 note: ดัชนี Change Record ทุกตัว — กติกาอยู่ใน ../change-management.md
 ---
@@ -21,13 +21,10 @@ CR แต่ละตัวเก็บในโฟลเดอร์ตาม�
 
 | หมวด                                             | โฟลเดอร์                             | จำนวน CR |
 | ------------------------------------------------ | ------------------------------------ | -------- |
-| [00-baseline — Baseline (FR-1–20)](#00-baseline) | [`00-baseline/`](00-baseline/)       | 27       |
-| [01-core — Platform/Core](#01-core)              | [`01-core/`](01-core/)               | 28       |
-| [02-people — Household & Zoning](#02-people)     | [`02-people/`](02-people/)           | 8        |
-| [03-C — Supply & Inventory](#03-c-supply)        | [`03-C-supply/`](03-C-supply/)       | 23       |
-| [01-core — Platform/Core](#01-core)              | [`01-core/`](01-core/)               | 27       |
+| [00-baseline — Baseline (FR-1–20)](#00-baseline) | [`00-baseline/`](00-baseline/)       | 28       |
+| [01-core — Platform/Core](#01-core)              | [`01-core/`](01-core/)               | 30       |
 | [02-people — Household & Zoning](#02-people)     | [`02-people/`](02-people/)           | 9        |
-| [03-C — Supply & Inventory](#03-c-supply)        | [`03-C-supply/`](03-C-supply/)       | 22       |
+| [03-C — Supply & Inventory](#03-c-supply)        | [`03-C-supply/`](03-C-supply/)       | 23       |
 | [04-donation — Donation](#04-donation)           | [`04-donation/`](04-donation/)       | 11       |
 | [05-D — Kitchen & Food](#05-d-kitchen)           | [`05-D-kitchen/`](05-D-kitchen/)     | 12       |
 | [06-A — Volunteer](#06-a-volunteer)              | [`06-A-volunteer/`](06-A-volunteer/) | 8        |
@@ -37,7 +34,7 @@ CR แต่ละตัวเก็บในโฟลเดอร์ตาม�
 | [10-eoc — Partner API (EXT-001–007)](#10-eoc)    | [`10-eoc/`](10-eoc/)                 | 7        |
 | [11-famsearch — Family Search](#11-famsearch)    | [`11-famsearch/`](11-famsearch/)     | 2        |
 | [12-public — Public Portal](#12-public)          | [`12-public/`](12-public/)           | 7        |
-| [14-kiosk — Kiosk Station](#14-kiosk)            | [`14-kiosk/`](14-kiosk/)             | 6        |
+| [14-kiosk — Kiosk Station](#14-kiosk)            | [`14-kiosk/`](14-kiosk/)             | 9        |
 
 ## 00-baseline
 
@@ -107,6 +104,7 @@ CR แต่ละตัวเก็บในโฟลเดอร์ตาม�
 | [CR-141](01-core/CR-141-oauth-first-login-link.md)                                     | OAuth-first staff login — `config:app.password_login_enabled` (default off) ซ่อน password form บน `/login`, hidden `/admin-login`, OAuth ที่ยังไม่ผูก → `/login/link` ผูกเข้าบัญชีใหม่ (must_change_password) ด้วย username/password → force-setup; admin create บังคับ must_change_password; supersede CR-124 FR-09a — no schema_v bump                            | approved   | stable                             | 2026-09-29                                    | docs/data/schema.md §3.2, docs/data/api-contract.md §1.1, CR-124, frontend login feature + routes login/admin-login/login/link, api/v1/auth/oauth/*/callback, api/v1/auth/link-account, api/public/v1/login-methods, api/v1/users, shared app-config                                                                                                                            |
 | [CR-142](01-core/CR-142-configurable-system-banner.md)                                 | System banner ตั้งค่าได้ — `config:app.banner_enabled/banner_message/banner_variant` (เปิด/ปิด · ข้อความ ≤120 · สี success/warning/destructive/info; ไม่มีข้อความ = ไม่แสดง), หน้า System Management ใหม่ + public BFF `GET /api/public/v1/system-banner` — no schema_v bump                                                                                        | done       | volatile                           | 2026-10-01                                    | docs/data/schema.md §3.2, docs/data/api-contract.md, frontend shared app-config + system-banner, routes/+layout.svelte, app.css, system-management/system-banner, api/v1/app-config, api/public/v1/system-banner                                                                                                                                                                |
 | [CR-161](01-core/CR-161-distribution-staff-role.md)                                    | เพิ่มบทบาท `distribution_staff` (เจ้าหน้าที่แจกจ่าย) แบบระบุศูนย์ `{code}:distribution_staff` — สิทธิ์เฉพาะจุดแจกจ่ายหน้างาน (Station 4) ไม่เปิด PII ทะเบียน และไม่แตะงานคลัง/ใบเบิก                                                                                                                                                                                | approved   | volatile                           | 2026-10-11                                    | docs/prd/role-permission-matrix.md §1.1/§3, frontend roles.ts, distribution/auth.ts, shelter-access-design.ts, portal-menu.ts, user-form.svelte                                                                                                                                                                                                                                 |
+| [CR-164](01-core/CR-164-central-db-shelter-scope-members.md)                          | ให้ `shelter:{code}` เป็นกุญแจอ่าน DB กลาง `registry` / `catalog` — แก้ผู้ใช้ compound role อ่านรายชื่อศูนย์และ catalog ไม่ได้                                                                                                                                                                                | approved   | stable                             | 2026-10-12                                    | docs/data/schema.md §6, docs/data/data-model.md §3.3/§6, frontend/src/lib/server/central-db-security.ts, provisioner.ts, sync-central-db.ts                                                                                                                                                                                                     |
 
 ## 02-people
 
@@ -295,3 +293,4 @@ CR แต่ละตัวเก็บในโฟลเดอร์ตาม�
 | [CR-158](14-kiosk/CR-158-kiosk-staff-pin-face-bypass.md)     | Kiosk staff PIN — ข้ามการตรวจใบหน้าได้เฉพาะเมื่อเจ้าหน้าที่ใส่ PIN ของเครื่อง (PIN 6 หลักต่อเครื่อง ใน DB scanner_secrets บน central, admin-only) ทั้ง walk-in และ check-in ด้วยบัตร, endpoint staff-pin CRUD (SA) + verify (device credential หน่วงเวลา 1s เมื่อผิด, limit คิว 429), scanner_device schema_v 1→2 (metadata only), default PIN ตอน sync:central | approved | volatile | 2026-10-10 (approved 2026-10-11) | docs/data/schema.md §3.11/§3.11.1, docs/data/api-contract.md, DB scanner_secrets, frontend scanners + kiosk, routes api/v1/scanner/**, scanner_client                                                              |
 | [CR-162](14-kiosk/CR-162-kiosk-banner.md)                    | Kiosk banner — doc type ใหม่ `kiosk_banner` v1 ใน registry (รูป ≤2 MB, ช่วงเวลา, order, duration 3–60 s, shelter_codes); attract overlay บน `/kiosk` เมื่อ idle 30 s; `POST /api/v1/scanner/kiosk/banners` + signed image URL; back-office `/back-office/kiosk-banners` + preview; role ใหม่ `banner_staff` (SM/SA จัดการได้ด้วย)                               | approved | volatile | 2026-10-11 (approved 2026-10-11) | docs/data/schema.md §3.12/§6, docs/data/api-contract.md §2.3, docs/prd/role-permission-matrix.md, docs/features/kiosk-banner-design-guideline.md, frontend kiosk + kiosk-banners + roles, scanner_client allowlist |
 | [CR-163](14-kiosk/CR-163-kiosk-thaid-check-in.md)            | Kiosk รายงานตัวด้วย ThaiD — QR บนตู้ → ยืนยันในแอป ThaiD บนมือถือ (OAuth mode `kiosk_check_in`, callback เดิม); session in-memory single-use ผูก `device_id`+`shelter_code` (pending 300 s / completed 180 s, 10/นาที/kiosk); `source:'thaid'` ใน lookup/check-in (browser ไม่ส่งเลข 13 หลัก); flag ศูนย์ `kiosk_thaid_check_in_enabled` default off, no schema_v bump | approved | volatile | 2026-10-10 (approved 2026-10-11) | docs/data/schema.md §3.1 feature_flags, docs/data/api-contract.md scanner/kiosk thaid, CR-151 F-08/FR-KPC-11, CR-152, frontend thaid + kiosk + shelters, scanner_client allowlist |
+| [CR-165](14-kiosk/CR-165-kiosk-management-back-office.md)    | ย้ายการจัดการเครื่องสแกน/Kiosk (scanner_device) จาก System Management ไป Back Office — SA ทุกศูนย์ + shelter_manager / kiosk_staff เฉพาะศูนย์ตัวเอง · ย้าย API `/api/v1/scanner/*` → `/api/v1/kiosk/*` | approved | volatile | 2026-10-12                       | docs/prd/role-permission-matrix.md §1.1, docs/changes/14-kiosk/CR-162-kiosk-banner.md, docs/data/schema.md §3.11/§3.12/§6, docs/data/api-contract.md §2.1–2.4, frontend routes api/v1/kiosk/**, frontend features kiosk + kiosk-devices, kiosk client |
