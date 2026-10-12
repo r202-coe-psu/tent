@@ -40,7 +40,7 @@ Known problems:
   `waitForStatusBudget(needed)` now counts real hits and only waits when the budget is short. The
   limiters live in the preview server's memory, so re-running the pre-register suite back-to-back
   against a **reused** server with `RATE_LIMIT=true` can still get `429 Too Many Requests` on W4/W5 —
-  wait a minute or restart the server (not an issue with the default `RATE_LIMIT=false`).
+  wait a minute or restart the server (not an issue with the default `RATE_LIMIT=false`, see §7.1).
   Since develop's `registrations/check-duplicate` (instant duplicate check on the public form)
   shares that same `registerLookupIpLimiter` budget, W4 and W5 fill the form again and usually
   wait out one window, so the pre-register `@critical` group takes ~1 min longer than before.
@@ -205,6 +205,26 @@ pnpm test:e2e:regression                      # mocked suites only
 
 Live suites also need platform init (`pnpm seed:master`, `pnpm db:sync`); see each file's header.
 
+### 7.1 Rate limits — the `RATE_LIMIT` switch (CR-160)
+
+BFF limiters exempt loopback only under `vite dev`; Playwright runs `vite preview` (a production
+build) and every suite shares the runner's IP, so the 3/min booking limit would throttle e2e.
+CR-160 adds a **server env `RATE_LIMIT`**:
+
+- `false` / `0` (trimmed, case-insensitive) turns off **only** limiters constructed with
+  `{ bypassable: true }`: `donationIp/Phone/Edit/Read` and `registerIp/Phone/LookupIp`. No hit is
+  recorded while off. Everything else — staff login, secret reveal, link-account, volunteer — and
+  any limiter added later enforces regardless (the default is `bypassable: false`).
+- Unset or any other value enforces everything. FastAPI's own per-IP limiter is not affected.
+- `playwright.config.ts` defaults it to `false` for the local preview server (override with
+  `RATE_LIMIT=true`). On staging the server needs `RATE_LIMIT=false` in its root `.env` and the
+  runner env (Jenkins credential `tent-staging-e2e-env`) must carry the same value. The compose
+  files pass `RATE_LIMIT: ${RATE_LIMIT:-true}` to the frontend, so production stays enforced and
+  must never set `false`.
+- The e2e side reads the same variable (`RATE_LIMIT_ENFORCED` in `helpers/e2e-env.ts`):
+  `waitForStatusBudget` in the pre-register suite only waits when limits are enforced (unset counts
+  as enforced).
+
 ## 8. Release gate — six journeys that must pass before prod
 
 Nothing is merged `staging → main` unless every journey below is green on staging (`@release`) — checked by a person in the Staging E2E Report (decision 2026-10-09), not by an automatic gate.
@@ -296,24 +316,52 @@ How the three full-stack suites obey §4:
   `public_shelters` row (the worker's retention job drops it within minutes). A received donation
   is not reversible either — its `stock_ledger` row lives in the deleted shelter database, so it
   goes with it.
-- **Rate limits.** The BFF allows 3 bookings and 10 edit/cancel calls per minute per IP (and
-  FastAPI 30 requests per minute per IP on every donation route). Every suite shares the one
-  runner IP and the BFF's loopback exemption applies only under `vite dev`, so e2e switches the
-  BFF limiters off with the server env flag **`RATE_LIMIT=false`** (any `RateLimiter.check()`
-  returns true, for every key; enforced unless the value is exactly `false`/`0`). It is set for
-  the local preview server by `playwright.config.ts` (default `false`, override with
-  `RATE_LIMIT=true`), in `e2e/.env` / `.env.staging`, and for the staging server in
-  `docker-compose.staging*.yml` (`RATE_LIMIT: ${RATE_LIMIT:-false}`). Production leaves it unset.
-  The e2e side reads the same variable (`RATE_LIMIT_ENFORCED` in `helpers/e2e-env.ts`):
-  `bookingPacer` / the cancel pacer and `waitForStatusBudget` only wait when it is **not**
-  `false`/`0` (unset counts as enforced), so by default runs are unpaced. To exercise the real
-  limits set `RATE_LIMIT=true` in the e2e env (and on the target); pacing then returns, with its
-  hit log persisted in `node_modules/.cache/donation-e2e-pacer.json` so a worker restart after a
-  failure does not forget the last minute, and the three suites take an estimated 10–15 minutes.
-  `DONATION_E2E_PACE=0` still forces pacing off. `RATE_LIMIT` does **not** touch FastAPI's own
-  per-IP limiter (30/min, in-process): wait about a minute between two back-to-back runs if a
-  suite gets a 429 from it. A remote runner whose env lacks `RATE_LIMIT=false` (e.g. the
-  `tent-staging-e2e-env` Jenkins credential) paces even though the server has limits off.
+- **Rate limits.** The BFF allows 3 bookings (and `track-search` lookups) and 10 edit/cancel
+  calls per minute per IP, and FastAPI 30 requests per minute per IP on every donation route.
+  Every suite shares the one runner IP, so e2e runs with **`RATE_LIMIT=false`** (CR-160, §7.1),
+  which bypasses the donation limiters. The e2e side reads the same variable
+  (`RATE_LIMIT_ENFORCED` in `helpers/e2e-env.ts`): `bookingPacer` / the cancel pacer only wait
+  when it is **not** `false`/`0` (unset counts as enforced), so by default runs are unpaced. To
+  exercise the real limits set `RATE_LIMIT=true` in the e2e env (and on the target); pacing then
+  returns, with its hit log persisted in `node_modules/.cache/donation-e2e-pacer.json` so a
+  worker restart after a failure does not forget the last minute, and the three suites take an
+  estimated 10–15 minutes. `DONATION_E2E_PACE=0` still forces pacing off. `RATE_LIMIT` does
+  **not** touch FastAPI's own per-IP limiter (30/min, in-process): wait about a minute between
+  two back-to-back runs if a suite gets a 429 from it. A remote runner whose env lacks
+  `RATE_LIMIT=false` (e.g. the `tent-staging-e2e-env` Jenkins credential) paces even though the
+  server has limits off.
+
+### 8.4 Distribution suites (`@distribution`)
+
+Feature tag `@distribution`, layer `@critical`; none carries `@release` yet.
+
+| Suite                                                  | What it proves                                                                                                                                                                           |
+| ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `distribution/distribution-ticket-lifecycle.test.ts`   | Back-office ↔ desk: create → allocate → approve → dispatch → receive → hand out → close (Journey A: zero returns → COMPLETED; Journey B: warehouse credits only the verified return qty) |
+| `distribution/distribution-desk-access.test.ts`        | Who may do what: page access by role (every capability × flat/compound, SA, scope-only, cross-shelter) and VDU write permissions (no UI)                                                 |
+| `distribution/distribution-desk-handover.test.ts`      | Tab 1 receive cargo, tab 2 ready meals (duplicate / menu-mismatch overrides, lot expiry, service day, history, preflight retry), tab 3 supplies and loans                                |
+| `distribution/distribution-desk-returns-close.test.ts` | Tab 4 loan returns (physical, lost/waived, bulk pool, offline, resume) and tab 5 shift close + warehouse hand-off (incl. the "card stays on the closed ticket" regression)               |
+| `distribution/distribution-desk-flow.test.ts`          | Across tabs (point filter, badges, live updates between desks, scan-first) and a compound-role DST working every tab                                                                     |
+
+How they obey §4:
+
+- **Own shelter.** The `shelter` worker fixture (`distribution/fixtures.ts`) creates an
+  `E2E Distribution <ulid>` shelter through system management as the CouchDB admin and records
+  it with `recordCreatedShelter`. Every test seeds at its own distribution point inside it, so
+  tests never see each other's tickets. SH002 is only visited/read as "another shelter".
+- **Setup.** Ticket-level prerequisites that are not the subject of a test (a ticket already
+  dispatched, a meal already served, a counted bulk pool) are written with the admin API —
+  driving back-office for each of ~70 tests would dominate the run. The UI path itself is
+  covered end to end by Journey A/B.
+- **Teardown by id.** Users and catalog items are recorded per scenario and deleted by id after
+  each test; the shelter (registry master, database and its `shelter:{code}` grant on
+  `registry`/`catalog`) is removed when the worker ends, then `assertRunLeftNothing` fails the
+  run on any leak.
+- **Known gaps** are `test.fixme('GAP: …')` (e.g. a scan code with stray digits selects a
+  person by phone number).
+
+Run them (preview build, local CouchDB with `pnpm seed:master` + `pnpm db:sync`):
+`pnpm exec playwright test e2e/distribution`
 
 ## 9. Agent handoff
 

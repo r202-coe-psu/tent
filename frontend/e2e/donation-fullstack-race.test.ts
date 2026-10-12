@@ -33,9 +33,9 @@ import {
  * shelter (README §4).
  *
  * Needs `docker compose up -d` (CouchDB, Mongo, worker, FastAPI) and a seeded catalog
- * (`pnpm seed`). The BFF's per-IP rate limiters are switched off for e2e
- * (`RATE_LIMIT=false`: set by playwright.config.ts for the local preview server, and in
- * staging's compose files), so bookings are not paced. With `RATE_LIMIT=true` in the e2e
+ * (`pnpm seed`). The BFF's donation rate limiters are switched off for e2e
+ * (`RATE_LIMIT=false`, CR-160: set by playwright.config.ts for the local preview server,
+ * and in the staging server `.env`), so bookings are not paced. With `RATE_LIMIT=true` in the e2e
  * env they are paced to the real limits (see helpers/donation-fullstack.ts `Pacer`).
  * On a writable remote target (`E2E_BASE_URL` + `ALLOW_REMOTE_WRITES=true`, i.e. staging)
  * it runs like any `@critical` suite; read-only targets skip it.

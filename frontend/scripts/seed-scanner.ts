@@ -20,6 +20,7 @@ function loadEnv(): Record<string, string> {
 const env = loadEnv();
 const rawAdminUrl =
 	process.env.COUCHDB_ADMIN_URL || env.COUCHDB_ADMIN_URL || 'http://admin:password@127.0.0.1:5984';
+const seedSecret = process.env.SCANNER_SEED_SECRET || env.SCANNER_SEED_SECRET;
 
 function parseCouchCredentialUrl(rawUrl: string): { url: string; authHeader: string } {
 	const parsed = new URL(rawUrl);
@@ -66,7 +67,13 @@ export async function seedScannerDevice(): Promise<void> {
 	}
 
 	const deviceId = 'kiosk-test';
-	const secret = 'kisok-test-secret';
+	if (!seedSecret) {
+		throw new Error('SCANNER_SEED_SECRET is required for the legacy scanner seed command');
+	}
+	if (!/^sk_scan_[0-9a-f]{64}$/.test(seedSecret)) {
+		throw new Error('SCANNER_SEED_SECRET must use a generated scanner key format');
+	}
+	const secret = seedSecret;
 	const secretHash = hashSecret(secret);
 	const secretPrefix = secret.slice(0, 16) + '...';
 	const docId = `scanner_device:${deviceId}`;
@@ -109,7 +116,6 @@ export async function seedScannerDevice(): Promise<void> {
 		console.log(`   - DB: ${REGISTRY_DB}`);
 		console.log(`   - Doc ID: ${docId}`);
 		console.log(`   - Device ID: ${deviceId}`);
-		console.log(`   - Secret: ${secret}`);
 		console.log(`   - Shelter: SH001`);
 		console.log(`   - Station: จุดสแกน Kiosk ทดสอบ (Kiosk Test)`);
 		console.log(`   - Status: active`);

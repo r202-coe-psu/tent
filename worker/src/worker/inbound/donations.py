@@ -30,12 +30,16 @@ POLL_INTERVAL_SECONDS = 3
 async def _persist_donation(couch: CouchClient, donation: DonationBuffer) -> bool:
     database = shelter_db_name(donation.shelter_code)
     if not await couch.database_exists(database):
-        logger.warning("Shelter database %s missing for donation %s", database, donation.id)
+        logger.warning(
+            "Shelter database %s missing for donation %s", database, donation.id
+        )
         return False
 
     now = iso_utc(datetime.now(UTC))
     couch_doc = {
-        "_id": donation.id if donation.id.startswith("donation:") else f"donation:{donation.id}",
+        "_id": donation.id
+        if donation.id.startswith("donation:")
+        else f"donation:{donation.id}",
         "type": "donation",
         # 5 for redirect_to_shelter_code (CR-087); 4 was revisions[] (CR-080). This line
         # read 2 until CR-080, two versions behind: CR-038 moved items[].qty to qty_str and
@@ -94,7 +98,7 @@ async def run_inbound_loop(couch: CouchClient, *, stop_event: asyncio.Event) -> 
     while not stop_event.is_set():
         try:
             pending = await DonationBuffer.find(
-                DonationBuffer.synced_to_couch == False  # noqa: E712
+                DonationBuffer.synced_to_couch == False
             ).to_list()
             for donation in pending:
                 if stop_event.is_set():

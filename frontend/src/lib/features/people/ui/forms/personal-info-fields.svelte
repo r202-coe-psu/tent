@@ -409,7 +409,7 @@
 	</div>
 
 	<!-- Birth Year & Age stack on mobile (M10); Gender full-row ≥44px (M2) -->
-	<div class="grid grid-cols-1 gap-2 sm:grid-cols-3 sm:gap-3">
+	<div class="grid grid-cols-1 gap-2 sm:grid-cols-2 sm:gap-3">
 		<div class="flex flex-col gap-1.5">
 			<div class="flex min-h-7 items-center justify-between gap-1 sm:gap-2">
 				<Label for={fid('birth-year')} class="truncate text-xs font-semibold text-foreground">
@@ -483,7 +483,8 @@
 			{/if}
 		</div>
 
-		<div class="flex flex-col gap-1.5">
+		<!-- Own row: three options never fit a third of the row (English "Unspecified" overflowed) -->
+		<div class="flex flex-col gap-1.5 sm:col-span-2">
 			<div class="flex min-h-7 items-center">
 				<Label class="text-xs font-semibold text-foreground" id={fid('gender-label')}>
 					{t.genderLabel}

@@ -94,10 +94,10 @@ describe('Warehouse Picking, Lot Assignment & Dispatch Flow (Slice 5.3)', () => 
 			expect(canPerformFrontlineDistribution(ctx)).toBe(false);
 		});
 
-		it('allows supply_coordinator to both dispatch and receive', () => {
+		it('allows supply_coordinator to dispatch but NOT receive at distribution point (CR-161 R3)', () => {
 			const ctx = createMockContext(['supply_coordinator']);
 			expect(canDispatchTicket(ctx)).toBe(true);
-			expect(canPerformFrontlineDistribution(ctx)).toBe(true);
+			expect(canPerformFrontlineDistribution(ctx)).toBe(false);
 		});
 
 		it('allows shelter_manager to both dispatch and receive', () => {
@@ -112,8 +112,14 @@ describe('Warehouse Picking, Lot Assignment & Dispatch Flow (Slice 5.3)', () => 
 			expect(canPerformFrontlineDistribution(ctx)).toBe(true);
 		});
 
-		it('allows registration_staff to receive at distribution point but NOT dispatch from warehouse', () => {
+		it('denies registration_staff both dispatch and receive (CR-161 R3)', () => {
 			const ctx = createMockContext(['registration_staff']);
+			expect(canDispatchTicket(ctx)).toBe(false);
+			expect(canPerformFrontlineDistribution(ctx)).toBe(false);
+		});
+
+		it('allows distribution_staff to receive at distribution point but NOT dispatch from warehouse', () => {
+			const ctx = createMockContext(['distribution_staff']);
 			expect(canDispatchTicket(ctx)).toBe(false);
 			expect(canPerformFrontlineDistribution(ctx)).toBe(true);
 		});

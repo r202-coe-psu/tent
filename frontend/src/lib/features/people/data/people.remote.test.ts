@@ -26,8 +26,12 @@ import {
 } from './people.remote';
 import { UlidReservation } from '$lib/db/ulid-reservation';
 import type { EvacueeInput, Medical } from '../domain/people';
+import { createKioskEvacueeFromCard, type CardSnapshot } from '../domain/people';
 
 const ctx = { shelterCode: 'SH001', createdBy: 'tester' };
+
+const isStoredDoc = (doc: unknown): doc is { _id: string; type: string } =>
+	Boolean(doc && typeof doc === 'object');
 
 function evInput(over: Partial<EvacueeInput> = {}): EvacueeInput {
 	return {
@@ -502,6 +506,19 @@ describe('PeopleRemoteRepository', () => {
 				evInput({ first_name: 'Malee', last_name: 'Suksan', phone: '0899999999' }),
 				ctx
 			);
+			await repo.createEvacuee(
+				evInput({
+					first_name: 'Emergency',
+					last_name: 'Contact',
+					phone: null,
+					emergency_contact: {
+						name: 'ญาติ',
+						phone: '0823456789',
+						relation: 'ญาติ'
+					}
+				}),
+				ctx
+			);
 		});
 
 		it('returns [] for an empty query', async () => {
@@ -517,6 +534,12 @@ describe('PeopleRemoteRepository', () => {
 			const hits = await repo.searchEvacuees('081-234-5678');
 			expect(hits).toHaveLength(1);
 			expect(hits[0].first_name).toBe('Somchai');
+		});
+
+		it('matches +66 input against an emergency-contact phone', async () => {
+			const hits = await repo.searchEvacuees('+66 82 345 6789');
+			expect(hits).toHaveLength(1);
+			expect(hits[0].first_name).toBe('Emergency');
 		});
 
 		it('searchEvacueesMany answers every query from one evacuee scan', async () => {
@@ -1524,6 +1547,30 @@ describe('check-in / check-out', () => {
 	});
 
 	describe('promoteReportIn', () => {
+		it('does not migrate a legacy card photo when the evacuee write fails', async () => {
+			const generated = createKioskEvacueeFromCard(
+				{
+					citizen_id: '1234567890123',
+					photo_base64: 'data:image/jpeg;base64,AA=='
+				} as CardSnapshot,
+				ctx
+			);
+			const evacuee = {
+				...generated,
+				card_snapshot: {
+					...generated.card_snapshot!,
+					photo_base64: 'data:image/jpeg;base64,AA=='
+				}
+			};
+			expect(evacuee.photo).toBeNull();
+			await memoryRepo.put(evacuee);
+			vi.spyOn(memoryRepo, 'put').mockRejectedValueOnce(new Error('write conflict'));
+
+			await expect(repo.promoteReportIn(evacuee._id)).rejects.toThrow('write conflict');
+
+			expect((await repo.getEvacuee(evacuee._id))?.photo).toBeNull();
+		});
+
 		it('promotes pre_registered to arriving with zone null and creates no screening', async () => {
 			const evacuee = await repo.createEvacuee(evInput({ first_name: 'Report' }), ctx);
 			expect(evacuee.current_stay.status).toBe('pre_registered');
@@ -1897,6 +1944,132 @@ describe('submitFamilyReportIn', () => {
 	beforeEach(() => {
 		memoryRepo = createInMemoryRepository();
 		repo = new PeopleRemoteRepository('shelter_sh001');
+	});
+
+	it('links the migrated card image during family report-in', async () => {
+		const registration = await repo.createFamilyRegistration(
+			{
+				members: [
+					{
+						first_name: 'สมชาย',
+						last_name: 'ใจดี',
+						gender: 'male',
+						phone: '0812345678',
+						country: 'THAILAND'
+					}
+				],
+				household: {
+					housing_type: 'owned_house',
+					address_no: '1',
+					subdistrict: 'ในเมือง',
+					district: 'เมือง',
+					province: 'เชียงใหม่',
+					pets: [],
+					vehicles: [],
+					assets: null
+				}
+			},
+			ctx,
+			'public'
+		);
+		const original = registration.members[0]!;
+		await repo.updateEvacuee({
+			...original,
+			current_stay: { status: 'kiosk_registered', zone: null, since: new Date().toISOString() },
+			card_snapshot: {
+				citizen_id: '1234567890123',
+				scanned_at: new Date().toISOString(),
+				device_id: 'KIOSK-01',
+				photo_base64: 'data:image/jpeg;base64,AA=='
+			}
+		});
+
+		const result = await repo.submitFamilyReportIn({
+			householdId: registration.household._id,
+			household: {
+				housing_type: 'owned_house',
+				address_no: '1',
+				subdistrict: 'ในเมือง',
+				district: 'เมือง',
+				province: 'เชียงใหม่',
+				pets: [],
+				vehicles: [],
+				assets: null
+			},
+			members: [
+				{
+					_id: original._id,
+					first_name: 'สมชาย',
+					last_name: 'ใจดี',
+					gender: 'male',
+					phone: '0812345678',
+					photo: 'data:image/jpeg;base64,AA==',
+					country: 'THAILAND',
+					reporting_in: true
+				}
+			],
+			ctx
+		});
+
+		expect(result.members[0]?.photo).toBe('data:image/jpeg;base64,AA==');
+		expect(result.members[0]?.card_snapshot?.photo_base64).toBe('data:image/jpeg;base64,AA==');
+	});
+
+	it('rejects an empty household target unless the caller explicitly opts into creation', async () => {
+		await expect(
+			repo.submitFamilyReportIn({
+				householdId: '',
+				household: {
+					housing_type: 'owned_house',
+					address_no: '1',
+					subdistrict: 'ในเมือง',
+					district: 'เมือง',
+					province: 'เชียงใหม่',
+					pets: [],
+					vehicles: [],
+					assets: null
+				},
+				members: [{ ...evInput(), reporting_in: true }],
+				ctx
+			})
+		).rejects.toThrow('กรุณาเลือกครัวเรือนเดิมหรือยืนยันสร้างครัวเรือนใหม่');
+	});
+
+	it('reuses the reserved household and member ids when an explicit create report-in is retried', async () => {
+		const ids = new UlidReservation();
+		const payload = {
+			householdId: '',
+			createHousehold: true,
+			household: {
+				housing_type: 'owned_house' as const,
+				address_no: '2',
+				subdistrict: 'ในเมือง',
+				district: 'เมือง',
+				province: 'เชียงใหม่',
+				pets: [],
+				vehicles: [],
+				assets: null
+			},
+			members: [
+				{
+					...evInput(),
+					first_name: 'ครอบครัวซ้ำ',
+					reporting_in: true,
+					medical_note: 'เบาหวาน'
+				}
+			],
+			ctx,
+			ids
+		};
+
+		const first = await repo.submitFamilyReportIn(payload);
+		const retried = await repo.submitFamilyReportIn(payload);
+
+		expect(retried.household._id).toBe(first.household._id);
+		expect(retried.members[0]?._id).toBe(first.members[0]?._id);
+		expect(await memoryRepo.allByType('household', isStoredDoc)).toHaveLength(1);
+		expect(await memoryRepo.allByType('evacuee', isStoredDoc)).toHaveLength(1);
+		expect(await memoryRepo.allByType('medical', isStoredDoc)).toHaveLength(1);
 	});
 
 	it('updates household, updates member details, and promotes checked members to arriving', async () => {

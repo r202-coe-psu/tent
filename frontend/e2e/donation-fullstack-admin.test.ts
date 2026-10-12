@@ -1,4 +1,5 @@
 import { test, expect, type APIRequestContext, type Page } from '@playwright/test';
+import { bangkokToday } from '../src/lib/utils/date';
 import { couchReq } from './helpers/couch';
 import { CAN_WRITE, READ_ONLY_REASON } from './helpers/e2e-env';
 import { clearSession } from './helpers/login';
@@ -38,9 +39,9 @@ import {
  * `E2E Donation admin …` shelter (README §4), driven through the back-office screens.
  *
  * Needs `docker compose up -d` (CouchDB, Mongo, worker, FastAPI) and a seeded catalog
- * (`pnpm seed`). The BFF's per-IP rate limiters are switched off for e2e
- * (`RATE_LIMIT=false`: set by playwright.config.ts for the local preview server, and in
- * staging's compose files), so bookings are not paced. With `RATE_LIMIT=true` in the e2e
+ * (`pnpm seed`). The BFF's donation rate limiters are switched off for e2e
+ * (`RATE_LIMIT=false`, CR-160: set by playwright.config.ts for the local preview server,
+ * and in the staging server `.env`), so bookings are not paced. With `RATE_LIMIT=true` in the e2e
  * env they are paced to the real limits (see helpers/donation-fullstack.ts `Pacer`).
  * On a writable remote target (`E2E_BASE_URL` + `ALLOW_REMOTE_WRITES=true`, i.e. staging)
  * it runs like any `@critical` suite; read-only targets skip it.
@@ -367,7 +368,7 @@ test.describe('Donation full-stack: back office', { tag: ['@critical', '@donatio
 		test('another day: no truck until staff open the day (เปิดรอบรถทั้งวัน), then donors see it', async ({
 			page
 		}) => {
-			const tomorrow = new Date(Date.now() + 24 * 3600 * 1000).toLocaleDateString('sv-SE');
+			const tomorrow = bangkokToday(new Date(Date.now() + 24 * 3600 * 1000));
 
 			// Donor: tomorrow has no truck — told so, nothing to book.
 			await donorAtLogistics(page, /ต้องการให้รถศูนย์ไปรับ/);

@@ -69,11 +69,15 @@ async function installFakeBackend(page: Page): Promise<FakeBackend> {
 	await page.route('**/api/v1/auth/mfa**', (r) => json(r, 200, { ok: true }));
 
 	// CouchDB (cross-origin in the test build): answer preflights, then the fake.
-	await page.route(`${COUCH}/**`, async (route) => {
+	// The app reaches CouchDB either directly (PUBLIC_COUCHDB_URL) or through the same-origin
+	// proxy (PUBLIC_COUCH_PROXY=/couch, the default in .env). Intercept both.
+	const isCouchRequest = (url: URL) =>
+		url.href.startsWith(`${COUCH}/`) || url.pathname.startsWith('/couch/');
+	await page.route(isCouchRequest, async (route) => {
 		const req = route.request();
 		if (req.method() === 'OPTIONS') return route.fulfill({ status: 204, headers: cors });
 		const url = new URL(req.url());
-		const path = url.pathname;
+		const path = url.pathname.replace(/^\/couch(?=\/)/, '');
 		const reply = (status: number, body: unknown) => json(route, status, body, cors);
 
 		if (path === '/_session') {

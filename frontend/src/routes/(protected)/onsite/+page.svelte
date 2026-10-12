@@ -9,8 +9,11 @@
 	import Truck from '@lucide/svelte/icons/truck';
 	import { resolve } from '$app/paths';
 	import { authStore } from '$lib/stores/auth.svelte';
-	import { canAccessMedicalScreening, canAccessZoning } from '$lib/auth/roles';
-	import { canPerformFrontlineDistribution, canDispatchTicket } from '$lib/features/distribution';
+	import {
+		canAccessDistributionDesk,
+		canAccessMedicalScreening,
+		canAccessZoning
+	} from '$lib/auth/roles';
 	import { useShelter } from '$lib/features/shelters';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
@@ -22,17 +25,12 @@
 		shelterQuery.data?.feature_flags?.enable_medical_screening ?? false
 	);
 	const showMedicalTile = $derived(canAccessMedical && enableMedical);
+	// CR-161 R5: the desk tile matches requireDistributionDesk (SA, SM, distribution_staff).
 	const canDistribution = $derived(
-		canPerformFrontlineDistribution({
-			shelterCode: shelterStore.selectedShelterCode ?? getShelterCode(),
-			createdBy: authStore.user?.name ?? '',
-			roles: authStore.user?.roles ?? []
-		}) ||
-			canDispatchTicket({
-				shelterCode: shelterStore.selectedShelterCode ?? getShelterCode(),
-				createdBy: authStore.user?.name ?? '',
-				roles: authStore.user?.roles ?? []
-			})
+		canAccessDistributionDesk(
+			authStore.user?.roles ?? [],
+			shelterStore.selectedShelterCode ?? getShelterCode()
+		)
 	);
 </script>
 

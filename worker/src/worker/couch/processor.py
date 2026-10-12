@@ -22,6 +22,7 @@ from worker.mongo import (
     delete_needs_for_shelter,
     delete_occupants_for_shelter,
     delete_persons_for_shelter,
+    delete_stocks_for_shelter,
     refresh_occupancy,
     refresh_shelter_occupants,
     refresh_shelter_stock,
@@ -85,6 +86,7 @@ async def process_change(couch: Any, database: str, change: dict[str, Any]) -> N
                     await apply_shelter_deactivate(shelter_code)
                     await delete_persons_for_shelter(shelter_code)
                     await delete_needs_for_shelter(shelter_code)
+                    await delete_stocks_for_shelter(shelter_code)
         else:
             shelter_code = shelter_code_from_db_name(database)
             if shelter_code:
@@ -130,6 +132,7 @@ async def process_change(couch: Any, database: str, change: dict[str, Any]) -> N
                 await delete_persons_for_shelter(code)
                 await delete_occupants_for_shelter(code)
                 await delete_needs_for_shelter(code)
+                await delete_stocks_for_shelter(code)
         elif doc_type == "announcement":
             action, payload = project_announcement(doc)
             await apply_announcement(action, payload)

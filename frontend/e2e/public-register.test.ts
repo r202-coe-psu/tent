@@ -193,7 +193,7 @@ test.describe(
 			await page.locator('#member-0-first-name').fill('สมชาย');
 			await page.locator('#member-0-last-name').fill('ใจดี');
 			await page.locator('#member-0-gender-male').click({ force: true });
-			await page.getByLabel(/ข้าพเจ้ารับทราบเงื่อนไขการใช้งานระบบ/).check();
+			await page.getByLabel(/ข้าพเจ้ารับทราบข้อตกลงการใช้งาน/).check();
 
 			// The sticky summary aside repeats the submit button; use the one in the form body.
 			await page.getByRole('button', { name: 'ยืนยันการลงทะเบียน' }).last().click();
@@ -282,11 +282,14 @@ test.describe(
 			await expect(page.getByText('ผู้สูงอายุช่วยเหลือตัวเองไม่ได้').first()).toBeVisible();
 
 			await page.getByRole('button', { name: 'เพิ่มสมาชิก' }).click();
-			const member2 = page.getByRole('region', { name: 'สมาชิก 2' });
+			const member2 = page.getByRole('region', { name: 'สมาชิกคนที่ 2' });
 			await expect(member2).toBeVisible();
 			await member2.locator('#member-1-first-name').fill('สมหญิง');
 			await member2.locator('#member-1-last-name').fill('ใจดี');
-			await member2.locator('#member-1-gender-female').click({ force: true });
+			// The label is the real click target (the radio itself is a tiny button).
+			await page.locator('label[for="member-1-gender-female"]').click();
+			// No phone for this member — the field opens ready to type, so say so (roleplay #10).
+			await member2.locator('#member-1-no-phone').click();
 			await member2.getByRole('button', { name: 'กลุ่มเปราะบาง' }).click();
 			await member2.locator('#vg-1-elderly_dependent').click();
 
@@ -509,7 +512,7 @@ test.describe(
 			});
 			await expect(page.locator('#member-0-no-phone')).toHaveCount(0);
 
-			await page.getByLabel(/ข้าพเจ้ารับทราบเงื่อนไขการใช้งานระบบ/).check();
+			await page.getByLabel(/ข้าพเจ้ารับทราบข้อตกลงการใช้งาน/).check();
 			await page.getByRole('button', { name: 'ยืนยันการลงทะเบียน' }).last().click();
 
 			await expect(page.getByText('ลงทะเบียนล่วงหน้าสำเร็จ')).toBeVisible();
@@ -519,8 +522,10 @@ test.describe(
 			await expect(
 				page.getByText('แสดง QR Code นี้ต่อเจ้าหน้าที่ เพื่อรับเข้าศูนย์')
 			).toBeVisible();
-			// The registration id rides in the QR only — never printed for a human to read.
-			await expect(page.getByText('01JUNASSIGNEDREG0000000001')).toHaveCount(0);
+			// CR-150: an unassigned ticket prints its queue code under the name (`รหัส: {code}`)
+			await expect(
+				page.getByText('รหัส: 01JUNASSIGNEDREG0000000001', { exact: true })
+			).toBeVisible();
 
 			expect(submitted).toMatchObject({
 				disclaimerAcknowledged: true,
@@ -571,7 +576,7 @@ test.describe(
 					lastName: 'ใจดี',
 					phone: '0812345678'
 				});
-				await page.getByLabel(/ข้าพเจ้ารับทราบเงื่อนไขการใช้งานระบบ/).check();
+				await page.getByLabel(/ข้าพเจ้ารับทราบข้อตกลงการใช้งาน/).check();
 				await page.getByRole('button', { name: 'ยืนยันการลงทะเบียน' }).last().click();
 				await expect(page.getByText('ลงทะเบียนล่วงหน้าสำเร็จ')).toBeVisible();
 				await expect.poll(() => storedCodes(page)).toContain(REG_ID);

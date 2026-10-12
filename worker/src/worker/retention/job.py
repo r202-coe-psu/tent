@@ -15,6 +15,7 @@ from tent_model import (
     PublicPerson,
     PublicShelter,
     RetentionAudit,
+    ShelterStock,
     release_quota,
     release_slot,
 )
@@ -113,6 +114,16 @@ async def reconcile_closed_shelters(job_run_id: str) -> None:
                 trigger="scheduled",
                 model=PublicNeed,
                 target_id=need.id,
+            )
+        stocks = await ShelterStock.find(
+            ShelterStock.shelter_code == shelter.shelter_code
+        ).to_list()
+        for stock in stocks:
+            await _audit_and_delete(
+                job_run_id=job_run_id,
+                trigger="scheduled",
+                model=ShelterStock,
+                target_id=stock.id,
             )
         await _audit_and_delete(
             job_run_id=job_run_id,

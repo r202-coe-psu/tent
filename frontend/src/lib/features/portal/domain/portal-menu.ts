@@ -72,7 +72,8 @@ export type PortalCapability =
 	| 'supply_coordinator'
 	| 'volunteer_coordinator'
 	| 'security_officer'
-	| 'facility_staff';
+	| 'facility_staff'
+	| 'distribution_staff';
 
 /**
  * Per-shelter feature availability. `null` = not known yet (shelter still loading): items that
@@ -138,6 +139,7 @@ const SC = 'supply_coordinator';
 const VC = 'volunteer_coordinator';
 const SO = 'security_officer';
 const FAC = 'facility_staff';
+const DST = 'distribution_staff';
 
 export const PORTAL_DEPARTMENTS: readonly PortalDepartment[] = [
 	{
@@ -282,7 +284,8 @@ export const PORTAL_DEPARTMENTS: readonly PortalDepartment[] = [
 				icon: 'package-check',
 				href: '/onsite/distribution',
 				scope: 'shelter',
-				roles: [SC]
+				// CR-161 R5: the desk is SA, SM and distribution_staff only.
+				roles: [DST]
 			}
 		]
 	},

@@ -869,19 +869,6 @@
 											จุดเก็บของ
 											{#if storagePointRequired}<span class="text-red-500">*</span>{/if}
 										</Label>
-										<Select.Root type="single" bind:value={item.storage_zone}>
-											<Select.Trigger
-												id="storage-zone-{idx}"
-												class="h-11 w-full text-sm data-[size=default]:h-11"
-											>
-												{item.storage_zone || '-- เลือกโซนจัดเก็บ --'}
-											</Select.Trigger>
-											<Select.Content>
-												{#each STORAGE_ZONE_OPTIONS as zone (zone)}
-													<Select.Item value={zone} label={zone} />
-												{/each}
-											</Select.Content>
-										</Select.Root>
 										<StoragePointSelect
 											id="storage-zone-{idx}"
 											points={storagePoints.points}

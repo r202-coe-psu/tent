@@ -1,0 +1,59 @@
+import {
+	DEFAULT_KIOSK_HARDWARE,
+	DEFAULT_READER_MAX_GAP_MS,
+	MAX_READER_GAP_MS,
+	MIN_READER_GAP_MS,
+	type KioskHardware
+} from '../domain/kiosk-hardware';
+import { parseFaceCheckConfig } from '../domain/face-check';
+
+export const KIOSK_HARDWARE_PATH = '/api/v1/scanner/kiosk/hardware';
+export const KIOSK_HARDWARE_TIMEOUT_MS = 3_000;
+
+/**
+ * Per-machine hardware settings, answered by the scanner client on the kiosk itself. Without one
+ * (plain browser, Raspberry Pi kiosks that set nothing, any error) the page keeps the camera.
+ */
+export async function fetchKioskHardware(fetchFn: typeof fetch = fetch): Promise<KioskHardware> {
+	try {
+		const response = await fetchFn(KIOSK_HARDWARE_PATH, {
+			method: 'POST',
+			cache: 'no-store',
+			signal: AbortSignal.timeout(KIOSK_HARDWARE_TIMEOUT_MS)
+		});
+		if (!response.ok) return DEFAULT_KIOSK_HARDWARE;
+		const body = (await response.json()) as {
+			qr_check_in?: unknown;
+			qr_input?: unknown;
+			camera_label?: unknown;
+			camera_flip?: unknown;
+			reader_max_gap_ms?: unknown;
+			face_check?: unknown;
+		} | null;
+		if (body?.qr_input !== 'camera' && body?.qr_input !== 'reader' && body?.qr_input !== 'both') {
+			return DEFAULT_KIOSK_HARDWARE;
+		}
+		const gap = body.reader_max_gap_ms;
+		return {
+			// Only an explicit `false` turns QR off: older scanner clients do not send the field.
+			qrCheckInEnabled: body.qr_check_in !== false,
+			qrInput: body.qr_input,
+			cameraLabel:
+				typeof body.camera_label === 'string' && body.camera_label.trim()
+					? body.camera_label.trim()
+					: null,
+			// Only an explicit `true` flips: older scanner clients do not send the field.
+			cameraFlip: body.camera_flip === true,
+			readerMaxGapMs:
+				typeof gap === 'number' &&
+				Number.isInteger(gap) &&
+				gap >= MIN_READER_GAP_MS &&
+				gap <= MAX_READER_GAP_MS
+					? gap
+					: DEFAULT_READER_MAX_GAP_MS,
+			faceCheck: parseFaceCheckConfig(body.face_check)
+		};
+	} catch {
+		return DEFAULT_KIOSK_HARDWARE;
+	}
+}

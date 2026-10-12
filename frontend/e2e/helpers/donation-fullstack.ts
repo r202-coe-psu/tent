@@ -17,10 +17,11 @@ import {
 	seedSecurityQuestion,
 	type TestUser
 } from './couch';
+import { bangkokToday } from '../../src/lib/utils/date';
 import { RATE_LIMIT_ENFORCED } from './e2e-env';
 import { injectSession, routeBrowserCouchThroughApp } from './login';
 import { publicShelter, teardownShelter, waitForProjection } from './public-cleanup';
-import { createShelterViaUi, setRecaptcha } from './staff-ui';
+import { createShelterViaUi, pinActiveShelter, setRecaptcha } from './staff-ui';
 
 /**
  * Shared steps for the full-stack donation specs (`donation-fullstack*.test.ts`,
@@ -70,9 +71,10 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
  * Sliding-window pacer for the BFF's per-IP limiters (`src/lib/server/security/rate-limiter.ts`).
  *
  * Pacing only matters while those limiters are enforced. The server's `RATE_LIMIT=false`
- * switches every limiter off, and that is how e2e runs: `playwright.config.ts` starts the
- * local preview server with it off, and staging sets it off in its compose files — so the
- * Pacer is a no-op there and the suites run at full speed. Pacing turns itself on when
+ * (CR-160) switches the donation limiters off, and that is how e2e runs:
+ * `playwright.config.ts` starts the local preview server with it off, and staging sets it
+ * in its server `.env` / the `tent-staging-e2e-env` credential — so the Pacer is a no-op
+ * there and the suites run at full speed. Pacing turns itself on when
  * `RATE_LIMIT` is not `false`/`0` in the e2e env (unset counts as enforced, the safe
  * assumption for a remote target), e.g. `RATE_LIMIT=true` to exercise the real limits, in
  * which case every suite shares the one runner IP and the 3rd booking in a minute would
@@ -440,13 +442,22 @@ export async function bookAsDonor(page: Page, opts: BookingOptions): Promise<Boo
 
 const routedPages = new WeakSet<Page>();
 
-/** Open stock-donations as `staff`. */
+/**
+ * Open stock-donations as `staff`.
+ *
+ * The active shelter is pinned in localStorage first: the back-office layout re-mounts its
+ * children (`{#key shelterStore.selectedShelterCode}`) when the selection flips from
+ * `undefined` to a code after the shelter list loads. Unpinned, that remount lands after the
+ * tab is visible and resets the sub-tab / detaches forms the test is already filling in.
+ */
 export async function openBackOffice(page: Page, staff: Staff) {
 	if (!routedPages.has(page)) {
 		routedPages.add(page);
 		await routeBrowserCouchThroughApp(page);
 	}
 	await injectSession(page, staff, staff.session);
+	const shelterCode = staff.roles.find((r) => r.startsWith('shelter:'))?.slice('shelter:'.length);
+	if (shelterCode) await pinActiveShelter(page, shelterCode);
 	await page.goto('/back-office/stock-donations');
 	await expect(page.getByRole('tab', { name: /รอการประเมิน/ })).toBeVisible({ timeout: 15_000 });
 }
@@ -509,9 +520,9 @@ export async function ledgerRowsFor(shelterCode: string, donationId: string) {
 
 export type SlotWindow = { from: string; to: string };
 
-/** Local YYYY-MM-DD — the wizard and the slot screen both default to it. */
+/** Asia/Bangkok YYYY-MM-DD — the wizard and the slot screen both default to it. */
 export function todayYmd() {
-	return new Date().toLocaleDateString('sv-SE');
+	return bangkokToday();
 }
 
 /** The public board's line for `itemName` at `shelterCode`, if any. */

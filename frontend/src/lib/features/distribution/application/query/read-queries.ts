@@ -17,6 +17,8 @@ import {
 	bulkReturnClaimRepository
 } from './repositories';
 import { calculateShiftReconciliation } from '../food-supplies/reconciliation-workflow';
+import { resolveDispatchedLotExpiry } from '../food-supplies/lot-expiry';
+import { operationsRepository } from '$lib/features/operations';
 import { getReturnOperationState } from '../food-supplies/return-workflow';
 import type {
 	RequisitionTicketListFilter,
@@ -72,6 +74,28 @@ export const useDistributionLogs = (
 			queryKey: distributionKeys.logs(shelterCode, resolvedFilter),
 			queryFn: () => distributionLogRepository(shelterCode).list(resolvedFilter),
 			enabled: isEnabled
+		};
+	});
+
+/**
+ * `lot.expiry` of the lot dispatched for a ticket item — the ready-meal safety clock
+ * (FR-MQW-06 B). `null` when unknown. Lot metadata never changes after dispatch.
+ */
+export const useDispatchedLotExpiry = (
+	ticketId: MaybeGetter<string>,
+	itemId: MaybeGetter<string>,
+	shelterCodeGetter?: MaybeGetter<string | undefined>
+) =>
+	createQuery(() => {
+		const ticket = toValue(ticketId);
+		const item = toValue(itemId);
+		const shelterCode = resolveShelterCode(toValue(shelterCodeGetter));
+		return {
+			queryKey: distributionKeys.dispatchedLotExpiry(shelterCode, ticket, item),
+			queryFn: async () =>
+				(await resolveDispatchedLotExpiry(ticket, item, operationsRepository(shelterCode))) ?? null,
+			enabled: Boolean(ticket && item && shelterCode),
+			staleTime: Infinity
 		};
 	});
 

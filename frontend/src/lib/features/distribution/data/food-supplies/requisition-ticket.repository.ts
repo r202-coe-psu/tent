@@ -15,6 +15,9 @@ import {
 } from '../../domain/food-supplies';
 import { NotFoundError, resolveShelterDbName, retryCas } from './shared';
 
+/** Types `list()` returns: Flow 2 food/supplies plus transfer; kitchen tickets have their own shape. */
+const LIST_TYPES: ReadonlySet<string> = new Set<RequisitionType>(['food', 'supplies', 'transfer']);
+
 export interface RequisitionTicketListFilter {
 	status?: RequisitionTicketStatus;
 	requisition_type?: RequisitionType;
@@ -88,7 +91,25 @@ export class RequisitionTicketRemoteRepository implements RequisitionTicketRepos
 				d !== null &&
 				(d as { type?: string }).type === 'requisition_ticket'
 		);
-		const parsed = docs.map((d) => requisitionTicketDocSchema.parse(d));
+		// The shelter DB also holds kitchen tickets (`$lib/features/tickets`, different item
+		// shape) and pre-CR-121 legacy docs. Listing skips kitchen tickets and anything that
+		// fails the strict schema, so one foreign doc cannot empty the whole desk; `get()`
+		// stays strict.
+		const invalidIds: string[] = [];
+		const parsed = docs.flatMap((d) => {
+			if (!LIST_TYPES.has((d as { requisition_type?: string }).requisition_type ?? '')) {
+				return [];
+			}
+			const result = requisitionTicketDocSchema.safeParse(d);
+			if (result.success) return [result.data as RequisitionTicket];
+			invalidIds.push(d._id);
+			return [];
+		});
+		if (invalidIds.length > 0) {
+			console.warn(
+				`[requisition_ticket] Skipped ${invalidIds.length} ticket(s) in "${this.dbName}" that fail the schema: ${invalidIds.join(', ')}`
+			);
+		}
 		return parsed.filter((ticket) => {
 			if (filter?.status && ticket.status !== filter.status) return false;
 			if (filter?.requisition_type && ticket.requisition_type !== filter.requisition_type)

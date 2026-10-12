@@ -12,7 +12,7 @@ from worker.timeutil import iso_utc
 
 def test_iso_utc_reads_a_naive_datetime_as_utc():
     # What PyMongo returns without tz_aware: UTC, but no offset attached.
-    naive = datetime(2026, 9, 25, 21, 20, 18, 908000)  # noqa: DTZ001 — the point of the test
+    naive = datetime(2026, 9, 25, 21, 20, 18, 908000)
     assert iso_utc(naive) == "2026-09-25T21:20:18.908Z"
 
 
@@ -34,8 +34,8 @@ async def test_persisted_donation_timestamps_carry_z_when_mongo_returns_naive():
         id="donation:01TESTDONATION0000000001",
         shelter_code="SH001",
         campaign_id=None,
-        created_at=datetime(2026, 9, 25, 21, 20, 18, 908000),  # noqa: DTZ001 — naive, as from Mongo
-        expires_at=datetime(2026, 9, 28, 21, 20, 18, 908000),  # noqa: DTZ001
+        created_at=datetime(2026, 9, 25, 21, 20, 18, 908000),
+        expires_at=datetime(2026, 9, 28, 21, 20, 18, 908000),
         booking_ref="DN-123456",
         tracking_token_hash="hash",
         donor=SimpleNamespace(
