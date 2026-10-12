@@ -157,3 +157,12 @@ describe('GET /api/v1/auth/oauth/thaid/start (mode=kiosk_check_in)', () => {
 		});
 	});
 });
+
+describe('GET /api/v1/auth/oauth/thaid/start (mode=stepup)', () => {
+	it('sends a hidden step-up back to /portal without starting OAuth', async () => {
+		const { redir, cookies } = await redirectOf('mode=stepup');
+		expect(redir.status).toBe(302);
+		expect(redir.location).toBe('/portal');
+		expect(cookies.set).not.toHaveBeenCalled();
+	});
+});

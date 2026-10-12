@@ -17,6 +17,7 @@ import { completeKioskSession, completeScanSession } from '$lib/server/thaid-sca
 import {
 	fetchCouchAuthHashAlgorithm,
 	fetchCouchAuthSecret,
+	isMfaStepupEnabled,
 	mintAuthSessionCookie,
 	setAuthSessionCookie,
 	setMfaOkCookie
@@ -50,6 +51,8 @@ function loginErrorRedirect(code: string): never {
 }
 
 function mfaErrorRedirect(code: string): never {
+	// Step-up hidden: only /me linking lands here — send its failures back to /me.
+	if (!isMfaStepupEnabled()) throw redirect(302, '/me?mfa=link_failed');
 	throw redirect(302, `/mfa-challenge?error=${encodeURIComponent(code)}`);
 }
 

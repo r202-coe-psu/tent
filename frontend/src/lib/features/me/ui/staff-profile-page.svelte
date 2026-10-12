@@ -207,6 +207,8 @@
 			toast.success('ผูกบัญชี ThaID สำหรับ MFA สำเร็จ');
 		} else if (mfa === 'thaid_conflict') {
 			toast.error('บัญชี ThaID นี้ถูกผูกกับผู้ใช้อื่นแล้ว');
+		} else if (mfa === 'link_failed') {
+			toast.error('เชื่อมบัญชีไม่สำเร็จ กรุณาลองอีกครั้ง');
 		} else if (mfa === 'thaid_disabled') {
 			toast.error('ระบบ ThaiD Digital ID ถูกปิดใช้งานชั่วคราว');
 		}
