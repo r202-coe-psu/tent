@@ -147,15 +147,15 @@ export async function requireKioskManagement(fetchFn?: typeof fetch) {
 
 /**
  * Back-office layout gate — a user whose only capability in the selected shelter is kiosk_staff
- * is sent to the kiosk device page from every other back-office page (FR-SBO-29). Call after
- * {@link requireAuth}.
+ * may open the kiosk device page only (FR-SBO-29); every other back-office page sends them to the
+ * portal like any other denied page. Call after {@link requireAuth}.
  */
 export function confineKioskStaffOnly(pathname: string) {
 	const roles = authStore.user?.roles ?? [];
 	if (!isKioskStaffOnly(roles, activeShelterCode(roles))) return;
 	const allowed = resolve(KIOSK_STAFF_BACKOFFICE_ROUTE);
 	if (pathname === allowed || pathname.startsWith(`${allowed}/`)) return;
-	throw redirect(302, allowed);
+	throw redirect(302, resolve(LANDING_ROUTE));
 }
 
 /**
