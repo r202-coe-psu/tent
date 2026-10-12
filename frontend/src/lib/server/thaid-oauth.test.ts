@@ -124,7 +124,7 @@ describe('thaid-oauth helpers (CR-ThaID)', () => {
 			expect(scopes).toContain('address');
 		});
 
-		it('requests only openid + pid for kiosk_check_in mode (data minimization)', () => {
+		it('requests the profile scope for kiosk_check_in mode (a scan may become a walk-in)', () => {
 			const url = buildThaidAuthorizeUrl({
 				clientId: 'my-client',
 				redirectUri: 'https://shelter.importstar.dev/callback',
@@ -132,7 +132,8 @@ describe('thaid-oauth helpers (CR-ThaID)', () => {
 				mode: 'kiosk_check_in'
 			});
 
-			expect(new URL(url).searchParams.get('scope')).toBe('openid pid');
+			const scopes = new URL(url).searchParams.get('scope')?.split(' ') ?? [];
+			expect(scopes).toEqual(expect.arrayContaining(['openid', 'pid', 'name', 'address']));
 		});
 	});
 

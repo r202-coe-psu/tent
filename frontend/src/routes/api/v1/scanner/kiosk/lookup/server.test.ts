@@ -418,4 +418,36 @@ describe('POST /api/v1/scanner/kiosk/lookup source thaid', () => {
 		expect(text).not.toContain(pid);
 		expect(mockFindShelter).not.toHaveBeenCalled();
 	});
+
+	it('offers a walk-in for a ThaiD miss and extends the verified session once', async () => {
+		mockLookup.mockResolvedValue({ kind: 'not_found', can_register: true } as never);
+		mockFindShelter.mockResolvedValue({
+			code: 'SH001',
+			feature_flags: { kiosk_walk_in_registration_enabled: true }
+		} as never);
+		const sessionId = completedSession();
+		const before = getKioskSessionForDevice(sessionId, device)!.expiresAt;
+
+		const response = await send({ source: 'thaid', session_id: sessionId }, device);
+		const text = await response.text();
+
+		expect(response.status).toBe(404);
+		expect(JSON.parse(text)).toMatchObject({ can_register: true });
+		expect(text).not.toContain(pid);
+		const session = getKioskSessionForDevice(sessionId, device);
+		expect(session?.status).toBe('completed');
+		expect(session?.registrationExtended).toBe(true);
+		expect(session!.expiresAt).toBeGreaterThanOrEqual(before);
+	});
+
+	it('neither offers a walk-in nor extends the session when walk-in is off', async () => {
+		mockLookup.mockResolvedValue({ kind: 'not_found', can_register: true } as never);
+		mockFindShelter.mockResolvedValue({ code: 'SH001', feature_flags: {} } as never);
+		const sessionId = completedSession();
+
+		const response = await send({ source: 'thaid', session_id: sessionId }, device);
+
+		expect(await response.json()).toMatchObject({ can_register: false });
+		expect(getKioskSessionForDevice(sessionId, device)?.registrationExtended).toBeUndefined();
+	});
 });

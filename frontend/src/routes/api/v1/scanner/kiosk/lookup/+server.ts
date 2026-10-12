@@ -26,7 +26,10 @@ import {
 	ScannerDependencyError
 } from '$lib/server/scanners/device-credentials';
 import { findMasterByCode } from '$lib/server/shelters.admin';
-import { getKioskSessionForDevice } from '$lib/server/thaid-scan-session';
+import {
+	extendKioskSessionForRegistration,
+	getKioskSessionForDevice
+} from '$lib/server/thaid-scan-session';
 
 export const prerender = false;
 
@@ -131,10 +134,18 @@ export const POST: RequestHandler = async ({ request }) => {
 			gateInput = parsed.data;
 		}
 		const result = await lookupPreRegisteredEvacuee(principal.shelter_code, gateInput);
-		if (result.kind === 'not_found' && parsed.data.source === 'smart-card') {
+		if (
+			result.kind === 'not_found' &&
+			result.can_register === true &&
+			(parsed.data.source === 'smart-card' || parsed.data.source === 'thaid')
+		) {
 			walkInRegistrationEnabled = await findMasterByCode(principal.shelter_code)
 				.then(isKioskWalkInRegistrationEnabled)
 				.catch(() => false);
+			// A walk-in (offer → consent → phone) outlasts the check-in window: extend it, once.
+			if (walkInRegistrationEnabled && parsed.data.source === 'thaid') {
+				extendKioskSessionForRegistration(parsed.data.session_id, principal.registry_id);
+			}
 		}
 		await scannerServerRepository.updateDeviceLastSeen(principal.registry_id).catch(() => {});
 		if (result.kind === 'not_found') {

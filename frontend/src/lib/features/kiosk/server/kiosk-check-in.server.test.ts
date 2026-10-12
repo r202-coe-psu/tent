@@ -648,13 +648,13 @@ describe('lookupPreRegisteredEvacuee thaid', () => {
 		});
 	});
 
-	it('does not offer walk-in registration when the citizen is unknown', async () => {
+	it('offers walk-in registration when the citizen is unknown', async () => {
 		expect(
 			await lookupPreRegisteredEvacuee(shelterCode, {
 				source: 'thaid',
 				citizen_id: '1234567890123'
 			})
-		).toEqual({ kind: 'not_found', can_register: false });
+		).toEqual({ kind: 'not_found', can_register: true });
 	});
 
 	it('returns the repeat-registration outcome for kiosk_registered records', async () => {
