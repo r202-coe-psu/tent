@@ -306,6 +306,12 @@ describe('lookupPreRegisteredEvacuee ThaiD gate', () => {
 	});
 });
 
+const registered = {
+	evacuee_id: 'evacuee:01ARZ3NDEKTSV4RRFFQ69G5FAV',
+	qr_payload: 'evacuee:01ARZ3NDEKTSV4RRFFQ69G5FAV',
+	label: { name: 'สมชาย ใจดี', phone: '0812345678' }
+};
+
 describe('registerKioskWalkIn', () => {
 	afterEach(() => vi.unstubAllGlobals());
 
@@ -326,7 +332,7 @@ describe('registerKioskWalkIn', () => {
 			};
 			expect(body.card).not.toHaveProperty('photo_base64');
 			expect(body.photo).toEqual(photo);
-			return new Response(JSON.stringify({ evacuee_id: 'evacuee:01ARZ3NDEKTSV4RRFFQ69G5FAV' }), {
+			return new Response(JSON.stringify(registered), {
 				status: 200,
 				headers: { 'content-type': 'application/json' }
 			});
@@ -335,7 +341,7 @@ describe('registerKioskWalkIn', () => {
 
 		await expect(
 			registerKioskWalkIn({ citizen_id: '1234567890123' }, photo, new Date().toISOString())
-		).resolves.toEqual({ evacuee_id: 'evacuee:01ARZ3NDEKTSV4RRFFQ69G5FAV' });
+		).resolves.toEqual(registered);
 		expect(fetchMock).toHaveBeenCalledOnce();
 	});
 
@@ -343,7 +349,7 @@ describe('registerKioskWalkIn', () => {
 		const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
 			const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
 			expect(body).toMatchObject({ source: 'smart-card', phone: '0812345678', consented: true });
-			return new Response(JSON.stringify({ evacuee_id: 'evacuee:01ARZ3NDEKTSV4RRFFQ69G5FAV' }), {
+			return new Response(JSON.stringify(registered), {
 				status: 200
 			});
 		});
@@ -372,15 +378,15 @@ describe('registerKioskThaidWalkIn', () => {
 				consented: true,
 				consented_at: consentedAt
 			});
-			return new Response(JSON.stringify({ evacuee_id: 'evacuee:01ARZ3NDEKTSV4RRFFQ69G5FAV' }), {
+			return new Response(JSON.stringify(registered), {
 				status: 200
 			});
 		});
 		vi.stubGlobal('fetch', fetchMock);
 
-		await expect(registerKioskThaidWalkIn('a'.repeat(32), consentedAt, null)).resolves.toEqual({
-			evacuee_id: 'evacuee:01ARZ3NDEKTSV4RRFFQ69G5FAV'
-		});
+		await expect(registerKioskThaidWalkIn('a'.repeat(32), consentedAt, null)).resolves.toEqual(
+			registered
+		);
 	});
 
 	it('surfaces an expired ThaiD session as its error code', async () => {

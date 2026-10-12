@@ -13,6 +13,7 @@ import {
 	registerKioskThaidWalkIn,
 	registerKioskWalkIn
 } from '$lib/features/kiosk/server/kiosk-register.server';
+import { toLabelIdentity } from '$lib/features/kiosk/server/kiosk-check-in.server';
 import { isKioskThaidCheckInAllowed } from '$lib/features/kiosk/server/kiosk-thaid-gate.server';
 import {
 	consumeKioskSession,
@@ -143,7 +144,16 @@ export const POST: RequestHandler = async ({ request }) => {
 			);
 		}
 		await scannerServerRepository.updateDeviceLastSeen(principal.registry_id).catch(() => {});
-		return json({ status: 'created', evacuee_id: evacuee._id }, { headers: noStoreHeaders });
+		// The QR is the evacuee id itself (same as check-in), so the kiosk can print the label at once.
+		return json(
+			{
+				status: 'created',
+				evacuee_id: evacuee._id,
+				qr_payload: evacuee._id,
+				label: toLabelIdentity(evacuee)
+			},
+			{ headers: noStoreHeaders }
+		);
 	} catch (error) {
 		if (error instanceof ScannerAuthError) {
 			return json(

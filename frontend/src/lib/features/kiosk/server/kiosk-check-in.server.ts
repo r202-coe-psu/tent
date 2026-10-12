@@ -212,7 +212,10 @@ function toSummary(
 	};
 }
 
-function toLabelIdentity(doc: EvacueeDoc): KioskLabelIdentity {
+/** Unmasked name + phone for the printed label (check-in and a fresh walk-in registration). */
+export function toLabelIdentity(
+	doc: Pick<EvacueeDoc, 'first_name' | 'last_name' | 'phone'>
+): KioskLabelIdentity {
 	const name = [doc.first_name, doc.last_name]
 		.map((part) => part?.trim())
 		.filter(Boolean)

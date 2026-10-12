@@ -57,7 +57,14 @@ export interface KioskCheckInBatchResult extends KioskCheckInResult {
 	retryable_evacuee_ids: string[];
 }
 
-function postKioskRegistration(body: Record<string, unknown>): Promise<{ evacuee_id: string }> {
+/** What the register endpoint returns: the new record plus what the kiosk prints (QR + label). */
+export interface KioskRegistrationResult {
+	evacuee_id: string;
+	qr_payload: string;
+	label: { name: string; phone: string | null };
+}
+
+function postKioskRegistration(body: Record<string, unknown>): Promise<KioskRegistrationResult> {
 	return requestWithTimeout(
 		'/api/v1/kiosk/register',
 		{
@@ -68,7 +75,7 @@ function postKioskRegistration(body: Record<string, unknown>): Promise<{ evacuee
 		},
 		async (response) => {
 			if (!response.ok) throw await requestError(response);
-			return (await response.json()) as { evacuee_id: string };
+			return (await response.json()) as KioskRegistrationResult;
 		}
 	);
 }
@@ -79,7 +86,7 @@ export async function registerKioskWalkIn(
 	photo: KioskPhotoPayload | null,
 	consentedAt: string,
 	phone: string | null = null
-): Promise<{ evacuee_id: string }> {
+): Promise<KioskRegistrationResult> {
 	return postKioskRegistration({
 		source: 'smart-card',
 		card,
@@ -94,7 +101,7 @@ export async function registerKioskThaidWalkIn(
 	sessionId: string,
 	consentedAt: string,
 	phone: string | null
-): Promise<{ evacuee_id: string }> {
+): Promise<KioskRegistrationResult> {
 	return postKioskRegistration({
 		source: 'thaid',
 		session_id: sessionId,
