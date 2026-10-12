@@ -293,13 +293,13 @@ describe('confineKioskStaffOnly (back-office layout, FR-SBO-29)', () => {
 		mocks.selectedShelterCode = 'SH001';
 	});
 
-	it('sends a kiosk_staff-only user from another back-office page to the scanners page', () => {
+	it('sends a kiosk_staff-only user from another back-office page to the portal', () => {
 		mocks.user = { roles: kioskOnly };
 		expect(() => confineKioskStaffOnly('/back-office/evacuee-management')).toThrow(
-			expect.objectContaining({ status: 302, location: '/back-office/kiosks' })
+			expect.objectContaining({ status: 302, location: '/portal' })
 		);
 		expect(() => confineKioskStaffOnly('/back-office')).toThrow(
-			expect.objectContaining({ location: '/back-office/kiosks' })
+			expect.objectContaining({ location: '/portal' })
 		);
 	});
 
