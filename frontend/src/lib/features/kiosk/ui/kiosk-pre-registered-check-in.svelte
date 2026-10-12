@@ -7,11 +7,11 @@
 	import ShieldCheck from '@lucide/svelte/icons/shield-check';
 	import UserCheck from '@lucide/svelte/icons/user-check';
 	import UsersRound from '@lucide/svelte/icons/users-round';
-	import QrIdCard from '$lib/components/qr-id-card.svelte';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import KioskCheckInWizard from './kiosk-check-in-wizard.svelte';
 	import KioskLookupErrorActions from './kiosk-lookup-error-actions.svelte';
 	import PhoneHouseholdPicker from './phone-household-picker.svelte';
+	import KioskLabelSheet from './kiosk-label-sheet.svelte';
 	import KioskPrintStatus from './kiosk-print-status.svelte';
 	import {
 		initialReprintSelection,
@@ -20,16 +20,6 @@
 		toExistingReportResults,
 		toggleAllSelection
 	} from '../domain/household-selection';
-	import {
-		KIOSK_LABEL_CHECKLIST,
-		KIOSK_LABEL_GAP_MM,
-		KIOSK_LABEL_LINK,
-		KIOSK_LABEL_MM,
-		KIOSK_LABEL_OFFSET_X_MM,
-		KIOSK_LABEL_PADDING_MM,
-		kioskLabelPageCss,
-		kioskQrBoxMm
-	} from '../domain/print-label';
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 	import {
 		checkInSelectedMembers,
@@ -481,13 +471,6 @@
 		});
 	}
 
-	// Print labels must be a direct child of <body> so print CSS can drop the whole kiosk screen with
-	// display:none; visibility:hidden keeps its layout height and prints blank labels.
-	function mountOnBody(node: HTMLElement) {
-		document.body.appendChild(node);
-		return () => node.remove();
-	}
-
 	function fullName(member: Pick<KioskEvacueeSummary, 'first_name' | 'last_name'>): string {
 		return [member.first_name, member.last_name].filter(Boolean).join(' ') || 'ไม่ระบุชื่อ';
 	}
@@ -511,9 +494,6 @@
 
 <svelte:head>
 	<title>ตรวจสอบและรายงานตัว — SmartShelter Kiosk</title>
-	<!-- Static CSS built from KIOSK_LABEL_MM constants only (no user input). -->
-	<!-- eslint-disable-next-line svelte/no-at-html-tags -->
-	{@html `<style>${kioskLabelPageCss()}</style>`}
 </svelte:head>
 
 <section
@@ -962,37 +942,18 @@
 				</div>
 			</section>
 
-			<!-- The wrapper stays in place for Svelte's DOM bookkeeping; its child is moved to <body>. -->
-			<div hidden>
-				<div
-					class="kiosk-print-area"
-					aria-hidden="true"
-					style:--label-width="{KIOSK_LABEL_MM.width}mm"
-					style:--label-height="{KIOSK_LABEL_MM.height}mm"
-					style:--label-padding="{KIOSK_LABEL_PADDING_MM}mm"
-					style:--label-offset-x="{KIOSK_LABEL_OFFSET_X_MM}mm"
-					style:--label-gap="{KIOSK_LABEL_GAP_MM}mm"
-					{@attach mountOnBody}
-				>
-					{#each printableResults as result (result.evacuee_id)}
-						{@const person = lookup?.members.find(
-							(member) => member.evacuee_id === result.evacuee_id
-						)}
-						{@const qr = qrImages[result.evacuee_id]}
-						<div class="wristband" style:--qr-size="{qr?.sizeMm ?? kioskQrBoxMm()}mm">
-							<QrIdCard
-								variant="label"
-								src={qr?.src}
-								alt="QR ประจำตัวสำหรับใช้ภายในศูนย์"
-								name={labelName(result, person)}
-								phone={result.label?.phone}
-								footer={KIOSK_LABEL_LINK}
-								checklist={KIOSK_LABEL_CHECKLIST}
-							/>
-						</div>
-					{/each}
-				</div>
-			</div>
+			<KioskLabelSheet
+				labels={printableResults.map((result) => ({
+					key: result.evacuee_id,
+					qrSrc: qrImages[result.evacuee_id]?.src,
+					qrSizeMm: qrImages[result.evacuee_id]?.sizeMm,
+					name: labelName(
+						result,
+						lookup?.members.find((member) => member.evacuee_id === result.evacuee_id)
+					),
+					phone: result.label?.phone
+				}))}
+			/>
 		{/if}
 
 		<p
@@ -1012,38 +973,3 @@
 {#if printPhase !== 'idle'}
 	<KioskPrintStatus phase={printPhase} count={printedCount} />
 {/if}
-
-<style>
-	.kiosk-print-area {
-		display: none;
-	}
-
-	/* Label size comes from domain/print-label.ts (CSS vars + generated @page in <svelte:head>). */
-	@media print {
-		:global(body) {
-			margin: 0 !important;
-		}
-		:global(body > :not(.kiosk-print-area)) {
-			display: none !important;
-		}
-		.kiosk-print-area {
-			display: block;
-		}
-		.wristband {
-			box-sizing: border-box;
-			display: block;
-			width: var(--label-width);
-			height: var(--label-height);
-			padding: var(--label-padding);
-			translate: var(--label-offset-x) 0;
-			overflow: hidden;
-			break-after: page;
-			break-inside: avoid;
-			font-family: 'IBM Plex Sans Thai', sans-serif;
-			color: #000;
-		}
-		.wristband:last-child {
-			break-after: auto;
-		}
-	}
-</style>
