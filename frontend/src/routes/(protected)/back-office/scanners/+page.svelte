@@ -3,11 +3,8 @@
 	import { spatial } from '$lib/tokens';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import Plus from '@lucide/svelte/icons/plus';
-	import ShelterScopeSelect from '$lib/components/shelter-scope-select.svelte';
-	import { authStore } from '$lib/stores/auth.svelte';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
-	import { isSystemAdmin } from '$lib/auth/roles';
 	import {
 		CreateScannerDialog,
 		RevealScannerSecretDialog,
@@ -20,13 +17,10 @@
 		type ScannerDevice
 	} from '$lib/features/scanners';
 
-	const isSA = $derived(isSystemAdmin(authStore.user?.roles ?? []));
+	/** Every role (SA included) works on the shelter picked in the back-office shelter switcher. */
 	const activeShelter = $derived(shelterStore.selectedShelterCode ?? getShelterCode());
 
-	/** SA only: `undefined` = every shelter. A shelter manager is always scoped to the active one. */
-	let filter = $state<string | undefined>(undefined);
-
-	const devicesQuery = useScannerDevices(() => (isSA ? filter : activeShelter));
+	const devicesQuery = useScannerDevices(() => activeShelter);
 
 	let createOpen = $state(false);
 	let revealOpen = $state(false);
@@ -83,17 +77,6 @@
 		</Button>
 	{/snippet}
 
-	{#if isSA}
-		<div class="max-w-sm">
-			<ShelterScopeSelect
-				allowedCodes={null}
-				includeAll
-				bind:value={filter}
-				ariaLabel="กรองเครื่องตามศูนย์พักพิง"
-			/>
-		</div>
-	{/if}
-
 	<div class={spatial.container.staffPageCard}>
 		{#if devicesQuery.isLoading}
 			<div class="flex flex-col items-center justify-center gap-3 py-24 text-muted-foreground">
@@ -121,7 +104,7 @@
 
 <CreateScannerDialog
 	bind:open={createOpen}
-	fixedShelterCode={isSA ? null : activeShelter}
+	fixedShelterCode={activeShelter}
 	oncreated={handleCreated}
 />
 <RevealScannerSecretDialog
