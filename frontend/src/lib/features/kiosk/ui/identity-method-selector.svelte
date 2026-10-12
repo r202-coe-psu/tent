@@ -150,20 +150,31 @@
 		}
 	}
 
+	/* 1024×600: the stepper stays on top; title + cards are centred in the space below it. */
 	@media (max-height: 650px) {
 		.kiosk-method-page {
 			min-height: auto;
+			flex: 1;
 			justify-content: flex-start;
 			gap: 0.5rem;
 		}
 
+		.kiosk-method-page > header {
+			margin-top: auto;
+		}
+
 		.method-grid {
 			gap: 0.5rem;
+			margin-bottom: auto;
 		}
 
 		.method-card {
 			min-height: 9.5rem;
 			padding: 0.75rem;
+		}
+
+		.method-grid[data-single-row] .method-card {
+			min-height: 14rem;
 		}
 	}
 
