@@ -105,6 +105,18 @@
 	let masterSkills = $state<SkillOption[]>([]);
 	let isLoadingSkills = $state(false);
 
+	function skillDisplayLabel(item: {
+		code: string;
+		label?: string;
+		label_th?: string;
+		label_en?: string;
+	}): string {
+		const th = item.label_th?.trim() ?? '';
+		const en = item.label_en?.trim() ?? '';
+		const localized = languageStore.current === 'en' ? en || th : th || en;
+		return item.label?.trim() || localized || item.code;
+	}
+
 	// Fetch skills from public master data endpoint (NO AUTH REQUIRED)
 	async function loadPublicSkills() {
 		try {
@@ -114,10 +126,18 @@
 				const data = await res.json();
 				if (Array.isArray(data.volunteerSkills) && data.volunteerSkills.length > 0) {
 					masterSkills = data.volunteerSkills.map(
-						(i: { code: string; label: string; category?: string; description?: string }) => ({
+						(i: {
+							code: string;
+							label?: string;
+							label_th?: string;
+							label_en?: string;
+							category?: string;
+							description?: string;
+						}) => ({
 							id: i.code,
 							key: i.code,
-							label: i.label,
+							// The endpoint sends label_th / label_en (no `label`) since the master-data shrink.
+							label: skillDisplayLabel(i),
 							category: (i.category ?? 'operational') as 'operational' | 'controlled',
 							controlled: i.category === 'controlled' || i.category === 'CONTROLLED',
 							description: i.description ?? ''
@@ -232,13 +252,13 @@
 
 	/** Compare job/applicant skills by Master Data code, with legacy labels supported. */
 	function canonicalSkillId(value: string): string {
-		const normalized = value.trim().toLowerCase();
+		const normalized = value?.trim().toLowerCase() ?? '';
 		return (
 			masterSkills.find(
 				(skill) =>
 					skill.id === value ||
 					skill.key === value ||
-					skill.label.trim().toLowerCase() === normalized
+					(skill.label ?? '').trim().toLowerCase() === normalized
 			)?.id ?? value
 		);
 	}
