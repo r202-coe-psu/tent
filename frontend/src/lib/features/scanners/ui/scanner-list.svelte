@@ -14,6 +14,7 @@
 	import { useDeleteScannerDevice, useUpdateScannerDevice } from '../application/queries';
 	import { toast } from 'svelte-sonner';
 	import { formatThaiShortDate } from '$lib/utils/date';
+	import DeleteScannerDialog from './delete-scanner-dialog.svelte';
 
 	let {
 		devices = [],
@@ -32,13 +33,22 @@
 	const deleteMutation = useDeleteScannerDevice();
 	const updateMutation = useUpdateScannerDevice();
 
+	let deleteDialogOpen = $state(false);
+	let deleteTarget = $state<ScannerDevice | null>(null);
+
 	function handleDelete(device: ScannerDevice) {
-		if (confirm(`คุณต้องการลบเครื่องสแกน "${device.name}" (${device.device_id}) หรือไม่?`)) {
-			deleteMutation.mutate(device.device_id, {
-				onSuccess: () => toast.success('ลบเครื่องสแกนเรียบร้อยแล้ว'),
-				onError: (err) => toast.error(err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการลบ')
-			});
-		}
+		deleteTarget = device;
+		deleteDialogOpen = true;
+	}
+
+	function confirmDelete(device: ScannerDevice) {
+		deleteMutation.mutate(device.device_id, {
+			onSuccess: () => {
+				deleteDialogOpen = false;
+				toast.success('ลบเครื่องสแกนเรียบร้อยแล้ว');
+			},
+			onError: (err) => toast.error(err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการลบ')
+		});
 	}
 
 	function handleToggleStatus(device: ScannerDevice) {
@@ -224,3 +234,10 @@
 		</tbody>
 	</table>
 </div>
+
+<DeleteScannerDialog
+	bind:open={deleteDialogOpen}
+	device={deleteTarget}
+	pending={deleteMutation.isPending}
+	onconfirm={confirmDelete}
+/>
