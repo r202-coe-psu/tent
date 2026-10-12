@@ -65,7 +65,8 @@ const userProfileFields = {
 	/** Multi-shelter compound assignments (CR-093). */
 	assignments: z.array(shelterAssignmentSchema).optional(),
 	/** @deprecated single-shelter fields — still accepted for SM locked forms */
-	capabilities: z.array(capabilitySchema).min(1, 'ต้องเลือกอย่างน้อย 1 บทบาท').optional(),
+	/** Emptiness is enforced in `refineUserForm` — multi-shelter forms keep roles in `assignments`. */
+	capabilities: z.array(capabilitySchema).optional(),
 	capability: capabilitySchema.optional(),
 	shelter_id: shelterCodeSchema.optional(),
 	volunteer_id: z.string().optional(),
