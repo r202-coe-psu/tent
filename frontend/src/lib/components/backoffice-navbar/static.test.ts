@@ -123,7 +123,6 @@ describe('real backofficeNavbarGroups — visible leaves per role (regression gu
 		return backofficeNavbarGroups.flatMap((g) => walk(g.items));
 	};
 
-	const sopSimulation = 'จำลองสถานการณ์ SOP';
 	const everyoneSees = [
 		'จัดการผู้ประสบภัย',
 		'จัดการอาสาสมัคร',
@@ -151,18 +150,17 @@ describe('real backofficeNavbarGroups — visible leaves per role (regression gu
 		scannerDevices,
 		...everyoneSees.slice(afterUsers)
 	];
-	const withSopAndScanners = [...withScanners.slice(0, 5), sopSimulation, ...withScanners.slice(5)];
 
 	it('system_admin sees every leaf', () => {
-		expect(visibleLeafLabels(ctx(['system_admin']))).toEqual(withSopAndScanners);
+		expect(visibleLeafLabels(ctx(['system_admin']))).toEqual(withScanners);
 	});
 
 	it('the shelter_manager of the active shelter sees every leaf', () => {
 		const roles = ['shelter:SH001', 'SH001:shelter_manager'];
-		expect(visibleLeafLabels(ctx(roles, 'SH001'))).toEqual(withSopAndScanners);
+		expect(visibleLeafLabels(ctx(roles, 'SH001'))).toEqual(withScanners);
 	});
 
-	it('registration_staff sees neither the SOP simulation nor the kiosk device management', () => {
+	it('registration_staff does not see the kiosk device management', () => {
 		const roles = ['shelter:SH001', 'SH001:registration_staff'];
 		const labels = visibleLeafLabels(ctx(roles, 'SH001'));
 		expect(labels).toEqual(everyoneSees);
@@ -170,7 +168,7 @@ describe('real backofficeNavbarGroups — visible leaves per role (regression gu
 		expect(labels).not.toContain('จัดการ Kiosk');
 	});
 
-	it('a manager of another shelter lacks the SOP simulation but keeps the kiosk devices', () => {
+	it('a manager of another shelter keeps the kiosk devices', () => {
 		const roles = ['shelter:SH002', 'SH002:shelter_manager'];
 		expect(visibleLeafLabels(ctx(roles, 'SH001'))).toEqual(withScanners);
 	});
