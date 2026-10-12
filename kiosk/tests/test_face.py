@@ -113,8 +113,19 @@ class QualityTests(unittest.TestCase):
 
     def test_no_face_and_several_faces(self):
         self.assertEqual(self.hint(faces=[]), quality.NO_FACE)
-        self.assertEqual(self.hint(faces=[face_row(), face_row(x=10)]), quality.MULTIPLE_FACES)
+        self.assertEqual(self.hint(faces=[face_row(), face_row(x=240)]), quality.MULTIPLE_FACES)
         self.assertEqual(self.hint(faces=[face_row(score=0.5)]), quality.NO_FACE)
+
+    def test_a_bystander_outside_the_oval_guide_is_ignored(self):
+        # 640x480: the oval is centred on the frame, so a face at the left edge is outside it.
+        inside, bystander = face_row(), face_row(x=10)
+        for faces in ([inside, bystander], [bystander, inside]):
+            hint, face = quality.assess(textured(), faces, PROFILE)
+            self.assertEqual(hint, quality.OK)
+            self.assertIs(face, inside)
+
+    def test_a_single_face_outside_the_oval_guide_is_no_face(self):
+        self.assertEqual(self.hint(faces=[face_row(x=10)]), quality.NO_FACE)
 
     def test_distance(self):
         small = face_row(w=60, h=70)
@@ -433,6 +444,12 @@ class FaceServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(reply["attempt"], 0)  # an unread photo costs no attempt
         release.set()
         self.assertEqual((await service.verify(self.frames()))["result"], "match")
+
+    async def test_a_bystander_outside_the_oval_guide_does_not_block_the_check(self):
+        bystander = face_row(x=10)
+        service = self.make(FakeEngine(faces=[face_row(), bystander]))
+        await self.start_walk_in(service)
+        self.assertEqual(await service.verify(self.frames()), {"result": "match", "attempt": 1})
 
     async def test_preview_frames_get_a_hint(self):
         service = self.make()

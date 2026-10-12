@@ -43,17 +43,34 @@ def pose_ratios(face: np.ndarray) -> tuple[float, float, float]:
     return yaw, pitch, roll
 
 
+def faces_in_guide(
+    faces: list[np.ndarray], width: int, height: int, profile: ThresholdProfile
+) -> list[np.ndarray]:
+    """Keep the faces whose box centre lies inside the on-screen oval guide (centred on the frame)."""
+    ry = profile.guide_half_height_ratio * height
+    rx = profile.guide_aspect * ry
+    kept = []
+    for face in faces:
+        dx = float(face[0] + face[2] / 2) - width / 2
+        dy = float(face[1] + face[3] / 2) - height / 2
+        if (dx / rx) ** 2 + (dy / ry) ** 2 <= 1:
+            kept.append(face)
+    return kept
+
+
 def assess(
     image: np.ndarray, faces: list[np.ndarray], profile: ThresholdProfile
 ) -> tuple[str, np.ndarray | None]:
     """Return (hint, face). `hint` is OK or the first problem found; `face` is the single detected
-    row (also returned for a failed gate so the caller can still draw on it), or None."""
+    row (also returned for a failed gate so the caller can still draw on it), or None. Only faces
+    inside the oval guide count, so a bystander behind the person is ignored."""
+    height, width = image.shape[:2]
+    faces = faces_in_guide(faces, width, height, profile)
     if not faces:
         return NO_FACE, None
     if len(faces) > 1:
         return MULTIPLE_FACES, None
     face = faces[0]
-    height, width = image.shape[:2]
 
     if float(face[14]) < profile.min_detect_score:
         return NO_FACE, face
