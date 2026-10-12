@@ -9,6 +9,7 @@ import {
 	consumeKioskSession,
 	cancelKioskSession,
 	releaseKioskSession,
+	extendKioskSessionForRegistration,
 	_resetSessionsForTest
 } from './thaid-scan-session';
 import type { ThaiDAutofillProfile } from '$lib/features/people';
@@ -280,6 +281,43 @@ describe('thaid-scan-session', () => {
 			}
 		});
 
+		it('keeps the ThaiD profile with the citizen for a walk-in registration', () => {
+			const session = createKioskCheckInSession(KIOSK_A);
+			const citizen = { pid: '1234567890123', sub: 'sub-1', profile: SAMPLE_PROFILE };
+			completeKioskSession(session.id, citizen);
+			expect(consumeKioskSession(session.id, KIOSK_A.device_id)).toEqual(citizen);
+		});
+
+		it('extends a completed session once, for its own device only', () => {
+			vi.useFakeTimers();
+			try {
+				vi.setSystemTime(new Date('2026-10-10T10:00:00Z'));
+				const session = createKioskCheckInSession(KIOSK_A);
+				expect(extendKioskSessionForRegistration(session.id, KIOSK_A.device_id)).toBe(false); // pending
+				completeKioskSession(session.id, { pid: '1234567890123', sub: 'sub-1' });
+
+				vi.setSystemTime(new Date('2026-10-10T10:02:30Z'));
+				expect(extendKioskSessionForRegistration(session.id, KIOSK_B.device_id)).toBe(false);
+				expect(extendKioskSessionForRegistration(session.id, KIOSK_A.device_id)).toBe(true);
+				expect(extendKioskSessionForRegistration(session.id, KIOSK_A.device_id)).toBe(false);
+
+				// Past the first 180 s window, still inside the extended one.
+				vi.setSystemTime(new Date('2026-10-10T10:05:00Z'));
+				expect(getKioskSessionForDevice(session.id, KIOSK_A.device_id)?.status).toBe('completed');
+				vi.setSystemTime(new Date('2026-10-10T10:05:31Z'));
+				expect(getKioskSessionForDevice(session.id, KIOSK_A.device_id)).toBeNull();
+			} finally {
+				vi.useRealTimers();
+			}
+		});
+
+		it('does not extend a consumed session', () => {
+			const session = createKioskCheckInSession(KIOSK_A);
+			completeKioskSession(session.id, { pid: '1234567890123', sub: 'sub-1' });
+			consumeKioskSession(session.id, KIOSK_A.device_id);
+			expect(extendKioskSessionForRegistration(session.id, KIOSK_A.device_id)).toBe(false);
+		});
+
 		it('cancels idempotently for its own device and blocks later completion', () => {
 			const session = createKioskCheckInSession(KIOSK_A);
 
@@ -465,6 +503,44 @@ describe('thaid-scan-session', () => {
 			});
 			receive({ action: 'release', id: 'rel-1' });
 			expect(getKioskSessionForDevice('rel-1', KIOSK_A.device_id)?.status).toBe('completed');
+		});
+
+		it('broadcasts an extension and replays one received from another worker', () => {
+			const spy = captureBroadcasts();
+			try {
+				const session = createKioskCheckInSession(KIOSK_A);
+				completeKioskSession(session.id, CITIZEN);
+				extendKioskSessionForRegistration(session.id, KIOSK_A.device_id);
+
+				expect(spy.sent.at(-1)).toEqual({
+					topic: 'thaid-scan-session',
+					action: 'extend',
+					id: session.id,
+					expiresAt: session.expiresAt
+				});
+			} finally {
+				spy.restore();
+			}
+
+			const now = Date.now();
+			receive({
+				action: 'init_sync',
+				sessions: [
+					{
+						id: 'ext-1',
+						kind: 'kiosk_check_in',
+						createdAt: now,
+						expiresAt: now + 10_000,
+						status: 'completed',
+						citizen: CITIZEN,
+						binding: KIOSK_A
+					}
+				]
+			});
+			receive({ action: 'extend', id: 'ext-1', expiresAt: now + 180_000 });
+			expect(getKioskSessionForDevice('ext-1', KIOSK_A.device_id)?.expiresAt).toBe(now + 180_000);
+			// The replica knows it was extended, so it will not extend it a second time.
+			expect(extendKioskSessionForRegistration('ext-1', KIOSK_A.device_id)).toBe(false);
 		});
 
 		it('includes kiosk binding, citizen and non-pending status when answering init', () => {

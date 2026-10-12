@@ -248,11 +248,13 @@ export interface Caller {
 }
 
 /**
- * Authorize a user-management write. Forwards the caller's cookie to central
- * `/_session` (whoami), then requires SA or shelter_manager. Returns the caller
- * so the handler can scope the operation. Throws {@link ServiceError}.
+ * Resolve the caller's identity by forwarding their cookie to central `/_session` (whoami).
+ * `name` is null for an anonymous session; `roles` is `[]` when CouchDB returns no userCtx.
+ * Never throws on an unauthenticated session — callers decide the error to raise.
  */
-export async function authorizeUserWrite(cookie: string | null): Promise<Caller> {
+export async function readSessionUserCtx(
+	cookie: string | null
+): Promise<{ name: string | null; roles: string[] }> {
 	const { base } = adminConfig();
 	const res = await fetch(`${base}/_session`, {
 		headers: { Accept: 'application/json', ...(cookie ? { Cookie: cookie } : {}) }
@@ -260,8 +262,16 @@ export async function authorizeUserWrite(cookie: string | null): Promise<Caller>
 	const data = (await res.json().catch(() => null)) as {
 		userCtx?: { name: string | null; roles: string[] };
 	} | null;
-	const name = data?.userCtx?.name;
-	const roles = data?.userCtx?.roles ?? [];
+	return { name: data?.userCtx?.name ?? null, roles: data?.userCtx?.roles ?? [] };
+}
+
+/**
+ * Authorize a user-management write. Forwards the caller's cookie to central
+ * `/_session` (whoami), then requires SA or shelter_manager. Returns the caller
+ * so the handler can scope the operation. Throws {@link ServiceError}.
+ */
+export async function authorizeUserWrite(cookie: string | null): Promise<Caller> {
+	const { name, roles } = await readSessionUserCtx(cookie);
 	if (!name) throw new ServiceError('UNAUTHENTICATED', 'Authentication required');
 
 	const isSA = isSystemAdmin(roles);

@@ -7,6 +7,7 @@
 	import CircleAlert from '@lucide/svelte/icons/circle-alert';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import {
+		abandonWalkIn,
 		buildKioskContextQuery,
 		cancelKioskFaceCheck,
 		getKioskDisplayContext,
@@ -22,21 +23,24 @@
 		loadKioskHardware,
 		navigateToKioskHome,
 		readKioskDisplayQuery,
-		submitWalkInCard,
+		walkInCardMismatch,
 		walkInSession,
 		type KioskHardware
 	} from '$lib/features/kiosk';
-	import type { SmartCardData } from '$lib/features/scanners';
+	import type { SmartCardData } from '$lib/features/kiosk-devices';
 	const displayContext = $derived(
 		getKioskDisplayContext(readKioskDisplayQuery(page.url.searchParams))
 	);
 	const contextQuery = $derived(buildKioskContextQuery(displayContext));
 	const homeUrl = $derived(`/kiosk${contextQuery}`);
 	let ready = $state(false);
-	/** scanner_client is reading the chip; pulling the card now loses the photo. */
+	/** kiosk is reading the chip; pulling the card now loses the photo. */
 	let cardReading = $state(false);
+	/** The read is in: waiting for the hardware answer before moving on. */
 	let reading = $state(false);
 	let error = $state('');
+	/** Going on to the next walk-in step; any other way off this page abandons the walk-in. */
+	let continuing = false;
 	// Null until the scanner client answers; a card read that beats it waits for the answer (FR-17).
 	let hardware = $state<KioskHardware | null>(null);
 	let hardwareLoaded: Promise<KioskHardware> | null = null;
@@ -44,7 +48,11 @@
 	// Paused while the chip is read or the card is saved: neither may be cut short by going home.
 	const idleTimeout = new KioskIdleTimeout(KIOSK_IDLE_TIMEOUT_MS, returnHome);
 	onMount(() => {
-		if (!walkInSession.citizenId || !walkInSession.consented) {
+		if (
+			walkInSession.source !== 'smart-card' ||
+			!walkInSession.citizenId ||
+			!walkInSession.consented
+		) {
 			void goto(resolve(`/kiosk${contextQuery}` as '/kiosk' | `/kiosk?${string}`));
 			return;
 		}
@@ -68,6 +76,7 @@
 		ready = true;
 		return () => {
 			idleTimeout.stop();
+			if (!continuing && walkInSession.active) leave();
 			ready = false;
 			window.removeEventListener('kiosk:smart-card-reading', onCardReading);
 			window.removeEventListener('kiosk:smart-card-full-read', onCardRead);
@@ -81,7 +90,7 @@
 	function leave() {
 		// The chip photo may be set aside on the scanner client for the face check.
 		if (hardware && isFaceCheckEnabled(hardware.faceCheck, 'walk_in')) void cancelKioskFaceCheck();
-		walkInSession.clear();
+		abandonWalkIn();
 	}
 	function returnHome() {
 		leave();
@@ -95,43 +104,31 @@
 			idleTimeout.setPaused(false);
 			return;
 		}
-		const resolved = hardware ?? (await hardwareLoaded);
-		if (
-			resolved &&
-			isFaceCheckEnabled(resolved.faceCheck, 'walk_in') &&
-			card.citizen_id === walkInSession.citizenId
-		) {
-			// Hold the card in memory; the face page registers it once the check has ended. The face
-			// check found on here goes with it, so the face page never has to ask again (and fail open).
-			walkInSession.holdCard(card, {
-				cameraLabel: resolved.cameraLabel,
-				cameraFlip: resolved.cameraFlip
-			});
-			await goto(
-				resolve(
-					`/kiosk/register/face${contextQuery}` as
-						'/kiosk/register/face' | `/kiosk/register/face?${string}`
-				)
-			);
+		const mismatch = walkInCardMismatch(card, walkInSession);
+		if (mismatch) {
+			error = mismatch;
+			idleTimeout.setPaused(false);
 			return;
 		}
 		reading = true;
 		idleTimeout.setPaused(true);
 		error = '';
-		const outcome = await submitWalkInCard(card, walkInSession);
-		if (outcome.kind === 'registered') {
-			walkInSession.clear();
-			await goto(
-				resolve(
-					`/kiosk/register/done${contextQuery}` as
-						'/kiosk/register/done' | `/kiosk/register/done?${string}`
-				)
-			);
-		} else {
-			if (outcome.kind === 'mismatch' || outcome.kind === 'error') error = outcome.message;
-			reading = false;
-			idleTimeout.setPaused(false);
-		}
+		const resolved = hardware ?? (await hardwareLoaded);
+		const faceCheckOn = Boolean(resolved && isFaceCheckEnabled(resolved.faceCheck, 'walk_in'));
+		// Hold the card in memory; the phone step registers it at the end. The face check found on
+		// here goes with it, so the face page never has to ask again (and fail open).
+		walkInSession.holdCard(
+			card,
+			faceCheckOn && resolved
+				? { cameraLabel: resolved.cameraLabel, cameraFlip: resolved.cameraFlip }
+				: null
+		);
+		continuing = true;
+		await goto(
+			resolve(
+				faceCheckOn ? `/kiosk/register/face${contextQuery}` : `/kiosk/register/phone${contextQuery}`
+			)
+		);
 	}
 </script>
 
@@ -149,7 +146,7 @@
 		tone="info"
 		icon={CreditCard}
 		headingTag="h1"
-		title={busy ? (cardReading ? 'กำลังอ่านข้อมูลบัตร' : 'กำลังบันทึกข้อมูล') : 'เสียบบัตรประชาชน'}
+		title={busy ? 'กำลังอ่านข้อมูลบัตร' : 'เสียบบัตรประชาชน'}
 	>
 		{#if busy}
 			<KioskBusyStatus data-testid="kiosk-register-card-busy">กรุณารอสักครู่</KioskBusyStatus>

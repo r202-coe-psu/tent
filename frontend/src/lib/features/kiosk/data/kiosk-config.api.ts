@@ -30,7 +30,7 @@ export async function fetchKioskConfig(fetchFn: typeof fetch = fetch): Promise<K
 		return cachedConfig.config;
 	}
 	try {
-		const response = await fetchFn('/api/v1/scanner/kiosk/config', {
+		const response = await fetchFn('/api/v1/kiosk/config', {
 			method: 'POST',
 			cache: 'no-store',
 			signal: AbortSignal.timeout(KIOSK_CONFIG_TIMEOUT_MS)

@@ -3,7 +3,7 @@
  * opens. Without a scanner client (plain dev browser) the request reaches SvelteKit, which has no
  * such route and answers 404 → the caller falls back to `window.print()`.
  */
-export const KIOSK_PRINT_PATH = '/api/v1/scanner/kiosk/print';
+export const KIOSK_PRINT_PATH = '/api/v1/kiosk/print';
 const KIOSK_PRINT_TIMEOUT_MS = 30_000;
 /**
  * Labels per print request. The scanner client takes 1–20 (`KIOSK_PRINT_MAX_LABELS`), but each

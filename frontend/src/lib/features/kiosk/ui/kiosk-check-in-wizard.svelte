@@ -4,15 +4,22 @@
 		step2Label?: string;
 		/** Identity-check flows (card face check, ThaiD) verify here instead of a plain lookup. */
 		step3Label?: string;
+		/** Walk-in registration asks for a phone here instead of picking members. */
+		step4Label?: string;
 	}
 
-	let { currentStep, step2Label = 'สแกน', step3Label = 'ค้นหา' }: Props = $props();
+	let {
+		currentStep,
+		step2Label = 'สแกน',
+		step3Label = 'ค้นหา',
+		step4Label = 'สมาชิก'
+	}: Props = $props();
 
 	const steps = $derived([
 		{ id: 1, label: 'วิธีค้นหา' },
 		{ id: 2, label: step2Label },
 		{ id: 3, label: step3Label },
-		{ id: 4, label: 'สมาชิก' },
+		{ id: 4, label: step4Label },
 		{ id: 5, label: 'เสร็จสิ้น' }
 	]);
 	const currentLabel = $derived(steps[currentStep - 1].label);

@@ -420,9 +420,10 @@ describe('GET /api/v1/auth/oauth/thaid/callback (mode=kiosk_check_in)', () => {
 		return session;
 	}
 
-	it('completes the kiosk session with pid + sub and redirects to the kiosk success page', async () => {
+	it('completes the kiosk session with pid + sub + profile and redirects to the kiosk success page', async () => {
 		const session = pendingKioskSession();
 		mockExchangeThaidCode.mockResolvedValue(mockClaims);
+		mockParseThaidCitizenClaims.mockReturnValue({ id: 'thaid-1100500123456', first_name: 'สมชาย' });
 
 		const redir = await redirectOf(kioskEvent());
 
@@ -430,7 +431,11 @@ describe('GET /api/v1/auth/oauth/thaid/callback (mode=kiosk_check_in)', () => {
 		expect(redir.location).toBe('/thaid-scan-success?flow=kiosk&status=success');
 		const stored = getKioskSessionForDevice(session.id, DEVICE);
 		expect(stored?.status).toBe('completed');
-		expect(stored?.citizen).toEqual({ pid: '1100500123456', sub: 'test-subject' });
+		expect(stored?.citizen).toEqual({
+			pid: '1100500123456',
+			sub: 'test-subject',
+			profile: { id: 'thaid-1100500123456', first_name: 'สมชาย' }
+		});
 	});
 
 	it('redirects to error=missing_pid and leaves the session pending when ThaiD returns no pid', async () => {

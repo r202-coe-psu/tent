@@ -8,7 +8,7 @@ import {
 	type FaceVerifyReply
 } from '../domain/face-check';
 
-export const KIOSK_FACE_PATH = '/api/v1/scanner/kiosk/face';
+export const KIOSK_FACE_PATH = '/api/v1/kiosk/face';
 export const KIOSK_FACE_FRAME_TIMEOUT_MS = 8_000;
 /** `verify` may wait for the chip photo to be read (up to 20 s on the scanner client). */
 export const KIOSK_FACE_VERIFY_TIMEOUT_MS = 35_000;

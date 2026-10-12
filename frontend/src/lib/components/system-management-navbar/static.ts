@@ -11,7 +11,6 @@ import Users from '@lucide/svelte/icons/users';
 import Building from '@lucide/svelte/icons/building';
 import UserCog from '@lucide/svelte/icons/user-cog';
 import Warehouse from '@lucide/svelte/icons/warehouse';
-import Cpu from '@lucide/svelte/icons/cpu';
 import LayoutDashboard from '@lucide/svelte/icons/layout-dashboard';
 import ClipboardList from '@lucide/svelte/icons/clipboard-list';
 import Database from '@lucide/svelte/icons/database';
@@ -76,12 +75,6 @@ export const systemManagementNavbarGroups: SystemManagementNavbarGroup[] = [
 				label: 'API Keys',
 				href: resolve(`${base}/api-keys`),
 				icon: KeyRound,
-				requiresAdmin: true
-			},
-			{
-				label: 'เครื่องสแกนบัตร (Scanners)',
-				href: resolve(`${base}/scanners`),
-				icon: Cpu,
 				requiresAdmin: true
 			}
 		]

@@ -15,6 +15,8 @@ export interface KioskSessionBinding {
 export interface KioskCitizen {
 	pid: string;
 	sub: string;
+	/** What ThaiD returned about the citizen, used only to register a walk-in at the kiosk. */
+	profile?: ThaiDAutofillProfile;
 }
 
 export interface ScanSession {
@@ -26,6 +28,8 @@ export interface ScanSession {
 	profile?: ThaiDAutofillProfile;
 	citizen?: KioskCitizen;
 	binding?: KioskSessionBinding;
+	/** A kiosk session's completed window was already extended once for a walk-in registration. */
+	registrationExtended?: boolean;
 	emitter: EventEmitter;
 }
 
@@ -49,18 +53,27 @@ interface ClusterSessionPayload {
 	profile?: ThaiDAutofillProfile;
 	citizen?: KioskCitizen;
 	binding?: KioskSessionBinding;
+	registrationExtended?: boolean;
 }
 
 interface ClusterMessage {
 	topic: 'thaid-scan-session';
 	action:
-		'create' | 'complete' | 'cancel' | 'consume' | 'release' | 'expire' | 'init' | 'init_sync';
+		| 'create'
+		| 'complete'
+		| 'cancel'
+		| 'consume'
+		| 'release'
+		| 'extend'
+		| 'expire'
+		| 'init'
+		| 'init_sync';
 	session?: ClusterSessionPayload;
 	sessions?: ClusterSessionPayload[];
 	id?: string;
 	profile?: ThaiDAutofillProfile;
 	citizen?: KioskCitizen;
-	/** New expiry carried by a kiosk `complete` (the completed-TTL window). */
+	/** New expiry carried by a kiosk `complete` (the completed-TTL window) or `extend`. */
 	expiresAt?: number;
 }
 
@@ -121,6 +134,12 @@ function handleClusterMessage(msg: unknown) {
 		if (session && session.kind === 'kiosk_check_in' && session.status === 'consumed') {
 			session.status = 'completed';
 		}
+	} else if (m.action === 'extend' && m.id && m.expiresAt) {
+		const session = sessions.get(m.id);
+		if (session && session.kind === 'kiosk_check_in' && session.status === 'completed') {
+			session.expiresAt = m.expiresAt;
+			session.registrationExtended = true;
+		}
 	} else if (m.action === 'expire' && m.id) {
 		const session = sessions.get(m.id);
 		if (session) {
@@ -157,7 +176,8 @@ function handleClusterMessage(msg: unknown) {
 					status: s.status,
 					profile: s.profile,
 					citizen: s.citizen,
-					binding: s.binding
+					binding: s.binding,
+					registrationExtended: s.registrationExtended
 				});
 			}
 		}
@@ -309,6 +329,20 @@ export function consumeKioskSession(id: string, deviceId: string): KioskCitizen 
 	session.status = 'consumed';
 	broadcastCluster({ action: 'consume', id });
 	return session.citizen;
+}
+
+/**
+ * Give the owning device's completed session one more completed-TTL window, once: a walk-in
+ * registration (offer → consent → phone) takes longer than a check-in. False when not extended.
+ */
+export function extendKioskSessionForRegistration(id: string, deviceId: string): boolean {
+	const session = getKioskSessionForDevice(id, deviceId);
+	if (!session || session.status !== 'completed' || session.registrationExtended) return false;
+
+	session.expiresAt = Date.now() + KIOSK_THAID_COMPLETED_TTL_SEC * 1000;
+	session.registrationExtended = true;
+	broadcastCluster({ action: 'extend', id, expiresAt: session.expiresAt });
+	return true;
 }
 
 /**
