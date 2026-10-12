@@ -88,6 +88,14 @@ describe('POST /api/v1/kiosk/devices', () => {
 		expect(mockCreate).toHaveBeenCalledWith(input, 'sm-a');
 	});
 
+	it('lets kiosk_staff create in their own shelter only (AC-SBO-19/20)', async () => {
+		mockSession.mockResolvedValue(SESSIONS.kioskA);
+		expect((await post(input)).status).toBe(201);
+		expect(mockCreate).toHaveBeenCalledWith(input, 'kiosk-a');
+		expect((await post({ ...input, shelter_code: 'SH002' })).status).toBe(403);
+		expect(mockCreate).toHaveBeenCalledTimes(1);
+	});
+
 	it('returns 403 when a shelter manager creates in another shelter', async () => {
 		mockSession.mockResolvedValue(SESSIONS.managerA);
 		const response = await post({ ...input, shelter_code: 'SH002' });
@@ -247,6 +255,14 @@ describe('GET /api/v1/kiosk/devices', () => {
 		const response = await get('?shelter_code=SH002');
 		expect(response.status).toBe(403);
 		expect(mockList).not.toHaveBeenCalled();
+	});
+
+	it('lists the own shelter for kiosk_staff and 403 for another (AC-SBO-20)', async () => {
+		mockSession.mockResolvedValue(SESSIONS.kioskA);
+		expect((await get('?shelter_code=SH001')).status).toBe(200);
+		expect(mockList).toHaveBeenCalledWith(['SH001']);
+		expect((await get('?shelter_code=SH002')).status).toBe(403);
+		expect(mockList).toHaveBeenCalledTimes(1);
 	});
 
 	it('lists one shelter at a time for a manager of both', async () => {

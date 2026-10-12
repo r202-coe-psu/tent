@@ -117,6 +117,14 @@ describe('POST /api/v1/kiosk/devices/[id]/staff-pin/reveal', () => {
 		expect(mockReveal).not.toHaveBeenCalled();
 	});
 
+	it('lets kiosk_staff reveal in their own shelter and reads another as missing', async () => {
+		mockSession.mockResolvedValue(SESSIONS.kioskA);
+		expect((await post()).status).toBe(200);
+		mockGet.mockResolvedValue(deviceIn('SH002'));
+		expect((await post()).status).toBe(404);
+		expect(mockReveal).toHaveBeenCalledTimes(1);
+	});
+
 	it('lets a manager of both shelters and a system admin reveal in either', async () => {
 		for (const session of [SESSIONS.managerAB, SESSIONS.admin]) {
 			mockSession.mockResolvedValue(session);

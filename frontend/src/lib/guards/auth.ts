@@ -13,6 +13,8 @@ import {
 	canAccessMedicalScreening,
 	canAccessVolunteerBackoffice,
 	canAccessZoning,
+	canManageScanners,
+	isKioskStaffOnly,
 	shelterCodeFromRoles
 } from '$lib/auth/roles';
 import { fetchAuthStatus, type AuthStatus } from '$lib/features/users';
@@ -124,6 +126,36 @@ export async function requireManager(fetchFn?: typeof fetch) {
 	if (!isSystemAdmin(roles) && !isShelterManager(roles, shelter)) {
 		throw redirect(302, resolve(LANDING_ROUTE));
 	}
+}
+
+/** The only back-office page a kiosk_staff-only user may open (FR-SBO-29). */
+export const KIOSK_STAFF_BACKOFFICE_ROUTE = '/back-office/scanners';
+
+/**
+ * Kiosk device management (`/back-office/scanners`) guard — system_admin, or shelter_manager /
+ * kiosk_staff of the selected shelter (draft CR scanner back-office FR-SBO-20). The scanner BFF
+ * routes re-check scope per device.
+ */
+export async function requireScannerManagement(fetchFn?: typeof fetch) {
+	await requireAuth(fetchFn);
+	const roles = authStore.user?.roles ?? [];
+	const shelter = activeShelterCode(roles);
+	if (!isSystemAdmin(roles) && !(shelter && canManageScanners(roles, shelter))) {
+		throw redirect(302, resolve(LANDING_ROUTE));
+	}
+}
+
+/**
+ * Back-office layout gate — a user whose only capability in the selected shelter is kiosk_staff
+ * is sent to the kiosk device page from every other back-office page (FR-SBO-29). Call after
+ * {@link requireAuth}.
+ */
+export function confineKioskStaffOnly(pathname: string) {
+	const roles = authStore.user?.roles ?? [];
+	if (!isKioskStaffOnly(roles, activeShelterCode(roles))) return;
+	const allowed = resolve(KIOSK_STAFF_BACKOFFICE_ROUTE);
+	if (pathname === allowed || pathname.startsWith(`${allowed}/`)) return;
+	throw redirect(302, allowed);
 }
 
 /**

@@ -3,6 +3,7 @@ import { resolve } from '$app/paths';
 import type { Icon } from '@lucide/svelte';
 import {
 	hasCapabilityAnywhere,
+	isKioskStaffOnly,
 	isShelterManager,
 	isSystemAdmin,
 	SCANNER_MANAGER_CAPABILITIES
@@ -51,10 +52,13 @@ export type NavVisibilityContext = {
 
 /**
  * Whether the signed-in user sees a nav node. `visibleTo` wins; a group also needs at least one
- * visible child (no empty parents); otherwise `requiresAdmin` / `requiresManager` apply.
+ * visible child (no empty parents); otherwise `requiresAdmin` / `requiresManager` apply. A
+ * kiosk_staff-only user of the active shelter sees only leaves whose `visibleTo` admits them
+ * (FR-SBO-29).
  */
 export function canSeeNavNode(node: BackofficeNavbarNode, ctx: NavVisibilityContext): boolean {
 	if (node.visibleTo) return node.visibleTo(ctx.roles);
+	if (!isGroup(node) && isKioskStaffOnly(ctx.roles, ctx.shelterCode)) return false;
 	const isSA = isSystemAdmin(ctx.roles);
 	if (node.requiresAdmin && !isSA) return false;
 	if (node.requiresManager && !isSA && !isShelterManager(ctx.roles, ctx.shelterCode)) return false;

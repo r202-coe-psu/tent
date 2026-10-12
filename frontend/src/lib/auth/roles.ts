@@ -22,6 +22,8 @@ export const VOLUNTEER_COORDINATOR = 'volunteer_coordinator';
 export const SECURITY_OFFICER = 'security_officer';
 export const FACILITY_STAFF = 'facility_staff';
 export const DISTRIBUTION_STAFF = 'distribution_staff';
+/** Looks after the kiosk devices of one shelter (draft CR scanner back-office FR-SBO-28). */
+export const KIOSK_STAFF = 'kiosk_staff';
 
 /** Capability roles a shelter_manager or coordinator is allowed to grant (per CR-104 §2.1). */
 export const STAFF_CAPABILITIES = [
@@ -34,7 +36,8 @@ export const STAFF_CAPABILITIES = [
 	VOLUNTEER_COORDINATOR,
 	SECURITY_OFFICER,
 	FACILITY_STAFF,
-	DISTRIBUTION_STAFF
+	DISTRIBUTION_STAFF,
+	KIOSK_STAFF
 ] as const;
 export type StaffCapability = (typeof STAFF_CAPABILITIES)[number];
 
@@ -163,11 +166,28 @@ export function hasCapabilityAnywhere(
 }
 
 /** Capabilities that manage scanner / kiosk devices (CR scanner back-office). */
-export const SCANNER_MANAGER_CAPABILITIES = [SHELTER_MANAGER] as const;
+export const SCANNER_MANAGER_CAPABILITIES = [SHELTER_MANAGER, KIOSK_STAFF] as const;
 
-/** True when the user may manage scanner devices in `shelterCode` (SA, or its shelter_manager). */
+/**
+ * True when the user may manage scanner devices in `shelterCode` (SA, or its shelter_manager /
+ * kiosk_staff).
+ */
 export function canManageScanners(roles: readonly string[], shelterCode: string): boolean {
 	return canManageInShelters(roles, [shelterCode], SCANNER_MANAGER_CAPABILITIES);
+}
+
+/**
+ * True when `kiosk_staff` is the user's only capability in `shelterCode` (every shelter when
+ * null) — such a user sees nothing in back-office but the kiosk pages (FR-SBO-29).
+ */
+export function isKioskStaffOnly(
+	roles: readonly string[],
+	shelterCode: string | null | undefined
+): boolean {
+	if (isSystemAdmin(roles)) return false;
+	const codes = shelterCode ? [shelterCode] : shelterCodesFromRoles(roles);
+	const caps = codes.flatMap((code) => capabilitiesForShelter(roles, code));
+	return caps.length > 0 && caps.every((cap) => cap === KIOSK_STAFF);
 }
 
 /** Shelter codes where the user holds `shelter_manager` (compound or legacy). */
@@ -423,7 +443,8 @@ const STAFF_CAPABILITY_LABELS: Record<StaffCapability, string> = {
 	volunteer_coordinator: 'ผู้ประสานงานจิตอาสา',
 	security_officer: 'เจ้าหน้าที่รักษาความปลอดภัย',
 	facility_staff: 'เจ้าหน้าที่ฝ่ายอาคารสถานที่',
-	distribution_staff: 'เจ้าหน้าที่แจกจ่าย'
+	distribution_staff: 'เจ้าหน้าที่แจกจ่าย',
+	kiosk_staff: 'เจ้าหน้าที่ดูแลตู้ Kiosk'
 };
 
 /**

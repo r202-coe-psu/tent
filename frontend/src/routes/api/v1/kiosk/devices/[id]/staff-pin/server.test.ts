@@ -120,6 +120,15 @@ describe('POST /api/v1/kiosk/devices/[id]/staff-pin', () => {
 		expect(mockRegenerate).not.toHaveBeenCalled();
 	});
 
+	it('lets kiosk_staff set a PIN in their own shelter, recorded under their name', async () => {
+		mockSession.mockResolvedValue(SESSIONS.kioskA);
+		expect((await post({ pin: '482913' })).status).toBe(200);
+		expect(mockSet).toHaveBeenCalledWith(DOC_ID, '482913', 'kiosk-a');
+		mockGet.mockResolvedValue(deviceIn('SH002'));
+		expect((await post({ pin: '482913' })).status).toBe(404);
+		expect(mockSet).toHaveBeenCalledTimes(1);
+	});
+
 	it('lets a manager of both shelters and a system admin set a PIN in either', async () => {
 		for (const session of [SESSIONS.managerAB, SESSIONS.admin]) {
 			mockSession.mockResolvedValue(session);

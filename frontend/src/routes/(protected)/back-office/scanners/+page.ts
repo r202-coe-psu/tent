@@ -1,6 +1,6 @@
-import { requireManager } from '$lib/guards/auth';
+import { requireScannerManagement } from '$lib/guards/auth';
 import type { PageLoad } from './$types';
 
 export const load = (async ({ fetch }) => {
-	await requireManager(fetch);
+	await requireScannerManagement(fetch);
 }) satisfies PageLoad;

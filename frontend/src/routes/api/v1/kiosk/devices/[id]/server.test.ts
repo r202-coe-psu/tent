@@ -105,6 +105,15 @@ describe('DELETE /api/v1/kiosk/devices/[id]', () => {
 		expect(mockDelete).not.toHaveBeenCalled();
 	});
 
+	it('lets kiosk_staff delete in their own shelter and reads another as missing', async () => {
+		mockSession.mockResolvedValue(SESSIONS.kioskA);
+		expect((await del()).status).toBe(200);
+		expect(info.mock.calls.flat().join(' ')).toContain('by=kiosk-a');
+		mockGet.mockResolvedValue(deviceIn('SH002'));
+		expect((await del()).status).toBe(404);
+		expect(mockDelete).toHaveBeenCalledTimes(1);
+	});
+
 	it('lets a manager of both shelters and a system admin delete in either', async () => {
 		for (const session of [SESSIONS.managerAB, SESSIONS.admin]) {
 			mockSession.mockResolvedValue(session);
@@ -217,6 +226,15 @@ describe('PATCH /api/v1/kiosk/devices/[id]', () => {
 		expect(response.status).toBe(404);
 		expect(response.headers.get('cache-control')).toBe('no-store');
 		expect(mockUpdate).not.toHaveBeenCalled();
+	});
+
+	it('lets kiosk_staff update in their own shelter and reads another as missing', async () => {
+		mockSession.mockResolvedValue(SESSIONS.kioskA);
+		expect((await patch({ name: 'เครื่องใหม่' })).status).toBe(200);
+		expect(mockUpdate).toHaveBeenCalledWith(DOC_ID, { name: 'เครื่องใหม่' }, 'kiosk-a');
+		mockGet.mockResolvedValue(persisted('SH002'));
+		expect((await patch({ status: 'inactive' })).status).toBe(404);
+		expect(mockUpdate).toHaveBeenCalledTimes(1);
 	});
 
 	it('lets a manager of both shelters and a system admin update in either', async () => {

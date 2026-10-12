@@ -54,7 +54,9 @@ describe('scanner access', () => {
 		const caller = await asCaller('sm-a', ['shelter:A', 'A:shelter_manager']);
 		expect(() => assertCanCreateFor(caller, 'A')).not.toThrow();
 		expect(() => assertCanCreateFor(caller, 'B')).toThrow(ServiceError);
-		expect(() => assertCanCreateFor(caller, 'B')).toThrow('Not a shelter_manager of this shelter');
+		expect(() => assertCanCreateFor(caller, 'B')).toThrow(
+			'Not a shelter_manager or kiosk_staff of this shelter'
+		);
 	});
 
 	it('scopes a manager of A who is only registration staff in B to A', async () => {

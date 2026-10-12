@@ -172,4 +172,18 @@ describe('real backofficeNavbarGroups — visible leaves per role (regression gu
 		const roles = ['shelter:SH002', 'SH002:shelter_manager'];
 		expect(visibleLeafLabels(ctx(roles, 'SH001'))).toEqual(withScanners);
 	});
+
+	it('kiosk_staff-only sees the kiosk device management and nothing else (AC-SBO-21)', () => {
+		const roles = ['shelter:SH001', 'SH001:kiosk_staff'];
+		expect(visibleLeafLabels(ctx(roles, 'SH001'))).toEqual([scannerDevices]);
+		const kioskGroup = backofficeNavbarGroups
+			.flatMap((g) => g.items)
+			.find((n) => n.label === 'จัดการ Kiosk');
+		expect(kioskGroup && canSeeNavNode(kioskGroup, ctx(roles, 'SH001'))).toBe(true);
+	});
+
+	it('kiosk_staff with another capability in the shelter keeps the other menus too', () => {
+		const roles = ['shelter:SH001', 'SH001:kiosk_staff', 'SH001:registration_staff'];
+		expect(visibleLeafLabels(ctx(roles, 'SH001'))).toEqual(withScanners);
+	});
 });

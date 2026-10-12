@@ -12,6 +12,7 @@ import HeartPulse from '@lucide/svelte/icons/heart-pulse';
 import House from '@lucide/svelte/icons/house';
 import MapPin from '@lucide/svelte/icons/map-pin';
 import Monitor from '@lucide/svelte/icons/monitor';
+import MonitorSmartphone from '@lucide/svelte/icons/monitor-smartphone';
 import Package from '@lucide/svelte/icons/package';
 import PackageCheck from '@lucide/svelte/icons/package-check';
 import ScanLine from '@lucide/svelte/icons/scan-line';
@@ -41,6 +42,7 @@ export const PORTAL_ICONS: Record<PortalIconKey, Component<{ class?: string }>> 
 	house: House,
 	'map-pin': MapPin,
 	monitor: Monitor,
+	'monitor-smartphone': MonitorSmartphone,
 	package: Package,
 	'package-check': PackageCheck,
 	'scan-line': ScanLine,
