@@ -1,0 +1,6 @@
+{
+	"PrintHeaderFooter": false,
+	"PrintingBackgroundGraphicsDefault": "enabled",
+	"PrintPreviewUseSystemDefaultPrinter": true,
+	"PrinterTypeDenyList": ["pdf"]
+}

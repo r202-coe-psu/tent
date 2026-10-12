@@ -7,7 +7,12 @@ import {
 	ServiceError
 } from '$lib/server/couch-admin';
 import { getSession } from '$lib/db/couch';
-import { computeMfaFlags, verifyMfaOkCookie, MFA_OK_COOKIE } from '$lib/server/google-oauth';
+import {
+	computeMfaFlags,
+	isMfaStepupEnabled,
+	verifyMfaOkCookie,
+	MFA_OK_COOKIE
+} from '$lib/server/google-oauth';
 import {
 	getGoogleMfa,
 	getThaidMfa,
@@ -72,7 +77,11 @@ export const GET: RequestHandler = async ({ fetch, cookies }) => {
 			const thaid = getThaidMfa(doc);
 			const enrolled = Boolean(google || thaid);
 			const mfaOkValid = verifyMfaOkCookie(cookies.get(MFA_OK_COOKIE), session.name);
-			const mfa = computeMfaFlags({ enrolled, mfaOkValid });
+			const mfa = computeMfaFlags({
+				enrolled,
+				mfaOkValid,
+				stepupEnabled: isMfaStepupEnabled()
+			});
 
 			const mfaProviders: ('google' | 'thaid')[] = [];
 			if (google) mfaProviders.push('google');

@@ -1,3 +1,11 @@
+---
+title: Contributing — frontend
+status: active
+created: 2026-06-10
+updated: 2026-10-10
+note: decision sync 2026-10-10 — §4 session expiry — 401 = session expired → `needsReauth` + global non-dismissable login modal; 403 or BFF 401 → `needsReauth` only when `GET /_session` confirms anonymous, otherwise treat as permission denied (no modal); network errors = offline banner only (replaces "on 401/403 set needsReauth")
+---
+
 # Contributing
 
 Working agreement for the **`frontend`** package (the SvelteKit frontend of _tent / CouchDB Lab_).
@@ -295,8 +303,13 @@ that must not be called from the browser.
   origin/remote. Always login central first; edge login is only for central outage.
 - Edge `AuthSession` does **not** grant `/api/v1/*` service access (central-only). When central
   returns, re-validate/re-login against central and fail back the active endpoint to central.
-- On 401/403 from the active endpoint, stop further protected mutations and set `needsReauth` —
-  do not force an unrelated global logout/redirect loop.
+- **Session expiry (decision sync 2026-10-10).** A 401 from the active endpoint means the session
+  expired: stop further protected mutations and set `needsReauth`, which opens the global
+  non-dismissable login modal on the current route. A 403, or a 401 from a BFF `/api/*` route,
+  sets `needsReauth` only after `GET /_session` confirms the user is anonymous. A 403 with a valid
+  session is a permission denial: show it as such and do not open the login modal. Network
+  errors are offline (`ConnectionBanner`), never expiry. Do not force an unrelated global
+  logout/redirect loop.
 - Use the guards in `$lib/guards/auth.ts` (`requireAuth`, `requireAdmin`, `redirectIfAuthenticated`)
   from route `+layout.ts`/`+page.ts` `load` functions. Don't roll your own redirect logic.
 - **Admin credentials (`COUCHDB_ADMIN_URL`) are server-only.** They may only be used in

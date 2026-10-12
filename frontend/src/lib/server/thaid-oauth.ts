@@ -20,16 +20,17 @@ export type { ThaiDAutofillProfile };
 
 export const OAUTH_THAID_STATE_COOKIE = 'oauth_thaid_state';
 
-export type ThaidOAuthMode = 'link' | 'stepup' | 'login' | 'register' | 'member_scan';
+export type ThaidOAuthMode =
+	'link' | 'stepup' | 'login' | 'register' | 'member_scan' | 'kiosk_check_in';
 
 export interface ThaidOAuthState {
 	mode: ThaidOAuthMode;
-	/** Username for link/stepup; empty string for login/register/member_scan until callback lookup. */
+	/** Username for link/stepup; empty string for login/register/member_scan/kiosk_check_in until callback lookup. */
 	name: string;
 	nonce: string;
 	/** Optional safe relative return path (e.g. /pre-register?shelter=SH001) for mode=register */
 	returnTo?: string;
-	/** Optional session ID for mode=member_scan cross-device flow */
+	/** Optional session ID for the cross-device flows (mode=member_scan | kiosk_check_in) */
 	sessionId?: string;
 }
 
@@ -79,6 +80,22 @@ export function getThaidOAuthConfig(): {
 	return { clientId, clientSecret, authUrl, tokenUrl, userinfoUrl };
 }
 
+/**
+ * Public origin a phone can reach — `ORIGIN` (adapter-node / compose) when set, else the request
+ * origin. Behind an SSH tunnel or reverse proxy the request origin is an internal host.
+ */
+export function resolvePublicOrigin(url: URL): string {
+	const configured = env.ORIGIN?.trim();
+	if (configured) {
+		try {
+			return new URL(configured).origin;
+		} catch {
+			// malformed ORIGIN — fall back to the request origin
+		}
+	}
+	return url.origin;
+}
+
 export function resolveThaidRedirectUri(url: URL): string {
 	const configured = env.THAID_OAUTH_REDIRECT_URI?.trim();
 	if (configured) return configured;
@@ -122,7 +139,8 @@ function isThaidOAuthMode(mode: unknown): mode is ThaidOAuthMode {
 		mode === 'stepup' ||
 		mode === 'login' ||
 		mode === 'register' ||
-		mode === 'member_scan'
+		mode === 'member_scan' ||
+		mode === 'kiosk_check_in'
 	);
 }
 
@@ -190,6 +208,17 @@ export function maskPid(rawPid: string | null | undefined): string | null {
 	return `${digits[0]}-xxxx-xxxxx-${digits.slice(10, 12)}-${digits[12]}`;
 }
 
+/**
+ * Profile scope for registration-style flows (`register`, `member_scan`, and `kiosk_check_in`,
+ * whose scan may turn into a kiosk walk-in registration that needs the name and address).
+ */
+function thaidProfileScope(): string {
+	return (
+		env.THAID_OAUTH_SCOPE?.trim() ||
+		'openid pid name birthdate gender address house_address given_name family_name title'
+	);
+}
+
 export function buildThaidAuthorizeUrl(opts: {
 	clientId: string;
 	redirectUri: string;
@@ -199,9 +228,8 @@ export function buildThaidAuthorizeUrl(opts: {
 }): string {
 	const base = opts.authUrl || 'https://imauthsbx.bora.dopa.go.th/api/v2/oauth2/auth/';
 	const defaultScope =
-		opts.mode === 'register' || opts.mode === 'member_scan'
-			? env.THAID_OAUTH_SCOPE?.trim() ||
-				'openid pid name birthdate gender address house_address given_name family_name title'
+		opts.mode === 'register' || opts.mode === 'member_scan' || opts.mode === 'kiosk_check_in'
+			? thaidProfileScope()
 			: 'pid name openid';
 	const params = new URLSearchParams({
 		response_type: 'code',

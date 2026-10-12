@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { POST } from './+server';
 import { adminRaw } from '$lib/server/couch-admin';
 import { donationIpLimiter, donationPhoneLimiter } from '$lib/server/security/rate-limiter';
@@ -47,9 +47,17 @@ function mockFastapiCreate(body: Record<string, unknown> = {}) {
 }
 
 describe('POST /api/public/v1/donations', () => {
+	afterEach(() => {
+		vi.useRealTimers();
+	});
+
 	beforeEach(() => {
 		vi.resetAllMocks();
 		vi.unstubAllGlobals();
+		// The fixtures book 2026-06-27; pin "now" before it so they stay in the future
+		// (past dates are refused). Only Date is faked — timers/promises stay real.
+		vi.useFakeTimers({ toFake: ['Date'] });
+		vi.setSystemTime(new Date('2026-06-01T03:00:00Z'));
 		vi.mocked(donationIpLimiter.check).mockReturnValue(true);
 		vi.mocked(donationPhoneLimiter.check).mockReturnValue(true);
 	});
@@ -138,6 +146,8 @@ describe('POST /api/public/v1/donations', () => {
 		const [, init] = vi.mocked(fetch).mock.calls[0]!;
 		const body = JSON.parse(String((init as RequestInit).body));
 		expect(body.campaign_id).toBe('donation_campaign:c1');
+		// No window picked → nothing for FastAPI's slot counter to hold.
+		expect(body.slot_hold).toBeUndefined();
 	});
 
 	it('forwards shelter_pickup logistics to FastAPI', async () => {
@@ -159,6 +169,10 @@ describe('POST /api/public/v1/donations', () => {
 					}
 				});
 			}
+			// A pickup needs a published truck window to book into.
+			if (method === 'GET' && path.includes('donation_slot')) {
+				return Promise.resolve({ status: 200, data: { capacity: 2, status: 'open', to: '11:00' } });
+			}
 			if (method === 'GET' && path.includes('donation:')) {
 				return Promise.resolve({
 					status: 200,
@@ -173,6 +187,7 @@ describe('POST /api/public/v1/donations', () => {
 			delivery_method: 'shelter_pickup',
 			vehicle: 'car',
 			eta: '2026-06-27T10:00:00Z',
+			slot: { date: '2026-06-27', from: '10:00', to: '11:00' },
 			pickup_address: '123/45 Sukhumvit Rd, Bangkok'
 		};
 		const mockRequest = {
@@ -191,6 +206,98 @@ describe('POST /api/public/v1/donations', () => {
 		const body = JSON.parse(String((init as RequestInit).body));
 		expect(body.logistics.delivery_method).toBe('shelter_pickup');
 		expect(body.logistics.pickup_address).toBe('123/45 Sukhumvit Rd, Bangkok');
+		// A capped window goes to FastAPI as a hold: its counter makes the SLOT_FULL call
+		// the CouchDB count above cannot make atomically.
+		expect(body.slot_hold).toEqual({
+			mode: 'pickup',
+			date: '2026-06-27',
+			from: '10:00',
+			capacity: 2,
+			booked: 0
+		});
+	});
+
+	it('sends no slot hold for an uncapped drop-off window', async () => {
+		vi.mocked(adminRaw).mockImplementation((path: string, method: string) => {
+			if (method === 'GET' && path.includes('donation_campaign:')) {
+				return Promise.resolve({ status: 200, data: { rows: [] } });
+			}
+			// Opening hours with no ceiling (FR-DS-3): the window never fills.
+			if (method === 'GET' && path.includes('donation_slot')) {
+				return Promise.resolve({
+					status: 200,
+					data: { capacity: null, status: 'open', to: '10:00' }
+				});
+			}
+			if (method === 'GET' && path.includes('donation:')) {
+				return Promise.resolve({ status: 200, data: { rows: [] } });
+			}
+			return Promise.resolve({ status: 404, data: {} });
+		});
+		mockFastapiCreate();
+
+		const response = await POST({
+			request: {
+				json: () =>
+					Promise.resolve({
+						...validPayload,
+						logistics: {
+							delivery_method: 'self_dropoff',
+							slot: { date: '2026-06-27', from: '09:00', to: '10:00' }
+						}
+					})
+			},
+			getClientAddress: () => '127.0.0.1'
+		} as unknown as PostEvent);
+
+		expect(response.status).toBe(200);
+		const [, init] = vi.mocked(fetch).mock.calls[0]!;
+		const body = JSON.parse(String((init as RequestInit).body));
+		expect(body.slot_hold).toBeUndefined();
+	});
+
+	it('passes a FastAPI SLOT_FULL through when the counter refuses the last place', async () => {
+		// The CouchDB count still read the window open — the booking that took the last
+		// place has not synced yet. FastAPI's counter saw it and refused.
+		vi.mocked(adminRaw).mockImplementation((path: string, method: string) => {
+			if (method === 'GET' && path.includes('donation_campaign:')) {
+				return Promise.resolve({ status: 200, data: { rows: [] } });
+			}
+			if (method === 'GET' && path.includes('donation_slot')) {
+				return Promise.resolve({ status: 200, data: { capacity: 1, status: 'open', to: '10:00' } });
+			}
+			if (method === 'GET' && path.includes('donation:')) {
+				return Promise.resolve({ status: 200, data: { rows: [] } });
+			}
+			return Promise.resolve({ status: 404, data: {} });
+		});
+		// FastAPI's error envelope wraps the HTTPException detail in `errors[]`.
+		vi.stubGlobal(
+			'fetch',
+			vi.fn().mockResolvedValue({
+				ok: false,
+				status: 409,
+				json: async () => ({ success: false, errors: [{ success: false, error: 'SLOT_FULL' }] })
+			})
+		);
+
+		const response = await POST({
+			request: {
+				json: () =>
+					Promise.resolve({
+						...validPayload,
+						logistics: {
+							delivery_method: 'self_dropoff',
+							slot: { date: '2026-06-27', from: '09:00', to: '10:00' }
+						}
+					})
+			},
+			getClientAddress: () => '127.0.0.1'
+		} as unknown as PostEvent);
+
+		const data = await response.json();
+		expect(response.status).toBe(409);
+		expect(data.error).toBe('SLOT_FULL');
 	});
 
 	it('returns 409 NEED_FULL if the item need target is already fully met', async () => {
@@ -424,7 +531,8 @@ describe('POST /api/public/v1/donations', () => {
 					status: 200,
 					data: {
 						capacity: 1,
-						status: 'open'
+						status: 'open',
+						to: '10:00'
 					}
 				});
 			}
@@ -483,7 +591,10 @@ describe('POST /api/public/v1/donations', () => {
 					return Promise.resolve({ status: 200, data: { rows: [] } });
 				}
 				if (method === 'GET' && path.includes('donation_slot')) {
-					return Promise.resolve({ status: 200, data: { capacity: 1, status: 'open' } });
+					return Promise.resolve({
+						status: 200,
+						data: { capacity: 1, status: 'open', to: '10:00' }
+					});
 				}
 				if (method === 'GET' && path.includes('donation')) {
 					return Promise.resolve({
@@ -628,6 +739,235 @@ describe('POST /api/public/v1/donations', () => {
 					(c) => String(c[0]).includes('/registry') && !String(c[0]).includes('config%3Aapp')
 				);
 			expect(registryReads).toHaveLength(0);
+		});
+	});
+	describe('slot re-check per queue', () => {
+		const SLOT = { date: '2026-06-27', from: '09:00', to: '10:00' };
+
+		/** CouchDB as the route reads it: no campaigns, `bookings`, and a slot lookup. */
+		function couch(opts: {
+			bookings?: Record<string, unknown>[];
+			/** Status of the `donation:` `_all_docs` read (default 200). */
+			donationsStatus?: number;
+			slot?: (path: string) => { status: number; data: unknown };
+		}) {
+			vi.mocked(adminRaw).mockImplementation((path: string, method: string) => {
+				if (method !== 'GET') return Promise.resolve({ status: 404, data: {} });
+				if (path.includes('donation_campaign:')) {
+					return Promise.resolve({ status: 200, data: { rows: [] } });
+				}
+				if (path.includes('donation_slot')) {
+					return Promise.resolve(opts.slot?.(path) ?? { status: 404, data: {} });
+				}
+				if (path.includes('donation')) {
+					const status = opts.donationsStatus ?? 200;
+					if (status >= 400) return Promise.resolve({ status, data: {} });
+					return Promise.resolve({
+						status,
+						data: { rows: (opts.bookings ?? []).map((doc) => ({ doc })) }
+					});
+				}
+				return Promise.resolve({ status: 404, data: {} });
+			});
+		}
+
+		async function submit(logistics: Record<string, unknown>) {
+			const response = await POST({
+				request: { json: () => Promise.resolve({ ...validPayload, logistics }) },
+				getClientAddress: () => '127.0.0.1'
+			} as unknown as PostEvent);
+			return { status: response.status, body: await response.json() };
+		}
+
+		it('refuses a pickup with no window — a truck trip only exists where one was published', async () => {
+			couch({});
+			const res = await submit({ delivery_method: 'shelter_pickup', pickup_address: '1/1' });
+			expect(res.status).toBe(422);
+			expect(res.body.error).toBe('SLOT_REQUIRED');
+		});
+
+		it('refuses a pickup into a window the shelter never published', async () => {
+			couch({ slot: () => ({ status: 404, data: {} }) });
+			const res = await submit({
+				delivery_method: 'shelter_pickup',
+				pickup_address: '1/1',
+				slot: SLOT
+			});
+			expect(res.status).toBe(409);
+			expect(res.body.error).toBe('SLOT_UNAVAILABLE');
+		});
+
+		it('fails closed when the slot lookup itself fails', async () => {
+			couch({ slot: () => ({ status: 500, data: {} }) });
+			const res = await submit({ delivery_method: 'self_dropoff', slot: SLOT });
+			expect(res.status).toBe(503);
+			expect(res.body.error).toBe('SLOTS_UNAVAILABLE');
+		});
+
+		it('fails closed (503) when the booking list cannot be read — an outage is not "nothing booked"', async () => {
+			mockFastapiCreate();
+			couch({ donationsStatus: 500, slot: () => ({ status: 404, data: {} }) });
+			const res = await submit({ delivery_method: 'self_dropoff', slot: SLOT });
+			expect(res.status).toBe(503);
+			expect(res.body.error).toBe('SLOTS_UNAVAILABLE');
+			// Nothing may have been created behind a failed count.
+			expect(fetch).not.toHaveBeenCalled();
+		});
+
+		it('treats a missing shelter database (404) on the booking read as no bookings', async () => {
+			mockFastapiCreate();
+			couch({ donationsStatus: 404, slot: () => ({ status: 404, data: {} }) });
+			const res = await submit({ delivery_method: 'self_dropoff', slot: SLOT });
+			expect(res.status).toBe(200);
+		});
+
+		it('refuses a window whose end differs from the one the shelter published', async () => {
+			// Same date + start (so the same doc id), but a longer window than published.
+			couch({
+				slot: () => ({
+					status: 200,
+					data: { capacity: null, status: 'open', date: SLOT.date, from: SLOT.from, to: '10:00' }
+				})
+			});
+			const res = await submit({
+				delivery_method: 'self_dropoff',
+				slot: { ...SLOT, to: '12:00' }
+			});
+			expect(res.status).toBe(409);
+			expect(res.body.error).toBe('SLOT_UNAVAILABLE');
+		});
+
+		it('accepts a window that matches the published doc exactly', async () => {
+			mockFastapiCreate();
+			couch({
+				slot: () => ({
+					status: 200,
+					data: { capacity: 2, status: 'open', date: SLOT.date, from: SLOT.from, to: SLOT.to }
+				})
+			});
+			const res = await submit({ delivery_method: 'self_dropoff', slot: SLOT });
+			expect(res.status).toBe(200);
+		});
+
+		it('refuses a date that is already past in Asia/Bangkok', async () => {
+			// 2026-06-01T20:00Z is already 2026-06-02 03:00 in Bangkok.
+			vi.setSystemTime(new Date('2026-06-01T20:00:00Z'));
+			couch({ slot: () => ({ status: 404, data: {} }) });
+			const res = await submit({
+				delivery_method: 'self_dropoff',
+				slot: { date: '2026-06-01', from: '09:00', to: '10:00' }
+			});
+			expect(res.status).toBe(409);
+			expect(res.body.error).toBe('SLOT_UNAVAILABLE');
+		});
+
+		it('accepts today in Asia/Bangkok even while UTC is still on the previous day', async () => {
+			mockFastapiCreate();
+			vi.setSystemTime(new Date('2026-06-26T20:00:00Z')); // 2026-06-27 03:00 Bangkok
+			couch({ slot: () => ({ status: 404, data: {} }) });
+			const res = await submit({ delivery_method: 'self_dropoff', slot: SLOT });
+			expect(res.status).toBe(200);
+		});
+
+		it.each([
+			['date not YYYY-MM-DD', { date: '27/06/2026', from: '09:00', to: '10:00' }],
+			['date that does not exist', { date: '2026-02-31', from: '09:00', to: '10:00' }],
+			['start not HH:mm', { date: '2026-06-27', from: '9:00', to: '10:00' }],
+			['end not HH:mm', { date: '2026-06-27', from: '09:00', to: '10' }],
+			['end before start', { date: '2026-06-27', from: '10:00', to: '09:00' }],
+			['end equal to start', { date: '2026-06-27', from: '09:00', to: '09:00' }],
+			['id-injecting start', { date: '2026-06-27', from: '09:00/../x', to: '10:00' }]
+		])('rejects a malformed slot with 422 before touching CouchDB: %s', async (_label, slot) => {
+			couch({});
+			const res = await submit({ delivery_method: 'self_dropoff', slot });
+			expect(res.status).toBe(422);
+			expect(adminRaw).not.toHaveBeenCalled();
+		});
+
+		it('finds a drop-off window written before the split under its old id', async () => {
+			couch({
+				bookings: [
+					{
+						_id: 'donation:d1',
+						type: 'donation',
+						status: 'pending_review',
+						logistics: { delivery_method: 'self_dropoff', slot: SLOT }
+					}
+				],
+				// Only the legacy id `donation_slot:{date}:{from}` exists, full at 1.
+				slot: (path) =>
+					path.includes(encodeURIComponent('donation_slot:2026-06-27:09:00'))
+						? { status: 200, data: { capacity: 1, status: 'open', to: '10:00' } }
+						: { status: 404, data: {} }
+			});
+			const res = await submit({ delivery_method: 'self_dropoff', slot: SLOT });
+			expect(res.status).toBe(409);
+			expect(res.body.error).toBe('SLOT_FULL');
+		});
+
+		it('accepts a non-standard drop-off hour backed by a legacy-id doc (fallback hit is not re-checked)', async () => {
+			mockFastapiCreate();
+			couch({
+				slot: (path) =>
+					path.includes(encodeURIComponent('donation_slot:2026-06-27:03:00'))
+						? { status: 200, data: { capacity: null, status: 'open', to: '04:00' } }
+						: { status: 404, data: {} }
+			});
+			const res = await submit({
+				delivery_method: 'self_dropoff',
+				slot: { date: '2026-06-27', from: '03:00', to: '04:00' }
+			});
+			expect(res.status).toBe(200);
+		});
+
+		it('refuses a drop-off outside the standard windows when no override doc exists (AC-DS-11)', async () => {
+			couch({ slot: () => ({ status: 404, data: {} }) });
+			const res = await submit({
+				delivery_method: 'self_dropoff',
+				slot: { date: '2026-06-27', from: '03:00', to: '04:00' }
+			});
+			expect(res.status).toBe(409);
+			expect(res.body.error).toBe('SLOT_UNAVAILABLE');
+		});
+
+		it('refuses a drop-off whose start matches a standard window but whose end does not', async () => {
+			couch({ slot: () => ({ status: 404, data: {} }) });
+			const res = await submit({
+				delivery_method: 'self_dropoff',
+				slot: { date: '2026-06-27', from: '09:00', to: '11:00' }
+			});
+			expect(res.status).toBe(409);
+			expect(res.body.error).toBe('SLOT_UNAVAILABLE');
+		});
+
+		it('accepts a drop-off in a standard window with no doc behind it', async () => {
+			mockFastapiCreate();
+			couch({ slot: () => ({ status: 404, data: {} }) });
+			const res = await submit({ delivery_method: 'self_dropoff', slot: SLOT });
+			expect(res.status).toBe(200);
+			expect(res.body.success).toBe(true);
+		});
+
+		it('does not count a drop-off booking against the truck at the same hour', async () => {
+			mockFastapiCreate();
+			couch({
+				bookings: [
+					{
+						_id: 'donation:d1',
+						type: 'donation',
+						status: 'pending_review',
+						logistics: { delivery_method: 'self_dropoff', slot: SLOT }
+					}
+				],
+				slot: () => ({ status: 200, data: { capacity: 1, status: 'open', to: '10:00' } })
+			});
+			const res = await submit({
+				delivery_method: 'shelter_pickup',
+				pickup_address: '1/1',
+				slot: SLOT
+			});
+			expect(res.body.error).not.toBe('SLOT_FULL');
+			expect(res.body.success).toBe(true);
 		});
 	});
 });

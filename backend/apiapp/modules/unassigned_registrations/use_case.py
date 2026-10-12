@@ -350,6 +350,12 @@ def _emergency_out(member: UnassignedMember) -> EmergencyContactOut | None:
     )
 
 
+def _masked_member_name(first_name: str | None, last_name: str | None) -> str:
+    """Public residence-match label: first name + masked surname (e.g. "สมชาย ใ****")."""
+    masked_last = mask_last_name(last_name) if last_name else ""
+    return f"{first_name or ''} {masked_last}".strip()
+
+
 def _member_response(member: UnassignedMember) -> MemberCreated:
     person_id = None
     if member.person_id is not None:
@@ -571,11 +577,13 @@ class UnassignedRegistrationsUseCase:
                     claimed_shelter = m.claimed_shelter_code
                     break
 
-            primary_masked = None
-            if doc.members:
-                head = doc.members[0]
-                masked_last = mask_last_name(head.last_name) if head.last_name else ""
-                primary_masked = f"{head.first_name} {masked_last}".strip()
+            # Cancelled members are no longer part of the family a joiner sees.
+            active_members = [m for m in doc.members if m.status != "cancelled"]
+            head = active_members[0] if active_members else None
+            primary_masked = _masked_member_name(head.first_name, head.last_name) if head else None
+            members_masked = [
+                _masked_member_name(m.first_name, m.last_name) for m in active_members
+            ]
 
             pets_list = [
                 p.model_dump() if hasattr(p, "model_dump") else p
@@ -608,7 +616,8 @@ class UnassignedRegistrationsUseCase:
                     status=doc.status,
                     primary_contact_name_masked=primary_masked,
                     matched_member_masked=matched_member_str,
-                    member_count=len(doc.members),
+                    member_count=len(active_members),
+                    members_masked=members_masked,
                     pets=pets_list,
                     household_address=hh_addr,
                 )

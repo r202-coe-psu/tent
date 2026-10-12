@@ -1,0 +1,302 @@
+import type { KioskPhotoPayload } from '../domain/kiosk-photo';
+
+export type GateInput =
+	| { source: 'smart-card'; citizen_id: string }
+	| { source: 'qr'; token: string }
+	| { source: 'phone'; phone: string; primary_evacuee_id?: string }
+	| { source: 'thaid'; session_id: string };
+
+export interface KioskEvacueeSummary {
+	evacuee_id: string;
+	first_name: string;
+	last_name: string;
+	gender: string | null;
+	age: number | null;
+	status: string;
+	is_primary: boolean;
+	phone_matched?: boolean;
+	selectable: boolean;
+}
+
+export interface KioskLookupResult {
+	shelter_code: string;
+	primary_evacuee_id: string;
+	members: KioskEvacueeSummary[];
+}
+
+export interface KioskHouseholdCandidate {
+	primary_evacuee_id: string;
+	contact_display: string;
+	member_count: number;
+	pending_count: number;
+}
+
+export type KioskLookupResponse =
+	| ({ kind: 'household'; name_masked: boolean } & KioskLookupResult)
+	| { kind: 'candidates'; shelter_code: string; candidates: KioskHouseholdCandidate[] }
+	| { kind: 'kiosk_registered'; shelter_code: string };
+
+export interface KioskCheckInMemberResult {
+	evacuee_id: string;
+	status: 'checked_in' | 'already_checked_in' | 'not_found' | 'not_eligible' | 'failed';
+	stay_status?: string;
+	qr_payload?: string;
+	/**
+	 * Unmasked name + phone for the printed label; only with a `qr_payload`. A lookup never carries
+	 * it, so a reprint asks /check-in (no write for arriving members) when the visitor taps print.
+	 */
+	label?: { name: string; phone: string | null };
+}
+
+export interface KioskCheckInResult {
+	shelter_code: string;
+	members: KioskCheckInMemberResult[];
+}
+
+export interface KioskCheckInBatchResult extends KioskCheckInResult {
+	retryable_evacuee_ids: string[];
+}
+
+function postKioskRegistration(body: Record<string, unknown>): Promise<{ evacuee_id: string }> {
+	return requestWithTimeout(
+		'/api/v1/kiosk/register',
+		{
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			cache: 'no-store',
+			body: JSON.stringify({ ...body, consented: true })
+		},
+		async (response) => {
+			if (!response.ok) throw await requestError(response);
+			return (await response.json()) as { evacuee_id: string };
+		}
+	);
+}
+
+/** `phone` is what the visitor typed at the kiosk, or `null` when they gave none. */
+export async function registerKioskWalkIn(
+	card: unknown,
+	photo: KioskPhotoPayload | null,
+	consentedAt: string,
+	phone: string | null = null
+): Promise<{ evacuee_id: string }> {
+	return postKioskRegistration({
+		source: 'smart-card',
+		card,
+		photo,
+		phone,
+		consented_at: consentedAt
+	});
+}
+
+/** ThaiD walk-in: only the verified session id goes out; the server holds who it is. */
+export async function registerKioskThaidWalkIn(
+	sessionId: string,
+	consentedAt: string,
+	phone: string | null
+): Promise<{ evacuee_id: string }> {
+	return postKioskRegistration({
+		source: 'thaid',
+		session_id: sessionId,
+		phone,
+		consented_at: consentedAt
+	});
+}
+
+export class KioskRequestError extends Error {
+	constructor(
+		message: string,
+		readonly status: number,
+		readonly code: string | null,
+		readonly canRegister = false
+	) {
+		super(message);
+		this.name = 'KioskRequestError';
+	}
+}
+
+export class KioskPartialCheckInError extends Error {
+	constructor(readonly result: KioskCheckInBatchResult) {
+		super('รายงานตัวได้บางส่วน กรุณาตรวจผลและลองรายการที่เหลืออีกครั้ง');
+		this.name = 'KioskPartialCheckInError';
+	}
+}
+
+async function requestError(response: Response): Promise<KioskRequestError> {
+	const body = (await response.json().catch((error: unknown) => {
+		if (error instanceof Error && error.name === 'AbortError') throw error;
+		return null;
+	})) as {
+		error?: { message?: unknown; code?: unknown } | unknown;
+		can_register?: unknown;
+	} | null;
+	const nestedMessage =
+		typeof body?.error === 'object' && body.error !== null && 'message' in body.error
+			? body.error.message
+			: null;
+	const nestedCode =
+		typeof body?.error === 'object' && body.error !== null && 'code' in body.error
+			? body.error.code
+			: null;
+	const message = typeof nestedMessage === 'string' ? nestedMessage : 'ระบบไม่สามารถทำรายการได้';
+	return new KioskRequestError(
+		message,
+		response.status,
+		typeof nestedCode === 'string' ? nestedCode : null,
+		body?.can_register === true
+	);
+}
+
+function withTimeout(
+	ms: number,
+	signal?: AbortSignal
+): { signal: AbortSignal; cleanup: () => void } {
+	const controller = new AbortController();
+	const timeoutId = setTimeout(() => controller.abort(), ms);
+	const abortFromParent = () => controller.abort(signal?.reason);
+	if (signal?.aborted) abortFromParent();
+	else signal?.addEventListener('abort', abortFromParent, { once: true });
+	return {
+		signal: controller.signal,
+		cleanup: () => {
+			clearTimeout(timeoutId);
+			signal?.removeEventListener('abort', abortFromParent);
+		}
+	};
+}
+
+async function requestWithTimeout<T>(
+	input: RequestInfo | URL,
+	init: RequestInit,
+	consume: (response: Response) => Promise<T>,
+	signal?: AbortSignal
+): Promise<T> {
+	const timeout = withTimeout(10_000, signal);
+	try {
+		const response = await fetch(input, { ...init, signal: timeout.signal });
+		return await consume(response);
+	} catch (error) {
+		if (error instanceof Error && error.name === 'AbortError') {
+			throw new KioskRequestError('เชื่อมต่อช้า กรุณาลองอีกครั้ง', 0, 'TIMEOUT');
+		}
+		throw error;
+	} finally {
+		timeout.cleanup();
+	}
+}
+
+function normalizeLookupResponse(payload: unknown): KioskLookupResponse {
+	if (typeof payload === 'object' && payload !== null && 'kind' in payload) {
+		return payload as KioskLookupResponse;
+	}
+	return { ...(payload as KioskLookupResult), kind: 'household', name_masked: false };
+}
+
+/** Resolve any identity gate through the scanner-authenticated kiosk API. */
+export async function lookupPreRegisteredEvacuee(
+	input: GateInput,
+	options: { signal?: AbortSignal } = {}
+): Promise<KioskLookupResponse> {
+	const result = await requestWithTimeout(
+		'/api/v1/kiosk/lookup',
+		{
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			cache: 'no-store',
+			body: JSON.stringify(input)
+		},
+		async (response) => {
+			if (!response.ok) throw await requestError(response);
+			return normalizeLookupResponse(await response.json());
+		},
+		options.signal
+	);
+	return result;
+}
+
+/**
+ * Face-matched chip photo for a smart-card check-in, plus the card's citizen id so the server
+ * can tie it to the card owner. The server keeps it as the owner's profile photo only when they
+ * have none yet; a photo problem never fails the check-in.
+ */
+export type KioskCheckInPhotoOptions =
+	| { photo?: null; citizenId?: undefined; thaidSessionId?: undefined }
+	| { photo: KioskPhotoPayload; citizenId: string; thaidSessionId?: undefined }
+	/**
+	 * ThaiD check-in: the verified session id instead of a citizen id (the server resolves the
+	 * citizen from it and burns the session), and never a photo. Sent once, on the batch that holds
+	 * the primary; the session is single-use, so a retry of leftover members must omit it.
+	 */
+	| { photo?: null; citizenId?: undefined; thaidSessionId: string };
+
+/** The server derives the shelter from device auth and validates household membership. */
+export async function checkInSelectedMembers(
+	primaryEvacueeId: string,
+	evacueeIds: string[],
+	options: { signal?: AbortSignal; batchLimit?: number } & KioskCheckInPhotoOptions = {}
+): Promise<KioskCheckInBatchResult> {
+	const batchLimit = Math.min(20, Math.max(1, options.batchLimit ?? 20));
+	// The primary goes first, so the batch carrying the card photo / ThaiD session is sent (and
+	// verified by the server) before any other member of a large household is written.
+	const ordered = evacueeIds.includes(primaryEvacueeId)
+		? [primaryEvacueeId, ...evacueeIds.filter((id) => id !== primaryEvacueeId)]
+		: evacueeIds;
+	const batches = Array.from({ length: Math.ceil(ordered.length / batchLimit) }, (_, index) =>
+		ordered.slice(index * batchLimit, (index + 1) * batchLimit)
+	);
+	const members: KioskCheckInMemberResult[] = [];
+	let shelterCode = '';
+	const retryableIds = (notReturned: ReadonlySet<string> = new Set()) => {
+		const byId = new Map(members.map((member) => [member.evacuee_id, member]));
+		return evacueeIds.filter((id) => {
+			const result = byId.get(id);
+			return notReturned.has(id) || !result || result.status === 'failed';
+		});
+	};
+
+	// The card owner is the primary; attach the photo only to the batch that checks them in.
+	const photoBatchIndex =
+		(options.photo && options.citizenId) || options.thaidSessionId
+			? batches.findIndex((batch) => batch.includes(primaryEvacueeId))
+			: -1;
+
+	for (const [batchIndex, batch] of batches.entries()) {
+		const photoFields =
+			batchIndex !== photoBatchIndex
+				? {}
+				: options.thaidSessionId
+					? { source: 'thaid', thaid_session_id: options.thaidSessionId, photo: null }
+					: { source: 'smart-card', citizen_id: options.citizenId, photo: options.photo };
+		try {
+			const result = await requestWithTimeout<KioskCheckInResult>(
+				'/api/v1/kiosk/check-in',
+				{
+					method: 'POST',
+					headers: { 'content-type': 'application/json' },
+					cache: 'no-store',
+					body: JSON.stringify({
+						primary_evacuee_id: primaryEvacueeId,
+						evacuee_ids: batch,
+						...photoFields
+					})
+				},
+				async (response) => {
+					if (!response.ok) throw await requestError(response);
+					return (await response.json()) as KioskCheckInResult;
+				},
+				options.signal
+			);
+			shelterCode = result.shelter_code;
+			members.push(...result.members);
+		} catch (error) {
+			if (members.length === 0) throw error;
+			const notReturned = new Set(batches.slice(batchIndex).flat());
+			throw new KioskPartialCheckInError({
+				shelter_code: shelterCode,
+				members: [...members],
+				retryable_evacuee_ids: retryableIds(notReturned)
+			});
+		}
+	}
+	return { shelter_code: shelterCode, members, retryable_evacuee_ids: retryableIds() };
+}

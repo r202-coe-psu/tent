@@ -19,6 +19,7 @@ vi.mock('$lib/stores/shelter.svelte', () => ({
 }));
 
 vi.mock('$lib/features/users', () => ({
+	invalidateAuthStatusRequest: vi.fn(),
 	clearMfaOk: vi.fn().mockResolvedValue({ ok: true })
 }));
 
@@ -85,6 +86,134 @@ describe('authStore.ensureInitialized', () => {
 		await vi.waitFor(() => expect(getSessionMock).toHaveBeenCalled());
 
 		expect(authStore.isAuthenticated).toBe(true);
+		expect(authStore.needsReauth).toBe(false);
+	});
+});
+
+describe('authStore session expiry', () => {
+	beforeEach(() => {
+		vi.resetModules();
+		storage.clear();
+		vi.stubGlobal('localStorage', {
+			getItem: (key: string) => storage.get(key) ?? null,
+			setItem: (key: string, value: string) => {
+				storage.set(key, value);
+			},
+			removeItem: (key: string) => {
+				storage.delete(key);
+			},
+			clear: () => {
+				storage.clear();
+			}
+		});
+		getSessionMock.mockReset();
+		storage.set('auth:user', JSON.stringify({ name: 'demo', roles: ['staff'] }));
+	});
+
+	afterEach(() => {
+		vi.unstubAllGlobals();
+	});
+
+	async function loadStore() {
+		const { authStore } = await import('./auth.svelte');
+		const { CouchAuthError } = await import('$lib/utils/errors');
+		return { authStore, CouchAuthError };
+	}
+
+	it('flags a Couch 401 immediately without calling /_session', async () => {
+		const { authStore, CouchAuthError } = await loadStore();
+		await expect(authStore.handleAuthFailure(new CouchAuthError(401))).resolves.toBe('expired');
+		expect(authStore.needsReauth).toBe(true);
+		expect(getSessionMock).not.toHaveBeenCalled();
+	});
+
+	it('is a no-op without a cached identity', async () => {
+		storage.clear();
+		const { authStore, CouchAuthError } = await loadStore();
+		await authStore.handleAuthFailure(new CouchAuthError(401));
+		authStore.markNeedsReauth();
+		expect(authStore.needsReauth).toBe(false);
+	});
+
+	it('confirms a 403 against /_session: anonymous means expired', async () => {
+		getSessionMock.mockResolvedValue(null);
+		const { authStore, CouchAuthError } = await loadStore();
+		await expect(authStore.handleAuthFailure(new CouchAuthError(403))).resolves.toBe('expired');
+		expect(authStore.needsReauth).toBe(true);
+	});
+
+	it('treats a 403 with a valid session as a permission denial (no modal)', async () => {
+		getSessionMock.mockResolvedValue({ name: 'demo', roles: ['staff'] });
+		const { authStore, CouchAuthError } = await loadStore();
+		await expect(authStore.handleAuthFailure(new CouchAuthError(403))).resolves.toBe(
+			'permission-denied'
+		);
+		expect(authStore.needsReauth).toBe(false);
+	});
+
+	it('confirms a BFF 401 (plain error with status) the same way', async () => {
+		getSessionMock.mockResolvedValue({ name: 'demo', roles: ['staff'] });
+		const { authStore } = await loadStore();
+		const bff = Object.assign(new Error('Incorrect password'), { status: 401 });
+		await expect(authStore.handleAuthFailure(bff)).resolves.toBe('permission-denied');
+		expect(authStore.needsReauth).toBe(false);
+	});
+
+	it('never opens the modal when /_session is unreachable (offline)', async () => {
+		getSessionMock.mockRejectedValue(new TypeError('Failed to fetch'));
+		const { authStore, CouchAuthError } = await loadStore();
+		await expect(authStore.handleAuthFailure(new CouchAuthError(403))).resolves.toBe('ignored');
+		expect(authStore.needsReauth).toBe(false);
+	});
+
+	it('ignores network errors and unrelated errors', async () => {
+		const { authStore } = await loadStore();
+		await expect(authStore.handleAuthFailure(new TypeError('Failed to fetch'))).resolves.toBe(
+			'ignored'
+		);
+		await expect(authStore.handleAuthFailure(new Error('boom'))).resolves.toBe('ignored');
+		expect(authStore.needsReauth).toBe(false);
+		expect(getSessionMock).not.toHaveBeenCalled();
+	});
+
+	it('single-flights concurrent unverified failures into one /_session call', async () => {
+		let resolveSession!: (value: null) => void;
+		getSessionMock.mockReturnValue(
+			new Promise((resolve) => {
+				resolveSession = resolve;
+			})
+		);
+		const { authStore, CouchAuthError } = await loadStore();
+		const results = Promise.all([
+			authStore.handleAuthFailure(new CouchAuthError(403)),
+			authStore.handleAuthFailure(new CouchAuthError(403)),
+			authStore.handleAuthFailure(new CouchAuthError(403))
+		]);
+		resolveSession(null);
+		await expect(results).resolves.toEqual(['expired', 'expired', 'expired']);
+		expect(getSessionMock).toHaveBeenCalledTimes(1);
+	});
+
+	it('clears the flag after a successful re-login so a later expiry opens again', async () => {
+		sessionLoginMock.mockResolvedValue({ name: 'demo', roles: ['staff'] });
+		vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('{}', { status: 404 })));
+		const { authStore, CouchAuthError } = await loadStore();
+		await authStore.handleAuthFailure(new CouchAuthError(401));
+		expect(authStore.needsReauth).toBe(true);
+		await authStore.login({ name: 'demo', password: 'x' });
+		expect(authStore.needsReauth).toBe(false);
+		await authStore.handleAuthFailure(new CouchAuthError(401));
+		expect(authStore.needsReauth).toBe(true);
+	});
+
+	it('revalidateSession flags expiry when the cookie is gone and clears it when valid again', async () => {
+		getSessionMock.mockResolvedValue(null);
+		vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('{}', { status: 404 })));
+		const { authStore } = await loadStore();
+		await authStore.revalidateSession();
+		expect(authStore.needsReauth).toBe(true);
+		getSessionMock.mockResolvedValue({ name: 'demo', roles: ['staff'] });
+		await authStore.revalidateSession();
 		expect(authStore.needsReauth).toBe(false);
 	});
 });

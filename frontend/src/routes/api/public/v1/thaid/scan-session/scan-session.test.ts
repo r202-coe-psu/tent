@@ -1,7 +1,13 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { POST } from './+server';
 import { GET as getDetail } from './[id]/+server';
-import { completeScanSession, _resetSessionsForTest } from '$lib/server/thaid-scan-session';
+import { GET as getEvents } from './[id]/events/+server';
+import {
+	completeScanSession,
+	createKioskCheckInSession,
+	completeKioskSession,
+	_resetSessionsForTest
+} from '$lib/server/thaid-scan-session';
 import type { ThaiDAutofillProfile } from '$lib/features/people';
 
 const mockProfile: ThaiDAutofillProfile = {
@@ -86,5 +92,39 @@ describe('Scan Session API endpoints', () => {
 		expect(res.status).toBe(404);
 		const data = await res.json();
 		expect(data.status).toBe('expired');
+	});
+
+	describe('kiosk check-in sessions are invisible to the public plane', () => {
+		const KIOSK = { device_id: 'scanner-device:A', shelter_code: 'SH001' };
+
+		it('GET [id] answers 404 expired for a pending kiosk session', async () => {
+			const session = createKioskCheckInSession(KIOSK);
+			const res = await getDetail({
+				params: { id: session.id }
+			} as unknown as Parameters<typeof getDetail>[0]);
+			expect(res.status).toBe(404);
+			expect(await res.json()).toEqual({ status: 'expired' });
+		});
+
+		it('GET [id] answers 404 expired for a completed kiosk session without leaking citizen', async () => {
+			const session = createKioskCheckInSession(KIOSK);
+			completeKioskSession(session.id, { pid: '1234567890123', sub: 'sub-1' });
+			const res = await getDetail({
+				params: { id: session.id }
+			} as unknown as Parameters<typeof getDetail>[0]);
+			expect(res.status).toBe(404);
+			const text = await res.text();
+			expect(JSON.parse(text)).toEqual({ status: 'expired' });
+			expect(text).not.toContain('1234567890123');
+		});
+
+		it('GET [id]/events answers the missing-session 404 expired event', async () => {
+			const session = createKioskCheckInSession(KIOSK);
+			const res = await getEvents({
+				params: { id: session.id }
+			} as unknown as Parameters<typeof getEvents>[0]);
+			expect(res.status).toBe(404);
+			expect(await res.text()).toBe('event: expired\ndata: {"status":"expired"}\n\n');
+		});
 	});
 });

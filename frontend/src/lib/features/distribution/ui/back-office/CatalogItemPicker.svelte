@@ -19,6 +19,7 @@
 
 	interface Props {
 		open: boolean;
+		shelterCode: string;
 		requisitionType: Flow2RequisitionType;
 		alreadySelectedItemIds: readonly string[];
 		onSelectItem: (item: ItemMaster, requestedQty: string) => void;
@@ -27,13 +28,14 @@
 
 	let {
 		open = $bindable(false),
+		shelterCode,
 		requisitionType,
 		alreadySelectedItemIds,
 		onSelectItem,
 		onClose
 	}: Props = $props();
 
-	const itemsQuery = useItemMasters();
+	const itemsQuery = useItemMasters(() => shelterCode);
 	const stockBalanceQuery = useStockBalance();
 
 	let searchQuery = $state('');

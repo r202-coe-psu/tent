@@ -7,7 +7,6 @@
 	import Loader from '@lucide/svelte/icons/loader';
 	import ChevronDown from '@lucide/svelte/icons/chevron-down';
 	import ChevronUp from '@lucide/svelte/icons/chevron-up';
-	import Info from '@lucide/svelte/icons/info';
 	import FileX from '@lucide/svelte/icons/file-x';
 	import Archive from '@lucide/svelte/icons/archive';
 	import {
@@ -17,7 +16,7 @@
 	} from '../../application/queries';
 	import { useItemMasters } from '$lib/features/catalog';
 	import {
-		canReceivePhysicalStock,
+		canReturnLoanPhysical,
 		canPerformFrontlineDistribution
 	} from '../../application/food-supplies/auth';
 	import type { DistributionLog } from '../../domain/food-supplies';
@@ -53,7 +52,7 @@
 	});
 
 	const canFrontline = $derived(authContext ? canPerformFrontlineDistribution(authContext) : false);
-	const canReturnStock = $derived(authContext ? canReceivePhysicalStock(authContext) : false);
+	const canReturnStock = $derived(authContext ? canReturnLoanPhysical(authContext) : false);
 
 	// State
 	let recipientSelection = $state<FrontlineRecipientSelection | null>(null);
@@ -159,28 +158,8 @@
 		</div>
 	</div>
 
-	<!-- Role Permission Advisory Banner if only Frontline / Registrar -->
-	{#if !canReturnStock && canFrontline}
-		<div
-			class="flex items-start gap-2.5 rounded-xl border border-amber-200 bg-amber-50/80 p-3.5 text-xs text-amber-950"
-			role="note"
-		>
-			<Info class="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
-			<div>
-				<p class="font-bold">ข้อมูลสิทธิ์การบันทึกตรวจรับของคืน</p>
-				<p class="mt-0.5 text-2xs text-amber-800">
-					เจ้าหน้าที่ส่วนหน้าสามารถค้นหาและตรวจสอบประวัติการยืม และ<strong
-						>บันทึกตัดจำหน่ายรายการ (สูญหาย/ยกเว้น) ได้</strong
-					>
-					แต่การบันทึกรับของคืนจริงเข้าคลังสินค้าต้องดำเนินการโดยเจ้าหน้าที่คลัง ผู้ประสานงาน ผู้จัดการศูนย์
-					หรือผู้ดูแลระบบเท่านั้น
-				</p>
-			</div>
-		</div>
-	{/if}
-
 	<!-- Recipient Search Picker Reused Component -->
-	<RecipientSearchPicker bind:value={recipientSelection} />
+	<RecipientSearchPicker bind:value={recipientSelection} allowOutside={false} />
 
 	<!-- Loan List & Operations Surface -->
 	{#if !recipientSelection}
@@ -188,12 +167,12 @@
 			class="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 py-12 text-center text-xs text-slate-500"
 		>
 			<Package class="mb-2 h-10 w-10 text-slate-300" />
-			<p class="font-semibold text-slate-700">กรุณาระบุหรือสแกนบัตรผู้ประสบภัย</p>
-			<p class="mt-0.5 text-2xs text-slate-400">
-				ระบบจะค้นหารายการพัสดุและสิ่งของยืม-คืนทั้งหมดที่ผูกกับผู้ประสบภัยรายนี้
+			<p class="text-base font-semibold text-slate-700">สแกน QR ผู้ที่นำของมาคืน</p>
+			<p class="mt-0.5 text-sm text-slate-500">
+				ระบบจะแสดงของที่คนนี้ยังยืมอยู่ แล้วกด "รับคืน" ทีละรายการ
 			</p>
 		</div>
-	{:else if recipientLoansQuery.isPending}
+	{:else if recipientId && recipientLoansQuery.isPending}
 		<div
 			class="flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-slate-50/50 py-12 text-xs text-slate-500"
 		>

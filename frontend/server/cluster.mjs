@@ -15,6 +15,7 @@ import cluster from 'node:cluster';
 import { availableParallelism } from 'node:os';
 import process from 'node:process';
 import { resolveWorkerCount } from './resolve-worker-count.mjs';
+import { STAFF_PIN_TURN_TOPIC, StaffPinTurns } from './staff-pin-turns.mjs';
 
 const cpus = availableParallelism();
 const raw = process.env.WEB_CONCURRENCY;
@@ -34,6 +35,14 @@ if (workers === 1) {
 } else if (cluster.isPrimary) {
 	let shuttingDown = false;
 	const activeSessions = new Map();
+	// Kiosk staff-PIN turns live here so a device gets one check at a time across all workers.
+	const staffPinTurns = new StaffPinTurns();
+	const grantStaffPinTurn = (device, turn) => {
+		const w = cluster.workers?.[turn.owner];
+		if (w?.isConnected()) {
+			w.send({ topic: STAFF_PIN_TURN_TOPIC, action: 'granted', device, req: turn.req });
+		}
+	};
 
 	console.info(
 		`[cluster] primary ${process.pid}: starting ${workers} workers` +
@@ -46,16 +55,61 @@ if (workers === 1) {
 
 	// Relay ThaiD scan sessions across workers so SSE and polling work on any worker
 	cluster.on('message', (worker, message) => {
+		if (
+			message?.topic === STAFF_PIN_TURN_TOPIC &&
+			typeof message.device === 'string' &&
+			typeof message.req === 'string'
+		) {
+			const turn = { owner: worker.id, req: message.req };
+			if (message.action === 'acquire') {
+				const state = staffPinTurns.acquire(message.device, turn);
+				if (state === 'granted') grantStaffPinTurn(message.device, turn);
+				else if (state === 'busy' && worker.isConnected()) {
+					worker.send({
+						topic: STAFF_PIN_TURN_TOPIC,
+						action: 'busy',
+						device: message.device,
+						req: message.req
+					});
+				}
+			} else if (message.action === 'release') {
+				const next = staffPinTurns.release(message.device, turn, message.outcome);
+				if (next) grantStaffPinTurn(message.device, next);
+			}
+			return;
+		}
 		if (message && message.topic === 'thaid-scan-session') {
 			const now = Date.now();
 			if (message.action === 'create' && message.session) {
 				activeSessions.set(message.session.id, message.session);
+			} else if (message.action === 'complete' && message.id && message.citizen) {
+				const s = activeSessions.get(message.id);
+				if (s && s.kind === 'kiosk_check_in' && s.status === 'pending') {
+					s.status = 'completed';
+					s.citizen = message.citizen;
+					if (message.expiresAt) s.expiresAt = message.expiresAt;
+				}
 			} else if (message.action === 'complete' && message.id && message.profile) {
 				const s = activeSessions.get(message.id);
-				if (s) {
+				if (s && (s.kind ?? 'member_scan') === 'member_scan' && s.status === 'pending') {
 					s.status = 'completed';
 					s.profile = message.profile;
 				}
+			} else if (message.action === 'cancel' && message.id) {
+				const s = activeSessions.get(message.id);
+				if (
+					s &&
+					s.kind === 'kiosk_check_in' &&
+					(s.status === 'pending' || s.status === 'completed')
+				) {
+					s.status = 'cancelled';
+				}
+			} else if (message.action === 'consume' && message.id) {
+				const s = activeSessions.get(message.id);
+				if (s && s.kind === 'kiosk_check_in' && s.status === 'completed') s.status = 'consumed';
+			} else if (message.action === 'release' && message.id) {
+				const s = activeSessions.get(message.id);
+				if (s && s.kind === 'kiosk_check_in' && s.status === 'consumed') s.status = 'completed';
 			} else if (message.action === 'expire' && message.id) {
 				activeSessions.delete(message.id);
 			} else if (message.action === 'init') {
@@ -82,6 +136,9 @@ if (workers === 1) {
 	});
 
 	cluster.on('exit', (worker, code, signal) => {
+		for (const { device, turn } of staffPinTurns.dropOwner(worker.id)) {
+			grantStaffPinTurn(device, turn);
+		}
 		if (shuttingDown) return;
 		console.warn(`[cluster] worker ${worker.process.pid} exited (${signal || code}); restarting`);
 		cluster.fork();

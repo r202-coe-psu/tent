@@ -10,6 +10,7 @@ from tent_model import DonationBuffer
 
 from worker.couch.client import CouchClient
 from worker.masking import sha256_hex, shelter_db_name
+from worker.timeutil import iso_utc
 
 logger = logging.getLogger(__name__)
 
@@ -29,12 +30,16 @@ POLL_INTERVAL_SECONDS = 3
 async def _persist_donation(couch: CouchClient, donation: DonationBuffer) -> bool:
     database = shelter_db_name(donation.shelter_code)
     if not await couch.database_exists(database):
-        logger.warning("Shelter database %s missing for donation %s", database, donation.id)
+        logger.warning(
+            "Shelter database %s missing for donation %s", database, donation.id
+        )
         return False
 
-    now = datetime.now(UTC).isoformat().replace("+00:00", "Z")
+    now = iso_utc(datetime.now(UTC))
     couch_doc = {
-        "_id": donation.id if donation.id.startswith("donation:") else f"donation:{donation.id}",
+        "_id": donation.id
+        if donation.id.startswith("donation:")
+        else f"donation:{donation.id}",
         "type": "donation",
         # 5 for redirect_to_shelter_code (CR-087); 4 was revisions[] (CR-080). This line
         # read 2 until CR-080, two versions behind: CR-038 moved items[].qty to qty_str and
@@ -44,12 +49,11 @@ async def _persist_donation(couch: CouchClient, donation: DonationBuffer) -> boo
         "channel": "public",
         "shelter_code": donation.shelter_code,
         "campaign_id": donation.campaign_id,
-        "created_at": donation.created_at.isoformat().replace("+00:00", "Z"),
+        # Mongo hands these back naive (UTC without an offset) — see `iso_utc`.
+        "created_at": iso_utc(donation.created_at),
         "updated_at": now,
-        "declared_at": donation.created_at.isoformat().replace("+00:00", "Z"),
-        "expires_at": (
-            donation.expires_at.isoformat().replace("+00:00", "Z") if donation.expires_at else None
-        ),
+        "declared_at": iso_utc(donation.created_at),
+        "expires_at": iso_utc(donation.expires_at) if donation.expires_at else None,
         "created_by": "public",
         "booking_ref": donation.booking_ref,
         "tracking_token_hash": donation.tracking_token_hash,
@@ -94,7 +98,7 @@ async def run_inbound_loop(couch: CouchClient, *, stop_event: asyncio.Event) -> 
     while not stop_event.is_set():
         try:
             pending = await DonationBuffer.find(
-                DonationBuffer.synced_to_couch == False  # noqa: E712
+                DonationBuffer.synced_to_couch == False
             ).to_list()
             for donation in pending:
                 if stop_event.is_set():

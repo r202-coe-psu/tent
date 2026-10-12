@@ -2,12 +2,14 @@
 title: "Full-System Role Permission Matrix (R2-R4 & V10)"
 status: approved
 created: 2026-06-04
-updated: 2026-10-08 # CR-155 — shelter_incident replaces shelter_report
+updated: 2026-10-11 # CR-162 banner_staff (11th role); เดิม: CR-093 (Compound Roles) & CR-104 (Volunteer Backoffice, 10-Role Taxonomy, Health Policy); decision sync 2026-10-10; CR-155 shelter_incident แทน shelter_report
+note: decision sync 2026-10-10 — VC may access /back-office/volunteers (job board/shifts), REG may access Station 2 medical screening; portal groups menus by department (ฝ่าย): ทะเบียน(REG; TRG/MED เห็นเฉพาะ Station 2), ครัว(KS), พัสดุและคลัง(SC, warehouse_staff alias), อาสาสมัคร(VC), รักษาความปลอดภัย(SO), อาคารสถานที่(FAC), บริหารศูนย์(SM), ส่วนกลาง(SA)
 closes: K-12 (A1 RBAC phase-blocker)
 affects:
   - docs/data/schema.md §6 _users
   - frontend/src/lib/auth/roles.ts
   - frontend/src/lib/server/shelter-access-design.ts
+  - docs/changes/14-kiosk/CR-162-kiosk-banner.md
 ---
 
 # Full-System Role Permission Matrix (R2-R4 & V10)
@@ -34,6 +36,13 @@ affects:
 | **VC** | `volunteer_coordinator` | ผู้ประสานงานจิตอาสา | สร้างประกาศภารกิจงานอาสา (`job`), ดูแลกระดานงาน, จัดสรรกะงาน, ดูแลจุดเช็คอินแท็บเล็ตหน้าศูนย์, และออกสิทธิ์ระบบให้อาสาช่วยงาน |
 | **SO** | `security_officer` | เจ้าหน้าที่รักษาความปลอดภัย | ควบคุมความสงบเรียบร้อย, บันทึกเหตุการณ์ความไม่ปลอดภัย (Incidents), จัดการพื้นที่หวงห้าม, และเฝ้าระวังจุดเข้า-ออกศูนย์ |
 | **FAC** | `facility_staff` | เจ้าหน้าที่ฝ่ายอาคารสถานที่ | จัดการโซนที่พัก (Zoning), บริหารจัดการเต็นท์และพื้นที่นอน, ดูแลระบบไฟฟ้า น้ำประปา สุขาภิบาล และการซ่อมบำรุงอาคาร |
+| **BAN** | `banner_staff` | เจ้าหน้าที่ประชาสัมพันธ์ (แบนเนอร์ Kiosk) | สร้าง/แก้ไข/เปิดปิด/ลบแบนเนอร์รูปภาพที่แสดงบนตู้ kiosk ของศูนย์ตัวเอง — ไม่มีสิทธิ์อื่นของศูนย์ ([CR-162](../changes/14-kiosk/CR-162-kiosk-banner.md)) |
+
+> **CR-162 (2026-10-11)** — เพิ่มบทบาทที่ 11 `banner_staff` (compound `{code}:banner_staff`, อยู่ใน `STAFF_CAPABILITIES` — SM ของศูนย์และ SA grant/revoke ได้)
+
+| หมวดงาน / เอกสาร | การกระทำ (Action) | SA | SM | BAN | บทบาทอื่น |
+| :--- | :--- | :---: | :---: | :---: | :---: |
+| **Kiosk Banner** (`/back-office/kiosk-banners`) | ดู / สร้าง / แก้ไข / เปิดปิด / ลบ | ✓ | scope | scope | — |
 
 ---
 
@@ -75,6 +84,8 @@ affects:
 ---
 
 ## 3. Action Matrix — สิทธิ์การปฏิบัติการในระดับศูนย์พักพิง
+
+> **decision sync 2026-10-10** — VC เข้า `/back-office/volunteers` (Job Board/กะงาน) ได้ และ REG เข้า Station 2 คัดกรองการแพทย์ได้ (แถว Volunteer Job Board / Triage & Screening); การจัดการผู้ใช้ยังเป็น SM/SA เท่านั้น. หน้า portal จัดกลุ่มเมนูตามฝ่าย: ทะเบียน(REG; TRG/MED เห็นเฉพาะ Station 2), ครัว(KS), พัสดุและคลัง(SC, `warehouse_staff` เป็น alias), อาสาสมัคร(VC), รักษาความปลอดภัย(SO), อาคารสถานที่(FAC), บริหารศูนย์(SM), ส่วนกลาง(SA).
 
 | หมวดงาน / เอกสาร | การกระทำ (Action) | SA | SM | REG | TRG | MED | KS | SC | VC | SO | FAC |
 | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |

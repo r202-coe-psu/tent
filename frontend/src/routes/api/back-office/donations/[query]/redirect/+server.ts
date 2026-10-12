@@ -14,7 +14,7 @@ import {
 	donationRedirectInputSchema,
 	type DonationRedirect,
 	type PublicDonationDoc
-} from '$lib/features/donations';
+} from '$lib/features/donations/server';
 import { canTransitionDonation } from '$lib/features/operations/server';
 import { createAuditEntry, type AuditEntry } from '$lib/features/shared';
 

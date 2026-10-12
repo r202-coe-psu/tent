@@ -9,7 +9,8 @@ import {
 	computeTicketGroupCounts,
 	filterRequisitionTickets,
 	sortRequisitionTickets,
-	filterAndSortRequisitionTickets
+	filterAndSortRequisitionTickets,
+	filterDeskTickets
 } from './ticket-filters';
 
 const mockTicket = (
@@ -468,5 +469,21 @@ describe('Ticket Workflow Groups & Filtering (Slice 5.1 §17, §18, §19, §43)'
 			});
 			expect(result).toEqual([]);
 		});
+	});
+});
+
+describe('filterDeskTickets', () => {
+	it('keeps food and supplies and drops transfer and kitchen tickets', () => {
+		const tickets = [
+			mockTicket('01', 'IN_TRANSIT', { requisition_type: 'food' }),
+			mockTicket('02', 'COMPLETED', { requisition_type: 'supplies' }),
+			mockTicket('03', 'IN_TRANSIT', { requisition_type: 'transfer' }),
+			mockTicket('04', 'COMPLETED', { requisition_type: 'transfer' }),
+			mockTicket('05', 'PENDING_PICK', { requisition_type: 'kitchen' })
+		];
+		expect(filterDeskTickets(tickets).map((t) => t._id)).toEqual([
+			'requisition_ticket:01',
+			'requisition_ticket:02'
+		]);
 	});
 });
