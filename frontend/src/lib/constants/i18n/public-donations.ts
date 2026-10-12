@@ -3,10 +3,9 @@ export const PUBLIC_DONATIONS_I18N = {
 		// Header & Stepper
 		pageTitle: 'บริจาคและจองคิว — Smart Shelter',
 		donationBoard: 'DONATION BOARD',
-		heroTitlePrefix: 'กระดาน',
-		heroTitleHighlight: 'ความต้องการด่วน',
-		heroDesc:
-			'อัปเดตข้อมูลแบบเรียลไทม์จากทุกศูนย์พักพิง คุณสามารถช่วยเติมเต็มในส่วนที่ขาดแคลนได้ทันที',
+		heroTitlePrefix: 'ของที่ศูนย์พักพิง',
+		heroTitleHighlight: 'ต้องการตอนนี้',
+		heroDesc: 'ดูว่าแต่ละศูนย์ยังขาดของอะไร เลือกรายการที่คุณช่วยได้ แล้วนัดวันส่งของกับศูนย์',
 		step1: 'ความต้องการ',
 		step2: 'รายการบริจาค',
 		step3: 'นัดหมาย',
@@ -369,10 +368,10 @@ export const PUBLIC_DONATIONS_I18N = {
 		// Header & Stepper
 		pageTitle: 'Donate & Queue — Smart Shelter',
 		donationBoard: 'DONATION BOARD',
-		heroTitlePrefix: 'Urgent',
-		heroTitleHighlight: 'Needs Board',
+		heroTitlePrefix: 'What shelters',
+		heroTitleHighlight: 'need now',
 		heroDesc:
-			'Real-time updates from all shelters. You can help fulfill critical shortages immediately.',
+			'See what each shelter is still short of, choose what you can give, and set a delivery date with the shelter.',
 		step1: 'Needs',
 		step2: 'Donation Items',
 		step3: 'Schedule',

@@ -292,7 +292,9 @@ export async function catalogItem(name: string): Promise<{ id: string; unit: str
 /** Public needs board → `shelter`'s card → the line for `itemName` (as the board prints it). */
 export async function openNeed(page: Page, shelter: Pick<PublicShelter, 'name'>, itemName: string) {
 	await page.goto('/donations');
-	await expect(page.getByRole('heading', { name: /กระดาน\s*ความต้องการด่วน/ })).toBeVisible();
+	await expect(
+		page.getByRole('heading', { name: /ของที่ศูนย์พักพิง\s*ต้องการตอนนี้/ })
+	).toBeVisible();
 	await cardWith(page, shelter.name, 'ดูรายละเอียดและบริจาค').click();
 	await cardWith(page, itemName, 'บริจาครายการนี้').click();
 }
