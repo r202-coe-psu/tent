@@ -398,7 +398,7 @@ export const PORTAL_DEPARTMENTS: readonly PortalDepartment[] = [
 				label: 'จัดการ Kiosk',
 				desc: 'ตู้ Kiosk และ PIN เจ้าหน้าที่ของศูนย์',
 				icon: 'monitor-smartphone',
-				href: '/back-office/scanners',
+				href: '/back-office/kiosks',
 				scope: 'shelter',
 				// Draft CR scanner back-office: SA, SM and kiosk_staff of the selected shelter.
 				roles: [KIO]

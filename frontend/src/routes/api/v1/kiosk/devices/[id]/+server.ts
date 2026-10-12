@@ -4,7 +4,7 @@ import { ServiceError } from '$lib/server/couch-admin';
 import {
 	scannerDevicePatchSchema,
 	toScannerDeviceSummary
-} from '$lib/features/scanners/domain/scanner.schema';
+} from '$lib/features/kiosk-devices/domain/scanner.schema';
 import { scannerDeviceRepository } from '$lib/server/scanners/device-repository';
 import { assertDeviceInScope, requireScannerManager } from '$lib/server/scanners/scanner-access';
 import {

@@ -1,7 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { now } from '$lib/db/model';
-import { scannerServerRepository } from '$lib/features/scanners/server';
+import { scannerServerRepository } from '$lib/features/kiosk-devices/server';
 import { findMasterByCode } from '$lib/server/shelters.admin';
 import {
 	authenticateScannerDevice,

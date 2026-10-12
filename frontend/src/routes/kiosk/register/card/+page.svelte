@@ -27,7 +27,7 @@
 		walkInSession,
 		type KioskHardware
 	} from '$lib/features/kiosk';
-	import type { SmartCardData } from '$lib/features/scanners';
+	import type { SmartCardData } from '$lib/features/kiosk-devices';
 	const displayContext = $derived(
 		getKioskDisplayContext(readKioskDisplayQuery(page.url.searchParams))
 	);

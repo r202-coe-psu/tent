@@ -1,6 +1,6 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { scannerServerRepository } from '$lib/features/scanners/server';
+import { scannerServerRepository } from '$lib/features/kiosk-devices/server';
 import {
 	kioskThaidErrorResponse,
 	kioskThaidInvalidInputResponse,

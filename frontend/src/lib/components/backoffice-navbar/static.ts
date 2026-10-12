@@ -160,7 +160,7 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 				children: [
 					{
 						label: 'จัดการอุปกรณ์',
-						href: resolve('/back-office/scanners'),
+						href: resolve('/back-office/kiosks'),
 						icon: Cpu,
 						visibleTo: (roles) => hasCapabilityAnywhere(roles, SCANNER_MANAGER_CAPABILITIES)
 					}

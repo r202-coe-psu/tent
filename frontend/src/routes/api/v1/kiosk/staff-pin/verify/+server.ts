@@ -2,7 +2,7 @@ import type { RequestHandler } from './$types';
 import {
 	scannerServerRepository,
 	type PersistedScannerDevice
-} from '$lib/features/scanners/server';
+} from '$lib/features/kiosk-devices/server';
 import {
 	authenticateScannerDevice,
 	DEVICE_AUTH_FAILED,

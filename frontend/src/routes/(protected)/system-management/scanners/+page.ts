@@ -4,5 +4,5 @@ import type { PageLoad } from './$types';
 
 /** Moved to back-office so shelter managers can manage their own devices. */
 export const load = (() => {
-	redirect(302, resolve('/back-office/scanners'));
+	redirect(302, resolve('/back-office/kiosks'));
 }) satisfies PageLoad;

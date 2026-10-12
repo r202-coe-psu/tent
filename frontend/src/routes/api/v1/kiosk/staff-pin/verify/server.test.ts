@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('$env/dynamic/private', () => ({ env: {} }));
-vi.mock('$lib/features/scanners/server', () => ({
+vi.mock('$lib/features/kiosk-devices/server', () => ({
 	scannerServerRepository: { getDeviceByDeviceId: vi.fn() }
 }));
 vi.mock('$lib/server/scanners/staff-pin-store', async () => {
@@ -13,7 +13,7 @@ vi.mock('$lib/server/scanners/staff-pin-store', async () => {
 
 import { POST } from './+server';
 import type { RequestEvent } from './$types';
-import { scannerServerRepository } from '$lib/features/scanners/server';
+import { scannerServerRepository } from '$lib/features/kiosk-devices/server';
 import { hashScannerSecret } from '$lib/server/scanners/device-credentials';
 import {
 	staffPinSecretStore,

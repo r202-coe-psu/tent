@@ -1,4 +1,4 @@
-import type { SmartCardData } from '$lib/features/scanners';
+import type { SmartCardData } from '$lib/features/kiosk-devices';
 import {
 	KioskRequestError,
 	registerKioskThaidWalkIn,

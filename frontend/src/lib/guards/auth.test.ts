@@ -37,7 +37,7 @@ import {
 	confineKioskStaffOnly,
 	resolvePostLoginDestination,
 	requireDistributionDesk,
-	requireScannerManagement,
+	requireKioskManagement,
 	requireMedicalScreening,
 	requireVolunteerBackoffice,
 	LANDING_ROUTE
@@ -254,24 +254,24 @@ describe('requireDistributionDesk (Station 4 route guard)', () => {
 	});
 });
 
-describe('requireScannerManagement (/back-office/scanners)', () => {
+describe('requireKioskManagement (/back-office/kiosks)', () => {
 	beforeEach(() => {
 		mocks.user = { roles: [] };
 		mocks.selectedShelterCode = null;
 	});
 
 	it('admits SA, SM and kiosk_staff of the selected shelter (FR-SBO-20)', async () => {
-		expect(await passes(requireScannerManagement, ['system_admin'], null)).toBe(true);
+		expect(await passes(requireKioskManagement, ['system_admin'], null)).toBe(true);
 		for (const cap of ['shelter_manager', 'kiosk_staff']) {
-			expect(await passes(requireScannerManagement, ['shelter:SH001', `SH001:${cap}`])).toBe(true);
+			expect(await passes(requireKioskManagement, ['shelter:SH001', `SH001:${cap}`])).toBe(true);
 		}
 	});
 
 	it('redirects other staff roles and a bare shelter scope', async () => {
 		for (const cap of ['registration_staff', 'distribution_staff', 'kitchen_staff']) {
-			expect(await passes(requireScannerManagement, ['shelter:SH001', `SH001:${cap}`])).toBe(false);
+			expect(await passes(requireKioskManagement, ['shelter:SH001', `SH001:${cap}`])).toBe(false);
 		}
-		expect(await passes(requireScannerManagement, ['shelter:SH001'])).toBe(false);
+		expect(await passes(requireKioskManagement, ['shelter:SH001'])).toBe(false);
 	});
 
 	it('is scoped to the selected shelter (AC-SBO-15)', async () => {
@@ -281,8 +281,8 @@ describe('requireScannerManagement (/back-office/scanners)', () => {
 			'SH001:kiosk_staff',
 			'SH002:registration_staff'
 		];
-		expect(await passes(requireScannerManagement, roles, 'SH001')).toBe(true);
-		expect(await passes(requireScannerManagement, roles, 'SH002')).toBe(false);
+		expect(await passes(requireKioskManagement, roles, 'SH001')).toBe(true);
+		expect(await passes(requireKioskManagement, roles, 'SH002')).toBe(false);
 	});
 });
 
@@ -296,16 +296,16 @@ describe('confineKioskStaffOnly (back-office layout, FR-SBO-29)', () => {
 	it('sends a kiosk_staff-only user from another back-office page to the scanners page', () => {
 		mocks.user = { roles: kioskOnly };
 		expect(() => confineKioskStaffOnly('/back-office/evacuee-management')).toThrow(
-			expect.objectContaining({ status: 302, location: '/back-office/scanners' })
+			expect.objectContaining({ status: 302, location: '/back-office/kiosks' })
 		);
 		expect(() => confineKioskStaffOnly('/back-office')).toThrow(
-			expect.objectContaining({ location: '/back-office/scanners' })
+			expect.objectContaining({ location: '/back-office/kiosks' })
 		);
 	});
 
 	it('lets a kiosk_staff-only user stay on the scanners page', () => {
 		mocks.user = { roles: kioskOnly };
-		expect(() => confineKioskStaffOnly('/back-office/scanners')).not.toThrow();
+		expect(() => confineKioskStaffOnly('/back-office/kiosks')).not.toThrow();
 	});
 
 	it('leaves users with another capability in the selected shelter alone', () => {

@@ -1,4 +1,4 @@
-import type { SmartCardData } from '$lib/features/scanners';
+import type { SmartCardData } from '$lib/features/kiosk-devices';
 import type { FaceCheckOutcome } from '../domain/face-check';
 
 /** The face check the walk-in face page runs, as the card page resolved it from the hardware. */

@@ -14,7 +14,7 @@ import { scopedShelterFilter } from '$lib/server/shelter-capability-access';
 import {
 	scannerDeviceInputSchema,
 	toScannerDeviceSummary
-} from '$lib/features/scanners/domain/scanner.schema';
+} from '$lib/features/kiosk-devices/domain/scanner.schema';
 
 export const prerender = false;
 

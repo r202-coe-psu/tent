@@ -1,4 +1,4 @@
-import { smartCardDataSchema } from '$lib/features/scanners/domain/scanner.schema';
+import { smartCardDataSchema } from '$lib/features/kiosk-devices/domain/scanner.schema';
 import {
 	createKioskEvacueeFromCard,
 	type CardSnapshot,

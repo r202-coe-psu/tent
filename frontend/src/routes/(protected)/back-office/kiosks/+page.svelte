@@ -15,7 +15,7 @@
 		withoutScannerPlaintext,
 		type CreatedScannerDevice,
 		type ScannerDevice
-	} from '$lib/features/scanners';
+	} from '$lib/features/kiosk-devices';
 
 	/** Every role (SA included) works on the shelter picked in the back-office shelter switcher. */
 	const activeShelter = $derived(shelterStore.selectedShelterCode ?? getShelterCode());

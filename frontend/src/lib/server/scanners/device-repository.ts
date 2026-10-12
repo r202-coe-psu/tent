@@ -12,7 +12,7 @@ import {
 	type ScannerDevicePatch,
 	type ScannerDeviceSummary,
 	type StaffPinReveal
-} from '$lib/features/scanners/domain/scanner.schema';
+} from '$lib/features/kiosk-devices/domain/scanner.schema';
 import {
 	generateScannerSecret,
 	hashScannerSecret,

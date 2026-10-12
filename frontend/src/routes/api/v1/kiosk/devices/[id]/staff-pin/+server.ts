@@ -8,7 +8,7 @@ import {
 	staffPinJson
 } from '$lib/server/scanners/staff-pin-http';
 // eslint-disable-next-line no-restricted-imports -- server-safe domain schema; feature barrel pulls client UI/query code
-import { staffPinUpdateRequestSchema } from '$lib/features/scanners/domain/scanner.schema';
+import { staffPinUpdateRequestSchema } from '$lib/features/kiosk-devices/domain/scanner.schema';
 
 export const prerender = false;
 

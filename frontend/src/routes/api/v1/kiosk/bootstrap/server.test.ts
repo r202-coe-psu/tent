@@ -1,13 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { POST } from './+server';
 import type { RequestEvent } from './$types';
-import { scannerServerRepository } from '$lib/features/scanners/server';
+import { scannerServerRepository } from '$lib/features/kiosk-devices/server';
 import { hashScannerSecret, ScannerDependencyError } from '$lib/server/scanners/device-credentials';
 import { findMasterByCode } from '$lib/server/shelters.admin';
 
-vi.mock('$lib/features/scanners/server', async () => {
-	const actual = await vi.importActual<typeof import('$lib/features/scanners/server')>(
-		'$lib/features/scanners/server'
+vi.mock('$lib/features/kiosk-devices/server', async () => {
+	const actual = await vi.importActual<typeof import('$lib/features/kiosk-devices/server')>(
+		'$lib/features/kiosk-devices/server'
 	);
 	return {
 		...actual,

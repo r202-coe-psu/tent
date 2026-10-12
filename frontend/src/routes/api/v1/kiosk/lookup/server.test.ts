@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { POST } from './+server';
 import type { RequestEvent } from './$types';
-import { scannerServerRepository } from '$lib/features/scanners/server';
+import { scannerServerRepository } from '$lib/features/kiosk-devices/server';
 import {
 	authenticateScannerDevice,
 	DEVICE_AUTH_FAILED,
@@ -30,9 +30,9 @@ vi.mock('$lib/features/kiosk/server/kiosk-thaid-gate.server', () => ({
 
 vi.mock('$lib/server/shelters.admin', () => ({ findMasterByCode: vi.fn() }));
 
-vi.mock('$lib/features/scanners/server', async () => {
-	const actual = await vi.importActual<typeof import('$lib/features/scanners/server')>(
-		'$lib/features/scanners/server'
+vi.mock('$lib/features/kiosk-devices/server', async () => {
+	const actual = await vi.importActual<typeof import('$lib/features/kiosk-devices/server')>(
+		'$lib/features/kiosk-devices/server'
 	);
 	return {
 		...actual,

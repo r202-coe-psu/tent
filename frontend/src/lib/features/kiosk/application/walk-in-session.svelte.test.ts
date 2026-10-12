@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { SmartCardData } from '$lib/features/scanners';
+import type { SmartCardData } from '$lib/features/kiosk-devices';
 import { createWalkInSession, WALK_IN_FACE_CHECK_STRICT } from './walk-in-session.svelte';
 
 const CARD = { citizen_id: '1234567890123' } as SmartCardData;

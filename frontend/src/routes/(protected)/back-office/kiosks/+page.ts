@@ -1,6 +1,6 @@
-import { requireScannerManagement } from '$lib/guards/auth';
+import { requireKioskManagement } from '$lib/guards/auth';
 import type { PageLoad } from './$types';
 
 export const load = (async ({ fetch }) => {
-	await requireScannerManagement(fetch);
+	await requireKioskManagement(fetch);
 }) satisfies PageLoad;

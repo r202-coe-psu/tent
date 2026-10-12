@@ -8,7 +8,7 @@ import {
 import { findMasterByCode } from '$lib/server/shelters.admin';
 import { isKioskThaidCheckInAllowed } from '$lib/features/kiosk/server';
 
-vi.mock('$lib/features/scanners/server', () => ({ scannerServerRepository: {} }));
+vi.mock('$lib/features/kiosk-devices/server', () => ({ scannerServerRepository: {} }));
 vi.mock('$lib/features/kiosk/server', () => ({ isKioskThaidCheckInAllowed: vi.fn() }));
 vi.mock('$lib/server/shelters.admin', () => ({ findMasterByCode: vi.fn() }));
 vi.mock('$lib/server/scanners/device-credentials', async () => {

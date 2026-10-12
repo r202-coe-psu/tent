@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { adminFetch } from '$lib/server/couch-admin';
-import { smartCardDataSchema } from '$lib/features/scanners/domain/scanner.schema';
+import { smartCardDataSchema } from '$lib/features/kiosk-devices/domain/scanner.schema';
 import {
 	decodeKioskPhoto,
 	KioskPhotoValidationError,

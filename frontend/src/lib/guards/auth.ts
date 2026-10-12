@@ -129,14 +129,14 @@ export async function requireManager(fetchFn?: typeof fetch) {
 }
 
 /** The only back-office page a kiosk_staff-only user may open (FR-SBO-29). */
-export const KIOSK_STAFF_BACKOFFICE_ROUTE = '/back-office/scanners';
+export const KIOSK_STAFF_BACKOFFICE_ROUTE = '/back-office/kiosks';
 
 /**
- * Kiosk device management (`/back-office/scanners`) guard — system_admin, or shelter_manager /
+ * Kiosk device management (`/back-office/kiosks`) guard — system_admin, or shelter_manager /
  * kiosk_staff of the selected shelter (draft CR scanner back-office FR-SBO-20). The scanner BFF
  * routes re-check scope per device.
  */
-export async function requireScannerManagement(fetchFn?: typeof fetch) {
+export async function requireKioskManagement(fetchFn?: typeof fetch) {
 	await requireAuth(fetchFn);
 	const roles = authStore.user?.roles ?? [];
 	const shelter = activeShelterCode(roles);

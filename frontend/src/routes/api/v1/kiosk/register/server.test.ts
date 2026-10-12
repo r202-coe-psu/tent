@@ -24,7 +24,7 @@ import {
 const { mockUpdateLastSeen } = vi.hoisted(() => ({
 	mockUpdateLastSeen: vi.fn().mockResolvedValue(undefined)
 }));
-vi.mock('$lib/features/scanners/server', () => ({
+vi.mock('$lib/features/kiosk-devices/server', () => ({
 	scannerServerRepository: {
 		updateDeviceLastSeen: (...args: unknown[]) => mockUpdateLastSeen(...args)
 	}

@@ -6,7 +6,7 @@ import {
 	staffPinStateOf,
 	type PersistedScannerDevice,
 	type PersistedScannerDeviceV2
-} from '$lib/features/scanners/domain/scanner.schema';
+} from '$lib/features/kiosk-devices/domain/scanner.schema';
 import { ScannerConflictError } from './device-credentials';
 import {
 	generateStaffPin,
