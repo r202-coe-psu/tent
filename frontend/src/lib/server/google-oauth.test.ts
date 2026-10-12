@@ -33,15 +33,20 @@ describe('google-oauth helpers (CR-124)', () => {
 	});
 
 	it('computes pending_mfa only when enrolled and cookie invalid', () => {
-		expect(computeMfaFlags({ enrolled: false, mfaOkValid: false })).toEqual({
+		expect(computeMfaFlags({ enrolled: false, mfaOkValid: false, stepupEnabled: true })).toEqual({
 			mfa_enrolled: false,
 			pending_mfa: false
 		});
-		expect(computeMfaFlags({ enrolled: true, mfaOkValid: false })).toEqual({
+		expect(computeMfaFlags({ enrolled: true, mfaOkValid: false, stepupEnabled: true })).toEqual({
 			mfa_enrolled: true,
 			pending_mfa: true
 		});
-		expect(computeMfaFlags({ enrolled: true, mfaOkValid: true })).toEqual({
+		// Step-up hidden (default) — enrolled users are never sent to /mfa-challenge.
+		expect(computeMfaFlags({ enrolled: true, mfaOkValid: false, stepupEnabled: false })).toEqual({
+			mfa_enrolled: true,
+			pending_mfa: false
+		});
+		expect(computeMfaFlags({ enrolled: true, mfaOkValid: true, stepupEnabled: true })).toEqual({
 			mfa_enrolled: true,
 			pending_mfa: false
 		});

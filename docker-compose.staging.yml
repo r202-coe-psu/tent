@@ -144,6 +144,8 @@ services:
       # Staff Google step-up MFA (CR-124) — server-only; never PUBLIC_*
       GOOGLE_OAUTH_CLIENT_ID: ${GOOGLE_OAUTH_CLIENT_ID:-}
       GOOGLE_OAUTH_CLIENT_SECRET: ${GOOGLE_OAUTH_CLIENT_SECRET:-}
+      # Step-up MFA after password login (/mfa-challenge) — hidden unless "true"
+      MFA_STEPUP_ENABLED: ${MFA_STEPUP_ENABLED:-false}
       # Staff ThaID step-up MFA & linked login (BORA Digital ID) — server-only; never PUBLIC_*
       THAID_OAUTH_CLIENT_ID: ${THAID_OAUTH_CLIENT_ID:-}
       THAID_OAUTH_CLIENT_SECRET: ${THAID_OAUTH_CLIENT_SECRET:-}
