@@ -557,6 +557,11 @@ export async function openSlots(page: Page, staff: Staff, mode: SlotMode) {
 	await page.getByRole('tab', { name: 'ช่วงเวลารับของ' }).click();
 	await expect(page.getByRole('heading', { name: 'ช่วงเวลารับของบริจาค' })).toBeVisible();
 	await page.getByRole('button', { name: mode, exact: true }).click();
+	// Under load the schedule and booking reads can trail past the 5 s default. Settle both
+	// first: the "คิวเต็ม" badge and the "จองแล้ว N / M" count only render once bookings load
+	// (until then each row shows "–" and the "รอข้อมูลการจองก่อน…" hint).
+	await expect(page.getByText('กำลังโหลดช่วงเวลา...')).toHaveCount(0, BOARD_SYNC);
+	await expect(page.getByText('รอข้อมูลการจองก่อน จึงจะลบได้')).toHaveCount(0, BOARD_SYNC);
 }
 
 /** Filtered on "จองแล้ว" too: the success toast is also an <li> carrying the window. */
