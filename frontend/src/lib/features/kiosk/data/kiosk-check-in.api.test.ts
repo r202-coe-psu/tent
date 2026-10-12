@@ -5,6 +5,7 @@ import {
 	KioskRequestError,
 	lookupPreRegisteredEvacuee,
 	registerKioskThaidWalkIn,
+	reprintKioskLabels,
 	registerKioskWalkIn
 } from './kiosk-check-in.api';
 
@@ -406,5 +407,60 @@ describe('registerKioskThaidWalkIn', () => {
 		await expect(
 			registerKioskThaidWalkIn('a'.repeat(32), new Date().toISOString(), null)
 		).rejects.toMatchObject({ status: 409, code: 'KIOSK_THAID_SESSION_INVALID' });
+	});
+});
+
+describe('reprintKioskLabels', () => {
+	afterEach(() => vi.unstubAllGlobals());
+
+	const input = {
+		phone: '0812345678',
+		primary_evacuee_id: 'evacuee:01ARZ3NDEKTSV4RRFFQ69G5FAV',
+		id_last4: '0123',
+		evacuee_ids: ['evacuee:01ARZ3NDEKTSV4RRFFQ69G5FAV']
+	};
+
+	it('posts the verification to the reprint endpoint and returns the labels', async () => {
+		const members = [
+			{
+				evacuee_id: input.primary_evacuee_id,
+				qr_payload: input.primary_evacuee_id,
+				label: { name: 'สมชาย ใจดี', phone: '0812345678' }
+			}
+		];
+		const fetchMock = vi.fn(async (...args: [RequestInfo | URL, RequestInit?]) => {
+			void args;
+			return new Response(JSON.stringify({ shelter_code: 'SH001', members }), { status: 200 });
+		});
+		vi.stubGlobal('fetch', fetchMock);
+
+		expect(await reprintKioskLabels(input)).toEqual({ shelter_code: 'SH001', members });
+
+		const [url, init] = fetchMock.mock.calls[0];
+		expect(url).toBe('/api/v1/kiosk/reprint');
+		expect(init?.method).toBe('POST');
+		expect(JSON.parse(String(init?.body))).toEqual(input);
+	});
+
+	it('maps an error response to a KioskRequestError with its code', async () => {
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(
+				async () =>
+					new Response(
+						JSON.stringify({
+							error: { code: 'KIOSK_REPRINT_VERIFY_FAILED', message: 'เลข 4 หลักท้ายไม่ถูกต้อง' }
+						}),
+						{ status: 403 }
+					)
+			)
+		);
+
+		await expect(reprintKioskLabels(input)).rejects.toMatchObject({
+			name: 'KioskRequestError',
+			status: 403,
+			code: 'KIOSK_REPRINT_VERIFY_FAILED',
+			message: 'เลข 4 หลักท้ายไม่ถูกต้อง'
+		});
 	});
 });

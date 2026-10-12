@@ -110,6 +110,49 @@ export async function registerKioskThaidWalkIn(
 	});
 }
 
+/** What the reprint endpoint needs: the phone, who owns it, their id's last four, the members. */
+export interface KioskReprintInput {
+	phone: string;
+	primary_evacuee_id: string;
+	id_last4: string;
+	evacuee_ids: string[];
+}
+
+export interface KioskReprintMember {
+	evacuee_id: string;
+	qr_payload: string;
+	label: { name: string; phone: string | null };
+}
+
+export interface KioskReprintResult {
+	shelter_code: string;
+	members: KioskReprintMember[];
+}
+
+/**
+ * Labels of the phone owner's checked-in household after the visitor typed the last four digits
+ * of the owner's citizen id. Read-only on the server; 403 `KIOSK_REPRINT_VERIFY_FAILED` on a miss.
+ */
+export function reprintKioskLabels(
+	input: KioskReprintInput,
+	options: { signal?: AbortSignal } = {}
+): Promise<KioskReprintResult> {
+	return requestWithTimeout(
+		'/api/v1/kiosk/reprint',
+		{
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			cache: 'no-store',
+			body: JSON.stringify(input)
+		},
+		async (response) => {
+			if (!response.ok) throw await requestError(response);
+			return (await response.json()) as KioskReprintResult;
+		},
+		options.signal
+	);
+}
+
 export class KioskRequestError extends Error {
 	constructor(
 		message: string,
