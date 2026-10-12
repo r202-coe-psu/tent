@@ -324,6 +324,38 @@ How the three full-stack suites obey §4:
   `PLAYWRIGHT_TEST_BASE_URL=http://localhost:5173 pnpm exec playwright test e2e/donation-fullstack.test.ts`
   (wait about a minute between two back-to-back runs: FastAPI's limiter is not loopback-exempt).
 
+### 8.4 Distribution suites (`@distribution`)
+
+Feature tag `@distribution`, layer `@critical`; none carries `@release` yet.
+
+| Suite                                                  | What it proves                                                                                                                                                                           |
+| ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `distribution/distribution-ticket-lifecycle.test.ts`   | Back-office ↔ desk: create → allocate → approve → dispatch → receive → hand out → close (Journey A: zero returns → COMPLETED; Journey B: warehouse credits only the verified return qty) |
+| `distribution/distribution-desk-access.test.ts`        | Who may do what: page access by role (every capability × flat/compound, SA, scope-only, cross-shelter) and VDU write permissions (no UI)                                                 |
+| `distribution/distribution-desk-handover.test.ts`      | Tab 1 receive cargo, tab 2 ready meals (duplicate / menu-mismatch overrides, lot expiry, service day, history, preflight retry), tab 3 supplies and loans                                |
+| `distribution/distribution-desk-returns-close.test.ts` | Tab 4 loan returns (physical, lost/waived, bulk pool, offline, resume) and tab 5 shift close + warehouse hand-off (incl. the "card stays on the closed ticket" regression)               |
+| `distribution/distribution-desk-flow.test.ts`          | Across tabs (point filter, badges, live updates between desks, scan-first) and a compound-role DST working every tab                                                                     |
+
+How they obey §4:
+
+- **Own shelter.** The `shelter` worker fixture (`distribution/fixtures.ts`) creates an
+  `E2E Distribution <ulid>` shelter through system management as the CouchDB admin and records
+  it with `recordCreatedShelter`. Every test seeds at its own distribution point inside it, so
+  tests never see each other's tickets. SH002 is only visited/read as "another shelter".
+- **Setup.** Ticket-level prerequisites that are not the subject of a test (a ticket already
+  dispatched, a meal already served, a counted bulk pool) are written with the admin API —
+  driving back-office for each of ~70 tests would dominate the run. The UI path itself is
+  covered end to end by Journey A/B.
+- **Teardown by id.** Users and catalog items are recorded per scenario and deleted by id after
+  each test; the shelter (registry master, database and its `shelter:{code}` grant on
+  `registry`/`catalog`) is removed when the worker ends, then `assertRunLeftNothing` fails the
+  run on any leak.
+- **Known gaps** are `test.fixme('GAP: …')` (e.g. a scan code with stray digits selects a
+  person by phone number).
+
+Run them (preview build, local CouchDB with `pnpm seed:master` + `pnpm db:sync`):
+`pnpm exec playwright test e2e/distribution`
+
 ## 9. Agent handoff
 
 ### 9.0 Rules for every agent (non-negotiable)

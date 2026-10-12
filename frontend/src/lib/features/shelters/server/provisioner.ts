@@ -1,7 +1,8 @@
 import { ulid } from '$lib/db/ulid';
 import { SHELTER_MASTER_SCHEMA_V, type Shelter, type ShelterMaster } from '../domain/schema';
-import { SHELTER_CAPABILITIES } from '$lib/auth/roles';
+import { SHELTER_CAPABILITIES, shelterScopeRole } from '$lib/auth/roles';
 import { adminRaw, ServiceError } from '$lib/server/couch-admin';
+import { CENTRAL_WRITE_POLICY_DESIGN, hasWritePolicy } from '$lib/server/central-db-security';
 import {
 	SHELTER_REGISTRY_DB,
 	deployPeopleMangoIndexes,
@@ -230,6 +231,48 @@ export interface ProvisionOptions {
 	assertActive?: () => Promise<void>;
 }
 
+const CATALOG_DB = 'catalog';
+
+/**
+ * Catalog membership also opens writes, so a shelter scope may join `catalog`
+ * only once its `validate_doc_update` is live (draft CR
+ * central-db-shelter-scope-members FR-4). `'absent'` = no catalog DB yet —
+ * `pnpm sync:central` grants every shelter scope when it creates the DB.
+ * A catalog without a write policy fails closed.
+ */
+export async function assertCatalogWritePolicy(): Promise<'ready' | 'absent'> {
+	const db = await adminRaw(`/${CATALOG_DB}`, 'GET');
+	if (db.status === 404) return 'absent';
+	assertStatus(db.status, 'catalog database', db.data);
+
+	const design = await adminRaw(`/${CATALOG_DB}/${CENTRAL_WRITE_POLICY_DESIGN.catalog}`, 'GET');
+	assertStatus(design.status, 'catalog write policy', design.data, [404]);
+	if (design.status === 404 || !hasWritePolicy(design.data)) {
+		throw new ServiceError(
+			'INTERNAL',
+			'catalog has no write policy (_design/access) — run `pnpm sync:central --write --confirm` first'
+		);
+	}
+	return 'ready';
+}
+
+/** Let the new shelter's scope read the central `catalog` (FR-2). */
+export async function grantCatalogShelterScope(
+	code: string,
+	assertActive?: () => Promise<void>
+): Promise<ProvisionStep> {
+	if ((await assertCatalogWritePolicy()) === 'absent') {
+		return { step: 'catalog-security', status: 404 };
+	}
+	await mergeShelterSecurity(
+		CATALOG_DB,
+		{ roles: ['system_admin'] },
+		{ roles: [shelterScopeRole(code)] },
+		{ assertActive }
+	);
+	return { step: 'catalog-security', status: 200 };
+}
+
 /** Provision one shelter. This is shared by the HTTP route and async worker. */
 export async function provisionShelter(
 	input: Shelter,
@@ -278,6 +321,9 @@ async function provisionShelterUnlocked(
 	const registryDb = await adminRaw(`/${SHELTER_REGISTRY_DB}`, 'PUT');
 	assertStatus(registryDb.status, 'registry database', registryDb.data, [412]);
 	await deployRegistryDesign();
+	// Fail before a code is allocated or any shelter DB exists — the catalog grant
+	// below would otherwise abort a half-provisioned shelter.
+	await assertCatalogWritePolicy();
 	const duplicateByName = await findMasterByName(input.name);
 	if (duplicateByName && duplicateByName.code !== allocatedCode) {
 		throw new ServiceError('CONFLICT', `Shelter name "${input.name}" already exists`);
@@ -350,15 +396,19 @@ async function provisionShelterUnlocked(
 	const registry = await adminRaw(`/${SHELTER_REGISTRY_DB}`, 'PUT');
 	assertStatus(registry.status, 'registry database', registry.data, [412]);
 	await assertActive?.();
+	// The registry write policy is already live: deployRegistryDesign() ran before the
+	// first lookup above, so widening membership here grants read only.
 	await mergeShelterSecurity(
 		SHELTER_REGISTRY_DB,
 		{ roles: ['system_admin'] },
-		{ roles: [...SHELTER_CAPABILITIES] },
+		{ roles: [...SHELTER_CAPABILITIES, shelterScopeRole(code)] },
 		{ assertActive }
 	);
 	await assertActive?.();
 	const registryDesign = await deployRegistryDesign();
 	steps.push({ step: 'registry-design', status: registryDesign.status });
+	await assertActive?.();
+	steps.push(await grantCatalogShelterScope(code, assertActive));
 
 	const existingMaster = await findMasterByCode(code);
 	if (!existingMaster) {

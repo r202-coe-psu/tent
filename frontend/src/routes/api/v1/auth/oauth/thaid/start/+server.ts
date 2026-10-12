@@ -13,6 +13,7 @@ import {
 
 import { isKioskThaidCheckInAllowed } from '$lib/features/kiosk/server';
 import { getScanSession } from '$lib/server/thaid-scan-session';
+import { isMfaStepupEnabled } from '$lib/server/google-oauth';
 import { isThaidRegistrationEnabled } from '$lib/server/thaid-registration-gate';
 
 export const prerender = false;
@@ -57,6 +58,8 @@ async function requireStartableKioskSession(rawSessionId: string | null): Promis
 export const GET: RequestHandler = async ({ url, fetch, cookies }) => {
 	try {
 		const mode = parseMode(url.searchParams.get('mode'));
+		// Step-up MFA is hidden unless MFA_STEPUP_ENABLED — nothing to challenge.
+		if (mode === 'stepup' && !isMfaStepupEnabled()) throw redirect(302, '/portal');
 
 		// Operator kill-switch: hide/block new ThaiD entry points (not MFA step-up).
 		// Run before getThaidOAuthConfig so disabled still redirects cleanly when keys are missing.
