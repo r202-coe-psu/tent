@@ -9,6 +9,11 @@ const session = {
 	consentedAt: new Date().toISOString()
 };
 const card = { citizen_id: '1234567890123' } as never;
+const registration = {
+	evacuee_id: 'evacuee:01',
+	qr_payload: 'qr-payload',
+	label: { name: 'สมชาย ใจดี', phone: '0812345678' }
+};
 
 describe('registerWalkInCardRead', () => {
 	it('rejects a different card without submitting it', async () => {
@@ -24,14 +29,15 @@ describe('registerWalkInCardRead', () => {
 		const register = vi
 			.fn()
 			.mockRejectedValueOnce(new Error('บริการไม่พร้อมใช้งาน'))
-			.mockResolvedValueOnce({ evacuee_id: 'evacuee:01' });
+			.mockResolvedValueOnce(registration);
 
 		await expect(registerWalkInCardRead(card, session, register)).resolves.toMatchObject({
 			kind: 'error',
 			message: 'บริการไม่พร้อมใช้งาน'
 		});
 		await expect(registerWalkInCardRead(card, session, register)).resolves.toEqual({
-			kind: 'registered'
+			kind: 'registered',
+			registration
 		});
 		expect(register).toHaveBeenCalledTimes(2);
 	});
@@ -58,9 +64,10 @@ describe('submitWalkInThaid', () => {
 	};
 
 	it('sends the session id, consent time and phone', async () => {
-		const register = vi.fn().mockResolvedValue({ evacuee_id: 'evacuee:01' });
+		const register = vi.fn().mockResolvedValue(registration);
 		await expect(submitWalkInThaid(thaidSession, register)).resolves.toEqual({
-			kind: 'registered'
+			kind: 'registered',
+			registration
 		});
 		expect(register).toHaveBeenCalledWith('a'.repeat(32), thaidSession.consentedAt, '0812345678');
 	});

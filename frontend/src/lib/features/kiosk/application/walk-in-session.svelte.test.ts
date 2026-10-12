@@ -80,3 +80,24 @@ describe('walkInSession sources and phone', () => {
 		expect(session.active).toBe(false);
 	});
 });
+
+describe('walkInSession registration hand-over', () => {
+	it('clear() and begin() forget the registration the done page prints from', () => {
+		const session = consentedSession();
+		session.registration = {
+			evacuee_id: 'evacuee:01',
+			qr_payload: 'qr-payload',
+			label: { name: 'สมชาย ใจดี', phone: null }
+		};
+		session.clear();
+		expect(session.registration).toBeNull();
+
+		session.registration = {
+			evacuee_id: 'evacuee:02',
+			qr_payload: 'qr-payload-2',
+			label: { name: 'สมหญิง ใจดี', phone: null }
+		};
+		session.begin(CARD.citizen_id);
+		expect(session.registration).toBeNull();
+	});
+});

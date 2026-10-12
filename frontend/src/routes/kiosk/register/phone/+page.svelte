@@ -82,6 +82,7 @@
 		const outcome = await submitWalkIn(walkInSession);
 		if (outcome.kind === 'registered') {
 			registered = true;
+			walkInSession.registration = outcome.registration;
 			await goto(resolve(`/kiosk/register/done${contextQuery}`));
 			return;
 		}
