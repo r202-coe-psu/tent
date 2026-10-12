@@ -291,7 +291,7 @@
 					headingTag="h1"
 					role="status"
 				>
-					<p>ยังไม่ได้ลงทะเบียน — ใช้บัตรประชาชนหรือ ThaiD</p>
+					<p>{session.blockedReason}</p>
 					{#snippet actions()}
 						<Button
 							type="button"

@@ -270,7 +270,8 @@ describe('lookupPreRegisteredEvacuee phone gate', () => {
 		const head = evacuee(0, { current_stay: { status: 'active' } });
 		const waiting = evacuee(1, { phone: null });
 		const left = evacuee(2, { phone: null, current_stay: { status: 'checked_out' } });
-		setHousehold([head, waiting, left], head);
+		const away = evacuee(4, { phone: null, current_stay: { status: 'temporary_leave' } });
+		setHousehold([head, waiting, left, away], head);
 		setHousehold([evacuee(3, { current_stay: { status: 'pre_registered' } })]);
 
 		const result = await lookupPreRegisteredEvacuee(shelterCode, { source: 'phone', phone });
@@ -278,7 +279,7 @@ describe('lookupPreRegisteredEvacuee phone gate', () => {
 		expect(
 			result.candidates.map(({ member_count, pending_count }) => [member_count, pending_count])
 		).toEqual([
-			[2, 1],
+			[3, 1],
 			[1, 0]
 		]);
 	});
@@ -341,7 +342,8 @@ describe('lookupPreRegisteredEvacuee phone gate', () => {
 		});
 		const waiting = evacuee(2, { phone: null, current_stay: { status: 'pre_registered' } });
 		const gone = evacuee(3, { phone: null, current_stay: { status: 'checked_out' } });
-		setHousehold([walkIn, active, waiting, gone], walkIn);
+		const away = evacuee(4, { phone: null, current_stay: { status: 'temporary_leave' } });
+		setHousehold([walkIn, active, waiting, gone, away], walkIn);
 
 		const result = await lookupPreRegisteredEvacuee(shelterCode, { source: 'phone', phone });
 		if (result.kind !== 'household') throw new Error('expected household');
@@ -349,7 +351,8 @@ describe('lookupPreRegisteredEvacuee phone gate', () => {
 		expect(result.members.map(({ evacuee_id, selectable }) => [evacuee_id, selectable])).toEqual([
 			[walkIn._id, true],
 			[active._id, true],
-			[waiting._id, false]
+			[waiting._id, false],
+			[away._id, false]
 		]);
 	});
 

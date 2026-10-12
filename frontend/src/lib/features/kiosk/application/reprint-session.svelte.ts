@@ -9,6 +9,7 @@ import {
 	type KioskReprintResult
 } from '../data/kiosk-check-in.api';
 import { isKioskPhoneSubmittable } from '../domain/phone';
+import { REPRINT_NOBODY_REASON, REPRINT_PRE_REGISTERED_REASON } from '../domain/check-in-status';
 import { selectableIds, isAllSelected, toggleAllSelection } from '../domain/household-selection';
 import type { KioskPrintFlowResult } from './kiosk-print-flow';
 
@@ -116,6 +117,13 @@ export class ReprintSession {
 	/** Nobody in this household has been registered at the kiosk yet: nothing to print. */
 	get blocked(): boolean {
 		return this.step === 'members' && selectableIds(this.members).length === 0;
+	}
+
+	/** Banner text for a blocked household: pre-registered wording only if everyone is. */
+	get blockedReason(): string {
+		const everyonePreRegistered =
+			this.members.length > 0 && this.members.every((m) => m.status === 'pre_registered');
+		return everyonePreRegistered ? REPRINT_PRE_REGISTERED_REASON : REPRINT_NOBODY_REASON;
 	}
 
 	get allSelected(): boolean {

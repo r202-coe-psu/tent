@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { isAlreadyCheckedInStatus, isListedHouseholdMember } from '../domain/check-in-status';
+import { isListedHouseholdMember, isReprintableStatus } from '../domain/check-in-status';
 import { normalizeKioskPhone, phoneVariants } from '../domain/phone';
 import { shelterDbName } from '$lib/server/shelter-access-design';
 import {
@@ -115,7 +115,7 @@ export async function reprintKioskLabels(
 			) ||
 			!isKioskEligibleChannel(member) ||
 			!isListedHouseholdMember(member) ||
-			!isAlreadyCheckedInStatus(member.current_stay?.status)
+			!isReprintableStatus(member.current_stay?.status)
 		) {
 			continue;
 		}

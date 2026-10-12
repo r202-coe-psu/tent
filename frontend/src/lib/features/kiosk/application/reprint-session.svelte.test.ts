@@ -139,6 +139,38 @@ describe('ReprintSession phone step', () => {
 		expect(session.step).toBe('phone');
 	});
 
+	it('explains a block with the pre-registered wording when everyone is pre-registered', async () => {
+		const lookup = vi.fn<ReprintSessionDeps['lookup']>().mockResolvedValue({
+			...HOUSEHOLD,
+			members: [
+				member('EV3', 'pre_registered', false, true),
+				member('EV4', 'pre_registered', false)
+			]
+		} as KioskLookupResponse);
+		const { session } = setup({ lookup });
+		session.phone = '0812345678';
+		await session.submitPhone();
+
+		expect(session.blocked).toBe(true);
+		expect(session.blockedReason).toBe('ยังไม่ได้ลงทะเบียน — ใช้บัตรประชาชนหรือ ThaiD');
+	});
+
+	it('blocks with the generic wording when someone is on temporary leave', async () => {
+		const lookup = vi.fn<ReprintSessionDeps['lookup']>().mockResolvedValue({
+			...HOUSEHOLD,
+			members: [
+				member('EV3', 'pre_registered', false, true),
+				member('EV4', 'temporary_leave', false)
+			]
+		} as KioskLookupResponse);
+		const { session } = setup({ lookup });
+		session.phone = '0812345678';
+		await session.submitPhone();
+
+		expect(session.blocked).toBe(true);
+		expect(session.blockedReason).toBe('ไม่มีผู้ที่พิมพ์ QR ได้ กรุณาติดต่อเจ้าหน้าที่');
+	});
+
 	it.each([
 		['PRE_REGISTRATION_NOT_FOUND', 404, 'ไม่พบข้อมูลที่ลงทะเบียนด้วยเบอร์นี้'],
 		['KIOSK_RATE_LIMITED', 429, 'ลองผิดหลายครั้ง กรุณารอสักครู่หรือติดต่อเจ้าหน้าที่'],

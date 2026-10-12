@@ -20,7 +20,8 @@ const ids = [
 	'01ARZ3NDEKTSV4RRFFQ69G5FAX',
 	'01ARZ3NDEKTSV4RRFFQ69G5FAY',
 	'01ARZ3NDEKTSV4RRFFQ69G5FAZ',
-	'01ARZ3NDEKTSV4RRFFQ69G5FB0'
+	'01ARZ3NDEKTSV4RRFFQ69G5FB0',
+	'01ARZ3NDEKTSV4RRFFQ69G5FB1'
 ].map((ulid) => `evacuee:${ulid}`);
 
 interface Fixture {
@@ -149,12 +150,13 @@ describe('reprintKioskLabels', () => {
 			evacuee(1, { household_id: 'household:B' }),
 			evacuee(2, { current_stay: { status: 'pre_registered' } }),
 			evacuee(3, { current_stay: { status: 'checked_out' } }),
-			evacuee(4, { registered_via: 'station_1' })
+			evacuee(4, { registered_via: 'station_1' }),
+			evacuee(5, { current_stay: { status: 'temporary_leave' } })
 		];
 
 		const members = await reprintKioskLabels(
 			shelterCode,
-			input({ evacuee_ids: [ids[0], ids[1], ids[2], ids[3], ids[4], ids[5]] })
+			input({ evacuee_ids: [ids[0], ids[1], ids[2], ids[3], ids[4], ids[5], ids[6]] })
 		);
 
 		expect(members.map((member) => member.evacuee_id)).toEqual([ids[0]]);

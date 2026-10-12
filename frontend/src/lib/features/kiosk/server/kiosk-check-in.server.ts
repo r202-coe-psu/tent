@@ -1,7 +1,11 @@
 import { z } from 'zod';
 import { now } from '$lib/db/model';
 import { deriveHouseholdStatus, stayStatusSchema } from '$lib/features/people/domain/people';
-import { isAlreadyCheckedInStatus, isListedHouseholdMember } from '../domain/check-in-status';
+import {
+	isAlreadyCheckedInStatus,
+	isListedHouseholdMember,
+	isReprintableStatus
+} from '../domain/check-in-status';
 import { normalizeKioskPhone, phoneVariants } from '../domain/phone';
 import {
 	groupPhoneMatches,
@@ -204,14 +208,14 @@ export function isKioskEligibleChannel(doc: Pick<EvacueeDoc, 'registered_via'>):
 
 /**
  * What a household member can be selected for: a check-in (`pre_registered` only, the card / QR /
- * ThaiD gates) or a QR reprint (already checked in only, the phone gate).
+ * ThaiD gates) or a QR reprint (arriving / active / room_confirmed only, the phone gate).
  */
 type SelectableFor = 'check_in' | 'reprint';
 
 function isSelectableFor(doc: EvacueeDoc, mode: SelectableFor): boolean {
 	if (!isKioskEligibleChannel(doc)) return false;
 	const status = doc.current_stay?.status;
-	return mode === 'reprint' ? isAlreadyCheckedInStatus(status) : status === 'pre_registered';
+	return mode === 'reprint' ? isReprintableStatus(status) : status === 'pre_registered';
 }
 
 function toSummary(

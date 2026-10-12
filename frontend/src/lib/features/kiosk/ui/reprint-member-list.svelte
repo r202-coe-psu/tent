@@ -3,6 +3,10 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 	import type { KioskEvacueeSummary } from '../data/kiosk-check-in.api';
+	import {
+		REPRINT_PRE_REGISTERED_REASON,
+		reprintUnavailableReason
+	} from '../domain/check-in-status';
 	import { KIOSK_NOTICE_SECONDARY_ACTION } from './kiosk-notice-actions';
 
 	interface Props {
@@ -29,12 +33,16 @@
 		return [member.first_name, member.last_name].filter(Boolean).join(' ') || 'ไม่ระบุชื่อ';
 	}
 
-	function statusLabel(status: string): string {
+	function statusLabel(member: Pick<KioskEvacueeSummary, 'status' | 'selectable'>): string {
+		const { status } = member;
+		if (!member.selectable) {
+			const reason = reprintUnavailableReason(status);
+			if (reason) return reason;
+		}
 		if (status === 'arriving') return 'รายงานตัวแล้ว · รอคัดกรอง';
 		if (status === 'room_confirmed') return 'ยืนยันที่พักแล้ว';
-		if (status === 'temporary_leave') return 'ออกไปชั่วคราว';
 		if (status === 'active') return 'เข้าพักแล้ว';
-		return 'ยังไม่ได้ลงทะเบียน — ใช้บัตรประชาชนหรือ ThaiD';
+		return REPRINT_PRE_REGISTERED_REASON;
 	}
 </script>
 
@@ -113,7 +121,7 @@
 						{#if member.selectable}
 							{member.age === null ? 'ไม่ระบุอายุ' : `${member.age} ปี`}
 							<span class="mx-1" aria-hidden="true">·</span>
-						{/if}{statusLabel(member.status)}
+						{/if}{statusLabel(member)}
 					</p>
 				</div>
 			</label>
