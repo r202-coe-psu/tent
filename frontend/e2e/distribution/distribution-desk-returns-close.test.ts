@@ -4,8 +4,9 @@
  * T5-1 (zero returns → COMPLETED) is Journey A in distribution-ticket-lifecycle.test.ts.
  */
 
-import type { Page } from '@playwright/test';
+import type { Page, Route } from '@playwright/test';
 import { subQty } from '../../src/lib/utils/qty';
+import { COUCH_BASE } from '../helpers/couch';
 import { injectSession } from '../helpers/login';
 import { expect, test } from './fixtures';
 import { expectTicketLogs, expectTicketStatus, ledgerRows } from './checks';
@@ -293,7 +294,10 @@ test.describe('Tab 4 — loan return counter (plan §4.6)', { tag: DESK_TAGS }, 
 		const { desk, item, logId } = await issueLoan(page, scenario, '2');
 
 		// Central drops: every app → CouchDB request fails, so the desk marks itself disconnected.
-		await page.route('**/couch/**', (route) => route.abort('internetdisconnected'));
+		// The browser requests COUCH_BASE directly (the `/couch` hop happens inside the helper's
+		// route.fetch), so abort there; a later route runs before the helper's.
+		const centralDown = (route: Route) => route.abort('internetdisconnected');
+		await page.route(`${COUCH_BASE}/**`, centralDown);
 		await desk.loanCard(item.name).getByRole('button', { name: 'รับคืนจากผู้ยืม' }).click();
 		const dialog = page.getByRole('dialog', { name: /ตรวจรับคืนพัสดุเข้าคลัง/ });
 		await dialog.getByLabel(/จำนวนที่ตรวจรับคืนครั้งนี้/).fill('2');
@@ -307,7 +311,7 @@ test.describe('Tab 4 — loan return counter (plan §4.6)', { tag: DESK_TAGS }, 
 
 		// Back online: the live `_changes` poll reconnects the desk without a reload (the
 		// banner's retry button sits under the dialog's overlay).
-		await page.unroute('**/couch/**');
+		await page.unroute(`${COUCH_BASE}/**`, centralDown); // keep the helper's own route
 		await expect(page.getByText('เชื่อมต่อเซิร์ฟเวอร์ไม่ได้', { exact: false })).toBeHidden({
 			timeout: 20_000
 		});

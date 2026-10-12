@@ -163,6 +163,10 @@ test.describe(
 
 				await expect(watcher.itemButton(item.name)).toContainText('เหลือ 7', { timeout: 15_000 });
 			} finally {
+				// The watcher's `_changes` long-poll may still be in flight inside the route handler.
+				await Promise.all(
+					otherContext.pages().map((p) => p.unrouteAll({ behavior: 'ignoreErrors' }))
+				);
 				await otherContext.close();
 			}
 		});
