@@ -254,7 +254,7 @@ describe('lookupPreRegisteredEvacuee phone gate', () => {
 					primary_evacuee_id: earlier._id,
 					contact_display: 'ต้น นา****ว',
 					member_count: 3,
-					pending_count: 2
+					pending_count: 0
 				},
 				{
 					primary_evacuee_id: later._id,
@@ -264,6 +264,23 @@ describe('lookupPreRegisteredEvacuee phone gate', () => {
 				}
 			]
 		});
+	});
+
+	it('counts only reprintable (already checked-in) members as pending_count', async () => {
+		const head = evacuee(0, { current_stay: { status: 'active' } });
+		const waiting = evacuee(1, { phone: null });
+		const left = evacuee(2, { phone: null, current_stay: { status: 'checked_out' } });
+		setHousehold([head, waiting, left], head);
+		setHousehold([evacuee(3, { current_stay: { status: 'pre_registered' } })]);
+
+		const result = await lookupPreRegisteredEvacuee(shelterCode, { source: 'phone', phone });
+		if (result.kind !== 'candidates') throw new Error('expected candidates');
+		expect(
+			result.candidates.map(({ member_count, pending_count }) => [member_count, pending_count])
+		).toEqual([
+			[2, 1],
+			[1, 0]
+		]);
 	});
 
 	it('counts candidates with one exact household query per group and never uses $in', async () => {
@@ -278,7 +295,7 @@ describe('lookupPreRegisteredEvacuee phone gate', () => {
 		const candidateQueries = queryBodies.filter(
 			({ selector }) => typeof selector.household_id === 'string'
 		);
-		expect(queryBodies).toHaveLength(5); // two phone variants plus three household groups
+		expect(queryBodies).toHaveLength(7); // 2 channels x 2 phone variants plus three household groups
 		expect(candidateQueries).toHaveLength(3);
 		expect(candidateQueries.map(({ selector }) => selector.household_id).sort()).toEqual([
 			'household:0',
@@ -315,6 +332,44 @@ describe('lookupPreRegisteredEvacuee phone gate', () => {
 		).toEqual({ kind: 'too_many' });
 	});
 
+	it('finds a kiosk walk-in by phone and lets only checked-in members be reprinted', async () => {
+		const walkIn = evacuee(0, { registered_via: 'kiosk', current_stay: { status: 'arriving' } });
+		const active = evacuee(1, {
+			phone: null,
+			registered_via: 'kiosk',
+			current_stay: { status: 'active' }
+		});
+		const waiting = evacuee(2, { phone: null, current_stay: { status: 'pre_registered' } });
+		const gone = evacuee(3, { phone: null, current_stay: { status: 'checked_out' } });
+		setHousehold([walkIn, active, waiting, gone], walkIn);
+
+		const result = await lookupPreRegisteredEvacuee(shelterCode, { source: 'phone', phone });
+		if (result.kind !== 'household') throw new Error('expected household');
+		expect(result.primary_evacuee_id).toBe(walkIn._id);
+		expect(result.members.map(({ evacuee_id, selectable }) => [evacuee_id, selectable])).toEqual([
+			[walkIn._id, true],
+			[active._id, true],
+			[waiting._id, false]
+		]);
+	});
+
+	it('keeps pre_registered-only selectable semantics for card lookups', async () => {
+		const walkIn = evacuee(0, { registered_via: 'kiosk', current_stay: { status: 'arriving' } });
+		const waiting = evacuee(1, {
+			phone: null,
+			person_id: { number: '1111111111111' },
+			current_stay: { status: 'pre_registered' }
+		});
+		setHousehold([walkIn, waiting], walkIn);
+
+		const result = await lookupPreRegisteredEvacuee(shelterCode, {
+			source: 'smart-card',
+			citizen_id: '1234567890123'
+		});
+		if (result.kind !== 'household') throw new Error('expected household');
+		expect(result.members.map(({ selectable }) => selectable)).toEqual([false, true]);
+	});
+
 	it('follows Mango bookmarks so a full first page from one large household is not mistaken for many matches', async () => {
 		const head = evacuee(0);
 		setHousehold([head]);
@@ -341,7 +396,7 @@ describe('lookupPreRegisteredEvacuee phone gate', () => {
 
 		const result = await lookupPreRegisteredEvacuee(shelterCode, { source: 'phone', phone });
 		expect(result).toMatchObject({ kind: 'household', primary_evacuee_id: head._id });
-		expect(phoneQueryCount).toBe(2);
+		expect(phoneQueryCount).toBe(3); // two pages for web, then one for kiosk
 	});
 
 	it('fails closed when a full Mango page has no continuation bookmark', async () => {
@@ -392,7 +447,7 @@ describe('lookupPreRegisteredEvacuee phone gate', () => {
 		});
 	});
 
-	it('queries only the authenticated shelter and web records with exact canonical and legacy values', async () => {
+	it('queries only the authenticated shelter and web/kiosk records with exact canonical and legacy values', async () => {
 		await lookupPreRegisteredEvacuee(shelterCode, { source: 'phone', phone });
 		const queryCalls = mockAdminFetch.mock.calls.filter(([path]) => path.endsWith('/_find'));
 		const bodies = queryCalls.map(
@@ -400,12 +455,16 @@ describe('lookupPreRegisteredEvacuee phone gate', () => {
 				JSON.parse(String(init?.body)) as { selector: Record<string, unknown>; fields: string[] }
 		);
 
-		expect(bodies.map(({ selector }) => selector.phone)).toEqual([phone, '+66812345678']);
+		expect(bodies.map(({ selector }) => [selector.registered_via, selector.phone])).toEqual([
+			['web', phone],
+			['web', '+66812345678'],
+			['kiosk', phone],
+			['kiosk', '+66812345678']
+		]);
 		for (const { selector, fields } of bodies) {
 			expect(selector).toMatchObject({
 				type: 'evacuee',
-				shelter_code: shelterCode,
-				registered_via: 'web'
+				shelter_code: shelterCode
 			});
 			expect(fields).toContain('type');
 			expect(fields).toContain('privacy');
@@ -429,7 +488,7 @@ describe('lookupPreRegisteredEvacuee phone gate', () => {
 
 		const result = await lookupPreRegisteredEvacuee(shelterCode, { source: 'phone', phone });
 
-		expect(queriedPhones).toEqual([phone, '+66812345678']);
+		expect(queriedPhones).toEqual([phone, '+66812345678', phone, '+66812345678']);
 		expect(result).toMatchObject({ kind: 'household', primary_evacuee_id: matchingMember._id });
 		if (result.kind === 'household') {
 			expect(result.members.map((member) => member.evacuee_id)).toEqual([matchingMember._id]);

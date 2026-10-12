@@ -20,7 +20,7 @@ import {
 } from './kiosk-photo.server';
 
 const ULID = '[0-7][0-9A-HJKMNP-TV-Z]{25}';
-const evacueeIdSchema = z.string().regex(new RegExp(`^evacuee:${ULID}$`, 'i'));
+export const evacueeIdSchema = z.string().regex(new RegExp(`^evacuee:${ULID}$`, 'i'));
 
 const thaidSessionIdSchema = z.string().regex(/^[0-9a-f]{32}$/);
 
@@ -92,7 +92,7 @@ export const kioskCheckInInputSchema = z
 	});
 
 type Stay = { status?: string; zone?: string | null; since?: string };
-type EvacueeDoc = {
+export type EvacueeDoc = {
 	_id: string;
 	_rev?: string;
 	type?: string;
@@ -198,17 +198,29 @@ function responseStatus(error: unknown): number | null {
  */
 const KIOSK_ELIGIBLE_CHANNELS: readonly string[] = ['web', 'kiosk'];
 
-function isKioskEligibleChannel(doc: Pick<EvacueeDoc, 'registered_via'>): boolean {
+export function isKioskEligibleChannel(doc: Pick<EvacueeDoc, 'registered_via'>): boolean {
 	return doc.registered_via !== undefined && KIOSK_ELIGIBLE_CHANNELS.includes(doc.registered_via);
+}
+
+/**
+ * What a household member can be selected for: a check-in (`pre_registered` only, the card / QR /
+ * ThaiD gates) or a QR reprint (already checked in only, the phone gate).
+ */
+type SelectableFor = 'check_in' | 'reprint';
+
+function isSelectableFor(doc: EvacueeDoc, mode: SelectableFor): boolean {
+	if (!isKioskEligibleChannel(doc)) return false;
+	const status = doc.current_stay?.status;
+	return mode === 'reprint' ? isAlreadyCheckedInStatus(status) : status === 'pre_registered';
 }
 
 function toSummary(
 	doc: EvacueeDoc,
 	primaryId: string,
-	options: { matchedPhoneIds?: ReadonlySet<string> } = {}
+	options: { matchedPhoneIds?: ReadonlySet<string>; selectableFor?: SelectableFor } = {}
 ): KioskEvacueeSummary {
 	const status = doc.current_stay?.status ?? 'unknown';
-	const selectable = isKioskEligibleChannel(doc) && status === 'pre_registered';
+	const selectable = isSelectableFor(doc, options.selectableFor ?? 'check_in');
 	return {
 		evacuee_id: doc._id,
 		first_name: doc.first_name ?? '',
@@ -265,7 +277,7 @@ async function expandHousehold(
 	return members;
 }
 
-async function getById(dbName: string, id: string): Promise<EvacueeDoc | null> {
+export async function getById(dbName: string, id: string): Promise<EvacueeDoc | null> {
 	try {
 		const doc = await adminFetch<EvacueeDoc>(`/${dbName}/${encodeURIComponent(id)}`);
 		return isEvacueeDoc(doc) ? doc : null;
@@ -285,13 +297,16 @@ async function lookupByPhone(
 
 	const dbName = shelterDbName(shelterCode);
 	const variants = phoneVariants(canonical);
-	// Query each stored representation with equality so CouchDB can use the
-	// (type, phone) index. The second query covers legacy +66 values.
+	// Query each channel x stored representation with equality so CouchDB can use the
+	// (type, phone) index. The +66 variant covers legacy values; `kiosk` covers walk-ins.
 	const pageLimit = 50;
 	const maxPages = 20;
 	const docsById = new Map<string, EvacueeDoc>();
 	let truncated = false;
-	for (const phone of variants) {
+	const queries = KIOSK_ELIGIBLE_CHANNELS.flatMap((channel) =>
+		variants.map((phone) => ({ channel, phone }))
+	);
+	for (const { channel, phone } of queries) {
 		let bookmark: string | undefined;
 		for (let page = 0; page < maxPages; page += 1) {
 			const result = await adminFetch<{ docs?: unknown[]; bookmark?: string }>(`/${dbName}/_find`, {
@@ -300,7 +315,7 @@ async function lookupByPhone(
 					selector: {
 						type: 'evacuee',
 						shelter_code: shelterCode,
-						registered_via: 'web',
+						registered_via: channel,
 						phone
 					},
 					fields: [
@@ -411,10 +426,9 @@ async function lookupByPhone(
 						.filter(Boolean)
 						.join(' '),
 					member_count: visibleMembers.length,
-					pending_count: visibleMembers.filter(
-						(member) =>
-							member.registered_via === 'web' && member.current_stay?.status === 'pre_registered'
-					).length
+					// Phone is the reprint gate: counts members whose QR can be reprinted.
+					pending_count: visibleMembers.filter((member) => isSelectableFor(member, 'reprint'))
+						.length
 				};
 			});
 			return { kind: 'candidates', shelter_code: shelterCode, candidates };
@@ -432,7 +446,9 @@ async function lookupByPhone(
 		name_masked: true,
 		shelter_code: shelterCode,
 		primary_evacuee_id: primary._id,
-		members: members.map((member) => toSummary(member, primary._id, { matchedPhoneIds }))
+		members: members.map((member) =>
+			toSummary(member, primary._id, { matchedPhoneIds, selectableFor: 'reprint' })
+		)
 	};
 }
 
