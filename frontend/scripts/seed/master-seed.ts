@@ -20,6 +20,7 @@ import { DEFAULT_REPLENISHMENT_POLICIES } from '$lib/features/sop-ratios/domain/
 import { DEFAULT_REQUIREMENT_GROUPS } from '$lib/features/sop-ratios/domain/requirement-group.fixture';
 import { now } from '$lib/db/model';
 import { ulid } from '$lib/db/ulid';
+import { LEGACY_CENTRAL_MEMBER_ROLES } from '$lib/server/central-db-security';
 import { bulkDocs, couchReq, ensureDb, putDoc, setSecurity } from './couch';
 import { MASTER_DATA_DEFS } from './master-defs';
 import { type MasterLookup } from './types';
@@ -498,10 +499,7 @@ export async function seedCatalog(): Promise<Map<string, string>> {
 	await ensureDb('catalog');
 	await setSecurity('catalog', {
 		admins: { names: [], roles: ['system_admin'] },
-		members: {
-			names: [],
-			roles: ['shelter_manager', 'registration_staff', 'kitchen_staff', 'warehouse_staff']
-		}
+		members: { names: [], roles: [...LEGACY_CENTRAL_MEMBER_ROLES] }
 	});
 
 	const ddocId = '_design/access';

@@ -804,9 +804,13 @@
 					</div>
 				{/if}
 
+				<!-- Pin the acted-on ticket: the fallback selection follows the food/supplies tabs and
+					 would swap the card to another ticket once this one leaves DISTRIBUTING. -->
 				<ShiftReconciliationCard
 					ticket={activeReconciliationTicket}
 					shelterCode={currentShelterCode}
+					onShiftClosed={(t) => (pickedReconciliationTicketId = t._id)}
+					onReturnsSubmitted={(t) => (pickedReconciliationTicketId = t._id)}
 				/>
 			{/if}
 		</div>

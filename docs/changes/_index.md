@@ -2,7 +2,7 @@
 title: Change Records — Index
 status: active
 created: 2026-06-16
-updated: 2026-10-11 # CR-163 approved (kiosk ThaiD check-in)
+updated: 2026-10-12 # CR-164 approved (central db shelter scope members)
 
 note: ดัชนี Change Record ทุกตัว — กติกาอยู่ใน ../change-management.md
 ---
@@ -21,13 +21,10 @@ CR แต่ละตัวเก็บในโฟลเดอร์ตาม�
 
 | หมวด                                             | โฟลเดอร์                             | จำนวน CR |
 | ------------------------------------------------ | ------------------------------------ | -------- |
-| [00-baseline — Baseline (FR-1–20)](#00-baseline) | [`00-baseline/`](00-baseline/)       | 27       |
-| [01-core — Platform/Core](#01-core)              | [`01-core/`](01-core/)               | 28       |
-| [02-people — Household & Zoning](#02-people)     | [`02-people/`](02-people/)           | 8        |
-| [03-C — Supply & Inventory](#03-c-supply)        | [`03-C-supply/`](03-C-supply/)       | 23       |
-| [01-core — Platform/Core](#01-core)              | [`01-core/`](01-core/)               | 27       |
+| [00-baseline — Baseline (FR-1–20)](#00-baseline) | [`00-baseline/`](00-baseline/)       | 28       |
+| [01-core — Platform/Core](#01-core)              | [`01-core/`](01-core/)               | 30       |
 | [02-people — Household & Zoning](#02-people)     | [`02-people/`](02-people/)           | 9        |
-| [03-C — Supply & Inventory](#03-c-supply)        | [`03-C-supply/`](03-C-supply/)       | 22       |
+| [03-C — Supply & Inventory](#03-c-supply)        | [`03-C-supply/`](03-C-supply/)       | 23       |
 | [04-donation — Donation](#04-donation)           | [`04-donation/`](04-donation/)       | 11       |
 | [05-D — Kitchen & Food](#05-d-kitchen)           | [`05-D-kitchen/`](05-D-kitchen/)     | 12       |
 | [06-A — Volunteer](#06-a-volunteer)              | [`06-A-volunteer/`](06-A-volunteer/) | 8        |
@@ -107,6 +104,7 @@ CR แต่ละตัวเก็บในโฟลเดอร์ตาม�
 | [CR-141](01-core/CR-141-oauth-first-login-link.md)                                     | OAuth-first staff login — `config:app.password_login_enabled` (default off) ซ่อน password form บน `/login`, hidden `/admin-login`, OAuth ที่ยังไม่ผูก → `/login/link` ผูกเข้าบัญชีใหม่ (must_change_password) ด้วย username/password → force-setup; admin create บังคับ must_change_password; supersede CR-124 FR-09a — no schema_v bump                            | approved   | stable                             | 2026-09-29                                    | docs/data/schema.md §3.2, docs/data/api-contract.md §1.1, CR-124, frontend login feature + routes login/admin-login/login/link, api/v1/auth/oauth/*/callback, api/v1/auth/link-account, api/public/v1/login-methods, api/v1/users, shared app-config                                                                                                                            |
 | [CR-142](01-core/CR-142-configurable-system-banner.md)                                 | System banner ตั้งค่าได้ — `config:app.banner_enabled/banner_message/banner_variant` (เปิด/ปิด · ข้อความ ≤120 · สี success/warning/destructive/info; ไม่มีข้อความ = ไม่แสดง), หน้า System Management ใหม่ + public BFF `GET /api/public/v1/system-banner` — no schema_v bump                                                                                        | done       | volatile                           | 2026-10-01                                    | docs/data/schema.md §3.2, docs/data/api-contract.md, frontend shared app-config + system-banner, routes/+layout.svelte, app.css, system-management/system-banner, api/v1/app-config, api/public/v1/system-banner                                                                                                                                                                |
 | [CR-161](01-core/CR-161-distribution-staff-role.md)                                    | เพิ่มบทบาท `distribution_staff` (เจ้าหน้าที่แจกจ่าย) แบบระบุศูนย์ `{code}:distribution_staff` — สิทธิ์เฉพาะจุดแจกจ่ายหน้างาน (Station 4) ไม่เปิด PII ทะเบียน และไม่แตะงานคลัง/ใบเบิก                                                                                                                                                                                | approved   | volatile                           | 2026-10-11                                    | docs/prd/role-permission-matrix.md §1.1/§3, frontend roles.ts, distribution/auth.ts, shelter-access-design.ts, portal-menu.ts, user-form.svelte                                                                                                                                                                                                                                 |
+| [CR-164](01-core/CR-164-central-db-shelter-scope-members.md)                          | ให้ `shelter:{code}` เป็นกุญแจอ่าน DB กลาง `registry` / `catalog` — แก้ผู้ใช้ compound role อ่านรายชื่อศูนย์และ catalog ไม่ได้                                                                                                                                                                                | approved   | stable                             | 2026-10-12                                    | docs/data/schema.md §6, docs/data/data-model.md §3.3/§6, frontend/src/lib/server/central-db-security.ts, provisioner.ts, sync-central-db.ts                                                                                                                                                                                                     |
 
 ## 02-people
 
