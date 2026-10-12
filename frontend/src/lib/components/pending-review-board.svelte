@@ -86,7 +86,7 @@
 		if (req.is_unsolicited) {
 			return 'สิ่งของนอกเหนือรายการแจ้งความต้องการ (Unsolicited Donation)';
 		}
-		return 'รายการตามประกาศ — รอเจ้าหน้าที่ยืนยันก่อนเข้าขั้นตรวจรับ (CR-052)';
+		return 'รายการตามประกาศ — รอเจ้าหน้าที่ยืนยันก่อนเข้าขั้นตรวจรับ';
 	}
 
 	const filteredRequests = $derived.by(() => {
