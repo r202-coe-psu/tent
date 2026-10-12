@@ -78,6 +78,7 @@ vi.mock('$lib/server/thaid-oauth', () => ({
 vi.mock('$lib/server/google-oauth', () => ({
 	fetchCouchAuthHashAlgorithm: vi.fn(),
 	fetchCouchAuthSecret: vi.fn(),
+	isMfaStepupEnabled: vi.fn(() => false),
 	mintAuthSessionCookie: vi.fn(),
 	setAuthSessionCookie: vi.fn(),
 	setMfaOkCookie: vi.fn()
@@ -194,6 +195,29 @@ describe('GET /api/v1/auth/oauth/thaid/callback (mode=register)', () => {
 			const redir = e as { status: number; location: string };
 			expect(redir.status).toBe(302);
 			expect(redir.location).toBe('/pre-register?shelter=SH001&error=oauth_access_denied');
+		}
+	});
+
+	it('sends /me link failures back to /me while step-up is hidden', async () => {
+		const stateToken = 'signed-state-link';
+		mockParseThaidOAuthState.mockReturnValue({
+			...mockStateRegister,
+			mode: 'link',
+			name: 'staff01'
+		});
+
+		const event = createEvent(
+			`http://localhost/api/v1/auth/oauth/thaid/callback?error=access_denied&state=${stateToken}`,
+			stateToken
+		);
+
+		try {
+			await GET(event as Parameters<typeof GET>[0]);
+			expect.unreachable('Should have thrown redirect');
+		} catch (e: unknown) {
+			const redir = e as { status: number; location: string };
+			expect(redir.status).toBe(302);
+			expect(redir.location).toBe('/me?mfa=link_failed');
 		}
 	});
 
