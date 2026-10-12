@@ -192,13 +192,23 @@ function responseStatus(error: unknown): number | null {
 	return typeof status === 'number' ? status : null;
 }
 
+/**
+ * Registration channels the kiosk check-in serves: web pre-registrations and the kiosk's own
+ * walk-ins (found again by card/QR/ThaiD for a reprint).
+ */
+const KIOSK_ELIGIBLE_CHANNELS: readonly string[] = ['web', 'kiosk'];
+
+function isKioskEligibleChannel(doc: Pick<EvacueeDoc, 'registered_via'>): boolean {
+	return doc.registered_via !== undefined && KIOSK_ELIGIBLE_CHANNELS.includes(doc.registered_via);
+}
+
 function toSummary(
 	doc: EvacueeDoc,
 	primaryId: string,
 	options: { matchedPhoneIds?: ReadonlySet<string> } = {}
 ): KioskEvacueeSummary {
 	const status = doc.current_stay?.status ?? 'unknown';
-	const selectable = doc.registered_via === 'web' && status === 'pre_registered';
+	const selectable = isKioskEligibleChannel(doc) && status === 'pre_registered';
 	return {
 		evacuee_id: doc._id,
 		first_name: doc.first_name ?? '',
@@ -483,7 +493,7 @@ export async function lookupPreRegisteredEvacuee(
 	const eligible = candidates.filter(
 		(doc) =>
 			doc.shelter_code === shelterCode &&
-			doc.registered_via === 'web' &&
+			isKioskEligibleChannel(doc) &&
 			isListedHouseholdMember(doc)
 	);
 	if (eligible.length !== 1) return { kind: 'not_found', can_register: false };
@@ -521,7 +531,7 @@ export async function checkInSelectedMembers(
 	if (
 		!primary ||
 		primary.shelter_code !== shelterCode ||
-		primary.registered_via !== 'web' ||
+		!isKioskEligibleChannel(primary) ||
 		!isListedHouseholdMember(primary)
 	) {
 		return normalizedEvacueeIds.map((evacueeId) => ({
@@ -549,7 +559,7 @@ export async function checkInSelectedMembers(
 			(Boolean(primary.household_id) && member.household_id === primary.household_id);
 		if (
 			!belongsToHousehold ||
-			member.registered_via !== 'web' ||
+			!isKioskEligibleChannel(member) ||
 			!isListedHouseholdMember(member)
 		) {
 			results.push({ evacuee_id: evacueeId, status: 'not_eligible' });

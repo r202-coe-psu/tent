@@ -565,6 +565,32 @@ describe('lookupPreRegisteredEvacuee phone gate', () => {
 		).toEqual({ kind: 'kiosk_registered' });
 	});
 
+	it('finds a kiosk walk-in that is already arriving, listed but not selectable', async () => {
+		const walkIn = evacuee(0, { registered_via: 'kiosk', current_stay: { status: 'arriving' } });
+		setHousehold([walkIn]);
+		configureCheckInCouchMocks();
+		const outcome = await lookupPreRegisteredEvacuee(shelterCode, {
+			source: 'smart-card',
+			citizen_id: '1234567890123'
+		});
+		expect(outcome).toMatchObject({
+			kind: 'household',
+			primary_evacuee_id: walkIn._id,
+			members: [{ evacuee_id: walkIn._id, status: 'arriving', selectable: false }]
+		});
+	});
+
+	it('does not find a registration from another channel', async () => {
+		evacuees = [evacuee(0, { registered_via: 'api', current_stay: { status: 'arriving' } })];
+		configureCheckInCouchMocks();
+		expect(
+			await lookupPreRegisteredEvacuee(shelterCode, {
+				source: 'smart-card',
+				citizen_id: '1234567890123'
+			})
+		).toEqual({ kind: 'not_found', can_register: false });
+	});
+
 	it('keeps ambiguous card lookup as not_found', async () => {
 		evacuees = [evacuee(0), evacuee(1)];
 		expect(
@@ -678,10 +704,10 @@ describe('checkInSelectedMembers', () => {
 		configureCheckInCouchMocks();
 	});
 
-	it('checks in only eligible web members in the primary household and refreshes household status', async () => {
+	it('checks in only eligible web/kiosk-channel members in the primary household and refreshes household status', async () => {
 		const primary = evacuee(0);
 		const member = evacuee(1);
-		const legacyKioskMember = evacuee(2, { registered_via: 'kiosk' });
+		const legacyKioskMember = evacuee(2, { registered_via: 'api' });
 		setHousehold([primary, member, legacyKioskMember], primary);
 		const unrelated = evacuee(3);
 		setHousehold([unrelated]);
@@ -805,6 +831,33 @@ describe('checkInSelectedMembers', () => {
 		expect(
 			mockAdminFetch.mock.calls.filter(([path]) => path.endsWith(encodeURIComponent(primary._id)))
 		).toHaveLength(4);
+	});
+});
+
+describe('checkInSelectedMembers kiosk walk-in reprint', () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+		evacuees = [];
+		households = [];
+		configureCheckInCouchMocks();
+	});
+
+	it('returns the QR and label of an arriving kiosk walk-in without writing', async () => {
+		const walkIn = evacuee(0, { registered_via: 'kiosk', current_stay: { status: 'arriving' } });
+		setHousehold([walkIn]);
+
+		const results = await checkInSelectedMembers(shelterCode, walkIn._id, [walkIn._id]);
+
+		expect(results).toEqual([
+			{
+				evacuee_id: walkIn._id,
+				status: 'already_checked_in',
+				stay_status: 'arriving',
+				qr_payload: walkIn._id,
+				label: { name: 'สมชาย0 ใจดี', phone }
+			}
+		]);
+		expect(mockAdminFetch.mock.calls.filter(([, init]) => init?.method === 'PUT')).toHaveLength(0);
 	});
 });
 
