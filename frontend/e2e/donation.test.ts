@@ -149,6 +149,12 @@ test.describe('Public Donation & Queue Booking Wizard (T-60)', TAGS, () => {
  * Cancel-from-track coverage with the track BFF mocked: a declared booking can be
  * cancelled from the page, and a received one offers no cancel. Which statuses allow a
  * cancel is unit-tested on `canCancelDonation`.
+ *
+ * Both were `fixme` from 2026-08-21 to 2026-10-13: under this route mock the tracking
+ * query stayed `status: pending, fetchStatus: fetching` although the mock answered 200,
+ * so nothing rendered (seen on `vite preview` and the dev server). It no longer does,
+ * and no app change was traced as the fix — if these start timing out with an empty
+ * page, that hang is back.
  */
 test.describe('Donor cancels their own reservation from the track page (T-21 DoD 4)', TAGS, () => {
 	const TOKEN = 'TX-SH001-CANCELME';
@@ -199,11 +205,13 @@ test.describe('Donor cancels their own reservation from the track page (T-21 DoD
 
 		await expect(page.getByText('ยกเลิกการจองบริจาคนี้?')).toBeVisible();
 		// The card heading shows the ref too, so look inside the dialog.
-		await expect(page.getByRole('alertdialog').getByText(/DN-777001/)).toBeVisible();
+		await expect(page.getByRole('alertdialog').getByText('DN-777001')).toBeVisible();
 		await page.getByRole('button', { name: 'ยืนยันยกเลิกการจอง' }).click();
 
 		await expect(page.getByText('ยกเลิกการจองบริจาคแล้ว')).toBeVisible();
-		// Refetch drove the page to the cancelled status, so the button is gone.
+		// Refetch drove the page to the cancelled status (shown on the badge and the status
+		// line), so the button is gone.
+		await expect(page.getByText('ยกเลิกการจองแล้ว', { exact: true }).first()).toBeVisible();
 		await expect(openCancel).toBeHidden();
 	});
 
@@ -218,7 +226,7 @@ test.describe('Donor cancels their own reservation from the track page (T-21 DoD
 
 		await page.goto(`/donations/track/${TOKEN}`);
 
-		await expect(page.getByText('DN-777001')).toBeVisible();
+		await expect(page.getByRole('heading', { name: 'DN-777001' })).toBeVisible();
 		await expect(page.getByRole('button', { name: 'ยกเลิกการจองนี้' })).toHaveCount(0);
 	});
 });
