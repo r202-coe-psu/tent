@@ -146,15 +146,9 @@ test.describe('Public Donation & Queue Booking Wizard (T-60)', TAGS, () => {
 });
 
 /**
- * Cancel-from-track coverage. Both are `fixme`: under Playwright route mocking the
- * track page's tracking query never settles — the mock fulfils with 200 (the request
- * and response both show in the trace) yet the query stays `status: pending,
- * fetchStatus: fetching` indefinitely, so no branch of the page renders. Reproduced
- * with an unconditional debug element, against both `vite preview` and the dev server,
- * and on the page as it stood *before* the cancel button was added — so it is a
- * problem with mocking this route, not with the cancel wiring. The gating logic is
- * covered by unit tests on `canCancelDonation`; un-fixme these once the mocking issue
- * is understood.
+ * Cancel-from-track coverage with the track BFF mocked: a declared booking can be
+ * cancelled from the page, and a received one offers no cancel. Which statuses allow a
+ * cancel is unit-tested on `canCancelDonation`.
  */
 test.describe('Donor cancels their own reservation from the track page (T-21 DoD 4)', TAGS, () => {
 	const TOKEN = 'TX-SH001-CANCELME';
@@ -177,7 +171,7 @@ test.describe('Donor cancels their own reservation from the track page (T-21 DoD
 		};
 	}
 
-	test.fixme('cancels a declared booking and reflects the new status', async ({ page }) => {
+	test('cancels a declared booking and reflects the new status', async ({ page }) => {
 		let cancelled = false;
 
 		await page.route(`**/api/public/v1/donations/${TOKEN}`, async (route) => {
@@ -204,7 +198,8 @@ test.describe('Donor cancels their own reservation from the track page (T-21 DoD
 		await openCancel.click();
 
 		await expect(page.getByText('ยกเลิกการจองบริจาคนี้?')).toBeVisible();
-		await expect(page.getByText('DN-777001')).toBeVisible();
+		// The card heading shows the ref too, so look inside the dialog.
+		await expect(page.getByRole('alertdialog').getByText(/DN-777001/)).toBeVisible();
 		await page.getByRole('button', { name: 'ยืนยันยกเลิกการจอง' }).click();
 
 		await expect(page.getByText('ยกเลิกการจองบริจาคแล้ว')).toBeVisible();
@@ -212,7 +207,7 @@ test.describe('Donor cancels their own reservation from the track page (T-21 DoD
 		await expect(openCancel).toBeHidden();
 	});
 
-	test.fixme('offers no cancel once the goods were received', async ({ page }) => {
+	test('offers no cancel once the goods were received', async ({ page }) => {
 		await page.route(`**/api/public/v1/donations/${TOKEN}`, async (route) => {
 			await route.fulfill({
 				status: 200,
