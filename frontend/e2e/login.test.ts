@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { createCouchUser, deleteCouchUser, SA_ROLES } from './helpers/couch';
+import { createCouchUser, deleteCouchUser, seedSecurityQuestion, SA_ROLES } from './helpers/couch';
 
 const RUN_ID = Date.now().toString(36);
 const VALID = {
@@ -18,6 +18,8 @@ test.describe('Login', () => {
 			roles: VALID.roles,
 			display_name: VALID.display_name
 		});
+		// Without this the fresh user hits the first-login gate (/force-setup) instead of /portal.
+		await seedSecurityQuestion(VALID.username);
 	});
 
 	test.afterAll(async () => {
@@ -98,7 +100,7 @@ test.describe('Login', () => {
 		await expect(page).toHaveURL('/portal');
 	});
 
-	test('shows error toast on invalid credentials', async ({ page }) => {
+	test('shows an inline Thai alert on invalid credentials', async ({ page }) => {
 		await mockProxy(page);
 		await mockLoginCaptcha(page);
 		await page.goto('/login');
@@ -106,8 +108,8 @@ test.describe('Login', () => {
 		await page.getByLabel('Password').fill(INVALID.password);
 		await page.getByRole('button', { name: 'Login' }).click();
 
-		// CouchDB returns "name or password is incorrect"
-		// The UI renders it inside a toast
-		await expect(page.getByText(/incorrect|failed/i)).toBeVisible({ timeout: 5000 });
+		// CouchDB's English "Name or password is incorrect." is mapped to Thai, shown under the form.
+		const alert = page.getByRole('alert').filter({ hasText: 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง' });
+		await expect(alert).toBeVisible({ timeout: 5000 });
 	});
 });

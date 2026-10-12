@@ -69,7 +69,10 @@
 		cardMode?: boolean;
 		backHref?: string;
 		onprintbusychange?: (busy: boolean) => void;
-		onregister?: (citizenId: string) => void;
+		/** Walk-in registration, offered after a card or ThaiD miss: who to register. */
+		onregister?: (
+			identity: Extract<GateInput, { source: 'smart-card' } | { source: 'thaid' }>
+		) => void;
 		onreset: () => void;
 		/** ThaiD only: scan again with a new QR once the verified session can no longer be used. */
 		onrescan?: () => void;
@@ -138,9 +141,12 @@
 	const holdShown = $derived(
 		holdMembers && Boolean(hold) && Boolean(lookup) && centerMatches && results.length === 0
 	);
-	/** No pre-registration for this card, and this shelter takes walk-ins at the kiosk. */
+	/** No pre-registration for this card / ThaiD scan, and this shelter takes walk-ins at the kiosk. */
 	const walkInOffered = $derived(
-		Boolean(lookupError) && canRegister && input?.source === 'smart-card' && Boolean(onregister)
+		Boolean(lookupError) &&
+			canRegister &&
+			(input?.source === 'smart-card' || input?.source === 'thaid') &&
+			Boolean(onregister)
 	);
 	const successfulResults = $derived(
 		results.filter((result) => result.status === 'checked_in' || result.qr_payload)
@@ -612,11 +618,12 @@
 
 		{#if walkInOffered}
 			<KioskWalkInOffer
+				source={input?.source === 'thaid' ? 'thaid' : 'smart-card'}
 				{isLookingUp}
 				{retryAfterSeconds}
 				onretry={retryLookup}
 				onregister={() => {
-					if (input?.source === 'smart-card') onregister?.(input.citizen_id);
+					if (input?.source === 'smart-card' || input?.source === 'thaid') onregister?.(input);
 				}}
 			/>
 		{:else if lookupError}

@@ -107,8 +107,13 @@ export function createTicket(
 	) as RequisitionTicket;
 }
 
+// Kitchen tickets only: food/supplies/transfer share `type: 'requisition_ticket'` but run the
+// distribution lifecycle (DISTRIBUTING, SHIFT_CLOSED, …) that this feature's status enum excludes.
 export const isRequisitionTicket = (d: unknown): d is RequisitionTicket =>
-	!!d && typeof d === 'object' && (d as { type?: unknown }).type === 'requisition_ticket';
+	!!d &&
+	typeof d === 'object' &&
+	(d as { type?: unknown }).type === 'requisition_ticket' &&
+	(d as { requisition_type?: unknown }).requisition_type === 'kitchen';
 
 // ---- transitions (pure — no I/O, no ledger writes; see tickets/data for that) ----
 

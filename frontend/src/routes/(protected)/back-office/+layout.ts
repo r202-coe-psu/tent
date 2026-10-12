@@ -1,10 +1,12 @@
-import { requireAuth } from '$lib/guards/auth';
+import { confineKioskStaffOnly, requireAuth } from '$lib/guards/auth';
 import type { LayoutLoad } from './$types';
 
 // Only gate on authentication here — each back-office page picks its own role
 // guard (requireManager / requireAdmin / requireKitchen / requireAuth). A
 // requireManager gate at this level pre-empted every page guard, so
 // kitchen_staff (CR-024) was redirected before ever reaching requireKitchen.
-export const load = (async ({ fetch }) => {
+// A kiosk_staff-only user is the exception: they may open the kiosk pages only (FR-SBO-29).
+export const load = (async ({ fetch, url }) => {
 	await requireAuth(fetch);
+	confineKioskStaffOnly(url.pathname);
 }) satisfies LayoutLoad;

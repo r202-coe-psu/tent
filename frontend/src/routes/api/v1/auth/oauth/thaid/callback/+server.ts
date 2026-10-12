@@ -17,6 +17,7 @@ import { completeKioskSession, completeScanSession } from '$lib/server/thaid-sca
 import {
 	fetchCouchAuthHashAlgorithm,
 	fetchCouchAuthSecret,
+	isMfaStepupEnabled,
 	mintAuthSessionCookie,
 	setAuthSessionCookie,
 	setMfaOkCookie
@@ -50,6 +51,8 @@ function loginErrorRedirect(code: string): never {
 }
 
 function mfaErrorRedirect(code: string): never {
+	// Step-up hidden: only /me linking lands here — send its failures back to /me.
+	if (!isMfaStepupEnabled()) throw redirect(302, '/me?mfa=link_failed');
 	throw redirect(302, `/mfa-challenge?error=${encodeURIComponent(code)}`);
 }
 
@@ -154,7 +157,9 @@ export const GET: RequestHandler = async ({ url, fetch, cookies }) => {
 			// Digits only (ThaiD may format the id); the session stores the bare 13 digits.
 			const pid = (claims.pid ?? '').replace(/\D/g, '');
 			if (!/^\d{13}$/.test(pid)) kioskErrorRedirect('missing_pid');
-			const completed = completeKioskSession(state.sessionId, { pid, sub: claims.sub });
+			// The profile stays on the server; it is read only to register a kiosk walk-in.
+			const profile = parseThaidCitizenClaims(claims);
+			const completed = completeKioskSession(state.sessionId, { pid, sub: claims.sub, profile });
 			if (!completed) kioskErrorRedirect('session_expired');
 			throw redirect(302, '/thaid-scan-success?flow=kiosk&status=success');
 		}

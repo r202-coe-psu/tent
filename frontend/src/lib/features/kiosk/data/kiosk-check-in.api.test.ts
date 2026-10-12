@@ -4,6 +4,7 @@ import {
 	KioskPartialCheckInError,
 	KioskRequestError,
 	lookupPreRegisteredEvacuee,
+	registerKioskThaidWalkIn,
 	registerKioskWalkIn
 } from './kiosk-check-in.api';
 
@@ -336,5 +337,68 @@ describe('registerKioskWalkIn', () => {
 			registerKioskWalkIn({ citizen_id: '1234567890123' }, photo, new Date().toISOString())
 		).resolves.toEqual({ evacuee_id: 'evacuee:01ARZ3NDEKTSV4RRFFQ69G5FAV' });
 		expect(fetchMock).toHaveBeenCalledOnce();
+	});
+
+	it('sends the phone with a card registration', async () => {
+		const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+			const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+			expect(body).toMatchObject({ source: 'smart-card', phone: '0812345678', consented: true });
+			return new Response(JSON.stringify({ evacuee_id: 'evacuee:01ARZ3NDEKTSV4RRFFQ69G5FAV' }), {
+				status: 200
+			});
+		});
+		vi.stubGlobal('fetch', fetchMock);
+
+		await registerKioskWalkIn(
+			{ citizen_id: '1234567890123' },
+			null,
+			new Date().toISOString(),
+			'0812345678'
+		);
+		expect(fetchMock).toHaveBeenCalledOnce();
+	});
+});
+
+describe('registerKioskThaidWalkIn', () => {
+	afterEach(() => vi.unstubAllGlobals());
+
+	it('sends only the session id, consent and phone', async () => {
+		const consentedAt = new Date().toISOString();
+		const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+			expect(JSON.parse(String(init?.body))).toEqual({
+				source: 'thaid',
+				session_id: 'a'.repeat(32),
+				phone: null,
+				consented: true,
+				consented_at: consentedAt
+			});
+			return new Response(JSON.stringify({ evacuee_id: 'evacuee:01ARZ3NDEKTSV4RRFFQ69G5FAV' }), {
+				status: 200
+			});
+		});
+		vi.stubGlobal('fetch', fetchMock);
+
+		await expect(registerKioskThaidWalkIn('a'.repeat(32), consentedAt, null)).resolves.toEqual({
+			evacuee_id: 'evacuee:01ARZ3NDEKTSV4RRFFQ69G5FAV'
+		});
+	});
+
+	it('surfaces an expired ThaiD session as its error code', async () => {
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(
+				async () =>
+					new Response(
+						JSON.stringify({
+							error: { code: 'KIOSK_THAID_SESSION_INVALID', message: 'กรุณาสแกนใหม่' }
+						}),
+						{ status: 409 }
+					)
+			)
+		);
+
+		await expect(
+			registerKioskThaidWalkIn('a'.repeat(32), new Date().toISOString(), null)
+		).rejects.toMatchObject({ status: 409, code: 'KIOSK_THAID_SESSION_INVALID' });
 	});
 });

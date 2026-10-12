@@ -9,12 +9,13 @@
 	import BackofficeShelterSelect from '$lib/components/backoffice-shelter-select.svelte';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { afterNavigate } from '$app/navigation';
-	import { isSystemAdmin, isShelterManager, formatRoleList } from '$lib/auth/roles';
+	import { formatRoleList } from '$lib/auth/roles';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import {
 		backofficeNavbarGroups,
 		backofficeHomePath,
 		isGroup,
+		canSeeNavNode,
 		type BackofficeNavbarNode
 	} from './backoffice-navbar/static';
 
@@ -22,8 +23,7 @@
 	let mobileMenuOpen = $state(false);
 
 	const roles = $derived(authStore.user?.roles ?? []);
-	const isSA = $derived(isSystemAdmin(roles));
-	const isManager = $derived(isSA || isShelterManager(roles, shelterStore.selectedShelterCode));
+	const navContext = $derived({ roles, shelterCode: shelterStore.selectedShelterCode });
 
 	function closeMobileMenu() {
 		mobileMenuOpen = false;
@@ -82,11 +82,9 @@
 		manualOverrides[label] = !isExpanded(label, node);
 	}
 
-	// Reactive through closure on `isSA` ($derived) — only called from template blocks
+	// Reactive through closure on `navContext` ($derived) — only called from template blocks
 	function canSee(node: BackofficeNavbarNode): boolean {
-		if ('requiresAdmin' in node && node.requiresAdmin) return isSA;
-		if ('requiresManager' in node && node.requiresManager) return isManager;
-		return true;
+		return canSeeNavNode(node, navContext);
 	}
 </script>
 
