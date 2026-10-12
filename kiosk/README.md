@@ -58,7 +58,7 @@ Legacy `POST /api/v1/scanner/draft` ถูกปิดเพื่อไม่�
 
 1. ผู้ดูแลระบบที่มีสิทธิ์ `system_admin` เปิดเมนูจัดการเครื่องสแกนและสร้างอุปกรณ์ใหม่
 2. คัดลอก `.env` snippet จากหน้าต่างที่แสดงหลังสร้างทันที — Scanner Key จะแสดงเป็น plaintext เพียงครั้งเดียว
-3. บันทึกลง `scanner_client/.env` บนเครื่อง Kiosk แล้วจำกัดสิทธิ์ไฟล์เป็น `0600`
+3. บันทึกลง `kiosk/.env` บนเครื่อง Kiosk แล้วจำกัดสิทธิ์ไฟล์เป็น `0600`
 4. ตอนเริ่มโปรแกรม Scanner Client จะโหลด `.env` (process environment มีสิทธิ์ override), ตรวจ HTTPS/placeholder และเรียก
    `POST /api/v1/scanner/bootstrap` ก่อนเปิด Playwright หรือเริ่มเครื่องอ่านบัตร; credential จะไม่อยู่ใน URL หรือ JavaScript
 5. เฉพาะ bootstrap ที่สำเร็จเท่านั้นจึงเปิดหน้า `/kiosk`
@@ -217,7 +217,7 @@ sudo systemctl status pcscd
    ```bash
    cd /home/pi
    git clone https://github.com/your-org/tent.git
-   cd tent/scanner_client
+   cd tent/kiosk
    ```
 
 2. สร้างและเปิดใช้งาน Python Virtual Environment (venv):
@@ -343,10 +343,10 @@ python main.py
 
 โปรเจกต์มีสคริปต์ `setup_autostart.sh` ที่ช่วยตรวจจับตำแหน่งไดเรกทอรีอัตโนมัติ (ไม่ต้องแก้ไข path ผู้ใช้เอง) และกำหนดค่า Autostart ให้รองรับทั้ง **Labwc** (Raspberry Pi OS Bookworm รุ่นล่าสุด), **Wayfire** และ **XDG Desktop Autostart (`.desktop`)** พร้อมทั้งเปิดใช้งาน service `pcscd`:
 
-1. ย้ายเข้าสู่โฟลเดอร์ `scanner_client`:
+1. ย้ายเข้าสู่โฟลเดอร์ `kiosk`:
 
    ```bash
-   cd ~/tent/scanner_client
+   cd ~/tent/kiosk
    ```
 
 2. รันสคริปต์ติดตั้ง Autostart:
@@ -386,13 +386,13 @@ python main.py
    ```bash
    nano ~/.config/autostart/smart-shelter-kiosk.desktop
    ```
-3. กำหนดค่าต่อไปนี้ _(แทนที่ `/path/to/tent/scanner_client` ด้วย path จริงในเครื่องของคุณ)_:
+3. กำหนดค่าต่อไปนี้ _(แทนที่ `/path/to/tent/kiosk` ด้วย path จริงในเครื่องของคุณ)_:
    ```ini
    [Desktop Entry]
    Type=Application
    Name=SmartShelter Kiosk
    Comment=Start SmartShelter Card Scanner Kiosk in Fullscreen
-   Exec=sh -c 'cd /path/to/tent/scanner_client && exec ./start_kiosk.sh'
+   Exec=sh -c 'cd /path/to/tent/kiosk && exec ./start_kiosk.sh'
    Terminal=false
    Hidden=false
    X-GNOME-Autostart-enabled=true
@@ -411,7 +411,7 @@ python main.py
    ```
 2. เพิ่มคำสั่งรัน Kiosk ต่อท้าย:
    ```bash
-   sh -c 'cd /path/to/tent/scanner_client && exec ./start_kiosk.sh' &
+   sh -c 'cd /path/to/tent/kiosk && exec ./start_kiosk.sh' &
    ```
 3. กำหนดสิทธิ์ให้รันได้: `chmod +x ~/.config/labwc/autostart`
 
@@ -467,14 +467,14 @@ tail -f /tmp/kiosk_autostart.log
 
 ## 🖥️ ตู้ใหญ่ kiosk3 (ESC/POS + เครื่องอ่าน QR + เครื่องอ่านบัตร RFpro)
 
-ตู้ที่สั่งทำ (ELSKY M219FN-2C) ใช้ฮาร์ดแวร์ต่างจาก Raspberry Pi + XP-365B ตั้งค่าทั้งหมดใน `scanner_client/.env` ของเครื่องนั้น — **ตู้ที่ไม่ตั้งค่าเหล่านี้ทำงานเหมือนเดิมทุกอย่าง** (`PRINTER_BACKEND=cups` · `KIOSK_QR_INPUT=camera` · `CARD_READER=pcsc`)
+ตู้ที่สั่งทำ (ELSKY M219FN-2C) ใช้ฮาร์ดแวร์ต่างจาก Raspberry Pi + XP-365B ตั้งค่าทั้งหมดใน `kiosk/.env` ของเครื่องนั้น — **ตู้ที่ไม่ตั้งค่าเหล่านี้ทำงานเหมือนเดิมทุกอย่าง** (`PRINTER_BACKEND=cups` · `KIOSK_QR_INPUT=camera` · `CARD_READER=pcsc`)
 
 ### ตั้งค่าตู้ใหญ่ทั้งหมดด้วยคำสั่งเดียว
 
 รันด้วย user ของ kiosk (**ไม่ต้องใส่ sudo** — script เรียก sudo เอง) · รันซ้ำได้ · แต่ละขั้นรายงาน ✅/⚠️/❌
 
 ```bash
-cd ~/tent/scanner_client
+cd ~/tent/kiosk
 ./setup_big_kiosk.sh                 # ติดตั้ง/ตั้งค่าทั้งหมด
 sudo reboot                          # ให้สิทธิ์ group lp / plugdev มีผล
 ./setup_big_kiosk.sh --status        # ตรวจอย่างเดียว ไม่แก้อะไร
@@ -505,7 +505,7 @@ CARD_READER=rfpro
 CARD_READER_USB_ID=0483:4c43
 ```
 
-ค่าผิดรูปแบบ (นอก enum, VID:PID ผิด, ความกว้างนอก 384–832 หรือหาร 8 ไม่ลงตัว) ทำให้ `scanner_client` หยุดตั้งแต่เริ่ม (exit 78) พร้อมบอกชื่อ key ที่ผิด
+ค่าผิดรูปแบบ (นอก enum, VID:PID ผิด, ความกว้างนอก 384–832 หรือหาร 8 ไม่ลงตัว) ทำให้ `kiosk` หยุดตั้งแต่เริ่ม (exit 78) พร้อมบอกชื่อ key ที่ผิด
 
 ### ครั้งแรกของแต่ละเครื่อง (นอก `.env`)
 
@@ -545,7 +545,7 @@ sudo usermod -aG lp kiosk
 | `KIOSK_CAMERA_FLIP` | `off` \| `on` (กลับภาพกล้องบนจอซ้าย↔ขวา ทั้งหน้าสแกน QR และหน้าตรวจใบหน้า; เปลี่ยนแค่ภาพที่แสดง ไม่กระทบการอ่าน QR / ตรวจใบหน้า) | `off` |
 | `KIOSK_QR_READER_MAX_GAP_MS` | ช่วงห่างสูงสุดระหว่างตัวอักษรที่นับว่าเป็นเครื่องอ่าน 10–100 ms (วัดด้วย `sudo ./inspect_hardware.sh --qr`; ใช้ค่าสูงสุด × 2) | `50` |
 
-เครื่องอ่านต้องพิมพ์แบบ keyboard (US layout) และปิดท้ายด้วย Enter หน้า `/kiosk/qr` จะรับข้อความที่พิมพ์เร็วและยาวอย่างน้อย 8 ตัวอักษรเท่านั้น — แป้นพิมพ์ที่คนกดช้า ๆ ไม่ถูกนับเป็นการสแกน หน้าเว็บอ่านค่าเหล่านี้จาก `scanner_client` ในเครื่อง (`POST /api/v1/scanner/kiosk/hardware` ไม่ส่งต่อไป server และไม่มี credential)
+เครื่องอ่านต้องพิมพ์แบบ keyboard (US layout) และปิดท้ายด้วย Enter หน้า `/kiosk/qr` จะรับข้อความที่พิมพ์เร็วและยาวอย่างน้อย 8 ตัวอักษรเท่านั้น — แป้นพิมพ์ที่คนกดช้า ๆ ไม่ถูกนับเป็นการสแกน หน้าเว็บอ่านค่าเหล่านี้จาก `kiosk` ในเครื่อง (`POST /api/v1/scanner/kiosk/hardware` ไม่ส่งต่อไป server และไม่มี credential)
 
 ### เครื่องอ่านบัตร RFpro (ตู้ใหญ่)
 
@@ -556,7 +556,7 @@ sudo usermod -aG lp kiosk
 - ถอด USB ของโมดูล → log `Smart Card Reader disconnected; waiting for the hardware` เสียบกลับแล้วใช้ต่อได้โดยไม่ restart
 - โมดูลตอบกลับเป็น input report ขนาด 32 ไบต์ ถ้าเฟรมคำตอบยาวกว่านั้นมันส่งมาแค่ report แรก และต้อง**ขอหน้าถัดไปทีละหน้าด้วยคำสั่ง `FE FF`** (`AA <INX เดิม> 00 04 00 00 FE FF <CHK>` — ไม่มีในเอกสารผู้ผลิต พบจากการจับทราฟฟิก USB ด้วย usbmon ของไลบรารีผู้ผลิต) `RfproTransport` ทำให้เองเมื่อเฟรมยังไม่ครบ จึงอ่านชื่อ/ที่อยู่/รูปได้ทีละ 255 ไบต์ (วัดบน kiosk3: Le 255 = 9 report, ข้อมูลตรง) — รูปจาก ~17 วินาทีเหลือ ~8 วินาที (เวลาส่วนใหญ่คือสายบัตร 9600 baud ~1.25 ms/ไบต์) ถ้าหน้าถัดไปไม่มา driver ถอยกลับไปอ่านชิ้นละ 20 ไบต์เองและ log `reading in 20-byte pieces` · `inspect_card_rfpro.py paged-reply` ตรวจการอ่านหลายหน้าที่ Le 20…255 · อ่านรูปเกิน 30 วินาทีจะข้ามรูปแล้วลงทะเบียนต่อโดยไม่มีรูป
 - driver ส่งได้เฉพาะคำสั่งอ่านที่อยู่ใน allowlist (ไม่มี reboot / เขียน flash / เปลี่ยน baud) และไม่ log ข้อมูลบัตรทุกระดับ · ความเร็วสายโมดูล↔บัตรคงที่ 9600 — ลองแล้วบน kiosk3 (2026-10-03): `18 82` SET_BAUD 38400 ก่อน ATR ทำให้บัตรไม่ตอบรีเซ็ต (status `0xf8`), PPS (`18 83`) เร็วกว่า 9600 โมดูลรับคำสั่งแต่ APDU ถัดไปไม่ตอบ จึงเร่งสายบัตรไม่ได้ · อ่านรูปชิ้นละ 20 ไบต์ ≈ 66 ms/ชิ้น ≈ 17 วินาที
-- ตรวจ/วัดเวลา (ต้อง `sudo`, รันในโฟลเดอร์ `scanner_client`):
+- ตรวจ/วัดเวลา (ต้อง `sudo`, รันในโฟลเดอร์ `kiosk`):
 
 ```bash
 sudo python3 inspect_card_rfpro.py ping            # version + สถานะบัตร (ไม่ต้องมีบัตร)
@@ -576,10 +576,10 @@ SFace เทียบหน้า, MiniFASNet ตรวจว่าเป็น�
 หรือคำแนะนำ (เช่น `too_far`) ยกเว้นรูปจากชิปของการรายงานตัวที่ผลเป็น `match` ซึ่งส่งกลับให้หน้าเว็บครั้งเดียวเพื่อแนบไปกับ `/check-in`
 
 เมื่อ `KIOSK_FACE_CHECK=on` ไปต่อเองได้เฉพาะผล `match` ผลอื่นทั้งหมด (`not_confirmed`, ข้าม, ไม่มีรูปในชิป, หมดเวลา,
-กล้องหรือ scanner_client เสีย, ไม่ยินยอม) **ต้องให้เจ้าหน้าที่ใส่ PIN 6 หลักของเครื่อง** ก่อน kiosk จะลงทะเบียน (walk-in)
+กล้องหรือ kiosk เสีย, ไม่ยินยอม) **ต้องให้เจ้าหน้าที่ใส่ PIN 6 หลักของเครื่อง** ก่อน kiosk จะลงทะเบียน (walk-in)
 หรือแสดงรายชื่อสมาชิก (check-in) ระบบไม่ปฏิเสธใครถาวร แต่ให้เจ้าหน้าที่ตรวจบัตรด้วยตาแล้วยืนยันด้วย PIN
 PIN ตั้ง/ดูได้ที่ `/system-management/scanners` (SA เท่านั้น) ตรวจผ่าน `/api/v1/scanner/kiosk/staff-pin/verify`
-โดย scanner_client แนบ device credential ให้ ดู [draft-kiosk-staff-pin-face-bypass](../docs/changes/draft-kiosk-staff-pin-face-bypass.md)
+โดย kiosk แนบ device credential ให้ ดู [draft-kiosk-staff-pin-face-bypass](../docs/changes/draft-kiosk-staff-pin-face-bypass.md)
 **ก่อนตั้ง `on` ที่เครื่องใด ต้องให้เครื่องนั้นมี PIN แล้ว** ไม่งั้นจะข้ามด้วย PIN ไม่ได้ (`staff_pin_not_set`)
 เครื่องที่สร้างใหม่ได้ default PIN ทันที ส่วนเครื่องเดิมที่ยังไม่มี PIN ให้ผู้ดูแลรัน `pnpm sync:central --write --confirm` (ใน `frontend/`)
 เพื่อสร้าง default PIN ให้ แล้ว SA ใช้「ดู PIN」แจ้งเจ้าหน้าที่หน้างาน (`KIOSK_FACE_CHECK` ตั้งต่อเครื่อง ต้องตรวจทีละเครื่อง)
@@ -596,13 +596,13 @@ PIN ตั้ง/ดูได้ที่ `/system-management/scanners` (SA เ�
   (`--card --show-scores`; ลองส่องบัตร รูปพิมพ์ หรือจอมือถือให้กล้องด้วย) อย่าใช้หน้าคนอื่นโดยไม่ได้รับความยินยอม
 - **ทดสอบอ่านบัตรจริงพร้อมสแกนหน้าในหน้าต่าง OpenCV** (กล้องสด + รูปจากชิปบัตร + ผลตรงกัน/ไม่ตรง): `./card_face_demo.py`
   เสียบบัตรที่ตัวอ่าน USB ได้เลย (ตัวอ่านตาม `CARD_READER` ใน `.env` หรือ `--reader pcsc|rfpro`) กด `R` อ่านบัตรใหม่ `S` แสดงตัวเลข `Q` ออก
-  ต้องใช้ OpenCV แบบมี GUI ซึ่ง `opencv-python-headless` ของ scanner_client ไม่มี ให้ใช้ venv แยก:
+  ต้องใช้ OpenCV แบบมี GUI ซึ่ง `opencv-python-headless` ของ kiosk ไม่มี ให้ใช้ venv แยก:
   `python3 -m venv .venv-gui && .venv-gui/bin/pip install opencv-python numpy pillow pyscard python-dotenv && .venv-gui/bin/python card_face_demo.py`
   ไม่บันทึกภาพ และแสดงเลขบัตรแค่ 4 ตัวท้าย (ใช้ `--show-data` ถ้าต้องการดูข้อมูลทั้งหมดใน terminal)
-- เมื่อเปิด face check หรือสแกน QR ด้วยกล้อง (`KIOSK_QR_INPUT=camera|both`) `scanner_client` ให้สิทธิ์กล้องแก่ origin ของ kiosk อัตโนมัติ (ไม่มี prompt) เปิด `KIOSK_FACE_CHECK=on` จะมี log เตือนว่าเกณฑ์ยังไม่ได้ calibrate ให้คง `off` ไว้บนตู้ที่ให้บริการจริง
+- เมื่อเปิด face check หรือสแกน QR ด้วยกล้อง (`KIOSK_QR_INPUT=camera|both`) `kiosk` ให้สิทธิ์กล้องแก่ origin ของ kiosk อัตโนมัติ (ไม่มี prompt) เปิด `KIOSK_FACE_CHECK=on` จะมี log เตือนว่าเกณฑ์ยังไม่ได้ calibrate ให้คง `off` ไว้บนตู้ที่ให้บริการจริง
 - ตรวจว่าสิทธิ์กล้องถูกให้โดยไม่มี prompt จริงบนเครื่อง (ไม่ใช่ CI): `./smoke_face_permissions.py` (เพิ่ม `--headed` เพื่อดูหน้าต่าง, `--live` เพื่อเปิดหน้า `/kiosk/register/face` จริง)
   เปิด Chromium profile ใหม่แบบเดียวกับ manager แล้วถามหน้าเว็บว่า permission เป็น `granted` หรือ `prompt`; ผ่านเมื่อ `granted` (exit 0)
-- **ที่เก็บ model**: ค่าเริ่มต้นคือโฟลเดอร์ `models/` ข้างโค้ด (`scanner_client/models/`) ไม่ต้องตั้งอะไรใน `.env`
+- **ที่เก็บ model**: ค่าเริ่มต้นคือโฟลเดอร์ `models/` ข้างโค้ด (`kiosk/models/`) ไม่ต้องตั้งอะไรใน `.env`
   ไฟล์ `.onnx` **ไม่ได้อยู่ใน git** (`models/.gitignore`) `git pull` จึงไม่ได้ model มาให้ ต้องรัน `./models/download_models.sh` บนเครื่องนั้นเอง
   ต้องมีครบ 4 ไฟล์: `face_detection_yunet_2023mar.onnx`, `face_recognition_sface_2021dec.onnx`, `MiniFASNetV2.onnx`, `MiniFASNetV1SE.onnx`
   ```bash
@@ -610,7 +610,7 @@ PIN ตั้ง/ดูได้ที่ `/system-management/scanners` (SA เ�
   ```
   ตั้ง `KIOSK_FACE_MODELS_DIR=/path/ไป/โฟลเดอร์` เฉพาะเมื่อเก็บ model ไว้นอก repo จริงๆ และต้องมีไฟล์ครบ 4 ไฟล์ในโฟลเดอร์นั้น
   **ถ้าไม่ได้ใช้ ให้ปล่อยบรรทัดนี้เป็นคอมเมนต์ หรือลบทิ้ง** (ค่า `/opt/tent/models` ใน `.env.example` เป็นแค่ตัวอย่าง ถ้าเปิดบรรทัดนี้โดยที่ไม่มีไฟล์อยู่ที่นั่น
-  จะขึ้น `FACE_MODELS_MISSING` ทั้งที่ `models/` ข้างโค้ดมีไฟล์ครบ) แก้ `.env` แล้วต้อง restart `scanner_client`
+  จะขึ้น `FACE_MODELS_MISSING` ทั้งที่ `models/` ข้างโค้ดมีไฟล์ครบ) แก้ `.env` แล้วต้อง restart `kiosk`
 - ถ้า model ไม่ครบ (หรือชี้โฟลเดอร์ผิด) เครื่องจะตอบ `FACE_MODELS_MISSING` และหน้า kiosk ถือเป็นผล `unavailable` (ยืนยันไม่ได้) ซึ่งเมื่อ `on` **ต้องให้เจ้าหน้าที่ใส่ PIN** ก่อนไปต่อ
   ใน log จะมีบรรทัด `Face check models are missing: … (run models/download_models.sh): <ชื่อไฟล์ที่หาย>` ดูด้วย `grep -i "models" /tmp/kiosk_autostart.log`
 - model ทั้ง 4 ตัวและ license อยู่ใน [`models/MODELS.md`](models/MODELS.md)
@@ -628,7 +628,7 @@ PIN ตั้ง/ดูได้ที่ `/system-management/scanners` (SA เ�
 รันด้วย user ของ kiosk (**ไม่ต้องใส่ sudo**) หลัง `./setup_big_kiosk.sh` ทำงานได้แล้ว และควรทดสอบ kiosk ใน desktop ปกติให้ผ่านก่อน (อ่านบัตร / QR / พิมพ์)
 
 ```bash
-cd ~/tent/scanner_client
+cd ~/tent/kiosk
 ./setup_kiosk_lockdown.sh --restart  # ติดตั้ง + ตั้งค่า → แสดง --status ให้เอง → restart gdm (จอดับแป๊บแล้วเข้า kiosk)
 ./setup_kiosk_lockdown.sh --status   # ตรวจซ้ำภายหลัง: ทุกบรรทัดต้องเป็น ✅
 ```
@@ -670,7 +670,7 @@ script เปลี่ยน session เป็น kiosk **ก่อน** เป�
 
 **ทางที่ 1 — ผ่าน SSH (แนะนำ)**
 ```bash
-cd ~/tent/scanner_client
+cd ~/tent/kiosk
 ./setup_kiosk_lockdown.sh --disable --restart  # จอตู้เข้า desktop GNOME ปกติ (kiosk ยังเปิดผ่าน XDG autostart)
 # ... ซ่อม ...
 ./setup_kiosk_lockdown.sh --restart            # ล็อกกลับ
@@ -716,7 +716,7 @@ sudo cp /etc/gdm3/daemon.conf.tent-bak /etc/gdm3/daemon.conf
 ./setup_kiosk_lockdown.sh --user kiosk --status
 ./setup_kiosk_lockdown.sh --user kiosk --disable --restart
 ```
-user ของ kiosk ต้องรัน `scanner_client/start_kiosk.sh` ได้ (script ตรวจให้ก่อนติดตั้ง)
+user ของ kiosk ต้องรัน `kiosk/start_kiosk.sh` ได้ (script ตรวจให้ก่อนติดตั้ง)
 
 #### แก้ปัญหา
 
@@ -758,7 +758,7 @@ user ของ kiosk ต้องรัน `scanner_client/start_kiosk.sh` ไ�
    ```
 4. **ติดตั้งและตั้งค่า:**
    ```bash
-   cd ~/tent/scanner_client
+   cd ~/tent/kiosk
    ./setup_printer.sh ~/printer-driver-xprinter_3.13.55_all.deb --test
    ```
    - ม้วนไม่ใช่ 80×60 mm (กว้าง×สูง) → ใส่ `--label <กว้าง>x<สูง>` (mm, กว้างไม่เกิน 82) และแก้ `KIOSK_LABEL_MM` ให้ตรงกัน

@@ -545,7 +545,7 @@ def print_card(data: dict, show_data: bool) -> None:
 
 
 GUI_HELP = """OpenCV ตัวนี้ไม่มีหน้าต่าง (opencv-python-headless) เปิด popup ไม่ได้
-ใช้ venv แยกที่ลง opencv-python แบบมี GUI (ไม่ไปแตะ venv ของ scanner_client):
+ใช้ venv แยกที่ลง opencv-python แบบมี GUI (ไม่ไปแตะ venv ของ kiosk):
 
   python3 -m venv .venv-gui
   .venv-gui/bin/pip install opencv-python numpy pillow pyscard python-dotenv

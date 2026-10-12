@@ -206,7 +206,7 @@ show_status() {
 
     # 5. ตรวจสอบขนาดใน .env
     if [ -f "$ENV_FILE" ]; then
-        echo -e "\n  [scanner_client/.env Settings]:"
+        echo -e "\n  [kiosk/.env Settings]:"
         grep -E "WINDOW_WIDTH|WINDOW_HEIGHT|DEBUG" "$ENV_FILE" | sed 's/^/    /' || true
     fi
     echo ""

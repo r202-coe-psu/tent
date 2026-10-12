@@ -1,6 +1,6 @@
 # 🔒 อธิบาย `setup_kiosk_lockdown.sh`: Autologin + ล็อกตู้ใหญ่ไม่ให้ออกจากหน้า Kiosk
 
-เอกสารนี้อธิบาย **ทุกส่วนของ** `scanner_client/setup_kiosk_lockdown.sh` อย่างละเอียด ได้แก่ script ทำอะไร ทำไมต้องทำแบบนั้น แก้ไฟล์อะไรในเครื่อง และลำดับขั้นตอนมีผลอย่างไร สำหรับตู้ใหญ่ **kiosk3** (Debian x86_64 + GDM/GNOME + จอสัมผัสแนวตั้ง)
+เอกสารนี้อธิบาย **ทุกส่วนของ** `kiosk/setup_kiosk_lockdown.sh` อย่างละเอียด ได้แก่ script ทำอะไร ทำไมต้องทำแบบนั้น แก้ไฟล์อะไรในเครื่อง และลำดับขั้นตอนมีผลอย่างไร สำหรับตู้ใหญ่ **kiosk3** (Debian x86_64 + GDM/GNOME + จอสัมผัสแนวตั้ง)
 
 > วิธีใช้แบบย่อ (ติดตั้ง / ตรวจ / กลับเป็น desktop ปกติ) อยู่ใน `README.md` หัวข้อ "ล็อกไม่ให้ออกจากหน้า kiosk (ตู้ใหญ่)" · แผนงานและเกณฑ์ทดสอบอยู่ใน `docs/features/kiosk-lockdown-implementation-plan.md`
 >
@@ -208,7 +208,7 @@ set -uo pipefail
 | `LOCK_FILE` | `/tmp/smart_shelter_kiosk.lock` | **ต้องตรงกับ** `LOCK_FILE` ใน `start_kiosk.sh` |
 | `HOTKEY_LOG` | `/tmp/kiosk_maintenance_hotkey.log` | log ของ `maintenance_hotkey.py` |
 
-| `MANAGED_MARK` | `# Managed by tent scanner_client/setup_kiosk_lockdown.sh` | บรรทัด marker ใน kiosk script — `--status` ใช้แยกว่าเป็นไฟล์ของเรา หรือเป็นตัวอย่างของแพ็กเกจ/ไฟล์ที่คนแก้เอง |
+| `MANAGED_MARK` | `# Managed by tent kiosk/setup_kiosk_lockdown.sh` | บรรทัด marker ใน kiosk script — `--status` ใช้แยกว่าเป็นไฟล์ของเรา หรือเป็นตัวอย่างของแพ็กเกจ/ไฟล์ที่คนแก้เอง |
 | `FALLBACK_SESSION` | `gnome` | session ที่ `--disable` ใช้ ถ้าไม่ได้จำ session เดิมไว้ |
 | `INPUT_GROUP` | `input` | group ที่อ่าน `/dev/input/event*` ได้ |
 | `CHVT` | `/usr/bin/chvt` | **ต้องตรงกับ** `CHVT` ใน `maintenance_hotkey.py` (sudoers อนุญาตตาม path เต็ม) |
@@ -305,18 +305,18 @@ kiosk3 login: _
 ไฟล์ที่ได้ (สมมติ repo อยู่ที่ `/home/kiosk/tent`):
 ```sh
 #!/bin/sh
-# Managed by tent scanner_client/setup_kiosk_lockdown.sh - rerun it instead of editing.
+# Managed by tent kiosk/setup_kiosk_lockdown.sh - rerun it instead of editing.
 # Ctrl+Alt+F1..F6 -> text TTY: ...
 (
     while true; do
-        python3 "/home/kiosk/tent/scanner_client/maintenance_hotkey.py" >>"/tmp/kiosk_maintenance_hotkey.log" 2>&1
+        python3 "/home/kiosk/tent/kiosk/maintenance_hotkey.py" >>"/tmp/kiosk_maintenance_hotkey.log" 2>&1
         sleep 5
     done
 ) &
 # GNOME Kiosk keeps this as the only app on screen. ...
 while true; do
     if flock -n "/tmp/smart_shelter_kiosk.lock" true 2>/dev/null; then
-        "/home/kiosk/tent/scanner_client/start_kiosk.sh"
+        "/home/kiosk/tent/kiosk/start_kiosk.sh"
     fi
     sleep 30
 done
@@ -535,7 +535,7 @@ shortcut ไม่ใช่ความสามารถของ Linux หร�
 | `/etc/gdm3/daemon.conf.tent-bak` | root | backup ครั้งแรก | — |
 | `/tmp/kiosk_maintenance_hotkey.log` | kiosk user | log ตอนรัน (หายตอน reboot) | — |
 
-**ไม่แตะ:** `~/.config/monitors.xml` (การหมุนจอ), `scanner_client/.env`, `~/.config/autostart/*` (XDG autostart เดิม), Chromium flags/policy, ตู้ Raspberry Pi
+**ไม่แตะ:** `~/.config/monitors.xml` (การหมุนจอ), `kiosk/.env`, `~/.config/autostart/*` (XDG autostart เดิม), Chromium flags/policy, ตู้ Raspberry Pi
 
 ### 8.2 `/etc/gdm3/daemon.conf` ของ kiosk3
 
@@ -575,7 +575,7 @@ Session=gnome                Session=gnome-kiosk-script-wayland
 
 ## 9. Test อัตโนมัติ
 
-ไฟล์ `scanner_client/tests/test_setup_kiosk_lockdown.py` ทดสอบเฉพาะ **pure helpers** (§5) โดย `source` script ใน bash (source guard กัน `main` ทำงาน) ไม่ใช้ sudo, GDM หรือ D-Bus จึงรันบนเครื่อง dev ได้
+ไฟล์ `kiosk/tests/test_setup_kiosk_lockdown.py` ทดสอบเฉพาะ **pure helpers** (§5) โดย `source` script ใน bash (source guard กัน `main` ทำงาน) ไม่ใช้ sudo, GDM หรือ D-Bus จึงรันบนเครื่อง dev ได้
 
 | Test | ยืนยันอะไร |
 | :-- | :-- |
@@ -594,12 +594,12 @@ Session=gnome                Session=gnome-kiosk-script-wayland
 | `test_hotkey_and_sudoers_use_the_same_chvt_path` | path ของ `chvt` ใน script กับ daemon ตรงกัน (sudo จับคู่ตาม path) |
 | `test_rule_passes_visudo` | rule ผ่าน `visudo -c` (ข้ามถ้าเครื่องไม่มี visudo) |
 
-`scanner_client/tests/test_maintenance_hotkey.py` — ตัวรับปุ่ม (ไม่ต้องมีคีย์บอร์ดจริง): `Ctrl+Alt+F3` → VT 3 ครั้งเดียว · F1–F6 → VT 1–6 · F7 ไม่สลับ · Ctrl/Alt ฝั่งขวาใช้ได้ · ขาด modifier ไม่สลับ · autorepeat ไม่สลับซ้ำ · ปล่อย modifier แล้วลืม · ปุ่มอื่นไม่สลับ · แปลง `input_event` ถูก · คำสั่งเป็น `sudo -n /usr/bin/chvt N` · `chvt` ล้ม/ไม่มี sudo ไม่ crash
+`kiosk/tests/test_maintenance_hotkey.py` — ตัวรับปุ่ม (ไม่ต้องมีคีย์บอร์ดจริง): `Ctrl+Alt+F3` → VT 3 ครั้งเดียว · F1–F6 → VT 1–6 · F7 ไม่สลับ · Ctrl/Alt ฝั่งขวาใช้ได้ · ขาด modifier ไม่สลับ · autorepeat ไม่สลับซ้ำ · ปล่อย modifier แล้วลืม · ปุ่มอื่นไม่สลับ · แปลง `input_event` ถูก · คำสั่งเป็น `sudo -n /usr/bin/chvt N` · `chvt` ล้ม/ไม่มี sudo ไม่ crash
 | `test_keeps_agetty_escapes_literal_after_debian_banner` | `\n`/`\4` ใน `/etc/issue` ยังเป็นตัวอักษรตรงๆ (ไม่ถูก awk แปลง) และต่อท้าย banner ของ Debian |
 | `test_is_idempotent` (issue) | รันซ้ำไม่เพิ่มบรรทัดซ้อน |
 | `test_creates_line_when_issue_is_missing` | ไม่มี `/etc/issue` → สร้างบรรทัดเดียว |
 
-รัน (ในโฟลเดอร์ `scanner_client`):
+รัน (ในโฟลเดอร์ `kiosk`):
 ```bash
 venv/bin/python -m unittest tests.test_setup_kiosk_lockdown tests.test_maintenance_hotkey -v
 venv/bin/python -m unittest                                      # ทั้งหมด
@@ -618,7 +618,7 @@ Autologin = **ใครก็ตามที่เปิดเครื่อง
 | :-- | :-- | :-- |
 | group `lp` | `setup_big_kiosk.sh` ขั้น 5 | ส่งคำสั่งใดๆ ไป printer |
 | group `plugdev` + udev `0660` | `setup_card_reader.sh` | ใช้เครื่องอ่านบัตรตัวนี้ |
-| อ่าน `scanner_client/.env` | เป็นเจ้าของไฟล์ (600) | ได้ `DEVICE_SECRET` = ปลอมตัวเป็นตู้นี้ |
+| อ่าน `kiosk/.env` | เป็นเจ้าของไฟล์ (600) | ได้ `DEVICE_SECRET` = ปลอมตัวเป็นตู้นี้ |
 | เป็นเจ้าของ repo + kiosk script | — | แก้โค้ดที่ตู้รัน |
 | group `sudo` (ถ้ามี — ตรวจด้วย `id kiosk`) | ตอนติดตั้ง Debian | เป็น admin (ยังต้องใส่รหัส sudo) |
 | polkit `allow_active` (session ที่นั่งหน้าเครื่อง) | autologin | reboot, ตั้ง Wi-Fi, mount USB ได้โดยไม่ต้องใส่รหัส |
@@ -655,7 +655,7 @@ Autologin = **ใครก็ตามที่เปิดเครื่อง
 ## 12. คำสั่งอ้างอิงด่วน
 
 ```bash
-cd ~/tent/scanner_client
+cd ~/tent/kiosk
 
 # ติดตั้ง / ล็อก (แสดง --status ให้เอง + restart gdm)
 ./setup_kiosk_lockdown.sh --restart

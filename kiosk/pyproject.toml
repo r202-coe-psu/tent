@@ -1,5 +1,5 @@
 [project]
-name = "scanner-client"
+name = "smart-shelter-kiosk"
 version = "0.1.0"
 description = "Smart Card Scanner Client for SmartShelter (Tent)"
 readme = "README.md"

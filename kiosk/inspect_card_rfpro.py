@@ -4,7 +4,7 @@
 Manual hardware inspector for the HOUSESmart 0483:4c43 card reader (YE XIN EF-011C socket).
 Uses the same driver as the kiosk (`app/rfpro.py`: frame codec, command allowlist, hidraw
 transport), so a pass here means the kiosk driver works on this machine. Not an automated
-test; run directly from scanner_client/.
+test; run directly from kiosk/.
 
 Only the driver's read-only command allowlist is ever sent (no flash/baud/reboot commands):
   00 00 hardware version · 18 00 card state · 18 01 select card type · 18 02 slot power

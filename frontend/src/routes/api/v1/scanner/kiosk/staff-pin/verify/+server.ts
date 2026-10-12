@@ -29,7 +29,7 @@ function audit(deviceId: string, outcome: string): void {
 
 /**
  * Kiosk staff bypass: check the PIN a staff member typed on the kiosk for *this* device.
- * Authenticated with the scanner's device credentials (attached by scanner_client); the device
+ * Authenticated with the scanner's device credentials (attached by kiosk); the device
  * whose PIN is checked is always the authenticated one, never something from the body.
  * Never locks the device, but checks one PIN at a time per device and holds a wrong one ~1 s
  * (`staffPinThrottle`, shared across cluster workers) so guessing all 10⁶ PINs takes ~11 days. A PIN that is not 6 digits is held and

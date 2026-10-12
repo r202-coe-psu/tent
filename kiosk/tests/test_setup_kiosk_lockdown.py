@@ -138,21 +138,21 @@ class KioskSessionIdTests(unittest.TestCase):
 class SessionScriptTests(unittest.TestCase):
     def session_script(self) -> str:
         return run_helper(
-            'session_script_content "/opt/tent/scanner_client/start_kiosk.sh" '
-            '"/opt/tent/scanner_client/maintenance_hotkey.py"'
+            'session_script_content "/opt/tent/kiosk/start_kiosk.sh" '
+            '"/opt/tent/kiosk/maintenance_hotkey.py"'
         )
 
     def test_loops_start_kiosk_and_skips_while_locked(self):
         body = self.session_script()
-        self.assertTrue(body.startswith("#!/bin/sh\n# Managed by tent scanner_client/setup_kiosk_lockdown.sh"))
+        self.assertTrue(body.startswith("#!/bin/sh\n# Managed by tent kiosk/setup_kiosk_lockdown.sh"))
         self.assertIn('flock -n "/tmp/smart_shelter_kiosk.lock" true', body)
-        self.assertIn('"/opt/tent/scanner_client/start_kiosk.sh"', body)
+        self.assertIn('"/opt/tent/kiosk/start_kiosk.sh"', body)
         self.assertIn("while true; do", body)
         subprocess.run(["sh", "-n"], input=body, text=True, check=True)
 
     def test_starts_vt_hotkey_in_background_before_the_kiosk_loop(self):
         body = self.session_script()
-        hotkey_line = 'python3 "/opt/tent/scanner_client/maintenance_hotkey.py" >>"/tmp/kiosk_maintenance_hotkey.log" 2>&1'
+        hotkey_line = 'python3 "/opt/tent/kiosk/maintenance_hotkey.py" >>"/tmp/kiosk_maintenance_hotkey.log" 2>&1'
         self.assertIn(hotkey_line, body)
         self.assertIn(") &", body)
         # The kiosk loop never returns, so the hotkey loop must be started before it.

@@ -1112,7 +1112,7 @@ class EscposPrintRouteTests(unittest.IsolatedAsyncioTestCase):
             "c = m.ScannerClientManager({'TENT_BASE_URL': 'https://t.example', 'DEVICE_ID': 'd', "
             "'DEVICE_SECRET': 's'}); print('PIL' in sys.modules)"
         )
-        # `import app.manager` resolves from the scanner_client dir, wherever pytest was started.
+        # `import app.manager` resolves from the kiosk dir, wherever pytest was started.
         scanner_dir = Path(__file__).resolve().parents[1]
         out = await asyncio.to_thread(
             subprocess.run,

@@ -5,7 +5,7 @@
 # A normal GNOME session lets anyone leave Chromium (touch swipe -> Activities overview, top bar).
 # This sets GDM autologin for the kiosk user into the "GNOME Kiosk Script" session: no GNOME
 # Shell, no overview, no gestures, no panel. The only app on screen is
-# ~/.local/bin/gnome-kiosk-script, which keeps scanner_client/start_kiosk.sh running.
+# ~/.local/bin/gnome-kiosk-script, which keeps kiosk/start_kiosk.sh running.
 # Display rotation keeps coming from the user's ~/.config/monitors.xml (not touched here).
 # Text TTYs for maintenance: GNOME Kiosk does not switch VTs on Ctrl+Alt+F<n> (GNOME Shell does), so
 # the session also runs maintenance_hotkey.py, which reads the keyboard (group input) and runs
@@ -33,7 +33,9 @@ SESSION_DIRS=(/usr/share/wayland-sessions /usr/share/xsessions)
 GDM_CONF="/etc/gdm3/daemon.conf"
 LOCK_FILE="/tmp/smart_shelter_kiosk.lock"
 HOTKEY_LOG="/tmp/kiosk_maintenance_hotkey.log"
-MANAGED_MARK="# Managed by tent scanner_client/setup_kiosk_lockdown.sh"
+MANAGED_MARK="# Managed by tent kiosk/setup_kiosk_lockdown.sh"
+# Written by installs from before the scanner_client/ -> kiosk/ rename; still ours for --status.
+LEGACY_MANAGED_MARK="# Managed by tent scanner_client/setup_kiosk_lockdown.sh"
 FALLBACK_SESSION="gnome"
 # Ctrl+Alt+F1..F6: read access to /dev/input/event* (read-only, never grabbed) + root for chvt.
 INPUT_GROUP="input"
@@ -272,8 +274,10 @@ show_status() {
 
     session_id="$(kiosk_session_id)" && ok "พบ session: $session_id" || bad "ไม่พบ session GNOME Kiosk Script"
 
-    if as_kiosk grep -qs "$MANAGED_MARK" "$SESSION_SCRIPT" && as_kiosk test -x "$SESSION_SCRIPT"; then
+    if as_kiosk grep -qsF -e "$MANAGED_MARK" -e "$LEGACY_MANAGED_MARK" "$SESSION_SCRIPT" && as_kiosk test -x "$SESSION_SCRIPT"; then
         ok "kiosk script: $SESSION_SCRIPT"
+        as_kiosk grep -qsF "$LEGACY_MANAGED_MARK" "$SESSION_SCRIPT" &&
+            warn "$SESSION_SCRIPT ยังชี้ไปที่ scanner_client/ (ชื่อเดิม) — รันติดตั้งใหม่จาก kiosk/ เพื่ออัปเดต path"
     elif as_kiosk test -e "$SESSION_SCRIPT"; then
         warn "$SESSION_SCRIPT มีอยู่แต่ไม่ได้สร้างโดย script นี้ (รันติดตั้งใหม่เพื่อเขียนทับ)"
     else

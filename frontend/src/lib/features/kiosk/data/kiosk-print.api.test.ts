@@ -9,7 +9,7 @@ import {
 const json = (body: unknown, status: number) => new Response(JSON.stringify(body), { status });
 
 describe('printKioskLabels', () => {
-	it('posts the labels uncached to the scanner-client print path', async () => {
+	it('posts the labels uncached to the kiosk client print path', async () => {
 		const fetchFn = vi.fn<typeof fetch>().mockResolvedValue(json({ printed: 2 }, 200));
 
 		await expect(printKioskLabels(['a', 'b'], fetchFn)).resolves.toEqual({

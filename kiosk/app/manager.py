@@ -1090,7 +1090,7 @@ class ScannerClientManager:
                 browser_launcher = p.chromium
 
             context = await browser_launcher.launch_persistent_context(
-                user_data_dir="/tmp/scanner_client_browser_profile",
+                user_data_dir="/tmp/kiosk_browser_profile",
                 headless=self.is_headless,
                 executable_path=self.executable_path,
                 args=args,

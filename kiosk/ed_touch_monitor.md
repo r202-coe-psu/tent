@@ -78,13 +78,13 @@ sudo libinput list-devices
 
 ## 4. สคริปต์ตั้งค่าอัตโนมัติ: `setup_monitor.sh`
 
-โปรเจกต์ได้เตรียมสคริปต์ [`setup_monitor.sh`](file:///home/jk/tent/scanner_client/setup_monitor.sh) ไว้ในโฟลเดอร์ `scanner_client` เพื่อช่วยจัดการเรื่องการหมุนจอ (Rotation), คาลิเบรตพิกัดสัมผัส (Calibration Matrix) และป้องกันจอดับแบบอัตโนมัติ
+โปรเจกต์ได้เตรียมสคริปต์ [`setup_monitor.sh`](file:///home/jk/tent/kiosk/setup_monitor.sh) ไว้ในโฟลเดอร์ `kiosk` เพื่อช่วยจัดการเรื่องการหมุนจอ (Rotation), คาลิเบรตพิกัดสัมผัส (Calibration Matrix) และป้องกันจอดับแบบอัตโนมัติ
 
 ### วิธีใช้งาน:
 
 1. **เปิดเมนูตั้งค่าแบบโต้ตอบ (Interactive Menu):**
    ```bash
-   cd ~/tent/scanner_client
+   cd ~/tent/kiosk
    ./setup_monitor.sh
    ```
    *จะมีเมนูให้เลือกตั้งค่า แนวนอน, แนวตั้ง 90°, แนวตั้ง 270°, ทดสอบทัช และป้องกันจอดับ*
@@ -120,7 +120,7 @@ sudo libinput list-devices
 ### ประเด็นที่ต้องคำนึงถึง:
 1. **ความสูงแนวตั้ง 600px:**
    - ในโหมดแนวนอน ความสูงของหน้าจอมีเพียง 600 พิกเซล หากองค์ประกอบในหน้าเว็บ (เช่น โลโก้, ขั้นตอน Wizard, ฟอร์ม) มี Margin/Padding ที่สูงเกินไป อาจทำให้ปุ่มกดกดยืนยันถูกดันตกขอบล่าง
-2. **การตั้งค่าใน `scanner_client/.env`:**
+2. **การตั้งค่าใน `kiosk/.env`:**
    - ได้ปรับค่าเริ่มต้นสำหรับโหมด Windowed Debug ให้ตรงกับความละเอียดจริง:
      ```env
      WINDOW_WIDTH=1024
@@ -134,7 +134,7 @@ sudo libinput list-devices
 
 ## 6. การปรับแต่ง Chromium Kiosk สำหรับจอสัมผัส
 
-ใน [`scanner_client/app/manager.py`](file:///home/jk/tent/scanner_client/app/manager.py) ระบบได้กำหนด Flags สำหรับตู้ Kiosk จอสัมผัสไว้เรียบร้อยแล้ว:
+ใน [`kiosk/app/manager.py`](file:///home/jk/tent/kiosk/app/manager.py) ระบบได้กำหนด Flags สำหรับตู้ Kiosk จอสัมผัสไว้เรียบร้อยแล้ว:
 
 ```python
 base_args = [

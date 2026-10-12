@@ -236,7 +236,7 @@ sudo rm -f "$TSPL_FILTER"
 sudo tee "$TSPL_FILTER" >/dev/null <<WRAP
 #!/bin/sh
 # $WRAPPER_MARK — the Xprinter filter writes every printed label (name + QR) to /tmp as a bitmap;
-# delete them after each job. Re-created by scanner_client/setup_printer.sh.
+# delete them after each job. Re-created by kiosk/setup_printer.sh.
 "$APP_DIR/bin/rastertosnailtspl-${ARCH}" "\$@"
 rc=\$?
 rm -f /tmp/origin_*.bmp /tmp/dithered_*.bmp /tmp/prnimg_*.bmp /tmp/xxxxx.log
@@ -308,4 +308,4 @@ if $DO_TEST; then
 fi
 
 echo
-ok "เสร็จ — ตั้ง PRINTER_NAME=$QUEUE ใน scanner_client/.env แล้วรีบูต (หรือรัน ./test_label_print.sh จากหน้าจอ Pi)"
+ok "เสร็จ — ตั้ง PRINTER_NAME=$QUEUE ใน kiosk/.env แล้วรีบูต (หรือรัน ./test_label_print.sh จากหน้าจอ Pi)"

@@ -68,7 +68,7 @@
 
 <StaffPageShell
 	title="จัดการอุปกรณ์ Kiosk"
-	description="บริหารจัดการเครื่องอ่านบัตรประชาชน Smart Card Reader ประจำจุดคัดกรองและศูนย์พักพิง — สร้าง Device Secret เพื่อเชื่อมต่อกับ scanner_client"
+	description="บริหารจัดการเครื่องอ่านบัตรประชาชน Smart Card Reader ประจำจุดคัดกรองและศูนย์พักพิง — สร้าง Device Secret เพื่อเชื่อมต่อกับ kiosk"
 >
 	{#snippet actions()}
 		<Button onclick={() => (createOpen = true)} class="btn-primary-brand shrink-0 gap-2">

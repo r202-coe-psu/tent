@@ -1,6 +1,6 @@
 /**
  * Physical print settings for the kiosk report-in label (Xprinter XP-365B, 203 dpi TSPL).
- * KIOSK_LABEL_MM is the single source of truth for the label size: `scanner_client/setup_printer.sh`
+ * KIOSK_LABEL_MM is the single source of truth for the label size: `kiosk/setup_printer.sh`
  * must default `--label` to the same value so CSS `@page` and the CUPS `PageSize` agree.
  */
 export const KIOSK_PRINT_DPI = 203;

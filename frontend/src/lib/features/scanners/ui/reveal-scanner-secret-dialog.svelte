@@ -103,7 +103,7 @@
 				<span>{isNew ? 'ลงทะเบียนอุปกรณ์สำเร็จ' : 'ข้อมูลการติดตั้ง Scanner Key'}</span>
 			</Dialog.Title>
 			<Dialog.Description class="text-sm text-muted-foreground">
-				นำ Device Secret ไปใส่ในไฟล์ <code>.env</code> ของโปรแกรม <code>scanner_client</code> เพื่อยืนยันตัวตนอุปกรณ์
+				นำ Device Secret ไปใส่ในไฟล์ <code>.env</code> ของโปรแกรม <code>kiosk</code> เพื่อยืนยันตัวตนอุปกรณ์
 			</Dialog.Description>
 		</Dialog.Header>
 
@@ -231,7 +231,7 @@
 				<div class="space-y-1.5">
 					<div class="flex flex-wrap items-center justify-between gap-1">
 						<label for="env-snippet" class="text-xs font-semibold text-muted-foreground">
-							ตัวอย่างไฟล์ .env สำหรับ scanner_client:
+							ตัวอย่างไฟล์ .env สำหรับ kiosk:
 						</label>
 						<Button
 							variant="ghost"

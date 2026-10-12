@@ -4,7 +4,7 @@
 Manual hardware inspector for the 28e9:5812 receipt printer. Each test prints a numbered strip:
 a 1 mm black line at the top, the test name, a 1 mm line at the bottom, then that test's
 feed + cut command. After the run, check for each number: was it cut off? how long is the strip?
-Not an automated test; run directly from scanner_client/.
+Not an automated test; run directly from kiosk/.
 
 Usage:
   python3 inspect_printer_cut.py                 # ทุกเทสต์ (1–5) ทีละอัน กด Enter ระหว่างเทสต์

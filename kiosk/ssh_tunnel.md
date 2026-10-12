@@ -1,6 +1,6 @@
 # 🔌 SSH Reverse Tunnel: ให้ kiosk เปิด dev server ของเครื่อง local ผ่าน `localhost`
 
-เอกสารนี้อธิบายวิธีให้ตู้ kiosk (`scanner_client`) เปิดหน้า `/kiosk` จาก **dev server บนเครื่องนักพัฒนา** โดยใช้ SSH reverse tunnel ใช้ตอนพัฒนา/ทดสอบเท่านั้น (production ใช้ HTTPS ตามหัวข้อ [ใช้กับ staging / production](#-ใช้กับ-staging--production))
+เอกสารนี้อธิบายวิธีให้ตู้ kiosk (`kiosk`) เปิดหน้า `/kiosk` จาก **dev server บนเครื่องนักพัฒนา** โดยใช้ SSH reverse tunnel ใช้ตอนพัฒนา/ทดสอบเท่านั้น (production ใช้ HTTPS ตามหัวข้อ [ใช้กับ staging / production](#-ใช้กับ-staging--production))
 
 ---
 
@@ -49,7 +49,7 @@ tunnel ทำให้ Chromium บน kiosk เห็น URL เป็น `http
 
 | ฝั่ง | ต้องมี |
 | --- | --- |
-| kiosk | เปิดเครื่องและต่อเครือข่ายเดียวกับเครื่อง local, `openssh-server` รันอยู่, `scanner_client/.env` ที่มี `DEVICE_ID` / `DEVICE_SECRET` แล้ว |
+| kiosk | เปิดเครื่องและต่อเครือข่ายเดียวกับเครื่อง local, `openssh-server` รันอยู่, `kiosk/.env` ที่มี `DEVICE_ID` / `DEVICE_SECRET` แล้ว |
 | เครื่อง local | `ssh` (Linux / macOS / Windows OpenSSH), repo `tent` + `pnpm`, เข้าถึง IP ของ kiosk ได้ (`ping <kiosk-ip>`) |
 
 > ในเอกสารนี้ `<kiosk-ip>` คือ IP ของ kiosk (หาได้จาก `hostname -I` บน kiosk) ให้แทนด้วยเลขจริงโดยไม่ต้องใส่ `<>` — ใน shell `<` `>` มีความหมายเป็น redirect IP เป็น DHCP อาจเปลี่ยนได้ ถ้าต่อไม่ติดให้เช็กอีกครั้ง
@@ -65,7 +65,7 @@ sudo systemctl enable --now ssh
 hostname -I                      # จด IP
 ```
 
-**A2. ตั้ง `scanner_client/.env`**
+**A2. ตั้ง `kiosk/.env`**
 ```
 TENT_BASE_URL=http://localhost:8080
 DEVICE_ID=<จาก System Management>
@@ -129,7 +129,7 @@ ssh -N -i ~/.ssh/tent_tunnel \
 
 ### 3. kiosk — เปิดหรือ restart kiosk
 ```bash
-cd ~/tent/scanner_client
+cd ~/tent/kiosk
 DEBUG=true ./start_kiosk.sh       # หน้าต่างปกติ (ทดสอบ)
 ./start_kiosk.sh                  # โหมด --kiosk เต็มจอ
 ```
@@ -211,7 +211,7 @@ TENT_BASE_URL=https://<staging-host>
 
 ## 🔒 ความปลอดภัย
 
-- shell บน kiosk อ่าน `scanner_client/.env` ได้ ซึ่งมี `DEVICE_SECRET` และคุมเครื่องพิมพ์/กล้องได้ ผู้ที่ไม่จำเป็นต้องมี shell ควรได้ key ที่ทำ tunnel ได้อย่างเดียว ใน `~/.ssh/authorized_keys` บน kiosk ใส่ option นำหน้าบรรทัด key:
+- shell บน kiosk อ่าน `kiosk/.env` ได้ ซึ่งมี `DEVICE_SECRET` และคุมเครื่องพิมพ์/กล้องได้ ผู้ที่ไม่จำเป็นต้องมี shell ควรได้ key ที่ทำ tunnel ได้อย่างเดียว ใน `~/.ssh/authorized_keys` บน kiosk ใส่ option นำหน้าบรรทัด key:
   ```
   restrict,port-forwarding,permitlisten="127.0.0.1:8080" ssh-ed25519 AAAA... ชื่อ@เครื่อง
   ```
