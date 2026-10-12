@@ -30,6 +30,9 @@ import { BackOfficePage } from './pages/back-office.page';
 import { DeskPage } from './pages/desk.page';
 import { DESK_TAGS } from './distribution-desk-setup';
 
+/** Attempts `withRetry` (src/lib/db/couch-db.ts, MAX_RETRIES) makes on a 5xx before giving up. */
+const WITH_RETRY_ATTEMPTS = 3;
+
 // Journey C (= T4-1) plus every other way a loan leaves the counter.
 interface LoanSetup {
 	desk: DeskPage;
@@ -333,10 +336,12 @@ test.describe('Tab 4 — loan return counter (plan §4.6)', { tag: DESK_TAGS }, 
 		// The log update is the last write of a counter return: fail it so the operation stops
 		// after its reservation and stock receipt are already persisted.
 		let failLogWrites = true;
+		let failedPuts = 0;
 		await page.route(
 			(url) => url.pathname.includes(encodeURIComponent(logId)),
 			async (route) => {
 				if (failLogWrites && route.request().method() === 'PUT') {
+					failedPuts += 1;
 					await route.fulfill({ status: 500, body: '{"error":"e2e"}' });
 					return;
 				}
@@ -348,12 +353,24 @@ test.describe('Tab 4 — loan return counter (plan §4.6)', { tag: DESK_TAGS }, 
 		await dialog.getByLabel(/จำนวนที่ตรวจรับคืนครั้งนี้/).fill('2');
 		await dialog.getByRole('button', { name: /ยืนยันตรวจรับคืนเข้าคลัง/ }).click();
 		await expect.poll(async () => (await ledgerRows('receive', logId)).length).toBe(1);
+
+		// Keep the fault up until the app's withRetry (src/lib/db/couch-db.ts, MAX_RETRIES = 3 with
+		// 200/400ms backoff) has exhausted every attempt and marked the endpoint disconnected;
+		// lifting it earlier lets a later retry succeed and close the loan.
+		await expect.poll(() => failedPuts).toBeGreaterThanOrEqual(WITH_RETRY_ATTEMPTS);
+		await expect(page.getByText('เชื่อมต่อเซิร์ฟเวอร์ไม่ได้', { exact: false })).toBeVisible({
+			timeout: 15_000
+		});
 		expect(await getShelterDocument(logId)).toMatchObject({ status: 'active' });
 
 		failLogWrites = false;
 		await page.reload();
 		await desk.openTab('returns');
 		await desk.chooseRecipientBySearch(recipient);
+		// Writes are gated on the endpoint being connected again.
+		await expect(page.getByText('เชื่อมต่อเซิร์ฟเวอร์ไม่ได้', { exact: false })).toBeHidden({
+			timeout: 20_000
+		});
 		await desk.loanCard(item.name).getByRole('button', { name: 'รับคืนจากผู้ยืม' }).click();
 		// Past the stock write the operation can only go forward: inputs are locked to it.
 		await expect(dialog.getByText('รายการนี้บันทึกลงสต็อกแล้ว ไม่สามารถยกเลิกได้')).toBeVisible();
