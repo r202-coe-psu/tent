@@ -264,4 +264,12 @@
 			width: min(100%, 36rem);
 		}
 	}
+
+	/* 1024×600: a bigger QR from the height left under the header. No `100%` term here: the img's
+	 * 640 px intrinsic width would size the column and push the steps far to the right. */
+	@media (max-height: 650px) {
+		.thaid-qr-frame {
+			width: min(24rem, max(9rem, calc(100svh - 14rem)));
+		}
+	}
 </style>
