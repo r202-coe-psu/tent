@@ -3,25 +3,18 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { onMount } from 'svelte';
-	import CircleAlert from '@lucide/svelte/icons/circle-alert';
-	import UserPlus from '@lucide/svelte/icons/user-plus';
-	import { Button } from '$lib/components/ui/button/index.js';
 	import {
+		abandonWalkIn,
 		buildKioskContextQuery,
 		cancelKioskFaceCheck,
 		getKioskDisplayContext,
-		KIOSK_NOTICE_PRIMARY_ACTION,
-		KIOSK_NOTICE_SECONDARY_ACTION,
 		KioskBackButton,
-		KioskBusyStatus,
 		KioskCheckInWizard,
-		KioskNoticePanel,
 		KioskFaceCheck,
 		KioskIdleTimeout,
 		KIOSK_IDLE_TIMEOUT_MS,
 		navigateToKioskHome,
 		readKioskDisplayQuery,
-		submitWalkInCard,
 		walkInSession,
 		type FaceCheckOutcome
 	} from '$lib/features/kiosk';
@@ -31,22 +24,22 @@
 	);
 	const contextQuery = $derived(buildKioskContextQuery(displayContext));
 	const homeUrl = $derived(`/kiosk${contextQuery}`);
-	let registering = $state(false);
-	let error = $state('');
 	const faceCheck = walkInSession.faceCheckToRun;
-	let faceBusy = false;
 	const idleTimeout = new KioskIdleTimeout(KIOSK_IDLE_TIMEOUT_MS, returnHome);
+	/** Going on to the phone step; any other way off this page abandons the walk-in. */
+	let continuing = false;
 
 	onMount(() => {
-		if (!walkInSession.citizenId || !walkInSession.consented || !walkInSession.card) {
+		if (walkInSession.source !== 'smart-card' || !walkInSession.identityReady) {
 			void goto(resolve(`/kiosk${contextQuery}` as '/kiosk' | `/kiosk?${string}`));
 			return;
 		}
 		idleTimeout.start();
 		return () => {
 			idleTimeout.stop();
-			// However the person leaves (cancel, idle, registered), do not leave the check behind.
+			// However the person leaves (cancel, idle, on to the phone), do not leave the check behind.
 			void cancelKioskFaceCheck();
+			if (!continuing && walkInSession.active) abandonWalkIn();
 		};
 	});
 
@@ -54,51 +47,23 @@
 		idleTimeout.recordActivity();
 	}
 
-	function syncIdlePause() {
-		idleTimeout.setPaused(faceBusy || registering);
-	}
-
 	function handleFaceBusyChange(busy: boolean) {
-		faceBusy = busy;
-		syncIdlePause();
+		idleTimeout.setPaused(busy);
 	}
 
 	function returnHome() {
-		walkInSession.clear();
+		abandonWalkIn();
 		navigateToKioskHome(contextQuery);
 	}
 
 	/**
 	 * Only a match or a staff PIN bypass gets here (anything else waits for the PIN, or "cancel" /
-	 * taking the card out on the PIN goes home without registering).
+	 * taking the card out on the PIN goes home without registering). The phone step registers.
 	 */
 	function handleFaceFinished(outcome: FaceCheckOutcome) {
 		walkInSession.faceOutcome = outcome;
-		void register();
-	}
-
-	async function register() {
-		if (registering) return;
-		registering = true;
-		syncIdlePause();
-		error = '';
-		const outcome = await submitWalkInCard(walkInSession.card, walkInSession);
-		if (outcome.kind === 'registered') {
-			walkInSession.clear();
-			await goto(
-				resolve(
-					`/kiosk/register/done${contextQuery}` as
-						'/kiosk/register/done' | `/kiosk/register/done?${string}`
-				)
-			);
-			return;
-		}
-		error =
-			outcome.kind === 'mismatch' || outcome.kind === 'error'
-				? outcome.message
-				: 'ลงทะเบียนไม่สำเร็จ กรุณาลองอีกครั้ง';
-		registering = false;
-		syncIdlePause();
+		continuing = true;
+		void goto(resolve(`/kiosk/register/phone${contextQuery}`));
 	}
 </script>
 
@@ -110,34 +75,9 @@
 	<KioskCheckInWizard currentStep={3} step2Label="อ่านบัตร" />
 	<!-- Leaving mid-check is a cancel: unmounting ends the check and nothing is registered. -->
 	<div class="flex justify-start">
-		<KioskBackButton href={homeUrl} onclick={() => walkInSession.clear()} disabled={registering} />
+		<KioskBackButton href={homeUrl} onclick={() => abandonWalkIn()} />
 	</div>
-	{#if error}
-		<KioskNoticePanel
-			tone="warning"
-			icon={CircleAlert}
-			headingTag="h1"
-			title="ลงทะเบียนไม่สำเร็จ"
-			role="alert"
-		>
-			<p>{error}</p>
-			{#snippet actions()}
-				<Button type="button" onclick={register} class={KIOSK_NOTICE_PRIMARY_ACTION}
-					>ลองอีกครั้ง</Button
-				>
-				<Button
-					type="button"
-					variant="outline"
-					onclick={returnHome}
-					class={KIOSK_NOTICE_SECONDARY_ACTION}>ยกเลิก</Button
-				>
-			{/snippet}
-		</KioskNoticePanel>
-	{:else if registering}
-		<KioskNoticePanel tone="info" icon={UserPlus} headingTag="h1" title="กำลังบันทึกข้อมูล">
-			<KioskBusyStatus>กรุณารอสักครู่</KioskBusyStatus>
-		</KioskNoticePanel>
-	{:else if walkInSession.citizenId && walkInSession.consented && walkInSession.card}
+	{#if walkInSession.citizenId && walkInSession.identityReady}
 		<KioskFaceCheck
 			flow="walk_in"
 			citizenId={walkInSession.citizenId}

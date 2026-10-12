@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { SmartCardData } from '$lib/features/scanners';
+import type { SmartCardData } from '$lib/features/kiosk-devices';
 import { createWalkInSession, WALK_IN_FACE_CHECK_STRICT } from './walk-in-session.svelte';
 
 const CARD = { citizen_id: '1234567890123' } as SmartCardData;
@@ -45,5 +45,38 @@ describe('walkInSession face check hand-over', () => {
 		session.begin('9876543210987');
 		expect(session.card).toBeNull();
 		expect(session.faceCheck).toBeNull();
+	});
+});
+
+describe('walkInSession sources and phone', () => {
+	it('a ThaiD walk-in holds only the session id and is ready once consented', () => {
+		const session = createWalkInSession();
+		session.beginThaid('a'.repeat(32));
+		expect(session.source).toBe('thaid');
+		expect(session.citizenId).toBeNull();
+		expect(session.active).toBe(true);
+		expect(session.identityReady).toBe(false);
+		session.consent();
+		expect(session.identityReady).toBe(true);
+	});
+
+	it('a card walk-in is ready only once the full card is held', () => {
+		const session = consentedSession();
+		expect(session.source).toBe('smart-card');
+		expect(session.identityReady).toBe(false);
+		session.holdCard(CARD, null);
+		expect(session.identityReady).toBe(true);
+	});
+
+	it('starting another walk-in forgets the previous source and phone', () => {
+		const session = createWalkInSession();
+		session.beginThaid('a'.repeat(32));
+		session.phone = '0812345678';
+		session.begin(CARD.citizen_id);
+		expect(session.thaidSessionId).toBeNull();
+		expect(session.phone).toBeNull();
+		session.clear();
+		expect(session.source).toBeNull();
+		expect(session.active).toBe(false);
 	});
 });

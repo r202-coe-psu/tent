@@ -1836,6 +1836,16 @@ describe('gender nullable (schema_v 12, CR-154; decision sync 2026-10-09)', () =
 		expect(female.gender).toBe('female');
 	});
 
+	it('kiosk card keeps the phone typed at the kiosk, and null when none was given', () => {
+		const card = {
+			citizen_id: '1101700230673',
+			scanned_at: '2026-10-09T00:00:00.000Z',
+			device_id: 'scanner-1'
+		};
+		expect(createKioskEvacueeFromCard(card, ctx).phone).toBeNull();
+		expect(createKioskEvacueeFromCard(card, ctx, undefined, '0812345678').phone).toBe('0812345678');
+	});
+
 	it('accepts registered_via api', () => {
 		const parsed = evacueeInputSchema.safeParse({
 			first_name: 'A',
