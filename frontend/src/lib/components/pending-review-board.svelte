@@ -16,6 +16,7 @@
 	} from '$lib/features/donations';
 	import { formatUnit, useUnitsOfMeasure } from '$lib/features/catalog';
 	import { langState } from '$lib/states/i18n.svelte';
+	import BoardSectionHeader from '$lib/components/board-section-header.svelte';
 
 	let {
 		requests = [],
@@ -131,24 +132,11 @@
 </script>
 
 <div class="overflow-hidden rounded-2xl border border-border bg-card shadow-xs">
-	<!-- Section Header -->
-	<div
-		class="flex flex-col justify-between gap-4 border-b border-border/60 bg-muted/5 p-6 md:flex-row md:items-center"
-	>
-		<div>
-			<h2 class="flex items-center gap-2.5 text-base font-bold text-foreground">
-				<div
-					class="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400"
-				>
-					<ClipboardCheck class="h-5 w-5" />
-				</div>
-				รายการรอตรวจสอบความเหมาะสม (Pending Review Board)
-			</h2>
-			<p class="mt-1 text-2xs text-muted-foreground">
-				ระบบกรองอนุมัติคำขอขอบริจาคพิเศษที่มีน้ำหนักหรือคุณสมบัติจำเป็นต้องให้ส่วนกลางประเมินพื้นที่คลังและการกระจายพัสดุก่อนรับเข้าจริง
-			</p>
-		</div>
-	</div>
+	<BoardSectionHeader
+		icon={ClipboardCheck}
+		title="รายการรอตรวจสอบความเหมาะสม (Pending Review Board)"
+		description="ระบบกรองอนุมัติคำขอขอบริจาคพิเศษที่มีน้ำหนักหรือคุณสมบัติจำเป็นต้องให้ส่วนกลางประเมินพื้นที่คลังและการกระจายพัสดุก่อนรับเข้าจริง"
+	/>
 
 	<!-- Filter Bar -->
 	<div class="border-b border-border/60 bg-card p-4">
