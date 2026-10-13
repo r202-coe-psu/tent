@@ -80,12 +80,23 @@ test.describe(
 			await expect(page.getByRole('heading', { name: 'เริ่มการค้นหา' })).toBeVisible();
 		});
 
-		test('E01 rejects a query shorter than 3 characters', async ({ page }) => {
+		test('E01 rejects a word shorter than 2 characters', async ({ page }) => {
 			await page.goto('/search');
-			await page.getByRole('textbox', { name: SEARCH_BOX }).fill('ทด');
+			await page.getByRole('textbox', { name: SEARCH_BOX }).fill('ท');
 			await page.getByRole('button', { name: 'ค้นหา' }).click();
-			await expect(page.getByText('กรุณากรอกข้อมูลอย่างน้อย 3')).toBeVisible();
+			await expect(
+				page.getByText('กรุณากรอกชื่อหรือนามสกุลอย่างน้อย 2 ตัวอักษรต่อคำ')
+			).toBeVisible();
 			await expect(page.getByRole('heading', { name: 'เริ่มการค้นหา' })).toBeVisible();
+		});
+
+		test('E03 judges every word, so a one-character word is rejected too', async ({ page }) => {
+			await page.goto('/search');
+			await page.getByRole('textbox', { name: SEARCH_BOX }).fill('สมหมาย ก');
+			await page.getByRole('button', { name: 'ค้นหา' }).click();
+			await expect(
+				page.getByText('กรุณากรอกชื่อหรือนามสกุลอย่างน้อย 2 ตัวอักษรต่อคำ')
+			).toBeVisible();
 		});
 
 		test('E02 hints at a full phone number for a partial phone without calling the API', async ({
@@ -175,14 +186,36 @@ test.describe('Public family search: live results', { tag: ['@public', '@critica
 
 	test('rejects a short query then recovers with a valid search', async ({ page }) => {
 		await page.goto('/search');
-		await page.getByRole('textbox', { name: SEARCH_BOX }).fill('ทด');
+		await page.getByRole('textbox', { name: SEARCH_BOX }).fill('ท');
 		await page.getByRole('button', { name: 'ค้นหา' }).click();
-		await expect(page.getByText('กรุณากรอกข้อมูลอย่างน้อย 3')).toBeVisible();
+		await expect(page.getByText('กรุณากรอกชื่อหรือนามสกุลอย่างน้อย 2 ตัวอักษรต่อคำ')).toBeVisible();
 
 		await page.getByRole('textbox', { name: SEARCH_BOX }).fill(PREFIX);
 		await page.getByRole('button', { name: 'ค้นหา' }).click();
 		await expect(page.getByText(`พบข้อมูลทั้งหมด ${TOTAL} รายการ`)).toBeVisible();
-		await expect(page.getByText('กรุณากรอกข้อมูลอย่างน้อย 3')).toBeHidden();
+		await expect(page.getByText('กรุณากรอกชื่อหรือนามสกุลอย่างน้อย 2 ตัวอักษรต่อคำ')).toBeHidden();
+	});
+
+	test('first name AND full surname must both match (CR-166)', async ({ page }) => {
+		const search = async (query: string) => {
+			await page.goto('/search');
+			await page.getByRole('textbox', { name: SEARCH_BOX }).fill(query);
+			await page.getByRole('button', { name: 'ค้นหา' }).click();
+		};
+
+		await search(`${HEAD} ${LAST_NAME}`);
+		await expect(page.getByText('พบข้อมูลทั้งหมด 1 รายการ')).toBeVisible();
+		await expect(page.getByRole('heading', { name: `${HEAD} ${LAST_NAME_MASKED}` })).toBeVisible();
+
+		// A first-name prefix with the whole surname still finds the same person.
+		await search(`${PREFIX} ${LAST_NAME}`);
+		await expect(page.getByText(`พบข้อมูลทั้งหมด ${TOTAL} รายการ`)).toBeVisible();
+
+		// The right first name with a wrong or partial surname finds nobody (#533).
+		for (const wrongSurname of ['ผิดนามสกุล', 'ทดสอบ']) {
+			await search(`${HEAD} ${wrongSurname}`);
+			await expect(page.getByRole('heading', { name: 'ไม่พบรายชื่อ' })).toBeVisible();
+		}
 	});
 
 	test('shows the household members of a result and toggles them', async ({ page }) => {

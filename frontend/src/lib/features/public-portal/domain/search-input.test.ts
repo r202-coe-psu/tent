@@ -19,6 +19,10 @@ describe('validateFamilySearchQuery', () => {
 		['AB1234567', 'passport'],
 		['สมชาย', 'Thai name'],
 		['สมชาย ใจดี', 'full name'],
+		['สม', 'two-grapheme name (CR-166 floor)'],
+		['ab', 'two-letter name'],
+		['สม มา', 'two short words'],
+		['สม ชาย มา โชค', 'four words'],
 		['+6612345', 'non-digit text the backend treats as a name']
 	])('accepts %s (%s)', (query) => {
 		expect(validateFamilySearchQuery(query)).toBeNull();
@@ -31,8 +35,32 @@ describe('validateFamilySearchQuery', () => {
 		}
 	);
 
-	it.each(['', '   ', 'สม', 'ab', ' a '])('flags %j as too short', (query) => {
+	it.each([
+		'',
+		'   ',
+		'a',
+		' a ',
+		'ก ข',
+		'สมหมาย ก',
+		'ก สมหมาย',
+		// Thai marks attach to their consonant: each of these is ONE grapheme.
+		'ที่',
+		'มี',
+		'สมหมาย มี'
+	])('flags %j as too short', (query) => {
 		expect(validateFamilySearchQuery(query)).toBe('tooShort');
+	});
+
+	it('flags more than four words', () => {
+		expect(validateFamilySearchQuery('สม ชาย มา โชค ใจ')).toBe('tooManyWords');
+		expect(validateFamilySearchQuery('  สม   ชาย  มา   โชค  ')).toBeNull();
+	});
+
+	it('counts words after NFKC, like the backend name_key', () => {
+		// SARA AM written as U+0E4D U+0E32 composes to the same word as U+0E33.
+		expect(validateFamilySearchQuery('น\u0e4d\u0e32้ใจ ใจดี')).toBeNull();
+		expect(validateFamilySearchQuery('ＡＢ')).toBeNull();
+		expect(validateFamilySearchQuery('Ａ')).toBe('tooShort');
 	});
 
 	// Python's str.strip() and re \s do not treat U+FEFF (BOM) as whitespace, while JS trim() and
