@@ -4,7 +4,7 @@ title: Kiosk — เปิด/ปิดช่องทางรายงาน�
 status: approved
 date: 2026-09-25
 created: 2026-09-25
-updated: 2026-10-13 # ข้อเสนอแก้ไข §9 (proposed)
+updated: 2026-10-13 # ข้อเสนอแก้ไข §9 approved โดย Dev/Team Lead Soravit Sukkarn (รับ requirement จากหัวหน้าโครงการเมื่อวาน 2026-10-12)
 requested_by: ทีม kiosk (branch feat/pre-register_kiosk)
 decided_by: Jakee Indapanya (GitHub net-lynx), Project Owner — อนุมัติ 2026-10-04 (Asia/Bangkok)
 decision_date: 2026-10-04
@@ -30,7 +30,7 @@ migration: ไม่มี backfill — flag ใหม่ใน `feature_flags` 
 ---
 # CR-152: Kiosk — เปิด/ปิดช่องทางเบอร์โทรรายศูนย์ผ่าน backoffice
 
-> **ข้อเสนอแก้ไข 2026-10-13 (proposed, ยังไม่ approve):** §9 ท้ายเอกสาร — flag เดิมเปิด/ปิดเมนู「พิมพ์ QR」(CR-151 §15) แทนการ์ดรายงานตัวด้วยเบอร์ · ระหว่างรอ PO ข้อความ §1–§8 ยังมีผล
+> **ข้อเสนอแก้ไข 2026-10-13 (approved โดย Team Lead):** §9 ท้ายเอกสาร — Soravit Sukkarn (Team Lead) อนุมัติแล้ว โดยรับ requirement จากหัวหน้าโครงการเมื่อ 2026-10-12: flag เดิมเปิด/ปิดเมนู「พิมพ์ QR」(CR-151 §15) แทนการ์ดรายงานตัวด้วยเบอร์
 
 > **สถานะ:** approved เป็น spec เมื่อ 2026-10-04 (Asia/Bangkok) โดย Project Owner Jakee Indapanya (GitHub net-lynx) · ยังไม่ implement · ยอมรับ flag รายศูนย์ผ่าน backoffice แล้ว
 
@@ -157,9 +157,10 @@ migration: ไม่มี backfill — flag ใหม่ใน `feature_flags` 
   - kiosk อ่านค่าผ่าน `POST /api/v1/scanner/kiosk/config` · อ่านค่าไม่ได้ = ปิด (fail closed)
   - §7 ไม่มี open decision
   - รันเลข CR-152 จาก `docs/changes/_index.md` บน `develop` (เลขที่จัดสรรล่าสุดคือ CR-151; ไม่ใช้ช่องว่าง 131–133 และ 144–147) · ถอด `docs/changes/draft-kiosk-phone-check-in-toggle.md`
-- 2026-10-13 — ทีม kiosk เสนอ (proposed) §9: ช่องทางเบอร์เปลี่ยนเป็นเมนู「พิมพ์ QR」(CR-151 §15) · flag key เดิม เปลี่ยนเฉพาะสิ่งที่ flag คุมและ label ใน back-office
+- 2026-10-13 — ทีม kiosk เสนอ §9: ช่องทางเบอร์เปลี่ยนเป็นเมนู「พิมพ์ QR」(CR-151 §15) · flag key เดิม เปลี่ยนเฉพาะสิ่งที่ flag คุมและ label ใน back-office
+- 2026-10-13 — Soravit Sukkarn (Team Lead) approved ข้อเสนอแก้ไข §9 โดยรับ requirement จากหัวหน้าโครงการเมื่อวาน (2026-10-12)
 
-## 9. ข้อเสนอแก้ไข 2026-10-13 (proposed — รอ PO)
+## 9. ข้อเสนอแก้ไข 2026-10-13 (approved โดย Team Lead)
 
 > **สรุป (TL;DR):** `feature_flags.kiosk_phone_check_in_enabled` (key เดิม ไม่ migrate) คุมเมนู「พิมพ์ QR」ด้วยเบอร์โทร (CR-151 §15) แทนการ์ด「เบอร์โทรศัพท์」· หน้าแรกเป็น 3 การ์ดเสมอ · ไม่กระทบ schema
 

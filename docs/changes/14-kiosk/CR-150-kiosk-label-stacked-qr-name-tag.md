@@ -3,7 +3,7 @@ id: CR-150
 title: Kiosk label — QR บน / ข้อความล่าง ใช้ component QR + ชื่อ ร่วมกับตั๋ว pre-register
 status: approved
 date: 2026-09-27
-updated: 2026-10-13 # ข้อเสนอแก้ไข §6 (proposed) · 2026-10-04 approved โดย Dev Lead Soravit Sukkarn + รันเลข CR-150 และลงทะเบียนใน _index.md
+updated: 2026-10-13 # ข้อเสนอแก้ไข §6 approved โดย Dev/Team Lead Soravit Sukkarn (รับ requirement จากหัวหน้าโครงการเมื่อวาน 2026-10-12) · 2026-10-04 approved โดย Dev Lead Soravit Sukkarn + รันเลข CR-150 และลงทะเบียนใน _index.md
 requested_by: ทีม (kiosk pre-register)
 decided_by: Soravit Sukkarn (Dev Lead)
 layer: volatile
@@ -22,7 +22,7 @@ migration: N/A (ไม่แตะ API / CouchDB / MongoDB / schema_v)
 
 # CR-150: Kiosk label — QR บน / ข้อความล่าง ใช้ component QR + ชื่อ ร่วมกับตั๋ว pre-register
 
-> **ข้อเสนอแก้ไข 2026-10-13 (proposed, ยังไม่ approve):** §6 ท้ายเอกสาร — label พิมพ์ `shelter.psu.ac.th` ใต้ QR · ปุ่ม test print หน้าแรก (ต้อง PIN เจ้าหน้าที่)
+> **ข้อเสนอแก้ไข 2026-10-13 (approved โดย Team Lead):** §6 ท้ายเอกสาร — Soravit Sukkarn (Team Lead) อนุมัติแล้ว โดยรับ requirement จากหัวหน้าโครงการเมื่อ 2026-10-12: label พิมพ์ `shelter.psu.ac.th` ใต้ QR · ปุ่ม test print หน้าแรก (ต้อง PIN เจ้าหน้าที่)
 
 > [!NOTE]
 > **Branch Dependency & Retrospective Spec:** เอกสารนี้เป็นการ sync spec ย้อนหลัง (retrospective documentation) สำหรับการปรับปรุง layout label และการแชร์ component ที่เริ่มพัฒนาบน feature branch `feat/pre-register_kiosk` (โฟลเดอร์ `frontend/src/lib/features/kiosk` จะเข้าสู่ `develop` พร้อม feature branch ดังกล่าว)
@@ -93,9 +93,10 @@ N/A
 - 2026-09-27 — proposed; เจ้าของเลือก layout "QR บน / `ชื่อ` + ชื่อ + `ศูนย์ X`, ไม่แสดง ULID" และ track เป็น CR ไฟล์ใหม่
 - 2026-10-04 — ปรับปรุงตาม PR Review (#321): ลบ dead link, ปรับ `affects:` อ้างอิงเอกสารที่มีอยู่จริง (ระบุสถานะรอ merge), ระบุ branch dependency (`feat/pre-register_kiosk`), ขยายความ FR-P8 เรื่องจำนวนบรรทัด (3–4 บรรทัดเมื่อชื่อตัด 2 บรรทัด), FR-L2 พฤติกรรม placeholder บนกระดาษความร้อน, ระบุรหัสเป็น FR-P8 (แก้ — Kiosk Label Layout) ให้ชัดเจน และเพิ่มหมายเหตุนโยบาย Privacy การ mask นามสกุล (FR-KPC-28)
 - 2026-10-04 — approved โดย Dev Lead Soravit Sukkarn หลัง merge PR #321 เข้า develop · รันเลข CR-150 จาก docs/changes/_index.md
-- 2026-10-13 — ทีม kiosk เสนอ (proposed) §6 จาก feedback หน้างาน: ลิงก์เป็นข้อความบน label (ไม่เปลี่ยน QR payload) · ปุ่ม test print ต้องใส่ PIN เจ้าหน้าที่ · ปุ่มเล็กมุมล่างขวา
+- 2026-10-13 — ทีม kiosk เสนอ §6 จาก feedback หน้างาน: ลิงก์เป็นข้อความบน label (ไม่เปลี่ยน QR payload) · ปุ่ม test print ต้องใส่ PIN เจ้าหน้าที่ · ปุ่มเล็กมุมล่างขวา
+- 2026-10-13 — Soravit Sukkarn (Team Lead) approved ข้อเสนอแก้ไข §6 โดยรับ requirement จากหัวหน้าโครงการเมื่อวาน (2026-10-12)
 
-## 6. ข้อเสนอแก้ไข 2026-10-13 (proposed — รอ PO)
+## 6. ข้อเสนอแก้ไข 2026-10-13 (approved โดย Team Lead)
 
 > **สรุป (TL;DR):** label 80×60 mm เพิ่มบรรทัด `shelter.psu.ac.th` ใต้ QR · หน้า `/kiosk` มีปุ่มทดสอบการพิมพ์สำหรับเจ้าหน้าที่ · QR payload และขนาด label ไม่เปลี่ยน · ไม่กระทบ schema / API
 

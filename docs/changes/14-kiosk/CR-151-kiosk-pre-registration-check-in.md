@@ -4,7 +4,7 @@ title: Kiosk — เปลี่ยนจาก "เสียบบัตรเ�
 status: approved
 date: 2026-09-24
 created: 2026-09-24
-updated: 2026-10-13 # ข้อเสนอแก้ไข §15 (proposed) · 2026-10-04 approved และ merge โดย Soravit Sukkar (Team Lead) + รันเลข CR-151 และลงทะเบียนใน _index.md
+updated: 2026-10-13 # ข้อเสนอแก้ไข §15 approved โดย Dev/Team Lead Soravit Sukkarn (รับ requirement จากหัวหน้าโครงการเมื่อวาน 2026-10-12) · 2026-10-04 approved และ merge โดย Soravit Sukkar (Team Lead) + รันเลข CR-151 และลงทะเบียนใน _index.md
 requested_by: ทีม kiosk (branch feat/pre-register_kiosk)
 decided_by: Soravit Sukkar (Team Lead)
 decision_date: 2026-10-04
@@ -445,11 +445,12 @@ migration: ไม่มี — ไม่มี field ใหม่ ไม่ bump
 - 2026-10-04 — ปรับปรุงเอกสารตาม PR review (#309): ปรับการอ้างอิง `schema_v` ของ evacuee ให้ระบุคงเดิมตาม develop (ไม่ระบุเลข 10 ที่ล้าสมัย), ระบุหมายเหตุเชื่อมโยง walk-in กับ CR-149, บันทึกคำเตือนความเสี่ยงด้าน audit trail (Audit Trail Gap), ปรับ G-8 เป็น backlog ของ scanner_client, ปรับการอ้างอิง implementation plans ให้ระบุรวมติดตามใน CR นี้ (ตัด phantom paths), และยกเลิกโครงสร้างส่วนถาม-ตอบเดิม โดยผนวกข้อกำหนดและคำตอบของเจ้าของโครงการทั้งหมดเข้าสู่เนื้อหา spec โดยตรง
 - 2026-10-04 — Soravit Sukkar (Team Lead) อนุมัติ (approved) CR-151 และ merge PR #309 เข้า branch develop; ยืนยัน schema_v ของ evacuee คงเดิม (ไม่อัปเกรด schema_v; อิงตามเวอร์ชันปัจจุบันของ develop) และรันเลข CR-151
 - เหตุผลที่ใช้ `/lookup` เดิมสำหรับเบอร์แทนการสร้าง endpoint ใหม่: allowlist ของ `scanner_client` ครอบคลุมอยู่แล้ว จึงไม่ต้อง deploy ฝั่ง Python ใหม่
-- 2026-10-13 — ทีม kiosk เสนอ (proposed) §15 จาก feedback หน้างาน: หัวข้อหน้าแรก「ลงทะเบียน」· รับ `registered_via:'kiosk'` · ช่องทางเบอร์เปลี่ยนเป็น「พิมพ์ QR」ยืนยัน 4 ตัวท้าย พิมพ์ได้เฉพาะ `arriving`/`active`/`room_confirmed` (ไม่รวม `temporary_leave`, `checked_out`) · ช่องทางบัตร/QR/ThaiD พิมพ์ซ้ำได้เฉพาะ `arriving` คงเดิม · track ใน CR นี้แทน draft CR ใหม่
+- 2026-10-13 — ทีม kiosk เสนอ §15 จาก feedback หน้างาน: หัวข้อหน้าแรก「ลงทะเบียน」· รับ `registered_via:'kiosk'` · ช่องทางเบอร์เปลี่ยนเป็น「พิมพ์ QR」ยืนยัน 4 ตัวท้าย พิมพ์ได้เฉพาะ `arriving`/`active`/`room_confirmed` (ไม่รวม `temporary_leave`, `checked_out`) · ช่องทางบัตร/QR/ThaiD พิมพ์ซ้ำได้เฉพาะ `arriving` คงเดิม · track ใน CR นี้แทน draft CR ใหม่
+- 2026-10-13 — Soravit Sukkarn (Team Lead) approved ข้อเสนอแก้ไข §15 โดยรับ requirement จากหัวหน้าโครงการเมื่อวาน (2026-10-12)
 
-## 15. ข้อเสนอแก้ไข 2026-10-13 (proposed — รอ PO)
+## 15. ข้อเสนอแก้ไข 2026-10-13 (approved โดย Team Lead)
 
-> **สถานะ:** ข้อเสนอของทีม kiosk จาก feedback ทดสอบหน้างาน 2026-10-13 ยังไม่ approve · implement แล้วบน branch `refactor-kiosk-cleanup` · ระหว่างรอ PO ข้อความ §1–§14 ยังเป็น spec ที่ approve
+> **สถานะ:** approved โดย Soravit Sukkarn (Team Lead) — รับ requirement จากหัวหน้าโครงการเมื่อ 2026-10-12 · implement แล้วบน branch `refactor-kiosk-cleanup`
 
 > **สรุป (TL;DR)**
 >

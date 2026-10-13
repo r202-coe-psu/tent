@@ -4,7 +4,7 @@ title: Kiosk walk-in registration — เสียบบัตรแล้วไ
 status: approved
 date: 2026-09-27
 created: 2026-09-27
-updated: 2026-10-13 # ข้อเสนอแก้ไข §9 (proposed)
+updated: 2026-10-13 # ข้อเสนอแก้ไข §9 approved โดย Dev/Team Lead Soravit Sukkarn (รับ requirement จากหัวหน้าโครงการเมื่อวาน 2026-10-12)
 requested_by: ทีม kiosk (branch feat/pre-register_kiosk)
 decided_by: Jakee Indapanya (GitHub net-lynx), Project Owner — อนุมัติ 2026-10-03 (Asia/Bangkok)
 decision_date: 2026-10-03
@@ -43,7 +43,7 @@ note: >
 
 > **สถานะ:** approved เป็น spec เมื่อ 2026-10-03 (Asia/Bangkok) โดย Project Owner Jakee Indapanya (GitHub net-lynx) · ยังไม่ implement
 
-> **ข้อเสนอแก้ไข 2026-10-12/13 (proposed, ยังไม่ approve):** §9 ด้านล่าง — บล็อกเบอร์ซ้ำ · walk-in ได้ household จากที่อยู่บนบัตร/ThaiD และเข้าครัวเรือนที่ที่อยู่ตรงกัน · walk-in เป็น `arriving` + พิมพ์ QR · แก้ Q3 / Q4 / FR-KWR-18..21 / FR-KWR-26 / FR-KWR-31 / FR-KWR-41..42 · ระหว่างรอ PO ข้อความ §1–§8 ยังมีผล
+> **ข้อเสนอแก้ไข 2026-10-12/13 (approved โดย Team Lead):** §9 ด้านล่าง — Soravit Sukkarn (Team Lead) อนุมัติแล้ว โดยรับ requirement จากหัวหน้าโครงการเมื่อ 2026-10-12: บล็อกเบอร์ซ้ำ · walk-in ได้ household จากที่อยู่บนบัตร/ThaiD และเข้าครัวเรือนที่ที่อยู่ตรงกัน · walk-in เป็น `arriving` + พิมพ์ QR · แก้ Q3 / Q4 / FR-KWR-18..21 / FR-KWR-26 / FR-KWR-31 / FR-KWR-41..42
 
 > **สรุป (TL;DR)**
 >
@@ -236,9 +236,9 @@ Project Owner Jakee Indapanya (GitHub net-lynx) เคาะทุกข้อ�
 
 ---
 
-## 9. ข้อเสนอแก้ไข 2026-10-12/13 (proposed — รอ PO)
+## 9. ข้อเสนอแก้ไข 2026-10-12/13 (approved โดย Team Lead)
 
-> **สถานะ:** ข้อเสนอของทีม kiosk ยังไม่ approve · implement แล้วบน branch `refactor-kiosk-cleanup` · ระหว่างรอ PO ข้อความ §1–§8 ยังเป็น spec ที่ approve · แผน: [`kiosk-walk-in-phone-duplicate-household-implementation-plan.md`](../../plans/kiosk-walk-in-phone-duplicate-household-implementation-plan.md), [`kiosk-feedback-walk-in-reprint-implementation-plan.md`](../../plans/kiosk-feedback-walk-in-reprint-implementation-plan.md)
+> **สถานะ:** approved โดย Soravit Sukkarn (Team Lead) — รับ requirement จากหัวหน้าโครงการเมื่อ 2026-10-12 · implement แล้วบน branch `refactor-kiosk-cleanup` · แผน: [`kiosk-walk-in-phone-duplicate-household-implementation-plan.md`](../../plans/kiosk-walk-in-phone-duplicate-household-implementation-plan.md), [`kiosk-feedback-walk-in-reprint-implementation-plan.md`](../../plans/kiosk-feedback-walk-in-reprint-implementation-plan.md)
 
 > **สรุป (TL;DR)**
 >
@@ -328,7 +328,7 @@ Project Owner Jakee Indapanya (GitHub net-lynx) เคาะทุกข้อ�
 4. kiosk household lookup — walk-in `arriving` แสดงในครัวเรือนแต่เลือก check-in ไม่ได้ (พิมพ์ซ้ำได้)
 5. **walk-in นับเป็น `arriving` ทันที** — เข้าคิวคัดกรองโดยไม่ผ่านการยืนยันของ Station 1 · ตัวเลข Present/In-zone ตาม definition ของ `arriving` · คิว「ลงทะเบียนที่ตู้ (รอยืนยัน)」ไม่มีรายการใหม่ · Station 1 ยกเลิก/promote walk-in ใหม่ไม่ได้ เหมือน pre-registration ที่รายงานตัวแล้ว
 
-> [NEEDS DECISION: ข้อ 2 — ให้ residence-match เสนอ household ที่สร้างจากตู้ (ยังไม่ผ่าน Station 1) ได้หรือไม่ · ข้อเสนอของทีม: ยอมรับได้ เพราะ join ต้องกดยืนยันและไม่เปิดเผย PII (draft-residence-join-on-create) · ทางเลือก: กรอง household ที่ `created_by` ขึ้นต้นด้วย `scanner:` ออก]
+> [DECISION: ข้อ 2 — ให้ residence-match เสนอ household ที่สร้างจากตู้ (ยังไม่ผ่าน Station 1) ได้ — อนุมัติโดย Team Lead ตาม requirement จากหัวหน้าโครงการ เพราะ join ต้องกดยืนยันและไม่เปิดเผย PII]
 
 ### 9.8 Why
 
@@ -380,3 +380,4 @@ Project Owner Jakee Indapanya (GitHub net-lynx) เคาะทุกข้อ�
 - 2026-10-12 — ทีม kiosk เสนอ (proposed): บล็อกเบอร์ซ้ำ (ไม่ใช่เตือน) · เทียบเฉพาะ evacuee ในศูนย์ · สร้าง household ใหม่ให้ walk-in · นับเฉพาะสถานะ Forecast · ไม่ตรวจเบอร์ผู้ติดต่อฉุกเฉิน · ไม่มีที่อยู่ก็สร้าง household · ไม่ย้ายซอย/ถนน · ข้อความเบอร์ซ้ำแสดงใต้ numpad (§9.1–9.2)
 - 2026-10-13 — ทีม kiosk เสนอเพิ่มจาก feedback หน้างาน (proposed): walk-in เป็น `arriving` + พิมพ์ QR ที่หน้าสุดท้าย · merge ครัวเรือนเมื่อบ้านเลขที่ + หมู่ + ตำบล + อำเภอ + จังหวัดตรงกัน (ถนนเทียบเฉพาะเมื่อมีทั้งสองฝั่ง · ไม่เทียบตรอก/ซอย) หัวหน้า = คนแรก — ไม่ใช้ "ทุกช่องบนบัตร" เพราะ ThaiD ไม่เก็บตรอก/ซอย/ถนน และยังไม่มี response DOPA จริงยืนยันรูปแบบ → เลื่อนไปเฟสถัดไป · แก้ `scard.py` ที่เก็บถนนผิดช่อง (§9.3–9.5)
 - 2026-10-13 — รวมข้อเสนอเข้า CR นี้เป็น §9 แทนการเปิด draft CR ใหม่ (ถอด `draft-kiosk-walk-in-household-phone-duplicate.md`) · ส่วนเมนู「พิมพ์ QR」อยู่ใน CR-151 §15 / CR-152 §9 · label อยู่ใน CR-150 · ตรวจหน้าในกรอบอยู่ใน CR-158
+- 2026-10-13 — Soravit Sukkarn (Team Lead) approved ข้อเสนอแก้ไข §9 ทั้งหมด โดยรับ requirement จากหัวหน้าโครงการเมื่อวาน (2026-10-12)

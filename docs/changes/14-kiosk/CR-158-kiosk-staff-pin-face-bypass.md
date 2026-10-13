@@ -3,7 +3,7 @@ id: CR-158
 title: Kiosk staff PIN — ข้ามการตรวจใบหน้าได้เฉพาะเมื่อเจ้าหน้าที่ใส่ PIN ของเครื่อง (PIN ต่อเครื่อง เก็บใน DB scanner_secrets)
 status: approved
 date: 2026-10-10
-updated: 2026-10-13 # ข้อเสนอแก้ไข §8 (proposed)
+updated: 2026-10-13 # ข้อเสนอแก้ไข §8 approved โดย Dev/Team Lead Soravit Sukkarn (รับ requirement จากหัวหน้าโครงการเมื่อวาน 2026-10-12)
 requested_by: ทีม kiosk
 decided_by: Soravit Sukkarn (Team Lead)
 layer: volatile
@@ -28,7 +28,7 @@ migration: additive — doc scanner_device v1 อ่านเป็น "ยั�
 
 # CR-158: Kiosk staff PIN — ข้ามการตรวจใบหน้าได้เฉพาะเมื่อเจ้าหน้าที่ใส่ PIN ของเครื่อง
 
-> **ข้อเสนอแก้ไข 2026-10-13 (proposed, ยังไม่ approve):** §8 ท้ายเอกสาร — การตรวจใบหน้านับเฉพาะหน้าในกรอบวงรี · PIN ของเครื่องใช้เปิดปุ่ม test print ด้วย (CR-150 §6)
+> **ข้อเสนอแก้ไข 2026-10-13 (approved โดย Team Lead):** §8 ท้ายเอกสาร — Soravit Sukkarn (Team Lead) อนุมัติแล้ว โดยรับ requirement จากหัวหน้าโครงการเมื่อ 2026-10-12: การตรวจใบหน้านับเฉพาะหน้าในกรอบวงรี · PIN ของเครื่องใช้เปิดปุ่ม test print ด้วย (CR-150 §6)
 
 > **สรุป (TL;DR):**
 >
@@ -218,9 +218,10 @@ mode `off`: ไม่เปลี่ยน ไม่มี PIN (mode `shadow` �
   - feature spec kiosk 01 / 02 ยังไม่อยู่ใน PR นี้ ระบุใน `affects:` ว่ามาใน PR แยก
   - ถอดบัตรระหว่าง panel PIN เปิด = ยกเลิก session (FR-21, AC-3)
 - 2026-10-11 — approved โดย Soravit Sukkarn (Team Lead) (รันเลข CR-158)
-- 2026-10-13 — ทีม kiosk เสนอ (proposed) §8 จาก feedback หน้างาน: คนเดินผ่านด้านหลังทำให้ตรวจหน้าไม่ผ่าน (`multiple_faces`) → ตรวจเฉพาะหน้าในกรอบวงรี
+- 2026-10-13 — ทีม kiosk เสนอ §8 จาก feedback หน้างาน: คนเดินผ่านด้านหลังทำให้ตรวจหน้าไม่ผ่าน (`multiple_faces`) → ตรวจเฉพาะหน้าในกรอบวงรี
+- 2026-10-13 — Soravit Sukkarn (Team Lead) approved ข้อเสนอแก้ไข §8 โดยรับ requirement จากหัวหน้าโครงการเมื่อวาน (2026-10-12)
 
-## 8. ข้อเสนอแก้ไข 2026-10-13 (proposed — รอ PO)
+## 8. ข้อเสนอแก้ไข 2026-10-13 (approved โดย Team Lead)
 
 > **สรุป (TL;DR):** `quality.assess` ของ face service ตัดสินเฉพาะหน้าที่อยู่ในกรอบวงรีบนจอ · คนเดินผ่านด้านหลังไม่ทำให้ได้ `multiple_faces` · PIN ของเครื่องใช้กับปุ่ม test print ด้วย · ไม่กระทบ schema / API
 
