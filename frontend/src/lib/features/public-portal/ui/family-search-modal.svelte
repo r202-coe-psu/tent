@@ -29,6 +29,7 @@
 	/** Always a copy key (never raw server/network text) so it follows the language toggle. */
 	type SearchMessage =
 		| 'tooShort'
+		| 'tooManyWords'
 		| 'incompletePhone'
 		| 'tooLong'
 		| 'rateLimited'
