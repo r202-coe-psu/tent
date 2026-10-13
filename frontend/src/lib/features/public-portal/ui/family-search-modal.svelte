@@ -28,7 +28,13 @@
 	let results = $state<FamilySearchResult[] | null>(null);
 	/** Always a copy key (never raw server/network text) so it follows the language toggle. */
 	type SearchMessage =
-		'tooShort' | 'incompletePhone' | 'rateLimited' | 'unavailable' | 'generic' | 'networkError';
+		| 'tooShort'
+		| 'incompletePhone'
+		| 'tooLong'
+		| 'rateLimited'
+		| 'unavailable'
+		| 'generic'
+		| 'networkError';
 	let message = $state<SearchMessage | null>(null);
 	/** Input guidance (fixable by the user) is a hint, not a failure. */
 	let isHint = $state(false);
