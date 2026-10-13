@@ -379,7 +379,7 @@
 	<div class="flex h-16 w-full items-center justify-between px-4">
 		<a
 			href={systemManagementHomePath}
-			class="flex min-h-11 items-center gap-3"
+			class="flex min-h-11 min-w-0 items-center gap-3"
 			onclick={closeMobileMenu}
 		>
 			<img
@@ -392,7 +392,7 @@
 			>
 				<span class="truncate">PSU Smart Shelter</span>
 				<span
-					class="shrink-0 rounded bg-primary/10 px-1.5 py-0.5 text-2xs font-semibold text-primary"
+					class="hidden shrink-0 rounded bg-primary/10 px-1.5 py-0.5 text-2xs font-semibold text-primary min-[360px]:inline-flex"
 				>
 					System Management
 				</span>
@@ -400,7 +400,7 @@
 		</a>
 		<button
 			type="button"
-			class="flex min-h-11 min-w-11 items-center justify-center rounded-lg border border-sidebar-border bg-card text-muted-foreground transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none"
+			class="flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-lg border border-sidebar-border bg-card text-muted-foreground transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none"
 			onclick={() => (mobileMenuOpen = !mobileMenuOpen)}
 			aria-label={mobileMenuOpen ? 'ปิดเมนู' : 'เปิดเมนู'}
 			aria-expanded={mobileMenuOpen}

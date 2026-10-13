@@ -30,10 +30,10 @@
 	const rowBase = $derived(
 		compact
 			? 'flex min-h-11 items-center gap-3 rounded-lg border px-3 py-2'
-			: 'flex min-h-11 items-center gap-4 rounded-xl border p-4'
+			: 'flex min-h-11 items-center gap-2.5 rounded-xl border p-3 sm:gap-4 sm:p-4'
 	);
-	const iconBox = $derived(compact ? 'size-8 rounded-lg' : 'size-12 rounded-xl');
-	const iconSize = $derived(compact ? 'size-4' : 'size-6');
+	const iconBox = $derived(compact ? 'size-8 rounded-lg' : 'size-10 rounded-xl sm:size-12');
+	const iconSize = $derived(compact ? 'size-4' : 'size-5 sm:size-6');
 	const labelSize = $derived(compact ? 'text-sm' : 'text-base');
 </script>
 
@@ -68,7 +68,7 @@
 				<p class="mt-0.5 text-sm text-slate-600">{item.desc}</p>
 			{/if}
 		</div>
-		<ChevronRight class="size-5 shrink-0 text-slate-400" aria-hidden="true" />
+		<ChevronRight class="size-4 shrink-0 text-slate-400 sm:size-5" aria-hidden="true" />
 	</a>
 {:else if state === 'checking'}
 	<div aria-busy="true" class="{rowBase} border-slate-200/80 bg-white">
