@@ -26,31 +26,44 @@ async function hasOps(db: string): Promise<boolean> {
 }
 
 /**
- * `ITEM_NAME` → the catalog's `item_master` ids. Run after the master seed, which is what
- * creates them; fails loudly rather than writing stock or campaigns the catalog cannot
- * resolve.
+ * `ITEM_NAME` → the catalog's `item_master` id and `base_unit`. Run after the master seed,
+ * which is what creates them; fails loudly rather than writing stock or campaigns the
+ * catalog cannot resolve.
+ *
+ * The unit is read, not hard-coded: these docs are written with admin credentials, so
+ * the campaign and receive unit checks never run on them. A hard-coded `piece` for the
+ * `cloth` blanket went in unnoticed and later blocked every cut-off and promote on that
+ * campaign with `Unit mismatch` (schema.md §2.1 — `unit` must equal `base_unit`).
  */
-async function resolveItemIds(): Promise<Record<ItemKey, string>> {
+async function resolveCatalogItems(): Promise<{
+	ITEM: Record<ItemKey, string>;
+	UNIT: Record<ItemKey, string>;
+}> {
 	const names = Object.values(ITEM_NAME);
 	const { status, data } = await couchReq('POST', '/catalog/_find', {
 		selector: { type: 'item_master', name: { $in: names } },
-		fields: ['_id', 'name'],
+		fields: ['_id', 'name', 'base_unit'],
 		limit: names.length * 2
 	});
 	if (status !== 200) throw new Error(`seed: catalog item lookup failed (HTTP ${status})`);
-	const idByName = new Map(
-		((data as { docs?: { _id: string; name: string }[] }).docs ?? []).map((d) => [d.name, d._id])
+	const byName = new Map(
+		((data as { docs?: { _id: string; name: string; base_unit?: string }[] }).docs ?? []).map(
+			(d) => [d.name, d]
+		)
 	);
-	const ids = {} as Record<ItemKey, string>;
+	const ITEM = {} as Record<ItemKey, string>;
+	const UNIT = {} as Record<ItemKey, string>;
 	for (const [key, name] of Object.entries(ITEM_NAME) as [ItemKey, string][]) {
-		const id = idByName.get(name);
-		if (!id)
+		const doc = byName.get(name);
+		if (!doc)
 			throw new Error(
 				`seed: catalog has no item_master named "${name}" — run the master seed first`
 			);
-		ids[key] = id;
+		if (!doc.base_unit) throw new Error(`seed: item_master "${name}" has no base_unit`);
+		ITEM[key] = doc._id;
+		UNIT[key] = doc.base_unit;
 	}
-	return ids;
+	return { ITEM, UNIT };
 }
 
 function scale(code: string, hi: number, mid: number, lo: number): string {
@@ -60,7 +73,7 @@ function scale(code: string, hi: number, mid: number, lo: number): string {
 }
 
 export async function seedStagingOps(): Promise<void> {
-	const ITEM = await resolveItemIds();
+	const { ITEM, UNIT } = await resolveCatalogItems();
 	for (const code of [SH001_CODE, SH002_CODE, SH003_CODE]) {
 		const db = shelterDbName(code);
 		const ctx: AuthorContext = { shelterCode: code, createdBy: 'seed' };
@@ -80,7 +93,7 @@ export async function seedStagingOps(): Promise<void> {
 				{
 					item_id: ITEM.rice,
 					qty: scale(code, 500, 300, 150),
-					unit: 'kg',
+					unit: UNIT.rice,
 					reason: 'adjust',
 					ref_id: null,
 					adjust_reason: 'found'
@@ -91,7 +104,7 @@ export async function seedStagingOps(): Promise<void> {
 				{
 					item_id: ITEM.water,
 					qty: scale(code, 1200, 800, 400),
-					unit: 'bottle',
+					unit: UNIT.water,
 					reason: 'adjust',
 					ref_id: null,
 					adjust_reason: 'found'
@@ -102,7 +115,7 @@ export async function seedStagingOps(): Promise<void> {
 				{
 					item_id: ITEM.paracetamol,
 					qty: '2000',
-					unit: 'tablet',
+					unit: UNIT.paracetamol,
 					reason: 'adjust',
 					ref_id: null,
 					adjust_reason: 'found'
@@ -113,7 +126,7 @@ export async function seedStagingOps(): Promise<void> {
 				{
 					item_id: ITEM.soap,
 					qty: '300',
-					unit: 'bar',
+					unit: UNIT.soap,
 					reason: 'adjust',
 					ref_id: null,
 					adjust_reason: 'found'
@@ -124,7 +137,7 @@ export async function seedStagingOps(): Promise<void> {
 				{
 					item_id: ITEM.blanket,
 					qty: scale(code, 200, 120, 60),
-					unit: 'piece',
+					unit: UNIT.blanket,
 					reason: 'adjust',
 					ref_id: null,
 					adjust_reason: 'found'
@@ -135,7 +148,7 @@ export async function seedStagingOps(): Promise<void> {
 				{
 					item_id: ITEM.egg,
 					qty: '3000',
-					unit: 'piece',
+					unit: UNIT.egg,
 					reason: 'adjust',
 					ref_id: null,
 					adjust_reason: 'found'
@@ -146,7 +159,7 @@ export async function seedStagingOps(): Promise<void> {
 				{
 					item_id: ITEM.vegetable,
 					qty: '200',
-					unit: 'kg',
+					unit: UNIT.vegetable,
 					reason: 'adjust',
 					ref_id: null,
 					adjust_reason: 'found'
@@ -164,12 +177,12 @@ export async function seedStagingOps(): Promise<void> {
 							{
 								item_id: ITEM.rice,
 								qty_target: scale(code, 800, 500, 250),
-								unit: 'kg'
+								unit: UNIT.rice
 							},
 							{
 								item_id: ITEM.water,
 								qty_target: scale(code, 2000, 1200, 600),
-								unit: 'bottle'
+								unit: UNIT.water
 							}
 						],
 						notes: 'เปิดรับบริจาคเพื่อผู้ประสบภัยน้ำท่วม (staging seed)'
@@ -183,8 +196,8 @@ export async function seedStagingOps(): Promise<void> {
 					{
 						title: 'รับบริจาคของใช้ส่วนตัว',
 						needs: [
-							{ item_id: ITEM.soap, qty_target: '400', unit: 'bar' },
-							{ item_id: ITEM.blanket, qty_target: '200', unit: 'piece' }
+							{ item_id: ITEM.soap, qty_target: '400', unit: UNIT.soap },
+							{ item_id: ITEM.blanket, qty_target: '200', unit: UNIT.blanket }
 						]
 					},
 					ctx
@@ -202,7 +215,7 @@ export async function seedStagingOps(): Promise<void> {
 						phone_hash: 'mock-hash-cpf'
 					},
 					kind: 'items',
-					items: [{ item_id: ITEM.rice, qty: scale(code, 80, 40, 20), unit: 'kg' }],
+					items: [{ item_id: ITEM.rice, qty: scale(code, 80, 40, 20), unit: UNIT.rice }],
 					campaign_id: campaigns[0]._id,
 					tracking_token_hash: `mock-track-${code}-001`
 				},
@@ -213,8 +226,8 @@ export async function seedStagingOps(): Promise<void> {
 					donor: { name: 'วัดท่าสะอ้าน', phone: null, phone_hash: 'mock-hash-wat' },
 					kind: 'items',
 					items: [
-						{ item_id: ITEM.water, qty: scale(code, 200, 100, 50), unit: 'bottle' },
-						{ item_id: ITEM.blanket, qty: '25', unit: 'piece' }
+						{ item_id: ITEM.water, qty: scale(code, 200, 100, 50), unit: UNIT.water },
+						{ item_id: ITEM.blanket, qty: '25', unit: UNIT.blanket }
 					],
 					campaign_id: campaigns[0]._id,
 					tracking_token_hash: `mock-track-${code}-002`

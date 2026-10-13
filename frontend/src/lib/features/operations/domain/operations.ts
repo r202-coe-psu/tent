@@ -1737,6 +1737,28 @@ export function reopenNeed(campaign: DonationCampaign, itemId: string): Donation
 }
 
 /**
+ * A campaign need whose `unit` is not its catalog item's `base_unit` (schema.md §2.1).
+ *
+ * Carries the item and both unit codes so the needs board can name them in Thai — the
+ * message alone left staff reading `item_master:01M4…: expected cloth, got piece` with
+ * no idea which row it meant. Every write re-checks every need, so one stale need
+ * blocks cut-off and promote on the whole campaign until that row is re-saved.
+ */
+export class CampaignUnitMismatchError extends Error {
+	readonly itemId: string;
+	readonly expected: string;
+	readonly actual: string;
+
+	constructor(itemId: string, expected: string, actual: string) {
+		super(`Unit mismatch for campaign item ${itemId}: expected ${expected}, got ${actual}`);
+		this.name = 'CampaignUnitMismatchError';
+		this.itemId = itemId;
+		this.expected = expected;
+		this.actual = actual;
+	}
+}
+
+/**
  * Change what a campaign asks for on ONE need (back-office needs board — T-22 edit).
  *
  * Targets the need by `item_id`, never by position: the board renders one row per
