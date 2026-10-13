@@ -31,6 +31,15 @@ describe('validateFamilySearchQuery', () => {
 		expect(validateFamilySearchQuery(query)).toBe('tooShort');
 	});
 
+	// Python's str.strip() and re \s do not treat U+FEFF (BOM) as whitespace, while JS trim() and
+	// \s do. The backend therefore keeps these as names (>= 3 code points) and accepts them.
+	it.each(['\ufeffab', 'ab\ufeff', '\ufeff08236', '08\ufeff236'])(
+		'accepts %j because the backend does not strip U+FEFF',
+		(query) => {
+			expect(validateFamilySearchQuery(query)).toBeNull();
+		}
+	);
+
 	it('trims surrounding whitespace before checking', () => {
 		expect(validateFamilySearchQuery('  0812345678  ')).toBeNull();
 	});
