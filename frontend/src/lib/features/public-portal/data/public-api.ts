@@ -9,24 +9,52 @@ import type {
 	PublicShelterListResponse
 } from '../domain/types';
 import type { MasterLabelOption } from '../domain/master-labels';
+import { classifyPublicApiError, type PublicApiErrorKind } from '../domain/search-error';
 
-function publicApiError(error: unknown, status: number, fallback: string): Error {
-	if (error && typeof error === 'object' && 'error' in error) {
-		const body = error as { error?: { message?: string } };
-		if (body.error?.message) return new Error(body.error.message);
+const SEARCH_FALLBACK = 'เกิดข้อผิดพลาดในการค้นหา';
+
+/** Thai default copy per kind; UI layers re-map `kind` to the active language. */
+const SEARCH_ERROR_MESSAGES: Partial<Record<PublicApiErrorKind, string>> = {
+	validation: 'กรุณากรอกเบอร์โทรศัพท์ให้ครบ 10 หลัก หรือเลขบัตรประชาชน 13 หลัก',
+	rateLimited: 'ค้นหาบ่อยเกินไป ลองใหม่ภายหลัง',
+	unavailable: 'ระบบค้นหาไม่พร้อมใช้งานชั่วคราว'
+};
+
+export class PublicApiError extends Error {
+	readonly kind: PublicApiErrorKind;
+
+	constructor(kind: PublicApiErrorKind, message: string) {
+		super(message);
+		this.name = 'PublicApiError';
+		this.kind = kind;
 	}
-	return new Error(fallback || `Request failed (${status})`);
+}
+
+/** Never surfaces backend text — only `kind`-based copy, else `fallback`. */
+export function publicApiError(
+	body: unknown,
+	status: number,
+	fallback: string,
+	messages: Partial<Record<PublicApiErrorKind, string>> = {}
+): PublicApiError {
+	const kind = classifyPublicApiError(body, status);
+	return new PublicApiError(kind, messages[kind] ?? (fallback || `Request failed (${status})`));
 }
 
 export async function familySearch(query: string): Promise<FamilySearchResponse> {
-	const response = await fetch('/api/public/v1/occupants', {
-		method: 'POST',
-		headers: { 'Content-Type': 'application/json' },
-		body: JSON.stringify({ search: query })
-	});
+	let response: Response;
+	try {
+		response = await fetch('/api/public/v1/occupants', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ search: query })
+		});
+	} catch {
+		throw new PublicApiError('unavailable', SEARCH_ERROR_MESSAGES.unavailable ?? '');
+	}
 	const data = await response.json().catch(() => null);
 	if (!response.ok || !data) {
-		throw publicApiError(data, response.status, 'เกิดข้อผิดพลาดในการค้นหา');
+		throw publicApiError(data, response.status, SEARCH_FALLBACK, SEARCH_ERROR_MESSAGES);
 	}
 	return data as FamilySearchResponse;
 }

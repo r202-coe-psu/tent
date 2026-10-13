@@ -87,6 +87,22 @@ test.describe(
 			await expect(page.getByText('กรุณากรอกข้อมูลอย่างน้อย 3')).toBeVisible();
 			await expect(page.getByRole('heading', { name: 'เริ่มการค้นหา' })).toBeVisible();
 		});
+
+		test('E02 hints at a full phone number for a partial phone without calling the API', async ({
+			page
+		}) => {
+			let apiCalls = 0;
+			await page.route('**/api/public/v1/occupants', (route) => {
+				apiCalls += 1;
+				return route.abort();
+			});
+			await page.goto('/search');
+			await page.getByRole('textbox', { name: SEARCH_BOX }).fill('08236');
+			await page.getByRole('button', { name: 'ค้นหา' }).click();
+			await expect(page.getByText('กรุณากรอกเบอร์โทรศัพท์ให้ครบ 10 หลัก')).toBeVisible();
+			await expect(page.getByText('เกิดข้อผิดพลาดในการค้นหา')).toHaveCount(0);
+			expect(apiCalls).toBe(0);
+		});
 	}
 );
 
