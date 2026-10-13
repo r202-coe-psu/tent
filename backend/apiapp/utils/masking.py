@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+import unicodedata
 
 import grapheme
 
@@ -26,6 +27,32 @@ def mask_last_name(last_name: str) -> str:
     if len(graphemes) <= 4:
         return f"{graphemes[0]}****"
     return f"{graphemes[0]}{graphemes[1]}****{graphemes[-2]}{graphemes[-1]}"
+
+
+_WHITESPACE_RUN = re.compile(r"\s+")
+
+
+def name_key(value: str) -> str:
+    """Search key for a name — NFKC, casefold, one space between words, trimmed (CR-166).
+
+    NFKC makes Thai SARA AM (U+0E33) and its decomposed form (U+0E4D U+0E32) compare
+    equal. Must produce byte-identical output in the worker and in the backend.
+    """
+    folded = unicodedata.normalize("NFKC", value).casefold()
+    return _WHITESPACE_RUN.sub(" ", folded).strip()
+
+
+def surname_key(value: str) -> str:
+    """`name_key` with every space removed, so "van der Berg" and "vanderberg" match."""
+    return name_key(value).replace(" ", "")
+
+
+def last_name_hash(last_name: str | None) -> str | None:
+    """sha256 of the normalized full surname; None when there is no surname (CR-166)."""
+    if not last_name:
+        return None
+    key = surname_key(last_name)
+    return sha256_hex(key) if key else None
 
 
 def normalize_national_id(value: str) -> str:
