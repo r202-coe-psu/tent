@@ -355,11 +355,11 @@
 
 	<!-- Compact menu sheet (phone + tablet + iPad Pro mid-range) -->
 	<Sheet.Root bind:open={mobileMenuOpen}>
-		<Sheet.Content id="public-mobile-nav" side="right" class="gap-0 p-0">
-			<Sheet.Header class="border-b p-4 pr-14">
+		<Sheet.Content id="public-mobile-nav" side="right" class="h-dvh gap-0 overflow-hidden p-0">
+			<Sheet.Header class="shrink-0 border-b p-4 pr-14">
 				<Sheet.Title>{t.menuTitle}</Sheet.Title>
 			</Sheet.Header>
-			<nav class="flex flex-col gap-1 p-4">
+			<nav class="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto overscroll-contain p-4">
 				<button
 					type="button"
 					onclick={() => {
