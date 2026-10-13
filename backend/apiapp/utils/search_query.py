@@ -6,6 +6,10 @@ import re
 from dataclasses import dataclass
 from enum import StrEnum
 
+import grapheme
+
+from .masking import name_key
+
 
 class SearchQueryKind(StrEnum):
     NATIONAL_ID = "national_id"
@@ -20,6 +24,11 @@ class ParsedSearchQuery:
     raw: str
     normalized: str
 
+
+#: Every word of a name query must have at least this many graphemes (CR-166).
+MIN_NAME_WORD_GRAPHEMES = 2
+#: More words than this is rejected — bounds the `$or` branches built per query.
+MAX_NAME_WORDS = 4
 
 _DIGITS_ONLY = re.compile(r"^\d+$")
 _PASSPORT = re.compile(r"^[A-Za-z]{1,2}\d{6,9}$")
@@ -74,11 +83,17 @@ def parse_search_query(raw_query: str) -> ParsedSearchQuery | None:
             normalized=phone,
         )
 
-    if len(raw) < 3:
+    # Name query: `normalized` is the search key (NFKC/casefold/single spaces), one word
+    # per space. Judging each word (not the whole string) is what keeps "ก ข" out.
+    key = name_key(raw)
+    words = key.split(" ")
+    if len(words) > MAX_NAME_WORDS:
+        return None
+    if any(grapheme.length(word) < MIN_NAME_WORD_GRAPHEMES for word in words):
         return None
 
     return ParsedSearchQuery(
         kind=SearchQueryKind.NAME,
         raw=raw,
-        normalized=raw,
+        normalized=key,
     )
