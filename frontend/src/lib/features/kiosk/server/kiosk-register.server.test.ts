@@ -546,6 +546,29 @@ describe('kiosk walk-in joining the household at the same card address', () => {
 		expect(db.ofType('evacuee')).toHaveLength(2);
 	});
 
+	it('keeps the third and fourth walk-in at the address in the first household', async () => {
+		const db = fakeShelterDb();
+		const first = await register({ ...card, ...address });
+		await register({ ...second, ...address });
+		const third = await register({
+			...card,
+			...address,
+			citizen_id: '3234567890123',
+			first_name_th: 'สมศรี'
+		});
+		const fourth = await register({
+			...card,
+			...address,
+			citizen_id: '4234567890123',
+			first_name_th: 'สมปอง'
+		});
+
+		expect(db.ofType('household')).toHaveLength(1);
+		expect(third.household_id).toBe(first.household_id);
+		expect(fourth.household_id).toBe(first.household_id);
+		expect(db.ofType('evacuee')).toHaveLength(4);
+	});
+
 	it('gives a different road (both from the card) its own household', async () => {
 		const db = fakeShelterDb();
 		const first = await register({ ...card, ...address });

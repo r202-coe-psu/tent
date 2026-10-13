@@ -234,7 +234,7 @@ async function findJoinableKioskHousehold(
 	cardSnapshot: CardSnapshot,
 	addressKey: string
 ): Promise<string | null> {
-	const candidates = new Map<string, string>();
+	const candidates = new Map<string, Set<string>>();
 	let bookmark: string | undefined;
 	for (;;) {
 		const page = await adminFetch<{ docs?: unknown[]; bookmark?: string }>(`/${dbName}/_find`, {
@@ -263,7 +263,9 @@ async function findJoinableKioskHousehold(
 				walkInAddressKey(evacuee.card_snapshot) === addressKey &&
 				walkInRoadsCompatible(cardSnapshot.road, evacuee.card_snapshot.road)
 			) {
-				candidates.set(evacuee.household_id, evacuee._id);
+				const members = candidates.get(evacuee.household_id) ?? new Set<string>();
+				members.add(evacuee._id);
+				candidates.set(evacuee.household_id, members);
 			}
 		}
 		if (docs.length < ADDRESS_PAGE_SIZE || !page.bookmark || page.bookmark === bookmark) break;
@@ -271,7 +273,7 @@ async function findJoinableKioskHousehold(
 	}
 
 	let oldest: { id: string; createdAt: string } | null = null;
-	for (const [householdId, evacueeId] of candidates) {
+	for (const [householdId, evacueeIds] of candidates) {
 		const household = await adminFetch<{
 			type?: string;
 			shelter_code?: string;
@@ -283,7 +285,7 @@ async function findJoinableKioskHousehold(
 		const joinable =
 			household?.type === 'household' &&
 			household.shelter_code === shelterCode &&
-			household.head_evacuee_id === evacueeId &&
+			evacueeIds.has(household.head_evacuee_id ?? '') &&
 			household.created_by?.startsWith('scanner:') === true &&
 			!CLOSED_HOUSEHOLD_STATUSES.has(household.status ?? '');
 		if (!joinable) continue;
