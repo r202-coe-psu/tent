@@ -11,7 +11,7 @@
 	import { formatDate, getTranslation } from '$lib/utils/i18n';
 	import { familySearch, PublicApiError } from '../data/public-api';
 	import { searchResultKey } from '../domain/mappers';
-	import { validateFamilySearchQuery } from '../domain/search-input';
+	import { normalizeFamilySearchQuery, validateFamilySearchQuery } from '../domain/search-input';
 	import StayStatusChip from './stay-status-chip.svelte';
 	import type { FamilySearchResult } from '../domain/types';
 
@@ -47,7 +47,7 @@
 		results = null;
 
 		try {
-			const data = await familySearch(query.trim());
+			const data = await familySearch(normalizeFamilySearchQuery(query));
 			results = data.results;
 		} catch (e) {
 			if (e instanceof PublicApiError) {

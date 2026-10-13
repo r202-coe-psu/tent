@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { validateFamilySearchQuery } from './search-input';
+import {
+	FAMILY_SEARCH_MAX_LENGTH,
+	normalizeFamilySearchQuery,
+	validateFamilySearchQuery
+} from './search-input';
 
 describe('validateFamilySearchQuery', () => {
 	it.each([
@@ -42,5 +46,23 @@ describe('validateFamilySearchQuery', () => {
 
 	it('trims surrounding whitespace before checking', () => {
 		expect(validateFamilySearchQuery('  0812345678  ')).toBeNull();
+	});
+
+	it.each(['\u001c0812345678', '\u00850812345678', '\u30000812345678\u2003'])(
+		'strips Python-only whitespace around %j',
+		(query) => {
+			expect(validateFamilySearchQuery(query)).toBeNull();
+			expect(normalizeFamilySearchQuery(query)).toBe('0812345678');
+		}
+	);
+
+	it('keeps U+FEFF when normalizing, like Python strip()', () => {
+		expect(normalizeFamilySearchQuery(' \ufeffab ')).toBe('\ufeffab');
+	});
+
+	it('rejects queries over the backend max length', () => {
+		expect(validateFamilySearchQuery('ก'.repeat(FAMILY_SEARCH_MAX_LENGTH))).toBeNull();
+		expect(validateFamilySearchQuery('ก'.repeat(FAMILY_SEARCH_MAX_LENGTH + 1))).toBe('tooLong');
+		expect(validateFamilySearchQuery(`  ${'ก'.repeat(FAMILY_SEARCH_MAX_LENGTH)}  `)).toBeNull();
 	});
 });

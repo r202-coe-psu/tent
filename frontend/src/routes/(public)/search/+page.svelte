@@ -10,6 +10,7 @@
 	import { onMount } from 'svelte';
 	import {
 		familySearch,
+		normalizeFamilySearchQuery,
 		PublicApiError,
 		searchResultKey,
 		validateFamilySearchQuery,
@@ -51,7 +52,12 @@
 	async function performSearch() {
 		const issue = validateFamilySearchQuery(query);
 		if (issue) {
-			error = issue === 'tooShort' ? t.errorMinChars : t.errorIncompletePhone;
+			error =
+				issue === 'tooShort'
+					? t.errorMinChars
+					: issue === 'tooLong'
+						? t.errorTooLong
+						: t.errorIncompletePhone;
 			isHint = true;
 			return;
 		}
@@ -61,7 +67,7 @@
 		results = null;
 
 		try {
-			const data = await familySearch(query.trim());
+			const data = await familySearch(normalizeFamilySearchQuery(query));
 			results = data.results;
 			currentPage = 1;
 		} catch (e) {

@@ -33,7 +33,12 @@ export {
 	type StayStatusTone
 } from './domain/stay-status';
 export { default as StayStatusChip } from './ui/stay-status-chip.svelte';
-export { validateFamilySearchQuery, type FamilySearchInputIssue } from './domain/search-input';
+export {
+	FAMILY_SEARCH_MAX_LENGTH,
+	normalizeFamilySearchQuery,
+	validateFamilySearchQuery,
+	type FamilySearchInputIssue
+} from './domain/search-input';
 export type { PublicApiErrorKind } from './domain/search-error';
 export {
 	familySearch,

@@ -2,15 +2,30 @@
  * Client-side pre-check for the family search box. Mirrors the backend classifier
  * (backend/apiapp/utils/search_query.py) so a query the backend accepts is never blocked
  * here — we only intercept queries the API would reject with 422 anyway.
+ *
+ * Whitespace deliberately follows Python (`str.strip()` / `re` `\s`), not JS: Python does not
+ * treat U+FEFF as whitespace but does treat U+001C-U+001F and U+0085 as whitespace.
  */
 
-export type FamilySearchInputIssue = 'tooShort' | 'incompletePhone';
+export type FamilySearchInputIssue = 'tooShort' | 'incompletePhone' | 'tooLong';
 
-const SEPARATORS = /[\s-]+/gu;
-const PHONE_SEPARATORS = /[\s\-()]+/gu;
+/** Mirrors `SearchRequest.search` `max_length` (backend/apiapp/modules/evacuee/schemas.py). */
+export const FAMILY_SEARCH_MAX_LENGTH = 200;
+
+/** Python `str.isspace()` / `re` `\s` code points (verified against CPython). */
+const PY_WS =
+	'\\t-\\r\\x1c-\\x20\\x85\\xa0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000';
+const PY_TRIM = new RegExp(`^[${PY_WS}]+|[${PY_WS}]+$`, 'gu');
+const SEPARATORS = new RegExp(`[${PY_WS}-]+`, 'gu');
+const PHONE_SEPARATORS = new RegExp(`[${PY_WS}\\-()]+`, 'gu');
 const DIGITS_ONLY = /^\p{Nd}+$/u;
 const THAI_PHONE = /^0\p{Nd}{8,9}$/u;
 const NATIONAL_ID_LENGTH = 13;
+
+/** Trim exactly like the backend's `str.strip()`; send this, not `String.prototype.trim()`. */
+export function normalizeFamilySearchQuery(query: string): string {
+	return query.replace(PY_TRIM, '');
+}
 
 function normalizePhone(value: string): string | null {
 	let digits = value.replace(PHONE_SEPARATORS, '');
@@ -27,8 +42,9 @@ function normalizePhone(value: string): string | null {
  *   free text shorter than 3 characters is `tooShort`.
  */
 export function validateFamilySearchQuery(query: string): FamilySearchInputIssue | null {
-	const raw = query.trim();
+	const raw = normalizeFamilySearchQuery(query);
 	if (!raw) return 'tooShort';
+	if ([...raw].length > FAMILY_SEARCH_MAX_LENGTH) return 'tooLong';
 
 	const compact = raw.replace(SEPARATORS, '');
 
