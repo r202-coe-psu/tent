@@ -61,6 +61,23 @@ if [ "$PRINTER_BACKEND" != "escpos" ] && command -v cupsenable >/dev/null 2>&1 &
     cupsenable "$PRINTER_NAME" >> "$LOG_FILE" 2>&1 || echo "[$(date)] cupsenable $PRINTER_NAME failed (user needs lpadmin group)" >> "$LOG_FILE"
 fi
 
+# 6.2 Warm the webcam up once after boot: a cold UVC camera (e.g. Fantech C30 on kiosk1) gives
+# Chromium a black first stream; one short capture here makes the first open on the page work.
+# index0 is the capture node (index1 is metadata). Never block the kiosk when it fails.
+if command -v v4l2-ctl >/dev/null 2>&1; then
+    for _ in 1 2 3 4 5 6 7 8 9 10; do
+        compgen -G "/dev/v4l/by-id/*-video-index0" >/dev/null && break
+        sleep 1
+    done
+    for dev in /dev/v4l/by-id/*-video-index0; do
+        [ -e "$dev" ] || continue
+        timeout 5 v4l2-ctl -d "$dev" --stream-mmap --stream-count=10 --stream-to=/dev/null >> "$LOG_FILE" 2>&1 \
+            || echo "[$(date)] camera warm-up failed: $dev" >> "$LOG_FILE"
+    done
+else
+    echo "[$(date)] v4l2-ctl not found; camera warm-up skipped (sudo apt install v4l-utils)" >> "$LOG_FILE"
+fi
+
 # 7. Supervisor Loop: รัน main.py หากหลุดหรือปิดตัว ให้เปิดใหม่เสมอเพื่อความต่อเนื่องของ Kiosk
 echo "=== Starting SmartShelter Kiosk at $(date) (PID: $$, Python: $PYTHON_BIN, Flags: $EXTRA_ARGS) ===" >> "$LOG_FILE"
 while true; do
