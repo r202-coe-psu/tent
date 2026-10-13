@@ -181,13 +181,15 @@
 		}
 	}
 
-	/* 1024×600: the stepper stays on top; title + cards are centred in the space below it. */
+	/* 1024×600: the stepper stays on top; title + cards sit a little above the centre of the space
+	   below it (the bottom padding lifts them by half its height). */
 	@media (max-height: 650px) {
 		.kiosk-method-page {
 			min-height: auto;
 			flex: 1;
 			justify-content: flex-start;
 			gap: 0.5rem;
+			padding-bottom: 2rem;
 		}
 
 		.kiosk-method-page > header {
