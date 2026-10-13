@@ -33,6 +33,7 @@ import {
 	searchFixture
 } from './helpers/e2e-env';
 import { injectSession, routeBrowserCouchThroughApp } from './helpers/login';
+import { mockSystemBanner } from './helpers/pre-register';
 import {
 	publicSearchCount,
 	publicShelter,
@@ -139,6 +140,13 @@ test.describe('Public family search: server errors', { tag: ['@public', '@smoke'
 
 test.describe('Public family search: live results', { tag: ['@public', '@critical'] }, () => {
 	test.describe.configure({ mode: 'serial' });
+
+	// The PII checks below assert the full fixture surname never appears anywhere on the page, so
+	// the target's live system banner must not be able to say the same words (it reads
+	// "ทดสอบระบบ" on a dev stack that left its banner on).
+	test.beforeEach(async ({ page }) => {
+		await mockSystemBanner(page, false);
+	});
 
 	test('staff creates a shelter and registers households', async ({ page }) => {
 		test.skip(!CAN_WRITE, READ_ONLY_REASON);
