@@ -66,12 +66,15 @@
 		aria-label="PIN เจ้าหน้าที่สำหรับทดสอบการพิมพ์"
 		data-testid="kiosk-test-print-pin"
 	>
-		<KioskStaffPinEntry
-			headingTag="h2"
-			description="กรอก PIN 6 หลักเพื่อทดสอบการพิมพ์"
-			onverified={() => void testPrint.pinVerified()}
-			oncancel={() => testPrint.pinCancelled()}
-		/>
+		<!-- my-auto: centred on the screen, yet still scrolls from the top when it does not fit. -->
+		<div class="my-auto w-full">
+			<KioskStaffPinEntry
+				headingTag="h2"
+				description="กรอก PIN 6 หลักเพื่อทดสอบการพิมพ์"
+				onverified={() => void testPrint.pinVerified()}
+				oncancel={() => testPrint.pinCancelled()}
+			/>
+		</div>
 	</div>
 {/if}
 
