@@ -10,7 +10,9 @@
 	import { onMount } from 'svelte';
 	import {
 		familySearch,
+		PublicApiError,
 		searchResultKey,
+		validateFamilySearchQuery,
 		PublicPageShell,
 		StayStatusChip,
 		type FamilySearchResult
@@ -25,6 +27,8 @@
 	let isLoading = $state(false);
 	let results = $state<FamilySearchResult[] | null>(null);
 	let error = $state('');
+	/** Input guidance (fixable by the user) is a hint, not a failure. */
+	let isHint = $state(false);
 
 	let currentPage = $state(1);
 	const itemsPerPage = 5;
@@ -45,20 +49,34 @@
 	});
 
 	async function performSearch() {
-		if (query.length < 3) {
-			error = t.errorMinChars;
+		const issue = validateFamilySearchQuery(query);
+		if (issue) {
+			error = issue === 'tooShort' ? t.errorMinChars : t.errorIncompletePhone;
+			isHint = true;
 			return;
 		}
 		isLoading = true;
 		error = '';
+		isHint = false;
 		results = null;
 
 		try {
-			const data = await familySearch(query);
+			const data = await familySearch(query.trim());
 			results = data.results;
 			currentPage = 1;
 		} catch (e) {
-			error = e instanceof Error ? e.message : t.errorConnect;
+			if (!(e instanceof PublicApiError)) {
+				error = t.errorConnect;
+			} else if (e.kind === 'validation') {
+				error = t.errorIncompletePhone;
+				isHint = true;
+			} else if (e.kind === 'rateLimited') {
+				error = t.errorRateLimited;
+			} else if (e.kind === 'unavailable') {
+				error = t.errorUnavailable;
+			} else {
+				error = t.errorGeneric;
+			}
 		} finally {
 			isLoading = false;
 		}
@@ -130,7 +148,12 @@
 		</div>
 
 		{#if error}
-			<p class="mt-3 text-center text-sm text-danger">{error}</p>
+			<p
+				class="mt-3 text-center text-sm {isHint ? 'text-muted-foreground' : 'text-danger'}"
+				role={isHint ? 'status' : 'alert'}
+			>
+				{error}
+			</p>
 		{/if}
 	</div>
 
