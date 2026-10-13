@@ -39,23 +39,24 @@
 			class="sticky top-0 z-30 flex h-16 shrink-0 flex-col justify-center border-b border-sidebar-border bg-card px-4 md:px-6"
 		>
 			<div class="flex items-center justify-between gap-4">
-				<div class="flex items-center gap-2.5">
+				<div class="flex min-w-0 flex-1 items-center gap-2.5">
 					<a
 						href={resolve('/portal')}
-						class="inline-flex items-center gap-1 rounded-lg border border-border/70 bg-background px-2.5 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+						class="inline-flex shrink-0 items-center gap-1 rounded-lg border border-border/70 bg-background px-2.5 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
 						title="กลับหน้าเลือกเมนูหลัก"
+						aria-label="กลับหน้าเลือกเมนูหลัก"
 					>
 						<ChevronLeft class="size-3.5" />
-						<span>Portal</span>
+						<span class="hidden sm:inline">Portal</span>
 					</a>
 					<span class="text-muted-foreground/40">/</span>
-					<div class="flex items-center gap-2">
+					<div class="flex min-w-0 items-center gap-2">
 						<PageIcon class="size-4 shrink-0 text-primary" />
-						<h1 class="text-sm font-bold text-foreground">{pageTitle}</h1>
+						<h1 class="min-w-0 truncate text-sm font-bold text-foreground">{pageTitle}</h1>
 					</div>
 				</div>
 
-				<div class="flex items-center gap-2 md:gap-3">
+				<div class="flex shrink-0 items-center gap-2 md:gap-3">
 					<span
 						class="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1 text-2xs font-bold text-emerald-600"
 					>
