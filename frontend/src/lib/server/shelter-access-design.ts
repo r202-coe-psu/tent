@@ -67,6 +67,12 @@ export const KIOSK_LOOKUP_MANGO_INDEXES = [
 		index: { fields: ['type', 'household_id'] },
 		name: 'evacuee-type-household-idx',
 		type: 'json' as const
+	},
+	{
+		// Walk-in household join (`findJoinableKioskHousehold`) looks kiosk walk-ins up by card address.
+		index: { fields: ['type', 'card_snapshot.address_no'] },
+		name: 'evacuee-type-card-address-no-idx',
+		type: 'json' as const
 	}
 ];
 

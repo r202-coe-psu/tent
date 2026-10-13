@@ -71,7 +71,7 @@ function citizenIdLast4(primary: EvacueeDoc): string | null {
 /**
  * Labels for the selected, already checked-in members of the phone owner's household, after the
  * last four digits of the owner's citizen id are verified. Members that are not in the household,
- * not yet checked in, gone, or hidden are skipped silently. Never writes.
+ * not yet checked in, gone, or hidden are skipped silently; not found if none are left. Never writes.
  */
 export async function reprintKioskLabels(
 	shelterCode: string,
@@ -127,5 +127,7 @@ export async function reprintKioskLabels(
 			label: toLabelIdentity(member)
 		});
 	}
+	// Nothing left to print (all checked out meanwhile, say): never report a print of zero labels.
+	if (members.length === 0) throw new KioskReprintNotFoundError();
 	return members;
 }

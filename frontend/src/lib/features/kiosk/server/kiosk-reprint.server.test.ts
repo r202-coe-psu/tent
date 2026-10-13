@@ -171,6 +171,14 @@ describe('reprintKioskLabels', () => {
 		expect(writes()).toEqual([]);
 	});
 
+	it('is not found when none of the selected members can be reprinted', async () => {
+		docs = [evacuee(0), evacuee(1, { current_stay: { status: 'checked_out' } })];
+		await expect(
+			reprintKioskLabels(shelterCode, input({ evacuee_ids: [ids[1]] }))
+		).rejects.toBeInstanceOf(KioskReprintNotFoundError);
+		expect(writes()).toEqual([]);
+	});
+
 	it('only lists the primary when it has no household', async () => {
 		docs = [evacuee(0, { household_id: null }), evacuee(1, { household_id: null })];
 		const members = await reprintKioskLabels(shelterCode, input({ evacuee_ids: [ids[0], ids[1]] }));
