@@ -34,7 +34,15 @@ export {
 } from './domain/stay-status';
 export { default as StayStatusChip } from './ui/stay-status-chip.svelte';
 export {
+	FAMILY_SEARCH_MAX_LENGTH,
+	normalizeFamilySearchQuery,
+	validateFamilySearchQuery,
+	type FamilySearchInputIssue
+} from './domain/search-input';
+export type { PublicApiErrorKind } from './domain/search-error';
+export {
 	familySearch,
+	PublicApiError,
 	listPublicShelters,
 	fetchShelterTypes,
 	type ShelterTypeOption
