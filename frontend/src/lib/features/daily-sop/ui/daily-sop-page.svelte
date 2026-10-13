@@ -163,9 +163,6 @@
 	const progress = $derived(
 		selectedRole ? roleAssessmentProgress(effectiveDraft, selectedRole.code) : null
 	);
-	const firstUnansweredQuestionId = $derived(
-		questions.find((question) => !effectiveDraft[question.id]?.status)?.id ?? null
-	);
 	const counts = $derived(
 		selectedRole ? summarizeRoleDraft(effectiveDraft, selectedRole.code) : null
 	);
@@ -461,13 +458,6 @@
 		const current = effectiveDraft[questionId];
 		if (!current) return false;
 		return !sameControlAnswer(baseDraft?.[questionId], current);
-	}
-
-	function scrollToNextUnanswered(): void {
-		if (!firstUnansweredQuestionId) return;
-		document
-			.getElementById(`role-question-${firstUnansweredQuestionId}`)
-			?.scrollIntoView({ behavior: 'smooth', block: 'center' });
 	}
 
 	function formatAuditDateTime(value: string): string {
@@ -1487,20 +1477,7 @@
 									</div>
 								</div>
 							{/if}
-							<div
-								class={firstUnansweredQuestionId
-									? 'grid grid-cols-[auto_minmax(0,1fr)] gap-2 sm:flex sm:justify-end'
-									: 'grid gap-2 sm:flex sm:justify-end'}
-							>
-								{#if firstUnansweredQuestionId && progress?.unanswered}
-									<Button
-										variant="outline"
-										class="min-h-12 min-w-0 px-2 text-xs leading-tight sm:min-h-11 sm:px-3 sm:text-sm"
-										onclick={scrollToNextUnanswered}
-									>
-										ข้อถัดไปที่ยังไม่ตอบ ({progress.unanswered})
-									</Button>
-								{/if}
+							<div class="grid gap-2 sm:flex sm:justify-end">
 								<Button
 									class="min-h-12 w-full gap-2 px-3 py-2 text-sm sm:min-h-11 sm:w-auto sm:px-4"
 									disabled={!canSave || isSaving}
