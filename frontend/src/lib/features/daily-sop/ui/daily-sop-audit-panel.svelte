@@ -22,7 +22,7 @@
 	</Sheet.Trigger>
 	<Sheet.Content
 		side="bottom"
-		class="flex max-h-[72dvh] flex-col gap-0 overflow-hidden rounded-t-2xl border-slate-200 bg-white p-0 [&>button:last-child]:flex [&>button:last-child]:size-12 [&>button:last-child]:items-center [&>button:last-child]:justify-center"
+		class="flex max-h-[72dvh] flex-col gap-0 overflow-hidden rounded-t-2xl border-slate-200 bg-white p-0 sm:inset-x-auto sm:top-1/2 sm:bottom-auto sm:left-1/2 sm:max-h-[min(36rem,80dvh)] sm:w-[min(28rem,calc(100vw-2rem))] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-2xl sm:border sm:shadow-md [&>button:last-child]:flex [&>button:last-child]:size-12 [&>button:last-child]:items-center [&>button:last-child]:justify-center"
 		data-testid="daily-sop-audit-panel"
 	>
 		<Sheet.Header class="relative shrink-0 border-b border-slate-200/80 p-4 pr-14 sm:p-5">
@@ -64,14 +64,5 @@
 				</div>
 			{/if}
 		</div>
-		<Sheet.Footer class="shrink-0 border-t border-slate-200/80 bg-slate-50 p-4 sm:p-5">
-			<Sheet.Close>
-				{#snippet child({ props })}
-					<Button variant="outline" class="min-h-12 w-full sm:min-h-11 sm:w-auto" {...props}
-						>ปิด</Button
-					>
-				{/snippet}
-			</Sheet.Close>
-		</Sheet.Footer>
 	</Sheet.Content>
 </Sheet.Root>

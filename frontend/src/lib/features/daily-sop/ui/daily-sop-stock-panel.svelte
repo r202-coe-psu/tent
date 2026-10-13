@@ -57,7 +57,7 @@
 >
 	<Sheet.Content
 		side="bottom"
-		class="flex max-h-[72dvh] flex-col gap-0 overflow-hidden rounded-t-2xl border-slate-200 bg-white p-0 [&>button:last-child]:flex [&>button:last-child]:size-12 [&>button:last-child]:items-center [&>button:last-child]:justify-center"
+		class="flex max-h-[72dvh] flex-col gap-0 overflow-hidden rounded-t-2xl border-slate-200 bg-white p-0 sm:inset-x-auto sm:top-1/2 sm:bottom-auto sm:left-1/2 sm:max-h-[min(36rem,80dvh)] sm:w-[min(28rem,calc(100vw-2rem))] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-2xl sm:border sm:shadow-md [&>button:last-child]:flex [&>button:last-child]:size-12 [&>button:last-child]:items-center [&>button:last-child]:justify-center"
 		data-testid="daily-sop-stock-sheet"
 		onCloseAutoFocus={(event) => {
 			event.preventDefault();
@@ -132,7 +132,7 @@
 					<p class="flex items-start gap-2 text-sm font-medium text-red-900">
 						<TriangleAlert class="mt-0.5 size-4 shrink-0 text-red-600" />โหลดรายการคลังไม่สำเร็จ
 					</p>
-					<p class="text-sm text-slate-600">เลือก “รอตรวจ” และระบุสาเหตุในหมายเหตุได้</p>
+					<p class="text-sm text-slate-600">ลองโหลดใหม่ก่อนบันทึกผลประเมิน</p>
 					<Button variant="outline" class="min-h-12" onclick={onRefresh}>ลองโหลดใหม่</Button>
 				</div>
 			{:else if items.length === 0}
@@ -163,9 +163,7 @@
 			{/if}
 		</div>
 
-		<Sheet.Footer
-			class="shrink-0 flex-col items-stretch gap-2 border-t border-slate-200/80 bg-slate-50 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5"
-		>
+		<Sheet.Footer class="shrink-0 border-t border-slate-200/80 bg-slate-50 p-4 sm:p-5">
 			<p class="text-sm text-slate-600">
 				{#if status === 'ready'}
 					<span class="font-semibold tabular-nums">{filtered.length}</span> จาก
@@ -173,13 +171,6 @@
 				{/if}
 				<span class="block text-xs">นับจริงด้วยหน่วยเดียวกัน · ส่วนต่างระบุในหมายเหตุ</span>
 			</p>
-			<Sheet.Close>
-				{#snippet child({ props })}
-					<Button variant="outline" class="min-h-12 w-full sm:min-h-11 sm:w-auto" {...props}
-						>ปิด</Button
-					>
-				{/snippet}
-			</Sheet.Close>
 		</Sheet.Footer>
 	</Sheet.Content>
 </Sheet.Root>
