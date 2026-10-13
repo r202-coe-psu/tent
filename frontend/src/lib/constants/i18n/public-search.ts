@@ -42,7 +42,8 @@ export const PUBLIC_SEARCH_I18N = {
 		hide: 'ซ่อน',
 		safeInShelter: 'ปลอดภัยอยู่ในศูนย์',
 		noResultsTitle: 'ไม่พบรายชื่อ',
-		noResultsDesc: 'ไม่พบข้อมูลที่ตรงกับการค้นหา กรุณาตรวจสอบความถูกต้องอีกครั้ง',
+		noResultsDesc:
+			'ไม่พบข้อมูลที่ตรงกับการค้นหา กรุณาตรวจสอบความถูกต้องอีกครั้ง หากจำนามสกุลได้ไม่ครบ ลองค้นด้วยชื่ออย่างเดียว',
 		startSearchTitle: 'เริ่มการค้นหา',
 		startSearchDesc: 'พิมพ์ชื่อ สกุล เบอร์โทรศัพท์ หรือ รหัสบัตรประชาชน เพื่อทำการสืบค้นข้อมูล',
 		prevBtn: 'ก่อนหน้า',
@@ -94,7 +95,8 @@ export const PUBLIC_SEARCH_I18N = {
 		hide: 'Hide',
 		safeInShelter: 'Safe in Shelter',
 		noResultsTitle: 'No Results Found',
-		noResultsDesc: 'No data matching the search criteria. Please check again.',
+		noResultsDesc:
+			'No data matching the search criteria. Please check again. If you are unsure of the surname, try the first name only.',
 		startSearchTitle: 'Start Searching',
 		startSearchDesc: 'Type name, surname, phone, or ID card to search for information.',
 		prevBtn: 'Previous',

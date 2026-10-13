@@ -54,6 +54,12 @@ def test_parse_rejects_a_word_under_two_graphemes():
     assert parse_search_query("สมหมาย มี") is None
 
 
+def test_parse_rejects_a_nul_byte():
+    # MongoDB cannot take a NUL inside the $regex built from the query.
+    assert parse_search_query("\x00\x00") is None
+    assert parse_search_query("สม\x00หมาย") is None
+
+
 def test_parse_rejects_more_than_four_words():
     assert parse_search_query("สม ชาย มา โชค") is not None
     assert parse_search_query("สม ชาย มา โชค ใจ") is None

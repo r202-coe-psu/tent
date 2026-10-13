@@ -61,6 +61,8 @@ describe('validateFamilySearchQuery', () => {
 		expect(validateFamilySearchQuery('น\u0e4d\u0e32้ใจ ใจดี')).toBeNull();
 		expect(validateFamilySearchQuery('ＡＢ')).toBeNull();
 		expect(validateFamilySearchQuery('Ａ')).toBe('tooShort');
+		// Python casefold turns ß into ss (2 graphemes), so the backend accepts it.
+		expect(validateFamilySearchQuery('ß')).toBeNull();
 	});
 
 	// Python's str.strip() and re \s do not treat U+FEFF (BOM) as whitespace, while JS trim() and

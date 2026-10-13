@@ -745,4 +745,33 @@ async def test_evacuee_name_search_returns_a_stable_order_when_capped(
     masked = mask_last_name("ใจดี")
     expected = [f"ทดสอบ{index:02d} {masked}" for index in range(1, 11)]
     assert await _search_names(client, auth_headers, "ทดสอบ") == expected
-    assert await _search_names(client, auth_headers, "ทดสอบ") == expected
+
+
+async def test_evacuee_name_search_breaks_first_name_ties_by_id(
+    client: AsyncClient,
+    db_client: AsyncMongoClient,
+    settings: Settings,
+    auth_headers: dict[str, str],
+):
+    """Same first name for everyone: `_id` decides which 10 of 12 survive the cap."""
+    now = datetime.now(UTC)
+    for index in range(12, 0, -1):  # inserted out of order on purpose
+        await _insert_person(
+            db_client,
+            settings,
+            {
+                "_id": f"evacuee:{index:02d}",
+                "shelter_code": "SH001",
+                "first_name": "สมศรี",
+                # Distinct display surname per row so the response order is observable.
+                "last_name_masked": f"ใจ{index:02d}",
+                "search_excluded": False,
+                "status": "active",
+                "updated_at": now,
+            },
+            last_name="ใจดี",
+        )
+
+    expected = [f"สมศรี ใจ{index:02d}" for index in range(1, 11)]
+    assert await _search_names(client, auth_headers, "สมศรี") == expected
+    assert await _search_names(client, auth_headers, "สมศรี ใจดี") == expected

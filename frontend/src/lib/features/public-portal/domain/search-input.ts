@@ -36,13 +36,15 @@ function graphemeCount(word: string): number {
 /**
  * The backend's `name_key`: NFKC, case fold, one space between words. The backend counts
  * graphemes (not code points — Thai "มี" is one), so this does too. `toLowerCase` stands in
- * for Python `casefold`; they only differ for rare letters such as "ß", and the backend
- * (422) has the last word.
+ * for Python `casefold`, so "ß" is expanded by hand. It can still differ from the backend
+ * for rare scripts (e.g. a Devanagari conjunct is 2 graphemes to Python, 1 to `Intl.Segmenter`);
+ * the backend (422) remains the authority for those.
  */
 function nameWords(query: string): string[] {
 	return query
 		.normalize('NFKC')
 		.toLowerCase()
+		.replace(/ß|ẞ/gu, 'ss')
 		.replace(PY_WS_RUN, ' ')
 		.replace(PY_TRIM, '')
 		.split(' ');

@@ -49,6 +49,9 @@ def parse_search_query(raw_query: str) -> ParsedSearchQuery | None:
     raw = raw_query.strip()
     if not raw:
         return None
+    # MongoDB rejects a NUL inside a $regex (the first-name prefix match) with a 500.
+    if "\x00" in raw:
+        return None
 
     compact = re.sub(r"[\s\-]+", "", raw)
 
