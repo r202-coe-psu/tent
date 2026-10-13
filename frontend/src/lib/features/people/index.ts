@@ -75,6 +75,7 @@ export {
 	createEvacuee,
 	createDraftEvacueeFromCard,
 	createKioskEvacueeFromCard,
+	createKioskWalkInHousehold,
 	createMedical,
 	createHousehold,
 	createMovement,

@@ -1,4 +1,5 @@
 import type { SmartCardData } from '$lib/features/kiosk-devices';
+import type { KioskRegistrationResult } from '../data/kiosk-check-in.api';
 import type { FaceCheckOutcome } from '../domain/face-check';
 
 /** The face check the walk-in face page runs, as the card page resolved it from the hardware. */
@@ -28,6 +29,8 @@ class WalkInSession {
 	faceOutcome = $state<FaceCheckOutcome | null>(null);
 	/** Canonical phone typed on the phone step; `null` = none given (or not asked yet). */
 	phone = $state<string | null>(null);
+	/** What the register call returned (QR + label text): the done page prints it, then forgets it. */
+	registration = $state.raw<KioskRegistrationResult | null>(null);
 
 	/** A walk-in is under way (card or ThaiD). */
 	get active(): boolean {
@@ -84,6 +87,7 @@ class WalkInSession {
 		this.faceCheck = null;
 		this.faceOutcome = null;
 		this.phone = null;
+		this.registration = null;
 	}
 }
 

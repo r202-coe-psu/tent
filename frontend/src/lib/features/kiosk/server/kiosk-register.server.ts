@@ -1,6 +1,7 @@
 import { smartCardDataSchema } from '$lib/features/kiosk-devices/domain/scanner.schema';
 import {
 	createKioskEvacueeFromCard,
+	createKioskWalkInHousehold,
 	type CardSnapshot,
 	type Evacuee
 } from '$lib/features/people/domain/people';
@@ -10,7 +11,9 @@ import { adminFetch } from '$lib/server/couch-admin';
 import { shelterDbName } from '$lib/server/shelter-access-design';
 import { createHash } from 'node:crypto';
 import { kioskPhotoPayloadSchema, type KioskPhotoPayload } from '../domain/kiosk-photo';
-import { normalizeKioskPhone } from '../domain/phone';
+import { normalizeKioskPhone, phoneVariants } from '../domain/phone';
+import { walkInAddressKey, walkInRoadsCompatible } from '../domain/walk-in-address';
+import { refreshHouseholdStatus } from './kiosk-check-in.server';
 import { deleteKioskCardImage, putKioskCardImage } from './kiosk-photo.server';
 import { z } from 'zod';
 
@@ -71,6 +74,14 @@ export class KioskRegistrationBlockedError extends Error {
 	}
 }
 
+/** The phone typed at the kiosk already belongs to someone staying in this shelter. */
+export class KioskPhoneDuplicateError extends Error {
+	constructor() {
+		super('Kiosk walk-in phone already in use');
+		this.name = 'KioskPhoneDuplicateError';
+	}
+}
+
 /** Age after which an unreleased kiosk registration lock is treated as abandoned (crash, not a live request). */
 const LOCK_STALE_AFTER_MS = 30_000;
 
@@ -78,9 +89,12 @@ function isHttpConflict(e: unknown): boolean {
 	return typeof e === 'object' && e !== null && (e as { status?: unknown }).status === 409;
 }
 
-function kioskRegistrationLockId(shelterCode: string, citizenId: string): string {
-	const key = `${shelterCode}:${citizenId}`;
-	return `kiosk_reg_lock:${createHash('sha256').update(key).digest('hex')}`;
+type KioskLockKind = 'kiosk_reg_lock' | 'kiosk_addr_lock';
+
+/** Lock doc `_id` (`<kind>:<sha256>`); the kind is also the doc `type`. */
+function kioskLockId(kind: KioskLockKind, shelterCode: string, subject: string): string {
+	const key = `${shelterCode}:${subject}`;
+	return `${kind}:${createHash('sha256').update(key).digest('hex')}`;
 }
 
 /**
@@ -100,27 +114,53 @@ async function reclaimStaleLock(dbName: string, lockId: string): Promise<boolean
 }
 
 /**
- * Acquire a cross-worker registration lock backed by a CouchDB doc with a
- * deterministic `_id`: CouchDB rejects the second concurrent create with 409,
- * which works across `node:cluster` workers (an in-memory `Map` does not —
- * each worker has its own).
+ * Try once to take a cross-worker kiosk lock (citizen or address) backed by a CouchDB doc with a
+ * deterministic `_id`: CouchDB rejects the second concurrent create with 409, which works across
+ * `node:cluster` workers (an in-memory `Map` does not — each worker has its own). Returns the
+ * lock revision, or `null` while a live request holds it (a stale one is reclaimed).
  */
-async function acquireKioskRegistrationLock(dbName: string, lockId: string): Promise<string> {
+async function tryAcquireKioskLock(dbName: string, lockId: string): Promise<string | null> {
 	for (let attempt = 0; attempt < 2; attempt++) {
 		try {
 			const res = await adminFetch<{ rev?: string }>(`/${dbName}/${encodeURIComponent(lockId)}`, {
 				method: 'PUT',
-				body: JSON.stringify({ type: 'kiosk_reg_lock', created_at: new Date().toISOString() })
+				body: JSON.stringify({
+					type: lockId.split(':')[0],
+					created_at: new Date().toISOString()
+				})
 			});
 			if (!res.rev) throw new Error('CouchDB did not return a lock revision');
 			return res.rev;
 		} catch (e) {
 			if (!isHttpConflict(e)) throw e;
 			if (attempt === 0 && (await reclaimStaleLock(dbName, lockId))) continue;
-			throw new KioskRegistrationBlockedError();
+			return null;
 		}
 	}
-	throw new KioskRegistrationBlockedError();
+	return null;
+}
+
+/** The citizen lock: a second request for the same citizen is a duplicate registration. */
+async function acquireKioskRegistrationLock(dbName: string, lockId: string): Promise<string> {
+	const rev = await tryAcquireKioskLock(dbName, lockId);
+	if (!rev) throw new KioskRegistrationBlockedError();
+	return rev;
+}
+
+const ADDRESS_LOCK_ATTEMPTS = 10;
+const ADDRESS_LOCK_RETRY_MS = 200;
+
+/**
+ * The address lock: another walk-in at the same address is a different person, so wait for them
+ * to finish. A plain `Error` (not "already registered") if it stays held, so the kiosk retries.
+ */
+async function acquireKioskAddressLock(dbName: string, lockId: string): Promise<string> {
+	for (let attempt = 0; attempt < ADDRESS_LOCK_ATTEMPTS; attempt++) {
+		if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, ADDRESS_LOCK_RETRY_MS));
+		const rev = await tryAcquireKioskLock(dbName, lockId);
+		if (rev) return rev;
+	}
+	throw new Error('Kiosk address registration is busy');
 }
 
 async function releaseKioskRegistrationLock(
@@ -131,6 +171,135 @@ async function releaseKioskRegistrationLock(
 	await adminFetch(`/${dbName}/${encodeURIComponent(lockId)}?rev=${rev}`, {
 		method: 'DELETE'
 	}).catch(() => {});
+}
+
+/**
+ * Stay statuses whose phone a walk-in may not reuse: anyone still held by the shelter (the
+ * Forecast set). Someone checked out, cancelled, transferred or deceased frees their phone.
+ */
+const PHONE_HOLDING_STATUSES: ReadonlySet<string> = new Set([
+	'pre_registered',
+	'kiosk_registered',
+	'arriving',
+	'active',
+	'room_confirmed',
+	'temporary_leave'
+]);
+
+/**
+ * True when an evacuee still held by this shelter already has `phone` (canonical or legacy
+ * `+66`). Equality on `phone` keeps the query on the `['type', 'phone']` index (CR-151).
+ */
+async function isKioskPhoneInUse(
+	dbName: string,
+	shelterCode: string,
+	phone: string
+): Promise<boolean> {
+	for (const variant of phoneVariants(phone)) {
+		const found = await adminFetch<{ docs?: unknown[] }>(`/${dbName}/_find`, {
+			method: 'POST',
+			body: JSON.stringify({
+				selector: { type: 'evacuee', shelter_code: shelterCode, phone: variant },
+				fields: ['_id', 'current_stay'],
+				limit: 1000
+			})
+		});
+		const holding = (found.docs ?? []).some((doc) => {
+			const status = (doc as { current_stay?: { status?: unknown } } | null)?.current_stay?.status;
+			return typeof status === 'string' && PHONE_HOLDING_STATUSES.has(status);
+		});
+		if (holding) return true;
+	}
+	return false;
+}
+
+/** A household a later walk-in may no longer join: it ended, was cancelled, or was merged away. */
+const CLOSED_HOUSEHOLD_STATUSES: ReadonlySet<string> = new Set([
+	'cancelled',
+	'checked_out',
+	'merged'
+]);
+
+const ADDRESS_PAGE_SIZE = 200;
+
+/**
+ * The household a kiosk created earlier for this card address (`addressKey`; roads must not
+ * conflict), when it is still open and its head is the kiosk walk-in who made it; the oldest one
+ * if several qualify.
+ * Staff-made households, and ones whose head changed, are never joined.
+ */
+async function findJoinableKioskHousehold(
+	dbName: string,
+	shelterCode: string,
+	cardSnapshot: CardSnapshot,
+	addressKey: string
+): Promise<string | null> {
+	const candidates = new Map<string, Set<string>>();
+	let bookmark: string | undefined;
+	for (;;) {
+		const page = await adminFetch<{ docs?: unknown[]; bookmark?: string }>(`/${dbName}/_find`, {
+			method: 'POST',
+			body: JSON.stringify({
+				selector: {
+					type: 'evacuee',
+					shelter_code: shelterCode,
+					registered_via: 'kiosk',
+					'card_snapshot.address_no': cardSnapshot.address_no
+				},
+				fields: ['_id', 'household_id', 'card_snapshot'],
+				limit: ADDRESS_PAGE_SIZE,
+				...(bookmark ? { bookmark } : {})
+			})
+		});
+		const docs = page.docs ?? [];
+		for (const doc of docs) {
+			const evacuee = doc as {
+				_id?: string;
+				household_id?: string;
+				card_snapshot?: CardSnapshot;
+			} | null;
+			if (!evacuee?._id || !evacuee.household_id || !evacuee.card_snapshot) continue;
+			if (
+				walkInAddressKey(evacuee.card_snapshot) === addressKey &&
+				walkInRoadsCompatible(cardSnapshot.road, evacuee.card_snapshot.road)
+			) {
+				const members = candidates.get(evacuee.household_id) ?? new Set<string>();
+				members.add(evacuee._id);
+				candidates.set(evacuee.household_id, members);
+			}
+		}
+		if (docs.length < ADDRESS_PAGE_SIZE || !page.bookmark || page.bookmark === bookmark) break;
+		bookmark = page.bookmark;
+	}
+
+	let oldest: { id: string; createdAt: string } | null = null;
+	for (const [householdId, evacueeIds] of candidates) {
+		const household = await adminFetch<{
+			type?: string;
+			shelter_code?: string;
+			head_evacuee_id?: string | null;
+			created_by?: string;
+			created_at?: string;
+			status?: string;
+		} | null>(`/${dbName}/${encodeURIComponent(householdId)}`).catch(() => null);
+		const joinable =
+			household?.type === 'household' &&
+			household.shelter_code === shelterCode &&
+			evacueeIds.has(household.head_evacuee_id ?? '') &&
+			household.created_by?.startsWith('scanner:') === true &&
+			!CLOSED_HOUSEHOLD_STATUSES.has(household.status ?? '');
+		if (!joinable) continue;
+		const createdAt = household.created_at ?? '';
+		if (!oldest || createdAt < oldest.createdAt) oldest = { id: householdId, createdAt };
+	}
+	return oldest?.id ?? null;
+}
+
+/** Undo the household of a walk-in whose record could not be written (no orphan is left). */
+async function deleteKioskHousehold(dbName: string, householdId: string): Promise<void> {
+	const path = `/${dbName}/${encodeURIComponent(householdId)}`;
+	const saved = await adminFetch<{ _rev?: string }>(path);
+	if (saved?._rev) await adminFetch(`${path}?rev=${saved._rev}`, { method: 'DELETE' });
 }
 
 /** The kiosk that took the registration, as written into the snapshot and `created_by`. */
@@ -207,6 +376,51 @@ export function kioskCardSnapshotFromThaid(
 }
 
 /**
+ * Write the walk-in: into `joinHouseholdId` when given (that household keeps its head), otherwise
+ * into a new household of their own. Nothing of this walk-in is left behind on failure.
+ */
+async function writeKioskWalkIn(
+	dbName: string,
+	device: KioskWalkInDevice,
+	cardSnapshot: CardSnapshot,
+	photo: KioskPhotoPayload | null,
+	phone: string | null,
+	joinHouseholdId: string | null
+): Promise<Evacuee> {
+	const { shelterCode, deviceId } = device;
+	const image = photo ? await putKioskCardImage(dbName, shelterCode, deviceId, photo) : null;
+	const ctx = { shelterCode, createdBy: `scanner:${deviceId}` };
+	const unlinked = createKioskEvacueeFromCard(cardSnapshot, ctx, image?.id, phone);
+	const household = joinHouseholdId
+		? null
+		: createKioskWalkInHousehold(unlinked, cardSnapshot, ctx);
+	const evacuee: Evacuee = { ...unlinked, household_id: household?._id ?? joinHouseholdId! };
+	if (household) {
+		try {
+			await adminFetch(`/${dbName}/${encodeURIComponent(household._id)}`, {
+				method: 'PUT',
+				body: JSON.stringify(household)
+			});
+		} catch (error) {
+			if (image) await deleteKioskCardImage(dbName, image).catch(() => {});
+			throw error;
+		}
+	}
+	try {
+		await adminFetch(`/${dbName}/${encodeURIComponent(evacuee._id)}`, {
+			method: 'PUT',
+			body: JSON.stringify(evacuee)
+		});
+	} catch (error) {
+		if (household) await deleteKioskHousehold(dbName, household._id).catch(() => {});
+		if (image) await deleteKioskCardImage(dbName, image).catch(() => {});
+		throw error;
+	}
+	if (joinHouseholdId) await refreshHouseholdStatus(dbName, joinHouseholdId, shelterCode);
+	return evacuee;
+}
+
+/**
  * Create one new kiosk walk-in record after consent; existing records are never reused.
  * The snapshot comes from the chip (with its photo) or from ThaiD (never a photo).
  */
@@ -216,10 +430,10 @@ export async function registerKioskWalkInSnapshot(
 	photo: KioskPhotoPayload | null,
 	phone: string | null
 ): Promise<Evacuee> {
-	const { shelterCode, deviceId } = device;
+	const { shelterCode } = device;
 	const citizenId = cardSnapshot.citizen_id;
 	const dbName = shelterDbName(shelterCode);
-	const lockId = kioskRegistrationLockId(shelterCode, citizenId);
+	const lockId = kioskLockId('kiosk_reg_lock', shelterCode, citizenId);
 	const lockRev = await acquireKioskRegistrationLock(dbName, lockId);
 	try {
 		const found = await adminFetch<{ docs?: unknown[] }>(`/${dbName}/_find`, {
@@ -246,27 +460,29 @@ export async function registerKioskWalkInSnapshot(
 			);
 		});
 		if (!allRowsMatchQuery || docs.length > 0) throw new KioskRegistrationBlockedError();
-
-		const image = photo ? await putKioskCardImage(dbName, shelterCode, deviceId, photo) : null;
-		const evacuee = createKioskEvacueeFromCard(
-			cardSnapshot,
-			{
-				shelterCode,
-				createdBy: `scanner:${deviceId}`
-			},
-			image?.id,
-			phone
-		);
-		try {
-			await adminFetch(`/${dbName}/${encodeURIComponent(evacuee._id)}`, {
-				method: 'PUT',
-				body: JSON.stringify(evacuee)
-			});
-		} catch (error) {
-			if (image) await deleteKioskCardImage(dbName, image).catch(() => {});
-			throw error;
+		if (phone && (await isKioskPhoneInUse(dbName, shelterCode, phone))) {
+			throw new KioskPhoneDuplicateError();
 		}
-		return evacuee;
+
+		// Walk-ins from one card address share a household: the address lock keeps two kiosks from
+		// each creating their own, and is released (in `finally`) before the citizen lock.
+		const addressKey = walkInAddressKey(cardSnapshot);
+		const addressLockId = addressKey
+			? kioskLockId('kiosk_addr_lock', shelterCode, addressKey)
+			: null;
+		const addressLockRev = addressLockId
+			? await acquireKioskAddressLock(dbName, addressLockId)
+			: null;
+		try {
+			const joinHouseholdId = addressKey
+				? await findJoinableKioskHousehold(dbName, shelterCode, cardSnapshot, addressKey)
+				: null;
+			return await writeKioskWalkIn(dbName, device, cardSnapshot, photo, phone, joinHouseholdId);
+		} finally {
+			if (addressLockId && addressLockRev) {
+				await releaseKioskRegistrationLock(dbName, addressLockId, addressLockRev);
+			}
+		}
 	} finally {
 		await releaseKioskRegistrationLock(dbName, lockId, lockRev);
 	}

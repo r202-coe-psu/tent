@@ -74,6 +74,19 @@ export class RateLimiter {
 		return true;
 	}
 
+	/**
+	 * True when `key` has used its whole budget in the current window. Never consumes, so a
+	 * caller can gate on it and spend budget with `check()` only for the events it counts
+	 * (e.g. failed verifications).
+	 */
+	isBlocked(key: string): boolean {
+		if (!key) return false;
+		if (this.bypassable && rateLimitSwitchedOff()) return false;
+		const now = Date.now();
+		const active = (this.store.get(key)?.timestamps ?? []).filter((ts) => now - ts < this.windowMs);
+		return active.length >= this.maxRequests;
+	}
+
 	private cleanup(now: number) {
 		// Clean up every 100 requests roughly (naive approach)
 		if (Math.random() < 0.01) {
@@ -165,6 +178,14 @@ export const registerLookupIpLimiter = new RateLimiter(60000, 10, { bypassable: 
 export const kioskPhoneDeviceLimiter = new RateLimiter(60_000, 10);
 /** Kiosk phone lookup — per normalized phone across devices. */
 export const kioskPhoneNumberLimiter = new RateLimiter(60_000, 5);
+/** Kiosk QR reprint — per scanner device (registry_id). */
+export const kioskReprintDeviceLimiter = new RateLimiter(60_000, 10);
+/**
+ * Kiosk QR reprint — failed ID last-4 verifications per primary evacuee (5 per 10 minutes).
+ * Only failures consume it (`isBlocked` gates, `check` records), so a correct entry is never
+ * counted but a guesser of the 10 000 possible codes is locked out after five misses.
+ */
+export const kioskReprintVerifyFailureLimiter = new RateLimiter(10 * 60_000, 5);
 /** Walk-in creation — per authenticated kiosk device. */
 export const kioskRegisterDeviceLimiter = new RateLimiter(60_000, 5);
 /** Kiosk ThaiD session creation — per scanner device (registry_id). D-5 proposal, pending PO decision. */
