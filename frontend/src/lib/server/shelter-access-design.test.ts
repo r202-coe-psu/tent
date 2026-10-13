@@ -177,6 +177,11 @@ describe('buildValidateDocUpdate', () => {
 				index: { fields: ['type', 'household_id'] },
 				name: 'evacuee-type-household-idx',
 				type: 'json'
+			},
+			{
+				index: { fields: ['type', 'card_snapshot.address_no'] },
+				name: 'evacuee-type-card-address-no-idx',
+				type: 'json'
 			}
 		]);
 		for (const definition of KIOSK_LOOKUP_MANGO_INDEXES) {

@@ -92,6 +92,12 @@ describe('groupPhoneMatches', () => {
 		).toBe(false);
 	});
 
+	it('accepts a kiosk walk-in like a web pre-registration', () => {
+		expect(
+			isPhoneMatchEligible(evacuee({ _id: 'evacuee:walk-in', registered_via: 'kiosk' }), 'SH001')
+		).toBe(true);
+	});
+
 	it('drops groups when every hit is ineligible', () => {
 		const docs = [
 			evacuee({ _id: 'evacuee:cancelled', current_stay: { status: 'cancelled' } }),

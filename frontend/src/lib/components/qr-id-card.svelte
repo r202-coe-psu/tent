@@ -7,6 +7,8 @@
 		alt: string;
 		name: string;
 		phone?: string | null;
+		/** Small line centred under the QR (`label` variant only), e.g. the site address. */
+		footer?: string;
 		/** Station boxes ticked by hand (e.g. เช็คอิน · คัดกรอง · ที่พัก). */
 		checklist: readonly string[];
 		/**
@@ -24,6 +26,7 @@
 		alt,
 		name,
 		phone,
+		footer,
 		checklist,
 		variant = 'screen',
 		id,
@@ -40,6 +43,8 @@
 			root: 'qr-identity-card mx-auto flex w-full max-w-[560px] flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-md sm:min-h-44 sm:flex-row dark:border-slate-700',
 			panel:
 				'card-qr-panel order-1 flex w-full shrink-0 items-center justify-center border-b border-slate-200 bg-slate-50 px-5 py-5 sm:order-2 sm:w-auto sm:border-b-0 sm:border-l sm:px-5 dark:border-slate-700 dark:bg-slate-900/30',
+			qrWrap: 'contents',
+			footer: '',
 			qr: 'card-qr-image size-36 object-contain sm:size-36 md:size-40',
 			placeholder:
 				'flex size-36 items-center justify-center rounded bg-slate-100 text-2xs text-slate-400 sm:size-36 md:size-40',
@@ -56,7 +61,10 @@
 			root: 'flex h-full w-full flex-row text-black',
 			panel:
 				'order-2 ml-(--label-gap) flex shrink-0 items-center border-l-[0.25mm] border-black pl-(--label-gap)',
+			qrWrap: 'relative',
 			qr: 'block size-(--qr-size) [image-rendering:pixelated]',
+			footer:
+				'absolute top-full left-0 mt-[1mm] w-full text-center text-[9pt] leading-none font-medium whitespace-nowrap',
 			placeholder: 'grid size-(--qr-size) place-items-center border border-black text-[8pt]',
 			details: 'order-1 flex min-w-0 flex-1 flex-col gap-[0.5mm]',
 			name: 'line-clamp-3 text-[16pt] leading-[1.3] font-bold [overflow-wrap:anywhere]',
@@ -73,11 +81,16 @@
 
 <div bind:this={ref} {id} class={cn(styles.root, className)}>
 	<div class={styles.panel}>
-		{#if src}
-			<img {src} {alt} class={styles.qr} />
-		{:else}
-			<div class={styles.placeholder}>{variant === 'label' ? 'QR' : '...'}</div>
-		{/if}
+		<div class={styles.qrWrap}>
+			{#if src}
+				<img {src} {alt} class={styles.qr} />
+			{:else}
+				<div class={styles.placeholder}>{variant === 'label' ? 'QR' : '...'}</div>
+			{/if}
+			{#if variant === 'label' && footer}
+				<span class={styles.footer}>{footer}</span>
+			{/if}
+		</div>
 	</div>
 
 	<div class={styles.details}>

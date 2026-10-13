@@ -8,6 +8,7 @@ import {
 import { findMasterByCode } from '$lib/server/shelters.admin';
 import { ServiceError } from '$lib/server/couch-admin';
 import {
+	KioskPhoneDuplicateError,
 	KioskRegistrationBlockedError,
 	registerKioskThaidWalkIn,
 	registerKioskWalkIn
@@ -88,7 +89,12 @@ describe('POST /api/v1/kiosk/register', () => {
 		mockFindShelter.mockResolvedValue({
 			feature_flags: { kiosk_walk_in_registration_enabled: true }
 		} as never);
-		mockRegister.mockResolvedValue({ _id: 'evacuee:01ARZ3NDEKTSV4RRFFQ69G5FAV' } as never);
+		mockRegister.mockResolvedValue({
+			_id: 'evacuee:01ARZ3NDEKTSV4RRFFQ69G5FAV',
+			first_name: 'สมชาย',
+			last_name: 'ใจดี',
+			phone: '0812345678'
+		} as never);
 	});
 
 	it('creates a record only under the authenticated shelter and disables caching', async () => {
@@ -97,7 +103,9 @@ describe('POST /api/v1/kiosk/register', () => {
 		expect(response.headers.get('cache-control')).toBe('no-store');
 		expect(await response.json()).toEqual({
 			status: 'created',
-			evacuee_id: 'evacuee:01ARZ3NDEKTSV4RRFFQ69G5FAV'
+			evacuee_id: 'evacuee:01ARZ3NDEKTSV4RRFFQ69G5FAV',
+			qr_payload: 'evacuee:01ARZ3NDEKTSV4RRFFQ69G5FAV',
+			label: { name: 'สมชาย ใจดี', phone: '0812345678' }
 		});
 		expect(mockRegister).toHaveBeenCalledWith(
 			'SH001',
@@ -198,6 +206,15 @@ describe('POST /api/v1/kiosk/register', () => {
 		expect((await response.json()).error.code).toBe('KIOSK_REGISTRATION_BLOCKED');
 	});
 
+	it('answers 409 KIOSK_PHONE_DUPLICATE when the phone is already in use', async () => {
+		mockRegister.mockRejectedValue(new KioskPhoneDuplicateError());
+		const response = await POST(request({ ...validBody, phone: '0812345678' }));
+		expect(response.status).toBe(409);
+		const { error } = await response.json();
+		expect(error.code).toBe('KIOSK_PHONE_DUPLICATE');
+		expect(error.message).toContain('เบอร์');
+	});
+
 	it('reports the shelter registry as unavailable separately from a write failure', async () => {
 		mockFindShelter.mockRejectedValue(new ServiceError('INTERNAL', 'Could not read registry'));
 		const response = await POST(request(validBody));
@@ -226,7 +243,12 @@ describe('POST /api/v1/kiosk/register source thaid', () => {
 			feature_flags: { kiosk_walk_in_registration_enabled: true }
 		} as never);
 		mockThaidAllowed.mockResolvedValue(true);
-		mockRegisterThaid.mockResolvedValue({ _id: 'evacuee:01ARZ3NDEKTSV4RRFFQ69G5FAV' } as never);
+		mockRegisterThaid.mockResolvedValue({
+			_id: 'evacuee:01ARZ3NDEKTSV4RRFFQ69G5FAV',
+			first_name: 'สมชาย',
+			last_name: 'ใจดี',
+			phone: null
+		} as never);
 	});
 
 	function completedSession(shelterCode = 'SH001'): string {
@@ -267,6 +289,10 @@ describe('POST /api/v1/kiosk/register source thaid', () => {
 	it('registers without a phone', async () => {
 		const response = await POST(request(thaidBody(completedSession(), { phone: null })));
 		expect(response.status).toBe(200);
+		expect(await response.json()).toMatchObject({
+			qr_payload: 'evacuee:01ARZ3NDEKTSV4RRFFQ69G5FAV',
+			label: { name: 'สมชาย ใจดี', phone: null }
+		});
 		expect(mockRegisterThaid.mock.calls[0]?.[3]).toBeNull();
 	});
 
@@ -318,5 +344,16 @@ describe('POST /api/v1/kiosk/register source thaid', () => {
 		expect(response.status).toBe(409);
 		expect((await response.json()).error.code).toBe('KIOSK_REGISTRATION_BLOCKED');
 		expect(getKioskSessionForDevice(sessionId, DEVICE)?.status).toBe('consumed');
+	});
+
+	it('gives the session back when the phone is already in use, so a new phone needs no new scan', async () => {
+		mockRegisterThaid.mockRejectedValueOnce(new KioskPhoneDuplicateError());
+		const sessionId = completedSession();
+
+		const response = await POST(request(thaidBody(sessionId)));
+
+		expect(response.status).toBe(409);
+		expect((await response.json()).error.code).toBe('KIOSK_PHONE_DUPLICATE');
+		expect(getKioskSessionForDevice(sessionId, DEVICE)?.status).toBe('completed');
 	});
 });

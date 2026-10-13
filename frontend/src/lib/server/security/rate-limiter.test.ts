@@ -54,6 +54,27 @@ describe('RateLimiter', () => {
 	});
 });
 
+describe('RateLimiter.isBlocked', () => {
+	beforeEach(() => vi.useFakeTimers());
+	afterEach(() => vi.useRealTimers());
+
+	it('reports a full window without consuming from it', () => {
+		const limiter = new RateLimiter(60000, 2);
+		expect(limiter.isBlocked('k')).toBe(false);
+		expect(limiter.isBlocked('k')).toBe(false);
+		limiter.check('k');
+		expect(limiter.isBlocked('k')).toBe(false);
+		limiter.check('k');
+		expect(limiter.isBlocked('k')).toBe(true);
+		vi.advanceTimersByTime(61000);
+		expect(limiter.isBlocked('k')).toBe(false);
+	});
+
+	it('never blocks an empty key', () => {
+		expect(new RateLimiter(60000, 1).isBlocked('')).toBe(false);
+	});
+});
+
 describe('donation limiter budgets', () => {
 	/**
 	 * These were one shared 3-per-minute limiter, which made a single edit cost three
@@ -203,6 +224,8 @@ describe('RATE_LIMIT switch (CR-160)', () => {
 			'kioskPhoneDeviceLimiter',
 			'kioskPhoneNumberLimiter',
 			'kioskRegisterDeviceLimiter',
+			'kioskReprintDeviceLimiter',
+			'kioskReprintVerifyFailureLimiter',
 			'kioskThaidSessionDeviceLimiter',
 			'linkAccountIpLimiter',
 			'linkAccountNonceLimiter',

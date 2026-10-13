@@ -9,6 +9,9 @@ export { default as KioskCheckInWizard } from './ui/kiosk-check-in-wizard.svelte
 export { default as KioskBackButton } from './ui/kiosk-back-button.svelte';
 export { default as KioskNoticePanel } from './ui/kiosk-notice-panel.svelte';
 export { default as KioskInlineAlert } from './ui/kiosk-inline-alert.svelte';
+export { default as KioskLabelSheet } from './ui/kiosk-label-sheet.svelte';
+export { default as KioskTestPrint } from './ui/kiosk-test-print.svelte';
+export { default as KioskPrintStatus } from './ui/kiosk-print-status.svelte';
 export { default as KioskBusyStatus } from './ui/kiosk-busy-status.svelte';
 export {
 	KIOSK_NOTICE_PRIMARY_ACTION,
@@ -16,11 +19,18 @@ export {
 } from './ui/kiosk-notice-actions';
 export { default as KioskCardInsertScene } from './ui/kiosk-card-insert-scene.svelte';
 export { default as KioskReaderPointer } from './ui/kiosk-reader-pointer.svelte';
-export { default as KioskPhoneIdentityEntry } from './ui/phone-identity-entry.svelte';
+export { default as KioskReprint } from './ui/kiosk-reprint.svelte';
 export { default as KioskThaidIdentityScan } from './ui/thaid-identity-scan.svelte';
 export { KioskIdleTimeout, KIOSK_IDLE_TIMEOUT_MS } from './ui/kiosk-idle-timeout.svelte.js';
 export { navigateToKioskHome } from './application/kiosk-navigation';
-export { registerKioskWalkIn, type GateInput } from './data/kiosk-check-in.api';
+export {
+	registerKioskWalkIn,
+	reprintKioskLabels,
+	type GateInput,
+	type KioskReprintInput,
+	type KioskReprintMember,
+	type KioskReprintResult
+} from './data/kiosk-check-in.api';
 export { fetchKioskConfig } from './data/kiosk-config.api';
 export { KIOSK_THAID_PATH } from './domain/identity-method';
 export {
@@ -35,6 +45,12 @@ export {
 	submitWalkIn,
 	walkInCardMismatch
 } from './application/walk-in-registration';
+export {
+	prepareKioskQrImage,
+	printKioskQrLabels,
+	type KioskQrImage,
+	type KioskQrLabel
+} from './application/kiosk-label-print';
 export { loadKioskHardware } from './application/kiosk-qr-input';
 export { cancelKioskFaceCheck } from './data/kiosk-face.api';
 export type { KioskHardware } from './domain/kiosk-hardware';

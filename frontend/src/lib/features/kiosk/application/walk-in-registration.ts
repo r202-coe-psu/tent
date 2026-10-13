@@ -1,6 +1,7 @@
 import type { SmartCardData } from '$lib/features/kiosk-devices';
 import {
 	KioskRequestError,
+	type KioskRegistrationResult,
 	registerKioskThaidWalkIn,
 	registerKioskWalkIn
 } from '../data/kiosk-check-in.api';
@@ -24,10 +25,17 @@ export type WalkInSubmitSession = WalkInCardSession & {
 export type WalkInCardRegistrationOutcome =
 	| { kind: 'ignored' }
 	| { kind: 'mismatch'; message: string }
-	| { kind: 'registered' }
+	/** The new record plus the QR and label text the done page prints. */
+	| { kind: 'registered'; registration: KioskRegistrationResult }
 	/** ThaiD only: the verified scan expired or was used up; only a new scan can go on. */
 	| { kind: 'expired'; message: string }
+	/** Someone staying in the shelter already has this phone: only another phone (or none) goes on. */
+	| { kind: 'phone_duplicate'; message: string }
 	| { kind: 'error'; message: string };
+
+function isPhoneDuplicate(cause: unknown): cause is KioskRequestError {
+	return cause instanceof KioskRequestError && cause.code === 'KIOSK_PHONE_DUPLICATE';
+}
 
 const CARD_MISMATCH_MESSAGE = 'บัตรไม่ตรงกับบัตรที่ค้นหา กรุณาเสียบบัตรเดิมหรือติดต่อเจ้าหน้าที่';
 
@@ -42,7 +50,7 @@ export function walkInCardMismatch(
 export async function registerWalkInCardRead(
 	card: SmartCardData | null | undefined,
 	session: WalkInCardSession,
-	register: (card: SmartCardData, consentedAt: string) => Promise<unknown>
+	register: (card: SmartCardData, consentedAt: string) => Promise<KioskRegistrationResult>
 ): Promise<WalkInCardRegistrationOutcome> {
 	if (!session.consented || !session.citizenId || !card) return { kind: 'ignored' };
 	const mismatch = walkInCardMismatch(card, session);
@@ -51,9 +59,9 @@ export async function registerWalkInCardRead(
 		return { kind: 'error', message: 'ไม่พบเวลาการยินยอม กรุณาเริ่มใหม่' };
 	}
 	try {
-		await register(card, session.consentedAt);
-		return { kind: 'registered' };
+		return { kind: 'registered', registration: await register(card, session.consentedAt) };
 	} catch (cause) {
+		if (isPhoneDuplicate(cause)) return { kind: 'phone_duplicate', message: cause.message };
 		return {
 			kind: 'error',
 			message: cause instanceof Error ? cause.message : 'อ่านข้อมูลไม่สำเร็จ กรุณาลองอีกครั้ง'
@@ -83,9 +91,14 @@ export async function submitWalkInThaid(
 		return { kind: 'error', message: 'ไม่พบเวลาการยินยอม กรุณาเริ่มใหม่' };
 	}
 	try {
-		await register(session.thaidSessionId, session.consentedAt, session.phone ?? null);
-		return { kind: 'registered' };
+		const registration = await register(
+			session.thaidSessionId,
+			session.consentedAt,
+			session.phone ?? null
+		);
+		return { kind: 'registered', registration };
 	} catch (cause) {
+		if (isPhoneDuplicate(cause)) return { kind: 'phone_duplicate', message: cause.message };
 		const message = cause instanceof Error ? cause.message : 'ลงทะเบียนไม่สำเร็จ กรุณาลองอีกครั้ง';
 		if (cause instanceof KioskRequestError && cause.code === 'KIOSK_THAID_SESSION_INVALID') {
 			return { kind: 'expired', message };
