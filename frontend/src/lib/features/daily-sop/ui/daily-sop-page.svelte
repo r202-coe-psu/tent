@@ -1496,9 +1496,11 @@
 <style>
 	.role-progress-table {
 		min-width: 0;
+		--role-progress-columns: minmax(0, 1fr) auto;
 	}
 
 	.role-progress-header {
+		display: grid;
 		position: absolute;
 		width: 1px;
 		height: 1px;
@@ -1508,6 +1510,11 @@
 		clip: rect(0, 0, 0, 0);
 		white-space: nowrap;
 		border: 0;
+	}
+
+	.role-progress-header,
+	.role-progress-row {
+		grid-template-columns: var(--role-progress-columns);
 	}
 
 	.role-progress-rows {
@@ -1522,7 +1529,6 @@
 			'meter meter'
 			'summary summary'
 			'action action';
-		grid-template-columns: minmax(0, 1fr) auto;
 		align-items: center;
 		gap: 0.75rem;
 		min-width: 0;
@@ -1561,6 +1567,7 @@
 
 	.role-progress-track {
 		height: 0.375rem;
+		width: 100%;
 		margin-top: 0.4rem;
 		overflow: hidden;
 		border-radius: 9999px;
@@ -1593,6 +1600,7 @@
 
 	@media (min-width: 80rem) {
 		.role-progress-table {
+			--role-progress-columns: minmax(0, 1.3fr) 12rem minmax(7rem, 0.7fr) minmax(0, 1.5fr) auto;
 			overflow: hidden;
 			border: 1px solid var(--border);
 			border-radius: 0.75rem;
@@ -1602,9 +1610,7 @@
 		.role-progress-header,
 		.role-progress-row {
 			display: grid;
-			grid-template-columns:
-				minmax(0, 1.3fr) minmax(0, 1.2fr) minmax(7rem, 0.7fr) minmax(0, 1.5fr)
-				auto;
+			grid-template-columns: var(--role-progress-columns);
 			align-items: center;
 			gap: 0.85rem;
 		}
@@ -1625,8 +1631,8 @@
 			font-weight: 600;
 		}
 
-		.role-progress-header > :last-child {
-			text-align: right;
+		.role-progress-header > * {
+			text-align: center;
 		}
 
 		.role-progress-rows {
@@ -1635,9 +1641,7 @@
 
 		.role-progress-row {
 			grid-template-areas: none;
-			grid-template-columns:
-				minmax(0, 1.3fr) minmax(0, 1.2fr) minmax(7rem, 0.7fr) minmax(0, 1.5fr)
-				auto;
+			grid-template-columns: var(--role-progress-columns);
 			gap: 0.85rem;
 			border: 0;
 			border-top: 1px solid var(--border);
