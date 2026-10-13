@@ -39,7 +39,7 @@
 				{item.name}
 			</h3>
 			<span
-				class="inline-flex shrink-0 items-center gap-1 rounded-full border border-red-200 bg-[#FFF1F2] px-2.5 py-0.5 text-[11px] font-semibold text-[#E11D48] sm:gap-1.5 sm:px-3.5 sm:py-1 sm:text-xs"
+				class="inline-flex shrink-0 items-center gap-1 rounded-full border border-red-200 bg-[#FFF1F2] px-2.5 py-0.5 text-xs font-semibold text-[#E11D48] sm:gap-1.5 sm:px-3.5 sm:py-1"
 			>
 				<span class="h-1.5 w-1.5 rounded-full bg-[#E11D48]"></span>
 				{displayStatus}
@@ -54,7 +54,7 @@
 
 		<!-- Missions Needed Tags -->
 		<div class="space-y-1.5 pt-0.5 sm:space-y-3 sm:pt-1">
-			<div class="text-[11px] font-semibold text-slate-700 sm:text-sm">
+			<div class="text-xs font-semibold text-slate-700 sm:text-sm">
 				{isEn ? 'Urgent volunteer roles needed:' : 'ภารกิจจิตอาสาที่เปิดรับ:'}
 			</div>
 			<div class="flex flex-wrap gap-1.5 sm:gap-2">
@@ -62,14 +62,14 @@
 					<span
 						class="{idx >= 3
 							? 'hidden sm:inline-flex'
-							: 'inline-flex'} rounded-lg border border-domain-volunteer-border bg-domain-volunteer-subtle px-2.5 py-1 text-[11px] font-medium text-domain-volunteer-text sm:rounded-xl sm:px-3.5 sm:py-1.5 sm:text-sm"
+							: 'inline-flex'} rounded-lg border border-domain-volunteer-border bg-domain-volunteer-subtle px-2.5 py-1 text-xs font-medium text-domain-volunteer-text sm:rounded-xl sm:px-3.5 sm:py-1.5 sm:text-sm"
 					>
 						{mission}
 					</span>
 				{/each}
 				{#if item.missions.length > 3}
 					<span
-						class="inline-flex items-center rounded-lg border border-dashed border-domain-volunteer-border bg-domain-volunteer-subtle px-2 py-0.5 text-[11px] font-semibold text-domain-volunteer-text sm:hidden"
+						class="inline-flex items-center rounded-lg border border-dashed border-domain-volunteer-border bg-domain-volunteer-subtle px-2 py-0.5 text-xs font-semibold text-domain-volunteer-text sm:hidden"
 					>
 						+{item.missions.length - 3}
 						{isEn ? 'more' : 'ภารกิจ'}
@@ -86,7 +86,7 @@
 				<span class="text-xs font-bold text-slate-900 sm:text-base">
 					{isEn ? `Enrolled ${item.volunteerPercent}%` : `มีอาสาแล้ว ${item.volunteerPercent}%`}
 				</span>
-				<span class="text-[11px] font-normal text-slate-500 sm:text-sm">
+				<span class="text-xs font-normal text-slate-500 sm:text-sm">
 					({item.deficitText})
 				</span>
 			</div>
