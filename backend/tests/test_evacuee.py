@@ -7,7 +7,13 @@ from pymongo import AsyncMongoClient
 
 from apiapp.core.config import Settings
 from apiapp.modules.evacuee.use_case import map_public_status
-from apiapp.utils.masking import mask_last_name, national_id_hash, phone_hash
+from apiapp.utils.masking import (
+    last_name_hash,
+    mask_last_name,
+    name_key,
+    national_id_hash,
+    phone_hash,
+)
 
 
 def test_map_public_status_includes_arriving_and_room_confirmed():
@@ -23,7 +29,18 @@ async def _insert_person(
     db_client: AsyncMongoClient,
     settings: Settings,
     doc: dict,
+    *,
+    last_name: str | None = None,
 ) -> None:
+    """Insert a `public_persons` row the way the worker projects it (CR-166 keys included).
+
+    `last_name` is the full surname the worker would hash; it is never stored.
+    """
+    doc = {
+        "first_name_key": name_key(doc.get("first_name", "")),
+        "last_name_hash": last_name_hash(last_name),
+        **doc,
+    }
     db_name = settings.DATABASE_URI.rsplit("/", 1)[-1]
     await db_client[db_name]["public_persons"].insert_one(doc)
 
@@ -376,7 +393,31 @@ async def test_evacuee_search_rejects_invalid_query(
 ):
     response = await client.post(
         "/public/v1/occupants",
-        json={"q": "ab"},
+        json={"q": "a"},
+        headers=auth_headers,
+    )
+    assert response.status_code == 422
+
+
+async def test_evacuee_search_rejects_a_query_with_a_one_character_word(
+    client: AsyncClient, auth_headers: dict[str, str]
+):
+    """CR-166 — each word is judged on its own; "ก ข" used to pass as 3 characters."""
+    for query in ("ก ข", "สมหมาย ก", "ก สมหมาย"):
+        response = await client.post(
+            "/public/v1/occupants",
+            json={"q": query},
+            headers=auth_headers,
+        )
+        assert response.status_code == 422, query
+
+
+async def test_evacuee_search_rejects_more_than_four_words(
+    client: AsyncClient, auth_headers: dict[str, str]
+):
+    response = await client.post(
+        "/public/v1/occupants",
+        json={"q": "สม หมาย มี โชค ดี"},
         headers=auth_headers,
     )
     assert response.status_code == 422
@@ -580,3 +621,157 @@ async def test_evacuee_search_returns_physical_address_from_location(
     assert body["count"] == 1
     result = body["results"][0]
     assert result["shelter_address"] == "15 ถ.กาญจนวนิช ต.คอหงส์ อ.หาดใหญ่ จ.สงขลา 90110"
+
+
+async def _search_names(client: AsyncClient, auth_headers: dict[str, str], query: str) -> list[str]:
+    response = await client.post(
+        "/public/v1/occupants",
+        json={"q": query},
+        headers=auth_headers,
+    )
+    assert response.status_code == 200, query
+    return [result["name"] for result in response.json()["results"]]
+
+
+async def test_evacuee_name_search_needs_first_name_and_full_surname(
+    client: AsyncClient,
+    db_client: AsyncMongoClient,
+    settings: Settings,
+    auth_headers: dict[str, str],
+):
+    """CR-166 / #533 — "สมหมาย มีบุญ" must not return "สมหมาย มี****"."""
+    now = datetime.now(UTC)
+    people = [
+        ("evacuee:1", "สมหมาย", "มีโชค", False),
+        ("evacuee:2", "สมหมาย", "ใจดี", False),
+        ("evacuee:3", "สมชาย", "มีโชค", False),
+        ("evacuee:4", "สมหมายนิด", "มีโชค", True),  # opted out — never returned
+    ]
+    for person_id, first_name, last_name, excluded in people:
+        await _insert_person(
+            db_client,
+            settings,
+            {
+                "_id": person_id,
+                "shelter_code": "SH001",
+                "first_name": first_name,
+                "last_name_masked": mask_last_name(last_name),
+                "search_excluded": excluded,
+                "status": "active",
+                "updated_at": now,
+            },
+            last_name=last_name,
+        )
+    masked_mi_chok = mask_last_name("มีโชค")
+
+    # Full name: only the person whose first name AND whole surname match.
+    assert await _search_names(client, auth_headers, "สมหมาย มีโชค") == [f"สมหมาย {masked_mi_chok}"]
+    # The false positives from the issue: right first name, wrong / partial surname.
+    assert await _search_names(client, auth_headers, "สมหมาย มีบุญ") == []
+    assert await _search_names(client, auth_headers, "สมหมาย บุญ") == []
+    # "มี" is one grapheme (consonant + vowel mark), so a bare "มี" word is rejected.
+    response = await client.post(
+        "/public/v1/occupants", json={"q": "สมหมาย มี"}, headers=auth_headers
+    )
+    assert response.status_code == 422
+    # A first-name prefix plus the whole surname works.
+    assert await _search_names(client, auth_headers, "สมห มีโชค") == [f"สมหมาย {masked_mi_chok}"]
+    # Surname alone — compared as a hash, so the full surname is needed.
+    assert len(await _search_names(client, auth_headers, "มีโชค")) == 2
+    assert await _search_names(client, auth_headers, "มีโช") == []
+    # First name alone, and a two-character prefix (CR-166 lowers the floor to 2).
+    assert len(await _search_names(client, auth_headers, "สมหมาย")) == 2
+    assert len(await _search_names(client, auth_headers, "สม")) == 3
+
+
+async def test_evacuee_name_search_normalizes_case_and_spaces(
+    client: AsyncClient,
+    db_client: AsyncMongoClient,
+    settings: Settings,
+    auth_headers: dict[str, str],
+):
+    """Multi-word first names and surnames match however the relative types the spaces."""
+    now = datetime.now(UTC)
+    for person_id, first_name, last_name in (
+        ("evacuee:a", "John Paul", "van der Berg"),
+        ("evacuee:b", "Somchai", "Smith"),
+    ):
+        await _insert_person(
+            db_client,
+            settings,
+            {
+                "_id": person_id,
+                "shelter_code": "SH001",
+                "first_name": first_name,
+                "last_name_masked": mask_last_name(last_name),
+                "search_excluded": False,
+                "status": "active",
+                "updated_at": now,
+            },
+            last_name=last_name,
+        )
+
+    assert len(await _search_names(client, auth_headers, "john paul vander berg")) == 1
+    assert len(await _search_names(client, auth_headers, "JOHN  PAUL vanderberg")) == 1
+    assert len(await _search_names(client, auth_headers, "john paulvan der berg")) == 0
+    assert len(await _search_names(client, auth_headers, "SOMCHAI smith")) == 1
+    assert len(await _search_names(client, auth_headers, "somchai smyth")) == 0
+
+
+async def test_evacuee_name_search_returns_a_stable_order_when_capped(
+    client: AsyncClient,
+    db_client: AsyncMongoClient,
+    settings: Settings,
+    auth_headers: dict[str, str],
+):
+    """More than 10 matches: the 10 returned are always the first ten by first name."""
+    now = datetime.now(UTC)
+    for index in range(12, 0, -1):  # inserted out of order on purpose
+        await _insert_person(
+            db_client,
+            settings,
+            {
+                "_id": f"evacuee:{index:02d}",
+                "shelter_code": "SH001",
+                "first_name": f"ทดสอบ{index:02d}",
+                "last_name_masked": mask_last_name("ใจดี"),
+                "search_excluded": False,
+                "status": "active",
+                "updated_at": now,
+            },
+            last_name="ใจดี",
+        )
+
+    masked = mask_last_name("ใจดี")
+    expected = [f"ทดสอบ{index:02d} {masked}" for index in range(1, 11)]
+    assert await _search_names(client, auth_headers, "ทดสอบ") == expected
+
+
+async def test_evacuee_name_search_breaks_first_name_ties_by_id(
+    client: AsyncClient,
+    db_client: AsyncMongoClient,
+    settings: Settings,
+    auth_headers: dict[str, str],
+):
+    """Same first name for everyone: `_id` decides which 10 of 12 survive the cap."""
+    now = datetime.now(UTC)
+    for index in range(12, 0, -1):  # inserted out of order on purpose
+        await _insert_person(
+            db_client,
+            settings,
+            {
+                "_id": f"evacuee:{index:02d}",
+                "shelter_code": "SH001",
+                "first_name": "สมศรี",
+                # Distinct display surname per row so the response order is observable.
+                "last_name_masked": f"ใจ{index:02d}",
+                "search_excluded": False,
+                "status": "active",
+                "updated_at": now,
+            },
+            last_name="ใจดี",
+        )
+
+    expected = [f"สมศรี ใจ{index:02d}" for index in range(1, 11)]
+    assert await _search_names(client, auth_headers, "สมศรี") == expected
+    assert await _search_names(client, auth_headers, "สมศรี ใจดี") == expected

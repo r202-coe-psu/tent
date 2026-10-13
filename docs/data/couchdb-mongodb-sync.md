@@ -17,7 +17,7 @@ api-contract v1 เดิมเขียนว่า public plane "อ่าน 
 | --- | --- |
 | **Privacy by construction** | เฉพาะ field ที่ public เห็นได้ ถูก project ลง Mongo (นามสกุล masked, ไม่มี medical, ไม่มีเบอร์ใน response) — ต่อให้ Mongo รั่ว ก็ไม่มี PII เต็ม |
 | **Blast radius** | public traffic / scraping / DDoS ชนแค่ Mongo replica — operational CouchDB (ที่ศูนย์พึ่งพา) ไม่กระทบ |
-| **Query shape** | occupants search ต้องการ text index + phone exact + masking — ทำบน Mongo (aggregation/`$text`) ง่ายกว่า CouchDB view มาก |
+| **Query shape** | occupants search ต้องการ index ชื่อ (prefix + hash นามสกุลเต็ม — CR-166; เดิม `$text`) + phone exact + masking — ทำบน Mongo ง่ายกว่า CouchDB view มาก |
 | **Scaling แยกโปรไฟล์** | public อ่านหนัก-เขียนเบา, operational เขียนหนัก — แยก store ปรับ scale อิสระ |
 
 **กติกาเจ้าของข้อมูล (สำคัญสุด):**

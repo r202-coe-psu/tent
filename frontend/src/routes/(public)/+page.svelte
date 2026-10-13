@@ -404,7 +404,7 @@
 						<h2 class="text-lg font-bold tracking-tight text-slate-900 sm:text-2xl">
 							{t.urgentDonationsTitle}
 						</h2>
-						<p class="text-[11px] text-slate-400 sm:text-xs">{t.urgentDonationsSubtitle}</p>
+						<p class="text-xs text-slate-400">{t.urgentDonationsSubtitle}</p>
 					</div>
 				</div>
 
@@ -508,7 +508,7 @@
 						<h2 class="text-lg font-bold tracking-tight text-slate-900 sm:text-2xl">
 							{t.volunteersTitle}
 						</h2>
-						<p class="text-[11px] text-slate-400 sm:text-xs">
+						<p class="text-xs text-slate-400">
 							{t.volunteersSubtitle}
 						</p>
 					</div>

@@ -55,9 +55,11 @@
 			error =
 				issue === 'tooShort'
 					? t.errorMinChars
-					: issue === 'tooLong'
-						? t.errorTooLong
-						: t.errorIncompletePhone;
+					: issue === 'tooManyWords'
+						? t.errorTooManyWords
+						: issue === 'tooLong'
+							? t.errorTooLong
+							: t.errorIncompletePhone;
 			isHint = true;
 			return;
 		}
