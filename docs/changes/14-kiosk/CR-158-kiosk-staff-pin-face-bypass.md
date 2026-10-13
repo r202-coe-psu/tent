@@ -3,7 +3,7 @@ id: CR-158
 title: Kiosk staff PIN — ข้ามการตรวจใบหน้าได้เฉพาะเมื่อเจ้าหน้าที่ใส่ PIN ของเครื่อง (PIN ต่อเครื่อง เก็บใน DB scanner_secrets)
 status: approved
 date: 2026-10-10
-updated: 2026-10-11
+updated: 2026-10-13 # ข้อเสนอแก้ไข §8 (proposed)
 requested_by: ทีม kiosk
 decided_by: Soravit Sukkarn (Team Lead)
 layer: volatile
@@ -21,11 +21,14 @@ affects:
   - frontend/src/lib/features/kiosk/{domain/face-check.ts,data/kiosk-staff-pin.api.ts,application/face-check-pin-flow.svelte.ts,application/staff-pin-entry.svelte.ts,application/walk-in-session.svelte.ts,ui/kiosk-face-check.svelte,ui/kiosk-staff-pin-entry.svelte,ui/kiosk-numpad-panel.svelte}
   - frontend/src/routes/kiosk/register/{card,face,done}/+page.svelte, frontend/src/routes/kiosk/scanner/remove-card/+page.svelte
   - scanner_client/app/manager.py (allowlist /staff-pin/verify, end reason staff_bypass)
+  - (§8 proposed) kiosk/app/face/{profiles,quality}.py · kiosk/tests/test_face.py · frontend/src/lib/features/kiosk/ui/kiosk-face-camera-panel.svelte (comment)
 why: ปุ่ม「ข้าม ให้เจ้าหน้าที่ตรวจแทน」ที่หน้ากล้องกดได้โดยไม่มีการยืนยันใดๆ ผู้ที่ใช้บัตรของคนอื่นจึงข้ามการตรวจใบหน้าแล้วบันทึกต่อได้เอง
 migration: additive — doc scanner_device v1 อ่านเป็น "ยังไม่มี PIN"; `pnpm sync:central --write --confirm` สร้าง default PIN ให้เครื่องเดิมที่ยังไม่มี PIN doc และ stamp v2 (ไม่ทับ PIN ที่มีอยู่); server stamp v2 เมื่อตั้ง PIN
 ---
 
 # CR-158: Kiosk staff PIN — ข้ามการตรวจใบหน้าได้เฉพาะเมื่อเจ้าหน้าที่ใส่ PIN ของเครื่อง
+
+> **ข้อเสนอแก้ไข 2026-10-13 (proposed, ยังไม่ approve):** §8 ท้ายเอกสาร — การตรวจใบหน้านับเฉพาะหน้าในกรอบวงรี · PIN ของเครื่องใช้เปิดปุ่ม test print ด้วย (CR-150 §6)
 
 > **สรุป (TL;DR):**
 >
@@ -215,3 +218,17 @@ mode `off`: ไม่เปลี่ยน ไม่มี PIN (mode `shadow` �
   - feature spec kiosk 01 / 02 ยังไม่อยู่ใน PR นี้ ระบุใน `affects:` ว่ามาใน PR แยก
   - ถอดบัตรระหว่าง panel PIN เปิด = ยกเลิก session (FR-21, AC-3)
 - 2026-10-11 — approved โดย Soravit Sukkarn (Team Lead) (รันเลข CR-158)
+- 2026-10-13 — ทีม kiosk เสนอ (proposed) §8 จาก feedback หน้างาน: คนเดินผ่านด้านหลังทำให้ตรวจหน้าไม่ผ่าน (`multiple_faces`) → ตรวจเฉพาะหน้าในกรอบวงรี
+
+## 8. ข้อเสนอแก้ไข 2026-10-13 (proposed — รอ PO)
+
+> **สรุป (TL;DR):** `quality.assess` ของ face service ตัดสินเฉพาะหน้าที่อยู่ในกรอบวงรีบนจอ · คนเดินผ่านด้านหลังไม่ทำให้ได้ `multiple_faces` · PIN ของเครื่องใช้กับปุ่ม test print ด้วย · ไม่กระทบ schema / API
+
+| ID    | Requirement                                                                                                                                                                                                              |
+| :---- | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| FR-30 | `quality.assess` พิจารณาเฉพาะหน้าที่จุดกลาง bbox อยู่ในวงรีนำทาง: จุดกลางเฟรม · ครึ่งสูง `0.42·H` · ครึ่งกว้าง `0.75 ×` ครึ่งสูง (ตรงกับวงรี `aspect-[3/4] h-[84%]` ในกล่อง 4:3 `object-cover`) — ค่าอยู่ใน face profile |
+| FR-31 | ในกรอบ 0 หน้า → `no_face` · >1 → `multiple_faces` · 1 → ตรวจคุณภาพ/embed/liveness กับหน้านั้น (ทั้ง preview และ verify)                                                                                                  |
+| FR-32 | PIN ของเครื่อง (`/api/v1/kiosk/staff-pin/verify`) ใช้เปิดปุ่ม test print หน้า `/kiosk` ได้ (CR-150 FR-L6) · ไม่เปลี่ยนกติกา verify (FR-8..10)                                                                            |
+
+- **AC-15** คนยืนในกรอบ + คนเดินผ่านด้านหลัง → ตรวจหน้าผ่าน · 2 คนในกรอบ →「กรุณาให้มีเพียงท่านเดียวในภาพ」
+- **Risk:** ค่ากรอบอยู่ทั้ง Svelte และ Python (ต่างภาษา) — cross-ref ด้วยคอมเมนต์ · กล้องที่แคบกว่า 4:3 วงรีจะคลาดเคลื่อน
