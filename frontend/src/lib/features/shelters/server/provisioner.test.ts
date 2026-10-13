@@ -197,3 +197,69 @@ describe('provisionShelter catalog write-policy precondition', () => {
 		expect(mergeShelterSecurityMock).not.toHaveBeenCalled();
 	});
 });
+
+describe('provisionShelter seeding', () => {
+	const ACCESS_VDU = 'function (newDoc, oldDoc, userCtx) {}';
+
+	/** A PUT/POST that writes an evacuee doc: by doc-id path or by `type` in the body (incl. _bulk_docs). */
+	function isEvacueeWrite(path: string, body: unknown): boolean {
+		if (decodeURIComponent(path).includes('evacuee:')) return true;
+		const docs =
+			body && typeof body === 'object' && Array.isArray((body as { docs?: unknown }).docs)
+				? (body as { docs: unknown[] }).docs
+				: [body];
+		return docs.some(
+			(doc) =>
+				doc !== null && typeof doc === 'object' && (doc as { type?: unknown }).type === 'evacuee'
+		);
+	}
+
+	beforeEach(() => {
+		adminRawMock.mockReset();
+		deployRegistryDesignMock.mockReset().mockResolvedValue({ status: 201, updated: true });
+		findMasterByNameMock.mockReset().mockResolvedValue(null);
+		findMasterByCodeMock.mockReset().mockResolvedValue(null);
+		mergeShelterSecurityMock.mockReset().mockResolvedValue(undefined);
+	});
+
+	it('creates a shelter without writing evacuee docs or seed:* steps', async () => {
+		// Stateful store so PUTs are readable back: a seed write that succeeds must be
+		// observable, otherwise the test could pass for the wrong reason.
+		const docs = new Map<string, unknown>();
+		adminRawMock.mockImplementation(async (path: string, method: string, body?: unknown) => {
+			if (method === 'GET' && path === '/catalog') {
+				return { status: 200, data: { db_name: 'catalog' } };
+			}
+			if (method === 'GET' && path === '/catalog/_design/access') {
+				return { status: 200, data: { validate_doc_update: ACCESS_VDU } };
+			}
+			if (method === 'GET' && path.includes('/_view/')) {
+				return { status: 200, data: { rows: [] } };
+			}
+			const key = decodeURIComponent(path);
+			if (method === 'PUT') {
+				docs.set(key, body);
+				return { status: 201, data: { ok: true } };
+			}
+			if (method === 'GET') {
+				return docs.has(key)
+					? { status: 200, data: docs.get(key) }
+					: { status: 404, data: { reason: 'missing' } };
+			}
+			return { status: 201, data: { ok: true } };
+		});
+
+		const result = await provisionShelter(
+			{ name: 'ศูนย์ทดสอบ' } as Parameters<typeof provisionShelter>[0],
+			'SH001'
+		);
+
+		expect(result.ok).toBe(true);
+		const evacueeWrites = adminRawMock.mock.calls
+			.filter(([, method]) => method === 'PUT' || method === 'POST')
+			.filter(([path, , body]) => isEvacueeWrite(path as string, body))
+			.map(([path, method]) => `${method} ${path}`);
+		expect(evacueeWrites).toEqual([]);
+		expect(result.steps.filter((step) => step.step.startsWith('seed:'))).toEqual([]);
+	});
+});
