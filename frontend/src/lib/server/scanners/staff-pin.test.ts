@@ -13,7 +13,7 @@ import type { StaffPinSecret } from './staff-pin-store';
 import {
 	isTrivialStaffPin,
 	type PersistedScannerDevice
-} from '$lib/features/scanners/domain/scanner.schema';
+} from '$lib/features/kiosk-devices/domain/scanner.schema';
 
 function device(overrides: Record<string, unknown> = {}): PersistedScannerDevice {
 	return {

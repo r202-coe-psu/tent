@@ -55,6 +55,7 @@
 		StoragePointSelect,
 		useStoragePoints
 	} from '$lib/features/operations';
+	import BoardSectionHeader from '$lib/components/board-section-header.svelte';
 
 	let {
 		initialQuery = '',
@@ -744,28 +745,28 @@
 			<!-- Verifying drop-off: count the goods in (left), confirm or reject (right). -->
 			<div>
 				<!-- Header -->
-				<div class="border-b border-slate-200/80 bg-white px-4 py-4 sm:px-6 sm:py-5">
+				<div class="bg-[#002D5B] p-6 text-white md:p-8 dark:bg-slate-900">
 					<Button
 						variant="link"
 						size="sm"
 						type="button"
 						onclick={handleCancel}
-						class="mb-2 h-auto gap-1.5 p-0 text-sm font-medium text-slate-500 no-underline hover:text-slate-900 hover:no-underline"
+						class="mb-3 h-auto gap-1.5 p-0 text-xs font-medium text-blue-200 no-underline hover:text-white hover:no-underline"
 					>
-						<ArrowLeft class="h-4 w-4" />
+						<ArrowLeft class="h-3.5 w-3.5" />
 						กลับหน้าตรวจรับบริจาค
 					</Button>
 					<div class="flex flex-wrap items-center gap-3">
 						<span
-							class="hidden rounded-xl border border-sky-200 bg-sky-50 p-2 text-sky-700 sm:inline-flex"
+							class="hidden h-8 w-8 items-center justify-center rounded-lg bg-white/10 text-white sm:inline-flex"
 						>
 							<PackageCheck class="h-5 w-5" />
 						</span>
 						<div class="min-w-0 basis-full sm:flex-1 sm:basis-auto">
-							<h2 class="text-lg font-bold text-slate-900 sm:text-xl">
+							<h2 class="text-base font-bold text-white md:text-lg">
 								{donationRefLabel({ booking_ref: bookingRef })} - ตรวจรับพัสดุบริจาค
 							</h2>
-							<p class="text-sm text-slate-500">
+							<p class="text-sm text-blue-100">
 								{donorName || 'ไม่ระบุชื่อ'}
 								{#if donorPhone}· <span class="tabular-nums">{donorPhone}</span>{/if}
 							</p>
@@ -1156,25 +1157,11 @@
 			</div>
 		{:else}
 			<!-- Idle & Scanning View -->
-			<!-- Section Header -->
-			<div
-				class="flex flex-col justify-between gap-4 border-b border-border/60 bg-muted/5 p-6 md:flex-row md:items-center"
-			>
-				<div>
-					<h2 class="flex items-center gap-2.5 text-base font-bold text-foreground">
-						<div
-							class="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400"
-						>
-							<Scan class="h-5 w-5" />
-						</div>
-						ระบบสแกนรับของเข้าคลัง (Ref. Scan Station)
-					</h2>
-					<p class="mt-1 text-sm leading-relaxed text-muted-foreground">
-						สแกนคิวอาร์โค้ดใบจองจากมือถือผู้บริจาค เพื่อตรวจรับสินค้าและอัปเดตระบบคลังพัสดุแบบทันที
-						(Real-time Sync)
-					</p>
-				</div>
-			</div>
+			<BoardSectionHeader
+				icon={Scan}
+				title="ระบบสแกนรับของเข้าคลัง (Ref. Scan Station)"
+				description="สแกนคิวอาร์โค้ดใบจองจากมือถือผู้บริจาค เพื่อตรวจรับสินค้าและอัปเดตระบบคลังพัสดุแบบทันที (Real-time Sync)"
+			/>
 
 			<!-- Scan Body -->
 			<div

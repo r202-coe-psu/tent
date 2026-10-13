@@ -43,6 +43,21 @@ describe('QrIdCard', () => {
 		expect(result.body).toContain('line-clamp-3');
 	});
 
+	it('prints the footer under the QR on the thermal label only', () => {
+		const props = {
+			src: 'data:image/png;base64,abc',
+			alt: 'QR',
+			name: 'ทดสอบ',
+			checklist,
+			footer: 'shelter.psu.ac.th'
+		};
+		const label = render(QrIdCard, { props: { ...props, variant: 'label' } });
+		const screen = render(QrIdCard, { props });
+
+		expect(label.body).toContain('shelter.psu.ac.th');
+		expect(screen.body).not.toContain('shelter.psu.ac.th');
+	});
+
 	it('omits the phone line when there is no phone', () => {
 		const result = render(QrIdCard, {
 			props: { src: 'data:image/png;base64,abc', alt: 'QR', name: 'ทดสอบ', phone: null, checklist }

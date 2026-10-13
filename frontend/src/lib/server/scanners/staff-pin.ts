@@ -1,6 +1,6 @@
 import { timingSafeEqual } from 'node:crypto';
 // eslint-disable-next-line no-restricted-imports -- server-safe domain schema; feature barrel pulls client UI/query code
-import type { PersistedScannerDevice } from '$lib/features/scanners/domain/scanner.schema';
+import type { PersistedScannerDevice } from '$lib/features/kiosk-devices/domain/scanner.schema';
 import { staffPinSecretStore, type StaffPinSecretStore } from './staff-pin-store';
 
 export { generateStaffPin, StaffPinNotSetError, StaffPinUnavailableError } from './staff-pin-store';

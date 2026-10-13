@@ -1545,10 +1545,16 @@ export function createEvacuee(input: EvacueeInput, ctx: AuthorContext, id?: stri
 	);
 }
 
+/**
+ * A kiosk walk-in is created `arriving`, like a web pre-registration that reported in: the visitor
+ * is physically at the shelter, so their QR (the evacuee id) is valid at once.
+ * `phone` is the canonical number the visitor typed at the kiosk (`null` = none given).
+ */
 export function createKioskEvacueeFromCard(
 	cardSnapshot: CardSnapshot,
 	ctx: AuthorContext,
 	photoId?: string,
+	phone: string | null = null,
 	id?: string
 ): Evacuee {
 	const firstName = cardSnapshot.first_name_th || 'ไม่ระบุชื่อ';
@@ -1572,7 +1578,7 @@ export function createKioskEvacueeFromCard(
 			first_name: firstName,
 			last_name: lastName,
 			gender,
-			phone: null,
+			phone,
 			...(birthYearBE ? { birth_year: birthYearBE } : {}),
 			...(age !== undefined ? { age } : {}),
 			person_id: {
@@ -1585,7 +1591,7 @@ export function createKioskEvacueeFromCard(
 			household_id: null,
 			card_snapshot: persistedCardSnapshot,
 			photo: photoId ?? null,
-			current_stay: { status: 'kiosk_registered', zone: null, since: now() },
+			current_stay: { status: 'arriving', zone: null, since: now() },
 			privacy: { search_excluded: false },
 			registered_via: 'kiosk'
 		},
@@ -1595,6 +1601,40 @@ export function createKioskEvacueeFromCard(
 }
 
 export const createDraftEvacueeFromCard = createKioskEvacueeFromCard;
+
+/** Auto Household label — UI never shows a label field (FR-03b-H). */
+export function autoHouseholdLabel(personName: string): string {
+	return `ครอบครัว${personName.trim()}`;
+}
+
+/**
+ * The household a kiosk walk-in gets on registering (`arriving`, like its head): theirs alone,
+ * headed by them, with the address read from the card or ThaiD as its starting Residence.
+ * Station 1 corrects or merges it when confirming. Lane and road stay in `card_snapshot`: a
+ * Residence has no field for them.
+ */
+export function createKioskWalkInHousehold(
+	head: Evacuee,
+	cardSnapshot: CardSnapshot,
+	ctx: AuthorContext,
+	id?: string
+): Household {
+	return createHousehold(
+		{
+			label: autoHouseholdLabel(formatPersonName(head)),
+			head_evacuee_id: head._id,
+			status: 'arriving',
+			address_no: cardSnapshot.address_no ?? null,
+			village_no: cardSnapshot.village_no ?? null,
+			subdistrict: cardSnapshot.subdistrict ?? null,
+			district: cardSnapshot.district ?? null,
+			province: cardSnapshot.province ?? null,
+			postal_code: cardSnapshot.postal_code ?? null
+		},
+		ctx,
+		id
+	);
+}
 
 export function createMedical(input: MedicalInput, ctx: AuthorContext, id?: string): Medical {
 	const d = medicalInputSchema.parse(input);

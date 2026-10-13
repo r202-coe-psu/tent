@@ -363,7 +363,7 @@ describe('createEvacuee', () => {
 		expect(kioskEv.last_name).toBe('รักชาติ');
 		expect(kioskEv.birth_year).toBe(2533);
 		expect(kioskEv.age).toBe(36);
-		expect(kioskEv.current_stay.status).toBe('kiosk_registered');
+		expect(kioskEv.current_stay.status).toBe('arriving');
 		expect(kioskEv.household_id).toBeNull();
 		expect(kioskEv.registered_via).toBe('kiosk');
 		expect(kioskEv.person_id?.number).toBe('1234567890121');
@@ -1834,6 +1834,16 @@ describe('gender nullable (schema_v 12, CR-154; decision sync 2026-10-09)', () =
 		expect(e.gender).toBeNull();
 		const female = createKioskEvacueeFromCard({ ...card, gender: 'female' }, ctx);
 		expect(female.gender).toBe('female');
+	});
+
+	it('kiosk card keeps the phone typed at the kiosk, and null when none was given', () => {
+		const card = {
+			citizen_id: '1101700230673',
+			scanned_at: '2026-10-09T00:00:00.000Z',
+			device_id: 'scanner-1'
+		};
+		expect(createKioskEvacueeFromCard(card, ctx).phone).toBeNull();
+		expect(createKioskEvacueeFromCard(card, ctx, undefined, '0812345678').phone).toBe('0812345678');
 	});
 
 	it('accepts registered_via api', () => {

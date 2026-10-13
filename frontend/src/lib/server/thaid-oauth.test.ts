@@ -124,7 +124,7 @@ describe('thaid-oauth helpers (CR-ThaID)', () => {
 			expect(scopes).toContain('address');
 		});
 
-		it('requests only openid + pid for kiosk_check_in mode (data minimization)', () => {
+		it('requests the profile scope for kiosk_check_in mode (a scan may become a walk-in)', () => {
 			const url = buildThaidAuthorizeUrl({
 				clientId: 'my-client',
 				redirectUri: 'https://shelter.importstar.dev/callback',
@@ -132,7 +132,8 @@ describe('thaid-oauth helpers (CR-ThaID)', () => {
 				mode: 'kiosk_check_in'
 			});
 
-			expect(new URL(url).searchParams.get('scope')).toBe('openid pid');
+			const scopes = new URL(url).searchParams.get('scope')?.split(' ') ?? [];
+			expect(scopes).toEqual(expect.arrayContaining(['openid', 'pid', 'name', 'address']));
 		});
 	});
 
@@ -162,7 +163,7 @@ describe('thaid-oauth helpers (CR-ThaID)', () => {
 	});
 
 	describe('resolvePublicOrigin', () => {
-		const requestUrl = new URL('http://127.0.0.1:3000/api/v1/scanner/kiosk/thaid/session');
+		const requestUrl = new URL('http://127.0.0.1:3000/api/v1/kiosk/thaid/session');
 
 		it('prefers the configured ORIGIN over the request origin', () => {
 			(env as Record<string, string | undefined>).ORIGIN = 'https://shelter.example.com/';

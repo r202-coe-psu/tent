@@ -7,12 +7,11 @@
 	import ShieldCheck from '@lucide/svelte/icons/shield-check';
 	import UserCheck from '@lucide/svelte/icons/user-check';
 	import UsersRound from '@lucide/svelte/icons/users-round';
-	import QrIdCard from '$lib/components/qr-id-card.svelte';
 	import { Button } from '$lib/components/ui/button/index.js';
-	import { generateQrDataUrl, qrModuleCount } from '$lib/utils/qrcode';
 	import KioskCheckInWizard from './kiosk-check-in-wizard.svelte';
 	import KioskLookupErrorActions from './kiosk-lookup-error-actions.svelte';
 	import PhoneHouseholdPicker from './phone-household-picker.svelte';
+	import KioskLabelSheet from './kiosk-label-sheet.svelte';
 	import KioskPrintStatus from './kiosk-print-status.svelte';
 	import {
 		initialReprintSelection,
@@ -21,17 +20,6 @@
 		toExistingReportResults,
 		toggleAllSelection
 	} from '../domain/household-selection';
-	import {
-		KIOSK_LABEL_CHECKLIST,
-		KIOSK_LABEL_GAP_MM,
-		KIOSK_LABEL_MM,
-		KIOSK_LABEL_OFFSET_X_MM,
-		KIOSK_LABEL_PADDING_MM,
-		KIOSK_QR_COLOR,
-		kioskLabelPageCss,
-		kioskQrBoxMm,
-		kioskQrPrintSize
-	} from '../domain/print-label';
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 	import {
 		checkInSelectedMembers,
@@ -45,9 +33,12 @@
 		type KioskEvacueeSummary,
 		type KioskLookupResponse
 	} from '../data/kiosk-check-in.api';
-	import { printKioskLabels } from '../data/kiosk-print.api';
-	import { renderKioskLabelPng } from '../application/kiosk-label-image';
-	import { runKioskPrintFlow } from '../application/kiosk-print-flow';
+	import {
+		prepareKioskQrImage,
+		printKioskQrLabels,
+		type KioskQrImage,
+		type KioskQrLabel
+	} from '../application/kiosk-label-print';
 	import { buildKioskPhotoPayload } from '../application/kiosk-card-photo';
 	import KioskBackButton from './kiosk-back-button.svelte';
 	import KioskWalkInOffer from './kiosk-walk-in-offer.svelte';
@@ -69,7 +60,10 @@
 		cardMode?: boolean;
 		backHref?: string;
 		onprintbusychange?: (busy: boolean) => void;
-		onregister?: (citizenId: string) => void;
+		/** Walk-in registration, offered after a card or ThaiD miss: who to register. */
+		onregister?: (
+			identity: Extract<GateInput, { source: 'smart-card' } | { source: 'thaid' }>
+		) => void;
 		onreset: () => void;
 		/** ThaiD only: scan again with a new QR once the verified session can no longer be used. */
 		onrescan?: () => void;
@@ -111,7 +105,7 @@
 	let selectedIds = $state<string[]>([]);
 	let results = $state<KioskCheckInMemberResult[]>([]);
 	let retryableIds = $state<string[]>([]);
-	let qrImages = $state<Record<string, { src: string; sizeMm: number }>>({});
+	let qrImages = $state<Record<string, KioskQrImage>>({});
 	let actionError = $state('');
 	let printError = $state('');
 	let printBusy = $state(false);
@@ -138,9 +132,12 @@
 	const holdShown = $derived(
 		holdMembers && Boolean(hold) && Boolean(lookup) && centerMatches && results.length === 0
 	);
-	/** No pre-registration for this card, and this shelter takes walk-ins at the kiosk. */
+	/** No pre-registration for this card / ThaiD scan, and this shelter takes walk-ins at the kiosk. */
 	const walkInOffered = $derived(
-		Boolean(lookupError) && canRegister && input?.source === 'smart-card' && Boolean(onregister)
+		Boolean(lookupError) &&
+			canRegister &&
+			(input?.source === 'smart-card' || input?.source === 'thaid') &&
+			Boolean(onregister)
 	);
 	const successfulResults = $derived(
 		results.filter((result) => result.status === 'checked_in' || result.qr_payload)
@@ -375,18 +372,11 @@
 		generation?: number
 	): Promise<boolean> {
 		printError = '';
-		const nextImages: Record<string, { src: string; sizeMm: number }> = { ...qrImages };
+		const nextImages: Record<string, KioskQrImage> = { ...qrImages };
 		try {
 			for (const item of items) {
 				if (!item.qr_payload || nextImages[item.evacuee_id]) continue;
-				const size = kioskQrPrintSize(await qrModuleCount(item.qr_payload));
-				const src = await generateQrDataUrl(item.qr_payload, {
-					width: size.widthPx,
-					margin: size.margin,
-					color: KIOSK_QR_COLOR
-				});
-				if (!src) throw new Error('QR render returned empty');
-				nextImages[item.evacuee_id] = { src, sizeMm: size.sizeMm };
+				nextImages[item.evacuee_id] = await prepareKioskQrImage(item.qr_payload);
 			}
 			if (generation !== undefined && generation !== lookupGeneration) return false;
 			qrImages = nextImages;
@@ -435,16 +425,19 @@
 			const toPrint = printableResults;
 			if (toPrint.length === 0) return;
 			if (!(await prepareQrImages(toPrint))) return;
+			let labels: KioskQrLabel[];
+			try {
+				labels = toLabels(toPrint);
+			} catch {
+				printError = 'สร้าง label สำหรับพิมพ์ไม่สำเร็จ กรุณาลองอีกครั้ง';
+				return;
+			}
 			printedCount = toPrint.length;
 			printPhase = 'printing';
-			const result = await runKioskPrintFlow({
-				renderLabels: () => renderLabels(toPrint),
-				printLabels: printKioskLabels,
-				// No scanner client (dev browser / browser print mode): print the CSS labels instead.
-				fallbackPrint: async () => {
-					await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-					window.print();
-				}
+			// No scanner client (dev browser / browser print mode): print the CSS labels instead.
+			const result = await printKioskQrLabels(labels, async () => {
+				await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+				window.print();
 			});
 			if (result.kind === 'printed') {
 				printPhase = 'done';
@@ -465,26 +458,17 @@
 		}
 	}
 
-	function renderLabels(items: KioskCheckInMemberResult[]): Promise<string[]> {
-		return Promise.all(
-			items.map((result) => {
-				const person = lookup?.members.find((member) => member.evacuee_id === result.evacuee_id);
-				const qr = qrImages[result.evacuee_id];
-				if (!qr) throw new Error('QR image missing');
-				return renderKioskLabelPng({
-					qrSrc: qr.src,
-					name: labelName(result, person),
-					phone: result.label?.phone ?? null
-				});
-			})
-		);
-	}
-
-	// Print labels must be a direct child of <body> so print CSS can drop the whole kiosk screen with
-	// display:none; visibility:hidden keeps its layout height and prints blank labels.
-	function mountOnBody(node: HTMLElement) {
-		document.body.appendChild(node);
-		return () => node.remove();
+	function toLabels(items: KioskCheckInMemberResult[]): KioskQrLabel[] {
+		return items.map((result) => {
+			const person = lookup?.members.find((member) => member.evacuee_id === result.evacuee_id);
+			const qr = qrImages[result.evacuee_id];
+			if (!qr) throw new Error('QR image missing');
+			return {
+				qrSrc: qr.src,
+				name: labelName(result, person),
+				phone: result.label?.phone ?? null
+			};
+		});
 	}
 
 	function fullName(member: Pick<KioskEvacueeSummary, 'first_name' | 'last_name'>): string {
@@ -510,9 +494,6 @@
 
 <svelte:head>
 	<title>ตรวจสอบและรายงานตัว — SmartShelter Kiosk</title>
-	<!-- Static CSS built from KIOSK_LABEL_MM constants only (no user input). -->
-	<!-- eslint-disable-next-line svelte/no-at-html-tags -->
-	{@html `<style>${kioskLabelPageCss()}</style>`}
 </svelte:head>
 
 <section
@@ -612,11 +593,12 @@
 
 		{#if walkInOffered}
 			<KioskWalkInOffer
+				source={input?.source === 'thaid' ? 'thaid' : 'smart-card'}
 				{isLookingUp}
 				{retryAfterSeconds}
 				onretry={retryLookup}
 				onregister={() => {
-					if (input?.source === 'smart-card') onregister?.(input.citizen_id);
+					if (input?.source === 'smart-card' || input?.source === 'thaid') onregister?.(input);
 				}}
 			/>
 		{:else if lookupError}
@@ -960,36 +942,18 @@
 				</div>
 			</section>
 
-			<!-- The wrapper stays in place for Svelte's DOM bookkeeping; its child is moved to <body>. -->
-			<div hidden>
-				<div
-					class="kiosk-print-area"
-					aria-hidden="true"
-					style:--label-width="{KIOSK_LABEL_MM.width}mm"
-					style:--label-height="{KIOSK_LABEL_MM.height}mm"
-					style:--label-padding="{KIOSK_LABEL_PADDING_MM}mm"
-					style:--label-offset-x="{KIOSK_LABEL_OFFSET_X_MM}mm"
-					style:--label-gap="{KIOSK_LABEL_GAP_MM}mm"
-					{@attach mountOnBody}
-				>
-					{#each printableResults as result (result.evacuee_id)}
-						{@const person = lookup?.members.find(
-							(member) => member.evacuee_id === result.evacuee_id
-						)}
-						{@const qr = qrImages[result.evacuee_id]}
-						<div class="wristband" style:--qr-size="{qr?.sizeMm ?? kioskQrBoxMm()}mm">
-							<QrIdCard
-								variant="label"
-								src={qr?.src}
-								alt="QR ประจำตัวสำหรับใช้ภายในศูนย์"
-								name={labelName(result, person)}
-								phone={result.label?.phone}
-								checklist={KIOSK_LABEL_CHECKLIST}
-							/>
-						</div>
-					{/each}
-				</div>
-			</div>
+			<KioskLabelSheet
+				labels={printableResults.map((result) => ({
+					key: result.evacuee_id,
+					qrSrc: qrImages[result.evacuee_id]?.src,
+					qrSizeMm: qrImages[result.evacuee_id]?.sizeMm,
+					name: labelName(
+						result,
+						lookup?.members.find((member) => member.evacuee_id === result.evacuee_id)
+					),
+					phone: result.label?.phone
+				}))}
+			/>
 		{/if}
 
 		<p
@@ -1009,38 +973,3 @@
 {#if printPhase !== 'idle'}
 	<KioskPrintStatus phase={printPhase} count={printedCount} />
 {/if}
-
-<style>
-	.kiosk-print-area {
-		display: none;
-	}
-
-	/* Label size comes from domain/print-label.ts (CSS vars + generated @page in <svelte:head>). */
-	@media print {
-		:global(body) {
-			margin: 0 !important;
-		}
-		:global(body > :not(.kiosk-print-area)) {
-			display: none !important;
-		}
-		.kiosk-print-area {
-			display: block;
-		}
-		.wristband {
-			box-sizing: border-box;
-			display: block;
-			width: var(--label-width);
-			height: var(--label-height);
-			padding: var(--label-padding);
-			translate: var(--label-offset-x) 0;
-			overflow: hidden;
-			break-after: page;
-			break-inside: avoid;
-			font-family: 'IBM Plex Sans Thai', sans-serif;
-			color: #000;
-		}
-		.wristband:last-child {
-			break-after: auto;
-		}
-	}
-</style>

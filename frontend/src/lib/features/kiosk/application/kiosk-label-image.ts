@@ -1,6 +1,7 @@
 import {
 	KIOSK_LABEL_CHECKBOX,
 	KIOSK_LABEL_CHECKLIST,
+	KIOSK_LABEL_LINK,
 	KIOSK_LABEL_TEXT,
 	KIOSK_LABEL_TEXT_ROW_GAP_MM,
 	kioskLabelDots,
@@ -66,11 +67,17 @@ export async function renderKioskLabelPng(label: KioskLabelContent): Promise<str
 	const context = canvas.getContext('2d', { willReadFrequently: true });
 	if (!context) throw new Error('Canvas 2D is unavailable');
 
-	const { name: nameStyle, phone: phoneStyle, checklist: checkStyle } = KIOSK_LABEL_TEXT;
+	const {
+		name: nameStyle,
+		phone: phoneStyle,
+		checklist: checkStyle,
+		link: linkStyle
+	} = KIOSK_LABEL_TEXT;
 	const fonts = {
 		name: `${nameStyle.weight} ${ptToDots(nameStyle.pt)}px ${FONT_FAMILY}`,
 		phone: `${phoneStyle.weight} ${ptToDots(phoneStyle.pt)}px ${MONO_FAMILY}`,
-		checklist: `${checkStyle.weight} ${ptToDots(checkStyle.pt)}px ${FONT_FAMILY}`
+		checklist: `${checkStyle.weight} ${ptToDots(checkStyle.pt)}px ${FONT_FAMILY}`,
+		link: `${linkStyle.weight} ${ptToDots(linkStyle.pt)}px ${FONT_FAMILY}`
 	};
 
 	// `document.fonts.ready` only waits for faces already in flight — it won't fetch a
@@ -132,6 +139,12 @@ export async function renderKioskLabelPng(label: KioskLabelContent): Promise<str
 	}
 
 	drawChecklist(context, label.checklist ?? KIOSK_LABEL_CHECKLIST, fonts.checklist, layout.text);
+
+	// Centred under the QR (the one centred row; everything else is left-aligned).
+	context.font = fonts.link;
+	context.textAlign = 'center';
+	context.fillText(KIOSK_LABEL_LINK, layout.link.x, layout.link.y);
+	context.textAlign = 'left';
 
 	binarize(context, width, height);
 	return canvas.toDataURL('image/png').slice('data:image/png;base64,'.length);

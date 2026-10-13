@@ -10,6 +10,8 @@
 
 	interface Props {
 		headingTag?: 'h1' | 'h2';
+		/** The line under the heading; defaults to the face-check wording. */
+		description?: string;
 		/** The PIN was right: carry on (the panel has already forgotten it). */
 		onverified: () => void;
 		/** Cancel, Esc or 30 s without a touch. */
@@ -18,7 +20,13 @@
 		verify?: (pin: string) => Promise<KioskStaffPinResult>;
 	}
 
-	let { headingTag = 'h1', onverified, oncancel, verify = verifyKioskStaffPin }: Props = $props();
+	let {
+		headingTag = 'h1',
+		description = 'ตรวจบัตรประชาชนกับตัวบุคคลแล้ว กรอก PIN 6 หลักเพื่อดำเนินการต่อ',
+		onverified,
+		oncancel,
+		verify = verifyKioskStaffPin
+	}: Props = $props();
 
 	const id = $props.id();
 	const titleId = `${id}-title`;
@@ -108,7 +116,7 @@
 					>สำหรับเจ้าหน้าที่</svelte:element
 				>
 				<p class="mt-1 text-base text-slate-700 kiosk-portrait:text-xl">
-					ตรวจบัตรประชาชนกับตัวบุคคลแล้ว กรอก PIN 6 หลักเพื่อดำเนินการต่อ
+					{description}
 				</p>
 			</header>
 		{/snippet}

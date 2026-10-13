@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { findSkillOption, skillLabel, skillLabels } from './skill-label';
+import { findSkillOption, localizedSkillLabel, skillLabel, skillLabels } from './skill-label';
 import type { VolunteerSkillOption } from './volunteer';
 
 const OPTIONS: VolunteerSkillOption[] = [
 	{
 		code: 'medical',
 		label: 'การแพทย์ / ปฐมพยาบาล',
+		label_th: 'การแพทย์ / ปฐมพยาบาล',
+		label_en: 'Medical / First aid',
 		category: 'controlled',
 		description: '',
 		is_default: false
@@ -13,6 +15,8 @@ const OPTIONS: VolunteerSkillOption[] = [
 	{
 		code: 'kitchen',
 		label: 'ประกอบอาหาร / ครัวสนาม',
+		label_th: 'ประกอบอาหาร / ครัวสนาม',
+		label_en: '',
 		category: 'operational',
 		description: '',
 		is_default: true
@@ -30,8 +34,33 @@ describe('findSkillOption', () => {
 		expect(findSkillOption('การแพทย์ / ปฐมพยาบาล'.normalize('NFD'), OPTIONS)?.code).toBe('medical');
 	});
 
+	it('finds a legacy English label', () => {
+		expect(findSkillOption('medical / first aid', OPTIONS)?.code).toBe('medical');
+	});
+
 	it('returns undefined for a value the list no longer carries', () => {
 		expect(findSkillOption('ทักษะลับ', OPTIONS)).toBeUndefined();
+	});
+
+	it('does not match an empty value against a missing label', () => {
+		expect(findSkillOption('', OPTIONS)).toBeUndefined();
+		expect(findSkillOption('  ', OPTIONS)).toBeUndefined();
+	});
+});
+
+describe('localizedSkillLabel', () => {
+	it('picks the label in the reader language', () => {
+		expect(localizedSkillLabel(OPTIONS[0], 'th')).toBe('การแพทย์ / ปฐมพยาบาล');
+		expect(localizedSkillLabel(OPTIONS[0], 'en')).toBe('Medical / First aid');
+	});
+
+	it('falls back to the other language when one is missing', () => {
+		expect(localizedSkillLabel(OPTIONS[1], 'en')).toBe('ประกอบอาหาร / ครัวสนาม');
+	});
+
+	it('falls back to the code when the option has no label at all', () => {
+		const bare = { ...OPTIONS[1], label: '', label_th: '', label_en: '' };
+		expect(localizedSkillLabel(bare, 'th')).toBe('kitchen');
 	});
 });
 
@@ -45,6 +74,8 @@ describe('skillLabel', () => {
 			{
 				code: 'item_01m1vs0fj92e25krt2when7cjc',
 				label: 'ประกอบอาหาร / ครัวสนาม',
+				label_th: 'ประกอบอาหาร / ครัวสนาม',
+				label_en: '',
 				category: 'operational',
 				description: '',
 				is_default: true

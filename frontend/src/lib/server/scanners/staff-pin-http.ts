@@ -1,5 +1,5 @@
 import { json } from '@sveltejs/kit';
-import { authorizeUserWrite, ServiceError, type Caller } from '$lib/server/couch-admin';
+import { ServiceError } from '$lib/server/couch-admin';
 import {
 	ScannerConflictError,
 	ScannerDependencyError,
@@ -27,13 +27,6 @@ const DEVICE_ID_PARAM = /^[A-Za-z0-9_-]{2,}$/;
 export function scannerDocIdFromParam(deviceId: string): string {
 	if (!DEVICE_ID_PARAM.test(deviceId)) throw new ScannerDeviceNotFoundError();
 	return `scanner_device:${deviceId}`;
-}
-
-/** SA-only gate shared by the admin staff-PIN and device-delete routes (same as device create). */
-export async function requireStaffPinAdmin(request: Request): Promise<Caller> {
-	const caller = await authorizeUserWrite(request.headers.get('cookie'));
-	if (!caller.isSA) throw new ServiceError('FORBIDDEN', 'Requires system_admin');
-	return caller;
 }
 
 const SERVICE_STATUS: Record<string, number> = {
