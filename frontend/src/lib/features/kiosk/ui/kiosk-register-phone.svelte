@@ -13,14 +13,16 @@
 	interface Props {
 		/** Saving: keys and buttons wait. */
 		disabled?: boolean;
+		/** Why the last phone was turned away; shown until the visitor starts typing another. */
+		notice?: string;
 		/** The canonical phone, or `null` when the visitor has none. */
 		onconfirm: (phone: string | null) => void;
 	}
 
-	let { disabled = false, onconfirm }: Props = $props();
+	let { disabled = false, notice = '', onconfirm }: Props = $props();
 	let phone = $state('');
 	const isValid = $derived(isKioskPhoneSubmittable(phone));
-	const entryHint = $derived(phoneEntryHint(phone));
+	const footerMessage = $derived(phone.length === 0 && notice ? notice : phoneEntryHint(phone));
 	const displayPhone = $derived(formatPhoneForDisplay(phone));
 
 	function confirm(): void {
@@ -100,7 +102,7 @@
 			class="min-h-7 text-center text-sm font-semibold text-amber-900 kiosk-portrait:text-lg"
 			aria-live="polite"
 		>
-			{entryHint ?? ''}
+			{footerMessage ?? ''}
 		</p>
 	{/snippet}
 </KioskNumpadPanel>

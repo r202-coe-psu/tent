@@ -43,7 +43,9 @@ test.describe('Public Donation & Queue Booking Wizard (T-60)', TAGS, () => {
 		await page.goto('/donations');
 
 		// Step 1: Needs Board — shelter cards first, needs one level in
-		await expect(page.getByRole('heading', { name: /กระดาน\s*ความต้องการด่วน/ })).toBeVisible();
+		await expect(
+			page.getByRole('heading', { name: /ของที่ศูนย์พักพิง\s*ต้องการตอนนี้/ })
+		).toBeVisible();
 		await expect(page.getByText('ศูนย์พักพิง เทศบาลนครหาดใหญ่ (โรงเรียนเทศบาล 2)')).toBeVisible();
 
 		// Open the shelter, then pick the need — locks SH001 and pre-fills "ข้าวสาร"
@@ -409,7 +411,9 @@ test.describe('Non-secure context (LAN HTTP over an IP)', TAGS, () => {
 
 		await page.goto('/donations');
 
-		await expect(page.getByRole('heading', { name: /กระดาน\s*ความต้องการด่วน/ })).toBeVisible();
+		await expect(
+			page.getByRole('heading', { name: /ของที่ศูนย์พักพิง\s*ต้องการตอนนี้/ })
+		).toBeVisible();
 		await expect(page.getByText('ศูนย์พักพิงทดสอบ LAN')).toBeVisible();
 		expect(crashes.join('\n')).not.toContain('randomUUID');
 		expect(crashes).toEqual([]);

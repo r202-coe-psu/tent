@@ -14,6 +14,7 @@ import {
 	KIOSK_LABEL_CHECKLIST,
 	KIOSK_LABEL_DIVIDER_MM,
 	KIOSK_LABEL_GAP_MM,
+	KIOSK_LABEL_LINK,
 	KIOSK_LABEL_TEXT,
 	KIOSK_LABEL_TEXT_MIN_WIDTH_MM,
 	KIOSK_LABEL_TEXT_OFFSET_Y_MM,
@@ -162,6 +163,18 @@ describe('kioskLabelLayout', () => {
 				Math.round(mmToDots(KIOSK_LABEL_TEXT_OFFSET_Y_MM))
 		);
 		expect(layout.text.bottom).toBe(height - Math.round(mmToDots(KIOSK_LABEL_PADDING_MM)));
+	});
+
+	it('centres the link under the QR, inside the right column and the bottom padding', () => {
+		const half = ptToDots(KIOSK_LABEL_TEXT.link.pt) / 2;
+		const padding = Math.round(mmToDots(KIOSK_LABEL_PADDING_MM));
+
+		expect(KIOSK_LABEL_LINK).toBe('shelter.psu.ac.th');
+		expect(layout.link.x).toBe(layout.qr.x + size.widthPx / 2);
+		expect(layout.link.x).toBeGreaterThan(layout.divider.x + layout.divider.width);
+		expect(layout.link.x).toBeLessThan(width);
+		expect(layout.link.y - half).toBeGreaterThan(layout.qr.y + size.widthPx);
+		expect(layout.link.y + half).toBeLessThanOrEqual(height - padding);
 	});
 
 	it('leaves the text column at least its minimum width', () => {
