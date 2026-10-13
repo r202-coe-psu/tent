@@ -7,6 +7,7 @@ import {
 import {
 	DAILY_SOP_ROLES,
 	assessableRoles,
+	applySystemMetricSuggestionsForEditedControls,
 	canAssessRole,
 	canCompleteRoleDraft,
 	classifyDailySopDocument,
@@ -15,6 +16,7 @@ import {
 	dailySopBangkokDate,
 	dailySopReviewDates,
 	dailySopRoleAssessmentSchema,
+	hasRoleDraftInput,
 	isDailySopUtcTimestamp,
 	metricForQuestion,
 	metricParameterForQuestion,
@@ -202,6 +204,46 @@ describe('Daily SOP role question set', () => {
 		const draft = createEmptyRoleDraft('SM');
 		expect(metricForQuestion('D-SM-02')?.evaluate({ occupants: 101, capacity: 100 })).toBe(false);
 		expect(draft['D-SM-02'].status).toBeNull();
+	});
+
+	it('keeps system metric suggestions out of untouched controls until the user edits them', () => {
+		const baseDraft = createEmptyRoleDraft('SM');
+		const draft = createEmptyRoleDraft('SM');
+		const suggestions = {
+			'D-SM-02': { occupants: 0, capacity: 120 },
+			'D-SM-03': { people: 10 }
+		};
+		const untouched = applySystemMetricSuggestionsForEditedControls(
+			draft,
+			baseDraft,
+			'SM',
+			suggestions
+		);
+		expect(untouched).toEqual(draft);
+		expect(hasRoleDraftInput(untouched, 'SM')).toBe(false);
+
+		draft['D-SM-02'].status = 'Pass';
+		draft['D-SM-02'].measured_values.capacity = 100;
+		const edited = applySystemMetricSuggestionsForEditedControls(
+			draft,
+			baseDraft,
+			'SM',
+			suggestions
+		);
+		expect(edited['D-SM-02'].measured_values).toEqual({ occupants: 0, capacity: 100 });
+		expect(edited['D-SM-03'].measured_values).toEqual({});
+
+		const vcBase = createEmptyRoleDraft('VC');
+		const vcDraft = createEmptyRoleDraft('VC');
+		vcDraft['D-VC-02'].status = 'Pass';
+		const vcEdited = applySystemMetricSuggestionsForEditedControls(
+			vcDraft,
+			vcBase,
+			'VC',
+			{ 'D-VC-02': { occupants: 14 } },
+			validRatios
+		);
+		expect(vcEdited['D-VC-02'].measured_values.occupants).toBe(14);
 	});
 
 	it('handles zero denominators, incomplete operands, ceilings, and decimal comparisons', () => {

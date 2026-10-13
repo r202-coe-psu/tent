@@ -458,6 +458,9 @@ export interface DailySopRoleControlDraft {
 }
 
 export type DailySopRoleDraft = Record<string, DailySopRoleControlDraft>;
+export type DailySopSystemMetricSuggestions = Readonly<
+	Record<string, Readonly<Record<string, number>>>
+>;
 
 export interface DailySopRoleControlSnapshot extends DailySopRoleControlDraft {
 	id: string;
@@ -550,6 +553,50 @@ export const hasRoleDraftInput = (draft: DailySopRoleDraft, role: DailySopRoleCo
 			Boolean(control?.status || control?.notes.trim() || control?.observations.trim()) ||
 			Object.values(control?.measured_values ?? {}).some((item) => item !== null)
 	);
+
+export const applySystemMetricSuggestionsForEditedControls = (
+	draft: DailySopRoleDraft,
+	baseDraft: DailySopRoleDraft,
+	role: DailySopRoleCode,
+	suggestions: DailySopSystemMetricSuggestions,
+	sopRatios?: Partial<Record<SopRatioKey, string>>
+): DailySopRoleDraft => {
+	const result = Object.fromEntries(
+		Object.entries(draft).map(([id, answer]) => [
+			id,
+			{ ...answer, measured_values: { ...answer.measured_values } }
+		])
+	);
+	for (const question of questionsForRole(role)) {
+		const answer = result[question.id];
+		const baseAnswer = baseDraft[question.id];
+		if (!answer || !baseAnswer) continue;
+		const measuredKeys = new Set([
+			...Object.keys(answer.measured_values),
+			...Object.keys(baseAnswer.measured_values)
+		]);
+		const changed =
+			answer.status !== baseAnswer.status ||
+			answer.notes !== baseAnswer.notes ||
+			answer.observations !== baseAnswer.observations ||
+			[...measuredKeys].some(
+				(key) => answer.measured_values[key] !== baseAnswer.measured_values[key]
+			);
+		if (!changed) continue;
+		const metricKeys = new Set([
+			...Object.keys(answer.measured_values),
+			...(metricForQuestion(question.id, sopRatios)?.fields.map((item) => item.key) ?? [])
+		]);
+		for (const [key, value] of Object.entries(suggestions[question.id] ?? {})) {
+			if (
+				metricKeys.has(key) &&
+				(answer.measured_values[key] === null || answer.measured_values[key] === undefined)
+			)
+				answer.measured_values[key] = value;
+		}
+	}
+	return result;
+};
 
 export const roleAssessmentStatusFor = (
 	draft: DailySopRoleDraft,
