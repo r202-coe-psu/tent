@@ -117,6 +117,14 @@ describe('reprintKioskLabels', () => {
 		).rejects.toBeInstanceOf(KioskReprintVerifyFailedError);
 	});
 
+	it.each([['1-2345-67890-12-3'], ['1 2345 67890 12 3']])(
+		'verifies a primary whose id is stored with separators (%j)',
+		async (number) => {
+			docs = [evacuee(0, { person_id: { number } })];
+			expect(await reprintKioskLabels(shelterCode, input())).toHaveLength(1);
+		}
+	);
+
 	it.each([[undefined], ['123'], ['12345678901AB']])(
 		'cannot verify a primary whose id is %j',
 		async (number) => {

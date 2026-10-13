@@ -62,8 +62,10 @@ function normalizeEvacueeId(id: string): string {
 
 function citizenIdLast4(primary: EvacueeDoc): string | null {
 	const number = primary.person_id?.number;
-	if (typeof number !== 'string' || !/^\d{4,}$/.test(number)) return null;
-	return number.slice(-4);
+	if (typeof number !== 'string') return null;
+	const digits = number.replace(/[\s-]/g, '');
+	if (!/^\d{4,}$/.test(digits)) return null;
+	return digits.slice(-4);
 }
 
 /**
