@@ -342,7 +342,11 @@
 	class="sticky top-0 z-50 w-full shrink-0 border-b border-sidebar-border bg-card pt-[env(safe-area-inset-top)] lg:hidden"
 >
 	<div class="flex h-16 w-full items-center justify-between px-4">
-		<a href={backofficeHomePath} class="flex min-h-11 items-center gap-3" onclick={closeMobileMenu}>
+		<a
+			href={backofficeHomePath}
+			class="flex min-h-11 min-w-0 items-center gap-3"
+			onclick={closeMobileMenu}
+		>
 			<img
 				src="/logo.png"
 				alt="PSU Smart Shelter"
@@ -362,7 +366,7 @@
 
 		<button
 			type="button"
-			class="flex min-h-11 min-w-11 items-center justify-center rounded-lg border border-sidebar-border bg-card text-muted-foreground transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none"
+			class="flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-lg border border-sidebar-border bg-card text-muted-foreground transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none"
 			onclick={() => (mobileMenuOpen = !mobileMenuOpen)}
 			aria-label={mobileMenuOpen ? 'ปิดเมนู' : 'เปิดเมนู'}
 			aria-expanded={mobileMenuOpen}
