@@ -1545,10 +1545,12 @@ export function createEvacuee(input: EvacueeInput, ctx: AuthorContext, id?: stri
 	);
 }
 
+/** `phone` is the canonical number the visitor typed at the kiosk (`null` = none given). */
 export function createKioskEvacueeFromCard(
 	cardSnapshot: CardSnapshot,
 	ctx: AuthorContext,
 	photoId?: string,
+	phone: string | null = null,
 	id?: string
 ): Evacuee {
 	const firstName = cardSnapshot.first_name_th || 'ไม่ระบุชื่อ';
@@ -1572,7 +1574,7 @@ export function createKioskEvacueeFromCard(
 			first_name: firstName,
 			last_name: lastName,
 			gender,
-			phone: null,
+			phone,
 			...(birthYearBE ? { birth_year: birthYearBE } : {}),
 			...(age !== undefined ? { age } : {}),
 			person_id: {

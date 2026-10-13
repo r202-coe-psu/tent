@@ -237,7 +237,10 @@ export const portalCredentialSchema = z.union([
  */
 export type VolunteerSkillOption = {
 	code: string;
+	/** Single display label — Thai first; kept for callers that do not switch language. */
 	label: string;
+	label_th: string;
+	label_en: string;
 	category: string;
 	description: string;
 	is_default: boolean;

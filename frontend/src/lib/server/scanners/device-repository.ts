@@ -9,9 +9,10 @@ import {
 	type PersistedScannerDevice,
 	type PersistedScannerDeviceV2,
 	type ScannerDeviceInput,
+	type ScannerDevicePatch,
 	type ScannerDeviceSummary,
 	type StaffPinReveal
-} from '$lib/features/scanners/domain/scanner.schema';
+} from '$lib/features/kiosk-devices/domain/scanner.schema';
 import {
 	generateScannerSecret,
 	hashScannerSecret,
@@ -39,6 +40,9 @@ export interface CreatedScannerDeviceRecord {
 
 /** Registry metadata writes retry a `_rev` race this many times (heartbeats bump `_rev` often). */
 const METADATA_WRITE_ATTEMPTS = 3;
+
+/** Upper bound on devices returned by one list (registry holds a handful per shelter). */
+const LIST_LIMIT = 1000;
 
 function parsePersistedDevice(value: unknown): PersistedScannerDevice {
 	const parsed = scannerDevicePersistedSchema.safeParse(value);
@@ -92,6 +96,46 @@ export class ScannerDeviceRepository {
 		} catch (error) {
 			return rethrowDependency(error);
 		}
+	}
+
+	/**
+	 * Scanner devices of the given shelters (`null` = every shelter, SA). `registry` has no Mango
+	 * index on `shelter_code`, so the selector is `type` only and the shelter filter runs in memory
+	 * (a deployment has few devices). A doc that fails to parse is skipped and logged, not fatal.
+	 */
+	async listDevices(shelterCodes: string[] | null): Promise<PersistedScannerDevice[]> {
+		let docs: unknown[];
+		try {
+			const result = await adminFetch<{ docs: unknown[] }>(`/${SCANNER_REGISTRY_DB}/_find`, {
+				method: 'POST',
+				body: JSON.stringify({ selector: { type: 'scanner_device' }, limit: LIST_LIMIT })
+			});
+			docs = result.docs;
+		} catch (error) {
+			return rethrowDependency(error);
+		}
+
+		const devices: PersistedScannerDevice[] = [];
+		for (const doc of docs) {
+			const parsed = scannerDevicePersistedSchema.safeParse(doc);
+			if (!parsed.success) {
+				const id = (doc as { _id?: unknown } | null)?._id;
+				console.warn(`[scanner-device] skipped malformed registry doc ${String(id)}`);
+				continue;
+			}
+			if (shelterCodes === null || shelterCodes.includes(parsed.data.shelter_code)) {
+				devices.push(parsed.data);
+			}
+		}
+		return devices;
+	}
+
+	/**
+	 * The registry doc for `id` (`scanner_device:{device_id}`), or NotFound. Routes call this to
+	 * check the caller's shelter scope before acting on the device.
+	 */
+	async getDevice(id: string): Promise<PersistedScannerDevice> {
+		return this.findDeviceById(id);
 	}
 
 	/** Like {@link getDeviceById} but maps a missing (or non-scanner) doc to NotFound. */
@@ -200,7 +244,50 @@ export class ScannerDeviceRepository {
 	}
 
 	/**
-	 * Delete a device and its staff PIN (SA only, enforced by the route). Registry first: once the
+	 * Change a device's name, station and/or status. Only those fields are written; PIN metadata,
+	 * secret, shelter, ids and `created_*` come from the stored doc untouched. A `_rev` race (the
+	 * kiosk bumps `last_seen_at` on every call) is retried on a fresh read so the newer heartbeat
+	 * survives; after {@link METADATA_WRITE_ATTEMPTS} races it fails with {@link ScannerConflictError}.
+	 */
+	async updateDevice(
+		id: string,
+		patch: ScannerDevicePatch,
+		updatedBy: string
+	): Promise<PersistedScannerDevice> {
+		const fields = Object.fromEntries(
+			Object.entries(patch).filter(([, value]) => value !== undefined)
+		) as ScannerDevicePatch;
+
+		let current = await this.findDeviceById(id);
+		for (let attempt = 1; ; attempt += 1) {
+			const updated = parsePersistedDevice({ ...current, ...fields, updated_at: now() });
+			let result: { status: number; data: unknown };
+			try {
+				result = await adminRaw(
+					`/${SCANNER_REGISTRY_DB}/${encodeURIComponent(id)}`,
+					'PUT',
+					updated
+				);
+			} catch (error) {
+				return rethrowDependency(error);
+			}
+			if (result.status >= 200 && result.status < 300) {
+				console.info(
+					`[scanner-device] updated device=${updated.device_id} shelter=${updated.shelter_code} fields=${Object.keys(fields).join(',')} by=${updatedBy} at=${updated.updated_at}`
+				);
+				const rev = (result.data as { rev?: unknown } | null)?.rev;
+				return typeof rev === 'string' ? { ...updated, _rev: rev } : updated;
+			}
+			if (result.status !== 409) throw new ScannerDependencyError();
+			if (attempt >= METADATA_WRITE_ATTEMPTS) {
+				throw new ScannerConflictError('Scanner device was modified concurrently');
+			}
+			current = await this.findDeviceById(id);
+		}
+	}
+
+	/**
+	 * Delete a device and its staff PIN (caller scope is enforced by the route). Registry first: once the
 	 * device is gone it cannot authenticate, so a PIN doc left by a failed second step is inert and
 	 * is replaced if the id is ever registered again.
 	 */

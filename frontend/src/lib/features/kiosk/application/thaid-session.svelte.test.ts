@@ -361,6 +361,44 @@ describe('ThaidSession destroy', () => {
 	});
 });
 
+describe('ThaidSession handOff', () => {
+	it('keeps a completed session alive for the walk-in, even when destroyed afterwards', async () => {
+		const { api, session } = setup();
+		await session.start();
+		api.getStatus.mockResolvedValue({ status: 'completed', expiresAt: SESSION.expiresAt });
+		await vi.advanceTimersByTimeAsync(2000);
+
+		expect(session.handOff()).toBe(SESSION.sessionId);
+		session.destroy();
+
+		expect(api.cancel).not.toHaveBeenCalled();
+	});
+
+	it('a new QR after a hand-off is cancelled again when the page is left', async () => {
+		const { api, session } = setup();
+		await session.start();
+		api.getStatus.mockResolvedValue({ status: 'completed', expiresAt: SESSION.expiresAt });
+		await vi.advanceTimersByTimeAsync(2000);
+		session.handOff();
+
+		await session.restart();
+		session.destroy();
+
+		expect(api.cancel).toHaveBeenCalledTimes(1);
+	});
+
+	it('hands nothing over while the scan is still pending', async () => {
+		const { api, session } = setup();
+		await session.start();
+
+		expect(session.handOff()).toBeNull();
+		await vi.advanceTimersByTimeAsync(10_000);
+		expect(api.getStatus).not.toHaveBeenCalled();
+		session.destroy();
+		expect(api.cancel).toHaveBeenCalledWith(SESSION.sessionId);
+	});
+});
+
 describe('ThaidSession restart', () => {
 	it('creates a new session after the QR expired', async () => {
 		const { api, session } = setup();

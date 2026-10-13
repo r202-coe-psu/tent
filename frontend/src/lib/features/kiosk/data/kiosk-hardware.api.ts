@@ -7,7 +7,7 @@ import {
 } from '../domain/kiosk-hardware';
 import { parseFaceCheckConfig } from '../domain/face-check';
 
-export const KIOSK_HARDWARE_PATH = '/api/v1/scanner/kiosk/hardware';
+export const KIOSK_HARDWARE_PATH = '/api/v1/kiosk/hardware';
 export const KIOSK_HARDWARE_TIMEOUT_MS = 3_000;
 
 /**

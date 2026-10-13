@@ -132,7 +132,7 @@ describe('GET /api/v1/auth/oauth/thaid/start (mode=kiosk_check_in)', () => {
 		expect(mockIsKioskThaidCheckInAllowed).toHaveBeenCalledWith('SH001');
 	});
 
-	it('redirects to DOPA with scope "openid pid" and sets a signed state cookie carrying the session', async () => {
+	it('redirects to DOPA with the profile scope and sets a signed state cookie carrying the session', async () => {
 		const session = createKioskCheckInSession(BINDING);
 
 		const { redir, cookies } = await redirectOf(`mode=kiosk_check_in&session_id=${session.id}`);
@@ -140,7 +140,10 @@ describe('GET /api/v1/auth/oauth/thaid/start (mode=kiosk_check_in)', () => {
 		expect(redir.status).toBe(302);
 		const target = new URL(redir.location);
 		expect(`${target.origin}${target.pathname}`).toBe('https://dopa.example/oauth2/auth/');
-		expect(target.searchParams.get('scope')).toBe('openid pid');
+		// A kiosk scan may turn into a walk-in registration, which needs the name and address.
+		expect(target.searchParams.get('scope')?.split(' ')).toEqual(
+			expect.arrayContaining(['openid', 'pid', 'name', 'address'])
+		);
 		expect(target.searchParams.get('client_id')).toBe('test-client');
 		expect(target.searchParams.get('redirect_uri')).toBe(
 			'http://localhost/api/v1/auth/oauth/thaid/callback'

@@ -469,8 +469,13 @@ export async function lookupPreRegisteredEvacuee(
 	if (candidates.some((doc) => doc.current_stay?.status === 'kiosk_registered')) {
 		return { kind: 'kiosk_registered' };
 	}
-	if (candidates.length === 0)
-		return { kind: 'not_found', can_register: input.source === 'smart-card' };
+	// Nobody with this verified citizen id (chip or ThaiD) yet: a walk-in may register them.
+	if (candidates.length === 0) {
+		return {
+			kind: 'not_found',
+			can_register: input.source === 'smart-card' || input.source === 'thaid'
+		};
+	}
 
 	const eligible = candidates.filter(
 		(doc) =>

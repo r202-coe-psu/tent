@@ -19,6 +19,8 @@
 		getKioskDisplayContext(readKioskDisplayQuery(page.url.searchParams))
 	);
 	const contextQuery = $derived(buildKioskContextQuery(displayContext));
+	// Read before onMount forgets the walk-in: a ThaiD walk-in has no card in the reader.
+	const viaThaid = walkInSession.source === 'thaid';
 	const idleTimeout = new KioskIdleTimeout(KIOSK_IDLE_TIMEOUT_MS, returnHome);
 	onMount(() => {
 		walkInSession.clear();
@@ -45,7 +47,10 @@
 		headingTag="h1"
 		role="status"
 	>
-		<p>กรุณานำบัตรออกจากเครื่อง แล้วไปพบเจ้าหน้าที่เพื่อยืนยันข้อมูลและรายงานตัว</p>
+		<p>
+			{viaThaid ? 'กรุณาไปพบเจ้าหน้าที่' : 'กรุณานำบัตรออกจากเครื่อง แล้วไปพบเจ้าหน้าที่'}
+			เพื่อยืนยันข้อมูลและรายงานตัว
+		</p>
 		{#snippet actions()}
 			<Button type="button" onclick={returnHome} class={KIOSK_NOTICE_PRIMARY_ACTION}
 				>กลับหน้าแรก</Button
