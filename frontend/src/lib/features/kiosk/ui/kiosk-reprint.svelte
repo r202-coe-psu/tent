@@ -136,7 +136,7 @@
 {/snippet}
 
 {#if session.step === 'done'}
-	<div class="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-4 py-3">
+	<div class="mx-auto flex w-full max-w-5xl flex-1 flex-col justify-center gap-4 py-3">
 		<KioskNoticePanel
 			tone="success"
 			icon={CheckCircle2}
@@ -153,7 +153,7 @@
 		</KioskNoticePanel>
 	</div>
 {:else if session.step === 'print_failed'}
-	<div class="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-4 py-3">
+	<div class="mx-auto flex w-full max-w-5xl flex-1 flex-col justify-center gap-4 py-3">
 		<KioskNoticePanel
 			tone="warning"
 			icon={CircleAlert}
