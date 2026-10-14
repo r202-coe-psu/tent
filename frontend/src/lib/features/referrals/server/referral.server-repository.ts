@@ -6,6 +6,7 @@ import {
 	isReferral,
 	type Referral,
 	type ReferralFilter,
+	type ReferralPage,
 	referralFilterSchema,
 	type ReferralInput,
 	type ReferralStatus,
@@ -43,6 +44,7 @@ export class CouchDbReferralError extends Error {
 
 interface MangoFindResponse {
 	docs: Record<string, unknown>[];
+	bookmark?: string;
 	warning?: string;
 }
 
@@ -269,11 +271,32 @@ export class CouchDbReferralServerRepository implements ReferralRepository {
 	}
 
 	async list(filter?: ReferralFilter): Promise<Referral[]> {
+		return (await this.listPage(filter)).items;
+	}
+
+	/**
+	 * One page of referrals. With `direction`, the selector targets a single shelter field and the
+	 * sort covers every field of the `(type, <shelter field>, created_at)` index so Mango uses it
+	 * directly. Without `direction`, falls back to the `$or` selector (evacuee lookups).
+	 * Pages by `bookmark` (never `skip`); `hasMore` counts raw docs before malformed ones are dropped.
+	 */
+	async listPage(filter?: ReferralFilter): Promise<ReferralPage> {
 		const parsed = referralFilterSchema.parse(filter ?? {});
-		const selector: Record<string, unknown> = {
-			type: 'referral',
-			$or: [{ shelter_code: this.contextShelterCode }, { to_shelter_code: this.contextShelterCode }]
-		};
+		const selector: Record<string, unknown> = { type: 'referral' };
+		const dir = parsed.sort === 'created_at_asc' ? 'asc' : 'desc';
+		let sort: Record<string, string>[];
+
+		if (parsed.direction) {
+			const field = parsed.direction === 'outgoing' ? 'shelter_code' : 'to_shelter_code';
+			selector[field] = this.contextShelterCode;
+			sort = [{ type: dir }, { [field]: dir }, { created_at: dir }];
+		} else {
+			selector.$or = [
+				{ shelter_code: this.contextShelterCode },
+				{ to_shelter_code: this.contextShelterCode }
+			];
+			sort = [{ type: dir }, { created_at: dir }];
+		}
 
 		if (parsed.status) {
 			selector.status = parsed.status;
@@ -282,17 +305,12 @@ export class CouchDbReferralServerRepository implements ReferralRepository {
 			selector.evacuee_id = parsed.evacuee_id;
 		}
 
-		const sort =
-			parsed.sort === 'created_at_asc'
-				? [{ type: 'asc' }, { created_at: 'asc' }]
-				: [{ type: 'desc' }, { created_at: 'desc' }];
-
-		const body: Record<string, unknown> = {
-			selector,
-			limit: parsed.limit,
-			skip: parsed.skip,
-			sort
-		};
+		const body: Record<string, unknown> = { selector, limit: parsed.limit, sort };
+		if (parsed.bookmark) {
+			body.bookmark = parsed.bookmark;
+		} else if (parsed.skip) {
+			body.skip = parsed.skip;
+		}
 
 		const { status, data } = await this.couchPost<MangoFindResponse>(this.dbName, '/_find', body);
 
@@ -300,7 +318,12 @@ export class CouchDbReferralServerRepository implements ReferralRepository {
 			throw new CouchDbReferralError(`CouchDB _find query failed`, status, data);
 		}
 
-		return (data.docs || []).filter((d): d is Referral => isReferral(d));
+		const rawDocs = data.docs || [];
+		return {
+			items: rawDocs.filter((d): d is Referral => isReferral(d)),
+			bookmark: data.bookmark ?? null,
+			hasMore: rawDocs.length === parsed.limit
+		};
 	}
 
 	async hasActiveReferral(evacueeId: string): Promise<boolean> {

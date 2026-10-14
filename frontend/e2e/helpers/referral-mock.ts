@@ -20,6 +20,8 @@ export interface ReferralStore {
 	referrals: Record<string, ReferralRow>;
 	/** Make GET /api/back-office/referral return 500. */
 	listFail: boolean;
+	/** Make GET /api/back-office/referral return 500 only for bookmark (load-more) requests. */
+	pageFail: boolean;
 	/** Make GET /api/back-office/referral/:id return 500. */
 	detailFail: boolean;
 	/** Every PATCH transition the page sent, in order. */
@@ -34,6 +36,7 @@ export function newReferralStore(rows: ReferralRow[] = []): ReferralStore {
 	return {
 		referrals: Object.fromEntries(rows.map((r) => [r._id, r])),
 		listFail: false,
+		pageFail: false,
 		detailFail: false,
 		patches: [],
 		writes: []
@@ -153,6 +156,28 @@ function couchReadResponse(
 	return { total_rows: 0, offset: 0, rows: [], docs: [] };
 }
 
+/**
+ * Mirror of the BFF list contract: filter by direction/status (relative to `shelter_code`),
+ * newest first, page by an opaque bookmark (the offset). Responds `{ items, bookmark, has_more }`.
+ */
+function listPage(store: ReferralStore, params: URLSearchParams) {
+	const shelter = params.get('shelter_code');
+	const direction = params.get('direction');
+	const status = params.get('status');
+	const limit = Number(params.get('limit') ?? 50);
+	const offset = Number(params.get('bookmark') ?? 0);
+	const rows = Object.values(store.referrals)
+		.filter((r) => {
+			if (direction === 'outgoing') return r.shelter_code === shelter;
+			if (direction === 'incoming') return r.to_shelter_code === shelter;
+			return r.shelter_code === shelter || r.to_shelter_code === shelter;
+		})
+		.filter((r) => !status || r.status === status)
+		.sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
+	const items = rows.slice(offset, offset + limit);
+	return { items, bookmark: String(offset + items.length), has_more: items.length === limit };
+}
+
 /** Serve the referral BFF from `store`. Records every non-GET request in `store.writes`. */
 export async function mockReferralApi(page: Page, store: ReferralStore): Promise<void> {
 	page.on('request', (req) => {
@@ -171,7 +196,9 @@ export async function mockReferralApi(page: Page, store: ReferralStore): Promise
 				}
 				if (store.listFail)
 					return route.fulfill({ status: 500, json: { error: 'mock list failure' } });
-				return route.fulfill({ json: Object.values(store.referrals) });
+				if (store.pageFail && new URL(req.url()).searchParams.has('bookmark'))
+					return route.fulfill({ status: 500, json: { error: 'mock page failure' } });
+				return route.fulfill({ json: listPage(store, new URL(req.url()).searchParams) });
 			}
 			const match = path.match(/^\/api\/back-office\/referral\/([^/]+)(\/transition)?$/);
 			if (!match) return route.fallback();

@@ -5,6 +5,7 @@ import {
 	type Referral,
 	type ReferralFilter,
 	type ReferralInput,
+	type ReferralPage,
 	type ReferralStatus
 } from '../domain/referral.schema';
 import type {
@@ -50,13 +51,18 @@ async function transitionCapacityViaBff(
 
 export class ReferralRemoteRepository implements ReferralRepository {
 	async list(filter?: ReferralFilter): Promise<Referral[]> {
+		return (await this.listPage(filter)).items;
+	}
+
+	async listPage(filter?: ReferralFilter): Promise<ReferralPage> {
 		const qs = new URLSearchParams({ shelter_code: getShelterCode() });
 		if (filter) {
 			if (filter.status) qs.append('status', filter.status);
 			if (filter.evacuee_id) qs.append('evacuee_id', filter.evacuee_id);
 			if (filter.limit) qs.append('limit', filter.limit.toString());
-			if (filter.skip) qs.append('skip', filter.skip.toString());
 			if (filter.sort) qs.append('sort', filter.sort);
+			if (filter.direction) qs.append('direction', filter.direction);
+			if (filter.bookmark) qs.append('bookmark', filter.bookmark);
 		}
 		const res = await fetch(`/api/back-office/referral?${qs}`, {
 			credentials: 'include',
@@ -65,14 +71,19 @@ export class ReferralRemoteRepository implements ReferralRepository {
 		if (!res.ok) {
 			throw new Error(`Failed to list referrals: ${res.statusText}`);
 		}
-		const list = await res.json();
-		const referrals: Referral[] = list.filter(isReferral);
-		const dropped = list.length - referrals.length;
+		const payload = (await res.json()) as {
+			items?: unknown[];
+			bookmark?: string | null;
+			has_more?: boolean;
+		};
+		const rawItems = Array.isArray(payload?.items) ? payload.items : [];
+		const items: Referral[] = rawItems.filter(isReferral);
+		const dropped = rawItems.length - items.length;
 		if (dropped > 0) {
 			// Malformed docs are skipped so one bad row does not hide the rest; log so it is traceable.
 			console.warn(`[referrals] skipped ${dropped} malformed referral doc(s) in list response`);
 		}
-		return referrals;
+		return { items, bookmark: payload?.bookmark ?? null, hasMore: payload?.has_more === true };
 	}
 
 	async get(id: string): Promise<Referral | null> {

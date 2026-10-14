@@ -19,12 +19,14 @@ vi.mock('$lib/server/couch-admin', () => ({
 }));
 
 const mockList = vi.fn();
+const mockListPage = vi.fn();
 const mockCreate = vi.fn();
 const mockHasActiveReferral = vi.fn();
 
 vi.mock('$lib/features/referrals/server/referral.server-repository', () => {
 	class MockReferralServerRepository {
 		list = mockList;
+		listPage = mockListPage;
 		create = mockCreate;
 		hasActiveReferral = mockHasActiveReferral;
 	}
@@ -120,15 +122,70 @@ describe('BFF Referral List and Create Endpoints', () => {
 					timeline: {}
 				}
 			];
-			mockList.mockResolvedValue(mockReferrals as unknown as Referral[]);
+			mockListPage.mockResolvedValue({
+				items: mockReferrals as unknown as Referral[],
+				bookmark: 'bm-1',
+				hasMore: true
+			});
 
 			const event = createMockEvent({ status: 'draft' });
 			const res = await GET(event);
 			expect(res.status).toBe(200);
 
 			const data = await res.json();
-			expect(data).toEqual(mockReferrals);
-			expect(mockList).toHaveBeenCalledWith({ status: 'draft', evacuee_id: undefined });
+			expect(data).toEqual({ items: mockReferrals, bookmark: 'bm-1', has_more: true });
+			expect(mockListPage).toHaveBeenCalledWith({ limit: 50, status: 'draft' });
+		});
+
+		describe('query params', () => {
+			beforeEach(() => {
+				vi.mocked(requireShelterScopeOrSA).mockResolvedValue({
+					name: 'sm_user',
+					roles: ['shelter_manager', 'shelter:SH001'],
+					isSA: false,
+					shelterCode: 'SH001'
+				});
+				mockListPage.mockResolvedValue({ items: [], bookmark: null, hasMore: false });
+			});
+
+			it('defaults limit to 50 and passes bookmark/direction/sort through', async () => {
+				const res = await GET(
+					createMockEvent({ bookmark: 'abc', direction: 'incoming', sort: 'created_at_asc' })
+				);
+				expect(res.status).toBe(200);
+				expect(mockListPage).toHaveBeenCalledWith({
+					limit: 50,
+					bookmark: 'abc',
+					direction: 'incoming',
+					sort: 'created_at_asc'
+				});
+				expect(await res.json()).toEqual({ items: [], bookmark: null, has_more: false });
+			});
+
+			it('accepts the limit bounds 1 and 200', async () => {
+				expect((await GET(createMockEvent({ limit: '1' }))).status).toBe(200);
+				expect((await GET(createMockEvent({ limit: '200' }))).status).toBe(200);
+				expect(mockListPage).toHaveBeenLastCalledWith({ limit: 200 });
+			});
+
+			it.each(['0', '201', '-1', '1.5', 'abc'])('rejects limit=%s with 400', async (limit) => {
+				const res = await GET(createMockEvent({ limit }));
+				expect(res.status).toBe(400);
+				expect((await res.json()).error).toEqual(expect.any(String));
+				expect(mockListPage).not.toHaveBeenCalled();
+			});
+
+			it('rejects an invalid status with 400', async () => {
+				expect((await GET(createMockEvent({ status: 'bogus' }))).status).toBe(400);
+			});
+
+			it('rejects an invalid direction with 400', async () => {
+				expect((await GET(createMockEvent({ direction: 'sideways' }))).status).toBe(400);
+			});
+
+			it('rejects an oversized bookmark with 400', async () => {
+				expect((await GET(createMockEvent({ bookmark: 'x'.repeat(2001) }))).status).toBe(400);
+			});
 		});
 	});
 
