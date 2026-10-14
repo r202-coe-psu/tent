@@ -323,6 +323,43 @@ describe('CouchDbReferralServerRepository transition() checks the state matrix b
 		).toBe(true);
 	});
 
+	it('source withdraws a sent referral: closed, timeline.sent kept, no transfer writes', async () => {
+		mockDb(() => capacitySent);
+		repo = new CouchDbReferralServerRepository('central_ops', 'SH001');
+
+		const result = await repo.transition(
+			'referral:01CAPACITY',
+			'closed',
+			'Staff A',
+			'ส่งผิด',
+			'SH001'
+		);
+
+		expect(result.status).toBe('closed');
+		expect(result.timeline.sent).toEqual(capacitySent.timeline.sent);
+		expect(result.timeline.closed?.by).toBe('Staff A');
+		expect(result.close_reason).toBe('ส่งผิด');
+		expect(putCalls().map((c) => (c[2] as { _id: string })._id)).toEqual(['referral:01CAPACITY']);
+	});
+
+	it('destination cannot withdraw a sent referral (403) and nothing is written', async () => {
+		mockDb(() => capacitySent);
+
+		await expect(
+			repo.transition('referral:01CAPACITY', 'closed', 'Staff B', 'x', 'SH002')
+		).rejects.toMatchObject({ status: 403 });
+		expect(putCalls()).toHaveLength(0);
+	});
+
+	it('accept arriving after a withdraw → 422 with no transfer writes', async () => {
+		mockDb(() => ({ ...capacitySent, status: 'closed' }));
+
+		await expect(
+			repo.transition('referral:01CAPACITY', 'accepted', 'Staff B', 'ok', 'SH002')
+		).rejects.toMatchObject({ status: 422, message: 'Invalid referral transition' });
+		expect(putCalls()).toHaveLength(0);
+	});
+
 	it('409 retry re-reads the latest referral; a non-sent latest → 422 with no second transfer', async () => {
 		let latest: Referral = capacitySent;
 		let referralPutAttempts = 0;

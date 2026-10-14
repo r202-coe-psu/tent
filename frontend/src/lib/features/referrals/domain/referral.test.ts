@@ -157,7 +157,7 @@ describe('Referral Domain', () => {
 		describe('canTransition combinations', () => {
 			const expectedTransitions: Record<ReferralStatus, ReferralStatus[]> = {
 				draft: ['sent', 'closed'],
-				sent: ['accepted', 'rejected'],
+				sent: ['accepted', 'rejected', 'closed'],
 				accepted: ['closed'],
 				rejected: ['closed'],
 				closed: []
@@ -170,6 +170,33 @@ describe('Referral Domain', () => {
 						expect(canTransition(from, to)).toBe(shouldAllow);
 					});
 				});
+			});
+		});
+
+		describe('backward transitions stay rejected (CR-167)', () => {
+			const backward: [ReferralStatus, ReferralStatus][] = [
+				['sent', 'draft'],
+				['accepted', 'draft'],
+				['accepted', 'sent'],
+				['accepted', 'rejected'],
+				['rejected', 'draft'],
+				['rejected', 'sent'],
+				['rejected', 'accepted'],
+				['closed', 'draft'],
+				['closed', 'sent'],
+				['closed', 'accepted'],
+				['closed', 'rejected']
+			];
+			it.each(backward)('%s → %s is rejected by canTransition and applyTransition', (from, to) => {
+				expect(canTransition(from, to)).toBe(false);
+				expect(() =>
+					applyTransition(
+						mockReferral({ status: from }),
+						to,
+						'Manager A',
+						'2026-07-11T05:10:00.000Z'
+					)
+				).toThrow(/Invalid referral transition/);
 			});
 		});
 
@@ -225,6 +252,20 @@ describe('Referral Domain', () => {
 				expect(updated.status).toBe('closed');
 				expect(updated.timeline.closed).toEqual({ at: nowIso, by: 'Manager A' });
 				expect(updated.timeline.sent).toBeUndefined();
+			});
+
+			it('should apply sent → closed (withdraw — CR-167) and keep timeline.sent', () => {
+				const sentStamp = { at: '2026-07-11T05:10:00.000Z', by: 'Manager A' };
+				const doc = mockReferral({ status: 'sent', timeline: { sent: sentStamp } });
+				const nowIso = '2026-07-11T05:25:00.000Z';
+				const updated = applyTransition(doc, 'closed', 'Manager A', nowIso, 'ส่งผิดศูนย์');
+
+				expect(updated.status).toBe('closed');
+				expect(updated.timeline.closed).toEqual({ at: nowIso, by: 'Manager A' });
+				expect(updated.timeline.sent).toEqual(sentStamp);
+				expect(updated.timeline.responded).toBeUndefined();
+				expect(updated.close_reason).toBe('ส่งผิดศูนย์');
+				expect(updated.response_reason).toBeUndefined();
 			});
 
 			it('should apply accepted → closed', () => {
@@ -319,7 +360,7 @@ describe('Referral Domain', () => {
 		describe('allowedTransitions list helper', () => {
 			it('should return correct options list', () => {
 				expect(allowedTransitions('draft')).toEqual(['sent', 'closed']);
-				expect(allowedTransitions('sent')).toEqual(['accepted', 'rejected']);
+				expect(allowedTransitions('sent')).toEqual(['accepted', 'rejected', 'closed']);
 				expect(allowedTransitions('closed')).toEqual([]);
 			});
 		});
