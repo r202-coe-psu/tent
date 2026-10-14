@@ -2,7 +2,7 @@
 title: Change Records — Index
 status: active
 created: 2026-06-16
-updated: 2026-10-13 # CR-166 approved (public name search AND match)
+updated: 2026-10-14 # CR-167, CR-168 approved (referral withdraw/close_reason/bulk + shelter closure worker)
 
 note: ดัชนี Change Record ทุกตัว — กติกาอยู่ใน ../change-management.md
 ---
@@ -30,7 +30,7 @@ CR แต่ละตัวเก็บในโฟลเดอร์ตาม�
 | [06-A — Volunteer](#06-a-volunteer)              | [`06-A-volunteer/`](06-A-volunteer/) | 8        |
 | [07-B — SOP & Resource Calc](#07-b-sop)          | [`07-B-sop/`](07-B-sop/)             | 11       |
 | [08-E — Shelter Reports](#08-e-reports)          | [`08-E-reports/`](08-E-reports/)     | 3        |
-| [09-F — Referral](#09-f-referral)                | [`09-F-referral/`](09-F-referral/)   | 3        |
+| [09-F — Referral](#09-f-referral)                | [`09-F-referral/`](09-F-referral/)   | 5        |
 | [10-eoc — Partner API (EXT-001–007)](#10-eoc)    | [`10-eoc/`](10-eoc/)                 | 7        |
 | [11-famsearch — Family Search](#11-famsearch)    | [`11-famsearch/`](11-famsearch/)     | 3        |
 | [12-public — Public Portal](#12-public)          | [`12-public/`](12-public/)           | 7        |
@@ -241,6 +241,8 @@ CR แต่ละตัวเก็บในโฟลเดอร์ตาม�
 | [CR-045](09-F-referral/CR-045-referral-full-dod-alignment.md) | Referral Schema & Implementation Alignment — 3 referral kinds, destination-gated capacity accept (mirror inbox + cross-DB transfer), `response_reason`                                | approved | volatile | 2026-07-22                   | docs/data/schema.md §2.11, docs/task-breakdown/09-F-referral.md, frontend/src/lib/features/referrals/                                                |
 | [CR-048](09-F-referral/CR-048-referral-draft-cancel.md)       | Referral — อนุญาต `draft → closed` (ยกเลิกร่างก่อนส่ง); capacity draft ห้าม sync peer ปลายทาง (renumbered from CR-046)                                                                | done     | volatile | 2026-07-24                   | schema.md §2.11, 09-F-referral.md, features/referrals/{domain,ui,server}                                                                             |
 | [CR-049](09-F-referral/CR-049-referral-logic-hardening.md)    | Referral Logic Hardening — 3 business rule fixes: self-referral prevention (422), duplicate active referral prevention (409), cross-shelter direction badges (renumbered from CR-046) | done     | volatile | 2026-07-24 (done 2026-09-01) | schema.md §2.11, docs/task-breakdown/09-F-referral.md, frontend/src/lib/features/referrals/, frontend/src/routes/api/back-office/referral/+server.ts |
+| [CR-167](09-F-referral/CR-167-referral-withdraw-close-reason-bulk.md) | Referral — ถอนคำขอ (`sent → closed`, ต้นทางเท่านั้น), field `close_reason` แยกจาก `response_reason` (schema_v 1→2 additive), `POST bulk-transition` + core `bulkTransition` ใช้ร่วมกับ worker, guard กัน accept หลังถอน | approved | volatile | 2026-10-14 (approved 2026-10-14) | docs/data/schema.md §5.4, docs/task-breakdown/09-F-referral.md, schema_v referral 1→2, frontend/src/lib/features/referrals/{domain,server,ui}, routes/api/back-office/referral/ |
+| [CR-168](09-F-referral/CR-168-referral-shelter-closure-worker.md) | Referral — flow ปิดศูนย์ด้วย durable job: doc `referral_close_job` + `referral_close_lock`, service `referral-worker` (Node, ไม่ใช้ sync worker/Redis), หน่วง 60 วินาทีก่อนเริ่มและยกเลิกได้ช่วงนั้น, ยืนยันด้วย search-select, บล็อกสร้าง referral ของศูนย์ขณะ job active (พึ่ง CR-167) | approved | stable | 2026-10-14 (approved 2026-10-14) | docs/data/schema.md §5.4.1–5.4.2, docs/data/data-model.md, docs/data/api-contract.md, frontend/server/referral-worker.mjs, routes/api/internal/referral-close/, docker-compose*, nginx |
 
 ## 10-eoc
 

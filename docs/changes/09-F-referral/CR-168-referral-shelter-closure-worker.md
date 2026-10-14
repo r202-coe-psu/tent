@@ -1,12 +1,13 @@
 ---
-id: draft
+id: CR-168
 title: Referral — flow ปิดศูนย์ด้วย durable worker job (referral-worker)
-status: proposed
+status: approved
 date: 2026-10-14
+approved: 2026-10-14
 requested_by: project owner
 decided_by: project owner
 layer: stable
-depends_on: draft-referral-withdraw-close-reason-bulk (ต้อง approve และ implement ก่อน — ใช้ `sent → closed`, `close_reason`, schema_v 2 และ core function `bulkTransition`)
+depends_on: CR-167 (ต้อง approve และ implement ก่อน — ใช้ `sent → closed`, `close_reason`, schema_v 2 และ core function `bulkTransition`)
 affects:
   - docs/data/schema.md (doc type ใหม่ `referral_close_job` schema_v 1 ใน `central_ops`; `referral_close_lock` schema_v 1)
   - docs/data/data-model.md (topology: referral-worker, ownership ของ job doc)
@@ -165,7 +166,7 @@ doc type ใหม่ทั้งหมด (schema_v 1) ไม่มี backfill
 - 2026-10-14 — project owner: ตอนแรกเลือกยกเลิก job ไม่ได้ รันจนจบ (ถูกแก้ด้วย N-6 ด้านล่าง ยกเลิกได้เฉพาะช่วงหน่วงก่อนเริ่ม)
 - 2026-10-14 — project owner (N-5): ขณะ job active บล็อกการสร้าง referral ใหม่ของศูนย์นั้น (`409`) ไม่บล็อกศูนย์อื่นและขาเข้าจากศูนย์อื่น ขาเข้าที่เกิดระหว่างทำงานพึ่ง sweep (FR-J10)
 - 2026-10-14 — project owner (N-6): ลดความเสี่ยงของ job ที่ยกเลิกไม่ได้ด้วยสองอย่างพร้อมกัน (1) ยืนยันด้วย search-select เลือกศูนย์ ค้นได้ทั้งชื่อและรหัส (2) หน่วงก่อนเริ่ม 60 วินาที ยกเลิกได้เฉพาะช่วงนั้น ปรับ FR-J9 จาก "ไม่มีการยกเลิก" เป็น "ยกเลิกได้เฉพาะช่วงหน่วง"
-- 2026-10-14 — project owner: แยกเป็นสอง CR — ฉบับนี้ (stable) กับ [draft-referral-withdraw-close-reason-bulk](draft-referral-withdraw-close-reason-bulk.md) (volatile)
+- 2026-10-14 — project owner: แยกเป็นสอง CR — ฉบับนี้ (stable) กับ [CR-167](CR-167-referral-withdraw-close-reason-bulk.md) (volatile)
 - 2026-10-14 — proposed (ร่างโดย Claude): ยืม lease TTL 5 นาที, idle sleep 3 วินาที, backoff 5 วินาที, SIGTERM 30 วินาที, token + constant-time compare, retention 30 วัน จาก CR-123 และ pattern `import-worker`
 - 2026-10-14 — proposed (ร่างโดย Claude): เพิ่ม FR-J7 (lock ต่อศูนย์), FR-P9 (sweep) และ FR-J5a (prop `includeClosed` เพราะ `shelter-combobox` เดิมกรองศูนย์ที่ปิดแล้วออก) ค่า 60 วินาทีของช่วงหน่วงเป็น proposed default
-- ไม่มีประเด็นค้างจาก owner · ยังไม่ approve; ยังไม่มีเลข `CR-NNN` (ตั้งหลัง owner approve ตาม `docs/change-management.md`); เป็นชั้น stable ต้อง review ก่อน
+- 2026-10-14 — approved โดย project owner; รันเลข CR-168; ย้ายจาก `draft-referral-shelter-closure-worker.md` ชั้น stable ซึ่งนโยบายกำหนดให้ review ก่อน approve: owner เป็นผู้ approve โดยตรงหลังตัดสินใจรายข้อครบ (รวม N-5, N-6) ไม่มีผู้ review แยก; แก้ `schema.md`, `data-model.md`, `api-contract.md` ตาม CR นี้ (ยังไม่ implement โค้ด) และต้อง implement หลัง CR-167

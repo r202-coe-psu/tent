@@ -1,8 +1,9 @@
 ---
-id: draft
+id: CR-167
 title: Referral — ถอนคำขอ (sent → closed), close_reason, และ bulk transition endpoint
-status: proposed
+status: approved
 date: 2026-10-14
+approved: 2026-10-14
 requested_by: project owner
 decided_by: project owner
 layer: volatile
@@ -24,7 +25,7 @@ affects:
 
 เพิ่ม transition **`sent → closed`** (ถอนคำขอ, ต้นทางเท่านั้น) · เพิ่ม field `close_reason` เก็บเหตุผลปิด/ถอนแยกจาก `response_reason` (schema_v 1→2, additive) · เพิ่ม endpoint `bulk-transition` สำหรับ bulk ใน list พร้อม core function ที่ worker ใช้ร่วมได้
 Dev ต้องแก้ state machine + Zod, เพิ่ม guard ใน `transition()` กัน accept หลังถอน, deploy แบบสองขั้นเพราะ schema_v, สร้าง endpoint · สิทธิ์ใช้ชุดเดิม ไม่แก้ role matrix
-CR นี้เป็นฐานของ [draft-referral-shelter-closure-worker](draft-referral-shelter-closure-worker.md) (flow ปิดศูนย์) ซึ่งแยกเป็นอีก CR เพราะเป็นชั้น stable
+CR นี้เป็นฐานของ [CR-168](CR-168-referral-shelter-closure-worker.md) (flow ปิดศูนย์) ซึ่งแยกเป็นอีก CR เพราะเป็นชั้น stable
 
 ## Why
 
@@ -99,7 +100,7 @@ closed   → (terminal)
 | FR-B6 | ขนาด `ids` ต่อคำขอ: proposed default 200 รายการ (list เลือกได้เฉพาะแถวที่โหลดอยู่ จึงอยู่ระดับหลักร้อย) ค่าปรับได้โดยไม่ต้องมี CR ใหม่ |
 | FR-B7 | การทำ 409 retry ต่อรายการต้องคงพฤติกรรมเดิมของ endpoint รายตัว (สูงสุด 3 ครั้ง) |
 | FR-B8 | ระบบต้องประมวลผลรายการด้วย concurrency จำกัด (proposed default 5) ห้ามใช้ `Promise.all` กับทั้ง chunk เพื่อกัน CouchDB เปิด connection/file descriptor เกินจำนวน (อาการ `EMFILE` ที่พบใน CR-126) |
-| FR-B9 | logic การ transition หลายรายการต้องอยู่ใน core function ฝั่ง server ตัวเดียว (`bulkTransition(ids, to, reason, actor, actorShelter)`) ที่ endpoint นี้และ referral-worker ([draft-referral-shelter-closure-worker](draft-referral-shelter-closure-worker.md)) เรียกร่วมกัน ห้ามเขียนซ้ำใน worker |
+| FR-B9 | logic การ transition หลายรายการต้องอยู่ใน core function ฝั่ง server ตัวเดียว (`bulkTransition(ids, to, reason, actor, actorShelter)`) ที่ endpoint นี้และ referral-worker ([CR-168](CR-168-referral-shelter-closure-worker.md)) เรียกร่วมกัน ห้ามเขียนซ้ำใน worker |
 
 ## Impact
 
@@ -156,4 +157,4 @@ closed   → (terminal)
 - 2026-10-14 — proposed (ร่างโดย Claude): เพิ่ม FR-C7 (deploy สองขั้น) หลังพบ `schema_v: z.literal(1)` + `isReferral` ใช้ `safeParse` ทำให้ client รุ่นเก่ากรอง doc v2 ทิ้งเงียบๆ
 - 2026-10-14 — proposed (ร่างโดย Claude): เพิ่ม FR-B8 หลังตรวจ CR-126 (`EMFILE` จากการเขียนพร้อมกันจำนวนมาก)
 - 2026-10-14 — ผลการตรวจ: referral เก็บใน `central_ops` เอกสารเดียวต่อรายการ ไม่มี mirror (schema.md §5.4) ปลายทางเห็นเอกสารเดียวกันที่เป็น `closed`
-- ยังไม่ approve; ยังไม่มีเลข `CR-NNN` (ตั้งหลัง owner approve ตาม `docs/change-management.md`)
+- 2026-10-14 — approved โดย project owner; รันเลข CR-167 (ถัดจาก CR-166 ใน `_index.md` บน develop); ย้ายจาก `draft-referral-withdraw-close-reason-bulk.md`; แก้ `schema.md` §5.4 และ T-34 ตาม CR นี้ (ยังไม่ implement โค้ด)

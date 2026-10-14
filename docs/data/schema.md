@@ -2,7 +2,7 @@
 title: Smart Shelter — Database Schema v5
 status: draft for review
 created: 2026-06-11
-updated: 2026-10-13
+updated: 2026-10-14
 note: field-level canonical — คู่กับ data-model.md (topology/policy) และ api-contract.md (planes); CR-112/CR-113 registration foundation; CR-118 T-13 lot metadata; CR-119/CR-120/CR-121 catalog, fuel and requisition contracts; CR-124 staff Google step-up MFA on _users; CR-125 Unit of Measure (UOM) master data in catalog; decision sync 2026-09-23 — `_users.phone` เป็น optional; login ได้ทั้ง CouchDB `name` (username) และเบอร์ติดต่อ (resolve ผ่าน BFF); decision sync 2026-09-23 — `_users.organization` optional สำหรับทั้ง staff และ volunteer; CR-135/CR-136 partner OAuth2 client name/module preset + secret reveal/edit/delete; CR-137 shrink master_data (10→4) + zone/community free text; CR-138 remove purchase doc type + withdraw purchase from stock_ledger.reason; CR-139 shelter storage points; CR-140 item_category default_class editable; CR-144/CR-145 meal_service_receipt (§2.7.3); CR-147 removes CR-146 meal_distribution_push (§2.7.4) — ticket flow ends at warehouse stock-in; CR-148 pre-register validation + evacuee religion_other/disability_other_detail (v11) + household dorm_* (v6); CR-151 kiosk pre-registration check-in (report-in arriving status & KIOSK_LOOKUP_MANGO_INDEXES); CR-154 evacuee.gender nullable + registered_via api (v12), external_bookings (§9.7), partner scopes booking-write/residency-read + module M2; decision sync 2026-10-09 — `evacuee.gender = null` ("ไม่ระบุ") ใช้ได้ทุกช่องทาง (public/kiosk/Station 1/back-office/api) เป็นค่าเริ่มต้นของฟอร์ม, `'other'` คงไว้อ่านเฉพาะ doc เดิม (UI ไม่เสนอให้เลือกใหม่, แก้ไขแล้วต้อง preserve) — ยกเลิก CR-154 FR-70/FR-71(บางส่วน)/FR-72; เพิ่ม `public_shelters.occupancy_breakdown.gender_unspecified` (null+other) พร้อม invariant `male+female+gender_unspecified = occupancy_total`; evacuee ไม่ bump schema_v (v12 รองรับ null แล้ว); ต้อง re-project `public_shelters` (worker bootstrap) หลัง deploy; CR-157 donation_slot แยกคิว dropoff/pickup (§2.13, v2); CR-158 kiosk staff PIN face bypass — `scanner_device` v2 (`staff_pin_*` metadata) + DB ใหม่ `scanner_secrets` (§3.11.1, admin-only, ไม่ replicate/sync); CR-159 evacuee `preferred_zone` (v13); CR-162 kiosk banner — doc type ใหม่ `kiosk_banner` v1 ใน `registry` (§3.12) + capability role `banner_staff` ใน `_users.roles` (§6); CR-163 kiosk ThaiD check-in — shelter `feature_flags.kiosk_thaid_check_in_enabled` (additive, ไม่ bump schema_v) + `config:app.thaid_registration_enabled` ครอบคลุม mode `kiosk_check_in` (kiosk อ่านแบบ fail closed); CR-164 ให้ `shelter:{code}` เป็นกุญแจอ่าน DB กลาง `registry`/`catalog` (§6)
 ---
 
@@ -2166,7 +2166,7 @@ edge/device ไม่เคย mint code). central เป็น single writer �
 | --- | --- | --- | --- |
 | `value` | int≥0 | sys | เลขที่ allocate ล่าสุด (เริ่ม `0`) — provision ศูนย์ใหม่ = read-modify-write `value+1` แล้ว mint `code = "SH" + pad3(value)`; ชน `_rev` (409) → retry |
 
-### 5.4 `referral` — `referral:{ulid}` · state machine (CR-045, CR-046, Centralized Architecture)
+### 5.4 `referral` — `referral:{ulid}` · state machine (CR-045, CR-046, CR-167, Centralized Architecture)
 
 > **การจัดเก็บข้อมูลแบบรวมศูนย์ (Centralized Cross-Tenant Database):**
 > เอกสารส่งต่อทุกประเภท (`capacity`, `resource`, `medical-emergency`) จัดเก็บรวมกันในฐานข้อมูลกลาง `central_ops` โดยตรง (ไม่ใช่ `shelter_{shelter_code}`) เพื่อรองรับการทำงานข้ามศูนย์แบบไร้รอยต่อโดยไม่ต้อง Mirror เอกสารระหว่างฐานข้อมูล
@@ -2180,21 +2180,28 @@ edge/device ไม่เคย mint code). central เป็น single writer �
 | `to_shelter_code` | str | opt | รหัสศูนย์พักพิงปลายทาง (ระบุเมื่อ `referral_type` = `capacity`) |
 | `to_org` | {`name`:str?, `kind`:enum(`hospital`,`social_services`,`other`)?, `contact`:str?} | opt | หน่วยงานปลายทาง (ระบุเมื่อ `referral_type` ≠ `capacity`) |
 | `reason` | str | req | — |
-| `response_reason` | str | opt | เหตุผลประกอบการตอบรับ (`accepted`) หรือปฏิเสธ (`rejected`) (CR-045) |
+| `response_reason` | str | opt | เหตุผลประกอบการตอบรับ (`accepted`) หรือปฏิเสธ (`rejected`) (CR-045) — เขียนเฉพาะ transition ไป `accepted`/`rejected`; transition ไป `closed` ต้องไม่แก้ (CR-167) |
+| `close_reason` | str (≤2000) | opt | เหตุผลของ transition ไป `closed` (ถอนคำขอ, ยกเลิกร่าง, ปิดรายการ, ปิดศูนย์) แยกจาก `response_reason` เพื่อไม่ทับเหตุผลที่ปลายทางเขียนไว้ (CR-167, `schema_v` 2) |
 | `urgency` | enum(`normal`,`urgent`) | req | — |
 | `status` | enum(`draft`,`sent`,`accepted`,`rejected`,`closed`) | req | forward-only — ดู transitions ด้านล่าง |
 | `timeline` | {`sent`:{at,by}?, `responded`:{at,by}?, `closed`:{at,by}?} | sys | — |
 | `notes` | str | opt | — |
 
+**`schema_v` (CR-167):** `2` สำหรับ doc ที่สร้างใหม่ · `1` ยังอ่านได้ (reader ต้องรับ 1\|2) ไม่ backfill · doc v1 ที่ถูกเขียน `close_reason` ต้องยกเป็น v2 ตอนเขียน · deploy สองขั้น: ปล่อย reader ที่รับ 1\|2 ก่อน แล้วค่อยปล่อย writer ที่เขียน v2 (client รุ่นเก่าใช้ `schema_v: z.literal(1)` + `safeParse` จึงกรอง doc v2 ทิ้งเงียบๆ) · `central_ops` ไม่มี `validate_doc_update` การบังคับอยู่ที่ server code
+
 **Status transitions (forward-only):**
 
 ```
-draft    → sent | closed     (closed = ยกเลิกร่างก่อนส่ง — CR-046)
-sent     → accepted | rejected
+draft    → sent | closed          (closed = ยกเลิกร่างก่อนส่ง — CR-046)
+sent     → accepted | rejected | closed   (sent → closed = ถอนคำขอ, ต้นทางเท่านั้น — CR-167)
 accepted → closed
 rejected → closed
 closed   → (terminal)
 ```
+
+> **สิทธิ์ของ `closed` (CR-167):** ทุกประเภท (`capacity`, `resource`, `medical-emergency`) ทำได้เฉพาะศูนย์ต้นทาง (`shelter_code`) ศูนย์ปลายทางปิดไม่ได้ (`403`)
+> **ป้าย "ถอนคำขอ" เป็น derived:** `status = closed` และ `timeline.sent` มีค่า และ `timeline.responded` ไม่มีค่า — ห้ามเก็บเป็น field · ไม่มี `timeline.sent` = "ยกเลิกร่าง"
+> **Guard (CR-167 FR-W6/W7):** `transition()` ต้องตรวจ `canTransition(latest.status, to)` ก่อนทำ cross-DB transfer ของ `accepted` — accept ที่มาถึงหลังถอนต้องได้ `422` และห้ามเขียน `transfer_in`/`transfer_out`
 
 > **Cross-Tenant Flow & Scope Isolation (Centralized Architecture):**
 > 1. **Central Database Storage:** คำร้องถูกสร้างและอัปเดตสถานะใน DB `central_ops` โดยตรง ผ่าน BFF Endpoints (`/api/back-office/referral` และ `/api/back-office/referral/[id]/transition`)
@@ -2211,6 +2218,39 @@ closed   → (terminal)
 > - `referral-type-toshelter-created-idx`: `['type', 'to_shelter_code', 'created_at']`
 > - `referral-list-sort-idx`: `['type', 'created_at', 'status', 'evacuee_id']`
 > - `referral-list-basic-idx`: `['type', 'created_at']`
+
+### 5.4.1 `referral_close_job` — `referral_close_job:{ulid}` (CR-168) · schema_v 1
+
+> **สถานะ:** approved (CR-168) · ยังไม่ implement · งานปิด referral ทั้งศูนย์หนึ่งครั้ง ประมวลผลโดย `referral-worker` (Node) — ไม่ใช่ Python sync worker และไม่ projection ไป Mongo · จัดเก็บใน `central_ops` envelope เดียวกับ `referral` · ไม่มี doc ต่อรายการ referral (ตัว referral คือสถานะงาน, การ transition เป็น idempotent)
+
+| Field | ชนิด | req | หมายเหตุ |
+| --- | --- | --- | --- |
+| `job_ulid` | str | req | ส่วน ULID ของ `_id` |
+| `shelter_code` | str | req | ศูนย์ที่ปิด |
+| `requested_by` | str | req | ชื่อผู้สั่ง จาก session ฝั่ง server (ไม่รับจาก client) ใช้เป็น actor ของ transition |
+| `reason` | str (≤2000) | req | เหตุผลเดียวใช้ทุกรายการ: ขาออก → `close_reason`, ขาเข้า → `response_reason` ขึ้นต้น "ศูนย์ปิด" |
+| `status` | enum(`scheduled`,`running`,`completed`,`completed_with_errors`,`cancelled`) | req | active = `scheduled`\|`running` |
+| `start_after` | ts | req | เวลาที่ worker เริ่มได้เร็วที่สุด (สร้าง + 60 วินาที, proposed default) |
+| `phase` | enum(`outgoing`,`incoming`,`sweep`,`done`) | req | — |
+| `cursor` | {} | sys | ตำแหน่งต่อใน phase ปัจจุบัน ต้องไม่ข้ามรายการที่ `created_at` เท่ากัน |
+| `counters` | {`closed`,`rejected`,`skipped`,`failed`: int≥0} | sys | `skipped` = ปิด/ปฏิเสธไว้แล้ว |
+| `preview` | {} | sys | snapshot จำนวนตอนสั่ง แยกทิศทาง/สถานะ |
+| `failures` | [{`id`:str, `error`:str}] | sys | จำกัดจำนวน (proposed default 200) ส่วนเกินนับใน `counters.failed` |
+| `lease_owner` / `lease_until` | str / ts | sys | lease ผ่าน `_rev` CAS, TTL 5 นาที, renew ก่อนครึ่ง TTL |
+| `attempt` | int | sys | — |
+| `started_at` / `finished_at` / `cancelled_at` / `cancelled_by` | ts / ts / ts / str | sys | — |
+
+**Rules:** ยกเลิกได้เฉพาะ `scheduled → cancelled` ด้วย CAS เมื่อ `now < start_after` และยังไม่ถูก claim (หลังเริ่มยกเลิกไม่ได้ → `409`) · terminal ถูก cleanup หลัง 30 วันจาก `finished_at` · หลักฐานรายรายการอยู่ที่ `timeline.closed` / `close_reason` / `response_reason` ของ referral เอง
+
+### 5.4.2 `referral_close_lock` — `referral_close_lock:{shelter_code}` (CR-168) · schema_v 1
+
+> กัน job active ซ้อนกันต่อศูนย์ (สร้างด้วย CAS แบบเดียวกับ `shelter-name-lock`) และใช้ตัดสินใจบล็อกการสร้าง referral ใหม่ของศูนย์นั้นขณะ job active (`409`) ปล่อยเมื่อ job เป็น terminal (`completed`, `completed_with_errors`, `cancelled`) — ศูนย์อื่นและขาเข้าจากศูนย์อื่นไม่ถูกบล็อก
+
+| Field | ชนิด | req | หมายเหตุ |
+| --- | --- | --- | --- |
+| `shelter_code` | str | req | ส่วนของ `_id` |
+| `job_id` | str | req | `_id` เต็มของ job ที่ถือ lock |
+| `acquired_at` | ts | req | — |
 
 ### 5.5 `stock_transfer` — `stock_transfer:{ulid}` · state machine (forward-only, CR-059, Centralized Architecture)
 
