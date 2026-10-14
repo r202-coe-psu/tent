@@ -9,6 +9,7 @@ import {
 } from '../domain/referral.schema';
 import type {
 	ReferralBatchResult,
+	ReferralBulkTransitionResult,
 	ReferralRepository,
 	ReferralSubmitIntent
 } from './referral.repository';
@@ -120,6 +121,62 @@ export class ReferralRemoteRepository implements ReferralRepository {
 		// Every transition goes through the BFF (scope checks, state machine, dest-gated accept).
 		return transitionCapacityViaBff(id, to, reason, getShelterCode());
 	}
+
+	async bulkTransition(
+		ids: string[],
+		to: ReferralStatus,
+		reason?: string
+	): Promise<ReferralBulkTransitionResult> {
+		const qs = new URLSearchParams({ shelter_code: getShelterCode() });
+		const res = await fetch(`/api/back-office/referral/bulk-transition?${qs}`, {
+			method: 'POST',
+			credentials: 'include',
+			headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+			body: JSON.stringify({ ids, to, reason })
+		});
+
+		const payload: unknown = await res.json().catch(() => null);
+		if (!res.ok) {
+			const message =
+				payload && typeof payload === 'object' && 'error' in payload
+					? String((payload as { error: unknown }).error)
+					: `Bulk referral transition failed (${res.status})`;
+			throw new Error(message);
+		}
+		if (!isBulkTransitionResult(payload)) {
+			throw new Error('Bulk referral transition returned an invalid result');
+		}
+		return payload;
+	}
+}
+
+function isBulkTransitionResult(value: unknown): value is ReferralBulkTransitionResult {
+	if (!value || typeof value !== 'object') return false;
+	const { succeeded, failed } = value as Record<string, unknown>;
+	return (
+		Array.isArray(succeeded) &&
+		succeeded.every((id) => typeof id === 'string') &&
+		Array.isArray(failed) &&
+		failed.every(
+			(f) =>
+				!!f &&
+				typeof f === 'object' &&
+				typeof (f as { id?: unknown }).id === 'string' &&
+				typeof (f as { error?: unknown }).error === 'string'
+		)
+	);
+}
+
+/**
+ * Transition many referrals in one request (CR-167). Partial success: inspect `failed`.
+ * Thin client only; UI wiring and a query hook come with the list work.
+ */
+export function bulkTransitionReferrals(
+	ids: string[],
+	to: ReferralStatus,
+	reason?: string
+): Promise<ReferralBulkTransitionResult> {
+	return referralRepository().bulkTransition(ids, to, reason);
 }
 
 let singleton: ReferralRepository | null = null;

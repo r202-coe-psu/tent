@@ -9,6 +9,7 @@ export * from './data/referral.remote';
 export type {
 	ReferralBatchFailure,
 	ReferralBatchResult,
+	ReferralBulkTransitionResult,
 	ReferralSubmitIntent
 } from './data/referral.repository';
 

@@ -161,6 +161,51 @@ describe('ReferralRemoteRepository — capacity via BFF', () => {
 	});
 });
 
+describe('ReferralRemoteRepository.bulkTransition', () => {
+	const fetchMock = vi.fn();
+	const repo = new ReferralRemoteRepository();
+
+	beforeEach(() => {
+		vi.clearAllMocks();
+		vi.stubGlobal('fetch', fetchMock);
+	});
+
+	it('POSTs ids, status and reason once and returns the per-id result', async () => {
+		const result = { succeeded: ['referral:1'], failed: [{ id: 'referral:2', error: 'nope' }] };
+		fetchMock.mockResolvedValue({ ok: true, json: async () => result });
+
+		await expect(
+			repo.bulkTransition(['referral:1', 'referral:2'], 'closed', 'ปิด')
+		).resolves.toEqual(result);
+
+		expect(fetchMock).toHaveBeenCalledTimes(1);
+		const [url, init] = fetchMock.mock.calls[0];
+		expect(url).toBe('/api/back-office/referral/bulk-transition?shelter_code=SH001');
+		expect(init).toMatchObject({ method: 'POST', credentials: 'include' });
+		expect(JSON.parse(init.body)).toEqual({
+			ids: ['referral:1', 'referral:2'],
+			to: 'closed',
+			reason: 'ปิด'
+		});
+	});
+
+	it('throws the server error message on a non-2xx response', async () => {
+		fetchMock.mockResolvedValue({
+			ok: false,
+			status: 422,
+			json: async () => ({ error: 'ids must not exceed 200 items' })
+		});
+		await expect(repo.bulkTransition(['referral:1'], 'closed')).rejects.toThrow(
+			'ids must not exceed 200 items'
+		);
+	});
+
+	it('throws on a malformed success payload', async () => {
+		fetchMock.mockResolvedValue({ ok: true, json: async () => ({ succeeded: 'x' }) });
+		await expect(repo.bulkTransition(['referral:1'], 'closed')).rejects.toThrow('invalid result');
+	});
+});
+
 describe('createReferralBatch', () => {
 	const template: ReferralInput = {
 		referral_type: 'medical-emergency',
