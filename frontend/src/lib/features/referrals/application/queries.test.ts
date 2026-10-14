@@ -9,6 +9,7 @@ vi.mock('$lib/db/shelter', () => ({
 vi.mock('../data/referral.remote', () => ({
 	referralRepository: () => ({
 		list: vi.fn(),
+		listPage: vi.fn(),
 		get: vi.fn(),
 		create: vi.fn(),
 		transition: vi.fn()
@@ -29,10 +30,18 @@ vi.mock('$lib/db/subscribe-data-changes', () => ({
 
 vi.mock('@tanstack/svelte-query', () => ({
 	createQuery: (fn: () => unknown) => fn(),
+	createInfiniteQuery: (fn: () => unknown) => fn(),
 	createMutation: (fn: () => unknown) => fn()
 }));
 
-import { referralKeys, startReferralsLiveQuery } from './queries';
+import {
+	getNextReferralPageParam,
+	referralKeys,
+	replaceReferralInPages,
+	startReferralsLiveQuery,
+	useReferralPages
+} from './queries';
+import type { Referral, ReferralPage } from '../domain/referral.schema';
 
 beforeEach(() => {
 	vi.clearAllMocks();
@@ -48,5 +57,62 @@ describe('startReferralsLiveQuery', () => {
 		expect(keysForType('referral')).toEqual([referralKeys.all]);
 		expect(keysForType('evacuee')).toEqual([]);
 		expect(keysForType('donation')).toEqual([]);
+	});
+});
+
+const ref = (id: string, status: string) => ({ _id: id, status }) as unknown as Referral;
+
+describe('getNextReferralPageParam', () => {
+	it('returns the bookmark when more pages exist', () => {
+		expect(getNextReferralPageParam({ items: [], bookmark: 'bm-1', hasMore: true })).toBe('bm-1');
+	});
+
+	it('returns undefined on the last page even when a bookmark is present', () => {
+		expect(
+			getNextReferralPageParam({ items: [], bookmark: 'bm-2', hasMore: false })
+		).toBeUndefined();
+	});
+
+	it('returns undefined when hasMore but the bookmark is missing', () => {
+		expect(getNextReferralPageParam({ items: [], bookmark: null, hasMore: true })).toBeUndefined();
+	});
+});
+
+describe('useReferralPages', () => {
+	it('keys under referralKeys.lists() and starts without a bookmark', () => {
+		const opts = useReferralPages(() => ({ direction: 'incoming', status: 'sent' })) as unknown as {
+			queryKey: unknown[];
+			initialPageParam: unknown;
+		};
+		expect(opts.queryKey.slice(0, referralKeys.lists().length)).toEqual([...referralKeys.lists()]);
+		expect(opts.initialPageParam).toBeUndefined();
+	});
+
+	it('uses a different key per direction and status', () => {
+		const key = (d: 'outgoing' | 'incoming', status?: 'sent') =>
+			(useReferralPages(() => ({ direction: d, status })) as unknown as { queryKey: unknown[] })
+				.queryKey;
+		expect(key('outgoing')).not.toEqual(key('incoming'));
+		expect(key('outgoing')).not.toEqual(key('outgoing', 'sent'));
+	});
+});
+
+describe('replaceReferralInPages (transition updater)', () => {
+	const pages: ReferralPage[] = [
+		{ items: [ref('a', 'sent'), ref('b', 'sent')], bookmark: 'x', hasMore: true },
+		{ items: [ref('c', 'sent')], bookmark: 'y', hasMore: false }
+	];
+	const old = { pages, pageParams: [undefined, 'x'] };
+
+	it('replaces the matching doc on any page and keeps the page shape', () => {
+		const next = replaceReferralInPages(old, ref('c', 'accepted'))!;
+		expect(next.pages[1]!.items[0]!.status).toBe('accepted');
+		expect(next.pages[0]!.items.map((r) => r.status)).toEqual(['sent', 'sent']);
+		expect(next.pages[0]!.bookmark).toBe('x');
+		expect(next.pageParams).toEqual([undefined, 'x']);
+	});
+
+	it('passes undefined through', () => {
+		expect(replaceReferralInPages(undefined, ref('a', 'closed'))).toBeUndefined();
 	});
 });

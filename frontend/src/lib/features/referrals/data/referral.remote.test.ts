@@ -119,7 +119,11 @@ describe('ReferralRemoteRepository — capacity via BFF', () => {
 		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 		fetchMock.mockResolvedValue({
 			ok: true,
-			json: async () => [capacitySent, { _id: 'referral:broken', type: 'referral' }]
+			json: async () => ({
+				items: [capacitySent, { _id: 'referral:broken', type: 'referral' }],
+				bookmark: 'bm',
+				has_more: false
+			})
 		});
 
 		const result = await repo.list();
@@ -129,9 +133,28 @@ describe('ReferralRemoteRepository — capacity via BFF', () => {
 		warn.mockRestore();
 	});
 
+	it('listPage sends direction/bookmark and maps has_more to hasMore', async () => {
+		fetchMock.mockResolvedValue({
+			ok: true,
+			json: async () => ({ items: [capacitySent], bookmark: 'bm-2', has_more: true })
+		});
+
+		const page = await repo.listPage({ direction: 'incoming', status: 'sent', bookmark: 'bm-1' });
+
+		const url = new URL(fetchMock.mock.calls[0]![0] as string, 'http://x');
+		expect(url.searchParams.get('direction')).toBe('incoming');
+		expect(url.searchParams.get('status')).toBe('sent');
+		expect(url.searchParams.get('bookmark')).toBe('bm-1');
+		expect(url.searchParams.has('skip')).toBe(false);
+		expect(page).toEqual({ items: [capacitySent], bookmark: 'bm-2', hasMore: true });
+	});
+
 	it('does not warn when every list row is a valid referral', async () => {
 		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-		fetchMock.mockResolvedValue({ ok: true, json: async () => [capacitySent] });
+		fetchMock.mockResolvedValue({
+			ok: true,
+			json: async () => ({ items: [capacitySent], bookmark: null, has_more: false })
+		});
 
 		await repo.list();
 
