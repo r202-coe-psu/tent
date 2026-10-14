@@ -99,10 +99,8 @@
 	<div
 		class="flex flex-col justify-between gap-4 border-b border-border/60 pb-5 sm:flex-row sm:items-center"
 	>
-		<div class="space-y-1">
-			<h1
-				class="bg-gradient-to-r from-foreground via-foreground/90 to-muted-foreground bg-clip-text text-3xl font-extrabold tracking-tight text-transparent"
-			>
+		<div class="min-w-0 flex-1 space-y-1">
+			<h1 class="text-2xl leading-snug font-bold tracking-tight text-slate-900 md:text-3xl">
 				ระบบส่งต่อผู้ประสบภัย
 			</h1>
 			<p class="text-sm text-muted-foreground">
@@ -111,7 +109,7 @@
 			</p>
 		</div>
 
-		<div>
+		<div class="shrink-0">
 			{#if viewMode === 'list'}
 				<Button onclick={goToCreate} class="gap-2 font-semibold shadow-sm">
 					<Plus class="h-4.5 w-4.5" />

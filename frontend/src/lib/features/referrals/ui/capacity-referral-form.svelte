@@ -87,17 +87,17 @@
 	<div class="space-y-4">
 		<span class="text-sm font-semibold text-foreground">4. รายละเอียดความจำเป็น</span>
 
-		<div class="grid grid-cols-1 gap-4 md:grid-cols-3">
+		<div class="grid grid-cols-1 gap-4">
 			<Form.Field {form} name="urgency">
 				<Form.Control>
 					{#snippet children({ props })}
 						<Form.Label>ระดับความเร่งด่วน <span class="text-red-600">*</span></Form.Label>
-						<div role="group" aria-label="ระดับความเร่งด่วน" class="mt-1 flex gap-2">
+						<div role="group" aria-label="ระดับความเร่งด่วน" class="mt-1 flex gap-2 md:max-w-md">
 							<button
 								type="button"
 								aria-pressed={$formData.urgency === 'normal'}
 								onclick={() => ($formData.urgency = 'normal')}
-								class="flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-md border px-3 py-2 text-center text-sm font-medium transition-all focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none
+								class="flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-md border px-3 py-2 text-center text-sm font-medium whitespace-nowrap transition-all focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none
 								{$formData.urgency === 'normal'
 									? 'border-primary bg-primary text-primary-foreground shadow-xs'
 									: 'border-input bg-background text-foreground hover:bg-accent hover:text-accent-foreground'}"
@@ -109,7 +109,7 @@
 								type="button"
 								aria-pressed={$formData.urgency === 'urgent'}
 								onclick={() => ($formData.urgency = 'urgent')}
-								class="flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-md border px-3 py-2 text-center text-sm font-medium transition-all focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none
+								class="flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-md border px-3 py-2 text-center text-sm font-medium whitespace-nowrap transition-all focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none
 								{$formData.urgency === 'urgent'
 									? 'border-red-600 bg-red-600 text-white shadow-xs dark:border-red-700 dark:bg-red-700'
 									: 'border-input bg-background text-foreground hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/20 dark:hover:text-red-400'}"
