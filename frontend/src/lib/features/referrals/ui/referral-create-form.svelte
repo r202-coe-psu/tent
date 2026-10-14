@@ -142,7 +142,7 @@
 		<Card.Content class="space-y-6 p-6">
 			<div class="space-y-3">
 				<span class="text-sm font-semibold text-foreground"
-					>1. เลือกประเภทการส่งต่อ (Referral Type) *</span
+					>1. เลือกประเภทการส่งต่อ (Referral Type) <span class="text-red-600">*</span></span
 				>
 				<div class="grid grid-cols-1 gap-3 md:grid-cols-3">
 					<button

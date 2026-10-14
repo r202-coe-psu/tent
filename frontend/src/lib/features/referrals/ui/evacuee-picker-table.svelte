@@ -80,7 +80,7 @@
 	<div class="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
 		<div class="space-y-1">
 			<span class="text-sm font-semibold text-foreground"
-				>2. เลือกผู้ประสบภัยที่ต้องการส่งต่อ *</span
+				>2. เลือกผู้ประสบภัยที่ต้องการส่งต่อ <span class="text-red-600">*</span></span
 			>
 			<p class="text-xs text-muted-foreground">แสดงเฉพาะผู้ที่พักพิงอยู่ในศูนย์ (active stay)</p>
 		</div>
