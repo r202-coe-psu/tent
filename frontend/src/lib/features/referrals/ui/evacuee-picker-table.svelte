@@ -95,7 +95,7 @@
 			type="search"
 			placeholder="ค้นหาชื่อ หรือเบอร์โทร..."
 			bind:value={searchTerm}
-			class="pl-9 {errorMessage ? 'border-destructive' : ''}"
+			class="h-11 pl-9 md:h-9 {errorMessage ? 'border-destructive' : ''}"
 			aria-label="ค้นหาผู้ประสบภัย"
 		/>
 		<div class="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-muted-foreground">
@@ -120,7 +120,12 @@
 			>
 				<TriangleAlert class="h-6 w-6 text-red-600" />
 				<p class="text-sm font-medium text-foreground">โหลดรายชื่อผู้ประสบภัยไม่สำเร็จ</p>
-				<Button variant="outline" size="sm" onclick={() => evacueesQuery.refetch()} class="gap-2">
+				<Button
+					variant="outline"
+					size="sm"
+					onclick={() => evacueesQuery.refetch()}
+					class="h-11 gap-2 md:h-7"
+				>
 					<RotateCw class="h-4 w-4" />
 					ลองใหม่
 				</Button>
@@ -138,8 +143,12 @@
 				<Table.Root>
 					<Table.Header class="sticky top-0 z-10 bg-muted/80 backdrop-blur-sm">
 						<Table.Row>
-							<Table.Head class="w-12">
+							<Table.Head
+								class="h-11 w-12 cursor-pointer"
+								onclick={() => toggleSelectAll(!allFilteredSelected)}
+							>
 								<Checkbox
+									onclick={(e) => e.stopPropagation()}
 									checked={allFilteredSelected}
 									indeterminate={someFilteredSelected}
 									onCheckedChange={toggleSelectAll}
@@ -154,11 +163,14 @@
 					<Table.Body>
 						{#each filteredEvacuees as evacuee (evacuee._id)}
 							<Table.Row
-								class="cursor-pointer {isSelected(evacuee._id) ? 'bg-primary/5' : ''}"
+								class="h-11 cursor-pointer md:h-auto {isSelected(evacuee._id)
+									? 'bg-primary/5'
+									: ''}"
 								onclick={() => toggleId(evacuee._id, !isSelected(evacuee._id))}
 							>
-								<Table.Cell onclick={(e) => e.stopPropagation()}>
+								<Table.Cell>
 									<Checkbox
+										onclick={(e) => e.stopPropagation()}
 										checked={isSelected(evacuee._id)}
 										onCheckedChange={(v) => toggleId(evacuee._id, v)}
 										aria-label={`เลือก ${rowLabel(evacuee)}`}

@@ -130,8 +130,8 @@
 		<RedactionBanner />
 	{/if}
 
-	<Card.Root class="overflow-hidden border border-border/80 shadow-md">
-		<Card.Header class="bg-muted/40 pb-4">
+	<Card.Root class="border border-border/80 shadow-md">
+		<Card.Header class="rounded-t-xl bg-muted/40 pb-4">
 			<Card.Title class="text-xl font-bold"
 				>สร้างรายการส่งต่อผู้ประสบภัย (New Referral Request)</Card.Title
 			>
@@ -139,7 +139,7 @@
 				>เลือกผู้ประสบภัยได้หลายคน — ระบบจะสร้าง 1 ใบต่อคนด้วยข้อมูลปลายทางชุดเดียวกัน</Card.Description
 			>
 		</Card.Header>
-		<Card.Content class="space-y-6 p-6">
+		<Card.Content class="space-y-6 p-4 md:p-6">
 			<div class="space-y-3">
 				<span class="text-sm font-semibold text-foreground"
 					>1. เลือกประเภทการส่งต่อ (Referral Type) <span class="text-red-600">*</span></span
@@ -148,7 +148,7 @@
 					<button
 						type="button"
 						onclick={() => (selectedType = 'medical-emergency')}
-						class="flex cursor-pointer flex-col justify-between rounded-xl border-2 p-4 text-left shadow-xs transition-all duration-200 hover:scale-[1.02] hover:shadow-md active:scale-[0.98]
+						class="flex min-h-11 cursor-pointer flex-col justify-between rounded-xl border-2 p-4 text-left shadow-xs transition-all duration-200 hover:scale-[1.02] hover:shadow-md active:scale-[0.98]
 						{selectedType === 'medical-emergency'
 							? 'border-red-500 bg-red-50/50 dark:bg-red-950/20'
 							: 'border-border/60 hover:border-border'}"
@@ -167,7 +167,7 @@
 					<button
 						type="button"
 						onclick={() => (selectedType = 'capacity')}
-						class="flex cursor-pointer flex-col justify-between rounded-xl border-2 p-4 text-left shadow-xs transition-all duration-200 hover:scale-[1.02] hover:shadow-md active:scale-[0.98]
+						class="flex min-h-11 cursor-pointer flex-col justify-between rounded-xl border-2 p-4 text-left shadow-xs transition-all duration-200 hover:scale-[1.02] hover:shadow-md active:scale-[0.98]
 						{selectedType === 'capacity'
 							? 'border-purple-500 bg-purple-50/50 dark:bg-purple-950/20'
 							: 'border-border/60 hover:border-border'}"
@@ -186,7 +186,7 @@
 					<button
 						type="button"
 						onclick={() => (selectedType = 'resource')}
-						class="flex cursor-pointer flex-col justify-between rounded-xl border-2 p-4 text-left shadow-xs transition-all duration-200 hover:scale-[1.02] hover:shadow-md active:scale-[0.98]
+						class="flex min-h-11 cursor-pointer flex-col justify-between rounded-xl border-2 p-4 text-left shadow-xs transition-all duration-200 hover:scale-[1.02] hover:shadow-md active:scale-[0.98]
 						{selectedType === 'resource'
 							? 'border-blue-500 bg-blue-50/50 dark:bg-blue-950/20'
 							: 'border-border/60 hover:border-border'}"
@@ -210,7 +210,7 @@
 
 			<hr class="border-border/60" />
 
-			<div onsubmitcapture={handleSubmitAttempt}>
+			<div class="contents" onsubmitcapture={handleSubmitAttempt}>
 				{#key selectedType}
 					{#if selectedType === 'medical-emergency'}
 						<MedicalReferralForm

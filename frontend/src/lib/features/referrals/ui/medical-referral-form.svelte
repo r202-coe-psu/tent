@@ -5,7 +5,7 @@
 	import * as Form from '$lib/components/ui/form/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Textarea } from '$lib/components/ui/textarea/index.js';
-	import { Button } from '$lib/components/ui/button/index.js';
+	import ReferralSubmitBar from './referral-submit-bar.svelte';
 	import AlertTriangle from '@lucide/svelte/icons/alert-triangle';
 	import Check from '@lucide/svelte/icons/check';
 	import { medicalInputSchema, type ReferralInput } from '../domain/referral.schema';
@@ -58,7 +58,8 @@
 	});
 </script>
 
-<form method="POST" use:enhance class="space-y-6">
+<!-- display: contents so the sticky submit bar spans the whole card, not just this form. -->
+<form method="POST" use:enhance class="contents">
 	<!-- Step 3: Target Destination -->
 	<div class="space-y-4">
 		<span class="text-sm font-semibold text-foreground">3. ข้อมูลปลายทางที่ส่งต่อ</span>
@@ -68,6 +69,7 @@
 					{#snippet children({ props })}
 						<Form.Label>ชื่อสถานพยาบาลปลายทาง <span class="text-red-600">*</span></Form.Label>
 						<Input
+							class="h-11 md:h-9"
 							{...props}
 							bind:value={$formData.to_org.name}
 							placeholder="เช่น โรงพยาบาลมหาราช"
@@ -81,7 +83,12 @@
 				<Form.Control>
 					{#snippet children({ props })}
 						<Form.Label>ข้อมูลการติดต่อ / เบอร์โทรศัพท์</Form.Label>
-						<Input {...props} bind:value={$formData.to_org.contact} placeholder="เช่น 053-123456" />
+						<Input
+							class="h-11 md:h-9"
+							{...props}
+							bind:value={$formData.to_org.contact}
+							placeholder="เช่น 053-123456"
+						/>
 					{/snippet}
 				</Form.Control>
 				<Form.FieldErrors />
@@ -105,7 +112,7 @@
 								type="button"
 								aria-pressed={$formData.urgency === 'normal'}
 								onclick={() => ($formData.urgency = 'normal')}
-								class="flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-md border px-3 py-2 text-center text-sm font-medium whitespace-nowrap transition-all focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none
+								class="flex min-h-11 min-w-0 flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-md border px-3 py-2 text-center text-sm font-medium transition-all focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none md:min-h-0 md:whitespace-nowrap
 								{$formData.urgency === 'normal'
 									? 'border-primary bg-primary text-primary-foreground shadow-xs'
 									: 'border-input bg-background text-foreground hover:bg-accent hover:text-accent-foreground'}"
@@ -117,7 +124,7 @@
 								type="button"
 								aria-pressed={$formData.urgency === 'urgent'}
 								onclick={() => ($formData.urgency = 'urgent')}
-								class="flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-md border px-3 py-2 text-center text-sm font-medium whitespace-nowrap transition-all focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none
+								class="flex min-h-11 min-w-0 flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-md border px-3 py-2 text-center text-sm font-medium transition-all focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none md:min-h-0 md:whitespace-nowrap
 								{$formData.urgency === 'urgent'
 									? 'border-red-600 bg-red-600 text-white shadow-xs dark:border-red-700 dark:bg-red-700'
 									: 'border-input bg-background text-foreground hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/20 dark:hover:text-red-400'}"
@@ -141,6 +148,7 @@
 						bind:value={$formData.reason}
 						placeholder="ระบุรายละเอียดเหตุผลความจำเป็นในการส่งต่อผู้ประสบภัย"
 						rows={3}
+						class="min-h-20"
 					/>
 				{/snippet}
 			</Form.Control>
@@ -163,23 +171,5 @@
 		</Form.Field>
 	</div>
 
-	<div class="flex flex-wrap items-center justify-end gap-3 border-t border-border/60 pt-4">
-		<Button
-			type="submit"
-			variant="outline"
-			disabled={submitting}
-			class="min-w-28"
-			onclick={() => (submitIntent = 'draft')}
-		>
-			บันทึกร่าง
-		</Button>
-		<Button
-			type="submit"
-			disabled={submitting}
-			class="min-w-28 bg-primary text-primary-foreground hover:bg-primary/95"
-			onclick={() => (submitIntent = 'send')}
-		>
-			ส่งข้อมูล
-		</Button>
-	</div>
+	<ReferralSubmitBar {submitting} onIntent={(intent) => (submitIntent = intent)} />
 </form>
