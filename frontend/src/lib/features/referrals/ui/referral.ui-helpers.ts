@@ -30,6 +30,24 @@ export function getStatusLabel(status: ReferralStatus, options?: { verbose?: boo
 	return options?.verbose ? labels[status].verbose : labels[status].short;
 }
 
+/**
+ * Derived sub-label for a `closed` referral (CR-167 FR-W4/W5). Never stored on the doc.
+ * - closed with `timeline.sent` and no `timeline.responded` → withdrawn ("ถอนคำขอ", or
+ *   "ถูกถอนโดยศูนย์ต้นทาง" when `viewer` is the destination shelter)
+ * - closed without `timeline.sent` → cancelled draft ("ยกเลิกร่าง")
+ * - any other closed referral (responded) or non-closed status → null (plain "closed")
+ */
+export function getClosedSubLabel(
+	referral: Pick<Referral, 'status' | 'timeline'>,
+	viewer: 'source' | 'destination' = 'source'
+): string | null {
+	if (referral.status !== 'closed') return null;
+	const { sent, responded } = referral.timeline ?? {};
+	if (!sent) return 'ยกเลิกร่าง';
+	if (responded) return null;
+	return viewer === 'destination' ? 'ถูกถอนโดยศูนย์ต้นทาง' : 'ถอนคำขอ';
+}
+
 export function getStatusBadgeVariant(status: ReferralStatus): string {
 	switch (status) {
 		case 'draft':

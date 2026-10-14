@@ -97,3 +97,52 @@ describe('referral-detail close_reason', () => {
 		expect(body).not.toContain('close-reason');
 	});
 });
+
+describe('referral-detail withdraw (CR-167)', () => {
+	const stamp = { at: '2026-10-14T08:00:00.000Z', by: 'sm_user' };
+	const outgoingSent = {
+		...draftReferral,
+		referral_type: 'capacity',
+		to_org: undefined,
+		to_shelter_code: 'SH002',
+		status: 'sent',
+		timeline: { sent: stamp }
+	} as Referral;
+	const incomingSent = {
+		...outgoingSent,
+		shelter_code: 'SH009',
+		to_shelter_code: 'SH001'
+	} as Referral;
+
+	it('offers a withdraw button (and no generic close) to the source of a sent referral', () => {
+		const { body } = render(ReferralDetail, { props: { referral: outgoingSent } });
+
+		expect(isDisabled(buttonOpenTag(body, 'ถอนคำขอ'))).toBe(false);
+		expect(body).not.toContain('btn-close-referral');
+	});
+
+	it('offers no withdraw button to the destination of a sent referral', () => {
+		const { body } = render(ReferralDetail, { props: { referral: incomingSent } });
+
+		expect(body).not.toContain('btn-withdraw-referral');
+		expect(buttonOpenTag(body, 'ตอบรับ')).toBeTruthy();
+	});
+
+	it('shows the withdrawn label to the source and no withdraw button once closed', () => {
+		const closed = { ...outgoingSent, status: 'closed', timeline: { sent: stamp, closed: stamp } };
+		const { body } = render(ReferralDetail, { props: { referral: closed as Referral } });
+
+		expect(body).toContain('closed-sub-label');
+		expect(body).toContain('ถอนคำขอ');
+		expect(body).not.toContain('btn-withdraw-referral');
+	});
+
+	it('shows the destination the withdrawn-by-source label and no accept/reject buttons', () => {
+		const closed = { ...incomingSent, status: 'closed', timeline: { sent: stamp, closed: stamp } };
+		const { body } = render(ReferralDetail, { props: { referral: closed as Referral } });
+
+		expect(body).toContain('ถูกถอนโดยศูนย์ต้นทาง');
+		expect(body).not.toContain('ตอบรับการส่งต่อ');
+		expect(body).not.toContain('ปฏิเสธรับการส่งต่อ');
+	});
+});
