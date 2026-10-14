@@ -96,7 +96,8 @@ describe('bulkTransition', () => {
 			'SH001'
 		);
 
-		expect(result.succeeded).toEqual(['referral:ok1', 'referral:ok2']);
+		expect(result.succeeded.map((d) => d._id)).toEqual(['referral:ok1', 'referral:ok2']);
+		expect(result.succeeded.every((d) => d.status === 'closed' && d._rev === '2-b')).toBe(true);
 		expect(result.failed.map((f) => f.id)).toEqual([
 			'referral:foreign',
 			'referral:done',
@@ -149,7 +150,8 @@ describe('bulkTransition', () => {
 			'SH001'
 		);
 
-		expect(result).toEqual({ succeeded: ['referral:c1', 'referral:c2'], failed: [] });
+		expect(result.succeeded.map((d) => d._id)).toEqual(['referral:c1', 'referral:c2']);
+		expect(result.failed).toEqual([]);
 		expect(store.get('referral:c1')?.status).toBe('closed');
 	});
 
@@ -173,7 +175,7 @@ describe('bulkTransition', () => {
 			'SH001'
 		);
 
-		expect(result.succeeded).toEqual(['referral:y']);
+		expect(result.succeeded.map((d) => d._id)).toEqual(['referral:y']);
 		expect(result.failed).toEqual([
 			{ id: 'referral:x', error: 'Conflict: transition failed after 3 attempts' }
 		]);

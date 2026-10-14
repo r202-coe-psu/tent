@@ -1,4 +1,3 @@
- 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { POST } from './+server';
 import { requireShelterScopeOrSA } from '$lib/server/couch-admin';
@@ -39,8 +38,9 @@ describe('POST /api/back-office/referral/bulk-transition', () => {
 	});
 
 	it('passes the session actor and shelter to the core and returns its result', async () => {
+		const saved = { _id: 'referral:1', type: 'referral', status: 'closed', reason: 'r' };
 		mockBulk.mockResolvedValue({
-			succeeded: ['referral:1'],
+			succeeded: [saved],
 			failed: [{ id: 'referral:2', error: 'Invalid referral transition' }]
 		});
 
@@ -57,7 +57,7 @@ describe('POST /api/back-office/referral/bulk-transition', () => {
 
 		expect(res.status).toBe(200);
 		expect(await res.json()).toEqual({
-			succeeded: ['referral:1'],
+			succeeded: [saved],
 			failed: [{ id: 'referral:2', error: 'Invalid referral transition' }]
 		});
 		expect(mockBulk).toHaveBeenCalledWith(

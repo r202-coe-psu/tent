@@ -20,7 +20,7 @@ export type ReferralBatchResult = {
 
 /** Per-id outcome of a bulk transition (CR-167 FR-B3): partial success, no rollback. */
 export type ReferralBulkTransitionResult = {
-	succeeded: string[];
+	succeeded: Referral[];
 	failed: { id: string; error: string }[];
 };
 

@@ -1,4 +1,4 @@
-import type { ReferralStatus } from '../domain/referral.schema';
+import type { Referral, ReferralStatus } from '../domain/referral.schema';
 import { CouchDbReferralServerRepository } from './referral.server-repository';
 import { transitionWithRetry, type TransitionRepo } from './referral.transition-retry';
 
@@ -11,7 +11,8 @@ export const BULK_TRANSITION_MAX_IDS = 200;
 export type BulkTransitionFailure = { id: string; error: string };
 
 export type BulkTransitionResult = {
-	succeeded: string[];
+	/** The saved referral docs (CR-167 FR-B3), in input order. */
+	succeeded: Referral[];
 	failed: BulkTransitionFailure[];
 };
 
@@ -43,7 +44,7 @@ export async function bulkTransition(
 	const workers = Math.max(1, Math.floor(options.concurrency ?? BULK_TRANSITION_CONCURRENCY));
 	const queue = [...new Set(ids)];
 
-	const succeeded = new Set<string>();
+	const succeeded = new Map<string, Referral>();
 	const failed = new Map<string, string>();
 	let next = 0;
 
@@ -51,8 +52,7 @@ export async function bulkTransition(
 		while (next < queue.length) {
 			const id = queue[next++];
 			try {
-				await transitionWithRetry(repo, id, to, actor, reason, actorShelter);
-				succeeded.add(id);
+				succeeded.set(id, await transitionWithRetry(repo, id, to, actor, reason, actorShelter));
 			} catch (e: unknown) {
 				failed.set(id, e instanceof Error ? e.message : 'Unknown error');
 			}
@@ -63,7 +63,7 @@ export async function bulkTransition(
 
 	// Report in input order regardless of completion order.
 	return {
-		succeeded: queue.filter((id) => succeeded.has(id)),
+		succeeded: queue.filter((id) => succeeded.has(id)).map((id) => succeeded.get(id)!),
 		failed: queue.filter((id) => failed.has(id)).map((id) => ({ id, error: failed.get(id)! }))
 	};
 }

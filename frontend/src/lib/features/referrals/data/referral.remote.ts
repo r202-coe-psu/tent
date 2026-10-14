@@ -143,28 +143,29 @@ export class ReferralRemoteRepository implements ReferralRepository {
 					: `Bulk referral transition failed (${res.status})`;
 			throw new Error(message);
 		}
-		if (!isBulkTransitionResult(payload)) {
+		const result = parseBulkTransitionResult(payload);
+		if (!result) {
 			throw new Error('Bulk referral transition returned an invalid result');
 		}
-		return payload;
+		return result;
 	}
 }
 
-function isBulkTransitionResult(value: unknown): value is ReferralBulkTransitionResult {
-	if (!value || typeof value !== 'object') return false;
+function parseBulkTransitionResult(value: unknown): ReferralBulkTransitionResult | null {
+	if (!value || typeof value !== 'object') return null;
 	const { succeeded, failed } = value as Record<string, unknown>;
-	return (
-		Array.isArray(succeeded) &&
-		succeeded.every((id) => typeof id === 'string') &&
-		Array.isArray(failed) &&
-		failed.every(
-			(f) =>
-				!!f &&
-				typeof f === 'object' &&
-				typeof (f as { id?: unknown }).id === 'string' &&
-				typeof (f as { error?: unknown }).error === 'string'
-		)
+	if (!Array.isArray(succeeded) || !Array.isArray(failed)) return null;
+	const docs = succeeded.filter(isReferral);
+	if (docs.length !== succeeded.length) return null;
+	const failures = failed.filter(
+		(f): f is { id: string; error: string } =>
+			!!f &&
+			typeof f === 'object' &&
+			typeof (f as { id?: unknown }).id === 'string' &&
+			typeof (f as { error?: unknown }).error === 'string'
 	);
+	if (failures.length !== failed.length) return null;
+	return { succeeded: docs, failed: failures };
 }
 
 /**

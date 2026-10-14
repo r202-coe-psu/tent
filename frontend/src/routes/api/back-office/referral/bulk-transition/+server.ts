@@ -7,9 +7,12 @@ import {
 	BULK_TRANSITION_MAX_IDS,
 	bulkTransition
 } from '$lib/features/referrals/server/referral.bulk-transition';
+import { redactForScope } from '$lib/features/referrals/domain/referral.redaction';
 import { referralStatusSchema } from '$lib/features/referrals/domain/referral.schema';
 
 export const prerender = false;
+
+const BACK_OFFICE_SCOPE = 'internal' as const;
 
 const bulkTransitionBodySchema = z.object({
 	ids: z
@@ -41,7 +44,10 @@ export const POST: RequestHandler = async ({ request, url }) => {
 
 		const { ids, to, reason } = parsed.data;
 		const result = await bulkTransition(ids, to, reason || undefined, caller.name, shelterCode);
-		return json(result);
+		return json({
+			succeeded: result.succeeded.map((doc) => redactForScope(doc, BACK_OFFICE_SCOPE)),
+			failed: result.failed
+		});
 	} catch (e: unknown) {
 		return handleEndpointError(e, 'Referral API Bulk Transition POST');
 	}

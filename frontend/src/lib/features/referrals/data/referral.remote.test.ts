@@ -171,7 +171,23 @@ describe('ReferralRemoteRepository.bulkTransition', () => {
 	});
 
 	it('POSTs ids, status and reason once and returns the per-id result', async () => {
-		const result = { succeeded: ['referral:1'], failed: [{ id: 'referral:2', error: 'nope' }] };
+		const saved: Referral = {
+			_id: 'referral:1',
+			type: 'referral',
+			schema_v: 2,
+			shelter_code: 'SH001',
+			created_at: '2026-07-11T05:00:00.000Z',
+			updated_at: '2026-07-11T05:00:00.000Z',
+			created_by: 'Staff A',
+			evacuee_id: 'evacuee:01F8MECHEVACUEEID1234567',
+			referral_type: 'medical-emergency',
+			to_org: { name: 'General Hospital', kind: 'hospital' },
+			reason: 'r',
+			urgency: 'normal',
+			status: 'closed',
+			timeline: {}
+		} as Referral;
+		const result = { succeeded: [saved], failed: [{ id: 'referral:2', error: 'nope' }] };
 		fetchMock.mockResolvedValue({ ok: true, json: async () => result });
 
 		await expect(
@@ -198,6 +214,14 @@ describe('ReferralRemoteRepository.bulkTransition', () => {
 		await expect(repo.bulkTransition(['referral:1'], 'closed')).rejects.toThrow(
 			'ids must not exceed 200 items'
 		);
+	});
+
+	it('throws when a succeeded entry is not a valid referral', async () => {
+		fetchMock.mockResolvedValue({
+			ok: true,
+			json: async () => ({ succeeded: [{ _id: 'referral:1' }], failed: [] })
+		});
+		await expect(repo.bulkTransition(['referral:1'], 'closed')).rejects.toThrow('invalid result');
 	});
 
 	it('throws on a malformed success payload', async () => {
