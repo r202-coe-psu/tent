@@ -155,8 +155,15 @@ function parseBulkTransitionResult(value: unknown): ReferralBulkTransitionResult
 	if (!value || typeof value !== 'object') return null;
 	const { succeeded, failed } = value as Record<string, unknown>;
 	if (!Array.isArray(succeeded) || !Array.isArray(failed)) return null;
+	// These writes already happened, so a malformed doc must not fail the whole call: keep the
+	// valid ones and warn, like the list does.
 	const docs = succeeded.filter(isReferral);
-	if (docs.length !== succeeded.length) return null;
+	const dropped = succeeded.length - docs.length;
+	if (dropped > 0) {
+		console.warn(
+			`[referrals] skipped ${dropped} malformed referral doc(s) in bulk transition response`
+		);
+	}
 	const failures = failed.filter(
 		(f): f is { id: string; error: string } =>
 			!!f &&
