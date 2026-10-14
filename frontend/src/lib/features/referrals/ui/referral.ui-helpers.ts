@@ -146,3 +146,12 @@ export function getDirectionBadgeVariant(direction: 'outgoing' | 'incoming' | 'i
 export function getEvacueeSelectionError(selectedIds: readonly string[]): string | undefined {
 	return selectedIds.length === 0 ? 'กรุณาเลือกผู้ประสบภัยอย่างน้อย 1 คน' : undefined;
 }
+
+/**
+ * Whether a keydown on a selectable list row should activate it (Enter or Space).
+ * `isOwnTarget` must be true only when the event target is the row itself, so keys pressed on a
+ * nested control (e.g. an action button inside the row) do not also select the row.
+ */
+export function isRowActivationKey(event: { key: string; isOwnTarget: boolean }): boolean {
+	return event.isOwnTarget && (event.key === 'Enter' || event.key === ' ');
+}

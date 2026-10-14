@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { Badge } from '$lib/components/ui/badge/index.js';
-	import { Button } from '$lib/components/ui/button/index.js';
 	import AlertCircle from '@lucide/svelte/icons/alert-circle';
+	import Check from '@lucide/svelte/icons/check';
 	import Eye from '@lucide/svelte/icons/eye';
 	import Search from '@lucide/svelte/icons/search';
 	import Users from '@lucide/svelte/icons/users';
@@ -120,24 +120,34 @@
 		<input
 			type="text"
 			bind:value={searchQuery}
+			aria-label="ค้นหารายการส่งต่อ"
 			placeholder="ค้นหาชื่อผู้ประสบภัย หรือหน่วยงาน/ศูนย์พักพิงปลายทาง..."
 			class="flex h-9 w-full min-w-0 rounded-md border border-input bg-background px-3 py-1 pl-9 text-base shadow-xs ring-offset-background transition-[color,box-shadow] outline-none selection:bg-primary selection:text-primary-foreground placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 md:text-sm dark:bg-input/30 dark:aria-invalid:ring-destructive/40"
 		/>
 	</div>
 
 	<!-- Row 2: Filter Tabs -->
-	<div class="flex flex-wrap gap-1.5 border-b border-border pb-px">
+	<div
+		role="group"
+		aria-label="กรองตามสถานะ"
+		class="flex flex-wrap gap-1.5 border-b border-border pb-px"
+	>
 		{#each tabs as tab (tab.value)}
+			{@const isActive = activeTab === tab.value}
 			<button
 				type="button"
+				aria-pressed={isActive}
 				onclick={() => {
 					activeTab = tab.value;
 				}}
-				class="-mb-px border-b-2 px-4 py-2 text-sm font-medium transition-all hover:text-foreground
-				{activeTab === tab.value
-					? 'border-primary text-primary'
-					: 'border-transparent text-muted-foreground hover:border-border'}"
+				class="-mb-px inline-flex items-center gap-1.5 border-b-2 px-4 py-2 text-sm transition-all hover:text-foreground focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none
+				{isActive
+					? 'border-primary font-semibold text-primary'
+					: 'border-transparent font-medium text-muted-foreground hover:border-border'}"
 			>
+				{#if isActive}
+					<Check class="h-3.5 w-3.5" aria-hidden="true" />
+				{/if}
 				{tab.label}
 			</button>
 		{/each}
@@ -158,7 +168,8 @@
 				<button
 					type="button"
 					onclick={() => onSelect?.(group)}
-					class="group relative flex w-full cursor-pointer flex-col justify-between gap-1.5 rounded-lg border border-border/80 bg-card p-3 text-left shadow-xs transition-colors hover:border-primary/50 hover:bg-accent/50
+					aria-current={selectedKey === group.key ? 'true' : undefined}
+					class="group relative flex w-full cursor-pointer flex-col justify-between gap-1.5 rounded-lg border border-border/80 bg-card p-3 text-left shadow-xs transition-colors hover:border-primary/50 hover:bg-accent/50 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none
 					{selectedKey === group.key ? 'border-primary ring-2 ring-primary/10' : ''}"
 				>
 					<!-- Line 1: Primary Info -->
@@ -231,18 +242,12 @@
 								</span>
 							{/if}
 						</div>
-						<Button
-							variant="ghost"
-							size="sm"
-							onclick={(e) => {
-								e.stopPropagation();
-								onSelect?.(group);
-							}}
-							class="h-6 shrink-0 gap-1 px-2 text-xs text-muted-foreground group-hover:text-primary"
+						<span
+							class="inline-flex h-6 shrink-0 items-center gap-1 px-2 text-xs text-muted-foreground group-hover:text-primary group-focus-visible:text-primary"
 						>
-							<Eye class="h-3.5 w-3.5" />
+							<Eye class="h-3.5 w-3.5" aria-hidden="true" />
 							รายละเอียด →
-						</Button>
+						</span>
 					</div>
 				</button>
 			{/each}
