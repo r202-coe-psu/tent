@@ -114,10 +114,6 @@ closed   → (terminal)
 - UI: ป้าย "ถอนคำขอ", ปุ่มถอนคำขอใน `referral-detail` และแถวขาออกสถานะ `sent`, แสดง `close_reason`, bulk ใน list เรียก endpoint ใหม่
 - ไม่กระทบ: `completeCapacityTransfer` (ไม่ถูกเรียกเมื่อ `to ≠ accepted`), index ใน `central_ops`, worker/backend Python (ไม่ projection referral), `role-permission-matrix.md`
 
-### ข้อสังเกตนอกขอบเขต CR นี้
-
-- `list()` ใช้ `$or: [shelter_code, to_shelter_code]` โดยไม่กรองสถานะ ศูนย์ปลายทางจึงอาจเห็น capacity `draft` ของศูนย์อื่น ยังไม่ได้ตรวจว่า BFF กรองออกที่อื่นหรือไม่ ต้องตรวจแยก ไม่แก้ใน CR นี้
-
 ## Migration
 
 **schema_v referral 1 → 2 (additive):**
