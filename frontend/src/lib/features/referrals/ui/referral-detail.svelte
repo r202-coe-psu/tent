@@ -38,6 +38,8 @@
 
 	let responseReasonInput = $state('');
 	let showReasonPrompt = $state<'accepted' | 'rejected' | null>(null);
+	let transitionInFlight = $state(false);
+	const isTransitionBusy = $derived(transitionMutation.isPending || transitionInFlight);
 
 	const actorShelter = $derived(getShelterCode());
 	const canRespond = $derived(canActorRespond(referral, actorShelter));
@@ -57,13 +59,26 @@
 	);
 
 	async function handleTransition(to: ReferralStatus, label: string, reason?: string) {
-		await toast.promise(transitionMutation.mutateAsync({ id: referral._id, to, reason }), {
+		// Synchronous guard: TanStack's isPending reaches the DOM only after a batched flush,
+		// so a second click in the same tick would otherwise send a second request.
+		if (transitionMutation.isPending || transitionInFlight) return;
+		transitionInFlight = true;
+		const mutation = transitionMutation.mutateAsync({ id: referral._id, to, reason });
+		// toast.promise returns void; it does not wait for the mutation, so await `mutation` directly.
+		void toast.promise(mutation, {
 			loading: `กำลังเปลี่ยนสถานะเป็น "${label}"...`,
 			success: `เปลี่ยนสถานะเป็น "${label}" สำเร็จ`,
 			error: (err) => (err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการเปลี่ยนสถานะ')
 		});
-		showReasonPrompt = null;
-		responseReasonInput = '';
+		try {
+			await mutation;
+		} catch {
+			// toast.promise already surfaced the error
+		} finally {
+			transitionInFlight = false;
+			showReasonPrompt = null;
+			responseReasonInput = '';
+		}
 	}
 
 	function triggerActionWithReason(to: 'accepted' | 'rejected') {
@@ -253,6 +268,7 @@
 							size="sm"
 							variant={showReasonPrompt === 'accepted' ? 'default' : 'destructive'}
 							onclick={submitWithReason}
+							disabled={isTransitionBusy}
 						>
 							ยืนยันการ{showReasonPrompt === 'accepted' ? 'ตอบรับ' : 'ปฏิเสธ'}
 						</Button>
@@ -357,6 +373,7 @@
 					variant="default"
 					class="gap-1.5"
 					onclick={() => handleTransition('sent', 'ส่งตัว')}
+					disabled={isTransitionBusy}
 				>
 					<Send class="h-4 w-4" />
 					ส่งออกข้อมูล (Send)
@@ -368,6 +385,7 @@
 					size="sm"
 					class="gap-1.5 bg-emerald-600 text-white hover:bg-emerald-700"
 					onclick={() => triggerActionWithReason('accepted')}
+					disabled={isTransitionBusy}
 				>
 					<CheckCircle2 class="h-4 w-4" />
 					ตอบรับการส่งต่อ (Accept)
@@ -380,6 +398,7 @@
 					variant="outline"
 					class="gap-1.5 border-rose-300 text-rose-600 hover:bg-rose-50"
 					onclick={() => triggerActionWithReason('rejected')}
+					disabled={isTransitionBusy}
 				>
 					<XCircle class="h-4 w-4" />
 					ปฏิเสธรับการส่งต่อ (Reject)
@@ -393,6 +412,7 @@
 						variant="outline"
 						class="gap-1.5 border-rose-300 text-rose-700 hover:bg-rose-50"
 						onclick={() => handleTransition('closed', 'ยกเลิกร่าง')}
+						disabled={isTransitionBusy}
 					>
 						<Ban class="h-4 w-4" />
 						ยกเลิกร่าง
@@ -403,6 +423,7 @@
 						variant="outline"
 						class="gap-1.5 border-slate-300 text-slate-700 hover:bg-slate-50"
 						data-testid="btn-close-referral"
+						disabled={isTransitionBusy}
 						onclick={() => {
 							handleTransition('closed', 'ปิดรายการ');
 						}}
