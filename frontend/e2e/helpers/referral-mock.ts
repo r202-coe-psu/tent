@@ -24,6 +24,12 @@ export interface ReferralStore {
 	pageFail: boolean;
 	/** Make GET /api/back-office/referral/:id return 500. */
 	detailFail: boolean;
+	/** Make GET /api/back-office/referral/:id/batch return 500. */
+	batchFail: boolean;
+	/** Evacuee ids whose POST create is answered with a 500. */
+	createFailIds: string[];
+	/** Every GET of a batch the page made (anchor ids), in order. */
+	batchReads: string[];
 	/** Every PATCH transition the page sent, in order. */
 	patches: { id: string; body: { to: string; reason?: string } }[];
 	/** When set, PATCH waits on this promise before answering (in-flight window). */
@@ -38,6 +44,9 @@ export function newReferralStore(rows: ReferralRow[] = []): ReferralStore {
 		listFail: false,
 		pageFail: false,
 		detailFail: false,
+		batchFail: false,
+		createFailIds: [],
+		batchReads: [],
 		patches: [],
 		writes: []
 	};
@@ -178,6 +187,30 @@ function listPage(store: ReferralStore, params: URLSearchParams) {
 	return { items, bookmark: String(offset + items.length), has_more: items.length === limit };
 }
 
+const BUCKET_MS = 2 * 60 * 1000;
+
+/** Mirror of the batch contract: siblings with the same template + creator in the same 2-minute bucket. */
+function batchOf(store: ReferralStore, anchor: ReferralRow): ReferralRow[] {
+	const key = (r: ReferralRow) =>
+		[
+			r.shelter_code,
+			r.created_by,
+			r.referral_type,
+			r.reason,
+			r.urgency,
+			r.notes ?? '',
+			r.to_shelter_code ?? '',
+			JSON.stringify(r.to_org ?? null),
+			Math.floor(new Date(String(r.created_at)).getTime() / BUCKET_MS)
+		].join('|');
+	const k = key(anchor);
+	return Object.values(store.referrals)
+		.filter((r) => key(r) === k)
+		.sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)));
+}
+
+let createdCount = 0;
+
 /** Serve the referral BFF from `store`. Records every non-GET request in `store.writes`. */
 export async function mockReferralApi(page: Page, store: ReferralStore): Promise<void> {
 	page.on('request', (req) => {
@@ -191,6 +224,25 @@ export async function mockReferralApi(page: Page, store: ReferralStore): Promise
 			const req = route.request();
 			const path = new URL(req.url()).pathname;
 			if (path === '/api/back-office/referral') {
+				if (req.method() === 'POST') {
+					const body = req.postDataJSON() as Record<string, unknown> & { evacuee_id: string };
+					if (store.createFailIds.includes(body.evacuee_id)) {
+						return route.fulfill({ status: 500, json: { error: 'mock create failure' } });
+					}
+					createdCount += 1;
+					// Fixed bucket: every doc of one test's create batch shares a 2-minute window.
+					const created_at = new Date(Date.UTC(2026, 9, 14, 9, 0, createdCount % 60)).toISOString();
+					const doc = referralFixture({
+						...body,
+						_id: `referral:mock_created_${createdCount}`,
+						status: 'draft',
+						timeline: {},
+						created_at,
+						updated_at: created_at
+					});
+					store.referrals[doc._id] = doc;
+					return route.fulfill({ status: 201, json: doc });
+				}
 				if (req.method() !== 'GET') {
 					return route.fulfill({ status: 500, json: { error: 'unexpected write in mock' } });
 				}
@@ -200,10 +252,18 @@ export async function mockReferralApi(page: Page, store: ReferralStore): Promise
 					return route.fulfill({ status: 500, json: { error: 'mock page failure' } });
 				return route.fulfill({ json: listPage(store, new URL(req.url()).searchParams) });
 			}
-			const match = path.match(/^\/api\/back-office\/referral\/([^/]+)(\/transition)?$/);
+			const match = path.match(/^\/api\/back-office\/referral\/([^/]+)(\/transition|\/batch)?$/);
 			if (!match) return route.fallback();
 			const id = decodeURIComponent(match[1]);
 			const current = store.referrals[id];
+			if (match[2] === '/batch') {
+				if (req.method() !== 'GET') return route.fallback();
+				store.batchReads.push(id);
+				if (store.batchFail)
+					return route.fulfill({ status: 500, json: { error: 'mock batch failure' } });
+				if (!current) return route.fulfill({ status: 404, json: { error: 'not found' } });
+				return route.fulfill({ json: { items: batchOf(store, current) } });
+			}
 			if (match[2]) {
 				if (req.method() !== 'PATCH') return route.fallback();
 				const body = req.postDataJSON() as { to: string; reason?: string };

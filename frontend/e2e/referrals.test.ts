@@ -90,7 +90,7 @@ test.describe('Referrals — mocked UI contracts', { tag: ['@regression', '@back
 		store.listFail = false;
 		store.referrals['referral:mock_retry'] = referralFixture({ _id: 'referral:mock_retry' });
 		await alert.getByRole('button', { name: 'ลองใหม่' }).click();
-		await expect(page.getByRole('button', { name: /สมชาย ทดสอบ/ })).toBeVisible();
+		await expect(page.getByRole('link', { name: /สมชาย ทดสอบ/ })).toBeVisible();
 		await expect(alert).toHaveCount(0);
 	});
 
@@ -150,9 +150,8 @@ test.describe('Referrals — mocked UI contracts', { tag: ['@regression', '@back
 		]);
 		store.detailFail = true;
 		await signInMocked(page, store);
-		await page.goto('/back-office/referrals');
-
-		await page.getByRole('button', { name: /สมชาย ทดสอบ/ }).click();
+		// Deep link: no cached list to seed the detail, so the failed fetch is what the page shows.
+		await page.goto('/back-office/referrals/referral%3Amock_detail');
 		const alert = page.getByRole('alert').filter({ hasText: 'โหลดประวัติการส่งต่อไม่สำเร็จ' });
 		await expect(alert).toBeVisible({ timeout: 20_000 });
 		await expect(page.getByText('ไม่พบรายการส่งต่อนี้')).toHaveCount(0);
@@ -166,12 +165,12 @@ test.describe('Referrals — mocked UI contracts', { tag: ['@regression', '@back
 		const store = newReferralStore([referralFixture({ _id: 'referral:mock_back' })]);
 		store.detailFail = true;
 		await signInMocked(page, store);
-		await page.goto('/back-office/referrals');
-
-		await page.getByRole('button', { name: /สมชาย ทดสอบ/ }).click();
+		// Deep link: no cached list to seed the detail, so the failed fetch is what the page shows.
+		await page.goto('/back-office/referrals/referral%3Amock_back');
 		const alert = page.getByRole('alert').filter({ hasText: 'โหลดประวัติการส่งต่อไม่สำเร็จ' });
 		await expect(alert).toBeVisible({ timeout: 20_000 });
-		await alert.getByRole('button', { name: 'กลับไปหน้ารายการ' }).click();
+		await page.getByRole('link', { name: 'รายการส่งต่อ', exact: true }).click();
+		await expect(page).toHaveURL(/\/back-office\/referrals$/);
 		await expect(alert).toHaveCount(0);
 		await expect(page.getByRole('group', { name: 'กรองตามสถานะ' })).toBeVisible();
 	});
@@ -187,7 +186,7 @@ test.describe('Referrals — mocked UI contracts', { tag: ['@regression', '@back
 		await signInMocked(page, store);
 		await page.goto('/back-office/referrals');
 
-		await page.getByRole('button', { name: /สร้างรายการส่งต่อ/ }).click();
+		await page.getByRole('link', { name: /สร้างรายการส่งต่อ/ }).click();
 		await expect(page.getByText('สร้างรายการส่งต่อผู้ประสบภัย')).toBeVisible();
 
 		for (const name of [/^ส่งข้อมูล$/, /^บันทึกร่าง$/]) {
@@ -217,7 +216,7 @@ test.describe('Referrals — mocked UI contracts', { tag: ['@regression', '@back
 		await signInMocked(page, store, MOCK_SHELTER, evacuees);
 		await page.goto('/back-office/referrals');
 
-		await page.getByRole('button', { name: /สร้างรายการส่งต่อ/ }).click();
+		await page.getByRole('link', { name: /สร้างรายการส่งต่อ/ }).click();
 		await page.getByRole('row', { name: /สมชาย ก/ }).click();
 		await page.getByPlaceholder('เช่น โรงพยาบาลมหาราช').fill('โรงพยาบาลทดสอบ');
 		const reason = page.getByPlaceholder(/ระบุรายละเอียดเหตุผลความจำเป็น/);
@@ -248,7 +247,7 @@ test.describe('Referrals — mocked UI contracts', { tag: ['@regression', '@back
 		await signInMocked(page, store);
 		await page.goto('/back-office/referrals');
 
-		await page.getByRole('button', { name: /สมชาย ทดสอบ/ }).click();
+		await page.getByRole('link', { name: /สมชาย ทดสอบ/ }).click();
 		const trigger = page.getByTestId('btn-close-referral');
 		await trigger.click();
 		const dialog = page.getByRole('alertdialog');
@@ -275,7 +274,7 @@ test.describe('Referrals — mocked UI contracts', { tag: ['@regression', '@back
 		]);
 		await signInMocked(page, store);
 		await page.goto('/back-office/referrals');
-		await page.getByRole('button', { name: /สมชาย ทดสอบ/ }).click();
+		await page.getByRole('link', { name: /สมชาย ทดสอบ/ }).click();
 
 		await page.getByRole('button', { name: 'ยกเลิกร่าง', exact: true }).click();
 		const dialog = page.getByRole('alertdialog');
@@ -303,7 +302,7 @@ test.describe('Referrals — mocked UI contracts', { tag: ['@regression', '@back
 		]);
 		await signInMocked(page, store);
 		await page.goto('/back-office/referrals');
-		await page.getByRole('button', { name: /สมชาย ทดสอบ/ }).click();
+		await page.getByRole('link', { name: /สมชาย ทดสอบ/ }).click();
 
 		await page.getByRole('button', { name: /ส่งออกข้อมูล/ }).click();
 		const dialog = page.getByRole('alertdialog');
@@ -327,7 +326,7 @@ test.describe('Referrals — mocked UI contracts', { tag: ['@regression', '@back
 		]);
 		await signInMocked(page, store);
 		await page.goto('/back-office/referrals');
-		await page.getByRole('button', { name: /สมชาย ทดสอบ/ }).click();
+		await page.getByRole('link', { name: /สมชาย ทดสอบ/ }).click();
 
 		await page.getByTestId('btn-close-referral').click();
 		const dialog = page.getByRole('alertdialog');
@@ -354,7 +353,7 @@ test.describe('Referrals — mocked UI contracts', { tag: ['@regression', '@back
 		await signInMocked(page, store);
 		await page.goto('/back-office/referrals');
 		await page.getByRole('tab', { name: 'ขาเข้า' }).click();
-		await page.getByRole('button', { name: /สมชาย ทดสอบ/ }).click();
+		await page.getByRole('link', { name: /สมชาย ทดสอบ/ }).click();
 
 		await page.getByRole('button', { name: /ตอบรับการส่งต่อ/ }).click();
 		await page.getByPlaceholder('ระบุเหตุผลหรือคำอธิบายประกอบการพิจารณา...').fill('มีที่ว่าง');
@@ -372,6 +371,243 @@ test.describe('Referrals — mocked UI contracts', { tag: ['@regression', '@back
 		expect(store.patches).toEqual([
 			{ id: 'referral:mock_incoming', body: { to: 'accepted', reason: 'มีที่ว่าง' } }
 		]);
+	});
+
+	// -----------------------------------------------------------------------
+	// #575 — list, create, detail and batch are separate routes
+	// -----------------------------------------------------------------------
+
+	test('#575 ?dir=in&status=sent loads that tab and tab changes are written to the URL', async ({
+		page
+	}) => {
+		const store = newReferralStore([
+			referralFixture({
+				_id: 'referral:mock_in_sent',
+				shelter_code: MOCK_DEST,
+				to_shelter_code: MOCK_SHELTER,
+				evacuee_summary: { first_name: 'ขาเข้า', last_name: 'ส่งแล้ว' }
+			}),
+			referralFixture({
+				_id: 'referral:mock_in_closed',
+				status: 'closed',
+				shelter_code: MOCK_DEST,
+				to_shelter_code: MOCK_SHELTER,
+				evacuee_summary: { first_name: 'ขาเข้า', last_name: 'ปิดแล้ว' }
+			}),
+			referralFixture({
+				_id: 'referral:mock_out',
+				evacuee_summary: { first_name: 'ขาออก', last_name: 'ส่งแล้ว' }
+			})
+		]);
+		await signInMocked(page, store);
+		await page.goto('/back-office/referrals?dir=in&status=sent');
+
+		await expect(page.getByRole('tab', { name: 'ขาเข้า' })).toHaveAttribute(
+			'aria-selected',
+			'true'
+		);
+		await expect(page.getByRole('button', { name: /ส่งแล้ว \(Sent\)/ })).toHaveAttribute(
+			'aria-pressed',
+			'true'
+		);
+		await expect(page.getByRole('link', { name: /ขาเข้า ส่งแล้ว/ })).toBeVisible();
+		await expect(page.getByRole('link', { name: /ขาเข้า ปิดแล้ว/ })).toHaveCount(0);
+		await expect(page.getByRole('link', { name: /ขาออก/ })).toHaveCount(0);
+
+		await page.getByRole('button', { name: /ปิดรายการ \(Closed\)/ }).click();
+		await expect(page).toHaveURL(/dir=in&status=closed/);
+		await expect(page.getByRole('link', { name: /ขาเข้า ปิดแล้ว/ })).toBeVisible();
+		await page.getByRole('tab', { name: 'ขาออก' }).click();
+		await expect(page).toHaveURL(/status=closed/);
+		await expect(page).not.toHaveURL(/dir=in/);
+	});
+
+	test('#575 list -> batch -> detail, browser back returns to the same tab and loaded rows', async ({
+		page
+	}) => {
+		const batch = {
+			shelter_code: MOCK_DEST,
+			to_shelter_code: MOCK_SHELTER,
+			reason: 'ชุดทดสอบ',
+			created_at: '2026-10-14T09:00:30.000Z'
+		};
+		const store = newReferralStore([
+			referralFixture({
+				_id: 'referral:mock_nav_a',
+				...batch,
+				evacuee_summary: { first_name: 'สมหญิง', last_name: 'ก' }
+			}),
+			referralFixture({
+				_id: 'referral:mock_nav_b',
+				...batch,
+				evacuee_summary: { first_name: 'สมศรี', last_name: 'ข' }
+			}),
+			...Array.from({ length: 55 }, (_, i) =>
+				referralFixture({
+					_id: `referral:mock_nav_${String(i).padStart(2, '0')}`,
+					shelter_code: MOCK_DEST,
+					to_shelter_code: MOCK_SHELTER,
+					reason: `เหตุผล ${i}`,
+					created_at: new Date(Date.UTC(2026, 9, 14, 8, 0, 55 - i)).toISOString()
+				})
+			)
+		]);
+		await signInMocked(page, store);
+		await page.goto('/back-office/referrals?dir=in&status=sent');
+		await page.getByRole('button', { name: 'โหลดเพิ่ม' }).click();
+		await expect(page.getByText('แสดง 57 รายการ')).toBeVisible({ timeout: 20_000 });
+
+		await page.getByRole('link', { name: /ชุดส่งต่อ 2 คน/ }).click();
+		await expect(page).toHaveURL(/\/batch$/);
+		await expect(page.getByRole('heading', { name: 'รายละเอียดชุดส่งต่อ' })).toBeVisible();
+		await page.getByRole('row', { name: /สมหญิง ก/ }).click();
+		await expect(page).toHaveURL(/\/referral%3Amock_nav_[ab]$/);
+		await expect(page.getByRole('link', { name: /ดูชุดส่งต่อ \(2 คน\)/ })).toBeVisible();
+
+		await page.goBack();
+		await expect(page).toHaveURL(/\/batch$/);
+		await page.goBack();
+		await expect(page).toHaveURL(/\/back-office\/referrals\?dir=in&status=sent$/);
+		await expect(page.getByRole('tab', { name: 'ขาเข้า' })).toHaveAttribute(
+			'aria-selected',
+			'true'
+		);
+		await expect(page.getByText('แสดง 57 รายการ')).toBeVisible();
+	});
+
+	test('#575 the back link from a detail opened from the list keeps the list state', async ({
+		page
+	}) => {
+		const store = newReferralStore([
+			referralFixture({
+				_id: 'referral:mock_backlink',
+				status: 'accepted',
+				shelter_code: MOCK_DEST,
+				to_shelter_code: MOCK_SHELTER
+			})
+		]);
+		await signInMocked(page, store);
+		await page.goto('/back-office/referrals?dir=in&status=accepted');
+		await page.getByRole('link', { name: /สมชาย ทดสอบ/ }).click();
+		await expect(page).toHaveURL(/\/referral%3Amock_backlink$/);
+		await page.getByRole('link', { name: 'รายการส่งต่อ', exact: true }).click();
+		await expect(page).toHaveURL(/\/back-office\/referrals\?dir=in&status=accepted$/);
+	});
+
+	test('#575 a detail opened from the list is seeded from the cached rows', async ({ page }) => {
+		const store = newReferralStore([
+			referralFixture({ _id: 'referral:mock_seed', status: 'accepted' })
+		]);
+		await signInMocked(page, store);
+		await page.goto('/back-office/referrals');
+		await expect(page.getByRole('link', { name: /สมชาย ทดสอบ/ })).toBeVisible({ timeout: 20_000 });
+
+		// The background refetch fails, yet the seeded detail stays on screen.
+		store.detailFail = true;
+		await page.getByRole('link', { name: /สมชาย ทดสอบ/ }).click();
+		await expect(page.getByTestId('btn-close-referral')).toBeVisible();
+	});
+
+	test('#575 deep links to a detail and to a batch survive a refresh', async ({ page }) => {
+		const shared = { reason: 'ชุดลึก', created_at: '2026-10-14T09:00:30.000Z' };
+		const store = newReferralStore([
+			referralFixture({
+				_id: 'referral:mock_deep_a',
+				status: 'accepted',
+				...shared,
+				evacuee_summary: { first_name: 'สมหญิง', last_name: 'ก' }
+			}),
+			referralFixture({
+				_id: 'referral:mock_deep_b',
+				status: 'accepted',
+				...shared,
+				evacuee_summary: { first_name: 'สมศรี', last_name: 'ข' }
+			})
+		]);
+		await signInMocked(page, store);
+
+		await page.goto('/back-office/referrals/referral%3Amock_deep_a');
+		await expect(page.getByTestId('btn-close-referral')).toBeVisible({ timeout: 20_000 });
+		await page.reload();
+		await expect(page.getByTestId('btn-close-referral')).toBeVisible({ timeout: 20_000 });
+		await page.getByRole('link', { name: /ดูชุดส่งต่อ \(2 คน\)/ }).click();
+		await expect(page).toHaveURL(/\/referral%3Amock_deep_a\/batch$/);
+
+		await page.reload();
+		await expect(page.getByRole('heading', { name: 'รายละเอียดชุดส่งต่อ' })).toBeVisible({
+			timeout: 20_000
+		});
+		await expect(page.getByRole('row', { name: /สมหญิง ก/ })).toBeVisible();
+		await expect(page.getByRole('row', { name: /สมศรี ข/ })).toBeVisible();
+	});
+
+	test('#575 a missing referral shows not-found on detail and batch', async ({ page }) => {
+		const store = newReferralStore();
+		await signInMocked(page, store);
+		await page.goto('/back-office/referrals/referral%3Anope');
+		await expect(page.getByText('ไม่พบรายการส่งต่อนี้')).toBeVisible({ timeout: 20_000 });
+		await page.goto('/back-office/referrals/referral%3Anope/batch');
+		await expect(page.getByText('ไม่พบรายการส่งต่อนี้')).toBeVisible({ timeout: 20_000 });
+	});
+
+	async function pickTwoAndFillDraft(page: Page) {
+		await page.getByRole('link', { name: /สร้างรายการส่งต่อ/ }).click();
+		await page.getByRole('row', { name: /สมชาย ก/ }).click();
+		await page.getByRole('row', { name: /สมชาย ข/ }).click();
+		await page.getByPlaceholder('เช่น โรงพยาบาลมหาราช').fill('โรงพยาบาลทดสอบ');
+		await page.getByPlaceholder(/ระบุรายละเอียดเหตุผลความจำเป็น/).fill('ต้องการการรักษาต่อเนื่อง');
+	}
+
+	const pickable = ['ก', 'ข'].map((last, i) => ({
+		_id: `evacuee:mock_create_${i}`,
+		type: 'evacuee',
+		schema_v: 13,
+		shelter_code: MOCK_SHELTER,
+		first_name: 'สมชาย',
+		last_name: last,
+		created_at: '2026-10-14T08:00:00.000Z',
+		updated_at: '2026-10-14T08:00:00.000Z',
+		created_by: 'system',
+		current_stay: { status: 'active' }
+	}));
+
+	test('#575 the create flow lands on the batch page of what it created', async ({ page }) => {
+		const store = newReferralStore();
+		await signInMocked(page, store, MOCK_SHELTER, pickable);
+		await page.goto('/back-office/referrals');
+		await pickTwoAndFillDraft(page);
+		await expect(page).toHaveURL(/\/referrals\/new$/);
+
+		await page.getByRole('button', { name: /^บันทึกร่าง$/ }).click();
+		await expect(page).toHaveURL(/\/referrals\/referral%3Amock_created_\d+\/batch$/, {
+			timeout: 20_000
+		});
+		await expect(page.getByRole('row', { name: /สมชาย ก/ })).toBeVisible();
+		await expect(page.getByRole('row', { name: /สมชาย ข/ })).toBeVisible();
+		await expect(page.getByText('สร้างไม่สำเร็จ')).toHaveCount(0);
+	});
+
+	test('#575 a partial create shows the failures on the batch page', async ({ page }) => {
+		const store = newReferralStore();
+		store.createFailIds = ['evacuee:mock_create_1'];
+		await signInMocked(page, store, MOCK_SHELTER, pickable);
+		await page.goto('/back-office/referrals');
+		await pickTwoAndFillDraft(page);
+		await page.getByRole('button', { name: /^บันทึกร่าง$/ }).click();
+		await expect(page).toHaveURL(/\/referral%3Amock_created_\d+\/batch$/, { timeout: 20_000 });
+		await expect(page.getByText('สร้างไม่สำเร็จ 1 คน')).toBeVisible();
+		await expect(page.getByRole('row', { name: /สมชาย ก/ })).toBeVisible();
+	});
+
+	test('#575 when nothing was created the form stays and shows the failures', async ({ page }) => {
+		const store = newReferralStore();
+		store.createFailIds = pickable.map((e) => e._id);
+		await signInMocked(page, store, MOCK_SHELTER, pickable);
+		await page.goto('/back-office/referrals');
+		await pickTwoAndFillDraft(page);
+		await page.getByRole('button', { name: /^บันทึกร่าง$/ }).click();
+		await expect(page.getByText('สร้างไม่สำเร็จ 2 คน')).toBeVisible({ timeout: 20_000 });
+		await expect(page).toHaveURL(/\/referrals\/new$/);
 	});
 
 	// -----------------------------------------------------------------------
@@ -405,9 +641,10 @@ test.describe('Referrals — mocked UI contracts', { tag: ['@regression', '@back
 		// Nested interactive content: a button inside a button is invalid HTML.
 		await expect(page.locator('button button')).toHaveCount(0);
 
-		const batch = page.getByRole('button', { name: /ชุดส่งต่อ 2 คน/ });
+		const batch = page.getByRole('link', { name: /ชุดส่งต่อ 2 คน/ });
 		await tabTo(page, batch);
 		await page.keyboard.press('Enter');
+		await expect(page).toHaveURL(/\/referral%3Amock_kb_[ab]\/batch$/);
 
 		const row = page.getByRole('row', { name: /สมหญิง ก/ });
 		await tabTo(page, row);
@@ -445,7 +682,7 @@ test.describe('Referrals — mocked UI contracts', { tag: ['@regression', '@back
 		]);
 		await signInMocked(page, store);
 		await page.goto('/back-office/referrals');
-		await page.getByRole('button', { name: /สมชาย ทดสอบ/ }).click();
+		await page.getByRole('link', { name: /สมชาย ทดสอบ/ }).click();
 		await page.getByRole('button', { name: /ตอบรับการส่งต่อ/ }).click();
 		await expect(page.getByPlaceholder('ระบุเหตุผลหรือคำอธิบายประกอบการพิจารณา...')).toBeFocused();
 	});
@@ -544,7 +781,7 @@ test.describe(
 			// STEP 1: Source Shelter creates a referral
 			await injectSession(page, SM1, sessions[SM1.name]);
 			await page.goto('/back-office/referrals');
-			await page.getByRole('button', { name: /สร้างรายการส่งต่อ/ }).click();
+			await page.getByRole('link', { name: /สร้างรายการส่งต่อ/ }).click();
 			await expect(page.getByText('สร้างรายการส่งต่อผู้ประสบภัย')).toBeVisible();
 			await page.getByRole('button', { name: /ย้ายศูนย์พักพิง/ }).click();
 			await expect(page.getByText('ศูนย์พักพิงปลายทาง')).toBeVisible();
@@ -569,7 +806,7 @@ test.describe(
 			await clearSession(page);
 			await injectSession(page, SM2, sessions[SM2.name]);
 			await page.goto('/back-office/referrals');
-			const refItem = page.locator('button').filter({ hasText: 'ศูนย์เต็ม' }).first();
+			const refItem = page.locator('a').filter({ hasText: 'ศูนย์เต็ม' }).first();
 			await expect(refItem).toBeVisible();
 			await refItem.click();
 			await page.getByRole('button', { name: 'ตอบรับการส่งต่อ (Accept)' }).click();
@@ -581,7 +818,7 @@ test.describe(
 			await clearSession(page);
 			await injectSession(page, SM1, sessions[SM1.name]);
 			await page.goto('/back-office/referrals');
-			const acceptedItem = page.locator('button').filter({ hasText: 'ศูนย์เต็ม' }).first();
+			const acceptedItem = page.locator('a').filter({ hasText: 'ศูนย์เต็ม' }).first();
 			await expect(acceptedItem).toBeVisible();
 			await acceptedItem.click();
 			const closeButton = page.getByTestId('btn-close-referral');

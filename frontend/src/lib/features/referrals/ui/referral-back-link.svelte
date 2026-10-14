@@ -8,7 +8,7 @@
 
 	let cameFromList = $state(false);
 	afterNavigate(({ from }) => {
-		cameFromList = from?.url.pathname === REFERRALS_PATH;
+		cameFromList = from?.url?.pathname === REFERRALS_PATH;
 	});
 
 	/** Coming from the list: go back in history so its tab, filters and loaded pages survive. */
