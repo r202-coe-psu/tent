@@ -14,10 +14,10 @@ import type {
 } from './referral.repository';
 
 /**
- * Capacity referrals need BFF/admin for:
- * - `sent` → mirror into destination shelter DB (inbox)
- * - `accepted`/`rejected` → destination-only; accept runs cross-DB transfer
- * - `closed` → sync peer copy
+ * Every referral transition (capacity and non-capacity) goes through the BFF, which applies the
+ * state machine and scope checks. Capacity-specific rules on that path:
+ * - `accepted`/`rejected` → destination-only; accept runs the cross-DB evacuee transfer first
+ * - `sent`, `closed` → single write to the referral doc in `central_ops`; no copy is made
  */
 async function transitionCapacityViaBff(
 	id: string,
@@ -66,7 +66,13 @@ export class ReferralRemoteRepository implements ReferralRepository {
 			throw new Error(`Failed to list referrals: ${res.statusText}`);
 		}
 		const list = await res.json();
-		return list.filter(isReferral);
+		const referrals: Referral[] = list.filter(isReferral);
+		const dropped = list.length - referrals.length;
+		if (dropped > 0) {
+			// Malformed docs are skipped so one bad row does not hide the rest; log so it is traceable.
+			console.warn(`[referrals] skipped ${dropped} malformed referral doc(s) in list response`);
+		}
+		return referrals;
 	}
 
 	async get(id: string): Promise<Referral | null> {
@@ -111,7 +117,7 @@ export class ReferralRemoteRepository implements ReferralRepository {
 		actor: string,
 		reason?: string
 	): Promise<Referral> {
-		// All capacity transitions go through BFF (mirror / dest-gated accept / peer sync).
+		// Every transition goes through the BFF (scope checks, state machine, dest-gated accept).
 		return transitionCapacityViaBff(id, to, reason, getShelterCode());
 	}
 }
