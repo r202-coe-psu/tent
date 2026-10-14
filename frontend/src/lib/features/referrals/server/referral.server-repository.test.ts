@@ -226,3 +226,128 @@ describe('CouchDbReferralServerRepository capacity destination-gated accept', ()
 		expect(adminRaw.mock.calls.every((c) => c[1] !== 'PUT')).toBe(true);
 	});
 });
+
+describe('CouchDbReferralServerRepository transition() checks the state matrix before capacity transfer', () => {
+	const capacityRejected: Referral = { ...capacitySent, status: 'rejected' };
+	const capacityAccepted: Referral = { ...capacitySent, status: 'accepted' };
+	let repo: CouchDbReferralServerRepository;
+
+	/** Document writes only: excludes the one-time `PUT /central_ops` DB create (no body). */
+	function putCalls() {
+		return adminRaw.mock.calls.filter((c) => c[1] === 'PUT' && c[2] !== undefined);
+	}
+
+	/**
+	 * Stateless fake of central_ops + shelter DBs. `referral` is read per GET so a test can
+	 * change the latest referral between attempts. `referralPutStatus` drives the referral write.
+	 */
+	function mockDb(referral: () => Referral, referralPutStatus: () => number = () => 201) {
+		adminRaw.mockImplementation(async (path: string, method: string, body?: unknown) => {
+			const decoded = decodeURIComponent(path);
+			if (method === 'GET' && decoded.includes('referral:01CAPACITY')) {
+				return { status: 200, data: referral() };
+			}
+			if (method === 'GET' && decoded.includes('/shelter_sh001/evacuee:')) {
+				return { status: 200, data: activeEvacuee() };
+			}
+			if (method === 'GET' && decoded.includes('/shelter_sh002/evacuee:')) {
+				return { status: 404, data: { error: 'not_found' } };
+			}
+			if (method === 'GET' && decoded.includes('/movement:capacity_')) {
+				return { status: 404, data: { error: 'not_found' } };
+			}
+			if (method === 'PUT') {
+				const id = (body as { _id?: string } | undefined)?._id;
+				const status = id === 'referral:01CAPACITY' ? referralPutStatus() : 201;
+				return { status, data: { ok: true, id, rev: '2-new' } };
+			}
+			return { status: 500, data: { error: 'unexpected', path, method } };
+		});
+	}
+
+	beforeEach(() => {
+		vi.clearAllMocks();
+		repo = new CouchDbReferralServerRepository('central_ops', 'SH002');
+	});
+
+	it('accept on a rejected referral → 422 with no shelter reads and no transfer writes', async () => {
+		mockDb(() => capacityRejected);
+
+		await expect(
+			repo.transition('referral:01CAPACITY', 'accepted', 'Staff B', 'late', 'SH002')
+		).rejects.toMatchObject({ status: 422, message: 'Invalid referral transition' });
+
+		expect(putCalls()).toHaveLength(0);
+		expect(
+			adminRaw.mock.calls.some((c) => decodeURIComponent(String(c[0])).includes('/shelter_'))
+		).toBe(false);
+	});
+
+	it('accept on an already accepted referral → 422 and no second transfer', async () => {
+		mockDb(() => capacityAccepted);
+
+		await expect(
+			repo.transition('referral:01CAPACITY', 'accepted', 'Staff B', 'again', 'SH002')
+		).rejects.toMatchObject({ status: 422, message: 'Invalid referral transition' });
+
+		expect(putCalls()).toHaveLength(0);
+		expect(
+			adminRaw.mock.calls.some((c) => decodeURIComponent(String(c[0])).includes('/shelter_'))
+		).toBe(false);
+	});
+
+	it('accept on a sent referral still transfers the evacuee and marks it accepted', async () => {
+		mockDb(() => capacitySent);
+
+		const result = await repo.transition(
+			'referral:01CAPACITY',
+			'accepted',
+			'Staff B',
+			'ok',
+			'SH002'
+		);
+
+		expect(result.status).toBe('accepted');
+		const puts = putCalls();
+		expect(
+			puts.some(
+				(c) => (c[2] as { _id?: string })._id === 'movement:capacity_transfer_in:01CAPACITY'
+			)
+		).toBe(true);
+		expect(
+			puts.some(
+				(c) =>
+					(c[2] as { _id?: string; status?: string })._id === 'referral:01CAPACITY' &&
+					(c[2] as { status?: string }).status === 'accepted'
+			)
+		).toBe(true);
+	});
+
+	it('409 retry re-reads the latest referral; a non-sent latest → 422 with no second transfer', async () => {
+		let latest: Referral = capacitySent;
+		let referralPutAttempts = 0;
+		mockDb(
+			() => latest,
+			() => {
+				referralPutAttempts += 1;
+				return referralPutAttempts === 1 ? 409 : 201;
+			}
+		);
+
+		// Attempt 1 sees `sent`, runs the transfer, then loses the referral write (409).
+		await expect(
+			repo.transition('referral:01CAPACITY', 'accepted', 'Staff B', 'ok', 'SH002')
+		).rejects.toMatchObject({ status: 409 });
+		const putsAfterFirstAttempt = putCalls().length;
+		expect(putsAfterFirstAttempt).toBeGreaterThan(0);
+
+		// Meanwhile another writer rejected the referral. The BFF retry calls transition() again,
+		// which must read the latest doc and refuse before touching any transfer docs.
+		latest = { ...capacitySent, status: 'rejected' };
+		await expect(
+			repo.transition('referral:01CAPACITY', 'accepted', 'Staff B', 'ok', 'SH002')
+		).rejects.toMatchObject({ status: 422, message: 'Invalid referral transition' });
+
+		expect(putCalls()).toHaveLength(putsAfterFirstAttempt);
+	});
+});
