@@ -126,3 +126,11 @@ export function getDirectionBadgeVariant(direction: 'outgoing' | 'incoming' | 'i
 	};
 	return variants[direction];
 }
+
+/**
+ * Validation message for the evacuee picker on the create-referral form.
+ * Returns undefined when at least one evacuee is selected.
+ */
+export function getEvacueeSelectionError(selectedIds: readonly string[]): string | undefined {
+	return selectedIds.length === 0 ? 'กรุณาเลือกผู้ประสบภัยอย่างน้อย 1 คน' : undefined;
+}

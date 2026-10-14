@@ -6,6 +6,7 @@
 	import { type Referral, type ReferralInput } from '../domain/referral.schema';
 	import type { ReferralBatchFailure, ReferralSubmitIntent } from '../data/referral.repository';
 	import { useCreateReferralBatch } from '../application/queries';
+	import { getEvacueeSelectionError } from './referral.ui-helpers';
 	import RedactionBanner from './redaction-banner.svelte';
 	import EvacueePickerTable from './evacuee-picker-table.svelte';
 	import MedicalReferralForm from './medical-referral-form.svelte';
@@ -26,17 +27,26 @@
 	let selectionAttempted = $state(false);
 
 	const evacueeError = $derived(
-		selectionAttempted && selectedIds.length === 0
-			? 'กรุณาเลือกผู้ประสบภัยอย่างน้อย 1 คน'
-			: undefined
+		selectionAttempted ? getEvacueeSelectionError(selectedIds) : undefined
 	);
 
 	const formEvacueeId = $derived(selectedIds[0] ?? '');
 
+	// Superforms skips onUpdate → handleSubmit when evacuee_id is empty (schema fails first),
+	// so an empty selection never reaches handleSubmit. This runs on every submit attempt
+	// (draft or send) in the capture phase, before superforms' listener on the <form>.
+	function handleSubmitAttempt() {
+		const error = getEvacueeSelectionError(selectedIds);
+		if (!error) return;
+		selectionAttempted = true;
+		toast.error(error);
+	}
+
 	async function handleSubmit(formData: ReferralInput, intent: ReferralSubmitIntent) {
-		if (selectedIds.length === 0) {
+		const selectionError = getEvacueeSelectionError(selectedIds);
+		if (selectionError) {
 			selectionAttempted = true;
-			toast.error('กรุณาเลือกผู้ประสบภัยอย่างน้อย 1 คน');
+			toast.error(selectionError);
 			return;
 		}
 
@@ -158,27 +168,29 @@
 
 			<hr class="border-border/60" />
 
-			{#key selectedType}
-				{#if selectedType === 'medical-emergency'}
-					<MedicalReferralForm
-						evacueeId={formEvacueeId}
-						onSubmit={handleSubmit}
-						submitting={batchMutation.isPending}
-					/>
-				{:else if selectedType === 'capacity'}
-					<CapacityReferralForm
-						evacueeId={formEvacueeId}
-						onSubmit={handleSubmit}
-						submitting={batchMutation.isPending}
-					/>
-				{:else if selectedType === 'resource'}
-					<ResourceReferralForm
-						evacueeId={formEvacueeId}
-						onSubmit={handleSubmit}
-						submitting={batchMutation.isPending}
-					/>
-				{/if}
-			{/key}
+			<div onsubmitcapture={handleSubmitAttempt}>
+				{#key selectedType}
+					{#if selectedType === 'medical-emergency'}
+						<MedicalReferralForm
+							evacueeId={formEvacueeId}
+							onSubmit={handleSubmit}
+							submitting={batchMutation.isPending}
+						/>
+					{:else if selectedType === 'capacity'}
+						<CapacityReferralForm
+							evacueeId={formEvacueeId}
+							onSubmit={handleSubmit}
+							submitting={batchMutation.isPending}
+						/>
+					{:else if selectedType === 'resource'}
+						<ResourceReferralForm
+							evacueeId={formEvacueeId}
+							onSubmit={handleSubmit}
+							submitting={batchMutation.isPending}
+						/>
+					{/if}
+				{/key}
+			</div>
 		</Card.Content>
 	</Card.Root>
 </div>
