@@ -10,22 +10,12 @@ vi.mock('svelte-sonner', () => ({
 	toast: { promise: vi.fn(), error: vi.fn(), success: vi.fn() }
 }));
 
-vi.mock('$lib/features/people', () => ({
-	useEvacuees: () => ({ data: [] }),
-	zoneLabel: (zone: string) => zone
-}));
+const { useEvacuees } = vi.hoisted(() => ({ useEvacuees: vi.fn(() => ({ data: [] })) }));
+vi.mock('$lib/features/people', () => ({ useEvacuees, zoneLabel: (zone: string) => zone }));
 
 vi.mock('$lib/db/shelter', () => ({
 	getShelterCode: () => 'SH001',
 	getShelterDb: () => 'shelter_sh001'
-}));
-
-vi.mock('$lib/stores/shelter.svelte', () => ({
-	shelterStore: { selectedShelterCode: null }
-}));
-
-vi.mock('$lib/features/shelters', () => ({
-	useShelter: () => ({ data: undefined })
 }));
 
 vi.mock('../application/queries', () => ({
@@ -84,5 +74,24 @@ describe('referral-batch-cards keyboard access (F-29, F-33)', () => {
 		for (const tag of bodyRowTags(body)) {
 			expect(tag).not.toContain('tabindex');
 		}
+	});
+});
+
+describe('referral-batch-cards names come from evacuee_summary (F-04, F-06)', () => {
+	it('never loads the evacuee roster and resolves names per member', () => {
+		const named = {
+			...makeReferral('referral:1'),
+			evacuee_summary: { first_name: 'สมชาย', last_name: 'ใจดี' }
+		} as Referral;
+		const mononym = {
+			...makeReferral('referral:2'),
+			evacuee_summary: { first_name: 'มะลิ', last_name: '' }
+		} as Referral;
+		const legacy = makeReferral('referral:3');
+		const { body } = render(ReferralBatchCards, { props: { referrals: [named, mononym, legacy] } });
+		expect(useEvacuees).not.toHaveBeenCalled();
+		expect(body).toContain('สมชาย ใจดี');
+		expect(body).toMatch(/มะลิ(?! )/);
+		expect(body).toContain('ไม่พบชื่อผู้ประสบภัย');
 	});
 });

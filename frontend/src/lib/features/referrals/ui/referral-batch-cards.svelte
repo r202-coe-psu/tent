@@ -16,10 +16,7 @@
 	import { tick } from 'svelte';
 	import { useQueryClient } from '@tanstack/svelte-query';
 	import { toast } from 'svelte-sonner';
-	import { useEvacuees, zoneLabel } from '$lib/features/people';
 	import { getShelterCode } from '$lib/db/shelter';
-	import { shelterStore } from '$lib/stores/shelter.svelte';
-	import { useShelter } from '$lib/features/shelters';
 	import type { Referral, ReferralStatus } from '../domain/referral.schema';
 	import type { ReferralBatchFailure } from '../data/referral.repository';
 	import { canTransition } from '../domain/referral.transitions';
@@ -60,9 +57,6 @@
 
 	const queryClient = useQueryClient();
 	const transitionMutation = useTransitionReferral(queryClient);
-	const evacueesQuery = useEvacuees();
-	const shelterQuery = useShelter(() => shelterStore.selectedShelterCode ?? getShelterCode());
-	const shelterZones = $derived(shelterQuery.data?.zones ?? []);
 	const actorShelter = $derived(getShelterCode());
 
 	/** Local status overrides after transitions (avoids $effect ↔ $state write). */
@@ -161,16 +155,13 @@
 			closeable.length > 0
 	);
 
-	function evacueeName(evacueeId: string, referral?: Referral): string {
-		return resolveEvacueeName(
-			evacueesQuery.data?.find((e) => e._id === evacueeId),
-			referral?.evacuee_summary
-		);
-	}
+	/** Display names by referral id, built once per `items` change (from each `evacuee_summary`). */
+	const nameById = $derived(
+		new Map(items.map((r) => [r._id, resolveEvacueeName(r.evacuee_summary)] as const))
+	);
 
-	function evacueeZone(evacueeId: string): string {
-		const found = evacueesQuery.data?.find((e) => e._id === evacueeId);
-		return zoneLabel(found?.current_stay?.zone, shelterZones);
+	function evacueeName(referral: Referral): string {
+		return nameById.get(referral._id) ?? resolveEvacueeName(referral.evacuee_summary);
 	}
 
 	async function runBatchTransition(
@@ -215,7 +206,7 @@
 	}
 
 	function namesOf(list: Referral[]): string[] {
-		return list.map((r) => evacueeName(r.evacuee_id, r));
+		return list.map(evacueeName);
 	}
 
 	function askConfirm(request: ConfirmRequest) {
@@ -505,7 +496,7 @@
 				<ul class="list-inside list-disc space-y-1 text-xs">
 					{#each failed as item (item.evacuee_id)}
 						<li>
-							<span class="font-medium">{evacueeName(item.evacuee_id)}</span>
+							<span class="font-medium tabular-nums">{item.evacuee_id}</span>
 							— {item.error}
 						</li>
 					{/each}
@@ -519,7 +510,6 @@
 					<Table.Header>
 						<Table.Row class="bg-muted/40 hover:bg-muted/40">
 							<Table.Head class="font-semibold text-foreground">ชื่อผู้ประสบภัย</Table.Head>
-							<Table.Head class="font-semibold text-foreground">โซน</Table.Head>
 							<Table.Head class="font-semibold text-foreground">สถานะ</Table.Head>
 							<Table.Head class="font-semibold text-foreground">สร้างเมื่อ</Table.Head>
 							<Table.Head class="font-semibold text-foreground">ID</Table.Head>
@@ -545,10 +535,7 @@
 								}}
 							>
 								<Table.Cell class="font-semibold text-foreground">
-									{evacueeName(referral.evacuee_id, referral)}
-								</Table.Cell>
-								<Table.Cell class="text-muted-foreground">
-									{evacueeZone(referral.evacuee_id)}
+									{evacueeName(referral)}
 								</Table.Cell>
 								<Table.Cell>
 									<span

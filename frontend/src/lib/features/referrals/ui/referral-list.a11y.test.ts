@@ -2,9 +2,8 @@ import { describe, it, expect, vi } from 'vitest';
 import { render } from 'svelte/server';
 import type { Referral } from '../domain/referral.schema';
 
-vi.mock('$lib/features/people', () => ({
-	useEvacuees: () => ({ data: [] })
-}));
+const { useEvacuees } = vi.hoisted(() => ({ useEvacuees: vi.fn(() => ({ data: [] })) }));
+vi.mock('$lib/features/people', () => ({ useEvacuees }));
 
 vi.mock('$lib/db/shelter', () => ({
 	getShelterCode: () => 'SH001',
@@ -155,5 +154,32 @@ describe('referral-list accessibility', () => {
 		expect(html).toMatch(/role="alert"[^>]*>[^<]*โหลดรายการเพิ่มไม่สำเร็จ/);
 		expect(html).toContain('โหลดเพิ่ม');
 		expect(body).not.toContain('โหลดรายการเพิ่มไม่สำเร็จ');
+	});
+});
+
+describe('referral-list names come from evacuee_summary (F-04, F-06)', () => {
+	it('never loads the evacuee roster', () => {
+		render(ReferralList, { props: { referrals: [draftReferral] } });
+		expect(useEvacuees).not.toHaveBeenCalled();
+	});
+
+	it('shows the summary name, the mononym without trailing space, and a fallback without summary', () => {
+		const withSummary = {
+			...draftReferral,
+			_id: 'referral:a',
+			evacuee_id: 'evacuee:a',
+			evacuee_summary: { first_name: 'สมชาย', last_name: 'ใจดี' }
+		} as Referral;
+		const mononym = {
+			...draftReferral,
+			_id: 'referral:b',
+			evacuee_id: 'evacuee:b',
+			evacuee_summary: { first_name: 'มะลิ', last_name: '' }
+		} as Referral;
+		const legacy = { ...draftReferral, _id: 'referral:c', evacuee_id: 'evacuee:c' } as Referral;
+		const html = (r: Referral) => render(ReferralList, { props: { referrals: [r] } }).body;
+		expect(html(withSummary)).toContain('สมชาย ใจดี');
+		expect(html(mononym)).toMatch(/มะลิ(?! )/);
+		expect(html(legacy)).toContain('ไม่พบชื่อผู้ประสบภัย');
 	});
 });
