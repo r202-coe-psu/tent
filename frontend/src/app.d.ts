@@ -6,7 +6,10 @@ declare global {
 		// interface Error {}
 		// interface Locals {}
 		// interface PageData {}
-		// interface PageState {}
+		interface PageState {
+			/** Per-person failures of a create batch, passed to the batch page via `goto` state. */
+			failed?: { evacuee_id: string; error: string }[];
+		}
 		// interface Platform {}
 	}
 	interface Window {

@@ -8,7 +8,11 @@ import {
 	getEvacueeSelectionError,
 	resolveEvacueeName,
 	formatEvacueeFullName,
-	EVACUEE_NAME_FALLBACK
+	EVACUEE_NAME_FALLBACK,
+	buildReferralListHref,
+	parseReferralListParams,
+	referralBatchPath,
+	referralDetailPath
 } from './referral.ui-helpers';
 
 describe('getEvacueeSelectionError', () => {
@@ -51,5 +55,43 @@ describe('formatEvacueeFullName', () => {
 		expect(formatEvacueeFullName({ first_name: 'ทดสอบ', last_name: '  ' })).toBe('ทดสอบ');
 		expect(formatEvacueeFullName({ first_name: 'ทดสอบ' })).toBe('ทดสอบ');
 		expect(resolveEvacueeName({ first_name: 'ทดสอบ', last_name: '' })).toBe('ทดสอบ');
+	});
+});
+
+describe('referral route paths', () => {
+	it('encodes ids that contain a colon and round-trips through decodeURIComponent', () => {
+		const id = 'referral:01ABC';
+		expect(referralDetailPath(id)).toBe('/back-office/referrals/referral%3A01ABC');
+		expect(referralBatchPath(id)).toBe('/back-office/referrals/referral%3A01ABC/batch');
+		expect(decodeURIComponent(referralDetailPath(id).split('/').pop()!)).toBe(id);
+	});
+});
+
+describe('list URL params', () => {
+	it('defaults to outgoing / all / empty', () => {
+		expect(parseReferralListParams(new URLSearchParams())).toEqual({
+			direction: 'outgoing',
+			status: 'all',
+			q: ''
+		});
+	});
+
+	it('reads dir, status and q, ignoring unknown status values', () => {
+		expect(parseReferralListParams(new URLSearchParams('dir=in&status=sent&q=สม'))).toEqual({
+			direction: 'incoming',
+			status: 'sent',
+			q: 'สม'
+		});
+		expect(parseReferralListParams(new URLSearchParams('status=bogus&dir=x')).status).toBe('all');
+	});
+
+	it('builds a clean URL, omitting defaults', () => {
+		expect(buildReferralListHref({})).toBe('/back-office/referrals');
+		expect(buildReferralListHref({ direction: 'outgoing', status: 'all', q: '  ' })).toBe(
+			'/back-office/referrals'
+		);
+		expect(buildReferralListHref({ direction: 'incoming', status: 'sent', q: 'a b' })).toBe(
+			'/back-office/referrals?dir=in&status=sent&q=a+b'
+		);
 	});
 });

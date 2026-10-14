@@ -91,10 +91,24 @@ describe('referral-list accessibility', () => {
 		}
 	});
 
-	it('shows a visible focus ring on the list row (F-33)', () => {
-		const row = buttonElements(body).find((b) => b.includes('ไม่พบชื่อผู้ประสบภัย'));
-		expect(row).toBeDefined();
-		expect(openTag(row!)).toContain('focus-visible:ring-2');
+	it('renders rows as links with a visible focus ring and no checkboxes (F-33)', () => {
+		const links = body.match(/<a\b[^>]*href="\/back-office\/referrals\/[^"]*"[^>]*>/g) ?? [];
+		// One link in the md+ table, one in the card list.
+		expect(links).toHaveLength(2);
+		for (const tag of links) expect(tag).toContain('focus-visible:ring-2');
+		expect(body).not.toMatch(/type="checkbox"/);
+	});
+
+	it('links a single referral to its detail and a multi-member group to the batch page', () => {
+		expect(body).toContain('href="/back-office/referrals/referral%3A1"');
+		expect(body).not.toContain('/batch"');
+		const member = (id: string, evacuee: string) =>
+			({ ...draftReferral, _id: id, evacuee_id: evacuee }) as Referral;
+		const { body: html } = render(ReferralList, {
+			props: { referrals: [member('referral:m1', 'evacuee:1'), member('referral:m2', 'evacuee:2')] }
+		});
+		expect(html).toContain('ชุดส่งต่อ 2 คน');
+		expect(html).toMatch(/href="\/back-office\/referrals\/referral%3Am[12]\/batch"/);
 	});
 
 	it('exposes the direction control as a tablist with aria-selected', () => {
