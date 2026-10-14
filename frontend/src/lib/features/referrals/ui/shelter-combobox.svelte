@@ -174,7 +174,7 @@
 				: sheltersQuery.isError
 					? 'เกิดข้อผิดพลาดในการโหลดรายชื่อศูนย์พักพิง'
 					: 'เลือกศูนย์พักพิงปลายทาง...'}
-			class="flex h-10 w-full rounded-md border bg-background px-3 py-2 pr-8 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50
+			class="flex h-11 w-full rounded-md border bg-background px-3 py-2 pr-12 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 md:h-10 md:pr-8
 			{errorMessage || sheltersQuery.isError
 				? 'border-destructive focus-visible:ring-destructive'
 				: 'border-input focus-visible:ring-ring'}"
@@ -184,7 +184,7 @@
 				type="button"
 				onclick={clearSelection}
 				aria-label="ลบการเลือกศูนย์พักพิง"
-				class="absolute top-1/2 right-1 flex h-8 w-8 -translate-y-1/2 cursor-pointer items-center justify-center text-muted-foreground hover:text-foreground"
+				class="absolute top-1/2 right-0 flex h-11 w-11 -translate-y-1/2 cursor-pointer items-center justify-center text-muted-foreground hover:text-foreground md:right-1 md:h-8 md:w-8"
 			>
 				<X class="h-4 w-4" />
 			</button>
@@ -213,7 +213,7 @@
 					<button
 						type="button"
 						onclick={() => sheltersQuery.refetch()}
-						class="mt-1 inline-flex items-center gap-1.5 rounded-md bg-destructive/10 px-3 py-1.5 text-xs font-medium text-destructive transition-colors hover:bg-destructive/20 focus:outline-none"
+						class="mt-1 inline-flex min-h-11 items-center gap-1.5 rounded-md bg-destructive/10 px-3 py-1.5 text-xs font-medium text-destructive transition-colors hover:bg-destructive/20 focus:outline-none"
 					>
 						<RefreshCw class="h-3.5 w-3.5" />
 						ลองอีกครั้ง
@@ -288,7 +288,7 @@
 			<button
 				type="button"
 				onclick={() => sheltersQuery.refetch()}
-				class="font-medium underline hover:text-destructive/80"
+				class="inline-flex min-h-11 items-center px-2 font-medium underline hover:text-destructive/80"
 			>
 				ลองอีกครั้ง
 			</button>
