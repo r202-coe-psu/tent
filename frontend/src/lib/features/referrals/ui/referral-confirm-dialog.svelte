@@ -58,7 +58,7 @@
 		}
 	}
 >
-	<AlertDialog.Content class="gap-4 p-5" portalProps={{ disabled: portalDisabled }}>
+	<AlertDialog.Content class="gap-4" portalProps={{ disabled: portalDisabled }}>
 		<AlertDialog.Header class="gap-2">
 			<AlertDialog.Title class="text-base font-bold text-slate-900">{title}</AlertDialog.Title>
 			<AlertDialog.Description class="space-y-1 text-sm text-slate-700">

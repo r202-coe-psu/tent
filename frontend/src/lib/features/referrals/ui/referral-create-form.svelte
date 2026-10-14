@@ -29,11 +29,12 @@
 		formData: ReferralInput;
 		intent: ReferralSubmitIntent;
 		evacueeIds: string[];
-		names: string[];
 	};
 	/** Set when a "ส่งข้อมูล" submit awaits confirmation; kept after close so the dialog stays mounted. */
 	let pendingSend = $state.raw<PendingSend | null>(null);
 	let sendConfirmOpen = $state(false);
+	// Resolved at render time so names fill in once the evacuee list has loaded.
+	const pendingNames = $derived(pendingSend ? namesFor(pendingSend.evacueeIds) : []);
 
 	let selectedIds = $state<string[]>([]);
 	let selectedType = $state<'medical-emergency' | 'capacity' | 'resource'>('medical-emergency');
@@ -74,7 +75,7 @@
 		if (intent === 'send') {
 			// Sending moves referrals out of draft, so confirm first. Snapshot the selection now.
 			const evacueeIds = [...selectedIds];
-			pendingSend = { formData, intent, evacueeIds, names: namesFor(evacueeIds) };
+			pendingSend = { formData, intent, evacueeIds };
 			sendConfirmOpen = true;
 			return;
 		}
@@ -238,7 +239,7 @@
 		<ReferralConfirmDialog
 			bind:open={sendConfirmOpen}
 			title="ยืนยันการสร้างและส่งข้อมูล"
-			names={pendingSend.names}
+			names={pendingNames}
 			count={pendingSend.evacueeIds.length}
 			confirmLabel={`สร้างและส่ง ${pendingSend.evacueeIds.length} รายการ`}
 			pending={batchMutation.isPending}
