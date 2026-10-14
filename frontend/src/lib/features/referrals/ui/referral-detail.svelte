@@ -23,6 +23,7 @@
 	import { useTransitionReferral } from '../application/queries';
 	import { getShelterCode } from '$lib/db/shelter';
 	import RedactionBanner from './redaction-banner.svelte';
+	import ReferralConfirmDialog from './referral-confirm-dialog.svelte';
 	import {
 		formatReferralDate as formatDate,
 		getKindLabel,
@@ -40,6 +41,23 @@
 	let showReasonPrompt = $state<'accepted' | 'rejected' | null>(null);
 	let transitionInFlight = $state(false);
 	const isTransitionBusy = $derived(transitionMutation.isPending || transitionInFlight);
+
+	type ConfirmRequest = {
+		title: string;
+		description?: string;
+		names: string[];
+		count: number;
+		confirmLabel: string;
+		destructive?: boolean;
+		run: () => Promise<unknown>;
+	};
+	let confirmOpen = $state(false);
+	let confirmRequest = $state.raw<ConfirmRequest | null>(null);
+	const subjectNames = $derived([
+		referral.evacuee_summary
+			? `${referral.evacuee_summary.first_name} ${referral.evacuee_summary.last_name}`
+			: referral.evacuee_id
+	]);
 
 	const actorShelter = $derived(getShelterCode());
 	const canRespond = $derived(canActorRespond(referral, actorShelter));
@@ -85,10 +103,59 @@
 		showReasonPrompt = to;
 	}
 
-	async function submitWithReason() {
+	function askConfirm(request: ConfirmRequest) {
+		confirmRequest = request;
+		confirmOpen = true;
+	}
+
+	function confirmSend() {
+		askConfirm({
+			title: 'ยืนยันการส่งตัว',
+			names: subjectNames,
+			count: 1,
+			confirmLabel: 'ส่งตัว',
+			run: () => handleTransition('sent', 'ส่งตัว')
+		});
+	}
+
+	function confirmCancelDraft() {
+		askConfirm({
+			title: 'ยืนยันการยกเลิกร่าง',
+			names: subjectNames,
+			count: 1,
+			confirmLabel: 'ยกเลิกร่าง',
+			destructive: true,
+			run: () => handleTransition('closed', 'ยกเลิกร่าง')
+		});
+	}
+
+	function confirmClose() {
+		askConfirm({
+			title: 'ยืนยันการปิดรายการ',
+			names: subjectNames,
+			count: 1,
+			confirmLabel: 'ปิดรายการ',
+			destructive: true,
+			run: () => handleTransition('closed', 'ปิดรายการ')
+		});
+	}
+
+	function submitWithReason() {
 		if (!showReasonPrompt) return;
-		const label = showReasonPrompt === 'accepted' ? 'ตอบรับ' : 'ปฏิเสธ';
-		await handleTransition(showReasonPrompt, label, responseReasonInput.trim());
+		const to = showReasonPrompt;
+		const label = to === 'accepted' ? 'ตอบรับ' : 'ปฏิเสธ';
+		const reason = responseReasonInput.trim();
+		askConfirm({
+			title: `ยืนยันการ${label}`,
+			description: reason
+				? `เหตุผลนี้จะใช้กับ 1 รายการ: ${reason}`
+				: 'ไม่ได้ระบุเหตุผล จะใช้กับ 1 รายการ',
+			names: subjectNames,
+			count: 1,
+			confirmLabel: `ยืนยัน${label}`,
+			destructive: to === 'rejected',
+			run: () => handleTransition(to, label, reason)
+		});
 	}
 </script>
 
@@ -372,7 +439,7 @@
 					size="sm"
 					variant="default"
 					class="gap-1.5"
-					onclick={() => handleTransition('sent', 'ส่งตัว')}
+					onclick={confirmSend}
 					disabled={isTransitionBusy}
 				>
 					<Send class="h-4 w-4" />
@@ -411,7 +478,7 @@
 						size="sm"
 						variant="outline"
 						class="gap-1.5 border-rose-300 text-rose-700 hover:bg-rose-50"
-						onclick={() => handleTransition('closed', 'ยกเลิกร่าง')}
+						onclick={confirmCancelDraft}
 						disabled={isTransitionBusy}
 					>
 						<Ban class="h-4 w-4" />
@@ -424,9 +491,7 @@
 						class="gap-1.5 border-slate-300 text-slate-700 hover:bg-slate-50"
 						data-testid="btn-close-referral"
 						disabled={isTransitionBusy}
-						onclick={() => {
-							handleTransition('closed', 'ปิดรายการ');
-						}}
+						onclick={confirmClose}
 					>
 						<Archive class="h-4 w-4" />
 						ปิดรายการ (Close)
@@ -435,4 +500,15 @@
 			{/if}
 		</Card.Footer>
 	</Card.Root>
+	<ReferralConfirmDialog
+		bind:open={confirmOpen}
+		title={confirmRequest?.title ?? ''}
+		description={confirmRequest?.description}
+		names={confirmRequest?.names ?? []}
+		count={confirmRequest?.count ?? 0}
+		confirmLabel={confirmRequest?.confirmLabel ?? ''}
+		destructive={confirmRequest?.destructive}
+		pending={isTransitionBusy}
+		onConfirm={() => confirmRequest?.run()}
+	/>
 </div>

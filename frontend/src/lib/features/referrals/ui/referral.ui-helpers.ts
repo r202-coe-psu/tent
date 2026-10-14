@@ -139,6 +139,23 @@ export function getDirectionBadgeVariant(direction: 'outgoing' | 'incoming' | 'i
 	return variants[direction];
 }
 
+/** Max names listed in a referral confirm dialog before the rest is summarised as "และอีก N คน". */
+export const REFERRAL_CONFIRM_NAME_LIMIT = 5;
+
+/**
+ * Names line for a referral confirm dialog: the first `limit` names joined by ", ", then
+ * " และอีก N คน" for the remainder. Returns '' for an empty list.
+ */
+export function formatReferralNameSummary(
+	names: readonly string[],
+	limit: number = REFERRAL_CONFIRM_NAME_LIMIT
+): string {
+	if (names.length === 0) return '';
+	const shown = names.slice(0, limit).join(', ');
+	const remaining = names.length - limit;
+	return remaining > 0 ? `${shown} และอีก ${remaining} คน` : shown;
+}
+
 /**
  * Validation message for the evacuee picker on the create-referral form.
  * Returns undefined when at least one evacuee is selected.

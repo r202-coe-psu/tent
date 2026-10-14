@@ -6,12 +6,14 @@
 	import { type Referral, type ReferralInput } from '../domain/referral.schema';
 	import type { ReferralBatchFailure, ReferralSubmitIntent } from '../data/referral.repository';
 	import { useCreateReferralBatch } from '../application/queries';
+	import { useEvacuees } from '$lib/features/people';
 	import { getEvacueeSelectionError } from './referral.ui-helpers';
 	import RedactionBanner from './redaction-banner.svelte';
 	import EvacueePickerTable from './evacuee-picker-table.svelte';
 	import MedicalReferralForm from './medical-referral-form.svelte';
 	import CapacityReferralForm from './capacity-referral-form.svelte';
 	import ResourceReferralForm from './resource-referral-form.svelte';
+	import ReferralConfirmDialog from './referral-confirm-dialog.svelte';
 
 	let {
 		onBatchDone
@@ -21,6 +23,18 @@
 
 	const queryClient = useQueryClient();
 	const batchMutation = useCreateReferralBatch(queryClient);
+	const evacueesQuery = useEvacuees();
+
+	type PendingSend = {
+		formData: ReferralInput;
+		intent: ReferralSubmitIntent;
+		evacueeIds: string[];
+	};
+	/** Set when a "ส่งข้อมูล" submit awaits confirmation; kept after close so the dialog stays mounted. */
+	let pendingSend = $state.raw<PendingSend | null>(null);
+	let sendConfirmOpen = $state(false);
+	// Resolved at render time so names fill in once the evacuee list has loaded.
+	const pendingNames = $derived(pendingSend ? namesFor(pendingSend.evacueeIds) : []);
 
 	let selectedIds = $state<string[]>([]);
 	let selectedType = $state<'medical-emergency' | 'capacity' | 'resource'>('medical-emergency');
@@ -42,6 +56,13 @@
 		toast.error(error);
 	}
 
+	function namesFor(ids: string[]): string[] {
+		return ids.map((id) => {
+			const found = evacueesQuery.data?.find((e) => e._id === id);
+			return found ? `${found.first_name} ${found.last_name}` : id;
+		});
+	}
+
 	async function handleSubmit(formData: ReferralInput, intent: ReferralSubmitIntent) {
 		const selectionError = getEvacueeSelectionError(selectedIds);
 		if (selectionError) {
@@ -51,16 +72,37 @@
 		}
 
 		selectionAttempted = false;
+		if (intent === 'send') {
+			// Sending moves referrals out of draft, so confirm first. Snapshot the selection now.
+			const evacueeIds = [...selectedIds];
+			pendingSend = { formData, intent, evacueeIds };
+			sendConfirmOpen = true;
+			return;
+		}
+		await submitBatch(formData, intent, [...selectedIds]);
+	}
+
+	function confirmPendingSend() {
+		const request = pendingSend;
+		if (!request) return;
+		return submitBatch(request.formData, request.intent, request.evacueeIds);
+	}
+
+	async function submitBatch(
+		formData: ReferralInput,
+		intent: ReferralSubmitIntent,
+		evacueeIds: string[]
+	) {
 		const actionLabel = intent === 'send' ? 'สร้างและส่ง' : 'บันทึกร่าง';
 		const mutation = batchMutation.mutateAsync({
 			template: formData,
-			evacueeIds: [...selectedIds],
+			evacueeIds,
 			intent
 		});
 
 		try {
 			void toast.promise(mutation, {
-				loading: `กำลัง${actionLabel} ${selectedIds.length} รายการ...`,
+				loading: `กำลัง${actionLabel} ${evacueeIds.length} รายการ...`,
 				success: (res) => {
 					if (res.failed.length === 0) {
 						return intent === 'send'
@@ -193,4 +235,15 @@
 			</div>
 		</Card.Content>
 	</Card.Root>
+	{#if pendingSend}
+		<ReferralConfirmDialog
+			bind:open={sendConfirmOpen}
+			title="ยืนยันการสร้างและส่งข้อมูล"
+			names={pendingNames}
+			count={pendingSend.evacueeIds.length}
+			confirmLabel={`สร้างและส่ง ${pendingSend.evacueeIds.length} รายการ`}
+			pending={batchMutation.isPending}
+			onConfirm={confirmPendingSend}
+		/>
+	{/if}
 </div>
