@@ -258,7 +258,7 @@
 										{/if}
 										<span class="text-sm font-medium">{shelter.name}</span>
 									</div>
-									<span class="font-mono text-xs text-muted-foreground">({shelter.code})</span>
+									<span class="text-xs text-muted-foreground tabular-nums">({shelter.code})</span>
 								</div>
 								<div class="mt-0.5 flex items-center gap-2 pl-6 text-xs text-muted-foreground">
 									{#if shelter.province}
