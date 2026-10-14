@@ -29,7 +29,8 @@
 		getKindLabel,
 		getStatusLabel,
 		getUrgencyLabel,
-		getUrgencyStyle
+		getUrgencyStyle,
+		resolveEvacueeName
 	} from './referral.ui-helpers';
 
 	let { referral }: { referral: Referral } = $props();
@@ -53,11 +54,7 @@
 	};
 	let confirmOpen = $state(false);
 	let confirmRequest = $state.raw<ConfirmRequest | null>(null);
-	const subjectNames = $derived([
-		referral.evacuee_summary
-			? `${referral.evacuee_summary.first_name} ${referral.evacuee_summary.last_name}`
-			: referral.evacuee_id
-	]);
+	const subjectNames = $derived([resolveEvacueeName(referral.evacuee_summary)]);
 
 	const actorShelter = $derived(getShelterCode());
 	const canRespond = $derived(canActorRespond(referral, actorShelter));

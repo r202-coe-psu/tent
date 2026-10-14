@@ -37,7 +37,8 @@
 		getStatusLabel,
 		getUrgencyLabel,
 		getUrgencyStyle,
-		isRowActivationKey
+		isRowActivationKey,
+		resolveEvacueeName
 	} from './referral.ui-helpers';
 
 	let {
@@ -161,12 +162,10 @@
 	);
 
 	function evacueeName(evacueeId: string, referral?: Referral): string {
-		const found = evacueesQuery.data?.find((e) => e._id === evacueeId);
-		if (found) return `${found.first_name} ${found.last_name}`;
-		if (referral?.evacuee_summary) {
-			return `${referral.evacuee_summary.first_name} ${referral.evacuee_summary.last_name}`;
-		}
-		return evacueeId;
+		return resolveEvacueeName(
+			evacueesQuery.data?.find((e) => e._id === evacueeId),
+			referral?.evacuee_summary
+		);
 	}
 
 	function evacueeZone(evacueeId: string): string {

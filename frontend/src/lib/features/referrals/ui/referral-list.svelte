@@ -19,7 +19,8 @@
 		isIncomingListItem,
 		getReferralDirection,
 		getDirectionLabel,
-		getDirectionBadgeVariant
+		getDirectionBadgeVariant,
+		resolveEvacueeName
 	} from './referral.ui-helpers';
 
 	let {
@@ -45,12 +46,10 @@
 	) as Evacuee[];
 
 	function getEvacueeName(evacueeId: string, referral?: Referral): string {
-		const evac = resolvedEvacuees.find((e) => e._id === evacueeId);
-		if (evac) return `${evac.first_name} ${evac.last_name}`;
-		if (referral?.evacuee_summary) {
-			return `${referral.evacuee_summary.first_name} ${referral.evacuee_summary.last_name}`;
-		}
-		return 'ไม่พบชื่อผู้ประสบภัย';
+		return resolveEvacueeName(
+			resolvedEvacuees.find((e) => e._id === evacueeId),
+			referral?.evacuee_summary
+		);
 	}
 
 	// Local state for filtering and pagination

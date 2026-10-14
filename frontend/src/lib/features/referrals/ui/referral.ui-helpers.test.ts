@@ -7,7 +7,9 @@ vi.mock('$lib/db/shelter', () => ({
 import {
 	REFERRAL_LIST_CAP,
 	isReferralListCapReached,
-	getEvacueeSelectionError
+	getEvacueeSelectionError,
+	resolveEvacueeName,
+	EVACUEE_NAME_FALLBACK
 } from './referral.ui-helpers';
 
 describe('REFERRAL_LIST_CAP', () => {
@@ -44,5 +46,24 @@ describe('getEvacueeSelectionError', () => {
 	it('returns undefined when at least one evacuee is selected', () => {
 		expect(getEvacueeSelectionError(['evacuee:01A'])).toBeUndefined();
 		expect(getEvacueeSelectionError(['evacuee:01A', 'evacuee:01B'])).toBeUndefined();
+	});
+});
+
+describe('resolveEvacueeName', () => {
+	const roster = { first_name: 'สมชาย', last_name: 'ใจดี' };
+	const summary = { first_name: 'สมหญิง', last_name: 'รักดี' };
+
+	it('prefers the roster name over the summary', () => {
+		expect(resolveEvacueeName(roster, summary)).toBe('สมชาย ใจดี');
+	});
+
+	it('falls back to the summary when the roster has no match', () => {
+		expect(resolveEvacueeName(undefined, summary)).toBe('สมหญิง รักดี');
+		expect(resolveEvacueeName(null, summary)).toBe('สมหญิง รักดี');
+	});
+
+	it('returns the shared fallback text when no source has a name', () => {
+		expect(resolveEvacueeName()).toBe(EVACUEE_NAME_FALLBACK);
+		expect(resolveEvacueeName(undefined, undefined)).toBe('ไม่พบชื่อผู้ประสบภัย');
 	});
 });
