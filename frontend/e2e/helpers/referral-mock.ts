@@ -34,6 +34,10 @@ export interface ReferralStore {
 	batchReads: string[];
 	/** Every PATCH transition the page sent, in order. */
 	patches: { id: string; body: { to: string; reason?: string } }[];
+	/** Referral ids that POST bulk-transition reports as failed (per-item error, others succeed). */
+	bulkFailIds: string[];
+	/** Every POST bulk-transition the page sent, in order. */
+	bulkCalls: { ids: string[]; to: string; reason?: string }[];
 	/** When set, PATCH waits on this promise before answering (in-flight window). */
 	patchGate?: Promise<unknown>;
 	/** Every non-GET request the page made to the BFF or CouchDB. */
@@ -50,6 +54,8 @@ export function newReferralStore(rows: ReferralRow[] = []): ReferralStore {
 		evacueeSummaries: {},
 		createFailIds: [],
 		batchReads: [],
+		bulkFailIds: [],
+		bulkCalls: [],
 		patches: [],
 		writes: []
 	};
@@ -257,6 +263,29 @@ export async function mockReferralApi(page: Page, store: ReferralStore): Promise
 				if (store.pageFail && new URL(req.url()).searchParams.has('bookmark'))
 					return route.fulfill({ status: 500, json: { error: 'mock page failure' } });
 				return route.fulfill({ json: listPage(store, new URL(req.url()).searchParams) });
+			}
+			if (path === '/api/back-office/referral/bulk-transition') {
+				if (req.method() !== 'POST') return route.fallback();
+				const body = req.postDataJSON() as { ids: string[]; to: string; reason?: string };
+				store.bulkCalls.push(body);
+				const succeeded: ReferralRow[] = [];
+				const failed: { id: string; error: string }[] = [];
+				for (const id of body.ids) {
+					const current = store.referrals[id];
+					if (!current || store.bulkFailIds.includes(id)) {
+						failed.push({ id, error: current ? 'mock bulk failure' : 'not found' });
+						continue;
+					}
+					const next: ReferralRow = {
+						...current,
+						status: body.to,
+						updated_at: new Date().toISOString(),
+						...(body.reason ? { close_reason: body.reason } : {})
+					};
+					store.referrals[id] = next;
+					succeeded.push(next);
+				}
+				return route.fulfill({ json: { succeeded, failed } });
 			}
 			const match = path.match(/^\/api\/back-office\/referral\/([^/]+)(\/transition|\/batch)?$/);
 			if (!match) return route.fallback();
