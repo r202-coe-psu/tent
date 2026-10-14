@@ -59,13 +59,6 @@
 	let currentPage = $state(1);
 	const PAGE_SIZE = 10;
 
-	// Reset currentPage automatically when activeTab or searchQuery changes
-	$effect(() => {
-		void searchQuery;
-		void activeTab;
-		currentPage = 1;
-	});
-
 	// Filter pipeline (per referral), then collapse batches into one row
 	const filteredGroups = $derived.by(() => {
 		let list = referrals;
@@ -120,6 +113,9 @@
 		<input
 			type="text"
 			bind:value={searchQuery}
+			oninput={() => {
+				currentPage = 1;
+			}}
 			aria-label="ค้นหารายการส่งต่อ"
 			placeholder="ค้นหาชื่อผู้ประสบภัย หรือหน่วยงาน/ศูนย์พักพิงปลายทาง..."
 			class="flex h-9 w-full min-w-0 rounded-md border border-input bg-background px-3 py-1 pl-9 text-base shadow-xs ring-offset-background transition-[color,box-shadow] outline-none selection:bg-primary selection:text-primary-foreground placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 md:text-sm dark:bg-input/30 dark:aria-invalid:ring-destructive/40"
@@ -138,7 +134,10 @@
 				type="button"
 				aria-pressed={isActive}
 				onclick={() => {
-					activeTab = tab.value;
+					if (activeTab !== tab.value) {
+						activeTab = tab.value;
+						currentPage = 1;
+					}
 				}}
 				class="-mb-px inline-flex items-center gap-1.5 border-b-2 px-4 py-2 text-sm transition-all hover:text-foreground focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none
 				{isActive
@@ -272,7 +271,7 @@
 				{#snippet children({ pages })}
 					<Pagination.Content>
 						<Pagination.Previous />
-						{#each pages as p, i (i)}
+						{#each pages as p (p.key)}
 							<Pagination.Item>
 								{#if p.type === 'page'}
 									<Pagination.Link page={p} isActive={p.value === currentPage} />
