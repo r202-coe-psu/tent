@@ -26,6 +26,8 @@ export interface ReferralStore {
 	detailFail: boolean;
 	/** Make GET /api/back-office/referral/:id/batch return 500. */
 	batchFail: boolean;
+	/** Name snapshot the BFF writes as `evacuee_summary` on create, by evacuee id. */
+	evacueeSummaries: Record<string, { first_name: string; last_name: string }>;
 	/** Evacuee ids whose POST create is answered with a 500. */
 	createFailIds: string[];
 	/** Every GET of a batch the page made (anchor ids), in order. */
@@ -45,6 +47,7 @@ export function newReferralStore(rows: ReferralRow[] = []): ReferralStore {
 		pageFail: false,
 		detailFail: false,
 		batchFail: false,
+		evacueeSummaries: {},
 		createFailIds: [],
 		batchReads: [],
 		patches: [],
@@ -234,6 +237,9 @@ export async function mockReferralApi(page: Page, store: ReferralStore): Promise
 					const created_at = new Date(Date.UTC(2026, 9, 14, 9, 0, createdCount % 60)).toISOString();
 					const doc = referralFixture({
 						...body,
+						...(store.evacueeSummaries[body.evacuee_id]
+							? { evacuee_summary: store.evacueeSummaries[body.evacuee_id] }
+							: {}),
 						_id: `referral:mock_created_${createdCount}`,
 						status: 'draft',
 						timeline: {},

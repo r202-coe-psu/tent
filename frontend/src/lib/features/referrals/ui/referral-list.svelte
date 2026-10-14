@@ -22,7 +22,6 @@
 		ReferralStatus
 	} from '../domain/referral.schema';
 	import { groupReferralsForList, type ReferralListGroup } from '../domain/referral.batch-group';
-	import { useEvacuees, type Evacuee } from '$lib/features/people';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import {
@@ -39,7 +38,6 @@
 
 	let {
 		referrals,
-		evacuees = null,
 		direction = 'outgoing',
 		onDirectionChange,
 		status = 'all',
@@ -55,7 +53,6 @@
 		onLoadMore
 	}: {
 		referrals: Referral[];
-		evacuees?: Evacuee[] | null;
 		/** Server query inputs — the parent owns them (URL) and refetches on change. */
 		direction?: ReferralDirectionFilter;
 		onDirectionChange?: (next: ReferralDirectionFilter) => void;
@@ -73,17 +70,9 @@
 		onLoadMore?: () => void;
 	} = $props();
 
-	// Load evacuees client-side if not provided (names fall back to `evacuee_summary`).
-	const evacueesQuery = useEvacuees();
-	const resolvedEvacuees = $derived(
-		evacuees !== null ? evacuees : (evacueesQuery.data ?? [])
-	) as Evacuee[];
-
-	function getEvacueeName(evacueeId: string, referral?: Referral): string {
-		return resolveEvacueeName(
-			resolvedEvacuees.find((e) => e._id === evacueeId),
-			referral?.evacuee_summary
-		);
+	/** Names come from the referral's own `evacuee_summary` snapshot — no evacuee roster is loaded. */
+	function getEvacueeName(referral: Referral): string {
+		return resolveEvacueeName(referral.evacuee_summary);
 	}
 
 	// Typing updates this immediately; it re-syncs whenever the `search` prop changes (URL back/forward).
@@ -94,7 +83,7 @@
 		const query = searchInput.toLowerCase().trim();
 		if (query) {
 			list = list.filter((r) => {
-				const evacName = getEvacueeName(r.evacuee_id, r).toLowerCase();
+				const evacName = getEvacueeName(r).toLowerCase();
 				const orgName = r.to_org?.name?.toLowerCase() ?? r.to_shelter_code?.toLowerCase() ?? '';
 				const evacId = r.evacuee_id.toLowerCase();
 				return evacName.includes(query) || orgName.includes(query) || evacId.includes(query);
@@ -138,7 +127,7 @@
 		if (group.count > 1) {
 			return `ชุดส่งต่อ ${group.count} คน`;
 		}
-		return getEvacueeName(group.sample.evacuee_id, group.sample);
+		return getEvacueeName(group.sample);
 	}
 
 	/** Outgoing tab shows where it goes; incoming tab shows where it came from. */
