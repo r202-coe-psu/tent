@@ -94,12 +94,13 @@ test.describe('Referrals — mocked UI contracts', { tag: ['@regression', '@back
 		await expect(alert).toHaveCount(0);
 	});
 
-	test('#548 shows the 50-row ceiling notice when the list is full', async ({ page }) => {
+	test('#552 loads more rows on demand until the list ends', async ({ page }) => {
 		const store = newReferralStore(
-			Array.from({ length: 50 }, (_, i) =>
+			Array.from({ length: 60 }, (_, i) =>
 				referralFixture({
-					_id: `referral:mock_cap_${i}`,
+					_id: `referral:mock_page_${String(i).padStart(2, '0')}`,
 					reason: `เหตุผล ${i}`,
+					created_at: new Date(Date.UTC(2026, 9, 14, 8, 0, 60 - i)).toISOString(),
 					evacuee_summary: { first_name: 'ผู้ประสบภัย', last_name: `ลำดับ ${i}` }
 				})
 			)
@@ -107,21 +108,11 @@ test.describe('Referrals — mocked UI contracts', { tag: ['@regression', '@back
 		await signInMocked(page, store);
 		await page.goto('/back-office/referrals');
 
-		await expect(page.getByRole('group', { name: 'กรองตามสถานะ' })).toBeVisible();
-		await expect(page.getByText('แสดง 50 รายการล่าสุด')).toBeVisible();
-	});
-
-	test('#548 no ceiling notice below 50 rows', async ({ page }) => {
-		const store = newReferralStore(
-			Array.from({ length: 49 }, (_, i) =>
-				referralFixture({ _id: `referral:mock_below_${i}`, reason: `เหตุผล ${i}` })
-			)
-		);
-		await signInMocked(page, store);
-		await page.goto('/back-office/referrals');
-
-		await expect(page.getByRole('group', { name: 'กรองตามสถานะ' })).toBeVisible();
-		await expect(page.getByText(/แสดง \d+ รายการล่าสุด/)).toHaveCount(0);
+		await expect(page.getByText('แสดง 50 รายการ')).toBeVisible({ timeout: 20_000 });
+		await page.getByRole('button', { name: 'โหลดเพิ่ม' }).click();
+		await expect(page.getByText('แสดง 60 รายการ')).toBeVisible();
+		await expect(page.getByText('ไม่มีรายการเพิ่มเติม')).toBeVisible();
+		await expect(page.getByRole('button', { name: 'โหลดเพิ่ม' })).toHaveCount(0);
 	});
 
 	test('#548 detail load failure shows an error with retry and a way back', async ({ page }) => {
@@ -333,6 +324,7 @@ test.describe('Referrals — mocked UI contracts', { tag: ['@regression', '@back
 		]);
 		await signInMocked(page, store);
 		await page.goto('/back-office/referrals');
+		await page.getByRole('tab', { name: 'ขาเข้า' }).click();
 		await page.getByRole('button', { name: /สมชาย ทดสอบ/ }).click();
 
 		await page.getByRole('button', { name: /ตอบรับการส่งต่อ/ }).click();

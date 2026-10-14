@@ -2,15 +2,22 @@
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import AlertCircle from '@lucide/svelte/icons/alert-circle';
 	import Check from '@lucide/svelte/icons/check';
+	import Loader2 from '@lucide/svelte/icons/loader-2';
+	import RotateCw from '@lucide/svelte/icons/rotate-cw';
+	import TriangleAlert from '@lucide/svelte/icons/triangle-alert';
 	import Eye from '@lucide/svelte/icons/eye';
 	import Search from '@lucide/svelte/icons/search';
 	import Users from '@lucide/svelte/icons/users';
-	import type { Referral, ReferralStatus } from '../domain/referral.schema';
+	import type {
+		Referral,
+		ReferralDirectionFilter,
+		ReferralStatus
+	} from '../domain/referral.schema';
 	import { groupReferralsForList, type ReferralListGroup } from '../domain/referral.batch-group';
 	import { useEvacuees, type Evacuee } from '$lib/features/people';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { Input } from '$lib/components/ui/input/index.js';
-	import * as Pagination from '$lib/components/ui/pagination/index.js';
+	import { Button } from '$lib/components/ui/button/index.js';
 	import {
 		formatReferralDate,
 		getStatusBadgeVariant,
@@ -24,16 +31,39 @@
 		resolveEvacueeName
 	} from './referral.ui-helpers';
 
+	type StatusTab = 'all' | ReferralStatus;
+
 	let {
 		referrals,
 		onSelect,
 		selectedKey = null,
-		evacuees = null
+		evacuees = null,
+		direction = 'outgoing',
+		onDirectionChange,
+		status = 'all',
+		onStatusChange,
+		isLoading = false,
+		isError = false,
+		onRetry,
+		hasMore = false,
+		isFetchingMore = false,
+		onLoadMore
 	}: {
 		referrals: Referral[];
 		onSelect?: (group: ReferralListGroup) => void;
 		selectedKey?: string | null;
 		evacuees?: Evacuee[] | null;
+		/** Server query inputs — the parent owns them and refetches on change. */
+		direction?: ReferralDirectionFilter;
+		onDirectionChange?: (next: ReferralDirectionFilter) => void;
+		status?: StatusTab;
+		onStatusChange?: (next: StatusTab) => void;
+		isLoading?: boolean;
+		isError?: boolean;
+		onRetry?: () => void;
+		hasMore?: boolean;
+		isFetchingMore?: boolean;
+		onLoadMore?: () => void;
 	} = $props();
 
 	const actorShelter = $derived(getShelterCode());
@@ -53,19 +83,11 @@
 		);
 	}
 
-	// Local state for filtering and pagination
-	let activeTab = $state<'all' | ReferralStatus>('all');
+	// Search filters the already-loaded rows only; direction/status are server-side.
 	let searchQuery = $state('');
-	let currentPage = $state(1);
-	const PAGE_SIZE = 10;
 
-	// Filter pipeline (per referral), then collapse batches into one row
 	const filteredGroups = $derived.by(() => {
 		let list = referrals;
-		if (activeTab !== 'all') {
-			list = list.filter((r) => r.status === activeTab);
-		}
-
 		if (searchQuery.trim()) {
 			const query = searchQuery.toLowerCase().trim();
 			list = list.filter((r) => {
@@ -75,21 +97,21 @@
 				return evacName.includes(query) || orgName.includes(query) || evacId.includes(query);
 			});
 		}
-
 		return groupReferralsForList(list);
 	});
 
-	const paginatedGroups = $derived(
-		filteredGroups.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE)
-	);
-
-	const tabs: { value: 'all' | ReferralStatus; label: string }[] = [
+	const tabs: { value: StatusTab; label: string }[] = [
 		{ value: 'all', label: 'ทั้งหมด' },
 		{ value: 'draft', label: 'ฉบับร่าง (Draft)' },
 		{ value: 'sent', label: 'ส่งแล้ว (Sent)' },
 		{ value: 'accepted', label: 'ตอบรับแล้ว (Accepted)' },
 		{ value: 'rejected', label: 'ปฏิเสธ (Rejected)' },
 		{ value: 'closed', label: 'ปิดรายการ (Closed)' }
+	];
+
+	const directions: { value: ReferralDirectionFilter; label: string }[] = [
+		{ value: 'outgoing', label: 'ขาออก' },
+		{ value: 'incoming', label: 'ขาเข้า' }
 	];
 
 	function primaryLabel(group: ReferralListGroup): string {
@@ -113,31 +135,50 @@
 		<Input
 			type="text"
 			bind:value={searchQuery}
-			oninput={() => {
-				currentPage = 1;
-			}}
 			aria-label="ค้นหารายการส่งต่อ"
 			placeholder="ค้นหาชื่อผู้ประสบภัย หรือหน่วยงาน/ศูนย์พักพิงปลายทาง..."
 			class="bg-background pl-9 placeholder:text-base md:placeholder:text-sm"
 		/>
 	</div>
 
-	<!-- Row 2: Filter Tabs -->
+	<!-- Row 2: Direction (server query) -->
+	<div
+		role="tablist"
+		aria-label="ทิศทางการส่งต่อ"
+		class="inline-flex rounded-lg border border-border bg-muted/40 p-0.5"
+	>
+		{#each directions as d (d.value)}
+			{@const isActive = direction === d.value}
+			<button
+				type="button"
+				role="tab"
+				aria-selected={isActive}
+				onclick={() => {
+					if (!isActive) onDirectionChange?.(d.value);
+				}}
+				class="rounded-md px-4 py-1.5 text-sm transition-colors focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none
+				{isActive
+					? 'bg-card font-semibold text-primary shadow-xs'
+					: 'font-medium text-muted-foreground hover:text-foreground'}"
+			>
+				{d.label}
+			</button>
+		{/each}
+	</div>
+
+	<!-- Row 3: Status tabs (server query) -->
 	<div
 		role="group"
 		aria-label="กรองตามสถานะ"
 		class="flex flex-wrap gap-1.5 border-b border-border pb-px"
 	>
 		{#each tabs as tab (tab.value)}
-			{@const isActive = activeTab === tab.value}
+			{@const isActive = status === tab.value}
 			<button
 				type="button"
 				aria-pressed={isActive}
 				onclick={() => {
-					if (activeTab !== tab.value) {
-						activeTab = tab.value;
-						currentPage = 1;
-					}
+					if (status !== tab.value) onStatusChange?.(tab.value);
 				}}
 				class="-mb-px inline-flex items-center gap-1.5 border-b-2 px-4 py-2 text-sm transition-all hover:text-foreground focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none
 				{isActive
@@ -153,7 +194,25 @@
 	</div>
 
 	<!-- List -->
-	{#if paginatedGroups.length === 0}
+	{#if isLoading}
+		<div class="flex flex-col items-center justify-center gap-2 py-12 text-muted-foreground">
+			<Loader2 class="h-8 w-8 animate-spin text-primary" />
+			<span class="text-sm">กำลังโหลดข้อมูล...</span>
+		</div>
+	{:else if isError}
+		<div
+			role="alert"
+			class="flex flex-col items-center justify-center gap-3 rounded-xl border border-red-200 bg-white py-12 text-center"
+		>
+			<TriangleAlert class="h-8 w-8 text-red-600" />
+			<h3 class="font-semibold text-foreground">โหลดรายการส่งต่อไม่สำเร็จ</h3>
+			<p class="text-sm text-muted-foreground">กรุณาตรวจสอบการเชื่อมต่อแล้วลองใหม่อีกครั้ง</p>
+			<Button variant="outline" onclick={() => onRetry?.()} class="gap-2">
+				<RotateCw class="h-4 w-4" />
+				ลองใหม่
+			</Button>
+		</div>
+	{:else if filteredGroups.length === 0}
 		<div
 			class="flex flex-col items-center justify-center rounded-xl border border-dashed border-border bg-card p-12 text-center text-muted-foreground"
 		>
@@ -163,7 +222,7 @@
 		</div>
 	{:else}
 		<div class="space-y-2">
-			{#each paginatedGroups as group (group.key)}
+			{#each filteredGroups as group (group.key)}
 				<button
 					type="button"
 					onclick={() => onSelect?.(group)}
@@ -253,37 +312,33 @@
 		</div>
 	{/if}
 
-	<!-- Pagination Footer -->
-	{#if filteredGroups.length > 0}
+	<!-- Footer: load more -->
+	{#if !isLoading && !isError && referrals.length > 0}
 		<div
-			class="mt-4 flex flex-col items-center justify-between gap-4 border-t border-border/60 pt-4 sm:flex-row"
+			class="mt-4 flex flex-col items-center justify-between gap-3 border-t border-border/60 pt-4 sm:flex-row"
 		>
-			<!-- Stats text -->
-			<div class="font-sans text-xs text-muted-foreground">
-				แสดงรายการที่ {(currentPage - 1) * PAGE_SIZE + 1} - {Math.min(
-					currentPage * PAGE_SIZE,
-					filteredGroups.length
-				)} จากทั้งหมด {filteredGroups.length} รายการ
+			<div class="space-y-0.5 text-center font-sans text-xs text-muted-foreground sm:text-left">
+				<div>แสดง {filteredGroups.length} รายการ</div>
+				{#if hasMore && searchQuery.trim()}
+					<div role="status">ค้นหาเฉพาะรายการที่โหลดแล้ว</div>
+				{/if}
 			</div>
 
-			<!-- Shadcn Pagination Root -->
-			<Pagination.Root bind:page={currentPage} count={filteredGroups.length} perPage={PAGE_SIZE}>
-				{#snippet children({ pages })}
-					<Pagination.Content>
-						<Pagination.Previous />
-						{#each pages as p (p.key)}
-							<Pagination.Item>
-								{#if p.type === 'page'}
-									<Pagination.Link page={p} isActive={p.value === currentPage} />
-								{:else}
-									<Pagination.Ellipsis />
-								{/if}
-							</Pagination.Item>
-						{/each}
-						<Pagination.Next />
-					</Pagination.Content>
-				{/snippet}
-			</Pagination.Root>
+			{#if hasMore}
+				<Button
+					variant="outline"
+					onclick={() => onLoadMore?.()}
+					disabled={isFetchingMore}
+					class="gap-2"
+				>
+					{#if isFetchingMore}
+						<Loader2 class="h-4 w-4 animate-spin" aria-hidden="true" />
+					{/if}
+					โหลดเพิ่ม
+				</Button>
+			{:else}
+				<span class="text-xs text-muted-foreground">ไม่มีรายการเพิ่มเติม</span>
+			{/if}
 		</div>
 	{/if}
 </div>

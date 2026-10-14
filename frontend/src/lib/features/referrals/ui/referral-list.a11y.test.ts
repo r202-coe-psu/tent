@@ -96,4 +96,19 @@ describe('referral-list accessibility', () => {
 		expect(row).toBeDefined();
 		expect(openTag(row!)).toContain('focus-visible:ring-2');
 	});
+
+	it('exposes the direction control as a tablist with aria-selected', () => {
+		expect(body).toMatch(/role="tablist"/);
+		expect(openTag(tabElement(body, 'ขาออก'))).toContain('aria-selected="true"');
+		expect(openTag(tabElement(body, 'ขาเข้า'))).toContain('aria-selected="false"');
+	});
+
+	it('shows the load-more button and search scope hint only when more rows exist', () => {
+		const more = render(ReferralList, { props: { referrals: [draftReferral], hasMore: true } });
+		expect(more.body).toContain('โหลดเพิ่ม');
+		expect(more.body).not.toContain('ไม่มีรายการเพิ่มเติม');
+		expect(body).toContain('ไม่มีรายการเพิ่มเติม');
+		expect(body).toContain('แสดง 1 รายการ');
+		expect(body).not.toContain('จากทั้งหมด');
+	});
 });
