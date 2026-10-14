@@ -9,6 +9,7 @@
 	import { groupReferralsForList, type ReferralListGroup } from '../domain/referral.batch-group';
 	import { useEvacuees, type Evacuee } from '$lib/features/people';
 	import { getShelterCode } from '$lib/db/shelter';
+	import { Input } from '$lib/components/ui/input/index.js';
 	import * as Pagination from '$lib/components/ui/pagination/index.js';
 	import {
 		formatReferralDate,
@@ -109,7 +110,7 @@
 		<div class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
 			<Search class="h-4 w-4 text-muted-foreground" />
 		</div>
-		<input
+		<Input
 			type="text"
 			bind:value={searchQuery}
 			oninput={() => {
@@ -117,7 +118,7 @@
 			}}
 			aria-label="ค้นหารายการส่งต่อ"
 			placeholder="ค้นหาชื่อผู้ประสบภัย หรือหน่วยงาน/ศูนย์พักพิงปลายทาง..."
-			class="flex h-9 w-full min-w-0 rounded-md border border-input bg-background px-3 py-1 pl-9 text-base shadow-xs ring-offset-background transition-[color,box-shadow] outline-none selection:bg-primary selection:text-primary-foreground placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 md:text-sm dark:bg-input/30 dark:aria-invalid:ring-destructive/40"
+			class="bg-background pl-9 placeholder:text-base md:placeholder:text-sm"
 		/>
 	</div>
 
