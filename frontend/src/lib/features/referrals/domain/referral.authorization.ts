@@ -25,7 +25,8 @@ export function isOutgoingCapacityReferral(referral: Referral, actorShelter: str
 
 /**
  * Capacity referral targeting `actorShelter` (incoming inbox).
- * Mirrored copies keep source `shelter_code` but live in the destination DB.
+ * The referral is stored once in `central_ops`; the incoming side is identified by
+ * `to_shelter_code`, while `shelter_code` keeps the source shelter.
  */
 export function isIncomingCapacityReferral(referral: Referral, actorShelter: string): boolean {
 	return (

@@ -29,7 +29,8 @@
 		getKindLabel,
 		getStatusLabel,
 		getUrgencyLabel,
-		getUrgencyStyle
+		getUrgencyStyle,
+		resolveEvacueeName
 	} from './referral.ui-helpers';
 
 	let { referral }: { referral: Referral } = $props();
@@ -53,11 +54,7 @@
 	};
 	let confirmOpen = $state(false);
 	let confirmRequest = $state.raw<ConfirmRequest | null>(null);
-	const subjectNames = $derived([
-		referral.evacuee_summary
-			? `${referral.evacuee_summary.first_name} ${referral.evacuee_summary.last_name}`
-			: referral.evacuee_id
-	]);
+	const subjectNames = $derived([resolveEvacueeName(referral.evacuee_summary)]);
 
 	const actorShelter = $derived(getShelterCode());
 	const canRespond = $derived(canActorRespond(referral, actorShelter));
@@ -170,7 +167,7 @@
 			class="rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-100"
 			role="status"
 		>
-			คำขอย้ายเข้าจากศูนย์ <span class="font-mono font-semibold">{referral.shelter_code}</span> — ตอบรับแล้วระบบจะย้ายผู้ประสบภัยเข้าศูนย์นี้
+			คำขอย้ายเข้าจากศูนย์ <span class="font-semibold tabular-nums">{referral.shelter_code}</span> — ตอบรับแล้วระบบจะย้ายผู้ประสบภัยเข้าศูนย์นี้
 			(occupancy สองฝั่งจะอัปเดตหลังตอบรับเท่านั้น)
 		</div>
 	{/if}
@@ -181,12 +178,12 @@
 			role="status"
 		>
 			รอศูนย์ปลายทาง
-			<span class="font-mono font-semibold">{referral.to_shelter_code}</span>
+			<span class="font-semibold tabular-nums">{referral.to_shelter_code}</span>
 			ตอบรับหรือปฏิเสธ — การย้ายศูนย์จะเกิดขึ้นเมื่อปลายทางกดตอบรับเท่านั้น
 		</div>
 	{/if}
 
-	<Card.Root class="border border-border/80 shadow-md">
+	<Card.Root class="border border-border/80 shadow-2xs">
 		<Card.Header class="border-b border-border/60 bg-muted/30 pb-4">
 			<div class="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
 				<div>
@@ -228,7 +225,7 @@
 						{/if}
 						<div>
 							<p class="text-xs text-muted-foreground">รหัสผู้ประสบภัย (Evacuee ID)</p>
-							<p class="mt-0.5 font-mono font-medium">{referral.evacuee_id}</p>
+							<p class="mt-0.5 font-medium tabular-nums">{referral.evacuee_id}</p>
 						</div>
 					</div>
 				</div>
@@ -243,7 +240,7 @@
 					{#if referral.referral_type === 'capacity' || referral.to_shelter_code}
 						<div>
 							<p class="text-xs text-muted-foreground">ศูนย์พักพิงปลายทาง (Target Shelter)</p>
-							<p class="mt-0.5 font-mono font-semibold text-primary">
+							<p class="mt-0.5 font-semibold text-primary tabular-nums">
 								{referral.to_shelter_code || '-'}
 							</p>
 						</div>

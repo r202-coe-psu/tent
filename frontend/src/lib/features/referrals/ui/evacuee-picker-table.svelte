@@ -167,7 +167,7 @@
 								<Table.Cell class="hidden text-muted-foreground sm:table-cell">
 									{evacuee.phone ?? '—'}
 								</Table.Cell>
-								<Table.Cell class="hidden font-mono text-xs text-muted-foreground md:table-cell">
+								<Table.Cell class="hidden text-xs text-muted-foreground tabular-nums md:table-cell">
 									{zoneLabel(evacuee.current_stay?.zone, shelterZones)}
 								</Table.Cell>
 							</Table.Row>

@@ -85,7 +85,7 @@ export function formatReferralDate(isoString?: string | null): string {
 	return formatThaiDateTime(isoString) || isoString;
 }
 
-/** List badge: incoming capacity mirror targeting this shelter. */
+/** List badge: incoming capacity referral targeting this shelter. */
 export function isIncomingListItem(
 	referral: { referral_type?: string; shelter_code: string; to_shelter_code?: string },
 	actorShelter: string
@@ -137,6 +137,20 @@ export function getDirectionBadgeVariant(direction: 'outgoing' | 'incoming' | 'i
 		internal: 'bg-gray-100 text-gray-600 border-gray-200'
 	};
 	return variants[direction];
+}
+
+/** Shown when neither the evacuee roster nor the referral's name summary has a name. */
+export const EVACUEE_NAME_FALLBACK = 'ไม่พบชื่อผู้ประสบภัย';
+
+/**
+ * Display name for an evacuee. The first source with a name wins (e.g. roster row, then the
+ * referral's `evacuee_summary`); if none has one, returns EVACUEE_NAME_FALLBACK.
+ */
+export function resolveEvacueeName(
+	...sources: ({ first_name: string; last_name: string } | null | undefined)[]
+): string {
+	const found = sources.find((source) => !!source);
+	return found ? `${found.first_name} ${found.last_name}` : EVACUEE_NAME_FALLBACK;
 }
 
 /** Max names listed in a referral confirm dialog before the rest is summarised as "และอีก N คน". */

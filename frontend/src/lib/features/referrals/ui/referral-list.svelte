@@ -9,6 +9,7 @@
 	import { groupReferralsForList, type ReferralListGroup } from '../domain/referral.batch-group';
 	import { useEvacuees, type Evacuee } from '$lib/features/people';
 	import { getShelterCode } from '$lib/db/shelter';
+	import { Input } from '$lib/components/ui/input/index.js';
 	import * as Pagination from '$lib/components/ui/pagination/index.js';
 	import {
 		formatReferralDate,
@@ -19,7 +20,8 @@
 		isIncomingListItem,
 		getReferralDirection,
 		getDirectionLabel,
-		getDirectionBadgeVariant
+		getDirectionBadgeVariant,
+		resolveEvacueeName
 	} from './referral.ui-helpers';
 
 	let {
@@ -45,12 +47,10 @@
 	) as Evacuee[];
 
 	function getEvacueeName(evacueeId: string, referral?: Referral): string {
-		const evac = resolvedEvacuees.find((e) => e._id === evacueeId);
-		if (evac) return `${evac.first_name} ${evac.last_name}`;
-		if (referral?.evacuee_summary) {
-			return `${referral.evacuee_summary.first_name} ${referral.evacuee_summary.last_name}`;
-		}
-		return 'ไม่พบชื่อผู้ประสบภัย';
+		return resolveEvacueeName(
+			resolvedEvacuees.find((e) => e._id === evacueeId),
+			referral?.evacuee_summary
+		);
 	}
 
 	// Local state for filtering and pagination
@@ -58,13 +58,6 @@
 	let searchQuery = $state('');
 	let currentPage = $state(1);
 	const PAGE_SIZE = 10;
-
-	// Reset currentPage automatically when activeTab or searchQuery changes
-	$effect(() => {
-		void searchQuery;
-		void activeTab;
-		currentPage = 1;
-	});
 
 	// Filter pipeline (per referral), then collapse batches into one row
 	const filteredGroups = $derived.by(() => {
@@ -117,12 +110,15 @@
 		<div class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
 			<Search class="h-4 w-4 text-muted-foreground" />
 		</div>
-		<input
+		<Input
 			type="text"
 			bind:value={searchQuery}
+			oninput={() => {
+				currentPage = 1;
+			}}
 			aria-label="ค้นหารายการส่งต่อ"
 			placeholder="ค้นหาชื่อผู้ประสบภัย หรือหน่วยงาน/ศูนย์พักพิงปลายทาง..."
-			class="flex h-9 w-full min-w-0 rounded-md border border-input bg-background px-3 py-1 pl-9 text-base shadow-xs ring-offset-background transition-[color,box-shadow] outline-none selection:bg-primary selection:text-primary-foreground placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 md:text-sm dark:bg-input/30 dark:aria-invalid:ring-destructive/40"
+			class="bg-background pl-9 placeholder:text-base md:placeholder:text-sm"
 		/>
 	</div>
 
@@ -138,7 +134,10 @@
 				type="button"
 				aria-pressed={isActive}
 				onclick={() => {
-					activeTab = tab.value;
+					if (activeTab !== tab.value) {
+						activeTab = tab.value;
+						currentPage = 1;
+					}
 				}}
 				class="-mb-px inline-flex items-center gap-1.5 border-b-2 px-4 py-2 text-sm transition-all hover:text-foreground focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none
 				{isActive
@@ -272,7 +271,7 @@
 				{#snippet children({ pages })}
 					<Pagination.Content>
 						<Pagination.Previous />
-						{#each pages as p, i (i)}
+						{#each pages as p (p.key)}
 							<Pagination.Item>
 								{#if p.type === 'page'}
 									<Pagination.Link page={p} isActive={p.value === currentPage} />

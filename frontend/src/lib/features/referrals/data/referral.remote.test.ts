@@ -115,6 +115,30 @@ describe('ReferralRemoteRepository — capacity via BFF', () => {
 		expect(mockRepoPut).not.toHaveBeenCalled();
 	});
 
+	it('skips malformed docs in a list response and warns with the dropped count', async () => {
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		fetchMock.mockResolvedValue({
+			ok: true,
+			json: async () => [capacitySent, { _id: 'referral:broken', type: 'referral' }]
+		});
+
+		const result = await repo.list();
+
+		expect(result).toEqual([capacitySent]);
+		expect(warn).toHaveBeenCalledWith(expect.stringContaining('skipped 1 malformed referral doc'));
+		warn.mockRestore();
+	});
+
+	it('does not warn when every list row is a valid referral', async () => {
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		fetchMock.mockResolvedValue({ ok: true, json: async () => [capacitySent] });
+
+		await repo.list();
+
+		expect(warn).not.toHaveBeenCalled();
+		warn.mockRestore();
+	});
+
 	it('delegates all transitions (including non-capacity) to BFF', async () => {
 		const medicalSent: Referral = {
 			...capacitySent,

@@ -37,7 +37,8 @@
 		getStatusLabel,
 		getUrgencyLabel,
 		getUrgencyStyle,
-		isRowActivationKey
+		isRowActivationKey,
+		resolveEvacueeName
 	} from './referral.ui-helpers';
 
 	let {
@@ -161,12 +162,10 @@
 	);
 
 	function evacueeName(evacueeId: string, referral?: Referral): string {
-		const found = evacueesQuery.data?.find((e) => e._id === evacueeId);
-		if (found) return `${found.first_name} ${found.last_name}`;
-		if (referral?.evacuee_summary) {
-			return `${referral.evacuee_summary.first_name} ${referral.evacuee_summary.last_name}`;
-		}
-		return evacueeId;
+		return resolveEvacueeName(
+			evacueesQuery.data?.find((e) => e._id === evacueeId),
+			referral?.evacuee_summary
+		);
 	}
 
 	function evacueeZone(evacueeId: string): string {
@@ -318,7 +317,7 @@
 				class="rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-100"
 				role="status"
 			>
-				คำขอย้ายเข้าจากศูนย์ <span class="font-mono font-semibold">{sample.shelter_code}</span>
+				คำขอย้ายเข้าจากศูนย์ <span class="font-semibold tabular-nums">{sample.shelter_code}</span>
 				({incomingSent.length} คน) — ตอบรับแล้วระบบจะย้ายผู้ประสบภัยเข้าศูนย์นี้ (occupancy สองฝั่งจะอัปเดตหลังตอบรับเท่านั้น)
 			</div>
 		{/if}
@@ -329,7 +328,7 @@
 				role="status"
 			>
 				รอศูนย์ปลายทาง
-				<span class="font-mono font-semibold">{sample.to_shelter_code}</span>
+				<span class="font-semibold tabular-nums">{sample.to_shelter_code}</span>
 				ตอบรับหรือปฏิเสธ — การย้ายศูนย์จะเกิดขึ้นเมื่อปลายทางกดตอบรับเท่านั้น
 			</div>
 		{/if}
@@ -347,7 +346,7 @@
 					</div>
 					<div class="space-y-1">
 						<p class="text-xs font-medium text-muted-foreground">ปลายทาง</p>
-						<p class="font-mono text-sm font-semibold">{destinationLabel}</p>
+						<p class="text-sm font-semibold tabular-nums">{destinationLabel}</p>
 					</div>
 					<div class="space-y-1">
 						<p class="text-xs font-medium text-muted-foreground">ความเร่งด่วน</p>
@@ -564,7 +563,7 @@
 									{formatReferralDate(referral.created_at)}
 								</Table.Cell>
 								<Table.Cell
-									class="max-w-[10rem] truncate font-mono text-xs text-muted-foreground"
+									class="max-w-[10rem] truncate text-xs text-muted-foreground tabular-nums"
 									title={referral._id}
 								>
 									{referral._id}
