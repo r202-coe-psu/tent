@@ -380,3 +380,82 @@ describe('CouchDbReferralServerRepository create() with a mononym evacuee', () =
 		expect(written).toBeTruthy();
 	});
 });
+
+describe('CouchDbReferralServerRepository listPage()', () => {
+	const repo = new CouchDbReferralServerRepository('central_ops', 'SH001');
+
+	function findBody(): Record<string, unknown> {
+		const call = adminRaw.mock.calls.find((c) => String(c[0]).endsWith('/_find'));
+		return call![2] as Record<string, unknown>;
+	}
+
+	function stubFind(docs: unknown[], bookmark = 'bm-next') {
+		adminRaw.mockImplementation(async (path: string) => {
+			if (path.endsWith('/_find')) return { status: 200, data: { docs, bookmark } };
+			return { status: 201, data: { ok: true } };
+		});
+	}
+
+	beforeEach(() => {
+		vi.clearAllMocks();
+	});
+
+	it('outgoing: selects on shelter_code and sorts every index field desc', async () => {
+		stubFind([]);
+		await repo.listPage({ direction: 'outgoing', status: 'sent' });
+		const body = findBody();
+		expect(body.selector).toEqual({ type: 'referral', shelter_code: 'SH001', status: 'sent' });
+		expect(body.sort).toEqual([{ type: 'desc' }, { shelter_code: 'desc' }, { created_at: 'desc' }]);
+		expect(body).not.toHaveProperty('skip');
+	});
+
+	it('incoming: selects on to_shelter_code and sorts asc when created_at_asc', async () => {
+		stubFind([]);
+		await repo.listPage({ direction: 'incoming', sort: 'created_at_asc' });
+		const body = findBody();
+		expect(body.selector).toEqual({ type: 'referral', to_shelter_code: 'SH001' });
+		expect(body.sort).toEqual([{ type: 'asc' }, { to_shelter_code: 'asc' }, { created_at: 'asc' }]);
+	});
+
+	it('sends the bookmark and never skip when a bookmark is given', async () => {
+		stubFind([]);
+		await repo.listPage({ direction: 'outgoing', bookmark: 'bm-1', skip: 20 });
+		const body = findBody();
+		expect(body.bookmark).toBe('bm-1');
+		expect(body).not.toHaveProperty('skip');
+	});
+
+	it('omits bookmark on the first page and returns Couch bookmark', async () => {
+		stubFind([capacitySent], 'bm-out');
+		const page = await repo.listPage({ direction: 'outgoing', limit: 5 });
+		expect(findBody()).not.toHaveProperty('bookmark');
+		expect(page.bookmark).toBe('bm-out');
+		expect(page.items).toEqual([capacitySent]);
+		expect(page.hasMore).toBe(false);
+	});
+
+	it('hasMore is true when a full page comes back, even if a malformed doc is dropped', async () => {
+		stubFind([capacitySent, { _id: 'referral:broken', type: 'referral' }]);
+		const page = await repo.listPage({ direction: 'outgoing', limit: 2 });
+		expect(page.items).toHaveLength(1);
+		expect(page.hasMore).toBe(true);
+	});
+
+	it('hasMore is false on an empty last page that still carries a bookmark', async () => {
+		stubFind([], 'bm-end');
+		const page = await repo.listPage({ direction: 'outgoing', limit: 2 });
+		expect(page).toEqual({ items: [], bookmark: 'bm-end', hasMore: false });
+	});
+
+	it('keeps the legacy $or selector when no direction is given (evacuee lookup)', async () => {
+		stubFind([]);
+		await repo.list({ evacuee_id: 'evacuee:1' });
+		const body = findBody();
+		expect(body.selector).toEqual({
+			type: 'referral',
+			$or: [{ shelter_code: 'SH001' }, { to_shelter_code: 'SH001' }],
+			evacuee_id: 'evacuee:1'
+		});
+		expect(body.sort).toEqual([{ type: 'desc' }, { created_at: 'desc' }]);
+	});
+});
