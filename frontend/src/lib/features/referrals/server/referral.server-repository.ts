@@ -13,7 +13,7 @@ import {
 	buildReferralBody,
 	referralSchema
 } from '../domain/referral.schema';
-import { applyTransition } from '../domain/referral.transitions';
+import { applyTransition, canTransition } from '../domain/referral.transitions';
 import {
 	assertActorMayTransition,
 	ReferralAuthorizationError
@@ -379,6 +379,12 @@ export class CouchDbReferralServerRepository implements ReferralRepository {
 				throw new CouchDbReferralError(e.message, HTTP_FORBIDDEN);
 			}
 			throw e;
+		}
+
+		// Check the state matrix before any cross-DB transfer. Otherwise a stale or concurrent
+		// accept (latest already rejected/accepted) would move the evacuee before failing.
+		if (!canTransition(latest.status, to)) {
+			throw new CouchDbReferralError('Invalid referral transition', 422);
 		}
 
 		const nowIso = new Date().toISOString();
