@@ -29,6 +29,7 @@
 		isOutgoingCapacityReferral
 	} from '../domain/referral.authorization';
 	import { useTransitionReferral } from '../application/queries';
+	import ReferralConfirmDialog from './referral-confirm-dialog.svelte';
 	import {
 		formatReferralDate,
 		getKindLabel,
@@ -68,6 +69,18 @@
 	let responseReasonInput = $state('');
 	let pendingAction = $state<{ to: 'accepted' | 'rejected'; ids: string[] } | null>(null);
 	let reasonInputRef = $state<HTMLInputElement | null>(null);
+
+	type ConfirmRequest = {
+		title: string;
+		description?: string;
+		names: string[];
+		count: number;
+		confirmLabel: string;
+		destructive?: boolean;
+		run: () => Promise<unknown>;
+	};
+	let confirmOpen = $state(false);
+	let confirmRequest = $state.raw<ConfirmRequest | null>(null);
 
 	const items = $derived(referrals.map((r) => overrides[r._id] ?? r));
 
@@ -167,30 +180,30 @@
 		label: string,
 		reason?: string
 	) {
-		await toast.promise(
-			(async () => {
-				let succeeded = 0;
-				let failedCount = 0;
-				for (const id of ids) {
-					try {
-						const updated = await transitionMutation.mutateAsync({ id, to, reason });
-						overrides = { ...overrides, [updated._id]: updated };
-						succeeded++;
-					} catch {
-						failedCount++;
-					}
+		// toast.promise returns an id synchronously, so keep the work promise to await it directly.
+		const work = (async () => {
+			let succeeded = 0;
+			let failedCount = 0;
+			for (const id of ids) {
+				try {
+					const updated = await transitionMutation.mutateAsync({ id, to, reason });
+					overrides = { ...overrides, [updated._id]: updated };
+					succeeded++;
+				} catch {
+					failedCount++;
 				}
-				return { succeeded, failedCount, total: ids.length };
-			})(),
-			{
-				loading: `กำลัง${label} ${ids.length} รายการ...`,
-				success: (r) =>
-					r.failedCount === 0
-						? `${label}สำเร็จ ${r.succeeded} รายการ`
-						: `${label}สำเร็จ ${r.succeeded} / ล้มเหลว ${r.failedCount} จาก ${r.total}`,
-				error: (err) => (err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการเปลี่ยนสถานะ')
 			}
-		);
+			return { succeeded, failedCount, total: ids.length };
+		})();
+		void toast.promise(work, {
+			loading: `กำลัง${label} ${ids.length} รายการ...`,
+			success: (r) =>
+				r.failedCount === 0
+					? `${label}สำเร็จ ${r.succeeded} รายการ`
+					: `${label}สำเร็จ ${r.succeeded} / ล้มเหลว ${r.failedCount} จาก ${r.total}`,
+			error: (err) => (err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการเปลี่ยนสถานะ')
+		});
+		return await work;
 	}
 
 	async function triggerActionWithReason(to: 'accepted' | 'rejected', ids: string[]) {
@@ -202,17 +215,62 @@
 		reasonInputRef?.scrollIntoView({ block: 'nearest' });
 	}
 
-	async function submitWithReason() {
+	function namesOf(list: Referral[]): string[] {
+		return list.map((r) => evacueeName(r.evacuee_id, r));
+	}
+
+	function askConfirm(request: ConfirmRequest) {
+		confirmRequest = request;
+		confirmOpen = true;
+	}
+
+	function confirmSend(list: Referral[]) {
+		const ids = list.map((r) => r._id);
+		askConfirm({
+			title: 'ยืนยันการส่งตัว',
+			names: namesOf(list),
+			count: list.length,
+			confirmLabel: `ส่งตัว ${list.length} รายการ`,
+			run: () => runBatchTransition(ids, 'sent', 'ส่งตัว')
+		});
+	}
+
+	function confirmClose(list: Referral[], title: string, label: string) {
+		const ids = list.map((r) => r._id);
+		askConfirm({
+			title,
+			names: namesOf(list),
+			count: list.length,
+			confirmLabel: `${label} ${list.length} รายการ`,
+			destructive: true,
+			run: () => runBatchTransition(ids, 'closed', label)
+		});
+	}
+
+	function submitWithReason() {
 		if (!pendingAction) return;
 		const { to, ids } = pendingAction;
 		const label = to === 'accepted' ? 'ตอบรับ' : 'ปฏิเสธ';
-		await runBatchTransition(ids, to, label, responseReasonInput.trim());
-		pendingAction = null;
-		responseReasonInput = '';
+		const reason = responseReasonInput.trim();
+		askConfirm({
+			title: `ยืนยันการ${label}`,
+			description: reason
+				? `เหตุผลนี้จะใช้กับ ${ids.length} รายการ: ${reason}`
+				: `ไม่ได้ระบุเหตุผล จะใช้กับ ${ids.length} รายการ`,
+			names: namesOf(items.filter((r) => ids.includes(r._id))),
+			count: ids.length,
+			confirmLabel: `ยืนยัน${label} ${ids.length} รายการ`,
+			destructive: to === 'rejected',
+			run: async () => {
+				await runBatchTransition(ids, to, label, reason);
+				pendingAction = null;
+				responseReasonInput = '';
+			}
+		});
 	}
 
-	async function cancelDraft(referral: Referral) {
-		await runBatchTransition([referral._id], 'closed', 'ยกเลิกร่าง');
+	function cancelDraft(referral: Referral) {
+		confirmClose([referral], 'ยืนยันการยกเลิกร่าง', 'ยกเลิกร่าง');
 	}
 </script>
 
@@ -522,7 +580,7 @@
 													disabled={transitionMutation.isPending}
 													onclick={(e) => {
 														e.stopPropagation();
-														runBatchTransition([referral._id], 'sent', 'ส่งตัว');
+														confirmSend([referral]);
 													}}
 												>
 													<Send class="h-3.5 w-3.5" />
@@ -639,12 +697,7 @@
 								variant="default"
 								class="gap-1.5"
 								disabled={transitionMutation.isPending}
-								onclick={() =>
-									runBatchTransition(
-										sendable.map((r) => r._id),
-										'sent',
-										'ส่งตัว'
-									)}
+								onclick={() => confirmSend(sendable)}
 							>
 								<Send class="h-4 w-4" />
 								ส่งทั้งหมด ({sendable.length})
@@ -690,12 +743,7 @@
 								variant="outline"
 								class="gap-1.5 border-rose-300 text-rose-700 hover:bg-rose-50"
 								disabled={transitionMutation.isPending}
-								onclick={() =>
-									runBatchTransition(
-										cancelableDrafts.map((r) => r._id),
-										'closed',
-										'ยกเลิกร่าง'
-									)}
+								onclick={() => confirmClose(cancelableDrafts, 'ยืนยันการยกเลิกร่าง', 'ยกเลิกร่าง')}
 							>
 								<Ban class="h-4 w-4" />
 								ยกเลิกร่างทั้งหมด ({cancelableDrafts.length})
@@ -708,12 +756,7 @@
 								variant="outline"
 								class="gap-1.5 border-slate-300 text-slate-700 hover:bg-slate-50"
 								disabled={transitionMutation.isPending}
-								onclick={() =>
-									runBatchTransition(
-										closeable.map((r) => r._id),
-										'closed',
-										'ปิดรายการ'
-									)}
+								onclick={() => confirmClose(closeable, 'ยืนยันการปิดรายการ', 'ปิดรายการ')}
 							>
 								<Archive class="h-4 w-4" />
 								ปิดทั้งหมด ({closeable.length})
@@ -723,5 +766,18 @@
 				{/if}
 			</div>
 		</div>
+	{/if}
+	{#if confirmRequest}
+		<ReferralConfirmDialog
+			bind:open={confirmOpen}
+			title={confirmRequest.title}
+			description={confirmRequest.description}
+			names={confirmRequest.names}
+			count={confirmRequest.count}
+			confirmLabel={confirmRequest.confirmLabel}
+			destructive={confirmRequest.destructive}
+			pending={transitionMutation.isPending}
+			onConfirm={() => confirmRequest?.run()}
+		/>
 	{/if}
 </div>
