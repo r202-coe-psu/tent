@@ -3,6 +3,7 @@ export * from './domain/referral.transitions';
 export * from './domain/referral.authorization';
 export * from './domain/referral.redaction';
 export * from './domain/referral.batch-group';
+export * from './domain/referral.bulk-actions';
 export * from './application/queries';
 export * from './ui/referral.ui-helpers';
 export * from './data/referral.remote';
