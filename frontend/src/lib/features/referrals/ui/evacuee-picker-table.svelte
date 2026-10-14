@@ -1,6 +1,9 @@
 <script lang="ts">
 	import Loader2 from '@lucide/svelte/icons/loader-2';
+	import RotateCw from '@lucide/svelte/icons/rotate-cw';
 	import Search from '@lucide/svelte/icons/search';
+	import TriangleAlert from '@lucide/svelte/icons/triangle-alert';
+	import { Button } from '$lib/components/ui/button/index.js';
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import * as Table from '$lib/components/ui/table/index.js';
@@ -108,6 +111,18 @@
 			<div class="flex flex-col items-center justify-center gap-2 py-12 text-muted-foreground">
 				<Loader2 class="h-6 w-6 animate-spin text-primary" />
 				<span class="text-sm">กำลังโหลดรายชื่อผู้ประสบภัย...</span>
+			</div>
+		{:else if evacueesQuery.isError}
+			<div
+				role="alert"
+				class="flex flex-col items-center justify-center gap-3 px-4 py-10 text-center"
+			>
+				<TriangleAlert class="h-6 w-6 text-red-600" />
+				<p class="text-sm font-medium text-foreground">โหลดรายชื่อผู้ประสบภัยไม่สำเร็จ</p>
+				<Button variant="outline" size="sm" onclick={() => evacueesQuery.refetch()} class="gap-2">
+					<RotateCw class="h-4 w-4" />
+					ลองใหม่
+				</Button>
 			</div>
 		{:else if filteredEvacuees.length === 0}
 			<div class="px-4 py-10 text-center text-sm text-muted-foreground">

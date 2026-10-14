@@ -5,6 +5,9 @@
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import Loader2 from '@lucide/svelte/icons/loader-2';
 	import ClipboardList from '@lucide/svelte/icons/clipboard-list';
+	import RotateCw from '@lucide/svelte/icons/rotate-cw';
+	import TriangleAlert from '@lucide/svelte/icons/triangle-alert';
+	import Info from '@lucide/svelte/icons/info';
 
 	import {
 		useReferrals,
@@ -14,6 +17,8 @@
 		ReferralDetail,
 		ReferralBatchCards,
 		referralBatchKey,
+		isReferralListCapReached,
+		REFERRAL_LIST_CAP,
 		type Referral,
 		type ReferralBatchFailure,
 		type ReferralListGroup
@@ -29,6 +34,7 @@
 	const listQuery = useReferrals();
 	const referrals = $derived(listQuery.data ?? []);
 	const isLoadingList = $derived(listQuery.isLoading);
+	const isListCapReached = $derived(isReferralListCapReached(referrals.length));
 
 	const detailQuery = useReferral(
 		() => selectedMemberId ?? '',
@@ -146,7 +152,34 @@
 								<Loader2 class="h-8 w-8 animate-spin text-primary" />
 								<span class="text-sm">กำลังโหลดข้อมูล...</span>
 							</div>
+						{:else if listQuery.isError}
+							<div
+								role="alert"
+								class="flex flex-col items-center justify-center gap-3 rounded-xl border border-red-200 bg-white py-12 text-center"
+							>
+								<TriangleAlert class="h-8 w-8 text-red-600" />
+								<h3 class="font-semibold text-foreground">โหลดรายการส่งต่อไม่สำเร็จ</h3>
+								<p class="text-sm text-muted-foreground">
+									กรุณาตรวจสอบการเชื่อมต่อแล้วลองใหม่อีกครั้ง
+								</p>
+								<Button variant="outline" onclick={() => listQuery.refetch()} class="gap-2">
+									<RotateCw class="h-4 w-4" />
+									ลองใหม่
+								</Button>
+							</div>
 						{:else}
+							{#if isListCapReached}
+								<div
+									role="status"
+									class="mb-4 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-amber-900"
+								>
+									<Info class="mt-0.5 h-4 w-4 shrink-0" />
+									<p class="text-sm">
+										<span class="font-semibold">แสดง {REFERRAL_LIST_CAP} รายการล่าสุด</span>
+										— รายการเก่ากว่านี้ยังไม่แสดงในหน้านี้ (จะเพิ่มการแบ่งหน้าในภายหลัง)
+									</p>
+								</div>
+							{/if}
 							<ReferralList
 								{referrals}
 								onSelect={handleSelectGroup}
@@ -193,6 +226,41 @@
 								{/if}
 								<ReferralDetail referral={selectedReferral} />
 							</div>
+						{:else if detailQuery.isError}
+							<Card.Root role="alert" class="border border-red-200 bg-white shadow-2xs">
+								<Card.Content
+									class="flex flex-col items-center justify-center gap-3 py-16 text-center"
+								>
+									<TriangleAlert class="h-8 w-8 text-red-600" />
+									<h3 class="font-semibold text-foreground">โหลดประวัติการส่งต่อไม่สำเร็จ</h3>
+									<p class="text-sm text-muted-foreground">
+										กรุณาลองใหม่อีกครั้ง หรือกลับไปเลือกรายการอื่น
+									</p>
+									<div class="flex flex-wrap justify-center gap-2">
+										<Button variant="outline" onclick={() => detailQuery.refetch()} class="gap-2">
+											<RotateCw class="h-4 w-4" />
+											ลองใหม่
+										</Button>
+										<Button variant="ghost" onclick={clearGroupSelection} class="gap-2">
+											<ArrowLeft class="h-4 w-4" />
+											กลับไปหน้ารายการ
+										</Button>
+									</div>
+								</Card.Content>
+							</Card.Root>
+						{:else if detailQuery.isSuccess}
+							<Card.Root class="border border-border/80 shadow-sm">
+								<Card.Content
+									class="flex flex-col items-center justify-center gap-3 py-16 text-center"
+								>
+									<h3 class="font-semibold text-foreground">ไม่พบรายการส่งต่อนี้</h3>
+									<p class="text-sm text-muted-foreground">รายการอาจถูกลบหรือไม่มีในศูนย์นี้แล้ว</p>
+									<Button variant="ghost" onclick={clearGroupSelection} class="gap-2">
+										<ArrowLeft class="h-4 w-4" />
+										กลับไปหน้ารายการ
+									</Button>
+								</Card.Content>
+							</Card.Root>
 						{/if}
 					{:else}
 						<ReferralBatchCards

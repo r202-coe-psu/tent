@@ -1,11 +1,23 @@
-import type {
-	Referral,
-	ReferralStatus,
-	ReferralType,
-	ReferralUrgency
+import {
+	referralFilterSchema,
+	type Referral,
+	type ReferralStatus,
+	type ReferralType,
+	type ReferralUrgency
 } from '../domain/referral.schema';
 import { getShelterCode } from '$lib/db/shelter';
 import { formatThaiDateTime } from '$lib/utils/date';
+
+/**
+ * Max rows the referral list returns (no paging yet — #552). Read from the same schema default
+ * the server applies (`referralFilterSchema.limit`), so the UI cap cannot drift from the API.
+ */
+export const REFERRAL_LIST_CAP: number = referralFilterSchema.parse({}).limit;
+
+/** True when the fetched row count hit the cap, meaning older referrals may be hidden. */
+export function isReferralListCapReached(count: number, cap: number = REFERRAL_LIST_CAP): boolean {
+	return count >= cap;
+}
 
 export function getStatusLabel(status: ReferralStatus, options?: { verbose?: boolean }): string {
 	const labels: Record<ReferralStatus, { short: string; verbose: string }> = {
