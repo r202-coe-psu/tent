@@ -184,6 +184,103 @@ describe('ReferralRemoteRepository — capacity via BFF', () => {
 	});
 });
 
+describe('ReferralRemoteRepository.bulkTransition', () => {
+	const fetchMock = vi.fn();
+	const repo = new ReferralRemoteRepository();
+
+	beforeEach(() => {
+		vi.clearAllMocks();
+		vi.stubGlobal('fetch', fetchMock);
+	});
+
+	it('POSTs ids, status and reason once and returns the per-id result', async () => {
+		const saved: Referral = {
+			_id: 'referral:1',
+			type: 'referral',
+			schema_v: 2,
+			shelter_code: 'SH001',
+			created_at: '2026-07-11T05:00:00.000Z',
+			updated_at: '2026-07-11T05:00:00.000Z',
+			created_by: 'Staff A',
+			evacuee_id: 'evacuee:01F8MECHEVACUEEID1234567',
+			referral_type: 'medical-emergency',
+			to_org: { name: 'General Hospital', kind: 'hospital' },
+			reason: 'r',
+			urgency: 'normal',
+			status: 'closed',
+			timeline: {}
+		} as Referral;
+		const result = { succeeded: [saved], failed: [{ id: 'referral:2', error: 'nope' }] };
+		fetchMock.mockResolvedValue({ ok: true, json: async () => result });
+
+		await expect(
+			repo.bulkTransition(['referral:1', 'referral:2'], 'closed', 'ปิด')
+		).resolves.toEqual(result);
+
+		expect(fetchMock).toHaveBeenCalledTimes(1);
+		const [url, init] = fetchMock.mock.calls[0];
+		expect(url).toBe('/api/back-office/referral/bulk-transition?shelter_code=SH001');
+		expect(init).toMatchObject({ method: 'POST', credentials: 'include' });
+		expect(JSON.parse(init.body)).toEqual({
+			ids: ['referral:1', 'referral:2'],
+			to: 'closed',
+			reason: 'ปิด'
+		});
+	});
+
+	it('throws the server error message on a non-2xx response', async () => {
+		fetchMock.mockResolvedValue({
+			ok: false,
+			status: 422,
+			json: async () => ({ error: 'ids must not exceed 200 items' })
+		});
+		await expect(repo.bulkTransition(['referral:1'], 'closed')).rejects.toThrow(
+			'ids must not exceed 200 items'
+		);
+	});
+
+	it('keeps valid succeeded docs, drops malformed ones and warns with the count', async () => {
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		const valid = {
+			_id: 'referral:1',
+			type: 'referral',
+			schema_v: 2,
+			shelter_code: 'SH001',
+			created_at: '2026-07-11T05:00:00.000Z',
+			updated_at: '2026-07-11T05:00:00.000Z',
+			created_by: 'Staff A',
+			evacuee_id: 'evacuee:01F8MECHEVACUEEID1234567',
+			referral_type: 'medical-emergency',
+			to_org: { name: 'General Hospital', kind: 'hospital' },
+			reason: 'r',
+			urgency: 'normal',
+			status: 'closed',
+			timeline: {}
+		};
+		fetchMock.mockResolvedValue({
+			ok: true,
+			json: async () => ({
+				succeeded: [valid, { _id: 'referral:2' }],
+				failed: [{ id: 'referral:3', error: 'nope' }]
+			})
+		});
+
+		const result = await repo.bulkTransition(['referral:1', 'referral:2', 'referral:3'], 'closed');
+
+		expect(result.succeeded).toEqual([valid]);
+		expect(result.failed).toEqual([{ id: 'referral:3', error: 'nope' }]);
+		expect(warn).toHaveBeenCalledWith(
+			'[referrals] skipped 1 malformed referral doc(s) in bulk transition response'
+		);
+		warn.mockRestore();
+	});
+
+	it('throws on a malformed success payload', async () => {
+		fetchMock.mockResolvedValue({ ok: true, json: async () => ({ succeeded: 'x' }) });
+		await expect(repo.bulkTransition(['referral:1'], 'closed')).rejects.toThrow('invalid result');
+	});
+});
+
 describe('createReferralBatch', () => {
 	const template: ReferralInput = {
 		referral_type: 'medical-emergency',

@@ -66,7 +66,8 @@ async function ensureCentralDb() {
 	}
 }
 
-export class CouchDbReferralServerRepository implements ReferralRepository {
+/** Server side owns the per-item path; the bulk call is `bulkTransition()` in ./referral.bulk-transition. */
+export class CouchDbReferralServerRepository implements Omit<ReferralRepository, 'bulkTransition'> {
 	constructor(
 		private readonly dbName: string,
 		private readonly contextShelterCode: string
