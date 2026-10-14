@@ -3,6 +3,7 @@ import {
 	createMutation,
 	createQuery,
 	type InfiniteData,
+	useQueryClient,
 	type QueryClient
 } from '@tanstack/svelte-query';
 import { getShelterCode, getShelterDb } from '$lib/db/shelter';
@@ -27,7 +28,8 @@ export const referralKeys = {
 	lists: () => [...referralKeys.all, 'list', getShelterCode()] as const,
 	list: (filter?: ReferralFilter) => [...referralKeys.lists(), filter] as const,
 	details: () => [...referralKeys.all, 'detail', getShelterCode()] as const,
-	detail: (id: string) => [...referralKeys.details(), id] as const
+	detail: (id: string) => [...referralKeys.details(), id] as const,
+	batch: (id: string) => [...referralKeys.all, 'batch', getShelterCode(), id] as const
 };
 
 export type ReferralPagesParams = {
@@ -69,12 +71,48 @@ export const useReferralPages = (params: () => ReferralPagesParams) =>
 		};
 	});
 
-export const useReferral = (id: () => string, enabled: () => boolean = () => true) =>
+export const useReferral = (id: () => string, enabled: () => boolean = () => true) => {
+	const queryClient = useQueryClient();
+	return createQuery(() => {
+		const seed = id() ? findCachedReferral(queryClient, id()) : undefined;
+		return {
+			queryKey: referralKeys.detail(id()),
+			queryFn: () => referralRepository().get(id()),
+			enabled: enabled() && !!id(),
+			initialData: seed?.data,
+			initialDataUpdatedAt: seed?.updatedAt
+		};
+	});
+};
+
+/** Batch members of the referral `id` (its siblings created in the same 2-minute window). */
+export const useReferralBatch = (id: () => string, enabled: () => boolean = () => true) =>
 	createQuery(() => ({
-		queryKey: referralKeys.detail(id()),
-		queryFn: () => referralRepository().get(id()),
+		queryKey: referralKeys.batch(id()),
+		queryFn: () => referralRepository().getBatch(id()),
 		enabled: enabled() && !!id()
 	}));
+
+/**
+ * Seed for the detail query: the referral from any cached infinite list page, with the time that
+ * list was fetched so the query still refetches in the background when stale.
+ */
+export function findCachedReferral(
+	queryClient: QueryClient,
+	id: string
+): { data: Referral; updatedAt: number } | undefined {
+	const lists = queryClient.getQueriesData<InfiniteData<ReferralPage, string | undefined>>({
+		queryKey: referralKeys.lists()
+	});
+	let best: { data: Referral; updatedAt: number } | undefined;
+	for (const [key, data] of lists) {
+		const found = data?.pages.flatMap((p) => p.items).find((r) => r._id === id);
+		if (!found) continue;
+		const updatedAt = queryClient.getQueryState(key)?.dataUpdatedAt ?? 0;
+		if (!best || updatedAt > best.updatedAt) best = { data: found, updatedAt };
+	}
+	return best;
+}
 
 export const useCreateReferral = (queryClient: QueryClient) =>
 	createMutation(() => ({

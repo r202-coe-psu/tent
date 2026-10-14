@@ -11,6 +11,7 @@ vi.mock('../data/referral.remote', () => ({
 		list: vi.fn(),
 		listPage: vi.fn(),
 		get: vi.fn(),
+		getBatch: vi.fn(),
 		create: vi.fn(),
 		transition: vi.fn()
 	})
@@ -31,10 +32,12 @@ vi.mock('$lib/db/subscribe-data-changes', () => ({
 vi.mock('@tanstack/svelte-query', () => ({
 	createQuery: (fn: () => unknown) => fn(),
 	createInfiniteQuery: (fn: () => unknown) => fn(),
-	createMutation: (fn: () => unknown) => fn()
+	createMutation: (fn: () => unknown) => fn(),
+	useQueryClient: () => ({})
 }));
 
 import {
+	findCachedReferral,
 	getNextReferralPageParam,
 	referralKeys,
 	replaceReferralInPages,
@@ -114,5 +117,42 @@ describe('replaceReferralInPages (transition updater)', () => {
 
 	it('passes undefined through', () => {
 		expect(replaceReferralInPages(undefined, ref('a', 'closed'))).toBeUndefined();
+	});
+});
+
+describe('findCachedReferral', () => {
+	const row = (id: string) => ({ _id: id }) as Referral;
+	const page = (...ids: string[]) => ({
+		pages: [{ items: ids.map(row), bookmark: null, hasMore: false }],
+		pageParams: [undefined]
+	});
+
+	function fakeClient(entries: [unknown[], unknown, number][]) {
+		return {
+			getQueriesData: ({ queryKey }: { queryKey: unknown[] }) => {
+				expect(queryKey).toEqual(referralKeys.lists());
+				return entries.map(([key, data]) => [key, data]);
+			},
+			getQueryState: (key: unknown[]) => ({
+				dataUpdatedAt: entries.find(([k]) => k === key)![2]
+			})
+		} as never;
+	}
+
+	it('returns the referral with the freshest list timestamp that contains it', () => {
+		const k1 = ['a'];
+		const k2 = ['b'];
+		const client = fakeClient([
+			[k1, page('referral:1'), 100],
+			[k2, page('referral:1', 'referral:2'), 300]
+		]);
+		expect(findCachedReferral(client, 'referral:1')?.updatedAt).toBe(300);
+		expect(findCachedReferral(client, 'referral:2')?.data._id).toBe('referral:2');
+	});
+
+	it('returns undefined when no cached page has the id', () => {
+		const client = fakeClient([[['a'], page('referral:1'), 100]]);
+		expect(findCachedReferral(client, 'referral:9')).toBeUndefined();
+		expect(findCachedReferral(fakeClient([[['a'], undefined, 0]]), 'referral:1')).toBeUndefined();
 	});
 });

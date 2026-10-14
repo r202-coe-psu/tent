@@ -536,3 +536,81 @@ describe('CouchDbReferralServerRepository transition() close_reason (CR-167 FR-C
 		expect(written?.[2]).toMatchObject({ schema_v: 2, close_reason: 'ปิดงาน' });
 	});
 });
+
+describe('CouchDbReferralServerRepository.getBatchFor', () => {
+	const anchor: Referral = {
+		...capacitySent,
+		_id: 'referral:a',
+		created_at: '2026-07-11T05:03:10.000Z'
+	};
+	const sibling: Referral = {
+		...anchor,
+		_id: 'referral:b',
+		created_at: '2026-07-11T05:03:50.000Z'
+	};
+	const other: Referral = { ...anchor, _id: 'referral:c', reason: 'Different' };
+
+	beforeEach(() => vi.clearAllMocks());
+
+	it('queries the anchor shelter_code bucket and keeps only matching batch keys', async () => {
+		adminRaw.mockResolvedValue({ status: 200, data: { docs: [anchor, other, sibling] } });
+		const repo = new CouchDbReferralServerRepository('central_ops', 'SH001');
+		const items = await repo.getBatchFor(anchor);
+
+		expect(items.map((r) => r._id)).toEqual(['referral:a', 'referral:b']);
+		const [path, method, body] = adminRaw.mock.calls.at(-1)!;
+		expect(path).toBe('/central_ops/_find');
+		expect(method).toBe('POST');
+		expect(body.selector).toEqual({
+			type: 'referral',
+			shelter_code: 'SH001',
+			created_at: { $gte: '2026-07-11T05:02:00.000Z', $lt: '2026-07-11T05:04:00.000Z' }
+		});
+		expect(body.sort).toEqual([{ type: 'asc' }, { shelter_code: 'asc' }, { created_at: 'asc' }]);
+		expect(body.limit).toBe(200);
+		expect(body.bookmark).toBeUndefined();
+	});
+
+	it.each([
+		['an incoming viewer', 'SH002'],
+		['an SA viewing another shelter', 'SH009']
+	])('uses the anchor shelter_code for %s', async (_label, viewer) => {
+		adminRaw.mockResolvedValue({ status: 200, data: { docs: [anchor] } });
+		const repo = new CouchDbReferralServerRepository('central_ops', viewer);
+		expect(await repo.getBatchFor(anchor)).toHaveLength(1);
+		const body = adminRaw.mock.calls.at(-1)![2];
+		expect(body.selector.shelter_code).toBe('SH001');
+		expect(body.selector.to_shelter_code).toBeUndefined();
+	});
+
+	it('pages through the bucket by bookmark until a short page', async () => {
+		const full = Array.from({ length: 200 }, (_, i) =>
+			i === 0 ? anchor : { ...other, _id: `referral:o${i}` }
+		);
+		const tail = Array.from({ length: 49 }, (_, i) => ({ ...sibling, _id: `referral:t${i}` }));
+		adminRaw
+			.mockResolvedValueOnce({ status: 200, data: { docs: full, bookmark: 'bm1' } })
+			.mockResolvedValueOnce({ status: 200, data: { docs: [sibling, ...tail], bookmark: 'bm2' } });
+		const repo = new CouchDbReferralServerRepository('central_ops', 'SH001');
+		const items = await repo.getBatchFor(anchor);
+
+		expect(items).toHaveLength(51);
+		expect(adminRaw).toHaveBeenCalledTimes(2);
+		expect(adminRaw.mock.calls[0]![2].bookmark).toBeUndefined();
+		expect(adminRaw.mock.calls[1]![2].bookmark).toBe('bm1');
+	});
+
+	it('throws instead of returning a partial batch past the page cap', async () => {
+		const full = Array.from({ length: 200 }, (_, i) => ({ ...other, _id: `referral:o${i}` }));
+		adminRaw.mockResolvedValue({ status: 200, data: { docs: full, bookmark: 'bm' } });
+		const repo = new CouchDbReferralServerRepository('central_ops', 'SH001');
+		await expect(repo.getBatchFor(anchor)).rejects.toThrow('page cap');
+		expect(adminRaw).toHaveBeenCalledTimes(50);
+	});
+
+	it('throws when CouchDB fails', async () => {
+		adminRaw.mockResolvedValue({ status: 500, data: {} });
+		const repo = new CouchDbReferralServerRepository('central_ops', 'SH001');
+		await expect(repo.getBatchFor(anchor)).rejects.toThrow('_find');
+	});
+});

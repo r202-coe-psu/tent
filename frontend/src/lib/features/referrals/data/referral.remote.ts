@@ -101,6 +101,20 @@ export class ReferralRemoteRepository implements ReferralRepository {
 		return isReferral(doc) ? doc : null;
 	}
 
+	async getBatch(id: string): Promise<Referral[]> {
+		const qs = new URLSearchParams({ shelter_code: getShelterCode() });
+		const res = await fetch(`/api/back-office/referral/${encodeURIComponent(id)}/batch?${qs}`, {
+			credentials: 'include',
+			headers: { Accept: 'application/json' }
+		});
+		if (res.status === 404) return [];
+		if (!res.ok) {
+			throw new Error(`Failed to get referral batch: ${res.statusText}`);
+		}
+		const payload = (await res.json()) as { items?: unknown[] };
+		return (Array.isArray(payload?.items) ? payload.items : []).filter(isReferral);
+	}
+
 	async create(input: ReferralInput): Promise<Referral> {
 		const qs = new URLSearchParams({ shelter_code: getShelterCode() });
 		const res = await fetch(`/api/back-office/referral?${qs}`, {

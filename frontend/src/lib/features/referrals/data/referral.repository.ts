@@ -29,6 +29,8 @@ export interface ReferralRepository {
 	list(filter?: ReferralFilter): Promise<Referral[]>;
 	listPage(filter?: ReferralFilter): Promise<ReferralPage>;
 	get(id: string): Promise<Referral | null>;
+	/** Members of the batch the referral belongs to (includes itself); `[]` when it does not exist. */
+	getBatch(id: string): Promise<Referral[]>;
 	create(input: ReferralInput, ctx: AuthorContext): Promise<Referral>;
 	transition(id: string, to: ReferralStatus, actor: string, reason?: string): Promise<Referral>;
 	/** One call for many ids, one shared `reason`; the server enforces every per-item rule. */

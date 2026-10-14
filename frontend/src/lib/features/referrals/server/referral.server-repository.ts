@@ -24,6 +24,7 @@ import {
 	buildDestinationIntakeDocs,
 	CapacityTransferError
 } from '../domain/referral.capacity-transfer';
+import { referralBatchBucketBounds, referralBatchKey } from '../domain/referral.batch-group';
 import type { ReferralRepository } from '../data/referral.repository';
 
 const HTTP_OK = 200;
@@ -325,6 +326,56 @@ export class CouchDbReferralServerRepository implements Omit<ReferralRepository,
 			bookmark: data.bookmark ?? null,
 			hasMore: rawDocs.length === parsed.limit
 		};
+	}
+
+	/** Docs per `_find` request while reading a batch bucket. */
+	static readonly BATCH_LIMIT = 200;
+	/** Sanity cap on pages per batch read; exceeding it throws instead of returning a partial batch. */
+	static readonly BATCH_MAX_PAGES = 50;
+
+	/**
+	 * Members of the batch `anchor` belongs to, oldest first. A batch is defined by its creator's
+	 * side, so the selector always uses the anchor's `shelter_code` (every sibling shares it and
+	 * `to_shelter_code`; the caller is authorized on the anchor by the route). Reads the whole
+	 * 2-minute bucket on the `(type, shelter_code, created_at)` index, paging by `bookmark`, then
+	 * keeps docs whose `referralBatchKey` matches.
+	 */
+	async getBatchFor(anchor: Referral): Promise<Referral[]> {
+		const { start, end } = referralBatchBucketBounds(anchor.created_at);
+		const key = referralBatchKey(anchor);
+		const limit = CouchDbReferralServerRepository.BATCH_LIMIT;
+		const members: Referral[] = [];
+		let bookmark: string | undefined;
+
+		for (let page = 0; page < CouchDbReferralServerRepository.BATCH_MAX_PAGES; page++) {
+			const body: Record<string, unknown> = {
+				selector: {
+					type: 'referral',
+					shelter_code: anchor.shelter_code,
+					created_at: { $gte: start, $lt: end }
+				},
+				sort: [{ type: 'asc' }, { shelter_code: 'asc' }, { created_at: 'asc' }],
+				limit
+			};
+			if (bookmark) body.bookmark = bookmark;
+
+			const { status, data } = await this.couchPost<MangoFindResponse>(this.dbName, '/_find', body);
+			if (status !== HTTP_OK) {
+				throw new CouchDbReferralError(`CouchDB _find query failed`, status, data);
+			}
+			const docs = data.docs || [];
+			for (const d of docs) {
+				if (isReferral(d) && referralBatchKey(d) === key) members.push(d);
+			}
+			if (docs.length < limit) return members;
+			bookmark = data.bookmark;
+		}
+		throw new CouchDbReferralError('Referral batch exceeds the page cap', 500);
+	}
+
+	async getBatch(id: string): Promise<Referral[]> {
+		const anchor = await this.get(id);
+		return anchor ? this.getBatchFor(anchor) : [];
 	}
 
 	async hasActiveReferral(evacueeId: string): Promise<boolean> {

@@ -1,5 +1,6 @@
 import {
 	type Referral,
+	type ReferralDirectionFilter,
 	type ReferralStatus,
 	type ReferralType,
 	type ReferralUrgency
@@ -199,4 +200,49 @@ export function getEvacueeSelectionError(selectedIds: readonly string[]): string
  */
 export function isRowActivationKey(event: { key: string; isOwnTarget: boolean }): boolean {
 	return event.isOwnTarget && (event.key === 'Enter' || event.key === ' ');
+}
+
+// ---------------------------------------------------------------------------
+// Route paths and list URL params (`dir`, `status`, `q`)
+// ---------------------------------------------------------------------------
+
+export const REFERRALS_PATH = '/back-office/referrals';
+
+/** Detail page of one referral. Ids contain `:`, so they are always encoded. */
+export function referralDetailPath(id: string): string {
+	return `${REFERRALS_PATH}/${encodeURIComponent(id)}`;
+}
+
+/** Batch members page of the batch the referral belongs to. */
+export function referralBatchPath(id: string): string {
+	return `${referralDetailPath(id)}/batch`;
+}
+
+export type ReferralListParams = {
+	direction: ReferralDirectionFilter;
+	status: 'all' | ReferralStatus;
+	q: string;
+};
+
+const LIST_STATUSES: readonly string[] = ['draft', 'sent', 'accepted', 'rejected', 'closed'];
+
+/** Read list state from the URL; unknown values fall back to the defaults (`out`, all, empty). */
+export function parseReferralListParams(params: URLSearchParams): ReferralListParams {
+	const status = params.get('status') ?? '';
+	return {
+		direction: params.get('dir') === 'in' ? 'incoming' : 'outgoing',
+		status: LIST_STATUSES.includes(status) ? (status as ReferralStatus) : 'all',
+		q: params.get('q') ?? ''
+	};
+}
+
+/** List URL for the given state; defaults are omitted so the plain list URL stays clean. */
+export function buildReferralListHref(state: Partial<ReferralListParams>): string {
+	const qs = new URLSearchParams();
+	if (state.direction === 'incoming') qs.set('dir', 'in');
+	if (state.status && state.status !== 'all') qs.set('status', state.status);
+	const q = state.q?.trim();
+	if (q) qs.set('q', q);
+	const text = qs.toString();
+	return text ? `${REFERRALS_PATH}?${text}` : REFERRALS_PATH;
 }
