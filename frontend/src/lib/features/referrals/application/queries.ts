@@ -11,8 +11,17 @@ import {
 	subscribeDataChanges,
 	type SubscribeDataChangesHandle
 } from '$lib/db/subscribe-data-changes';
-import { createReferralBatch, referralRepository } from '../data/referral.remote';
-import type { ReferralSubmitIntent } from '../data/referral.repository';
+import {
+	bulkTransitionReferrals,
+	createReferralBatch,
+	referralRepository
+} from '../data/referral.remote';
+import { BulkTransitionProgress } from './bulk-transition-progress.svelte';
+import { runBulkTransition } from './bulk-transition-run';
+import type {
+	ReferralBulkTransitionResult,
+	ReferralSubmitIntent
+} from '../data/referral.repository';
 import { authStore } from '$lib/stores/auth.svelte';
 import type {
 	Referral,
@@ -29,6 +38,7 @@ export const referralKeys = {
 	list: (filter?: ReferralFilter) => [...referralKeys.lists(), filter] as const,
 	details: () => [...referralKeys.all, 'detail', getShelterCode()] as const,
 	detail: (id: string) => [...referralKeys.details(), id] as const,
+	batches: () => [...referralKeys.all, 'batch', getShelterCode()] as const,
 	batch: (id: string) => [...referralKeys.all, 'batch', getShelterCode(), id] as const
 };
 
@@ -168,11 +178,83 @@ export const useTransitionReferral = (queryClient: QueryClient) =>
 		}
 	}));
 
-export function startReferralsLiveQuery(queryClient: QueryClient): SubscribeDataChangesHandle {
-	return subscribeDataChanges(queryClient, getShelterDb, (type) => {
-		if (type === 'referral') {
-			return [referralKeys.all];
+/** Patch the updated docs into the detail, list and batch caches without refetching. */
+export function patchReferralCaches(queryClient: QueryClient, updated: Referral[]) {
+	for (const doc of updated) {
+		queryClient.setQueryData(referralKeys.detail(doc._id), doc);
+		queryClient.setQueriesData<InfiniteData<ReferralPage, string | undefined>>(
+			{ queryKey: referralKeys.lists() },
+			(old) => replaceReferralInPages(old, doc)
+		);
+		queryClient.setQueriesData<Referral[]>({ queryKey: referralKeys.batches() }, (old) =>
+			old?.map((r) => (r._id === doc._id ? doc : r))
+		);
+	}
+}
+
+export type BulkTransitionVars = { ids: string[]; to: ReferralStatus; reason?: string };
+
+/**
+ * Bulk transition (CR-167): ids go to `POST bulk-transition` in chunks of 200, one request at a
+ * time. `progress` is reactive state for "สำเร็จ n / N" and the per-item failures; successes are
+ * never rolled back. Caches are patched with the returned docs and invalidated once per run (F-08).
+ */
+export function useBulkTransition(queryClient: QueryClient) {
+	const progress = new BulkTransitionProgress();
+
+	const mutation = createMutation(() => ({
+		mutationFn: ({ ids, to, reason }: BulkTransitionVars) =>
+			runBulkTransition({
+				ids,
+				to,
+				reason,
+				send: bulkTransitionReferrals,
+				onChunk: (r) => progress.addChunk(r.succeeded.length, r.failed)
+			}),
+		onSuccess: (result: ReferralBulkTransitionResult) => {
+			patchReferralCaches(queryClient, result.succeeded);
+			queryClient.invalidateQueries({ queryKey: referralKeys.all });
 		}
-		return [];
-	});
+	}));
+
+	async function run(ids: string[], to: ReferralStatus, reason?: string) {
+		progress.start(ids.length, to, reason);
+		try {
+			return await mutation.mutateAsync({ ids, to, reason });
+		} finally {
+			progress.finish();
+		}
+	}
+
+	/** Resend only the ids that failed in the last run, with the same target and reason. */
+	async function retryFailed() {
+		const ids = progress.failed.map((f) => f.id);
+		if (ids.length === 0 || !progress.to) return undefined;
+		progress.beginRetry();
+		try {
+			return await mutation.mutateAsync({ ids, to: progress.to, reason: progress.reason });
+		} finally {
+			progress.finish();
+		}
+	}
+
+	return { mutation, progress, run, retryFailed };
+}
+
+/**
+ * Query keys a referral change event invalidates (F-09): lists and batches, plus that one detail
+ * when the doc id is known (every detail otherwise) — never unrelated referral caches.
+ */
+export function referralKeysForChange(docId?: string): (readonly unknown[])[] {
+	return [
+		referralKeys.lists(),
+		referralKeys.batches(),
+		docId ? referralKeys.detail(docId) : referralKeys.details()
+	];
+}
+
+export function startReferralsLiveQuery(queryClient: QueryClient): SubscribeDataChangesHandle {
+	return subscribeDataChanges(queryClient, getShelterDb, (type, docId) =>
+		type === 'referral' ? referralKeysForChange(docId) : []
+	);
 }

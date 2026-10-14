@@ -11,12 +11,12 @@ export interface SubscribeDataChangesHandle {
 export function subscribeDataChanges(
 	queryClient: QueryClient,
 	dbName: string | (() => string),
-	keysForType: (type: string) => readonly (readonly unknown[])[]
+	keysForType: (type: string, docId: string) => readonly (readonly unknown[])[]
 ): SubscribeDataChangesHandle {
 	const unsubscribe = eventChannel.subscribe((event) => {
 		const db = typeof dbName === 'function' ? dbName() : dbName;
 		if (event.db !== db) return;
-		for (const queryKey of keysForType(event.docType)) {
+		for (const queryKey of keysForType(event.docType, event.docId)) {
 			queryClient.invalidateQueries({ queryKey });
 		}
 	});

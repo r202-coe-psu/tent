@@ -621,6 +621,120 @@ test.describe('Referrals — mocked UI contracts', { tag: ['@regression', '@back
 	// #556 — keyboard use and semantics
 	// -----------------------------------------------------------------------
 
+	test('#563 batch page: select all of one status, confirm, see progress, retry the failures', async ({
+		page
+	}) => {
+		const member = (id: string, name: string, second: number, status: string) =>
+			referralFixture({
+				_id: id,
+				status,
+				evacuee_id: `evacuee:${id}`,
+				evacuee_summary: { first_name: name, last_name: 'ทดสอบ' },
+				created_at: `2026-10-14T08:00:0${second}.000Z`,
+				timeline: {}
+			});
+		const store = newReferralStore([
+			member('referral:b1', 'สมศรี', 1, 'draft'),
+			member('referral:b2', 'สมพงษ์', 2, 'draft'),
+			member('referral:b3', 'สมหมาย', 3, 'draft'),
+			member('referral:b4', 'สมปอง', 4, 'accepted'),
+			member('referral:b5', 'สมจิต', 5, 'closed')
+		]);
+		store.bulkFailIds = ['referral:b2'];
+		await signInMocked(page, store);
+
+		// The list never offers checkboxes.
+		await page.goto('/back-office/referrals');
+		await expect(page.getByRole('checkbox')).toHaveCount(0);
+
+		await page.goto('/back-office/referrals/referral:b1/batch');
+		await expect(page.getByText('5 คนในชุดนี้')).toBeVisible();
+		// Closed member has no checkbox; the other four do (3 draft, 1 accepted) plus select-all.
+		await expect(page.getByRole('checkbox')).toHaveCount(5);
+		await expect(page.getByRole('checkbox', { name: 'เลือก สมจิต ทดสอบ' })).toHaveCount(0);
+		await expect(page.locator('.sticky', { hasText: 'รายการที่เลือก' })).toHaveCount(0);
+
+		await page.getByRole('checkbox', { name: /เลือกทั้งหมด/ }).click();
+		const bar = page.locator('.sticky', { hasText: 'รายการที่เลือก' });
+		await expect(bar).toContainText('3 รายการที่เลือก');
+		await expect(bar).toContainText('ฉบับร่าง');
+		// A member with another status is blocked and says why.
+		await expect(page.getByRole('checkbox', { name: 'เลือก สมปอง ทดสอบ' })).toBeDisabled();
+		await expect(page.getByText('สถานะต่างจากที่เลือก')).toBeVisible();
+
+		// Every bar control is at least 44px tall.
+		for (const name of ['ล้างการเลือก', 'ส่ง', 'ยกเลิกร่าง']) {
+			const box = await bar.getByRole('button', { name, exact: true }).boundingBox();
+			expect(box?.height ?? 0).toBeGreaterThanOrEqual(44);
+		}
+
+		await bar.getByRole('button', { name: 'ส่ง', exact: true }).click();
+		const dialog = page.getByRole('alertdialog');
+		await expect(dialog.getByText('จำนวน 3 รายการ')).toBeVisible();
+		await dialog.getByRole('button', { name: 'ส่งตัว 3 รายการ' }).click();
+
+		// One request, partial success with the per-item message.
+		await expect(page.getByText('สำเร็จ 2 / 3')).toBeVisible();
+		expect(store.bulkCalls).toEqual([
+			{ ids: ['referral:b1', 'referral:b2', 'referral:b3'], to: 'sent' }
+		]);
+		expect(store.patches).toHaveLength(0);
+		await expect(page.getByText(/สมพงษ์ ทดสอบ\s*— mock bulk failure/)).toBeVisible();
+
+		// Retry resends only the failed id.
+		store.bulkFailIds = [];
+		await page.getByRole('button', { name: /ลองใหม่เฉพาะที่ล้มเหลว \(1\)/ }).click();
+		await expect(page.getByText('ส่งตัวสำเร็จ 1 รายการ')).toBeVisible();
+		expect(store.bulkCalls.map((c) => c.ids)).toEqual([
+			['referral:b1', 'referral:b2', 'referral:b3'],
+			['referral:b2']
+		]);
+		await expect(page.locator('.sticky', { hasText: 'สำเร็จ' })).toHaveCount(0);
+		await expect(page.locator('td span', { hasText: /^\s*ส่งตัวแล้ว\s*$/ })).toHaveCount(3);
+	});
+
+	test('#563 batch page: a row checkbox does not open the detail and a row action sends one id', async ({
+		page
+	}) => {
+		const member = (id: string, name: string, second: number) =>
+			referralFixture({
+				_id: id,
+				status: 'draft',
+				evacuee_id: `evacuee:${id}`,
+				evacuee_summary: { first_name: name, last_name: 'ทดสอบ' },
+				created_at: `2026-10-14T08:00:0${second}.000Z`,
+				timeline: {}
+			});
+		const store = newReferralStore([
+			member('referral:s1', 'สมศรี', 1),
+			member('referral:s2', 'สมพงษ์', 2)
+		]);
+		await signInMocked(page, store);
+		await page.goto('/back-office/referrals/referral:s1/batch');
+
+		await page.getByRole('checkbox', { name: 'เลือก สมพงษ์ ทดสอบ' }).click();
+		await expect(page).toHaveURL(/\/referrals\/referral(%3A|:)s1\/batch$/);
+		await expect(page.locator('.sticky', { hasText: 'รายการที่เลือก' })).toContainText(
+			'1 รายการที่เลือก'
+		);
+		await page.getByRole('button', { name: 'ล้างการเลือก' }).click();
+		await expect(page.locator('.sticky', { hasText: 'รายการที่เลือก' })).toHaveCount(0);
+
+		// A row action confirms, then uses the bulk endpoint with that single id.
+		await page
+			.getByRole('row', { name: /สมศรี/ })
+			.getByRole('button', { name: 'ส่ง', exact: true })
+			.click();
+		const dialog = page.getByRole('alertdialog');
+		await expect(dialog.getByText('จำนวน 1 รายการ')).toBeVisible();
+		await expect(dialog.getByText('ผู้ประสบภัย: สมศรี ทดสอบ')).toBeVisible();
+		await dialog.getByRole('button', { name: 'ส่งตัว 1 รายการ' }).click();
+		await expect(page.getByText('ส่งตัวสำเร็จ 1 รายการ')).toBeVisible();
+		expect(store.bulkCalls).toEqual([{ ids: ['referral:s1'], to: 'sent' }]);
+		expect(store.patches).toHaveLength(0);
+		await expect(page).toHaveURL(/\/batch$/);
+	});
+
 	test('#556 keyboard only: open a batch, select a row, open its detail', async ({ page }) => {
 		const shared = {
 			reason: 'ศูนย์เต็ม ชุดทดสอบ',
