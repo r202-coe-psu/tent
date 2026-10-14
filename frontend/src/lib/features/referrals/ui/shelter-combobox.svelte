@@ -23,6 +23,7 @@
 	} = $props();
 
 	const errorMessage = $derived(Array.isArray(error) ? error[0] : error);
+	const listboxId = $props.id();
 
 	const sheltersQuery = useSearchShelters();
 	const allShelters = $derived(sheltersQuery.data ?? []);
@@ -41,7 +42,7 @@
 	let listboxRef = $state<HTMLUListElement | null>(null);
 	let itemRefs = $state<(HTMLButtonElement | null)[]>([]);
 
-	const filteredShelters = $derived(() => {
+	const filteredShelters = $derived.by(() => {
 		if (!searchTerm.trim()) {
 			return availableShelters.slice(0, 10);
 		}
@@ -51,7 +52,7 @@
 			.slice(0, 20);
 	});
 
-	const displayValue = $derived(() => {
+	const displayValue = $derived.by(() => {
 		if (!value) return '';
 		const found = allShelters.find((s) => s.code === value);
 		return found ? `${found.name} (${found.code})` : value;
@@ -85,7 +86,7 @@
 	}
 
 	function handleKeyDown(e: KeyboardEvent) {
-		const currentList = filteredShelters();
+		const currentList = filteredShelters;
 		if (!isOpen) {
 			if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Enter') {
 				e.preventDefault();
@@ -150,11 +151,11 @@
 			type="text"
 			role="combobox"
 			aria-expanded={isOpen}
-			aria-controls="shelter-listbox"
+			aria-controls={listboxId}
 			aria-autocomplete="list"
 			aria-invalid={!!errorMessage || sheltersQuery.isError}
 			disabled={sheltersQuery.isPending}
-			value={isOpen ? searchTerm : displayValue()}
+			value={isOpen ? searchTerm : displayValue}
 			onfocus={() => {
 				if (!sheltersQuery.isPending) {
 					isOpen = true;
@@ -222,18 +223,18 @@
 				<div class="p-4 text-center text-sm text-muted-foreground">
 					ไม่มีศูนย์พักพิงที่เปิดให้บริการ
 				</div>
-			{:else if filteredShelters().length === 0}
+			{:else if filteredShelters.length === 0}
 				<div class="p-4 text-center text-sm text-muted-foreground">
 					ไม่พบศูนย์พักพิงที่ตรงกับ "{searchTerm}"
 				</div>
 			{:else}
 				<ul
-					id="shelter-listbox"
+					id={listboxId}
 					role="listbox"
 					bind:this={listboxRef}
 					class="max-h-60 overflow-y-auto py-1"
 				>
-					{#each filteredShelters() as shelter, index (shelter.code)}
+					{#each filteredShelters as shelter, index (shelter.code)}
 						{@const isSelected = value === shelter.code}
 						{@const isHighlighted = highlightedIndex === index}
 						<li role="presentation">
