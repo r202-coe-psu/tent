@@ -571,8 +571,14 @@ test.describe('Referrals — mocked UI contracts', { tag: ['@regression', '@back
 		current_stay: { status: 'active' }
 	}));
 
+	// What the BFF snapshots into `evacuee_summary` when it creates a referral for these evacuees.
+	const summaries = Object.fromEntries(
+		pickable.map((e) => [e._id, { first_name: e.first_name, last_name: e.last_name }])
+	);
+
 	test('#575 the create flow lands on the batch page of what it created', async ({ page }) => {
 		const store = newReferralStore();
+		store.evacueeSummaries = summaries;
 		await signInMocked(page, store, MOCK_SHELTER, pickable);
 		await page.goto('/back-office/referrals');
 		await pickTwoAndFillDraft(page);
@@ -589,6 +595,7 @@ test.describe('Referrals — mocked UI contracts', { tag: ['@regression', '@back
 
 	test('#575 a partial create shows the failures on the batch page', async ({ page }) => {
 		const store = newReferralStore();
+		store.evacueeSummaries = summaries;
 		store.createFailIds = ['evacuee:mock_create_1'];
 		await signInMocked(page, store, MOCK_SHELTER, pickable);
 		await page.goto('/back-office/referrals');
