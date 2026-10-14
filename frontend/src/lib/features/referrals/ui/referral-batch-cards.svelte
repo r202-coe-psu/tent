@@ -13,6 +13,7 @@
 	import Send from '@lucide/svelte/icons/send';
 	import Clock from '@lucide/svelte/icons/clock';
 	import User from '@lucide/svelte/icons/user';
+	import { tick } from 'svelte';
 	import { useQueryClient } from '@tanstack/svelte-query';
 	import { toast } from 'svelte-sonner';
 	import { useEvacuees, zoneLabel } from '$lib/features/people';
@@ -34,7 +35,8 @@
 		getStatusBadgeVariant,
 		getStatusLabel,
 		getUrgencyLabel,
-		getUrgencyStyle
+		getUrgencyStyle,
+		isRowActivationKey
 	} from './referral.ui-helpers';
 
 	let {
@@ -65,6 +67,7 @@
 	let overrides = $state<Record<string, Referral>>({});
 	let responseReasonInput = $state('');
 	let pendingAction = $state<{ to: 'accepted' | 'rejected'; ids: string[] } | null>(null);
+	let reasonInputRef = $state<HTMLInputElement | null>(null);
 
 	const items = $derived(referrals.map((r) => overrides[r._id] ?? r));
 
@@ -190,9 +193,13 @@
 		);
 	}
 
-	function triggerActionWithReason(to: 'accepted' | 'rejected', ids: string[]) {
+	async function triggerActionWithReason(to: 'accepted' | 'rejected', ids: string[]) {
 		pendingAction = { to, ids };
 		responseReasonInput = '';
+		// Move focus to the reason field once it has rendered, so keyboard and screen-reader users land in it.
+		await tick();
+		reasonInputRef?.focus();
+		reasonInputRef?.scrollIntoView({ block: 'nearest' });
 	}
 
 	async function submitWithReason() {
@@ -465,10 +472,20 @@
 					<Table.Body>
 						{#each items as referral (referral._id)}
 							<Table.Row
-								class="transition-colors hover:bg-muted/20
+								class="transition-colors hover:bg-muted/20 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:outline-none focus-visible:ring-inset
 							{onSelectReferral ? 'cursor-pointer' : ''}
 							{selectedId === referral._id ? 'bg-primary/5 ring-1 ring-primary/20 ring-inset' : ''}"
+								tabindex={onSelectReferral ? 0 : undefined}
+								aria-selected={onSelectReferral ? selectedId === referral._id : undefined}
 								onclick={() => onSelectReferral?.(referral._id)}
+								onkeydown={(e) => {
+									if (
+										isRowActivationKey({ key: e.key, isOwnTarget: e.target === e.currentTarget })
+									) {
+										e.preventDefault();
+										onSelectReferral?.(referral._id);
+									}
+								}}
 							>
 								<Table.Cell class="font-semibold text-foreground">
 									{evacueeName(referral.evacuee_id, referral)}
@@ -588,7 +605,9 @@
 						</h4>
 						<Input
 							type="text"
+							aria-label="เหตุผลการตอบรับหรือปฏิเสธ"
 							placeholder="ระบุเหตุผลหรือคำอธิบายประกอบการพิจารณา..."
+							bind:ref={reasonInputRef}
 							bind:value={responseReasonInput}
 						/>
 						<div class="flex justify-end gap-2">
