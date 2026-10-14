@@ -648,7 +648,7 @@ test.describe('Referrals — mocked UI contracts', { tag: ['@regression', '@back
 		await expect(page.getByRole('checkbox')).toHaveCount(0);
 
 		await page.goto('/back-office/referrals/referral:b1/batch');
-		await expect(page.getByText('4 คนในชุดนี้').or(page.getByText('5 คนในชุดนี้'))).toBeVisible();
+		await expect(page.getByText('5 คนในชุดนี้')).toBeVisible();
 		// Closed member has no checkbox; the other four do (3 draft, 1 accepted) plus select-all.
 		await expect(page.getByRole('checkbox')).toHaveCount(5);
 		await expect(page.getByRole('checkbox', { name: 'เลือก สมจิต ทดสอบ' })).toHaveCount(0);
@@ -691,6 +691,48 @@ test.describe('Referrals — mocked UI contracts', { tag: ['@regression', '@back
 		]);
 		await expect(page.locator('.sticky', { hasText: 'สำเร็จ' })).toHaveCount(0);
 		await expect(page.locator('td span', { hasText: /^\s*ส่งตัวแล้ว\s*$/ })).toHaveCount(3);
+	});
+
+	test('#563 batch page: a row checkbox does not open the detail and a row action sends one id', async ({
+		page
+	}) => {
+		const member = (id: string, name: string, second: number) =>
+			referralFixture({
+				_id: id,
+				status: 'draft',
+				evacuee_id: `evacuee:${id}`,
+				evacuee_summary: { first_name: name, last_name: 'ทดสอบ' },
+				created_at: `2026-10-14T08:00:0${second}.000Z`,
+				timeline: {}
+			});
+		const store = newReferralStore([
+			member('referral:s1', 'สมศรี', 1),
+			member('referral:s2', 'สมพงษ์', 2)
+		]);
+		await signInMocked(page, store);
+		await page.goto('/back-office/referrals/referral:s1/batch');
+
+		await page.getByRole('checkbox', { name: 'เลือก สมพงษ์ ทดสอบ' }).click();
+		await expect(page).toHaveURL(/\/referrals\/referral(%3A|:)s1\/batch$/);
+		await expect(page.locator('.sticky', { hasText: 'รายการที่เลือก' })).toContainText(
+			'1 รายการที่เลือก'
+		);
+		await page.getByRole('button', { name: 'ล้างการเลือก' }).click();
+		await expect(page.locator('.sticky', { hasText: 'รายการที่เลือก' })).toHaveCount(0);
+
+		// A row action confirms, then uses the bulk endpoint with that single id.
+		await page
+			.getByRole('row', { name: /สมศรี/ })
+			.getByRole('button', { name: 'ส่ง', exact: true })
+			.click();
+		const dialog = page.getByRole('alertdialog');
+		await expect(dialog.getByText('จำนวน 1 รายการ')).toBeVisible();
+		await expect(dialog.getByText('ผู้ประสบภัย: สมศรี ทดสอบ')).toBeVisible();
+		await dialog.getByRole('button', { name: 'ส่งตัว 1 รายการ' }).click();
+		await expect(page.getByText('ส่งตัวสำเร็จ 1 รายการ')).toBeVisible();
+		expect(store.bulkCalls).toEqual([{ ids: ['referral:s1'], to: 'sent' }]);
+		expect(store.patches).toHaveLength(0);
+		await expect(page).toHaveURL(/\/batch$/);
 	});
 
 	test('#556 keyboard only: open a batch, select a row, open its detail', async ({ page }) => {
