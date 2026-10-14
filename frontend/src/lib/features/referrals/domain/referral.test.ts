@@ -242,6 +242,72 @@ describe('Referral Domain', () => {
 				expect(updated.timeline.closed).toEqual({ at: nowIso, by: 'Manager A' });
 			});
 
+			it('closed with a reason writes close_reason and leaves response_reason untouched', () => {
+				const doc = mockReferral({
+					status: 'accepted',
+					response_reason: 'Bed space confirmed',
+					timeline: {
+						sent: { at: '2026-07-11T05:10:00.000Z', by: 'Manager A' },
+						responded: { at: '2026-07-11T05:20:00.000Z', by: 'Hospital Staff B' }
+					}
+				});
+				const updated = applyTransition(
+					doc,
+					'closed',
+					'Manager A',
+					'2026-07-11T05:30:00.000Z',
+					'ปิดงาน'
+				);
+
+				expect(updated.close_reason).toBe('ปิดงาน');
+				expect(updated.response_reason).toBe('Bed space confirmed');
+			});
+
+			it('closed without a reason writes no close_reason and keeps the schema_v', () => {
+				const doc = mockReferral({ status: 'draft', schema_v: 1 });
+				const updated = applyTransition(doc, 'closed', 'Manager A', '2026-07-11T05:15:00.000Z');
+
+				expect(updated.close_reason).toBeUndefined();
+				expect(updated.schema_v).toBe(1);
+			});
+
+			it('lifts a v1 doc to schema_v 2 when close_reason is written', () => {
+				const doc = mockReferral({ status: 'draft', schema_v: 1 });
+				const updated = applyTransition(
+					doc,
+					'closed',
+					'Manager A',
+					'2026-07-11T05:15:00.000Z',
+					'ส่งผิดคน'
+				);
+
+				expect(updated.schema_v).toBe(2);
+				expect(isReferral(updated)).toBe(true);
+			});
+
+			it('does not write close_reason on non-closed transitions', () => {
+				const sent = applyTransition(
+					mockReferral({ status: 'draft' }),
+					'sent',
+					'Manager A',
+					'2026-07-11T05:10:00.000Z',
+					'x'
+				);
+				expect(sent.close_reason).toBeUndefined();
+				expect(sent.response_reason).toBeUndefined();
+				expect(sent.schema_v).toBe(1);
+
+				const accepted = applyTransition(
+					mockReferral({ status: 'sent' }),
+					'accepted',
+					'B',
+					'2026-07-11T05:20:00.000Z',
+					'ok'
+				);
+				expect(accepted.response_reason).toBe('ok');
+				expect(accepted.close_reason).toBeUndefined();
+			});
+
 			it('should throw on invalid transition', () => {
 				const doc = mockReferral({ status: 'draft' });
 				expect(() =>

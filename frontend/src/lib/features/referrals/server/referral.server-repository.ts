@@ -339,7 +339,7 @@ export class CouchDbReferralServerRepository implements ReferralRepository {
 		evacueeSummary?: EvacueeSummary
 	): Promise<Referral> {
 		const body = buildReferralBody(input, evacueeSummary);
-		const rawDoc = makeDoc('referral', 1, body, ctx);
+		const rawDoc = makeDoc('referral', 2, body, ctx);
 
 		const doc = referralSchema.parse(rawDoc);
 

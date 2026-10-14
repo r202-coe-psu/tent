@@ -421,6 +421,14 @@
 									<User class="h-3 w-3" /> By: {referral.timeline.closed.by}
 								</span>
 							</div>
+							{#if referral.close_reason}
+								<p
+									class="mt-1 text-xs whitespace-pre-wrap text-slate-700 dark:text-slate-300"
+									data-testid="close-reason"
+								>
+									เหตุผล: {referral.close_reason}
+								</p>
+							{/if}
 						</div>
 					{/if}
 				</div>
