@@ -1,6 +1,7 @@
 <script lang="ts">
 	import * as AlertDialog from '$lib/components/ui/alert-dialog/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
+	import type { Snippet } from 'svelte';
 	import { formatReferralNameSummary } from './referral.ui-helpers';
 
 	let {
@@ -13,6 +14,7 @@
 		destructive = false,
 		pending = false,
 		portalDisabled = false,
+		children,
 		onConfirm
 	}: {
 		/** Owned by the caller. The dialog sets it to `false` after `onConfirm` settles or on cancel. */
@@ -29,6 +31,8 @@
 		pending?: boolean;
 		/** Renders inline instead of through the portal. Only for SSR markup tests; production keeps the portal. */
 		portalDisabled?: boolean;
+		/** Extra body between the summary and the buttons, e.g. an optional reason field. */
+		children?: Snippet;
 		onConfirm: () => unknown;
 	} = $props();
 
@@ -73,6 +77,7 @@
 				{/if}
 			</AlertDialog.Description>
 		</AlertDialog.Header>
+		{@render children?.()}
 		<AlertDialog.Footer class="gap-2">
 			<Button
 				variant="outline"
