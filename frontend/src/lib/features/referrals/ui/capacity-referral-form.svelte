@@ -36,6 +36,9 @@
 	const form = superForm(defaults(initialData, zod4(capacityInputSchema)), {
 		id: 'referral-create-capacity',
 		SPA: true,
+		// Keep the typed values: the send confirm dialog can be cancelled, and the default reset-on-valid
+		// would blank the form so it could not be submitted again.
+		resetForm: false,
 		dataType: 'json',
 		validators: zod4(capacityInputSchema),
 		onUpdate: ({ form: f }) => {
@@ -59,7 +62,9 @@
 		<Form.Field {form} name="to_shelter_code">
 			<Form.Control>
 				{#snippet children({ props })}
-					<Form.Label>ศูนย์พักพิงปลายทาง (Target Shelter) *</Form.Label>
+					<Form.Label
+						>ศูนย์พักพิงปลายทาง (Target Shelter) <span class="text-red-600">*</span></Form.Label
+					>
 					<ShelterCombobox
 						id={props.id}
 						bind:value={$formData.to_shelter_code}
@@ -86,7 +91,7 @@
 			<Form.Field {form} name="urgency">
 				<Form.Control>
 					{#snippet children({ props })}
-						<Form.Label>ระดับความเร่งด่วน *</Form.Label>
+						<Form.Label>ระดับความเร่งด่วน <span class="text-red-600">*</span></Form.Label>
 						<div role="group" aria-label="ระดับความเร่งด่วน" class="mt-1 flex gap-2">
 							<button
 								type="button"
@@ -122,7 +127,7 @@
 		<Form.Field {form} name="reason">
 			<Form.Control>
 				{#snippet children({ props })}
-					<Form.Label>เหตุผลการส่งต่อ / ความจำเป็น *</Form.Label>
+					<Form.Label>เหตุผลการส่งต่อ / ความจำเป็น <span class="text-red-600">*</span></Form.Label>
 					<Textarea
 						{...props}
 						bind:value={$formData.reason}

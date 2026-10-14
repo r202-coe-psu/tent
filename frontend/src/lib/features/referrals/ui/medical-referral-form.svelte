@@ -39,6 +39,9 @@
 	const form = superForm(defaults(initialData, zod4(medicalInputSchema)), {
 		id: 'referral-create-medical',
 		SPA: true,
+		// Keep the typed values: the send confirm dialog can be cancelled, and the default reset-on-valid
+		// would blank the form so it could not be submitted again.
+		resetForm: false,
 		dataType: 'json',
 		validators: zod4(medicalInputSchema),
 		onUpdate: ({ form: f }) => {
@@ -63,7 +66,7 @@
 			<Form.Field {form} name="to_org.name">
 				<Form.Control>
 					{#snippet children({ props })}
-						<Form.Label>ชื่อสถานพยาบาลปลายทาง *</Form.Label>
+						<Form.Label>ชื่อสถานพยาบาลปลายทาง <span class="text-red-600">*</span></Form.Label>
 						<Input
 							{...props}
 							bind:value={$formData.to_org.name}
@@ -96,7 +99,7 @@
 			<Form.Field {form} name="urgency">
 				<Form.Control>
 					{#snippet children({ props })}
-						<Form.Label>ระดับความเร่งด่วน *</Form.Label>
+						<Form.Label>ระดับความเร่งด่วน <span class="text-red-600">*</span></Form.Label>
 						<div role="group" aria-label="ระดับความเร่งด่วน" class="mt-1 flex gap-2">
 							<button
 								type="button"
@@ -132,7 +135,7 @@
 		<Form.Field {form} name="reason">
 			<Form.Control>
 				{#snippet children({ props })}
-					<Form.Label>เหตุผลการส่งต่อ / ความจำเป็น *</Form.Label>
+					<Form.Label>เหตุผลการส่งต่อ / ความจำเป็น <span class="text-red-600">*</span></Form.Label>
 					<Textarea
 						{...props}
 						bind:value={$formData.reason}

@@ -26,8 +26,13 @@ const MOCK_USER = 'ref_mock_manager';
  * Sign in as a shelter manager for `shelter` with every CouchDB and BFF call answered by
  * route mocks. The page's auth guard reads the cached identity from localStorage.
  */
-async function signInMocked(page: Page, store: ReferralStore, shelter = MOCK_SHELTER) {
-	await mockStaffSession(page, shelter);
+async function signInMocked(
+	page: Page,
+	store: ReferralStore,
+	shelter = MOCK_SHELTER,
+	evacuees: Record<string, unknown>[] = []
+) {
+	await mockStaffSession(page, shelter, evacuees);
 	await mockReferralApi(page, store);
 	await injectSession(
 		page,
@@ -168,6 +173,46 @@ test.describe('Referrals — mocked UI contracts', { tag: ['@regression', '@back
 		for (const name of [/^ส่งข้อมูล$/, /^บันทึกร่าง$/]) {
 			await page.getByRole('button', { name }).click();
 			await expect(page.getByText('กรุณาเลือกผู้ประสบภัยอย่างน้อย 1 คน').first()).toBeVisible();
+		}
+		expect(store.writes).toEqual([]);
+	});
+
+	test('#549 cancelling the send confirm keeps the form so it can be sent again', async ({
+		page
+	}) => {
+		const stamp = '2026-10-14T08:00:00.000Z';
+		const evacuees = ['ก', 'ข'].map((last, i) => ({
+			_id: `evacuee:mock_pick_${i}`,
+			type: 'evacuee',
+			schema_v: 13,
+			shelter_code: MOCK_SHELTER,
+			first_name: 'สมชาย',
+			last_name: last,
+			created_at: stamp,
+			updated_at: stamp,
+			created_by: 'system',
+			current_stay: { status: 'active' }
+		}));
+		const store = newReferralStore();
+		await signInMocked(page, store, MOCK_SHELTER, evacuees);
+		await page.goto('/back-office/referrals');
+
+		await page.getByRole('button', { name: /สร้างรายการส่งต่อ/ }).click();
+		await page.getByRole('row', { name: /สมชาย ก/ }).click();
+		await page.getByPlaceholder('เช่น โรงพยาบาลมหาราช').fill('โรงพยาบาลทดสอบ');
+		const reason = page.getByPlaceholder(/ระบุรายละเอียดเหตุผลความจำเป็น/);
+		await reason.fill('ต้องการการรักษาต่อเนื่อง');
+
+		const send = page.getByRole('button', { name: /^ส่งข้อมูล$/ });
+		const dialog = page.getByRole('alertdialog');
+		for (let attempt = 1; attempt <= 2; attempt++) {
+			await send.click();
+			await expect(dialog, `attempt ${attempt}`).toBeVisible();
+			await dialog.getByRole('button', { name: 'ยกเลิก' }).click();
+			await expect(dialog).toBeHidden();
+			// The typed values survive the cancelled confirm (superforms must not reset the form).
+			await expect(page.getByPlaceholder('เช่น โรงพยาบาลมหาราช')).toHaveValue('โรงพยาบาลทดสอบ');
+			await expect(reason).toHaveValue('ต้องการการรักษาต่อเนื่อง');
 		}
 		expect(store.writes).toEqual([]);
 	});

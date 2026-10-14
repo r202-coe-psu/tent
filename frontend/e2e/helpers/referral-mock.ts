@@ -63,7 +63,11 @@ export function referralFixture(overrides: Partial<ReferralRow> & { _id: string 
 }
 
 /** Serve a staff session (no real CouchDB user) for the given shelter roles. */
-export async function mockStaffSession(page: Page, shelter: string): Promise<void> {
+export async function mockStaffSession(
+	page: Page,
+	shelter: string,
+	evacuees: Record<string, unknown>[] = []
+): Promise<void> {
 	const roles = [`shelter:${shelter}`, 'shelter_manager'];
 	const appBase = appBaseUrl();
 	await page.route(
@@ -106,7 +110,7 @@ export async function mockStaffSession(page: Page, shelter: string): Promise<voi
 		}
 		return route.fulfill({
 			headers: cors,
-			json: couchReadResponse(path)
+			json: couchReadResponse(path, new URL(req.url()).searchParams, evacuees)
 		});
 	});
 }
@@ -115,7 +119,11 @@ export async function mockStaffSession(page: Page, shelter: string): Promise<voi
  * Read answers for CouchDB paths the page polls. The registry must list the active shelter,
  * or the page shows "no shelter"; every other collection is empty.
  */
-function couchReadResponse(path: string): Record<string, unknown> {
+function couchReadResponse(
+	path: string,
+	params: URLSearchParams,
+	evacuees: Record<string, unknown>[]
+): Record<string, unknown> {
 	if (path === '/registry/_all_docs') {
 		const docs = [MOCK_SHELTER, MOCK_DEST].map((code) => ({
 			_id: `shelter:${code}`,
@@ -131,6 +139,16 @@ function couchReadResponse(path: string): Record<string, unknown> {
 			offset: 0,
 			rows: docs.map((doc) => ({ id: doc._id, key: doc._id, value: { rev: '1-mock' }, doc }))
 		};
+	}
+	// Evacuee roster (`_all_docs` by the `evacuee:` prefix) of the active shelter's DB.
+	if (path.endsWith('/_all_docs') && params.get('startkey')?.includes('evacuee:')) {
+		const rows = evacuees.map((doc) => ({
+			id: doc._id,
+			key: doc._id,
+			value: { rev: '1-mock' },
+			doc
+		}));
+		return { total_rows: rows.length, offset: 0, rows };
 	}
 	return { total_rows: 0, offset: 0, rows: [], docs: [] };
 }
