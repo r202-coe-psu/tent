@@ -24,6 +24,7 @@ import {
 	buildDestinationIntakeDocs,
 	CapacityTransferError
 } from '../domain/referral.capacity-transfer';
+import { referralBatchBucketBounds, referralBatchKey } from '../domain/referral.batch-group';
 import type { ReferralRepository } from '../data/referral.repository';
 
 const HTTP_OK = 200;
@@ -324,6 +325,41 @@ export class CouchDbReferralServerRepository implements ReferralRepository {
 			bookmark: data.bookmark ?? null,
 			hasMore: rawDocs.length === parsed.limit
 		};
+	}
+
+	/** Upper bound of docs read for one batch bucket (a 2-minute create window). */
+	static readonly BATCH_LIMIT = 200;
+
+	/**
+	 * Members of the batch `anchor` belongs to, oldest first. Reads one 2-minute bucket on the
+	 * `(type, <shelter field>, created_at)` index, then keeps docs whose `referralBatchKey` matches.
+	 */
+	async getBatchFor(anchor: Referral): Promise<Referral[]> {
+		const field =
+			anchor.shelter_code === this.contextShelterCode ? 'shelter_code' : 'to_shelter_code';
+		const { start, end } = referralBatchBucketBounds(anchor.created_at);
+		const body = {
+			selector: {
+				type: 'referral',
+				[field]: this.contextShelterCode,
+				created_at: { $gte: start, $lt: end }
+			},
+			sort: [{ type: 'asc' }, { [field]: 'asc' }, { created_at: 'asc' }],
+			limit: CouchDbReferralServerRepository.BATCH_LIMIT
+		};
+		const { status, data } = await this.couchPost<MangoFindResponse>(this.dbName, '/_find', body);
+		if (status !== HTTP_OK) {
+			throw new CouchDbReferralError(`CouchDB _find query failed`, status, data);
+		}
+		const key = referralBatchKey(anchor);
+		return (data.docs || []).filter(
+			(d): d is Referral => isReferral(d) && referralBatchKey(d) === key
+		);
+	}
+
+	async getBatch(id: string): Promise<Referral[]> {
+		const anchor = await this.get(id);
+		return anchor ? this.getBatchFor(anchor) : [];
 	}
 
 	async hasActiveReferral(evacueeId: string): Promise<boolean> {

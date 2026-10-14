@@ -182,6 +182,26 @@ describe('ReferralRemoteRepository — capacity via BFF', () => {
 		);
 		expect(result.status).toBe('accepted');
 	});
+
+	it('getBatch calls the batch BFF with the encoded id and drops malformed docs', async () => {
+		fetchMock.mockResolvedValue({
+			ok: true,
+			status: 200,
+			json: async () => ({ items: [capacitySent, { junk: true }] })
+		});
+		const items = await repo.getBatch('referral:a b');
+		expect(items).toEqual([capacitySent]);
+		expect(fetchMock.mock.calls[0]![0]).toBe(
+			'/api/back-office/referral/referral%3Aa%20b/batch?shelter_code=SH001'
+		);
+	});
+
+	it('getBatch returns [] on 404 and throws on other failures', async () => {
+		fetchMock.mockResolvedValueOnce({ ok: false, status: 404, statusText: 'Not Found' });
+		expect(await repo.getBatch('referral:x')).toEqual([]);
+		fetchMock.mockResolvedValueOnce({ ok: false, status: 500, statusText: 'Boom' });
+		await expect(repo.getBatch('referral:x')).rejects.toThrow('Failed to get referral batch');
+	});
 });
 
 describe('createReferralBatch', () => {

@@ -459,3 +459,52 @@ describe('CouchDbReferralServerRepository listPage()', () => {
 		expect(body.sort).toEqual([{ type: 'desc' }, { created_at: 'desc' }]);
 	});
 });
+
+describe('CouchDbReferralServerRepository.getBatchFor', () => {
+	const anchor: Referral = {
+		...capacitySent,
+		_id: 'referral:a',
+		created_at: '2026-07-11T05:03:10.000Z'
+	};
+	const sibling: Referral = {
+		...anchor,
+		_id: 'referral:b',
+		created_at: '2026-07-11T05:03:50.000Z'
+	};
+	const other: Referral = { ...anchor, _id: 'referral:c', reason: 'Different' };
+
+	beforeEach(() => vi.clearAllMocks());
+
+	it('queries the source index for the anchor bucket and keeps only matching batch keys', async () => {
+		adminRaw.mockResolvedValue({ status: 200, data: { docs: [anchor, other, sibling] } });
+		const repo = new CouchDbReferralServerRepository('central_ops', 'SH001');
+		const items = await repo.getBatchFor(anchor);
+
+		expect(items.map((r) => r._id)).toEqual(['referral:a', 'referral:b']);
+		const [path, method, body] = adminRaw.mock.calls.at(-1)!;
+		expect(path).toBe('/central_ops/_find');
+		expect(method).toBe('POST');
+		expect(body.selector).toEqual({
+			type: 'referral',
+			shelter_code: 'SH001',
+			created_at: { $gte: '2026-07-11T05:02:00.000Z', $lt: '2026-07-11T05:04:00.000Z' }
+		});
+		expect(body.sort).toEqual([{ type: 'asc' }, { shelter_code: 'asc' }, { created_at: 'asc' }]);
+	});
+
+	it('uses to_shelter_code when the caller is the destination', async () => {
+		adminRaw.mockResolvedValue({ status: 200, data: { docs: [anchor] } });
+		const repo = new CouchDbReferralServerRepository('central_ops', 'SH002');
+		await repo.getBatchFor(anchor);
+		const body = adminRaw.mock.calls.at(-1)![2];
+		expect(body.selector.to_shelter_code).toBe('SH002');
+		expect(body.selector.shelter_code).toBeUndefined();
+		expect(body.sort[1]).toEqual({ to_shelter_code: 'asc' });
+	});
+
+	it('throws when CouchDB fails', async () => {
+		adminRaw.mockResolvedValue({ status: 500, data: {} });
+		const repo = new CouchDbReferralServerRepository('central_ops', 'SH001');
+		await expect(repo.getBatchFor(anchor)).rejects.toThrow('_find');
+	});
+});
