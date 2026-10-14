@@ -924,3 +924,135 @@ test.describe(
 		}
 	}
 );
+
+// ---------------------------------------------------------------------------
+// #564 — mobile create form: sticky submit, 44px targets, no horizontal scroll
+// ---------------------------------------------------------------------------
+test.describe(
+	'Referrals — mobile create form (#564)',
+	{ tag: ['@regression', '@back-office'] },
+	() => {
+		const manyEvacuees = Array.from({ length: 30 }, (_, i) => ({
+			_id: `evacuee:mock_mobile_${i}`,
+			type: 'evacuee',
+			schema_v: 13,
+			shelter_code: MOCK_SHELTER,
+			first_name: 'สมชาย',
+			last_name: `ทดสอบ${i}`,
+			created_at: '2026-10-14T08:00:00.000Z',
+			updated_at: '2026-10-14T08:00:00.000Z',
+			created_by: 'system',
+			current_stay: { status: 'active' }
+		}));
+		const typeButtons = [/ส่งต่อทางการแพทย์/, /ย้ายศูนย์พักพิง/, /ขอสนับสนุนทรัพยากร/];
+
+		const viewports = [
+			{ width: 360, height: 740 },
+			{ width: 390, height: 844 },
+			{ width: 414, height: 896 }
+		];
+
+		for (const vp of viewports) {
+			test(`${vp.width}x${vp.height}: no overflow, submit in view, targets >= 44px`, async ({
+				page
+			}) => {
+				const errors = trackPageErrors(page);
+				await page.setViewportSize(vp);
+				await signInMocked(page, newReferralStore(), MOCK_SHELTER, manyEvacuees);
+				await page.goto('/back-office/referrals/new');
+				await expect(page.getByRole('row', { name: /ทดสอบ0$/ })).toBeVisible({ timeout: 20_000 });
+
+				for (const [index, typeName] of typeButtons.entries()) {
+					await page.getByRole('button', { name: typeName }).click();
+					// Let the type's form mount before measuring.
+					await expect(page.getByRole('button', { name: /^บันทึกร่าง$/ })).toBeVisible();
+
+					const overflow = await page.evaluate(() => {
+						const offenders = [...document.querySelectorAll('body *')]
+							.filter((el) => {
+								if (el.getBoundingClientRect().right <= window.innerWidth + 0.5) return false;
+								// Content inside a scroll/clip container cannot widen the page.
+								for (let a = el.parentElement; a && a !== document.body; a = a.parentElement) {
+									if (getComputedStyle(a).overflowX !== 'visible') return false;
+								}
+								return true;
+							})
+							.slice(0, 5)
+							.map((el) => `${el.tagName}.${String(el.className).slice(0, 40)}`);
+						return {
+							px: document.documentElement.scrollWidth - window.innerWidth,
+							offenders
+						};
+					});
+					expect(overflow.px, `overflow by ${overflow.offenders.join(' | ')}`).toBeLessThanOrEqual(
+						0
+					);
+
+					// Submit buttons stay in view while the end of the form is still off-screen.
+					// Scroll the form's first field to the top: the end of the form is still far below.
+					await page.getByLabel('ค้นหาผู้ประสบภัย').evaluate((el) => {
+						const top = el.getBoundingClientRect().top + window.scrollY - 8;
+						window.scrollTo({ top, behavior: 'instant' });
+					});
+					await page.waitForTimeout(150);
+					for (const name of [/^บันทึกร่าง$/, /^ส่งข้อมูล$/]) {
+						const box = await page.getByRole('button', { name }).boundingBox();
+						expect(box, `${name} box`).not.toBeNull();
+						expect(box!.y).toBeGreaterThanOrEqual(0);
+						expect(box!.y + box!.height).toBeLessThanOrEqual(vp.height);
+					}
+
+					// Every tappable control in the page body is at least 44px tall.
+					const targets = page
+						.locator('main')
+						.locator(
+							'button:visible, input:visible, textarea:visible, [role="combobox"]:visible, tbody tr:visible'
+						);
+					const heights = await targets.evaluateAll((els) =>
+						els
+							.filter((el) => el.getAttribute('role') !== 'checkbox')
+							.map((el) => ({
+								label:
+									el.getAttribute('aria-label') ??
+									el.getAttribute('placeholder') ??
+									(el.textContent ?? '').trim().slice(0, 30),
+								height: el.getBoundingClientRect().height
+							}))
+					);
+					expect(heights.length).toBeGreaterThan(8);
+					const short = heights.filter((h) => h.height < 43.5);
+					expect(short, 'controls under 44px').toEqual([]);
+					console.log(
+						`[#564] ${vp.width}x${vp.height} type#${index}: min control height ${Math.min(...heights.map((h) => h.height))}`
+					);
+
+					if (index === 0) {
+						await page.screenshot({
+							path: `test-results/referrals-create-${vp.width}x${vp.height}.png`,
+							fullPage: false
+						});
+					}
+				}
+				expect(errors).toEqual([]);
+			});
+		}
+
+		test('picker row hit area: tapping beside the checkbox toggles the row once', async ({
+			page
+		}) => {
+			await page.setViewportSize({ width: 390, height: 844 });
+			await signInMocked(page, newReferralStore(), MOCK_SHELTER, manyEvacuees);
+			await page.goto('/back-office/referrals/new');
+			const row = page.getByRole('row', { name: /ทดสอบ0$/ });
+			await row
+				.getByRole('cell')
+				.first()
+				.click({ position: { x: 2, y: 2 } });
+			await expect(page.getByText(/เลือกแล้ว\s*1\s*คน/)).toBeVisible();
+			await row.getByRole('checkbox').click();
+			await expect(page.getByText(/เลือกแล้ว\s*0\s*คน/)).toBeVisible();
+			await row.getByRole('checkbox').click();
+			await expect(page.getByText(/เลือกแล้ว\s*1\s*คน/)).toBeVisible();
+		});
+	}
+);
