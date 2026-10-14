@@ -25,6 +25,7 @@
 	import RedactionBanner from './redaction-banner.svelte';
 	import ReferralConfirmDialog from './referral-confirm-dialog.svelte';
 	import {
+		formatEvacueeFullName,
 		formatReferralDate as formatDate,
 		getKindLabel,
 		getStatusLabel,
@@ -218,8 +219,7 @@
 							<div>
 								<p class="text-xs text-muted-foreground">ชื่อ-นามสกุล ผู้ประสบภัย</p>
 								<p class="mt-0.5 text-base font-semibold text-foreground">
-									{referral.evacuee_summary.first_name}
-									{referral.evacuee_summary.last_name}
+									{formatEvacueeFullName(referral.evacuee_summary)}
 								</p>
 							</div>
 						{/if}

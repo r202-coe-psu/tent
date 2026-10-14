@@ -9,6 +9,7 @@ import {
 	isReferralListCapReached,
 	getEvacueeSelectionError,
 	resolveEvacueeName,
+	formatEvacueeFullName,
 	EVACUEE_NAME_FALLBACK
 } from './referral.ui-helpers';
 
@@ -65,5 +66,18 @@ describe('resolveEvacueeName', () => {
 	it('returns the shared fallback text when no source has a name', () => {
 		expect(resolveEvacueeName()).toBe(EVACUEE_NAME_FALLBACK);
 		expect(resolveEvacueeName(undefined, undefined)).toBe('ไม่พบชื่อผู้ประสบภัย');
+	});
+});
+
+describe('formatEvacueeFullName', () => {
+	it('joins first and last name with one space', () => {
+		expect(formatEvacueeFullName({ first_name: 'สมชาย', last_name: 'ใจดี' })).toBe('สมชาย ใจดี');
+	});
+
+	it('omits an empty, blank or missing last name (mononym) without a trailing space', () => {
+		expect(formatEvacueeFullName({ first_name: 'ทดสอบ', last_name: '' })).toBe('ทดสอบ');
+		expect(formatEvacueeFullName({ first_name: 'ทดสอบ', last_name: '  ' })).toBe('ทดสอบ');
+		expect(formatEvacueeFullName({ first_name: 'ทดสอบ' })).toBe('ทดสอบ');
+		expect(resolveEvacueeName({ first_name: 'ทดสอบ', last_name: '' })).toBe('ทดสอบ');
 	});
 });

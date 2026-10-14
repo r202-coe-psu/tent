@@ -11,6 +11,7 @@
 	import { useShelter } from '$lib/features/shelters';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
+	import { formatEvacueeFullName } from './referral.ui-helpers';
 
 	let {
 		selectedIds = $bindable<string[]>([]),
@@ -72,7 +73,7 @@
 	}
 
 	function rowLabel(evacuee: Evacuee): string {
-		return `${evacuee.first_name} ${evacuee.last_name}`;
+		return formatEvacueeFullName(evacuee);
 	}
 </script>
 

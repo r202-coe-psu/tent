@@ -53,7 +53,9 @@ export type ReferralTimeline = z.infer<typeof referralTimelineSchema>;
 
 export const evacueeSummarySchema = z.object({
 	first_name: z.string().min(1),
-	last_name: z.string().min(1),
+	// May be empty: registration accepts a mononym (people `last_name` defaults to ''), so the
+	// summary snapshot must too, or such evacuees cannot be referred.
+	last_name: z.string(),
 	gender: z.string().optional()
 });
 export type EvacueeSummary = z.infer<typeof evacueeSummarySchema>;

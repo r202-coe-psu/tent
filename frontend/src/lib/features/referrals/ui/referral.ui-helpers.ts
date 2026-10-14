@@ -150,7 +150,15 @@ export function resolveEvacueeName(
 	...sources: ({ first_name: string; last_name: string } | null | undefined)[]
 ): string {
 	const found = sources.find((source) => !!source);
-	return found ? `${found.first_name} ${found.last_name}` : EVACUEE_NAME_FALLBACK;
+	return found ? formatEvacueeFullName(found) : EVACUEE_NAME_FALLBACK;
+}
+
+/** "first last"; an empty or blank last_name (mononym) is omitted, leaving no trailing space. */
+export function formatEvacueeFullName(person: { first_name: string; last_name?: string | null }) {
+	return [person.first_name, person.last_name ?? '']
+		.map((part) => part.trim())
+		.filter(Boolean)
+		.join(' ');
 }
 
 /** Max names listed in a referral confirm dialog before the rest is summarised as "และอีก N คน". */

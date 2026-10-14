@@ -95,3 +95,32 @@ describe('Referral schema_v 1|2 reader (CR-167 FR-C1, FR-C4)', () => {
 		expect(isReferral({ ...v1Medical, schema_v: 0 })).toBe(false);
 	});
 });
+
+describe('evacuee_summary last_name', () => {
+	const base = {
+		_id: 'referral:01',
+		type: 'referral',
+		schema_v: 1,
+		referral_type: 'medical-emergency',
+		shelter_code: 'SH001',
+		evacuee_id: 'evacuee:01',
+		reason: 'ต้องการการรักษา',
+		urgency: 'normal',
+		status: 'draft',
+		timeline: {},
+		to_org: { name: 'โรงพยาบาลทดสอบ', kind: 'hospital' },
+		created_at: '2026-10-14T08:00:00.000Z',
+		updated_at: '2026-10-14T08:00:00.000Z',
+		created_by: 'staff1'
+	};
+
+	it('accepts an empty last_name (mononym), matching what registration accepts', () => {
+		const doc = { ...base, evacuee_summary: { first_name: 'ทดสอบ', last_name: '' } };
+		expect(isReferral(doc)).toBe(true);
+	});
+
+	it('still requires a first_name', () => {
+		const doc = { ...base, evacuee_summary: { first_name: '', last_name: 'ใจดี' } };
+		expect(isReferral(doc)).toBe(false);
+	});
+});

@@ -351,3 +351,32 @@ describe('CouchDbReferralServerRepository transition() checks the state matrix b
 		expect(putCalls()).toHaveLength(putsAfterFirstAttempt);
 	});
 });
+
+describe('CouchDbReferralServerRepository create() with a mononym evacuee', () => {
+	it('writes the referral when the evacuee summary has an empty last_name', async () => {
+		vi.clearAllMocks();
+		adminRaw.mockImplementation(async (_path: string, method: string, body?: { _id?: string }) =>
+			method === 'PUT'
+				? { status: 201, data: { ok: true, id: body?._id, rev: '1-new' } }
+				: { status: 200, data: {} }
+		);
+		const repo = new CouchDbReferralServerRepository('central_ops', 'SH001');
+
+		const doc = await repo.create(
+			{
+				referral_type: 'medical-emergency',
+				evacuee_id: 'evacuee:01MONONYM',
+				reason: 'ต้องการการรักษา',
+				urgency: 'normal',
+				to_org: { name: 'โรงพยาบาลทดสอบ', kind: 'hospital' }
+			} as never,
+			{ shelterCode: 'SH001', createdBy: 'Staff A' },
+			{ first_name: 'ทดสอบ', last_name: '' }
+		);
+
+		expect(doc.status).toBe('draft');
+		expect(doc.evacuee_summary).toEqual({ first_name: 'ทดสอบ', last_name: '' });
+		const written = adminRaw.mock.calls.find((c) => c[1] === 'PUT' && c[2]?._id === doc._id);
+		expect(written).toBeTruthy();
+	});
+});

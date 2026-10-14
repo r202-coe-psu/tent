@@ -7,7 +7,7 @@
 	import type { ReferralBatchFailure, ReferralSubmitIntent } from '../data/referral.repository';
 	import { useCreateReferralBatch } from '../application/queries';
 	import { useEvacuees } from '$lib/features/people';
-	import { getEvacueeSelectionError } from './referral.ui-helpers';
+	import { formatEvacueeFullName, getEvacueeSelectionError } from './referral.ui-helpers';
 	import RedactionBanner from './redaction-banner.svelte';
 	import EvacueePickerTable from './evacuee-picker-table.svelte';
 	import MedicalReferralForm from './medical-referral-form.svelte';
@@ -59,7 +59,7 @@
 	function namesFor(ids: string[]): string[] {
 		return ids.map((id) => {
 			const found = evacueesQuery.data?.find((e) => e._id === id);
-			return found ? `${found.first_name} ${found.last_name}` : id;
+			return found ? formatEvacueeFullName(found) : id;
 		});
 	}
 
