@@ -85,7 +85,7 @@ export function formatReferralDate(isoString?: string | null): string {
 	return formatThaiDateTime(isoString) || isoString;
 }
 
-/** List badge: incoming capacity mirror targeting this shelter. */
+/** List badge: incoming capacity referral targeting this shelter. */
 export function isIncomingListItem(
 	referral: { referral_type?: string; shelter_code: string; to_shelter_code?: string },
 	actorShelter: string

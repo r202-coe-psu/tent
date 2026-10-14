@@ -12,7 +12,7 @@ export const prerender = false;
  * Transition the referral state with conflict (409) retry.
  *
  * Capacity referrals (all transitions) use this BFF path:
- * - `sent` mirrors the doc into the destination shelter DB (inbox)
+ * - `sent` writes the referral doc in `central_ops` only (no copy in the destination DB)
  * - `accepted`/`rejected` require the **destination** shelter scope (DoD)
  * - `accepted` runs cross-DB transfer via adminRaw before status write
  */
