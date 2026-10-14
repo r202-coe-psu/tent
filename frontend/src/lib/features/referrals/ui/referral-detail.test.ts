@@ -75,3 +75,25 @@ describe('referral-detail transition actions', () => {
 		expect(isDisabled(buttonOpenTag(body, 'ยกเลิกร่าง'))).toBe(true);
 	});
 });
+
+describe('referral-detail close_reason', () => {
+	const closed = {
+		...draftReferral,
+		status: 'closed',
+		schema_v: 2,
+		close_reason: 'ส่งผิดศูนย์',
+		timeline: { closed: { at: '2026-10-14T09:00:00.000Z', by: 'sm_user' } }
+	} as Referral;
+
+	it('shows close_reason in the timeline of a closed referral', () => {
+		const { body } = render(ReferralDetail, { props: { referral: closed } });
+		expect(body).toContain('ส่งผิดศูนย์');
+	});
+
+	it('shows no reason line when a closed referral has no close_reason', () => {
+		const { body } = render(ReferralDetail, {
+			props: { referral: { ...closed, close_reason: undefined } as Referral }
+		});
+		expect(body).not.toContain('close-reason');
+	});
+});

@@ -375,6 +375,7 @@ describe('CouchDbReferralServerRepository create() with a mononym evacuee', () =
 		);
 
 		expect(doc.status).toBe('draft');
+		expect(doc.schema_v).toBe(2);
 		expect(doc.evacuee_summary).toEqual({ first_name: 'ทดสอบ', last_name: '' });
 		const written = adminRaw.mock.calls.find((c) => c[1] === 'PUT' && c[2]?._id === doc._id);
 		expect(written).toBeTruthy();
@@ -457,5 +458,44 @@ describe('CouchDbReferralServerRepository listPage()', () => {
 			evacuee_id: 'evacuee:1'
 		});
 		expect(body.sort).toEqual([{ type: 'desc' }, { created_at: 'desc' }]);
+	});
+});
+
+describe('CouchDbReferralServerRepository transition() close_reason (CR-167 FR-C2, FR-C5)', () => {
+	it('closing an accepted v1 referral stores close_reason, keeps response_reason, lifts to v2', async () => {
+		vi.clearAllMocks();
+		const accepted: Referral = {
+			...capacitySent,
+			status: 'accepted',
+			response_reason: 'ปลายทางตอบรับ',
+			timeline: {
+				sent: { at: '2026-07-11T05:00:00.000Z', by: 'Staff A' },
+				responded: { at: '2026-07-11T06:00:00.000Z', by: 'Staff B' }
+			}
+		};
+		adminRaw.mockImplementation(async (path: string, method: string, body?: { _id?: string }) => {
+			if (method === 'GET' && decodeURIComponent(path).includes('referral:01CAPACITY')) {
+				return { status: 200, data: accepted };
+			}
+			if (method === 'PUT') return { status: 201, data: { ok: true, id: body?._id, rev: '2-new' } };
+			return { status: 200, data: {} };
+		});
+		const repo = new CouchDbReferralServerRepository('central_ops', 'SH001');
+
+		const result = await repo.transition(
+			'referral:01CAPACITY',
+			'closed',
+			'Staff A',
+			'ปิดงาน',
+			'SH001'
+		);
+
+		expect(result.schema_v).toBe(2);
+		expect(result.close_reason).toBe('ปิดงาน');
+		expect(result.response_reason).toBe('ปลายทางตอบรับ');
+		const written = adminRaw.mock.calls.find(
+			(c) => c[1] === 'PUT' && c[2]?._id === 'referral:01CAPACITY'
+		);
+		expect(written?.[2]).toMatchObject({ schema_v: 2, close_reason: 'ปิดงาน' });
 	});
 });
