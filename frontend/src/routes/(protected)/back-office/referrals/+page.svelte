@@ -159,6 +159,7 @@
 							onRetry={() => listQuery.refetch()}
 							hasMore={listQuery.hasNextPage}
 							isFetchingMore={listQuery.isFetchingNextPage}
+							isLoadMoreError={listQuery.isFetchNextPageError}
 							onLoadMore={() => listQuery.fetchNextPage()}
 						/>
 					</Card.Content>

@@ -47,6 +47,7 @@
 		onRetry,
 		hasMore = false,
 		isFetchingMore = false,
+		isLoadMoreError = false,
 		onLoadMore
 	}: {
 		referrals: Referral[];
@@ -63,6 +64,7 @@
 		onRetry?: () => void;
 		hasMore?: boolean;
 		isFetchingMore?: boolean;
+		isLoadMoreError?: boolean;
 		onLoadMore?: () => void;
 	} = $props();
 
@@ -99,6 +101,8 @@
 		}
 		return groupReferralsForList(list);
 	});
+
+	const shownCount = $derived(filteredGroups.reduce((n, g) => n + g.count, 0));
 
 	const tabs: { value: StatusTab; label: string }[] = [
 		{ value: 'all', label: 'ทั้งหมด' },
@@ -318,7 +322,10 @@
 			class="mt-4 flex flex-col items-center justify-between gap-3 border-t border-border/60 pt-4 sm:flex-row"
 		>
 			<div class="space-y-0.5 text-center font-sans text-xs text-muted-foreground sm:text-left">
-				<div>แสดง {filteredGroups.length} รายการ</div>
+				<div>แสดง {shownCount} รายการ</div>
+				{#if isLoadMoreError}
+					<div role="alert" class="font-medium text-red-700">โหลดรายการเพิ่มไม่สำเร็จ</div>
+				{/if}
 				{#if hasMore && searchQuery.trim()}
 					<div role="status">ค้นหาเฉพาะรายการที่โหลดแล้ว</div>
 				{/if}

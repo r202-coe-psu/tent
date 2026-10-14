@@ -20,6 +20,8 @@ export interface ReferralStore {
 	referrals: Record<string, ReferralRow>;
 	/** Make GET /api/back-office/referral return 500. */
 	listFail: boolean;
+	/** Make GET /api/back-office/referral return 500 only for bookmark (load-more) requests. */
+	pageFail: boolean;
 	/** Make GET /api/back-office/referral/:id return 500. */
 	detailFail: boolean;
 	/** Every PATCH transition the page sent, in order. */
@@ -34,6 +36,7 @@ export function newReferralStore(rows: ReferralRow[] = []): ReferralStore {
 	return {
 		referrals: Object.fromEntries(rows.map((r) => [r._id, r])),
 		listFail: false,
+		pageFail: false,
 		detailFail: false,
 		patches: [],
 		writes: []
@@ -193,6 +196,8 @@ export async function mockReferralApi(page: Page, store: ReferralStore): Promise
 				}
 				if (store.listFail)
 					return route.fulfill({ status: 500, json: { error: 'mock list failure' } });
+				if (store.pageFail && new URL(req.url()).searchParams.has('bookmark'))
+					return route.fulfill({ status: 500, json: { error: 'mock page failure' } });
 				return route.fulfill({ json: listPage(store, new URL(req.url()).searchParams) });
 			}
 			const match = path.match(/^\/api\/back-office\/referral\/([^/]+)(\/transition)?$/);

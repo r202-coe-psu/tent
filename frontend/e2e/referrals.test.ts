@@ -115,6 +115,35 @@ test.describe('Referrals — mocked UI contracts', { tag: ['@regression', '@back
 		await expect(page.getByRole('button', { name: 'โหลดเพิ่ม' })).toHaveCount(0);
 	});
 
+	test('#552 a failed load-more shows an inline error and the button retries', async ({ page }) => {
+		const store = newReferralStore(
+			Array.from({ length: 60 }, (_, i) =>
+				referralFixture({
+					_id: `referral:mock_fail_${String(i).padStart(2, '0')}`,
+					reason: `เหตุผล ${i}`,
+					created_at: new Date(Date.UTC(2026, 9, 14, 8, 0, 60 - i)).toISOString()
+				})
+			)
+		);
+		await signInMocked(page, store);
+		await page.goto('/back-office/referrals');
+		await expect(page.getByText('แสดง 50 รายการ')).toBeVisible({ timeout: 20_000 });
+
+		store.pageFail = true;
+		await page.getByRole('button', { name: 'โหลดเพิ่ม' }).click();
+		await expect(
+			page.getByRole('alert').filter({ hasText: 'โหลดรายการเพิ่มไม่สำเร็จ' })
+		).toBeVisible();
+		await expect(page.getByText('แสดง 50 รายการ')).toBeVisible();
+
+		store.pageFail = false;
+		await page.getByRole('button', { name: 'โหลดเพิ่ม' }).click();
+		await expect(page.getByText('แสดง 60 รายการ')).toBeVisible();
+		await expect(
+			page.getByRole('alert').filter({ hasText: 'โหลดรายการเพิ่มไม่สำเร็จ' })
+		).toHaveCount(0);
+	});
+
 	test('#548 detail load failure shows an error with retry and a way back', async ({ page }) => {
 		const store = newReferralStore([
 			referralFixture({ _id: 'referral:mock_detail', status: 'accepted' })
