@@ -6,7 +6,7 @@
  *
  * State matrix (valid transitions only):
  *   draft    → sent | closed   (closed = cancel draft before send — CR-046)
- *   sent     → accepted | rejected
+ *   sent     → accepted | rejected | closed   (closed = withdraw — CR-167, source shelter only)
  *   accepted → closed
  *   rejected → closed
  *   closed   → (terminal — no further transitions)
@@ -20,7 +20,7 @@ import type { Referral, ReferralStatus, ReferralTimeline } from './referral.sche
 
 const VALID_TRANSITIONS: Record<ReferralStatus, readonly ReferralStatus[]> = {
 	draft: ['sent', 'closed'],
-	sent: ['accepted', 'rejected'],
+	sent: ['accepted', 'rejected', 'closed'],
 	accepted: ['closed'],
 	rejected: ['closed'],
 	closed: []

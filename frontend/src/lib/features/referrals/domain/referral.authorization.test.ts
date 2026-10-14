@@ -74,4 +74,26 @@ describe('referral.authorization', () => {
 			ReferralAuthorizationError
 		);
 	});
+
+	it('allows only source to withdraw a sent capacity referral (sent → closed)', () => {
+		const sent = capacitySent();
+		expect(() => assertActorMayTransition(sent, 'closed', 'SH001')).not.toThrow();
+		expect(() => assertActorMayTransition(sent, 'closed', 'SH002')).toThrow(
+			ReferralAuthorizationError
+		);
+		expect(() => assertActorMayTransition(sent, 'closed', 'SH003')).toThrow(
+			ReferralAuthorizationError
+		);
+	});
+
+	it.each(['medical-emergency', 'resource'] as const)(
+		'allows only the originating shelter to withdraw a sent %s referral',
+		(referral_type) => {
+			const sent = capacitySent({ referral_type, to_shelter_code: undefined } as Partial<Referral>);
+			expect(() => assertActorMayTransition(sent, 'closed', 'SH001')).not.toThrow();
+			expect(() => assertActorMayTransition(sent, 'closed', 'SH002')).toThrow(
+				ReferralAuthorizationError
+			);
+		}
+	);
 });

@@ -8,7 +8,8 @@ import {
 	getEvacueeSelectionError,
 	resolveEvacueeName,
 	formatEvacueeFullName,
-	EVACUEE_NAME_FALLBACK
+	EVACUEE_NAME_FALLBACK,
+	getClosedSubLabel
 } from './referral.ui-helpers';
 
 describe('getEvacueeSelectionError', () => {
@@ -51,5 +52,36 @@ describe('formatEvacueeFullName', () => {
 		expect(formatEvacueeFullName({ first_name: 'ทดสอบ', last_name: '  ' })).toBe('ทดสอบ');
 		expect(formatEvacueeFullName({ first_name: 'ทดสอบ' })).toBe('ทดสอบ');
 		expect(resolveEvacueeName({ first_name: 'ทดสอบ', last_name: '' })).toBe('ทดสอบ');
+	});
+});
+
+describe('getClosedSubLabel (CR-167 derived labels)', () => {
+	const stamp = { at: '2026-10-14T08:00:00.000Z', by: 'sm' };
+
+	it('labels a closed referral that was sent and never answered as withdrawn', () => {
+		const r = { status: 'closed', timeline: { sent: stamp, closed: stamp } } as const;
+		expect(getClosedSubLabel(r)).toBe('ถอนคำขอ');
+	});
+
+	it('shows the destination the withdrawn-by-source wording', () => {
+		const r = { status: 'closed', timeline: { sent: stamp, closed: stamp } } as const;
+		expect(getClosedSubLabel(r, 'destination')).toBe('ถูกถอนโดยศูนย์ต้นทาง');
+	});
+
+	it('labels a closed referral that was never sent as a cancelled draft', () => {
+		const r = { status: 'closed', timeline: { closed: stamp } } as const;
+		expect(getClosedSubLabel(r)).toBe('ยกเลิกร่าง');
+	});
+
+	it('has no sub-label for a closed referral the destination responded to', () => {
+		const r = {
+			status: 'closed',
+			timeline: { sent: stamp, responded: stamp, closed: stamp }
+		} as const;
+		expect(getClosedSubLabel(r)).toBeNull();
+	});
+
+	it('has no sub-label for a referral that is not closed', () => {
+		expect(getClosedSubLabel({ status: 'sent', timeline: { sent: stamp } })).toBeNull();
 	});
 });

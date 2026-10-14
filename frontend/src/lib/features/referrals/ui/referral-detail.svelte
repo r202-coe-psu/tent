@@ -8,6 +8,7 @@
 	import CheckCircle2 from '@lucide/svelte/icons/check-circle-2';
 	import XCircle from '@lucide/svelte/icons/x-circle';
 	import Archive from '@lucide/svelte/icons/archive';
+	import Undo2 from '@lucide/svelte/icons/undo-2';
 	import Ban from '@lucide/svelte/icons/ban';
 	import Send from '@lucide/svelte/icons/send';
 	import Clock from '@lucide/svelte/icons/clock';
@@ -27,6 +28,7 @@
 	import {
 		formatEvacueeFullName,
 		formatReferralDate as formatDate,
+		getClosedSubLabel,
 		getKindLabel,
 		getStatusLabel,
 		getUrgencyLabel,
@@ -40,7 +42,7 @@
 	const transitionMutation = useTransitionReferral(queryClient);
 
 	let responseReasonInput = $state('');
-	let showReasonPrompt = $state<'accepted' | 'rejected' | null>(null);
+	let showReasonPrompt = $state<'accepted' | 'rejected' | 'withdraw' | null>(null);
 	let transitionInFlight = $state(false);
 	const isTransitionBusy = $derived(transitionMutation.isPending || transitionInFlight);
 
@@ -74,6 +76,19 @@
 			(referral.referral_type !== 'capacity' || isOutgoingCapacityReferral(referral, actorShelter))
 	);
 
+	// CR-167: `sent → closed` is a withdraw (source only), shown as its own button + reason prompt.
+	const canWithdraw = $derived(canClose && referral.status === 'sent');
+	const closedSubLabel = $derived(
+		getClosedSubLabel(referral, isIncoming ? 'destination' : 'source')
+	);
+	const promptLabel = $derived(
+		showReasonPrompt === 'accepted'
+			? 'ตอบรับ'
+			: showReasonPrompt === 'rejected'
+				? 'ปฏิเสธ'
+				: 'ถอนคำขอ'
+	);
+
 	async function handleTransition(to: ReferralStatus, label: string, reason?: string) {
 		// Synchronous guard: TanStack's isPending reaches the DOM only after a batched flush,
 		// so a second click in the same tick would otherwise send a second request.
@@ -97,7 +112,7 @@
 		}
 	}
 
-	function triggerActionWithReason(to: 'accepted' | 'rejected') {
+	function triggerActionWithReason(to: 'accepted' | 'rejected' | 'withdraw') {
 		showReasonPrompt = to;
 	}
 
@@ -140,8 +155,9 @@
 
 	function submitWithReason() {
 		if (!showReasonPrompt) return;
-		const to = showReasonPrompt;
-		const label = to === 'accepted' ? 'ตอบรับ' : 'ปฏิเสธ';
+		const prompt = showReasonPrompt;
+		const to: ReferralStatus = prompt === 'withdraw' ? 'closed' : prompt;
+		const label = promptLabel;
 		const reason = responseReasonInput.trim();
 		askConfirm({
 			title: `ยืนยันการ${label}`,
@@ -150,8 +166,8 @@
 				: 'ไม่ได้ระบุเหตุผล จะใช้กับ 1 รายการ',
 			names: subjectNames,
 			count: 1,
-			confirmLabel: `ยืนยัน${label}`,
-			destructive: to === 'rejected',
+			confirmLabel: prompt === 'withdraw' ? label : `ยืนยัน${label}`,
+			destructive: prompt !== 'accepted',
 			run: () => handleTransition(to, label, reason)
 		});
 	}
@@ -203,6 +219,11 @@
 					<Badge variant="outline" class="font-semibold">
 						{getStatusLabel(referral.status, { verbose: true })}
 					</Badge>
+					{#if closedSubLabel}
+						<Badge variant="secondary" class="font-medium" data-testid="closed-sub-label">
+							{closedSubLabel}
+						</Badge>
+					{/if}
 				</div>
 			</div>
 		</Card.Header>
@@ -317,7 +338,11 @@
 			{#if showReasonPrompt}
 				<div class="space-y-3 rounded-lg border border-primary/40 bg-primary/5 p-4">
 					<h4 class="text-sm font-semibold text-foreground">
-						ระบุเหตุผลการ{showReasonPrompt === 'accepted' ? 'ตอบรับ' : 'ปฏิเสธ'} (Response Reason)
+						{#if showReasonPrompt === 'withdraw'}
+							ระบุเหตุผลการถอนคำขอ (ไม่บังคับ)
+						{:else}
+							ระบุเหตุผลการ{promptLabel} (Response Reason)
+						{/if}
 					</h4>
 					<Input
 						type="text"
@@ -334,7 +359,7 @@
 							onclick={submitWithReason}
 							disabled={isTransitionBusy}
 						>
-							ยืนยันการ{showReasonPrompt === 'accepted' ? 'ตอบรับ' : 'ปฏิเสธ'}
+							ยืนยันการ{promptLabel}
 						</Button>
 					</div>
 				</div>
@@ -477,7 +502,19 @@
 				</Button>
 			{/if}
 
-			{#if canClose}
+			{#if canWithdraw}
+				<Button
+					size="sm"
+					variant="outline"
+					class="gap-1.5 border-rose-300 text-rose-700 hover:bg-rose-50"
+					data-testid="btn-withdraw-referral"
+					onclick={() => triggerActionWithReason('withdraw')}
+					disabled={isTransitionBusy}
+				>
+					<Undo2 class="h-4 w-4" />
+					ถอนคำขอ
+				</Button>
+			{:else if canClose}
 				{#if referral.status === 'draft'}
 					<Button
 						size="sm"
