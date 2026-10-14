@@ -6,7 +6,10 @@ vi.mock('$lib/db/shelter', () => ({
 	getShelterCode: () => 'SH001'
 }));
 
+const { bulkTransitionReferrals } = vi.hoisted(() => ({ bulkTransitionReferrals: vi.fn() }));
 vi.mock('../data/referral.remote', () => ({
+	bulkTransitionReferrals,
+	createReferralBatch: vi.fn(),
 	referralRepository: () => ({
 		list: vi.fn(),
 		listPage: vi.fn(),
@@ -21,9 +24,13 @@ vi.mock('$lib/stores/auth.svelte', () => ({
 	authStore: { user: { name: 'sm_user' } }
 }));
 
-const subscribeCalls: Array<{ keysForType: (t: string) => unknown }> = [];
+const subscribeCalls: Array<{ keysForType: (t: string, docId?: string) => unknown }> = [];
 vi.mock('$lib/db/subscribe-data-changes', () => ({
-	subscribeDataChanges: (_qc: unknown, _db: unknown, keysForType: (t: string) => unknown) => {
+	subscribeDataChanges: (
+		_qc: unknown,
+		_db: unknown,
+		keysForType: (t: string, docId?: string) => unknown
+	) => {
 		subscribeCalls.push({ keysForType });
 		return { stop: vi.fn() };
 	}
@@ -41,10 +48,13 @@ import {
 	getNextReferralPageParam,
 	referralKeys,
 	replaceReferralInPages,
+	patchReferralCaches,
+	referralKeysForChange,
 	startReferralsLiveQuery,
+	useBulkTransition,
 	useReferralPages
 } from './queries';
-import type { Referral, ReferralPage } from '../domain/referral.schema';
+import type { Referral, ReferralPage, ReferralStatus } from '../domain/referral.schema';
 
 beforeEach(() => {
 	vi.clearAllMocks();
@@ -52,14 +62,132 @@ beforeEach(() => {
 });
 
 describe('startReferralsLiveQuery', () => {
-	it('maps type === referral → referralKeys.all and ignores other types', () => {
+	it('maps a referral event to list, batch and that one detail — never referralKeys.all (F-09)', () => {
 		startReferralsLiveQuery({} as never);
 
 		expect(subscribeCalls).toHaveLength(1);
 		const { keysForType } = subscribeCalls[0]!;
-		expect(keysForType('referral')).toEqual([referralKeys.all]);
-		expect(keysForType('evacuee')).toEqual([]);
-		expect(keysForType('donation')).toEqual([]);
+		const keys = keysForType('referral', 'referral:abc') as unknown[][];
+		expect(keys).toEqual([
+			referralKeys.lists(),
+			referralKeys.batches(),
+			referralKeys.detail('referral:abc')
+		]);
+		expect(keys).not.toContainEqual(referralKeys.all);
+	});
+
+	it('invalidates every detail (but still not everything) when the doc id is unknown', () => {
+		expect(referralKeysForChange(undefined)).toEqual([
+			referralKeys.lists(),
+			referralKeys.batches(),
+			referralKeys.details()
+		]);
+		expect(referralKeysForChange('')).toContainEqual(referralKeys.details());
+	});
+
+	it('ignores other doc types', () => {
+		startReferralsLiveQuery({} as never);
+		const { keysForType } = subscribeCalls[0]!;
+		expect(keysForType('evacuee', 'evacuee:1')).toEqual([]);
+		expect(keysForType('donation', 'donation:1')).toEqual([]);
+	});
+});
+
+describe('patchReferralCaches', () => {
+	it('writes each doc to its detail, list pages and batch caches', () => {
+		const detail = vi.fn();
+		const setQueriesData = vi.fn();
+		const qc = { setQueryData: detail, setQueriesData } as never;
+		const docs = [ref('referral:1', 'sent'), ref('referral:2', 'sent')];
+		patchReferralCaches(qc, docs);
+
+		expect(detail).toHaveBeenCalledTimes(2);
+		expect(detail).toHaveBeenCalledWith(referralKeys.detail('referral:1'), docs[0]);
+		// list + batch per doc
+		expect(setQueriesData).toHaveBeenCalledTimes(4);
+		const batchCall = setQueriesData.mock.calls.find(
+			([filter]) => JSON.stringify(filter.queryKey) === JSON.stringify(referralKeys.batches())
+		)!;
+		const updater = batchCall[1] as (old: Referral[] | undefined) => Referral[] | undefined;
+		expect(updater([ref('referral:1', 'draft'), ref('referral:9', 'draft')])).toEqual([
+			docs[0],
+			ref('referral:9', 'draft')
+		]);
+		expect(updater(undefined)).toBeUndefined();
+	});
+});
+
+describe('useBulkTransition', () => {
+	const make = (count: number) => Array.from({ length: count }, (_, i) => `referral:${i}`);
+	const okSend = async (ids: string[]) => ({
+		succeeded: ids.map((id) => ref(id, 'closed')),
+		failed: []
+	});
+
+	function setup() {
+		const qc = {
+			setQueryData: vi.fn(),
+			setQueriesData: vi.fn(),
+			invalidateQueries: vi.fn()
+		};
+		const hook = useBulkTransition(qc as never) as unknown as {
+			progress: ReturnType<typeof useBulkTransition>['progress'];
+			// createMutation is mocked to hand back its options object
+			mutation: {
+				mutationFn: (v: { ids: string[]; to: ReferralStatus; reason?: string }) => Promise<{
+					succeeded: Referral[];
+					failed: { id: string; error: string }[];
+				}>;
+				onSuccess: (r: { succeeded: Referral[]; failed: unknown[] }) => void;
+			};
+		};
+		return { qc, ...hook };
+	}
+
+	it('sends 150 ids in one request and 450 in three', async () => {
+		const { mutation, progress } = setup();
+		bulkTransitionReferrals.mockImplementation(okSend);
+		progress.start(150, 'closed');
+		await mutation.mutationFn({ ids: make(150), to: 'closed' });
+		expect(bulkTransitionReferrals).toHaveBeenCalledTimes(1);
+
+		bulkTransitionReferrals.mockClear();
+		progress.start(450, 'closed');
+		await mutation.mutationFn({ ids: make(450), to: 'closed' });
+		expect(bulkTransitionReferrals.mock.calls.map((c) => (c[0] as string[]).length)).toEqual([
+			200, 200, 50
+		]);
+		expect(progress.succeeded).toBe(450);
+	});
+
+	it('records per-item failures and a retry resends only those ids with the same target and reason', async () => {
+		const { mutation, progress } = setup();
+		bulkTransitionReferrals.mockImplementationOnce(async (ids: string[]) => ({
+			succeeded: ids.filter((id) => id !== 'referral:1').map((id) => ref(id, 'closed')),
+			failed: [{ id: 'referral:1', error: 'ปลายทางไม่รับ' }]
+		}));
+		progress.start(3, 'closed', 'เหตุผล');
+		await mutation.mutationFn({ ids: make(3), to: 'closed', reason: 'เหตุผล' });
+		expect(progress.succeeded).toBe(2);
+		expect(progress.failed).toEqual([{ id: 'referral:1', error: 'ปลายทางไม่รับ' }]);
+
+		bulkTransitionReferrals.mockClear();
+		bulkTransitionReferrals.mockImplementation(okSend);
+		const failedIds = progress.failed.map((f) => f.id);
+		progress.beginRetry();
+		await mutation.mutationFn({ ids: failedIds, to: progress.to!, reason: progress.reason });
+		expect(bulkTransitionReferrals).toHaveBeenCalledTimes(1);
+		expect(bulkTransitionReferrals).toHaveBeenCalledWith(['referral:1'], 'closed', 'เหตุผล');
+		expect(progress.succeeded).toBe(3);
+		expect(progress.failed).toEqual([]);
+	});
+
+	it('patches caches and invalidates exactly once per run, not per item', () => {
+		const { mutation, qc } = setup();
+		mutation.onSuccess({ succeeded: make(5).map((id) => ref(id, 'closed')), failed: [] });
+		expect(qc.setQueryData).toHaveBeenCalledTimes(5);
+		expect(qc.invalidateQueries).toHaveBeenCalledTimes(1);
+		expect(qc.invalidateQueries).toHaveBeenCalledWith({ queryKey: referralKeys.all });
 	});
 });
 
