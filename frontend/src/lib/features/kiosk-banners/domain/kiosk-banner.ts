@@ -1,0 +1,138 @@
+import { z } from 'zod';
+import { makeDocId } from '$lib/db/model';
+import { KIOSK_BANNER_IMAGE_MAX_BYTES } from './kiosk-banner-image';
+
+export const KIOSK_BANNER_LIMITS = {
+	titleMax: 120,
+	captionMax: 200,
+	orderMin: 1,
+	orderDefault: 1,
+	durationMin: 3,
+	durationMax: 60,
+	durationDefault: 10,
+	imageMaxBytes: KIOSK_BANNER_IMAGE_MAX_BYTES
+} as const;
+
+export const kioskBannerStatusSchema = z.enum(['active', 'inactive']);
+
+const kioskBannerFieldsSchema = z.object({
+	title: z
+		.string()
+		.trim()
+		.min(1, 'ระบุหัวข้อแบนเนอร์')
+		.max(KIOSK_BANNER_LIMITS.titleMax, 'หัวข้อยาวเกิน 120 ตัวอักษร'),
+	caption: z
+		.string()
+		.trim()
+		.max(KIOSK_BANNER_LIMITS.captionMax, 'คำอธิบายยาวเกิน 200 ตัวอักษร')
+		.nullish(),
+	order: z
+		.number()
+		.int()
+		.min(KIOSK_BANNER_LIMITS.orderMin)
+		.default(KIOSK_BANNER_LIMITS.orderDefault),
+	duration_sec: z
+		.number()
+		.int()
+		.min(KIOSK_BANNER_LIMITS.durationMin, 'ระยะเวลาต่ำสุด 3 วินาที')
+		.max(KIOSK_BANNER_LIMITS.durationMax, 'ระยะเวลาสูงสุด 60 วินาที')
+		.default(KIOSK_BANNER_LIMITS.durationDefault),
+	start_at: z.string().datetime({ message: 'รูปแบบเวลาเริ่มไม่ถูกต้อง' }),
+	end_at: z.string().datetime({ message: 'รูปแบบเวลาสิ้นสุดไม่ถูกต้อง' }),
+	status: kioskBannerStatusSchema.default('active')
+});
+
+type Period = { start_at: string; end_at: string };
+
+const endAfterStart = {
+	check: (v: Period) => Date.parse(v.end_at) > Date.parse(v.start_at),
+	params: { message: 'เวลาสิ้นสุดต้องหลังเวลาเริ่ม', path: ['end_at'] }
+};
+
+export const kioskBannerInputSchema = kioskBannerFieldsSchema.refine(
+	endAfterStart.check,
+	endAfterStart.params
+);
+
+export const kioskBannerDocSchema = kioskBannerFieldsSchema
+	.extend({
+		_id: z.string().startsWith('kiosk_banner:'),
+		_rev: z.string().optional(),
+		type: z.literal('kiosk_banner'),
+		schema_v: z.literal(1),
+		shelter_code: z.string().min(1),
+		created_at: z.string().datetime(),
+		updated_at: z.string().datetime(),
+		created_by: z.string().min(1)
+	})
+	.refine(endAfterStart.check, endAfterStart.params);
+
+export type KioskBannerDoc = z.infer<typeof kioskBannerDocSchema>;
+
+export type KioskBannerInput = z.infer<typeof kioskBannerInputSchema>;
+
+export interface KioskBannerContext {
+	shelterCode: string;
+	createdBy: string;
+}
+
+export function createKioskBanner(
+	input: KioskBannerInput,
+	ctx: KioskBannerContext,
+	now: Date = new Date()
+): KioskBannerDoc {
+	const ts = now.toISOString();
+	return {
+		_id: makeDocId('kiosk_banner'),
+		type: 'kiosk_banner',
+		schema_v: 1,
+		shelter_code: ctx.shelterCode,
+		title: input.title,
+		caption: input.caption,
+		order: input.order,
+		duration_sec: input.duration_sec,
+		start_at: input.start_at,
+		end_at: input.end_at,
+		status: input.status,
+		created_at: ts,
+		updated_at: ts,
+		created_by: ctx.createdBy
+	};
+}
+
+export function isActiveAt(
+	banner: Pick<KioskBannerDoc, 'status' | 'start_at' | 'end_at'>,
+	now: Date
+): boolean {
+	const t = now.getTime();
+	return (
+		banner.status === 'active' && Date.parse(banner.start_at) <= t && t < Date.parse(banner.end_at)
+	);
+}
+
+type Sortable = Pick<KioskBannerDoc, '_id' | 'order' | 'start_at'>;
+
+const compareStrings = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
+
+export function sortBanners<T extends Sortable>(banners: readonly T[]): T[] {
+	return [...banners].sort(
+		(a, b) =>
+			a.order - b.order ||
+			Date.parse(a.start_at) - Date.parse(b.start_at) ||
+			compareStrings(a._id, b._id)
+	);
+}
+
+export function splitByView<T extends Pick<KioskBannerDoc, 'start_at' | 'end_at'>>(
+	banners: readonly T[],
+	now: Date
+): { current: T[]; expired: T[] } {
+	const t = now.getTime();
+	const current = banners
+		.filter((b) => Date.parse(b.end_at) >= t)
+		.sort((a, b) => Date.parse(a.start_at) - Date.parse(b.start_at));
+	const expired = banners
+		.filter((b) => Date.parse(b.end_at) < t)
+		.sort((a, b) => Date.parse(b.end_at) - Date.parse(a.end_at));
+	return { current, expired };
+}
