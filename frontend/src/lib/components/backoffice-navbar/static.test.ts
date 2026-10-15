@@ -146,10 +146,12 @@ describe('real backofficeNavbarGroups — visible leaves per role (regression gu
 		'7. โลจิสติกส์ & GIS'
 	];
 	const scannerDevices = 'จัดการอุปกรณ์';
+	const bannerManagement = 'จัดการแบนเนอร์';
 	const afterUsers = everyoneSees.indexOf('จัดการผู้ใช้งานและสิทธิ์') + 1;
 	const withScanners = [
 		...everyoneSees.slice(0, afterUsers),
 		scannerDevices,
+		bannerManagement,
 		...everyoneSees.slice(afterUsers)
 	];
 
@@ -167,6 +169,7 @@ describe('real backofficeNavbarGroups — visible leaves per role (regression gu
 		const labels = visibleLeafLabels(ctx(roles, 'SH001'));
 		expect(labels).toEqual(everyoneSees);
 		expect(labels).not.toContain(scannerDevices);
+		expect(labels).not.toContain(bannerManagement);
 		expect(labels).not.toContain('จัดการ Kiosk');
 	});
 
@@ -175,9 +178,9 @@ describe('real backofficeNavbarGroups — visible leaves per role (regression gu
 		expect(visibleLeafLabels(ctx(roles, 'SH001'))).toEqual(withScanners);
 	});
 
-	it('kiosk_staff-only sees the kiosk device management and nothing else (AC-SBO-21)', () => {
+	it('kiosk_staff-only sees the kiosk device and banner management, nothing else (AC-SBO-21, FR-KBR-22)', () => {
 		const roles = ['shelter:SH001', 'SH001:kiosk_staff'];
-		expect(visibleLeafLabels(ctx(roles, 'SH001'))).toEqual([scannerDevices]);
+		expect(visibleLeafLabels(ctx(roles, 'SH001'))).toEqual([scannerDevices, bannerManagement]);
 		const kioskGroup = backofficeNavbarGroups
 			.flatMap((g) => g.items)
 			.find((n) => n.label === 'จัดการ Kiosk');
@@ -225,6 +228,21 @@ describe('activeNavHref — longest path-segment match (FR-KBR-24, draft CR kios
 	it('returns null when nothing matches', () => {
 		expect(activeNavHref('/portal', hrefs)).toBeNull();
 		expect(activeNavHref('/back-office/kiosks', [])).toBeNull();
+	});
+});
+
+describe('kiosk banner management nav child (FR-KBR-22)', () => {
+	const kioskChildren = () => {
+		const group = backofficeNavbarGroups
+			.flatMap((g) => g.items)
+			.find((n) => n.label === 'จัดการ Kiosk');
+		return group && isGroup(group) ? group.children : [];
+	};
+
+	it('sits right after the device management and links to the banner list', () => {
+		const children = kioskChildren();
+		expect(children.map((c) => c.label)).toEqual(['จัดการอุปกรณ์', 'จัดการแบนเนอร์']);
+		expect(children[1].href).toBe('/back-office/kiosks/banners');
 	});
 });
 

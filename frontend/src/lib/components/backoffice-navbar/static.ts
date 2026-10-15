@@ -25,6 +25,7 @@ import UtensilsCrossed from '@lucide/svelte/icons/utensils-crossed';
 import ClipboardCheck from '@lucide/svelte/icons/clipboard-check';
 import Cpu from '@lucide/svelte/icons/cpu';
 import MonitorSmartphone from '@lucide/svelte/icons/monitor-smartphone';
+import Images from '@lucide/svelte/icons/images';
 
 type Leaf = {
 	label: string;
@@ -162,6 +163,12 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 						label: 'จัดการอุปกรณ์',
 						href: resolve('/back-office/kiosks'),
 						icon: Cpu,
+						visibleTo: (roles) => hasCapabilityAnywhere(roles, SCANNER_MANAGER_CAPABILITIES)
+					},
+					{
+						label: 'จัดการแบนเนอร์',
+						href: resolve('/back-office/kiosks/banners'),
+						icon: Images,
 						visibleTo: (roles) => hasCapabilityAnywhere(roles, SCANNER_MANAGER_CAPABILITIES)
 					}
 				]
