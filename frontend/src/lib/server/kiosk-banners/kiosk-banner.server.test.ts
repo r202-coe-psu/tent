@@ -1,0 +1,318 @@
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+
+vi.mock('$lib/server/couch-admin', async (importOriginal) => ({
+	...(await importOriginal<typeof import('$lib/server/couch-admin')>()),
+	adminRaw: vi.fn()
+}));
+
+import { adminRaw, ServiceError } from '$lib/server/couch-admin';
+import type { KioskBannerInput } from '$lib/features/kiosk-banners';
+import {
+	BannerNotFoundError,
+	createBanner,
+	deleteBanner,
+	getBanner,
+	getBannerImage,
+	KIOSK_BANNER_MANGO_INDEX,
+	listActiveForShelter,
+	listBannersForShelter,
+	setBannerStatus,
+	updateBanner
+} from './kiosk-banner.server';
+
+const adminRawMock = vi.mocked(adminRaw);
+
+const NOW = new Date('2026-10-15T03:00:00.000Z');
+const input: KioskBannerInput = {
+	title: 'ประกาศ',
+	caption: null,
+	order: 2,
+	duration_sec: 10,
+	start_at: '2026-10-01T00:00:00.000Z',
+	end_at: '2026-11-01T00:00:00.000Z',
+	status: 'active'
+};
+const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 1, 2, 3]);
+const pngBase64 = Buffer.from(png).toString('base64');
+
+beforeEach(() => {
+	adminRawMock.mockReset();
+});
+
+describe('createBanner', () => {
+	it('sends one PUT carrying the doc fields and the inline image attachment', async () => {
+		adminRawMock.mockResolvedValue({ status: 201, data: { ok: true, id: 'x', rev: '1-a' } });
+
+		const record = await createBanner(
+			input,
+			{ bytes: png, contentType: 'image/png' },
+			{ shelterCode: 'SH1', createdBy: 'alice' },
+			NOW
+		);
+
+		expect(adminRawMock).toHaveBeenCalledTimes(1);
+		const [path, method, body] = adminRawMock.mock.calls[0];
+		expect(method).toBe('PUT');
+		expect(path).toBe(`/registry/${encodeURIComponent(record._id)}`);
+		expect(body).toMatchObject({
+			_id: record._id,
+			type: 'kiosk_banner',
+			shelter_code: 'SH1',
+			created_by: 'alice',
+			title: 'ประกาศ',
+			_attachments: { image: { content_type: 'image/png', data: pngBase64 } }
+		});
+		expect(record._rev).toBe('1-a');
+	});
+});
+
+const STUB = {
+	content_type: 'image/jpeg',
+	revpos: 1,
+	digest: 'md5-abc',
+	length: 1234,
+	stub: true
+};
+
+function existingDoc(overrides: Record<string, unknown> = {}) {
+	return {
+		_id: 'kiosk_banner:b1',
+		_rev: '1-a',
+		type: 'kiosk_banner',
+		schema_v: 1,
+		shelter_code: 'SH1',
+		title: 'เดิม',
+		caption: null,
+		order: 1,
+		duration_sec: 10,
+		start_at: '2026-10-01T00:00:00.000Z',
+		end_at: '2026-11-01T00:00:00.000Z',
+		status: 'active',
+		created_at: '2026-09-01T00:00:00.000Z',
+		updated_at: '2026-09-01T00:00:00.000Z',
+		created_by: 'alice',
+		_attachments: { image: STUB },
+		...overrides
+	};
+}
+
+describe('updateBanner', () => {
+	it('keeps the existing attachment as a stub when no new image is given', async () => {
+		adminRawMock.mockResolvedValueOnce({ status: 200, data: existingDoc() }).mockResolvedValueOnce({
+			status: 201,
+			data: { ok: true, id: 'kiosk_banner:b1', rev: '2-b' }
+		});
+
+		const record = await updateBanner(
+			'kiosk_banner:b1',
+			'1-a',
+			{ ...input, title: 'ใหม่' },
+			null,
+			NOW
+		);
+
+		const [path, method, body] = adminRawMock.mock.calls[1];
+		expect(method).toBe('PUT');
+		expect(path).toBe('/registry/kiosk_banner%3Ab1');
+		expect(body).toMatchObject({
+			_id: 'kiosk_banner:b1',
+			_rev: '1-a',
+			shelter_code: 'SH1',
+			created_at: '2026-09-01T00:00:00.000Z',
+			created_by: 'alice',
+			updated_at: NOW.toISOString(),
+			title: 'ใหม่',
+			_attachments: { image: STUB }
+		});
+		expect(record._rev).toBe('2-b');
+		expect(record.image_content_type).toBe('image/jpeg');
+		expect(record).not.toHaveProperty('_attachments');
+	});
+
+	it('inlines the new image when one is given', async () => {
+		adminRawMock.mockResolvedValueOnce({ status: 200, data: existingDoc() }).mockResolvedValueOnce({
+			status: 201,
+			data: { ok: true, id: 'kiosk_banner:b1', rev: '2-b' }
+		});
+
+		const record = await updateBanner(
+			'kiosk_banner:b1',
+			'1-a',
+			input,
+			{ bytes: png, contentType: 'image/png' },
+			NOW
+		);
+
+		const body = adminRawMock.mock.calls[1][2] as { _attachments: unknown };
+		expect(body._attachments).toEqual({ image: { content_type: 'image/png', data: pngBase64 } });
+		expect(record.image_content_type).toBe('image/png');
+	});
+
+	it('rejects a stale rev with CONFLICT and never PUTs', async () => {
+		adminRawMock.mockResolvedValueOnce({ status: 200, data: existingDoc({ _rev: '2-z' }) });
+
+		await expect(updateBanner('kiosk_banner:b1', '1-a', input, null, NOW)).rejects.toMatchObject({
+			code: 'CONFLICT'
+		});
+		expect(adminRawMock).toHaveBeenCalledTimes(1);
+	});
+
+	it('maps a CouchDB 409 on the PUT to CONFLICT', async () => {
+		adminRawMock
+			.mockResolvedValueOnce({ status: 200, data: existingDoc() })
+			.mockResolvedValueOnce({ status: 409, data: { error: 'conflict' } });
+
+		const err = await updateBanner('kiosk_banner:b1', '1-a', input, null, NOW).catch((e) => e);
+		expect(err).toBeInstanceOf(ServiceError);
+		expect(err.code).toBe('CONFLICT');
+	});
+});
+
+describe('setBannerStatus', () => {
+	it('flips only status and updated_at, keeping the attachment stub', async () => {
+		adminRawMock.mockResolvedValueOnce({ status: 200, data: existingDoc() }).mockResolvedValueOnce({
+			status: 201,
+			data: { ok: true, id: 'kiosk_banner:b1', rev: '2-b' }
+		});
+
+		const record = await setBannerStatus('kiosk_banner:b1', '1-a', 'inactive', NOW);
+
+		const body = adminRawMock.mock.calls[1][2];
+		expect(body).toMatchObject({
+			title: 'เดิม',
+			status: 'inactive',
+			updated_at: NOW.toISOString(),
+			_attachments: { image: STUB }
+		});
+		expect(record.status).toBe('inactive');
+	});
+});
+
+describe('getBanner', () => {
+	it('returns a record without _attachments, exposing image_content_type', async () => {
+		adminRawMock.mockResolvedValue({ status: 200, data: existingDoc() });
+
+		const record = await getBanner('kiosk_banner:b1');
+
+		expect(record).toMatchObject({ _id: 'kiosk_banner:b1', image_content_type: 'image/jpeg' });
+		expect(record).not.toHaveProperty('_attachments');
+	});
+
+	it('returns null on 404', async () => {
+		adminRawMock.mockResolvedValue({ status: 404, data: { error: 'not_found' } });
+
+		expect(await getBanner('kiosk_banner:nope')).toBeNull();
+	});
+});
+
+describe('deleteBanner', () => {
+	it('DELETEs with the rev as a query parameter', async () => {
+		adminRawMock.mockResolvedValue({ status: 200, data: { ok: true } });
+
+		await deleteBanner('kiosk_banner:b1', '1-a');
+
+		expect(adminRawMock).toHaveBeenCalledWith('/registry/kiosk_banner%3Ab1?rev=1-a', 'DELETE');
+	});
+
+	it('maps 409 to CONFLICT', async () => {
+		adminRawMock.mockResolvedValue({ status: 409, data: { error: 'conflict' } });
+
+		await expect(deleteBanner('kiosk_banner:b1', '1-a')).rejects.toMatchObject({
+			code: 'CONFLICT'
+		});
+	});
+
+	it('throws BannerNotFoundError on 404', async () => {
+		adminRawMock.mockResolvedValue({ status: 404, data: { error: 'not_found' } });
+
+		await expect(deleteBanner('kiosk_banner:b1', '1-a')).rejects.toBeInstanceOf(
+			BannerNotFoundError
+		);
+	});
+});
+
+describe('listBannersForShelter', () => {
+	it('queries by type and shelter_code and strips _attachments', async () => {
+		adminRawMock.mockResolvedValue({ status: 200, data: { docs: [existingDoc()] } });
+
+		const records = await listBannersForShelter('SH1');
+
+		const [path, method, body] = adminRawMock.mock.calls[0];
+		expect(path).toBe('/registry/_find');
+		expect(method).toBe('POST');
+		expect(body).toMatchObject({
+			selector: { type: 'kiosk_banner', shelter_code: 'SH1' },
+			limit: 500
+		});
+		expect(records).toHaveLength(1);
+		expect(records[0].image_content_type).toBe('image/jpeg');
+		expect(records[0]).not.toHaveProperty('_attachments');
+	});
+});
+
+describe('listActiveForShelter', () => {
+	it('keeps only banners live now, sorted, capped at 20', async () => {
+		const live = (n: number, order: number) =>
+			existingDoc({ _id: `kiosk_banner:live-${String(n).padStart(2, '0')}`, order });
+		const docs = [
+			...Array.from({ length: 22 }, (_, i) => live(i, 22 - i)),
+			existingDoc({ _id: 'kiosk_banner:off', status: 'inactive', order: 0 }),
+			existingDoc({
+				_id: 'kiosk_banner:future',
+				start_at: '2026-12-01T00:00:00.000Z',
+				end_at: '2026-12-31T00:00:00.000Z',
+				order: 0
+			}),
+			existingDoc({
+				_id: 'kiosk_banner:expired',
+				start_at: '2026-01-01T00:00:00.000Z',
+				end_at: '2026-02-01T00:00:00.000Z',
+				order: 0
+			})
+		];
+		adminRawMock.mockResolvedValue({ status: 200, data: { docs } });
+
+		const records = await listActiveForShelter('SH1', NOW);
+
+		expect(records).toHaveLength(20);
+		expect(records.map((r) => r.order)).toEqual(Array.from({ length: 20 }, (_, i) => i + 1));
+		expect(records.some((r) => ['off', 'future', 'expired'].some((k) => r._id.endsWith(k)))).toBe(
+			false
+		);
+	});
+});
+
+describe('getBannerImage', () => {
+	it('decodes the inline attachment fetched with attachments=true', async () => {
+		adminRawMock.mockResolvedValue({
+			status: 200,
+			data: existingDoc({ _attachments: { image: { content_type: 'image/png', data: pngBase64 } } })
+		});
+
+		const image = await getBannerImage('kiosk_banner:b1');
+
+		expect(adminRawMock).toHaveBeenCalledWith(
+			'/registry/kiosk_banner%3Ab1?attachments=true',
+			'GET'
+		);
+		expect(image?.contentType).toBe('image/png');
+		expect(Array.from(new Uint8Array(image!.bytes))).toEqual(Array.from(png));
+	});
+
+	it('returns null when the doc or attachment is missing', async () => {
+		adminRawMock.mockResolvedValueOnce({ status: 404, data: { error: 'not_found' } });
+		expect(await getBannerImage('kiosk_banner:x')).toBeNull();
+
+		adminRawMock.mockResolvedValueOnce({
+			status: 200,
+			data: existingDoc({ _attachments: undefined })
+		});
+		expect(await getBannerImage('kiosk_banner:y')).toBeNull();
+	});
+});
+
+describe('KIOSK_BANNER_MANGO_INDEX', () => {
+	it('indexes type, shelter_code and end_at', () => {
+		expect(KIOSK_BANNER_MANGO_INDEX.index.fields).toEqual(['type', 'shelter_code', 'end_at']);
+	});
+});
