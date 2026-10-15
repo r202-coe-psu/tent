@@ -142,7 +142,8 @@ describe('POST /api/v1/kiosk/devices', () => {
 			status: 'active',
 			last_seen_at: null,
 			staff_pin_set: false,
-			staff_pin_is_default: false
+			staff_pin_is_default: false,
+			banner_enabled: true
 		});
 		expect(data.device).not.toHaveProperty('secret_hash');
 		expect(data.device).not.toHaveProperty('_rev');
@@ -237,7 +238,8 @@ describe('GET /api/v1/kiosk/devices', () => {
 				status: 'active',
 				last_seen_at: null,
 				staff_pin_set: false,
-				staff_pin_is_default: false
+				staff_pin_is_default: false,
+				banner_enabled: true
 			}
 		]);
 	});

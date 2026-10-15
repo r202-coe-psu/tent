@@ -78,6 +78,8 @@ export interface ScannerDevicePrincipal {
 	readonly name: string;
 	readonly shelter_code: string;
 	readonly station_name: string;
+	/** FR-KBR-35: `false` only when the registry doc says so; absent = banners shown. */
+	readonly banner_enabled: boolean;
 }
 
 export interface ScannerDeviceLookup {
@@ -138,7 +140,8 @@ export async function authenticateScannerDevice(
 		device_id: device.device_id,
 		name: device.name,
 		shelter_code: device.shelter_code,
-		station_name: device.station_name
+		station_name: device.station_name,
+		banner_enabled: device.banner_enabled ?? true
 	};
 }
 

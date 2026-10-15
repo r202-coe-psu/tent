@@ -71,6 +71,30 @@ describe('POST /api/v1/kiosk/banners', () => {
 		vi.useRealTimers();
 	});
 
+	it('returns an empty feed without listing banners when the device has them switched off (FR-KBR-37)', async () => {
+		mockAuthenticate.mockResolvedValueOnce({
+			shelter_code: 'SH001',
+			banner_enabled: false
+		} as never);
+
+		const response = await POST(request({}, deviceHeaders));
+
+		expect(response.status).toBe(200);
+		expect(response.headers.get('cache-control')).toBe('no-store');
+		expect(await response.json()).toEqual({ banners: [], fetched_at: NOW.toISOString() });
+		expect(mockList).not.toHaveBeenCalled();
+	});
+
+	it('still lists banners when banner_enabled is true', async () => {
+		mockAuthenticate.mockResolvedValueOnce({
+			shelter_code: 'SH001',
+			banner_enabled: true
+		} as never);
+		const body = await (await POST(request({}, deviceHeaders))).json();
+		expect(body.banners).toHaveLength(2);
+		expect(mockList).toHaveBeenCalledTimes(1);
+	});
+
 	it('returns the active banners with signed image urls and fetched_at', async () => {
 		const response = await POST(request({}, deviceHeaders));
 

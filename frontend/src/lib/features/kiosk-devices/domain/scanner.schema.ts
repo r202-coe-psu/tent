@@ -129,7 +129,9 @@ const scannerDevicePersistedBaseShape = {
 	secret_hash: z.string().regex(/^[0-9a-f]{64}$/, 'Invalid scanner secret hash'),
 	secret_prefix: z.string().regex(/^sk_scan_[0-9a-f]{8}\.\.\.$/, 'Invalid scanner secret prefix'),
 	status: deviceStatusSchema,
-	last_seen_at: z.string().min(1).nullable()
+	last_seen_at: z.string().min(1).nullable(),
+	/** FR-KBR-35: absent = banners shown (additive flag, no `schema_v` bump). */
+	banner_enabled: z.boolean().optional()
 };
 
 /** v1 document (before staff PIN). Read as "no PIN"; upgraded to v2 when a PIN is first set. */
@@ -198,7 +200,9 @@ export const scannerDeviceSummarySchema = z
 		status: deviceStatusSchema,
 		last_seen_at: z.string().min(1).nullable(),
 		staff_pin_set: z.boolean(),
-		staff_pin_is_default: z.boolean()
+		staff_pin_is_default: z.boolean(),
+		/** Whether the kiosk shows the banner attract loop (stored absent = `true`). */
+		banner_enabled: z.boolean()
 	})
 	.strict();
 
@@ -216,7 +220,8 @@ export const scannerDevicePatchSchema = z
 	.object({
 		name: scannerDeviceInputSchema.shape.name.optional(),
 		station_name: z.string().trim().min(1, 'กรุณาระบุจุดบริการ').optional(),
-		status: deviceStatusSchema.optional()
+		status: deviceStatusSchema.optional(),
+		banner_enabled: z.boolean().optional()
 	})
 	.strict()
 	.refine((value) => Object.keys(value).length > 0, { message: 'ไม่มีข้อมูลที่จะแก้ไข' });
@@ -224,7 +229,7 @@ export type ScannerDevicePatch = z.infer<typeof scannerDevicePatchSchema>;
 
 /** Device details returned by bootstrap; it does not disclose the registry id or PIN state. */
 export const scannerBootstrapDeviceSchema = scannerDeviceSummarySchema
-	.omit({ id: true, staff_pin_set: true, staff_pin_is_default: true })
+	.omit({ id: true, staff_pin_set: true, staff_pin_is_default: true, banner_enabled: true })
 	.extend({ shelter_name: z.string().trim().min(1) });
 export type ScannerBootstrapDevice = z.infer<typeof scannerBootstrapDeviceSchema>;
 
@@ -250,7 +255,8 @@ export function toScannerDeviceSummary(doc: PersistedScannerDevice): ScannerDevi
 		status: doc.status,
 		last_seen_at: doc.last_seen_at,
 		staff_pin_set: pin.staff_pin_set,
-		staff_pin_is_default: pin.staff_pin_is_default
+		staff_pin_is_default: pin.staff_pin_is_default,
+		banner_enabled: doc.banner_enabled ?? true
 	};
 }
 
@@ -285,7 +291,8 @@ export function withoutScannerPlaintext(
 		status: device.status,
 		last_seen_at: device.last_seen_at,
 		staff_pin_set: device.staff_pin_set,
-		staff_pin_is_default: device.staff_pin_is_default
+		staff_pin_is_default: device.staff_pin_is_default,
+		banner_enabled: device.banner_enabled
 	};
 }
 

@@ -485,6 +485,25 @@ describe('ScannerDeviceRepository', () => {
 			expect(updated.status).toBe('inactive');
 		});
 
+		it('writes banner_enabled and keeps it absent when not patched (FR-KBR-35)', async () => {
+			mockRaw
+				.mockResolvedValueOnce({ status: 200, data: v2Doc })
+				.mockResolvedValueOnce({ status: 201, data: { ok: true, rev: '4-def' } })
+				.mockResolvedValueOnce({ status: 200, data: v2Doc })
+				.mockResolvedValueOnce({ status: 201, data: { ok: true, rev: '4-def' } });
+
+			const updated = await repository.updateDevice(v2Doc._id, { banner_enabled: false }, 'sm-a');
+			expect(putBodyAt(1)).toEqual({
+				...v2Doc,
+				banner_enabled: false,
+				updated_at: expect.any(String)
+			});
+			expect(updated.banner_enabled).toBe(false);
+
+			await repository.updateDevice(v2Doc._id, { status: 'inactive' }, 'sm-a');
+			expect(putBodyAt(3)).not.toHaveProperty('banner_enabled');
+		});
+
 		it('keeps a v1 doc at v1 (no PIN metadata invented)', async () => {
 			mockRaw
 				.mockResolvedValueOnce({ status: 200, data: v1Doc })
