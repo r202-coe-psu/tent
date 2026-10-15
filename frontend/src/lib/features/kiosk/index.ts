@@ -21,6 +21,7 @@ export { default as KioskCardInsertScene } from './ui/kiosk-card-insert-scene.sv
 export { default as KioskReaderPointer } from './ui/kiosk-reader-pointer.svelte';
 export { default as KioskReprint } from './ui/kiosk-reprint.svelte';
 export { default as KioskThaidIdentityScan } from './ui/thaid-identity-scan.svelte';
+export { default as KioskBannerAttract } from './ui/kiosk-banner-attract.svelte';
 export { KioskIdleTimeout, KIOSK_IDLE_TIMEOUT_MS } from './ui/kiosk-idle-timeout.svelte.js';
 export { navigateToKioskHome } from './application/kiosk-navigation';
 export {
