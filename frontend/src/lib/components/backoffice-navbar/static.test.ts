@@ -190,7 +190,7 @@ describe('real backofficeNavbarGroups — visible leaves per role (regression gu
 	});
 });
 
-describe('activeNavHref — longest path-segment match (CR-170 FR-KBR-24)', () => {
+describe('activeNavHref — longest path-segment match (FR-KBR-24, draft CR kiosk-banner-design-revision)', () => {
 	const hrefs = ['/back-office/kiosks', '/back-office/kiosks/banners', '/back-office/users'];
 
 	it('picks the nested item on its own page and sub-pages', () => {

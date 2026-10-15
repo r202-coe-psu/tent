@@ -219,7 +219,7 @@ export function navLeafHrefs(
 /**
  * The single nav href that owns `path`: the LONGEST href equal to the path or a path-segment
  * prefix of it (`href + '/'`). Lets a nested page (`/kiosks/banners`) win over its parent
- * (`/kiosks`) — CR-170 FR-KBR-24. Null when no href matches.
+ * (`/kiosks`) — FR-KBR-24, draft CR kiosk-banner-design-revision. Null when no href matches.
  */
 export function activeNavHref(path: string, hrefs: readonly string[]): string | null {
 	const current = stripTrailingSlash(path);
