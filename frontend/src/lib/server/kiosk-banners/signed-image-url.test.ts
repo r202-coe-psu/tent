@@ -6,7 +6,7 @@ import {
 } from './signed-image-url';
 
 const mockEnv = vi.hoisted(
-	() => ({ KIOSK_BANNER_URL_SECRET: 'test-banner-secret' }) as Record<string, string | undefined>
+	() => ({ EXTERNAL_API_SECRET: 'test-banner-secret' }) as Record<string, string | undefined>
 );
 vi.mock('$env/dynamic/private', () => ({ env: mockEnv }));
 
@@ -18,7 +18,7 @@ function parts(url: string) {
 }
 
 beforeEach(() => {
-	mockEnv.KIOSK_BANNER_URL_SECRET = 'test-banner-secret';
+	mockEnv.EXTERNAL_API_SECRET = 'test-banner-secret';
 });
 
 describe('signBannerImageUrl / verifyBannerImageSig', () => {
@@ -68,9 +68,9 @@ describe('signBannerImageUrl / verifyBannerImageSig', () => {
 	});
 
 	it('throws when the secret is missing or empty', () => {
-		mockEnv.KIOSK_BANNER_URL_SECRET = undefined;
-		expect(() => signBannerImageUrl('banner-1', NOW)).toThrow(/KIOSK_BANNER_URL_SECRET/);
-		mockEnv.KIOSK_BANNER_URL_SECRET = '';
+		mockEnv.EXTERNAL_API_SECRET = undefined;
+		expect(() => signBannerImageUrl('banner-1', NOW)).toThrow(/EXTERNAL_API_SECRET/);
+		mockEnv.EXTERNAL_API_SECRET = '';
 		expect(() => signBannerImageUrl('banner-1', NOW)).toThrow();
 		expect(() => verifyBannerImageSig('banner-1', '9999999999', 'a'.repeat(64), NOW)).toThrow();
 	});

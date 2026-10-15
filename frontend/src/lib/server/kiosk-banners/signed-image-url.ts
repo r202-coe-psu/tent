@@ -1,7 +1,10 @@
 /**
  * Server-only short-lived signed URLs for kiosk banner images.
  *
- * Stateless HMAC so any Node worker can verify. Missing secret throws; callers map to 503.
+ * Stateless HMAC so any Node worker can verify. The key is derived from the existing
+ * server-only `EXTERNAL_API_SECRET` (no extra env var); a purpose label keeps these
+ * signatures distinct from anything else signed with that secret. Missing secret throws;
+ * callers map to 503.
  */
 
 import { createHmac, timingSafeEqual } from 'node:crypto';
@@ -11,11 +14,12 @@ export const KIOSK_BANNER_URL_TTL_MS = 15 * 60_000;
 
 const SIG_RE = /^[0-9a-f]{64}$/;
 const EXP_RE = /^[0-9]+$/;
+const KEY_PURPOSE = 'kiosk-banner-image-url:v1';
 
-function secret(): string {
-	const value = env.KIOSK_BANNER_URL_SECRET;
-	if (!value) throw new Error('KIOSK_BANNER_URL_SECRET is not configured');
-	return value;
+function secret(): Buffer {
+	const value = env.EXTERNAL_API_SECRET;
+	if (!value) throw new Error('EXTERNAL_API_SECRET is not configured');
+	return createHmac('sha256', value).update(KEY_PURPOSE).digest();
 }
 
 function hmacHex(id: string, exp: string): string {

@@ -8,7 +8,7 @@ import {
 import { listActiveForShelter } from '$lib/server/kiosk-banners/kiosk-banner.server';
 
 const mockEnv = vi.hoisted(
-	() => ({ KIOSK_BANNER_URL_SECRET: 'test-banner-secret' }) as Record<string, string | undefined>
+	() => ({ EXTERNAL_API_SECRET: 'test-banner-secret' }) as Record<string, string | undefined>
 );
 vi.mock('$env/dynamic/private', () => ({ env: mockEnv }));
 vi.mock('$lib/features/kiosk-devices/server', () => ({ scannerServerRepository: {} }));
@@ -59,7 +59,7 @@ describe('POST /api/v1/kiosk/banners', () => {
 		vi.clearAllMocks();
 		vi.useFakeTimers();
 		vi.setSystemTime(NOW);
-		mockEnv.KIOSK_BANNER_URL_SECRET = 'test-banner-secret';
+		mockEnv.EXTERNAL_API_SECRET = 'test-banner-secret';
 		mockAuthenticate.mockImplementation(async (deviceId) => {
 			if (!deviceId) throw new ScannerAuthError();
 			return { shelter_code: 'SH001' } as never;
@@ -124,7 +124,7 @@ describe('POST /api/v1/kiosk/banners', () => {
 	});
 
 	it('returns 503 when the image url secret is not configured', async () => {
-		mockEnv.KIOSK_BANNER_URL_SECRET = undefined;
+		mockEnv.EXTERNAL_API_SECRET = undefined;
 		const response = await POST(request({}, deviceHeaders));
 
 		expect(response.status).toBe(503);

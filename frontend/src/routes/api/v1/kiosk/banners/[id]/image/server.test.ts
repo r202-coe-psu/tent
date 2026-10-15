@@ -8,7 +8,7 @@ import {
 } from '$lib/server/kiosk-banners/signed-image-url';
 
 const mockEnv = vi.hoisted(
-	() => ({ KIOSK_BANNER_URL_SECRET: 'test-banner-secret' }) as Record<string, string | undefined>
+	() => ({ EXTERNAL_API_SECRET: 'test-banner-secret' }) as Record<string, string | undefined>
 );
 vi.mock('$env/dynamic/private', () => ({ env: mockEnv }));
 vi.mock('$lib/server/kiosk-banners/kiosk-banner.server', () => ({
@@ -50,7 +50,7 @@ describe('GET /api/v1/kiosk/banners/[id]/image', () => {
 		vi.clearAllMocks();
 		vi.useFakeTimers();
 		vi.setSystemTime(NOW);
-		mockEnv.KIOSK_BANNER_URL_SECRET = 'test-banner-secret';
+		mockEnv.EXTERNAL_API_SECRET = 'test-banner-secret';
 		mockGetBanner.mockResolvedValue(activeBanner());
 		mockGetImage.mockResolvedValue({ bytes: BYTES, contentType: 'image/png' });
 	});
@@ -109,7 +109,7 @@ describe('GET /api/v1/kiosk/banners/[id]/image', () => {
 
 	it('returns 503 when the url secret is not configured', async () => {
 		const ev = event();
-		mockEnv.KIOSK_BANNER_URL_SECRET = undefined;
+		mockEnv.EXTERNAL_API_SECRET = undefined;
 		const response = await GET(ev);
 
 		expect(response.status).toBe(503);
