@@ -137,13 +137,21 @@ describe('reprintKioskLabels', () => {
 
 	it.each([
 		['phone mismatch', { phone: '0899999999' }],
-		['another shelter', { shelter_code: 'SH002' }],
-		['a staff-registered primary', { registered_via: 'station_1' }]
+		['another shelter', { shelter_code: 'SH002' }]
 	])('is not found for %s', async (_label, override) => {
 		docs = [evacuee(0, override)];
 		await expect(reprintKioskLabels(shelterCode, input())).rejects.toBeInstanceOf(
 			KioskReprintNotFoundError
 		);
+	});
+
+	it('reprints a staff-registered household like any other channel', async () => {
+		docs = [
+			evacuee(0, { registered_via: 'station_1' }),
+			evacuee(1, { registered_via: 'station_1' })
+		];
+		const members = await reprintKioskLabels(shelterCode, input({ evacuee_ids: [ids[0], ids[1]] }));
+		expect(members.map((member) => member.evacuee_id)).toEqual([ids[0], ids[1]]);
 	});
 
 	it('is not found for an unknown primary', async () => {
@@ -158,13 +166,12 @@ describe('reprintKioskLabels', () => {
 			evacuee(1, { household_id: 'household:B' }),
 			evacuee(2, { current_stay: { status: 'pre_registered' } }),
 			evacuee(3, { current_stay: { status: 'checked_out' } }),
-			evacuee(4, { registered_via: 'station_1' }),
-			evacuee(5, { current_stay: { status: 'temporary_leave' } })
+			evacuee(4, { current_stay: { status: 'temporary_leave' } })
 		];
 
 		const members = await reprintKioskLabels(
 			shelterCode,
-			input({ evacuee_ids: [ids[0], ids[1], ids[2], ids[3], ids[4], ids[5], ids[6]] })
+			input({ evacuee_ids: [ids[0], ids[1], ids[2], ids[3], ids[4], ids[5]] })
 		);
 
 		expect(members.map((member) => member.evacuee_id)).toEqual([ids[0]]);

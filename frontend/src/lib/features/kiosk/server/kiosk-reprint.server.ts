@@ -5,7 +5,6 @@ import { shelterDbName } from '$lib/server/shelter-access-design';
 import {
 	evacueeIdSchema,
 	getById,
-	isKioskEligibleChannel,
 	KioskInputError,
 	KioskLookupUnavailableError,
 	toLabelIdentity,
@@ -93,7 +92,6 @@ export async function reprintKioskLabels(
 	if (
 		!primary ||
 		primary.shelter_code !== shelterCode ||
-		!isKioskEligibleChannel(primary) ||
 		!isListedHouseholdMember(primary) ||
 		!primary.phone ||
 		!phoneVariants(canonical).includes(primary.phone)
@@ -115,7 +113,6 @@ export async function reprintKioskLabels(
 				member._id === primary._id ||
 				(Boolean(primary.household_id) && member.household_id === primary.household_id)
 			) ||
-			!isKioskEligibleChannel(member) ||
 			!isListedHouseholdMember(member) ||
 			!isReprintableStatus(member.current_stay?.status)
 		) {
