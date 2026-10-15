@@ -1,9 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 import Users from '@lucide/svelte/icons/users';
 import {
+	activeNavHref,
 	backofficeNavbarGroups,
 	canSeeNavNode,
 	isGroup,
+	navLeafHrefs,
 	type BackofficeNavbarNode,
 	type NavVisibilityContext
 } from './static';
@@ -185,5 +187,53 @@ describe('real backofficeNavbarGroups — visible leaves per role (regression gu
 	it('kiosk_staff with another capability in the shelter keeps the other menus too', () => {
 		const roles = ['shelter:SH001', 'SH001:kiosk_staff', 'SH001:registration_staff'];
 		expect(visibleLeafLabels(ctx(roles, 'SH001'))).toEqual(withScanners);
+	});
+});
+
+describe('activeNavHref — longest path-segment match (CR-170 FR-KBR-24)', () => {
+	const hrefs = ['/back-office/kiosks', '/back-office/kiosks/banners', '/back-office/users'];
+
+	it('picks the nested item on its own page and sub-pages', () => {
+		expect(activeNavHref('/back-office/kiosks/banners', hrefs)).toBe('/back-office/kiosks/banners');
+		expect(activeNavHref('/back-office/kiosks/banners/new', hrefs)).toBe(
+			'/back-office/kiosks/banners'
+		);
+	});
+
+	it('picks the parent item when the path is not under the nested one', () => {
+		expect(activeNavHref('/back-office/kiosks', hrefs)).toBe('/back-office/kiosks');
+		expect(activeNavHref('/back-office/kiosks/KSK-001', hrefs)).toBe('/back-office/kiosks');
+	});
+
+	it('is order independent', () => {
+		expect(activeNavHref('/back-office/kiosks/banners', [...hrefs].reverse())).toBe(
+			'/back-office/kiosks/banners'
+		);
+	});
+
+	it('matches whole path segments only', () => {
+		expect(activeNavHref('/back-office/kiosks-x', hrefs)).toBeNull();
+		expect(activeNavHref('/back-office/kiosks/bannersX', hrefs)).toBe('/back-office/kiosks');
+	});
+
+	it('ignores a trailing slash on the path', () => {
+		expect(activeNavHref('/back-office/kiosks/banners/', hrefs)).toBe(
+			'/back-office/kiosks/banners'
+		);
+	});
+
+	it('returns null when nothing matches', () => {
+		expect(activeNavHref('/portal', hrefs)).toBeNull();
+		expect(activeNavHref('/back-office/kiosks', [])).toBeNull();
+	});
+});
+
+describe('navLeafHrefs', () => {
+	it('collects every leaf href of the real nav, skipping null hrefs and group parents', () => {
+		const hrefs = navLeafHrefs(backofficeNavbarGroups);
+		expect(hrefs).toContain('/back-office/kiosks');
+		expect(hrefs).toContain('/back-office/distribution');
+		expect(hrefs).not.toContain(null);
+		expect(hrefs.every((h) => typeof h === 'string')).toBe(true);
 	});
 });

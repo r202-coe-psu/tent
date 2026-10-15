@@ -195,4 +195,41 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 
 export const backofficeHomePath: ResolvedPathname = resolve('/portal');
 
+const stripTrailingSlash = (path: string): string => path.replace(/\/$/, '');
+
+/** Every non-null nav href in the tree (groups included), depth-first. */
+export function navLeafHrefs(
+	items: readonly BackofficeNavbarNode[] | readonly BackofficeNavbarGroup[]
+): string[] {
+	const result: string[] = [];
+	const walk = (nodes: readonly (BackofficeNavbarNode | BackofficeNavbarGroup)[]): void => {
+		for (const node of nodes) {
+			if ('items' in node) {
+				walk(node.items);
+				continue;
+			}
+			if (node.href) result.push(String(node.href));
+			if (isGroup(node)) walk(node.children);
+		}
+	};
+	walk(items);
+	return result;
+}
+
+/**
+ * The single nav href that owns `path`: the LONGEST href equal to the path or a path-segment
+ * prefix of it (`href + '/'`). Lets a nested page (`/kiosks/banners`) win over its parent
+ * (`/kiosks`) — CR-170 FR-KBR-24. Null when no href matches.
+ */
+export function activeNavHref(path: string, hrefs: readonly string[]): string | null {
+	const current = stripTrailingSlash(path);
+	let best: string | null = null;
+	for (const href of hrefs) {
+		const target = stripTrailingSlash(href);
+		if (current !== target && !current.startsWith(target + '/')) continue;
+		if (best === null || target.length > stripTrailingSlash(best).length) best = href;
+	}
+	return best;
+}
+
 export { isGroup };
