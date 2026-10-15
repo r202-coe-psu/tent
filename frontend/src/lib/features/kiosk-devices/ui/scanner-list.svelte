@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button/index.js';
+	import { Switch } from '$lib/components/ui/switch/index.js';
 	import Trash2 from '@lucide/svelte/icons/trash-2';
 	import Cpu from '@lucide/svelte/icons/cpu';
 	import Building from '@lucide/svelte/icons/building';
@@ -62,6 +63,19 @@
 		);
 	}
 
+	/** FR-KBR-38: flip the per-kiosk banner flag; the list refetches on success. */
+	function handleToggleBanner(device: ScannerDevice, enabled: boolean) {
+		updateMutation.mutate(
+			{ deviceId: device.device_id, patch: { banner_enabled: enabled } },
+			{
+				onSuccess: () =>
+					toast.success(enabled ? 'เปิดการแสดงแบนเนอร์เรียบร้อย' : 'ปิดการแสดงแบนเนอร์เรียบร้อย'),
+				onError: (err) =>
+					toast.error(err instanceof Error ? err.message : 'ไม่สามารถเปลี่ยนการแสดงแบนเนอร์ได้')
+			}
+		);
+	}
+
 	function formatLastSeen(lastSeen: string | null): string {
 		if (!lastSeen) return 'ยังไม่เคยเชื่อมต่อ';
 		const diff = Math.floor((Date.now() - new Date(lastSeen).getTime()) / 1000);
@@ -83,6 +97,7 @@
 				<th class="px-6 py-4">Scanner Key</th>
 				<th class="px-6 py-4">PIN เจ้าหน้าที่</th>
 				<th class="px-6 py-4">สถานะ</th>
+				<th class="px-6 py-4">แบนเนอร์</th>
 				<th class="px-6 py-4">การเชื่อมต่อล่าสุด</th>
 				<th class="px-6 py-4 text-right">จัดการ</th>
 			</tr>
@@ -90,7 +105,7 @@
 		<tbody class="divide-y divide-border/60">
 			{#if devices.length === 0}
 				<tr>
-					<td colspan="7" class="px-6 py-12 text-center text-muted-foreground">
+					<td colspan="8" class="px-6 py-12 text-center text-muted-foreground">
 						<Cpu class="mx-auto mb-2 h-8 w-8 text-muted-foreground/50" />
 						<p>ยังไม่มีเครื่องสแกนบัตรในระบบ</p>
 						<p class="text-xs">กดปุ่ม "ลงทะเบียนเครื่องสแกน" ด้านบนเพื่อเพิ่มอุปกรณ์</p>
@@ -197,6 +212,24 @@
 									Inactive
 								</button>
 							{/if}
+						</td>
+						<td class="px-6 py-4">
+							<div class="flex min-h-11 items-center gap-2">
+								<Switch
+									id="banner-enabled-{device.device_id}"
+									bind:checked={
+										() => device.banner_enabled, (next) => handleToggleBanner(device, next)
+									}
+									disabled={updateMutation.isPending}
+									aria-label="แบนเนอร์ของ {device.name}"
+								/>
+								<label
+									for="banner-enabled-{device.device_id}"
+									class="text-sm font-medium text-slate-700"
+								>
+									{device.banner_enabled ? 'แสดงแบนเนอร์' : 'ไม่แสดงแบนเนอร์'}
+								</label>
+							</div>
 						</td>
 						<td class="px-6 py-4 text-xs text-muted-foreground">
 							<div class="flex items-center gap-1.5">
