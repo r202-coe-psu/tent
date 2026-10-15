@@ -32,6 +32,12 @@ export {
 	type KioskReprintResult
 } from './data/kiosk-check-in.api';
 export { fetchKioskConfig } from './data/kiosk-config.api';
+export { fetchKioskBanners } from './data/kiosk-banners.api';
+export type { KioskBannerSlide } from './domain/kiosk-banner-feed';
+export {
+	KioskBannerAttractController,
+	KIOSK_BANNER_IDLE_MS
+} from './ui/kiosk-banner-attract.svelte.js';
 export { KIOSK_THAID_PATH } from './domain/identity-method';
 export {
 	buildKioskContextQuery,
