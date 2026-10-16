@@ -166,6 +166,7 @@ export {
 	lotStorageKey,
 	lotLocationFields,
 	storageLotFields,
+	isStoragePointChosen,
 	type StoragePointRef
 } from './domain/lot-storage';
 

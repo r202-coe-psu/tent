@@ -483,7 +483,6 @@ test.describe('Donation full-stack: back office', { tag: ['@critical', '@donatio
 			await page.getByRole('button', { name: /^เลือกประเภทสิ่งของ/ }).click();
 			await page.getByRole('option', { name: /^สบู่ก้อน/ }).click();
 			await page.getByRole('textbox', { name: 'จำนวนที่รับจริง *' }).fill('3');
-			await page.getByRole('textbox', { name: 'โซนจัดเก็บ (ถ้ามี)' }).fill('A-1');
 			// สบู่ก้อน carries `shelf_life_days`, so the walk-in will not save without an expiry.
 			await fillExpiry(page.getByRole('textbox', { name: 'วันหมดอายุ' }));
 
