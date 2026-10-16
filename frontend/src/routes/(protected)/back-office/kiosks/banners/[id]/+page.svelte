@@ -9,12 +9,17 @@
 		KioskBannerApiError,
 		KioskBannerForm,
 		useKioskBanner,
+		useKioskBanners,
 		useUpdateKioskBanner,
 		type KioskBannerSavePayload
 	} from '$lib/features/kiosk-banners';
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 
 	const bannerQuery = useKioskBanner(() => page.params.id);
+	const siblingsQuery = useKioskBanners(
+		() => bannerQuery.data?.shelter_code,
+		() => 'current'
+	);
 	const update = useUpdateKioskBanner();
 	const listHref = resolve('/back-office/kiosks/banners');
 
@@ -76,6 +81,7 @@
 				<KioskBannerForm
 					shelterCode={bannerQuery.data.shelter_code}
 					banner={bannerQuery.data}
+					siblings={siblingsQuery.data ?? []}
 					onsave={handleSave}
 				/>
 			{/key}
