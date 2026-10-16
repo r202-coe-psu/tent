@@ -197,23 +197,12 @@ function responseStatus(error: unknown): number | null {
 }
 
 /**
- * Registration channels the kiosk check-in serves: web pre-registrations and the kiosk's own
- * walk-ins (found again by card/QR/ThaiD for a reprint).
- */
-const KIOSK_ELIGIBLE_CHANNELS: readonly string[] = ['web', 'kiosk'];
-
-export function isKioskEligibleChannel(doc: Pick<EvacueeDoc, 'registered_via'>): boolean {
-	return doc.registered_via !== undefined && KIOSK_ELIGIBLE_CHANNELS.includes(doc.registered_via);
-}
-
-/**
  * What a household member can be selected for: a check-in (`pre_registered` only, the card / QR /
  * ThaiD gates) or a QR reprint (arriving / active / room_confirmed only, the phone gate).
  */
 type SelectableFor = 'check_in' | 'reprint';
 
 function isSelectableFor(doc: EvacueeDoc, mode: SelectableFor): boolean {
-	if (!isKioskEligibleChannel(doc)) return false;
 	const status = doc.current_stay?.status;
 	return mode === 'reprint' ? isReprintableStatus(status) : status === 'pre_registered';
 }
@@ -301,16 +290,13 @@ async function lookupByPhone(
 
 	const dbName = shelterDbName(shelterCode);
 	const variants = phoneVariants(canonical);
-	// Query each channel x stored representation with equality so CouchDB can use the
-	// (type, phone) index. The +66 variant covers legacy values; `kiosk` covers walk-ins.
+	// Query each stored representation with equality so CouchDB can use the (type, phone) index.
+	// The +66 variant covers legacy values. Every channel in the shelter is in scope.
 	const pageLimit = 50;
 	const maxPages = 20;
 	const docsById = new Map<string, EvacueeDoc>();
 	let truncated = false;
-	const queries = KIOSK_ELIGIBLE_CHANNELS.flatMap((channel) =>
-		variants.map((phone) => ({ channel, phone }))
-	);
-	for (const { channel, phone } of queries) {
+	for (const phone of variants) {
 		let bookmark: string | undefined;
 		for (let page = 0; page < maxPages; page += 1) {
 			const result = await adminFetch<{ docs?: unknown[]; bookmark?: string }>(`/${dbName}/_find`, {
@@ -319,14 +305,12 @@ async function lookupByPhone(
 					selector: {
 						type: 'evacuee',
 						shelter_code: shelterCode,
-						registered_via: channel,
 						phone
 					},
 					fields: [
 						'_id',
 						'type',
 						'shelter_code',
-						'registered_via',
 						'household_id',
 						'created_at',
 						'current_stay',
@@ -511,10 +495,7 @@ export async function lookupPreRegisteredEvacuee(
 	}
 
 	const eligible = candidates.filter(
-		(doc) =>
-			doc.shelter_code === shelterCode &&
-			isKioskEligibleChannel(doc) &&
-			isListedHouseholdMember(doc)
+		(doc) => doc.shelter_code === shelterCode && isListedHouseholdMember(doc)
 	);
 	if (eligible.length !== 1) return { kind: 'not_found', can_register: false };
 
@@ -548,12 +529,7 @@ export async function checkInSelectedMembers(
 	) {
 		throw new KioskThaidIdentityMismatchError();
 	}
-	if (
-		!primary ||
-		primary.shelter_code !== shelterCode ||
-		!isKioskEligibleChannel(primary) ||
-		!isListedHouseholdMember(primary)
-	) {
+	if (!primary || primary.shelter_code !== shelterCode || !isListedHouseholdMember(primary)) {
 		return normalizedEvacueeIds.map((evacueeId) => ({
 			evacuee_id: evacueeId,
 			status: 'not_eligible'
@@ -577,11 +553,7 @@ export async function checkInSelectedMembers(
 		const belongsToHousehold =
 			member._id === primary._id ||
 			(Boolean(primary.household_id) && member.household_id === primary.household_id);
-		if (
-			!belongsToHousehold ||
-			!isKioskEligibleChannel(member) ||
-			!isListedHouseholdMember(member)
-		) {
+		if (!belongsToHousehold || !isListedHouseholdMember(member)) {
 			results.push({ evacuee_id: evacueeId, status: 'not_eligible' });
 			continue;
 		}

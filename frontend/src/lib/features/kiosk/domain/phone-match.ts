@@ -22,11 +22,7 @@ export type PhoneMatchGroup = {
 };
 
 export function isPhoneMatchEligible(doc: PhoneMatchDoc, shelterCode: string): boolean {
-	return (
-		doc.shelter_code === shelterCode &&
-		(doc.registered_via === 'web' || doc.registered_via === 'kiosk') &&
-		isListedHouseholdMember(doc)
-	);
+	return doc.shelter_code === shelterCode && isListedHouseholdMember(doc);
 }
 
 function compareDocsByCreatedAtThenId(left: PhoneMatchDoc, right: PhoneMatchDoc): number {

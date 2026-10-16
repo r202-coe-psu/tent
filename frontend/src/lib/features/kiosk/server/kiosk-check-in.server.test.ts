@@ -296,7 +296,7 @@ describe('lookupPreRegisteredEvacuee phone gate', () => {
 		const candidateQueries = queryBodies.filter(
 			({ selector }) => typeof selector.household_id === 'string'
 		);
-		expect(queryBodies).toHaveLength(7); // 2 channels x 2 phone variants plus three household groups
+		expect(queryBodies).toHaveLength(5); // 2 phone variants plus three household groups
 		expect(candidateQueries).toHaveLength(3);
 		expect(candidateQueries.map(({ selector }) => selector.household_id).sort()).toEqual([
 			'household:0',
@@ -399,7 +399,7 @@ describe('lookupPreRegisteredEvacuee phone gate', () => {
 
 		const result = await lookupPreRegisteredEvacuee(shelterCode, { source: 'phone', phone });
 		expect(result).toMatchObject({ kind: 'household', primary_evacuee_id: head._id });
-		expect(phoneQueryCount).toBe(3); // two pages for web, then one for kiosk
+		expect(phoneQueryCount).toBe(2); // both pages of the canonical number
 	});
 
 	it('fails closed when a full Mango page has no continuation bookmark', async () => {
@@ -450,7 +450,7 @@ describe('lookupPreRegisteredEvacuee phone gate', () => {
 		});
 	});
 
-	it('queries only the authenticated shelter and web/kiosk records with exact canonical and legacy values', async () => {
+	it('queries the whole authenticated shelter, any channel, with exact canonical and legacy values', async () => {
 		await lookupPreRegisteredEvacuee(shelterCode, { source: 'phone', phone });
 		const queryCalls = mockAdminFetch.mock.calls.filter(([path]) => path.endsWith('/_find'));
 		const bodies = queryCalls.map(
@@ -458,13 +458,9 @@ describe('lookupPreRegisteredEvacuee phone gate', () => {
 				JSON.parse(String(init?.body)) as { selector: Record<string, unknown>; fields: string[] }
 		);
 
-		expect(bodies.map(({ selector }) => [selector.registered_via, selector.phone])).toEqual([
-			['web', phone],
-			['web', '+66812345678'],
-			['kiosk', phone],
-			['kiosk', '+66812345678']
-		]);
+		expect(bodies.map(({ selector }) => selector.phone)).toEqual([phone, '+66812345678']);
 		for (const { selector, fields } of bodies) {
+			expect(selector).not.toHaveProperty('registered_via');
 			expect(selector).toMatchObject({
 				type: 'evacuee',
 				shelter_code: shelterCode
@@ -491,7 +487,7 @@ describe('lookupPreRegisteredEvacuee phone gate', () => {
 
 		const result = await lookupPreRegisteredEvacuee(shelterCode, { source: 'phone', phone });
 
-		expect(queriedPhones).toEqual([phone, '+66812345678', phone, '+66812345678']);
+		expect(queriedPhones).toEqual([phone, '+66812345678']);
 		expect(result).toMatchObject({ kind: 'household', primary_evacuee_id: matchingMember._id });
 		if (result.kind === 'household') {
 			expect(result.members.map((member) => member.evacuee_id)).toEqual([matchingMember._id]);
@@ -550,7 +546,7 @@ describe('lookupPreRegisteredEvacuee phone gate', () => {
 		if (qr.kind === 'household') expect(qr.members[0].last_name).toBe('ใ****');
 	});
 
-	it('lists eligible staff-created household members without making them selectable', async () => {
+	it('makes staff-created household members selectable like any pre-registration', async () => {
 		const primary = evacuee(0);
 		const staffMember = evacuee(1, {
 			registered_via: 'station_1',
@@ -577,7 +573,7 @@ describe('lookupPreRegisteredEvacuee phone gate', () => {
 			primary._id,
 			staffMember._id
 		]);
-		expect(result.members[1]).toMatchObject({ selectable: false, status: 'pre_registered' });
+		expect(result.members[1]).toMatchObject({ selectable: true, status: 'pre_registered' });
 		const householdQuery = mockAdminFetch.mock.calls
 			.filter(([path]) => path.endsWith('/_find'))
 			.map(([, init]) => JSON.parse(String(init?.body)) as { selector: Record<string, unknown> })
@@ -642,15 +638,20 @@ describe('lookupPreRegisteredEvacuee phone gate', () => {
 		});
 	});
 
-	it('does not find a registration from another channel', async () => {
-		evacuees = [evacuee(0, { registered_via: 'api', current_stay: { status: 'arriving' } })];
+	it('finds a registration from any channel in the shelter', async () => {
+		const staffMade = evacuee(0, { registered_via: 'api', current_stay: { status: 'arriving' } });
+		evacuees = [staffMade];
 		configureCheckInCouchMocks();
 		expect(
 			await lookupPreRegisteredEvacuee(shelterCode, {
 				source: 'smart-card',
 				citizen_id: '1234567890123'
 			})
-		).toEqual({ kind: 'not_found', can_register: false });
+		).toMatchObject({
+			kind: 'household',
+			primary_evacuee_id: staffMade._id,
+			members: [{ evacuee_id: staffMade._id, status: 'arriving', selectable: false }]
+		});
 	});
 
 	it('keeps ambiguous card lookup as not_found', async () => {
@@ -766,11 +767,11 @@ describe('checkInSelectedMembers', () => {
 		configureCheckInCouchMocks();
 	});
 
-	it('checks in only eligible web/kiosk-channel members in the primary household and refreshes household status', async () => {
+	it('checks in pre-registered members of any channel in the primary household and refreshes household status', async () => {
 		const primary = evacuee(0);
 		const member = evacuee(1);
-		const legacyKioskMember = evacuee(2, { registered_via: 'api' });
-		setHousehold([primary, member, legacyKioskMember], primary);
+		const apiMember = evacuee(2, { registered_via: 'api' });
+		setHousehold([primary, member, apiMember], primary);
 		const unrelated = evacuee(3);
 		setHousehold([unrelated]);
 		const otherShelter = evacuee(4, { shelter_code: 'SH002' });
@@ -779,7 +780,7 @@ describe('checkInSelectedMembers', () => {
 		const results = await checkInSelectedMembers(shelterCode, primary._id, [
 			primary._id,
 			member._id,
-			legacyKioskMember._id,
+			apiMember._id,
 			unrelated._id,
 			otherShelter._id
 		]);
@@ -799,11 +800,16 @@ describe('checkInSelectedMembers', () => {
 				qr_payload: member._id,
 				label: { name: 'สมชาย1 ใจดี', phone }
 			},
-			{ evacuee_id: legacyKioskMember._id, status: 'not_eligible' },
+			{
+				evacuee_id: apiMember._id,
+				status: 'checked_in',
+				stay_status: 'arriving',
+				qr_payload: apiMember._id
+			},
 			{ evacuee_id: unrelated._id, status: 'not_eligible' },
 			{ evacuee_id: otherShelter._id, status: 'not_found' }
 		]);
-		for (const result of results.slice(2)) expect(result).not.toHaveProperty('label');
+		for (const result of results.slice(3)) expect(result).not.toHaveProperty('label');
 		expect(primary.current_stay).toMatchObject({ status: 'arriving', zone: null });
 		expect(member.current_stay).toMatchObject({ status: 'arriving', zone: null });
 		expect(typeof primary.current_stay.since).toBe('string');
@@ -812,13 +818,12 @@ describe('checkInSelectedMembers', () => {
 		const evacueeWrites = mockAdminFetch.mock.calls.filter(
 			([path, init]) =>
 				init?.method === 'PUT' &&
-				[primary._id, member._id].some((id) => path.endsWith(encodeURIComponent(id)))
+				[primary._id, member._id, apiMember._id].some((id) => path.endsWith(encodeURIComponent(id)))
 		);
-		expect(evacueeWrites).toHaveLength(2);
+		expect(evacueeWrites).toHaveLength(3);
 		for (const [, init] of evacueeWrites) {
 			const body = JSON.parse(String(init?.body)) as FixtureEvacuee;
 			expect(body._rev).toBe('1-evacuee');
-			expect(body.registered_via).toBe('web');
 		}
 
 		const householdWrite = mockAdminFetch.mock.calls.find(
