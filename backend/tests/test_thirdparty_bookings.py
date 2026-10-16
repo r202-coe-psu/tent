@@ -522,6 +522,67 @@ async def test_staged_insert_failure_leaves_nothing_behind(
     assert await _rows() == []
 
 
+def _fail_update_many(monkeypatch: pytest.MonkeyPatch, failures: int | None) -> list[int]:
+    """Make `update_many` on `external_bookings` raise `failures` times (None = always)."""
+    collection = ExternalBooking.get_pymongo_collection()
+    real = type(collection).update_many
+    calls = [0]
+
+    async def flaky(self: Any, *args: Any, **kwargs: Any) -> Any:
+        if self.name == collection.name:
+            calls[0] += 1
+            if failures is None or calls[0] <= failures:
+                raise RuntimeError("boom")
+        return await real(self, *args, **kwargs)
+
+    monkeypatch.setattr(type(collection), "update_many", flaky)
+    return calls
+
+
+async def test_commit_step_is_retried_after_a_transient_failure(
+    client: AsyncClient, shelters: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls = _fail_update_many(monkeypatch, failures=1)
+    response = await client.post(URL, json=_group_payload(3), headers=GRANTED)
+    assert response.status_code == 201
+    assert calls[0] == 2
+    rows = await _rows(response.json()["result"]["booking_id"])
+    assert len(rows) == 3
+    assert all(row["committed"] is True for row in rows)
+
+
+async def test_commit_step_failure_removes_every_pending_row(
+    client: AsyncClient, shelters: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    await _booking(cid=_cid(9), booking_id="BK-OTHER")  # another group must stay untouched
+    calls = _fail_update_many(monkeypatch, failures=None)
+    with pytest.raises(RuntimeError):
+        await client.post(URL, json=_group_payload(3), headers=GRANTED)
+    assert calls[0] == 3
+    assert [row["booking_id"] for row in await _rows()] == ["BK-OTHER"]
+
+
+async def test_commit_step_failure_keeps_rows_the_worker_already_advanced(
+    client: AsyncClient, shelters: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from apiapp.modules.thirdparty_bookings import use_case
+
+    real = ExternalBooking.insert_many
+
+    async def advance_one(rows: Any, **kwargs: Any) -> Any:
+        result = await real(rows, **kwargs)
+        await ExternalBooking.get_pymongo_collection().update_one(
+            {"_id": rows[0].id}, {"$set": {"state": "written"}}
+        )
+        return result
+
+    monkeypatch.setattr(use_case.ExternalBooking, "insert_many", advance_one)
+    _fail_update_many(monkeypatch, failures=None)
+    with pytest.raises(RuntimeError):
+        await client.post(URL, json=_group_payload(3), headers=GRANTED)
+    assert [row["state"] for row in await _rows()] == ["written"]
+
+
 @pytest.mark.parametrize("same_order", [True, False])
 async def test_concurrent_overlapping_groups_yield_one_winner(
     client: AsyncClient, shelters: None, same_order: bool

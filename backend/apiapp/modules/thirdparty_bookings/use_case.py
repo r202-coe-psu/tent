@@ -13,7 +13,9 @@ every attempt lands in `third_party_access_logs` — never with the CID, phone o
 
 from __future__ import annotations
 
+import asyncio
 import re
+from collections.abc import Awaitable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, Literal
@@ -66,6 +68,23 @@ HOLD_STATUSES: tuple[str, ...] = (
 
 
 _DUPLICATE_KEY_CODE = 11000
+_COMMIT_ATTEMPTS = 3
+
+
+async def _shielded(cleanup: Awaitable[Any]) -> None:
+    """Await `cleanup` so that cancelling the caller does not cancel the cleanup itself."""
+    await asyncio.shield(cleanup)
+
+
+async def _commit_group(collection: Any, booking_id: str) -> None:
+    """Flip a staged group to `committed=True`; retried since the flip is idempotent."""
+    for attempt in range(1, _COMMIT_ATTEMPTS + 1):
+        try:
+            await collection.update_many({"booking_id": booking_id}, {"$set": {"committed": True}})
+            return
+        except Exception:
+            if attempt == _COMMIT_ATTEMPTS:
+                raise
 
 
 def _error(status_code: int, code: str, message: str, detail: str | None = None) -> HTTPException:
@@ -395,19 +414,29 @@ class ThirdPartyBookingsUseCase:
         ]
         rows.sort(key=lambda row: row.cid_hash)
         collection = ExternalBooking.get_pymongo_collection()
+        # Staged rows hold plaintext PII, so a failed request must not leave them behind.
+        # Cleanup is shielded so a cancelled request (client disconnect) cannot abort it.
+        # A sweeper for rows orphaned by a hard process kill is planned in #578; until it
+        # ships, such rows stay `committed=False` and are ignored by the worker poll.
         try:
             await ExternalBooking.insert_many(rows, ordered=True)
-            await collection.update_many({"booking_id": booking_id}, {"$set": {"committed": True}})
         except BulkWriteError as exc:
             # Race guard: the unique partial index on (shelter_code, cid_hash).
-            await collection.delete_many({"booking_id": booking_id, "committed": False})
+            await _shielded(collection.delete_many({"booking_id": booking_id, "committed": False}))
             write_errors = exc.details.get("writeErrors") or []
             if not write_errors or write_errors[0].get("code") != _DUPLICATE_KEY_CODE:
                 raise
             raise await duplicate(rows[write_errors[0]["index"]].person_seq) from None
         except BaseException:
-            # No orphans: staged rows hold plaintext PII (the worker sweeper is the backstop).
-            await collection.delete_many({"booking_id": booking_id, "committed": False})
+            await _shielded(collection.delete_many({"booking_id": booking_id, "committed": False}))
+            raise
+        try:
+            await _commit_group(collection, booking_id)
+        except BaseException:
+            # The flip may have been applied to only some rows, so `committed` can no longer
+            # tell this group's rows apart: remove every row of this booking_id that is still
+            # `pending`. Rows the worker already advanced cannot be rolled back from here.
+            await _shielded(collection.delete_many({"booking_id": booking_id, "state": "pending"}))
             raise
 
         await self._log(
