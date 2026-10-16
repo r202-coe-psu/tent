@@ -34,7 +34,11 @@ const banner = (id: string, over: Partial<KioskBannerSummary> = {}): KioskBanner
 
 let instance: ReturnType<typeof mount> | null = null;
 
-function render(props: { banners: KioskBannerSummary[]; view?: 'current' | 'expired' }) {
+function render(props: {
+	banners: KioskBannerSummary[];
+	view?: 'current' | 'expired';
+	screenFilter?: 'all' | 'compact' | 'portrait';
+}) {
 	instance = mount(KioskBannerList, { target: document.body, props });
 	flushSync();
 }
@@ -139,5 +143,42 @@ describe('KioskBannerList', () => {
 			{ id: 'kiosk_banner:b', rev: '1-b' },
 			expect.anything()
 		);
+	});
+
+	it('labels each row with its screen type and size; a legacy banner counts as ตู้เล็ก', () => {
+		render({
+			banners: [banner('old'), banner('big', { screen_type: 'portrait', title: 'จอใหญ่' })]
+		});
+
+		expect(
+			[...document.body.querySelectorAll('thead th')].some(
+				(th) => th.textContent?.trim() === 'ขนาดจอ'
+			)
+		).toBe(true);
+		const old = byText('tbody tr', 'แบนเนอร์ old') as HTMLElement;
+		expect(old.querySelector('.badge-muted')?.textContent?.replace(/\s+/g, ' ').trim()).toBe(
+			'ตู้เล็ก 1024×600'
+		);
+		const big = byText('tbody tr', 'จอใหญ่') as HTMLElement;
+		expect(big.querySelector('.badge-muted')?.textContent?.replace(/\s+/g, ' ').trim()).toBe(
+			'ตู้ใหญ่ 1080×1920'
+		);
+		expect(old.querySelector('img')?.className).toContain('w-20');
+		expect(big.querySelector('img')?.className).toContain('w-9');
+	});
+
+	it('words the empty state for the screen filter', () => {
+		render({ banners: [], screenFilter: 'portrait' });
+		expect(document.body.textContent).toContain('ยังไม่มีแบนเนอร์ตู้ใหญ่ที่กำลังแสดงหรือรอแสดง');
+	});
+
+	it('keeps the generic empty wording without a filter', () => {
+		render({ banners: [], screenFilter: 'all' });
+		expect(document.body.textContent).toContain('ยังไม่มีแบนเนอร์ที่กำลังแสดงหรือรอแสดง');
+	});
+
+	it('spans every column in the empty state', () => {
+		render({ banners: [] });
+		expect(document.body.querySelector('tbody td')?.getAttribute('colspan')).toBe('7');
 	});
 });

@@ -10,6 +10,11 @@
 	import Trash2 from '@lucide/svelte/icons/trash-2';
 	import TriangleAlert from '@lucide/svelte/icons/triangle-alert';
 	import {
+		KIOSK_SCREENS,
+		screenTypeOf,
+		type KioskScreenType
+	} from '$lib/features/shared/domain/kiosk-screen';
+	import {
 		useDeleteKioskBanner,
 		useSetKioskBannerStatus
 	} from '../application/kiosk-banner.queries';
@@ -25,13 +30,23 @@
 		banners,
 		view = $bindable('current'),
 		loading = false,
-		errorMessage = null
+		errorMessage = null,
+		screenFilter = 'all'
 	}: {
 		banners: KioskBannerSummary[];
 		view?: KioskBannerView;
 		loading?: boolean;
 		errorMessage?: string | null;
+		/** Only words the empty state; the parent has already filtered `banners`. */
+		screenFilter?: KioskScreenType | 'all';
 	} = $props();
+
+	const emptyMessage = $derived.by(() => {
+		const scope = screenFilter === 'all' ? '' : KIOSK_SCREENS[screenFilter].label;
+		return view === 'current'
+			? `ยังไม่มีแบนเนอร์${scope}ที่กำลังแสดงหรือรอแสดง`
+			: `ยังไม่มีแบนเนอร์${scope}ที่หมดอายุ`;
+	});
 
 	const setStatus = useSetKioskBannerStatus();
 	const remove = useDeleteKioskBanner();
@@ -73,6 +88,11 @@
 		);
 	}
 
+	const screenLabel = (banner: KioskBannerSummary) => {
+		const screen = KIOSK_SCREENS[screenTypeOf(banner)];
+		return `${screen.label} ${screen.size}`;
+	};
+
 	const editHref = (id: string) => resolve(`/back-office/kiosks/banners/${encodeURIComponent(id)}`);
 </script>
 
@@ -101,6 +121,7 @@
 								<tr>
 									<th class="px-4 py-4 sm:px-6">รูป</th>
 									<th class="px-4 py-4">ชื่อ</th>
+									<th class="px-4 py-4">ขนาดจอ</th>
 									<th class="px-4 py-4">ช่วงเวลา</th>
 									<th class="px-4 py-4">ลำดับ</th>
 									<th class="px-4 py-4">สถานะ</th>
@@ -114,11 +135,17 @@
 											<img
 												src={kioskBannerRemoteRepository.imageUrl(banner._id, banner._rev)}
 												alt=""
-												class="h-12 w-20 rounded-md border border-border bg-slate-100 object-contain"
+												class={[
+													'rounded-md border border-border bg-slate-100 object-contain',
+													screenTypeOf(banner) === 'portrait' ? 'h-16 w-9' : 'h-12 w-20'
+												]}
 												loading="lazy"
 											/>
 										</td>
 										<td class="px-4 py-3 font-semibold text-foreground">{banner.title}</td>
+										<td class="px-4 py-3 whitespace-nowrap">
+											<span class="badge-muted">{screenLabel(banner)}</span>
+										</td>
 										<td class="px-4 py-3 whitespace-nowrap text-slate-700 tabular-nums">
 											{formatBannerWindow(banner.start_at, banner.end_at)}
 										</td>
@@ -173,13 +200,9 @@
 									</tr>
 								{:else}
 									<tr>
-										<td colspan="6" class="px-6 py-12 text-center text-muted-foreground">
+										<td colspan="7" class="px-6 py-12 text-center text-muted-foreground">
 											<Images class="mx-auto mb-2 h-8 w-8 text-muted-foreground/50" />
-											<p>
-												{view === 'current'
-													? 'ยังไม่มีแบนเนอร์ที่กำลังแสดงหรือรอแสดง'
-													: 'ยังไม่มีแบนเนอร์ที่หมดอายุ'}
-											</p>
+											<p>{emptyMessage}</p>
 											{#if view === 'current'}
 												<p class="text-xs">กดปุ่ม "+ สร้างแบนเนอร์" ด้านบนเพื่อเพิ่มแบนเนอร์</p>
 											{/if}

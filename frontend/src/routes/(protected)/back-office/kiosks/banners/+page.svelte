@@ -5,11 +5,13 @@
 	import { spatial } from '$lib/tokens';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
+	import { KIOSK_SCREENS, KIOSK_SCREEN_TYPES, type KioskScreenType } from '$lib/features/shared';
 	import {
 		KioskBannerList,
 		KioskBannerPreviewDialog,
 		buildListPreviewSlides,
 		kioskBannerRemoteRepository,
+		matchesScreen,
 		useKioskBanners,
 		type KioskBannerView
 	} from '$lib/features/kiosk-banners';
@@ -29,6 +31,22 @@
 	const currentQuery = useKioskBanners(
 		() => activeShelter,
 		() => 'current'
+	);
+
+	let screenFilter = $state<KioskScreenType | 'all'>('all');
+
+	const screenOptions: { value: KioskScreenType | 'all'; label: string }[] = [
+		{ value: 'all', label: 'ทั้งหมด' },
+		...KIOSK_SCREEN_TYPES.map((type) => ({
+			value: type,
+			label: `${KIOSK_SCREENS[type].label} ${KIOSK_SCREENS[type].size}`
+		}))
+	];
+
+	const visibleBanners = $derived(
+		(listQuery.data ?? []).filter(
+			(banner) => screenFilter === 'all' || matchesScreen(banner, screenFilter)
+		)
 	);
 
 	let previewOpen = $state(false);
@@ -76,8 +94,27 @@
 	{/snippet}
 
 	<div class={spatial.container.staffPageCard}>
+		<div
+			class="flex flex-wrap items-center gap-2 border-b border-border px-4 py-3 sm:px-6"
+			role="group"
+			aria-label="กรองตามขนาดหน้าจอ"
+		>
+			{#each screenOptions as option (option.value)}
+				<Button
+					type="button"
+					size="sm"
+					variant={screenFilter === option.value ? 'default' : 'outline'}
+					aria-pressed={screenFilter === option.value}
+					class="min-h-11"
+					onclick={() => (screenFilter = option.value)}
+				>
+					{option.label}
+				</Button>
+			{/each}
+		</div>
 		<KioskBannerList
-			banners={listQuery.data ?? []}
+			banners={visibleBanners}
+			{screenFilter}
 			bind:view
 			loading={listQuery.isLoading}
 			errorMessage={listQuery.isError
@@ -89,4 +126,8 @@
 	</div>
 </StaffPageShell>
 
-<KioskBannerPreviewDialog bind:open={previewOpen} slides={previewSlides} />
+<KioskBannerPreviewDialog
+	bind:open={previewOpen}
+	slides={previewSlides}
+	initialScreen={screenFilter === 'all' ? undefined : screenFilter}
+/>
