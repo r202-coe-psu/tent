@@ -100,17 +100,26 @@ async def _booking(
     cancel_requested: bool = False,
     reject_reason: str | None = None,
     booking_id: str = "BK-TEST0001",
+    row_id: str | None = None,
+    cid: str = CID,
+    person_seq: int = 0,
+    group_size: int = 1,
+    committed: bool = True,
+    created_at: datetime | None = None,
 ) -> ExternalBooking:
-    now = datetime(2026, 8, 20, 7, 30, tzinfo=UTC)
+    now = created_at or datetime(2026, 8, 20, 7, 30, tzinfo=UTC)
     pii = state == "pending"
     return await ExternalBooking(
-        id=booking_id,
+        id=row_id or booking_id,
         booking_id=booking_id,
+        person_seq=person_seq,
+        group_size=group_size,
+        committed=committed,
         client_id=client_id,
         module_name="M2",
         shelter_code="SH001",
-        cid=CID if pii else None,
-        cid_hash=national_id_hash(CID),
+        cid=cid if pii else None,
+        cid_hash=national_id_hash(cid),
         first_name="สมชาย" if pii else None,
         last_name="ใจดี" if pii else None,
         phone="0812345678" if pii else None,
@@ -121,6 +130,58 @@ async def _booking(
         created_at=now,
         updated_at=now,
     ).insert()
+
+
+def _group_payload(count: int, **overrides: Any) -> dict[str, Any]:
+    body: dict[str, Any] = {
+        "location_code": "SH001",
+        "persons": [
+            {
+                "cid": _cid(i),
+                "first_name": f"ชื่อ{i}",
+                "last_name": "ใจดี",
+                "phone": f"08{i:08d}",
+            }
+            for i in range(count)
+        ],
+    }
+    body.update(overrides)
+    return body
+
+
+def _cid(i: int) -> str:
+    """Distinct valid CIDs — `i` fills the 12-digit prefix (starts with 1)."""
+    return _valid_cid(f"1{i:011d}")
+
+
+async def _group(
+    count: int,
+    states: list[str] | None = None,
+    *,
+    booking_id: str = "BK-GROUP001",
+    client_id: str = "m2-test",
+    committed: bool = True,
+) -> list[ExternalBooking]:
+    return [
+        await _booking(
+            state=(states or ["pending"] * count)[i],
+            booking_id=booking_id,
+            row_id=f"BP-{booking_id}-{i}",
+            cid=_cid(i),
+            person_seq=i,
+            group_size=count,
+            client_id=client_id,
+            committed=committed,
+            evacuee_id=f"evacuee:{booking_id}-{i}",
+        )
+        for i in range(count)
+    ]
+
+
+async def _rows(booking_id: str | None = None) -> list[dict[str, Any]]:
+    query = {"booking_id": booking_id} if booking_id else {}
+    cursor = ExternalBooking.get_pymongo_collection().find(query).sort("person_seq")
+    return await cursor.to_list()
 
 
 async def _log_statuses() -> list[str]:
@@ -145,6 +206,7 @@ async def test_missing_scope_is_403_and_logged(client: AsyncClient, shelters: No
     logs = await ThirdPartyAccessLog.find_all().to_list()
     assert [log.status for log in logs] == ["denied_insufficient_scope"]
     assert logs[0].endpoint == "EXT-008"
+    assert logs[0].result_count == 0
     assert await ExternalBooking.find_all().count() == 0
 
 
@@ -226,10 +288,12 @@ async def test_create_happy_path(client: AsyncClient, shelters: None) -> None:
     assert result["booking_id"].startswith("BK-")
     assert result["location_code"] == "SH001"
     assert result["booking_status"] == "BOOKED"
+    assert result["persons_count"] == 1
 
-    booking = await ExternalBooking.get(result["booking_id"])
+    booking = await ExternalBooking.find_one(ExternalBooking.booking_id == result["booking_id"])
     assert booking is not None
-    assert booking.booking_id == result["booking_id"]
+    assert booking.id.startswith("BP-")
+    assert (booking.person_seq, booking.group_size, booking.committed) == (0, 1, True)
     assert booking.state == "pending"
     assert booking.client_id == "m2-test"
     assert booking.module_name == "M2"
@@ -300,6 +364,192 @@ async def test_concurrent_creates_yield_one_booking(client: AsyncClient, shelter
     conflict = next(r for r in responses if r.status_code == 409)
     assert conflict.json()["code"] == "duplicate_booking"
     assert await ExternalBooking.find_all().count() == 1
+
+
+async def test_create_group_of_three(client: AsyncClient, shelters: None) -> None:
+    response = await client.post(URL, json=_group_payload(3), headers=GRANTED)
+    assert response.status_code == 201
+    result = response.json()["result"]
+    assert result["persons_count"] == 3
+    assert result["booking_status"] == "BOOKED"
+
+    rows = await _rows(result["booking_id"])
+    assert [row["person_seq"] for row in rows] == [0, 1, 2]
+    assert {row["group_size"] for row in rows} == {3}
+    assert {row["committed"] for row in rows} == {True}
+    assert {row["state"] for row in rows} == {"pending"}
+    assert len({row["_id"] for row in rows}) == 3
+    assert all(row["_id"].startswith("BP-") for row in rows)
+    assert [row["cid"] for row in rows] == [_cid(0), _cid(1), _cid(2)]
+    assert await _rows() == rows  # nothing else was written
+
+    logs = await ThirdPartyAccessLog.find_all().to_list()
+    assert [(log.endpoint, log.status, log.result_count) for log in logs] == [
+        ("EXT-008", "granted", 3)
+    ]
+    dumped = str(logs[0].model_dump())
+    for secret in (_cid(0), _cid(1), "ชื่อ0", "ใจดี", "080000000"):
+        assert secret not in dumped
+
+
+async def test_create_group_upper_bound_is_100(client: AsyncClient, shelters: None) -> None:
+    response = await client.post(URL, json=_group_payload(100), headers=GRANTED)
+    assert response.status_code == 201
+    assert response.json()["result"]["persons_count"] == 100
+    assert len(await _rows(response.json()["result"]["booking_id"])) == 100
+
+
+async def test_create_group_over_cap_is_422(client: AsyncClient, shelters: None) -> None:
+    response = await client.post(URL, json=_group_payload(101), headers=GRANTED)
+    assert response.status_code == 422
+    assert response.json()["code"] == "validation_error"
+    assert "between 1 and 100" in response.json()["message"]
+    assert await _log_statuses() == ["denied_validation_error"]
+    assert await _rows() == []
+
+
+async def test_empty_persons_is_422(client: AsyncClient, shelters: None) -> None:
+    response = await client.post(URL, json=_group_payload(0), headers=GRANTED)
+    assert response.status_code == 422
+    assert "between 1 and 100" in response.json()["message"]
+    assert await _log_statuses() == ["denied_validation_error"]
+
+
+async def test_both_shapes_is_422(client: AsyncClient, shelters: None) -> None:
+    body = _group_payload(1, cid=CID)
+    response = await client.post(URL, json=body, headers=GRANTED)
+    assert response.status_code == 422
+    assert response.json()["code"] == "validation_error"
+    assert await _log_statuses() == ["denied_validation_error"]
+    assert await _rows() == []
+
+
+async def test_repeated_cid_in_group_is_422(client: AsyncClient, shelters: None) -> None:
+    body = _group_payload(3)
+    body["persons"][2]["cid"] = body["persons"][0]["cid"]
+    response = await client.post(URL, json=body, headers=GRANTED)
+    assert response.status_code == 422
+    assert response.json()["code"] == "validation_error"
+    assert "persons[2].cid duplicates persons[0].cid" in response.json()["message"]
+    assert _cid(0) not in response.text
+    assert await _log_statuses() == ["denied_validation_error"]
+    assert await _rows() == []
+
+
+async def test_group_422_reports_every_bad_person(client: AsyncClient, shelters: None) -> None:
+    body = _group_payload(5)
+    del body["persons"][1]["phone"]
+    body["persons"][3]["cid"] = "1909800123456"  # bad checksum
+    body["persons"][4]["phone"] = "12345"
+    response = await client.post(URL, json=body, headers=GRANTED)
+    assert response.status_code == 422
+    message = response.json()["message"]
+    assert "persons[1].phone" in message
+    assert "persons[3].cid" in message
+    assert "persons[4].phone" in message
+    assert "persons[0]" not in message and "persons[2]" not in message
+    assert "1909800123456" not in response.text
+    assert await _log_statuses() == ["denied_validation_error"]
+    assert await _rows() == []
+
+
+async def test_group_duplicate_via_hold_is_409_with_index(
+    client: AsyncClient, shelters: None
+) -> None:
+    await PublicPerson(
+        id="evacuee:held",
+        shelter_code="SH001",
+        first_name="x",
+        last_name_masked="x.",
+        national_id_hash=national_id_hash(_cid(1)),
+        status="pre_registered",
+        updated_at=datetime.now(UTC),
+    ).insert()
+    response = await client.post(URL, json=_group_payload(3), headers=GRANTED)
+    assert response.status_code == 409
+    assert response.json()["code"] == "duplicate_booking"
+    assert response.json()["detail"] == "persons[1]"
+    assert _cid(1) not in response.text
+    assert await _rows() == []
+    assert await _log_statuses() == ["denied_duplicate_booking"]
+
+
+async def test_group_duplicate_via_open_booking_reports_first_index(
+    client: AsyncClient, shelters: None
+) -> None:
+    await _booking(cid=_cid(2), booking_id="BK-OLD")
+    await _booking(cid=_cid(1), booking_id="BK-OLD2", row_id="BP-OLD2")
+    response = await client.post(URL, json=_group_payload(4), headers=GRANTED)
+    assert response.status_code == 409
+    assert response.json()["detail"] == "persons[1]"
+    assert len(await _rows()) == 2  # only the two pre-existing rows
+
+
+async def test_group_race_loser_leaves_nothing_behind(
+    client: AsyncClient, shelters: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A row of another request lands between the pre-check and the insert."""
+    from apiapp.modules.thirdparty_bookings import use_case
+
+    real = use_case.ExternalBooking.insert_many
+
+    async def racing(rows: Any, **kwargs: Any) -> Any:
+        await _booking(cid=_cid(2), booking_id="BK-WINNER")
+        return await real(rows, **kwargs)
+
+    monkeypatch.setattr(use_case.ExternalBooking, "insert_many", racing)
+    response = await client.post(URL, json=_group_payload(4), headers=GRANTED)
+    assert response.status_code == 409
+    assert response.json()["code"] == "duplicate_booking"
+    assert response.json()["detail"] == "persons[2]"
+    rows = await _rows()
+    assert [row["booking_id"] for row in rows] == ["BK-WINNER"]
+    assert await _log_statuses() == ["denied_duplicate_booking"]
+
+
+async def test_staged_insert_failure_leaves_nothing_behind(
+    client: AsyncClient, shelters: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from apiapp.modules.thirdparty_bookings import use_case
+
+    async def broken(rows: Any, **kwargs: Any) -> Any:
+        await ExternalBooking.get_pymongo_collection().insert_one(rows[0].model_dump(by_alias=True))
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(use_case.ExternalBooking, "insert_many", broken)
+    with pytest.raises(RuntimeError):
+        await client.post(URL, json=_group_payload(3), headers=GRANTED)
+    assert await _rows() == []
+
+
+@pytest.mark.parametrize("same_order", [True, False])
+async def test_concurrent_overlapping_groups_yield_one_winner(
+    client: AsyncClient, shelters: None, same_order: bool
+) -> None:
+    first = _group_payload(4)
+    second = _group_payload(4)
+    second["persons"] = list(first["persons"][1:3])  # overlaps first on persons 1 and 2
+    second["persons"].append(
+        {"cid": _cid(9), "first_name": "ก", "last_name": "ข", "phone": "0899999999"}
+    )
+    if not same_order:
+        second["persons"].reverse()
+    responses = await asyncio.gather(
+        client.post(URL, json=first, headers=GRANTED),
+        client.post(URL, json=second, headers=GRANTED),
+    )
+    assert sorted(r.status_code for r in responses) == [201, 409]
+    winner = next(r for r in responses if r.status_code == 201).json()["result"]
+    rows = await _rows()
+    assert {row["booking_id"] for row in rows} == {winner["booking_id"]}
+    assert len(rows) == winner["persons_count"]
+    assert {row["committed"] for row in rows} == {True}
+
+
+async def test_group_rows_are_invisible_until_committed(client: AsyncClient) -> None:
+    await _group(2, committed=False)
+    assert (await client.get(f"{URL}/BK-GROUP001", headers=GRANTED)).status_code == 404
+    assert (await client.post(_cancel_url("BK-GROUP001"), headers=GRANTED)).status_code == 404
 
 
 # --- EXT-009 ----------------------------------------------------------------------
@@ -414,6 +664,56 @@ async def test_cancel_terminal_is_409(
     assert response.json()["code"] == "booking_not_cancellable"
 
 
+async def test_cancel_group_pending_and_written(client: AsyncClient) -> None:
+    await _person(status="pre_registered", person_id="evacuee:BK-GROUP001-1")
+    await _group(3, ["pending", "written", "pending"])
+    response = await client.post(_cancel_url("BK-GROUP001"), json={"reason": "r"}, headers=GRANTED)
+    assert response.status_code == 200
+    assert response.json()["result"] == {
+        "booking_id": "BK-GROUP001",
+        "booking_status": "CANCELLED",
+    }
+    rows = await _rows("BK-GROUP001")
+    assert [(row["state"], row["cancel_requested"]) for row in rows] == [
+        ("cancelled", False),
+        ("written", True),
+        ("cancelled", False),
+    ]
+    assert all(row["cancel_reason"] == "r" for row in rows)
+    for index in (0, 2):
+        assert (rows[index]["cid"], rows[index]["phone"]) == (None, None)
+    logs = await ThirdPartyAccessLog.find_all().to_list()
+    assert [(log.endpoint, log.status) for log in logs] == [("EXT-009", "granted")]
+
+
+async def test_cancel_group_blocked_member_changes_nothing(client: AsyncClient) -> None:
+    await _person(status="active", person_id="evacuee:BK-GROUP001-1")
+    await _group(3, ["pending", "written", "pending"])
+    before = await _rows("BK-GROUP001")
+    response = await client.post(_cancel_url("BK-GROUP001"), headers=GRANTED)
+    assert response.status_code == 409
+    assert response.json()["code"] == "booking_not_cancellable"
+    assert await _rows("BK-GROUP001") == before
+    assert await _log_statuses() == ["denied_booking_not_cancellable"]
+
+
+async def test_cancel_group_by_other_client_is_404(client: AsyncClient) -> None:
+    await _group(2)
+    before = await _rows("BK-GROUP001")
+    response = await client.post(_cancel_url("BK-GROUP001"), headers=OTHER_CLIENT)
+    assert response.status_code == 404
+    assert response.json()["code"] == "booking_not_found"
+    assert await _rows("BK-GROUP001") == before
+
+
+async def test_cancel_group_twice_is_409(client: AsyncClient) -> None:
+    await _group(2)
+    assert (await client.post(_cancel_url("BK-GROUP001"), headers=GRANTED)).status_code == 200
+    second = await client.post(_cancel_url("BK-GROUP001"), headers=GRANTED)
+    assert second.status_code == 409
+    assert second.json()["code"] == "booking_not_cancellable"
+
+
 # --- EXT-010 ----------------------------------------------------------------------
 
 
@@ -439,9 +739,46 @@ async def test_status_mapping(
         "location_code": "SH001",
         "booking_status": expected,
         "reject_reason": reject_reason,
+        "persons": [{"index": 0, "booking_status": expected, "reject_reason": reject_reason}],
         "created_at": "2026-08-20T14:30:00+07:00",
         "updated_at": "2026-08-20T14:30:00+07:00",
     }
+    logs = await ThirdPartyAccessLog.find_all().to_list()
+    assert [(log.endpoint, log.status) for log in logs] == [("EXT-010", "granted")]
+
+
+@pytest.mark.parametrize(
+    ("states", "expected"),
+    [
+        (["pending", "written", "pending"], "BOOKED"),
+        (["cancelled", "cancelled"], "CANCELLED"),
+        (["cancelled", "pending"], "BOOKED"),
+        (["written", "rejected", "rejected"], "REJECTED"),
+        (["cancelled", "rejected"], "REJECTED"),
+    ],
+)
+async def test_group_status_aggregate(
+    client: AsyncClient, states: list[str], expected: str
+) -> None:
+    rows = await _group(len(states), states)
+    for row, state in zip(rows, states, strict=True):
+        if state == "rejected":
+            await ExternalBooking.get_pymongo_collection().update_one(
+                {"_id": row.id}, {"$set": {"reject_reason": f"duplicate-{row.person_seq}"}}
+            )
+    response = await client.get(f"{URL}/BK-GROUP001", headers=GRANTED)
+    assert response.status_code == 200
+    result = response.json()["result"]
+    assert result["booking_id"] == "BK-GROUP001"
+    assert result["booking_status"] == expected
+    assert [p["index"] for p in result["persons"]] == list(range(len(states)))
+    first_rejected = next((i for i, s in enumerate(states) if s == "rejected"), None)
+    assert result["reject_reason"] == (
+        None if first_rejected is None else f"duplicate-{first_rejected}"
+    )
+    for person in result["persons"]:
+        assert set(person) == {"index", "booking_status", "reject_reason"}
+    assert str(_cid(0)) not in response.text
     logs = await ThirdPartyAccessLog.find_all().to_list()
     assert [(log.endpoint, log.status) for log in logs] == [("EXT-010", "granted")]
 
@@ -466,3 +803,8 @@ async def test_unique_index_guards_open_bookings(client: AsyncClient) -> None:
     with pytest.raises(DuplicateKeyError):
         await _booking(state="written", booking_id="BK-B")
     await _booking(state="cancelled", booking_id="BK-C")
+
+
+async def test_group_lookup_index_exists(client: AsyncClient) -> None:
+    indexes = await ExternalBooking.get_pymongo_collection().index_information()
+    assert any(info["key"] == [("booking_id", 1), ("person_seq", 1)] for info in indexes.values())
