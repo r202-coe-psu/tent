@@ -1299,23 +1299,28 @@ export interface components {
 			 */
 			location_code?: string | null;
 			/**
+			 * Persons
+			 * @description ผู้จองในกลุ่มเดียวกัน 1–100 คน (all-or-nothing) — ห้ามส่งพร้อม cid/first_name/last_name/phone ระดับบน
+			 */
+			persons?: components['schemas']['BookingPersonInput'][] | null;
+			/**
 			 * Cid
-			 * @description เลขประจำตัวประชาชน 13 หลัก
+			 * @description รูปแบบเดิม (คนเดียว) — เลขประจำตัวประชาชน 13 หลัก
 			 */
 			cid?: string | null;
 			/**
 			 * First Name
-			 * @description ชื่อ
+			 * @description รูปแบบเดิม (คนเดียว) — ชื่อ
 			 */
 			first_name?: string | null;
 			/**
 			 * Last Name
-			 * @description นามสกุล
+			 * @description รูปแบบเดิม (คนเดียว) — นามสกุล
 			 */
 			last_name?: string | null;
 			/**
 			 * Phone
-			 * @description เบอร์โทรศัพท์ (รับ +66)
+			 * @description รูปแบบเดิม (คนเดียว) — เบอร์โทรศัพท์ (รับ +66)
 			 */
 			phone?: string | null;
 		};
@@ -1345,6 +1350,8 @@ export interface components {
 			 * @enum {string}
 			 */
 			booking_status: 'BOOKED' | 'CANCELLED' | 'REJECTED';
+			/** Persons Count */
+			persons_count: number;
 		};
 		/** BookingErrorResponse */
 		BookingErrorResponse: {
@@ -1356,6 +1363,44 @@ export interface components {
 			code?: string | null;
 			/** Detail */
 			detail?: string | null;
+		};
+		/** BookingPersonInput */
+		BookingPersonInput: {
+			/**
+			 * Cid
+			 * @description เลขประจำตัวประชาชน 13 หลัก
+			 */
+			cid?: string | null;
+			/**
+			 * First Name
+			 * @description ชื่อ
+			 */
+			first_name?: string | null;
+			/**
+			 * Last Name
+			 * @description นามสกุล
+			 */
+			last_name?: string | null;
+			/**
+			 * Phone
+			 * @description เบอร์โทรศัพท์ (รับ +66)
+			 */
+			phone?: string | null;
+		};
+		/** BookingPersonStatus */
+		BookingPersonStatus: {
+			/**
+			 * Index
+			 * @description ลำดับใน persons[] ตอนจอง (เริ่ม 0)
+			 */
+			index: number;
+			/**
+			 * Booking Status
+			 * @enum {string}
+			 */
+			booking_status: 'BOOKED' | 'CANCELLED' | 'REJECTED';
+			/** Reject Reason */
+			reject_reason?: string | null;
 		};
 		/** BookingStatusEnvelope */
 		BookingStatusEnvelope: {
@@ -1379,11 +1424,17 @@ export interface components {
 			location_code: string;
 			/**
 			 * Booking Status
+			 * @description สรุปทั้งกลุ่ม: ทุกคน CANCELLED → CANCELLED, มีคน REJECTED → REJECTED, อื่น ๆ → BOOKED
 			 * @enum {string}
 			 */
 			booking_status: 'BOOKED' | 'CANCELLED' | 'REJECTED';
-			/** Reject Reason */
+			/**
+			 * Reject Reason
+			 * @description เหตุผลของคนแรกที่ REJECTED (ถ้ามี)
+			 */
 			reject_reason?: string | null;
+			/** Persons */
+			persons: components['schemas']['BookingPersonStatus'][];
 			/**
 			 * Created At
 			 * @description ISO 8601 (+07:00)
