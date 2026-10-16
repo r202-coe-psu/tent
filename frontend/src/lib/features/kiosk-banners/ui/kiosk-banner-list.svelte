@@ -97,10 +97,10 @@
 </script>
 
 <Tabs.Root bind:value={view}>
-	<div class="border-b border-border px-4 pt-3 sm:px-6">
-		<Tabs.List>
+	<div class="border-b border-border px-4 py-3 sm:px-6">
+		<Tabs.List class="h-11">
 			{#each tabs as tab (tab.value)}
-				<Tabs.Trigger value={tab.value}>{tab.label}</Tabs.Trigger>
+				<Tabs.Trigger value={tab.value} class="px-4">{tab.label}</Tabs.Trigger>
 			{/each}
 		</Tabs.List>
 	</div>
