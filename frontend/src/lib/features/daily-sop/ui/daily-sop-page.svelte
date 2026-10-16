@@ -1447,7 +1447,7 @@
 
 				{#if canEditSelectedRole}
 					<div
-						class="fixed inset-x-0 bottom-[var(--testing-banner-height)] z-20 border-t bg-background/95 px-3 py-2 backdrop-blur sm:px-4 sm:py-3"
+						class="sticky bottom-[var(--testing-banner-height)] z-20 -mx-4 -mb-[calc(9rem+env(safe-area-inset-bottom))] border-t bg-background/95 px-3 py-2 backdrop-blur sm:-mx-6 sm:-mb-28 sm:px-4 sm:py-3"
 					>
 						<div
 							class="mx-auto grid max-w-6xl grid-cols-1 items-center gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:gap-3"
