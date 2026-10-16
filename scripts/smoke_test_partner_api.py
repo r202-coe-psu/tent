@@ -54,7 +54,12 @@ the script behaves exactly as before.
 WARNING: a 100-person group creates 100 households + 100 evacuees (+ audit docs
 on cancel) in the CouchDB of ONE shelter. Use a dedicated test shelter on a
 local/dev stack. The script refuses non-localhost targets unless you pass
---i-know-this-writes-to <host>[,<host>] naming every non-local API/CouchDB host.
+--i-know-this-writes-to <host>[,<host>] naming every non-local API / CouchDB / Mongo
+host (local = localhost, 127.0.0.1, ::1; exact match; every host of a multi-host
+mongodb:// URI is checked; `mongodb+srv://` always counts as non-local). The check runs
+before any connection or write. URLs that embed credentials (user:pass@host) are
+refused; pass them through env vars / the repo-root .env instead. Printed URLs are
+redacted.
 
 Prerequisites: local stack up (`docker compose up -d`), with fastapi + worker
 built from a branch that contains CR-169 (`docker compose up -d --build --no-deps
@@ -69,10 +74,16 @@ Run (local; admin provision mode, secrets from env / repo-root .env, never echoe
     --e2e-shelter-code SH004 --mongo-uri mongodb://localhost:27017/tentdb
 
   * --mongo-uri is optional (needs `pymongo`; plain python3 works without it). With
-    it the script also asserts "no committed=false rows left", runs the sweeper
-    case and deletes the terminal `external_bookings` rows it created. Without it
-    those become API-behaviour-only checks / SKIPPED and the (PII-free) cancelled
-    rows stay in Mongo.
+    it the script also asserts "no committed=false rows left" (rows of this run's
+    client_id only), runs the sweeper case, finds this run's rows by client_id (also
+    those of a POST that timed out before a booking_id came back) and deletes the
+    terminal `external_bookings` rows it created. Without it those become
+    API-behaviour-only checks / SKIPPED and the (PII-free) cancelled rows stay in Mongo.
+    RUN WITH --mongo-uri FOR A RELIABLE CLEANUP: without it the worker-quiescence
+    wait is only a heuristic ("bed-holding evacuee count stopped changing") and cleanup
+    can end before the worker has finished a big group.
+  * The worker must run the same code version as fastapi (a worker that does not filter
+    `committed != false` can pick up rows that are still being staged).
   * Env equivalents: PARTNER_E2E_SHELTER_CODE, PARTNER_E2E_COUCH_URL (default
     http://localhost:5984), COUCHDB_USER / COUCHDB_PASSWORD (or the repo-root .env),
     PARTNER_E2E_MONGO_URI.
@@ -99,12 +110,14 @@ are printed, never CIDs / phones / names):
   fail so the suite can serve as #578 acceptance):
      evacuee.booking_ref == booking_id with schema_v 14, group-level reject on a
      CouchDB-side duplicate, sweeper removing orphan committed=false rows (needs
-     Mongo, else SKIPPED).
+     Mongo, else SKIPPED). With --require-578 a SKIPPED pending case also fails.
 
-Cleanup (always, also on failure): cancel every booking it created, wait for the
-worker to settle, then delete from CouchDB only docs it can attribute to itself
-(evacuees found by its random CIDs and `registered_via: api`, their households and
-audit docs, plus the one planted duplicate evacuee). Never unseeds or touches
+Cleanup (always, also on failure): every CID is registered BEFORE its request is sent,
+so a request that times out after the server committed is still cleaned up. It cancels
+every booking it created (with Mongo also the ones it only finds by this run's
+client_id), waits for the worker to settle, then deletes from CouchDB only docs it can
+attribute to itself (evacuees found by its random CIDs and `registered_via: api`, their
+households and audit docs, plus the one planted duplicate evacuee). Never unseeds or touches
 other shelters. Expected runtime (local, 3 s worker poll): about 1-3 minutes plus
 the 100-person run (worker handles rows one by one; see the printed timing).
 "green" = exit code 0: no FAIL lines; EXPECTED-FAIL / SKIPPED lines are listed.
@@ -118,6 +131,7 @@ import datetime as dt
 import json
 import os
 import random
+import re
 import sys
 import threading
 import time
@@ -173,6 +187,26 @@ def make_valid_cid() -> str:
     total = sum(d * (13 - i) for i, d in enumerate(digits))
     digits.append((11 - total % 11) % 10)
     return "".join(str(d) for d in digits)
+
+
+_USERINFO_RE = re.compile(r"([A-Za-z][A-Za-z0-9+.\-]*://)[^/\s@?#]*@")
+
+
+def redact_url(url: str) -> str:
+    """URL safe to print: userinfo replaced by `***@`, query and fragment dropped."""
+    try:
+        parts = urllib.parse.urlsplit(url)
+    except ValueError:
+        return "<unparseable-url>"
+    netloc = parts.netloc
+    if "@" in netloc:
+        netloc = "***@" + netloc.rsplit("@", 1)[1]
+    return urllib.parse.urlunsplit((parts.scheme, netloc, parts.path, "", ""))
+
+
+def redact_text(text: Any) -> str:
+    """Mask `scheme://user:pass@` in any free text (exception messages, URLs)."""
+    return _USERINFO_RE.sub(r"\1***@", str(text))
 
 
 class SmokeTestRunner:
@@ -278,7 +312,7 @@ class SmokeTestRunner:
         headers.setdefault("User-Agent", DEFAULT_USER_AGENT)
         req = urllib.request.Request(url, data=req_body, headers=headers, method=method)
 
-        self.log_verbose(f"HTTP {method} {url}")
+        self.log_verbose(f"HTTP {method} {redact_text(url)}")
         if body and self.verbose and log_body:
             # Never echo client_secret in verbose logs.
             safe_body = {
@@ -303,8 +337,8 @@ class SmokeTestRunner:
             self.log_verbose(f"HTTPError ({status_code}): {raw_data[:200]}...")
             return status_code, parsed
         except Exception as ex:
-            self.log_verbose(f"Connection Exception: {ex}")
-            return 0, {"error": str(ex)}
+            self.log_verbose(f"Connection Exception: {redact_text(ex)}")
+            return 0, {"error": redact_text(ex)}
 
     @staticmethod
     def is_cloudflare_block(status: int, data: Dict[str, Any]) -> bool:
@@ -1302,7 +1336,7 @@ class SmokeTestRunner:
         self.log(
             f"{BOLD}{CYAN}SMOKE TEST SUITE: Smart Shelter Partner API (Issues #214-#220 + M2 EXT-008..011){RESET}"
         )
-        self.log(f"{BOLD}Target Host: {self.base_url}{RESET}")
+        self.log(f"{BOLD}Target Host: {redact_url(self.base_url)}{RESET}")
         self.log(
             f"{BOLD}API prefix: {self.api_prefix or '(none — direct FastAPI paths)'}{RESET}"
         )
@@ -1316,7 +1350,9 @@ class SmokeTestRunner:
         self.log("\nChecking target server connectivity...")
         status, probe_body = self.http_request("GET", probe_path)
         if status == 0:
-            self.log(f"{RED}ERROR: Cannot connect to server at {self.base_url}.{RESET}")
+            self.log(
+                f"{RED}ERROR: Cannot connect to server at {redact_url(self.base_url)}.{RESET}"
+            )
             self.log(
                 f"{YELLOW}Hint: Use the public origin (e.g. https://shelter.importstar.dev) "
                 f"with --api-prefix /public-api.{RESET}"
@@ -1442,7 +1478,10 @@ HOLD_STATUSES = (
     "room_confirmed",
     "temporary_leave",
 )
+#: Sleep between CouchDB polls in watch_group (timing resolution is bounded by it).
+WATCH_POLL_SECONDS = 0.25
 PENDING_578 = "pending #578"
+S1_REF_CASE = "evacuee.booking_ref == booking_id and schema_v 14"
 EVACUEE_FIELDS = [
     "_id",
     "household_id",
@@ -1473,19 +1512,106 @@ def read_env_file(path: str) -> Dict[str, str]:
 
 
 def url_host(url: str) -> str:
-    return (urllib.parse.urlparse(url).hostname or "").lower()
+    try:
+        return (urllib.parse.urlsplit(url).hostname or "").lower()
+    except ValueError:
+        return ""
 
 
-def unsafe_hosts(urls: List[str], confirmed: List[str]) -> List[str]:
-    """Hosts among `urls` that are neither local nor explicitly confirmed."""
+def url_has_userinfo(url: str) -> bool:
+    """True when a http(s)/mongodb URL embeds credentials (`user[:pass]@host`)."""
+    rest = url.split("://", 1)[1] if "://" in url else url
+    authority = re.split(r"[/?#]", rest, maxsplit=1)[0]
+    return "@" in authority
+
+
+def mongo_uri_hosts(uri: str) -> Tuple[List[Tuple[str, bool]], Optional[str]]:
+    """Every host of a `mongodb://` URI as (host, may_be_local), plus an error text.
+
+    `mongodb+srv://` resolves hosts through DNS, so it never counts as local.
+    """
+    lowered = uri.strip()
+    if lowered.lower().startswith("mongodb+srv://"):
+        rest, may_be_local = lowered[len("mongodb+srv://") :], False
+    elif lowered.lower().startswith("mongodb://"):
+        rest, may_be_local = lowered[len("mongodb://") :], True
+    else:
+        return [], "must start with mongodb:// or mongodb+srv://"
+    authority = re.split(r"[/?#]", rest, maxsplit=1)[0]
+    if "@" in authority:
+        authority = authority.rsplit("@", 1)[1]
+    hosts: List[Tuple[str, bool]] = []
+    for part in authority.split(","):
+        part = part.strip()
+        if part.startswith("["):  # [::1]:27017
+            host = part[1:].split("]", 1)[0]
+        elif part.count(":") == 1:
+            host = part.split(":", 1)[0]
+        else:
+            host = part
+        hosts.append((host.lower(), may_be_local))
+    return hosts, None
+
+
+def unsafe_hosts(hosts: List[Tuple[str, bool]], confirmed: List[str]) -> List[str]:
+    """Hosts that are neither local (exact match) nor explicitly confirmed.
+
+    `hosts` holds (host, may_be_local). An empty/unparseable host is never allowed.
+    """
     allowed = {h.strip().lower() for h in confirmed if h.strip()}
-    return sorted(
-        {
-            host
-            for host in (url_host(u) for u in urls)
-            if host not in LOCAL_HOSTS and host not in allowed
-        }
-    )
+    risky = set()
+    for host, may_be_local in hosts:
+        if not host:
+            risky.add("(unparseable host)")
+        elif not (may_be_local and host in LOCAL_HOSTS) and host not in allowed:
+            risky.add(host)
+    return sorted(risky)
+
+
+def e2e_target_guard(parser: argparse.ArgumentParser, args: argparse.Namespace) -> Optional[int]:
+    """Safety checks for every e2e target, BEFORE any connection or write.
+
+    Returns an exit code when the run must not proceed. Never echoes URL values.
+    """
+    targets = [("--base-url", args.base_url), ("--couch-url", args.couch_url)]
+    if args.mongo_uri:
+        targets.append(("--mongo-uri", args.mongo_uri))
+    for label, value in targets:
+        if url_has_userinfo(value):
+            print(
+                f"{RED}Refusing {label}: the URL embeds credentials (user:pass@host).{RESET}\n"
+                "Do not put secrets in URLs (they leak into logs and shell history). Pass "
+                "CouchDB credentials through COUCHDB_USER / COUCHDB_PASSWORD (env or .env) "
+                "and use a credential-free URL.",
+                file=sys.stderr,
+            )
+            return 2
+    hosts: List[Tuple[str, bool]] = []
+    for label, value in targets[:2]:
+        scheme = value.split("://", 1)[0].lower() if "://" in value else ""
+        if scheme not in ("http", "https"):
+            print(f"{RED}Refusing {label}: it must be an http(s) URL.{RESET}", file=sys.stderr)
+            return 2
+        hosts.append((url_host(value), True))
+    if args.mongo_uri:
+        mongo_hosts, problem = mongo_uri_hosts(args.mongo_uri)
+        if problem:
+            print(f"{RED}Refusing --mongo-uri: {problem}.{RESET}", file=sys.stderr)
+            return 2
+        hosts.extend(mongo_hosts or [("", True)])
+    confirmed = [h for h in args.i_know_this_writes_to.split(",") if h.strip()]
+    risky = unsafe_hosts(hosts, confirmed)
+    if risky:
+        print(
+            f"{RED}Refusing e2e writes to non-local host(s): {', '.join(risky)}.{RESET}\n"
+            "A 100-person group creates 100 households + 100 evacuees, and the script "
+            "inserts/deletes external_bookings rows. Use a local stack, or pass "
+            "--i-know-this-writes-to <host> naming each host (API, CouchDB and Mongo) if "
+            "you really mean it.",
+            file=sys.stderr,
+        )
+        return 2
+    return None
 
 
 def stats(values: List[float]) -> str:
@@ -1525,7 +1651,7 @@ class CouchAdmin:
             except ValueError:
                 return err.code, {"raw": raw}
         except Exception as ex:  # connection refused, timeout, ...
-            return 0, {"error": str(ex)}
+            return 0, {"error": redact_text(ex)}
 
     def info(self) -> Optional[Dict[str, Any]]:
         status, data = self.request("GET", f"/{self.database}")
@@ -1583,29 +1709,66 @@ class CouchAdmin:
 
 
 class MongoProbe:
-    """Optional Mongo access (pymongo) for `external_bookings` assertions."""
+    """Optional Mongo access (pymongo) for `external_bookings` assertions.
+
+    Every query is scoped to THIS run: the token's `client_id` + the test shelter, and
+    (for destructive ones) the run's own tracked booking_ids / CIDs.
+    """
 
     def __init__(self, uri: str):
         import pymongo  # imported lazily: the script is stdlib-only otherwise
 
-        self._client = pymongo.MongoClient(uri, serverSelectionTimeoutMS=3000)
+        options: Dict[str, Any] = {"serverSelectionTimeoutMS": 3000}
+        hosts, _ = mongo_uri_hosts(uri)
+        if len(hosts) == 1 and "replicaset" not in uri.lower() and hosts[0][1]:
+            options["directConnection"] = True  # never follow a topology to other hosts
+        self._client = pymongo.MongoClient(uri, **options)
         self._client.admin.command("ping")
         database = self._client.get_default_database()
         self.bookings = database["external_bookings"]
 
-    def staged_rows(self, shelter_code: str) -> int:
+    @staticmethod
+    def owned_filter(
+        client_id: str,
+        shelter_code: str,
+        since: dt.datetime,
+        cids: List[str],
+        booking_ids: List[str],
+        strict: bool,
+    ) -> Dict[str, Any]:
+        """Rows this run created. `strict` (provided, shared client credentials) also
+        requires a tracked CID / booking_id; an admin-created client is unique to the run."""
+        flt: Dict[str, Any] = {
+            "client_id": client_id,
+            "shelter_code": shelter_code,
+            "created_at": {"$gte": since},
+            "_id": {"$not": re.compile("^BP-E2E-ORPHAN-")},  # planted orphans: own path
+        }
+        if strict:
+            flt["$or"] = [{"cid": {"$in": cids}}, {"booking_id": {"$in": booking_ids}}]
+        return flt
+
+    def staged_rows(self, shelter_code: str, client_id: str) -> int:
+        """`committed=False` rows of this run's client (other writers do not count)."""
         return self.bookings.count_documents(
-            {"shelter_code": shelter_code, "committed": False}
+            {"shelter_code": shelter_code, "client_id": client_id, "committed": False}
         )
 
-    def open_rows(self, booking_ids: List[str]) -> int:
-        """Rows of these groups the worker still has to act on."""
+    def booking_ids_of(self, flt: Dict[str, Any]) -> List[str]:
+        return sorted(self.bookings.distinct("booking_id", flt))
+
+    def open_rows(self, flt: Dict[str, Any]) -> int:
+        """Rows of the run the worker still has to act on."""
         return self.bookings.count_documents(
             {
-                "booking_id": {"$in": booking_ids},
-                "$or": [
-                    {"state": "pending"},
-                    {"state": "written", "cancel_requested": True},
+                **flt,
+                "$and": [
+                    {
+                        "$or": [
+                            {"state": "pending"},
+                            {"state": "written", "cancel_requested": True},
+                        ]
+                    }
                 ],
             }
         )
@@ -1625,8 +1788,11 @@ class MongoProbe:
             }
         )
 
-    def plant_orphan(self, shelter_code: str, age_seconds: int) -> str:
-        """Insert an API-crashed-mid-insert lookalike row (`committed=False`, no PII)."""
+    def plant_orphan(self, shelter_code: str, client_id: str, age_seconds: int) -> str:
+        """Insert an API-crashed-mid-insert lookalike row (`committed=False`, no PII).
+
+        It carries this run's `client_id`, so staged-row checks and cleanup find it.
+        """
         suffix = f"{random.getrandbits(64):016x}"
         created = dt.datetime.now(dt.timezone.utc) - dt.timedelta(seconds=age_seconds)
         self.bookings.insert_one(
@@ -1636,7 +1802,7 @@ class MongoProbe:
                 "person_seq": 0,
                 "group_size": 1,
                 "committed": False,
-                "client_id": "e2e-smoke-orphan",
+                "client_id": client_id,
                 "module_name": None,
                 "shelter_code": shelter_code,
                 "cid": None,
@@ -1655,19 +1821,41 @@ class MongoProbe:
     def orphan_exists(self, booking_id: str) -> bool:
         return self.bookings.count_documents({"booking_id": booking_id}) > 0
 
-    def delete_groups(self, booking_ids: List[str], states: List[str]) -> int:
+    def delete_groups(
+        self, booking_ids: List[str], states: List[str], client_id: str, shelter_code: str
+    ) -> int:
         result = self.bookings.delete_many(
             {
                 "booking_id": {"$in": booking_ids},
+                "client_id": client_id,
+                "shelter_code": shelter_code,
                 "state": {"$in": states},
                 "cancel_requested": {"$ne": True},  # the worker still owes a cancel
             }
         )
         return int(result.deleted_count)
 
-    def delete_orphan(self, booking_id: str) -> None:
+    def delete_staged(
+        self, booking_ids: List[str], client_id: str, shelter_code: str
+    ) -> int:
+        """Leftover `committed=False` rows of this run's own groups (never anything else)."""
+        result = self.bookings.delete_many(
+            {
+                "booking_id": {"$in": booking_ids},
+                "client_id": client_id,
+                "shelter_code": shelter_code,
+                "committed": False,
+            }
+        )
+        return int(result.deleted_count)
+
+    def delete_orphan(self, booking_id: str, client_id: str) -> None:
         self.bookings.delete_many(
-            {"booking_id": booking_id, "client_id": "e2e-smoke-orphan"}
+            {
+                "booking_id": booking_id,
+                "client_id": client_id,
+                "_id": {"$regex": "^BP-E2E-ORPHAN-"},
+            }
         )
 
 
@@ -1710,8 +1898,11 @@ class E2ERunner(SmokeTestRunner):
         self.e2e_booking_ids: List[str] = []
         self.e2e_planted_ids: List[str] = []
         self.e2e_orphan_ids: List[str] = []
+        self.run_started = dt.datetime.now(dt.timezone.utc)
         self.timing_lines: List[str] = []
         self.baseline_doc_count: Optional[int] = None
+        #: True once the worker was seen writing a group (precondition for EXPECTED-FAIL).
+        self.worker_proven = False
 
     # ------------------------------------------------------------------ helpers
     def _auth(self) -> Dict[str, str]:
@@ -1723,15 +1914,51 @@ class E2ERunner(SmokeTestRunner):
     def e2e_result(self, name: str, passed: bool, detail: str = "") -> None:
         self.record_result("E2E", name, passed, detail)
 
-    def pending_578(self, name: str, passed: bool, detail: str = "") -> None:
-        """A case that needs #578: PASS when it already holds, else EXPECTED-FAIL."""
+    def pending_578(
+        self, name: str, passed: bool, detail: str = "", precondition: bool = True
+    ) -> None:
+        """A case that needs #578: PASS when it already holds, else EXPECTED-FAIL.
+
+        EXPECTED-FAIL is only valid when the precondition holds (worker healthy and the
+        group actually written/visible); otherwise the case could not run: real FAIL.
+        """
         label = f"{name} [{PENDING_578}]"
         if passed:
             self.record_result("E2E", label, True, "#578 behaviour present")
+        elif not precondition:
+            self.record_result("E2E", label, False, f"precondition not met: {detail}")
         elif self.require_578:
             self.record_result("E2E", label, False, detail)
         else:
             self.record_expected_fail("E2E", name, f"{PENDING_578}: {detail}")
+
+    def pending_not_run(self, name: str, reason: str) -> None:
+        """A pending-#578 case that was not exercised: SKIPPED, or FAIL with --require-578."""
+        if self.require_578:
+            self.record_result(
+                "E2E", f"{name} [{PENDING_578}]", False, f"not exercised: {reason}"
+            )
+        else:
+            self.record_skip("E2E", name, f"{PENDING_578}: {reason}")
+
+    # -- Mongo scoping: only rows of THIS run's client_id (+ tracked ids when shared) --
+    def mongo_on(self) -> bool:
+        return self.mongo is not None and bool(self.created_client_id)
+
+    def staged_count(self) -> int:
+        assert self.mongo is not None and self.created_client_id
+        return self.mongo.staged_rows(self.e2e_shelter, self.created_client_id)
+
+    def owned_rows_filter(self) -> Dict[str, Any]:
+        assert self.created_client_id
+        return MongoProbe.owned_filter(
+            self.created_client_id,
+            self.e2e_shelter,
+            self.run_started - dt.timedelta(minutes=5),
+            sorted(self.e2e_cids),
+            list(self.e2e_booking_ids),
+            strict=self.use_provided_credentials,
+        )
 
     def make_group(self, size: int) -> List[str]:
         return [make_valid_cid() for _ in range(size)]
@@ -1815,28 +2042,36 @@ class E2ERunner(SmokeTestRunner):
         """Poll CouchDB until every person's evacuee + household is `ready`.
 
         `started` is a `time.monotonic()` stamp; the returned times are seconds since
-        then at which each evacuee / household was first seen ready.
+        then at which each evacuee / household was first seen ready. A time is stamped
+        AFTER the CouchDB query that showed the doc returned, so it never understates
+        latency; resolution is bounded by the poll interval + query time (`max_query`).
         """
         evac_seen: Dict[str, float] = {}
         house_seen: Dict[str, float] = {}
         evac_docs: Dict[str, Dict[str, Any]] = {}
         house_docs: Dict[str, Dict[str, Any]] = {}
         deadline = started + timeout
+        max_query = 0.0
         while True:
-            now = time.monotonic()
+            query_start = time.monotonic()
             found = self.evacuees(cids)
+            seen_at = time.monotonic()  # stamp after the observation
+            max_query = max(max_query, seen_at - query_start)
             for cid, docs in found.items():
                 doc = docs[0]
                 evac_docs[cid] = doc
                 if cid not in evac_seen and evacuee_ready(doc):
-                    evac_seen[cid] = now - started
+                    evac_seen[cid] = seen_at - started
             house_ids = sorted(
                 {d["household_id"] for d in evac_docs.values() if d.get("household_id")}
             )
+            query_start = time.monotonic()
             house_docs = self.couch.get_many(house_ids) if house_ids else {}
+            seen_at = time.monotonic()
+            max_query = max(max_query, seen_at - query_start)
             for house_id, doc in house_docs.items():
                 if house_id not in house_seen and household_ready(doc):
-                    house_seen[house_id] = now - started
+                    house_seen[house_id] = seen_at - started
             done = len(evac_seen) == len(cids) and len(house_seen) == len(cids)
             if done or time.monotonic() >= deadline:
                 return {
@@ -1846,8 +2081,9 @@ class E2ERunner(SmokeTestRunner):
                     "evac_docs": evac_docs,
                     "house_docs": house_docs,
                     "elapsed": time.monotonic() - started,
+                    "max_query": max_query,
                 }
-            time.sleep(0.25)
+            time.sleep(WATCH_POLL_SECONDS)
 
     def verify_written(self, count: int, watch: Dict[str, Any]) -> Tuple[bool, str]:
         """FR-10/51: one household per evacuee, pre_registered, registered_via api."""
@@ -1899,6 +2135,7 @@ class E2ERunner(SmokeTestRunner):
             f"booking_id={res.get('booking_id')}" if ok else f"HTTP {status} - {data}",
         )
         if not ok:
+            self.pending_not_run(S1_REF_CASE, "group of 3 was not created")
             return
         self.s1_booking = res["booking_id"]
         watch = self.watch_group(
@@ -1909,6 +2146,7 @@ class E2ERunner(SmokeTestRunner):
             lambda d: d.get("type") == "household",
         )
         self.s1_watch = watch
+        self.worker_proven = self.worker_proven or watch["complete"]
         self.e2e_result(
             f"CouchDB has 3 households + 3 evacuees within {self.group_timeout:.0f}s",
             watch["complete"],
@@ -1929,9 +2167,10 @@ class E2ERunner(SmokeTestRunner):
             and set(st.get("persons", [{}])[0].keys())
             <= {"index", "booking_status", "reject_reason"},
         )
-        self.check_booking_ref(
-            self.s1_booking, watch, "evacuee.booking_ref == booking_id and schema_v 14"
-        )
+        if watch["complete"]:
+            self.check_booking_ref(self.s1_booking, watch, S1_REF_CASE)
+        else:
+            self.pending_not_run(S1_REF_CASE, "group of 3 was never written by the worker")
         if self.mongo:
             left = self.mongo.plaintext_rows([self.s1_booking])
             self.e2e_result(
@@ -1966,8 +2205,8 @@ class E2ERunner(SmokeTestRunner):
             not found,
             f"found docs for {len(found)} person(s)" if found else "",
         )
-        if self.mongo:
-            staged = self.mongo.staged_rows(self.e2e_shelter)
+        if self.mongo_on():
+            staged = self.staged_count()
             self.e2e_result(
                 "no committed=false rows left in Mongo", staged == 0, f"rows={staged}"
             )
@@ -2054,8 +2293,8 @@ class E2ERunner(SmokeTestRunner):
                 and get_error_detail(loser_data) == "persons[0]",
                 f"code={get_error_code(loser_data)} detail={get_error_detail(loser_data)!r}",
             )
-            if self.mongo:
-                staged = self.mongo.staged_rows(self.e2e_shelter)
+            if self.mongo_on():
+                staged = self.staged_count()
                 self.e2e_result(
                     f"round {round_no}: no committed=false rows left in Mongo",
                     staged == 0,
@@ -2080,6 +2319,7 @@ class E2ERunner(SmokeTestRunner):
         self._banner(f"E2E 5: {size}-person group -> timing (gate for the cap, CR-169 FR-6)")
         if self.skip_big:
             self.record_skip("E2E", f"{size}-person group timing", "--skip-e2e-big")
+            self.pending_not_run(f"{size}-person evacuee.booking_ref + schema_v 14", "--skip-e2e-big")
             return
         cids = self.make_group(size)
         t_start = time.monotonic()
@@ -2094,6 +2334,9 @@ class E2ERunner(SmokeTestRunner):
             else f"HTTP {status} - {str(data)[:200]}",
         )
         if not ok:
+            self.pending_not_run(
+                f"{size}-person evacuee.booking_ref + schema_v 14", "group was not created"
+            )
             return
         booking_id = res["booking_id"]
         written = self.watch_group(
@@ -2118,6 +2361,7 @@ class E2ERunner(SmokeTestRunner):
             f"{total_written:.1f}s after 201 "
             f"(evacuees {len(evac_times)}/{size}, households {len(house_times)}/{size})",
         )
+        self.worker_proven = self.worker_proven or written["complete"]
         if written["complete"]:
             good, why = self.verify_written(size, written)
             self.e2e_result(
@@ -2127,6 +2371,11 @@ class E2ERunner(SmokeTestRunner):
             )
             self.check_booking_ref(
                 booking_id, written, f"{size}-person evacuee.booking_ref + schema_v 14"
+            )
+        else:
+            self.pending_not_run(
+                f"{size}-person evacuee.booking_ref + schema_v 14",
+                "group was not fully written by the worker",
             )
 
         # Cancel timing (EXT-009 fan-out through the worker).
@@ -2174,21 +2423,37 @@ class E2ERunner(SmokeTestRunner):
             f"{cancelled['elapsed']:.2f}s{'' if cancelled['complete'] else ' (TIMEOUT/skipped)'}",
             f"  total (request -> everything cancelled)    : "
             f"{time.monotonic() - t_start:.2f}s",
+            f"  (times are stamped after each CouchDB query returns; resolution is bounded by "
+            f"the {WATCH_POLL_SECONDS:.2f}s poll interval + query time, max query "
+            f"{max(written.get('max_query', 0.0), cancelled.get('max_query', 0.0)):.2f}s)",
         ]
 
     def scenario_couch_side_duplicate(self) -> None:
         """Pending #578 (FR-21): a CouchDB-only duplicate must reject the whole group."""
         self._banner(f"E2E 6 ({PENDING_578}): CouchDB-side duplicate rejects the group")
+        case = "CouchDB-side duplicate rejects the whole group with no docs"
         cids = self.make_group(3)
         planted_id = f"evacuee:E2E-PLANT-{random.getrandbits(48):012x}"
         self.e2e_planted_ids.append(planted_id)
-        self.e2e_cids.update(cids)
-        status, data, _ = self.create_group(cids)
+        status, data, _ = self.create_group(cids)  # registers cids before sending
+        res = data.get("result", {}) if isinstance(data, dict) else {}
+        if status != 201 or not res.get("booking_id"):
+            self.e2e_result(
+                "set-up: group accepted before planting the duplicate", False, f"HTTP {status}"
+            )
+            self.pending_not_run(case, "set-up failed")
+            return
+        booking_id = res["booking_id"]
+        # Decide "race lost" BEFORE planting: if the worker already wrote any doc of the
+        # group the duplicate can no longer be seen by it, so the case is not testable.
+        if self.evacuees(cids):
+            self.pending_not_run(
+                case, "race lost: worker wrote the group before the duplicate was planted; rerun"
+            )
+            return
         # The duplicate exists only in CouchDB, planted right after the API accepted the
         # group, so the API-side projection check cannot see it (only the worker can).
-        now = (
-            dt.datetime.now(dt.timezone.utc).isoformat().replace("+00:00", "Z")
-        )
+        now = dt.datetime.now(dt.timezone.utc).isoformat().replace("+00:00", "Z")
         planted = self.couch.put(
             {
                 "_id": planted_id,
@@ -2211,46 +2476,42 @@ class E2ERunner(SmokeTestRunner):
                 "privacy": {"search_excluded": False},
             }
         )
-        res = data.get("result", {}) if isinstance(data, dict) else {}
-        if status != 201 or not planted:
-            self.e2e_result(
-                "set-up: group accepted and CouchDB duplicate planted",
-                False,
-                f"HTTP {status}, planted={planted}",
-            )
+        if not planted:
+            self.e2e_result("set-up: CouchDB duplicate planted", False, "PUT failed")
+            self.pending_not_run(case, "set-up failed")
             return
-        booking_id = res["booking_id"]
+
+        def written_docs() -> int:
+            """Docs the worker wrote for the group (the planted doc itself excluded)."""
+            others = sum(len(v) for v in self.evacuees([cids[0], cids[2]]).values())
+            own = [d for d in self.evacuees([cids[1]]).get(cids[1], []) if d["_id"] != planted_id]
+            return others + len(own)
+
         deadline = time.monotonic() + self.group_timeout
         last: Dict[str, Any] = {}
         while time.monotonic() < deadline:
             _, last = self.booking_status(booking_id)
-            others = self.evacuees([cids[0], cids[2]])
-            planted_dupes = len(self.evacuees([cids[1]]).get(cids[1], []))
             rejected = any(p.get("booking_status") == "REJECTED" for p in last.get("persons", []))
-            if rejected or others or planted_dupes > 1:
+            if rejected or written_docs():
                 break
             time.sleep(0.5)
         # Let the worker finish the rest of the group before judging.
         time.sleep(WORKER_POLL_SECONDS + 1)
         _, last = self.booking_status(booking_id)
         persons = last.get("persons", [])
-        if len(self.evacuees([cids[1]]).get(cids[1], [])) > 1:
-            self.record_skip(
-                "E2E",
-                "CouchDB-side duplicate rejects whole group",
-                "race lost: worker wrote the group before the duplicate was planted; rerun",
-            )
-            return
-        leaked = self.evacuees([cids[0], cids[2]])
+        leaked = written_docs()
         all_rejected = len(persons) == 3 and all(
             p.get("booking_status") == "REJECTED" and p.get("reject_reason") == "duplicate"
             for p in persons
         )
+        processed = leaked > 0 or any(p.get("booking_status") == "REJECTED" for p in persons)
         self.pending_578(
-            "CouchDB-side duplicate rejects the whole group with no docs",
-            all_rejected and not leaked,
+            case,
+            all_rejected and leaked == 0,
             f"statuses={[p.get('booking_status') for p in persons]}, "
-            f"docs written for other members={len(leaked)}",
+            f"docs written for the group={leaked}"
+            + ("" if processed else " (worker did not process the group in time)"),
+            precondition=processed,
         )
         if self.mongo:
             left = self.mongo.plaintext_rows([booking_id])
@@ -2263,14 +2524,14 @@ class E2ERunner(SmokeTestRunner):
     def scenario_sweeper(self) -> None:
         """Pending #578 (FR-33): orphan committed=false rows are swept after 60 s."""
         self._banner(f"E2E 7 ({PENDING_578}): sweeper removes orphan committed=false rows")
-        if not self.mongo:
-            self.record_skip(
-                "E2E",
-                "sweeper removes orphan committed=false rows",
-                f"{PENDING_578}; needs --mongo-uri (pymongo) to plant an orphan row",
-            )
+        case = "sweeper removes orphan committed=false rows"
+        if not self.mongo_on():
+            self.pending_not_run(case, "needs --mongo-uri (pymongo) to plant an orphan row")
             return
-        orphan = self.mongo.plant_orphan(self.e2e_shelter, age_seconds=120)
+        assert self.mongo is not None and self.created_client_id
+        orphan = self.mongo.plant_orphan(
+            self.e2e_shelter, self.created_client_id, age_seconds=120
+        )
         self.e2e_orphan_ids.append(orphan)
         deadline = time.monotonic() + max(self.settle * 3, 2 * WORKER_POLL_SECONDS + 15)
         gone = False
@@ -2282,23 +2543,51 @@ class E2ERunner(SmokeTestRunner):
         self.pending_578(
             "sweeper deletes a committed=false row older than 60s",
             gone,
-            "orphan row still present (no sweeper in the worker yet)",
+            "orphan row still present (no sweeper in the worker yet)"
+            + ("" if self.worker_proven else "; worker never proven healthy in this run"),
+            precondition=self.worker_proven,
         )
 
     # ------------------------------------------------------------------ cleanup
+    def _discover_run_bookings(self) -> List[str]:
+        """Add this run's Mongo bookings we have no booking_id for (e.g. a POST that
+        timed out after the server committed). Scoped to this run's client_id."""
+        if not self.mongo_on():
+            return []
+        assert self.mongo is not None
+        known = set(self.e2e_booking_ids)
+        found = [b for b in self.mongo.booking_ids_of(self.owned_rows_filter()) if b not in known]
+        self.e2e_booking_ids.extend(found)
+        return found
+
     def e2e_cleanup(self) -> None:
         self._banner("E2E cleanup: cancel bookings, then remove this run's CouchDB docs")
+        attempted: set = set()
         cancelled = 0
-        for booking_id in self.e2e_booking_ids:
-            status, _, _ = self.cancel_group(booking_id)
-            cancelled += 1 if status == 200 else 0  # 409 = already cancelled
-        self.log(
-            f"  cancelled {cancelled} still-open booking(s) of {len(self.e2e_booking_ids)}"
-        )
+
+        def cancel_new() -> None:
+            nonlocal cancelled
+            for booking_id in list(self.e2e_booking_ids):
+                if booking_id in attempted:
+                    continue
+                attempted.add(booking_id)
+                status, _, _ = self.cancel_group(booking_id)
+                cancelled += 1 if status == 200 else 0  # 409/404 = already settled/invisible
+
+        try:
+            discovered = self._discover_run_bookings()
+        except Exception as exc:
+            discovered = []
+            self.log(f"  {YELLOW}mongo discovery failed: {type(exc).__name__}{RESET}")
+        if discovered:
+            self.log(f"  found {len(discovered)} booking(s) of this run by client_id in Mongo")
+        cancel_new()
+        self.log(f"  cancelled {cancelled} still-open booking(s) of {len(self.e2e_booking_ids)}")
 
         # Wait until the worker has nothing left to do for our groups, so a late write
         # cannot resurrect a doc after the purge. With Mongo that is "no pending /
-        # cancel_requested rows"; without it, "the number of bed-holding evacuees stopped
+        # cancel_requested rows of this run" (re-discovering late-committed groups of timed
+        # out requests each poll); without it, "the number of bed-holding evacuees stopped
         # changing" (a partly-written group the API refuses to cancel never drains).
         deadline = time.monotonic() + self.cleanup_timeout
         quiet_since: Optional[float] = None
@@ -2311,11 +2600,17 @@ class E2ERunner(SmokeTestRunner):
                     for d in docs
                     if self.stay(d) in HOLD_STATUSES and d["_id"] not in self.e2e_planted_ids
                 )
-                busy = self.mongo.open_rows(self.e2e_booking_ids) if self.mongo else holding
+                if self.mongo_on():
+                    assert self.mongo is not None
+                    fresh = self._discover_run_bookings()
+                    cancel_new()
+                    busy = self.mongo.open_rows(self.owned_rows_filter()) + len(fresh)
+                else:
+                    busy = holding
             except Exception as exc:
-                self.log(f"  {YELLOW}cleanup poll failed: {exc}{RESET}")
+                self.log(f"  {YELLOW}cleanup poll failed: {redact_text(exc)}{RESET}")
                 holding, busy = -1, 1
-            changing = holding != last_holding if not self.mongo else bool(busy)
+            changing = holding != last_holding if not self.mongo_on() else bool(busy)
             last_holding = holding
             if changing:
                 quiet_since = None
@@ -2327,22 +2622,31 @@ class E2ERunner(SmokeTestRunner):
         else:
             self.log(f"  {YELLOW}worker did not settle within the cleanup timeout{RESET}")
 
-        removed = failed = 0
+        # Count per attempt: a rev conflict fixed on a later attempt must not fail the
+        # run, and `removed` counts unique doc ids.
+        removed_ids: set = set()
+        last_failed = 0
         for attempt in range(3):
             docs, skipped = self._owned_docs()
             if skipped:
                 self.log(f"  {YELLOW}left {skipped} doc(s) alone (not attributable){RESET}")
             if not docs:
+                last_failed = 0
                 break
-            failed += self.couch.bulk_delete(docs)
-            removed += len(docs)
+            last_failed = self.couch.bulk_delete(docs)
+            removed_ids.update(d["_id"] for d in docs)
             time.sleep(WORKER_POLL_SECONDS + 1)  # catch late worker writes, then re-scan
         leftover, _ = self._owned_docs()
-        self.log(f"  deleted {removed} CouchDB doc(s) (delete failures: {failed})")
+        self.log(
+            f"  deleted {len(removed_ids)} CouchDB doc(s) "
+            f"(delete failures in the last attempt: {last_failed})"
+        )
         self.e2e_result(
             "cleanup leaves no CouchDB docs of this run in the test shelter",
-            not leftover and not failed,
-            f"leftover={len(leftover)}, delete_failures={failed}" if leftover or failed else "",
+            not leftover and not last_failed,
+            f"leftover={len(leftover)}, delete_failures={last_failed}"
+            if leftover or last_failed
+            else "",
         )
         info = self.couch.info() or {}
         if self.baseline_doc_count is not None:
@@ -2350,26 +2654,38 @@ class E2ERunner(SmokeTestRunner):
                 f"  doc_count baseline={self.baseline_doc_count} final={info.get('doc_count')} "
                 "(informational; other writers may change it)"
             )
-        if self.mongo:
+        if self.mongo_on():
+            assert self.mongo is not None and self.created_client_id
             try:
                 for orphan in self.e2e_orphan_ids:
-                    self.mongo.delete_orphan(orphan)
-                done = self.mongo.delete_groups(
-                    self.e2e_booking_ids, ["cancelled", "rejected", "written"]
-                )
-                self.log(f"  deleted {done} settled external_bookings row(s) of this run")
-                stale = self.mongo.staged_rows(self.e2e_shelter)
+                    self.mongo.delete_orphan(orphan, self.created_client_id)
+                self._discover_run_bookings()
+                stale = self.staged_count()  # judged before this run's own leftovers go
                 self.e2e_result(
                     "no committed=false rows left in Mongo after the run",
                     stale == 0,
                     f"rows={stale}",
+                )
+                done = self.mongo.delete_groups(
+                    self.e2e_booking_ids,
+                    ["cancelled", "rejected", "written"],
+                    self.created_client_id,
+                    self.e2e_shelter,
+                )
+                staged_gone = self.mongo.delete_staged(
+                    self.e2e_booking_ids, self.created_client_id, self.e2e_shelter
+                )
+                self.log(
+                    f"  deleted {done} settled + {staged_gone} staged external_bookings "
+                    "row(s) of this run"
                 )
             except Exception as exc:
                 self.log(f"  {YELLOW}mongo cleanup failed: {type(exc).__name__}{RESET}")
         else:
             self.log(
                 f"  {YELLOW}no --mongo-uri: cancelled external_bookings rows (PII cleared) "
-                f"of this run stay in Mongo{RESET}"
+                f"of this run stay in Mongo; a request that timed out cannot be found by "
+                f"client_id (CouchDB docs are still purged by tracked CID){RESET}"
             )
 
     def _owned_docs(self) -> Tuple[List[Dict[str, Any]], int]:
@@ -2420,9 +2736,11 @@ class E2ERunner(SmokeTestRunner):
         self.log(
             f"{BOLD}{CYAN}E2E: partner bookings API -> Mongo -> worker -> CouchDB (#597 / CR-169){RESET}"
         )
-        self.log(f"{BOLD}API: {self.base_url}  |  test shelter: {self.e2e_shelter}{RESET}")
         self.log(
-            f"{BOLD}CouchDB: {self.couch.base_url}/{self.couch.database}  |  "
+            f"{BOLD}API: {redact_url(self.base_url)}  |  test shelter: {self.e2e_shelter}{RESET}"
+        )
+        self.log(
+            f"{BOLD}CouchDB: {redact_url(self.couch.base_url)}/{self.couch.database}  |  "
             f"Mongo checks: {'on' if self.mongo else 'off (API-behaviour only)'}{RESET}"
         )
         self.log(
@@ -2431,7 +2749,9 @@ class E2ERunner(SmokeTestRunner):
 
         status, _ = self.http_request("GET", self.partner_path("/external/locations"))
         if status == 0:
-            self.log(f"{RED}ERROR: Cannot connect to API at {self.base_url}.{RESET}")
+            self.log(
+                f"{RED}ERROR: Cannot connect to API at {redact_url(self.base_url)}.{RESET}"
+            )
             return 1
         info = self.couch.info()
         if info is None:
@@ -2458,12 +2778,16 @@ class E2ERunner(SmokeTestRunner):
                 self.scenario_couch_side_duplicate()
                 self.scenario_sweeper()
             except Exception as exc:  # keep going to cleanup; report the type only
-                self.e2e_result("scenario run aborted", False, f"{type(exc).__name__}: {exc}")
+                self.e2e_result(
+                    "scenario run aborted", False, f"{type(exc).__name__}: {redact_text(exc)}"
+                )
             finally:
                 try:
                     self.e2e_cleanup()
                 except Exception as exc:
-                    self.e2e_result("cleanup", False, f"{type(exc).__name__}: {exc}")
+                    self.e2e_result(
+                        "cleanup", False, f"{type(exc).__name__}: {redact_text(exc)}"
+                    )
         finally:
             self.test_cleanup_and_revocation()
         return self._finish(start_time)
@@ -2490,16 +2814,9 @@ def run_e2e_from_args(
         parser.error("--e2e needs --e2e-shelter-code (a dedicated TEST shelter).")
     if not 1 <= args.e2e_big_size <= 100:
         parser.error("--e2e-big-size must be between 1 and 100.")
-    confirmed = [h for h in args.i_know_this_writes_to.split(",") if h.strip()]
-    risky = unsafe_hosts([args.base_url, args.couch_url], confirmed)
-    if risky:
-        print(
-            f"{RED}Refusing e2e writes to non-local host(s): {', '.join(risky)}.{RESET}\n"
-            "A 100-person group creates 100 households + 100 evacuees. Use a local stack, "
-            "or pass --i-know-this-writes-to <host> naming each host if you really mean it.",
-            file=sys.stderr,
-        )
-        return 2
+    guard = e2e_target_guard(parser, args)  # idempotent; main() already ran it first
+    if guard is not None:
+        return guard
 
     dotenv = read_env_file(args.couch_env_file)
     couch_user = os.getenv("COUCHDB_USER") or dotenv.get("COUCHDB_USER", "")
@@ -2709,6 +3026,11 @@ def main():
 
     args = parser.parse_args()
 
+    if args.e2e:  # before anything else: no connection, no echo of target URLs
+        guard = e2e_target_guard(parser, args)
+        if guard is not None:
+            sys.exit(guard)
+
     client_id = (args.client_id or "").strip()
     client_secret = (args.client_secret or "").strip()
     if bool(client_id) ^ bool(client_secret):
@@ -2723,7 +3045,7 @@ def main():
         and "127.0.0.1" not in args.base_url
     ):
         print(
-            f"{YELLOW}Warning:{RESET} admin provision mode against {args.base_url} "
+            f"{YELLOW}Warning:{RESET} admin provision mode against {redact_url(args.base_url)} "
             "usually fails — /v1/admin/* is not public. "
             "Set PARTNER_CLIENT_ID + PARTNER_CLIENT_SECRET instead.",
             file=sys.stderr,
