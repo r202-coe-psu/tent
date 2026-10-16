@@ -1,4 +1,10 @@
 import { z } from 'zod';
+import {
+	DEFAULT_KIOSK_SCREEN_TYPE,
+	kioskScreenTypeSchema,
+	screenTypeOf,
+	type KioskScreenType
+} from '$lib/features/shared/domain/kiosk-screen';
 import { fromBangkokLocalInput, toBangkokLocalInput } from './kiosk-banner-datetime';
 import {
 	KIOSK_BANNER_LIMITS,
@@ -34,7 +40,8 @@ export const kioskBannerFormSchema = z
 			.max(KIOSK_BANNER_LIMITS.durationMax, 'ระยะเวลาสูงสุด 60 วินาที'),
 		start_at: localTime('ระบุเวลาเริ่ม'),
 		end_at: localTime('ระบุเวลาสิ้นสุด'),
-		status: kioskBannerStatusSchema
+		status: kioskBannerStatusSchema,
+		screen_type: kioskScreenTypeSchema
 	})
 	.superRefine((value, ctx) => {
 		const start = fromBangkokLocalInput(value.start_at);
@@ -58,12 +65,15 @@ export function emptyKioskBannerForm(): KioskBannerFormValues {
 		duration_sec: KIOSK_BANNER_LIMITS.durationDefault,
 		start_at: '',
 		end_at: '',
-		status: 'active'
+		status: 'active',
+		screen_type: DEFAULT_KIOSK_SCREEN_TYPE
 	};
 }
 
 /** Stored banner fields -> form values (UTC instants shown as Bangkok wall-clock). */
-export function bannerToFormValues(banner: KioskBannerInput): KioskBannerFormValues {
+export function bannerToFormValues(
+	banner: Omit<KioskBannerInput, 'screen_type'> & { screen_type?: KioskScreenType | null }
+): KioskBannerFormValues {
 	return {
 		title: banner.title,
 		caption: banner.caption ?? '',
@@ -71,7 +81,8 @@ export function bannerToFormValues(banner: KioskBannerInput): KioskBannerFormVal
 		duration_sec: banner.duration_sec,
 		start_at: toBangkokLocalInput(banner.start_at),
 		end_at: toBangkokLocalInput(banner.end_at),
-		status: banner.status
+		status: banner.status,
+		screen_type: screenTypeOf(banner)
 	};
 }
 
@@ -85,6 +96,7 @@ export function bannerFormToInput(values: KioskBannerFormValues): KioskBannerInp
 		duration_sec: values.duration_sec,
 		start_at: fromBangkokLocalInput(values.start_at),
 		end_at: fromBangkokLocalInput(values.end_at),
-		status: values.status
+		status: values.status,
+		screen_type: values.screen_type
 	});
 }

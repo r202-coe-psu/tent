@@ -4,6 +4,7 @@ import {
 	isActiveAt,
 	kioskBannerDocSchema,
 	kioskBannerInputSchema,
+	matchesScreen,
 	sortBanners,
 	splitByView
 } from './kiosk-banner';
@@ -67,6 +68,18 @@ describe('kioskBannerInputSchema', () => {
 		});
 	});
 
+	it('defaults screen_type to compact and accepts portrait', () => {
+		expect(kioskBannerInputSchema.parse(validInput).screen_type).toBe('compact');
+		expect(
+			kioskBannerInputSchema.parse({ ...validInput, screen_type: 'portrait' }).screen_type
+		).toBe('portrait');
+	});
+
+	it('rejects an unknown screen_type', () => {
+		const result = kioskBannerInputSchema.safeParse({ ...validInput, screen_type: 'landscape' });
+		expect(result.success).toBe(false);
+	});
+
 	it('rejects unknown status', () => {
 		const result = kioskBannerInputSchema.safeParse({ ...validInput, status: 'paused' });
 		expect(result.success).toBe(false);
@@ -122,6 +135,15 @@ describe('kioskBannerDocSchema', () => {
 		}
 	});
 
+	it('accepts a legacy doc without screen_type and a portrait doc', () => {
+		const parsed = kioskBannerDocSchema.safeParse(validDoc);
+		expect(parsed.success && parsed.data.screen_type).toBeUndefined();
+		expect(kioskBannerDocSchema.safeParse({ ...validDoc, screen_type: 'portrait' }).success).toBe(
+			true
+		);
+		expect(kioskBannerDocSchema.safeParse({ ...validDoc, screen_type: 'tv' }).success).toBe(false);
+	});
+
 	it('still enforces end_at > start_at', () => {
 		const result = kioskBannerDocSchema.safeParse({ ...validDoc, end_at: validDoc.start_at });
 		expect(result.success).toBe(false);
@@ -152,6 +174,16 @@ describe('createKioskBanner', () => {
 		expect(kioskBannerDocSchema.safeParse(doc).success).toBe(true);
 	});
 
+	it('stores the input screen_type on the doc', () => {
+		const input = kioskBannerInputSchema.parse({ ...validInput, screen_type: 'portrait' });
+		const doc = createKioskBanner(input, ctx, now);
+		expect(doc.screen_type).toBe('portrait');
+		expect(kioskBannerDocSchema.safeParse(doc).success).toBe(true);
+		expect(createKioskBanner(kioskBannerInputSchema.parse(validInput), ctx, now).screen_type).toBe(
+			'compact'
+		);
+	});
+
 	it('mints a distinct _id per call and applies input defaults', () => {
 		const input = kioskBannerInputSchema.parse({
 			title: 't',
@@ -162,6 +194,16 @@ describe('createKioskBanner', () => {
 		const b = createKioskBanner(input, ctx, now);
 		expect(a._id).not.toBe(b._id);
 		expect(a).toMatchObject({ order: 1, duration_sec: 10, status: 'active' });
+	});
+});
+
+describe('matchesScreen', () => {
+	it('matches the stored screen type, treating a missing one as compact', () => {
+		expect(matchesScreen({ screen_type: 'portrait' }, 'portrait')).toBe(true);
+		expect(matchesScreen({ screen_type: 'portrait' }, 'compact')).toBe(false);
+		expect(matchesScreen({ screen_type: 'compact' }, 'compact')).toBe(true);
+		expect(matchesScreen({}, 'compact')).toBe(true);
+		expect(matchesScreen({}, 'portrait')).toBe(false);
 	});
 });
 

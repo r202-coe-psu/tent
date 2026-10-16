@@ -16,6 +16,7 @@ const valid = (over: Partial<KioskBannerFormValues> = {}): KioskBannerFormValues
 	start_at: '2026-10-15T08:00',
 	end_at: '2026-10-15T18:00',
 	status: 'active',
+	screen_type: 'compact',
 	...over
 });
 
@@ -46,6 +47,10 @@ describe('kioskBannerFormSchema', () => {
 		expect(issuePaths(valid({ duration_sec: 2 }))).toContain('duration_sec');
 		expect(issuePaths(valid({ duration_sec: 61 }))).toContain('duration_sec');
 		expect(issuePaths(valid({ order: 0 }))).toContain('order');
+	});
+
+	it('rejects an unknown screen_type', () => {
+		expect(issuePaths({ ...valid(), screen_type: 'landscape' })).toContain('screen_type');
 	});
 
 	it('rejects a caption over 200 characters', () => {
@@ -81,7 +86,8 @@ describe('bannerToFormValues', () => {
 			duration_sec: 15,
 			start_at: '2026-10-16T02:00:00.000Z',
 			end_at: '2026-10-16T05:00:00.000Z',
-			status: 'inactive' as const
+			status: 'inactive' as const,
+			screen_type: 'portrait' as const
 		};
 		const values = bannerToFormValues(stored);
 		expect(values).toEqual({
@@ -91,9 +97,23 @@ describe('bannerToFormValues', () => {
 			duration_sec: 15,
 			start_at: '2026-10-16T09:00',
 			end_at: '2026-10-16T12:00',
-			status: 'inactive'
+			status: 'inactive',
+			screen_type: 'portrait'
 		});
 		expect(bannerFormToInput(values)).toEqual(stored);
+	});
+
+	it('reads a legacy banner without screen_type as compact', () => {
+		const legacy = {
+			title: 'เก่า',
+			caption: null,
+			order: 1,
+			duration_sec: 10,
+			start_at: '2026-10-16T02:00:00.000Z',
+			end_at: '2026-10-16T05:00:00.000Z',
+			status: 'active' as const
+		};
+		expect(bannerToFormValues(legacy).screen_type).toBe('compact');
 	});
 });
 
@@ -106,7 +126,8 @@ describe('emptyKioskBannerForm', () => {
 			duration_sec: 10,
 			start_at: '',
 			end_at: '',
-			status: 'active'
+			status: 'active',
+			screen_type: 'compact'
 		});
 	});
 });

@@ -5,6 +5,7 @@ export {
 	kioskBannerDocSchema,
 	kioskBannerInputSchema,
 	kioskBannerStatusSchema,
+	matchesScreen,
 	sortBanners,
 	splitByView
 } from './domain/kiosk-banner';

@@ -1,5 +1,10 @@
 import { z } from 'zod';
 import { makeDocId } from '$lib/db/model';
+import {
+	kioskScreenTypeSchema,
+	screenTypeOf,
+	type KioskScreenType
+} from '$lib/features/shared/domain/kiosk-screen';
 import { KIOSK_BANNER_IMAGE_MAX_BYTES } from './kiosk-banner-image';
 
 export const KIOSK_BANNER_LIMITS = {
@@ -39,7 +44,9 @@ const kioskBannerFieldsSchema = z.object({
 		.default(KIOSK_BANNER_LIMITS.durationDefault),
 	start_at: z.string().datetime({ message: 'รูปแบบเวลาเริ่มไม่ถูกต้อง' }),
 	end_at: z.string().datetime({ message: 'รูปแบบเวลาสิ้นสุดไม่ถูกต้อง' }),
-	status: kioskBannerStatusSchema.default('active')
+	status: kioskBannerStatusSchema.default('active'),
+	/** Absent on a doc stored before screen types existed = compact. */
+	screen_type: kioskScreenTypeSchema.optional()
 });
 
 type Period = { start_at: string; end_at: string };
@@ -49,10 +56,9 @@ const endAfterStart = {
 	params: { message: 'เวลาสิ้นสุดต้องหลังเวลาเริ่ม', path: ['end_at'] }
 };
 
-export const kioskBannerInputSchema = kioskBannerFieldsSchema.refine(
-	endAfterStart.check,
-	endAfterStart.params
-);
+export const kioskBannerInputSchema = kioskBannerFieldsSchema
+	.extend({ screen_type: kioskScreenTypeSchema.default('compact') })
+	.refine(endAfterStart.check, endAfterStart.params);
 
 export const kioskBannerDocSchema = kioskBannerFieldsSchema
 	.extend({
@@ -94,10 +100,19 @@ export function createKioskBanner(
 		start_at: input.start_at,
 		end_at: input.end_at,
 		status: input.status,
+		screen_type: input.screen_type,
 		created_at: ts,
 		updated_at: ts,
 		created_by: ctx.createdBy
 	};
+}
+
+/** True when the banner is for this screen type (a doc without one is a compact banner). */
+export function matchesScreen(
+	banner: { screen_type?: KioskScreenType | null },
+	type: KioskScreenType
+): boolean {
+	return screenTypeOf(banner) === type;
 }
 
 export function isActiveAt(

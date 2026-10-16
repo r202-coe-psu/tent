@@ -34,7 +34,8 @@ const input: KioskBannerInput = {
 	duration_sec: 10,
 	start_at: '2026-10-14T17:00:00.000Z',
 	end_at: '2026-10-20T17:00:00.000Z',
-	status: 'active'
+	status: 'active',
+	screen_type: 'portrait'
 };
 const image = { content_type: 'image/png', data_base64: 'iVBORw==' };
 
@@ -63,6 +64,15 @@ describe('list', () => {
 		expect(rows).toHaveLength(1);
 		expect(rows[0]._rev).toBe('1-abc');
 		expect(rows[0].image_content_type).toBe('image/png');
+	});
+
+	it('keeps screen_type on parsed rows; a legacy row has none', async () => {
+		fetchMock.mockResolvedValueOnce(
+			respond(200, [{ ...summary, screen_type: 'portrait' }, summary])
+		);
+		const rows = await repo.list('SH-01', 'current');
+		expect(rows[0].screen_type).toBe('portrait');
+		expect(rows[1].screen_type).toBeUndefined();
 	});
 
 	it('encodes the shelter code', async () => {
@@ -96,6 +106,7 @@ describe('create', () => {
 		expect(new Headers(init.headers).get('content-type')).toBe('application/json');
 		const body = JSON.parse(init.body as string);
 		expect(body).toEqual({ ...input, image });
+		expect(body.screen_type).toBe('portrait');
 		expect(body).not.toHaveProperty('shelter_code');
 		expect(created._rev).toBe('1-abc');
 	});
@@ -108,7 +119,9 @@ describe('update', () => {
 		const { url, init } = lastCall();
 		expect(url).toBe(`${BASE}/kiosk_banner%3A01J`);
 		expect(init.method).toBe('PUT');
-		expect(JSON.parse(init.body as string)).toEqual({ _rev: '1-abc', ...input, image });
+		const body = JSON.parse(init.body as string);
+		expect(body).toEqual({ _rev: '1-abc', ...input, image });
+		expect(body.screen_type).toBe('portrait');
 	});
 
 	it('omits image when none is replaced', async () => {
