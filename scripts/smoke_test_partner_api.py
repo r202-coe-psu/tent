@@ -122,14 +122,27 @@ retries, else that scenario fails). Only CIDs that passed are registered for cle
 Cleanup (always, also on failure): every CID is registered BEFORE its request is sent,
 so a request that times out after the server committed is still cleaned up. It cancels
 every booking it created (with Mongo also the ones it only finds by this run's
-client_id), waits for the worker to settle, then deletes from CouchDB only docs it can
-prove are its own. With --mongo-uri the proof is the `evacuee_id` / `household_id` the
+client_id; transport errors / 5xx / 401 are retried with a small bounded backoff, a
+409/404 is terminal but recorded and printed in the cleanup summary), waits for the
+worker to settle, then deletes from CouchDB only docs it can prove are its own. If the
+worker has not settled within --e2e-cleanup-timeout the run records a FAIL ("worker
+settled before cleanup", with the still-open booking_ids), cancels those again and, with
+Mongo, compare-and-sets THIS run's still `pending` / `cancel_requested` rows (client_id +
+tracked booking_ids + shelter, never other clients' rows) to `cancelled` with their PII
+cleared so the worker cannot write them afterwards, then purges anyway.
+With --mongo-uri the ownership proof is the `evacuee_id` / `household_id` the
 worker reserved on this run's `external_bookings` rows (kept for the whole run); without
 it, a doc must match a CID this run registered, `registered_via: api`, this run's
 `partner:M2` creator and a `created_at` not older than the run start (60 s skew). The
-`partner:` prefix alone is never enough. Audit docs of owned targets and the one planted
-duplicate evacuee go too. Never unseeds or touches other shelters. Expected runtime (local, 3 s worker poll): about 1-3 minutes plus
-the 100-person run (worker handles rows one by one; see the printed timing).
+`partner:` prefix alone is never enough. Proven ids are kept for the whole cleanup (id ->
+kind): every round re-fetches them directly and audit docs are looked up by `target_id`
+over all of them, even ones already deleted, so a failed delete of a household/audit is
+retried and can never be forgotten. PASS = no proven doc still exists and no unresolved
+delete failure. Audit docs of owned targets and the one planted duplicate evacuee go too.
+When the CouchDB purge could not be verified clean, the run's settled Mongo rows are kept
+(they are the ownership proof for a retry). Never unseeds or touches other shelters.
+Expected runtime (local, 3 s worker poll): about 1-3 minutes plus the 100-person run
+(worker handles rows one by one; see the printed timing).
 "green" = exit code 0: no FAIL lines; EXPECTED-FAIL / SKIPPED lines are listed.
 """
 
@@ -165,6 +178,13 @@ DEFAULT_USER_AGENT = (
     "Mozilla/5.0 (compatible; TentPartnerAPISmoke/1.0; +https://shelter.importstar.dev) "
     "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
 )
+
+
+#: Module the admin-provisioned client is created with, and the creator its writes carry
+#: (`partner:<module>`). The ONE place the literal lives: client creation and the
+#: cleanup ownership check must never drift apart.
+ADMIN_CLIENT_MODULE = "M2"
+ADMIN_CLIENT_CREATOR = f"partner:{ADMIN_CLIENT_MODULE}"
 
 
 def get_error_code(data: Dict[str, Any]) -> str:
@@ -371,7 +391,7 @@ class SmokeTestRunner:
             ts = int(time.time())
             payload = {
                 "name": f"smoke-m2-{ts}",
-                "module_name": "M2",
+                "module_name": ADMIN_CLIENT_MODULE,
                 "allowed_scopes": [
                     "location-read",
                     "location-stock-read",
@@ -1428,8 +1448,14 @@ HOLD_STATUSES = (
 WATCH_POLL_SECONDS = 0.25
 #: Fallback ownership (no Mongo): a doc older than run start minus this is not ours.
 CLOCK_SKEW = dt.timedelta(seconds=60)
-#: Creator the admin-provisioned client writes as (it is created with module_name "M2").
-ADMIN_CLIENT_CREATOR = "partner:M2"
+#: Cleanup: bounded retry of one cancel call (transport error / 5xx / 401), and how many
+#: cleanup passes may retry the same booking.
+CANCEL_TRIES = 3
+CANCEL_BACKOFF_SECONDS = (0.5, 1.5)
+CANCEL_ROUNDS = 3
+#: Cleanup: delete/re-scan rounds, and scrub/re-check rounds for rows left open.
+PURGE_ROUNDS = 3
+SCRUB_ROUNDS = 3
 #: Pre-flight: regeneration rounds for CIDs that already have a doc in the shelter.
 PREFLIGHT_ATTEMPTS = 5
 PENDING_578 = "pending #578"
@@ -1646,19 +1672,17 @@ class CouchAdmin:
         status, _ = self.request("PUT", f"/{self.database}/{doc['_id']}", doc)
         return status in (200, 201, 202)
 
-    def bulk_delete(self, docs: List[Dict[str, Any]]) -> int:
-        """Delete docs (needs `_id` + `_rev`); returns how many were NOT deleted."""
-        failed = 0
+    def bulk_delete(self, docs: List[Dict[str, Any]]) -> List[str]:
+        """Delete docs (needs `_id` + `_rev`); returns the ids that were NOT deleted."""
+        failed: List[str] = []
         for start in range(0, len(docs), 200):
-            chunk = [
-                {"_id": d["_id"], "_rev": d["_rev"], "_deleted": True}
-                for d in docs[start : start + 200]
-            ]
+            part = docs[start : start + 200]
+            chunk = [{"_id": d["_id"], "_rev": d["_rev"], "_deleted": True} for d in part]
             status, rows = self.request("POST", f"/{self.database}/_bulk_docs", {"docs": chunk})
             if status not in (200, 201, 202) or not isinstance(rows, list):
-                failed += len(chunk)
+                failed.extend(d["_id"] for d in part)  # whole chunk unknown: fail closed
             else:
-                failed += sum(1 for r in rows if r.get("error"))
+                failed.extend(str(r.get("id")) for r in rows if r.get("error"))
         return failed
 
 
@@ -1723,21 +1747,66 @@ class MongoProbe:
                 households.add(row["household_id"])
         return evacuees, households
 
+    @staticmethod
+    def _open_filter(flt: Dict[str, Any]) -> Dict[str, Any]:
+        """`flt` narrowed to rows the worker still has to act on."""
+        return {
+            **flt,
+            "$and": [
+                {
+                    "$or": [
+                        {"state": "pending"},
+                        {"state": "written", "cancel_requested": True},
+                    ]
+                }
+            ],
+        }
+
     def open_rows(self, flt: Dict[str, Any]) -> int:
         """Rows of the run the worker still has to act on."""
-        return self.bookings.count_documents(
+        return self.bookings.count_documents(self._open_filter(flt))
+
+    def open_booking_ids(self, flt: Dict[str, Any]) -> List[str]:
+        """booking_ids (not PII) of the run's rows the worker still has to act on."""
+        return sorted(self.bookings.distinct("booking_id", self._open_filter(flt)))
+
+    def scrub_open_rows(self, flt: Dict[str, Any], booking_ids: List[str], reason: str) -> int:
+        """Compare-and-set this run's open rows to `cancelled` and clear their PII, so the
+        worker never writes them afterwards. `flt` already carries client_id + shelter and
+        is narrowed to the run's tracked booking_ids. Each update is guarded on the state
+        it observed (like the API cancel / the worker transitions); reserved
+        evacuee_id/household_id are left untouched. Returns the number of rows changed."""
+        now = dt.datetime.now(dt.timezone.utc)
+        scoped = {**flt, "booking_id": {"$in": booking_ids}}
+        pending = self.bookings.update_many(
+            {**scoped, "state": "pending"},
             {
-                **flt,
-                "$and": [
-                    {
-                        "$or": [
-                            {"state": "pending"},
-                            {"state": "written", "cancel_requested": True},
-                        ]
-                    }
-                ],
-            }
+                "$set": {
+                    "state": "cancelled",
+                    "cancel_reason": reason,
+                    "cid": None,
+                    "first_name": None,
+                    "last_name": None,
+                    "phone": None,
+                    "updated_at": now,
+                }
+            },
         )
+        due = self.bookings.update_many(
+            {**scoped, "state": "written", "cancel_requested": True},
+            {
+                "$set": {
+                    "state": "cancelled",
+                    "cancel_requested": False,
+                    "cid": None,
+                    "first_name": None,
+                    "last_name": None,
+                    "phone": None,
+                    "updated_at": now,
+                }
+            },
+        )
+        return int(pending.modified_count) + int(due.modified_count)
 
     def plaintext_rows(self, booking_ids: List[str]) -> int:
         """Rows of these groups that are terminal yet still hold CID/phone/name."""
@@ -1866,6 +1935,17 @@ class E2ERunner(SmokeTestRunner):
         self.run_evacuee_ids: set = set()
         self.run_household_ids: set = set()
         self.run_started = dt.datetime.now(dt.timezone.utc)
+        #: Cumulative PROVEN ownership across the whole cleanup: doc id -> kind. Only ever
+        #: grows, so a doc proven once is still deleted / verified later even when the doc
+        #: that led to it (evacuee -> household -> audit) is already gone.
+        self.proven: Dict[str, str] = {}
+        self.deleted_ids: set = set()
+        self.failed_ids: set = set()  # delete failures not (yet) resolved by a later round
+        #: Cleanup cancel bookkeeping: booking_id -> outcome.
+        self.cancel_ok: set = set()  # 200
+        self.cancel_settled: Dict[str, str] = {}  # 409/404 -> "409:booking_not_cancellable"
+        self.cancel_failed: Dict[str, str] = {}  # retries exhausted -> "HTTP 503"
+        self.cancel_rounds: Dict[str, int] = {}
         self.timing_lines: List[str] = []
         self.baseline_doc_count: Optional[int] = None
         #: True once the worker was seen writing a group (precondition for EXPECTED-FAIL).
@@ -2553,36 +2633,104 @@ class E2ERunner(SmokeTestRunner):
         self.e2e_booking_ids.extend(found)
         return found
 
-    def e2e_cleanup(self) -> None:
-        self._banner("E2E cleanup: cancel bookings, then remove this run's CouchDB docs")
-        self._refresh_run_ids()
-        attempted: set = set()
-        cancelled = 0
+    def _remint_token(self) -> None:
+        """Fresh token after a 401 (a long run can outlive the 1 h TTL). Never printed."""
+        if not (self.created_client_id and self.client_secret):
+            return
+        status, data = self.http_request(
+            "POST",
+            self.partner_path("/external/token"),
+            body={
+                "grant_type": "client_credentials",
+                "client_id": self.created_client_id,
+                "client_secret": self.client_secret,
+            },
+        )
+        if status == 200 and isinstance(data, dict) and data.get("access_token"):
+            self.access_token = data["access_token"]
 
-        def cancel_new() -> None:
-            nonlocal cancelled
-            for booking_id in list(self.e2e_booking_ids):
-                if booking_id in attempted:
-                    continue
-                attempted.add(booking_id)
-                status, _, _ = self.cancel_group(booking_id)
-                cancelled += 1 if status == 200 else 0  # 409/404 = already settled/invisible
+    def cancel_one(self, booking_id: str) -> str:
+        """Cancel one booking with a small bounded retry. Returns the outcome:
+        `cancelled` (200), `settled` (409/404: terminal, recorded) or `failed`.
 
-        try:
-            discovered = self._discover_run_bookings()
-        except Exception as exc:
-            discovered = []
-            self.log(f"  {YELLOW}mongo discovery failed: {type(exc).__name__}{RESET}")
-        if discovered:
-            self.log(f"  found {len(discovered)} booking(s) of this run by client_id in Mongo")
-        cancel_new()
-        self.log(f"  cancelled {cancelled} still-open booking(s) of {len(self.e2e_booking_ids)}")
+        Transport errors, 5xx and 401 (token is re-minted) are retried; any other status
+        is final. Nothing here touches CouchDB or Mongo.
+        """
+        status = 0
+        for attempt in range(CANCEL_TRIES):
+            status, data, _ = self.cancel_group(booking_id)
+            if status == 200:
+                self.cancel_ok.add(booking_id)
+                self.cancel_failed.pop(booking_id, None)
+                return "cancelled"
+            if status in (404, 409):
+                code = get_error_code(data)
+                self.cancel_settled[booking_id] = f"{status}:{code}" if code else str(status)
+                self.cancel_failed.pop(booking_id, None)
+                return "settled"
+            if not (status == 0 or status >= 500 or status == 401):
+                break  # 400/403/422/...: retrying cannot help
+            if status == 401:
+                self._remint_token()
+            if attempt < CANCEL_TRIES - 1:
+                time.sleep(CANCEL_BACKOFF_SECONDS[min(attempt, len(CANCEL_BACKOFF_SECONDS) - 1)])
+        self.cancel_failed[booking_id] = f"HTTP {status}"
+        return "failed"
 
-        # Wait until the worker has nothing left to do for our groups, so a late write
-        # cannot resurrect a doc after the purge. With Mongo that is "no pending /
-        # cancel_requested rows of this run" (re-discovering late-committed groups of timed
-        # out requests each poll); without it, "the number of bed-holding evacuees stopped
-        # changing" (a partly-written group the API refuses to cancel never drains).
+    def cancel_new(self, only: Optional[List[str]] = None, force: bool = False) -> None:
+        """Cancel tracked bookings that have no terminal outcome yet. A `failed` one is
+        retried on later passes (at most CANCEL_ROUNDS, or always with `force`)."""
+        if not self.access_token:
+            return  # recovery mode: no client secret, so no API cancel (Mongo CAS only)
+        wanted = set(only) if only is not None else None
+        for booking_id in list(self.e2e_booking_ids):
+            if wanted is not None and booking_id not in wanted:
+                continue
+            if booking_id in self.cancel_ok or booking_id in self.cancel_settled:
+                continue
+            if not force and self.cancel_rounds.get(booking_id, 0) >= CANCEL_ROUNDS:
+                continue
+            self.cancel_rounds[booking_id] = self.cancel_rounds.get(booking_id, 0) + 1
+            self.cancel_one(booking_id)
+
+    def _log_cancel_summary(self) -> None:
+        def ids(items: Any) -> str:
+            shown = sorted(items)
+            more = f" (+{len(shown) - 20} more)" if len(shown) > 20 else ""
+            return ", ".join(shown[:20]) + more
+
+        self.log(
+            f"  cancel summary: {len(self.cancel_ok)} cancelled (200), "
+            f"{len(self.cancel_settled)} already settled/invisible (409/404), "
+            f"{len(self.cancel_failed)} failed after retries, of {len(self.e2e_booking_ids)} tracked"
+        )
+        if self.cancel_settled:
+            self.log("    settled (terminal; the Mongo scrub/delete below still covers them): ")
+            for booking_id in sorted(self.cancel_settled)[:20]:
+                self.log(f"      {booking_id} -> {self.cancel_settled[booking_id]}")
+            if len(self.cancel_settled) > 20:
+                self.log(f"      (+{len(self.cancel_settled) - 20} more)")
+        if self.cancel_failed:
+            self.log(f"    {YELLOW}cancel failed for: {ids(self.cancel_failed)}{RESET}")
+
+    def _open_booking_ids(self) -> List[str]:
+        """booking_ids the worker may still act on. Without Mongo that cannot be told, so
+        every tracked id is listed (fail closed)."""
+        if self.mongo_on():
+            assert self.mongo is not None
+            try:
+                return self.mongo.open_booking_ids(self.owned_rows_filter())
+            except Exception as exc:
+                self.log(f"  {YELLOW}could not list open rows: {type(exc).__name__}{RESET}")
+        return sorted(self.e2e_booking_ids)
+
+    def _wait_worker_settled(self) -> bool:
+        """Wait until the worker has nothing left to do for our groups, so a late write
+        cannot resurrect a doc after the purge. With Mongo that is "no pending /
+        cancel_requested rows of this run" (re-discovering late-committed groups of timed
+        out requests each poll); without it, "the number of bed-holding evacuees stopped
+        changing" (a partly-written group the API refuses to cancel never drains).
+        Returns False when the cleanup timeout expired first."""
         deadline = time.monotonic() + self.cleanup_timeout
         quiet_since: Optional[float] = None
         last_holding = -1
@@ -2597,7 +2745,7 @@ class E2ERunner(SmokeTestRunner):
                 if self.mongo_on():
                     assert self.mongo is not None
                     fresh = self._discover_run_bookings()
-                    cancel_new()
+                    self.cancel_new()
                     self._refresh_run_ids()
                     busy = self.mongo.open_rows(self.owned_rows_filter()) + len(fresh)
                 else:
@@ -2612,38 +2760,134 @@ class E2ERunner(SmokeTestRunner):
             elif quiet_since is None:
                 quiet_since = time.monotonic()
             elif time.monotonic() - quiet_since >= self.settle:
-                break
+                return True
             time.sleep(1)
-        else:
-            self.log(f"  {YELLOW}worker did not settle within the cleanup timeout{RESET}")
+        return False
 
-        # Count per attempt: a rev conflict fixed on a later attempt must not fail the
-        # run, and `removed` counts unique doc ids.
-        removed_ids: set = set()
-        last_failed = 0
-        for attempt in range(3):
+    def _scrub_open_rows(self) -> int:
+        """Stop the worker from writing this run's still-open rows (Mongo mode only).
+
+        Compare-and-set `pending` / `cancel_requested` rows of THIS run (client_id +
+        tracked booking_ids + shelter) to `cancelled` and clear their PII. A row the worker
+        was writing at that moment is moved back to `written`+`cancel_requested` by the
+        worker, so after a scrub wait two polls, re-check and scrub again (bounded). The
+        reserved doc ids stay on the rows and are re-read afterwards, so the purge still
+        has its ownership proof. Returns the number of rows changed.
+        """
+        if not self.mongo_on():
+            return 0
+        assert self.mongo is not None
+        total = 0
+        for _ in range(SCRUB_ROUNDS):
+            self._discover_run_bookings()
+            changed = self.mongo.scrub_open_rows(
+                self.owned_rows_filter(),
+                list(self.e2e_booking_ids),
+                "e2e smoke test cleanup (scrub)",
+            )
+            total += changed
+            self._refresh_run_ids()
+            if changed:
+                time.sleep(2 * WORKER_POLL_SECONDS)  # an in-flight worker write moves on
+                self._refresh_run_ids()
+            if self.mongo.open_rows(self.owned_rows_filter()) == 0:
+                break
+        return total
+
+    def purge_run_docs(self) -> bool:
+        """Delete this run's CouchDB docs; True only when verified clean.
+
+        Round after round: re-prove ownership (only ever adds to `self.proven`), re-fetch
+        EVERY proven id directly (so a doc whose finder is gone, or whose delete failed,
+        is retried) and delete what exists. Delete failures are kept as a set of ids until
+        a later round deletes them. PASS = no proven doc still exists AND no unresolved
+        delete failure.
+        """
+        for _ in range(PURGE_ROUNDS):
             self._refresh_run_ids()  # rows still exist here; they go only after the purge
-            docs, skipped = self._owned_docs()
+            skipped = self._discover_proven()
             if skipped:
                 self.log(f"  {YELLOW}left {skipped} doc(s) alone (not attributable){RESET}")
-            if not docs:
-                last_failed = 0
+            existing = self.couch.get_many(sorted(self.proven))
+            if not existing:
                 break
-            last_failed = self.couch.bulk_delete(docs)
-            removed_ids.update(d["_id"] for d in docs)
+            docs = list(existing.values())
+            failed = set(self.couch.bulk_delete(docs))
+            deleted_now = {d["_id"] for d in docs} - failed
+            self.deleted_ids |= deleted_now
+            self.failed_ids = (self.failed_ids - deleted_now) | failed
             time.sleep(WORKER_POLL_SECONDS + 1)  # catch late worker writes, then re-scan
-        leftover, _ = self._owned_docs()
+        self._refresh_run_ids()
+        self._discover_proven()
+        leftover = self.couch.get_many(sorted(self.proven))
+        unresolved = sorted(self.failed_ids)
         self.log(
-            f"  deleted {len(removed_ids)} CouchDB doc(s) "
-            f"(delete failures in the last attempt: {last_failed})"
+            f"  deleted {len(self.deleted_ids)} CouchDB doc(s) of {len(self.proven)} proven "
+            f"(unresolved delete failures: {len(unresolved)})"
         )
+        clean = not leftover and not unresolved
         self.e2e_result(
             "cleanup leaves no CouchDB docs of this run in the test shelter",
-            not leftover and not last_failed,
-            f"leftover={len(leftover)}, delete_failures={last_failed}"
-            if leftover or last_failed
+            clean,
+            f"leftover={len(leftover)}, unresolved_delete_failures={len(unresolved)}"
+            if not clean
             else "",
         )
+        return clean
+
+    def e2e_cleanup(self) -> None:
+        self._banner("E2E cleanup: cancel bookings, then remove this run's CouchDB docs")
+        self._refresh_run_ids()
+        try:
+            discovered = self._discover_run_bookings()
+        except Exception as exc:
+            discovered = []
+            self.log(f"  {YELLOW}mongo discovery failed: {type(exc).__name__}{RESET}")
+        if discovered:
+            self.log(f"  found {len(discovered)} booking(s) of this run by client_id in Mongo")
+        self.cancel_new()
+        self.log(
+            f"  cancelled {len(self.cancel_ok)} still-open booking(s) of {len(self.e2e_booking_ids)}"
+        )
+
+        if not self._wait_worker_settled():
+            open_ids = self._open_booking_ids()
+            listed = ", ".join(open_ids[:30]) + (
+                f" (+{len(open_ids) - 30} more)" if len(open_ids) > 30 else ""
+            )
+            basis = "open rows" if self.mongo_on() else "no --mongo-uri: all tracked ids"
+            self.e2e_result(
+                "worker settled before cleanup",
+                False,
+                f"not settled within {self.cleanup_timeout:.0f}s; still-open booking_ids "
+                f"({basis}): {listed or 'none listed'}",
+            )
+            # Last attempt through the API, then stop the worker from writing the rest.
+            self.cancel_new(only=open_ids, force=True)
+            if self.mongo_on():
+                try:
+                    scrubbed = self._scrub_open_rows()
+                    self.log(
+                        f"  scrubbed {scrubbed} open row(s) of this run (cancelled, PII cleared)"
+                    )
+                except Exception as exc:
+                    self.log(f"  {YELLOW}scrub failed: {type(exc).__name__}{RESET}")
+            else:
+                self.log(
+                    f"  {YELLOW}no --mongo-uri: open rows cannot be scrubbed; the worker may "
+                    f"still write docs later (purge below only sees what exists now){RESET}"
+                )
+        self._log_cancel_summary()
+
+        purged = False
+        try:
+            purged = self.purge_run_docs()
+        except Exception as exc:
+            self.e2e_result(
+                "cleanup leaves no CouchDB docs of this run in the test shelter",
+                False,
+                f"could not verify: {type(exc).__name__}: {redact_text(exc)}",
+            )
         info = self.couch.info() or {}
         if self.baseline_doc_count is not None:
             self.log(
@@ -2656,25 +2900,34 @@ class E2ERunner(SmokeTestRunner):
                 for orphan in self.e2e_orphan_ids:
                     self.mongo.delete_orphan(orphan, self.created_client_id)
                 self._discover_run_bookings()
+                if self.mongo.open_rows(self.owned_rows_filter()):
+                    self._scrub_open_rows()  # e.g. a row the worker re-queued meanwhile
                 stale = self.staged_count()  # judged before this run's own leftovers go
                 self.e2e_result(
                     "no committed=false rows left in Mongo after the run",
                     stale == 0,
                     f"rows={stale}",
                 )
-                done = self.mongo.delete_groups(
-                    self.e2e_booking_ids,
-                    ["cancelled", "rejected", "written"],
-                    self.created_client_id,
-                    self.e2e_shelter,
-                )
                 staged_gone = self.mongo.delete_staged(
                     self.e2e_booking_ids, self.created_client_id, self.e2e_shelter
                 )
-                self.log(
-                    f"  deleted {done} settled + {staged_gone} staged external_bookings "
-                    "row(s) of this run"
-                )
+                if purged:
+                    done = self.mongo.delete_groups(
+                        self.e2e_booking_ids,
+                        ["cancelled", "rejected", "written"],
+                        self.created_client_id,
+                        self.e2e_shelter,
+                    )
+                    self.log(
+                        f"  deleted {done} settled + {staged_gone} staged external_bookings "
+                        "row(s) of this run"
+                    )
+                else:
+                    self.log(
+                        f"  {YELLOW}kept this run's settled external_bookings rows (PII "
+                        f"cleared): they hold the reserved doc ids that prove ownership for "
+                        f"a retry; deleted {staged_gone} staged row(s){RESET}"
+                    )
             except Exception as exc:
                 self.log(f"  {YELLOW}mongo cleanup failed: {type(exc).__name__}{RESET}")
         else:
@@ -2737,9 +2990,15 @@ class E2ERunner(SmokeTestRunner):
             return False
         return self._created_during_run(doc)
 
-    def _owned_docs(self) -> Tuple[List[Dict[str, Any]], int]:
-        """CouchDB docs created by this run (full docs with `_rev`) + count skipped."""
-        owned: Dict[str, Dict[str, Any]] = {}
+    def _discover_proven(self) -> int:
+        """Prove ownership of this run's docs and add them to `self.proven`; returns how
+        many candidates were left alone. Only ever adds.
+
+        Candidates: evacuees by tracked CID (not proof) and by the ids the worker reserved
+        on this run's Mongo rows; households of proven evacuees plus the reserved ones;
+        audit docs targeting ANY proven id (including docs that are already deleted, so an
+        audit left behind by a failed delete is still found); the planted duplicates.
+        """
         skipped = 0
         candidates: Dict[str, Dict[str, Any]] = {}
         listed = sorted(self.e2e_cids)
@@ -2756,28 +3015,30 @@ class E2ERunner(SmokeTestRunner):
             if not self._owned_by_this_run(doc, "evacuee"):
                 skipped += 1
                 continue
-            owned[doc_id] = doc
+            self.proven[doc_id] = "evacuee"
             if doc.get("household_id"):
                 house_ids.add(doc["household_id"])
         house_ids |= self.run_household_ids
+        house_ids |= {i for i, kind in self.proven.items() if kind == "household"}
         for house_id, doc in self.couch.get_many(sorted(house_ids)).items():
             if doc.get("type") != "household":
                 continue
             if self._owned_by_this_run(doc, "household"):
-                owned[house_id] = doc
+                self.proven[house_id] = "household"
             else:
                 skipped += 1
-        targets = sorted(owned)
+        targets = sorted(i for i, kind in self.proven.items() if kind in ("evacuee", "household"))
         for start in range(0, len(targets), 100):
             for doc in self.couch.find(
                 {"type": "audit", "target_id": {"$in": targets[start : start + 100]}}
             ):
                 if self._owned_by_this_run(doc, "audit"):
-                    owned[doc["_id"]] = doc
+                    self.proven[doc["_id"]] = "audit"
                 else:
                     skipped += 1
-        owned.update(self.couch.get_many(list(self.e2e_planted_ids)))
-        return list(owned.values()), skipped
+        for planted_id in self.e2e_planted_ids:  # ids this run generated itself
+            self.proven.setdefault(planted_id, "planted")
+        return skipped
 
     # -------------------------------------------------------------------- run
     def run_e2e(self) -> int:
@@ -2916,6 +3177,7 @@ def run_e2e_from_args(
         big_timeout=args.e2e_big_timeout,
         big_budget=args.e2e_big_budget,
         race_rounds=args.e2e_race_rounds,
+        cleanup_timeout=args.e2e_cleanup_timeout,
         require_578=args.require_578,
         skip_big=args.skip_e2e_big,
     )
@@ -3054,6 +3316,13 @@ def main():
         type=float,
         default=None,
         help="Optional: fail the large-group check when 201 -> all-in-CouchDB exceeds this",
+    )
+    e2e.add_argument(
+        "--e2e-cleanup-timeout",
+        type=float,
+        default=180,
+        help="Seconds cleanup waits for the worker to settle before it records a FAIL, "
+        "cancels/scrubs this run's still-open rows and purges anyway (default 180)",
     )
     e2e.add_argument(
         "--e2e-race-rounds",
