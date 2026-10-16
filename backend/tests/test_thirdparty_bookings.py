@@ -192,6 +192,17 @@ async def _assert_one_internal_error_log() -> None:
         assert secret not in dumped
 
 
+def _assert_sanitized_500(response: Any) -> None:
+    """The commit-failure 500 is the same partner `internal_error` body as an insert failure."""
+    assert response.status_code == 500
+    body = response.json()
+    assert body["code"] == "internal_error"
+    assert body["message"] == "The booking could not be saved."
+    assert body["status"] == 500
+    for leak in ("boom", "matched", "CommitShortfallError", "RuntimeError", *_PII):
+        assert leak not in response.text
+
+
 async def _rows(booking_id: str | None = None) -> list[dict[str, Any]]:
     query = {"booking_id": booking_id} if booking_id else {}
     cursor = ExternalBooking.get_pymongo_collection().find(query).sort("person_seq")
@@ -620,11 +631,69 @@ async def test_commit_step_failure_removes_every_pending_row(
 ) -> None:
     await _booking(cid=_cid(9), booking_id="BK-OTHER")  # another group must stay untouched
     calls = _fail_update_many(monkeypatch, failures=None)
-    with pytest.raises(RuntimeError):
-        await client.post(URL, json=_group_payload(3), headers=GRANTED)
+    response = await client.post(URL, json=_group_payload(3), headers=GRANTED)
+    _assert_sanitized_500(response)
     assert calls[0] == 3
     assert [row["booking_id"] for row in await _rows()] == ["BK-OTHER"]
     await _assert_one_internal_error_log()
+
+
+def _sweep_before_update_many(
+    monkeypatch: pytest.MonkeyPatch, *, delete: dict[str, Any]
+) -> list[int]:
+    """Simulate the worker sweeper deleting rows just before the commit flip runs."""
+    collection = ExternalBooking.get_pymongo_collection()
+    real = type(collection).update_many
+    calls = [0]
+
+    async def swept(self: Any, *args: Any, **kwargs: Any) -> Any:
+        if self.name == collection.name:
+            calls[0] += 1
+            await self.delete_many(delete)
+        return await real(self, *args, **kwargs)
+
+    monkeypatch.setattr(type(collection), "update_many", swept)
+    return calls
+
+
+@pytest.mark.parametrize("delete", [{"person_seq": 1}, {}], ids=["one-row", "whole-group"])
+async def test_commit_shortfall_fails_without_retry_and_removes_pending_rows(
+    client: AsyncClient,
+    shelters: None,
+    monkeypatch: pytest.MonkeyPatch,
+    delete: dict[str, Any],
+) -> None:
+    """Rows swept mid-commit must not be answered with a 201 (CR-169 FR-33)."""
+    await _booking(cid=_cid(9), booking_id="BK-OTHER")  # another group must stay untouched
+    calls = _sweep_before_update_many(
+        monkeypatch, delete={**delete, "committed": False, "booking_id": {"$ne": "BK-OTHER"}}
+    )
+    response = await client.post(URL, json=_group_payload(3), headers=GRANTED)
+    _assert_sanitized_500(response)
+    assert calls[0] == 1  # a shortfall is permanent: not retried
+    assert [row["booking_id"] for row in await _rows()] == ["BK-OTHER"]
+    await _assert_one_internal_error_log()
+
+
+async def test_commit_shortfall_keeps_rows_the_worker_already_advanced(
+    client: AsyncClient, shelters: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from apiapp.modules.thirdparty_bookings import use_case
+
+    real = ExternalBooking.insert_many
+
+    async def advance_one(rows: Any, **kwargs: Any) -> Any:
+        result = await real(rows, **kwargs)
+        await ExternalBooking.get_pymongo_collection().update_one(
+            {"_id": rows[0].id}, {"$set": {"state": "written"}}
+        )
+        return result
+
+    monkeypatch.setattr(use_case.ExternalBooking, "insert_many", advance_one)
+    _sweep_before_update_many(monkeypatch, delete={"person_seq": 2})
+    response = await client.post(URL, json=_group_payload(3), headers=GRANTED)
+    _assert_sanitized_500(response)
+    assert [row["state"] for row in await _rows()] == ["written"]
 
 
 async def test_commit_step_failure_keeps_rows_the_worker_already_advanced(
@@ -643,8 +712,8 @@ async def test_commit_step_failure_keeps_rows_the_worker_already_advanced(
 
     monkeypatch.setattr(use_case.ExternalBooking, "insert_many", advance_one)
     _fail_update_many(monkeypatch, failures=None)
-    with pytest.raises(RuntimeError):
-        await client.post(URL, json=_group_payload(3), headers=GRANTED)
+    response = await client.post(URL, json=_group_payload(3), headers=GRANTED)
+    _assert_sanitized_500(response)
     assert [row["state"] for row in await _rows()] == ["written"]
 
 
@@ -953,8 +1022,7 @@ async def test_rolled_back_group_does_not_block_a_later_booking(
     client: AsyncClient, shelters: None, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _fail_update_many(monkeypatch, failures=3)  # every attempt of the first request fails
-    with pytest.raises(RuntimeError):
-        await client.post(URL, json=_group_payload(3), headers=GRANTED)
+    _assert_sanitized_500(await client.post(URL, json=_group_payload(3), headers=GRANTED))
     assert await _rows() == []
     response = await client.post(URL, json=_group_payload(3), headers=GRANTED)
     assert response.status_code == 201

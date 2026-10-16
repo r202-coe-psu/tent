@@ -98,11 +98,13 @@ async def _with_retry(
     attempts: int,
     reraise: bool,
     give_up: str,
+    fatal: tuple[type[Exception], ...] = (),
 ) -> None:
     """Run `operation` up to `attempts` times, logging only the booking_id and error type.
 
     After the last failed attempt the exception is re-raised (`reraise=True`) or swallowed
     after logging `give_up` as an error, so a caller's original exception is not masked.
+    An exception in `fatal` is not transient: it is logged and re-raised at once.
     """
     for attempt in range(1, attempts + 1):
         try:
@@ -116,6 +118,8 @@ async def _with_retry(
                 attempt,
                 type(exc).__name__,
             )
+            if isinstance(exc, fatal):
+                raise
             if attempt == attempts:
                 if reraise:
                     raise
@@ -152,15 +156,38 @@ async def _cleanup_staged(
     await asyncio.shield(_detach(cleanup()))
 
 
-async def _commit_group(collection: Any, booking_id: str) -> None:
-    """Flip a staged group to `committed=True`; retried since the flip is idempotent."""
+class CommitShortfallError(RuntimeError):
+    """The commit flip matched fewer rows than the group has (the worker swept some)."""
+
+
+async def _commit_group(collection: Any, booking_id: str, group_size: int) -> None:
+    """Flip a staged group to `committed=True`; retried since the flip is idempotent.
+
+    `matched_count` must equal `group_size`. A shortfall means the worker's sweeper
+    (FR-33: it deletes `committed=False` rows older than its TTL, then the group's remaining
+    `pending` rows) removed rows while this request was still committing, e.g. a stalled
+    API or clock skew between the worker's cutoff and `created_at`. Telling the partner
+    "201" for rows that no longer exist would be a lie, so a shortfall fails the commit
+    (no retry: the rows are gone for good) and the caller's cleanup + 500 path runs.
+    """
+
+    async def flip() -> None:
+        result = await collection.update_many(
+            {"booking_id": booking_id}, {"$set": {"committed": True}}
+        )
+        if result.matched_count != group_size:
+            raise CommitShortfallError(
+                f"matched {result.matched_count} of {group_size} staged rows"
+            )
+
     await _with_retry(
-        lambda: collection.update_many({"booking_id": booking_id}, {"$set": {"committed": True}}),
+        flip,
         what="booking commit",
         booking_id=booking_id,
         attempts=_COMMIT_ATTEMPTS,
         reraise=True,
         give_up="booking commit gave up",
+        fatal=(CommitShortfallError,),
     )
 
 
@@ -530,8 +557,9 @@ class ThirdPartyBookingsUseCase:
         # The insert runs as its own task: if the request is cancelled mid-flight, cleanup
         # waits for it to settle first, otherwise it could miss rows mongod applies later.
         # Cleanup is shielded so a cancelled request (client disconnect) cannot abort it.
-        # A sweeper for rows orphaned by a hard process kill is planned in #578; until it
-        # ships, such rows stay `committed=False` and are ignored by the worker poll.
+        # Rows orphaned by a hard process kill stay `committed=False` and are ignored by
+        # the worker poll; the worker sweeper (`sweep_stale_staged`, CR-169 FR-33) deletes
+        # them, plus any `pending` rows of the same `booking_id`, once older than 60s.
         # The `except` blocks below only record the outcome: cleanup, audit and the final
         # raise happen after them so the `BulkWriteError` (whose details embed the rows) is
         # never in the `__context__` chain of anything raised later.
@@ -581,7 +609,7 @@ class ThirdPartyBookingsUseCase:
 
         commit_error: Exception | None = None
         try:
-            await _commit_group(collection, booking_id)
+            await _commit_group(collection, booking_id, len(rows))
         except asyncio.CancelledError:
             await _cleanup_staged(collection, {"booking_id": booking_id, "state": "pending"})
             raise
@@ -600,7 +628,13 @@ class ThirdPartyBookingsUseCase:
                 outcome="denied_internal_error",
                 location_code=location_code,
             )
-            raise commit_error
+            # Same sanitized 500 as the insert-failure path (partner `internal_error`
+            # body, no exception text); `_with_retry` already logged the error type.
+            raise _error(
+                status.HTTP_500_INTERNAL_SERVER_ERROR,
+                "internal_error",
+                "The booking could not be saved.",
+            )
 
         # The group is committed and the worker will process it: a failing or cancelled
         # access log must not turn this into an error (the partner's retry would then hit 409).

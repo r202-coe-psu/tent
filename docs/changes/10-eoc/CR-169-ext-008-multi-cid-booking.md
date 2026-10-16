@@ -3,7 +3,7 @@ id: CR-169
 title: EXT-008 รับหลาย CID ใน booking เดียว — group key ใน external_bookings + evacuee.booking_ref (schema_v 13→14), 1 คน = 1 household (รวม household เลื่อนไปก่อน)
 status: approved
 date: 2026-10-15
-updated: 2026-10-16
+updated: 2026-10-17
 requested_by: เจ้าของโครงการ
 decided_by: เจ้าของโครงการ
 layer: volatile
@@ -111,7 +111,7 @@ affects:
 ### C3 — Atomicity (all-or-nothing) และ duplicate
 
 - **FR-20** ตรวจ duplicate (CR-154 FR-17 a/b) ของ **ทุกคน** ก่อน insert; ถ้าคนใดคนหนึ่งซ้ำ → 409 `duplicate_booking` ทั้ง request ไม่สร้างอะไรเลย; `detail` ระบุ **ดัชนี** ของคนที่ซ้ำ (เช่น `"persons[1]"`) ห้ามใส่ CID/ชื่อ
-- **FR-21** worker-time duplicate check (CR-154 FR-50) ตรวจ **ทุกแถวในกลุ่มก่อนเขียน CouchDB แถวใดแถวหนึ่ง**; พบซ้ำ ≥1 คน → ตั้ง `state = rejected`, `reject_reason = duplicate` **ทั้งกลุ่ม** และล้าง PII ทุกแถว
+- **FR-21** worker-time duplicate check (CR-154 FR-50) ตรวจ **ทุกแถวในกลุ่มก่อนเขียน CouchDB แถวใดแถวหนึ่ง**; พบซ้ำ ≥1 คน → ตั้ง `state = rejected`, `reject_reason = duplicate` **ทั้งกลุ่ม** และล้าง PII ทุกแถว · **ข้อยกเว้นตอน retry:** ถ้าบางคนของกลุ่มถูกเขียนลง CouchDB ไปแล้ว (worker ล่ม / `_bulk_docs` สำเร็จบางส่วน) การตรวจซ้ำรอบหลัง reject **เฉพาะคนที่ CID ซ้ำ** (`rejected` / `duplicate` + ล้าง PII) คนที่เขียนแล้วคงไว้ตามเดิม คนอื่นที่ยัง `pending` เขียนต่อ · ข้อยกเว้นนี้ครอบคลุมคนที่ doc เข้า CouchDB แล้วแต่แถวยัง `pending` ด้วย: ถ้า CID ของเขาซ้ำกับผู้ถือรายอื่นแล้ว ให้ reject แถวนั้น (`rejected` / `duplicate` + ล้าง PII) **และยกเลิก stay ใน CouchDB** (ไม่ให้มีผู้ถือ CID ซ้ำ — FR-50) เฉพาะเมื่อ stay ยังเป็น `pre_registered` เท่านั้น · ถ้า staff เช็กอินแล้ว (arriving / active ฯลฯ) แถวจองยัง reject แต่ไม่ยกเลิกคนนั้น (สอดคล้อง FR-53 `not_cancellable`) และ staff ต้องแก้ CID ซ้ำเอง · แถวที่ `written` แล้วคงไว้ตามเดิม
 
 > **[DECIDED 2026-10-15 — D2]** **all-or-nothing**
 
@@ -135,7 +135,7 @@ affects:
   2. ครบทุกแถว → `update_many({booking_id}, {$set: {committed: true}})` แล้วตอบ 201
   3. `DuplicateKeyError` กลางทาง → `delete_many({booking_id, committed: false})` (compensate) แล้วตอบ 409 `duplicate_booking`
 - **FR-32** worker poll เฉพาะแถวที่ `committed != false`
-- **FR-33** worker sweeper: แถว `committed = false` ที่ `created_at` เก่ากว่า **60 วินาที** ถูกลบ (กัน PII ค้างกรณี API crash กลางทาง) `[DECIDED 2026-10-15: 60 วิ]`
+- **FR-33** worker sweeper: แถว `committed = false` ที่ `created_at` เก่ากว่า **60 วินาที** ถูกลบ (กัน PII ค้างกรณี API crash กลางทาง) `[DECIDED 2026-10-15: 60 วิ]` · พร้อมกันนั้นลบแถว `state = pending` ที่เหลือ**ทั้งกลุ่ม** (`booking_id` เดียวกัน) เพราะ `update_many` ใน FR-31 ไม่ atomic อาจเหลือแถว `committed = true` ที่มี PII ค้าง; **ไม่แตะแถว `written` / `cancelled` / `rejected`** `[DECIDED 2026-10-16]`
 - **FR-34** worker ประมวลผลต่อแถวด้วย id ที่ reserve ไว้ (`household_id`/`evacuee_id` ต่อแถว — retry idempotent เหมือนเดิม) หลังผ่าน group pre-check (FR-21); เขียนสำเร็จ → `state = written` + ล้าง PII ต่อแถว
 
 > ทางเลือกที่ตัดทิ้ง: เก็บทั้งกลุ่มเป็น doc เดียวมี `persons[]` + multikey unique index — unique ข้าม document ได้แต่ไม่กัน duplicate ภายใน doc เดียว และทำให้ state/cancel/reject รายคนซับซ้อน
@@ -204,7 +204,7 @@ affects:
 
 ## Migration
 
-- **evacuee schema_v 13 → 14:** additive ล้วน (field optional ใหม่) doc เดิมไม่ต้อง backfill · Zod รับ `booking_ref` optional · reader ทุกจุดต้องไม่พังเมื่อไม่มี field นี้ · ไม่พบ `validate_doc_update` ที่ตรวจ field evacuee ใน code (พบเฉพาะในเอกสาร) — ตรวจซ้ำตอน implement
+- **evacuee schema_v worker 12 / staff 13 → 14:** worker เดิมเขียน evacuee `schema_v` **12** (ไม่ใช่ 13) และตอนนี้เขียน **14** ข้าม 13 · additive ล้วน (field optional ใหม่) doc เดิมไม่ต้อง backfill · Zod รับ `booking_ref` optional · reader ทุกจุดต้องไม่พังเมื่อไม่มี field นี้ · ไม่พบ `validate_doc_update` ที่ตรวจ field evacuee ใน code (พบเฉพาะในเอกสาร) — ตรวจซ้ำตอน implement
 - **`external_bookings`:** field ใหม่มี default (`person_seq=0`, `group_size=1`, `committed=true`) → แถวเดิมคือกลุ่มขนาด 1 ไม่ต้อง backfill; index ใหม่สร้างตอน Beanie init
 - **evacuee จาก booking เดิม (ก่อนงานนี้):** ไม่มี `booking_ref` — ยอมรับ (ไม่ backfill; ช่วงทดลองใช้)
 
@@ -215,4 +215,8 @@ affects:
 - 2026-10-15 — เจ้าของโครงการ: **ไม่รวม household อัตโนมัติ** (ระบบหลักยังจัดการ household ไม่ดี) → 1 คน = 1 household; **เพิ่ม `evacuee.booking_ref` ใน Couch** (schema_v 13→14) เพราะอยู่ช่วงทดลองและไม่กระทบ partner
 - ทางเลือกที่ตัดทิ้งสำหรับ `booking_ref`: ใส่ที่ `household` ด้วย — ตัดทิ้งเพราะหลัง staff รวม household จะกำกวม (หนึ่ง household มีหลายกลุ่ม); evacuee-level คงอยู่หลัง merge
 - 2026-10-15 — **approved** โดยเจ้าของโครงการ ได้เลข CR-169; ข้อที่เคยค้างเคาะตามค่าที่แนะนำ: cap 20 · sweeper 60 วิ · EXT-010 คืน `persons[]` · access log 1 แถว/request
-- 2026-10-16 — เจ้าของโครงการ: **`MAX_PERSONS` 20 → 100** (FR-6) — partner อาจส่งกลุ่มใหญ่กว่า 20 และ 100 เป็นเพดานของ synchronous atomic request; track ด้วยการแก้ FR-6 ใน CR นี้ · ⚠️ ยังไม่ได้วัดเวลาที่ worker เขียน 100 คน (group pre-check + household/evacuee ลง CouchDB ทีละคน) — วัดตอน #578 ก่อน ship ถ้านานเกินรับได้ให้ลดค่า cap
+- 2026-10-16 — เจ้าของโครงการ: **`MAX_PERSONS` 20 → 100** (FR-6) — partner อาจส่งกลุ่มใหญ่กว่า 20 และ 100 เป็นเพดานของ synchronous atomic request; track ด้วยการแก้ FR-6 ใน CR นี้ · วัดเวลาแล้ว (2026-10-17, ดู entry ท้ายสุด): worker เขียน 100 คน ≈ 0.2–1.0 วิ → ไม่ต้องลด cap
+- 2026-10-16 — เจ้าของโครงการ: **sweeper (FR-33) ลบแถว `pending` ทั้งกลุ่มของ `booking_id` ที่มีแถว `committed = false` ค้างเกิน 60 วิ** (ไม่ใช่เฉพาะแถว `committed = false`) — `update_many` commit ของ API (FR-31) ไม่ atomic บน Mongo standalone ถ้า process ถูก kill กลางทางอาจเหลือแถว `committed = true` ที่ยัง `pending` พร้อม PII plaintext และกินสิทธิ์ unique index; worker ไม่ประมวลผลกลุ่มที่ไม่ครบ (นับ `committed` ≠ `group_size`) จึงลบได้อย่างปลอดภัย และไม่แตะแถว terminal (`written` / `cancelled` / `rejected`) เพราะสคริปต์ e2e ใช้ `evacuee_id` / `household_id` จากแถวเหล่านั้น; track ด้วยการแก้ FR-33 ใน CR นี้
+- 2026-10-17 — เจ้าของโครงการ (review รอบ 2 ของ PR #601, track ใน CR นี้): **D1** แก้ FR-21 — ถ้าบางคนของกลุ่มเข้า CouchDB แล้วและรอบ retry พบ CID ซ้ำ ให้ reject เฉพาะคนที่ซ้ำ คนที่เขียนแล้วคงไว้ คนอื่นเขียนต่อ (ไม่ reject ทั้งกลุ่ม เพราะจะทิ้งคนที่ pre-register ไปแล้วไว้ลอย) · **D2** กรณี API ยกเลิกทั้งกลุ่มหลัง worker ล่มกลางทาง → stay ค้าง `pre_registered` ไม่มีแถว `pending` เหลือให้ worker กลับมาจัดการ: **ยอมรับเป็นความเสี่ยง** ย้ายไป #595 (ต้องเคาะ Mango index `['type','booking_ref']` ร่วมกับ #603) · **D3** บันทึกผลวัดเวลา (local single-host, ไม่ใช่ production benchmark): `_persist_group` 100 คน ≈ 0.2 วิ ที่ ~1.6k docs ใน shelter DB และ ≈ 1.0 วิ ที่ ~31.6k docs (Mango duplicate `find` ใช้ index `['type','person_id.number']` = `evacuee-type-person-id-idx` เมื่อมี — index นี้นิยามใน `KIOSK_LOOKUP_MANGO_INDEXES` และ deploy ตอนสร้างศูนย์ / `redeploy-access` / seed; ตรวจ `_explain` ด้วย selector จริงของ worker บนฐานทดลองที่สร้าง index นี้แล้วเลือก `evacuee-type-person-id-idx` แต่ตรวจ local 2026-10-17 พบ `shelter_sh001`–`sh004` **ไม่มี index นี้** (`_explain` เลือก `_all_docs`) → ตัวเลขข้างต้นคือกรณี full scan; ยังไม่ได้วัดเวลาบนฐานที่ provision index ครบ — ต้อง `redeploy-access` ฐาน local/staging ก่อนวัดซ้ำ) → ไม่ลด `MAX_PERSONS`
+- 2026-10-17 — เจ้าของโครงการ (review รอบ 3 ของ PR #601): **D4** แก้ FR-21 — แถวที่ยัง `pending` แต่ doc เข้า CouchDB แล้ว และรอบ retry พบว่า CID ของแถวนั้นซ้ำกับผู้ถือรายอื่น → reject แถวนั้นด้วย (`rejected` / `duplicate` + ล้าง PII) และยกเลิก stay ใน CouchDB (ไม่ให้มีผู้ถือ CID ซ้ำ — FR-50; แถวที่ `written` แล้วไม่แตะ) · **G5** (commit ack หายหลัง flip สำเร็จ → partner ได้ 500 แล้ว retry ได้ 409) ย้ายไป #595 · แก้ migration note (worker เดิมเขียน `schema_v` 12 ไม่ใช่ 13) และหมายเหตุเวลา D3 (index `['type','person_id.number']`) ตามข้างต้น
+- 2026-10-17 — เจ้าของโครงการ (review รอบ 4 ของ PR #601): **H8** ยืนยันพฤติกรรม D4 — worker ยกเลิก stay เฉพาะตอนที่ยังเป็น `pre_registered`; ถ้า staff เช็กอินคนนั้นไปแล้ว แถวจองถูก reject แต่ไม่ยกเลิกคน (สอดคล้อง FR-53 `not_cancellable`) และ staff แก้ CID ซ้ำเอง · เพิ่มข้อความใน FR-21 (ไม่แก้โค้ด)
