@@ -466,19 +466,25 @@ async def _process_cancel(couch: CouchClient, booking: ExternalBooking) -> bool:
     return True
 
 
+async def _find_due() -> list[ExternalBooking]:
+    """Rows to act on; `committed=False` rows are still being staged by the API (FR-32)."""
+    return await ExternalBooking.find(
+        {
+            "committed": {"$ne": False},
+            "$or": [
+                {"state": "pending"},
+                {"state": "written", "cancel_requested": True},
+            ],
+        }
+    ).to_list()
+
+
 async def run_external_booking_inbound_loop(
     couch: CouchClient, *, stop_event: asyncio.Event
 ) -> None:
     while not stop_event.is_set():
         try:
-            due = await ExternalBooking.find(
-                {
-                    "$or": [
-                        {"state": "pending"},
-                        {"state": "written", "cancel_requested": True},
-                    ]
-                }
-            ).to_list()
+            due = await _find_due()
             for booking in due:
                 if stop_event.is_set():
                     break
