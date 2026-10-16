@@ -14,6 +14,7 @@ every attempt lands in `third_party_access_logs` — never with the CID, phone o
 from __future__ import annotations
 
 import asyncio
+import logging
 import re
 from collections.abc import Awaitable
 from dataclasses import dataclass
@@ -69,11 +70,54 @@ HOLD_STATUSES: tuple[str, ...] = (
 
 _DUPLICATE_KEY_CODE = 11000
 _COMMIT_ATTEMPTS = 3
+_CLEANUP_ATTEMPTS = 3
+_RETRY_BACKOFF_SECONDS = 0.05  # multiplied by the attempt number
+
+# Messages here must never carry a CID, phone, name or document body: only the booking_id
+# and the exception *type* are logged.
+logger = logging.getLogger(__name__)
+
+# Strong references so a shielded cleanup task is not garbage-collected mid-flight.
+_cleanup_tasks: set[asyncio.Task[Any]] = set()
 
 
 async def _shielded(cleanup: Awaitable[Any]) -> None:
     """Await `cleanup` so that cancelling the caller does not cancel the cleanup itself."""
-    await asyncio.shield(cleanup)
+    task = asyncio.ensure_future(cleanup)
+    _cleanup_tasks.add(task)
+    task.add_done_callback(_cleanup_tasks.discard)
+    await asyncio.shield(task)
+
+
+async def _delete_with_retry(collection: Any, flt: dict[str, Any]) -> None:
+    booking_id = flt.get("booking_id")
+    for attempt in range(1, _CLEANUP_ATTEMPTS + 1):
+        try:
+            await collection.delete_many(flt)
+            return
+        except Exception as exc:
+            logger.warning(
+                "staged booking cleanup failed (booking_id=%s attempt=%d error=%s)",
+                booking_id,
+                attempt,
+                type(exc).__name__,
+            )
+            if attempt < _CLEANUP_ATTEMPTS:
+                await asyncio.sleep(_RETRY_BACKOFF_SECONDS * attempt)
+    logger.error(
+        "staged booking rows could not be removed (booking_id=%s attempts=%d)",
+        booking_id,
+        _CLEANUP_ATTEMPTS,
+    )
+
+
+async def _cleanup_staged(collection: Any, flt: dict[str, Any]) -> None:
+    """Delete staged rows matching `flt`, shielded from cancellation and retried.
+
+    Never raises on a delete failure (it is logged), so the caller's original exception
+    keeps propagating instead of being masked by the cleanup error.
+    """
+    await _shielded(_delete_with_retry(collection, flt))
 
 
 async def _commit_group(collection: Any, booking_id: str) -> None:
@@ -82,9 +126,16 @@ async def _commit_group(collection: Any, booking_id: str) -> None:
         try:
             await collection.update_many({"booking_id": booking_id}, {"$set": {"committed": True}})
             return
-        except Exception:
+        except Exception as exc:
+            logger.warning(
+                "booking commit failed (booking_id=%s attempt=%d error=%s)",
+                booking_id,
+                attempt,
+                type(exc).__name__,
+            )
             if attempt == _COMMIT_ATTEMPTS:
                 raise
+            await asyncio.sleep(_RETRY_BACKOFF_SECONDS * attempt)
 
 
 def _error(status_code: int, code: str, message: str, detail: str | None = None) -> HTTPException:
@@ -422,31 +473,48 @@ class ThirdPartyBookingsUseCase:
             await ExternalBooking.insert_many(rows, ordered=True)
         except BulkWriteError as exc:
             # Race guard: the unique partial index on (shelter_code, cid_hash).
-            await _shielded(collection.delete_many({"booking_id": booking_id, "committed": False}))
+            await _cleanup_staged(collection, {"booking_id": booking_id, "committed": False})
             write_errors = exc.details.get("writeErrors") or []
-            if not write_errors or write_errors[0].get("code") != _DUPLICATE_KEY_CODE:
-                raise
-            raise await duplicate(rows[write_errors[0]["index"]].person_seq) from None
-        except BaseException:
-            await _shielded(collection.delete_many({"booking_id": booking_id, "committed": False}))
+            if write_errors and write_errors[0].get("code") == _DUPLICATE_KEY_CODE:
+                raise await duplicate(rows[write_errors[0]["index"]].person_seq) from None
+            # `BulkWriteError` embeds the failing rows (plaintext PII) in its details and
+            # str(): log only the error codes and re-raise something that carries no document.
+            codes = [e.get("code") for e in write_errors if isinstance(e.get("code"), int)]
+            logger.error("staged booking insert failed (booking_id=%s codes=%s)", booking_id, codes)
+            raise _error(
+                status.HTTP_500_INTERNAL_SERVER_ERROR,
+                "internal_error",
+                "The booking could not be saved.",
+            ) from None
+        except Exception, asyncio.CancelledError:
+            await _cleanup_staged(collection, {"booking_id": booking_id, "committed": False})
             raise
         try:
             await _commit_group(collection, booking_id)
-        except BaseException:
+        except Exception, asyncio.CancelledError:
             # The flip may have been applied to only some rows, so `committed` can no longer
             # tell this group's rows apart: remove every row of this booking_id that is still
             # `pending`. Rows the worker already advanced cannot be rolled back from here.
-            await _shielded(collection.delete_many({"booking_id": booking_id, "state": "pending"}))
+            await _cleanup_staged(collection, {"booking_id": booking_id, "state": "pending"})
             raise
 
-        await self._log(
-            endpoint=endpoint,
-            claims=claims,
-            client_ip=client_ip,
-            outcome="granted",
-            location_code=location_code,
-            result_count=len(persons),
-        )
+        # The group is committed and the worker will process it: a failing access log must
+        # not turn this into a 500 (the partner's retry would then hit 409).
+        try:
+            await self._log(
+                endpoint=endpoint,
+                claims=claims,
+                client_ip=client_ip,
+                outcome="granted",
+                location_code=location_code,
+                result_count=len(persons),
+            )
+        except Exception as exc:
+            logger.warning(
+                "granted access log failed after commit (booking_id=%s error=%s)",
+                booking_id,
+                type(exc).__name__,
+            )
         return BookingCreatedEnvelope(
             result=BookingCreatedResult(
                 booking_id=booking_id, location_code=location_code, persons_count=len(persons)

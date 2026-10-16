@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from datetime import UTC, datetime
 from typing import Any
 
 import pytest
 from httpx import AsyncClient
-from pymongo.errors import DuplicateKeyError
+from pymongo.errors import BulkWriteError, DuplicateKeyError
 from tent_model.external_booking import ExternalBooking
 from tent_model.public_person import PublicPerson
 from tent_model.public_shelter import PublicShelter
@@ -581,6 +582,136 @@ async def test_commit_step_failure_keeps_rows_the_worker_already_advanced(
     with pytest.raises(RuntimeError):
         await client.post(URL, json=_group_payload(3), headers=GRANTED)
     assert [row["state"] for row in await _rows()] == ["written"]
+
+
+@pytest.fixture(autouse=True)
+def _no_retry_backoff(monkeypatch: pytest.MonkeyPatch) -> None:
+    from apiapp.modules.thirdparty_bookings import use_case
+
+    monkeypatch.setattr(use_case, "_RETRY_BACKOFF_SECONDS", 0)
+
+
+def _fail_delete_many(monkeypatch: pytest.MonkeyPatch, failures: int | None) -> list[int]:
+    """Make `delete_many` on `external_bookings` raise `failures` times (None = always)."""
+    collection = ExternalBooking.get_pymongo_collection()
+    real = type(collection).delete_many
+    calls = [0]
+
+    async def flaky(self: Any, *args: Any, **kwargs: Any) -> Any:
+        if self.name == collection.name:
+            calls[0] += 1
+            if failures is None or calls[0] <= failures:
+                raise RuntimeError("boom")
+        return await real(self, *args, **kwargs)
+
+    monkeypatch.setattr(type(collection), "delete_many", flaky)
+    return calls
+
+
+async def test_non_duplicate_bulk_write_error_is_sanitized(
+    client: AsyncClient,
+    shelters: None,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    from apiapp.modules.thirdparty_bookings import use_case
+
+    async def broken(rows: Any, **kwargs: Any) -> Any:
+        await ExternalBooking.get_pymongo_collection().insert_one(rows[0].model_dump(by_alias=True))
+        leaked = {"cid": CID, "phone": "0812345678", "first_name": "สมชาย"}
+        raise BulkWriteError(
+            {
+                "writeErrors": [
+                    {
+                        "index": 0,
+                        "code": 121,
+                        "errmsg": f"Document failed validation {leaked}",
+                        "op": leaked,
+                    }
+                ],
+                "writeConcernErrors": [],
+                "nInserted": 1,
+            }
+        )
+
+    monkeypatch.setattr(use_case.ExternalBooking, "insert_many", broken)
+    with caplog.at_level(logging.DEBUG):
+        response = await client.post(URL, json=_payload(), headers=GRANTED)
+    assert response.status_code == 500
+    assert response.json()["code"] == "internal_error"
+    # Only the app's own records: pymongo's DEBUG command log would echo the test's own
+    # seeding insert, which is not what is under test here.
+    app_logs = "\n".join(r.getMessage() for r in caplog.records if r.name.startswith("apiapp"))
+    for secret in (CID, "0812345678", "081-234-5678", "สมชาย"):
+        assert secret not in response.text
+        assert secret not in app_logs
+    assert "121" in app_logs  # only the error code is logged
+    assert await _rows() == []
+
+
+async def test_granted_log_failure_after_commit_still_returns_201(
+    client: AsyncClient,
+    shelters: None,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    from apiapp.modules.thirdparty_bookings import use_case
+
+    async def broken(self: Any, *args: Any, **kwargs: Any) -> Any:
+        raise RuntimeError(f"log store down {CID}")
+
+    monkeypatch.setattr(use_case.ThirdPartyAccessLog, "insert", broken)
+    with caplog.at_level(logging.WARNING):
+        response = await client.post(URL, json=_group_payload(3), headers=GRANTED)
+    assert response.status_code == 201
+    rows = await _rows(response.json()["result"]["booking_id"])
+    assert len(rows) == 3
+    assert all(row["committed"] is True for row in rows)
+    assert "RuntimeError" in caplog.text
+    assert CID not in caplog.text  # only the exception type is logged
+
+
+async def test_cleanup_is_retried_after_a_transient_failure(
+    client: AsyncClient, shelters: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from apiapp.modules.thirdparty_bookings import use_case
+
+    async def broken(rows: Any, **kwargs: Any) -> Any:
+        await ExternalBooking.get_pymongo_collection().insert_one(rows[0].model_dump(by_alias=True))
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(use_case.ExternalBooking, "insert_many", broken)
+    calls = _fail_delete_many(monkeypatch, failures=1)
+    with pytest.raises(RuntimeError, match="boom"):
+        await client.post(URL, json=_group_payload(3), headers=GRANTED)
+    assert calls[0] == 2
+    assert await _rows() == []
+
+
+async def test_failed_cleanup_does_not_mask_the_duplicate_409(
+    client: AsyncClient,
+    shelters: None,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    from apiapp.modules.thirdparty_bookings import use_case
+
+    real = use_case.ExternalBooking.insert_many
+
+    async def racing(rows: Any, **kwargs: Any) -> Any:
+        await _booking(cid=_cid(2), booking_id="BK-WINNER")
+        return await real(rows, **kwargs)
+
+    monkeypatch.setattr(use_case.ExternalBooking, "insert_many", racing)
+    calls = _fail_delete_many(monkeypatch, failures=None)
+    with caplog.at_level(logging.WARNING):
+        response = await client.post(URL, json=_group_payload(4), headers=GRANTED)
+    assert response.status_code == 409
+    assert response.json()["code"] == "duplicate_booking"
+    assert response.json()["detail"] == "persons[2]"
+    assert calls[0] == 3
+    assert "could not be removed" in caplog.text
+    assert await _log_statuses() == ["denied_duplicate_booking"]
 
 
 @pytest.mark.parametrize("same_order", [True, False])
