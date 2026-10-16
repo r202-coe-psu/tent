@@ -410,6 +410,27 @@ export async function listUsers(caller: Caller): Promise<UserSummary[]> {
 	return all.filter((u) => codes.some((code) => hasShelterScope(u.roles, code)));
 }
 
+/** Minimal colleague entry — enough to pick a handover target, no contact/PII fields. */
+export interface StaffDirectoryEntry {
+	name: string;
+	display_name: string | null;
+}
+
+/**
+ * Active staff of a shelter (incident handover picker, IL-P5): holds at least one shelter
+ * capability for `code` and is not a volunteer account (`personnel_type = volunteer`).
+ * Callers are gated by `requireShelterScopeOrSA` — colleagues' names only, no contact/PII.
+ */
+export async function listShelterStaffDirectory(code: string): Promise<StaffDirectoryEntry[]> {
+	const bootstrap = bootstrapAdminName();
+	return (await fetchAllUserDocs())
+		.filter((d) => !isProtectedBootstrapAdmin(d, bootstrap))
+		.filter((d) => (d.active ?? true) && d.personnel_type !== 'volunteer')
+		.filter((d) => capabilitiesForShelter(d.roles ?? [], code).length > 0)
+		.map((d) => ({ name: d.name, display_name: toSummary(d).display_name ?? null }))
+		.sort((a, b) => (a.display_name ?? a.name).localeCompare(b.display_name ?? b.name, 'th'));
+}
+
 function managerMayMutateTarget(caller: Caller, targetRoles: readonly string[]): string {
 	if (isAppSystemAdmin(targetRoles)) {
 		throw new ServiceError('FORBIDDEN', 'A manager may not modify a system admin');

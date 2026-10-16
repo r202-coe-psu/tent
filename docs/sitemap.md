@@ -2,8 +2,8 @@
 title: Smart Shelter — Sitemap & Endpoint Map
 status: draft for review
 created: 2026-06-11
-updated: 2026-08-21
-note: แตกจาก api-contract.md v1 + role-permission-matrix — map หน้าจอ (SPA route) ↔ endpoint/doc action แบ่งตามระบบ Intake / Backoffice / Public; CR-040 route `/reports`
+updated: 2026-10-08 # CR-155 — shelter_incident replaces shelter_report
+note: แตกจาก api-contract.md v1 + role-permission-matrix — map หน้าจอ (SPA route) ↔ endpoint/doc action แบ่งตามระบบ Intake / Backoffice / Public; CR-155 route `/back-office/incidents` (แทน `/reports` ของ CR-040)
 ---
 
 # Smart Shelter — Sitemap & Endpoint Map
@@ -121,12 +121,12 @@ Role ย่อ (ดู [role-permission-matrix](prd/role-permission-matrix.md)):
 | ------------ | ----------------------------------------------------------------------- | --------- | ---------------------------------------------------- |
 | `/resources` | daily resource calculation (น้ำ/อาหาร/ของใช้ ต่อ occupancy) + dashboard | FR-45..46 | views + `sop_profile` (catalog, read-only บน device) |
 
-### 2.8 Shelter Reports & Referral — SM เท่านั้น
+### 2.8 Shelter Incident Log & Referral
 
 | Route        | หน้าที่                                                                             | FR    | Endpoint / Data action                                             |
 | ------------ | ----------------------------------------------------------------------------------- | ----- | ------------------------------------------------------------------ |
-| `/reports`   | เปิด/ติดตามรายงานในศูนย์ (`shelter_report` · kind grievance\|incident)              | FR-47 | `put`/`update shelter_report:{ulid}` (state machine, forward-only) |
-| `/referrals` | ส่งต่อหน่วยงานภายนอก — SM เห็น flag medical-emergency แต่ **medical detail = null** | FR-48 | `put referral` (state `draft→sent→accepted                         | rejected→closed`) |
+| `/back-office/incidents` (`/new`, `/{id}`) | บันทึกเหตุการณ์ประจำวัน — staff ทุกคนในศูนย์ (CR-155) | FR-47 | `put`/`update shelter_incident:{ulid}` (state machine, append timeline) · `GET /api/v1/shelters/{code}/staff` |
+| `/referrals` | ส่งต่อหน่วยงานภายนอก (SM เท่านั้น) — SM เห็น flag medical-emergency แต่ **medical detail = null** | FR-48 | `put referral` (state `draft→sent→accepted                         | rejected→closed`) |
 
 ### 2.9 Administration — SA, SM (ตาม scope ศูนย์)
 

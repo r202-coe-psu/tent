@@ -11,6 +11,7 @@ import {
 	isSystemAdmin,
 	canAccessDistributionDesk,
 	canAccessMedicalScreening,
+	canAccessIncidents,
 	canAccessVolunteerBackoffice,
 	canAccessZoning,
 	canManageScanners,
@@ -302,6 +303,15 @@ export async function requireZoning(fetchFn?: typeof fetch) {
 	await requireAuth(fetchFn);
 	const roles = authStore.user?.roles ?? [];
 	if (!canAccessZoning(roles, activeShelterCode(roles))) {
+		throw redirect(302, resolve(LANDING_ROUTE));
+	}
+}
+
+/** Shelter Incident Log — any staff with the active shelter scope (or SA). */
+export async function requireIncidents(fetchFn?: typeof fetch) {
+	await requireAuth(fetchFn);
+	const roles = authStore.user?.roles ?? [];
+	if (!canAccessIncidents(roles, activeShelterCode(roles))) {
 		throw redirect(302, resolve(LANDING_ROUTE));
 	}
 }

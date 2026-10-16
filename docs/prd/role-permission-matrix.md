@@ -2,7 +2,7 @@
 title: "Full-System Role Permission Matrix (R2-R4 & V10)"
 status: approved
 created: 2026-06-04
-updated: 2026-10-11 # CR-162 banner_staff (11th role); เดิม: CR-093 (Compound Roles) & CR-104 (Volunteer Backoffice, 10-Role Taxonomy, Health Policy); decision sync 2026-10-10
+updated: 2026-10-11 # CR-162 banner_staff (11th role); เดิม: CR-093 (Compound Roles) & CR-104 (Volunteer Backoffice, 10-Role Taxonomy, Health Policy); decision sync 2026-10-10; CR-155 shelter_incident แทน shelter_report
 note: decision sync 2026-10-10 — VC may access /back-office/volunteers (job board/shifts), REG may access Station 2 medical screening; portal groups menus by department (ฝ่าย): ทะเบียน(REG; TRG/MED เห็นเฉพาะ Station 2), ครัว(KS), พัสดุและคลัง(SC, warehouse_staff alias), อาสาสมัคร(VC), รักษาความปลอดภัย(SO), อาคารสถานที่(FAC), บริหารศูนย์(SM), ส่วนกลาง(SA)
 closes: K-12 (A1 RBAC phase-blocker)
 affects:
@@ -98,7 +98,7 @@ affects:
 | **Inventory & Supply** | รับของบริจาค, ตัดจ่ายพัสดุ, สต็อก | ✓ | scope | — | — | — | — | scope | — | — | — |
 | **Volunteer Job Board** | สร้างประกาศภารกิจงานอาสา, จัดกะ | ✓ | scope | — | — | — | — | — | scope | — | — |
 | **Volunteer Check-in** | รับรายงานตัวอาสาหน้างาน (POS/Kiosk) | ✓ | scope | scope | — | — | — | — | scope | — | — |
-| **Security Incidents** | บันทึกเหตุการณ์ความไม่ปลอดภัย | ✓ | scope | — | — | — | — | — | — | scope | — |
+| **Shelter Incident Log** ([CR-155](../changes/08-E-reports/CR-155-shelter-incident-log.md)) | เปิดบันทึก + เพิ่มบันทึกสังเกตการณ์ (ทุก staff) · เปลี่ยนสถานะ/ส่งต่อ/ปิด = เจ้าของเคสหรือ SM · ยกเลิก = SM · ลบไม่ได้ทุก role | ✓ | scope | scope | scope | scope | scope | scope | scope | scope | scope |
 | **Zoning & Facilities** | จัดการโซน, เต็นท์, ทรัพย์สินอาคาร | ✓ | scope | — | — | — | — | — | — | — | scope |
 | **User Management** | สร้าง/แก้ไขผู้ใช้ประจำศูนย์ตน | ✓ | scope | — | — | — | — | — | — | — | — |
 
