@@ -151,3 +151,42 @@ export function splitByView<T extends Pick<KioskBannerDoc, 'start_at' | 'end_at'
 		.sort((a, b) => Date.parse(b.end_at) - Date.parse(a.end_at));
 	return { current, expired };
 }
+
+type OrderSubject = Pick<KioskBannerDoc, '_id' | 'order' | 'end_at'> & {
+	screen_type?: KioskScreenType | null;
+};
+
+/** Same "current" rule as {@link splitByView}: not yet expired. */
+const isCurrentAt = (banner: Pick<KioskBannerDoc, 'end_at'>, t: number): boolean =>
+	Date.parse(banner.end_at) >= t;
+
+/**
+ * Current banners (inactive included) already holding this `order` on the same screen type
+ * (FR-KBR-45). Informational only: duplicates stay allowed, the kiosk falls back to `start_at`.
+ */
+export function findOrderConflicts<T extends OrderSubject>(
+	banners: readonly T[],
+	query: { order: number; screen_type: KioskScreenType; excludeId?: string; now: Date }
+): T[] {
+	const t = query.now.getTime();
+	return banners.filter(
+		(b) =>
+			b.order === query.order &&
+			matchesScreen(b, query.screen_type) &&
+			isCurrentAt(b, t) &&
+			b._id !== query.excludeId
+	);
+}
+
+/** `max(order) + 1` among current banners of this screen type; the default order when none. */
+export function nextBannerOrder(
+	banners: readonly Pick<OrderSubject, 'order' | 'end_at' | 'screen_type'>[],
+	screen_type: KioskScreenType,
+	now: Date
+): number {
+	const t = now.getTime();
+	const orders = banners
+		.filter((b) => matchesScreen(b, screen_type) && isCurrentAt(b, t))
+		.map((b) => b.order);
+	return orders.length ? Math.max(...orders) + 1 : KIOSK_BANNER_LIMITS.orderDefault;
+}

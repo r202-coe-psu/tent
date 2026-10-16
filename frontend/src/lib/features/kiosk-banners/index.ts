@@ -1,11 +1,13 @@
 export {
 	KIOSK_BANNER_LIMITS,
 	createKioskBanner,
+	findOrderConflicts,
 	isActiveAt,
 	kioskBannerDocSchema,
 	kioskBannerInputSchema,
 	kioskBannerStatusSchema,
 	matchesScreen,
+	nextBannerOrder,
 	sortBanners,
 	splitByView
 } from './domain/kiosk-banner';

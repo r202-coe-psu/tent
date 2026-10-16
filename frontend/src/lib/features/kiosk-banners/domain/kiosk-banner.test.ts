@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
 	createKioskBanner,
+	findOrderConflicts,
 	isActiveAt,
 	kioskBannerDocSchema,
 	kioskBannerInputSchema,
 	matchesScreen,
+	nextBannerOrder,
 	sortBanners,
 	splitByView
 } from './kiosk-banner';
@@ -274,5 +276,81 @@ describe('splitByView', () => {
 
 	it('returns empty lists for empty input', () => {
 		expect(splitByView([], now)).toEqual({ current: [], expired: [] });
+	});
+});
+
+describe('order conflicts (FR-KBR-45)', () => {
+	const now = new Date('2026-10-16T00:00:00.000Z');
+	const banner = (
+		id: string,
+		order: number,
+		extra: { screen_type?: 'compact' | 'portrait'; end_at?: string } = {}
+	) => ({
+		_id: `kiosk_banner:${id}`,
+		order,
+		end_at: extra.end_at ?? '2026-10-20T00:00:00.000Z',
+		screen_type: extra.screen_type
+	});
+
+	describe('findOrderConflicts', () => {
+		it('returns banners with the same order and screen type', () => {
+			const a = banner('a', 2, { screen_type: 'compact' });
+			const list = [a, banner('b', 3, { screen_type: 'compact' })];
+			expect(findOrderConflicts(list, { order: 2, screen_type: 'compact', now })).toEqual([a]);
+		});
+
+		it('ignores another screen type', () => {
+			const list = [banner('a', 2, { screen_type: 'portrait' })];
+			expect(findOrderConflicts(list, { order: 2, screen_type: 'compact', now })).toEqual([]);
+		});
+
+		it('counts a legacy banner (no screen type) as compact', () => {
+			const legacy = banner('a', 2);
+			expect(findOrderConflicts([legacy], { order: 2, screen_type: 'compact', now })).toEqual([
+				legacy
+			]);
+			expect(findOrderConflicts([legacy], { order: 2, screen_type: 'portrait', now })).toEqual([]);
+		});
+
+		it('ignores expired banners but keeps one ending exactly now', () => {
+			const expired = banner('a', 2, { end_at: '2026-10-15T23:59:59.000Z' });
+			const endsNow = banner('b', 2, { end_at: now.toISOString() });
+			expect(
+				findOrderConflicts([expired, endsNow], { order: 2, screen_type: 'compact', now })
+			).toEqual([endsNow]);
+		});
+
+		it('excludes the banner being edited', () => {
+			const a = banner('a', 2);
+			const b = banner('b', 2);
+			expect(
+				findOrderConflicts([a, b], {
+					order: 2,
+					screen_type: 'compact',
+					excludeId: 'kiosk_banner:a',
+					now
+				})
+			).toEqual([b]);
+		});
+	});
+
+	describe('nextBannerOrder', () => {
+		it('is max order + 1 among current banners of that screen type', () => {
+			const list = [
+				banner('a', 2),
+				banner('b', 5, { screen_type: 'compact' }),
+				banner('c', 9, { screen_type: 'portrait' }),
+				banner('d', 7, { end_at: '2026-10-01T00:00:00.000Z' })
+			];
+			expect(nextBannerOrder(list, 'compact', now)).toBe(6);
+			expect(nextBannerOrder(list, 'portrait', now)).toBe(10);
+		});
+
+		it('is the default order (1) when there is none', () => {
+			expect(nextBannerOrder([], 'compact', now)).toBe(1);
+			expect(nextBannerOrder([banner('a', 4, { screen_type: 'portrait' })], 'compact', now)).toBe(
+				1
+			);
+		});
 	});
 });
