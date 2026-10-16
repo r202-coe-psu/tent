@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import traceback
 from datetime import UTC, datetime
 from typing import Any
 
@@ -15,7 +16,8 @@ from tent_model.public_person import PublicPerson
 from tent_model.public_shelter import PublicShelter
 from tent_model.third_party_access_log import ThirdPartyAccessLog
 
-from apiapp.modules.thirdparty_auth.scopes import mint_access_token
+from apiapp.modules.thirdparty_auth.scopes import ThirdPartyClaims, mint_access_token
+from apiapp.modules.thirdparty_bookings.schemas import BookingCreateRequest
 from apiapp.utils.masking import national_id_hash
 
 URL = "/external/bookings"
@@ -179,6 +181,17 @@ async def _group(
     ]
 
 
+async def _assert_one_internal_error_log() -> None:
+    """The 500 paths are audited like every other attempt: one row, no PII, count 0."""
+    logs = await ThirdPartyAccessLog.find_all().to_list()
+    assert [(log.endpoint, log.status, log.result_count) for log in logs] == [
+        ("EXT-008", "denied_internal_error", 0)
+    ]
+    dumped = str(logs[0].model_dump())
+    for secret in _PII:
+        assert secret not in dumped
+
+
 async def _rows(booking_id: str | None = None) -> list[dict[str, Any]]:
     query = {"booking_id": booking_id} if booking_id else {}
     cursor = ExternalBooking.get_pymongo_collection().find(query).sort("person_seq")
@@ -187,6 +200,56 @@ async def _rows(booking_id: str | None = None) -> list[dict[str, Any]]:
 
 async def _log_statuses() -> list[str]:
     return [log.status for log in await ThirdPartyAccessLog.find_all().to_list()]
+
+
+def _chain_text(exc: BaseException) -> str:
+    """Everything a log handler could print for `exc` and every exception chained to it."""
+    parts: list[str] = []
+    seen: set[int] = set()
+    pending: list[BaseException | None] = [exc]
+    while pending:
+        current = pending.pop()
+        if current is None or id(current) in seen:
+            continue
+        seen.add(id(current))
+        parts.append(f"{type(current).__name__} {current!r} {current}")
+        parts.append("".join(traceback.format_exception(current)))
+        pending += [current.__cause__, current.__context__, *getattr(current, "exceptions", ())]
+    return "\n".join(parts)
+
+
+def _chain_has_bulk_write_error(exc: BaseException) -> bool:
+    seen: set[int] = set()
+    pending: list[BaseException | None] = [exc]
+    while pending:
+        current = pending.pop()
+        if current is None or id(current) in seen:
+            continue
+        seen.add(id(current))
+        if isinstance(current, BulkWriteError):
+            return True
+        pending += [current.__cause__, current.__context__, *getattr(current, "exceptions", ())]
+    return False
+
+
+_PII = (CID, "0812345678", "081-234-5678", "สมชาย", "ใจดี")
+
+
+async def _drain_detached() -> None:
+    """Wait for detached cleanup / log tasks that outlive a cancelled request."""
+    from apiapp.modules.thirdparty_bookings import use_case
+
+    while use_case._detached_tasks:
+        await asyncio.gather(*list(use_case._detached_tasks), return_exceptions=True)
+
+
+def _create_directly(body: dict[str, Any]) -> Any:
+    from apiapp.modules.thirdparty_bookings.use_case import ThirdPartyBookingsUseCase
+
+    claims = ThirdPartyClaims(client_id="m2-test", module_name="M2", scopes=["booking-write"])
+    return ThirdPartyBookingsUseCase().create_booking(
+        body=BookingCreateRequest.model_validate(body), claims=claims, client_ip="127.0.0.1"
+    )
 
 
 # --- EXT-008 ----------------------------------------------------------------------
@@ -561,6 +624,7 @@ async def test_commit_step_failure_removes_every_pending_row(
         await client.post(URL, json=_group_payload(3), headers=GRANTED)
     assert calls[0] == 3
     assert [row["booking_id"] for row in await _rows()] == ["BK-OTHER"]
+    await _assert_one_internal_error_log()
 
 
 async def test_commit_step_failure_keeps_rows_the_worker_already_advanced(
@@ -647,6 +711,7 @@ async def test_non_duplicate_bulk_write_error_is_sanitized(
         assert secret not in app_logs
     assert "121" in app_logs  # only the error code is logged
     assert await _rows() == []
+    await _assert_one_internal_error_log()
 
 
 async def test_granted_log_failure_after_commit_still_returns_201(
@@ -742,6 +807,158 @@ async def test_group_rows_are_invisible_until_committed(client: AsyncClient) -> 
     await _group(2, committed=False)
     assert (await client.get(f"{URL}/BK-GROUP001", headers=GRANTED)).status_code == 404
     assert (await client.post(_cancel_url("BK-GROUP001"), headers=GRANTED)).status_code == 404
+
+
+@pytest.mark.parametrize("how", ["one_still_staged", "one_row_missing"])
+async def test_partially_committed_group_is_not_found(client: AsyncClient, how: str) -> None:
+    """Mid commit-flip a reader sees only part of the group: it must read as not found."""
+    await _group(3)
+    collection = ExternalBooking.get_pymongo_collection()
+    if how == "one_still_staged":
+        await collection.update_one({"_id": "BP-BK-GROUP001-2"}, {"$set": {"committed": False}})
+    else:
+        await collection.delete_one({"_id": "BP-BK-GROUP001-2"})
+    before = await _rows()
+
+    cancel = await client.post(_cancel_url("BK-GROUP001"), headers=GRANTED)
+    status = await client.get(f"{URL}/BK-GROUP001", headers=GRANTED)
+    assert cancel.status_code == 404
+    assert cancel.json()["code"] == "booking_not_found"
+    assert status.status_code == 404
+    assert await _rows() == before  # nothing was cancelled or cleared
+    assert await _log_statuses() == ["denied_booking_not_found"] * 2
+
+
+async def test_legacy_row_without_group_fields_is_a_complete_group(client: AsyncClient) -> None:
+    await _booking(booking_id="BK-LEGACY")
+    await ExternalBooking.get_pymongo_collection().update_one(
+        {"_id": "BK-LEGACY"}, {"$unset": {"committed": "", "group_size": "", "person_seq": ""}}
+    )
+    status = await client.get(f"{URL}/BK-LEGACY", headers=GRANTED)
+    assert status.status_code == 200
+    assert status.json()["result"]["booking_status"] == "BOOKED"
+    cancel = await client.post(_cancel_url("BK-LEGACY"), headers=GRANTED)
+    assert cancel.status_code == 200
+
+
+async def test_log_failure_during_duplicate_race_leaves_no_pii_in_the_chain(
+    client: AsyncClient, shelters: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`BulkWriteError` embeds the rows; nothing raised later may chain back to it."""
+    from apiapp.modules.thirdparty_bookings import use_case
+
+    real = use_case.ExternalBooking.insert_many
+
+    async def racing(rows: Any, **kwargs: Any) -> Any:
+        await _booking(cid=CID, booking_id="BK-WINNER")
+        return await real(rows, **kwargs)
+
+    async def broken(self: Any, *args: Any, **kwargs: Any) -> Any:
+        raise RuntimeError("log store down")
+
+    monkeypatch.setattr(use_case.ExternalBooking, "insert_many", racing)
+    monkeypatch.setattr(use_case.ThirdPartyAccessLog, "insert", broken)
+    with pytest.raises(RuntimeError, match="log store down") as caught:
+        await client.post(URL, json=_payload(), headers=GRANTED)
+    assert not _chain_has_bulk_write_error(caught.value)
+    text = _chain_text(caught.value)
+    for secret in _PII:
+        assert secret not in text
+    assert [row["booking_id"] for row in await _rows()] == ["BK-WINNER"]
+
+
+async def test_cancelled_request_waits_for_the_insert_before_cleanup(
+    client: AsyncClient, shelters: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Cleanup must not run before mongod applied an insert whose caller was cancelled."""
+    from apiapp.modules.thirdparty_bookings import use_case
+
+    real = use_case.ExternalBooking.insert_many
+    started, release = asyncio.Event(), asyncio.Event()
+    applied: list[bool] = []
+
+    async def slow(rows: Any, **kwargs: Any) -> Any:
+        started.set()
+        await release.wait()
+        result = await real(rows, **kwargs)
+        applied.append(True)
+        return result
+
+    monkeypatch.setattr(use_case.ExternalBooking, "insert_many", slow)
+    request = asyncio.create_task(_create_directly(_group_payload(3)))
+    await started.wait()
+    request.cancel()
+    await asyncio.sleep(0)  # the request is now cancelled while its insert is still in flight
+    release.set()
+    with pytest.raises(asyncio.CancelledError):
+        await request
+    await _drain_detached()
+    assert applied == [True]  # the insert really landed after the cancellation...
+    assert await _rows() == []  # ...and was still cleaned up
+    assert await _log_statuses() == []
+
+
+async def test_cancelled_granted_log_still_returns_the_booking(
+    client: AsyncClient, shelters: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from apiapp.modules.thirdparty_bookings import use_case
+
+    real = use_case.ThirdPartyAccessLog.insert
+    started, release = asyncio.Event(), asyncio.Event()
+
+    async def slow(self: Any, *args: Any, **kwargs: Any) -> Any:
+        started.set()
+        await release.wait()
+        return await real(self, *args, **kwargs)
+
+    monkeypatch.setattr(use_case.ThirdPartyAccessLog, "insert", slow)
+    request = asyncio.create_task(_create_directly(_group_payload(3)))
+    await started.wait()
+    request.cancel()
+    release.set()
+    envelope = await request  # the commit already happened, so the result is still returned
+    assert envelope.result.persons_count == 3
+    await _drain_detached()
+    rows = await _rows(envelope.result.booking_id)
+    assert len(rows) == 3
+    assert all(row["committed"] is True for row in rows)
+    assert await _log_statuses() == ["granted"]  # the detached write still completed
+
+
+async def test_staging_rows_of_another_request_do_not_trip_the_pre_check(
+    client: AsyncClient, shelters: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The pre-check ignores `committed=False` rows; the unique index still decides at insert."""
+    from apiapp.modules.thirdparty_bookings import use_case
+
+    await _booking(cid=_cid(1), booking_id="BK-STAGING", committed=False)
+    real = use_case.ExternalBooking.insert_many
+    inserts: list[int] = []
+
+    async def spy(rows: Any, **kwargs: Any) -> Any:
+        inserts.append(len(rows))
+        return await real(rows, **kwargs)
+
+    monkeypatch.setattr(use_case.ExternalBooking, "insert_many", spy)
+    response = await client.post(URL, json=_group_payload(3), headers=GRANTED)
+    # Reaching the insert proves the pre-check did not fire. The index then still refuses
+    # the CID that the other request holds (409), and our own rows are rolled back.
+    assert inserts == [3]
+    assert response.status_code == 409
+    assert response.json()["detail"] == "persons[1]"
+    assert [row["booking_id"] for row in await _rows()] == ["BK-STAGING"]
+
+
+async def test_rolled_back_group_does_not_block_a_later_booking(
+    client: AsyncClient, shelters: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _fail_update_many(monkeypatch, failures=3)  # every attempt of the first request fails
+    with pytest.raises(RuntimeError):
+        await client.post(URL, json=_group_payload(3), headers=GRANTED)
+    assert await _rows() == []
+    response = await client.post(URL, json=_group_payload(3), headers=GRANTED)
+    assert response.status_code == 201
+    assert len(await _rows(response.json()["result"]["booking_id"])) == 3
 
 
 # --- EXT-009 ----------------------------------------------------------------------
