@@ -628,7 +628,13 @@ class ThirdPartyBookingsUseCase:
                 outcome="denied_internal_error",
                 location_code=location_code,
             )
-            raise commit_error
+            # Same sanitized 500 as the insert-failure path (partner `internal_error`
+            # body, no exception text); `_with_retry` already logged the error type.
+            raise _error(
+                status.HTTP_500_INTERNAL_SERVER_ERROR,
+                "internal_error",
+                "The booking could not be saved.",
+            )
 
         # The group is committed and the worker will process it: a failing or cancelled
         # access log must not turn this into an error (the partner's retry would then hit 409).
