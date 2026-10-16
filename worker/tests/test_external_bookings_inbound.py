@@ -14,6 +14,7 @@ from tent_model import ExternalBooking
 
 from worker.inbound.external_bookings import (
     HOLD_STATUSES,
+    _find_due,
     _persist_booking,
     _process_cancel,
     build_evacuee_doc,
@@ -464,3 +465,39 @@ async def test_cancel_already_cancelled_stay_finishes_booking(db):
     row = await _row()
     assert row["state"] == "cancelled"
     assert row["cancel_requested"] is False
+
+
+async def test_poll_skips_rows_still_being_staged(db):
+    """FR-32 — neither the pending nor the cancel branch may pick up `committed=False`."""
+    await _insert(id="BP-staged-pending", booking_id="BK-S1", committed=False)
+    await _insert(
+        id="BP-staged-cancel",
+        booking_id="BK-S1",
+        cid_hash="h1",
+        committed=False,
+        state="written",
+        cancel_requested=True,
+    )
+    await _insert(id="BP-pending", booking_id="BK-S2", cid_hash="h2")
+    await _insert(
+        id="BP-cancel",
+        booking_id="BK-S3",
+        cid_hash="h3",
+        state="written",
+        cancel_requested=True,
+    )
+    await _insert(id="BP-idle", booking_id="BK-S4", cid_hash="h4", state="written")
+
+    assert sorted(booking.id for booking in await _find_due()) == [
+        "BP-cancel",
+        "BP-pending",
+    ]
+
+
+async def test_poll_includes_rows_without_committed_key(db):
+    """Rows written before CR-169 have no `committed` field and are committed."""
+    await _insert()
+    await ExternalBooking.get_pymongo_collection().update_one(
+        {"_id": BOOKING_ID}, {"$unset": {"committed": ""}}
+    )
+    assert [booking.id for booking in await _find_due()] == [BOOKING_ID]

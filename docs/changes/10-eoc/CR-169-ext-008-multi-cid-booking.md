@@ -3,7 +3,7 @@ id: CR-169
 title: EXT-008 รับหลาย CID ใน booking เดียว — group key ใน external_bookings + evacuee.booking_ref (schema_v 13→14), 1 คน = 1 household (รวม household เลื่อนไปก่อน)
 status: approved
 date: 2026-10-15
-updated: 2026-10-15
+updated: 2026-10-16
 requested_by: เจ้าของโครงการ
 decided_by: เจ้าของโครงการ
 layer: volatile
@@ -96,7 +96,7 @@ affects:
 - **FR-3** `location_code` อยู่ระดับ request (ทุกคนจองศูนย์เดียวกัน) · ตรวจ FR-14/15/16 ครั้งเดียวต่อ request
 - **FR-4** `cid` ซ้ำกันภายใน request เดียว → 422 `validation_error` (ไม่ไปถึงขั้นตรวจ duplicate_booking)
 - **FR-5** `booking_id` ใน response = **รหัสกลุ่ม** ที่ใช้กับ EXT-009/010 (1 request = 1 `booking_id`)
-- **FR-6** `MAX_PERSONS` = **20** `[DECIDED 2026-10-15: 20]`
+- **FR-6** `MAX_PERSONS` = **100** `[DECIDED 2026-10-16: 100]` (เดิม 20 ตอน approve 2026-10-15 — partner อาจส่งกลุ่มใหญ่กว่า 20; 100 คือเพดานของ request แบบ synchronous all-or-nothing, ปรับที่ const ตัวเดียวใน use case)
 
 > **[DECIDED 2026-10-15 — D1]** **รับสอง shape**: ถ้า body มี `cid` ระดับบนแบบเดิมและไม่มี `persons` ให้ถือเป็น `persons` ยาว 1 (behavior เหมือนเดิมทุกประการ + `persons_count: 1`); ส่งทั้งสอง shape พร้อมกัน = 422
 
@@ -171,7 +171,7 @@ affects:
 
 - [ ] `persons` 3 คน → 201 `persons_count: 3` และภายใน ~10 วินาทีมี `household` 3 + `evacuee` 3 ใน `shelter_{code}` (`pre_registered`, `registered_via: api`, `gender: null`) ทุก evacuee มี `booking_ref` = `booking_id` เดียวกัน และ `schema_v = 14`; forecast occupancy +3
 - [ ] body เดิม (single `cid`) ยังตอบ 201 พฤติกรรมเดิม และ evacuee ได้ `booking_ref`
-- [ ] `cid` ซ้ำใน request เดียวกัน → 422 · `persons` ว่าง/เกิน cap → 422
+- [ ] `cid` ซ้ำใน request เดียวกัน → 422 · `persons` ว่าง/เกิน cap (100) → 422
 - [ ] คนใดคนหนึ่งซ้ำที่ศูนย์เดียวกัน → 409 `duplicate_booking` + `detail` ระบุดัชนี และ **ไม่มีแถวใดถูกสร้าง/ค้าง** ใน `external_bookings`
 - [ ] ยิง 2 request พร้อมกันที่มี CID ทับกัน ได้ 201 หนึ่ง / 409 หนึ่ง และไม่มีแถว `committed=false` ค้าง
 - [ ] API ล้มกลางการ insert (จำลอง) → worker ไม่หยิบกลุ่มนั้น และ sweeper ลบแถว `committed=false` ภายใน 60 วินาที
@@ -215,3 +215,4 @@ affects:
 - 2026-10-15 — เจ้าของโครงการ: **ไม่รวม household อัตโนมัติ** (ระบบหลักยังจัดการ household ไม่ดี) → 1 คน = 1 household; **เพิ่ม `evacuee.booking_ref` ใน Couch** (schema_v 13→14) เพราะอยู่ช่วงทดลองและไม่กระทบ partner
 - ทางเลือกที่ตัดทิ้งสำหรับ `booking_ref`: ใส่ที่ `household` ด้วย — ตัดทิ้งเพราะหลัง staff รวม household จะกำกวม (หนึ่ง household มีหลายกลุ่ม); evacuee-level คงอยู่หลัง merge
 - 2026-10-15 — **approved** โดยเจ้าของโครงการ ได้เลข CR-169; ข้อที่เคยค้างเคาะตามค่าที่แนะนำ: cap 20 · sweeper 60 วิ · EXT-010 คืน `persons[]` · access log 1 แถว/request
+- 2026-10-16 — เจ้าของโครงการ: **`MAX_PERSONS` 20 → 100** (FR-6) — partner อาจส่งกลุ่มใหญ่กว่า 20 และ 100 เป็นเพดานของ synchronous atomic request; track ด้วยการแก้ FR-6 ใน CR นี้ · ⚠️ ยังไม่ได้วัดเวลาที่ worker เขียน 100 คน (group pre-check + household/evacuee ลง CouchDB ทีละคน) — วัดตอน #578 ก่อน ship ถ้านานเกินรับได้ให้ลดค่า cap

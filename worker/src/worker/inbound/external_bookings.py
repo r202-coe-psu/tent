@@ -60,6 +60,14 @@ def _now_iso() -> str:
     return datetime.now(UTC).isoformat().replace("+00:00", "Z")
 
 
+def _ref(booking: ExternalBooking) -> str:
+    """Log label for a row: its own id plus the partner-visible group id and position.
+
+    Ids and counters only — never PII — so operators can grep logs by the `BK-…` id.
+    """
+    return f"{booking.id} (booking_id={booking.booking_id} person_seq={booking.person_seq})"
+
+
 def partner_actor(module_name: str | None, client_id: str) -> str:
     """``created_by`` for partner writes — module when known, else client (FR-62)."""
     return f"partner:{module_name}" if module_name else f"partner:{client_id}"
@@ -215,13 +223,13 @@ async def _persist_booking(couch: CouchClient, booking: ExternalBooking) -> bool
     database = shelter_db_name(booking.shelter_code)
     if not await couch.database_exists(database):
         logger.warning(
-            "Shelter database %s missing for booking %s", database, booking.id
+            "Shelter database %s missing for booking %s", database, _ref(booking)
         )
         return False
     if not booking.cid or not booking.first_name:
         # PII is only cleared on a terminal transition — a pending row without it
         # cannot be written and would loop forever, so surface it loudly.
-        logger.error("Pending booking %s has no PII to write — skipping", booking.id)
+        logger.error("Pending booking %s has no PII to write — skipping", _ref(booking))
         return False
 
     # Reserve ids before touching CouchDB so a retry re-uses them (conflict = written).
@@ -233,7 +241,9 @@ async def _persist_booking(couch: CouchClient, booking: ExternalBooking) -> bool
             "household_id": booking.household_id or f"household:{new_ulid()}",
         }
         if not await _transition(booking, _PENDING, reserved):
-            logger.info("Booking %s left pending before write — skipping", booking.id)
+            logger.info(
+                "Booking %s left pending before write — skipping", _ref(booking)
+            )
             return True
 
     try:
@@ -249,7 +259,7 @@ async def _persist_booking(couch: CouchClient, booking: ExternalBooking) -> bool
             limit=1,
         )
     except Exception:
-        logger.exception("Duplicate check failed for booking %s", booking.id)
+        logger.exception("Duplicate check failed for booking %s", _ref(booking))
         return False
 
     if duplicates:
@@ -259,7 +269,9 @@ async def _persist_booking(couch: CouchClient, booking: ExternalBooking) -> bool
             {"state": "rejected", "reject_reason": "duplicate", **_PII_CLEARED},
         )
         if rejected:
-            logger.info("Rejected booking %s as duplicate in %s", booking.id, database)
+            logger.info(
+                "Rejected booking %s as duplicate in %s", _ref(booking), database
+            )
         return True
 
     now = _now_iso()
@@ -289,7 +301,7 @@ async def _persist_booking(couch: CouchClient, booking: ExternalBooking) -> bool
     try:
         rows = await couch.bulk_docs(database, docs)
     except Exception:
-        logger.exception("Bulk write failed for booking %s", booking.id)
+        logger.exception("Bulk write failed for booking %s", _ref(booking))
         return False
 
     # `conflict` on a reserved id = already written by an earlier attempt.
@@ -300,12 +312,14 @@ async def _persist_booking(couch: CouchClient, booking: ExternalBooking) -> bool
     ]
     if hard:
         detail = ", ".join(f"{row.get('id')}={row.get('error')}" for row in hard)
-        logger.error("Bulk write row failures for booking %s: %s", booking.id, detail)
+        logger.error(
+            "Bulk write row failures for booking %s: %s", _ref(booking), detail
+        )
         return False
 
     if await _transition(booking, _PENDING, {"state": "written", **_PII_CLEARED}):
         logger.info(
-            "Wrote booking %s to %s as %s", booking.id, database, booking.evacuee_id
+            "Wrote booking %s to %s as %s", _ref(booking), database, booking.evacuee_id
         )
         return True
 
@@ -318,13 +332,13 @@ async def _persist_booking(couch: CouchClient, booking: ExternalBooking) -> bool
     ):
         logger.info(
             "Booking %s cancelled during write — queued stay cancel for %s",
-            booking.id,
+            _ref(booking),
             booking.evacuee_id,
         )
     else:
         logger.warning(
             "Booking %s left pending during write; evacuee %s written but row not updated",
-            booking.id,
+            _ref(booking),
             booking.evacuee_id,
         )
     return True
@@ -383,7 +397,7 @@ async def _process_cancel(couch: CouchClient, booking: ExternalBooking) -> bool:
     database = shelter_db_name(booking.shelter_code)
     if not await couch.database_exists(database):
         logger.warning(
-            "Shelter database %s missing for booking %s", database, booking.id
+            "Shelter database %s missing for booking %s", database, _ref(booking)
         )
         return False
 
@@ -394,7 +408,7 @@ async def _process_cancel(couch: CouchClient, booking: ExternalBooking) -> bool:
             else None
         )
     except Exception:
-        logger.exception("Could not read evacuee for booking %s", booking.id)
+        logger.exception("Could not read evacuee for booking %s", _ref(booking))
         return False
 
     status = ((evacuee or {}).get("current_stay") or {}).get("status")
@@ -404,7 +418,7 @@ async def _process_cancel(couch: CouchClient, booking: ExternalBooking) -> bool:
             _CANCEL_DUE,
             {"cancel_requested": False, "reject_reason": "not_cancellable"},
         )
-        logger.info("Booking %s not cancellable (stay=%s)", booking.id, status)
+        logger.info("Booking %s not cancellable (stay=%s)", _ref(booking), status)
         return True
 
     if status == "pre_registered":
@@ -420,7 +434,7 @@ async def _process_cancel(couch: CouchClient, booking: ExternalBooking) -> bool:
                 },
             )
         except Exception:
-            logger.exception("Could not cancel evacuee for booking %s", booking.id)
+            logger.exception("Could not cancel evacuee for booking %s", _ref(booking))
             return False
 
         # Audit + household roll-up are best effort: the stay is the source of truth
@@ -454,7 +468,7 @@ async def _process_cancel(couch: CouchClient, booking: ExternalBooking) -> bool:
                 )
         except Exception:
             logger.exception(
-                "Cancel audit/household update failed for booking %s", booking.id
+                "Cancel audit/household update failed for booking %s", _ref(booking)
             )
 
     # status == "cancelled" here means an earlier attempt (or staff) already cancelled
@@ -462,8 +476,21 @@ async def _process_cancel(couch: CouchClient, booking: ExternalBooking) -> bool:
     await _transition(
         booking, _CANCEL_DUE, {"state": "cancelled", "cancel_requested": False}
     )
-    logger.info("Cancelled booking %s in %s", booking.id, database)
+    logger.info("Cancelled booking %s in %s", _ref(booking), database)
     return True
+
+
+async def _find_due() -> list[ExternalBooking]:
+    """Rows to act on; `committed=False` rows are still being staged by the API (FR-32)."""
+    return await ExternalBooking.find(
+        {
+            "committed": {"$ne": False},
+            "$or": [
+                {"state": "pending"},
+                {"state": "written", "cancel_requested": True},
+            ],
+        }
+    ).to_list()
 
 
 async def run_external_booking_inbound_loop(
@@ -471,14 +498,7 @@ async def run_external_booking_inbound_loop(
 ) -> None:
     while not stop_event.is_set():
         try:
-            due = await ExternalBooking.find(
-                {
-                    "$or": [
-                        {"state": "pending"},
-                        {"state": "written", "cancel_requested": True},
-                    ]
-                }
-            ).to_list()
+            due = await _find_due()
             for booking in due:
                 if stop_event.is_set():
                     break

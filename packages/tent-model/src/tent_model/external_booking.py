@@ -24,9 +24,15 @@ OPEN_BOOKING_STATES: tuple[str, ...] = ("pending", "written")
 class ExternalBooking(Document):
 	model_config = ConfigDict(populate_by_name=True)
 
-	# `_id` == `booking_id` (`BK-{ulid}`)
+	# `_id`: `BP-{ulid}` per row (rows written before CR-169 still use `BK-…` == `booking_id`)
 	id: str = Field(alias="_id")
+	# `BK-{ulid}` — group key shared by every row of one request (CR-169 C4)
 	booking_id: str
+	# Position in `persons[]` (0-based) and size of the whole group
+	person_seq: int = 0
+	group_size: int = 1
+	# False while the API is still staging the group's rows; workers skip those (FR-32)
+	committed: bool = True
 	client_id: str
 	module_name: str | None = None
 	shelter_code: str
@@ -63,6 +69,7 @@ class ExternalBooking(Document):
 				name="uniq_open_booking_per_shelter",
 				partialFilterExpression={"state": {"$in": list(OPEN_BOOKING_STATES)}},
 			),
+			IndexModel([("booking_id", 1), ("person_seq", 1)]),
 			IndexModel([("state", 1), ("updated_at", 1)]),
 			IndexModel([("cancel_requested", 1)]),
 			IndexModel([("client_id", 1)]),
