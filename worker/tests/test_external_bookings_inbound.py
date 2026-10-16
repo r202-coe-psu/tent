@@ -760,6 +760,43 @@ async def test_d4_rejected_row_in_couch_still_proves_the_group_reached_couch(db)
     assert _live_holders(store, _cid(0)) == [_evacuee_doc(9, _cid(0))["_id"]]
 
 
+async def test_failed_stay_cancel_of_d4_rejected_row_is_retried_while_a_sibling_is_pending(
+    db,
+):
+    """Review R5/I1: person 0 (in CouchDB) is rejected as a per-person duplicate but CouchDB
+    is down, so neither the stay cancel nor the bulk write of person 1 lands. Person 1 is
+    still ``pending``, so the group is processed again — and that pass must retry the stay
+    cancel of the already ``rejected`` row 0, or the CID keeps two live holders (FR-50)."""
+    await _insert_group(2)
+    for index in (0, 1):
+        await _reserve(index)
+    couch, store = _fr50_couch(
+        [*_stay_docs(0), *_stay_docs(1), _evacuee_doc(9, _cid(0))]
+    )
+    store["evacuee:E0"]["person_id"] = {"number": _cid(0)}
+    real_update = couch.update_doc
+    real_bulk = couch.bulk_docs.side_effect
+
+    async def down(*_args, **_kwargs):
+        raise ConnectionError("couch down")
+
+    couch.update_doc = AsyncMock(side_effect=down)
+    couch.bulk_docs = AsyncMock(side_effect=down)
+    assert await _persist_group(couch, BOOKING_ID) is False
+    assert (await _row(_row_id(0)))["state"] == "rejected"
+    assert (await _row(_row_id(1)))["state"] == "pending"
+    assert store["evacuee:E0"]["current_stay"]["status"] == "pre_registered"
+
+    couch.update_doc = real_update
+    couch.bulk_docs = AsyncMock(side_effect=real_bulk)
+    assert await _persist_group(couch, BOOKING_ID) is True
+
+    assert (await _row(_row_id(0)))["state"] == "rejected"
+    assert (await _row(_row_id(1)))["state"] == "written"
+    assert store["evacuee:E0"]["current_stay"]["status"] == "cancelled"
+    assert _live_holders(store, _cid(0)) == ["evacuee:E9"]
+
+
 async def test_failed_stay_cancel_of_a_rejected_in_couch_row_is_logged_by_id_only(
     db, caplog
 ):

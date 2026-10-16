@@ -34,8 +34,10 @@ stranded stays (``_cancel_stranded_rows``).
 The same gap applies when a row stays ``cancelled`` / ``rejected`` and the direct stay
 cancel fails on a CouchDB error (a stranded row, a row the API cancelled during the write,
 or a row rejected as duplicate after its docs reached CouchDB — see
-``_cancel_stranded_rows`` / ``_mark_written`` / ``_reject_duplicated_rows``): with no
-``pending`` sibling left, nothing retries it.
+``_cancel_stranded_rows`` / ``_mark_written`` / ``_reject_duplicated_rows``). While a
+``pending`` sibling is left, the next pass retries that stay cancel for both ``cancelled``
+and D4-``rejected`` rows (``_cancel_stranded_rows``); with none left, nothing retries it
+(the #595 residual).
 
 The API changes the same rows concurrently (EXT-009), so every Mongo write here is a
 conditional ``update_one`` on the observed state (``_transition``), never a Beanie
@@ -591,7 +593,8 @@ async def _cancel_stay_directly(
     cancelled while its docs were being written (`_mark_written`) and a row rejected as
     duplicate after its docs had reached CouchDB (`_reject_duplicated_rows`). Only a stay
     still ``pre_registered`` is touched; a failed write is logged (ids only) and not
-    retried here — with no ``pending`` sibling left nothing would (the #595 residual).
+    retried here. While a ``pending`` sibling is left the next pass retries it
+    (`_cancel_stranded_rows`); with none left nothing would (the #595 residual).
     """
     if booking.evacuee_id:
         await _cancel_stay(couch, database, booking, booking.evacuee_id)
@@ -633,12 +636,14 @@ async def _mark_written(
 async def _cancel_stranded_rows(
     couch: CouchClient, database: str, rows: list[ExternalBooking]
 ) -> None:
-    """Cancel stays of ``cancelled`` rows whose evacuee reached CouchDB (R5).
+    """Cancel stays of ``cancelled`` / ``rejected`` rows whose evacuee reached CouchDB (R5).
 
     A crashed pass can leave docs in CouchDB for a row the API then cancelled
     (``pending`` → ``cancelled`` while the worker was down). Such a row is no longer
-    ``pending``, so nothing else would ever cancel its stay. Only rows with reserved
-    ids qualify, and only a stay still ``pre_registered`` is touched. The row stays
+    ``pending``, so nothing else would ever cancel its stay. The same goes for a row
+    rejected as duplicate (D4) whose stay cancel failed. A ``rejected`` row of a group
+    that never reached CouchDB has no doc, so the call writes nothing. Only rows with
+    reserved ids qualify, and only a stay still ``pre_registered`` is touched. The row stays
     ``cancelled``: the partner was told CANCELLED and the stay is cancelled right here
     (`_cancel_stay_directly`). Re-opening it as ``written`` + ``cancel_requested`` would
     leave it stuck there if staff checked the evacuee in before the next poll (the cancel
@@ -647,13 +652,13 @@ async def _cancel_stranded_rows(
     if the API cancelled *all* rows the group is never due again (see module docstring).
     """
     for row in rows:
-        if row.state != "cancelled" or not row.evacuee_id:
+        if row.state not in ("cancelled", "rejected") or not row.evacuee_id:
             continue
         try:
             await _cancel_stay_directly(couch, database, row)
         except Exception:
             logger.exception(
-                "Could not check cancelled booking %s",
+                "Could not check stay of terminal booking %s",
                 _ref(row),
             )
 
@@ -930,8 +935,9 @@ async def _reject_duplicated_rows(
     way (rejected by us or cancelled by the API) and, with no ``pending`` sibling left,
     nothing else would cancel its stay (`_cancel_stranded_rows` sees the stale in-memory
     state). The stay cancel is idempotent (only a still ``pre_registered`` stay is
-    touched). If it fails it is logged (ids only) and, with the row already terminal,
-    nothing retries it — the #595 residual. Logs ids and counts only.
+    touched). If it fails it is logged (ids only); while a ``pending`` sibling is left the
+    next pass retries it for the now-``rejected`` row (`_cancel_stranded_rows`), with none
+    left nothing does — the #595 residual. Logs ids and counts only.
     """
     duplicated = {cid for cid in map(_hit_cid, duplicates) if cid}
     keep: list[ExternalBooking] = []
