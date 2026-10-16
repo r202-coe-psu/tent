@@ -1,5 +1,10 @@
 import { z } from 'zod';
 import { shelterCodeSchema } from '$lib/db/model';
+import {
+	DEFAULT_KIOSK_SCREEN_TYPE,
+	kioskScreenTypeSchema,
+	screenTypeOf
+} from '$lib/features/shared/domain/kiosk-screen';
 
 /**
  * v2 adds staff bypass PIN *metadata* (set / default / who / when). The PIN itself never lives in
@@ -26,7 +31,9 @@ export const scannerDeviceInputSchema = z
 		name: z.string({ error: 'กรุณาระบุชื่อเครื่องสแกน' }).trim().min(1, 'กรุณาระบุชื่อเครื่องสแกน'),
 		shelter_code: shelterCodeSchema,
 		station_name: z.string().trim().min(1, 'กรุณาระบุจุดบริการ').default('จุดคัดกรองทั่วไป'),
-		status: deviceStatusSchema.default('active')
+		status: deviceStatusSchema.default('active'),
+		/** Which kiosk screen the device drives; picks which banners it is fed. */
+		screen_type: kioskScreenTypeSchema.default(DEFAULT_KIOSK_SCREEN_TYPE)
 	})
 	.strict();
 export type ScannerDeviceInput = z.infer<typeof scannerDeviceInputSchema>;
@@ -131,7 +138,9 @@ const scannerDevicePersistedBaseShape = {
 	status: deviceStatusSchema,
 	last_seen_at: z.string().min(1).nullable(),
 	/** FR-KBR-35: absent = banners shown (additive flag, no `schema_v` bump). */
-	banner_enabled: z.boolean().optional()
+	banner_enabled: z.boolean().optional(),
+	/** Absent = `compact` (additive field, no `schema_v` bump). */
+	screen_type: kioskScreenTypeSchema.optional()
 };
 
 /** v1 document (before staff PIN). Read as "no PIN"; upgraded to v2 when a PIN is first set. */
@@ -202,7 +211,9 @@ export const scannerDeviceSummarySchema = z
 		staff_pin_set: z.boolean(),
 		staff_pin_is_default: z.boolean(),
 		/** Whether the kiosk shows the banner attract loop (stored absent = `true`). */
-		banner_enabled: z.boolean()
+		banner_enabled: z.boolean(),
+		/** Which kiosk screen the device drives (stored absent = `compact`). */
+		screen_type: kioskScreenTypeSchema
 	})
 	.strict();
 
@@ -221,7 +232,8 @@ export const scannerDevicePatchSchema = z
 		name: scannerDeviceInputSchema.shape.name.optional(),
 		station_name: z.string().trim().min(1, 'กรุณาระบุจุดบริการ').optional(),
 		status: deviceStatusSchema.optional(),
-		banner_enabled: z.boolean().optional()
+		banner_enabled: z.boolean().optional(),
+		screen_type: kioskScreenTypeSchema.optional()
 	})
 	.strict()
 	.refine((value) => Object.keys(value).length > 0, { message: 'ไม่มีข้อมูลที่จะแก้ไข' });
@@ -229,7 +241,13 @@ export type ScannerDevicePatch = z.infer<typeof scannerDevicePatchSchema>;
 
 /** Device details returned by bootstrap; it does not disclose the registry id or PIN state. */
 export const scannerBootstrapDeviceSchema = scannerDeviceSummarySchema
-	.omit({ id: true, staff_pin_set: true, staff_pin_is_default: true, banner_enabled: true })
+	.omit({
+		id: true,
+		staff_pin_set: true,
+		staff_pin_is_default: true,
+		banner_enabled: true,
+		screen_type: true
+	})
 	.extend({ shelter_name: z.string().trim().min(1) });
 export type ScannerBootstrapDevice = z.infer<typeof scannerBootstrapDeviceSchema>;
 
@@ -256,7 +274,8 @@ export function toScannerDeviceSummary(doc: PersistedScannerDevice): ScannerDevi
 		last_seen_at: doc.last_seen_at,
 		staff_pin_set: pin.staff_pin_set,
 		staff_pin_is_default: pin.staff_pin_is_default,
-		banner_enabled: doc.banner_enabled ?? true
+		banner_enabled: doc.banner_enabled ?? true,
+		screen_type: screenTypeOf(doc)
 	};
 }
 
@@ -292,7 +311,8 @@ export function withoutScannerPlaintext(
 		last_seen_at: device.last_seen_at,
 		staff_pin_set: device.staff_pin_set,
 		staff_pin_is_default: device.staff_pin_is_default,
-		banner_enabled: device.banner_enabled
+		banner_enabled: device.banner_enabled,
+		screen_type: device.screen_type
 	};
 }
 

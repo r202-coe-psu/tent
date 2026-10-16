@@ -31,6 +31,17 @@ describe('authenticateScannerDevice principal', () => {
 		expect(principal.banner_enabled).toBe(true);
 	});
 
+	it('exposes screen_type, reading a doc without one as compact', async () => {
+		const legacy = await authenticateScannerDevice('SCAN-01', SECRET, lookupOf(doc));
+		expect(legacy.screen_type).toBe('compact');
+		const portrait = await authenticateScannerDevice(
+			'SCAN-01',
+			SECRET,
+			lookupOf({ ...doc, screen_type: 'portrait' })
+		);
+		expect(portrait.screen_type).toBe('portrait');
+	});
+
 	it('exposes an explicit banner_enabled=false', async () => {
 		const principal = await authenticateScannerDevice(
 			'SCAN-01',

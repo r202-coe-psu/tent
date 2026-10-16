@@ -197,7 +197,8 @@ describe('PATCH /api/v1/kiosk/devices/[id]', () => {
 			last_seen_at: null,
 			staff_pin_set: false,
 			staff_pin_is_default: false,
-			banner_enabled: true
+			banner_enabled: true,
+			screen_type: 'compact'
 		});
 		expect(JSON.stringify(data)).not.toContain('secret_hash');
 	});
@@ -208,6 +209,14 @@ describe('PATCH /api/v1/kiosk/devices/[id]', () => {
 		expect(response.status).toBe(200);
 		expect(mockUpdate).toHaveBeenCalledWith(DOC_ID, { banner_enabled: false }, 'sa-user');
 		expect(await response.json()).toMatchObject({ device_id: DEVICE_ID, banner_enabled: false });
+	});
+
+	it('persists screen_type=portrait and returns it in the summary', async () => {
+		mockUpdate.mockResolvedValueOnce(persisted('SH001', { screen_type: 'portrait' }));
+		const response = await patch({ screen_type: 'portrait' });
+		expect(response.status).toBe(200);
+		expect(mockUpdate).toHaveBeenCalledWith(DOC_ID, { screen_type: 'portrait' }, 'sa-user');
+		expect(await response.json()).toMatchObject({ device_id: DEVICE_ID, screen_type: 'portrait' });
 	});
 
 	it('lets kiosk_staff switch banners of their shelter and reads another shelter as 404', async () => {
@@ -271,6 +280,7 @@ describe('PATCH /api/v1/kiosk/devices/[id]', () => {
 		['PIN metadata', { staff_pin_set: true }],
 		['blank name', { name: ' ' }],
 		['non-boolean banner_enabled', { banner_enabled: 'false' }],
+		['unknown screen_type', { screen_type: 'wide' }],
 		['not an object', 'not json']
 	])('returns 400 for a %s body before reading the device', async (_label, body) => {
 		const response = await patch(body);

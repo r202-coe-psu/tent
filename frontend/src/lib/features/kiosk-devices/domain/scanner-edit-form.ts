@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { kioskScreenTypeSchema } from '$lib/features/shared/domain/kiosk-screen';
 import {
 	deviceStatusSchema,
 	scannerDeviceInputSchema,
@@ -11,7 +12,8 @@ export const scannerEditFormSchema = z.object({
 	name: scannerDeviceInputSchema.shape.name,
 	station_name: z.string().trim().min(1, 'กรุณาระบุจุดบริการ'),
 	status: deviceStatusSchema,
-	banner_enabled: z.boolean()
+	banner_enabled: z.boolean(),
+	screen_type: kioskScreenTypeSchema
 });
 export type ScannerEditFormValues = z.infer<typeof scannerEditFormSchema>;
 
@@ -20,7 +22,8 @@ export function scannerEditFormValues(device: ScannerDeviceSummary): ScannerEdit
 		name: device.name,
 		station_name: device.station_name,
 		status: device.status,
-		banner_enabled: device.banner_enabled
+		banner_enabled: device.banner_enabled,
+		screen_type: device.screen_type
 	};
 }
 
@@ -36,5 +39,6 @@ export function scannerEditPatch(
 	if (station !== device.station_name) patch.station_name = station;
 	if (values.status !== device.status) patch.status = values.status;
 	if (values.banner_enabled !== device.banner_enabled) patch.banner_enabled = values.banner_enabled;
+	if (values.screen_type !== device.screen_type) patch.screen_type = values.screen_type;
 	return Object.keys(patch).length > 0 ? patch : null;
 }

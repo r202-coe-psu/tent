@@ -74,6 +74,17 @@ describe('scanner.schema', () => {
 			expect(result.success).toBe(true);
 		});
 
+		it('defaults a new device to the compact kiosk and accepts portrait', () => {
+			const base = { device_id: 'SCAN-01', name: 'ตู้ 1', shelter_code: 'SH001' };
+			expect(scannerDeviceInputSchema.parse(base).screen_type).toBe('compact');
+			expect(scannerDeviceInputSchema.parse({ ...base, screen_type: 'portrait' }).screen_type).toBe(
+				'portrait'
+			);
+			expect(scannerDeviceInputSchema.safeParse({ ...base, screen_type: 'wide' }).success).toBe(
+				false
+			);
+		});
+
 		it('rejects invalid device_id with spaces or special characters', () => {
 			const invalid = {
 				device_id: 'SCAN SH001 @!',
@@ -169,6 +180,25 @@ describe('scanner.schema', () => {
 			expect(Object.keys(scannerBootstrapDeviceSchema.shape)).not.toContain('banner_enabled');
 		});
 
+		it('reads a doc without screen_type as compact and carries a stored one', () => {
+			expect(toScannerDeviceSummary(scannerDevicePersistedSchema.parse(v1Doc))).toMatchObject({
+				screen_type: 'compact'
+			});
+			expect(toScannerDeviceSummary(scannerDevicePersistedSchema.parse(v2Doc))).toMatchObject({
+				screen_type: 'compact'
+			});
+			const parsed = scannerDevicePersistedSchema.parse({ ...v2Doc, screen_type: 'portrait' });
+			expect(toScannerDeviceSummary(parsed)).toMatchObject({ screen_type: 'portrait' });
+			expect(
+				scannerDevicePersistedSchema.safeParse({ ...v2Doc, screen_type: 'wide' }).success
+			).toBe(false);
+		});
+
+		it('keeps screen_type in the summary but out of the bootstrap payload', () => {
+			expect(Object.keys(scannerDeviceSummarySchema.shape)).toContain('screen_type');
+			expect(Object.keys(scannerBootstrapDeviceSchema.shape)).not.toContain('screen_type');
+		});
+
 		it('requires a 6-digit plaintext_staff_pin on the create response', () => {
 			const device = toScannerDeviceSummary(scannerDevicePersistedSchema.parse(v2Doc));
 			const base = { device, plaintext_secret: 'sk_scan_x' };
@@ -245,6 +275,7 @@ describe('withoutScannerPlaintext', () => {
 		const kept = withoutScannerPlaintext(created);
 
 		expect(kept).toEqual(summary);
+		expect(kept.screen_type).toBe('compact');
 		expect(JSON.stringify(kept)).not.toContain('483920');
 		expect(scannerDeviceSummarySchema.safeParse(kept).success).toBe(true);
 	});
@@ -262,6 +293,13 @@ describe('scannerDevicePatchSchema', () => {
 		});
 		expect(scannerDevicePatchSchema.safeParse({ banner_enabled: 'false' }).success).toBe(false);
 		expect(scannerDevicePatchSchema.safeParse({ banner_enabled: null }).success).toBe(false);
+	});
+
+	it('accepts screen_type alone and rejects an unknown screen', () => {
+		expect(scannerDevicePatchSchema.parse({ screen_type: 'portrait' })).toEqual({
+			screen_type: 'portrait'
+		});
+		expect(scannerDevicePatchSchema.safeParse({ screen_type: 'wide' }).success).toBe(false);
 	});
 
 	it('rejects an empty patch', () => {

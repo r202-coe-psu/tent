@@ -110,7 +110,8 @@ const summary = {
 	last_seen_at: null,
 	staff_pin_set: true,
 	staff_pin_is_default: false,
-	banner_enabled: true
+	banner_enabled: true,
+	screen_type: 'compact'
 };
 
 describe('listScannerDevices', () => {
