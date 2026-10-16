@@ -53,6 +53,50 @@ function pick(file: File) {
 	flushSync();
 }
 
+function drop(file: File) {
+	const zone = q<HTMLLabelElement>('label[for="banner-image"]') as HTMLLabelElement;
+	const event = new Event('drop', { bubbles: true, cancelable: true });
+	Object.defineProperty(event, 'dataTransfer', { value: { files: [file] } });
+	zone.dispatchEvent(event);
+	flushSync();
+}
+
+async function press(el: Element) {
+	el.dispatchEvent(
+		new PointerEvent('pointerdown', { bubbles: true, button: 0, pointerType: 'mouse' })
+	);
+	el.dispatchEvent(
+		new PointerEvent('pointerup', { bubbles: true, button: 0, pointerType: 'mouse' })
+	);
+	(el as HTMLElement).click();
+	await tick();
+	flushSync();
+}
+
+/** Portalled content lands at the end of `body`, so the newest match is the one just opened. */
+const lastOf = (selector: string) =>
+	[...document.body.querySelectorAll(selector)].at(-1) as Element;
+
+/** Date: typed into the date picker. Time: hour and minute chosen in the time picker popover. */
+async function setDateTime(name: 'start_at' | 'end_at', date: string, time: string) {
+	type(field(name), date);
+	const trigger = q(`#banner-${name}-time`) as HTMLElement;
+	await press(trigger);
+	const [hourSelect, minuteSelect] = lastOf('[data-slot="popover-content"]').querySelectorAll(
+		'[data-slot="select-trigger"]'
+	);
+	for (const [select, part] of [
+		[hourSelect, time.slice(0, 2)],
+		[minuteSelect, time.slice(3, 5)]
+	] as const) {
+		await press(select);
+		const option = [...lastOf('[role="listbox"]').querySelectorAll('[role="option"]')].find(
+			(o) => o.textContent?.trim() === part
+		) as HTMLElement;
+		await press(option);
+	}
+}
+
 const png = () => new File([new Uint8Array([137, 80, 78, 71])], 'a.png', { type: 'image/png' });
 
 async function submit() {
@@ -117,6 +161,18 @@ describe('KioskBannerForm', () => {
 		expect(revokeObjectURL).toHaveBeenCalledWith('blob:preview-2');
 	});
 
+	it('takes an image dropped on the drop box like a picked one', () => {
+		render();
+
+		drop(png());
+		expect(q('[data-testid="banner-new-image"]')?.getAttribute('src')).toBe('blob:preview-1');
+		expect(document.body.textContent).toContain('a.png');
+
+		drop(new File(['x'], 'a.gif', { type: 'image/gif' }));
+		expect(document.body.textContent).toContain('รองรับเฉพาะรูป png / jpeg / webp');
+		expect(q('[data-testid="banner-new-image"]')).toBeNull();
+	});
+
 	it('rejects a wrong type client-side: message under the field, no preview', () => {
 		render();
 
@@ -131,8 +187,10 @@ describe('KioskBannerForm', () => {
 		render(stored);
 
 		expect(field('title').value).toBe('ตรวจสุขภาพฟรี');
-		expect(field('start_at').value).toBe('2026-10-16T09:00');
-		expect(field('end_at').value).toBe('2026-10-16T12:00');
+		expect(field('start_at').value).toBe('16/10/2026');
+		expect(q('#banner-start_at-time')?.textContent).toContain('09:00');
+		expect(field('end_at').value).toBe('16/10/2026');
+		expect(q('#banner-end_at-time')?.textContent).toContain('12:00');
 		const current = q('[data-testid="banner-current-image"]');
 		expect(current?.getAttribute('src')).toBe(
 			'/api/back-office/kiosk-banners/kiosk_banner%3Aabc/image?v=3-xyz'
@@ -149,8 +207,8 @@ describe('KioskBannerForm', () => {
 	it('requires an image when creating', async () => {
 		render();
 		type(field('title'), 'ป้ายใหม่');
-		type(field('start_at'), '2026-10-15T08:00');
-		type(field('end_at'), '2026-10-15T18:00');
+		await setDateTime('start_at', '2026-10-15', '08:00');
+		await setDateTime('end_at', '2026-10-15', '18:00');
 
 		await submit();
 
@@ -161,8 +219,8 @@ describe('KioskBannerForm', () => {
 	it('shows the end-time error under the end field', async () => {
 		render();
 		type(field('title'), 'ป้ายใหม่');
-		type(field('start_at'), '2026-10-15T18:00');
-		type(field('end_at'), '2026-10-15T08:00');
+		await setDateTime('start_at', '2026-10-15', '18:00');
+		await setDateTime('end_at', '2026-10-15', '08:00');
 		pick(png());
 
 		await submit();
@@ -175,8 +233,8 @@ describe('KioskBannerForm', () => {
 	it('saves the mapped input and the image payload on create', async () => {
 		render();
 		type(field('title'), 'ป้ายใหม่');
-		type(field('start_at'), '2026-10-15T08:00');
-		type(field('end_at'), '2026-10-15T18:00');
+		await setDateTime('start_at', '2026-10-15', '08:00');
+		await setDateTime('end_at', '2026-10-15', '18:00');
 		pick(png());
 
 		await submit();

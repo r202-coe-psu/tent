@@ -4,12 +4,17 @@
 	import { resolve } from '$app/paths';
 	import { toast } from 'svelte-sonner';
 	import { Button } from '$lib/components/ui/button/index.js';
-	import * as Field from '$lib/components/ui/field/index.js';
+	import * as Form from '$lib/components/ui/form/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
+	import { Label } from '$lib/components/ui/label/index.js';
+	import { DatePicker } from '$lib/components/ui/date-picker/index.js';
+	import TimePicker from '$lib/components/time-picker.svelte';
 	import { Switch } from '$lib/components/ui/switch/index.js';
 	import { Textarea } from '$lib/components/ui/textarea/index.js';
 	import Eye from '@lucide/svelte/icons/eye';
+	import Upload from '@lucide/svelte/icons/upload';
 	import { KIOSK_BANNER_LIMITS } from '../domain/kiosk-banner';
+	import { joinLocalInput, splitLocalInput } from '../domain/kiosk-banner-datetime';
 	import {
 		bannerFormToInput,
 		bannerToFormValues,
@@ -70,21 +75,40 @@
 		if (newImageUrl) URL.revokeObjectURL(newImageUrl);
 	});
 
-	function handleFileChange(event: Event & { currentTarget: HTMLInputElement }) {
-		const input = event.currentTarget;
-		const chosen = input.files?.[0] ?? null;
+	/** One path for the file picker and a drop: validate, then show the preview at once. */
+	function chooseFile(chosen: File | null): boolean {
 		revokeNewImage();
 		file = null;
 		fileError = null;
-		if (!chosen) return;
+		if (!chosen) return true;
 		const problem = validateBannerFile(chosen);
 		if (problem) {
 			fileError = problem;
-			input.value = '';
-			return;
+			return false;
 		}
 		file = chosen;
 		newImageUrl = URL.createObjectURL(chosen);
+		return true;
+	}
+
+	function handleFileChange(event: Event & { currentTarget: HTMLInputElement }) {
+		const input = event.currentTarget;
+		if (!chooseFile(input.files?.[0] ?? null)) input.value = '';
+	}
+
+	let dragOver = $state(false);
+
+	function handleDragOver(event: DragEvent) {
+		event.preventDefault();
+		if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy';
+		dragOver = true;
+	}
+
+	function handleDrop(event: DragEvent) {
+		event.preventDefault();
+		dragOver = false;
+		const dropped = event.dataTransfer?.files?.[0];
+		if (dropped) chooseFile(dropped);
 	}
 
 	const form = superForm(defaults(initialValues, zod4Client(kioskBannerFormSchema)), {
@@ -110,7 +134,7 @@
 		}
 	});
 
-	const { form: formData, errors, enhance, submitting } = form;
+	const { form: formData, enhance, submitting } = form;
 
 	const previewSlides = $derived.by(() => {
 		const slide = buildFormPreviewSlide($formData, newImageUrl ?? currentImageUrl);
@@ -120,113 +144,140 @@
 	const listHref = resolve('/back-office/kiosks/banners');
 </script>
 
+{#snippet dateTimeField(name: 'start_at' | 'end_at', label: string, errorsId?: string)}
+	{@const parts = splitLocalInput($formData[name])}
+	<Form.Field {form} {name}>
+		<Form.Control id="banner-{name}">
+			{#snippet children({ props })}
+				<Form.Label>
+					{label} <span class="text-destructive">*</span>
+					<span class="font-normal text-slate-500">(เวลาไทย)</span>
+				</Form.Label>
+				<div class="grid grid-cols-[minmax(0,1fr)_8rem] gap-2">
+					<DatePicker
+						{...props}
+						class="h-11"
+						ariaLabel="วันที่{label}"
+						bind:value={
+							() => parts.date, (date) => ($formData[name] = joinLocalInput(date, parts.time))
+						}
+					/>
+					<TimePicker
+						id="banner-{name}-time"
+						bind:value={
+							() => parts.time, (time) => ($formData[name] = joinLocalInput(parts.date, time))
+						}
+					/>
+					<Label for="banner-{name}-time" class="sr-only">เวลา{label}</Label>
+				</div>
+			{/snippet}
+		</Form.Control>
+		<Form.FieldErrors id={errorsId} />
+	</Form.Field>
+{/snippet}
+
 <form method="post" use:enhance novalidate class="space-y-6">
 	<div class="grid gap-6 lg:grid-cols-2">
-		<Field.Group class="gap-4">
-			<Field.Field>
-				<Field.Label>ศูนย์</Field.Label>
+		<div class="space-y-4">
+			<div class="space-y-2">
+				<span class="text-sm font-medium">ศูนย์</span>
 				<p class="flex min-h-9 items-center text-sm font-semibold text-slate-900">
 					{shelterCode}
 					<span class="ml-2 text-xs font-normal text-slate-500"
 						>(แก้ไขไม่ได้ — ตามศูนย์ที่เลือกอยู่)</span
 					>
 				</p>
-			</Field.Field>
+			</div>
 
-			<Field.Field data-invalid={$errors.title ? true : undefined}>
-				<Field.Label for="banner-title">ชื่อ *</Field.Label>
-				<Input
-					id="banner-title"
-					class="h-11"
-					maxlength={KIOSK_BANNER_LIMITS.titleMax}
-					aria-invalid={$errors.title ? true : undefined}
-					bind:value={$formData.title}
-				/>
-				{#if $errors.title}<Field.Error>{$errors.title[0]}</Field.Error>{/if}
-			</Field.Field>
+			<Form.Field {form} name="title">
+				<Form.Control id="banner-title">
+					{#snippet children({ props })}
+						<Form.Label>ชื่อ <span class="text-destructive">*</span></Form.Label>
+						<Input
+							{...props}
+							class="h-11"
+							maxlength={KIOSK_BANNER_LIMITS.titleMax}
+							bind:value={$formData.title}
+						/>
+					{/snippet}
+				</Form.Control>
+				<Form.FieldErrors />
+			</Form.Field>
 
-			<Field.Field data-invalid={$errors.caption ? true : undefined}>
-				<Field.Label for="banner-caption">คำบรรยาย</Field.Label>
-				<Textarea
-					id="banner-caption"
-					rows={2}
-					maxlength={KIOSK_BANNER_LIMITS.captionMax}
-					aria-invalid={$errors.caption ? true : undefined}
-					bind:value={$formData.caption}
-				/>
-				{#if $errors.caption}<Field.Error>{$errors.caption[0]}</Field.Error>{/if}
-			</Field.Field>
+			<Form.Field {form} name="caption">
+				<Form.Control id="banner-caption">
+					{#snippet children({ props })}
+						<Form.Label>คำบรรยาย</Form.Label>
+						<Textarea
+							{...props}
+							rows={2}
+							maxlength={KIOSK_BANNER_LIMITS.captionMax}
+							bind:value={$formData.caption}
+						/>
+					{/snippet}
+				</Form.Control>
+				<Form.FieldErrors />
+			</Form.Field>
 
 			<div class="grid grid-cols-2 gap-4">
-				<Field.Field data-invalid={$errors.order ? true : undefined}>
-					<Field.Label for="banner-order">ลำดับ *</Field.Label>
-					<Input
-						id="banner-order"
-						type="number"
-						min={KIOSK_BANNER_LIMITS.orderMin}
-						step="1"
-						class="h-11"
-						aria-invalid={$errors.order ? true : undefined}
-						bind:value={$formData.order}
-					/>
-					{#if $errors.order}<Field.Error>{$errors.order[0]}</Field.Error>{/if}
-				</Field.Field>
-				<Field.Field data-invalid={$errors.duration_sec ? true : undefined}>
-					<Field.Label for="banner-duration_sec">วินาที/สไลด์ *</Field.Label>
-					<Input
-						id="banner-duration_sec"
-						type="number"
-						min={KIOSK_BANNER_LIMITS.durationMin}
-						max={KIOSK_BANNER_LIMITS.durationMax}
-						step="1"
-						class="h-11"
-						aria-invalid={$errors.duration_sec ? true : undefined}
-						bind:value={$formData.duration_sec}
-					/>
-					{#if $errors.duration_sec}<Field.Error>{$errors.duration_sec[0]}</Field.Error>{/if}
-				</Field.Field>
+				<Form.Field {form} name="order">
+					<Form.Control id="banner-order">
+						{#snippet children({ props })}
+							<Form.Label>ลำดับ <span class="text-destructive">*</span></Form.Label>
+							<Input
+								{...props}
+								type="number"
+								min={KIOSK_BANNER_LIMITS.orderMin}
+								step="1"
+								class="h-11"
+								bind:value={$formData.order}
+							/>
+						{/snippet}
+					</Form.Control>
+					<Form.FieldErrors />
+				</Form.Field>
+				<Form.Field {form} name="duration_sec">
+					<Form.Control id="banner-duration_sec">
+						{#snippet children({ props })}
+							<Form.Label>วินาที/สไลด์ <span class="text-destructive">*</span></Form.Label>
+							<Input
+								{...props}
+								type="number"
+								min={KIOSK_BANNER_LIMITS.durationMin}
+								max={KIOSK_BANNER_LIMITS.durationMax}
+								step="1"
+								class="h-11"
+								bind:value={$formData.duration_sec}
+							/>
+						{/snippet}
+					</Form.Control>
+					<Form.FieldErrors />
+				</Form.Field>
 			</div>
 
-			<Field.Field data-invalid={$errors.start_at ? true : undefined}>
-				<Field.Label for="banner-start_at">เริ่ม * (เวลาไทย)</Field.Label>
-				<Input
-					id="banner-start_at"
-					type="datetime-local"
-					class="h-11"
-					aria-invalid={$errors.start_at ? true : undefined}
-					bind:value={$formData.start_at}
-				/>
-				{#if $errors.start_at}<Field.Error>{$errors.start_at[0]}</Field.Error>{/if}
-			</Field.Field>
+			{@render dateTimeField('start_at', 'เริ่ม')}
 
-			<Field.Field data-invalid={$errors.end_at ? true : undefined}>
-				<Field.Label for="banner-end_at">สิ้นสุด * (เวลาไทย)</Field.Label>
-				<Input
-					id="banner-end_at"
-					type="datetime-local"
-					class="h-11"
-					aria-invalid={$errors.end_at ? true : undefined}
-					aria-describedby={$errors.end_at ? 'banner-end_at-error' : undefined}
-					bind:value={$formData.end_at}
-				/>
-				{#if $errors.end_at}
-					<Field.Error id="banner-end_at-error">{$errors.end_at[0]}</Field.Error>
-				{/if}
-			</Field.Field>
+			{@render dateTimeField('end_at', 'สิ้นสุด', 'banner-end_at-error')}
 
-			<div class="flex min-h-11 items-center gap-2">
-				<Switch
-					id="banner-status"
-					bind:checked={
-						() => $formData.status === 'active',
-						(next) => ($formData.status = next ? 'active' : 'inactive')
-					}
-				/>
-				<label for="banner-status" class="text-sm font-medium text-slate-700">
-					{$formData.status === 'active' ? 'แสดงบนตู้' : 'ไม่แสดง'}
-				</label>
-			</div>
-		</Field.Group>
+			<Form.Field {form} name="status">
+				<Form.Control id="banner-status">
+					{#snippet children({ props })}
+						<div class="flex min-h-11 items-center gap-2">
+							<Switch
+								{...props}
+								bind:checked={
+									() => $formData.status === 'active',
+									(next) => ($formData.status = next ? 'active' : 'inactive')
+								}
+							/>
+							<Form.Label class="text-slate-700">
+								{$formData.status === 'active' ? 'แสดงบนตู้' : 'ไม่แสดง'}
+							</Form.Label>
+						</div>
+					{/snippet}
+				</Form.Control>
+			</Form.Field>
+		</div>
 
 		<div class="space-y-4">
 			<div class="grid gap-4 sm:grid-cols-2">
@@ -254,7 +305,7 @@
 						/>
 					{:else}
 						<div
-							class="flex aspect-video w-full items-center justify-center rounded-lg border border-dashed border-slate-300 bg-slate-50 text-sm text-slate-500"
+							class="flex aspect-video w-full items-center justify-center rounded-lg border-2 border-dashed border-slate-400 bg-slate-50 text-sm text-slate-500"
 						>
 							ยังไม่ได้เลือกรูป
 						</div>
@@ -262,22 +313,51 @@
 				</figure>
 			</div>
 
-			<Field.Field data-invalid={fileError ? true : undefined}>
-				<Field.Label for="banner-image">{isEdit ? 'เปลี่ยนรูป' : 'รูปแบนเนอร์ *'}</Field.Label>
-				<Input
-					id="banner-image"
-					type="file"
-					accept="image/png,image/jpeg,image/webp"
-					class="h-11"
-					aria-invalid={fileError ? true : undefined}
-					aria-describedby="banner-image-help"
-					onchange={handleFileChange}
-				/>
-				<Field.Description id="banner-image-help">
-					รองรับ png / jpeg / webp ขนาดไม่เกิน 2 MB
-				</Field.Description>
-				{#if fileError}<Field.Error>{fileError}</Field.Error>{/if}
-			</Field.Field>
+			<!-- The image is not in the superform schema (text fields only), so it is wired by hand.
+			     Same dashed drop box as the Excel imports (people-import / shelter-import), plus drop. -->
+			<div class="space-y-2">
+				<span class={['text-sm font-medium', fileError && 'text-destructive']}>
+					{#if isEdit}เปลี่ยนรูป{:else}รูปแบนเนอร์ <span class="text-destructive">*</span>{/if}
+				</span>
+				<label
+					for="banner-image"
+					ondragover={handleDragOver}
+					ondragleave={() => (dragOver = false)}
+					ondrop={handleDrop}
+					class={[
+						'flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed px-6 py-8 text-center transition-colors focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 hover:bg-muted/40',
+						dragOver
+							? 'border-primary bg-primary/5'
+							: fileError
+								? 'border-destructive'
+								: 'border-slate-400 hover:border-slate-500'
+					]}
+				>
+					<Upload class="h-8 w-8 text-muted-foreground" />
+					<span class="text-sm font-medium">
+						{file ? file.name : 'ลากรูปมาวางที่นี่ หรือคลิกเพื่อเลือกไฟล์'}
+					</span>
+					<span id="banner-image-help" class="text-xs text-muted-foreground">
+						รองรับ png / jpeg / webp ขนาดไม่เกิน 2 MB
+					</span>
+					<!-- sr-only, not `hidden`: display:none drops the input out of the tab
+					     order, leaving keyboard users no way to open the file picker. -->
+					<input
+						id="banner-image"
+						type="file"
+						accept="image/png,image/jpeg,image/webp"
+						class="sr-only"
+						aria-invalid={fileError ? true : undefined}
+						aria-describedby={fileError
+							? 'banner-image-help banner-image-error'
+							: 'banner-image-help'}
+						onchange={handleFileChange}
+					/>
+				</label>
+				{#if fileError}
+					<p id="banner-image-error" class="text-sm font-medium text-destructive">{fileError}</p>
+				{/if}
+			</div>
 		</div>
 	</div>
 
