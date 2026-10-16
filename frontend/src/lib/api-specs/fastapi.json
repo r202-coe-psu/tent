@@ -2854,25 +2854,33 @@
 						"title": "Location Code",
 						"description": "\u0e23\u0e2b\u0e31\u0e2a\u0e28\u0e39\u0e19\u0e22\u0e4c\u0e1e\u0e31\u0e01\u0e1e\u0e34\u0e07 (EXT-002)"
 					},
+					"persons": {
+						"anyOf": [
+							{ "items": { "$ref": "#/components/schemas/BookingPersonInput" }, "type": "array" },
+							{ "type": "null" }
+						],
+						"title": "Persons",
+						"description": "\u0e1c\u0e39\u0e49\u0e08\u0e2d\u0e07\u0e43\u0e19\u0e01\u0e25\u0e38\u0e48\u0e21\u0e40\u0e14\u0e35\u0e22\u0e27\u0e01\u0e31\u0e19 1\u2013100 \u0e04\u0e19 (all-or-nothing) \u2014 \u0e2b\u0e49\u0e32\u0e21\u0e2a\u0e48\u0e07\u0e1e\u0e23\u0e49\u0e2d\u0e21 cid/first_name/last_name/phone \u0e23\u0e30\u0e14\u0e31\u0e1a\u0e1a\u0e19"
+					},
 					"cid": {
 						"anyOf": [{ "type": "string" }, { "type": "null" }],
 						"title": "Cid",
-						"description": "\u0e40\u0e25\u0e02\u0e1b\u0e23\u0e30\u0e08\u0e33\u0e15\u0e31\u0e27\u0e1b\u0e23\u0e30\u0e0a\u0e32\u0e0a\u0e19 13 \u0e2b\u0e25\u0e31\u0e01"
+						"description": "\u0e23\u0e39\u0e1b\u0e41\u0e1a\u0e1a\u0e40\u0e14\u0e34\u0e21 (\u0e04\u0e19\u0e40\u0e14\u0e35\u0e22\u0e27) \u2014 \u0e40\u0e25\u0e02\u0e1b\u0e23\u0e30\u0e08\u0e33\u0e15\u0e31\u0e27\u0e1b\u0e23\u0e30\u0e0a\u0e32\u0e0a\u0e19 13 \u0e2b\u0e25\u0e31\u0e01"
 					},
 					"first_name": {
 						"anyOf": [{ "type": "string" }, { "type": "null" }],
 						"title": "First Name",
-						"description": "\u0e0a\u0e37\u0e48\u0e2d"
+						"description": "\u0e23\u0e39\u0e1b\u0e41\u0e1a\u0e1a\u0e40\u0e14\u0e34\u0e21 (\u0e04\u0e19\u0e40\u0e14\u0e35\u0e22\u0e27) \u2014 \u0e0a\u0e37\u0e48\u0e2d"
 					},
 					"last_name": {
 						"anyOf": [{ "type": "string" }, { "type": "null" }],
 						"title": "Last Name",
-						"description": "\u0e19\u0e32\u0e21\u0e2a\u0e01\u0e38\u0e25"
+						"description": "\u0e23\u0e39\u0e1b\u0e41\u0e1a\u0e1a\u0e40\u0e14\u0e34\u0e21 (\u0e04\u0e19\u0e40\u0e14\u0e35\u0e22\u0e27) \u2014 \u0e19\u0e32\u0e21\u0e2a\u0e01\u0e38\u0e25"
 					},
 					"phone": {
 						"anyOf": [{ "type": "string" }, { "type": "null" }],
 						"title": "Phone",
-						"description": "\u0e40\u0e1a\u0e2d\u0e23\u0e4c\u0e42\u0e17\u0e23\u0e28\u0e31\u0e1e\u0e17\u0e4c (\u0e23\u0e31\u0e1a +66)"
+						"description": "\u0e23\u0e39\u0e1b\u0e41\u0e1a\u0e1a\u0e40\u0e14\u0e34\u0e21 (\u0e04\u0e19\u0e40\u0e14\u0e35\u0e22\u0e27) \u2014 \u0e40\u0e1a\u0e2d\u0e23\u0e4c\u0e42\u0e17\u0e23\u0e28\u0e31\u0e1e\u0e17\u0e4c (\u0e23\u0e31\u0e1a +66)"
 					}
 				},
 				"type": "object",
@@ -2897,10 +2905,11 @@
 						"enum": ["BOOKED", "CANCELLED", "REJECTED"],
 						"title": "Booking Status",
 						"default": "BOOKED"
-					}
+					},
+					"persons_count": { "type": "integer", "title": "Persons Count" }
 				},
 				"type": "object",
-				"required": ["booking_id", "location_code"],
+				"required": ["booking_id", "location_code", "persons_count"],
 				"title": "BookingCreatedResult"
 			},
 			"BookingErrorResponse": {
@@ -2913,6 +2922,53 @@
 				"type": "object",
 				"required": ["status", "message"],
 				"title": "BookingErrorResponse"
+			},
+			"BookingPersonInput": {
+				"properties": {
+					"cid": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Cid",
+						"description": "\u0e40\u0e25\u0e02\u0e1b\u0e23\u0e30\u0e08\u0e33\u0e15\u0e31\u0e27\u0e1b\u0e23\u0e30\u0e0a\u0e32\u0e0a\u0e19 13 \u0e2b\u0e25\u0e31\u0e01"
+					},
+					"first_name": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "First Name",
+						"description": "\u0e0a\u0e37\u0e48\u0e2d"
+					},
+					"last_name": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Last Name",
+						"description": "\u0e19\u0e32\u0e21\u0e2a\u0e01\u0e38\u0e25"
+					},
+					"phone": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Phone",
+						"description": "\u0e40\u0e1a\u0e2d\u0e23\u0e4c\u0e42\u0e17\u0e23\u0e28\u0e31\u0e1e\u0e17\u0e4c (\u0e23\u0e31\u0e1a +66)"
+					}
+				},
+				"type": "object",
+				"title": "BookingPersonInput"
+			},
+			"BookingPersonStatus": {
+				"properties": {
+					"index": {
+						"type": "integer",
+						"title": "Index",
+						"description": "\u0e25\u0e33\u0e14\u0e31\u0e1a\u0e43\u0e19 persons[] \u0e15\u0e2d\u0e19\u0e08\u0e2d\u0e07 (\u0e40\u0e23\u0e34\u0e48\u0e21 0)"
+					},
+					"booking_status": {
+						"type": "string",
+						"enum": ["BOOKED", "CANCELLED", "REJECTED"],
+						"title": "Booking Status"
+					},
+					"reject_reason": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Reject Reason"
+					}
+				},
+				"type": "object",
+				"required": ["index", "booking_status"],
+				"title": "BookingPersonStatus"
 			},
 			"BookingStatusEnvelope": {
 				"properties": {
@@ -2931,11 +2987,18 @@
 					"booking_status": {
 						"type": "string",
 						"enum": ["BOOKED", "CANCELLED", "REJECTED"],
-						"title": "Booking Status"
+						"title": "Booking Status",
+						"description": "\u0e2a\u0e23\u0e38\u0e1b\u0e17\u0e31\u0e49\u0e07\u0e01\u0e25\u0e38\u0e48\u0e21: \u0e17\u0e38\u0e01\u0e04\u0e19 CANCELLED \u2192 CANCELLED, \u0e21\u0e35\u0e04\u0e19 REJECTED \u2192 REJECTED, \u0e2d\u0e37\u0e48\u0e19 \u0e46 \u2192 BOOKED"
 					},
 					"reject_reason": {
 						"anyOf": [{ "type": "string" }, { "type": "null" }],
-						"title": "Reject Reason"
+						"title": "Reject Reason",
+						"description": "\u0e40\u0e2b\u0e15\u0e38\u0e1c\u0e25\u0e02\u0e2d\u0e07\u0e04\u0e19\u0e41\u0e23\u0e01\u0e17\u0e35\u0e48 REJECTED (\u0e16\u0e49\u0e32\u0e21\u0e35)"
+					},
+					"persons": {
+						"items": { "$ref": "#/components/schemas/BookingPersonStatus" },
+						"type": "array",
+						"title": "Persons"
 					},
 					"created_at": {
 						"type": "string",
@@ -2949,7 +3012,14 @@
 					}
 				},
 				"type": "object",
-				"required": ["booking_id", "location_code", "booking_status", "created_at", "updated_at"],
+				"required": [
+					"booking_id",
+					"location_code",
+					"booking_status",
+					"persons",
+					"created_at",
+					"updated_at"
+				],
 				"title": "BookingStatusResult"
 			},
 			"ClaimedMemberOut": {
