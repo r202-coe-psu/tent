@@ -797,6 +797,73 @@ async def test_failed_stay_cancel_of_d4_rejected_row_is_retried_while_a_sibling_
     assert _live_holders(store, _cid(0)) == ["evacuee:E9"]
 
 
+async def test_checked_in_stay_of_d4_rejected_row_is_never_cancelled_or_retried(db):
+    """CR-169 FR-21 H8: person 0 (in CouchDB) is a per-person duplicate, but staff already
+    checked their stay in (``active``). The row is rejected, yet the stay is not
+    ``pre_registered`` so no pass — first, nor the retry while person 1 is still pending
+    (``_cancel_stranded_rows``) — writes the evacuee or an audit doc for it."""
+    await _insert_group(2)
+    for index in (0, 1):
+        await _reserve(index)
+    couch, store = _fr50_couch(
+        [*_stay_docs(0), *_stay_docs(1), _evacuee_doc(9, _cid(0))]
+    )
+    store["evacuee:E0"]["person_id"] = {"number": _cid(0)}
+    store["evacuee:E0"]["current_stay"]["status"] = "active"
+    checked_in = dict(store["evacuee:E0"])
+    household = dict(store["household:H0"])
+    real_bulk = couch.bulk_docs.side_effect
+
+    async def failing_bulk(database, docs):
+        return [{"id": doc["_id"], "error": "forbidden"} for doc in docs]
+
+    couch.bulk_docs = AsyncMock(side_effect=failing_bulk)
+    assert await _persist_group(couch, BOOKING_ID) is False
+    assert (await _row(_row_id(0)))["state"] == "rejected"
+    assert (await _row(_row_id(1)))["state"] == "pending"
+
+    couch.bulk_docs = AsyncMock(side_effect=real_bulk)
+    assert await _persist_group(couch, BOOKING_ID) is True
+
+    rejected = await _row(_row_id(0))
+    assert (rejected["state"], rejected["reject_reason"]) == ("rejected", "duplicate")
+    _assert_pii_cleared(rejected)
+    written = await _row(_row_id(1))
+    assert (written["state"], written["reject_reason"]) == ("written", None)
+    assert store["evacuee:E0"] == checked_in
+    assert store["evacuee:E0"]["current_stay"]["status"] == "active"
+    assert store["household:H0"] == household
+    assert not any(
+        d.get("type") == "audit" and d["target_id"] == "evacuee:E0"
+        for d in store.values()
+    )
+    assert store["evacuee:E1"]["current_stay"]["status"] == "pre_registered"
+
+
+async def test_cancel_stranded_rows_never_touches_pending_or_written_rows(db):
+    """Only terminal ``cancelled`` / ``rejected`` rows qualify (R5): a ``pending`` or
+    ``written`` row with reserved ids keeps its ``pre_registered`` stay."""
+    await _insert_group(3)
+    for index in range(3):
+        await _reserve(index)
+    couch, store = _fr50_couch([*_stay_docs(0), *_stay_docs(1), *_stay_docs(2)])
+    rows = (
+        await ExternalBooking.find({"booking_id": BOOKING_ID})
+        .sort("person_seq")
+        .to_list()
+    )
+    rows[1].state = "written"
+    rows[2].state = "rejected"
+    snapshot = copy.deepcopy(store)
+
+    await inbound._cancel_stranded_rows(couch, DB, rows)
+
+    assert rows[0].state == "pending"
+    assert store["evacuee:E0"] == snapshot["evacuee:E0"]
+    assert store["evacuee:E1"] == snapshot["evacuee:E1"]
+    assert store["evacuee:E2"]["current_stay"]["status"] == "cancelled"
+
+
 async def test_failed_stay_cancel_of_a_rejected_in_couch_row_is_logged_by_id_only(
     db, caplog
 ):

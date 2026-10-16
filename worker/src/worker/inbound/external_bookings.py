@@ -643,13 +643,15 @@ async def _cancel_stranded_rows(
     ``pending``, so nothing else would ever cancel its stay. The same goes for a row
     rejected as duplicate (D4) whose stay cancel failed. A ``rejected`` row of a group
     that never reached CouchDB has no doc, so the call writes nothing. Only rows with
-    reserved ids qualify, and only a stay still ``pre_registered`` is touched. The row stays
-    ``cancelled``: the partner was told CANCELLED and the stay is cancelled right here
-    (`_cancel_stay_directly`). Re-opening it as ``written`` + ``cancel_requested`` would
-    leave it stuck there if staff checked the evacuee in before the next poll (the cancel
-    then ends ``not_cancellable``) while it still held the CID. This runs when the
-    group is processed again, i.e. while at least one sibling row is still ``pending``;
-    if the API cancelled *all* rows the group is never due again (see module docstring).
+    reserved ids qualify, and only a stay still ``pre_registered`` is touched (a stay staff
+    already checked in is left alone, FR-21 H8). The row keeps its terminal state
+    (``cancelled`` / ``rejected``): the partner was told CANCELLED / REJECTED and the stay
+    is cancelled right here (`_cancel_stay_directly`). Re-opening it as ``written`` +
+    ``cancel_requested`` would leave it stuck there if staff checked the evacuee in
+    before the next poll (the cancel then ends ``not_cancellable``) while it still held
+    the CID. This runs when the group is processed again, i.e. while at least one
+    sibling row is still ``pending``; if the API cancelled *all* rows the group is never
+    due again (see module docstring).
     """
     for row in rows:
         if row.state not in ("cancelled", "rejected") or not row.evacuee_id:
