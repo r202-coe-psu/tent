@@ -2,7 +2,7 @@
 title: Change Records — Index
 status: active
 created: 2026-06-16
-updated: 2026-10-15 # CR-169 approved (EXT-008 multi-CID booking + evacuee.booking_ref)
+updated: 2026-10-16 # CR-170 approved (evacuee dashboard range filter + stay counts)
 
 note: ดัชนี Change Record ทุกตัว — กติกาอยู่ใน ../change-management.md
 ---
@@ -22,7 +22,7 @@ CR แต่ละตัวเก็บในโฟลเดอร์ตาม�
 | หมวด                                             | โฟลเดอร์                             | จำนวน CR |
 | ------------------------------------------------ | ------------------------------------ | -------- |
 | [00-baseline — Baseline (FR-1–20)](#00-baseline) | [`00-baseline/`](00-baseline/)       | 28       |
-| [01-core — Platform/Core](#01-core)              | [`01-core/`](01-core/)               | 30       |
+| [01-core — Platform/Core](#01-core)              | [`01-core/`](01-core/)               | 31       |
 | [02-people — Household & Zoning](#02-people)     | [`02-people/`](02-people/)           | 9        |
 | [03-C — Supply & Inventory](#03-c-supply)        | [`03-C-supply/`](03-C-supply/)       | 23       |
 | [04-donation — Donation](#04-donation)           | [`04-donation/`](04-donation/)       | 11       |
@@ -105,6 +105,7 @@ CR แต่ละตัวเก็บในโฟลเดอร์ตาม�
 | [CR-142](01-core/CR-142-configurable-system-banner.md)                                 | System banner ตั้งค่าได้ — `config:app.banner_enabled/banner_message/banner_variant` (เปิด/ปิด · ข้อความ ≤120 · สี success/warning/destructive/info; ไม่มีข้อความ = ไม่แสดง), หน้า System Management ใหม่ + public BFF `GET /api/public/v1/system-banner` — no schema_v bump                                                                                        | done       | volatile                           | 2026-10-01                                    | docs/data/schema.md §3.2, docs/data/api-contract.md, frontend shared app-config + system-banner, routes/+layout.svelte, app.css, system-management/system-banner, api/v1/app-config, api/public/v1/system-banner                                                                                                                                                                |
 | [CR-161](01-core/CR-161-distribution-staff-role.md)                                    | เพิ่มบทบาท `distribution_staff` (เจ้าหน้าที่แจกจ่าย) แบบระบุศูนย์ `{code}:distribution_staff` — สิทธิ์เฉพาะจุดแจกจ่ายหน้างาน (Station 4) ไม่เปิด PII ทะเบียน และไม่แตะงานคลัง/ใบเบิก                                                                                                                                                                                | approved   | volatile                           | 2026-10-11                                    | docs/prd/role-permission-matrix.md §1.1/§3, frontend roles.ts, distribution/auth.ts, shelter-access-design.ts, portal-menu.ts, user-form.svelte                                                                                                                                                                                                                                 |
 | [CR-164](01-core/CR-164-central-db-shelter-scope-members.md)                           | ให้ `shelter:{code}` เป็นกุญแจอ่าน DB กลาง `registry` / `catalog` — แก้ผู้ใช้ compound role อ่านรายชื่อศูนย์และ catalog ไม่ได้                                                                                                                                                                                                                                      | approved   | stable                             | 2026-10-12                                    | docs/data/schema.md §6, docs/data/data-model.md §3.3/§6, frontend/src/lib/server/central-db-security.ts, provisioner.ts, sync-central-db.ts                                                                                                                                                                                                                                     |
+| [CR-170](01-core/CR-170-evacuee-dashboard-range-and-stay-counts.md)                    | Evacuee dashboard — ตัวเลือกช่วงวันที่ของกราฟลงทะเบียน (7/14/30 วัน, ตั้งแต่เปิดศูนย์ = default, กำหนดเอง; Asia/Bangkok; `from > to` → 422) · occupancy นับ `arriving` ในยอดรวม + `in_shelter` = `active` + `room_confirmed` · demographics views นับ `room_confirmed` (view manifest v3, redeploy) · no schema_v bump                                              | approved   | volatile                           | 2026-10-16                                    | CR-020 §3, docs/data/schema.md §7, `_design/app` v3, routes api/back-office/shelter/[code]/dashboard/\*, features/dashboard, shelters/domain/views, back-office evacuee-management dashboard                                                                                                                                                                                    |
 
 ## 02-people
 
