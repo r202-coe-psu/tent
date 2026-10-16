@@ -6,10 +6,12 @@ from datetime import UTC, datetime
 from typing import Any, Literal
 
 from worker.masking import (
+    last_name_hash,
     mask_address,
     mask_last_name,
     mask_national_id,
     mask_passport,
+    name_key,
     national_id_hash,
     passport_hash,
     phone_hash,
@@ -114,7 +116,9 @@ def project_evacuee(
         "_id": doc_id,
         "shelter_code": shelter_code,
         "first_name": doc.get("first_name") or "",
+        "first_name_key": name_key(doc.get("first_name") or ""),
         "last_name_masked": mask_last_name(last_name),
+        "last_name_hash": last_name_hash(last_name),
         "phone_hash": phone_hash(doc.get("phone")),
         "gender": doc.get("gender"),
         "address_masked": mask_address(household),

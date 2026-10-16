@@ -46,7 +46,7 @@
 	{#if compact}
 		<!-- Mobile bottom chrome: bottom sheet instead of a floating center dropdown -->
 		<Sheet.Root bind:open={sheetOpen}>
-			<Sheet.Trigger aria-label={ariaLabel} class={compactTriggerClass}>
+			<Sheet.Trigger type="button" aria-label={ariaLabel} class={compactTriggerClass}>
 				{#if activeNavItem}
 					{@const ActiveIcon = activeNavItem.icon}
 					<ActiveIcon class="size-4 shrink-0 text-primary" />

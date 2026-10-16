@@ -38,9 +38,7 @@
 					<p class="truncate text-base font-extrabold tracking-tight sm:text-lg">
 						PSU Smart Shelter
 					</p>
-					<p
-						class="line-clamp-2 text-[11px] leading-snug font-medium whitespace-normal text-white/90 sm:text-xs"
-					>
+					<p class="line-clamp-2 text-xs leading-snug font-medium whitespace-normal text-white/90">
 						เช็คงาน ติดตามสถานะ และรายงานตัวปฏิบัติหน้าที่
 					</p>
 				</div>
@@ -66,9 +64,7 @@
 		</div>
 	</main>
 
-	<footer
-		class="border-t border-slate-200 bg-white px-6 py-5 text-center text-[11px] text-slate-500"
-	>
+	<footer class="border-t border-slate-200 bg-white px-6 py-5 text-center text-xs text-slate-500">
 		ระบบบริการจิตอาสา · Smart Shelter Project
 	</footer>
 </div>

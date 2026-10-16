@@ -113,12 +113,12 @@
 	<title>SmartShelter</title>
 </svelte:head>
 
-<div class="flex flex-1 flex-col justify-start bg-[#F8FAFC] p-4 sm:p-6">
+<div class="flex flex-1 flex-col justify-start bg-[#F8FAFC] px-0 py-3 sm:p-6">
 	<div class="mx-auto w-full max-w-7xl min-w-0 px-4 sm:px-0">
 		<!-- Welcome & Operational Context Banner -->
 		<section
 			aria-label="บริบทการปฏิบัติงาน"
-			class="mb-6 rounded-xl border border-border/80 bg-card px-3 py-2.5 shadow-xs"
+			class="mb-4 rounded-xl border border-border/80 bg-card px-3 py-2.5 shadow-xs sm:mb-6"
 		>
 			<div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
 				<!-- Left: User Identity & Roles -->
@@ -152,10 +152,10 @@
 				<div class="flex flex-wrap items-center gap-2 sm:gap-3">
 					<!-- Shelter context -->
 					{#if canSwitchShelters && allowedShelters.length > 0}
-						<div class="w-full min-w-0 sm:w-[220px]">
+						<div class="min-w-0 flex-1 sm:w-[220px] sm:flex-none">
 							<Select.Root type="single" value={selectedCode ?? ''} onValueChange={onShelterChange}>
 								<Select.Trigger
-									class="h-8 w-full border-border bg-background text-xs font-medium"
+									class="h-11 w-full border-border bg-background text-xs font-medium sm:h-8"
 									aria-label="ศูนย์พักพิงที่ปฏิบัติงาน"
 								>
 									<div class="flex items-center gap-1.5 truncate">

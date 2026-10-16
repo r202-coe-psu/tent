@@ -363,7 +363,7 @@ describe('createEvacuee', () => {
 		expect(kioskEv.last_name).toBe('รักชาติ');
 		expect(kioskEv.birth_year).toBe(2533);
 		expect(kioskEv.age).toBe(36);
-		expect(kioskEv.current_stay.status).toBe('kiosk_registered');
+		expect(kioskEv.current_stay.status).toBe('arriving');
 		expect(kioskEv.household_id).toBeNull();
 		expect(kioskEv.registered_via).toBe('kiosk');
 		expect(kioskEv.person_id?.number).toBe('1234567890121');

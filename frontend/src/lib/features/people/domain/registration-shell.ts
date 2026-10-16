@@ -218,10 +218,7 @@ export function resolveHeadTransferRevert(
 	return { id: pending.householdId, patch: { head_evacuee_id: pending.previousHeadId } };
 }
 
-/** Auto Household label — UI never shows a label field (FR-03b-H). */
-export function autoHouseholdLabel(personName: string): string {
-	return `ครอบครัว${personName.trim()}`;
-}
+export { autoHouseholdLabel } from './people';
 
 function trimField(value: string | null | undefined): string {
 	return (value ?? '').trim();

@@ -39,7 +39,7 @@
 	{#if isLoading}
 		<div class="space-y-6">
 			<Skeleton class="h-32 w-full" />
-			<div class="grid gap-6 md:grid-cols-2">
+			<div class="grid min-w-0 grid-cols-1 gap-6 md:grid-cols-2">
 				<Skeleton class="h-[300px] w-full" />
 				<Skeleton class="h-[300px] w-full" />
 			</div>
@@ -56,9 +56,9 @@
 			<DashboardKpiCards occupancy={occupancyQuery.data} />
 		{/if}
 
-		<div class="flex flex-col gap-6">
+		<div class="flex min-w-0 flex-col gap-6">
 			<!-- Registration Trend Chart -->
-			<div class="rounded-xl border bg-card p-6 shadow-sm">
+			<div class="min-w-0 rounded-xl border bg-card p-4 shadow-sm sm:p-6">
 				<div class="mb-4 flex items-center gap-2">
 					<Activity class="h-4 w-4 text-primary" />
 					<h3 class="leading-none font-semibold tracking-tight">สถิติการลงทะเบียน</h3>
@@ -68,9 +68,9 @@
 				{/if}
 			</div>
 
-			<div class="grid gap-6 md:grid-cols-2">
+			<div class="grid min-w-0 grid-cols-1 gap-6 md:grid-cols-2">
 				<!-- Age Range -->
-				<div class="rounded-xl border bg-card p-6 shadow-sm">
+				<div class="min-w-0 rounded-xl border bg-card p-4 shadow-sm sm:p-6">
 					<div class="mb-4 flex items-center gap-2">
 						<Users class="h-4 w-4 text-primary" />
 						<h3 class="leading-none font-semibold tracking-tight">ช่วงอายุผู้อพยพทั้งหมด</h3>
@@ -81,7 +81,9 @@
 				</div>
 
 				<!-- Nationality Top 5 -->
-				<div class="flex flex-col justify-between rounded-xl border bg-card p-6 shadow-sm">
+				<div
+					class="flex min-w-0 flex-col justify-between rounded-xl border bg-card p-4 shadow-sm sm:p-6"
+				>
 					<div>
 						<div class="mb-4 flex items-center gap-2">
 							<Globe class="h-4 w-4 text-primary" />

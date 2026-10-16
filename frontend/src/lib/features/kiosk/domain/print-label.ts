@@ -92,8 +92,13 @@ export function kioskLabelPageCss(): string {
 export const KIOSK_LABEL_TEXT = {
 	name: { pt: 16, lineHeight: 1.3, weight: 700, maxLines: 3 },
 	phone: { pt: 12, lineHeight: 1.3, weight: 700, letterSpacingEm: 0.1 },
-	checklist: { pt: 10, lineHeight: 1.3, weight: 500 }
+	checklist: { pt: 10, lineHeight: 1.3, weight: 500 },
+	link: { pt: 9, lineHeight: 1.3, weight: 500 }
 } as const;
+/** Site address printed centred under the QR. */
+export const KIOSK_LABEL_LINK = 'shelter.psu.ac.th';
+/** Space between the QR's bottom edge and the link. */
+export const KIOSK_LABEL_LINK_GAP_MM = 1;
 /** Space between the name and the phone line. */
 export const KIOSK_LABEL_TEXT_ROW_GAP_MM = 0.5;
 /** Staff ID card checklist, ticked by hand at each station. */
@@ -167,6 +172,8 @@ export type KioskLabelLayout = {
 	qr: { x: number; y: number };
 	divider: { x: number; y: number; width: number; height: number };
 	text: { x: number; y: number; width: number; bottom: number };
+	/** Horizontal centre of the QR and the vertical middle of the link line below it. */
+	link: { x: number; y: number };
 };
 
 /**
@@ -183,10 +190,14 @@ export function kioskLabelLayout(qrPx: number): KioskLabelLayout {
 	const dividerX = qrX - gap - dividerWidth;
 	const textX = padding + offset;
 	const textY = padding + Math.round(mmToDots(KIOSK_LABEL_TEXT_OFFSET_Y_MM));
+	const qrY = Math.round((height - qrPx) / 2);
+	const linkY =
+		qrY + qrPx + mmToDots(KIOSK_LABEL_LINK_GAP_MM) + ptToDots(KIOSK_LABEL_TEXT.link.pt) / 2;
 	return {
-		qr: { x: qrX, y: Math.round((height - qrPx) / 2) },
+		qr: { x: qrX, y: qrY },
 		divider: { x: dividerX, y: padding, width: dividerWidth, height: height - padding * 2 },
-		text: { x: textX, y: textY, width: dividerX - gap - textX, bottom: height - padding }
+		text: { x: textX, y: textY, width: dividerX - gap - textX, bottom: height - padding },
+		link: { x: qrX + qrPx / 2, y: Math.round(linkY) }
 	};
 }
 

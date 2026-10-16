@@ -1,23 +1,29 @@
-export type IdentityMethodId = 'qr' | 'smart-card' | 'phone' | 'thaid';
+export type IdentityMethodId = 'qr' | 'smart-card' | 'thaid';
 
 export interface IdentityMethodDefinition {
 	id: IdentityMethodId;
-	icon: 'qr' | 'card' | 'phone' | 'thaid';
+	icon: 'qr' | 'card' | 'thaid';
 	title: string;
 	description?: string;
 	buttonLabel: string;
 	enabled: boolean;
-	href?:
-		| typeof KIOSK_QR_PATH
-		| typeof KIOSK_CARD_PATH
-		| typeof KIOSK_PHONE_PATH
-		| typeof KIOSK_THAID_PATH;
+	href?: typeof KIOSK_QR_PATH | typeof KIOSK_CARD_PATH | typeof KIOSK_THAID_PATH;
 }
 
 export const KIOSK_QR_PATH = '/kiosk/qr';
 export const KIOSK_CARD_PATH = '/kiosk/scanner/waiting';
-export const KIOSK_PHONE_PATH = '/kiosk/phone';
 export const KIOSK_THAID_PATH = '/kiosk/thaid';
+export const KIOSK_REPRINT_PATH = '/kiosk/reprint';
+
+/**
+ * Not a check-in method: a secondary entry under the method grid for a visitor who is already
+ * registered and lost their QR. Shown only when the shelter's phone flag is on.
+ */
+export const KIOSK_REPRINT_ENTRY = {
+	title: 'พิมพ์ QR',
+	description: 'กรอกเบอร์โทรที่ลงทะเบียนไว้ เพื่อพิมพ์ QR Code',
+	href: KIOSK_REPRINT_PATH
+} as const;
 
 export const IDENTITY_METHODS: readonly IdentityMethodDefinition[] = [
 	{
@@ -39,15 +45,6 @@ export const IDENTITY_METHODS: readonly IdentityMethodDefinition[] = [
 		href: KIOSK_CARD_PATH
 	},
 	{
-		id: 'phone',
-		icon: 'phone',
-		title: 'เบอร์โทรศัพท์',
-		description: 'กรอกเบอร์ที่ใช้ลงทะเบียน',
-		buttonLabel: 'กรอกเบอร์',
-		enabled: true,
-		href: KIOSK_PHONE_PATH
-	},
-	{
 		id: 'thaid',
 		icon: 'thaid',
 		title: 'ThaiD',
@@ -61,7 +58,6 @@ export const IDENTITY_METHODS: readonly IdentityMethodDefinition[] = [
 export interface IdentityMethodOptions {
 	/** Per machine, from the scanner client (`KIOSK_QR_CHECK_IN`). */
 	qrCheckInEnabled: boolean;
-	phoneCheckInEnabled: boolean;
 	thaidCheckInEnabled: boolean;
 }
 
@@ -72,7 +68,6 @@ export function visibleIdentityMethods(
 	return IDENTITY_METHODS.filter(
 		(method) =>
 			(method.id !== 'qr' || options.qrCheckInEnabled) &&
-			(method.id !== 'phone' || options.phoneCheckInEnabled) &&
 			(method.id !== 'thaid' || options.thaidCheckInEnabled)
 	);
 }

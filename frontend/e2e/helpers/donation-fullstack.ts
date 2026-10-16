@@ -292,7 +292,9 @@ export async function catalogItem(name: string): Promise<{ id: string; unit: str
 /** Public needs board → `shelter`'s card → the line for `itemName` (as the board prints it). */
 export async function openNeed(page: Page, shelter: Pick<PublicShelter, 'name'>, itemName: string) {
 	await page.goto('/donations');
-	await expect(page.getByRole('heading', { name: /กระดาน\s*ความต้องการด่วน/ })).toBeVisible();
+	await expect(
+		page.getByRole('heading', { name: /ของที่ศูนย์พักพิง\s*ต้องการตอนนี้/ })
+	).toBeVisible();
 	await cardWith(page, shelter.name, 'ดูรายละเอียดและบริจาค').click();
 	await cardWith(page, itemName, 'บริจาครายการนี้').click();
 }
@@ -455,6 +457,9 @@ export async function approvePending(page: Page, shelterCode: string, bookingRef
 /** Open a booking in the scan station by typing its ref. */
 export async function openInScanStation(page: Page, bookingRef: string) {
 	await page.reload();
+	// The active tab is kept in `?tab=` and survives the reload, so coming from the
+	// pending queue the scan station has to be picked explicitly.
+	await page.getByRole('tab', { name: /สแกนรับของเข้าคลัง/ }).click();
 	await page.getByRole('textbox', { name: 'รหัสการจอง' }).fill(bookingRef);
 	await page.getByRole('button', { name: 'ค้นหา' }).click();
 	await expect(

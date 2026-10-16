@@ -35,6 +35,7 @@
 		type DonationSlotMode
 	} from '$lib/features/operations';
 	import { DEFAULT_SLOT_WINDOWS, slotBookedCount } from '$lib/features/donations';
+	import BoardSectionHeader from '$lib/components/board-section-header.svelte';
 
 	/**
 	 * DN-5 — the shelter's own queues (`donation_slot`, schema.md §2.13), kept apart
@@ -253,27 +254,17 @@
 </script>
 
 <div class="space-y-4 md:space-y-6">
-	<div class="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-2xs sm:p-6">
-		<div class="flex items-start gap-3">
-			<span class="rounded-xl border border-sky-200 bg-sky-50 p-2 text-sky-700">
-				<CalendarClock class="h-5 w-5" />
-			</span>
-			<div class="space-y-1">
-				<h3 class="text-lg font-bold text-slate-900">ช่วงเวลารับของบริจาค</h3>
-				<p class="text-sm text-slate-500">
-					{#if isPickup}
-						รอบรถของศูนย์ที่ออกไปรับของถึงที่ — จำนวนเที่ยวต่อช่วงคือเพดานจริง
-						ผู้บริจาคจะจองได้ไม่เกินนี้ วันไหนไม่ตั้งรอบ = วันนั้นศูนย์ไม่ออกไปรับ
-					{:else}
-						ช่วงมาตรฐานเปิดให้อยู่แล้วทุกวัน ไม่ต้องตั้งอะไรก็รับของได้ —
-						ตั้งตรงนี้เฉพาะเมื่อจะปิดบางช่วง ใส่เพดานเฉพาะช่วงที่แน่น หรือเพิ่มช่วงนอกเวลามาตรฐาน
-					{/if}
-				</p>
-			</div>
-		</div>
+	<div class="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-2xs">
+		<BoardSectionHeader
+			icon={CalendarClock}
+			title="ช่วงเวลารับของบริจาค"
+			description={isPickup
+				? 'รอบรถของศูนย์ที่ออกไปรับของถึงที่ — จำนวนเที่ยวต่อช่วงคือเพดานจริง ผู้บริจาคจะจองได้ไม่เกินนี้ วันไหนไม่ตั้งรอบ = วันนั้นศูนย์ไม่ออกไปรับ'
+				: 'ช่วงมาตรฐานเปิดให้อยู่แล้วทุกวัน ไม่ต้องตั้งอะไรก็รับของได้ — ตั้งตรงนี้เฉพาะเมื่อจะปิดบางช่วง ใส่เพดานเฉพาะช่วงที่แน่น หรือเพิ่มช่วงนอกเวลามาตรฐาน'}
+		/>
 
 		<!-- คนละข้อจำกัดกัน จึงตั้งค่าแยกกัน: หน้าเคาน์เตอร์รับได้เรื่อยๆ แต่รถศูนย์มีจำกัด -->
-		<div class="mt-4 flex flex-wrap gap-2">
+		<div class="flex flex-wrap gap-2 p-4 sm:px-6">
 			<Button
 				variant={isPickup ? 'outline' : 'default'}
 				onclick={() => (mode = 'dropoff')}
@@ -462,93 +453,97 @@
 						{@const isClosed = slot.status === 'closed'}
 						{@const isFull = bookingsReady && slot.capacity !== null && booked >= slot.capacity}
 						<li
-							class="flex flex-col gap-3 rounded-xl border bg-white p-4 shadow-2xs sm:flex-row sm:items-center sm:justify-between
+							class="space-y-2 rounded-xl border bg-white p-4 shadow-2xs
 								{isClosed ? 'border-slate-300' : isFull ? 'border-amber-200' : 'border-emerald-200'}"
 						>
-							<div class="space-y-1">
-								<div class="flex flex-wrap items-center gap-2">
-									<span class="text-base font-bold text-slate-900 tabular-nums">
-										{slot.from} - {slot.to}
-									</span>
-									{#if isClosed}
-										<span
-											class="inline-flex items-center gap-1 rounded-full border border-slate-300 bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-700"
-										>
-											<Lock class="h-3.5 w-3.5" />
-											งดรับ
+							<div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+								<div class="min-w-0 space-y-1">
+									<div class="flex flex-wrap items-center gap-2">
+										<span class="text-base font-bold text-slate-900 tabular-nums">
+											{slot.from} - {slot.to}
 										</span>
-									{:else if isFull}
-										<span
-											class="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-900"
-										>
-											<Users class="h-3.5 w-3.5" />
-											คิวเต็ม
-										</span>
-									{:else}
-										<span
-											class="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-900"
-										>
-											<Users class="h-3.5 w-3.5" />
-											เปิดรับ
-										</span>
-									{/if}
-								</div>
-								<p class="text-sm text-slate-600">
-									จองแล้ว
-									<span class="font-semibold tabular-nums">{bookingsReady ? booked : '–'}</span>
-									{#if slot.capacity === null}
-										คิว · ไม่จำกัด
-									{:else}
-										/ <span class="tabular-nums">{slot.capacity}</span>
-										{isPickup ? 'เที่ยว' : 'คิว'}
-									{/if}
-									{#if slot.note}
-										<span class="text-slate-400"> · {slot.note}</span>
-									{/if}
-								</p>
-							</div>
-
-							<div class="flex flex-wrap items-center gap-2">
-								<Button
-									variant="outline"
-									onclick={() => openEdit(slot)}
-									disabled={saveSlot.isPending}
-									class="h-11 shrink-0"
-								>
-									<Pencil class="mr-1.5 h-4 w-4" />
-									แก้ไข
-								</Button>
-								<Button
-									variant="outline"
-									onclick={() => toggleStatus(slot)}
-									disabled={saveSlot.isPending}
-									class="h-11 shrink-0"
-								>
-									{#if isClosed}
-										<LockOpen class="mr-1.5 h-4 w-4" />
-										เปิดรับ
-									{:else}
-										<Lock class="mr-1.5 h-4 w-4" />
-										งดรับ
-									{/if}
-								</Button>
-								<Button
-									variant="outline"
-									onclick={() => openDelete(slot)}
-									disabled={!bookingsReady || booked > 0 || deleteSlot.isPending}
-									class="h-11 shrink-0 border-red-200 text-red-700 hover:bg-red-50 hover:text-red-800"
-								>
-									<Trash2 class="mr-1.5 h-4 w-4" />
-									ลบ
-								</Button>
-								{#if !bookingsReady}
-									<p class="w-full text-xs text-slate-500">รอข้อมูลการจองก่อน จึงจะลบได้</p>
-								{:else if booked > 0}
-									<p class="w-full text-xs text-slate-500">
-										มีผู้จองแล้ว ลบไม่ได้ — ใช้ "งดรับ" เพื่อหยุดรับแทน
+										{#if isClosed}
+											<span
+												class="inline-flex items-center gap-1 rounded-full border border-slate-300 bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-700"
+											>
+												<Lock class="h-3.5 w-3.5" />
+												งดรับ
+											</span>
+										{:else if isFull}
+											<span
+												class="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-900"
+											>
+												<Users class="h-3.5 w-3.5" />
+												คิวเต็ม
+											</span>
+										{:else}
+											<span
+												class="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-900"
+											>
+												<Users class="h-3.5 w-3.5" />
+												เปิดรับ
+											</span>
+										{/if}
+									</div>
+									<p class="text-sm text-slate-600">
+										จองแล้ว
+										<span class="font-semibold tabular-nums">{bookingsReady ? booked : '–'}</span>
+										{#if slot.capacity === null}
+											คิว · ไม่จำกัด
+										{:else}
+											/ <span class="tabular-nums">{slot.capacity}</span>
+											{isPickup ? 'เที่ยว' : 'คิว'}
+										{/if}
+										{#if slot.note}
+											<span class="text-slate-400"> · {slot.note}</span>
+										{/if}
 									</p>
-								{/if}
+								</div>
+
+								<div class="flex shrink-0 flex-wrap items-center gap-2">
+									<Button
+										variant="outline"
+										onclick={() => openEdit(slot)}
+										disabled={saveSlot.isPending}
+										class="h-11 shrink-0"
+									>
+										<Pencil class="mr-1.5 h-4 w-4" />
+										แก้ไข
+									</Button>
+									<Button
+										variant="outline"
+										onclick={() => toggleStatus(slot)}
+										disabled={saveSlot.isPending}
+										class="h-11 shrink-0"
+									>
+										{#if isClosed}
+											<LockOpen class="mr-1.5 h-4 w-4" />
+											เปิดรับ
+										{:else}
+											<Lock class="mr-1.5 h-4 w-4" />
+											งดรับ
+										{/if}
+									</Button>
+									<Button
+										variant="outline"
+										onclick={() => openDelete(slot)}
+										disabled={!bookingsReady || booked > 0 || deleteSlot.isPending}
+										class="h-11 shrink-0 border-red-200 text-red-700 hover:bg-red-50 hover:text-red-800"
+									>
+										<Trash2 class="mr-1.5 h-4 w-4" />
+										ลบ
+									</Button>
+								</div>
 							</div>
+							<!-- Below the row, not inside the button group: as a `w-full` child of
+							     that group it stretched the buttons across the card. -->
+							{#if !bookingsReady}
+								<p class="text-xs text-slate-500 sm:text-right">รอข้อมูลการจองก่อน จึงจะลบได้</p>
+							{:else if booked > 0}
+								<p class="text-xs text-slate-500 sm:text-right">
+									มีผู้จองแล้ว ลบไม่ได้ — ใช้ "งดรับ" เพื่อหยุดรับแทน
+								</p>
+							{/if}
 						</li>
 					{/each}
 				</ul>
