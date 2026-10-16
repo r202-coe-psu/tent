@@ -328,12 +328,19 @@ test.describe('Donation full-stack: back office', { tag: ['@critical', '@donatio
 			const newTo = `${String(Math.floor(endMin / 60)).padStart(2, '0')}:${String(endMin % 60).padStart(2, '0')}`;
 			const note = `ประตู 2 (e2e ${RUN_ID})`;
 			await original.getByRole('button', { name: 'แก้ไข' }).click();
-			const dialog = page.getByRole('dialog', { name: new RegExp(`^แก้ไขช่วง ${CAPPED.from}`) });
+			// Not pinned to the start time: saving clears the dialog's `editing`, which rewrites its
+			// title, so a title-specific name would stop matching and `toBeHidden` would pass vacuously.
+			const dialog = page.getByRole('dialog', { name: /^แก้ไขช่วง/ });
+			const editToasts = page
+				.locator('[data-sonner-toast]')
+				.filter({ hasText: `แก้ไขช่วง ${CAPPED.from} - ${newTo} แล้ว` });
+			await expect(dialog).toBeVisible();
 			await dialog.locator('#edit-slot-to').fill(newTo);
 			await dialog.locator('#edit-slot-capacity').fill('2');
 			await dialog.locator('#edit-slot-note').fill(note);
+			await expect(dialog.getByRole('button', { name: 'บันทึกการแก้ไข' })).toBeEnabled();
 			await dialog.getByRole('button', { name: 'บันทึกการแก้ไข' }).click();
-			await expect(page.getByText(`แก้ไขช่วง ${CAPPED.from} - ${newTo} แล้ว`)).toBeVisible();
+			await expect(editToasts).toHaveCount(1);
 			await expect(dialog).toBeHidden();
 
 			const edited = slotRow(page, { from: CAPPED.from, to: newTo });
@@ -341,9 +348,20 @@ test.describe('Donation full-stack: back office', { tag: ['@critical', '@donatio
 			await expect(edited).toContainText('ประตู 2');
 
 			// Lift the ceiling again from the same dialog.
+			// Let the first success toast go so the second one is not satisfied by the stale toast.
+			await expect(editToasts).toHaveCount(0, { timeout: 15_000 });
 			await edited.getByRole('button', { name: 'แก้ไข' }).click();
+			await expect(dialog).toBeVisible();
+			await expect(dialog.locator('#edit-slot-capacity')).toHaveValue('2');
 			await dialog.locator('#edit-slot-capacity').fill('');
-			await dialog.getByRole('button', { name: 'บันทึกการแก้ไข' }).click();
+			await expect(dialog.locator('#edit-slot-capacity')).toHaveValue('');
+			const saveEditButton = dialog.getByRole('button', { name: 'บันทึกการแก้ไข' });
+			await expect(saveEditButton).toBeEnabled();
+			await saveEditButton.click();
+			// A guard refusal (bookings not loaded, ceiling below booked) toasts an error and keeps the
+			// dialog open — wait on the success toast so that case fails here, not on the row text.
+			await expect(editToasts).toHaveCount(1);
+			await expect(dialog).toBeHidden();
 			await expect(edited).toContainText('ไม่จำกัด');
 
 			// Same start again → refused; still one row for it.
