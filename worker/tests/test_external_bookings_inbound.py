@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock
 
@@ -473,47 +474,149 @@ async def test_duplicate_after_api_cancel_keeps_cancelled(db):
     assert row["reject_reason"] is None
 
 
-async def test_retry_after_partial_write_is_not_rejected_by_new_duplicate(db):
-    """FR-21: once part of the group is in CouchDB, finish it — don't orphan the rest."""
-    await _insert_group(3)
-    # An earlier attempt wrote person 0 (row `written`, PII cleared) and then crashed;
-    # persons 1 and 2 have reserved ids but are still pending.
+def _dup_couch(live: dict[str, int], *, in_couch=(), bulk=None):
+    """A `_couch` whose duplicate query answers like Mango: hits are the live evacuees
+    holding one of the asked CIDs, capped at `limit`. `live` = cid -> holder count."""
+    couch = _couch(bulk=bulk)
+    couch.dup_selectors = []
+
+    async def find(_database, selector, *, fields=None, limit=25):
+        if "$in" in selector.get("_id", {}):
+            return [{"_id": i} for i in selector["_id"]["$in"] if i in set(in_couch)]
+        couch.dup_selectors.append((selector, fields, limit))
+        asked = selector["person_id.number"]["$in"]
+        hits = [
+            {"_id": f"evacuee:OTHER-{cid}-{n}", "person_id": {"number": cid}}
+            for cid, count in live.items()
+            if cid in asked
+            for n in range(count)
+        ]
+        return hits[:limit]
+
+    couch.find = AsyncMock(side_effect=find)
+    return couch
+
+
+async def _partly_written_group(size: int) -> None:
+    """Person 0 was written by an earlier attempt that then crashed; the rest has
+    reserved ids but is still pending."""
+    await _insert_group(size)
     await _api_update(
         {},
         {
             "state": "written",
             "evacuee_id": "evacuee:E0",
             "household_id": "household:H0",
-            "cid": None,
-            "first_name": None,
-            "last_name": None,
-            "phone": None,
+            **dict.fromkeys(PII),
         },
         _row_id(0),
     )
+    for index in range(1, size):
+        await _reserve(index)
+
+
+async def test_retry_after_partial_write_rejects_only_the_duplicated_person(db, caplog):
+    """FR-21 retry rule (CR-169 D1): part of the group is in CouchDB, person 1 is now a
+    duplicate -> reject person 1 only; person 0 stays written and person 2 is written."""
+    caplog.set_level(logging.INFO)
+    await _partly_written_group(3)
+    before = await _row(_row_id(0))
+    couch = _dup_couch({_cid(1): 1})
+
+    assert await _persist_group(couch, BOOKING_ID) is True
+
+    (selector, fields, limit), *_ = couch.dup_selectors
+    assert selector["person_id.number"] == {"$in": [_cid(1), _cid(2)]}  # pending only
+    assert "person_id.number" in fields and limit == 2
+    _, docs = couch.bulk_docs.await_args.args
+    assert [d["_id"] for d in docs] == ["household:H2", "evacuee:E2"]
+    rejected = await _row(_row_id(1))
+    assert rejected["state"] == "rejected"
+    assert rejected["reject_reason"] == "duplicate"
+    _assert_pii_cleared(rejected)
+    written = await _row(_row_id(2))
+    assert written["state"] == "written"
+    _assert_pii_cleared(written)
+    assert await _row(_row_id(0)) == before  # already-written rows are untouched
+    _assert_no_pii_logged(caplog.text)
+
+
+async def test_retry_after_partial_write_with_every_pending_person_duplicated(db):
+    await _partly_written_group(3)
+    couch = _dup_couch({_cid(1): 1, _cid(2): 2})
+
+    assert await _persist_group(couch, BOOKING_ID) is True
+
+    couch.bulk_docs.assert_not_awaited()
+    assert (await _row(_row_id(0)))["state"] == "written"
     for index in (1, 2):
-        await _api_update(
-            {},
-            {"evacuee_id": f"evacuee:E{index}", "household_id": f"household:H{index}"},
-            _row_id(index),
-        )
-    # Person 1 now also has a duplicate elsewhere in the shelter.
-    couch = _couch(find=[{"_id": "evacuee:OTHER"}])
+        row = await _row(_row_id(index))
+        assert (row["state"], row["reject_reason"]) == ("rejected", "duplicate")
+        _assert_pii_cleared(row)
+
+
+async def test_partial_retry_never_rejects_a_person_whose_docs_are_already_in_couch(db):
+    """Crash after the bulk write, before any row transition: both persons already live in
+    CouchDB. Person 0's CID is also held elsewhere, but rejecting the row would leave a
+    live pre-registration behind it — only person 1 (not in Couch) may be rejected."""
+    await _insert_group(2)
+    for index in (0, 1):
+        await _reserve(index)
+    couch = _dup_couch(
+        {_cid(0): 1, _cid(1): 1}, in_couch=["household:H0", "evacuee:E0"]
+    )
 
     assert await _persist_group(couch, BOOKING_ID) is True
 
     _, docs = couch.bulk_docs.await_args.args
-    assert [d["_id"] for d in docs] == [
-        "household:H1",
-        "evacuee:E1",
-        "household:H2",
-        "evacuee:E2",
-    ]
-    assert {d["booking_ref"] for d in docs if d["type"] == "evacuee"} == {BOOKING_ID}
+    assert [d["_id"] for d in docs] == ["household:H0", "evacuee:E0"]
+    assert (await _row(_row_id(0)))["state"] == "written"
+    assert (await _row(_row_id(1)))["state"] == "rejected"
+
+
+async def test_duplicate_rejects_the_whole_group_when_nothing_reached_couch(db):
+    """Unchanged FR-21: no row written, nothing in Couch -> one duplicated CID rejects all."""
+    await _insert_group(3)
+    couch = _dup_couch({_cid(1): 1})
+
+    assert await _persist_group(couch, BOOKING_ID) is True
+
+    couch.bulk_docs.assert_not_awaited()
     for index in range(3):
         row = await _row(_row_id(index))
-        assert row["state"] == "written"
+        assert (row["state"], row["reject_reason"]) == ("rejected", "duplicate")
         _assert_pii_cleared(row)
+
+
+async def test_partial_reject_survives_a_failed_bulk_write_and_is_finished_later(db):
+    """The rejection of person 1 is persisted before the bulk write. If that write then
+    fails, the retry must not read the rejected row as 'group rejected' (R1) and reject
+    person 2 as well."""
+    await _partly_written_group(3)
+    failing = _dup_couch({_cid(1): 1})
+    failing.bulk_docs = AsyncMock(side_effect=RuntimeError("couch down"))
+    assert await _persist_group(failing, BOOKING_ID) is False
+    assert (await _row(_row_id(1)))["state"] == "rejected"
+    assert (await _row(_row_id(2)))["state"] == "pending"
+
+    couch = _dup_couch({})
+    assert await _persist_group(couch, BOOKING_ID) is True
+
+    _, docs = couch.bulk_docs.await_args.args
+    assert [d["_id"] for d in docs] == ["household:H2", "evacuee:E2"]
+    assert (await _row(_row_id(2)))["state"] == "written"
+    assert (await _row(_row_id(1)))["state"] == "rejected"
+
+
+async def test_duplicate_query_pages_so_one_busy_cid_cannot_hide_another(db):
+    cids = [_cid(0), _cid(1), _cid(2)]
+    couch = _dup_couch({_cid(1): 3, _cid(2): 1})
+
+    hits = await inbound._find_duplicates(couch, DB, cids, ["evacuee:own"])
+
+    assert {inbound._hit_cid(hit) for hit in hits} == {_cid(1), _cid(2)}
+    limits = [limit for _, _, limit in couch.dup_selectors]
+    assert limits[0] == 3 and all(limit <= 3 for limit in limits)
 
 
 async def test_retry_after_crash_before_row_transition_is_not_rejected(db):
@@ -1128,8 +1231,9 @@ async def test_crash_mid_reject_is_finished_on_the_next_pass_without_writing(
     couch = _couch()
     assert await _persist_group(couch, BOOKING_ID) is True
 
-    couch.database_exists.assert_not_awaited()
-    couch.find.assert_not_awaited()
+    # Only the "did any of it reach Couch?" probe is made; nothing is written.
+    assert len(_probe_selectors(couch)) == 1
+    assert couch.find.await_count == 1
     couch.bulk_docs.assert_not_awaited()
     for index in range(3):
         row = await _row(_row_id(index))
@@ -1192,7 +1296,7 @@ async def test_cancel_during_write_with_rebooked_cid_cancels_stay_directly(db, c
 # R5 + probe selector --------------------------------------------------
 
 
-async def test_stranded_cancelled_row_with_live_stay_is_routed_to_cancel(db):
+async def test_stranded_cancelled_row_has_its_stay_cancelled_and_stays_cancelled(db):
     """Crash after the bulk write, then the API cancelled person 0 while rows 1-2 wait."""
     await _insert_group(3)
     for index in range(3):
@@ -1203,17 +1307,67 @@ async def test_stranded_cancelled_row_with_live_stay_is_routed_to_cancel(db):
     assert await _persist_group(couch, BOOKING_ID) is True
 
     row = await _row(_row_id(0))
-    assert row["state"] == "written"
-    assert row["cancel_requested"] is True
+    assert row["state"] == "cancelled"  # never re-opened as `written`
+    assert row["cancel_requested"] is False
+    assert row["reject_reason"] is None
     _assert_pii_cleared(row)
-    for index in (1, 2):
-        assert (await _row(_row_id(index)))["state"] == "written"
-    # And the next poll's cancel pass finishes the stay.
-    booking = next(b for b in await _find_due() if b.id == _row_id(0))
-    assert await _process_cancel(couch, booking) is True
     assert store["evacuee:E0"]["current_stay"]["status"] == "cancelled"
     assert store["household:H0"]["status"] == "cancelled"
-    assert (await _row(_row_id(0)))["state"] == "cancelled"
+    audits = [d for d in store.values() if d.get("type") == "audit"]
+    assert {a["target_id"] for a in audits} == {"evacuee:E0", "household:H0"}
+    for index in (1, 2):
+        assert (await _row(_row_id(index)))["state"] == "written"
+    assert _row_id(0) not in {b.id for b in await _find_due()}
+
+
+async def test_stranded_cancelled_row_is_not_reopened_if_staff_check_in_afterwards(
+    db, monkeypatch
+):
+    """Review R2/F1: re-opening the row as `written` + `cancel_requested` left it stuck
+    `written` / `not_cancellable` (still holding the CID) once staff had checked the
+    evacuee in before the cancel poll. The stay is now cancelled in the same pass."""
+    await _insert_group(2)
+    for index in range(2):
+        await _reserve(index)
+    await _api_cancel_all_but(1, size=2)
+    couch, store = _stored_couch(_stay_docs(0))
+
+    assert await _persist_group(couch, BOOKING_ID) is True
+    store["evacuee:E0"]["current_stay"]["status"] = (
+        "active"  # staff check-in, a beat late
+    )
+
+    await inbound.run_external_booking_inbound_loop(
+        couch, stop_event=_stop_after_polls(monkeypatch, 2)
+    )
+
+    row = await _row(_row_id(0))
+    assert (row["state"], row["cancel_requested"], row["reject_reason"]) == (
+        "cancelled",
+        False,
+        None,
+    )
+
+
+async def test_whole_group_cancelled_after_a_crash_is_never_due_again(db, monkeypatch):
+    """Accepted residual risk (review R2/F4, tracked in #595): the process died after the
+    bulk write and the API then cancelled *every* pending row. No pending row is left, so
+    the group is never due and the stays stay `pre_registered` until staff cancel them.
+    Fixing it needs a new persisted field / index (a spec change)."""
+    await _insert_group(2)
+    for index in range(2):
+        await _reserve(index)
+    await _api_cancel_all_but(size=2)
+    couch, store = _stored_couch([*_stay_docs(0), *_stay_docs(1)])
+
+    assert await _find_due() == []
+    await inbound.run_external_booking_inbound_loop(
+        couch, stop_event=_stop_after_polls(monkeypatch, 2)
+    )
+
+    couch.get_doc.assert_not_awaited()
+    for index in range(2):
+        assert store[f"evacuee:E{index}"]["current_stay"]["status"] == "pre_registered"
 
 
 async def test_cancelled_rows_without_a_live_stay_are_left_alone(db):
@@ -1302,7 +1456,7 @@ async def test_cancelled_rows_docs_in_couch_count_as_group_reached_couch(db):
     assert (await _row(_row_id(1)))["state"] == "written"
 
 
-async def test_written_row_is_proof_without_a_probe(db):
+async def test_written_row_alone_proves_the_group_reached_couch(db):
     await _insert_group(2)
     await _api_update({}, {"state": "written", **dict.fromkeys(PII)}, _row_id(0))
     await _reserve(0)
@@ -1310,8 +1464,8 @@ async def test_written_row_is_proof_without_a_probe(db):
 
     assert await _persist_group(couch, BOOKING_ID) is True
 
-    assert _probe_selectors(couch) == []
-    couch.bulk_docs.assert_awaited_once()
+    couch.bulk_docs.assert_awaited_once()  # not rejected, the pending person is written
+    assert (await _row(_row_id(0)))["state"] == "written"
 
 
 # FR-41 group cancel ---------------------------------------------------
@@ -1531,6 +1685,69 @@ async def test_incomplete_group_log_is_throttled(db, clock, caplog):
     assert caplog.text.count("incomplete") == 2
 
 
+# R2/F3: skips that used to retry and log on every poll -----------------
+
+
+async def _poll(couch, monkeypatch, polls: int) -> None:
+    await inbound.run_external_booking_inbound_loop(
+        couch, stop_event=_stop_after_polls(monkeypatch, polls)
+    )
+
+
+async def test_missing_shelter_database_is_backed_off_and_logged_once(
+    db, monkeypatch, clock, caplog
+):
+    await _insert_group(2)
+    couch = _couch(exists=False)
+
+    await _poll(couch, monkeypatch, 5)
+
+    assert couch.database_exists.await_count == 1  # polls 2-5 inside the backoff window
+    assert caplog.text.count("missing for booking group") == 1
+    assert (await _row(_row_id(0)))["state"] == "pending"
+
+
+async def test_failed_duplicate_check_is_backed_off_and_logged_once(
+    db, monkeypatch, clock, caplog
+):
+    await _insert_group(2)
+    couch = _couch()
+    couch.find = AsyncMock(side_effect=ValueError(_LEAK))
+
+    await _poll(couch, monkeypatch, 5)
+
+    assert couch.find.await_count == 1
+    assert caplog.text.count("Duplicate check failed") == 1
+    assert "attempt 1" in caplog.text
+    _assert_no_pii_logged(caplog.text)
+    couch.bulk_docs.assert_not_awaited()
+
+
+async def test_pending_row_without_pii_is_backed_off_and_logged_once(
+    db, monkeypatch, clock, caplog
+):
+    await _insert_group(2)
+    await _api_update({}, {"cid": None}, _row_id(1))
+    couch = _couch()
+
+    await _poll(couch, monkeypatch, 5)
+
+    assert couch.database_exists.await_count == 1
+    assert caplog.text.count("no PII") == 1
+    couch.bulk_docs.assert_not_awaited()
+
+
+async def test_incomplete_group_is_not_backed_off(db, clock):
+    """Usually a commit in flight: it must be re-checked on the very next poll."""
+    await _insert_group(2)
+    await _api_update({}, {"committed": False}, _row_id(1))
+    tracker = FailureTracker()
+
+    assert await _persist_group(_couch(), BOOKING_ID, health=tracker) is False
+
+    assert tracker.ready(f"group:{BOOKING_ID}")
+
+
 # PII never reaches the logs -------------------------------------------
 
 _LEAK = f"bad doc {CID} {PHONE} สมชาย ใจดี ชื่อ0 สกุล0 08000000"
@@ -1588,3 +1805,28 @@ async def test_loop_level_exceptions_carrying_pii_are_logged_by_type_only(
     assert "ValueError" in caplog.text
     _assert_no_pii_logged(caplog.text)
     assert "Traceback" not in caplog.text
+
+
+async def test_logged_exception_keeps_the_innermost_frame_location_but_no_values(
+    db, caplog
+):
+    """Review R2/F6: the traceback is dropped (it can carry values) but the operator
+    still gets `file:function:line` of where the error was raised."""
+    await _insert_group(2)
+    couch = _couch()
+
+    async def _find_boom(*_args, **_kwargs):
+        raise ValueError(_LEAK)
+
+    couch.find = _find_boom
+
+    assert await _persist_group(couch, BOOKING_ID) is False
+
+    match = re.search(
+        r"error=ValueError at test_external_bookings_inbound\.py:_find_boom:(\d+)",
+        caplog.text,
+    )
+    assert match, caplog.text
+    assert "Traceback" not in caplog.text
+    assert "bad doc" not in caplog.text  # the exception message is never logged
+    _assert_no_pii_logged(caplog.text)
