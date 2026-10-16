@@ -35,15 +35,22 @@ import type { CycleCountSubmission } from '../domain/cycle-count';
 import { countPendingTransfers } from '../domain/transfer-pending';
 import { distributeAcrossLots, type DistributeAcrossLotsArgs } from './distribute-across-lots';
 
+/**
+ * Keys for data read out of ONE shelter's database carry that shelter's code, like
+ * `balance` already did. Without it SH001 and SH002 shared a cache entry: switching
+ * shelter remounted the donation page onto the previous shelter's campaigns (still
+ * inside `staleTime`), and a promote/cut-off clicked on that list was written into the
+ * newly selected shelter's database as a stray copy.
+ */
 export const operationsKeys = {
 	all: ['operations'] as const,
-	campaigns: () => [...operationsKeys.all, 'campaigns'] as const,
-	stockLedgers: () => [...operationsKeys.all, 'stockLedgers'] as const,
-	donations: () => [...operationsKeys.all, 'donations'] as const,
+	campaigns: () => [...operationsKeys.all, 'campaigns', getShelterCode()] as const,
+	stockLedgers: () => [...operationsKeys.all, 'stockLedgers', getShelterCode()] as const,
+	donations: () => [...operationsKeys.all, 'donations', getShelterCode()] as const,
 	ledger: () => [...operationsKeys.all, 'ledger'] as const,
 	byItem: (id: string) => [...operationsKeys.ledger(), id] as const,
 	balance: () => [...operationsKeys.all, 'balance', getShelterCode()] as const,
-	donationSlots: () => [...operationsKeys.all, 'donationSlots'] as const,
+	donationSlots: () => [...operationsKeys.all, 'donationSlots', getShelterCode()] as const,
 	transfers: () => [...operationsKeys.all, 'transfers'] as const,
 	transfer: (id: string) => [...operationsKeys.transfers(), id] as const
 };

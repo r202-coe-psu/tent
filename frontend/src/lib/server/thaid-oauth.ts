@@ -209,11 +209,15 @@ export function maskPid(rawPid: string | null | undefined): string | null {
 }
 
 /**
- * FR-KTD-18 (data minimization): kiosk check-in needs only the citizen id.
- * D-6 — verify on the DOPA sandbox that `pid` is returned for this scope;
- * fallback is `pid name openid` (the scope used by mode `login`).
+ * Profile scope for registration-style flows (`register`, `member_scan`, and `kiosk_check_in`,
+ * whose scan may turn into a kiosk walk-in registration that needs the name and address).
  */
-const KIOSK_CHECK_IN_SCOPE = 'openid pid';
+function thaidProfileScope(): string {
+	return (
+		env.THAID_OAUTH_SCOPE?.trim() ||
+		'openid pid name birthdate gender address house_address given_name family_name title'
+	);
+}
 
 export function buildThaidAuthorizeUrl(opts: {
 	clientId: string;
@@ -224,12 +228,9 @@ export function buildThaidAuthorizeUrl(opts: {
 }): string {
 	const base = opts.authUrl || 'https://imauthsbx.bora.dopa.go.th/api/v2/oauth2/auth/';
 	const defaultScope =
-		opts.mode === 'kiosk_check_in'
-			? KIOSK_CHECK_IN_SCOPE
-			: opts.mode === 'register' || opts.mode === 'member_scan'
-				? env.THAID_OAUTH_SCOPE?.trim() ||
-					'openid pid name birthdate gender address house_address given_name family_name title'
-				: 'pid name openid';
+		opts.mode === 'register' || opts.mode === 'member_scan' || opts.mode === 'kiosk_check_in'
+			? thaidProfileScope()
+			: 'pid name openid';
 	const params = new URLSearchParams({
 		response_type: 'code',
 		client_id: opts.clientId,

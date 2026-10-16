@@ -1,4 +1,4 @@
-export const KIOSK_THAID_SESSION_PATH = '/api/v1/scanner/kiosk/thaid/session';
+export const KIOSK_THAID_SESSION_PATH = '/api/v1/kiosk/thaid/session';
 export const KIOSK_THAID_STATUS_PATH = `${KIOSK_THAID_SESSION_PATH}/status`;
 export const KIOSK_THAID_CANCEL_PATH = `${KIOSK_THAID_SESSION_PATH}/cancel`;
 export const KIOSK_THAID_CREATE_TIMEOUT_MS = 10_000;

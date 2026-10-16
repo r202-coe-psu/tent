@@ -4,7 +4,7 @@ title: Kiosk — เปลี่ยนจาก "เสียบบัตรเ�
 status: approved
 date: 2026-09-24
 created: 2026-09-24
-updated: 2026-10-04 # approved และ merge โดย Soravit Sukkar (Team Lead) + รันเลข CR-151 และลงทะเบียนใน _index.md
+updated: 2026-10-15 # ทีม kiosk ขอเลิกกรอง registered_via ใน §15 (FR-KPC-101/104) · 2026-10-13 ข้อเสนอแก้ไข §15 approved โดย Dev/Team Lead Soravit Sukkarn (รับ requirement จากหัวหน้าโครงการเมื่อวาน 2026-10-12) · 2026-10-04 approved และ merge โดย Soravit Sukkar (Team Lead) + รันเลข CR-151 และลงทะเบียนใน _index.md
 requested_by: ทีม kiosk (branch feat/pre-register_kiosk)
 decided_by: Soravit Sukkar (Team Lead)
 decision_date: 2026-10-04
@@ -25,6 +25,8 @@ affects:
   - frontend/src/lib/server/security/rate-limiter.ts
   - frontend/src/lib/server/shelter-access-design.ts · shelters.admin.ts · features/shelters/server/provisioner.ts · scripts/redeploy-access.ts · scripts/seed/registry-shelters.ts
   - scanner_client/app/{manager,config,scard}.py · scanner_client/tests · scanner_client/README.md
+  - (§15 proposed) frontend/src/lib/features/kiosk/server/{kiosk-check-in.server.ts,kiosk-reprint.server.ts} · domain/{check-in-status.ts,identity-method.ts} · application/{reprint-session.svelte.ts,kiosk-label-print.ts} · ui/{identity-method-selector,kiosk-reprint,reprint-member-list,phone-household-picker}.svelte
+  - (§15 proposed) frontend/src/routes/api/v1/kiosk/reprint/+server.ts · frontend/src/routes/kiosk/{reprint,phone}/** · frontend/src/lib/server/security/rate-limiter.ts · kiosk/app/manager.py (allowlist)
 why: >
   Kiosk แบบเดิม (CR-097) สร้าง evacuee จากบัตรโดยไม่มีครัวเรือนและไม่มีเบอร์ เจ้าหน้าที่ต้องกรอกซ้ำที่ Station 1
   และเกิด record ซ้อนกับผู้จองออนไลน์ kiosk รอบนี้จึงทำหน้าที่เดียว คือรับรายงานตัว (Report-in) ผู้ที่ลงทะเบียนล่วงหน้าทางเว็บแล้ว
@@ -32,6 +34,8 @@ why: >
 migration: ไม่มี — ไม่มี field ใหม่ ไม่ bump schema_v (คงเดิม (ไม่อัปเกรด schema_v; อิงตามเวอร์ชันปัจจุบันของ develop)); evacuee ที่ `registered_via:'kiosk'` เดิมยังอยู่ และให้เจ้าหน้าที่จัดการที่ Station 1 (ดู §9)
 ---
 # CR-151: Kiosk รับรายงานตัวผู้ลงทะเบียนล่วงหน้า
+
+> **ข้อเสนอแก้ไข 2026-10-13 (proposed, ยังไม่ approve):** §15 ท้ายเอกสาร — หัวข้อหน้าแรก「ลงทะเบียน」· รับ walk-in `registered_via:'kiosk'` · ช่องทางเบอร์ → เมนู「พิมพ์ QR」ยืนยันเลขบัตร 4 ตัวท้าย · ระหว่างรอ PO ข้อความ §1–§14 ยังมีผล
 
 > **สรุป (TL;DR)**
 >
@@ -441,3 +445,55 @@ migration: ไม่มี — ไม่มี field ใหม่ ไม่ bump
 - 2026-10-04 — ปรับปรุงเอกสารตาม PR review (#309): ปรับการอ้างอิง `schema_v` ของ evacuee ให้ระบุคงเดิมตาม develop (ไม่ระบุเลข 10 ที่ล้าสมัย), ระบุหมายเหตุเชื่อมโยง walk-in กับ CR-149, บันทึกคำเตือนความเสี่ยงด้าน audit trail (Audit Trail Gap), ปรับ G-8 เป็น backlog ของ scanner_client, ปรับการอ้างอิง implementation plans ให้ระบุรวมติดตามใน CR นี้ (ตัด phantom paths), และยกเลิกโครงสร้างส่วนถาม-ตอบเดิม โดยผนวกข้อกำหนดและคำตอบของเจ้าของโครงการทั้งหมดเข้าสู่เนื้อหา spec โดยตรง
 - 2026-10-04 — Soravit Sukkar (Team Lead) อนุมัติ (approved) CR-151 และ merge PR #309 เข้า branch develop; ยืนยัน schema_v ของ evacuee คงเดิม (ไม่อัปเกรด schema_v; อิงตามเวอร์ชันปัจจุบันของ develop) และรันเลข CR-151
 - เหตุผลที่ใช้ `/lookup` เดิมสำหรับเบอร์แทนการสร้าง endpoint ใหม่: allowlist ของ `scanner_client` ครอบคลุมอยู่แล้ว จึงไม่ต้อง deploy ฝั่ง Python ใหม่
+- 2026-10-13 — ทีม kiosk เสนอ §15 จาก feedback หน้างาน: หัวข้อหน้าแรก「ลงทะเบียน」· รับ `registered_via:'kiosk'` · ช่องทางเบอร์เปลี่ยนเป็น「พิมพ์ QR」ยืนยัน 4 ตัวท้าย พิมพ์ได้เฉพาะ `arriving`/`active`/`room_confirmed` (ไม่รวม `temporary_leave`, `checked_out`) · ช่องทางบัตร/QR/ThaiD พิมพ์ซ้ำได้เฉพาะ `arriving` คงเดิม · track ใน CR นี้แทน draft CR ใหม่
+- 2026-10-13 — Soravit Sukkarn (Team Lead) approved ข้อเสนอแก้ไข §15 โดยรับ requirement จากหัวหน้าโครงการเมื่อวาน (2026-10-12)
+- 2026-10-15 — ทีม kiosk ขอเลิกกรอง `registered_via` (เดิม {`web`, `kiosk`}): lookup บัตร/QR/ThaiD/เบอร์, `/kiosk/check-in` และ `/kiosk/reprint` ค้นทั้งศูนย์ของเครื่อง · กฎสถานะคงเดิม (check-in = `pre_registered` · พิมพ์ซ้ำทางเบอร์ = `arriving`/`active`/`room_confirmed`) · สมาชิกที่เจ้าหน้าที่เพิ่มที่ Station 1 เลือกได้ตามสถานะ (แก้ FR-KPC-29, E-11, E-23) · Mango selector เบอร์ไม่มี `registered_via` แล้ว ยังใช้ `evacuee-type-phone-idx`
+
+## 15. ข้อเสนอแก้ไข 2026-10-13 (approved โดย Team Lead)
+
+> **สถานะ:** approved โดย Soravit Sukkarn (Team Lead) — รับ requirement จากหัวหน้าโครงการเมื่อ 2026-10-12 · implement แล้วบน branch `refactor-kiosk-cleanup`
+
+> **สรุป (TL;DR)**
+>
+> - **เปลี่ยนอะไร:** (1) หัวข้อหน้า `/kiosk`「รายงานตัว」→「ลงทะเบียน」(2) ช่องทางบัตร/QR/ThaiD และ `/kiosk/check-in` รับ `registered_via: 'kiosk'` ด้วย (walk-in ของ CR-149 §9) (3) ช่องทางเบอร์โทรเลิกรับรายงานตัว เปลี่ยนเป็นเมนู「พิมพ์ QR」ที่ยืนยันด้วยเลขบัตร 4 ตัวท้าย
+> - **เพื่อใคร/ทำไม:** walk-in ที่เป็น `arriving` พิมพ์ QR ซ้ำได้เหมือนคนจองล่วงหน้า · คนที่ QR หายพิมพ์ใหม่ได้เองโดยไม่ต้องใช้เบอร์อย่างเดียว
+> - **Dev ต้อง build:** `POST /api/v1/kiosk/reprint` (อ่านอย่างเดียว) · หน้า `/kiosk/reprint` · `/kiosk/phone` redirect · ปุ่ม「พิมพ์ QR」ใต้การ์ด
+> - **กระทบ schema:** ไม่มี · flag `kiosk_phone_check_in_enabled` key เดิม (CR-152 §9)
+
+**แก้ข้อเดิม:** FR-KPC-11 (การ์ดเบอร์) · FR-KPC-21/22/23/72 (`registered_via:'web'` → ไม่กรองช่องทาง ค้นทั้งศูนย์ · 2026-10-13 เดิมเป็น `web` หรือ `kiosk`) · FR-KPC-29, E-11, E-23 (สมาชิกช่องทางอื่นไม่ถูกล็อกแล้ว — เลือกได้ตามสถานะ) · §6.6 ช่องทางเบอร์ (FR-KPC-60 และส่วนเบอร์ของ FR-KPC-83 — ไม่รับรายงานตัวด้วยเบอร์อีก)
+
+### 15.1 หน้าแรกและช่องทางเดิม
+
+| ID         | Requirement                                                                                                                                                                                                                                             |
+| :--------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| FR-KPC-100 | หัวข้อ h1 หน้า `/kiosk`「รายงานตัว」→「ลงทะเบียน」(เปลี่ยนเฉพาะ h1 หน้าแรก)                                                                                                                                                                             |
+| FR-KPC-101 | lookup บัตร/QR/ThaiD และ `/kiosk/check-in`: ค้นทั้งศูนย์ของเครื่อง ไม่กรอง `registered_via` (ทุกช่องทางเข้าเงื่อนไข · เลือกได้ตามสถานะเท่านั้น: check-in = `pre_registered`) · household ที่ไม่มีคนเลือก check-in ได้ → ทางพิมพ์ซ้ำเดิม (`already_checked_in` + `label`, ไม่เขียน doc) · ทางนี้พิมพ์ซ้ำได้เฉพาะ `arriving` (เหมือนเดิม) |
+| FR-KPC-102 | หน้า `/kiosk`: การ์ดหลัก 3 ช่องทาง (QR · บัตรประชาชน · ThaiD) · ใต้ grid ปุ่มรองเต็มความกว้าง ไอคอนเครื่องพิมพ์「พิมพ์ QR」→ `/kiosk/reprint` · แสดงเมื่อ `kiosk_phone_check_in_enabled` เปิด                                                           |
+| FR-KPC-103 | `/kiosk/phone` redirect 307 → `/kiosk/reprint` (คง context query) · flag ปิด → redirect `/kiosk`                                                                                                                                                        |
+
+### 15.2 พิมพ์ QR ด้วยเบอร์โทร
+
+| ID         | Requirement                                                                                                                                                                                                                                                                                                                                                        |
+| :--------- | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| FR-KPC-104 | lookup `source:'phone'` และ `/kiosk/reprint`: ค้นทั้งศูนย์ของเครื่อง ไม่กรอง `registered_via` · สมาชิกที่พิมพ์ได้ = `arriving`/`active`/`room_confirmed` · `pre_registered` แสดงแต่เลือกไม่ได้ (ให้ใช้บัตรหรือ ThaiD) · `temporary_leave` แสดงแต่เลือกไม่ได้ · `checked_out` ไม่แสดง (FR-KPC-29) · candidates นับคนที่พิมพ์ได้                                                                      |
+| FR-KPC-105 | เลือกครัวเรือนแล้ว → numpad「เลขบัตรประชาชน 4 ตัวท้ายของเจ้าของเบอร์」ก่อนพิมพ์                                                                                                                                                                                                                                                                                    |
+| FR-KPC-106 | `POST /api/v1/kiosk/reprint { phone, primary_evacuee_id, id_last4, evacuee_ids }`: device auth · flag ปิด → 403 `KIOSK_METHOD_DISABLED` · primary ต้องมี `phone` ตรง (canonical/legacy) · `person_id.number` ลงท้ายด้วย `id_last4` → ไม่ตรง 403 `KIOSK_REPRINT_VERIFY_FAILED` · primary ไม่มีเลขที่เป็นตัวเลข → 403 `KIOSK_REPRINT_UNVERIFIABLE` (ไปพบเจ้าหน้าที่) |
+| FR-KPC-107 | reprint คืน `[{ evacuee_id, qr_payload, label }]` เฉพาะสมาชิก household เดียวกันที่พิมพ์ได้และไม่ `search_excluded` · **ไม่เขียน doc ใด ๆ** · `cache-control: no-store`                                                                                                                                                                                            |
+| FR-KPC-108 | rate limit ต่อเครื่อง และ verify ผิด 5 ครั้ง/10 นาทีต่อ primary → 429 `KIOSK_RATE_LIMITED` · `scanner_client` allowlist เพิ่ม `/api/v1/kiosk/reprint`                                                                                                                                                                                                              |
+| FR-KPC-109 | ข้อความเมื่อเลือกไม่ได้: `pre_registered`「ยังไม่ได้ลงทะเบียน — ใช้บัตรประชาชนหรือ ThaiD」· `temporary_leave`「ออกนอกศูนย์ชั่วคราว — พิมพ์ QR ไม่ได้」· ไม่มีใครพิมพ์ได้「ไม่มีผู้ที่พิมพ์ QR ได้ กรุณาติดต่อเจ้าหน้าที่」                                                                                                                                         |
+
+### 15.3 Acceptance
+
+- **AC-KPC-100** walk-in `arriving` เสียบบัตรซ้ำ → พิมพ์ QR ซ้ำได้ ไม่มีการเขียน doc
+- **AC-KPC-101** เบอร์ + 4 ตัวท้ายถูก → พิมพ์ label คนที่เลือก · 4 ตัวท้ายผิด → ไม่ได้ label · ผิดเกิน 5 ครั้ง → 429
+- **AC-KPC-102** คน `pre_registered` / `temporary_leave` เห็นในรายชื่อแต่เลือกพิมพ์ไม่ได้ · คน `checked_out` ไม่แสดง
+- **AC-KPC-103** เปิด `/kiosk/phone` → ไปที่ `/kiosk/reprint` · flag ปิด → `/kiosk`
+- **AC-KPC-104** reprint ทุกกรณีไม่มี PUT / DELETE ไปที่ CouchDB
+
+### 15.4 Impact / Risks
+
+- `/kiosk/check-in` ไม่ใช้เป็นทางพิมพ์ซ้ำด้วยเบอร์อีก (เดิมไม่ตรวจ flag และไม่ต้องยืนยันตัวตนเพิ่ม)
+- คนที่รู้ทั้งเบอร์และเลขบัตร 4 ตัวท้ายพิมพ์ QR ของผู้อื่นในครัวเรือนเดียวกันได้ · จำกัดด้วย rate limit
+- ผู้จองล่วงหน้าที่ยังไม่รายงานตัวใช้เบอร์รายงานตัวไม่ได้แล้ว ต้องใช้ QR ใบจอง / บัตร / ThaiD
+
+---

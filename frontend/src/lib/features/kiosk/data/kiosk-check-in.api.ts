@@ -57,23 +57,99 @@ export interface KioskCheckInBatchResult extends KioskCheckInResult {
 	retryable_evacuee_ids: string[];
 }
 
-export async function registerKioskWalkIn(
-	card: unknown,
-	photo: KioskPhotoPayload | null,
-	consentedAt: string
-): Promise<{ evacuee_id: string }> {
+/** What the register endpoint returns: the new record plus what the kiosk prints (QR + label). */
+export interface KioskRegistrationResult {
+	evacuee_id: string;
+	qr_payload: string;
+	label: { name: string; phone: string | null };
+}
+
+function postKioskRegistration(body: Record<string, unknown>): Promise<KioskRegistrationResult> {
 	return requestWithTimeout(
-		'/api/v1/scanner/kiosk/register',
+		'/api/v1/kiosk/register',
 		{
 			method: 'POST',
 			headers: { 'content-type': 'application/json' },
 			cache: 'no-store',
-			body: JSON.stringify({ card, photo, consented: true, consented_at: consentedAt })
+			body: JSON.stringify({ ...body, consented: true })
 		},
 		async (response) => {
 			if (!response.ok) throw await requestError(response);
-			return (await response.json()) as { evacuee_id: string };
+			return (await response.json()) as KioskRegistrationResult;
 		}
+	);
+}
+
+/** `phone` is what the visitor typed at the kiosk, or `null` when they gave none. */
+export async function registerKioskWalkIn(
+	card: unknown,
+	photo: KioskPhotoPayload | null,
+	consentedAt: string,
+	phone: string | null = null
+): Promise<KioskRegistrationResult> {
+	return postKioskRegistration({
+		source: 'smart-card',
+		card,
+		photo,
+		phone,
+		consented_at: consentedAt
+	});
+}
+
+/** ThaiD walk-in: only the verified session id goes out; the server holds who it is. */
+export async function registerKioskThaidWalkIn(
+	sessionId: string,
+	consentedAt: string,
+	phone: string | null
+): Promise<KioskRegistrationResult> {
+	return postKioskRegistration({
+		source: 'thaid',
+		session_id: sessionId,
+		phone,
+		consented_at: consentedAt
+	});
+}
+
+/** What the reprint endpoint needs: the phone, who owns it, their id's last four, the members. */
+export interface KioskReprintInput {
+	phone: string;
+	primary_evacuee_id: string;
+	id_last4: string;
+	evacuee_ids: string[];
+}
+
+export interface KioskReprintMember {
+	evacuee_id: string;
+	qr_payload: string;
+	label: { name: string; phone: string | null };
+}
+
+export interface KioskReprintResult {
+	shelter_code: string;
+	members: KioskReprintMember[];
+}
+
+/**
+ * Labels of the phone owner's checked-in household after the visitor typed the last four digits
+ * of the owner's citizen id. Read-only on the server; 403 `KIOSK_REPRINT_VERIFY_FAILED` on a miss.
+ */
+export function reprintKioskLabels(
+	input: KioskReprintInput,
+	options: { signal?: AbortSignal } = {}
+): Promise<KioskReprintResult> {
+	return requestWithTimeout(
+		'/api/v1/kiosk/reprint',
+		{
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			cache: 'no-store',
+			body: JSON.stringify(input)
+		},
+		async (response) => {
+			if (!response.ok) throw await requestError(response);
+			return (await response.json()) as KioskReprintResult;
+		},
+		options.signal
 	);
 }
 
@@ -172,7 +248,7 @@ export async function lookupPreRegisteredEvacuee(
 	options: { signal?: AbortSignal } = {}
 ): Promise<KioskLookupResponse> {
 	const result = await requestWithTimeout(
-		'/api/v1/scanner/kiosk/lookup',
+		'/api/v1/kiosk/lookup',
 		{
 			method: 'POST',
 			headers: { 'content-type': 'application/json' },
@@ -243,7 +319,7 @@ export async function checkInSelectedMembers(
 					: { source: 'smart-card', citizen_id: options.citizenId, photo: options.photo };
 		try {
 			const result = await requestWithTimeout<KioskCheckInResult>(
-				'/api/v1/scanner/kiosk/check-in',
+				'/api/v1/kiosk/check-in',
 				{
 					method: 'POST',
 					headers: { 'content-type': 'application/json' },

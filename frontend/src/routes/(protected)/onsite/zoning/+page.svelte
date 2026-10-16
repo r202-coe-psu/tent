@@ -647,17 +647,17 @@
 
 <div class="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-6 md:px-6">
 	<header class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-		<div class="flex items-center gap-3">
+		<div class="flex min-w-0 items-start gap-3 sm:items-center">
 			<a
 				href={resolve('/portal')}
-				class="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200/80 bg-white text-slate-600 shadow-2xs transition-colors hover:bg-slate-50"
+				class="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-slate-200/80 bg-white text-slate-600 shadow-2xs transition-colors hover:bg-slate-50"
 				aria-label="กลับหน้าเลือกเมนูหลัก"
 			>
 				<ArrowLeft class="size-4" />
 			</a>
-			<div>
-				<div class="flex items-center gap-2">
-					<MapPin class="size-6 text-[#0A2647]" />
+			<div class="min-w-0">
+				<div class="flex flex-wrap items-center gap-x-2 gap-y-1">
+					<MapPin class="size-6 shrink-0 text-[#0A2647]" />
 					<h1 class="text-2xl font-bold tracking-tight text-slate-900 md:text-3xl">จัดสรรที่พัก</h1>
 					<Badge
 						variant="outline"
@@ -698,8 +698,8 @@
 				{/if}
 			</div>
 
-			<div class="flex items-center gap-2">
-				<div class="relative min-w-[220px]">
+			<div class="flex flex-wrap items-center gap-2">
+				<div class="relative w-full min-w-0 sm:w-auto sm:min-w-[220px] sm:flex-1">
 					<Scan
 						class="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-slate-400"
 					/>
@@ -721,7 +721,7 @@
 					size="default"
 					onclick={() => handleCodeInput(barcodeInput)}
 					disabled={!barcodeInput.trim()}
-					class="h-12 rounded-xl"
+					class="h-12 shrink-0 rounded-xl"
 				>
 					ยืนยัน
 				</Button>
@@ -729,7 +729,7 @@
 					variant="default"
 					size="default"
 					onclick={() => (showCameraModal = true)}
-					class="h-12 gap-1.5 rounded-xl bg-amber-600 font-semibold text-white hover:bg-amber-700"
+					class="h-12 shrink-0 gap-1.5 rounded-xl bg-amber-600 font-semibold text-white hover:bg-amber-700"
 				>
 					<Camera class="size-4" />
 					<span>สแกนกล้อง</span>

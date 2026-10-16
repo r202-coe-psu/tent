@@ -254,7 +254,7 @@ describe('lookupPreRegisteredEvacuee phone gate', () => {
 					primary_evacuee_id: earlier._id,
 					contact_display: 'ต้น นา****ว',
 					member_count: 3,
-					pending_count: 2
+					pending_count: 0
 				},
 				{
 					primary_evacuee_id: later._id,
@@ -264,6 +264,24 @@ describe('lookupPreRegisteredEvacuee phone gate', () => {
 				}
 			]
 		});
+	});
+
+	it('counts only reprintable (already checked-in) members as pending_count', async () => {
+		const head = evacuee(0, { current_stay: { status: 'active' } });
+		const waiting = evacuee(1, { phone: null });
+		const left = evacuee(2, { phone: null, current_stay: { status: 'checked_out' } });
+		const away = evacuee(4, { phone: null, current_stay: { status: 'temporary_leave' } });
+		setHousehold([head, waiting, left, away], head);
+		setHousehold([evacuee(3, { current_stay: { status: 'pre_registered' } })]);
+
+		const result = await lookupPreRegisteredEvacuee(shelterCode, { source: 'phone', phone });
+		if (result.kind !== 'candidates') throw new Error('expected candidates');
+		expect(
+			result.candidates.map(({ member_count, pending_count }) => [member_count, pending_count])
+		).toEqual([
+			[3, 1],
+			[1, 0]
+		]);
 	});
 
 	it('counts candidates with one exact household query per group and never uses $in', async () => {
@@ -278,7 +296,7 @@ describe('lookupPreRegisteredEvacuee phone gate', () => {
 		const candidateQueries = queryBodies.filter(
 			({ selector }) => typeof selector.household_id === 'string'
 		);
-		expect(queryBodies).toHaveLength(5); // two phone variants plus three household groups
+		expect(queryBodies).toHaveLength(5); // 2 phone variants plus three household groups
 		expect(candidateQueries).toHaveLength(3);
 		expect(candidateQueries.map(({ selector }) => selector.household_id).sort()).toEqual([
 			'household:0',
@@ -315,6 +333,46 @@ describe('lookupPreRegisteredEvacuee phone gate', () => {
 		).toEqual({ kind: 'too_many' });
 	});
 
+	it('finds a kiosk walk-in by phone and lets only checked-in members be reprinted', async () => {
+		const walkIn = evacuee(0, { registered_via: 'kiosk', current_stay: { status: 'arriving' } });
+		const active = evacuee(1, {
+			phone: null,
+			registered_via: 'kiosk',
+			current_stay: { status: 'active' }
+		});
+		const waiting = evacuee(2, { phone: null, current_stay: { status: 'pre_registered' } });
+		const gone = evacuee(3, { phone: null, current_stay: { status: 'checked_out' } });
+		const away = evacuee(4, { phone: null, current_stay: { status: 'temporary_leave' } });
+		setHousehold([walkIn, active, waiting, gone, away], walkIn);
+
+		const result = await lookupPreRegisteredEvacuee(shelterCode, { source: 'phone', phone });
+		if (result.kind !== 'household') throw new Error('expected household');
+		expect(result.primary_evacuee_id).toBe(walkIn._id);
+		expect(result.members.map(({ evacuee_id, selectable }) => [evacuee_id, selectable])).toEqual([
+			[walkIn._id, true],
+			[active._id, true],
+			[waiting._id, false],
+			[away._id, false]
+		]);
+	});
+
+	it('keeps pre_registered-only selectable semantics for card lookups', async () => {
+		const walkIn = evacuee(0, { registered_via: 'kiosk', current_stay: { status: 'arriving' } });
+		const waiting = evacuee(1, {
+			phone: null,
+			person_id: { number: '1111111111111' },
+			current_stay: { status: 'pre_registered' }
+		});
+		setHousehold([walkIn, waiting], walkIn);
+
+		const result = await lookupPreRegisteredEvacuee(shelterCode, {
+			source: 'smart-card',
+			citizen_id: '1234567890123'
+		});
+		if (result.kind !== 'household') throw new Error('expected household');
+		expect(result.members.map(({ selectable }) => selectable)).toEqual([false, true]);
+	});
+
 	it('follows Mango bookmarks so a full first page from one large household is not mistaken for many matches', async () => {
 		const head = evacuee(0);
 		setHousehold([head]);
@@ -341,7 +399,7 @@ describe('lookupPreRegisteredEvacuee phone gate', () => {
 
 		const result = await lookupPreRegisteredEvacuee(shelterCode, { source: 'phone', phone });
 		expect(result).toMatchObject({ kind: 'household', primary_evacuee_id: head._id });
-		expect(phoneQueryCount).toBe(2);
+		expect(phoneQueryCount).toBe(2); // both pages of the canonical number
 	});
 
 	it('fails closed when a full Mango page has no continuation bookmark', async () => {
@@ -392,7 +450,7 @@ describe('lookupPreRegisteredEvacuee phone gate', () => {
 		});
 	});
 
-	it('queries only the authenticated shelter and web records with exact canonical and legacy values', async () => {
+	it('queries the whole authenticated shelter, any channel, with exact canonical and legacy values', async () => {
 		await lookupPreRegisteredEvacuee(shelterCode, { source: 'phone', phone });
 		const queryCalls = mockAdminFetch.mock.calls.filter(([path]) => path.endsWith('/_find'));
 		const bodies = queryCalls.map(
@@ -402,10 +460,10 @@ describe('lookupPreRegisteredEvacuee phone gate', () => {
 
 		expect(bodies.map(({ selector }) => selector.phone)).toEqual([phone, '+66812345678']);
 		for (const { selector, fields } of bodies) {
+			expect(selector).not.toHaveProperty('registered_via');
 			expect(selector).toMatchObject({
 				type: 'evacuee',
-				shelter_code: shelterCode,
-				registered_via: 'web'
+				shelter_code: shelterCode
 			});
 			expect(fields).toContain('type');
 			expect(fields).toContain('privacy');
@@ -488,7 +546,7 @@ describe('lookupPreRegisteredEvacuee phone gate', () => {
 		if (qr.kind === 'household') expect(qr.members[0].last_name).toBe('ใ****');
 	});
 
-	it('lists eligible staff-created household members without making them selectable', async () => {
+	it('makes staff-created household members selectable like any pre-registration', async () => {
 		const primary = evacuee(0);
 		const staffMember = evacuee(1, {
 			registered_via: 'station_1',
@@ -515,7 +573,7 @@ describe('lookupPreRegisteredEvacuee phone gate', () => {
 			primary._id,
 			staffMember._id
 		]);
-		expect(result.members[1]).toMatchObject({ selectable: false, status: 'pre_registered' });
+		expect(result.members[1]).toMatchObject({ selectable: true, status: 'pre_registered' });
 		const householdQuery = mockAdminFetch.mock.calls
 			.filter(([path]) => path.endsWith('/_find'))
 			.map(([, init]) => JSON.parse(String(init?.body)) as { selector: Record<string, unknown> })
@@ -563,6 +621,37 @@ describe('lookupPreRegisteredEvacuee phone gate', () => {
 				citizen_id: '1234567890123'
 			})
 		).toEqual({ kind: 'kiosk_registered' });
+	});
+
+	it('finds a kiosk walk-in that is already arriving, listed but not selectable', async () => {
+		const walkIn = evacuee(0, { registered_via: 'kiosk', current_stay: { status: 'arriving' } });
+		setHousehold([walkIn]);
+		configureCheckInCouchMocks();
+		const outcome = await lookupPreRegisteredEvacuee(shelterCode, {
+			source: 'smart-card',
+			citizen_id: '1234567890123'
+		});
+		expect(outcome).toMatchObject({
+			kind: 'household',
+			primary_evacuee_id: walkIn._id,
+			members: [{ evacuee_id: walkIn._id, status: 'arriving', selectable: false }]
+		});
+	});
+
+	it('finds a registration from any channel in the shelter', async () => {
+		const staffMade = evacuee(0, { registered_via: 'api', current_stay: { status: 'arriving' } });
+		evacuees = [staffMade];
+		configureCheckInCouchMocks();
+		expect(
+			await lookupPreRegisteredEvacuee(shelterCode, {
+				source: 'smart-card',
+				citizen_id: '1234567890123'
+			})
+		).toMatchObject({
+			kind: 'household',
+			primary_evacuee_id: staffMade._id,
+			members: [{ evacuee_id: staffMade._id, status: 'arriving', selectable: false }]
+		});
 	});
 
 	it('keeps ambiguous card lookup as not_found', async () => {
@@ -648,13 +737,13 @@ describe('lookupPreRegisteredEvacuee thaid', () => {
 		});
 	});
 
-	it('does not offer walk-in registration when the citizen is unknown', async () => {
+	it('offers walk-in registration when the citizen is unknown', async () => {
 		expect(
 			await lookupPreRegisteredEvacuee(shelterCode, {
 				source: 'thaid',
 				citizen_id: '1234567890123'
 			})
-		).toEqual({ kind: 'not_found', can_register: false });
+		).toEqual({ kind: 'not_found', can_register: true });
 	});
 
 	it('returns the repeat-registration outcome for kiosk_registered records', async () => {
@@ -678,11 +767,11 @@ describe('checkInSelectedMembers', () => {
 		configureCheckInCouchMocks();
 	});
 
-	it('checks in only eligible web members in the primary household and refreshes household status', async () => {
+	it('checks in pre-registered members of any channel in the primary household and refreshes household status', async () => {
 		const primary = evacuee(0);
 		const member = evacuee(1);
-		const legacyKioskMember = evacuee(2, { registered_via: 'kiosk' });
-		setHousehold([primary, member, legacyKioskMember], primary);
+		const apiMember = evacuee(2, { registered_via: 'api' });
+		setHousehold([primary, member, apiMember], primary);
 		const unrelated = evacuee(3);
 		setHousehold([unrelated]);
 		const otherShelter = evacuee(4, { shelter_code: 'SH002' });
@@ -691,7 +780,7 @@ describe('checkInSelectedMembers', () => {
 		const results = await checkInSelectedMembers(shelterCode, primary._id, [
 			primary._id,
 			member._id,
-			legacyKioskMember._id,
+			apiMember._id,
 			unrelated._id,
 			otherShelter._id
 		]);
@@ -711,11 +800,16 @@ describe('checkInSelectedMembers', () => {
 				qr_payload: member._id,
 				label: { name: 'สมชาย1 ใจดี', phone }
 			},
-			{ evacuee_id: legacyKioskMember._id, status: 'not_eligible' },
+			{
+				evacuee_id: apiMember._id,
+				status: 'checked_in',
+				stay_status: 'arriving',
+				qr_payload: apiMember._id
+			},
 			{ evacuee_id: unrelated._id, status: 'not_eligible' },
 			{ evacuee_id: otherShelter._id, status: 'not_found' }
 		]);
-		for (const result of results.slice(2)) expect(result).not.toHaveProperty('label');
+		for (const result of results.slice(3)) expect(result).not.toHaveProperty('label');
 		expect(primary.current_stay).toMatchObject({ status: 'arriving', zone: null });
 		expect(member.current_stay).toMatchObject({ status: 'arriving', zone: null });
 		expect(typeof primary.current_stay.since).toBe('string');
@@ -724,13 +818,12 @@ describe('checkInSelectedMembers', () => {
 		const evacueeWrites = mockAdminFetch.mock.calls.filter(
 			([path, init]) =>
 				init?.method === 'PUT' &&
-				[primary._id, member._id].some((id) => path.endsWith(encodeURIComponent(id)))
+				[primary._id, member._id, apiMember._id].some((id) => path.endsWith(encodeURIComponent(id)))
 		);
-		expect(evacueeWrites).toHaveLength(2);
+		expect(evacueeWrites).toHaveLength(3);
 		for (const [, init] of evacueeWrites) {
 			const body = JSON.parse(String(init?.body)) as FixtureEvacuee;
 			expect(body._rev).toBe('1-evacuee');
-			expect(body.registered_via).toBe('web');
 		}
 
 		const householdWrite = mockAdminFetch.mock.calls.find(
@@ -805,6 +898,33 @@ describe('checkInSelectedMembers', () => {
 		expect(
 			mockAdminFetch.mock.calls.filter(([path]) => path.endsWith(encodeURIComponent(primary._id)))
 		).toHaveLength(4);
+	});
+});
+
+describe('checkInSelectedMembers kiosk walk-in reprint', () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+		evacuees = [];
+		households = [];
+		configureCheckInCouchMocks();
+	});
+
+	it('returns the QR and label of an arriving kiosk walk-in without writing', async () => {
+		const walkIn = evacuee(0, { registered_via: 'kiosk', current_stay: { status: 'arriving' } });
+		setHousehold([walkIn]);
+
+		const results = await checkInSelectedMembers(shelterCode, walkIn._id, [walkIn._id]);
+
+		expect(results).toEqual([
+			{
+				evacuee_id: walkIn._id,
+				status: 'already_checked_in',
+				stay_status: 'arriving',
+				qr_payload: walkIn._id,
+				label: { name: 'สมชาย0 ใจดี', phone }
+			}
+		]);
+		expect(mockAdminFetch.mock.calls.filter(([, init]) => init?.method === 'PUT')).toHaveLength(0);
 	});
 });
 

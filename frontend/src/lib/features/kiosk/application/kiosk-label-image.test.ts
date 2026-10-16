@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { KIOSK_LABEL_LINK, kioskLabelLayout } from '../domain/print-label';
 import { renderKioskLabelPng } from './kiosk-label-image';
 
 class FakeImage {
@@ -30,7 +31,7 @@ function installFakeCanvas() {
 		fillText: vi.fn<(text: string) => void>(() => {
 			// `fillText` is synchronous — if any row's font wasn't `document.fonts.load()`-ed
 			// (and awaited) before this call, the draw races the fetch (see kiosk-label-image.ts).
-			if (fontsLoaded.length < 3) orderViolation = true;
+			if (fontsLoaded.length < 4) orderViolation = true;
 		})
 	};
 	Object.defineProperty(fakeContext, 'font', {
@@ -85,7 +86,7 @@ describe('renderKioskLabelPng', () => {
 	it('preloads every row font before drawing any of them', async () => {
 		await renderKioskLabelPng(label);
 
-		expect(harness.fontsLoaded).toHaveLength(3);
+		expect(harness.fontsLoaded).toHaveLength(4);
 		expect(harness.isOrderViolated()).toBe(false);
 	});
 
@@ -97,7 +98,38 @@ describe('renderKioskLabelPng', () => {
 			expect(font).toMatch(/'IBM Plex Sans Thai'|'Geist Mono'/);
 		}
 		const texts = harness.fakeContext.fillText.mock.calls.map(([text]) => text);
-		expect(texts).toEqual(['สมชาย ใจดี', '0804497982', 'เช็คอิน', 'คัดกรอง', 'ที่พัก']);
+		expect(texts).toEqual([
+			'สมชาย ใจดี',
+			'0804497982',
+			'เช็คอิน',
+			'คัดกรอง',
+			'ที่พัก',
+			KIOSK_LABEL_LINK
+		]);
+	});
+
+	it('draws the link centred under the QR, then restores left alignment', async () => {
+		const aligns: string[] = [];
+		let align = '';
+		Object.defineProperty(harness.fakeContext, 'textAlign', {
+			configurable: true,
+			set(value: string) {
+				align = value;
+				aligns.push(value);
+			},
+			get: () => align
+		});
+		let linkAlign = '';
+		harness.fakeContext.fillText.mockImplementation((text: string) => {
+			if (text === KIOSK_LABEL_LINK) linkAlign = align;
+		});
+
+		await renderKioskLabelPng(label);
+
+		const { x, y } = kioskLabelLayout(264).link;
+		expect(linkAlign).toBe('center');
+		expect(harness.fakeContext.fillText).toHaveBeenCalledWith(KIOSK_LABEL_LINK, x, y);
+		expect(aligns.at(-1)).toBe('left');
 	});
 
 	it('skips the phone line when there is no phone', async () => {

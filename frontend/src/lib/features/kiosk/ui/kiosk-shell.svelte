@@ -1,9 +1,7 @@
 <script lang="ts">
 	import { onMount, type Snippet } from 'svelte';
 	import { page } from '$app/state';
-	import CheckCircle2 from '@lucide/svelte/icons/check-circle-2';
 	import Clock3 from '@lucide/svelte/icons/clock-3';
-	import Tent from '@lucide/svelte/icons/tent';
 	import { installReaderKeyGuard } from '../application/reader-key-guard';
 	import { loadKioskHardware } from '../application/kiosk-qr-input';
 	import { KIOSK_QR_PATH } from '../domain/identity-method';
@@ -92,12 +90,11 @@
 		>
 			<div class="mx-auto flex w-full max-w-5xl items-center justify-between gap-3">
 				<div class="flex min-w-0 items-center gap-2.5">
-					<div
-						class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#0A2647] text-white kiosk-portrait:h-12 kiosk-portrait:w-12"
-						aria-hidden="true"
-					>
-						<Tent class="h-5 w-5 kiosk-portrait:h-7 kiosk-portrait:w-7" />
-					</div>
+					<img
+						src="/logo.png"
+						alt=""
+						class="h-9 w-9 shrink-0 rounded-lg object-contain kiosk-portrait:h-12 kiosk-portrait:w-12"
+					/>
 					<div class="min-w-0">
 						<p
 							class="truncate text-sm leading-tight font-extrabold text-[#0A2647] kiosk-portrait:text-lg"
@@ -126,15 +123,6 @@
 							<span class="font-bold tabular-nums">{timeString}</span>
 						</div>
 					{/if}
-					<div
-						class="inline-flex min-h-10 items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 text-sm font-bold text-emerald-900 kiosk-portrait:min-h-12 kiosk-portrait:px-4 kiosk-portrait:text-base"
-					>
-						<CheckCircle2
-							class="h-4 w-4 text-emerald-700 kiosk-portrait:h-5 kiosk-portrait:w-5"
-							aria-hidden="true"
-						/>
-						<span>พร้อม</span>
-					</div>
 				</div>
 			</div>
 		</header>

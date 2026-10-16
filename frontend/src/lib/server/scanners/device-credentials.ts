@@ -4,7 +4,7 @@ import {
 	scannerDevicePersistedSchema,
 	type PersistedScannerDevice,
 	type ScannerBootstrapDevice
-} from '$lib/features/scanners/domain/scanner.schema';
+} from '$lib/features/kiosk-devices/domain/scanner.schema';
 
 export const DEVICE_AUTH_FAILED = 'DEVICE_AUTH_FAILED' as const;
 export const DEPENDENCY_UNAVAILABLE = 'DEPENDENCY_UNAVAILABLE' as const;

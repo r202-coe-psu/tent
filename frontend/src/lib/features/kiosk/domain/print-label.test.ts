@@ -14,8 +14,10 @@ import {
 	KIOSK_LABEL_CHECKLIST,
 	KIOSK_LABEL_DIVIDER_MM,
 	KIOSK_LABEL_GAP_MM,
+	KIOSK_LABEL_LINK,
 	KIOSK_LABEL_TEXT,
 	KIOSK_LABEL_TEXT_MIN_WIDTH_MM,
+	KIOSK_LABEL_TEXT_OFFSET_Y_MM,
 	KIOSK_LABEL_TEXT_ROW_GAP_MM,
 	kioskLabelDots,
 	kioskLabelLayout,
@@ -124,7 +126,9 @@ describe('kiosk label canvas', () => {
 			ptToDots(checklist.pt) * checklist.lineHeight
 		);
 		const used =
-			mmToDots(KIOSK_LABEL_PADDING_MM * 2 + KIOSK_LABEL_TEXT_ROW_GAP_MM) +
+			mmToDots(
+				KIOSK_LABEL_PADDING_MM * 2 + KIOSK_LABEL_TEXT_OFFSET_Y_MM + KIOSK_LABEL_TEXT_ROW_GAP_MM
+			) +
 			ptToDots(name.pt) * name.lineHeight * name.maxLines +
 			ptToDots(phone.pt) * phone.lineHeight +
 			checkRow * 2 +
@@ -151,6 +155,26 @@ describe('kioskLabelLayout', () => {
 	it('keeps the divider between the text column and the QR', () => {
 		expect(layout.text.x + layout.text.width).toBeLessThan(layout.divider.x);
 		expect(layout.divider.x + layout.divider.width).toBeLessThan(layout.qr.x);
+	});
+
+	it('starts the name below the padding by the top text offset', () => {
+		expect(layout.text.y).toBe(
+			Math.round(mmToDots(KIOSK_LABEL_PADDING_MM)) +
+				Math.round(mmToDots(KIOSK_LABEL_TEXT_OFFSET_Y_MM))
+		);
+		expect(layout.text.bottom).toBe(height - Math.round(mmToDots(KIOSK_LABEL_PADDING_MM)));
+	});
+
+	it('centres the link under the QR, inside the right column and the bottom padding', () => {
+		const half = ptToDots(KIOSK_LABEL_TEXT.link.pt) / 2;
+		const padding = Math.round(mmToDots(KIOSK_LABEL_PADDING_MM));
+
+		expect(KIOSK_LABEL_LINK).toBe('shelter.psu.ac.th');
+		expect(layout.link.x).toBe(layout.qr.x + size.widthPx / 2);
+		expect(layout.link.x).toBeGreaterThan(layout.divider.x + layout.divider.width);
+		expect(layout.link.x).toBeLessThan(width);
+		expect(layout.link.y - half).toBeGreaterThan(layout.qr.y + size.widthPx);
+		expect(layout.link.y + half).toBeLessThanOrEqual(height - padding);
 	});
 
 	it('leaves the text column at least its minimum width', () => {

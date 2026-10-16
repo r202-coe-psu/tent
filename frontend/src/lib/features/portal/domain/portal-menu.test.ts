@@ -115,6 +115,7 @@ describe('filterPortalMenu — shelter manager', () => {
 			'shelter-manage',
 			'shelter-readiness',
 			'shelter-users',
+			'kiosk-devices',
 			'referrals',
 			'back-office'
 		]);
@@ -232,6 +233,16 @@ describe('filterPortalMenu — single-department roles', () => {
 	it('legacy flat distribution_staff with one shelter sees the desk', () => {
 		const views = menu(['shelter:SH001', 'distribution_staff']);
 		expect(itemIds(dept(views, 'supply'))).toEqual(['frontline-distribution']);
+	});
+
+	it('kiosk_staff sees only the kiosk device management', () => {
+		const views = menu(staff('kiosk_staff'));
+		expect(deptIds(views)).toEqual(['management']);
+		expect(itemIds(views[0])).toEqual(['kiosk-devices']);
+	});
+
+	it('kiosk_staff of another shelter does not see it', () => {
+		expect(menu(staff('kiosk_staff', 'SH002'))).toEqual([]);
 	});
 
 	it('warehouse_staff is treated as supply_coordinator', () => {

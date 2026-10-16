@@ -70,7 +70,7 @@
 		}}
 	/>
 
-	<div class="grid gap-6 lg:grid-cols-2">
+	<div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
 		<OverviewOriginSection buckets={originQuery.data?.buckets} loading={originQuery.isPending} />
 		<OverviewDemographicsSection
 			age_groups={demographicsQuery.data?.age_groups}

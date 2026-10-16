@@ -3,7 +3,7 @@ id: CR-099
 title: Public family search — คืนสถานะจริงตาม backoffice (เลิก 3 bucket) + ค้นชื่อไทยแบบขึ้นต้นได้ (renumbered from CR-080)
 status: done
 date: 2026-08-22
-updated: 2026-09-01
+updated: 2026-10-13
 requested_by: เจ้าของโครงการ (พบจากการทดลองใช้หน้า /search)
 decided_by: เจ้าของโครงการ
 layer: volatile
@@ -134,3 +134,4 @@ index ใหม่ 2 ตัวถูกสร้างโดย Beanie ตอน
 - 2026-08-22 — field ใน mockup ที่ไม่มีใน data model (ความสัมพันธ์/บทบาท/tag/พลัดหลง) → "ข้ามไปก่อน"
 - 2026-08-22 — เลือก track ด้วย CR ไฟล์ใน `docs/changes/` → proposed
 - 2026-08-31 — renumbered เป็น CR-099 เพื่อหลีกเลี่ยงการชนกับ CR-080 donor edit reservation via token
+- 2026-10-13 — ส่วนการจับคู่ชื่อ (`$text` + fallback `^prefix` ใน `_find_by_name`) ถูกแทนที่โดย [CR-166](CR-166-public-name-search-and-match.md) (AND ชื่อต้น + นามสกุลเต็ม, เลิก `$text`); ส่วนสถานะจริง 7 ค่ายังใช้ตามเดิม

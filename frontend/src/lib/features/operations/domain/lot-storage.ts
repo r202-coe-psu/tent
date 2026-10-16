@@ -76,6 +76,17 @@ export function storageLotFields(
 }
 
 /**
+ * Whether a receive line has its storage point settled (CR-139 N1): a shelter with at
+ * least one storage point must name one; a shelter with none receives into the main
+ * store. An id that no longer matches a point (renamed list, shelter switched) does
+ * not count as chosen.
+ */
+export function isStoragePointChosen(pointId: string, points: readonly StoragePointRef[]): boolean {
+	if (points.length === 0) return true;
+	return points.some((point) => point.id === pointId);
+}
+
+/**
  * The location fields exactly as a lot's rows carry them, so an adjustment
  * written with them lands in the same {@link lotStorageKey} group. A legacy
  * location stays in `note` (where the group's other rows have it).

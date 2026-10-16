@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount, untrack } from 'svelte';
 	import type { Attachment } from 'svelte/attachments';
+	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import CircleAlert from '@lucide/svelte/icons/circle-alert';
 	import Clock from '@lucide/svelte/icons/clock';
@@ -18,6 +19,7 @@
 	} from './kiosk-notice-actions';
 	import { navigateToKioskHome } from '../application/kiosk-navigation';
 	import { ThaidSession } from '../application/thaid-session.svelte';
+	import { walkInSession } from '../application/walk-in-session.svelte';
 	import {
 		cancelKioskThaidSession,
 		createKioskThaidSession,
@@ -117,6 +119,17 @@
 		navigateToKioskHome(contextQuery);
 	}
 
+	/**
+	 * Not pre-registered: the verified scan goes on to a walk-in registration, which now owns it
+	 * (leaving this page must not cancel it; abandoning the walk-in does).
+	 */
+	function startWalkInRegistration(): void {
+		const sessionId = session.handOff();
+		if (!sessionId) return;
+		walkInSession.beginThaid(sessionId);
+		void goto(resolve(`/kiosk/register/consent${contextQuery}`));
+	}
+
 	/** Only the explicit "new QR" / "scan again" actions ask for a fresh QR. */
 	function newQr(): void {
 		void session.restart();
@@ -137,6 +150,7 @@
 		onprintbusychange={handlePrintBusyChange}
 		onreset={goHome}
 		onrescan={newQr}
+		onregister={startWalkInRegistration}
 	/>
 {:else}
 	<section
@@ -248,6 +262,14 @@
 	@media screen and (orientation: portrait) and (min-height: 1200px) {
 		.thaid-qr-frame {
 			width: min(100%, 36rem);
+		}
+	}
+
+	/* 1024×600: a bigger QR from the height left under the header. No `100%` term here: the img's
+	 * 640 px intrinsic width would size the column and push the steps far to the right. */
+	@media (max-height: 650px) {
+		.thaid-qr-frame {
+			width: min(24rem, max(9rem, calc(100svh - 14rem)));
 		}
 	}
 </style>

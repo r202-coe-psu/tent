@@ -44,9 +44,6 @@ export class LinkAccountError extends Error {
 	}
 }
 
-/** Codes after which the pending identity is gone — the user must restart OAuth. */
-export const LINK_TERMINAL_CODES = new Set(['LINK_EXPIRED', 'RATE_LIMITED', 'CONFLICT']);
-
 export async function linkAccount(input: {
 	login: string;
 	password: string;

@@ -5,10 +5,12 @@
 		KIOSK_NOTICE_SECONDARY_ACTION
 	} from './kiosk-notice-actions';
 	interface Props {
+		/** Where the details come from: the card chip, or what ThaiD verified (no photo). */
+		source?: 'smart-card' | 'thaid';
 		onconsent: () => void;
 		oncancel: () => void;
 	}
-	let { onconsent, oncancel }: Props = $props();
+	let { source = 'smart-card', onconsent, oncancel }: Props = $props();
 
 	// Button sets whitespace-nowrap and a fixed height: long Thai labels must wrap inside the card.
 	const wrapLabel = 'h-auto min-w-0 whitespace-normal py-3 text-center sm:flex-1';
@@ -29,19 +31,30 @@
 		id="consent-title"
 		class="text-2xl font-bold text-[#0A2647] sm:text-3xl kiosk-portrait:text-4xl kiosk-compact:text-2xl"
 	>
-		ยินยอมให้อ่านข้อมูลจากบัตรประชาชน
+		{source === 'thaid' ? 'ยินยอมให้ใช้ข้อมูลจาก ThaiD' : 'ยินยอมให้อ่านข้อมูลจากบัตรประชาชน'}
 	</h1>
 	<div
 		class="mt-4 space-y-3 text-base leading-relaxed text-slate-700 kiosk-portrait:mt-6 kiosk-portrait:text-xl kiosk-compact:mt-2 kiosk-compact:space-y-1.5 kiosk-compact:leading-snug"
 	>
-		<p>
-			ระบบจะอ่านชื่อและนามสกุล เลขบัตรประชาชน เพศ วันเกิด ที่อยู่ และรูปถ่ายจากชิปบัตร
-			เพื่อสร้างรายการผู้ประสบภัยของศูนย์นี้ และส่งข้อมูลให้เจ้าหน้าที่ตรวจสอบก่อนยืนยันการเข้าพัก
-		</p>
+		{#if source === 'thaid'}
+			<p>
+				ระบบจะใช้ชื่อและนามสกุล เลขบัตรประชาชน เพศ วันเกิด และที่อยู่ที่ยืนยันผ่าน ThaiD
+				(ไม่มีรูปถ่าย) และเบอร์โทรศัพท์ที่ท่านกรอก (ถ้ามี) เพื่อสร้างรายการผู้ประสบภัยของศูนย์นี้
+				และส่งข้อมูลให้เจ้าหน้าที่ตรวจสอบก่อนยืนยันการเข้าพัก
+			</p>
+		{:else}
+			<p>
+				ระบบจะอ่านชื่อและนามสกุล เลขบัตรประชาชน เพศ วันเกิด ที่อยู่ และรูปถ่ายจากชิปบัตร
+				และเบอร์โทรศัพท์ที่ท่านกรอก (ถ้ามี) เพื่อสร้างรายการผู้ประสบภัยของศูนย์นี้
+				และส่งข้อมูลให้เจ้าหน้าที่ตรวจสอบก่อนยืนยันการเข้าพัก
+			</p>
+		{/if}
 		<p>ข้อมูลจะถูกเก็บในรายการที่รอยืนยัน และเจ้าหน้าที่จะตรวจสอบข้อมูลเมื่อท่านไปพบเจ้าหน้าที่</p>
-		<p class="font-semibold text-slate-900">
-			กรุณาเสียบบัตรของผู้ที่ต้องการลงทะเบียน เมื่อหน้าจอแจ้งว่าลงทะเบียนสำเร็จแล้วจึงนำบัตรออก
-		</p>
+		{#if source !== 'thaid'}
+			<p class="font-semibold text-slate-900">
+				กรุณาเสียบบัตรของผู้ที่ต้องการลงทะเบียน เมื่อหน้าจอแจ้งว่าลงทะเบียนสำเร็จแล้วจึงนำบัตรออก
+			</p>
+		{/if}
 	</div>
 	<div
 		class="mt-7 flex flex-col-reverse gap-3 sm:flex-row kiosk-portrait:mt-10 kiosk-portrait:gap-4 kiosk-compact:mt-4"

@@ -49,6 +49,7 @@ export type PortalIconKey =
 	| 'house'
 	| 'map-pin'
 	| 'monitor'
+	| 'monitor-smartphone'
 	| 'package'
 	| 'package-check'
 	| 'scan-line'
@@ -73,7 +74,8 @@ export type PortalCapability =
 	| 'volunteer_coordinator'
 	| 'security_officer'
 	| 'facility_staff'
-	| 'distribution_staff';
+	| 'distribution_staff'
+	| 'kiosk_staff';
 
 /**
  * Per-shelter feature availability. `null` = not known yet (shelter still loading): items that
@@ -140,6 +142,7 @@ const VC = 'volunteer_coordinator';
 const SO = 'security_officer';
 const FAC = 'facility_staff';
 const DST = 'distribution_staff';
+const KIO = 'kiosk_staff';
 
 export const PORTAL_DEPARTMENTS: readonly PortalDepartment[] = [
 	{
@@ -389,6 +392,16 @@ export const PORTAL_DEPARTMENTS: readonly PortalDepartment[] = [
 				href: '/back-office/users',
 				scope: 'shelter',
 				roles: []
+			},
+			{
+				id: 'kiosk-devices',
+				label: 'จัดการ Kiosk',
+				desc: 'ตู้ Kiosk และ PIN เจ้าหน้าที่ของศูนย์',
+				icon: 'monitor-smartphone',
+				href: '/back-office/kiosks',
+				scope: 'shelter',
+				// Draft CR scanner back-office: SA, SM and kiosk_staff of the selected shelter.
+				roles: [KIO]
 			},
 			{
 				id: 'referrals',

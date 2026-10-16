@@ -45,7 +45,7 @@ describe('createKioskThaidSession', () => {
 		});
 		expect(fetchMock).toHaveBeenCalledTimes(1);
 		const [url, init] = fetchMock.mock.calls[0];
-		expect(url).toBe('/api/v1/scanner/kiosk/thaid/session');
+		expect(url).toBe('/api/v1/kiosk/thaid/session');
 		expect(init).toMatchObject({ method: 'POST', cache: 'no-store' });
 		expect(init?.body).toBeUndefined();
 	});
@@ -107,7 +107,7 @@ describe('getKioskThaidSessionStatus', () => {
 			expiresInSec: 42
 		});
 		const [url, init] = fetchMock.mock.calls[0];
-		expect(url).toBe('/api/v1/scanner/kiosk/thaid/session/status');
+		expect(url).toBe('/api/v1/kiosk/thaid/session/status');
 		expect(init).toMatchObject({ method: 'POST', cache: 'no-store' });
 		expect(JSON.parse(String(init?.body))).toEqual({ session_id: SESSION_ID });
 	});
@@ -145,7 +145,7 @@ describe('cancelKioskThaidSession', () => {
 		await cancelKioskThaidSession(SESSION_ID);
 
 		const [url, init] = fetchMock.mock.calls[0];
-		expect(url).toBe('/api/v1/scanner/kiosk/thaid/session/cancel');
+		expect(url).toBe('/api/v1/kiosk/thaid/session/cancel');
 		expect(init).toMatchObject({ method: 'POST', cache: 'no-store' });
 		expect(JSON.parse(String(init?.body))).toEqual({ session_id: SESSION_ID });
 	});

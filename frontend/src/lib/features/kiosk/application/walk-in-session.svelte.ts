@@ -1,8 +1,12 @@
-import type { SmartCardData } from '$lib/features/scanners';
+import type { SmartCardData } from '$lib/features/kiosk-devices';
+import type { KioskRegistrationResult } from '../data/kiosk-check-in.api';
 import type { FaceCheckOutcome } from '../domain/face-check';
 
 /** The face check the walk-in face page runs, as the card page resolved it from the hardware. */
 export type WalkInFaceCheck = { cameraLabel: string | null; cameraFlip: boolean };
+
+/** How the walk-in proved who they are: the card in the reader, or a ThaiD scan. */
+export type WalkInSource = 'smart-card' | 'thaid';
 
 /**
  * Nothing known about the face check (the card page never said): run it anyway with the front
@@ -11,7 +15,11 @@ export type WalkInFaceCheck = { cameraLabel: string | null; cameraFlip: boolean 
 export const WALK_IN_FACE_CHECK_STRICT: WalkInFaceCheck = { cameraLabel: null, cameraFlip: false };
 
 class WalkInSession {
+	source = $state<WalkInSource | null>(null);
+	/** Card walk-in only: the id read from the chip. A ThaiD id never reaches the browser. */
 	citizenId = $state<string | null>(null);
+	/** ThaiD walk-in only: the verified session the server registers from. */
+	thaidSessionId = $state<string | null>(null);
 	consented = $state(false);
 	consentedAt = $state<string | null>(null);
 	/** The full card read, kept in memory only while the face check runs, then submitted. */
@@ -19,6 +27,21 @@ class WalkInSession {
 	/** Set with `card` by the card page: the face check it found on for this machine. */
 	faceCheck = $state.raw<WalkInFaceCheck | null>(null);
 	faceOutcome = $state<FaceCheckOutcome | null>(null);
+	/** Canonical phone typed on the phone step; `null` = none given (or not asked yet). */
+	phone = $state<string | null>(null);
+	/** What the register call returned (QR + label text): the done page prints it, then forgets it. */
+	registration = $state.raw<KioskRegistrationResult | null>(null);
+
+	/** A walk-in is under way (card or ThaiD). */
+	get active(): boolean {
+		return this.source === 'thaid' ? this.thaidSessionId !== null : this.citizenId !== null;
+	}
+
+	/** Who they are is settled: a ThaiD scan, or (card) the full chip read held for submitting. */
+	get identityReady(): boolean {
+		if (!this.active || !this.consented) return false;
+		return this.source === 'thaid' || this.card !== null;
+	}
 
 	/** What the face page runs: the card page's face check, or the strict default when not known. */
 	get faceCheckToRun(): WalkInFaceCheck {
@@ -26,34 +49,45 @@ class WalkInSession {
 	}
 
 	begin(citizenId: string): void {
+		this.reset();
+		this.source = 'smart-card';
 		this.citizenId = citizenId;
-		this.consented = false;
-		this.consentedAt = null;
-		this.card = null;
-		this.faceCheck = null;
-		this.faceOutcome = null;
+	}
+
+	beginThaid(sessionId: string): void {
+		this.reset();
+		this.source = 'thaid';
+		this.thaidSessionId = sessionId;
 	}
 
 	consent(): void {
-		if (this.citizenId) {
+		if (this.active) {
 			this.consented = true;
 			this.consentedAt = new Date().toISOString();
 		}
 	}
 
-	/** Hold the card for the face page, with the camera the card page found for the face check. */
-	holdCard(card: SmartCardData, faceCheck: WalkInFaceCheck): void {
+	/** Hold the card for the next steps, with the camera the card page found for the face check. */
+	holdCard(card: SmartCardData, faceCheck: WalkInFaceCheck | null): void {
 		this.card = card;
 		this.faceCheck = faceCheck;
 	}
 
 	clear(): void {
+		this.reset();
+	}
+
+	private reset(): void {
+		this.source = null;
 		this.citizenId = null;
+		this.thaidSessionId = null;
 		this.consented = false;
 		this.consentedAt = null;
 		this.card = null;
 		this.faceCheck = null;
 		this.faceOutcome = null;
+		this.phone = null;
+		this.registration = null;
 	}
 }
 

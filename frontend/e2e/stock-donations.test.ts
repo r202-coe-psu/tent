@@ -9,6 +9,7 @@ import {
 } from './helpers/couch';
 import { CAN_WRITE, READ_ONLY_REASON } from './helpers/e2e-env';
 import { injectSession, clearSession, routeBrowserCouchThroughApp } from './helpers/login';
+import { pinActiveShelter } from './helpers/staff-ui';
 
 const TAGS = { tag: ['@critical', '@donation'] };
 
@@ -76,6 +77,7 @@ test.afterEach(async ({ page }) => {
 test.describe('Stock donations — access', TAGS, () => {
 	test('warehouse staff can open the page', async ({ page }) => {
 		await injectSession(page, WS, sessions[WS.name]);
+		await pinActiveShelter(page, 'SH001');
 		await page.goto('/back-office/stock-donations');
 		await expect(page.getByRole('tab', { name: /จัดการความต้องการ/ })).toBeVisible({
 			timeout: 10_000
@@ -94,6 +96,10 @@ test.describe("Create campaign — the unit is the catalog's", TAGS, () => {
 	test.beforeEach(async ({ page }) => {
 		await routeBrowserCouchThroughApp(page);
 		await injectSession(page, WS, sessions[WS.name]);
+		// Pin the active shelter (WS holds `shelter:SH001`): the back-office layout re-keys its
+		// children once the shelter list loads and selection flips undefined -> a code, which
+		// remounts the page, resets the sub-tab to 'scan' and detaches the button mid-click.
+		await pinActiveShelter(page, 'SH001');
 		await page.goto('/back-office/stock-donations');
 		await page.getByRole('tab', { name: /จัดการความต้องการ/ }).click();
 		await page.getByRole('button', { name: /สร้างประกาศแบบกำหนดเอง/ }).click({ timeout: 10_000 });
