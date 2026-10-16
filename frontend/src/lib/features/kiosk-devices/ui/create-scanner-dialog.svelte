@@ -6,6 +6,8 @@
 	import { toast } from 'svelte-sonner';
 	import { scannerDeviceInputSchema, type CreatedScannerDevice } from '../domain/scanner.schema';
 	import { useCreateScannerDevice } from '../application/queries';
+	import KioskScreenPicker from '$lib/features/shared/ui/kiosk-screen-picker.svelte';
+	import type { KioskScreenType } from '$lib/features/shared/domain/kiosk-screen';
 	import ShelterScopeSelect from '$lib/components/shelter-scope-select.svelte';
 
 	let {
@@ -24,6 +26,7 @@
 	let name = $state('');
 	let pickedShelterCode = $state<string | undefined>(undefined);
 	let stationName = $state('จุดคัดกรองหลัก');
+	let screenType = $state<KioskScreenType>('compact');
 
 	const shelterCode = $derived(fixedShelterCode ?? pickedShelterCode);
 
@@ -32,6 +35,7 @@
 		name = '';
 		pickedShelterCode = undefined;
 		stationName = 'จุดคัดกรองหลัก';
+		screenType = 'compact';
 	}
 
 	function handleOpenChange(next: boolean) {
@@ -49,7 +53,8 @@
 			name,
 			shelter_code: shelterCode.toUpperCase(),
 			station_name: stationName,
-			status: 'active'
+			status: 'active',
+			screen_type: screenType
 		});
 
 		if (!parsed.success) {
@@ -133,6 +138,18 @@
 					bind:value={stationName}
 					placeholder="เช่น จุดคัดกรองหลัก, ประตู 1"
 				/>
+			</div>
+
+			<div class="grid gap-2">
+				<span id="screen-type-label" class="text-sm font-semibold">ขนาดหน้าจอ</span>
+				<KioskScreenPicker
+					id="create-screen-type"
+					aria-labelledby="screen-type-label"
+					bind:value={screenType}
+				/>
+				<p class="text-xs text-muted-foreground">
+					ตู้จะได้รับเฉพาะแบนเนอร์ที่ออกแบบสำหรับขนาดหน้าจอนี้
+				</p>
 			</div>
 		</div>
 

@@ -1,8 +1,9 @@
 <script lang="ts">
 	/**
 	 * "จัดการเครื่อง" — every per-device action of the kiosk list in one dialog, so the table only
-	 * shows state. Name / service point / active / banner (FR-KBR-38) are one form saved as a single
-	 * PATCH of the changed fields; Scanner Key, staff PIN and delete hand off to their own dialogs.
+	 * shows state. Name / service point / active / banner (FR-KBR-38) / screen size are one form saved
+	 * as a single PATCH of the changed fields; Scanner Key, staff PIN and delete hand off to their own
+	 * dialogs.
 	 */
 	import { defaults, superForm } from 'sveltekit-superforms';
 	import { zod4Client } from 'sveltekit-superforms/adapters';
@@ -12,6 +13,7 @@
 	import * as Form from '$lib/components/ui/form/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Switch } from '$lib/components/ui/switch/index.js';
+	import KioskScreenPicker from '$lib/features/shared/ui/kiosk-screen-picker.svelte';
 	import Cpu from '@lucide/svelte/icons/cpu';
 	import Eye from '@lucide/svelte/icons/eye';
 	import Key from '@lucide/svelte/icons/key';
@@ -187,6 +189,18 @@
 							<Switch {...props} bind:checked={$formData.banner_enabled} />
 						{/snippet}
 					</Form.Control>
+				</Form.Field>
+				<Form.Field {form} name="screen_type" class="space-y-2">
+					<Form.Control>
+						{#snippet children({ props })}
+							<Form.Label class="text-sm font-semibold text-slate-700">ขนาดหน้าจอ</Form.Label>
+							<KioskScreenPicker {...props} bind:value={$formData.screen_type} />
+						{/snippet}
+					</Form.Control>
+					<Form.Description class="text-xs text-slate-500">
+						เลือกตามตู้จริง — ตู้จะได้รับเฉพาะแบนเนอร์ที่ออกแบบสำหรับขนาดนี้
+					</Form.Description>
+					<Form.FieldErrors />
 				</Form.Field>
 			</section>
 		</form>

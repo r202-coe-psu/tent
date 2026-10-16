@@ -19,6 +19,7 @@ const device = (id: string, over: Partial<ScannerDevice> = {}): ScannerDevice =>
 	staff_pin_set: false,
 	staff_pin_is_default: false,
 	banner_enabled: true,
+	screen_type: 'compact',
 	...over
 });
 
@@ -32,6 +33,14 @@ describe('ScannerList', () => {
 		expect(on).not.toContain('role="switch"');
 
 		expect(html([device('a', { banner_enabled: false })])).toContain('ไม่แสดงแบนเนอร์');
+	});
+
+	it('labels each device with its kiosk screen and size', () => {
+		const body = html([device('a'), device('b', { screen_type: 'portrait' })]);
+		expect(body).toContain('ตู้เล็ก');
+		expect(body).toContain('1024×600');
+		expect(body).toContain('ตู้ใหญ่');
+		expect(body).toContain('1080×1920');
 	});
 
 	it('shows status and PIN state as text badges', () => {

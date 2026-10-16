@@ -12,6 +12,7 @@
 	import { formatThaiShortDate } from '$lib/utils/date';
 	import DeleteScannerDialog from './delete-scanner-dialog.svelte';
 	import EditScannerDialog from './edit-scanner-dialog.svelte';
+	import { KIOSK_SCREENS, screenTypeOf } from '$lib/features/shared/domain/kiosk-screen';
 	import ScannerPinBadge from './scanner-pin-badge.svelte';
 
 	/**
@@ -110,6 +111,10 @@
 								<div class="min-w-0">
 									<p class="font-semibold text-slate-900">{device.name}</p>
 									<p class="text-xs text-slate-500 tabular-nums">{device.device_id}</p>
+									<span class="badge-muted mt-1">
+										{KIOSK_SCREENS[screenTypeOf(device)].label}
+										<span class="tabular-nums">{KIOSK_SCREENS[screenTypeOf(device)].size}</span>
+									</span>
 								</div>
 							</div>
 						</td>

@@ -20,7 +20,8 @@ const device: ScannerDevice = {
 	last_seen_at: null,
 	staff_pin_set: true,
 	staff_pin_is_default: false,
-	banner_enabled: true
+	banner_enabled: true,
+	screen_type: 'compact'
 };
 
 let instance: ReturnType<typeof mount> | null = null;
@@ -91,6 +92,24 @@ describe('EditScannerDialog', () => {
 		expect(mutateAsync).toHaveBeenCalledWith({
 			deviceId: 'SCAN-01',
 			patch: { banner_enabled: false, status: 'inactive' }
+		});
+	});
+
+	it('shows the stored screen and saves a switch to ตู้ใหญ่ as a screen_type patch', async () => {
+		await render();
+		const radio = (type: string) =>
+			document.body.querySelector(`[role="radio"][data-value="${type}"]`) as HTMLButtonElement;
+		expect(radio('compact').getAttribute('aria-checked')).toBe('true');
+		expect(radio('portrait').getAttribute('aria-checked')).toBe('false');
+
+		radio('portrait').click();
+		flushSync();
+		buttonByText('บันทึก').click();
+		await settle();
+
+		expect(mutateAsync).toHaveBeenCalledWith({
+			deviceId: 'SCAN-01',
+			patch: { screen_type: 'portrait' }
 		});
 	});
 
