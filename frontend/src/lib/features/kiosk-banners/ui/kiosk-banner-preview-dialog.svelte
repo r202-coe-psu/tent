@@ -1,31 +1,32 @@
 <script lang="ts">
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
-	import { Button } from '$lib/components/ui/button/index.js';
-	import { KioskBannerAttract, type KioskBannerSlide } from '$lib/features/kiosk';
-	import { PREVIEW_FRAMES, fitScale, type PreviewFrame } from './kiosk-banner-preview-frame';
+	import type { KioskBannerSlide } from '$lib/features/kiosk';
+	import type { KioskScreenType } from '$lib/features/shared/domain/kiosk-screen';
+	import KioskBannerPreviewPlayer from './kiosk-banner-preview-player.svelte';
 
 	/**
-	 * 「ตัวอย่างบน kiosk」: plays `slides` with the real kiosk overlay inside a simulated 1024×600 or
-	 * 1080×1920 screen, scaled to fit (FR-KBN-29). A tap on the overlay replays it.
+	 * 「ตัวอย่างบน kiosk」: plays the slides of one screen type with the real kiosk overlay inside a
+	 * simulated 1024×600 or 1080×1920 screen, scaled to fit (FR-KBN-29, FR-KBR-44). A tap on the
+	 * overlay replays it.
 	 */
 	let {
 		open = $bindable(false),
 		slides,
-		emptyMessage = 'ไม่มีแบนเนอร์ที่แสดงอยู่ในขณะนี้'
+		screens,
+		initialScreen,
+		emptyMessage
 	}: {
 		open?: boolean;
-		slides: KioskBannerSlide[];
+		slides: Record<KioskScreenType, KioskBannerSlide[]>;
+		/** Screens offered (default both). A single one hides the toggle. */
+		screens?: readonly KioskScreenType[];
+		/** Screen shown first; default is the first screen that has slides. */
+		initialScreen?: KioskScreenType;
+		/** Overrides the per-screen「ไม่มีแบนเนอร์…」message. */
 		emptyMessage?: string;
 	} = $props();
 
-	let frame = $state.raw<PreviewFrame>(PREVIEW_FRAMES[0]);
-	let spaceWidth = $state(0);
 	let windowHeight = $state(0);
-	let replay = $state(0);
-
-	// Leave room for the dialog header and the frame toggle.
-	const space = $derived({ width: spaceWidth, height: Math.max(windowHeight - 220, 0) });
-	const scale = $derived(fitScale(frame, space));
 </script>
 
 <svelte:window bind:innerHeight={windowHeight} />
@@ -39,46 +40,6 @@
 			</Dialog.Description>
 		</Dialog.Header>
 
-		<div class="flex gap-2" role="group" aria-label="ขนาดหน้าจอ kiosk">
-			{#each PREVIEW_FRAMES as option (option.id)}
-				<Button
-					type="button"
-					size="sm"
-					variant={frame.id === option.id ? 'default' : 'outline'}
-					aria-pressed={frame.id === option.id}
-					class="min-h-11"
-					onclick={() => (frame = option)}
-				>
-					{option.label}
-				</Button>
-			{/each}
-		</div>
-
-		<div bind:clientWidth={spaceWidth} class="flex min-h-40 justify-center">
-			{#if slides.length === 0}
-				<p class="self-center py-10 text-center text-sm text-muted-foreground">{emptyMessage}</p>
-			{:else if spaceWidth > 0}
-				<!-- The transform makes this box the containing block of the overlay's `fixed` layout. -->
-				<div
-					data-testid="kiosk-preview-viewport"
-					class="relative overflow-hidden rounded-lg border border-slate-300 bg-slate-950"
-					style:width="{frame.width * scale}px"
-					style:height="{frame.height * scale}px"
-				>
-					<div
-						data-testid="kiosk-preview-frame"
-						class="absolute top-0 left-0 origin-top-left overflow-hidden"
-						style:width="{frame.width}px"
-						style:height="{frame.height}px"
-						style:transform="scale({scale})"
-						style:--testing-banner-height="0px"
-					>
-						{#key `${frame.id}:${replay}`}
-							<KioskBannerAttract mode="preview" banners={slides} onDismiss={() => replay++} />
-						{/key}
-					</div>
-				</div>
-			{/if}
-		</div>
+		<KioskBannerPreviewPlayer {slides} {screens} {initialScreen} {emptyMessage} {windowHeight} />
 	</Dialog.Content>
 </Dialog.Root>

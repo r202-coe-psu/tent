@@ -30,7 +30,23 @@ describe('buildListPreviewSlides', () => {
 			now,
 			imageUrl
 		);
-		expect(slides.map((s) => s.id)).toEqual(['kiosk_banner:a', 'kiosk_banner:b']);
+		expect(slides.compact.map((s) => s.id)).toEqual(['kiosk_banner:a', 'kiosk_banner:b']);
+		expect(slides.portrait).toEqual([]);
+	});
+
+	it('groups slides by screen type, legacy banners count as compact, order kept per group', () => {
+		const slides = buildListPreviewSlides(
+			[
+				banner('kiosk_banner:p2', { order: 2, screen_type: 'portrait' }),
+				banner('kiosk_banner:c2', { order: 2 }),
+				banner('kiosk_banner:p1', { order: 1, screen_type: 'portrait' }),
+				banner('kiosk_banner:c1', { order: 1, screen_type: 'compact' })
+			],
+			now,
+			imageUrl
+		);
+		expect(slides.compact.map((s) => s.id)).toEqual(['kiosk_banner:c1', 'kiosk_banner:c2']);
+		expect(slides.portrait.map((s) => s.id)).toEqual(['kiosk_banner:p1', 'kiosk_banner:p2']);
 	});
 
 	it('maps the slide shape the kiosk overlay expects', () => {
@@ -38,7 +54,7 @@ describe('buildListPreviewSlides', () => {
 			[banner('kiosk_banner:a', { caption: 'cap', duration_sec: 5 })],
 			now,
 			imageUrl
-		);
+		).compact;
 		expect(slide).toEqual({
 			id: 'kiosk_banner:a',
 			title: 'T kiosk_banner:a',
@@ -49,7 +65,7 @@ describe('buildListPreviewSlides', () => {
 	});
 
 	it('is empty when nothing is active', () => {
-		expect(buildListPreviewSlides([], now, imageUrl)).toEqual([]);
+		expect(buildListPreviewSlides([], now, imageUrl)).toEqual({ compact: [], portrait: [] });
 	});
 });
 
