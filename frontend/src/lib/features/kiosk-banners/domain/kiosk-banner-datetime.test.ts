@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { fromBangkokLocalInput, toBangkokLocalInput } from './kiosk-banner-datetime';
+import {
+	fromBangkokLocalInput,
+	joinLocalInput,
+	splitLocalInput,
+	toBangkokLocalInput
+} from './kiosk-banner-datetime';
 
 describe('toBangkokLocalInput', () => {
 	it('renders a UTC instant as Asia/Bangkok wall-clock time', () => {
@@ -34,5 +39,36 @@ describe('fromBangkokLocalInput', () => {
 			expect(iso).not.toBeNull();
 			expect(toBangkokLocalInput(iso as string)).toBe(local);
 		}
+	});
+});
+
+describe('splitLocalInput', () => {
+	it('splits a full value into the date and time pickers', () => {
+		expect(splitLocalInput('2026-10-15T08:30')).toEqual({ date: '2026-10-15', time: '08:30' });
+	});
+
+	it('keeps a half-filled value (only the date or only the time chosen)', () => {
+		expect(splitLocalInput('2026-10-15T')).toEqual({ date: '2026-10-15', time: '' });
+		expect(splitLocalInput('T08:30')).toEqual({ date: '', time: '08:30' });
+	});
+
+	it('reads an empty value as two empty pickers', () => {
+		expect(splitLocalInput('')).toEqual({ date: '', time: '' });
+	});
+});
+
+describe('joinLocalInput', () => {
+	it('joins the pickers back into a datetime-local value', () => {
+		expect(joinLocalInput('2026-10-15', '08:30')).toBe('2026-10-15T08:30');
+	});
+
+	it('round-trips a half-filled value, which stays invalid until both are chosen', () => {
+		const half = joinLocalInput('2026-10-15', '');
+		expect(splitLocalInput(half)).toEqual({ date: '2026-10-15', time: '' });
+		expect(fromBangkokLocalInput(half)).toBeNull();
+	});
+
+	it('is empty when neither picker is set', () => {
+		expect(joinLocalInput('', '')).toBe('');
 	});
 });

@@ -28,3 +28,17 @@ export function fromBangkokLocalInput(local: string): string | null {
 	}
 	return new Date(utc - BANGKOK_OFFSET_MS).toISOString();
 }
+
+/** `datetime-local` value -> the separate date (`YYYY-MM-DD`) and time (`HH:mm`) picker values. */
+export function splitLocalInput(local: string): { date: string; time: string } {
+	const [date = '', time = ''] = local.split('T');
+	return { date, time };
+}
+
+/**
+ * Date + time picker values -> one `datetime-local` value. A half-filled pair is kept as is (it
+ * splits back unchanged) and fails {@link fromBangkokLocalInput} until both are chosen.
+ */
+export function joinLocalInput(date: string, time: string): string {
+	return date || time ? `${date}T${time}` : '';
+}
