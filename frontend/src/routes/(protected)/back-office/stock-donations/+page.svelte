@@ -4,6 +4,10 @@
 	import Megaphone from '@lucide/svelte/icons/megaphone';
 	import CalendarClock from '@lucide/svelte/icons/calendar-clock';
 	import { toast } from 'svelte-sonner';
+	import { page } from '$app/state';
+	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
+	import { SvelteURLSearchParams } from 'svelte/reactivity';
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import * as Tabs from '$lib/components/ui/tabs/index.js';
 	import NeedsBoardAdmin from '$lib/components/needs-board-admin.svelte';
@@ -35,7 +39,15 @@
 	 * `incoming-redirects-board.svelte`) and their routes still serve data — putting a
 	 * tab back is re-adding a button and a branch, not rebuilding a feature.
 	 */
-	let activeSubTab = $state('scan');
+	const TABS = ['scan', 'pending', 'needs', 'slots'] as const;
+	type TabKey = (typeof TABS)[number];
+
+	// The tab lives in `?tab=`, not in component state: the back-office layout remounts
+	// this page on every shelter switch (`{#key selectedShelterCode}`), which used to
+	// throw staff back to the scan tab mid-task.
+	const activeSubTab = $derived<TabKey>(
+		TABS.find((t) => t === page.url.searchParams.get('tab')) ?? 'scan'
+	);
 	let viewState = $state<'list' | 'create' | 'edit'>('list');
 	// One board row = one need, so the edit target is (campaign, item), never just the campaign.
 	let selectedEditingItem = $state<NeedItem | null>(null);
@@ -85,7 +97,13 @@
 	}
 
 	function switchTab(tab: string) {
-		activeSubTab = tab;
+		const params = new SvelteURLSearchParams(page.url.searchParams);
+		params.set('tab', tab);
+		void goto(resolve(`/back-office/stock-donations?${params}` as '/back-office/stock-donations'), {
+			replaceState: true,
+			keepFocus: true,
+			noScroll: true
+		});
 		viewState = 'list';
 		selectedPendingRequest = null;
 		if (tab === 'pending') loadPending();

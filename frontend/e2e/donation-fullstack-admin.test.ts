@@ -1,4 +1,4 @@
-import { test, expect, type APIRequestContext, type Page } from '@playwright/test';
+import { test, expect, type APIRequestContext, type Locator, type Page } from '@playwright/test';
 import { bangkokToday } from '../src/lib/utils/date';
 import { couchReq } from './helpers/couch';
 import { CAN_WRITE, READ_ONLY_REASON } from './helpers/e2e-env';
@@ -226,6 +226,23 @@ test.describe('Donation full-stack: back office', { tag: ['@critical', '@donatio
 			await expect(page.getByRole('button', { name: ymd, exact: true }).first()).toBeVisible();
 		}
 
+		/**
+		 * Open a slot row's edit dialog and wait until its open animation has finished: filling
+		 * while bits-ui is still mounting the dialog (zoom/fade-in) can lose the typed value, so
+		 * the save then sends nothing.
+		 */
+		async function openEditDialog(page: Page, row: Locator) {
+			await row.getByRole('button', { name: 'แก้ไข' }).click();
+			// Not pinned to the start time: saving clears the dialog's `editing`, which rewrites its
+			// title, so a title-specific name would stop matching and `toBeHidden` would pass vacuously.
+			const dialog = page.getByRole('dialog', { name: /^แก้ไขช่วง/ });
+			await expect(dialog).toBeVisible();
+			await dialog.evaluate((el) =>
+				Promise.all(el.getAnimations({ subtree: true }).map((a) => a.finished))
+			);
+			return dialog;
+		}
+
 		/** The slot screen's date box takes the Thai dd/mm/yyyy (Gregorian year). */
 		async function staffPicksDate(page: Page, ymd: string) {
 			const [y, m, d] = ymd.split('-');
@@ -327,20 +344,18 @@ test.describe('Donation full-stack: back office', { tag: ['@critical', '@donatio
 			const endMin = h * 60 + m + 15;
 			const newTo = `${String(Math.floor(endMin / 60)).padStart(2, '0')}:${String(endMin % 60).padStart(2, '0')}`;
 			const note = `ประตู 2 (e2e ${RUN_ID})`;
-			await original.getByRole('button', { name: 'แก้ไข' }).click();
-			// Not pinned to the start time: saving clears the dialog's `editing`, which rewrites its
-			// title, so a title-specific name would stop matching and `toBeHidden` would pass vacuously.
-			const dialog = page.getByRole('dialog', { name: /^แก้ไขช่วง/ });
-			const editToasts = page
-				.locator('[data-sonner-toast]')
-				.filter({ hasText: `แก้ไขช่วง ${CAPPED.from} - ${newTo} แล้ว` });
-			await expect(dialog).toBeVisible();
-			await dialog.locator('#edit-slot-to').fill(newTo);
-			await dialog.locator('#edit-slot-capacity').fill('2');
-			await dialog.locator('#edit-slot-note').fill(note);
-			await expect(dialog.getByRole('button', { name: 'บันทึกการแก้ไข' })).toBeEnabled();
+			const dialog = await openEditDialog(page, original);
+			const to = dialog.locator('#edit-slot-to');
+			await to.fill(newTo);
+			await expect(to).toHaveValue(newTo);
+			const capacity = dialog.locator('#edit-slot-capacity');
+			await capacity.fill('2');
+			await expect(capacity).toHaveValue('2');
+			const noteBox = dialog.locator('#edit-slot-note');
+			await noteBox.fill(note);
+			await expect(noteBox).toHaveValue(note);
 			await dialog.getByRole('button', { name: 'บันทึกการแก้ไข' }).click();
-			await expect(editToasts).toHaveCount(1);
+			await expect(page.getByText(`แก้ไขช่วง ${CAPPED.from} - ${newTo} แล้ว`)).toBeVisible();
 			await expect(dialog).toBeHidden();
 
 			const edited = slotRow(page, { from: CAPPED.from, to: newTo });
@@ -348,20 +363,12 @@ test.describe('Donation full-stack: back office', { tag: ['@critical', '@donatio
 			await expect(edited).toContainText('ประตู 2');
 
 			// Lift the ceiling again from the same dialog.
-			// Let the first success toast go so the second one is not satisfied by the stale toast.
-			await expect(editToasts).toHaveCount(0, { timeout: 15_000 });
-			await edited.getByRole('button', { name: 'แก้ไข' }).click();
-			await expect(dialog).toBeVisible();
-			await expect(dialog.locator('#edit-slot-capacity')).toHaveValue('2');
-			await dialog.locator('#edit-slot-capacity').fill('');
-			await expect(dialog.locator('#edit-slot-capacity')).toHaveValue('');
-			const saveEditButton = dialog.getByRole('button', { name: 'บันทึกการแก้ไข' });
-			await expect(saveEditButton).toBeEnabled();
-			await saveEditButton.click();
-			// A guard refusal (bookings not loaded, ceiling below booked) toasts an error and keeps the
-			// dialog open — wait on the success toast so that case fails here, not on the row text.
-			await expect(editToasts).toHaveCount(1);
-			await expect(dialog).toBeHidden();
+			const reopened = await openEditDialog(page, edited);
+			const ceiling = reopened.locator('#edit-slot-capacity');
+			await ceiling.fill('');
+			await expect(ceiling).toHaveValue('');
+			await reopened.getByRole('button', { name: 'บันทึกการแก้ไข' }).click();
+			await expect(reopened).toBeHidden();
 			await expect(edited).toContainText('ไม่จำกัด');
 
 			// Same start again → refused; still one row for it.
@@ -478,7 +485,6 @@ test.describe('Donation full-stack: back office', { tag: ['@critical', '@donatio
 			await page.getByRole('button', { name: /^เลือกประเภทสิ่งของ/ }).click();
 			await page.getByRole('option', { name: /^สบู่ก้อน/ }).click();
 			await page.getByRole('textbox', { name: 'จำนวนที่รับจริง *' }).fill('3');
-			await page.getByRole('textbox', { name: 'โซนจัดเก็บ (ถ้ามี)' }).fill('A-1');
 			// สบู่ก้อน carries `shelf_life_days`, so the walk-in will not save without an expiry.
 			await fillExpiry(page.getByRole('textbox', { name: 'วันหมดอายุ' }));
 

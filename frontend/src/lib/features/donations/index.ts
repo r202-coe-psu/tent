@@ -11,6 +11,7 @@ export {
 	publicDonationErrorMessage,
 	isDonorEditable,
 	donationPayloadUnit,
+	donorUnitOptions,
 	linesMissingExpiry
 } from './domain/public-donation';
 export type { DonationUnitSource, ExpiryCheckLine } from './domain/public-donation';

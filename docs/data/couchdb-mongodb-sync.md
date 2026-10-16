@@ -2,8 +2,8 @@
 title: Smart Shelter — CouchDB ⇄ MongoDB Sync (Public Plane)
 status: draft for review
 created: 2026-06-11
-updated: 2026-10-09
-note: คู่กับ data-model.md v3 + api-contract.md v1 + CR-017/CR-044 — public tier ทำงานบน MongoDB ผ่าน FastAPI; ตัด public_transparency (CR-017 Decision B); CR-113 unassigned_registrations; decision sync 2026-10-09 — worker PROJECTION_VERSION + auto re-bootstrap on start (stored in Mongo _worker_meta); bootstrap reads update_seq before scan
+updated: 2026-10-13
+note: คู่กับ data-model.md v3 + api-contract.md v1 + CR-017/CR-044 — public tier ทำงานบน MongoDB ผ่าน FastAPI; ตัด public_transparency (CR-017 Decision B); CR-113 unassigned_registrations; CR-166 (2026-10-13) — public_persons เพิ่ม `first_name_key`/`last_name_hash`, PROJECTION_VERSION 2→3, เลิก `$text`; decision sync 2026-10-09 — worker PROJECTION_VERSION + auto re-bootstrap on start (stored in Mongo _worker_meta); bootstrap reads update_seq before scan
 ---
 
 # Smart Shelter — CouchDB ⇄ MongoDB Sync
@@ -17,7 +17,7 @@ api-contract v1 เดิมเขียนว่า public plane "อ่าน 
 | --- | --- |
 | **Privacy by construction** | เฉพาะ field ที่ public เห็นได้ ถูก project ลง Mongo (นามสกุล masked, ไม่มี medical, ไม่มีเบอร์ใน response) — ต่อให้ Mongo รั่ว ก็ไม่มี PII เต็ม |
 | **Blast radius** | public traffic / scraping / DDoS ชนแค่ Mongo replica — operational CouchDB (ที่ศูนย์พึ่งพา) ไม่กระทบ |
-| **Query shape** | occupants search ต้องการ text index + phone exact + masking — ทำบน Mongo (aggregation/`$text`) ง่ายกว่า CouchDB view มาก |
+| **Query shape** | occupants search ต้องการ index ชื่อ (prefix + hash นามสกุลเต็ม — CR-166; เดิม `$text`) + phone exact + masking — ทำบน Mongo ง่ายกว่า CouchDB view มาก |
 | **Scaling แยกโปรไฟล์** | public อ่านหนัก-เขียนเบา, operational เขียนหนัก — แยก store ปรับ scale อิสระ |
 
 **กติกาเจ้าของข้อมูล (สำคัญสุด):**
@@ -106,7 +106,9 @@ The worker resumes `_changes` from its checkpoint, so documents that never chang
 { _id: "evacuee:01H...",            // = CouchDB _id (idempotency)
   shelter_code: "SH001",            // code ของ shelter
   first_name: "สมชาย",              // ชื่อจริงเต็ม
-  last_name_masked: "ใจ****ดี",      // mask ตอน project (≥5: 2หน้า+****+2ท้าย; ≤4: ตัวแรก+****; นับ grapheme)
+  last_name_masked: "ใจ****ดี",      // mask ตอน project (≥5: 2หน้า+****+2ท้าย; ≤4: ตัวแรก+****; นับ grapheme) — ใช้แสดงผลเท่านั้น ไม่ใช้ค้น (CR-166)
+  first_name_key: "สมชาย",          // CR-166: NFKC → casefold → ยุบช่องว่าง → strip; ใช้ prefix match
+  last_name_hash: "sha256(ใจดี)",   // CR-166: sha256(surname_key) — surname_key = name_key ตัดช่องว่างทั้งหมด; None ถ้าว่าง; ไม่ส่งออก API
   phone_hash: "sha256(0812345678)", // ค้นด้วยเบอร์เต็ม = hash แล้วเทียบ — เบอร์จริงไม่ลง Mongo
   status: "active",                 // จาก current_stay (CR-035 v3)
   national_id_hash, national_id_masked, passport_hash, passport_id_masked,
@@ -258,7 +260,7 @@ donation doc ที่ลงไปเป็น state machine แบบ **forward
 
 | Endpoint | แตะ Mongo | หมายเหตุ |
 | --- | --- | --- |
-| `POST /public/v1/occupants` | read `public_persons` (`$text` ชื่อ หรือ `phone_hash`) | response: ชื่อจริง + นามสกุล masked + ศูนย์ + สถานะ; **ไม่มีเบอร์**; audit ลง Mongo → sync → `central_ops.search_audit`; allow-list stay รวม `arriving`/`room_confirmed` (CR-112) |
+| `POST /public/v1/occupants` | read `public_persons` (ชื่อ: `first_name_key` prefix + `last_name_hash` exact — CR-166; หรือ `phone_hash`) | response: ชื่อจริง + นามสกุล masked + ศูนย์ + สถานะ; **ไม่มีเบอร์**; audit ลง Mongo → sync → `central_ops.search_audit`; allow-list stay รวม `arriving`/`room_confirmed` (CR-112) |
 | `POST /public/v1/unassigned-registrations` | write `unassigned_registrations` | CR-113 — ไม่แตะ Couch / ไม่สร้าง `public_persons` |
 | `GET /staff/v1/unassigned-registrations/search` | read `unassigned_registrations` | CR-113 — staff online search ตรงจากคิวกลาง |
 | `POST /staff/v1/unassigned-registrations/{id}/claim` | update/delete `unassigned_registrations` + write Couch | CR-113 — birth of Couch SoR; แล้ว worker → `public_persons` |
@@ -302,7 +304,7 @@ donor PII (`donor.name/phone`) ใน Mongo `donations`: ลบทันที�
 - **projector** มี unit test ต่อ type ยืนยัน allow-list (กัน field ใหม่หลุด) + masking ถูกต้อง
 - **seed script** (data-model §8) ควร seed ทั้ง CouchDB และรัน worker 1 รอบให้ Mongo มี projection
   สำหรับ dev/e2e ของ public tier
-- Mongo indexes: `public_persons`: `$text(first_name,last_name_masked)`, `{phone_hash}`,
+- Mongo indexes: `public_persons`: `{last_name_hash, first_name_key}`, `{first_name_key}` (CR-166 — แทน `$text(first_name,last_name_masked)` เดิมที่คงไว้ใน DB จนระบบนิ่งแล้ว drop ด้วยมือ), `{phone_hash}`,
   `{shelter_code}`; `public_donations`: `{tracking_token_hash}`; `donations`: `{synced_to_couch}`
 
 ## 9. สิ่งที่ตั้งใจ "ไม่มี"

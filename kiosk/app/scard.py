@@ -19,6 +19,46 @@ class ReaderLostError(RuntimeError):
     """The reader hardware vanished (USB unplugged). Unlike a card error it must reach the
     manager, which then drops the reader and waits for it again instead of showing a read error."""
 
+
+def _address_part(parts: List[str], index: int) -> Optional[str]:
+    """Stripped part at index, or None when missing, blank or just '-' (the card's 'empty')."""
+    if index >= len(parts):
+        return None
+    value = parts[index].strip()
+    return None if value in ("", "-") else value
+
+
+def split_card_address(parts: List[str]) -> Dict[str, Optional[str]]:
+    """Map the chip address parts (เลขที่#หมู่ที่#ตรอก#ซอย#ถนน#ตำบล#อำเภอ#จังหวัด) to fields.
+
+    lane joins ตรอก and ซอย; road is ถนน. Tolerates short part lists."""
+    lane_parts = [v for v in (_address_part(parts, 2), _address_part(parts, 3)) if v]
+    village_no = _address_part(parts, 1)
+    subdistrict = _address_part(parts, 5)
+    district = _address_part(parts, 6)
+    province = _address_part(parts, 7)
+
+    # Clean address prefixes (e.g. ตำบล, อำเภอ, จังหวัด)
+    if subdistrict:
+        subdistrict = subdistrict.replace("ตำบล", "").replace("แขวง", "").strip()
+    if district:
+        district = district.replace("อำเภอ", "").replace("เขต", "").strip()
+    if province:
+        province = province.replace("จังหวัด", "").strip()
+    if village_no:
+        village_no = village_no.replace("หมู่ที่", "").replace("หมู่", "").replace("ม.", "").strip()
+
+    return {
+        "address_no": _address_part(parts, 0),
+        "village_no": village_no or None,
+        "lane": " ".join(lane_parts) or None,
+        "road": _address_part(parts, 4),
+        "subdistrict": subdistrict or None,
+        "district": district or None,
+        "province": province or None,
+    }
+
+
 # Consecutive failed status polls before the reader is treated as gone so the manager re-opens it.
 MAX_POLL_FAILURES = 3
 
@@ -312,23 +352,14 @@ class ThaiSmartCardReader:
         # Address
         addr_parts = self.get_address_parts()
         addr_raw = " ".join([p.strip() for p in addr_parts if p.strip()]).strip()
-        address_no = addr_parts[0].strip() if len(addr_parts) > 0 and addr_parts[0].strip() else None
-        village_no = addr_parts[1].strip() if len(addr_parts) > 1 and addr_parts[1].strip() else None
-        lane = addr_parts[2].strip() if len(addr_parts) > 2 and addr_parts[2].strip() else None
-        road = addr_parts[3].strip() if len(addr_parts) > 3 and addr_parts[3].strip() else None
-        subdistrict = addr_parts[5].strip() if len(addr_parts) > 5 and addr_parts[5].strip() else None
-        district = addr_parts[6].strip() if len(addr_parts) > 6 and addr_parts[6].strip() else None
-        province = addr_parts[7].strip() if len(addr_parts) > 7 and addr_parts[7].strip() else None
-
-        # Clean address prefixes (e.g. ตำบล, อำเภอ, จังหวัด)
-        if subdistrict:
-            subdistrict = subdistrict.replace("ตำบล", "").replace("แขวง", "").strip()
-        if district:
-            district = district.replace("อำเภอ", "").replace("เขต", "").strip()
-        if province:
-            province = province.replace("จังหวัด", "").strip()
-        if village_no:
-            village_no = village_no.replace("หมู่ที่", "").replace("หมู่", "").replace("ม.", "").strip()
+        address = split_card_address(addr_parts)
+        address_no = address["address_no"]
+        village_no = address["village_no"]
+        lane = address["lane"]
+        road = address["road"]
+        subdistrict = address["subdistrict"]
+        district = address["district"]
+        province = address["province"]
 
         # Dates & Issuer
         issuer = self.get_issuer()

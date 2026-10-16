@@ -22,6 +22,11 @@ class ThresholdProfile:
     max_attempts: int
     required_frames: int  # frames that pass the quality gate that one attempt needs
     top_k: int  # best frames that are averaged (median) into the attempt's similarity
+    # Oval guide the person stands in; faces centred outside it (bystanders) are ignored. Mirrors
+    # kiosk-face-camera-panel.svelte: an `aspect-[3/4] h-[84%]` oval centred in a 4:3 object-cover
+    # box, so in frame pixels half-height = ratio * height and half-width = aspect * half-height.
+    guide_half_height_ratio: float
+    guide_aspect: float
     # Quality gate, per frame.
     min_detect_score: float
     min_eye_distance_ratio: float  # eye distance / image width
@@ -40,6 +45,8 @@ DEFAULT_PROFILE = ThresholdProfile(
     max_attempts=3,
     required_frames=3,
     top_k=3,
+    guide_half_height_ratio=0.42,
+    guide_aspect=0.75,
     min_detect_score=0.85,
     min_eye_distance_ratio=0.09,
     max_face_width_ratio=0.7,

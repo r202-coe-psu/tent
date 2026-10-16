@@ -9,6 +9,11 @@ const session = {
 	consentedAt: new Date().toISOString()
 };
 const card = { citizen_id: '1234567890123' } as never;
+const registration = {
+	evacuee_id: 'evacuee:01',
+	qr_payload: 'qr-payload',
+	label: { name: 'สมชาย ใจดี', phone: '0812345678' }
+};
 
 describe('registerWalkInCardRead', () => {
 	it('rejects a different card without submitting it', async () => {
@@ -24,16 +29,29 @@ describe('registerWalkInCardRead', () => {
 		const register = vi
 			.fn()
 			.mockRejectedValueOnce(new Error('บริการไม่พร้อมใช้งาน'))
-			.mockResolvedValueOnce({ evacuee_id: 'evacuee:01' });
+			.mockResolvedValueOnce(registration);
 
 		await expect(registerWalkInCardRead(card, session, register)).resolves.toMatchObject({
 			kind: 'error',
 			message: 'บริการไม่พร้อมใช้งาน'
 		});
 		await expect(registerWalkInCardRead(card, session, register)).resolves.toEqual({
-			kind: 'registered'
+			kind: 'registered',
+			registration
 		});
 		expect(register).toHaveBeenCalledTimes(2);
+	});
+
+	it('tells a phone already in use apart from a failure worth retrying', async () => {
+		const register = vi
+			.fn()
+			.mockRejectedValue(
+				new KioskRequestError('เบอร์โทรศัพท์นี้ถูกใช้ลงทะเบียนแล้ว', 409, 'KIOSK_PHONE_DUPLICATE')
+			);
+		await expect(registerWalkInCardRead(card, session, register)).resolves.toEqual({
+			kind: 'phone_duplicate',
+			message: 'เบอร์โทรศัพท์นี้ถูกใช้ลงทะเบียนแล้ว'
+		});
 	});
 });
 
@@ -46,9 +64,10 @@ describe('submitWalkInThaid', () => {
 	};
 
 	it('sends the session id, consent time and phone', async () => {
-		const register = vi.fn().mockResolvedValue({ evacuee_id: 'evacuee:01' });
+		const register = vi.fn().mockResolvedValue(registration);
 		await expect(submitWalkInThaid(thaidSession, register)).resolves.toEqual({
-			kind: 'registered'
+			kind: 'registered',
+			registration
 		});
 		expect(register).toHaveBeenCalledWith('a'.repeat(32), thaidSession.consentedAt, '0812345678');
 	});
@@ -76,6 +95,18 @@ describe('submitWalkInThaid', () => {
 		await expect(submitWalkInThaid(thaidSession, down)).resolves.toEqual({
 			kind: 'error',
 			message: 'ลองใหม่'
+		});
+	});
+
+	it('tells a phone already in use apart from a failure worth retrying', async () => {
+		const register = vi
+			.fn()
+			.mockRejectedValue(
+				new KioskRequestError('เบอร์โทรศัพท์นี้ถูกใช้ลงทะเบียนแล้ว', 409, 'KIOSK_PHONE_DUPLICATE')
+			);
+		await expect(submitWalkInThaid(thaidSession, register)).resolves.toEqual({
+			kind: 'phone_duplicate',
+			message: 'เบอร์โทรศัพท์นี้ถูกใช้ลงทะเบียนแล้ว'
 		});
 	});
 });

@@ -105,6 +105,7 @@
 				aria-label="ภาพจากกล้อง"
 			></video>
 			<div class="pointer-events-none absolute inset-0 flex items-center justify-center">
+				<!-- Oval size is mirrored by guide_half_height_ratio / guide_aspect in kiosk/app/face/profiles.py. -->
 				<div
 					class={[
 						'aspect-[3/4] h-[84%] rounded-[50%] border-4 transition-colors motion-reduce:transition-none',

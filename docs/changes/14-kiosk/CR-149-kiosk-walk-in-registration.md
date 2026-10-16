@@ -4,7 +4,7 @@ title: Kiosk walk-in registration — เสียบบัตรแล้วไ
 status: approved
 date: 2026-09-27
 created: 2026-09-27
-updated: 2026-10-03
+updated: 2026-10-15 # ทีม kiosk ขอเลิกกรอง registered_via ของหัวหน้าใน FR-KWR-83 · 2026-10-13 ข้อเสนอแก้ไข §9 approved โดย Dev/Team Lead Soravit Sukkarn (รับ requirement จากหัวหน้าโครงการเมื่อวาน 2026-10-12)
 requested_by: ทีม kiosk (branch feat/pre-register_kiosk)
 decided_by: Jakee Indapanya (GitHub net-lynx), Project Owner — อนุมัติ 2026-10-03 (Asia/Bangkok)
 decision_date: 2026-10-03
@@ -23,6 +23,10 @@ affects:
   - frontend/src/lib/features/{system-overview,public-portal,public-register,dashboard}/domain (occupancy/forecast sets)
   - worker/src/worker/projectors/evacuee.py · backend/apiapp/modules/{external,shelter,transparency,evacuee}
   - scanner_client/app/{manager,scard}.py · scanner_client/tests
+  - (§9 proposed) frontend/src/lib/features/kiosk/server/kiosk-register.server.ts · domain/walk-in-address.ts · application/walk-in-registration.ts · walk-in-session.svelte.ts · ui/kiosk-register-phone.svelte (+ tests)
+  - (§9 proposed) frontend/src/routes/api/v1/kiosk/register/+server.ts · frontend/src/routes/kiosk/register/{phone,done}/+page.svelte
+  - (§9 proposed) frontend/src/lib/features/people/domain/people.ts (`createKioskEvacueeFromCard` → `arriving`, `createKioskWalkInHousehold`, `autoHouseholdLabel`)
+  - (§9 proposed) kiosk/app/scard.py (`split_card_address`) · kiosk/tests/test_card_address.py
 why: >
   ผู้ประสบภัยที่ไม่ได้ลงทะเบียนล่วงหน้าเสียบบัตรที่ kiosk แล้วได้แค่ "ไม่พบข้อมูล" ต้องไปต่อคิว Station 1
   และให้เจ้าหน้าที่พิมพ์ข้อมูลจากบัตรเองทั้งหมด kiosk มีเครื่องอ่านชิปอยู่แล้ว จึงสร้าง record เบื้องต้นจากบัตรได้ทันที
@@ -38,6 +42,8 @@ note: >
 # CR-149: Kiosk walk-in registration (`kiosk_registered`)
 
 > **สถานะ:** approved เป็น spec เมื่อ 2026-10-03 (Asia/Bangkok) โดย Project Owner Jakee Indapanya (GitHub net-lynx) · ยังไม่ implement
+
+> **ข้อเสนอแก้ไข 2026-10-12/13 (approved โดย Team Lead):** §9 ด้านล่าง — Soravit Sukkarn (Team Lead) อนุมัติแล้ว โดยรับ requirement จากหัวหน้าโครงการเมื่อ 2026-10-12: บล็อกเบอร์ซ้ำ · walk-in ได้ household จากที่อยู่บนบัตร/ThaiD และเข้าครัวเรือนที่ที่อยู่ตรงกัน · walk-in เป็น `arriving` + พิมพ์ QR · แก้ Q3 / Q4 / FR-KWR-18..21 / FR-KWR-26 / FR-KWR-31 / FR-KWR-41..42
 
 > **สรุป (TL;DR)**
 >
@@ -230,6 +236,130 @@ Project Owner Jakee Indapanya (GitHub net-lynx) เคาะทุกข้อ�
 
 ---
 
+## 9. ข้อเสนอแก้ไข 2026-10-12/13 (approved โดย Team Lead)
+
+> **สถานะ:** approved โดย Soravit Sukkarn (Team Lead) — รับ requirement จากหัวหน้าโครงการเมื่อ 2026-10-12 · implement แล้วบน branch `refactor-kiosk-cleanup` · แผน: [`kiosk-walk-in-phone-duplicate-household-implementation-plan.md`](../../plans/kiosk-walk-in-phone-duplicate-household-implementation-plan.md), [`kiosk-feedback-walk-in-reprint-implementation-plan.md`](../../plans/kiosk-feedback-walk-in-reprint-implementation-plan.md)
+
+> **สรุป (TL;DR)**
+>
+> - **เปลี่ยนอะไร:** (1) เบอร์ที่ walk-in กรอกซ้ำกับคนที่ยังอยู่ในศูนย์ → ไม่บันทึก (2) walk-in ได้ `household` จากที่อยู่บนบัตร/ThaiD — ที่อยู่ตรงกับครัวเรือนที่ตู้สร้างไว้ → เข้าครัวเรือนนั้น หัวหน้าคงเดิม (3) walk-in ได้สถานะ `arriving` ทันที (ตู้ไม่สร้าง `kiosk_registered`) และพิมพ์ QR label ที่หน้าสุดท้าย (4) `scanner_client` เก็บถนนจากชิปถูกช่อง
+> - **เพื่อใคร/ทำไม:** walk-in ได้ QR เหมือนคนจองล่วงหน้า ไม่ต้องรอ Station 1 · ครอบครัวที่มาทีละคนรวมกันเอง · Station 1 ไม่ต้องพิมพ์ที่อยู่จากบัตรซ้ำ
+> - **Dev ต้อง build:** ตรวจเบอร์ซ้ำ · household + join ใต้ lock ที่อยู่ · status `arriving` + response `qr_payload`/`label` · หน้า `/kiosk/register/done` พิมพ์ label · `split_card_address` ใน `scard.py`
+> - **กระทบ schema:** ไม่ bump `schema_v` · ไม่มี field ใหม่ · `kiosk_registered` คงอยู่ใน enum ให้ doc เก่า แต่ตู้ไม่สร้างค่านี้อีก
+
+**แก้ข้อเดิม:** Q3 (A → household จากที่อยู่ + merge) · Q4 (พักไว้ → พิมพ์ทันที) · Q8/Q10 (walk-in เข้า `arriving` ไม่ผ่าน `kiosk_registered`) · FR-KWR-18 (`household_id`, `current_stay.status`) · FR-KWR-19 (response) · FR-KWR-20/21 (ตู้ไม่สร้าง `kiosk_registered`) · FR-KWR-26 · FR-KWR-31 (Station 1 ไม่ต้องยืนยัน walk-in ก่อนคัดกรอง) · FR-KWR-41/42 (พิมพ์ QR)
+
+### 9.1 เบอร์ซ้ำ
+
+| ID        | Requirement                                                                                                                                                                                                             |
+| :-------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| FR-KWR-50 | `POST /api/v1/kiosk/register` (ทั้ง `source: 'smart-card'` และ `'thaid'`) ที่มี `phone` ≠ null ต้องตรวจว่ามี `evacuee` ใน shelter DB ของตู้ที่ `phone` เท่ากับเบอร์ canonical หรือรูป legacy `+66…` หรือไม่             |
+| FR-KWR-51 | นับเป็นซ้ำเฉพาะ evacuee ที่ `current_stay.status` ∈ {`pre_registered`, `kiosk_registered`, `arriving`, `active`, `room_confirmed`, `temporary_leave`} · `checked_out` / `cancelled` / `transferred` / `deceased` ไม่นับ |
+| FR-KWR-52 | ตรวจเฉพาะ `evacuee.phone` — ไม่ตรวจ `emergency_contact.phone` และไม่ตรวจข้ามศูนย์                                                                                                                                       |
+| FR-KWR-53 | เบอร์ซ้ำ → `409 { error: { code: 'KIOSK_PHONE_DUPLICATE', message: 'เบอร์โทรศัพท์นี้ถูกใช้ลงทะเบียนแล้ว กรุณากรอกเบอร์อื่น หรือกด「ไม่มีเบอร์」' } }` และต้องไม่เขียน doc ใด ๆ (image / household / evacuee)            |
+| FR-KWR-54 | ตรวจหลังเช็คเลขบัตรซ้ำ (FR-KWR-17) และก่อนเขียน image ภายใต้ lock `kiosk_reg_lock` เดิม                                                                                                                                 |
+| FR-KWR-55 | ThaiD: เบอร์ซ้ำต้องคืน session (`releaseKioskSession`) ให้ตู้ส่งใหม่ด้วยเบอร์อื่นได้โดยไม่ต้องสแกน ThaiD ใหม่                                                                                                           |
+| FR-KWR-56 | หน้า `/kiosk/register/phone`: ได้ `KIOSK_PHONE_DUPLICATE` → กลับไปที่ numpad (ว่าง) และแสดงข้อความจาก server ใต้ numpad จนกว่าผู้ใช้เริ่มพิมพ์เบอร์ใหม่ · ไม่มีปุ่ม「ลองอีกครั้ง」· idle timeout ทำงานต่อ               |
+
+### 9.2 Household จากที่อยู่บนบัตร/ThaiD
+
+| ID        | Requirement                                                                                                                                                                                               |
+| :-------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| FR-KWR-60 | walk-in ที่บันทึกสำเร็จต้องมี `household_id` เสมอ: ที่อยู่ตรงกับครัวเรือนจากตู้ตาม §9.4 → ใช้ household นั้น · ไม่ตรง → สร้าง `household` ใหม่ 1 หลัง                                                     |
+| FR-KWR-61 | `label` = `ครอบครัว{ชื่อ นามสกุล}` (`autoHouseholdLabel`) · `head_evacuee_id` = evacuee ที่ลงทะเบียน · `status` = `'arriving'`                                                                            |
+| FR-KWR-62 | Residence: `address_no`, `village_no`, `subdistrict`, `district`, `province`, `postal_code` คัดจาก `card_snapshot` (หลังเติม `postal_code` จาก lookup) · `lane`/`road` ไม่ย้าย (คงอยู่ใน `card_snapshot`) |
+| FR-KWR-63 | `housing_type`, `residence_landmark`, `municipality_zone`, `community`, `dorm_*` = `null` · `pets`/`vehicles` = `[]` · `assets` = `null` · `created_by` = `scanner:{device_id}`                           |
+| FR-KWR-64 | ThaiD ที่ไม่มีที่อยู่ยังสร้าง household โดย Residence เป็น `null` ทั้งหมด                                                                                                                                 |
+| FR-KWR-65 | ลำดับเขียน: household → evacuee · household เขียนไม่ได้ → ลบ image แล้วล้ม · evacuee เขียนไม่ได้ → ลบ household + image แล้วล้ม (ไม่เหลือ household กำพร้า)                                               |
+| FR-KWR-66 | Station 1 จัดการ household จากตู้ด้วยพฤติกรรมเดิมของ `people.remote`: ย้ายเข้า family อื่น → household จากตู้ `cancelled` เมื่อว่าง · ยกเลิก walk-in → household `cancelled` เมื่อว่าง                    |
+
+### 9.3 Walk-in เป็น `arriving` + พิมพ์ QR
+
+| ID        | Requirement                                                                                                                                                                                                                                                                        |
+| :-------- | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| FR-KWR-70 | evacuee ที่ตู้สร้าง: `current_stay = { status: 'arriving', zone: null, since: now }` · `registered_via: 'kiosk'` · field อื่นตาม FR-KWR-18 · ตู้ไม่สร้าง `kiosk_registered` อีก (enum คงไว้ให้ doc เก่า)                                                                           |
+| FR-KWR-71 | `POST /api/v1/kiosk/register` 200 → `{ status: 'created', evacuee_id, qr_payload: evacuee_id, label: { name, phone } }` · `cache-control: no-store`                                                                                                                                |
+| FR-KWR-72 | หน้า `/kiosk/register/done` พิมพ์ QR label 1 ครั้งอัตโนมัติ (render + `printKioskLabels`, fallback `window.print` เมื่อเครื่องพิมพ์ unavailable) · มีปุ่ม「พิมพ์อีกครั้ง」และสถานะการพิมพ์ · พัก idle timeout ระหว่างพิมพ์ · ข้อความ: ลงทะเบียนสำเร็จ รับ QR Code แล้วไปจุดคัดกรอง |
+| FR-KWR-73 | walk-in ที่ `arriving` แล้วเสียบบัตร/สแกน QR/ThaiD ซ้ำ → พิมพ์ QR ซ้ำได้แบบเดียวกับ pre-registration (CR-151 FR-KPC-101) · ไม่เขียน doc                                                                                                                                            |
+| FR-KWR-74 | outcome `kiosk_registered` ของ lookup (FR-KWR-03) คงไว้สำหรับ doc เก่า                                                                                                                                                                                                             |
+
+### 9.4 Merge ครัวเรือนเมื่อที่อยู่ตรงกัน
+
+| ID        | Requirement                                                                                                                                                                                                                                                                                                                                              |
+| :-------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| FR-KWR-80 | key ที่อยู่ = (`address_no`, `village_no`, `subdistrict`, `district`, `province`) จาก `card_snapshot` · trim + ยุบช่องว่างซ้ำ · `-` = ว่าง · ตัดคำนำหน้า (หมู่: `หมู่ที่`/`หมู่`/`ม.` · ตำบล: `ตำบล`/`แขวง`/`ต.` · อำเภอ: `อำเภอ`/`เขต`/`อ.` · จังหวัด: `จังหวัด`/`จ.`) · ไม่รวม `lane` และ `postal_code` · key ใช้ทั้งหา candidate และ lock (FR-KWR-85) |
+| FR-KWR-81 | ถนน: เทียบ `card_snapshot.road` (ตัด `ถนน`/`ถ.`, `-` = ว่าง) **เฉพาะเมื่อทั้งสองฝั่งมีค่า** — ต่างกัน → ไม่ merge · ฝั่งใดว่าง (เช่น walk-in ทาง ThaiD ซึ่งไม่มีถนน) → ไม่ใช้ถนนตัดสิน                                                                                                                                                                   |
+| FR-KWR-82 | ไม่มี `address_no` หรือไม่มี `subdistrict`/`district`/`province` → ไม่ merge (สร้างใหม่ตาม FR-KWR-60)                                                                                                                                                                                                                                                    |
+| FR-KWR-83 | ครัวเรือนที่ merge ได้: ศูนย์เดียวกัน · `created_by` ขึ้นต้น `scanner:` · หัวหน้าเป็น evacuee ที่ `card_snapshot` key ตรงกัน (ช่องทางใดก็ได้ · แก้ 2026-10-15 เดิมต้องเป็น `registered_via: 'kiosk'`) · household `status` ∉ {`cancelled`, `checked_out`, `merged`} · มีหลายหลัง → `created_at` เก่าสุด                                                                                                                 |
+| FR-KWR-84 | merge: `evacuee.household_id` = household นั้น · ไม่เปลี่ยน `head_evacuee_id` · refresh household status (`deriveHouseholdStatus`)                                                                                                                                                                                                                       |
+| FR-KWR-85 | lock `kiosk_addr_lock:<sha256(shelter:key)>` (หลัง lock เลขบัตร) กัน 2 ตู้สร้าง 2 หลังพร้อมกัน · stale reclaim เหมือน lock เลขบัตร · รอ lock ไม่ได้ (10 ครั้ง × 200 ms) → 503                                                                                                                                                                            |
+| FR-KWR-86 | evacuee เขียนไม่ได้ระหว่าง merge → ลบ image · **ไม่ลบ household เดิม**                                                                                                                                                                                                                                                                                   |
+
+### 9.5 ที่อยู่จากชิปบัตร
+
+| ID        | Requirement                                                                                                                                                                       |
+| :-------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| FR-KWR-90 | `scanner_client` อ่านที่อยู่ชิป (`เลขที่#หมู่#ตรอก#ซอย#ถนน#ตำบล#อำเภอ#จังหวัด`): `lane` = ตรอก + ซอย (เว้นวรรค, ข้ามค่าว่าง/`-`) · `road` = ถนน — เดิม `road` = ซอย และไม่เก็บถนน |
+
+### 9.6 Acceptance
+
+- **AC-KWR-50** walk-in บัตรกรอกเบอร์ของคน `active` ในศูนย์ → 409 `KIOSK_PHONE_DUPLICATE` · DB ไม่มี doc ใหม่ · lock ถูกปล่อย
+- **AC-KWR-51** เบอร์ที่เก็บแบบ `+66…` นับว่าซ้ำ · เบอร์ของคน `checked_out`/`cancelled`/`transferred`/`deceased` ใช้ได้
+- **AC-KWR-52** ThaiD เบอร์ซ้ำ → 409 และ session ยังเป็น `completed`
+- **AC-KWR-53** ตู้แสดงข้อความเบอร์ซ้ำใต้ numpad → กรอกเบอร์อื่นหรือ「ไม่มีเบอร์」→ บันทึกได้
+- **AC-KWR-60** walk-in สำเร็จ → มี household 1 หลังที่ field ตรง FR-KWR-61..63 และ evacuee ผูกอยู่
+- **AC-KWR-61** evacuee เขียนไม่ได้ → ไม่มี household / image เหลือใน DB
+- **AC-KWR-62** Station 1 pull เข้า family อื่น / ยกเลิก ให้ผลตาม FR-KWR-66
+- **AC-KWR-70** walk-in สำเร็จ → evacuee + household `arriving` · ตู้พิมพ์ label ที่มี QR `evacuee:<ULID>` · DB ไม่มี `kiosk_registered` ใหม่
+- **AC-KWR-71** walk-in เสียบบัตรซ้ำ → พิมพ์ QR ซ้ำได้ ไม่มีการเขียน doc
+- **AC-KWR-80** walk-in คนที่ 2 ที่ 5 ช่องตรง (รวมบัตร + ThaiD, `หมู่ที่ 3` = `3`) → household เดียวกับคนแรก หัวหน้า = คนแรก · บัตร + บัตรที่ถนนต่าง → household ใหม่ · ซอยต่างอย่างเดียว → merge · ที่อยู่ว่าง → household ใหม่
+- **AC-KWR-81** evacuee เขียนไม่ได้ตอน merge → household เดิมยังอยู่ครบ
+- **AC-KWR-90** อ่านบัตรที่มีซอยและถนน → `card_snapshot.lane` = ตรอก/ซอย, `road` = ถนน
+
+### 9.7 Impact (ตรวจแล้ว 2026-10-12)
+
+**ตัวเลขที่ไม่เปลี่ยน** (นับจาก evacuee ไม่ใช่ household): occupancy view, dashboard KPI「รอรายงานตัว」, system-overview per-site/summary, public booking gate, transparency metrics, worker projector
+
+**ที่เปลี่ยน:**
+
+1. back-office `household-tab` — walk-in ขึ้นเป็นแถว household · total +1 ต่อ walk-in ที่ไม่ได้ merge
+2. **public `residence-match`** (`frontend/src/lib/features/public-register/residence-match.server.ts`) ค้น household สถานะ `pre_registered|arriving|checked_in` → household จากตู้จะถูกเสนอเป็น「เข้าร่วมครอบครัว」ให้คนที่ pre-register ออนไลน์จากที่อยู่เดียวกัน
+3. system-overview household picker (limit 200/100) มีรายการเพิ่ม
+4. kiosk household lookup — walk-in `arriving` แสดงในครัวเรือนแต่เลือก check-in ไม่ได้ (พิมพ์ซ้ำได้)
+5. **walk-in นับเป็น `arriving` ทันที** — เข้าคิวคัดกรองโดยไม่ผ่านการยืนยันของ Station 1 · ตัวเลข Present/In-zone ตาม definition ของ `arriving` · คิว「ลงทะเบียนที่ตู้ (รอยืนยัน)」ไม่มีรายการใหม่ · Station 1 ยกเลิก/promote walk-in ใหม่ไม่ได้ เหมือน pre-registration ที่รายงานตัวแล้ว
+
+> [DECISION: ข้อ 2 — ให้ residence-match เสนอ household ที่สร้างจากตู้ (ยังไม่ผ่าน Station 1) ได้ — อนุมัติโดย Team Lead ตาม requirement จากหัวหน้าโครงการ เพราะ join ต้องกดยืนยันและไม่เปิดเผย PII]
+
+### 9.8 Why
+
+1. Station 1 พิมพ์ที่อยู่จากบัตรซ้ำทุกคน ทั้งที่ตู้อ่านได้แล้ว
+2. การติดต่อกลับและการพิมพ์ QR ด้วยเบอร์ต้องการเบอร์ที่ไม่ชนกันระหว่างคนที่ยังพักอยู่
+3. feedback ทดสอบหน้างาน 2026-10-13: walk-in ไม่ได้ QR ต้องไปต่อคิว Station 1 · ครอบครัวที่ลงทะเบียนทีละคนแยกเป็นหลายครัวเรือน
+4. **ตอบเหตุผลที่ §8.1 ปัดทางเลือก C:**
+   - _ครัวเรือนที่ยังไม่ผ่านการตรวจ_ — merge เฉพาะครัวเรือนที่ตู้สร้างและที่อยู่ตามบัตรตรงกัน · Station 1 ย้ายสมาชิกออกได้
+   - _household กำพร้า_ — rollback ตอนเขียน (FR-KWR-65) + Station 1 ยกเลิก household ที่ว่าง (FR-KWR-66)
+   - _ที่อยู่ตามบัตร ≠ Residence (CR-106)_ — ใช้เป็นค่าเริ่มต้นของ Residence ที่ Station 1 แก้ได้ · ที่อยู่ตามบัตรจริงยังอยู่ใน `card_snapshot`
+
+### 9.9 Risks
+
+- **กลับเหตุผลของ §1 ข้อ 4** — walk-in เข้าคิวคัดกรองโดยยังไม่มีเจ้าหน้าที่ตรวจข้อมูลบัตร/เบอร์ · ยังแยกได้ด้วย `registered_via: 'kiosk'`
+- **ที่อยู่ไม่มีซอยในการเทียบ** — บ้านเลขที่เดียวกันในตำบลเดียวกันที่ไม่มีหมู่และอยู่คนละซอยจะถูกรวม (ถนนช่วยแยกได้เฉพาะบัตร + บัตร) · ThaiD ไม่มีถนน → กรณีที่มี ThaiD ไม่เทียบถนน
+- **ชิปบัตรเก็บถนนผิดช่องก่อนแก้** — walk-in ที่อ่านบัตรก่อน FR-KWR-90 มี `road` เป็นซอย → อาจไม่ merge กับคนที่อ่านหลังแก้
+- **merge คนต่างครอบครัว** — หอพัก/คอนโด/วัด/ทะเบียนบ้านกลางที่ใช้ที่อยู่เดียวกันจะถูกรวม · Station 1 ย้ายออกได้
+- lock เบอร์เป็นต่อเลขบัตร: 2 คนต่างบัตรที่กรอกเบอร์เดียวกันพร้อมกันอาจผ่านทั้งคู่ (โอกาสต่ำ)
+- ครอบครัวที่ใช้เบอร์ร่วม: คนที่ 2 ต้องกด「ไม่มีเบอร์」แล้วให้ Station 1 เติมทีหลัง
+- การตอบว่าเบอร์ซ้ำเปิดเผยว่าเบอร์นี้อยู่ในศูนย์ — ต้องผ่านบัตร/ThaiD + consent ก่อน และมี `kioskRegisterDeviceLimiter`
+
+### 9.10 เลื่อนไปเฟสถัดไป
+
+- ThaiD เก็บ `lane`/`road` จากที่อยู่ DOPA (ต้องได้ response จริงยืนยันรูปแบบ `house_address` ก่อน) → แล้วจึงเทียบซอย/ถนนครบทุกช่องทั้งบัตรและ ThaiD
+
+### 9.11 Migration
+
+ไม่เปลี่ยน shape ของ doc ไม่ bump `schema_v` · doc เก่าที่ `household_id: null` / `kiosk_registered` ยังอ่านได้และ Station 1 เลื่อนเป็น `arriving` ได้ตามเดิม
+
+---
+
 ## Decision log
 
 - 2026-09-27 — proposed โดยทีม kiosk · ข้อเสนอเดิมครอบคลุม Q1–Q8 และ Q10–Q13 · Q3 ทีมเสนอ A
@@ -247,3 +377,8 @@ Project Owner Jakee Indapanya (GitHub net-lynx) เคาะทุกข้อ�
   - Q12: ไม่ถามเบอร์โทรบน kiosk · `phone` เป็น null · Station 1 เติมเบอร์ (หรือ「ไม่มี」) ก่อน promote เป็น `arriving`
   - Q13: track การเปลี่ยนด้วยไฟล์ CR นี้ · ไฟล์แผน `docs/features/kiosk-walk-in-registration-implementation-plan.md` ไม่มีใน repo จึงไม่ได้อยู่ใน change นี้
 - 2026-10-03 — รันเลข CR-149 จาก `docs/changes/_index.md` บน `develop` (เลขที่จัดสรรล่าสุดคือ CR-148; ไม่ใช้ช่องว่าง 131–133 และ 144–147) · evacuee `schema_v` ที่ร่างไว้ 10→11 ถูก CR-148 ใช้ไปแล้ว จึงเป็น 11→12
+- 2026-10-12 — ทีม kiosk เสนอ (proposed): บล็อกเบอร์ซ้ำ (ไม่ใช่เตือน) · เทียบเฉพาะ evacuee ในศูนย์ · สร้าง household ใหม่ให้ walk-in · นับเฉพาะสถานะ Forecast · ไม่ตรวจเบอร์ผู้ติดต่อฉุกเฉิน · ไม่มีที่อยู่ก็สร้าง household · ไม่ย้ายซอย/ถนน · ข้อความเบอร์ซ้ำแสดงใต้ numpad (§9.1–9.2)
+- 2026-10-13 — ทีม kiosk เสนอเพิ่มจาก feedback หน้างาน (proposed): walk-in เป็น `arriving` + พิมพ์ QR ที่หน้าสุดท้าย · merge ครัวเรือนเมื่อบ้านเลขที่ + หมู่ + ตำบล + อำเภอ + จังหวัดตรงกัน (ถนนเทียบเฉพาะเมื่อมีทั้งสองฝั่ง · ไม่เทียบตรอก/ซอย) หัวหน้า = คนแรก — ไม่ใช้ "ทุกช่องบนบัตร" เพราะ ThaiD ไม่เก็บตรอก/ซอย/ถนน และยังไม่มี response DOPA จริงยืนยันรูปแบบ → เลื่อนไปเฟสถัดไป · แก้ `scard.py` ที่เก็บถนนผิดช่อง (§9.3–9.5)
+- 2026-10-13 — รวมข้อเสนอเข้า CR นี้เป็น §9 แทนการเปิด draft CR ใหม่ (ถอด `draft-kiosk-walk-in-household-phone-duplicate.md`) · ส่วนเมนู「พิมพ์ QR」อยู่ใน CR-151 §15 / CR-152 §9 · label อยู่ใน CR-150 · ตรวจหน้าในกรอบอยู่ใน CR-158
+- 2026-10-13 — Soravit Sukkarn (Team Lead) approved ข้อเสนอแก้ไข §9 ทั้งหมด โดยรับ requirement จากหัวหน้าโครงการเมื่อวาน (2026-10-12)
+- 2026-10-15 — ทีม kiosk ขอเลิกกรอง `registered_via: 'kiosk'` ตอนหาครัวเรือนที่ merge ได้ (FR-KWR-83) ให้ตรงกับ scope ทั้งศูนย์ของ CR-151 FR-KPC-101/104 · ยังต้องเป็นครัวเรือนที่ตู้สร้าง (`created_by` ขึ้นต้น `scanner:`) และหัวหน้ามี `card_snapshot` key ตรงกัน

@@ -13,6 +13,7 @@ import {
 	type StockLotPendingClaim
 } from '$lib/features/distribution';
 import {
+	CampaignUnitMismatchError,
 	createCampaign as buildCampaign,
 	isDonationCampaign,
 	isStockLedger,
@@ -868,10 +869,18 @@ export class OperationsRemoteRepository implements OperationsRepository {
 	): Promise<DonationCampaign> {
 		// Read-Modify-Write: Fetch the latest _rev from the database to prevent 409 conflict
 		const existing = await this.repo.get<DonationCampaign>(campaign._id);
-		await this.validateCampaignUnits(campaign, existing ?? undefined);
+		// An update never creates. A campaign this database does not hold came from
+		// another shelter's list (a cache left over from a shelter switch) — writing it
+		// here put a stray copy into the wrong shelter, which the public board then read.
+		if (!existing) {
+			throw new Error(
+				`ไม่พบประกาศนี้ในศูนย์ที่เลือก (${this.dbName}) — กรุณาโหลดหน้าใหม่ก่อนแก้ไข`
+			);
+		}
+		await this.validateCampaignUnits(campaign, existing);
 		const merged = {
 			...campaign,
-			_rev: existing?._rev ?? undefined
+			_rev: existing._rev
 		};
 
 		const updated = await this.repo.put(touch(merged));
@@ -913,9 +922,7 @@ export class OperationsRemoteRepository implements OperationsRepository {
 			}
 			const expected = catalogItemRules(item).unit;
 			if (expected !== need.unit) {
-				throw new Error(
-					`Unit mismatch for campaign item ${need.item_id}: expected ${expected}, got ${need.unit}`
-				);
+				throw new CampaignUnitMismatchError(need.item_id, expected, need.unit);
 			}
 		}
 	}

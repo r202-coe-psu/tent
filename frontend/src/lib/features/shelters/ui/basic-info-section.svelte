@@ -409,10 +409,11 @@
 		>
 			<div class="min-w-0 flex-1 space-y-1">
 				<label for="kiosk-phone-check-in" class="text-sm font-medium text-card-foreground">
-					รับรายงานตัวด้วยเบอร์โทรที่ Kiosk
+					เปิดพิมพ์ QR ด้วยเบอร์โทร
 				</label>
 				<p class="text-xs text-muted-foreground">
-					เปิด: ผู้ประสบภัยค้นหาด้วยเบอร์โทรที่ตู้ Kiosk ได้ · ปิด: ซ่อนช่องทางนี้ (ค่าเริ่มต้นปิด)
+					เปิด: ตู้ Kiosk แสดงเมนู «พิมพ์ QR» ให้พิมพ์ QR Code ใหม่ด้วยเบอร์โทร · ปิด: ซ่อนเมนูนี้
+					(ค่าเริ่มต้นปิด)
 				</p>
 			</div>
 			<Switch
@@ -420,7 +421,7 @@
 				checked={$formData.feature_flags?.kiosk_phone_check_in_enabled ?? false}
 				onCheckedChange={(v) => setKioskPhoneCheckIn(v === true)}
 				{disabled}
-				aria-label="รับรายงานตัวด้วยเบอร์โทรที่ Kiosk"
+				aria-label="เปิดพิมพ์ QR ด้วยเบอร์โทร"
 			/>
 		</div>
 

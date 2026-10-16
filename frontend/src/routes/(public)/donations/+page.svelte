@@ -79,15 +79,15 @@
 
 				<div class="relative z-10 max-w-2xl space-y-3">
 					<div
-						class="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-bold tracking-wider text-blue-100 uppercase"
+						class="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-bold tracking-wider text-white uppercase"
 					>
-						<HeartHandshake class="h-3.5 w-3.5 text-blue-200" />
+						<HeartHandshake class="h-3.5 w-3.5 text-white" />
 						{t.donationBoard}
 					</div>
 					<h1 class="text-3xl font-extrabold tracking-tight text-white sm:text-4xl">
-						{t.heroTitlePrefix} <span class="text-blue-200">{t.heroTitleHighlight}</span>
+						{t.heroTitlePrefix} <span>{t.heroTitleHighlight}</span>
 					</h1>
-					<p class="text-sm leading-relaxed font-medium text-blue-100/80 sm:text-base">
+					<p class="text-sm leading-relaxed font-medium text-white sm:text-base">
 						{t.heroDesc}
 					</p>
 				</div>

@@ -449,6 +449,20 @@ class KioskApiRouteTests(unittest.IsolatedAsyncioTestCase):
                 True,
             ),
             (
+                "same-origin kiosk reprint POST",
+                "https://tent.example.go.th/api/v1/kiosk/reprint",
+                "POST",
+                "https://tent.example.go.th",
+                True,
+            ),
+            (
+                "kiosk reprint GET",
+                "https://tent.example.go.th/api/v1/kiosk/reprint",
+                "GET",
+                "https://tent.example.go.th",
+                False,
+            ),
+            (
                 "same-origin kiosk config POST",
                 "https://tent.example.go.th/api/v1/kiosk/config",
                 "POST",
