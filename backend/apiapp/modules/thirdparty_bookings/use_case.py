@@ -530,8 +530,9 @@ class ThirdPartyBookingsUseCase:
         # The insert runs as its own task: if the request is cancelled mid-flight, cleanup
         # waits for it to settle first, otherwise it could miss rows mongod applies later.
         # Cleanup is shielded so a cancelled request (client disconnect) cannot abort it.
-        # A sweeper for rows orphaned by a hard process kill is planned in #578; until it
-        # ships, such rows stay `committed=False` and are ignored by the worker poll.
+        # Rows orphaned by a hard process kill stay `committed=False` and are ignored by
+        # the worker poll; the worker sweeper (`sweep_stale_staged`, CR-169 FR-33) deletes
+        # them, plus any `pending` rows of the same `booking_id`, once older than 60s.
         # The `except` blocks below only record the outcome: cleanup, audit and the final
         # raise happen after them so the `BulkWriteError` (whose details embed the rows) is
         # never in the `__context__` chain of anything raised later.

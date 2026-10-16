@@ -3,9 +3,14 @@
 FastAPI accepts a booking into Mongo ``external_bookings`` (schema.md §9.7) and never
 touches CouchDB (FR-54). This loop:
 
-* ``pending`` → duplicate guard via ``_find`` (FR-50), then ``_bulk_docs`` a
-  ``household`` + one ``evacuee`` at ``pre_registered`` (FR-51), then ``written`` and
-  PII cleared (FR-52). Any failure leaves the booking ``pending`` for the next poll.
+* ``pending`` → a booking is a *group* of rows sharing ``booking_id`` (CR-169). The
+  whole group is handled at once: one duplicate guard via ``_find`` over every CID
+  (FR-21/FR-50; a hit rejects the whole group), then one ``_bulk_docs`` of a
+  ``household`` + ``evacuee`` per row at ``pre_registered`` (FR-51, evacuee carries
+  ``booking_ref``), then each row ``written`` and PII cleared (FR-52/FR-34). Any
+  failure leaves the affected rows ``pending`` for the next poll.
+* sweeper (FR-33) → drops groups the API never finished committing, so staged PII
+  cannot linger after an API crash.
 * ``written`` + ``cancel_requested`` → cancel the pre-registration if the evacuee is
   still ``pre_registered`` (FR-53), mirroring the staff
   ``cancelEvacueePreRegistration`` path (stay → ``cancelled`` + ``audit`` doc, and the
@@ -23,7 +28,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from tent_model import ExternalBooking
@@ -38,8 +43,13 @@ logger = logging.getLogger(__name__)
 #: and the shelter should see the pre-registration within a few seconds.
 POLL_INTERVAL_SECONDS = 3
 
+#: A `committed=False` row older than this was abandoned by a crashed API (FR-33).
+STAGED_TTL_SECONDS = 60
+
 HOUSEHOLD_SCHEMA_V = 6
-EVACUEE_SCHEMA_V = 12  # CR-154: gender nullable + registered_via api
+EVACUEE_SCHEMA_V = (
+    14  # CR-169: booking_ref (13 = CR-154 gender nullable + registered_via api)
+)
 AUDIT_SCHEMA_V = 1
 
 #: Stay statuses that hold a bed (schema.md §1.1 Forecast set) — a CID already in one
@@ -125,10 +135,15 @@ def build_evacuee_doc(
     first_name: str,
     last_name: str | None,
     phone: str | None,
+    booking_ref: str,
     created_by: str,
     now: str,
 ) -> dict[str, Any]:
-    """Couch ``evacuee`` (schema.md §1.1, schema_v 12) at ``pre_registered`` (FR-51)."""
+    """Couch ``evacuee`` (schema.md §1.1, schema_v 14) at ``pre_registered`` (FR-51).
+
+    ``booking_ref`` is the partner ``booking_id`` shared by every person of one group
+    (CR-169 FR-60) — set on every new booking, single-person ones included.
+    """
     return {
         "_id": evacuee_id,
         "type": "evacuee",
@@ -150,6 +165,7 @@ def build_evacuee_doc(
         "current_stay": {"status": "pre_registered", "zone": None, "since": now},
         "privacy": {"search_excluded": False},
         "registered_via": "api",
+        "booking_ref": booking_ref,
     }
 
 
@@ -216,112 +232,82 @@ _PENDING = {"state": "pending"}
 _CANCEL_DUE = {"state": "written", "cancel_requested": True}
 
 
-async def _persist_booking(couch: CouchClient, booking: ExternalBooking) -> bool:
-    """Write a ``pending`` booking into ``shelter_{code}``. False = retry next poll."""
-    if booking.state != "pending":
-        return False
-    database = shelter_db_name(booking.shelter_code)
-    if not await couch.database_exists(database):
+async def sweep_stale_staged() -> int:
+    """Delete groups the API never finished committing (FR-33). Returns rows deleted.
+
+    A group is stale when any of its rows is still ``committed=False`` after
+    ``STAGED_TTL_SECONDS`` — the API crashed mid-insert or mid-commit. The commit flip
+    (``update_many``) is not atomic on standalone Mongo, so such a group can also hold
+    ``committed=True`` rows that still carry PII. The worker never processes an
+    incomplete group (``_persist_group``), so every ``pending`` row of that
+    ``booking_id`` is safe to drop. Terminal rows (``written`` / ``cancelled`` /
+    ``rejected``) are never touched: they hold no PII and callers read their
+    ``evacuee_id`` / ``household_id`` afterwards.
+
+    ``committed`` is matched with a literal ``False`` — rows from before CR-169 have no
+    such field and must not be mistaken for staged ones. Logs ids and counts only.
+    """
+    collection = ExternalBooking.get_pymongo_collection()
+    cutoff = datetime.now(UTC) - timedelta(seconds=STAGED_TTL_SECONDS)
+    booking_ids = await collection.distinct(
+        "booking_id", {"committed": False, "created_at": {"$lt": cutoff}}
+    )
+    if not booking_ids:
+        return 0
+    result = await collection.delete_many(
+        {"booking_id": {"$in": booking_ids}, "state": "pending"}
+    )
+    if result.deleted_count:
         logger.warning(
-            "Shelter database %s missing for booking %s", database, _ref(booking)
+            "Swept %d stale staged booking row(s) from booking_id(s) %s",
+            result.deleted_count,
+            ", ".join(booking_ids),
         )
-        return False
-    if not booking.cid or not booking.first_name:
-        # PII is only cleared on a terminal transition — a pending row without it
-        # cannot be written and would loop forever, so surface it loudly.
-        logger.error("Pending booking %s has no PII to write — skipping", _ref(booking))
-        return False
+    return result.deleted_count
 
-    # Reserve ids before touching CouchDB so a retry re-uses them (conflict = written).
-    # Guarded on `pending`: if the API cancelled the row since the poll read it, stop
-    # here — nothing reaches CouchDB and the cancelled row is not resurrected.
-    if not booking.evacuee_id or not booking.household_id:
-        reserved = {
-            "evacuee_id": booking.evacuee_id or f"evacuee:{new_ulid()}",
-            "household_id": booking.household_id or f"household:{new_ulid()}",
-        }
-        if not await _transition(booking, _PENDING, reserved):
-            logger.info(
-                "Booking %s left pending before write — skipping", _ref(booking)
-            )
-            return True
 
-    try:
-        duplicates = await couch.find(
-            database,
-            {
-                "type": "evacuee",
-                "person_id.number": booking.cid,
-                "current_stay.status": {"$in": list(HOLD_STATUSES)},
-                "_id": {"$ne": booking.evacuee_id},
-            },
-            fields=["_id"],
-            limit=1,
-        )
-    except Exception:
-        logger.exception("Duplicate check failed for booking %s", _ref(booking))
+def _bulk_row_ok(row: dict[str, Any] | None) -> bool:
+    """A `_bulk_docs` row succeeded; `conflict` on a reserved id = written earlier."""
+    if not isinstance(row, dict):
         return False
+    return not row.get("error") or row.get("error") == "conflict"
 
-    if duplicates:
-        rejected = await _transition(
-            booking,
-            _PENDING,
-            {"state": "rejected", "reject_reason": "duplicate", **_PII_CLEARED},
-        )
-        if rejected:
-            logger.info(
-                "Rejected booking %s as duplicate in %s", _ref(booking), database
-            )
+
+async def _group_reached_couch(
+    couch: CouchClient, database: str, rows: list[ExternalBooking]
+) -> bool:
+    """True when any member of the group is already in CouchDB (retry after a crash).
+
+    FR-21 only allows rejecting a group *before* anything was written. A previous
+    attempt may have written some rows (``_bulk_docs`` is not atomic, and the process
+    can die before the row transitions). If so, a duplicate now showing up must not
+    reject the rest — it would orphan the persons already pre-registered — so the
+    caller keeps writing. A ``written`` row is proof without a call; otherwise ask
+    CouchDB whether any reserved household/evacuee id exists. Only called on the
+    (rare) duplicate path.
+    """
+    if any(row.state == "written" for row in rows):
         return True
-
-    now = _now_iso()
-    actor = partner_actor(booking.module_name, booking.client_id)
-    docs = [
-        build_household_doc(
-            household_id=booking.household_id,
-            evacuee_id=booking.evacuee_id,
-            shelter_code=booking.shelter_code,
-            first_name=booking.first_name,
-            created_by=actor,
-            now=now,
-        ),
-        build_evacuee_doc(
-            evacuee_id=booking.evacuee_id,
-            household_id=booking.household_id,
-            shelter_code=booking.shelter_code,
-            cid=booking.cid,
-            first_name=booking.first_name,
-            last_name=booking.last_name,
-            phone=booking.phone,
-            created_by=actor,
-            now=now,
-        ),
-    ]
-
-    try:
-        rows = await couch.bulk_docs(database, docs)
-    except Exception:
-        logger.exception("Bulk write failed for booking %s", _ref(booking))
-        return False
-
-    # `conflict` on a reserved id = already written by an earlier attempt.
-    hard = [
-        row
+    ids = [
+        value
         for row in rows
-        if isinstance(row, dict) and row.get("error") and row.get("error") != "conflict"
+        if row.state == "pending"
+        for value in (row.household_id, row.evacuee_id)
+        if value
     ]
-    if hard:
-        detail = ", ".join(f"{row.get('id')}={row.get('error')}" for row in hard)
-        logger.error(
-            "Bulk write row failures for booking %s: %s", _ref(booking), detail
-        )
+    if not ids:
         return False
+    found = await couch.find(database, {"_id": {"$in": ids}}, fields=["_id"], limit=1)
+    return bool(found)
 
+
+async def _mark_written(booking: ExternalBooking, database: str) -> None:
+    """CAS one row `pending` → `written` + PII cleared, after its docs reached Couch."""
     if await _transition(booking, _PENDING, {"state": "written", **_PII_CLEARED}):
         logger.info(
             "Wrote booking %s to %s as %s", _ref(booking), database, booking.evacuee_id
         )
-        return True
+        return
 
     # The API cancelled the row while we were writing (it already cleared PII and kept
     # `cancel_reason`). The evacuee now exists in CouchDB, so route the row through the
@@ -341,7 +327,163 @@ async def _persist_booking(couch: CouchClient, booking: ExternalBooking) -> bool
             _ref(booking),
             booking.evacuee_id,
         )
-    return True
+
+
+async def _persist_group(couch: CouchClient, booking_id: str) -> bool:
+    """Write a booking group's ``pending`` rows into ``shelter_{code}`` (FR-21, FR-34).
+
+    False = retry next poll. The group is all-or-nothing up to the CouchDB write: one
+    duplicate rejects every pending row; after that, rows are written in one
+    ``_bulk_docs`` and each row transitions on its own result.
+    """
+    rows = (
+        await ExternalBooking.find({"booking_id": booking_id})
+        .sort("person_seq")
+        .to_list()
+    )
+    if not rows:
+        return True
+
+    # FR-32: never act on a group the API has not finished committing. The commit flip
+    # is not atomic, so a partly-flipped group is skipped until the sweeper drops it.
+    committed = sum(1 for row in rows if row.committed is not False)
+    if committed != rows[0].group_size:
+        logger.info(
+            "Booking group %s incomplete (%d/%d committed) — skipping",
+            booking_id,
+            committed,
+            rows[0].group_size,
+        )
+        return False
+
+    pending = [row for row in rows if row.state == "pending"]
+    if not pending:
+        return True
+
+    database = shelter_db_name(pending[0].shelter_code)
+    if not await couch.database_exists(database):
+        logger.warning(
+            "Shelter database %s missing for booking group %s", database, booking_id
+        )
+        return False
+    if any(not row.cid or not row.first_name for row in pending):
+        # PII is only cleared on a terminal transition — a pending row without it
+        # cannot be written and would loop forever, so surface it loudly.
+        logger.error(
+            "Booking group %s has a pending row with no PII — skipping", booking_id
+        )
+        return False
+
+    # Reserve ids before touching CouchDB so a retry re-uses them (conflict = written).
+    # Guarded on `pending`: if the API cancelled a row since the poll read it, stop the
+    # whole group here — nothing reaches CouchDB and the cancelled row is not resurrected.
+    for row in pending:
+        if row.evacuee_id and row.household_id:
+            continue
+        reserved = {
+            "evacuee_id": row.evacuee_id or f"evacuee:{new_ulid()}",
+            "household_id": row.household_id or f"household:{new_ulid()}",
+        }
+        if not await _transition(row, _PENDING, reserved):
+            logger.info(
+                "Booking %s left pending before write — skipping group", _ref(row)
+            )
+            return True
+
+    try:
+        duplicates = await couch.find(
+            database,
+            {
+                "type": "evacuee",
+                "person_id.number": {"$in": [row.cid for row in pending]},
+                "current_stay.status": {"$in": list(HOLD_STATUSES)},
+                # The group's own evacuees (a retry may already have written some).
+                "_id": {"$nin": [row.evacuee_id for row in rows if row.evacuee_id]},
+            },
+            fields=["_id"],
+            limit=1,
+        )
+        reached_couch = bool(duplicates) and await _group_reached_couch(
+            couch, database, rows
+        )
+    except Exception:
+        logger.exception("Duplicate check failed for booking group %s", booking_id)
+        return False
+
+    if duplicates and not reached_couch:
+        rejected = 0
+        for row in pending:
+            if await _transition(
+                row,
+                _PENDING,
+                {"state": "rejected", "reject_reason": "duplicate", **_PII_CLEARED},
+            ):
+                rejected += 1
+        logger.info(
+            "Rejected %d row(s) of booking group %s as duplicate in %s",
+            rejected,
+            booking_id,
+            database,
+        )
+        return True
+    if duplicates:
+        logger.warning(
+            "Booking group %s already partly written to %s — finishing despite a "
+            "newly seen duplicate",
+            booking_id,
+            database,
+        )
+
+    now = _now_iso()
+    docs: list[dict[str, Any]] = []
+    for row in pending:
+        actor = partner_actor(row.module_name, row.client_id)
+        docs.append(
+            build_household_doc(
+                household_id=row.household_id,
+                evacuee_id=row.evacuee_id,
+                shelter_code=row.shelter_code,
+                first_name=row.first_name,
+                created_by=actor,
+                now=now,
+            )
+        )
+        docs.append(
+            build_evacuee_doc(
+                evacuee_id=row.evacuee_id,
+                household_id=row.household_id,
+                shelter_code=row.shelter_code,
+                cid=row.cid,
+                first_name=row.first_name,
+                last_name=row.last_name,
+                phone=row.phone,
+                booking_ref=row.booking_id,
+                created_by=actor,
+                now=now,
+            )
+        )
+
+    try:
+        results = await couch.bulk_docs(database, docs)
+    except Exception:
+        logger.exception("Bulk write failed for booking group %s", booking_id)
+        return False
+
+    by_id = {result.get("id"): result for result in results if isinstance(result, dict)}
+    all_ok = True
+    for row in pending:
+        outcomes = [by_id.get(row.household_id), by_id.get(row.evacuee_id)]
+        if all(_bulk_row_ok(outcome) for outcome in outcomes):
+            await _mark_written(row, database)
+            continue
+        all_ok = False
+        detail = ", ".join(
+            f"{doc_id}={(by_id.get(doc_id) or {}).get('error') or 'missing'}"
+            for doc_id in (row.household_id, row.evacuee_id)
+            if not _bulk_row_ok(by_id.get(doc_id))
+        )
+        logger.error("Bulk write row failures for booking %s: %s", _ref(row), detail)
+    return all_ok
 
 
 async def _cancel_household_if_empty(
@@ -497,14 +639,26 @@ async def run_external_booking_inbound_loop(
     couch: CouchClient, *, stop_event: asyncio.Event
 ) -> None:
     while not stop_event.is_set():
+        # Own try/except: a sweeper failure must not stop bookings being written.
+        try:
+            await sweep_stale_staged()
+        except Exception:
+            logger.exception("Staged external booking sweep failed")
         try:
             due = await _find_due()
+            # A group is written as one unit, so its pending rows are handled together.
+            groups: dict[str, None] = {}
+            for booking in due:
+                if booking.state == "pending":
+                    groups.setdefault(booking.booking_id)
+            for booking_id in groups:
+                if stop_event.is_set():
+                    break
+                await _persist_group(couch, booking_id)
             for booking in due:
                 if stop_event.is_set():
                     break
-                if booking.state == "pending":
-                    await _persist_booking(couch, booking)
-                else:
+                if booking.state == "written":
                     await _process_cancel(couch, booking)
         except Exception:
             logger.exception("Inbound external booking poll failed")

@@ -135,7 +135,7 @@ affects:
   2. ครบทุกแถว → `update_many({booking_id}, {$set: {committed: true}})` แล้วตอบ 201
   3. `DuplicateKeyError` กลางทาง → `delete_many({booking_id, committed: false})` (compensate) แล้วตอบ 409 `duplicate_booking`
 - **FR-32** worker poll เฉพาะแถวที่ `committed != false`
-- **FR-33** worker sweeper: แถว `committed = false` ที่ `created_at` เก่ากว่า **60 วินาที** ถูกลบ (กัน PII ค้างกรณี API crash กลางทาง) `[DECIDED 2026-10-15: 60 วิ]`
+- **FR-33** worker sweeper: แถว `committed = false` ที่ `created_at` เก่ากว่า **60 วินาที** ถูกลบ (กัน PII ค้างกรณี API crash กลางทาง) `[DECIDED 2026-10-15: 60 วิ]` · พร้อมกันนั้นลบแถว `state = pending` ที่เหลือ**ทั้งกลุ่ม** (`booking_id` เดียวกัน) เพราะ `update_many` ใน FR-31 ไม่ atomic อาจเหลือแถว `committed = true` ที่มี PII ค้าง; **ไม่แตะแถว `written` / `cancelled` / `rejected`** `[DECIDED 2026-10-16]`
 - **FR-34** worker ประมวลผลต่อแถวด้วย id ที่ reserve ไว้ (`household_id`/`evacuee_id` ต่อแถว — retry idempotent เหมือนเดิม) หลังผ่าน group pre-check (FR-21); เขียนสำเร็จ → `state = written` + ล้าง PII ต่อแถว
 
 > ทางเลือกที่ตัดทิ้ง: เก็บทั้งกลุ่มเป็น doc เดียวมี `persons[]` + multikey unique index — unique ข้าม document ได้แต่ไม่กัน duplicate ภายใน doc เดียว และทำให้ state/cancel/reject รายคนซับซ้อน
@@ -216,3 +216,4 @@ affects:
 - ทางเลือกที่ตัดทิ้งสำหรับ `booking_ref`: ใส่ที่ `household` ด้วย — ตัดทิ้งเพราะหลัง staff รวม household จะกำกวม (หนึ่ง household มีหลายกลุ่ม); evacuee-level คงอยู่หลัง merge
 - 2026-10-15 — **approved** โดยเจ้าของโครงการ ได้เลข CR-169; ข้อที่เคยค้างเคาะตามค่าที่แนะนำ: cap 20 · sweeper 60 วิ · EXT-010 คืน `persons[]` · access log 1 แถว/request
 - 2026-10-16 — เจ้าของโครงการ: **`MAX_PERSONS` 20 → 100** (FR-6) — partner อาจส่งกลุ่มใหญ่กว่า 20 และ 100 เป็นเพดานของ synchronous atomic request; track ด้วยการแก้ FR-6 ใน CR นี้ · ⚠️ ยังไม่ได้วัดเวลาที่ worker เขียน 100 คน (group pre-check + household/evacuee ลง CouchDB ทีละคน) — วัดตอน #578 ก่อน ship ถ้านานเกินรับได้ให้ลดค่า cap
+- 2026-10-16 — เจ้าของโครงการ: **sweeper (FR-33) ลบแถว `pending` ทั้งกลุ่มของ `booking_id` ที่มีแถว `committed = false` ค้างเกิน 60 วิ** (ไม่ใช่เฉพาะแถว `committed = false`) — `update_many` commit ของ API (FR-31) ไม่ atomic บน Mongo standalone ถ้า process ถูก kill กลางทางอาจเหลือแถว `committed = true` ที่ยัง `pending` พร้อม PII plaintext และกินสิทธิ์ unique index; worker ไม่ประมวลผลกลุ่มที่ไม่ครบ (นับ `committed` ≠ `group_size`) จึงลบได้อย่างปลอดภัย และไม่แตะแถว terminal (`written` / `cancelled` / `rejected`) เพราะสคริปต์ e2e ใช้ `evacuee_id` / `household_id` จากแถวเหล่านั้น; track ด้วยการแก้ FR-33 ใน CR นี้
