@@ -447,7 +447,13 @@ test.describe(
 
 		// Close both browsers before teardown so no page is still reading the docs being deleted.
 		test.afterEach(async () => {
-			await Promise.all(contexts.splice(0).map((context) => context.close()));
+			await Promise.all(
+				contexts.splice(0).map(async (context) => {
+					// Drop route handlers first so in-flight `_changes` long-polls aren't fetched on a dying context.
+					for (const page of context.pages()) await page.unrouteAll({ behavior: 'ignoreErrors' });
+					await context.close();
+				})
+			);
 		});
 
 		test.afterAll(async () => {
