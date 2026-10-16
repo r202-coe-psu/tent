@@ -133,6 +133,12 @@ afterEach(() => {
 	document.body.innerHTML = '';
 });
 
+function render_cleanup() {
+	if (instance) unmount(instance);
+	instance = null;
+	document.body.innerHTML = '';
+}
+
 describe('KioskBannerForm', () => {
 	it('shows the accepted types and size limit under the file field', () => {
 		render();
@@ -278,5 +284,54 @@ describe('KioskBannerForm', () => {
 		expect(document.body.querySelector('[role="dialog"]')?.textContent).toContain(
 			'ตัวอย่างบน kiosk'
 		);
+	});
+
+	describe('screen type', () => {
+		const radio = (type: string) =>
+			q<HTMLButtonElement>(`[role="radio"][data-value="${type}"]`) as HTMLButtonElement;
+
+		it('defaults to ตู้เล็ก on create, with the recommended size in the upload help', () => {
+			render();
+			expect(radio('compact').getAttribute('aria-checked')).toBe('true');
+			expect(document.body.textContent).toContain(
+				'แนะนำ 1024×600 px · รองรับ png / jpeg / webp ขนาดไม่เกิน 2 MB'
+			);
+		});
+
+		it('switching to ตู้ใหญ่ updates the recommended size and saves screen_type portrait', async () => {
+			render();
+			radio('portrait').click();
+			flushSync();
+			expect(radio('portrait').getAttribute('aria-checked')).toBe('true');
+			expect(document.body.textContent).toContain('แนะนำ 1080×1920 px');
+
+			type(field('title'), 'ป้ายตู้ใหญ่');
+			await setDateTime('start_at', '2026-10-15', '08:00');
+			await setDateTime('end_at', '2026-10-15', '18:00');
+			pick(png());
+			await submit();
+
+			expect(onsave).toHaveBeenCalledTimes(1);
+			expect(onsave.mock.calls[0][0].input.screen_type).toBe('portrait');
+		});
+
+		it('edit mode shows a stored portrait banner as ตู้ใหญ่', () => {
+			render({ ...stored, screen_type: 'portrait' });
+			expect(radio('portrait').getAttribute('aria-checked')).toBe('true');
+			expect(radio('compact').getAttribute('aria-checked')).toBe('false');
+		});
+
+		it('edit mode shows a legacy banner without screen_type as ตู้เล็ก', () => {
+			render(stored);
+			expect(radio('compact').getAttribute('aria-checked')).toBe('true');
+		});
+
+		it('shapes the image preview boxes like the chosen screen', () => {
+			render({ ...stored, screen_type: 'portrait' });
+			expect(q('[data-testid="banner-current-image"]')?.className).toContain('aspect-[9/16]');
+			render_cleanup();
+			render(stored);
+			expect(q('[data-testid="banner-current-image"]')?.className).toContain('aspect-video');
+		});
 	});
 });

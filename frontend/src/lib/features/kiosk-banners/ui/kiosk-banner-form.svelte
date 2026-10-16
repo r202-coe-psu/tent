@@ -13,6 +13,8 @@
 	import { Textarea } from '$lib/components/ui/textarea/index.js';
 	import Eye from '@lucide/svelte/icons/eye';
 	import Upload from '@lucide/svelte/icons/upload';
+	import { KIOSK_SCREENS, type KioskScreenType } from '$lib/features/shared/domain/kiosk-screen';
+	import KioskScreenPicker from '$lib/features/shared/ui/kiosk-screen-picker.svelte';
 	import { KIOSK_BANNER_LIMITS } from '../domain/kiosk-banner';
 	import { joinLocalInput, splitLocalInput } from '../domain/kiosk-banner-datetime';
 	import {
@@ -28,6 +30,7 @@
 	} from '../data/kiosk-banner-file';
 	import { kioskBannerRemoteRepository } from '../data/kiosk-banner.remote';
 	import type { KioskBannerSummary } from '../data/kiosk-banner.repository';
+	import type { KioskBannerSlide } from '$lib/features/kiosk';
 	import KioskBannerPreviewDialog from './kiosk-banner-preview-dialog.svelte';
 	import { buildFormPreviewSlide } from './kiosk-banner-preview-slides';
 	import type { KioskBannerSavePayload } from './kiosk-banner-save';
@@ -136,9 +139,17 @@
 
 	const { form: formData, enhance, submitting } = form;
 
+	const imageHelp = $derived(
+		`แนะนำ ${KIOSK_SCREENS[$formData.screen_type].size} px · รองรับ png / jpeg / webp ขนาดไม่เกิน 2 MB`
+	);
+	const isPortrait = $derived($formData.screen_type === 'portrait');
+	const imageShape = $derived(isPortrait ? 'aspect-[9/16] max-h-80 mx-auto' : 'aspect-video');
+
 	const previewSlides = $derived.by(() => {
 		const slide = buildFormPreviewSlide($formData, newImageUrl ?? currentImageUrl);
-		return slide ? [slide] : [];
+		const slides: Record<KioskScreenType, KioskBannerSlide[]> = { compact: [], portrait: [] };
+		if (slide) slides[$formData.screen_type].push(slide);
+		return slides;
 	});
 
 	const listHref = resolve('/back-office/kiosks/banners');
@@ -188,6 +199,23 @@
 					>
 				</p>
 			</div>
+
+			<Form.Field {form} name="screen_type" class="space-y-2">
+				<Form.Control>
+					{#snippet children({ props })}
+						<Form.Label>ขนาดหน้าจอ <span class="text-destructive">*</span></Form.Label>
+						<KioskScreenPicker
+							{...props}
+							id="banner-screen_type"
+							bind:value={$formData.screen_type}
+						/>
+					{/snippet}
+				</Form.Control>
+				<Form.Description class="text-xs text-slate-500">
+					แบนเนอร์จะแสดงเฉพาะตู้ที่ตั้งขนาดหน้าจอตรงกัน
+				</Form.Description>
+				<Form.FieldErrors />
+			</Form.Field>
 
 			<Form.Field {form} name="title">
 				<Form.Control id="banner-title">
@@ -288,7 +316,7 @@
 							data-testid="banner-current-image"
 							src={currentImageUrl}
 							alt="รูปปัจจุบันของแบนเนอร์"
-							class="aspect-video w-full rounded-lg border border-slate-200 bg-slate-100 object-contain"
+							class="{imageShape} w-full rounded-lg border border-slate-200 bg-slate-100 object-contain"
 						/>
 					</figure>
 				{/if}
@@ -301,11 +329,11 @@
 							data-testid="banner-new-image"
 							src={newImageUrl}
 							alt="ตัวอย่างรูปที่เลือก"
-							class="aspect-video w-full rounded-lg border border-slate-200 bg-slate-100 object-contain"
+							class="{imageShape} w-full rounded-lg border border-slate-200 bg-slate-100 object-contain"
 						/>
 					{:else}
 						<div
-							class="flex aspect-video w-full items-center justify-center rounded-lg border-2 border-dashed border-slate-400 bg-slate-50 text-sm text-slate-500"
+							class="flex {imageShape} w-full items-center justify-center rounded-lg border-2 border-dashed border-slate-400 bg-slate-50 text-sm text-slate-500"
 						>
 							ยังไม่ได้เลือกรูป
 						</div>
@@ -338,7 +366,7 @@
 						{file ? file.name : 'ลากรูปมาวางที่นี่ หรือคลิกเพื่อเลือกไฟล์'}
 					</span>
 					<span id="banner-image-help" class="text-xs text-muted-foreground">
-						รองรับ png / jpeg / webp ขนาดไม่เกิน 2 MB
+						{imageHelp}
 					</span>
 					<!-- sr-only, not `hidden`: display:none drops the input out of the tab
 					     order, leaving keyboard users no way to open the file picker. -->
@@ -385,5 +413,6 @@
 <KioskBannerPreviewDialog
 	bind:open={previewOpen}
 	slides={previewSlides}
+	screens={[$formData.screen_type]}
 	emptyMessage="เลือกรูปก่อนจึงจะดูตัวอย่างได้"
 />
