@@ -81,10 +81,7 @@ export function storageLotFields(
  * store. An id that no longer matches a point (renamed list, shelter switched) does
  * not count as chosen.
  */
-export function isStoragePointChosen(
-	pointId: string,
-	points: readonly StoragePointRef[]
-): boolean {
+export function isStoragePointChosen(pointId: string, points: readonly StoragePointRef[]): boolean {
 	if (points.length === 0) return true;
 	return points.some((point) => point.id === pointId);
 }

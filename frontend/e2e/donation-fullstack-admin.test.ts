@@ -231,9 +231,11 @@ test.describe('Donation full-stack: back office', { tag: ['@critical', '@donatio
 		 * while bits-ui is still mounting the dialog (zoom/fade-in) can lose the typed value, so
 		 * the save then sends nothing.
 		 */
-		async function openEditDialog(page: Page, row: Locator, from: string) {
+		async function openEditDialog(page: Page, row: Locator) {
 			await row.getByRole('button', { name: 'แก้ไข' }).click();
-			const dialog = page.getByRole('dialog', { name: new RegExp(`^แก้ไขช่วง ${from}`) });
+			// Not pinned to the start time: saving clears the dialog's `editing`, which rewrites its
+			// title, so a title-specific name would stop matching and `toBeHidden` would pass vacuously.
+			const dialog = page.getByRole('dialog', { name: /^แก้ไขช่วง/ });
 			await expect(dialog).toBeVisible();
 			await dialog.evaluate((el) =>
 				Promise.all(el.getAnimations({ subtree: true }).map((a) => a.finished))
@@ -342,7 +344,7 @@ test.describe('Donation full-stack: back office', { tag: ['@critical', '@donatio
 			const endMin = h * 60 + m + 15;
 			const newTo = `${String(Math.floor(endMin / 60)).padStart(2, '0')}:${String(endMin % 60).padStart(2, '0')}`;
 			const note = `ประตู 2 (e2e ${RUN_ID})`;
-			const dialog = await openEditDialog(page, original, CAPPED.from);
+			const dialog = await openEditDialog(page, original);
 			const to = dialog.locator('#edit-slot-to');
 			await to.fill(newTo);
 			await expect(to).toHaveValue(newTo);
@@ -361,7 +363,7 @@ test.describe('Donation full-stack: back office', { tag: ['@critical', '@donatio
 			await expect(edited).toContainText('ประตู 2');
 
 			// Lift the ceiling again from the same dialog.
-			const reopened = await openEditDialog(page, edited, CAPPED.from);
+			const reopened = await openEditDialog(page, edited);
 			const ceiling = reopened.locator('#edit-slot-capacity');
 			await ceiling.fill('');
 			await expect(ceiling).toHaveValue('');
