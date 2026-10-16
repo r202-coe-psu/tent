@@ -718,6 +718,46 @@ async def test_in_couch_row_cancelled_by_the_api_while_duplicated_is_not_rejecte
 
     row = await _row(_row_id(0))
     assert (row["state"], row["reject_reason"]) == ("cancelled", None)
+    # The row is terminal either way (cancelled by the API), so its stay must not be left
+    # live next to the new holder of the CID (FR-50) — even though our CAS lost.
+    assert store["evacuee:E0"]["current_stay"]["status"] == "cancelled"
+    assert (await _row(_row_id(1)))["state"] == "written"
+    assert store["evacuee:E1"]["current_stay"]["status"] == "pre_registered"
+
+
+async def test_d4_rejected_row_in_couch_still_proves_the_group_reached_couch(db):
+    """Review R4/H1: person 0 (in CouchDB) is rejected as a per-person duplicate, then the
+    bulk write of person 1 fails. On the next pass person 1's CID is not duplicated, so it
+    must be written — not rejected because the group "never reached CouchDB"."""
+    await _insert_group(2)
+    for index in (0, 1):
+        await _reserve(index)
+    couch, store = _fr50_couch(
+        [*_stay_docs(0), *_stay_docs(1), _evacuee_doc(9, _cid(0))]
+    )
+    store["evacuee:E0"]["person_id"] = {"number": _cid(0)}
+    del store["evacuee:E1"], store["household:H1"]  # person 1 never reached CouchDB
+    real_bulk = couch.bulk_docs.side_effect
+
+    async def failing_bulk(database, docs):
+        return [{"id": doc["_id"], "error": "forbidden"} for doc in docs]
+
+    couch.bulk_docs = AsyncMock(side_effect=failing_bulk)
+    assert await _persist_group(couch, BOOKING_ID) is False
+    assert (await _row(_row_id(0)))["state"] == "rejected"
+    assert (await _row(_row_id(1)))["state"] == "pending"
+    assert store["evacuee:E0"]["current_stay"]["status"] == "cancelled"
+
+    couch.bulk_docs = AsyncMock(side_effect=real_bulk)
+    assert await _persist_group(couch, BOOKING_ID) is True
+
+    rejected = await _row(_row_id(0))
+    assert (rejected["state"], rejected["reject_reason"]) == ("rejected", "duplicate")
+    written = await _row(_row_id(1))
+    assert (written["state"], written["reject_reason"]) == ("written", None)
+    _assert_pii_cleared(written)
+    assert store["evacuee:E1"]["current_stay"]["status"] == "pre_registered"
+    assert _live_holders(store, _cid(0)) == [_evacuee_doc(9, _cid(0))["_id"]]
 
 
 async def test_failed_stay_cancel_of_a_rejected_in_couch_row_is_logged_by_id_only(
@@ -2021,6 +2061,19 @@ async def test_loop_survives_a_poll_pass_that_raises(db, monkeypatch, caplog):
     assert "OverflowError" in caplog.text
     _assert_no_pii_logged(caplog.text)
     assert "Traceback" not in caplog.text
+
+
+async def test_poll_pass_failure_log_is_throttled(db, monkeypatch, clock, caplog):
+    """R4/H7: a pass that keeps raising logs once per throttle window, not every poll."""
+
+    async def run_poll(*_args, **_kwargs):
+        raise OverflowError(_LEAK)
+
+    monkeypatch.setattr(inbound, "_run_poll", run_poll)
+
+    await _poll(_couch(), monkeypatch, 5)
+    assert caplog.text.count("poll pass failed") == 1
+    _assert_no_pii_logged(caplog.text)
 
 
 # R3/G7: R1 reached-probe failure backs off (mutation M6) -----------------

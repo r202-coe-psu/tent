@@ -425,18 +425,20 @@ def _bulk_row_ok(row: dict[str, Any] | None) -> bool:
 async def _ids_in_couch(
     couch: CouchClient, database: str, rows: list[ExternalBooking]
 ) -> set[str]:
-    """Reserved household/evacuee ids of ``pending`` / ``cancelled`` rows that exist in Couch.
+    """Reserved household/evacuee ids of ``pending`` / ``cancelled`` / ``rejected`` rows in Couch.
 
     A previous attempt may have written some rows (``_bulk_docs`` is not atomic, and the
     process can die before the row transitions). The API may also have cancelled a row
-    whose docs a crashed pass had already written, so ``cancelled`` rows are probed too.
-    Only called on the (rare) paths where a duplicate shows up or a rejection must be
-    finished.
+    whose docs a crashed pass had already written, so ``cancelled`` rows are probed too,
+    and so are ``rejected`` rows: one rejected as a per-person duplicate after its docs
+    reached CouchDB (CR-169 D4) still proves the group reached it. A whole-group
+    rejection never has docs, so probing those rows finds nothing. Only called on the
+    (rare) paths where a duplicate shows up or a rejection must be finished.
     """
     ids = [
         value
         for row in rows
-        if row.state in ("pending", "cancelled")
+        if row.state in ("pending", "cancelled", "rejected")
         for value in (row.household_id, row.evacuee_id)
         if value
     ]
@@ -923,11 +925,13 @@ async def _reject_duplicated_rows(
     ``written`` are not in ``pending`` and stay untouched.
 
     Order: the row is rejected first (a CAS on ``pending``; PII cleared), the stay cancelled
-    second. A row the API cancelled meanwhile fails the CAS and is dropped from the write;
-    its stay is then cancelled by `_cancel_stranded_rows`. The stay cancel is idempotent
-    (only a still ``pre_registered`` stay is touched). If it fails it is logged (ids only)
-    and, with the row already terminal, nothing retries it — the #595 residual.
-    Logs ids and counts only.
+    second — whenever the row's docs are in CouchDB, whatever the CAS said. A row the API
+    cancelled meanwhile fails the CAS and is dropped from the write; it is terminal either
+    way (rejected by us or cancelled by the API) and, with no ``pending`` sibling left,
+    nothing else would cancel its stay (`_cancel_stranded_rows` sees the stale in-memory
+    state). The stay cancel is idempotent (only a still ``pre_registered`` stay is
+    touched). If it fails it is logged (ids only) and, with the row already terminal,
+    nothing retries it — the #595 residual. Logs ids and counts only.
     """
     duplicated = {cid for cid in map(_hit_cid, duplicates) if cid}
     keep: list[ExternalBooking] = []
@@ -943,8 +947,8 @@ async def _reject_duplicated_rows(
             {"state": "rejected", "reject_reason": "duplicate", **_PII_CLEARED},
         ):
             rejected += 1
-            if written_to_couch:
-                await _cancel_stay_directly(couch, database, row)
+        if written_to_couch:
+            await _cancel_stay_directly(couch, database, row)
     logger.info(
         "Booking group %s partly written — rejected %d duplicated row(s), writing %d",
         booking_id,
@@ -1161,5 +1165,6 @@ async def run_external_booking_inbound_loop(
             try:
                 await _run_poll(couch, due, health, stop_event)
             except Exception:
-                logger.exception("Inbound external booking poll pass failed")
+                if health.should_log("error:poll-pass"):
+                    logger.exception("Inbound external booking poll pass failed")
         await asyncio.sleep(POLL_INTERVAL_SECONDS)

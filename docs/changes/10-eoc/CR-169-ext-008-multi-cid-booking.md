@@ -204,7 +204,7 @@ affects:
 
 ## Migration
 
-- **evacuee schema_v 13 → 14:** worker เดิมเขียน evacuee `schema_v` **12** (ไม่ใช่ 13) และตอนนี้เขียน **14** ข้าม 13 · additive ล้วน (field optional ใหม่) doc เดิมไม่ต้อง backfill · Zod รับ `booking_ref` optional · reader ทุกจุดต้องไม่พังเมื่อไม่มี field นี้ · ไม่พบ `validate_doc_update` ที่ตรวจ field evacuee ใน code (พบเฉพาะในเอกสาร) — ตรวจซ้ำตอน implement
+- **evacuee schema_v worker 12 / staff 13 → 14:** worker เดิมเขียน evacuee `schema_v` **12** (ไม่ใช่ 13) และตอนนี้เขียน **14** ข้าม 13 · additive ล้วน (field optional ใหม่) doc เดิมไม่ต้อง backfill · Zod รับ `booking_ref` optional · reader ทุกจุดต้องไม่พังเมื่อไม่มี field นี้ · ไม่พบ `validate_doc_update` ที่ตรวจ field evacuee ใน code (พบเฉพาะในเอกสาร) — ตรวจซ้ำตอน implement
 - **`external_bookings`:** field ใหม่มี default (`person_seq=0`, `group_size=1`, `committed=true`) → แถวเดิมคือกลุ่มขนาด 1 ไม่ต้อง backfill; index ใหม่สร้างตอน Beanie init
 - **evacuee จาก booking เดิม (ก่อนงานนี้):** ไม่มี `booking_ref` — ยอมรับ (ไม่ backfill; ช่วงทดลองใช้)
 
