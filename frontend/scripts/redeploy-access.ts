@@ -1,7 +1,7 @@
 /**
- * Redeploy `_design/access` (validate_doc_update allowlist), referral and
- * kiosk lookup Mango indexes on every shelter DB listed in the registry, and
- * grant the public writer user `_security.members` access.
+ * Redeploy `_design/access` (validate_doc_update allowlist), referral, kiosk
+ * lookup and Daily SOP role Mango indexes on every shelter DB listed in the
+ * registry, and grant the public writer user `_security.members` access.
  *
  * Run after allowlist changes (e.g. new doc types in shelter-access-design)
  * on existing staging/prod DBs — new shelters provisioned via
@@ -38,6 +38,7 @@ import {
 } from '$lib/server/security-mutation-lock';
 import {
 	buildValidateDocUpdate,
+	DAILY_SOP_ROLE_MANGO_INDEX,
 	REFERRAL_MANGO_INDEXES,
 	KIOSK_LOOKUP_MANGO_INDEXES,
 	REQUISITION_TICKET_MANGO_INDEXES,
@@ -295,7 +296,7 @@ async function grantSecurityMember(db: string, name: string, dryRun: boolean): P
 
 async function deployMangoIndexes(
 	db: string,
-	indexes: readonly (typeof REFERRAL_MANGO_INDEXES)[number][],
+	indexes: readonly { name: string }[],
 	dryRun: boolean
 ): Promise<{ created: number; existing: number }> {
 	let created = 0;
@@ -408,7 +409,7 @@ function logPublicWriterEnsure(result: Awaited<ReturnType<typeof ensurePublicWri
 
 async function main() {
 	console.log(
-		'🔄 Redeploy _design/access + referral and kiosk lookup Mango indexes + public writer grant'
+		'🔄 Redeploy _design/access + shelter Mango indexes (referral, kiosk lookup, Daily SOP role) + public writer grant'
 	);
 	console.log(`   mode: ${DRY_RUN ? 'DRY-RUN (pass --write --confirm to apply)' : 'WRITE'}`);
 
@@ -464,20 +465,16 @@ async function main() {
 
 			if (DRY_RUN) {
 				if (accessResult.updated) {
-					const indexCount =
-						REFERRAL_MANGO_INDEXES.length +
-						KIOSK_LOOKUP_MANGO_INDEXES.length +
-						REQUISITION_TICKET_MANGO_INDEXES.length;
-					console.log(
-						`    would redeploy _design/access (${accessResult.reason}) + ${indexCount} mango indexes`
-					);
+					console.log(`    would redeploy _design/access (${accessResult.reason})`);
 				} else {
 					console.log(`    _design/access already current (skip PUT)`);
 				}
-				console.log(`    would deploy referral mango indexes (${REFERRAL_MANGO_INDEXES.length})`);
-				console.log(
-					`    would deploy kiosk lookup mango indexes (${KIOSK_LOOKUP_MANGO_INDEXES.length})`
-				);
+				const indexCount =
+					REFERRAL_MANGO_INDEXES.length +
+					KIOSK_LOOKUP_MANGO_INDEXES.length +
+					REQUISITION_TICKET_MANGO_INDEXES.length +
+					1;
+				console.log(`    would ensure ${indexCount} shelter Mango indexes`);
 				if (PUBLIC_WRITER_NAME) {
 					console.log(
 						writerGranted
@@ -506,6 +503,10 @@ async function main() {
 			);
 			console.log(
 				`    ✓ requisition_ticket mango indexes (${ticketIndexResult.created} created, ${ticketIndexResult.existing} existing)`
+			);
+			const dailySopIndexResult = await deployMangoIndexes(db, [DAILY_SOP_ROLE_MANGO_INDEX], false);
+			console.log(
+				`    ✓ Daily SOP role mango index (${dailySopIndexResult.created} created, ${dailySopIndexResult.existing} existing)`
 			);
 			const kioskIndexResult = await deployKioskLookupMangoIndexes(db, false);
 			console.log(

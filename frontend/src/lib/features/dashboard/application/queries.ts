@@ -22,11 +22,11 @@ export const dashboardKeys = {
 		[...dashboardKeys.all, 'registrations', shelterCode, from ?? null, to ?? null] as const
 };
 
-export const useDashboardOccupancy = (code: () => string) =>
+export const useDashboardOccupancy = (code: () => string, enabled: () => boolean = () => true) =>
 	createQuery(() => ({
 		queryKey: dashboardKeys.occupancy(code()),
 		queryFn: () => fetchOccupancy(code()),
-		enabled: !!code(),
+		enabled: !!code() && enabled(),
 		staleTime: DASHBOARD_STALE_TIME
 	}));
 
