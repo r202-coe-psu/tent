@@ -2652,4 +2652,78 @@ describe('evacuee booking_ref survives household writes (CR-169 FR-62)', () => {
 		expect((await repo.getEvacuee(ev._id))?.booking_ref).toBe('BK-01TEST');
 		expect(mergedMembers.find((m) => m._id === ev._id)?.booking_ref).toBe('BK-01TEST');
 	});
+
+	describe('submitFamilyReportIn', () => {
+		const reportInHousehold = {
+			housing_type: 'owned_house' as const,
+			address_no: '1',
+			subdistrict: 'ในเมือง',
+			district: 'เมือง',
+			province: 'เชียงใหม่',
+			pets: [],
+			vehicles: [],
+			assets: null
+		};
+
+		it('keeps booking_ref when an api-registered pre_registered member reports in', async () => {
+			const hh = await repo.createHousehold(householdInput('จองผ่านพาร์ทเนอร์'), ctx);
+			const ev = await repo.createEvacuee(
+				evInput({
+					booking_ref: 'BK-01TEST',
+					registered_via: 'api',
+					status: 'pre_registered',
+					household_id: hh._id
+				}),
+				ctx
+			);
+
+			const { members } = await repo.submitFamilyReportIn({
+				householdId: hh._id,
+				household: reportInHousehold,
+				members: [
+					{
+						_id: ev._id,
+						first_name: 'Somchai',
+						last_name: 'Jaidee',
+						gender: 'male',
+						phone: '0812345678',
+						country: 'THAILAND',
+						reporting_in: true
+					}
+				],
+				ctx
+			});
+
+			const saved = await repo.getEvacuee(ev._id);
+			expect(saved?.current_stay.status).toBe('arriving');
+			expect(saved?.registered_via).toBe('api');
+			expect(saved?.booking_ref).toBe('BK-01TEST');
+			expect(members.find((m) => m._id === ev._id)?.booking_ref).toBe('BK-01TEST');
+		});
+
+		it('never stamps a booking_ref smuggled onto a new report-in member', async () => {
+			const hh = await repo.createHousehold(householdInput('สมาชิกใหม่'), ctx);
+
+			const { members } = await repo.submitFamilyReportIn({
+				householdId: hh._id,
+				household: reportInHousehold,
+				members: [
+					{
+						first_name: 'Somying',
+						last_name: 'Jaidee',
+						gender: 'female',
+						phone: '0812345678',
+						country: 'THAILAND',
+						reporting_in: true,
+						booking_ref: 'BK-FORGED'
+					} as never
+				],
+				ctx
+			});
+
+			expect(members).toHaveLength(1);
+			expect(members[0]).not.toHaveProperty('booking_ref');
+			expect(await repo.getEvacuee(members[0]!._id)).not.toHaveProperty('booking_ref');
+		});
+	});
 });

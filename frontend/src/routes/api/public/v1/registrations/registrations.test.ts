@@ -326,6 +326,20 @@ describe('POST /api/public/v1/registrations', () => {
 			vi.mocked(findMasterByCode).mockResolvedValue(OPEN_SHELTER as never);
 		});
 
+		it('ignores a client-supplied member booking_ref on the legacy booking shape (CR-169 FR-61)', async () => {
+			const res = await POST(
+				event({
+					...FAMILY,
+					members: FAMILY.members.map((m) => ({ ...m, booking_ref: 'BK-SPOOF01' }))
+				})
+			);
+			expect(res.status).toBe(201);
+
+			const { evacuees } = writtenDocs();
+			expect(evacuees).toHaveLength(3);
+			for (const e of evacuees) expect(e).not.toHaveProperty('booking_ref');
+		});
+
 		it('writes one evacuee per member, all pointing at the same household', async () => {
 			const res = await POST(event(FAMILY));
 			expect(res.status).toBe(201);

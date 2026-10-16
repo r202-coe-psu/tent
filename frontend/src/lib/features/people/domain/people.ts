@@ -320,10 +320,11 @@ export interface Evacuee extends BaseDoc {
 	preferred_zone?: string | null;
 	/**
 	 * Partner booking group id `BK-{ulid}` = `external_bookings.booking_id` (schema_v 14, CR-169).
-	 * Written by the sync worker for partner bookings (`registered_via: 'api'`). The input schemas
-	 * exposed to public / kiosk / form paths omit it (FR-61), so those can never set it; staff
-	 * edit and merge preserve an existing value. Opaque, not PII, never projected to `public_*`.
-	 * Unrelated to `donation.booking_ref`.
+	 * Written only by the sync worker for partner bookings (`registered_via: 'api'`). Input paths
+	 * never set it (FR-61): the public BFF and kiosk strip it via `unifiedMemberInputSchema` /
+	 * `station1EvacueeInputSchema`, and the staff forms omit it by schema and `withoutBookingRef`.
+	 * Staff edit and merge paths preserve an existing value by spreading the stored doc (FR-62).
+	 * Opaque, not PII, never projected to `public_*`. Unrelated to `donation.booking_ref`.
 	 */
 	booking_ref?: string | null;
 	privacy: { search_excluded: boolean };
@@ -885,13 +886,24 @@ export const evacueeInputSchema = z.object({
 		.default(null)
 		.transform((v) => v || null),
 	/**
-	 * CR-169: partner booking group id (schema_v 14). Worker-owned: kept here so `createEvacuee`
-	 * can persist it, but the public / form-facing derived schemas omit it (FR-61).
+	 * CR-169: partner booking group id (schema_v 14). Worker-owned: kept on the base schema so
+	 * `createEvacuee` can persist it, but the derived public / kiosk / staff-form schemas omit it
+	 * (FR-61); form payloads are also passed through `withoutBookingRef`.
 	 */
 	booking_ref: z.string().trim().nullable().optional(),
 	registered_via: registeredViaSchema.default('staff')
 });
 export type EvacueeInput = z.input<typeof evacueeInputSchema>;
+
+/**
+ * Drop `booking_ref` (CR-169 FR-61) from a form / request payload. The key is worker-owned, so
+ * no staff, kiosk or public form payload may forward it, even when seeded from a stored doc.
+ */
+export function withoutBookingRef<T extends object>(input: T): Omit<T, 'booking_ref'> {
+	const rest = { ...input } as T & { booking_ref?: unknown };
+	delete rest.booking_ref;
+	return rest as Omit<T, 'booking_ref'>;
+}
 
 /** Station 1 walk-in + Report-in: same as base — emergency contact optional. */
 export const station1EvacueeInputSchema = evacueeInputSchema.omit({ booking_ref: true });

@@ -41,6 +41,7 @@ import {
 	MANUAL_HOUSEHOLD_STATUS_TRANSITIONS,
 	evacueeInputSchema,
 	station1EvacueeInputSchema,
+	withoutBookingRef,
 	triageLevelSchema,
 	screeningInputSchema,
 	householdPreRegisterEvacueeSchema,
@@ -1907,5 +1908,14 @@ describe('evacuee booking_ref (CR-169, schema_v 14)', () => {
 				booking_ref: 'BK-X'
 			})
 		).not.toHaveProperty('booking_ref');
+	});
+
+	it('withoutBookingRef drops only booking_ref and does not mutate the input', () => {
+		const input = { ...base, booking_ref: 'BK-X' };
+		const out = withoutBookingRef(input);
+		expect(out).not.toHaveProperty('booking_ref');
+		expect(out).toEqual(base);
+		expect(input.booking_ref).toBe('BK-X');
+		expect(withoutBookingRef(base)).toEqual(base);
 	});
 });
