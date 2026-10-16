@@ -49,12 +49,12 @@ note: decision-synced 2026-06-15 — task details and DoD maintained directly in
 
 **Definition of Done:**
 - รับเข้า: เลือก item + จำนวน + source marker (donation / transfer-in / manual) → ledger entry ถูกสร้าง + on-hand เพิ่มทันที พร้อม audit (ใคร/เมื่อไร)
-- ~~**จัดซื้อ (purchase)**~~ — ถอนโดย [CR-138](../changes/CR-138-remove-purchase.md) (supersede CR-032); ไม่มี route/UI/`reason:purchase`
+- ~~**จัดซื้อ (purchase)**~~ — ถอนโดย [CR-138](../changes/03-C-supply/CR-138-remove-purchase.md) (supersede CR-032); ไม่มี route/UI/`reason:purchase`
 - ปริมาณศูนย์หรือติดลบถูก validate ปฏิเสธ
 - Ledger แก้ไขย้อนหลังไม่ได้ — ผิดต้องทำรายการ adjust ใหม่ (correction entry)
 - ยอดคงเหลือต่อ item คำนวณจาก ledger ถูกต้อง (test ครอบ concurrent writes บน CouchDB)
 - Demo รับของเข้าคลัง → ยอดอัปเดต end-to-end
-- **[CR-143](../changes/CR-143-stock-redesign-rules.md) §B** — รับเข้าจากใบบริจาคหลายรายการในครั้งเดียว (ดึงบรรทัดจากใบ, ยืนยันจำนวนรับจริง); สำเร็จบางแถว → retry เฉพาะแถวที่ล้ม, ใบเป็น `received` เมื่อครบทุกแถว, ไม่มีแถวซ้ำ (#342)
+- **[CR-143](../changes/03-C-supply/CR-143-stock-redesign-rules.md) §B** — รับเข้าจากใบบริจาคหลายรายการในครั้งเดียว (ดึงบรรทัดจากใบ, ยืนยันจำนวนรับจริง); สำเร็จบางแถว → retry เฉพาะแถวที่ล้ม, ใบเป็น `received` เมื่อครบทุกแถว, ไม่มีแถวซ้ำ (#342)
 - **CR-143 §C** — การปรับยอด (adjust) ต้องเลือก `adjust_reason` และบันทึก `note` ได้ (stock_ledger schema_v 6) (#343)
 - **CR-143 §D** — บังคับวันหมดอายุเมื่อ `requiresExpiry(item)`; มี `shelf_life_days` → เติมวันหมดอายุอัตโนมัติพร้อม label ให้ตรวจสอบ (#344)
 
@@ -67,7 +67,7 @@ note: decision-synced 2026-06-15 — task details and DoD maintained directly in
 - แจกเกิน on-hand → **เตือน/ปฏิเสธ — ห้ามทำให้ stock ติดลบ** (PRD FR-29 + NFR-7/NFR-13 ไม่ใช่ warning-only)
 - ผูกผู้รับระดับโซนได้เป็นอย่างน้อย; ราย household (scan QR) เป็น optional ตาม design
 - ประวัติการแจกจ่าย query ได้ และ test + demo ผ่าน
-- **[CR-143](../changes/CR-143-stock-redesign-rules.md) §A** — เลือกล็อตด้วยลำดับถ่วงน้ำหนักวันหมดอายุ × อายุในคลัง (+กลุ่มเร่งด่วน ≤7 วัน) ทั้งระบบ; เบิกตรงจำนวนเกินล็อตแรก → ตัดหลายล็อตด้วย `ref_id` เดียวกัน, ล็อตหมดอายุไม่ถูกเลือกอัตโนมัติ (#340, #341)
+- **[CR-143](../changes/03-C-supply/CR-143-stock-redesign-rules.md) §A** — เลือกล็อตด้วยลำดับถ่วงน้ำหนักวันหมดอายุ × อายุในคลัง (+กลุ่มเร่งด่วน ≤7 วัน) ทั้งระบบ; เบิกตรงจำนวนเกินล็อตแรก → ตัดหลายล็อตด้วย `ref_id` เดียวกัน, ล็อตหมดอายุไม่ถูกเลือกอัตโนมัติ (#340, #341)
 - **CR-143 §E** — เบิกตรงจากหน้าคลังต้องระบุปลายทาง/ผู้รับ (`lot.note`) (#345)
 
 ### T-13 — Inter-shelter transfer + receive confirm (FR-30)
@@ -98,7 +98,7 @@ note: decision-synced 2026-06-15 — task details and DoD maintained directly in
 - ตัวเลข dashboard reconcile กับ Stock Ledger ได้เสมอ (ผลต่าง = 0 ใน UAT — SM-8)
 - ข้อมูล "ขาด/เกิน" expose เป็น API ให้ module Donation และ B ใช้ (ตาม contract T-03)
 - Perf ตามที่ตกลงกับ T-35 (read-model) และ test + demo ผ่าน
-- **[CR-143](../changes/CR-143-stock-redesign-rules.md)** — สถานะหมดอายุ/ใกล้หมดอายุคิดจากทุกล็อตที่มีของ (ไม่ใช่ล็อตล่าสุด); รวมสินค้าซ้ำผ่าน `adjust_reason='merge'` + `item_master.merged_into` (§F, #346); redesign หน้าคลังตาม #331
+- **[CR-143](../changes/03-C-supply/CR-143-stock-redesign-rules.md)** — สถานะหมดอายุ/ใกล้หมดอายุคิดจากทุกล็อตที่มีของ (ไม่ใช่ล็อตล่าสุด); รวมสินค้าซ้ำผ่าน `adjust_reason='merge'` + `item_master.merged_into` (§F, #346); redesign หน้าคลังตาม #331
 
 ### T-45 — Donation/kitchen/inventory polish + UAT support (deferred)
 

@@ -73,7 +73,7 @@
 	// Section 2: Vulnerable Groups (editable, prefilled from Station 1)
 	let vulnerable_groups = $state<string[]>([]);
 
-	// Section 3: Additional needs (editable, prefilled from Station 1)
+	// Section 3: Special needs (editable, prefilled from Station 1)
 	let special_needs = $state<string[]>([]);
 
 	// Section 4: EWAR surveillance symptoms
@@ -231,16 +231,15 @@
 			/>
 		</div>
 
-		<!-- Section 3: Additional needs -->
+		<!-- Section 3: Special needs (same `special_needs` field as Station 1) -->
 		<div class="space-y-3 rounded-2xl border border-border/80 bg-card p-4 shadow-xs">
 			<div class="flex items-center gap-2 border-b border-border/60 pb-2.5">
 				<HeartHandshake class="size-4 text-primary" />
 				<div>
-					<h3 class="text-sm font-bold text-foreground">
-						3. ความต้องการเพิ่มเติม (Additional needs)
-					</h3>
+					<h3 class="text-sm font-bold text-foreground">3. ความต้องการพิเศษ (Special needs)</h3>
 					<p class="text-xs text-muted-foreground">
-						กดเลือกแท็กที่ตรง หรือพิมพ์เพิ่มเอง — เลือกได้หลายข้อ · ไม่มีให้เว้นว่าง
+						ข้อมูลเดียวกับที่กรอกที่จุดลงทะเบียน (สถานี 1) — แก้ไขหรือเพิ่มได้ · เลือกได้หลายข้อ ·
+						ไม่มีให้เว้นว่าง
 					</p>
 				</div>
 			</div>

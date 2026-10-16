@@ -3,10 +3,14 @@
  *
  * Ensures:
  * 1. Central databases exist (registry, catalog, thailand_locations)
- * 2. Database security (_security) on registry and catalog
- * 3. Access control design doc (_design/access) on catalog (VDU for system_admin only)
+ * 2. Write policies first: registry _design/app and catalog _design/access (VDUs)
+ * 3. Database security (_security) on registry and catalog — legacy flat roles plus
+ *    `shelter:{code}` for every shelter in the registry (draft CR central-db-shelter-scope-members)
  * 4. Mango indexes on thailand_locations (province_id, district_id)
  * 5. Baseline master SOP ratio profile (sop_profile:master_sphere_baseline) if missing
+ * 6. System item categories and units of measure in catalog
+ * 7. scanner_secrets (admin-only) + a default staff PIN for every scanner device that has none
+ *    (draft-kiosk-staff-pin-face-bypass FR-13; never prints a PIN, never overwrites one)
  *
  * Fast and idempotent (<1 second). Safe to run on every CI/CD deployment.
  *
@@ -26,6 +30,9 @@ import {
 import { validRatios } from '$lib/features/sop-ratios/domain/sop-ratio.fixture';
 import { FALLBACK_UNIT_DEFINITIONS } from '$lib/features/catalog/domain/unit-of-measure';
 import { SYSTEM_ITEM_CATEGORIES, type ItemCategory } from '$lib/features/catalog/domain/catalog';
+import { backfillStaffPins } from '$lib/server/scanners/staff-pin-backfill';
+import { CENTRAL_MEMBER_DBS, syncCentralDbAccess } from '$lib/server/central-db-security';
+import { deployRegistryDesign, listShelterMasters } from '$lib/server/registry-redeploy';
 
 // ─── env loader ─────────────────────────────────────────────────────────────
 
@@ -547,22 +554,26 @@ async function main() {
 		console.log(`  ✓ DB: ${db} (${res === 'created' && DRY_RUN ? 'would create' : res})`);
 	}
 
-	// 2. Security
-	const secRoles = {
-		admins: { roles: ['system_admin'] },
-		members: {
-			roles: ['shelter_manager', 'registration_staff', 'kitchen_staff', 'warehouse_staff']
-		}
-	};
-	const regSec = await syncSecurity('registry', secRoles, DRY_RUN);
-	console.log(`  ✓ registry: _security (${regSec})`);
-
-	const catSec = await syncSecurity('catalog', secRoles, DRY_RUN);
-	console.log(`  ✓ catalog: _security (${catSec})`);
-
-	// 3. Catalog Access VDU
-	const catAccess = await syncCatalogAccessDesign(DRY_RUN);
-	console.log(`  ✓ catalog: _design/access (${catAccess})`);
+	// 2–3. Write policies first, then `_security` — central DB membership also opens
+	//      writes, so each VDU must be live before membership widens
+	//      (draft CR central-db-shelter-scope-members FR-3/FR-4).
+	const access = await syncCentralDbAccess({
+		deployRegistryPolicy: async () => {
+			const res = await deployRegistryDesign(couchReq, DRY_RUN);
+			return res === 'deployed' && DRY_RUN ? 'would deploy' : res;
+		},
+		deployCatalogPolicy: () => syncCatalogAccessDesign(DRY_RUN),
+		listShelterCodes: async () => (await listShelterMasters(couchReq)).map((m) => m.code),
+		mergeMembers: (db, roles) =>
+			syncSecurity(db, { admins: { roles: ['system_admin'] }, members: { roles } }, DRY_RUN)
+	});
+	console.log(`  ✓ registry: _design/app (${access.registryPolicy})`);
+	console.log(`  ✓ catalog: _design/access (${access.catalogPolicy})`);
+	for (const db of CENTRAL_MEMBER_DBS) {
+		console.log(
+			`  ✓ ${db}: _security (${access.security[db]}; ${access.shelterCodes.length} shelter scope(s))`
+		);
+	}
 
 	// 4. Thailand Location Indexes
 	const locIndexes = await syncThailandLocationIndexes(DRY_RUN);
@@ -585,6 +596,29 @@ async function main() {
 	console.log(
 		`  ✓ catalog: units of measure (${uomRes.created} created/would create, ${uomRes.existing} existing)`
 	);
+
+	// 8. Scanner staff PINs (scanner_secrets) — ids only, never a PIN
+	const pins = await backfillStaffPins((path, method, body) => couchReq(method, path, body), {
+		dryRun: DRY_RUN
+	});
+	console.log(
+		`  ✓ scanner_secrets: default staff PIN for ${pins.pinned.length} device(s) ${DRY_RUN ? 'would be created' : 'created'}${pins.pinned.length ? ` (${pins.pinned.join(', ')})` : ''}`
+	);
+	if (pins.reconciled.length) {
+		console.log(
+			`  ✓ scanner_secrets: registry PIN metadata ${DRY_RUN ? 'would be reconciled' : 'reconciled'} from PIN doc for ${pins.reconciled.length} device(s) (${pins.reconciled.join(', ')})`
+		);
+	}
+	if (pins.orphans.length) {
+		console.log(
+			`  ⚠ scanner_secrets: ${pins.orphans.length} PIN doc(s) with no scanner device, left in place (${pins.orphans.join(', ')})`
+		);
+	}
+	if (pins.conflicts.length) {
+		console.log(
+			`  ⚠ scanner_secrets: skipped ${pins.conflicts.length} device(s) changed meanwhile (${pins.conflicts.join(', ')}) — run again`
+		);
+	}
 
 	console.log('');
 	console.log('✨ Central database synchronization completed successfully');

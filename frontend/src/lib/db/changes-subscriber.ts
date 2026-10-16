@@ -45,14 +45,17 @@ export function classifyChangesPollStatus(
 	return 'error';
 }
 
+type AuthPollDecision = 'stop-db' | 'retry';
+
 /**
  * Long-poll CouchDB `_changes` on the active central endpoint and emit to the
  * app-level event channel. Not TanStack refetchInterval — canonical live-update
  * mechanism (CR-033 decision B).
  *
- * On 401/403 the entire subscriber hard-stops (abort all pollers) and sets
- * `needsReauth`. `startStaffCouchSync` in the protected layout restarts the
- * feed only after a successful login.
+ * On 401/403 the entire subscriber hard-stops (abort all pollers). A 401 sets
+ * `needsReauth`; a 403 does so only when `/_session` confirms the user is anonymous
+ * (`authStore.handleAuthFailure`). `startStaffCouchSync` in the protected layout restarts
+ * the feed after a successful login.
  */
 export function startChangesSubscriber(dbNames: string[]): ChangesSubscriberHandle {
 	if (!browser) return { stop: () => {} };
@@ -61,15 +64,24 @@ export function startChangesSubscriber(dbNames: string[]): ChangesSubscriberHand
 	const sinceByDb = new Map<string, string>();
 	const staggerTimers: ReturnType<typeof setTimeout>[] = [];
 
-	const haltOnAuthError = () => {
-		authStore.markNeedsReauth();
-		abort.abort();
+	const onAuthError = async (err: CouchAuthError): Promise<AuthPollDecision> => {
+		// The server answered, so it is reachable. 401 = expired; 403 is confirmed via `/_session`.
+		endpointStore.markConnected();
+		const outcome = await authStore.handleAuthFailure(err);
+		if (abort.signal.aborted) return 'stop-db';
+		if (outcome === 'expired') {
+			abort.abort();
+			return 'stop-db';
+		}
+		// Valid session: this DB is simply not permitted — stop only its poller.
+		// Unverifiable (offline): transient, keep polling after a backoff.
+		return outcome === 'permission-denied' ? 'stop-db' : 'retry';
 	};
 
 	for (const [index, dbName] of dbNames.entries()) {
 		sinceByDb.set(dbName, 'now');
 		const timer = setTimeout(() => {
-			if (!abort.signal.aborted) void pollDb(dbName, sinceByDb, abort.signal, haltOnAuthError);
+			if (!abort.signal.aborted) void pollDb(dbName, sinceByDb, abort.signal, onAuthError);
 		}, index * POLL_STAGGER_MS);
 		staggerTimers.push(timer);
 	}
@@ -86,7 +98,7 @@ async function pollDb(
 	dbName: string,
 	sinceByDb: Map<string, string>,
 	signal: AbortSignal,
-	haltOnAuthError: () => void
+	onAuthError: (err: CouchAuthError) => Promise<AuthPollDecision>
 ): Promise<void> {
 	while (!signal.aborted) {
 		try {
@@ -130,8 +142,10 @@ async function pollDb(
 		} catch (err) {
 			if (signal.aborted) return;
 			if (err instanceof CouchAuthError) {
-				haltOnAuthError();
-				return;
+				const decision = await onAuthError(err);
+				if (decision === 'stop-db' || signal.aborted) return;
+				await sleep(ERROR_BACKOFF_MS, signal);
+				continue;
 			}
 			endpointStore.markDisconnected();
 			await sleep(ERROR_BACKOFF_MS, signal);

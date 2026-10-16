@@ -1,7 +1,7 @@
 <script lang="ts">
-	import CheckCircle from '@lucide/svelte/icons/check-circle';
 	import CircleCheck from '@lucide/svelte/icons/circle-check';
 	import Download from '@lucide/svelte/icons/download';
+	import QrNameTag from '$lib/components/qr-name-tag.svelte';
 	import ImageDown from '@lucide/svelte/icons/image-down';
 	import { generateQrDataUrl } from '$lib/utils/qrcode';
 	import { toast } from 'svelte-sonner';
@@ -10,17 +10,16 @@
 	import { langState } from '$lib/states/i18n.svelte';
 	import { downloadElementAsPdf, downloadElementAsPng } from '$lib/utils/pdf';
 	import { getTranslation } from '$lib/utils/i18n';
+	import { formatThaiDateTime } from '$lib/utils/date';
 	import type { BookingTicket } from '../application/booking-store.svelte';
 
 	interface Props {
 		ticket: BookingTicket;
 		/** Shown on the confirmation step; hidden when the ticket is re-opened from lookup. */
 		showSuccessHeader?: boolean;
-		/** Optional callback when citizen confirms ticket has been verified at shelter. */
-		onVerified?: (code: string) => void;
 	}
 
-	const { ticket, showSuccessHeader = true, onVerified }: Props = $props();
+	const { ticket, showSuccessHeader = true }: Props = $props();
 
 	let t = $derived(getTranslation(PUBLIC_BOOKING_TICKET_I18N, langState.current));
 
@@ -49,16 +48,7 @@
 		})
 	);
 
-	const bookedAt = $derived.by(() => {
-		if (!ticket.booked_at) return '';
-		const d = new Date(ticket.booked_at);
-		return Number.isNaN(d.getTime())
-			? ''
-			: d.toLocaleString(langState.current === 'th' ? 'th-TH' : 'en-US', {
-					dateStyle: 'medium',
-					timeStyle: 'short'
-				});
-	});
+	const bookedAt = $derived(ticket.booked_at ? formatThaiDateTime(ticket.booked_at) : '');
 
 	/**
 	 * Save the ticket straight to the device as `preregister-<code>.pdf` or `.png`
@@ -98,12 +88,6 @@
 						? t.statusCancelled
 						: ticket.status
 	);
-
-	function handleVerifiedClick() {
-		if (!onVerified) return;
-		if (!confirm(t.verifiedConfirm)) return;
-		onVerified(ticket.code);
-	}
 </script>
 
 <div class="space-y-4">
@@ -156,24 +140,14 @@
 			<p class="hidden text-center text-sm font-bold text-foreground print:block">
 				{isUnassigned ? t.unassignedShelterPrint : ticket.shelter_name}
 			</p>
-			{#await qrPromise}
-				<div class="h-44 w-44 animate-pulse rounded-lg bg-muted"></div>
-			{:then qrUrl}
-				<img src={qrUrl} alt={isUnassigned ? t.qrAltUnassigned : t.qrAlt} class="h-44 w-44" />
-			{:catch}
-				<p
-					class="flex h-44 w-44 items-center justify-center rounded-lg bg-muted p-4 text-center text-xs text-muted-foreground"
-				>
-					{isUnassigned ? t.qrErrorFallbackUnassigned : t.qrErrorFallback}
-				</p>
-			{/await}
-
-			<div class="text-center">
-				<p class="text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">
-					{t.bookerNameLabel}
-				</p>
-				<p class="text-base font-bold text-foreground">{fullName}</p>
-			</div>
+			<QrNameTag
+				src={qrPromise}
+				alt={isUnassigned ? t.qrAltUnassigned : t.qrAlt}
+				caption={t.bookerNameLabel}
+				name={fullName}
+				detail={isUnassigned ? `รหัส: ${ticket.code}` : undefined}
+				fallback={isUnassigned ? t.qrErrorFallbackUnassigned : t.qrErrorFallback}
+			/>
 			<p class="text-center text-sm font-semibold text-foreground">{t.showQrInstruction}</p>
 		</div>
 
@@ -221,17 +195,6 @@
 			<ImageDown class="h-4 w-4" />
 			{downloading === 'png' ? t.downloadingBtn : t.downloadPngBtn}
 		</Button>
-		{#if onVerified}
-			<Button
-				type="button"
-				variant="outline"
-				class="min-h-11 gap-1.5 font-semibold text-destructive hover:bg-destructive/10 hover:text-destructive"
-				onclick={handleVerifiedClick}
-			>
-				<CheckCircle class="h-4 w-4" />
-				<span>{t.verifiedBtn}</span>
-			</Button>
-		{/if}
 	</div>
 </div>
 
@@ -272,7 +235,7 @@
 			visibility: hidden !important;
 		}
 		#booking-ticket-print,
-		#booking-ticket-print * {
+		#booking-ticket-print :global(*) {
 			visibility: visible !important;
 		}
 		/*
@@ -296,7 +259,7 @@
 			align-items: center;
 			gap: 12px;
 		}
-		#booking-ticket-print img {
+		#booking-ticket-print :global(img) {
 			height: 240px !important;
 			width: 240px !important;
 		}

@@ -23,6 +23,7 @@
 	import { useMasterData, formatMasterLabel } from '$lib/features/master-data';
 	import { useShelter } from '$lib/features/shelters';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
+	import { formatThaiDateTime } from '$lib/utils/date';
 
 	import { useEvacuees, useHouseholds, useScreenings } from '../../application/queries';
 	import {
@@ -98,7 +99,10 @@
 
 	// Summary KPI counts
 	const preRegisteredEvacuees = $derived(
-		allEvacuees.filter((e) => e.current_stay?.status === 'pre_registered')
+		allEvacuees.filter(
+			(e) =>
+				e.current_stay?.status === 'pre_registered' || e.current_stay?.status === 'kiosk_registered'
+		)
 	);
 	const arrivingEvacuees = $derived(
 		allEvacuees.filter((e) => e.current_stay?.status === 'arriving')
@@ -209,17 +213,7 @@
 
 	function formatUpdated(iso?: string | null): string {
 		if (!iso) return '—';
-		try {
-			const d = new Date(iso);
-			return d.toLocaleString('th-TH', {
-				day: 'numeric',
-				month: 'short',
-				hour: '2-digit',
-				minute: '2-digit'
-			});
-		} catch {
-			return iso;
-		}
+		return formatThaiDateTime(iso) || iso;
 	}
 
 	function nextQueueBadgeVariant(
@@ -412,6 +406,7 @@
 							<option value="all">ทุกสถานะ</option>
 							<option value={IN_SHELTER_FILTER}>พักในศูนย์แล้ว (เข้าพัก + ยืนยันถึงโซน)</option>
 							<option value="pre_registered">ลงทะเบียนล่วงหน้า</option>
+							<option value="kiosk_registered">ลงทะเบียนที่ตู้ (รอยืนยัน)</option>
 							<option value="arriving">รอเข้าพัก</option>
 							<option value="active">เข้าพักแล้ว</option>
 							<option value="room_confirmed">ยืนยันถึงโซนแล้ว</option>
@@ -687,7 +682,7 @@
 										{specialNeedsShort(row.special_needs)}
 									</Table.Cell>
 									<Table.Cell class="px-3 py-3">
-										<StayStatusBadge status="pre_registered" size="sm" />
+										<StayStatusBadge status={row.current_stay.status} size="sm" />
 									</Table.Cell>
 									<Table.Cell class="py-3 pr-5 text-right">
 										<div class="flex justify-end gap-1.5">

@@ -23,16 +23,17 @@ describe('presentFromCounts / forecastFromCounts (CR-112)', () => {
 		).toBe(13);
 	});
 
-	it('counts Forecast as Present + pre_registered + arriving', () => {
+	it('counts Forecast as Present + pre_registered + kiosk_registered + arriving', () => {
 		expect(
 			forecastFromCounts({
 				active: 10,
 				room_confirmed: 2,
 				temporary_leave: 1,
 				pre_registered: 5,
+				kiosk_registered: 4,
 				arriving: 3
 			})
-		).toBe(21);
+		).toBe(25);
 	});
 });
 

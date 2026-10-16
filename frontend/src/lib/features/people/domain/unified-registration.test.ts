@@ -4,6 +4,7 @@ import {
 	PRIMARY_CONTACT_LABEL,
 	applyAnonymousIdToMember,
 	blankUnifiedMember,
+	membersMissingPhoneChoice,
 	memberCardLabel,
 	parseUnifiedRegistration,
 	planFamilyRegistration,
@@ -207,6 +208,23 @@ describe('unified registration — mononym and anonymous ID', () => {
 		const member = blankUnifiedMember();
 		expect(member.gender).toBeNull();
 		expect(member.religion).toBe('unknown');
+		expect(member.religion_other).toBeNull();
+		expect(member.disability_other_detail).toBeNull();
+	});
+
+	it('blankUnifiedMember opens the phone field ready to type (not "no phone")', () => {
+		expect(blankUnifiedMember().phone).toBe('');
+	});
+
+	it('membersMissingPhoneChoice flags blank phones but not "no phone" (null) or filled ones', () => {
+		expect(
+			membersMissingPhoneChoice([
+				{ phone: '0812345678' },
+				{ phone: '' },
+				{ phone: null },
+				{ phone: '   ' }
+			])
+		).toEqual([1, 3]);
 	});
 
 	it('blankUnifiedMember defines CR-148 optional fields (Svelte bindable fallbacks)', () => {
@@ -353,6 +371,48 @@ describe('unified registration — report-in converters', () => {
 		expect(otherMember.reporting_in).toBe(false);
 	});
 
+	it('preserves null and legacy other gender when loading an evacuee (decision sync 2026-10-09)', () => {
+		const base = {
+			_id: 'ev-g',
+			type: 'evacuee' as const,
+			household_id: 'hh-1',
+			first_name: 'สมชาย',
+			last_name: 'ใจดี',
+			phone: '0812345678',
+			person_id: { cardType: 'national_id' as const, number: '1234567890121' },
+			current_stay: {
+				status: 'pre_registered' as const,
+				zone: null,
+				since: '2026-01-01T00:00:00.000Z'
+			},
+			registered_via: 'web' as const,
+			created_at: '2026-01-01T00:00:00.000Z',
+			updated_at: '2026-01-01T00:00:00.000Z',
+			shelter_code: 'SH001'
+		};
+		type EvacueeArg = import('./people').Evacuee;
+		expect(
+			evacueeToUnifiedMember({ ...base, gender: null } as unknown as EvacueeArg, 'ev-g').gender
+		).toBeNull();
+		expect(
+			evacueeToUnifiedMember({ ...base, gender: 'other' } as unknown as EvacueeArg, 'ev-g').gender
+		).toBe('other');
+	});
+
+	it('accepts a registration whose members keep the default null gender (no required-gender error)', () => {
+		const parsed = unifiedRegistrationInputSchema.safeParse(
+			validInput({ members: [validMember({ gender: null })] })
+		);
+		expect(parsed.success).toBe(true);
+	});
+
+	it('accepts legacy other gender on a member (edit of an old doc)', () => {
+		const parsed = unifiedRegistrationInputSchema.safeParse(
+			validInput({ members: [validMember({ gender: 'other' })] })
+		);
+		expect(parsed.success).toBe(true);
+	});
+
 	it('pre-fills address from evacuee card_snapshot when household is null (Kiosk flow)', () => {
 		const kioskEvacuee = {
 			_id: 'ev-kiosk-1',
@@ -453,6 +513,20 @@ describe('unified registration — report-in converters', () => {
 		expect(targetMember.emergency_contact?.name).toBe('กิตติศักดิ์');
 		expect(targetMember.special_needs).toContain('ต้องการแพมเพิส');
 		expect(targetMember.vulnerable_groups).toContain('pregnant');
+	});
+});
+
+describe('planFamilyRegistration — preferred_zone (CR-159)', () => {
+	it('carries the suggestion but never zones at Station 1', () => {
+		const plan = planFamilyRegistration(
+			validInput({ members: [validMember({ preferred_zone: 'Z5' })] }),
+			'onsite'
+		);
+		expect(plan.memberInputs[0]).toMatchObject({
+			preferred_zone: 'Z5',
+			zone: null,
+			status: 'arriving'
+		});
 	});
 });
 

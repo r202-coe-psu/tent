@@ -16,6 +16,7 @@ import {
 	resolveThaidLoginUser,
 	exchangeThaidCode,
 	resolveThaidRedirectUri,
+	resolvePublicOrigin,
 	parseThaidCitizenClaims,
 	parseThaiAddressText,
 	setCitizenClaimCookie,
@@ -45,6 +46,15 @@ describe('thaid-oauth helpers (CR-ThaID)', () => {
 			expect(parseThaidOAuthState('tampered.state')).toBeNull();
 			expect(parseThaidOAuthState('')).toBeNull();
 			expect(parseThaidOAuthState(undefined)).toBeNull();
+		});
+
+		it('round-trips kiosk_check_in state together with its sessionId', () => {
+			const kiosk = createThaidOAuthState('kiosk_check_in', '', undefined, 'sess-kiosk-1');
+			expect(parseThaidOAuthState(kiosk)).toMatchObject({
+				mode: 'kiosk_check_in',
+				name: '',
+				sessionId: 'sess-kiosk-1'
+			});
 		});
 	});
 
@@ -113,6 +123,18 @@ describe('thaid-oauth helpers (CR-ThaID)', () => {
 			expect(scopes).toContain('gender');
 			expect(scopes).toContain('address');
 		});
+
+		it('requests the profile scope for kiosk_check_in mode (a scan may become a walk-in)', () => {
+			const url = buildThaidAuthorizeUrl({
+				clientId: 'my-client',
+				redirectUri: 'https://shelter.importstar.dev/callback',
+				state: 'test-state-token',
+				mode: 'kiosk_check_in'
+			});
+
+			const scopes = new URL(url).searchParams.get('scope')?.split(' ') ?? [];
+			expect(scopes).toEqual(expect.arrayContaining(['openid', 'pid', 'name', 'address']));
+		});
 	});
 
 	describe('resolveThaidRedirectUri', () => {
@@ -137,6 +159,23 @@ describe('thaid-oauth helpers (CR-ThaID)', () => {
 			expect(resolveThaidRedirectUri(dummyUrl)).toBe(
 				'https://shelter.example.com/api/v1/auth/oauth/thaid/callback'
 			);
+		});
+	});
+
+	describe('resolvePublicOrigin', () => {
+		const requestUrl = new URL('http://127.0.0.1:3000/api/v1/kiosk/thaid/session');
+
+		it('prefers the configured ORIGIN over the request origin', () => {
+			(env as Record<string, string | undefined>).ORIGIN = 'https://shelter.example.com/';
+			expect(resolvePublicOrigin(requestUrl)).toBe('https://shelter.example.com');
+		});
+
+		it('falls back to the request origin when ORIGIN is unset or malformed', () => {
+			(env as Record<string, string | undefined>).ORIGIN = undefined;
+			expect(resolvePublicOrigin(requestUrl)).toBe('http://127.0.0.1:3000');
+			(env as Record<string, string | undefined>).ORIGIN = 'not a url';
+			expect(resolvePublicOrigin(requestUrl)).toBe('http://127.0.0.1:3000');
+			(env as Record<string, string | undefined>).ORIGIN = undefined;
 		});
 	});
 
@@ -471,6 +510,16 @@ describe('thaid-oauth helpers (CR-ThaID)', () => {
 			};
 			const missProfile = parseThaidCitizenClaims(missClaims);
 			expect(missProfile.gender).toBe('female');
+		});
+
+		it('returns null gender (ไม่ระบุ) when neither claim nor title resolves it', () => {
+			const profile = parseThaidCitizenClaims({
+				sub: 'sub-none',
+				pid: '333',
+				name: 'สมศรี ตัวอย่าง',
+				raw: {}
+			});
+			expect(profile.gender).toBeNull();
 		});
 
 		it('parses numeric gender and sex claims (1=male, 2=female)', () => {

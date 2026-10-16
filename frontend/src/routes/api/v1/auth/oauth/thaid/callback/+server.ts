@@ -13,10 +13,11 @@ import {
 	resolveThaidRedirectUri,
 	setCitizenClaimCookie
 } from '$lib/server/thaid-oauth';
-import { completeScanSession } from '$lib/server/thaid-scan-session';
+import { completeKioskSession, completeScanSession } from '$lib/server/thaid-scan-session';
 import {
 	fetchCouchAuthHashAlgorithm,
 	fetchCouchAuthSecret,
+	isMfaStepupEnabled,
 	mintAuthSessionCookie,
 	setAuthSessionCookie,
 	setMfaOkCookie
@@ -50,6 +51,8 @@ function loginErrorRedirect(code: string): never {
 }
 
 function mfaErrorRedirect(code: string): never {
+	// Step-up hidden: only /me linking lands here — send its failures back to /me.
+	if (!isMfaStepupEnabled()) throw redirect(302, '/me?mfa=link_failed');
 	throw redirect(302, `/mfa-challenge?error=${encodeURIComponent(code)}`);
 }
 
@@ -63,7 +66,11 @@ function memberScanErrorRedirect(code: string): never {
 	throw redirect(302, `/thaid-scan-success?error=${encodeURIComponent(code)}`);
 }
 
-/** GET — ThaID OAuth callback: register, link, step-up, or enrolled login mint. */
+function kioskErrorRedirect(code: string): never {
+	throw redirect(302, `/thaid-scan-success?flow=kiosk&error=${encodeURIComponent(code)}`);
+}
+
+/** GET — ThaID OAuth callback: register, link, step-up, enrolled login mint, member scan, or kiosk check-in. */
 export const GET: RequestHandler = async ({ url, fetch, cookies }) => {
 	const cookieState = cookies.get(OAUTH_THAID_STATE_COOKIE);
 	const earlyState = parseThaidOAuthState(cookieState);
@@ -74,6 +81,7 @@ export const GET: RequestHandler = async ({ url, fetch, cookies }) => {
 	const isRegisterMode = detectedMode === 'register';
 	const isLoginMode = detectedMode === 'login';
 	const isMemberScanMode = detectedMode === 'member_scan';
+	const isKioskCheckInMode = detectedMode === 'kiosk_check_in';
 
 	function dispatchErrorRedirect(code: string): never {
 		if (isRegisterMode) {
@@ -84,6 +92,9 @@ export const GET: RequestHandler = async ({ url, fetch, cookies }) => {
 		}
 		if (isMemberScanMode) {
 			memberScanErrorRedirect(code);
+		}
+		if (isKioskCheckInMode) {
+			kioskErrorRedirect(code);
 		}
 		mfaErrorRedirect(code);
 	}
@@ -137,6 +148,20 @@ export const GET: RequestHandler = async ({ url, fetch, cookies }) => {
 				memberScanErrorRedirect('session_expired');
 			}
 			throw redirect(302, '/thaid-scan-success?status=success');
+		}
+
+		if (state.mode === 'kiosk_check_in') {
+			if (!state.sessionId) {
+				kioskErrorRedirect('missing_session');
+			}
+			// Digits only (ThaiD may format the id); the session stores the bare 13 digits.
+			const pid = (claims.pid ?? '').replace(/\D/g, '');
+			if (!/^\d{13}$/.test(pid)) kioskErrorRedirect('missing_pid');
+			// The profile stays on the server; it is read only to register a kiosk walk-in.
+			const profile = parseThaidCitizenClaims(claims);
+			const completed = completeKioskSession(state.sessionId, { pid, sub: claims.sub, profile });
+			if (!completed) kioskErrorRedirect('session_expired');
+			throw redirect(302, '/thaid-scan-success?flow=kiosk&status=success');
 		}
 
 		if (state.mode === 'login') {
@@ -218,6 +243,9 @@ export const GET: RequestHandler = async ({ url, fetch, cookies }) => {
 		}
 		if (isMemberScanMode) {
 			memberScanErrorRedirect('oauth_exchange_failed');
+		}
+		if (isKioskCheckInMode) {
+			kioskErrorRedirect('oauth_exchange_failed');
 		}
 		return serviceError(e);
 	}

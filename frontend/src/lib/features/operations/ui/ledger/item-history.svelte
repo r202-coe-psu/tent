@@ -8,6 +8,7 @@
 	import ArrowDownLeft from '@lucide/svelte/icons/arrow-down-left';
 	import ArrowUpRight from '@lucide/svelte/icons/arrow-up-right';
 	import { qtyGt } from '$lib/utils/qty';
+	import { formatThaiDateTime, formatThaiShortDate } from '$lib/utils/date';
 	import { ADJUST_REASON_LABELS, REASON_LABELS } from './ledger-view';
 	import { resolveAdjustReason } from '../../domain/operations';
 	import { lotStorageName } from '../../domain/lot-storage';
@@ -29,19 +30,8 @@
 	);
 
 	function formatDateTime(isoString: string): string {
-		try {
-			return (
-				new Date(isoString).toLocaleString('th-TH', {
-					day: '2-digit',
-					month: '2-digit',
-					year: '2-digit',
-					hour: '2-digit',
-					minute: '2-digit'
-				}) + ' น.'
-			);
-		} catch {
-			return isoString;
-		}
+		const formatted = formatThaiDateTime(isoString);
+		return formatted ? `${formatted} น.` : isoString;
 	}
 </script>
 
@@ -152,20 +142,12 @@
 										{/if}
 										{#if entry.lot?.produced_at}
 											<span class="text-2xs font-medium text-muted-foreground/90">
-												จากผลิต: {new Date(entry.lot.produced_at).toLocaleDateString('th-TH', {
-													day: '2-digit',
-													month: 'short',
-													year: '2-digit'
-												})}
+												จากผลิต: {formatThaiShortDate(entry.lot.produced_at)}
 											</span>
 										{/if}
 										{#if entry.lot?.expiry}
 											<span class="text-2xs font-medium text-muted-foreground/90">
-												⌛ หมดอายุ: {new Date(entry.lot.expiry).toLocaleDateString('th-TH', {
-													day: '2-digit',
-													month: 'short',
-													year: '2-digit'
-												})}
+												⌛ หมดอายุ: {formatThaiShortDate(entry.lot.expiry)}
 											</span>
 										{/if}
 										{#if entry.ref_id}

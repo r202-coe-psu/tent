@@ -22,6 +22,7 @@
 	import Database from '@lucide/svelte/icons/database';
 	import ArrowRight from '@lucide/svelte/icons/arrow-right';
 	import { toast } from 'svelte-sonner';
+	import { formatThaiDateTime } from '$lib/utils/date';
 
 	let { shelterCode }: { shelterCode: string } = $props();
 	const currentQuery = useCurrentCalculationSnapshot(() => shelterCode);
@@ -143,11 +144,7 @@
 			{:else if currentQuery.isError || !currentQuery.data}
 				<span>อ่าน Stock และข้อมูลปัจจุบันไม่สำเร็จ</span>
 			{:else}
-				<span
-					>Stock และข้อมูลปัจจุบัน ณ {new Date(currentQuery.data.as_of).toLocaleString(
-						'th-TH'
-					)}</span
-				>
+				<span>Stock และข้อมูลปัจจุบัน ณ {formatThaiDateTime(currentQuery.data.as_of)}</span>
 			{/if}
 		</div>
 		<Button type="button" variant="outline" size="sm" onclick={() => (historyOpen = true)}>
@@ -198,9 +195,9 @@
 						<details>
 							<summary>รายละเอียด</summary>
 							<div>
-								สูตร {currentQuery.data.formula_v}<br />ข้อมูล ณ {new Date(
+								สูตร {currentQuery.data.formula_v}<br />ข้อมูล ณ {formatThaiDateTime(
 									currentQuery.data.as_of
-								).toLocaleString('th-TH')}
+								)}
 							</div>
 						</details>
 					</div>

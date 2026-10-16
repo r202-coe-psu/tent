@@ -10,7 +10,6 @@
 		BookingTicketView,
 		TicketHistory,
 		getStoredTickets,
-		removeStoredTicket,
 		syncStoredTicketStatuses,
 		type BookingTicketModel
 	} from '$lib/features/public-register';
@@ -143,8 +142,9 @@
 					: ''}"
 				onclick={() => {
 					activeTab = 'history';
+					// no sync here: TicketHistory mounts with the tab and syncs itself — a second
+					// call doubled every status request (10/min/IP budget) and the claimed toast
 					storedTicketsCount = getStoredTickets().length;
-					void syncTicketsStatus();
 				}}
 			>
 				<History class="hidden size-4 sm:block" />
@@ -185,15 +185,7 @@
 	{:else if ticket}
 		<div class="space-y-6">
 			<div class="rounded-2xl border border-border/80 bg-card p-6 shadow-2xs sm:p-8">
-				<BookingTicketView
-					{ticket}
-					onVerified={(code) => {
-						removeStoredTicket(code);
-						ticket = null;
-						storedTicketsCount = getStoredTickets().length;
-						toast.success(t.verifiedToast);
-					}}
-				/>
+				<BookingTicketView {ticket} />
 			</div>
 
 			<div class="flex flex-wrap items-center justify-between gap-4">

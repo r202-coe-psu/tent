@@ -9,7 +9,7 @@ import { expect, type Locator, type Page } from '@playwright/test';
 export const PRE_REGISTER_PATH = '/pre-register?shelter=unassigned';
 export const SUBMIT_LABEL = 'ยืนยันการลงทะเบียน';
 export const UNASSIGNED_OPTION = /ไม่ระบุศูนย์พักพิง/;
-export const DISCLAIMER_LABEL = /ข้าพเจ้ารับทราบเงื่อนไขการใช้งานระบบ/;
+export const DISCLAIMER_LABEL = /ข้าพเจ้ารับทราบข้อตกลงการใช้งาน/;
 export const SUMMARY_TITLE = 'ตรวจสอบข้อมูลก่อนบันทึก';
 export const JUMP_BUTTON = 'ไปยังช่องที่ต้องแก้';
 
@@ -49,6 +49,18 @@ export interface PageHealth {
 	registrationWrites: string[];
 }
 
+/**
+ * reCAPTCHA's own iframe (injected when the server has it enabled, e.g. staging) logs
+ * `requestStorageAccess: Permission denied.` into the page console; it is third-party noise,
+ * not an app problem. Matched on the console message's source URL so first-party errors still count.
+ */
+const RECAPTCHA_FRAME_URL =
+	/^https:\/\/(www\.)?(google\.com|gstatic\.com|recaptcha\.net)\/recaptcha\//;
+
+/** reCAPTCHA's report-only CSP `frame-ancestors` console noise about framing google.com (no usable source URL). */
+const GOOGLE_REPORT_ONLY_CSP_TEXT =
+	/^Framing 'https:\/\/(www\.)?google\.com\/[^']*' violates the following report-only Content Security Policy/;
+
 const REGISTRATION_WRITE = /\/api\/public\/v1\/(unassigned-registrations|registrations)(\?|$)/;
 
 /** Start collecting console problems, failed responses and registration writes on `page`. */
@@ -56,6 +68,8 @@ export function watchPage(page: Page): PageHealth {
 	const health: PageHealth = { problems: [], failedResponses: [], registrationWrites: [] };
 	page.on('pageerror', (err) => health.problems.push(`pageerror: ${err.message}`));
 	page.on('console', (msg) => {
+		if (RECAPTCHA_FRAME_URL.test(msg.location().url)) return;
+		if (GOOGLE_REPORT_ONLY_CSP_TEXT.test(msg.text())) return;
 		if (msg.type() === 'error' || msg.type() === 'warning') {
 			health.problems.push(`console.${msg.type()}: ${msg.text()}`);
 		}
@@ -105,7 +119,8 @@ export function primaryCard(page: Page): Locator {
 }
 
 export function memberCard(page: Page, n: number): Locator {
-	return page.getByRole('region', { name: `สมาชิก ${n}` });
+	// Cards are titled "สมาชิกคนที่ N" (roleplay #11); the head card is "…(ผู้ติดต่อหลักของครอบครัว)".
+	return page.getByRole('region', { name: `สมาชิกคนที่ ${n}` });
 }
 
 /** The submit button in the bottom bar (the summary aside repeats the same label). */
@@ -185,7 +200,8 @@ export async function openMemberAccordion(
 	card: Locator,
 	name: 'ผู้ติดต่อฉุกเฉิน' | 'กลุ่มเปราะบาง' | 'ความต้องการพิเศษ'
 ): Promise<void> {
-	const trigger = card.getByRole('button', { name, exact: true });
+	// The emergency trigger also carries a one-line hint (roleplay #11), so match the title only.
+	const trigger = card.getByRole('button', { name: new RegExp(`^${name}`) });
 	if ((await trigger.getAttribute('aria-expanded')) !== 'true') await trigger.click();
 }
 

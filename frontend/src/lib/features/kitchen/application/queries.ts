@@ -50,7 +50,8 @@ import {
 export const kitchenKeys = {
 	all: ['kitchen'] as const,
 	mealSessions: () => [...kitchenKeys.all, 'meal_sessions', getShelterCode()] as const,
-	mealSession: (id: string) => [...kitchenKeys.all, 'meal_session', getShelterCode(), id] as const,
+	mealSessionDetails: () => [...kitchenKeys.all, 'meal_session', getShelterCode()] as const,
+	mealSession: (id: string) => [...kitchenKeys.mealSessionDetails(), id] as const,
 	mealPlans: () => [...kitchenKeys.all, 'meal_plans', getShelterCode()] as const,
 	requisitions: () => [...kitchenKeys.all, 'requisitions', getShelterCode()] as const,
 	kitchenRequisition: (id: string) =>
@@ -61,6 +62,27 @@ export const kitchenKeys = {
 	occupancy: () => [...kitchenKeys.all, 'occupancy', getShelterCode()] as const,
 	dietCounts: () => [...kitchenKeys.all, 'diet_counts', getShelterCode()] as const
 };
+
+/**
+ * Mutation that refreshes the writer's own UI on success. The `_changes` feed
+ * (startKitchenLiveQuery) is delayed and misses detail keys, so it can't be the
+ * only refresh path. `stock` also refreshes operations (stock_ledger writes).
+ */
+function kitchenMutation<TData, TVariables>(
+	mutationFn: (variables: TVariables) => Promise<TData>,
+	{ stock = false }: { stock?: boolean } = {}
+) {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
+		mutationFn,
+		onSuccess: () => invalidateKitchen(queryClient, stock)
+	}));
+}
+
+function invalidateKitchen(queryClient: QueryClient, stock: boolean) {
+	void queryClient.invalidateQueries({ queryKey: kitchenKeys.all });
+	if (stock) void queryClient.invalidateQueries({ queryKey: operationsKeys.all });
+}
 
 // --- Occupancy & Diet Counts (T-06 handoff & 2-Tier Headcount) ---
 // Live headcount derived from currently checked-in evacuees. Re-derives on any
@@ -98,35 +120,32 @@ export const useMealSession = (id: () => string | undefined) =>
 	});
 
 export const useCreateMealSession = () =>
-	createMutation(() => ({
-		mutationFn: ({ input, ctx }: { input: MealSessionInput; ctx: AuthorContext }) =>
-			kitchenRepository().createMealSession(input, ctx)
-	}));
+	kitchenMutation(({ input, ctx }: { input: MealSessionInput; ctx: AuthorContext }) =>
+		kitchenRepository().createMealSession(input, ctx)
+	);
 
 export const useUpdateMealSession = () =>
-	createMutation(() => ({
-		mutationFn: ({ session, patch }: { session: MealSession; patch: Partial<MealSessionInput> }) =>
+	kitchenMutation(
+		({ session, patch }: { session: MealSession; patch: Partial<MealSessionInput> }) =>
 			kitchenRepository().updateMealSession(session, patch)
-	}));
+	);
 
 export const useDeleteMealSession = () =>
-	createMutation(() => ({
-		mutationFn: (session: MealSession) => kitchenRepository().deleteMealSession(session)
-	}));
+	kitchenMutation((session: MealSession) => kitchenRepository().deleteMealSession(session));
 
 // --- MealPlan ---
 
 export const useMealPlans = () =>
 	createQuery(() => ({
 		queryKey: kitchenKeys.mealPlans(),
+		refetchOnMount: 'always',
 		queryFn: () => kitchenRepository().listMealPlans()
 	}));
 
 export const useCreateMealPlan = () =>
-	createMutation(() => ({
-		mutationFn: ({ input, ctx }: { input: MealPlanInput; ctx: AuthorContext }) =>
-			kitchenRepository().createMealPlan(input, ctx)
-	}));
+	kitchenMutation(({ input, ctx }: { input: MealPlanInput; ctx: AuthorContext }) =>
+		kitchenRepository().createMealPlan(input, ctx)
+	);
 
 // Resolves ingredient calculations from recipe, custom ingredients, or default rice ratio.
 async function resolveMealPlanCalc(
@@ -173,8 +192,8 @@ async function resolveMealPlanCalc(
 }
 
 export const useCreateMealPlanCalc = () =>
-	createMutation(() => ({
-		mutationFn: async ({
+	kitchenMutation(
+		async ({
 			date,
 			meal,
 			label,
@@ -215,29 +234,27 @@ export const useCreateMealPlanCalc = () =>
 				ctx
 			);
 		}
-	}));
+	);
 
 export const useConfirmMealPlan = () =>
-	createMutation(() => ({
-		mutationFn: (plan: MealPlan) => kitchenRepository().confirmMealPlan(plan)
-	}));
+	kitchenMutation((plan: MealPlan) => kitchenRepository().confirmMealPlan(plan));
 
 export const useStartMealPlanCooking = () =>
-	createMutation(() => ({
-		mutationFn: ({
+	kitchenMutation(
+		({
 			plan,
 			cookingStartedAt
 		}: {
 			plan: MealPlan;
 			cookingStartedAt: NonNullable<MealPlan['cooking_started_at']>;
 		}) => kitchenRepository().startMealPlanCooking(plan, cookingStartedAt)
-	}));
+	);
 
 // Draft-only edit — recomputes recipes the same way useCreateMealPlanCalc does,
 // then patches the existing doc in place (date/meal/_id stay fixed).
 export const useUpdateMealPlanCalc = () =>
-	createMutation(() => ({
-		mutationFn: async ({
+	kitchenMutation(
+		async ({
 			plan,
 			label,
 			headcount,
@@ -270,25 +287,23 @@ export const useUpdateMealPlanCalc = () =>
 				label
 			});
 		}
-	}));
+	);
 
 // Confirmed plan edit (CR-142) — caller must have already confirmed the
 // linked ticket is still PENDING_PICK (e.g. by updating the ticket first).
 export const useUpdateConfirmedMealPlan = () =>
-	createMutation(() => ({
-		mutationFn: ({
+	kitchenMutation(
+		({
 			plan,
 			patch
 		}: {
 			plan: MealPlan;
 			patch: Parameters<ReturnType<typeof kitchenRepository>['updateConfirmedMealPlan']>[1];
 		}) => kitchenRepository().updateConfirmedMealPlan(plan, patch)
-	}));
+	);
 
 export const useDeleteMealPlanDraft = () =>
-	createMutation(() => ({
-		mutationFn: (plan: MealPlan) => kitchenRepository().deleteMealPlanDraft(plan)
-	}));
+	kitchenMutation((plan: MealPlan) => kitchenRepository().deleteMealPlanDraft(plan));
 
 // --- KitchenRequisition ---
 
@@ -311,14 +326,14 @@ export const useKitchenRequisition = (id: () => string | undefined) =>
 	});
 
 export const useCreatePendingRequisition = () =>
-	createMutation(() => ({
-		mutationFn: ({ params, ctx }: { params: CreatePendingRequisitionParams; ctx: AuthorContext }) =>
+	kitchenMutation(
+		({ params, ctx }: { params: CreatePendingRequisitionParams; ctx: AuthorContext }) =>
 			kitchenRepository().createPendingRequisition(params, ctx)
-	}));
+	);
 
 export const useApproveKitchenRequisition = () =>
-	createMutation(() => ({
-		mutationFn: ({
+	kitchenMutation(
+		({
 			requisitionId,
 			approver,
 			options,
@@ -328,12 +343,13 @@ export const useApproveKitchenRequisition = () =>
 			approver: string;
 			options?: ApproveRequisitionOptions;
 			ctx?: AuthorContext;
-		}) => kitchenRepository().approveKitchenRequisition(requisitionId, approver, options, ctx)
-	}));
+		}) => kitchenRepository().approveKitchenRequisition(requisitionId, approver, options, ctx),
+		{ stock: true }
+	);
 
 export const useRejectKitchenRequisition = () =>
-	createMutation(() => ({
-		mutationFn: ({
+	kitchenMutation(
+		({
 			requisitionId,
 			reason,
 			ctx
@@ -342,41 +358,42 @@ export const useRejectKitchenRequisition = () =>
 			reason: string;
 			ctx: AuthorContext;
 		}) => kitchenRepository().rejectKitchenRequisition(requisitionId, reason, ctx)
-	}));
+	);
 
 export const useIssueRequisition = () =>
-	createMutation(() => ({
-		mutationFn: ({ input, ctx }: { input: KitchenRequisitionInput; ctx: AuthorContext }) =>
-			kitchenRepository().issueRequisition(input, ctx)
-	}));
+	kitchenMutation(
+		({ input, ctx }: { input: KitchenRequisitionInput; ctx: AuthorContext }) =>
+			kitchenRepository().issueRequisition(input, ctx),
+		{ stock: true }
+	);
 
 // --- MealService ---
 
 export const useMealServices = () =>
 	createQuery(() => ({
 		queryKey: kitchenKeys.mealServices(),
+		refetchOnMount: 'always',
 		queryFn: () => kitchenRepository().listMealServices()
 	}));
 
 export const useRecordMealService = () =>
-	createMutation(() => ({
-		mutationFn: ({ input, ctx }: { input: MealServiceInput; ctx: AuthorContext }) =>
-			kitchenRepository().recordMealService(input, ctx)
-	}));
+	kitchenMutation(({ input, ctx }: { input: MealServiceInput; ctx: AuthorContext }) =>
+		kitchenRepository().recordMealService(input, ctx)
+	);
 
 // --- MealServiceReceipt (CR-144) ---
 
 export const useMealServiceReceipts = () =>
 	createQuery(() => ({
 		queryKey: kitchenKeys.mealServiceReceipts(),
+		refetchOnMount: 'always',
 		queryFn: () => kitchenRepository().listMealServiceReceipts()
 	}));
 
 export const useConfirmMealServiceReceipt = () =>
-	createMutation(() => ({
-		mutationFn: ({ mealServiceId, ctx }: { mealServiceId: string; ctx: AuthorContext }) =>
-			kitchenRepository().confirmMealServiceReceipt(mealServiceId, ctx)
-	}));
+	kitchenMutation(({ mealServiceId, ctx }: { mealServiceId: string; ctx: AuthorContext }) =>
+		kitchenRepository().confirmMealServiceReceipt(mealServiceId, ctx)
+	);
 
 /**
  * Confirm receipt of a meal_service AND put the cooked food into stock. Every
@@ -415,16 +432,13 @@ export const useConfirmMealServiceYield = () => {
 			});
 			return kitchenRepository().confirmMealServiceReceiptWithYield(service, resolved, ctx);
 		},
-		onSuccess: () => {
-			void queryClient.invalidateQueries({ queryKey: kitchenKeys.mealServiceReceipts() });
-			void queryClient.invalidateQueries({ queryKey: operationsKeys.all });
-		}
+		onSuccess: () => invalidateKitchen(queryClient, true)
 	}));
 };
 
 export const useRejectMealServiceReceipt = () =>
-	createMutation(() => ({
-		mutationFn: ({
+	kitchenMutation(
+		({
 			mealServiceId,
 			reason,
 			ctx
@@ -433,7 +447,7 @@ export const useRejectMealServiceReceipt = () =>
 			reason: string;
 			ctx: AuthorContext;
 		}) => kitchenRepository().rejectMealServiceReceipt(mealServiceId, reason, ctx)
-	}));
+	);
 
 // --- Live sync ---
 
@@ -441,15 +455,23 @@ export function startKitchenLiveQuery(queryClient: QueryClient): SubscribeDataCh
 	return subscribeDataChanges(queryClient, getShelterDb, (type) => {
 		switch (type) {
 			case 'meal_session':
-				return [kitchenKeys.mealSessions()];
+				return [kitchenKeys.mealSessions(), kitchenKeys.mealSessionDetails()];
 			case 'meal_plan':
-				return [kitchenKeys.mealPlans(), kitchenKeys.mealSessions()];
+				return [
+					kitchenKeys.mealPlans(),
+					kitchenKeys.mealSessions(),
+					kitchenKeys.mealSessionDetails()
+				];
 			case 'kitchen_requisition':
-				return [kitchenKeys.requisitions()];
+				return [kitchenKeys.requisitions(), [...kitchenKeys.all, 'kitchen_requisition']];
 			case 'kitchen_counter':
 				return [kitchenKeys.requisitions()];
 			case 'meal_service':
-				return [kitchenKeys.mealServices(), kitchenKeys.mealSessions()];
+				return [
+					kitchenKeys.mealServices(),
+					kitchenKeys.mealSessions(),
+					kitchenKeys.mealSessionDetails()
+				];
 			case 'meal_service_receipt':
 				return [kitchenKeys.mealServiceReceipts()];
 			case 'stock_ledger':

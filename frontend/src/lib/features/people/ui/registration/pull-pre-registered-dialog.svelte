@@ -16,6 +16,7 @@
 		matchesEvacueeSearch,
 		type Evacuee
 	} from '$lib/features/people';
+	import { formatThaiTime } from '$lib/utils/date';
 	import EvacueePhoto from '../shared/evacuee-photo.svelte';
 	import RegisteredViaBadge from '../shared/registered-via-badge.svelte';
 
@@ -38,7 +39,10 @@
 	const preRegisteredList = $derived.by(() => {
 		const excluded = new Set(excludeIds.filter(Boolean));
 		return allEvacuees.filter(
-			(e) => e.current_stay?.status === 'pre_registered' && !excluded.has(e._id)
+			(e) =>
+				(e.current_stay?.status === 'pre_registered' ||
+					e.current_stay?.status === 'kiosk_registered') &&
+				!excluded.has(e._id)
 		);
 	});
 
@@ -76,13 +80,7 @@
 	}
 
 	function formatTime(iso?: string) {
-		if (!iso) return '';
-		try {
-			const d = new Date(iso);
-			return d.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
-		} catch {
-			return '';
-		}
+		return formatThaiTime(iso);
 	}
 </script>
 

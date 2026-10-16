@@ -85,7 +85,7 @@ description: Act as project owner/PM turning the owner's intent into specs a dev
 4. **เสนอวิธี track + เหตุผล** → **STOP ถามเจ้าของโครงการ** (CR ไฟล์ / Notion / decision sync note)
 5. **หลังเจ้าของเคาะ approve:**
    - อ่าน `docs/changes/_index.md` บน branch หลัก (`develop`/`main`) เพื่อรันเลขถัดไป `CR-NNN`
-   - Rename ไฟล์เป็น `docs/changes/CR-NNN-<slug>.md`
+   - Rename ไฟล์เป็น `docs/changes/<หมวด>/CR-NNN-<slug>.md`
    - ตั้ง `id: CR-NNN`, `status: approved` (stable core ต้องผ่าน review ก่อน)
    - เพิ่มแถวบันทึกลงใน `docs/changes/_index.md`
    - แก้ doc + bump เวอร์ชัน + อัปเดต `updated:` → แก้ code/test ที่กระทบ → ปิด CR `status: done` (อัปเดตทั้งในไฟล์ CR และ `_index.md`)

@@ -75,9 +75,9 @@
 <div class="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-6 md:px-6">
 	<header class="flex items-center gap-3">
 		<a
-			href={resolve('/onsite')}
+			href={resolve('/portal')}
 			class="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200/80 bg-white text-slate-600 shadow-2xs transition-colors hover:bg-slate-50"
-			aria-label="กลับหน้าหลักระบบส่วนหน้า"
+			aria-label="กลับหน้าเลือกเมนูหลัก"
 		>
 			<ArrowLeft class="size-4" />
 		</a>

@@ -1,6 +1,30 @@
 /**
  * Date formatting and utility functions.
+ *
+ * Display datetime is always `th-TH` + `Asia/Bangkok`. Storage stays UTC ISO.
  */
+
+/** BCP 47 tag for every human-facing date/time string. */
+export const DISPLAY_LOCALE = 'th-TH';
+
+/** IANA zone for every human-facing date/time string. */
+export const DISPLAY_TIME_ZONE = 'Asia/Bangkok';
+
+/**
+ * The Asia/Bangkok calendar date (`YYYY-MM-DD`) that `now` falls on.
+ *
+ * Between 00:00 and 07:00 Bangkok the UTC date is still yesterday, so anything that
+ * asks "is this date already past?" for a person in Thailand must not use
+ * `toISOString()`. `en-CA` is used only because it formats as `YYYY-MM-DD`.
+ */
+export function bangkokToday(now: Date = new Date()): string {
+	return new Intl.DateTimeFormat('en-CA', {
+		timeZone: DISPLAY_TIME_ZONE,
+		year: 'numeric',
+		month: '2-digit',
+		day: '2-digit'
+	}).format(now);
+}
 
 /** จำนวนวันระหว่าง 2 วัน (inclusive) */
 export function daysBetween(from: string, to: string): number {
@@ -66,19 +90,21 @@ export function formatThaiShortDate(iso: string): string {
 	if (!iso) return '';
 	const date = new Date(iso);
 	if (Number.isNaN(date.getTime())) return iso;
-	return date.toLocaleDateString('th-TH', {
+	return date.toLocaleDateString(DISPLAY_LOCALE, {
+		timeZone: DISPLAY_TIME_ZONE,
 		year: 'numeric',
 		month: 'numeric',
 		day: 'numeric'
 	});
 }
 
-/** แปลง ISO timestamp string → ข้อความวันเวลาภาษาไทย (เช่น "4 ก.ค. 2569, 14:30") */
+/** แปลง ISO timestamp string → ข้อความวันเวลาภาษาไทย (เช่น "4 ก.ค. 2569, 21:30") */
 export function formatThaiDateTime(iso?: string | null): string {
 	if (!iso) return '';
 	const date = new Date(iso);
 	if (Number.isNaN(date.getTime())) return iso;
-	return date.toLocaleString('th-TH', {
+	return date.toLocaleString(DISPLAY_LOCALE, {
+		timeZone: DISPLAY_TIME_ZONE,
 		year: 'numeric',
 		month: 'short',
 		day: 'numeric',
@@ -87,12 +113,13 @@ export function formatThaiDateTime(iso?: string | null): string {
 	});
 }
 
-/** แปลง ISO timestamp string → ข้อความเวลาภาษาไทย (เช่น "14:30") */
+/** แปลง ISO timestamp string → ข้อความเวลาภาษาไทย (เช่น "21:30") */
 export function formatThaiTime(iso?: string | null): string {
 	if (!iso) return '';
 	const date = new Date(iso);
 	if (Number.isNaN(date.getTime())) return iso;
-	return date.toLocaleTimeString('th-TH', {
+	return date.toLocaleTimeString(DISPLAY_LOCALE, {
+		timeZone: DISPLAY_TIME_ZONE,
 		hour: '2-digit',
 		minute: '2-digit'
 	});

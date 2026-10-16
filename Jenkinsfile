@@ -47,7 +47,7 @@ pipeline {
             }
         }
 
-        stage('Staging E2E Gate') {
+        stage('Staging E2E (manual review)') {
             when {
                 branch 'staging'
             }
@@ -71,17 +71,16 @@ pipeline {
                             error("Staging server is at ${deployedCommit}, expected ${env.GIT_COMMIT}")
                         }
 
-                        // Wait + propagate: a red/missing E2E fails this deploy job.
-                        // tent-e2e-staging also posts GitHub commit status `staging/e2e`
-                        // on DEPLOY_COMMIT — owner enables that check on `main` protection.
-                        echo "Running tent-e2e-staging (wait+propagate) for ${deployedCommit}"
+                        // Wait, don't propagate (decision 2026-10-09): the deploy stays green when the deploy itself
+                        // succeeded; E2E results are reviewed manually in the tent-e2e-staging job before promoting.
+                        echo "Running tent-e2e-staging (wait, no propagate — manual review) for ${deployedCommit}"
                         build job: 'tent-e2e-staging',
                               parameters: [
                                   string(name: 'DEPLOY_COMMIT', value: deployedCommit),
                                   string(name: 'STAGING_URL', value: 'https://shelter.importstar.dev')
                               ],
                               wait: true,
-                              propagate: true
+                              propagate: false
                     }
                 }
             }

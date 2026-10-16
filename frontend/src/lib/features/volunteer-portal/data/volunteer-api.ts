@@ -45,7 +45,7 @@ const ERROR_COPY: Record<string, string> = {
 	TICKET_NOT_FOUND: 'ไม่พบตั๋วนี้ กรุณาตรวจสอบลิงก์อีกครั้ง',
 	NOT_CANCELLABLE: 'ตั๋วนี้ยกเลิกไม่ได้แล้ว',
 	RATE_LIMITED: 'ส่งคำขอถี่เกินไป กรุณารอสักครู่แล้วลองใหม่',
-	VOLUNTEER_NOT_FOUND: 'ไม่พบเบอร์โทรศัพท์นี้ในระบบจิตอาสา กรุณาตรวจสอบเบอร์ที่ใช้สมัครอีกครั้ง',
+	VOLUNTEER_NOT_FOUND: 'ไม่พบเบอร์โทรศัพท์นี้ในระบบอาสาสมัคร กรุณาตรวจสอบเบอร์ที่ใช้สมัครอีกครั้ง',
 	ACCESS_UNAVAILABLE: 'ไม่สามารถตรวจสอบข้อมูลจิตอาสาได้ กรุณาลองใหม่อีกครั้ง',
 	ROLE_CARD_NOT_FOUND: 'ไม่พบข้อมูล role card ของอาสาสมัคร',
 	ROLE_CARD_WRITE_FAILED: 'ไม่สามารถสร้าง QR Role Card ได้ กรุณาลองใหม่อีกครั้ง'
@@ -278,12 +278,20 @@ export async function fetchVolunteerSkills(shelterCode?: string): Promise<Volunt
 	const raw =
 		(
 			data as {
-				volunteerSkills?: Array<VolunteerSkillOption & { label_th?: string; label_en?: string }>;
+				volunteerSkills?: Array<
+					Omit<VolunteerSkillOption, 'label' | 'label_th' | 'label_en'> & {
+						label?: string;
+						label_th?: string;
+						label_en?: string;
+					}
+				>;
 			}
 		).volunteerSkills ?? [];
 	return raw.map((item) => ({
 		code: item.code,
 		label: item.label?.trim() || item.label_th?.trim() || item.label_en?.trim() || item.code,
+		label_th: item.label_th?.trim() ?? '',
+		label_en: item.label_en?.trim() ?? '',
 		category: item.category,
 		description: item.description,
 		is_default: item.is_default

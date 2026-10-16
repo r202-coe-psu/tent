@@ -75,6 +75,7 @@ export {
 	createEvacuee,
 	createDraftEvacueeFromCard,
 	createKioskEvacueeFromCard,
+	createKioskWalkInHousehold,
 	createMedical,
 	createHousehold,
 	createMovement,
@@ -82,6 +83,9 @@ export {
 	assertMovementAllowed,
 	movementConflictMessage,
 	canCheckInEvacuee,
+	canScanCheckIn,
+	needsIntakeBeforeStay,
+	SCAN_RETURN_STATUSES,
 	canCheckOutEvacuee,
 	canChangeEvacueeZone,
 	canConfirmRoom,
@@ -110,11 +114,13 @@ export {
 	collectMemberRuleIssues,
 	type MemberRuleIssue,
 	formatPersonName,
+	matchesEvacueePhoneSearch,
 	matchesEvacueeSearch,
 	zoneLabel,
 	type ZoneLabelSource,
 	evacueeAgeYears,
 	EWAR_SYMPTOM_GROUPS,
+	ewarSymptomLabel,
 	isEvacuee,
 	isMedical,
 	isHousehold,
@@ -143,6 +149,9 @@ export {
 	classifyScreeningQueueTab,
 	nextScreeningQueueEvacuee,
 	recommendZoneKind,
+	pickRecommendedZone,
+	resolvePreferredZone,
+	ZONE_KIND_LABELS,
 	countPresentOccupantsByZone,
 	parseZoningQrCode,
 	buildZoningPath,
@@ -153,7 +162,8 @@ export {
 	type NextQueueLabel,
 	type ZoningQueueTab,
 	type ScreeningQueueTab,
-	type ZoningRecommendKind
+	type ZoningRecommendKind,
+	type PreferredZoneOutcome
 } from './domain/intake-pipeline';
 
 export {
@@ -209,6 +219,7 @@ export {
 	matchesResidenceAddress,
 	normThaiAddressText,
 	suggestHouseholdsByResidence,
+	suggestHouseholdsByPhone,
 	isJoinableHouseholdStatus,
 	filterJoinCandidatesByEvacueeQuery,
 	type SectionEFlags,
@@ -219,6 +230,7 @@ export {
 	type HouseholdChoice,
 	type ResidenceFields,
 	type ResidenceMatchCandidate,
+	type PhoneHouseholdMatchCandidate,
 	type JoinCandidateEvacuee
 } from './domain/registration-shell';
 
@@ -332,7 +344,6 @@ export {
 	openEvacueeRow
 } from './ui/search-scan/evacuee-queue-navigation';
 export { default as EvacueeProfileView } from './ui/evacuee-profile/evacuee-profile-view.svelte';
-export { default as EvacueeForm } from './ui/registration/evacuee-form.svelte';
 export { default as RegistrationShell } from './ui/registration/registration-shell.svelte';
 export { default as EvacueeList } from './ui/search-scan/evacuee-list.svelte';
 export { default as HouseholdForm } from './ui/household-form/household-form.svelte';
@@ -372,6 +383,14 @@ export {
 	formatSaveFailureReport,
 	type SaveFailureReport
 } from '$lib/utils/errors';
+export {
+	isValidThaiIdCandidate,
+	performFederatedDuplicateLookup,
+	resolveInstantDuplicateAction,
+	type InstantDuplicateMatch,
+	type FederatedDuplicateLookupDeps
+} from './domain/instant-duplicate';
+export { default as InstantDuplicateDialog } from './ui/registration/instant-duplicate-dialog.svelte';
 
 // UI — i18n dictionaries used directly by route pages
 export { EVACUEE_PAGE_I18N, type EvacueePageI18n } from './ui/_constants/evacuee-page.i18n';

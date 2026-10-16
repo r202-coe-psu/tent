@@ -304,12 +304,23 @@ export interface Donation extends BaseDoc {
 	redirect_to_shelter_code?: string | null;
 }
 
+/**
+ * Which queue a window belongs to.
+ *
+ * A donor walking up and the shelter's own truck going out are two different
+ * constraints: the counter can take whoever turns up, the fleet cannot. One
+ * `capacity` covering both would claim 10 donors and 10 truck runs in the same hour.
+ */
+export type DonationSlotMode = 'dropoff' | 'pickup';
+
 export interface DonationSlot extends BaseDoc {
 	type: 'donation_slot';
+	mode: DonationSlotMode;
 	date: string; // YYYY-MM-DD
 	from: string; // HH:mm
 	to: string; // HH:mm
-	capacity: number;
+	/** `null` = no ceiling — the window is open hours, not a queue (drop-off). */
+	capacity: number | null;
 	status: 'open' | 'closed';
 	note?: string;
 }
@@ -1723,6 +1734,28 @@ export function reopenNeed(campaign: DonationCampaign, itemId: string): Donation
 		),
 		updated_at: now()
 	};
+}
+
+/**
+ * A campaign need whose `unit` is not its catalog item's `base_unit` (schema.md §2.1).
+ *
+ * Carries the item and both unit codes so the needs board can name them in Thai — the
+ * message alone left staff reading `item_master:01M4…: expected cloth, got piece` with
+ * no idea which row it meant. Every write re-checks every need, so one stale need
+ * blocks cut-off and promote on the whole campaign until that row is re-saved.
+ */
+export class CampaignUnitMismatchError extends Error {
+	readonly itemId: string;
+	readonly expected: string;
+	readonly actual: string;
+
+	constructor(itemId: string, expected: string, actual: string) {
+		super(`Unit mismatch for campaign item ${itemId}: expected ${expected}, got ${actual}`);
+		this.name = 'CampaignUnitMismatchError';
+		this.itemId = itemId;
+		this.expected = expected;
+		this.actual = actual;
+	}
 }
 
 /**

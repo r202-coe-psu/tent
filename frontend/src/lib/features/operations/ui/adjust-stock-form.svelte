@@ -16,6 +16,7 @@
 	import { SvelteMap } from 'svelte/reactivity';
 	import { toast } from 'svelte-sonner';
 	import { addQty, subQty, qtyAbs } from '$lib/utils/qty';
+	import { formatThaiShortDate } from '$lib/utils/date';
 	import {
 		ADJUST_NOTE_MAX_LENGTH,
 		MANUAL_ADJUST_REASONS,
@@ -160,15 +161,7 @@
 	// Helpers
 	function formatExpiry(expiryStr: string | undefined): string {
 		if (!expiryStr) return '-';
-		try {
-			return new Date(expiryStr).toLocaleDateString('th-TH', {
-				day: '2-digit',
-				month: 'short',
-				year: '2-digit'
-			});
-		} catch {
-			return expiryStr;
-		}
+		return formatThaiShortDate(expiryStr) || expiryStr;
 	}
 
 	function selectItem(item: StockFormItem) {

@@ -139,6 +139,9 @@ export function isDonorEditable(status: DonationStatus): boolean {
 const PUBLIC_DONATION_ERROR_MESSAGES: Record<string, string> = {
 	NEED_FULL: 'รายการนี้รับบริจาคครบแล้ว กรุณาเลือกรายการอื่น',
 	SLOT_FULL: 'คิวจัดส่งเต็มแล้ว กรุณาเลือกช่วงเวลาอื่น',
+	SLOT_REQUIRED: 'กรุณาเลือกรอบรถที่ศูนย์เปิดให้ไปรับของ',
+	SLOT_UNAVAILABLE: 'ช่วงเวลาที่เลือกไม่เปิดรับแล้ว กรุณาเลือกช่วงเวลาอื่น',
+	SLOTS_UNAVAILABLE: 'ตรวจสอบคิวไม่สำเร็จ กรุณาลองใหม่อีกครั้ง',
 	SHELTER_NOT_FOUND: 'ไม่พบศูนย์พักพิงที่เลือก',
 	SHELTER_CLOSED: 'ศูนย์พักพิงนี้ปิดรับบริจาคชั่วคราว',
 	RATE_LIMITED: 'คุณส่งคำขอบ่อยเกินไป กรุณารอสักครู่แล้วลองใหม่'
@@ -174,6 +177,25 @@ export type DonationUnitSource = {
  */
 export function donationPayloadUnit(item: DonationUnitSource, fallback: string): string {
 	return item.unit_code?.trim() || item.unit?.trim() || fallback;
+}
+
+/**
+ * Units no donor offers goods in — nutrition and dosage units the UOM master carries
+ * for recipes and medicine, which only lengthen the public picker.
+ */
+const DONOR_HIDDEN_UNIT_CODES: ReadonlySet<string> = new Set(['kcal', 'mg', 'mcg']);
+
+/**
+ * The units a donor may pick for an item offered outside the posted needs.
+ *
+ * The line used to take free text, so staff reviewing it got "ลังใหญ่" or "bag" with
+ * no code to match against the catalog at receipt. A picker over the UOM master keeps
+ * the value a code; anything one unit cannot say ("แพ็คละ 12 ขวด") goes in the note.
+ */
+export function donorUnitOptions<T extends { code: string; deactivated?: boolean }>(
+	units: readonly T[]
+): T[] {
+	return units.filter((unit) => !unit.deactivated && !DONOR_HIDDEN_UNIT_CODES.has(unit.code));
 }
 
 /** One counted line, as far as the perishable rule cares. */

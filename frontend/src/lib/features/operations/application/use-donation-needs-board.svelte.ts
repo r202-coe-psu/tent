@@ -3,6 +3,7 @@ import { getShelterCode } from '$lib/db/shelter';
 import { authStore } from '$lib/stores/auth.svelte';
 import { isSupplyItem, supplyRepository, useSupplyItems } from '$lib/features/supply';
 import {
+	canonicalizeUnitCode,
 	catalogRepository,
 	formatUnit,
 	itemMasterUnit,
@@ -21,6 +22,7 @@ import {
 } from './queries';
 import {
 	buildCampaignNotes,
+	CampaignUnitMismatchError,
 	deriveNeedAvailability,
 	editNeed,
 	forceCutOffNeed,
@@ -137,6 +139,17 @@ export function useDonationNeedsBoard(options?: { onFormCreated?: () => void }) 
 	}
 
 	/**
+	 * Toast copy for a failed campaign write. A unit mismatch names the item and both
+	 * units in Thai and points at the row's "แก้ไข" — the edit form re-reads the
+	 * catalog unit, so saving it is what repairs the stored one.
+	 */
+	function campaignWriteErrorMessage(err: Error): string {
+		if (!(err instanceof CampaignUnitMismatchError)) return err.message;
+		const unit = (code: string) => formatUnit(code, unitsOfMeasure, langState.current);
+		return `หน่วยของ "${itemDisplayName(err.itemId)}" ในประกาศนี้เป็น ${unit(err.actual)} แต่ Item Master ใช้ ${unit(err.expected)} — กด "แก้ไข" ที่รายการนี้แล้วบันทึกเพื่อปรับหน่วย`;
+	}
+
+	/**
 	 * The board's three inputs all move without this page doing anything: a donor books
 	 * or edits from the public plane, another shelter's staff receive stock. With the
 	 * app's 60s `staleTime` and no focus event to trigger a refetch, staff watching the
@@ -247,7 +260,7 @@ export function useDonationNeedsBoard(options?: { onFormCreated?: () => void }) 
 						);
 					},
 					onError: (err) => {
-						toast.error(`ไม่สามารถแก้ไขการโปรโมตได้: ${err.message}`);
+						toast.error(`ไม่สามารถแก้ไขการโปรโมตได้: ${campaignWriteErrorMessage(err)}`);
 					}
 				}
 			);
@@ -298,7 +311,7 @@ export function useDonationNeedsBoard(options?: { onFormCreated?: () => void }) 
 					);
 				},
 				onError: (err) => {
-					toast.error(`ไม่สามารถบันทึกสถานะได้: ${err.message}`);
+					toast.error(`ไม่สามารถบันทึกสถานะได้: ${campaignWriteErrorMessage(err)}`);
 				}
 			}
 		);
@@ -326,9 +339,19 @@ export function useDonationNeedsBoard(options?: { onFormCreated?: () => void }) 
 		// unit to announce, so the campaign is refused rather than inventing one (CR-125).
 		const item = await resolveNeedCatalogItem(input.itemId, input.name);
 		if (!item) return;
-		if (input.unit && input.unit.trim() !== item.unit) {
+		// Catalog rows written before CR-125 can carry a label (`กิโลกรัม`, `KG`) where the
+		// code belongs; `campaignInputSchema` accepts only the code, so the raw value came
+		// back as a regex error on save. Resolve both sides through the UOM master.
+		const unit = canonicalizeUnitCode(item.unit, unitsOfMeasure);
+		if (!unit) {
 			toast.error(
-				`หน่วยของ ${input.name} ต้องเป็น ${formatUnit(item.unit, unitsOfMeasure, langState.current)} ตาม Item Master`
+				`หน่วย "${item.unit}" ของ ${input.name} ไม่อยู่ในรายการหน่วยนับ — กรุณาแก้หน่วยที่ Item Master ก่อน`
+			);
+			return;
+		}
+		if (input.unit && canonicalizeUnitCode(input.unit, unitsOfMeasure) !== unit) {
+			toast.error(
+				`หน่วยของ ${input.name} ต้องเป็น ${formatUnit(unit, unitsOfMeasure, langState.current)} ตาม Item Master`
 			);
 			return;
 		}
@@ -339,7 +362,7 @@ export function useDonationNeedsBoard(options?: { onFormCreated?: () => void }) 
 				{
 					item_id: item.itemId,
 					qty_target: input.target,
-					unit: item.unit,
+					unit,
 					status: 'open' as const
 				}
 			],
@@ -359,7 +382,7 @@ export function useDonationNeedsBoard(options?: { onFormCreated?: () => void }) 
 					options?.onFormCreated?.();
 				},
 				onError: (err) => {
-					toast.error(`ไม่สามารถสร้างประกาศได้: ${err.message}`);
+					toast.error(`ไม่สามารถสร้างประกาศได้: ${campaignWriteErrorMessage(err)}`);
 				}
 			}
 		);
@@ -437,7 +460,7 @@ export function useDonationNeedsBoard(options?: { onFormCreated?: () => void }) 
 					toast.success(`แก้ไขประกาศ "${title}" สำเร็จ`);
 				},
 				onError: (err) => {
-					toast.error(`ไม่สามารถแก้ไขประกาศได้: ${err.message}`);
+					toast.error(`ไม่สามารถแก้ไขประกาศได้: ${campaignWriteErrorMessage(err)}`);
 				}
 			}
 		);

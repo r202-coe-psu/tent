@@ -9,6 +9,7 @@
 	import MapPin from '@lucide/svelte/icons/map-pin';
 	import Boxes from '@lucide/svelte/icons/boxes';
 	import Loader2 from '@lucide/svelte/icons/loader-2';
+	import { formatThaiShortDate } from '$lib/utils/date';
 
 	interface Props {
 		itemId: string;
@@ -56,15 +57,7 @@
 
 	function formatExpiryDate(dateStr?: string): string {
 		if (!dateStr) return 'ไม่ระบุวันหมดอายุ';
-		try {
-			return new Intl.DateTimeFormat('th-TH', {
-				year: 'numeric',
-				month: 'short',
-				day: 'numeric'
-			}).format(new Date(dateStr));
-		} catch {
-			return dateStr;
-		}
+		return formatThaiShortDate(dateStr) || dateStr;
 	}
 </script>
 

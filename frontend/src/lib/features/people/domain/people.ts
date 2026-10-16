@@ -5,6 +5,7 @@ import {
 	type Timestamp,
 	makeDoc,
 	now,
+	normalizeThaiPhone,
 	phoneSchema,
 	registeredViaSchema
 } from '$lib/db/model';
@@ -133,14 +134,16 @@ export const personIdSchema = z
 	});
 export type PersonId = z.infer<typeof personIdSchema>;
 
-export const genderSchema = z.enum(['male', 'female', 'other']);
+export const genderSchema = z.enum(['male', 'female', 'other'], { error: 'เพศไม่ถูกต้อง' });
 export type Gender = z.infer<typeof genderSchema>;
 
-/** Thai display label; `null` = unknown (partner booking, schema_v 12, CR-154). */
+/**
+ * Thai display label. `null` (ไม่ระบุ, valid on every channel) and legacy `'other'` both display as
+ * "ไม่ระบุ" and are counted as `gender_unspecified` in occupancy (decision sync 2026-10-09).
+ */
 export function genderLabelTh(gender: Gender | null | undefined): string {
 	if (gender === 'male') return 'ชาย';
 	if (gender === 'female') return 'หญิง';
-	if (gender === 'other') return 'อื่นๆ';
 	return 'ไม่ระบุ';
 }
 
@@ -149,6 +152,7 @@ export type Religion = z.infer<typeof religionSchema>;
 
 export const stayStatusSchema = z.enum([
 	'pre_registered',
+	'kiosk_registered',
 	'arriving',
 	'active',
 	'room_confirmed',
@@ -162,6 +166,7 @@ export type StayStatus = z.infer<typeof stayStatusSchema>;
 
 export const STATUS_LABELS: Record<StayStatus, string> = {
 	pre_registered: 'ลงทะเบียนล่วงหน้า',
+	kiosk_registered: 'ลงทะเบียนที่ตู้ (รอยืนยัน)',
 	arriving: 'รอเข้าพัก',
 	active: 'เข้าพักแล้ว',
 	room_confirmed: 'ยืนยันถึงโซนแล้ว',
@@ -277,6 +282,7 @@ export const cardSnapshotSchema = z.object({
 	postal_code: z.string().optional(),
 	photo_base64: z.string().optional(),
 	scanned_at: z.string(),
+	consented_at: z.string().optional(),
 	device_id: z.string(),
 	station_name: z.string().optional(),
 	expires_at: z.string().optional()
@@ -287,7 +293,7 @@ export interface Evacuee extends BaseDoc {
 	type: 'evacuee';
 	first_name: string;
 	last_name: string;
-	/** `null` = ไม่ระบุ / unknown (registration default + partner booking, schema_v 12). */
+	/** `null` = ไม่ระบุ (registration default on every channel + partner booking; 'other' = legacy). */
 	gender: Gender | null;
 	phone: string | null;
 	nickname?: string;
@@ -307,6 +313,11 @@ export interface Evacuee extends BaseDoc {
 	card_snapshot?: CardSnapshot | null;
 	household_id: string | null;
 	current_stay: CurrentStay;
+	/**
+	 * Zone code Station 1 suggested for this person (schema_v 13, CR-159). Non-binding: it
+	 * never zones — Station 3 only uses it as the default pick when there are no EWAR symptoms.
+	 */
+	preferred_zone?: string | null;
 	privacy: { search_excluded: boolean };
 	registered_via: z.infer<typeof registeredViaSchema>;
 	anonymized?: boolean; // set by the purge job
@@ -549,7 +560,12 @@ export function deriveHouseholdStatus(memberStayStatuses: readonly StayStatus[])
 	const present = new Set<StayStatus>(['active', 'room_confirmed', 'temporary_leave']);
 	if (memberStayStatuses.some((status) => present.has(status))) return 'checked_in';
 	if (memberStayStatuses.some((status) => status === 'arriving')) return 'arriving';
-	if (memberStayStatuses.some((status) => status === 'pre_registered')) return 'pre_registered';
+	if (
+		memberStayStatuses.some(
+			(status) => status === 'pre_registered' || status === 'kiosk_registered'
+		)
+	)
+		return 'pre_registered';
 	if (
 		memberStayStatuses.some(
 			(status) => status === 'checked_out' || status === 'transferred' || status === 'deceased'
@@ -805,7 +821,8 @@ export const evacueeInputSchema = z.object({
 	// Empty allowed for mononyms / foreign nationals without family names (CR-106 FR-18).
 	last_name: z.string().trim().default(''),
 	/** `null` = ไม่ระบุเพศ (default on registration forms). */
-	gender: z.enum(['male', 'female', 'other'], { error: 'กรุณาเลือกเพศ' }).nullable(),
+	// 'other' = legacy (read/preserve only — forms never offer it); null = ไม่ระบุ, never required.
+	gender: genderSchema.nullable(),
 	phone: phoneSchema, // UI requires a value; "ไม่มี" → null
 	nickname: z.string().trim().optional(),
 	birth_year: z.coerce
@@ -851,6 +868,14 @@ export const evacueeInputSchema = z.object({
 	card_snapshot: cardSnapshotSchema.nullable().optional().default(null),
 	status: stayStatusSchema.optional().default('pre_registered'),
 	zone: z.string().trim().nullable().optional().default(null),
+	/** CR-159: Station 1's optional, non-binding zone suggestion ('' → null). */
+	preferred_zone: z
+		.string()
+		.trim()
+		.nullable()
+		.optional()
+		.default(null)
+		.transform((v) => v || null),
 	registered_via: registeredViaSchema.default('staff')
 });
 export type EvacueeInput = z.input<typeof evacueeInputSchema>;
@@ -1491,7 +1516,7 @@ export function createEvacuee(input: EvacueeInput, ctx: AuthorContext, id?: stri
 	const person_id = resolvePersonIdOnCreate(d.person_id);
 	return makeDoc(
 		'evacuee',
-		12, // schema_v 12: gender nullable + registered_via `api` (CR-154); 11: religion_other + disability_other_detail (CR-148); 10: anonymous cardType + ANON mint (CR-112); 9: arriving (CR-106); 8: draft/card_snapshot (CR-084); 7 = registered_via `web` (CR-070); 6 = stay cancelled (CR-070); 5 = age (CR-057)
+		13, // schema_v 13: preferred_zone (CR-159); 12: gender nullable + registered_via `api` (CR-154); 11: religion_other + disability_other_detail (CR-148); 10: anonymous cardType + ANON mint (CR-112); 9: arriving (CR-106); 8: draft/card_snapshot (CR-084); 7 = registered_via `web` (CR-070); 6 = stay cancelled (CR-070); 5 = age (CR-057)
 		{
 			first_name: d.first_name,
 			last_name: d.last_name,
@@ -1511,6 +1536,7 @@ export function createEvacuee(input: EvacueeInput, ctx: AuthorContext, id?: stri
 			...(d.card_snapshot ? { card_snapshot: d.card_snapshot } : {}),
 			household_id: d.household_id,
 			current_stay: { status: d.zone ? 'active' : d.status, zone: d.zone ?? null, since: now() },
+			...(d.preferred_zone ? { preferred_zone: d.preferred_zone } : {}),
 			privacy: { search_excluded: false },
 			registered_via: d.registered_via
 		},
@@ -1519,14 +1545,22 @@ export function createEvacuee(input: EvacueeInput, ctx: AuthorContext, id?: stri
 	);
 }
 
+/**
+ * A kiosk walk-in is created `arriving`, like a web pre-registration that reported in: the visitor
+ * is physically at the shelter, so their QR (the evacuee id) is valid at once.
+ * `phone` is the canonical number the visitor typed at the kiosk (`null` = none given).
+ */
 export function createKioskEvacueeFromCard(
 	cardSnapshot: CardSnapshot,
 	ctx: AuthorContext,
+	photoId?: string,
+	phone: string | null = null,
 	id?: string
 ): Evacuee {
 	const firstName = cardSnapshot.first_name_th || 'ไม่ระบุชื่อ';
 	const lastName = cardSnapshot.last_name_th || '';
-	const gender = cardSnapshot.gender || 'other';
+	// Card chip carries no gender → ไม่ระบุ (`null`); never fabricate legacy 'other'.
+	const gender = cardSnapshot.gender ?? null;
 	const birthYearBE = cardSnapshot.birth_year_ce ? cardSnapshot.birth_year_ce + 543 : undefined;
 	const age =
 		cardSnapshot.age !== undefined
@@ -1534,15 +1568,17 @@ export function createKioskEvacueeFromCard(
 			: birthYearBE !== undefined
 				? Math.max(0, currentBEYear() - birthYearBE)
 				: undefined;
+	const persistedCardSnapshot = { ...cardSnapshot };
+	delete persistedCardSnapshot.photo_base64;
 
 	return makeDoc(
 		'evacuee',
-		8,
+		11,
 		{
 			first_name: firstName,
 			last_name: lastName,
 			gender,
-			phone: null,
+			phone,
 			...(birthYearBE ? { birth_year: birthYearBE } : {}),
 			...(age !== undefined ? { age } : {}),
 			person_id: {
@@ -1553,9 +1589,9 @@ export function createKioskEvacueeFromCard(
 			vulnerable_groups: [],
 			special_needs: [],
 			household_id: null,
-			card_snapshot: cardSnapshot,
-			photo: cardSnapshot.photo_base64 ?? null,
-			current_stay: { status: 'pre_registered', zone: null, since: now() },
+			card_snapshot: persistedCardSnapshot,
+			photo: photoId ?? null,
+			current_stay: { status: 'arriving', zone: null, since: now() },
 			privacy: { search_excluded: false },
 			registered_via: 'kiosk'
 		},
@@ -1565,6 +1601,40 @@ export function createKioskEvacueeFromCard(
 }
 
 export const createDraftEvacueeFromCard = createKioskEvacueeFromCard;
+
+/** Auto Household label — UI never shows a label field (FR-03b-H). */
+export function autoHouseholdLabel(personName: string): string {
+	return `ครอบครัว${personName.trim()}`;
+}
+
+/**
+ * The household a kiosk walk-in gets on registering (`arriving`, like its head): theirs alone,
+ * headed by them, with the address read from the card or ThaiD as its starting Residence.
+ * Station 1 corrects or merges it when confirming. Lane and road stay in `card_snapshot`: a
+ * Residence has no field for them.
+ */
+export function createKioskWalkInHousehold(
+	head: Evacuee,
+	cardSnapshot: CardSnapshot,
+	ctx: AuthorContext,
+	id?: string
+): Household {
+	return createHousehold(
+		{
+			label: autoHouseholdLabel(formatPersonName(head)),
+			head_evacuee_id: head._id,
+			status: 'arriving',
+			address_no: cardSnapshot.address_no ?? null,
+			village_no: cardSnapshot.village_no ?? null,
+			subdistrict: cardSnapshot.subdistrict ?? null,
+			district: cardSnapshot.district ?? null,
+			province: cardSnapshot.province ?? null,
+			postal_code: cardSnapshot.postal_code ?? null
+		},
+		ctx,
+		id
+	);
+}
 
 export function createMedical(input: MedicalInput, ctx: AuthorContext, id?: string): Medical {
 	const d = medicalInputSchema.parse(input);
@@ -1750,6 +1820,28 @@ export function canCheckInEvacuee(evacuee: Evacuee): boolean {
 	);
 }
 
+/**
+ * Scan-page check-in is for people coming *back* — they already went through Station 1–3.
+ * `pre_registered` / `arriving` have not been screened (Station 2) or zoned (Station 3) yet,
+ * so a scan must never check them in — not even alongside a family member who has a zone.
+ */
+export const SCAN_RETURN_STATUSES = [
+	'temporary_leave',
+	'checked_out',
+	'transferred'
+] as const satisfies readonly StayStatus[];
+
+export function canScanCheckIn(evacuee: Pick<Evacuee, 'current_stay'>): boolean {
+	return (SCAN_RETURN_STATUSES as readonly StayStatus[]).includes(evacuee.current_stay.status);
+}
+
+/** Not through intake yet: must go Station 1 → 2 → 3 before staying in a zone. */
+export function needsIntakeBeforeStay(evacuee: Pick<Evacuee, 'current_stay'>): boolean {
+	return (
+		evacuee.current_stay.status === 'pre_registered' || evacuee.current_stay.status === 'arriving'
+	);
+}
+
 export function canConfirmRoom(evacuee: Evacuee): boolean {
 	return (CONFIRM_ROOM_ELIGIBLE_STATUSES as readonly StayStatus[]).includes(
 		evacuee.current_stay.status
@@ -1862,7 +1954,10 @@ export function movementConflictMessage(err: unknown): string {
 
 /** True when an evacuee stay may be cancelled via the hold-cancel path (D-HOLD-CANCEL). */
 export function canCancelEvacueePreRegistration(evacuee: Evacuee): boolean {
-	return evacuee.current_stay.status === 'pre_registered';
+	return (
+		evacuee.current_stay.status === 'pre_registered' ||
+		evacuee.current_stay.status === 'kiosk_registered'
+	);
 }
 
 /** True when a household may be cancelled via the hold-cancel path (D-HOLD-CANCEL). */
@@ -2020,6 +2115,19 @@ export function maskNationalId(id: string | null | undefined): string {
 	return `${id.slice(0, 3)}***${id.slice(-3)}`;
 }
 
+/** True when `query` matches an evacuee's own or emergency-contact phone. */
+export function matchesEvacueePhoneSearch(
+	evacuee: Pick<Evacuee, 'phone' | 'emergency_contact'>,
+	query: string
+): boolean {
+	const normalizedQuery = normalizeThaiPhone(query);
+	if (!normalizedQuery || !/\d/.test(normalizedQuery)) return false;
+	return [evacuee.phone, evacuee.emergency_contact?.phone].some((phone) => {
+		const normalizedPhone = normalizeThaiPhone(phone ?? '');
+		return normalizedPhone.includes(normalizedQuery);
+	});
+}
+
 /** True when `query` matches evacuee name, nickname, phone, or person ID (incl. masked). */
 export function matchesEvacueeSearch(
 	evacuee: Evacuee,
@@ -2043,7 +2151,7 @@ export function matchesEvacueeSearch(
 	if (masked.includes(q)) return true;
 	const digitsOnly = q.replace(/\D/g, '');
 	if (digitsOnly) {
-		if (evacuee.phone?.replace(/\D/g, '').includes(digitsOnly)) return true;
+		if (matchesEvacueePhoneSearch(evacuee, q)) return true;
 		if (evacuee.person_id?.number?.replace(/\D/g, '').includes(digitsOnly)) return true;
 	}
 	return false;
@@ -2260,3 +2368,12 @@ export const EWAR_SYMPTOM_GROUPS: EwarSymptomGroup[] = [
 		]
 	}
 ];
+
+const EWAR_SYMPTOM_LABELS: ReadonlyMap<string, string> = new Map(
+	EWAR_SYMPTOM_GROUPS.flatMap((g) => g.symptoms.map((s) => [s.id, s.label] as const))
+);
+
+/** Plain-Thai label for a persisted `Screening.symptoms` id; unknown ids are shown as-is. */
+export function ewarSymptomLabel(id: string): string {
+	return EWAR_SYMPTOM_LABELS.get(id) ?? id;
+}

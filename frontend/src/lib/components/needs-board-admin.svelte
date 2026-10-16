@@ -6,13 +6,14 @@
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
-	import * as Pagination from '$lib/components/ui/pagination/index.js';
+	import PaginationControls from '$lib/components/pagination-controls.svelte';
 	import * as Select from '$lib/components/ui/select/index.js';
 	import * as Table from '$lib/components/ui/table/index.js';
 	import { parseCampaignNotes, publicItemAggregate, type NeedItem } from '$lib/features/operations';
 	import { addQty, parseQty, qtyIsZero, roundQty } from '$lib/utils/qty';
 	import { formatUnit, useUnitsOfMeasure } from '$lib/features/catalog';
 	import { langState } from '$lib/states/i18n.svelte';
+	import BoardSectionHeader from '$lib/components/board-section-header.svelte';
 
 	let {
 		items = [],
@@ -175,30 +176,12 @@
 <div class="space-y-4">
 	<!-- Main Container Card -->
 	<div class="overflow-hidden rounded-2xl border border-border bg-card shadow-xs">
-		<!-- Top Section Header -->
-		<div
-			class="flex flex-col justify-between gap-4 border-b border-border/60 bg-muted/5 p-6 lg:flex-row lg:items-center"
+		<BoardSectionHeader
+			icon={Megaphone}
+			title="จัดการกระดานแจ้งความต้องการด่วน (Public Needs Board)"
+			description="สับสวิตช์เปิด-ปิด หรือจำกัดจำนวนรายการสิ่งของที่ศูนย์ต้องการแจ้งให้สาธารณชนรับทราบผ่านทางหน้าเว็บแรก"
 		>
-			<div>
-				<h2 class="flex items-center gap-2.5 text-base font-bold text-foreground">
-					<div
-						class="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400"
-					>
-						<Megaphone class="h-5 w-5" />
-					</div>
-					จัดการกระดานแจ้งความต้องการด่วน (Public Needs Board)
-				</h2>
-				<p class="mt-1 text-2xs text-muted-foreground">
-					สับสวิตช์เปิด-ปิด
-					หรือจำกัดจำนวนรายการสิ่งของที่ศูนย์ต้องการแจ้งให้สาธารณชนรับทราบผ่านทางหน้าเว็บแรก
-				</p>
-			</div>
-
-			<!-- Right Status & Action Box -->
-			<div
-				class="flex flex-col items-start gap-3 sm:flex-row sm:items-center lg:flex-col lg:items-end"
-			>
-				<!-- Special Request Button -->
+			{#snippet actions()}
 				<Button
 					type="button"
 					onclick={onAddRequest}
@@ -207,8 +190,8 @@
 					<Plus class="h-4 w-4" />
 					สร้างประกาศแบบกำหนดเอง (Special Request)
 				</Button>
-			</div>
-		</div>
+			{/snippet}
+		</BoardSectionHeader>
 
 		<!-- Filter Bar -->
 		<div class="border-b border-border/60 bg-card p-4">
@@ -588,23 +571,11 @@
 					แสดง {(safePage - 1) * PAGE_SIZE + 1}–{Math.min(safePage * PAGE_SIZE, flatRows.length)}
 					จาก {flatRows.length} รายการ
 				</p>
-				<Pagination.Root bind:page={currentPage} count={flatRows.length} perPage={PAGE_SIZE}>
-					{#snippet children({ pages })}
-						<Pagination.Content>
-							<Pagination.Previous />
-							{#each pages as p, i (p.type === 'page' ? `page-${p.value}` : `ellipsis-${i}`)}
-								<Pagination.Item>
-									{#if p.type === 'page'}
-										<Pagination.Link page={p} isActive={p.value === safePage} />
-									{:else}
-										<Pagination.Ellipsis />
-									{/if}
-								</Pagination.Item>
-							{/each}
-							<Pagination.Next />
-						</Pagination.Content>
-					{/snippet}
-				</Pagination.Root>
+				<PaginationControls
+					bind:page={() => safePage, (p) => (currentPage = p)}
+					count={flatRows.length}
+					perPage={PAGE_SIZE}
+				/>
 			</div>
 		{/if}
 	</div>

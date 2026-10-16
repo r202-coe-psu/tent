@@ -532,6 +532,7 @@ class SmokeTestRunner:
         expected_keys = {
             "male",
             "female",
+            "gender_unspecified",
             "child_under_5",
             "elderly_over_60",
             "pregnant",

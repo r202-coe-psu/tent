@@ -8,6 +8,7 @@
 	import { spatial } from '$lib/tokens';
 	import type { PreRegistrationProfile } from '../domain/schemas';
 	import { useUnassignedProfile } from '../application/queries';
+	import { formatThaiDateTime } from '$lib/utils/date';
 
 	let { unassignedId }: { unassignedId: string } = $props();
 
@@ -19,9 +20,7 @@
 
 	function formatWhen(value: string | null | undefined): string {
 		if (!value) return '—';
-		const d = new Date(value);
-		if (Number.isNaN(d.getTime())) return value;
-		return d.toLocaleString('th-TH', { dateStyle: 'medium', timeStyle: 'short' });
+		return formatThaiDateTime(value) || value;
 	}
 </script>
 

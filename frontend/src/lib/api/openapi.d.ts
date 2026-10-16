@@ -1538,6 +1538,7 @@ export interface components {
 			logistics?: {
 				[key: string]: unknown;
 			} | null;
+			slot_hold?: components['schemas']['SlotHold'] | null;
 			/** Captchatoken */
 			captchaToken?: string | null;
 		};
@@ -2035,7 +2036,7 @@ export interface components {
 			/** Last Name */
 			last_name: string;
 			/** Gender */
-			gender: string;
+			gender?: string | null;
 			/** Phone */
 			phone?: string | null;
 			person_id?: components['schemas']['PersonIdOut'] | null;
@@ -2070,11 +2071,8 @@ export interface components {
 			 * @default
 			 */
 			last_name: string;
-			/**
-			 * Gender — `null` = ไม่ระบุ
-			 * @enum {string|null}
-			 */
-			gender: 'male' | 'female' | 'other' | null;
+			/** Gender */
+			gender: ('male' | 'female' | 'other') | null;
 			/** Phone */
 			phone?: string | null;
 			person_id?: components['schemas']['PersonIdInput'] | null;
@@ -2154,6 +2152,8 @@ export interface components {
 			male: number;
 			/** Female */
 			female: number;
+			/** Gender Unspecified */
+			gender_unspecified: number;
 			/** Child Under 5 */
 			child_under_5: number;
 			/** Elderly Over 60 */
@@ -2240,7 +2240,7 @@ export interface components {
 			/** Last Name */
 			last_name: string;
 			/** Gender */
-			gender: string;
+			gender?: string | null;
 			/** Phone */
 			phone?: string | null;
 			person_id?: components['schemas']['PersonIdOut'] | null;
@@ -2953,6 +2953,30 @@ export interface components {
 			/** Area M2 */
 			area_m2?: number | null;
 		};
+		/**
+		 * SlotHold
+		 * @description The capped queue window a booking takes a place in, as the BFF read it.
+		 *
+		 *     Sent only when the window has a ceiling. ``capacity`` is the window's current
+		 *     ceiling and ``booked`` the places CouchDB already shows held — the counter is seeded
+		 *     from it on the window's first booking. The BFF is the only caller (service secret),
+		 *     so both figures come from CouchDB, not from the donor.
+		 */
+		SlotHold: {
+			/**
+			 * Mode
+			 * @enum {string}
+			 */
+			mode: 'dropoff' | 'pickup';
+			/** Date */
+			date: string;
+			/** From */
+			from: string;
+			/** Capacity */
+			capacity: number;
+			/** Booked */
+			booked: number;
+		};
 		/** StockErrorDetail */
 		StockErrorDetail: {
 			/** Code */
@@ -3615,6 +3639,8 @@ export interface components {
 			 * @default 0
 			 */
 			member_count: number;
+			/** Members Masked */
+			members_masked?: string[];
 			/** Pets */
 			pets?: {
 				[key: string]: unknown;

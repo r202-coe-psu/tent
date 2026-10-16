@@ -4,14 +4,17 @@ from decimal import Decimal
 import pytest
 
 from worker.masking import (
+    last_name_hash,
     mask_last_name,
     mask_national_id,
     mask_passport,
+    name_key,
     national_id_hash,
     passport_hash,
     phone_hash,
     sha256_hex,
     shelter_code_from_db_name,
+    surname_key,
 )
 from worker.projectors.compute_needs import compute_needs
 from worker.projectors.donation_need_counter import plan_need_counters
@@ -34,6 +37,24 @@ from worker.projectors.stock import (
 
 def test_sha256_hex_matches_frontend_contract():
     assert sha256_hex("0811111111") == hashlib.sha256(b"0811111111").hexdigest()
+
+
+# Pinned vectors: the same literals are asserted in backend/tests/test_masking.py, so the
+# worker (projection) and the backend (query) can never drift apart on the search keys.
+def test_search_key_vectors_are_pinned():
+    assert name_key("  SomChai \t Smith  ") == "somchai smith"
+    assert name_key("น\u0e33") == "น\u0e4d\u0e32"
+    assert surname_key("van der Berg") == "vanderberg"
+    assert (
+        last_name_hash("van der Berg")
+        == "aad607ca3121d5d843c2cd64e8c73c2a24fa3a4cb890ed8d40a1efa8af7a14d5"
+    )
+    assert (
+        last_name_hash("ใจ ดี")
+        == "b3acc4a6f758f651d109f134e9b60fc6e25eabedbe69c3a22d59295a201de85d"
+    )
+    assert last_name_hash("") is None
+    assert last_name_hash(None) is None
 
 
 def test_mask_last_name_long_thai():
@@ -214,7 +235,9 @@ def test_project_evacuee_maps_person_id_and_masked_fields():
     assert action == "upsert"
     assert payload is not None
     assert payload["first_name"] == "สมชาย"
+    assert payload["first_name_key"] == "สมชาย"
     assert payload["last_name_masked"] == mask_last_name("ใจดี")
+    assert payload["last_name_hash"] == last_name_hash("ใจดี")
     assert payload["national_id_hash"] == national_id_hash("3900100244192")
     assert payload["national_id_masked"] == mask_national_id("3900100244192")
     assert payload["phone_hash"] == sha256_hex("0811111111")
@@ -224,6 +247,38 @@ def test_project_evacuee_maps_person_id_and_masked_fields():
     assert payload["address_masked"].startswith("**/*")
     assert "last_name" not in payload
     assert "phone" not in payload
+
+
+def test_project_evacuee_search_keys_are_normalized():
+    doc = {
+        "_id": "evacuee:keys",
+        "type": "evacuee",
+        "first_name": "  John   PAUL ",
+        "last_name": "van der Berg",
+        "current_stay": {"status": "active"},
+        "updated_at": "2026-01-01T00:00:00.000Z",
+    }
+    _, payload = project_evacuee(doc, shelter_code="SH001")
+    assert payload is not None
+    assert payload["first_name"] == "  John   PAUL "  # display value is untouched
+    assert payload["first_name_key"] == "john paul"
+    assert payload["last_name_hash"] == last_name_hash("vanderberg")
+    assert "van der Berg" not in payload.values()
+
+
+def test_project_evacuee_without_a_surname_has_no_surname_hash():
+    doc = {
+        "_id": "evacuee:nosurname",
+        "type": "evacuee",
+        "first_name": "สมหมาย",
+        "last_name": "",
+        "current_stay": {"status": "active"},
+        "updated_at": "2026-01-01T00:00:00.000Z",
+    }
+    _, payload = project_evacuee(doc, shelter_code="SH001")
+    assert payload is not None
+    assert payload["last_name_hash"] is None
+    assert payload["first_name_key"] == "สมหมาย"
 
 
 def test_project_evacuee_passport():
@@ -241,6 +296,24 @@ def test_project_evacuee_passport():
     assert payload is not None
     assert payload["passport_hash"] == passport_hash("AB1234567")
     assert payload["passport_id_masked"] == mask_passport("AB1234567")
+
+
+@pytest.mark.parametrize("status", ["pre_registered", "kiosk_registered"])
+def test_project_evacuee_pending_registration_has_no_checkin_time(status):
+    doc = {
+        "_id": "evacuee:pending",
+        "type": "evacuee",
+        "current_stay": {
+            "status": status,
+            "since": "2026-01-01T00:00:00.000Z",
+        },
+    }
+
+    action, payload = project_evacuee(doc, shelter_code="SH001")
+
+    assert action == "upsert"
+    assert payload is not None
+    assert payload["checked_in_at"] is None
 
 
 def test_project_evacuee_pink_card_hashes_national_id_field():
@@ -576,10 +649,12 @@ def test_aggregate_occupancy_gender_split():
     assert total == 3
     assert breakdown["male"] == 1
     assert breakdown["female"] == 1
+    # legacy 'other' is counted as unspecified (decision sync 2026-10-09)
+    assert breakdown["gender_unspecified"] == 1
 
 
-def test_aggregate_occupancy_null_gender_counts_in_total_only():
-    """schema_v 12 (CR-154): partner bookings may carry gender=None."""
+def test_aggregate_occupancy_null_gender_counts_as_unspecified():
+    """decision sync 2026-10-09: gender=None (any channel) → gender_unspecified."""
     total, breakdown = aggregate_occupancy(
         [
             _active_evacuee(_id="e1", gender=None),
@@ -589,6 +664,43 @@ def test_aggregate_occupancy_null_gender_counts_in_total_only():
     assert total == 2
     assert breakdown["male"] == 0
     assert breakdown["female"] == 1
+    assert breakdown["gender_unspecified"] == 1
+
+
+def test_aggregate_occupancy_missing_gender_key_counts_as_unspecified():
+    doc = _active_evacuee(_id="e1")
+    doc.pop("gender", None)
+    total, breakdown = aggregate_occupancy([doc])
+    assert total == 1
+    assert breakdown["gender_unspecified"] == 1
+
+
+def test_aggregate_occupancy_gender_groups_partition_total():
+    """Invariant: male + female + gender_unspecified == occupancy_total."""
+    total, breakdown = aggregate_occupancy(
+        [
+            _active_evacuee(_id="e1", gender="male"),
+            _active_evacuee(_id="e2", gender="male"),
+            _active_evacuee(_id="e3", gender="female"),
+            _active_evacuee(_id="e4", gender="other"),
+            _active_evacuee(_id="e5", gender=None),
+            _active_evacuee(_id="e6", gender="unexpected"),
+            {
+                "_id": "e7",
+                "type": "evacuee",
+                "gender": None,
+                "current_stay": {"status": "checked_out"},
+            },
+        ]
+    )
+    assert total == 6
+    assert breakdown["male"] == 2
+    assert breakdown["female"] == 1
+    assert breakdown["gender_unspecified"] == 3
+    assert (
+        breakdown["male"] + breakdown["female"] + breakdown["gender_unspecified"]
+        == total
+    )
 
 
 def test_aggregate_occupancy_age_buckets():
@@ -650,6 +762,7 @@ def test_aggregate_occupancy_empty_list():
     assert breakdown == {
         "male": 0,
         "female": 0,
+        "gender_unspecified": 0,
         "child_under_5": 0,
         "elderly_over_60": 0,
         "pregnant": 0,

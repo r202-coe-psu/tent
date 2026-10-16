@@ -206,7 +206,7 @@
 																	: 'text-foreground hover:bg-muted'}"
 															>
 																<ChildIcon
-																	class="h-3.5 w-3.5 shrink-0 {childActive
+																	class="h-4 w-4 shrink-0 {childActive
 																		? 'text-primary-foreground'
 																		: 'text-muted-foreground'}"
 																/>
@@ -217,7 +217,7 @@
 																disabled
 																class="flex cursor-not-allowed items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs text-muted-foreground opacity-50"
 															>
-																<ChildIcon class="h-3.5 w-3.5 shrink-0" />
+																<ChildIcon class="h-4 w-4 shrink-0" />
 																<span class="truncate">{child.label}</span>
 															</DropdownMenu.Item>
 														{/if}
@@ -241,7 +241,7 @@
 												/>
 												<span class="flex-1 text-left whitespace-nowrap">{item.label}</span>
 												<ChevronDown
-													class="h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform duration-200 {expanded
+													class="h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 {expanded
 														? 'rotate-180'
 														: ''}"
 												/>
@@ -373,11 +373,13 @@
 	</Tooltip.Provider>
 </aside>
 
-<div class="z-50 w-full shrink-0 border-b border-sidebar-border bg-card lg:hidden">
+<div
+	class="sticky top-0 z-50 w-full shrink-0 border-b border-sidebar-border bg-card pt-[env(safe-area-inset-top)] lg:hidden"
+>
 	<div class="flex h-16 w-full items-center justify-between px-4">
 		<a
 			href={systemManagementHomePath}
-			class="flex min-h-11 items-center gap-3"
+			class="flex min-h-11 min-w-0 items-center gap-3"
 			onclick={closeMobileMenu}
 		>
 			<img
@@ -390,7 +392,7 @@
 			>
 				<span class="truncate">PSU Smart Shelter</span>
 				<span
-					class="shrink-0 rounded bg-primary/10 px-1.5 py-0.5 text-2xs font-semibold text-primary"
+					class="hidden shrink-0 rounded bg-primary/10 px-1.5 py-0.5 text-2xs font-semibold text-primary min-[360px]:inline-flex"
 				>
 					System Management
 				</span>
@@ -398,21 +400,21 @@
 		</a>
 		<button
 			type="button"
-			class="flex min-h-11 min-w-11 items-center justify-center rounded-lg border border-sidebar-border bg-card text-muted-foreground transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none"
+			class="flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-lg border border-sidebar-border bg-card text-muted-foreground transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none"
 			onclick={() => (mobileMenuOpen = !mobileMenuOpen)}
 			aria-label={mobileMenuOpen ? 'ปิดเมนู' : 'เปิดเมนู'}
 			aria-expanded={mobileMenuOpen}
 			aria-controls="system-management-mobile-nav"
 		>
-			<Menu class="h-5 w-5" />
+			<Menu class="h-6 w-6" />
 		</button>
 	</div>
 
 	<Sheet.Root bind:open={mobileMenuOpen}>
 		<Sheet.Content
 			id="system-management-mobile-nav"
-			side="left"
-			class="gap-0 border-sidebar-border bg-card p-0 text-foreground shadow-none"
+			side="right"
+			class="h-dvh w-[88%] gap-0 border-sidebar-border bg-card p-0 text-foreground shadow-none"
 		>
 			<Sheet.Header class="border-b border-sidebar-border p-4 pr-14">
 				<Sheet.Title
@@ -434,7 +436,7 @@
 						onclick={closeMobileMenu}
 						title="กลับหน้าเลือกเมนูหลัก"
 					>
-						<House class="h-4 w-4 shrink-0 text-muted-foreground" />
+						<House class="h-5 w-5 shrink-0 text-muted-foreground" />
 						<span>กลับหน้าเลือกเมนูหลัก</span>
 					</a>
 				</div>
@@ -464,13 +466,13 @@
 												aria-expanded={expanded}
 											>
 												<Icon
-													class="h-4 w-4 shrink-0 {active
+													class="h-5 w-5 shrink-0 {active
 														? 'text-primary'
 														: 'text-muted-foreground'}"
 												/>
 												<span class="flex-1 text-left whitespace-nowrap">{item.label}</span>
 												<ChevronDown
-													class="h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform duration-200 {expanded
+													class="h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 {expanded
 														? 'rotate-180'
 														: ''}"
 												/>
@@ -490,7 +492,7 @@
 																aria-current={childActive ? 'page' : undefined}
 															>
 																<ChildIcon
-																	class="h-4 w-4 shrink-0 {childActive
+																	class="h-5 w-5 shrink-0 {childActive
 																		? 'text-primary-foreground'
 																		: 'text-muted-foreground'}"
 																/>
@@ -501,7 +503,7 @@
 																class="ml-4 flex min-h-11 cursor-not-allowed items-center gap-3 rounded-xl px-4 py-3 text-muted-foreground opacity-50"
 																aria-disabled="true"
 															>
-																<ChildIcon class="h-4 w-4 shrink-0 text-muted-foreground" />
+																<ChildIcon class="h-5 w-5 shrink-0 text-muted-foreground" />
 																<span class="whitespace-nowrap">{child.label}</span>
 															</span>
 														{/if}
@@ -519,7 +521,7 @@
 												aria-current={active ? 'page' : undefined}
 											>
 												<Icon
-													class="h-4 w-4 shrink-0 {active
+													class="h-5 w-5 shrink-0 {active
 														? 'text-primary-foreground'
 														: 'text-muted-foreground'}"
 												/>
@@ -530,7 +532,7 @@
 												class="flex min-h-11 cursor-not-allowed items-center gap-3 rounded-xl px-4 py-3 text-muted-foreground opacity-50"
 												aria-disabled="true"
 											>
-												<Icon class="h-4 w-4 shrink-0 text-muted-foreground" />
+												<Icon class="h-5 w-5 shrink-0 text-muted-foreground" />
 												<span class="whitespace-nowrap">{item.label}</span>
 											</span>
 										{/if}
@@ -542,7 +544,9 @@
 				</div>
 			</div>
 
-			<Sheet.Footer class="border-t border-sidebar-border bg-card p-4">
+			<Sheet.Footer
+				class="border-t border-sidebar-border bg-card p-4 pb-[max(1rem,env(safe-area-inset-bottom))]"
+			>
 				<StaffAccountMenu class="w-full" side="top" align="start" onNavigate={closeMobileMenu} />
 			</Sheet.Footer>
 		</Sheet.Content>

@@ -67,9 +67,14 @@ Dockerfile). Don't add npm/yarn lockfiles.
 | E2E (Playwright) | `pnpm test:e2e` |
 | Regenerate OpenAPI types from FastAPI | `pnpm openapi:update` (backend must be on `:9000`) |
 
-**Definition of done (all must pass locally — see CONTRIBUTING.md §2):** `pnpm lint`, `pnpm check`
-(zero errors), `pnpm test` (new domain/data logic ships with tests), and every `.svelte` file you
-touched run through **`svelte-autofixer`** (Svelte MCP) until clean.
+**Definition of done (see CONTRIBUTING.md §2):**
+
+- **Lint, type-check, unit tests are enforced by Lefthook** — pre-commit runs Prettier + ESLint on
+  staged files; pre-push runs full `pnpm check` + `pnpm test`. Do **not** run the full suites by
+  hand before committing; while developing run only the tests you touched
+  (`pnpm vitest run <file>`). A green push satisfies these.
+- **Not hooked — you must ensure:** new domain/data logic ships with tests, and every `.svelte`
+  file you touched is run through **`svelte-autofixer`** (Svelte MCP) until clean.
 
 ### Infra + public plane (repo root / `backend/` / `worker/`)
 
@@ -97,7 +102,7 @@ Full reset (Couch unseed + Mongo wipe + seed + bootstrap — stop worker first):
 
 Full workflow: **`frontend/CONTRIBUTING.md` §4.2** + coding patterns **`frontend/CONVENTIONS.md` §12**.
 
-1. **Change CouchDB docs / projectors** (`worker/`) → projections land in Mongo `public_*`.
+1. **Change CouchDB docs / projectors** (`worker/`) → projections land in Mongo `public_*`. Bump `PROJECTION_VERSION` (`worker/src/worker/projection_version.py`) when a projector's output shape changes.
 2. **Change FastAPI** (`backend/apiapp/modules/…`) — keep paths on contract
    (`/public/v1/occupants`, `/public/v1/shelters`, …); add tests under `backend/tests/`.
 3. **Regenerate types** from `frontend/`: `pnpm openapi:update` → commit `fastapi.json` +

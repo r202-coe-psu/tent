@@ -98,13 +98,31 @@ else
 		fail "Docker image ${IMAGE_NAME} does not exist; run without --no-build first."
 fi
 
-printf 'Running Staging E2E (@release + @smoke, grepInvert @quarantine)...\n'
+printf 'Running Staging E2E (@critical + @smoke, grepInvert @quarantine)...\n'
+
+# ALLOW_REMOTE_WRITES is normally set inside ${ENV_FILE} (the tent-staging-e2e-env
+# credential content, see frontend/e2e/.env.example) rather than exported in this
+# shell, so check the file too — not just the current process env — for an
+# accurate log line.
+remote_writes_enabled=false
+if [[ "${ALLOW_REMOTE_WRITES:-}" == 'true' ]]; then
+	remote_writes_enabled=true
+elif env_file_has_value ALLOW_REMOTE_WRITES &&
+	grep -Eq '^[[:space:]]*ALLOW_REMOTE_WRITES[[:space:]]*=[[:space:]]*true[[:space:]]*$' "${ENV_FILE}"; then
+	remote_writes_enabled=true
+fi
+if [[ "${remote_writes_enabled}" == true ]]; then
+	printf '@critical journeys will write to staging (ALLOW_REMOTE_WRITES=true).\n'
+else
+	printf '@critical journeys stay read-only/skipped (ALLOW_REMOTE_WRITES is not "true").\n'
+fi
+
 docker_env_args=()
 if [[ -f "${ENV_FILE}" ]]; then
 	docker_env_args+=(--env-file "${ENV_FILE}")
 fi
 
-for env_name in E2E_BASE_URL E2E_ADMIN_USERNAME E2E_ADMIN_PASSWORD E2E_USERNAME E2E_PASSWORD; do
+for env_name in E2E_BASE_URL E2E_ADMIN_USERNAME E2E_ADMIN_PASSWORD E2E_USERNAME E2E_PASSWORD ALLOW_REMOTE_WRITES; do
 	if [[ -n "${!env_name:-}" ]]; then
 		docker_env_args+=(--env "${env_name}")
 	fi

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import { page } from '$app/state';
 	import { env } from '$env/dynamic/public';
 	import * as Card from '$lib/components/ui/card/index.js';
@@ -14,11 +14,24 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { authStore } from '$lib/stores/auth.svelte';
-	import { LANDING_ROUTE, resolvePostLoginDestination } from '$lib/guards/auth';
+	import {
+		LANDING_ROUTE,
+		resolvePostLoginDestination,
+		type PostLoginDestination
+	} from '$lib/guards/auth';
 	import { fetchAuthStatus, googleOAuthStartHref, thaidOAuthStartHref } from '$lib/features/users';
 	import { fetchRecaptchaEnabled } from '$lib/api/recaptcha-status';
 	import { fetchLoginMethods } from '$lib/api/login-methods';
 	import { executeLoginCaptcha } from '../data/recaptcha';
+	import {
+		CAPTCHA_FAILED,
+		callbackErrorMessage,
+		loginErrorView,
+		RECAPTCHA_UNAVAILABLE,
+		type LoginErrorView
+	} from '../domain/errors';
+	import LoginErrorAlert from './login-error-alert.svelte';
+	import LinkSteps from './link-steps.svelte';
 	import GoogleSignInButton from './google-sign-in-button.svelte';
 	import ThaIdSignInButton from './thaid-sign-in-button.svelte';
 	import Eye from '@lucide/svelte/icons/eye';
@@ -28,11 +41,20 @@
 		navigateOnSuccess = true,
 		onSuccess,
 		showCard = true,
-		passwordMode = 'auto'
+		passwordMode = 'auto',
+		defaultUsername = '',
+		lockUsername = false,
+		submitLabel = 'เข้าสู่ระบบ (Login)'
 	}: {
 		navigateOnSuccess?: boolean;
-		onSuccess?: () => void;
+		/** Fires after login AND post-login destination resolution, before any navigation. */
+		onSuccess?: (result: { destination: PostLoginDestination }) => void;
 		showCard?: boolean;
+		/** Prefill the username (re-auth: the expired user). */
+		defaultUsername?: string;
+		/** Render the username read-only (re-auth must not silently switch accounts). */
+		lockUsername?: boolean;
+		submitLabel?: string;
 		/**
 		 * `auto` — username/password only when `config:app.password_login_enabled` (CR-141);
 		 * `always` — `/admin-login` and re-auth.
@@ -51,8 +73,7 @@
 	let thaidEnabled = $state(false);
 	const showPasswordForm = $derived(passwordMode === 'always' || passwordLoginEnabled);
 
-	const RECAPTCHA_ERROR = 'ระบบยืนยันตัวตน (reCAPTCHA) ขัดข้อง กรุณาลองใหม่อีกครั้ง';
-	const CAPTCHA_FAILED = 'การยืนยันตัวตนไม่ผ่าน กรุณารีเฟรชหน้าแล้วลองใหม่';
+	let error = $state<LoginErrorView | null>(null);
 
 	function captchaToken(): Promise<string | null> {
 		return executeLoginCaptcha(siteKey, captchaEnabled);
@@ -71,55 +92,38 @@
 		const err = page.url.searchParams.get('error');
 		if (!err) return;
 
-		// CR-141 FR-26 — never point at the hidden password route from here.
-		if (err === 'google_not_linked' || err === 'thaid_not_linked') {
-			toast.error('บัญชีนี้ยังไม่ได้เชื่อมกับระบบ กรุณาติดต่อผู้ดูแลระบบ');
-		} else if (err === 'link_expired') {
-			toast.error('หมดเวลาการเชื่อมบัญชี กรุณาเข้าสู่ระบบใหม่อีกครั้ง');
-		} else if (err === 'thaid_login_failed') {
-			toast.error('ไม่สามารถเข้าสู่ระบบด้วย ThaID ได้ กรุณาลองอีกครั้ง');
-		} else if (err === 'thaid_disabled') {
-			toast.error('ระบบ ThaiD Digital ID ถูกปิดใช้งานชั่วคราว');
-		} else if (err === 'invalid_state' || err === 'google_login_failed') {
-			toast.error('ไม่สามารถเข้าสู่ระบบได้ กรุณาลองอีกครั้ง');
-		} else if (err.startsWith('oauth_')) {
-			toast.error('ไม่สามารถเชื่อมต่อระบบยืนยันตัวตนภายนอกได้ กรุณาลองอีกครั้ง');
-		}
+		error = { title: callbackErrorMessage(err) };
 
 		const next = new URL(page.url);
 		next.searchParams.delete('error');
 		void goto(`${next.pathname}${next.search}${next.hash}`, { replaceState: true, noScroll: true });
 	});
 
-	const form = superForm(defaults(zod4(loginSchema)), {
-		SPA: true,
-		validators: zod4(loginSchema),
-		resetForm: false,
-		onUpdate: async ({ form }) => {
-			if (!form.valid) {
-				toast.error('กรุณากรอกข้อมูลให้ครบถ้วน');
-				return;
-			}
+	const form = superForm(
+		defaults({ username: untrack(() => defaultUsername), password: '' }, zod4(loginSchema)),
+		{
+			SPA: true,
+			validators: zod4(loginSchema),
+			resetForm: false,
+			onUpdate: async ({ form }) => {
+				error = null;
+				// Field errors render under each input.
+				if (!form.valid) return;
 
-			toast.promise(
-				(async () => {
+				let dest: PostLoginDestination = LANDING_ROUTE;
+				try {
 					const enabled = await fetchRecaptchaEnabled();
 					captchaEnabled = enabled;
 					if (enabled) {
 						const token = await captchaToken();
-						if (!token) {
-							toast.error(RECAPTCHA_ERROR);
-							throw new Error(RECAPTCHA_ERROR);
-						}
+						if (!token) throw new Error(RECAPTCHA_UNAVAILABLE);
 
 						const captchaRes = await fetch('/api/v1/auth/captcha/verify', {
 							method: 'POST',
 							headers: { 'Content-Type': 'application/json' },
 							body: JSON.stringify({ captchaToken: token })
 						});
-						if (!captchaRes.ok) {
-							throw new Error(CAPTCHA_FAILED);
-						}
+						if (!captchaRes.ok) throw new Error(CAPTCHA_FAILED);
 					}
 
 					const name = await resolveLoginIdentifier(form.data.username);
@@ -127,28 +131,27 @@
 						name,
 						password: form.data.password
 					});
-					reset();
-					onSuccess?.();
-					let dest: '/portal' | '/force-setup' | '/mfa-challenge' = LANDING_ROUTE;
-					try {
-						const status = await fetchAuthStatus();
-						dest = resolvePostLoginDestination(status);
-					} catch {
-						// Fallback if status fetch fails
-					}
-					// Always honor force-setup / MFA gates; only skip portal when reauth.
-					if (navigateOnSuccess || dest !== LANDING_ROUTE) {
-						await goto(resolve(dest));
-					}
-				})(),
-				{
-					loading: 'กำลังเข้าสู่ระบบ...',
-					success: 'เข้าสู่ระบบสำเร็จ!',
-					error: (err) => (err instanceof Error ? err.message : 'เข้าสู่ระบบไม่สำเร็จ')
+				} catch (err) {
+					error = loginErrorView(err);
+					return;
 				}
-			);
+
+				try {
+					const status = await fetchAuthStatus();
+					dest = resolvePostLoginDestination(status);
+				} catch {
+					// Fallback if status fetch fails
+				}
+				toast.success('เข้าสู่ระบบสำเร็จ!');
+				reset();
+				onSuccess?.({ destination: dest });
+				// Always honor force-setup / MFA gates; only skip portal when reauth.
+				if (navigateOnSuccess || dest !== LANDING_ROUTE) {
+					await goto(resolve(dest));
+				}
+			}
 		}
-	});
+	);
 	const { form: formData, submitting, reset } = form;
 </script>
 
@@ -161,6 +164,12 @@
 		></script>
 	{/if}
 </svelte:head>
+
+{#snippet errorAlert()}
+	{#if error}
+		<LoginErrorAlert {error} />
+	{/if}
+{/snippet}
 
 {#snippet fields()}
 	<form method="POST" use:form.enhance class="flex flex-col gap-4">
@@ -177,7 +186,8 @@
 								bind:value={$formData.username}
 								placeholder="เช่น staff01 หรือ 0812345678"
 								autocomplete="username"
-								class="h-11"
+								readonly={lockUsername}
+								class={['h-11', lockUsername && 'bg-slate-50 text-slate-700']}
 							/>
 						{/snippet}
 					</Form.Control>
@@ -193,7 +203,7 @@
 								>
 								<a
 									href={resolve('/forgot-password')}
-									class="text-xs font-semibold text-blue-600 hover:text-blue-800 hover:underline"
+									class="inline-flex min-h-11 items-center text-xs font-semibold text-blue-600 hover:text-blue-800 hover:underline"
 								>
 									ลืมรหัสผ่าน?
 								</a>
@@ -211,7 +221,7 @@
 									type="button"
 									variant="ghost"
 									size="icon"
-									class="absolute top-0 right-0 h-full px-3 hover:bg-transparent"
+									class="absolute top-0 right-0 h-full min-w-11 px-3 hover:bg-transparent"
 									aria-label={showPassword ? 'ซ่อนรหัสผ่าน' : 'แสดงรหัสผ่าน'}
 									onclick={() => (showPassword = !showPassword)}
 								>
@@ -233,8 +243,9 @@
 					disabled={$submitting}
 					class="h-11 w-full rounded-xl bg-[#0A2647] font-semibold text-white transition-colors hover:bg-[#051930]"
 				>
-					เข้าสู่ระบบ (Login)
+					{$submitting ? 'กำลังเข้าสู่ระบบ...' : submitLabel}
 				</Form.Button>
+				{@render errorAlert()}
 
 				{#if captchaEnabled}
 					<p class="text-center text-xs text-muted-foreground">
@@ -254,11 +265,23 @@
 		{/if}
 
 		<div class="flex flex-col gap-2.5">
+			{#if !showPasswordForm}
+				{@render errorAlert()}
+			{/if}
 			{#if googleEnabled}
 				<GoogleSignInButton href={googleOAuthStartHref('login')} class="h-11 text-sm font-medium" />
 			{/if}
 			{#if thaidEnabled}
 				<ThaIdSignInButton href={thaidOAuthStartHref('login')} class="h-11 text-sm font-medium" />
+			{/if}
+			{#if passwordMode === 'auto' && (googleEnabled || thaidEnabled)}
+				<LinkSteps
+					provider={googleEnabled && !thaidEnabled
+						? 'google'
+						: thaidEnabled && !googleEnabled
+							? 'thaid'
+							: null}
+				/>
 			{/if}
 		</div>
 	</form>

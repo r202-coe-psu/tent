@@ -6,9 +6,10 @@
 	import ArrowRight from '@lucide/svelte/icons/arrow-right';
 	import AlertCircle from '@lucide/svelte/icons/alert-circle';
 	import { toast } from 'svelte-sonner';
+	import * as Select from '$lib/components/ui/select';
 	import { getDonationStore } from '../../../routes/(public)/donations/donation.svelte';
-	import { PUBLIC_DONATION_CATEGORIES } from '$lib/features/donations';
-	import { formatUnit, useUnitsOfMeasure } from '$lib/features/catalog';
+	import { PUBLIC_DONATION_CATEGORIES, donorUnitOptions } from '$lib/features/donations';
+	import { FALLBACK_UNIT_DEFINITIONS, formatUnit, useUnitsOfMeasure } from '$lib/features/catalog';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { getTranslation } from '$lib/utils/i18n';
 	import { PUBLIC_DONATIONS_I18N } from '$lib/constants/i18n';
@@ -16,6 +17,11 @@
 	const donationStore = getDonationStore();
 	const unitsQuery = useUnitsOfMeasure();
 	const units = $derived(unitsQuery.data ?? []);
+	// A donor is anonymous and cannot read the `catalog` database, so the query comes back
+	// empty on the public site; the bundled master keeps the picker filled.
+	const unitOptions = $derived(
+		donorUnitOptions(units.length > 0 ? units : FALLBACK_UNIT_DEFINITIONS)
+	);
 	const t = $derived(getTranslation(PUBLIC_DONATIONS_I18N, langState.current));
 
 	const CATEGORY_MAP: Record<string, { th: string; en: string }> = {
@@ -33,29 +39,27 @@
 		return PUBLIC_DONATION_CATEGORIES.find((c) => c.value === value)?.label ?? value ?? '';
 	}
 
+	const categoryOptions = $derived([
+		{ value: 'food', label: categoryLabel('food') },
+		{ value: 'clothing', label: categoryLabel('clothing') },
+		{ value: 'medicine', label: categoryLabel('medicine') },
+		{ value: 'supply', label: categoryLabel('supply') },
+		{ value: 'other', label: t.categoryOther }
+	]);
+	const conditionOptions = $derived([
+		{ value: 'new', label: t.conditionNew },
+		{ value: 'used', label: t.conditionUsed },
+		{ value: 'other', label: t.conditionOther }
+	]);
+
+	function optionLabel(options: { value: string; label: string }[], value: string | undefined) {
+		return options.find((option) => option.value === value)?.label;
+	}
+
+	const selectTriggerClass =
+		'w-full rounded-xl border-2 border-slate-200 p-3 text-base font-medium text-slate-800 focus-visible:border-domain-donation-strong data-placeholder:text-base data-[size=default]:h-auto';
+
 	let validationErrors = $state<string[]>([]);
-
-	function handleImageUpload(index: number, e: Event) {
-		const target = e.target as HTMLInputElement;
-		const file = target.files?.[0];
-		if (file) {
-			const reader = new FileReader();
-			reader.onload = (evt) => {
-				if (donationStore.items[index]) {
-					donationStore.items[index].image = (evt.target?.result as string) || '';
-				}
-			};
-			reader.readAsDataURL(file);
-		} else if (donationStore.items[index]) {
-			donationStore.items[index].image = '';
-		}
-	}
-
-	function removeImage(index: number) {
-		if (donationStore.items[index]) {
-			donationStore.items[index].image = '';
-		}
-	}
 
 	function handleNext() {
 		validationErrors = [];
@@ -103,8 +107,10 @@
 	<!-- ส่วนที่ 1: ข้อมูลผู้บริจาค -->
 	<div class="mb-8">
 		<div class="mb-6 flex items-center gap-3 border-b border-slate-100 pb-4">
-			<div class="flex h-10 w-10 items-center justify-center rounded-full bg-blue-50">
-				<ShieldCheck class="h-5 w-5 text-[#013481]" />
+			<div
+				class="flex h-10 w-10 items-center justify-center rounded-full bg-domain-donation-subtle"
+			>
+				<ShieldCheck class="h-5 w-5 text-domain-donation-text" />
 			</div>
 			<div>
 				<h3 class="text-xl font-bold text-slate-800">{t.section1Title}</h3>
@@ -124,7 +130,7 @@
 					id="donor-name"
 					bind:value={donationStore.donorName}
 					placeholder={t.donorNamePlaceholder}
-					class="w-full rounded-xl border border-slate-200 bg-slate-50 p-3 outline-hidden transition-colors focus:border-[#013481] focus:bg-white"
+					class="w-full rounded-xl border border-slate-200 bg-slate-50 p-3 outline-hidden transition-colors focus:border-domain-donation-strong focus:bg-white"
 				/>
 			</div>
 			<div>
@@ -136,7 +142,7 @@
 					id="donor-phone"
 					bind:value={donationStore.donorPhone}
 					placeholder={t.phonePlaceholder}
-					class="w-full rounded-xl border border-slate-200 bg-slate-50 p-3 font-bold text-slate-800 outline-hidden transition-colors focus:border-[#013481] focus:bg-white"
+					class="w-full rounded-xl border border-slate-200 bg-slate-50 p-3 font-bold text-slate-800 outline-hidden transition-colors focus:border-domain-donation-strong focus:bg-white"
 				/>
 			</div>
 			<div>
@@ -148,7 +154,7 @@
 					id="donor-line"
 					bind:value={donationStore.donorLine}
 					placeholder={t.linePlaceholder}
-					class="w-full rounded-xl border border-slate-200 bg-slate-50 p-3 outline-hidden transition-colors focus:border-[#013481] focus:bg-white"
+					class="w-full rounded-xl border border-slate-200 bg-slate-50 p-3 outline-hidden transition-colors focus:border-domain-donation-strong focus:bg-white"
 				/>
 			</div>
 			<div>
@@ -160,7 +166,7 @@
 					id="donor-email"
 					bind:value={donationStore.donorEmail}
 					placeholder={t.emailPlaceholder}
-					class="w-full rounded-xl border border-slate-200 bg-slate-50 p-3 outline-hidden transition-colors focus:border-[#013481] focus:bg-white"
+					class="w-full rounded-xl border border-slate-200 bg-slate-50 p-3 outline-hidden transition-colors focus:border-domain-donation-strong focus:bg-white"
 				/>
 			</div>
 		</div>
@@ -169,14 +175,14 @@
 	<!-- ส่วนที่ 2: รายละเอียดสิ่งของบริจาค -->
 	<div>
 		<div class="mb-6 flex items-center gap-3 border-b border-slate-100 pb-4">
-			<div class="flex h-10 w-10 items-center justify-center rounded-full bg-[#fff8e1]">
-				<Package class="h-5 w-5 text-[#fbbc04]" />
+			<div
+				class="flex h-10 w-10 items-center justify-center rounded-full bg-domain-donation-subtle"
+			>
+				<Package class="h-5 w-5 text-domain-donation-text" />
 			</div>
 			<div>
 				<h3 class="text-xl font-bold text-slate-800">{t.section2Title}</h3>
-				<p
-					class="mt-1 inline-block rounded bg-[#013365]/10 px-3 py-1 text-sm font-medium text-[#013365]"
-				>
+				<p class="mt-1 text-sm font-medium text-slate-500">
 					{donationStore.flowMode === 'solicited'
 						? t.section2DescSolicited
 						: t.section2DescUnsolicited}
@@ -185,7 +191,7 @@
 		</div>
 
 		<div class="space-y-4">
-			{#each donationStore.items as item, idx (item.id)}
+			{#each donationStore.items as item (item.id)}
 				<div
 					class="relative flex flex-col gap-3 rounded-xl border border-slate-200 bg-[#f8f9fa] p-5"
 				>
@@ -213,18 +219,20 @@
 									class="w-full cursor-not-allowed rounded-xl border-2 border-transparent bg-slate-100 p-3 font-medium text-slate-500 outline-hidden"
 								/>
 							{:else}
-								<select
-									id="category-{item.id}"
-									bind:value={item.category}
-									class="w-full appearance-none rounded-xl border-2 border-slate-200 bg-white p-3 font-medium text-slate-800 outline-hidden transition-colors focus:border-[#013481]"
+								<Select.Root
+									type="single"
+									value={item.category ?? ''}
+									onValueChange={(v) => (item.category = v)}
 								>
-									<option value="" disabled>{t.categorySelectPlaceholder}</option>
-									<option value="food">{categoryLabel('food')}</option>
-									<option value="clothing">{categoryLabel('clothing')}</option>
-									<option value="medicine">{categoryLabel('medicine')}</option>
-									<option value="supply">{categoryLabel('supply')}</option>
-									<option value="other">{t.categoryOther}</option>
-								</select>
+									<Select.Trigger id="category-{item.id}" class={selectTriggerClass}>
+										{optionLabel(categoryOptions, item.category) ?? t.categorySelectPlaceholder}
+									</Select.Trigger>
+									<Select.Content>
+										{#each categoryOptions as option (option.value)}
+											<Select.Item value={option.value} label={option.label} />
+										{/each}
+									</Select.Content>
+								</Select.Root>
 							{/if}
 						</div>
 						<div>
@@ -245,7 +253,7 @@
 									id="name-{item.id}"
 									placeholder={t.itemNamePlaceholder}
 									bind:value={item.name}
-									class="w-full rounded-xl border-2 border-slate-200 bg-white p-3 font-medium text-slate-800 outline-hidden transition-colors focus:border-[#013481]"
+									class="w-full rounded-xl border-2 border-slate-200 bg-white p-3 font-medium text-slate-800 outline-hidden transition-colors focus:border-domain-donation-strong"
 								/>
 							{/if}
 						</div>
@@ -261,7 +269,7 @@
 								id="amount-{item.id}"
 								min="1"
 								bind:value={item.amount}
-								class="w-full rounded-xl border-2 border-slate-200 bg-white p-3 font-bold text-slate-800 outline-hidden transition-colors focus:border-[#013481]"
+								class="w-full rounded-xl border-2 border-slate-200 bg-white p-3 font-bold text-slate-800 outline-hidden transition-colors focus:border-domain-donation-strong"
 							/>
 						</div>
 						<div class="col-span-1">
@@ -277,28 +285,39 @@
 									class="w-full cursor-not-allowed rounded-xl border-2 border-transparent bg-slate-100 p-3 font-medium text-slate-500 outline-hidden"
 								/>
 							{:else}
-								<input
-									type="text"
-									id="unit-{item.id}"
-									placeholder={t.unitPlaceholder}
-									bind:value={item.unit}
-									class="w-full rounded-xl border-2 border-slate-200 bg-white p-3 font-medium text-slate-800 outline-hidden transition-colors focus:border-[#013481]"
-								/>
+								<Select.Root type="single" value={item.unit} onValueChange={(v) => (item.unit = v)}>
+									<Select.Trigger id="unit-{item.id}" class={selectTriggerClass}>
+										{formatUnit(item.unit, unitOptions, langState.current)}
+									</Select.Trigger>
+									<Select.Content>
+										{#each unitOptions as unit (unit.code)}
+											<Select.Item
+												value={unit.code}
+												label={formatUnit(unit.code, unitOptions, langState.current)}
+											/>
+										{/each}
+									</Select.Content>
+								</Select.Root>
 							{/if}
 						</div>
 						<div class="col-span-2 md:col-span-1">
 							<label class="mb-1 block text-xs font-bold text-slate-600" for="condition-{item.id}">
 								{t.conditionLabel}
 							</label>
-							<select
-								id="condition-{item.id}"
-								bind:value={item.condition}
-								class="w-full appearance-none rounded-xl border-2 border-slate-200 bg-white p-3 font-medium text-slate-800 outline-hidden transition-colors focus:border-[#013481]"
+							<Select.Root
+								type="single"
+								value={item.condition ?? ''}
+								onValueChange={(v) => (item.condition = v)}
 							>
-								<option value="new">{t.conditionNew}</option>
-								<option value="used">{t.conditionUsed}</option>
-								<option value="other">{t.conditionOther}</option>
-							</select>
+								<Select.Trigger id="condition-{item.id}" class={selectTriggerClass}>
+									{optionLabel(conditionOptions, item.condition) ?? ''}
+								</Select.Trigger>
+								<Select.Content>
+									{#each conditionOptions as option (option.value)}
+										<Select.Item value={option.value} label={option.label} />
+									{/each}
+								</Select.Content>
+							</Select.Root>
 						</div>
 					</div>
 
@@ -311,43 +330,13 @@
 							id="remark-{item.id}"
 							placeholder={t.remarkPlaceholder}
 							bind:value={item.remark}
-							class="w-full rounded-xl border-2 border-slate-200 bg-white p-3 font-medium text-slate-800 outline-hidden transition-colors focus:border-[#013481]"
+							class="w-full rounded-xl border-2 border-slate-200 bg-white p-3 font-medium text-slate-800 outline-hidden transition-colors focus:border-domain-donation-strong"
 						/>
 					</div>
 
-					<!-- Optional Image Attachment — unsolicited flow only, per v8.5 -->
-					{#if donationStore.flowMode !== 'solicited'}
-						<div>
-							<label
-								class="mb-1 block text-xs font-bold text-slate-600"
-								for="file-upload-{item.id}"
-							>
-								{t.imageUploadLabel}
-							</label>
-							<input
-								type="file"
-								id="file-upload-{item.id}"
-								accept="image/*"
-								onchange={(e) => handleImageUpload(idx, e)}
-								class="w-full rounded-xl border-2 border-slate-200 bg-white p-1 text-sm text-slate-500 file:mr-4 file:cursor-pointer file:rounded-xl file:border-0 file:bg-blue-50 file:px-4 file:py-2.5 file:text-sm file:font-semibold file:text-[#013481] file:transition-colors hover:file:bg-blue-100"
-							/>
-							{#if item.image}
-								<div
-									class="group relative mt-2 h-20 w-20 overflow-hidden rounded-xl border border-slate-200"
-								>
-									<img src={item.image} alt="Preview" class="h-full w-full object-cover" />
-									<button
-										type="button"
-										onclick={() => removeImage(idx)}
-										class="absolute top-1 right-1 cursor-pointer rounded-full bg-white/90 p-1 text-red-500 opacity-0 shadow-xs transition-opacity group-hover:opacity-100 hover:bg-red-50"
-										aria-label={t.removeImageAria}
-									>
-										<Trash2 class="h-3 w-3" />
-									</button>
-								</div>
-							{/if}
-						</div>
-					{/if}
+					<!-- No photo field: the booking payload never carried the image (schema.md has no
+					     field for it), so donors attached photos nobody received. Bring it back
+					     together with a real upload path. -->
 				</div>
 			{/each}
 
@@ -355,7 +344,7 @@
 				<button
 					type="button"
 					onclick={() => donationStore.addItem()}
-					class="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-dashed border-[#013481]/30 bg-blue-50/50 py-4 font-bold text-[#013481] transition-colors hover:bg-blue-50"
+					class="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-dashed border-domain-donation-border bg-domain-donation-subtle py-4 font-bold text-domain-donation-text transition-colors hover:bg-domain-donation-border/40"
 				>
 					<PlusCircle class="h-5 w-5" />
 					{t.addItemBtn}
@@ -383,7 +372,7 @@
 		<button
 			type="button"
 			onclick={handleNext}
-			class="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-[#013481] py-4 text-lg font-bold text-white shadow-md transition-colors hover:bg-[#002244] active:scale-95 disabled:opacity-50"
+			class="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-domain-donation-strong py-4 text-lg font-bold text-white shadow-md transition-colors hover:bg-domain-donation-text active:scale-95 disabled:opacity-50"
 		>
 			{t.nextBtn}
 			<ArrowRight class="h-5 w-5" />

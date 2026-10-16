@@ -5,13 +5,13 @@ stepsCompleted:
   - step-03-create-stories
   - step-04-final-validation
 inputDocuments:
-  - docs/changes/CR-042-daily-sop-calc-follow-up.md
+  - docs/changes/07-B-sop/CR-042-daily-sop-calc-follow-up.md
   - docs/features/daily-sop-resource-calc-flow.md
   - docs/task-breakdown/07-B-sop.md
   - docs/prd/phase-r3-operations.md
   - docs/prd/role-permission-matrix.md
   - docs/data/schema.md
-  - docs/changes/CR-036-daily-calc-doc-type.md
+  - docs/changes/07-B-sop/CR-036-daily-calc-doc-type.md
   - frontend/CONTRIBUTING.md
   - frontend/CONVENTIONS.md
 status: ready-for-development
@@ -25,7 +25,7 @@ updated: 2026-07-23
 
 ## Overview
 
-Epic/story breakdown สำหรับ **Module B — SOP & Resource Calc** ตาม [CR-042](../changes/CR-042-daily-sop-calc-follow-up.md) (`approved`) ที่ปิด follow-up จาก CR-036 และทำให้ T-31/T-32 develop-ready  
+Epic/story breakdown สำหรับ **Module B — SOP & Resource Calc** ตาม [CR-042](../changes/07-B-sop/CR-042-daily-sop-calc-follow-up.md) (`approved`) ที่ปิด follow-up จาก CR-036 และทำให้ T-31/T-32 develop-ready  
 แมปกับบอร์ดโปรเจกต์: **T-30 / T-31 / T-32** · Team D · Phase R3
 
 **ตำแหน่งผลิตภัณฑ์ (R3):** Daily SOP เป็น **โมดูลแยกสำหรับ decision support** — SM ตั้ง ratio → คำนวณ need/have/gap → ดู dashboard แล้ว**ตัดสินใจมือ** (ขอบริจาค / เรียกอาสา / แจ้งครัว ฯลฯ)  

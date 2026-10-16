@@ -16,7 +16,7 @@ note: >-
 
 | CR | Scope |
 | --- | --- |
-| [CR-112](../changes/CR-112-registration-foundation-schema-stay.md) | evacuee schema_v 10, household schema_v 5, movement `confirm_room`, occupancy triple, master seeds |
-| [CR-113](../changes/CR-113-unassigned-registration-mongo.md) | Mongo `unassigned_registrations` (§9.5) |
+| [CR-112](../changes/00-baseline/CR-112-registration-foundation-schema-stay.md) | evacuee schema_v 10, household schema_v 5, movement `confirm_room`, occupancy triple, master seeds |
+| [CR-113](../changes/00-baseline/CR-113-unassigned-registration-mongo.md) | Mongo `unassigned_registrations` (§9.5) |
 
 Canonical: [`docs/data/schema.md`](schema.md) §1.1 / §1.3 / §1.4 / §3.3 / §9.1 / §9.5

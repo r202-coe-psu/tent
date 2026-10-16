@@ -11,6 +11,7 @@ export {
 	publicDonationErrorMessage,
 	isDonorEditable,
 	donationPayloadUnit,
+	donorUnitOptions,
 	linesMissingExpiry
 } from './domain/public-donation';
 export type { DonationUnitSource, ExpiryCheckLine } from './domain/public-donation';
@@ -57,6 +58,19 @@ export {
 } from './domain/compute-needs';
 export { carryItemIds, type BareItem } from './domain/carry-item-ids';
 
+// Domain — queue slots (DN-5 · schema.md §2.13)
+export {
+	computeSlotAvailability,
+	slotAvailabilityFor,
+	slotBookedCount,
+	slotLabel,
+	slotModeForDelivery,
+	DEFAULT_SLOT_WINDOWS,
+	type SlotAvailability,
+	type SlotBooking,
+	type SlotStatus
+} from './domain/compute-slots';
+
 // Domain — input schemas + factories + transitions + guards
 export {
 	donationPreDeclarationInputSchema,
@@ -67,6 +81,7 @@ export {
 
 // Data + application — public tracking (BFF, not publicClient)
 export { fetchShelterNeeds, type PublicShelterNeed } from './data/public-needs';
+export { fetchDonationSlots } from './data/public-slots';
 export {
 	cancelDonation,
 	fetchDonationTracking,
@@ -78,6 +93,7 @@ export {
 export {
 	donationTrackingKeys,
 	usePublicShelterNeeds,
+	useDonationSlots,
 	useCancelDonation,
 	useDonationTracking,
 	useDonationTrackSearch,

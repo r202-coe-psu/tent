@@ -2,8 +2,8 @@
 title: Smart Shelter — API Contract v1
 status: draft for review
 created: 2026-06-11
-updated: 2026-10-08
-note: คู่กับ data-model.md v3 — ตัดสิน sync boundary: staff app คุย CouchDB ตรง, service API มีเฉพาะที่ CouchDB ทำเองไม่ได้; CR-112/CR-113 occupancy + unassigned registration; Partner Data API EXT-001–007 (#214); CR-124 staff Google step-up MFA + Google SSO login (enrolled + mint AuthSession); decision sync 2026-10-08 — เพิ่ม GET /public/v1/unassigned-registrations/{id}/status (service secret, status-only) แทนการเรียก staff detail จาก BFF registrations/status — แก้ ticket คิวกลางหายจากอุปกรณ์ (QA pre-register 2026-10-08)
+updated: 2026-10-14
+note: คู่กับ data-model.md v3 — ตัดสิน sync boundary: staff app คุย CouchDB ตรง, service API มีเฉพาะที่ CouchDB ทำเองไม่ได้; CR-112/CR-113 occupancy + unassigned registration; Partner Data API EXT-001–007 (#214); CR-124 staff Google step-up MFA + Google SSO login (enrolled + mint AuthSession); decision sync 2026-10-08 — เพิ่ม GET /public/v1/unassigned-registrations/{id}/status (service secret, status-only) แทนการเรียก staff detail จาก BFF registrations/status — แก้ ticket คิวกลางหายจากอุปกรณ์ (QA pre-register 2026-10-08); decision sync 2026-10-09 — `breakdown` ของ EXT-005 เพิ่ม `gender_unspecified` (null+other; `male+female+gender_unspecified = occupancy_total`) และ `POST /public/v1/unassigned-registrations` รับ `members[].gender = null`; CR-157 (2026-10-10) — เพิ่ม `GET /api/public/v1/donations/slots` (BFF-only อ่าน CouchDB ฝั่ง server) และ error code ของ slot ใน `POST /public/v1/donations` (`SLOT_REQUIRED`, `SLOT_UNAVAILABLE`, `SLOT_FULL`, `SLOTS_UNAVAILABLE`); CR-162 — §2.3 kiosk banner (`POST /api/v1/scanner/kiosk/banners`, signed image GET, back-office `/api/back-office/kiosk-banners/**`)
 ---
 
 # Smart Shelter — API Contract v1
@@ -73,7 +73,7 @@ DELETE /couch/_session          → logout
   GET/POST /api/v1/auth/oauth/google/start      → redirect ไป Google authorize (mode: link | stepup | login)
   GET      /api/v1/auth/oauth/google/callback   → แลก code, อ่าน sub/email; link / step-up / mint login
   POST     /api/v1/auth/oauth/google/unlink     → ถอดการผูก Google (self หรือ admin ตามสิทธิ์)
-  GET/POST /api/v1/auth/oauth/thaid/start       → redirect ไป BORA ThaID authorize (mode: link | stepup | login)
+  GET/POST /api/v1/auth/oauth/thaid/start       → redirect ไป BORA ThaID authorize (mode: link | stepup | login; kiosk_check_in → §2.1.1)
   GET      /api/v1/auth/oauth/thaid/callback    → แลก code (Basic Auth), อ่าน sub/name/pid; link / step-up / mint login
   POST     /api/v1/auth/oauth/thaid/unlink      → ถอดการผูก ThaID (self หรือ admin ตามสิทธิ์)
   GET      /api/public/v1/login-methods          → { password, google, thaid } สำหรับหน้า login (CR-141)
@@ -139,6 +139,263 @@ Versioning: path prefix /api/v1 — breaking change = /api/v2
 | `CONFLICT` 409 | ทำซ้ำ/สถานะไม่ให้ทำ |
 | `RATE_LIMITED` 429 | เกิน limit |
 
+### 2.1 Scanner kiosk — shelter configuration, lookup และ walk-in registration
+
+เครื่อง scanner ยืนยันตัวตนด้วย `X-Device-ID` และ `X-Device-Secret` ที่ออกตอน provision เครื่อง
+เส้นทาง `/api/v1/scanner/kiosk/*` ใช้ device credentials แทน staff `AuthSession` และตอบ
+`cache-control: no-store`, `pragma: no-cache` เพื่อไม่เก็บข้อมูลเฉพาะศูนย์ไว้ใน cache
+
+```http
+POST /api/v1/scanner/kiosk/config
+X-Device-ID: kiosk-sh001-01
+X-Device-Secret: …
+```
+
+คืนค่าจาก shelter ที่ผูกกับเครื่อง (ไม่รับ `shelter_code` จาก request body):
+
+```json
+{
+  "shelter_code": "SH001",
+  "phone_check_in_enabled": false,
+  "walk_in_registration_enabled": false,
+  "thaid_check_in_enabled": false
+}
+```
+
+`phone_check_in_enabled` อ่านจาก `shelter.feature_flags.kiosk_phone_check_in_enabled` และ
+`walk_in_registration_enabled` อ่านจาก `shelter.feature_flags.kiosk_walk_in_registration_enabled`;
+`thaid_check_in_enabled` เป็น `true` เมื่อ `shelter.feature_flags.kiosk_thaid_check_in_enabled` **และ** `config:app.thaid_registration_enabled` เปิดคู่กัน (§2.1.1); ไม่มี shelter หรือไม่มี flag ให้ถือเป็น `false` (ค่าเริ่มต้นปิด) ส่วน registry อ่านไม่ได้ตอบ
+`503 DEPENDENCY_UNAVAILABLE`. Kiosk โหลด config เมื่อเข้า `/kiosk` และ `/kiosk/phone`; เมื่อปิดหรืออ่าน
+ไม่สำเร็จจะซ่อนช่องทางเบอร์โทรและนำทางกลับหน้าเลือกวิธี. เมื่อปิด walk-in registration จะไม่แสดง
+ปุ่มลงทะเบียนใหม่บนผล lookup.
+
+การซ่อนปุ่มเป็นเพียง UX: `POST /api/v1/scanner/kiosk/lookup` ที่ `source: "phone"` ตรวจ flag
+ซ้ำฝั่ง server ก่อน rate limit และ lookup; เมื่อปิดตอบ `403 KIOSK_METHOD_DISABLED`.
+QR และ smart-card lookup ไม่ขึ้นกับ flag เบอร์โทร. Smart-card lookup ตรวจ
+`kiosk_walk_in_registration_enabled` เพื่อกำหนด `can_register`; flag นี้ควบคุมเฉพาะการเริ่ม
+walk-in registration และไม่ปิด lookup หรือ check-in flow เดิม.
+
+`POST /api/v1/scanner/kiosk/register` สร้างผู้ประสบภัยจากการอ่าน Smart Card แบบเต็ม หลังผู้ใช้
+ยินยอมที่ Kiosk:
+
+```http
+POST /api/v1/scanner/kiosk/register
+X-Device-ID: kiosk-sh001-01
+X-Device-Secret: …
+Content-Type: application/json
+```
+
+Request body เป็น `{ "card": <SmartCardData without photo_base64>, "photo": <KioskPhotoPayload|null>, "consented": true, "consented_at": <ISO-8601 UTC> }`.
+เมื่อมีรูป `photo` มี `content_type`, `full_base64`, `thumb_base64?`, `width`, `height`,
+`original_size`, `compressed_size` และ `thumbnail_size`; base64 ไม่มี data URL prefix.
+Browser บันทึก `consented_at` ตอนผู้ใช้กดยินยอมไว้ใน in-memory state; ห้ามใส่ citizen ID ใน URL
+หรือ log. `card` เป็นข้อมูลบัตรแบบเต็มจาก `read_all_data()` รวม citizen ID, ชื่อ, วันเกิด, เพศ และ
+ที่อยู่. รูปจากชิปถูก compress เป็น WEBP พร้อม thumbnail ก่อนส่งใน `photo` แยก; หาก compress ไม่สำเร็จ
+จะส่ง JPEG เดิมโดยไม่มี thumbnail และหากไม่มีรูปหรือรูปเกินขนาดจะลงทะเบียนต่อโดยไม่แนบรูป. Server
+ผูก shelter จาก device registry เท่านั้น, ตรวจ flag ซ้ำ, ตรวจข้อมูลบัตร
+และค้น record เดิมใน shelter นั้นแบบ fail-closed ก่อนสร้าง `evacuee` ที่ `schema_v: 11`,
+`current_stay.status: "kiosk_registered"`, `registered_via: "kiosk"`, `household_id: null`,
+`phone: null`, `card_snapshot.consented_at` และ `photo: image:{ulid}` เมื่อมีรูป. Server ตรวจ
+base64, ขนาด decoded (full ≤300 KB, thumb ≤50 KB) และ magic bytes; สร้าง image document พร้อม
+inline attachments ก่อนเขียน evacuee. หากเขียน evacuee ไม่สำเร็จจะลบ image ที่เพิ่งสร้างแบบ best-effort.
+`card_snapshot` ที่สร้างใหม่ไม่มี `photo_base64`. สำเร็จตอบ
+`{ "status": "created", "evacuee_id": "evacuee:{ulid}" }`. Endpoint ต้องตอบ
+`cache-control: no-store`, `pragma: no-cache`.
+
+การ lookup ที่ไม่มี record อนุญาตให้เริ่มลงทะเบียนเมื่อ flag เปิด โดยส่ง `can_register: true`
+ใน not-found response. เมื่อ flag ปิดให้ส่ง `can_register: false`. Record เดิมที่ไม่อนุญาตให้
+ลงทะเบียนซ้ำตอบ `409 KIOSK_REGISTRATION_BLOCKED`; body ไม่ผ่าน schema ตอบ `400
+INVALID_KIOSK_REGISTRATION`, flag ปิดตอบ `403 KIOSK_REGISTRATION_DISABLED`, limit ต่อ device
+ตอบ `429 KIOSK_RATE_LIMITED`, auth ไม่ผ่านตอบ `401 DEVICE_AUTH_FAILED`, และ registry/database
+อ่านหรือเขียนไม่ได้ตอบ `503` โดยไม่สร้าง record. รายละเอียดนี้ implement ตามค่าที่เสนอในแผน;
+CR ที่แผนอ้างถึงยังไม่มีใน `docs/changes/` และต้องได้รับอนุมัติก่อนเปิด PR.
+
+### 2.1.1 Kiosk ThaiD check-in — QR บนตู้ → ยืนยันในแอป ThaiD บนมือถือ
+
+> [CR-163](../changes/14-kiosk/CR-163-kiosk-thaid-check-in.md) · รายละเอียด FR-KTD-01..45:
+> [`docs/plans/kiosk-thaid-check-in-implementation-plan.md`](../plans/kiosk-thaid-check-in-implementation-plan.md).
+> ค่า TTL / rate limit ด้านล่างเป็นข้อเสนอของทีม (D-4 / D-5) รอ PO เคาะ.
+
+**สรุป:** ตู้ขอ session → แสดง `qr_url` เป็น QR → ผู้อพยพสแกนด้วยมือถือและยืนยันในแอป ThaiD → server เก็บเลข
+13 หลัก (`pid`) ไว้ใน session ที่ผูกกับตู้ → ตู้ส่งแค่ `session_id` ไป lookup / check-in. Browser ของตู้ไม่เคยได้รับหรือส่ง
+เลข 13 หลัก. Session อยู่ใน memory ของ Node (relay ข้าม worker ผ่าน cluster IPC) ไม่ persist ลง CouchDB.
+
+**Gate (ตรวจทุก endpoint ด้านล่าง):** เปิดเมื่อ `config:app.thaid_registration_enabled` เปิด (อ่านไม่ได้ = ปิด) **และ**
+shelter ที่ผูกกับเครื่องมี `feature_flags.kiosk_thaid_check_in_enabled = true`. ปิด → `403 KIOSK_METHOD_DISABLED`.
+
+**Endpoint (device credential `X-Device-ID` / `X-Device-Secret`, `cache-control: no-store`):**
+
+| Endpoint | Body | Response |
+| --- | --- | --- |
+| `POST /api/v1/scanner/kiosk/thaid/session` | — | `200 { "session_id", "qr_url", "expires_at", "expires_in_sec" }` |
+| `POST /api/v1/scanner/kiosk/thaid/session/status` | `{ "session_id" }` | `200 { "status", "expires_at", "expires_in_sec" }` · `404 { "status": "expired" }` |
+| `POST /api/v1/scanner/kiosk/thaid/session/cancel` | `{ "session_id" }` | `200 { "ok": true }` (idempotent — session ไม่มี / หมดอายุ / ของเครื่องอื่น ตอบเหมือนกัน) |
+
+- `session_id` = hex 32 ตัว; รูปแบบผิด → `400 INVALID_INPUT`
+- ทุก endpoint: auth ไม่ผ่าน → `401 DEVICE_AUTH_FAILED`; registry อ่านไม่ได้ → `503 DEPENDENCY_UNAVAILABLE`
+- `qr_url` = `{origin}/api/v1/auth/oauth/thaid/start?mode=kiosk_check_in&session_id=…` (origin = `ORIGIN` / `PUBLIC_ORIGIN` ของ deploy)
+- สร้าง session: ลำดับตรวจ auth → rate limit 10 ครั้ง/นาที/เครื่อง (`429 KIOSK_RATE_LIMITED` + `retry-after: 60`, นับต่อ worker) →
+  gate → สร้าง. สร้างใหม่ = ยกเลิก session `pending` / `completed` เดิมของเครื่องเดียวกัน
+- TTL: `pending` 300 วิ; เมื่อยืนยันสำเร็จเป็น `completed` และนับใหม่ 180 วิ. ตู้ต้องนับเวลาจาก `expires_in_sec` ด้วยนาฬิกา
+  monotonic (ไม่ใช้ `expires_at` กับนาฬิกาตู้) และ poll `status` อีกครั้งก่อนแสดงว่าหมดอายุ
+- `status`: `pending` · `completed` · `cancelled` · `consumed`; ไม่มี / หมดอายุ / เป็นของเครื่องอื่น → `404 { "status": "expired" }`
+  (ไม่บอกว่ามี session อยู่). Response ไม่มี `pid` หรือ PII
+- `GET /api/public/v1/thaid/scan-session/[id]` และ `/[id]/events` (ของ flow `member_scan`) ตอบ `404 { "status": "expired" }`
+  สำหรับ session `kind = kiosk_check_in`
+
+**ThaiD OAuth mode `kiosk_check_in`:** `GET /api/v1/auth/oauth/thaid/start?mode=kiosk_check_in&session_id=…` ไม่ต้องมี
+`AuthSession`; scope `openid pid` (ไม่ใช้ `THAID_OAUTH_SCOPE`); ใช้ callback / redirect URI เดิม. Start ตรวจ kill-switch →
+session ต้องเป็น kind kiosk และ `pending` → gate ของ shelter ใน session. Callback ต้องได้ `pid` 13 หลักแล้วตั้ง session เป็น
+`completed`. ทุกผลลัพธ์ redirect ไป `/thaid-scan-success?flow=kiosk&status=success` หรือ `&error=<code>`
+(`missing_session` · `session_expired` · `thaid_disabled` · `missing_pid` · `oauth_exchange_failed` · `oauth_<idp_error>` · `invalid_state`).
+
+**Lookup (`POST /api/v1/scanner/kiosk/lookup`):** body `{ "source": "thaid", "session_id" }` (strict; ไม่รับ `citizen_id`).
+ตรวจ rate limit เดิม → gate → session ต้องเป็นของเครื่องนี้, `completed`, และ `shelter_code` ตรงกับเครื่อง มิฉะนั้น
+`409 KIOSK_THAID_SESSION_INVALID`. Lookup ใช้ `pid` จาก session และ**ไม่** consume session. ไม่พบ → `404
+PRE_REGISTRATION_NOT_FOUND` พร้อม `can_register: false` (walk-in ด้วย ThaiD อยู่นอก scope).
+
+**Check-in (`POST /api/v1/scanner/kiosk/check-in`):** body เพิ่ม `source: "thaid"` + `thaid_session_id`; ห้ามส่ง
+`citizen_id` คู่กับ `source: "thaid"` และห้ามส่ง `thaid_session_id` กับ source อื่น (`400 INVALID_CHECK_IN_INPUT`).
+- ลำดับ: gate → `shelter_code` ของ session ตรงกับเครื่อง → consume session (single-use) → เขียน check-in
+- `pid` ต้องตรงกับ `person_id.number` ของ `primary_evacuee_id`; ไม่ตรงหรือไม่พบ primary → `409 KIOSK_THAID_SESSION_INVALID`
+  และ session ถูกใช้แล้ว (ไม่คืน)
+- การเขียน throw หรือสมาชิกทุกคนได้ `failed` → คืน session เป็น `completed` ให้ลองใหม่ด้วย scan เดิม
+- session ไม่ใช่ `completed` / ใช้แล้ว / เป็นของเครื่องหรือศูนย์อื่น → `409 KIOSK_THAID_SESSION_INVALID`
+- ตู้แนบ `source: "thaid"` เฉพาะ batch แรกที่มี primary (client ส่ง primary ไว้ batch แรกเสมอ); batch ถัดไปส่งแบบไม่มี
+  `source` (ข้อเสนอ D-8 — รอ PO เคาะ)
+- ช่องทาง ThaiD ไม่ใช้ face check / staff PIN
+
+`scanner_client` แนบ device credential ให้ 3 path `thaid/session{,/status,/cancel}` เพิ่มจาก allowlist เดิม.
+
+### 2.2 Scanner staff PIN — ข้ามการตรวจใบหน้าด้วย PIN ของเครื่อง
+
+> [CR-158](../changes/14-kiosk/CR-158-kiosk-staff-pin-face-bypass.md).
+> PIN อยู่ใน DB `scanner_secrets` (schema.md §3.11.1) บน central เท่านั้น. ทุก response ของ endpoint ในหัวข้อนี้
+> มี `cache-control: no-store`, `pragma: no-cache`. error ใช้ envelope `{ "error": { "code", "message" } }`.
+> ทุก endpoint log ผู้เรียก/เครื่อง, เวลา, ผล — **ห้าม log ค่า PIN**.
+
+**Admin (SA เท่านั้น — `_session` cookie + `system_admin`):**
+
+| Endpoint | Body | สำเร็จ |
+| --- | --- | --- |
+| `POST /api/v1/scanner/devices` (ใหม่ — ย้ายการสร้างเครื่องจาก browser มาฝั่ง server) | `{ device_id, name, shelter_code, station_name?, status? }` | `201 { "device", "plaintext_secret", "plaintext_staff_pin" }` — สร้างเครื่องพร้อม default PIN สุ่ม |
+| `POST /api/v1/scanner/devices/[id]/staff-pin` | `{ "pin": "<6 หลัก>" }` หรือ `{ "regenerate": true }` | `200 { "ok": true }` · regenerate → `200 { "ok": true, "pin": "<6 หลัก>" }` |
+| `POST /api/v1/scanner/devices/[id]/staff-pin/reveal` | — | `200 { "pin", "is_default", "updated_at", "updated_by" }` |
+| `DELETE /api/v1/scanner/devices/[id]` | — | `200 { "ok": true }` — ลบ registry doc ก่อน แล้วลบ PIN doc (best effort) |
+
+`[id]` ใน path = `device_id` (เช่น `kiosk-01`) **ไม่ใช่** `_id` ของ doc (`scanner_device:kiosk-01`); ค่าที่ไม่ใช่
+`device_id` ที่ถูกต้อง = `404 NOT_FOUND`.
+
+Error ของ admin endpoint: ไม่ login `401 UNAUTHENTICATED` · ไม่ใช่ SA `403 FORBIDDEN` · PIN ไม่ใช่ 6 หลักหรือเดาง่าย
+`400 VALIDATION` · ไม่พบเครื่อง `404 NOT_FOUND` · reveal เครื่องที่ไม่มี PIN `409 staff_pin_not_set` · `_rev` ชน
+`409 CONFLICT` · `scanner_secrets` ใช้ไม่ได้, `_security` มี member ที่ไม่ใช่ admin หรือ rollback PIN doc ไม่สำเร็จ `503 STAFF_PIN_UNAVAILABLE` ·
+registry ใช้ไม่ได้ `503 DEPENDENCY_UNAVAILABLE`.
+
+**Kiosk (device credential):**
+
+```http
+POST /api/v1/scanner/kiosk/staff-pin/verify
+X-Device-ID: kiosk-sh001-01
+X-Device-Secret: …
+Content-Type: application/json
+
+{ "pin": "482913" }
+```
+
+ตรวจ PIN ของเครื่องที่ยืนยันตัวตนแล้วเท่านั้น (ไม่รับ device id จาก body) เทียบแบบ constant-time และอ่าน PIN จาก
+`scanner_secrets` เสมอ (ไม่เชื่อ `staff_pin_set` ใน registry):
+
+| ผล | Response |
+| --- | --- |
+| PIN ถูก | `200 { "ok": true }` ตอบทันที |
+| PIN ผิด | `401 staff_pin_invalid` ตอบหลังหน่วงประมาณ 1 วินาที |
+| device credential ผิด | `401 DEVICE_AUTH_FAILED` (ตรวจก่อน PIN) |
+| PIN ไม่ใช่ตัวเลข 6 หลัก (ว่าง, สั้น/ยาว, มีตัวอักษร) หรือ body อ่านไม่ได้ | ถือเป็น PIN ผิด: `401 staff_pin_invalid` หลังหน่วงเหมือนกัน (ตรวจ format ก่อน `timingSafeEqual`) |
+| คิวของเครื่องเต็ม (ตรวจอยู่ 1 + รอ 1) | `429 RATE_LIMITED` ตอบทันที ไม่รับเข้าคิว |
+| เครื่องไม่มี PIN doc | `409 staff_pin_not_set` |
+| registry / `scanner_secrets` ใช้ไม่ได้ | `503 DEPENDENCY_UNAVAILABLE` |
+
+ไม่ล็อกเครื่องและไม่จำกัดจำนวนครั้ง แต่ server ตรวจ PIN ได้ทีละ request ต่อเครื่อง (request ที่ซ้อนเข้ามารอคิวได้
+1 request; เกินนั้น `429`; device auth ตรวจก่อนเข้าคิว เครื่องที่ credential ผิดจึงไม่กินที่ในคิว)
+และ log ระดับ `warn` ทุกครั้งที่ PIN ผิดติดกันครบ 5 ครั้งต่อเครื่อง (ตัวนับอยู่ใน memory, reset เมื่อ PIN ถูกหรือ
+server restart). `scanner_client` แนบ device credential ให้เฉพาะ request `POST` same-origin จากหน้า kiosk.
+
+### 2.3 Kiosk banner — feed ของตู้ + back-office ([CR-162](../changes/14-kiosk/CR-162-kiosk-banner.md))
+
+**ฝั่งตู้ (device credential, `cache-control: no-store` + `pragma: no-cache`)**
+
+```http
+POST /api/v1/scanner/kiosk/banners
+X-Device-Id: kiosk-01
+X-Device-Secret: <secret>
+```
+
+คืน banner ของ `shelter_code` ของเครื่อง (จาก device principal เท่านั้น) ที่ `status = active` และ
+`start_at ≤ now < end_at` เรียง `order` → `start_at` → `_id` สูงสุด 20 รายการ:
+
+```json
+{
+  "banners": [
+    {
+      "id": "kiosk_banner:01J...",
+      "title": "แจกอาหารกลางวัน",
+      "caption": "เวลา 12:00 ที่โรงอาหาร",
+      "duration_sec": 10,
+      "image_url": "/api/v1/scanner/kiosk/banners/kiosk_banner:01J.../image?exp=1760190000&sig=..."
+    }
+  ],
+  "fetched_at": "2026-10-11T08:00:00.000Z"
+}
+```
+
+| ผล | Response |
+| --- | --- |
+| สำเร็จ (รวมกรณีไม่มี banner) | `200` · `banners: []` ได้ |
+| device credential ผิด / เครื่อง inactive | `401 DEVICE_AUTH_FAILED` |
+| registry ใช้ไม่ได้ | `503 DEPENDENCY_UNAVAILABLE` |
+
+```http
+GET /api/v1/scanner/kiosk/banners/{id}/image?exp={unix}&sig={hex}
+```
+
+ไม่ใช้ device header (`<img>` ส่ง GET; `scanner_client` ฉีด credential เฉพาะ POST ใน allowlist). `sig =
+HMAC-SHA256(server_secret, "{id}.{exp}")` อายุ 15 นาที · `200` + `content-type` ของรูป · sig ผิด/หมดอายุ `403` ·
+ไม่พบ / inactive / นอกช่วงเวลา `404`.
+
+**ฝั่ง back-office (`_session`; SA ทุกศูนย์ · `{code}:shelter_manager` / `{code}:banner_staff` เฉพาะ banner ที่
+`shelter_codes` ทั้งหมดอยู่ใน scope — ทั้งค่าเดิมและค่าใหม่; อื่น ๆ `403`)**
+
+| Method | Path | หมายเหตุ |
+| --- | --- | --- |
+| `GET` | `/api/back-office/kiosk-banners?view=current\|expired&shelter_code=` | `current` = `end_at ≥ now` เรียง `start_at` asc · `expired` = `end_at < now` เรียง `end_at` desc |
+| `POST` | `/api/back-office/kiosk-banners` | body JSON ทุก field + `image: { content_type, data_base64 }` (req) · `201` |
+| `GET` | `/api/back-office/kiosk-banners/{id}` | — |
+| `PUT` | `/api/back-office/kiosk-banners/{id}` | `_rev` req · `image` opt (ไม่ส่ง = คงรูปเดิม) · `_rev` ชน `409` |
+| `PATCH` | `/api/back-office/kiosk-banners/{id}` | `{ status }` เท่านั้น |
+| `DELETE` | `/api/back-office/kiosk-banners/{id}?rev=` | hard delete |
+| `GET` | `/api/back-office/kiosk-banners/{id}/image` | รูปสำหรับ preview ในหน้าจัดการ |
+
+รูปผิดชนิด (magic bytes) / เกิน 2 MB / field ไม่ผ่าน Zod → `422 VALIDATION`.
+
+### 2.4 Referral — bulk transition และ job ปิดศูนย์ ([CR-167](../changes/09-F-referral/CR-167-referral-withdraw-close-reason-bulk.md), [CR-168](../changes/09-F-referral/CR-168-referral-shelter-closure-worker.md))
+
+> **สถานะ:** approved ทั้งสอง CR · ยังไม่ implement · สิทธิ์ทุก route ใช้ `authorizeReferral` เดิม: `shelter_manager` ของศูนย์ตัวเอง และ `system_admin` (ต้องระบุ `shelter_code`) · error shape ตามสัญญาข้างต้น
+
+| Method | Path | หมายเหตุ |
+| --- | --- | --- |
+| `POST` | `/api/back-office/referral/bulk-transition` | `{ ids[], to, reason? }` · ตรวจสิทธิ์/transition ต่อรายการด้วย `assertActorMayTransition` ตัวเดียวกับ endpoint รายตัว · ตอบ partial success `{ succeeded[], failed[{id,error}] }` (ไม่ rollback รายการที่ผ่าน) · ขนาด `ids` proposed default 200 · concurrency จำกัด (default 5) · `reason` เก็บที่ `close_reason` เมื่อ `to=closed`, `response_reason` เมื่อ `accepted`/`rejected` |
+| `GET` | `/api/back-office/referral/close-shelter/preview` | จำนวนที่จะถูกกระทบ แยกขาออก/ขาเข้า และสถานะ |
+| `POST` | `/api/back-office/referral/close-shelter/jobs` | `{ reason, confirm_shelter_code }` · คืน job id ทันที (ไม่รอประมวลผล) · `status=scheduled`, `start_after` = สร้าง + 60 วินาที · `confirm_shelter_code` ไม่ตรง `shelter_code` → `422` · มี job active ของศูนย์เดียวกัน → `409` |
+| `GET` | `/api/back-office/referral/close-shelter/jobs/{id}` | สถานะ + ตัวนับ + `failures[]` (ETag polling) |
+| `POST` | `/api/back-office/referral/close-shelter/jobs/{id}/cancel` | ได้เฉพาะ `scheduled` และ `now < start_after` ด้วย CAS · หลังเริ่ม → `409` |
+| `POST` | `/api/back-office/referral` | เพิ่ม: ศูนย์ที่มี job active สร้าง referral ใหม่ไม่ได้ → `409` (ศูนย์อื่น/ขาเข้าจากศูนย์อื่นไม่ถูกบล็อก) |
+
+**Internal worker (private network เท่านั้น — ห้ามอยู่หลัง public listener; nginx ต้อง deny):**
+
+| Method | Path | หมายเหตุ |
+| --- | --- | --- |
+| `POST` | `/api/internal/referral-close/worker/next` | `Authorization: Bearer <REFERRAL_WORKER_TOKEN>` (constant-time compare) · claim/ประมวลผลไม่เกิน 1 batch ต่อ request (proposed default 50) · `204` เมื่อไม่มีงาน · ไม่ตั้ง token → API ไม่รับ job ใหม่ |
+
 ## 3. Provisioning (system_admin เท่านั้น)
 
 ```
@@ -190,9 +447,10 @@ Contract เต็มอยู่ที่ [public-tier-flow-spec.html](../featu
 
 | Endpoint | Auth |
 | --- | --- |
-| `POST /public/v1/occupants` | — (rate-limited + audit) |
+| `POST /public/v1/occupants` | — (rate-limited + audit); ค้นชื่อ: ทุกคำ ≥2 ตัวอักษร (สูงสุด 4 คำ), หลายคำ = ชื่อต้น prefix AND นามสกุลเต็ม exact, คำเดียว = ชื่อต้น prefix หรือ นามสกุลเต็ม, เรียงคงที่, max 10 ผล (CR-166) |
 | `GET /public/v1/needs` | — |
 | `POST /public/v1/donations` | เบอร์โทร (+OTP เมื่อ `public_otp_required` เปิด) |
+| `GET /api/public/v1/donations/slots?shelter_code&date&mode` | — (BFF-only, CR-157) — BFF อ่าน `donation_slot` จาก CouchDB ฝั่ง server (doc type นี้ไม่ถูก project ลง Mongo) คืนเฉพาะช่วงเวลา/ความจุ/ยอดจอง ไม่มี PII |
 | `GET /public/v1/donations/{tracking_token}` | token |
 | `PATCH /public/v1/donations/{tracking_token}` | token |
 | `PATCH /public/v1/donations/{tracking_token}/items` | token |
@@ -247,6 +505,18 @@ Contract เต็มอยู่ที่ [public-tier-flow-spec.html](../featu
 
 TTL **ไม่รีเซ็ต** — `expires_at` ยังนับจาก `declared_at` เดิม
 
+#### Slot error codes ของ `POST /public/v1/donations` (CR-157)
+
+BFF ตรวจช่วงเวลา (`logistics.slot`) ก่อนส่งต่อ FastAPI; ช่วงที่มีเพดานตัดสินแบบ atomic ผ่าน Mongo
+`donation_slot_counters` (CR-157 §C-6). `delivery_method = parcel` ไม่จองคิว จึงไม่ผ่านด่านนี้
+
+| สถานะ | ความหมาย |
+| --- | --- |
+| `422 SLOT_REQUIRED` | `delivery_method = shelter_pickup` แต่ไม่ได้ส่ง `logistics.slot` (FR-DS-11) |
+| `409 SLOT_UNAVAILABLE` | ช่วงที่ส่งมาไม่อยู่บนกระดาน — `shelter_pickup` ที่ศูนย์ไม่ได้ประกาศรอบ (ไม่มี doc `pickup`) (FR-DS-11) หรือ `self_dropoff` ที่ไม่มี doc และ `from`/`to` ไม่ตรงช่วงมาตรฐาน 5 ช่วง (FR-DS-12) |
+| `409 SLOT_FULL` | ช่วงเต็มตามการนับ CouchDB, ถูกปฏิเสธโดย `$inc` แบบมีเงื่อนไขบน `donation_slot_counters`, หรือ doc มี `status = closed` (FR-DS-7, FR-DS-14) |
+| `503 SLOTS_UNAVAILABLE` | อ่าน `donation_slot` จาก CouchDB ไม่สำเร็จ (ไม่ใช่ 200/404) — ไม่รับ booking ที่ตรวจช่วงไม่ได้ (FR-DS-13) |
+
 ### 5.1 External plane `/external/v1` (CR-062) — legacy
 
 สำหรับหน่วยงานและระบบภายนอกที่ถือ managed API key (CR-062) เรียกใช้งาน — **คนละ plane กับ Partner Data API (§5.3)** (path / auth / error shape ต่างกัน). **Soft-deprecated สำหรับงานใหม่:** คง router + API Keys UI ไว้; integration ใหม่ของพันธมิตรใช้ §5.3 `/external` (OAuth2) ไม่ใช่ `/external/v1`.
@@ -257,7 +527,7 @@ TTL **ไม่รีเซ็ต** — `expires_at` ยังนับจาก
 | --- | --- | --- | --- |
 | `/external/v1/shelters/{code}` | GET | `Authorization: Bearer <key>` หรือ `X-API-Key` | รายละเอียดศูนย์ (`ShelterDetailResponse`) |
 | `/external/v1/needs` | GET | เหมือนกัน | รายการความต้องการ (`NeedsListResponse`) |
-| `/external/v1/occupants` | POST | เหมือนกัน | ค้นหาผู้ประสบภัยแบบ public search (rate limit + `SearchAudit`) |
+| `/external/v1/occupants` | POST | เหมือนกัน | ค้นหาผู้ประสบภัยแบบ public search (rate limit + `SearchAudit`); กติกาค้นชื่อเหมือน `/public/v1/occupants` (CR-166 — partner เห็นพฤติกรรมเปลี่ยน) |
 | `/external/v1/announcements` | GET | เหมือนกัน | ประกาศ (แบ่งหน้า) |
 | `/external/v1/config/faqs` | GET | เหมือนกัน | FAQ config |
 
@@ -278,9 +548,9 @@ TTL **ไม่รีเซ็ต** — `expires_at` ยังนับจาก
 | POST | `/staff/v1/unassigned-registrations/{id}/claim` | staff + shelter scope — body `member_ids` and/or `pet_ids`; copies nickname/religion/emergency_contact; GridFS member `photo` + pet `image_url` → Couch `image:{ulid}`; append claimed pets onto existing Couch HH |
 | DELETE | `/staff/v1/unassigned-registrations/{id}` | `system_admin` only |
 
-Claim = Mongo mark (คน+สัตว์) แล้ว birth/append Couch (option B — ดู [CR-113](../changes/CR-113-unassigned-registration-mongo.md) + [CR-140](../changes/CR-140-persistent-unassigned-family.md)); shape: `schema.md` §9.5. เมื่อไม่มี `open` เหลือ → เอกสาร `closed` (**ไม่** hard-delete); `deleted` เสมอ `false`. Public browser เรียกผ่าน SvelteKit BFF เท่านั้น (ไม่ตรง FastAPI).
+Claim = Mongo mark (คน+สัตว์) แล้ว birth/append Couch (option B — ดู [CR-113](../changes/00-baseline/CR-113-unassigned-registration-mongo.md) + [CR-140](../changes/00-baseline/CR-140-persistent-unassigned-family.md)); shape: `schema.md` §9.5. เมื่อไม่มี `open` เหลือ → เอกสาร `closed` (**ไม่** hard-delete); `deleted` เสมอ `false`. Public browser เรียกผ่าน SvelteKit BFF เท่านั้น (ไม่ตรง FastAPI).
 
-**CR-140 addendum:** Staff claim UI ไม่เรียก `POST .../claim` ทันทีที่ติ๊กเลือก — ไปหน้า review (`GET .../{id}/review`, อ่านอย่างเดียว) ก่อนเสมอ; `POST .../claim` ถูกเรียกเมื่อ staff กดยืนยันในหน้านั้นเท่านั้น (ดู [CR-140](../changes/CR-140-persistent-unassigned-family.md) addendum ท้ายไฟล์).
+**CR-140 addendum:** Staff claim UI ไม่เรียก `POST .../claim` ทันทีที่ติ๊กเลือก — ไปหน้า review (`GET .../{id}/review`, อ่านอย่างเดียว) ก่อนเสมอ; `POST .../claim` ถูกเรียกเมื่อ staff กดยืนยันในหน้านั้นเท่านั้น (ดู [CR-140](../changes/00-baseline/CR-140-persistent-unassigned-family.md) addendum ท้ายไฟล์).
 
 ### 5.3 Partner Data API — OAuth2 `/external` (EXT-001–011, #214, CR-154)
 
@@ -292,7 +562,7 @@ Machine-to-machine สำหรับ **M6 Resource Logistics / M7 Command Cente
 | `/external/locations` | GET | Bearer · `location-read` | Location Master list (EXT-002) |
 | `/external/locations/{code}` | GET | Bearer · `location-read` | detail + `facilities` (EXT-003) |
 | `/external/locations/{code}/stock` | GET | Bearer · `location-stock-read` | stock; `updated_at` ระดับ location (EXT-004) |
-| `/external/locations/{code}/occupancy` | GET | Bearer · `occupancy-read` | breakdown + `updated_by_role` คงที่ (EXT-005) |
+| `/external/locations/{code}/occupancy` | GET | Bearer · `occupancy-read` | breakdown (`male`, `female`, `gender_unspecified`, `child_under_5`, `elderly_over_60`, `pregnant`, `bedridden`, `disabled`) + `updated_by_role` คงที่ (EXT-005); `gender_unspecified` = `gender` เป็น `null`/`'other'`, invariant `male+female+gender_unspecified = occupancy_total` (decision sync 2026-10-09) |
 | `/external/summary` | GET | Bearer · `location-read` (+ `occupancy-read` สำหรับ top-level `occupancy_total`) | `critical_items` เฉพาะ `low`/`critical` (EXT-006) |
 | `/external/locations/{code}/occupants` | GET | Bearer · `occupancy-pii-read` + `?purpose=` | **denied by default**; ได้ scope แล้วยังคืน `result: []` จนกว่ามี data source (EXT-007 scaffold) |
 | `/external/bookings` | POST | Bearer · `booking-write` | จองศูนย์แทนประชาชน (M2 booking-shelter) — body `{location_code, cid, first_name, last_name, phone}` → **201** `result: {booking_id: "BK-{ulid}", location_code, booking_status: "BOOKED"}` = **รับเข้าคิว** (worker เขียน CouchDB `evacuee`+`household` `pre_registered`, `registered_via: api` ภายใน ~10s); กันซ้ำ **เฉพาะภายในศูนย์เดียวกัน**; ศูนย์ `full` จองได้ (EXT-008) |

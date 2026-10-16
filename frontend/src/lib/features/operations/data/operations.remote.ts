@@ -13,6 +13,7 @@ import {
 	type StockLotPendingClaim
 } from '$lib/features/distribution';
 import {
+	CampaignUnitMismatchError,
 	createCampaign as buildCampaign,
 	isDonationCampaign,
 	isStockLedger,
@@ -44,6 +45,7 @@ import {
 	type CancelInfoInput,
 	type DisputeInfoInput
 } from '../domain/operations';
+import { assertDonationSlotDeletable, countSlotBookings, slotMode } from '../domain/donation-slot';
 import { ItemMergeError, planItemMerge } from '../domain/item-merge';
 import type { MergeItemsInput, ItemMergeResult } from '../domain/item-merge';
 import { createAuditEntry, type AuditAction } from '$lib/features/shared';
@@ -867,10 +869,18 @@ export class OperationsRemoteRepository implements OperationsRepository {
 	): Promise<DonationCampaign> {
 		// Read-Modify-Write: Fetch the latest _rev from the database to prevent 409 conflict
 		const existing = await this.repo.get<DonationCampaign>(campaign._id);
-		await this.validateCampaignUnits(campaign, existing ?? undefined);
+		// An update never creates. A campaign this database does not hold came from
+		// another shelter's list (a cache left over from a shelter switch) — writing it
+		// here put a stray copy into the wrong shelter, which the public board then read.
+		if (!existing) {
+			throw new Error(
+				`ไม่พบประกาศนี้ในศูนย์ที่เลือก (${this.dbName}) — กรุณาโหลดหน้าใหม่ก่อนแก้ไข`
+			);
+		}
+		await this.validateCampaignUnits(campaign, existing);
 		const merged = {
 			...campaign,
-			_rev: existing?._rev ?? undefined
+			_rev: existing._rev
 		};
 
 		const updated = await this.repo.put(touch(merged));
@@ -912,9 +922,7 @@ export class OperationsRemoteRepository implements OperationsRepository {
 			}
 			const expected = catalogItemRules(item).unit;
 			if (expected !== need.unit) {
-				throw new Error(
-					`Unit mismatch for campaign item ${need.item_id}: expected ${expected}, got ${need.unit}`
-				);
+				throw new CampaignUnitMismatchError(need.item_id, expected, need.unit);
 			}
 		}
 	}
@@ -962,6 +970,23 @@ export class OperationsRemoteRepository implements OperationsRepository {
 			_rev: existing?._rev ?? slot._rev
 		};
 		return this.repo.put(touch(merged));
+	}
+
+	/**
+	 * Delete a window nobody has booked. Counts against a fresh read of the donations,
+	 * not the screen's copy, so a booking made since the list loaded still blocks it.
+	 */
+	async deleteDonationSlot(slot: DonationSlot): Promise<void> {
+		const [current, donations] = await Promise.all([
+			this.repo.get<DonationSlot>(slot._id),
+			this.listDonations()
+		]);
+		if (!current) return;
+		assertDonationSlotDeletable(
+			current,
+			countSlotBookings(donations, slotMode(current), current.date, current.from)
+		);
+		await this.repo.remove(current);
 	}
 
 	// --- Transfer methods (CR-059 Flow 1 / T-13) ---

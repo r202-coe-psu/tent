@@ -26,7 +26,7 @@
 		badgeText="Rescue Volunteer Platform"
 		badgeIcon={UserPlus}
 		showLivePing={false}
-		bgClass="bg-primary-dark"
+		bgClass="bg-domain-volunteer-strong"
 		showSearch={false}
 	/>
 
@@ -88,7 +88,7 @@
 									id="fullname"
 									type="text"
 									placeholder="ระบุชื่อจริง นามสกุล"
-									class="rounded-xl border border-border bg-muted/20 px-3.5 py-3 text-xs text-foreground outline-hidden focus:border-primary focus:ring-1 focus:ring-primary"
+									class="rounded-xl border border-border bg-muted/20 px-3.5 py-3 text-xs text-foreground outline-hidden focus:border-domain-volunteer-strong focus:ring-1 focus:ring-domain-volunteer-strong"
 								/>
 							</div>
 							<div class="flex flex-col gap-1.5">
@@ -99,7 +99,7 @@
 									id="emergency-phone"
 									type="text"
 									placeholder="08X-XXX-XXXX"
-									class="rounded-xl border border-border bg-muted/20 px-3.5 py-3 text-xs text-foreground outline-hidden focus:border-primary focus:ring-1 focus:ring-primary"
+									class="rounded-xl border border-border bg-muted/20 px-3.5 py-3 text-xs text-foreground outline-hidden focus:border-domain-volunteer-strong focus:ring-1 focus:ring-domain-volunteer-strong"
 								/>
 							</div>
 						</div>
@@ -110,7 +110,7 @@
 							>
 							<select
 								id="shelter"
-								class="rounded-xl border border-border bg-muted/20 px-3.5 py-3 text-xs text-foreground outline-hidden focus:ring-1 focus:ring-primary"
+								class="rounded-xl border border-border bg-muted/20 px-3.5 py-3 text-xs text-foreground outline-hidden focus:ring-1 focus:ring-domain-volunteer-strong"
 							>
 								<option>ศูนย์พักพิง เทศบาลนครหาดใหญ่ (โรงเรียนเทศบาล 2)</option>
 								<option>ศูนย์พักพิง เทศบาลเมืองคลองแห (โรงเรียนวัดคลองแห)</option>
@@ -123,7 +123,7 @@
 							>
 							<select
 								id="shift"
-								class="rounded-xl border border-border bg-muted/20 px-3.5 py-3 text-xs text-foreground outline-hidden focus:ring-1 focus:ring-primary"
+								class="rounded-xl border border-border bg-muted/20 px-3.5 py-3 text-xs text-foreground outline-hidden focus:ring-1 focus:ring-domain-volunteer-strong"
 							>
 								<option>กะเช้า (08:00 - 16:00)</option>
 								<option>กะบ่าย (16:00 - 00:00)</option>
@@ -142,14 +142,14 @@
 								>
 									<input
 										type="checkbox"
-										class="mt-1 h-4.5 w-4.5 rounded border-border text-primary focus:ring-primary"
+										class="mt-1 h-4.5 w-4.5 rounded border-border text-domain-volunteer-strong focus:ring-domain-volunteer-strong"
 									/>
 									<div>
 										<span class="flex items-center gap-1.5 text-xs font-bold text-foreground">
 											<ChefHat class="h-3.5 w-3.5 text-warning" />
 											ประกอบอาหาร (Cooking)
 										</span>
-										<p class="mt-1 text-2xs text-muted-foreground">
+										<p class="mt-1 text-xs text-muted-foreground">
 											ศูนย์ขาดแคลนกำลังทำอาหารจำนวนมาก
 										</p>
 									</div>
@@ -160,14 +160,14 @@
 								>
 									<input
 										type="checkbox"
-										class="mt-1 h-4.5 w-4.5 rounded border-border text-primary focus:ring-primary"
+										class="mt-1 h-4.5 w-4.5 rounded border-border text-domain-volunteer-strong focus:ring-domain-volunteer-strong"
 									/>
 									<div>
 										<span class="flex items-center gap-1.5 text-xs font-bold text-foreground">
 											<Ambulance class="h-3.5 w-3.5 text-danger" />
 											การแพทย์/ปฐมพยาบาล (Medical)
 										</span>
-										<p class="mt-1 text-2xs text-muted-foreground">
+										<p class="mt-1 text-xs text-muted-foreground">
 											ต้องการพยาบาลและผู้ดูแลผู้ป่วยไข้
 										</p>
 									</div>
@@ -178,14 +178,14 @@
 								>
 									<input
 										type="checkbox"
-										class="mt-1 h-4.5 w-4.5 rounded border-border text-primary focus:ring-primary"
+										class="mt-1 h-4.5 w-4.5 rounded border-border text-domain-volunteer-strong focus:ring-domain-volunteer-strong"
 									/>
 									<div>
 										<span class="flex items-center gap-1.5 text-xs font-bold text-foreground">
-											<FileText class="h-3.5 w-3.5 text-primary" />
+											<FileText class="h-3.5 w-3.5 text-domain-volunteer-strong" />
 											คัดกรองประวัติ (Screening)
 										</span>
-										<p class="mt-1 text-2xs text-muted-foreground">
+										<p class="mt-1 text-xs text-muted-foreground">
 											บันทึกข้อมูลหน้าจุดลงทะเบียนร่วมกับระบบคลาวด์
 										</p>
 									</div>
@@ -196,14 +196,14 @@
 								>
 									<input
 										type="checkbox"
-										class="mt-1 h-4.5 w-4.5 rounded border-border text-primary focus:ring-primary"
+										class="mt-1 h-4.5 w-4.5 rounded border-border text-domain-volunteer-strong focus:ring-domain-volunteer-strong"
 									/>
 									<div>
 										<span class="flex items-center gap-1.5 text-xs font-bold text-foreground">
 											<Truck class="h-3.5 w-3.5 text-warning-foreground" />
 											ขนย้ายสิ่งของ (Lifting/Logistics)
 										</span>
-										<p class="mt-1 text-2xs text-muted-foreground">
+										<p class="mt-1 text-xs text-muted-foreground">
 											ใช้แรงจัดขนของ ยานพาหนะ อุปกรณ์ช่วยเหลือภัยน้ำท่วม
 										</p>
 									</div>
@@ -213,7 +213,7 @@
 
 						<button
 							type="submit"
-							class="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-primary py-3.5 text-xs font-bold text-white shadow-sm transition-colors hover:bg-primary-dark"
+							class="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-domain-volunteer-strong py-3.5 text-xs font-bold text-white shadow-sm transition-colors hover:bg-domain-volunteer-text"
 						>
 							+ ยื่นส่งแบบฟอร์มอาสาสมัคร
 						</button>
@@ -229,7 +229,7 @@
 						<Heart class="h-4.5 w-4.5 text-danger" />
 						คุณจะได้รับสวัสดิการอะไรบ้าง?
 					</h3>
-					<p class="mt-2 text-2xs leading-relaxed text-muted-foreground">
+					<p class="mt-2 text-xs leading-relaxed text-muted-foreground">
 						โครงการยึดถือมาตรฐานสากลในการดูแลช่วยเหลือและสนับสนุนปัจจัยสี่ให้กับอาสาสมัครส่วนหน้าระหว่างปฏิบัติงาน:
 					</p>
 
@@ -238,7 +238,7 @@
 							<span class="text-sm">🍱</span>
 							<div>
 								<h4 class="text-xs font-bold text-foreground">โภชนาการประจำมื้อ</h4>
-								<p class="text-3xs text-muted-foreground">
+								<p class="text-xs text-muted-foreground">
 									รับสิทธิ์อาหารหลักกล่องฟรีตามที่จองลงกะงาน
 								</p>
 							</div>
@@ -247,7 +247,7 @@
 							<span class="text-sm">💧</span>
 							<div>
 								<h4 class="text-xs font-bold text-foreground">น้ำดื่มผลิตสะอาด</h4>
-								<p class="text-3xs text-muted-foreground">
+								<p class="text-xs text-muted-foreground">
 									ได้รับการจัดสรรน้ำขวดพกพาปฏิบัติงานอย่างต่อเนื่อง
 								</p>
 							</div>
@@ -256,7 +256,7 @@
 							<span class="text-sm">🦺</span>
 							<div>
 								<h4 class="text-xs font-bold text-foreground">ชุดเครื่องแต่งกาย & อุปกรณ์ PPE</h4>
-								<p class="text-3xs text-muted-foreground">
+								<p class="text-xs text-muted-foreground">
 									เสื้อสะท้อนแสง หน้ากาก ถุงมือ ปฐมพยาบาลครบครัน
 								</p>
 							</div>
@@ -283,7 +283,7 @@
 	{#if activeTab === 'portal'}
 		<div class="mx-auto max-w-2xl rounded-3xl border border-border bg-card p-6 shadow-sm md:p-8">
 			<h2 class="flex items-center gap-2 text-base font-bold text-foreground">
-				<UserCheck class="h-5 w-5 text-primary" />
+				<UserCheck class="h-5 w-5 text-domain-volunteer-strong" />
 				พอร์ทัลอาสาสมัคร (My Portal)
 			</h2>
 			<p class="mt-1 text-xs text-muted-foreground">
@@ -296,12 +296,12 @@
 					<input
 						type="text"
 						placeholder="ระบุรหัส V-1025 หรือชื่อ"
-						class="w-full rounded-xl border border-border bg-muted/20 px-3.5 py-3 pl-10 text-xs text-foreground outline-hidden focus:border-primary focus:ring-1 focus:ring-primary"
+						class="w-full rounded-xl border border-border bg-muted/20 px-3.5 py-3 pl-10 text-xs text-foreground outline-hidden focus:border-domain-volunteer-strong focus:ring-1 focus:ring-domain-volunteer-strong"
 					/>
 					<Search class="absolute top-3.5 left-3.5 h-4 w-4 text-muted-foreground" />
 				</div>
 				<button
-					class="rounded-xl bg-primary px-5 py-3 text-xs font-bold text-white shadow-sm transition-colors hover:bg-primary-dark"
+					class="rounded-xl bg-domain-volunteer-strong px-5 py-3 text-xs font-bold text-white shadow-sm transition-colors hover:bg-domain-volunteer-text"
 				>
 					ค้นหาประวัติ
 				</button>
@@ -331,7 +331,7 @@
 			>
 				<div>
 					<h2 class="flex items-center gap-2 text-base font-bold text-foreground">
-						<ClipboardList class="h-5 w-5 text-primary" />
+						<ClipboardList class="h-5 w-5 text-domain-volunteer-strong" />
 						ประกาศความต้องการกำลังพล
 					</h2>
 					<p class="mt-1 text-xs text-muted-foreground">
@@ -343,7 +343,7 @@
 					<input
 						type="text"
 						placeholder="ค้นหาชื่อศูนย์ หรือ อปท."
-						class="w-full rounded-xl border border-border bg-muted/20 px-3.5 py-2.5 pl-9 text-xs text-foreground outline-hidden focus:border-primary focus:ring-1 focus:ring-primary"
+						class="w-full rounded-xl border border-border bg-muted/20 px-3.5 py-2.5 pl-9 text-xs text-foreground outline-hidden focus:border-domain-volunteer-strong focus:ring-1 focus:ring-domain-volunteer-strong"
 					/>
 					<Search class="absolute top-3 left-3 h-3.5 w-3.5 text-muted-foreground" />
 				</div>
@@ -360,7 +360,7 @@
 							<h3 class="text-sm font-bold text-foreground">
 								ศูนย์พักพิง เทศบาลนครหาดใหญ่ (โรงเรียนเทศบาล 2)
 							</h3>
-							<p class="mt-0.5 text-2xs text-muted-foreground">
+							<p class="mt-0.5 text-xs text-muted-foreground">
 								อปท. เทศบาลนครหาดใหญ่ | จำนวนผู้พักพิง 1/250 คน
 							</p>
 						</div>
@@ -395,7 +395,7 @@
 
 					<button
 						onclick={() => (activeTab = 'register')}
-						class="flex w-full cursor-pointer items-center justify-center rounded-xl bg-primary py-3 text-xs font-bold text-primary-foreground shadow-sm transition-colors hover:bg-primary/95"
+						class="flex w-full cursor-pointer items-center justify-center rounded-xl bg-domain-volunteer-strong py-3 text-xs font-bold text-primary-foreground shadow-sm transition-colors hover:bg-domain-volunteer-text"
 					>
 						สมัครเป็นอาสาสมัครประจำศูนย์นี้
 					</button>
@@ -410,7 +410,7 @@
 							<h3 class="text-sm font-bold text-foreground">
 								ศูนย์พักพิง เทศบาลเมืองคลองแห (โรงเรียนวัดคลองแห)
 							</h3>
-							<p class="mt-0.5 text-2xs text-muted-foreground">
+							<p class="mt-0.5 text-xs text-muted-foreground">
 								อปท. เทศบาลเมืองคลองแห | จำนวนผู้พักพิง 1/180 คน
 							</p>
 						</div>
@@ -445,7 +445,7 @@
 
 					<button
 						onclick={() => (activeTab = 'register')}
-						class="flex w-full cursor-pointer items-center justify-center rounded-xl bg-primary py-3 text-xs font-bold text-primary-foreground shadow-sm transition-colors hover:bg-primary/95"
+						class="flex w-full cursor-pointer items-center justify-center rounded-xl bg-domain-volunteer-strong py-3 text-xs font-bold text-primary-foreground shadow-sm transition-colors hover:bg-domain-volunteer-text"
 					>
 						สมัครเป็นอาสาสมัครประจำศูนย์นี้
 					</button>

@@ -91,10 +91,10 @@ _Avoid_: Checked-in, resident, admitted, “at bed” (that is Zone Arrival Conf
 A household-level pre-arrival intake recorded before any shelter is chosen. Persisted only in Mongo (`unassigned_registrations`); members are not Evacuees until a shelter claims them into Couch. Staff search this collection directly (no `public_persons` stub until claim). Partial claim leaves unclaimed members `open` for later intake. Does not count toward shelter Forecast occupancy until claimed.
 _UI (th)_: ลงทะเบียนล่วงหน้าแบบไม่ระบุศูนย์.
 _Avoid_: Central Pool, `central_pool_registration`, equating with Couch `pre_registered` holds for a known shelter, treating Mongo as SoR for checked-in Evacuees.
-_Spec_: [CR-113](docs/changes/CR-113-unassigned-registration-mongo.md) (approved).
+_Spec_: [CR-113](docs/changes/00-baseline/CR-113-unassigned-registration-mongo.md) (approved).
 
 **Forecast Occupancy**:
-Headcount of evacuees expected at the shelter for capacity planning: stay ∈ {`pre_registered`, `arriving`, `active`, `room_confirmed`, `temporary_leave`} on that shelter's Couch SoR. In-shelter public booking holds remain Couch `pre_registered`. Unassigned Registration Mongo documents are excluded until claimed. Excludes `transferred`, `checked_out`, `deceased`, `cancelled`. Spec: [CR-112](docs/changes/CR-112-registration-foundation-schema-stay.md) (approved).
+Headcount of evacuees expected at the shelter for capacity planning: stay ∈ {`pre_registered`, `arriving`, `active`, `room_confirmed`, `temporary_leave`} on that shelter's Couch SoR. In-shelter public booking holds remain Couch `pre_registered`. Unassigned Registration Mongo documents are excluded until claimed. Excludes `transferred`, `checked_out`, `deceased`, `cancelled`. Spec: [CR-112](docs/changes/00-baseline/CR-112-registration-foundation-schema-stay.md) (approved).
 _Avoid_: Single blended occupancy number, only-active count.
 
 **Present Occupancy** (actual):

@@ -15,7 +15,9 @@
 	import Search from '@lucide/svelte/icons/search';
 	import Plus from '@lucide/svelte/icons/plus';
 	import X from '@lucide/svelte/icons/x';
-	import { Settings2, Trash2, RotateCcw } from '@lucide/svelte';
+	import Settings2 from '@lucide/svelte/icons/settings-2';
+	import Trash2 from '@lucide/svelte/icons/trash-2';
+	import RotateCcw from '@lucide/svelte/icons/rotate-ccw';
 	// Feature
 	import {
 		useItemCategories,

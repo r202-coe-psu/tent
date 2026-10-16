@@ -1,7 +1,7 @@
 /**
  * Staging ops: stock, campaigns, donations for SH001–SH003.
  */
-import { now, type AuthorContext } from '$lib/db/model';
+import type { AuthorContext } from '$lib/db/model';
 import {
 	createCampaign,
 	createStockLedger,
@@ -11,26 +11,7 @@ import {
 import { shelterDbName } from '$lib/server/shelter-access-design';
 import { prefixRangeEnd } from '../t31-seed-support';
 import { bulkDocs, couchReq } from './couch';
-import { ITEM, SH001_CODE, SH002_CODE, SH003_CODE } from './types';
-
-/**
- * item_master ids are random ULIDs since the catalog rewrite (develop merge) — only
- * preserved across reseeds by matching on `name`. Resolve the real id for a few
- * item masters this script references by the old deterministic id, falling back to
- * that literal id only if no match exists (keeps this a no-op on an already-seeded DB).
- */
-async function resolveItemMasterIdsByName(): Promise<Map<string, string>> {
-	const byName = new Map<string, string>();
-	const { status, data } = await couchReq('GET', '/catalog/_all_docs?include_docs=true');
-	if (status !== 200) return byName;
-	const rows = (data as { rows?: Array<{ doc?: { type?: string; name?: string; _id: string } }> })
-		.rows;
-	for (const row of rows ?? []) {
-		const doc = row.doc;
-		if (doc?.type === 'item_master' && doc.name) byName.set(doc.name, doc._id);
-	}
-	return byName;
-}
+import { ITEM_NAME, SH001_CODE, SH002_CODE, SH003_CODE, type ItemKey } from './types';
 
 async function hasOps(db: string): Promise<boolean> {
 	const prefix = 'donation_campaign:seed-st:';
@@ -44,6 +25,47 @@ async function hasOps(db: string): Promise<boolean> {
 	return ((data as { rows?: unknown[] }).rows ?? []).length > 0;
 }
 
+/**
+ * `ITEM_NAME` → the catalog's `item_master` id and `base_unit`. Run after the master seed,
+ * which is what creates them; fails loudly rather than writing stock or campaigns the
+ * catalog cannot resolve.
+ *
+ * The unit is read, not hard-coded: these docs are written with admin credentials, so
+ * the campaign and receive unit checks never run on them. A hard-coded `piece` for the
+ * `cloth` blanket went in unnoticed and later blocked every cut-off and promote on that
+ * campaign with `Unit mismatch` (schema.md §2.1 — `unit` must equal `base_unit`).
+ */
+async function resolveCatalogItems(): Promise<{
+	ITEM: Record<ItemKey, string>;
+	UNIT: Record<ItemKey, string>;
+}> {
+	const names = Object.values(ITEM_NAME);
+	const { status, data } = await couchReq('POST', '/catalog/_find', {
+		selector: { type: 'item_master', name: { $in: names } },
+		fields: ['_id', 'name', 'base_unit'],
+		limit: names.length * 2
+	});
+	if (status !== 200) throw new Error(`seed: catalog item lookup failed (HTTP ${status})`);
+	const byName = new Map(
+		((data as { docs?: { _id: string; name: string; base_unit?: string }[] }).docs ?? []).map(
+			(d) => [d.name, d]
+		)
+	);
+	const ITEM = {} as Record<ItemKey, string>;
+	const UNIT = {} as Record<ItemKey, string>;
+	for (const [key, name] of Object.entries(ITEM_NAME) as [ItemKey, string][]) {
+		const doc = byName.get(name);
+		if (!doc)
+			throw new Error(
+				`seed: catalog has no item_master named "${name}" — run the master seed first`
+			);
+		if (!doc.base_unit) throw new Error(`seed: item_master "${name}" has no base_unit`);
+		ITEM[key] = doc._id;
+		UNIT[key] = doc.base_unit;
+	}
+	return { ITEM, UNIT };
+}
+
 function scale(code: string, hi: number, mid: number, lo: number): string {
 	if (code === SH001_CODE) return String(hi);
 	if (code === SH002_CODE) return String(mid);
@@ -51,7 +73,7 @@ function scale(code: string, hi: number, mid: number, lo: number): string {
 }
 
 export async function seedStagingOps(): Promise<void> {
-	const itemMasterIdByName = await resolveItemMasterIdsByName();
+	const { ITEM, UNIT } = await resolveCatalogItems();
 	for (const code of [SH001_CODE, SH002_CODE, SH003_CODE]) {
 		const db = shelterDbName(code);
 		const ctx: AuthorContext = { shelterCode: code, createdBy: 'seed' };
@@ -71,7 +93,7 @@ export async function seedStagingOps(): Promise<void> {
 				{
 					item_id: ITEM.rice,
 					qty: scale(code, 500, 300, 150),
-					unit: 'kg',
+					unit: UNIT.rice,
 					reason: 'adjust',
 					ref_id: null,
 					adjust_reason: 'found'
@@ -82,7 +104,7 @@ export async function seedStagingOps(): Promise<void> {
 				{
 					item_id: ITEM.water,
 					qty: scale(code, 1200, 800, 400),
-					unit: 'bottle',
+					unit: UNIT.water,
 					reason: 'adjust',
 					ref_id: null,
 					adjust_reason: 'found'
@@ -93,7 +115,7 @@ export async function seedStagingOps(): Promise<void> {
 				{
 					item_id: ITEM.paracetamol,
 					qty: '2000',
-					unit: 'tablet',
+					unit: UNIT.paracetamol,
 					reason: 'adjust',
 					ref_id: null,
 					adjust_reason: 'found'
@@ -104,7 +126,7 @@ export async function seedStagingOps(): Promise<void> {
 				{
 					item_id: ITEM.soap,
 					qty: '300',
-					unit: 'bar',
+					unit: UNIT.soap,
 					reason: 'adjust',
 					ref_id: null,
 					adjust_reason: 'found'
@@ -115,7 +137,7 @@ export async function seedStagingOps(): Promise<void> {
 				{
 					item_id: ITEM.blanket,
 					qty: scale(code, 200, 120, 60),
-					unit: 'piece',
+					unit: UNIT.blanket,
 					reason: 'adjust',
 					ref_id: null,
 					adjust_reason: 'found'
@@ -126,7 +148,7 @@ export async function seedStagingOps(): Promise<void> {
 				{
 					item_id: ITEM.egg,
 					qty: '3000',
-					unit: 'piece',
+					unit: UNIT.egg,
 					reason: 'adjust',
 					ref_id: null,
 					adjust_reason: 'found'
@@ -137,7 +159,7 @@ export async function seedStagingOps(): Promise<void> {
 				{
 					item_id: ITEM.vegetable,
 					qty: '200',
-					unit: 'kg',
+					unit: UNIT.vegetable,
 					reason: 'adjust',
 					ref_id: null,
 					adjust_reason: 'found'
@@ -155,12 +177,12 @@ export async function seedStagingOps(): Promise<void> {
 							{
 								item_id: ITEM.rice,
 								qty_target: scale(code, 800, 500, 250),
-								unit: 'kg'
+								unit: UNIT.rice
 							},
 							{
 								item_id: ITEM.water,
 								qty_target: scale(code, 2000, 1200, 600),
-								unit: 'bottle'
+								unit: UNIT.water
 							}
 						],
 						notes: 'เปิดรับบริจาคเพื่อผู้ประสบภัยน้ำท่วม (staging seed)'
@@ -174,8 +196,8 @@ export async function seedStagingOps(): Promise<void> {
 					{
 						title: 'รับบริจาคของใช้ส่วนตัว',
 						needs: [
-							{ item_id: ITEM.soap, qty_target: '400', unit: 'bar' },
-							{ item_id: ITEM.blanket, qty_target: '200', unit: 'piece' }
+							{ item_id: ITEM.soap, qty_target: '400', unit: UNIT.soap },
+							{ item_id: ITEM.blanket, qty_target: '200', unit: UNIT.blanket }
 						]
 					},
 					ctx
@@ -193,7 +215,7 @@ export async function seedStagingOps(): Promise<void> {
 						phone_hash: 'mock-hash-cpf'
 					},
 					kind: 'items',
-					items: [{ item_id: ITEM.rice, qty: scale(code, 80, 40, 20), unit: 'kg' }],
+					items: [{ item_id: ITEM.rice, qty: scale(code, 80, 40, 20), unit: UNIT.rice }],
 					campaign_id: campaigns[0]._id,
 					tracking_token_hash: `mock-track-${code}-001`
 				},
@@ -204,8 +226,8 @@ export async function seedStagingOps(): Promise<void> {
 					donor: { name: 'วัดท่าสะอ้าน', phone: null, phone_hash: 'mock-hash-wat' },
 					kind: 'items',
 					items: [
-						{ item_id: ITEM.water, qty: scale(code, 200, 100, 50), unit: 'bottle' },
-						{ item_id: ITEM.blanket, qty: '25', unit: 'piece' }
+						{ item_id: ITEM.water, qty: scale(code, 200, 100, 50), unit: UNIT.water },
+						{ item_id: ITEM.blanket, qty: '25', unit: UNIT.blanket }
 					],
 					campaign_id: campaigns[0]._id,
 					tracking_token_hash: `mock-track-${code}-002`
@@ -217,35 +239,9 @@ export async function seedStagingOps(): Promise<void> {
 			_id: `donation:seed-st:${code.toLowerCase()}:${i}`
 		}));
 
-		// Demo scenario for the catalog "ปรับแต่งแล้ว" (override) flow: SH001 customizes the
-		// central item_master:rice by adding a shelter-specific bulk-sack conversion unit.
-		const itemMasterOverrides =
-			code === SH001_CODE
-				? [
-						{
-							_id: itemMasterIdByName.get('ข้าวสาร') ?? 'item_master:rice',
-							type: 'item_master',
-							schema_v: 4,
-							created_at: now(),
-							updated_at: now(),
-							created_by: 'seed',
-							name: 'ข้าวสาร',
-							category: 'item_category:food',
-							base_unit: 'kg',
-							sku: 'SKU-RICE-01',
-							dietary: ['HALAL'],
-							conversions: [{ uom_name: 'กระสอบ', multiplier: '50', barcode: '' }],
-							distribution_type: 'recurring',
-							type_class: 'CONSUMABLE',
-							shelter_code: code,
-							override: true
-						}
-					]
-				: [];
-
-		await bulkDocs(db, [...stockEntries, ...campaigns, ...donations, ...itemMasterOverrides]);
+		await bulkDocs(db, [...stockEntries, ...campaigns, ...donations]);
 		console.log(
-			`  ✓ ${db}: ${stockEntries.length} stock, ${campaigns.length} campaigns, ${donations.length} donations${itemMasterOverrides.length ? `, ${itemMasterOverrides.length} item_master override` : ''}`
+			`  ✓ ${db}: ${stockEntries.length} stock, ${campaigns.length} campaigns, ${donations.length} donations`
 		);
 	}
 }

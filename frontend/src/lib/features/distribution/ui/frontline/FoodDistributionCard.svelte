@@ -3,27 +3,34 @@
 	import UtensilsCrossed from '@lucide/svelte/icons/utensils-crossed';
 	import AlertTriangle from '@lucide/svelte/icons/alert-triangle';
 	import AlertCircle from '@lucide/svelte/icons/alert-circle';
+	import Clock from '@lucide/svelte/icons/clock';
 	import CheckCircle2 from '@lucide/svelte/icons/check-circle-2';
 	import Loader from '@lucide/svelte/icons/loader';
 	import { qtyGte } from '$lib/utils/qty';
 	import { validatePositiveQuantity } from '../model/ticket-quantity';
 	import { Input } from '$lib/components/ui/input/index.js';
+	import { Label } from '$lib/components/ui/label/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
+	import { useItemMasters } from '$lib/features/catalog';
 	import {
 		resolveAuthenticatedAuthorContext,
 		useDistributionLogs,
+		useDispatchedLotExpiry,
 		useRecordFoodDistribution
 	} from '../../application/queries';
 	import { canPerformFrontlineDistribution } from '../../application/food-supplies/auth';
-	import type { RequisitionTicket } from '../../domain/food-supplies';
+	import { lotExpiryStatus, type RequisitionTicket } from '../../domain/food-supplies';
 	import {
 		checkDuplicateMealAdvisory,
+		checkMenuMatchAdvisory,
+		formatMenuTags,
 		getItemCapacitySummary,
 		type FrontlineRecipientSelection
 	} from '../model/frontline-handover';
 	import { formatDistributionError } from '../model/distribution-error';
 	import { getMealPeriodLabel } from '../model/ticket-status';
 	import RecipientSearchPicker from '../common/RecipientSearchPicker.svelte';
+	import QtyStepper from '../common/QtyStepper.svelte';
 	import MealEntitlementWarning from './MealEntitlementWarning.svelte';
 	import InFlightTopUpDialog from './InFlightTopUpDialog.svelte';
 
@@ -50,14 +57,16 @@
 		authContext ? canPerformFrontlineDistribution(authContext) : false
 	);
 
-	// State — selectedItemId syncs reactively; never hard-codes a prop value at initialisation
-	let selectedItemId = $state('');
+	// Item the user picked; the effective selection falls back to the first ticket item whenever
+	// the pick is empty or no longer on the ticket (e.g. parent switches active ticket).
+	let pickedItemId = $state('');
 	let qtyInput = $state('1');
 	let recipientSelection = $state<FrontlineRecipientSelection | null>(null);
 	let notesInput = $state('');
 	let warningModalOpen = $state(false);
 	let localSubmitError = $state<string | null>(null);
 	let topUpDialogOpen = $state(false);
+	let picker = $state<ReturnType<typeof RecipientSearchPicker>>();
 
 	function handleQtyBlur() {
 		const raw = qtyInput.trim();
@@ -65,13 +74,11 @@
 		validatePositiveQuantity(raw);
 	}
 
-	// Keep selectedItemId valid when ticket prop changes (e.g. parent switches active ticket).
-	$effect(() => {
-		const ids = ticket.items.map((i) => i.item_id);
-		if (!selectedItemId || !ids.includes(selectedItemId)) {
-			selectedItemId = ids[0] ?? '';
-		}
-	});
+	const selectedItemId = $derived(
+		ticket.items.some((i) => i.item_id === pickedItemId)
+			? pickedItemId
+			: (ticket.items[0]?.item_id ?? '')
+	);
 
 	// Read queries
 	const ticketLogsQuery = useDistributionLogs(
@@ -108,6 +115,60 @@
 			: { isDuplicate: false, priorLog: null }
 	);
 
+	// Advisory menu matching (CR-159 §C FR-MRM-04): menu tags come from
+	// the catalog item_master; an item the catalog does not know counts as a general menu.
+	const itemMastersQuery = useItemMasters(() => shelterCode ?? null);
+	const selectedMenu = $derived(
+		itemMastersQuery.data?.find((item) => item._id === selectedItem?.item_id)
+	);
+	const menuPreflight = $derived(checkMenuMatchAdvisory(recipientSelection, selectedMenu));
+	const menuMismatchLabel = $derived(
+		menuPreflight.isMismatch ? formatMenuTags(menuPreflight.menuTags) : null
+	);
+
+	// Ready-meal safety clock (FR-MQW-06 B): expiry of the lot dispatched for this item.
+	// Advisory — expired food may still go out; the workflow stamps `is_expired_warning`.
+	const lotExpiryQuery = useDispatchedLotExpiry(
+		() => ticket._id,
+		() => selectedItemId,
+		() => shelterCode
+	);
+	let now = $state(Date.now());
+	$effect(() => {
+		const timer = setInterval(() => (now = Date.now()), 30_000);
+		return () => clearInterval(timer);
+	});
+	const expiryStatus = $derived(lotExpiryStatus(lotExpiryQuery.data, now));
+
+	function formatClock(iso: string): string {
+		return new Date(iso).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
+	}
+
+	function formatDuration(minutes: number): string {
+		const hours = Math.floor(minutes / 60);
+		const rest = minutes % 60;
+		return hours > 0 ? `${hours} ชม. ${rest} นาที` : `${rest} นาที`;
+	}
+
+	// The duplicate-meal and menu-match preflights need their data before a confirm; without it
+	// they read as "no warning" and the override dialog would be skipped. A failed load blocks the
+	// confirm too (fail closed) until a retry succeeds.
+	const needsRecipientLogs = $derived(recipientSelection?.recipientType === 'evacuee');
+	const preflightLoading = $derived(
+		itemMastersQuery.isPending || (needsRecipientLogs && recipientLogsQuery.isPending)
+	);
+	const preflightError = $derived(
+		itemMastersQuery.isError || (needsRecipientLogs && recipientLogsQuery.isError)
+	);
+	const preflightRetrying = $derived(
+		itemMastersQuery.isFetching || (needsRecipientLogs && recipientLogsQuery.isFetching)
+	);
+
+	function retryPreflight() {
+		if (itemMastersQuery.isError) void itemMastersQuery.refetch();
+		if (needsRecipientLogs && recipientLogsQuery.isError) void recipientLogsQuery.refetch();
+	}
+
 	const isQtyValid = $derived.by(() => {
 		const res = validatePositiveQuantity(qtyInput);
 		if (!res.isValid || !res.value) return false;
@@ -120,7 +181,7 @@
 
 		if (!canDistribute) {
 			localSubmitError =
-				'คุณไม่มีสิทธิ์ในการแจกจ่ายอาหาร (ต้องการสิทธิ์ส่วนหน้า/ผู้ประสานงาน/ผู้จัดการ)';
+				'คุณไม่มีสิทธิ์ในการแจกจ่ายอาหาร (ต้องการสิทธิ์เจ้าหน้าที่แจกจ่ายหรือผู้จัดการศูนย์)';
 			return;
 		}
 		if (!recipientSelection) {
@@ -135,9 +196,10 @@
 			localSubmitError = 'จำนวนที่ระบุเกินยอดคงเหลือในมือ';
 			return;
 		}
+		if (preflightLoading || preflightError) return;
 
-		// Advisory duplicate check: if duplicate detected, open override warning modal
-		if (duplicatePreflight.isDuplicate) {
+		// Duplicate meal or menu mismatch: open the override warning modal (reason required)
+		if (duplicatePreflight.isDuplicate || menuPreflight.isMismatch) {
 			warningModalOpen = true;
 			return;
 		}
@@ -174,20 +236,26 @@
 							: undefined,
 					is_override: isOverride,
 					override_reason: overrideReason,
-					// CRITICAL: cooking_completed_at MUST remain omitted in Slice 5.4 (FOOD_4H_TIMESTAMP_BLOCKER)
-					notes: notesInput.trim() || undefined
+					notes: notesInput.trim() || undefined,
+					menu_check: selectedMenu
+						? {
+								recipient_tags:
+									recipientSelection.recipientType === 'evacuee'
+										? (recipientSelection.menuTags ?? [])
+										: null,
+								menu: selectedMenu
+							}
+						: undefined
 				},
 				shelterCode
 			});
 
 			toast.success(`บันทึกแจกอาหารสำเร็จ: ${selectedItem.item_name} จำนวน ${qtyRes.value} ชุด`);
-			// Reset form state
+			// Reset for the next person; a scanned recipient reopens the scanner.
 			warningModalOpen = false;
 			qtyInput = '1';
 			notesInput = '';
-			if (recipientSelection.recipientType === 'evacuee') {
-				recipientSelection = null;
-			}
+			picker?.next();
 		} catch (err) {
 			localSubmitError = formatDistributionError(
 				err,
@@ -243,8 +311,8 @@
 
 	<!-- Line Items & Live In-Hand Capacity Summary -->
 	<fieldset class="space-y-2">
-		<legend class="block text-2xs font-bold text-slate-700 uppercase">
-			รายการอาหารในตั๋ว (ยอดคงเหลือในมือ) <span class="text-red-500">*</span>
+		<legend class="text-sm font-semibold text-slate-700">
+			เลือกเมนูที่จะแจก <span class="text-red-500">*</span>
 		</legend>
 		<div class="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
 			{#each ticket.items as item (item.item_id)}
@@ -252,14 +320,15 @@
 				{@const isSelected = selectedItemId === item.item_id}
 				<button
 					type="button"
-					onclick={() => (selectedItemId = item.item_id)}
-					class="flex items-center justify-between rounded-xl border p-3 text-left transition-all {isSelected
+					onclick={() => (pickedItemId = item.item_id)}
+					aria-pressed={isSelected}
+					class="flex min-h-14 items-center justify-between rounded-xl border p-3 text-left transition-all focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:outline-none {isSelected
 						? 'border-amber-400 bg-amber-50/40 ring-2 ring-amber-400/20'
 						: 'border-slate-200 bg-white hover:border-slate-300'}"
 				>
 					<div class="min-w-0 flex-1">
-						<p class="truncate text-xs font-bold text-slate-900">{item.item_name}</p>
-						<p class="text-2xs text-slate-500">
+						<p class="truncate text-base font-bold text-slate-900">{item.item_name}</p>
+						<p class="text-xs text-slate-500">
 							จัดสรร: <strong class="text-slate-700">{summary.allocatedQty}</strong> | แจกแล้ว:
 							<strong class="text-slate-700">{summary.distributedQty}</strong>
 						</p>
@@ -267,11 +336,11 @@
 
 					<div class="ml-3 shrink-0 text-right">
 						<span
-							class="inline-flex items-center rounded-lg px-2.5 py-1 text-xs font-bold {summary.isExhausted
+							class="inline-flex items-center rounded-lg px-2.5 py-1 text-sm font-bold tabular-nums {summary.isExhausted
 								? 'bg-red-100 text-red-800'
 								: 'bg-emerald-100 text-emerald-900'}"
 						>
-							เหลือ {summary.inHandQty}
+							{summary.isExhausted ? 'หมดแล้ว' : `เหลือ ${summary.inHandQty}`}
 						</span>
 					</div>
 				</button>
@@ -279,100 +348,173 @@
 		</div>
 	</fieldset>
 
-	<!-- Recipient Search Picker Component -->
-	<RecipientSearchPicker bind:value={recipientSelection} disabled={recordFoodMutation.isPending} />
-
-	<!-- Advisory Duplicate Meal Warning Banner -->
-	{#if duplicatePreflight.isDuplicate}
+	<!-- Ready-meal safety clock for the selected item (FR-MQW-06 B) -->
+	{#if expiryStatus?.isExpired}
 		<div
-			class="flex items-start gap-2.5 rounded-xl border border-amber-300 bg-amber-50 p-3.5 text-xs text-amber-950"
+			class="flex items-start gap-2.5 rounded-xl border border-red-200 bg-red-50 p-3.5 text-sm text-red-900"
 			role="alert"
 		>
-			<AlertTriangle class="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+			<AlertTriangle class="mt-0.5 size-4 shrink-0 text-red-600" aria-hidden="true" />
 			<div>
-				<p class="font-bold">ตรวจพบประวัติการรับอาหารซ้ำในรอบวัน</p>
-				<p class="mt-0.5 text-2xs text-amber-800">
-					ผู้ประสบภัยรายนี้ได้รับอาหารมื้อ {ticket.meal ? getMealPeriodLabel(ticket.meal) : ''} ในรอบวันแล้ว
-					หากกดแจกจ่าย ระบบจะแสดงหน้าต่างให้ระบุเหตุผลก่อนแจกซ้ำ
+				<p class="font-bold">อาหารล็อตนี้เกินเวลาปลอดภัยแล้ว</p>
+				<p class="mt-0.5 text-xs text-red-800">
+					หมดอายุเมื่อ {formatClock(expiryStatus.expiry)} น. · แจกต่อได้ แต่ระบบจะบันทึกคำเตือนไว้ในรายการแจก
 				</p>
 			</div>
 		</div>
+	{:else if expiryStatus}
+		<p
+			class="flex items-center gap-2 text-sm {expiryStatus.minutesLeft < 60
+				? 'font-semibold text-amber-800'
+				: 'text-slate-600'}"
+		>
+			<Clock class="size-4 shrink-0" aria-hidden="true" />
+			<span>
+				ปลอดภัยอีก {formatDuration(expiryStatus.minutesLeft)} (ถึง {formatClock(
+					expiryStatus.expiry
+				)} น.)
+			</span>
+		</p>
 	{/if}
 
-	<!-- Quantity & Notes Input Grid -->
-	<div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
-		<div>
-			<label for="food-qty-input" class="mb-1 block text-2xs font-bold text-slate-700 uppercase">
-				จำนวนชุดที่แจก <span class="text-red-500">*</span>
-			</label>
-			<Input
+	<!-- Recipient: scan first, then confirm -->
+	<RecipientSearchPicker
+		bind:this={picker}
+		bind:value={recipientSelection}
+		disabled={recordFoodMutation.isPending}
+	/>
+
+	{#if recipientSelection}
+		<!-- Advisory Duplicate Meal Warning Banner -->
+		{#if duplicatePreflight.isDuplicate}
+			<div
+				class="flex items-start gap-2.5 rounded-xl border border-amber-300 bg-amber-50 p-3.5 text-sm text-amber-950"
+				role="alert"
+			>
+				<AlertTriangle class="mt-0.5 size-4 shrink-0 text-amber-600" aria-hidden="true" />
+				<div>
+					<p class="font-bold">คนนี้รับอาหารมื้อนี้ไปแล้ววันนี้</p>
+					<p class="mt-0.5 text-xs text-amber-800">
+						มื้อ{ticket.meal ? getMealPeriodLabel(ticket.meal) : ''} · ถ้ากดแจกต่อ ระบบจะขอเหตุผลก่อนบันทึก
+					</p>
+				</div>
+			</div>
+		{/if}
+
+		<!-- Advisory Menu Mismatch Banner -->
+		{#if menuMismatchLabel}
+			<div
+				class="flex items-start gap-2.5 rounded-xl border border-amber-300 bg-amber-50 p-3.5 text-sm text-amber-950"
+				role="alert"
+			>
+				<AlertTriangle class="mt-0.5 size-4 shrink-0 text-amber-600" aria-hidden="true" />
+				<div>
+					<p class="font-bold">เมนูนี้ไม่ตรงกลุ่มผู้รับ</p>
+					<p class="mt-0.5 text-xs text-amber-800">
+						เมนูจัดไว้สำหรับกลุ่ม {menuMismatchLabel} · ถ้ากดแจกต่อ ระบบจะขอเหตุผลก่อนบันทึก
+					</p>
+				</div>
+			</div>
+		{/if}
+
+		<!-- Preflight load failure: confirm stays blocked until the checks can run -->
+		{#if preflightError}
+			<div
+				class="flex items-start gap-2.5 rounded-xl border border-red-200 bg-red-50 p-3.5 text-sm text-red-800"
+				role="alert"
+			>
+				<AlertCircle class="mt-0.5 size-4 shrink-0 text-red-600" aria-hidden="true" />
+				<div class="flex-1">
+					<p class="font-bold">ตรวจเมนูและประวัติการรับอาหารไม่สำเร็จ</p>
+					<p class="mt-0.5 text-xs">ยังบันทึกการแจกไม่ได้จนกว่าระบบจะตรวจได้ ลองใหม่อีกครั้ง</p>
+				</div>
+				<Button
+					type="button"
+					variant="outline"
+					size="sm"
+					onclick={retryPreflight}
+					disabled={preflightRetrying}
+				>
+					{#if preflightRetrying}
+						<Loader class="size-4 animate-spin" aria-hidden="true" />
+					{/if}
+					ลองใหม่
+				</Button>
+			</div>
+		{/if}
+
+		<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+			<QtyStepper
 				id="food-qty-input"
-				type="text"
-				inputmode="numeric"
-				step="1"
+				label="จำนวนที่แจก"
+				unit="ชุด"
 				bind:value={qtyInput}
-				onblur={handleQtyBlur}
-				class="h-9 w-full text-xs font-bold shadow-2xs"
+				max={capacitySummary.inHandQty}
 				disabled={recordFoodMutation.isPending || capacitySummary.isExhausted}
 			/>
+
+			<div class="space-y-1.5">
+				<Label for="food-notes-input" class="text-sm font-semibold text-slate-700">
+					หมายเหตุ (ไม่บังคับ)
+				</Label>
+				<Input
+					id="food-notes-input"
+					type="text"
+					bind:value={notesInput}
+					placeholder="เช่น รับแทนผู้ป่วยติดเตียง"
+					class="h-12 text-sm"
+					disabled={recordFoodMutation.isPending}
+				/>
+			</div>
 		</div>
 
-		<div class="sm:col-span-2">
-			<label for="food-notes-input" class="mb-1 block text-2xs font-bold text-slate-700 uppercase">
-				หมายเหตุการแจกจ่าย (ถ้ามี)
-			</label>
-			<Input
-				id="food-notes-input"
-				type="text"
-				bind:value={notesInput}
-				placeholder="เช่น ขอรับเพิ่มสำหรับเด็กเล็ก, แจกพร้อมน้ำดื่ม..."
-				class="h-9 w-full text-xs shadow-2xs placeholder:text-slate-400"
-				disabled={recordFoodMutation.isPending}
-			/>
-		</div>
-	</div>
+		<!-- Error Alert -->
+		{#if localSubmitError}
+			<div
+				class="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800"
+				role="alert"
+			>
+				<AlertCircle class="size-4 shrink-0 text-red-600" aria-hidden="true" />
+				<span>{localSubmitError}</span>
+			</div>
+		{/if}
 
-	<!-- Error Alert -->
-	{#if localSubmitError}
-		<div
-			class="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-700"
-		>
-			<AlertCircle class="h-4 w-4 shrink-0 text-red-500" />
-			<span>{localSubmitError}</span>
-		</div>
-	{/if}
-
-	<!-- Submit Action Button -->
-	<div class="flex items-center justify-end gap-3 border-t border-slate-100 pt-4">
 		<Button
 			type="button"
-			variant="default"
 			onclick={handleSubmitClick}
 			disabled={recordFoodMutation.isPending ||
 				capacitySummary.isExhausted ||
-				!recipientSelection ||
+				preflightLoading ||
+				preflightError ||
 				!isQtyValid ||
 				!canDistribute}
-			class="h-10 rounded-xl bg-amber-600 px-5 text-xs font-bold hover:bg-amber-700"
+			class="h-14 w-full rounded-xl bg-amber-600 text-base font-bold hover:bg-amber-700"
 		>
 			{#if recordFoodMutation.isPending}
-				<Loader class="h-4 w-4 animate-spin" />
-				<span>กำลังบันทึกแจกอาหาร...</span>
+				<Loader class="size-5 animate-spin" aria-hidden="true" />
+				<span>กำลังบันทึก...</span>
 			{:else}
-				<CheckCircle2 class="h-4 w-4" />
-				<span>ยืนยันบันทึกแจกอาหาร</span>
+				<CheckCircle2 class="size-5" aria-hidden="true" />
+				<span>ยืนยันแจก {selectedItem?.item_name ?? ''} {qtyInput} ชุด</span>
 			{/if}
 		</Button>
-	</div>
+		{#if !canDistribute}
+			<p class="text-center text-sm text-slate-500">
+				บัญชีนี้ไม่มีสิทธิ์บันทึกการแจกอาหาร (ต้องเป็นเจ้าหน้าที่แจกจ่ายหรือผู้จัดการศูนย์)
+			</p>
+		{/if}
+	{/if}
 </div>
 
-<!-- Duplicate Meal Override Warning Modal -->
+<!-- Duplicate Meal / Menu Mismatch Override Warning Modal -->
 {#if ticket.meal && recipientSelection}
 	<MealEntitlementWarning
 		open={warningModalOpen}
 		meal={ticket.meal}
 		recipientLabel={recipientSelection.label}
+		isDuplicate={duplicatePreflight.isDuplicate}
 		priorDistributedAt={duplicatePreflight.priorLog?.distributed_at}
+		{menuMismatchLabel}
 		onconfirm={handleOverrideConfirm}
 		oncancel={() => (warningModalOpen = false)}
 	/>

@@ -8,6 +8,7 @@
 	import { getTranslation } from '$lib/utils/i18n';
 	import { PUBLIC_EMERGENCY_I18N } from '$lib/constants/i18n';
 	import { langState } from '$lib/states/i18n.svelte';
+	import { formatThaiDateTime } from '$lib/utils/date';
 
 	let {
 		announcement,
@@ -105,7 +106,7 @@
 			{#if announcement.created_at}
 				<div class="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
 					<Clock class="h-3.5 w-3.5 text-muted-foreground" />
-					<span>ประกาศเมื่อ {new Date(announcement.created_at).toLocaleString('th-TH')} น.</span>
+					<span>ประกาศเมื่อ {formatThaiDateTime(announcement.created_at)} น.</span>
 				</div>
 			{/if}
 			<!-- Shelter Badges (optional) -->

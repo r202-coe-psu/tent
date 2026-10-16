@@ -2,23 +2,29 @@ import type { ResolvedPathname } from '$app/types';
 import { resolve } from '$app/paths';
 import type { Icon } from '@lucide/svelte';
 import {
-	Users,
-	HeartHandshake,
-	ClipboardList,
-	Package,
-	FileCheck,
-	FileText,
-	Building,
-	UserCog,
-	Database,
-	Warehouse,
-	Calculator,
-	HandHeart,
-	MapPin,
-	UtensilsCrossed,
-	FlaskConical,
-	ClipboardCheck
-} from '@lucide/svelte/icons';
+	hasCapabilityAnywhere,
+	isKioskStaffOnly,
+	isShelterManager,
+	isSystemAdmin,
+	SCANNER_MANAGER_CAPABILITIES
+} from '$lib/auth/roles';
+import Users from '@lucide/svelte/icons/users';
+import HeartHandshake from '@lucide/svelte/icons/heart-handshake';
+import ClipboardList from '@lucide/svelte/icons/clipboard-list';
+import Package from '@lucide/svelte/icons/package';
+import FileCheck from '@lucide/svelte/icons/file-check';
+import FileText from '@lucide/svelte/icons/file-text';
+import Building from '@lucide/svelte/icons/building';
+import UserCog from '@lucide/svelte/icons/user-cog';
+import Database from '@lucide/svelte/icons/database';
+import Warehouse from '@lucide/svelte/icons/warehouse';
+import Calculator from '@lucide/svelte/icons/calculator';
+import HandHeart from '@lucide/svelte/icons/hand-heart';
+import MapPin from '@lucide/svelte/icons/map-pin';
+import UtensilsCrossed from '@lucide/svelte/icons/utensils-crossed';
+import ClipboardCheck from '@lucide/svelte/icons/clipboard-check';
+import Cpu from '@lucide/svelte/icons/cpu';
+import MonitorSmartphone from '@lucide/svelte/icons/monitor-smartphone';
 
 type Leaf = {
 	label: string;
@@ -26,6 +32,8 @@ type Leaf = {
 	icon: typeof Icon;
 	requiresAdmin?: boolean;
 	requiresManager?: boolean;
+	/** Fine-grained visibility (e.g. capability in any shelter). Wins over the boolean flags. */
+	visibleTo?: (roles: readonly string[]) => boolean;
 };
 
 type Group = Leaf & {
@@ -35,6 +43,28 @@ type Group = Leaf & {
 export type BackofficeNavbarNode = Leaf | Group;
 
 const isGroup = (n: BackofficeNavbarNode): n is Group => 'children' in n;
+
+export type NavVisibilityContext = {
+	roles: readonly string[];
+	/** Active shelter — scopes `requiresManager` to a manager of this shelter. */
+	shelterCode?: string | null;
+};
+
+/**
+ * Whether the signed-in user sees a nav node. `visibleTo` wins; a group also needs at least one
+ * visible child (no empty parents); otherwise `requiresAdmin` / `requiresManager` apply. A
+ * kiosk_staff-only user of the active shelter sees only leaves whose `visibleTo` admits them
+ * (FR-SBO-29).
+ */
+export function canSeeNavNode(node: BackofficeNavbarNode, ctx: NavVisibilityContext): boolean {
+	if (node.visibleTo) return node.visibleTo(ctx.roles);
+	if (!isGroup(node) && isKioskStaffOnly(ctx.roles, ctx.shelterCode)) return false;
+	const isSA = isSystemAdmin(ctx.roles);
+	if (node.requiresAdmin && !isSA) return false;
+	if (node.requiresManager && !isSA && !isShelterManager(ctx.roles, ctx.shelterCode)) return false;
+	if (isGroup(node)) return node.children.some((child) => canSeeNavNode(child, ctx));
+	return true;
+}
 
 export type BackofficeNavbarGroup = {
 	title: string;
@@ -64,20 +94,14 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 		title: '2. บริหารทรัพยากร',
 		items: [
 			{
-				label: 'การประเมินความพร้อมศูนย์ (Readiness SOP)',
+				label: 'การประเมินความพร้อมศูนย์',
 				href: resolve('/back-office/shelters/readiness' as '/back-office/shelters'),
 				icon: ClipboardCheck
 			},
 			{
-				label: 'การประเมินประจำวัน (Daily SOP)',
+				label: 'การประเมินประจำวัน',
 				href: resolve('/back-office/dailysop'),
 				icon: ClipboardList
-			},
-			{
-				label: 'จำลองสถานการณ์ SOP',
-				href: resolve('/back-office/sop-simulation'),
-				icon: FlaskConical,
-				requiresManager: true
 			},
 			{
 				label: 'คลัง',
@@ -130,12 +154,25 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 			},
 			{ label: 'จัดการผู้ใช้งานและสิทธิ์', href: resolve('/back-office/users'), icon: UserCog },
 			{
-				label: 'จัดการข้อมูลหลัก (Master Data)',
+				label: 'จัดการ Kiosk',
+				href: null,
+				icon: MonitorSmartphone,
+				children: [
+					{
+						label: 'จัดการอุปกรณ์',
+						href: resolve('/back-office/kiosks'),
+						icon: Cpu,
+						visibleTo: (roles) => hasCapabilityAnywhere(roles, SCANNER_MANAGER_CAPABILITIES)
+					}
+				]
+			},
+			{
+				label: 'จัดการข้อมูลหลัก',
 				href: null,
 				icon: Database,
 				children: [
 					{
-						label: 'Master Data',
+						label: 'ข้อมูลหลัก',
 						href: resolve('/back-office/master-data'),
 						icon: Database
 					},

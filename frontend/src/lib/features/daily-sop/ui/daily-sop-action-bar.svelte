@@ -1,5 +1,6 @@
 <script lang="ts">
-	import { ArrowLeft, Save } from '@lucide/svelte';
+	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
+	import Save from '@lucide/svelte/icons/save';
 	import { Button } from '$lib/components/ui/button/index.js';
 
 	type ActionBarMode = 'draft' | 'edit';

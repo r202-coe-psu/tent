@@ -43,6 +43,7 @@
 	import { getShelterCode } from '$lib/db/shelter';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
+	import { formatThaiDateTime } from '$lib/utils/date';
 	import type {
 		Evacuee,
 		StayStatus,
@@ -117,6 +118,12 @@
 			colorClass:
 				'bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800',
 			dotClass: 'bg-blue-500'
+		},
+		kiosk_registered: {
+			label: 'ลงทะเบียนที่ตู้ (รอยืนยัน)',
+			shortLabel: 'ที่ตู้ (รอยืนยัน)',
+			colorClass: 'bg-amber-50 text-amber-900 border-amber-200',
+			dotClass: 'bg-amber-500'
 		},
 		arriving: {
 			label: 'อยู่ระหว่างรอเข้าพัก (Arriving / Waiting)',
@@ -726,15 +733,8 @@
 
 	function formatDateTime(ts: string | number | undefined): string {
 		if (!ts) return 'ไม่ระบุ';
-		const d = new Date(ts);
-		if (isNaN(d.getTime())) return String(ts);
-		return d.toLocaleString('th-TH', {
-			year: 'numeric',
-			month: 'short',
-			day: 'numeric',
-			hour: '2-digit',
-			minute: '2-digit'
-		});
+		const formatted = formatThaiDateTime(String(ts));
+		return formatted || String(ts);
 	}
 </script>
 

@@ -2,7 +2,12 @@
 	import Scan from '@lucide/svelte/icons/scan';
 	import ClipboardList from '@lucide/svelte/icons/clipboard-list';
 	import Megaphone from '@lucide/svelte/icons/megaphone';
+	import CalendarClock from '@lucide/svelte/icons/calendar-clock';
 	import { toast } from 'svelte-sonner';
+	import { page } from '$app/state';
+	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
+	import { SvelteURLSearchParams } from 'svelte/reactivity';
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import * as Tabs from '$lib/components/ui/tabs/index.js';
 	import NeedsBoardAdmin from '$lib/components/needs-board-admin.svelte';
@@ -12,6 +17,7 @@
 	import CreateCampaignForm from './components/create-campaign-form.svelte';
 	import EditCampaignForm from './components/edit-campaign-form.svelte';
 	import ForceCutoffDialog from './components/force-cutoff-dialog.svelte';
+	import DonationSlotsManager from './components/donation-slots-manager.svelte';
 	import { useDonationNeedsBoard, type NeedItem } from '$lib/features/operations';
 	import type { PendingDonationRow } from '$lib/features/donations';
 
@@ -33,7 +39,15 @@
 	 * `incoming-redirects-board.svelte`) and their routes still serve data — putting a
 	 * tab back is re-adding a button and a branch, not rebuilding a feature.
 	 */
-	let activeSubTab = $state('scan');
+	const TABS = ['scan', 'pending', 'needs', 'slots'] as const;
+	type TabKey = (typeof TABS)[number];
+
+	// The tab lives in `?tab=`, not in component state: the back-office layout remounts
+	// this page on every shelter switch (`{#key selectedShelterCode}`), which used to
+	// throw staff back to the scan tab mid-task.
+	const activeSubTab = $derived<TabKey>(
+		TABS.find((t) => t === page.url.searchParams.get('tab')) ?? 'scan'
+	);
 	let viewState = $state<'list' | 'create' | 'edit'>('list');
 	// One board row = one need, so the edit target is (campaign, item), never just the campaign.
 	let selectedEditingItem = $state<NeedItem | null>(null);
@@ -83,7 +97,13 @@
 	}
 
 	function switchTab(tab: string) {
-		activeSubTab = tab;
+		const params = new SvelteURLSearchParams(page.url.searchParams);
+		params.set('tab', tab);
+		void goto(resolve(`/back-office/stock-donations?${params}` as '/back-office/stock-donations'), {
+			replaceState: true,
+			keepFocus: true,
+			noScroll: true
+		});
 		viewState = 'list';
 		selectedPendingRequest = null;
 		if (tab === 'pending') loadPending();
@@ -237,6 +257,15 @@
 					<Megaphone class="h-4 w-4" />
 					จัดการความต้องการ
 				</Tabs.Trigger>
+
+				<!-- DN-5 — the queue the public wizard books into (schema.md §2.13). -->
+				<Tabs.Trigger
+					value="slots"
+					class="flex shrink-0 items-center gap-2 rounded-lg border border-transparent px-3.5 py-2 text-xs font-semibold tracking-wide text-muted-foreground transition-all duration-300 hover:text-foreground active:scale-[0.98] data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm md:px-5 md:py-2.5"
+				>
+					<CalendarClock class="h-4 w-4" />
+					ช่วงเวลารับของ
+				</Tabs.Trigger>
 			</Tabs.List>
 		</div>
 
@@ -263,6 +292,10 @@
 					}}
 				/>
 			{/if}
+		</Tabs.Content>
+
+		<Tabs.Content value="slots">
+			<DonationSlotsManager />
 		</Tabs.Content>
 
 		<Tabs.Content value="needs">

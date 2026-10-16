@@ -80,6 +80,36 @@ describe('createUserSchema', () => {
 		expect(parsed.assignments).toHaveLength(2);
 	});
 
+	it('accepts assignments when top-level capabilities is empty (central multi-shelter form)', () => {
+		const result = createUserSchema.safeParse({
+			username: '0812345678',
+			password: validPassword,
+			display_name: 'สมชาย ใจดี',
+			personnel_type: 'staff',
+			organization: 'ปภ.',
+			phone: '0812345678',
+			is_system_admin: false,
+			capabilities: [],
+			assignments: [{ shelter_code: 'SH001', capabilities: ['registration_staff'] }]
+		});
+		expect(result.success).toBe(true);
+	});
+
+	it('rejects a non-SA user with neither assignments nor capabilities', () => {
+		const result = createUserSchema.safeParse({
+			username: '0812345678',
+			password: validPassword,
+			display_name: 'สมชาย ใจดี',
+			personnel_type: 'staff',
+			organization: 'ปภ.',
+			phone: '0812345678',
+			is_system_admin: false,
+			capabilities: [],
+			assignments: []
+		});
+		expect(result.success).toBe(false);
+	});
+
 	it('rejects duplicate shelters in assignments', () => {
 		const result = createUserSchema.safeParse({
 			username: '0812345678',

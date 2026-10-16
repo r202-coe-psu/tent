@@ -63,6 +63,14 @@ describe('isRequisitionTicket', () => {
 		expect(isRequisitionTicket({ type: 'meal_plan' })).toBe(false);
 		expect(isRequisitionTicket(null)).toBe(false);
 	});
+
+	it('rejects non-kitchen requisition tickets (distribution lifecycle)', () => {
+		const ticket = createTicket(baseInput(), 'TKT-KITCHEN-0001', ctx);
+		expect(isRequisitionTicket({ ...ticket, requisition_type: 'supplies' })).toBe(false);
+		expect(
+			isRequisitionTicket({ ...ticket, requisition_type: 'supplies', status: 'DISTRIBUTING' })
+		).toBe(false);
+	});
 });
 
 describe('ticket lifecycle transitions', () => {

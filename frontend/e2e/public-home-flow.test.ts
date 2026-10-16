@@ -71,22 +71,26 @@ test.describe('Public landing: setup and urgent need', { tag: ['@public', '@crit
 
 	test('lists the critical need and links to its donation form', async ({ page }) => {
 		test.skip(IS_REMOTE, 'no production need fixture — it would invite real donations');
-		test.setTimeout(120_000); // outlasts the 90 s projection wait below
-		// The worker projects new needs asynchronously — retry the landing page.
+		test.setTimeout(45_000); // outlasts the 35 s projection wait below
+		// This shelter was just created — the worker's registry listener only polls for
+		// brand-new shelter databases every 30s (listeners/registry.py), so this first
+		// wait needs headroom past that; retry the landing page until it does.
 		await expect(async () => {
 			await page.goto('/');
 			await expect(page.getByRole('heading', { name: SHELTER_NAME })).toBeVisible({
 				timeout: 3_000
 			});
-		}).toPass({ intervals: [3_000], timeout: 90_000 });
+		}).toPass({ intervals: [2_000], timeout: 35_000 });
 
-		await expect(
-			page.getByRole('heading', { name: 'ความต้องการบริจาคด่วน', exact: true })
-		).toBeVisible();
+		await expect(page.getByRole('heading', { name: 'รับบริจาคด่วน', exact: true })).toBeVisible();
 		await expect(page.getByText(NEED_ITEM)).toBeVisible();
 		await expect(page.getByText('ขาดอีก 500 จากเป้า 500')).toBeVisible();
 
-		await page.getByRole('link', { name: 'แจ้งบริจาค' }).click();
+		// Scope to THIS run's shelter: a seeded DB has its own urgent needs, so the bare
+		// "แจ้งบริจาค" link name matches several cards (strict-mode violation).
+		const donateLink = page.locator(`a[href="/donations?shelter=${shelterCode}"]`);
+		await expect(donateLink).toHaveText('แจ้งบริจาค');
+		await donateLink.click();
 		await expect(page).toHaveURL(new RegExp(`/donations\\?shelter=${shelterCode}$`));
 	});
 });
@@ -101,15 +105,14 @@ test.describe(
 			await expect(
 				page.getByRole('heading', { name: 'แพลตฟอร์มช่วยเหลือผู้ประสบภัย', level: 1 })
 			).toBeVisible();
-			await expect(page.getByRole('link', { name: 'ลงทะเบียนผู้ประสบภัยล่วงหน้า' })).toBeVisible();
-			await expect(page.getByRole('link', { name: 'ค้นหาศูนย์พักพิงใกล้ฉัน' })).toBeVisible();
+			await expect(
+				page.locator('main header').getByRole('link', { name: 'ลงทะเบียนล่วงหน้า', exact: true })
+			).toBeVisible();
 			await expect(
 				page.getByRole('textbox', { name: 'พิมพ์ชื่อ-นามสกุล, เลขประจำตัว' })
 			).toBeVisible();
 			await expect(page.getByRole('button', { name: 'ค้นหา', exact: true })).toBeVisible();
-			await expect(
-				page.getByRole('heading', { name: 'ความต้องการบริจาคด่วน', exact: true })
-			).toBeVisible();
+			await expect(page.getByRole('heading', { name: 'รับบริจาคด่วน', exact: true })).toBeVisible();
 		});
 
 		test('navigates to the shelter directory and back home', async ({ page }) => {
@@ -184,9 +187,7 @@ test.describe('Public landing: smoke extras', { tag: ['@public', '@smoke'] }, ()
 		await expect(page.getByRole('link', { name: 'Home' })).toBeVisible();
 
 		await page.getByRole('button', { name: 'เปลี่ยนเป็นภาษาไทย' }).click();
-		await expect(
-			page.getByRole('heading', { name: 'ความต้องการบริจาคด่วน', exact: true })
-		).toBeVisible();
+		await expect(page.getByRole('heading', { name: 'รับบริจาคด่วน', exact: true })).toBeVisible();
 	});
 });
 
@@ -210,8 +211,9 @@ test.describe('Public landing: error contract', { tag: ['@public', '@smoke'] }, 
 		await expect(
 			page.getByRole('heading', { name: 'แพลตฟอร์มช่วยเหลือผู้ประสบภัย', level: 1 })
 		).toBeVisible();
-		await expect(page.getByRole('link', { name: 'ลงทะเบียนผู้ประสบภัยล่วงหน้า' })).toBeVisible();
-		await expect(page.getByRole('link', { name: 'ค้นหาศูนย์พักพิงใกล้ฉัน' })).toBeVisible();
+		await expect(
+			page.locator('main header').getByRole('link', { name: 'ลงทะเบียนล่วงหน้า', exact: true })
+		).toBeVisible();
 	});
 
 	test.fixme('GAP: landing does not surface a load-error message when public needs/shelters APIs fail (sysError i18n unused; page silently degrades to empty lists)', async ({

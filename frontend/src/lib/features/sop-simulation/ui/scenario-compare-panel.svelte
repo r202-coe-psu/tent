@@ -16,6 +16,7 @@
 	import ArrowRight from '@lucide/svelte/icons/arrow-right';
 	import Clock from '@lucide/svelte/icons/clock';
 	import Info from '@lucide/svelte/icons/info';
+	import { formatThaiDateTime } from '$lib/utils/date';
 
 	let { result }: { result: ScenarioResult } = $props();
 
@@ -117,11 +118,7 @@
 				ส่วนรายการที่ต้องใช้พร้อมกัน เช่น ห้องน้ำ จะไม่คูณจำนวนวัน
 			</p>
 			<div class="compare-metadata">
-				<span
-					><Clock class="size-3.5" />ข้อมูล ณ {new Date(result.snapshot.as_of).toLocaleString(
-						'th-TH'
-					)}</span
-				>
+				<span><Clock class="size-3.5" />ข้อมูล ณ {formatThaiDateTime(result.snapshot.as_of)}</span>
 				<span>สูตร {result.snapshot.formula_v}</span>
 				<span>มาตรฐาน v{result.snapshot.profile.effective_version}</span>
 			</div>

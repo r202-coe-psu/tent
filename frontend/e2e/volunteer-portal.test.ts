@@ -237,7 +237,7 @@ test.describe('Volunteer Access Portal (CR-092 หน้าจอ 6)', () => {
 		await openPortalTab(page);
 		await signIn(page, '081-9992211');
 
-		await expect(page.getByText('ไม่พบเบอร์โทรศัพท์นี้ในระบบจิตอาสา')).toBeVisible();
+		await expect(page.getByText('ไม่พบเบอร์โทรศัพท์นี้ในระบบอาสาสมัคร')).toBeVisible();
 		await expect(signOutButton(page)).toHaveCount(0);
 		await expect(page.getByText('Heavy Lifting')).toHaveCount(0);
 		await expect(page.getByText('นายเก่งกล้า')).toHaveCount(0);
@@ -314,7 +314,11 @@ test.describe('Volunteer Access Portal (CR-092 หน้าจอ 6)', () => {
 
 test.describe('Booking a mission from the board (CR-092 FR-VOL-02)', () => {
 	/** One open job with an implicit today shift (from the empty `shift_template.days`). */
-	async function mockJobBoard(page: Page, applyResponse: Record<string, unknown>) {
+	async function mockJobBoard(
+		page: Page,
+		applyResponse: Record<string, unknown>,
+		skillsRequired: string[] = []
+	) {
 		await page.route('**/api/public/v1/volunteer/jobs*', (route) =>
 			route.fulfill(
 				json({
@@ -327,7 +331,7 @@ test.describe('Booking a mission from the board (CR-092 FR-VOL-02)', () => {
 							title: 'ผู้ช่วยครัวจัดเตรียมอาหาร',
 							description: 'ช่วยเตรียมอาหารกลางวัน',
 							tier: 'operational',
-							skills_required: [],
+							skills_required: skillsRequired,
 							shift_template: {
 								shift_name: 'เช้า',
 								start_time: '08:00',
@@ -425,6 +429,23 @@ test.describe('Booking a mission from the board (CR-092 FR-VOL-02)', () => {
 
 		await expect(page).toHaveURL(/\/volunteers\/portal\/volunteer\/01PORTALVOLUNTEER\/dashboard/);
 		expect(resolveAskedWith).toEqual({ phone: '0891112222' });
+	});
+
+	test('opens the form and shows the skills by name from Master Data', async ({ page }) => {
+		// The skills endpoint sends label_th / label_en only. Matching a job's required
+		// skills against it used to read a `label` that is not there and crash the page.
+		const pageErrors: string[] = [];
+		page.on('pageerror', (error) => pageErrors.push(error.message));
+		await mockPortalApi(page);
+		await mockJobBoard(page, { success: true }, ['driver', 'cooking']);
+
+		await page.goto('/volunteers/jobs');
+		await page.getByRole('button', { name: 'สมัครกะนี้' }).click();
+
+		const form = page.locator('form');
+		await expect(form.getByRole('button', { name: 'ประกอบอาหาร / ครัวสนาม' })).toBeVisible();
+		await expect(form.getByRole('button', { name: 'ขับขี่ยานพาหนะ / ขนส่ง' })).toBeVisible();
+		expect(pageErrors).toEqual([]);
 	});
 });
 

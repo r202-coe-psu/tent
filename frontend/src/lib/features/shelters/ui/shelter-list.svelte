@@ -9,6 +9,7 @@
 	import type { ShelterSummary } from '../data/shelters.repository';
 	import type { ProjectLevel } from '../domain/schema';
 	import ShelterOccupancyCell from './shelter-occupancy-cell.svelte';
+	import { formatThaiShortDate } from '$lib/utils/date';
 
 	let {
 		shelters,
@@ -43,6 +44,10 @@
 	function locationLine(s: ShelterSummary): string {
 		return [s.subdistrict, s.district, s.province].filter(Boolean).join(' · ');
 	}
+
+	function displayDate(iso: string): string {
+		return iso ? formatThaiShortDate(iso) : '—';
+	}
 </script>
 
 {#if shelters.length === 0}
@@ -66,6 +71,8 @@
 					<th class="px-3.5 py-2.5">ประเภท / ที่ตั้ง</th>
 					<th class="px-3.5 py-2.5">ผู้พักปัจจุบัน / ความจุ</th>
 					<th class="px-3.5 py-2.5">ผู้จัดการ / ติดต่อ</th>
+					<th class="px-3.5 py-2.5 whitespace-nowrap">วันที่สร้าง</th>
+					<th class="px-3.5 py-2.5 whitespace-nowrap">วันที่อัปเดต</th>
 					<th class="px-3.5 py-2.5 text-right">จัดการ</th>
 				</tr>
 			</thead>
@@ -139,6 +146,20 @@
 									<span>{shelter.contact.phone}</span>
 								</div>
 							{/if}
+						</td>
+
+						<!-- Created -->
+						<td class="px-3.5 py-2.5 align-middle">
+							<span class="text-xs whitespace-nowrap text-slate-600 tabular-nums">
+								{displayDate(shelter.created_at)}
+							</span>
+						</td>
+
+						<!-- Updated -->
+						<td class="px-3.5 py-2.5 align-middle">
+							<span class="text-xs whitespace-nowrap text-slate-600 tabular-nums">
+								{displayDate(shelter.updated_at)}
+							</span>
 						</td>
 
 						<!-- Actions -->

@@ -1,6 +1,8 @@
 import { test, expect } from '@playwright/test';
 
-test.describe('Public Donation & Queue Booking Wizard (T-60)', () => {
+const TAGS = { tag: ['@regression', '@donation'] };
+
+test.describe('Public Donation & Queue Booking Wizard (T-60)', TAGS, () => {
 	test('successfully performs the entire 4-step wizard donation flow', async ({ page }) => {
 		// 1. Mock API GET /api/public/v1/needs
 		await page.route('**/api/public/v1/needs', async (route) => {
@@ -41,7 +43,9 @@ test.describe('Public Donation & Queue Booking Wizard (T-60)', () => {
 		await page.goto('/donations');
 
 		// Step 1: Needs Board — shelter cards first, needs one level in
-		await expect(page.getByRole('heading', { name: /กระดาน\s*ความต้องการด่วน/ })).toBeVisible();
+		await expect(
+			page.getByRole('heading', { name: /ของที่ศูนย์พักพิง\s*ต้องการตอนนี้/ })
+		).toBeVisible();
 		await expect(page.getByText('ศูนย์พักพิง เทศบาลนครหาดใหญ่ (โรงเรียนเทศบาล 2)')).toBeVisible();
 
 		// Open the shelter, then pick the need — locks SH001 and pre-fills "ข้าวสาร"
@@ -144,17 +148,17 @@ test.describe('Public Donation & Queue Booking Wizard (T-60)', () => {
 });
 
 /**
- * Cancel-from-track coverage. Both are `fixme`: under Playwright route mocking the
- * track page's tracking query never settles — the mock fulfils with 200 (the request
- * and response both show in the trace) yet the query stays `status: pending,
- * fetchStatus: fetching` indefinitely, so no branch of the page renders. Reproduced
- * with an unconditional debug element, against both `vite preview` and the dev server,
- * and on the page as it stood *before* the cancel button was added — so it is a
- * problem with mocking this route, not with the cancel wiring. The gating logic is
- * covered by unit tests on `canCancelDonation`; un-fixme these once the mocking issue
- * is understood.
+ * Cancel-from-track coverage with the track BFF mocked: a declared booking can be
+ * cancelled from the page, and a received one offers no cancel. Which statuses allow a
+ * cancel is unit-tested on `canCancelDonation`.
+ *
+ * Both were `fixme` from 2026-08-21 to 2026-10-13: under this route mock the tracking
+ * query stayed `status: pending, fetchStatus: fetching` although the mock answered 200,
+ * so nothing rendered (seen on `vite preview` and the dev server). It no longer does,
+ * and no app change was traced as the fix — if these start timing out with an empty
+ * page, that hang is back.
  */
-test.describe('Donor cancels their own reservation from the track page (T-21 DoD 4)', () => {
+test.describe('Donor cancels their own reservation from the track page (T-21 DoD 4)', TAGS, () => {
 	const TOKEN = 'TX-SH001-CANCELME';
 
 	/** Track payload the BFF returns for GET /api/public/v1/donations/{token}. */
@@ -175,7 +179,7 @@ test.describe('Donor cancels their own reservation from the track page (T-21 DoD
 		};
 	}
 
-	test.fixme('cancels a declared booking and reflects the new status', async ({ page }) => {
+	test('cancels a declared booking and reflects the new status', async ({ page }) => {
 		let cancelled = false;
 
 		await page.route(`**/api/public/v1/donations/${TOKEN}`, async (route) => {
@@ -202,15 +206,18 @@ test.describe('Donor cancels their own reservation from the track page (T-21 DoD
 		await openCancel.click();
 
 		await expect(page.getByText('ยกเลิกการจองบริจาคนี้?')).toBeVisible();
-		await expect(page.getByText('DN-777001')).toBeVisible();
+		// The card heading shows the ref too, so look inside the dialog.
+		await expect(page.getByRole('alertdialog').getByText('DN-777001')).toBeVisible();
 		await page.getByRole('button', { name: 'ยืนยันยกเลิกการจอง' }).click();
 
 		await expect(page.getByText('ยกเลิกการจองบริจาคแล้ว')).toBeVisible();
-		// Refetch drove the page to the cancelled status, so the button is gone.
+		// Refetch drove the page to the cancelled status (shown on the badge and the status
+		// line), so the button is gone.
+		await expect(page.getByText('ยกเลิกการจองแล้ว', { exact: true }).first()).toBeVisible();
 		await expect(openCancel).toBeHidden();
 	});
 
-	test.fixme('offers no cancel once the goods were received', async ({ page }) => {
+	test('offers no cancel once the goods were received', async ({ page }) => {
 		await page.route(`**/api/public/v1/donations/${TOKEN}`, async (route) => {
 			await route.fulfill({
 				status: 200,
@@ -221,7 +228,7 @@ test.describe('Donor cancels their own reservation from the track page (T-21 DoD
 
 		await page.goto(`/donations/track/${TOKEN}`);
 
-		await expect(page.getByText('DN-777001')).toBeVisible();
+		await expect(page.getByRole('heading', { name: 'DN-777001' })).toBeVisible();
 		await expect(page.getByRole('button', { name: 'ยกเลิกการจองนี้' })).toHaveCount(0);
 	});
 });
@@ -234,7 +241,7 @@ test.describe('Donor cancels their own reservation from the track page (T-21 DoD
  * levels to the stored value, and keep `normal` a real level rather than the absence
  * of a badge: its chip filters, so it has to be visible and selectable.
  */
-test.describe('Needs board reflects the urgency staff set (not the quantity)', () => {
+test.describe('Needs board reflects the urgency staff set (not the quantity)', TAGS, () => {
 	const SHELTER = 'ศูนย์พักพิงทดสอบความเร่งด่วน';
 
 	/** Every level carries a shortage well over the old `>= 50` threshold. */
@@ -302,7 +309,7 @@ test.describe('Needs board reflects the urgency staff set (not the quantity)', (
  * The "ปกติ" chip used to return every open need — same result as "ทั้งหมด" — because
  * it filtered on `status` alone and never looked at the level.
  */
-test.describe('Urgency filter chips', () => {
+test.describe('Urgency filter chips', TAGS, () => {
 	test.beforeEach(async ({ page }) => {
 		await page.route('**/api/public/v1/needs', async (route) => {
 			await route.fulfill({
@@ -368,7 +375,7 @@ test.describe('Urgency filter chips', () => {
  * deletes `randomUUID` to stand in for a non-secure origin without needing a second
  * host. Keep it deleted for any page that mints client-side ids.
  */
-test.describe('Non-secure context (LAN HTTP over an IP)', () => {
+test.describe('Non-secure context (LAN HTTP over an IP)', TAGS, () => {
 	test.beforeEach(async ({ page }) => {
 		await page.addInitScript(() => {
 			// @ts-expect-error — deleting a readonly DOM property on purpose
@@ -407,7 +414,9 @@ test.describe('Non-secure context (LAN HTTP over an IP)', () => {
 
 		await page.goto('/donations');
 
-		await expect(page.getByRole('heading', { name: /กระดาน\s*ความต้องการด่วน/ })).toBeVisible();
+		await expect(
+			page.getByRole('heading', { name: /ของที่ศูนย์พักพิง\s*ต้องการตอนนี้/ })
+		).toBeVisible();
 		await expect(page.getByText('ศูนย์พักพิงทดสอบ LAN')).toBeVisible();
 		expect(crashes.join('\n')).not.toContain('randomUUID');
 		expect(crashes).toEqual([]);

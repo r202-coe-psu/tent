@@ -1,12 +1,12 @@
 /**
- * Redeploy `_design/access` (validate_doc_update allowlist) + referral Mango
- * indexes on every shelter DB listed in the registry, and grant the public
- * writer user `_security.members` access.
+ * Redeploy `_design/access` (validate_doc_update allowlist), referral and
+ * kiosk lookup Mango indexes on every shelter DB listed in the registry, and
+ * grant the public writer user `_security.members` access.
  *
  * Run after allowlist changes (e.g. new doc types in shelter-access-design)
  * on existing staging/prod DBs — new shelters provisioned via
- * POST /api/back-office/shelter get all three automatically; seed also deploys
- * them for local SH001/SH002.
+ * POST /api/back-office/shelter get the design and required indexes automatically;
+ * seed also deploys them for local SH001/SH002.
  *
  * Usage (from frontend/):
  *   pnpm redeploy:access                 # dry-run
@@ -31,7 +31,7 @@ import { resolve } from 'node:path';
 
 import { couchUserFromUrl } from '$lib/server/couch-credentials';
 import { ensurePublicWriter } from '$lib/server/ensure-public-writer';
-import { buildRegistryDesignDoc, REGISTRY_DESIGN_ID } from '$lib/server/registry-design';
+import { redeployRegistry } from '$lib/server/registry-redeploy';
 import {
 	buildSecurityMutationLock,
 	type SecurityMutationLock
@@ -39,6 +39,7 @@ import {
 import {
 	buildValidateDocUpdate,
 	REFERRAL_MANGO_INDEXES,
+	KIOSK_LOOKUP_MANGO_INDEXES,
 	REQUISITION_TICKET_MANGO_INDEXES,
 	shelterDbName
 } from '$lib/server/shelter-access-design';
@@ -197,25 +198,6 @@ async function withSecurityMutationLock<T>(resource: string, mutate: () => Promi
 	return result;
 }
 
-interface ShelterMasterRow {
-	code: string;
-}
-
-async function listShelterMasters(): Promise<ShelterMasterRow[]> {
-	const res = await couchReq('GET', '/registry/_all_docs?include_docs=true');
-	if (res.status === 404) return [];
-	if (res.status >= 400) {
-		const detail = (res.data as { reason?: string; error?: string } | null) ?? {};
-		throw new Error(
-			`Could not read registry (${res.status}): ${detail.reason ?? detail.error ?? 'unknown'}`
-		);
-	}
-	const rows = (res.data as { rows?: { id: string; doc?: { code?: string } }[] })?.rows ?? [];
-	return rows
-		.filter((r) => r.id.startsWith('shelter:') && r.doc?.code)
-		.map((r) => ({ code: r.doc!.code! }));
-}
-
 interface AccessRedeployOutcome {
 	status: number;
 	updated: boolean;
@@ -259,47 +241,6 @@ async function redeployShelterAccessDesign(
 		);
 	}
 	return { status: res.status, updated: true, reason: rev ? 'updated' : 'created' };
-}
-
-/**
- * Idempotent PUT of the registry `_design/app` (`by_code` view) so
- * `findMasterByCode` and the public booking BFF can resolve a shelter by code
- * instead of scanning the whole registry.
- */
-async function deployRegistryDesign(dryRun: boolean): Promise<'current' | 'deployed'> {
-	const desired = buildRegistryDesignDoc();
-	const existing = await couchReq('GET', `/registry/${REGISTRY_DESIGN_ID}`);
-	const current =
-		existing.status === 200
-			? (existing.data as {
-					_rev?: string;
-					version?: number;
-					views?: Record<string, { map: string }>;
-					validate_doc_update?: string;
-				} | null)
-			: null;
-
-	if (
-		current &&
-		current.version === desired.version &&
-		current.validate_doc_update === desired.validate_doc_update &&
-		Object.entries(desired.views).every(([name, view]) => current.views?.[name]?.map === view.map)
-	) {
-		return 'current';
-	}
-	if (dryRun) return 'deployed';
-
-	const res = await couchReq('PUT', `/registry/${REGISTRY_DESIGN_ID}`, {
-		...desired,
-		...(current?._rev ? { _rev: current._rev } : {})
-	});
-	if (res.status >= 400) {
-		const detail = (res.data as { reason?: string; error?: string } | null) ?? {};
-		throw new Error(
-			`registry _design/app deploy failed (${res.status}): ${detail.reason ?? detail.error ?? 'unknown'}`
-		);
-	}
-	return 'deployed';
 }
 
 /**
@@ -381,6 +322,66 @@ async function deployMangoIndexes(
 	return { created, existing };
 }
 
+async function warmUpKioskLookupMangoIndexes(db: string): Promise<void> {
+	const warmupSelectorByIndexName: Record<string, Record<string, string>> = {
+		'evacuee-type-phone-idx': { type: 'evacuee', phone: '__warmup__' },
+		'evacuee-type-person-id-idx': { type: 'evacuee', 'person_id.number': '__warmup__' },
+		'evacuee-type-household-idx': { type: 'evacuee', household_id: '__warmup__' }
+	};
+
+	for (const def of KIOSK_LOOKUP_MANGO_INDEXES) {
+		try {
+			const selector = warmupSelectorByIndexName[def.name];
+			if (!selector) {
+				console.warn(`    ⚠ no kiosk lookup warm-up selector configured for ${def.name}`);
+				continue;
+			}
+			const res = await couchReq('POST', `/${db}/_find`, {
+				selector,
+				limit: 1
+			});
+			if (res.status >= 400) {
+				const detail = (res.data as { reason?: string; error?: string } | null) ?? {};
+				console.warn(
+					`    ⚠ kiosk lookup index warm-up failed for ${def.name} (${res.status}): ${detail.reason ?? detail.error ?? 'unknown'}`
+				);
+			}
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			console.warn(`    ⚠ kiosk lookup index warm-up failed for ${def.name}: ${message}`);
+		}
+	}
+}
+
+async function deployKioskLookupMangoIndexes(
+	db: string,
+	dryRun: boolean
+): Promise<{ created: number; existing: number }> {
+	let created = 0;
+	let existing = 0;
+	for (const def of KIOSK_LOOKUP_MANGO_INDEXES) {
+		if (dryRun) {
+			created++;
+			continue;
+		}
+		const res = await couchReq('POST', `/${db}/_index`, def);
+		if (res.status >= 400) {
+			const detail = (res.data as { reason?: string; error?: string } | null) ?? {};
+			throw new Error(
+				`Mango index ${def.name} deploy failed (${res.status}): ${detail.reason ?? detail.error ?? 'unknown'}`
+			);
+		}
+		const result = (res.data as { result?: string } | null)?.result;
+		if (result === 'exists') {
+			existing++;
+		} else {
+			created++;
+		}
+	}
+	if (!dryRun) await warmUpKioskLookupMangoIndexes(db);
+	return { created, existing };
+}
+
 // ─── main ───────────────────────────────────────────────────────────────────
 
 function logPublicWriterEnsure(result: Awaited<ReturnType<typeof ensurePublicWriter>>): void {
@@ -406,7 +407,9 @@ function logPublicWriterEnsure(result: Awaited<ReturnType<typeof ensurePublicWri
 }
 
 async function main() {
-	console.log('🔄 Redeploy _design/access + referral Mango indexes + public writer grant');
+	console.log(
+		'🔄 Redeploy _design/access + referral and kiosk lookup Mango indexes + public writer grant'
+	);
 	console.log(`   mode: ${DRY_RUN ? 'DRY-RUN (pass --write --confirm to apply)' : 'WRITE'}`);
 
 	const writerUrl = process.env.COUCHDB_PUBLIC_WRITER_URL ?? env.COUCHDB_PUBLIC_WRITER_URL;
@@ -425,15 +428,9 @@ async function main() {
 	}
 	console.log('');
 
-	const masters = await listShelterMasters();
-	if (masters.length === 0) {
-		console.log('⚠️  No shelter masters in registry — skipping shelter redeploy');
-		return;
-	}
-
-	console.log(`📋 Found ${masters.length} shelter master(s)`);
-
-	const registryDesign = await deployRegistryDesign(DRY_RUN);
+	// Registry views must exist even on a fresh install with zero shelters, so
+	// deploy them before the empty-registry early return.
+	const { design: registryDesign, masters } = await redeployRegistry(couchReq, DRY_RUN);
 	console.log(
 		registryDesign === 'current'
 			? '  ✓ registry _design/app (by_code) already current'
@@ -441,6 +438,14 @@ async function main() {
 				? '  would deploy registry _design/app (by_code view)'
 				: '  ✓ registry _design/app (by_code view) deployed'
 	);
+	console.log('');
+
+	if (masters.length === 0) {
+		console.log('⚠️  No shelter masters in registry — skipping shelter redeploy');
+		return;
+	}
+
+	console.log(`📋 Found ${masters.length} shelter master(s)`);
 	console.log('');
 
 	let ok = 0;
@@ -460,13 +465,19 @@ async function main() {
 			if (DRY_RUN) {
 				if (accessResult.updated) {
 					const indexCount =
-						REFERRAL_MANGO_INDEXES.length + REQUISITION_TICKET_MANGO_INDEXES.length;
+						REFERRAL_MANGO_INDEXES.length +
+						KIOSK_LOOKUP_MANGO_INDEXES.length +
+						REQUISITION_TICKET_MANGO_INDEXES.length;
 					console.log(
 						`    would redeploy _design/access (${accessResult.reason}) + ${indexCount} mango indexes`
 					);
 				} else {
 					console.log(`    _design/access already current (skip PUT)`);
 				}
+				console.log(`    would deploy referral mango indexes (${REFERRAL_MANGO_INDEXES.length})`);
+				console.log(
+					`    would deploy kiosk lookup mango indexes (${KIOSK_LOOKUP_MANGO_INDEXES.length})`
+				);
 				if (PUBLIC_WRITER_NAME) {
 					console.log(
 						writerGranted
@@ -495,6 +506,10 @@ async function main() {
 			);
 			console.log(
 				`    ✓ requisition_ticket mango indexes (${ticketIndexResult.created} created, ${ticketIndexResult.existing} existing)`
+			);
+			const kioskIndexResult = await deployKioskLookupMangoIndexes(db, false);
+			console.log(
+				`    ✓ kiosk lookup mango indexes (${kioskIndexResult.created} created, ${kioskIndexResult.existing} existing)`
 			);
 			if (PUBLIC_WRITER_NAME) {
 				console.log(

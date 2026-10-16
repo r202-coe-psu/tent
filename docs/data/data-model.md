@@ -2,7 +2,7 @@
 title: Smart Shelter — Data Model (CouchDB remote-first) v3
 status: draft for review
 created: 2026-06-11
-updated: 2026-08-26
+updated: 2026-10-14
 note: ออกแบบใหม่ทั้งหมด — ไม่สืบทอดจาก docs/data v2.0 (retired 2026-06-11); decision sync 2026-06-15 เลือก MongoDB projection สำหรับ public tier และ EOC read-model
 ---
 
@@ -17,7 +17,7 @@ note: ออกแบบใหม่ทั้งหมด — ไม่สืบ
 | Decision | ค่า |
 | --- | --- |
 | Medical masking | **ไม่มี** — staff ทุก role เห็น medical เต็ม (สถานการณ์ฉุกเฉิน) |
-| Registration minimum | `first_name` + `last_name` + `gender` + `phone` (กรอก "ไม่มี" ได้ → เก็บ `null`) |
+| Registration minimum | `first_name` + `last_name` + `gender` (key ต้องมี; "ไม่ระบุ" → เก็บ `null` — decision sync 2026-10-09) + `phone` (กรอก "ไม่มี" ได้ → เก็บ `null`) |
 | Scale assumptions | ≤350 shelters · ≤20,000 คน/ศูนย์ (ใหญ่สุด) · ≤50 devices/ศูนย์ |
 | Retention | purge PII ≤3 เดือนหลังปิดศูนย์ · local db บน device อายุ 1 เดือน (SOP wipe) · PSU = data controller |
 | EOC / Open API | deferred service แยก ใช้ **MongoDB projection** จาก Central CouchDB — ไม่มี operational doc type ในรุ่นนี้ |
@@ -50,7 +50,7 @@ device app  ⇄ WAN ⇄  central (CouchDB)
 | `shelter_import_audit` | ✓ private | — | no browser access | server-side `adminRaw` + SA-only BFF | — |
 | `catalog` | ✓ master | ✓ replica | no disconnected read cache (status-only when unreachable) | app read จาก central (pull/read-through) | central → edge; app read จาก edge เฉพาะ outage |
 | `_users` | ✓ master | ✓ **filtered replica** (เฉพาะ user ของศูนย์ตน) | — | central `_session` | central → edge (selector by role `shelter:{id}`) เพื่อ fallback login |
-| `central_ops` | ✓ เท่านั้น | — | — | central-only service/read model & cross-tenant store | — (search_audit, export_job, `counter:shelter`, `referral`) |
+| `central_ops` | ✓ เท่านั้น | — | — | central-only service/read model & cross-tenant store | — (search_audit, export_job, `counter:shelter`, `referral`, `referral_close_job`, `referral_close_lock` — CR-168) |
 
 - 1 ศูนย์ = 1 db → ปิดศูนย์ = หยุด replication + purge ทั้ง db ที่ central, ล้าง edge server ทั้งเครื่อง
 - ศูนย์ 20,000 คน: traffic ปกติวิ่งกับ **central**; ถ้า WAN/central ล่มระหว่าง onboarding จึง failover ไป
@@ -87,7 +87,7 @@ device app  ⇄ WAN ⇄  central (CouchDB)
 {
   type: "evacuee", schema_v: 2,
   // ---- minimum (บังคับแค่นี้ — เคาะ 2026-06-11) ----
-  first_name: "สมชาย", last_name: "ใจดี", gender: "male|female|other",
+  first_name: "สมชาย", last_name: "ใจดี", gender: "male|female|other" | null,  // null = ไม่ระบุ (default ฟอร์ม; 'other' = legacy อ่าน/preserve เท่านั้น)
   phone: "0812345678" | null,         // required ใน UI — ผู้ลงทะเบียนกด/กรอก "ไม่มี" → เก็บ null
                                       // ใช้ค้นใน FAM search (เบอร์เต็มเท่านั้น) — ไม่ส่งกลับใน public response
   country: "THAILAND",                // ประเทศต้นทาง (เพิ่มใน v2 — CR-007)
@@ -132,8 +132,9 @@ device app  ⇄ WAN ⇄  central (CouchDB)
 | `job_application` | state machine | ใบสมัครงานอาสา (`pending_review→confirmed|rejected|cancelled`, tracking_token) — v2 CR-041 + CR-094 |
 | `shift_assignment` | mutable (LWW) | ตารางเวร + duty_window + เช็คอิน/เช็คเอาต์หน้างาน (QR หรือ manual override) + dispatch — v3 CR-094, บังคับ Time-Bound Write Access ที่ CouchDB (role grant ตามกะ) |
 | `volunteer_transfer` | state machine | คำขอโอนย้ายอาสาข้ามศูนย์ (`pending→accepted|rejected`) — doc ใหม่ CR-094 §3.5, accepted แล้วอัปเดต `volunteer.current_shelter_code` |
-| `shelter_report` | state machine | รายงานในศูนย์ (`kind`: grievance \| incident) — [CR-040](../changes/CR-040-shelter-case-grievance-reframe.md) |
-| `referral` | state machine | ส่งต่อหน่วยงานนอก/ข้ามศูนย์: `draft→sent→accepted|rejected→closed` (จัดเก็บที่ `central_ops` — ดู schema.md §5.4) |
+| `shelter_report` | state machine | รายงานในศูนย์ (`kind`: grievance \| incident) — [CR-040](../changes/08-E-reports/CR-040-shelter-case-grievance-reframe.md) |
+| `referral` | state machine | ส่งต่อหน่วยงานนอก/ข้ามศูนย์: `draft→sent→accepted|rejected→closed`, `draft→closed` (CR-048), `sent→closed` ถอนคำขอ (CR-167) (จัดเก็บที่ `central_ops` — ดู schema.md §5.4) |
+| `referral_close_job` / `referral_close_lock` | job + lock | ปิด referral ทั้งศูนย์ด้วย worker (CR-168): job doc เดียว + cursor, lock ต่อศูนย์ — `schema.md` §5.4.1–5.4.2 · ประมวลผลโดย service `referral-worker` (Node, image เดียวกับ frontend) แยกจาก Python `sync-worker` และ `import-worker` · ไม่ใช้ Redis · Python projection ไม่ consume doc type นี้ |
 | `audit` | **append-only** | การกระทำสำคัญ (override duplicate-hint, แก้ retroactive, export, ลบ) |
 
 State machine บน CouchDB = เขียน doc ใหม่ทั้ง doc พร้อม `status` ใหม่ (LWW) — ตัว transition ที่ขัดกัน
@@ -212,6 +213,10 @@ design doc เดียวกัน deploy พร้อม db provisioning
   `affiliation_tags: ["volunteer"]` เป็น metadata เท่านั้น ไม่ให้สิทธิ์และไม่เปลี่ยน shelter scope
 - `shelter_{shelter_code}._security.members.roles = ["shelter:{id}"]` + admins = `system_admin` —
   ตั้งเหมือนกันทั้ง central และ edge (provisioning จัดให้)
+- `registry` และ `catalog` `_security.members.roles`: รวม flat roles เดิม (`shelter_manager`, `registration_staff`,
+  `kitchen_staff`, `warehouse_staff`) ∪ `shelter:{code}` ของทุกศูนย์ใน registry (CR-164) เพื่อให้ผู้ใช้ทุก capability
+  ที่มี scope ศูนย์อ่าน DB กลางได้; admins = `system_admin`; การเขียน `registry` จำกัดเฉพาะ `system_admin` เท่านั้น
+  และ `catalog` ควบคุมด้วย `validate_doc_update`
 - `validate_doc_update` ต่อ shelter db บังคับ: type whitelist, append-only types ปฏิเสธ update/delete,
   ตาราง role→type ที่เขียนได้ (ตาม role-permission-matrix; public/API redaction ทำใน service layer) —
   design docs ชุดเดียว deploy ทั้ง central และ edge เพราะ edge อาจรับ write ตอน LAN fallback

@@ -14,6 +14,7 @@ import type { AuditAction } from '$lib/features/shared';
 import { operationsRepository, OperationsRemoteRepository } from '../data/operations.remote';
 import type {
 	DonationCampaign,
+	DonationSlot,
 	CampaignInput,
 	ReceiveInput,
 	DistributeInput,
@@ -34,14 +35,22 @@ import type { CycleCountSubmission } from '../domain/cycle-count';
 import { countPendingTransfers } from '../domain/transfer-pending';
 import { distributeAcrossLots, type DistributeAcrossLotsArgs } from './distribute-across-lots';
 
+/**
+ * Keys for data read out of ONE shelter's database carry that shelter's code, like
+ * `balance` already did. Without it SH001 and SH002 shared a cache entry: switching
+ * shelter remounted the donation page onto the previous shelter's campaigns (still
+ * inside `staleTime`), and a promote/cut-off clicked on that list was written into the
+ * newly selected shelter's database as a stray copy.
+ */
 export const operationsKeys = {
 	all: ['operations'] as const,
-	campaigns: () => [...operationsKeys.all, 'campaigns'] as const,
-	stockLedgers: () => [...operationsKeys.all, 'stockLedgers'] as const,
-	donations: () => [...operationsKeys.all, 'donations'] as const,
+	campaigns: () => [...operationsKeys.all, 'campaigns', getShelterCode()] as const,
+	stockLedgers: () => [...operationsKeys.all, 'stockLedgers', getShelterCode()] as const,
+	donations: () => [...operationsKeys.all, 'donations', getShelterCode()] as const,
 	ledger: () => [...operationsKeys.all, 'ledger'] as const,
 	byItem: (id: string) => [...operationsKeys.ledger(), id] as const,
 	balance: () => [...operationsKeys.all, 'balance', getShelterCode()] as const,
+	donationSlots: () => [...operationsKeys.all, 'donationSlots', getShelterCode()] as const,
 	transfers: () => [...operationsKeys.all, 'transfers'] as const,
 	transfer: (id: string) => [...operationsKeys.transfers(), id] as const
 };
@@ -61,7 +70,12 @@ export const useStockLedgers = () =>
 export const useDonations = () =>
 	createQuery(() => ({
 		queryKey: operationsKeys.donations(),
-		queryFn: () => operationsRepository().listDonations()
+		queryFn: () => operationsRepository().listDonations(),
+		// svelte-query v6 only notifies for props it has seen read ("tracked props"), and
+		// reads are lazy. A consumer that gates UI on `isSuccess` / `isError` inside a
+		// conditional block can read a prop for the first time AFTER the transition, and
+		// is then handed a stale snapshot that never refreshes. Track every prop.
+		notifyOnChangeProps: 'all'
 	}));
 
 export const useCreateCampaign = () => {
@@ -87,6 +101,44 @@ export const useUpdateCampaign = () => {
 		}) => operationsRepository().updateCampaign(campaign, auditInput),
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: operationsKeys.campaigns() });
+		}
+	}));
+};
+
+/**
+ * Queue windows this shelter has configured (DN-5 · schema.md §2.13).
+ *
+ * Named for the schedule, not the public board: `useDonationSlots` in
+ * `$lib/features/donations` is the donor-facing availability read through the BFF,
+ * while this one is staff reading their own CouchDB.
+ */
+export const useDonationSlotSchedule = () =>
+	createQuery(() => ({
+		queryKey: operationsKeys.donationSlots(),
+		queryFn: () => operationsRepository().listDonationSlots()
+	}));
+
+/**
+ * Create or edit one window. `_id` is deterministic per date + start time, so the
+ * same call serves both — the repository merges the current `_rev` before writing.
+ */
+export const useSaveDonationSlot = () => {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: (slot: DonationSlot) => operationsRepository().updateDonationSlot(slot),
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: operationsKeys.donationSlots() });
+		}
+	}));
+};
+
+/** Delete one window; the repository refuses while it has bookings. */
+export const useDeleteDonationSlot = () => {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: (slot: DonationSlot) => operationsRepository().deleteDonationSlot(slot),
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: operationsKeys.donationSlots() });
 		}
 	}));
 };

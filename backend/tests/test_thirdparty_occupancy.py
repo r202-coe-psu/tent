@@ -33,8 +33,9 @@ async def shelter_with_occupancy() -> PublicShelter:
         capacity=500,
         occupancy_total=312,
         occupancy_breakdown=OccupancyBreakdown(
-            male=141,
-            female=171,
+            male=140,
+            female=170,
+            gender_unspecified=2,
             child_under_5=24,
             elderly_over_60=58,
             pregnant=3,
@@ -70,14 +71,21 @@ async def test_get_occupancy_returns_total_and_breakdown(
     assert result["capacity"] == 500
     assert result["occupancy_total"] == 312
     assert result["breakdown"] == {
-        "male": 141,
-        "female": 171,
+        "male": 140,
+        "female": 170,
+        "gender_unspecified": 2,
         "child_under_5": 24,
         "elderly_over_60": 58,
         "pregnant": 3,
         "bedridden": 6,
         "disabled": 11,
     }
+    breakdown = result["breakdown"]
+    # decision sync 2026-10-09: gender groups partition the total.
+    assert (
+        breakdown["male"] + breakdown["female"] + breakdown["gender_unspecified"]
+        == result["occupancy_total"]
+    )
     assert result["updated_by_role"]
 
 
@@ -89,3 +97,24 @@ async def test_get_occupancy_unknown_location_returns_location_not_found(
     )
     assert response.status_code == 404
     assert response.json()["code"] == "location_not_found"
+
+
+async def test_get_occupancy_defaults_gender_unspecified_for_legacy_projection(
+    client: AsyncClient, occupancy_read_headers: dict[str, str]
+) -> None:
+    """public_shelters rows projected before the field existed read as 0 until re-projected."""
+    await PublicShelter(
+        id="SH002",
+        shelter_code="SH002",
+        name="ศูนย์ legacy",
+        status="open",
+        capacity=10,
+        occupancy_total=3,
+        occupancy_breakdown=OccupancyBreakdown(male=2, female=1),
+        updated_at=datetime(2026, 8, 11, 9, 15, 0, tzinfo=UTC),
+    ).insert()
+    response = await client.get(
+        "/external/locations/SH002/occupancy", headers=occupancy_read_headers
+    )
+    assert response.status_code == 200
+    assert response.json()["result"]["breakdown"]["gender_unspecified"] == 0

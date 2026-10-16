@@ -2,7 +2,7 @@
 title: Smart Shelter — Change Management Policy
 status: active
 created: 2026-06-16
-updated: 2026-09-01
+updated: 2026-10-08
 note: หลักการกำกับการเปลี่ยนแปลงเอกสาร (spec/docs) ของทั้งโครงการ — บังคับกับ docs/ ทั้งหมด
 ---
 
@@ -10,7 +10,7 @@ note: หลักการกำกับการเปลี่ยนแป�
 
 โครงการนี้เป็น **งานวิจัย**: requirement ยัง gather ไม่ครบแต่ build เริ่มไปแล้ว และ spec จะถูก
 ปรับแก้ตลอดอายุโครงการ (12 เดือน). เอกสารนี้กำหนด **หลักการเดียว** ที่ทุกการเปลี่ยนแปลง spec/docs
-ต้องทำตาม เพื่อให้ trace กลับได้ว่า *อะไรเปลี่ยน เปลี่ยนเมื่อไร เพราะอะไร ใครเคาะ กระทบอะไร* —
+ต้องทำตาม เพื่อให้ trace กลับได้ว่า _อะไรเปลี่ยน เปลี่ยนเมื่อไร เพราะอะไร ใครเคาะ กระทบอะไร_ —
 สำคัญทั้งกับการ implement และกับการเขียน paper/รายงานภายหลัง
 
 > **กฎเหล็ก:** ห้ามแก้ spec แบบเงียบๆ. ทุกการเปลี่ยนที่เข้าข่ายตาม §2 ต้องมี **Change Record**
@@ -22,10 +22,10 @@ note: หลักการกำกับการเปลี่ยนแป�
 
 แยกสิ่งที่เปลี่ยนยากออกจากสิ่งที่เปลี่ยนบ่อย เพื่อรู้ว่าการแก้แต่ละครั้งกระทบแค่ไหน:
 
-| ชั้น | คือ | ตัวอย่าง | น้ำหนักการเปลี่ยน |
-| --- | --- | --- | --- |
-| **Stable core** | สิ่งที่เปลี่ยนแล้วกระทบทั้งระบบ | common envelope, auth/`_session`, sync priority, feature-layer boundary, `_id` pattern | สูง — ต้อง CR + review ก่อนเสมอ |
-| **Volatile spec** | สิ่งที่คาดว่าจะปรับระหว่าง field study | field ใน doc type, business rule, enum, workflow, UI copy | ปกติ — CR เบา แต่ยังต้อง log |
+| ชั้น              | คือ                                    | ตัวอย่าง                                                                               | น้ำหนักการเปลี่ยน               |
+| ----------------- | -------------------------------------- | -------------------------------------------------------------------------------------- | ------------------------------- |
+| **Stable core**   | สิ่งที่เปลี่ยนแล้วกระทบทั้งระบบ        | common envelope, auth/`_session`, sync priority, feature-layer boundary, `_id` pattern | สูง — ต้อง CR + review ก่อนเสมอ |
+| **Volatile spec** | สิ่งที่คาดว่าจะปรับระหว่าง field study | field ใน doc type, business rule, enum, workflow, UI copy                              | ปกติ — CR เบา แต่ยังต้อง log    |
 
 Stable core สอดคล้องกับข้อห้ามใน [`CLAUDE.md`](../CLAUDE.md) (sync/auth/layer) — แตะต้องเฉพาะเมื่อ task ระบุชัด
 
@@ -57,7 +57,8 @@ Stable core สอดคล้องกับข้อห้ามใน [`CLAUD
    - การอ้างอิงระหว่างทบทวน: ให้อ้างอิงด้วย slug เช่น `draft-<slug>`
 2. **เมื่ออนุมัติ (Approved) และรันเลข:**
    - ตรวจสอบลำดับเลขล่าสุดจาก `docs/changes/_index.md` (บน branch หลัก `develop` / `main`)
-   - รันหมายเลขถัดไปและเปลี่ยนชื่อไฟล์เป็น `docs/changes/CR-NNN-<slug>.md`
+   - รันหมายเลขถัดไปและเปลี่ยนชื่อไฟล์เป็น `docs/changes/<หมวด>/CR-NNN-<slug>.md`
+     (`<หมวด>` = โฟลเดอร์ project ใน Notion เช่น `04-donation`, `03-C-supply` — ดูตารางหมวดใน `_index.md`; draft ยังอยู่ที่ราก `docs/changes/` จนกว่าจะ approve)
    - อัปเดต frontmatter: `id: CR-NNN`, `status: approved` และบันทึกแถวลงใน `_index.md`
 
 โครงสร้าง Frontmatter ของ Change Record:
@@ -103,7 +104,7 @@ CR ที่ approve แล้วและลงมือทำเสร็จ �
 3. **เปิด Draft Change Record** — สร้างไฟล์ `docs/changes/draft-<slug>.md` (`id: draft`, `status: proposed`) ระบุ impact + layer (ยังไม่ให้เลข CR-NNN)
 4. **เจ้าของเคาะ (Approval)**:
    - ตรวจสอบ `docs/changes/_index.md` บน branch หลักเพื่อกำหนดเลข `CR-NNN` ถัดไป
-   - Rename ไฟล์เป็น `docs/changes/CR-NNN-<slug>.md`
+   - Rename ไฟล์เป็น `docs/changes/<หมวด>/CR-NNN-<slug>.md`
    - อัปเดต frontmatter `id: CR-NNN`, `status: approved` (ถ้า stable core ต้องผ่าน review ก่อน)
    - เพิ่มแถวใน `docs/changes/_index.md`
 5. **แก้ doc** + bump version/`schema_v` ถ้าเข้าข่าย + อัปเดต `updated:`

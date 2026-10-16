@@ -133,6 +133,8 @@ import {
 	catalogItemRules
 } from './operations.remote';
 import {
+	CampaignUnitMismatchError,
+	createCampaign,
 	createReceiveEntry,
 	createStockLedger,
 	projectStockLotBalances
@@ -1341,6 +1343,53 @@ describe('OperationsRemoteRepository.updateCampaign', () => {
 			target_id: created._id,
 			reason: 'อัปเดตชื่อแคมเปญเพื่อความชัดเจน',
 			created_by: 'tester'
+		});
+	});
+
+	it('refuses to update a campaign this shelter database does not hold', async () => {
+		// A list cached under another shelter used to be written back here as a new
+		// doc — a stray copy in the wrong shelter that the public board then read.
+		const foreign = createCampaign(
+			{
+				title: 'แคมเปญของศูนย์อื่น',
+				needs: [{ item_id: 'item:water', qty_target: '100', unit: 'bottle' }]
+			},
+			{ shelterCode: 'SH002', createdBy: 'tester' }
+		);
+
+		await expect(repo.updateCampaign({ ...foreign, visible_on_home: false })).rejects.toThrow(
+			'ไม่พบประกาศนี้ในศูนย์ที่เลือก'
+		);
+		expect(await repo.getCampaign(foreign._id)).toBeNull();
+	});
+
+	it('rejects any write to a campaign holding a need in the wrong unit, naming the need', async () => {
+		// The staging seed wrote blankets as `piece` against a `cloth` catalog unit,
+		// skipping this check; promoting the campaign then failed on that need.
+		const stale = await memoryRepo.put(
+			createCampaign(
+				{
+					title: 'รับบริจาคผ้าห่ม',
+					needs: [{ item_id: 'item:blanket', qty_target: '200', unit: 'bottle' }]
+				},
+				ctx
+			)
+		);
+		mockGetItem.mockResolvedValue({
+			_id: 'item:blanket',
+			type: 'item',
+			name: 'ผ้าห่ม',
+			unit: 'cloth',
+			perishable: false
+		} as unknown as SupplyItem);
+
+		const write = repo.updateCampaign({ ...stale, visible_on_home: false });
+
+		await expect(write).rejects.toBeInstanceOf(CampaignUnitMismatchError);
+		await expect(write).rejects.toMatchObject({
+			itemId: 'item:blanket',
+			expected: 'cloth',
+			actual: 'bottle'
 		});
 	});
 });

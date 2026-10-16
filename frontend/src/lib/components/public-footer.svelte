@@ -1,10 +1,14 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
-	import Building from '@lucide/svelte/icons/building';
 	import ExternalLink from '@lucide/svelte/icons/external-link';
 	import Mail from '@lucide/svelte/icons/mail';
-	import { PUBLIC_FOOTER_I18N, PUBLIC_POLICY_I18N, PUBLIC_TERM_I18N } from '$lib/constants/i18n';
+	import {
+		PUBLIC_COOKIE_I18N,
+		PUBLIC_FOOTER_I18N,
+		PUBLIC_POLICY_I18N,
+		PUBLIC_TERM_I18N
+	} from '$lib/constants/i18n';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { getTranslation } from '$lib/utils/i18n';
 
@@ -32,6 +36,7 @@
 
 	const t = $derived(getTranslation(PUBLIC_FOOTER_I18N, langState.current));
 	const termT = $derived(getTranslation(PUBLIC_TERM_I18N, langState.current));
+	const cookieT = $derived(getTranslation(PUBLIC_COOKIE_I18N, langState.current));
 	const policyT = $derived(getTranslation(PUBLIC_POLICY_I18N, langState.current));
 </script>
 
@@ -41,11 +46,11 @@
 			<!-- Column 1: Platform Branding -->
 			<div class="space-y-3 {hasOnlineChannels ? 'md:col-span-5' : 'md:col-span-7'}">
 				<div class="flex items-center gap-2.5">
-					<div
-						class="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-600 text-white shadow-sm"
-					>
-						<Building class="h-4 w-4" />
-					</div>
+					<img
+						src="/logo.png"
+						alt="PSU Smart Shelter"
+						class="h-8 w-8 shrink-0 rounded-lg object-contain"
+					/>
 					<h3 class="text-sm font-bold text-white">Smart Shelter Platform</h3>
 				</div>
 				<div class="flex items-center gap-2 text-xs text-white/80">
@@ -139,6 +144,13 @@
 					class="underline-offset-2 transition-colors hover:text-white hover:underline"
 				>
 					{termT.footerLink}
+				</a>
+				<span class="text-white/30" aria-hidden="true">·</span>
+				<a
+					href={resolve('/cookie')}
+					class="underline-offset-2 transition-colors hover:text-white hover:underline"
+				>
+					{cookieT.footerLink}
 				</a>
 			</p>
 		</div>

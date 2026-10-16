@@ -9,8 +9,8 @@ note: >
   OD-1..OD-5 ล็อกแล้ว (2026-08-12).
   decision sync 2026-10-05 — OD-6 replicator credential = central admin ชุดเดียว (ดู §6 + Decision log).
 related:
-  - docs/changes/CR-064-edge-disaster-continuity.md
-  - docs/changes/CR-033-remote-first-architecture-program-index.md
+  - docs/changes/01-core/CR-064-edge-disaster-continuity.md
+  - docs/changes/01-core/CR-033-remote-first-architecture-program-index.md
   - docs/task-breakdown/00-baseline.md (T-54)
   - docs/features/offline-fallback-flow-spec.html
   - docs/data/data-model.md §1 §6 §8
@@ -23,7 +23,7 @@ related:
 
 ## สรุป (TL;DR)
 
-บันทึกแนวปฏิบัติการ: **แจก mini PC ที่ image พร้อมก่อนเหตุการณ์ → warm sync central→edge ตลอดช่วงเปิดศูนย์ → WAN ล่มแล้ว network-only cutover ไป edge (login ใหม่ได้) → WAN กลับแล้ว sync edge→central + ops UI สถานะ → ตัดกลับ central** · ไม่รวม FastAPI/Mongo บน edge · ไม่ scale user บน edge · **elevate ผ่าน [CR-064](../changes/CR-064-edge-disaster-continuity.md)** (proposed) + T-54 Package B · ยังไม่ supersede data-model/api-contract จนกว่า CR approve
+บันทึกแนวปฏิบัติการ: **แจก mini PC ที่ image พร้อมก่อนเหตุการณ์ → warm sync central→edge ตลอดช่วงเปิดศูนย์ → WAN ล่มแล้ว network-only cutover ไป edge (login ใหม่ได้) → WAN กลับแล้ว sync edge→central + ops UI สถานะ → ตัดกลับ central** · ไม่รวม FastAPI/Mongo บน edge · ไม่ scale user บน edge · **elevate ผ่าน [CR-064](../changes/01-core/CR-064-edge-disaster-continuity.md)** (proposed) + T-54 Package B · ยังไม่ supersede data-model/api-contract จนกว่า CR approve
 
 ## 1. Intent
 
@@ -109,7 +109,7 @@ related:
 | **OD-2** | Failover = **network-only** — router/DNS ชี้ domain เดิมไป edge; app ไม่สลับ `ActiveEndpoint` เอง | C1–C3 (app-aware probe/switch) **ลด / ไม่ทำ**; โฟกัส cutover ที่ LAN + login บน edge |
 | **OD-3** | Cutover **ยอมให้ login ใหม่** — ไม่บังคับคง `_session` จาก central ข้ามไป edge | Same-domain ยังมีประโยชน์เรื่อง URL/bookmark แต่ cookie continuity ไม่ใช่ hard req; ต้องมี runbook “login ใหม่บน edge / login ใหม่ตอนกลับ central” |
 | **OD-4** | Cutback / continuity มองผ่าน **ops UI**: (1) หน้า central เห็นสถานะ **shelter ทีละศูนย์** (2) ที่ศูนย์ staff เห็นสถานะ **WAN** | เกณฑ์ lag/conflict + ใครประกาศ cutback ผูกกับ UI นี้ (รายละเอียด SLO ลงใน CR/T-54) |
-| **OD-5** | Track = **เปิด CR ใหม่** (ต่อ CR-033 follow-up) + **ขยาย T-54** + **sync ขึ้น Notion** | ✅ [CR-064](../changes/CR-064-edge-disaster-continuity.md) proposed · T-54 Package B · Notion sync |
+| **OD-5** | Track = **เปิด CR ใหม่** (ต่อ CR-033 follow-up) + **ขยาย T-54** + **sync ขึ้น Notion** | ✅ [CR-064](../changes/01-core/CR-064-edge-disaster-continuity.md) proposed · T-54 Package B · Notion sync |
 | **OD-6** | Replicator credential (A5) = **central CouchDB admin ชุดเดียว** (`CENTRAL_REPL_*`) กับทุก job รวม filtered `_users` pull — เอา `CENTRAL_USERS_REPL_*` / per-shelter `repl_<code>` ออกจาก setup · เหตุผล: `_users/_changes` เปิดเฉพาะ server admin (ทดสอบ CouchDB 3.5: role member / db admin ของ `_users` ยังได้ 401) และเมื่อ edge ต้องถือ admin อยู่แล้ว `repl_<code>` ไม่ลดความเสี่ยงตอนเครื่อง edge หลุด | ยอมรับ: เครื่อง edge หลุด = central admin หลุด · `SHELTER_CODE` ผิดไม่ถูก central ปฏิเสธ · `_design/*` จาก edge push ขึ้น central ได้ · เปลี่ยนรหัส admin กระทบ edge ทุกศูนย์ · ทางเลือก least-privilege ที่เลื่อนไว้: per-shelter users mirror DB ที่ central (`scripts/central-repl-user.sh` เก็บไว้) · กระทบ `scripts/edge-init.sh`, `docker-compose.edge.yml`, `.env.edge.example`, `docs/couchdb-replication/*` |
 
 
@@ -251,7 +251,7 @@ related:
 
 | Doc | Relationship |
 | --- | --- |
-| [CR-033](../changes/CR-033-remote-first-architecture-program-index.md) | Master remote-first; follow-up edge orchestration → CR ใหม่ตาม OD-5 |
+| [CR-033](../changes/01-core/CR-033-remote-first-architecture-program-index.md) | Master remote-first; follow-up edge orchestration → CR ใหม่ตาม OD-5 |
 | [T-54](../task-breakdown/00-baseline.md) | ขยายให้ครอบ network-only cutover + ops UI + failback tests |
 | [data-model.md](../data/data-model.md) / [api-contract.md](../data/api-contract.md) | Binding — อย่า supersede จนกว่า CR approve; note: api-contract เคยเขียน app-aware → CR ต้อง reconcile กับ OD-2 |
 | [offline-fallback-flow-spec.html](./offline-fallback-flow-spec.html) | App-aware state machine — ลด scope ตาม OD-2; เก็บ UX สถานะ WAN / degraded |

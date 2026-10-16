@@ -21,9 +21,11 @@
 	import { Checkbox } from '$lib/components/ui/checkbox';
 	import * as Card from '$lib/components/ui/card';
 	import * as Dialog from '$lib/components/ui/dialog';
+	import * as Popover from '$lib/components/ui/popover';
 	import * as Table from '$lib/components/ui/table';
 
 	import {
+		ewarSymptomLabel,
 		useEvacuees,
 		useHouseholds,
 		useScreenings,
@@ -65,15 +67,27 @@
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { paginateItems } from '$lib/db/paginate';
 	import { getShelterCode } from '$lib/db/shelter';
+	import { DISPLAY_LOCALE, DISPLAY_TIME_ZONE, formatThaiTime } from '$lib/utils/date';
 	import { authStore } from '$lib/stores/auth.svelte';
 
 	const PAGE_SIZE = 10;
+	/** Chips shown per table cell before collapsing the rest into a 「+N」 popover. */
+	const MAX_VISIBLE_CHIPS = 2;
+
+	const CHIP_TONES = {
+		ewar: 'border-red-200 bg-red-50 text-red-900',
+		vulnerable: 'border-sky-200 bg-sky-50 text-sky-900',
+		need: 'border-amber-200 bg-amber-50 text-amber-900'
+	} as const;
 
 	const allEvacueesQuery = useEvacuees();
 	const householdsQuery = useHouseholds();
 	const screeningsQuery = useScreenings();
 	const shelterQuery = useShelter(() => shelterStore.selectedShelterCode ?? getShelterCode());
 	const shelterZones = $derived(shelterQuery.data?.zones ?? []);
+	const quarantineZoneCodes = $derived(
+		new Set(shelterZones.filter((z) => z.type === 'quarantine').map((z) => z.code))
+	);
 	const vulnerableGroupQuery = useMasterData(() => 'vulnerable_group');
 	const confirmRoomMutation = useConfirmRoom();
 	const confirmRoomHouseholdMutation = useConfirmRoomForHousehold();
@@ -555,17 +569,14 @@
 
 	function formatTimeOrDate(isoDate?: string | null): string {
 		if (!isoDate) return '—';
-		try {
-			const d = new Date(isoDate);
-			return (
-				d.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) +
-				' น. (' +
-				d.toLocaleDateString('th-TH', { day: 'numeric', month: 'short' }) +
-				')'
-			);
-		} catch {
-			return isoDate;
-		}
+		const time = formatThaiTime(isoDate);
+		if (!time) return isoDate;
+		const day = new Date(isoDate).toLocaleDateString(DISPLAY_LOCALE, {
+			timeZone: DISPLAY_TIME_ZONE,
+			day: 'numeric',
+			month: 'short'
+		});
+		return `${time} น. (${day})`;
 	}
 
 	const emptyPendingMessage = $derived(
@@ -575,23 +586,78 @@
 	);
 </script>
 
+{#snippet chip(label: string, tone: string)}
+	<Badge
+		variant="outline"
+		title={label}
+		class="h-auto max-w-full justify-start rounded-md px-2 py-0.5 text-xs font-semibold {tone}"
+	>
+		<span class="min-w-0 truncate">{label}</span>
+	</Badge>
+{/snippet}
+
+{#snippet chipList(rawLabels: string[], tone: string, heading: string)}
+	{@const labels = [...new Set(rawLabels)]}
+	{#if labels.length === 0}
+		<span class="text-xs text-slate-500">—</span>
+	{:else}
+		{@const hidden = labels.length - MAX_VISIBLE_CHIPS}
+		<div class="flex max-w-56 flex-col items-start gap-1">
+			{#each labels.slice(0, MAX_VISIBLE_CHIPS) as label (label)}
+				{@render chip(label, tone)}
+			{/each}
+			{#if hidden > 0}
+				<Popover.Root>
+					<Popover.Trigger>
+						{#snippet child({ props })}
+							<button
+								{...props}
+								type="button"
+								onclick={(e) => {
+									e.stopPropagation();
+									(props.onclick as ((e: MouseEvent) => void) | undefined)?.(e);
+								}}
+								onmousedown={(e) => e.stopPropagation()}
+								aria-label={`ดู${heading}ทั้งหมด ${labels.length} รายการ`}
+								class="rounded-md border border-slate-200 bg-white px-2 py-0.5 text-xs font-semibold text-slate-600 tabular-nums hover:bg-slate-50 hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none"
+							>
+								+{hidden} รายการ
+							</button>
+						{/snippet}
+					</Popover.Trigger>
+					<Popover.Content align="start" class="w-80">
+						<p class="text-sm font-semibold text-slate-900">
+							{heading} <span class="text-slate-500 tabular-nums">({labels.length})</span>
+						</p>
+						<div class="flex flex-wrap gap-1">
+							{#each labels as label (label)}
+								{@render chip(label, tone)}
+							{/each}
+						</div>
+					</Popover.Content>
+				</Popover.Root>
+			{/if}
+		</div>
+	{/if}
+{/snippet}
+
 <svelte:head>
 	<title>จัดสรรที่พัก (Station 3) | SmartShelter</title>
 </svelte:head>
 
 <div class="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-6 md:px-6">
 	<header class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-		<div class="flex items-center gap-3">
+		<div class="flex min-w-0 items-start gap-3 sm:items-center">
 			<a
-				href={resolve('/onsite')}
-				class="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200/80 bg-white text-slate-600 shadow-2xs transition-colors hover:bg-slate-50"
-				aria-label="กลับหน้าหลักระบบส่วนหน้า"
+				href={resolve('/portal')}
+				class="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-slate-200/80 bg-white text-slate-600 shadow-2xs transition-colors hover:bg-slate-50"
+				aria-label="กลับหน้าเลือกเมนูหลัก"
 			>
 				<ArrowLeft class="size-4" />
 			</a>
-			<div>
-				<div class="flex items-center gap-2">
-					<MapPin class="size-6 text-[#0A2647]" />
+			<div class="min-w-0">
+				<div class="flex flex-wrap items-center gap-x-2 gap-y-1">
+					<MapPin class="size-6 shrink-0 text-[#0A2647]" />
 					<h1 class="text-2xl font-bold tracking-tight text-slate-900 md:text-3xl">จัดสรรที่พัก</h1>
 					<Badge
 						variant="outline"
@@ -632,8 +698,8 @@
 				{/if}
 			</div>
 
-			<div class="flex items-center gap-2">
-				<div class="relative min-w-[220px]">
+			<div class="flex flex-wrap items-center gap-2">
+				<div class="relative w-full min-w-0 sm:w-auto sm:min-w-[220px] sm:flex-1">
 					<Scan
 						class="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-slate-400"
 					/>
@@ -655,7 +721,7 @@
 					size="default"
 					onclick={() => handleCodeInput(barcodeInput)}
 					disabled={!barcodeInput.trim()}
-					class="h-12 rounded-xl"
+					class="h-12 shrink-0 rounded-xl"
 				>
 					ยืนยัน
 				</Button>
@@ -663,7 +729,7 @@
 					variant="default"
 					size="default"
 					onclick={() => (showCameraModal = true)}
-					class="h-12 gap-1.5 rounded-xl bg-amber-600 font-semibold text-white hover:bg-amber-700"
+					class="h-12 shrink-0 gap-1.5 rounded-xl bg-amber-600 font-semibold text-white hover:bg-amber-700"
 				>
 					<Camera class="size-4" />
 					<span>สแกนกล้อง</span>
@@ -902,6 +968,9 @@
 									>เฝ้าระวัง (EWAR)</Table.Head
 								>
 								<Table.Head class="h-11 px-3 text-xs font-semibold text-slate-600"
+									>กลุ่มเปราะบาง</Table.Head
+								>
+								<Table.Head class="h-11 px-3 text-xs font-semibold text-slate-600"
 									>ความต้องการพิเศษ</Table.Head
 								>
 								<Table.Head class="h-11 px-3 text-xs font-semibold text-slate-600"
@@ -949,29 +1018,25 @@
 										{maskNationalId(row.person_id?.number)}
 									</Table.Cell>
 									<Table.Cell class="px-3 py-3">
-										{#if ewarSymptoms && ewarSymptoms.length > 0}
-											<Badge variant="outline" class="border-red-200 bg-red-50 text-red-900">
-												เฝ้าระวัง ({ewarSymptoms.length})
-											</Badge>
-										{:else}
-											<span class="text-xs text-slate-500">—</span>
-										{/if}
+										{@render chipList(
+											(ewarSymptoms ?? []).map(ewarSymptomLabel),
+											CHIP_TONES.ewar,
+											'เฝ้าระวัง (EWAR)'
+										)}
 									</Table.Cell>
 									<Table.Cell class="px-3 py-3">
-										{#if row.special_needs && row.special_needs.length > 0}
-											<div class="flex max-w-[14rem] flex-wrap gap-1">
-												{#each row.special_needs as need (need)}
-													<Badge
-														variant="outline"
-														class="border-amber-200 bg-amber-50 px-1.5 py-0 text-xs text-amber-900"
-													>
-														{getSpecialNeedLabel(need)}
-													</Badge>
-												{/each}
-											</div>
-										{:else}
-											<span class="text-xs text-slate-500">—</span>
-										{/if}
+										{@render chipList(
+											(row.vulnerable_groups ?? []).map(getSpecialNeedLabel),
+											CHIP_TONES.vulnerable,
+											'กลุ่มเปราะบาง'
+										)}
+									</Table.Cell>
+									<Table.Cell class="px-3 py-3">
+										{@render chipList(
+											(row.special_needs ?? []).map(getSpecialNeedLabel),
+											CHIP_TONES.need,
+											'ความต้องการพิเศษ'
+										)}
 									</Table.Cell>
 									<Table.Cell class="px-3 py-3 text-sm text-slate-600">
 										{hh?.label ?? '—'}
@@ -985,6 +1050,12 @@
 										{:else}
 											<span class="inline-flex flex-wrap items-center gap-1.5">
 												<span>{zoneLabel(row.current_stay.zone, shelterZones)}</span>
+												{#if quarantineZoneCodes.has(row.current_stay.zone ?? '')}
+													<span
+														class="rounded-full bg-red-600 px-1.5 py-0.5 text-2xs font-semibold text-white dark:bg-red-500"
+														>กักโรค</span
+													>
+												{/if}
 												{#if row.current_stay.status === 'room_confirmed'}
 													<span
 														class="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-1.5 py-0.5 text-2xs font-medium text-emerald-800 dark:text-emerald-200"

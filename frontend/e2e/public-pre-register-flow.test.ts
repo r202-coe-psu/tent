@@ -12,9 +12,11 @@
  * system-admin API and the `E2E …` shelter of W5 through `teardownShelter` — then asserts
  * nothing carrying this run's id is left in the queue or CouchDB (zero-leak, like
  * `stock-inventory.test.ts`).
- * Remote target (`E2E_BASE_URL`, staging/production, `playwright.public.config.ts`): strictly
- * read-only — the W* group is skipped; the navigation / render / validation / responsive
- * groups run (they never POST: the server-error cases mock the write endpoint).
+ * Remote target (`E2E_BASE_URL`, staging/production, `playwright.public.config.ts`): read-only
+ * by default — the W* group is skipped; the navigation / render / validation / responsive
+ * groups run (they never POST: the server-error cases mock the write endpoint). With
+ * `ALLOW_REMOTE_WRITES=true` (staging only), the W* group runs the same live writes +
+ * zero-leak teardown as local, against that remote target's own CouchDB.
  *
  * Local requirements: the full local stack — `docker compose up -d` (CouchDB, MongoDB, sync
  * worker, FastAPI :9000; set `E2E_FASTAPI_URL` if FastAPI is elsewhere) plus platform init
@@ -30,10 +32,11 @@
  * ── Tags (Playwright `{ tag }`, select with `--grep`) ─────────────────────────────────────
  *  @pre-register  feature tag — every test in this file and in `public-register.test.ts`
  *  @smoke         read-only, safe on staging / production (never writes; server-error cases
- *                 mock the write endpoint): N, R, V, E, S, U. Run on pre-push, the PR gate and
+ *                 mock the write endpoint): N, R, V, E, S (except S2), U. Run on pre-push, the PR gate and
  *                 against staging (`pnpm test:e2e:pre-register:smoke`); kept when `IS_REMOTE`
- *  @critical      writes real data against the local stack and asserts zero leak afterwards:
- *                 W1–W6 and Z. Skipped when `IS_REMOTE`; run on the PR gate / nightly
+ *  @critical      writes real data and asserts zero leak afterwards: W1–W6, S2 and Z. Runs
+ *                 locally or on a remote target with `ALLOW_REMOTE_WRITES=true` (staging);
+ *                 read-only remote otherwise; also run on the PR gate / nightly
  *  @release       release-gate journey only: navigation (N) + critical happy paths (W*) +
  *                 zero-leak (Z). Not on the error-matrix / render / server-error rows.
  *  @regression    the fully mocked suite `public-register.test.ts` (no backend needed);
@@ -52,13 +55,13 @@
  *  W5  shelter booking (own `E2E …` shelter) → ticket + QR, survives reload   W6 read-back
  *
  * ── Render contract (C2.1) ───────────────────────────────────────────────────────────────
- *  R1 page skeleton (H1, QR guidance, shelter section + warning, live summary, 3-step
- *     stepper, 4 sections, both submit buttons, both tabs)
+ *  R1 page skeleton (H1, QR guidance, shelter section + warning, live summary, 4 sections,
+ *     both submit buttons, both tabs)
  *  R2 every control visible + enabled with its label bound (`getByLabel`) — address, primary
  *     contact, emergency / vulnerable / special-needs accordions, pets, consent, member 2
  *  R3 dropdowns open with real options (housing 5, province from the API, religion, card type)
- *  R4 ARIA snapshots of <main>: empty form, all-errors form, queue ticket
- *  R5 screenshots 1440 / 390 of the empty and the all-errors form
+ *  R4 no field flagged before submit; an empty submit flags fields + shows the summary
+ *  R5 1440 / 390: every section renders, empty and all-errors (structural, no pixel baselines)
  *  R6 no pageerror / console error / warning / HTTP >= 400 while loading and filling
  *
  * ── Error matrix (C2.2) ──────────────────────────────────────────────────────────────────
@@ -70,7 +73,7 @@
  *  id   message (literal)                                         trigger                              field (focus)
  *  E01  กรุณากรอกบ้านเลขที่ จังหวัด อำเภอ และตำบล                  no house no. / province / …           #address-no
  *  E02  กรุณากรอกชื่อ                                              first name empty                     #member-0-first-name
- *  E03  กรุณาเลือกเพศ                                              no gender picked                     radiogroup เพศ
+ *  E03  (no error — gender optional, ไม่ระบุ preselected)         no gender picked → payload gender:null  see "Gender is optional" below
  *  E04  เลขบัตรประชาชนไม่ถูกต้อง (ตรวจสอบหลักสุดท้ายอีกครั้ง)       13 digits, wrong checksum            #member-0-card-number
  *  E05  เลขประจำตัวประชาชนต้องมี 13 หลัก                           12 digits                            #member-0-card-number
  *  E06  กรุณากรอกเบอร์โทรศัพท์ 10 หลักของผู้ติดต่อหลัก              head phone empty                     #member-0-phone
@@ -84,7 +87,7 @@
  *  E14  อายุต้องไม่เกิน 150 ปี                                     age "151"                            #member-0-age
  *  E15  กรุณาระบุศาสนา                                             religion อื่นๆ (ระบุ), text empty    #member-0-religion-other
  *  E16  กรุณากรอกชื่อ (card สมาชิก 2)                              member 2 added, left blank           #member-1-first-name
- *  E17  กรุณาเลือกเพศ (card สมาชิก 2)                              member 2 named, no gender            radiogroup (card 2)
+ *  E17  (no error — gender optional, ไม่ระบุ preselected)         member 2 named, no gender → gender:null  see "Gender is optional" below
  *  E18  กรุณาระบุชนิดสัตว์เมื่อเลือกอื่นๆ                           "เพิ่มสัตว์อื่นๆ", species empty     species input (pets)
  *  E19  กรุณากรอกชื่อหอพัก                                         housing = หอพัก, name empty          #dorm-name
  *  E20  กรุณากรอกเลขห้อง                                           housing = หอพัก, room empty          #dorm-room
@@ -110,7 +113,13 @@ import {
 	type Page
 } from '@playwright/test';
 import { bootstrapAdminSession, couchReq } from './helpers/couch';
-import { IS_REMOTE, LOCAL_RUN_ID as RUN_ID, READ_ONLY_REASON } from './helpers/e2e-env';
+import {
+	CAN_WRITE as TARGET_CAN_WRITE,
+	IS_REMOTE,
+	LOCAL_RUN_ID as RUN_ID,
+	RATE_LIMIT_ENFORCED,
+	READ_ONLY_REASON as TARGET_READ_ONLY_REASON
+} from './helpers/e2e-env';
 import { injectSession, routeBrowserCouchThroughApp } from './helpers/login';
 import {
 	DISCLAIMER_LABEL,
@@ -126,6 +135,7 @@ import {
 	fillAddress,
 	fillEmergencyContact,
 	fillMember,
+	invalidFields,
 	memberCard,
 	mockSystemBanner,
 	openMemberAccordion,
@@ -142,14 +152,16 @@ import {
 	type PageHealth
 } from './helpers/pre-register';
 import {
+	forgetCreatedShelter,
 	getUnassignedRegistration,
 	listUnassignedRegistrations,
 	purgeCreatedData,
 	recordCreatedQueueId,
 	recordCreatedShelter,
+	teardownShelter,
 	waitForProjection
 } from './helpers/public-cleanup';
-import { createShelterViaUi } from './helpers/staff-ui';
+import { createShelterViaUi, setRecaptcha } from './helpers/staff-ui';
 
 // ------------------------------------------------------------------ fixtures
 
@@ -177,6 +189,26 @@ const test = base.extend<{ health: PageHealth & { allow(...patterns: RegExp[]): 
 
 const NO_BANNER = async (page: Page) => mockSystemBanner(page, false);
 
+/**
+ * ThaiD is not under test here and its flag differs per environment (staging: ON, local: OFF).
+ * The render-contract snapshots (R4 / R5) mock it OFF so they never depend on that flag.
+ */
+const NO_THAID = async (page: Page) =>
+	page.route('**/api/public/v1/thaid/status', (route) =>
+		route.fulfill({ json: { enabled: false, isDev: false, mode: 'real' } })
+	);
+
+/**
+ * Teardown (`purgeCreatedData`) lists and deletes central-queue documents through FastAPI's
+ * staff routes, which have no browser-facing BFF. On a remote target they are reachable only
+ * through `E2E_FASTAPI_URL` (staging: `https://<host>/public-api`); without it every write here
+ * would leave data behind, so the live-write groups stay read-only instead.
+ */
+const CAN_WRITE = TARGET_CAN_WRITE && (!IS_REMOTE || Boolean(process.env.E2E_FASTAPI_URL));
+const READ_ONLY_REASON = TARGET_CAN_WRITE
+	? 'E2E_FASTAPI_URL is not set — teardown cannot reach the central queue on this target'
+	: TARGET_READ_ONLY_REASON;
+
 /** Identity of this run — the last name carries the run id so teardown can find it. */
 const LAST_NAME = `ทดสอบ${RUN_ID}`;
 const HEAD_ID = fictitiousNationalId(Number.parseInt(RUN_ID, 36) % 1e11);
@@ -192,7 +224,7 @@ let liveWritesStarted = false;
 /** Everything the run created is gone — queue documents, and the W5 shelter in CouchDB. */
 test.afterAll(async () => {
 	test.setTimeout(180_000);
-	if (IS_REMOTE || !liveWritesStarted) return;
+	if (!CAN_WRITE || !liveWritesStarted) return;
 	await purgeCreatedData(LAST_NAME, createdQueueIds);
 });
 
@@ -211,16 +243,22 @@ test.describe(
 			await expect(links).toHaveCount(3);
 			await expect(links.filter({ visible: true })).toHaveCount(2);
 
-			await page.getByRole('link', { name: 'ลงทะเบียนผู้ประสบภัยล่วงหน้า' }).click();
+			await page
+				.locator('main header')
+				.getByRole('link', { name: 'ลงทะเบียนล่วงหน้า', exact: true })
+				.click();
 			// The booking form pins the default (central queue) in the URL once it mounts.
 			await expect(page).toHaveURL(/\/pre-register\?shelter=unassigned$/);
-			await expect(page).toHaveTitle('ลงทะเบียนเข้าศูนย์พักพิงล่วงหน้า | SmartShelter');
+			await expect(page).toHaveTitle('ลงทะเบียนล่วงหน้า | SmartShelter');
 			await expect(
-				page.getByRole('heading', { name: 'ลงทะเบียนเข้าศูนย์พักพิงล่วงหน้า', level: 1 })
+				page.getByRole('heading', { name: 'ลงทะเบียนล่วงหน้า', level: 1 })
 			).toBeVisible();
 
 			await page.goto('/');
-			await page.getByRole('link', { name: 'ลงทะเบียนล่วงหน้า', exact: true }).click();
+			await page
+				.getByRole('banner')
+				.getByRole('link', { name: 'ลงทะเบียนล่วงหน้า', exact: true })
+				.click();
 			await expect(page).toHaveURL(/\/pre-register/);
 		});
 
@@ -245,10 +283,16 @@ test.describe(
 			await openPreRegister(page);
 			await shelterTrigger(page).click();
 			const options = page.getByRole('option');
+			// An option reads "<name>[ (เต็ม)][ <capacity>]": anchor the name at the start and
+			// require a word boundary after it, so "ทดสอบ" never matches "ศูนย์อพยพทดสอบ".
+			const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+			const optionNamed = (name: string) => new RegExp(`^\\s*${escapeRegExp(name)}(?=\\s|\\(|$)`);
 			await expect(options).toHaveCount(1 + bookable.length);
 			await expect(options.filter({ hasText: UNASSIGNED_OPTION })).toHaveCount(1);
-			for (const s of bookable) await expect(options.filter({ hasText: s.name })).toHaveCount(1);
-			for (const s of hidden) await expect(options.filter({ hasText: s.name })).toHaveCount(0);
+			for (const s of bookable)
+				await expect(options.filter({ hasText: optionNamed(s.name) })).toHaveCount(1);
+			for (const s of hidden)
+				await expect(options.filter({ hasText: optionNamed(s.name) })).toHaveCount(0);
 		});
 	}
 );
@@ -260,37 +304,39 @@ test.describe('Pre-register: render contract (R)', { tag: ['@pre-register', '@sm
 		await NO_BANNER(page);
 		await openPreRegister(page);
 
-		await expect(
-			page.getByRole('heading', { name: 'ลงทะเบียนเข้าศูนย์พักพิงล่วงหน้า', level: 1 })
-		).toBeVisible();
+		await expect(page.getByRole('heading', { name: 'ลงทะเบียนล่วงหน้า', level: 1 })).toBeVisible();
 		await expect(page.getByText('💡 ลงทะเบียนล่วงหน้าเพื่อความสะดวกและรวดเร็ว')).toBeVisible();
+		await expect(
+			page.getByText(
+				'- เมื่อลงทะเบียนเรียบร้อยแล้ว ท่านสามารถแจ้งเบอร์โทรศัพท์หรือแสดง QR Code ต่อเจ้าหน้าที่ลงทะเบียนประจำศูนย์ เพื่อยืนยันการเข้าพักได้ทันที'
+			)
+		).toBeVisible();
+		await expect(
+			page.getByText(
+				'- การลงทะเบียนล่วงหน้าเป็นเพียงการบันทึกข้อมูลเข้าสู่ระบบเพื่อความสะดวกและลดขั้นตอนเท่านั้น ไม่ได้เป็นการยืนยันสิทธิ์หรือการันตีการเข้าพัก'
+			)
+		).toBeVisible();
 		await expect(page.getByRole('link', { name: 'กลับหน้าหลัก' })).toBeVisible();
 		await expect(page.getByRole('button', { name: 'ลงทะเบียนใหม่' })).toBeVisible();
 		await expect(page.getByRole('button', { name: 'ใบลงทะเบียนของฉัน' })).toBeVisible();
 
-		// shelter section + the "no shelter" warning
+		// shelter section + always-visible note box
 		await expect(
 			page.getByRole('heading', { name: 'ศูนย์พักพิงที่ต้องการเข้าพัก', level: 3 })
 		).toBeVisible();
 		await expect(shelterTrigger(page)).toContainText('ไม่ระบุศูนย์พักพิง');
-		await expect(page.getByText('กรณีไม่ระบุศูนย์พักพิง', { exact: true })).toBeVisible();
+		await expect(page.getByText('หมายเหตุ', { exact: true })).toBeVisible();
 		await expect(
-			page.getByText('การลงทะเบียนล่วงหน้า จะไม่การันตีว่าคุณจะได้เข้าพักในศูนย์')
+			page.getByText(
+				'หากไม่พบศูนย์พักพิง ที่ต้องการเข้าพักให้เลือกไม่ระบุศูนย์พักพิงไว้ก่อน เนื่องจากศูนย์ของท่านไม่เปิดให้ลงทะเบียนล่วงหน้า'
+			)
 		).toBeVisible();
 
-		// live summary (desktop aside) + 3-step stepper
+		// summary card (desktop aside): present with heading, but without "Live Summary" badge
 		const aside = page.getByRole('complementary');
-		await expect(aside).toContainText('Live Summary');
-		await expect(aside.getByRole('button', { name: SUBMIT_LABEL })).toBeVisible();
-		for (const shortcut of ['1. ที่อยู่', '2. สมาชิก', '3. สัตว์เลี้ยง']) {
-			await expect(aside.getByRole('button', { name: shortcut })).toBeVisible();
-		}
-		const stepper = page.getByRole('navigation', { name: 'ขั้นตอนการลงทะเบียน' });
-		await expect(stepper.getByRole('listitem')).toHaveCount(3);
-		for (const [i, step] of ['ที่พักอาศัย', 'สมาชิก', 'สัตว์เลี้ยง'].entries()) {
-			await expect(stepper.getByRole('listitem').nth(i)).toContainText(`ขั้นตอนที่ ${i + 1}`);
-			await expect(stepper.getByRole('listitem').nth(i)).toContainText(step);
-		}
+		await expect(aside).toBeVisible();
+		await expect(aside).toContainText('สรุปข้อมูลการลงทะเบียน');
+		await expect(aside.getByText('Live Summary')).toHaveCount(0);
 
 		// the four sections
 		await expect(page.getByRole('heading', { name: 'ข้อมูลที่อยู่อาศัย', level: 2 })).toBeVisible();
@@ -301,11 +347,9 @@ test.describe('Pre-register: render contract (R)', { tag: ['@pre-register', '@sm
 		).toBeVisible();
 		await expect(page.getByRole('checkbox', { name: DISCLAIMER_LABEL })).toBeVisible();
 
-		// both submit buttons (summary aside + bottom bar)
+		// submit button in the bottom bar, repeated once in the summary aside
 		await expect(page.getByRole('button', { name: SUBMIT_LABEL })).toHaveCount(2);
-		for (const button of await page.getByRole('button', { name: SUBMIT_LABEL }).all()) {
-			await expect(button).toBeVisible();
-		}
+		await expect(submitButton(page)).toBeVisible();
 	});
 
 	test('R2 every address and primary-contact control is rendered, enabled and labelled', async ({
@@ -354,15 +398,13 @@ test.describe('Pre-register: render contract (R)', { tag: ['@pre-register', '@sm
 		await expect(page.getByRole('button', { name: 'ใช้ตำแหน่งปัจจุบัน' })).toBeEnabled();
 		await expect(
 			page.getByRole('textbox', {
-				name: 'ค้นหาครอบครัวด้วยเบอร์โทรศัพท์ (เพื่อเข้าร่วมบ้านเดิม)'
+				name: 'ค้นหาครอบครัวของท่านด้วยเบอร์โทรศัพท์'
 			})
 		).toBeEnabled();
 
 		// primary contact
 		const card = primaryCard(page);
 		await expect(card.getByRole('heading', { name: 'ผู้ติดต่อหลัก', level: 3 })).toBeVisible();
-		await expect(page.locator('#unified-member-photo-0')).toBeEnabled();
-		await expect(card.getByText('ถ่าย / เลือกภาพ', { exact: true })).toBeVisible();
 		// Public channel omits nickname (`showNickname={channel !== 'public'}`).
 		await expect(page.locator('#member-0-nickname')).toHaveCount(0);
 		const memberControls: [string, string][] = [
@@ -401,7 +443,6 @@ test.describe('Pre-register: render contract (R)', { tag: ['@pre-register', '@sm
 		await expect(
 			card.getByRole('group', { name: 'สลับปฏิทินปีเกิด' }).getByRole('button')
 		).toHaveText(['พ.ศ.', 'ค.ศ.']);
-		await expect(card.getByRole('button', { name: 'ไม่มีบัตร / บุคคลนิรนาม' })).toBeEnabled();
 		// the public head of family must give a phone: no "no phone" opt-out
 		await expect(page.locator('#member-0-no-phone')).toHaveCount(0);
 	});
@@ -415,7 +456,7 @@ test.describe('Pre-register: render contract (R)', { tag: ['@pre-register', '@sm
 
 		await openMemberAccordion(card, 'ผู้ติดต่อฉุกเฉิน');
 		for (const [selector, label] of [
-			['#emergency-name', 'ชื่อผู้ติดต่อ'],
+			['#emergency-name', 'ชื่อผู้ติดต่อฉุกเฉิน'],
 			['#emergency-phone', 'เบอร์โทรศัพท์'],
 			['#emergency-relation', 'ความสัมพันธ์']
 		]) {
@@ -508,7 +549,7 @@ test.describe('Pre-register: render contract (R)', { tag: ['@pre-register', '@sm
 		await expect(consent).toBeEnabled();
 		await expect(consent).not.toBeChecked();
 
-		await page.getByRole('button', { name: 'เพิ่มสมาชิก' }).click();
+		await page.getByRole('button', { name: 'เพิ่มสมาชิก', exact: true }).click();
 		const card = memberCard(page, 2);
 		await expect(card).toBeVisible();
 		await expect(card.locator('#member-1-nickname')).toHaveCount(0);
@@ -526,17 +567,18 @@ test.describe('Pre-register: render contract (R)', { tag: ['@pre-register', '@sm
 			await expect(control, field).toBeVisible();
 			await expect(control, field).toBeEnabled();
 		}
-		await expect(page.locator('#unified-member-photo-1')).toBeEnabled();
-		// members after the first may have no phone (the box starts ticked) — the head may not
-		await expect(card.getByRole('checkbox', { name: 'ไม่มีเบอร์โทรศัพท์' })).toBeChecked();
-		await expect(card.locator('#member-1-phone')).toBeDisabled();
-		await card.getByRole('checkbox', { name: 'ไม่มีเบอร์โทรศัพท์' }).uncheck();
+		// members after the first may have no phone — the head may not. The phone field opens
+		// ready to type (roleplay #10); ticking "no phone" disables it.
+		await expect(card.getByRole('checkbox', { name: 'ไม่มีเบอร์โทรศัพท์' })).not.toBeChecked();
 		await expect(card.locator('#member-1-phone')).toBeEnabled();
+		await card.getByRole('checkbox', { name: 'ไม่มีเบอร์โทรศัพท์' }).check();
+		await expect(card.locator('#member-1-phone')).toBeDisabled();
 		await expect(
 			primaryCard(page).getByRole('checkbox', { name: 'ไม่มีเบอร์โทรศัพท์' })
 		).toHaveCount(0);
 		for (const accordion of ['ผู้ติดต่อฉุกเฉิน', 'กลุ่มเปราะบาง', 'ความต้องการพิเศษ'] as const) {
-			await expect(card.getByRole('button', { name: accordion, exact: true })).toBeVisible();
+			// The emergency trigger also carries a hint line (roleplay #11) — match the title.
+			await expect(card.getByRole('button', { name: new RegExp(`^${accordion}`) })).toBeVisible();
 		}
 		await card.getByRole('button', { name: 'ลบ' }).click();
 		await expect(card).toHaveCount(0);
@@ -585,65 +627,51 @@ test.describe('Pre-register: render contract (R)', { tag: ['@pre-register', '@sm
 		await expect(page.getByRole('button', { name: 'ไทย', exact: true }).first()).toBeVisible();
 	});
 
-	test('R4 ARIA snapshot: the empty form', async ({ page }) => {
+	test('R4 no field is flagged before submit; an empty submit flags fields and lists them', async ({
+		page
+	}) => {
 		await NO_BANNER(page);
+		await NO_THAID(page);
 		await openPreRegister(page);
-		await expect(page.locator('main')).toMatchAriaSnapshot({ name: 'form-empty.aria.yml' });
-	});
+		await expect(invalidFields(page)).toHaveCount(0);
+		await expect(summaryAlert(page)).toHaveCount(0);
 
-	test('R4 ARIA snapshot: the form with every error showing', async ({ page }) => {
-		await NO_BANNER(page);
-		await openPreRegister(page);
 		await acceptDisclaimer(page);
 		await submitButton(page).click();
 		await expect(summaryAlert(page)).toBeVisible();
-		await expect(page.locator('main')).toMatchAriaSnapshot({ name: 'form-errors.aria.yml' });
+		await expect(page.getByRole('button', { name: JUMP_BUTTON })).toBeVisible();
+		expect(await invalidFields(page).count()).toBeGreaterThan(0);
 	});
 
 	for (const viewport of [
 		{ name: 'desktop', width: 1440, height: 900 },
 		{ name: 'mobile', width: 390, height: 844 }
 	]) {
-		test(`R5 screenshot ${viewport.name}: empty and all-errors form`, async ({ page }) => {
+		// Structural render check (no pixel baselines): every section shows and the error state
+		// renders; console / page errors are caught by the auto `health` fixture.
+		test(`R5 ${viewport.name}: the empty and the all-errors form render every section`, async ({
+			page
+		}) => {
 			await page.setViewportSize({ width: viewport.width, height: viewport.height });
 			await NO_BANNER(page);
+			await NO_THAID(page);
 			await openPreRegister(page);
-			await page.waitForLoadState('networkidle');
-			// Viewport shots at fixed scroll positions: a full-page capture mangles the sticky
-			// summary / bars. The navbar carries live announcement counts, toasts are transient.
-			const options = {
-				animations: 'disabled' as const,
-				caret: 'hide' as const,
-				maxDiffPixelRatio: 0.01,
-				mask: [page.locator('header')]
-			};
-			const scrollTo = async (selector: string | null) => {
-				await page.evaluate((sel) => {
-					const target = sel ? document.querySelector(sel) : null;
-					window.scrollTo({
-						top: target ? target.getBoundingClientRect().top + window.scrollY - 90 : 0,
-						behavior: 'instant'
-					});
-				}, selector);
-				await settleScroll(page);
-			};
 
-			await expect(page).toHaveScreenshot(`form-empty-top-${viewport.name}.png`, options);
-			await scrollTo('#unified-members');
-			await expect(page).toHaveScreenshot(`form-empty-members-${viewport.name}.png`, options);
+			await expect(
+				page.getByRole('heading', { name: 'ลงทะเบียนล่วงหน้า', level: 1 })
+			).toBeVisible();
+			await expect(shelterTrigger(page)).toBeVisible();
+			await page.locator('#address-no').scrollIntoViewIfNeeded();
+			await expect(page.locator('#address-no')).toBeVisible();
+			await page.locator('#unified-members').scrollIntoViewIfNeeded();
+			await expect(page.locator('#unified-members')).toBeVisible();
+			await expect(primaryCard(page)).toBeVisible();
+			await expect(submitButton(page)).toBeVisible();
 
-			await scrollTo(null);
 			await acceptDisclaimer(page);
 			await submitButton(page).click();
 			await expect(summaryAlert(page)).toBeVisible();
-			await page.locator('[data-sonner-toast]').first().waitFor();
-			// toasts are transient — hide them so the baseline never depends on their timing
-			await page.addStyleTag({ content: '[data-sonner-toaster]{display:none !important}' });
-			await settleScroll(page);
-			await scrollTo('form [role="alert"]');
-			await expect(page).toHaveScreenshot(`form-errors-top-${viewport.name}.png`, options);
-			await scrollTo('#unified-members');
-			await expect(page).toHaveScreenshot(`form-errors-members-${viewport.name}.png`, options);
+			expect(await invalidFields(page).count()).toBeGreaterThan(0);
 		});
 	}
 
@@ -656,11 +684,11 @@ test.describe('Pre-register: render contract (R)', { tag: ['@pre-register', '@sm
 		await page.waitForLoadState('networkidle');
 		await fillAddress(page);
 		await fillMember(page, 0, { firstName: 'ทดสอบ', gender: 'male', phone: fictitiousPhone() });
-		await page.getByRole('button', { name: 'เพิ่มสมาชิก' }).click();
+		await page.getByRole('button', { name: 'เพิ่มสมาชิก', exact: true }).click();
 		await openPets(page);
 		await page.getByRole('button', { name: 'เพิ่มแมว' }).click();
 		await page.getByRole('button', { name: 'ใบลงทะเบียนของฉัน' }).click();
-		await expect(page.getByText('ใบลงทะเบียนที่บันทึกไว้ในอุปกรณ์นี้')).toBeVisible();
+		await expect(page.getByRole('heading', { name: 'ใบลงทะเบียนของฉัน', level: 2 })).toBeVisible();
 		await page.waitForLoadState('networkidle');
 		expectHealthy(health);
 		expect(health.registrationWrites).toEqual([]);
@@ -727,16 +755,15 @@ test.describe('Pre-register: validation gates (V)', { tag: ['@pre-register', '@s
 		health
 	}) => {
 		await openPreRegister(page);
+		// the bottom bar and the summary aside each carry a confirm button
 		const buttons = page.getByRole('button', { name: SUBMIT_LABEL });
 		await expect(buttons).toHaveCount(2);
-		await expect(buttons.first()).toBeDisabled();
-		await expect(buttons.last()).toBeDisabled();
+		for (const button of await buttons.all()) await expect(button).toBeDisabled();
 
 		await acceptDisclaimer(page);
-		await expect(buttons.first()).toBeEnabled();
-		await expect(buttons.last()).toBeEnabled();
+		for (const button of await buttons.all()) await expect(button).toBeEnabled();
 		await page.getByRole('checkbox', { name: DISCLAIMER_LABEL }).uncheck();
-		await expect(buttons.last()).toBeDisabled();
+		for (const button of await buttons.all()) await expect(button).toBeDisabled();
 
 		await acceptDisclaimer(page);
 		await submitButton(page).click();
@@ -746,7 +773,7 @@ test.describe('Pre-register: validation gates (V)', { tag: ['@pre-register', '@s
 		expect(health.registrationWrites).toEqual([]);
 	});
 
-	test('V2 one submit reports gender + wrong ID checksum + short phone together, without repeating the title', async ({
+	test('V2 one submit reports wrong ID checksum + short phone together (gender is never an error), without repeating the title', async ({
 		page,
 		health
 	}) => {
@@ -760,9 +787,7 @@ test.describe('Pre-register: validation gates (V)', { tag: ['@pre-register', '@s
 		await acceptDisclaimer(page);
 		await submitButton(page).click();
 
-		const card = primaryCard(page);
 		const expected: [Locator, string][] = [
-			[card.getByRole('radiogroup', { name: /เพศ/ }), 'กรุณาเลือกเพศ'],
 			[
 				page.locator('#member-0-card-number'),
 				'เลขบัตรประชาชนไม่ถูกต้อง (ตรวจสอบหลักสุดท้ายอีกครั้ง)'
@@ -776,6 +801,12 @@ test.describe('Pre-register: validation gates (V)', { tag: ['@pre-register', '@s
 				summaryAlert(page).getByRole('listitem').filter({ hasText: message })
 			).toHaveCount(1);
 		}
+
+		// decision sync 2026-10-09: gender defaults to ไม่ระบุ (null) and is never reported as missing.
+		await expect(radiogroup(page)).not.toHaveAttribute('aria-invalid', 'true');
+		await expect(
+			summaryAlert(page).getByRole('listitem').filter({ hasText: 'กรุณาเลือกเพศ' })
+		).toHaveCount(0);
 
 		// OBS-02: the toast title is the first message and the description never repeats it.
 		const toast = page.locator('[data-sonner-toast]').first();
@@ -842,12 +873,6 @@ const ERROR_ROWS: ErrorRow[] = [
 		message: 'กรุณากรอกชื่อ',
 		prepare: (page) => fillBase(page, { member: { firstName: '' } }),
 		field: (page) => page.locator('#member-0-first-name')
-	},
-	{
-		id: 'E03',
-		message: 'กรุณาเลือกเพศ',
-		prepare: (page) => fillBase(page, { member: { gender: undefined } }),
-		field: (page) => radiogroup(page)
 	},
 	{
 		id: 'E04',
@@ -948,19 +973,9 @@ const ERROR_ROWS: ErrorRow[] = [
 		message: 'กรุณากรอกชื่อ',
 		prepare: async (page) => {
 			await fillBase(page);
-			await page.getByRole('button', { name: 'เพิ่มสมาชิก' }).click();
+			await page.getByRole('button', { name: 'เพิ่มสมาชิก', exact: true }).click();
 		},
 		field: (page) => memberCard(page, 2).locator('#member-1-first-name')
-	},
-	{
-		id: 'E17',
-		message: 'กรุณาเลือกเพศ',
-		prepare: async (page) => {
-			await fillBase(page);
-			await page.getByRole('button', { name: 'เพิ่มสมาชิก' }).click();
-			await fillMember(page, 1, { firstName: 'สมาชิกสอง' });
-		},
-		field: (page) => radiogroup(page, memberCard(page, 2))
 	},
 	{
 		id: 'E18',
@@ -1011,9 +1026,13 @@ const ERROR_ROWS: ErrorRow[] = [
 		message: 'ลงทะเบียนได้สูงสุด 20 คนต่อครั้ง',
 		prepare: async (page) => {
 			await fillBase(page);
-			for (let i = 0; i < 20; i++) await page.getByRole('button', { name: 'เพิ่มสมาชิก' }).click();
+			for (let i = 0; i < 20; i++)
+				await page.getByRole('button', { name: 'เพิ่มสมาชิก', exact: true }).click();
 		},
-		field: (page) => page.getByRole('button', { name: 'เพิ่มสมาชิก' })
+		field: (page) => page.getByRole('button', { name: 'เพิ่มสมาชิก', exact: true }),
+		// The add button sits below the last member (roleplay #13), so the jump lands on the
+		// first blank member card above it.
+		firstInvalid: (page) => memberCard(page, 2).locator('#member-1-first-name')
 	}
 ];
 
@@ -1065,13 +1084,88 @@ test.describe('Pre-register: error matrix (E)', { tag: ['@pre-register', '@smoke
 		});
 	}
 
+	// ---- Gender is optional (decision sync 2026-10-09 — supersedes CR-154 FR-70) ----------------
+	// ไม่ระบุ is preselected in every registration form and persists as `null`; there is no
+	// "กรุณาเลือกเพศ" error any more. @smoke is read-only on staging, so the registration POST is
+	// intercepted (answered with a stubbed 500, like S1e) and the captured request body is asserted
+	// instead of letting anything reach the server.
+
+	type QueueSubmitBody = { members: { first_name: string; gender: string | null }[] };
+
+	/** Answer the queue POST locally and collect its JSON body — nothing is written upstream. */
+	async function captureQueueSubmit(
+		page: Page,
+		health: { allow(...p: RegExp[]): void }
+	): Promise<QueueSubmitBody[]> {
+		health.allow(/500/);
+		const bodies: QueueSubmitBody[] = [];
+		await page.route('**/api/public/v1/unassigned-registrations', (route) => {
+			if (route.request().method() !== 'POST') return route.continue();
+			bodies.push(route.request().postDataJSON() as QueueSubmitBody);
+			return route.fulfill({
+				status: 500,
+				contentType: 'application/json',
+				body: JSON.stringify({ success: false, error: 'WRITE_FAILED' })
+			});
+		});
+		return bodies;
+	}
+
+	async function expectUnspecifiedPreselected(card: Locator) {
+		await expect(card.getByRole('radio', { name: 'ไม่ระบุ' })).toBeChecked();
+		await expect(card.getByRole('radio', { name: 'ชาย' })).not.toBeChecked();
+		await expect(card.getByRole('radio', { name: 'หญิง' })).not.toBeChecked();
+	}
+
+	test('E03 gender is optional — ไม่ระบุ preselected, submit not blocked, payload gender is null', async ({
+		page,
+		health
+	}) => {
+		await NO_BANNER(page);
+		await openPreRegister(page);
+		await expectUnspecifiedPreselected(primaryCard(page));
+		const bodies = await captureQueueSubmit(page, health);
+		await fillBase(page, { member: { gender: undefined } });
+		await submitButton(page).click();
+
+		await expect.poll(() => bodies.length).toBe(1);
+		expect(bodies[0].members[0].gender).toBeNull();
+		await expect(radiogroup(page)).not.toHaveAttribute('aria-invalid', 'true');
+		await expect(summaryAlert(page)).toHaveCount(0);
+		await expect(page.getByText('กรุณาเลือกเพศ')).toHaveCount(0);
+		// the only write is the intercepted one
+		expect(health.registrationWrites).toEqual(['POST /api/public/v1/unassigned-registrations']);
+	});
+
+	test('E17 gender is optional on member 2 — ไม่ระบุ preselected, payload gender is null', async ({
+		page,
+		health
+	}) => {
+		await NO_BANNER(page);
+		await openPreRegister(page);
+		const bodies = await captureQueueSubmit(page, health);
+		await fillBase(page);
+		await page.getByRole('button', { name: 'เพิ่มสมาชิก', exact: true }).click();
+		await fillMember(page, 1, { firstName: 'สมาชิกสอง' });
+		await expectUnspecifiedPreselected(memberCard(page, 2));
+		// No phone for member 2 — the field opens ready to type, so tick "no phone" (#10).
+		await page.locator('#member-1-no-phone').click();
+		await submitButton(page).click();
+
+		await expect.poll(() => bodies.length).toBe(1);
+		expect(bodies[0].members.map((m) => m.gender)).toEqual(['male', null]);
+		await expect(radiogroup(page, memberCard(page, 2))).not.toHaveAttribute('aria-invalid', 'true');
+		await expect(summaryAlert(page)).toHaveCount(0);
+		expect(health.registrationWrites).toEqual(['POST /api/public/v1/unassigned-registrations']);
+	});
+
 	test('E23 an invalid family-search phone is flagged once the field loses focus', async ({
 		page,
 		health
 	}) => {
 		await openPreRegister(page);
 		const search = page.getByRole('textbox', {
-			name: 'ค้นหาครอบครัวด้วยเบอร์โทรศัพท์ (เพื่อเข้าร่วมบ้านเดิม)'
+			name: 'ค้นหาครอบครัวของท่านด้วยเบอร์โทรศัพท์'
 		});
 		await search.fill('08123');
 		await expect(search).not.toHaveAttribute('aria-invalid', 'true');
@@ -1120,7 +1214,7 @@ test.describe('Pre-register: error matrix (E)', { tag: ['@pre-register', '@smoke
 		);
 		await openPreRegister(page);
 		await fillAddress(page);
-		await page.getByRole('button', { name: 'เข้าร่วมคิวกลาง' }).click();
+		await page.getByRole('button', { name: 'เข้าร่วมครอบครัวนี้' }).click();
 		await expect(page.getByText('จะเข้าร่วมครอบครัวที่มีอยู่แล้ว')).toBeVisible();
 
 		await fillMember(page, 0, { firstName: 'ทดสอบ', gender: 'male', phone: '12' });
@@ -1145,31 +1239,19 @@ test.describe('Pre-register: error matrix (E)', { tag: ['@pre-register', '@smoke
 		await submitButton(page).click();
 
 		const first = page.locator('#member-0-first-name');
-		const gender = radiogroup(page);
 		const phone = page.locator('#member-0-phone');
-		for (const field of [first, gender, phone])
-			await expect(field).toHaveAttribute('aria-invalid', 'true');
+		for (const field of [first, phone]) await expect(field).toHaveAttribute('aria-invalid', 'true');
 
 		// 1) fix the name → only its error goes away
 		await first.fill('ทดสอบ');
 		await submitButton(page).click();
 		await expect(first).not.toHaveAttribute('aria-invalid', 'true');
-		await expect(gender).toHaveAttribute('aria-invalid', 'true');
 		await expect(phone).toHaveAttribute('aria-invalid', 'true');
 		await expect(
 			summaryAlert(page).getByRole('listitem').filter({ hasText: 'กรุณากรอกชื่อ' })
 		).toHaveCount(0);
 
-		// 2) fix the gender
-		await page.locator('label[for="member-0-gender-female"]').click();
-		await submitButton(page).click();
-		await expect(gender).not.toHaveAttribute('aria-invalid', 'true');
-		await expect(phone).toHaveAttribute('aria-invalid', 'true');
-		await expect(
-			summaryAlert(page).getByRole('listitem').filter({ hasText: 'กรุณาเลือกเพศ' })
-		).toHaveCount(0);
-
-		// 3) fix the phone → the remaining error (ID number "123" is still short)
+		// 2) fix the phone → the remaining error (ID number "123" is still short)
 		await phone.fill('0899999999');
 		await submitButton(page).click();
 		await expect(phone).not.toHaveAttribute('aria-invalid', 'true');
@@ -1193,11 +1275,10 @@ test.describe('Pre-register: error matrix (E)', { tag: ['@pre-register', '@smoke
 		await submitButton(page).click();
 
 		const first = page.locator('#member-0-first-name');
-		const gender = radiogroup(page);
 		const phone = page.locator('#member-0-phone');
 		const card = page.locator('#member-0-card-number');
 		const summary = summaryAlert(page);
-		for (const field of [first, gender, phone, card])
+		for (const field of [first, phone, card])
 			await expect(field).toHaveAttribute('aria-invalid', 'true');
 
 		// typing a name clears only the name error — message, flag and summary line
@@ -1205,7 +1286,6 @@ test.describe('Pre-register: error matrix (E)', { tag: ['@pre-register', '@smoke
 		await expect(first).not.toHaveAttribute('aria-invalid', 'true');
 		expect(await messageUnderField(first, 'กรุณากรอกชื่อ')).toBe(false);
 		await expect(summary.getByRole('listitem').filter({ hasText: 'กรุณากรอกชื่อ' })).toHaveCount(0);
-		await expect(gender).toHaveAttribute('aria-invalid', 'true');
 		await expect(phone).toHaveAttribute('aria-invalid', 'true');
 
 		// a still-invalid value keeps its error while typing, and clears on the last digit
@@ -1214,11 +1294,6 @@ test.describe('Pre-register: error matrix (E)', { tag: ['@pre-register', '@smoke
 		await phone.fill('0899999999');
 		await expect(phone).not.toHaveAttribute('aria-invalid', 'true');
 		expect(await messageUnderField(phone, HEAD_PHONE_REQUIRED)).toBe(false);
-
-		// picking a gender clears the radio group
-		await page.locator('label[for="member-0-gender-female"]').click();
-		await expect(gender).not.toHaveAttribute('aria-invalid', 'true');
-		await expect(gender).not.toHaveAttribute('aria-describedby', /.+/);
 
 		// the ID number is still short, so it stays flagged, and nothing new appeared
 		await expect(card).toHaveAttribute('aria-invalid', 'true');
@@ -1302,7 +1377,7 @@ test.describe(
 				id: 'S1a 409 DUPLICATE_OPEN_IDENTITY',
 				status: 409,
 				body: { success: false, error: 'DUPLICATE_OPEN_IDENTITY' },
-				toast: 'มีผู้ลงทะเบียนด้วยบัตรหรือเบอร์นี้อยู่แล้วในคิวกลาง',
+				toast: 'เลขบัตรประชาชน หรือ เบอร์โทรศัพท์นี้ลงทะเบียนเรียบร้อยแล้ว',
 				allow: /409/
 			},
 			{
@@ -1393,23 +1468,6 @@ test.describe(
 			await expect(toast).toContainText('ข้อมูลที่กรอกยังอยู่ครบ');
 			await expect(page.locator('[data-sonner-toast]')).not.toContainText('Failed to fetch');
 			await expectFormKept(page);
-		});
-
-		test('S2 a shelter that does not take pre-registrations cannot be chosen from a link', async ({
-			page
-		}) => {
-			const res = await page.request.get('/api/public/v1/shelters');
-			const { shelters } = (await res.json()) as {
-				shelters: { code: string; accepts_pre_registration?: boolean }[];
-			};
-			const closedToBooking = shelters.find((s) => s.accepts_pre_registration !== true);
-			test.skip(!closedToBooking, 'every shelter accepts pre-registration on this target');
-			await page.goto(`/pre-register?shelter=${closedToBooking!.code}`);
-			await expect(
-				page.getByText('ศูนย์นี้ยังไม่เปิดรับลงทะเบียนล่วงหน้าจากหน้าสาธารณะ')
-			).toBeVisible();
-			await expect(page.getByText('กรุณาเลือกศูนย์พักพิง', { exact: true })).toBeVisible();
-			await expect(page.locator('#address-no')).toHaveCount(0);
 		});
 
 		test('S3 a reCAPTCHA failure blocks the send with its own message', async ({
@@ -1533,6 +1591,77 @@ test.describe(
 	}
 );
 
+// ====================================================== S2 — shelter that is not accepting
+
+/**
+ * Writes (creates its own `E2E …` shelter), so unlike the rest of S it is not `@smoke`: it
+ * follows W5 — skipped on read-only targets, torn down through `teardownShelter`. The
+ * shelter is created here instead of picked from the live list because leftovers of earlier
+ * runs (closed, registry master deleted) have no shelter policy and would 404 the page.
+ */
+test.describe(
+	'Pre-register: shelter not accepting pre-registrations (S2)',
+	{ tag: ['@pre-register', '@critical'] },
+	() => {
+		test.beforeEach(() => {
+			test.skip(!CAN_WRITE, READ_ONLY_REASON);
+		});
+
+		test('S2 a shelter that does not take pre-registrations cannot be chosen from a link', async ({
+			page,
+			browser,
+			baseURL
+		}) => {
+			test.setTimeout(240_000);
+			liveWritesStarted = true;
+
+			// staff: create a shelter that does NOT accept pre-registrations, through the UI
+			const staffContext = await browser.newContext();
+			let code: string | undefined;
+			try {
+				const staffPage = await staffContext.newPage();
+				const admin = await bootstrapAdminSession();
+				await routeBrowserCouchThroughApp(staffPage);
+				await injectSession(staffPage, admin.user, admin.cookie);
+				code = await createShelterViaUi(staffPage, {
+					name: `E2E ศูนย์ทดสอบไม่รับจองล่วงหน้า ${RUN_ID}`,
+					siteKind: 'evacuation_center',
+					lat: 7.0,
+					lng: 100.48,
+					subdistrict: 'คอหงส์',
+					capacity: 40,
+					acceptsPreRegistration: false
+				});
+				// ledger first: the top-level afterAll sweeps it even if the steps below throw
+				recordCreatedShelter(code);
+
+				// the worker projects it asynchronously — wait until the public API serves it
+				await waitForProjection('shelter open and not accepting in /shelters', async () => {
+					const res = await fetch(`${baseURL}/api/public/v1/shelters`);
+					const { shelters } = (await res.json()) as {
+						shelters: { code: string; status: string; accepts_pre_registration?: boolean }[];
+					};
+					const row = shelters.find((s) => s.code === code);
+					return row?.status === 'open' && row.accepts_pre_registration !== true;
+				});
+
+				await page.goto(`/pre-register?shelter=${code}`);
+				await expect(
+					page.getByText('ศูนย์นี้ยังไม่เปิดรับลงทะเบียนล่วงหน้าจากหน้าสาธารณะ')
+				).toBeVisible();
+				await expect(page.getByText('กรุณาเลือกศูนย์พักพิง', { exact: true })).toBeVisible();
+				await expect(page.locator('#address-no')).toHaveCount(0);
+			} finally {
+				await staffContext.close().catch(() => undefined);
+				if (code) {
+					await teardownShelter(code);
+					forgetCreatedShelter(code);
+				}
+			}
+		});
+	}
+);
+
 // =============================================================== U — layout, i18n
 
 test.describe('Pre-register: layout and language (U)', { tag: ['@pre-register', '@smoke'] }, () => {
@@ -1607,7 +1736,7 @@ test.describe('Pre-register: layout and language (U)', { tag: ['@pre-register', 
 			}
 			// the register link is icon-only here but still announced
 			await expect(
-				page.locator('header').getByRole('link', { name: 'ลงทะเบียน', exact: true })
+				page.locator('header').getByRole('link', { name: 'ลงทะเบียนล่วงหน้า', exact: true })
 			).toBeVisible();
 		});
 	}
@@ -1615,15 +1744,11 @@ test.describe('Pre-register: layout and language (U)', { tag: ['@pre-register', 
 	test('U3 switching to English retitles the page', async ({ page }) => {
 		await openPreRegister(page);
 		await page.getByRole('button', { name: 'Switch to English' }).click();
-		await expect(
-			page.getByRole('heading', { name: 'Pre-register for a shelter', level: 1 })
-		).toBeVisible();
+		await expect(page.getByRole('heading', { name: 'Pre-registration', level: 1 })).toBeVisible();
 		await expect(page.getByRole('button', { name: 'My registrations' })).toBeVisible();
-		await expect(page).toHaveTitle('Pre-register for a shelter | SmartShelter');
+		await expect(page).toHaveTitle('Pre-registration | SmartShelter');
 		await page.getByRole('button', { name: 'เปลี่ยนเป็นภาษาไทย' }).click();
-		await expect(
-			page.getByRole('heading', { name: 'ลงทะเบียนเข้าศูนย์พักพิงล่วงหน้า', level: 1 })
-		).toBeVisible();
+		await expect(page.getByRole('heading', { name: 'ลงทะเบียนล่วงหน้า', level: 1 })).toBeVisible();
 	});
 
 	test('U3 on a phone the language toggle lives in the hamburger menu', async ({ page }) => {
@@ -1636,9 +1761,7 @@ test.describe('Pre-register: layout and language (U)', { tag: ['@pre-register', 
 		await page.getByRole('button', { name: /เปิดเมนู/ }).click();
 		await page.getByRole('button', { name: /เปลี่ยนภาษา/ }).click();
 		await page.keyboard.press('Escape');
-		await expect(
-			page.getByRole('heading', { name: 'Pre-register for a shelter', level: 1 })
-		).toBeVisible();
+		await expect(page.getByRole('heading', { name: 'Pre-registration', level: 1 })).toBeVisible();
 	});
 });
 
@@ -1663,16 +1786,30 @@ function storedTicketCodes(page: Page): Promise<string[]> {
 }
 
 /**
- * The ticket-status BFF allows 10 requests per minute per IP. W2/W3 spend about half of it;
- * W5 waits for that window to pass instead of tripping a 429 (the sync only ever fires from
- * the page, so the budget cannot be raised from the test).
+ * The ticket-status BFF and the form's instant duplicate check (`check-duplicate`, fired when a
+ * member's national ID / phone is complete) share one budget: 10 requests per sliding minute per
+ * IP (`registerLookupIpLimiter`). Every real request to either that this file makes is
+ * timestamped in `statusHits`, so a test that is about to spend `needed` more waits only until
+ * enough older hits have left the window — instead of tripping a 429 (both fire from the page,
+ * so the budget cannot be raised from the test). Timestamps are taken on the response, i.e.
+ * never earlier than the server's own.
  */
-let statusWindowStart = 0;
-async function waitForStatusBudget(): Promise<void> {
-	if (!statusWindowStart) return;
-	const remaining = statusWindowStart + 61_000 - Date.now();
-	if (remaining > 0) await new Promise((r) => setTimeout(r, remaining));
-	statusWindowStart = 0;
+const LOOKUP_BUDGET_PATHS = [
+	'/api/public/v1/registrations/status',
+	'/api/public/v1/registrations/check-duplicate'
+];
+const STATUS_LIMIT = 10;
+const STATUS_WINDOW_MS = 61_000;
+const statusHits: number[] = [];
+async function waitForStatusBudget(needed: number): Promise<void> {
+	// Nothing to wait for when the target's limiters are off (RATE_LIMIT=false).
+	if (!RATE_LIMIT_ENFORCED) return;
+	for (;;) {
+		const now = Date.now();
+		while (statusHits.length > 0 && now - statusHits[0] >= STATUS_WINDOW_MS) statusHits.shift();
+		if (statusHits.length + needed <= STATUS_LIMIT) return;
+		await new Promise((r) => setTimeout(r, statusHits[0] + STATUS_WINDOW_MS - now));
+	}
 }
 
 interface StatusCall {
@@ -1680,11 +1817,20 @@ interface StatusCall {
 	body: Record<string, unknown> | null;
 }
 
-/** Record the ticket-status BFF responses the page receives. */
+/** Count every lookup-budget request `page` makes into `statusHits`. */
+function countLookupBudget(page: Page): void {
+	page.on('response', (res) => {
+		const { pathname } = new URL(res.url());
+		if (LOOKUP_BUDGET_PATHS.includes(pathname)) statusHits.push(Date.now());
+	});
+}
+
+/** Record the ticket-status BFF responses the page receives (and count its budget). */
 function recordStatusCalls(page: Page): StatusCall[] {
+	countLookupBudget(page);
 	const calls: StatusCall[] = [];
 	page.on('response', async (res) => {
-		if (!res.url().includes('/api/public/v1/registrations/status')) return;
+		if (new URL(res.url()).pathname !== '/api/public/v1/registrations/status') return;
 		calls.push({ status: res.status(), body: await res.json().catch(() => null) });
 	});
 	return calls;
@@ -1715,25 +1861,44 @@ test.describe(
 		let statusCalls: StatusCall[];
 		let queueId = '';
 
+		// This suite writes through the real reCAPTCHA gate (recaptcha-gate.ts) — a fake
+		// __captchaToken never passes real Google verification — so disable the switch for
+		// the duration of the writes and restore whatever it was set to beforehand.
+		let adminContext: BrowserContext;
+		let adminPage: Page;
+		let recaptchaWasEnabled = true;
+
 		test.beforeAll(async ({ browser }) => {
-			if (IS_REMOTE) return;
+			if (!CAN_WRITE) return;
 			context = await browser.newContext();
 			page = await context.newPage();
 			health = watchPage(page);
 			statusCalls = recordStatusCalls(page);
+
+			const admin = await bootstrapAdminSession();
+			adminContext = await browser.newContext();
+			adminPage = await adminContext.newPage();
+			await routeBrowserCouchThroughApp(adminPage);
+			await injectSession(adminPage, admin.user, admin.cookie);
+			recaptchaWasEnabled = await setRecaptcha(adminPage, false);
 		});
 		test.afterAll(async () => {
+			if (CAN_WRITE) await setRecaptcha(adminPage, recaptchaWasEnabled);
+			await adminContext?.close();
 			await context?.close();
 		});
 		test.beforeEach(() => {
-			test.skip(IS_REMOTE, READ_ONLY_REASON);
+			test.skip(!CAN_WRITE, READ_ONLY_REASON);
 		});
 
 		test('W1 a full family registers in the central queue and gets its QR ticket', async () => {
 			test.setTimeout(120_000);
 			liveWritesStarted = true;
 			await page.goto('/');
-			await page.getByRole('link', { name: 'ลงทะเบียนผู้ประสบภัยล่วงหน้า' }).click();
+			await page
+				.locator('main header')
+				.getByRole('link', { name: 'ลงทะเบียนล่วงหน้า', exact: true })
+				.click();
 			await expect(page).toHaveURL(/\/pre-register\?shelter=unassigned$/);
 			await expect(page.locator('#address-no')).toBeVisible({ timeout: 20_000 });
 			await expect(shelterTrigger(page)).toContainText('ไม่ระบุศูนย์พักพิง');
@@ -1764,7 +1929,7 @@ test.describe(
 			});
 
 			// member 2 with vulnerable groups + a special need
-			await page.getByRole('button', { name: 'เพิ่มสมาชิก' }).click();
+			await page.getByRole('button', { name: 'เพิ่มสมาชิก', exact: true }).click();
 			const card2 = memberCard(page, 2);
 			await fillMember(page, 1, {
 				firstName: MEMBER2_NAME,
@@ -1773,6 +1938,8 @@ test.describe(
 				birthYear: '2490',
 				gender: 'female'
 			});
+			// No phone for member 2 — the field opens ready to type, so tick "no phone" (#10).
+			await page.locator('#member-1-no-phone').click();
 			await openMemberAccordion(card2, 'กลุ่มเปราะบาง');
 			await page.locator('#vg-1-elderly_dependent').click();
 			await page.locator('#vg-1-chronic_illness').click();
@@ -1803,8 +1970,8 @@ test.describe(
 			await expect(
 				page.getByText('แสดง QR Code นี้ต่อเจ้าหน้าที่ เพื่อรับเข้าศูนย์')
 			).toBeVisible();
-			// the id rides in the QR only — never printed for a human
-			await expect(page.getByText(queueId)).toHaveCount(0);
+			// CR-150: an unassigned ticket prints its queue code under the name (`รหัส: {code}`)
+			await expect(page.getByText(`รหัส: ${queueId}`, { exact: true })).toBeVisible();
 			await expect.poll(() => storedTicketCodes(page)).toContain(queueId);
 			await expect(page.locator('main')).toMatchAriaSnapshot({ name: 'ticket.aria.yml' });
 			expectHealthy(health);
@@ -1814,7 +1981,6 @@ test.describe(
 			test.setTimeout(90_000);
 			const claimedToast = page.getByText(CLAIMED_TOAST);
 			statusCalls.length = 0;
-			statusWindowStart = Date.now();
 
 			await page.getByRole('button', { name: /ใบลงทะเบียนของฉัน/ }).click();
 			await expect(page.getByText(`${FIRST_NAME} ${LAST_NAME}`)).toBeVisible();
@@ -1844,9 +2010,11 @@ test.describe(
 		});
 
 		test('W3 the status BFF reports the real ticket as still open, never as not found', async () => {
+			// page.request fires no page 'response' events — count these two by hand
 			const res = await page.request.post('/api/public/v1/registrations/status', {
 				data: { code: queueId }
 			});
+			statusHits.push(Date.now());
 			expect(res.status()).toBe(200);
 			const body = (await res.json()) as Record<string, unknown>;
 			expect(body).toMatchObject({ success: true, verified: false, status: 'open' });
@@ -1856,12 +2024,15 @@ test.describe(
 			const missing = await page.request.post('/api/public/v1/registrations/status', {
 				data: { code: '01ZZZZZZZZZZZZZZZZZZZZZZZZ' }
 			});
+			statusHits.push(Date.now());
 			expect(await missing.json()).toMatchObject({ verified: false, notFound: true });
 		});
 
 		test('W4 the same identity cannot enter the queue twice', async () => {
-			test.setTimeout(90_000);
+			test.setTimeout(150_000); // may first wait out the lookup budget W1–W3 spent
 			health.problems.length = 0; // the 409 below logs a console error on purpose
+			// the mount sync of W1's ticket + the duplicate checks of the head's ID and phone
+			await waitForStatusBudget(4);
 			await page.goto(PRE_REGISTER_PATH);
 			await expect(page.locator('#address-no')).toBeVisible({ timeout: 20_000 });
 			await fillAddress(page);
@@ -1882,7 +2053,7 @@ test.describe(
 			await expect(
 				page
 					.locator('[data-sonner-toast]')
-					.filter({ hasText: 'มีผู้ลงทะเบียนด้วยบัตรหรือเบอร์นี้อยู่แล้วในคิวกลาง' })
+					.filter({ hasText: 'เลขบัตรประชาชน หรือ เบอร์โทรศัพท์นี้ลงทะเบียนเรียบร้อยแล้ว' })
 			).toBeVisible();
 			// nothing was lost: the form keeps what was typed and no ticket appeared
 			await expect(page.locator('#member-0-first-name')).toHaveValue(FIRST_NAME);
@@ -1966,15 +2137,33 @@ test.describe(
 		let statusCalls: StatusCall[];
 		let ticketCode = '';
 
+		// This booking also writes through the real reCAPTCHA gate (recaptcha-gate.ts) — see
+		// the W1-W4/W6 block above for why it must be disabled for the duration of the writes.
+		let adminContext: BrowserContext;
+		let adminPage: Page;
+		let recaptchaWasEnabled = true;
+		const canWrite = () => CAN_WRITE && Boolean(process.env.COUCHDB_PUBLIC_WRITER_URL);
+
 		test.beforeEach(() => {
-			test.skip(IS_REMOTE, READ_ONLY_REASON);
+			test.skip(!CAN_WRITE, READ_ONLY_REASON);
 			// the production-mode app writes bookings as the limited `public_writer` CouchDB user
 			test.skip(
 				!process.env.COUCHDB_PUBLIC_WRITER_URL,
 				'COUCHDB_PUBLIC_WRITER_URL is not set (and public_writer provisioned via pnpm seed:master)'
 			);
 		});
+		test.beforeAll(async ({ browser }) => {
+			if (!canWrite()) return;
+			const admin = await bootstrapAdminSession();
+			adminContext = await browser.newContext();
+			adminPage = await adminContext.newPage();
+			await routeBrowserCouchThroughApp(adminPage);
+			await injectSession(adminPage, admin.user, admin.cookie);
+			recaptchaWasEnabled = await setRecaptcha(adminPage, false);
+		});
 		test.afterAll(async () => {
+			if (canWrite()) await setRecaptcha(adminPage, recaptchaWasEnabled);
+			await adminContext?.close();
 			await context?.close();
 		});
 
@@ -2013,7 +2202,9 @@ test.describe(
 				return row?.status === 'open' && row.accepts_pre_registration === true;
 			});
 
-			// citizen: a fresh browser, no staff session
+			// citizen: a fresh browser, no staff session — the form's duplicate checks (ID + phone)
+			// and the reload below come out of the same lookup budget W4 just spent
+			await waitForStatusBudget(4);
 			context = await browser.newContext();
 			page = await context.newPage();
 			health = watchPage(page);
@@ -2051,7 +2242,8 @@ test.describe(
 			await expect.poll(() => storedTicketCodes(page)).toContain(ticketCode);
 
 			// reload → the ticket is still in "my registrations" and still pending
-			await waitForStatusBudget();
+			// the reload's mount sync + the history tab's own sync, one ticket each
+			await waitForStatusBudget(2);
 			statusCalls.length = 0;
 			await page.reload();
 			await page.getByRole('button', { name: /ใบลงทะเบียนของฉัน/ }).click();
@@ -2102,7 +2294,7 @@ test.describe(
 	{ tag: ['@pre-register', '@critical', '@release'] },
 	() => {
 		test.beforeEach(() => {
-			test.skip(IS_REMOTE, READ_ONLY_REASON);
+			test.skip(!CAN_WRITE, READ_ONLY_REASON);
 		});
 
 		test('Z the central queue and CouchDB hold nothing of this run', async () => {

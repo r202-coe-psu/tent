@@ -9,8 +9,12 @@ import {
 	isShelterManager,
 	isWarehouseStaff,
 	isSystemAdmin,
+	canAccessDistributionDesk,
 	canAccessMedicalScreening,
+	canAccessVolunteerBackoffice,
 	canAccessZoning,
+	canManageScanners,
+	isKioskStaffOnly,
 	shelterCodeFromRoles
 } from '$lib/auth/roles';
 import { fetchAuthStatus, type AuthStatus } from '$lib/features/users';
@@ -124,6 +128,36 @@ export async function requireManager(fetchFn?: typeof fetch) {
 	}
 }
 
+/** The only back-office page a kiosk_staff-only user may open (FR-SBO-29). */
+export const KIOSK_STAFF_BACKOFFICE_ROUTE = '/back-office/kiosks';
+
+/**
+ * Kiosk device management (`/back-office/kiosks`) guard — system_admin, or shelter_manager /
+ * kiosk_staff of the selected shelter (draft CR scanner back-office FR-SBO-20). The scanner BFF
+ * routes re-check scope per device.
+ */
+export async function requireKioskManagement(fetchFn?: typeof fetch) {
+	await requireAuth(fetchFn);
+	const roles = authStore.user?.roles ?? [];
+	const shelter = activeShelterCode(roles);
+	if (!isSystemAdmin(roles) && !(shelter && canManageScanners(roles, shelter))) {
+		throw redirect(302, resolve(LANDING_ROUTE));
+	}
+}
+
+/**
+ * Back-office layout gate — a user whose only capability in the selected shelter is kiosk_staff
+ * may open the kiosk device page only (FR-SBO-29); every other back-office page sends them to the
+ * portal like any other denied page. Call after {@link requireAuth}.
+ */
+export function confineKioskStaffOnly(pathname: string) {
+	const roles = authStore.user?.roles ?? [];
+	if (!isKioskStaffOnly(roles, activeShelterCode(roles))) return;
+	const allowed = resolve(KIOSK_STAFF_BACKOFFICE_ROUTE);
+	if (pathname === allowed || pathname.startsWith(`${allowed}/`)) return;
+	throw redirect(302, resolve(LANDING_ROUTE));
+}
+
 /**
  * Warehouse guard — requires INVENTORY_WRITE_ROLES: system_admin, shelter_manager,
  * or warehouse_staff (role-permission-matrix.md §4). Redirects to / otherwise.
@@ -181,6 +215,20 @@ export async function requireTicketAccess(fetchFn?: typeof fetch) {
 }
 
 /**
+ * Distribution Desk (Station 4, `/onsite/distribution`) guard — system_admin, shelter_manager or
+ * distribution_staff of the selected shelter (CR-161 R5). Matches the onsite and portal tiles;
+ * per-step buttons stay gated in the UI and the CouchDB `validate_doc_update` guard remains the
+ * real boundary.
+ */
+export async function requireDistributionDesk(fetchFn?: typeof fetch) {
+	await requireAuth(fetchFn);
+	const roles = authStore.user?.roles ?? [];
+	if (!canAccessDistributionDesk(roles, activeShelterCode(roles))) {
+		throw redirect(302, resolve(LANDING_ROUTE));
+	}
+}
+
+/**
  * Evacuee registration guard — requires system_admin, shelter_manager, or
  * the `registration_staff` capability. Used for PII surfaces (evacuee/
  * household CRUD) so only staff whose job is registration can reach them;
@@ -221,8 +269,22 @@ export async function requireVolunteerCheckIn(fetchFn?: typeof fetch) {
 }
 
 /**
+ * Volunteer back-office guard — requires system_admin, shelter_manager, or
+ * `volunteer_coordinator` in the selected shelter (matrix §3 "Volunteer Job Board").
+ * Used for `/back-office/volunteers` (+ job detail / assign). UX gate; the data layer
+ * stays the authorization boundary. User management is NOT covered (stays SM/SA).
+ */
+export async function requireVolunteerBackoffice(fetchFn?: typeof fetch) {
+	await requireAuth(fetchFn);
+	const roles = authStore.user?.roles ?? [];
+	if (!canAccessVolunteerBackoffice(roles, activeShelterCode(roles))) {
+		throw redirect(302, resolve(LANDING_ROUTE));
+	}
+}
+
+/**
  * Medical screening guard — requires system_admin, shelter_manager,
- * medical_staff, or triage_staff. Used for Station 2 medical screening.
+ * registration_staff, medical_staff, or triage_staff. Used for Station 2 medical screening.
  */
 export async function requireMedicalScreening(fetchFn?: typeof fetch) {
 	await requireAuth(fetchFn);

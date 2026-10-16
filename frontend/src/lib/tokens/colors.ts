@@ -64,13 +64,105 @@ export const baseText = {
 	inverse: '#FFFFFF' // Pure White: Text on Brand Navy & solid buttons
 } as const;
 
+/**
+ * Domain colour families — one work domain = one colour family, identical on the public site and
+ * the staff app (owner-approved "domain color tokens").
+ *
+ * Steps: `base` = identity / icons / large text; `strong` = solid button background with white
+ * text (WCAG AA); `subtle` = soft background; `border` = 360° tinted border; `text` = text on
+ * `subtle`. The `text` step doubles as the solid-button hover colour (hover:bg-domain-<id>-text).
+ *
+ * Domain colours must NEVER express status (critical red, warning amber, operational green, EOC
+ * purple stay reserved) — pair every domain colour with a label or icon.
+ *
+ * CSS twin: `--domain-<id>[-strong|-subtle|-border|-text]` in app.css (a unit test keeps them equal;
+ * `registration` base/strong reference `var(--primary)` there, which is the same #124481).
+ */
+export const baseDomain = {
+	registration: {
+		name: 'ทะเบียนและศูนย์พักพิง',
+		base: '#124481',
+		strong: '#124481',
+		subtle: '#E4F0FF',
+		border: '#BFD4F2',
+		text: '#0B2647'
+	},
+	donation: {
+		name: 'บริจาค พัสดุและคลัง',
+		base: '#FF5C00',
+		strong: '#C2410C',
+		subtle: '#FFF3EB',
+		border: '#FED7AA',
+		text: '#9A3412'
+	},
+	volunteer: {
+		name: 'จิตอาสา',
+		base: '#059669',
+		strong: '#047857',
+		subtle: '#ECFDF5',
+		border: '#A7F3D0',
+		text: '#065F46'
+	},
+	kitchen: {
+		name: 'ครัว',
+		base: '#DB2777',
+		strong: '#BE185D',
+		subtle: '#FDF2F8',
+		border: '#FBCFE8',
+		text: '#9D174D'
+	},
+	facility: {
+		name: 'อาคารสถานที่',
+		base: '#0D9488',
+		strong: '#0F766E',
+		subtle: '#F0FDFA',
+		border: '#99F6E4',
+		text: '#134E4A'
+	},
+	security: {
+		name: 'ความปลอดภัย',
+		base: '#7C3AED',
+		strong: '#6D28D9',
+		subtle: '#F5F3FF',
+		border: '#DDD6FE',
+		text: '#5B21B6'
+	},
+	admin: {
+		name: 'บริหารและส่วนกลาง',
+		base: '#475569',
+		strong: '#334155',
+		subtle: '#F1F5F9',
+		border: '#CBD5E1',
+		text: '#1E293B'
+	}
+} as const;
+
+export type DomainId = keyof typeof baseDomain;
+
+/** Domain ids in display order. */
+export const DOMAIN_IDS = Object.keys(baseDomain) as DomainId[];
+
+/** The CSS custom-property name (`var(--domain-…)`) for a domain step; `base` has no suffix. */
+export function domainVar(
+	id: DomainId,
+	step: 'base' | 'strong' | 'subtle' | 'border' | 'text' = 'base'
+) {
+	return step === 'base' ? `var(--domain-${id})` : `var(--domain-${id}-${step})`;
+}
+
+// DEPRECATED(domain-color-tokens): use colors.domain.<id> / --domain-<id> — remove after usages migrate
+/**
+ * @deprecated use `colors.domain.<id>` / `--domain-<id>`.
+ * kitchen -> kitchen domain; inventory + donor -> donation domain; volunteer -> volunteer domain.
+ * `family` (rose) is not a work domain and stays as is.
+ */
 export const baseOperations = {
 	kitchen: {
-		hex: '#EA580C',
-		bg: 'bg-orange-50',
-		text: 'text-orange-900',
-		border: 'border-orange-200',
-		dot: 'bg-orange-600'
+		hex: baseDomain.kitchen.base,
+		bg: 'bg-domain-kitchen-subtle',
+		text: 'text-domain-kitchen-text',
+		border: 'border-domain-kitchen-border',
+		dot: 'bg-domain-kitchen'
 	},
 	family: {
 		hex: '#E11D48',
@@ -80,25 +172,25 @@ export const baseOperations = {
 		dot: 'bg-rose-600'
 	},
 	donor: {
-		hex: baseSecondary.cerulean, // Inherits directly from Secondary Cerulean
-		bg: 'bg-sky-50',
-		text: 'text-sky-900',
-		border: 'border-sky-200',
-		dot: 'bg-sky-600'
+		hex: baseDomain.donation.base,
+		bg: 'bg-domain-donation-subtle',
+		text: 'text-domain-donation-text',
+		border: 'border-domain-donation-border',
+		dot: 'bg-domain-donation'
 	},
 	volunteer: {
-		hex: '#059669',
-		bg: 'bg-emerald-50',
-		text: 'text-emerald-900',
-		border: 'border-emerald-200',
-		dot: 'bg-emerald-600'
+		hex: baseDomain.volunteer.base,
+		bg: 'bg-domain-volunteer-subtle',
+		text: 'text-domain-volunteer-text',
+		border: 'border-domain-volunteer-border',
+		dot: 'bg-domain-volunteer'
 	},
 	inventory: {
-		hex: '#0D9488',
-		bg: 'bg-teal-50',
-		text: 'text-teal-900',
-		border: 'border-teal-200',
-		dot: 'bg-teal-600'
+		hex: baseDomain.donation.base,
+		bg: 'bg-domain-donation-subtle',
+		text: 'text-domain-donation-text',
+		border: 'border-domain-donation-border',
+		dot: 'bg-domain-donation'
 	}
 } as const;
 
@@ -222,13 +314,104 @@ export const colors = {
 		}
 	},
 
-	// 4. Domain & Specialized Shelter Operations
+	// 4a. Work-domain colour families (same on public site + staff app) — see `baseDomain`
+	domain: {
+		registration: {
+			id: 'registration',
+			...baseDomain.registration,
+			badge:
+				'border border-domain-registration-border bg-domain-registration-subtle text-domain-registration-text font-semibold',
+			card: 'border border-domain-registration-border bg-white shadow-2xs hover:border-domain-registration transition-all',
+			solid:
+				'bg-domain-registration-strong text-white hover:bg-domain-registration-text focus-visible:ring-domain-registration-strong',
+			subtleBtn:
+				'border border-domain-registration-border bg-domain-registration-subtle text-domain-registration-text hover:bg-white',
+			iconBox:
+				'border border-domain-registration-border bg-domain-registration-subtle text-domain-registration'
+		},
+		donation: {
+			id: 'donation',
+			...baseDomain.donation,
+			badge:
+				'border border-domain-donation-border bg-domain-donation-subtle text-domain-donation-text font-semibold',
+			card: 'border border-domain-donation-border bg-white shadow-2xs hover:border-domain-donation transition-all',
+			solid:
+				'bg-domain-donation-strong text-white hover:bg-domain-donation-text focus-visible:ring-domain-donation-strong',
+			subtleBtn:
+				'border border-domain-donation-border bg-domain-donation-subtle text-domain-donation-text hover:bg-white',
+			iconBox: 'border border-domain-donation-border bg-domain-donation-subtle text-domain-donation'
+		},
+		volunteer: {
+			id: 'volunteer',
+			...baseDomain.volunteer,
+			badge:
+				'border border-domain-volunteer-border bg-domain-volunteer-subtle text-domain-volunteer-text font-semibold',
+			card: 'border border-domain-volunteer-border bg-white shadow-2xs hover:border-domain-volunteer transition-all',
+			solid:
+				'bg-domain-volunteer-strong text-white hover:bg-domain-volunteer-text focus-visible:ring-domain-volunteer-strong',
+			subtleBtn:
+				'border border-domain-volunteer-border bg-domain-volunteer-subtle text-domain-volunteer-text hover:bg-white',
+			iconBox:
+				'border border-domain-volunteer-border bg-domain-volunteer-subtle text-domain-volunteer'
+		},
+		kitchen: {
+			id: 'kitchen',
+			...baseDomain.kitchen,
+			badge:
+				'border border-domain-kitchen-border bg-domain-kitchen-subtle text-domain-kitchen-text font-semibold',
+			card: 'border border-domain-kitchen-border bg-white shadow-2xs hover:border-domain-kitchen transition-all',
+			solid:
+				'bg-domain-kitchen-strong text-white hover:bg-domain-kitchen-text focus-visible:ring-domain-kitchen-strong',
+			subtleBtn:
+				'border border-domain-kitchen-border bg-domain-kitchen-subtle text-domain-kitchen-text hover:bg-white',
+			iconBox: 'border border-domain-kitchen-border bg-domain-kitchen-subtle text-domain-kitchen'
+		},
+		facility: {
+			id: 'facility',
+			...baseDomain.facility,
+			badge:
+				'border border-domain-facility-border bg-domain-facility-subtle text-domain-facility-text font-semibold',
+			card: 'border border-domain-facility-border bg-white shadow-2xs hover:border-domain-facility transition-all',
+			solid:
+				'bg-domain-facility-strong text-white hover:bg-domain-facility-text focus-visible:ring-domain-facility-strong',
+			subtleBtn:
+				'border border-domain-facility-border bg-domain-facility-subtle text-domain-facility-text hover:bg-white',
+			iconBox: 'border border-domain-facility-border bg-domain-facility-subtle text-domain-facility'
+		},
+		security: {
+			id: 'security',
+			...baseDomain.security,
+			badge:
+				'border border-domain-security-border bg-domain-security-subtle text-domain-security-text font-semibold',
+			card: 'border border-domain-security-border bg-white shadow-2xs hover:border-domain-security transition-all',
+			solid:
+				'bg-domain-security-strong text-white hover:bg-domain-security-text focus-visible:ring-domain-security-strong',
+			subtleBtn:
+				'border border-domain-security-border bg-domain-security-subtle text-domain-security-text hover:bg-white',
+			iconBox: 'border border-domain-security-border bg-domain-security-subtle text-domain-security'
+		},
+		admin: {
+			id: 'admin',
+			...baseDomain.admin,
+			badge:
+				'border border-domain-admin-border bg-domain-admin-subtle text-domain-admin-text font-semibold',
+			card: 'border border-domain-admin-border bg-white shadow-2xs hover:border-domain-admin transition-all',
+			solid:
+				'bg-domain-admin-strong text-white hover:bg-domain-admin-text focus-visible:ring-domain-admin-strong',
+			subtleBtn:
+				'border border-domain-admin-border bg-domain-admin-subtle text-domain-admin-text hover:bg-white',
+			iconBox: 'border border-domain-admin-border bg-domain-admin-subtle text-domain-admin'
+		}
+	},
+
+	// 4b. Legacy operations (DEPRECATED — repointed to the domain families above; `family` unchanged)
 	operations: {
 		kitchen: {
 			name: 'ครัวกลาง เชื้อเพลิง และบริจาคเสบียง (Kitchen, Energy & Food Supply)',
 			...baseOperations.kitchen,
-			badge: 'border border-orange-200 bg-orange-50 text-orange-900 font-semibold',
-			card: 'border border-orange-200 bg-white shadow-2xs hover:border-orange-300 transition-all'
+			badge:
+				'border border-domain-kitchen-border bg-domain-kitchen-subtle text-domain-kitchen-text font-semibold',
+			card: 'border border-domain-kitchen-border bg-white shadow-2xs hover:border-domain-kitchen transition-all'
 		},
 		family: {
 			name: 'แม่และเด็ก / สตรีมีครรภ์ (Maternal & Infant Family Care)',
@@ -239,20 +422,23 @@ export const colors = {
 		donor: {
 			name: 'ระบบผู้บริจาคและติดตามหาญาติ (Donors, Tracing & Public Relations)',
 			...baseOperations.donor,
-			badge: 'border border-sky-200 bg-sky-50 text-sky-900 font-semibold',
-			card: 'border border-sky-200 bg-white shadow-2xs hover:border-sky-300 transition-all'
+			badge:
+				'border border-domain-donation-border bg-domain-donation-subtle text-domain-donation-text font-semibold',
+			card: 'border border-domain-donation-border bg-white shadow-2xs hover:border-domain-donation transition-all'
 		},
 		volunteer: {
 			name: 'อาสาสมัครและบุคลากรการแพทย์ (Volunteers & Field Responders)',
 			...baseOperations.volunteer,
-			badge: 'border border-emerald-200 bg-emerald-50 text-emerald-900 font-semibold',
-			card: 'border border-emerald-200 bg-white shadow-2xs hover:border-emerald-300 transition-all'
+			badge:
+				'border border-domain-volunteer-border bg-domain-volunteer-subtle text-domain-volunteer-text font-semibold',
+			card: 'border border-domain-volunteer-border bg-white shadow-2xs hover:border-domain-volunteer transition-all'
 		},
 		inventory: {
 			name: 'มาตรฐานสิ่งของและอัตราส่วน (SPHERE Catalog & Inventory)',
 			...baseOperations.inventory,
-			badge: 'border border-teal-200 bg-teal-50 text-teal-900 font-semibold',
-			card: 'border border-teal-200 bg-white shadow-2xs hover:border-teal-300 transition-all'
+			badge:
+				'border border-domain-donation-border bg-domain-donation-subtle text-domain-donation-text font-semibold',
+			card: 'border border-domain-donation-border bg-white shadow-2xs hover:border-domain-donation transition-all'
 		}
 	},
 
@@ -298,50 +484,57 @@ export const colors = {
 			id: 'shelter',
 			title: 'ค้นหาที่พักพิง',
 			category: 'For Evacuees & Displaced Families',
-			hex: baseDestructive.red,
+			domain: 'registration',
+			hex: baseDomain.registration.base,
 			bg: 'bg-white',
-			border: 'border-red-200',
-			iconBg: 'bg-red-50',
-			iconColor: 'text-red-600',
-			btnPrimary: 'bg-red-600 hover:bg-red-700 text-white',
-			btnSubtle: 'bg-red-50 text-red-700 hover:bg-red-100 border border-red-100'
+			border: 'border-domain-registration-border',
+			iconBg: 'bg-domain-registration-subtle',
+			iconColor: 'text-domain-registration',
+			btnPrimary: 'bg-domain-registration-strong hover:bg-domain-registration-text text-white',
+			btnSubtle:
+				'bg-domain-registration-subtle text-domain-registration-text hover:bg-white border border-domain-registration-border'
 		},
 		tracing: {
 			id: 'tracing',
 			title: 'ผู้พักพิง',
 			category: 'Family Tracing & Safety Verification',
-			hex: baseBrand.primary,
-			accentHex: baseSecondary.cerulean,
+			domain: 'registration',
+			hex: baseDomain.registration.base,
 			bg: 'bg-white',
-			border: 'border-sky-200',
-			iconBg: 'bg-sky-50',
-			iconColor: 'text-[#0284C7]',
-			btnPrimary: 'bg-[#0A2647] hover:bg-[#051930] text-white',
-			btnSubtle: 'bg-sky-50 text-sky-800 hover:bg-sky-100 border border-sky-100'
+			border: 'border-domain-registration-border',
+			iconBg: 'bg-domain-registration-subtle',
+			iconColor: 'text-domain-registration',
+			btnPrimary: 'bg-domain-registration-strong hover:bg-domain-registration-text text-white',
+			btnSubtle:
+				'bg-domain-registration-subtle text-domain-registration-text hover:bg-white border border-domain-registration-border'
 		},
 		donation: {
 			id: 'donation',
 			title: 'บริจาค',
 			category: 'Donations, Food & Logistics Coordination',
-			hex: baseOperations.kitchen.hex,
+			domain: 'donation',
+			hex: baseDomain.donation.base,
 			bg: 'bg-white',
-			border: 'border-amber-200',
-			iconBg: 'bg-amber-50',
-			iconColor: 'text-amber-600',
-			btnPrimary: 'bg-amber-600 hover:bg-amber-700 text-white',
-			btnSubtle: 'bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-100'
+			border: 'border-domain-donation-border',
+			iconBg: 'bg-domain-donation-subtle',
+			iconColor: 'text-domain-donation',
+			btnPrimary: 'bg-domain-donation-strong hover:bg-domain-donation-text text-white',
+			btnSubtle:
+				'bg-domain-donation-subtle text-domain-donation-text hover:bg-white border border-domain-donation-border'
 		},
 		volunteer: {
 			id: 'volunteer',
 			title: 'อาสาสมัคร',
 			category: 'Field Responders, Medical & Community Volunteers',
-			hex: baseOperations.volunteer.hex,
+			domain: 'volunteer',
+			hex: baseDomain.volunteer.base,
 			bg: 'bg-white',
-			border: 'border-emerald-200',
-			iconBg: 'bg-emerald-50',
-			iconColor: 'text-emerald-600',
-			btnPrimary: 'bg-emerald-600 hover:bg-emerald-700 text-white',
-			btnSubtle: 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-100'
+			border: 'border-domain-volunteer-border',
+			iconBg: 'bg-domain-volunteer-subtle',
+			iconColor: 'text-domain-volunteer',
+			btnPrimary: 'bg-domain-volunteer-strong hover:bg-domain-volunteer-text text-white',
+			btnSubtle:
+				'bg-domain-volunteer-subtle text-domain-volunteer-text hover:bg-white border border-domain-volunteer-border'
 		},
 		faq: {
 			activeBorder: 'border-blue-300',
@@ -360,10 +553,10 @@ export const colors = {
 	// 7. Data Visualization & Analytics Charts
 	chart: {
 		1: baseSecondary.cerulean,
-		2: baseOperations.inventory.hex,
+		2: '#0D9488', // chart series (teal) — decoupled from the deprecated operations tokens
 		3: baseBrand.primary,
 		4: baseStatus.warning.hex,
-		5: baseOperations.kitchen.hex
+		5: '#EA580C' // chart series (orange) — decoupled from the deprecated operations tokens
 	}
 } as const;
 

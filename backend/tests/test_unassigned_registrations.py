@@ -141,6 +141,67 @@ async def test_create_persists_mongo_only_with_reserved_ids(
     )
 
 
+def _member(**overrides: object) -> dict:
+    member: dict = dict(_create_payload()["members"][0])
+    member.update(overrides)
+    return member
+
+
+async def test_create_accepts_null_gender_unspecified(
+    client: AsyncClient, auth_headers: dict[str, str], open_shelter: PublicShelter
+) -> None:
+    """decision sync 2026-10-09: gender=null (ไม่ระบุ) is valid on every channel."""
+    response = await client.post(
+        "/public/v1/unassigned-registrations",
+        headers=auth_headers,
+        json=_create_payload(members=[_member(gender=None)]),
+    )
+    assert response.status_code == 201
+    assert response.json()["members"][0]["gender"] is None
+
+    stored = await UnassignedRegistration.get(response.json()["id"])
+    assert stored is not None
+    assert stored.members[0].gender is None
+
+
+async def test_create_still_accepts_legacy_other_gender(
+    client: AsyncClient, auth_headers: dict[str, str], open_shelter: PublicShelter
+) -> None:
+    response = await client.post(
+        "/public/v1/unassigned-registrations",
+        headers=auth_headers,
+        json=_create_payload(members=[_member(gender="other")]),
+    )
+    assert response.status_code == 201
+    assert response.json()["members"][0]["gender"] == "other"
+
+
+async def test_create_rejects_unknown_gender_value(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    response = await client.post(
+        "/public/v1/unassigned-registrations",
+        headers=auth_headers,
+        json=_create_payload(members=[_member(gender="unspecified")]),
+    )
+    assert response.status_code == 422
+    assert await UnassignedRegistration.count() == 0
+
+
+async def test_create_requires_gender_key(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    """Key must be present (null allowed) — mirrors evacuee schema_v 12."""
+    member = _member()
+    member.pop("gender")
+    response = await client.post(
+        "/public/v1/unassigned-registrations",
+        headers=auth_headers,
+        json=_create_payload(members=[member]),
+    )
+    assert response.status_code == 422
+
+
 async def test_create_rejects_missing_address_when_housing_type_omitted(
     client: AsyncClient, auth_headers: dict[str, str]
 ) -> None:
@@ -810,8 +871,48 @@ async def test_residence_match_by_member_phone(
     assert hit["member_count"] == 2
     assert "สมชาย" in hit["primary_contact_name_masked"]
     assert "คุณส***" in hit["matched_member_masked"]
+    # Every current member, first name + masked surname — never the full surname.
+    assert hit["members_masked"] == ["สมชาย ใ****", "สมหญิง ใ****"]
     assert len(hit["pets"]) == 1
     assert hit["pets"][0]["species"] == "dog"
+
+
+async def test_residence_match_leaves_out_cancelled_members(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    second = {
+        "first_name": "สมหญิง",
+        "last_name": "ใจดี",
+        "gender": "female",
+        "phone": "0899999999",
+        "person_id": {"cardType": "national_id", "number": "2222222222222"},
+        "country": "THAILAND",
+        "vulnerable_groups": [],
+        "special_needs": [],
+    }
+    payload = _create_payload()
+    payload["members"] = [payload["members"][0], second]
+    created = await client.post(
+        "/public/v1/unassigned-registrations", headers=auth_headers, json=payload
+    )
+    assert created.status_code == 201
+
+    # The first member (the original head) is cancelled.
+    stored = await UnassignedRegistration.get(created.json()["id"])
+    assert stored is not None
+    stored.members[0].status = "cancelled"
+    await stored.save()
+
+    response = await client.post(
+        "/public/v1/unassigned-registrations/residence-match",
+        headers=auth_headers,
+        json={"phone": "0899999999"},
+    )
+    assert response.status_code == 200
+    hit = response.json()["matches"][0]
+    assert hit["member_count"] == 1
+    assert hit["members_masked"] == ["สมหญิง ใ****"]
+    assert hit["primary_contact_name_masked"] == "สมหญิง ใ****"
 
 
 async def test_residence_match_by_phone_finds_closed_document(

@@ -15,6 +15,7 @@
 		type PreRegistrationListItem
 	} from '../domain';
 	import { usePreRegistrations } from '../application/queries';
+	import { formatThaiDateTime } from '$lib/utils/date';
 	import OverviewFilterBar from './overview-filter-bar.svelte';
 
 	let filters = $state<OverviewFilters>(overviewFiltersSchema.parse({}));
@@ -44,9 +45,7 @@
 
 	function formatWhen(value: string | null): string {
 		if (!value) return '—';
-		const d = new Date(value);
-		if (Number.isNaN(d.getTime())) return value;
-		return d.toLocaleString('th-TH', { dateStyle: 'short', timeStyle: 'short' });
+		return formatThaiDateTime(value) || value;
 	}
 
 	function originLabel(item: PreRegistrationListItem): string {

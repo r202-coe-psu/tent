@@ -1,7 +1,7 @@
 <script lang="ts">
 	let {
 		title,
-		subtitle = 'ศูนย์จัดการข้อมูลหลังบ้าน (BACKEND MASTER CONSOLE)',
+		subtitle = 'ศูนย์จัดการข้อมูลหลังบ้าน',
 		description = 'กำหนดพารามิเตอร์อ้างอิง อัตราพลังงาน ความเหมาะสมของสูตรเสเบียง และเกณฑ์เตือนภัยมาตรฐานวิกฤตของระบบ EOC'
 	}: {
 		title: string;

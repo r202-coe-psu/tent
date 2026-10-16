@@ -2,15 +2,13 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import type { UserSummary } from '../data/users.api';
-	import {
-		Settings2,
-		Trash2,
-		KeyRound,
-		Building,
-		Users,
-		ShieldCheck,
-		Unlink
-	} from '@lucide/svelte';
+	import Settings2 from '@lucide/svelte/icons/settings-2';
+	import Trash2 from '@lucide/svelte/icons/trash-2';
+	import KeyRound from '@lucide/svelte/icons/key-round';
+	import Building from '@lucide/svelte/icons/building';
+	import Users from '@lucide/svelte/icons/users';
+	import ShieldCheck from '@lucide/svelte/icons/shield-check';
+	import Unlink from '@lucide/svelte/icons/unlink';
 	import * as Table from '$lib/components/ui/table/index.js';
 
 	import { formatRoleList, isStaffOnly, COUCH_ADMIN } from '$lib/auth/roles';

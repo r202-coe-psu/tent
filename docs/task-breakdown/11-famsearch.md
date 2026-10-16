@@ -2,7 +2,7 @@
 title: "Task Breakdown — Family Search"
 status: active
 created: 2026-06-05
-updated: 2026-08-13
+updated: 2026-10-13
 module: famsearch
 note: decision-synced 2026-06-15 — task details and DoD maintained directly in Markdown; CR-005 (§E, 2026-06-22) ขยาย exposure surface ของ /search — ดู T-41
 ---
@@ -44,7 +44,7 @@ note: decision-synced 2026-06-15 — task details and DoD maintained directly in
 **Description:** หน้าเว็บสาธารณะ `/search` ("สืบค้นญาติ" / Restoring Family Links, FAM tier) ให้ญาติค้นหาผู้ประสบภัย (ไม่ต้อง login) เพื่อยืนยันว่า "ปลอดภัยและอยู่ศูนย์ใด". **CR-005 §E (2026-06-22) ขยาย exposure surface เกินร่างเดิม** — เพิ่มช่องทางค้นด้วย identifier และคืน field set masked ชุดเต็ม ตาม spec `docs/features/public-tier-find-spec.html`; ต้อง reflect กลับใน `public-tier-flow-spec §FAM`. คงกลไก anti-enumeration ทุกข้อ
 
 **Definition of Done:**
-- **ช่องทางค้น (FS-1, CR-005):** เลขบัตรประชาชน 13 หลัก (**exact-only**) / passport (exact) / เบอร์โทร (exact) / ชื่อ-สกุล (token ≥3 ตัว, max 10 ผล) — identifier ห้ามรับ partial เพื่อกัน enumeration
+- **ช่องทางค้น (FS-1, CR-005):** เลขบัตรประชาชน 13 หลัก (**exact-only**) / passport (exact) / เบอร์โทร (exact) / ชื่อ-สกุล (**CR-166:** ทุกคำ ≥2 grapheme; หลายคำ = ชื่อต้น prefix AND นามสกุลเต็ม exact ผ่าน hash; คำเดียว = ชื่อต้น prefix หรือ นามสกุลเต็ม; max 10 ผล เรียงคงที่) — identifier ห้ามรับ partial เพื่อกัน enumeration
 - **Field ที่คืน (FS-2, CR-005 — masked ทุกตัว):** เลขบัตร mask 3หน้า+3ท้าย, เพศ, ชื่อศูนย์, ภูมิลำเนาเดิม mask (เลขที่บ้าน), เวลาลงทะเบียน, โซนความดูแล, สถานะความปลอดภัย (in_shelter/moved/checked_out) — **ห้ามคืนเด็ดขาด:** เบอร์โทรเต็ม, เลขบัตรเต็ม, medical detail, internal id (ดู T-01 redaction)
 - **กติกา mask ชื่อ (FS-3, CR-005):** ชื่อจริงเต็ม + นามสกุล mask (FAM grapheme rule เดิม) — ให้ญาติยืนยันตัวบุคคลได้
 - เฉพาะคนที่ consent (T-40) เท่านั้นที่ปรากฏ; opt-out `search_excluded` ซ่อนทั้ง record ครอบทุกช่องทางค้น (รวม identifier); ไม่พบ กับ ไม่ยินยอม ต้องแยกไม่ออกจากภายนอก

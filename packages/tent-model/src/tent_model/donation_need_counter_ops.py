@@ -156,31 +156,39 @@ async def set_qty_target(
 	new_value: Decimal,
 	now: datetime,
 ) -> bool:
-	"""Move the quota ceiling to match its campaign — recalculation path only.
+	"""Move the quota ceiling to match its campaign.
 
-	``seed_counter`` writes ``qty_target`` with ``$setOnInsert`` so a CDC event can never
-	shift the ceiling under a booking in flight (CR-060 FR-2). The consequence is that
-	editing a campaign's ``qty_target`` leaves the counter behind: the board and
-	``public_needs`` recompute to the new figure while donors keep being refused
-	``NEED_FULL`` at the old one. CR-060 §Change names the recalculation CLI as the thing
-	allowed to close that gap — this is it.
+	Called by the CDC projector on every campaign edit and by
+	``donation-quota recalculate --targets`` (both decide via
+	``worker.quota_target_rules``). ``seed_counter`` still writes ``qty_target`` with
+	``$setOnInsert``; this is the only path that moves an existing ceiling.
 
 	``expected`` is the exact ``Decimal128`` read a moment ago and is part of the filter,
 	mirroring :func:`set_reserved_qty`: if anything moved in between the update matches
 	nothing and this returns ``False``, to be retried inside a maintenance window rather
 	than applied blindly (CR-047 §Cutover Lock).
 
-	The caller is responsible for refusing to lower a ceiling below the quota already
-	reserved — see ``worker.quota.reconcile``.
+	The filter also refuses to land the ceiling below ``reserved_qty``. Callers check that
+	first (``worker.quota_target_rules``), but against a figure read a moment ago: a
+	booking ``$inc``-ing in between would pass FastAPI's guard at the old ceiling and
+	leave ``reserved_qty > qty_target`` once this wrote. Only a check inside the same
+	update closes that window. ``on_hand_qty`` is deliberately left out — it moves with
+	the stock ledger outside any guard here, and the rule protects quota donors already
+	hold, not the effective ceiling (draft-quota-ceiling-follows-campaign-target §Why).
+
+	``False`` therefore means either the target moved or reservations rose above
+	``new_value``; the caller cannot tell which and must not retry blindly.
 	"""
+	new_target = bson.Decimal128(str(new_value))
 	updated = await DonationNeedCounter.get_pymongo_collection().find_one_and_update(
 		{
 			"_id": counter_id(shelter_code, campaign_id, item_id),
 			"qty_target": expected,
+			"$expr": {"$lte": ["$reserved_qty", new_target]},
 		},
 		{
 			"$set": {
-				"qty_target": bson.Decimal128(str(new_value)),
+				"qty_target": new_target,
 				"last_recalculated_at": now,
 				"updated_at": now,
 			}

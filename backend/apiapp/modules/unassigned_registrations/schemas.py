@@ -46,7 +46,9 @@ class EmergencyContactOut(BaseModel):
 class MemberInput(BaseModel):
     first_name: str = Field(min_length=1, max_length=100)
     last_name: str = ""
-    gender: Literal["male", "female", "other"]
+    # decision sync 2026-10-09: null = ไม่ระบุ (valid on every channel); key stays required.
+    # 'other' is legacy — accepted so edited/legacy docs round-trip.
+    gender: Literal["male", "female", "other"] | None
     phone: str | None = None
     person_id: PersonIdInput | None = None
     country: str = "THAILAND"
@@ -279,6 +281,9 @@ class UnassignedResidenceMatchHit(BaseModel):
     primary_contact_name_masked: str | None = None
     matched_member_masked: str | None = None
     member_count: int = 0
+    # Current members as "first name + masked surname" (no cancelled members) — lets a
+    # joiner see who is already in the family without exposing full names.
+    members_masked: list[str] = Field(default_factory=list)
     pets: list[dict[str, Any]] = Field(default_factory=list)
     household_address: dict[str, Any] | None = None
 
@@ -292,7 +297,7 @@ class MemberCreated(BaseModel):
     status: Literal["open", "claimed", "cancelled"]
     first_name: str
     last_name: str
-    gender: str
+    gender: str | None = None
     phone: str | None = None
     person_id: PersonIdOut | None = None
     country: str
@@ -340,7 +345,7 @@ class OpenMemberHit(BaseModel):
     status: Literal["open"] = "open"
     first_name: str
     last_name: str
-    gender: str
+    gender: str | None = None
     phone: str | None = None
     person_id: PersonIdOut | None = None
     country: str

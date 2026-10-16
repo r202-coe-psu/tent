@@ -93,7 +93,7 @@
             <span class="text-sm"
               ><strong>Change tracking:</strong> หน้านี้และ data-exposure
               decisions ของมัน tracked ใน
-              <a href="../changes/CR-005-public-portal-landing-public-metrics.md"
+              <a href="../changes/12-public/CR-005-public-portal-landing-public-metrics.md"
                 >CR-005 §E</a
               >. การค้นด้วยเลขบัตร 13 หลัก + ชุด field ที่คืน (FS-1/FS-2) เป็นการ
               <strong>ขยาย exposure surface ของ FAM tier</strong> เกินร่างเดิมใน
@@ -294,10 +294,15 @@
                   <td>ชื่อ / นามสกุล</td>
                   <td>ข้อความที่ไม่เข้ารูปแบบเลขข้างบน</td>
                   <td>
-                    token match ขั้นต่ำ <strong>3 ตัวอักษร</strong> (match ชื่อ
-                    หรือ สกุล หรือทั้งคู่)
+                    ทุกคำขั้นต่ำ <strong>2 ตัวอักษร</strong> (grapheme). หลายคำ =
+                    <strong>AND</strong>: ชื่อต้นขึ้นต้นด้วยคำแรก + นามสกุล<strong>เต็ม</strong>ตรงเป๊ะ
+                    (เทียบผ่าน hash). คำเดียว = ชื่อต้นขึ้นต้นด้วยคำนั้น
+                    <strong>หรือ</strong> นามสกุลเต็มตรงเป๊ะ (<a href="../changes/11-famsearch/CR-166-public-name-search-and-match.md">CR-166</a>)
                   </td>
-                  <td>max 10 ผล/query; rate-limit แรง; PoW เมื่อ pattern ผิดปกติ</td>
+                  <td>
+                    max 10 ผล/query เรียงคงที่ (ชื่อต้น แล้ว id); rate-limit แรง;
+                    PoW เมื่อ pattern ผิดปกติ
+                  </td>
                 </tr>
               </tbody>
             </table>
@@ -483,7 +488,7 @@
               <a href="./public-tier-flow-spec.html">public-tier-flow-spec §FAM</a>
               (ซึ่งจำกัดที่ ชื่อ/เบอร์ + ห้ามเลขบัตร/field อื่น). การขยายนี้
               <strong>approved 2026-06-22</strong> tracked ใน
-              <a href="../changes/CR-005-public-portal-landing-public-metrics.md"
+              <a href="../changes/12-public/CR-005-public-portal-landing-public-metrics.md"
                 >CR-005 §E</a
               ></span
             >
@@ -511,7 +516,7 @@
                   <td>query</td>
                   <td>
                     <span class="badge badge-success badge-sm">OPEN ได้ปกติ</span>
-                    ตาม FAM เดิม (เบอร์ exact, ชื่อ ≥3 ตัว)
+                    ตาม FAM เดิม (เบอร์ exact, ชื่อ-สกุลทุกคำ ≥2 ตัว — CR-166)
                   </td>
                 </tr>
                 <tr>
@@ -659,7 +664,7 @@ Max   : 10 results/query (ชื่อ); identifier exact = 0/1</code></pre>
                 <tr>
                   <td>Input ไม่ถูกต้อง</td>
                   <td>
-                    เช่น เลขบัตรไม่ครบ 13 / ชื่อ &lt;3 ตัว → inline validation
+                    เช่น เลขบัตรไม่ครบ 13 / คำในชื่อ &lt;2 ตัว → inline validation
                     ก่อนยิง API
                   </td>
                 </tr>
@@ -719,7 +724,7 @@ Max   : 10 results/query (ชื่อ); identifier exact = 0/1</code></pre>
               error (ไม่ยิง API)
             </li>
             <li>☐ ค้นด้วย passport / เบอร์โทร (เต็ม) → พบ record; partial → ไม่พบ</li>
-            <li>☐ ค้นด้วยชื่อ/นามสกุล (≥3 ตัว) → match list (max 10)</li>
+            <li>☐ ค้นด้วยชื่อ/นามสกุล (ทุกคำ ≥2 ตัว; ชื่อ+นามสกุลเต็มต้องตรงทั้งคู่) → match list (max 10)</li>
             <li>
               ☐ result card แสดง: ชื่อเต็ม + สกุล mask, สถานะปลอดภัย, เลขบัตร mask
               (3+3), เพศ, ศูนย์, ภูมิลำเนา mask, เวลาลงทะเบียน, โซน
@@ -800,7 +805,7 @@ Max   : 10 results/query (ชื่อ); identifier exact = 0/1</code></pre>
             <span
               >FS-1 / FS-2 / FS-3 <strong>approved 2026-06-22</strong> — tracked
               ใน
-              <a href="../changes/CR-005-public-portal-landing-public-metrics.md"
+              <a href="../changes/12-public/CR-005-public-portal-landing-public-metrics.md"
                 >CR-005 §E</a
               >. การขยาย exposure ของ FAM tier ต้อง reflect กลับใน
               public-tier-flow-spec §FAM</span

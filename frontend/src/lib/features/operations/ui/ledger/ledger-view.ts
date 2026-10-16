@@ -1,4 +1,5 @@
 import { qtyGt } from '$lib/utils/qty';
+import { DISPLAY_LOCALE, DISPLAY_TIME_ZONE } from '$lib/utils/date';
 import { lotStorageName, type StoragePointRef } from '../../domain/lot-storage';
 import {
 	resolveAdjustReason,
@@ -291,10 +292,12 @@ export function ledgerToCsv(rows: readonly LedgerRow[]): string {
 
 /** Heading of a day group: "วันนี้ · วันพฤหัสบดีที่ 2 ต.ค. 2569". */
 export function dayHeading(dayKey: string, now: Date = new Date()): string {
-	const [y, m, d] = dayKey.split('-').map(Number);
-	const date = new Date(y, m - 1, d);
-	if (!dayKey || Number.isNaN(date.getTime())) return 'ไม่ทราบวันที่';
-	const full = date.toLocaleDateString('th-TH', {
+	if (!dayKey || !/^\d{4}-\d{2}-\d{2}$/.test(dayKey)) return 'ไม่ทราบวันที่';
+	// Noon Bangkok keeps the calendar day stable regardless of the machine TZ.
+	const date = new Date(`${dayKey}T12:00:00+07:00`);
+	if (Number.isNaN(date.getTime())) return 'ไม่ทราบวันที่';
+	const full = date.toLocaleDateString(DISPLAY_LOCALE, {
+		timeZone: DISPLAY_TIME_ZONE,
 		weekday: 'long',
 		day: 'numeric',
 		month: 'short',

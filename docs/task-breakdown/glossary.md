@@ -60,7 +60,7 @@ note: เอกสารรวบรวมตัวย่อ คำนิยา�
 | คำศัพท์ / ตัวย่อ | ความหมาย | บทบาทและประเด็นเชิงวิเคราะห์ในระบบ |
 | :--- | :--- | :--- |
 | **CouchDB** | ระบบฐานข้อมูล NoSQL แบบ Document | ฐานข้อมูลฝั่ง Server หลักของโครงการ โดย Central CouchDB เป็น source of truth ปกติ ส่วน LAN Edge CouchDB เป็น fallback replica เฉพาะช่วง WAN/Central ล่ม |
-| **Remote-First** | แนวคิดเขียนไปเซิร์ฟเวอร์ก่อน | client เขียนไป active endpoint โดยตรง (Central ก่อน, Edge เมื่อ outage); **ไม่มี** local client DB เป็น write path ([CR-033](../changes/CR-033-remote-first-architecture-program-index.md)) |
+| **Remote-First** | แนวคิดเขียนไปเซิร์ฟเวอร์ก่อน | client เขียนไป active endpoint โดยตรง (Central ก่อน, Edge เมื่อ outage); **ไม่มี** local client DB เป็น write path ([CR-033](../changes/01-core/CR-033-remote-first-architecture-program-index.md)) |
 | **PouchDB** | (legacy / out of scope) | เคยเป็นสมมติฐาน local-first — **ตัดออกจาก client write path ตาม CR-033**; เก็บคำนี้ใน glossary เพื่อกันสับสนเอกสารเก่าเท่านั้น |
 | **Offline-First** | (legacy / out of scope) | สมมติฐานเดิมที่เขียน local ก่อนแล้ว sync — **supersede โดย Remote-First (CR-033)**; full offline sync ทุก module = non-goal |
 | **Active endpoint** | ปลายทางเขียนที่ active ครั้งละหนึ่ง | Central เป็นค่าเริ่มต้น; สลับไป LAN Edge เฉพาะ outage; ห้าม active Central+Edge พร้อมกัน; เมื่อไม่มี endpoint → disconnected status-only |

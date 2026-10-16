@@ -15,7 +15,7 @@
 | **Updated**         | 2026-09-15                                                                                                                                                                   |
 | **Classification**  | Volatile Feature Spec                                                                                                                                                        |
 | **Authority / SoT** | **Single Source of Truth (SoT)** สำหรับ Functional Requirements (FR), Non-Functional Requirements (NFR), Acceptance Criteria (AC), Definition of Done (DoD) และ API Contract |
-| **Related CR**      | [`docs/changes/CR-122-shelter-feedback-system.md`](../changes/CR-122-shelter-feedback-system.md) (สถานะ: approved)                                                             |
+| **Related CR**      | [`docs/changes/08-E-reports/CR-122-shelter-feedback-system.md`](../changes/08-E-reports/CR-122-shelter-feedback-system.md) (สถานะ: approved)                                                             |
 | **Target Audience** | Frontend & Fullstack Developers, QA Engineers, UX/UI Designers                                                                                                               |
 
 ---
