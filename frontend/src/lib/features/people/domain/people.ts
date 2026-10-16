@@ -320,8 +320,10 @@ export interface Evacuee extends BaseDoc {
 	preferred_zone?: string | null;
 	/**
 	 * Partner booking group id `BK-{ulid}` = `external_bookings.booking_id` (schema_v 14, CR-169).
-	 * Set only by the sync worker for `registered_via: 'api'`; opaque, not PII, never projected to
-	 * `public_*`. Unrelated to `donation.booking_ref`.
+	 * Written by the sync worker for partner bookings (`registered_via: 'api'`). The input schemas
+	 * exposed to public / kiosk / form paths omit it (FR-61), so those can never set it; staff
+	 * edit and merge preserve an existing value. Opaque, not PII, never projected to `public_*`.
+	 * Unrelated to `donation.booking_ref`.
 	 */
 	booking_ref?: string | null;
 	privacy: { search_excluded: boolean };
@@ -882,43 +884,48 @@ export const evacueeInputSchema = z.object({
 		.optional()
 		.default(null)
 		.transform((v) => v || null),
-	/** CR-169: partner booking group id; forms never set it (worker-owned, schema_v 14). */
+	/**
+	 * CR-169: partner booking group id (schema_v 14). Worker-owned: kept here so `createEvacuee`
+	 * can persist it, but the public / form-facing derived schemas omit it (FR-61).
+	 */
 	booking_ref: z.string().trim().nullable().optional(),
 	registered_via: registeredViaSchema.default('staff')
 });
 export type EvacueeInput = z.input<typeof evacueeInputSchema>;
 
 /** Station 1 walk-in + Report-in: same as base — emergency contact optional. */
-export const station1EvacueeInputSchema = evacueeInputSchema;
+export const station1EvacueeInputSchema = evacueeInputSchema.omit({ booking_ref: true });
 export type Station1EvacueeInput = z.input<typeof station1EvacueeInputSchema>;
 
 /** Required identity/contact fields used by the household pre-registration wizard. */
-export const householdPreRegisterEvacueeSchema = evacueeInputSchema.extend({
-	person_id: z
-		.object({
-			cardType: cardTypeSchema.default('national_id'),
-			number: z.string().trim().optional().default('')
-		})
-		.superRefine((data, ctx) => {
-			if (data.cardType === 'anonymous') return;
-			if (!data.number?.trim()) {
-				ctx.addIssue({
-					code: 'custom',
-					path: ['number'],
-					message: 'กรุณากรอกเลขประจำตัวหรือเลขที่เอกสาร'
-				});
-				return;
-			}
-			refineCardNumberMax(data.cardType, data.number, ctx, ['number']);
-		})
-		.default({ cardType: 'national_id', number: '' }),
-	religion: z
-		.enum(['buddhist', 'muslim', 'christian', 'other', 'unknown'], {
-			error: 'กรุณาเลือกศาสนา'
-		})
-		.default('buddhist'),
-	emergency_contact: emergencyContactRequiredSchema
-});
+export const householdPreRegisterEvacueeSchema = evacueeInputSchema
+	.omit({ booking_ref: true })
+	.extend({
+		person_id: z
+			.object({
+				cardType: cardTypeSchema.default('national_id'),
+				number: z.string().trim().optional().default('')
+			})
+			.superRefine((data, ctx) => {
+				if (data.cardType === 'anonymous') return;
+				if (!data.number?.trim()) {
+					ctx.addIssue({
+						code: 'custom',
+						path: ['number'],
+						message: 'กรุณากรอกเลขประจำตัวหรือเลขที่เอกสาร'
+					});
+					return;
+				}
+				refineCardNumberMax(data.cardType, data.number, ctx, ['number']);
+			})
+			.default({ cardType: 'national_id', number: '' }),
+		religion: z
+			.enum(['buddhist', 'muslim', 'christian', 'other', 'unknown'], {
+				error: 'กรุณาเลือกศาสนา'
+			})
+			.default('buddhist'),
+		emergency_contact: emergencyContactRequiredSchema
+	});
 
 export const medicalInputSchema = z.object({
 	evacuee_id: z.string().min(1),
@@ -1545,6 +1552,7 @@ export function createEvacuee(input: EvacueeInput, ctx: AuthorContext, id?: stri
 			household_id: d.household_id,
 			current_stay: { status: d.zone ? 'active' : d.status, zone: d.zone ?? null, since: now() },
 			...(d.preferred_zone ? { preferred_zone: d.preferred_zone } : {}),
+			// Worker-owned (CR-169): only reachable via EvacueeInput; public/form schemas omit it.
 			...(d.booking_ref ? { booking_ref: d.booking_ref } : {}),
 			privacy: { search_excluded: false },
 			registered_via: d.registered_via

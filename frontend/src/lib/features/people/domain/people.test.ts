@@ -1890,4 +1890,22 @@ describe('evacuee booking_ref (CR-169, schema_v 14)', () => {
 		expect(createEvacuee({ ...base, booking_ref: null }, ctx)).not.toHaveProperty('booking_ref');
 		expect(createEvacuee({ ...base, booking_ref: '' }, ctx)).not.toHaveProperty('booking_ref');
 	});
+
+	it('omits the booking_ref key when it is whitespace only', () => {
+		expect(createEvacuee({ ...base, booking_ref: '   ' }, ctx)).not.toHaveProperty('booking_ref');
+	});
+
+	it('strips booking_ref from the form-facing schemas (FR-61)', () => {
+		expect(station1EvacueeInputSchema.parse({ ...base, booking_ref: 'BK-X' })).not.toHaveProperty(
+			'booking_ref'
+		);
+		expect(
+			householdPreRegisterEvacueeSchema.parse({
+				...base,
+				person_id: { cardType: 'national_id', number: '1234567890121' },
+				emergency_contact: { name: 'ก', phone: '0899999999', relation: 'ญาติ' },
+				booking_ref: 'BK-X'
+			})
+		).not.toHaveProperty('booking_ref');
+	});
 });

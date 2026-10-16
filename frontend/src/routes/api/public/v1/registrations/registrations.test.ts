@@ -596,6 +596,43 @@ describe('POST /api/public/v1/registrations', () => {
 			expect(evacuees[1].registered_via).toBe('web');
 		});
 
+		it('strips a client-supplied member booking_ref (CR-169 FR-61)', async () => {
+			vi.mocked(findMasterByCode).mockResolvedValue(OPEN_SHELTER as never);
+
+			const res = await POST(
+				event({
+					shelter_code: 'SH001',
+					captchaToken: 'tok',
+					members: [
+						{
+							first_name: 'สมเกียรติ',
+							last_name: 'รักสงบ',
+							gender: 'male',
+							phone: '0811112222',
+							person_id: { cardType: 'national_id', number: '1100000000008' },
+							booking_ref: 'BK-SPOOF01'
+						}
+					],
+					household: {
+						housing_type: 'owned_house',
+						address_no: '99/1',
+						subdistrict: 'คอหงส์',
+						district: 'หาดใหญ่',
+						province: 'สงขลา',
+						postal_code: '90110',
+						pets: [],
+						vehicles: [],
+						assets: null
+					}
+				})
+			);
+			expect(res.status).toBe(201);
+
+			const { evacuees } = writtenDocs();
+			expect(evacuees).toHaveLength(1);
+			expect(evacuees[0]).not.toHaveProperty('booking_ref');
+		});
+
 		it('persists member face photo and pet image_url as Couch image refs', async () => {
 			vi.mocked(findMasterByCode).mockResolvedValue(OPEN_SHELTER as never);
 
