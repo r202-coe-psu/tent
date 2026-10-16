@@ -5,7 +5,7 @@ import ScannerList from './scanner-list.svelte';
 
 vi.mock('../application/queries', () => ({
 	useDeleteScannerDevice: () => ({ mutate: vi.fn(), isPending: false }),
-	useUpdateScannerDevice: () => ({ mutate: vi.fn(), isPending: false })
+	useUpdateScannerDevice: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false })
 }));
 
 const device = (id: string, over: Partial<ScannerDevice> = {}): ScannerDevice => ({
@@ -24,27 +24,32 @@ const device = (id: string, over: Partial<ScannerDevice> = {}): ScannerDevice =>
 
 const html = (devices: ScannerDevice[]) => render(ScannerList, { props: { devices } }).body;
 
-describe('ScannerList banner switch (FR-KBR-38)', () => {
-	it('shows a checked switch labelled แสดงแบนเนอร์ when banners are on', () => {
-		const body = html([device('a')]);
+describe('ScannerList', () => {
+	it('shows the banner state as a labelled badge (FR-KBR-38), not a switch', () => {
+		const on = html([device('a')]);
+		expect(on).toContain('แสดงแบนเนอร์');
+		expect(on).not.toContain('ไม่แสดงแบนเนอร์');
+		expect(on).not.toContain('role="switch"');
 
-		expect(body).toContain('แสดงแบนเนอร์');
-		expect(body).not.toContain('ไม่แสดงแบนเนอร์');
-		expect(body).toMatch(/role="switch"[^>]*aria-checked="true"/);
+		expect(html([device('a', { banner_enabled: false })])).toContain('ไม่แสดงแบนเนอร์');
 	});
 
-	it('shows an unchecked switch labelled ไม่แสดงแบนเนอร์ when banners are off', () => {
-		const body = html([device('a', { banner_enabled: false })]);
-
-		expect(body).toContain('ไม่แสดงแบนเนอร์');
-		expect(body).toMatch(/role="switch"[^>]*aria-checked="false"/);
+	it('shows status and PIN state as text badges', () => {
+		const body = html([device('a', { status: 'inactive' })]);
+		expect(body).toContain('Inactive');
+		expect(body).toContain('ยังไม่ตั้ง PIN');
 	});
 
-	it('renders one banner switch per device with an accessible name naming the device', () => {
-		const body = html([device('a'), device('b', { banner_enabled: false })]);
+	it('does not flag a default PIN in the table', () => {
+		const body = html([device('a', { staff_pin_set: true, staff_pin_is_default: true })]);
+		expect(body).not.toContain('PIN เริ่มต้น');
+		expect(body).not.toContain('ตั้ง PIN แล้ว');
+	});
 
-		expect(body.match(/role="switch"/g)).toHaveLength(2);
-		expect(body).toContain('Kiosk a');
-		expect(body).toContain('Kiosk b');
+	it('has one จัดการ button per device, named after the device', () => {
+		const body = html([device('a'), device('b')]);
+		expect(body.match(/>\s*จัดการ\s*</g)?.length ?? 0).toBeGreaterThanOrEqual(2);
+		expect(body).toContain('เครื่อง Kiosk a');
+		expect(body).toContain('เครื่อง Kiosk b');
 	});
 });
