@@ -150,6 +150,40 @@ When the CouchDB purge could not be verified clean, the run's settled Mongo rows
 (they are the ownership proof for a retry). Never unseeds or touches other shelters.
 Expected runtime (local, 3 s worker poll): about 1-3 minutes plus the 100-person run
 (worker handles rows one by one; see the printed timing).
+Recovery manifest (--e2e-manifest, --e2e-cleanup-from)
+-----------------------------------------------------
+Before the first request that can create data the run writes a JSON manifest (default
+`smoke-e2e-<runid>.json` in the system temp dir, mode 0600, created exclusively and never
+overwritten; override with --e2e-manifest PATH) and rewrites it atomically (temp file +
+rename) after every registration step: run id and UTC start, shelter + CouchDB database,
+redacted API/CouchDB/Mongo host:port, the admin-created client_id and its row id, every
+tracked CID (registered before it is sent), booking_ids, the evacuee/household ids proven
+or reserved, and planted ids. It holds synthetic test CIDs and ids only: no real data and
+no secrets (never the client secret, the admin secret or CouchDB credentials), but keep it
+private anyway. After a SUCCESSFUL cleanup (every cleanup check passed and the client
+revoked) it is deleted; after a cleanup FAIL, crash or abort it is kept and its path plus
+the exact recovery command are printed.
+
+  python3 scripts/smoke_test_partner_api.py --e2e-cleanup-from PATH \
+    --base-url ... --api-prefix ... --couch-url ... [--mongo-uri ...] \
+    --admin-secret "$EXTERNAL_API_SECRET"
+
+finishes the job WITHOUT sending any booking. The flags must match the manifest's targets
+(refused otherwise; same guard as a run: a non-local target needs --mongo-uri, a manifest
+that is not a private file owned by you is refused). It rescans this run's Mongo rows by
+the manifest's client_id, scrubs still-open rows (same compare-and-set as above; there is
+no token in recovery, so nothing is cancelled through the API), purges the proven CouchDB
+docs with the cumulative proven-id logic (manifest CIDs/ids are only candidates; the
+ownership rules are unchanged, and without Mongo the stricter CID + created_at rule
+applies and worker idleness cannot be proven), revokes the admin-created client when the
+admin API accepts --admin-secret (otherwise it says so), deletes the run's Mongo rows and
+deletes the manifest only if everything succeeded. It is idempotent.
+
+Signals: SIGINT/SIGTERM during the run stop the scenarios and run the normal cleanup. A
+signal while cleanup runs prints that cleanup is in progress and is ignored; only a
+further one aborts (exit 128+signal, manifest kept, recovery command printed). SIGKILL
+cannot be handled: the manifest is the recovery path.
+
 "green" = exit code 0: no FAIL lines; EXPECTED-FAIL / SKIPPED lines are listed.
 """
 
@@ -162,7 +196,10 @@ import json
 import os
 import random
 import re
+import shlex
+import signal
 import sys
+import tempfile
 import threading
 import time
 import urllib.error
@@ -295,6 +332,9 @@ class SmokeTestRunner:
         self.expected_fail: List[Tuple[str, str, str]] = []
         self.skipped: List[Tuple[str, str, str]] = []
 
+    def _on_client_created(self) -> None:
+        """Hook: the admin API just created a client (id + row id are known)."""
+
     def partner_path(self, path: str) -> str:
         """Join api_prefix with a FastAPI partner path like /external/token."""
         if not path.startswith("/"):
@@ -419,6 +459,7 @@ class SmokeTestRunner:
                 # client_id is generated server-side (tpc_…)
                 self.created_client_id = data.get("client_id")
                 self.client_secret = data.get("client_secret")
+                self._on_client_created()
                 self.record_result(
                     "#215",
                     "Admin API creates Partner Client with plaintext secret reveal",
@@ -1480,6 +1521,174 @@ EVACUEE_FIELDS = [
 ]
 
 
+MANIFEST_SCHEMA = "smoke-e2e-manifest/1"
+
+
+class RunInterrupted(BaseException):
+    """First SIGINT/SIGTERM while the e2e run is going: unwind to the normal cleanup.
+
+    A BaseException so that no `except Exception` in the run swallows it."""
+
+    def __init__(self, signum: int):
+        super().__init__(signal.Signals(signum).name)
+        self.signum = signum
+
+
+class CleanupAborted(BaseException):
+    """Cleanup was aborted by repeated signals; the manifest is kept for a recovery run."""
+
+    def __init__(self, signum: int):
+        super().__init__(signal.Signals(signum).name)
+        self.signum = signum
+
+
+class ManifestError(ValueError):
+    """The recovery manifest is missing, unsafe or malformed (refuse; fail closed)."""
+
+
+class RunManifest:
+    """Per-run JSON file that lets `--e2e-cleanup-from` finish a run that died.
+
+    Holds synthetic test CIDs, ids and redacted target hosts: NO secrets (never the client
+    secret, the admin secret or CouchDB credentials). Created exclusively with mode 0600
+    BEFORE the first request that can create data, then replaced atomically (temp file in
+    the same directory + rename) after every registration step.
+    """
+
+    def __init__(self, path: str):
+        self.path = path
+
+    @staticmethod
+    def default_path(run_id: str) -> str:
+        return os.path.join(tempfile.gettempdir(), f"smoke-e2e-{run_id}.json")
+
+    @staticmethod
+    def _dump(handle: Any, data: Dict[str, Any]) -> None:
+        json.dump(data, handle, indent=1, sort_keys=True)
+        handle.write("\n")
+        handle.flush()
+        os.fsync(handle.fileno())
+
+    def create(self, data: Dict[str, Any]) -> None:
+        """First write; O_EXCL, so an existing path (or symlink) is refused, never reused."""
+        fd = os.open(self.path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            self._dump(handle, data)
+
+    def write(self, data: Dict[str, Any]) -> None:
+        directory = os.path.dirname(os.path.abspath(self.path))
+        fd, tmp = tempfile.mkstemp(prefix=".smoke-e2e-", suffix=".tmp", dir=directory)  # 0600
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                self._dump(handle, data)
+            os.replace(tmp, self.path)
+        except BaseException:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+            raise
+
+    def remove(self) -> None:
+        try:
+            os.unlink(self.path)
+        except FileNotFoundError:
+            pass
+
+    @staticmethod
+    def load(path: str) -> Dict[str, Any]:
+        """Read + validate a manifest. Refuses anything that is not a private regular file
+        owned by this user, or whose content does not have the expected shape."""
+        try:
+            info = os.stat(path)
+        except FileNotFoundError:
+            raise ManifestError(
+                "manifest not found (already cleaned up, or a wrong path)"
+            ) from None
+        except OSError as exc:
+            raise ManifestError(f"cannot read the manifest ({type(exc).__name__})") from None
+        if not os.path.isfile(path):
+            raise ManifestError("the manifest path is not a regular file")
+        if hasattr(os, "getuid") and info.st_uid != os.getuid():
+            raise ManifestError("the manifest is not owned by this user")
+        if info.st_mode & 0o022:
+            raise ManifestError("the manifest is group/world writable; refusing to trust it")
+        try:
+            with open(path, encoding="utf-8") as handle:
+                data = json.load(handle)
+        except (OSError, ValueError):
+            raise ManifestError("the manifest is not valid JSON") from None
+        try:
+            if data.get("schema") != MANIFEST_SCHEMA:
+                raise ManifestError("unsupported manifest schema")
+            for key in ("run_id", "run_started", "shelter", "couch_database"):
+                if not isinstance(data.get(key), str) or not data[key]:
+                    raise ManifestError(f"manifest field {key} is missing")
+            if data["couch_database"] != f"shelter_{data['shelter'].lower()}":
+                raise ManifestError("manifest couch_database does not match its shelter")
+            started = dt.datetime.fromisoformat(data["run_started"].replace("Z", "+00:00"))
+            if started.tzinfo is None:
+                raise ManifestError("manifest run_started has no timezone")
+            for key in ("cids", "booking_ids", "planted_ids", "orphan_ids"):
+                if not isinstance(data.get(key), list) or not all(
+                    isinstance(i, str) for i in data[key]
+                ):
+                    raise ManifestError(f"manifest field {key} is malformed")
+            reserved = data.get("reserved")
+            if not isinstance(reserved, dict) or not all(
+                isinstance(reserved.get(k), list) and all(isinstance(i, str) for i in reserved[k])
+                for k in ("evacuees", "households")
+            ):
+                raise ManifestError("manifest field reserved is malformed")
+            if not isinstance(data.get("proven"), dict):
+                raise ManifestError("manifest field proven is malformed")
+            client = data.get("client")
+            if not isinstance(client, dict) or client.get("mode") not in ("admin", "provided"):
+                raise ManifestError("manifest field client is malformed")
+            if not isinstance(data.get("targets"), dict):
+                raise ManifestError("manifest field targets is malformed")
+        except (AttributeError, ValueError, TypeError) as exc:
+            if isinstance(exc, ManifestError):
+                raise
+            raise ManifestError("the manifest is malformed") from None
+        return data
+
+
+def host_port(url: str) -> str:
+    """`host:port` of an http(s) URL (userinfo, path and query dropped)."""
+    try:
+        parts = urllib.parse.urlsplit(url)
+        port = parts.port or {"http": 80, "https": 443}.get(parts.scheme, 0)
+    except ValueError:
+        return "?"
+    return f"{(parts.hostname or '').lower()}:{port}"
+
+
+def mongo_endpoints(uri: str) -> Tuple[List[str], str]:
+    """(sorted `host[:port]` list, database name) of a mongodb URI; userinfo dropped."""
+    rest = uri.strip().split("://", 1)[1] if "://" in uri else uri.strip()
+    match = re.match(r"([^/?#]*)([^?#]*)", rest)
+    authority, path = (match.group(1), match.group(2)) if match else ("", "")
+    if "@" in authority:
+        authority = authority.rsplit("@", 1)[1]
+    hosts = sorted(p.strip().lower() for p in authority.split(",") if p.strip())
+    return hosts, path.strip("/")
+
+
+def target_fingerprint(args: argparse.Namespace) -> Dict[str, Any]:
+    """Redacted identity of the targets (no credentials, no paths): what the manifest
+    records and what `--e2e-cleanup-from` must match."""
+    fingerprint: Dict[str, Any] = {
+        "api": host_port(args.base_url),
+        "couch": host_port(args.couch_url),
+        "mongo": None,
+        "mongo_db": None,
+    }
+    if args.mongo_uri:
+        fingerprint["mongo"], fingerprint["mongo_db"] = mongo_endpoints(args.mongo_uri)
+    return fingerprint
+
+
 def read_env_file(path: str) -> Dict[str, str]:
     """Parse KEY=VALUE lines of a dotenv file. Values are never printed."""
     values: Dict[str, str] = {}
@@ -1867,12 +2076,14 @@ class MongoProbe:
             }
         )
 
-    def plant_orphan(self, shelter_code: str, client_id: str, age_seconds: int) -> str:
+    def plant_orphan(
+        self, shelter_code: str, client_id: str, age_seconds: int, suffix: Optional[str] = None
+    ) -> str:
         """Insert an API-crashed-mid-insert lookalike row (`committed=False`, no PII).
 
         It carries this run's `client_id`, so staged-row checks and cleanup find it.
         """
-        suffix = f"{random.getrandbits(64):016x}"
+        suffix = suffix or f"{random.getrandbits(64):016x}"
         created = dt.datetime.now(dt.timezone.utc) - dt.timedelta(seconds=age_seconds)
         self.bookings.insert_one(
             {
@@ -1954,9 +2165,11 @@ class E2ERunner(SmokeTestRunner):
         cleanup_timeout: float = 180,
         require_578: bool = False,
         skip_big: bool = False,
+        recovery: bool = False,
         **kwargs: Any,
     ):
         super().__init__(*args, **kwargs)
+        self.recovery = recovery  # --e2e-cleanup-from: no token, no new data
         self.e2e_shelter = e2e_shelter
         self.couch = couch
         self.mongo = mongo
@@ -1979,6 +2192,20 @@ class E2ERunner(SmokeTestRunner):
         self.run_evacuee_ids: set = set()
         self.run_household_ids: set = set()
         self.run_started = dt.datetime.now(dt.timezone.utc)
+        self.run_id = f"{self.run_started:%Y%m%dT%H%M%SZ}-{random.getrandbits(32):08x}"
+        #: Recovery manifest (see RunManifest) + what the printed recovery command needs.
+        self.manifest: Optional[RunManifest] = None
+        self.targets: Dict[str, Any] = {}
+        self.cli_context: Dict[str, Any] = {}
+        self._manifest_lock = threading.RLock()
+        #: Signal handling: "run" until the first signal / the start of cleanup.
+        self._phase = "run"
+        self._cleanup_signals = 0
+        self._aborted = False
+        self._in_cleanup = False
+        self.cleanup_done = False  # e2e_cleanup ran to its end
+        self.cleanup_failed = False  # a cleanup check failed or a cleanup step raised
+        self.revocation_ok = True
         #: Cumulative PROVEN ownership across the whole cleanup: doc id -> kind. Only ever
         #: grows, so a doc proven once is still deleted / verified later even when the doc
         #: that led to it (evacuee -> household -> audit) is already gone.
@@ -2003,7 +2230,83 @@ class E2ERunner(SmokeTestRunner):
         return self.partner_path("/external/bookings")
 
     def e2e_result(self, name: str, passed: bool, detail: str = "") -> None:
+        if self._in_cleanup and not passed:
+            self.cleanup_failed = True
         self.record_result("E2E", name, passed, detail)
+
+    # ------------------------------------------------------------------ manifest
+    def _manifest_data(self) -> Dict[str, Any]:
+        """Snapshot for the manifest. Synthetic CIDs and ids only: no secret of any kind."""
+        return {
+            "schema": MANIFEST_SCHEMA,
+            "run_id": self.run_id,
+            "run_started": self.run_started.isoformat().replace("+00:00", "Z"),
+            "shelter": self.e2e_shelter,
+            "couch_database": self.couch.database,
+            "targets": self.targets,
+            "client": {
+                "mode": "provided" if self.use_provided_credentials else "admin",
+                "client_id": self.created_client_id,
+                "row_id": self.created_client_row_id,
+            },
+            "cids": sorted(self.e2e_cids),
+            "booking_ids": list(self.e2e_booking_ids),
+            "reserved": {
+                "evacuees": sorted(self.run_evacuee_ids),
+                "households": sorted(self.run_household_ids),
+            },
+            "proven": dict(sorted(self.proven.items())),
+            "planted_ids": list(self.e2e_planted_ids),
+            "orphan_ids": list(self.e2e_orphan_ids),
+        }
+
+    def _save_manifest(self, strict: bool = False) -> None:
+        """Atomically rewrite the manifest. `strict` (before something is sent) raises, so
+        nothing is created that the manifest could not recover; otherwise a failure is
+        only reported (cleanup must go on)."""
+        if self.manifest is None:
+            return
+        with self._manifest_lock:
+            try:
+                self.manifest.write(self._manifest_data())
+            except OSError as exc:
+                if strict:
+                    raise
+                self.log(f"  {YELLOW}could not update the manifest: {type(exc).__name__}{RESET}")
+
+    def attach_manifest(self, path: Optional[str], targets: Dict[str, Any]) -> str:
+        """Create the manifest (mode 0600, O_EXCL) before anything can be created."""
+        self.targets = targets
+        self.manifest = RunManifest(path or RunManifest.default_path(self.run_id))
+        self.manifest.create(self._manifest_data())
+        return self.manifest.path
+
+    def _on_client_created(self) -> None:
+        self._save_manifest()  # the client id + row id are what recovery needs to revoke
+
+    def load_manifest(self, manifest: RunManifest, data: Dict[str, Any]) -> None:
+        """Adopt the identity of the run that wrote `data` (recovery mode)."""
+        self.manifest = manifest
+        self.targets = data["targets"]
+        self.run_id = data["run_id"]
+        self.run_started = dt.datetime.fromisoformat(data["run_started"].replace("Z", "+00:00"))
+        client = data["client"]
+        self.use_provided_credentials = client["mode"] == "provided"
+        self.created_client_id = client.get("client_id") or None
+        self.created_client_row_id = client.get("row_id") or None
+        self.e2e_cids = set(data["cids"])
+        self.e2e_booking_ids = list(data["booking_ids"])
+        self.e2e_planted_ids = list(data["planted_ids"])
+        self.e2e_orphan_ids = list(data["orphan_ids"])
+        # Candidates + (Mongo mode) proof: attribute checks in _owned_by_this_run still
+        # apply, and without Mongo the stricter CID/created_at rule is unchanged.
+        proven = data["proven"]
+        self.run_evacuee_ids = set(data["reserved"]["evacuees"]) | {
+            i for i, kind in proven.items() if kind == "evacuee"
+        }
+        self.run_household_ids = set(data["reserved"]["households"]) | {
+            i for i, kind in proven.items() if kind == "household"
+        }
 
     def pending_578(
         self, name: str, passed: bool, detail: str = "", precondition: bool = True
@@ -2089,7 +2392,9 @@ class E2ERunner(SmokeTestRunner):
         self, cids: List[str], timeout: float = 60
     ) -> Tuple[int, Dict[str, Any], float]:
         """POST a group (all-or-nothing). Returns (HTTP status, body, monotonic time)."""
-        self.e2e_cids.update(cids)  # tracked even on failure: staged rows may leak
+        with self._manifest_lock:
+            self.e2e_cids.update(cids)  # tracked even on failure: staged rows may leak
+            self._save_manifest(strict=True)  # on disk BEFORE the request can create data
         body = {
             "location_code": self.e2e_shelter,
             "persons": [
@@ -2113,7 +2418,9 @@ class E2ERunner(SmokeTestRunner):
         stamp = time.monotonic()
         res = data.get("result", {}) if isinstance(data, dict) else {}
         if status == 201 and res.get("booking_id"):
-            self.e2e_booking_ids.append(res["booking_id"])
+            with self._manifest_lock:
+                self.e2e_booking_ids.append(res["booking_id"])
+                self._save_manifest()
         return status, data, stamp
 
     def cancel_group(self, booking_id: str) -> Tuple[int, Dict[str, Any], float]:
@@ -2553,7 +2860,9 @@ class E2ERunner(SmokeTestRunner):
         case = "CouchDB-side duplicate rejects the whole group with no docs"
         cids = self.make_group(3)
         planted_id = f"evacuee:E2E-PLANT-{random.getrandbits(48):012x}"
-        self.e2e_planted_ids.append(planted_id)
+        with self._manifest_lock:
+            self.e2e_planted_ids.append(planted_id)
+            self._save_manifest(strict=True)  # recorded before the PUT that creates it
         status, data, _ = self.create_group(cids)  # registers cids before sending
         res = data.get("result", {}) if isinstance(data, dict) else {}
         if status != 201 or not res.get("booking_id"):
@@ -2648,8 +2957,13 @@ class E2ERunner(SmokeTestRunner):
             self.pending_not_run(case, "needs --mongo-uri (pymongo) to plant an orphan row")
             return
         assert self.mongo is not None and self.created_client_id
-        orphan = self.mongo.plant_orphan(self.e2e_shelter, self.created_client_id, age_seconds=120)
-        self.e2e_orphan_ids.append(orphan)
+        suffix = f"{random.getrandbits(64):016x}"
+        with self._manifest_lock:
+            self.e2e_orphan_ids.append(f"BK-E2E-ORPHAN-{suffix}")
+            self._save_manifest(strict=True)  # recorded before the row is inserted
+        orphan = self.mongo.plant_orphan(
+            self.e2e_shelter, self.created_client_id, age_seconds=120, suffix=suffix
+        )
         deadline = time.monotonic() + max(self.settle * 3, 2 * WORKER_POLL_SECONDS + 15)
         gone = False
         while time.monotonic() < deadline:
@@ -2674,7 +2988,10 @@ class E2ERunner(SmokeTestRunner):
         assert self.mongo is not None
         known = set(self.e2e_booking_ids)
         found = [b for b in self.mongo.booking_ids_of(self.owned_rows_filter()) if b not in known]
-        self.e2e_booking_ids.extend(found)
+        if found:
+            with self._manifest_lock:
+                self.e2e_booking_ids.extend(found)
+                self._save_manifest()
         return found
 
     def _remint_token(self) -> None:
@@ -2880,12 +3197,15 @@ class E2ERunner(SmokeTestRunner):
         return clean
 
     def e2e_cleanup(self) -> None:
+        self._phase = "cleanup"  # later signals no longer unwind the run
+        self._in_cleanup = True
         self._banner("E2E cleanup: cancel bookings, then remove this run's CouchDB docs")
         self._refresh_run_ids()
         try:
             discovered = self._discover_run_bookings()
         except Exception as exc:
             discovered = []
+            self.cleanup_failed = True
             self.log(f"  {YELLOW}mongo discovery failed: {type(exc).__name__}{RESET}")
         if discovered:
             self.log(f"  found {len(discovered)} booking(s) of this run by client_id in Mongo")
@@ -2893,6 +3213,25 @@ class E2ERunner(SmokeTestRunner):
         self.log(
             f"  cancelled {len(self.cancel_ok)} still-open booking(s) of {len(self.e2e_booking_ids)}"
         )
+        if self.recovery:
+            # No token (the client secret is never stored): nothing can be cancelled through
+            # the API, so the Mongo compare-and-set is the only way to keep the worker from
+            # writing this run's still-open rows.
+            if self.mongo_on():
+                try:
+                    scrubbed = self._scrub_open_rows()
+                    self.log(
+                        f"  scrubbed {scrubbed} open row(s) of this run (cancelled, PII cleared)"
+                    )
+                except Exception as exc:
+                    self.cleanup_failed = True
+                    self.log(f"  {YELLOW}scrub failed: {type(exc).__name__}{RESET}")
+            else:
+                self.log(
+                    f"  {YELLOW}no Mongo in recovery: nothing can stop the worker from writing "
+                    f"rows it has not handled yet, and idleness cannot be proven (only the "
+                    f"leftover check below counts); the manifest is kept if that fails{RESET}"
+                )
 
         if not self._wait_worker_settled():
             open_ids = self._open_booking_ids()
@@ -2915,6 +3254,7 @@ class E2ERunner(SmokeTestRunner):
                         f"  scrubbed {scrubbed} open row(s) of this run (cancelled, PII cleared)"
                     )
                 except Exception as exc:
+                    self.cleanup_failed = True
                     self.log(f"  {YELLOW}scrub failed: {type(exc).__name__}{RESET}")
             else:
                 self.log(
@@ -2973,6 +3313,7 @@ class E2ERunner(SmokeTestRunner):
                         f"a retry; deleted {staged_gone} staged row(s){RESET}"
                     )
             except Exception as exc:
+                self.cleanup_failed = True
                 self.log(f"  {YELLOW}mongo cleanup failed: {type(exc).__name__}{RESET}")
         else:
             self.log(
@@ -2980,6 +3321,7 @@ class E2ERunner(SmokeTestRunner):
                 f"of this run stay in Mongo; a request that timed out cannot be found by "
                 f"client_id (CouchDB docs are still purged, by the stricter no-Mongo ownership rule){RESET}"
             )
+        self.cleanup_done = True
 
     def _refresh_run_ids(self) -> None:
         """Collect the evacuee/household ids the worker reserved on this run's Mongo rows.
@@ -2995,8 +3337,11 @@ class E2ERunner(SmokeTestRunner):
         except Exception as exc:
             self.log(f"  {YELLOW}could not read this run's doc ids: {type(exc).__name__}{RESET}")
             return
+        before = (len(self.run_evacuee_ids), len(self.run_household_ids))
         self.run_evacuee_ids |= evacuees
         self.run_household_ids |= households
+        if (len(self.run_evacuee_ids), len(self.run_household_ids)) != before:
+            self._save_manifest()
 
     def _created_during_run(self, doc: Dict[str, Any]) -> bool:
         """`created_at` (ISO, set by the worker) is not older than run start - skew."""
@@ -3044,6 +3389,7 @@ class E2ERunner(SmokeTestRunner):
         audit left behind by a failed delete is still found); the planted duplicates.
         """
         skipped = 0
+        proven_before = len(self.proven)
         candidates: Dict[str, Dict[str, Any]] = {}
         listed = sorted(self.e2e_cids)
         for start in range(0, len(listed), 100):  # candidates by tracked CID (not proof)
@@ -3071,7 +3417,11 @@ class E2ERunner(SmokeTestRunner):
                 self.proven[house_id] = "household"
             else:
                 skipped += 1
-        targets = sorted(i for i, kind in self.proven.items() if kind in ("evacuee", "household"))
+        targets = sorted(
+            {i for i, kind in self.proven.items() if kind in ("evacuee", "household")}
+            | self.run_evacuee_ids  # reserved/recorded ids: their docs may be gone already
+            | self.run_household_ids
+        )
         for start in range(0, len(targets), 100):
             for doc in self.couch.find(
                 {"type": "audit", "target_id": {"$in": targets[start : start + 100]}}
@@ -3082,11 +3432,214 @@ class E2ERunner(SmokeTestRunner):
                     skipped += 1
         for planted_id in self.e2e_planted_ids:  # ids this run generated itself
             self.proven.setdefault(planted_id, "planted")
+        if len(self.proven) != proven_before:
+            self._save_manifest()
         return skipped
+
+    # --------------------------------------------------------- signals + recovery
+    def _say(self, text: str) -> None:
+        """Print from a signal handler: a raw write, since `print` is not re-entrant."""
+        try:
+            os.write(1, (text + "\n").encode("utf-8", "replace"))
+        except OSError:
+            pass
+
+    def _on_signal(self, signum: int, _frame: Any) -> None:
+        name = signal.Signals(signum).name
+        if self._phase == "run":
+            self._phase = "cleanup"  # every later signal counts as a cleanup-phase one
+            self._say(
+                f"\n{YELLOW}{name}: stopping the run; cleanup runs first (a further {name} "
+                f"says it is in progress, one more aborts it and keeps the manifest).{RESET}"
+            )
+            raise RunInterrupted(signum)
+        self._cleanup_signals += 1
+        if self._cleanup_signals == 1:
+            self._say(
+                f"\n{YELLOW}{name}: cleanup is in progress and is being finished, not "
+                f"interrupted. Press again to ABORT it (CouchDB docs / Mongo rows may stay "
+                f"behind; the manifest is kept for --e2e-cleanup-from).{RESET}"
+            )
+            return
+        self._aborted = True
+        self._say(f"\n{RED}{name}: aborting cleanup.{RESET}")
+        raise CleanupAborted(signum)
+
+    def _install_signal_handlers(self) -> Dict[int, Any]:
+        """SIGINT/SIGTERM -> normal cleanup (e2e / recovery mode only, main thread only).
+        SIGKILL cannot be handled: the manifest is the recovery path for that."""
+        previous: Dict[int, Any] = {}
+        if threading.current_thread() is not threading.main_thread():
+            return previous
+        for signum in (signal.SIGINT, signal.SIGTERM):
+            previous[signum] = signal.signal(signum, self._on_signal)
+        return previous
+
+    @staticmethod
+    def _restore_signal_handlers(previous: Dict[int, Any]) -> None:
+        for signum, handler in previous.items():
+            try:
+                signal.signal(signum, handler)
+            except (ValueError, OSError):
+                pass
+
+    def recovery_command(self) -> str:
+        """The exact command that finishes this run. Never contains a secret value."""
+        ctx = self.cli_context
+        parts = [
+            "uv run --with pymongo python3" if ctx.get("mongo_uri") else "python3",
+            shlex.quote(str(ctx.get("script") or sys.argv[0])),
+            "--e2e-cleanup-from",
+            shlex.quote(self.manifest.path if self.manifest else "<manifest>"),
+            "--base-url",
+            shlex.quote(str(ctx.get("base_url", ""))),
+            "--api-prefix",
+            shlex.quote(str(ctx.get("api_prefix", ""))),
+            "--couch-url",
+            shlex.quote(str(ctx.get("couch_url", ""))),
+        ]
+        if ctx.get("mongo_uri"):
+            parts += ["--mongo-uri", shlex.quote(str(ctx["mongo_uri"]))]
+        if ctx.get("confirm"):
+            parts += ["--i-know-this-writes-to", shlex.quote(str(ctx["confirm"]))]
+        if not self.use_provided_credentials:
+            parts += ["--admin-secret", '"$EXTERNAL_API_SECRET"']  # the variable, not its value
+        return " ".join(parts)
+
+    def _print_recovery(self, reason: str) -> None:
+        if self.manifest is None:
+            return
+        self.log(f"{YELLOW}{reason}{RESET}")
+        self.log(
+            f"{BOLD}Manifest kept (synthetic test CIDs and ids, no secrets; keep it private):"
+            f"{RESET} {self.manifest.path}"
+        )
+        self.log(
+            "To finish the cleanup (set -a; . ./.env; set +a first, for COUCHDB_USER / "
+            "COUCHDB_PASSWORD / EXTERNAL_API_SECRET):"
+        )
+        self.log(f"  {self.recovery_command()}")
+
+    def _finalize_manifest(self) -> None:
+        """Delete the manifest after a SUCCESSFUL cleanup (all cleanup checks passed and
+        the client revoked); otherwise keep it and print how to finish."""
+        if self.manifest is None:
+            return
+        data_may_exist = bool(
+            self.e2e_cids or self.e2e_booking_ids or self.e2e_planted_ids or self.e2e_orphan_ids
+        ) or bool(self.proven)
+        cleaned = self.cleanup_done and not self.cleanup_failed
+        if (cleaned or not data_may_exist) and self.revocation_ok and not self._aborted:
+            self.manifest.remove()
+            self.log(f"Cleanup verified: manifest {self.manifest.path} removed.")
+            return
+        why = []
+        if data_may_exist and not cleaned:
+            why.append("cleanup did not complete cleanly")
+        if not self.revocation_ok:
+            why.append("the admin client was not revoked")
+        self._print_recovery("Not everything is verified clean: " + "; ".join(why or ["aborted"]))
+
+    def revoke_for_recovery(self) -> bool:
+        """Revoke the admin-created client by its row id (idempotent). True = nothing left
+        to do; False = could not revoke (the manifest is kept)."""
+        if self.use_provided_credentials:
+            self.log("  client was provided by the operator: not ours to revoke")
+            return True
+        if self.keep_client:
+            self.log("  --keep-client: client not revoked")
+            return True
+        if not self.created_client_row_id:
+            self.log(
+                f"  {YELLOW}no client row id in the manifest (the run died before the client "
+                f"was recorded): the client was NOT revoked{RESET}"
+            )
+            return True
+        status, data = self.http_request(
+            "POST",
+            f"/v1/admin/thirdparty-clients/{self.created_client_row_id}/revoke",
+            headers={"Authorization": f"Bearer {self.admin_secret}"},
+        )
+        client = data.get("client", {}) if isinstance(data, dict) else {}
+        if status == 200 and client.get("is_active") is False:
+            self.e2e_result("admin client revoked (is_active=False)", True)
+            return True
+        if status == 404:
+            self.log("  client no longer exists (already deleted): nothing to revoke")
+            return True
+        self.e2e_result(
+            "admin client revoked (is_active=False)",
+            False,
+            f"HTTP {status} (is --admin-secret / --base-url right? the client is NOT revoked)",
+        )
+        return False
+
+    def run_cleanup_only(self) -> int:
+        """`--e2e-cleanup-from`: finish a run that died. Sends no booking."""
+        start_time = time.time()
+        self._phase = "cleanup"  # a signal here is a cleanup-phase one
+        self._in_cleanup = True
+        previous = self._install_signal_handlers()
+        try:
+            try:
+                self.log(f"\n{BOLD}E2E recovery cleanup (run {self.run_id}){RESET}")
+                self.log(
+                    f"{BOLD}API: {redact_url(self.base_url)}  |  CouchDB: "
+                    f"{redact_url(self.couch.base_url)}/{self.couch.database}  |  Mongo: "
+                    f"{'on' if self.mongo else 'off'}  |  tracked: {len(self.e2e_cids)} CIDs, "
+                    f"{len(self.e2e_booking_ids)} bookings{RESET}"
+                )
+                if self.couch.info() is None:
+                    self.log(
+                        f"{RED}ERROR: CouchDB database {self.couch.database} not reachable; "
+                        f"nothing was changed.{RESET}"
+                    )
+                    self._print_recovery("Nothing was cleaned.")
+                    return 1
+                try:
+                    self.e2e_cleanup()
+                except Exception as exc:
+                    self.e2e_result("cleanup", False, f"{type(exc).__name__}: {redact_text(exc)}")
+                self.revocation_ok = self.revoke_for_recovery()
+                code = self._finish(start_time)
+                self._finalize_manifest()
+                return code
+            except CleanupAborted:
+                self._print_recovery("Recovery cleanup aborted.")
+                return 130
+        finally:
+            self._restore_signal_handlers(previous)
 
     # -------------------------------------------------------------------- run
     def run_e2e(self) -> int:
         start_time = time.time()
+        previous = self._install_signal_handlers()
+        try:
+            try:
+                code = self._run_e2e_body(start_time)
+            except RunInterrupted as sig:
+                cleanup_failed = self.cleanup_failed  # an interrupt is not a cleanup failure
+                self.e2e_result(
+                    "run completed without a signal",
+                    False,
+                    f"{sig} received: scenarios stopped, cleanup ran (see above)",
+                )
+                self.cleanup_failed = cleanup_failed
+                self._finish(start_time)
+                code = 128 + sig.signum
+            self._finalize_manifest()
+            return code
+        except CleanupAborted as sig:
+            self._print_recovery(f"Run aborted by {sig} during cleanup.")
+            return 128 + sig.signum
+        except Exception as exc:  # crash outside the guarded cleanup: keep the manifest
+            self.log(f"{RED}e2e run crashed: {type(exc).__name__}: {redact_text(exc)}{RESET}")
+            self._print_recovery("The run crashed.")
+            return 1
+        finally:
+            self._restore_signal_handlers(previous)
+
+    def _run_e2e_body(self, start_time: float) -> int:
         self.log(
             f"\n{BOLD}================================================================={RESET}"
         )
@@ -3100,6 +3653,11 @@ class E2ERunner(SmokeTestRunner):
             f"{BOLD}CouchDB: {redact_url(self.couch.base_url)}/{self.couch.database}  |  "
             f"Mongo checks: {'on' if self.mongo else 'off (API-behaviour only)'}{RESET}"
         )
+        if self.manifest is not None:
+            self.log(
+                f"{BOLD}Manifest: {self.manifest.path} (synthetic test CIDs + ids, no secrets; "
+                f"keep it private; removed after a verified cleanup){RESET}"
+            )
         self.log(f"{BOLD}================================================================={RESET}")
 
         status, _ = self.http_request("GET", self.partner_path("/external/locations"))
@@ -3148,7 +3706,11 @@ class E2ERunner(SmokeTestRunner):
                 except Exception as exc:
                     self.e2e_result("cleanup", False, f"{type(exc).__name__}: {redact_text(exc)}")
         finally:
-            self.test_cleanup_and_revocation()
+            self._phase = "cleanup"
+            if not self._aborted:  # an aborted run leaves the revocation to the recovery run
+                before = len(self.results)
+                self.test_cleanup_and_revocation()
+                self.revocation_ok = all(passed for _, _, passed, _ in self.results[before:])
         return self._finish(start_time)
 
     def _finish(self, start_time: float) -> int:
@@ -3177,39 +3739,10 @@ def run_e2e_from_args(
     if guard is not None:
         return guard
 
-    dotenv = read_env_file(args.couch_env_file)
-    couch_user = os.getenv("COUCHDB_USER") or dotenv.get("COUCHDB_USER", "")
-    couch_password = os.getenv("COUCHDB_PASSWORD") or dotenv.get("COUCHDB_PASSWORD", "")
-    if not couch_user or not couch_password:
-        parser.error(
-            "CouchDB credentials missing: set COUCHDB_USER / COUCHDB_PASSWORD "
-            "(or provide them in the --couch-env-file)."
-        )
-
-    mongo: Optional[MongoProbe] = None
-    if args.mongo_uri:
-        # A non-local target must never fall back to the no-Mongo mode (the guard requires
-        # --mongo-uri for exactly that reason), so a missing/unreachable Mongo aborts.
-        must_have_mongo = bool(nonlocal_hosts(e2e_target_hosts(args)))
-        try:
-            mongo = MongoProbe(args.mongo_uri)
-        except ImportError:
-            print(
-                f"{RED if must_have_mongo else YELLOW}pymongo is not installed — "
-                f"{'aborting' if must_have_mongo else 'Mongo assertions off'} "
-                f"(try: uv run --with pymongo python3 {sys.argv[0]} ...){RESET}",
-                file=sys.stderr,
-            )
-            if must_have_mongo:
-                return 2
-        except Exception as exc:
-            print(
-                f"{RED if must_have_mongo else YELLOW}Mongo unreachable ({type(exc).__name__}) — "
-                f"{'aborting' if must_have_mongo else 'Mongo assertions off'}{RESET}",
-                file=sys.stderr,
-            )
-            if must_have_mongo:
-                return 2
+    couch_user, couch_password = couch_credentials(parser, args)
+    mongo, mongo_error = connect_mongo(args, require=bool(nonlocal_hosts(e2e_target_hosts(args))))
+    if mongo_error:
+        return 2
 
     runner = E2ERunner(
         base_url=args.base_url,
@@ -3234,7 +3767,132 @@ def run_e2e_from_args(
         require_578=args.require_578,
         skip_big=args.skip_e2e_big,
     )
+    fingerprint = target_fingerprint(args)
+    if mongo is None:  # the run really is without Mongo (local only): record that
+        fingerprint["mongo"] = fingerprint["mongo_db"] = None
+    runner.cli_context = {
+        "script": sys.argv[0],
+        "base_url": redact_url(args.base_url),
+        "api_prefix": args.api_prefix.strip(),
+        "couch_url": redact_url(args.couch_url),
+        "mongo_uri": redact_text(args.mongo_uri) if mongo is not None else "",
+        "confirm": args.i_know_this_writes_to,
+    }
+    try:  # BEFORE the first request that can create data
+        manifest_path = runner.attach_manifest(args.e2e_manifest or None, fingerprint)
+    except FileExistsError:
+        print(
+            f"{RED}Refusing: the manifest path already exists (it is never overwritten). "
+            f"Pick another --e2e-manifest, or finish/remove the old run first.{RESET}",
+            file=sys.stderr,
+        )
+        return 2
+    except OSError as exc:
+        print(
+            f"{RED}Refusing: cannot create the recovery manifest ({type(exc).__name__}); "
+            f"nothing was sent.{RESET}",
+            file=sys.stderr,
+        )
+        return 2
+    del manifest_path  # printed by the run banner
     return runner.run_e2e()
+
+
+def couch_credentials(parser: argparse.ArgumentParser, args: argparse.Namespace) -> Tuple[str, str]:
+    """CouchDB admin credentials from the environment or the dotenv file (never printed)."""
+    dotenv = read_env_file(args.couch_env_file)
+    user = os.getenv("COUCHDB_USER") or dotenv.get("COUCHDB_USER", "")
+    password = os.getenv("COUCHDB_PASSWORD") or dotenv.get("COUCHDB_PASSWORD", "")
+    if not user or not password:
+        parser.error(
+            "CouchDB credentials missing: set COUCHDB_USER / COUCHDB_PASSWORD "
+            "(or provide them in the --couch-env-file)."
+        )
+    return user, password
+
+
+def connect_mongo(args: argparse.Namespace, require: bool) -> Tuple[Optional[MongoProbe], bool]:
+    """(probe, abort). `require` (a non-local target, or a recovery of a run that used
+    Mongo) turns a missing pymongo / unreachable Mongo into an abort instead of dropping
+    to the weaker no-Mongo mode."""
+    if not args.mongo_uri:
+        return None, False
+    try:
+        return MongoProbe(args.mongo_uri), False
+    except ImportError:
+        print(
+            f"{RED if require else YELLOW}pymongo is not installed — "
+            f"{'aborting' if require else 'Mongo assertions off'} "
+            f"(try: uv run --with pymongo python3 {sys.argv[0]} ...){RESET}",
+            file=sys.stderr,
+        )
+    except Exception as exc:
+        print(
+            f"{RED if require else YELLOW}Mongo unreachable ({type(exc).__name__}) — "
+            f"{'aborting' if require else 'Mongo assertions off'}{RESET}",
+            file=sys.stderr,
+        )
+    return None, require
+
+
+def run_cleanup_from_args(parser: argparse.ArgumentParser, args: argparse.Namespace) -> int:
+    """`--e2e-cleanup-from PATH`: finish a run that died, sending no booking."""
+    guard = e2e_target_guard(parser, args)  # same guard: non-local needs --mongo-uri etc.
+    if guard is not None:
+        return guard
+    try:
+        data = RunManifest.load(args.e2e_cleanup_from)
+    except ManifestError as exc:
+        print(f"{RED}Refusing --e2e-cleanup-from: {exc}.{RESET}", file=sys.stderr)
+        return 2
+    now = target_fingerprint(args)
+    mismatches = [
+        f"{key}: manifest={data['targets'].get(key)!r} now={now[key]!r}"
+        for key in ("api", "couch", "mongo", "mongo_db")
+        if data["targets"].get(key) != now[key]
+    ]
+    given_shelter = (args.e2e_shelter_code or "").strip()
+    if given_shelter and given_shelter.lower() != data["shelter"].lower():
+        mismatches.append(f"shelter: manifest={data['shelter']!r} now={given_shelter!r}")
+    if mismatches:
+        print(
+            f"{RED}Refusing --e2e-cleanup-from: the targets given now do not match the "
+            f"manifest ({'; '.join(mismatches)}). Nothing was contacted.{RESET}",
+            file=sys.stderr,
+        )
+        return 2
+    couch_user, couch_password = couch_credentials(parser, args)
+    mongo, mongo_error = connect_mongo(args, require=True)  # the run used Mongo: so must we
+    if mongo_error:
+        return 2
+    shelter = data["shelter"]
+    runner = E2ERunner(
+        base_url=args.base_url,
+        admin_secret=args.admin_secret,
+        shelter_code=shelter,
+        keep_client=args.keep_client,
+        verbose=args.verbose,
+        client_id=None,
+        client_secret=None,
+        api_prefix=args.api_prefix.strip(),
+        skip_booking_writes=False,
+        checked_in_cid=None,
+        e2e_shelter=shelter,
+        couch=CouchAdmin(args.couch_url, couch_user, couch_password, data["couch_database"]),
+        mongo=mongo,
+        cleanup_timeout=args.e2e_cleanup_timeout,
+        recovery=True,
+    )
+    runner.load_manifest(RunManifest(args.e2e_cleanup_from), data)
+    runner.cli_context = {
+        "script": sys.argv[0],
+        "base_url": redact_url(args.base_url),
+        "api_prefix": args.api_prefix.strip(),
+        "couch_url": redact_url(args.couch_url),
+        "mongo_uri": redact_text(args.mongo_uri) if mongo is not None else "",
+        "confirm": args.i_know_this_writes_to,
+    }
+    return runner.run_cleanup_only()
 
 
 def main():
@@ -3371,6 +4029,22 @@ def main():
         help="Optional: fail the large-group check when 201 -> all-in-CouchDB exceeds this",
     )
     e2e.add_argument(
+        "--e2e-manifest",
+        default="",
+        metavar="PATH",
+        help="Recovery manifest of this run (default: smoke-e2e-<runid>.json in the system "
+        "temp dir, mode 0600, never overwritten). Holds synthetic test CIDs and ids, no "
+        "secrets; keep it private. Removed after a verified cleanup",
+    )
+    e2e.add_argument(
+        "--e2e-cleanup-from",
+        default="",
+        metavar="PATH",
+        help="Cleanup-only mode: finish a run that died, from its manifest, sending no "
+        "booking. Give the same --base-url / --couch-url / --mongo-uri as the run (they "
+        "must match the manifest); --admin-secret revokes the admin-created client",
+    )
+    e2e.add_argument(
         "--e2e-cleanup-timeout",
         type=float,
         default=180,
@@ -3397,6 +4071,12 @@ def main():
 
     args = parser.parse_args()
 
+    if args.e2e_cleanup_from and args.e2e:
+        parser.error("--e2e-cleanup-from replaces --e2e (it only finishes a finished run).")
+    if args.e2e_manifest and not args.e2e:
+        parser.error("--e2e-manifest needs --e2e.")
+    if args.e2e_cleanup_from:  # cleanup-only: its own guard + manifest match, then exit
+        sys.exit(run_cleanup_from_args(parser, args))
     if args.e2e:  # before anything else: no connection, no echo of target URLs
         guard = e2e_target_guard(parser, args)
         if guard is not None:
