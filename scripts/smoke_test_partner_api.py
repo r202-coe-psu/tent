@@ -263,9 +263,7 @@ class SmokeTestRunner:
         self.booking_cid: Optional[str] = None
         self.booking_location: Optional[str] = None
 
-        self.results: List[Tuple[str, str, bool, str]] = (
-            []
-        )  # (issue, test_name, passed, detail)
+        self.results: List[Tuple[str, str, bool, str]] = []  # (issue, test_name, passed, detail)
         # e2e mode only: (issue, test_name, detail) — never counted as failures
         self.expected_fail: List[Tuple[str, str, str]] = []
         self.skipped: List[Tuple[str, str, str]] = []
@@ -291,15 +289,11 @@ class SmokeTestRunner:
 
     def record_skip(self, issue: str, test_name: str, reason: str) -> None:
         self.skipped.append((issue, test_name, reason))
-        self.log(
-            f"  {YELLOW}○ SKIPPED{RESET} {BOLD}[{issue}]{RESET} {test_name} ({reason})"
-        )
+        self.log(f"  {YELLOW}○ SKIPPED{RESET} {BOLD}[{issue}]{RESET} {test_name} ({reason})")
 
     def record_expected_fail(self, issue: str, test_name: str, reason: str) -> None:
         self.expected_fail.append((issue, test_name, reason))
-        self.log(
-            f"  {YELLOW}~ EXPECTED-FAIL{RESET} {BOLD}[{issue}]{RESET} {test_name} ({reason})"
-        )
+        self.log(f"  {YELLOW}~ EXPECTED-FAIL{RESET} {BOLD}[{issue}]{RESET} {test_name} ({reason})")
 
     def http_request(
         self,
@@ -325,9 +319,7 @@ class SmokeTestRunner:
         self.log_verbose(f"HTTP {method} {redact_text(url)}")
         if body and self.verbose and log_body:
             # Never echo client_secret in verbose logs.
-            safe_body = {
-                k: ("***" if k == "client_secret" else v) for k, v in body.items()
-            }
+            safe_body = {k: ("***" if k == "client_secret" else v) for k, v in body.items()}
             self.log_verbose(f"Payload: {json.dumps(safe_body)}")
 
         try:
@@ -363,9 +355,7 @@ class SmokeTestRunner:
     # Scenario 1: Issue #215 (EXT-001 OAuth2 Token Minting & Client Admin)
     # -------------------------------------------------------------------------
     def test_issue_215_auth(self) -> bool:
-        self.log(
-            f"\n{BOLD}======================================================{RESET}"
-        )
+        self.log(f"\n{BOLD}======================================================{RESET}")
         self.log(f"{BOLD}Testing Issue #215: EXT-001 OAuth2 Client & Auth Flow{RESET}")
         self.log(f"{BOLD}======================================================{RESET}")
 
@@ -502,16 +492,12 @@ class SmokeTestRunner:
     # Scenario 2: Issue #216 (EXT-002 & EXT-003 Location Master & DOPA codes)
     # -------------------------------------------------------------------------
     def test_issue_216_locations(self) -> bool:
-        self.log(
-            f"\n{BOLD}======================================================{RESET}"
-        )
+        self.log(f"\n{BOLD}======================================================{RESET}")
         self.log(f"{BOLD}Testing Issue #216: Location Master & DOPA Codes{RESET}")
         self.log(f"{BOLD}======================================================{RESET}")
 
         if not self.access_token:
-            self.record_result(
-                "#216", "Location Master endpoints", False, "Missing access token"
-            )
+            self.record_result("#216", "Location Master endpoints", False, "Missing access token")
             return False
 
         headers = {"Authorization": f"Bearer {self.access_token}"}
@@ -621,9 +607,7 @@ class SmokeTestRunner:
         # 2.5 Scope Protection: Request without token returns 401/403
         status, _ = self.http_request("GET", self.partner_path("/external/locations"))
         if status in (401, 403):
-            self.record_result(
-                "#216", "Unauthenticated request rejected with 401/403", True
-            )
+            self.record_result("#216", "Unauthenticated request rejected with 401/403", True)
         else:
             self.record_result(
                 "#216",
@@ -638,16 +622,12 @@ class SmokeTestRunner:
     # Scenario 3: Issue #217 (EXT-005 Occupancy Projection & Demographics)
     # -------------------------------------------------------------------------
     def test_issue_217_occupancy(self) -> bool:
-        self.log(
-            f"\n{BOLD}======================================================{RESET}"
-        )
+        self.log(f"\n{BOLD}======================================================{RESET}")
         self.log(f"{BOLD}Testing Issue #217: EXT-005 Occupancy Projection{RESET}")
         self.log(f"{BOLD}======================================================{RESET}")
 
         if not self.access_token:
-            self.record_result(
-                "#217", "Occupancy endpoint", False, "Missing access token"
-            )
+            self.record_result("#217", "Occupancy endpoint", False, "Missing access token")
             return False
 
         headers = {"Authorization": f"Bearer {self.access_token}"}
@@ -699,9 +679,7 @@ class SmokeTestRunner:
     # Scenario 4: Issue #218 (EXT-004 Stock Projection & M6 Mapping)
     # -------------------------------------------------------------------------
     def test_issue_218_stock(self) -> bool:
-        self.log(
-            f"\n{BOLD}======================================================{RESET}"
-        )
+        self.log(f"\n{BOLD}======================================================{RESET}")
         self.log(f"{BOLD}Testing Issue #218: EXT-004 Shelter Stock Projection{RESET}")
         self.log(f"{BOLD}======================================================{RESET}")
 
@@ -721,11 +699,7 @@ class SmokeTestRunner:
         res = data.get("result", {})
         items = res.get("items", [])
 
-        if (
-            status == 200
-            and res.get("location_code") == target_code
-            and isinstance(items, list)
-        ):
+        if status == 200 and res.get("location_code") == target_code and isinstance(items, list):
             self.record_result(
                 "#218",
                 "GET .../stock returns location stock envelope",
@@ -769,16 +743,12 @@ class SmokeTestRunner:
     # Scenario 5: Issue #219 (EXT-006 Cross-Location Summary)
     # -------------------------------------------------------------------------
     def test_issue_219_summary(self) -> bool:
-        self.log(
-            f"\n{BOLD}======================================================{RESET}"
-        )
+        self.log(f"\n{BOLD}======================================================{RESET}")
         self.log(f"{BOLD}Testing Issue #219: EXT-006 Cross-Location Summary{RESET}")
         self.log(f"{BOLD}======================================================{RESET}")
 
         if not self.access_token:
-            self.record_result(
-                "#219", "Summary endpoint", False, "Missing access token"
-            )
+            self.record_result("#219", "Summary endpoint", False, "Missing access token")
             return False
 
         headers = {"Authorization": f"Bearer {self.access_token}"}
@@ -822,16 +792,12 @@ class SmokeTestRunner:
     # Scenario 6: Issue #220 (EXT-007 Occupants Scaffold & PDPA Governance)
     # -------------------------------------------------------------------------
     def test_issue_220_occupants_pdpa(self) -> bool:
-        self.log(
-            f"\n{BOLD}======================================================{RESET}"
-        )
+        self.log(f"\n{BOLD}======================================================{RESET}")
         self.log(f"{BOLD}Testing Issue #220: EXT-007 Occupants & PDPA Audit{RESET}")
         self.log(f"{BOLD}======================================================{RESET}")
 
         if not self.access_token:
-            self.record_result(
-                "#220", "Occupants endpoint", False, "Missing access token"
-            )
+            self.record_result("#220", "Occupants endpoint", False, "Missing access token")
             return False
 
         headers = {"Authorization": f"Bearer {self.access_token}"}
@@ -1011,9 +977,7 @@ class SmokeTestRunner:
         )
 
         # M2.5 Unknown booking id → 404 booking_not_found (EXT-010)
-        status, data = self.http_request(
-            "GET", f"{bookings}/BK-NON_EXISTENT_999", headers=headers
-        )
+        status, data = self.http_request("GET", f"{bookings}/BK-NON_EXISTENT_999", headers=headers)
         err_code = get_error_code(data)
         self.record_result(
             "M2",
@@ -1082,9 +1046,7 @@ class SmokeTestRunner:
         )
 
         # M2.8 Status read-back (EXT-010)
-        status, data = self.http_request(
-            "GET", f"{bookings}/{self.booking_id}", headers=headers
-        )
+        status, data = self.http_request("GET", f"{bookings}/{self.booking_id}", headers=headers)
         res = data.get("result", {}) if isinstance(data, dict) else {}
         stamps_ok = all(
             str(res.get(k, "")).endswith("+07:00") for k in ("created_at", "updated_at")
@@ -1178,9 +1140,7 @@ class SmokeTestRunner:
 
         # M2.14 Optional 200 path with a known checked-in person
         if self.checked_in_cid:
-            status, data = self.http_request(
-                "GET", query(self.checked_in_cid), headers=headers
-            )
+            status, data = self.http_request("GET", query(self.checked_in_cid), headers=headers)
             res = data.get("result", {}) if isinstance(data, dict) else {}
             self.record_result(
                 "M2",
@@ -1262,20 +1222,14 @@ class SmokeTestRunner:
             return True
 
         if self.keep_client:
-            self.log(
-                f"\n{YELLOW}Skipping client cleanup (--keep-client specified){RESET}"
-            )
+            self.log(f"\n{YELLOW}Skipping client cleanup (--keep-client specified){RESET}")
             return True
 
         if not self.created_client_row_id or not self.created_client_id:
             return True
 
-        self.log(
-            f"\n{BOLD}======================================================{RESET}"
-        )
-        self.log(
-            f"{BOLD}Testing Client Revocation & Cleanup (Issue #215 Lifecycle){RESET}"
-        )
+        self.log(f"\n{BOLD}======================================================{RESET}")
+        self.log(f"{BOLD}Testing Client Revocation & Cleanup (Issue #215 Lifecycle){RESET}")
         self.log(f"{BOLD}======================================================{RESET}")
 
         # 7.1 Revoke Client
@@ -1285,11 +1239,7 @@ class SmokeTestRunner:
             headers={"Authorization": f"Bearer {self.admin_secret}"},
         )
         client_data = data.get("client", {})
-        if (
-            status == 200
-            and data.get("success") is True
-            and client_data.get("is_active") is False
-        ):
+        if status == 200 and data.get("success") is True and client_data.get("is_active") is False:
             self.record_result(
                 "#215",
                 "Admin API revokes third-party client (is_active=False)",
@@ -1347,22 +1297,16 @@ class SmokeTestRunner:
             f"{BOLD}{CYAN}SMOKE TEST SUITE: Smart Shelter Partner API (Issues #214-#220 + M2 EXT-008..011){RESET}"
         )
         self.log(f"{BOLD}Target Host: {redact_url(self.base_url)}{RESET}")
-        self.log(
-            f"{BOLD}API prefix: {self.api_prefix or '(none — direct FastAPI paths)'}{RESET}"
-        )
+        self.log(f"{BOLD}API prefix: {self.api_prefix or '(none — direct FastAPI paths)'}{RESET}")
         self.log(f"{BOLD}Mode: {mode}{RESET}")
-        self.log(
-            f"{BOLD}================================================================={RESET}"
-        )
+        self.log(f"{BOLD}================================================================={RESET}")
 
         # Connectivity: public plane has no /v1/health — probe partner path instead.
         probe_path = self.partner_path("/external/locations")
         self.log("\nChecking target server connectivity...")
         status, probe_body = self.http_request("GET", probe_path)
         if status == 0:
-            self.log(
-                f"{RED}ERROR: Cannot connect to server at {redact_url(self.base_url)}.{RESET}"
-            )
+            self.log(f"{RED}ERROR: Cannot connect to server at {redact_url(self.base_url)}.{RESET}")
             self.log(
                 f"{YELLOW}Hint: Use the public origin (e.g. https://shelter.importstar.dev) "
                 f"with --api-prefix /public-api.{RESET}"
@@ -1378,9 +1322,7 @@ class SmokeTestRunner:
             )
             return 1
         raw_probe = str(probe_body.get("raw", ""))
-        if status == 404 and (
-            "html" in raw_probe.lower() or not probe_body.get("code")
-        ):
+        if status == 404 and ("html" in raw_probe.lower() or not probe_body.get("code")):
             self.log(
                 f"{RED}ERROR: {probe_path} returned SPA/HTML 404 — partner route not found.{RESET}"
             )
@@ -1389,9 +1331,7 @@ class SmokeTestRunner:
                 f"(not bare /external). Local FastAPI: --api-prefix ''.{RESET}"
             )
             return 1
-        self.log_verbose(
-            f"Probe GET {probe_path} → HTTP {status} (expect 401 without token)"
-        )
+        self.log_verbose(f"Probe GET {probe_path} → HTTP {status} (expect 401 without token)")
 
         # Execute tests sequentially
         self.test_issue_215_auth()
@@ -1416,12 +1356,8 @@ class SmokeTestRunner:
         self.log(
             f"\n\n{BOLD}================================================================={RESET}"
         )
-        self.log(
-            f"{BOLD}                     SMOKE TEST SUMMARY REPORT                   {RESET}"
-        )
-        self.log(
-            f"{BOLD}================================================================={RESET}"
-        )
+        self.log(f"{BOLD}                     SMOKE TEST SUMMARY REPORT                   {RESET}")
+        self.log(f"{BOLD}================================================================={RESET}")
 
         # Summary by Issue
         issue_map = {
@@ -1718,9 +1654,7 @@ class CouchAdmin:
                 {"_id": d["_id"], "_rev": d["_rev"], "_deleted": True}
                 for d in docs[start : start + 200]
             ]
-            status, rows = self.request(
-                "POST", f"/{self.database}/_bulk_docs", {"docs": chunk}
-            )
+            status, rows = self.request("POST", f"/{self.database}/_bulk_docs", {"docs": chunk})
             if status not in (200, 201, 202) or not isinstance(rows, list):
                 failed += len(chunk)
             else:
@@ -1867,9 +1801,7 @@ class MongoProbe:
         )
         return int(result.deleted_count)
 
-    def delete_staged(
-        self, booking_ids: List[str], client_id: str, shelter_code: str
-    ) -> int:
+    def delete_staged(self, booking_ids: List[str], client_id: str, shelter_code: str) -> int:
         """Leftover `committed=False` rows of this run's own groups (never anything else)."""
         result = self.bookings.delete_many(
             {
@@ -1970,9 +1902,7 @@ class E2ERunner(SmokeTestRunner):
     def pending_not_run(self, name: str, reason: str) -> None:
         """A pending-#578 case that was not exercised: SKIPPED, or FAIL with --require-578."""
         if self.require_578:
-            self.record_result(
-                "E2E", f"{name} [{PENDING_578}]", False, f"not exercised: {reason}"
-            )
+            self.record_result("E2E", f"{name} [{PENDING_578}]", False, f"not exercised: {reason}")
         else:
             self.record_skip("E2E", name, f"{PENDING_578}: {reason}")
 
@@ -2275,9 +2205,7 @@ class E2ERunner(SmokeTestRunner):
         )
         if self.mongo_on():
             staged = self.staged_count()
-            self.e2e_result(
-                "no committed=false rows left in Mongo", staged == 0, f"rows={staged}"
-            )
+            self.e2e_result("no committed=false rows left in Mongo", staged == 0, f"rows={staged}")
         # API-level proof the rolled-back group left nothing holding the unique index.
         status, data, _ = self.create_group(fresh)
         self.e2e_result(
@@ -2387,7 +2315,9 @@ class E2ERunner(SmokeTestRunner):
         self._banner(f"E2E 5: {size}-person group -> timing (gate for the cap, CR-169 FR-6)")
         if self.skip_big:
             self.record_skip("E2E", f"{size}-person group timing", "--skip-e2e-big")
-            self.pending_not_run(f"{size}-person evacuee.booking_ref + schema_v 14", "--skip-e2e-big")
+            self.pending_not_run(
+                f"{size}-person evacuee.booking_ref + schema_v 14", "--skip-e2e-big"
+            )
             return
         cids = self.make_group(size)
         t_start = time.monotonic()
@@ -2420,9 +2350,7 @@ class E2ERunner(SmokeTestRunner):
         within_budget = self.big_budget is None or (
             written["complete"] and total_written <= self.big_budget
         )
-        budget_note = (
-            "" if self.big_budget is None else f", budget {self.big_budget:.0f}s"
-        )
+        budget_note = "" if self.big_budget is None else f", budget {self.big_budget:.0f}s"
         self.e2e_result(
             f"all {size} households + {size} evacuees in CouchDB within {self.big_timeout:.0f}s{budget_note}",
             written["complete"] and within_budget,
@@ -2489,8 +2417,7 @@ class E2ERunner(SmokeTestRunner):
             f"  cancel -> households cancelled ({len(c_house)}/{size}) : {stats(c_house)}",
             f"  cancel -> ALL cancelled                    : "
             f"{cancelled['elapsed']:.2f}s{'' if cancelled['complete'] else ' (TIMEOUT/skipped)'}",
-            f"  total (request -> everything cancelled)    : "
-            f"{time.monotonic() - t_start:.2f}s",
+            f"  total (request -> everything cancelled)    : {time.monotonic() - t_start:.2f}s",
             f"  (times are stamped after each CouchDB query returns; resolution is bounded by "
             f"the {WATCH_POLL_SECONDS:.2f}s poll interval + query time, max query "
             f"{max(written.get('max_query', 0.0), cancelled.get('max_query', 0.0)):.2f}s)",
@@ -2597,9 +2524,7 @@ class E2ERunner(SmokeTestRunner):
             self.pending_not_run(case, "needs --mongo-uri (pymongo) to plant an orphan row")
             return
         assert self.mongo is not None and self.created_client_id
-        orphan = self.mongo.plant_orphan(
-            self.e2e_shelter, self.created_client_id, age_seconds=120
-        )
+        orphan = self.mongo.plant_orphan(self.e2e_shelter, self.created_client_id, age_seconds=120)
         self.e2e_orphan_ids.append(orphan)
         deadline = time.monotonic() + max(self.settle * 3, 2 * WORKER_POLL_SECONDS + 15)
         gone = False
@@ -2870,15 +2795,11 @@ class E2ERunner(SmokeTestRunner):
             f"{BOLD}CouchDB: {redact_url(self.couch.base_url)}/{self.couch.database}  |  "
             f"Mongo checks: {'on' if self.mongo else 'off (API-behaviour only)'}{RESET}"
         )
-        self.log(
-            f"{BOLD}================================================================={RESET}"
-        )
+        self.log(f"{BOLD}================================================================={RESET}")
 
         status, _ = self.http_request("GET", self.partner_path("/external/locations"))
         if status == 0:
-            self.log(
-                f"{RED}ERROR: Cannot connect to API at {redact_url(self.base_url)}.{RESET}"
-            )
+            self.log(f"{RED}ERROR: Cannot connect to API at {redact_url(self.base_url)}.{RESET}")
             return 1
         info = self.couch.info()
         if info is None:
@@ -2920,9 +2841,7 @@ class E2ERunner(SmokeTestRunner):
                 try:
                     self.e2e_cleanup()
                 except Exception as exc:
-                    self.e2e_result(
-                        "cleanup", False, f"{type(exc).__name__}: {redact_text(exc)}"
-                    )
+                    self.e2e_result("cleanup", False, f"{type(exc).__name__}: {redact_text(exc)}")
         finally:
             self.test_cleanup_and_revocation()
         return self._finish(start_time)
@@ -2990,9 +2909,7 @@ def run_e2e_from_args(
         skip_booking_writes=False,
         checked_in_cid=None,
         e2e_shelter=shelter,
-        couch=CouchAdmin(
-            args.couch_url, couch_user, couch_password, f"shelter_{shelter.lower()}"
-        ),
+        couch=CouchAdmin(args.couch_url, couch_user, couch_password, f"shelter_{shelter.lower()}"),
         mongo=mongo,
         group_timeout=args.e2e_timeout,
         big_size=args.e2e_big_size,
@@ -3024,10 +2941,7 @@ def main():
             "PARTNER_API_BASE_URL",
             os.getenv("FASTAPI_URL", "https://shelter.importstar.dev"),
         ),
-        help=(
-            "Public origin (env: PARTNER_API_BASE_URL; "
-            "default: https://shelter.importstar.dev)"
-        ),
+        help=("Public origin (env: PARTNER_API_BASE_URL; default: https://shelter.importstar.dev)"),
     )
     parser.add_argument(
         "--api-prefix",
@@ -3174,11 +3088,7 @@ def main():
             "(or PARTNER_CLIENT_ID and PARTNER_CLIENT_SECRET), or neither for admin mode."
         )
 
-    if (
-        not client_id
-        and "localhost" not in args.base_url
-        and "127.0.0.1" not in args.base_url
-    ):
+    if not client_id and "localhost" not in args.base_url and "127.0.0.1" not in args.base_url:
         print(
             f"{YELLOW}Warning:{RESET} admin provision mode against {redact_url(args.base_url)} "
             "usually fails — /v1/admin/* is not public. "
