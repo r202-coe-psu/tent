@@ -580,8 +580,10 @@ async def _route_cancelled_row(
     cancelled right here.
 
     Only for the write window (`_mark_written`): the evacuee was created in this very
-    pass, milliseconds ago, so staff cannot have touched it before the next poll cancels
-    it. A *stranded* row (crash, arbitrary delay) must not be re-opened like this — see
+    pass, so staff are very unlikely to have touched it before the next poll cancels it
+    (the cancel retries with backoff, so a failing cancel widens that window). Unlike a
+    direct cancel, this route keeps the retry pipeline when the stay cancel fails. A
+    *stranded* row (crash, arbitrary delay) must not be re-opened like this — see
     `_cancel_stranded_rows`.
     """
     try:
@@ -669,9 +671,14 @@ async def _persist_group(
     """Write a booking group's ``pending`` rows into ``shelter_{code}`` (FR-21, FR-34).
 
     False = retry next poll. The group is all-or-nothing up to the CouchDB write: one
-    duplicate rejects every pending row; after that, rows are written in one
+    duplicate rejects every pending row — unless part of the group already reached
+    CouchDB (crashed earlier attempt), then only the pending rows whose own CID is
+    duplicated are rejected and the rest is written. Rows are written in one
     ``_bulk_docs`` and each row transitions on its own result. ``health`` (the loop's
-    tracker) backs off and throttles logs for repeated write failures.
+    tracker) backs off and throttles logs for failures a retry may fix by itself: a
+    failed CouchDB write, a missing shelter database, a failed duplicate check and a
+    pending row without PII. An incomplete group is not backed off (usually a commit in
+    flight).
     """
     health = health or FailureTracker()
     rows = (
