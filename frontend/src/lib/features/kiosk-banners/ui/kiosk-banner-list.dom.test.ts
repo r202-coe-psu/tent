@@ -49,9 +49,11 @@ const byText = (selector: string, text: string) =>
 	);
 
 beforeEach(() => vi.clearAllMocks());
-afterEach(() => {
+afterEach(async () => {
 	if (instance) unmount(instance);
 	instance = null;
+	// bits-ui releases the body scroll lock on a 24 ms timer; let it run before happy-dom tears down.
+	await new Promise((resolve) => setTimeout(resolve, 50));
 	document.body.innerHTML = '';
 });
 
