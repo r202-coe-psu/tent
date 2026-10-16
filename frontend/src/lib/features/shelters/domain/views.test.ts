@@ -55,6 +55,20 @@ describe('SHELTER_DASHBOARD_VIEWS Map Functions', () => {
 			mapFn({ type: 'evacuee', current_stay: { status: 'active' }, birth_year: 2536 }, mockEmit);
 			expect(emitted).toEqual([{ key: 2536, value: 1 }]);
 		});
+
+		it('counts room_confirmed as in the shelter (CR-170)', () => {
+			mapFn(
+				{ type: 'evacuee', current_stay: { status: 'room_confirmed' }, birth_year: 2540 },
+				mockEmit
+			);
+			expect(emitted).toEqual([{ key: 2540, value: 1 }]);
+		});
+
+		it('ignores arriving and temporary_leave', () => {
+			mapFn({ type: 'evacuee', current_stay: { status: 'arriving' } }, mockEmit);
+			mapFn({ type: 'evacuee', current_stay: { status: 'temporary_leave' } }, mockEmit);
+			expect(emitted).toHaveLength(0);
+		});
 	});
 
 	describe('demographics_by_country', () => {
@@ -76,6 +90,14 @@ describe('SHELTER_DASHBOARD_VIEWS Map Functions', () => {
 				mockEmit
 			);
 			expect(emitted).toEqual([{ key: 'THAILAND', value: 1 }]);
+		});
+
+		it('counts room_confirmed as in the shelter (CR-170)', () => {
+			mapFn(
+				{ type: 'evacuee', current_stay: { status: 'room_confirmed' }, country: 'myanmar' },
+				mockEmit
+			);
+			expect(emitted).toEqual([{ key: 'MYANMAR', value: 1 }]);
 		});
 	});
 
