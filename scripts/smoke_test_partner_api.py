@@ -52,8 +52,11 @@ and revokes the admin-created client. Without `--e2e` nothing below applies and
 the script behaves exactly as before.
 
 WARNING: a 100-person group creates 100 households + 100 evacuees (+ audit docs
-on cancel) in the CouchDB of ONE shelter. Use a dedicated test shelter on a
-local/dev stack. The script refuses non-localhost targets unless you pass
+on cancel) in the CouchDB of ONE shelter, and cleanup DELETES docs there. Run `--e2e`
+only against a dedicated TEST shelter that has no real people: deletes create CouchDB
+tombstones that sync to kiosk/staff devices. The local-host guard and
+`--i-know-this-writes-to` below are not a substitute for choosing the right shelter.
+Use a dedicated test shelter on a local/dev stack. The script refuses non-localhost targets unless you pass
 --i-know-this-writes-to <host>[,<host>] naming every non-local API / CouchDB / Mongo
 host (local = localhost, 127.0.0.1, ::1; exact match; every host of a multi-host
 mongodb:// URI is checked; `mongodb+srv://` always counts as non-local). The check runs
@@ -112,13 +115,20 @@ are printed, never CIDs / phones / names):
      CouchDB-side duplicate, sweeper removing orphan committed=false rows (needs
      Mongo, else SKIPPED). With --require-578 a SKIPPED pending case also fails.
 
+Pre-flight: before any group is sent, the freshly generated CIDs are looked up in the
+test shelter's CouchDB; a CID that already has an evacuee doc is regenerated (bounded
+retries, else that scenario fails). Only CIDs that passed are registered for cleanup.
+
 Cleanup (always, also on failure): every CID is registered BEFORE its request is sent,
 so a request that times out after the server committed is still cleaned up. It cancels
 every booking it created (with Mongo also the ones it only finds by this run's
 client_id), waits for the worker to settle, then deletes from CouchDB only docs it can
-attribute to itself (evacuees found by its random CIDs and `registered_via: api`, their
-households and audit docs, plus the one planted duplicate evacuee). Never unseeds or touches
-other shelters. Expected runtime (local, 3 s worker poll): about 1-3 minutes plus
+prove are its own. With --mongo-uri the proof is the `evacuee_id` / `household_id` the
+worker reserved on this run's `external_bookings` rows (kept for the whole run); without
+it, a doc must match a CID this run registered, `registered_via: api`, this run's
+`partner:M2` creator and a `created_at` not older than the run start (60 s skew). The
+`partner:` prefix alone is never enough. Audit docs of owned targets and the one planted
+duplicate evacuee go too. Never unseeds or touches other shelters. Expected runtime (local, 3 s worker poll): about 1-3 minutes plus
 the 100-person run (worker handles rows one by one; see the printed timing).
 "green" = exit code 0: no FAIL lines; EXPECTED-FAIL / SKIPPED lines are listed.
 """
@@ -1480,6 +1490,12 @@ HOLD_STATUSES = (
 )
 #: Sleep between CouchDB polls in watch_group (timing resolution is bounded by it).
 WATCH_POLL_SECONDS = 0.25
+#: Fallback ownership (no Mongo): a doc older than run start minus this is not ours.
+CLOCK_SKEW = dt.timedelta(seconds=60)
+#: Creator the admin-provisioned client writes as (it is created with module_name "M2").
+ADMIN_CLIENT_CREATOR = "partner:M2"
+#: Pre-flight: regeneration rounds for CIDs that already have a doc in the shelter.
+PREFLIGHT_ATTEMPTS = 5
 PENDING_578 = "pending #578"
 S1_REF_CASE = "evacuee.booking_ref == booking_id and schema_v 14"
 EVACUEE_FIELDS = [
@@ -1612,6 +1628,10 @@ def e2e_target_guard(parser: argparse.ArgumentParser, args: argparse.Namespace) 
         )
         return 2
     return None
+
+
+class PreflightError(RuntimeError):
+    """Raised when fresh CIDs cannot be proven absent from the test shelter."""
 
 
 def stats(values: List[float]) -> str:
@@ -1757,6 +1777,18 @@ class MongoProbe:
     def booking_ids_of(self, flt: Dict[str, Any]) -> List[str]:
         return sorted(self.bookings.distinct("booking_id", flt))
 
+    def reserved_ids(self, flt: Dict[str, Any]) -> Tuple[set, set]:
+        """(evacuee_ids, household_ids) the worker reserved on these rows. Kept in every
+        state (clear_pii only blanks cid/names/phone), so they outlive PII clearing."""
+        evacuees: set = set()
+        households: set = set()
+        for row in self.bookings.find(flt, {"evacuee_id": 1, "household_id": 1}):
+            if row.get("evacuee_id"):
+                evacuees.add(row["evacuee_id"])
+            if row.get("household_id"):
+                households.add(row["household_id"])
+        return evacuees, households
+
     def open_rows(self, flt: Dict[str, Any]) -> int:
         """Rows of the run the worker still has to act on."""
         return self.bookings.count_documents(
@@ -1898,6 +1930,9 @@ class E2ERunner(SmokeTestRunner):
         self.e2e_booking_ids: List[str] = []
         self.e2e_planted_ids: List[str] = []
         self.e2e_orphan_ids: List[str] = []
+        #: Couch ids of this run's docs, read from its Mongo rows (--mongo-uri only).
+        self.run_evacuee_ids: set = set()
+        self.run_household_ids: set = set()
         self.run_started = dt.datetime.now(dt.timezone.utc)
         self.timing_lines: List[str] = []
         self.baseline_doc_count: Optional[int] = None
@@ -1960,8 +1995,41 @@ class E2ERunner(SmokeTestRunner):
             strict=self.use_provided_credentials,
         )
 
+    def _cids_with_docs(self, cids: List[str]) -> set:
+        """The subset of `cids` that already has an evacuee doc in the test shelter."""
+        taken: set = set()
+        listed = sorted(cids)
+        for start in range(0, len(listed), 100):
+            for doc in self.couch.find(
+                {"type": "evacuee", "person_id.number": {"$in": listed[start : start + 100]}},
+                fields=["_id", "person_id.number"],
+            ):
+                taken.add((doc.get("person_id") or {}).get("number"))
+        return taken
+
     def make_group(self, size: int) -> List[str]:
-        return [make_valid_cid() for _ in range(size)]
+        """`size` random CIDs proven absent from the shelter's CouchDB (pre-flight).
+
+        A random CID could collide with a real person; cleanup must never touch that
+        doc, so a colliding CID is regenerated (bounded) and never sent or registered.
+        A CouchDB error propagates (fail closed). CIDs are never logged.
+        """
+        cids = [make_valid_cid() for _ in range(size)]
+        for attempt in range(PREFLIGHT_ATTEMPTS + 1):
+            taken = self._cids_with_docs(cids)
+            if not taken:
+                return cids
+            if attempt == PREFLIGHT_ATTEMPTS:
+                raise PreflightError(
+                    f"{len(taken)} generated CID(s) still collide with existing docs in "
+                    f"{self.e2e_shelter} after {PREFLIGHT_ATTEMPTS} regenerations; nothing was sent"
+                )
+            self.log(
+                f"  pre-flight: {len(taken)} generated CID(s) already have a doc in "
+                f"{self.e2e_shelter}; regenerating (round {attempt + 1}/{PREFLIGHT_ATTEMPTS})"
+            )
+            cids = [make_valid_cid() if cid in taken else cid for cid in cids]
+        raise AssertionError("unreachable")
 
     def create_group(
         self, cids: List[str], timeout: float = 60
@@ -2259,7 +2327,7 @@ class E2ERunner(SmokeTestRunner):
             f"E2E 4: two concurrent groups with an overlapping CID ({self.race_rounds} rounds)"
         )
         for round_no in range(1, self.race_rounds + 1):
-            shared = make_valid_cid()
+            shared = self.make_group(1)[0]
             a_only = self.make_group(2)
             b_only = self.make_group(2)
             groups = {"A": [shared] + a_only, "B": [shared] + b_only}
@@ -2562,6 +2630,7 @@ class E2ERunner(SmokeTestRunner):
 
     def e2e_cleanup(self) -> None:
         self._banner("E2E cleanup: cancel bookings, then remove this run's CouchDB docs")
+        self._refresh_run_ids()
         attempted: set = set()
         cancelled = 0
 
@@ -2604,6 +2673,7 @@ class E2ERunner(SmokeTestRunner):
                     assert self.mongo is not None
                     fresh = self._discover_run_bookings()
                     cancel_new()
+                    self._refresh_run_ids()
                     busy = self.mongo.open_rows(self.owned_rows_filter()) + len(fresh)
                 else:
                     busy = holding
@@ -2627,6 +2697,7 @@ class E2ERunner(SmokeTestRunner):
         removed_ids: set = set()
         last_failed = 0
         for attempt in range(3):
+            self._refresh_run_ids()  # rows still exist here; they go only after the purge
             docs, skipped = self._owned_docs()
             if skipped:
                 self.log(f"  {YELLOW}left {skipped} doc(s) alone (not attributable){RESET}")
@@ -2685,46 +2756,102 @@ class E2ERunner(SmokeTestRunner):
             self.log(
                 f"  {YELLOW}no --mongo-uri: cancelled external_bookings rows (PII cleared) "
                 f"of this run stay in Mongo; a request that timed out cannot be found by "
-                f"client_id (CouchDB docs are still purged by tracked CID){RESET}"
+                f"client_id (CouchDB docs are still purged, by the stricter no-Mongo ownership rule){RESET}"
             )
+
+    def _refresh_run_ids(self) -> None:
+        """Collect the evacuee/household ids the worker reserved on this run's Mongo rows.
+
+        Called while the rows exist (after every scenario and before each purge) and only
+        ever adds, so the ids survive later PII clearing / row deletion.
+        """
+        if not self.mongo_on():
+            return
+        assert self.mongo is not None
+        try:
+            evacuees, households = self.mongo.reserved_ids(self.owned_rows_filter())
+        except Exception as exc:
+            self.log(f"  {YELLOW}could not read this run's doc ids: {type(exc).__name__}{RESET}")
+            return
+        self.run_evacuee_ids |= evacuees
+        self.run_household_ids |= households
+
+    def _created_during_run(self, doc: Dict[str, Any]) -> bool:
+        """`created_at` (ISO, set by the worker) is not older than run start - skew."""
+        try:
+            created = dt.datetime.fromisoformat(str(doc["created_at"]).replace("Z", "+00:00"))
+        except (KeyError, ValueError):
+            return False  # no reliable timestamp: not ours
+        return created.tzinfo is not None and created >= self.run_started - CLOCK_SKEW
+
+    def _owned_by_this_run(self, doc: Dict[str, Any], kind: str) -> bool:
+        """Fail-closed proof that `doc` (kind: evacuee | household | audit) is this run's.
+
+        `created_by` starting with "partner:" is NOT proof: every partner client and every
+        earlier run shares it, and a random CID can collide with a real person, so a prefix
+        match could delete real data (the tombstone then syncs to kiosk/staff devices).
+        Candidates found by tracked CID are therefore only candidates.
+        """
+        if doc.get("_id") in self.e2e_planted_ids:  # planted by this run under its own id
+            return True
+        creator = str(doc.get("created_by", ""))
+        if not creator.startswith("partner:"):
+            return False
+        if not self.use_provided_credentials and creator != ADMIN_CLIENT_CREATOR:
+            return False
+        if kind == "evacuee" and doc.get("registered_via") != "api":
+            return False
+        if self.mongo_on():
+            if kind == "audit":  # audit docs are only fetched for already-proven targets
+                return True
+            ids = self.run_evacuee_ids if kind == "evacuee" else self.run_household_ids
+            return doc.get("_id") in ids
+        # No Mongo: the CID must be one this run registered AND the doc must be new.
+        # (Households/audits are only reached through an owned evacuee / target.)
+        if kind == "evacuee" and (doc.get("person_id") or {}).get("number") not in self.e2e_cids:
+            return False
+        return self._created_during_run(doc)
 
     def _owned_docs(self) -> Tuple[List[Dict[str, Any]], int]:
         """CouchDB docs created by this run (full docs with `_rev`) + count skipped."""
         owned: Dict[str, Dict[str, Any]] = {}
         skipped = 0
-        evac_ids: List[str] = []
-        house_ids: set = set()
+        candidates: Dict[str, Dict[str, Any]] = {}
         listed = sorted(self.e2e_cids)
-        for start in range(0, len(listed), 100):
-            docs = self.couch.find(
-                {
-                    "type": "evacuee",
-                    "person_id.number": {"$in": listed[start : start + 100]},
-                }
-            )
-            for doc in docs:
-                ours = doc["_id"] in self.e2e_planted_ids or (
-                    doc.get("registered_via") == "api"
-                    and str(doc.get("created_by", "")).startswith("partner:")
-                )
-                if not ours:
-                    skipped += 1
-                    continue
-                owned[doc["_id"]] = doc
-                evac_ids.append(doc["_id"])
-                if doc.get("household_id"):
-                    house_ids.add(doc["household_id"])
+        for start in range(0, len(listed), 100):  # candidates by tracked CID (not proof)
+            for doc in self.couch.find(
+                {"type": "evacuee", "person_id.number": {"$in": listed[start : start + 100]}}
+            ):
+                candidates[doc["_id"]] = doc
+        for doc_id, doc in self.couch.get_many(sorted(self.run_evacuee_ids)).items():
+            if doc.get("type") == "evacuee":  # candidates by reserved id (Mongo mode)
+                candidates[doc_id] = doc
+        house_ids: set = set()
+        for doc_id, doc in candidates.items():
+            if not self._owned_by_this_run(doc, "evacuee"):
+                skipped += 1
+                continue
+            owned[doc_id] = doc
+            if doc.get("household_id"):
+                house_ids.add(doc["household_id"])
+        house_ids |= self.run_household_ids
         for house_id, doc in self.couch.get_many(sorted(house_ids)).items():
-            if str(doc.get("created_by", "")).startswith("partner:"):
+            if doc.get("type") != "household":
+                continue
+            if self._owned_by_this_run(doc, "household"):
                 owned[house_id] = doc
-        targets = sorted(set(evac_ids) | {h for h in house_ids if h in owned})
+            else:
+                skipped += 1
+        targets = sorted(owned)
         for start in range(0, len(targets), 100):
             for doc in self.couch.find(
                 {"type": "audit", "target_id": {"$in": targets[start : start + 100]}}
             ):
-                owned[doc["_id"]] = doc
-        stale_planted = self.couch.get_many(list(self.e2e_planted_ids))
-        owned.update(stale_planted)
+                if self._owned_by_this_run(doc, "audit"):
+                    owned[doc["_id"]] = doc
+                else:
+                    skipped += 1
+        owned.update(self.couch.get_many(list(self.e2e_planted_ids)))
         return list(owned.values()), skipped
 
     # -------------------------------------------------------------------- run
@@ -2770,13 +2897,21 @@ class E2ERunner(SmokeTestRunner):
                 self.e2e_result("token has booking-write scope", False, str(self.token_scopes))
                 return self._finish(start_time)
             try:
-                self.scenario_group_of_three()
-                self.scenario_duplicate_group()
-                self.scenario_cancel_after_written()
-                self.scenario_race()
-                self.scenario_big_group()
-                self.scenario_couch_side_duplicate()
-                self.scenario_sweeper()
+                for scenario in (
+                    self.scenario_group_of_three,
+                    self.scenario_duplicate_group,
+                    self.scenario_cancel_after_written,
+                    self.scenario_race,
+                    self.scenario_big_group,
+                    self.scenario_couch_side_duplicate,
+                    self.scenario_sweeper,
+                ):
+                    try:
+                        scenario()
+                    except PreflightError as exc:  # nothing was sent; go on with the next one
+                        self.e2e_result(f"{scenario.__name__}: CID pre-flight", False, str(exc))
+                    finally:
+                        self._refresh_run_ids()  # rows exist now; keep their ids for cleanup
             except Exception as exc:  # keep going to cleanup; report the type only
                 self.e2e_result(
                     "scenario run aborted", False, f"{type(exc).__name__}: {redact_text(exc)}"
