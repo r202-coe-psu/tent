@@ -181,8 +181,10 @@ deletes the manifest only if everything succeeded. It is idempotent.
 
 Signals: SIGINT/SIGTERM during the run stop the scenarios and run the normal cleanup. A
 signal while cleanup runs prints that cleanup is in progress and is ignored; only a
-further one aborts (exit 128+signal, manifest kept, recovery command printed). SIGKILL
-cannot be handled: the manifest is the recovery path.
+further one aborts (exit 128+signal, manifest kept, recovery command printed). Repeats of
+the same signal within 1 s count as one press (a Ctrl-C under `uv run` arrives twice), so
+wait about a second between presses. SIGKILL cannot be handled: the manifest is the
+recovery path.
 
 "green" = exit code 0: no FAIL lines; EXPECTED-FAIL / SKIPPED lines are listed.
 """
@@ -1484,6 +1486,10 @@ class SmokeTestRunner:
 LOCAL_HOSTS = ("localhost", "127.0.0.1", "::1")
 #: Mirrors worker POLL_INTERVAL_SECONDS (worker/src/worker/inbound/external_bookings.py).
 WORKER_POLL_SECONDS = 3
+#: A repeat of the same signal within this window counts as the SAME key press: `uv run`
+#: forwards a terminal Ctrl-C to its child on top of the copy the child gets from the
+#: terminal's process group, so one press would otherwise arrive twice.
+SIGNAL_DEBOUNCE_SECONDS = 1.0
 #: Stay statuses that hold a bed (same set as the worker / API duplicate guards).
 HOLD_STATUSES = (
     "pre_registered",
@@ -2202,6 +2208,7 @@ class E2ERunner(SmokeTestRunner):
         self._phase = "run"
         self._cleanup_signals = 0
         self._aborted = False
+        self._last_signal_at: Dict[int, float] = {}
         self._in_cleanup = False
         self.cleanup_done = False  # e2e_cleanup ran to its end
         self.cleanup_failed = False  # a cleanup check failed or a cleanup step raised
@@ -3446,6 +3453,13 @@ class E2ERunner(SmokeTestRunner):
 
     def _on_signal(self, signum: int, _frame: Any) -> None:
         name = signal.Signals(signum).name
+        now = time.monotonic()
+        last = self._last_signal_at.get(signum)
+        if last is not None and now - last < SIGNAL_DEBOUNCE_SECONDS:
+            # Duplicate delivery of one key press. The window is measured from the last
+            # COUNTED signal, so mashing Ctrl-C still counts about once a second.
+            return
+        self._last_signal_at[signum] = now
         if self._phase == "run":
             self._phase = "cleanup"  # every later signal counts as a cleanup-phase one
             self._say(
