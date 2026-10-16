@@ -63,6 +63,12 @@ mongodb:// URI is checked; `mongodb+srv://` always counts as non-local). The che
 before any connection or write. URLs that embed credentials (user:pass@host) are
 refused; pass them through env vars / the repo-root .env instead. Printed URLs are
 redacted.
+When ANY target is non-local, `--mongo-uri` is REQUIRED as well (exit 2 before any
+connection or write, even with --i-know-this-writes-to; an unreachable Mongo or a missing
+pymongo aborts instead of silently dropping to the no-Mongo mode). Reason: without Mongo,
+cleanup ownership is a `created_at` comparison between THIS machine's clock and the
+worker's, and a POST that timed out cannot be found; that is only trustworthy when
+everything runs on this host, so the no-Mongo mode is for all-local runs only.
 
 Prerequisites: local stack up (`docker compose up -d`), with fastapi + worker
 built from a branch that contains CR-169 (`docker compose up -d --build --no-deps
@@ -76,7 +82,8 @@ Run (local; admin provision mode, secrets from env / repo-root .env, never echoe
     --admin-secret "$EXTERNAL_API_SECRET" \
     --e2e-shelter-code SH004 --mongo-uri mongodb://localhost:27017/tentdb
 
-  * --mongo-uri is optional (needs `pymongo`; plain python3 works without it). With
+  * --mongo-uri is optional for all-local runs (needs `pymongo`; plain python3 works
+    without it) and REQUIRED as soon as any target is non-local. With
     it the script also asserts "no committed=false rows left" (rows of this run's
     client_id only), runs the sweeper case, finds this run's rows by client_id (also
     those of a POST that timed out before a booking_id came back) and deletes the
@@ -1546,6 +1553,29 @@ def unsafe_hosts(hosts: List[Tuple[str, bool]], confirmed: List[str]) -> List[st
     return sorted(risky)
 
 
+def e2e_target_hosts(args: argparse.Namespace) -> List[Tuple[str, bool]]:
+    """Every host of the API, CouchDB and Mongo targets as (host, may_be_local)."""
+    hosts: List[Tuple[str, bool]] = [
+        (url_host(args.base_url), True),
+        (url_host(args.couch_url), True),
+    ]
+    if args.mongo_uri:
+        mongo_hosts, _ = mongo_uri_hosts(args.mongo_uri)
+        hosts.extend(mongo_hosts or [("", True)])
+    return hosts
+
+
+def nonlocal_hosts(hosts: List[Tuple[str, bool]]) -> List[str]:
+    """Hosts that are not local, whether or not they were confirmed (sorted, no secrets)."""
+    return sorted(
+        {
+            host or "(unparseable host)"
+            for host, may_be_local in hosts
+            if not (may_be_local and host in LOCAL_HOSTS)
+        }
+    )
+
+
 def e2e_target_guard(parser: argparse.ArgumentParser, args: argparse.Namespace) -> Optional[int]:
     """Safety checks for every e2e target, BEFORE any connection or write.
 
@@ -1564,21 +1594,20 @@ def e2e_target_guard(parser: argparse.ArgumentParser, args: argparse.Namespace) 
                 file=sys.stderr,
             )
             return 2
-    hosts: List[Tuple[str, bool]] = []
     for label, value in targets[:2]:
         scheme = value.split("://", 1)[0].lower() if "://" in value else ""
         if scheme not in ("http", "https"):
             print(f"{RED}Refusing {label}: it must be an http(s) URL.{RESET}", file=sys.stderr)
             return 2
-        hosts.append((url_host(value), True))
     if args.mongo_uri:
-        mongo_hosts, problem = mongo_uri_hosts(args.mongo_uri)
+        _, problem = mongo_uri_hosts(args.mongo_uri)
         if problem:
             print(f"{RED}Refusing --mongo-uri: {problem}.{RESET}", file=sys.stderr)
             return 2
-        hosts.extend(mongo_hosts or [("", True)])
+    hosts = e2e_target_hosts(args)
     confirmed = [h for h in args.i_know_this_writes_to.split(",") if h.strip()]
     risky = unsafe_hosts(hosts, confirmed)
+    refused = False
     if risky:
         print(
             f"{RED}Refusing e2e writes to non-local host(s): {', '.join(risky)}.{RESET}\n"
@@ -1588,8 +1617,23 @@ def e2e_target_guard(parser: argparse.ArgumentParser, args: argparse.Namespace) 
             "you really mean it.",
             file=sys.stderr,
         )
-        return 2
-    return None
+        refused = True
+    remote = nonlocal_hosts(hosts)
+    if remote and not args.mongo_uri:
+        # Without Mongo, ownership of CouchDB docs falls back to `created_at` compared with
+        # THIS machine's clock, and a POST that timed out cannot be discovered. That is only
+        # trustworthy when everything runs on this host, so a confirmation is not enough.
+        print(
+            f"{RED}Refusing: --mongo-uri is required when any target is non-local "
+            f"({', '.join(remote)}).{RESET}\n"
+            "The no-Mongo mode proves ownership with a clock comparison between this machine "
+            "and the worker, so it is only allowed when the API, CouchDB and Mongo all run "
+            "locally. Pass --mongo-uri (the same remote stack; needs pymongo); "
+            "--i-know-this-writes-to does not lift this.",
+            file=sys.stderr,
+        )
+        refused = True
+    return 2 if refused else None
 
 
 class PreflightError(RuntimeError):
@@ -3144,19 +3188,28 @@ def run_e2e_from_args(
 
     mongo: Optional[MongoProbe] = None
     if args.mongo_uri:
+        # A non-local target must never fall back to the no-Mongo mode (the guard requires
+        # --mongo-uri for exactly that reason), so a missing/unreachable Mongo aborts.
+        must_have_mongo = bool(nonlocal_hosts(e2e_target_hosts(args)))
         try:
             mongo = MongoProbe(args.mongo_uri)
         except ImportError:
             print(
-                f"{YELLOW}pymongo is not installed — Mongo assertions off "
+                f"{RED if must_have_mongo else YELLOW}pymongo is not installed — "
+                f"{'aborting' if must_have_mongo else 'Mongo assertions off'} "
                 f"(try: uv run --with pymongo python3 {sys.argv[0]} ...){RESET}",
                 file=sys.stderr,
             )
+            if must_have_mongo:
+                return 2
         except Exception as exc:
             print(
-                f"{YELLOW}Mongo unreachable ({type(exc).__name__}) — Mongo assertions off{RESET}",
+                f"{RED if must_have_mongo else YELLOW}Mongo unreachable ({type(exc).__name__}) — "
+                f"{'aborting' if must_have_mongo else 'Mongo assertions off'}{RESET}",
                 file=sys.stderr,
             )
+            if must_have_mongo:
+                return 2
 
     runner = E2ERunner(
         base_url=args.base_url,
