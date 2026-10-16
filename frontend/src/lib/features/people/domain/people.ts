@@ -318,6 +318,12 @@ export interface Evacuee extends BaseDoc {
 	 * never zones — Station 3 only uses it as the default pick when there are no EWAR symptoms.
 	 */
 	preferred_zone?: string | null;
+	/**
+	 * Partner booking group id `BK-{ulid}` = `external_bookings.booking_id` (schema_v 14, CR-169).
+	 * Set only by the sync worker for `registered_via: 'api'`; opaque, not PII, never projected to
+	 * `public_*`. Unrelated to `donation.booking_ref`.
+	 */
+	booking_ref?: string | null;
 	privacy: { search_excluded: boolean };
 	registered_via: z.infer<typeof registeredViaSchema>;
 	anonymized?: boolean; // set by the purge job
@@ -876,6 +882,8 @@ export const evacueeInputSchema = z.object({
 		.optional()
 		.default(null)
 		.transform((v) => v || null),
+	/** CR-169: partner booking group id; forms never set it (worker-owned, schema_v 14). */
+	booking_ref: z.string().trim().nullable().optional(),
 	registered_via: registeredViaSchema.default('staff')
 });
 export type EvacueeInput = z.input<typeof evacueeInputSchema>;
@@ -1516,7 +1524,7 @@ export function createEvacuee(input: EvacueeInput, ctx: AuthorContext, id?: stri
 	const person_id = resolvePersonIdOnCreate(d.person_id);
 	return makeDoc(
 		'evacuee',
-		13, // schema_v 13: preferred_zone (CR-159); 12: gender nullable + registered_via `api` (CR-154); 11: religion_other + disability_other_detail (CR-148); 10: anonymous cardType + ANON mint (CR-112); 9: arriving (CR-106); 8: draft/card_snapshot (CR-084); 7 = registered_via `web` (CR-070); 6 = stay cancelled (CR-070); 5 = age (CR-057)
+		14, // schema_v 14: booking_ref (CR-169); 13: preferred_zone (CR-159); 12: gender nullable + registered_via `api` (CR-154); 11: religion_other + disability_other_detail (CR-148); 10: anonymous cardType + ANON mint (CR-112); 9: arriving (CR-106); 8: draft/card_snapshot (CR-084); 7 = registered_via `web` (CR-070); 6 = stay cancelled (CR-070); 5 = age (CR-057)
 		{
 			first_name: d.first_name,
 			last_name: d.last_name,
@@ -1537,6 +1545,7 @@ export function createEvacuee(input: EvacueeInput, ctx: AuthorContext, id?: stri
 			household_id: d.household_id,
 			current_stay: { status: d.zone ? 'active' : d.status, zone: d.zone ?? null, since: now() },
 			...(d.preferred_zone ? { preferred_zone: d.preferred_zone } : {}),
+			...(d.booking_ref ? { booking_ref: d.booking_ref } : {}),
 			privacy: { search_excluded: false },
 			registered_via: d.registered_via
 		},

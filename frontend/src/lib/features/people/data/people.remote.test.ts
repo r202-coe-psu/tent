@@ -2598,3 +2598,58 @@ describe('kiosk walk-in household at Station 1', () => {
 		expect((await repo.getHousehold(householdId))?.status).toBe('cancelled');
 	});
 });
+
+describe('evacuee booking_ref survives household writes (CR-169 FR-62)', () => {
+	let repo: PeopleRemoteRepository;
+
+	beforeEach(() => {
+		memoryRepo = createInMemoryRepository();
+		repo = new PeopleRemoteRepository('shelter_sh001');
+	});
+
+	const householdInput = (label: string) => ({
+		label,
+		head_evacuee_id: null,
+		status: 'pre_registered' as const,
+		municipality_zone: null,
+		community: null,
+		pets: [],
+		vehicles: []
+	});
+
+	it('keeps booking_ref through updateEvacuee with a spread of the caller doc', async () => {
+		const ev = await repo.createEvacuee(evInput({ booking_ref: 'BK-01TEST' }), ctx);
+		const hh = await repo.createHousehold(householdInput('บ้านหนึ่ง'), ctx);
+
+		const saved = await repo.updateEvacuee({ ...ev, household_id: hh._id });
+
+		expect(saved.household_id).toBe(hh._id);
+		expect(saved.booking_ref).toBe('BK-01TEST');
+		expect((await repo.getEvacuee(ev._id))?.booking_ref).toBe('BK-01TEST');
+	});
+
+	it('keeps booking_ref through patchEvacuee', async () => {
+		const ev = await repo.createEvacuee(evInput({ booking_ref: 'BK-01TEST' }), ctx);
+		const hh = await repo.createHousehold(householdInput('บ้านสอง'), ctx);
+
+		await repo.patchEvacuee(ev._id, { household_id: hh._id });
+		await repo.patchEvacuee(ev._id, { first_name: 'ชื่อใหม่' });
+
+		const saved = await repo.getEvacuee(ev._id);
+		expect(saved?.household_id).toBe(hh._id);
+		expect(saved?.booking_ref).toBe('BK-01TEST');
+	});
+
+	it('keeps booking_ref through mergeHouseholds', async () => {
+		const ev = await repo.createEvacuee(evInput({ booking_ref: 'BK-01TEST' }), ctx);
+		const source = await repo.createHousehold(householdInput('ต้นทาง'), ctx);
+		const target = await repo.createHousehold(householdInput('ปลายทาง'), ctx);
+		await repo.updateEvacuee({ ...ev, household_id: source._id });
+
+		const { mergedMembers } = await repo.mergeHouseholds(source._id, target._id, ctx);
+
+		expect(mergedMembers.map((m) => m._id)).toContain(ev._id);
+		expect((await repo.getEvacuee(ev._id))?.booking_ref).toBe('BK-01TEST');
+		expect(mergedMembers.find((m) => m._id === ev._id)?.booking_ref).toBe('BK-01TEST');
+	});
+});
