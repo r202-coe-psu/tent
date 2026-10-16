@@ -30,7 +30,8 @@ const input: KioskBannerInput = {
 	duration_sec: 10,
 	start_at: '2026-10-01T00:00:00.000Z',
 	end_at: '2026-11-01T00:00:00.000Z',
-	status: 'active'
+	status: 'active',
+	screen_type: 'compact'
 };
 const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 1, 2, 3]);
 const pngBase64 = Buffer.from(png).toString('base64');
@@ -127,6 +128,17 @@ describe('updateBanner', () => {
 		expect(record._rev).toBe('2-b');
 		expect(record.image_content_type).toBe('image/jpeg');
 		expect(record).not.toHaveProperty('_attachments');
+	});
+
+	it('writes screen_type, moving a legacy banner to portrait', async () => {
+		adminRawMock.mockResolvedValueOnce({ status: 200, data: existingDoc() }).mockResolvedValueOnce({
+			status: 201,
+			data: { ok: true, id: 'kiosk_banner:b1', rev: '2-b' }
+		});
+
+		await updateBanner('kiosk_banner:b1', '1-a', { ...input, screen_type: 'portrait' }, null, NOW);
+
+		expect(adminRawMock.mock.calls[1][2]).toMatchObject({ screen_type: 'portrait' });
 	});
 
 	it('inlines the new image when one is given', async () => {
@@ -272,13 +284,56 @@ describe('listActiveForShelter', () => {
 		];
 		adminRawMock.mockResolvedValue({ status: 200, data: { docs } });
 
-		const records = await listActiveForShelter('SH1', NOW);
+		const records = await listActiveForShelter('SH1', NOW, 'compact');
 
 		expect(records).toHaveLength(20);
 		expect(records.map((r) => r.order)).toEqual(Array.from({ length: 20 }, (_, i) => i + 1));
 		expect(records.some((r) => ['off', 'future', 'expired'].some((k) => r._id.endsWith(k)))).toBe(
 			false
 		);
+	});
+});
+
+describe('listActiveForShelter by screen type', () => {
+	it('returns only the requested screen type, a legacy doc counting as compact', async () => {
+		adminRawMock.mockResolvedValue({
+			status: 200,
+			data: {
+				docs: [
+					existingDoc({ _id: 'kiosk_banner:legacy' }),
+					existingDoc({ _id: 'kiosk_banner:c', screen_type: 'compact' }),
+					existingDoc({ _id: 'kiosk_banner:p', screen_type: 'portrait' })
+				]
+			}
+		});
+
+		const compact = await listActiveForShelter('SH1', NOW, 'compact');
+		const portrait = await listActiveForShelter('SH1', NOW, 'portrait');
+
+		expect(compact.map((r) => r._id).sort()).toEqual(['kiosk_banner:c', 'kiosk_banner:legacy']);
+		expect(portrait.map((r) => r._id)).toEqual(['kiosk_banner:p']);
+	});
+
+	it('applies the cap of 20 after filtering by screen type', async () => {
+		const docs = [
+			...Array.from({ length: 5 }, (_, i) =>
+				existingDoc({ _id: `kiosk_banner:c-${i}`, order: 1, screen_type: 'compact' })
+			),
+			...Array.from({ length: 22 }, (_, i) =>
+				existingDoc({
+					_id: `kiosk_banner:p-${String(i).padStart(2, '0')}`,
+					order: 2 + i,
+					screen_type: 'portrait'
+				})
+			)
+		];
+		adminRawMock.mockResolvedValue({ status: 200, data: { docs } });
+
+		const portrait = await listActiveForShelter('SH1', NOW, 'portrait');
+
+		expect(portrait).toHaveLength(20);
+		expect(portrait.every((r) => r._id.startsWith('kiosk_banner:p-'))).toBe(true);
+		expect(await listActiveForShelter('SH1', NOW, 'compact')).toHaveLength(5);
 	});
 });
 

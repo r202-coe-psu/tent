@@ -30,7 +30,7 @@ export const POST: RequestHandler = async ({ request }) => {
 				{ status: 200, headers: noStoreHeaders }
 			);
 		}
-		const banners = await listActiveForShelter(principal.shelter_code, now);
+		const banners = await listActiveForShelter(principal.shelter_code, now, principal.screen_type);
 		return json(
 			{
 				banners: banners.map((banner) => ({

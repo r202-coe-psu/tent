@@ -191,6 +191,31 @@ describe('POST /api/back-office/kiosk-banners (FR-KBR-02/04/11)', () => {
 		}
 	});
 
+	it('passes screen_type through, defaulting to compact', async () => {
+		await post('?shelter_code=SH001', { ...input, image, screen_type: 'portrait' });
+		expect(mockCreate).toHaveBeenLastCalledWith(
+			expect.objectContaining({ screen_type: 'portrait' }),
+			expect.anything(),
+			expect.anything()
+		);
+		await post('?shelter_code=SH001', { ...input, image });
+		expect(mockCreate).toHaveBeenLastCalledWith(
+			expect.objectContaining({ screen_type: 'compact' }),
+			expect.anything(),
+			expect.anything()
+		);
+	});
+
+	it('returns 422 for an unknown screen_type', async () => {
+		const response = await post('?shelter_code=SH001', {
+			...input,
+			image,
+			screen_type: 'landscape'
+		});
+		expect(response.status).toBe(422);
+		expect(mockCreate).not.toHaveBeenCalled();
+	});
+
 	it('returns 422 when the body carries shelter_code', async () => {
 		const response = await post('?shelter_code=SH001', { ...input, image, shelter_code: 'SH002' });
 		expect(response.status).toBe(422);

@@ -62,7 +62,7 @@ describe('POST /api/v1/kiosk/banners', () => {
 		mockEnv.EXTERNAL_API_SECRET = 'test-banner-secret';
 		mockAuthenticate.mockImplementation(async (deviceId) => {
 			if (!deviceId) throw new ScannerAuthError();
-			return { shelter_code: 'SH001' } as never;
+			return { shelter_code: 'SH001', screen_type: 'compact' } as never;
 		});
 		mockList.mockResolvedValue([record('banner-1'), record('banner-2', { caption: undefined })]);
 	});
@@ -115,7 +115,7 @@ describe('POST /api/v1/kiosk/banners', () => {
 			/^\/api\/v1\/kiosk\/banners\/banner-1\/image\?exp=\d+&sig=[0-9a-f]{64}$/
 		);
 		expect(body.banners[1].caption).toBeNull();
-		expect(mockList).toHaveBeenCalledWith('SH001', NOW);
+		expect(mockList).toHaveBeenCalledWith('SH001', NOW, 'compact');
 		expect(response.headers.get('cache-control')).toBe('no-store');
 		expect(response.headers.get('pragma')).toBe('no-cache');
 	});
@@ -124,7 +124,21 @@ describe('POST /api/v1/kiosk/banners', () => {
 		await POST(request({ shelter_code: 'SH999' }, deviceHeaders, '?shelter_code=SH998'));
 
 		expect(mockList).toHaveBeenCalledTimes(1);
-		expect(mockList).toHaveBeenCalledWith('SH001', NOW);
+		expect(mockList).toHaveBeenCalledWith('SH001', NOW, 'compact');
+	});
+
+	it('lists banners for the device screen type', async () => {
+		mockAuthenticate.mockResolvedValueOnce({
+			shelter_code: 'SH001',
+			screen_type: 'portrait'
+		} as never);
+
+		const response = await POST(request({}, deviceHeaders));
+
+		expect(response.status).toBe(200);
+		expect(mockList).toHaveBeenCalledWith('SH001', NOW, 'portrait');
+		const body = await response.json();
+		expect(Object.keys(body.banners[0])).not.toContain('screen_type');
 	});
 
 	it('returns 401 without reading banners when authentication fails', async () => {

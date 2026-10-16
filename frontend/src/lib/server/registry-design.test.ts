@@ -11,6 +11,7 @@ describe('registry shelter lookup design', () => {
 		const design = buildRegistryDesignDoc();
 
 		expect(design.version).toBe(REGISTRY_DESIGN_VERSION);
+		expect(REGISTRY_DESIGN_VERSION).toBe(7);
 		expect(design.views.by_normalized_name.map).toContain("doc.type === 'shelter'");
 		expect(design.views.by_normalized_name.map).toContain("replace(/\\s+/g, ' ')");
 	});
@@ -103,11 +104,20 @@ describe('registry kiosk_banner validate_doc_update', () => {
 		['fractional duration_sec', { duration_sec: 5.5 }],
 		['string duration_sec', { duration_sec: '10' }],
 		['unknown status', { status: 'draft' }],
-		['missing status', { status: undefined }]
+		['missing status', { status: undefined }],
+		['unknown screen_type', { screen_type: 'landscape' }],
+		['null screen_type', { screen_type: null }],
+		['numeric screen_type', { screen_type: 1 }]
 	])('rejects %s', (_label, overrides) => {
 		expect(() => runVdu(validBanner(overrides))).toThrow(
 			expect.objectContaining({ forbidden: expect.any(String) })
 		);
+	});
+
+	it('accepts compact, portrait and an absent screen_type', () => {
+		for (const screen_type of ['compact', 'portrait', undefined]) {
+			expect(() => runVdu(validBanner({ screen_type }))).not.toThrow();
+		}
 	});
 
 	it('accepts boundary order/duration and inactive status', () => {

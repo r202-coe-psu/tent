@@ -2,12 +2,14 @@ import { adminRaw, ServiceError } from '$lib/server/couch-admin';
 import {
 	createKioskBanner,
 	isActiveAt,
+	matchesScreen,
 	sortBanners,
 	type KioskBannerContext,
 	type KioskBannerDoc,
 	type KioskBannerImageMime,
 	type KioskBannerInput
 } from '$lib/features/kiosk-banners';
+import type { KioskScreenType } from '$lib/features/shared';
 
 const REGISTRY_DB = 'registry';
 const IMAGE_ATTACHMENT = 'image';
@@ -115,11 +117,11 @@ export function updateBanner(
 	image: DecodedBannerImage | null,
 	now: Date = new Date()
 ): Promise<KioskBannerRecord> {
-	const { title, caption, order, duration_sec, start_at, end_at, status } = input;
+	const { title, caption, order, duration_sec, start_at, end_at, status, screen_type } = input;
 	return mutate(
 		id,
 		rev,
-		{ title, caption, order, duration_sec, start_at, end_at, status },
+		{ title, caption, order, duration_sec, start_at, end_at, status, screen_type },
 		image,
 		now
 	);
@@ -181,10 +183,14 @@ export async function listBannersForShelter(shelterCode: string): Promise<KioskB
 
 export async function listActiveForShelter(
 	shelterCode: string,
-	now: Date
+	now: Date,
+	screenType: KioskScreenType
 ): Promise<KioskBannerRecord[]> {
 	const all = await listBannersForShelter(shelterCode);
-	return sortBanners(all.filter((b) => isActiveAt(b, now))).slice(0, ACTIVE_CAP);
+	return sortBanners(all.filter((b) => matchesScreen(b, screenType) && isActiveAt(b, now))).slice(
+		0,
+		ACTIVE_CAP
+	);
 }
 
 export async function getBannerImage(

@@ -18,7 +18,7 @@ export const REGISTRY_DESIGN_ID = '_design/app';
  * Bump when a view or the registry write policy changes so deployers can tell a
  * stale design doc from a current one without diffing every function body.
  */
-export const REGISTRY_DESIGN_VERSION = 6;
+export const REGISTRY_DESIGN_VERSION = 7;
 
 export interface RegistryDesignDoc {
 	_id: string;
@@ -70,6 +70,13 @@ export function buildRegistryValidateDocUpdate(): string {
     }
     if (newDoc.status !== 'active' && newDoc.status !== 'inactive') {
       throw({ forbidden: 'kiosk_banner status must be active or inactive' });
+    }
+    if (
+      newDoc.screen_type !== undefined &&
+      newDoc.screen_type !== 'compact' &&
+      newDoc.screen_type !== 'portrait'
+    ) {
+      throw({ forbidden: 'kiosk_banner screen_type must be compact or portrait' });
     }
     var startMs = typeof newDoc.start_at === 'string' ? Date.parse(newDoc.start_at) : NaN;
     var endMs = typeof newDoc.end_at === 'string' ? Date.parse(newDoc.end_at) : NaN;

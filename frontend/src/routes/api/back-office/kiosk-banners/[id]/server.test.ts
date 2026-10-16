@@ -190,6 +190,25 @@ describe('/api/back-office/kiosk-banners/[id] (FR-KBR-10/12/13)', () => {
 			);
 		});
 
+		it('passes screen_type to updateBanner and rejects an unknown one', async () => {
+			const response = await call(PUT, 'PUT', {
+				body: { ...fields, _rev: '1-a', screen_type: 'portrait' }
+			});
+			expect(response.status).toBe(200);
+			expect(mockUpdate).toHaveBeenCalledWith(
+				DOC_ID,
+				'1-a',
+				expect.objectContaining({ screen_type: 'portrait' }),
+				null
+			);
+			mockUpdate.mockClear();
+			const bad = await call(PUT, 'PUT', {
+				body: { ...fields, _rev: '1-a', screen_type: 'landscape' }
+			});
+			expect(bad.status).toBe(422);
+			expect(mockUpdate).not.toHaveBeenCalled();
+		});
+
 		it('keeps the current image when image is omitted (FR-KBR-05)', async () => {
 			await send.PUT();
 			expect(mockUpdate).toHaveBeenCalledWith(DOC_ID, '1-a', expect.any(Object), null);
