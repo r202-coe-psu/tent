@@ -10,15 +10,19 @@ sweeper drops groups the API never finished committing (FR-33).
 from __future__ import annotations
 
 import asyncio
+import copy
+import json
 import logging
 import re
 from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock
 
+import httpx
 import pytest
 from tent_model import ExternalBooking
 
 import worker.inbound.external_bookings as inbound
+from worker.couch.client import CouchClient
 from worker.inbound.external_bookings import (
     BACKOFF_BASE_SECONDS,
     BACKOFF_MAX_SECONDS,
@@ -124,6 +128,23 @@ def _bulk_ok(_database, docs):
     return [{"ok": True, "id": doc["_id"], "rev": "1-x"} for doc in docs]
 
 
+def _fake_update_doc(couch):
+    """`CouchClient.update_doc` on top of the mock's `get_doc` / `put_doc` (no conflicts;
+    the real conflict handling is covered with `_FakeCouch` and in test_couch_client)."""
+
+    async def update_doc(database, doc_id, mutate, **_kwargs):
+        current = await couch.get_doc(database, doc_id)
+        if current is None:
+            return None
+        changed = await mutate(current)
+        if changed is None:
+            return None
+        await couch.put_doc(database, changed)
+        return changed
+
+    return update_doc
+
+
 def _couch(*, exists=True, find=None, written=None, bulk=None, doc=None):
     """`find` = duplicate hits; `written` = hits for the "already in Couch?" id probe."""
     couch = MagicMock()
@@ -142,6 +163,7 @@ def _couch(*, exists=True, find=None, written=None, bulk=None, doc=None):
     )
     couch.get_doc = AsyncMock(return_value=doc)
     couch.put_doc = AsyncMock(return_value={"ok": True})
+    couch.update_doc = AsyncMock(side_effect=_fake_update_doc(couch))
     return couch
 
 
@@ -405,24 +427,52 @@ async def test_group_stops_when_one_row_cancelled_before_reserve(db):
         assert row["cid"] == _cid(index)
 
 
-async def test_cancelled_during_write_is_routed_to_cancel(db):
+async def test_cancelled_during_write_cancels_the_stay_and_stays_cancelled(db):
+    """Review R3/G4: the row the API cancelled mid-write is not re-opened as `written` +
+    `cancel_requested`; its fresh stay is cancelled right away and the row stays cancelled."""
     await _insert()
-    couch = _couch()
+    couch, store = _stored_couch()
+    real_bulk = couch.bulk_docs.side_effect
 
-    async def bulk_then_api_cancels(_database, docs):
+    async def bulk_then_api_cancels(database, docs):
+        result = await real_bulk(database, docs)
         await _api_cancel_pending()
-        return _bulk_ok(_database, docs)
+        return result
 
     couch.bulk_docs = AsyncMock(side_effect=bulk_then_api_cancels)
 
     assert await _persist_group(couch, BOOKING_ID) is True
 
     row = await _row()
-    assert row["state"] == "written"
-    assert row["cancel_requested"] is True
+    assert row["state"] == "cancelled"
+    assert row["cancel_requested"] is False
     assert row["cancel_reason"] == "partner cancel"
     assert row["evacuee_id"].startswith("evacuee:")
     _assert_pii_cleared(row)
+    assert store[row["evacuee_id"]]["current_stay"]["status"] == "cancelled"
+    assert store[row["household_id"]]["status"] == "cancelled"
+    assert BOOKING_ID not in {b.id for b in await _find_due()}
+
+
+async def test_cancelled_during_write_with_a_checked_in_evacuee_is_left_alone(db):
+    await _insert()
+    couch, store = _stored_couch()
+    real_bulk = couch.bulk_docs.side_effect
+
+    async def bulk_then_cancel_and_check_in(database, docs):
+        result = await real_bulk(database, docs)
+        await _api_cancel_pending()
+        evacuee = next(d for d in store.values() if d["type"] == "evacuee")
+        evacuee["current_stay"]["status"] = "active"
+        return result
+
+    couch.bulk_docs = AsyncMock(side_effect=bulk_then_cancel_and_check_in)
+
+    assert await _persist_group(couch, BOOKING_ID) is True
+
+    assert (await _row())["state"] == "cancelled"
+    evacuee = next(d for d in store.values() if d["type"] == "evacuee")
+    assert evacuee["current_stay"]["status"] == "active"
 
 
 # ---------------------------------------------------------------- duplicates
@@ -555,23 +605,139 @@ async def test_retry_after_partial_write_with_every_pending_person_duplicated(db
         _assert_pii_cleared(row)
 
 
-async def test_partial_retry_never_rejects_a_person_whose_docs_are_already_in_couch(db):
-    """Crash after the bulk write, before any row transition: both persons already live in
-    CouchDB. Person 0's CID is also held elsewhere, but rejecting the row would leave a
-    live pre-registration behind it — only person 1 (not in Couch) may be rejected."""
+def _live_holders(store: dict[str, dict], cid: str) -> list[str]:
+    return [
+        doc["_id"]
+        for doc in store.values()
+        if doc.get("type") == "evacuee"
+        and (doc.get("person_id") or {}).get("number") == cid
+        and doc["current_stay"]["status"] in HOLD_STATUSES
+    ]
+
+
+def _evacuee_doc(index: int, cid: str, status: str = "pre_registered") -> dict:
+    doc = _stay_docs(index, status=status)[0]
+    doc["person_id"] = {"cardType": "national_id", "number": cid}
+    return doc
+
+
+def _fr50_couch(initial):
+    """`_stored_couch` whose `find` also answers the duplicate / probe queries like Mango."""
+    couch, store = _stored_couch(initial)
+    members_find = couch.find.side_effect
+
+    async def find(database, selector, **kwargs):
+        if "$in" in selector.get("_id", {}):
+            return [{"_id": i} for i in selector["_id"]["$in"] if i in store]
+        if "person_id.number" in selector:
+            asked = selector["person_id.number"]["$in"]
+            own = selector["_id"]["$nin"]
+            return [
+                {"_id": d["_id"], "person_id": d["person_id"]}
+                for d in store.values()
+                if d.get("type") == "evacuee"
+                and d["_id"] not in own
+                and d.get("person_id", {}).get("number") in asked
+                and d["current_stay"]["status"]
+                in selector["current_stay.status"]["$in"]
+            ][: kwargs.get("limit", 25)]
+        return await members_find(database, selector, **kwargs)
+
+    couch.find = AsyncMock(side_effect=find)
+    return couch, store
+
+
+async def test_in_couch_pending_row_with_a_duplicated_cid_is_rejected_and_its_stay_cancelled(
+    db, caplog
+):
+    """CR-169 D4 (review R3/G2): crash after the bulk write, before any row transition —
+    persons 0 and 1 are in CouchDB, still pending. Person 0's CID is now also held by
+    someone else: reject person 0 and cancel the stay that is already in CouchDB (FR-50),
+    write person 1 (its docs already exist, so the bulk write reports a conflict = written)."""
+    caplog.set_level(logging.INFO)
     await _insert_group(2)
     for index in (0, 1):
         await _reserve(index)
-    couch = _dup_couch(
-        {_cid(0): 1, _cid(1): 1}, in_couch=["household:H0", "evacuee:E0"]
+    other = _evacuee_doc(9, _cid(0))
+    couch, store = _fr50_couch(
+        [
+            *_stay_docs(0),
+            *_stay_docs(1),
+            other,
+        ]
     )
+    store["evacuee:E0"]["person_id"] = {"number": _cid(0)}
+    store["evacuee:E1"]["person_id"] = {"number": _cid(1)}
 
     assert await _persist_group(couch, BOOKING_ID) is True
 
-    _, docs = couch.bulk_docs.await_args.args
-    assert [d["_id"] for d in docs] == ["household:H0", "evacuee:E0"]
-    assert (await _row(_row_id(0)))["state"] == "written"
-    assert (await _row(_row_id(1)))["state"] == "rejected"
+    rejected = await _row(_row_id(0))
+    assert (rejected["state"], rejected["reject_reason"]) == ("rejected", "duplicate")
+    _assert_pii_cleared(rejected)
+    assert store["evacuee:E0"]["current_stay"]["status"] == "cancelled"
+    assert store["household:H0"]["status"] == "cancelled"
+    assert any(
+        d.get("type") == "audit" and d["target_id"] == "evacuee:E0"
+        for d in store.values()
+    )
+    written = await _row(_row_id(1))
+    assert written["state"] == "written"
+    _assert_pii_cleared(written)
+    assert store["evacuee:E1"]["current_stay"]["status"] == "pre_registered"
+    # FR-50 end state: the CID has exactly one live holder, and it is not ours.
+    assert _live_holders(store, _cid(0)) == [other["_id"]]
+    assert _live_holders(store, _cid(1)) == ["evacuee:E1"]
+    _assert_no_pii_logged(caplog.text)
+
+    # Idempotent: a further pass changes nothing.
+    snapshot = {key: dict(doc) for key, doc in store.items()}
+    assert await _persist_group(couch, BOOKING_ID) is True
+    assert store == snapshot
+
+
+async def test_in_couch_row_cancelled_by_the_api_while_duplicated_is_not_rejected(db):
+    """The CAS on `pending` fails for a row the API cancelled first; it stays cancelled."""
+    await _insert_group(2)
+    for index in (0, 1):
+        await _reserve(index)
+    couch, store = _fr50_couch(
+        [*_stay_docs(0), *_stay_docs(1), _evacuee_doc(9, _cid(0))]
+    )
+    store["evacuee:E0"]["person_id"] = {"number": _cid(0)}
+    real_find = couch.find.side_effect
+
+    async def find_then_api_cancels(database, selector, **kwargs):
+        hits = await real_find(database, selector, **kwargs)
+        if "person_id.number" in selector:
+            await _api_cancel_pending(_row_id(0))
+        return hits
+
+    couch.find = AsyncMock(side_effect=find_then_api_cancels)
+
+    assert await _persist_group(couch, BOOKING_ID) is True
+
+    row = await _row(_row_id(0))
+    assert (row["state"], row["reject_reason"]) == ("cancelled", None)
+
+
+async def test_failed_stay_cancel_of_a_rejected_in_couch_row_is_logged_by_id_only(
+    db, caplog
+):
+    await _insert_group(2)
+    for index in (0, 1):
+        await _reserve(index)
+    couch, store = _fr50_couch(
+        [*_stay_docs(0), *_stay_docs(1), _evacuee_doc(9, _cid(0))]
+    )
+    store["evacuee:E0"]["person_id"] = {"number": _cid(0)}
+    couch.update_doc = AsyncMock(side_effect=ValueError(_LEAK))
+
+    assert await _persist_group(couch, BOOKING_ID) is True  # the pass itself goes on
+
+    assert (await _row(_row_id(0)))["state"] == "rejected"
+    assert (await _row(_row_id(1)))["state"] == "written"
+    assert "Could not cancel evacuee" in caplog.text and "ValueError" in caplog.text
+    _assert_no_pii_logged(caplog.text)
 
 
 async def test_duplicate_rejects_the_whole_group_when_nothing_reached_couch(db):
@@ -968,6 +1134,16 @@ def _evacuee(status: str) -> dict:
     }
 
 
+def _docs_by_id(*docs):
+    by_id = {doc["_id"]: doc for doc in docs}
+
+    async def get_doc(_database, doc_id):
+        doc = by_id.get(doc_id)
+        return dict(doc) if doc else None
+
+    return get_doc
+
+
 async def _insert_written() -> ExternalBooking:
     return await _insert(
         state="written",
@@ -991,7 +1167,9 @@ async def test_cancel_pre_registered_evacuee(db):
         "status": "pre_registered",
     }
     couch = _couch()
-    couch.get_doc = AsyncMock(side_effect=[_evacuee("pre_registered"), household])
+    couch.get_doc = AsyncMock(
+        side_effect=_docs_by_id(_evacuee("pre_registered"), household)
+    )
     couch.find = AsyncMock(return_value=[{"_id": "evacuee:E1", "current_stay": {}}])
 
     assert await _process_cancel(couch, booking) is True
@@ -1021,7 +1199,9 @@ async def test_cancel_keeps_household_when_other_member_pre_registered(db):
         "shelter_code": "SH001",
     }
     couch = _couch()
-    couch.get_doc = AsyncMock(side_effect=[_evacuee("pre_registered"), household])
+    couch.get_doc = AsyncMock(
+        side_effect=_docs_by_id(_evacuee("pre_registered"), household)
+    )
     couch.find = AsyncMock(
         return_value=[
             {"_id": "evacuee:E1", "current_stay": {"status": "pre_registered"}},
@@ -1746,6 +1926,289 @@ async def test_incomplete_group_is_not_backed_off(db, clock):
     assert await _persist_group(_couch(), BOOKING_ID, health=tracker) is False
 
     assert tracker.ready(f"group:{BOOKING_ID}")
+
+
+# R3/G1: the backoff can never overflow or kill the loop -----------------
+
+
+def test_failure_tracker_never_overflows_however_often_a_key_fails(clock):
+    tracker = FailureTracker()
+
+    for _ in range(1100):  # `2 ** (count - 1)` overflowed a float at attempt 1025
+        count, delay = tracker.failed("group:forever")
+
+    assert (count, delay) == (1100, BACKOFF_MAX_SECONDS)
+    assert not tracker.ready("group:forever")
+
+
+def test_failure_tracker_stops_counting_at_its_cap(clock, monkeypatch):
+    monkeypatch.setattr(inbound, "_MAX_TRACKED_FAILURES", 50)
+    tracker = FailureTracker()
+
+    results = [tracker.failed("group:forever") for _ in range(80)]
+
+    assert results[-1] == (50, BACKOFF_MAX_SECONDS)
+
+
+async def test_a_group_failing_over_a_thousand_times_keeps_the_poll_alive(
+    db, monkeypatch, clock
+):
+    await _insert_group(1, booking_id="BK-BAD")
+    await _insert(
+        id="BP-ok",
+        booking_id="BK-OK",
+        cid_hash="hok",
+        cid="1103700099999",
+        person_seq=0,
+    )
+    due = await _find_due()
+    seen: list[str] = []
+
+    async def persist(_couch, booking_id, **_kwargs):
+        if booking_id == "BK-BAD":
+            raise ValueError("boom")
+        seen.append(booking_id)
+        return True
+
+    monkeypatch.setattr(inbound, "_persist_group", persist)
+    tracker = FailureTracker()
+
+    for _ in range(1100):
+        clock[0] += BACKOFF_MAX_SECONDS  # the retry is due again on every pass
+        await inbound._run_poll(_couch(), due, tracker, asyncio.Event())
+
+    assert seen == ["BK-OK"] * 1100  # the healthy group was served on every pass
+
+
+async def test_a_failing_health_tracker_cannot_escape_the_poll(db, monkeypatch, caplog):
+    await _insert_group(1, booking_id="BK-BAD")
+    await _insert_written_group(1, prefix="W", booking_id="BK-CANCEL")
+    due = await _find_due()
+    monkeypatch.setattr(
+        inbound, "_persist_group", AsyncMock(side_effect=ValueError("boom"))
+    )
+    monkeypatch.setattr(
+        inbound, "_process_cancel", AsyncMock(side_effect=ValueError("boom"))
+    )
+    tracker = FailureTracker()
+    monkeypatch.setattr(tracker, "failed", MagicMock(side_effect=OverflowError("x")))
+
+    await inbound._run_poll(_couch(), due, tracker, asyncio.Event())  # must not raise
+
+    assert caplog.text.count("Could not record failure") == 2
+
+
+async def test_loop_survives_a_poll_pass_that_raises(db, monkeypatch, caplog):
+    """No single failure of a pass may kill the task: the sweeper and later polls go on."""
+    await _insert()
+    real_run_poll = inbound._run_poll
+    passes = [0]
+
+    async def run_poll(*args, **kwargs):
+        passes[0] += 1
+        if passes[0] == 1:
+            raise OverflowError(_LEAK)
+        await real_run_poll(*args, **kwargs)
+
+    monkeypatch.setattr(inbound, "_run_poll", run_poll)
+
+    await inbound.run_external_booking_inbound_loop(
+        _couch(), stop_event=_stop_after_polls(monkeypatch, 3)
+    )
+
+    assert passes[0] >= 3
+    assert (await _row())["state"] == "written"  # a later pass still wrote the booking
+    assert "OverflowError" in caplog.text
+    _assert_no_pii_logged(caplog.text)
+    assert "Traceback" not in caplog.text
+
+
+# R3/G7: R1 reached-probe failure backs off (mutation M6) -----------------
+
+
+async def test_failed_reached_probe_of_a_half_rejected_group_is_backed_off_and_logged_once(
+    db, monkeypatch, clock, caplog
+):
+    await _insert_group(2)
+    await _api_update(
+        {"state": "pending"},
+        {"state": "rejected", "reject_reason": "duplicate", **dict.fromkeys(PII)},
+        _row_id(0),
+    )
+    await _reserve(1)  # the probe asks for reserved ids of the pending rows
+    couch = _couch()
+    couch.find = AsyncMock(side_effect=ValueError(_LEAK))
+
+    await _poll(couch, monkeypatch, 5)
+
+    assert couch.find.await_count == 1  # polls 2-5 fall inside the backoff window
+    assert caplog.text.count("Duplicate check failed") == 1
+    assert (await _row(_row_id(1)))["state"] == "pending"
+    couch.bulk_docs.assert_not_awaited()
+    _assert_no_pii_logged(caplog.text)
+
+    clock[0] += BACKOFF_MAX_SECONDS
+    await _poll(couch, monkeypatch, 1)
+    assert couch.find.await_count == 2  # due again after the backoff
+
+
+# R3/G3: a 409 must not overwrite a concurrent staff change ---------------
+
+
+class _FakeCouch:
+    """In-memory CouchDB behind `httpx.MockTransport`: GET/PUT with real `_rev` checks
+    (409 on a stale one) and `_find` for household members. `before_put` lets a test play
+    staff writing in between the worker's read and its write."""
+
+    def __init__(self, docs):
+        self.docs = {doc["_id"]: copy.deepcopy(doc) for doc in docs}
+        self.revs = {doc_id: 1 for doc_id in self.docs}
+        self.before_put: dict[str, object] = {}
+        self.puts: list[str] = []
+
+    def rev(self, doc_id):
+        return f"{self.revs[doc_id]}-x"
+
+    def staff_writes(self, doc_id, **changes):
+        self.docs[doc_id].update(changes)
+        self.revs[doc_id] += 1
+
+    def client(self) -> CouchClient:
+        settings = MagicMock(
+            couch_base_url="http://couch:5984", couchdb_user="a", couchdb_password="b"
+        )
+        client = CouchClient(settings)
+        client._client = httpx.AsyncClient(
+            base_url="http://couch:5984", transport=httpx.MockTransport(self.handle)
+        )
+        return client
+
+    def handle(self, request: httpx.Request) -> httpx.Response:
+        parts = request.url.path.strip("/").split("/", 1)
+        if len(parts) == 1:
+            return httpx.Response(200, json={"db_name": parts[0]})
+        doc_id = parts[1]
+        if doc_id == "_find":
+            body = json.loads(request.content)
+            household = body["selector"]["household_id"]
+            docs = [
+                d
+                for d in self.docs.values()
+                if d.get("type") == "evacuee" and d.get("household_id") == household
+            ]
+            return httpx.Response(200, json={"docs": copy.deepcopy(docs)})
+        if request.method == "GET":
+            if doc_id not in self.docs:
+                return httpx.Response(404, json={"error": "not_found"})
+            return httpx.Response(
+                200, json={**copy.deepcopy(self.docs[doc_id]), "_rev": self.rev(doc_id)}
+            )
+        hook = self.before_put.pop(doc_id, None)
+        if hook:
+            hook()
+        body = json.loads(request.content)
+        if doc_id in self.docs and body.get("_rev") != self.rev(doc_id):
+            return httpx.Response(409, json={"error": "conflict"})
+        self.puts.append(doc_id)
+        self.revs[doc_id] = self.revs.get(doc_id, 0) + 1
+        self.docs[doc_id] = {k: v for k, v in body.items() if k != "_rev"}
+        return httpx.Response(
+            201, json={"ok": True, "id": doc_id, "rev": self.rev(doc_id)}
+        )
+
+
+async def _fake_couch_with_stay(
+    status="pre_registered",
+) -> tuple[_FakeCouch, CouchClient]:
+    fake = _FakeCouch(_stay_docs(1, status=status))
+    return fake, fake.client()
+
+
+async def test_conflict_with_a_concurrent_staff_check_in_does_not_overwrite_the_stay(
+    db,
+):
+    booking = await _insert_written()
+    fake, couch = await _fake_couch_with_stay()
+    fake.before_put["evacuee:E1"] = lambda: fake.staff_writes(
+        "evacuee:E1", current_stay={"status": "active", "zone": "A", "since": "now"}
+    )
+
+    assert await _process_cancel(couch, booking) is False  # re-checked next poll
+
+    assert fake.docs["evacuee:E1"]["current_stay"]["status"] == "active"
+    assert "evacuee:E1" not in fake.puts
+    assert fake.docs["household:H1"]["status"] == "pre_registered"
+    row = await _row()
+    assert (row["state"], row["cancel_requested"]) == ("written", True)
+
+    # The next poll reads the checked-in evacuee: nothing to cancel any more.
+    assert await _process_cancel(couch, booking) is True
+    row = await _row()
+    assert (row["state"], row["reject_reason"]) == ("written", "not_cancellable")
+    assert fake.docs["evacuee:E1"]["current_stay"]["status"] == "active"
+    await couch.close()
+
+
+async def test_conflict_with_an_unrelated_change_applies_the_cancel_on_the_fresh_doc(
+    db,
+):
+    booking = await _insert_written()
+    fake, couch = await _fake_couch_with_stay()
+    fake.before_put["evacuee:E1"] = lambda: fake.staff_writes(
+        "evacuee:E1", phone="0899999999"
+    )
+
+    assert await _process_cancel(couch, booking) is True
+
+    evacuee = fake.docs["evacuee:E1"]
+    assert evacuee["current_stay"]["status"] == "cancelled"
+    assert evacuee["phone"] == "0899999999"  # staff's change survived the retry
+    assert fake.docs["household:H1"]["status"] == "cancelled"
+    assert (await _row())["state"] == "cancelled"
+    await couch.close()
+
+
+async def test_household_conflict_with_a_member_moved_in_is_not_cancelled(db):
+    """Staff move another pre_registered member into the household between the worker's
+    read and its write: the retry re-checks the members and leaves the household open."""
+    booking = await _insert_written()
+    fake, couch = await _fake_couch_with_stay()
+
+    def staff_merges_a_member():
+        fake.docs["evacuee:E2"] = {
+            "_id": "evacuee:E2",
+            "type": "evacuee",
+            "household_id": "household:H1",
+            "current_stay": {"status": "pre_registered"},
+        }
+        fake.revs["evacuee:E2"] = 1
+        fake.staff_writes("household:H1", label="merged")
+
+    fake.before_put["household:H1"] = staff_merges_a_member
+
+    assert await _process_cancel(couch, booking) is True
+
+    assert fake.docs["evacuee:E1"]["current_stay"]["status"] == "cancelled"
+    assert fake.docs["household:H1"]["status"] == "pre_registered"
+    assert "household:H1" not in fake.puts
+    await couch.close()
+
+
+async def test_household_conflict_with_unchanged_state_is_cancelled_on_the_fresh_rev(
+    db,
+):
+    booking = await _insert_written()
+    fake, couch = await _fake_couch_with_stay()
+    fake.before_put["household:H1"] = lambda: fake.staff_writes(
+        "household:H1", label="renamed"
+    )
+
+    assert await _process_cancel(couch, booking) is True
+
+    household = fake.docs["household:H1"]
+    assert household["status"] == "cancelled"
+    assert household["label"] == "renamed"
+    await couch.close()
 
 
 # PII never reaches the logs -------------------------------------------
