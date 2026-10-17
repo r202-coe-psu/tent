@@ -2689,7 +2689,7 @@ Buffer ของ partner booking (M2) — FastAPI insert ตอนรับค�
 | `state` | enum(`pending`,`written`,`cancelled`,`rejected`) | req | `pending` → worker → `written` · cancel ก่อนเขียน → `cancelled` · ซ้ำตอนเขียน → `rejected` |
 | `cancel_requested` | bool | req | default `false` — EXT-009 หลัง `written`; worker เปลี่ยน stay เป็น `cancelled` ถ้ายัง `pre_registered` |
 | `cancel_reason` | str\|null | opt | จาก body EXT-009 (≤200) |
-| `cancel_flag_token` | str\|null | opt | id ของ EXT-009 request ที่ตั้ง `cancel_requested` และยังไม่จบ (CR-169 FR-40, decision sync 2026-10-17 #612). ตั้งพร้อม flag ตอน 2a/2b; request นั้นลบเมื่อจบ (สำเร็จ / 409 ที่คง flag / revert ล้าง flag + token). flag ที่ไม่มี token = FINISHED (legacy หรือ request จบแล้ว). ไม่ใช่ field ใน response |
+| `cancel_flag_token` | str\|null | opt | id ของ EXT-009 request ที่ตั้ง `cancel_requested` และยังไม่จบ (CR-169 FR-40, decision sync 2026-10-17 #612). ตั้งพร้อม flag ตอน 2a/2b; request นั้นลบเมื่อจบ (สำเร็จ / 409 ที่คง flag / revert ล้าง flag + token). flag ที่ไม่มี token = FINISHED (legacy หรือ request จบแล้ว). ระหว่างรอ flag ของ request อื่น (งบรวม 1 วินาที/request) หมดเวลาแล้วอ่านแถวซ้ำอีกครั้งก่อนตอบ 409 (token หาย → FINISHED ข้าม; flag ถูกย้อน → OPEN ยกเลิกต่อ). ไม่ใช่ field ใน response |
 | `reject_reason` | str\|null | opt | `duplicate` · `not_cancellable` |
 | `evacuee_id` / `household_id` | str\|null | opt | `evacuee:{ulid}` / `household:{ulid}` — สร้างไว้ก่อนเขียน Couch เพื่อ retry แบบ idempotent |
 | `created_at` / `updated_at` | ts | req | — |
@@ -2697,6 +2697,8 @@ Buffer ของ partner booking (M2) — FastAPI insert ตอนรับค�
 **Index:** `(shelter_code, cid_hash)` unique partial (`state ∈ {pending, written}`) — กันซ้ำภายในศูนย์ + race (FR-30, คงเดิม) · `(booking_id, person_seq)` **ใหม่ (CR-169)** — ดึงทั้งกลุ่มตามลำดับ · `(state, updated_at)` · `(client_id)`
 
 **Group (CR-169 C4):** 1 แถวต่อคน · ไม่ใช้ Mongo transaction (standalone, ไม่มี replica set) — API insert ทุกแถวด้วย `committed = false` → ครบแล้ว `update_many({booking_id}, {$set: {committed: true}})` แล้วตอบ 201; `BulkWriteError` (writeErrors code 11000) กลางทาง → `delete_many({booking_id, committed: false})` แล้วตอบ 409 · worker sweeper ลบแถว `committed = false` ที่ค้างเกิน 60 วินาที พร้อมแถว `state = pending` ของกลุ่มเดียวกัน (FR-33) · แถว `written` / `cancelled` / `rejected` ไม่ถูกแตะ
+
+**Cancel กลุ่ม (CR-169 #612, decision sync 2026-10-17):** flag `cancel_requested` ทั้งกลุ่มด้วย `update_many` (guard `state: written`, `cancel_requested: false`) ก่อน แล้วค่อยยกเลิกแถว `pending` ด้วย `update_many` · **ความเสี่ยงที่ยอมรับ (owner decision):** หลังยกเลิกแถว `pending` แบบ bulk แล้ว ถ้าแถวที่ worker เพิ่งเขียนกลางทางยกเลิกไม่ได้ จะยังตอบ 409 ทั้งที่แถว `pending` อื่นถูกยกเลิกไปแล้ว (ย้อนไม่ได้เพราะล้าง PII) · partner retry ได้ผลถูก · **ปิดจริงได้เฉพาะด้วย #616** (atomic group commit)
 
 **Migration (CR-169):** ไม่ bump `schema_v` (Beanie doc) — field ใหม่ทั้งหมดมี default (`person_seq = 0`, `group_size = 1`, `committed = true`) → แถวเดิมคือกลุ่มขนาด 1 ไม่ต้อง backfill; index ใหม่สร้างตอน Beanie init
 

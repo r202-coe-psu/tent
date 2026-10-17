@@ -2354,6 +2354,83 @@ async def test_cancel_group_foreign_token_still_in_flight_is_409_and_changes_not
     assert await _log_statuses() == ["denied_booking_not_cancellable"]
 
 
+def _settle_flag_on_final_reread(monkeypatch: pytest.MonkeyPatch, fields: dict[str, Any]) -> None:
+    """Apply `fields` to row 0 right before the first `ExternalBooking.get` (the final re-read)."""
+    original = ExternalBooking.get
+    fired = False
+
+    async def get(doc_id: Any, *args: Any, **kwargs: Any) -> Any:
+        nonlocal fired
+        if not fired:
+            fired = True
+            await _set_row("BP-BK-GROUP001-0", fields)
+        return await original(doc_id, *args, **kwargs)
+
+    monkeypatch.setattr(ExternalBooking, "get", get)
+
+
+async def test_cancel_group_foreign_token_cleared_on_final_reread_is_skipped(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Budget spent with a foreign flag still in place: one re-read before the 409.
+
+    The other request clears its token between the last poll and the final re-read, so the row
+    is FINISHED: it is skipped and the request succeeds (200) instead of 409.
+    """
+    from apiapp.modules.thirdparty_bookings import use_case
+
+    await _person(status="pre_registered", person_id="evacuee:BK-GROUP001-0")
+    await _person(status="pre_registered", person_id="evacuee:BK-GROUP001-1")
+    await _group(2, ["written", "written"])
+    await _set_row(
+        "BP-BK-GROUP001-0",
+        {"cancel_requested": True, "cancel_reason": "foreign", "cancel_flag_token": "other"},
+    )
+    monkeypatch.setattr(use_case, "_FLAG_WAIT_SECONDS", 0.0)
+    _settle_flag_on_final_reread(monkeypatch, {"cancel_flag_token": None})
+
+    response = await client.post(_cancel_url("BK-GROUP001"), json={"reason": "r"}, headers=GRANTED)
+    assert response.status_code == 200
+    rows = await _rows("BK-GROUP001")
+    assert [(row["cancel_requested"], row["cancel_reason"]) for row in rows] == [
+        (True, "foreign"),
+        (True, "r"),
+    ]
+    assert await _log_statuses() == ["granted"]
+
+
+async def test_cancel_group_foreign_flag_reverted_on_final_reread_proceeds(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Budget spent with a foreign flag still in place: the final re-read sees it reverted.
+
+    The row is OPEN again, so this request flags and cancels it as usual (200).
+    """
+    from apiapp.modules.thirdparty_bookings import use_case
+
+    await _person(status="pre_registered", person_id="evacuee:BK-GROUP001-0")
+    await _person(status="pre_registered", person_id="evacuee:BK-GROUP001-1")
+    await _group(2, ["written", "written"])
+    await _set_row(
+        "BP-BK-GROUP001-0",
+        {"cancel_requested": True, "cancel_reason": "foreign", "cancel_flag_token": "other"},
+    )
+    monkeypatch.setattr(use_case, "_FLAG_WAIT_SECONDS", 0.0)
+    _settle_flag_on_final_reread(
+        monkeypatch, {"cancel_requested": False, "cancel_reason": None, "cancel_flag_token": None}
+    )
+
+    response = await client.post(_cancel_url("BK-GROUP001"), json={"reason": "r"}, headers=GRANTED)
+    assert response.status_code == 200
+    rows = await _rows("BK-GROUP001")
+    assert [(row["cancel_requested"], row["cancel_reason"]) for row in rows] == [
+        (True, "r"),
+        (True, "r"),
+    ]
+    assert [row["cancel_flag_token"] for row in rows] == [None, None]
+    assert await _log_statuses() == ["granted"]
+
+
 async def test_cancel_group_foreign_waits_share_one_request_budget(
     client: AsyncClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:

@@ -794,11 +794,12 @@ class ThirdPartyBookingsUseCase:
         try:
             # Phase 2 is two `update_many` steps (no per-row loop on the common path). The written
             # rows are flagged first, so a check-in that lands meanwhile is caught before any
-            # pending row is cancelled. Residual race: a step-2b conflict can still leave the
-            # pending rows that 2b already cancelled stay cancelled while the 409 is returned (the
-            # bulk cancel clears PII and cannot be rolled back). The flags set in step 2a are
-            # reverted on that 409 (CR-169 FR-40, all-or-nothing for the flags). The retry skips the
-            # cancelled rows (FINISHED).
+            # pending row is cancelled. Accepted residual risk (owner decision, CR-169 decision
+            # sync 2026-10-17, review of PR #635): a step-2b conflict can still leave the pending
+            # rows that 2b already cancelled stay cancelled while the 409 is returned (the bulk
+            # cancel clears PII and cannot be rolled back). Closed only by #616 (atomic group
+            # commit). The flags set in step 2a are reverted on that 409 (CR-169 FR-40,
+            # all-or-nothing for the flags). The retry skips the cancelled rows (FINISHED).
             if requested and not await self._flag_requested(
                 collection, requested, reason, now, token, deadline
             ):
@@ -870,14 +871,22 @@ class ThirdPartyBookingsUseCase:
         current = row
         while _foreign_flag(current, token):
             if loop.time() >= deadline:
-                logger.warning("cancel flag still in flight (booking_id=%s)", row.booking_id)
-                return None
+                break
             await asyncio.sleep(_FLAG_POLL_SECONDS)
             fresh = await ExternalBooking.get(row.id)
             if fresh is None:
                 return None
             current = fresh
-        return current
+        if not _foreign_flag(current, token):
+            return current
+        # The shared budget is spent. The other request may have settled the flag between the
+        # last poll and now, so re-read the row once more before the 409: token gone → FINISHED
+        # (skipped by the caller), flag reverted → OPEN (cancelled by the caller).
+        fresh = await ExternalBooking.get(row.id)
+        if fresh is None or _foreign_flag(fresh, token):
+            logger.warning("cancel flag still in flight (booking_id=%s)", row.booking_id)
+            return None
+        return fresh
 
     async def _flag_requested(
         self,
@@ -920,10 +929,11 @@ class ThirdPartyBookingsUseCase:
         this step is a 409, so the request cannot return 200 while that row stays open. Our own
         flags are reverted; the foreign flag is left alone.
 
-        Residual race: the worker may process a `cancel_requested` flag between the flag
-        write below and the revert, so a stay that has just checked in can be asked to cancel.
-        A 409 from this step reverts the flags; a 409 from step 2b (`_cancel_pending`) reverts
-        them too, in `cancel_booking`.
+        Accepted residual risk (owner decision, CR-169 decision sync 2026-10-17): the worker may
+        process a `cancel_requested` flag between the flag write below and the revert, so a stay
+        that has just checked in can be asked to cancel. A 409 from this step reverts the flags;
+        a 409 from step 2b (`_cancel_pending`) reverts them too, in `cancel_booking`. Closed only
+        by #616.
         """
         ids = [row.id for row in rows]
         result = await collection.update_many(
