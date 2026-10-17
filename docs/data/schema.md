@@ -2691,7 +2691,7 @@ Buffer ของ partner booking (M2) — FastAPI insert ตอนรับค�
 | `cancel_reason` | str\|null | opt | จาก body EXT-009 (≤200) |
 | `reject_reason` | str\|null | opt | `duplicate` · `not_cancellable` |
 | `evacuee_id` / `household_id` | str\|null | opt | `evacuee:{ulid}` / `household:{ulid}` — สร้างไว้ก่อนเขียน Couch เพื่อ retry แบบ idempotent |
-| `reconciled_at` | ts\|null | opt | **ใหม่ (#613)** — worker reconcile pass ทำแถว `cancelled` / `rejected` ที่จองไว้ (ดู Reconcile ด้านล่าง) เสร็จแล้ว ตั้งครั้งเดียว; ไม่มี / `null` = ยังไม่ reconcile (แถวก่อน deploy รวมอยู่ด้วย). ความล้มเหลวชั่วคราว (CouchDB error, shelter DB หาย, stay/household เปลี่ยนระหว่างทำ) → ไม่ตั้ง |
+| `reconciled_at` | ts\|null | opt | **ใหม่ (#613)** — worker reconcile pass ทำแถว `cancelled` / `rejected` ที่จองไว้ (ดู Reconcile ด้านล่าง) เสร็จแล้ว ตั้งครั้งเดียว; ไม่มี / `null` = ยังไม่ reconcile (แถวก่อน deploy รวมอยู่ด้วย). ความล้มเหลวชั่วคราว (CouchDB error, stay/household เปลี่ยนระหว่างทำ) → ไม่ตั้ง |
 | `reconcile_outcome` | enum(`cancelled`,`advanced`,`missing`,`noop`)\|null | opt | **ใหม่ (#613)** — ผลของ reconcile: `cancelled` = ยกเลิก stay และ/หรือ household ที่จองไว้ (รวมรอบที่เขียน audit ที่ค้างจากรอบก่อนให้ครบ); `advanced` = stay เลย `pre_registered` แล้ว ไม่แตะ (log warning, ไม่มี PII); `missing` = ไม่มี doc `evacuee`/`household` ที่จองไว้ใน `shelter_{code}` (shelter DB หายก็นับเป็น `missing` เพราะ GET ได้ 404 เหมือนกัน; error ชั่วคราว/5xx ไม่นับ); `noop` = ไม่มีอะไรต้องทำ (stay/household ถูกยกเลิกไปแล้ว และ audit ของการยกเลิกนั้นมีครบ) |
 | `created_at` / `updated_at` | ts | req | — |
 
