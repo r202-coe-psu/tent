@@ -342,39 +342,61 @@ async def _committed_count(collection: Any, booking_id: str) -> int | None:
         return None
 
 
-async def _all_rows_committed(collection: Any, booking_id: str, group_size: int) -> bool:
+async def _all_rows_committed(collection: Any, booking_id: str, group_size: int) -> bool | None:
     """G5 — True when every row of the group is committed although the flip raised.
 
-    The flip may have been applied and only its acknowledgement lost. If the count cannot be
-    read, report False so the caller takes the normal failure path.
+    The flip may have been applied and only its acknowledgement lost. None when the count
+    cannot be read: the caller must not treat the group as removable without owning the key.
     """
-    return await _committed_count(collection, booking_id) == group_size
+    committed = await _committed_count(collection, booking_id)
+    return None if committed is None else committed == group_size
 
 
-async def _release_key(record_id: str | None, booking_id: str) -> None:
+def _lease_filter(record_id: str, created_at: datetime) -> dict[str, Any]:
+    """#614 — the key row as long as it is still this attempt's own `in_progress` lease.
+
+    `created_at` is the lease: a stale-key claim renews it, so a write guarded by the old value
+    matches nothing once the key was taken over (or completed, or released by its new owner).
+    """
+    return {"_id": record_id, "status": "in_progress", "created_at": created_at}
+
+
+async def _release_key(record_id: str | None, created_at: datetime, booking_id: str) -> bool:
     """Delete the Idempotency-Key row of a request that created no booking (#614).
 
-    Shielded and retried like the staged-row cleanup; a give-up is logged, never raised.
+    Guarded by this attempt's lease (`_lease_filter`): a key that was taken over by a later
+    retry, or completed, is never deleted. Returns True when the row is gone (this delete, an
+    earlier attempt whose ack was lost, or a claim that freed it), False when it is still held
+    by someone else or the delete gave up. Shielded and retried like the staged-row cleanup;
+    a give-up is logged, never raised.
     """
     if record_id is None:
-        return
+        return True
     collection = ExternalBookingIdempotency.get_pymongo_collection()
 
-    async def delete() -> None:
-        await collection.delete_one({"_id": record_id})
-
-    await asyncio.shield(
-        _detach(
-            _with_retry(
-                delete,
+    async def release() -> bool:
+        try:
+            await _with_retry(
+                lambda: collection.delete_one(_lease_filter(record_id, created_at)),
                 what="idempotency key release",
                 booking_id=booking_id,
                 attempts=_CLEANUP_ATTEMPTS,
-                reraise=False,
+                reraise=True,
                 give_up="idempotency key could not be released",
             )
-        )
-    )
+            gone = await collection.count_documents({"_id": record_id}) == 0
+        except Exception:
+            logger.error(
+                "idempotency key could not be released (booking_id=%s attempts=%d)",
+                booking_id,
+                _CLEANUP_ATTEMPTS,
+            )
+            return False
+        if not gone:
+            logger.warning("idempotency key lease lost, not released (booking_id=%s)", booking_id)
+        return gone
+
+    return await asyncio.shield(_detach(release()))
 
 
 async def _drop_rows(collection: Any, booking_id: str, extra: dict[str, Any]) -> bool:
@@ -440,7 +462,7 @@ async def _claim_stale_key(
         if committed is None:
             return "busy"
         if committed == persons_count:
-            await _complete_key(record.id, record.booking_id)
+            await _complete_key(record.id, claimed_at, record.booking_id)
             return "completed"
         if committed > 0:
             await _drop_rows(collection, record.booking_id, {"state": "pending"})
@@ -461,17 +483,22 @@ async def _claim_stale_key(
     return await asyncio.shield(_detach(claim()))
 
 
-async def _complete_key(record_id: str | None, booking_id: str) -> None:
+async def _complete_key(record_id: str | None, created_at: datetime, booking_id: str) -> None:
     """Mark the Idempotency-Key row `completed` once the group is committed (#614).
 
-    The booking exists at this point, so this never releases the row; a give-up is logged.
+    Guarded by this attempt's lease (`_lease_filter`). A lost lease matches nothing and that is
+    fine: whoever holds the key now judges the same fully committed rows and completes it (or
+    the next stale retry does). The booking exists at this point, so this never releases the
+    row; a give-up is logged.
     """
     if record_id is None:
         return
     collection = ExternalBookingIdempotency.get_pymongo_collection()
 
     async def complete() -> None:
-        await collection.update_one({"_id": record_id}, {"$set": {"status": "completed"}})
+        await collection.update_one(
+            _lease_filter(record_id, created_at), {"$set": {"status": "completed"}}
+        )
 
     await asyncio.shield(
         _detach(
@@ -502,17 +529,50 @@ async def _still_owns_key(record_id: str | None, created_at: datetime) -> bool:
 
     async def check() -> bool:
         try:
-            return (
-                await collection.count_documents(
-                    {"_id": record_id, "status": "in_progress", "created_at": created_at}
-                )
-                == 1
-            )
+            return await collection.count_documents(_lease_filter(record_id, created_at)) == 1
         except Exception as exc:
             logger.warning("idempotency key ownership check failed (error=%s)", type(exc).__name__)
             return False
 
     return await asyncio.shield(_detach(check()))
+
+
+async def _settle_unconfirmed_commit(
+    collection: Any,
+    *,
+    booking_id: str,
+    group_size: int,
+    record_id: str | None,
+    created_at: datetime,
+) -> bool:
+    """Keep the group (G5) or remove it after a flip whose outcome is unknown (#614).
+
+    True when every row is committed: the key is completed (lease-guarded) and the rows are kept
+    for the worker. Otherwise the group is removed and the key released, both only as far as
+    this attempt still owns them:
+    - count read → it is below `group_size`, and since this attempt's flip has finished it can
+      only fall, so nobody else can see this group as booked: remove every row of the
+      booking_id still `pending` (the flip may have touched only some, so `committed` no longer
+      tells them apart; rows the worker advanced cannot be rolled back), then release the key
+      guarded by the lease.
+    - count unreadable → the group may be fully committed and a retry that took the key over
+      may already have answered 201 for it. Release the key first (lease-guarded); only if the
+      row is gone does nobody else own this booking_id, and the pending rows are removed.
+      Without an Idempotency-Key there is no one else, so the rows are removed as before.
+    """
+    committed = await _all_rows_committed(collection, booking_id, group_size)
+    if committed:
+        logger.warning("commit unconfirmed but every row is committed (booking_id=%s)", booking_id)
+        await _complete_key(record_id, created_at, booking_id)
+        return True
+    pending = {"booking_id": booking_id, "state": "pending"}
+    if committed is None and record_id is not None:
+        if await _release_key(record_id, created_at, booking_id):
+            await _cleanup_staged(collection, pending)
+        return False
+    await _cleanup_staged(collection, pending)
+    await _release_key(record_id, created_at, booking_id)
+    return False
 
 
 async def _settle_cancelled_commit(
@@ -522,25 +582,26 @@ async def _settle_cancelled_commit(
     booking_id: str,
     group_size: int,
     record_id: str | None,
+    created_at: datetime,
 ) -> None:
     """Settle a commit whose request was cancelled, then keep the group or release it (#614).
 
     The flip task is awaited before anything is counted, because `update_many` may still be
-    applied after the cancel. A fully committed group means the booking exists: the key is
-    completed (a retry gets the original 201) and the rows are kept for the worker. Otherwise
-    the pending rows are removed and the key released, as on a commit failure.
-    Shielded and detached, so a second cancel cannot interrupt the decision.
+    applied after the cancel; then `_settle_unconfirmed_commit` decides. Shielded and detached,
+    so a second cancel cannot interrupt the decision.
     """
 
     async def settle() -> None:
         await asyncio.wait({commit_task})
         if not commit_task.cancelled():
             commit_task.exception()  # mark retrieved; a failed flip is handled here, not raised
-        if await _all_rows_committed(collection, booking_id, group_size):
-            await _complete_key(record_id, booking_id)
-            return
-        await _cleanup_staged(collection, {"booking_id": booking_id, "state": "pending"})
-        await _release_key(record_id, booking_id)
+        await _settle_unconfirmed_commit(
+            collection,
+            booking_id=booking_id,
+            group_size=group_size,
+            record_id=record_id,
+            created_at=created_at,
+        )
 
     await asyncio.shield(_detach(settle()))
 
@@ -551,24 +612,21 @@ async def _settle_failed_commit(
     booking_id: str,
     group_size: int,
     record_id: str | None,
+    created_at: datetime,
 ) -> bool:
     """Settle a commit whose flip raised: keep the group (G5) or remove it (#614).
 
     Returns True when every row is committed (the flip was applied, only its acknowledgement
-    was lost): the key is completed and the rows are kept for the worker. Otherwise the pending
-    rows are removed and the key released. Runs detached and shielded by the caller, so the
-    count and the cleanup finish even when the request is cancelled.
+    was lost). See `_settle_unconfirmed_commit`. Runs detached and shielded by the caller, so
+    the count and the cleanup finish even when the request is cancelled.
     """
-    if await _all_rows_committed(collection, booking_id, group_size):
-        logger.warning("commit raised but every row is committed (booking_id=%s)", booking_id)
-        await _complete_key(record_id, booking_id)
-        return True
-    # The flip may have been applied to only some rows, so `committed` can no longer tell this
-    # group's rows apart: remove every row of this booking_id that is still `pending`. Rows the
-    # worker already advanced cannot be rolled back from here.
-    await _cleanup_staged(collection, {"booking_id": booking_id, "state": "pending"})
-    await _release_key(record_id, booking_id)
-    return False
+    return await _settle_unconfirmed_commit(
+        collection,
+        booking_id=booking_id,
+        group_size=group_size,
+        record_id=record_id,
+        created_at=created_at,
+    )
 
 
 class ThirdPartyBookingsUseCase:
@@ -725,7 +783,8 @@ class ThirdPartyBookingsUseCase:
                 # The key is ours and no booking was made: this request proceeds as new.
                 return None
         else:
-            await _complete_key(existing.id, existing.booking_id)
+            # Guarded by the lease value read above: a claim that renewed it decides instead.
+            await _complete_key(existing.id, existing.created_at, existing.booking_id)
         # Every row of the group is committed: the booking exists, answer it as the original.
         await self._log(
             endpoint=ENDPOINT_CREATE,
@@ -831,7 +890,7 @@ class ThirdPartyBookingsUseCase:
             except BaseException:
                 # The insert may have been applied before its acknowledgement was lost, or the
                 # request was cancelled. Remove only this request's own row (never the winner's).
-                await _release_key(record.id, booking_id)
+                await _release_key(record.id, record.created_at, booking_id)
                 raise
             return record.id
         raise await self._deny(
@@ -1066,7 +1125,7 @@ class ThirdPartyBookingsUseCase:
                 if cid_hash in taken:
                     raise await duplicate(index)
         except BaseException:
-            await _release_key(reserved_id, booking_id)
+            await _release_key(reserved_id, now, booking_id)
             raise
         # Inserting in `cid_hash` order means two overlapping groups collide on the same
         # key first, so one of them wins instead of each blocking the other half-way.
@@ -1112,7 +1171,7 @@ class ThirdPartyBookingsUseCase:
             await asyncio.shield(insert_task)
         except asyncio.CancelledError:
             await _cleanup_staged(collection, staged, after=insert_task)
-            await _release_key(reserved_id, booking_id)
+            await _release_key(reserved_id, now, booking_id)
             raise
         except BulkWriteError as exc:
             # Race guard: the unique partial index on (shelter_code, cid_hash).
@@ -1135,7 +1194,7 @@ class ThirdPartyBookingsUseCase:
             failure = exc
         if duplicate_seq is not None or failure is not None:
             await _cleanup_staged(collection, staged)
-            await _release_key(reserved_id, booking_id)
+            await _release_key(reserved_id, now, booking_id)
             if duplicate_seq is not None:
                 raise await duplicate(
                     await self._lowest_duplicate_index(location_code, cid_hashes, duplicate_seq)
@@ -1158,9 +1217,13 @@ class ThirdPartyBookingsUseCase:
             owns_key = await _still_owns_key(reserved_id, now)
         except BaseException:
             await _cleanup_staged(collection, staged)
+            await _release_key(reserved_id, now, booking_id)
             raise
         if not owns_key:
+            # Taken over (or the check failed): remove this attempt's rows. The lease-guarded
+            # release frees the key only when it is still this attempt's own (a failed read).
             await _cleanup_staged(collection, staged)
+            await _release_key(reserved_id, now, booking_id)
             raise await self._deny(
                 endpoint=endpoint,
                 claims=claims,
@@ -1185,6 +1248,7 @@ class ThirdPartyBookingsUseCase:
                 booking_id=booking_id,
                 group_size=len(rows),
                 record_id=reserved_id,
+                created_at=now,
             )
             raise
         except Exception:
@@ -1199,6 +1263,7 @@ class ThirdPartyBookingsUseCase:
                         booking_id=booking_id,
                         group_size=len(rows),
                         record_id=reserved_id,
+                        created_at=now,
                     )
                 )
             )
@@ -1225,7 +1290,7 @@ class ThirdPartyBookingsUseCase:
             )
 
         if not key_completed:
-            await _complete_key(reserved_id, booking_id)
+            await _complete_key(reserved_id, now, booking_id)
         # The group is committed and the worker will process it: a failing or cancelled
         # access log must not turn this into an error (the partner's retry would then hit 409).
         with contextlib.suppress(asyncio.CancelledError):

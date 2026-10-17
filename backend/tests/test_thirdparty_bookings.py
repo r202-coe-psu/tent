@@ -2259,3 +2259,211 @@ async def test_cancel_during_the_commit_failure_check_still_cleans_up(
     await _drain_detached()
     assert await _rows() == []
     assert await _keys() == []
+
+
+# --- #614 lease guard: a lost lease never releases or completes another attempt's key -------
+
+
+async def _key_doc(key: str) -> dict[str, Any] | None:
+    return await ExternalBookingIdempotency.get_pymongo_collection().find_one(
+        {"client_id": "m2-test", "key": key}
+    )
+
+
+def _lease_then_partial_flip(key: str, state: dict[str, Any]) -> Any:
+    """A `_still_owns_key` stand-in: after the real fence passed, a flip races a retry's claim.
+
+    Two of the stalled attempt's three rows get committed (a flip that raced the lease), the key
+    looks stale, and retry B claims it: B leases the key (same `_id`, renewed `created_at`),
+    removes the staged row, counts 2 of 3 committed, removes the rest and answers busy, keeping
+    the key `in_progress` under its own lease. Control then returns to the stalled attempt A.
+    """
+    from apiapp.modules.thirdparty_bookings import use_case
+
+    real_fence = use_case._still_owns_key
+
+    async def fence(record_id: str | None, created_at: datetime) -> bool:
+        owned = await real_fence(record_id, created_at)
+        if state.get("claim") is None:
+            doc = await _key_doc(key)
+            assert doc is not None
+            await ExternalBooking.get_pymongo_collection().update_many(
+                {"booking_id": doc["booking_id"], "person_seq": {"$lt": 2}},
+                {"$set": {"committed": True}},
+            )
+            await _age_key(key)
+            record = await ExternalBookingIdempotency.find_one(
+                ExternalBookingIdempotency.key == key
+            )
+            assert record is not None
+            state["claim"] = await use_case._claim_stale_key(record, 3)
+            state["lease"] = await _key_doc(key)
+        return owned
+
+    return fence
+
+
+async def _assert_retry_b_still_holds_the_key(
+    client: AsyncClient, key: str, state: dict[str, Any]
+) -> None:
+    """B's leased row survived A's failure; the partner's retries follow the decided semantics."""
+    assert state["claim"] == "busy"
+    lease = state["lease"]
+    assert lease is not None
+    after = await _key_doc(key)
+    assert after == lease  # same _id, still in_progress, B's created_at: untouched by A
+    assert after["status"] == "in_progress"
+    assert await _rows() == []
+
+    young = await client.post(URL, json=_group_payload(3), headers=_idem(key))
+    assert young.status_code == 409
+    assert young.json()["code"] == "idempotency_in_progress"
+    assert await _rows() == []
+
+    await _age_key(key)
+    retry = await client.post(URL, json=_group_payload(3), headers=_idem(key))
+    assert retry.status_code == 201
+    new_id = retry.json()["result"]["booking_id"]
+    assert new_id != lease["booking_id"]
+    assert [(k.status, k.booking_id) for k in await _keys()] == [("completed", new_id)]
+    rows = await _rows()
+    assert len(rows) == 3
+    assert {row["booking_id"] for row in rows} == {new_id}
+
+
+async def test_failed_commit_after_a_lost_lease_keeps_the_new_owners_key(
+    client: AsyncClient, shelters: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """#614 review (PR #666): A passed the fence, B claimed the stale key and answered busy,
+    then A's flip matched nothing (shortfall). A's failure settle must not delete the key row
+    B now holds — else the partner's next retry would create a second booking at once."""
+    from apiapp.modules.thirdparty_bookings import use_case
+
+    state: dict[str, Any] = {}
+    monkeypatch.setattr(use_case, "_still_owns_key", _lease_then_partial_flip("lost-1", state))
+    first = await client.post(URL, json=_group_payload(3), headers=_idem("lost-1"))
+    _assert_sanitized_500(first)
+    monkeypatch.undo()
+    await _assert_retry_b_still_holds_the_key(client, "lost-1", state)
+
+
+async def test_cancelled_commit_after_a_lost_lease_keeps_the_new_owners_key(
+    client: AsyncClient, shelters: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Same interleaving, but A is cancelled while its flip is in flight: the cancelled-commit
+    settle also leaves B's leased key row alone."""
+    from apiapp.modules.thirdparty_bookings import use_case
+
+    state: dict[str, Any] = {}
+    monkeypatch.setattr(use_case, "_still_owns_key", _lease_then_partial_flip("lost-2", state))
+    collection = ExternalBooking.get_pymongo_collection()
+    real = type(collection).update_many
+    started, release = asyncio.Event(), asyncio.Event()
+
+    async def held_flip(self: Any, *args: Any, **kwargs: Any) -> Any:
+        if self.name == collection.name and args and args[1] == {"$set": {"committed": True}}:
+            if "booking_id" in args[0] and len(args[0]) == 1:  # A's own flip, not the hook's
+                started.set()
+                await release.wait()
+        return await real(self, *args, **kwargs)
+
+    monkeypatch.setattr(type(collection), "update_many", held_flip)
+    request = asyncio.create_task(_create_directly(_group_payload(3), idempotency_key="lost-2"))
+    await started.wait()
+    request.cancel()
+    await asyncio.sleep(0)
+    release.set()
+    with pytest.raises(asyncio.CancelledError):
+        await request
+    await _drain_detached()
+    monkeypatch.undo()
+    await _assert_retry_b_still_holds_the_key(client, "lost-2", state)
+
+
+async def test_unreadable_count_after_a_lost_lease_keeps_the_booking_a_retry_answered(
+    client: AsyncClient, shelters: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A's flip was applied but its ack lost; meanwhile a retry found every row committed and
+    answered 201 (key completed). A cannot read the count: it must not remove that booking's
+    rows, since it no longer owns the key. A answers 500; the booking and the key stand."""
+    from apiapp.modules.thirdparty_bookings import use_case
+
+    collection = ExternalBooking.get_pymongo_collection()
+    real = type(collection).update_many
+    retry: list[Any] = []
+
+    async def applied_then_lost(self: Any, *args: Any, **kwargs: Any) -> Any:
+        result = await real(self, *args, **kwargs)
+        if self.name != collection.name:
+            return result
+        if not retry:
+            await _age_key("unknown-1")
+            retry.append(await client.post(URL, json=_group_payload(3), headers=_idem("unknown-1")))
+        raise RuntimeError("ack lost")  # every attempt of the commit retry budget
+
+    async def unreadable(collection: Any, booking_id: str, group_size: int) -> bool | None:
+        return None
+
+    monkeypatch.setattr(type(collection), "update_many", applied_then_lost)
+    monkeypatch.setattr(use_case, "_all_rows_committed", unreadable)
+    first = await client.post(URL, json=_group_payload(3), headers=_idem("unknown-1"))
+    _assert_sanitized_500(first)
+    assert retry[0].status_code == 201
+    booking_id = retry[0].json()["result"]["booking_id"]
+    assert [(k.status, k.booking_id) for k in await _keys()] == [("completed", booking_id)]
+    rows = await _rows()
+    assert len(rows) == 3
+    assert all(row["committed"] is True and row["booking_id"] == booking_id for row in rows)
+
+
+async def test_unreadable_count_while_still_owning_the_key_releases_it_and_removes_the_rows(
+    client: AsyncClient, shelters: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Commit failed and the G5 count cannot be read, but nobody took the key over: the key is
+    released (lease-guarded) first, then the pending rows are removed; the retry proceeds."""
+    from apiapp.modules.thirdparty_bookings import use_case
+
+    async def unreadable(collection: Any, booking_id: str, group_size: int) -> bool | None:
+        return None
+
+    _fail_update_many(monkeypatch, failures=3)
+    monkeypatch.setattr(use_case, "_all_rows_committed", unreadable)
+    failed = await client.post(URL, json=_group_payload(3), headers=_idem("unknown-2"))
+    _assert_sanitized_500(failed)
+    assert await _rows() == []
+    assert await _keys() == []
+
+
+async def test_release_and_complete_with_a_stale_lease_leave_the_row_untouched(
+    client: AsyncClient,
+) -> None:
+    """Every key write is guarded by `{_id, status: in_progress, created_at: <lease>}`."""
+    from apiapp.modules.thirdparty_bookings import use_case
+
+    await _seed_key("guard-1", count=1, booking_id="BK-GUARD", age_seconds=0)
+    before = await _key_doc("guard-1")
+    assert before is not None
+    stale = before["created_at"] - timedelta(seconds=90)
+
+    assert await use_case._release_key(before["_id"], stale, "BK-GUARD") is False
+    await use_case._complete_key(before["_id"], stale, "BK-GUARD")
+    assert await _key_doc("guard-1") == before
+
+    await use_case._complete_key(before["_id"], before["created_at"], "BK-GUARD")
+    completed = await _key_doc("guard-1")
+    assert completed is not None and completed["status"] == "completed"
+    # a completed key is never released, not even with its own lease value
+    assert await use_case._release_key(before["_id"], before["created_at"], "BK-GUARD") is False
+    assert await _key_doc("guard-1") == completed
+
+
+async def test_release_with_the_own_lease_removes_the_row(client: AsyncClient) -> None:
+    from apiapp.modules.thirdparty_bookings import use_case
+
+    await _seed_key("guard-2", count=1, booking_id="BK-GUARD-2", age_seconds=0)
+    doc = await _key_doc("guard-2")
+    assert doc is not None
+    assert await use_case._release_key(doc["_id"], doc["created_at"], "BK-GUARD-2") is True
+    assert await _key_doc("guard-2") is None
+    # already gone (e.g. an earlier attempt's ack was lost): still reported as released
+    assert await use_case._release_key(doc["_id"], doc["created_at"], "BK-GUARD-2") is True
