@@ -63,10 +63,13 @@ class ExternalBooking(Document):
 	# transient CouchDB error leaves it unset so the next pass retries.
 	reconciled_at: datetime | None = None
 	reconcile_outcome: ExternalBookingReconcileOutcome | None = None
-	# Set before the reconcile pass cancels a stay or household of this row (#613). The
-	# retry pass writes the partner audit of a cancelled doc only when this marker is set;
-	# a doc cancelled by someone else (no marker) gets no partner audit.
-	reconcile_cancelled_at: datetime | None = None
+	# Per-doc reconcile markers (#613, decision sync review รอบ 3): the exact ISO-8601 string
+	# the worker writes when it cancels the doc — the stay's `current_stay.since` and the
+	# household's `updated_at` — stamped before that write. The retry pass writes the
+	# partner audit of a cancelled doc only when the doc's timestamp equals its marker; any
+	# other value means someone else (e.g. staff) cancelled it → no partner audit.
+	reconcile_stay_cancelled_at: str | None = None
+	reconcile_household_cancelled_at: str | None = None
 	created_at: datetime
 	updated_at: datetime
 

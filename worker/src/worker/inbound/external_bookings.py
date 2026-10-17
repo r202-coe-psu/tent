@@ -594,6 +594,7 @@ async def _cancel_stay(
     evacuee_id: str,
     *,
     strict: bool = False,
+    now: str | None = None,
 ) -> str:
     """Cancel a ``pre_registered`` stay like the staff app does (FR-53).
 
@@ -612,8 +613,12 @@ async def _cancel_stay(
     ``strict=True`` (reconcile, #613): an audit or household write failure is raised after
     the stay was cancelled, so the row stays unreconciled; the next pass finishes it
     (`_ensure_stay_audit`, then the household step of `_reconcile_row`).
+
+    ``now`` (default: the current time) is written as ``current_stay.since`` and, by the
+    household roll-up, as the household's ``updated_at``; reconcile passes the value it
+    stamped in the row's per-doc markers beforehand.
     """
-    now = _now_iso()
+    now = _now_iso() if now is None else now
 
     async def cancel(evacuee: dict[str, Any]) -> dict[str, Any] | None:
         if (evacuee.get("current_stay") or {}).get("status") != "pre_registered":
@@ -1177,6 +1182,16 @@ def _stay_status(doc: dict[str, Any] | None) -> str | None:
     return ((doc or {}).get("current_stay") or {}).get("status")
 
 
+def _cancelled_by_reconcile(stamp: str | None, marker: str | None) -> bool:
+    """True when a cancelled doc carries the timestamp this row's reconcile wrote (#613 r3).
+
+    CouchDB docs have no ``updated_by``, so the worker records the exact timestamp it
+    writes on each doc as a per-doc marker; a mismatch (or no marker) means someone else,
+    e.g. staff, cancelled it.
+    """
+    return marker is not None and stamp == marker
+
+
 async def _ensure_stay_audit(
     couch: CouchClient,
     database: str,
@@ -1185,10 +1200,10 @@ async def _ensure_stay_audit(
 ) -> bool:
     """Audit retry for a stay the reconcile pass cancelled (#613). True = written now.
 
-    Called only for a row carrying ``reconcile_cancelled_at``: a ``cancelled`` stay whose
-    deterministic audit doc is missing means the audit write failed after the cancel; it is
-    written now (idempotent by id). A stay cancelled by someone else has no marker and never
-    gets here.
+    Called only for a ``cancelled`` stay whose ``current_stay.since`` equals the row's
+    ``reconcile_stay_cancelled_at``: its deterministic audit doc missing means the audit
+    write failed after the cancel; it is written now (idempotent by id). A stay cancelled
+    by someone else does not match the marker and never gets here.
     """
     return await _write_audit_once(
         couch,
@@ -1207,7 +1222,8 @@ async def _ensure_household_audit(
 ) -> bool:
     """Audit retry for a household the reconcile pass cancelled (#613). True = written now.
 
-    Called only for a row carrying ``reconcile_cancelled_at`` (see `_ensure_stay_audit`).
+    Called only for a ``cancelled`` household whose ``updated_at`` equals the row's
+    ``reconcile_household_cancelled_at`` (see `_ensure_stay_audit`).
     """
     return await _write_audit_once(
         couch,
@@ -1222,44 +1238,28 @@ async def _ensure_household_audit(
     )
 
 
-async def _mark_reconcile_cancel(booking: ExternalBooking) -> bool:
-    """Stamp ``reconcile_cancelled_at`` on the row before the pass cancels a CouchDB doc.
+async def _mark_reconcile_cancel(
+    booking: ExternalBooking, *, now: str, stay: bool, household: bool
+) -> None:
+    """Stamp the per-doc markers with ``now`` before the pass cancels a CouchDB doc (#613 r3).
 
-    Once per row (a marker already set is kept). The stamp is guarded on the state and
-    ``reconciled_at`` observed by the pass; a moved row raises `_ReconcileRetry` so nothing
-    is cancelled under a stale view. A Mongo error propagates and is retried as transient.
-    Returns True when this call set the marker (False: it was already there).
+    ``now`` is the exact timestamp the following write uses (``current_stay.since`` for the
+    stay, ``updated_at`` for the household), so it is re-stamped on every attempt. The stamp
+    is guarded on the state and ``reconciled_at`` observed by the pass; a moved row raises
+    `_ReconcileRetry` so nothing is cancelled under a stale view. A Mongo error propagates
+    and is retried as transient. A marker left behind by a write that did not happen is
+    harmless: no later cancel by someone else carries the same timestamp.
     """
-    if booking.reconcile_cancelled_at is not None:
-        return False
+    changes: dict[str, Any] = {}
+    if stay:
+        changes["reconcile_stay_cancelled_at"] = now
+    if household:
+        changes["reconcile_household_cancelled_at"] = now
     stamped = await _transition(
-        booking,
-        {"state": booking.state, "reconciled_at": None},
-        {"reconcile_cancelled_at": datetime.now(UTC)},
+        booking, {"state": booking.state, "reconciled_at": None}, changes
     )
     if not stamped:
         raise _ReconcileRetry("row moved before the cancel")
-    return True
-
-
-async def _clear_reconcile_cancel(booking: ExternalBooking) -> None:
-    """Return ``reconcile_cancelled_at`` to ``null`` after a pass wrote nothing (#613 r1).
-
-    Only for a marker this pass stamped, when the cancel definitely did not happen (the
-    stay came back `_CHANGED`, or the household declined). Guarded on ``state`` and an unset
-    ``reconciled_at`` (not on the marker's value: Mongo stores milliseconds). A missed guard
-    is logged (ids only) and the marker lingers — see the reconcile docs.
-    """
-    cleared = await _transition(
-        booking,
-        {"state": booking.state, "reconciled_at": None},
-        {"reconcile_cancelled_at": None},
-    )
-    if not cleared:
-        logger.warning(
-            "Booking %s moved before its reconcile marker could be cleared",
-            _ref(booking),
-        )
 
 
 async def _reconcile_row(couch: CouchClient, booking: ExternalBooking) -> str:
@@ -1270,19 +1270,22 @@ async def _reconcile_row(couch: CouchClient, booking: ExternalBooking) -> str:
     * neither doc exists (an absent shelter database also answers 404) → ``missing``;
     * the stay moved past ``pre_registered`` → ``advanced``, nothing is written and the
       household is left alone (its status may already reflect that member);
-    * a ``pre_registered`` stay → ``reconcile_cancelled_at`` is stamped on the row first,
-      then the stay is cancelled through ``_cancel_stay(strict=True)``; a failed or changed
+    * a ``pre_registered`` stay → one timestamp ``now`` is stamped on the row as
+      ``reconcile_stay_cancelled_at`` (and ``reconcile_household_cancelled_at`` when the
+      row reserved a household, since the roll-up writes the same ``now``), then the stay
+      is cancelled through ``_cancel_stay(strict=True, now=now)``; a failed or changed
       write, or a failed audit / household write after the cancel, raises so the row is
-      retried (``reconciled_at`` stays unset); a changed stay (nothing written) clears the
-      marker this pass stamped;
-    * a ``cancelled`` stay with its audit doc missing is audited only when the row carries
-      ``reconcile_cancelled_at`` (an earlier pass cancelled it and its audit write failed);
-      a stay cancelled by someone else (no marker) gets no partner audit → ``noop``;
-    * the household is re-read: still ``pre_registered`` → marker stamped first, then
-      cancelled by ``_cancel_household_if_empty`` (only once no member is still held,
+      retried (``reconciled_at`` stays unset);
+    * a ``cancelled`` stay with its audit doc missing is audited only when its
+      ``current_stay.since`` equals ``reconcile_stay_cancelled_at`` (an earlier pass
+      cancelled it and its audit write failed); any other stamp means someone else (e.g.
+      staff) cancelled it → no partner audit;
+    * the household is re-read: still ``pre_registered`` → a fresh ``now`` is stamped as
+      ``reconcile_household_cancelled_at`` first, then it is cancelled by
+      ``_cancel_household_if_empty`` with that ``now`` (only once no member is still held,
       §1.3 rule 1; covers a household left behind by a failed roll-up and household-only
-      rows); already ``cancelled`` → its audit is written only with the marker, as for the
-      stay;
+      rows); already ``cancelled`` → its audit is written only when its ``updated_at``
+      equals ``reconcile_household_cancelled_at``, as for the stay;
     * anything cancelled or audited in this pass → ``cancelled``; otherwise → ``noop``.
 
     Raises on a CouchDB error (the caller leaves the row unreconciled). Logs ids only.
@@ -1310,43 +1313,47 @@ async def _reconcile_row(couch: CouchClient, booking: ExternalBooking) -> str:
 
     cancelled = False
     if status == "pre_registered":
-        stamped_stay = await _mark_reconcile_cancel(booking)
+        now = _now_iso()
+        await _mark_reconcile_cancel(
+            booking, now=now, stay=True, household=booking.household_id is not None
+        )
         outcome = await _cancel_stay(
-            couch, database, booking, booking.evacuee_id, strict=True
+            couch, database, booking, booking.evacuee_id, strict=True, now=now
         )
         if outcome != _CANCELLED:
-            if outcome == _CHANGED and stamped_stay:
-                # Nothing was written: the marker this pass set is not ours to keep.
-                await _clear_reconcile_cancel(booking)
             raise _ReconcileRetry(outcome)
         cancelled = True
     elif (
         status == "cancelled"
         and evacuee is not None
-        and booking.reconcile_cancelled_at is not None
+        and _cancelled_by_reconcile(
+            (evacuee.get("current_stay") or {}).get("since"),
+            booking.reconcile_stay_cancelled_at,
+        )
     ):
         cancelled = await _ensure_stay_audit(couch, database, booking, evacuee)
 
     if booking.household_id:
         fresh = await couch.get_doc(database, booking.household_id)
         if fresh is not None and fresh.get("status") == "pre_registered":
-            stamped_household = await _mark_reconcile_cancel(booking)
-            done = await _cancel_household_if_empty(
+            now_household = _now_iso()
+            await _mark_reconcile_cancel(
+                booking, now=now_household, stay=False, household=True
+            )
+            cancelled |= await _cancel_household_if_empty(
                 couch,
                 database,
                 household_id=booking.household_id,
                 evacuee_id=booking.evacuee_id,
                 actor=partner_actor(booking.module_name, booking.client_id),
-                now=_now_iso(),
+                now=now_household,
             )
-            if not done and stamped_household and not cancelled:
-                # Declined (a member still held) and this pass cancelled nothing.
-                await _clear_reconcile_cancel(booking)
-            cancelled |= done
         elif (
             fresh is not None
             and fresh.get("status") == "cancelled"
-            and booking.reconcile_cancelled_at is not None
+            and _cancelled_by_reconcile(
+                fresh.get("updated_at"), booking.reconcile_household_cancelled_at
+            )
         ):
             cancelled |= await _ensure_household_audit(couch, database, booking, fresh)
 
