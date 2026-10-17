@@ -781,6 +781,8 @@ class ThirdPartyBookingsUseCase:
                 raise
             if not cancelled:
                 raise await self._not_cancellable(endpoint, claims, client_ip, rows[0])
+        # Phase 2c — the granted access-log write after 2b. An error here reverts the 2a flags
+        # too, so a failed 2c never leaves `cancel_requested=True` behind.
         try:
             return await self._cancelled(endpoint, claims, client_ip, rows[0])
         except BaseException:
@@ -980,7 +982,8 @@ class ThirdPartyBookingsUseCase:
                 return True
             fresh = await ExternalBooking.get(current.id)
             if fresh is None:
-                break
+                logger.warning("cancel row no longer exists (booking_id=%s)", row.booking_id)
+                return False
             if not _is_open(fresh):
                 return True
             next_kind = await self._classify_fresh(fresh)

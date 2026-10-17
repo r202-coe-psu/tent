@@ -11,7 +11,7 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
-from httpx import AsyncClient
+from httpx import ASGITransport, AsyncClient
 from pymongo.errors import BulkWriteError, DuplicateKeyError
 from tent_model.external_booking import ExternalBooking
 from tent_model.public_person import PublicPerson
@@ -1883,6 +1883,7 @@ async def test_cancel_group_stay_reread_error_keeps_original_error_when_revert_f
     assert messages == ["cancel flag revert failed (booking_id=BK-GROUP001 error=RuntimeError)"]
     for secret in (CID, "สมชาย"):
         assert secret not in "\n".join(messages)
+    assert await _log_statuses() == []
 
 
 async def test_cancel_group_pending_write_error_reverts_our_flags(
@@ -1900,6 +1901,42 @@ async def test_cancel_group_pending_write_error_reverts_our_flags(
     assert _snapshot(after) == _snapshot(before)
     assert after[1]["cancel_requested"] is False
     assert [row["state"] for row in after] == ["pending", "written", "pending"]
+    assert await _log_statuses() == []
+
+
+async def test_cancel_group_access_log_error_reverts_our_flags(
+    app: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Phase 2c: the granted access-log write fails after 2a flagged the written rows.
+
+    Both rows are written, so 2b has nothing to cancel and 2c is the only step after the
+    flags. The flags are reverted and the error surfaces as the sanitized partner 500. The
+    transport is asked not to re-raise so the response itself can be checked.
+    """
+    from apiapp.modules.thirdparty_bookings import use_case
+
+    for i in range(2):
+        await _person(status="pre_registered", person_id=f"evacuee:BK-GROUP001-{i}")
+    await _group(2, ["written", "written"])
+    before = await _rows("BK-GROUP001")
+
+    async def broken(self: Any, *args: Any, **kwargs: Any) -> Any:
+        raise RuntimeError("log store down")
+
+    monkeypatch.setattr(use_case.ThirdPartyAccessLog, "insert", broken)
+    transport = ASGITransport(app=app, raise_app_exceptions=False)
+    async with AsyncClient(transport=transport, base_url="http://test") as raw:
+        response = await raw.post(_cancel_url("BK-GROUP001"), json={"reason": "r"}, headers=GRANTED)
+    monkeypatch.undo()
+    assert response.status_code == 500
+    assert response.json()["code"] == "internal_error"
+    assert "log store down" not in response.text
+    after = await _rows("BK-GROUP001")
+    assert _snapshot(after) == _snapshot(before)
+    assert [(row["cancel_requested"], row["cancel_reason"]) for row in after] == [
+        (False, None),
+        (False, None),
+    ]
     assert await _log_statuses() == []
 
 
