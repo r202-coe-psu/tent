@@ -1597,6 +1597,81 @@ async def test_cancel_group_foreign_flag_set_mid_request_is_left_alone(
     assert await _log_statuses() == ["denied_booking_not_cancellable"]
 
 
+async def test_cancel_group_foreign_flag_on_written_row_is_409_not_200(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A concurrent request flags a written row we planned as OPEN: never a 200 without it.
+
+    Row 0 is OPEN at phase 1. A foreign request flags it just before our flag write, so our
+    write flags only row 1. The old code treated row 0 as FINISHED, kept row 1 (stay ok) and
+    cancelled the pending row 2 with a 200 while row 0 stayed open. Now the step is a 409: our
+    flag on row 1 is reverted, the foreign flag on row 0 and the pending row 2 are untouched.
+    """
+    await _person(status="pre_registered", person_id="evacuee:BK-GROUP001-0")
+    await _person(status="pre_registered", person_id="evacuee:BK-GROUP001-1")
+    await _group(3, ["written", "written", "pending"])
+    foreign_at = datetime(2026, 9, 1)
+    _around_update_many(
+        monkeypatch,
+        when=lambda flt: flt.get("cancel_requested") is False,
+        before=lambda: _set_row(
+            "BP-BK-GROUP001-0",
+            {"cancel_requested": True, "cancel_reason": "foreign", "updated_at": foreign_at},
+        ),
+    )
+    response = await client.post(_cancel_url("BK-GROUP001"), json={"reason": "r"}, headers=GRANTED)
+    assert response.status_code == 409
+    assert response.json()["code"] == "booking_not_cancellable"
+    after = await _rows("BK-GROUP001")
+    assert (after[0]["cancel_requested"], after[0]["cancel_reason"]) == (True, "foreign")
+    assert after[0]["updated_at"] == foreign_at
+    assert (after[1]["state"], after[1]["cancel_requested"], after[1]["cancel_reason"]) == (
+        "written",
+        False,
+        None,
+    )
+    assert (after[2]["state"], after[2]["cid"]) == ("pending", _cid(2))
+    assert await _log_statuses() == ["denied_booking_not_cancellable"]
+
+
+async def test_cancel_group_pending_row_flagged_elsewhere_mid_way_is_409(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Phase 2b: a pending row that becomes a foreign-flagged written row is a conflict.
+
+    The bulk pending cancel misses row 1, which a concurrent request has just moved to written
+    and flagged. It is in flight (not FINISHED), so the request is a 409 rather than a skip.
+    Row 0 was cancelled by the bulk step before the conflict: that is the documented 2b residual
+    race, and the foreign flag on row 1 is left alone.
+    """
+    await _group(2, ["pending", "pending"])
+    foreign_at = datetime(2026, 9, 1)
+    _around_update_many(
+        monkeypatch,
+        when=lambda flt: flt.get("state") == "pending",
+        before=lambda: _set_row(
+            "BP-BK-GROUP001-1",
+            {
+                "state": "written",
+                "cancel_requested": True,
+                "cancel_reason": "foreign",
+                "updated_at": foreign_at,
+            },
+        ),
+    )
+    response = await client.post(_cancel_url("BK-GROUP001"), json={"reason": "r"}, headers=GRANTED)
+    assert response.status_code == 409
+    assert response.json()["code"] == "booking_not_cancellable"
+    rows = await _rows("BK-GROUP001")
+    assert [(row["state"], row["cancel_requested"]) for row in rows] == [
+        ("cancelled", False),
+        ("written", True),
+    ]
+    assert (rows[1]["cancel_reason"], rows[1]["updated_at"]) == ("foreign", foreign_at)
+    assert rows[1]["cid"] == _cid(1)
+    assert await _log_statuses() == ["denied_booking_not_cancellable"]
+
+
 async def test_cancel_group_revert_keeps_a_flag_set_after_our_marker(
     client: AsyncClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:

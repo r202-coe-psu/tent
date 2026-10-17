@@ -276,6 +276,15 @@ def _to_milliseconds(value: datetime) -> datetime:
     return value.replace(microsecond=value.microsecond // 1000 * 1000)
 
 
+def _flag_in_flight(row: ExternalBooking) -> bool:
+    """A written row flagged for cancel whose worker cancel has not landed yet.
+
+    It is not FINISHED (the worker has not cancelled it) and this request did not set its flag,
+    so a step that finds it must refuse (409) rather than skip it.
+    """
+    return row.state == "written" and bool(row.cancel_requested)
+
+
 def _is_open(row: ExternalBooking) -> bool:
     """CR-169 FR-40 — an OPEN row is `pending`, or `written` with cancel not yet requested.
 
@@ -824,6 +833,10 @@ class ThirdPartyBookingsUseCase:
         FINISHED by someone else, or moved on and need a fresh flag). The stays of every row
         this request flagged are then read again: a check-in since phase 1 reverts the flags.
 
+        A written row flagged by a concurrent request (not this one) is never skipped: it makes
+        this step a 409 (`_cancel_row` returns False), so the request cannot return 200 while
+        that row stays open. Our own flags are reverted; the foreign flag is left alone.
+
         Residual race: the worker may process a `cancel_requested` flag between the flag
         write below and the revert, so a stay that has just checked in can be asked to cancel.
         A 409 from this step reverts the flags; a 409 from step 2b (`_cancel_pending`) does not,
@@ -955,7 +968,7 @@ class ThirdPartyBookingsUseCase:
             if row.id in cancelled:
                 continue
             fresh = await ExternalBooking.get(row.id)
-            if fresh is None:
+            if fresh is None or _flag_in_flight(fresh):
                 return False
             if not _is_open(fresh):
                 continue
@@ -989,6 +1002,10 @@ class ThirdPartyBookingsUseCase:
             fresh = await ExternalBooking.get(current.id)
             if fresh is None:
                 logger.warning("cancel row no longer exists (booking_id=%s)", row.booking_id)
+                return False
+            if _flag_in_flight(fresh):
+                # Another request flagged it and the worker has not finished yet: not FINISHED,
+                # and not ours to skip. Refuse, so this request never returns 200 without it.
                 return False
             if not _is_open(fresh):
                 return True
