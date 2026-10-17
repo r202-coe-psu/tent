@@ -433,6 +433,31 @@ async def _complete_key(record_id: str | None, booking_id: str) -> None:
     )
 
 
+async def _still_owns_key(record_id: str | None) -> bool:
+    """#614 fence — True while this request's `in_progress` key row still exists.
+
+    A stale key can be taken over by a later retry (`_take_over_stale_key`), which also removes
+    the staged rows of this attempt. Checked after the insert and before the commit flip so an
+    attempt that stalled past the takeover never commits a booking it no longer owns. A read
+    failure counts as not owned (the partner retries; nothing is committed). Shielded and
+    detached, so a cancel cannot split the check from the caller's cleanup.
+    """
+    if record_id is None:
+        return True
+    collection = ExternalBookingIdempotency.get_pymongo_collection()
+
+    async def check() -> bool:
+        try:
+            return (
+                await collection.count_documents({"_id": record_id, "status": "in_progress"}) == 1
+            )
+        except Exception as exc:
+            logger.warning("idempotency key ownership check failed (error=%s)", type(exc).__name__)
+            return False
+
+    return await asyncio.shield(_detach(check()))
+
+
 async def _settle_cancelled_commit(
     collection: Any,
     commit_task: asyncio.Task[Any],
@@ -1066,6 +1091,26 @@ class ThirdPartyBookingsUseCase:
                     location_code=location_code,
                 )
             raise failure
+
+        # #614 fence — the key may have been taken over while this attempt was staging rows
+        # (stalled past 60 s). Then this attempt must not commit: its rows are removed and the
+        # new owner of the key answers the partner.
+        try:
+            owns_key = await _still_owns_key(reserved_id)
+        except BaseException:
+            await _cleanup_staged(collection, staged)
+            raise
+        if not owns_key:
+            await _cleanup_staged(collection, staged)
+            raise await self._deny(
+                endpoint=endpoint,
+                claims=claims,
+                client_ip=client_ip,
+                status_code=status.HTTP_409_CONFLICT,
+                code="idempotency_in_progress",
+                message="A request with this Idempotency-Key is still being processed.",
+                location_code=location_code,
+            )
 
         commit_failed = False
         key_completed = False  # set when the G5 settle already completed the key

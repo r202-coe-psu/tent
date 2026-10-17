@@ -595,6 +595,7 @@ Error   : { "status": <http>, "message": "…", "code"?: "…", "detail"?: "…"
   - **key เดิม body เดียวกัน และ `in_progress` อายุเกิน 60 วินาที** (รอบแรกอาจค้างหลัง process ถูก kill) → ตัดสินจากแถวจริงของ `booking_id` ที่ key เก็บไว้:
     - ทุกแถวของกลุ่ม committed ครบ → **201** booking เดิม (`booking_id` เดิม) และ key เป็น completed
     - ไม่มีแถว committed เลย → key ถูกปล่อยและคำขอนี้ทำเป็นคำขอใหม่ (ได้ `booking_id` ใหม่) · คำขอซ้ำที่ตัดสินพร้อมกันมีเพียงหนึ่งเดียวที่ได้สิทธิ์ ที่เหลือตอบ 409 `idempotency_in_progress`
+    - รอบแรกที่ค้างนานแต่ยังทำงานอยู่: ก่อน commit ตรวจว่า key ยังเป็นของรอบนี้ ถ้าถูกรับช่วงไปแล้ว → ลบแถว staged ของรอบนี้และตอบ **409** `idempotency_in_progress` (ไม่ commit)
     - committed บางส่วน → **409** `idempotency_in_progress` (ไม่สร้าง ไม่ลบอะไร)
   - รอบแรกล้มโดยยังไม่มี booking (4xx/5xx ก่อน commit, รวม `duplicate_booking` 409 และ insert key ที่ ack หาย) → key ถูกปล่อย ส่งซ้ำได้ทันที
   - รอบแรกถูกตัดการเชื่อมต่อระหว่าง commit: ถ้ากลุ่มถูก commit ครบแล้ว → key เป็น completed และ retry ได้ 201 body เดิม; ถ้ายังไม่ครบ → key ถูกปล่อยเหมือนข้อด้านบน

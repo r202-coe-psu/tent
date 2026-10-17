@@ -12,6 +12,7 @@ import pytest
 from httpx import AsyncClient
 from pymongo.errors import BulkWriteError, DuplicateKeyError
 from tent_model.external_booking import ExternalBooking
+from tent_model.external_booking_idempotency import ExternalBookingIdempotency
 from tent_model.public_person import PublicPerson
 from tent_model.public_shelter import PublicShelter
 from tent_model.third_party_access_log import ThirdPartyAccessLog
@@ -1930,6 +1931,30 @@ async def test_cancel_after_the_flip_keeps_the_group_and_completes_the_key(
     assert replay.status_code == 201
     assert replay.json()["result"]["booking_id"] == booking_id
     assert len(await _rows()) == 3  # the replay created nothing
+
+
+async def test_key_taken_over_before_the_commit_is_never_committed(
+    client: AsyncClient, shelters: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """#614 fence (review r1 on #666): an attempt that stalled past the takeover must not commit.
+
+    The key row is removed right after this attempt staged its rows (as a stale-key takeover
+    would). The attempt answers 409, removes its own staged rows and commits nothing, so no
+    booking exists without a key row to replay it.
+    """
+    real_insert = ExternalBooking.insert_many
+
+    async def taken_over_after_insert(docs: Any, **kwargs: Any) -> Any:
+        result = await real_insert(docs, **kwargs)
+        await ExternalBookingIdempotency.get_pymongo_collection().delete_many({"key": "fenced-1"})
+        return result
+
+    monkeypatch.setattr(ExternalBooking, "insert_many", taken_over_after_insert)
+    response = await client.post(URL, json=_group_payload(3), headers=_idem("fenced-1"))
+    assert response.status_code == 409
+    assert response.json()["code"] == "idempotency_in_progress"
+    assert await _rows() == []
+    assert await _keys() == []
 
 
 async def test_cancel_before_the_flip_releases_the_key(

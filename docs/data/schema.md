@@ -2730,5 +2730,6 @@ Buffer ของ partner booking (M2) — FastAPI insert ตอนรับค�
 **`in_progress` ค้าง (decision sync CR-169 2026-10-17, จาก code review PR #666):** แถว key เก็บ `booking_id` ตั้งแต่ตอน insert ดังนั้น request ที่เจอแถว `in_progress` อายุ > 60 วินาที (รอบแรกอาจถูก kill ก่อน release/complete) ตัดสินจากแถว `external_bookings` ที่มี `booking_id` นั้น:
 - **committed ครบ `group_size`** → **201** body เดิม (`booking_id` เดิม, ไม่สร้างแถวใหม่) และ mark key เป็น `completed`
 - **ไม่มีแถว `committed: true` เลย** → **takeover**: ลบแถว key ด้วยเงื่อนไข `_id` + `status: in_progress` + `created_at` เดิม (atomic — ของคำขอที่แข่งกันตัดสินพร้อมกันมีเพียงคำขอเดียวที่ `deleted_count = 1`; อีกคำขอตอบ 409 `idempotency_in_progress`) แล้วลบแถว `committed: false` ของ `booking_id` เดิม และคำขอนี้ดำเนินการเป็นคำขอใหม่ (`booking_id` ใหม่, insert key ใหม่)
+- **fence ก่อน commit (ทุกรอบที่ key ถูกสร้าง):** หลัง insert แถว staged และก่อน flip `committed` ตรวจว่าแถว key ยังอยู่ (`_id` + `status: in_progress`); ถ้าถูกรับช่วงไปแล้ว (รอบแรกค้างเกิน 60 วินาที) → ลบแถว staged ของรอบนี้ ตอบ **409** `idempotency_in_progress` และไม่ commit
 - **committed บางส่วน** → **409** `idempotency_in_progress` ไม่แก้ไขแถวใด ๆ (ไม่มี sweep ของ key นี้; key คงอยู่จนหมด TTL 24 ชม. ตามกติกานี้)
 - อายุ ≤ 60 วินาที → 409 `idempotency_in_progress` ไม่แตะข้อมูล
