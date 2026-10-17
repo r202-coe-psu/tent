@@ -40,10 +40,20 @@ auth() { printf '{"basic":{"username":"%s","password":"%s"}}' "$1" "$2"; }
 # job <doc-id> <source-url> <source-auth> <target-url> <target-auth> [extra-json]
 # doc ของ job เก็บ `edge_init_hash` (sha256 ของ config ทั้งก้อน รวม URL + credential) ไว้เทียบรอบถัดไป:
 # ตรง = ข้าม · ไม่ตรง/ไม่มี (เช่นแก้ SYNC_URL หรือรหัสใน .env) = ลบแล้วสร้างใหม่ ไม่ปล่อยให้ job ชี้ค่าเก่าแบบเงียบ ๆ
+# อ่าน job ไม่ได้ (HTTP อื่นนอกจาก 200/404 เช่น 500 หรือต่อไม่ติด = 000) = FAILED exit 1 ไม่เดาว่า "ยังไม่มี" แล้วสร้างทับ
 job() {
 	body="\"source\":{\"url\":\"$2\",\"auth\":$3},\"target\":{\"url\":\"$4\",\"auth\":$5},\"continuous\":true${6:+,$6}"
 	hash=$(printf '%s' "$body" | sha256sum | cut -c1-32)
-	cur=$(curl -s "$E/_replicator/$1")
+	: >/tmp/edge-init.cur # ต่อไม่ติด (000) curl ไม่เขียนไฟล์ — กันข้อความค้างจากรอบก่อน
+	cur_status=$(curl -s -o /tmp/edge-init.cur -w '%{http_code}' "$E/_replicator/$1")
+	case "$cur_status" in
+	200 | 404) ;;
+	*)
+		echo "FAILED  อ่าน _replicator/$1 ไม่ได้ (HTTP $cur_status): $(cat /tmp/edge-init.cur)"
+		exit 1
+		;;
+	esac
+	cur=$(cat /tmp/edge-init.cur)
 	case "$cur" in
 	*"\"edge_init_hash\":\"$hash\""*)
 		echo "exists  _replicator/$1"
