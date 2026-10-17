@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { KioskBannerSummary } from '../../data/kiosk-banner.repository';
 	import type { KioskScreenType } from '$lib/features/shared/domain/kiosk-screen';
-	import KioskBannerScreenDialog from '../kiosk-banner-screen-dialog.svelte';
+	import KioskBannerScreenManager from '../kiosk-banner-screen-manager.svelte';
 
 	/**
 	 * Test-only parent: owns the bound `draft` (as the page does), echoes its `_id` order, and can
@@ -15,8 +15,7 @@
 		initialDraft = null,
 		loading = false,
 		errorMessage = null,
-		now,
-		onclose
+		now
 	}: {
 		screen?: KioskScreenType;
 		initialCurrent: KioskBannerSummary[];
@@ -26,16 +25,16 @@
 		loading?: boolean;
 		errorMessage?: string | null;
 		now: Date;
-		onclose: () => void;
 	} = $props();
 
 	// svelte-ignore state_referenced_locally
 	let current = $state.raw(initialCurrent);
+	let previewOpen = $state(false);
 	// svelte-ignore state_referenced_locally
 	let draft = $state.raw<KioskBannerSummary[] | null>(initialDraft);
 </script>
 
-<KioskBannerScreenDialog
+<KioskBannerScreenManager
 	{screen}
 	{current}
 	{expired}
@@ -44,7 +43,10 @@
 	{loading}
 	{errorMessage}
 	bind:draft
-	{onclose}
+	bind:previewOpen
 />
+<button type="button" data-testid="open-preview" onclick={() => (previewOpen = true)}
+	>preview</button
+>
 <button type="button" data-testid="refetch" onclick={() => (current = refreshed)}>refetch</button>
 <output data-testid="draft">{draft ? draft.map((item) => item._id).join(',') : 'none'}</output>

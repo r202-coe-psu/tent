@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushSync, mount, tick, unmount } from 'svelte';
 import { KioskBannerApiError, type KioskBannerSummary } from '../data/kiosk-banner.repository';
-import Harness from './__fixtures__/screen-dialog-harness.svelte';
+import Harness from './__fixtures__/screen-manager-harness.svelte';
 
 const reorder = vi.hoisted(() => ({ mutateAsync: vi.fn(), isPending: false }));
 const setStatus = vi.hoisted(() => ({ mutate: vi.fn(), isPending: false }));
@@ -51,11 +51,10 @@ function render(props: {
 	loading?: boolean;
 	errorMessage?: string | null;
 	screen?: 'compact' | 'portrait';
-	onclose?: () => void;
 }) {
 	instance = mount(Harness, {
 		target: document.body,
-		props: { now: NOW, onclose: () => {}, ...props }
+		props: { now: NOW, ...props }
 	});
 	flushSync();
 }
@@ -88,7 +87,7 @@ afterEach(async () => {
 	document.body.innerHTML = '';
 });
 
-describe('KioskBannerScreenDialog', () => {
+describe('KioskBannerScreenManager', () => {
 	it('lists only this screen’s banners; a legacy doc without screen_type counts as compact', () => {
 		render({
 			initialCurrent: [
@@ -99,8 +98,6 @@ describe('KioskBannerScreenDialog', () => {
 		});
 
 		expect(titles()).toEqual(['แบนเนอร์ legacy', 'แบนเนอร์ small']);
-		expect(document.body.textContent).toContain('ตู้เล็ก 1024×600');
-		expect(document.body.textContent).toContain('ศูนย์ SH001');
 	});
 
 	it('shows this screen’s expired banners without drag handles', async () => {
@@ -223,23 +220,6 @@ describe('KioskBannerScreenDialog', () => {
 		expect((byText('button', 'ยกเลิก') as HTMLButtonElement).disabled).toBe(true);
 	});
 
-	it('calls onclose from the close button', () => {
-		const onclose = vi.fn();
-		render({ initialCurrent: [banner('a')], onclose });
-
-		(byText('button', 'Close') as HTMLButtonElement).click();
-		flushSync();
-
-		expect(onclose).toHaveBeenCalled();
-	});
-
-	it('links「สร้างแบนเนอร์」to the form preselecting this screen', () => {
-		render({ initialCurrent: [], screen: 'portrait' });
-
-		const link = byText('a', 'สร้างแบนเนอร์') as HTMLAnchorElement;
-		expect(link.getAttribute('href')).toBe('/back-office/kiosks/banners/new?screen=portrait');
-	});
-
 	it('shows a loading message instead of the list', () => {
 		render({ initialCurrent: [], loading: true });
 
@@ -274,11 +254,21 @@ describe('KioskBannerScreenDialog', () => {
 			initialDraft: [b, a]
 		});
 
-		(byText('button', 'ดูตัวอย่าง') as HTMLButtonElement).click();
+		(document.body.querySelector('[data-testid="open-preview"]') as HTMLButtonElement).click();
 		await tick();
 		flushSync();
 
 		expect(document.body.textContent).toContain('ตัวอย่างบน kiosk');
 		expect(document.body.querySelector('[aria-pressed]')).toBeNull();
+	});
+
+	it('pins the unsaved-order footer to the bottom while the list scrolls', () => {
+		const a = banner('a', { order: 1 });
+		const b = banner('b', { order: 2 });
+		render({ initialCurrent: [a, b], initialDraft: [b, a] });
+
+		const footer = (byText('button', 'บันทึกลำดับ') as HTMLElement).closest('div') as HTMLElement;
+		expect(footer.className).toContain('sticky');
+		expect(footer.className).toContain('bottom-0');
 	});
 });

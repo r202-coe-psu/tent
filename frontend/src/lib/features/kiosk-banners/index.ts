@@ -54,7 +54,7 @@ export { default as KioskBannerOrderList } from './ui/kiosk-banner-order-list.sv
 export { sameOrder, summarizeScreen } from './ui/kiosk-banner-order';
 export type { ScreenSummary } from './ui/kiosk-banner-order';
 export { default as KioskBannerScreenCard } from './ui/kiosk-banner-screen-card.svelte';
-export { default as KioskBannerScreenDialog } from './ui/kiosk-banner-screen-dialog.svelte';
+export { default as KioskBannerScreenManager } from './ui/kiosk-banner-screen-manager.svelte';
 export { default as KioskBannerPreviewDialog } from './ui/kiosk-banner-preview-dialog.svelte';
 export { buildListPreviewSlides } from './ui/kiosk-banner-preview-slides';
 export type { KioskBannerSavePayload } from './ui/kiosk-banner-save';

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
 	import ChevronRight from '@lucide/svelte/icons/chevron-right';
 	import { KIOSK_SCREENS, type KioskScreenType } from '$lib/features/shared/domain/kiosk-screen';
 	import { kioskBannerRemoteRepository } from '../data/kiosk-banner.remote';
@@ -6,13 +7,9 @@
 
 	/**
 	 * One summary card per screen type: banner counts by state plus the first banners of the play
-	 * order. The whole card opens the manage dialog for that screen.
+	 * order. The whole card links to that screen's manage page.
 	 */
-	let {
-		screen,
-		summary,
-		onopen
-	}: { screen: KioskScreenType; summary: ScreenSummary; onopen: () => void } = $props();
+	let { screen, summary }: { screen: KioskScreenType; summary: ScreenSummary } = $props();
 
 	const STRIP_LIMIT = 6;
 
@@ -21,11 +18,10 @@
 	const hidden = $derived(summary.strip.length - shown.length);
 </script>
 
-<button
-	type="button"
+<a
+	href={resolve(`/back-office/kiosks/banners/${screen}`)}
 	class="flex min-h-11 w-full flex-col gap-3 rounded-xl border border-slate-200/80 bg-white p-4 text-left shadow-2xs transition-colors hover:border-slate-300 hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none sm:p-5"
 	aria-label="จัดการแบนเนอร์{meta.label} {meta.size}"
-	onclick={onopen}
 >
 	<span class="flex flex-col gap-1">
 		<span class="text-lg font-bold text-slate-900">{meta.label} {meta.size}</span>
@@ -78,4 +74,4 @@
 		จัดการ
 		<ChevronRight class="size-4" aria-hidden="true" />
 	</span>
-</button>
+</a>

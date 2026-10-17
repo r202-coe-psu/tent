@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { flushSync, mount, unmount } from 'svelte';
 import type { KioskBannerSummary } from '../data/kiosk-banner.repository';
 import type { ScreenSummary } from './kiosk-banner-order';
@@ -35,19 +35,15 @@ const summary = (over: Partial<ScreenSummary> = {}): ScreenSummary => ({
 
 let instance: ReturnType<typeof mount> | null = null;
 
-function render(props: {
-	screen?: 'compact' | 'portrait';
-	summary: ScreenSummary;
-	onopen?: () => void;
-}) {
+function render(props: { screen?: 'compact' | 'portrait'; summary: ScreenSummary }) {
 	instance = mount(KioskBannerScreenCard, {
 		target: document.body,
-		props: { screen: 'compact', onopen: () => {}, ...props }
+		props: { screen: 'compact', ...props }
 	});
 	flushSync();
 }
 
-const button = () => document.body.querySelector('button') as HTMLButtonElement;
+const link = () => document.body.querySelector('a') as HTMLAnchorElement;
 
 afterEach(() => {
 	if (instance) unmount(instance);
@@ -62,7 +58,7 @@ describe('KioskBannerScreenCard', () => {
 			summary: summary({ active: 2, scheduled: 1, expired: 3, strip: [banner('a')] })
 		});
 
-		expect(button().getAttribute('aria-label')).toBe('จัดการแบนเนอร์ตู้ใหญ่ 1080×1920');
+		expect(link().getAttribute('aria-label')).toBe('จัดการแบนเนอร์ตู้ใหญ่ 1080×1920');
 		const text = document.body.textContent ?? '';
 		expect(text).toContain('ตู้ใหญ่ 1080×1920');
 		expect(text).toContain('แสดงอยู่ 2');
@@ -110,12 +106,10 @@ describe('KioskBannerScreenCard', () => {
 		expect(document.body.textContent).toContain('ยังไม่มีแบนเนอร์ที่ยังไม่หมดอายุ');
 	});
 
-	it('calls onopen when clicked', () => {
-		const onopen = vi.fn();
-		render({ summary: summary(), onopen });
+	it('is a single link to the screen page', () => {
+		render({ screen: 'portrait', summary: summary() });
 
-		button().click();
-
-		expect(onopen).toHaveBeenCalledOnce();
+		expect(document.body.querySelectorAll('a')).toHaveLength(1);
+		expect(link().getAttribute('href')).toBe('/back-office/kiosks/banners/portrait');
 	});
 });
