@@ -289,19 +289,29 @@ export async function catalogItem(name: string): Promise<{ id: string; unit: str
 	return { id: doc._id, unit: doc.base_unit };
 }
 
-/** Public needs board → `shelter`'s card → the line for `itemName` (as the board prints it). */
-export async function openNeed(page: Page, shelter: Pick<PublicShelter, 'name'>, itemName: string) {
+/** Public needs board → `shelter`'s card, opened. */
+export async function openShelter(page: Page, shelter: Pick<PublicShelter, 'name'>) {
 	await page.goto('/donations');
 	await expect(
 		page.getByRole('heading', { name: /ของที่ศูนย์พักพิง\s*ต้องการตอนนี้/ })
 	).toBeVisible();
 	await cardWith(page, shelter.name, 'ดูรายละเอียดและบริจาค').click();
+}
+
+/** Public needs board → `shelter`'s card → the line for `itemName` (as the board prints it). */
+export async function openNeed(page: Page, shelter: Pick<PublicShelter, 'name'>, itemName: string) {
+	await openShelter(page, shelter);
 	await cardWith(page, itemName, 'บริจาครายการนี้').click();
 }
 
+/** An item the donor types in themselves ("บริจาคสิ่งของอื่นๆ") instead of picking a need card. */
+export type UnsolicitedItem = { itemName: string; unitLabel: string };
+
 export type BookingOptions = {
 	shelter: Pick<PublicShelter, 'code' | 'name'>;
-	need: Pick<PublicNeed, 'name'>;
+	/** The need card to book against — or `unsolicited` to type the item in yourself. */
+	need?: Pick<PublicNeed, 'name'>;
+	unsolicited?: UnsolicitedItem;
 	donorName: string;
 	phone: string;
 	mode?: DeliveryMode;
@@ -324,16 +334,28 @@ export async function fillBooking(
 	page: Page,
 	opts: BookingOptions
 ): Promise<{ submit: (o?: { paced?: boolean }) => Promise<BookingResponse> }> {
-	const { shelter, need, donorName, phone } = opts;
+	const { shelter, need, unsolicited, donorName, phone } = opts;
 	const mode = opts.mode ?? { kind: 'self' };
 
-	await openNeed(page, shelter, need.name);
+	if (unsolicited) {
+		await openShelter(page, shelter);
+		await page.getByRole('button', { name: 'บริจาคสิ่งของอื่นๆ' }).click();
+	} else {
+		if (!need) throw new Error('fillBooking needs either `need` or `unsolicited`');
+		await openNeed(page, shelter, need.name);
+	}
 
-	// Step 2 — donor + item. Name/unit come from the need; only the qty is ours.
+	// Step 2 — donor + item. A need card brings its own name/unit; a typed item does not.
 	await expect(page.getByRole('heading', { name: 'ส่วนที่ 1: ข้อมูลผู้บริจาค' })).toBeVisible();
 	await page.locator('#donor-name').fill(donorName);
 	await page.locator('#donor-phone').fill(phone);
-	await expect(page.getByRole('textbox', { name: 'ประเภทสิ่งของ' })).toHaveValue(need.name);
+	if (unsolicited) {
+		await page.getByRole('textbox', { name: 'ประเภทสิ่งของ' }).fill(unsolicited.itemName);
+		await page.getByRole('button', { name: /^หน่วย/ }).click();
+		await page.getByRole('option', { name: unsolicited.unitLabel, exact: true }).click();
+	} else {
+		await expect(page.getByRole('textbox', { name: 'ประเภทสิ่งของ' })).toHaveValue(need!.name);
+	}
 	await page.getByRole('spinbutton', { name: 'ปริมาณ' }).fill('1');
 	await page.getByRole('button', { name: 'ถัดไป: เลือกจุดส่งมอบ' }).click();
 

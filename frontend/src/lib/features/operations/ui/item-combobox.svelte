@@ -46,6 +46,7 @@
 		placeholder = 'ค้นหา…',
 		emptyText = 'ไม่พบสินค้า',
 		allowCreate = false,
+		createInitialName = '',
 		onSelect,
 		id,
 		name,
@@ -59,11 +60,14 @@
 		isLoading?: boolean;
 		balanceByItemId?: ReadonlyMap<string, string>;
 		disableWhenEmpty?: boolean;
+		/** Unit label for a row — beside the balance, or alone when there is no balance map. */
 		formatBalanceUnit?: (item: StockFormItem) => string;
 		placeholder?: string;
 		emptyText?: string;
 		/** Offer "+ สร้างสินค้าใหม่" (quick-create) to roles that may write the shelter catalog. */
 		allowCreate?: boolean;
+		/** Name to start quick-create with when nothing has been typed (e.g. what a donor declared). */
+		createInitialName?: string;
 		onSelect?: (item: StockFormItem | null, meta?: ItemSelectMeta) => void;
 		id?: string;
 		name?: string;
@@ -199,7 +203,7 @@
 	function openCreate(barcode?: string) {
 		const code = barcode ?? (queryIsBarcode ? query : '');
 		createBarcode = code;
-		createName = code ? '' : query;
+		createName = code ? '' : query || createInitialName;
 		open = false;
 		createOpen = true;
 	}
@@ -354,6 +358,11 @@
 											: 'border-destructive/20 bg-destructive/10 text-destructive'}"
 									>
 										{bal}
+										{unitLabel(item)}
+									</span>
+								{:else if formatBalanceUnit}
+									<!-- No balance to show: still say which unit the item counts in (#636). -->
+									<span class="shrink-0 text-xs font-medium text-muted-foreground">
 										{unitLabel(item)}
 									</span>
 								{/if}

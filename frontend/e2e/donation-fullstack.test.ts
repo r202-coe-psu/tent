@@ -6,6 +6,7 @@ import {
 	RunLedger,
 	approvePending,
 	bookAsDonor,
+	catalogItem,
 	createCampaignViaUi,
 	createWarehouseStaff,
 	expectRunGone,
@@ -213,6 +214,80 @@ test.describe('Donation full-stack: donor and staff', { tag: ['@critical', '@don
 			const donation = await findDonation(shelter.code, bookingRef);
 			expect(await ledgerRowsFor(shelter.code, donation._id as string)).toEqual([]);
 		});
+	});
+
+	test('typed-in item in another unit maps to a stock item and is received in its own unit (#623, #636, #638)', async ({
+		page
+	}) => {
+		// The donor types the item and counts it in boxes; the stock item counts pieces.
+		// Mapping the line used to keep the donor's "box" and every receipt failed with
+		// CATALOG_MISMATCH ("expected piece, got box").
+		const brush = await catalogItem('แปรงสีฟัน');
+		const { bookingRef } = await bookAsDonor(page, {
+			shelter,
+			ledger,
+			unsolicited: { itemName: `แปรงสีฟันยกกล่อง ${RUN_ID}`, unitLabel: 'กล่อง' },
+			donorName: `E2E หน่วยไม่ตรง ${RUN_ID}`,
+			phone: '0867770011'
+		});
+
+		await openBackOffice(page, ws);
+		await approvePending(page, shelter.code, bookingRef);
+		await openBackOffice(page, ws);
+		await openInScanStation(page, bookingRef);
+
+		// What the donor declared stays visible, in their unit and in Thai.
+		await expect(page.getByText(/แจ้งไว้\s*1\s*กล่อง/)).toBeVisible();
+
+		// Searchable picker (#638); its rows show the unit in Thai, not the raw code (#636).
+		const picker = page.getByRole('combobox', { name: /^รายการในคลัง/ });
+		// Thai text is inserted without key events, so open the list with ArrowDown first.
+		await picker.click();
+		await picker.press('ArrowDown');
+		await picker.pressSequentially('แปรงสี');
+		const option = page.getByRole('option', { name: /^แปรงสีฟัน/ }).first();
+		await expect(option).toContainText('ชิ้น');
+		await expect(option).not.toContainText('piece');
+		await option.click();
+
+		await page.getByRole('textbox', { name: 'จำนวนรับจริง *' }).fill('12');
+		// Boxes against pieces do not compare, so no "more/less than declared" badge.
+		await expect(page.getByText(/(มากกว่า|น้อยกว่า)ที่แจ้ง/)).toHaveCount(0);
+		await page.getByRole('checkbox', { name: 'ผ่านการตรวจสอบแล้ว' }).check();
+		const confirm = page.getByRole('button', { name: 'ยืนยันรับเข้าคลัง' });
+		await expect(confirm).toBeEnabled();
+
+		const received = page.waitForResponse(
+			(r) =>
+				r.url().endsWith(`/api/back-office/donations/${bookingRef}`) &&
+				r.request().method() === 'POST'
+		);
+		await confirm.click();
+		const res = await received;
+		expect(res.ok(), `receive failed: ${await res.text()}`).toBe(true);
+
+		const donation = await findDonation(shelter.code, bookingRef);
+		expect(donation.status).toBe('received');
+		const rows = (await ledgerRowsFor(shelter.code, donation._id as string)) as {
+			item_id: string;
+			qty: string;
+			unit?: string;
+			lot?: { lot_no?: string };
+		}[];
+		expect(rows).toEqual([
+			expect.objectContaining({ item_id: brush.id, qty: '12', unit: brush.unit })
+		]);
+
+		// The lot panel names the item and links into the stock movements for that lot.
+		const lotNo = rows[0].lot?.lot_no;
+		expect(lotNo, 'receipt minted no lot number').toBeTruthy();
+		await expect(page.getByText('เลขล็อตที่ระบบออกให้ (เขียนติดกล่อง)')).toBeVisible();
+		await expect(page.getByText('แปรงสีฟัน', { exact: true })).toBeVisible();
+		const toStock = page.getByRole('link', { name: 'ดูในคลัง' }).first();
+		await expect(toStock).toHaveAttribute('href', new RegExp(`tab=movements&lq=${lotNo}`));
+		await toStock.click();
+		await expect(page).toHaveURL(/\/back-office\/supply\?tab=movements/);
+		await expect(page.getByText(lotNo!).first()).toBeVisible({ timeout: 15_000 });
 	});
 
 	test.describe('donor self-service on the track page', () => {
