@@ -125,13 +125,13 @@ vi.mock('$lib/db/couch-db', () => ({
 const regStaffCtx: AuthorContext = {
 	createdBy: 'Registration Staff',
 	shelterCode: 'SH001',
-	roles: ['registration_staff']
+	roles: ['shelter:SH001', 'SH001:registration_staff']
 };
 
 const managerCtx: AuthorContext = {
 	createdBy: 'Shelter Manager',
 	shelterCode: 'SH001',
-	roles: ['shelter_manager']
+	roles: ['shelter:SH001', 'SH001:shelter_manager']
 };
 
 const adminCtx: AuthorContext = {
@@ -143,19 +143,25 @@ const adminCtx: AuthorContext = {
 const warehouseCtx: AuthorContext = {
 	createdBy: 'Warehouse Staff',
 	shelterCode: 'SH001',
-	roles: ['warehouse_staff']
+	roles: ['shelter:SH001', 'SH001:warehouse_staff']
 };
 
 const kitchenCtx: AuthorContext = {
 	createdBy: 'Kitchen Staff',
 	shelterCode: 'SH001',
-	roles: ['kitchen_staff']
+	roles: ['shelter:SH001', 'SH001:kitchen_staff']
 };
 
 const supplyCtx: AuthorContext = {
 	createdBy: 'Supply Coordinator',
 	shelterCode: 'SH001',
-	roles: ['supply_coordinator']
+	roles: ['shelter:SH001', 'SH001:supply_coordinator']
+};
+
+const distributionCtx: AuthorContext = {
+	createdBy: 'Distribution Staff',
+	shelterCode: 'SH001',
+	roles: ['shelter:SH001', 'SH001:distribution_staff']
 };
 
 const crossShelterRegistrationCtx: AuthorContext = {
@@ -254,21 +260,22 @@ describe('DistributionRemoteRepository — Phase 3B Issue Execution', () => {
 		it('authorizes recipient lookup before reading data and enforces shelter scope', async () => {
 			seedActiveEvacuee('evacuee:01J1');
 			seedActiveEvacuee('evacuee:OTHER', { shelter_code: 'SH002' });
-			for (const ctx of [regStaffCtx, managerCtx, adminCtx]) {
+			for (const ctx of [distributionCtx, managerCtx, adminCtx]) {
 				expect(await repo.listActiveRecipients(ctx)).toHaveLength(1);
 				expect((await repo.getRecipient('evacuee:01J1', ctx))?._id).toBe('evacuee:01J1');
 			}
 			for (const ctx of [
+				regStaffCtx,
 				warehouseCtx,
 				supplyCtx,
 				kitchenCtx,
 				crossShelterRegistrationCtx,
-				{ ...regStaffCtx, roles: [] }
+				{ ...distributionCtx, roles: [] }
 			]) {
 				await expect(repo.listActiveRecipients(ctx)).rejects.toThrow(/Unauthorized/);
 				await expect(repo.getRecipient('evacuee:01J1', ctx)).rejects.toThrow(/Unauthorized/);
 			}
-			expect(await repo.getRecipient('evacuee:OTHER', regStaffCtx)).toBeNull();
+			expect(await repo.getRecipient('evacuee:OTHER', distributionCtx)).toBeNull();
 		});
 
 		it('returns only minimal recipient DTO without leaking sensitive fields', async () => {
@@ -280,7 +287,7 @@ describe('DistributionRemoteRepository — Phase 3B Issue Execution', () => {
 				photo_url: 'https://example.com/photo.jpg'
 			});
 
-			const recipients = await repo.listActiveRecipients(regStaffCtx);
+			const recipients = await repo.listActiveRecipients(distributionCtx);
 			expect(recipients).toHaveLength(1);
 			const r = recipients[0];
 			expect(r).toEqual({
@@ -306,12 +313,12 @@ describe('DistributionRemoteRepository — Phase 3B Issue Execution', () => {
 			seedActiveEvacuee('evacuee:01J_OUT', { current_stay: { status: 'checked_out', zone: 'A' } });
 			seedActiveEvacuee('evacuee:01J_DEAD', { current_stay: { status: 'deceased', zone: 'A' } });
 
-			const list = await repo.listActiveRecipients(regStaffCtx);
+			const list = await repo.listActiveRecipients(distributionCtx);
 			expect(list).toHaveLength(1);
 			expect(list[0]._id).toBe('evacuee:01J_ACTIVE');
 
-			expect(await repo.getRecipient('evacuee:01J_LEAVE', regStaffCtx)).toBeNull();
-			expect(await repo.getRecipient('evacuee:01J_OUT', regStaffCtx)).toBeNull();
+			expect(await repo.getRecipient('evacuee:01J_LEAVE', distributionCtx)).toBeNull();
+			expect(await repo.getRecipient('evacuee:01J_OUT', distributionCtx)).toBeNull();
 		});
 
 		it('supports search query matching first_name, last_name, or nickname', async () => {
@@ -326,32 +333,20 @@ describe('DistributionRemoteRepository — Phase 3B Issue Execution', () => {
 				nickname: 'กุ้ง'
 			});
 
-			const byName = await repo.listActiveRecipients(regStaffCtx, 'สมชาย');
+			const byName = await repo.listActiveRecipients(distributionCtx, 'สมชาย');
 			expect(byName).toHaveLength(1);
 			expect(byName[0]._id).toBe('evacuee:01J1');
 
-			const byNick = await repo.listActiveRecipients(regStaffCtx, 'กุ้ง');
+			const byNick = await repo.listActiveRecipients(distributionCtx, 'กุ้ง');
 			expect(byNick).toHaveLength(1);
 			expect(byNick[0]._id).toBe('evacuee:01J2');
 		});
 	});
 
 	describe('Security & Role Authorization Matrix', () => {
-		it('allows registration_staff, shelter_manager, and system_admin to issue goods', async () => {
+		it('allows shelter_manager and system_admin to issue goods', async () => {
 			seedActiveEvacuee('evacuee:01J1');
 			seedActiveBatch('distribution_batch:01JBATCH1');
-
-			const issue1 = await repo.createIssue(
-				{
-					batch_id: 'distribution_batch:01JBATCH1',
-					evacuee_id: 'evacuee:01J1',
-					item_id: 'item:water',
-					qty: '1',
-					idempotency_key: 'idem-reg'
-				},
-				regStaffCtx
-			);
-			expect(issue1._id).toMatch(/^distribution_issue:.+/);
 
 			const issue2 = await repo.createIssue(
 				{
@@ -378,11 +373,85 @@ describe('DistributionRemoteRepository — Phase 3B Issue Execution', () => {
 			expect(issue3._id).toMatch(/^distribution_issue:.+/);
 		});
 
-		it('rejects warehouse_staff, supply_coordinator, and kitchen_staff before mutation', async () => {
+		it('allows distribution_staff of the active shelter to issue goods', async () => {
+			seedActiveEvacuee('evacuee:01J1');
+			seedActiveBatch('distribution_batch:01JBATCH1');
+
+			const issue = await repo.createIssue(
+				{
+					batch_id: 'distribution_batch:01JBATCH1',
+					evacuee_id: 'evacuee:01J1',
+					item_id: 'item:water',
+					qty: '1',
+					idempotency_key: 'idem-dist'
+				},
+				distributionCtx
+			);
+			expect(issue._id).toMatch(/^distribution_issue:.+/);
+		});
+
+		it('allows a legacy flat distribution_staff with a single shelter scope (CR-161 R1)', async () => {
+			seedActiveEvacuee('evacuee:01J1');
+			seedActiveBatch('distribution_batch:01JBATCH1');
+
+			const issue = await repo.createIssue(
+				{
+					batch_id: 'distribution_batch:01JBATCH1',
+					evacuee_id: 'evacuee:01J1',
+					item_id: 'item:water',
+					qty: '1',
+					idempotency_key: 'idem-dist-flat'
+				},
+				{ ...distributionCtx, roles: ['shelter:SH001', 'distribution_staff'] }
+			);
+			expect(issue._id).toMatch(/^distribution_issue:.+/);
+		});
+
+		it.each([
+			['another shelter', ['shelter:SH002', 'SH002:distribution_staff']],
+			['legacy flat role without a shelter scope', ['distribution_staff']],
+			[
+				'legacy flat role with several shelter scopes',
+				['shelter:SH001', 'shelter:SH002', 'distribution_staff']
+			]
+		])('rejects distribution_staff from %s before mutation', async (_label, roles) => {
+			seedActiveEvacuee('evacuee:01J1');
+			seedActiveBatch('distribution_batch:01JBATCH1');
+			const countBefore = store.size;
+
+			await expect(
+				repo.createIssue(
+					{
+						batch_id: 'distribution_batch:01JBATCH1',
+						evacuee_id: 'evacuee:01J1',
+						item_id: 'item:water',
+						qty: '1',
+						idempotency_key: 'idem-dist-x'
+					},
+					{ ...distributionCtx, roles }
+				)
+			).rejects.toThrow(/Unauthorized/);
+			expect(store.size).toBe(countBefore);
+		});
+
+		it('rejects registration_staff, warehouse_staff, supply_coordinator, and kitchen_staff before mutation', async () => {
 			seedActiveEvacuee('evacuee:01J1');
 			seedActiveBatch('distribution_batch:01JBATCH1');
 
 			const countBefore = store.size;
+
+			await expect(
+				repo.createIssue(
+					{
+						batch_id: 'distribution_batch:01JBATCH1',
+						evacuee_id: 'evacuee:01J1',
+						item_id: 'item:water',
+						qty: '1',
+						idempotency_key: 'idem-reg'
+					},
+					regStaffCtx
+				)
+			).rejects.toThrow(/Unauthorized/);
 
 			await expect(
 				repo.createIssue(
@@ -466,7 +535,7 @@ describe('DistributionRemoteRepository — Phase 3B Issue Execution', () => {
 					qty: '2',
 					idempotency_key: 'idem-water-1'
 				},
-				regStaffCtx
+				distributionCtx
 			);
 
 			expect(issue.type).toBe('distribution_issue');
@@ -489,7 +558,7 @@ describe('DistributionRemoteRepository — Phase 3B Issue Execution', () => {
 					qty: '1',
 					idempotency_key: 'idem-blanket-1'
 				},
-				regStaffCtx
+				distributionCtx
 			);
 
 			expect(issue.distribution_type_snapshot).toBe('one_time');
@@ -510,7 +579,7 @@ describe('DistributionRemoteRepository — Phase 3B Issue Execution', () => {
 					qty: '1',
 					idempotency_key: 'idem-blanket-1'
 				},
-				regStaffCtx
+				distributionCtx
 			);
 
 			// Second issue without override
@@ -523,7 +592,7 @@ describe('DistributionRemoteRepository — Phase 3B Issue Execution', () => {
 						qty: '1',
 						idempotency_key: 'idem-blanket-2'
 					},
-					regStaffCtx
+					distributionCtx
 				)
 			).rejects.toThrow(DistributionEligibilityError);
 		});
@@ -540,7 +609,7 @@ describe('DistributionRemoteRepository — Phase 3B Issue Execution', () => {
 					qty: '1',
 					idempotency_key: 'idem-blanket-1'
 				},
-				regStaffCtx
+				distributionCtx
 			);
 
 			const overrideIssue = await repo.createIssue(
@@ -553,7 +622,7 @@ describe('DistributionRemoteRepository — Phase 3B Issue Execution', () => {
 					repeat_override_reason: 'lost',
 					repeat_override_note: 'Lost during flood movement'
 				},
-				regStaffCtx
+				distributionCtx
 			);
 
 			expect(overrideIssue.repeat_override_reason).toBe('lost');
@@ -572,7 +641,7 @@ describe('DistributionRemoteRepository — Phase 3B Issue Execution', () => {
 					qty: '1',
 					idempotency_key: 'idem-blanket-1'
 				},
-				regStaffCtx
+				distributionCtx
 			);
 
 			const overrideIssue = await repo.createIssue(
@@ -585,7 +654,7 @@ describe('DistributionRemoteRepository — Phase 3B Issue Execution', () => {
 					repeat_override_reason: 'damaged',
 					repeat_override_note: 'Torn blanket'
 				},
-				regStaffCtx
+				distributionCtx
 			);
 
 			expect(overrideIssue.repeat_override_reason).toBe('damaged');
@@ -605,7 +674,7 @@ describe('DistributionRemoteRepository — Phase 3B Issue Execution', () => {
 						qty: '1',
 						idempotency_key: 'idem-inactive'
 					},
-					regStaffCtx
+					distributionCtx
 				)
 			).rejects.toThrow(RecipientNotActiveError);
 		});
@@ -622,7 +691,7 @@ describe('DistributionRemoteRepository — Phase 3B Issue Execution', () => {
 						qty: '1',
 						idempotency_key: 'idem-missing'
 					},
-					regStaffCtx
+					distributionCtx
 				)
 			).rejects.toThrow(RecipientNotActiveError);
 		});
@@ -678,7 +747,7 @@ describe('DistributionRemoteRepository — Phase 3B Issue Execution', () => {
 							qty: '1',
 							idempotency_key: `idem-${status}`
 						},
-						regStaffCtx
+						distributionCtx
 					)
 				).rejects.toThrow(ValidationError);
 			}
@@ -698,7 +767,7 @@ describe('DistributionRemoteRepository — Phase 3B Issue Execution', () => {
 						idempotency_key: 'idem-missing-override-note',
 						repeat_override_reason: 'lost'
 					},
-					regStaffCtx
+					distributionCtx
 				)
 			).rejects.toThrow(/repeat_override_note is required/);
 		});
@@ -711,7 +780,7 @@ describe('DistributionRemoteRepository — Phase 3B Issue Execution', () => {
 				...createDistributionIssueGate(
 					{ batch_id: 'distribution_batch:01J_OTHER', state: 'open', pending_claims: [] },
 					gateId.slice('distribution_issue_gate:'.length),
-					regStaffCtx
+					distributionCtx
 				),
 				_id: gateId,
 				_rev: nextRev(gateId)
@@ -726,7 +795,7 @@ describe('DistributionRemoteRepository — Phase 3B Issue Execution', () => {
 						qty: '1',
 						idempotency_key: 'idem-bad-gate'
 					},
-					regStaffCtx
+					distributionCtx
 				)
 			).rejects.toBeInstanceOf(IntegrityError);
 			expect(store.get(gateId)?.batch_id).toBe('distribution_batch:01J_OTHER');
@@ -748,7 +817,7 @@ describe('DistributionRemoteRepository — Phase 3B Issue Execution', () => {
 						qty: '1',
 						idempotency_key: 'idem-none'
 					},
-					regStaffCtx
+					distributionCtx
 				)
 			).rejects.toThrow(ValidationError);
 		});
@@ -765,7 +834,7 @@ describe('DistributionRemoteRepository — Phase 3B Issue Execution', () => {
 					qty: '10',
 					idempotency_key: 'idem-exact'
 				},
-				regStaffCtx
+				distributionCtx
 			);
 
 			expect(issue.qty).toBe('10');
@@ -784,7 +853,7 @@ describe('DistributionRemoteRepository — Phase 3B Issue Execution', () => {
 						qty: '10.0001',
 						idempotency_key: 'idem-over'
 					},
-					regStaffCtx
+					distributionCtx
 				)
 			).rejects.toThrow(IssueCapacityError);
 		});
@@ -829,7 +898,7 @@ describe('DistributionRemoteRepository — Phase 3B Issue Execution', () => {
 					qty: '2',
 					idempotency_key: 'idem-reg-stock'
 				},
-				regStaffCtx
+				distributionCtx
 			);
 
 			const ledgerCountAfter = Array.from(store.values()).filter(
@@ -852,9 +921,11 @@ describe('DistributionRemoteRepository — Phase 3B Issue Execution', () => {
 					qty: '1',
 					idempotency_key: 'idem-scoped-read'
 				},
-				regStaffCtx
+				distributionCtx
 			);
-			expect((await repo.getIssue(issue._id, warehouseCtx))?._id).toBe(issue._id);
+			expect((await repo.getIssue(issue._id, managerCtx))?._id).toBe(issue._id);
+			await expect(repo.getIssue(issue._id, regStaffCtx)).rejects.toThrow(/Unauthorized/);
+			await expect(repo.getIssue(issue._id, warehouseCtx)).rejects.toThrow(/Unauthorized/);
 			await expect(repo.getIssue(issue._id, supplyCtx)).rejects.toThrow(/Unauthorized/);
 			await expect(repo.getIssue(issue._id, crossShelterRegistrationCtx)).rejects.toThrow(
 				/Unauthorized/
@@ -864,8 +935,10 @@ describe('DistributionRemoteRepository — Phase 3B Issue Execution', () => {
 				...(store.get(issue._id) as InMemoryDoc),
 				shelter_code: 'SH002'
 			});
-			expect(await repo.getIssue(issue._id, regStaffCtx)).toBeNull();
-			expect(await repo.listIssuesByBatch('distribution_batch:01JBATCH1', regStaffCtx)).toEqual([]);
+			expect(await repo.getIssue(issue._id, distributionCtx)).toBeNull();
+			expect(await repo.listIssuesByBatch('distribution_batch:01JBATCH1', distributionCtx)).toEqual(
+				[]
+			);
 		});
 
 		it('returns same issue on retry with same idempotency key and same intent', async () => {
@@ -880,7 +953,7 @@ describe('DistributionRemoteRepository — Phase 3B Issue Execution', () => {
 					qty: '2',
 					idempotency_key: 'idem-key-1'
 				},
-				regStaffCtx
+				distributionCtx
 			);
 
 			const issue2 = await repo.createIssue(
@@ -891,11 +964,14 @@ describe('DistributionRemoteRepository — Phase 3B Issue Execution', () => {
 					qty: '2',
 					idempotency_key: 'idem-key-1'
 				},
-				regStaffCtx
+				distributionCtx
 			);
 
 			expect(issue2._id).toBe(issue1._id);
-			const allIssues = await repo.listIssuesByBatch('distribution_batch:01JBATCH1', regStaffCtx);
+			const allIssues = await repo.listIssuesByBatch(
+				'distribution_batch:01JBATCH1',
+				distributionCtx
+			);
 			expect(allIssues).toHaveLength(1);
 		});
 
@@ -909,7 +985,7 @@ describe('DistributionRemoteRepository — Phase 3B Issue Execution', () => {
 				qty: '1',
 				idempotency_key: 'idem-replay-after-close'
 			};
-			const first = await repo.createIssue(input, regStaffCtx);
+			const first = await repo.createIssue(input, distributionCtx);
 			const batch = store.get(input.batch_id)!;
 			store.set(input.batch_id, { ...batch, status: 'closed', _rev: nextRev(input.batch_id) });
 			const recipient = store.get(input.evacuee_id)!;
@@ -919,7 +995,7 @@ describe('DistributionRemoteRepository — Phase 3B Issue Execution', () => {
 				_rev: nextRev(input.evacuee_id)
 			});
 
-			const replay = await repo.createIssue(input, regStaffCtx);
+			const replay = await repo.createIssue(input, distributionCtx);
 			expect(replay._id).toBe(first._id);
 			expect(
 				Array.from(store.values()).filter((doc) => doc.type === 'distribution_issue')
@@ -938,7 +1014,7 @@ describe('DistributionRemoteRepository — Phase 3B Issue Execution', () => {
 					qty: '02.00',
 					idempotency_key: 'idem-norm'
 				},
-				regStaffCtx
+				distributionCtx
 			);
 
 			const issue2 = await repo.createIssue(
@@ -949,7 +1025,7 @@ describe('DistributionRemoteRepository — Phase 3B Issue Execution', () => {
 					qty: '2',
 					idempotency_key: 'idem-norm'
 				},
-				regStaffCtx
+				distributionCtx
 			);
 
 			expect(issue1.qty).toBe('2');
@@ -969,7 +1045,7 @@ describe('DistributionRemoteRepository — Phase 3B Issue Execution', () => {
 					qty: '2',
 					idempotency_key: 'idem-conflict'
 				},
-				regStaffCtx
+				distributionCtx
 			);
 
 			// Different evacuee
@@ -982,7 +1058,7 @@ describe('DistributionRemoteRepository — Phase 3B Issue Execution', () => {
 						qty: '2',
 						idempotency_key: 'idem-conflict'
 					},
-					regStaffCtx
+					distributionCtx
 				)
 			).rejects.toThrow(IssueConflictError);
 
@@ -996,7 +1072,7 @@ describe('DistributionRemoteRepository — Phase 3B Issue Execution', () => {
 						qty: '2',
 						idempotency_key: 'idem-conflict'
 					},
-					regStaffCtx
+					distributionCtx
 				)
 			).rejects.toThrow(IssueConflictError);
 
@@ -1010,7 +1086,7 @@ describe('DistributionRemoteRepository — Phase 3B Issue Execution', () => {
 						qty: '3',
 						idempotency_key: 'idem-conflict'
 					},
-					regStaffCtx
+					distributionCtx
 				)
 			).rejects.toThrow(IssueConflictError);
 		});
@@ -1029,7 +1105,7 @@ describe('DistributionRemoteRepository — Phase 3B Issue Execution', () => {
 						pending_claims: []
 					},
 					capId.slice('distribution_issue_capacity:'.length),
-					regStaffCtx
+					distributionCtx
 				),
 				_rev: nextRev(capId)
 			};
@@ -1077,7 +1153,7 @@ describe('DistributionRemoteRepository — Phase 3B Issue Execution', () => {
 						qty: '6',
 						idempotency_key: 'idem-handoff-race'
 					},
-					regStaffCtx
+					distributionCtx
 				)
 			).rejects.toBeInstanceOf(IssueCapacityError);
 			expect(handoffInjected).toBe(true);
@@ -1109,7 +1185,7 @@ describe('DistributionRemoteRepository — Phase 3B Issue Execution', () => {
 						qty: '1',
 						idempotency_key: 'idem-network-failure'
 					},
-					regStaffCtx
+					distributionCtx
 				)
 			).rejects.toThrow('capacity network failure');
 			expect(attempts).toBe(1);
@@ -1132,7 +1208,7 @@ describe('DistributionRemoteRepository — Phase 3B Issue Execution', () => {
 						pending_claims: []
 					},
 					capId.slice('distribution_issue_capacity:'.length),
-					regStaffCtx
+					distributionCtx
 				),
 				_rev: nextRev(capId)
 			});
@@ -1161,7 +1237,7 @@ describe('DistributionRemoteRepository — Phase 3B Issue Execution', () => {
 						qty: '6',
 						idempotency_key: 'idem-race-A'
 					},
-					regStaffCtx
+					distributionCtx
 				),
 				repo.createIssue(
 					{
@@ -1171,7 +1247,7 @@ describe('DistributionRemoteRepository — Phase 3B Issue Execution', () => {
 						qty: '6',
 						idempotency_key: 'idem-race-B'
 					},
-					regStaffCtx
+					distributionCtx
 				)
 			]);
 
@@ -1184,7 +1260,7 @@ describe('DistributionRemoteRepository — Phase 3B Issue Execution', () => {
 			expect(rejectedResult.reason).toBeInstanceOf(IssueCapacityError);
 
 			// Assert total committed quantity does not exceed 10
-			const issues = await repo.listIssuesByBatch('distribution_batch:01JBATCH1', regStaffCtx);
+			const issues = await repo.listIssuesByBatch('distribution_batch:01JBATCH1', distributionCtx);
 			expect(issues).toHaveLength(1);
 			expect(issues[0].qty).toBe('6');
 		});
@@ -1204,7 +1280,7 @@ describe('DistributionRemoteRepository — Phase 3B Issue Execution', () => {
 						pending_claims: []
 					},
 					guardId.slice('distribution_one_time_guard:'.length),
-					regStaffCtx
+					distributionCtx
 				),
 				_rev: nextRev(guardId)
 			});
@@ -1233,7 +1309,7 @@ describe('DistributionRemoteRepository — Phase 3B Issue Execution', () => {
 						qty: '1',
 						idempotency_key: 'idem-one-A'
 					},
-					regStaffCtx
+					distributionCtx
 				),
 				repo.createIssue(
 					{
@@ -1243,7 +1319,7 @@ describe('DistributionRemoteRepository — Phase 3B Issue Execution', () => {
 						qty: '1',
 						idempotency_key: 'idem-one-B'
 					},
-					regStaffCtx
+					distributionCtx
 				)
 			]);
 
@@ -1264,7 +1340,7 @@ describe('DistributionRemoteRepository — Phase 3B Issue Execution', () => {
 						qty: '1',
 						idempotency_key: rejectedIdempotencyKey
 					},
-					regStaffCtx
+					distributionCtx
 				)
 			).rejects.toBeInstanceOf(DistributionEligibilityError);
 
@@ -1301,7 +1377,7 @@ describe('DistributionRemoteRepository — Phase 3B Issue Execution', () => {
 						qty: '1'
 					},
 					mapId.slice('distribution_issue_idempotency:'.length),
-					regStaffCtx
+					distributionCtx
 				),
 				_rev: nextRev(mapId)
 			});
@@ -1314,7 +1390,7 @@ describe('DistributionRemoteRepository — Phase 3B Issue Execution', () => {
 					qty: '1',
 					idempotency_key: idempotencyKey
 				},
-				regStaffCtx
+				distributionCtx
 			);
 
 			expect(result._id).toBe(issueId);
@@ -1334,7 +1410,7 @@ describe('DistributionRemoteRepository — Phase 3B Issue Execution', () => {
 						qty: '1'
 					},
 					mapId.slice('distribution_issue_idempotency:'.length),
-					regStaffCtx
+					distributionCtx
 				),
 				_rev: nextRev(mapId)
 			});
@@ -1356,7 +1432,7 @@ describe('DistributionRemoteRepository — Phase 3B Issue Execution', () => {
 						]
 					},
 					guardId.slice('distribution_one_time_guard:'.length),
-					regStaffCtx
+					distributionCtx
 				),
 				_rev: nextRev(guardId)
 			});
@@ -1369,7 +1445,7 @@ describe('DistributionRemoteRepository — Phase 3B Issue Execution', () => {
 					qty: '1',
 					idempotency_key: idempotencyKey
 				},
-				regStaffCtx
+				distributionCtx
 			);
 
 			expect(result._id).toBe(issueId);
@@ -1388,7 +1464,7 @@ describe('DistributionRemoteRepository — Phase 3B Issue Execution', () => {
 						qty: '1'
 					},
 					mapId.slice('distribution_issue_idempotency:'.length),
-					regStaffCtx
+					distributionCtx
 				),
 				_rev: nextRev(mapId)
 			});
@@ -1410,7 +1486,7 @@ describe('DistributionRemoteRepository — Phase 3B Issue Execution', () => {
 						]
 					},
 					guardId.slice('distribution_one_time_guard:'.length),
-					regStaffCtx
+					distributionCtx
 				),
 				_rev: nextRev(guardId)
 			});
@@ -1433,7 +1509,7 @@ describe('DistributionRemoteRepository — Phase 3B Issue Execution', () => {
 						]
 					},
 					capId.slice('distribution_issue_capacity:'.length),
-					regStaffCtx
+					distributionCtx
 				),
 				_rev: nextRev(capId)
 			});
@@ -1446,7 +1522,7 @@ describe('DistributionRemoteRepository — Phase 3B Issue Execution', () => {
 					qty: '1',
 					idempotency_key: idempotencyKey
 				},
-				regStaffCtx
+				distributionCtx
 			);
 
 			expect(result._id).toBe(issueId);
@@ -1462,7 +1538,7 @@ describe('DistributionRemoteRepository — Phase 3B Issue Execution', () => {
 					qty: '1',
 					idempotency_key: idempotencyKey
 				},
-				regStaffCtx
+				distributionCtx
 			);
 
 			// Re-inject lingering claims
@@ -1484,7 +1560,7 @@ describe('DistributionRemoteRepository — Phase 3B Issue Execution', () => {
 						]
 					},
 					guardId.slice('distribution_one_time_guard:'.length),
-					regStaffCtx
+					distributionCtx
 				),
 				_rev: nextRev(guardId)
 			});
@@ -1505,7 +1581,7 @@ describe('DistributionRemoteRepository — Phase 3B Issue Execution', () => {
 						]
 					},
 					capId.slice('distribution_issue_capacity:'.length),
-					regStaffCtx
+					distributionCtx
 				),
 				_rev: nextRev(capId)
 			});
@@ -1518,7 +1594,7 @@ describe('DistributionRemoteRepository — Phase 3B Issue Execution', () => {
 					qty: '1',
 					idempotency_key: idempotencyKey
 				},
-				regStaffCtx
+				distributionCtx
 			);
 
 			expect(retryResult._id).toBe(issue._id);
@@ -1539,7 +1615,7 @@ describe('DistributionRemoteRepository — Phase 3B Issue Execution', () => {
 					qty: '1',
 					idempotency_key: idempotencyKey
 				},
-				regStaffCtx
+				distributionCtx
 			);
 
 			const capId = await makeIssueCapacityDocId(batchId, itemId);
@@ -1560,7 +1636,7 @@ describe('DistributionRemoteRepository — Phase 3B Issue Execution', () => {
 						]
 					},
 					capId.slice('distribution_issue_capacity:'.length),
-					regStaffCtx
+					distributionCtx
 				),
 				_rev: nextRev(capId)
 			});
@@ -1573,7 +1649,7 @@ describe('DistributionRemoteRepository — Phase 3B Issue Execution', () => {
 					qty: '1',
 					idempotency_key: idempotencyKey
 				},
-				regStaffCtx
+				distributionCtx
 			);
 
 			expect(retry._id).toBe(issue._id);
@@ -1590,7 +1666,7 @@ describe('DistributionRemoteRepository — Phase 3B Issue Execution', () => {
 					qty: '1',
 					idempotency_key: idempotencyKey
 				},
-				regStaffCtx
+				distributionCtx
 			);
 
 			const guardId = await makeOneTimeGuardDocId(evacueeId, itemId);
@@ -1610,7 +1686,7 @@ describe('DistributionRemoteRepository — Phase 3B Issue Execution', () => {
 						]
 					},
 					guardId.slice('distribution_one_time_guard:'.length),
-					regStaffCtx
+					distributionCtx
 				),
 				_rev: nextRev(guardId)
 			});
@@ -1623,7 +1699,7 @@ describe('DistributionRemoteRepository — Phase 3B Issue Execution', () => {
 					qty: '1',
 					idempotency_key: idempotencyKey
 				},
-				regStaffCtx
+				distributionCtx
 			);
 
 			expect(retry._id).toBe(issue._id);
@@ -1640,7 +1716,7 @@ describe('DistributionRemoteRepository — Phase 3B Issue Execution', () => {
 					qty: '1',
 					idempotency_key: idempotencyKey
 				},
-				regStaffCtx
+				distributionCtx
 			);
 
 			const guardId = await makeOneTimeGuardDocId(evacueeId, itemId);
@@ -1661,7 +1737,7 @@ describe('DistributionRemoteRepository — Phase 3B Issue Execution', () => {
 						]
 					},
 					guardId.slice('distribution_one_time_guard:'.length),
-					regStaffCtx
+					distributionCtx
 				),
 				_rev: nextRev(guardId)
 			});
@@ -1682,7 +1758,7 @@ describe('DistributionRemoteRepository — Phase 3B Issue Execution', () => {
 						]
 					},
 					capId.slice('distribution_issue_capacity:'.length),
-					regStaffCtx
+					distributionCtx
 				),
 				_rev: nextRev(capId)
 			});
@@ -1695,7 +1771,7 @@ describe('DistributionRemoteRepository — Phase 3B Issue Execution', () => {
 					qty: '1',
 					idempotency_key: idempotencyKey
 				},
-				regStaffCtx
+				distributionCtx
 			);
 
 			expect(retry._id).toBe(issue._id);

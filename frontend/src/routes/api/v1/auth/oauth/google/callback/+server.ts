@@ -8,6 +8,7 @@ import {
 	fetchCouchAuthHashAlgorithm,
 	fetchCouchAuthSecret,
 	getGoogleOAuthConfig,
+	isMfaStepupEnabled,
 	mintAuthSessionCookie,
 	OAUTH_STATE_COOKIE,
 	parseOAuthState,
@@ -38,6 +39,8 @@ function loginErrorRedirect(code: string): never {
 }
 
 function mfaErrorRedirect(code: string): never {
+	// Step-up hidden: only /me linking lands here — send its failures back to /me.
+	if (!isMfaStepupEnabled()) throw redirect(302, '/me?mfa=link_failed');
 	throw redirect(302, `/mfa-challenge?error=${encodeURIComponent(code)}`);
 }
 

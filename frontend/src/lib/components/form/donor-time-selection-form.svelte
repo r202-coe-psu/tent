@@ -13,9 +13,10 @@
 	import { Label } from '$lib/components/ui/label';
 	import { Input } from '$lib/components/ui/input';
 	import { Button } from '$lib/components/ui/button';
+	import * as Select from '$lib/components/ui/select';
 	import { Calendar } from '$lib/components/ui/calendar';
 	import { Popover, PopoverContent, PopoverTrigger } from '$lib/components/ui/popover';
-	import { today, getLocalTimeZone, type DateValue } from '@internationalized/date';
+	import { today, type DateValue } from '@internationalized/date';
 	import { toast } from 'svelte-sonner';
 	import { onMount } from 'svelte';
 	import {
@@ -28,8 +29,10 @@
 	import { getDonationStore } from '../../../routes/(public)/donations/donation.svelte';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { getTranslation } from '$lib/utils/i18n';
+	import { bangkokToday, DISPLAY_TIME_ZONE } from '$lib/utils/date';
 	import { PUBLIC_DONATIONS_I18N } from '$lib/constants/i18n';
 	import { fetchRecaptchaEnabled } from '$lib/api/recaptcha-status';
+	import { ensureRecaptchaLoaded } from '$lib/api/recaptcha-script';
 
 	const donationStore = getDonationStore();
 	const unitsQuery = useUnitsOfMeasure();
@@ -37,7 +40,9 @@
 	const siteKey = env.PUBLIC_RECAPTCHA_SITE_KEY || '';
 	const t = $derived(getTranslation(PUBLIC_DONATIONS_I18N, langState.current));
 
-	let selectedDate = $state<DateValue>(today(getLocalTimeZone()));
+	// "Today" is the shelter's calendar day (Asia/Bangkok), not the donor device's: the BFF
+	// refuses `date < bangkokToday()`, so a device clock behind Bangkok must not send yesterday.
+	let selectedDate = $state<DateValue>(today(DISPLAY_TIME_ZONE));
 	let shelters = $state<Array<{ code: string; name: string }>>([]);
 	let isItemsModalOpen = $state(false);
 
@@ -146,6 +151,8 @@
 		const enabled = await fetchRecaptchaEnabled();
 
 		if (enabled) {
+			// The page may have mounted while reCAPTCHA was off (no script tag) — load it now.
+			if (siteKey && !token) await ensureRecaptchaLoaded(siteKey);
 			if (siteKey && window.grecaptcha) {
 				try {
 					if (window.grecaptcha.enterprise) {
@@ -170,9 +177,7 @@
 			}
 		}
 
-		let slotDateStr = selectedDate
-			? selectedDate.toString()
-			: new Date().toISOString().split('T')[0];
+		let slotDateStr = selectedDate ? selectedDate.toString() : bangkokToday();
 		let fromTime = donationStore.slotTime.split('-')[0]?.trim() || '00:00';
 		let toTime = donationStore.slotTime.split('-')[1]?.trim() || '23:59';
 
@@ -438,17 +443,25 @@
 					{/if}
 				</label>
 
-				<select
-					id="shelter-select"
-					bind:value={donationStore.shelterCode}
+				<Select.Root
+					type="single"
+					value={donationStore.shelterCode}
+					onValueChange={(v) => (donationStore.shelterCode = v)}
 					disabled={donationStore.shelterLocked}
-					class="w-full appearance-none rounded-xl border-2 border-slate-200 bg-white p-4 font-bold text-slate-800 shadow-2xs outline-hidden focus:border-domain-donation disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
 				>
-					<option value="" disabled selected>{t.selectShelterPlaceholder}</option>
-					{#each shelters as shelter (shelter.code)}
-						<option value={shelter.code}>{shelter.name}</option>
-					{/each}
-				</select>
+					<Select.Trigger
+						id="shelter-select"
+						class="w-full rounded-xl border-2 border-slate-200 p-4 text-base font-bold text-slate-800 shadow-2xs focus-visible:border-domain-donation disabled:bg-slate-100 disabled:text-slate-500 disabled:opacity-100 data-placeholder:text-base data-[size=default]:h-auto"
+					>
+						{shelters.find((s) => s.code === donationStore.shelterCode)?.name ??
+							t.selectShelterPlaceholder}
+					</Select.Trigger>
+					<Select.Content>
+						{#each shelters as shelter (shelter.code)}
+							<Select.Item value={shelter.code} label={shelter.name} />
+						{/each}
+					</Select.Content>
+				</Select.Root>
 			</div>
 
 			<!-- 3. เลือกเวลา -->

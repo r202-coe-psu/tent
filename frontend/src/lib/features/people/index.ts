@@ -75,6 +75,7 @@ export {
 	createEvacuee,
 	createDraftEvacueeFromCard,
 	createKioskEvacueeFromCard,
+	createKioskWalkInHousehold,
 	createMedical,
 	createHousehold,
 	createMovement,
@@ -82,6 +83,9 @@ export {
 	assertMovementAllowed,
 	movementConflictMessage,
 	canCheckInEvacuee,
+	canScanCheckIn,
+	needsIntakeBeforeStay,
+	SCAN_RETURN_STATUSES,
 	canCheckOutEvacuee,
 	canChangeEvacueeZone,
 	canConfirmRoom,
@@ -110,11 +114,13 @@ export {
 	collectMemberRuleIssues,
 	type MemberRuleIssue,
 	formatPersonName,
+	matchesEvacueePhoneSearch,
 	matchesEvacueeSearch,
 	zoneLabel,
 	type ZoneLabelSource,
 	evacueeAgeYears,
 	EWAR_SYMPTOM_GROUPS,
+	ewarSymptomLabel,
 	isEvacuee,
 	isMedical,
 	isHousehold,
@@ -143,6 +149,9 @@ export {
 	classifyScreeningQueueTab,
 	nextScreeningQueueEvacuee,
 	recommendZoneKind,
+	pickRecommendedZone,
+	resolvePreferredZone,
+	ZONE_KIND_LABELS,
 	countPresentOccupantsByZone,
 	parseZoningQrCode,
 	buildZoningPath,
@@ -153,7 +162,8 @@ export {
 	type NextQueueLabel,
 	type ZoningQueueTab,
 	type ScreeningQueueTab,
-	type ZoningRecommendKind
+	type ZoningRecommendKind,
+	type PreferredZoneOutcome
 } from './domain/intake-pipeline';
 
 export {
@@ -209,6 +219,7 @@ export {
 	matchesResidenceAddress,
 	normThaiAddressText,
 	suggestHouseholdsByResidence,
+	suggestHouseholdsByPhone,
 	isJoinableHouseholdStatus,
 	filterJoinCandidatesByEvacueeQuery,
 	type SectionEFlags,
@@ -219,6 +230,7 @@ export {
 	type HouseholdChoice,
 	type ResidenceFields,
 	type ResidenceMatchCandidate,
+	type PhoneHouseholdMatchCandidate,
 	type JoinCandidateEvacuee
 } from './domain/registration-shell';
 

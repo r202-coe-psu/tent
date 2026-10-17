@@ -7,11 +7,18 @@ import re
 from datetime import UTC, datetime
 
 from fastapi import HTTPException, status
+from pymongo import ASCENDING
 from tent_model.public_person import PublicPerson
 from tent_model.public_shelter import PublicShelter
 from tent_model.search_audit import SearchAudit
 
-from ...utils.masking import national_id_hash, passport_hash, phone_hash, sha256_hex
+from ...utils.masking import (
+    last_name_hash,
+    national_id_hash,
+    passport_hash,
+    phone_hash,
+    sha256_hex,
+)
 from ...utils.search_query import ParsedSearchQuery, SearchQueryKind, parse_search_query
 from ...utils.ulid import new_ulid
 from .schemas import FamilyMember, SearchResponse, SearchResult
@@ -27,6 +34,7 @@ NAME_RESULT_LIMIT = 10
 PUBLIC_STAY_STATUSES = frozenset(
     {
         "pre_registered",
+        "kiosk_registered",
         "arriving",
         "active",
         "room_confirmed",
@@ -204,50 +212,55 @@ class EvacueeUseCase:
 
         return await self._find_by_name(parsed.normalized)
 
-    async def _find_by_name(self, name: str) -> list[PublicPerson]:
-        """Name search: whole-word text index first, then an anchored prefix match.
+    async def _find_by_name(self, name_key: str) -> list[PublicPerson]:
+        """Name search (CR-166): first-name prefix AND full surname, both anchored.
 
-        The text index alone cannot answer a partial Thai name. MongoDB tokenizes
-        `$text` on whitespace and punctuation and matches whole terms, and Thai is
-        not one of its supported text-search languages — Thai script also has no
-        spaces between words, so a name like "สักก์ธนัชญ์" is one indivisible
-        token. Searching "สัก" scored zero hits against three matching records
-        until this fallback existed; a relative had to type the name exactly.
+        `name_key` is the normalized query (`parse_search_query`), one word per space.
+        Only the masked surname is stored in plaintext, so a surname is compared as a
+        hash of the whole normalized surname — it matches exactly or not at all, which
+        keeps a partial surname from turning the endpoint into a browse oracle.
 
-        The fallback is deliberately anchored (`^`): "the name starts like this"
-        is what someone half-remembering a relative's name needs, whereas an
-        unanchored substring would turn the endpoint into a browse-everyone
-        oracle. `parse_search_query` already rejects queries under 3 characters,
-        the per-IP limiter throttles repeats, and the result cap still applies.
+        - one word: it is a prefix of the first name, or it is the whole surname;
+        - several words: some split point puts the leading words as a first-name prefix
+          and the rest (spaces removed) as the whole surname — every split is tried
+          because a first name can have several words ("John Paul Smith").
 
-        Runs only when the text search comes back empty, so an exact-name query
-        still costs a single round trip.
+        Results are sorted (`first_name_key`, `_id`) so the 10 that survive the cap are
+        the same ones every time. The prefix is anchored: "the name starts like this" is
+        what someone half-remembering a relative's name needs, an unanchored substring
+        would not be (see CR-099).
         """
-        exact = (
-            await PublicPerson.find(
-                {"$text": {"$search": name}},
-                {"search_excluded": {"$ne": True}},
-            )
-            .limit(NAME_RESULT_LIMIT)
-            .to_list()
-        )
-        if exact:
-            return exact
-
-        prefix = f"^{re.escape(name)}"
         return (
             await PublicPerson.find(
-                {
-                    "$or": [
-                        {"first_name": {"$regex": prefix}},
-                        {"last_name_masked": {"$regex": prefix}},
-                    ]
-                },
+                self._name_filter(name_key.split(" ")),
                 {"search_excluded": {"$ne": True}},
             )
+            .sort([("first_name_key", ASCENDING), ("_id", ASCENDING)])
             .limit(NAME_RESULT_LIMIT)
             .to_list()
         )
+
+    @staticmethod
+    def _name_filter(words: list[str]) -> dict:
+        def first_name_prefix(prefix: str) -> dict:
+            return {"first_name_key": {"$regex": f"^{re.escape(prefix)}"}}
+
+        if len(words) == 1:
+            return {
+                "$or": [
+                    first_name_prefix(words[0]),
+                    {"last_name_hash": last_name_hash(words[0])},
+                ]
+            }
+        return {
+            "$or": [
+                {
+                    **first_name_prefix(" ".join(words[:split])),
+                    "last_name_hash": last_name_hash("".join(words[split:])),
+                }
+                for split in range(1, len(words))
+            ]
+        }
 
     async def _load_shelters(self, codes: set[str]) -> dict[str, PublicShelter]:
         if not codes:

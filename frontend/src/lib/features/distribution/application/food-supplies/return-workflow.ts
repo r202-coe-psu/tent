@@ -41,6 +41,7 @@ import {
 import {
 	assertCanPerformFrontlineDistribution,
 	assertCanReceivePhysicalStock,
+	assertCanReturnLoanPhysical,
 	assertReservationModeAuthority
 } from './auth';
 import {
@@ -745,7 +746,7 @@ export async function returnLoanAtCounter(
 	ctx: AuthorContext,
 	deps?: ReturnWorkflowDependencies
 ): Promise<{ log: DistributionLog; ledgerEntryCreated: boolean }> {
-	assertCanReceivePhysicalStock(ctx);
+	assertCanReturnLoanPhysical(ctx);
 
 	assertPositiveIntegerQty(input.qty_returned, 'qty_returned');
 

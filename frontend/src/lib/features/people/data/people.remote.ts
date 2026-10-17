@@ -44,7 +44,8 @@ import {
 	type Movement,
 	type MovementAction,
 	dormFieldsFor,
-	memberExtrasFor
+	memberExtrasFor,
+	withoutBookingRef
 } from '../domain/people';
 import {
 	planFamilyRegistration,
@@ -1168,7 +1169,7 @@ export class PeopleRemoteRepository implements PeopleRepository {
 				target_id: evacueeId,
 				reason: 'ยกเลิกการลงทะเบียนล่วงหน้า',
 				context: {
-					previous_status: 'pre_registered',
+					previous_status: evacuee.current_stay.status,
 					next_status: 'cancelled',
 					household_id: evacuee.household_id
 				}
@@ -1184,7 +1185,9 @@ export class PeopleRemoteRepository implements PeopleRepository {
 
 		const members = await this.listHouseholdMembers(household._id);
 		const stillPreRegistered = members.some(
-			(m) => m._id !== evacueeId && m.current_stay.status === 'pre_registered'
+			(m) =>
+				m._id !== evacueeId &&
+				(m.current_stay.status === 'pre_registered' || m.current_stay.status === 'kiosk_registered')
 		);
 		if (stillPreRegistered) return;
 
@@ -1222,8 +1225,13 @@ export class PeopleRemoteRepository implements PeopleRepository {
 		if (!latest || !isEvacuee(latest)) {
 			throw new Error('ไม่พบข้อมูลผู้ประสบภัย');
 		}
-		if (latest.current_stay.status !== 'pre_registered') {
-			throw new Error('รายงานตัวได้เฉพาะผู้ที่ลงทะเบียนล่วงหน้า (pre_registered)');
+		if (
+			latest.current_stay.status !== 'pre_registered' &&
+			latest.current_stay.status !== 'kiosk_registered'
+		) {
+			throw new Error(
+				'รายงานตัวได้เฉพาะผู้ที่ลงทะเบียนล่วงหน้าหรือลงทะเบียนที่ตู้ (pre_registered / kiosk_registered)'
+			);
 		}
 		const saved = await this.repo.put(
 			touch({
@@ -1243,8 +1251,30 @@ export class PeopleRemoteRepository implements PeopleRepository {
 	async submitFamilyReportIn(
 		payload: FamilyReportInPayload
 	): Promise<{ household: Household; members: Evacuee[] }> {
-		const { householdId, household: householdInput, members: memberInputs, ctx } = payload;
-		const existingHousehold = householdId ? await this.getHousehold(householdId) : null;
+		const {
+			householdId,
+			createHousehold = false,
+			household: householdInput,
+			members: memberInputs,
+			ctx,
+			ids
+		} = payload;
+		ids?.rewind();
+		const nextUlid = () => ids?.next() ?? ulid();
+		const requestedHouseholdId = householdId?.trim() ?? '';
+		if (!requestedHouseholdId && !createHousehold) {
+			throw new Error('กรุณาเลือกครัวเรือนเดิมหรือยืนยันสร้างครัวเรือนใหม่');
+		}
+
+		// Reserve the create-path household id before any write. A retry after CouchDB
+		// accepted the first write but the response was lost will find this same doc.
+		const reservedHouseholdUlid = requestedHouseholdId ? null : nextUlid();
+		const targetHouseholdId =
+			requestedHouseholdId || makeDocId('household', reservedHouseholdUlid as string);
+		const existingHousehold = await this.getHousehold(targetHouseholdId);
+		if (requestedHouseholdId && !existingHousehold) {
+			throw new Error('ไม่พบครัวเรือนปลายทาง');
+		}
 		let savedHousehold: Household;
 
 		const normalizedPets: import('../domain/people').PetGroup[] = (householdInput.pets ?? []).map(
@@ -1269,13 +1299,18 @@ export class PeopleRemoteRepository implements PeopleRepository {
 
 		const docsToWrite: Array<{ _id: string; _rev?: string }> = [];
 
+		const plannedMemberIds = memberInputs.map((member) =>
+			member._id ? member._id : makeDocId('evacuee', nextUlid())
+		);
+
 		if (!existingHousehold) {
 			const headName = formatPersonName(
 				(memberInputs[0] as unknown as Evacuee) ?? { first_name: 'ผู้ประสบภัย', last_name: '' }
 			);
 			const label = autoHouseholdLabel(headName);
-			const householdUlid = ulid();
-			const headId = memberInputs[0]?._id ?? makeDocId('evacuee', ulid());
+			const householdUlid = reservedHouseholdUlid as string;
+			const headId = plannedMemberIds[0];
+			if (!headId) throw new Error('ต้องมีสมาชิกอย่างน้อย 1 คน');
 			savedHousehold = buildHousehold(
 				{
 					label,
@@ -1336,7 +1371,7 @@ export class PeopleRemoteRepository implements PeopleRepository {
 		const allSavedMembers: Evacuee[] = [];
 		const affectedOldHouseholdIds = new Set<string>();
 
-		for (const m of memberInputs) {
+		for (const [memberIndex, m] of memberInputs.entries()) {
 			const willReportIn = Boolean(m.reporting_in);
 			if (m._id) {
 				const existingEvacuee = await this.repo.get<Evacuee>(m._id);
@@ -1349,7 +1384,11 @@ export class PeopleRemoteRepository implements PeopleRepository {
 				}
 
 				let updatedStay = existingEvacuee.current_stay;
-				if (willReportIn && existingEvacuee.current_stay.status === 'pre_registered') {
+				if (
+					willReportIn &&
+					(existingEvacuee.current_stay.status === 'pre_registered' ||
+						existingEvacuee.current_stay.status === 'kiosk_registered')
+				) {
 					updatedStay = {
 						status: 'arriving' as const,
 						zone: null,
@@ -1405,6 +1444,8 @@ export class PeopleRemoteRepository implements PeopleRepository {
 						vulnerable_groups: m.vulnerable_groups ?? [],
 						disability_other_detail: m.disability_other_detail
 					}),
+					// CR-159: a suggestion only — current_stay is untouched by it.
+					preferred_zone: m.preferred_zone ?? existingEvacuee.preferred_zone ?? null,
 					current_stay: updatedStay
 				});
 
@@ -1414,11 +1455,17 @@ export class PeopleRemoteRepository implements PeopleRepository {
 					reportedInMembers.push(updatedEvacuee);
 				}
 			} else {
-				const newMemberUlid = ulid();
+				const plannedMemberId = plannedMemberIds[memberIndex];
+				if (!plannedMemberId) throw new Error('ไม่สามารถสร้างรหัสสมาชิกได้');
+				const newMemberUlid = plannedMemberId.replace(/^evacuee:/, '');
 				const newEvacuee = buildEvacuee(
 					{
-						...m,
+						// booking_ref is worker-owned (CR-169 FR-61): drop it if a caller smuggled one in.
+						...withoutBookingRef(m),
 						household_id: effectiveHouseholdId,
+						// Never zoned at the desk (ADR-0001) — a zone here would turn the new member
+						// `active` and skip Station 2/3.
+						zone: null,
 						status: 'arriving',
 						registered_via: 'staff'
 					},
@@ -1446,7 +1493,8 @@ export class PeopleRemoteRepository implements PeopleRepository {
 								notes: m.medical_note || '',
 								track: 'normal' as const
 							},
-							ctx
+							ctx,
+							nextUlid()
 						)
 					);
 				}

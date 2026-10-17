@@ -83,8 +83,8 @@
 		<header
 			class="sticky top-0 z-40 flex h-14 shrink-0 items-center justify-between border-b bg-background px-6"
 		>
-			<div class="flex items-center gap-6">
-				<a href={resolve('/portal')} class="flex min-w-0 items-center gap-2.5">
+			<div class="flex min-w-0 items-center gap-6">
+				<a href={resolve('/portal')} class="flex min-h-11 min-w-0 items-center gap-2.5">
 					<img
 						src="/logo.png"
 						alt="PSU Smart Shelter"
@@ -95,7 +95,7 @@
 					>
 				</a>
 			</div>
-			<div class="flex items-center gap-2">
+			<div class="flex shrink-0 items-center gap-2">
 				<StaffAccountMenu />
 			</div>
 		</header>

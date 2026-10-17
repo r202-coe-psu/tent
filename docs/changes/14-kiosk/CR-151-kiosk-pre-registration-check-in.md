@@ -4,7 +4,7 @@ title: Kiosk — เปลี่ยนจาก "เสียบบัตรเ�
 status: approved
 date: 2026-09-24
 created: 2026-09-24
-updated: 2026-10-04 # approved และ merge โดย Soravit Sukkar (Team Lead) + รันเลข CR-151 และลงทะเบียนใน _index.md
+updated: 2026-10-17 # decision sync (#604): ฐาน local ขาด kiosk index → redeploy แล้ว + redeploy/seed deploy index ครบชุด · 2026-10-15 ทีม kiosk ขอเลิกกรอง registered_via ใน §15 (FR-KPC-101/104) · 2026-10-13 ข้อเสนอแก้ไข §15 approved โดย Dev/Team Lead Soravit Sukkarn (รับ requirement จากหัวหน้าโครงการเมื่อวาน 2026-10-12) · 2026-10-04 approved และ merge โดย Soravit Sukkar (Team Lead) + รันเลข CR-151 และลงทะเบียนใน _index.md
 requested_by: ทีม kiosk (branch feat/pre-register_kiosk)
 decided_by: Soravit Sukkar (Team Lead)
 decision_date: 2026-10-04
@@ -25,6 +25,8 @@ affects:
   - frontend/src/lib/server/security/rate-limiter.ts
   - frontend/src/lib/server/shelter-access-design.ts · shelters.admin.ts · features/shelters/server/provisioner.ts · scripts/redeploy-access.ts · scripts/seed/registry-shelters.ts
   - scanner_client/app/{manager,config,scard}.py · scanner_client/tests · scanner_client/README.md
+  - (§15 proposed) frontend/src/lib/features/kiosk/server/{kiosk-check-in.server.ts,kiosk-reprint.server.ts} · domain/{check-in-status.ts,identity-method.ts} · application/{reprint-session.svelte.ts,kiosk-label-print.ts} · ui/{identity-method-selector,kiosk-reprint,reprint-member-list,phone-household-picker}.svelte
+  - (§15 proposed) frontend/src/routes/api/v1/kiosk/reprint/+server.ts · frontend/src/routes/kiosk/{reprint,phone}/** · frontend/src/lib/server/security/rate-limiter.ts · kiosk/app/manager.py (allowlist)
 why: >
   Kiosk แบบเดิม (CR-097) สร้าง evacuee จากบัตรโดยไม่มีครัวเรือนและไม่มีเบอร์ เจ้าหน้าที่ต้องกรอกซ้ำที่ Station 1
   และเกิด record ซ้อนกับผู้จองออนไลน์ kiosk รอบนี้จึงทำหน้าที่เดียว คือรับรายงานตัว (Report-in) ผู้ที่ลงทะเบียนล่วงหน้าทางเว็บแล้ว
@@ -33,12 +35,14 @@ migration: ไม่มี — ไม่มี field ใหม่ ไม่ bump
 ---
 # CR-151: Kiosk รับรายงานตัวผู้ลงทะเบียนล่วงหน้า
 
+> **ข้อเสนอแก้ไข 2026-10-13 (proposed, ยังไม่ approve):** §15 ท้ายเอกสาร — หัวข้อหน้าแรก「ลงทะเบียน」· รับ walk-in `registered_via:'kiosk'` · ช่องทางเบอร์ → เมนู「พิมพ์ QR」ยืนยันเลขบัตร 4 ตัวท้าย · ระหว่างรอ PO ข้อความ §1–§14 ยังมีผล
+
 > **สรุป (TL;DR)**
 >
 > - **เปลี่ยนอะไร:** kiosk **เลิกสร้าง** evacuee จากบัตร (`POST /api/v1/scanner/draft` → 410) และเปลี่ยนเป็น **รับรายงานตัว (Report-in)** ผู้จองทางเว็บ (`pre_registered → arriving`) ผ่าน 3 ช่องทาง ได้แก่ QR ใบจอง · บัตรประชาชน (ใช้เลข 13 หลักอย่างเดียว) · เบอร์โทร (กำลังพัฒนา) — ThaiD พักไว้ก่อน
 > - **เพื่อใคร / ทำไม:** ผู้จองล่วงหน้ารายงานตัวเองได้โดยไม่ต้องต่อคิว เลือกสมาชิกครัวเรือนที่มาถึง และรับ QR สายรัดข้อมือ → ลดคิวที่ Station 1 และไม่เกิด record ซ้ำ
 > - **Dev ต้องทำอะไร:** implementation หลัก commit แล้ว; ก่อน release ต้องผ่านการอนุมัติ CR, Svelte autofixer, deploy/`_explain` บน staging และ production และทดสอบ kiosk ตาม M1–M8 รวม AC-KPC-26
-> - **กระทบ schema / scope:** ไม่ bump `schema_v` (คงเดิม (ไม่อัปเกรด schema_v; อิงตามเวอร์ชันปัจจุบันของ develop)) · เพิ่มชุด Mango index `KIOSK_LOOKUP_MANGO_INDEXES` 3 ตัว (เบอร์ · เลขบัตร · ครัวเรือน) แยกจาก index ของ referral · แทนที่ส่วนสร้าง evacuee ของ CR-097 และ FR-CARD-01..04 ของ smart-card spec
+> - **กระทบ schema / scope:** ไม่ bump `schema_v` (คงเดิม (ไม่อัปเกรด schema_v; อิงตามเวอร์ชันปัจจุบันของ develop)) · เพิ่มชุด Mango index `KIOSK_LOOKUP_MANGO_INDEXES` 3 ตัว (เบอร์ · เลขบัตร · ครัวเรือน) (ภายหลังเป็น 4 ตัว — CR-149 / #525; ดู FR-KPC-63) แยกจาก index ของ referral · แทนที่ส่วนสร้าง evacuee ของ CR-097 และ FR-CARD-01..04 ของ smart-card spec
 
 ---
 
@@ -108,6 +112,8 @@ migration: ไม่มี — ไม่มี field ใหม่ ไม่ bump
 | 2026-09-25   | `f7da61f9`                                           | ปิดนามสกุลทุกช่องทาง · แสดงสมาชิกทั้งครัวเรือนและสมาชิกจาก Station 1 แบบเลือกไม่ได้ (FR-KPC-28, FR-KPC-29) |
 
 **ตรวจฐาน local (2026-09-25):** `shelter_sh001`–`shelter_sh004` มี kiosk index ครบ 3 ตัว (`_index` ตอบ `exists`) และ `_explain` ของ selector เบอร์, เลขบัตร, ครัวเรือนแบบมี/ไม่มี `registered_via` เลือก `evacuee-type-phone-idx`, `evacuee-type-person-id-idx`, `evacuee-type-household-idx` ตามลำดับทุกฐาน; ไม่มี `_all_docs` · warm-up `_find` ผ่านทุก selector · ยังไม่ได้ตรวจ staging/production
+
+> **2026-10-17 (decision sync, #604):** ผลตรวจข้างบนทำบน branch `feat/pre-register_kiosk` ก่อน merge เข้า develop (#457, 2026-10-11) — ตรวจซ้ำ 2026-10-17 พบ `shelter_sh001`–`sh004` บน local **ไม่มี** kiosk index (`_explain` เลือก `_all_docs`) เพราะไม่มีการรัน redeploy/seed หลัง #457 · รัน `redeploy-access --write --confirm` แล้ว ทุกฐานเลือก `evacuee-type-person-id-idx` · staging/production ได้ redeploy อัตโนมัติผ่าน `pnpm db:sync` ของ Jenkins ตอน deploy แต่ยังไม่ได้ตรวจ — ดูบันทึกการตัดสินใจ §14
 
 ---
 
@@ -222,7 +228,7 @@ migration: ไม่มี — ไม่มี field ใหม่ ไม่ bump
 | FR-KPC-60 | ช่องทางเบอร์: ถ้ามีสมาชิกที่เลือกได้อย่างน้อย 1 คน ให้ไปหน้าเลือกสมาชิก (เลือกให้ทุกคนที่เลือกได้ไว้ก่อน) · แสดงผลรายงานตัวเดิมทันทีเฉพาะเมื่อไม่มีใครเลือกได้เลย                                                                                                                                                                                    | 🔄                                                    |
 | FR-KPC-61 | evacuee ที่ตั้ง`privacy.search_excluded:true` ค้นด้วยเบอร์ไม่พบ และได้ผลลัพธ์ 404 `PRE_REGISTRATION_NOT_FOUND` เสมือนไม่พบข้อมูล                                                                                                                                                                                                                                                                                                                 | 🔄                                                    |
 | FR-KPC-62 | Mango index`['type','phone']` ในชุด `KIOSK_LOOKUP_MANGO_INDEXES` deploy ตอนสร้างศูนย์ใหม่, admin redeploy, `scripts/redeploy-access.ts` และ seed; query ใช้ exact match ต่อค่าที่จัดเก็บและ query ค่า `+66…` เพิ่มเพื่อรองรับข้อมูลเก่า                                                                                                                                                                               | 🔄 (local ผ่าน; รอ staging/production)          |
-| FR-KPC-63 | ชุด`KIOSK_LOOKUP_MANGO_INDEXES` มี 3 ตัว: `['type','phone']` (`evacuee-type-phone-idx`) · `['type','person_id.number']` (`evacuee-type-person-id-idx`) · `['type','household_id']` (`evacuee-type-household-idx`) · ไม่มี `shelter_code` ใน index                                                                                                                                                                                                                        | 🔄 (local ผ่าน; รอ staging/production)          |
+| FR-KPC-63 | ชุด`KIOSK_LOOKUP_MANGO_INDEXES` มี **4 ตัว** (decision sync 2026-10-17, #604): `['type','phone']` (`evacuee-type-phone-idx`) · `['type','person_id.number']` (`evacuee-type-person-id-idx`) · `['type','household_id']` (`evacuee-type-household-idx`) · `['type','card_snapshot.address_no']` (`evacuee-type-card-address-no-idx`, เพิ่มโดย CR-149 / #525 สำหรับ walk-in lookup ตามบัตร) · ไม่มี `shelter_code` ใน index                                                                                                                                                                                                                        | 🔄 (local ผ่าน; รอ staging/production)          |
 | FR-KPC-64 | ชุด index ของ kiosk deploy ด้วย function / loop / step ของตัวเองทุกจุด (provisioner, admin redeploy,`scripts/redeploy-access.ts`, seed) · `REFERRAL_MANGO_INDEXES` และ `deployReferralMangoIndexes` แยกเดิม · redeploy script warm-up 1 query ต่อ index หลังสร้าง                                                                                                                                                                                   | ✅ (code commit แล้ว; deploy จริงยังรอ)  |
 | FR-KPC-65 | ทุก`_find` ของ kiosk (ค้นบัตร, ขยายครัวเรือน, คำนวณสถานะครัวเรือน, นับสมาชิกตอนแสดงตัวเลือกครัวเรือน) ใช้ equality บน field ที่มี index · ไม่มี `$in`; ตัวเลือกครัวเรือนค้นทีละครัวเรือน ไม่เกิน 5 ครั้ง                                                                                                                                                    | ✅ (code commit แล้ว; local`_explain` ผ่าน) |
 
@@ -431,7 +437,7 @@ migration: ไม่มี — ไม่มี field ใหม่ ไม่ bump
   - Legacy Kiosk Records = record เดิมที่ `registered_via:'kiosk'` ให้เจ้าหน้าที่จัดการที่ Station 1 ตามเดิม; kiosk ค้นและรับรายงานตัวเฉพาะ record จากเว็บ
   - Phone Rate Limiting = request ที่มี `primary_evacuee_id` (ตอนเลือกครัวเรือน) ไม่นับ limit ต่อเบอร์ แต่ยังนับ limit ต่อเครื่อง
   - Terminology = ใช้คำว่า Report-in / รายงานตัวในเอกสาร และคงชื่อ API `check-in` เดิม
-  - Mango Lookup Indexes = ใช้ชุด index `KIOSK_LOOKUP_MANGO_INDEXES` ครบ 3 ตัว (`phone`, `person_id.number`, `household_id`), deploy แยกจาก referral ทุกจุด และใช้ equality query · CR ยังคง `proposed`
+  - Mango Lookup Indexes = ใช้ชุด index `KIOSK_LOOKUP_MANGO_INDEXES` ครบ 3 ตัว (`phone`, `person_id.number`, `household_id`) (ภายหลังเป็น 4 ตัว — CR-149 / #525; ดู FR-KPC-63), deploy แยกจาก referral ทุกจุด และใช้ equality query · CR ยังคง `proposed`
   - Name Masking All Channels = ปิดนามสกุลบางส่วนทุกช่องทาง ทั้งบนหน้าจอและบนสายรัดข้อมือ (QR / บัตร / เบอร์) ตาม FR-KPC-28
   - Household List Consistency = ทุกช่องทางแสดงรายชื่อครัวเรือนเดียวกัน รวมถึงการสแกนซ้ำ; สมาชิกที่ `registered_via` ไม่ใช่ `web` แสดงแต่เลือกไม่ได้ ตาม FR-KPC-29 และ FR-KPC-83
 - 2026-09-25 — ดำเนินการตามแผนจัดการรายชื่อครัวเรือนและเสียบบัตรซ้ำ: C1–C5 และ automated tests ผ่าน; code commits `11f4b4b3`, `bcd87dc2`, `f7da61f9` · manual M1–M8 บน kiosk ยัง pending · CR คง `proposed` จนกว่าเจ้าของโครงการจะอนุมัติ
@@ -441,3 +447,56 @@ migration: ไม่มี — ไม่มี field ใหม่ ไม่ bump
 - 2026-10-04 — ปรับปรุงเอกสารตาม PR review (#309): ปรับการอ้างอิง `schema_v` ของ evacuee ให้ระบุคงเดิมตาม develop (ไม่ระบุเลข 10 ที่ล้าสมัย), ระบุหมายเหตุเชื่อมโยง walk-in กับ CR-149, บันทึกคำเตือนความเสี่ยงด้าน audit trail (Audit Trail Gap), ปรับ G-8 เป็น backlog ของ scanner_client, ปรับการอ้างอิง implementation plans ให้ระบุรวมติดตามใน CR นี้ (ตัด phantom paths), และยกเลิกโครงสร้างส่วนถาม-ตอบเดิม โดยผนวกข้อกำหนดและคำตอบของเจ้าของโครงการทั้งหมดเข้าสู่เนื้อหา spec โดยตรง
 - 2026-10-04 — Soravit Sukkar (Team Lead) อนุมัติ (approved) CR-151 และ merge PR #309 เข้า branch develop; ยืนยัน schema_v ของ evacuee คงเดิม (ไม่อัปเกรด schema_v; อิงตามเวอร์ชันปัจจุบันของ develop) และรันเลข CR-151
 - เหตุผลที่ใช้ `/lookup` เดิมสำหรับเบอร์แทนการสร้าง endpoint ใหม่: allowlist ของ `scanner_client` ครอบคลุมอยู่แล้ว จึงไม่ต้อง deploy ฝั่ง Python ใหม่
+- 2026-10-13 — ทีม kiosk เสนอ §15 จาก feedback หน้างาน: หัวข้อหน้าแรก「ลงทะเบียน」· รับ `registered_via:'kiosk'` · ช่องทางเบอร์เปลี่ยนเป็น「พิมพ์ QR」ยืนยัน 4 ตัวท้าย พิมพ์ได้เฉพาะ `arriving`/`active`/`room_confirmed` (ไม่รวม `temporary_leave`, `checked_out`) · ช่องทางบัตร/QR/ThaiD พิมพ์ซ้ำได้เฉพาะ `arriving` คงเดิม · track ใน CR นี้แทน draft CR ใหม่
+- 2026-10-13 — Soravit Sukkarn (Team Lead) approved ข้อเสนอแก้ไข §15 โดยรับ requirement จากหัวหน้าโครงการเมื่อวาน (2026-10-12)
+- 2026-10-15 — ทีม kiosk ขอเลิกกรอง `registered_via` (เดิม {`web`, `kiosk`}): lookup บัตร/QR/ThaiD/เบอร์, `/kiosk/check-in` และ `/kiosk/reprint` ค้นทั้งศูนย์ของเครื่อง · กฎสถานะคงเดิม (check-in = `pre_registered` · พิมพ์ซ้ำทางเบอร์ = `arriving`/`active`/`room_confirmed`) · สมาชิกที่เจ้าหน้าที่เพิ่มที่ Station 1 เลือกได้ตามสถานะ (แก้ FR-KPC-29, E-11, E-23) · Mango selector เบอร์ไม่มี `registered_via` แล้ว ยังใช้ `evacuee-type-phone-idx`
+- 2026-10-17 — **decision sync** (#604; ไม่เปิด CR ใหม่ ตามที่เจ้าของโครงการเลือก): (1) ผลตรวจ local 2026-09-25 (§4) ล้าสมัย — `shelter_sh001`–`sh004` ไม่มี index ใน `KIOSK_LOOKUP_MANGO_INDEXES` (รวม people / transfer-ledger / Daily SOP) เพราะไม่ได้รัน redeploy/seed หลัง merge #457 (2026-10-11); รัน `scripts/redeploy-access.ts --write --confirm` บน local แล้ว (ok 4/4) และ `_explain` ของ selector เลขบัตรเลือก `evacuee-type-person-id-idx` ทุกฐาน · (2) FR-KPC-64 เพิ่มเติม: provisioning ทุกจุดต้อง deploy ชุด index ของ shelter DB **เท่ากัน** — เดิม `redeploy-access.ts` ขาด people + transfer-ledger และ seed ขาด requisition + people + transfer-ledger; warm-up selector ใช้ map กลาง `KIOSK_LOOKUP_WARMUP_SELECTORS` (ครบทุก index รวม `evacuee-type-card-address-no-idx`) และมี test กันนิยาม index ชื่อซ้ำไม่ตรงกัน (branch `fix/604-shelter-mango-index`, commit `748ebe2d6`) · (3) staging/production: Jenkins รัน `pnpm db:sync` (รวม `redeploy:access --write --confirm`) ทุกครั้งที่ deploy branch `staging` / `main` อยู่แล้ว — ไม่ต้องรันเอง แต่ยังไม่ได้ตรวจ `_index` / `_explain` บน staging/production หลัง deploy · (4) FR-KPC-63 แก้เป็น 4 ตัวให้ตรงกับ CR-149 / #525 (เพิ่ม `evacuee-type-card-address-no-idx` บน `card_snapshot.address_no`; เดิมนับ 3 ตัว)
+
+## 15. ข้อเสนอแก้ไข 2026-10-13 (approved โดย Team Lead)
+
+> **สถานะ:** approved โดย Soravit Sukkarn (Team Lead) — รับ requirement จากหัวหน้าโครงการเมื่อ 2026-10-12 · implement แล้วบน branch `refactor-kiosk-cleanup`
+
+> **สรุป (TL;DR)**
+>
+> - **เปลี่ยนอะไร:** (1) หัวข้อหน้า `/kiosk`「รายงานตัว」→「ลงทะเบียน」(2) ช่องทางบัตร/QR/ThaiD และ `/kiosk/check-in` รับ `registered_via: 'kiosk'` ด้วย (walk-in ของ CR-149 §9) (3) ช่องทางเบอร์โทรเลิกรับรายงานตัว เปลี่ยนเป็นเมนู「พิมพ์ QR」ที่ยืนยันด้วยเลขบัตร 4 ตัวท้าย
+> - **เพื่อใคร/ทำไม:** walk-in ที่เป็น `arriving` พิมพ์ QR ซ้ำได้เหมือนคนจองล่วงหน้า · คนที่ QR หายพิมพ์ใหม่ได้เองโดยไม่ต้องใช้เบอร์อย่างเดียว
+> - **Dev ต้อง build:** `POST /api/v1/kiosk/reprint` (อ่านอย่างเดียว) · หน้า `/kiosk/reprint` · `/kiosk/phone` redirect · ปุ่ม「พิมพ์ QR」ใต้การ์ด
+> - **กระทบ schema:** ไม่มี · flag `kiosk_phone_check_in_enabled` key เดิม (CR-152 §9)
+
+**แก้ข้อเดิม:** FR-KPC-11 (การ์ดเบอร์) · FR-KPC-21/22/23/72 (`registered_via:'web'` → ไม่กรองช่องทาง ค้นทั้งศูนย์ · 2026-10-13 เดิมเป็น `web` หรือ `kiosk`) · FR-KPC-29, E-11, E-23 (สมาชิกช่องทางอื่นไม่ถูกล็อกแล้ว — เลือกได้ตามสถานะ) · §6.6 ช่องทางเบอร์ (FR-KPC-60 และส่วนเบอร์ของ FR-KPC-83 — ไม่รับรายงานตัวด้วยเบอร์อีก)
+
+### 15.1 หน้าแรกและช่องทางเดิม
+
+| ID         | Requirement                                                                                                                                                                                                                                             |
+| :--------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| FR-KPC-100 | หัวข้อ h1 หน้า `/kiosk`「รายงานตัว」→「ลงทะเบียน」(เปลี่ยนเฉพาะ h1 หน้าแรก)                                                                                                                                                                             |
+| FR-KPC-101 | lookup บัตร/QR/ThaiD และ `/kiosk/check-in`: ค้นทั้งศูนย์ของเครื่อง ไม่กรอง `registered_via` (ทุกช่องทางเข้าเงื่อนไข · เลือกได้ตามสถานะเท่านั้น: check-in = `pre_registered`) · household ที่ไม่มีคนเลือก check-in ได้ → ทางพิมพ์ซ้ำเดิม (`already_checked_in` + `label`, ไม่เขียน doc) · ทางนี้พิมพ์ซ้ำได้เฉพาะ `arriving` (เหมือนเดิม) |
+| FR-KPC-102 | หน้า `/kiosk`: การ์ดหลัก 3 ช่องทาง (QR · บัตรประชาชน · ThaiD) · ใต้ grid ปุ่มรองเต็มความกว้าง ไอคอนเครื่องพิมพ์「พิมพ์ QR」→ `/kiosk/reprint` · แสดงเมื่อ `kiosk_phone_check_in_enabled` เปิด                                                           |
+| FR-KPC-103 | `/kiosk/phone` redirect 307 → `/kiosk/reprint` (คง context query) · flag ปิด → redirect `/kiosk`                                                                                                                                                        |
+
+### 15.2 พิมพ์ QR ด้วยเบอร์โทร
+
+| ID         | Requirement                                                                                                                                                                                                                                                                                                                                                        |
+| :--------- | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| FR-KPC-104 | lookup `source:'phone'` และ `/kiosk/reprint`: ค้นทั้งศูนย์ของเครื่อง ไม่กรอง `registered_via` · สมาชิกที่พิมพ์ได้ = `arriving`/`active`/`room_confirmed` · `pre_registered` แสดงแต่เลือกไม่ได้ (ให้ใช้บัตรหรือ ThaiD) · `temporary_leave` แสดงแต่เลือกไม่ได้ · `checked_out` ไม่แสดง (FR-KPC-29) · candidates นับคนที่พิมพ์ได้                                                                      |
+| FR-KPC-105 | เลือกครัวเรือนแล้ว → numpad「เลขบัตรประชาชน 4 ตัวท้ายของเจ้าของเบอร์」ก่อนพิมพ์                                                                                                                                                                                                                                                                                    |
+| FR-KPC-106 | `POST /api/v1/kiosk/reprint { phone, primary_evacuee_id, id_last4, evacuee_ids }`: device auth · flag ปิด → 403 `KIOSK_METHOD_DISABLED` · primary ต้องมี `phone` ตรง (canonical/legacy) · `person_id.number` ลงท้ายด้วย `id_last4` → ไม่ตรง 403 `KIOSK_REPRINT_VERIFY_FAILED` · primary ไม่มีเลขที่เป็นตัวเลข → 403 `KIOSK_REPRINT_UNVERIFIABLE` (ไปพบเจ้าหน้าที่) |
+| FR-KPC-107 | reprint คืน `[{ evacuee_id, qr_payload, label }]` เฉพาะสมาชิก household เดียวกันที่พิมพ์ได้และไม่ `search_excluded` · **ไม่เขียน doc ใด ๆ** · `cache-control: no-store`                                                                                                                                                                                            |
+| FR-KPC-108 | rate limit ต่อเครื่อง และ verify ผิด 5 ครั้ง/10 นาทีต่อ primary → 429 `KIOSK_RATE_LIMITED` · `scanner_client` allowlist เพิ่ม `/api/v1/kiosk/reprint`                                                                                                                                                                                                              |
+| FR-KPC-109 | ข้อความเมื่อเลือกไม่ได้: `pre_registered`「ยังไม่ได้ลงทะเบียน — ใช้บัตรประชาชนหรือ ThaiD」· `temporary_leave`「ออกนอกศูนย์ชั่วคราว — พิมพ์ QR ไม่ได้」· ไม่มีใครพิมพ์ได้「ไม่มีผู้ที่พิมพ์ QR ได้ กรุณาติดต่อเจ้าหน้าที่」                                                                                                                                         |
+
+### 15.3 Acceptance
+
+- **AC-KPC-100** walk-in `arriving` เสียบบัตรซ้ำ → พิมพ์ QR ซ้ำได้ ไม่มีการเขียน doc
+- **AC-KPC-101** เบอร์ + 4 ตัวท้ายถูก → พิมพ์ label คนที่เลือก · 4 ตัวท้ายผิด → ไม่ได้ label · ผิดเกิน 5 ครั้ง → 429
+- **AC-KPC-102** คน `pre_registered` / `temporary_leave` เห็นในรายชื่อแต่เลือกพิมพ์ไม่ได้ · คน `checked_out` ไม่แสดง
+- **AC-KPC-103** เปิด `/kiosk/phone` → ไปที่ `/kiosk/reprint` · flag ปิด → `/kiosk`
+- **AC-KPC-104** reprint ทุกกรณีไม่มี PUT / DELETE ไปที่ CouchDB
+
+### 15.4 Impact / Risks
+
+- `/kiosk/check-in` ไม่ใช้เป็นทางพิมพ์ซ้ำด้วยเบอร์อีก (เดิมไม่ตรวจ flag และไม่ต้องยืนยันตัวตนเพิ่ม)
+- คนที่รู้ทั้งเบอร์และเลขบัตร 4 ตัวท้ายพิมพ์ QR ของผู้อื่นในครัวเรือนเดียวกันได้ · จำกัดด้วย rate limit
+- ผู้จองล่วงหน้าที่ยังไม่รายงานตัวใช้เบอร์รายงานตัวไม่ได้แล้ว ต้องใช้ QR ใบจอง / บัตร / ThaiD
+
+---

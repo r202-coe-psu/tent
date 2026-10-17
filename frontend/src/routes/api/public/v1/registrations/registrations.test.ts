@@ -270,7 +270,7 @@ describe('POST /api/public/v1/registrations', () => {
 			const e = evacuees[0];
 
 			expect(e._id).toMatch(/^evacuee:[0-9A-HJKMNP-TV-Z]{26}$/);
-			expect(e.schema_v).toBe(12);
+			expect(e.schema_v).toBe(14);
 			expect(e.shelter_code).toBe('SH001');
 
 			expect(e.created_by).toBe('public');
@@ -324,6 +324,20 @@ describe('POST /api/public/v1/registrations', () => {
 
 		beforeEach(() => {
 			vi.mocked(findMasterByCode).mockResolvedValue(OPEN_SHELTER as never);
+		});
+
+		it('ignores a client-supplied member booking_ref on the legacy booking shape (CR-169 FR-61)', async () => {
+			const res = await POST(
+				event({
+					...FAMILY,
+					members: FAMILY.members.map((m) => ({ ...m, booking_ref: 'BK-SPOOF01' }))
+				})
+			);
+			expect(res.status).toBe(201);
+
+			const { evacuees } = writtenDocs();
+			expect(evacuees).toHaveLength(3);
+			for (const e of evacuees) expect(e).not.toHaveProperty('booking_ref');
 		});
 
 		it('writes one evacuee per member, all pointing at the same household', async () => {
@@ -594,6 +608,43 @@ describe('POST /api/public/v1/registrations', () => {
 			expect(evacuees[0].registered_via).toBe('web');
 			expect(evacuees[1].current_stay).toMatchObject({ status: 'pre_registered' });
 			expect(evacuees[1].registered_via).toBe('web');
+		});
+
+		it('strips a client-supplied member booking_ref (CR-169 FR-61)', async () => {
+			vi.mocked(findMasterByCode).mockResolvedValue(OPEN_SHELTER as never);
+
+			const res = await POST(
+				event({
+					shelter_code: 'SH001',
+					captchaToken: 'tok',
+					members: [
+						{
+							first_name: 'สมเกียรติ',
+							last_name: 'รักสงบ',
+							gender: 'male',
+							phone: '0811112222',
+							person_id: { cardType: 'national_id', number: '1100000000008' },
+							booking_ref: 'BK-SPOOF01'
+						}
+					],
+					household: {
+						housing_type: 'owned_house',
+						address_no: '99/1',
+						subdistrict: 'คอหงส์',
+						district: 'หาดใหญ่',
+						province: 'สงขลา',
+						postal_code: '90110',
+						pets: [],
+						vehicles: [],
+						assets: null
+					}
+				})
+			);
+			expect(res.status).toBe(201);
+
+			const { evacuees } = writtenDocs();
+			expect(evacuees).toHaveLength(1);
+			expect(evacuees[0]).not.toHaveProperty('booking_ref');
 		});
 
 		it('persists member face photo and pet image_url as Couch image refs', async () => {

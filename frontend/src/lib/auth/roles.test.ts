@@ -3,9 +3,14 @@ import {
 	formatRoleList,
 	canCancelHold,
 	canAccessUnassignedRegistrationQueue,
+	canAccessDistributionDesk,
 	canAccessMedicalScreening,
 	canAccessVolunteerBackoffice,
 	canAccessZoning,
+	canManageInShelters,
+	hasCapabilityAnywhere,
+	canManageScanners,
+	SCANNER_MANAGER_CAPABILITIES,
 	capabilitiesForShelter,
 	compoundCapabilityRole,
 	hasCapabilityInShelter,
@@ -20,8 +25,15 @@ import {
 	roleDisplayLabel,
 	rolesFromAssignments,
 	assignmentsFromRoles,
+	DISTRIBUTION_STAFF,
+	isKioskStaffOnly,
+	KIOSK_STAFF,
+	SA_GRANTABLE_CAPABILITIES,
+	SHELTER_CAPABILITIES,
+	STAFF_CAPABILITIES,
 	shelterCodeFromRoles,
 	shelterCodesFromRoles,
+	shelterCodesWithCapability,
 	shelterScopeRole
 } from './roles';
 
@@ -292,5 +304,196 @@ describe('formatRoleList', () => {
 	it('returns the default label for an empty/missing list', () => {
 		expect(formatRoleList([])).toBe('ผู้ใช้ทั่วไป');
 		expect(formatRoleList(undefined)).toBe('ผู้ใช้ทั่วไป');
+	});
+});
+
+describe('distribution_staff capability', () => {
+	it('is a grantable staff capability (SM, SA, and volunteer access pickers)', () => {
+		expect(STAFF_CAPABILITIES).toContain(DISTRIBUTION_STAFF);
+		expect(SHELTER_CAPABILITIES).toContain(DISTRIBUTION_STAFF);
+		expect(SA_GRANTABLE_CAPABILITIES).toContain(DISTRIBUTION_STAFF);
+		expect(isStaffOnly(['shelter:SH001', 'SH001:distribution_staff'])).toBe(true);
+	});
+
+	it('round-trips through compound shelter assignments', () => {
+		const roles = rolesFromAssignments([
+			{ shelter_code: 'SH001', capabilities: [DISTRIBUTION_STAFF] }
+		]);
+		expect(roles).toEqual(['shelter:SH001', 'SH001:distribution_staff']);
+		expect(assignmentsFromRoles(roles)).toEqual([
+			{ shelter_code: 'SH001', capabilities: [DISTRIBUTION_STAFF] }
+		]);
+	});
+
+	it('is scoped to its own shelter', () => {
+		const roles = ['shelter:SH001', 'shelter:SH002', 'SH001:distribution_staff'];
+		expect(hasCapabilityInShelter(roles, 'SH001', DISTRIBUTION_STAFF)).toBe(true);
+		expect(hasCapabilityInShelter(roles, 'SH002', DISTRIBUTION_STAFF)).toBe(false);
+	});
+
+	it('alone (with SA and SM) opens the Distribution Desk page (CR-161 R5)', () => {
+		expect(canAccessDistributionDesk(['system_admin'], 'SH001')).toBe(true);
+		for (const cap of ['shelter_manager', DISTRIBUTION_STAFF]) {
+			expect(canAccessDistributionDesk(['shelter:SH001', `SH001:${cap}`], 'SH001')).toBe(true);
+			expect(canAccessDistributionDesk(['shelter:SH001', `SH001:${cap}`], 'SH002')).toBe(false);
+		}
+		for (const cap of ['registration_staff', 'supply_coordinator', 'warehouse_staff']) {
+			expect(canAccessDistributionDesk(['shelter:SH001', `SH001:${cap}`], 'SH001')).toBe(false);
+		}
+		// Legacy flat role with a single shelter scope (CR-161 R1).
+		expect(canAccessDistributionDesk(['shelter:SH001', DISTRIBUTION_STAFF], 'SH001')).toBe(true);
+	});
+
+	it('has a Thai display label', () => {
+		expect(roleDisplayLabel(DISTRIBUTION_STAFF)).toBe('เจ้าหน้าที่แจกจ่าย');
+		expect(roleDisplayLabel('SH001:distribution_staff')).toBe('เจ้าหน้าที่แจกจ่าย (SH001)');
+		expect(formatRoleList(['shelter:SH001', 'SH001:distribution_staff'])).toBe(
+			'SH001:เจ้าหน้าที่แจกจ่าย'
+		);
+	});
+});
+
+describe('shelterCodesWithCapability', () => {
+	it('returns null (every shelter) for a system admin', () => {
+		expect(shelterCodesWithCapability(['system_admin'], ['shelter_manager'])).toBeNull();
+	});
+
+	it('lists the shelters where a compound shelter_manager holds the capability', () => {
+		expect(
+			shelterCodesWithCapability(['shelter:A', 'A:shelter_manager'], ['shelter_manager'])
+		).toEqual(['A']);
+		expect(
+			shelterCodesWithCapability(
+				['shelter:A', 'shelter:B', 'A:shelter_manager', 'B:shelter_manager'],
+				['shelter_manager']
+			)
+		).toEqual(['A', 'B']);
+	});
+
+	it('honours the legacy flat role when the user has a single shelter scope', () => {
+		expect(
+			shelterCodesWithCapability(['shelter:A', 'shelter_manager'], ['shelter_manager'])
+		).toEqual(['A']);
+	});
+
+	it('only lists the shelters where the capability is held (SM A + registration_staff B)', () => {
+		expect(
+			shelterCodesWithCapability(
+				['shelter:A', 'shelter:B', 'A:shelter_manager', 'B:registration_staff'],
+				['shelter_manager']
+			)
+		).toEqual(['A']);
+	});
+
+	it('does not count a compound capability without its shelter scope role', () => {
+		expect(shelterCodesWithCapability(['A:shelter_manager'], ['shelter_manager'])).toEqual([]);
+	});
+
+	it('matches any of several capabilities', () => {
+		const roles = ['shelter:A', 'shelter:B', 'A:shelter_manager', 'B:registration_staff'];
+		expect(shelterCodesWithCapability(roles, ['shelter_manager', 'registration_staff'])).toEqual([
+			'A',
+			'B'
+		]);
+	});
+});
+
+describe('canManageInShelters', () => {
+	it('is true for a system admin and false for an empty shelter list of a non-SA', () => {
+		expect(canManageInShelters(['system_admin'], ['A', 'B'], ['shelter_manager'])).toBe(true);
+		expect(canManageInShelters(['shelter:A', 'A:shelter_manager'], [], ['shelter_manager'])).toBe(
+			false
+		);
+	});
+
+	it('requires every shelter to be in scope', () => {
+		const roles = ['shelter:A', 'shelter:B', 'A:shelter_manager', 'B:registration_staff'];
+		expect(canManageInShelters(roles, ['A'], ['shelter_manager'])).toBe(true);
+		expect(canManageInShelters(roles, ['A', 'B'], ['shelter_manager'])).toBe(false);
+		expect(canManageInShelters(roles, ['A', 'B'], ['shelter_manager', 'registration_staff'])).toBe(
+			true
+		);
+	});
+
+	it('is false for a compound capability without its shelter scope role', () => {
+		expect(canManageInShelters(['A:shelter_manager'], ['A'], ['shelter_manager'])).toBe(false);
+	});
+
+	it('accepts the legacy flat role for a single-shelter user', () => {
+		expect(canManageInShelters(['shelter:A', 'shelter_manager'], ['A'], ['shelter_manager'])).toBe(
+			true
+		);
+	});
+});
+
+describe('hasCapabilityAnywhere', () => {
+	it('is true for SA or when held in at least one shelter, false otherwise', () => {
+		expect(hasCapabilityAnywhere(['system_admin'], ['shelter_manager'])).toBe(true);
+		expect(
+			hasCapabilityAnywhere(
+				['shelter:A', 'shelter:B', 'A:registration_staff', 'B:shelter_manager'],
+				['shelter_manager']
+			)
+		).toBe(true);
+		expect(hasCapabilityAnywhere(['shelter:A', 'A:registration_staff'], ['shelter_manager'])).toBe(
+			false
+		);
+		expect(hasCapabilityAnywhere([], ['shelter_manager'])).toBe(false);
+	});
+});
+
+describe('canManageScanners', () => {
+	it('allows SA and the shelter_manager or kiosk_staff of that shelter only', () => {
+		expect(SCANNER_MANAGER_CAPABILITIES).toEqual(['shelter_manager', 'kiosk_staff']);
+		expect(canManageScanners(['system_admin'], 'A')).toBe(true);
+		expect(canManageScanners(['shelter:A', 'A:shelter_manager'], 'A')).toBe(true);
+		expect(canManageScanners(['shelter:A', 'A:shelter_manager'], 'B')).toBe(false);
+		expect(canManageScanners(['shelter:A', 'A:kiosk_staff'], 'A')).toBe(true);
+		expect(canManageScanners(['shelter:A', 'A:kiosk_staff'], 'B')).toBe(false);
+		expect(canManageScanners(['shelter:A', 'A:registration_staff'], 'A')).toBe(false);
+	});
+});
+
+describe('kiosk_staff capability', () => {
+	it('is a grantable staff capability', () => {
+		expect(STAFF_CAPABILITIES).toContain(KIOSK_STAFF);
+		expect(SHELTER_CAPABILITIES).toContain(KIOSK_STAFF);
+		expect(SA_GRANTABLE_CAPABILITIES).toContain(KIOSK_STAFF);
+		expect(roleDisplayLabel('SH001:kiosk_staff')).toContain('เจ้าหน้าที่ดูแลตู้ Kiosk');
+	});
+
+	it('round-trips through compound shelter assignments', () => {
+		const roles = rolesFromAssignments([{ shelter_code: 'SH001', capabilities: [KIOSK_STAFF] }]);
+		expect(roles).toEqual(['shelter:SH001', 'SH001:kiosk_staff']);
+		expect(assignmentsFromRoles(roles)).toEqual([
+			{ shelter_code: 'SH001', capabilities: [KIOSK_STAFF] }
+		]);
+	});
+});
+
+describe('isKioskStaffOnly', () => {
+	it('is true when kiosk_staff is the only capability in the shelter', () => {
+		expect(isKioskStaffOnly(['shelter:A', 'A:kiosk_staff'], 'A')).toBe(true);
+		expect(isKioskStaffOnly(['shelter:A', 'A:kiosk_staff'], null)).toBe(true);
+	});
+
+	it('is false once the user holds another capability in that shelter', () => {
+		expect(isKioskStaffOnly(['shelter:A', 'A:kiosk_staff', 'A:registration_staff'], 'A')).toBe(
+			false
+		);
+		expect(isKioskStaffOnly(['shelter:A', 'A:shelter_manager'], 'A')).toBe(false);
+	});
+
+	it('scopes to the active shelter', () => {
+		const roles = ['shelter:A', 'shelter:B', 'A:kiosk_staff', 'B:shelter_manager'];
+		expect(isKioskStaffOnly(roles, 'A')).toBe(true);
+		expect(isKioskStaffOnly(roles, 'B')).toBe(false);
+		expect(isKioskStaffOnly(roles, null)).toBe(false);
+	});
+
+	it('is false for SA and for users without capabilities', () => {
+		expect(isKioskStaffOnly(['system_admin'], 'A')).toBe(false);
+		expect(isKioskStaffOnly(['shelter:A'], 'A')).toBe(false);
+		expect(isKioskStaffOnly([], null)).toBe(false);
 	});
 });

@@ -50,7 +50,9 @@ describe('buildPreviewRoles', () => {
 		['warehouse_staff', 'SH001:warehouse_staff'],
 		['volunteer_coordinator', 'SH001:volunteer_coordinator'],
 		['security_officer', 'SH001:security_officer'],
-		['facility_staff', 'SH001:facility_staff']
+		['facility_staff', 'SH001:facility_staff'],
+		['distribution_staff', 'SH001:distribution_staff'],
+		['kiosk_staff', 'SH001:kiosk_staff']
 	] as const)('gives %s the shelter scope and the compound capability', (role, compound) => {
 		expect(buildPreviewRoles(role, SH, SA)).toEqual(['shelter:SH001', compound]);
 	});
@@ -66,7 +68,7 @@ describe('buildPreviewRoles', () => {
 	});
 
 	it('covers every role offered by the picker', () => {
-		expect(PORTAL_PREVIEW_ROLES).toHaveLength(11);
+		expect(PORTAL_PREVIEW_ROLES).toHaveLength(13);
 		expect(PORTAL_PREVIEW_ROLES[0].value).toBe('system_admin');
 	});
 });

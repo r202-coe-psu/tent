@@ -33,9 +33,20 @@ export function findSkillOption(
 	const byCode = options.find((option) => option.code === value);
 	if (byCode) return byCode;
 	const needle = normalize(value);
-	return options.find(
-		(option) => normalize(option.code) === needle || normalize(option.label) === needle
+	// An empty value would otherwise match an option that lacks one of its labels.
+	if (!needle) return undefined;
+	return options.find((option) =>
+		[option.code, option.label, option.label_th, option.label_en].some(
+			(candidate) => normalize(candidate ?? '') === needle
+		)
 	);
+}
+
+/** The option's label in the reader's language, falling back to the other one. */
+export function localizedSkillLabel(option: VolunteerSkillOption, lang: 'th' | 'en'): string {
+	const localized =
+		lang === 'en' ? option.label_en || option.label_th : option.label_th || option.label_en;
+	return localized || option.label || option.code;
 }
 
 /** Human label for a stored value — the raw value when the list has dropped it. */

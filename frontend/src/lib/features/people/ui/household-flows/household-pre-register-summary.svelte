@@ -3,7 +3,7 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { authStore } from '$lib/stores/auth.svelte';
-	import { useCreateEvacuee, useEvacuees, useUpdateEvacuee } from '../../application/queries';
+	import { useCreateEvacuee, useEvacuees } from '../../application/queries';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { useSaveImage } from '$lib/features/images';
 	import {
@@ -11,7 +11,8 @@
 		formatPersonName,
 		type Evacuee,
 		type Household,
-		evacueeInputSchema,
+		station1EvacueeInputSchema,
+		withoutBookingRef,
 		currentBEYear,
 		minBirthYearBE,
 		MAX_AGE_YEARS,
@@ -79,7 +80,6 @@
 
 	// --- Queries and Mutations ---
 	const createEvacueeMutation = useCreateEvacuee();
-	const updateEvacueeMutation = useUpdateEvacuee();
 	const allEvacueesQuery = useEvacuees();
 
 	let isSubmitting = $state(false);
@@ -124,10 +124,10 @@
 	let memberMedicalMedicationsStr = $state('');
 	let memberMedicalAllergiesStr = $state('');
 
-	const memberForm = superForm(defaults(zod4(evacueeInputSchema)), {
+	const memberForm = superForm(defaults(zod4(station1EvacueeInputSchema)), {
 		SPA: true,
 		dataType: 'json',
-		validators: zod4(evacueeInputSchema),
+		validators: zod4(station1EvacueeInputSchema),
 		resetForm: false,
 		onSubmit: ({ cancel }) => {
 			if (memberBirthYearError || memberAgeError) {
@@ -181,20 +181,14 @@
 
 				f.data.household_id = createdHousehold._id;
 
-				const memberDoc = await createEvacueeMutation.mutateAsync({
-					input: f.data,
+				// Members follow the head's suggested zone; Station 3 assigns the real one.
+				await createEvacueeMutation.mutateAsync({
+					input: {
+						...withoutBookingRef(f.data),
+						preferred_zone: createdHead?.preferred_zone ?? null
+					},
 					ctx
 				});
-
-				if (createdHead?.current_stay?.zone) {
-					await updateEvacueeMutation.mutateAsync({
-						...memberDoc,
-						current_stay: {
-							...memberDoc.current_stay,
-							zone: createdHead.current_stay.zone
-						}
-					});
-				}
 
 				toast.success(`ลงทะเบียนสมาชิก "${formatPersonName(f.data)}" เรียบร้อยแล้ว`);
 

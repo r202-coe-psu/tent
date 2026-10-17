@@ -49,7 +49,7 @@
 	}
 
 	const chipBase =
-		'inline-flex min-h-11 shrink-0 items-center gap-2 rounded-xl border px-3.5 text-sm font-semibold whitespace-nowrap transition-colors focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none';
+		'inline-flex min-h-11 shrink-0 snap-start items-center gap-2 rounded-xl border px-3.5 text-sm font-semibold whitespace-nowrap transition-colors focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none';
 </script>
 
 <div class="space-y-6">
@@ -58,9 +58,11 @@
 			<div
 				role="group"
 				aria-label="กรองเมนูตามฝ่าย"
-				class="sticky top-[var(--portal-sticky-top)] z-30 -mx-4 bg-[#F8FAFC]/95 px-4 backdrop-blur-sm sm:-mx-0 sm:px-0"
+				class="z-30 -mx-4 bg-[#F8FAFC] sm:sticky sm:top-[var(--portal-sticky-top)] sm:mx-0"
 			>
-				<div class="flex gap-2 overflow-x-auto px-1 py-2">
+				<div
+					class="flex snap-x snap-proximity scroll-px-4 gap-2 overflow-x-auto [mask-image:linear-gradient(to_right,#000_calc(100%-2.5rem),transparent)] py-2 pr-10 pl-4 sm:[mask-image:none] sm:px-1"
+				>
 					<button
 						type="button"
 						aria-pressed={selection === PORTAL_DEPARTMENT_ALL}

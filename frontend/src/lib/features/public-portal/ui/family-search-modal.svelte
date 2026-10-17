@@ -9,8 +9,9 @@
 	import { PUBLIC_FAMILY_SEARCH_I18N } from '$lib/constants/i18n';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { formatDate, getTranslation } from '$lib/utils/i18n';
-	import { familySearch } from '../data/public-api';
+	import { familySearch, PublicApiError } from '../data/public-api';
 	import { searchResultKey } from '../domain/mappers';
+	import { normalizeFamilySearchQuery, validateFamilySearchQuery } from '../domain/search-input';
 	import StayStatusChip from './stay-status-chip.svelte';
 	import type { FamilySearchResult } from '../domain/types';
 
@@ -25,26 +26,44 @@
 	let query = $state('');
 	let isLoading = $state(false);
 	let results = $state<FamilySearchResult[] | null>(null);
-	/** A server message when there is one; otherwise a copy key so it follows the language toggle. */
-	let error = $state<{ message: string } | 'tooShort' | 'networkError' | null>(null);
-	const errorText = $derived(
-		error === null ? '' : typeof error === 'string' ? t[error] : error.message
-	);
+	/** Always a copy key (never raw server/network text) so it follows the language toggle. */
+	type SearchMessage =
+		| 'tooShort'
+		| 'tooManyWords'
+		| 'incompletePhone'
+		| 'tooLong'
+		| 'rateLimited'
+		| 'unavailable'
+		| 'generic'
+		| 'networkError';
+	let message = $state<SearchMessage | null>(null);
+	/** Input guidance (fixable by the user) is a hint, not a failure. */
+	let isHint = $state(false);
+	const messageText = $derived(message === null ? '' : t[message]);
 
 	async function performSearch() {
-		if (query.trim().length < 3) {
-			error = 'tooShort';
+		const issue = validateFamilySearchQuery(query);
+		if (issue) {
+			message = issue;
+			isHint = true;
+			results = null;
 			return;
 		}
 		isLoading = true;
-		error = null;
+		message = null;
 		results = null;
 
 		try {
-			const data = await familySearch(query.trim());
+			const data = await familySearch(normalizeFamilySearchQuery(query));
 			results = data.results;
 		} catch (e) {
-			error = e instanceof Error && e.message ? { message: e.message } : 'networkError';
+			if (e instanceof PublicApiError) {
+				isHint = e.kind === 'validation';
+				message = e.kind === 'validation' ? 'incompletePhone' : e.kind;
+			} else {
+				isHint = false;
+				message = 'networkError';
+			}
 		} finally {
 			isLoading = false;
 		}
@@ -97,13 +116,22 @@
 			</Button>
 		</div>
 
-		{#if errorText}
-			<p
-				class="rounded-xl border border-danger/30 bg-danger-muted/40 p-3 text-sm text-danger"
-				role="alert"
-			>
-				{errorText}
-			</p>
+		{#if messageText}
+			{#if isHint}
+				<p
+					class="rounded-xl border border-border bg-muted/50 p-3 text-sm text-foreground"
+					role="status"
+				>
+					{messageText}
+				</p>
+			{:else}
+				<p
+					class="rounded-xl border border-danger/30 bg-danger-muted/40 p-3 text-sm text-danger"
+					role="alert"
+				>
+					{messageText}
+				</p>
+			{/if}
 		{/if}
 
 		{#if results}

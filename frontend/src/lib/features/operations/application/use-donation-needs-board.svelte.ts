@@ -22,6 +22,7 @@ import {
 } from './queries';
 import {
 	buildCampaignNotes,
+	CampaignUnitMismatchError,
 	deriveNeedAvailability,
 	editNeed,
 	forceCutOffNeed,
@@ -138,6 +139,17 @@ export function useDonationNeedsBoard(options?: { onFormCreated?: () => void }) 
 	}
 
 	/**
+	 * Toast copy for a failed campaign write. A unit mismatch names the item and both
+	 * units in Thai and points at the row's "แก้ไข" — the edit form re-reads the
+	 * catalog unit, so saving it is what repairs the stored one.
+	 */
+	function campaignWriteErrorMessage(err: Error): string {
+		if (!(err instanceof CampaignUnitMismatchError)) return err.message;
+		const unit = (code: string) => formatUnit(code, unitsOfMeasure, langState.current);
+		return `หน่วยของ "${itemDisplayName(err.itemId)}" ในประกาศนี้เป็น ${unit(err.actual)} แต่ Item Master ใช้ ${unit(err.expected)} — กด "แก้ไข" ที่รายการนี้แล้วบันทึกเพื่อปรับหน่วย`;
+	}
+
+	/**
 	 * The board's three inputs all move without this page doing anything: a donor books
 	 * or edits from the public plane, another shelter's staff receive stock. With the
 	 * app's 60s `staleTime` and no focus event to trigger a refetch, staff watching the
@@ -248,7 +260,7 @@ export function useDonationNeedsBoard(options?: { onFormCreated?: () => void }) 
 						);
 					},
 					onError: (err) => {
-						toast.error(`ไม่สามารถแก้ไขการโปรโมตได้: ${err.message}`);
+						toast.error(`ไม่สามารถแก้ไขการโปรโมตได้: ${campaignWriteErrorMessage(err)}`);
 					}
 				}
 			);
@@ -299,7 +311,7 @@ export function useDonationNeedsBoard(options?: { onFormCreated?: () => void }) 
 					);
 				},
 				onError: (err) => {
-					toast.error(`ไม่สามารถบันทึกสถานะได้: ${err.message}`);
+					toast.error(`ไม่สามารถบันทึกสถานะได้: ${campaignWriteErrorMessage(err)}`);
 				}
 			}
 		);
@@ -370,7 +382,7 @@ export function useDonationNeedsBoard(options?: { onFormCreated?: () => void }) 
 					options?.onFormCreated?.();
 				},
 				onError: (err) => {
-					toast.error(`ไม่สามารถสร้างประกาศได้: ${err.message}`);
+					toast.error(`ไม่สามารถสร้างประกาศได้: ${campaignWriteErrorMessage(err)}`);
 				}
 			}
 		);
@@ -448,7 +460,7 @@ export function useDonationNeedsBoard(options?: { onFormCreated?: () => void }) 
 					toast.success(`แก้ไขประกาศ "${title}" สำเร็จ`);
 				},
 				onError: (err) => {
-					toast.error(`ไม่สามารถแก้ไขประกาศได้: ${err.message}`);
+					toast.error(`ไม่สามารถแก้ไขประกาศได้: ${campaignWriteErrorMessage(err)}`);
 				}
 			}
 		);

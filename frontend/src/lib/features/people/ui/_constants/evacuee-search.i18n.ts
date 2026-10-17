@@ -11,6 +11,7 @@ export const EVACUEE_SEARCH_I18N = {
 		statusLabel: 'สถานะ:',
 		statusLabels: {
 			pre_registered: 'ลงทะเบียนล่วงหน้า',
+			kiosk_registered: 'ลงทะเบียนที่ตู้ (รอยืนยัน)',
 			arriving: 'รอเข้าพัก',
 			active: 'เข้าพักแล้ว',
 			room_confirmed: 'ยืนยันถึงโซนแล้ว',
@@ -36,6 +37,7 @@ export const EVACUEE_SEARCH_I18N = {
 		statusLabel: 'Status:',
 		statusLabels: {
 			pre_registered: 'Pre-registered',
+			kiosk_registered: 'Registered at kiosk (pending)',
 			arriving: 'Arriving / Waiting',
 			active: 'Checked In',
 			room_confirmed: 'Zone Arrival Confirmed',

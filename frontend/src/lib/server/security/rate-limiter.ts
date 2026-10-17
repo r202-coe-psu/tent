@@ -2,17 +2,16 @@ import { dev } from '$app/environment';
 import { env } from '$env/dynamic/private';
 
 /**
- * Master switch for every `RateLimiter` below — server-only runtime env `RATE_LIMIT`.
+ * `RATE_LIMIT` — server-only runtime env, the e2e/staging switch of CR-160.
  *
- * Enforced by default: unset, empty, or any value that is not an explicit "off" keeps the
- * limits on, so a typo can never silently disable them. Only `false` or `0`
- * (case-insensitive, trimmed) turns them off, for every key — not just loopback. It exists
- * for e2e runs (every suite shares one runner IP) and for staging; production must leave it
- * unset. Read per call because `$env/dynamic/private` is a runtime lookup.
+ * `true` only when the value is exactly `false` or `0` (trimmed, case-insensitive); unset,
+ * empty or any other value — including typos — leaves limiting on. Read per call because
+ * `$env/dynamic/private` is a runtime lookup. It only ever affects limiters constructed
+ * with `{ bypassable: true }`; every other limiter ignores it.
  */
-function rateLimitEnabled(): boolean {
+function rateLimitSwitchedOff(): boolean {
 	const raw = env.RATE_LIMIT?.trim().toLowerCase();
-	return raw !== 'false' && raw !== '0';
+	return raw === 'false' || raw === '0';
 }
 
 interface RateLimitEntry {
@@ -23,10 +22,21 @@ export class RateLimiter {
 	private store = new Map<string, RateLimitEntry>();
 	private windowMs: number;
 	private maxRequests: number;
+	/**
+	 * Whether `RATE_LIMIT=false|0` may turn this limiter off. Default `false` (fail-closed):
+	 * only the public donation / pre-register forms that e2e drives opt in; auth, secret
+	 * reveal, link-account, volunteer and anything added later always enforce.
+	 */
+	readonly bypassable: boolean;
 
-	constructor(windowMs: number = 60000, maxRequests: number = 3) {
+	constructor(
+		windowMs: number = 60000,
+		maxRequests: number = 3,
+		options?: { bypassable?: boolean }
+	) {
 		this.windowMs = windowMs;
 		this.maxRequests = maxRequests;
+		this.bypassable = options?.bypassable ?? false;
 	}
 
 	/**
@@ -35,7 +45,8 @@ export class RateLimiter {
 	 */
 	check(key: string): boolean {
 		if (!key) return true;
-		if (!rateLimitEnabled()) return true;
+		// CR-160 switch: allow without counting, so re-enabling starts from a clean slate.
+		if (this.bypassable && rateLimitSwitchedOff()) return true;
 		if (
 			dev &&
 			(key === '127.0.0.1' || key === '::1' || key === 'localhost' || key === '::ffff:127.0.0.1')
@@ -61,6 +72,19 @@ export class RateLimiter {
 		this.cleanup(now);
 
 		return true;
+	}
+
+	/**
+	 * True when `key` has used its whole budget in the current window. Never consumes, so a
+	 * caller can gate on it and spend budget with `check()` only for the events it counts
+	 * (e.g. failed verifications).
+	 */
+	isBlocked(key: string): boolean {
+		if (!key) return false;
+		if (this.bypassable && rateLimitSwitchedOff()) return false;
+		const now = Date.now();
+		const active = (this.store.get(key)?.timestamps ?? []).filter((ts) => now - ts < this.windowMs);
+		return active.length >= this.maxRequests;
 	}
 
 	private cleanup(now: number) {
@@ -117,9 +141,9 @@ export const linkAccountNonceLimiter = new RateLimiter(10 * 60_000, 5);
 export const linkAccountIpLimiter = new RateLimiter(60_000, 10);
 
 /** Creating a booking. The abuse vector CR-005 set this at — deliberately tight. */
-export const donationIpLimiter = new RateLimiter(60000, 3);
+export const donationIpLimiter = new RateLimiter(60000, 3, { bypassable: true });
 /** Same, per phone number, so one abuser cannot spread across IPs. */
-export const donationPhoneLimiter = new RateLimiter(60000, 3);
+export const donationPhoneLimiter = new RateLimiter(60000, 3, { bypassable: true });
 /**
  * Changing a booking that already exists: edit, courier number, cancel.
  *
@@ -127,13 +151,13 @@ export const donationPhoneLimiter = new RateLimiter(60000, 3);
  * blast radius is a single record the caller already owns. Ten a minute is generous for
  * a person and still caps a script.
  */
-export const donationEditLimiter = new RateLimiter(60000, 10);
+export const donationEditLimiter = new RateLimiter(60000, 10, { bypassable: true });
 /**
  * Reading one's own ticket. Idempotent, token-gated, and the page refetches after every
  * change — counting it against the write budget is what made editing twice impossible.
  * Still limited, because each read reaches FastAPI and Mongo.
  */
-export const donationReadLimiter = new RateLimiter(60000, 30);
+export const donationReadLimiter = new RateLimiter(60000, 30, { bypassable: true });
 /**
  * The wizard's window grid (`GET /donations/slots`). Anonymous and keyed by IP only, and
  * each call scans every `donation_slot:` and `donation:` doc of a shelter with admin
@@ -145,10 +169,27 @@ export const donationSlotsLimiter = new RateLimiter(60000, 30);
 // Public booking (CR-070 / T-71). Separate buckets from donations so a busy
 // donation drive cannot lock a family out of booking a place to sleep.
 // One household books once; 3/min per IP still allows correcting a typo.
-export const registerIpLimiter = new RateLimiter(60000, 3);
-export const registerPhoneLimiter = new RateLimiter(60000, 3);
+export const registerIpLimiter = new RateLimiter(60000, 3, { bypassable: true });
+export const registerPhoneLimiter = new RateLimiter(60000, 3, { bypassable: true });
 // Lookup is a read but also an enumeration surface — hold it tighter.
-export const registerLookupIpLimiter = new RateLimiter(60000, 10);
+export const registerLookupIpLimiter = new RateLimiter(60000, 10, { bypassable: true });
+
+/** Kiosk phone lookup — per scanner device (registry_id), FR-KPC-59. */
+export const kioskPhoneDeviceLimiter = new RateLimiter(60_000, 10);
+/** Kiosk phone lookup — per normalized phone across devices. */
+export const kioskPhoneNumberLimiter = new RateLimiter(60_000, 5);
+/** Kiosk QR reprint — per scanner device (registry_id). */
+export const kioskReprintDeviceLimiter = new RateLimiter(60_000, 10);
+/**
+ * Kiosk QR reprint — failed ID last-4 verifications per primary evacuee (5 per 10 minutes).
+ * Only failures consume it (`isBlocked` gates, `check` records), so a correct entry is never
+ * counted but a guesser of the 10 000 possible codes is locked out after five misses.
+ */
+export const kioskReprintVerifyFailureLimiter = new RateLimiter(10 * 60_000, 5);
+/** Walk-in creation — per authenticated kiosk device. */
+export const kioskRegisterDeviceLimiter = new RateLimiter(60_000, 5);
+/** Kiosk ThaiD session creation — per scanner device (registry_id). D-5 proposal, pending PO decision. */
+export const kioskThaidSessionDeviceLimiter = new RateLimiter(60_000, 10);
 
 // Public volunteer board (CR-092 / T-28). Its own buckets so a donation drive and a
 // volunteer callout cannot starve each other.

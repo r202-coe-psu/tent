@@ -17,10 +17,11 @@ import {
 	seedSecurityQuestion,
 	type TestUser
 } from './couch';
-import { RATE_LIMIT_ENFORCED } from './e2e-env';
+import { bangkokToday } from '../../src/lib/utils/date';
+import { IS_REMOTE, RATE_LIMIT_ENFORCED } from './e2e-env';
 import { injectSession, routeBrowserCouchThroughApp } from './login';
 import { publicShelter, teardownShelter, waitForProjection } from './public-cleanup';
-import { createShelterViaUi, setRecaptcha } from './staff-ui';
+import { createShelterViaUi, pinActiveShelter, setRecaptcha } from './staff-ui';
 
 /**
  * Shared steps for the full-stack donation specs (`donation-fullstack*.test.ts`,
@@ -68,73 +69,38 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /**
  * Sliding-window pacer for the BFF's per-IP limiters (`src/lib/server/security/rate-limiter.ts`).
- *
- * Pacing only matters while those limiters are enforced. The server's `RATE_LIMIT=false`
- * switches every limiter off, and that is how e2e runs: `playwright.config.ts` starts the
- * local preview server with it off, and staging sets it off in its compose files — so the
- * Pacer is a no-op there and the suites run at full speed. Pacing turns itself on when
- * `RATE_LIMIT` is not `false`/`0` in the e2e env (unset counts as enforced, the safe
- * assumption for a remote target), e.g. `RATE_LIMIT=true` to exercise the real limits, in
- * which case every suite shares the one runner IP and the 3rd booking in a minute would
- * answer 429 RATE_LIMITED. `DONATION_E2E_PACE=0` also forces it off.
- *
- * The hit log lives in a file, not module state: Playwright restarts the worker after a
- * failed test, which would otherwise forget the bookings of the last minute and let the
- * next test trip the limiter — one failure cascading into several.
+ * They only exempt loopback under `vite dev`, so a remote target (staging) — or a local
+ * `vite preview` with `DONATION_E2E_PACE=1` — would answer 429 RATE_LIMITED after the 3rd
+ * booking in a minute. On `pnpm dev` it is a no-op, and so is it when the target runs with
+ * `RATE_LIMIT=false` (CR-160): the booking limiters are bypassed there, so pacing would only
+ * slow the run down.
  */
-const PACE_PATH = 'node_modules/.cache/donation-e2e-pacer.json';
-
-function pacingEnabled(): boolean {
-	return RATE_LIMIT_ENFORCED && process.env.DONATION_E2E_PACE !== '0';
-}
-
 class Pacer {
+	private hits: number[] = [];
 	constructor(
-		private readonly name: string,
 		private readonly limit: number,
 		private readonly windowMs = 61_000
 	) {}
 
-	private read(now: number): number[] {
-		try {
-			const all = JSON.parse(readFileSync(PACE_PATH, 'utf8')) as Record<string, number[]>;
-			return (all[this.name] ?? []).filter((t) => now - t < this.windowMs);
-		} catch {
-			return [];
-		}
-	}
-
-	private write(hits: number[]) {
-		let all: Record<string, number[]> = {};
-		try {
-			all = JSON.parse(readFileSync(PACE_PATH, 'utf8')) as Record<string, number[]>;
-		} catch {
-			// first use, or an unreadable file — start clean
-		}
-		mkdirSync(dirname(PACE_PATH), { recursive: true });
-		writeFileSync(PACE_PATH, JSON.stringify({ ...all, [this.name]: hits }));
-	}
-
 	async acquire(n = 1): Promise<void> {
-		if (!pacingEnabled()) return;
+		if (!RATE_LIMIT_ENFORCED || !(IS_REMOTE || process.env.DONATION_E2E_PACE === '1')) return;
 		for (;;) {
 			const now = Date.now();
-			const hits = this.read(now);
-			if (hits.length + n <= this.limit) {
-				for (let i = 0; i < n; i++) hits.push(now);
-				this.write(hits);
+			this.hits = this.hits.filter((t) => now - t < this.windowMs);
+			if (this.hits.length + n <= this.limit) {
+				for (let i = 0; i < n; i++) this.hits.push(now);
 				return;
 			}
-			const expiring = hits[hits.length + n - this.limit - 1];
+			const expiring = this.hits[this.hits.length + n - this.limit - 1];
 			await sleep(Math.max(expiring + this.windowMs - now, 250) + 250);
 		}
 	}
 }
 
-/** `donationIpLimiter`: creating a booking AND `track-search` (lookup by ref + phone) — 3 per minute per IP. */
-export const bookingPacer = new Pacer('booking', 3);
+/** `donationIpLimiter`: creating a booking — 3 per minute per IP. */
+export const bookingPacer = new Pacer(3);
 /** `donationEditLimiter`: edit / courier no. / cancel — 10 per minute per IP. */
-const editPacer = new Pacer('edit', 9);
+const editPacer = new Pacer(9);
 
 // ─── Per-run ledger ────────────────────────────────────────────────────────────
 
@@ -326,7 +292,9 @@ export async function catalogItem(name: string): Promise<{ id: string; unit: str
 /** Public needs board → `shelter`'s card → the line for `itemName` (as the board prints it). */
 export async function openNeed(page: Page, shelter: Pick<PublicShelter, 'name'>, itemName: string) {
 	await page.goto('/donations');
-	await expect(page.getByRole('heading', { name: /กระดาน\s*ความต้องการด่วน/ })).toBeVisible();
+	await expect(
+		page.getByRole('heading', { name: /ของที่ศูนย์พักพิง\s*ต้องการตอนนี้/ })
+	).toBeVisible();
 	await cardWith(page, shelter.name, 'ดูรายละเอียดและบริจาค').click();
 	await cardWith(page, itemName, 'บริจาครายการนี้').click();
 }
@@ -428,9 +396,9 @@ export async function bookAsDonor(page: Page, opts: BookingOptions): Promise<Boo
 	const body = await submit();
 	// Under `vite preview` (not dev) with no reCAPTCHA keys the BFF fails closed with
 	// SERVER_MISCONFIGURED — run against `pnpm dev` locally (PLAYWRIGHT_TEST_BASE_URL=
-	// http://localhost:5173). RATE_LIMITED is the BFF's 3 bookings/min/IP (only when
-	// RATE_LIMIT is not false; then paced here) or FastAPI's 30 req/min/IP on every donation
-	// route (not switched off by RATE_LIMIT): wait a minute between back-to-back runs.
+	// http://localhost:5173). RATE_LIMITED is the BFF's 3 bookings/min/IP (paced here on a
+	// remote target) or FastAPI's 30 req/min/IP on every donation route: wait a minute
+	// between back-to-back local runs.
 	expect(body.success, `booking POST failed: ${JSON.stringify(body)}`).toBe(true);
 	const { bookingRef, trackingToken } = body as Booking;
 
@@ -442,13 +410,22 @@ export async function bookAsDonor(page: Page, opts: BookingOptions): Promise<Boo
 
 const routedPages = new WeakSet<Page>();
 
-/** Open stock-donations as `staff`. */
+/**
+ * Open stock-donations as `staff`.
+ *
+ * The active shelter is pinned in localStorage first: the back-office layout re-mounts its
+ * children (`{#key shelterStore.selectedShelterCode}`) when the selection flips from
+ * `undefined` to a code after the shelter list loads. Unpinned, that remount lands after the
+ * tab is visible and resets the sub-tab / detaches forms the test is already filling in.
+ */
 export async function openBackOffice(page: Page, staff: Staff) {
 	if (!routedPages.has(page)) {
 		routedPages.add(page);
 		await routeBrowserCouchThroughApp(page);
 	}
 	await injectSession(page, staff, staff.session);
+	const shelterCode = staff.roles.find((r) => r.startsWith('shelter:'))?.slice('shelter:'.length);
+	if (shelterCode) await pinActiveShelter(page, shelterCode);
 	await page.goto('/back-office/stock-donations');
 	await expect(page.getByRole('tab', { name: /รอการประเมิน/ })).toBeVisible({ timeout: 15_000 });
 }
@@ -482,6 +459,9 @@ export async function approvePending(page: Page, shelterCode: string, bookingRef
 /** Open a booking in the scan station by typing its ref. */
 export async function openInScanStation(page: Page, bookingRef: string) {
 	await page.reload();
+	// The active tab is kept in `?tab=` and survives the reload, so coming from the
+	// pending queue the scan station has to be picked explicitly.
+	await page.getByRole('tab', { name: /สแกนรับของเข้าคลัง/ }).click();
 	await page.getByRole('textbox', { name: 'รหัสการจอง' }).fill(bookingRef);
 	await page.getByRole('button', { name: 'ค้นหา' }).click();
 	await expect(
@@ -511,9 +491,9 @@ export async function ledgerRowsFor(shelterCode: string, donationId: string) {
 
 export type SlotWindow = { from: string; to: string };
 
-/** Local YYYY-MM-DD — the wizard and the slot screen both default to it. */
+/** Asia/Bangkok YYYY-MM-DD — the wizard and the slot screen both default to it. */
 export function todayYmd() {
-	return new Date().toLocaleDateString('sv-SE');
+	return bangkokToday();
 }
 
 /** The public board's line for `itemName` at `shelterCode`, if any. */
@@ -584,6 +564,11 @@ export async function openSlots(page: Page, staff: Staff, mode: SlotMode) {
 	await page.getByRole('tab', { name: 'ช่วงเวลารับของ' }).click();
 	await expect(page.getByRole('heading', { name: 'ช่วงเวลารับของบริจาค' })).toBeVisible();
 	await page.getByRole('button', { name: mode, exact: true }).click();
+	// Under load the schedule and booking reads can trail past the 5 s default. Settle both
+	// first: the "คิวเต็ม" badge and the "จองแล้ว N / M" count only render once bookings load
+	// (until then each row shows "–" and the "รอข้อมูลการจองก่อน…" hint).
+	await expect(page.getByText('กำลังโหลดช่วงเวลา...')).toHaveCount(0, BOARD_SYNC);
+	await expect(page.getByText('รอข้อมูลการจองก่อน จึงจะลบได้')).toHaveCount(0, BOARD_SYNC);
 }
 
 /** Filtered on "จองแล้ว" too: the success toast is also an <li> carrying the window. */

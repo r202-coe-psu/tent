@@ -1,0 +1,146 @@
+// @vitest-environment happy-dom
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { KIOSK_LABEL_LINK, kioskLabelLayout } from '../domain/print-label';
+import { renderKioskLabelPng } from './kiosk-label-image';
+
+class FakeImage {
+	src = '';
+	width = 264;
+	height = 264;
+	decode(): Promise<void> {
+		return Promise.resolve();
+	}
+}
+
+function installFakeCanvas() {
+	const fontsLoaded: string[] = [];
+	const fontsUsedInDrawing: string[] = [];
+	let orderViolation = false;
+
+	const fakeContext = {
+		fillStyle: '',
+		letterSpacing: '0px',
+		textAlign: '',
+		textBaseline: '',
+		imageSmoothingEnabled: true,
+		fillRect: vi.fn(),
+		drawImage: vi.fn(),
+		measureText: vi.fn((text: string) => ({ width: text.length * 6 })),
+		getImageData: vi.fn(() => ({ data: new Uint8ClampedArray(4) })),
+		putImageData: vi.fn(),
+		fillText: vi.fn<(text: string) => void>(() => {
+			// `fillText` is synchronous — if any row's font wasn't `document.fonts.load()`-ed
+			// (and awaited) before this call, the draw races the fetch (see kiosk-label-image.ts).
+			if (fontsLoaded.length < 4) orderViolation = true;
+		})
+	};
+	Object.defineProperty(fakeContext, 'font', {
+		configurable: true,
+		set(value: string) {
+			fontsUsedInDrawing.push(value);
+		},
+		get() {
+			return fontsUsedInDrawing.at(-1) ?? '';
+		}
+	});
+
+	vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(
+		fakeContext as unknown as CanvasRenderingContext2D
+	);
+	vi.spyOn(HTMLCanvasElement.prototype, 'toDataURL').mockReturnValue(
+		'data:image/png;base64,ZmFrZS1wbmc='
+	);
+	vi.stubGlobal('Image', FakeImage);
+	Object.defineProperty(document, 'fonts', {
+		configurable: true,
+		value: {
+			ready: Promise.resolve(),
+			load: vi.fn((font: string) => {
+				fontsLoaded.push(font);
+				return Promise.resolve([]);
+			})
+		}
+	});
+
+	return { fontsLoaded, fontsUsedInDrawing, isOrderViolated: () => orderViolation, fakeContext };
+}
+
+describe('renderKioskLabelPng', () => {
+	let harness: ReturnType<typeof installFakeCanvas>;
+
+	beforeEach(() => {
+		harness = installFakeCanvas();
+	});
+
+	afterEach(() => {
+		vi.restoreAllMocks();
+		vi.unstubAllGlobals();
+	});
+
+	const label = {
+		qrSrc: 'data:image/png;base64,AA==',
+		name: 'สมชาย ใจดี',
+		phone: '0804497982'
+	};
+
+	it('preloads every row font before drawing any of them', async () => {
+		await renderKioskLabelPng(label);
+
+		expect(harness.fontsLoaded).toHaveLength(4);
+		expect(harness.isOrderViolated()).toBe(false);
+	});
+
+	it('draws Thai rows with the Thai-capable family and the phone in the mono family', async () => {
+		await renderKioskLabelPng(label);
+
+		expect(harness.fontsUsedInDrawing.length).toBeGreaterThan(0);
+		for (const font of harness.fontsUsedInDrawing) {
+			expect(font).toMatch(/'IBM Plex Sans Thai'|'Geist Mono'/);
+		}
+		const texts = harness.fakeContext.fillText.mock.calls.map(([text]) => text);
+		expect(texts).toEqual([
+			'สมชาย ใจดี',
+			'0804497982',
+			'เช็คอิน',
+			'คัดกรอง',
+			'ที่พัก',
+			KIOSK_LABEL_LINK
+		]);
+	});
+
+	it('draws the link centred under the QR, then restores left alignment', async () => {
+		const aligns: string[] = [];
+		let align = '';
+		Object.defineProperty(harness.fakeContext, 'textAlign', {
+			configurable: true,
+			set(value: string) {
+				align = value;
+				aligns.push(value);
+			},
+			get: () => align
+		});
+		let linkAlign = '';
+		harness.fakeContext.fillText.mockImplementation((text: string) => {
+			if (text === KIOSK_LABEL_LINK) linkAlign = align;
+		});
+
+		await renderKioskLabelPng(label);
+
+		const { x, y } = kioskLabelLayout(264).link;
+		expect(linkAlign).toBe('center');
+		expect(harness.fakeContext.fillText).toHaveBeenCalledWith(KIOSK_LABEL_LINK, x, y);
+		expect(aligns.at(-1)).toBe('left');
+	});
+
+	it('skips the phone line when there is no phone', async () => {
+		await renderKioskLabelPng({ ...label, phone: null });
+
+		const texts = harness.fakeContext.fillText.mock.calls.map(([text]) => text);
+		expect(texts).not.toContain('0804497982');
+		expect(harness.fontsUsedInDrawing.some((font) => font.includes('Geist Mono'))).toBe(false);
+	});
+
+	it('returns the rendered label as base64 PNG', async () => {
+		expect(await renderKioskLabelPng(label)).toBe('ZmFrZS1wbmc=');
+	});
+});

@@ -1,12 +1,13 @@
 /**
- * Redeploy `_design/access` (validate_doc_update allowlist) + referral Mango
- * indexes on every shelter DB listed in the registry, and grant the public
- * writer user `_security.members` access.
+ * Redeploy `_design/access` (validate_doc_update allowlist), and every shelter
+ * Mango index family (referral, kiosk lookup, transfer ledger, people, requisition
+ * ticket, Daily SOP role) on every shelter DB listed in the
+ * registry, and grant the public writer user `_security.members` access.
  *
  * Run after allowlist changes (e.g. new doc types in shelter-access-design)
  * on existing staging/prod DBs — new shelters provisioned via
- * POST /api/back-office/shelter get all three automatically; seed also deploys
- * them for local SH001/SH002.
+ * POST /api/back-office/shelter get the design and required indexes automatically;
+ * seed also deploys them for local SH001/SH002.
  *
  * Usage (from frontend/):
  *   pnpm redeploy:access                 # dry-run
@@ -38,9 +39,14 @@ import {
 } from '$lib/server/security-mutation-lock';
 import {
 	buildValidateDocUpdate,
+	DAILY_SOP_ROLE_MANGO_INDEX,
+	KIOSK_LOOKUP_WARMUP_SELECTORS,
+	PEOPLE_MANGO_INDEXES,
 	REFERRAL_MANGO_INDEXES,
+	KIOSK_LOOKUP_MANGO_INDEXES,
 	REQUISITION_TICKET_MANGO_INDEXES,
-	shelterDbName
+	shelterDbName,
+	TRANSFER_LEDGER_MANGO_INDEXES
 } from '$lib/server/shelter-access-design';
 
 // ─── env loader ─────────────────────────────────────────────────────────────
@@ -294,7 +300,7 @@ async function grantSecurityMember(db: string, name: string, dryRun: boolean): P
 
 async function deployMangoIndexes(
 	db: string,
-	indexes: readonly (typeof REFERRAL_MANGO_INDEXES)[number][],
+	indexes: readonly { name: string }[],
 	dryRun: boolean
 ): Promise<{ created: number; existing: number }> {
 	let created = 0;
@@ -318,6 +324,60 @@ async function deployMangoIndexes(
 			created++;
 		}
 	}
+	return { created, existing };
+}
+
+async function warmUpKioskLookupMangoIndexes(db: string): Promise<void> {
+	for (const def of KIOSK_LOOKUP_MANGO_INDEXES) {
+		try {
+			const selector = KIOSK_LOOKUP_WARMUP_SELECTORS[def.name];
+			if (!selector) {
+				console.warn(`    ⚠ no kiosk lookup warm-up selector configured for ${def.name}`);
+				continue;
+			}
+			const res = await couchReq('POST', `/${db}/_find`, {
+				selector,
+				limit: 1
+			});
+			if (res.status >= 400) {
+				const detail = (res.data as { reason?: string; error?: string } | null) ?? {};
+				console.warn(
+					`    ⚠ kiosk lookup index warm-up failed for ${def.name} (${res.status}): ${detail.reason ?? detail.error ?? 'unknown'}`
+				);
+			}
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			console.warn(`    ⚠ kiosk lookup index warm-up failed for ${def.name}: ${message}`);
+		}
+	}
+}
+
+async function deployKioskLookupMangoIndexes(
+	db: string,
+	dryRun: boolean
+): Promise<{ created: number; existing: number }> {
+	let created = 0;
+	let existing = 0;
+	for (const def of KIOSK_LOOKUP_MANGO_INDEXES) {
+		if (dryRun) {
+			created++;
+			continue;
+		}
+		const res = await couchReq('POST', `/${db}/_index`, def);
+		if (res.status >= 400) {
+			const detail = (res.data as { reason?: string; error?: string } | null) ?? {};
+			throw new Error(
+				`Mango index ${def.name} deploy failed (${res.status}): ${detail.reason ?? detail.error ?? 'unknown'}`
+			);
+		}
+		const result = (res.data as { result?: string } | null)?.result;
+		if (result === 'exists') {
+			existing++;
+		} else {
+			created++;
+		}
+	}
+	if (!dryRun) await warmUpKioskLookupMangoIndexes(db);
 	return { created, existing };
 }
 
@@ -346,7 +406,9 @@ function logPublicWriterEnsure(result: Awaited<ReturnType<typeof ensurePublicWri
 }
 
 async function main() {
-	console.log('🔄 Redeploy _design/access + referral Mango indexes + public writer grant');
+	console.log(
+		'🔄 Redeploy _design/access + shelter Mango indexes (referral, kiosk lookup, Daily SOP role) + public writer grant'
+	);
 	console.log(`   mode: ${DRY_RUN ? 'DRY-RUN (pass --write --confirm to apply)' : 'WRITE'}`);
 
 	const writerUrl = process.env.COUCHDB_PUBLIC_WRITER_URL ?? env.COUCHDB_PUBLIC_WRITER_URL;
@@ -401,14 +463,18 @@ async function main() {
 
 			if (DRY_RUN) {
 				if (accessResult.updated) {
-					const indexCount =
-						REFERRAL_MANGO_INDEXES.length + REQUISITION_TICKET_MANGO_INDEXES.length;
-					console.log(
-						`    would redeploy _design/access (${accessResult.reason}) + ${indexCount} mango indexes`
-					);
+					console.log(`    would redeploy _design/access (${accessResult.reason})`);
 				} else {
 					console.log(`    _design/access already current (skip PUT)`);
 				}
+				const indexCount =
+					REFERRAL_MANGO_INDEXES.length +
+					KIOSK_LOOKUP_MANGO_INDEXES.length +
+					TRANSFER_LEDGER_MANGO_INDEXES.length +
+					PEOPLE_MANGO_INDEXES.length +
+					REQUISITION_TICKET_MANGO_INDEXES.length +
+					1;
+				console.log(`    would ensure ${indexCount} shelter Mango indexes`);
 				if (PUBLIC_WRITER_NAME) {
 					console.log(
 						writerGranted
@@ -437,6 +503,22 @@ async function main() {
 			);
 			console.log(
 				`    ✓ requisition_ticket mango indexes (${ticketIndexResult.created} created, ${ticketIndexResult.existing} existing)`
+			);
+			const dailySopIndexResult = await deployMangoIndexes(db, [DAILY_SOP_ROLE_MANGO_INDEX], false);
+			console.log(
+				`    ✓ Daily SOP role mango index (${dailySopIndexResult.created} created, ${dailySopIndexResult.existing} existing)`
+			);
+			const kioskIndexResult = await deployKioskLookupMangoIndexes(db, false);
+			console.log(
+				`    ✓ kiosk lookup mango indexes (${kioskIndexResult.created} created, ${kioskIndexResult.existing} existing)`
+			);
+			const ledgerIndexResult = await deployMangoIndexes(db, TRANSFER_LEDGER_MANGO_INDEXES, false);
+			console.log(
+				`    ✓ transfer ledger mango indexes (${ledgerIndexResult.created} created, ${ledgerIndexResult.existing} existing)`
+			);
+			const peopleIndexResult = await deployMangoIndexes(db, PEOPLE_MANGO_INDEXES, false);
+			console.log(
+				`    ✓ people mango indexes (${peopleIndexResult.created} created, ${peopleIndexResult.existing} existing)`
 			);
 			if (PUBLIC_WRITER_NAME) {
 				console.log(

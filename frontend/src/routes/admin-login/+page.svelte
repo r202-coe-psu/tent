@@ -9,7 +9,7 @@
 	<meta name="robots" content="noindex, nofollow" />
 </svelte:head>
 
-<div class="flex h-[var(--app-shell-height)] w-full items-center justify-center px-4">
+<div class="flex min-h-[var(--app-shell-height)] w-full items-center justify-center px-4 py-8">
 	<div class="flex w-full max-w-md flex-col gap-4">
 		<a
 			href={resolve('/')}

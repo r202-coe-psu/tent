@@ -1,6 +1,4 @@
-/**
- * daily_calc (SH001) + daily_sop (SH001–SH004) staging snapshots.
- */
+/** daily_calc (SH001) staging snapshots. */
 import { makeDoc } from '$lib/db/model';
 import { parseStockLedger, stockBalance } from '$lib/features/operations/domain/operations';
 import {
@@ -22,16 +20,10 @@ import {
 	dailyCalcDocSchema,
 	DAILY_CALC_SCHEMA_VERSION
 } from '$lib/features/resource-calc/domain/calc.schema';
-import {
-	DAILY_SOP_DOCUMENT_TYPE,
-	DAILY_SOP_QUESTIONS,
-	DAILY_SOP_SCHEMA_VERSION,
-	LIFELINE_KEYS
-} from '$lib/features/daily-sop/domain/daily-sop';
 import { shelterDbName } from '$lib/server/shelter-access-design';
 import { prefixRangeEnd } from '../t31-seed-support';
 import { bulkDocs, couchReq, ensureDb } from './couch';
-import { SH001_CODE, SH002_CODE, SH003_CODE, SH004_CODE } from './types';
+import { SH001_CODE } from './types';
 
 const DAILY_CALC_DAYS = 14;
 const SH001_DB = shelterDbName(SH001_CODE);
@@ -164,99 +156,6 @@ export async function seedDailyCalc(): Promise<void> {
 		);
 	} catch {
 		console.log(`  ✓ ${SH001_DB}: daily_calc snapshots already present, skipping`);
-	}
-}
-
-type DailySopSeedTarget = { code: string; db: string; assessor: string };
-
-const DAILY_SOP_SEED_TARGETS: readonly DailySopSeedTarget[] = [
-	{ code: SH001_CODE, db: shelterDbName(SH001_CODE), assessor: 'พนักงานประจำศูนย์ หาดใหญ่' },
-	{
-		code: SH002_CODE,
-		db: shelterDbName(SH002_CODE),
-		assessor: 'เจ้าหน้าที่ศูนย์เทศบาลนครหาดใหญ่'
-	},
-	{ code: SH003_CODE, db: shelterDbName(SH003_CODE), assessor: 'พนักงานประจำศูนย์ บ้านพรุ' },
-	{
-		code: SH004_CODE,
-		db: shelterDbName(SH004_CODE),
-		assessor: 'ผู้ประสานงานบ้านพี่เลี้ยง คอหงส์'
-	}
-];
-
-function dailySopSeedSnapshot(
-	target: DailySopSeedTarget,
-	date: string,
-	time: string,
-	progress: number,
-	statuses: Partial<Record<number, 'No' | 'Pending'>> = {}
-) {
-	const passPercent = Math.round(
-		(DAILY_SOP_QUESTIONS.filter((_, index) => statuses[index] === undefined).length /
-			DAILY_SOP_QUESTIONS.length) *
-			100
-	);
-	const checkedAt = `${date}T${time}+07:00`;
-	return makeDoc(
-		DAILY_SOP_DOCUMENT_TYPE,
-		DAILY_SOP_SCHEMA_VERSION,
-		{
-			assessment_date: date,
-			assessed_at: checkedAt,
-			assessor_name: target.assessor,
-			status: 'Completed',
-			progress_percent: progress,
-			pass_percent: passPercent,
-			risk_label: Object.keys(statuses).length === 0 ? 'ไม่พบความเสี่ยง' : 'พบความเสี่ยง',
-			controls: DAILY_SOP_QUESTIONS.map((question, index) => ({
-				id: question.id,
-				section_id: question.sectionId,
-				question: question.prompt,
-				status: statuses[index] ?? 'Yes',
-				answered: true,
-				checked_by: target.assessor,
-				checked_at: checkedAt
-			})),
-			lifelines: Object.fromEntries(LIFELINE_KEYS.map((key) => [key, 'Operational']))
-		},
-		{ shelterCode: target.code, createdBy: 'seed' },
-		`${target.code}:${date}`
-	);
-}
-
-export async function seedDailySop(): Promise<void> {
-	for (const target of DAILY_SOP_SEED_TARGETS) {
-		await ensureDb(target.db);
-		const records = [
-			dailySopSeedSnapshot(target, '2026-06-09', '16:15:00', 85, {
-				15: 'No',
-				16: 'Pending',
-				17: 'Pending',
-				18: 'Pending'
-			}),
-			dailySopSeedSnapshot(target, '2026-06-10', '15:30:00', 100, { 4: 'No', 12: 'Pending' }),
-			dailySopSeedSnapshot(target, '2026-06-11', '15:00:00', 100)
-		];
-		await bulkDocs(target.db, records, { allowConflicts: true });
-		console.log(`  ✓ ${target.db}: ${records.length} Daily SOP snapshots seeded`);
-	}
-}
-
-export async function deleteDailySopData(): Promise<void> {
-	for (const target of DAILY_SOP_SEED_TARGETS) {
-		const ids = ['2026-06-09', '2026-06-10', '2026-06-11'].map(
-			(date) => `${DAILY_SOP_DOCUMENT_TYPE}:${target.code}:${date}`
-		);
-		const docs: { _id: string; _rev: string; _deleted: true }[] = [];
-		for (const id of ids) {
-			const { status, data } = await couchReq('GET', `/${target.db}/${encodeURIComponent(id)}`);
-			if (status === 200) {
-				const rev = (data as { _rev: string })._rev;
-				docs.push({ _id: id, _rev: rev, _deleted: true });
-			}
-		}
-		if (docs.length > 0) await bulkDocs(target.db, docs, { allowConflicts: false });
-		console.log(`  ✓ ${target.db}: removed ${docs.length} Daily SOP seed snapshots`);
 	}
 }
 

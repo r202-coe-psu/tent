@@ -117,18 +117,7 @@
 				<span>{copy.backToList}</span>
 			</button>
 
-			<BookingTicketView
-				ticket={selectedTicket}
-				showSuccessHeader={false}
-				onVerified={(code) => {
-					/* Confirm lives in BookingTicketView; apply removal only */
-					removeStoredTicket(code);
-					tickets = getStoredTickets();
-					selectedTicket = null;
-					onTicketsChange?.();
-					toast.success(copy.verifiedToast);
-				}}
-			/>
+			<BookingTicketView ticket={selectedTicket} showSuccessHeader={false} />
 		</div>
 	{:else if tickets.length === 0}
 		<div class="flex flex-col gap-4">

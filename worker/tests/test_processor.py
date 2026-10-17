@@ -467,10 +467,55 @@ async def test_process_registry_shelter_tombstone_deactivates_not_deletes():
         patch(
             "worker.couch.processor.delete_needs_for_shelter", new_callable=AsyncMock
         ) as del_needs,
+        patch(
+            "worker.couch.processor.delete_stocks_for_shelter", new_callable=AsyncMock
+        ) as del_stocks,
     ):
         await process_change(couch, "registry", change)
 
     deactivate.assert_awaited_once_with("SH001")
     del_persons.assert_awaited_once_with("SH001")
     del_needs.assert_awaited_once_with("SH001")
+    # #461 — the stock projection must not outlive the shelter it describes.
+    del_stocks.assert_awaited_once_with("SH001")
     save_cp.assert_awaited_once_with("registry", 77)
+
+
+@pytest.mark.asyncio
+async def test_process_registry_shelter_upsert_delete_drops_the_shelters_stocks():
+    """A registry doc that projects to `delete` (closed shelter) cascades like the
+    tombstone does — `shelter_stocks` rows included (#461)."""
+    couch = AsyncMock()
+    change = {
+        "seq": 78,
+        "id": "shelter:01CLOSED",
+        "doc": {"_id": "shelter:01CLOSED", "type": "shelter"},
+    }
+
+    with (
+        patch("worker.couch.processor.save_checkpoint", new_callable=AsyncMock),
+        patch(
+            "worker.couch.processor.project_shelter",
+            return_value=("delete", {"_id": "SH002"}),
+        ),
+        patch("worker.couch.processor.apply_shelter", new_callable=AsyncMock),
+        patch(
+            "worker.couch.processor.delete_persons_for_shelter", new_callable=AsyncMock
+        ) as del_persons,
+        patch(
+            "worker.couch.processor.delete_occupants_for_shelter",
+            new_callable=AsyncMock,
+        ) as del_occupants,
+        patch(
+            "worker.couch.processor.delete_needs_for_shelter", new_callable=AsyncMock
+        ) as del_needs,
+        patch(
+            "worker.couch.processor.delete_stocks_for_shelter", new_callable=AsyncMock
+        ) as del_stocks,
+    ):
+        await process_change(couch, "registry", change)
+
+    del_persons.assert_awaited_once_with("SH002")
+    del_occupants.assert_awaited_once_with("SH002")
+    del_needs.assert_awaited_once_with("SH002")
+    del_stocks.assert_awaited_once_with("SH002")

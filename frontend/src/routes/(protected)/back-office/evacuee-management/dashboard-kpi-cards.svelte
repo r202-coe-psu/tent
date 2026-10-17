@@ -7,14 +7,18 @@
 	import DoorOpen from '@lucide/svelte/icons/door-open';
 	import ArrowRightLeft from '@lucide/svelte/icons/arrow-right-left';
 	import Home from '@lucide/svelte/icons/home';
+	import ClipboardList from '@lucide/svelte/icons/clipboard-list';
 
 	let { occupancy }: { occupancy: OccupancyPayload } = $props();
 
-	// KPI logic — "present" follows the CR-022 headcount definition: active only
-	// (pre_registered means registered but not yet physically checked in).
+	// KPI logic — "in the shelter" is active + room_confirmed (CR-170). arriving counts toward
+	// the total but not as in the shelter; pre_registered/kiosk_registered are not checked in yet.
 	const returnRate = $derived(
 		occupancy.total > 0 ? ((occupancy.checked_out / occupancy.total) * 100).toFixed(0) + '%' : '0%'
 	);
+	// Matches the combined display in system-overview (loadSiteMetrics) so this card's total
+	// agrees with occupancy.total, which also sums both channels.
+	const awaitingCheckIn = $derived(occupancy.pre_registered + occupancy.kiosk_registered);
 </script>
 
 <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -34,17 +38,27 @@
 			<UserCheck class="h-4 w-4 text-green-500" />
 		</div>
 		<div class="p-6 pt-0">
-			<div class="text-2xl font-bold">{occupancy.active}</div>
+			<div class="text-2xl font-bold">{occupancy.in_shelter}</div>
 		</div>
 	</div>
 
 	<div class="rounded-xl border bg-card text-card-foreground shadow-sm">
 		<div class="flex flex-row items-center justify-between space-y-0 p-6 pb-2">
-			<h3 class="text-sm font-medium tracking-tight">รอเข้าพัก (ลงทะเบียนล่วงหน้า)</h3>
+			<h3 class="text-sm font-medium tracking-tight">รอเข้าพัก (ลงทะเบียนล่วงหน้า/ที่ตู้)</h3>
 			<Clock class="h-4 w-4 text-blue-400" />
 		</div>
 		<div class="p-6 pt-0">
-			<div class="text-2xl font-bold">{occupancy.pre_registered}</div>
+			<div class="text-2xl font-bold">{awaitingCheckIn}</div>
+		</div>
+	</div>
+
+	<div class="rounded-xl border bg-card text-card-foreground shadow-sm">
+		<div class="flex flex-row items-center justify-between space-y-0 p-6 pb-2">
+			<h3 class="text-sm font-medium tracking-tight">รายงานตัวแล้ว (รอคัดกรอง/จัดที่พัก)</h3>
+			<ClipboardList class="h-4 w-4 text-sky-500" />
+		</div>
+		<div class="p-6 pt-0">
+			<div class="text-2xl font-bold">{occupancy.arriving}</div>
 		</div>
 	</div>
 

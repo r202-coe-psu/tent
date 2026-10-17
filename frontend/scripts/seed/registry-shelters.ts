@@ -7,10 +7,22 @@ import { ulid } from '$lib/db/ulid';
 import { deployShelterViewsFn } from '$lib/features/shelters/server/deploy';
 import {
 	buildValidateDocUpdate,
+	DAILY_SOP_ROLE_MANGO_INDEX,
+	PEOPLE_MANGO_INDEXES,
 	REFERRAL_MANGO_INDEXES,
-	shelterDbName
+	KIOSK_LOOKUP_MANGO_INDEXES,
+	REQUISITION_TICKET_MANGO_INDEXES,
+	shelterDbName,
+	TRANSFER_LEDGER_MANGO_INDEXES
 } from '$lib/server/shelter-access-design';
 import { buildRegistryDesignDoc, REGISTRY_DESIGN_ID } from '$lib/server/registry-design';
+import { shelterScopeRole } from '$lib/auth/roles';
+import {
+	CENTRAL_MEMBER_DBS,
+	CENTRAL_WRITE_POLICY_DESIGN,
+	LEGACY_CENTRAL_MEMBER_ROLES,
+	hasWritePolicy
+} from '$lib/server/central-db-security';
 import { couchReq, ensureDb, putDoc, PUBLIC_WRITER_NAMES, setSecurity } from './couch';
 import {
 	ALL_VG_KEYS,
@@ -274,10 +286,7 @@ export async function seedRegistry(master: MasterLookup): Promise<void> {
 	await ensureDb('registry');
 	await setSecurity('registry', {
 		admins: { names: [], roles: ['system_admin'] },
-		members: {
-			names: [],
-			roles: ['shelter_manager', 'registration_staff', 'kitchen_staff', 'warehouse_staff']
-		}
+		members: { names: [], roles: [...LEGACY_CENTRAL_MEMBER_ROLES] }
 	});
 	await deployRegistryDesign();
 
@@ -361,26 +370,32 @@ export async function seedRegistry(master: MasterLookup): Promise<void> {
 		}
 	}
 
-	const testScannerSecret = 'kiosk-test-secret';
-	const testScannerDoc = {
-		_id: 'scanner_device:kiosk-test',
-		type: 'scanner_device',
-		schema_v: 1,
-		device_id: 'kiosk-test',
-		name: 'Kiosk Test Scanner',
-		shelter_code: SH001_CODE,
-		station_name: 'จุดสแกน Kiosk ทดสอบ (Kiosk Test)',
-		secret: testScannerSecret,
-		secret_hash: createHash('sha256').update(testScannerSecret).digest('hex'),
-		secret_prefix: testScannerSecret.slice(0, 16) + '...',
-		status: 'active',
-		last_seen_at: null,
-		created_at: ts,
-		updated_at: ts,
-		created_by: 'seed'
-	};
-	await putDoc('registry', testScannerDoc);
-	console.log(`  ✓ registry: 1 scanner device (kiosk-test)`);
+	const testScannerSecret = process.env.SCANNER_SEED_SECRET?.trim();
+	if (testScannerSecret) {
+		if (!/^sk_scan_[0-9a-f]{64}$/.test(testScannerSecret)) {
+			throw new Error('SCANNER_SEED_SECRET must use a generated scanner key format');
+		}
+		const testScannerDoc = {
+			_id: 'scanner_device:kiosk-test',
+			type: 'scanner_device',
+			schema_v: 1,
+			device_id: 'kiosk-test',
+			name: 'Kiosk Test Scanner',
+			shelter_code: SH001_CODE,
+			station_name: 'จุดสแกน Kiosk ทดสอบ (Kiosk Test)',
+			secret_hash: createHash('sha256').update(testScannerSecret).digest('hex'),
+			secret_prefix: testScannerSecret.slice(0, 16) + '...',
+			status: 'active',
+			last_seen_at: null,
+			created_at: ts,
+			updated_at: ts,
+			created_by: 'seed'
+		};
+		await putDoc('registry', testScannerDoc);
+		console.log(`  ✓ registry: 1 scanner device (kiosk-test)`);
+	} else {
+		console.log('  - registry: scanner seed skipped; use System Management or SCANNER_SEED_SECRET');
+	}
 }
 
 async function deployShelterAccessDesign(db: string, shelterCode: string): Promise<void> {
@@ -405,7 +420,14 @@ async function deployShelterAccessDesign(db: string, shelterCode: string): Promi
 }
 
 async function deployMangoIndexes(db: string): Promise<void> {
-	for (const def of REFERRAL_MANGO_INDEXES) {
+	const defs = [
+		...REFERRAL_MANGO_INDEXES,
+		...TRANSFER_LEDGER_MANGO_INDEXES,
+		...PEOPLE_MANGO_INDEXES,
+		...REQUISITION_TICKET_MANGO_INDEXES,
+		DAILY_SOP_ROLE_MANGO_INDEX
+	];
+	for (const def of defs) {
 		const { status, data } = await couchReq('POST', `/${db}/_index`, def);
 		if (status >= 400) {
 			const detail = (data as { reason?: string; error?: string } | null) ?? {};
@@ -414,7 +436,22 @@ async function deployMangoIndexes(db: string): Promise<void> {
 			);
 		}
 	}
-	console.log(`  ✓ ${db}: Mango indexes for referral deployed`);
+	console.log(
+		`  ✓ ${db}: referral, ledger, people, requisition and Daily SOP role Mango indexes deployed`
+	);
+}
+
+async function deployKioskLookupMangoIndexes(db: string): Promise<void> {
+	for (const def of KIOSK_LOOKUP_MANGO_INDEXES) {
+		const { status, data } = await couchReq('POST', `/${db}/_index`, def);
+		if (status >= 400) {
+			const detail = (data as { reason?: string; error?: string } | null) ?? {};
+			throw new Error(
+				`Cannot deploy Mango index "${def.name}" to "${db}" (HTTP ${status}): ${detail.reason ?? detail.error ?? 'unknown'}`
+			);
+		}
+	}
+	console.log(`  ✓ ${db}: kiosk lookup Mango indexes deployed`);
 }
 
 async function listRegistryShelterCodes(): Promise<string[]> {
@@ -457,6 +494,25 @@ async function provisionShelterDb(shelterCode: string): Promise<void> {
 	await deployShelterViewsFn(db, (path, method, body) => couchReq(method, path, body));
 	await deployShelterAccessDesign(db, code);
 	await deployMangoIndexes(db);
+	await deployKioskLookupMangoIndexes(db);
+	await grantCentralShelterScope(code);
+}
+
+/**
+ * Local mirror of the provisioner grant (draft CR central-db-shelter-scope-members
+ * FR-5): the shelter scope reads registry + catalog. Membership also opens writes,
+ * so it is granted only once each DB's write policy is deployed.
+ */
+async function grantCentralShelterScope(code: string): Promise<void> {
+	for (const db of CENTRAL_MEMBER_DBS) {
+		const { status, data } = await couchReq('GET', `/${db}/${CENTRAL_WRITE_POLICY_DESIGN[db]}`);
+		if (status !== 200 || !hasWritePolicy(data)) {
+			throw new Error(
+				`${db} has no write policy (${CENTRAL_WRITE_POLICY_DESIGN[db]}, HTTP ${status}) — run pnpm seed:master first`
+			);
+		}
+		await setSecurity(db, { members: { roles: [shelterScopeRole(code)] } });
+	}
 }
 
 export async function provisionRegistryShelterDbs(): Promise<void> {

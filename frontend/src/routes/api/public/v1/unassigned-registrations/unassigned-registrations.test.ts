@@ -150,6 +150,37 @@ describe('POST /api/public/v1/unassigned-registrations', () => {
 		expect(upstream.members[0].nickname).toBe('ชาย');
 	});
 
+	it('strips a client-supplied member booking_ref before forwarding (CR-169 FR-61)', async () => {
+		const fetchMock = vi.fn().mockResolvedValue({
+			ok: true,
+			status: 201,
+			json: async () => ({
+				success: true,
+				id: '01HTEST000000000000000000',
+				schema_v: 2,
+				reserved_household_id: 'household:01HTEST000000000000000001',
+				members: [],
+				registered_via: 'web',
+				status: 'open',
+				created_at: '2026-09-09T00:00:00Z'
+			})
+		});
+		vi.stubGlobal('fetch', fetchMock);
+
+		const res = await POST(
+			event({
+				...VALID_BODY,
+				members: VALID_BODY.members.map((m) => ({ ...m, booking_ref: 'BK-SPOOF01' }))
+			})
+		);
+		expect(res.status).toBe(201);
+
+		const [, init] = fetchMock.mock.calls[0]!;
+		const upstream = JSON.parse(init.body as string);
+		expect(upstream.members.length).toBeGreaterThan(0);
+		for (const m of upstream.members) expect(m).not.toHaveProperty('booking_ref');
+	});
+
 	it('requires disclaimer acknowledgment', async () => {
 		const res = await POST(event({ ...VALID_BODY, disclaimerAcknowledged: false }));
 		expect(res.status).toBe(400);

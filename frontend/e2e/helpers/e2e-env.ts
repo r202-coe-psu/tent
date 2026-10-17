@@ -26,7 +26,8 @@
  *   household 3: `<prefix>คู่หนึ่ง` (ชาย), `<prefix>คู่สอง` (หญิง)
  *
  * ID numbers must be fictitious: a 13-digit national ID starting with `0` (real Thai
- * IDs start with 1–8, so it can never belong to anyone) and a passport of two letters
+ * IDs start with 1–8, so it can never belong to anyone) whose last digit is a valid
+ * mod-11 check digit (the form rejects others since CR-148) and a passport of two letters
  * plus 7 digits.
  *
  * Shelters fixture — two shelters whose names start with `E2E_SHELTERS_MARKER`,
@@ -59,11 +60,12 @@ export const IS_REMOTE = Boolean(process.env.E2E_BASE_URL);
 export const ALLOW_REMOTE_WRITES = process.env.ALLOW_REMOTE_WRITES?.trim() === 'true';
 
 /**
- * Whether the target's BFF rate limiters are enforced — mirrors the server's `RATE_LIMIT` env
- * (`src/lib/server/security/rate-limiter.ts`): only `false` / `0` turns them off. Unset means
- * enforced, the safe assumption for a remote target whose setting the runner cannot see.
- * `playwright.config.ts` defaults it to `false` for the local preview server it starts, and
- * staging's compose sets it off, so e2e runs normally skip every pacing/wait workaround.
+ * Whether the target's bypassable BFF rate limiters (donation + pre-register, CR-160) are
+ * enforced — mirrors the server's `RATE_LIMIT` env (`src/lib/server/security/rate-limiter.ts`):
+ * only `false` / `0` turns them off. Unset means enforced, the safe assumption for a remote
+ * target whose setting the runner cannot see. `playwright.config.ts` defaults it to `false`
+ * for the local preview server it starts; staging gets it from its server `.env` / the
+ * `tent-staging-e2e-env` credential, so e2e runs there skip the pacing/wait workarounds.
  */
 export const RATE_LIMIT_ENFORCED = !['false', '0'].includes(
 	(process.env.RATE_LIMIT ?? '').trim().toLowerCase()

@@ -1,11 +1,16 @@
 import type { AuthorContext } from '$lib/db/model';
 import { qtyGte } from '$lib/utils/qty';
+import { operationsRepository } from '$lib/features/operations';
 import {
 	assertDistributionLogCanBeVoided,
 	calculateInHandQtyForTicketItem,
 	isDuplicateMealDistributionLog,
+	isLotExpired,
+	matchRecipientToMenu,
 	type DistributionLog,
 	type DistributionRecipientType,
+	type MenuTagSource,
+	type MenuTargetTag,
 	type RequisitionTicket,
 	type TicketItem
 } from '../../domain/food-supplies';
@@ -18,10 +23,13 @@ import {
 import { assertCanPerformFrontlineDistribution } from './auth';
 import { CapacityExceededError, TicketStateError, WorkflowValidationError } from './errors';
 import { assertPositiveIntegerQty } from './validation';
+import { resolveDispatchedLotExpiry, type LedgerEntryReader } from './lot-expiry';
 
 export interface DistributionWorkflowDependencies {
 	ticketRepo?: RequisitionTicketRepository;
 	logRepo?: DistributionLogRepository;
+	/** Reads the dispatched lot for the ready-meal expiry check (FR-MQW-06 B). */
+	ledgerReader?: LedgerEntryReader;
 }
 
 export interface FoodDistributionInput {
@@ -36,6 +44,12 @@ export interface FoodDistributionInput {
 	override_reason?: string;
 	cooking_completed_at?: string;
 	notes?: string;
+	/**
+	 * Menu ↔ recipient context for the FR-MRM-04 check (CR-159 §C). `recipient_tags` is `null`
+	 * for volunteer / outside recipients. The log does not carry recipient profile data, so
+	 * neither this workflow nor the VDU can derive it: callers that omit it skip the check.
+	 */
+	menu_check?: { recipient_tags: readonly MenuTargetTag[] | null; menu: MenuTagSource };
 }
 
 export interface SuppliesDistributionInput {
@@ -144,8 +158,34 @@ export async function recordFoodDistribution(
 		}
 	}
 
-	// 4-Hour Food Safety Countdown Check (CR-121 FR-DST-03)
-	let isExpiredWarning = false;
+	// Menu ↔ recipient group (CR-159 FR-MRM-04): a mismatch needs an override, like a repeat meal.
+	if (input.menu_check && !input.is_override) {
+		const { matches } = matchRecipientToMenu(
+			input.menu_check.recipient_tags,
+			input.menu_check.menu
+		);
+		if (!matches) {
+			throw new WorkflowValidationError(
+				`Menu ${input.item_id} does not match the recipient's group. Override required.`
+			);
+		}
+	}
+
+	// Food safety window (CR-121 FR-DST-03; CR-159 FR-MQW-06 B): the
+	// dispatched lot's expiry. Advisory — expired food may still go out, stamped on the log.
+	// Injected deps without a ledgerReader skip the lot lookup (callers own every dependency).
+	const ledgerReader = deps ? deps.ledgerReader : operationsRepository(ctx.shelterCode);
+	// The check is advisory, so a failed lookup must not block the handover: no clock, no stamp.
+	let lotExpiry: string | undefined;
+	if (ledgerReader) {
+		try {
+			lotExpiry = await resolveDispatchedLotExpiry(ticketId, input.item_id, ledgerReader);
+		} catch {
+			lotExpiry = undefined;
+		}
+	}
+	let isExpiredWarning = isLotExpired(lotExpiry);
+	// Legacy explicit cooking timestamp (kept for callers that still pass one).
 	if (input.cooking_completed_at) {
 		const cookingTime = new Date(input.cooking_completed_at).getTime();
 		if (!isNaN(cookingTime) && Date.now() - cookingTime > FOUR_HOURS_MS) {

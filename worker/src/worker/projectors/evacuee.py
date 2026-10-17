@@ -6,10 +6,12 @@ from datetime import UTC, datetime
 from typing import Any, Literal
 
 from worker.masking import (
+    last_name_hash,
     mask_address,
     mask_last_name,
     mask_national_id,
     mask_passport,
+    name_key,
     national_id_hash,
     passport_hash,
     phone_hash,
@@ -22,7 +24,7 @@ def _parse_datetime(value: Any) -> datetime | None:
     if not isinstance(value, str):
         return None
     try:
-        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+        return datetime.fromisoformat(value)
     except ValueError:
         return None
 
@@ -102,7 +104,9 @@ def project_evacuee(
 
     updated_raw = doc.get("updated_at") or doc.get("created_at")
     updated_at = (
-        _parse_datetime(updated_raw) if isinstance(updated_raw, str) else datetime.now(UTC)
+        _parse_datetime(updated_raw)
+        if isinstance(updated_raw, str)
+        else datetime.now(UTC)
     )
 
     last_name = doc.get("last_name") or ""
@@ -112,11 +116,19 @@ def project_evacuee(
         "_id": doc_id,
         "shelter_code": shelter_code,
         "first_name": doc.get("first_name") or "",
+        "first_name_key": name_key(doc.get("first_name") or ""),
         "last_name_masked": mask_last_name(last_name),
+        "last_name_hash": last_name_hash(last_name),
         "phone_hash": phone_hash(doc.get("phone")),
         "gender": doc.get("gender"),
         "address_masked": mask_address(household),
-        "checked_in_at": _parse_datetime(current_stay.get("since")),
+        # These statuses have not completed Station 1 check-in yet. A stale
+        # `since` value must not make either status appear resident externally.
+        "checked_in_at": (
+            None
+            if status in {"pre_registered", "kiosk_registered"}
+            else _parse_datetime(current_stay.get("since"))
+        ),
         "care_zone": current_stay.get("zone"),
         "household_id": doc.get("household_id"),
         "search_excluded": False,
