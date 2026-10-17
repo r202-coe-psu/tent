@@ -16,6 +16,7 @@ import {
 	KIOSK_BANNER_MANGO_INDEX,
 	listActiveForShelter,
 	listBannersForShelter,
+	reorderBanners,
 	setBannerStatus,
 	updateBanner
 } from './kiosk-banner.server';
@@ -259,6 +260,198 @@ describe('listBannersForShelter', () => {
 		expect(records).toHaveLength(1);
 		expect(records[0].image_content_type).toBe('image/jpeg');
 		expect(records[0]).not.toHaveProperty('_attachments');
+	});
+});
+
+describe('reorderBanners', () => {
+	const doc = (n: number, overrides: Record<string, unknown> = {}) =>
+		existingDoc({ _id: `kiosk_banner:b${n}`, _rev: `1-r${n}`, order: n, ...overrides });
+	const rowsFor = (...ids: string[]) =>
+		ids.map((id) => ({ ok: true, id, rev: `2-${id.slice(-2)}` }));
+
+	it('bulk-writes only the changed banners with new orders, keeping rev and attachment stubs', async () => {
+		adminRawMock
+			.mockResolvedValueOnce({ status: 200, data: { docs: [doc(1), doc(2), doc(3)] } })
+			.mockResolvedValueOnce({
+				status: 201,
+				data: rowsFor('kiosk_banner:b2', 'kiosk_banner:b3')
+			});
+
+		await reorderBanners(
+			'SH1',
+			'compact',
+			[
+				{ id: 'kiosk_banner:b1', rev: '1-r1' },
+				{ id: 'kiosk_banner:b3', rev: '1-r3' },
+				{ id: 'kiosk_banner:b2', rev: '1-r2' }
+			],
+			NOW
+		);
+
+		expect(adminRawMock).toHaveBeenCalledTimes(2);
+		const [path, method, body] = adminRawMock.mock.calls[1];
+		expect(path).toBe('/registry/_bulk_docs');
+		expect(method).toBe('POST');
+		expect(body).toEqual({
+			docs: [
+				doc(2, { order: 3, updated_at: NOW.toISOString() }),
+				doc(3, { order: 2, updated_at: NOW.toISOString() })
+			]
+		});
+	});
+
+	it('writes nothing when the order is unchanged and returns the current list', async () => {
+		adminRawMock.mockResolvedValueOnce({ status: 200, data: { docs: [doc(2), doc(1)] } });
+
+		const records = await reorderBanners(
+			'SH1',
+			'compact',
+			[
+				{ id: 'kiosk_banner:b1', rev: '1-r1' },
+				{ id: 'kiosk_banner:b2', rev: '1-r2' }
+			],
+			NOW
+		);
+
+		expect(adminRawMock).toHaveBeenCalledTimes(1);
+		expect(records.map((r) => r._id)).toEqual(['kiosk_banner:b1', 'kiosk_banner:b2']);
+	});
+
+	it('rejects a stale rev with CONFLICT before any write', async () => {
+		adminRawMock.mockResolvedValueOnce({ status: 200, data: { docs: [doc(1), doc(2)] } });
+
+		await expect(
+			reorderBanners(
+				'SH1',
+				'compact',
+				[
+					{ id: 'kiosk_banner:b2', rev: '0-old' },
+					{ id: 'kiosk_banner:b1', rev: '1-r1' }
+				],
+				NOW
+			)
+		).rejects.toMatchObject({ code: 'CONFLICT', message: 'Banner was modified by someone else' });
+		expect(adminRawMock).toHaveBeenCalledTimes(1);
+	});
+
+	it.each([
+		['an unknown id', [{ id: 'kiosk_banner:zz', rev: '1-zz' }]],
+		['a portrait banner', [{ id: 'kiosk_banner:p', rev: '1-p' }]],
+		['an expired banner', [{ id: 'kiosk_banner:old', rev: '1-old' }]]
+	])('rejects %s in the ordered ids with CONFLICT before any write', async (_name, extra) => {
+		adminRawMock.mockResolvedValueOnce({
+			status: 200,
+			data: {
+				docs: [
+					doc(1),
+					doc(2),
+					existingDoc({ _id: 'kiosk_banner:p', _rev: '1-p', screen_type: 'portrait' }),
+					existingDoc({
+						_id: 'kiosk_banner:old',
+						_rev: '1-old',
+						start_at: '2026-01-01T00:00:00.000Z',
+						end_at: '2026-02-01T00:00:00.000Z'
+					})
+				]
+			}
+		});
+
+		await expect(
+			reorderBanners(
+				'SH1',
+				'compact',
+				[{ id: 'kiosk_banner:b2', rev: '1-r2' }, { id: 'kiosk_banner:b1', rev: '1-r1' }, ...extra],
+				NOW
+			)
+		).rejects.toMatchObject({ code: 'CONFLICT' });
+		expect(adminRawMock).toHaveBeenCalledTimes(1);
+	});
+
+	it('rejects a repeated id with VALIDATION', async () => {
+		adminRawMock.mockResolvedValueOnce({ status: 200, data: { docs: [doc(1), doc(2)] } });
+
+		await expect(
+			reorderBanners(
+				'SH1',
+				'compact',
+				[
+					{ id: 'kiosk_banner:b1', rev: '1-r1' },
+					{ id: 'kiosk_banner:b1', rev: '1-r1' }
+				],
+				NOW
+			)
+		).rejects.toMatchObject({ code: 'VALIDATION' });
+		expect(adminRawMock).toHaveBeenCalledTimes(1);
+	});
+
+	describe('bulk write failures', () => {
+		const swap = [
+			{ id: 'kiosk_banner:b2', rev: '1-r2' },
+			{ id: 'kiosk_banner:b1', rev: '1-r1' }
+		];
+		const run = (bulk: { status: number; data: unknown }) => {
+			adminRawMock
+				.mockResolvedValueOnce({ status: 200, data: { docs: [doc(1), doc(2)] } })
+				.mockResolvedValueOnce(bulk);
+			return reorderBanners('SH1', 'compact', swap, NOW);
+		};
+
+		it('maps a conflicting row to CONFLICT', async () => {
+			await expect(
+				run({
+					status: 201,
+					data: [
+						{ ok: true, id: 'kiosk_banner:b1', rev: '2-b1' },
+						{ id: 'kiosk_banner:b2', error: 'conflict', reason: 'Document update conflict.' }
+					]
+				})
+			).rejects.toMatchObject({ code: 'CONFLICT' });
+		});
+
+		it('maps any other failed row to INTERNAL', async () => {
+			await expect(
+				run({ status: 201, data: [{ id: 'kiosk_banner:b1', error: 'forbidden', reason: 'no' }] })
+			).rejects.toMatchObject({ code: 'INTERNAL' });
+		});
+
+		it('maps an HTTP error to INTERNAL', async () => {
+			await expect(run({ status: 500, data: { error: 'boom' } })).rejects.toMatchObject({
+				code: 'INTERNAL'
+			});
+		});
+	});
+
+	it('returns the reordered banners with their new rev, order and updated_at', async () => {
+		adminRawMock
+			.mockResolvedValueOnce({ status: 200, data: { docs: [doc(1), doc(2), doc(3)] } })
+			.mockResolvedValueOnce({
+				status: 201,
+				data: [
+					{ ok: true, id: 'kiosk_banner:b1', rev: '2-b1' },
+					{ ok: true, id: 'kiosk_banner:b3', rev: '2-b3' }
+				]
+			});
+
+		const records = await reorderBanners(
+			'SH1',
+			'compact',
+			[
+				{ id: 'kiosk_banner:b3', rev: '1-r3' },
+				{ id: 'kiosk_banner:b2', rev: '1-r2' },
+				{ id: 'kiosk_banner:b1', rev: '1-r1' }
+			],
+			NOW
+		);
+
+		expect(records.map((r) => [r._id, r.order, r._rev])).toEqual([
+			['kiosk_banner:b3', 1, '2-b3'],
+			['kiosk_banner:b2', 2, '1-r2'],
+			['kiosk_banner:b1', 3, '2-b1']
+		]);
+		expect(records[0].updated_at).toBe(NOW.toISOString());
+		expect(records[1].updated_at).toBe('2026-09-01T00:00:00.000Z');
+		expect(records[0]).not.toHaveProperty('_attachments');
+		expect(records[0].image_content_type).toBe('image/jpeg');
 	});
 });
 

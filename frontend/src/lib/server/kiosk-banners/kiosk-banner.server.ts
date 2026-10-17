@@ -3,6 +3,8 @@ import {
 	createKioskBanner,
 	isActiveAt,
 	matchesScreen,
+	orderableBanners,
+	planReorder,
 	sortBanners,
 	type KioskBannerContext,
 	type KioskBannerDoc,
@@ -167,7 +169,7 @@ export const KIOSK_BANNER_MANGO_INDEX = {
 const LIST_LIMIT = 500;
 const ACTIVE_CAP = 20;
 
-export async function listBannersForShelter(shelterCode: string): Promise<KioskBannerRecord[]> {
+async function findRawBanners(shelterCode: string): Promise<RawBannerDoc[]> {
 	const res = await adminRaw(`/${REGISTRY_DB}/_find`, 'POST', {
 		selector: { type: 'kiosk_banner', shelter_code: shelterCode },
 		limit: LIST_LIMIT
@@ -178,7 +180,76 @@ export async function listBannersForShelter(shelterCode: string): Promise<KioskB
 			`Could not list banners (${res.status}): ${couchDetail(res.data)}`
 		);
 	}
-	return (res.data as { docs: RawBannerDoc[] }).docs.map(toRecord);
+	return (res.data as { docs: RawBannerDoc[] }).docs;
+}
+
+export async function listBannersForShelter(shelterCode: string): Promise<KioskBannerRecord[]> {
+	return (await findRawBanners(shelterCode)).map(toRecord);
+}
+
+/**
+ * Renumber the current banners of one screen type to the given order (1..n); only changed
+ * banners are written, with their `_attachments` stubs kept so CouchDB does not drop the image.
+ */
+export async function reorderBanners(
+	shelterCode: string,
+	screenType: KioskScreenType,
+	items: { id: string; rev: string }[],
+	now: Date = new Date()
+): Promise<KioskBannerRecord[]> {
+	const orderable = orderableBanners(await findRawBanners(shelterCode), screenType, now);
+	const plan = planReorder(
+		orderable,
+		items.map((i) => i.id)
+	);
+	if (!plan.ok) {
+		throw plan.reason === 'duplicate'
+			? new ServiceError('VALIDATION', 'Banner ids must not repeat')
+			: new ServiceError('CONFLICT', 'Banner list changed, reload and try again');
+	}
+	const revs = new Map(orderable.map((b) => [b._id, b._rev]));
+	if (items.some((i) => revs.get(i.id) !== i.rev)) {
+		throw new ServiceError('CONFLICT', 'Banner was modified by someone else');
+	}
+	const newOrder = new Map(plan.changes.map((c) => [c.id, c.order]));
+	const docs = orderable
+		.filter((b) => newOrder.has(b._id))
+		.map((b) => ({ ...b, order: newOrder.get(b._id)!, updated_at: now.toISOString() }));
+	const newRevs = docs.length ? await bulkWrite(docs) : new Map<string, string>();
+	return sortBanners(
+		orderable.map((b) =>
+			newOrder.has(b._id)
+				? toRecord({
+						...b,
+						order: newOrder.get(b._id)!,
+						_rev: newRevs.get(b._id) ?? b._rev,
+						updated_at: now.toISOString()
+					})
+				: toRecord(b)
+		)
+	);
+}
+
+type BulkRow = { id: string; ok?: boolean; rev?: string; error?: string };
+
+/** `_bulk_docs` answers per row and is not atomic: a failed row can leave the others written. */
+async function bulkWrite(docs: RawBannerDoc[]): Promise<Map<string, string>> {
+	const res = await adminRaw(`/${REGISTRY_DB}/_bulk_docs`, 'POST', { docs });
+	if (res.status >= 400) {
+		throw new ServiceError(
+			'INTERNAL',
+			`Could not reorder banners (${res.status}): ${couchDetail(res.data)}`
+		);
+	}
+	const rows = res.data as BulkRow[];
+	if (rows.some((r) => r.error === 'conflict')) {
+		throw new ServiceError('CONFLICT', 'Banner was modified by someone else');
+	}
+	const failed = rows.find((r) => r.error);
+	if (failed) {
+		throw new ServiceError('INTERNAL', `Could not reorder banner ${failed.id}: ${failed.error}`);
+	}
+	return new Map(rows.flatMap((r) => (r.rev ? [[r.id, r.rev] as const] : [])));
 }
 
 export async function listActiveForShelter(
