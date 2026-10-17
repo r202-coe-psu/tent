@@ -5,7 +5,9 @@ from __future__ import annotations
 import asyncio
 import logging
 import traceback
+from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -1194,6 +1196,7 @@ async def test_cancel_by_other_client_is_404(client: AsyncClient) -> None:
     assert response.json()["code"] == "booking_not_found"
     booking = await ExternalBooking.get("BK-TEST0001")
     assert booking is not None and booking.state == "pending"
+    assert await _log_statuses() == ["denied_booking_not_found"]
 
 
 async def test_cancel_twice_is_idempotent(client: AsyncClient) -> None:
@@ -1272,6 +1275,7 @@ async def test_cancel_group_by_other_client_is_404(client: AsyncClient) -> None:
     assert response.status_code == 404
     assert response.json()["code"] == "booking_not_found"
     assert await _rows("BK-GROUP001") == before
+    assert await _log_statuses() == ["denied_booking_not_found"]
 
 
 async def test_cancel_group_twice_is_idempotent(client: AsyncClient) -> None:
@@ -1282,6 +1286,7 @@ async def test_cancel_group_twice_is_idempotent(client: AsyncClient) -> None:
     assert second.status_code == 200
     assert second.json()["result"] == {"booking_id": "BK-GROUP001", "booking_status": "CANCELLED"}
     assert await _rows("BK-GROUP001") == before
+    assert await _log_statuses() == ["granted", "granted"]
 
 
 async def test_cancel_group_skips_finished_rows(client: AsyncClient) -> None:
@@ -1307,6 +1312,7 @@ async def test_cancel_group_skips_finished_rows(client: AsyncClient) -> None:
     assert rows[2]["cancel_reason"] == "earlier"
     assert (rows[1]["state"], rows[1]["cancel_reason"]) == ("cancelled", "new")
     assert (rows[1]["cid"], rows[1]["phone"]) == (None, None)
+    assert await _log_statuses() == ["granted"]
 
 
 async def test_cancel_group_with_rejected_member_cancels_open_rows(client: AsyncClient) -> None:
@@ -1349,54 +1355,211 @@ async def test_cancel_group_checked_in_member_with_rejected_changes_nothing(
     assert await _rows("BK-GROUP001") == before
 
 
-def _fail_cancel_update(monkeypatch: pytest.MonkeyPatch, row_id: str, failures: int) -> None:
-    """Make the phase-2 guarded update of one row raise `failures` times, then succeed."""
+def _snapshot(rows: list[dict[str, Any]]) -> list[tuple[Any, ...]]:
+    """The cancel-relevant columns of each row (`updated_at` is left out: every write moves it)."""
+    return [
+        (row["state"], row["cancel_requested"], row.get("cancel_reason"), row.get("cid"))
+        for row in rows
+    ]
+
+
+async def _set_row(row_id: str, fields: dict[str, Any]) -> None:
+    await ExternalBooking.get_pymongo_collection().update_one({"_id": row_id}, {"$set": fields})
+
+
+async def _set_stay(person_id: str, status: str) -> None:
+    await PublicPerson.get_pymongo_collection().update_one(
+        {"_id": person_id}, {"$set": {"status": status}}
+    )
+
+
+def _spy_bulk_writes(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, dict[str, Any]]]:
+    """Record every `update_one` / `update_many` on external_bookings, in call order."""
     collection = ExternalBooking.get_pymongo_collection()
-    real = type(collection).update_one
+    calls: list[tuple[str, dict[str, Any]]] = []
+    real_one = type(collection).update_one
+    real_many = type(collection).update_many
+
+    async def one(self: Any, flt: dict[str, Any], *args: Any, **kwargs: Any) -> Any:
+        if self.name == collection.name:
+            calls.append(("update_one", flt))
+        return await real_one(self, flt, *args, **kwargs)
+
+    async def many(self: Any, flt: dict[str, Any], *args: Any, **kwargs: Any) -> Any:
+        if self.name == collection.name:
+            calls.append(("update_many", flt))
+        return await real_many(self, flt, *args, **kwargs)
+
+    monkeypatch.setattr(type(collection), "update_one", one)
+    monkeypatch.setattr(type(collection), "update_many", many)
+    return calls
+
+
+def _around_update_many(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    when: Callable[[dict[str, Any]], bool],
+    before: Callable[[], Awaitable[None]] | None = None,
+    after: Callable[[], Awaitable[None]] | None = None,
+) -> None:
+    """Run `before` / `after` around the first matching `update_many` on external_bookings."""
+    collection = ExternalBooking.get_pymongo_collection()
+    real = type(collection).update_many
+    done = [False]
+
+    async def hooked(self: Any, flt: dict[str, Any], *args: Any, **kwargs: Any) -> Any:
+        if self.name == collection.name and not done[0] and when(flt):
+            done[0] = True
+            if before is not None:
+                await before()
+            result = await real(self, flt, *args, **kwargs)
+            if after is not None:
+                await after()
+            return result
+        return await real(self, flt, *args, **kwargs)
+
+    monkeypatch.setattr(type(collection), "update_many", hooked)
+
+
+def _fail_update_many_when(
+    monkeypatch: pytest.MonkeyPatch, *, when: Callable[[dict[str, Any]], bool], failures: int
+) -> None:
+    """Make the first `failures` matching `update_many` calls raise before touching the DB."""
+    collection = ExternalBooking.get_pymongo_collection()
+    real = type(collection).update_many
     calls = [0]
 
     async def flaky(self: Any, flt: dict[str, Any], *args: Any, **kwargs: Any) -> Any:
-        if self.name == collection.name and flt.get("_id") == row_id:
+        if self.name == collection.name and when(flt):
             calls[0] += 1
             if calls[0] <= failures:
                 raise RuntimeError("boom")
         return await real(self, flt, *args, **kwargs)
 
-    monkeypatch.setattr(type(collection), "update_one", flaky)
+    monkeypatch.setattr(type(collection), "update_many", flaky)
 
 
-def _interpose_before_cancel(
-    monkeypatch: pytest.MonkeyPatch, row_id: str, fields: dict[str, Any]
-) -> None:
-    """Apply `fields` to one row right before the first phase-2 update reaches it."""
+def _miss_pending_updates(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Make every guarded write of a pending row report zero modified documents."""
     collection = ExternalBooking.get_pymongo_collection()
-    real = type(collection).update_one
-    done = [False]
+    real_one = type(collection).update_one
+    real_many = type(collection).update_many
 
-    async def racing(self: Any, flt: dict[str, Any], *args: Any, **kwargs: Any) -> Any:
-        if self.name == collection.name and flt.get("_id") == row_id and not done[0]:
-            done[0] = True
-            await real(self, {"_id": row_id}, {"$set": fields})
-        return await real(self, flt, *args, **kwargs)
+    async def one(self: Any, flt: dict[str, Any], *args: Any, **kwargs: Any) -> Any:
+        if self.name == collection.name and flt.get("state") == "pending":
+            return SimpleNamespace(modified_count=0)
+        return await real_one(self, flt, *args, **kwargs)
 
-    monkeypatch.setattr(type(collection), "update_one", racing)
+    async def many(self: Any, flt: dict[str, Any], *args: Any, **kwargs: Any) -> Any:
+        if self.name == collection.name and flt.get("state") == "pending":
+            return SimpleNamespace(modified_count=0)
+        return await real_many(self, flt, *args, **kwargs)
+
+    monkeypatch.setattr(type(collection), "update_one", one)
+    monkeypatch.setattr(type(collection), "update_many", many)
 
 
-async def test_cancel_group_retry_after_partial_failure_succeeds(
+async def test_cancel_group_flags_written_rows_before_cancelling_pending(
     client: AsyncClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    await _group(2, ["pending", "pending"])
-    _fail_cancel_update(monkeypatch, "BP-BK-GROUP001-1", failures=1)
-    with pytest.raises(RuntimeError):
-        await client.post(_cancel_url("BK-GROUP001"), json={"reason": "r"}, headers=GRANTED)
-    monkeypatch.undo()
-    assert [row["state"] for row in await _rows("BK-GROUP001")] == ["cancelled", "pending"]
+    await _person(status="pre_registered", person_id="evacuee:BK-GROUP001-1")
+    await _group(3, ["pending", "written", "pending"])
+    calls = _spy_bulk_writes(monkeypatch)
+    response = await client.post(_cancel_url("BK-GROUP001"), json={"reason": "r"}, headers=GRANTED)
+    assert response.status_code == 200
+    assert [(name, flt["state"]) for name, flt in calls] == [
+        ("update_many", "written"),
+        ("update_many", "pending"),
+    ]
+    assert calls[0][1]["cancel_requested"] is False
 
+
+async def test_cancel_group_common_path_uses_two_bulk_writes(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """No per-row write on the common path: the write count does not grow with the group."""
+    states = ["written" if i % 2 else "pending" for i in range(20)]
+    for i, state in enumerate(states):
+        if state == "written":
+            await _person(status="pre_registered", person_id=f"evacuee:BK-GROUP001-{i}")
+    await _group(20, states)
+    calls = _spy_bulk_writes(monkeypatch)
+    response = await client.post(_cancel_url("BK-GROUP001"), json={"reason": "r"}, headers=GRANTED)
+    assert response.status_code == 200
+    assert [name for name, _ in calls] == ["update_many", "update_many"]
+    rows = await _rows("BK-GROUP001")
+    assert [(row["state"], row["cancel_requested"]) for row in rows[:2]] == [
+        ("cancelled", False),
+        ("written", True),
+    ]
+    assert all(row["cancel_reason"] == "r" for row in rows)
+    assert await _log_statuses() == ["granted"]
+
+
+async def test_cancel_group_check_in_after_flagging_reverts_our_flags(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A check-in between the flag write and the stay re-read: 409, flags reverted."""
+    await _person(status="pre_registered", person_id="evacuee:BK-GROUP001-1")
+    await _group(3, ["pending", "written", "pending"])
+    before = await _rows("BK-GROUP001")
+    _around_update_many(
+        monkeypatch,
+        when=lambda flt: flt.get("cancel_requested") is False,
+        after=lambda: _set_stay("evacuee:BK-GROUP001-1", "active"),
+    )
+    response = await client.post(_cancel_url("BK-GROUP001"), json={"reason": "r"}, headers=GRANTED)
+    assert response.status_code == 409
+    assert response.json()["code"] == "booking_not_cancellable"
+    after = await _rows("BK-GROUP001")
+    assert _snapshot(after) == _snapshot(before)
+    assert after[1]["cancel_requested"] is False
+    assert await _log_statuses() == ["denied_booking_not_cancellable"]
+
+
+async def test_cancel_group_revert_leaves_foreign_flags_alone(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A row flagged by another request is FINISHED: it is skipped and never reverted."""
+    await _person(status="pre_registered", person_id="evacuee:BK-GROUP001-2")
+    await _group(3, ["written", "pending", "written"])
+    await _set_row(
+        "BP-BK-GROUP001-0",
+        {"cancel_requested": True, "cancel_reason": "foreign", "updated_at": datetime(2026, 9, 1)},
+    )
+    before = await _rows("BK-GROUP001")
+    _around_update_many(
+        monkeypatch,
+        when=lambda flt: flt.get("cancel_requested") is False,
+        after=lambda: _set_stay("evacuee:BK-GROUP001-2", "active"),
+    )
+    response = await client.post(_cancel_url("BK-GROUP001"), json={"reason": "r"}, headers=GRANTED)
+    assert response.status_code == 409
+    after = await _rows("BK-GROUP001")
+    assert after[0] == before[0]
+    assert after[0]["cancel_reason"] == "foreign"
+    assert _snapshot(after) == _snapshot(before)
+
+
+async def test_cancel_group_pending_row_written_mid_way_is_flagged(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Phase 2 re-evaluation: a pending row that became a written, cancellable stay is flagged."""
+    await _person(status="pre_registered", person_id="evacuee:BK-GROUP001-1")
+    await _group(2, ["pending", "pending"])
+    _around_update_many(
+        monkeypatch,
+        when=lambda flt: flt.get("state") == "pending",
+        before=lambda: _set_row("BP-BK-GROUP001-1", {"state": "written"}),
+    )
     response = await client.post(_cancel_url("BK-GROUP001"), json={"reason": "r"}, headers=GRANTED)
     assert response.status_code == 200
     rows = await _rows("BK-GROUP001")
-    assert [row["state"] for row in rows] == ["cancelled", "cancelled"]
-    assert all(row["cancel_reason"] == "r" for row in rows)
+    assert [(row["state"], row["cancel_requested"], row["cancel_reason"]) for row in rows] == [
+        ("cancelled", False, "r"),
+        ("written", True, "r"),
+    ]
+    assert await _log_statuses() == ["granted"]
 
 
 async def test_cancel_group_row_finished_mid_way_is_skipped(
@@ -1404,8 +1567,12 @@ async def test_cancel_group_row_finished_mid_way_is_skipped(
 ) -> None:
     """Phase 2: a row the worker rejects just before the cancel reaches it counts as done."""
     await _group(2, ["pending", "pending"])
-    _interpose_before_cancel(
-        monkeypatch, "BP-BK-GROUP001-1", {"state": "rejected", "reject_reason": "duplicate"}
+    _around_update_many(
+        monkeypatch,
+        when=lambda flt: flt.get("state") == "pending",
+        before=lambda: _set_row(
+            "BP-BK-GROUP001-1", {"state": "rejected", "reject_reason": "duplicate"}
+        ),
     )
     response = await client.post(_cancel_url("BK-GROUP001"), json={"reason": "r"}, headers=GRANTED)
     assert response.status_code == 200
@@ -1420,18 +1587,61 @@ async def test_cancel_group_row_finished_mid_way_is_skipped(
 async def test_cancel_group_row_checked_in_mid_way_is_409(
     client: AsyncClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Phase 2: a row that becomes a checked-in stay after phase 1 is a conflict, not a skip."""
+    """Phase 2: a row that becomes a checked-in stay after phase 1 is a conflict, not a skip.
+
+    Residual race: the pending rows cancelled before the conflict stay cancelled, so the 409
+    arrives with a partial cancel. A retry skips those rows (FINISHED).
+    """
     await _person(status="active", person_id="evacuee:BK-GROUP001-1")
     await _group(2, ["pending", "pending"])
-    _interpose_before_cancel(
+    _around_update_many(
         monkeypatch,
-        "BP-BK-GROUP001-1",
-        {"state": "written", "evacuee_id": "evacuee:BK-GROUP001-1"},
+        when=lambda flt: flt.get("state") == "pending",
+        before=lambda: _set_row("BP-BK-GROUP001-1", {"state": "written"}),
     )
     response = await client.post(_cancel_url("BK-GROUP001"), headers=GRANTED)
     assert response.status_code == 409
     assert response.json()["code"] == "booking_not_cancellable"
+    rows = await _rows("BK-GROUP001")
+    assert [(row["state"], row["cancel_requested"]) for row in rows] == [
+        ("cancelled", False),
+        ("written", False),
+    ]
     assert await _log_statuses() == ["denied_booking_not_cancellable"]
+
+
+async def test_cancel_row_gives_up_after_bounded_attempts_and_logs(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    await _group(2, ["pending", "pending"])
+    _miss_pending_updates(monkeypatch)
+    before = await _rows("BK-GROUP001")
+    with caplog.at_level(logging.WARNING):
+        response = await client.post(_cancel_url("BK-GROUP001"), headers=GRANTED)
+    assert response.status_code == 409
+    assert [r.getMessage() for r in caplog.records if "gave up" in r.getMessage()] == [
+        "cancel re-evaluation gave up (booking_id=BK-GROUP001 attempts=3)"
+    ]
+    assert await _rows("BK-GROUP001") == before
+    assert await _log_statuses() == ["denied_booking_not_cancellable"]
+
+
+async def test_cancel_group_retry_after_failed_bulk_step_succeeds(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    await _group(2, ["pending", "pending"])
+    _fail_update_many_when(monkeypatch, when=lambda flt: flt.get("state") == "pending", failures=1)
+    with pytest.raises(RuntimeError):
+        await client.post(_cancel_url("BK-GROUP001"), json={"reason": "r"}, headers=GRANTED)
+    monkeypatch.undo()
+    assert [row["state"] for row in await _rows("BK-GROUP001")] == ["pending", "pending"]
+
+    response = await client.post(_cancel_url("BK-GROUP001"), json={"reason": "r"}, headers=GRANTED)
+    assert response.status_code == 200
+    rows = await _rows("BK-GROUP001")
+    assert [row["state"] for row in rows] == ["cancelled", "cancelled"]
+    assert all(row["cancel_reason"] == "r" for row in rows)
+    assert await _log_statuses() == ["granted"]
 
 
 # --- EXT-010 ----------------------------------------------------------------------

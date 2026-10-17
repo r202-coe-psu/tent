@@ -251,6 +251,13 @@ def _validate_person(raw: BookingPersonInput, prefix: str) -> tuple[_Person, lis
     return person, missing, problems
 
 
+def _stay_allows_cancel(stay: str | None) -> bool:
+    """FR-32 — a missing projection (`None`) means the worker's write has not synced yet,
+    so the stay is still `pre_registered`; any other stay status has checked in or moved on.
+    """
+    return stay is None or stay == "pre_registered"
+
+
 def _classify_cancel(
     row: ExternalBooking, person_status: dict[str, str]
 ) -> Literal["direct", "request"] | None:
@@ -258,12 +265,15 @@ def _classify_cancel(
     if row.state == "pending":
         return "direct"
     if row.state == "written" and not row.cancel_requested:
-        # FR-32 — a missing projection means the worker's write has not synced yet,
-        # so the stay is still `pre_registered`.
         stay = person_status.get(row.evacuee_id) if row.evacuee_id else None
-        if stay is None or stay == "pre_registered":
+        if _stay_allows_cancel(stay):
             return "request"
     return None
+
+
+def _to_milliseconds(value: datetime) -> datetime:
+    """Mongo stores datetimes at millisecond precision; the cancel marker must round-trip."""
+    return value.replace(microsecond=value.microsecond // 1000 * 1000)
 
 
 def _is_open(row: ExternalBooking) -> bool:
@@ -747,13 +757,143 @@ class ThirdPartyBookingsUseCase:
                 plan.append((row, kind))
 
         collection = ExternalBooking.get_pymongo_collection()
-        now = datetime.now(UTC)
-        for row, kind in plan:
-            # No transaction: a person checking in between the phases can still make a
-            # later row fail, leaving earlier rows cancelled. A retry then skips those rows.
-            if not await self._cancel_row(collection, row, kind, reason, now):
-                raise await self._not_cancellable(endpoint, claims, client_ip, rows[0])
+        # `now` is the cancel marker: a row flagged by this request carries exactly this
+        # `updated_at`, so a revert never touches a row flagged by someone else.
+        now = _to_milliseconds(datetime.now(UTC))
+        requested = [row for row, kind in plan if kind == "request"]
+        direct = [row for row, kind in plan if kind == "direct"]
+        # Phase 2 is two `update_many` steps (no per-row loop on the common path). The written
+        # rows are flagged first, so a check-in that lands meanwhile is caught before any
+        # pending row is cancelled. Residual race: a step-2 conflict can still leave the
+        # pending rows cancelled while the 409 is returned; the retry skips those rows.
+        if requested and not await self._flag_requested(collection, requested, reason, now):
+            raise await self._not_cancellable(endpoint, claims, client_ip, rows[0])
+        if direct and not await self._cancel_pending(collection, direct, reason, now):
+            raise await self._not_cancellable(endpoint, claims, client_ip, rows[0])
         return await self._cancelled(endpoint, claims, client_ip, rows[0])
+
+    async def _flag_requested(
+        self,
+        collection: Any,
+        rows: list[ExternalBooking],
+        reason: str | None,
+        now: datetime,
+    ) -> bool:
+        """Phase 2a (FR-32) — flag the written rows for the worker. False after a full revert.
+
+        One `update_many` guarded on `state: written` and `cancel_requested: False`. When it
+        flags fewer rows than asked, the missed rows are re-evaluated one by one (they are
+        FINISHED by someone else, or moved on and need a fresh flag). The stays of every row
+        this request flagged are then read again: a check-in since phase 1 reverts the flags.
+
+        Residual race: the worker may process a `cancel_requested` flag between the flag
+        write below and the revert, so a stay that has just checked in can be asked to cancel.
+        """
+        ids = [row.id for row in rows]
+        result = await collection.update_many(
+            {"_id": {"$in": ids}, "state": "written", "cancel_requested": False},
+            {"$set": {"cancel_requested": True, "cancel_reason": reason, "updated_at": now}},
+        )
+        flagged: set[str] = set(ids)
+        ok = True
+        if result.modified_count < len(ids):
+            flagged = set(await self._flagged_by(collection, ids, now))
+            for row in rows:
+                if row.id in flagged:
+                    continue
+                if not await self._cancel_row(collection, row, "request", reason, now):
+                    ok = False
+                    break
+            flagged = set(await self._flagged_by(collection, ids, now))
+
+        ours = [row for row in rows if row.id in flagged]
+        if ok:
+            evacuee_ids = [row.evacuee_id for row in ours if row.evacuee_id]
+            people = (
+                await PublicPerson.find({"_id": {"$in": evacuee_ids}}).to_list()
+                if evacuee_ids
+                else []
+            )
+            statuses = {person.id: person.status for person in people}
+            ok = all(
+                _stay_allows_cancel(statuses.get(row.evacuee_id) if row.evacuee_id else None)
+                for row in ours
+            )
+        if not ok and flagged:
+            await self._revert_flags(collection, sorted(flagged), now)
+        return ok
+
+    async def _flagged_by(self, collection: Any, ids: list[str], now: datetime) -> list[str]:
+        """The `ids` whose `cancel_requested` flag carries this request's marker."""
+        docs = await collection.find(
+            {
+                "_id": {"$in": ids},
+                "state": "written",
+                "cancel_requested": True,
+                "updated_at": now,
+            },
+            {"_id": 1},
+        ).to_list()
+        return [doc["_id"] for doc in docs]
+
+    async def _revert_flags(self, collection: Any, ids: list[str], now: datetime) -> None:
+        """Undo the flags this request set; the marker keeps other requests' flags intact."""
+        await collection.update_many(
+            {"_id": {"$in": ids}, "state": "written", "cancel_requested": True, "updated_at": now},
+            {
+                "$set": {
+                    "cancel_requested": False,
+                    "cancel_reason": None,
+                    "updated_at": _to_milliseconds(datetime.now(UTC)),
+                }
+            },
+        )
+
+    async def _cancel_pending(
+        self,
+        collection: Any,
+        rows: list[ExternalBooking],
+        reason: str | None,
+        now: datetime,
+    ) -> bool:
+        """Phase 2b (FR-31) — cancel the pending rows and clear their PII in one `update_many`.
+
+        A pending row that missed the guarded update moved on meanwhile: a FINISHED row is
+        skipped (success), a row now written and cancellable is flagged, anything else → False.
+        """
+        ids = [row.id for row in rows]
+        result = await collection.update_many(
+            {"_id": {"$in": ids}, "state": "pending"},
+            {
+                "$set": {
+                    "state": "cancelled",
+                    "cancel_reason": reason,
+                    "cid": None,
+                    "first_name": None,
+                    "last_name": None,
+                    "phone": None,
+                    "updated_at": now,
+                }
+            },
+        )
+        if result.modified_count == len(ids):
+            return True
+        docs = await collection.find(
+            {"_id": {"$in": ids}, "state": "cancelled", "updated_at": now}, {"_id": 1}
+        ).to_list()
+        cancelled = {doc["_id"] for doc in docs}
+        for row in rows:
+            if row.id in cancelled:
+                continue
+            fresh = await ExternalBooking.get(row.id)
+            if fresh is None:
+                return False
+            if not _is_open(fresh):
+                continue
+            kind = await self._classify_fresh(fresh)
+            if kind is None or not await self._cancel_row(collection, fresh, kind, reason, now):
+                return False
+        return True
 
     async def _cancel_row(
         self,
@@ -763,7 +903,7 @@ class ThirdPartyBookingsUseCase:
         reason: str | None,
         now: datetime,
     ) -> bool:
-        """Cancel one OPEN row in phase 2. False only when the row can no longer be cancelled.
+        """Cancel one OPEN row that a bulk step missed. False only when it can no longer be.
 
         A guarded update that misses means the row moved on meanwhile (worker write or a
         concurrent cancel). The fresh row is re-evaluated: FINISHED → skipped (success),
@@ -775,13 +915,18 @@ class ThirdPartyBookingsUseCase:
                 return True
             fresh = await ExternalBooking.get(current.id)
             if fresh is None:
-                return False
+                break
             if not _is_open(fresh):
                 return True
             next_kind = await self._classify_fresh(fresh)
             if next_kind is None:
-                return False
+                break
             current, current_kind = fresh, next_kind
+        logger.warning(
+            "cancel re-evaluation gave up (booking_id=%s attempts=%d)",
+            row.booking_id,
+            _CANCEL_ROW_ATTEMPTS,
+        )
         return False
 
     async def _guarded_cancel(
