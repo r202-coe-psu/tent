@@ -3107,7 +3107,9 @@ class E2ERunner(SmokeTestRunner):
             else f"HTTP {status} - {str(data)[:200]}",
         )
         if not ok:
-            self.not_run(f"{size}-person evacuee.booking_ref + schema_v 14", "group was not created")
+            self.not_run(
+                f"{size}-person evacuee.booking_ref + schema_v 14", "group was not created"
+            )
             return
         booking_id = res["booking_id"]
         written = self.watch_group(
@@ -3397,7 +3399,9 @@ class E2ERunner(SmokeTestRunner):
             self.not_run(case, "set-up failed")
             return
         if not (self.couch.put(own_stay) and self.couch.put(own_house) and self.couch.put(foreign)):
-            self.e2e_result("set-up: CouchDB docs of the partial group written", False, "PUT failed")
+            self.e2e_result(
+                "set-up: CouchDB docs of the partial group written", False, "PUT failed"
+            )
             self.not_run(case, "set-up failed")
             return
         # CAS on the still-unreserved row: 0 means the worker got there first (race lost).
@@ -3468,7 +3472,8 @@ class E2ERunner(SmokeTestRunner):
             lambda d: d.get("status") == "cancelled",
         )
         self.e2e_result(
-            f"remaining 2 evacuees and their households end cancelled within {self.group_timeout:.0f}s",
+            f"remaining 2 evacuees and their households end cancelled "
+            f"within {self.group_timeout:.0f}s",
             done["complete"],
             f"{done['elapsed']:.1f}s after cancel",
         )
@@ -3495,14 +3500,18 @@ class E2ERunner(SmokeTestRunner):
             f"HTTP {status} (code={get_error_code(data)})" if status != 200 else "",
         )
         left = self.mongo.plaintext_rows([booking_id])
-        self.e2e_result("no plaintext PII left in the partial group's rows", left == 0, f"rows={left}")
+        self.e2e_result(
+            "no plaintext PII left in the partial group's rows", left == 0, f"rows={left}"
+        )
 
     def scenario_checked_in(self) -> None:
         """EXT-009 after check-in: 409 booking_not_cancellable and nothing changed (FR-40/53)."""
         self._banner("E2E 9: group with a checked-in member -> cancel 409, nothing changed")
         case = "EXT-009 cancel with a checked-in member"
         if not self.mongo_on():
-            self.record_skip("E2E", case, "needs --mongo-uri (pymongo): waits for the API projection")
+            self.record_skip(
+                "E2E", case, "needs --mongo-uri (pymongo): waits for the API projection"
+            )
             return
         assert self.mongo is not None and self.created_client_id
         cids = self.make_group(2)
@@ -3531,9 +3540,11 @@ class E2ERunner(SmokeTestRunner):
         # watch_group above waited for pre_registered, so `original` is that stay; the
         # fallback only covers a doc that has no current_stay.
         restore = original or {"status": "pre_registered", "zone": None, "since": None}
+        set_ok = False
         try:
             now = dt.datetime.now(dt.UTC).isoformat().replace("+00:00", "Z")
-            set_ok = self.couch.set_stay(evac_id, {"status": "arriving", "zone": None, "since": now})
+            arriving = {"status": "arriving", "zone": None, "since": now}
+            set_ok = self.couch.set_stay(evac_id, arriving)
             self.e2e_result("set-up: member 0 checked in (stay arriving) in CouchDB", set_ok)
             if not set_ok:
                 return
@@ -3568,12 +3579,16 @@ class E2ERunner(SmokeTestRunner):
                 f"other member stay={other_stay}",
             )
         finally:
-            # Put the member back so this group can be cancelled by cleanup.
-            restored = self.couch.set_stay(evac_id, restore)
-            back = restored and self._wait_for(
-                lambda: self.mongo.person_status(evac_id) == "pre_registered", self.group_timeout
-            )
-            self.e2e_result("restore: member 0 back to pre_registered (CouchDB and API)", bool(back))
+            # Put the member back so this group can be cancelled by cleanup (only when changed).
+            if set_ok:
+                restored = self.couch.set_stay(evac_id, restore)
+                back = restored and self._wait_for(
+                    lambda: self.mongo.person_status(evac_id) == "pre_registered",
+                    self.group_timeout,
+                )
+                self.e2e_result(
+                    "restore: member 0 back to pre_registered (CouchDB and API)", bool(back)
+                )
 
     def scenario_sweeper(self) -> None:
         """FR-33: an orphan committed=false row older than 60 s is swept by the worker."""
