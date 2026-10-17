@@ -581,6 +581,35 @@ docker logs couch-edge 2>&1 | grep -i replicat   # log ฝั่ง replicator
 | F8 | `_security` จริงของ DB มี member อื่น (เช่น `public_writer`) — PUT ทับจะลบทิ้ง | ใช้อ่าน-แก้-เขียนกลับ (`add_member_role` / `scripts/central-repl-user.sh`) |
 | F9 | replicator ขอ session ที่ `<host>/_session` โดยตัด path ทิ้ง — ถ้า `SYNC_URL` มี path (`https://<domain>/sync`) คำขอนั้นไปตกที่เว็บแอป (ทดสอบกับ nginx จำลอง: `session_unexpected_result ... 502`) job ล้มทั้งที่ `/sync/_up` ปกติ | ตั้ง `[replicator] auth_plugins = couch_replicator_auth_noop` ใน `couchdb-edge.ini` (ใช้ Basic auth ตรง ๆ) ทดสอบแล้ว: registry + design doc + id ที่มี `%2F` replicate ผ่าน `/sync/` ได้ · ไม่มีผลกับ `http://<IP>:5984` |
 
+### ข้อจำกัดที่รู้แล้ว
+
+**A. ถอดสิทธิ์/ลบ user ที่ central แล้ว edge ยัง login ได้ — ✅ แก้แล้วด้วย [CR-171](../changes/01-core/CR-171-users-edge-shelters-soft-delete.md)**
+
+- **สาเหตุ:** selector ของ `users_<code>_pull` เทียบ `roles` ที่มี `shelter:<CODE>` และประเมินเฉพาะ revision *ใหม่* — revision ที่ถอด role ออกไม่ตรง selector และ tombstone ของการลบไม่มี `roles` → ทั้งสองแบบไม่ถูก replicate แล้ว checkpoint เลยไป · `_users` ที่ edge เป็นสำเนาคนละ DB และ login ที่ edge ตรวจกับสำเนาเก่านั้น (role เดิม + รหัสเดิม)
+- **ผลกระทบ:** คนที่ถูกถอดสิทธิ์ยัง login ที่ edge ได้ (ผ่าน IP ของ edge ใน LAN แม้ WAN ปกติ) และข้อมูลที่เขียนถูก push ขึ้น central ด้วยสิทธิ์ admin — ขัดกับ A1 (central เป็นเจ้าของ user)
+
+**ทางแก้ (CR-171, อนุมัติ 2026-10-17):**
+
+- เพิ่ม field `_users.edge_shelters` (รหัสศูนย์ทุกศูนย์ที่ user เคยมี `shelter:<CODE>` — เพิ่มได้อย่างเดียว) แล้ว selector ของ `users_<code>_pull` กรองด้วย field นี้ **หรือ** `roles` (กันช่วงก่อน backfill) → revision ที่ถอด role / soft delete ยังตรง selector และ replicate ไป edge
+- "ลบ user" ทุกเส้นทางเป็น soft delete (`roles: []`, สุ่มรหัส, `deleted_at`) ห้าม `DELETE` · ชื่อของ user ที่ถูกลบใช้ซ้ำไม่ได้
+- Google / ThaiD login ปฏิเสธบัญชีที่ถูกลบ · ขั้นตอน deploy: ดู SETUP-EDGE "อัปเกรดเป็น CR-171"
+- ทางเลือกที่ตัดทิ้ง (reconcile ใน watchdog, ตัด selector, `$or` กับ `_deleted`, runbook ลบมือ): ดู Decision log ใน CR
+
+**ข้อจำกัดที่เหลือ (ยอมรับ):**
+
+- ลบ/แก้ `_users` ตรงผ่าน Fauxton / admin API นอก `user-service` ข้ามกฎนี้ได้ — ห้ามทำใน runbook
+- ช่วง WAN ของศูนย์ล่ม การถอดสิทธิ์ที่ central ไปไม่ถึง edge จนกว่า WAN กลับ
+- doc ที่ถูกลบ (พร้อม PII และ hash ของรหัสสุ่ม) ค้างที่ central และที่ edge ทุกศูนย์ใน `edge_shelters` จนกว่าจะ wipe edge ตอนปิดศูนย์ · ชื่อ user ที่ถูกลบถูกจองถาวร
+- user ที่ถูก `DELETE` ไปก่อน CR-171 (tombstone) ไม่ถูกแก้ย้อนหลัง — ลบที่ edge ด้วยมือ หรือ wipe edge
+
+**สถานะ:** แก้แล้ว (CR-171) — ยังไม่ได้ทดสอบบน edge จริง; เกณฑ์รับรองดูหัวข้อ Acceptance ใน CR
+
+**B. job push ส่ง `_design/*` จาก edge ขึ้น central**
+
+OD-6 ยอมรับความเสี่ยงนี้ไว้แล้ว · ถ้าเครื่อง edge ถูกขโมย/แก้ไข `_design/access` (`validate_doc_update`) ที่ central อาจถูกเขียนทับด้วยสิทธิ์ admin · §5.4 / T11 เคยเสนอ `"selector":{"_id":{"$regex":"^(?!_design/)"}}` บน job `<code>_push`
+
+**สถานะ:** รอ owner ตัดสินว่าจะแก้ OD-6 หรือไม่ — ยังไม่แก้
+
 ### คำถามเปิด (ต้องให้เจ้าของโครงการตัดสิน ไม่ใช่แค่ config)
 
 1. **cert ของ domain แอปที่ edge** — ตอน cutover browser ยังเปิด `https://<domain แอป>` แต่ถูกชี้มาที่ edge
@@ -591,6 +620,8 @@ docker logs couch-edge 2>&1 | grep -i replicat   # log ฝั่ง replicator
 2. ~~**credential ของ job `_users`**~~ — **ตัดสินแล้ว (decision sync 2026-10-05):** edge ใช้ central admin ชุดเดียวกับทุก job
    ยอมรับว่าเครื่อง edge หลุด = central admin หลุด และเปลี่ยนรหัส admin กระทบ edge ทุกศูนย์ (T11 · SETUP-CENTRAL ขั้น 3)
 3. **CR-064 ยังรอ owner approve** — ไฟล์ edge / `location /sync/` ใน `nginx/nginx.conf` ใน repo เป็นส่วนของ work package 3 ต้องผ่าน review ก่อน deploy
+4. ~~**ข้อจำกัด A — ถอดสิทธิ์/ลบ user ที่ central ไม่ตามไป edge**~~ — **ตัดสินแล้ว (CR-171, 2026-10-17):** field `edge_shelters` + soft delete · เหลือข้อจำกัดที่ยอมรับตามหัวข้อ "ข้อจำกัดที่รู้แล้ว" ด้านบน
+5. **ข้อจำกัด B — push `_design/*` จาก edge** — จะแก้ OD-6 เพื่อกรอง `_design/*` หรือไม่ (ดู subsection เดียวกัน)
 
 ข้อค้นพบ F1–F3 กระทบ runbook ของ CR-064 (WP5) และเกณฑ์ "ops UI สถานะต่อ shelter" (OD-4: ต้องเห็น job ฝั่งดึงค้าง) —
 ควรยกให้เจ้าของโครงการตัดสินใจ
