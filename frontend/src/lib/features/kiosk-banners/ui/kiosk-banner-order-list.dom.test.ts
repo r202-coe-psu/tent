@@ -46,6 +46,16 @@ afterEach(() => {
 });
 
 describe('KioskBannerOrderList', () => {
+	it('shows each row’s title, Bangkok time window and image', () => {
+		render([banner('a')]);
+
+		const row = rows()[0];
+		expect(row.textContent).toContain('แบนเนอร์ a');
+		expect(row.textContent).toContain('15 ต.ค. 08:00–18:00');
+		const image = row.querySelector('img') as HTMLImageElement;
+		expect(image.getAttribute('src')).toContain('/api/back-office/kiosk-banners/');
+	});
+
 	it('renders rows in items order with positions and status badges', () => {
 		render([
 			banner('a'),
