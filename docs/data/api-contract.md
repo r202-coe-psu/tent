@@ -594,13 +594,13 @@ Error   : { "status": <http>, "message": "…", "code"?: "…", "detail"?: "…"
   - **key เดิม body เดียวกัน แต่รอบแรกยังไม่จบ (`in_progress` อายุ ≤ 60 วินาที)** → **409** `idempotency_in_progress` — partner ลองใหม่ได้ภายหลัง
   - **key เดิม body เดียวกัน และ `in_progress` อายุเกิน 60 วินาที** (รอบแรกอาจค้างหลัง process ถูก kill) → ตัดสินจากแถวจริงของ `booking_id` ที่ key เก็บไว้:
     - ทุกแถวของกลุ่ม committed ครบ → **201** booking เดิม (`booking_id` เดิม) และ key เป็น completed
-    - ไม่มีแถว committed เลย → key ถูกปล่อยและคำขอนี้ทำเป็นคำขอใหม่ (ได้ `booking_id` ใหม่) · คำขอซ้ำที่ตัดสินพร้อมกันมีเพียงหนึ่งเดียวที่ได้สิทธิ์ ที่เหลือตอบ 409 `idempotency_in_progress`
-    - รอบแรกที่ค้างนานแต่ยังทำงานอยู่: ก่อน commit ตรวจว่า key ยังเป็นของรอบนี้ ถ้าถูกรับช่วงไปแล้ว → ลบแถว staged ของรอบนี้และตอบ **409** `idempotency_in_progress` (ไม่ commit)
-    - committed บางส่วน → **409** `idempotency_in_progress` (ไม่สร้าง ไม่ลบอะไร)
+    - ไม่มีแถว committed เลย → key ถูก claim (lease ต่ออายุ `created_at` → ลบแถว staged ของรอบเดิม → นับซ้ำ): ไม่มีแถวเลย → key ถูกปล่อยและคำขอนี้ทำเป็นคำขอใหม่ (ได้ `booking_id` ใหม่) · คำขอซ้ำที่แข่งกันมีเพียงหนึ่งเดียวที่ได้สิทธิ์ ที่เหลือตอบ 409 `idempotency_in_progress` · ถ้า flip ที่ค้างจบครบระหว่างนั้น → 201 booking เดิม · ถ้าจบบางส่วน → 409 และลบแถวที่เหลือของกลุ่ม
+    - รอบแรกที่ค้างนานแต่ยังทำงานอยู่: ก่อน commit ตรวจว่า key ยังเป็นของรอบนี้ (`created_at` เดิม) ถ้าถูก claim แล้ว → ลบแถว staged ของรอบนี้และตอบ **409** `idempotency_in_progress` (ไม่ commit) · ถ้า flip มาถึงหลังการ claim ลบแถวไปแล้ว → **500** `internal_error` ตามกติกา shortfall โดยไม่มีแถวที่ commit
+    - committed บางส่วน → **409** `idempotency_in_progress` และคำขอนี้ไม่แก้ไขแถวใด ๆ · worker sweeper กวาดกลุ่มที่ staged ค้างเกิน 60 วินาที (ลบแถว staged แล้วแถว pending ที่เหลือ) → retry ถัดไปหลังจากนั้นไม่พบแถว committed จึง claim key ได้ (ไม่ใช่ 409 จนหมด TTL)
   - รอบแรกล้มโดยยังไม่มี booking (4xx/5xx ก่อน commit, รวม `duplicate_booking` 409 และ insert key ที่ ack หาย) → key ถูกปล่อย ส่งซ้ำได้ทันที
   - รอบแรกถูกตัดการเชื่อมต่อระหว่าง commit: ถ้ากลุ่มถูก commit ครบแล้ว → key เป็น completed และ retry ได้ 201 body เดิม; ถ้ายังไม่ครบ → key ถูกปล่อยเหมือนข้อด้านบน
   - **G5 (ทำเสมอ ไม่ขึ้นกับ key):** ถ้า commit ตอบ error แต่แถวของ `booking_id` ที่สร้างใหม่ `committed: true` ครบ `group_size` แล้ว → **201** แทน 500 (กรณี ack หายหลัง flip สำเร็จ); ไม่ครบ → 500 `internal_error` เดิม
-  - **key ค้างจาก process ที่ถูก kill:** ตัดสินตามข้อ `in_progress` อายุเกิน 60 วินาทีข้างบน (decision sync CR-169 2026-10-17, PR #666) · กรณี committed บางส่วนยังคง 409 จนหมด TTL 24 ชม.
+  - **key ค้างจาก process ที่ถูก kill:** ตัดสินตามข้อ `in_progress` อายุเกิน 60 วินาทีข้างบน (decision sync CR-169 2026-10-17, PR #666; claim และ sweeper ตามข้อ 2026-10-17 จาก code review PR #635/#665/#666) · กรณี committed บางส่วนตอบ 409 จนกว่า sweeper จะกวาดกลุ่ม แล้ว retry ถัดไปจึงดำเนินการต่อ
 
 **ตัวอย่าง — EXT-008 กลุ่ม (2 คน)**
 

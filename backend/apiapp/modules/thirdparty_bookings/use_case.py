@@ -377,34 +377,88 @@ async def _release_key(record_id: str | None, booking_id: str) -> None:
     )
 
 
-async def _take_over_stale_key(record: ExternalBookingIdempotency) -> bool:
-    """Delete a stale `in_progress` key row so this request may take the key over (#614).
+async def _drop_rows(collection: Any, booking_id: str, extra: dict[str, Any]) -> bool:
+    """Delete the rows of `booking_id` matching `extra`, retried; True when the delete ran (#614).
 
-    The delete is guarded by `_id`, `status` and `created_at`, so when several requests judged
-    the same row stale only one deletes it (True); the others match nothing and must answer
-    409. A failed delete is logged and reported as not taken over (the state is unknown, so
-    the partner retries). Shielded and detached, so a cancel cannot split the decision.
+    Unlike `_cleanup_staged` this reports failure, because the takeover decides from the
+    rows that remain. Only the booking_id is logged.
     """
-    collection = ExternalBookingIdempotency.get_pymongo_collection()
-
-    async def delete() -> bool:
-        result = await collection.delete_one(
-            {"_id": record.id, "status": "in_progress", "created_at": record.created_at}
+    try:
+        await _with_retry(
+            lambda: collection.delete_many({"booking_id": booking_id, **extra}),
+            what="stale group cleanup",
+            booking_id=booking_id,
+            attempts=_CLEANUP_ATTEMPTS,
+            reraise=True,
+            give_up="stale group cleanup gave up",
         )
-        return result.deleted_count == 1
+    except Exception:
+        return False
+    return True
 
-    async def guarded() -> bool:
+
+async def _claim_stale_key(
+    record: ExternalBookingIdempotency, persons_count: int
+) -> Literal["completed", "free", "busy"]:
+    """Claim a stale `in_progress` key whose `booking_id` has no committed row (#614).
+
+    1. Lease: `created_at` of the key row is set to now, guarded by its old value. Only one
+       racing request matches; the others see a young row, and the stalled attempt's fence
+       (which checks `created_at`) now fails. The row keeps its `_id` and `booking_id`.
+    2. Remove the staged (`committed: false`) rows of `booking_id`. This must succeed before the
+       count, because a stalled flip can only touch rows that are still staged.
+    3. Recount the committed rows. All committed → the booking stands: the key is completed
+       (`completed`). None → the row is deleted with its lease value (`free`), so the caller
+       proceeds as a new request. Some (a flip raced the lease) → the rest of the group is
+       removed, as the sweeper's phase 2 does, so no committed PII outlives the decision; the
+       key stays `in_progress` and answers 409 (`busy`).
+    Any failure before step 3 answers `busy`; the key keeps its new age, so the partner retries.
+    Shielded and detached, so a cancelled request cannot split the decision.
+    """
+    key_collection = ExternalBookingIdempotency.get_pymongo_collection()
+    collection = ExternalBooking.get_pymongo_collection()
+    claimed_at = datetime.now(UTC)
+
+    async def claim() -> Literal["completed", "free", "busy"]:
         try:
-            return await delete()
+            leased = await key_collection.update_one(
+                {"_id": record.id, "status": "in_progress", "created_at": record.created_at},
+                {"$set": {"created_at": claimed_at}},
+            )
         except Exception as exc:
             logger.warning(
                 "idempotency key takeover failed (booking_id=%s error=%s)",
                 record.booking_id,
                 type(exc).__name__,
             )
-            return False
+            return "busy"
+        if leased.matched_count != 1:
+            return "busy"
+        if not await _drop_rows(collection, record.booking_id, {"committed": False}):
+            return "busy"
+        committed = await _committed_count(collection, record.booking_id)
+        if committed is None:
+            return "busy"
+        if committed == persons_count:
+            await _complete_key(record.id, record.booking_id)
+            return "completed"
+        if committed > 0:
+            await _drop_rows(collection, record.booking_id, {"state": "pending"})
+            return "busy"
+        try:
+            deleted = await key_collection.delete_one(
+                {"_id": record.id, "status": "in_progress", "created_at": claimed_at}
+            )
+        except Exception as exc:
+            logger.warning(
+                "idempotency key release failed (booking_id=%s error=%s)",
+                record.booking_id,
+                type(exc).__name__,
+            )
+            return "busy"
+        return "free" if deleted.deleted_count == 1 else "busy"
 
-    return await asyncio.shield(_detach(guarded()))
+    return await asyncio.shield(_detach(claim()))
 
 
 async def _complete_key(record_id: str | None, booking_id: str) -> None:
@@ -433,14 +487,14 @@ async def _complete_key(record_id: str | None, booking_id: str) -> None:
     )
 
 
-async def _still_owns_key(record_id: str | None) -> bool:
-    """#614 fence — True while this request's `in_progress` key row still exists.
+async def _still_owns_key(record_id: str | None, created_at: datetime) -> bool:
+    """#614 fence — True while this request's `in_progress` key row is still its own.
 
-    A stale key can be taken over by a later retry (`_take_over_stale_key`), which also removes
-    the staged rows of this attempt. Checked after the insert and before the commit flip so an
-    attempt that stalled past the takeover never commits a booking it no longer owns. A read
-    failure counts as not owned (the partner retries; nothing is committed). Shielded and
-    detached, so a cancel cannot split the check from the caller's cleanup.
+    A stale key can be claimed by a later retry (`_claim_stale_key`), which renews `created_at`
+    and may remove the staged rows of this attempt. Checked after the insert and before the
+    commit flip, so an attempt that stalled past the claim never commits a booking it no longer
+    owns. A read failure counts as not owned (the partner retries; nothing is committed).
+    Shielded and detached, so a cancel cannot split the check from the caller's cleanup.
     """
     if record_id is None:
         return True
@@ -449,7 +503,10 @@ async def _still_owns_key(record_id: str | None) -> bool:
     async def check() -> bool:
         try:
             return (
-                await collection.count_documents({"_id": record_id, "status": "in_progress"}) == 1
+                await collection.count_documents(
+                    {"_id": record_id, "status": "in_progress", "created_at": created_at}
+                )
+                == 1
             )
         except Exception as exc:
             logger.warning("idempotency key ownership check failed (error=%s)", type(exc).__name__)
@@ -656,27 +713,29 @@ class ThirdPartyBookingsUseCase:
             raise await busy()
         collection = ExternalBooking.get_pymongo_collection()
         committed = await _committed_count(collection, existing.booking_id)
-        if committed is None:
+        if committed is None or 0 < committed < persons_count:
+            # Partly committed: 409 and nothing is touched; the worker sweeper removes the
+            # group's staged rows (FR-33), after which the next retry takes over.
             raise await busy()
-        if committed == persons_count:
+        if committed == 0:
+            outcome = await _claim_stale_key(existing, persons_count)
+            if outcome == "busy":
+                raise await busy()
+            if outcome == "free":
+                # The key is ours and no booking was made: this request proceeds as new.
+                return None
+        else:
             await _complete_key(existing.id, existing.booking_id)
-            await self._log(
-                endpoint=ENDPOINT_CREATE,
-                claims=claims,
-                client_ip=client_ip,
-                outcome="granted",
-                location_code=location_code,
-                result_count=persons_count,
-            )
-            return _created_envelope(existing.booking_id, location_code, persons_count)
-        if committed > 0:
-            raise await busy()
-        if not await _take_over_stale_key(existing):
-            raise await busy()
-        # The key is ours and the old attempt never produced a booking: drop its staged rows so
-        # they cannot collide with the new attempt. Committed rows are never touched here.
-        await _cleanup_staged(collection, {"booking_id": existing.booking_id, "committed": False})
-        return None
+        # Every row of the group is committed: the booking exists, answer it as the original.
+        await self._log(
+            endpoint=ENDPOINT_CREATE,
+            claims=claims,
+            client_ip=client_ip,
+            outcome="granted",
+            location_code=location_code,
+            result_count=persons_count,
+        )
+        return _created_envelope(existing.booking_id, location_code, persons_count)
 
     async def _answer_existing(
         self,
@@ -1096,7 +1155,7 @@ class ThirdPartyBookingsUseCase:
         # (stalled past 60 s). Then this attempt must not commit: its rows are removed and the
         # new owner of the key answers the partner.
         try:
-            owns_key = await _still_owns_key(reserved_id)
+            owns_key = await _still_owns_key(reserved_id, now)
         except BaseException:
             await _cleanup_staged(collection, staged)
             raise

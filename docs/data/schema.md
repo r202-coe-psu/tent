@@ -2713,7 +2713,7 @@ Buffer ของ partner booking (M2) — FastAPI insert ตอนรับค�
 | `request_hash` | str | req | `sha256` ของคำขอที่ normalize แล้ว: `location_code` + `persons[]` ทั้งหมด (`cid` แทนด้วย `national_id_hash` ก่อน hash; ชื่อ/เบอร์ถูก hash แต่ไม่เก็บ) — **ห้ามเก็บ CID/ชื่อ/เบอร์ดิบ** |
 | `booking_id` | str | req | `BK-{ulid}` ที่รอบแรกจองไว้ (ตั้งแต่แถวเป็น `in_progress`) |
 | `status` | enum(`in_progress`,`completed`) | req | `in_progress` ก่อน stage แถว `external_bookings` · `completed` หลัง commit สำเร็จ (รวม G5) · default `in_progress` |
-| `created_at` | ts | req | เวลาที่รอบแรกเริ่ม — TTL อ้างอิงฟิลด์นี้ |
+| `created_at` | ts | req | เวลาที่รอบแรกเริ่ม — TTL อ้างอิงฟิลด์นี้; ถูกตั้งใหม่เมื่อ claim key ที่ค้าง (ดู claim ด้านล่าง) |
 
 **Index:** `(client_id, key)` unique (`uniq_idempotency_key_per_client`) — key ซ้ำได้เฉพาะภายใน client เดียวกัน (ชนกันที่ index นี้) · `(created_at)` **TTL 86400 วินาที** (`ttl_idempotency_created_at`) — หมดอายุ 24 ชม. หลังรอบแรก
 
@@ -2729,7 +2729,12 @@ Buffer ของ partner booking (M2) — FastAPI insert ตอนรับค�
 
 **`in_progress` ค้าง (decision sync CR-169 2026-10-17, จาก code review PR #666):** แถว key เก็บ `booking_id` ตั้งแต่ตอน insert ดังนั้น request ที่เจอแถว `in_progress` อายุ > 60 วินาที (รอบแรกอาจถูก kill ก่อน release/complete) ตัดสินจากแถว `external_bookings` ที่มี `booking_id` นั้น:
 - **committed ครบ `group_size`** → **201** body เดิม (`booking_id` เดิม, ไม่สร้างแถวใหม่) และ mark key เป็น `completed`
-- **ไม่มีแถว `committed: true` เลย** → **takeover**: ลบแถว key ด้วยเงื่อนไข `_id` + `status: in_progress` + `created_at` เดิม (atomic — ของคำขอที่แข่งกันตัดสินพร้อมกันมีเพียงคำขอเดียวที่ `deleted_count = 1`; อีกคำขอตอบ 409 `idempotency_in_progress`) แล้วลบแถว `committed: false` ของ `booking_id` เดิม และคำขอนี้ดำเนินการเป็นคำขอใหม่ (`booking_id` ใหม่, insert key ใหม่)
-- **fence ก่อน commit (ทุกรอบที่ key ถูกสร้าง):** หลัง insert แถว staged และก่อน flip `committed` ตรวจว่าแถว key ยังอยู่ (`_id` + `status: in_progress`); ถ้าถูกรับช่วงไปแล้ว (รอบแรกค้างเกิน 60 วินาที) → ลบแถว staged ของรอบนี้ ตอบ **409** `idempotency_in_progress` และไม่ commit
-- **committed บางส่วน** → **409** `idempotency_in_progress` ไม่แก้ไขแถวใด ๆ (ไม่มี sweep ของ key นี้; key คงอยู่จนหมด TTL 24 ชม. ตามกติกานี้)
+- **ไม่มีแถว `committed: true` เลย** → **claim** (ลำดับด้านล่าง). ได้สิทธิ์ → คำขอนี้ทำเป็นคำขอใหม่ (`booking_id` ใหม่, insert key ใหม่); ไม่ได้สิทธิ์ → **409** `idempotency_in_progress`
+  - **claim:** (1) **lease** — `update` ด้วย `_id` + `status: in_progress` + `created_at` เดิม ตั้ง `created_at` = ตอนนี้ (guard ด้วยค่าเดิม → คำขอที่แข่งกันได้สิทธิ์เพียงคำขอเดียว; คำขออื่นเห็นแถวอายุน้อยและ fence ของรอบเดิมไม่ผ่านอีก) · (2) ลบแถว `committed: false` ของ `booking_id` เดิม (ต้องสำเร็จก่อนนับ ถ้าไม่สำเร็จ → 409) · (3) นับแถว `committed: true` ของ `booking_id` เดิมอีกครั้ง:
+    - ครบ `group_size` (flip ที่ค้างจบก่อน lease) → mark key `completed` → **201** booking เดิม
+    - ไม่มีเลย → ลบแถว key ด้วย `_id` + `status: in_progress` + `created_at` ที่ lease ตั้งไว้ (`deleted_count = 1` ได้เพียงครั้งเดียว) → คำขอนี้ทำเป็นคำขอใหม่
+    - บางส่วน (flip แข่งกับ lease) → ลบแถว `state: pending` ที่เหลือของ `booking_id` (เทียบเท่า phase 2 ของ sweeper ไม่ให้ PII ค้าง) → **409** `idempotency_in_progress`; แถว key คงอยู่ที่ `in_progress` และรอบ retry ถัดไป (อายุ > 60 วินาทีหลัง lease) เข้าเงื่อนไข "ไม่มีแถว committed"
+  - `created_at` ของแถว key ถูกตั้งใหม่ทุกครั้งที่ claim สำเร็จ (lease) — TTL 24 ชม. นับจากค่านี้
+- **fence ก่อน commit (ทุกรอบที่ key ถูกสร้าง):** หลัง insert แถว staged และก่อน flip `committed` ตรวจว่าแถว key ยังเป็นของรอบนี้ (`_id` + `status: in_progress` + `created_at` ที่รอบนี้ตั้งไว้); ถ้าถูก claim แล้ว (lease เปลี่ยน `created_at` หรือแถวถูกลบ) → ลบแถว staged ของรอบนี้ ตอบ **409** `idempotency_in_progress` และไม่ commit · ถ้า flip มาถึงหลัง claim ลบแถว staged ไปแล้ว flip จะ match น้อยกว่า `group_size` → shortfall → **500** `internal_error` ตามกติกาเดิม (ไม่มีแถวที่ commit)
+- **committed บางส่วน** → **409** `idempotency_in_progress` และคำขอนี้ไม่แก้ไขแถวใด ๆ · worker sweeper (`sweep_stale_staged`, FR-33) กวาดกลุ่มนี้เมื่อแถว staged อายุเกิน 60 วินาที: phase 1 ลบแถว `committed: false`, phase 2 ลบแถว `state: pending` ที่เหลือของ `booking_id` (รวมแถว `committed: true`) → หลังกวาด กลุ่มไม่มีแถว committed แล้ว รอบ retry ถัดไปจึงเข้า claim ได้ (ไม่ใช่ 409 จนหมด TTL)
 - อายุ ≤ 60 วินาที → 409 `idempotency_in_progress` ไม่แตะข้อมูล
