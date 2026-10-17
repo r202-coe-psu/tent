@@ -80,8 +80,9 @@ _FLAG_POLL_SECONDS = 0.1
 # A request whose flags have been set for longer than this does not commit them (it reverts and
 # fails instead). The worker reverts a token older than 2 minutes as an abandoned request
 # (CR-169 decision sync 2026-10-17, review round 2 of PR #635), so this margin keeps a slow but
-# live request from answering 200 for flags the worker may already have reverted. Clock skew
-# between the API and worker hosts beyond the margin is an accepted residual.
+# live request from answering 200 for flags the worker may already have reverted. The 60 s value
+# and clock skew between the API and worker hosts beyond it are pending owner confirmation
+# (reported on PR #635).
 _FLAG_COMMIT_SECONDS = 60.0
 
 # Messages here must never carry a CID, phone, name or document body: only the booking_id
@@ -836,10 +837,11 @@ class ThirdPartyBookingsUseCase:
                 raise await self._not_cancellable(endpoint, claims, client_ip, rows[0])
         # Phase 2c — the granted access-log write, then the commit of the flags (token clear).
         # An error in either reverts the flags, so the partner never gets a 200 for flags that
-        # were not handed to the worker. Accepted residuals: a commit that fails after the
-        # granted log leaves that log entry on a request answered 500, and a commit that
-        # cleared only some tokens before failing leaves those rows FINISHED (the revert is
-        # guarded on the token, so it reverts only the rest); a partner retry settles both.
+        # were not handed to the worker. Known residuals, not yet ruled on by the owner (reported
+        # on PR #635): a commit that fails after the granted log leaves that log entry on a
+        # request answered 500, and a commit that cleared only some tokens before failing leaves
+        # those rows FINISHED (the revert is guarded on the token, so it reverts only the rest);
+        # a partner retry settles both.
         try:
             result = await self._cancelled(endpoint, claims, client_ip, rows[0])
             if planned:
@@ -1096,6 +1098,14 @@ class ThirdPartyBookingsUseCase:
         of 200 (the worker would otherwise revert a flag the partner was told is cancelled).
         """
         if asyncio.get_running_loop().time() - flags_from > _FLAG_COMMIT_SECONDS:
+            # Only flags this request still holds are at risk. A request that cancelled pending
+            # rows only (or whose flags are gone) has nothing to hand over and stays a 200.
+            held = await collection.find(
+                {"_id": {"$in": [row.id for row in rows]}, "cancel_flag_token": token},
+                {"_id": 1},
+            ).to_list()
+            if not held:
+                return
             logger.error("cancel flags held too long (booking_id=%s)", rows[0].booking_id)
             raise TimeoutError("cancel flags held too long to commit")
         await self._clear_flag_tokens(collection, rows, token)
