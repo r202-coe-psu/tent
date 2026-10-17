@@ -15,6 +15,8 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import hashlib
+import json
 import logging
 import re
 from collections.abc import Awaitable, Callable
@@ -24,8 +26,9 @@ from typing import Any, Literal
 from zoneinfo import ZoneInfo
 
 from fastapi import HTTPException, status
-from pymongo.errors import BulkWriteError
+from pymongo.errors import BulkWriteError, DuplicateKeyError
 from tent_model.external_booking import OPEN_BOOKING_STATES, ExternalBooking
+from tent_model.external_booking_idempotency import ExternalBookingIdempotency
 from tent_model.public_person import PublicPerson
 from tent_model.public_shelter import PublicShelter
 from tent_model.third_party_access_log import ThirdPartyAccessLog
@@ -57,6 +60,7 @@ _BANGKOK_TZ = ZoneInfo("Asia/Bangkok")
 _PHONE_RE = re.compile(r"^0\d{8,9}$")
 _CID_RE = re.compile(r"^[0-9]{13}$")
 _MAX_CANCEL_REASON = 200
+_MAX_IDEMPOTENCY_KEY = 255
 
 # Stay statuses that hold a place at a shelter (FR-17a). Keep in sync with the
 # registration gate in `frontend/src/lib/features/public-register/domain/booking-gate.ts`.
@@ -287,6 +291,106 @@ def _is_complete_group(rows: list[ExternalBooking]) -> bool:
     return len(rows) == size and [row.person_seq for row in rows] == list(range(size))
 
 
+def _request_hash(location_code: str, persons: list[_Person]) -> str:
+    """sha256 of the canonical, normalized create request (EXT-008 Idempotency-Key, #614).
+
+    Each CID is replaced by its `national_id_hash` before hashing, so the raw CID is never
+    fed into the digest; names and phone are hashed but never stored.
+    """
+    canonical = {
+        "location_code": location_code,
+        "persons": [
+            {
+                "cid": national_id_hash(person.cid),
+                "first_name": person.first_name,
+                "last_name": person.last_name,
+                "phone": person.phone,
+            }
+            for person in persons
+        ],
+    }
+    payload = json.dumps(canonical, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _created_envelope(
+    booking_id: str, location_code: str, persons_count: int
+) -> BookingCreatedEnvelope:
+    return BookingCreatedEnvelope(
+        result=BookingCreatedResult(
+            booking_id=booking_id, location_code=location_code, persons_count=persons_count
+        )
+    )
+
+
+async def _all_rows_committed(collection: Any, booking_id: str, group_size: int) -> bool:
+    """G5 — True when every row of the group is committed although the flip raised.
+
+    The flip may have been applied and only its acknowledgement lost. If the count cannot be
+    read, report False so the caller takes the normal failure path.
+    """
+    try:
+        committed = await collection.count_documents({"booking_id": booking_id, "committed": True})
+    except Exception as exc:
+        logger.warning(
+            "commit check failed (booking_id=%s error=%s)", booking_id, type(exc).__name__
+        )
+        return False
+    return committed == group_size
+
+
+async def _release_key(record_id: str | None, booking_id: str) -> None:
+    """Delete the Idempotency-Key row of a request that created no booking (#614).
+
+    Shielded and retried like the staged-row cleanup; a give-up is logged, never raised.
+    """
+    if record_id is None:
+        return
+    collection = ExternalBookingIdempotency.get_pymongo_collection()
+
+    async def delete() -> None:
+        await collection.delete_one({"_id": record_id})
+
+    await asyncio.shield(
+        _detach(
+            _with_retry(
+                delete,
+                what="idempotency key release",
+                booking_id=booking_id,
+                attempts=_CLEANUP_ATTEMPTS,
+                reraise=False,
+                give_up="idempotency key could not be released",
+            )
+        )
+    )
+
+
+async def _complete_key(record_id: str | None, booking_id: str) -> None:
+    """Mark the Idempotency-Key row `completed` once the group is committed (#614).
+
+    The booking exists at this point, so this never releases the row; a give-up is logged.
+    """
+    if record_id is None:
+        return
+    collection = ExternalBookingIdempotency.get_pymongo_collection()
+
+    async def complete() -> None:
+        await collection.update_one({"_id": record_id}, {"$set": {"status": "completed"}})
+
+    await asyncio.shield(
+        _detach(
+            _with_retry(
+                complete,
+                what="idempotency key completion",
+                booking_id=booking_id,
+                attempts=_COMMIT_ATTEMPTS,
+                reraise=False,
+                give_up="idempotency key could not be marked completed",
+            )
+        )
+    )
+
+
 class ThirdPartyBookingsUseCase:
     async def _log(
         self,
@@ -396,6 +500,107 @@ class ThirdPartyBookingsUseCase:
 
     # --- EXT-008 -------------------------------------------------------------------
 
+    async def _answer_existing(
+        self,
+        *,
+        existing: ExternalBookingIdempotency,
+        request_hash: str,
+        location_code: str,
+        persons_count: int,
+        claims: ThirdPartyClaims,
+        client_ip: str,
+    ) -> BookingCreatedEnvelope:
+        """#614 — answer a request whose Idempotency-Key already has a row.
+
+        Different payload → 409 `idempotency_key_reused`; same payload still in progress →
+        409 `idempotency_in_progress`; same payload completed → the original 201 body.
+        """
+        endpoint = ENDPOINT_CREATE
+        if existing.request_hash != request_hash:
+            raise await self._deny(
+                endpoint=endpoint,
+                claims=claims,
+                client_ip=client_ip,
+                status_code=status.HTTP_409_CONFLICT,
+                code="idempotency_key_reused",
+                message="Idempotency-Key was already used with a different request.",
+                location_code=location_code,
+            )
+        if existing.status != "completed":
+            raise await self._deny(
+                endpoint=endpoint,
+                claims=claims,
+                client_ip=client_ip,
+                status_code=status.HTTP_409_CONFLICT,
+                code="idempotency_in_progress",
+                message="A request with this Idempotency-Key is still being processed.",
+                location_code=location_code,
+            )
+        await self._log(
+            endpoint=endpoint,
+            claims=claims,
+            client_ip=client_ip,
+            outcome="granted",
+            location_code=location_code,
+            result_count=persons_count,
+        )
+        return _created_envelope(existing.booking_id, location_code, persons_count)
+
+    async def _reserve_key(
+        self,
+        *,
+        key: str,
+        request_hash: str,
+        booking_id: str,
+        now: datetime,
+        location_code: str,
+        persons_count: int,
+        claims: ThirdPartyClaims,
+        client_ip: str,
+    ) -> str | BookingCreatedEnvelope:
+        """Insert the in_progress row (unique per client_id + key).
+
+        Returns the new row id, or the answer to a request that won the race for the key.
+        """
+        for _ in range(2):
+            record = ExternalBookingIdempotency(
+                id=f"IK-{new_ulid()}",
+                client_id=claims.client_id,
+                key=key,
+                request_hash=request_hash,
+                booking_id=booking_id,
+                status="in_progress",
+                created_at=now,
+            )
+            try:
+                await record.insert()
+            except DuplicateKeyError:
+                existing = await ExternalBookingIdempotency.find_one(
+                    ExternalBookingIdempotency.client_id == claims.client_id,
+                    ExternalBookingIdempotency.key == key,
+                )
+                if existing is not None:
+                    return await self._answer_existing(
+                        existing=existing,
+                        request_hash=request_hash,
+                        location_code=location_code,
+                        persons_count=persons_count,
+                        claims=claims,
+                        client_ip=client_ip,
+                    )
+                # The first request released its key meanwhile: try once more.
+                continue
+            return record.id
+        raise await self._deny(
+            endpoint=ENDPOINT_CREATE,
+            claims=claims,
+            client_ip=client_ip,
+            status_code=status.HTTP_409_CONFLICT,
+            code="idempotency_in_progress",
+            message="A request with this Idempotency-Key is still being processed.",
+            location_code=location_code,
+        )
+
     async def _taken_cid_hashes(self, location_code: str, cid_hashes: list[str]) -> set[str]:
         """The CID hashes that already hold a place at `location_code` (FR-17/20, D5).
 
@@ -454,7 +659,12 @@ class ThirdPartyBookingsUseCase:
         return min(colliding) if colliding else fallback
 
     async def create_booking(
-        self, *, body: BookingCreateRequest, claims: ThirdPartyClaims, client_ip: str
+        self,
+        *,
+        body: BookingCreateRequest,
+        claims: ThirdPartyClaims,
+        client_ip: str,
+        idempotency_key: str | None = None,
     ) -> BookingCreatedEnvelope:
         endpoint = ENDPOINT_CREATE
         await self._require_scope(endpoint=endpoint, claims=claims, client_ip=client_ip)
@@ -470,6 +680,11 @@ class ThirdPartyBookingsUseCase:
                 code="validation_error",
                 message=message,
                 location_code=location_code,
+            )
+
+        if idempotency_key is not None and not 1 <= len(idempotency_key) <= _MAX_IDEMPOTENCY_KEY:
+            raise await invalid(
+                f"Idempotency-Key must be between 1 and {_MAX_IDEMPOTENCY_KEY} characters."
             )
 
         # D1 — the legacy single-person body is a `persons` array of one.
@@ -517,6 +732,24 @@ class ThirdPartyBookingsUseCase:
                 first_seen[person.cid] = index
         if problems:
             raise await invalid(" ".join(problems))
+
+        request_hash = _request_hash(location_code, persons)
+        if idempotency_key is not None:
+            # #614 — a retry of an earlier request is answered before any duplicate check,
+            # since that earlier request now holds the places.
+            existing = await ExternalBookingIdempotency.find_one(
+                ExternalBookingIdempotency.client_id == claims.client_id,
+                ExternalBookingIdempotency.key == idempotency_key,
+            )
+            if existing is not None:
+                return await self._answer_existing(
+                    existing=existing,
+                    request_hash=request_hash,
+                    location_code=location_code,
+                    persons_count=len(persons),
+                    claims=claims,
+                    client_ip=client_ip,
+                )
 
         shelter = await PublicShelter.find_one(PublicShelter.shelter_code == location_code)
         if shelter is None or not shelter.is_active:
@@ -567,6 +800,22 @@ class ThirdPartyBookingsUseCase:
 
         now = datetime.now(UTC)
         booking_id = f"BK-{new_ulid()}"
+        # #614 — the key row exists before any staged row; every failure path below releases it.
+        reserved_id: str | None = None
+        if idempotency_key is not None:
+            reserved = await self._reserve_key(
+                key=idempotency_key,
+                request_hash=request_hash,
+                booking_id=booking_id,
+                now=now,
+                location_code=location_code,
+                persons_count=len(persons),
+                claims=claims,
+                client_ip=client_ip,
+            )
+            if isinstance(reserved, BookingCreatedEnvelope):
+                return reserved
+            reserved_id = reserved
         # Inserting in `cid_hash` order means two overlapping groups collide on the same
         # key first, so one of them wins instead of each blocking the other half-way.
         rows = [
@@ -611,6 +860,7 @@ class ThirdPartyBookingsUseCase:
             await asyncio.shield(insert_task)
         except asyncio.CancelledError:
             await _cleanup_staged(collection, staged, after=insert_task)
+            await _release_key(reserved_id, booking_id)
             raise
         except BulkWriteError as exc:
             # Race guard: the unique partial index on (shelter_code, cid_hash).
@@ -633,6 +883,7 @@ class ThirdPartyBookingsUseCase:
             failure = exc
         if duplicate_seq is not None or failure is not None:
             await _cleanup_staged(collection, staged)
+            await _release_key(reserved_id, booking_id)
             if duplicate_seq is not None:
                 raise await duplicate(
                     await self._lowest_duplicate_index(location_code, cid_hashes, duplicate_seq)
@@ -653,14 +904,27 @@ class ThirdPartyBookingsUseCase:
             await _commit_group(collection, booking_id, len(rows))
         except asyncio.CancelledError:
             await _cleanup_staged(collection, {"booking_id": booking_id, "state": "pending"})
+            await _release_key(reserved_id, booking_id)
             raise
         except Exception as exc:
             commit_error = exc
+        if commit_error is not None and await _all_rows_committed(
+            collection, booking_id, len(rows)
+        ):
+            # G5 — the flip was applied but its acknowledgement was lost: the group is committed,
+            # so answer 201 (the worker processes it) instead of a 500 that makes the partner retry.
+            logger.warning(
+                "commit raised but every row is committed (booking_id=%s error=%s)",
+                booking_id,
+                type(commit_error).__name__,
+            )
+            commit_error = None
         if commit_error is not None:
             # The flip may have been applied to only some rows, so `committed` can no longer
             # tell this group's rows apart: remove every row of this booking_id that is still
             # `pending`. Rows the worker already advanced cannot be rolled back from here.
             await _cleanup_staged(collection, {"booking_id": booking_id, "state": "pending"})
+            await _release_key(reserved_id, booking_id)
             await self._log_detached(
                 booking_id=booking_id,
                 endpoint=endpoint,
@@ -677,6 +941,7 @@ class ThirdPartyBookingsUseCase:
                 "The booking could not be saved.",
             )
 
+        await _complete_key(reserved_id, booking_id)
         # The group is committed and the worker will process it: a failing or cancelled
         # access log must not turn this into an error (the partner's retry would then hit 409).
         with contextlib.suppress(asyncio.CancelledError):

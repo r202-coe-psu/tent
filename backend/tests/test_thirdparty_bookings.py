@@ -1546,3 +1546,194 @@ async def test_unique_index_guards_open_bookings(client: AsyncClient) -> None:
 async def test_group_lookup_index_exists(client: AsyncClient) -> None:
     indexes = await ExternalBooking.get_pymongo_collection().index_information()
     assert any(info["key"] == [("booking_id", 1), ("person_seq", 1)] for info in indexes.values())
+
+
+# --- #614 Idempotency-Key (CR-169 decision sync 2026-10-17) ----------------------------
+
+
+def _idem(key: str, headers: dict[str, str] | None = None) -> dict[str, str]:
+    return {**(headers or GRANTED), "Idempotency-Key": key}
+
+
+async def _keys(client_id: str = "m2-test") -> list[Any]:
+    from tent_model.external_booking_idempotency import ExternalBookingIdempotency
+
+    return await ExternalBookingIdempotency.find(
+        ExternalBookingIdempotency.client_id == client_id
+    ).to_list()
+
+
+async def test_replay_with_same_key_and_body_returns_the_original_201(
+    client: AsyncClient, shelters: None
+) -> None:
+    body = _group_payload(3)
+    first = await client.post(URL, json=body, headers=_idem("retry-1"))
+    assert first.status_code == 201
+    replay = await client.post(URL, json=body, headers=_idem("retry-1"))
+    assert replay.status_code == 201
+    assert replay.json() == first.json()
+    booking_id = first.json()["result"]["booking_id"]
+    assert len(await _rows(booking_id)) == 3
+    assert len(await _rows()) == 3  # the replay created nothing
+    # replay is an accepted request: one granted access-log row per request
+    assert await _log_statuses() == ["granted", "granted"]
+    logs = await ThirdPartyAccessLog.find_all().to_list()
+    assert [log.result_count for log in logs] == [3, 3]
+
+
+async def test_replay_with_legacy_single_body_keeps_booking_status(
+    client: AsyncClient, shelters: None
+) -> None:
+    first = await client.post(URL, json=_payload(), headers=_idem("legacy-1"))
+    replay = await client.post(URL, json=_payload(), headers=_idem("legacy-1"))
+    assert first.status_code == 201
+    assert replay.status_code == 201
+    assert replay.json()["result"] == first.json()["result"]
+    assert replay.json()["result"]["booking_status"] == "BOOKED"
+    assert replay.json()["result"]["persons_count"] == 1
+
+
+async def test_same_key_with_a_different_body_is_refused(
+    client: AsyncClient, shelters: None
+) -> None:
+    first = await client.post(URL, json=_group_payload(3), headers=_idem("reused-1"))
+    assert first.status_code == 201
+    booking_id = first.json()["result"]["booking_id"]
+    other = await client.post(URL, json=_group_payload(2), headers=_idem("reused-1"))
+    assert other.status_code == 409
+    assert other.json()["code"] == "idempotency_key_reused"
+    assert [row["booking_id"] for row in await _rows()] == [booking_id] * 3
+    assert await _log_statuses() == ["granted", "denied_idempotency_key_reused"]
+
+
+async def test_retry_while_the_first_request_is_in_progress_is_refused(
+    client: AsyncClient, shelters: None
+) -> None:
+    from tent_model.external_booking_idempotency import ExternalBookingIdempotency
+
+    from apiapp.modules.thirdparty_bookings import use_case
+
+    body = _payload()
+    person = use_case._Person(cid=CID, first_name="สมชาย", last_name="ใจดี", phone="0812345678")
+    await ExternalBookingIdempotency(
+        id="IK-BUSY",
+        client_id="m2-test",
+        key="busy-1",
+        request_hash=use_case._request_hash("SH001", [person]),
+        booking_id="BK-BUSY",
+        status="in_progress",
+        created_at=datetime.now(UTC),
+    ).insert()
+    response = await client.post(URL, json=body, headers=_idem("busy-1"))
+    assert response.status_code == 409
+    assert response.json()["code"] == "idempotency_in_progress"
+    assert await _rows() == []
+
+
+async def test_failed_first_attempt_releases_the_key_so_a_retry_can_proceed(
+    client: AsyncClient, shelters: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    body = _group_payload(3)
+    # three failed commit attempts (the whole retry budget) → 500, nothing booked
+    _fail_update_many(monkeypatch, failures=3)
+    failed = await client.post(URL, json=body, headers=_idem("release-1"))
+    _assert_sanitized_500(failed)
+    assert await _keys() == []
+    assert await _rows() == []
+
+    monkeypatch.undo()
+    retry = await client.post(URL, json=body, headers=_idem("release-1"))
+    assert retry.status_code == 201
+    assert len(await _rows(retry.json()["result"]["booking_id"])) == 3
+    assert len(await _keys()) == 1
+
+
+async def test_key_is_scoped_per_client(client: AsyncClient, shelters: None) -> None:
+    first = await client.post(URL, json=_group_payload(1), headers=_idem("shared-key"))
+    other = await client.post(
+        URL, json=_payload(cid=_cid(50)), headers=_idem("shared-key", OTHER_CLIENT)
+    )
+    assert first.status_code == 201
+    assert other.status_code == 201
+    assert first.json()["result"]["booking_id"] != other.json()["result"]["booking_id"]
+    assert len(await _keys("m2-test")) == 1
+    assert len(await _keys("other-client")) == 1
+
+
+async def test_key_row_holds_no_pii_and_the_ttl_index_exists(
+    client: AsyncClient, shelters: None
+) -> None:
+    from tent_model.external_booking_idempotency import ExternalBookingIdempotency
+
+    response = await client.post(URL, json=_payload(), headers=_idem("pii-1"))
+    assert response.status_code == 201
+    dumped = str([doc.model_dump() for doc in await _keys()])
+    for secret in _PII:
+        assert secret not in dumped
+    indexes = await ExternalBookingIdempotency.get_pymongo_collection().index_information()
+    ttl = [info for info in indexes.values() if "expireAfterSeconds" in info]
+    assert [info["expireAfterSeconds"] for info in ttl] == [24 * 60 * 60]
+    assert [info["key"] for info in ttl] == [[("created_at", 1)]]
+    unique = [info for info in indexes.values() if info.get("unique")]
+    assert [info["key"] for info in unique] == [[("client_id", 1), ("key", 1)]]
+
+
+@pytest.mark.parametrize("key", ["", "x" * 256], ids=["empty", "too-long"])
+async def test_invalid_idempotency_key_is_a_validation_error(
+    client: AsyncClient, shelters: None, key: str
+) -> None:
+    response = await client.post(URL, json=_payload(), headers=_idem(key))
+    assert response.status_code == 422
+    assert response.json()["code"] == "validation_error"
+    assert await _rows() == []
+
+
+async def test_a_255_character_key_is_accepted(client: AsyncClient, shelters: None) -> None:
+    response = await client.post(URL, json=_payload(), headers=_idem("k" * 255))
+    assert response.status_code == 201
+
+
+async def test_commit_ack_lost_after_all_rows_committed_answers_201(
+    client: AsyncClient, shelters: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """G5 — every commit attempt applied the flip but raised: the group is committed → 201."""
+    collection = ExternalBooking.get_pymongo_collection()
+    real = type(collection).update_many
+
+    async def applied_then_lost(self: Any, *args: Any, **kwargs: Any) -> Any:
+        if self.name == collection.name:
+            await real(self, *args, **kwargs)
+            raise RuntimeError("ack lost")
+        return await real(self, *args, **kwargs)
+
+    monkeypatch.setattr(type(collection), "update_many", applied_then_lost)
+    response = await client.post(URL, json=_group_payload(3), headers=_idem("g5-1"))
+    assert response.status_code == 201
+    booking_id = response.json()["result"]["booking_id"]
+    rows = await _rows(booking_id)
+    assert len(rows) == 3
+    assert all(row["committed"] is True for row in rows)
+    assert await _log_statuses() == ["granted"]
+    # the key is completed, so a retry gets the same booking back
+    monkeypatch.undo()
+    replay = await client.post(URL, json=_group_payload(3), headers=_idem("g5-1"))
+    assert replay.status_code == 201
+    assert replay.json()["result"]["booking_id"] == booking_id
+
+
+async def test_commit_ack_lost_without_a_key_answers_201(
+    client: AsyncClient, shelters: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    collection = ExternalBooking.get_pymongo_collection()
+    real = type(collection).update_many
+
+    async def applied_then_lost(self: Any, *args: Any, **kwargs: Any) -> Any:
+        if self.name == collection.name:
+            await real(self, *args, **kwargs)
+            raise RuntimeError("ack lost")
+        return await real(self, *args, **kwargs)
+
+    monkeypatch.setattr(type(collection), "update_many", applied_then_lost)
+    response = await client.post(URL, json=_group_payload(3), headers=GRANTED)
+    assert response.status_code == 201
+    assert len(await _rows(response.json()["result"]["booking_id"])) == 3

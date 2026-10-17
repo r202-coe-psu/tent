@@ -2700,3 +2700,29 @@ Buffer ของ partner booking (M2) — FastAPI insert ตอนรับค�
 **Migration (CR-169):** ไม่ bump `schema_v` (Beanie doc) — field ใหม่ทั้งหมดมี default (`person_seq = 0`, `group_size = 1`, `committed = true`) → แถวเดิมคือกลุ่มขนาด 1 ไม่ต้อง backfill; index ใหม่สร้างตอน Beanie init
 
 **booking_status (EXT-010):** รายคน: `pending`/`written` → `BOOKED` · `cancelled` หรือ `cancel_requested` → `CANCELLED` · `rejected` → `REJECTED` · **aggregate ของกลุ่ม:** ไม่มีคนที่เปิดอยู่และมี `CANCELLED` ≥ 1 → `CANCELLED` · มี `REJECTED` → `REJECTED` · อื่น → `BOOKED` (CR-169 FR-42)
+
+### 9.8 `external_booking_idempotency` (MongoDB) — **ใหม่ (#614, decision sync CR-169 2026-10-17)**
+
+แถวของ `Idempotency-Key` ที่ partner ส่งกับ `POST /external/bookings` (EXT-008) ใช้ตอบ request ซ้ำด้วย `booking_id` เดิม. Beanie document (`tent_model.external_booking_idempotency`), ไม่มี `schema_v`, **ไม่มี PII** (เก็บเฉพาะ hash ของคำขอ).
+
+| Field | ชนิด | req | หมายเหตุ |
+| --- | --- | --- | --- |
+| `_id` | str | req | `IK-{ulid}` |
+| `client_id` | str | req | จาก JWT claims — key ผูกกับ client เดียว (client อื่นใช้ key เดียวกันได้) |
+| `key` | str | req | ค่า header `Idempotency-Key` (1–255 ตัวอักษร) |
+| `request_hash` | str | req | `sha256` ของคำขอที่ normalize แล้ว: `location_code` + `persons[]` ทั้งหมด (`cid` แทนด้วย `national_id_hash` ก่อน hash; ชื่อ/เบอร์ถูก hash แต่ไม่เก็บ) — **ห้ามเก็บ CID/ชื่อ/เบอร์ดิบ** |
+| `booking_id` | str | req | `BK-{ulid}` ที่รอบแรกจองไว้ (ตั้งแต่แถวเป็น `in_progress`) |
+| `status` | enum(`in_progress`,`completed`) | req | `in_progress` ก่อน stage แถว `external_bookings` · `completed` หลัง commit สำเร็จ (รวม G5) · default `in_progress` |
+| `created_at` | ts | req | เวลาที่รอบแรกเริ่ม — TTL อ้างอิงฟิลด์นี้ |
+
+**Index:** `(client_id, key)` unique (`uniq_idempotency_key_per_client`) — key ซ้ำได้เฉพาะภายใน client เดียวกัน (ชนกันที่ index นี้) · `(created_at)` **TTL 86400 วินาที** (`ttl_idempotency_created_at`) — หมดอายุ 24 ชม. หลังรอบแรก
+
+**Lifecycle (EXT-008):**
+- ไม่มี header → ไม่สร้างแถว
+- มี header → หลัง validate body แล้ว ก่อนตรวจ shelter/duplicate: มีแถวเดิม → hash ต่าง = `idempotency_key_reused` (409) · hash เดียวกัน + `in_progress` = `idempotency_in_progress` (409) · hash เดียวกัน + `completed` = 201 body เดิม
+- ไม่มีแถว → ตรวจ shelter/duplicate ตามปกติ → insert แถว `in_progress` (unique; ถ้าชนกับรอบที่ชนะก่อน ให้ตอบตามแถวนั้น) → stage `external_bookings`
+- รอบแรกล้มโดยยังไม่มี booking (4xx/5xx) → **ลบแถว** (`release`) เพื่อให้ retry ทำได้
+- commit สำเร็จ หรือ G5 (flip ตอบ error แต่ทุกแถวของ `booking_id` `committed: true` ครบ `group_size`) → `status = completed`
+- ไม่มีการ migrate: collection ใหม่ สร้าง index ตอน Beanie init
+
+**ข้อจำกัด:** ถ้า process ถูก kill หลัง insert แถว `in_progress` และก่อน release/complete แถวจะค้างจนหมด TTL (24 ชม.); ระหว่างนั้น retry ของ key นั้นได้ 409 `idempotency_in_progress` ยังไม่มีการ sweep ฝั่ง worker สำหรับแถวนี้ (ประเมินเมื่อพบปัญหาจริง)
