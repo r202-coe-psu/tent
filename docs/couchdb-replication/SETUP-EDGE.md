@@ -102,7 +102,7 @@ cp .env.edge.example .env
 | `EDGE_COUCHDB_PORT` | (ไม่ต้องใส่ = 5984) | เหมือนกัน | admin port ของ CouchDB — bind `127.0.0.1` เท่านั้น |
 | `FRONTEND_IMAGE` | (ว่าง = build เอง) | ถ้ามี image แล้วใส่ชื่อ | ข้ามการ build frontend |
 
-- ห้ามใช้ `"` หรือ `\` ในรหัสผ่านทุกตัว เพราะ `edge-init.sh` ประกอบ JSON เอง
+- รหัสผ่านทุกตัว **ห้ามมี** `"` `\` `@` `:` `/` `#` `%` `?` หรือช่องว่าง เพราะถูกใส่ลงใน URL และ JSON ตรง ๆ (`edge-init.sh` ประกอบเอง) · แนะนำสร้างด้วย `openssl rand -hex 24`
 - `.env` และ `couchdb-edge.ini` อยู่ใน `.gitignore` แล้ว — อย่า commit
 - `PUBLIC_ORIGIN` ฝังตอน build ถ้าเปลี่ยนภายหลังต้อง build frontend ใหม่
 
