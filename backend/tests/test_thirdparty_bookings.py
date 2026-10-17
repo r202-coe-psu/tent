@@ -1811,7 +1811,7 @@ def _fail_person_find_after(
 async def test_cancel_group_stay_reread_error_reverts_our_flags(
     client: AsyncClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Phase 2b re-read raises after 2a flagged row 1: the flag is reverted, the error propagates.
+    """Phase 2a stay re-read raises after 2a flagged row 1: flag reverted, error propagates.
 
     `PublicPerson.find` is called once in phase 1 and once for the stay re-read in 2a.
     """
@@ -1829,6 +1829,38 @@ async def test_cancel_group_stay_reread_error_reverts_our_flags(
         ("pending", _cid(0)),
         ("pending", _cid(2)),
     ]
+    assert await _log_statuses() == []
+
+
+async def test_cancel_group_pending_reread_error_reverts_our_flags(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Phase 2b re-read raises after 2a flagged row 1 and the pending update missed.
+
+    A missed pending update sends the request to the per-row re-read in `_cancel_pending`
+    (`ExternalBooking.get`). That re-read raises: the flag set in 2a is reverted, the pending
+    rows are left untouched, and the error propagates.
+    """
+    await _person(status="pre_registered", person_id="evacuee:BK-GROUP001-1")
+    await _group(3, ["pending", "written", "pending"])
+    before = await _rows("BK-GROUP001")
+    _miss_pending_updates(monkeypatch)
+
+    async def failing_get(*args: Any, **kwargs: Any) -> None:
+        raise RuntimeError("reread boom")
+
+    monkeypatch.setattr(ExternalBooking, "get", failing_get)
+    with pytest.raises(RuntimeError, match="^reread boom$"):
+        await client.post(_cancel_url("BK-GROUP001"), json={"reason": "r"}, headers=GRANTED)
+    monkeypatch.undo()
+    after = await _rows("BK-GROUP001")
+    assert _snapshot(after) == _snapshot(before)
+    assert (after[1]["cancel_requested"], after[1]["cancel_reason"]) == (False, None)
+    assert [(row["state"], row["cid"]) for row in (after[0], after[2])] == [
+        ("pending", _cid(0)),
+        ("pending", _cid(2)),
+    ]
+    assert await _log_statuses() == []
 
 
 async def test_cancel_group_stay_reread_error_keeps_original_error_when_revert_fails(
@@ -1856,7 +1888,7 @@ async def test_cancel_group_stay_reread_error_keeps_original_error_when_revert_f
 async def test_cancel_group_pending_write_error_reverts_our_flags(
     client: AsyncClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Phase 2c bulk pending cancel raises after 2a flagged row 1: the flag is reverted."""
+    """Phase 2b bulk pending cancel raises after 2a flagged row 1: the flag is reverted."""
     await _person(status="pre_registered", person_id="evacuee:BK-GROUP001-1")
     await _group(3, ["pending", "written", "pending"])
     before = await _rows("BK-GROUP001")
@@ -1868,6 +1900,7 @@ async def test_cancel_group_pending_write_error_reverts_our_flags(
     assert _snapshot(after) == _snapshot(before)
     assert after[1]["cancel_requested"] is False
     assert [row["state"] for row in after] == ["pending", "written", "pending"]
+    assert await _log_statuses() == []
 
 
 # --- EXT-010 ----------------------------------------------------------------------

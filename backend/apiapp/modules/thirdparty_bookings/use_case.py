@@ -771,7 +771,7 @@ class ThirdPartyBookingsUseCase:
         if requested and not await self._flag_requested(collection, requested, reason, now):
             raise await self._not_cancellable(endpoint, claims, client_ip, rows[0])
         # Any unexpected error after phase 2a reverts the flags this request set (guarded by
-        # `now`), so it never leaves `cancel_requested=True` behind. A 409 from 2c is the
+        # `now`), so it never leaves `cancel_requested=True` behind. A 409 from 2b is the
         # documented residual race and keeps the flags, as before.
         if direct:
             try:
@@ -892,6 +892,10 @@ class ThirdPartyBookingsUseCase:
         Called from an exception handler, so a failing revert is logged (booking_id and error
         type only, no PII) and never replaces the original exception. Rows not flagged by this
         request do not carry the `now` marker and are left alone by the guarded revert.
+
+        Only `Exception` is caught here. A `BaseException` such as `CancelledError` raised by
+        the revert itself propagates and replaces the original error; that is accepted because
+        cancellation already ends the request.
         """
         if not rows:
             return
@@ -915,6 +919,8 @@ class ThirdPartyBookingsUseCase:
 
         A pending row that missed the guarded update moved on meanwhile: a FINISHED row is
         skipped (success), a row now written and cancellable is flagged, anything else → False.
+        An exception raised here (including the per-row re-read) propagates to `cancel_booking`,
+        which reverts the step 2a flags before re-raising.
         """
         ids = [row.id for row in rows]
         result = await collection.update_many(
