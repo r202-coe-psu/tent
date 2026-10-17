@@ -2767,7 +2767,8 @@ async def test_advanced_stay_is_never_touched_and_logged_without_pii(db, caplog)
     couch.put_doc.assert_not_awaited()
     row = await _row(_row_id(0))
     assert row["reconcile_outcome"] == "advanced"
-    assert _no_markers(row)
+    assert row.get("reconcile_stay_cancelled_at") is None  # stay never cancelled
+    assert inbound._household_audit_id("household:H0") not in store
     assert "left untouched" in caplog.text
     _assert_no_pii_logged(caplog.text)
 
@@ -3001,7 +3002,7 @@ async def test_household_audit_failure_after_the_cancel_is_retried_not_stamped(d
     ],
 )
 async def test_reconcile_keeps_household_while_a_member_is_held(db, status):
-    """schema.md §1.3 rule 1: a household with another live member is kept, whatever its
+    """schema.md §1.3 derive rules 2-4 (CR-169 #613): a household with another live member is kept, whatever its
     status (`pre_registered` included)."""
     await _insert_terminal(0)
     docs = _stay_docs(0)
@@ -3028,6 +3029,55 @@ async def test_reconcile_keeps_household_while_a_member_is_held(db, status):
         row["reconcile_stay_cancelled_at"]
         == store["evacuee:E0"]["current_stay"]["since"]
     )
+
+
+def _advanced_with_remaining(status: str) -> list[dict]:
+    docs = _stay_docs(0, status="active")
+    docs[0]["current_stay"]["status"] = status
+    return docs
+
+
+@pytest.mark.parametrize("status", ["checked_out", "transferred", "deceased"])
+async def test_advanced_stay_not_live_cancels_the_household(db, status):
+    """#683: the only remaining member is past pre_registered but not held → the
+    household is cancelled (own marker + audit), not left pre_registered."""
+    await _insert_terminal(0)
+    couch, store = _stored_couch(_advanced_with_remaining(status))
+
+    assert await inbound.reconcile_terminal_bookings(couch) == 1
+
+    assert store["evacuee:E0"]["current_stay"]["status"] == status
+    assert store["household:H0"]["status"] == "cancelled"
+    assert inbound._household_audit_id("household:H0") in store
+    row = await _row(_row_id(0))
+    assert row["reconcile_outcome"] == "cancelled"
+    assert (
+        row["reconcile_household_cancelled_at"] == store["household:H0"]["updated_at"]
+    )
+    assert row.get("reconcile_stay_cancelled_at") is None
+
+
+async def test_advanced_stay_checked_out_keeps_household_with_a_live_sibling(db):
+    await _insert_terminal(0)
+    docs = _advanced_with_remaining("checked_out")
+    docs.append(
+        {
+            "_id": "evacuee:E9",
+            "type": "evacuee",
+            "shelter_code": "SH001",
+            "household_id": "household:H0",
+            "current_stay": {"status": "active", "zone": None, "since": "x"},
+        }
+    )
+    couch, store = _stored_couch(docs)
+
+    assert await inbound.reconcile_terminal_bookings(couch) == 1
+
+    assert store["household:H0"]["status"] == "pre_registered"
+    row = await _row(_row_id(0))
+    assert row["reconcile_outcome"] == "advanced"
+    assert row.get("reconcile_stay_cancelled_at") is None
+    assert inbound._household_audit_id("household:H0") not in store
 
 
 def _http_status(code: int) -> httpx.HTTPStatusError:
