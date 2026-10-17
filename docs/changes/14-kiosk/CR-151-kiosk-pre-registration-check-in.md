@@ -4,7 +4,7 @@ title: Kiosk — เปลี่ยนจาก "เสียบบัตรเ�
 status: approved
 date: 2026-09-24
 created: 2026-09-24
-updated: 2026-10-15 # ทีม kiosk ขอเลิกกรอง registered_via ใน §15 (FR-KPC-101/104) · 2026-10-13 ข้อเสนอแก้ไข §15 approved โดย Dev/Team Lead Soravit Sukkarn (รับ requirement จากหัวหน้าโครงการเมื่อวาน 2026-10-12) · 2026-10-04 approved และ merge โดย Soravit Sukkar (Team Lead) + รันเลข CR-151 และลงทะเบียนใน _index.md
+updated: 2026-10-17 # decision sync (#604): ฐาน local ขาด kiosk index → redeploy แล้ว + redeploy/seed deploy index ครบชุด · 2026-10-15 ทีม kiosk ขอเลิกกรอง registered_via ใน §15 (FR-KPC-101/104) · 2026-10-13 ข้อเสนอแก้ไข §15 approved โดย Dev/Team Lead Soravit Sukkarn (รับ requirement จากหัวหน้าโครงการเมื่อวาน 2026-10-12) · 2026-10-04 approved และ merge โดย Soravit Sukkar (Team Lead) + รันเลข CR-151 และลงทะเบียนใน _index.md
 requested_by: ทีม kiosk (branch feat/pre-register_kiosk)
 decided_by: Soravit Sukkar (Team Lead)
 decision_date: 2026-10-04
@@ -112,6 +112,8 @@ migration: ไม่มี — ไม่มี field ใหม่ ไม่ bump
 | 2026-09-25   | `f7da61f9`                                           | ปิดนามสกุลทุกช่องทาง · แสดงสมาชิกทั้งครัวเรือนและสมาชิกจาก Station 1 แบบเลือกไม่ได้ (FR-KPC-28, FR-KPC-29) |
 
 **ตรวจฐาน local (2026-09-25):** `shelter_sh001`–`shelter_sh004` มี kiosk index ครบ 3 ตัว (`_index` ตอบ `exists`) และ `_explain` ของ selector เบอร์, เลขบัตร, ครัวเรือนแบบมี/ไม่มี `registered_via` เลือก `evacuee-type-phone-idx`, `evacuee-type-person-id-idx`, `evacuee-type-household-idx` ตามลำดับทุกฐาน; ไม่มี `_all_docs` · warm-up `_find` ผ่านทุก selector · ยังไม่ได้ตรวจ staging/production
+
+> **2026-10-17 (decision sync, #604):** ผลตรวจข้างบนทำบน branch `feat/pre-register_kiosk` ก่อน merge เข้า develop (#457, 2026-10-11) — ตรวจซ้ำ 2026-10-17 พบ `shelter_sh001`–`sh004` บน local **ไม่มี** kiosk index (`_explain` เลือก `_all_docs`) เพราะไม่มีการรัน redeploy/seed หลัง #457 · รัน `redeploy-access --write --confirm` แล้ว ทุกฐานเลือก `evacuee-type-person-id-idx` · staging/production ได้ redeploy อัตโนมัติผ่าน `pnpm db:sync` ของ Jenkins ตอน deploy แต่ยังไม่ได้ตรวจ — ดูบันทึกการตัดสินใจ §14
 
 ---
 
@@ -448,6 +450,7 @@ migration: ไม่มี — ไม่มี field ใหม่ ไม่ bump
 - 2026-10-13 — ทีม kiosk เสนอ §15 จาก feedback หน้างาน: หัวข้อหน้าแรก「ลงทะเบียน」· รับ `registered_via:'kiosk'` · ช่องทางเบอร์เปลี่ยนเป็น「พิมพ์ QR」ยืนยัน 4 ตัวท้าย พิมพ์ได้เฉพาะ `arriving`/`active`/`room_confirmed` (ไม่รวม `temporary_leave`, `checked_out`) · ช่องทางบัตร/QR/ThaiD พิมพ์ซ้ำได้เฉพาะ `arriving` คงเดิม · track ใน CR นี้แทน draft CR ใหม่
 - 2026-10-13 — Soravit Sukkarn (Team Lead) approved ข้อเสนอแก้ไข §15 โดยรับ requirement จากหัวหน้าโครงการเมื่อวาน (2026-10-12)
 - 2026-10-15 — ทีม kiosk ขอเลิกกรอง `registered_via` (เดิม {`web`, `kiosk`}): lookup บัตร/QR/ThaiD/เบอร์, `/kiosk/check-in` และ `/kiosk/reprint` ค้นทั้งศูนย์ของเครื่อง · กฎสถานะคงเดิม (check-in = `pre_registered` · พิมพ์ซ้ำทางเบอร์ = `arriving`/`active`/`room_confirmed`) · สมาชิกที่เจ้าหน้าที่เพิ่มที่ Station 1 เลือกได้ตามสถานะ (แก้ FR-KPC-29, E-11, E-23) · Mango selector เบอร์ไม่มี `registered_via` แล้ว ยังใช้ `evacuee-type-phone-idx`
+- 2026-10-17 — **decision sync** (#604; ไม่เปิด CR ใหม่ ตามที่เจ้าของโครงการเลือก): (1) ผลตรวจ local 2026-09-25 (§4) ล้าสมัย — `shelter_sh001`–`sh004` ไม่มี index ใน `KIOSK_LOOKUP_MANGO_INDEXES` (รวม people / transfer-ledger / Daily SOP) เพราะไม่ได้รัน redeploy/seed หลัง merge #457 (2026-10-11); รัน `scripts/redeploy-access.ts --write --confirm` บน local แล้ว (ok 4/4) และ `_explain` ของ selector เลขบัตรเลือก `evacuee-type-person-id-idx` ทุกฐาน · (2) FR-KPC-64 เพิ่มเติม: provisioning ทุกจุดต้อง deploy ชุด index ของ shelter DB **เท่ากัน** — เดิม `redeploy-access.ts` ขาด people + transfer-ledger และ seed ขาด requisition + people + transfer-ledger; warm-up selector ใช้ map กลาง `KIOSK_LOOKUP_WARMUP_SELECTORS` (ครบทุก index รวม `evacuee-type-card-address-no-idx`) และมี test กันนิยาม index ชื่อซ้ำไม่ตรงกัน (branch `fix/604-shelter-mango-index`, commit `748ebe2d6`) · (3) staging/production: Jenkins รัน `pnpm db:sync` (รวม `redeploy:access --write --confirm`) ทุกครั้งที่ deploy branch `staging` / `main` อยู่แล้ว — ไม่ต้องรันเอง แต่ยังไม่ได้ตรวจ `_index` / `_explain` บน staging/production หลัง deploy
 
 ## 15. ข้อเสนอแก้ไข 2026-10-13 (approved โดย Team Lead)
 
