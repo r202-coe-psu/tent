@@ -1450,6 +1450,46 @@ def _fail_update_many_when(
     monkeypatch.setattr(type(collection), "update_many", flaky)
 
 
+def _is_revert(flt: dict[str, Any]) -> bool:
+    """The guarded revert of this request's flags (`_revert_flags`)."""
+    return flt.get("cancel_requested") is True and "cancel_flag_token" in flt and "state" in flt
+
+
+def _is_token_clear(flt: dict[str, Any]) -> bool:
+    """The success-path token clear (`_clear_flag_tokens`): filters on id + token only."""
+    return set(flt) == {"_id", "cancel_flag_token"}
+
+
+def _fail_update_many_counting(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    when: Callable[[dict[str, Any]], bool],
+    failures: int | None,
+) -> list[int]:
+    """Make the first `failures` matching `update_many` calls raise (None = all); count calls."""
+    collection = ExternalBooking.get_pymongo_collection()
+    real = type(collection).update_many
+    calls = [0]
+
+    async def flaky(self: Any, flt: dict[str, Any], *args: Any, **kwargs: Any) -> Any:
+        if self.name == collection.name and when(flt):
+            calls[0] += 1
+            if failures is None or calls[0] <= failures:
+                raise RuntimeError("boom")
+        return await real(self, flt, *args, **kwargs)
+
+    monkeypatch.setattr(type(collection), "update_many", flaky)
+    return calls
+
+
+async def _assert_leftover_flag(*, row_index: int) -> None:
+    """A failed revert leaves our flag *and* our token (+ set time) on the row (round 2)."""
+    row = (await _rows("BK-GROUP001"))[row_index]
+    assert (row["state"], row["cancel_requested"], row["cancel_reason"]) == ("written", True, "r")
+    assert row["cancel_flag_token"] is not None
+    assert row["cancel_flag_set_at"] is not None
+
+
 def _miss_pending_updates(monkeypatch: pytest.MonkeyPatch) -> None:
     """Make every guarded write of a pending row report zero modified documents."""
     collection = ExternalBooking.get_pymongo_collection()
@@ -1536,14 +1576,17 @@ async def test_cancel_group_check_in_after_flagging_reverts_our_flags(
 async def test_cancel_group_conflict_with_failing_revert_keeps_409(
     client: AsyncClient, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """2a 409 path: the revert of our flags fails. The 409 still wins, the failure is logged.
+    """2a 409 path: every revert attempt fails. The 409 still wins, the failure is logged.
 
     A check-in lands after the flag write, so the stay re-read reports not cancellable and the
-    revert runs. The revert raises: the response stays `booking_not_cancellable` (not a 500),
-    and the log line carries only the booking id and the error type, never PII.
-    """
-    from apiapp.modules.thirdparty_bookings import use_case
+    revert runs. The revert keeps raising: the response stays `booking_not_cancellable` (not a
+    500), and the log line carries only the booking id and the error type, never PII.
 
+    The flag and this request's token are left in place (CR-169 decision sync 2026-10-17,
+    review round 2 of PR #635): clearing the token would make the stray flag FINISHED and the
+    worker would cancel the stay although the partner got a 409. The worker skips the tokened
+    flag and reverts it once the token is older than 2 minutes.
+    """
     await _person(status="pre_registered", person_id="evacuee:BK-GROUP001-1")
     await _group(3, ["pending", "written", "pending"])
     _around_update_many(
@@ -1551,24 +1594,21 @@ async def test_cancel_group_conflict_with_failing_revert_keeps_409(
         when=lambda flt: flt.get("cancel_requested") is False,
         after=lambda: _set_stay("evacuee:BK-GROUP001-1", "active"),
     )
-
-    async def failing_revert(
-        self: Any, collection: Any, ids: list[str], now: Any, token: Any
-    ) -> None:
-        raise RuntimeError("revert boom")
-
-    monkeypatch.setattr(use_case.ThirdPartyBookingsUseCase, "_revert_flags", failing_revert)
+    attempts = _fail_update_many_counting(monkeypatch, when=_is_revert, failures=None)
     with caplog.at_level(logging.ERROR):
         response = await client.post(
             _cancel_url("BK-GROUP001"), json={"reason": "r"}, headers=GRANTED
         )
     assert response.status_code == 409
     assert response.json()["code"] == "booking_not_cancellable"
+    assert attempts[0] == 3  # bounded retry (`_CANCEL_ROW_ATTEMPTS`)
     messages = [r.getMessage() for r in caplog.records if "flag revert failed" in r.getMessage()]
     assert messages == ["cancel flag revert failed (booking_id=BK-GROUP001 error=RuntimeError)"]
     for secret in (CID, "สมชาย"):
         assert secret not in "\n".join(messages)
     assert await _log_statuses() == ["denied_booking_not_cancellable"]
+    monkeypatch.undo()
+    await _assert_leftover_flag(row_index=1)
 
 
 async def test_cancel_group_foreign_flag_set_mid_request_is_left_alone(
@@ -2086,19 +2126,14 @@ async def test_cancel_group_pending_reflag_then_error_reverts_reflagged_rows(
 async def test_cancel_group_stay_reread_error_keeps_original_error_when_revert_fails(
     client: AsyncClient, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """A failing revert is logged without PII and does not replace the original error."""
-    from apiapp.modules.thirdparty_bookings import use_case
+    """A failing revert is logged without PII and does not replace the original error.
 
+    Flag and token stay on the row (no unconditional token clear after an error).
+    """
     await _person(status="pre_registered", person_id="evacuee:BK-GROUP001-1")
     await _group(3, ["pending", "written", "pending"])
     _fail_person_find_after(monkeypatch, ok_calls=1, message="find boom")
-
-    async def failing_revert(
-        self: Any, collection: Any, ids: list[str], now: Any, token: Any
-    ) -> None:
-        raise RuntimeError("revert boom")
-
-    monkeypatch.setattr(use_case.ThirdPartyBookingsUseCase, "_revert_flags", failing_revert)
+    _fail_update_many_counting(monkeypatch, when=_is_revert, failures=None)
     with caplog.at_level(logging.ERROR), pytest.raises(RuntimeError, match="^find boom$"):
         await client.post(_cancel_url("BK-GROUP001"), json={"reason": "r"}, headers=GRANTED)
     messages = [r.getMessage() for r in caplog.records if "flag revert failed" in r.getMessage()]
@@ -2106,6 +2141,8 @@ async def test_cancel_group_stay_reread_error_keeps_original_error_when_revert_f
     for secret in (CID, "สมชาย"):
         assert secret not in "\n".join(messages)
     assert await _log_statuses() == []
+    monkeypatch.undo()
+    await _assert_leftover_flag(row_index=1)
 
 
 async def test_cancel_group_pending_write_error_reverts_our_flags(
@@ -2481,10 +2518,10 @@ async def test_cancel_group_success_clears_own_token_and_keeps_flags(client: Asy
     response = await client.post(_cancel_url("BK-GROUP001"), json={"reason": "r"}, headers=GRANTED)
     assert response.status_code == 200
     rows = await _rows("BK-GROUP001")
-    assert [(row["cancel_requested"], row["cancel_flag_token"]) for row in rows] == [
-        (True, None),
-        (True, None),
-    ]
+    assert [
+        (row["cancel_requested"], row["cancel_flag_token"], row["cancel_flag_set_at"])
+        for row in rows
+    ] == [(True, None, None), (True, None, None)]
 
 
 async def test_cancel_group_revert_clears_flags_and_token(
@@ -2538,3 +2575,109 @@ async def test_clear_flag_tokens_only_clears_the_requests_own_token(
     stored = await _rows("BK-GROUP001")
     assert [row["cancel_flag_token"] for row in stored] == ["other", None]
     assert [row["cancel_requested"] for row in stored] == [True, True]
+
+
+# --- CR-169 #612 review round 2: token is cleared only on success or a successful revert --------
+
+
+async def test_cancel_group_flags_carry_token_and_set_time_while_in_flight(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Right after the 2a flag write the row carries this request's token and its set time."""
+    await _person(status="pre_registered", person_id="evacuee:BK-GROUP001-1")
+    await _group(2, ["pending", "written"])
+    seen: list[dict[str, Any]] = []
+
+    async def snapshot() -> None:
+        seen.extend(await _rows("BK-GROUP001"))
+
+    _around_update_many(
+        monkeypatch, when=lambda flt: flt.get("cancel_requested") is False, after=snapshot
+    )
+    response = await client.post(_cancel_url("BK-GROUP001"), json={"reason": "r"}, headers=GRANTED)
+    assert response.status_code == 200
+    in_flight = seen[1]
+    assert in_flight["cancel_requested"] is True
+    assert in_flight["cancel_flag_token"] is not None
+    assert in_flight["cancel_flag_set_at"] == in_flight["updated_at"]
+    after = (await _rows("BK-GROUP001"))[1]
+    assert (after["cancel_requested"], after["cancel_flag_token"], after["cancel_flag_set_at"]) == (
+        True,
+        None,
+        None,
+    )
+
+
+async def test_cancel_group_revert_is_retried_until_it_succeeds(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Two failed revert attempts, the third succeeds: flags, token and set time are gone."""
+    await _person(status="pre_registered", person_id="evacuee:BK-GROUP001-1")
+    await _group(3, ["pending", "written", "pending"])
+    _around_update_many(
+        monkeypatch,
+        when=lambda flt: flt.get("cancel_requested") is False,
+        after=lambda: _set_stay("evacuee:BK-GROUP001-1", "active"),
+    )
+    attempts = _fail_update_many_counting(monkeypatch, when=_is_revert, failures=2)
+    response = await client.post(_cancel_url("BK-GROUP001"), json={"reason": "r"}, headers=GRANTED)
+    assert response.status_code == 409
+    assert attempts[0] == 3
+    monkeypatch.undo()
+    row = (await _rows("BK-GROUP001"))[1]
+    assert (
+        row["cancel_requested"],
+        row["cancel_reason"],
+        row["cancel_flag_token"],
+        row["cancel_flag_set_at"],
+    ) == (False, None, None, None)
+
+
+async def _post_raw(app: Any) -> Any:
+    transport = ASGITransport(app=app, raise_app_exceptions=False)
+    async with AsyncClient(transport=transport, base_url="http://test") as raw:
+        return await raw.post(_cancel_url("BK-GROUP001"), json={"reason": "r"}, headers=GRANTED)
+
+
+async def test_cancel_group_failed_token_clear_is_500_and_reverts_flags(
+    app: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The success-path token clear keeps failing: no 200, the flags are reverted instead.
+
+    A 200 with the token still set would let the worker revert, after 2 minutes, a cancel the
+    partner was told succeeded.
+    """
+    for i in range(2):
+        await _person(status="pre_registered", person_id=f"evacuee:BK-GROUP001-{i}")
+    await _group(2, ["written", "written"])
+    attempts = _fail_update_many_counting(monkeypatch, when=_is_token_clear, failures=None)
+    response = await _post_raw(app)
+    monkeypatch.undo()
+    assert response.status_code == 500
+    assert response.json()["code"] == "internal_error"
+    assert attempts[0] == 3
+    rows = await _rows("BK-GROUP001")
+    assert [
+        (row["cancel_requested"], row["cancel_flag_token"], row["cancel_flag_set_at"])
+        for row in rows
+    ] == [(False, None, None), (False, None, None)]
+
+
+async def test_cancel_group_flags_held_too_long_are_not_committed(
+    app: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A request past `_FLAG_COMMIT_SECONDS` reverts and fails rather than answering 200."""
+    from apiapp.modules.thirdparty_bookings import use_case
+
+    for i in range(2):
+        await _person(status="pre_registered", person_id=f"evacuee:BK-GROUP001-{i}")
+    await _group(2, ["written", "written"])
+    monkeypatch.setattr(use_case, "_FLAG_COMMIT_SECONDS", -1.0)
+    response = await _post_raw(app)
+    monkeypatch.undo()
+    assert response.status_code == 500
+    rows = await _rows("BK-GROUP001")
+    assert [(row["cancel_requested"], row["cancel_flag_token"]) for row in rows] == [
+        (False, None),
+        (False, None),
+    ]

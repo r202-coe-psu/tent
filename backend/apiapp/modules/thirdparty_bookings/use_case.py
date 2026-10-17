@@ -77,6 +77,12 @@ _RETRY_BACKOFF_SECONDS = 0.05  # multiplied by the attempt number
 # CR-169 FR-40: how long a request waits on another request's in-flight cancel flag.
 _FLAG_WAIT_SECONDS = 1.0
 _FLAG_POLL_SECONDS = 0.1
+# A request whose flags have been set for longer than this does not commit them (it reverts and
+# fails instead). The worker reverts a token older than 2 minutes as an abandoned request
+# (CR-169 decision sync 2026-10-17, review round 2 of PR #635), so this margin keeps a slow but
+# live request from answering 200 for flags the worker may already have reverted. Clock skew
+# between the API and worker hosts beyond the margin is an accepted residual.
+_FLAG_COMMIT_SECONDS = 60.0
 
 # Messages here must never carry a CID, phone, name or document body: only the booking_id
 # and the exception *type* are logged.
@@ -786,50 +792,62 @@ class ThirdPartyBookingsUseCase:
         # `now` is the cancel marker: a row flagged by this request carries exactly this
         # `updated_at`, so a revert never touches a row flagged by someone else.
         now = _to_milliseconds(datetime.now(UTC))
+        flags_from = asyncio.get_running_loop().time()
         requested = [row for row, kind in plan if kind == "request"]
         direct = [row for row, kind in plan if kind == "direct"]
         # Every planned row: 2b can re-flag a pending row that became written (`_cancel_row`),
         # so the revert after 2a must cover those rows too, not only `requested`.
         planned = [row for row, _ in plan]
-        try:
-            # Phase 2 is two `update_many` steps (no per-row loop on the common path). The written
-            # rows are flagged first, so a check-in that lands meanwhile is caught before any
-            # pending row is cancelled. Accepted residual risk (owner decision, CR-169 decision
-            # sync 2026-10-17, review of PR #635): a step-2b conflict can still leave the pending
-            # rows that 2b already cancelled stay cancelled while the 409 is returned (the bulk
-            # cancel clears PII and cannot be rolled back). Closed only by #616 (atomic group
-            # commit). The flags set in step 2a are reverted on that 409 (CR-169 FR-40,
-            # all-or-nothing for the flags). The retry skips the cancelled rows (FINISHED).
-            if requested and not await self._flag_requested(
-                collection, requested, reason, now, token, deadline
-            ):
-                raise await self._not_cancellable(endpoint, claims, client_ip, rows[0])
-            # Any unexpected error after phase 2a reverts the flags this request set (guarded by
-            # `now` and `token`), so it never leaves `cancel_requested=True` behind. A 409 from 2b
-            # reverts them the same way before it is returned.
-            if direct:
-                try:
-                    cancelled = await self._cancel_pending(
-                        collection, direct, reason, now, token, deadline
-                    )
-                except BaseException:
-                    await self._revert_after_error(collection, planned, now, token)
-                    raise
-                if not cancelled:
-                    await self._revert_after_error(collection, planned, now, token)
-                    raise await self._not_cancellable(endpoint, claims, client_ip, rows[0])
-            # Phase 2c — the granted access-log write after 2b. An error here reverts the 2a flags
-            # too, so a failed 2c never leaves `cancel_requested=True` behind.
+        # Phase 2 is two `update_many` steps (no per-row loop on the common path). The written
+        # rows are flagged first, so a check-in that lands meanwhile is caught before any
+        # pending row is cancelled. Accepted residual risk (owner decision, CR-169 decision
+        # sync 2026-10-17, review of PR #635): a step-2b conflict can still leave the pending
+        # rows that 2b already cancelled stay cancelled while the 409 is returned (the bulk
+        # cancel clears PII and cannot be rolled back). Closed only by #616 (atomic group
+        # commit). The flags set in step 2a are reverted on that 409 (CR-169 FR-40,
+        # all-or-nothing for the flags). The retry skips the cancelled rows (FINISHED).
+        #
+        # Token lifecycle (CR-169 decision sync 2026-10-17, review round 2 of PR #635): every
+        # flag this request sets carries its `cancel_flag_token` (+ `cancel_flag_set_at`), and
+        # the worker does not act on a flag that still carries a token. The token is cleared
+        # only (a) by `_commit_flags` once the request has succeeded, which hands the flags to
+        # the worker, or (b) by a successful `_revert_flags`, which removes the flags with it.
+        # There is no unconditional clear: if a revert keeps failing, or the process dies before
+        # it, flag + token stay. Later requests then wait their 1 s budget and answer 409, and
+        # the worker reverts the flag once its token is older than 2 minutes (the partner never
+        # got a 200 for it), without cancelling anything.
+        if requested and not await self._flag_requested(
+            collection, requested, reason, now, token, deadline
+        ):
+            raise await self._not_cancellable(endpoint, claims, client_ip, rows[0])
+        # Any unexpected error after phase 2a reverts the flags this request set (guarded by
+        # `now` and `token`), so it never hands `cancel_requested=True` to the worker. A 409
+        # from 2b reverts them the same way before it is returned.
+        if direct:
             try:
-                return await self._cancelled(endpoint, claims, client_ip, rows[0])
+                cancelled = await self._cancel_pending(
+                    collection, direct, reason, now, token, deadline
+                )
             except BaseException:
                 await self._revert_after_error(collection, planned, now, token)
                 raise
-        finally:
-            # The request is over: flags it kept (2b 409) or set and granted are no longer in
-            # flight, so its token goes. Reverted flags already lost it. Guarded on `token`.
+            if not cancelled:
+                await self._revert_after_error(collection, planned, now, token)
+                raise await self._not_cancellable(endpoint, claims, client_ip, rows[0])
+        # Phase 2c — the granted access-log write, then the commit of the flags (token clear).
+        # An error in either reverts the flags, so the partner never gets a 200 for flags that
+        # were not handed to the worker. Accepted residuals: a commit that fails after the
+        # granted log leaves that log entry on a request answered 500, and a commit that
+        # cleared only some tokens before failing leaves those rows FINISHED (the revert is
+        # guarded on the token, so it reverts only the rest); a partner retry settles both.
+        try:
+            result = await self._cancelled(endpoint, claims, client_ip, rows[0])
             if planned:
-                await self._clear_flag_tokens(collection, planned, token)
+                await self._commit_flags(collection, planned, token, flags_from)
+            return result
+        except BaseException:
+            await self._revert_after_error(collection, planned, now, token)
+            raise
 
     async def _settle_foreign_flags(
         self,
@@ -929,11 +947,11 @@ class ThirdPartyBookingsUseCase:
         this step is a 409, so the request cannot return 200 while that row stays open. Our own
         flags are reverted; the foreign flag is left alone.
 
-        Accepted residual risk (owner decision, CR-169 decision sync 2026-10-17): the worker may
-        process a `cancel_requested` flag between the flag write below and the revert, so a stay
-        that has just checked in can be asked to cancel. A 409 from this step reverts the flags;
-        a 409 from step 2b (`_cancel_pending`) reverts them too, in `cancel_booking`. Closed only
-        by #616.
+        The worker cannot act on these flags while the request runs: they carry its token, and
+        the worker skips tokened flags (CR-169 decision sync 2026-10-17, review round 2 of PR
+        #635). A 409 from this step reverts the flags; a 409 from step 2b (`_cancel_pending`)
+        reverts them too, in `cancel_booking`. A revert that fails leaves flag + token for the
+        worker's 2-minute abandoned-token revert.
         """
         ids = [row.id for row in rows]
         result = await collection.update_many(
@@ -943,6 +961,7 @@ class ThirdPartyBookingsUseCase:
                     "cancel_requested": True,
                     "cancel_reason": reason,
                     "cancel_flag_token": token,
+                    "cancel_flag_set_at": now,
                     "updated_at": now,
                 }
             },
@@ -997,45 +1016,68 @@ class ThirdPartyBookingsUseCase:
         return [doc["_id"] for doc in docs]
 
     async def _revert_flags(
-        self, collection: Any, ids: list[str], now: datetime, token: str
+        self, collection: Any, rows: list[ExternalBooking], now: datetime, token: str
     ) -> None:
-        """Undo the flags this request set and drop its token; other requests' flags stay intact."""
-        await collection.update_many(
-            {
-                "_id": {"$in": ids},
-                "state": "written",
-                "cancel_requested": True,
-                "updated_at": now,
-                "cancel_flag_token": token,
-            },
-            {
-                "$set": {
-                    "cancel_requested": False,
-                    "cancel_reason": None,
-                    "cancel_flag_token": None,
-                    "updated_at": _to_milliseconds(datetime.now(UTC)),
-                }
-            },
+        """Undo the flags this request set and drop its token; other requests' flags stay intact.
+
+        Shielded from cancellation (it runs as its own task, so a client disconnect cannot abort
+        it half-way) and retried; the last failure is re-raised so the caller knows the flags
+        and token are still in place. The write is idempotent and guarded on `now` and `token`.
+        """
+        ids = [row.id for row in rows]
+
+        async def revert() -> None:
+            await collection.update_many(
+                {
+                    "_id": {"$in": ids},
+                    "state": "written",
+                    "cancel_requested": True,
+                    "updated_at": now,
+                    "cancel_flag_token": token,
+                },
+                {
+                    "$set": {
+                        "cancel_requested": False,
+                        "cancel_reason": None,
+                        "cancel_flag_token": None,
+                        "cancel_flag_set_at": None,
+                        "updated_at": _to_milliseconds(datetime.now(UTC)),
+                    }
+                },
+            )
+
+        await asyncio.shield(
+            _detach(
+                _with_retry(
+                    revert,
+                    what="cancel flag revert attempt",
+                    booking_id=rows[0].booking_id,
+                    attempts=_CANCEL_ROW_ATTEMPTS,
+                    reraise=True,
+                    give_up="cancel flag revert gave up",
+                )
+            )
         )
 
     async def _revert_after_error(
         self, collection: Any, rows: list[ExternalBooking], now: datetime, token: str
     ) -> None:
-        """Revert the flags of `rows` before an unexpected error is re-raised.
+        """Revert the flags of `rows` before an unexpected error (or a 409) is re-raised.
 
-        Called from an exception handler or from the 409 path of phase 2a, so a failing revert
-        is logged (booking_id and error type only, no PII) and never replaces the original
-        outcome. Rows not flagged by this request do not carry its marker and token, so the
-        guarded revert leaves them alone.
+        Called from an exception handler or from a 409 path, so a revert that still fails after
+        its retries is logged (booking_id and error type only, no PII) and never replaces the
+        original outcome. Flag and token are then left in place on purpose (CR-169 decision sync
+        2026-10-17, review round 2 of PR #635): the worker skips a tokened flag and reverts it
+        once the token is older than 2 minutes. Rows not flagged by this request do not carry
+        its marker and token, so the guarded revert leaves them alone.
 
-        Only `Exception` is caught here. A `BaseException` such as `CancelledError` raised by
-        the revert itself propagates and replaces the original error; that is accepted because
-        cancellation already ends the request.
+        The revert runs as a shielded task: when the request itself is cancelled while waiting
+        for it, the `CancelledError` propagates here but the revert task carries on.
         """
         if not rows:
             return
         try:
-            await self._revert_flags(collection, [row.id for row in rows], now, token)
+            await self._revert_flags(collection, rows, now, token)
         except Exception as exc:
             logger.error(
                 "cancel flag revert failed (booking_id=%s error=%s)",
@@ -1043,21 +1085,37 @@ class ThirdPartyBookingsUseCase:
                 type(exc).__name__,
             )
 
+    async def _commit_flags(
+        self, collection: Any, rows: list[ExternalBooking], token: str, flags_from: float
+    ) -> None:
+        """Hand this request's flags to the worker by clearing its token (CR-169 FR-40).
+
+        Only called once the request has succeeded. Refuses (raises) when the flags have been
+        held longer than `_FLAG_COMMIT_SECONDS`, since the worker may treat them as abandoned.
+        A failure after the retries is re-raised so the caller reverts and answers 500 instead
+        of 200 (the worker would otherwise revert a flag the partner was told is cancelled).
+        """
+        if asyncio.get_running_loop().time() - flags_from > _FLAG_COMMIT_SECONDS:
+            logger.error("cancel flags held too long (booking_id=%s)", rows[0].booking_id)
+            raise TimeoutError("cancel flags held too long to commit")
+        await self._clear_flag_tokens(collection, rows, token)
+
     async def _clear_flag_tokens(
         self, collection: Any, rows: list[ExternalBooking], token: str
     ) -> None:
-        """Clear this request's `cancel_flag_token` once it is over (CR-169 FR-40).
+        """Clear this request's `cancel_flag_token` (and its set time); the flags stay.
 
-        Guarded on `token`, so a row carrying another request's token keeps it. The flag itself
-        stays: a row that is still `cancel_requested` is then FINISHED for later requests. Shielded
-        and retried like the staged cleanup; a failure is logged and never changes the outcome.
+        Guarded on `token`, so a row carrying another request's token keeps it, and a row whose
+        flag the worker already reverted is not touched. A row that is still `cancel_requested`
+        is then FINISHED for later requests and due for the worker. Shielded and retried like
+        the revert; the last failure is re-raised (see `_commit_flags`).
         """
         ids = [row.id for row in rows]
 
         async def clear() -> None:
             await collection.update_many(
                 {"_id": {"$in": ids}, "cancel_flag_token": token},
-                {"$set": {"cancel_flag_token": None}},
+                {"$set": {"cancel_flag_token": None, "cancel_flag_set_at": None}},
             )
 
         await asyncio.shield(
@@ -1067,7 +1125,7 @@ class ThirdPartyBookingsUseCase:
                     what="cancel flag token clear",
                     booking_id=rows[0].booking_id,
                     attempts=_CANCEL_ROW_ATTEMPTS,
-                    reraise=False,
+                    reraise=True,
                     give_up="cancel flag token could not be cleared",
                 )
             )
@@ -1208,6 +1266,7 @@ class ThirdPartyBookingsUseCase:
                     "cancel_requested": True,
                     "cancel_reason": reason,
                     "cancel_flag_token": token,
+                    "cancel_flag_set_at": now,
                     "updated_at": now,
                 }
             },

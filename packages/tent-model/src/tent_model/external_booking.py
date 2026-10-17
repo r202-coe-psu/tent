@@ -46,9 +46,13 @@ class ExternalBooking(Document):
 	state: ExternalBookingState = "pending"
 	cancel_requested: bool = False
 	cancel_reason: str | None = None
-	# Id of the cancel request that set `cancel_requested` while it is in flight; cleared when that
-	# request is over (CR-169 FR-40). A flag without a token is finished.
+	# Id of the cancel request that set `cancel_requested` while it is in flight (CR-169 FR-40).
+	# Cleared when that request succeeds or reverts its flag; a failed revert leaves it set. A flag
+	# without a token is finished (due for the worker); the worker skips a tokened flag and reverts
+	# it once `cancel_flag_set_at` is older than 2 minutes (abandoned request).
 	cancel_flag_token: str | None = None
+	# When `cancel_flag_token` was set (API clock); cleared with it.
+	cancel_flag_set_at: datetime | None = None
 	# "duplicate" | "not_cancellable"
 	reject_reason: str | None = None
 	# Reserved before the first CouchDB write so worker retries stay idempotent.
