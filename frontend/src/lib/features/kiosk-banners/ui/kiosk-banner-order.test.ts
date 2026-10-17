@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { dropIndex, moveItem, sameOrder } from './kiosk-banner-order';
+import type { KioskBannerSummary } from '../data/kiosk-banner.repository';
+import {
+	dropIndex,
+	moveItem,
+	reconcileDraft,
+	sameOrder,
+	summarizeScreen
+} from './kiosk-banner-order';
 
 describe('moveItem', () => {
 	it('moves an item up so it ends at the target index', () => {
@@ -62,5 +69,121 @@ describe('sameOrder', () => {
 
 	it('is false when the lengths differ', () => {
 		expect(sameOrder([row('a')], [row('a'), row('b')])).toBe(false);
+	});
+});
+
+describe('reconcileDraft', () => {
+	const row = (_id: string, _rev = '1') => ({ _id, _rev });
+
+	it('keeps the draft sequence but returns the saved objects', () => {
+		const draft = [row('b'), row('a')];
+		const saved = [row('a', '2'), row('b', '3')];
+		expect(reconcileDraft(draft, saved)).toEqual([row('b', '3'), row('a', '2')]);
+	});
+
+	it('drops an id that is no longer saved', () => {
+		const draft = [row('c'), row('b'), row('a')];
+		const saved = [row('a'), row('c')];
+		expect(reconcileDraft(draft, saved)).toEqual([row('c'), row('a')]);
+	});
+
+	it('appends a newly saved id at the end', () => {
+		const draft = [row('b'), row('a')];
+		const saved = [row('a'), row('b'), row('c')];
+		expect(reconcileDraft(draft, saved)).toEqual([row('b'), row('a'), row('c')]);
+	});
+
+	it('handles a deleted id and a new id together, appending new ids in saved order', () => {
+		const draft = [row('c'), row('a'), row('b')];
+		const saved = [row('d'), row('a'), row('e'), row('b')];
+		expect(reconcileDraft(draft, saved)).toEqual([row('a'), row('b'), row('d'), row('e')]);
+	});
+
+	it('returns the saved list for an empty draft', () => {
+		const saved = [row('b', '2'), row('a', '5')];
+		expect(reconcileDraft([], saved)).toEqual([row('b', '2'), row('a', '5')]);
+	});
+});
+
+describe('summarizeScreen', () => {
+	const NOW = new Date('2026-10-15T05:00:00.000Z');
+
+	const banner = (id: string, over: Partial<KioskBannerSummary> = {}): KioskBannerSummary => ({
+		_id: `kiosk_banner:${id}`,
+		_rev: `1-${id}`,
+		type: 'kiosk_banner',
+		schema_v: 1,
+		shelter_code: 'SH001',
+		title: `banner ${id}`,
+		caption: null,
+		order: 1,
+		duration_sec: 10,
+		start_at: '2026-10-15T01:00:00.000Z',
+		end_at: '2026-10-15T11:00:00.000Z',
+		status: 'active',
+		created_at: '2026-10-14T00:00:00.000Z',
+		updated_at: '2026-10-14T00:00:00.000Z',
+		created_by: 'tester',
+		image_content_type: 'image/png',
+		...over
+	});
+	const expiredOver = {
+		start_at: '2026-10-10T01:00:00.000Z',
+		end_at: '2026-10-12T01:00:00.000Z'
+	};
+
+	// compact: legacy (no screen_type), active, inactive, scheduled; portrait: one active
+	const current = [
+		banner('inactive', { screen_type: 'compact', order: 3, status: 'inactive' }),
+		banner('portrait', { screen_type: 'portrait', order: 1 }),
+		banner('scheduled', {
+			screen_type: 'compact',
+			order: 4,
+			start_at: '2026-10-15T08:00:00.000Z'
+		}),
+		banner('active', { screen_type: 'compact', order: 2 }),
+		banner('legacy', { order: 1 })
+	];
+	const expired = [
+		banner('old-compact', { screen_type: 'compact', ...expiredOver }),
+		banner('old-legacy', { ...expiredOver }),
+		banner('old-portrait', { screen_type: 'portrait', ...expiredOver })
+	];
+
+	it('counts the compact screen, treating a doc without screen_type as compact', () => {
+		const summary = summarizeScreen(current, expired, 'compact', NOW);
+		expect({
+			active: summary.active,
+			scheduled: summary.scheduled,
+			inactive: summary.inactive,
+			expired: summary.expired
+		}).toEqual({ active: 2, scheduled: 1, inactive: 1, expired: 2 });
+		expect(summary.strip.map((b) => b._id)).toEqual([
+			'kiosk_banner:legacy',
+			'kiosk_banner:active',
+			'kiosk_banner:inactive',
+			'kiosk_banner:scheduled'
+		]);
+	});
+
+	it('counts the portrait screen on its own', () => {
+		const summary = summarizeScreen(current, expired, 'portrait', NOW);
+		expect({
+			active: summary.active,
+			scheduled: summary.scheduled,
+			inactive: summary.inactive,
+			expired: summary.expired
+		}).toEqual({ active: 1, scheduled: 0, inactive: 0, expired: 1 });
+		expect(summary.strip.map((b) => b._id)).toEqual(['kiosk_banner:portrait']);
+	});
+
+	it('is all zeros with an empty strip when there are no banners', () => {
+		expect(summarizeScreen([], [], 'compact', NOW)).toEqual({
+			active: 0,
+			scheduled: 0,
+			inactive: 0,
+			expired: 0,
+			strip: []
+		});
 	});
 });
