@@ -489,7 +489,8 @@ sudo reboot                          # ให้สิทธิ์ group lp / pl
 | 6 | `./setup_card_reader.sh` (udev rule + group `plugdev`) |
 | 7 | ปิด `cups-browsed` (กัน printer ในเครือข่ายโผล่เข้ามาเอง) |
 | 8 | `./setup_autostart.sh` |
-| 9 | ปิด sleep/suspend ของระบบ · GNOME: ปิดจอดับ/ล็อกจอ · X11: `xset s off -dpms` ตอน login |
+| 9 | `./setup_chromium_policy.sh` (Chromium policy `TranslateEnabled: false` — ไม่ให้ bubble แปลภาษาเด้งมุมขวาบน) |
+| 10 | ปิด sleep/suspend ของระบบ · GNOME: ปิดจอดับ/ล็อกจอ · X11: `xset s off -dpms` ตอน login |
 
 ไม่ทำ: `setup_printer.sh` (XP-365B เท่านั้น) และการตั้งค่าในตัว printer (โหมด black mark ทำให้ตัดกระดาษ ~17 ซม./ใบ — ต้องตั้งที่ printer ตามคู่มือผู้ขาย)
 

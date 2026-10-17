@@ -18,7 +18,7 @@ export const REGISTRY_DESIGN_ID = '_design/app';
  * Bump when a view or the registry write policy changes so deployers can tell a
  * stale design doc from a current one without diffing every function body.
  */
-export const REGISTRY_DESIGN_VERSION = 5;
+export const REGISTRY_DESIGN_VERSION = 7;
 
 export interface RegistryDesignDoc {
 	_id: string;
@@ -35,10 +35,58 @@ export interface RegistryDesignDoc {
  */
 export function buildRegistryValidateDocUpdate(): string {
 	return `function (newDoc, oldDoc, userCtx) {
-  if (userCtx.roles.indexOf('_admin') !== -1 || userCtx.roles.indexOf('system_admin') !== -1) {
-    return;
+  var isAdmin =
+    userCtx.roles.indexOf('_admin') !== -1 || userCtx.roles.indexOf('system_admin') !== -1;
+  if (!isAdmin) {
+    throw({ forbidden: 'Only system administrators can write registry documents' });
   }
-  throw({ forbidden: 'Only system administrators can write registry documents' });
+  if (newDoc.type === 'kiosk_banner' && !newDoc._deleted) {
+    if (newDoc.schema_v !== 1) {
+      throw({ forbidden: 'kiosk_banner schema_v must be 1' });
+    }
+    if (typeof newDoc.shelter_code !== 'string' || newDoc.shelter_code.length === 0) {
+      throw({ forbidden: 'kiosk_banner shelter_code must be a non-empty string' });
+    }
+    if (
+      typeof newDoc.title !== 'string' ||
+      newDoc.title.trim().length === 0 ||
+      newDoc.title.length > 120
+    ) {
+      throw({ forbidden: 'kiosk_banner title must be 1-120 characters' });
+    }
+    if (newDoc.caption !== undefined && newDoc.caption !== null) {
+      if (typeof newDoc.caption !== 'string' || newDoc.caption.length > 200) {
+        throw({ forbidden: 'kiosk_banner caption must be a string up to 200 characters' });
+      }
+    }
+    var isInt = function (n) {
+      return typeof n === 'number' && isFinite(n) && Math.floor(n) === n;
+    };
+    if (!isInt(newDoc.order) || newDoc.order < 1) {
+      throw({ forbidden: 'kiosk_banner order must be an integer >= 1' });
+    }
+    if (!isInt(newDoc.duration_sec) || newDoc.duration_sec < 3 || newDoc.duration_sec > 60) {
+      throw({ forbidden: 'kiosk_banner duration_sec must be an integer from 3 to 60' });
+    }
+    if (newDoc.status !== 'active' && newDoc.status !== 'inactive') {
+      throw({ forbidden: 'kiosk_banner status must be active or inactive' });
+    }
+    if (
+      newDoc.screen_type !== undefined &&
+      newDoc.screen_type !== 'compact' &&
+      newDoc.screen_type !== 'portrait'
+    ) {
+      throw({ forbidden: 'kiosk_banner screen_type must be compact or portrait' });
+    }
+    var startMs = typeof newDoc.start_at === 'string' ? Date.parse(newDoc.start_at) : NaN;
+    var endMs = typeof newDoc.end_at === 'string' ? Date.parse(newDoc.end_at) : NaN;
+    if (isNaN(startMs) || isNaN(endMs)) {
+      throw({ forbidden: 'kiosk_banner start_at and end_at must be parseable dates' });
+    }
+    if (endMs <= startMs) {
+      throw({ forbidden: 'kiosk_banner end_at must be after start_at' });
+    }
+  }
 }`;
 }
 
