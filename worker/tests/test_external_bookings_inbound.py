@@ -1359,6 +1359,60 @@ async def test_cancel_keeps_household_when_other_member_pre_registered(db):
     assert (await _row())["state"] == "cancelled"
 
 
+@pytest.mark.parametrize(
+    "status",
+    ["arriving", "active", "room_confirmed", "temporary_leave", "kiosk_registered"],
+)
+async def test_cancel_keeps_household_while_another_member_is_held(db, status):
+    """EXT-009 cancel path (#613): a live member that is not pre_registered keeps the
+    household; only the cancelled stay changes."""
+    booking = await _insert_written()
+    household = {
+        "_id": "household:H1",
+        "status": "pre_registered",
+        "shelter_code": "SH001",
+    }
+    couch = _couch()
+    couch.get_doc = AsyncMock(
+        side_effect=_docs_by_id(_evacuee("pre_registered"), household)
+    )
+    couch.find = AsyncMock(
+        return_value=[
+            {"_id": "evacuee:E2", "current_stay": {"status": status}},
+        ]
+    )
+
+    assert await _process_cancel(couch, booking) is True
+
+    puts = [call.args[1] for call in couch.put_doc.await_args_list]
+    assert [p["_id"] for p in puts if p.get("type") == "household"] == []
+    assert "household:H1" not in [p["_id"] for p in puts]
+    assert not any(p.get("target_type") == "household" for p in puts)
+    assert next(p for p in puts if p["_id"] == "evacuee:E1")["current_stay"][
+        "status"
+    ] == ("cancelled")
+    row = await _row()
+    assert row["state"] == "cancelled"
+
+
+async def test_cancel_audit_failure_is_best_effort_and_still_cancels(db):
+    """The EXT-009 path keeps its best-effort audit: a failed audit write is logged and the
+    booking still finishes as cancelled."""
+    booking = await _insert_written()
+    couch = _couch(doc=_evacuee("pre_registered"))
+    write = AsyncMock(return_value={"ok": True})
+
+    async def fail_audits(database, doc):
+        if doc["_id"].startswith("audit:"):
+            raise RuntimeError("boom")
+        return await write(database, doc)
+
+    couch.put_doc = AsyncMock(side_effect=fail_audits)
+
+    assert await _process_cancel(couch, booking) is True
+    assert (await _row())["state"] == "cancelled"
+
+
 async def test_cancel_active_evacuee_not_cancellable(db):
     booking = await _insert_written()
     couch = _couch(doc=_evacuee("active"))
@@ -1673,11 +1727,12 @@ async def test_stranded_cancelled_row_is_not_reopened_if_staff_check_in_afterwar
     )
 
 
-async def test_whole_group_cancelled_after_a_crash_is_never_due_again(db, monkeypatch):
-    """Accepted residual risk (review R2/F4, tracked in #595): the process died after the
-    bulk write and the API then cancelled *every* pending row. No pending row is left, so
-    the group is never due and the stays stay `pre_registered` until staff cancel them.
-    Fixing it needs a new persisted field / index (a spec change)."""
+async def test_whole_group_cancelled_after_a_crash_is_reconciled_by_the_loop(
+    db, monkeypatch
+):
+    """#613 (closes R5 / #595): the process died after the bulk write and the API then
+    cancelled *every* pending row, so the group is never due again. The reconcile pass
+    reads the reserved ids of the terminal rows directly and cancels those stays."""
     await _insert_group(2)
     for index in range(2):
         await _reserve(index)
@@ -1689,9 +1744,12 @@ async def test_whole_group_cancelled_after_a_crash_is_never_due_again(db, monkey
         couch, stop_event=_stop_after_polls(monkeypatch, 2)
     )
 
-    couch.get_doc.assert_not_awaited()
     for index in range(2):
-        assert store[f"evacuee:E{index}"]["current_stay"]["status"] == "pre_registered"
+        assert store[f"evacuee:E{index}"]["current_stay"]["status"] == "cancelled"
+        assert store[f"household:H{index}"]["status"] == "cancelled"
+        row = await _row(_row_id(index))
+        assert row["reconcile_outcome"] == "cancelled"
+        assert row["reconciled_at"] is not None
 
 
 async def test_cancelled_rows_without_a_live_stay_are_left_alone(db):
@@ -2450,3 +2508,770 @@ async def test_logged_exception_keeps_the_innermost_frame_location_but_no_values
     assert "Traceback" not in caplog.text
     assert "bad doc" not in caplog.text  # the exception message is never logged
     _assert_no_pii_logged(caplog.text)
+
+
+# #613 reconcile pass over terminal rows -------------------------------------------
+
+
+def _terminal(index: int, *, state: str = "cancelled", **overrides) -> dict:
+    """Raw Mongo doc of a terminal row that reserved ids for person `index`."""
+    return {
+        "_id": _row_id(index),
+        "booking_id": BOOKING_ID,
+        "person_seq": index,
+        "group_size": 1,
+        "committed": True,
+        "client_id": "client-abc",
+        "module_name": "M2",
+        "shelter_code": "SH001",
+        "cid": None,
+        "cid_hash": f"t{index}",
+        "state": state,
+        "cancel_requested": False,
+        "evacuee_id": f"evacuee:E{index}",
+        "household_id": f"household:H{index}",
+        "created_at": OLD,
+        "updated_at": OLD,
+        **overrides,
+    }
+
+
+#: A timestamp the reconcile pass wrote on a doc (and recorded as that doc's marker), and
+#: one written by staff — they never coincide (#613 review รอบ 3).
+MARK_TS = "2026-10-17T03:00:00.123456Z"
+STAFF_TS = "2026-10-17T04:00:00.654321Z"
+
+
+def _no_markers(row: dict) -> bool:
+    return (
+        row.get("reconcile_stay_cancelled_at") is None
+        and row.get("reconcile_household_cancelled_at") is None
+    )
+
+
+def _partner_audits(store: dict) -> list[str]:
+    return [doc_id for doc_id in store if doc_id.startswith("audit:ext-cancel-")]
+
+
+async def _insert_terminal(index: int = 0, **overrides) -> None:
+    """Insert through the raw collection so a row can omit the reconcile fields (legacy)."""
+    await ExternalBooking.get_pymongo_collection().insert_one(
+        _terminal(index, **overrides)
+    )
+
+
+async def test_pre_registered_stay_of_a_cancelled_row_is_cancelled_and_stamped(db):
+    await _insert_terminal(0)
+    couch, store = _stored_couch(_stay_docs(0))
+
+    assert await inbound.reconcile_terminal_bookings(couch) == 1
+
+    assert store["evacuee:E0"]["current_stay"]["status"] == "cancelled"
+    assert store["household:H0"]["status"] == "cancelled"
+    row = await _row(_row_id(0))
+    assert row["reconcile_outcome"] == "cancelled"
+    assert row["reconciled_at"] is not None
+    assert row["state"] == "cancelled"
+
+
+async def test_rejected_row_with_a_reserved_stay_is_reconciled_too(db):
+    await _insert_terminal(0, state="rejected", reject_reason="duplicate")
+    couch, store = _stored_couch(_stay_docs(0))
+
+    assert await inbound.reconcile_terminal_bookings(couch) == 1
+
+    assert store["evacuee:E0"]["current_stay"]["status"] == "cancelled"
+    row = await _row(_row_id(0))
+    assert row["reconcile_outcome"] == "cancelled"
+    assert row["state"] == "rejected"
+
+
+async def test_advanced_stay_is_never_touched_and_logged_without_pii(db, caplog):
+    await _insert_terminal(0)
+    couch, store = _stored_couch(_stay_docs(0, status="active"))
+    caplog.set_level(logging.WARNING, logger=inbound.logger.name)
+
+    assert await inbound.reconcile_terminal_bookings(couch) == 1
+
+    assert store["evacuee:E0"]["current_stay"]["status"] == "active"
+    assert store["household:H0"]["status"] == "pre_registered"
+    couch.put_doc.assert_not_awaited()
+    row = await _row(_row_id(0))
+    assert row["reconcile_outcome"] == "advanced"
+    assert _no_markers(row)
+    assert "left untouched" in caplog.text
+    _assert_no_pii_logged(caplog.text)
+
+
+async def test_docs_missing_is_stamped_missing(db):
+    """No reserved doc in the shelter DB (an absent shelter DB answers 404 the same way)."""
+    await _insert_terminal(0)
+    couch, store = _stored_couch([])
+
+    assert await inbound.reconcile_terminal_bookings(couch) == 1
+
+    assert store == {}
+    couch.put_doc.assert_not_awaited()
+    row = await _row(_row_id(0))
+    assert row["reconcile_outcome"] == "missing"
+    assert row["reconciled_at"] is not None
+
+
+async def test_already_cancelled_stay_and_household_with_their_audits_is_noop(db):
+    """Both docs cancelled and audited (by the reconcile pass or the EXT-009 path)."""
+    await _insert_terminal(0)
+    docs = _stay_docs(0, status="cancelled")
+    docs[1]["status"] = "cancelled"
+    docs += [
+        {"_id": inbound._stay_audit_id(_row_id(0))},
+        {"_id": inbound._household_audit_id("household:H0")},
+    ]
+    couch, _store = _stored_couch(docs)
+
+    assert await inbound.reconcile_terminal_bookings(couch) == 1
+
+    couch.put_doc.assert_not_awaited()
+    assert (await _row(_row_id(0)))["reconcile_outcome"] == "noop"
+
+
+async def test_marked_stay_without_its_audit_gets_the_audit_and_is_cancelled(db):
+    """A cancel whose audit write failed in an earlier pass: each doc carries the timestamp
+    recorded in its marker (`current_stay.since` / `updated_at`), so the audits are written
+    now (deterministic ids, so a second pass would not duplicate them) and the row is
+    `cancelled`."""
+    await _insert_terminal(
+        0,
+        reconcile_stay_cancelled_at=MARK_TS,
+        reconcile_household_cancelled_at=MARK_TS,
+    )
+    docs = _stay_docs(0, status="cancelled")
+    docs[0]["current_stay"]["since"] = MARK_TS
+    docs[1] |= {"status": "cancelled", "updated_at": MARK_TS}
+    couch, store = _stored_couch(docs)
+
+    assert await inbound.reconcile_terminal_bookings(couch) == 1
+
+    audit = store[inbound._stay_audit_id(_row_id(0))]
+    assert audit["target_type"] == "evacuee"
+    assert audit["target_id"] == "evacuee:E0"
+    assert audit["created_by"] == "partner:M2"
+    assert inbound._household_audit_id("household:H0") in store
+    assert (await _row(_row_id(0)))["reconcile_outcome"] == "cancelled"
+
+
+async def test_marked_household_without_its_audit_is_cancelled_outcome(db):
+    """Household-only row: the household was cancelled by an earlier pass (marker set) but
+    its audit is missing — the audit-retry pass stamps `cancelled`, not `noop`."""
+    await _insert_terminal(0, evacuee_id=None, reconcile_household_cancelled_at=MARK_TS)
+    couch, store = _stored_couch(
+        [{**_stay_docs(0)[1], "status": "cancelled", "updated_at": MARK_TS}]
+    )
+
+    assert await inbound.reconcile_terminal_bookings(couch) == 1
+
+    assert (
+        store[inbound._household_audit_id("household:H0")]["target_type"] == "household"
+    )
+    assert (await _row(_row_id(0)))["reconcile_outcome"] == "cancelled"
+
+
+async def test_staff_cancelled_stay_and_household_are_noop_without_a_partner_audit(db):
+    """Both docs were cancelled by staff (no markers on the row): nothing to do, and no
+    audit is written in the partner's name."""
+    await _insert_terminal(0)
+    docs = _stay_docs(0, status="cancelled")
+    docs[1]["status"] = "cancelled"
+    couch, store = _stored_couch(docs)
+
+    assert await inbound.reconcile_terminal_bookings(couch) == 1
+
+    couch.put_doc.assert_not_awaited()
+    assert not [doc_id for doc_id in store if doc_id.startswith("audit:")]
+    row = await _row(_row_id(0))
+    assert row["reconcile_outcome"] == "noop"
+    assert _no_markers(row)
+
+
+async def test_staff_cancelled_household_only_row_is_noop_without_a_partner_audit(db):
+    await _insert_terminal(0, evacuee_id=None)
+    couch, store = _stored_couch([{**_stay_docs(0)[1], "status": "cancelled"}])
+
+    assert await inbound.reconcile_terminal_bookings(couch) == 1
+
+    couch.put_doc.assert_not_awaited()
+    assert inbound._household_audit_id("household:H0") not in store
+    row = await _row(_row_id(0))
+    assert row["reconcile_outcome"] == "noop"
+    assert _no_markers(row)
+
+
+async def test_staff_cancelled_stay_with_a_left_behind_household_cancels_only_the_household(
+    db,
+):
+    """Staff cancelled the stay; the household is still pre_registered with no live member:
+    the pass cancels it, marks the row and writes the household audit (no stay audit)."""
+    await _insert_terminal(0)
+    couch, store = _stored_couch(_stay_docs(0, status="cancelled"))
+
+    assert await inbound.reconcile_terminal_bookings(couch) == 1
+
+    assert store["household:H0"]["status"] == "cancelled"
+    assert inbound._household_audit_id("household:H0") in store
+    assert inbound._stay_audit_id(_row_id(0)) not in store
+    row = await _row(_row_id(0))
+    assert row["reconcile_outcome"] == "cancelled"
+    assert (
+        row["reconcile_household_cancelled_at"] == store["household:H0"]["updated_at"]
+    )
+    assert row.get("reconcile_stay_cancelled_at") is None
+
+
+async def test_marker_is_stamped_before_the_stay_is_cancelled(db):
+    """Both markers are on the row before the CouchDB cancel of the stay is written, with
+    the exact timestamp that write (and its household roll-up) uses (#613 r3)."""
+    await _insert_terminal(0)
+    couch, store = _stored_couch(_stay_docs(0))
+    real_update = couch.update_doc.side_effect
+    marker_seen: dict[str, object] = {}
+
+    async def spy(database, doc_id, mutate, **kwargs):
+        if doc_id == "evacuee:E0":
+            row = await _row(_row_id(0))
+            marker_seen["stay"] = row.get("reconcile_stay_cancelled_at")
+            marker_seen["household"] = row.get("reconcile_household_cancelled_at")
+        return await real_update(database, doc_id, mutate, **kwargs)
+
+    couch.update_doc = AsyncMock(side_effect=spy)
+
+    assert await inbound.reconcile_terminal_bookings(couch) == 1
+
+    assert marker_seen["stay"] == store["evacuee:E0"]["current_stay"]["since"]
+    assert marker_seen["household"] == store["household:H0"]["updated_at"]
+
+
+async def test_household_only_row_cancelled_in_this_pass_is_cancelled_outcome(db):
+    await _insert_terminal(0, evacuee_id=None)
+    couch, store = _stored_couch([_stay_docs(0)[1]])
+
+    assert await inbound.reconcile_terminal_bookings(couch) == 1
+
+    assert store["household:H0"]["status"] == "cancelled"
+    assert (await _row(_row_id(0)))["reconcile_outcome"] == "cancelled"
+
+
+async def test_stay_audit_failure_after_the_cancel_is_retried_not_stamped(db):
+    """Audit write fails after the stay was cancelled (transient): the row keeps no
+    `reconciled_at`; the next pass writes the audit and stamps `cancelled`."""
+    await _insert_terminal(0)
+    couch, store = _stored_couch(_stay_docs(0))
+    write = couch.put_doc.side_effect
+
+    async def fail_audits(database, doc):
+        if doc["_id"].startswith("audit:"):
+            raise httpx.ConnectError("refused")
+        return await write(database, doc)
+
+    couch.put_doc = AsyncMock(side_effect=fail_audits)
+
+    assert await inbound.reconcile_terminal_bookings(couch) == 0
+    assert store["evacuee:E0"]["current_stay"]["status"] == "cancelled"
+    row = await _row(_row_id(0))
+    assert row.get("reconciled_at") is None
+    assert row.get("reconcile_outcome") is None
+    assert (
+        row["reconcile_stay_cancelled_at"]
+        == store["evacuee:E0"]["current_stay"]["since"]
+    )
+
+    couch.put_doc = AsyncMock(side_effect=write)
+    assert await inbound.reconcile_terminal_bookings(couch) == 1
+
+    assert inbound._stay_audit_id(_row_id(0)) in store
+    assert store["household:H0"]["status"] == "cancelled"
+    row = await _row(_row_id(0))
+    assert row["reconcile_outcome"] == "cancelled"
+    assert row["reconciled_at"] is not None
+
+
+async def test_household_audit_failure_after_the_cancel_is_retried_not_stamped(db):
+    await _insert_terminal(0, evacuee_id=None)
+    couch, store = _stored_couch([_stay_docs(0)[1]])
+    write = couch.put_doc.side_effect
+
+    async def fail_audits(database, doc):
+        if doc["_id"].startswith("audit:"):
+            raise httpx.ConnectError("refused")
+        return await write(database, doc)
+
+    couch.put_doc = AsyncMock(side_effect=fail_audits)
+
+    assert await inbound.reconcile_terminal_bookings(couch) == 0
+    assert store["household:H0"]["status"] == "cancelled"
+    row = await _row(_row_id(0))
+    assert row.get("reconciled_at") is None
+    assert (
+        row["reconcile_household_cancelled_at"] == store["household:H0"]["updated_at"]
+    )
+
+    couch.put_doc = AsyncMock(side_effect=write)
+    assert await inbound.reconcile_terminal_bookings(couch) == 1
+
+    assert inbound._household_audit_id("household:H0") in store
+    assert (await _row(_row_id(0)))["reconcile_outcome"] == "cancelled"
+
+
+@pytest.mark.parametrize(
+    "status",
+    [
+        "pre_registered",
+        "arriving",
+        "active",
+        "room_confirmed",
+        "temporary_leave",
+        "kiosk_registered",
+    ],
+)
+async def test_reconcile_keeps_household_while_a_member_is_held(db, status):
+    """schema.md §1.3 rule 1: a household with another live member is kept, whatever its
+    status (`pre_registered` included)."""
+    await _insert_terminal(0)
+    docs = _stay_docs(0)
+    docs.append(
+        {
+            "_id": "evacuee:E9",
+            "type": "evacuee",
+            "shelter_code": "SH001",
+            "household_id": "household:H0",
+            "current_stay": {"status": status, "zone": None, "since": "x"},
+        }
+    )
+    couch, store = _stored_couch(docs)
+
+    assert await inbound.reconcile_terminal_bookings(couch) == 1
+
+    assert store["evacuee:E0"]["current_stay"]["status"] == "cancelled"
+    assert store["household:H0"]["status"] == "pre_registered"
+    assert store["evacuee:E9"]["current_stay"]["status"] == status
+    assert inbound._household_audit_id("household:H0") not in store
+    row = await _row(_row_id(0))
+    assert row["reconcile_outcome"] == "cancelled"
+    assert (
+        row["reconcile_stay_cancelled_at"]
+        == store["evacuee:E0"]["current_stay"]["since"]
+    )
+
+
+def _http_status(code: int) -> httpx.HTTPStatusError:
+    request = httpx.Request("GET", "http://couch/shelter_sh001")
+    return httpx.HTTPStatusError(
+        "boom", request=request, response=httpx.Response(code, request=request)
+    )
+
+
+def _http_503() -> httpx.HTTPStatusError:
+    return _http_status(503)
+
+
+@pytest.mark.parametrize(
+    "make_error",
+    [lambda: httpx.ConnectError("refused"), _http_503],
+    ids=["connection", "5xx"],
+)
+async def test_transient_couch_error_leaves_the_row_for_the_next_pass(
+    db, make_error, clock
+):
+    await _insert_terminal(0)
+    couch, _store = _stored_couch(_stay_docs(0))
+    couch.get_doc = AsyncMock(side_effect=make_error())
+
+    assert await inbound.reconcile_terminal_bookings(couch) == 0
+    row = await _row(_row_id(0))
+    assert row.get("reconciled_at") is None
+    assert row.get("reconcile_outcome") is None
+
+    # The next reconcile cycle (RECONCILE_INTERVAL_SECONDS later) retries the row; no backoff.
+    clock[0] += inbound.RECONCILE_INTERVAL_SECONDS
+    couch, store = _stored_couch(_stay_docs(0))
+    assert await inbound.reconcile_terminal_bookings(couch) == 1
+    assert store["evacuee:E0"]["current_stay"]["status"] == "cancelled"
+    assert (await _row(_row_id(0)))["reconcile_outcome"] == "cancelled"
+
+
+async def test_failed_stay_write_is_retried_not_stamped(db):
+    await _insert_terminal(0)
+    couch, _store = _stored_couch(_stay_docs(0))
+    couch.update_doc = AsyncMock(side_effect=httpx.ConnectError("refused"))
+
+    assert await inbound.reconcile_terminal_bookings(couch) == 0
+
+    assert (await _row(_row_id(0))).get("reconciled_at") is None
+
+
+async def test_stay_changed_during_the_pass_is_retried_not_stamped(db):
+    await _insert_terminal(0)
+    couch, _store = _stored_couch(_stay_docs(0))
+    couch.update_doc = AsyncMock(return_value=None)  # mutate declined: staff moved it
+
+    assert await inbound.reconcile_terminal_bookings(couch) == 0
+
+    assert (await _row(_row_id(0))).get("reconciled_at") is None
+
+
+async def test_staff_check_in_race_on_the_stay_leaves_no_marker_and_no_partner_audit(
+    db,
+):
+    """Path A (#613 r1/r3): the stay flips to `cancelled` by staff between the pass's read
+    and its guarded write. Pass 1 retries; its stay marker lingers but does not match the
+    staff `since`, so pass 2 writes no partner stay audit for the staff cancel."""
+    await _insert_terminal(0)
+    couch, store = _stored_couch(_stay_docs(0))
+    real_update = couch.update_doc.side_effect
+
+    async def staff_cancels_first(database, doc_id, mutate, **kwargs):
+        if doc_id == "evacuee:E0":
+            store[doc_id]["current_stay"] = {
+                "status": "cancelled",
+                "zone": None,
+                "since": "x",
+            }
+        return await real_update(database, doc_id, mutate, **kwargs)
+
+    couch.update_doc = AsyncMock(side_effect=staff_cancels_first)
+
+    assert await inbound.reconcile_terminal_bookings(couch) == 0
+    row = await _row(_row_id(0))
+    assert row.get("reconciled_at") is None
+    assert row["reconcile_stay_cancelled_at"] != "x"
+    assert inbound._stay_audit_id(_row_id(0)) not in store
+
+    # Pass 2 (the next cycle): the stay `since` is not the marker, so no stay audit. The
+    # household is left behind and no member holds it, so the pass cancels only the household.
+    couch, store = _stored_couch(
+        [
+            {**d, "current_stay": {"status": "cancelled", "zone": None, "since": "x"}}
+            if d["_id"] == "evacuee:E0"
+            else d
+            for d in _stay_docs(0)
+        ]
+    )
+    assert await inbound.reconcile_terminal_bookings(couch) == 1
+
+    assert inbound._stay_audit_id(_row_id(0)) not in store
+    assert store["household:H0"]["status"] == "cancelled"
+    row = await _row(_row_id(0))
+    assert row["reconcile_outcome"] == "cancelled"
+
+
+async def test_declined_household_leaves_no_marker_and_a_later_staff_cancel_gets_no_audit(
+    db,
+):
+    """Path C (#613 r1/r3): the household is held, so the pass cancels nothing; its
+    household marker lingers. If the row is revisited after staff cancel the household (a
+    staff `updated_at`), no partner household audit is written."""
+    await _insert_terminal(0)
+    docs = _stay_docs(0, status="cancelled")
+    docs.append(
+        {
+            "_id": "evacuee:E9",
+            "type": "evacuee",
+            "shelter_code": "SH001",
+            "household_id": "household:H0",
+            "current_stay": {"status": "arriving", "zone": None, "since": "x"},
+        }
+    )
+    couch, store = _stored_couch(docs)
+
+    assert await inbound.reconcile_terminal_bookings(couch) == 1
+
+    assert store["household:H0"]["status"] == "pre_registered"
+    assert inbound._household_audit_id("household:H0") not in store
+    row = await _row(_row_id(0))
+    assert row["reconcile_outcome"] == "noop"
+    assert row["reconcile_household_cancelled_at"] is not None
+
+    # Staff later cancels the household; the row is revisited (reconciled_at reset).
+    store["household:H0"] |= {"status": "cancelled", "updated_at": STAFF_TS}
+    store["evacuee:E9"]["current_stay"] = {
+        "status": "cancelled",
+        "zone": None,
+        "since": "x",
+    }
+    await ExternalBooking.get_pymongo_collection().update_one(
+        {"_id": _row_id(0)}, {"$set": {"reconciled_at": None}}
+    )
+    assert await inbound.reconcile_terminal_bookings(couch) == 1
+
+    assert inbound._household_audit_id("household:H0") not in store
+    assert (await _row(_row_id(0)))["reconcile_outcome"] == "noop"
+
+
+async def test_marker_is_restamped_on_each_cancel_attempt(db):
+    """A marker from an earlier attempt whose write never landed (the stay is still
+    `pre_registered`) is replaced by the timestamp this attempt writes (#613 r3)."""
+    await _insert_terminal(
+        0,
+        reconcile_stay_cancelled_at=MARK_TS,
+        reconcile_household_cancelled_at=MARK_TS,
+    )
+    couch, store = _stored_couch(_stay_docs(0))
+
+    assert await inbound.reconcile_terminal_bookings(couch) == 1
+
+    row = await _row(_row_id(0))
+    since = store["evacuee:E0"]["current_stay"]["since"]
+    assert since != MARK_TS
+    assert row["reconcile_stay_cancelled_at"] == since
+    assert (
+        row["reconcile_household_cancelled_at"] == store["household:H0"]["updated_at"]
+    )
+    assert len(_partner_audits(store)) == 2
+
+
+async def test_lingering_marker_after_a_failed_write_then_staff_cancel_is_noop(db):
+    """#613 r3: pass 1 stamps the markers but its stay write fails; staff then cancel the
+    stay and the household. Pass 2 finds both docs carrying staff timestamps, not the
+    markers → `noop`, no partner audit."""
+    await _insert_terminal(0)
+    couch, _store = _stored_couch(_stay_docs(0))
+    couch.update_doc = AsyncMock(side_effect=httpx.ConnectError("refused"))
+
+    assert await inbound.reconcile_terminal_bookings(couch) == 0
+    row = await _row(_row_id(0))
+    assert row["reconcile_stay_cancelled_at"] is not None
+    assert row["reconcile_household_cancelled_at"] is not None
+
+    docs = _stay_docs(0, status="cancelled")
+    docs[0]["current_stay"]["since"] = STAFF_TS
+    docs[1] |= {"status": "cancelled", "updated_at": STAFF_TS}
+    couch, store = _stored_couch(docs)
+
+    assert await inbound.reconcile_terminal_bookings(couch) == 1
+
+    couch.put_doc.assert_not_awaited()
+    assert _partner_audits(store) == []
+    assert (await _row(_row_id(0)))["reconcile_outcome"] == "noop"
+
+
+async def test_stay_cancelled_this_pass_with_a_staff_cancelled_household_audits_stay_only(
+    db,
+):
+    """#613 r3: the pass cancels the stay; the household was already cancelled earlier by
+    staff. The household's `updated_at` is not the marker → no partner household audit."""
+    await _insert_terminal(0)
+    docs = _stay_docs(0)
+    docs[1] |= {"status": "cancelled", "updated_at": STAFF_TS}
+    couch, store = _stored_couch(docs)
+
+    assert await inbound.reconcile_terminal_bookings(couch) == 1
+
+    assert store["evacuee:E0"]["current_stay"]["status"] == "cancelled"
+    assert inbound._stay_audit_id(_row_id(0)) in store
+    assert inbound._household_audit_id("household:H0") not in store
+    assert store["household:H0"]["updated_at"] == STAFF_TS
+    assert (await _row(_row_id(0)))["reconcile_outcome"] == "cancelled"
+
+
+async def test_row_moved_during_the_pass_is_not_overwritten(db):
+    """The stamp is guarded on the observed state: a row the API flipped meanwhile keeps
+    its own state and is left for the next pass."""
+    await _insert_terminal(0)
+    couch, _store = _stored_couch(_stay_docs(0))
+    original_get = couch.get_doc.side_effect
+
+    async def get_and_flip(database, doc_id):
+        doc = await original_get(database, doc_id)
+        await ExternalBooking.get_pymongo_collection().update_one(
+            {"_id": _row_id(0)}, {"$set": {"state": "rejected"}}
+        )
+        return doc
+
+    couch.get_doc = AsyncMock(side_effect=get_and_flip)
+
+    assert await inbound.reconcile_terminal_bookings(couch) == 0
+
+    row = await _row(_row_id(0))
+    assert row["state"] == "rejected"
+    assert row.get("reconciled_at") is None
+
+
+async def test_concurrent_stamp_is_never_overwritten(db):
+    await _insert_terminal(0)
+    couch, _store = _stored_couch(_stay_docs(0))
+    original_get = couch.get_doc.side_effect
+
+    async def get_and_stamp_elsewhere(database, doc_id):
+        doc = await original_get(database, doc_id)
+        await ExternalBooking.get_pymongo_collection().update_one(
+            {"_id": _row_id(0), "reconciled_at": None},
+            {"$set": {"reconciled_at": OLD, "reconcile_outcome": "noop"}},
+        )
+        return doc
+
+    couch.get_doc = AsyncMock(side_effect=get_and_stamp_elsewhere)
+
+    assert await inbound.reconcile_terminal_bookings(couch) == 0
+
+    row = await _row(_row_id(0))
+    assert row["reconcile_outcome"] == "noop"
+    assert row["reconciled_at"] == OLD.replace(tzinfo=None)  # Mongo returns naive UTC
+
+
+async def test_legacy_row_without_the_reconcile_fields_is_reconciled(db):
+    await _insert_terminal(0)  # no reconciled_at / reconcile_outcome key at all
+    raw = await _row(_row_id(0))
+    assert "reconciled_at" not in raw and "reconcile_outcome" not in raw
+    couch, store = _stored_couch(_stay_docs(0))
+
+    assert await inbound.reconcile_terminal_bookings(couch) == 1
+
+    assert store["evacuee:E0"]["current_stay"]["status"] == "cancelled"
+    assert (await _row(_row_id(0)))["reconcile_outcome"] == "cancelled"
+
+
+async def test_only_unreconciled_terminal_rows_with_reserved_ids_are_selected(db):
+    await _insert_terminal(0)  # selected
+    await _insert_terminal(1, reconciled_at=OLD, reconcile_outcome="noop")  # done
+    await _insert_terminal(2, evacuee_id=None, household_id=None)  # nothing reserved
+    await _insert_terminal(3, state="written", cancel_requested=False)  # not terminal
+    couch, store = _stored_couch([*_stay_docs(0), *_stay_docs(1)])
+
+    assert await inbound.reconcile_terminal_bookings(couch) == 1
+
+    asked = {
+        call.args[1]
+        for call in couch.get_doc.await_args_list
+        if not call.args[1].startswith(
+            "audit:"
+        )  # audit-existence probes, not reserved ids
+    }
+    assert asked == {"evacuee:E0", "household:H0"}
+    assert store["evacuee:E1"]["current_stay"]["status"] == "pre_registered"
+
+
+async def test_second_pass_is_idempotent_and_makes_no_couch_calls(db):
+    await _insert_terminal(0)
+    couch, store = _stored_couch(_stay_docs(0))
+    assert await inbound.reconcile_terminal_bookings(couch) == 1
+    couch.get_doc.reset_mock()
+    couch.put_doc.reset_mock()
+    before = dict(store)
+
+    assert await inbound.reconcile_terminal_bookings(couch) == 0
+
+    couch.get_doc.assert_not_awaited()
+    couch.put_doc.assert_not_awaited()
+    assert store == before
+
+
+async def test_persistently_failing_rows_do_not_starve_newer_healthy_rows(db, clock):
+    """50 rows whose evacuee GET always 403s are older than one healthy row. The healthy
+    row must still be reconciled on the next pass instead of waiting behind them."""
+    failing = [f"evacuee:E{i}" for i in range(50)]
+    for index in range(50):
+        await _insert_terminal(index)  # updated_at OLD: oldest first
+    await _insert_terminal(50, updated_at=datetime(2026, 10, 8, tzinfo=UTC))
+    couch, _store = _stored_couch(
+        [doc for index in range(51) for doc in _stay_docs(index)]
+    )
+    real_get = couch.get_doc.side_effect
+
+    async def forbidden_for_failing(database, doc_id):
+        if doc_id in failing:
+            raise _http_status(403)
+        return await real_get(database, doc_id)
+
+    couch.get_doc = AsyncMock(side_effect=forbidden_for_failing)
+    health = inbound.FailureTracker()
+
+    assert await inbound.reconcile_terminal_bookings(couch, health) == 0
+    assert len(health.keys("reconcile:")) == 50
+
+    clock[0] += inbound.RECONCILE_INTERVAL_SECONDS  # next cycle
+    assert await inbound.reconcile_terminal_bookings(couch, health) == 1
+
+    healthy = await _row(_row_id(50))
+    assert healthy["reconcile_outcome"] == "cancelled"
+    assert (await _row(_row_id(0))).get("reconciled_at") is None
+
+
+async def test_failing_row_is_retried_on_the_very_next_pass(db):
+    """Decision #613: a transient failure is retried in the next reconcile cycle. No timer
+    holds the row back, even on the immediately following pass."""
+    await _insert_terminal(0)
+    couch, store = _stored_couch(_stay_docs(0))
+    real_get = couch.get_doc.side_effect
+    failing = [True]
+
+    async def flaky(database, doc_id):
+        if failing[0] and doc_id == "evacuee:E0":
+            raise _http_status(503)
+        return await real_get(database, doc_id)
+
+    couch.get_doc = AsyncMock(side_effect=flaky)
+    health = inbound.FailureTracker()
+
+    assert await inbound.reconcile_terminal_bookings(couch, health) == 0
+    assert health.keys("reconcile:") == [f"reconcile:{_row_id(0)}"]
+
+    failing[0] = False
+    assert await inbound.reconcile_terminal_bookings(couch, health) == 1
+    assert store["evacuee:E0"]["current_stay"]["status"] == "cancelled"
+    assert (await _row(_row_id(0)))["reconcile_outcome"] == "cancelled"
+    assert health.keys("reconcile:") == []
+
+
+async def test_reconcile_pass_takes_at_most_one_batch_then_the_rest_next_pass(db):
+    count = inbound.RECONCILE_BATCH_SIZE + 1
+    docs: list[dict] = []
+    for i in range(count):
+        await _insert_terminal(i)
+        docs.extend(_stay_docs(i))
+    couch, _store = _stored_couch(docs)
+
+    assert (
+        await inbound.reconcile_terminal_bookings(couch) == inbound.RECONCILE_BATCH_SIZE
+    )
+    assert await inbound.reconcile_terminal_bookings(couch) == 1
+    assert await inbound.reconcile_terminal_bookings(couch) == 0
+
+
+async def test_reconcile_runs_at_most_once_per_interval_inside_the_loop(
+    db, monkeypatch, clock
+):
+    calls: list[int] = []
+
+    async def reconcile(_couch, _health=None):
+        calls.append(1)
+        return 0
+
+    monkeypatch.setattr(inbound, "reconcile_terminal_bookings", reconcile)
+    monkeypatch.setattr(inbound, "POLL_INTERVAL_SECONDS", 0)
+    stop = asyncio.Event()
+    polls = [0]
+
+    async def sweep() -> int:
+        polls[0] += 1
+        clock[0] += 1  # 1 s per pass: far below the interval
+        if polls[0] == 3:
+            clock[0] += inbound.RECONCILE_INTERVAL_SECONDS  # a full minute passes
+        if polls[0] > 4:
+            stop.set()
+        return 0
+
+    monkeypatch.setattr(inbound, "sweep_stale_staged", sweep)
+    await inbound.run_external_booking_inbound_loop(_couch(), stop_event=stop)
+
+    assert len(calls) == 2  # first pass, then again once the interval elapsed
+
+
+async def test_reconcile_failure_never_stops_the_loop(db, monkeypatch, caplog):
+    async def boom(_couch, _health=None):
+        raise RuntimeError("couch exploded")
+
+    monkeypatch.setattr(inbound, "reconcile_terminal_bookings", boom)
+
+    await inbound.run_external_booking_inbound_loop(
+        _couch(), stop_event=_stop_after_polls(monkeypatch, 2)
+    )
+
+    assert "Terminal booking reconcile pass failed" in caplog.text
