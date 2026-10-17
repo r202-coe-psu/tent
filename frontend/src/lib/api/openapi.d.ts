@@ -3365,7 +3365,7 @@ export interface components {
 			shelters_open: number;
 			/**
 			 * Occupancy Total
-			 * @description active + pre_registered across projected shelters (CR-070)
+			 * @description active + pre_registered + kiosk_registered across projected shelters (CR-070)
 			 */
 			occupancy_total?: number | null;
 			/**

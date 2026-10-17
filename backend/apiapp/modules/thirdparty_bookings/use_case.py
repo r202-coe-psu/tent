@@ -387,6 +387,63 @@ class ThirdPartyBookingsUseCase:
 
     # --- EXT-008 -------------------------------------------------------------------
 
+    async def _taken_cid_hashes(self, location_code: str, cid_hashes: list[str]) -> set[str]:
+        """The CID hashes that already hold a place at `location_code` (FR-17/20, D5).
+
+        Covers projected holds and open buffered bookings; rows still staged by another
+        request (`committed: False`) are excluded, the unique index decides that race.
+        """
+        held = (
+            await PublicPerson.get_pymongo_collection()
+            .find(
+                {
+                    "national_id_hash": {"$in": cid_hashes},
+                    "shelter_code": location_code,
+                    "status": {"$in": list(HOLD_STATUSES)},
+                },
+                {"national_id_hash": 1},
+            )
+            .to_list()
+        )
+        buffered = (
+            await ExternalBooking.get_pymongo_collection()
+            .find(
+                {
+                    "shelter_code": location_code,
+                    "cid_hash": {"$in": cid_hashes},
+                    "state": {"$in": list(OPEN_BOOKING_STATES)},
+                    # Rows other requests are still staging may yet be rolled back; the
+                    # unique index decides that race at insert time.
+                    "committed": {"$ne": False},
+                },
+                {"cid_hash": 1},
+            )
+            .to_list()
+        )
+        return {row["national_id_hash"] for row in held} | {row["cid_hash"] for row in buffered}
+
+    async def _lowest_duplicate_index(
+        self, location_code: str, cid_hashes: list[str], fallback: int
+    ) -> int:
+        """Lowest `persons[]` index that collides, re-checked after an insert-time race.
+
+        The insert runs in `cid_hash` order, so the unique-index error names only the first
+        colliding row. Re-run the pre-check to report the lowest index, matching it. Falls
+        back to the colliding row's index when the re-check finds nothing or fails.
+
+        `_taken_cid_hashes` skips `committed: False` rows of other requests, so a colliding
+        row that is still staged by another request is not seen here. The fallback then
+        reports the colliding row's own index, which may not be the lowest. This is the
+        spec's fallback, not a defect.
+        """
+        try:
+            taken = await self._taken_cid_hashes(location_code, cid_hashes)
+        except Exception as exc:
+            logger.warning("duplicate re-check failed (error=%s)", type(exc).__name__)
+            return fallback
+        colliding = [index for index, cid_hash in enumerate(cid_hashes) if cid_hash in taken]
+        return min(colliding) if colliding else fallback
+
     async def create_booking(
         self, *, body: BookingCreateRequest, claims: ThirdPartyClaims, client_ip: str
     ) -> BookingCreatedEnvelope:
@@ -494,34 +551,7 @@ class ThirdPartyBookingsUseCase:
 
         # FR-17/20 — duplicates are checked per shelter only (D5), for the whole group
         # before anything is inserted.
-        held = (
-            await PublicPerson.get_pymongo_collection()
-            .find(
-                {
-                    "national_id_hash": {"$in": cid_hashes},
-                    "shelter_code": location_code,
-                    "status": {"$in": list(HOLD_STATUSES)},
-                },
-                {"national_id_hash": 1},
-            )
-            .to_list()
-        )
-        buffered = (
-            await ExternalBooking.get_pymongo_collection()
-            .find(
-                {
-                    "shelter_code": location_code,
-                    "cid_hash": {"$in": cid_hashes},
-                    "state": {"$in": list(OPEN_BOOKING_STATES)},
-                    # Rows other requests are still staging may yet be rolled back; the
-                    # unique index decides that race at insert time.
-                    "committed": {"$ne": False},
-                },
-                {"cid_hash": 1},
-            )
-            .to_list()
-        )
-        taken = {row["national_id_hash"] for row in held} | {row["cid_hash"] for row in buffered}
+        taken = await self._taken_cid_hashes(location_code, cid_hashes)
         for index, cid_hash in enumerate(cid_hashes):
             if cid_hash in taken:
                 raise await duplicate(index)
@@ -595,7 +625,9 @@ class ThirdPartyBookingsUseCase:
         if duplicate_seq is not None or failure is not None:
             await _cleanup_staged(collection, staged)
             if duplicate_seq is not None:
-                raise await duplicate(duplicate_seq)
+                raise await duplicate(
+                    await self._lowest_duplicate_index(location_code, cid_hashes, duplicate_seq)
+                )
             if audit_failure:
                 await self._log_detached(
                     booking_id=booking_id,
