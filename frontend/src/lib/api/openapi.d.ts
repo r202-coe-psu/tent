@@ -1427,7 +1427,7 @@ export interface components {
 			location_code: string;
 			/**
 			 * Booking Status
-			 * @description สรุปทั้งกลุ่ม: ทุกคน CANCELLED → CANCELLED, มีคน REJECTED → REJECTED, อื่น ๆ → BOOKED
+			 * @description สรุปทั้งกลุ่ม: ไม่มีคนที่ยังเปิดอยู่ (OPEN) และมีอย่างน้อย 1 คนที่ CANCELLED หรือ cancel_requested → CANCELLED, มีคน REJECTED → REJECTED, อื่น ๆ → BOOKED
 			 * @enum {string}
 			 */
 			booking_status: 'BOOKED' | 'CANCELLED' | 'REJECTED';

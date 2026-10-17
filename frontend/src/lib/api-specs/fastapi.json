@@ -2859,8 +2859,8 @@
 						"anyOf": [
 							{
 								"items": { "$ref": "#/components/schemas/BookingPersonInput" },
-								"maxItems": 1000,
-								"type": "array"
+								"type": "array",
+								"maxItems": 1000
 							},
 							{ "type": "null" }
 						],
@@ -2993,7 +2993,7 @@
 						"type": "string",
 						"enum": ["BOOKED", "CANCELLED", "REJECTED"],
 						"title": "Booking Status",
-						"description": "\u0e2a\u0e23\u0e38\u0e1b\u0e17\u0e31\u0e49\u0e07\u0e01\u0e25\u0e38\u0e48\u0e21: \u0e17\u0e38\u0e01\u0e04\u0e19 CANCELLED \u2192 CANCELLED, \u0e21\u0e35\u0e04\u0e19 REJECTED \u2192 REJECTED, \u0e2d\u0e37\u0e48\u0e19 \u0e46 \u2192 BOOKED"
+						"description": "\u0e2a\u0e23\u0e38\u0e1b\u0e17\u0e31\u0e49\u0e07\u0e01\u0e25\u0e38\u0e48\u0e21: \u0e44\u0e21\u0e48\u0e21\u0e35\u0e04\u0e19\u0e17\u0e35\u0e48\u0e22\u0e31\u0e07\u0e40\u0e1b\u0e34\u0e14\u0e2d\u0e22\u0e39\u0e48 (OPEN) \u0e41\u0e25\u0e30\u0e21\u0e35\u0e2d\u0e22\u0e48\u0e32\u0e07\u0e19\u0e49\u0e2d\u0e22 1 \u0e04\u0e19\u0e17\u0e35\u0e48 CANCELLED \u0e2b\u0e23\u0e37\u0e2d cancel_requested \u2192 CANCELLED, \u0e21\u0e35\u0e04\u0e19 REJECTED \u2192 REJECTED, \u0e2d\u0e37\u0e48\u0e19 \u0e46 \u2192 BOOKED"
 					},
 					"reject_reason": {
 						"anyOf": [{ "type": "string" }, { "type": "null" }],
@@ -4758,7 +4758,7 @@
 				"type": "object",
 				"required": ["mode", "date", "from", "capacity", "booked"],
 				"title": "SlotHold",
-				"description": "The capped queue window a booking takes a place in, as the BFF read it.\n\nSent only when the window has a ceiling. ``capacity`` is the window's current\nceiling and ``booked`` the places CouchDB already shows held — the counter is seeded\nfrom it on the window's first booking. The BFF is the only caller (service secret),\nso both figures come from CouchDB, not from the donor."
+				"description": "The capped queue window a booking takes a place in, as the BFF read it.\n\nSent only when the window has a ceiling. ``capacity`` is the window's current\nceiling and ``booked`` the places CouchDB already shows held \u2014 the counter is seeded\nfrom it on the window's first booking. The BFF is the only caller (service secret),\nso both figures come from CouchDB, not from the donor."
 			},
 			"StockErrorDetail": {
 				"properties": {

@@ -82,7 +82,11 @@ class BookingStatusResult(BaseModel):
     booking_id: str
     location_code: str
     booking_status: BookingStatus = Field(
-        description="สรุปทั้งกลุ่ม: ทุกคน CANCELLED → CANCELLED, มีคน REJECTED → REJECTED, อื่น ๆ → BOOKED"
+        description=(
+            "สรุปทั้งกลุ่ม: ไม่มีคนที่ยังเปิดอยู่ (OPEN) และมีอย่างน้อย 1 คนที่ "
+            "CANCELLED หรือ cancel_requested → CANCELLED, มีคน REJECTED → REJECTED, "
+            "อื่น ๆ → BOOKED"
+        )
     )
     reject_reason: str | None = Field(default=None, description="เหตุผลของคนแรกที่ REJECTED (ถ้ามี)")
     persons: list[BookingPersonStatus]
