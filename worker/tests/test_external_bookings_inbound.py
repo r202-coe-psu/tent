@@ -2786,10 +2786,18 @@ async def test_household_audit_failure_after_the_cancel_is_retried_not_stamped(d
 
 @pytest.mark.parametrize(
     "status",
-    ["arriving", "active", "room_confirmed", "temporary_leave", "kiosk_registered"],
+    [
+        "pre_registered",
+        "arriving",
+        "active",
+        "room_confirmed",
+        "temporary_leave",
+        "kiosk_registered",
+    ],
 )
 async def test_reconcile_keeps_household_while_a_member_is_held(db, status):
-    """schema.md §1.3 rule 1: a household with a live non-pre_registered member is kept."""
+    """schema.md §1.3 rule 1: a household with another live member is kept, whatever its
+    status (`pre_registered` included)."""
     await _insert_terminal(0)
     docs = _stay_docs(0)
     docs.append(
@@ -2813,27 +2821,6 @@ async def test_reconcile_keeps_household_while_a_member_is_held(db, status):
     assert row["reconcile_outcome"] == "cancelled"
     # The stay was cancelled by this pass, so its marker stays.
     assert row["reconcile_cancelled_at"] is not None
-
-
-async def test_household_is_kept_while_another_member_is_pre_registered(db):
-    await _insert_terminal(0)
-    docs = _stay_docs(0)
-    docs.append(
-        {
-            "_id": "evacuee:E9",
-            "type": "evacuee",
-            "shelter_code": "SH001",
-            "household_id": "household:H0",
-            "current_stay": {"status": "pre_registered", "zone": None, "since": "x"},
-        }
-    )
-    couch, store = _stored_couch(docs)
-
-    assert await inbound.reconcile_terminal_bookings(couch) == 1
-
-    assert store["evacuee:E0"]["current_stay"]["status"] == "cancelled"
-    assert store["household:H0"]["status"] == "pre_registered"
-    assert (await _row(_row_id(0)))["reconcile_outcome"] == "cancelled"
 
 
 def _http_status(code: int) -> httpx.HTTPStatusError:
