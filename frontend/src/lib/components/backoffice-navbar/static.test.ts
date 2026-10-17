@@ -201,6 +201,9 @@ describe('activeNavHref — longest path-segment match (FR-KBR-24, draft CR kios
 		expect(activeNavHref('/back-office/kiosks/banners/new', hrefs)).toBe(
 			'/back-office/kiosks/banners'
 		);
+		expect(activeNavHref('/back-office/kiosks/banners/compact', hrefs)).toBe(
+			'/back-office/kiosks/banners'
+		);
 	});
 
 	it('picks the parent item when the path is not under the nested one', () => {

@@ -5,72 +5,53 @@
 	import { spatial } from '$lib/tokens';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
-	import { KIOSK_SCREENS, KIOSK_SCREEN_TYPES, type KioskScreenType } from '$lib/features/shared';
+	import { KIOSK_SCREEN_TYPES } from '$lib/features/shared';
 	import {
-		KioskBannerList,
 		KioskBannerPreviewDialog,
+		KioskBannerScreenCard,
 		buildListPreviewSlides,
 		kioskBannerRemoteRepository,
-		matchesScreen,
-		useKioskBanners,
-		type KioskBannerView
+		summarizeScreen,
+		useKioskBanners
 	} from '$lib/features/kiosk-banners';
 	import Eye from '@lucide/svelte/icons/eye';
-	import ArrowUpDown from '@lucide/svelte/icons/arrow-up-down';
 	import Plus from '@lucide/svelte/icons/plus';
 
 	/** Every role (SA included) works on the shelter picked in the back-office shelter switcher. */
 	const activeShelter = $derived(shelterStore.selectedShelterCode ?? getShelterCode());
 
-	let view = $state<KioskBannerView>('current');
+	const newHref = resolve('/back-office/kiosks/banners/new');
 
-	const listQuery = useKioskBanners(
-		() => activeShelter,
-		() => view
-	);
-	// Same query key as the list while on the current tab, so no extra request there.
 	const currentQuery = useKioskBanners(
 		() => activeShelter,
 		() => 'current'
 	);
+	const expiredQuery = useKioskBanners(
+		() => activeShelter,
+		() => 'expired'
+	);
 
-	let screenFilter = $state<KioskScreenType | 'all'>('all');
+	/** Evaluation time for "active now"; refreshed when the preview is opened. */
+	let now = $state(new Date());
 
-	const screenOptions: { value: KioskScreenType | 'all'; label: string }[] = [
-		{ value: 'all', label: 'ทั้งหมด' },
-		...KIOSK_SCREEN_TYPES.map((type) => ({
-			value: type,
-			label: `${KIOSK_SCREENS[type].label} ${KIOSK_SCREENS[type].size}`
-		}))
-	];
-
-	const visibleBanners = $derived(
-		(listQuery.data ?? []).filter(
-			(banner) => screenFilter === 'all' || matchesScreen(banner, screenFilter)
-		)
+	const current = $derived(currentQuery.data ?? []);
+	const expired = $derived(expiredQuery.data ?? []);
+	const loading = $derived(currentQuery.isLoading || expiredQuery.isLoading);
+	const failure = $derived(currentQuery.error ?? expiredQuery.error);
+	const errorMessage = $derived(
+		failure ? (failure instanceof Error ? failure.message : 'โหลดรายการแบนเนอร์ไม่สำเร็จ') : null
 	);
 
 	let previewOpen = $state(false);
-	let previewNow = $state(new Date());
 
 	const previewSlides = $derived(
-		buildListPreviewSlides(
-			currentQuery.data ?? [],
-			previewNow,
-			kioskBannerRemoteRepository.imageUrl
-		)
+		buildListPreviewSlides(current, now, kioskBannerRemoteRepository.imageUrl)
 	);
 
 	function openPreview() {
-		previewNow = new Date();
+		now = new Date();
 		previewOpen = true;
 	}
-
-	const newHref = resolve('/back-office/kiosks/banners/new');
-	const orderHref = $derived(
-		resolve('/back-office/kiosks/banners/order') +
-			(screenFilter === 'all' ? '' : `?screen=${screenFilter}`)
-	);
 </script>
 
 <svelte:head>
@@ -92,51 +73,28 @@
 			<Eye class="h-4 w-4" />
 			ดูตัวอย่างบน kiosk
 		</Button>
-		<Button variant="outline" href={orderHref} class="min-h-11 shrink-0 gap-2">
-			<ArrowUpDown class="h-4 w-4" />
-			จัดลำดับ
-		</Button>
 		<Button href={newHref} class="btn-primary-brand min-h-11 shrink-0 gap-2">
 			<Plus class="h-4 w-4" />
 			สร้างแบนเนอร์
 		</Button>
 	{/snippet}
 
-	<div class={spatial.container.staffPageCard}>
-		<div
-			class="flex flex-wrap items-center gap-2 border-b border-border px-4 py-3 sm:px-6"
-			role="group"
-			aria-label="กรองตามขนาดหน้าจอ"
-		>
-			{#each screenOptions as option (option.value)}
-				<Button
-					type="button"
-					size="sm"
-					variant={screenFilter === option.value ? 'default' : 'outline'}
-					aria-pressed={screenFilter === option.value}
-					class="min-h-11"
-					onclick={() => (screenFilter = option.value)}
-				>
-					{option.label}
-				</Button>
-			{/each}
-		</div>
-		<KioskBannerList
-			banners={visibleBanners}
-			{screenFilter}
-			bind:view
-			loading={listQuery.isLoading}
-			errorMessage={listQuery.isError
-				? listQuery.error instanceof Error
-					? listQuery.error.message
-					: 'โหลดรายการแบนเนอร์ไม่สำเร็จ'
-				: null}
-		/>
+	<div class={[spatial.container.staffPageCard, 'p-4 sm:p-6']}>
+		{#if loading}
+			<p class="py-16 text-center text-muted-foreground">กำลังโหลดรายการแบนเนอร์...</p>
+		{:else if errorMessage}
+			<p class="py-16 text-center text-sm text-destructive">{errorMessage}</p>
+		{:else}
+			<div class="grid gap-4 sm:grid-cols-2">
+				{#each KIOSK_SCREEN_TYPES as type (type)}
+					<KioskBannerScreenCard
+						screen={type}
+						summary={summarizeScreen(current, expired, type, now)}
+					/>
+				{/each}
+			</div>
+		{/if}
 	</div>
 </StaffPageShell>
 
-<KioskBannerPreviewDialog
-	bind:open={previewOpen}
-	slides={previewSlides}
-	initialScreen={screenFilter === 'all' ? undefined : screenFilter}
-/>
+<KioskBannerPreviewDialog bind:open={previewOpen} slides={previewSlides} />

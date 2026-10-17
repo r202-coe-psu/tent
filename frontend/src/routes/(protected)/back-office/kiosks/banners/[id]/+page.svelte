@@ -4,6 +4,7 @@
 	import { page } from '$app/state';
 	import { toast } from 'svelte-sonner';
 	import StaffPageShell from '$lib/components/staff-page-shell.svelte';
+	import { screenTypeOf } from '$lib/features/shared';
 	import { spatial } from '$lib/tokens';
 	import {
 		KioskBannerApiError,
@@ -16,7 +17,12 @@
 
 	const bannerQuery = useKioskBanner(() => page.params.id);
 	const update = useUpdateKioskBanner();
-	const listHref = resolve('/back-office/kiosks/banners');
+	/** Back to the manage page of the banner's screen type once it has loaded. */
+	const listPath = $derived(
+		bannerQuery.data
+			? (`/back-office/kiosks/banners/${screenTypeOf(bannerQuery.data)}` as const)
+			: ('/back-office/kiosks/banners' as const)
+	);
 
 	const notFound = $derived(
 		bannerQuery.error instanceof KioskBannerApiError && bannerQuery.error.status === 404
@@ -37,7 +43,7 @@
 			return;
 		}
 		toast.success('บันทึกแบนเนอร์แล้ว');
-		await goto(listHref);
+		await goto(resolve(`/back-office/kiosks/banners/${payload.input.screen_type}`));
 	}
 </script>
 
@@ -48,7 +54,7 @@
 <StaffPageShell title="แก้ไขแบนเนอร์" maxWidth="6xl">
 	{#snippet meta()}
 		<a
-			href={listHref}
+			href={resolve(listPath)}
 			class="inline-flex min-h-11 items-center gap-1 text-sm text-primary underline-offset-2 hover:underline"
 		>
 			<ArrowLeft class="h-4 w-4" />
@@ -63,7 +69,7 @@
 			<div class="space-y-3 py-12 text-center">
 				<p class="font-semibold text-slate-900">ไม่พบแบนเนอร์นี้</p>
 				<p class="text-sm text-slate-600">แบนเนอร์อาจถูกลบไปแล้ว หรือไม่ได้อยู่ในศูนย์ที่คุณดูแล</p>
-				<a href={listHref} class="inline-block text-sm text-primary underline">
+				<a href={resolve(listPath)} class="inline-block text-sm text-primary underline">
 					กลับไปรายการแบนเนอร์
 				</a>
 			</div>

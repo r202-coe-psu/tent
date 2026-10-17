@@ -1,9 +1,11 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
+	import { page } from '$app/state';
 	import { toast } from 'svelte-sonner';
 	import StaffPageShell from '$lib/components/staff-page-shell.svelte';
 	import { spatial } from '$lib/tokens';
+	import { kioskScreenTypeSchema, type KioskScreenType } from '$lib/features/shared';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import {
@@ -17,7 +19,13 @@
 	const activeShelter = $derived(shelterStore.selectedShelterCode ?? getShelterCode());
 
 	const create = useCreateKioskBanner();
-	const listHref = resolve('/back-office/kiosks/banners');
+	/** `?screen=` of the page this one was opened from; also where the back link returns to. */
+	const screenParam = $derived(
+		kioskScreenTypeSchema.safeParse(page.url.searchParams.get('screen'))
+	);
+	const defaultScreen = $derived<KioskScreenType | undefined>(
+		screenParam.success ? screenParam.data : undefined
+	);
 
 	/** A failed call is already toasted by the mutation hook. */
 	async function handleSave(payload: KioskBannerSavePayload) {
@@ -32,7 +40,7 @@
 			return;
 		}
 		toast.success('สร้างแบนเนอร์แล้ว');
-		await goto(listHref);
+		await goto(resolve(`/back-office/kiosks/banners/${payload.input.screen_type}`));
 	}
 </script>
 
@@ -43,7 +51,11 @@
 <StaffPageShell title="สร้างแบนเนอร์" maxWidth="6xl">
 	{#snippet meta()}
 		<a
-			href={listHref}
+			href={resolve(
+				defaultScreen
+					? `/back-office/kiosks/banners/${defaultScreen}`
+					: '/back-office/kiosks/banners'
+			)}
 			class="inline-flex min-h-11 items-center gap-1 text-sm text-primary underline-offset-2 hover:underline"
 		>
 			<ArrowLeft class="h-4 w-4" />
@@ -52,6 +64,6 @@
 	{/snippet}
 
 	<div class="{spatial.container.staffPageCard} p-4 sm:p-6">
-		<KioskBannerForm shelterCode={activeShelter} onsave={handleSave} />
+		<KioskBannerForm shelterCode={activeShelter} {defaultScreen} onsave={handleSave} />
 	</div>
 </StaffPageShell>
