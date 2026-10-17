@@ -144,8 +144,9 @@ HOLD_STATUSES: tuple[str, ...] = (
     "temporary_leave",
 )
 
-#: Stay statuses that keep a household alive (schema.md §1.3 derive rules 2-4, CR-169 #613: a household is cancelled
-#: only when no member is still held): HOLD_STATUSES plus ``kiosk_registered``.
+#: Stay statuses that keep a household alive (schema.md §1.3 derive rules 2-4, CR-169 #613:
+#: a household is cancelled only when no member is still held): HOLD_STATUSES plus
+#: ``kiosk_registered``.
 _HOUSEHOLD_LIVE_STATUSES: tuple[str, ...] = (*HOLD_STATUSES, "kiosk_registered")
 
 _CANCEL_REASON = "ยกเลิกการลงทะเบียนล่วงหน้า (partner API)"
@@ -1355,8 +1356,8 @@ async def _reconcile_row(couch: CouchClient, booking: ExternalBooking) -> str:
     Reads the reserved ``evacuee_id`` / ``household_id`` directly (no Mango for the docs):
 
     * neither doc exists (an absent shelter database also answers 404) → ``missing``;
-    * the stay moved past ``pre_registered`` → ``advanced``, nothing is written and the
-      the stay is left alone and the household is still evaluated below (#683);
+    * the stay moved past ``pre_registered`` → ``advanced``; the stay is left alone and
+      the household is still evaluated below (#683);
     * a ``pre_registered`` stay → one timestamp ``now`` is stamped on the row as
       ``reconcile_stay_cancelled_at`` (and ``reconcile_household_cancelled_at`` when the
       row reserved a household, since the roll-up writes the same ``now``), then the stay
@@ -1372,8 +1373,8 @@ async def _reconcile_row(couch: CouchClient, booking: ExternalBooking) -> str:
       ``_cancel_household_if_empty`` with that ``now`` (only once no member is still held,
       i.e. none in pre_registered / kiosk_registered / arriving / active / room_confirmed /
       temporary_leave; checked_out, transferred, deceased and cancelled members do not
-      hold it; when the stay itself is past ``pre_registered`` it counts as a member; covers a household left behind by a failed roll-up and household-only
-      rows); already ``cancelled`` → its audit is written only when its ``updated_at``
+      hold it; when the stay itself is past ``pre_registered`` it counts as a member;
+      covers a household left behind by a failed roll-up and household-only rows); already ``cancelled`` → its audit is written only when its ``updated_at``
       equals ``reconcile_household_cancelled_at``, as for the stay;
     * anything cancelled or audited in this pass → ``cancelled``; otherwise ``advanced``
       when the stay was past ``pre_registered`` (household kept, or already cancelled by
