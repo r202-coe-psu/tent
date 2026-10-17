@@ -346,9 +346,9 @@
 	 * How the counted quantity differs from what the donor declared, or null when it
 	 * does not (or the box is not a number yet). The field starts pre-filled with the
 	 * declared amount, so a "matches" badge would show before anyone had counted —
-	 * only a difference is worth flagging.
+	 * only a difference is worth flagging. Lines counted in another unit than the donor
+	 * declared do not compare at all (#623).
 	 */
-	/** Counted vs declared — only when both are in the same unit (#623). */
 	function qtyDifference(item: ScannedItem): { more: boolean; amount: string } | null {
 		return receivedQtyDifference({
 			declaredQty: item.declaredQty,
