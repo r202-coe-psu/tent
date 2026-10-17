@@ -118,8 +118,9 @@ test.describe('Donation full-stack: donor and staff', { tag: ['@critical', '@don
 			await expect(confirm).toBeDisabled();
 			await expect(page.getByRole('textbox', { name: 'จำนวนรับจริง *' })).toHaveValue('1');
 			await page.getByRole('checkbox', { name: 'ผ่านการตรวจสอบแล้ว' }).check();
-			await page.getByRole('button', { name: /^โซนจัดเก็บ/ }).click();
-			await page.getByRole('option').first().click();
+			// The run's own shelter has no storage points, so the line goes to the main
+			// store without a pick (CR-139 N1).
+			await expect(page.getByRole('button', { name: /^สถานที่จัดเก็บ/ })).toContainText('คลังหลัก');
 			// An item with `shelf_life_days` counts as perishable (catalog.ts) and holds the
 			// receive until it has an expiry — the seeded catalog gives NEED_ITEM one.
 			await fillExpiry(page.getByRole('textbox', { name: 'วันหมดอายุ' }));

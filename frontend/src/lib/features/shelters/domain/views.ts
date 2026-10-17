@@ -10,14 +10,20 @@ export const SHELTER_DASHBOARD_VIEWS = {
 		},
 		demographics_by_age: {
 			map: `function (doc) {
-				if (doc.type !== 'evacuee' || !doc.current_stay || doc.current_stay.status !== 'active') return;
+				// In the shelter = active + room_confirmed (CR-170), matching the occupancy KPI.
+				if (doc.type !== 'evacuee' || !doc.current_stay) return;
+				var s = doc.current_stay.status;
+				if (s !== 'active' && s !== 'room_confirmed') return;
 				emit(doc.birth_year || null, 1);
 			}`,
 			reduce: '_count'
 		},
 		demographics_by_country: {
 			map: `function (doc) {
-				if (doc.type !== 'evacuee' || !doc.current_stay || doc.current_stay.status !== 'active') return;
+				// In the shelter = active + room_confirmed (CR-170), matching the occupancy KPI.
+				if (doc.type !== 'evacuee' || !doc.current_stay) return;
+				var s = doc.current_stay.status;
+				if (s !== 'active' && s !== 'room_confirmed') return;
 				var c = (doc.country || '').trim().toUpperCase() || 'UNKNOWN';
 				emit(c, 1);
 			}`,

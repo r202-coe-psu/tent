@@ -44,7 +44,8 @@ import {
 	type Movement,
 	type MovementAction,
 	dormFieldsFor,
-	memberExtrasFor
+	memberExtrasFor,
+	withoutBookingRef
 } from '../domain/people';
 import {
 	planFamilyRegistration,
@@ -1459,7 +1460,8 @@ export class PeopleRemoteRepository implements PeopleRepository {
 				const newMemberUlid = plannedMemberId.replace(/^evacuee:/, '');
 				const newEvacuee = buildEvacuee(
 					{
-						...m,
+						// booking_ref is worker-owned (CR-169 FR-61): drop it if a caller smuggled one in.
+						...withoutBookingRef(m),
 						household_id: effectiveHouseholdId,
 						// Never zoned at the desk (ADR-0001) — a zone here would turn the new member
 						// `active` and skip Station 2/3.

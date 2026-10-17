@@ -9,6 +9,7 @@
 	import { zod4 } from 'sveltekit-superforms/adapters';
 	import {
 		station1EvacueeInputSchema,
+		withoutBookingRef,
 		currentBEYear,
 		minBirthYearBE,
 		MAX_AGE_YEARS,
@@ -163,7 +164,8 @@
 	});
 
 	const initialFormData: Partial<EvacueeInput> = {
-		...initial,
+		// booking_ref is worker-owned (CR-169 FR-61) — never seed it into the form.
+		...(initial ? withoutBookingRef(initial) : {}),
 		// Keep defined — Svelte 5 rejects bind:x={undefined} when $bindable has a fallback.
 		first_name: initial?.first_name ?? '',
 		last_name: initial?.last_name ?? '',
@@ -217,7 +219,7 @@
 			onUpdate: ({ form: f }) => {
 				ensureEmergencyContactShell();
 				if (f.valid) {
-					const data = structuredClone(f.data);
+					const data = withoutBookingRef(structuredClone(f.data));
 					showValidationSummary = false;
 					validationMessages = [];
 					ondraftchange?.(data);

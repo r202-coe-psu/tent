@@ -1,0 +1,20 @@
+# Heavy / generated — keep Cursor index lean (mirrors files.watcherExclude)
+.git/objects/
+.git/subtree-cache/
+node_modules/
+.svelte-kit/
+.venv/
+venv/
+dist/
+build/
+.cache/
+.claude/
+deployment/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+.pnpm-store/
+playwright-report/
+test-results/
+slides/
+.worktrees/

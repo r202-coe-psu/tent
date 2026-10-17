@@ -151,7 +151,10 @@ export const unifiedMemberInputSchema = evacueeInputSchema
 		status: true,
 		registered_via: true,
 		card_snapshot: true,
-		track: true
+		track: true,
+		// CR-169 FR-61: partner booking group id is worker-owned — a public/kiosk/staff member
+		// payload must never set it (Zod strips the unknown key).
+		booking_ref: true
 	})
 	.extend({
 		/**

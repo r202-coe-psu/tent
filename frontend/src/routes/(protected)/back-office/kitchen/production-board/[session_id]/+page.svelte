@@ -1460,7 +1460,6 @@
 									disabled={recordServiceMutation.isPending || !cookingStarted}
 									title={!cookingStarted ? 'กดเริ่มปรุงอาหารก่อน' : undefined}
 								>
-									>
 									<Check class="h-4 w-4" />
 									{recordServiceMutation.isPending
 										? 'กำลังบันทึก...'

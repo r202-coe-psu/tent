@@ -7,11 +7,12 @@
 	import DoorOpen from '@lucide/svelte/icons/door-open';
 	import ArrowRightLeft from '@lucide/svelte/icons/arrow-right-left';
 	import Home from '@lucide/svelte/icons/home';
+	import ClipboardList from '@lucide/svelte/icons/clipboard-list';
 
 	let { occupancy }: { occupancy: OccupancyPayload } = $props();
 
-	// KPI logic — "present" follows the CR-022 headcount definition: active only
-	// (pre_registered/kiosk_registered mean registered but not yet physically checked in).
+	// KPI logic — "in the shelter" is active + room_confirmed (CR-170). arriving counts toward
+	// the total but not as in the shelter; pre_registered/kiosk_registered are not checked in yet.
 	const returnRate = $derived(
 		occupancy.total > 0 ? ((occupancy.checked_out / occupancy.total) * 100).toFixed(0) + '%' : '0%'
 	);
@@ -37,7 +38,7 @@
 			<UserCheck class="h-4 w-4 text-green-500" />
 		</div>
 		<div class="p-6 pt-0">
-			<div class="text-2xl font-bold">{occupancy.active}</div>
+			<div class="text-2xl font-bold">{occupancy.in_shelter}</div>
 		</div>
 	</div>
 
@@ -48,6 +49,16 @@
 		</div>
 		<div class="p-6 pt-0">
 			<div class="text-2xl font-bold">{awaitingCheckIn}</div>
+		</div>
+	</div>
+
+	<div class="rounded-xl border bg-card text-card-foreground shadow-sm">
+		<div class="flex flex-row items-center justify-between space-y-0 p-6 pb-2">
+			<h3 class="text-sm font-medium tracking-tight">รายงานตัวแล้ว (รอคัดกรอง/จัดที่พัก)</h3>
+			<ClipboardList class="h-4 w-4 text-sky-500" />
+		</div>
+		<div class="p-6 pt-0">
+			<div class="text-2xl font-bold">{occupancy.arriving}</div>
 		</div>
 	</div>
 

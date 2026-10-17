@@ -49,6 +49,12 @@
 	import { ulid } from '$lib/db/ulid';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { useShelters } from '$lib/features/shelters';
+	import {
+		isStoragePointChosen,
+		storageLotFields,
+		StoragePointSelect,
+		useStoragePoints
+	} from '$lib/features/operations';
 	import BoardSectionHeader from '$lib/components/board-section-header.svelte';
 
 	let {
@@ -91,14 +97,15 @@
 		}))
 	);
 
-	const STORAGE_ZONE_OPTIONS = [
-		'Zone A (อาหารแห้งและเครื่องดื่ม)',
-		'Zone B (ยาและเวชภัณฑ์)',
-		'Zone C (ของใช้ทั่วไปและสุขอนามัย)',
-		'Zone D (เครื่องนุ่งห่มและที่นอน)',
-		'Zone E (อุปกรณ์และเครื่องมือช่าง)',
-		'Zone F (ห้องควบคุมอุณหภูมิ/ตู้แช่)'
-	];
+	// CR-139 FR-11: the shelter's own storage points ("จุดเก็บของ"), not a fixed Zone A–F
+	// list. Required only when the shelter has set some up (N1); none → main store.
+	const storagePoints = useStoragePoints(() => getShelterCode());
+	const storagePointRequired = $derived(storagePoints.points.length > 0);
+
+	/** The `lot` location fields for a line's chosen point ('' = main store). */
+	function lotLocation(pointId: string) {
+		return storageLotFields(storagePoints.points.find((p) => p.id === pointId) ?? null);
+	}
 
 	/** The catalog row's display label, or the dropdown placeholder when unmapped. */
 	function catalogLabel(itemId: string | undefined, placeholder: string): string {
@@ -141,7 +148,8 @@
 		unit: string;
 		item_id?: string;
 		expiry: string;
-		storage_zone: string;
+		/** Chosen storage point id; '' = main store. */
+		storage_point_id: string;
 		diffReason: string;
 		verified: boolean;
 	};
@@ -288,7 +296,14 @@
 	// Validation check for receiving into stock
 	const canReceive = $derived(
 		scannedItems.length > 0 &&
-			scannedItems.every((it) => it.verified && it.item_id && it.storage_zone && it.qty) &&
+			!storagePoints.isLoading &&
+			scannedItems.every(
+				(it) =>
+					it.verified &&
+					it.item_id &&
+					it.qty &&
+					isStoragePointChosen(it.storage_point_id, storagePoints.points)
+			) &&
 			scannedMissingExpiry.length === 0
 	);
 
@@ -299,7 +314,8 @@
 		scannedItems.length > 0 && scannedItems.every((it) => it.item_id && it.qty)
 	);
 	const checkZoned = $derived(
-		scannedItems.length > 0 && scannedItems.every((it) => it.storage_zone)
+		scannedItems.length > 0 &&
+			scannedItems.every((it) => isStoragePointChosen(it.storage_point_id, storagePoints.points))
 	);
 	const verifiedCount = $derived(scannedItems.filter((it) => it.verified).length);
 	const hasPerishableLine = $derived(
@@ -345,7 +361,8 @@
 		qty: string;
 		unit: string;
 		expiry: string;
-		storageZone: string;
+		/** Chosen storage point id; '' = main store. */
+		storagePointId: string;
 	};
 	let walkinItems = $state<WalkinItemState[]>([
 		{
@@ -355,7 +372,7 @@
 			qty: '1',
 			unit: 'piece',
 			expiry: '',
-			storageZone: ''
+			storagePointId: ''
 		}
 	]);
 	let walkinSaving = $state(false);
@@ -438,7 +455,7 @@
 						unit: it.unit || '',
 						item_id: matched?._id || it.item_id || '',
 						expiry: '',
-						storage_zone: '',
+						storage_point_id: '',
 						diffReason: '',
 						verified: false
 					};
@@ -480,19 +497,17 @@
 				body: JSON.stringify({
 					status: 'received',
 					...(remarks.trim() ? { remarks: remarks.trim() } : {}),
-					items: scannedItems.map((it) => ({
-						...(it.item_id ? { item_id: it.item_id } : { free_text: it.name }),
-						qty: it.qty,
-						unit: it.unit,
-						...(it.item_id && (it.expiry || it.storage_zone.trim())
-							? {
-									lot: {
-										...(it.expiry ? { expiry: it.expiry } : {}),
-										...(it.storage_zone.trim() ? { storage_zone: it.storage_zone.trim() } : {})
-									}
-								}
-							: {})
-					}))
+					items: scannedItems.map((it) => {
+						const location = lotLocation(it.storage_point_id);
+						return {
+							...(it.item_id ? { item_id: it.item_id } : { free_text: it.name }),
+							qty: it.qty,
+							unit: it.unit,
+							...(it.item_id && (it.expiry || location.storage_point_id)
+								? { lot: { ...(it.expiry ? { expiry: it.expiry } : {}), ...location } }
+								: {})
+						};
+					})
 				})
 			});
 			const data = await res.json();
@@ -595,7 +610,7 @@
 			qty: '1',
 			unit: 'piece',
 			expiry: '',
-			storageZone: ''
+			storagePointId: ''
 		});
 	}
 
@@ -660,19 +675,22 @@
 						...(walkinDonorPhone.trim() ? { phone: walkinDonorPhone.trim() } : {}),
 						...(walkinDonorEmail.trim() ? { email: walkinDonorEmail.trim() } : {})
 					},
-					items: validItems.map((it) => ({
-						item_id: it.itemId,
-						qty: it.qty,
-						unit: it.unit,
-						...(it.expiry.trim() || it.storageZone.trim()
-							? {
-									lot: {
-										...(it.expiry.trim() ? { expiry: it.expiry.trim() } : {}),
-										...(it.storageZone.trim() ? { storage_zone: it.storageZone.trim() } : {})
+					items: validItems.map((it) => {
+						const location = lotLocation(it.storagePointId);
+						return {
+							item_id: it.itemId,
+							qty: it.qty,
+							unit: it.unit,
+							...(it.expiry.trim() || location.storage_point_id
+								? {
+										lot: {
+											...(it.expiry.trim() ? { expiry: it.expiry.trim() } : {}),
+											...location
+										}
 									}
-								}
-							: {})
-					}))
+								: {})
+						};
+					})
 				})
 			});
 			const data = await res.json();
@@ -697,7 +715,7 @@
 					qty: '1',
 					unit: 'piece',
 					expiry: '',
-					storageZone: ''
+					storagePointId: ''
 				}
 			];
 			onSaved?.();
@@ -851,21 +869,14 @@
 
 									<div class="space-y-1.5">
 										<Label for="storage-zone-{idx}" class="text-sm font-semibold text-slate-700">
-											โซนจัดเก็บ <span class="text-red-500">*</span>
+											สถานที่จัดเก็บ
+											{#if storagePointRequired}<span class="text-red-500">*</span>{/if}
 										</Label>
-										<Select.Root type="single" bind:value={item.storage_zone}>
-											<Select.Trigger
-												id="storage-zone-{idx}"
-												class="h-11 w-full text-sm data-[size=default]:h-11"
-											>
-												{item.storage_zone || '-- เลือกโซนจัดเก็บ --'}
-											</Select.Trigger>
-											<Select.Content>
-												{#each STORAGE_ZONE_OPTIONS as zone (zone)}
-													<Select.Item value={zone} label={zone} />
-												{/each}
-											</Select.Content>
-										</Select.Root>
+										<StoragePointSelect
+											id="storage-zone-{idx}"
+											points={storagePoints.points}
+											bind:value={item.storage_point_id}
+										/>
 									</div>
 
 									<div class="space-y-1.5">
@@ -996,7 +1007,9 @@
 									</li>
 								{/snippet}
 								{@render step(checkMapped, 'เลือกรายการในคลังและกรอกจำนวนรับจริงครบ')}
-								{@render step(checkZoned, 'เลือกโซนจัดเก็บครบทุกรายการ')}
+								{#if storagePointRequired}
+									{@render step(checkZoned, 'เลือกสถานที่จัดเก็บครบทุกรายการ')}
+								{/if}
 								{#if hasPerishableLine}
 									{@render step(
 										scannedMissingExpiry.length === 0,
@@ -1574,15 +1587,13 @@
 											for="walkin-zone-{item.id}"
 											class="text-sm font-semibold text-foreground"
 										>
-											โซนจัดเก็บ
+											สถานที่จัดเก็บ
 											<span class="ml-1 text-xs font-normal text-muted-foreground">(ถ้ามี)</span>
 										</Label>
-										<Input
+										<StoragePointSelect
 											id="walkin-zone-{item.id}"
-											type="text"
-											placeholder="เช่น A-01, ตู้แช่ 2"
-											bind:value={item.storageZone}
-											class="h-10 rounded-xl text-sm"
+											points={storagePoints.points}
+											bind:value={item.storagePointId}
 										/>
 									</div>
 								</div>

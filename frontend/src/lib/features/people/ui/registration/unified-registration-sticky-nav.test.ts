@@ -40,4 +40,21 @@ describe('UnifiedRegistrationStickyNav', () => {
 		// Compact uses Sheet (data-slot), not the floating dropdown content class
 		expect(result.body).not.toContain('bits-floating-anchor-width');
 	});
+
+	it('compact sheet trigger is type="button" so it never submits the parent form', () => {
+		const result = render(UnifiedRegistrationStickyNav, {
+			props: {
+				sections: mockSections,
+				activeSection: 'address',
+				ariaLabel: 'กระโดดไปยังส่วนของแบบฟอร์ม',
+				compact: true,
+				onNavigate: vi.fn()
+			}
+		});
+
+		const trigger = result.body.match(/<button\b[^>]*data-slot="sheet-trigger"[^>]*>/)?.[0] ?? '';
+
+		expect(trigger).not.toBe('');
+		expect(trigger).toContain('type="button"');
+	});
 });

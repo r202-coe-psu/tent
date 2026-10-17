@@ -2,8 +2,8 @@
 title: Smart Shelter — Database Schema v5
 status: draft for review
 created: 2026-06-11
-updated: 2026-10-13
-note: field-level canonical — คู่กับ data-model.md (topology/policy) และ api-contract.md (planes); CR-112/CR-113 registration foundation; CR-118 T-13 lot metadata; CR-119/CR-120/CR-121 catalog, fuel and requisition contracts; CR-124 staff Google step-up MFA on _users; CR-125 Unit of Measure (UOM) master data in catalog; decision sync 2026-09-23 — `_users.phone` เป็น optional; login ได้ทั้ง CouchDB `name` (username) และเบอร์ติดต่อ (resolve ผ่าน BFF); decision sync 2026-09-23 — `_users.organization` optional สำหรับทั้ง staff และ volunteer; CR-135/CR-136 partner OAuth2 client name/module preset + secret reveal/edit/delete; CR-137 shrink master_data (10→4) + zone/community free text; CR-138 remove purchase doc type + withdraw purchase from stock_ledger.reason; CR-139 shelter storage points; CR-140 item_category default_class editable; CR-144/CR-145 meal_service_receipt (§2.7.3); CR-147 removes CR-146 meal_distribution_push (§2.7.4) — ticket flow ends at warehouse stock-in; CR-148 pre-register validation + evacuee religion_other/disability_other_detail (v11) + household dorm_* (v6); CR-151 kiosk pre-registration check-in (report-in arriving status & KIOSK_LOOKUP_MANGO_INDEXES); CR-154 evacuee.gender nullable + registered_via api (v12), external_bookings (§9.7), partner scopes booking-write/residency-read + module M2; decision sync 2026-10-09 — `evacuee.gender = null` ("ไม่ระบุ") ใช้ได้ทุกช่องทาง (public/kiosk/Station 1/back-office/api) เป็นค่าเริ่มต้นของฟอร์ม, `'other'` คงไว้อ่านเฉพาะ doc เดิม (UI ไม่เสนอให้เลือกใหม่, แก้ไขแล้วต้อง preserve) — ยกเลิก CR-154 FR-70/FR-71(บางส่วน)/FR-72; เพิ่ม `public_shelters.occupancy_breakdown.gender_unspecified` (null+other) พร้อม invariant `male+female+gender_unspecified = occupancy_total`; evacuee ไม่ bump schema_v (v12 รองรับ null แล้ว); ต้อง re-project `public_shelters` (worker bootstrap) หลัง deploy; CR-157 donation_slot แยกคิว dropoff/pickup (§2.13, v2); CR-158 kiosk staff PIN face bypass — `scanner_device` v2 (`staff_pin_*` metadata) + DB ใหม่ `scanner_secrets` (§3.11.1, admin-only, ไม่ replicate/sync); CR-159 evacuee `preferred_zone` (v13); CR-162 kiosk banner — doc type ใหม่ `kiosk_banner` v1 ใน `registry` (§3.12) + capability role `banner_staff` ใน `_users.roles` (§6); CR-163 kiosk ThaiD check-in — shelter `feature_flags.kiosk_thaid_check_in_enabled` (additive, ไม่ bump schema_v) + `config:app.thaid_registration_enabled` ครอบคลุม mode `kiosk_check_in` (kiosk อ่านแบบ fail closed); CR-164 ให้ `shelter:{code}` เป็นกุญแจอ่าน DB กลาง `registry`/`catalog` (§6)
+updated: 2026-10-18
+note: field-level canonical — คู่กับ data-model.md (topology/policy) และ api-contract.md (planes); CR-112/CR-113 registration foundation; CR-118 T-13 lot metadata; CR-119/CR-120/CR-121 catalog, fuel and requisition contracts; CR-124 staff Google step-up MFA on _users; CR-125 Unit of Measure (UOM) master data in catalog; decision sync 2026-09-23 — `_users.phone` เป็น optional; login ได้ทั้ง CouchDB `name` (username) และเบอร์ติดต่อ (resolve ผ่าน BFF); decision sync 2026-09-23 — `_users.organization` optional สำหรับทั้ง staff และ volunteer; CR-135/CR-136 partner OAuth2 client name/module preset + secret reveal/edit/delete; CR-137 shrink master_data (10→4) + zone/community free text; CR-138 remove purchase doc type + withdraw purchase from stock_ledger.reason; CR-139 shelter storage points; CR-140 item_category default_class editable; CR-144/CR-145 meal_service_receipt (§2.7.3); CR-147 removes CR-146 meal_distribution_push (§2.7.4) — ticket flow ends at warehouse stock-in; CR-148 pre-register validation + evacuee religion_other/disability_other_detail (v11) + household dorm_* (v6); CR-151 kiosk pre-registration check-in (report-in arriving status & KIOSK_LOOKUP_MANGO_INDEXES); CR-154 evacuee.gender nullable + registered_via api (v12), external_bookings (§9.7), partner scopes booking-write/residency-read + module M2; decision sync 2026-10-09 — `evacuee.gender = null` ("ไม่ระบุ") ใช้ได้ทุกช่องทาง (public/kiosk/Station 1/back-office/api) เป็นค่าเริ่มต้นของฟอร์ม, `'other'` คงไว้อ่านเฉพาะ doc เดิม (UI ไม่เสนอให้เลือกใหม่, แก้ไขแล้วต้อง preserve) — ยกเลิก CR-154 FR-70/FR-71(บางส่วน)/FR-72; เพิ่ม `public_shelters.occupancy_breakdown.gender_unspecified` (null+other) พร้อม invariant `male+female+gender_unspecified = occupancy_total`; evacuee ไม่ bump schema_v (v12 รองรับ null แล้ว); ต้อง re-project `public_shelters` (worker bootstrap) หลัง deploy; CR-157 donation_slot แยกคิว dropoff/pickup (§2.13, v2); CR-158 kiosk staff PIN face bypass — `scanner_device` v2 (`staff_pin_*` metadata) + DB ใหม่ `scanner_secrets` (§3.11.1, admin-only, ไม่ replicate/sync); CR-159 evacuee `preferred_zone` (v13); CR-162 kiosk banner — doc type ใหม่ `kiosk_banner` v1 ใน `registry` (§3.12) + capability role `banner_staff` ใน `_users.roles` (§6); CR-163 kiosk ThaiD check-in — shelter `feature_flags.kiosk_thaid_check_in_enabled` (additive, ไม่ bump schema_v) + `config:app.thaid_registration_enabled` ครอบคลุม mode `kiosk_check_in` (kiosk อ่านแบบ fail closed); CR-164 ให้ `shelter:{code}` เป็นกุญแจอ่าน DB กลาง `registry`/`catalog` (§6); CR-170 demographics views count room_confirmed (_design/app v3); CR-169 (2026-10-17, #592) evacuee `booking_ref` + schema_v 14 (§1.1), external_bookings group fields `person_seq`/`group_size`/`committed` + index `(booking_id, person_seq)` (§9.7); #613 `external_bookings` `reconciled_at` + `reconcile_outcome` + index `(state, reconciled_at)` (§9.7, additive), access log `result_count = N` (§9.4); #613 decision sync (review รอบ 3) `external_bookings.reconcile_stay_cancelled_at` + `reconcile_household_cancelled_at` (marker ราย doc = timestamp ที่ worker เขียนตอนยกเลิก; retry audit เฉพาะ doc ที่ `since`/`updated_at` ตรงกับ marker) แทน `reconcile_cancelled_at` ของรอบ 2
 ---
 
 # Database Schema v5 — field-level
@@ -40,6 +40,7 @@ Decimal — do not rely on CouchDB `_sum` of floats for correctness.
 
 ### 1.1 `evacuee` — `evacuee:{ulid}`
 
+> **schema_v 14** — เพิ่ม `booking_ref` (opt, `BK-{ulid}`) — รหัสกลุ่มการจองของ partner EXT-008 ที่ evacuee คนนี้มาจาก (CR-169 FR-60/61). ตั้งเฉพาะ `registered_via: api` โดย worker; **ไม่ซ้อนกับ `donation.booking_ref`** (คนละ doc type และความหมาย — `donation.booking_ref` คือ `DN-…` ของตั๋วบริจาค). Migration: additive, ไม่ backfill (ดูบรรทัด Migration schema_v 13 → 14 ใต้ตารางนี้).
 > **schema_v 13** — เพิ่ม `preferred_zone` (opt) — โซนที่ Station 1 ระบุไว้แบบไม่บังคับ เป็นค่าแนะนำให้ Station 3 เท่านั้น ไม่ใช่การจัดโซน ([CR-159](../changes/02-people/CR-159-station1-preferred-zone.md)).
 > **decision sync 2026-10-09 (ไม่ bump `schema_v`)** — `gender = null` ("ไม่ระบุ") ใช้ได้ **ทุกช่องทาง** ไม่จำกัดเฉพาะ `registered_via = api`; ฟอร์มลงทะเบียนทุกช่องทาง preselect "ไม่ระบุ" และไม่บังคับเลือกเพศ. ยกเลิก CR-154 FR-70, FR-71 (เหลือเพียง "UI แสดง `null` เป็น ไม่ระบุ + แก้เพศได้ทุกช่องทาง") และ FR-72 (ย้ายไป `public_shelters.occupancy_breakdown.gender_unspecified`, §9.1).
 > **schema_v 12** — `gender` รับ `null` ได้ (ยังไม่ทราบ — partner booking เป็นต้น; ขยายเป็นทุกช่องทางโดย decision sync 2026-10-09); `registered_via` เพิ่ม `api` ([CR-154](../changes/10-eoc/CR-154-m2-partner-booking-residency.md)).
@@ -82,6 +83,7 @@ Decimal — do not rely on CouchDB `_sum` of floats for correctness.
 | `card_snapshot` | {...} | opt | snapshot ข้อมูลชิปบัตรและที่อยู่ตามบัตรประชาชน (CR-084); `consented_at`: ts — เวลาที่ผู้ใช้ยินยอมก่อนอ่านชิปเต็ม (schema_v 11, proposed draft CR `draft-kiosk-walk-in-registration`) |
 | `current_stay` | {`status`, `zone`, `since`} | req | `status`: enum(`pre_registered`,`kiosk_registered`,`arriving`,`active`,`room_confirmed`,`temporary_leave`,`transferred`,`checked_out`,`deceased`,`cancelled`) · `kiosk_registered` = kiosk อ่านชิปเต็มและบันทึกแล้ว รอยืนยันตัวตน/ข้อมูลและรับรายงานตัวที่ Station 1; `zone`: str\|null · `since`: ts — snapshot เท่านั้น ความจริง = movement · `room_confirmed` = Zone Arrival Confirmation หลัง `active` (CR-112) |
 | `preferred_zone` | str\|null | opt | zone `code` ของศูนย์เดียวกันที่ Station 1 ระบุไว้ (ไม่บังคับ) — **ไม่ใช่การจัดโซน**: ไม่เปลี่ยน `current_stay`, ไม่มีผลต่อ queue/occupancy; Station 3 ใช้เป็นค่าเลือกเริ่มต้นเมื่อไม่มีอาการ EWAR และโซนยังเปิด; staff-only (ไม่ส่งออก public/external) (CR-159) |
+| `booking_ref` | str\|null | opt | `BK-{ulid}` = `external_bookings.booking_id` ของกลุ่มที่จองมา (EXT-008) — ใช้บอกว่า evacuee หลายคนมาจาก booking เดียวกัน; ตั้งเฉพาะ evacuee ที่ `registered_via = api` (worker ใส่ให้ทุก booking รวมกลุ่มขนาด 1); ไม่มี → ไม่ใส่ key หรือ `null`. **ไม่ใช่ `donation.booking_ref`** (`DN-…`, คนละ doc type). Opaque ไม่ใช่ PII — ไม่ project ลง `public_*` (CR-169 FR-63); staff แก้/รวม household ต้องคงค่าเดิม (FR-62) (CR-169) |
 | `privacy` | {`search_excluded`:bool} | req | default `{search_excluded:false}` (opt-out model) |
 | `registered_via` | enum(`kiosk`,`staff`,`backoffice`,`app`,`web`,`import`,`paper`,`api`) | req | `kiosk` = Smart Card Kiosk, `staff` = Onsite desk walk-in, `web` = public portal (CR-070), `backoffice` = Admin desk, `api` = Partner booking EXT-008 ผ่าน worker inbound (CR-154) |
 | `anonymized` | bool | sys | default ไม่มี field; purge job ตั้ง `true` พร้อมล้าง PII (§retention data-model §7) |
@@ -98,7 +100,7 @@ Decimal — do not rely on CouchDB `_sum` of floats for correctness.
 ไม่นับ: `transferred`, `checked_out`, `deceased`, `cancelled` · `kiosk_registered` ไม่อยู่ใน Present, In-zone หรือ Kitchen/SOP
 
 **Index:** `(last_name, first_name)` · `(phone)` · `(household_id)` · `(current_stay.status)` · `(person_id.number)`
-- **Kiosk Lookup Indexes (CR-151):** ชุด `KIOSK_LOOKUP_MANGO_INDEXES` 3 ตัว ได้แก่ `['type', 'phone']` (`evacuee-type-phone-idx`), `['type', 'person_id.number']` (`evacuee-type-person-id-idx`), และ `['type', 'household_id']` (`evacuee-type-household-idx`) deploy แยกจาก referral indexes เพื่อรองรับการค้นหาผู้จองล่วงหน้าหน้า kiosk
+- **Kiosk Lookup Indexes (CR-151):** ชุด `KIOSK_LOOKUP_MANGO_INDEXES` 4 ตัว ได้แก่ `['type', 'phone']` (`evacuee-type-phone-idx`), `['type', 'person_id.number']` (`evacuee-type-person-id-idx`), `['type', 'household_id']` (`evacuee-type-household-idx`), และ `['type', 'card_snapshot.address_no']` (`evacuee-type-card-address-no-idx`, CR-149 / #525) deploy แยกจาก referral indexes เพื่อรองรับการค้นหาผู้จองล่วงหน้าหน้า kiosk
 
 > **Kiosk Report-in (CR-151):** kiosk ปรับ flow จากเดิมที่สร้าง evacuee ใหม่จากบัตร (CR-097) เป็นการรับรายงานตัวผู้จองทางเว็บ (`registered_via: 'web'`) และอัปเดตสถานะเป็น `current_stay.status = 'arriving'` โดยคงเดิม (ไม่อัปเกรด schema_v; อิงตามเวอร์ชันปัจจุบันของ develop; ส่วน walk-in ที่จอง schema_v 12 อยู่ใน CR-149)
 
@@ -128,6 +130,8 @@ implement — ไม่กระทบ migration นี้
 **Migration (schema_v 8 → 9, CR-106):** purely additive enum — เพิ่ม `arriving` ใน `current_stay.status`; doc เดิม schema_v 8 อ่านได้ตามปกติโดยไม่ต้อง backfill, เมื่อเขียนใหม่ stamp schema_v 9
 
 **Migration (schema_v 10 → 11, CR-148):** purely additive — `religion_other`, `disability_other_detail` default `null` ตอนอ่าน; doc เดิมไม่ต้อง backfill; validation ใหม่ใช้กับ input ใหม่/ค่าที่ถูกแก้เท่านั้น; เขียนใหม่ stamp schema_v 11
+
+**Migration (schema_v 13 → 14, CR-169):** purely additive — `booking_ref` เป็น field เสริม (opt/null) เขียนโดย worker inbound เท่านั้น (`registered_via: api`); doc เดิมไม่มี key นี้อ่านได้ตามปกติ ไม่ backfill (evacuee จาก booking ก่อน CR-169 ไม่มี `booking_ref` — ยอมรับ); reader ทุกจุดต้องไม่พังเมื่อไม่มี field นี้; staff แก้ evacuee หรือรวม household ต้องคงค่าเดิม (merge/spread doc เดิม); เขียนใหม่ stamp `schema_v: 14`. ณ 2026-10-17 `EVACUEE_SCHEMA_V` ของ worker = 14 (ค้างที่ 12 ก่อนหน้านี้)
 
 **Migration (schema_v 11 → 12, CR-154):** relaxing + additive enum — doc เดิมมี `gender` ครบทุกตัว ไม่ต้อง backfill; reader ทุกจุดต้อง handle `gender = null` (label "ไม่ระบุ", occupancy breakdown ไม่นับเข้า male/female แต่นับใน total); `registered_via: api` เขียนโดย worker inbound `external_bookings` เท่านั้น; เขียนใหม่ stamp schema_v 12
 
@@ -1382,6 +1386,63 @@ backward compatibility ของ CR-059/110; flow ใหม่ใช้ §2.29�
 
 ---
 
+### 2.33 `daily_sop_assessment` — Legacy Daily SOP
+
+เอกสารจาก Daily SOP รุ่นก่อน ระบบปัจจุบันไม่สร้างหรือแสดงเอกสารชนิดนี้ และไม่ย้ายข้อมูลให้อัตโนมัติ หากต้องลบข้อมูลเดิม ให้ทำเฉพาะฐาน local ที่ผู้ใช้ระบุ; ไม่มีคำสั่งลบข้อมูล Legacy รวมอยู่ในแอปหรือ seed ปกติ
+
+### 2.34 `daily_sop_role_assessment` — `daily_sop_role_assessment:{shelter_code}:{assessment_date}:{role_code}` · **schema_v 1**
+
+หนึ่งเอกสารแทนหนึ่ง shelter / วันที่ปฏิทิน Bangkok / Role ใน shelter_{shelter_code}. Schema v1 ใช้ Question Bank รุ่น daily-sop-role-v1 จำนวน 79 ข้อจาก CR-153 (daily-sop-role-assessments); รายการ Role แสดงเฉพาะเอกสารชนิดนี้และไม่รวม Legacy daily_sop_assessment. ไม่ migrate, rewrite, ลบ หรือใช้เอกสาร Legacy เป็น template. JSON _rev เป็น metadata ของ CouchDB ไม่ใช่ field ของ schema application.
+
+| Field                                                   | ชนิด / ค่า                             | Required | กติกา                                                                                              |
+| ------------------------------------------------------- | -------------------------------------- | -------- | -------------------------------------------------------------------------------------------------- |
+| _id                                                     | string                                 | ใช่      | daily_sop_role_assessment:{shelter_code}:{assessment_date}:{role_code}; ต้อง derive ตรงกันทุกครั้ง |
+| type                                                    | literal daily_sop_role_assessment      | ใช่      | VDU อนุญาตเฉพาะชนิดนี้                                                                             |
+| schema_v                                                | integer 1                              | ใช่      | immutable                                                                                          |
+| shelter_code                                            | string                                 | ใช่      | ต้องตรงกับ shelter database; immutable                                                             |
+| assessment_date                                         | วันที่จริงรูปแบบ YYYY-MM-DD            | ใช่      | วันที่ปฏิทิน Bangkok; immutable                                                                    |
+| role_code                                               | SM, REG, TRG, MED, KS, SC, VC, SO, FAC | ใช่      | immutable และใช้ derive _id                                                                        |
+| role_key, role_label                                    | canonical key และ label ของ Role       | ใช่      | ต้องตรงกับ role_code; immutable snapshot                                                           |
+| question_set_version                                    | literal daily-sop-role-v1              | ไม่      | ถ้า omit ให้ถือเป็นรุ่นนี้; ถ้ามีต้องเป็น literal นี้ (null ไม่เท่ากับ omit และถูกปฏิเสธ). รุ่น/การ omit เปลี่ยนภายหลังไม่ได้          |
+| assessed_at                                             | ISO-8601 UTC timestamp ลงท้าย Z        | ใช่      | ต้อง parse เป็นเวลาจริงได้; เวลาเริ่มประเมิน; immutable                                            |
+| assessor_name                                           | non-empty string                       | ใช่      | หลัง trim ต้องไม่ว่าง; immutable และไม่ใช้ยืนยันตัวตนหรือ authorization                            |
+| status                                                  | InProgress หรือ Completed              | ใช่      | Completed เมื่อไม่มี unanswered; นอกนั้น InProgress                                                |
+| pass_count, fail_count, pending_count, unanswered_count | integer ≥ 0                            | ใช่      | ต้องเท่ากับผลนับจาก controls จริง                                                                  |
+| controls                                                | array ของ control snapshots            | ใช่      | ต้องมี ID และลำดับครบตาม Role/version; ห้ามซ้ำ เพิ่ม ลบ หรือเรียงใหม่                              |
+| created_at, updated_at                                  | ISO-8601 UTC timestamp ลงท้าย Z        | ใช่      | ต้อง parse เป็นเวลาจริงได้; created_at immutable                                                   |
+| created_by                                              | non-empty username                     | ใช่      | immutable; ตอน application create ต้องตรงกับ authenticated user                                    |
+
+แต่ละ controls[] มี field ต่อไปนี้:
+
+| Field           | ชนิด / ค่า                      | Required | กติกา                                                                                                                                                                                                                                                                                                                                       |
+| --------------- | ------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| id              | string                          | ใช่      | Question ID ที่ขึ้นต้น D-{role_code}-; unique และ immutable                                                                                                                                                                                                                                                                                 |
+| question        | string                          | ใช่      | immutable snapshot ของข้อความจาก Question Bank; ข้อที่ใช้ SOP Parameter บันทึกค่าที่ resolve ได้ลงข้อความ. หากไม่มีค่า ให้เก็บ token {parameter_key} ตามต้นฉบับและแสดงคำอธิบายว่าขาดค่า                                                                                                                                                     |
+| metric_spec     | object หรือ null                | ใช่      | มีเฉพาะข้อที่ระบุ metric ใน CR; field key/order/label/unit/step และ threshold ต้องตรง contract. step เป็น positive finite decimal string: 1 สำหรับจำนวนเต็ม และ 0.01/0.1 ตามหน่วยที่กำหนด. ข้อที่ใช้ Parameter ต้อง snapshot { key, value } เมื่อ resolve ได้ (value เป็น numeric string > 0 จาก override ของ shelter ทั้งชุด มิฉะนั้นจาก master profile ตาม CR-006/CR-021; ไม่เก็บ ID ของ profile/override; ข้อที่ไม่ใช้ Parameter ห้ามมี parameter; field ที่ยังไม่กรอกเก็บเป็น null); ถ้าไม่มี Parameter ให้เป็น null, สถานะ Pending และมี notes. D-SC-01 ใช้ null |
+| status          | Pass, Fail, Pending หรือ null   | ใช่      | null หมายถึง unanswered                                                                                                                                                                                                                                                                                                                     |
+| notes           | string                          | ใช่      | Pass/unanswered ใช้ ""; Fail/Pending ต้องมีข้อความหลัง trim                                                                                                                                                                                                                                                                                 |
+| observations    | string                          | ใช่      | ใช้ "" ได้                                                                                                                                                                                                                                                                                                                                  |
+| measured_values | object ของ number ≥ 0 หรือ null | ใช่      | key ต้องตรงกับ metric_spec.fields[].key ทุก key; ค่าต้อง finite และเป็นจำนวนเท่าของ step. เมื่อ metric_spec เป็น null ต้องเป็น {}                                                                                                                                                                                                           |
+| checked_by      | non-empty username              | ใช่      | ผู้บันทึก control ล่าสุด; application write ที่เปลี่ยน control ต้องตรงกับ authenticated user                                                                                                                                                                                                                                                |
+| checked_by_name | non-empty string                | ไม่      | ถ้าระบุต้องไม่ว่างหลัง trim; ใช้แสดงผลเท่านั้น                                                                                                                                                                                                                                                                                              |
+| checked_at      | ISO-8601 UTC timestamp ลงท้าย Z | ใช่      | ต้อง parse เป็นเวลาจริงได้; เวลาบันทึก control ล่าสุด                                                                                                                                                                                                                                                                                       |
+
+ตอนสร้างให้ snapshot controls ครบทุกข้อพร้อม checked_by/checked_at ของผู้สร้าง รวม unanswered; audit นี้หมายถึงผู้สร้าง snapshot ไม่ใช่หลักฐานว่าตรวจหน้างานแล้ว. ไม่สร้างเอกสารจนกว่าผู้ใช้จะบันทึกคำตอบ ค่าตรวจ note หรือ observation จริงอย่างน้อยหนึ่งรายการ. Not started เป็น UI projection เท่านั้น. D-SC-01 แสดงยอด stock-status แบบ read-only; schema นี้ไม่เก็บยอดระบบ/ยอดตรวจนับแยกตามสินค้าและไม่เพิ่ม stock mutation.
+
+การแก้ไขต้องส่ง _rev ที่หน้าโหลดมา. หาก revision เปลี่ยนให้ปฏิเสธ write และคง draft ไว้; ผู้ใช้ต้องโหลดข้อมูลล่าสุดและเลือก merge ก่อนกดบันทึกอีกครั้ง. ห้าม retry draft เก่าด้วย revision ใหม่หรือเปลี่ยน create conflict เป็น update อัตโนมัติ. assessor_name, assessed_at, identity, creation metadata และ question/metric snapshots เปลี่ยนไม่ได้; อนุญาตเปลี่ยนคำตอบ, ค่าที่วัด, notes, observations, audit ของ control ที่แก้ และ summary/timestamp ที่ derive จากคำตอบเท่านั้น. ไม่เก็บ check_method, pass_criteria หรือ record_values; ห้ามเติมค่าว่างหรืออนุมานค่า. ห้ามลบเอกสาร.
+
+Authorization และ Bangkok current-day write rule ถูกบังคับที่ VDU ของ shelter database; สมาชิก shelter อ่าน assessment ได้ทุก Role ตาม DB security. Role owner, shelter manager ใน shelter เดียวกัน และ application system_admin เขียนได้ตาม capability; SC รองรับ supply_coordinator และ warehouse_staff. VDU ใช้ Question Bank/metric contract ที่ embed ไว้ใน design document และไม่อ่าน external configuration.
+
+**Question Bank (CR-153 ภาคผนวก A):** 79 ข้อ ต่อ Role = SM 9 · REG 5 · TRG 7 · MED 9 · KS 6 · SC 10 · VC 8 · SO 10 · FAC 15. รหัสที่ตัดจาก 91 ข้อ (12 ข้อ) ต้องไม่ปรากฏ: D-SM-01, D-REG-04, D-REG-05, D-REG-06, D-REG-07, D-REG-09, D-TRG-07, D-MED-08, D-KS-01, D-KS-02, D-KS-03, D-KS-08. ข้อความคำถามและ metric/threshold เป็นไปตามภาคผนวก A ของ CR-153.
+
+**Role mapping:** `role_code` → `role_key` → capability ที่ประเมินได้: SM → shelter_manager · REG → registration_staff · TRG → triage_staff · MED → medical_staff · KS → kitchen_staff · SC → supply_coordinator (รับ `supply_coordinator` หรือ `warehouse_staff`) · VC → volunteer_coordinator · SO → security_officer · FAC → facility_staff. `system_admin` ไม่ใช่ Daily SOP Role.
+
+**วันที่ Bangkok:** VDU คำนวณจาก wall clock ของ CouchDB โดยเลื่อน epoch +07:00 แล้วใช้ UTC getters (16:59:59Z → วันเดิม; 17:00:00Z → วันถัดไป). เฉพาะ `_admin` (trusted replication/restore/migration) ข้าม current-day check; ตรวจ field allowlist, `_id` และ immutability ทุกกรณี.
+
+**Mango index:** ddoc `daily-sop-role-assessment`, name `daily-sop-role-assessment-by-shelter-date`, fields `type`, `shelter_code`, `assessment_date`, `role_code` ทุกตัว `desc`. `_find` ใช้ selector/sort เดียวกัน, `use_index`, `allow_fallback: false`, `limit: 100`, อ่านหน้าถัดไปด้วย `bookmark`. อยู่ใน ddoc แยกจาก `_design/access`.
+
+---
+
 ## 3. DB `registry` (central-managed → pull ลง device; edge fallback replica)
 
 ### 3.1 `shelter` — `shelter:{ulid}`
@@ -2166,7 +2227,7 @@ edge/device ไม่เคย mint code). central เป็น single writer �
 | --- | --- | --- | --- |
 | `value` | int≥0 | sys | เลขที่ allocate ล่าสุด (เริ่ม `0`) — provision ศูนย์ใหม่ = read-modify-write `value+1` แล้ว mint `code = "SH" + pad3(value)`; ชน `_rev` (409) → retry |
 
-### 5.4 `referral` — `referral:{ulid}` · state machine (CR-045, CR-046, Centralized Architecture)
+### 5.4 `referral` — `referral:{ulid}` · state machine (CR-045, CR-046, CR-167, Centralized Architecture)
 
 > **การจัดเก็บข้อมูลแบบรวมศูนย์ (Centralized Cross-Tenant Database):**
 > เอกสารส่งต่อทุกประเภท (`capacity`, `resource`, `medical-emergency`) จัดเก็บรวมกันในฐานข้อมูลกลาง `central_ops` โดยตรง (ไม่ใช่ `shelter_{shelter_code}`) เพื่อรองรับการทำงานข้ามศูนย์แบบไร้รอยต่อโดยไม่ต้อง Mirror เอกสารระหว่างฐานข้อมูล
@@ -2180,21 +2241,28 @@ edge/device ไม่เคย mint code). central เป็น single writer �
 | `to_shelter_code` | str | opt | รหัสศูนย์พักพิงปลายทาง (ระบุเมื่อ `referral_type` = `capacity`) |
 | `to_org` | {`name`:str?, `kind`:enum(`hospital`,`social_services`,`other`)?, `contact`:str?} | opt | หน่วยงานปลายทาง (ระบุเมื่อ `referral_type` ≠ `capacity`) |
 | `reason` | str | req | — |
-| `response_reason` | str | opt | เหตุผลประกอบการตอบรับ (`accepted`) หรือปฏิเสธ (`rejected`) (CR-045) |
+| `response_reason` | str | opt | เหตุผลประกอบการตอบรับ (`accepted`) หรือปฏิเสธ (`rejected`) (CR-045) — เขียนเฉพาะ transition ไป `accepted`/`rejected`; transition ไป `closed` ต้องไม่แก้ (CR-167) |
+| `close_reason` | str (≤2000) | opt | เหตุผลของ transition ไป `closed` (ถอนคำขอ, ยกเลิกร่าง, ปิดรายการ, ปิดศูนย์) แยกจาก `response_reason` เพื่อไม่ทับเหตุผลที่ปลายทางเขียนไว้ (CR-167, `schema_v` 2) |
 | `urgency` | enum(`normal`,`urgent`) | req | — |
 | `status` | enum(`draft`,`sent`,`accepted`,`rejected`,`closed`) | req | forward-only — ดู transitions ด้านล่าง |
 | `timeline` | {`sent`:{at,by}?, `responded`:{at,by}?, `closed`:{at,by}?} | sys | — |
 | `notes` | str | opt | — |
 
+**`schema_v` (CR-167):** `2` สำหรับ doc ที่สร้างใหม่ · `1` ยังอ่านได้ (reader ต้องรับ 1\|2) ไม่ backfill · doc v1 ที่ถูกเขียน `close_reason` ต้องยกเป็น v2 ตอนเขียน · deploy สองขั้น: ปล่อย reader ที่รับ 1\|2 ก่อน แล้วค่อยปล่อย writer ที่เขียน v2 (client รุ่นเก่าใช้ `schema_v: z.literal(1)` + `safeParse` จึงกรอง doc v2 ทิ้งเงียบๆ) · `central_ops` ไม่มี `validate_doc_update` การบังคับอยู่ที่ server code
+
 **Status transitions (forward-only):**
 
 ```
-draft    → sent | closed     (closed = ยกเลิกร่างก่อนส่ง — CR-046)
-sent     → accepted | rejected
+draft    → sent | closed          (closed = ยกเลิกร่างก่อนส่ง — CR-046)
+sent     → accepted | rejected | closed   (sent → closed = ถอนคำขอ, ต้นทางเท่านั้น — CR-167)
 accepted → closed
 rejected → closed
 closed   → (terminal)
 ```
+
+> **สิทธิ์ของ `closed` (CR-167):** ทุกประเภท (`capacity`, `resource`, `medical-emergency`) ทำได้เฉพาะศูนย์ต้นทาง (`shelter_code`) ศูนย์ปลายทางปิดไม่ได้ (`403`)
+> **ป้าย "ถอนคำขอ" เป็น derived:** `status = closed` และ `timeline.sent` มีค่า และ `timeline.responded` ไม่มีค่า — ห้ามเก็บเป็น field · ไม่มี `timeline.sent` = "ยกเลิกร่าง"
+> **Guard (CR-167 FR-W6/W7):** `transition()` ต้องตรวจ `canTransition(latest.status, to)` ก่อนทำ cross-DB transfer ของ `accepted` — accept ที่มาถึงหลังถอนต้องได้ `422` และห้ามเขียน `transfer_in`/`transfer_out`
 
 > **Cross-Tenant Flow & Scope Isolation (Centralized Architecture):**
 > 1. **Central Database Storage:** คำร้องถูกสร้างและอัปเดตสถานะใน DB `central_ops` โดยตรง ผ่าน BFF Endpoints (`/api/back-office/referral` และ `/api/back-office/referral/[id]/transition`)
@@ -2211,6 +2279,39 @@ closed   → (terminal)
 > - `referral-type-toshelter-created-idx`: `['type', 'to_shelter_code', 'created_at']`
 > - `referral-list-sort-idx`: `['type', 'created_at', 'status', 'evacuee_id']`
 > - `referral-list-basic-idx`: `['type', 'created_at']`
+
+### 5.4.1 `referral_close_job` — `referral_close_job:{ulid}` (CR-168) · schema_v 1
+
+> **สถานะ:** approved (CR-168) · ยังไม่ implement · งานปิด referral ทั้งศูนย์หนึ่งครั้ง ประมวลผลโดย `referral-worker` (Node) — ไม่ใช่ Python sync worker และไม่ projection ไป Mongo · จัดเก็บใน `central_ops` envelope เดียวกับ `referral` · ไม่มี doc ต่อรายการ referral (ตัว referral คือสถานะงาน, การ transition เป็น idempotent)
+
+| Field | ชนิด | req | หมายเหตุ |
+| --- | --- | --- | --- |
+| `job_ulid` | str | req | ส่วน ULID ของ `_id` |
+| `shelter_code` | str | req | ศูนย์ที่ปิด |
+| `requested_by` | str | req | ชื่อผู้สั่ง จาก session ฝั่ง server (ไม่รับจาก client) ใช้เป็น actor ของ transition |
+| `reason` | str (≤2000) | req | เหตุผลเดียวใช้ทุกรายการ: ขาออก → `close_reason`, ขาเข้า → `response_reason` ขึ้นต้น "ศูนย์ปิด" |
+| `status` | enum(`scheduled`,`running`,`completed`,`completed_with_errors`,`cancelled`) | req | active = `scheduled`\|`running` |
+| `start_after` | ts | req | เวลาที่ worker เริ่มได้เร็วที่สุด (สร้าง + 60 วินาที, proposed default) |
+| `phase` | enum(`outgoing`,`incoming`,`sweep`,`done`) | req | — |
+| `cursor` | {} | sys | ตำแหน่งต่อใน phase ปัจจุบัน ต้องไม่ข้ามรายการที่ `created_at` เท่ากัน |
+| `counters` | {`closed`,`rejected`,`skipped`,`failed`: int≥0} | sys | `skipped` = ปิด/ปฏิเสธไว้แล้ว |
+| `preview` | {} | sys | snapshot จำนวนตอนสั่ง แยกทิศทาง/สถานะ |
+| `failures` | [{`id`:str, `error`:str}] | sys | จำกัดจำนวน (proposed default 200) ส่วนเกินนับใน `counters.failed` |
+| `lease_owner` / `lease_until` | str / ts | sys | lease ผ่าน `_rev` CAS, TTL 5 นาที, renew ก่อนครึ่ง TTL |
+| `attempt` | int | sys | — |
+| `started_at` / `finished_at` / `cancelled_at` / `cancelled_by` | ts / ts / ts / str | sys | — |
+
+**Rules:** ยกเลิกได้เฉพาะ `scheduled → cancelled` ด้วย CAS เมื่อ `now < start_after` และยังไม่ถูก claim (หลังเริ่มยกเลิกไม่ได้ → `409`) · terminal ถูก cleanup หลัง 30 วันจาก `finished_at` · หลักฐานรายรายการอยู่ที่ `timeline.closed` / `close_reason` / `response_reason` ของ referral เอง
+
+### 5.4.2 `referral_close_lock` — `referral_close_lock:{shelter_code}` (CR-168) · schema_v 1
+
+> กัน job active ซ้อนกันต่อศูนย์ (สร้างด้วย CAS แบบเดียวกับ `shelter-name-lock`) และใช้ตัดสินใจบล็อกการสร้าง referral ใหม่ของศูนย์นั้นขณะ job active (`409`) ปล่อยเมื่อ job เป็น terminal (`completed`, `completed_with_errors`, `cancelled`) — ศูนย์อื่นและขาเข้าจากศูนย์อื่นไม่ถูกบล็อก
+
+| Field | ชนิด | req | หมายเหตุ |
+| --- | --- | --- | --- |
+| `shelter_code` | str | req | ส่วนของ `_id` |
+| `job_id` | str | req | `_id` เต็มของ job ที่ถือ lock |
+| `acquired_at` | ts | req | — |
 
 ### 5.5 `stock_transfer` — `stock_transfer:{ulid}` · state machine (forward-only, CR-059, Centralized Architecture)
 
@@ -2350,7 +2451,7 @@ CouchDB `_users` DB ไม่ใช่ operational doc ธรรมดา — �
 
 | DB | Mango indexes | Views (map/reduce) |
 | --- | --- | --- |
-| `shelter_*` | evacuee kiosk lookup: (type, phone), (type, person_id.number), (type, household_id) · movement: (evacuee_id, occurred_at) · screening: (evacuee_id, screened_at) · stock_ledger: (item_id, occurred_at) · `fuel_cylinder`: (item_master_id, cylinder_code) · `gas_ledger`: (cylinder_id, occurred_at) · `requisition_ticket`: (status, requisition_type, ticket_no) · `distribution_log`: (ticket_id, item_id, recipient_id, status), (recipient_id, status) · `bulk_return_pool`: (item_id, status) · donation: status, tracking_token_hash, booking_ref, campaign_id, (logistics.slot.date) · donation_slot: (date), (date, from) · medical: evacuee_id · shift_assignment: (job_id, shift_id), (volunteer_id, status), (status) · volunteer: (phone), (phone_hash), (tracking_token_hash), (status), (personnel_type), (checked_in) · job: (status), (tier, status) · job_application: (job_id, status), (tracking_token) · shelter_report: (status, occurred_at), (severity, status), (kind, status), (assignee_user_id, status) · sop_override: (active) · food_sphere_standard: (target_segment, req_group_id, effective_date) · requirement_group: (name) · replenishment_policy: (scope_type, target_id) | `occupancy` (count evacuees by stay status) · `demographics_by_age` (count active evacuees by birth year; dynamic age-bucket in API) · `demographics_by_country` (count active evacuees by country) · `registrations_by_date_status` (count check-in/out movements by date) · `stock_balance` (client Decimal sum qty_str by item; CR-038) · `gas_balance` (client Decimal sum gas_ledger.qty_kg by active cylinder) · `latest_screening` · `meals_served` (sum by date+meal) · `needs_open` · `slot_availability` |
+| `shelter_*` | evacuee kiosk lookup: (type, phone), (type, person_id.number), (type, household_id), (type, card_snapshot.address_no) · movement: (evacuee_id, occurred_at) · screening: (evacuee_id, screened_at) · stock_ledger: (item_id, occurred_at) · `fuel_cylinder`: (item_master_id, cylinder_code) · `gas_ledger`: (cylinder_id, occurred_at) · `requisition_ticket`: (status, requisition_type, ticket_no) · `distribution_log`: (ticket_id, item_id, recipient_id, status), (recipient_id, status) · `bulk_return_pool`: (item_id, status) · donation: status, tracking_token_hash, booking_ref, campaign_id, (logistics.slot.date) · donation_slot: (date), (date, from) · medical: evacuee_id · shift_assignment: (job_id, shift_id), (volunteer_id, status), (status) · volunteer: (phone), (phone_hash), (tracking_token_hash), (status), (personnel_type), (checked_in) · job: (status), (tier, status) · job_application: (job_id, status), (tracking_token) · shelter_report: (status, occurred_at), (severity, status), (kind, status), (assignee_user_id, status) · sop_override: (active) · food_sphere_standard: (target_segment, req_group_id, effective_date) · requirement_group: (name) · replenishment_policy: (scope_type, target_id) | `occupancy` (count evacuees by stay status) · `demographics_by_age` (count in-shelter evacuees — `active` + `room_confirmed`, CR-170 — by birth year; dynamic age-bucket in API) · `demographics_by_country` (count in-shelter evacuees by country) · `registrations_by_date_status` (count check-in/out movements by date) · `stock_balance` (client Decimal sum qty_str by item; CR-038) · `gas_balance` (client Decimal sum gas_ledger.qty_kg by active cylinder) · `latest_screening` · `meals_served` (sum by date+meal) · `needs_open` · `slot_availability` |
 | `registry` | shelter: status · shelter: code (unique) · location_district: (province_id) · location_subdistrict: (district_id) | — |
 | `catalog` | item_master: (category, distribution_type, type_class) · item_category: (system_key, is_protected) · recipe: (deactivated) · sop_profile: active · food_sphere_standard: (target_segment, req_group_id, effective_date) · requirement_group: (name) · replenishment_policy: (scope_type, target_id) | — |
 | `central_ops` | export_job: (status, requested_by) · search_audit: occurred_at | — |
@@ -2484,10 +2585,10 @@ partner ODT "นโยบายควบคุมการเข้าถึง�
 | `purpose` | str | req | จาก query param; `""` เมื่อผู้เรียกไม่ส่งมา (denied_missing_purpose ก็ยัง log); EXT-008–010 ไม่มี purpose → `""` เสมอ |
 | `ip` | str | req | `client_ip()` เดียวกับที่ใช้ทั้งระบบ (`apiapp/utils/request_meta.py`) |
 | `status` | enum(`denied_missing_purpose`,`denied_insufficient_scope`,`granted_location_not_found`,`granted_no_data_source`) | req | ผลลัพธ์ของ attempt นั้น — ไม่มีค่า "granted" จริงในสไลซ์นี้ (ไม่มี client ไหนถือ `occupancy-pii-read`) |
-| `result_count` | int | req | default `0` — จำนวนรายการที่คืนกลับจริง (ODT ขอให้เก็บ); เป็น `0` เสมอในสไลซ์นี้ |
+| `result_count` | int | req | default `0` — จำนวนรายการที่คืนกลับจริง (ODT ขอให้เก็บ). EXT-007 เป็น `0` เสมอ (scaffold). EXT-008 = **N = `persons_count`** เมื่อ `granted` (CR-169 C6/FR-50 — 1 แถว/request ไม่ว่ากี่คน), `0` เมื่อ `denied`; EXT-009/010 = `1` เมื่อ `granted`, `0` เมื่อ `denied` |
 | `created_at` | ts | req | เวลาที่เรียก |
 
-> **CR-154:** `status` ของ EXT-008–011 = `granted` (สำเร็จ) หรือ `denied_<error code>` (เช่น `denied_insufficient_scope`, `denied_missing_purpose`, `denied_validation_error`, `denied_location_not_found`, `denied_location_not_bookable`, `denied_duplicate_booking`, `denied_booking_not_found`, `denied_booking_not_cancellable`, `denied_residency_not_found`); `result_count` = 1 เมื่อ granted
+> **CR-154:** `status` ของ EXT-008–011 = `granted` (สำเร็จ) หรือ `denied_<error code>` (เช่น `denied_insufficient_scope`, `denied_missing_purpose`, `denied_validation_error`, `denied_location_not_found`, `denied_location_not_bookable`, `denied_duplicate_booking`, `denied_booking_not_found`, `denied_booking_not_cancellable`, `denied_residency_not_found`); `result_count` = 1 เมื่อ granted (EXT-008: `persons_count` — ดูแถว `result_count` ข้างบน)
 
 **Index:** `(client_id, created_at)` · `(location_code)` · `(created_at)` TTL `expireAfterSeconds` 1 ปี
 
@@ -2574,8 +2675,11 @@ Buffer ของ partner booking (M2) — FastAPI insert ตอนรับค�
 
 | Field | ชนิด | req | หมายเหตุ |
 | --- | --- | --- | --- |
-| `_id` | str | req | = `booking_id` |
-| `booking_id` | str | req | `BK-{ulid}` — คืนให้ partner |
+| `_id` | str | req | `BP-{ulid}` ต่อแถว (CR-169 C4) — แถวที่เขียนก่อน CR-169 เป็น `_id = booking_id = BK-…` ยังอ่านได้ (ไม่ต้อง migrate). **อย่า assume `_id == booking_id`** |
+| `booking_id` | str | req | `BK-{ulid}` — **รหัสกลุ่ม** ร่วมกันทุกแถวใน request เดียว (คืนให้ partner, ใช้กับ EXT-009/010). แถวเดิมที่ `booking_id = _id` = กลุ่มขนาด 1 |
+| `person_seq` | int | req | ลำดับคนใน `persons[]` เริ่ม 0 · default `0` (แถวเดิม) |
+| `group_size` | int | req | จำนวนคนทั้งกลุ่ม · default `1` (แถวเดิม) |
+| `committed` | bool | req | `false` ระหว่างที่ API ยัง insert แถวของกลุ่มไม่ครบ (staged insert, FR-31); worker ข้ามแถว `committed = false` (FR-32); default `true` (แถวเดิม) |
 | `client_id` | str | req | จาก JWT claims (`sub`) — ใช้ตรวจเจ้าของตอน cancel/get |
 | `module_name` | str | req | จาก claims |
 | `shelter_code` | str | req | จาก `location_code` ใน request |
@@ -2583,12 +2687,66 @@ Buffer ของ partner booking (M2) — FastAPI insert ตอนรับค�
 | `cid_hash` | str | req | `sha256(cid)` (เหมือน `public_persons.national_id_hash`) — ใช้ตรวจซ้ำ |
 | `first_name` / `last_name` / `phone` | str\|null | req | ล้างเป็น `null` พร้อม `cid`; `phone` เก็บแบบ normalize (`0XXXXXXXXX`) |
 | `state` | enum(`pending`,`written`,`cancelled`,`rejected`) | req | `pending` → worker → `written` · cancel ก่อนเขียน → `cancelled` · ซ้ำตอนเขียน → `rejected` |
-| `cancel_requested` | bool | req | default `false` — EXT-009 หลัง `written`; worker เปลี่ยน stay เป็น `cancelled` ถ้ายัง `pre_registered` |
+| `cancel_requested` | bool | req | default `false` — EXT-009 หลัง `written`; worker เปลี่ยน stay เป็น `cancelled` ถ้ายัง `pre_registered` และ household เป็น `cancelled` เฉพาะเมื่อไม่มีสมาชิกที่ยังถืออยู่ (§1.3 derive rules 2–4 + CR-169 decision #613; กฎเดียวกับ reconcile) · audit doc ของการยกเลิก stay/household มี `_id` คงที่ (`audit:ext-cancel-stay:{แถว _id}`, `audit:ext-cancel-household:{household_id}`) |
 | `cancel_reason` | str\|null | opt | จาก body EXT-009 (≤200) |
+| `cancel_flag_token` | str\|null | opt | id ของ EXT-009 request ที่ตั้ง `cancel_requested` และยังไม่จบ (CR-169 FR-40, decision sync 2026-10-17 #612 + review รอบ 2 ของ PR #635). ตั้งพร้อม flag ตอน 2a/2b; ล้างเป็น `null` **เฉพาะ** 2 กรณี: request สำเร็จ → ล้าง token (flag คงไว้ = FINISHED, ส่งต่อให้ worker) ก่อนตอบ 200 — ล้างไม่ได้ → ย้อน flag แล้วตอบ 500 (ไม่มีกำหนดเวลาถือ flag สูงสุด — กฎ "ถือ flag ได้ไม่เกิน 60 วินาที" ไม่รับ, review รอบ 3 ของ PR #635) · 409 หรือ error → ย้อน flag ที่ request นี้ตั้ง (retry แบบมีขอบเขต, กันการถูก cancel) พร้อมล้าง token. **ย้อนไม่สำเร็จหรือ process ตายก่อนย้อน → flag + token คงอยู่** (ไม่ล้าง token). worker **ไม่ยกเลิก** แถวที่ยังมี token; token ที่อายุเกิน 2 นาที (ตาม `cancel_flag_set_at`; ไม่มี → ใช้ `updated_at`) = request ที่ตายแล้ว → worker ย้อน flag (`cancel_requested=false`, ล้าง `cancel_reason`/token/`cancel_flag_set_at`; guard ด้วย token เดิม) โดยไม่ยกเลิกอะไรใน CouchDB เพราะ partner ไม่เคยได้ 200. flag ที่ไม่มี token = FINISHED (legacy หรือ request จบแล้ว). ระหว่างรอ flag ของ request อื่น (งบรวม 1 วินาที/request) หมดเวลาแล้วอ่านแถวซ้ำอีกครั้งก่อนตอบ 409 (token หาย → FINISHED ข้าม; flag ถูกย้อน → OPEN ยกเลิกต่อ). ความเสี่ยงที่ยอมรับ (review รอบ 3; ทุกกรณีต้อง Mongo ล้มกลางคำสั่งหรือช้าเกิน 1 นาที; ปิดได้จริงด้วย #616 เท่านั้น): ล้าง token ได้บางแถวแล้ว Mongo ล้ม (แถวนั้นจบแล้วขณะตอบ 500) · ล้าง token นานเกิน TTL 2 นาที (worker อาจย้อน flag แล้วขณะตอบ 200) · access log `granted` แต่ commit ตอบ 500 · client ตัดการเชื่อมต่อกลาง commit (ไม่แน่นอนว่าแถวใด commit หรือถูกย้อน). ไม่ใช่ field ใน response |
+| `cancel_flag_set_at` | ts\|null | opt | เวลาที่ตั้ง `cancel_flag_token` (นาฬิกาของ API; = `updated_at` ของการตั้ง flag) — ล้างพร้อม token · worker ใช้ตัดสิน token ค้าง (> 2 นาที); clock skew ระหว่าง host เป็นความเสี่ยงที่ยอมรับ (API ไม่มีกำหนดเวลาถือ flag; review รอบ 3 ของ PR #635) · decision sync 2026-10-17 (review รอบ 2 ของ PR #635) · additive ไม่ต้อง backfill · ไม่ใช่ field ใน response |
 | `reject_reason` | str\|null | opt | `duplicate` · `not_cancellable` |
 | `evacuee_id` / `household_id` | str\|null | opt | `evacuee:{ulid}` / `household:{ulid}` — สร้างไว้ก่อนเขียน Couch เพื่อ retry แบบ idempotent |
+| `reconciled_at` | ts\|null | opt | **ใหม่ (#613)** — worker reconcile pass ทำแถว `cancelled` / `rejected` ที่จองไว้ (ดู Reconcile ด้านล่าง) เสร็จแล้ว ตั้งครั้งเดียว; ไม่มี / `null` = ยังไม่ reconcile (แถวก่อน deploy รวมอยู่ด้วย). ความล้มเหลวชั่วคราว (CouchDB error, stay/household เปลี่ยนระหว่างทำ) → ไม่ตั้ง |
+| `reconcile_outcome` | enum(`cancelled`,`advanced`,`missing`,`noop`)\|null | opt | **ใหม่ (#613)** — ผลของ reconcile: `cancelled` = ยกเลิก stay และ/หรือ household ที่จองไว้ (รวมรอบที่เขียน audit ที่ค้างจากรอบก่อนของ doc ที่ timestamp ตรงกับ marker ของ doc นั้นให้ครบ); `advanced` = stay เลย `pre_registered` แล้ว ไม่แตะ (log warning, ไม่มี PII); `missing` = ไม่มี doc `evacuee`/`household` ที่จองไว้ใน `shelter_{code}` (shelter DB หายก็นับเป็น `missing` เพราะ GET ได้ 404 เหมือนกัน; error ชั่วคราว/5xx ไม่นับ); `noop` = ไม่มีอะไรต้องทำ: stay/household ถูกยกเลิกไปแล้วโดยคนอื่น (เช่น staff — timestamp ของ doc ไม่ตรงกับ marker ของ doc นั้น หรือไม่มี marker) → ไม่เขียน audit ของ partner, หรือถูกยกเลิกโดย reconcile และ audit ครบแล้ว |
+| `reconcile_stay_cancelled_at` | string(ISO-8601)\|null | opt | **ใหม่ (#613, decision sync review รอบ 3)** — timestamp ที่ reconcile จะเขียนเป็น `current_stay.since` ของ stay (`evacuee_id`) ตอนยกเลิก; ตั้ง *ก่อน* เขียนด้วยค่าเดียวกันทุกครั้งที่พยายามยกเลิก (ตั้งใหม่ทุก attempt). เก็บเป็น string ตรงตัวกับค่าที่เขียนลง CouchDB (ไม่ใช่ `datetime` ของ Mongo ซึ่งตัดเหลือ ms). รอบ retry เขียน audit ของ partner ของ stay ที่ `cancelled` **เฉพาะเมื่อ `current_stay.since` = ค่านี้**; ไม่ตรง (หรือ `null`) = ยกเลิกโดยคนอื่น → ไม่เขียน audit ของ partner. marker ที่ค้างจากการเขียนที่ไม่เกิดขึ้นไม่ต้องคืนเป็น `null` (การยกเลิกโดยคนอื่นไม่มีทางได้ timestamp เดียวกัน). additive, ไม่มี `schema_v` bump |
+| `reconcile_household_cancelled_at` | string(ISO-8601)\|null | opt | **ใหม่ (#613, decision sync review รอบ 3)** — เหมือน `reconcile_stay_cancelled_at` แต่สำหรับ household (`household_id`): timestamp ที่ reconcile จะเขียนเป็น `updated_at` ของ household ตอนยกเลิก (รวม roll-up จากการยกเลิก stay ซึ่งใช้ timestamp เดียวกับ stay). รอบ retry เขียน audit ของ partner ของ household ที่ `cancelled` **เฉพาะเมื่อ `updated_at` = ค่านี้**. additive, ไม่มี `schema_v` bump |
 | `created_at` / `updated_at` | ts | req | — |
 
-**Index:** `(shelter_code, cid_hash)` unique partial (`state ∈ {pending, written}`) — กันซ้ำภายในศูนย์ + race · `(state, updated_at)` · `(client_id)`
+**Index:** `(shelter_code, cid_hash)` unique partial (`state ∈ {pending, written}`) — กันซ้ำภายในศูนย์ + race (FR-30, คงเดิม) · `(booking_id, person_seq)` **ใหม่ (CR-169)** — ดึงทั้งกลุ่มตามลำดับ · `(state, updated_at)` · `(state, reconciled_at)` **ใหม่ (#613)** — query ของ reconcile pass · `(client_id)` · `(cancel_requested)`
 
-**booking_status (EXT-010):** `pending`/`written` → `BOOKED` · `cancelled` หรือ `cancel_requested` → `CANCELLED` · `rejected` → `REJECTED`
+**Reconcile (#613/#683, worker `inbound/external_bookings.py` `reconcile_terminal_bookings`):** sweeper รันทุก poll (`POLL_INTERVAL_SECONDS`) ส่วน reconcile อยู่ใน loop เดียวกันแต่รันอย่างน้อยทุก `RECONCILE_INTERVAL_SECONDS` ≈ 60 วินาที หยิบได้สูงสุด 50 แถวที่ `state ∈ {cancelled, rejected}` · มี `evacuee_id` หรือ `household_id` · `reconciled_at` ไม่มี/`null` (เก่าสุดก่อน). GET doc ที่จองไว้ใน `shelter_{code}` ตรง ๆ (ไม่ใช้ Mango). ไม่มีทั้งคู่ (รวมกรณี shelter DB หาย ซึ่ง GET ได้ 404) → `missing`; stay เลย `pre_registered` → ไม่แตะ stay แต่ยังตรวจ household ต่อด้านล่าง (#683 — นับสมาชิกคนนี้เป็นสมาชิกปกติ; ผลลัพธ์ดูท้ายประโยค); stay `pre_registered` → ตั้ง `reconcile_stay_cancelled_at` (และ `reconcile_household_cancelled_at` ถ้าแถวจอง household ไว้) เป็น timestamp เดียวกับที่จะเขียนบนแถวก่อน แล้วยกเลิกด้วย timestamp นั้น (`cancelled`); แล้ว GET household: ถ้ายัง `pre_registered` → ตั้ง `reconcile_household_cancelled_at` เป็น timestamp ใหม่ก่อน และถ้าไม่มีสมาชิกที่ยังถืออยู่เหลือ (`pre_registered` · `kiosk_registered` · `arriving` · `active` · `room_confirmed` · `temporary_leave`, §1.3 derive rules 2–4 + CR-169 decision #613; สมาชิก `checked_out` / `transferred` / `deceased` / `cancelled` ไม่ถือ household ไว้) → ยกเลิก household ด้วย timestamp นั้น (`cancelled`). **`reconcile_outcome`:** ยกเลิก/audit อะไรในรอบนี้ → `cancelled`; ไม่มี และ stay เลย `pre_registered` (household ถูกถือไว้หรือถูกยกเลิกโดยคนอื่น) → `advanced`; อื่น → `noop`. ผลลงแถวด้วย CAS บน `state` + `reconciled_at` ว่าง (ไม่เขียนทับแถวที่เปลี่ยนแล้ว). การยกเลิก stay/household ใช้ helper ชุดเดียวกับ EXT-009 cancel path (`_cancel_stay` / `_cancel_household_if_empty`) แต่ reconcile เรียก `_cancel_stay(strict=True)` และเรียก `_cancel_household_if_empty` ตรง ๆ: audit หรือ household ที่ล้มหลังจากยกเลิก stay แล้ว → raise ให้แถวไม่ถูก reconcile (EXT-009 path ทำแบบ best-effort, log แล้วตอบ 200 ต่อ) · audit doc ใช้ `_id` คงที่ (ดู `cancel_requested` ข้างบน) และเขียนได้ครั้งเดียว. **Marker ราย doc และ audit ของ reconcile (decision sync review รอบ 3):** doc ใน CouchDB ไม่มี `updated_by` จึงตัดสินว่าใครยกเลิกจาก timestamp — ก่อนยกเลิก stay หรือ household ทุกครั้ง worker ตั้ง marker ของ doc นั้นบนแถว (`reconcile_stay_cancelled_at` / `reconcile_household_cancelled_at`, CAS บน `state` + `reconciled_at` ว่าง) เป็น timestamp ที่จะเขียน (`current_stay.since` / `updated_at`) แล้วเขียนด้วยค่าเดียวกัน — การยกเลิกที่ไม่ผ่าน marker ไม่มี. marker ตั้งใหม่ทุกครั้งที่พยายามยกเลิก และไม่ต้องคืนเป็น `null` เมื่อการยกเลิกไม่เกิดขึ้น (ไม่ตรงกับ timestamp ของคนอื่นอยู่แล้ว). **ความล้มเหลวของ audit ใน reconcile = transient:** stay/household ถูกยกเลิกแล้วแต่เขียน audit ไม่สำเร็จ → ไม่ตั้ง `reconciled_at`; รอบถัดไปเจอ stay/household `cancelled` ที่ยังไม่มี audit doc **และ `current_stay.since` (stay) / `updated_at` (household) ตรงกับ marker ของ doc นั้น** → เขียน audit (id คงที่ ไม่ซ้ำ) แล้วบันทึก `cancelled`. ตัดสินราย doc: ไม่ตรง (ยกเลิกโดยคนอื่น เช่น staff — รวมกรณี marker ค้างจากการเขียนที่ล้มแล้ว staff ยกเลิกทีหลัง และกรณีรอบเดียวกันยกเลิก stay แต่ household ถูก staff ยกเลิกไปก่อน) → ไม่เขียน audit ของ partner ของ doc นั้น (doc นั้นนับเป็น `noop`). (EXT-009 cancel path ยังเป็น best-effort: audit ล้มเหลวได้ แถวยังเป็น `cancelled`.) household ที่ยังมีสมาชิกสถานะ `arriving` / `active` / `room_confirmed` / `temporary_leave` / `kiosk_registered` / `pre_registered` จะไม่ถูกยกเลิก ทั้งใน reconcile และ EXT-009 path. ไม่มีการเปลี่ยน `schema_v` ของ CouchDB. ความล้มเหลวของแถว (CouchDB error, ยกเลิกไม่สำเร็จ, stay เปลี่ยนระหว่างทำ) → ไม่ตั้ง `reconciled_at` และ **ลองใหม่ทุกรอบ** (ไม่มี backoff ตามเวลา ตามที่ตัดสินใจไว้ใน CR-169 decision sync #613); แถวที่ fail ก่อนหน้าถูกจัดไว้หลังแถวที่ยังไม่เคย fail ใน batch เดียวกัน เพื่อไม่ให้แถวที่ fail ซ้ำดันแถวใหม่ตกจาก batch. ไม่มี persisted field ของ worker สำหรับ fail count (อยู่ในหน่วยความจำ รีเซ็ตเมื่อ restart).
+
+**Group (CR-169 C4):** 1 แถวต่อคน · ไม่ใช้ Mongo transaction (standalone, ไม่มี replica set) — API insert ทุกแถวด้วย `committed = false` → ครบแล้ว `update_many({booking_id}, {$set: {committed: true}})` แล้วตอบ 201; `BulkWriteError` (writeErrors code 11000) กลางทาง → `delete_many({booking_id, committed: false})` แล้วตอบ 409 · worker sweeper ลบแถว `committed = false` ที่ค้างเกิน 60 วินาที พร้อมแถว `state = pending` ของกลุ่มเดียวกัน (FR-33) · แถว `written` / `cancelled` / `rejected` ไม่ถูกแตะ
+
+**Cancel กลุ่ม (CR-169 #612, decision sync 2026-10-17):** flag `cancel_requested` ทั้งกลุ่มด้วย `update_many` (guard `state: written`, `cancel_requested: false`) ก่อน แล้วค่อยยกเลิกแถว `pending` ด้วย `update_many` · **ความเสี่ยงที่ยอมรับ (owner decision):** หลังยกเลิกแถว `pending` แบบ bulk แล้ว ถ้าแถวที่ worker เพิ่งเขียนกลางทางยกเลิกไม่ได้ จะยังตอบ 409 ทั้งที่แถว `pending` อื่นถูกยกเลิกไปแล้ว (ย้อนไม่ได้เพราะล้าง PII) · partner retry ได้ผลถูก · **ปิดจริงได้เฉพาะด้วย #616** (atomic group commit) · **token (review รอบ 2 ของ PR #635):** worker ไม่แตะ flag ที่ยังมี `cancel_flag_token` (กัน worker ยกเลิก stay ระหว่างที่ request ยังอาจย้อน flag) · ย้อน flag ล้ม → flag + token ค้าง → request อื่นที่ยกเลิกกลุ่มเดียวกันได้ 409 หลังรอ 1 วินาทีจนกว่า worker ย้อน flag ที่อายุเกิน 2 นาที แล้ว retry ได้ · ระหว่างนั้น EXT-010 ยังรายงานแถวนั้นเป็น `CANCELLED` (FR-42 นับ `cancel_requested` โดยไม่ดู token) แล้วกลับเป็น `BOOKED` หลัง worker ย้อน
+
+**Migration (CR-169):** ไม่ bump `schema_v` (Beanie doc) — field ใหม่ทั้งหมดมี default (`person_seq = 0`, `group_size = 1`, `committed = true`) → แถวเดิมคือกลุ่มขนาด 1 ไม่ต้อง backfill; index ใหม่สร้างตอน Beanie init
+
+**booking_status (EXT-010):** รายคน: `pending`/`written` → `BOOKED` · `cancelled` หรือ `cancel_requested` → `CANCELLED` · `rejected` → `REJECTED` · **aggregate ของกลุ่ม:** ไม่มีคนที่เปิดอยู่และมี `CANCELLED` ≥ 1 → `CANCELLED` · มี `REJECTED` → `REJECTED` · อื่น → `BOOKED` (CR-169 FR-42)
+
+### 9.8 `external_booking_idempotency` (MongoDB) — **ใหม่ (#614, decision sync CR-169 2026-10-17)**
+
+แถวของ `Idempotency-Key` ที่ partner ส่งกับ `POST /external/bookings` (EXT-008) ใช้ตอบ request ซ้ำด้วย `booking_id` เดิม. Beanie document (`tent_model.external_booking_idempotency`), ไม่มี `schema_v`, **ไม่มี PII** (เก็บเฉพาะ hash ของคำขอ).
+
+| Field | ชนิด | req | หมายเหตุ |
+| --- | --- | --- | --- |
+| `_id` | str | req | `IK-{ulid}` |
+| `client_id` | str | req | จาก JWT claims — key ผูกกับ client เดียว (client อื่นใช้ key เดียวกันได้) |
+| `key` | str | req | ค่า header `Idempotency-Key` (1–255 ตัวอักษร) |
+| `request_hash` | str | req | `sha256` ของคำขอที่ normalize แล้ว: `location_code` + `persons[]` ทั้งหมด (`cid` แทนด้วย `national_id_hash` ก่อน hash; ชื่อ/เบอร์ถูก hash แต่ไม่เก็บ) — **ห้ามเก็บ CID/ชื่อ/เบอร์ดิบ** |
+| `booking_id` | str | req | `BK-{ulid}` ที่รอบแรกจองไว้ (ตั้งแต่แถวเป็น `in_progress`) |
+| `status` | enum(`in_progress`,`completed`) | req | `in_progress` ก่อน stage แถว `external_bookings` · `completed` หลัง commit สำเร็จ (รวม G5) · default `in_progress` |
+| `created_at` | ts | req | เวลาที่รอบแรกเริ่ม — TTL อ้างอิงฟิลด์นี้; ถูกตั้งใหม่เมื่อ claim key ที่ค้าง (ดู claim ด้านล่าง) |
+
+**Index:** `(client_id, key)` unique (`uniq_idempotency_key_per_client`) — key ซ้ำได้เฉพาะภายใน client เดียวกัน (ชนกันที่ index นี้) · `(created_at)` **TTL 86400 วินาที** (`ttl_idempotency_created_at`) — หมดอายุ 24 ชม. หลังรอบแรก
+
+**Lifecycle (EXT-008):**
+- ไม่มี header → ไม่สร้างแถว
+- มี header → หลัง validate body แล้ว ก่อนตรวจ shelter/duplicate: มีแถวเดิม → hash ต่าง = `idempotency_key_reused` (409) · hash เดียวกัน + `in_progress` อายุ ≤ 60 วินาที (`created_at`) = `idempotency_in_progress` (409) · hash เดียวกัน + `in_progress` อายุ > 60 วินาที = ตัดสินจากแถวจริงของ `booking_id` (ดูด้านล่าง) · hash เดียวกัน + `completed` = 201 body เดิม
+- ไม่มีแถว → ตรวจ shelter ตามปกติ → insert แถว `in_progress` ก่อนตรวจ duplicate (unique; ถ้าชนกับรอบที่ชนะก่อน ให้ตอบตามแถวนั้น; คำขอที่ overlap จึงไม่ถูกนับเป็น duplicate ของตัวเอง) → ตรวจ duplicate → stage `external_bookings`
+- insert แถว key ที่ error หรือถูก cancel ระหว่างนั้น → ลบแถวของ request นั้นเอง (ไม่แตะแถวของรอบอื่น)
+- รอบแรกล้มโดยยังไม่มี booking (4xx/5xx รวม `duplicate_booking`) → **ลบแถว** (`release`) เพื่อให้ retry ทำได้ · ยกเว้น flip ตอบ error / ถูกยกเลิก แล้วลบแถว `pending` ของ `booking_id` ไม่สำเร็จ → ไม่ release (ดูข้อรอบแรกถูกยกเลิกด้านล่าง)
+- commit สำเร็จ หรือ G5 (flip ตอบ error แต่ทุกแถวของ `booking_id` `committed: true` ครบ `group_size`) → `status = completed`
+- รอบแรกถูกยกเลิกกลางคัน (client หลุด) ระหว่าง commit → รอ flip จบก่อนนับ: ทุกแถว `committed: true` ครบ → `status = completed` (แถว `external_bookings` คงไว้); ไม่ครบ → ลบแถว `pending` ของ `booking_id` และ **ลบแถว key** (เหมือน release) · ถ้าลบแถว `pending` ไม่สำเร็จ (retry ครบแล้ว) → **ไม่ release แถว key** (คง `in_progress`) เพื่อให้ retry ด้วย key เดิมที่อายุ > 60 วินาทีจัดการกลุ่มตามกติกา `in_progress` ค้างด้านล่าง (ถ้า release แล้วแถวที่ค้างจะกัน CID เหล่านี้ด้วย `duplicate_booking`)
+- **ทุกการเขียนแถว key ของรอบหนึ่ง guard ด้วย lease ของรอบนั้นเอง** (`_id` + `status: in_progress` + `created_at` ที่รอบนั้นตั้งไว้ หรือที่ claim ตั้งไว้) — ทั้ง release (ลบแถว) และ mark `completed` · ถ้า lease หายแล้ว (key ถูก claim ไป ซึ่งตั้ง `created_at` ใหม่ หรือแถวเป็น `completed` แล้ว) การเขียนนั้น match ไม่ได้และ**ไม่เปลี่ยนอะไร** — รอบที่เสีย lease ไม่ลบหรือเขียนทับแถว key ของรอบอื่นเด็ดขาด (เจ้าของ lease ปัจจุบันหรือ retry ถัดไปตัดสินจากแถวจริงแทน); แถว `completed` ไม่ถูก release
+- commit ล้ม/ถูกยกเลิกและ **นับแถว committed ไม่ได้** (read error): มี key → release แถว key ด้วย lease ก่อน แล้วลบแถว `pending` ของ `booking_id` **เฉพาะเมื่อแถว key หายไปแล้ว** (ไม่มีรอบอื่นถือ booking นี้); ถ้าแถว key ยังอยู่ (ถูก claim/completed โดยรอบอื่น ซึ่งอาจตอบ 201 booking นี้ไปแล้ว) → ไม่แตะแถว `external_bookings` (เจ้าของ lease / sweeper จัดการ) · ไม่มี key → ลบแถว `pending` ตามเดิม · ทั้งสองกรณีตอบ 500 `internal_error`
+- ไม่มีการ migrate: collection ใหม่ สร้าง index ตอน Beanie init
+
+**`in_progress` ค้าง (decision sync CR-169 2026-10-17, จาก code review PR #666):** แถว key เก็บ `booking_id` ตั้งแต่ตอน insert ดังนั้น request ที่เจอแถว `in_progress` อายุ > 60 วินาที (รอบแรกอาจถูก kill ก่อน release/complete) ตัดสินจากแถว `external_bookings` ที่มี `booking_id` นั้น:
+- **committed ครบ `group_size`** → **201** body เดิม (`booking_id` เดิม, ไม่สร้างแถวใหม่) และ mark key เป็น `completed`
+- **ไม่มีแถว `committed: true` เลย** หรือ **committed บางส่วนแต่ไม่เหลือแถว `committed: false`** → **claim** (ลำดับด้านล่าง). ได้สิทธิ์ → คำขอนี้ทำเป็นคำขอใหม่ (`booking_id` ใหม่, insert key ใหม่); ไม่ได้สิทธิ์ → **409** `idempotency_in_progress`
+  - **claim:** (1) **lease** — `update` ด้วย `_id` + `status: in_progress` + `created_at` เดิม ตั้ง `created_at` = ตอนนี้ (guard ด้วยค่าเดิม → คำขอที่แข่งกันได้สิทธิ์เพียงคำขอเดียว; คำขออื่นเห็นแถวอายุน้อยและ fence ของรอบเดิมไม่ผ่านอีก) · (2) ลบแถว `committed: false` ของ `booking_id` เดิม (ต้องสำเร็จก่อนนับ ถ้าไม่สำเร็จ → 409) · (3) นับแถว `committed: true` ของ `booking_id` เดิมอีกครั้ง:
+    - ครบ `group_size` (flip ที่ค้างจบก่อน lease) → mark key `completed` → **201** booking เดิม
+    - ไม่มีเลย → ลบแถว key ด้วย `_id` + `status: in_progress` + `created_at` ที่ lease ตั้งไว้ (`deleted_count = 1` ได้เพียงครั้งเดียว) → คำขอนี้ทำเป็นคำขอใหม่
+    - บางส่วน (flip แข่งกับ lease) → ลบแถว `state: pending` ที่เหลือของ `booking_id` (เทียบเท่า phase 2 ของ sweeper ไม่ให้ PII ค้าง) → **409** `idempotency_in_progress`; แถว key คงอยู่ที่ `in_progress` และรอบ retry ถัดไป (อายุ > 60 วินาทีหลัง lease) เข้าเงื่อนไข "ไม่มีแถว committed" · ถ้าลบไม่สำเร็จ (retry ครบแล้ว) ก็ตอบ 409 เหมือนกัน กลุ่มค้างแบบ committed บางส่วนที่ไม่มีแถว staged ซึ่ง sweeper ไม่กวาด → retry ถัดไป (อายุ > 60 วินาที) claim อีกครั้งและลองลบใหม่
+  - `created_at` ของแถว key ถูกตั้งใหม่ทุกครั้งที่ claim สำเร็จ (lease) — TTL 24 ชม. นับจากค่านี้
+- **fence ก่อน commit (ทุกรอบที่ key ถูกสร้าง):** หลัง insert แถว staged และก่อน flip `committed` ตรวจว่าแถว key ยังเป็นของรอบนี้ (`_id` + `status: in_progress` + `created_at` ที่รอบนี้ตั้งไว้); ถ้าถูก claim แล้ว (lease เปลี่ยน `created_at` หรือแถวถูกลบ) → ลบแถว staged ของรอบนี้ ตอบ **409** `idempotency_in_progress` และไม่ commit · ถ้า flip มาถึงหลัง claim ลบแถว staged ไปแล้ว flip จะ match น้อยกว่า `group_size` → shortfall → **500** `internal_error` ตามกติกาเดิม (ไม่มีแถวที่ commit)
+- **committed บางส่วน และยังมีแถว `committed: false`** → **409** `idempotency_in_progress` และคำขอนี้ไม่แก้ไขแถวใด ๆ · worker sweeper (`sweep_stale_staged`, FR-33) กวาดกลุ่มนี้เมื่อแถว staged อายุเกิน 60 วินาที: phase 1 ลบแถว `committed: false`, phase 2 ลบแถว `state: pending` ที่เหลือของ `booking_id` (รวมแถว `committed: true`) → หลังกวาด กลุ่มไม่มีแถว committed แล้ว รอบ retry ถัดไปจึงเข้า claim ได้ (ไม่ใช่ 409 จนหมด TTL)
+- อายุ ≤ 60 วินาที → 409 `idempotency_in_progress` ไม่แตะข้อมูล
