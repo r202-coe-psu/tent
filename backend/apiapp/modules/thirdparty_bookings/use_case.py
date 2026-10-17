@@ -753,8 +753,10 @@ class ThirdPartyBookingsUseCase:
         rows = await self._load_owned_group(
             booking_id=booking_id, endpoint=endpoint, claims=claims, client_ip=client_ip
         )
+        # One wait budget per request (CR-169 FR-40): every foreign flag met below shares it.
+        deadline = asyncio.get_running_loop().time() + _FLAG_WAIT_SECONDS
         rows = await self._settle_foreign_flags(
-            rows, token, endpoint=endpoint, claims=claims, client_ip=client_ip
+            rows, token, deadline, endpoint=endpoint, claims=claims, client_ip=client_ip
         )
         open_rows = [row for row in rows if _is_open(row)]
         if not open_rows and not any(_booking_status(row) == "CANCELLED" for row in rows):
@@ -798,7 +800,7 @@ class ThirdPartyBookingsUseCase:
             # reverted on that 409 (CR-169 FR-40, all-or-nothing for the flags). The retry skips the
             # cancelled rows (FINISHED).
             if requested and not await self._flag_requested(
-                collection, requested, reason, now, token
+                collection, requested, reason, now, token, deadline
             ):
                 raise await self._not_cancellable(endpoint, claims, client_ip, rows[0])
             # Any unexpected error after phase 2a reverts the flags this request set (guarded by
@@ -806,7 +808,9 @@ class ThirdPartyBookingsUseCase:
             # reverts them the same way before it is returned.
             if direct:
                 try:
-                    cancelled = await self._cancel_pending(collection, direct, reason, now, token)
+                    cancelled = await self._cancel_pending(
+                        collection, direct, reason, now, token, deadline
+                    )
                 except BaseException:
                     await self._revert_after_error(collection, planned, now, token)
                     raise
@@ -830,19 +834,20 @@ class ThirdPartyBookingsUseCase:
         self,
         rows: list[ExternalBooking],
         token: str,
+        deadline: float,
         *,
         endpoint: str,
         claims: ThirdPartyClaims,
         client_ip: str,
     ) -> list[ExternalBooking]:
-        """CR-169 FR-40 — wait (one shared deadline) for other requests' in-flight cancel flags.
+        """CR-169 FR-40 — wait on other requests' in-flight cancel flags, within `deadline`.
 
-        A flag still in flight when the wait ends is a conflict: this request cannot tell whether
-        the row will be cancelled, so it is refused before it flags anything.
+        `deadline` is the request's single wait budget (`_FLAG_WAIT_SECONDS` from its start), shared
+        by every later step. A flag still in flight when the wait ends is a conflict: this request
+        cannot tell whether the row will be cancelled, so it is refused before it flags anything.
         """
         if not any(_foreign_flag(row, token) for row in rows):
             return rows
-        deadline = asyncio.get_running_loop().time() + _FLAG_WAIT_SECONDS
         settled: list[ExternalBooking] = []
         for row in rows:
             if _foreign_flag(row, token):
@@ -881,6 +886,7 @@ class ThirdPartyBookingsUseCase:
         reason: str | None,
         now: datetime,
         token: str,
+        deadline: float,
     ) -> bool:
         """Phase 2a (FR-32) — flag the written rows for the worker. False after a full revert.
 
@@ -888,7 +894,7 @@ class ThirdPartyBookingsUseCase:
         request set before it propagates (see `_revert_after_error`).
         """
         try:
-            return await self._flag_and_check(collection, rows, reason, now, token)
+            return await self._flag_and_check(collection, rows, reason, now, token, deadline)
         except BaseException:
             await self._revert_after_error(collection, rows, now, token)
             raise
@@ -900,6 +906,7 @@ class ThirdPartyBookingsUseCase:
         reason: str | None,
         now: datetime,
         token: str,
+        deadline: float,
     ) -> bool:
         """Body of phase 2a: flag the written rows, then re-read their stays.
 
@@ -937,7 +944,9 @@ class ThirdPartyBookingsUseCase:
             for row in rows:
                 if row.id in flagged:
                     continue
-                if not await self._cancel_row(collection, row, "request", reason, now, token):
+                if not await self._cancel_row(
+                    collection, row, "request", reason, now, token, deadline
+                ):
                     ok = False
                     break
             flagged = set(await self._flagged_by(collection, ids, now, token))
@@ -1061,6 +1070,7 @@ class ThirdPartyBookingsUseCase:
         reason: str | None,
         now: datetime,
         token: str,
+        deadline: float,
     ) -> bool:
         """Phase 2b (FR-31) — cancel the pending rows and clear their PII in one `update_many`.
 
@@ -1097,16 +1107,14 @@ class ThirdPartyBookingsUseCase:
             if fresh is None:
                 return False
             if _foreign_flag(fresh, token):
-                fresh = await self._await_foreign_flag(
-                    fresh, token, asyncio.get_running_loop().time() + _FLAG_WAIT_SECONDS
-                )
+                fresh = await self._await_foreign_flag(fresh, token, deadline)
                 if fresh is None:
                     return False
             if not _is_open(fresh):
                 continue
             kind = await self._classify_fresh(fresh)
             if kind is None or not await self._cancel_row(
-                collection, fresh, kind, reason, now, token
+                collection, fresh, kind, reason, now, token, deadline
             ):
                 return False
         return True
@@ -1119,6 +1127,7 @@ class ThirdPartyBookingsUseCase:
         reason: str | None,
         now: datetime,
         token: str,
+        deadline: float,
     ) -> bool:
         """Cancel one OPEN row that a bulk step missed. False only when it can no longer be.
 
@@ -1140,9 +1149,7 @@ class ThirdPartyBookingsUseCase:
                 logger.warning("cancel row no longer exists (booking_id=%s)", row.booking_id)
                 return False
             if _foreign_flag(fresh, token):
-                fresh = await self._await_foreign_flag(
-                    fresh, token, asyncio.get_running_loop().time() + _FLAG_WAIT_SECONDS
-                )
+                fresh = await self._await_foreign_flag(fresh, token, deadline)
                 if fresh is None:
                     return False
             if not _is_open(fresh):

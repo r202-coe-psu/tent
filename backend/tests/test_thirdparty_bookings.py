@@ -2354,6 +2354,46 @@ async def test_cancel_group_foreign_token_still_in_flight_is_409_and_changes_not
     assert await _log_statuses() == ["denied_booking_not_cancellable"]
 
 
+async def test_cancel_group_foreign_waits_share_one_request_budget(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """CR-169 FR-40: the wait is at most 1 s per request, not 1 s per foreign row.
+
+    Two written rows get a foreign flag just before our flag write, so both are waited on in
+    phase 2a. Row 0 settles after 0.6 s; row 1 never does. The request gives up at the shared
+    1 s deadline (409). A fresh 1 s window per row would end near 1.6 s instead.
+    """
+    await _person(status="pre_registered", person_id="evacuee:BK-GROUP001-0")
+    await _person(status="pre_registered", person_id="evacuee:BK-GROUP001-1")
+    await _group(2, ["written", "written"])
+    foreign = {"cancel_requested": True, "cancel_reason": "foreign", "cancel_flag_token": "other"}
+
+    async def flag_both() -> None:
+        await _set_row("BP-BK-GROUP001-0", foreign)
+        await _set_row("BP-BK-GROUP001-1", foreign)
+
+    async def settle_row_zero() -> None:
+        await asyncio.sleep(0.6)
+        await _set_row("BP-BK-GROUP001-0", {"cancel_flag_token": None})
+
+    _around_update_many(
+        monkeypatch, when=lambda flt: flt.get("cancel_requested") is False, before=flag_both
+    )
+    settler = asyncio.create_task(settle_row_zero())
+    started = asyncio.get_running_loop().time()
+    response = await client.post(_cancel_url("BK-GROUP001"), json={"reason": "r"}, headers=GRANTED)
+    elapsed = asyncio.get_running_loop().time() - started
+    await settler
+    assert response.status_code == 409
+    assert response.json()["code"] == "booking_not_cancellable"
+    assert elapsed < 1.3
+    rows = await _rows("BK-GROUP001")
+    assert [
+        (row["cancel_requested"], row["cancel_reason"], row["cancel_flag_token"]) for row in rows
+    ] == [(True, "foreign", None), (True, "foreign", "other")]
+    assert await _log_statuses() == ["denied_booking_not_cancellable"]
+
+
 async def test_cancel_group_success_clears_own_token_and_keeps_flags(client: AsyncClient) -> None:
     """A successful request flags its written rows, then clears its token; the flags stay."""
     await _person(status="pre_registered", person_id="evacuee:BK-GROUP001-0")
