@@ -29,6 +29,7 @@ import {
 	matchesEvacueePhoneSearch,
 	matchesEvacueeSearch,
 	zoneLabel,
+	stayZoneName,
 	isEvacuee,
 	createHousehold,
 	isHousehold,
@@ -1721,6 +1722,26 @@ describe('matchesEvacueeSearch', () => {
 	it('an empty query still short-circuits to true even when search_excluded + isPublicSearch', () => {
 		const excluded = { ...evacuee, privacy: { search_excluded: true } };
 		expect(matchesEvacueeSearch(excluded, '', { isPublicSearch: true })).toBe(true);
+	});
+});
+
+describe('stayZoneName', () => {
+	const zones = [{ code: 'z1', name: 'โซนชาย' }];
+
+	it('returns null when no zone is assigned', () => {
+		expect(stayZoneName(null, zones)).toBeNull();
+		expect(stayZoneName(undefined, zones)).toBeNull();
+		expect(stayZoneName('  ', zones)).toBeNull();
+	});
+
+	it('resolves the zone name by code, case-insensitively', () => {
+		expect(stayZoneName('Z1', zones)).toBe('โซนชาย');
+	});
+
+	it('falls back to the code when the name is unknown', () => {
+		expect(stayZoneName('z9', zones)).toBe('z9');
+		expect(stayZoneName('z1')).toBe('z1');
+		expect(stayZoneName('z1', [{ code: 'z1', name: '  ' }])).toBe('z1');
 	});
 });
 

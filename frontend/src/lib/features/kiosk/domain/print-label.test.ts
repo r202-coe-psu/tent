@@ -19,12 +19,15 @@ import {
 	KIOSK_LABEL_TEXT_MIN_WIDTH_MM,
 	KIOSK_LABEL_TEXT_OFFSET_Y_MM,
 	KIOSK_LABEL_TEXT_ROW_GAP_MM,
+	KIOSK_LABEL_ZONE,
+	KIOSK_LABEL_ZONE_PREFIX,
 	kioskLabelDots,
 	kioskLabelLayout,
 	kioskLabelPageCss,
 	layoutChecklist,
 	kioskQrBoxMm,
 	kioskQrPrintSize,
+	labelZoneLine,
 	mmToDots,
 	ptToDots,
 	wrapLabelText
@@ -119,8 +122,8 @@ describe('kiosk label canvas', () => {
 		expect(ptToDots(KIOSK_LABEL_TEXT.name.pt)).toBeCloseTo(45.11, 2);
 	});
 
-	it('fits the name, phone and a two-row checklist inside the label height', () => {
-		const { name, phone, checklist } = KIOSK_LABEL_TEXT;
+	it('fits the name, phone, zone and a two-row checklist inside the label height', () => {
+		const { name, phone, zone, checklist } = KIOSK_LABEL_TEXT;
 		const checkRow = Math.max(
 			mmToDots(KIOSK_LABEL_CHECKBOX.sizeMm),
 			ptToDots(checklist.pt) * checklist.lineHeight
@@ -131,6 +134,8 @@ describe('kiosk label canvas', () => {
 			) +
 			ptToDots(name.pt) * name.lineHeight * name.maxLines +
 			ptToDots(phone.pt) * phone.lineHeight +
+			mmToDots(KIOSK_LABEL_ZONE.rowGapMm) +
+			ptToDots(zone.pt) * zone.lineHeight +
 			checkRow * 2 +
 			mmToDots(KIOSK_LABEL_CHECKBOX.rowGapMm);
 		expect(used).toBeLessThanOrEqual(kioskLabelDots().height);
@@ -207,6 +212,26 @@ describe('layoutChecklist', () => {
 
 	it('ships the staff ID card checklist', () => {
 		expect(KIOSK_LABEL_CHECKLIST).toEqual(['เช็คอิน', 'คัดกรอง', 'ที่พัก']);
+	});
+});
+
+describe('labelZoneLine', () => {
+	it('prints the assigned zone after the prefix', () => {
+		expect(labelZoneLine('A3')).toEqual({ label: KIOSK_LABEL_ZONE_PREFIX, value: 'A3' });
+	});
+
+	it('trims the zone name', () => {
+		expect(labelZoneLine('  โซนชาย ').value).toBe('โซนชาย');
+	});
+
+	it('leaves the zone blank to write by hand when none is assigned', () => {
+		expect(labelZoneLine(null)).toEqual({ label: KIOSK_LABEL_ZONE_PREFIX, value: null });
+		expect(labelZoneLine(undefined).value).toBeNull();
+		expect(labelZoneLine('   ').value).toBeNull();
+	});
+
+	it('labels the row in English as on the field form', () => {
+		expect(KIOSK_LABEL_ZONE_PREFIX).toBe('Zone:');
 	});
 });
 

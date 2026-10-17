@@ -87,11 +87,12 @@ export function kioskLabelPageCss(): string {
 
 /**
  * Label text styles (pt + unitless line height), shared by the print CSS and the PNG renderer.
- * Mirrors the staff ID card (`QrIdCard`): bold name, tracked mono phone, checklist at the bottom.
+ * Mirrors the staff ID card (`QrIdCard`): bold name, mono phone, zone, checklist at the bottom.
  */
 export const KIOSK_LABEL_TEXT = {
 	name: { pt: 16, lineHeight: 1.3, weight: 700, maxLines: 3 },
 	phone: { pt: 12, lineHeight: 1.3, weight: 700, letterSpacingEm: 0.1 },
+	zone: { pt: 12, lineHeight: 1.3, weight: 700 },
 	checklist: { pt: 10, lineHeight: 1.3, weight: 500 },
 	link: { pt: 9, lineHeight: 1.3, weight: 500 }
 } as const;
@@ -101,6 +102,28 @@ export const KIOSK_LABEL_LINK = 'shelter.psu.ac.th';
 export const KIOSK_LABEL_LINK_GAP_MM = 1;
 /** Space between the name and the phone line. */
 export const KIOSK_LABEL_TEXT_ROW_GAP_MM = 0.5;
+/** Zone row under the phone, as on the field form. */
+export const KIOSK_LABEL_ZONE_PREFIX = 'Zone:';
+export const KIOSK_LABEL_ZONE = {
+	/** Phone → zone row. */
+	rowGapMm: 1,
+	/** Prefix → zone name or the dotted rule. */
+	textGapMm: 1.5,
+	/** Square dots of the blank rule staff write the zone on (3 dots every 8 at 203 dpi). */
+	dotMm: 0.375,
+	dotPitchMm: 1
+} as const;
+
+export type LabelZoneLine = { label: string; value: string | null };
+
+/**
+ * The zone row of a QR label: the assigned zone's name, or a null value for a blank dotted rule
+ * staff fill in by hand (first print, before Station 3 assigns a zone).
+ */
+export function labelZoneLine(zone: string | null | undefined): LabelZoneLine {
+	return { label: KIOSK_LABEL_ZONE_PREFIX, value: zone?.trim() || null };
+}
+
 /** Staff ID card checklist, ticked by hand at each station. */
 export const KIOSK_LABEL_CHECKLIST = ['เช็คอิน', 'คัดกรอง', 'ที่พัก'] as const;
 export const KIOSK_LABEL_CHECKBOX = {
