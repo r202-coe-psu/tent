@@ -16,12 +16,16 @@ term for term:
 where ``on_hand`` sums the stock ledger (issues are negative rows) and ``reserved``
 counts donations still owed to the shelter. A ``received`` donation already written
 into the ledger is *excluded* from reserved: its quantity is on the shelf now, and
-counting it in both places would close the need at half the goods.
+counting it in both places would close the need at half the goods. An outstanding
+donation part-way through a batch receipt owes only its unrecorded part (CR-143).
+The ledger reading is shared with the quota counter (``worker.donation_ledger``).
 """
 
 from __future__ import annotations
 
 from typing import Any
+
+from worker.donation_ledger import keyed_donation_ids, recorded_donation_qty, still_owed
 
 #: A donation stops owing the shelter anything once it is expired or cancelled. The
 #: wider set is kept deliberately — narrowing it here would change what the public board
@@ -39,15 +43,6 @@ def _to_float(value: Any) -> float:
         return 0.0
 
 
-def _keyed_donation_ids(stock_ledgers: list[dict[str, Any]]) -> set[str]:
-    """Donations already booked into the ledger, so their goods count as on-hand."""
-    return {
-        str(entry["ref_id"])
-        for entry in stock_ledgers
-        if entry.get("reason") == "donation" and entry.get("ref_id")
-    }
-
-
 def on_hand_by_item(stock_ledgers: list[dict[str, Any]]) -> dict[str, float]:
     balance: dict[str, float] = {}
     for entry in stock_ledgers:
@@ -63,23 +58,21 @@ def _reserved_by_item(
     stock_ledgers: list[dict[str, Any]],
     campaign_id: str,
 ) -> dict[str, float]:
-    keyed = _keyed_donation_ids(stock_ledgers)
+    keyed = keyed_donation_ids(stock_ledgers)
+    recorded = recorded_donation_qty(stock_ledgers)
     reserved: dict[str, float] = {}
     for donation in donations:
         if donation.get("campaign_id") != campaign_id:
             continue
-        status = donation.get("status")
-        if status in _SETTLED_STATUSES:
+        if donation.get("status") in _SETTLED_STATUSES:
             continue
         # Received *and* already booked into the ledger: the goods are on the shelf,
-        # counted in on_hand. Counting them again here closes the need at half.
-        if status == "received" and str(donation.get("_id")) in keyed:
-            continue
-        for item in donation.get("items") or []:
-            item_id = item.get("item_id")
+        # counted in on_hand — counting them again here closes the need at half. A
+        # batch receipt interrupted half way still owes only its unrecorded part.
+        for item_id, qty in still_owed(donation, keyed, recorded):
             if not item_id:
                 continue
-            reserved[item_id] = reserved.get(item_id, 0.0) + _to_float(item.get("qty"))
+            reserved[item_id] = reserved.get(item_id, 0.0) + float(qty)
     return reserved
 
 

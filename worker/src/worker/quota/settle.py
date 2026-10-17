@@ -189,3 +189,42 @@ async def reserve_walk_in_quota(
             doc.get("_id"),
         )
     return True
+
+
+async def settle_shelved_quota(couch: Any, shelter_code: str, *, now: datetime) -> None:
+    """Hand back the reservation of goods that just reached the stock ledger.
+
+    A ``received`` donation keeps holding quota (``QUOTA_HOLDING_STATUSES``), but once
+    its rows land in the ledger ``refresh_on_hand`` raises ``on_hand_qty`` by the same
+    goods — and ``reserve_quota`` caps at ``qty_target − on_hand_qty − reserved_qty``.
+    Left alone, the goods came off the ceiling twice: the board showed 89 open, and a
+    donor booking all 89 was told the need was full.
+
+    Same reconciliation as :func:`reserve_walk_in_quota` — it *sets* ``reserved_qty`` to
+    the recomputed truth, which already leaves recorded goods out, so replaying a ledger
+    change row is a no-op and a booking racing it is reported, not stomped.
+
+    A conflicted counter keeps its doubled-up value, which only ever errs strict —
+    but it would hold until the shelter's next donation or ledger change, refusing
+    donors in the meantime. So a conflict gets one more pass. The booking behind it
+    reserved before the failed write; its buffer insert follows within milliseconds,
+    well before the re-run's full shelter scan reaches the buffers, so the re-read
+    counts it. A second conflict is left for the next change, as before.
+    """
+    report = await reconcile_shelter(couch, shelter_code, now=now, apply=True)
+    changed = report.counters_changed
+    if report.counters_conflicted:
+        report = await reconcile_shelter(couch, shelter_code, now=now, apply=True)
+        changed += report.counters_changed
+    if changed:
+        logger.info(
+            "Settled shelved goods: %d counter(s) brought in line for %s",
+            changed,
+            shelter_code,
+        )
+    if report.counters_conflicted:
+        logger.warning(
+            "Reconcile for %s hit %d conflict(s) settling shelved goods",
+            shelter_code,
+            report.counters_conflicted,
+        )
