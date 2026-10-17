@@ -278,7 +278,7 @@ docker compose -f docker-compose.edge.yml run --rm edge-init
 | เงื่อนไข | ทำไม |
 | --- | --- |
 | state `crashing` และ `error_count` ≥ `WATCHDOG_MIN_ERRORS` (3) | ไม่ยุ่งกับการล้มชั่วคราวครั้งสองครั้ง |
-| error **ไม่ใช่** central ปฏิเสธรหัสผ่าน (`session_request_unauthorized` 401 / `session_request_forbidden` 403) | เตะไม่ช่วยอะไร และทุกครั้งที่ลองใหม่นับเข้าระบบล็อกเอาต์ของ CouchDB (รหัสผิดเกิน 5 ครั้ง → 403 นาน 5 นาที) ต้องแก้ `.env` เอง |
+| error **ไม่ใช่** central ปฏิเสธรหัสผ่าน — สคริปต์จับคำว่า `unauthorized` / `forbidden` (ไม่สนตัวพิมพ์) ซึ่งครอบทั้ง `auth_noop` ของ setup จริง (`unauthorized: ...` 401 / `forbidden: ...` 403) และ session plugin แบบ lab (`session_request_unauthorized` / `session_request_forbidden`) | เตะไม่ช่วยอะไร และทุกครั้งที่ลองใหม่นับเข้าระบบล็อกเอาต์ของ CouchDB (รหัสผิดเกิน 5 ครั้ง → 403 นาน 5 นาที) ต้องแก้ `.env` เอง |
 | `GET <SYNC_URL>/_up` ตอบเป็น JSON ของ CouchDB (`"status":"ok"`) | ถ้า central ยังไม่กลับ เตะไปก็ล้มซ้ำ · ตรวจเนื้อหา ไม่ใช่แค่ HTTP 200 เพราะถ้า LAN DNS ยังชี้ domain แอปมาที่ edge คำขอจะตกไปที่เว็บแอปของ edge ซึ่งตอบ 200 (HTML) |
 | job นั้นไม่ได้ถูกเตะภายใน `WATCHDOG_COOLDOWN` (300 วินาที) | กันเตะวน |
 
@@ -306,7 +306,21 @@ docker logs -f tent-edge-watchdog-edge          # ดูการทำงาน
 | ปกติ | เงียบ ไม่ทำอะไร |
 | central ล่ม | job `crashing` → watchdog ขึ้นว่า "central ... is not answering — leaving them" ไม่แตะ |
 | central กลับมา | เตะ 4 job ภายใน **1 วินาที** หลัง `/_up` ตอบ · doc ที่เขียนที่ central ระหว่างนั้นมาถึง edge ภายใน **5 วินาที** โดยไม่มีใครแตะมือ |
-| หมุนรหัสที่ central แต่ `.env` ของ edge ยังเป็นรหัสเก่า | job ล้มด้วย `session_request_unauthorized` → watchdog ขึ้น "central REJECTED the credentials" และ **ไม่เตะ** (0 ครั้ง) |
+
+**ทดสอบซ้ำกรณีรหัสผิดด้วย setup จริง** (2026-10-16 · CouchDB 3.5.2 ทั้งสองฝั่ง · central หลัง nginx TLS `location /sync/` (self-signed) ·
+edge ใช้ `couchdb-edge-example.ini` (`auth_noop`, ปิด `verify_ssl_certificates` เพราะ self-signed) · `SYNC_URL=https://central.test/sync` · watchdog `WATCHDOG_ONCE=1 WATCHDOG_DRY_RUN=1`):
+
+| ช่วง | error ใน `_scheduler/docs` (`info.error`) | watchdog regex เดิม | watchdog regex ใหม่ |
+| --- | --- | --- | --- |
+| รหัสผิด ก่อนล็อก (central ตอบ 401) | `unauthorized: unauthorized to access or create database https://central.test/sync/shelter_sh001/` | ❌ "would restart" — **เตะ** | ✅ "central REJECTED the credentials" ไม่เตะ |
+| ถูกล็อก (รหัสผิดครบ 5 ครั้ง, central ตอบ 403) | `forbidden: https://central.test/sync/_users/` · log ของ central: `Authentication rejected for locked-out user admin` | ❌ เตะ | ✅ ไม่เตะ |
+| เทียบ: lab `http://<IP>:5984` + session plugin | `{replication_auth_error,{session_request_unauthorized,"http://central:5984/_session","admin"}}` | ✅ ไม่เตะ | ✅ ไม่เตะ |
+| central ล่ม (`auth_noop`, nginx ตอบ 502) | `{http_error_code,502,<<"GET https://central.test/sync/shelter_sh001/">>}` | ไม่ตรง → รอ `/_up` | ไม่ตรง → รอ `/_up` |
+| central ล่ม (session plugin, nxdomain) | `{replication_auth_error,{session_request_failed,...,{conn_failed,{error,nxdomain}}}}` | ไม่ตรง → รอ `/_up` | ไม่ตรง → รอ `/_up` |
+
+ผลเดิม "ไม่เตะ 0 ครั้ง" มาจาก setup lab (`http://<IP>:5984` + session plugin) — กับ setup จริง (`auth_noop`) regex เดิมจับไม่ได้
+จึงจะลบ/สร้าง job ใหม่ทุก `WATCHDOG_COOLDOWN` และทำให้ lockout ของ central ไม่หมด · แก้แล้วเป็น `grep -i -E 'unauthorized|forbidden'` ·
+ยังไม่ได้ทดสอบ: 403 ที่มาจาก proxy / WAF หน้า central (ไม่ใช่ CouchDB) — regex ใหม่จะนับเป็นรหัสผิดและไม่เตะ (ปลอดภัยฝั่งไม่วนล็อก แต่ต้องดู log เอง)
 
 **ยังไม่ได้ทดสอบ:** ช่วงขาดนานกว่าหลายนาทีแบบควบคุมเวลา (1 นาที / 10 นาที / 1 ชั่วโมง ตาม README T4), และบน mini PC จริง
 (ตอนนี้ mini PC ใช้ stack เดิมที่ยังไม่มี `edge-watchdog` — `git pull` แล้ว `docker compose -f docker-compose.edge.yml up -d` จะเพิ่มให้)
@@ -318,7 +332,7 @@ docker logs -f tent-edge-watchdog-edge          # ดูการทำงาน
 | อาการ | สาเหตุ | แก้ |
 | --- | --- | --- |
 | `crashing` + `unauthorized` (401) | credential ผิด · **เปลี่ยนรหัส admin ที่ central แล้วไม่ได้อัปเดต `.env` ของ edge** | `.env` ขั้น 4 · SETUP-CENTRAL ขั้น 3 |
-| `crashing` + `session_request_forbidden` (403) ทั้งที่รหัสน่าจะถูก | **ถูกล็อกเอาต์**: CouchDB 3.5 นับรหัสผิดต่อ (user, IP) ถ้าเกิน 5 ครั้งจะตอบ 403 ต่อไปแม้รหัสถูกแล้ว (`chttpd_auth_lockout` default `enforce`) · job ที่ retry ด้วยรหัสผิดเองก็ทำให้เกิดได้ เห็นใน log ของ central ว่า `Authentication rejected for locked-out user` | แก้รหัสให้ถูกก่อน แล้วรอ **5 นาที** นับจากความผิดพลาดครั้งแรก (`max_lifetime`) หรือ restart CouchDB ของ central เพื่อล้างตาราง · อย่าลบ/สร้าง job ซ้ำ ๆ ระหว่างรอ เพราะ job ที่รหัสยังผิดจะทำให้ล็อกต่อ |
+| `crashing` + `forbidden: ...` (`auth_noop`) หรือ `session_request_forbidden` (session plugin) — 403 ทั้งที่รหัสน่าจะถูก | **ถูกล็อกเอาต์**: CouchDB 3.5 นับรหัสผิดต่อ (user, IP) ถ้าเกิน 5 ครั้งจะตอบ 403 ต่อไปแม้รหัสถูกแล้ว (`chttpd_auth_lockout` default `enforce`) · job ที่ retry ด้วยรหัสผิดเองก็ทำให้เกิดได้ เห็นใน log ของ central ว่า `Authentication rejected for locked-out user` | แก้รหัสให้ถูกก่อน แล้วรอ **5 นาที** นับจากความผิดพลาดครั้งแรก (`max_lifetime`) หรือ restart CouchDB ของ central เพื่อล้างตาราง · อย่าลบ/สร้าง job ซ้ำ ๆ ระหว่างรอ เพราะ job ที่รหัสยังผิดจะทำให้ล็อกต่อ |
 | `crashing` + `nxdomain` / `econnrefused` / timeout | `SYNC_URL` ผิด, central ปิด, firewall | ขั้น 1 |
 | `crashing` + error certificate | cert ยังไม่ออก / self-signed / นาฬิกา edge เพี้ยน | ขั้น 3 (`verify_ssl_certificates`) · NTP |
 | ได้ HTML แทน JSON | `location /sync/` ยังไม่มีบน central, `proxy_pass` ไม่มี `/` ท้าย หรือ LAN DNS ยังชี้ domain แอปมาที่ edge (cutover ยังไม่ cutback) | SETUP-CENTRAL ขั้น 4B · ตรวจว่า `<domain>` resolve ได้ IP ของ central |

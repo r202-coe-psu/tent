@@ -8,10 +8,12 @@
 #
 # Every WATCHDOG_INTERVAL seconds it looks at _scheduler/docs/_replicator and restarts a job when ALL hold:
 #   - state is `crashing` with error_count >= WATCHDOG_MIN_ERRORS (ignores one-off blips)
-#   - the error is NOT a credential rejection (session_request_unauthorized = 401, session_request_forbidden
-#     = 403, which also covers CouchDB's auth lockout): restarting cannot fix those and every retry feeds
-#     chttpd_auth_lockout (5 failures -> 403 for 5 minutes). Connectivity errors that CouchDB also wraps in
-#     replication_auth_error (session_request_failed: nxdomain, conn_failed, connection closed) DO qualify.
+#   - the error is NOT a credential rejection (401 / 403, which also covers CouchDB's auth lockout). Matches both
+#     the session plugin (session_request_unauthorized / session_request_forbidden) and couch_replicator_auth_noop
+#     (plain `unauthorized` / `forbidden`, which is what the F9 config in couchdb-edge.ini produces).
+#     Restarting cannot fix those and every retry feeds chttpd_auth_lockout (5 failures -> 403 for 5 minutes).
+#     Connectivity errors that CouchDB also wraps in replication_auth_error
+#     (session_request_failed: nxdomain, conn_failed, connection closed) DO qualify.
 #   - central answers GET <SYNC_URL>/_up with CouchDB's JSON {"status":"ok"} (otherwise restarting would just crash
 #     again; a bare HTTP 200 is not enough — if the app's domain resolves to this edge, /sync/_up lands on the
 #     edge's web app and returns HTML)
@@ -68,7 +70,7 @@ pass() {
 			log "$id crashing (errors=$errs < $MIN_ERRORS) — waiting"
 			continue
 		fi
-		if printf '%s' "$line" | grep -q -E 'session_request_unauthorized|session_request_forbidden'; then
+		if printf '%s' "$line" | grep -q -i -E 'unauthorized|forbidden'; then
 			log "$id crashing: central REJECTED the credentials (401/403 or lockout) — not restarting; fix .env / wait out the lockout (retries feed CouchDB's lockout)"
 			continue
 		fi
