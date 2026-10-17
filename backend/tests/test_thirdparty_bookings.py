@@ -2522,6 +2522,27 @@ async def test_failed_commit_after_a_lost_lease_keeps_the_new_owners_key(
     await _assert_retry_b_still_holds_the_key(client, "lost-1", state)
 
 
+async def test_flip_error_after_a_lost_lease_keeps_the_new_owners_key(
+    client: AsyncClient, shelters: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """#614 re-audit: A passed the fence, B took the stale key over (lease renewed, staged rows
+    dropped, busy), then A's flip raises a plain error (not a shortfall). The failed-commit
+    settle must find the lease lost and leave B's key row alone, not release it."""
+    from apiapp.modules.thirdparty_bookings import use_case
+
+    state: dict[str, Any] = {}
+    monkeypatch.setattr(use_case, "_still_owns_key", _lease_then_partial_flip("lost-3", state))
+
+    async def failing_flip(collection: Any, booking_id: str, group_size: int) -> None:
+        raise RuntimeError("flip lost its connection")
+
+    monkeypatch.setattr(use_case, "_commit_group", failing_flip)
+    first = await client.post(URL, json=_group_payload(3), headers=_idem("lost-3"))
+    _assert_sanitized_500(first)
+    monkeypatch.undo()
+    await _assert_retry_b_still_holds_the_key(client, "lost-3", state)
+
+
 async def test_cancelled_commit_after_a_lost_lease_keeps_the_new_owners_key(
     client: AsyncClient, shelters: None, monkeypatch: pytest.MonkeyPatch
 ) -> None:
