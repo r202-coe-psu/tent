@@ -411,7 +411,10 @@ export interface paths {
 		};
 		get?: never;
 		put?: never;
-		/** Cancel Booking */
+		/**
+		 * Cancel Booking
+		 * @description Cancels the whole booking group. Only OPEN persons (pending, or written without a cancel request) are cancelled; finished persons (cancelled, rejected, or already cancel-requested) are skipped and left unchanged. Repeating a cancel that has already happened returns 200. Returns 409 `booking_not_cancellable` when every person is rejected, or when an open person can no longer be cancelled (e.g. checked in); in the latter case no person is changed.
+		 */
 		post: operations['cancel_booking_external_bookings__booking_id__cancel_post'];
 		delete?: never;
 		options?: never;
@@ -1424,7 +1427,7 @@ export interface components {
 			location_code: string;
 			/**
 			 * Booking Status
-			 * @description สรุปทั้งกลุ่ม: ทุกคน CANCELLED → CANCELLED, มีคน REJECTED → REJECTED, อื่น ๆ → BOOKED
+			 * @description สรุปทั้งกลุ่ม: ไม่มีคนที่ยังเปิดอยู่ (OPEN) และมีอย่างน้อย 1 คนที่ CANCELLED หรือ cancel_requested → CANCELLED, มีคน REJECTED → REJECTED, อื่น ๆ → BOOKED
 			 * @enum {string}
 			 */
 			booking_status: 'BOOKED' | 'CANCELLED' | 'REJECTED';

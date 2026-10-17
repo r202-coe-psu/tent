@@ -34,8 +34,7 @@ Endpoints exercised (prefix + path):
 
 Normal mode also covers the CR-169 group rules at API level (persons[] of 2-3, cid
 duplicates in one request, several bad persons, duplicate vs existing booking, group
-cancel, EXT-010 persons[]). Repeat-cancel → 200 (CR-169 FR-40, #592) is an EXPECTED-FAIL
-until #592 is deployed, then it passes.
+cancel, EXT-010 persons[]). Repeat-cancel → 200 (CR-169 FR-40, #592) is a normal assertion.
 
 M2 checks (EXT-008..011) are scope-aware: when the token lacks `booking-write` /
 `residency-read` the script asserts the 403 insufficient_scope gate instead of
@@ -380,13 +379,6 @@ class SmokeTestRunner:
     def record_expected_fail(self, issue: str, test_name: str, reason: str) -> None:
         self.expected_fail.append((issue, test_name, reason))
         self.log(f"  {YELLOW}~ EXPECTED-FAIL{RESET} {BOLD}[{issue}]{RESET} {test_name} ({reason})")
-
-    def pending_592(self, name: str, passed: bool, detail: str = "") -> None:
-        """CR-169 FR-40/42 (#592): PASS once the new rule is deployed, else EXPECTED-FAIL."""
-        if passed:
-            self.record_result("M2", f"{name} [pending #592]", True, "#592 behaviour present")
-        else:
-            self.record_expected_fail("M2", name, f"pending #592: {detail}")
 
     def http_request(
         self,
@@ -1374,12 +1366,13 @@ class SmokeTestRunner:
             f"HTTP {status}, booking_status={res.get('booking_status')}",
         )
 
-        # G7 Repeat group cancel → 200 idempotent (CR-169 FR-40, #592; today 409)
+        # G7 Repeat group cancel → 200 idempotent (CR-169 FR-40, #592)
         status, data = self.http_request(
             "POST", f"{bookings}/{group_id}/cancel", headers=headers, body=None
         )
         res = data.get("result", {}) if isinstance(data, dict) else {}
-        self.pending_592(
+        self.record_result(
+            "M2",
             "EXT-009 repeat group cancel is idempotent (200 CANCELLED)",
             status == 200 and res.get("booking_status") == "CANCELLED",
             f"HTTP {status} (code={get_error_code(data)})",
@@ -1559,10 +1552,11 @@ class SmokeTestRunner:
             f"HTTP {status}, booking_status={res.get('booking_status')}",
         )
 
-        # M2.18 Cancelling twice → 200 idempotent (CR-169 FR-40, #592; today still 409)
+        # M2.18 Cancelling twice → 200 idempotent (CR-169 FR-40, #592)
         status, data = self.http_request("POST", f"{base}/cancel", headers=headers)
         res = data.get("result", {}) if isinstance(data, dict) else {}
-        self.pending_592(
+        self.record_result(
+            "M2",
             "EXT-009 second cancel is idempotent (200 CANCELLED)",
             status == 200 and res.get("booking_status") == "CANCELLED",
             f"HTTP {status} (code={get_error_code(data)})",
@@ -1758,7 +1752,7 @@ class SmokeTestRunner:
         )
         if self.expected_fail or self.skipped:
             self.log(
-                f"Expected-fail (pending #578 / #592): {YELLOW}{len(self.expected_fail)}{RESET} | "
+                f"Expected-fail (pending #578): {YELLOW}{len(self.expected_fail)}{RESET} | "
                 f"Skipped: {YELLOW}{len(self.skipped)}{RESET}"
             )
         self.log(

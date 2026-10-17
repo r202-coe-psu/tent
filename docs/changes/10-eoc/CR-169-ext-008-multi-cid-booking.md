@@ -190,12 +190,12 @@ affects:
 - [ ] API ล้มกลางการ insert (จำลอง) → worker ไม่หยิบกลุ่มนั้น และ sweeper ลบแถว `committed=false` ภายใน 60 วินาที
 - [ ] worker พบ duplicate ตอนเขียน → ทั้งกลุ่ม `rejected`, ไม่มี doc ใน CouchDB, PII ถูกล้างทุกแถว
 - [ ] cancel ตอน pending → ไม่มี doc ถูกเขียน · cancel หลัง written → evacuee ทุกคนและ household ของแต่ละคน `cancelled` · cancel หลังมีคน check-in (แถว open) → 409 และไม่เปลี่ยนแถวไหน · cancel หลัง staff รวม household แล้ว ยังยกเลิก evacuee ถูกต้อง
-- [ ] cancel กลุ่มที่มีแถว finished ปนอยู่ (เช่น `rejected` 1 คน + open 2 คน) → ยกเลิกเฉพาะแถว open · แถว finished ไม่ถูกแก้ไข และ `cancel_reason` เดิมไม่ถูกเขียนทับ · ตอบ 200 (#592)
-- [ ] cancel ซ้ำกลุ่มที่ยกเลิกแล้ว (ไม่มีแถว open และมี `cancelled`/`cancel_requested` ≥ 1) → 200 idempotent ไม่เขียน doc ซ้ำ · legacy single-person booking เช่นเดียวกัน (partially supersede CR-154 FR-33) (#592)
-- [ ] cancel กลุ่มที่ทุกแถวเป็น `rejected` → 409 `booking_not_cancellable` (#592)
-- [ ] cancel กลุ่มที่มีคน check-in แล้ว (แถว open ที่ stay ผ่าน `pre_registered`) → 409 `booking_not_cancellable` และ **ไม่เปลี่ยนแถวไหนเลย** แม้แถว open อื่นในกลุ่มจะยกเลิกได้ (#592)
-- [ ] retry cancel หลัง phase 2 ล้มกลางทาง (บางแถว `cancelled` แล้ว) → 200 สำเร็จ โดยข้ามแถวที่จบแล้ว (#592)
-- [ ] EXT-010 `booking_status`: ไม่มีแถว open และมี `cancelled`/`cancel_requested` ≥ 1 → `CANCELLED` (แม้มีแถว `rejected` ปนอยู่) · มี `rejected` และไม่เข้าเงื่อนไข `CANCELLED` → `REJECTED` · แถว open ล้วน → `BOOKED` (#592)
+- [x] cancel กลุ่มที่มีแถว finished ปนอยู่ (เช่น `rejected` 1 คน + open 2 คน) → ยกเลิกเฉพาะแถว open · แถว finished ไม่ถูกแก้ไข และ `cancel_reason` เดิมไม่ถูกเขียนทับ · ตอบ 200 (#592)
+- [x] cancel ซ้ำกลุ่มที่ยกเลิกแล้ว (ไม่มีแถว open และมี `cancelled`/`cancel_requested` ≥ 1) → 200 idempotent ไม่เขียน doc ซ้ำ · legacy single-person booking เช่นเดียวกัน (partially supersede CR-154 FR-33) (#592)
+- [x] cancel กลุ่มที่ทุกแถวเป็น `rejected` → 409 `booking_not_cancellable` (#592)
+- [x] cancel กลุ่มที่มีคน check-in แล้ว (แถว open ที่ stay ผ่าน `pre_registered`) → 409 `booking_not_cancellable` และ **ไม่เปลี่ยนแถวไหนเลย** แม้แถว open อื่นในกลุ่มจะยกเลิกได้ (#592)
+- [x] retry cancel หลัง phase 2 ล้มกลางทาง (บางแถว `cancelled` แล้ว) → 200 สำเร็จ โดยข้ามแถวที่จบแล้ว (#592)
+- [x] EXT-010 `booking_status`: ไม่มีแถว open และมี `cancelled`/`cancel_requested` ≥ 1 → `CANCELLED` (แม้มีแถว `rejected` ปนอยู่) · มี `rejected` และไม่เข้าเงื่อนไข `CANCELLED` → `REJECTED` · แถว open ล้วน → `BOOKED` (#592)
 - [ ] staff แก้ evacuee และรวม household แล้ว `booking_ref` ยังอยู่ (test)
 - [ ] หลัง written/cancelled/rejected ไม่เหลือ `cid`/`phone`/`first_name`/`last_name` plaintext ในทุกแถวของกลุ่ม
 - [ ] token ไม่มี `booking-write` → 403 `insufficient_scope` (เหมือนเดิม)

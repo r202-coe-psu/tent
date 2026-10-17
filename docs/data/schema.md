@@ -2699,4 +2699,4 @@ Buffer ของ partner booking (M2) — FastAPI insert ตอนรับค�
 
 **Migration (CR-169):** ไม่ bump `schema_v` (Beanie doc) — field ใหม่ทั้งหมดมี default (`person_seq = 0`, `group_size = 1`, `committed = true`) → แถวเดิมคือกลุ่มขนาด 1 ไม่ต้อง backfill; index ใหม่สร้างตอน Beanie init
 
-**booking_status (EXT-010):** รายคน: `pending`/`written` → `BOOKED` · `cancelled` หรือ `cancel_requested` → `CANCELLED` · `rejected` → `REJECTED` · **aggregate ของกลุ่ม (ปัจจุบัน):** ทุกคน `CANCELLED` → `CANCELLED`, มีคน `REJECTED` → `REJECTED`, อื่น → `BOOKED` · **[มีผลเมื่อ #592 deploy]** aggregate: ไม่มีคนที่เปิดอยู่และมี `CANCELLED` ≥ 1 → `CANCELLED` · มี `REJECTED` → `REJECTED` · อื่น → `BOOKED` (CR-169 FR-42)
+**booking_status (EXT-010):** รายคน: `pending`/`written` → `BOOKED` · `cancelled` หรือ `cancel_requested` → `CANCELLED` · `rejected` → `REJECTED` · **aggregate ของกลุ่ม:** ไม่มีคนที่เปิดอยู่และมี `CANCELLED` ≥ 1 → `CANCELLED` · มี `REJECTED` → `REJECTED` · อื่น → `BOOKED` (CR-169 FR-42)

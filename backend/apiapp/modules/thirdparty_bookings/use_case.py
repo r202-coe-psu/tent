@@ -72,6 +72,7 @@ HOLD_STATUSES: tuple[str, ...] = (
 _DUPLICATE_KEY_CODE = 11000
 _COMMIT_ATTEMPTS = 3
 _CLEANUP_ATTEMPTS = 3
+_CANCEL_ROW_ATTEMPTS = 3
 _RETRY_BACKOFF_SECONDS = 0.05  # multiplied by the attempt number
 
 # Messages here must never carry a CID, phone, name or document body: only the booking_id
@@ -263,6 +264,14 @@ def _classify_cancel(
         if stay is None or stay == "pre_registered":
             return "request"
     return None
+
+
+def _is_open(row: ExternalBooking) -> bool:
+    """CR-169 FR-40 — an OPEN row is `pending`, or `written` with cancel not yet requested.
+
+    Every other row (`cancelled`, `rejected`, `written` with `cancel_requested`) is FINISHED.
+    """
+    return row.state in OPEN_BOOKING_STATES and not row.cancel_requested
 
 
 def _is_complete_group(rows: list[ExternalBooking]) -> bool:
@@ -713,21 +722,35 @@ class ThirdPartyBookingsUseCase:
         rows = await self._load_owned_group(
             booking_id=booking_id, endpoint=endpoint, claims=claims, client_ip=client_ip
         )
-        # FR-40 — phase 1 is read-only: one blocked person leaves every row untouched.
-        evacuee_ids = [row.evacuee_id for row in rows if row.state == "written" and row.evacuee_id]
-        people = (
-            await PublicPerson.find({"_id": {"$in": evacuee_ids}}).to_list() if evacuee_ids else []
-        )
-        status_by_person = {person.id: person.status for person in people}
-        plan = [_classify_cancel(row, status_by_person) for row in rows]
-        if None in plan:
+        open_rows = [row for row in rows if _is_open(row)]
+        if not open_rows and not any(_booking_status(row) == "CANCELLED" for row in rows):
+            # Every row is `rejected`: nothing was ever cancelled, so there is nothing to confirm.
             raise await self._not_cancellable(endpoint, claims, client_ip, rows[0])
+
+        # FR-40 — phase 1 is read-only: one blocked open row leaves every row untouched.
+        # Finished rows are skipped, so they are not classified at all.
+        plan: list[tuple[ExternalBooking, Literal["direct", "request"]]] = []
+        if open_rows:
+            evacuee_ids = [
+                row.evacuee_id for row in open_rows if row.state == "written" and row.evacuee_id
+            ]
+            people = (
+                await PublicPerson.find({"_id": {"$in": evacuee_ids}}).to_list()
+                if evacuee_ids
+                else []
+            )
+            status_by_person = {person.id: person.status for person in people}
+            for row in open_rows:
+                kind = _classify_cancel(row, status_by_person)
+                if kind is None:
+                    raise await self._not_cancellable(endpoint, claims, client_ip, rows[0])
+                plan.append((row, kind))
 
         collection = ExternalBooking.get_pymongo_collection()
         now = datetime.now(UTC)
-        for row, kind in zip(rows, plan, strict=True):
+        for row, kind in plan:
             # No transaction: a person checking in between the phases can still make a
-            # later row fail, leaving earlier rows cancelled.
+            # later row fail, leaving earlier rows cancelled. A retry then skips those rows.
             if not await self._cancel_row(collection, row, kind, reason, now):
                 raise await self._not_cancellable(endpoint, claims, client_ip, rows[0])
         return await self._cancelled(endpoint, claims, client_ip, rows[0])
@@ -736,7 +759,36 @@ class ThirdPartyBookingsUseCase:
         self,
         collection: Any,
         row: ExternalBooking,
-        kind: Literal["direct", "request"] | None,
+        kind: Literal["direct", "request"],
+        reason: str | None,
+        now: datetime,
+    ) -> bool:
+        """Cancel one OPEN row in phase 2. False only when the row can no longer be cancelled.
+
+        A guarded update that misses means the row moved on meanwhile (worker write or a
+        concurrent cancel). The fresh row is re-evaluated: FINISHED → skipped (success),
+        still OPEN and cancellable → retried with its new kind, anything else → conflict.
+        """
+        current, current_kind = row, kind
+        for _ in range(_CANCEL_ROW_ATTEMPTS):
+            if await self._guarded_cancel(collection, current, current_kind, reason, now):
+                return True
+            fresh = await ExternalBooking.get(current.id)
+            if fresh is None:
+                return False
+            if not _is_open(fresh):
+                return True
+            next_kind = await self._classify_fresh(fresh)
+            if next_kind is None:
+                return False
+            current, current_kind = fresh, next_kind
+        return False
+
+    async def _guarded_cancel(
+        self,
+        collection: Any,
+        row: ExternalBooking,
+        kind: Literal["direct", "request"],
         reason: str | None,
         now: datetime,
     ) -> bool:
@@ -756,21 +808,17 @@ class ThirdPartyBookingsUseCase:
                     }
                 },
             )
-            if result.modified_count == 1:
-                return True
-            # The worker moved it on meanwhile — re-evaluate against the fresh row.
-            refreshed = await ExternalBooking.get(row.id)
-            if refreshed is None:
-                return False
-            person = await PublicPerson.get(refreshed.evacuee_id) if refreshed.evacuee_id else None
-            statuses = {person.id: person.status} if person else {}
-            if _classify_cancel(refreshed, statuses) != "request":
-                return False
+            return result.modified_count == 1
         result = await collection.update_one(
             {"_id": row.id, "state": "written", "cancel_requested": False},
             {"$set": {"cancel_requested": True, "cancel_reason": reason, "updated_at": now}},
         )
         return result.modified_count == 1
+
+    async def _classify_fresh(self, row: ExternalBooking) -> Literal["direct", "request"] | None:
+        person = await PublicPerson.get(row.evacuee_id) if row.evacuee_id else None
+        statuses = {person.id: person.status} if person else {}
+        return _classify_cancel(row, statuses)
 
     async def _cancelled(
         self,
@@ -818,8 +866,9 @@ class ThirdPartyBookingsUseCase:
             booking_id=booking_id, endpoint=endpoint, claims=claims, client_ip=client_ip
         )
         statuses = [_booking_status(row) for row in rows]
-        # FR-42 — aggregate: all cancelled → CANCELLED, any rejected → REJECTED, else BOOKED.
-        if all(item == "CANCELLED" for item in statuses):
+        # FR-42 — aggregate, in order: no OPEN row and ≥1 CANCELLED → CANCELLED;
+        # any REJECTED → REJECTED; else BOOKED.
+        if not any(_is_open(row) for row in rows) and "CANCELLED" in statuses:
             booking_status: BookingStatus = "CANCELLED"
         elif "REJECTED" in statuses:
             booking_status = "REJECTED"
