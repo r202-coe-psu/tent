@@ -2590,11 +2590,15 @@ async def test_household_is_kept_while_another_member_is_pre_registered(db):
     assert (await _row(_row_id(0)))["reconcile_outcome"] == "cancelled"
 
 
-def _http_503() -> httpx.HTTPStatusError:
+def _http_status(code: int) -> httpx.HTTPStatusError:
     request = httpx.Request("GET", "http://couch/shelter_sh001")
     return httpx.HTTPStatusError(
-        "boom", request=request, response=httpx.Response(503, request=request)
+        "boom", request=request, response=httpx.Response(code, request=request)
     )
+
+
+def _http_503() -> httpx.HTTPStatusError:
+    return _http_status(503)
 
 
 @pytest.mark.parametrize(
@@ -2602,7 +2606,9 @@ def _http_503() -> httpx.HTTPStatusError:
     [lambda: httpx.ConnectError("refused"), _http_503],
     ids=["connection", "5xx"],
 )
-async def test_transient_couch_error_leaves_the_row_for_the_next_pass(db, make_error):
+async def test_transient_couch_error_leaves_the_row_for_the_next_pass(
+    db, make_error, clock
+):
     await _insert_terminal(0)
     couch, _store = _stored_couch(_stay_docs(0))
     couch.get_doc = AsyncMock(side_effect=make_error())
@@ -2612,6 +2618,8 @@ async def test_transient_couch_error_leaves_the_row_for_the_next_pass(db, make_e
     assert row.get("reconciled_at") is None
     assert row.get("reconcile_outcome") is None
 
+    # The next reconcile cycle (60 s later) retries the row; the failure backoff is 6 s.
+    clock[0] += inbound.RECONCILE_INTERVAL_SECONDS
     couch, store = _stored_couch(_stay_docs(0))
     assert await inbound.reconcile_terminal_bookings(couch) == 1
     assert store["evacuee:E0"]["current_stay"]["status"] == "cancelled"
@@ -2738,12 +2746,73 @@ async def test_second_pass_is_idempotent_and_makes_no_couch_calls(db):
     assert store == before
 
 
+async def test_persistently_failing_rows_do_not_starve_newer_healthy_rows(db, clock):
+    """50 rows whose evacuee GET always 403s are older than one healthy row. The healthy
+    row must still be reconciled on the next pass instead of waiting behind them."""
+    failing = [f"evacuee:E{i}" for i in range(50)]
+    for index in range(50):
+        await _insert_terminal(index)  # updated_at OLD: oldest first
+    await _insert_terminal(50, updated_at=datetime(2026, 10, 8, tzinfo=UTC))
+    couch, _store = _stored_couch(
+        [doc for index in range(51) for doc in _stay_docs(index)]
+    )
+    real_get = couch.get_doc.side_effect
+
+    async def forbidden_for_failing(database, doc_id):
+        if doc_id in failing:
+            raise _http_status(403)
+        return await real_get(database, doc_id)
+
+    couch.get_doc = AsyncMock(side_effect=forbidden_for_failing)
+    health = inbound.FailureTracker()
+
+    assert await inbound.reconcile_terminal_bookings(couch, health) == 0
+    assert len(health.keys("reconcile:")) == 50
+
+    clock[0] += inbound.RECONCILE_INTERVAL_SECONDS  # next cycle
+    assert await inbound.reconcile_terminal_bookings(couch, health) == 1
+
+    healthy = await _row(_row_id(50))
+    assert healthy["reconcile_outcome"] == "cancelled"
+    assert (await _row(_row_id(0))).get("reconciled_at") is None
+
+
+async def test_backed_off_row_is_retried_after_its_backoff_then_forgotten(db, clock):
+    await _insert_terminal(0)
+    couch, store = _stored_couch(_stay_docs(0))
+    real_get = couch.get_doc.side_effect
+    failing = [True]
+
+    async def flaky(database, doc_id):
+        if failing[0] and doc_id == "evacuee:E0":
+            raise _http_status(403)
+        return await real_get(database, doc_id)
+
+    couch.get_doc = AsyncMock(side_effect=flaky)
+    health = inbound.FailureTracker()
+
+    assert await inbound.reconcile_terminal_bookings(couch, health) == 0
+    assert health.keys("reconcile:") == [f"reconcile:{_row_id(0)}"]
+
+    # Still inside the backoff window: the row is not even read.
+    couch.get_doc.reset_mock()
+    assert await inbound.reconcile_terminal_bookings(couch, health) == 0
+    couch.get_doc.assert_not_awaited()
+
+    failing[0] = False
+    clock[0] += inbound.BACKOFF_BASE_SECONDS
+    assert await inbound.reconcile_terminal_bookings(couch, health) == 1
+    assert store["evacuee:E0"]["current_stay"]["status"] == "cancelled"
+    assert (await _row(_row_id(0)))["reconcile_outcome"] == "cancelled"
+    assert health.keys("reconcile:") == []
+
+
 async def test_reconcile_runs_at_most_once_per_interval_inside_the_loop(
     db, monkeypatch, clock
 ):
     calls: list[int] = []
 
-    async def reconcile(_couch):
+    async def reconcile(_couch, _health=None):
         calls.append(1)
         return 0
 
@@ -2768,7 +2837,7 @@ async def test_reconcile_runs_at_most_once_per_interval_inside_the_loop(
 
 
 async def test_reconcile_failure_never_stops_the_loop(db, monkeypatch, caplog):
-    async def boom(_couch):
+    async def boom(_couch, _health=None):
         raise RuntimeError("couch exploded")
 
     monkeypatch.setattr(inbound, "reconcile_terminal_bookings", boom)

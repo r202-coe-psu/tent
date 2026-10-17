@@ -174,6 +174,10 @@ class FailureTracker:
         self._retry_at[key] = _clock() + delay
         return count, delay
 
+    def keys(self, prefix: str) -> list[str]:
+        """Tracked keys starting with ``prefix`` — in backoff or not."""
+        return [key for key in self._failures if key.startswith(prefix)]
+
     def succeeded(self, key: str) -> None:
         self._failures.pop(key, None)
         self._retry_at.pop(key, None)
@@ -1085,6 +1089,7 @@ RECONCILE_INTERVAL_SECONDS = 60.0
 #: Terminal rows handled per reconcile pass (oldest first); the rest wait for the next one.
 RECONCILE_BATCH_SIZE = 50
 
+_RECONCILE_KEY_PREFIX = "reconcile:"
 _RECONCILE_CANCELLED = "cancelled"
 _RECONCILE_ADVANCED = "advanced"
 _RECONCILE_MISSING = "missing"
@@ -1159,23 +1164,36 @@ async def _reconcile_row(couch: CouchClient, booking: ExternalBooking) -> str:
     return _RECONCILE_CANCELLED if cancelled else _RECONCILE_NOOP
 
 
-async def _reconcile_booking(couch: CouchClient, booking: ExternalBooking) -> bool:
+def _reconcile_key(booking_id: str) -> str:
+    return f"{_RECONCILE_KEY_PREFIX}{booking_id}"
+
+
+async def _reconcile_booking(
+    couch: CouchClient, booking: ExternalBooking, health: FailureTracker
+) -> bool:
     """Reconcile one row and stamp ``reconciled_at`` / ``reconcile_outcome``.
 
     False = left unreconciled for the next pass (a CouchDB error, a stay changed during
     the pass, or the row moved under the guarded write). The stamp is guarded on the
     row's state and ``reconciled_at`` still unset, so a row is never stamped twice.
+
+    Every failure backs the row off in ``health`` (the same in-memory backoff as the
+    groups, 6 s first, capped at 180 s): a row that fails on every pass — a shelter
+    write that always 403s, a corrupt doc — must not hold the head of the batch.
     """
+    key = _reconcile_key(booking.id)
     try:
         outcome = await _reconcile_row(couch, booking)
     except _ReconcileRetry:
         logger.info("Reconcile of booking %s deferred to the next pass", _ref(booking))
+        health.failed(key)
         return False
     except Exception:
         # logger.exception: the _ExceptionTypeOnly filter logs the type and location only.
         logger.exception(
             "Reconcile of booking %s failed — retry next pass", _ref(booking)
         )
+        health.failed(key)
         return False
 
     stamped = await _transition(
@@ -1183,38 +1201,63 @@ async def _reconcile_booking(couch: CouchClient, booking: ExternalBooking) -> bo
         {"state": booking.state, "reconciled_at": None},
         {"reconciled_at": datetime.now(UTC), "reconcile_outcome": outcome},
     )
-    if not stamped:
+    if stamped:
+        health.succeeded(key)
+    else:
         logger.info(
             "Booking %s moved during reconcile — retry next pass", _ref(booking)
         )
     return stamped
 
 
-async def reconcile_terminal_bookings(couch: CouchClient) -> int:
+async def reconcile_terminal_bookings(
+    couch: CouchClient, health: FailureTracker | None = None
+) -> int:
     """Reconcile up to ``RECONCILE_BATCH_SIZE`` unreconciled terminal rows (#613).
 
     Selects ``cancelled`` / ``rejected`` rows that reserved a ``evacuee_id`` or
     ``household_id`` and have no ``reconciled_at`` (legacy rows without the field match
     too: Mongo ``null`` matches a missing key). Returns the number of rows stamped.
+
+    Rows that have not failed yet come first (oldest first). Rows that failed are kept
+    out of that batch while backed off in ``health`` and only fill the slots left over
+    once their backoff has elapsed, so a set of rows that fail every pass cannot push
+    newer healthy rows out of the batch.
     """
+    health = FailureTracker() if health is None else health
+    base: dict[str, Any] = {
+        "state": {"$in": ["cancelled", "rejected"]},
+        "reconciled_at": None,
+        "$or": [
+            {"evacuee_id": {"$ne": None}},
+            {"household_id": {"$ne": None}},
+        ],
+    }
+    failing = health.keys(_RECONCILE_KEY_PREFIX)
+    failing_ids = [key[len(_RECONCILE_KEY_PREFIX) :] for key in failing]
+
     rows = (
-        await ExternalBooking.find(
-            {
-                "state": {"$in": ["cancelled", "rejected"]},
-                "reconciled_at": None,
-                "$or": [
-                    {"evacuee_id": {"$ne": None}},
-                    {"household_id": {"$ne": None}},
-                ],
-            }
-        )
+        await ExternalBooking.find({**base, "_id": {"$nin": failing_ids}})
         .sort("updated_at", "_id")
         .limit(RECONCILE_BATCH_SIZE)
         .to_list()
     )
+    if len(rows) < RECONCILE_BATCH_SIZE and failing_ids:
+        due = [
+            booking_id
+            for booking_id, key in zip(failing_ids, failing, strict=True)
+            if health.ready(key)
+        ]
+        if due:
+            rows += (
+                await ExternalBooking.find({**base, "_id": {"$in": due}})
+                .sort("updated_at", "_id")
+                .limit(RECONCILE_BATCH_SIZE - len(rows))
+                .to_list()
+            )
     stamped = 0
     for booking in rows:
-        if await _reconcile_booking(couch, booking):
+        if await _reconcile_booking(couch, booking, health):
             stamped += 1
     return stamped
 
@@ -1301,6 +1344,7 @@ async def run_external_booking_inbound_loop(
     couch: CouchClient, *, stop_event: asyncio.Event
 ) -> None:
     health = FailureTracker()
+    reconcile_health = FailureTracker()
     last_reconcile: float | None = None
     while not stop_event.is_set():
         # Own try/except: a sweeper failure must not stop bookings being written.
@@ -1317,7 +1361,7 @@ async def run_external_booking_inbound_loop(
         ):
             last_reconcile = _clock()
             try:
-                await reconcile_terminal_bookings(couch)
+                await reconcile_terminal_bookings(couch, reconcile_health)
             except Exception:
                 logger.exception("Terminal booking reconcile pass failed")
         try:
