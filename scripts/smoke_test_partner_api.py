@@ -1427,7 +1427,7 @@ class SmokeTestRunner:
             )
 
         # G8 Partial groups (a worker-rejected member, a checked-in member) need the worker
-        # and CouchDB: covered by e2e scenarios 9 and 10 (run with --e2e)
+        # and CouchDB: covered by e2e scenarios 8 and 9 (run with --e2e)
         self.record_skip(
             "M2",
             "EXT-009/010 partial groups (rejected member, cancel after check-in)",
