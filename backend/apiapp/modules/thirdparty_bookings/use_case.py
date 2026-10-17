@@ -84,13 +84,6 @@ _RETRY_BACKOFF_SECONDS = 0.05  # multiplied by the attempt number
 # CR-169 FR-40: how long a request waits on another request's in-flight cancel flag.
 _FLAG_WAIT_SECONDS = 1.0
 _FLAG_POLL_SECONDS = 0.1
-# A request whose flags have been set for longer than this does not commit them (it reverts and
-# fails instead). The worker reverts a token older than 2 minutes as an abandoned request
-# (CR-169 decision sync 2026-10-17, review round 2 of PR #635), so this margin keeps a slow but
-# live request from answering 200 for flags the worker may already have reverted. The 60 s value
-# and clock skew between the API and worker hosts beyond it are pending owner confirmation
-# (reported on PR #635).
-_FLAG_COMMIT_SECONDS = 60.0
 
 # Messages here must never carry a CID, phone, name or document body: only the booking_id
 # and the exception *type* are logged.
@@ -1445,7 +1438,6 @@ class ThirdPartyBookingsUseCase:
         # `now` is the cancel marker: a row flagged by this request carries exactly this
         # `updated_at`, so a revert never touches a row flagged by someone else.
         now = _to_milliseconds(datetime.now(UTC))
-        flags_from = asyncio.get_running_loop().time()
         requested = [row for row, kind in plan if kind == "request"]
         direct = [row for row, kind in plan if kind == "direct"]
         # Every planned row: 2b can re-flag a pending row that became written (`_cancel_row`),
@@ -1489,18 +1481,28 @@ class ThirdPartyBookingsUseCase:
                 raise await self._not_cancellable(endpoint, claims, client_ip, rows[0])
         # Phase 2c — the granted access-log write, then the commit of the flags (token clear).
         # An error in either reverts the flags, so the partner never gets a 200 for flags that
-        # were not handed to the worker. Known residuals, not yet ruled on by the owner (reported
-        # on PR #635): a commit that fails after the granted log leaves that log entry on a
-        # request answered 500, and a commit that cleared only some tokens before failing leaves
-        # those rows FINISHED (the revert is guarded on the token, so it reverts only the rest);
-        # a partner retry settles both. Same class: a client disconnect during the commit lets
-        # the detached token clear run on while the handler below starts a detached revert;
-        # both are guarded only on the token, so which rows end committed vs reverted is not
-        # determined (the partner got no response; a retry settles it).
+        # were not handed to the worker. There is no limit on how long a request may hold its
+        # flags before committing (the owner rejected a 60 s hold rule, CR-169 decision sync
+        # 2026-10-17, review round 3 of PR #635).
+        #
+        # Accepted residual risks (same decision; each needs Mongo to fail mid-command or to be
+        # slower than about a minute; closed only by #616, replica set / transaction, if seen in
+        # production):
+        # - a commit that cleared only some tokens before Mongo failed leaves those rows
+        #   FINISHED (the revert is guarded on the token, so it reverts only the rest) while
+        #   the request answers 500;
+        # - a token clear that runs past the worker's 2-minute token TTL: the worker may already
+        #   have reverted those flags as abandoned although the request then answers 200;
+        # - a commit that fails after the granted access log leaves that log entry on a request
+        #   answered 500;
+        # - a client disconnect during the commit lets the detached token clear run on while
+        #   the handler below starts a detached revert; both are guarded only on the token, so
+        #   which rows end committed vs reverted is not determined (the partner got no response).
+        # A partner retry settles each of them.
         try:
             result = await self._cancelled(endpoint, claims, client_ip, rows[0])
             if planned:
-                await self._commit_flags(collection, planned, token, flags_from)
+                await self._commit_flags(collection, planned, token)
             return result
         except BaseException:
             await self._revert_after_error(collection, planned, now, token)
@@ -1742,27 +1744,15 @@ class ThirdPartyBookingsUseCase:
                 type(exc).__name__,
             )
 
-    async def _commit_flags(
-        self, collection: Any, rows: list[ExternalBooking], token: str, flags_from: float
-    ) -> None:
+    async def _commit_flags(self, collection: Any, rows: list[ExternalBooking], token: str) -> None:
         """Hand this request's flags to the worker by clearing its token (CR-169 FR-40).
 
-        Only called once the request has succeeded. Refuses (raises) when the flags have been
-        held longer than `_FLAG_COMMIT_SECONDS`, since the worker may treat them as abandoned.
-        A failure after the retries is re-raised so the caller reverts and answers 500 instead
-        of 200 (the worker would otherwise revert a flag the partner was told is cancelled).
+        Only called once the request has succeeded. A failure after the retries is re-raised so
+        the caller reverts and answers 500 instead of 200 (the worker would otherwise revert a
+        flag the partner was told is cancelled). No hold-time limit applies (CR-169 decision
+        sync 2026-10-17, review round 3 of PR #635); a clear that runs past the worker's
+        2-minute token TTL is an accepted residual (see `cancel_booking`), closed only by #616.
         """
-        if asyncio.get_running_loop().time() - flags_from > _FLAG_COMMIT_SECONDS:
-            # Only flags this request still holds are at risk. A request that cancelled pending
-            # rows only (or whose flags are gone) has nothing to hand over and stays a 200.
-            held = await collection.find(
-                {"_id": {"$in": [row.id for row in rows]}, "cancel_flag_token": token},
-                {"_id": 1},
-            ).to_list()
-            if not held:
-                return
-            logger.error("cancel flags held too long (booking_id=%s)", rows[0].booking_id)
-            raise TimeoutError("cancel flags held too long to commit")
         await self._clear_flag_tokens(collection, rows, token)
 
     async def _clear_flag_tokens(

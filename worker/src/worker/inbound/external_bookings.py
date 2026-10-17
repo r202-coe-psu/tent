@@ -111,8 +111,10 @@ STAGED_TTL_SECONDS = 60
 
 #: A ``cancel_flag_token`` older than this belongs to an EXT-009 request that died or could
 #: not revert its flag (CR-169 decision sync 2026-10-17, review round 2 of PR #635). The API
-#: refuses to commit flags it has held for 60 s (``_FLAG_COMMIT_SECONDS``), so a live
-#: request is never reverted under it unless the hosts' clocks drift by more than that.
+#: has no hold-time limit on its flags (a 60 s rule was rejected, review round 3), so a live
+#: request whose token clear runs past this TTL (Mongo slower than about a minute, or host
+#: clock skew) may have its flags reverted here while it answers 200: an accepted residual,
+#: closed only by #616.
 CANCEL_FLAG_TTL_SECONDS = 120
 
 #: First retry delay after a failed CouchDB write; doubles per failure up to the cap.

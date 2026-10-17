@@ -2667,43 +2667,6 @@ async def test_cancel_group_failed_token_clear_is_500_and_reverts_flags(
     ] == [(False, None, None), (False, None, None)]
 
 
-async def test_cancel_group_flags_held_too_long_are_not_committed(
-    app: Any, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """A request past `_FLAG_COMMIT_SECONDS` reverts and fails rather than answering 200."""
-    from apiapp.modules.thirdparty_bookings import use_case
-
-    for i in range(2):
-        await _person(status="pre_registered", person_id=f"evacuee:BK-GROUP001-{i}")
-    await _group(2, ["written", "written"])
-    monkeypatch.setattr(use_case, "_FLAG_COMMIT_SECONDS", -1.0)
-    response = await _post_raw(app)
-    monkeypatch.undo()
-    assert response.status_code == 500
-    rows = await _rows("BK-GROUP001")
-    assert [(row["cancel_requested"], row["cancel_flag_token"]) for row in rows] == [
-        (False, None),
-        (False, None),
-    ]
-
-
-async def test_cancel_group_pending_only_past_commit_budget_is_still_200(
-    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """No flags held (pending rows only): the commit budget does not turn the cancel into 500."""
-    from apiapp.modules.thirdparty_bookings import use_case
-
-    await _group(2, ["pending", "pending"])
-    monkeypatch.setattr(use_case, "_FLAG_COMMIT_SECONDS", -1.0)
-    response = await client.post(_cancel_url("BK-GROUP001"), json={"reason": "r"}, headers=GRANTED)
-    assert response.status_code == 200
-    rows = await _rows("BK-GROUP001")
-    assert [(row["state"], row["cid"]) for row in rows] == [
-        ("cancelled", None),
-        ("cancelled", None),
-    ]
-
-
 # --- #614 Idempotency-Key (CR-169 decision sync 2026-10-17) ----------------------------
 
 
