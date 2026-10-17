@@ -52,4 +52,4 @@ To maintain high throughput, sub-second latency for command dashboards, strict P
 - Sync Worker responsibilities expanded to aggregate stock balances and demographic groups.
 - `PublicShelter` schema expanded to embed real-time occupancy counts and operational metadata.
 - FastAPI gains a dedicated `/external` routing plane matching the partner contract exactly.
-- **As-built partner handover (2026-09-10):** รายงาน `docs/reports/2026-09-10/` ถูกลบออกจาก repo แล้ว (commit `4374bcc20`) — แหล่งอ้างอิงของ integration คือ [api-contract.md](../data/api-contract.md) §5.3; stub ที่ [docs/data/partner-api.md](../data/partner-api.md) คงไว้เพื่อลิงก์เดิม. ODT ใน `docs/source/` เป็น immutable archive (ไม่แก้).
+- **As-built partner handover (2026-09-10):** รายงาน as-built ส่งมอบ (2026-09-10) ถูกลบออกจาก repo แล้ว (commit `4374bcc20`) — แหล่งอ้างอิงของ integration คือ [api-contract.md](../data/api-contract.md) §5.3; stub ที่ [docs/data/partner-api.md](../data/partner-api.md) คงไว้เพื่อลิงก์เดิม. ODT ใน `docs/source/` เป็น immutable archive (ไม่แก้).

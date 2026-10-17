@@ -2695,7 +2695,7 @@ Buffer ของ partner booking (M2) — FastAPI insert ตอนรับค�
 
 **Index:** `(shelter_code, cid_hash)` unique partial (`state ∈ {pending, written}`) — กันซ้ำภายในศูนย์ + race (FR-30, คงเดิม) · `(booking_id, person_seq)` **ใหม่ (CR-169)** — ดึงทั้งกลุ่มตามลำดับ · `(state, updated_at)` · `(client_id)`
 
-**Group (CR-169 C4):** 1 แถวต่อคน · ไม่ใช้ Mongo transaction (standalone, ไม่มี replica set) — API insert ทุกแถวด้วย `committed = false` → ครบแล้ว `update_many({booking_id}, {$set: {committed: true}})` แล้วตอบ 201; `DuplicateKeyError` กลางทาง → `delete_many({booking_id, committed: false})` แล้วตอบ 409 · worker sweeper ลบแถว `committed = false` ที่ค้างเกิน 60 วินาที พร้อมแถว `state = pending` ของกลุ่มเดียวกัน (FR-33) · แถว `written` / `cancelled` / `rejected` ไม่ถูกแตะ
+**Group (CR-169 C4):** 1 แถวต่อคน · ไม่ใช้ Mongo transaction (standalone, ไม่มี replica set) — API insert ทุกแถวด้วย `committed = false` → ครบแล้ว `update_many({booking_id}, {$set: {committed: true}})` แล้วตอบ 201; `BulkWriteError` (writeErrors code 11000) กลางทาง → `delete_many({booking_id, committed: false})` แล้วตอบ 409 · worker sweeper ลบแถว `committed = false` ที่ค้างเกิน 60 วินาที พร้อมแถว `state = pending` ของกลุ่มเดียวกัน (FR-33) · แถว `written` / `cancelled` / `rejected` ไม่ถูกแตะ
 
 **Migration (CR-169):** ไม่ bump `schema_v` (Beanie doc) — field ใหม่ทั้งหมดมี default (`person_seq = 0`, `group_size = 1`, `committed = true`) → แถวเดิมคือกลุ่มขนาด 1 ไม่ต้อง backfill; index ใหม่สร้างตอน Beanie init
 
