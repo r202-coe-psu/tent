@@ -8,10 +8,17 @@ export {
 	kioskBannerStatusSchema,
 	matchesScreen,
 	nextBannerOrder,
+	orderableBanners,
+	planReorder,
 	sortBanners,
 	splitByView
 } from './domain/kiosk-banner';
-export type { KioskBannerContext, KioskBannerDoc, KioskBannerInput } from './domain/kiosk-banner';
+export type {
+	KioskBannerContext,
+	KioskBannerDoc,
+	KioskBannerInput,
+	ReorderPlan
+} from './domain/kiosk-banner';
 export {
 	KIOSK_BANNER_IMAGE_MAX_BYTES,
 	KIOSK_BANNER_IMAGE_TYPES,

@@ -7,6 +7,8 @@ import {
 	kioskBannerInputSchema,
 	matchesScreen,
 	nextBannerOrder,
+	orderableBanners,
+	planReorder,
 	sortBanners,
 	splitByView
 } from './kiosk-banner';
@@ -352,5 +354,104 @@ describe('order conflicts (FR-KBR-45)', () => {
 				1
 			);
 		});
+	});
+});
+
+describe('orderableBanners', () => {
+	const now = new Date('2026-10-16T00:00:00.000Z');
+	const banner = (
+		id: string,
+		order: number,
+		extra: { screen_type?: 'compact' | 'portrait'; start_at?: string; end_at?: string } = {}
+	) => ({
+		_id: `kiosk_banner:${id}`,
+		order,
+		start_at: extra.start_at ?? '2026-10-15T00:00:00.000Z',
+		end_at: extra.end_at ?? '2026-10-20T00:00:00.000Z',
+		screen_type: extra.screen_type
+	});
+
+	it('keeps current banners of the screen type, sorted, and drops expired or other-screen ones', () => {
+		const list = [
+			banner('c', 3, { screen_type: 'compact' }),
+			banner('a', 1),
+			banner('p', 1, { screen_type: 'portrait' }),
+			banner('old', 2, { end_at: '2026-10-15T23:59:59.000Z' }),
+			banner('b', 2, { screen_type: 'compact' })
+		];
+		const ids = (type: 'compact' | 'portrait') =>
+			orderableBanners(list, type, now).map((b) => b._id);
+		expect(ids('compact')).toEqual(['kiosk_banner:a', 'kiosk_banner:b', 'kiosk_banner:c']);
+		expect(ids('portrait')).toEqual(['kiosk_banner:p']);
+	});
+
+	it('includes inactive and not-yet-started banners', () => {
+		const list = [
+			{ ...banner('a', 1), status: 'inactive' },
+			banner('b', 2, { start_at: '2026-10-18T00:00:00.000Z' })
+		];
+		expect(orderableBanners(list, 'compact', now).map((b) => b._id)).toEqual([
+			'kiosk_banner:a',
+			'kiosk_banner:b'
+		]);
+	});
+});
+
+describe('planReorder', () => {
+	const rows = (...orders: number[]) =>
+		orders.map((order, i) => ({ _id: `kiosk_banner:${'abc'[i]}`, order }));
+
+	it('plans no changes when the order is unchanged', () => {
+		expect(
+			planReorder(rows(1, 2, 3), ['kiosk_banner:a', 'kiosk_banner:b', 'kiosk_banner:c'])
+		).toEqual({ ok: true, changes: [] });
+	});
+
+	it('renumbers every banner when the last one moves to the front', () => {
+		expect(
+			planReorder(rows(1, 2, 3), ['kiosk_banner:c', 'kiosk_banner:a', 'kiosk_banner:b'])
+		).toEqual({
+			ok: true,
+			changes: [
+				{ id: 'kiosk_banner:c', order: 1 },
+				{ id: 'kiosk_banner:a', order: 2 },
+				{ id: 'kiosk_banner:b', order: 3 }
+			]
+		});
+	});
+
+	it('closes gaps and duplicates, changing only banners whose order differs', () => {
+		expect(
+			planReorder(rows(2, 2, 5), ['kiosk_banner:a', 'kiosk_banner:b', 'kiosk_banner:c'])
+		).toEqual({
+			ok: true,
+			changes: [
+				{ id: 'kiosk_banner:a', order: 1 },
+				{ id: 'kiosk_banner:c', order: 3 }
+			]
+		});
+		expect(
+			planReorder(rows(1, 2, 5), ['kiosk_banner:a', 'kiosk_banner:b', 'kiosk_banner:c'])
+		).toEqual({ ok: true, changes: [{ id: 'kiosk_banner:c', order: 3 }] });
+	});
+
+	it('rejects a repeated id', () => {
+		expect(planReorder(rows(1, 2), ['kiosk_banner:a', 'kiosk_banner:a'])).toEqual({
+			ok: false,
+			reason: 'duplicate'
+		});
+	});
+
+	it('rejects ids that are missing or extra', () => {
+		const mismatch = { ok: false, reason: 'mismatch' };
+		expect(planReorder(rows(1, 2), ['kiosk_banner:a'])).toEqual(mismatch);
+		expect(planReorder(rows(1, 2), ['kiosk_banner:a', 'kiosk_banner:b', 'kiosk_banner:z'])).toEqual(
+			mismatch
+		);
+		expect(planReorder(rows(1, 2), ['kiosk_banner:a', 'kiosk_banner:z'])).toEqual(mismatch);
+	});
+
+	it('plans nothing for an empty list', () => {
+		expect(planReorder([], [])).toEqual({ ok: true, changes: [] });
 	});
 });

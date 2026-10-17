@@ -190,3 +190,36 @@ export function nextBannerOrder(
 		.map((b) => b.order);
 	return orders.length ? Math.max(...orders) + 1 : KIOSK_BANNER_LIMITS.orderDefault;
 }
+
+/**
+ * Rows the reorder page shows for one screen type: current banners (inactive and not-yet-started
+ * included), in display order.
+ */
+export function orderableBanners<
+	T extends Sortable & Pick<KioskBannerDoc, 'end_at'> & { screen_type?: KioskScreenType | null }
+>(banners: readonly T[], screenType: KioskScreenType, now: Date): T[] {
+	const t = now.getTime();
+	return sortBanners(banners.filter((b) => matchesScreen(b, screenType) && isCurrentAt(b, t)));
+}
+
+export type ReorderPlan =
+	| { ok: true; changes: { id: string; order: number }[] }
+	| { ok: false; reason: 'duplicate' | 'mismatch' };
+
+/**
+ * Renumbers `orderedIds` to 1..n and lists only the banners whose order actually changes.
+ * Fails when an id repeats or the ids are not exactly the banners being reordered.
+ */
+export function planReorder(
+	current: readonly Pick<KioskBannerDoc, '_id' | 'order'>[],
+	orderedIds: readonly string[]
+): ReorderPlan {
+	const currentOrder = new Map(current.map((b) => [b._id, b.order]));
+	if (new Set(orderedIds).size !== orderedIds.length) return { ok: false, reason: 'duplicate' };
+	if (orderedIds.length !== currentOrder.size || !orderedIds.every((id) => currentOrder.has(id)))
+		return { ok: false, reason: 'mismatch' };
+	const changes = orderedIds.flatMap((id, i) =>
+		currentOrder.get(id) === i + 1 ? [] : [{ id, order: i + 1 }]
+	);
+	return { ok: true, changes };
+}
