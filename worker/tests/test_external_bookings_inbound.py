@@ -2618,7 +2618,7 @@ async def test_transient_couch_error_leaves_the_row_for_the_next_pass(
     assert row.get("reconciled_at") is None
     assert row.get("reconcile_outcome") is None
 
-    # The next reconcile cycle (60 s later) retries the row; the failure backoff is 6 s.
+    # The next reconcile cycle (60 s later) retries the row.
     clock[0] += inbound.RECONCILE_INTERVAL_SECONDS
     couch, store = _stored_couch(_stay_docs(0))
     assert await inbound.reconcile_terminal_bookings(couch) == 1
@@ -2777,7 +2777,9 @@ async def test_persistently_failing_rows_do_not_starve_newer_healthy_rows(db, cl
     assert (await _row(_row_id(0))).get("reconciled_at") is None
 
 
-async def test_backed_off_row_is_retried_after_its_backoff_then_forgotten(db, clock):
+async def test_failing_row_is_retried_on_the_very_next_pass(db):
+    """Decision #613: a transient failure is retried in the next reconcile cycle. No timer
+    holds the row back, even on the immediately following pass."""
     await _insert_terminal(0)
     couch, store = _stored_couch(_stay_docs(0))
     real_get = couch.get_doc.side_effect
@@ -2785,7 +2787,7 @@ async def test_backed_off_row_is_retried_after_its_backoff_then_forgotten(db, cl
 
     async def flaky(database, doc_id):
         if failing[0] and doc_id == "evacuee:E0":
-            raise _http_status(403)
+            raise _http_status(503)
         return await real_get(database, doc_id)
 
     couch.get_doc = AsyncMock(side_effect=flaky)
@@ -2794,17 +2796,57 @@ async def test_backed_off_row_is_retried_after_its_backoff_then_forgotten(db, cl
     assert await inbound.reconcile_terminal_bookings(couch, health) == 0
     assert health.keys("reconcile:") == [f"reconcile:{_row_id(0)}"]
 
-    # Still inside the backoff window: the row is not even read.
-    couch.get_doc.reset_mock()
-    assert await inbound.reconcile_terminal_bookings(couch, health) == 0
-    couch.get_doc.assert_not_awaited()
-
     failing[0] = False
-    clock[0] += inbound.BACKOFF_BASE_SECONDS
     assert await inbound.reconcile_terminal_bookings(couch, health) == 1
     assert store["evacuee:E0"]["current_stay"]["status"] == "cancelled"
     assert (await _row(_row_id(0)))["reconcile_outcome"] == "cancelled"
     assert health.keys("reconcile:") == []
+
+
+async def test_missing_shelter_database_is_retried_not_stamped_missing(db):
+    """A 404 on the GET cannot tell an absent doc from an absent shelter DB. An absent DB
+    must leave the row unreconciled so it is retried once the DB is back (#613)."""
+    await _insert_terminal(0)
+    couch, store = _stored_couch(_stay_docs(0))
+    couch.database_exists = AsyncMock(return_value=False)
+
+    assert await inbound.reconcile_terminal_bookings(couch) == 0
+
+    couch.get_doc.assert_not_awaited()
+    couch.put_doc.assert_not_awaited()
+    assert store["evacuee:E0"]["current_stay"]["status"] == "pre_registered"
+    row = await _row(_row_id(0))
+    assert row.get("reconciled_at") is None
+    assert row.get("reconcile_outcome") is None
+
+    couch.database_exists = AsyncMock(return_value=True)
+    assert await inbound.reconcile_terminal_bookings(couch) == 1
+    assert store["evacuee:E0"]["current_stay"]["status"] == "cancelled"
+    assert (await _row(_row_id(0)))["reconcile_outcome"] == "cancelled"
+
+
+async def test_household_is_kept_while_a_kiosk_registered_member_is_active(db):
+    """kiosk_registered is a Forecast-set stay (schema §1.1); a household with such a
+    member is not empty and must not be cancelled (§1.3 rule 1)."""
+    await _insert_terminal(0)
+    docs = _stay_docs(0)
+    docs.append(
+        {
+            "_id": "evacuee:E9",
+            "type": "evacuee",
+            "shelter_code": "SH001",
+            "household_id": "household:H0",
+            "current_stay": {"status": "kiosk_registered", "zone": None, "since": "x"},
+        }
+    )
+    couch, store = _stored_couch(docs)
+
+    assert await inbound.reconcile_terminal_bookings(couch) == 1
+
+    assert store["evacuee:E0"]["current_stay"]["status"] == "cancelled"
+    assert store["household:H0"]["status"] == "pre_registered"
+    assert store["evacuee:E9"]["current_stay"]["status"] == "kiosk_registered"
+    assert (await _row(_row_id(0)))["reconcile_outcome"] == "cancelled"
 
 
 async def test_reconcile_runs_at_most_once_per_interval_inside_the_loop(

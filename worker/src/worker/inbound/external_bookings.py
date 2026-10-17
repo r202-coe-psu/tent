@@ -131,6 +131,11 @@ HOLD_STATUSES: tuple[str, ...] = (
     "temporary_leave",
 )
 
+#: Stay statuses that keep a household alive: schema.md §1.3 derivation rule 1 cancels a
+#: household only when every member is cancelled. The Forecast set (§1.1) plus HOLD_STATUSES
+#: so a kiosk_registered member counts as well.
+_HOUSEHOLD_LIVE_STATUSES: tuple[str, ...] = (*HOLD_STATUSES, "kiosk_registered")
+
 _CANCEL_REASON = "ยกเลิกการลงทะเบียนล่วงหน้า (partner API)"
 _HOUSEHOLD_CANCEL_REASON = "ยกเลิกการลงทะเบียนครัวเรือนล่วงหน้า — ไม่มีสมาชิกค้าง pre_registered"
 
@@ -998,12 +1003,12 @@ async def _cancel_household_if_empty(
             fields=["_id", "current_stay"],
             limit=200,
         )
-        still_pre_registered = any(
+        still_held = any(
             m.get("_id") != evacuee_id
-            and (m.get("current_stay") or {}).get("status") == "pre_registered"
+            and (m.get("current_stay") or {}).get("status") in _HOUSEHOLD_LIVE_STATUSES
             for m in members
         )
-        if still_pre_registered:
+        if still_held:
             return None
         return {**household, "status": "cancelled", "updated_at": now}
 
@@ -1109,7 +1114,8 @@ async def _reconcile_row(couch: CouchClient, booking: ExternalBooking) -> str:
 
     Reads the reserved ``evacuee_id`` / ``household_id`` directly (no Mango for the docs):
 
-    * neither doc exists (or the shelter database is gone) → ``missing``;
+    * the shelter database is absent → retried (``_ReconcileRetry``), never ``missing``;
+    * neither doc exists → ``missing``;
     * the stay moved past ``pre_registered`` → ``advanced``, nothing is written and the
       household is left alone (its status may already reflect that member);
     * a ``pre_registered`` stay → cancelled through ``_cancel_stay``; a failed or changed
@@ -1122,6 +1128,10 @@ async def _reconcile_row(couch: CouchClient, booking: ExternalBooking) -> str:
     Raises on a CouchDB error (the caller leaves the row unreconciled). Logs ids only.
     """
     database = shelter_db_name(booking.shelter_code)
+    if not await couch.database_exists(database):
+        # A 404 on a GET cannot tell "doc absent" from "database absent"; only the former
+        # is `missing`. Leave the row unreconciled so the next pass retries (#613).
+        raise _ReconcileRetry("shelter database absent")
     evacuee = (
         await couch.get_doc(database, booking.evacuee_id)
         if booking.evacuee_id
@@ -1177,33 +1187,38 @@ async def _reconcile_booking(
     the pass, or the row moved under the guarded write). The stamp is guarded on the
     row's state and ``reconciled_at`` still unset, so a row is never stamped twice.
 
-    Every failure backs the row off in ``health`` (the same in-memory backoff as the
-    groups, 6 s first, capped at 180 s): a row that fails on every pass — a shelter
-    write that always 403s, a corrupt doc — must not hold the head of the batch.
+    A failed row is recorded in ``health`` only so that ``reconcile_terminal_bookings``
+    can take it after the healthy rows; it is retried on the next pass, not held back by a
+    timer (decision #613: a transient error is retried in the next reconcile cycle).
     """
     key = _reconcile_key(booking.id)
     try:
         outcome = await _reconcile_row(couch, booking)
-    except _ReconcileRetry:
-        logger.info("Reconcile of booking %s deferred to the next pass", _ref(booking))
+    except _ReconcileRetry as exc:
+        if health.should_log(key):
+            logger.info(
+                "Reconcile of booking %s deferred (%s) — retry next pass",
+                _ref(booking),
+                exc,
+            )
         health.failed(key)
         return False
     except Exception:
         # logger.exception: the _ExceptionTypeOnly filter logs the type and location only.
-        logger.exception(
-            "Reconcile of booking %s failed — retry next pass", _ref(booking)
-        )
+        if health.should_log(key):
+            logger.exception(
+                "Reconcile of booking %s failed — retry next pass", _ref(booking)
+            )
         health.failed(key)
         return False
+    health.succeeded(key)
 
     stamped = await _transition(
         booking,
         {"state": booking.state, "reconciled_at": None},
         {"reconciled_at": datetime.now(UTC), "reconcile_outcome": outcome},
     )
-    if stamped:
-        health.succeeded(key)
-    else:
+    if not stamped:
         logger.info(
             "Booking %s moved during reconcile — retry next pass", _ref(booking)
         )
@@ -1219,10 +1234,10 @@ async def reconcile_terminal_bookings(
     ``household_id`` and have no ``reconciled_at`` (legacy rows without the field match
     too: Mongo ``null`` matches a missing key). Returns the number of rows stamped.
 
-    Rows that have not failed yet come first (oldest first). Rows that failed are kept
-    out of that batch while backed off in ``health`` and only fill the slots left over
-    once their backoff has elapsed, so a set of rows that fail every pass cannot push
-    newer healthy rows out of the batch.
+    Rows that have not failed in an earlier pass come first (oldest first). Rows that
+    failed earlier are retried on every pass but only fill the slots left over, so a set
+    of rows that fail every time cannot push newer healthy rows out of the batch. ``health``
+    holds only those failure marks and the log throttle; no retry timer applies.
     """
     health = FailureTracker() if health is None else health
     base: dict[str, Any] = {
@@ -1233,8 +1248,9 @@ async def reconcile_terminal_bookings(
             {"household_id": {"$ne": None}},
         ],
     }
-    failing = health.keys(_RECONCILE_KEY_PREFIX)
-    failing_ids = [key[len(_RECONCILE_KEY_PREFIX) :] for key in failing]
+    failing_ids = [
+        key[len(_RECONCILE_KEY_PREFIX) :] for key in health.keys(_RECONCILE_KEY_PREFIX)
+    ]
 
     rows = (
         await ExternalBooking.find({**base, "_id": {"$nin": failing_ids}})
@@ -1243,18 +1259,12 @@ async def reconcile_terminal_bookings(
         .to_list()
     )
     if len(rows) < RECONCILE_BATCH_SIZE and failing_ids:
-        due = [
-            booking_id
-            for booking_id, key in zip(failing_ids, failing, strict=True)
-            if health.ready(key)
-        ]
-        if due:
-            rows += (
-                await ExternalBooking.find({**base, "_id": {"$in": due}})
-                .sort("updated_at", "_id")
-                .limit(RECONCILE_BATCH_SIZE - len(rows))
-                .to_list()
-            )
+        rows += (
+            await ExternalBooking.find({**base, "_id": {"$in": failing_ids}})
+            .sort("updated_at", "_id")
+            .limit(RECONCILE_BATCH_SIZE - len(rows))
+            .to_list()
+        )
     stamped = 0
     for booking in rows:
         if await _reconcile_booking(couch, booking, health):
