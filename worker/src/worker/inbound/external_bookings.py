@@ -1222,15 +1222,16 @@ async def _ensure_household_audit(
     )
 
 
-async def _mark_reconcile_cancel(booking: ExternalBooking) -> None:
+async def _mark_reconcile_cancel(booking: ExternalBooking) -> bool:
     """Stamp ``reconcile_cancelled_at`` on the row before the pass cancels a CouchDB doc.
 
     Once per row (a marker already set is kept). The stamp is guarded on the state and
     ``reconciled_at`` observed by the pass; a moved row raises `_ReconcileRetry` so nothing
     is cancelled under a stale view. A Mongo error propagates and is retried as transient.
+    Returns True when this call set the marker (False: it was already there).
     """
     if booking.reconcile_cancelled_at is not None:
-        return
+        return False
     stamped = await _transition(
         booking,
         {"state": booking.state, "reconciled_at": None},
@@ -1238,6 +1239,27 @@ async def _mark_reconcile_cancel(booking: ExternalBooking) -> None:
     )
     if not stamped:
         raise _ReconcileRetry("row moved before the cancel")
+    return True
+
+
+async def _clear_reconcile_cancel(booking: ExternalBooking) -> None:
+    """Return ``reconcile_cancelled_at`` to ``null`` after a pass wrote nothing (#613 r1).
+
+    Only for a marker this pass stamped, when the cancel definitely did not happen (the
+    stay came back `_CHANGED`, or the household declined). Guarded on ``state`` and an unset
+    ``reconciled_at`` (not on the marker's value: Mongo stores milliseconds). A missed guard
+    is logged (ids only) and the marker lingers — see the reconcile docs.
+    """
+    cleared = await _transition(
+        booking,
+        {"state": booking.state, "reconciled_at": None},
+        {"reconcile_cancelled_at": None},
+    )
+    if not cleared:
+        logger.warning(
+            "Booking %s moved before its reconcile marker could be cleared",
+            _ref(booking),
+        )
 
 
 async def _reconcile_row(couch: CouchClient, booking: ExternalBooking) -> str:
@@ -1251,7 +1273,8 @@ async def _reconcile_row(couch: CouchClient, booking: ExternalBooking) -> str:
     * a ``pre_registered`` stay → ``reconcile_cancelled_at`` is stamped on the row first,
       then the stay is cancelled through ``_cancel_stay(strict=True)``; a failed or changed
       write, or a failed audit / household write after the cancel, raises so the row is
-      retried (``reconciled_at`` stays unset);
+      retried (``reconciled_at`` stays unset); a changed stay (nothing written) clears the
+      marker this pass stamped;
     * a ``cancelled`` stay with its audit doc missing is audited only when the row carries
       ``reconcile_cancelled_at`` (an earlier pass cancelled it and its audit write failed);
       a stay cancelled by someone else (no marker) gets no partner audit → ``noop``;
@@ -1287,11 +1310,14 @@ async def _reconcile_row(couch: CouchClient, booking: ExternalBooking) -> str:
 
     cancelled = False
     if status == "pre_registered":
-        await _mark_reconcile_cancel(booking)
+        stamped_stay = await _mark_reconcile_cancel(booking)
         outcome = await _cancel_stay(
             couch, database, booking, booking.evacuee_id, strict=True
         )
         if outcome != _CANCELLED:
+            if outcome == _CHANGED and stamped_stay:
+                # Nothing was written: the marker this pass set is not ours to keep.
+                await _clear_reconcile_cancel(booking)
             raise _ReconcileRetry(outcome)
         cancelled = True
     elif (
@@ -1304,8 +1330,8 @@ async def _reconcile_row(couch: CouchClient, booking: ExternalBooking) -> str:
     if booking.household_id:
         fresh = await couch.get_doc(database, booking.household_id)
         if fresh is not None and fresh.get("status") == "pre_registered":
-            await _mark_reconcile_cancel(booking)
-            cancelled |= await _cancel_household_if_empty(
+            stamped_household = await _mark_reconcile_cancel(booking)
+            done = await _cancel_household_if_empty(
                 couch,
                 database,
                 household_id=booking.household_id,
@@ -1313,6 +1339,10 @@ async def _reconcile_row(couch: CouchClient, booking: ExternalBooking) -> str:
                 actor=partner_actor(booking.module_name, booking.client_id),
                 now=_now_iso(),
             )
+            if not done and stamped_household and not cancelled:
+                # Declined (a member still held) and this pass cancelled nothing.
+                await _clear_reconcile_cancel(booking)
+            cancelled |= done
         elif (
             fresh is not None
             and fresh.get("status") == "cancelled"
