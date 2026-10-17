@@ -1262,6 +1262,14 @@ class SmokeTestRunner:
             f"HTTP {status} - {data}" if not group_ok else f"booking_id={group_id}",
         )
         if not group_ok:
+            # A group that was created despite a wrong shape must still be cleaned up
+            if group_id.startswith("BK-"):
+                self.http_request(
+                    "POST",
+                    f"{bookings}/{group_id}/cancel",
+                    headers=headers,
+                    body={"reason": "smoke test cleanup"},
+                )
             return
 
         # G2 Status of the group: one aggregate + one entry per person, no PII
@@ -1376,6 +1384,36 @@ class SmokeTestRunner:
             status == 200 and res.get("booking_status") == "CANCELLED",
             f"HTTP {status} (code={get_error_code(data)})",
         )
+
+        # G9 Group of 2 (the lower bound of a multi-person group) → 201, then cancel it
+        pair_cids = [make_valid_cid(), make_valid_cid()]
+        status, data = self.http_request(
+            "POST",
+            bookings,
+            headers=headers,
+            body={"location_code": location, "persons": [make_group_person(c) for c in pair_cids]},
+        )
+        res = data.get("result", {}) if isinstance(data, dict) else {}
+        pair_id = str(res.get("booking_id", ""))
+        self.record_result(
+            "M2",
+            "EXT-008 persons[] of 2 → 201 BOOKED with persons_count 2 and a BK- id",
+            status == 201 and pair_id.startswith("BK-") and res.get("persons_count") == 2,
+            f"HTTP {status} - {data}" if not pair_id.startswith("BK-") else f"booking_id={pair_id}",
+        )
+        if pair_id.startswith("BK-"):
+            status, _ = self.http_request(
+                "POST",
+                f"{bookings}/{pair_id}/cancel",
+                headers=headers,
+                body={"reason": "smoke test cleanup"},
+            )
+            self.record_result(
+                "M2",
+                "EXT-009 cancel of the two-person group → 200",
+                status == 200,
+                f"HTTP {status}",
+            )
 
         # G8 Cases that need a worker-rejected or checked-in member cannot be built here
         self.record_skip(
