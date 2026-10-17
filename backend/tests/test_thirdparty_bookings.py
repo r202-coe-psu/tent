@@ -492,6 +492,7 @@ async def test_create_group_beyond_schema_bound_is_422(client: AsyncClient, shel
     response = await client.post(URL, json=_group_payload(1001), headers=GRANTED)
     assert response.status_code == 422
     assert response.json()["code"] == "validation_error"
+    assert response.json()["message"].startswith("body.persons: ")
     assert await _rows() == []
 
 

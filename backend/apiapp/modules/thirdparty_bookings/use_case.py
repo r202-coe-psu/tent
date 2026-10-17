@@ -430,6 +430,11 @@ class ThirdPartyBookingsUseCase:
         The insert runs in `cid_hash` order, so the unique-index error names only the first
         colliding row. Re-run the pre-check to report the lowest index, matching it. Falls
         back to the colliding row's index when the re-check finds nothing or fails.
+
+        `_taken_cid_hashes` skips `committed: False` rows of other requests, so a colliding
+        row that is still staged by another request is not seen here. The fallback then
+        reports the colliding row's own index, which may not be the lowest. This is the
+        spec's fallback, not a defect.
         """
         try:
             taken = await self._taken_cid_hashes(location_code, cid_hashes)

@@ -5148,7 +5148,7 @@
 					"occupancy_total": {
 						"anyOf": [{ "type": "integer" }, { "type": "null" }],
 						"title": "Occupancy Total",
-						"description": "active + pre_registered across projected shelters (CR-070)"
+						"description": "active + pre_registered + kiosk_registered across projected shelters (CR-070)"
 					},
 					"vulnerable_count": {
 						"anyOf": [{ "type": "integer" }, { "type": "null" }],
