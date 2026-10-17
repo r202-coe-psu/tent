@@ -123,8 +123,8 @@ are printed, never CIDs / phones / names):
      visible, cancel -> all cancelled; min/avg/max per person) = the gate for the cap
   6. (banner "E2E 6") CouchDB-side duplicate planted before the worker writes anything:
      the whole group is REJECTED (duplicate) and no doc is written (FR-21, first pass).
-     The per-person retry rule (D1/D4, part of the group already in CouchDB) needs a
-     crash between writes and is not run here.
+     The per-person retry rule (D1/D4, part of the group already in CouchDB) is covered by
+     scenario 8, which reserves a member's ids so the worker takes that path without a crash.
   7. (banner "E2E 7") sweeper: an orphan committed=false row older than 60 s is removed
      (FR-33; needs Mongo, else SKIPPED)
   8. (banner "E2E 8") partial group, the CR-169 retry rule (D1/D4): member 1's own
@@ -133,7 +133,8 @@ are printed, never CIDs / phones / names):
      aggregate REJECTED. Then group cancel -> 200 and aggregate CANCELLED, the other
      members cancelled, repeat cancel -> 200 (FR-21 D1/D4, FR-40/42; needs Mongo, else
      SKIPPED). Member 1's ids are reserved through the test's own Mongo row (CAS), which
-     is what lets the worker take the retry path without a crash.
+     is what lets the worker take the retry path without a crash. If the worker reserves
+     member 1 before the CAS, the case reports "race lost" as a FAIL (fail-closed): rerun it.
   9. (banner "E2E 9") group with a checked-in member (stay set to `arriving` in the test
      shelter's CouchDB and waited for in the API projection, restored afterwards) -> cancel
      409 booking_not_cancellable and nothing changed (FR-40/53; needs Mongo, else SKIPPED)
@@ -1319,11 +1320,17 @@ class SmokeTestRunner:
         if status == 201 and isinstance(data, dict):
             stray = str((data.get("result") or {}).get("booking_id", ""))
             if stray.startswith("BK-"):
-                self.http_request(
+                c_status, c_data = self.http_request(
                     "POST",
                     f"{bookings}/{stray}/cancel",
                     headers=headers,
                     body={"reason": "smoke test cleanup"},
+                )
+                self.record_result(
+                    "M2",
+                    "cleanup: stray group booked by the duplicate-group check was cancelled",
+                    c_status == 200,
+                    f"HTTP {c_status} (code={get_error_code(c_data)})",
                 )
 
         # G4 Nothing from the refused group is held: the other person can still book alone
@@ -2226,7 +2233,7 @@ class CouchAdmin:
         status, _ = self.request("PUT", f"/{self.database}/{doc['_id']}", doc)
         return status in (200, 201, 202)
 
-    def get_stay(self, doc_id: str) -> Optional[str]:
+    def get_stay(self, doc_id: str) -> str | None:
         """The `current_stay.status` of one doc (None when missing)."""
         status, doc = self.request(
             "GET", f"/{self.database}/{urllib.parse.quote(doc_id, safe=':')}"
@@ -2235,7 +2242,7 @@ class CouchAdmin:
             return None
         return (doc.get("current_stay") or {}).get("status")
 
-    def set_stay(self, doc_id: str, stay: Dict[str, Any]) -> bool:
+    def set_stay(self, doc_id: str, stay: dict[str, Any]) -> bool:
         """Replace one evacuee's `current_stay` (read-modify-write of that doc only)."""
         path = f"/{self.database}/{urllib.parse.quote(doc_id, safe=':')}"
         status, doc = self.request("GET", path)
@@ -2432,10 +2439,10 @@ class MongoProbe:
     def orphan_exists(self, booking_id: str) -> bool:
         return self.bookings.count_documents({"booking_id": booking_id}) > 0
 
-    def count_rows(self, booking_id: str, extra: Dict[str, Any]) -> int:
+    def count_rows(self, booking_id: str, extra: dict[str, Any]) -> int:
         return int(self.bookings.count_documents({"booking_id": booking_id, **extra}))
 
-    def person_status(self, evacuee_id: str) -> Optional[str]:
+    def person_status(self, evacuee_id: str) -> str | None:
         """The API projection of one stay (`public_persons`); None until the worker syncs it."""
         doc = self.persons.find_one({"_id": evacuee_id}, {"status": 1})
         return doc.get("status") if doc else None
@@ -2467,7 +2474,7 @@ class MongoProbe:
                 "$set": {
                     "evacuee_id": evacuee_id,
                     "household_id": household_id,
-                    "updated_at": dt.datetime.now(dt.timezone.utc),
+                    "updated_at": dt.datetime.now(dt.UTC),
                 }
             },
         )
@@ -3200,13 +3207,13 @@ class E2ERunner(SmokeTestRunner):
             time.sleep(WATCH_POLL_SECONDS)
 
     @staticmethod
-    def _person_map(status: Dict[str, Any]) -> Dict[Any, Any]:
+    def _person_map(status: dict[str, Any]) -> dict[Any, Any]:
         return {p.get("index"): p.get("booking_status") for p in status.get("persons") or []}
 
     def scenario_couch_side_duplicate(self) -> None:
         """FR-21, first pass: a CouchDB-side duplicate seen before the worker wrote anything
         rejects the WHOLE group and writes no doc. The per-person retry rule (D1/D4: part of
-        the group already in CouchDB) needs a crash between writes and is not run here."""
+        the group already in CouchDB) is covered by scenario 8."""
         self._banner("E2E 6: CouchDB-side duplicate rejects the whole group (FR-21, first pass)")
         case = "CouchDB-side duplicate rejects the whole group with no docs written"
         cids = self.make_group(3)
@@ -3318,7 +3325,7 @@ class E2ERunner(SmokeTestRunner):
         member_ev = f"evacuee:E2E-PART-{token}"
         member_hh = f"household:E2E-PART-{token}"
         foreign_id = f"evacuee:E2E-PLANT-{token}"
-        now = dt.datetime.now(dt.timezone.utc).isoformat().replace("+00:00", "Z")
+        now = dt.datetime.now(dt.UTC).isoformat().replace("+00:00", "Z")
         # Every id goes into the manifest BEFORE the doc that uses it is written.
         with self._manifest_lock:
             self.e2e_planted_ids.extend([member_ev, member_hh, foreign_id])
@@ -3419,7 +3426,7 @@ class E2ERunner(SmokeTestRunner):
             return
 
         expected_rows = {0: "BOOKED", 1: "REJECTED", 2: "BOOKED"}
-        last: Dict[str, Any] = {}
+        last: dict[str, Any] = {}
 
         def rejected_and_booked() -> bool:
             nonlocal last
@@ -3521,13 +3528,11 @@ class E2ERunner(SmokeTestRunner):
             return
         evac_id = target[0]["_id"]
         original = dict(target[0].get("current_stay") or {})
-        restore = original if original.get("status") == "pre_registered" else {
-            "status": "pre_registered",
-            "zone": None,
-            "since": None,
-        }
+        # watch_group above waited for pre_registered, so `original` is that stay; the
+        # fallback only covers a doc that has no current_stay.
+        restore = original or {"status": "pre_registered", "zone": None, "since": None}
         try:
-            now = dt.datetime.now(dt.timezone.utc).isoformat().replace("+00:00", "Z")
+            now = dt.datetime.now(dt.UTC).isoformat().replace("+00:00", "Z")
             set_ok = self.couch.set_stay(evac_id, {"status": "arriving", "zone": None, "since": now})
             self.e2e_result("set-up: member 0 checked in (stay arriving) in CouchDB", set_ok)
             if not set_ok:
