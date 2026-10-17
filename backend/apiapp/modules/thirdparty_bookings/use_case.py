@@ -967,6 +967,7 @@ class ThirdPartyBookingsUseCase:
             raise failure
 
         commit_failed = False
+        key_completed = False  # set when the G5 settle already completed the key
         # The flip runs as its own task so a cancelled request cannot leave it half-awaited:
         # `update_many` may still be applied server-side after the cancel.
         commit_task = _detach(_commit_group(collection, booking_id, len(rows)))
@@ -1000,6 +1001,7 @@ class ThirdPartyBookingsUseCase:
             # the answer is 201 (the worker processes it) instead of a 500 that makes the partner
             # retry.
             commit_failed = not kept
+            key_completed = kept
         if commit_failed:
             await self._log_detached(
                 booking_id=booking_id,
@@ -1017,7 +1019,8 @@ class ThirdPartyBookingsUseCase:
                 "The booking could not be saved.",
             )
 
-        await _complete_key(reserved_id, booking_id)
+        if not key_completed:
+            await _complete_key(reserved_id, booking_id)
         # The group is committed and the worker will process it: a failing or cancelled
         # access log must not turn this into an error (the partner's retry would then hit 409).
         with contextlib.suppress(asyncio.CancelledError):
