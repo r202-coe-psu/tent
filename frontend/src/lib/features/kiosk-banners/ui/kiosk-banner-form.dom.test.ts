@@ -29,10 +29,10 @@ let onsave: Mock<(payload: KioskBannerSavePayload) => Promise<void>>;
 const createObjectURL = vi.fn();
 const revokeObjectURL = vi.fn();
 
-function render(banner?: KioskBannerSummary) {
+function render(banner?: KioskBannerSummary, defaultScreen?: 'compact' | 'portrait') {
 	instance = mount(KioskBannerForm, {
 		target: document.body,
-		props: { shelterCode: 'SH001', banner, onsave }
+		props: { shelterCode: 'SH001', banner, defaultScreen, onsave }
 	});
 	flushSync();
 }
@@ -314,6 +314,17 @@ describe('KioskBannerForm', () => {
 
 			expect(onsave).toHaveBeenCalledTimes(1);
 			expect(onsave.mock.calls[0][0].input.screen_type).toBe('portrait');
+		});
+
+		it('create mode starts on the defaultScreen', () => {
+			render(undefined, 'portrait');
+			expect(radio('portrait').getAttribute('aria-checked')).toBe('true');
+			expect(document.body.textContent).toContain('แนะนำ 1080×1920 px');
+		});
+
+		it('edit mode ignores defaultScreen', () => {
+			render(stored, 'portrait');
+			expect(radio('compact').getAttribute('aria-checked')).toBe('true');
 		});
 
 		it('edit mode shows a stored portrait banner as ตู้ใหญ่', () => {

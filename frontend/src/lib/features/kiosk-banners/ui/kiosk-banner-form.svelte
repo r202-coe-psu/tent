@@ -43,11 +43,14 @@
 	let {
 		shelterCode,
 		banner,
+		defaultScreen,
 		onsave
 	}: {
 		shelterCode: string;
 		/** Present in edit mode. */
 		banner?: KioskBannerSummary;
+		/** Create mode only: the screen type the form starts on. */
+		defaultScreen?: KioskScreenType;
 		onsave: (payload: KioskBannerSavePayload) => Promise<void>;
 	} = $props();
 
@@ -57,7 +60,9 @@
 	// svelte-ignore state_referenced_locally
 	const initialRev = banner?._rev;
 	// svelte-ignore state_referenced_locally
-	const initialValues = banner ? bannerToFormValues(banner) : emptyKioskBannerForm();
+	const initialValues = banner
+		? bannerToFormValues(banner)
+		: { ...emptyKioskBannerForm(), ...(defaultScreen ? { screen_type: defaultScreen } : {}) };
 	// svelte-ignore state_referenced_locally
 	const currentImageUrl = banner
 		? kioskBannerRemoteRepository.imageUrl(banner._id, banner._rev)
