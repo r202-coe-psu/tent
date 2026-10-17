@@ -100,7 +100,10 @@ job "${CODE_LC}_pull" "$CEN/$SHELTER_DB" "$CEN_AUTH" "$LOC/$SHELTER_DB" "$LOC_AU
 job "${CODE_LC}_push" "$LOC/$SHELTER_DB" "$LOC_AUTH" "$CEN/$SHELTER_DB" "$CEN_AUTH"
 
 # _users ที่ central อ่านได้เฉพาะ server admin → CENTRAL_REPL_USER ต้องเป็น central admin
+# CR-171: selector ประเมินเฉพาะ revision ใหม่ — revision ที่ถอด role ออกจะหลุด selector `roles` และไม่ถึง edge
+# จึงกรองด้วย `edge_shelters` (append-only; ไม่เคยถูกถอด) แล้ว OR กับ `roles` กันช่วงก่อน backfill
+# (`pnpm backfill:edge-shelters`). SHELTER_CODE เป็นตัวพิมพ์ใหญ่เหมือนใน roles (SH001)
 job "users_${CODE_LC}_pull" "$CEN/_users" "$CEN_AUTH" "$LOC/_users" "$LOC_AUTH" \
-	"\"selector\":{\"roles\":{\"\$elemMatch\":{\"\$eq\":\"${ROLE}\"}}}"
+	"\"selector\":{\"\$or\":[{\"edge_shelters\":{\"\$elemMatch\":{\"\$eq\":\"${SHELTER_CODE}\"}}},{\"roles\":{\"\$elemMatch\":{\"\$eq\":\"${ROLE}\"}}}]}"
 
 echo "== done — ดูสถานะ: curl -s \$E/_scheduler/docs/_replicator"

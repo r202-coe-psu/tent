@@ -231,11 +231,21 @@ curl -s -X PUT -u <staff>:<pw> $EDGE/couch/shelter_sh001/evacuee:01OUTAGE0000000
 | `catalog_pull` | central → edge | `CENTRAL_REPL_USER` | catalog |
 | `sh001_pull` | central → edge | `CENTRAL_REPL_USER` | ข้อมูลศูนย์ที่เขียนที่ central |
 | `sh001_push` | edge → central | `CENTRAL_REPL_USER` | ข้อมูลที่เขียนที่ edge ตอน WAN ขาด (backlog) |
-| `users_sh001_pull` | central → edge | `CENTRAL_REPL_USER` | ให้ staff ของศูนย์นี้ login ที่ edge ได้ · `selector` role `shelter:<CODE>` กรองที่ central จึงไม่ส่ง user ศูนย์อื่นมา |
+| `users_sh001_pull` | central → edge | `CENTRAL_REPL_USER` | ให้ staff ของศูนย์นี้ login ที่ edge ได้ · `selector` (`edge_shelters` มี `<CODE>` **หรือ** `roles` มี `shelter:<CODE>` — [CR-171](../changes/01-core/CR-171-users-edge-shelters-soft-delete.md)) กรองที่ central จึงไม่ส่ง user ศูนย์อื่นมา และ revision ที่ถอด role / soft delete ยังถึง edge |
 
 - URL ฝั่ง edge ใน job คือ `http://127.0.0.1:5984` เพราะ job รัน **ภายใน container CouchDB** เอง
 - job แต่ละตัวเก็บ `edge_init_hash` (fingerprint ของ URL + credential + selector) — รันซ้ำแล้ว config ตรงกับ `.env` = `exists` (ข้าม) · ไม่ตรง เช่นแก้ `SYNC_URL` / รหัส / `SHELTER_CODE` = `stale` แล้วลบและสร้างใหม่ให้เอง (job ที่สร้างก่อนมี fingerprint ถูกสร้างใหม่หนึ่งครั้ง)
 - รหัสผ่านใน doc ของ `_replicator` เป็น **plaintext** (admin อ่านกลับก็เห็น) ถือเป็นความลับของเครื่อง edge
+
+### อัปเกรดเป็น CR-171 (`_users.edge_shelters` + soft delete)
+
+selector ของ `users_<code>_pull` เปลี่ยน (hash ของ job เปลี่ยน → `edge-init` สร้างใหม่เอง, checkpoint เริ่มใหม่ครั้งเดียว) ลำดับ:
+
+1. **central:** deploy frontend ก่อน — writer เริ่มเขียน `edge_shelters`
+2. **central:** `cd frontend && pnpm backfill:edge-shelters` (dry-run) → ตรวจ → `pnpm backfill:edge-shelters --write` (รันซ้ำได้ รอบสองต้องไม่มี doc เปลี่ยน)
+3. **edge แต่ละเครื่อง:** `git pull` แล้ว `docker compose -f docker-compose.edge.yml run --rm edge-init` — ขึ้น `stale  _replicator/users_<code>_pull` แล้วสร้างใหม่
+
+ทำข้อ 3 ก่อนข้อ 2 ได้ ไม่ทำให้ user หายจาก edge (selector มี `$or` กับ `roles`) · user ที่ถูก `DELETE` ก่อน CR-171 (tombstone) ไม่ถูกแก้ย้อนหลัง — ลบที่ edge ด้วยมือ หรือ wipe edge · ห้ามลบ/แก้ `_users` ตรงผ่าน Fauxton / admin API (ข้ามกฎนี้)
 
 📖 [Replicator database](https://docs.couchdb.org/en/stable/replication/replicator.html) ·
 [Selector objects](https://docs.couchdb.org/en/stable/replication/replicator.html#selectorobj) ·

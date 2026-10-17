@@ -48,7 +48,7 @@ couch-central :5985         couch-edge :5986 ── network: lan
 | `registry`      | central → edge | one-way                                                      |
 | `catalog`       | central → edge | one-way                                                      |
 | `shelter_sh001` | central ⇄ edge | two-way (ใช้ replication doc 2 ตัว คือ pull + push) |
-| `_users`        | central → edge | filtered ด้วย selector`roles` มี `shelter:SH001`   |
+| `_users`        | central → edge | filtered ด้วย selector `edge_shelters` มี `SH001` **หรือ** `roles` มี `shelter:SH001` ([CR-171](../changes/01-core/CR-171-users-edge-shelters-soft-delete.md)) |
 
 ### ทำไมต้องตั้งค่าแบบนี้ (หลักการ)
 
@@ -155,9 +155,10 @@ rep catalog_pull   $CEN/catalog       $LOC/catalog
 rep sh001_pull     $CEN/shelter_sh001 $LOC/shelter_sh001
 rep sh001_push     $LOC/shelter_sh001 $CEN/shelter_sh001
 
-# filtered _users (เฉพาะ user ของ SH001)
+# filtered _users (เฉพาะ user ของ SH001) — POC ตอนแรกใช้ `roles` อย่างเดียว · production ใช้ `$or` กับ
+# `edge_shelters` ตาม CR-171 (ดู scripts/edge-init.sh)
 rep users_sh001_pull $CEN/_users $LOC/_users \
-  '"selector": {"roles": {"$elemMatch": {"$eq": "shelter:SH001"}}}'
+  '"selector": {"$or": [{"edge_shelters": {"$elemMatch": {"$eq": "SH001"}}}, {"roles": {"$elemMatch": {"$eq": "shelter:SH001"}}}]}'
 ```
 
 ตรวจสถานะ — ทุกตัวต้องเป็น `running`:
