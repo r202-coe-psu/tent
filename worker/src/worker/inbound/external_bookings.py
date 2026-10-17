@@ -144,7 +144,7 @@ HOLD_STATUSES: tuple[str, ...] = (
     "temporary_leave",
 )
 
-#: Stay statuses that keep a household alive (schema.md §1.3 rule 1: a household is cancelled
+#: Stay statuses that keep a household alive (schema.md §1.3 derive rules 2-4, CR-169 #613: a household is cancelled
 #: only when no member is still held): HOLD_STATUSES plus ``kiosk_registered``.
 _HOUSEHOLD_LIVE_STATUSES: tuple[str, ...] = (*HOLD_STATUSES, "kiosk_registered")
 
@@ -1133,21 +1133,26 @@ async def _cancel_household_if_empty(
     evacuee_id: str | None,
     actor: str,
     now: str,
+    exclude_evacuee: bool = True,
 ) -> bool:
     """Cancel the household once no member is still held (+ audit).
 
-    The whole precondition (household still ``pre_registered``, no other member in a
-    ``_HOUSEHOLD_LIVE_STATUSES`` status, schema.md §1.3 rule 1) runs inside ``update_doc``'s
-    mutate, so after a ``409`` (staff merged/moved members meanwhile) it is evaluated again
-    on the fresh document. ``evacuee_id`` is excluded from the member check (``None`` for a
-    household-only row). Returns True when this call cancelled the household. Raises on a
+    The whole precondition (household still ``pre_registered``, no member in a
+    ``_HOUSEHOLD_LIVE_STATUSES`` status; schema.md §1.3 derive rules 2-4 keep a household
+    alive, CR-169 decision #613) runs inside ``update_doc``'s mutate, so after a ``409``
+    (staff merged/moved members meanwhile) it is evaluated again on the fresh document.
+    ``evacuee_id`` is excluded from the member check unless ``exclude_evacuee`` is False
+    (reconcile of a stay that is past ``pre_registered``: that member counts like any
+    other; #683). Returns True when this call cancelled the household. Raises on a
     CouchDB error.
     """
 
     async def cancel(household: dict[str, Any]) -> dict[str, Any] | None:
         if household.get("status") != "pre_registered":
             return None
-        if await _household_still_held(couch, database, household_id, evacuee_id):
+        if await _household_still_held(
+            couch, database, household_id, evacuee_id if exclude_evacuee else None
+        ):
             return None
         return {**household, "status": "cancelled", "updated_at": now}
 
@@ -1351,7 +1356,7 @@ async def _reconcile_row(couch: CouchClient, booking: ExternalBooking) -> str:
 
     * neither doc exists (an absent shelter database also answers 404) → ``missing``;
     * the stay moved past ``pre_registered`` → ``advanced``, nothing is written and the
-      household is left alone (its status may already reflect that member);
+      the stay is left alone and the household is still evaluated below (#683);
     * a ``pre_registered`` stay → one timestamp ``now`` is stamped on the row as
       ``reconcile_stay_cancelled_at`` (and ``reconcile_household_cancelled_at`` when the
       row reserved a household, since the roll-up writes the same ``now``), then the stay
@@ -1365,10 +1370,14 @@ async def _reconcile_row(couch: CouchClient, booking: ExternalBooking) -> str:
     * the household is re-read: still ``pre_registered`` → a fresh ``now`` is stamped as
       ``reconcile_household_cancelled_at`` first, then it is cancelled by
       ``_cancel_household_if_empty`` with that ``now`` (only once no member is still held,
-      §1.3 rule 1; covers a household left behind by a failed roll-up and household-only
+      i.e. none in pre_registered / kiosk_registered / arriving / active / room_confirmed /
+      temporary_leave; checked_out, transferred, deceased and cancelled members do not
+      hold it; when the stay itself is past ``pre_registered`` it counts as a member; covers a household left behind by a failed roll-up and household-only
       rows); already ``cancelled`` → its audit is written only when its ``updated_at``
       equals ``reconcile_household_cancelled_at``, as for the stay;
-    * anything cancelled or audited in this pass → ``cancelled``; otherwise → ``noop``.
+    * anything cancelled or audited in this pass → ``cancelled``; otherwise ``advanced``
+      when the stay was past ``pre_registered`` (household kept, or already cancelled by
+      someone else), else ``noop``.
 
     Raises on a CouchDB error (the caller leaves the row unreconciled). Logs ids only.
     """
@@ -1387,14 +1396,16 @@ async def _reconcile_row(couch: CouchClient, booking: ExternalBooking) -> str:
         return _RECONCILE_MISSING
 
     status = _stay_status(evacuee)
-    if status not in (None, "pre_registered", "cancelled"):
+    advanced = status not in (None, "pre_registered", "cancelled")
+    if advanced:
         logger.warning(
             "Booking %s: stay is past pre_registered — left untouched", _ref(booking)
         )
-        return _RECONCILE_ADVANCED
 
     cancelled = False
-    if status == "pre_registered":
+    if advanced:
+        pass
+    elif status == "pre_registered":
         now = _now_iso()
         await _mark_reconcile_cancel(
             booking, now=now, stay=True, household=booking.household_id is not None
@@ -1429,6 +1440,7 @@ async def _reconcile_row(couch: CouchClient, booking: ExternalBooking) -> str:
                 evacuee_id=booking.evacuee_id,
                 actor=partner_actor(booking.module_name, booking.client_id),
                 now=now_household,
+                exclude_evacuee=not advanced,
             )
         elif (
             fresh is not None
@@ -1439,7 +1451,9 @@ async def _reconcile_row(couch: CouchClient, booking: ExternalBooking) -> str:
         ):
             cancelled |= await _ensure_household_audit(couch, database, booking, fresh)
 
-    return _RECONCILE_CANCELLED if cancelled else _RECONCILE_NOOP
+    if cancelled:
+        return _RECONCILE_CANCELLED
+    return _RECONCILE_ADVANCED if advanced else _RECONCILE_NOOP
 
 
 def _reconcile_key(booking_id: str) -> str:
