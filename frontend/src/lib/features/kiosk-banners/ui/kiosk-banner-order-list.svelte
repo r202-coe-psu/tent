@@ -81,7 +81,7 @@
 			{@const status = statusOf(banner)}
 			<li
 				class={[
-					'relative flex items-center gap-3 bg-white px-4 py-3 sm:px-6',
+					'relative flex flex-wrap items-center gap-3 bg-white px-4 py-3 sm:px-6',
 					drag.from === index && 'z-10 opacity-90 shadow-md',
 					drag.active &&
 						drag.from !== index &&
@@ -115,14 +115,14 @@
 					]}
 					loading="lazy"
 				/>
-				<div class="min-w-0 flex-1">
+				<div class="min-w-0 flex-1 basis-48">
 					<p class="truncate font-semibold text-foreground">{banner.title}</p>
 					<p class="text-sm whitespace-nowrap text-slate-700 tabular-nums">
 						{formatBannerWindow(banner.start_at, banner.end_at)}
 					</p>
 				</div>
 				<span class={status.class}>{status.label}</span>
-				<div class="flex items-center gap-1">
+				<div class="ml-auto flex flex-wrap items-center justify-end gap-1">
 					{@render rowActions?.(banner)}
 					<Button
 						variant="ghost"
