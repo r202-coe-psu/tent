@@ -15,7 +15,7 @@
 | Docker + Docker Compose, git, curl, python3 | `docker compose version` |
 | internet (build frontend ครั้งแรก + pull image) | — |
 | port `80` ว่างบนเครื่อง (หรือเลือก port อื่นใน `EDGE_HTTP_PORT`) | `ss -ltn \| grep ':80 '` |
-| นาฬิกาตรง (NTP เปิด) | `timedatectl` — นาฬิกาเพี้ยนทำให้ TLS ล้มตอนต่อ `https://` |
+| นาฬิกาตรง (NTP เปิด) | `timedatectl` — นาฬิกาเพี้ยนทำให้ TLS ล้มตอนต่อ `https://` · วิธีตั้งท้ายขั้น 4 |
 | ค่าจาก central 3 กลุ่ม | ตาราง "ค่าที่ต้องส่งให้ฝั่ง edge" ท้าย [SETUP-CENTRAL.md](SETUP-CENTRAL.md) |
 
 เลือกแบบเหมือนที่เลือกฝั่ง central: **Lab** (`http://<IP central>:5984`, ไม่มี cert) หรือ **จริง** (`https://<domain>/sync` — path บน domain ของแอป)
@@ -69,10 +69,10 @@ sed -i "s/change-me-edge-secret/$(openssl rand -hex 16)/" couchdb-edge.ini
 | `secret` ของ edge เอง | ใช้เซ็น cookie `AuthSession` — **ต้องต่างจาก central** ทำให้ cookie ข้ามฝั่งไม่ได้ staff ต้อง login ใหม่ตอน cutover (OD-3 — ทดสอบแล้วว่าเป็นแบบนั้น) · BFF ของ edge อ่านค่านี้ผ่าน admin API เพื่อ mint session |
 | ไม่มี `[admins]` | admin ของ edge มาจาก `COUCHDB_USER` / `COUCHDB_PASSWORD` ใน `.env` คนละรหัสกับ central — **ห้ามใช้ `couchdb-session.ini` ของ central** เพราะฝัง hash ของ admin และ secret ของ central ไว้ |
 | `[replicator] auth_plugins = couch_replicator_auth_noop` | **จำเป็นเมื่อ `SYNC_URL` มี path (`/sync`)**: replicator ปกติขอ session ที่ `<host>/_session` โดยตัด path ทิ้ง คำขอไปตกที่เว็บแอปแทน CouchDB แล้ว job ล้มด้วย `session_unexpected_result` ค่านี้ให้ส่ง Basic auth ตรง ๆ · ไม่มีผลกับ `http://<IP>:5984` |
-| `[replicator] verify_ssl_certificates` | ไฟล์ตัวอย่างตั้งเป็น `false` (ใช้กับ Lab) · **แบบจริง (`https://`) ต้องเปลี่ยนเป็น `true`** แล้ว restart CouchDB ไม่งั้นไม่ตรวจ cert ของ central เลย · มีผลเฉพาะตอนต่อ `https://` |
+| `[replicator] verify_ssl_certificates` | default = `true` · lab ที่ใช้ self-signed ค่อยปิดเอง (`false`) แล้ว restart CouchDB · มีผลเฉพาะตอนต่อ `https://` |
 | `ssl_trusted_certificates_file` | CA bundle ที่มีอยู่ใน image แล้ว |
 
-ถ้าต่อ `https://` ด้วย self-signed cert ใน lab ให้คง `verify_ssl_certificates = false` — อย่าปิดบน edge จริง
+ไฟล์ตัวอย่างตั้ง `verify_ssl_certificates = true` — ถ้าต่อ `https://` ด้วย self-signed cert ใน lab ให้เปลี่ยนเป็น `false` เอง · **ห้ามปิดบน edge จริง** (ปิดแล้วไม่ตรวจ cert ของ central เลย) · เปิดไว้แล้วนาฬิกาเครื่องต้องตรง ดู "ตั้งเวลาเครื่อง (NTP)" ท้ายขั้น 4
 
 ค่าเสริมใน `[replicator]` เมื่อ WAN ของศูนย์ช้า: `connection_timeout` (30000 ms), `retries_per_request` (5),
 `worker_batch_size` (500 — ลดแล้ว body เล็กลง checkpoint ถี่ขึ้น), `checkpoint_interval` (30000 ms)
@@ -105,6 +105,16 @@ cp .env.edge.example .env
 - ห้ามใช้ `"` หรือ `\` ในรหัสผ่านทุกตัว เพราะ `edge-init.sh` ประกอบ JSON เอง
 - `.env` และ `couchdb-edge.ini` อยู่ใน `.gitignore` แล้ว — อย่า commit
 - `PUBLIC_ORIGIN` ฝังตอน build ถ้าเปลี่ยนภายหลังต้อง build frontend ใหม่
+
+**ตั้งเวลาเครื่อง (NTP) — ทำก่อนขั้น 5**
+
+```bash
+sudo timedatectl set-ntp true
+timedatectl    # ต้องเห็น System clock synchronized: yes และ NTP service: active
+```
+
+ทำไม: `verify_ssl_certificates = true` (ขั้น 3) — ถ้านาฬิกา edge เพี้ยน การตรวจ cert ของ central ล้ม (cert "ยังไม่เริ่ม/หมดอายุ") ทุก job จะ `crashing` (ดู [README T10b](README.md)) ·
+ถ้า LAN ของศูนย์ไม่มี internet NTP ให้ชี้ `chrony` / `systemd-timesyncd` ไปที่ NTP server ในเครือข่ายเอง
 
 ---
 
