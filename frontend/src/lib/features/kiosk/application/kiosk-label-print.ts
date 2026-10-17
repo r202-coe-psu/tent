@@ -6,7 +6,12 @@ import { runKioskPrintFlow, type KioskPrintFlowResult } from './kiosk-print-flow
 
 export type KioskQrImage = { src: string; sizeMm: number };
 
-export type KioskQrLabel = { qrSrc: string; name: string; phone: string | null };
+export type KioskQrLabel = {
+	qrSrc: string;
+	name: string;
+	phone: string | null;
+	zone?: string | null;
+};
 
 /** QR payload → data URL sized for the label (module-count based), in the kiosk print colour. */
 export async function prepareKioskQrImage(qrPayload: string): Promise<KioskQrImage> {

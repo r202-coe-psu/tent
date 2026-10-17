@@ -1,6 +1,12 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { KIOSK_LABEL_LINK, kioskLabelLayout } from '../domain/print-label';
+import {
+	KIOSK_LABEL_LINK,
+	KIOSK_LABEL_ZONE,
+	KIOSK_LABEL_ZONE_PREFIX,
+	kioskLabelLayout,
+	mmToDots
+} from '../domain/print-label';
 import { renderKioskLabelPng } from './kiosk-label-image';
 
 class FakeImage {
@@ -31,7 +37,7 @@ function installFakeCanvas() {
 		fillText: vi.fn<(text: string) => void>(() => {
 			// `fillText` is synchronous — if any row's font wasn't `document.fonts.load()`-ed
 			// (and awaited) before this call, the draw races the fetch (see kiosk-label-image.ts).
-			if (fontsLoaded.length < 4) orderViolation = true;
+			if (fontsLoaded.length < 5) orderViolation = true;
 		})
 	};
 	Object.defineProperty(fakeContext, 'font', {
@@ -86,7 +92,7 @@ describe('renderKioskLabelPng', () => {
 	it('preloads every row font before drawing any of them', async () => {
 		await renderKioskLabelPng(label);
 
-		expect(harness.fontsLoaded).toHaveLength(4);
+		expect(harness.fontsLoaded).toHaveLength(5);
 		expect(harness.isOrderViolated()).toBe(false);
 	});
 
@@ -101,6 +107,7 @@ describe('renderKioskLabelPng', () => {
 		expect(texts).toEqual([
 			'สมชาย ใจดี',
 			'0804497982',
+			KIOSK_LABEL_ZONE_PREFIX,
 			'เช็คอิน',
 			'คัดกรอง',
 			'ที่พัก',
@@ -138,6 +145,50 @@ describe('renderKioskLabelPng', () => {
 		const texts = harness.fakeContext.fillText.mock.calls.map(([text]) => text);
 		expect(texts).not.toContain('0804497982');
 		expect(harness.fontsUsedInDrawing.some((font) => font.includes('Geist Mono'))).toBe(false);
+	});
+
+	describe('zone row', () => {
+		const dot = Math.round(mmToDots(KIOSK_LABEL_ZONE.dotMm));
+		const ruleDots = () =>
+			harness.fakeContext.fillRect.mock.calls.filter(([, , w, h]) => w === dot && h === dot);
+		const texts = () => harness.fakeContext.fillText.mock.calls.map(([text]) => text);
+
+		it('leaves a dotted rule to write the zone on when none is assigned', async () => {
+			await renderKioskLabelPng({ ...label, zone: null });
+
+			expect(texts()).toContain(KIOSK_LABEL_ZONE_PREFIX);
+			expect(ruleDots().length).toBeGreaterThan(10);
+			// The rule stays inside the text column, left of the divider.
+			const column = kioskLabelLayout(264).text;
+			for (const [x] of ruleDots()) {
+				expect(x + dot).toBeLessThanOrEqual(column.x + column.width);
+			}
+		});
+
+		it('prints the assigned zone after the prefix instead of the rule', async () => {
+			await renderKioskLabelPng({ ...label, zone: 'A3' });
+
+			const drawn = texts();
+			expect(drawn.slice(drawn.indexOf(KIOSK_LABEL_ZONE_PREFIX), -4)).toEqual([
+				KIOSK_LABEL_ZONE_PREFIX,
+				'A3'
+			]);
+			expect(ruleDots()).toEqual([]);
+		});
+
+		it('cuts a zone name too long for the column to one line with an ellipsis', async () => {
+			await renderKioskLabelPng({ ...label, zone: 'โซน'.repeat(40) });
+
+			const value = texts()[texts().indexOf(KIOSK_LABEL_ZONE_PREFIX) + 1];
+			expect(value).toMatch(/…$/);
+			expect(value!.length).toBeLessThan(120);
+		});
+
+		it('keeps the zone row when there is no phone', async () => {
+			await renderKioskLabelPng({ ...label, phone: null });
+
+			expect(texts()).toContain(KIOSK_LABEL_ZONE_PREFIX);
+		});
 	});
 
 	it('returns the rendered label as base64 PNG', async () => {
