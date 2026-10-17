@@ -38,7 +38,11 @@ from worker.projectors.needs import project_needs_for_shelter
 from worker.projectors.shelter import project_shelter
 from worker.projectors.shift_assignment import project_shift_assignment
 from worker.projectors.volunteer import project_volunteer
-from worker.quota.settle import reserve_walk_in_quota, settle_donation_quota
+from worker.quota.settle import (
+    reserve_walk_in_quota,
+    settle_donation_quota,
+    settle_shelved_quota,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -106,8 +110,12 @@ async def process_change(couch: Any, database: str, change: dict[str, Any]) -> N
                 elif doc_id.startswith("stock_ledger:"):
                     # A deleted entry raises the shortfall again, so the ceiling has to
                     # go back up with it — a delete row carries no doc to read a type
-                    # from, hence the id prefix.
+                    # from, hence the id prefix. With no doc there is no reason to
+                    # filter on either, so a removed donation row is assumed.
                     await refresh_on_hand(couch, shelter_code)
+                    await settle_shelved_quota(
+                        couch, shelter_code, now=datetime.now(UTC)
+                    )
                     await refresh_shelter_stock(couch, shelter_code)  # EXT-004/006
                     await _reproject_needs(couch, shelter_code)
                 elif doc_id.startswith("stock_threshold_override:"):
@@ -198,6 +206,14 @@ async def process_change(couch: Any, database: str, change: dict[str, Any]) -> N
                 # at all: the board kept advertising the old shortfall and the counter
                 # kept accepting bookings against the bare target.
                 await refresh_on_hand(couch, shelter_code)
+                # …and the same goods leave reserved_qty, or the ceiling drops twice.
+                # Only a donation receipt moves what a booking still owes; issues,
+                # adjustments and kitchen rows change on_hand alone, and reconciling
+                # a whole shelter for each of those would be a full scan for nothing.
+                if doc.get("reason") == "donation":
+                    await settle_shelved_quota(
+                        couch, shelter_code, now=datetime.now(UTC)
+                    )
                 await refresh_shelter_stock(couch, shelter_code)  # EXT-004/006
                 await _reproject_needs(couch, shelter_code)
             elif doc_type == "job":

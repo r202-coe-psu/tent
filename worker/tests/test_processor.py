@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from decimal import Decimal
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -270,27 +270,13 @@ async def test_process_supply_item_change_does_not_seed_need_counters():
     apply_counters.assert_not_awaited()
 
 
-@pytest.mark.asyncio
-async def test_process_stock_ledger_change_refreshes_the_ceiling():
-    """Goods on the shelf lower what still has to be donated — and the booking ceiling.
-
-    Nothing reacted to a ledger entry before this: the board kept advertising the old
-    shortfall and the counter kept accepting bookings against the bare qty_target.
-    """
+async def _process_ledger_change(change: dict) -> tuple[AsyncMock, list[str]]:
+    """Run one stock_ledger change; return the couch stub and the order of the steps."""
     couch = AsyncMock()
-    change = {
-        "seq": 60,
-        "id": "stock_ledger:01",
-        "doc": {
-            "_id": "stock_ledger:01",
-            "type": "stock_ledger",
-            "item_id": "item:rice",
-            "qty": "270",
-        },
-    }
-
+    steps = MagicMock()
     with (
         patch("worker.couch.processor.save_checkpoint", new_callable=AsyncMock),
+        patch("worker.couch.processor.apply_person", new_callable=AsyncMock),
         patch("worker.couch.processor.apply_need", new_callable=AsyncMock),
         patch(
             "worker.couch.processor.project_needs_for_shelter",
@@ -300,37 +286,80 @@ async def test_process_stock_ledger_change_refreshes_the_ceiling():
         patch(
             "worker.couch.processor.refresh_on_hand", new_callable=AsyncMock
         ) as refresh,
+        patch(
+            "worker.couch.processor.settle_shelved_quota", new_callable=AsyncMock
+        ) as settle,
         patch("worker.couch.processor.refresh_shelter_stock", new_callable=AsyncMock),
     ):
+        steps.attach_mock(refresh, "refresh_on_hand")
+        steps.attach_mock(settle, "settle_shelved_quota")
+        steps.attach_mock(project_needs, "project_needs_for_shelter")
         await process_change(couch, "shelter_sh001", change)
 
-    refresh.assert_awaited_once_with(couch, "SH001")
-    project_needs.assert_awaited_once_with(couch, "SH001")
+    for name in ("refresh_on_hand", "project_needs_for_shelter"):
+        getattr(steps, name).assert_awaited_once_with(couch, "SH001")
+    tracked = {"refresh_on_hand", "settle_shelved_quota", "project_needs_for_shelter"}
+    order = [c[0] for c in steps.mock_calls if c[0] in tracked]
+    return couch, order
+
+
+def _ledger_change(reason: str) -> dict:
+    return {
+        "seq": 60,
+        "id": "stock_ledger:01",
+        "doc": {
+            "_id": "stock_ledger:01",
+            "type": "stock_ledger",
+            "reason": reason,
+            "ref_id": "donation:01" if reason == "donation" else None,
+            "item_id": "item:rice",
+            "qty": "270",
+        },
+    }
+
+
+@pytest.mark.asyncio
+async def test_process_stock_ledger_change_refreshes_the_ceiling():
+    """Goods on the shelf lower what still has to be donated — and the booking ceiling.
+
+    Nothing reacted to a ledger entry before this: the board kept advertising the old
+    shortfall and the counter kept accepting bookings against the bare qty_target.
+
+    A donation receipt also leaves reserved_qty, or the ceiling drops twice — and it
+    must do so before the board is re-projected: the board showing the goods on the
+    shelf is the signal that the counter has let go of them (the e2e relies on it).
+    """
+    _, order = await _process_ledger_change(_ledger_change("donation"))
+
+    assert order == [
+        "refresh_on_hand",
+        "settle_shelved_quota",
+        "project_needs_for_shelter",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_non_donation_ledger_row_skips_the_quota_reconcile():
+    """An issue or adjustment moves on_hand only — no booking owes less because of it,
+    so the whole-shelter reconcile is not worth its scan."""
+    _, order = await _process_ledger_change(_ledger_change("distribute"))
+
+    assert order == ["refresh_on_hand", "project_needs_for_shelter"]
 
 
 @pytest.mark.asyncio
 async def test_process_deleted_stock_ledger_raises_the_ceiling_back():
-    """A delete row carries no doc, so the branch keys off the id prefix instead."""
-    couch = AsyncMock()
-    change = {"seq": 61, "id": "stock_ledger:01", "deleted": True}
+    """A delete row carries no doc, so the branch keys off the id prefix instead — and
+    with no reason to read, a removed donation row is assumed and reconciled."""
+    _, order = await _process_ledger_change(
+        {"seq": 61, "id": "stock_ledger:01", "deleted": True}
+    )
 
-    with (
-        patch("worker.couch.processor.save_checkpoint", new_callable=AsyncMock),
-        patch("worker.couch.processor.apply_person", new_callable=AsyncMock),
-        patch("worker.couch.processor.apply_need", new_callable=AsyncMock),
-        patch(
-            "worker.couch.processor.project_needs_for_shelter",
-            new_callable=AsyncMock,
-            return_value=[],
-        ),
-        patch(
-            "worker.couch.processor.refresh_on_hand", new_callable=AsyncMock
-        ) as refresh,
-        patch("worker.couch.processor.refresh_shelter_stock", new_callable=AsyncMock),
-    ):
-        await process_change(couch, "shelter_sh001", change)
-
-    refresh.assert_awaited_once_with(couch, "SH001")
+    assert order == [
+        "refresh_on_hand",
+        "settle_shelved_quota",
+        "project_needs_for_shelter",
+    ]
 
 
 @pytest.mark.asyncio
