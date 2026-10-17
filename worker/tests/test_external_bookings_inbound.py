@@ -1359,6 +1359,60 @@ async def test_cancel_keeps_household_when_other_member_pre_registered(db):
     assert (await _row())["state"] == "cancelled"
 
 
+@pytest.mark.parametrize(
+    "status",
+    ["arriving", "active", "room_confirmed", "temporary_leave", "kiosk_registered"],
+)
+async def test_cancel_keeps_household_while_another_member_is_held(db, status):
+    """EXT-009 cancel path (#613): a live member that is not pre_registered keeps the
+    household; only the cancelled stay changes."""
+    booking = await _insert_written()
+    household = {
+        "_id": "household:H1",
+        "status": "pre_registered",
+        "shelter_code": "SH001",
+    }
+    couch = _couch()
+    couch.get_doc = AsyncMock(
+        side_effect=_docs_by_id(_evacuee("pre_registered"), household)
+    )
+    couch.find = AsyncMock(
+        return_value=[
+            {"_id": "evacuee:E2", "current_stay": {"status": status}},
+        ]
+    )
+
+    assert await _process_cancel(couch, booking) is True
+
+    puts = [call.args[1] for call in couch.put_doc.await_args_list]
+    assert [p["_id"] for p in puts if p.get("type") == "household"] == []
+    assert "household:H1" not in [p["_id"] for p in puts]
+    assert not any(p.get("target_type") == "household" for p in puts)
+    assert next(p for p in puts if p["_id"] == "evacuee:E1")["current_stay"][
+        "status"
+    ] == ("cancelled")
+    row = await _row()
+    assert row["state"] == "cancelled"
+
+
+async def test_cancel_audit_failure_is_best_effort_and_still_cancels(db):
+    """The EXT-009 path keeps its best-effort audit: a failed audit write is logged and the
+    booking still finishes as cancelled."""
+    booking = await _insert_written()
+    couch = _couch(doc=_evacuee("pre_registered"))
+    write = AsyncMock(return_value={"ok": True})
+
+    async def fail_audits(database, doc):
+        if doc["_id"].startswith("audit:"):
+            raise RuntimeError("boom")
+        return await write(database, doc)
+
+    couch.put_doc = AsyncMock(side_effect=fail_audits)
+
+    assert await _process_cancel(couch, booking) is True
+    assert (await _row())["state"] == "cancelled"
+
+
 async def test_cancel_active_evacuee_not_cancellable(db):
     booking = await _insert_written()
     couch = _couch(doc=_evacuee("active"))
@@ -2543,16 +2597,142 @@ async def test_docs_missing_is_stamped_missing(db):
     assert row["reconciled_at"] is not None
 
 
-async def test_already_cancelled_stay_and_household_is_noop(db):
+async def test_already_cancelled_stay_and_household_with_their_audits_is_noop(db):
     await _insert_terminal(0)
     docs = _stay_docs(0, status="cancelled")
     docs[1]["status"] = "cancelled"
+    docs += [
+        {"_id": inbound._stay_audit_id(_row_id(0))},
+        {"_id": inbound._household_audit_id("household:H0")},
+    ]
     couch, _store = _stored_couch(docs)
 
     assert await inbound.reconcile_terminal_bookings(couch) == 1
 
     couch.put_doc.assert_not_awaited()
     assert (await _row(_row_id(0)))["reconcile_outcome"] == "noop"
+
+
+async def test_cancelled_stay_without_its_audit_gets_the_audit_and_is_cancelled(db):
+    """A cancel whose audit write failed in an earlier pass: the audit is written now (its
+    deterministic id, so a second pass would not duplicate it) and the row is `cancelled`."""
+    await _insert_terminal(0)
+    docs = _stay_docs(0, status="cancelled")
+    docs[1]["status"] = "cancelled"
+    couch, store = _stored_couch(docs)
+
+    assert await inbound.reconcile_terminal_bookings(couch) == 1
+
+    audit = store[inbound._stay_audit_id(_row_id(0))]
+    assert audit["target_type"] == "evacuee"
+    assert audit["target_id"] == "evacuee:E0"
+    assert audit["created_by"] == "partner:M2"
+    assert (await _row(_row_id(0)))["reconcile_outcome"] == "cancelled"
+
+
+async def test_cancelled_household_without_its_audit_is_cancelled_outcome(db):
+    """Household-only row (#613 c): the household was cancelled by an earlier pass but its
+    audit is missing — the audit-retry pass stamps `cancelled`, not `noop`."""
+    await _insert_terminal(0, evacuee_id=None)
+    couch, store = _stored_couch([{**_stay_docs(0)[1], "status": "cancelled"}])
+
+    assert await inbound.reconcile_terminal_bookings(couch) == 1
+
+    assert (
+        store[inbound._household_audit_id("household:H0")]["target_type"] == "household"
+    )
+    assert (await _row(_row_id(0)))["reconcile_outcome"] == "cancelled"
+
+
+async def test_household_only_row_cancelled_in_this_pass_is_cancelled_outcome(db):
+    await _insert_terminal(0, evacuee_id=None)
+    couch, store = _stored_couch([_stay_docs(0)[1]])
+
+    assert await inbound.reconcile_terminal_bookings(couch) == 1
+
+    assert store["household:H0"]["status"] == "cancelled"
+    assert (await _row(_row_id(0)))["reconcile_outcome"] == "cancelled"
+
+
+async def test_stay_audit_failure_after_the_cancel_is_retried_not_stamped(db):
+    """Audit write fails after the stay was cancelled (transient): the row keeps no
+    `reconciled_at`; the next pass writes the audit and stamps `cancelled`."""
+    await _insert_terminal(0)
+    couch, store = _stored_couch(_stay_docs(0))
+    write = couch.put_doc.side_effect
+
+    async def fail_audits(database, doc):
+        if doc["_id"].startswith("audit:"):
+            raise httpx.ConnectError("refused")
+        return await write(database, doc)
+
+    couch.put_doc = AsyncMock(side_effect=fail_audits)
+
+    assert await inbound.reconcile_terminal_bookings(couch) == 0
+    assert store["evacuee:E0"]["current_stay"]["status"] == "cancelled"
+    row = await _row(_row_id(0))
+    assert row.get("reconciled_at") is None
+    assert row.get("reconcile_outcome") is None
+
+    couch.put_doc = AsyncMock(side_effect=write)
+    assert await inbound.reconcile_terminal_bookings(couch) == 1
+
+    assert inbound._stay_audit_id(_row_id(0)) in store
+    assert store["household:H0"]["status"] == "cancelled"
+    row = await _row(_row_id(0))
+    assert row["reconcile_outcome"] == "cancelled"
+    assert row["reconciled_at"] is not None
+
+
+async def test_household_audit_failure_after_the_cancel_is_retried_not_stamped(db):
+    await _insert_terminal(0, evacuee_id=None)
+    couch, store = _stored_couch([_stay_docs(0)[1]])
+    write = couch.put_doc.side_effect
+
+    async def fail_audits(database, doc):
+        if doc["_id"].startswith("audit:"):
+            raise httpx.ConnectError("refused")
+        return await write(database, doc)
+
+    couch.put_doc = AsyncMock(side_effect=fail_audits)
+
+    assert await inbound.reconcile_terminal_bookings(couch) == 0
+    assert store["household:H0"]["status"] == "cancelled"
+    assert (await _row(_row_id(0))).get("reconciled_at") is None
+
+    couch.put_doc = AsyncMock(side_effect=write)
+    assert await inbound.reconcile_terminal_bookings(couch) == 1
+
+    assert inbound._household_audit_id("household:H0") in store
+    assert (await _row(_row_id(0)))["reconcile_outcome"] == "cancelled"
+
+
+@pytest.mark.parametrize(
+    "status",
+    ["arriving", "active", "room_confirmed", "temporary_leave", "kiosk_registered"],
+)
+async def test_reconcile_keeps_household_while_a_member_is_held(db, status):
+    """schema.md §1.3 rule 1: a household with a live non-pre_registered member is kept."""
+    await _insert_terminal(0)
+    docs = _stay_docs(0)
+    docs.append(
+        {
+            "_id": "evacuee:E9",
+            "type": "evacuee",
+            "shelter_code": "SH001",
+            "household_id": "household:H0",
+            "current_stay": {"status": status, "zone": None, "since": "x"},
+        }
+    )
+    couch, store = _stored_couch(docs)
+
+    assert await inbound.reconcile_terminal_bookings(couch) == 1
+
+    assert store["evacuee:E0"]["current_stay"]["status"] == "cancelled"
+    assert store["household:H0"]["status"] == "pre_registered"
+    assert store["evacuee:E9"]["current_stay"]["status"] == status
+    assert inbound._household_audit_id("household:H0") not in store
+    assert (await _row(_row_id(0)))["reconcile_outcome"] == "cancelled"
 
 
 async def test_pre_registered_household_left_behind_is_cancelled_once_its_stay_is_gone(
@@ -2712,7 +2892,13 @@ async def test_only_unreconciled_terminal_rows_with_reserved_ids_are_selected(db
 
     assert await inbound.reconcile_terminal_bookings(couch) == 1
 
-    asked = {call.args[1] for call in couch.get_doc.await_args_list}
+    asked = {
+        call.args[1]
+        for call in couch.get_doc.await_args_list
+        if not call.args[1].startswith(
+            "audit:"
+        )  # audit-existence probes, not reserved ids
+    }
     assert asked == {"evacuee:E0", "household:H0"}
     assert store["evacuee:E1"]["current_stay"]["status"] == "pre_registered"
 

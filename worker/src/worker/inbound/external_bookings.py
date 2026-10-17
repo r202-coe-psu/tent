@@ -313,10 +313,16 @@ def build_audit_doc(
     shelter_code: str,
     created_by: str,
     now: str,
+    doc_id: str | None = None,
 ) -> dict[str, Any]:
-    """Couch ``audit`` entry — same shape the staff app's ``createAuditEntry`` writes."""
+    """Couch ``audit`` entry — same shape the staff app's ``createAuditEntry`` writes.
+
+    ``doc_id`` is set only for the partner cancel audits (`_stay_audit` /
+    `_household_audit`): a deterministic id makes the write idempotent, so the reconcile
+    pass can tell whether the audit of a cancel it finds already done exists (#613).
+    """
     return {
-        "_id": f"audit:{new_ulid()}",
+        "_id": doc_id or f"audit:{new_ulid()}",
         "type": "audit",
         "schema_v": AUDIT_SCHEMA_V,
         "shelter_code": shelter_code,
@@ -330,6 +336,68 @@ def build_audit_doc(
         "context": context,
         "occurred_at": now,
     }
+
+
+def _stay_audit_id(row_id: str) -> str:
+    """Deterministic id of the audit of a partner stay cancel (one per booking row)."""
+    return f"audit:ext-cancel-stay:{row_id}"
+
+
+def _household_audit_id(household_id: str) -> str:
+    """Deterministic id of the audit of a partner household cancel (one per household)."""
+    return f"audit:ext-cancel-household:{household_id}"
+
+
+def _stay_audit(
+    booking: ExternalBooking, evacuee_id: str, household_id: str | None, now: str
+) -> dict[str, Any]:
+    return build_audit_doc(
+        target_type="evacuee",
+        target_id=evacuee_id,
+        reason=_CANCEL_REASON,
+        context={
+            "previous_status": "pre_registered",
+            "next_status": "cancelled",
+            "household_id": household_id,
+            "booking_id": booking.booking_id,
+        },
+        shelter_code=booking.shelter_code,
+        created_by=partner_actor(booking.module_name, booking.client_id),
+        now=now,
+        doc_id=_stay_audit_id(booking.id),
+    )
+
+
+def _household_audit(
+    household_id: str, shelter_code: str, evacuee_id: str | None, actor: str, now: str
+) -> dict[str, Any]:
+    return build_audit_doc(
+        target_type="household",
+        target_id=household_id,
+        reason=_HOUSEHOLD_CANCEL_REASON,
+        context={
+            "previous_status": "pre_registered",
+            "next_status": "cancelled",
+            "triggered_by_evacuee_id": evacuee_id,
+        },
+        shelter_code=shelter_code,
+        created_by=actor,
+        now=now,
+        doc_id=_household_audit_id(household_id),
+    )
+
+
+async def _write_audit_once(
+    couch: CouchClient, database: str, doc: dict[str, Any]
+) -> bool:
+    """Write a deterministic-id audit doc unless it is already there. True = written now.
+
+    The existence check keeps `put_doc` from overwriting an audit an earlier pass wrote.
+    """
+    if await couch.get_doc(database, doc["_id"]) is not None:
+        return False
+    await couch.put_doc(database, doc)
+    return True
 
 
 _PII_CLEARED: dict[str, None] = {
@@ -520,7 +588,12 @@ async def _reject_pending(booking_id: str) -> int:
 
 
 async def _cancel_stay(
-    couch: CouchClient, database: str, booking: ExternalBooking, evacuee_id: str
+    couch: CouchClient,
+    database: str,
+    booking: ExternalBooking,
+    evacuee_id: str,
+    *,
+    strict: bool = False,
 ) -> str:
     """Cancel a ``pre_registered`` stay like the staff app does (FR-53).
 
@@ -531,12 +604,16 @@ async def _cancel_stay(
 
     Returns ``_CANCELLED``; ``_CHANGED`` when the evacuee is missing or no longer
     ``pre_registered`` (nothing written — callers re-evaluate); ``_FAILED`` when the stay
-    could not be written (caller retries). Audit + household are best effort — the stay
-    is the source of truth and the household status is derived from it (schema.md §1.3).
-    Logs ids and the exception type only.
+    could not be written (caller retries).
+
+    ``strict=False`` (EXT-009 cancel path): audit + household are best effort — the stay
+    is the source of truth and the household status is derived from it (schema.md §1.3);
+    a failure is logged (ids and exception type only) and ``_CANCELLED`` is still returned.
+    ``strict=True`` (reconcile, #613): an audit or household write failure is raised after
+    the stay was cancelled, so the row stays unreconciled; the next pass finishes it
+    (`_ensure_stay_audit`, then the household step of `_reconcile_row`).
     """
     now = _now_iso()
-    actor = partner_actor(booking.module_name, booking.client_id)
 
     async def cancel(evacuee: dict[str, Any]) -> dict[str, Any] | None:
         if (evacuee.get("current_stay") or {}).get("status") != "pre_registered":
@@ -559,22 +636,10 @@ async def _cancel_stay(
         return _CHANGED
 
     try:
-        await couch.put_doc(
+        await _write_audit_once(
+            couch,
             database,
-            build_audit_doc(
-                target_type="evacuee",
-                target_id=evacuee_id,
-                reason=_CANCEL_REASON,
-                context={
-                    "previous_status": "pre_registered",
-                    "next_status": "cancelled",
-                    "household_id": cancelled.get("household_id"),
-                    "booking_id": booking.booking_id,
-                },
-                shelter_code=booking.shelter_code,
-                created_by=actor,
-                now=now,
-            ),
+            _stay_audit(booking, evacuee_id, cancelled.get("household_id"), now),
         )
         if cancelled.get("household_id"):
             await _cancel_household_if_empty(
@@ -582,10 +647,12 @@ async def _cancel_stay(
                 database,
                 household_id=cancelled["household_id"],
                 evacuee_id=evacuee_id,
-                actor=actor,
+                actor=partner_actor(booking.module_name, booking.client_id),
                 now=now,
             )
     except Exception:
+        if strict:
+            raise
         logger.exception(
             "Cancel audit/household update failed for booking %s",
             _ref(booking),
@@ -1014,20 +1081,15 @@ async def _cancel_household_if_empty(
     cancelled = await couch.update_doc(database, household_id, cancel)
     if cancelled is None:
         return False
-    await couch.put_doc(
+    await _write_audit_once(
+        couch,
         database,
-        build_audit_doc(
-            target_type="household",
-            target_id=household_id,
-            reason=_HOUSEHOLD_CANCEL_REASON,
-            context={
-                "previous_status": "pre_registered",
-                "next_status": "cancelled",
-                "triggered_by_evacuee_id": evacuee_id,
-            },
-            shelter_code=cancelled.get("shelter_code") or "",
-            created_by=actor,
-            now=now,
+        _household_audit(
+            household_id,
+            cancelled.get("shelter_code") or "",
+            evacuee_id,
+            actor,
+            now,
         ),
     )
     return True
@@ -1108,6 +1170,46 @@ def _stay_status(doc: dict[str, Any] | None) -> str | None:
     return ((doc or {}).get("current_stay") or {}).get("status")
 
 
+async def _ensure_stay_audit(
+    couch: CouchClient,
+    database: str,
+    booking: ExternalBooking,
+    evacuee: dict[str, Any],
+) -> bool:
+    """Audit retry for a stay an earlier reconcile pass cancelled (#613). True = written now.
+
+    A ``cancelled`` stay whose deterministic audit doc is missing means the audit write
+    failed after the cancel; it is written now (idempotent by id).
+    """
+    return await _write_audit_once(
+        couch,
+        database,
+        _stay_audit(
+            booking, booking.evacuee_id or "", evacuee.get("household_id"), _now_iso()
+        ),
+    )
+
+
+async def _ensure_household_audit(
+    couch: CouchClient,
+    database: str,
+    booking: ExternalBooking,
+    household: dict[str, Any],
+) -> bool:
+    """Audit retry for a household an earlier reconcile pass cancelled (#613). True = written now."""
+    return await _write_audit_once(
+        couch,
+        database,
+        _household_audit(
+            booking.household_id or "",
+            household.get("shelter_code") or "",
+            booking.evacuee_id,
+            partner_actor(booking.module_name, booking.client_id),
+            _now_iso(),
+        ),
+    )
+
+
 async def _reconcile_row(couch: CouchClient, booking: ExternalBooking) -> str:
     """Finish one terminal row against the docs it reserved in ``shelter_{code}`` (#613).
 
@@ -1116,12 +1218,16 @@ async def _reconcile_row(couch: CouchClient, booking: ExternalBooking) -> str:
     * neither doc exists (an absent shelter database also answers 404) → ``missing``;
     * the stay moved past ``pre_registered`` → ``advanced``, nothing is written and the
       household is left alone (its status may already reflect that member);
-    * a ``pre_registered`` stay → cancelled through ``_cancel_stay``; a failed or changed
-      write raises ``_ReconcileRetry`` so the row is retried;
-    * then the household is re-read and, if it is still ``pre_registered``, cancelled by
-      ``_cancel_household_if_empty`` (covers a household left behind when the stay's own
-      household roll-up failed inside ``_cancel_stay``, and household-only rows);
-    * anything cancelled → ``cancelled``; otherwise → ``noop``.
+    * a ``pre_registered`` stay → cancelled through ``_cancel_stay(strict=True)``; a failed
+      or changed write, or a failed audit / household write after the cancel, raises so
+      the row is retried (``reconciled_at`` stays unset);
+    * a ``cancelled`` stay whose audit doc is missing (an earlier pass's audit write
+      failed) → the audit is written now → ``cancelled``;
+    * the household is re-read: still ``pre_registered`` → cancelled by
+      ``_cancel_household_if_empty`` (only once no member is still held, §1.3 rule 1; covers
+      a household left behind by a failed roll-up and household-only rows); already
+      ``cancelled`` with its audit doc missing → audit written now → ``cancelled``;
+    * anything cancelled or audited in this pass → ``cancelled``; otherwise → ``noop``.
 
     Raises on a CouchDB error (the caller leaves the row unreconciled). Logs ids only.
     """
@@ -1148,10 +1254,14 @@ async def _reconcile_row(couch: CouchClient, booking: ExternalBooking) -> str:
 
     cancelled = False
     if status == "pre_registered":
-        outcome = await _cancel_stay(couch, database, booking, booking.evacuee_id)
+        outcome = await _cancel_stay(
+            couch, database, booking, booking.evacuee_id, strict=True
+        )
         if outcome != _CANCELLED:
             raise _ReconcileRetry(outcome)
         cancelled = True
+    elif status == "cancelled" and evacuee is not None:
+        cancelled = await _ensure_stay_audit(couch, database, booking, evacuee)
 
     if booking.household_id:
         fresh = await couch.get_doc(database, booking.household_id)
@@ -1164,6 +1274,8 @@ async def _reconcile_row(couch: CouchClient, booking: ExternalBooking) -> str:
                 actor=partner_actor(booking.module_name, booking.client_id),
                 now=_now_iso(),
             )
+        elif fresh is not None and fresh.get("status") == "cancelled":
+            cancelled |= await _ensure_household_audit(couch, database, booking, fresh)
 
     return _RECONCILE_CANCELLED if cancelled else _RECONCILE_NOOP
 
