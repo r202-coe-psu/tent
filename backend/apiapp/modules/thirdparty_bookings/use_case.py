@@ -764,8 +764,10 @@ class ThirdPartyBookingsUseCase:
         direct = [row for row, kind in plan if kind == "direct"]
         # Phase 2 is two `update_many` steps (no per-row loop on the common path). The written
         # rows are flagged first, so a check-in that lands meanwhile is caught before any
-        # pending row is cancelled. Residual race: a step-2 conflict can still leave the
-        # pending rows cancelled while the 409 is returned; the retry skips those rows.
+        # pending row is cancelled. Residual race: a step-2b conflict can still leave the
+        # pending rows cancelled while the 409 is returned, and the written rows flagged in
+        # step 2a stay `cancel_requested=True` (the worker will still cancel them). The retry
+        # skips the cancelled rows (FINISHED) and the flagged rows (not OPEN).
         if requested and not await self._flag_requested(collection, requested, reason, now):
             raise await self._not_cancellable(endpoint, claims, client_ip, rows[0])
         if direct and not await self._cancel_pending(collection, direct, reason, now):
@@ -788,6 +790,8 @@ class ThirdPartyBookingsUseCase:
 
         Residual race: the worker may process a `cancel_requested` flag between the flag
         write below and the revert, so a stay that has just checked in can be asked to cancel.
+        A 409 from this step reverts the flags; a 409 from step 2b (`_cancel_pending`) does not,
+        so the rows flagged here stay `cancel_requested=True` and the worker will cancel them.
         """
         ids = [row.id for row in rows]
         result = await collection.update_many(
@@ -910,7 +914,11 @@ class ThirdPartyBookingsUseCase:
         still OPEN and cancellable → retried with its new kind, anything else → conflict.
         """
         current, current_kind = row, kind
+        # `attempts` is the number of guarded writes made when the loop ends, whether it ran
+        # out of attempts or stopped early (row gone, or no longer cancellable).
+        attempts = 0
         for _ in range(_CANCEL_ROW_ATTEMPTS):
+            attempts += 1
             if await self._guarded_cancel(collection, current, current_kind, reason, now):
                 return True
             fresh = await ExternalBooking.get(current.id)
@@ -925,7 +933,7 @@ class ThirdPartyBookingsUseCase:
         logger.warning(
             "cancel re-evaluation gave up (booking_id=%s attempts=%d)",
             row.booking_id,
-            _CANCEL_ROW_ATTEMPTS,
+            attempts,
         )
         return False
 
