@@ -591,11 +591,15 @@ Error   : { "status": <http>, "message": "…", "code"?: "…", "detail"?: "…"
   - key เก็บต่อ `client_id` (unique) อายุ 24 ชม. จาก `created_at` (TTL) — รายละเอียดแถวใน [schema.md §9.8](./schema.md)
   - **key + body เดิม** (หลัง normalize; `persons[]` และรูปแบบเดิมที่คนเดียวนับเป็นรูปแบบเดียวกัน) → **201** body เดิม: `booking_id`, `location_code`, `booking_status: "BOOKED"`, `persons_count` เดิม — ไม่สร้างแถวใหม่ และไม่ตรวจ `duplicate_booking` ซ้ำ; นับ access log เป็น `granted` (`result_count = persons_count`)
   - **key เดิม body ต่าง** → **409** `idempotency_key_reused` (ไม่มีข้อมูลของ booking เดิมในคำตอบ)
-  - **key เดิม body เดียวกัน แต่รอบแรกยังไม่จบ** → **409** `idempotency_in_progress` — partner ลองใหม่ได้ภายหลัง
+  - **key เดิม body เดียวกัน แต่รอบแรกยังไม่จบ (`in_progress` อายุ ≤ 60 วินาที)** → **409** `idempotency_in_progress` — partner ลองใหม่ได้ภายหลัง
+  - **key เดิม body เดียวกัน และ `in_progress` อายุเกิน 60 วินาที** (รอบแรกอาจค้างหลัง process ถูก kill) → ตัดสินจากแถวจริงของ `booking_id` ที่ key เก็บไว้:
+    - ทุกแถวของกลุ่ม committed ครบ → **201** booking เดิม (`booking_id` เดิม) และ key เป็น completed
+    - ไม่มีแถว committed เลย → key ถูกปล่อยและคำขอนี้ทำเป็นคำขอใหม่ (ได้ `booking_id` ใหม่) · คำขอซ้ำที่ตัดสินพร้อมกันมีเพียงหนึ่งเดียวที่ได้สิทธิ์ ที่เหลือตอบ 409 `idempotency_in_progress`
+    - committed บางส่วน → **409** `idempotency_in_progress` (ไม่สร้าง ไม่ลบอะไร)
   - รอบแรกล้มโดยยังไม่มี booking (4xx/5xx ก่อน commit, รวม `duplicate_booking` 409 และ insert key ที่ ack หาย) → key ถูกปล่อย ส่งซ้ำได้ทันที
   - รอบแรกถูกตัดการเชื่อมต่อระหว่าง commit: ถ้ากลุ่มถูก commit ครบแล้ว → key เป็น completed และ retry ได้ 201 body เดิม; ถ้ายังไม่ครบ → key ถูกปล่อยเหมือนข้อด้านบน
   - **G5 (ทำเสมอ ไม่ขึ้นกับ key):** ถ้า commit ตอบ error แต่แถวของ `booking_id` ที่สร้างใหม่ `committed: true` ครบ `group_size` แล้ว → **201** แทน 500 (กรณี ack หายหลัง flip สำเร็จ); ไม่ครบ → 500 `internal_error` เดิม
-  - **ยังไม่มีกติกาที่เจ้าของโครงการตัดสิน:** ถ้า process ถูก kill ระหว่างรอบแรก (หรือ `_complete_key` ไม่สำเร็จหลัง commit ครบ) key จะค้าง `in_progress` จนหมด TTL (24 ชม.) — ระหว่างนั้น retry ได้ 409 `idempotency_in_progress` และ partner ยังไม่มีทางได้ `booking_id` กลับมา (รอการตัดสินใจ: เช่น ตอบ 201 เมื่อพบกลุ่มที่ commit ครบแล้ว หรือกำหนด timeout ของ `in_progress`)
+  - **key ค้างจาก process ที่ถูก kill:** ตัดสินตามข้อ `in_progress` อายุเกิน 60 วินาทีข้างบน (decision sync CR-169 2026-10-17, PR #666) · กรณี committed บางส่วนยังคง 409 จนหมด TTL 24 ชม.
 
 **ตัวอย่าง — EXT-008 กลุ่ม (2 คน)**
 

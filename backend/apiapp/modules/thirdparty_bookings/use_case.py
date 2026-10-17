@@ -21,7 +21,7 @@ import logging
 import re
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
 from zoneinfo import ZoneInfo
 
@@ -61,6 +61,9 @@ _PHONE_RE = re.compile(r"^0\d{8,9}$")
 _CID_RE = re.compile(r"^[0-9]{13}$")
 _MAX_CANCEL_REASON = 200
 _MAX_IDEMPOTENCY_KEY = 255
+# #614 (decision sync 2026-10-17): an `in_progress` key older than this is judged from the
+# real rows of its booking_id instead of answering 409 forever.
+_IN_PROGRESS_STALE_SECONDS = 60
 
 # Stay statuses that hold a place at a shelter (FR-17a). Keep in sync with the
 # registration gate in `frontend/src/lib/features/public-register/domain/booking-gate.ts`.
@@ -313,6 +316,11 @@ def _request_hash(location_code: str, persons: list[_Person]) -> str:
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
+def _aware(value: datetime) -> datetime:
+    """Stored datetimes read back naive (UTC); treat them as UTC."""
+    return value if value.tzinfo is not None else value.replace(tzinfo=UTC)
+
+
 def _created_envelope(
     booking_id: str, location_code: str, persons_count: int
 ) -> BookingCreatedEnvelope:
@@ -323,20 +331,24 @@ def _created_envelope(
     )
 
 
+async def _committed_count(collection: Any, booking_id: str) -> int | None:
+    """Number of committed rows of `booking_id`; None when the count cannot be read."""
+    try:
+        return await collection.count_documents({"booking_id": booking_id, "committed": True})
+    except Exception as exc:
+        logger.warning(
+            "commit check failed (booking_id=%s error=%s)", booking_id, type(exc).__name__
+        )
+        return None
+
+
 async def _all_rows_committed(collection: Any, booking_id: str, group_size: int) -> bool:
     """G5 — True when every row of the group is committed although the flip raised.
 
     The flip may have been applied and only its acknowledgement lost. If the count cannot be
     read, report False so the caller takes the normal failure path.
     """
-    try:
-        committed = await collection.count_documents({"booking_id": booking_id, "committed": True})
-    except Exception as exc:
-        logger.warning(
-            "commit check failed (booking_id=%s error=%s)", booking_id, type(exc).__name__
-        )
-        return False
-    return committed == group_size
+    return await _committed_count(collection, booking_id) == group_size
 
 
 async def _release_key(record_id: str | None, booking_id: str) -> None:
@@ -363,6 +375,36 @@ async def _release_key(record_id: str | None, booking_id: str) -> None:
             )
         )
     )
+
+
+async def _take_over_stale_key(record: ExternalBookingIdempotency) -> bool:
+    """Delete a stale `in_progress` key row so this request may take the key over (#614).
+
+    The delete is guarded by `_id`, `status` and `created_at`, so when several requests judged
+    the same row stale only one deletes it (True); the others match nothing and must answer
+    409. A failed delete is logged and reported as not taken over (the state is unknown, so
+    the partner retries). Shielded and detached, so a cancel cannot split the decision.
+    """
+    collection = ExternalBookingIdempotency.get_pymongo_collection()
+
+    async def delete() -> bool:
+        result = await collection.delete_one(
+            {"_id": record.id, "status": "in_progress", "created_at": record.created_at}
+        )
+        return result.deleted_count == 1
+
+    async def guarded() -> bool:
+        try:
+            return await delete()
+        except Exception as exc:
+            logger.warning(
+                "idempotency key takeover failed (booking_id=%s error=%s)",
+                record.booking_id,
+                type(exc).__name__,
+            )
+            return False
+
+    return await asyncio.shield(_detach(guarded()))
 
 
 async def _complete_key(record_id: str | None, booking_id: str) -> None:
@@ -556,6 +598,61 @@ class ThirdPartyBookingsUseCase:
 
     # --- EXT-008 -------------------------------------------------------------------
 
+    async def _resolve_in_progress(
+        self,
+        *,
+        existing: ExternalBookingIdempotency,
+        location_code: str,
+        persons_count: int,
+        claims: ThirdPartyClaims,
+        client_ip: str,
+    ) -> BookingCreatedEnvelope | None:
+        """#614 decision sync — an `in_progress` key row decides by its age and real rows.
+
+        Younger than 60 s → 409 `idempotency_in_progress`. Older: every row of its `booking_id`
+        committed → 201 with the original booking, key completed. No committed row → the stale
+        key is taken over (None: the caller proceeds as new; only one of several racing requests
+        wins) and this attempt's staged rows are removed. Some but not all committed → 409.
+        """
+
+        async def busy() -> HTTPException:
+            return await self._deny(
+                endpoint=ENDPOINT_CREATE,
+                claims=claims,
+                client_ip=client_ip,
+                status_code=status.HTTP_409_CONFLICT,
+                code="idempotency_in_progress",
+                message="A request with this Idempotency-Key is still being processed.",
+                location_code=location_code,
+            )
+
+        age = datetime.now(UTC) - _aware(existing.created_at)
+        if age < timedelta(seconds=_IN_PROGRESS_STALE_SECONDS):
+            raise await busy()
+        collection = ExternalBooking.get_pymongo_collection()
+        committed = await _committed_count(collection, existing.booking_id)
+        if committed is None:
+            raise await busy()
+        if committed == persons_count:
+            await _complete_key(existing.id, existing.booking_id)
+            await self._log(
+                endpoint=ENDPOINT_CREATE,
+                claims=claims,
+                client_ip=client_ip,
+                outcome="granted",
+                location_code=location_code,
+                result_count=persons_count,
+            )
+            return _created_envelope(existing.booking_id, location_code, persons_count)
+        if committed > 0:
+            raise await busy()
+        if not await _take_over_stale_key(existing):
+            raise await busy()
+        # The key is ours and the old attempt never produced a booking: drop its staged rows so
+        # they cannot collide with the new attempt. Committed rows are never touched here.
+        await _cleanup_staged(collection, {"booking_id": existing.booking_id, "committed": False})
+        return None
+
     async def _answer_existing(
         self,
         *,
@@ -565,11 +662,12 @@ class ThirdPartyBookingsUseCase:
         persons_count: int,
         claims: ThirdPartyClaims,
         client_ip: str,
-    ) -> BookingCreatedEnvelope:
+    ) -> BookingCreatedEnvelope | None:
         """#614 — answer a request whose Idempotency-Key already has a row.
 
-        Different payload → 409 `idempotency_key_reused`; same payload still in progress →
-        409 `idempotency_in_progress`; same payload completed → the original 201 body.
+        Different payload → 409 `idempotency_key_reused`; same payload completed → the original
+        201 body; same payload in progress → see `_resolve_in_progress`. Returns None when a
+        stale in_progress key was taken over: the caller then proceeds as a new request.
         """
         endpoint = ENDPOINT_CREATE
         if existing.request_hash != request_hash:
@@ -583,14 +681,12 @@ class ThirdPartyBookingsUseCase:
                 location_code=location_code,
             )
         if existing.status != "completed":
-            raise await self._deny(
-                endpoint=endpoint,
+            return await self._resolve_in_progress(
+                existing=existing,
+                location_code=location_code,
+                persons_count=persons_count,
                 claims=claims,
                 client_ip=client_ip,
-                status_code=status.HTTP_409_CONFLICT,
-                code="idempotency_in_progress",
-                message="A request with this Idempotency-Key is still being processed.",
-                location_code=location_code,
             )
         await self._log(
             endpoint=endpoint,
@@ -636,7 +732,7 @@ class ThirdPartyBookingsUseCase:
                     ExternalBookingIdempotency.key == key,
                 )
                 if existing is not None:
-                    return await self._answer_existing(
+                    answer = await self._answer_existing(
                         existing=existing,
                         request_hash=request_hash,
                         location_code=location_code,
@@ -644,7 +740,9 @@ class ThirdPartyBookingsUseCase:
                         claims=claims,
                         client_ip=client_ip,
                     )
-                # The first request released its key meanwhile: try once more.
+                    if answer is not None:
+                        return answer
+                # The first request released its key (or a stale key was taken over): try again.
                 continue
             except BaseException:
                 # The insert may have been applied before its acknowledgement was lost, or the
@@ -803,7 +901,7 @@ class ThirdPartyBookingsUseCase:
                 ExternalBookingIdempotency.key == idempotency_key,
             )
             if existing is not None:
-                return await self._answer_existing(
+                answer = await self._answer_existing(
                     existing=existing,
                     request_hash=request_hash,
                     location_code=location_code,
@@ -811,6 +909,9 @@ class ThirdPartyBookingsUseCase:
                     claims=claims,
                     client_ip=client_ip,
                 )
+                if answer is not None:
+                    return answer
+                # A stale in_progress key was taken over: this request proceeds as new.
 
         shelter = await PublicShelter.find_one(PublicShelter.shelter_code == location_code)
         if shelter is None or not shelter.is_active:

@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import traceback
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
@@ -1631,6 +1631,154 @@ async def test_retry_while_the_first_request_is_in_progress_is_refused(
     assert response.status_code == 409
     assert response.json()["code"] == "idempotency_in_progress"
     assert await _rows() == []
+
+
+def _group_hash(count: int) -> str:
+    """The request_hash `_group_payload(count)` produces at SH001 (for seeded key rows)."""
+    from apiapp.modules.thirdparty_bookings import use_case
+
+    persons = [
+        use_case._Person(cid=_cid(i), first_name=f"ชื่อ{i}", last_name="ใจดี", phone=f"08{i:08d}")
+        for i in range(count)
+    ]
+    return use_case._request_hash("SH001", persons)
+
+
+async def _seed_key(
+    key: str,
+    *,
+    count: int,
+    booking_id: str,
+    age_seconds: int,
+    status: str = "in_progress",
+) -> Any:
+    from tent_model.external_booking_idempotency import ExternalBookingIdempotency
+
+    return await ExternalBookingIdempotency(
+        id=f"IK-{booking_id}",
+        client_id="m2-test",
+        key=key,
+        request_hash=_group_hash(count),
+        booking_id=booking_id,
+        status=status,
+        created_at=datetime.now(UTC) - timedelta(seconds=age_seconds),
+    ).insert()
+
+
+async def test_stale_key_whose_group_is_fully_committed_answers_the_original_201(
+    client: AsyncClient, shelters: None
+) -> None:
+    """in_progress > 60 s and every row committed: the booking exists, so 201 with its
+    original booking_id, the key is completed and nothing new is written."""
+    await _group(3, booking_id="BK-STALE-A", committed=True)
+    await _seed_key("stale-a", count=3, booking_id="BK-STALE-A", age_seconds=120)
+    response = await client.post(URL, json=_group_payload(3), headers=_idem("stale-a"))
+    assert response.status_code == 201
+    assert response.json()["result"] == {
+        "booking_id": "BK-STALE-A",
+        "location_code": "SH001",
+        "persons_count": 3,
+        "booking_status": "BOOKED",
+    }
+    assert [(k.status, k.booking_id) for k in await _keys()] == [("completed", "BK-STALE-A")]
+    assert len(await _rows()) == 3
+    assert await _log_statuses() == ["granted"]
+
+
+async def test_stale_key_with_no_committed_row_is_taken_over_and_proceeds_as_new(
+    client: AsyncClient, shelters: None
+) -> None:
+    """in_progress > 60 s and no committed row: the key is released and this request creates
+    a new booking. The dead attempt's staged rows are removed; the new key completes."""
+    await _group(3, committed=False, booking_id="BK-STALE-B")
+    await _seed_key("stale-b", count=3, booking_id="BK-STALE-B", age_seconds=120)
+    response = await client.post(URL, json=_group_payload(3), headers=_idem("stale-b"))
+    assert response.status_code == 201
+    new_id = response.json()["result"]["booking_id"]
+    assert new_id != "BK-STALE-B"
+    keys = await _keys()
+    assert [(k.status, k.booking_id) for k in keys] == [("completed", new_id)]
+    rows = await _rows()
+    assert len(rows) == 3
+    assert {row["booking_id"] for row in rows} == {new_id}
+    assert all(row["committed"] is True for row in rows)
+    assert await _log_statuses() == ["granted"]
+
+
+async def test_stale_key_with_a_partial_commit_answers_409_and_touches_nothing(
+    client: AsyncClient, shelters: None
+) -> None:
+    """in_progress > 60 s with 2 of 3 rows committed: neither the 201 nor the takeover
+    applies. 409 `idempotency_in_progress`; the key and every row are left as they are."""
+    for index in range(3):
+        await _booking(
+            booking_id="BK-STALE-C",
+            row_id=f"BP-STALE-C-{index}",
+            cid=_cid(index),
+            person_seq=index,
+            group_size=3,
+            committed=index < 2,
+        )
+    await _seed_key("stale-c", count=3, booking_id="BK-STALE-C", age_seconds=120)
+    response = await client.post(URL, json=_group_payload(3), headers=_idem("stale-c"))
+    assert response.status_code == 409
+    assert response.json()["code"] == "idempotency_in_progress"
+    keys = await _keys()
+    assert [(k.status, k.booking_id) for k in keys] == [("in_progress", "BK-STALE-C")]
+    assert len(await _rows()) == 3
+    assert await _log_statuses() == ["denied_idempotency_in_progress"]
+
+
+async def test_in_progress_younger_than_60_seconds_is_refused_and_touches_nothing(
+    client: AsyncClient, shelters: None
+) -> None:
+    """59 s old with staged rows and no commit: still 409, the staged rows are not swept."""
+    await _group(3, committed=False, booking_id="BK-YOUNG")
+    await _seed_key("young-1", count=3, booking_id="BK-YOUNG", age_seconds=59)
+    response = await client.post(URL, json=_group_payload(3), headers=_idem("young-1"))
+    assert response.status_code == 409
+    assert response.json()["code"] == "idempotency_in_progress"
+    assert [(k.status, k.booking_id) for k in await _keys()] == [("in_progress", "BK-YOUNG")]
+    assert len(await _rows()) == 3
+
+
+async def test_only_one_of_two_racing_takeovers_wins_the_stale_key(client: AsyncClient) -> None:
+    """Two requests judged the same stale row: the guarded delete succeeds for one only."""
+    from tent_model.external_booking_idempotency import ExternalBookingIdempotency
+
+    from apiapp.modules.thirdparty_bookings import use_case
+
+    await _seed_key("race-takeover", count=3, booking_id="BK-RACE", age_seconds=120)
+    record = await ExternalBookingIdempotency.find_one(
+        ExternalBookingIdempotency.key == "race-takeover"
+    )
+    assert record is not None
+    results = await asyncio.gather(
+        use_case._take_over_stale_key(record), use_case._take_over_stale_key(record)
+    )
+    assert sorted(results) == [False, True]
+    assert await _keys() == []
+
+
+async def test_racing_retries_on_one_stale_key_create_exactly_one_booking(
+    client: AsyncClient, shelters: None
+) -> None:
+    """Two same-key retries hit a stale key with no rows at once: at most one booking is
+    created; every 201 carries that booking_id and the other retry is refused or replayed."""
+    await _seed_key("race-retry", count=3, booking_id="BK-RACE-RETRY", age_seconds=120)
+    body = _group_payload(3)
+    first, second = await asyncio.gather(
+        client.post(URL, json=body, headers=_idem("race-retry")),
+        client.post(URL, json=body, headers=_idem("race-retry")),
+    )
+    responses = [first, second]
+    assert {r.status_code for r in responses} <= {201, 409}
+    ok = [r.json()["result"]["booking_id"] for r in responses if r.status_code == 201]
+    assert ok, "one racing retry must get the booking"
+    assert len(set(ok)) == 1
+    assert {row["booking_id"] for row in await _rows()} == {ok[0]}
+    assert len(await _rows()) == 3
+    assert [k.status for k in await _keys()] == ["completed"]
 
 
 async def test_failed_first_attempt_releases_the_key_so_a_retry_can_proceed(

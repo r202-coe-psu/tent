@@ -2719,7 +2719,7 @@ Buffer ของ partner booking (M2) — FastAPI insert ตอนรับค�
 
 **Lifecycle (EXT-008):**
 - ไม่มี header → ไม่สร้างแถว
-- มี header → หลัง validate body แล้ว ก่อนตรวจ shelter/duplicate: มีแถวเดิม → hash ต่าง = `idempotency_key_reused` (409) · hash เดียวกัน + `in_progress` = `idempotency_in_progress` (409) · hash เดียวกัน + `completed` = 201 body เดิม
+- มี header → หลัง validate body แล้ว ก่อนตรวจ shelter/duplicate: มีแถวเดิม → hash ต่าง = `idempotency_key_reused` (409) · hash เดียวกัน + `in_progress` อายุ ≤ 60 วินาที (`created_at`) = `idempotency_in_progress` (409) · hash เดียวกัน + `in_progress` อายุ > 60 วินาที = ตัดสินจากแถวจริงของ `booking_id` (ดูด้านล่าง) · hash เดียวกัน + `completed` = 201 body เดิม
 - ไม่มีแถว → ตรวจ shelter ตามปกติ → insert แถว `in_progress` ก่อนตรวจ duplicate (unique; ถ้าชนกับรอบที่ชนะก่อน ให้ตอบตามแถวนั้น; คำขอที่ overlap จึงไม่ถูกนับเป็น duplicate ของตัวเอง) → ตรวจ duplicate → stage `external_bookings`
 - insert แถว key ที่ error หรือถูก cancel ระหว่างนั้น → ลบแถวของ request นั้นเอง (ไม่แตะแถวของรอบอื่น)
 - รอบแรกล้มโดยยังไม่มี booking (4xx/5xx รวม `duplicate_booking`) → **ลบแถว** (`release`) เพื่อให้ retry ทำได้
@@ -2727,4 +2727,8 @@ Buffer ของ partner booking (M2) — FastAPI insert ตอนรับค�
 - รอบแรกถูกยกเลิกกลางคัน (client หลุด) ระหว่าง commit → รอ flip จบก่อนนับ: ทุกแถว `committed: true` ครบ → `status = completed` (แถว `external_bookings` คงไว้); ไม่ครบ → ลบแถว `pending` ของ `booking_id` และ **ลบแถว key** (เหมือน release)
 - ไม่มีการ migrate: collection ใหม่ สร้าง index ตอน Beanie init
 
-**ยังไม่ตัดสิน (รอเจ้าของโครงการ):** ถ้า process ถูก kill หลัง insert แถว `in_progress` และก่อน release/complete แถวจะค้างจนหมด TTL (24 ชม.); ระหว่างนั้น retry ของ key นั้นได้ 409 `idempotency_in_progress` และยังไม่มีกติกาการ resolve (ไม่มี sweep ฝั่ง worker สำหรับแถวนี้)
+**`in_progress` ค้าง (decision sync CR-169 2026-10-17, จาก code review PR #666):** แถว key เก็บ `booking_id` ตั้งแต่ตอน insert ดังนั้น request ที่เจอแถว `in_progress` อายุ > 60 วินาที (รอบแรกอาจถูก kill ก่อน release/complete) ตัดสินจากแถว `external_bookings` ที่มี `booking_id` นั้น:
+- **committed ครบ `group_size`** → **201** body เดิม (`booking_id` เดิม, ไม่สร้างแถวใหม่) และ mark key เป็น `completed`
+- **ไม่มีแถว `committed: true` เลย** → **takeover**: ลบแถว key ด้วยเงื่อนไข `_id` + `status: in_progress` + `created_at` เดิม (atomic — ของคำขอที่แข่งกันตัดสินพร้อมกันมีเพียงคำขอเดียวที่ `deleted_count = 1`; อีกคำขอตอบ 409 `idempotency_in_progress`) แล้วลบแถว `committed: false` ของ `booking_id` เดิม และคำขอนี้ดำเนินการเป็นคำขอใหม่ (`booking_id` ใหม่, insert key ใหม่)
+- **committed บางส่วน** → **409** `idempotency_in_progress` ไม่แก้ไขแถวใด ๆ (ไม่มี sweep ของ key นี้; key คงอยู่จนหมด TTL 24 ชม. ตามกติกานี้)
+- อายุ ≤ 60 วินาที → 409 `idempotency_in_progress` ไม่แตะข้อมูล
