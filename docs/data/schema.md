@@ -2720,10 +2720,11 @@ Buffer ของ partner booking (M2) — FastAPI insert ตอนรับค�
 **Lifecycle (EXT-008):**
 - ไม่มี header → ไม่สร้างแถว
 - มี header → หลัง validate body แล้ว ก่อนตรวจ shelter/duplicate: มีแถวเดิม → hash ต่าง = `idempotency_key_reused` (409) · hash เดียวกัน + `in_progress` = `idempotency_in_progress` (409) · hash เดียวกัน + `completed` = 201 body เดิม
-- ไม่มีแถว → ตรวจ shelter/duplicate ตามปกติ → insert แถว `in_progress` (unique; ถ้าชนกับรอบที่ชนะก่อน ให้ตอบตามแถวนั้น) → stage `external_bookings`
-- รอบแรกล้มโดยยังไม่มี booking (4xx/5xx) → **ลบแถว** (`release`) เพื่อให้ retry ทำได้
+- ไม่มีแถว → ตรวจ shelter ตามปกติ → insert แถว `in_progress` ก่อนตรวจ duplicate (unique; ถ้าชนกับรอบที่ชนะก่อน ให้ตอบตามแถวนั้น; คำขอที่ overlap จึงไม่ถูกนับเป็น duplicate ของตัวเอง) → ตรวจ duplicate → stage `external_bookings`
+- insert แถว key ที่ error หรือถูก cancel ระหว่างนั้น → ลบแถวของ request นั้นเอง (ไม่แตะแถวของรอบอื่น)
+- รอบแรกล้มโดยยังไม่มี booking (4xx/5xx รวม `duplicate_booking`) → **ลบแถว** (`release`) เพื่อให้ retry ทำได้
 - commit สำเร็จ หรือ G5 (flip ตอบ error แต่ทุกแถวของ `booking_id` `committed: true` ครบ `group_size`) → `status = completed`
 - รอบแรกถูกยกเลิกกลางคัน (client หลุด) ระหว่าง commit → รอ flip จบก่อนนับ: ทุกแถว `committed: true` ครบ → `status = completed` (แถว `external_bookings` คงไว้); ไม่ครบ → ลบแถว `pending` ของ `booking_id` และ **ลบแถว key** (เหมือน release)
 - ไม่มีการ migrate: collection ใหม่ สร้าง index ตอน Beanie init
 
-**ข้อจำกัด:** ถ้า process ถูก kill หลัง insert แถว `in_progress` และก่อน release/complete แถวจะค้างจนหมด TTL (24 ชม.); ระหว่างนั้น retry ของ key นั้นได้ 409 `idempotency_in_progress` ยังไม่มีการ sweep ฝั่ง worker สำหรับแถวนี้ (ประเมินเมื่อพบปัญหาจริง)
+**ยังไม่ตัดสิน (รอเจ้าของโครงการ):** ถ้า process ถูก kill หลัง insert แถว `in_progress` และก่อน release/complete แถวจะค้างจนหมด TTL (24 ชม.); ระหว่างนั้น retry ของ key นั้นได้ 409 `idempotency_in_progress` และยังไม่มีกติกาการ resolve (ไม่มี sweep ฝั่ง worker สำหรับแถวนี้)

@@ -421,6 +421,32 @@ async def _settle_cancelled_commit(
     await asyncio.shield(_detach(settle()))
 
 
+async def _settle_failed_commit(
+    collection: Any,
+    *,
+    booking_id: str,
+    group_size: int,
+    record_id: str | None,
+) -> bool:
+    """Settle a commit whose flip raised: keep the group (G5) or remove it (#614).
+
+    Returns True when every row is committed (the flip was applied, only its acknowledgement
+    was lost): the key is completed and the rows are kept for the worker. Otherwise the pending
+    rows are removed and the key released. Runs detached and shielded by the caller, so the
+    count and the cleanup finish even when the request is cancelled.
+    """
+    if await _all_rows_committed(collection, booking_id, group_size):
+        logger.warning("commit raised but every row is committed (booking_id=%s)", booking_id)
+        await _complete_key(record_id, booking_id)
+        return True
+    # The flip may have been applied to only some rows, so `committed` can no longer tell this
+    # group's rows apart: remove every row of this booking_id that is still `pending`. Rows the
+    # worker already advanced cannot be rolled back from here.
+    await _cleanup_staged(collection, {"booking_id": booking_id, "state": "pending"})
+    await _release_key(record_id, booking_id)
+    return False
+
+
 class ThirdPartyBookingsUseCase:
     async def _log(
         self,
@@ -620,6 +646,11 @@ class ThirdPartyBookingsUseCase:
                     )
                 # The first request released its key meanwhile: try once more.
                 continue
+            except BaseException:
+                # The insert may have been applied before its acknowledgement was lost, or the
+                # request was cancelled. Remove only this request's own row (never the winner's).
+                await _release_key(record.id, booking_id)
+                raise
             return record.id
         raise await self._deny(
             endpoint=ENDPOINT_CREATE,
@@ -821,16 +852,12 @@ class ThirdPartyBookingsUseCase:
                 detail=f"persons[{index}]",
             )
 
-        # FR-17/20 — duplicates are checked per shelter only (D5), for the whole group
-        # before anything is inserted.
-        taken = await self._taken_cid_hashes(location_code, cid_hashes)
-        for index, cid_hash in enumerate(cid_hashes):
-            if cid_hash in taken:
-                raise await duplicate(index)
-
         now = datetime.now(UTC)
         booking_id = f"BK-{new_ulid()}"
-        # #614 — the key row exists before any staged row; every failure path below releases it.
+        # #614 — the key is reserved before the duplicate check: a same-key request that overlaps
+        # this one meets the key row (in_progress / completed) instead of this request's rows,
+        # which the duplicate check would otherwise see as committed. Every failure path below
+        # releases it.
         reserved_id: str | None = None
         if idempotency_key is not None:
             reserved = await self._reserve_key(
@@ -846,6 +873,16 @@ class ThirdPartyBookingsUseCase:
             if isinstance(reserved, BookingCreatedEnvelope):
                 return reserved
             reserved_id = reserved
+        try:
+            # FR-17/20 — duplicates are checked per shelter only (D5), for the whole group
+            # before anything is inserted.
+            taken = await self._taken_cid_hashes(location_code, cid_hashes)
+            for index, cid_hash in enumerate(cid_hashes):
+                if cid_hash in taken:
+                    raise await duplicate(index)
+        except BaseException:
+            await _release_key(reserved_id, booking_id)
+            raise
         # Inserting in `cid_hash` order means two overlapping groups collide on the same
         # key first, so one of them wins instead of each blocking the other half-way.
         rows = [
@@ -929,7 +966,7 @@ class ThirdPartyBookingsUseCase:
                 )
             raise failure
 
-        commit_error: Exception | None = None
+        commit_failed = False
         # The flip runs as its own task so a cancelled request cannot leave it half-awaited:
         # `update_many` may still be applied server-side after the cancel.
         commit_task = _detach(_commit_group(collection, booking_id, len(rows)))
@@ -944,25 +981,26 @@ class ThirdPartyBookingsUseCase:
                 record_id=reserved_id,
             )
             raise
-        except Exception as exc:
-            commit_error = exc
-        if commit_error is not None and await _all_rows_committed(
-            collection, booking_id, len(rows)
-        ):
-            # G5 — the flip was applied but its acknowledgement was lost: the group is committed,
-            # so answer 201 (the worker processes it) instead of a 500 that makes the partner retry.
-            logger.warning(
-                "commit raised but every row is committed (booking_id=%s error=%s)",
-                booking_id,
-                type(commit_error).__name__,
+        except Exception:
+            commit_failed = True  # recorded here; handled below the except block
+        if commit_failed:
+            # G5 (count) and the failure cleanup run shielded and detached, so a cancel that
+            # lands during them cannot skip the key release or leave staged rows behind.
+            kept = await asyncio.shield(
+                _detach(
+                    _settle_failed_commit(
+                        collection,
+                        booking_id=booking_id,
+                        group_size=len(rows),
+                        record_id=reserved_id,
+                    )
+                )
             )
-            commit_error = None
-        if commit_error is not None:
-            # The flip may have been applied to only some rows, so `committed` can no longer
-            # tell this group's rows apart: remove every row of this booking_id that is still
-            # `pending`. Rows the worker already advanced cannot be rolled back from here.
-            await _cleanup_staged(collection, {"booking_id": booking_id, "state": "pending"})
-            await _release_key(reserved_id, booking_id)
+            # G5 — when every row is committed although the flip raised, the group stands and
+            # the answer is 201 (the worker processes it) instead of a 500 that makes the partner
+            # retry.
+            commit_failed = not kept
+        if commit_failed:
             await self._log_detached(
                 booking_id=booking_id,
                 endpoint=endpoint,

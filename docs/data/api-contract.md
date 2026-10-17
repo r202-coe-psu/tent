@@ -592,10 +592,10 @@ Error   : { "status": <http>, "message": "…", "code"?: "…", "detail"?: "…"
   - **key + body เดิม** (หลัง normalize; `persons[]` และรูปแบบเดิมที่คนเดียวนับเป็นรูปแบบเดียวกัน) → **201** body เดิม: `booking_id`, `location_code`, `booking_status: "BOOKED"`, `persons_count` เดิม — ไม่สร้างแถวใหม่ และไม่ตรวจ `duplicate_booking` ซ้ำ; นับ access log เป็น `granted` (`result_count = persons_count`)
   - **key เดิม body ต่าง** → **409** `idempotency_key_reused` (ไม่มีข้อมูลของ booking เดิมในคำตอบ)
   - **key เดิม body เดียวกัน แต่รอบแรกยังไม่จบ** → **409** `idempotency_in_progress` — partner ลองใหม่ได้ภายหลัง
-  - รอบแรกล้มโดยยังไม่มี booking (4xx/5xx ก่อน commit) → key ถูกปล่อย ส่งซ้ำได้ทันที
+  - รอบแรกล้มโดยยังไม่มี booking (4xx/5xx ก่อน commit, รวม `duplicate_booking` 409 และ insert key ที่ ack หาย) → key ถูกปล่อย ส่งซ้ำได้ทันที
   - รอบแรกถูกตัดการเชื่อมต่อระหว่าง commit: ถ้ากลุ่มถูก commit ครบแล้ว → key เป็น completed และ retry ได้ 201 body เดิม; ถ้ายังไม่ครบ → key ถูกปล่อยเหมือนข้อด้านบน
   - **G5 (ทำเสมอ ไม่ขึ้นกับ key):** ถ้า commit ตอบ error แต่แถวของ `booking_id` ที่สร้างใหม่ `committed: true` ครบ `group_size` แล้ว → **201** แทน 500 (กรณี ack หายหลัง flip สำเร็จ); ไม่ครบ → 500 `internal_error` เดิม
-  - ข้อจำกัด: ถ้า process ถูก kill ระหว่างรอบแรก key จะค้าง `in_progress` จนหมด TTL (24 ชม.) — ระหว่างนั้น retry ได้ 409 `idempotency_in_progress`
+  - **ยังไม่มีกติกาที่เจ้าของโครงการตัดสิน:** ถ้า process ถูก kill ระหว่างรอบแรก (หรือ `_complete_key` ไม่สำเร็จหลัง commit ครบ) key จะค้าง `in_progress` จนหมด TTL (24 ชม.) — ระหว่างนั้น retry ได้ 409 `idempotency_in_progress` และ partner ยังไม่มีทางได้ `booking_id` กลับมา (รอการตัดสินใจ: เช่น ตอบ 201 เมื่อพบกลุ่มที่ commit ครบแล้ว หรือกำหนด timeout ของ `in_progress`)
 
 **ตัวอย่าง — EXT-008 กลุ่ม (2 คน)**
 

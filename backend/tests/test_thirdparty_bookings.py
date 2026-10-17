@@ -1871,3 +1871,102 @@ async def test_partial_flip_then_ack_lost_is_a_500_and_removes_the_group(
     assert await _rows() == []
     assert await _keys() == []
     assert await _log_statuses() == ["denied_internal_error"]
+
+
+async def test_overlapping_retry_during_the_duplicate_check_is_not_a_duplicate(
+    client: AsyncClient, shelters: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Same key + same body overlapping the first request: the retry meets the key row
+    (in_progress → 409 idempotency_in_progress), never this request's own committed-to-be rows
+    as a duplicate_booking. The first request still completes with 201."""
+    from apiapp.modules.thirdparty_bookings import use_case
+
+    body = _group_payload(3)
+    real = use_case.ThirdPartyBookingsUseCase._taken_cid_hashes
+    nested: list[Any] = []
+
+    async def retry_overlaps_first(self: Any, location_code: str, cid_hashes: list[str]) -> Any:
+        if not nested:  # the retry runs while the first request is past its key lookup
+            nested.append(await client.post(URL, json=body, headers=_idem("race-k")))
+        return await real(self, location_code, cid_hashes)
+
+    monkeypatch.setattr(
+        use_case.ThirdPartyBookingsUseCase, "_taken_cid_hashes", retry_overlaps_first
+    )
+    first = await client.post(URL, json=body, headers=_idem("race-k"))
+    assert first.status_code == 201
+    assert nested[0].status_code == 409
+    assert nested[0].json()["code"] == "idempotency_in_progress"
+    booking_id = first.json()["result"]["booking_id"]
+    assert len(await _rows(booking_id)) == 3
+    assert len(await _rows()) == 3
+    assert [key.status for key in await _keys()] == ["completed"]
+
+
+async def test_duplicate_rejection_releases_the_key(client: AsyncClient, shelters: None) -> None:
+    first = await client.post(URL, json=_payload(), headers=GRANTED)
+    assert first.status_code == 201
+    rejected = await client.post(URL, json=_payload(), headers=_idem("dup-release"))
+    assert rejected.status_code == 409
+    assert rejected.json()["code"] == "duplicate_booking"
+    assert await _keys() == []
+    assert len(await _rows()) == 1
+
+
+async def test_key_insert_whose_ack_is_lost_releases_its_own_row(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The key row was applied but its insert raised: the row is removed, nothing else is."""
+    from tent_model.external_booking_idempotency import ExternalBookingIdempotency
+
+    from apiapp.modules.thirdparty_bookings import use_case
+
+    real_insert = ExternalBookingIdempotency.insert
+
+    async def insert_then_lose_ack(self: Any, *args: Any, **kwargs: Any) -> Any:
+        await real_insert(self, *args, **kwargs)
+        raise RuntimeError("ack lost")
+
+    monkeypatch.setattr(ExternalBookingIdempotency, "insert", insert_then_lose_ack)
+    claims = ThirdPartyClaims(client_id="m2-test", module_name="M2", scopes=["booking-write"])
+    with pytest.raises(RuntimeError):
+        await use_case.ThirdPartyBookingsUseCase()._reserve_key(
+            key="ack-lost",
+            request_hash="h",
+            booking_id="BK-ACK",
+            now=datetime.now(UTC),
+            location_code="SH001",
+            persons_count=1,
+            claims=claims,
+            client_ip="127.0.0.1",
+        )
+    assert await _keys() == []
+
+
+async def test_cancel_during_the_commit_failure_check_still_cleans_up(
+    client: AsyncClient, shelters: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The flip keeps failing and the request is cancelled while the G5 count runs: the staged
+    rows are still removed and the key released, because the settle step is detached."""
+    from apiapp.modules.thirdparty_bookings import use_case
+
+    _fail_update_many(monkeypatch, failures=3)
+    real = use_case._all_rows_committed
+    entered, release = asyncio.Event(), asyncio.Event()
+
+    async def slow_count(collection: Any, booking_id: str, group_size: int) -> bool:
+        entered.set()
+        await release.wait()
+        return await real(collection, booking_id, group_size)
+
+    monkeypatch.setattr(use_case, "_all_rows_committed", slow_count)
+    request = asyncio.create_task(_create_directly(_group_payload(3), "cancel-g5"))
+    await entered.wait()
+    request.cancel()
+    await asyncio.sleep(0)
+    release.set()
+    with pytest.raises(asyncio.CancelledError):
+        await request
+    await _drain_detached()
+    assert await _rows() == []
+    assert await _keys() == []
