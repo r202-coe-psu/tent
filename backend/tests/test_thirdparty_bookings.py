@@ -1898,6 +1898,181 @@ async def test_claim_on_a_partly_committed_group_clears_it_and_answers_busy(
     assert [k.status for k in await _keys()] == ["completed"]
 
 
+def _fail_pending_delete(monkeypatch: pytest.MonkeyPatch, failures: int | None) -> list[int]:
+    """Make `delete_many` on `external_bookings` raise `failures` times (None = always), only for
+    a filter on `state: pending`; the `committed: false` drop of a claim still runs."""
+    collection = ExternalBooking.get_pymongo_collection()
+    real = type(collection).delete_many
+    calls = [0]
+
+    async def flaky(self: Any, flt: dict[str, Any], *args: Any, **kwargs: Any) -> Any:
+        if self.name == collection.name and flt.get("state") == "pending":
+            calls[0] += 1
+            if failures is None or calls[0] <= failures:
+                raise RuntimeError("boom")
+        return await real(self, flt, *args, **kwargs)
+
+    monkeypatch.setattr(type(collection), "delete_many", flaky)
+    return calls
+
+
+async def _partial_group(booking_id: str, *, committed: int, staged: int = 0) -> None:
+    """A 3-person group with `committed` committed rows and `staged` staged rows."""
+    for index in range(committed + staged):
+        await _booking(
+            booking_id=booking_id,
+            row_id=f"BP-{booking_id}-{index}",
+            cid=_cid(index),
+            person_seq=index,
+            group_size=3,
+            committed=index < committed,
+        )
+
+
+async def _key_doc(key: str) -> Any:
+    return await ExternalBookingIdempotency.get_pymongo_collection().find_one(
+        {"client_id": "m2-test", "key": key}
+    )
+
+
+async def test_claim_whose_partial_removal_gives_up_is_retried_by_a_later_stale_retry(
+    client: AsyncClient, shelters: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """#614 review r1 (PR #666): the claim's removal of a partly committed group gives up (3
+    failed deletes). The claim still answers busy and the committed rows survive, with no staged
+    row left for the sweeper. Once the key is stale again the next retry claims the group again,
+    removes it (409), and the retry after that proceeds as new — not 409 until the TTL."""
+    from apiapp.modules.thirdparty_bookings import use_case
+
+    await _partial_group("BK-GIVEUP", committed=2, staged=1)
+    await _seed_key("giveup", count=3, booking_id="BK-GIVEUP", age_seconds=120)
+    record = await ExternalBookingIdempotency.find_one(ExternalBookingIdempotency.key == "giveup")
+    assert record is not None
+    calls = _fail_pending_delete(monkeypatch, failures=None)
+    assert await use_case._claim_stale_key(record, 3) == "busy"
+    assert calls[0] == use_case._CLEANUP_ATTEMPTS
+    rows = await _rows()
+    assert len(rows) == 2
+    assert all(row["committed"] is True for row in rows)
+    assert [k.status for k in await _keys()] == ["in_progress"]
+    monkeypatch.undo()
+
+    young = await client.post(URL, json=_group_payload(3), headers=_idem("giveup"))
+    assert young.status_code == 409
+    assert len(await _rows()) == 2
+
+    await _age_key("giveup")
+    cleared = await client.post(URL, json=_group_payload(3), headers=_idem("giveup"))
+    assert cleared.status_code == 409
+    assert cleared.json()["code"] == "idempotency_in_progress"
+    assert await _rows() == []
+    assert [k.status for k in await _keys()] == ["in_progress"]
+
+    await _age_key("giveup")
+    response = await client.post(URL, json=_group_payload(3), headers=_idem("giveup"))
+    assert response.status_code == 201
+    new_id = response.json()["result"]["booking_id"]
+    assert new_id != "BK-GIVEUP"
+    assert {row["booking_id"] for row in await _rows()} == {new_id}
+    assert [k.status for k in await _keys()] == ["completed"]
+
+
+async def test_stale_partial_group_with_staged_rows_is_left_to_the_sweeper(
+    client: AsyncClient, shelters: None
+) -> None:
+    """A partly committed group that still has a staged row is the sweeper's (FR-33): the
+    stale retry answers 409, does not lease the key and touches no row."""
+    await _partial_group("BK-SWEEP", committed=1, staged=2)
+    await _seed_key("sweep", count=3, booking_id="BK-SWEEP", age_seconds=120)
+    before = await _key_doc("sweep")
+    response = await client.post(URL, json=_group_payload(3), headers=_idem("sweep"))
+    assert response.status_code == 409
+    assert response.json()["code"] == "idempotency_in_progress"
+    assert len(await _rows()) == 3
+    assert (await _key_doc("sweep"))["created_at"] == before["created_at"]
+
+
+async def test_stale_partial_group_with_no_staged_row_is_removed_then_taken_over(
+    client: AsyncClient, shelters: None
+) -> None:
+    """2 of 3 rows committed and nothing staged (a removal gave up earlier): the sweeper never
+    reaches it, so the stale retry claims the key, removes the group and answers 409; the next
+    stale retry proceeds as new."""
+    await _partial_group("BK-ORPHAN", committed=2)
+    await _seed_key("orphan", count=3, booking_id="BK-ORPHAN", age_seconds=120)
+    before = await _key_doc("orphan")
+    response = await client.post(URL, json=_group_payload(3), headers=_idem("orphan"))
+    assert response.status_code == 409
+    assert response.json()["code"] == "idempotency_in_progress"
+    assert await _rows() == []
+    after = await _key_doc("orphan")
+    assert after["status"] == "in_progress"
+    assert after["created_at"] > before["created_at"]  # leased
+
+    await _age_key("orphan")
+    retry = await client.post(URL, json=_group_payload(3), headers=_idem("orphan"))
+    assert retry.status_code == 201
+    assert retry.json()["result"]["booking_id"] != "BK-ORPHAN"
+
+
+async def test_unconfirmed_commit_whose_removal_gives_up_keeps_the_key_for_a_retry(
+    client: AsyncClient, shelters: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """#614 review r1 (PR #666): a failed commit left 2 of 3 rows committed and the removal of
+    the group gives up. The key is not released (a released key would leave the rows blocking
+    these CIDs with duplicate_booking); the same-key retry, once stale, removes the group and
+    the one after it proceeds as new."""
+    from apiapp.modules.thirdparty_bookings import use_case
+
+    await _partial_group("BK-SETTLE", committed=2)
+    await _seed_key("settle", count=3, booking_id="BK-SETTLE", age_seconds=0)
+    lease = (await _key_doc("settle"))["created_at"]
+    calls = _fail_pending_delete(monkeypatch, failures=None)
+    kept = await use_case._settle_unconfirmed_commit(
+        ExternalBooking.get_pymongo_collection(),
+        booking_id="BK-SETTLE",
+        group_size=3,
+        record_id="IK-BK-SETTLE",
+        created_at=lease,
+    )
+    assert kept is False
+    assert calls[0] == use_case._CLEANUP_ATTEMPTS
+    assert len(await _rows()) == 2
+    assert [k.status for k in await _keys()] == ["in_progress"]
+    monkeypatch.undo()
+
+    await _age_key("settle")
+    cleared = await client.post(URL, json=_group_payload(3), headers=_idem("settle"))
+    assert cleared.status_code == 409
+    assert await _rows() == []
+
+    await _age_key("settle")
+    retry = await client.post(URL, json=_group_payload(3), headers=_idem("settle"))
+    assert retry.status_code == 201
+    assert retry.json()["result"]["booking_id"] != "BK-SETTLE"
+
+
+async def test_unconfirmed_commit_whose_removal_succeeds_releases_the_key(
+    client: AsyncClient, shelters: None
+) -> None:
+    """Count readable and below the group size: the group is removed and the key released."""
+    from apiapp.modules.thirdparty_bookings import use_case
+
+    await _partial_group("BK-SETTLE-OK", committed=2)
+    await _seed_key("settle-ok", count=3, booking_id="BK-SETTLE-OK", age_seconds=0)
+    lease = (await _key_doc("settle-ok"))["created_at"]
+    kept = await use_case._settle_unconfirmed_commit(
+        ExternalBooking.get_pymongo_collection(),
+        booking_id="BK-SETTLE-OK",
+        group_size=3,
+        record_id="IK-BK-SETTLE-OK",
+        created_at=lease,
+    )
+    assert kept is False
+    assert await _rows() == []
+    assert await _keys() == []
+
+
 async def test_failed_first_attempt_releases_the_key_so_a_retry_can_proceed(
     client: AsyncClient, shelters: None, monkeypatch: pytest.MonkeyPatch
 ) -> None:

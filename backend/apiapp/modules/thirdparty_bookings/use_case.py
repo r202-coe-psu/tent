@@ -342,6 +342,17 @@ async def _committed_count(collection: Any, booking_id: str) -> int | None:
         return None
 
 
+async def _staged_count(collection: Any, booking_id: str) -> int | None:
+    """Number of staged (`committed: false`) rows of `booking_id`; None when unreadable."""
+    try:
+        return await collection.count_documents({"booking_id": booking_id, "committed": False})
+    except Exception as exc:
+        logger.warning(
+            "staged count failed (booking_id=%s error=%s)", booking_id, type(exc).__name__
+        )
+        return None
+
+
 async def _all_rows_committed(collection: Any, booking_id: str, group_size: int) -> bool | None:
     """G5 — True when every row of the group is committed although the flip raised.
 
@@ -422,7 +433,8 @@ async def _drop_rows(collection: Any, booking_id: str, extra: dict[str, Any]) ->
 async def _claim_stale_key(
     record: ExternalBookingIdempotency, persons_count: int
 ) -> Literal["completed", "free", "busy"]:
-    """Claim a stale `in_progress` key whose `booking_id` has no committed row (#614).
+    """Claim a stale `in_progress` key whose group has no committed row, or is partly committed
+    with no staged row left (#614).
 
     1. Lease: `created_at` of the key row is set to now, guarded by its old value. Only one
        racing request matches; the others see a young row, and the stalled attempt's fence
@@ -433,7 +445,9 @@ async def _claim_stale_key(
        (`completed`). None → the row is deleted with its lease value (`free`), so the caller
        proceeds as a new request. Some (a flip raced the lease) → the rest of the group is
        removed, as the sweeper's phase 2 does, so no committed PII outlives the decision; the
-       key stays `in_progress` and answers 409 (`busy`).
+       key stays `in_progress` and answers 409 (`busy`). If that removal gives up, the group is
+       left partly committed with no staged row, which the sweeper never reaches; the caller
+       claims such a group again on the next stale retry, so the removal is retried.
     Any failure before step 3 answers `busy`; the key keeps its new age, so the partner retries.
     Shielded and detached, so a cancelled request cannot split the decision.
     """
@@ -465,7 +479,13 @@ async def _claim_stale_key(
             await _complete_key(record.id, claimed_at, record.booking_id)
             return "completed"
         if committed > 0:
-            await _drop_rows(collection, record.booking_id, {"state": "pending"})
+            if not await _drop_rows(collection, record.booking_id, {"state": "pending"}):
+                # The key keeps its new lease; once it is stale again the next retry finds a
+                # partial group with no staged row and claims it again (`_resolve_in_progress`).
+                logger.error(
+                    "partial group could not be removed, a later retry tries again (booking_id=%s)",
+                    record.booking_id,
+                )
             return "busy"
         try:
             deleted = await key_collection.delete_one(
@@ -554,7 +574,8 @@ async def _settle_unconfirmed_commit(
       only fall, so nobody else can see this group as booked: remove every row of the
       booking_id still `pending` (the flip may have touched only some, so `committed` no longer
       tells them apart; rows the worker advanced cannot be rolled back), then release the key
-      guarded by the lease.
+      guarded by the lease. If the removal gives up, the key is kept `in_progress`: the
+      same-key retry judges it stale after 60 s and removes the group then.
     - count unreadable → the group may be fully committed and a retry that took the key over
       may already have answered 201 for it. Release the key first (lease-guarded); only if the
       row is gone does nobody else own this booking_id, and the pending rows are removed.
@@ -570,7 +591,15 @@ async def _settle_unconfirmed_commit(
         if await _release_key(record_id, created_at, booking_id):
             await _cleanup_staged(collection, pending)
         return False
-    await _cleanup_staged(collection, pending)
+    if not await _drop_rows(collection, booking_id, {"state": "pending"}):
+        # Rows may be left partly committed. The key is kept `in_progress` so the same-key
+        # retry, once it is stale, removes the group (`_resolve_in_progress`); a released key
+        # would leave the rows blocking these CIDs with `duplicate_booking` instead.
+        logger.error(
+            "failed group could not be removed, key not released (booking_id=%s)",
+            booking_id,
+        )
+        return False
     await _release_key(record_id, created_at, booking_id)
     return False
 
@@ -752,7 +781,9 @@ class ThirdPartyBookingsUseCase:
         Younger than 60 s → 409 `idempotency_in_progress`. Older: every row of its `booking_id`
         committed → 201 with the original booking, key completed. No committed row → the stale
         key is taken over (None: the caller proceeds as new; only one of several racing requests
-        wins) and this attempt's staged rows are removed. Some but not all committed → 409.
+        wins) and this attempt's staged rows are removed. Some but not all committed → 409; when
+        no staged row is left (the sweeper never reaches such a group) the claim also removes the
+        rest of the group, so the next stale retry proceeds as new.
         """
 
         async def busy() -> HTTPException:
@@ -771,11 +802,18 @@ class ThirdPartyBookingsUseCase:
             raise await busy()
         collection = ExternalBooking.get_pymongo_collection()
         committed = await _committed_count(collection, existing.booking_id)
-        if committed is None or 0 < committed < persons_count:
-            # Partly committed: 409 and nothing is touched; the worker sweeper removes the
-            # group's staged rows (FR-33), after which the next retry takes over.
+        if committed is None:
             raise await busy()
-        if committed == 0:
+        if 0 < committed < persons_count:
+            staged = await _staged_count(collection, existing.booking_id)
+            if staged != 0:
+                # Partly committed with staged rows: 409 and nothing is touched; the worker
+                # sweeper removes the group (FR-33), after which the next retry takes over.
+                raise await busy()
+            # Partly committed and nothing staged: a removal that gave up (claim or failed
+            # commit) left it, and the sweeper never reaches a group without staged rows. The
+            # claim removes the rest of the group and answers busy (409).
+        if committed < persons_count:
             outcome = await _claim_stale_key(existing, persons_count)
             if outcome == "busy":
                 raise await busy()
