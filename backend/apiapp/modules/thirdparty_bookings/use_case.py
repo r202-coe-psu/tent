@@ -391,6 +391,36 @@ async def _complete_key(record_id: str | None, booking_id: str) -> None:
     )
 
 
+async def _settle_cancelled_commit(
+    collection: Any,
+    commit_task: asyncio.Task[Any],
+    *,
+    booking_id: str,
+    group_size: int,
+    record_id: str | None,
+) -> None:
+    """Settle a commit whose request was cancelled, then keep the group or release it (#614).
+
+    The flip task is awaited before anything is counted, because `update_many` may still be
+    applied after the cancel. A fully committed group means the booking exists: the key is
+    completed (a retry gets the original 201) and the rows are kept for the worker. Otherwise
+    the pending rows are removed and the key released, as on a commit failure.
+    Shielded and detached, so a second cancel cannot interrupt the decision.
+    """
+
+    async def settle() -> None:
+        await asyncio.wait({commit_task})
+        if not commit_task.cancelled():
+            commit_task.exception()  # mark retrieved; a failed flip is handled here, not raised
+        if await _all_rows_committed(collection, booking_id, group_size):
+            await _complete_key(record_id, booking_id)
+            return
+        await _cleanup_staged(collection, {"booking_id": booking_id, "state": "pending"})
+        await _release_key(record_id, booking_id)
+
+    await asyncio.shield(_detach(settle()))
+
+
 class ThirdPartyBookingsUseCase:
     async def _log(
         self,
@@ -900,11 +930,19 @@ class ThirdPartyBookingsUseCase:
             raise failure
 
         commit_error: Exception | None = None
+        # The flip runs as its own task so a cancelled request cannot leave it half-awaited:
+        # `update_many` may still be applied server-side after the cancel.
+        commit_task = _detach(_commit_group(collection, booking_id, len(rows)))
         try:
-            await _commit_group(collection, booking_id, len(rows))
+            await asyncio.shield(commit_task)
         except asyncio.CancelledError:
-            await _cleanup_staged(collection, {"booking_id": booking_id, "state": "pending"})
-            await _release_key(reserved_id, booking_id)
+            await _settle_cancelled_commit(
+                collection,
+                commit_task,
+                booking_id=booking_id,
+                group_size=len(rows),
+                record_id=reserved_id,
+            )
             raise
         except Exception as exc:
             commit_error = exc

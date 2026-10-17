@@ -254,12 +254,15 @@ async def _drain_detached() -> None:
         await asyncio.gather(*list(use_case._detached_tasks), return_exceptions=True)
 
 
-def _create_directly(body: dict[str, Any]) -> Any:
+def _create_directly(body: dict[str, Any], idempotency_key: str | None = None) -> Any:
     from apiapp.modules.thirdparty_bookings.use_case import ThirdPartyBookingsUseCase
 
     claims = ThirdPartyClaims(client_id="m2-test", module_name="M2", scopes=["booking-write"])
     return ThirdPartyBookingsUseCase().create_booking(
-        body=BookingCreateRequest.model_validate(body), claims=claims, client_ip="127.0.0.1"
+        body=BookingCreateRequest.model_validate(body),
+        claims=claims,
+        client_ip="127.0.0.1",
+        idempotency_key=idempotency_key,
     )
 
 
@@ -1737,3 +1740,134 @@ async def test_commit_ack_lost_without_a_key_answers_201(
     response = await client.post(URL, json=_group_payload(3), headers=GRANTED)
     assert response.status_code == 201
     assert len(await _rows(response.json()["result"]["booking_id"])) == 3
+
+
+async def test_cancel_after_the_flip_keeps_the_group_and_completes_the_key(
+    client: AsyncClient, shelters: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The request is cancelled after `update_many` applied the flip: the booking exists,
+    so the rows are kept and the key completes; a retry returns the original 201 body."""
+
+    collection = ExternalBooking.get_pymongo_collection()
+    real = type(collection).update_many
+    flipped, release = asyncio.Event(), asyncio.Event()
+
+    async def applied_then_held(self: Any, *args: Any, **kwargs: Any) -> Any:
+        if self.name == collection.name:
+            result = await real(self, *args, **kwargs)
+            flipped.set()
+            await release.wait()
+            return result
+        return await real(self, *args, **kwargs)
+
+    monkeypatch.setattr(type(collection), "update_many", applied_then_held)
+    request = asyncio.create_task(_create_directly(_group_payload(3), idempotency_key="cancel-1"))
+    await flipped.wait()
+    request.cancel()
+    await asyncio.sleep(0)
+    release.set()
+    with pytest.raises(asyncio.CancelledError):
+        await request
+    await _drain_detached()
+
+    rows = await _rows()
+    assert len(rows) == 3
+    assert all(row["committed"] is True for row in rows)
+    booking_id = rows[0]["booking_id"]
+    keys = await _keys()
+    assert [(key.status, key.booking_id) for key in keys] == [("completed", booking_id)]
+
+    monkeypatch.undo()
+    replay = await client.post(URL, json=_group_payload(3), headers=_idem("cancel-1"))
+    assert replay.status_code == 201
+    assert replay.json()["result"]["booking_id"] == booking_id
+    assert len(await _rows()) == 3  # the replay created nothing
+
+
+async def test_cancel_before_the_flip_releases_the_key(
+    client: AsyncClient, shelters: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Cancelled while the flip never applies: no booking exists, so rows are removed and
+    the key is released for a retry."""
+    collection = ExternalBooking.get_pymongo_collection()
+    real = type(collection).update_many
+    started, release = asyncio.Event(), asyncio.Event()
+
+    async def never_applied(self: Any, *args: Any, **kwargs: Any) -> Any:
+        if self.name == collection.name:
+            started.set()
+            await release.wait()
+            raise RuntimeError("flip never applied")
+        return await real(self, *args, **kwargs)
+
+    monkeypatch.setattr(type(collection), "update_many", never_applied)
+    request = asyncio.create_task(_create_directly(_group_payload(3), idempotency_key="cancel-2"))
+    await started.wait()
+    request.cancel()
+    await asyncio.sleep(0)
+    release.set()
+    with pytest.raises(asyncio.CancelledError):
+        await request
+    await _drain_detached()
+    assert await _rows() == []
+    assert await _keys() == []
+
+
+async def test_reserve_key_answers_the_row_that_won_the_race(
+    client: AsyncClient, shelters: None
+) -> None:
+    """DuplicateKeyError in _reserve_key: the winner's row is answered, nothing is inserted."""
+    from tent_model.external_booking_idempotency import ExternalBookingIdempotency
+
+    from apiapp.modules.thirdparty_bookings import use_case
+
+    person = use_case._Person(cid=CID, first_name="สมชาย", last_name="ใจดี", phone="0812345678")
+    request_hash = use_case._request_hash("SH001", [person])
+    now = datetime.now(UTC)
+    await ExternalBookingIdempotency(
+        id="IK-WON",
+        client_id="m2-test",
+        key="race-1",
+        request_hash=request_hash,
+        booking_id="BK-WON",
+        status="completed",
+        created_at=now,
+    ).insert()
+    claims = ThirdPartyClaims(client_id="m2-test", module_name="M2", scopes=["booking-write"])
+    answer = await use_case.ThirdPartyBookingsUseCase()._reserve_key(
+        key="race-1",
+        request_hash=request_hash,
+        booking_id="BK-LOSER",
+        now=now,
+        location_code="SH001",
+        persons_count=1,
+        claims=claims,
+        client_ip="127.0.0.1",
+    )
+    assert not isinstance(answer, str)
+    assert answer.result.booking_id == "BK-WON"
+    assert [key.booking_id for key in await _keys()] == ["BK-WON"]
+
+
+async def test_partial_flip_then_ack_lost_is_a_500_and_removes_the_group(
+    client: AsyncClient, shelters: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Only 2 of 3 rows flipped before the ack was lost: the group is not fully committed,
+    so the request fails with the sanitized 500, the pending rows are removed and the key
+    is released so a retry can proceed."""
+    collection = ExternalBooking.get_pymongo_collection()
+    real = type(collection).update_many
+
+    async def partial_then_lost(self: Any, *args: Any, **kwargs: Any) -> Any:
+        if self.name == collection.name:
+            flt = {**args[0], "person_seq": {"$lt": 2}}
+            await real(self, flt, *args[1:], **kwargs)
+            raise RuntimeError("ack lost")
+        return await real(self, *args, **kwargs)
+
+    monkeypatch.setattr(type(collection), "update_many", partial_then_lost)
+    response = await client.post(URL, json=_group_payload(3), headers=_idem("partial-1"))
+    _assert_sanitized_500(response)
+    assert await _rows() == []
+    assert await _keys() == []
+    assert await _log_statuses() == ["denied_internal_error"]

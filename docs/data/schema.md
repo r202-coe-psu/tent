@@ -2723,6 +2723,7 @@ Buffer ของ partner booking (M2) — FastAPI insert ตอนรับค�
 - ไม่มีแถว → ตรวจ shelter/duplicate ตามปกติ → insert แถว `in_progress` (unique; ถ้าชนกับรอบที่ชนะก่อน ให้ตอบตามแถวนั้น) → stage `external_bookings`
 - รอบแรกล้มโดยยังไม่มี booking (4xx/5xx) → **ลบแถว** (`release`) เพื่อให้ retry ทำได้
 - commit สำเร็จ หรือ G5 (flip ตอบ error แต่ทุกแถวของ `booking_id` `committed: true` ครบ `group_size`) → `status = completed`
+- รอบแรกถูกยกเลิกกลางคัน (client หลุด) ระหว่าง commit → รอ flip จบก่อนนับ: ทุกแถว `committed: true` ครบ → `status = completed` (แถว `external_bookings` คงไว้); ไม่ครบ → ลบแถว `pending` ของ `booking_id` และ **ลบแถว key** (เหมือน release)
 - ไม่มีการ migrate: collection ใหม่ สร้าง index ตอน Beanie init
 
 **ข้อจำกัด:** ถ้า process ถูก kill หลัง insert แถว `in_progress` และก่อน release/complete แถวจะค้างจนหมด TTL (24 ชม.); ระหว่างนั้น retry ของ key นั้นได้ 409 `idempotency_in_progress` ยังไม่มีการ sweep ฝั่ง worker สำหรับแถวนี้ (ประเมินเมื่อพบปัญหาจริง)

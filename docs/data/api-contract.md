@@ -593,6 +593,7 @@ Error   : { "status": <http>, "message": "…", "code"?: "…", "detail"?: "…"
   - **key เดิม body ต่าง** → **409** `idempotency_key_reused` (ไม่มีข้อมูลของ booking เดิมในคำตอบ)
   - **key เดิม body เดียวกัน แต่รอบแรกยังไม่จบ** → **409** `idempotency_in_progress` — partner ลองใหม่ได้ภายหลัง
   - รอบแรกล้มโดยยังไม่มี booking (4xx/5xx ก่อน commit) → key ถูกปล่อย ส่งซ้ำได้ทันที
+  - รอบแรกถูกตัดการเชื่อมต่อระหว่าง commit: ถ้ากลุ่มถูก commit ครบแล้ว → key เป็น completed และ retry ได้ 201 body เดิม; ถ้ายังไม่ครบ → key ถูกปล่อยเหมือนข้อด้านบน
   - **G5 (ทำเสมอ ไม่ขึ้นกับ key):** ถ้า commit ตอบ error แต่แถวของ `booking_id` ที่สร้างใหม่ `committed: true` ครบ `group_size` แล้ว → **201** แทน 500 (กรณี ack หายหลัง flip สำเร็จ); ไม่ครบ → 500 `internal_error` เดิม
   - ข้อจำกัด: ถ้า process ถูก kill ระหว่างรอบแรก key จะค้าง `in_progress` จนหมด TTL (24 ชม.) — ระหว่างนั้น retry ได้ 409 `idempotency_in_progress`
 
