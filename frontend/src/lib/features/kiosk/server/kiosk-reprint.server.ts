@@ -1,7 +1,9 @@
 import { z } from 'zod';
 import { isListedHouseholdMember, isReprintableStatus } from '../domain/check-in-status';
 import { normalizeKioskPhone, phoneVariants } from '../domain/phone';
+import { stayZoneName, type ZoneLabelSource } from '$lib/features/people/domain/people';
 import { shelterDbName } from '$lib/server/shelter-access-design';
+import { findMasterByCode } from '$lib/server/shelters.admin';
 import {
 	evacueeIdSchema,
 	getById,
@@ -29,7 +31,8 @@ export type KioskReprintInput = z.infer<typeof kioskReprintInputSchema>;
 export type KioskReprintMember = {
 	evacuee_id: string;
 	qr_payload: string;
-	label: KioskLabelIdentity;
+	/** `zone` is the member's current zone name, or null before Station 3 assigns one. */
+	label: KioskLabelIdentity & { zone: string | null };
 };
 
 /** No such primary for this phone in this shelter (unknown, other shelter, wrong channel). */
@@ -57,6 +60,15 @@ export class KioskReprintVerifyFailedError extends Error {
 
 function normalizeEvacueeId(id: string): string {
 	return `evacuee:${id.slice('evacuee:'.length).toUpperCase()}`;
+}
+
+/** The shelter's zones for naming a stay zone; none (codes print as-is) if the registry fails. */
+async function shelterZones(shelterCode: string): Promise<readonly ZoneLabelSource[]> {
+	try {
+		return (await findMasterByCode(shelterCode))?.zones ?? [];
+	} catch {
+		return [];
+	}
 }
 
 function citizenIdLast4(primary: EvacueeDoc): string | null {
@@ -103,7 +115,7 @@ export async function reprintKioskLabels(
 	if (last4 === null) throw new KioskReprintUnverifiableError();
 	if (last4 !== input.id_last4) throw new KioskReprintVerifyFailedError();
 
-	const members: KioskReprintMember[] = [];
+	const eligible: EvacueeDoc[] = [];
 	for (const evacueeId of new Set(input.evacuee_ids.map(normalizeEvacueeId))) {
 		const member = evacueeId === primary._id ? primary : await load(evacueeId);
 		if (
@@ -118,13 +130,18 @@ export async function reprintKioskLabels(
 		) {
 			continue;
 		}
-		members.push({
-			evacuee_id: member._id,
-			qr_payload: member._id,
-			label: toLabelIdentity(member)
-		});
+		eligible.push(member);
 	}
 	// Nothing left to print (all checked out meanwhile, say): never report a print of zero labels.
-	if (members.length === 0) throw new KioskReprintNotFoundError();
-	return members;
+	if (eligible.length === 0) throw new KioskReprintNotFoundError();
+
+	// Read the zone names only when someone already has a zone; a reprint never fails over them.
+	const zones = eligible.some((member) => member.current_stay?.zone?.trim())
+		? await shelterZones(shelterCode)
+		: [];
+	return eligible.map((member) => ({
+		evacuee_id: member._id,
+		qr_payload: member._id,
+		label: { ...toLabelIdentity(member), zone: stayZoneName(member.current_stay?.zone, zones) }
+	}));
 }

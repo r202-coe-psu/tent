@@ -121,7 +121,8 @@ export interface KioskReprintInput {
 export interface KioskReprintMember {
 	evacuee_id: string;
 	qr_payload: string;
-	label: { name: string; phone: string | null };
+	/** `zone` is the member's current zone name, or null before one is assigned. */
+	label: { name: string; phone: string | null; zone: string | null };
 }
 
 export interface KioskReprintResult {
