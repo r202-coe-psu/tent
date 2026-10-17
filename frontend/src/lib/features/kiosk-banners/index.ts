@@ -45,6 +45,7 @@ export {
 	useDeleteKioskBanner,
 	useKioskBanner,
 	useKioskBanners,
+	useReorderKioskBanners,
 	useSetKioskBannerStatus,
 	useUpdateKioskBanner
 } from './application/kiosk-banner.queries';

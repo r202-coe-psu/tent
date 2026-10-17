@@ -155,6 +155,38 @@ describe('remove', () => {
 	});
 });
 
+describe('reorder', () => {
+	it('PUTs the screen type and mapped items to the order route and parses the rows', async () => {
+		fetchMock.mockResolvedValueOnce(respond(200, [summary]));
+		const rows = await repo.reorder('SH 01', 'portrait', [
+			{ id: 'kiosk_banner:01J', rev: '1-abc' },
+			{ id: 'kiosk_banner:02K', rev: '3-def' }
+		]);
+		const { url, init } = lastCall();
+		expect(url).toBe(`${BASE}/order?shelter_code=SH%2001`);
+		expect(init.method).toBe('PUT');
+		expect(new Headers(init.headers).get('content-type')).toBe('application/json');
+		expect(JSON.parse(init.body as string)).toEqual({
+			screen_type: 'portrait',
+			items: [
+				{ id: 'kiosk_banner:01J', _rev: '1-abc' },
+				{ id: 'kiosk_banner:02K', _rev: '3-def' }
+			]
+		});
+		expect(rows).toHaveLength(1);
+		expect(rows[0]._rev).toBe('1-abc');
+	});
+
+	it('rejects a 409 with KioskBannerApiError', async () => {
+		fetchMock.mockResolvedValueOnce(
+			respond(409, { error: { code: 'CONFLICT', message: 'List changed' } })
+		);
+		const error = await repo.reorder('SH-01', 'compact', []).catch((e) => e);
+		expect(error).toBeInstanceOf(KioskBannerApiError);
+		expect(error).toMatchObject({ status: 409, code: 'CONFLICT' });
+	});
+});
+
 describe('imageUrl', () => {
 	it('points at the image route', () => {
 		expect(repo.imageUrl('kiosk_banner:01J')).toBe(`${BASE}/kiosk_banner%3A01J/image`);

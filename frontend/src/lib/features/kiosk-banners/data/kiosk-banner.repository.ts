@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { KioskScreenType } from '$lib/features/shared/domain/kiosk-screen';
 import { kioskBannerDocSchema, type KioskBannerInput } from '../domain/kiosk-banner';
 import type { BannerImagePayload } from './kiosk-banner-file';
 
@@ -42,6 +43,12 @@ export interface KioskBannerRepository {
 	): Promise<KioskBannerSummary>;
 	setStatus(id: string, rev: string, status: KioskBannerStatus): Promise<KioskBannerSummary>;
 	remove(id: string, rev: string): Promise<void>;
+	/** Saves a new order; `items` are all current banners of that screen type, in the new order. */
+	reorder(
+		shelterCode: string,
+		screenType: KioskScreenType,
+		items: { id: string; rev: string }[]
+	): Promise<KioskBannerSummary[]>;
 	/** URL of the stored image; pass `rev` so a replaced image is not served from cache. */
 	imageUrl(id: string, rev?: string): string;
 }

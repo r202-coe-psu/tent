@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { KioskScreenType } from '$lib/features/shared/domain/kiosk-screen';
 import type { KioskBannerInput } from '../domain/kiosk-banner';
 import type { BannerImagePayload } from './kiosk-banner-file';
 import {
@@ -75,6 +76,20 @@ export const kioskBannerRemoteRepository: KioskBannerRepository = {
 
 	async remove(id: string, rev: string) {
 		await request(`${itemPath(id)}?rev=${encodeURIComponent(rev)}`, { method: 'DELETE' });
+	},
+
+	async reorder(
+		shelterCode: string,
+		screenType: KioskScreenType,
+		items: { id: string; rev: string }[]
+	) {
+		const url = `${BASE}/order?shelter_code=${encodeURIComponent(shelterCode)}`;
+		const body = {
+			screen_type: screenType,
+			items: items.map(({ id, rev }) => ({ id, _rev: rev }))
+		};
+		const response = await request(url, jsonInit('PUT', body));
+		return z.array(kioskBannerSummarySchema).parse(await response.json());
 	},
 
 	imageUrl(id: string, rev?: string) {

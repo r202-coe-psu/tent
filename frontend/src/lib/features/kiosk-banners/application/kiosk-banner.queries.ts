@@ -1,5 +1,6 @@
 import { createMutation, createQuery, useQueryClient } from '@tanstack/svelte-query';
 import { toast } from 'svelte-sonner';
+import type { KioskScreenType } from '$lib/features/shared/domain/kiosk-screen';
 import type { KioskBannerInput } from '../domain/kiosk-banner';
 import type { BannerImagePayload } from '../data/kiosk-banner-file';
 import { kioskBannerRemoteRepository } from '../data/kiosk-banner.remote';
@@ -95,4 +96,14 @@ export const useDeleteKioskBanner = (repo: KioskBannerRepository = kioskBannerRe
 	useBannerMutation(
 		(input: { id: string; rev: string }) => repo.remove(input.id, input.rev),
 		'ลบแบนเนอร์ไม่สำเร็จ'
+	);
+
+export const useReorderKioskBanners = (repo: KioskBannerRepository = kioskBannerRemoteRepository) =>
+	useBannerMutation(
+		(input: {
+			shelterCode: string;
+			screenType: KioskScreenType;
+			items: { id: string; rev: string }[];
+		}) => repo.reorder(input.shelterCode, input.screenType, input.items),
+		'บันทึกลำดับไม่สำเร็จ'
 	);
