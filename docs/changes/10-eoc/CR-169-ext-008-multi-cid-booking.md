@@ -21,6 +21,7 @@ affects:
   - frontend/src/lib/features/people/domain/people.ts (Evacuee type + evacueeInputSchema + createEvacuee schema_v 14) + people domain tests
   - scripts/smoke_test_partner_api.py (test_m2_bookings)
   - frontend/fastapi.json + openapi.d.ts (pnpm openapi:update)
+  - docs/changes/10-eoc/CR-154-m2-partner-booking-residency.md (FR-33 superseded บางส่วน)
 ---
 
 # CR-169 — EXT-008 รับหลาย CID ใน booking เดียว
@@ -142,9 +143,21 @@ affects:
 
 ### C5 — Cancel (EXT-009) / Status (EXT-010)
 
-- **FR-40** `POST /external/bookings/{booking_id}/cancel` ยกเลิก **ทั้งกลุ่ม**: ทุกแถวของ `booking_id` ที่ `client_id` ตรง token; กฎ CR-154 FR-31/32/33 ใช้ต่อแถว; ถ้ามีคนใดคนหนึ่งยกเลิกไม่ได้ (เช่น check-in แล้ว) → 409 `booking_not_cancellable` และ **ไม่เปลี่ยนแถวไหน**
+- ~~**FR-40** `POST /external/bookings/{booking_id}/cancel` ยกเลิก **ทั้งกลุ่ม**: ทุกแถวของ `booking_id` ที่ `client_id` ตรง token; กฎ CR-154 FR-31/32/33 ใช้ต่อแถว; ถ้ามีคนใดคนหนึ่งยกเลิกไม่ได้ (เช่น check-in แล้ว) → 409 `booking_not_cancellable` และ **ไม่เปลี่ยนแถวไหน**~~
+  **Superseded by 2026-10-17 (#592):** `POST /external/bookings/{booking_id}/cancel` ยกเลิก **ทั้งกลุ่ม** เฉพาะแถวที่ `client_id` ตรง token ตามลำดับนี้
+  - 1. ยกเลิกเฉพาะแถว **open** = `state = pending` หรือ `state = written` ที่ `cancel_requested = false` · แถว **finished** = `cancelled`, `rejected`, หรือ `written` ที่ `cancel_requested = true` → **ข้าม** และไม่เขียนทับ `cancel_reason` เดิม
+  - 2. แถว open แต่ละแถวใช้ CR-154 FR-31/FR-32: `pending` → `cancelled`; `written` ที่ stay ยังเป็น `pre_registered` → `cancel_requested = true`
+  - 3. ถ้ามีแถว open แถวใดยกเลิกไม่ได้ (stay ผ่าน `pre_registered` แล้ว เช่น check-in) → 409 `booking_not_cancellable` และ **ไม่เปลี่ยนแถวไหนเลย** (all-or-nothing คงเดิม)
+  - 4. เมื่อไม่มีแถว open เหลือ: มีแถว `cancelled` หรือ `cancel_requested` อย่างน้อย 1 แถว → 200 (idempotent); ทุกแถวเป็น `rejected` → 409 `booking_not_cancellable`
+  - กฎนี้ใช้กับ legacy single-person booking ด้วย — **partially supersede CR-154 FR-33** (ยกเลิกซ้ำ booking ที่ `cancelled` แล้วตอบ 200 แทน 409; `rejected` ยังตอบ 409)
+  - ผลข้างเคียง: cancel กลุ่มที่ล้มกลาง phase 2 แล้ว retry สำเร็จได้ เพราะแถวที่ยกเลิกไปแล้วถูกข้าม (สถานการณ์ที่ 2 ของ #592)
 - **FR-41** worker `_process_cancel` ยกเลิก evacuee แต่ละคนตามเดิม; `_cancel_household_if_empty` อ่าน `household_id` ปัจจุบันของ evacuee จึงทำงานถูกต้องแม้ staff รวม household ไปแล้ว
-- **FR-42** `GET /external/bookings/{booking_id}` คง field เดิม (`booking_status` = aggregate: ทุกแถว cancelled → `CANCELLED`, มี rejected → `REJECTED`, อื่น ๆ → `BOOKED`) และเพิ่ม `persons: [{index, booking_status, reject_reason}]` (additive; **ไม่มี CID/ชื่อ**) `[DECIDED 2026-10-15: คืน persons[] รายคน]`
+- **FR-42** `GET /external/bookings/{booking_id}` คง field เดิม (`booking_status` = aggregate: ~~ทุกแถว cancelled → `CANCELLED`, มี rejected → `REJECTED`, อื่น ๆ → `BOOKED`~~) และเพิ่ม `persons: [{index, booking_status, reject_reason}]` (additive; **ไม่มี CID/ชื่อ**) `[DECIDED 2026-10-15: คืน persons[] รายคน]`
+  - **Superseded by 2026-10-17 (#592):** `booking_status` (aggregate) ประเมินตามลำดับนี้
+    - 1. ไม่มีแถว open และมีแถว `cancelled` (รวม `cancel_requested`) อย่างน้อย 1 แถว → `CANCELLED`
+    - 2. อื่น ๆ ถ้ามีแถว `rejected` อย่างน้อย 1 แถว → `REJECTED`
+    - 3. อื่น ๆ → `BOOKED`
+  - `persons[]` ไม่เปลี่ยนจากข้อความเดิม
 
 > **[DECIDED 2026-10-15 — D3]** cancel ทั้งกลุ่ม; รายคน (`person_seq` ใน path/body) เป็น follow-up ถ้า M2 ต้องการ
 
@@ -176,7 +189,13 @@ affects:
 - [ ] ยิง 2 request พร้อมกันที่มี CID ทับกัน ได้ 201 หนึ่ง / 409 หนึ่ง และไม่มีแถว `committed=false` ค้าง
 - [ ] API ล้มกลางการ insert (จำลอง) → worker ไม่หยิบกลุ่มนั้น และ sweeper ลบแถว `committed=false` ภายใน 60 วินาที
 - [ ] worker พบ duplicate ตอนเขียน → ทั้งกลุ่ม `rejected`, ไม่มี doc ใน CouchDB, PII ถูกล้างทุกแถว
-- [ ] cancel ตอน pending → ไม่มี doc ถูกเขียน · cancel หลัง written → evacuee ทุกคนและ household ของแต่ละคน `cancelled` · cancel หลังมีคน check-in → 409 และไม่เปลี่ยนแถวไหน · cancel หลัง staff รวม household แล้ว ยังยกเลิก evacuee ถูกต้อง
+- [ ] cancel ตอน pending → ไม่มี doc ถูกเขียน · cancel หลัง written → evacuee ทุกคนและ household ของแต่ละคน `cancelled` · cancel หลังมีคน check-in (แถว open) → 409 และไม่เปลี่ยนแถวไหน · cancel หลัง staff รวม household แล้ว ยังยกเลิก evacuee ถูกต้อง
+- [ ] cancel กลุ่มที่มีแถว finished ปนอยู่ (เช่น `rejected` 1 คน + open 2 คน) → ยกเลิกเฉพาะแถว open · แถว finished ไม่ถูกแก้ไข และ `cancel_reason` เดิมไม่ถูกเขียนทับ · ตอบ 200 (#592)
+- [ ] cancel ซ้ำกลุ่มที่ยกเลิกแล้ว (ไม่มีแถว open และมี `cancelled`/`cancel_requested` ≥ 1) → 200 idempotent ไม่เขียน doc ซ้ำ · legacy single-person booking เช่นเดียวกัน (partially supersede CR-154 FR-33) (#592)
+- [ ] cancel กลุ่มที่ทุกแถวเป็น `rejected` → 409 `booking_not_cancellable` (#592)
+- [ ] cancel กลุ่มที่มีคน check-in แล้ว (แถว open ที่ stay ผ่าน `pre_registered`) → 409 `booking_not_cancellable` และ **ไม่เปลี่ยนแถวไหนเลย** แม้แถว open อื่นในกลุ่มจะยกเลิกได้ (#592)
+- [ ] retry cancel หลัง phase 2 ล้มกลางทาง (บางแถว `cancelled` แล้ว) → 200 สำเร็จ โดยข้ามแถวที่จบแล้ว (#592)
+- [ ] EXT-010 `booking_status`: ไม่มีแถว open และมี `cancelled`/`cancel_requested` ≥ 1 → `CANCELLED` (แม้มีแถว `rejected` ปนอยู่) · มี `rejected` และไม่เข้าเงื่อนไข `CANCELLED` → `REJECTED` · แถว open ล้วน → `BOOKED` (#592)
 - [ ] staff แก้ evacuee และรวม household แล้ว `booking_ref` ยังอยู่ (test)
 - [ ] หลัง written/cancelled/rejected ไม่เหลือ `cid`/`phone`/`first_name`/`last_name` plaintext ในทุกแถวของกลุ่ม
 - [ ] token ไม่มี `booking-write` → 403 `insufficient_scope` (เหมือนเดิม)
@@ -220,3 +239,12 @@ affects:
 - 2026-10-17 — เจ้าของโครงการ (review รอบ 2 ของ PR #601, track ใน CR นี้): **D1** แก้ FR-21 — ถ้าบางคนของกลุ่มเข้า CouchDB แล้วและรอบ retry พบ CID ซ้ำ ให้ reject เฉพาะคนที่ซ้ำ คนที่เขียนแล้วคงไว้ คนอื่นเขียนต่อ (ไม่ reject ทั้งกลุ่ม เพราะจะทิ้งคนที่ pre-register ไปแล้วไว้ลอย) · **D2** กรณี API ยกเลิกทั้งกลุ่มหลัง worker ล่มกลางทาง → stay ค้าง `pre_registered` ไม่มีแถว `pending` เหลือให้ worker กลับมาจัดการ: **ยอมรับเป็นความเสี่ยง** ย้ายไป #595 (ต้องเคาะ Mango index `['type','booking_ref']` ร่วมกับ #603) · **D3** บันทึกผลวัดเวลา (local single-host, ไม่ใช่ production benchmark): `_persist_group` 100 คน ≈ 0.2 วิ ที่ ~1.6k docs ใน shelter DB และ ≈ 1.0 วิ ที่ ~31.6k docs (Mango duplicate `find` ใช้ index `['type','person_id.number']` = `evacuee-type-person-id-idx` เมื่อมี — index นี้นิยามใน `KIOSK_LOOKUP_MANGO_INDEXES` และ deploy ตอนสร้างศูนย์ / `redeploy-access` / seed; ตรวจ `_explain` ด้วย selector จริงของ worker บนฐานทดลองที่สร้าง index นี้แล้วเลือก `evacuee-type-person-id-idx` แต่ตรวจ local 2026-10-17 พบ `shelter_sh001`–`sh004` **ไม่มี index นี้** (`_explain` เลือก `_all_docs`) → ตัวเลขข้างต้นคือกรณี full scan; ยังไม่ได้วัดเวลาบนฐานที่ provision index ครบ — ต้อง `redeploy-access` ฐาน local/staging ก่อนวัดซ้ำ) → ไม่ลด `MAX_PERSONS`
 - 2026-10-17 — เจ้าของโครงการ (review รอบ 3 ของ PR #601): **D4** แก้ FR-21 — แถวที่ยัง `pending` แต่ doc เข้า CouchDB แล้ว และรอบ retry พบว่า CID ของแถวนั้นซ้ำกับผู้ถือรายอื่น → reject แถวนั้นด้วย (`rejected` / `duplicate` + ล้าง PII) และยกเลิก stay ใน CouchDB (ไม่ให้มีผู้ถือ CID ซ้ำ — FR-50; แถวที่ `written` แล้วไม่แตะ) · **G5** (commit ack หายหลัง flip สำเร็จ → partner ได้ 500 แล้ว retry ได้ 409) ย้ายไป #595 · แก้ migration note (worker เดิมเขียน `schema_v` 12 ไม่ใช่ 13) และหมายเหตุเวลา D3 (index `['type','person_id.number']`) ตามข้างต้น
 - 2026-10-17 — เจ้าของโครงการ (review รอบ 4 ของ PR #601): **H8** ยืนยันพฤติกรรม D4 — worker ยกเลิก stay เฉพาะตอนที่ยังเป็น `pre_registered`; ถ้า staff เช็กอินคนนั้นไปแล้ว แถวจองถูก reject แต่ไม่ยกเลิกคน (สอดคล้อง FR-53 `not_cancellable`) และ staff แก้ CID ซ้ำเอง · เพิ่มข้อความใน FR-21 (ไม่แก้โค้ด)
+- 2026-10-17 — เจ้าของโครงการ (#592, track ใน CR นี้): แก้ FR-40/FR-42 ตรง ๆ — เหตุผล: หลัง D1/D4 worker อาจ reject บางคนในกลุ่ม ภายใต้ FR-40 เดิม partner ยกเลิกคนที่เหลือผ่าน API ไม่ได้เลย
+  - **FR-40:** ยกเลิกเฉพาะแถว open (`pending`, `written` ที่ `cancel_requested = false`); ข้ามแถว finished (`cancelled`, `rejected`, `written` ที่ `cancel_requested = true`) และไม่เขียนทับ `cancel_reason`
+  - **FR-40 all-or-nothing:** แถว open ที่ยกเลิกไม่ได้ → 409 `booking_not_cancellable` ไม่เปลี่ยนแถวไหน (คงเดิม)
+  - **FR-40 ไม่เหลือแถว open:** มี `cancelled`/`cancel_requested` ≥ 1 → 200 idempotent; ทุกแถว `rejected` → 409 `booking_not_cancellable`
+  - **FR-40 legacy single-person:** ใช้กฎเดียวกัน → partially supersede CR-154 FR-33 (ยกเลิกซ้ำ `cancelled` ตอบ 200 แทน 409; `rejected` ยัง 409)
+  - **FR-42:** `booking_status` aggregate ตามลำดับ: ไม่มีแถว open และมี cancelled ≥ 1 → `CANCELLED`; มี `rejected` → `REJECTED`; อื่น → `BOOKED` · `persons[]` ไม่เปลี่ยน
+  - **ผลข้างเคียง:** cancel ที่ล้มกลาง phase 2 แล้ว retry สำเร็จได้ (สถานการณ์ที่ 2 ของ #592)
+  - **นอกขอบเขต:** ล้าง stay `pre_registered` ค้างของแถว rejected → #613 · cancel แบบ atomic (`update_many`) → #612
+  - implementation ยังไม่ลงโค้ด: backend `thirdparty_bookings/use_case.py` + tests (ติดตามใน #592)
