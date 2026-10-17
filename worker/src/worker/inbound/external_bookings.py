@@ -17,7 +17,12 @@ touches CouchDB (FR-54). This loop:
   still ``pre_registered`` (FR-53), mirroring the staff
   ``cancelEvacueePreRegistration`` path (stay → ``cancelled`` + ``audit`` doc, and the
   household → ``cancelled`` once no member is left ``pre_registered``). Staff cancel
-  writes no ``movement`` doc, so neither does this.
+  writes no ``movement`` doc, so neither does this. A flag that still carries a
+  ``cancel_flag_token`` belongs to an EXT-009 request that has not finished and is
+  never acted on (see ``revert_abandoned_cancel_flags``).
+* abandoned cancel flags → a ``cancel_flag_token`` older than
+  ``CANCEL_FLAG_TTL_SECONDS`` is a request that died or failed to revert its flag; the
+  flag is reverted without cancelling anything (the partner never got a 200).
 
 Failure handling: one broken group or cancel row never skips the rest of a poll, and a
 group whose CouchDB write keeps failing is retried with an in-memory exponential
@@ -104,6 +109,14 @@ POLL_INTERVAL_SECONDS = 3
 
 #: A `committed=False` row older than this was abandoned by a crashed API (FR-33).
 STAGED_TTL_SECONDS = 60
+
+#: A ``cancel_flag_token`` older than this belongs to an EXT-009 request that died or could
+#: not revert its flag (CR-169 decision sync 2026-10-17, review round 2 of PR #635). The API
+#: has no hold-time limit on its flags (a 60 s rule was rejected, review round 3), so a live
+#: request whose token clear runs past this TTL (Mongo slower than about a minute, or host
+#: clock skew) may have its flags reverted here while it answers 200: an accepted residual,
+#: closed only by #616.
+CANCEL_FLAG_TTL_SECONDS = 120
 
 #: First retry delay after a failed CouchDB write; doubles per failure up to the cap.
 BACKOFF_BASE_SECONDS = 6.0
@@ -437,7 +450,72 @@ _CHANGED = "changed"
 _FAILED = "failed"
 
 _PENDING = {"state": "pending"}
-_CANCEL_DUE = {"state": "written", "cancel_requested": True}
+# `cancel_flag_token: None` also matches rows without the field (flags set before #612).
+# A tokened flag is still owned by an in-flight EXT-009 request, which may yet revert it:
+# acting on it could cancel a stay although the partner gets a 409/500 (CR-169 decision
+# sync 2026-10-17, review round 2 of PR #635). The selector and every transition guard
+# share this filter so they cannot drift apart.
+_CANCEL_DUE = {"state": "written", "cancel_requested": True, "cancel_flag_token": None}
+
+
+async def revert_abandoned_cancel_flags() -> int:
+    """Revert ``cancel_requested`` flags whose request token is stale. Returns rows reverted.
+
+    An EXT-009 request clears its token when it succeeds or when it reverts its own flag.
+    A token still set after ``CANCEL_FLAG_TTL_SECONDS`` means the request's revert kept
+    failing or its process died: the partner never got a 200, so the flag is undone
+    (``cancel_requested=False``, reason/token/set time cleared) and nothing is cancelled in
+    CouchDB. Each write is guarded on the token observed here, so a request that finishes
+    meanwhile (its commit or revert clears the token first) is left alone, and an API revert
+    racing this one writes the same values.
+
+    Age is taken from ``cancel_flag_set_at`` (API clock vs. worker clock; skew only shifts
+    the effective TTL). A token without a set time (rows flagged before the field existed)
+    falls back to ``updated_at``, so such a row cannot stay tokened forever. Logs booking
+    ids only.
+    """
+    collection = ExternalBooking.get_pymongo_collection()
+    cutoff = datetime.now(UTC) - timedelta(seconds=CANCEL_FLAG_TTL_SECONDS)
+    stale = await collection.find(
+        {
+            "state": "written",
+            "cancel_requested": True,
+            "cancel_flag_token": {"$ne": None},
+            "$or": [
+                {"cancel_flag_set_at": {"$lt": cutoff}},
+                {"cancel_flag_set_at": None, "updated_at": {"$lt": cutoff}},
+            ],
+        },
+        {"_id": 1, "booking_id": 1, "cancel_flag_token": 1},
+    ).to_list()
+    reverted: list[str] = []
+    for row in stale:
+        result = await collection.update_one(
+            {
+                "_id": row["_id"],
+                "state": "written",
+                "cancel_requested": True,
+                "cancel_flag_token": row["cancel_flag_token"],
+            },
+            {
+                "$set": {
+                    "cancel_requested": False,
+                    "cancel_reason": None,
+                    "cancel_flag_token": None,
+                    "cancel_flag_set_at": None,
+                    "updated_at": datetime.now(UTC),
+                }
+            },
+        )
+        if result.modified_count:
+            reverted.append(str(row["booking_id"]))
+    if reverted:
+        logger.warning(
+            "Reverted %d abandoned cancel flag(s) from booking_id(s) %s",
+            len(reverted),
+            ", ".join(sorted(set(reverted))),
+        )
+    return len(reverted)
 
 
 async def sweep_stale_staged() -> int:
@@ -1111,6 +1189,10 @@ async def _process_cancel(couch: CouchClient, booking: ExternalBooking) -> bool:
     """Cancel a ``written`` booking's pre-registration (FR-53). False = retry next poll."""
     if booking.state != "written" or not booking.cancel_requested:
         return False
+    if booking.cancel_flag_token is not None:
+        # Still owned by an in-flight EXT-009 request: not due yet, and not a failure
+        # (no backoff). `_find_due` already excludes these; this guards direct callers.
+        return True
     database = shelter_db_name(booking.shelter_code)
     if not await couch.database_exists(database):
         logger.warning(
@@ -1465,7 +1547,7 @@ async def _find_due() -> list[ExternalBooking]:
             "committed": {"$ne": False},
             "$or": [
                 {"state": "pending"},
-                {"state": "written", "cancel_requested": True},
+                _CANCEL_DUE,
             ],
         }
     ).to_list()
@@ -1560,6 +1642,10 @@ async def run_external_booking_inbound_loop(
                 await reconcile_terminal_bookings(couch, reconcile_health)
             except Exception:
                 logger.exception("Terminal booking reconcile pass failed")
+        try:
+            await revert_abandoned_cancel_flags()
+        except Exception:
+            logger.exception("Abandoned cancel flag revert failed")
         try:
             due = await _find_due()
         except Exception:

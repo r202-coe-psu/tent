@@ -35,6 +35,7 @@ from worker.inbound.external_bookings import (
     build_evacuee_doc,
     build_household_doc,
     partner_actor,
+    revert_abandoned_cancel_flags,
     sweep_stale_staged,
 )
 
@@ -2508,6 +2509,174 @@ async def test_logged_exception_keeps_the_innermost_frame_location_but_no_values
     assert "Traceback" not in caplog.text
     assert "bad doc" not in caplog.text  # the exception message is never logged
     _assert_no_pii_logged(caplog.text)
+
+
+# ------------------------------------- CR-169 #612 review round 2: in-flight cancel tokens
+
+
+async def _insert_tokened(
+    *, row_id: str = BOOKING_ID, token: str = "req-1", set_at: datetime | None
+) -> ExternalBooking:
+    """A written row flagged by an EXT-009 request that still holds its token."""
+    return await _insert(
+        id=row_id,
+        cid_hash=f"hash-{row_id}",
+        state="written",
+        cancel_requested=True,
+        cancel_reason="partner cancel",
+        cancel_flag_token=token,
+        cancel_flag_set_at=set_at,
+        cid=None,
+        first_name=None,
+        last_name=None,
+        phone=None,
+        evacuee_id="evacuee:E1",
+        household_id="household:H1",
+    )
+
+
+async def test_due_selector_skips_flags_that_still_carry_a_token(db):
+    """A tokened flag is owned by an in-flight request that may still revert it."""
+    await _insert_tokened(set_at=datetime.now(UTC))
+    await _insert(
+        id="BP-untokened",
+        cid_hash="h-untokened",
+        state="written",
+        cancel_requested=True,
+    )
+    assert [booking.id for booking in await _find_due()] == ["BP-untokened"]
+
+
+async def test_process_cancel_never_acts_on_a_tokened_flag(db):
+    booking = await _insert_tokened(set_at=datetime.now(UTC))
+    couch = _couch(doc=_evacuee("pre_registered"))
+
+    assert await _process_cancel(couch, booking) is True
+
+    couch.get_doc.assert_not_awaited()
+    couch.put_doc.assert_not_awaited()
+    row = await _row()
+    assert (row["state"], row["cancel_requested"], row["cancel_flag_token"]) == (
+        "written",
+        True,
+        "req-1",
+    )
+
+
+async def test_untokened_flag_is_still_cancelled(db):
+    """A flag whose request finished (token cleared) is processed exactly as before."""
+    booking = await _insert_written()
+    assert booking.cancel_flag_token is None
+    assert [b.id for b in await _find_due()] == [BOOKING_ID]
+    couch = _couch()
+    couch.get_doc = AsyncMock(return_value=_evacuee("cancelled"))
+
+    assert await _process_cancel(couch, booking) is True
+
+    row = await _row()
+    assert (row["state"], row["cancel_requested"]) == ("cancelled", False)
+
+
+async def test_stale_token_is_reverted_without_cancelling_anything(db):
+    """Older than the TTL: the request is gone and the partner never got a 200."""
+    old = datetime.now(UTC) - timedelta(seconds=inbound.CANCEL_FLAG_TTL_SECONDS + 5)
+    await _insert_tokened(set_at=old)
+
+    assert await revert_abandoned_cancel_flags() == 1
+
+    row = await _row()
+    assert (
+        row["state"],
+        row["cancel_requested"],
+        row["cancel_reason"],
+        row["cancel_flag_token"],
+        row["cancel_flag_set_at"],
+    ) == ("written", False, None, None, None)
+    assert row["updated_at"].replace(tzinfo=UTC) > old
+    # Reverted, not cancelled: the row is open again and nothing is due for the worker.
+    assert await _find_due() == []
+
+
+async def test_fresh_token_is_not_reverted(db):
+    await _insert_tokened(set_at=datetime.now(UTC) - timedelta(seconds=30))
+
+    assert await revert_abandoned_cancel_flags() == 0
+
+    row = await _row()
+    assert (row["cancel_requested"], row["cancel_flag_token"]) == (True, "req-1")
+
+
+async def test_token_without_set_time_falls_back_to_updated_at(db):
+    """A tokened row lacking `cancel_flag_set_at` is aged by `updated_at` (OLD here)."""
+    await _insert_tokened(set_at=None)
+
+    assert await revert_abandoned_cancel_flags() == 1
+    assert (await _row())["cancel_flag_token"] is None
+
+
+async def test_stale_revert_is_guarded_on_the_observed_token(db, monkeypatch):
+    """The request finishes between the worker's read and its write: the write misses."""
+    old = datetime.now(UTC) - timedelta(seconds=inbound.CANCEL_FLAG_TTL_SECONDS + 5)
+    await _insert_tokened(set_at=old)
+    collection = ExternalBooking.get_pymongo_collection()
+    real = type(collection).update_one
+
+    async def commit_first(self, flt, *args, **kwargs):
+        if self.name == collection.name and flt.get("cancel_flag_token") == "req-1":
+            # The API's commit clears the token just before the worker's guarded write.
+            await real(
+                self,
+                {"_id": BOOKING_ID},
+                {"$set": {"cancel_flag_token": None, "cancel_flag_set_at": None}},
+            )
+        return await real(self, flt, *args, **kwargs)
+
+    monkeypatch.setattr(type(collection), "update_one", commit_first)
+
+    assert await revert_abandoned_cancel_flags() == 0
+
+    row = await _row()
+    # The committed flag survives and is now due for the normal cancel path.
+    assert (row["cancel_requested"], row["cancel_flag_token"]) == (True, None)
+    assert [b.id for b in await _find_due()] == [BOOKING_ID]
+
+
+async def test_stale_revert_logs_booking_ids_only(db, caplog):
+    old = datetime.now(UTC) - timedelta(seconds=inbound.CANCEL_FLAG_TTL_SECONDS + 5)
+    await _insert_tokened(set_at=old)
+
+    with caplog.at_level(logging.WARNING, logger=inbound.logger.name):
+        await revert_abandoned_cancel_flags()
+
+    text = "\n".join(record.getMessage() for record in caplog.records)
+    assert BOOKING_ID in text
+    for secret in (CID, PHONE, "สมชาย", "req-1"):
+        assert secret not in text
+
+
+async def test_loop_reverts_abandoned_flags_and_survives_its_failure(db, monkeypatch):
+    monkeypatch.setattr(inbound, "POLL_INTERVAL_SECONDS", 0)
+    calls: list[int] = []
+
+    async def failing_revert():
+        calls.append(1)
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(inbound, "revert_abandoned_cancel_flags", failing_revert)
+    await _insert()
+    stop = asyncio.Event()
+    couch = _couch()
+
+    async def bulk_then_stop(_database, docs):
+        stop.set()
+        return _bulk_ok(_database, docs)
+
+    couch.bulk_docs = AsyncMock(side_effect=bulk_then_stop)
+
+    await inbound.run_external_booking_inbound_loop(couch, stop_event=stop)
+
+    assert calls
+    assert (await _row())["state"] == "written"
 
 
 # #613 reconcile pass over terminal rows -------------------------------------------
