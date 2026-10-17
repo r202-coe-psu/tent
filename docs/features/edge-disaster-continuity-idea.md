@@ -127,7 +127,7 @@ related:
 | 0.2 | OD-2 network-only | ✅ locked |
 | 0.3 | OD-3 login ใหม่ได้ (ไม่บังคับ cookie continuity) | ✅ locked |
 | 0.4 | OD-4 ops UI สถานะ shelter + WAN ที่ศูนย์ | ✅ locked (รายละเอียดใน CR-064) |
-| 0.5 | OD-5 CR + ขยาย T-54 + Notion | ✅ [CR-064](../changes/CR-064-edge-disaster-continuity.md) proposed · T-54 updated · Notion sync |
+| 0.5 | OD-5 CR + ขยาย T-54 + Notion | ✅ [CR-064](../changes/01-core/CR-064-edge-disaster-continuity.md) proposed · T-54 updated · Notion sync |
 | 0.6 | OD-6 replicator credential = central admin ชุดเดียว | ✅ decision sync 2026-10-05 |
 
 
@@ -270,6 +270,6 @@ related:
 | --- | --- |
 | 2026-08-12 | Parked idea: mini PC + warm sync + same-domain LAN cutover + failback; ตัด scale user บน edge |
 | 2026-08-12 | **Locked OD-1..OD-5:** staff stack ยกเว้น FastAPI/Mongo · network-only · re-login OK · ops UI shelter+WAN · track = CR + T-54 + Notion |
-| 2026-08-12 | Elevated: [CR-064](../changes/CR-064-edge-disaster-continuity.md) proposed · T-54 Package B · Notion T-54 sync |
+| 2026-08-12 | Elevated: [CR-064](../changes/01-core/CR-064-edge-disaster-continuity.md) proposed · T-54 Package B · Notion T-54 sync |
 | 2026-10-05 | **Decision sync OD-6:** edge ใช้ central CouchDB admin ชุดเดียว (`CENTRAL_REPL_*`) กับทุก replication job (A5) — ปิดคำถามเปิดข้อ 2 ใน [couchdb-replication/README.md](../couchdb-replication/README.md) |
 
