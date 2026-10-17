@@ -1524,6 +1524,42 @@ async def test_cancel_group_check_in_after_flagging_reverts_our_flags(
     assert await _log_statuses() == ["denied_booking_not_cancellable"]
 
 
+async def test_cancel_group_conflict_with_failing_revert_keeps_409(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """2a 409 path: the revert of our flags fails. The 409 still wins, the failure is logged.
+
+    A check-in lands after the flag write, so the stay re-read reports not cancellable and the
+    revert runs. The revert raises: the response stays `booking_not_cancellable` (not a 500),
+    and the log line carries only the booking id and the error type, never PII.
+    """
+    from apiapp.modules.thirdparty_bookings import use_case
+
+    await _person(status="pre_registered", person_id="evacuee:BK-GROUP001-1")
+    await _group(3, ["pending", "written", "pending"])
+    _around_update_many(
+        monkeypatch,
+        when=lambda flt: flt.get("cancel_requested") is False,
+        after=lambda: _set_stay("evacuee:BK-GROUP001-1", "active"),
+    )
+
+    async def failing_revert(self: Any, collection: Any, ids: list[str], now: Any) -> None:
+        raise RuntimeError("revert boom")
+
+    monkeypatch.setattr(use_case.ThirdPartyBookingsUseCase, "_revert_flags", failing_revert)
+    with caplog.at_level(logging.ERROR):
+        response = await client.post(
+            _cancel_url("BK-GROUP001"), json={"reason": "r"}, headers=GRANTED
+        )
+    assert response.status_code == 409
+    assert response.json()["code"] == "booking_not_cancellable"
+    messages = [r.getMessage() for r in caplog.records if "flag revert failed" in r.getMessage()]
+    assert messages == ["cancel flag revert failed (booking_id=BK-GROUP001 error=RuntimeError)"]
+    for secret in (CID, "สมชาย"):
+        assert secret not in "\n".join(messages)
+    assert await _log_statuses() == ["denied_booking_not_cancellable"]
+
+
 async def test_cancel_group_foreign_flag_set_mid_request_is_left_alone(
     client: AsyncClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:

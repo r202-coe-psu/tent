@@ -859,8 +859,10 @@ class ThirdPartyBookingsUseCase:
                 _stay_allows_cancel(statuses.get(row.evacuee_id) if row.evacuee_id else None)
                 for row in ours
             )
-        if not ok and flagged:
-            await self._revert_flags(collection, sorted(flagged), now)
+        if not ok:
+            # The 409 must win over a failing revert: `_revert_after_error` logs a failed revert
+            # (booking_id and error type only) and never replaces the conflict outcome.
+            await self._revert_after_error(collection, ours, now)
         return ok
 
     async def _flagged_by(self, collection: Any, ids: list[str], now: datetime) -> list[str]:
@@ -894,8 +896,9 @@ class ThirdPartyBookingsUseCase:
     ) -> None:
         """Revert the flags of `rows` before an unexpected error is re-raised.
 
-        Called from an exception handler, so a failing revert is logged (booking_id and error
-        type only, no PII) and never replaces the original exception. Rows not flagged by this
+        Called from an exception handler or from the 409 path of phase 2a, so a failing revert
+        is logged (booking_id and error type only, no PII) and never replaces the original
+        outcome. Rows not flagged by this
         request do not carry the `now` marker and are left alone by the guarded revert.
 
         Only `Exception` is caught here. A `BaseException` such as `CancelledError` raised by
