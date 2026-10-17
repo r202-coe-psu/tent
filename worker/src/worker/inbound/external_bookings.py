@@ -37,8 +37,8 @@ cancel fails on a CouchDB error (a stranded row, a row the API cancelled during 
 or a row rejected as duplicate after its docs reached CouchDB — see
 ``_cancel_stranded_rows`` / ``_mark_written`` / ``_reject_duplicated_rows``). While a
 ``pending`` sibling is left, the next pass retries that stay cancel for both ``cancelled``
-and D4-``rejected`` rows (``_cancel_stranded_rows``); the reconcile pass (#613) retries it for every terminal row
-that has not been reconciled yet.
+and D4-``rejected`` rows (``_cancel_stranded_rows``); the reconcile pass (#613) retries it
+for every terminal row that has not been reconciled yet.
 
 The API changes the same rows concurrently (EXT-009), so every Mongo write here is a
 conditional ``update_one`` on the observed state (``_transition``), never a Beanie
@@ -131,9 +131,8 @@ HOLD_STATUSES: tuple[str, ...] = (
     "temporary_leave",
 )
 
-#: Stay statuses that keep a household alive: schema.md §1.3 derivation rule 1 cancels a
-#: household only when every member is cancelled. The Forecast set (§1.1) plus HOLD_STATUSES
-#: so a kiosk_registered member counts as well.
+#: Stay statuses that keep a household alive (schema.md §1.3 rule 1: a household is cancelled
+#: only when no member is still held): HOLD_STATUSES plus ``kiosk_registered``.
 _HOUSEHOLD_LIVE_STATUSES: tuple[str, ...] = (*HOLD_STATUSES, "kiosk_registered")
 
 _CANCEL_REASON = "ยกเลิกการลงทะเบียนล่วงหน้า (partner API)"
@@ -1114,8 +1113,7 @@ async def _reconcile_row(couch: CouchClient, booking: ExternalBooking) -> str:
 
     Reads the reserved ``evacuee_id`` / ``household_id`` directly (no Mango for the docs):
 
-    * the shelter database is absent → retried (``_ReconcileRetry``), never ``missing``;
-    * neither doc exists → ``missing``;
+    * neither doc exists (an absent shelter database also answers 404) → ``missing``;
     * the stay moved past ``pre_registered`` → ``advanced``, nothing is written and the
       household is left alone (its status may already reflect that member);
     * a ``pre_registered`` stay → cancelled through ``_cancel_stay``; a failed or changed
@@ -1128,10 +1126,6 @@ async def _reconcile_row(couch: CouchClient, booking: ExternalBooking) -> str:
     Raises on a CouchDB error (the caller leaves the row unreconciled). Logs ids only.
     """
     database = shelter_db_name(booking.shelter_code)
-    if not await couch.database_exists(database):
-        # A 404 on a GET cannot tell "doc absent" from "database absent"; only the former
-        # is `missing`. Leave the row unreconciled so the next pass retries (#613).
-        raise _ReconcileRetry("shelter database absent")
     evacuee = (
         await couch.get_doc(database, booking.evacuee_id)
         if booking.evacuee_id

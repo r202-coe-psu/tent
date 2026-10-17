@@ -2803,23 +2803,60 @@ async def test_failing_row_is_retried_on_the_very_next_pass(db):
     assert health.keys("reconcile:") == []
 
 
-async def test_missing_shelter_database_is_retried_not_stamped_missing(db):
-    """A 404 on the GET cannot tell an absent doc from an absent shelter DB. An absent DB
-    must leave the row unreconciled so it is retried once the DB is back (#613)."""
+async def test_absent_shelter_database_is_stamped_missing(db):
+    """An absent shelter DB answers 404, the same as an absent doc: no reserved doc is
+    there to reconcile, so the row is stamped `missing` (issue #613 spec)."""
+    await _insert_terminal(0)
+    couch, _store = _stored_couch([])
+
+    assert await inbound.reconcile_terminal_bookings(couch) == 1
+
+    couch.put_doc.assert_not_awaited()
+    row = await _row(_row_id(0))
+    assert row["reconcile_outcome"] == "missing"
+    assert row["reconciled_at"] is not None
+
+
+async def test_reconcile_pass_takes_at_most_one_batch_then_the_rest_next_pass(db):
+    count = inbound.RECONCILE_BATCH_SIZE + 1
+    docs: list[dict] = []
+    for i in range(count):
+        await _insert_terminal(i)
+        docs.extend(_stay_docs(i))
+    couch, _store = _stored_couch(docs)
+
+    assert (
+        await inbound.reconcile_terminal_bookings(couch) == inbound.RECONCILE_BATCH_SIZE
+    )
+    assert await inbound.reconcile_terminal_bookings(couch) == 1
+    assert await inbound.reconcile_terminal_bookings(couch) == 0
+
+
+async def test_couch_server_error_leaves_row_unreconciled_then_retries(db):
+    """A 5xx / unreachable CouchDB is transient: the row is not stamped and the next pass
+    reconciles it (#613)."""
     await _insert_terminal(0)
     couch, store = _stored_couch(_stay_docs(0))
-    couch.database_exists = AsyncMock(return_value=False)
+    real_get_doc = couch.get_doc.side_effect
+
+    async def flaky_get_doc(database, doc_id):
+        raise httpx.HTTPStatusError(
+            "boom",
+            request=httpx.Request("GET", f"http://couch/{database}/{doc_id}"),
+            response=httpx.Response(503),
+        )
+
+    couch.get_doc.side_effect = flaky_get_doc
 
     assert await inbound.reconcile_terminal_bookings(couch) == 0
 
-    couch.get_doc.assert_not_awaited()
     couch.put_doc.assert_not_awaited()
     assert store["evacuee:E0"]["current_stay"]["status"] == "pre_registered"
     row = await _row(_row_id(0))
     assert row.get("reconciled_at") is None
     assert row.get("reconcile_outcome") is None
 
-    couch.database_exists = AsyncMock(return_value=True)
+    couch.get_doc.side_effect = real_get_doc
     assert await inbound.reconcile_terminal_bookings(couch) == 1
     assert store["evacuee:E0"]["current_stay"]["status"] == "cancelled"
     assert (await _row(_row_id(0)))["reconcile_outcome"] == "cancelled"
