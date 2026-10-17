@@ -1863,6 +1863,48 @@ async def test_cancel_group_pending_reread_error_reverts_our_flags(
     assert await _log_statuses() == []
 
 
+async def test_cancel_group_pending_reflag_then_error_reverts_reflagged_rows(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Phase 2b re-flags row 1 in `_cancel_pending`, then a later re-read raises.
+
+    Both rows are pending in phase 1, so 2a has nothing to flag. The pending bulk update misses
+    and row 1 has become a written, cancellable stay (`pre_registered`). `_cancel_pending`
+    flags it with this request's marker, then the re-read of row 2 raises. The flag set in 2b
+    is reverted too, so row 1 is left written and unflagged and row 2 stays pending.
+    """
+    await _person(status="pre_registered", person_id="evacuee:BK-GROUP001-0")
+    await _group(2, ["pending", "pending"])
+    collection = ExternalBooking.get_pymongo_collection()
+    real_many = type(collection).update_many
+
+    async def many(self: Any, flt: dict[str, Any], *args: Any, **kwargs: Any) -> Any:
+        if self.name == collection.name and flt.get("state") == "pending":
+            # Row 1 moves on to written meanwhile; the guarded pending update misses.
+            await _set_row("BP-BK-GROUP001-0", {"state": "written"})
+            return SimpleNamespace(modified_count=0)
+        return await real_many(self, flt, *args, **kwargs)
+
+    monkeypatch.setattr(type(collection), "update_many", many)
+    real_get = ExternalBooking.get
+
+    async def get(doc_id: str, *args: Any, **kwargs: Any) -> Any:
+        if doc_id == "BP-BK-GROUP001-1":
+            raise RuntimeError("reread boom")
+        return await real_get(doc_id, *args, **kwargs)
+
+    monkeypatch.setattr(ExternalBooking, "get", get)
+    with pytest.raises(RuntimeError, match="^reread boom$"):
+        await client.post(_cancel_url("BK-GROUP001"), json={"reason": "r"}, headers=GRANTED)
+    monkeypatch.undo()
+    after = await _rows("BK-GROUP001")
+    assert [(row["state"], row["cancel_requested"], row["cancel_reason"]) for row in after] == [
+        ("written", False, None),
+        ("pending", False, None),
+    ]
+    assert await _log_statuses() == []
+
+
 async def test_cancel_group_stay_reread_error_keeps_original_error_when_revert_fails(
     client: AsyncClient, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:

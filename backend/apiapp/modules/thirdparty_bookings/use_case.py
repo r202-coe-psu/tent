@@ -762,6 +762,9 @@ class ThirdPartyBookingsUseCase:
         now = _to_milliseconds(datetime.now(UTC))
         requested = [row for row, kind in plan if kind == "request"]
         direct = [row for row, kind in plan if kind == "direct"]
+        # Every planned row: 2b can re-flag a pending row that became written (`_cancel_row`),
+        # so the revert after 2a must cover those rows too, not only `requested`.
+        planned = [row for row, _ in plan]
         # Phase 2 is two `update_many` steps (no per-row loop on the common path). The written
         # rows are flagged first, so a check-in that lands meanwhile is caught before any
         # pending row is cancelled. Residual race: a step-2b conflict can still leave the
@@ -777,7 +780,7 @@ class ThirdPartyBookingsUseCase:
             try:
                 cancelled = await self._cancel_pending(collection, direct, reason, now)
             except BaseException:
-                await self._revert_after_error(collection, requested, now)
+                await self._revert_after_error(collection, planned, now)
                 raise
             if not cancelled:
                 raise await self._not_cancellable(endpoint, claims, client_ip, rows[0])
@@ -786,7 +789,7 @@ class ThirdPartyBookingsUseCase:
         try:
             return await self._cancelled(endpoint, claims, client_ip, rows[0])
         except BaseException:
-            await self._revert_after_error(collection, requested, now)
+            await self._revert_after_error(collection, planned, now)
             raise
 
     async def _flag_requested(
