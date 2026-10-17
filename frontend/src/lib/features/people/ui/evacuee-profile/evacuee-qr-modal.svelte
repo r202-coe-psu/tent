@@ -7,7 +7,10 @@
 	import { toast } from 'svelte-sonner';
 	import { previewElementAsPdf } from '$lib/utils/pdf';
 	import type { Evacuee } from '$lib/features/people';
-	import { formatPersonName } from '$lib/features/people';
+	import { formatPersonName, stayZoneName } from '$lib/features/people';
+	import { useShelter } from '$lib/features/shelters';
+	import { shelterStore } from '$lib/stores/shelter.svelte';
+	import { getShelterCode } from '$lib/db/shelter';
 	import { getTranslation } from '$lib/utils/i18n';
 	import { languageStore } from '$lib/stores/language.svelte';
 	import { EVACUEE_QR_MODAL_I18N } from '../_constants/evacuee-qr-modal.i18n';
@@ -80,6 +83,13 @@
 
 	const fullId = $derived(evacuee._id.split(':')[1] ?? evacuee._id);
 	const phone = $derived(evacuee.phone?.trim() || null);
+
+	// Blank until Station 3 assigns a zone, so staff can write it on the printed card.
+	const shelterQuery = useShelter(() => shelterStore.selectedShelterCode ?? getShelterCode());
+	const zone = $derived({
+		label: t.zoneLabel,
+		value: stayZoneName(evacuee.current_stay?.zone, shelterQuery.data?.zones)
+	});
 </script>
 
 {#if show}
@@ -126,6 +136,7 @@
 					alt={t.qrAlt(formatPersonName(evacuee))}
 					name={formatPersonName(evacuee)}
 					{phone}
+					{zone}
 					checklist={[t.checklistCheckIn, t.checklistScreening, t.checklistLodging]}
 				/>
 			</div>

@@ -10,7 +10,8 @@ export const EVACUEE_QR_MODAL_I18N = {
 		qrAlt: (name: string) => `QR Code สำหรับ ${name}`,
 		checklistCheckIn: 'เช็คอิน',
 		checklistScreening: 'คัดกรอง',
-		checklistLodging: 'ที่พัก'
+		checklistLodging: 'ที่พัก',
+		zoneLabel: 'Zone:'
 	},
 	en: {
 		cardTitle: 'Evacuee Identity Card',
@@ -23,7 +24,8 @@ export const EVACUEE_QR_MODAL_I18N = {
 		qrAlt: (name: string) => `QR Code for ${name}`,
 		checklistCheckIn: 'Check-in',
 		checklistScreening: 'Screening',
-		checklistLodging: 'Lodging'
+		checklistLodging: 'Lodging',
+		zoneLabel: 'Zone:'
 	}
 } as const;
 
