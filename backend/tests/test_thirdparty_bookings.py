@@ -1528,6 +1528,8 @@ async def test_cancel_group_check_in_after_flagging_reverts_our_flags(
     after = await _rows("BK-GROUP001")
     assert _snapshot(after) == _snapshot(before)
     assert after[1]["cancel_requested"] is False
+    # 409 never keeps a flag: our 2a flag is reverted and its token cleared (CR-169 FR-40).
+    assert (after[1]["cancel_reason"], after[1]["cancel_flag_token"]) == (None, None)
     assert await _log_statuses() == ["denied_booking_not_cancellable"]
 
 
