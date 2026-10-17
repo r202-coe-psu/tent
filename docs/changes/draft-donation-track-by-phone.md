@@ -85,7 +85,7 @@ migration: ไม่เปลี่ยนรูป CouchDB doc — ไม่ bum
 
 - CouchDB doc ไม่เปลี่ยนรูป → ไม่ bump `schema_v`
 - Mongo `DonationBuffer`: field ใหม่ optional + index ใหม่
-- > [NEEDS DECISION: การจองที่สร้างก่อน deploy (ยังอยู่ใน buffer ≤ 72 ชม.) ยังไม่มี `donor_phone_hash` จึงค้นด้วยเบอร์ไม่เจอ — เติมด้วย one-off script ใน `worker/` (คำนวณจาก `donor.phone` ที่ buffer เก็บอยู่แล้ว) หรือยอมให้ช่วง 72 ชม. แรกค้นไม่เจอ]
+- **ไม่ backfill** `donor_phone_hash` ให้ buffer ที่สร้างก่อน deploy — production ยังไม่เปิดใช้งานจริง จึงไม่มีการจองจริงที่ต้องค้นย้อนหลัง
 - `donor.phone_hash` บน CouchDB ที่ hash จากเบอร์ดิบไปแล้ว: ไม่ต้องแก้ เพราะ endpoint นี้ไม่ได้ค้นจาก CouchDB
 
 ## Why
@@ -98,4 +98,5 @@ migration: ไม่เปลี่ยนรูป CouchDB doc — ไม่ bum
 ## Decision log
 
 - 2026-10-17 — เจ้าของโครงการ: ตกลงแนวทางรายการอ่านอย่างเดียว ไม่คืน token · ดูย้อนหลังตามเดิม (buffer ≈ 72 ชม.) ไม่ขยายไป `public_donations`
+- 2026-10-17 — เจ้าของโครงการ: ไม่ต้อง backfill `donor_phone_hash` เพราะ production ยังไม่เปิดใช้งานจริง
 - 2026-10-17 — proposed (track ด้วย CR file แยก branch ตามที่เจ้าของโครงการกำหนด)
