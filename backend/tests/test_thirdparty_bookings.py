@@ -1196,23 +1196,40 @@ async def test_cancel_by_other_client_is_404(client: AsyncClient) -> None:
     assert booking is not None and booking.state == "pending"
 
 
-async def test_cancel_twice_is_409(client: AsyncClient) -> None:
+async def test_cancel_twice_is_idempotent(client: AsyncClient) -> None:
     await _booking(state="pending")
-    first = await client.post(_cancel_url(), headers=GRANTED)
+    first = await client.post(_cancel_url(), json={"reason": "first"}, headers=GRANTED)
     assert first.status_code == 200
-    second = await client.post(_cancel_url(), headers=GRANTED)
-    assert second.status_code == 409
-    assert second.json()["code"] == "booking_not_cancellable"
+    before = await _rows("BK-TEST0001")
+    second = await client.post(_cancel_url(), json={"reason": "second"}, headers=GRANTED)
+    assert second.status_code == 200
+    assert second.json()["result"] == {"booking_id": "BK-TEST0001", "booking_status": "CANCELLED"}
+    assert await _rows("BK-TEST0001") == before
+    assert await _log_statuses() == ["granted", "granted"]
 
 
-@pytest.mark.parametrize(("state", "cancel_requested"), [("rejected", False), ("written", True)])
-async def test_cancel_terminal_is_409(
-    client: AsyncClient, state: str, cancel_requested: bool
+@pytest.mark.parametrize(
+    ("state", "cancel_requested", "status_code"),
+    [("cancelled", False, 200), ("written", True, 200), ("rejected", False, 409)],
+)
+async def test_cancel_finished_single_is_idempotent_or_409(
+    client: AsyncClient, state: str, cancel_requested: bool, status_code: int
 ) -> None:
+    """FR-40 legacy single-person booking: `cancelled` repeats as 200, `rejected` stays 409."""
     await _booking(state=state, cancel_requested=cancel_requested)
+    before = await _rows("BK-TEST0001")
     response = await client.post(_cancel_url(), headers=GRANTED)
-    assert response.status_code == 409
-    assert response.json()["code"] == "booking_not_cancellable"
+    assert response.status_code == status_code
+    if status_code == 200:
+        assert response.json()["result"] == {
+            "booking_id": "BK-TEST0001",
+            "booking_status": "CANCELLED",
+        }
+        assert await _log_statuses() == ["granted"]
+    else:
+        assert response.json()["code"] == "booking_not_cancellable"
+        assert await _log_statuses() == ["denied_booking_not_cancellable"]
+    assert await _rows("BK-TEST0001") == before
 
 
 async def test_cancel_group_pending_and_written(client: AsyncClient) -> None:
@@ -1257,12 +1274,164 @@ async def test_cancel_group_by_other_client_is_404(client: AsyncClient) -> None:
     assert await _rows("BK-GROUP001") == before
 
 
-async def test_cancel_group_twice_is_409(client: AsyncClient) -> None:
+async def test_cancel_group_twice_is_idempotent(client: AsyncClient) -> None:
     await _group(2)
     assert (await client.post(_cancel_url("BK-GROUP001"), headers=GRANTED)).status_code == 200
+    before = await _rows("BK-GROUP001")
     second = await client.post(_cancel_url("BK-GROUP001"), headers=GRANTED)
-    assert second.status_code == 409
-    assert second.json()["code"] == "booking_not_cancellable"
+    assert second.status_code == 200
+    assert second.json()["result"] == {"booking_id": "BK-GROUP001", "booking_status": "CANCELLED"}
+    assert await _rows("BK-GROUP001") == before
+
+
+async def test_cancel_group_skips_finished_rows(client: AsyncClient) -> None:
+    """FR-40: finished rows are not touched and keep their earlier cancel_reason."""
+    await _group(3, ["cancelled", "pending", "written"])
+    await ExternalBooking.get_pymongo_collection().update_one(
+        {"_id": "BP-BK-GROUP001-0"}, {"$set": {"cancel_reason": "earlier"}}
+    )
+    await ExternalBooking.get_pymongo_collection().update_one(
+        {"_id": "BP-BK-GROUP001-2"},
+        {"$set": {"cancel_requested": True, "cancel_reason": "earlier"}},
+    )
+    before = await _rows("BK-GROUP001")
+    response = await client.post(
+        _cancel_url("BK-GROUP001"), json={"reason": "new"}, headers=GRANTED
+    )
+    assert response.status_code == 200
+    assert response.json()["result"]["booking_status"] == "CANCELLED"
+    rows = await _rows("BK-GROUP001")
+    assert rows[0] == before[0]
+    assert rows[2] == before[2]
+    assert rows[0]["cancel_reason"] == "earlier"
+    assert rows[2]["cancel_reason"] == "earlier"
+    assert (rows[1]["state"], rows[1]["cancel_reason"]) == ("cancelled", "new")
+    assert (rows[1]["cid"], rows[1]["phone"]) == (None, None)
+
+
+async def test_cancel_group_with_rejected_member_cancels_open_rows(client: AsyncClient) -> None:
+    await _group(3, ["rejected", "pending", "pending"])
+    await ExternalBooking.get_pymongo_collection().update_one(
+        {"_id": "BP-BK-GROUP001-0"}, {"$set": {"reject_reason": "duplicate"}}
+    )
+    before = await _rows("BK-GROUP001")
+    response = await client.post(_cancel_url("BK-GROUP001"), headers=GRANTED)
+    assert response.status_code == 200
+    rows = await _rows("BK-GROUP001")
+    assert rows[0] == before[0]
+    assert [(row["state"], row["cancel_requested"]) for row in rows] == [
+        ("rejected", False),
+        ("cancelled", False),
+        ("cancelled", False),
+    ]
+    assert await _log_statuses() == ["granted"]
+
+
+async def test_cancel_group_all_rejected_is_409(client: AsyncClient) -> None:
+    await _group(2, ["rejected", "rejected"])
+    before = await _rows("BK-GROUP001")
+    response = await client.post(_cancel_url("BK-GROUP001"), headers=GRANTED)
+    assert response.status_code == 409
+    assert response.json()["code"] == "booking_not_cancellable"
+    assert await _rows("BK-GROUP001") == before
+    assert await _log_statuses() == ["denied_booking_not_cancellable"]
+
+
+async def test_cancel_group_checked_in_member_with_rejected_changes_nothing(
+    client: AsyncClient,
+) -> None:
+    await _person(status="active", person_id="evacuee:BK-GROUP001-2")
+    await _group(3, ["rejected", "pending", "written"])
+    before = await _rows("BK-GROUP001")
+    response = await client.post(_cancel_url("BK-GROUP001"), headers=GRANTED)
+    assert response.status_code == 409
+    assert response.json()["code"] == "booking_not_cancellable"
+    assert await _rows("BK-GROUP001") == before
+
+
+def _fail_cancel_update(monkeypatch: pytest.MonkeyPatch, row_id: str, failures: int) -> None:
+    """Make the phase-2 guarded update of one row raise `failures` times, then succeed."""
+    collection = ExternalBooking.get_pymongo_collection()
+    real = type(collection).update_one
+    calls = [0]
+
+    async def flaky(self: Any, flt: dict[str, Any], *args: Any, **kwargs: Any) -> Any:
+        if self.name == collection.name and flt.get("_id") == row_id:
+            calls[0] += 1
+            if calls[0] <= failures:
+                raise RuntimeError("boom")
+        return await real(self, flt, *args, **kwargs)
+
+    monkeypatch.setattr(type(collection), "update_one", flaky)
+
+
+def _interpose_before_cancel(
+    monkeypatch: pytest.MonkeyPatch, row_id: str, fields: dict[str, Any]
+) -> None:
+    """Apply `fields` to one row right before the first phase-2 update reaches it."""
+    collection = ExternalBooking.get_pymongo_collection()
+    real = type(collection).update_one
+    done = [False]
+
+    async def racing(self: Any, flt: dict[str, Any], *args: Any, **kwargs: Any) -> Any:
+        if self.name == collection.name and flt.get("_id") == row_id and not done[0]:
+            done[0] = True
+            await real(self, {"_id": row_id}, {"$set": fields})
+        return await real(self, flt, *args, **kwargs)
+
+    monkeypatch.setattr(type(collection), "update_one", racing)
+
+
+async def test_cancel_group_retry_after_partial_failure_succeeds(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    await _group(2, ["pending", "pending"])
+    _fail_cancel_update(monkeypatch, "BP-BK-GROUP001-1", failures=1)
+    with pytest.raises(RuntimeError):
+        await client.post(_cancel_url("BK-GROUP001"), json={"reason": "r"}, headers=GRANTED)
+    monkeypatch.undo()
+    assert [row["state"] for row in await _rows("BK-GROUP001")] == ["cancelled", "pending"]
+
+    response = await client.post(_cancel_url("BK-GROUP001"), json={"reason": "r"}, headers=GRANTED)
+    assert response.status_code == 200
+    rows = await _rows("BK-GROUP001")
+    assert [row["state"] for row in rows] == ["cancelled", "cancelled"]
+    assert all(row["cancel_reason"] == "r" for row in rows)
+
+
+async def test_cancel_group_row_finished_mid_way_is_skipped(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Phase 2: a row the worker rejects just before the cancel reaches it counts as done."""
+    await _group(2, ["pending", "pending"])
+    _interpose_before_cancel(
+        monkeypatch, "BP-BK-GROUP001-1", {"state": "rejected", "reject_reason": "duplicate"}
+    )
+    response = await client.post(_cancel_url("BK-GROUP001"), json={"reason": "r"}, headers=GRANTED)
+    assert response.status_code == 200
+    rows = await _rows("BK-GROUP001")
+    assert [(row["state"], row["cancel_reason"]) for row in rows] == [
+        ("cancelled", "r"),
+        ("rejected", None),
+    ]
+    assert await _log_statuses() == ["granted"]
+
+
+async def test_cancel_group_row_checked_in_mid_way_is_409(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Phase 2: a row that becomes a checked-in stay after phase 1 is a conflict, not a skip."""
+    await _person(status="active", person_id="evacuee:BK-GROUP001-1")
+    await _group(2, ["pending", "pending"])
+    _interpose_before_cancel(
+        monkeypatch,
+        "BP-BK-GROUP001-1",
+        {"state": "written", "evacuee_id": "evacuee:BK-GROUP001-1"},
+    )
+    response = await client.post(_cancel_url("BK-GROUP001"), headers=GRANTED)
+    assert response.status_code == 409
+    assert response.json()["code"] == "booking_not_cancellable"
+    assert await _log_statuses() == ["denied_booking_not_cancellable"]
 
 
 # --- EXT-010 ----------------------------------------------------------------------
@@ -1305,7 +1474,10 @@ async def test_status_mapping(
         (["cancelled", "cancelled"], "CANCELLED"),
         (["cancelled", "pending"], "BOOKED"),
         (["written", "rejected", "rejected"], "REJECTED"),
-        (["cancelled", "rejected"], "REJECTED"),
+        (["cancelled", "rejected"], "CANCELLED"),
+        (["rejected", "rejected"], "REJECTED"),
+        (["rejected", "pending"], "REJECTED"),
+        (["rejected", "written"], "REJECTED"),
     ],
 )
 async def test_group_status_aggregate(
@@ -1332,6 +1504,21 @@ async def test_group_status_aggregate(
     assert str(_cid(0)) not in response.text
     logs = await ThirdPartyAccessLog.find_all().to_list()
     assert [(log.endpoint, log.status) for log in logs] == [("EXT-010", "granted")]
+
+
+async def test_group_status_cancel_requested_with_rejected_is_cancelled(
+    client: AsyncClient,
+) -> None:
+    """FR-42: a `cancel_requested` row counts as CANCELLED, so no open row → CANCELLED."""
+    await _group(2, ["rejected", "written"])
+    await ExternalBooking.get_pymongo_collection().update_one(
+        {"_id": "BP-BK-GROUP001-1"}, {"$set": {"cancel_requested": True}}
+    )
+    response = await client.get(f"{URL}/BK-GROUP001", headers=GRANTED)
+    assert response.status_code == 200
+    result = response.json()["result"]
+    assert result["booking_status"] == "CANCELLED"
+    assert [p["booking_status"] for p in result["persons"]] == ["REJECTED", "CANCELLED"]
 
 
 async def test_status_other_client_is_404(client: AsyncClient) -> None:

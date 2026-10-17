@@ -43,6 +43,14 @@ async def create_booking(
     "/bookings/{booking_id}/cancel",
     response_model=BookingCancelledEnvelope,
     responses=_ERRORS,
+    description=(
+        "Cancels the whole booking group. Only OPEN persons (pending, or written without a "
+        "cancel request) are cancelled; finished persons (cancelled, rejected, or already "
+        "cancel-requested) are skipped and left unchanged. Repeating a cancel that has already "
+        "happened returns 200. Returns 409 `booking_not_cancellable` when every person is "
+        "rejected, or when an open person can no longer be cancelled (e.g. checked in); in the "
+        "latter case no person is changed."
+    ),
 )
 async def cancel_booking(
     request: Request,

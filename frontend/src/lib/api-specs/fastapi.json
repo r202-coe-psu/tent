@@ -875,6 +875,7 @@
 			"post": {
 				"tags": ["External"],
 				"summary": "Cancel Booking",
+				"description": "Cancels the whole booking group. Only OPEN persons (pending, or written without a cancel request) are cancelled; finished persons (cancelled, rejected, or already cancel-requested) are skipped and left unchanged. Repeating a cancel that has already happened returns 200. Returns 409 `booking_not_cancellable` when every person is rejected, or when an open person can no longer be cancelled (e.g. checked in); in the latter case no person is changed.",
 				"operationId": "cancel_booking_external_bookings__booking_id__cancel_post",
 				"security": [{ "HTTPBearer": [] }],
 				"parameters": [
