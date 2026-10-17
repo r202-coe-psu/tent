@@ -770,9 +770,22 @@ class ThirdPartyBookingsUseCase:
         # skips the cancelled rows (FINISHED) and the flagged rows (not OPEN).
         if requested and not await self._flag_requested(collection, requested, reason, now):
             raise await self._not_cancellable(endpoint, claims, client_ip, rows[0])
-        if direct and not await self._cancel_pending(collection, direct, reason, now):
-            raise await self._not_cancellable(endpoint, claims, client_ip, rows[0])
-        return await self._cancelled(endpoint, claims, client_ip, rows[0])
+        # Any unexpected error after phase 2a reverts the flags this request set (guarded by
+        # `now`), so it never leaves `cancel_requested=True` behind. A 409 from 2c is the
+        # documented residual race and keeps the flags, as before.
+        if direct:
+            try:
+                cancelled = await self._cancel_pending(collection, direct, reason, now)
+            except BaseException:
+                await self._revert_after_error(collection, requested, now)
+                raise
+            if not cancelled:
+                raise await self._not_cancellable(endpoint, claims, client_ip, rows[0])
+        try:
+            return await self._cancelled(endpoint, claims, client_ip, rows[0])
+        except BaseException:
+            await self._revert_after_error(collection, requested, now)
+            raise
 
     async def _flag_requested(
         self,
@@ -782,6 +795,24 @@ class ThirdPartyBookingsUseCase:
         now: datetime,
     ) -> bool:
         """Phase 2a (FR-32) — flag the written rows for the worker. False after a full revert.
+
+        Any exception raised while flagging or re-reading the stays reverts the flags this
+        request set before it propagates (see `_revert_after_error`).
+        """
+        try:
+            return await self._flag_and_check(collection, rows, reason, now)
+        except BaseException:
+            await self._revert_after_error(collection, rows, now)
+            raise
+
+    async def _flag_and_check(
+        self,
+        collection: Any,
+        rows: list[ExternalBooking],
+        reason: str | None,
+        now: datetime,
+    ) -> bool:
+        """Body of phase 2a: flag the written rows, then re-read their stays.
 
         One `update_many` guarded on `state: written` and `cancel_requested: False`. When it
         flags fewer rows than asked, the missed rows are re-evaluated one by one (they are
@@ -852,6 +883,26 @@ class ThirdPartyBookingsUseCase:
                 }
             },
         )
+
+    async def _revert_after_error(
+        self, collection: Any, rows: list[ExternalBooking], now: datetime
+    ) -> None:
+        """Revert the flags of `rows` before an unexpected error is re-raised.
+
+        Called from an exception handler, so a failing revert is logged (booking_id and error
+        type only, no PII) and never replaces the original exception. Rows not flagged by this
+        request do not carry the `now` marker and are left alone by the guarded revert.
+        """
+        if not rows:
+            return
+        try:
+            await self._revert_flags(collection, [row.id for row in rows], now)
+        except Exception as exc:
+            logger.error(
+                "cancel flag revert failed (booking_id=%s error=%s)",
+                rows[0].booking_id,
+                type(exc).__name__,
+            )
 
     async def _cancel_pending(
         self,
