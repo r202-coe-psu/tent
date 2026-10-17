@@ -27,26 +27,20 @@ describe('KioskBannerAttract preview markup', () => {
 		expect(body).not.toContain('/img/b');
 	});
 
-	it('renders the caption as literal text, never as markup', () => {
-		const body = preview([slide('a', { caption: '<b>x</b>' })]);
+	it('shows only the image: no caption, dots, caption bar or touch prompt', () => {
+		const body = preview([slide('a', { caption: 'Lunch at noon' }), slide('b')]);
 
-		expect(body).toContain('&lt;b>x&lt;/b>');
-		expect(body).not.toContain('<b>x</b>');
+		expect(body).not.toContain('Lunch at noon');
+		expect(body).not.toContain('kiosk-banner-dot');
+		expect(body).not.toContain('kiosk-banner-caption-bar');
+		expect(body).not.toContain('แตะหน้าจอเพื่อเริ่มใช้งาน');
 	});
 
-	it('draws one dot per slide, highlighting the current one', () => {
-		const body = preview([slide('a'), slide('b'), slide('c')]);
+	it('fills the overlay with the image, with no padding', () => {
+		const body = preview([slide('a')]);
 
-		expect(body.match(/data-testid="kiosk-banner-dot"/g)).toHaveLength(3);
-		expect(body.match(/data-current="true"/g)).toHaveLength(1);
-	});
-
-	it('draws no dots for a single slide', () => {
-		expect(preview([slide('a')])).not.toContain('kiosk-banner-dot');
-	});
-
-	it('always tells people to touch the screen', () => {
-		expect(preview([slide('a')])).toContain('แตะหน้าจอเพื่อเริ่มใช้งาน');
+		expect(body).toMatch(/<img[^>]*class="absolute inset-0 h-full w-full object-contain"/);
+		expect(body).not.toContain('kiosk-compact:p-2');
 	});
 
 	it('stays below the system banner and leaves its height free', () => {
