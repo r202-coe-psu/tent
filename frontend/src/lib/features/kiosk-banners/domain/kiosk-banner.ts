@@ -56,7 +56,9 @@ const endAfterStart = {
 	params: { message: 'เวลาสิ้นสุดต้องหลังเวลาเริ่ม', path: ['end_at'] }
 };
 
+/** `order` is not client input: the server appends on create and keeps it on update. */
 export const kioskBannerInputSchema = kioskBannerFieldsSchema
+	.omit({ order: true })
 	.extend({ screen_type: kioskScreenTypeSchema.default('compact') })
 	.refine(endAfterStart.check, endAfterStart.params);
 
@@ -80,6 +82,8 @@ export type KioskBannerInput = z.infer<typeof kioskBannerInputSchema>;
 export interface KioskBannerContext {
 	shelterCode: string;
 	createdBy: string;
+	/** Assigned by the server (see `nextBannerOrder`), never taken from the client input. */
+	order: number;
 }
 
 export function createKioskBanner(
@@ -95,7 +99,7 @@ export function createKioskBanner(
 		shelter_code: ctx.shelterCode,
 		title: input.title,
 		caption: input.caption,
-		order: input.order,
+		order: ctx.order,
 		duration_sec: input.duration_sec,
 		start_at: input.start_at,
 		end_at: input.end_at,
@@ -159,24 +163,6 @@ type OrderSubject = Pick<KioskBannerDoc, '_id' | 'order' | 'end_at'> & {
 /** Same "current" rule as {@link splitByView}: not yet expired. */
 const isCurrentAt = (banner: Pick<KioskBannerDoc, 'end_at'>, t: number): boolean =>
 	Date.parse(banner.end_at) >= t;
-
-/**
- * Current banners (inactive included) already holding this `order` on the same screen type
- * (FR-KBR-45). Informational only: duplicates stay allowed, the kiosk falls back to `start_at`.
- */
-export function findOrderConflicts<T extends OrderSubject>(
-	banners: readonly T[],
-	query: { order: number; screen_type: KioskScreenType; excludeId?: string; now: Date }
-): T[] {
-	const t = query.now.getTime();
-	return banners.filter(
-		(b) =>
-			b.order === query.order &&
-			matchesScreen(b, query.screen_type) &&
-			isCurrentAt(b, t) &&
-			b._id !== query.excludeId
-	);
-}
 
 /** `max(order) + 1` among current banners of this screen type; the default order when none. */
 export function nextBannerOrder(

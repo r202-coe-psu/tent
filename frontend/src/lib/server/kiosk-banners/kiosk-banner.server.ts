@@ -3,6 +3,7 @@ import {
 	createKioskBanner,
 	isActiveAt,
 	matchesScreen,
+	nextBannerOrder,
 	orderableBanners,
 	planReorder,
 	sortBanners,
@@ -11,7 +12,7 @@ import {
 	type KioskBannerImageMime,
 	type KioskBannerInput
 } from '$lib/features/kiosk-banners';
-import type { KioskScreenType } from '$lib/features/shared';
+import { screenTypeOf, type KioskScreenType } from '$lib/features/shared';
 
 const REGISTRY_DB = 'registry';
 const IMAGE_ATTACHMENT = 'image';
@@ -80,10 +81,12 @@ async function putDoc(
 export async function createBanner(
 	input: KioskBannerInput,
 	image: DecodedBannerImage,
-	ctx: KioskBannerContext,
+	ctx: Omit<KioskBannerContext, 'order'>,
 	now: Date = new Date()
 ): Promise<KioskBannerRecord> {
-	const doc = createKioskBanner(input, ctx, now);
+	const banners = await findRawBanners(ctx.shelterCode);
+	const order = nextBannerOrder(banners, input.screen_type, now);
+	const doc = createKioskBanner(input, { ...ctx, order }, now);
 	return putDoc(doc, { [IMAGE_ATTACHMENT]: toInline(image) });
 }
 
@@ -99,7 +102,7 @@ async function readRaw(id: string): Promise<RawBannerDoc> {
 async function mutate(
 	id: string,
 	rev: string,
-	change: Partial<KioskBannerDoc>,
+	change: (current: RawBannerDoc) => Partial<KioskBannerDoc> | Promise<Partial<KioskBannerDoc>>,
 	image: DecodedBannerImage | null,
 	now: Date
 ): Promise<KioskBannerRecord> {
@@ -108,7 +111,11 @@ async function mutate(
 		throw new ServiceError('CONFLICT', 'Banner was modified by someone else');
 	}
 	const { _attachments, ...kept } = current;
-	const doc: KioskBannerDoc = { ...kept, ...change, updated_at: now.toISOString() };
+	const doc: KioskBannerDoc = {
+		...kept,
+		...(await change(current)),
+		updated_at: now.toISOString()
+	};
 	return putDoc(doc, image ? { [IMAGE_ATTACHMENT]: toInline(image) } : (_attachments ?? {}));
 }
 
@@ -119,11 +126,24 @@ export function updateBanner(
 	image: DecodedBannerImage | null,
 	now: Date = new Date()
 ): Promise<KioskBannerRecord> {
-	const { title, caption, order, duration_sec, start_at, end_at, status, screen_type } = input;
+	const { title, caption, duration_sec, start_at, end_at, status, screen_type } = input;
 	return mutate(
 		id,
 		rev,
-		{ title, caption, order, duration_sec, start_at, end_at, status, screen_type },
+		async (current) => ({
+			title,
+			caption,
+			duration_sec,
+			start_at,
+			end_at,
+			status,
+			screen_type,
+			// Order is only set by the reorder page; a banner moved to another screen goes to its end.
+			order:
+				screenTypeOf(current) === screen_type
+					? current.order
+					: nextBannerOrder(await findRawBanners(current.shelter_code), screen_type, now)
+		}),
 		image,
 		now
 	);
@@ -135,7 +155,7 @@ export function setBannerStatus(
 	status: KioskBannerDoc['status'],
 	now: Date = new Date()
 ): Promise<KioskBannerRecord> {
-	return mutate(id, rev, { status }, null, now);
+	return mutate(id, rev, () => ({ status }), null, now);
 }
 
 export async function getBanner(id: string): Promise<KioskBannerRecord | null> {

@@ -11,7 +11,6 @@ import { kioskBannerInputSchema } from './kiosk-banner';
 const valid = (over: Partial<KioskBannerFormValues> = {}): KioskBannerFormValues => ({
 	title: 'แจกอาหารกลางวัน',
 	caption: '',
-	order: 1,
 	duration_sec: 10,
 	start_at: '2026-10-15T08:00',
 	end_at: '2026-10-15T18:00',
@@ -43,10 +42,9 @@ describe('kioskBannerFormSchema', () => {
 		);
 	});
 
-	it('rejects durations outside 3-60 and an order below 1', () => {
+	it('rejects durations outside 3-60', () => {
 		expect(issuePaths(valid({ duration_sec: 2 }))).toContain('duration_sec');
 		expect(issuePaths(valid({ duration_sec: 61 }))).toContain('duration_sec');
-		expect(issuePaths(valid({ order: 0 }))).toContain('order');
 	});
 
 	it('rejects an unknown screen_type', () => {
@@ -82,7 +80,6 @@ describe('bannerToFormValues', () => {
 		const stored = {
 			title: 'ตรวจสุขภาพ',
 			caption: null,
-			order: 2,
 			duration_sec: 15,
 			start_at: '2026-10-16T02:00:00.000Z',
 			end_at: '2026-10-16T05:00:00.000Z',
@@ -93,7 +90,6 @@ describe('bannerToFormValues', () => {
 		expect(values).toEqual({
 			title: 'ตรวจสุขภาพ',
 			caption: '',
-			order: 2,
 			duration_sec: 15,
 			start_at: '2026-10-16T09:00',
 			end_at: '2026-10-16T12:00',
@@ -107,7 +103,6 @@ describe('bannerToFormValues', () => {
 		const legacy = {
 			title: 'เก่า',
 			caption: null,
-			order: 1,
 			duration_sec: 10,
 			start_at: '2026-10-16T02:00:00.000Z',
 			end_at: '2026-10-16T05:00:00.000Z',
@@ -122,7 +117,6 @@ describe('emptyKioskBannerForm', () => {
 		expect(emptyKioskBannerForm()).toEqual({
 			title: '',
 			caption: '',
-			order: 1,
 			duration_sec: 10,
 			start_at: '',
 			end_at: '',

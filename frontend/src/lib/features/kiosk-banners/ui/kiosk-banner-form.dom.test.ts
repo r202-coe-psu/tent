@@ -29,13 +29,10 @@ let onsave: Mock<(payload: KioskBannerSavePayload) => Promise<void>>;
 const createObjectURL = vi.fn();
 const revokeObjectURL = vi.fn();
 
-function render(
-	banner?: KioskBannerSummary,
-	extra: { siblings?: KioskBannerSummary[]; defaultOrder?: number } = {}
-) {
+function render(banner?: KioskBannerSummary) {
 	instance = mount(KioskBannerForm, {
 		target: document.body,
-		props: { shelterCode: 'SH001', banner, onsave, ...extra }
+		props: { shelterCode: 'SH001', banner, onsave }
 	});
 	flushSync();
 }
@@ -255,7 +252,6 @@ describe('KioskBannerForm', () => {
 		expect(payload.input).toMatchObject({
 			title: 'ป้ายใหม่',
 			caption: null,
-			order: 1,
 			duration_sec: 10,
 			start_at: '2026-10-15T01:00:00.000Z',
 			end_at: '2026-10-15T11:00:00.000Z',
@@ -340,93 +336,19 @@ describe('KioskBannerForm', () => {
 		});
 	});
 
-	describe('duplicate order warning (FR-KBR-45)', () => {
-		const sibling = (
-			id: string,
-			title: string,
-			order: number,
-			extra: Partial<KioskBannerSummary> = {}
-		): KioskBannerSummary => ({
-			...stored,
-			_id: `kiosk_banner:${id}`,
-			title,
-			order,
-			end_at: '2099-01-01T00:00:00.000Z',
-			...extra
-		});
-		const radio = (type: string) =>
-			q<HTMLButtonElement>(`[role="radio"][data-value="${type}"]`) as HTMLButtonElement;
-		const warning = () => q('#banner-order-warning');
-
-		it('shows a non-blocking note for the same order and screen type', () => {
-			render(undefined, { siblings: [sibling('a', 'ประกาศน้ำดื่ม', 1)] });
-
-			expect(warning()?.getAttribute('role')).toBe('status');
-			expect(warning()?.textContent).toContain(
-				'ลำดับ 1 ซ้ำกับ「ประกาศน้ำดื่ม」(ตู้เล็ก) — แบนเนอร์ที่ลำดับเดียวกันจะแสดงตามเวลาเริ่ม'
-			);
-		});
-
-		it('names the first two titles and counts the rest', () => {
-			render(undefined, {
-				siblings: [sibling('a', 'หนึ่ง', 1), sibling('b', 'สอง', 1), sibling('c', 'สาม', 1)]
-			});
-
-			expect(warning()?.textContent).toContain('「หนึ่ง」、「สอง」(ตู้เล็ก) และอีก 1 รายการ — ');
-		});
-
-		it('hides when the order is changed or the screen type is switched', () => {
-			render(undefined, { siblings: [sibling('a', 'ประกาศ', 1)] });
-			expect(warning()).not.toBeNull();
-
-			radio('portrait').click();
-			flushSync();
-			expect(warning()).toBeNull();
-
-			radio('compact').click();
-			flushSync();
-			expect(warning()).not.toBeNull();
-
-			type(field('order'), '2');
-			expect(warning()).toBeNull();
-		});
-
-		it('ignores expired siblings', () => {
-			render(undefined, {
-				siblings: [sibling('a', 'หมดอายุ', 1, { end_at: '2020-01-01T00:00:00.000Z' })]
-			});
-			expect(warning()).toBeNull();
-		});
-
-		it('edit mode does not warn about the banner itself', () => {
-			render(stored, { siblings: [sibling('abc', stored.title, stored.order)] });
-			expect(warning()).toBeNull();
-
+	describe('order', () => {
+		it('has no order input: the server assigns it and the reorder page changes it', () => {
+			render();
+			expect(q('#banner-order')).toBeNull();
 			render_cleanup();
-			render(stored, { siblings: [sibling('other', 'อื่น', stored.order)] });
-			expect(warning()?.textContent).toContain('「อื่น」');
+			render(stored);
+			expect(q('#banner-order')).toBeNull();
 		});
 
-		it('still saves with the duplicate order', async () => {
-			render(undefined, { siblings: [sibling('a', 'ประกาศ', 1)] });
-			type(field('title'), 'ป้ายซ้ำลำดับ');
-			await setDateTime('start_at', '2026-10-15', '08:00');
-			await setDateTime('end_at', '2026-10-15', '18:00');
-			pick(png());
-
+		it('does not send an order with the input', async () => {
+			render(stored);
 			await submit();
-
-			expect(onsave).toHaveBeenCalledTimes(1);
-			expect(onsave.mock.calls[0][0].input.order).toBe(1);
-		});
-
-		it('create starts the order at defaultOrder; edit ignores it', () => {
-			render(undefined, { defaultOrder: 3 });
-			expect(field('order').value).toBe('3');
-
-			render_cleanup();
-			render(stored, { defaultOrder: 9 });
-			expect(field('order').value).toBe('2');
+			expect(onsave.mock.calls[0][0].input).not.toHaveProperty('order');
 		});
 	});
 });

@@ -1,7 +1,6 @@
 export {
 	KIOSK_BANNER_LIMITS,
 	createKioskBanner,
-	findOrderConflicts,
 	isActiveAt,
 	kioskBannerDocSchema,
 	kioskBannerInputSchema,

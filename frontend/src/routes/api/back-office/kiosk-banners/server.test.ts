@@ -133,7 +133,6 @@ describe('POST /api/back-office/kiosk-banners (FR-KBR-02/04/11)', () => {
 	const input = {
 		title: 'ประกาศ',
 		caption: null,
-		order: 1,
 		duration_sec: 10,
 		start_at: '2026-10-15T00:00:00.000Z',
 		end_at: '2026-11-15T00:00:00.000Z',

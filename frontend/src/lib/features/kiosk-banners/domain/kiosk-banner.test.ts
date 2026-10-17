@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
 	createKioskBanner,
-	findOrderConflicts,
 	isActiveAt,
 	kioskBannerDocSchema,
 	kioskBannerInputSchema,
@@ -16,7 +15,6 @@ import {
 const validInput = {
 	title: 'ยินดีต้อนรับ',
 	caption: 'ศูนย์พักพิงชั่วคราว',
-	order: 1,
 	duration_sec: 10,
 	start_at: '2026-10-15T00:00:00.000Z',
 	end_at: '2026-10-16T00:00:00.000Z',
@@ -48,19 +46,21 @@ describe('kioskBannerInputSchema', () => {
 		expect(kioskBannerInputSchema.safeParse(withoutCaption).success).toBe(true);
 	});
 
-	it('enforces duration_sec 3-60 and order >= 1, as integers', () => {
+	it('enforces duration_sec 3-60 as an integer', () => {
 		const parse = (patch: object) => kioskBannerInputSchema.safeParse({ ...validInput, ...patch });
 		expect(parse({ duration_sec: 3 }).success).toBe(true);
 		expect(parse({ duration_sec: 60 }).success).toBe(true);
 		expect(parse({ duration_sec: 2 }).success).toBe(false);
 		expect(parse({ duration_sec: 61 }).success).toBe(false);
 		expect(parse({ duration_sec: 10.5 }).success).toBe(false);
-		expect(parse({ order: 1 }).success).toBe(true);
-		expect(parse({ order: 0 }).success).toBe(false);
-		expect(parse({ order: 1.5 }).success).toBe(false);
 	});
 
-	it('applies defaults for order, duration_sec and status', () => {
+	it('strips an order sent by the client (the server assigns it)', () => {
+		const parsed = kioskBannerInputSchema.parse({ ...validInput, order: 9 });
+		expect(parsed).not.toHaveProperty('order');
+	});
+
+	it('applies defaults for duration_sec and status', () => {
 		const result = kioskBannerInputSchema.safeParse({
 			title: 't',
 			start_at: validInput.start_at,
@@ -68,7 +68,7 @@ describe('kioskBannerInputSchema', () => {
 		});
 		expect(result).toMatchObject({
 			success: true,
-			data: { order: 1, duration_sec: 10, status: 'active' }
+			data: { duration_sec: 10, status: 'active' }
 		});
 	});
 
@@ -109,6 +109,7 @@ describe('kioskBannerInputSchema', () => {
 
 const validDoc = {
 	...validInput,
+	order: 1,
 	_id: 'kiosk_banner:01J9ZZZZZZZZZZZZZZZZZZZZZZ',
 	_rev: '1-abc',
 	type: 'kiosk_banner',
@@ -155,7 +156,7 @@ describe('kioskBannerDocSchema', () => {
 });
 
 describe('createKioskBanner', () => {
-	const ctx = { shelterCode: 'SH-007', createdBy: 'user:bob' };
+	const ctx = { shelterCode: 'SH-007', createdBy: 'user:bob', order: 3 };
 	const now = new Date('2026-10-15T08:30:00.000Z');
 
 	it('stamps envelope fields from ctx and now', () => {
@@ -168,6 +169,7 @@ describe('createKioskBanner', () => {
 			created_by: 'user:bob',
 			created_at: '2026-10-15T08:30:00.000Z',
 			updated_at: '2026-10-15T08:30:00.000Z',
+			order: 3,
 			title: 'ยินดีต้อนรับ',
 			caption: 'ศูนย์พักพิงชั่วคราว',
 			start_at: validInput.start_at,
@@ -197,7 +199,7 @@ describe('createKioskBanner', () => {
 		const a = createKioskBanner(input, ctx, now);
 		const b = createKioskBanner(input, ctx, now);
 		expect(a._id).not.toBe(b._id);
-		expect(a).toMatchObject({ order: 1, duration_sec: 10, status: 'active' });
+		expect(a).toMatchObject({ order: 3, duration_sec: 10, status: 'active' });
 	});
 });
 
@@ -281,7 +283,7 @@ describe('splitByView', () => {
 	});
 });
 
-describe('order conflicts (FR-KBR-45)', () => {
+describe('next banner order', () => {
 	const now = new Date('2026-10-16T00:00:00.000Z');
 	const banner = (
 		id: string,
@@ -292,48 +294,6 @@ describe('order conflicts (FR-KBR-45)', () => {
 		order,
 		end_at: extra.end_at ?? '2026-10-20T00:00:00.000Z',
 		screen_type: extra.screen_type
-	});
-
-	describe('findOrderConflicts', () => {
-		it('returns banners with the same order and screen type', () => {
-			const a = banner('a', 2, { screen_type: 'compact' });
-			const list = [a, banner('b', 3, { screen_type: 'compact' })];
-			expect(findOrderConflicts(list, { order: 2, screen_type: 'compact', now })).toEqual([a]);
-		});
-
-		it('ignores another screen type', () => {
-			const list = [banner('a', 2, { screen_type: 'portrait' })];
-			expect(findOrderConflicts(list, { order: 2, screen_type: 'compact', now })).toEqual([]);
-		});
-
-		it('counts a legacy banner (no screen type) as compact', () => {
-			const legacy = banner('a', 2);
-			expect(findOrderConflicts([legacy], { order: 2, screen_type: 'compact', now })).toEqual([
-				legacy
-			]);
-			expect(findOrderConflicts([legacy], { order: 2, screen_type: 'portrait', now })).toEqual([]);
-		});
-
-		it('ignores expired banners but keeps one ending exactly now', () => {
-			const expired = banner('a', 2, { end_at: '2026-10-15T23:59:59.000Z' });
-			const endsNow = banner('b', 2, { end_at: now.toISOString() });
-			expect(
-				findOrderConflicts([expired, endsNow], { order: 2, screen_type: 'compact', now })
-			).toEqual([endsNow]);
-		});
-
-		it('excludes the banner being edited', () => {
-			const a = banner('a', 2);
-			const b = banner('b', 2);
-			expect(
-				findOrderConflicts([a, b], {
-					order: 2,
-					screen_type: 'compact',
-					excludeId: 'kiosk_banner:a',
-					now
-				})
-			).toEqual([b]);
-		});
 	});
 
 	describe('nextBannerOrder', () => {

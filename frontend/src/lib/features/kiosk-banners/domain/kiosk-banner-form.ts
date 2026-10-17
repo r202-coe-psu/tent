@@ -29,10 +29,6 @@ export const kioskBannerFormSchema = z
 			.min(1, 'ระบุหัวข้อแบนเนอร์')
 			.max(KIOSK_BANNER_LIMITS.titleMax, 'หัวข้อยาวเกิน 120 ตัวอักษร'),
 		caption: z.string().trim().max(KIOSK_BANNER_LIMITS.captionMax, 'คำอธิบายยาวเกิน 200 ตัวอักษร'),
-		order: z
-			.number({ message: 'ระบุลำดับ' })
-			.int('ลำดับต้องเป็นจำนวนเต็ม')
-			.min(KIOSK_BANNER_LIMITS.orderMin, 'ลำดับต่ำสุด 1'),
 		duration_sec: z
 			.number({ message: 'ระบุจำนวนวินาที' })
 			.int('วินาทีต้องเป็นจำนวนเต็ม')
@@ -61,7 +57,6 @@ export function emptyKioskBannerForm(): KioskBannerFormValues {
 	return {
 		title: '',
 		caption: '',
-		order: KIOSK_BANNER_LIMITS.orderDefault,
 		duration_sec: KIOSK_BANNER_LIMITS.durationDefault,
 		start_at: '',
 		end_at: '',
@@ -77,7 +72,6 @@ export function bannerToFormValues(
 	return {
 		title: banner.title,
 		caption: banner.caption ?? '',
-		order: banner.order,
 		duration_sec: banner.duration_sec,
 		start_at: toBangkokLocalInput(banner.start_at),
 		end_at: toBangkokLocalInput(banner.end_at),
@@ -92,7 +86,6 @@ export function bannerFormToInput(values: KioskBannerFormValues): KioskBannerInp
 	return kioskBannerInputSchema.parse({
 		title: values.title,
 		caption: caption === '' ? null : caption,
-		order: values.order,
 		duration_sec: values.duration_sec,
 		start_at: fromBangkokLocalInput(values.start_at),
 		end_at: fromBangkokLocalInput(values.end_at),

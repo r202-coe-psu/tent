@@ -63,7 +63,6 @@ function record(shelter: string): KioskBannerRecord {
 const fields = {
 	title: 'ใหม่',
 	caption: null,
-	order: 2,
 	duration_sec: 12,
 	start_at: '2026-10-15T00:00:00.000Z',
 	end_at: '2026-11-15T00:00:00.000Z',
@@ -185,9 +184,14 @@ describe('/api/back-office/kiosk-banners/[id] (FR-KBR-10/12/13)', () => {
 			expect(mockUpdate).toHaveBeenCalledWith(
 				DOC_ID,
 				'1-a',
-				expect.objectContaining({ title: 'ใหม่', order: 2 }),
+				expect.objectContaining({ title: 'ใหม่' }),
 				expect.objectContaining({ contentType: 'image/png' })
 			);
+		});
+
+		it('drops an order sent in the body (only the reorder route sets it)', async () => {
+			await call(PUT, 'PUT', { body: { ...fields, order: 9, _rev: '1-a' } });
+			expect(mockUpdate.mock.calls[0][2]).not.toHaveProperty('order');
 		});
 
 		it('passes screen_type to updateBanner and rejects an unknown one', async () => {

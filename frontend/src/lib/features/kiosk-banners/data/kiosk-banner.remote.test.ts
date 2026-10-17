@@ -30,7 +30,6 @@ const summary = {
 const input: KioskBannerInput = {
 	title: 'ประกาศ',
 	caption: null,
-	order: 1,
 	duration_sec: 10,
 	start_at: '2026-10-14T17:00:00.000Z',
 	end_at: '2026-10-20T17:00:00.000Z',

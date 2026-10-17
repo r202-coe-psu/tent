@@ -27,7 +27,6 @@ const NOW = new Date('2026-10-15T03:00:00.000Z');
 const input: KioskBannerInput = {
 	title: 'ประกาศ',
 	caption: null,
-	order: 2,
 	duration_sec: 10,
 	start_at: '2026-10-01T00:00:00.000Z',
 	end_at: '2026-11-01T00:00:00.000Z',
@@ -41,19 +40,24 @@ beforeEach(() => {
 	adminRawMock.mockReset();
 });
 
+const BYTES = { bytes: png, contentType: 'image/png' } as const;
+const CTX = { shelterCode: 'SH1', createdBy: 'alice' };
+const FOUND_NONE = { status: 200, data: { docs: [] } };
+
 describe('createBanner', () => {
 	it('sends one PUT carrying the doc fields and the inline image attachment', async () => {
-		adminRawMock.mockResolvedValue({ status: 201, data: { ok: true, id: 'x', rev: '1-a' } });
+		adminRawMock
+			.mockResolvedValueOnce(FOUND_NONE)
+			.mockResolvedValueOnce({ status: 201, data: { ok: true, id: 'x', rev: '1-a' } });
 
-		const record = await createBanner(
-			input,
-			{ bytes: png, contentType: 'image/png' },
-			{ shelterCode: 'SH1', createdBy: 'alice' },
-			NOW
-		);
+		const record = await createBanner(input, BYTES, CTX, NOW);
 
-		expect(adminRawMock).toHaveBeenCalledTimes(1);
-		const [path, method, body] = adminRawMock.mock.calls[0];
+		expect(adminRawMock).toHaveBeenCalledTimes(2);
+		const [findPath, findMethod, findBody] = adminRawMock.mock.calls[0];
+		expect(findPath).toBe('/registry/_find');
+		expect(findMethod).toBe('POST');
+		expect(findBody).toMatchObject({ selector: { type: 'kiosk_banner', shelter_code: 'SH1' } });
+		const [path, method, body] = adminRawMock.mock.calls[1];
 		expect(method).toBe('PUT');
 		expect(path).toBe(`/registry/${encodeURIComponent(record._id)}`);
 		expect(body).toMatchObject({
@@ -65,6 +69,65 @@ describe('createBanner', () => {
 			_attachments: { image: { content_type: 'image/png', data: pngBase64 } }
 		});
 		expect(record._rev).toBe('1-a');
+	});
+
+	it('gives the first banner of a screen type order 1', async () => {
+		adminRawMock
+			.mockResolvedValueOnce(FOUND_NONE)
+			.mockResolvedValueOnce({ status: 201, data: { ok: true, id: 'x', rev: '1-a' } });
+
+		const record = await createBanner(input, BYTES, CTX, NOW);
+
+		expect(record.order).toBe(1);
+		expect(adminRawMock.mock.calls[1][2]).toMatchObject({ order: 1 });
+	});
+
+	it('appends after the highest current order of the same screen type', async () => {
+		adminRawMock
+			.mockResolvedValueOnce({
+				status: 200,
+				data: {
+					docs: [
+						existingDoc({ _id: 'kiosk_banner:a', order: 2 }),
+						existingDoc({ _id: 'kiosk_banner:b', order: 5, screen_type: 'compact' })
+					]
+				}
+			})
+			.mockResolvedValueOnce({ status: 201, data: { ok: true, id: 'x', rev: '1-a' } });
+
+		const record = await createBanner(input, BYTES, CTX, NOW);
+
+		expect(record.order).toBe(6);
+		expect(adminRawMock.mock.calls[1][2]).toMatchObject({ order: 6 });
+	});
+
+	it('ignores other screen types and expired banners', async () => {
+		adminRawMock
+			.mockResolvedValueOnce({
+				status: 200,
+				data: {
+					docs: [
+						existingDoc({ _id: 'kiosk_banner:a', order: 3 }),
+						existingDoc({ _id: 'kiosk_banner:b', order: 9, screen_type: 'portrait' }),
+						existingDoc({ _id: 'kiosk_banner:c', order: 8, end_at: '2026-10-01T00:00:00.000Z' })
+					]
+				}
+			})
+			.mockResolvedValueOnce({ status: 201, data: { ok: true, id: 'x', rev: '1-a' } });
+
+		const record = await createBanner(input, BYTES, CTX, NOW);
+
+		expect(record.order).toBe(4);
+	});
+
+	it('ignores an order smuggled in the input', async () => {
+		adminRawMock
+			.mockResolvedValueOnce(FOUND_NONE)
+			.mockResolvedValueOnce({ status: 201, data: { ok: true, id: 'x', rev: '1-a' } });
+
+		const record = await createBanner({ ...input, order: 7 } as KioskBannerInput, BYTES, CTX, NOW);
+
+		expect(record.order).toBe(1);
 	});
 });
 
@@ -132,14 +195,90 @@ describe('updateBanner', () => {
 	});
 
 	it('writes screen_type, moving a legacy banner to portrait', async () => {
-		adminRawMock.mockResolvedValueOnce({ status: 200, data: existingDoc() }).mockResolvedValueOnce({
-			status: 201,
-			data: { ok: true, id: 'kiosk_banner:b1', rev: '2-b' }
-		});
+		adminRawMock
+			.mockResolvedValueOnce({ status: 200, data: existingDoc() })
+			.mockResolvedValueOnce(FOUND_NONE)
+			.mockResolvedValueOnce({
+				status: 201,
+				data: { ok: true, id: 'kiosk_banner:b1', rev: '2-b' }
+			});
 
 		await updateBanner('kiosk_banner:b1', '1-a', { ...input, screen_type: 'portrait' }, null, NOW);
 
-		expect(adminRawMock.mock.calls[1][2]).toMatchObject({ screen_type: 'portrait' });
+		expect(adminRawMock.mock.calls[2][2]).toMatchObject({ screen_type: 'portrait', order: 1 });
+	});
+
+	it('keeps the stored order and reads no other banners when the screen type is unchanged', async () => {
+		adminRawMock
+			.mockResolvedValueOnce({ status: 200, data: existingDoc({ order: 4 }) })
+			.mockResolvedValueOnce({
+				status: 201,
+				data: { ok: true, id: 'kiosk_banner:b1', rev: '2-b' }
+			});
+
+		const record = await updateBanner('kiosk_banner:b1', '1-a', input, null, NOW);
+
+		expect(adminRawMock).toHaveBeenCalledTimes(2);
+		expect(adminRawMock.mock.calls[1][2]).toMatchObject({ order: 4 });
+		expect(record.order).toBe(4);
+	});
+
+	it('never writes an order smuggled in the input', async () => {
+		adminRawMock
+			.mockResolvedValueOnce({ status: 200, data: existingDoc({ order: 4 }) })
+			.mockResolvedValueOnce({
+				status: 201,
+				data: { ok: true, id: 'kiosk_banner:b1', rev: '2-b' }
+			});
+
+		await updateBanner(
+			'kiosk_banner:b1',
+			'1-a',
+			{ ...input, order: 9 } as KioskBannerInput,
+			null,
+			NOW
+		);
+
+		expect(adminRawMock.mock.calls[1][2]).toMatchObject({ order: 4 });
+	});
+
+	it('appends to the end of the new screen type when the screen type changes', async () => {
+		adminRawMock
+			.mockResolvedValueOnce({ status: 200, data: existingDoc({ order: 1 }) })
+			.mockResolvedValueOnce({
+				status: 200,
+				data: {
+					docs: [
+						existingDoc({ order: 1 }),
+						existingDoc({ _id: 'kiosk_banner:p1', order: 2, screen_type: 'portrait' }),
+						existingDoc({ _id: 'kiosk_banner:p2', order: 5, screen_type: 'portrait' }),
+						existingDoc({
+							_id: 'kiosk_banner:p3',
+							order: 9,
+							screen_type: 'portrait',
+							end_at: '2026-10-01T00:00:00.000Z'
+						})
+					]
+				}
+			})
+			.mockResolvedValueOnce({
+				status: 201,
+				data: { ok: true, id: 'kiosk_banner:b1', rev: '2-b' }
+			});
+
+		const record = await updateBanner(
+			'kiosk_banner:b1',
+			'1-a',
+			{ ...input, screen_type: 'portrait' },
+			null,
+			NOW
+		);
+
+		const [findPath, , findBody] = adminRawMock.mock.calls[1];
+		expect(findPath).toBe('/registry/_find');
+		expect(findBody).toMatchObject({ selector: { type: 'kiosk_banner', shelter_code: 'SH1' } });
+		expect(adminRawMock.mock.calls[2][2]).toMatchObject({ screen_type: 'portrait', order: 6 });
+		expect(record.order).toBe(6);
 	});
 
 	it('inlines the new image when one is given', async () => {

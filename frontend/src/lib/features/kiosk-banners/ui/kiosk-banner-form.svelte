@@ -12,11 +12,10 @@
 	import { Switch } from '$lib/components/ui/switch/index.js';
 	import { Textarea } from '$lib/components/ui/textarea/index.js';
 	import Eye from '@lucide/svelte/icons/eye';
-	import TriangleAlert from '@lucide/svelte/icons/triangle-alert';
 	import Upload from '@lucide/svelte/icons/upload';
 	import { KIOSK_SCREENS, type KioskScreenType } from '$lib/features/shared/domain/kiosk-screen';
 	import KioskScreenPicker from '$lib/features/shared/ui/kiosk-screen-picker.svelte';
-	import { KIOSK_BANNER_LIMITS, findOrderConflicts } from '../domain/kiosk-banner';
+	import { KIOSK_BANNER_LIMITS } from '../domain/kiosk-banner';
 	import { joinLocalInput, splitLocalInput } from '../domain/kiosk-banner-datetime';
 	import {
 		bannerFormToInput,
@@ -44,17 +43,11 @@
 	let {
 		shelterCode,
 		banner,
-		siblings = [],
-		defaultOrder,
 		onsave
 	}: {
 		shelterCode: string;
 		/** Present in edit mode. */
 		banner?: KioskBannerSummary;
-		/** The shelter's current banners, used only for the non-blocking duplicate-order note. */
-		siblings?: KioskBannerSummary[];
-		/** Create mode only: the order the form starts with. */
-		defaultOrder?: number;
 		onsave: (payload: KioskBannerSavePayload) => Promise<void>;
 	} = $props();
 
@@ -64,11 +57,7 @@
 	// svelte-ignore state_referenced_locally
 	const initialRev = banner?._rev;
 	// svelte-ignore state_referenced_locally
-	const initialValues = banner
-		? bannerToFormValues(banner)
-		: { ...emptyKioskBannerForm(), order: defaultOrder ?? KIOSK_BANNER_LIMITS.orderDefault };
-	// Captured once: a banner expiring while the form is open does not flicker the note.
-	const mountedAt = new Date();
+	const initialValues = banner ? bannerToFormValues(banner) : emptyKioskBannerForm();
 	// svelte-ignore state_referenced_locally
 	const currentImageUrl = banner
 		? kioskBannerRemoteRepository.imageUrl(banner._id, banner._rev)
@@ -161,25 +150,6 @@
 		const slides: Record<KioskScreenType, KioskBannerSlide[]> = { compact: [], portrait: [] };
 		if (slide) slides[$formData.screen_type].push(slide);
 		return slides;
-	});
-
-	const orderConflicts = $derived(
-		findOrderConflicts(siblings, {
-			order: $formData.order,
-			screen_type: $formData.screen_type,
-			excludeId: banner?._id,
-			now: mountedAt
-		})
-	);
-	const orderWarning = $derived.by(() => {
-		if (orderConflicts.length === 0) return null;
-		const titles = orderConflicts
-			.slice(0, 2)
-			.map((b) => `「${b.title}」`)
-			.join('、');
-		const more = orderConflicts.length > 2 ? ` และอีก ${orderConflicts.length - 2} รายการ` : '';
-		const screen = KIOSK_SCREENS[$formData.screen_type].label;
-		return `ลำดับ ${$formData.order} ซ้ำกับ${titles}(${screen})${more} — แบนเนอร์ที่ลำดับเดียวกันจะแสดงตามเวลาเริ่ม`;
 	});
 
 	const listHref = resolve('/back-office/kiosks/banners');
@@ -277,52 +247,23 @@
 				<Form.FieldErrors />
 			</Form.Field>
 
-			<div class="grid grid-cols-2 gap-4">
-				<Form.Field {form} name="order">
-					<Form.Control id="banner-order">
-						{#snippet children({ props })}
-							<Form.Label>ลำดับ <span class="text-destructive">*</span></Form.Label>
-							<Input
-								{...props}
-								type="number"
-								min={KIOSK_BANNER_LIMITS.orderMin}
-								step="1"
-								class="h-11"
-								bind:value={$formData.order}
-							/>
-						{/snippet}
-					</Form.Control>
-					<Form.FieldErrors />
-				</Form.Field>
-				<Form.Field {form} name="duration_sec">
-					<Form.Control id="banner-duration_sec">
-						{#snippet children({ props })}
-							<Form.Label>วินาที/สไลด์ <span class="text-destructive">*</span></Form.Label>
-							<Input
-								{...props}
-								type="number"
-								min={KIOSK_BANNER_LIMITS.durationMin}
-								max={KIOSK_BANNER_LIMITS.durationMax}
-								step="1"
-								class="h-11"
-								bind:value={$formData.duration_sec}
-							/>
-						{/snippet}
-					</Form.Control>
-					<Form.FieldErrors />
-				</Form.Field>
-			</div>
-
-			{#if orderWarning}
-				<p
-					id="banner-order-warning"
-					role="status"
-					class="flex items-start gap-2 rounded-lg border border-amber-500/40 bg-amber-50/80 p-3 text-xs text-amber-900"
-				>
-					<TriangleAlert class="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
-					<span>{orderWarning}</span>
-				</p>
-			{/if}
+			<Form.Field {form} name="duration_sec">
+				<Form.Control id="banner-duration_sec">
+					{#snippet children({ props })}
+						<Form.Label>วินาที/สไลด์ <span class="text-destructive">*</span></Form.Label>
+						<Input
+							{...props}
+							type="number"
+							min={KIOSK_BANNER_LIMITS.durationMin}
+							max={KIOSK_BANNER_LIMITS.durationMax}
+							step="1"
+							class="h-11"
+							bind:value={$formData.duration_sec}
+						/>
+					{/snippet}
+				</Form.Control>
+				<Form.FieldErrors />
+			</Form.Field>
 
 			{@render dateTimeField('start_at', 'เริ่ม')}
 
