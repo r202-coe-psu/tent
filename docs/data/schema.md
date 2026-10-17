@@ -2704,3 +2704,43 @@ Buffer ของ partner booking (M2) — FastAPI insert ตอนรับค�
 **Migration (CR-169):** ไม่ bump `schema_v` (Beanie doc) — field ใหม่ทั้งหมดมี default (`person_seq = 0`, `group_size = 1`, `committed = true`) → แถวเดิมคือกลุ่มขนาด 1 ไม่ต้อง backfill; index ใหม่สร้างตอน Beanie init
 
 **booking_status (EXT-010):** รายคน: `pending`/`written` → `BOOKED` · `cancelled` หรือ `cancel_requested` → `CANCELLED` · `rejected` → `REJECTED` · **aggregate ของกลุ่ม:** ไม่มีคนที่เปิดอยู่และมี `CANCELLED` ≥ 1 → `CANCELLED` · มี `REJECTED` → `REJECTED` · อื่น → `BOOKED` (CR-169 FR-42)
+
+### 9.8 `external_booking_idempotency` (MongoDB) — **ใหม่ (#614, decision sync CR-169 2026-10-17)**
+
+แถวของ `Idempotency-Key` ที่ partner ส่งกับ `POST /external/bookings` (EXT-008) ใช้ตอบ request ซ้ำด้วย `booking_id` เดิม. Beanie document (`tent_model.external_booking_idempotency`), ไม่มี `schema_v`, **ไม่มี PII** (เก็บเฉพาะ hash ของคำขอ).
+
+| Field | ชนิด | req | หมายเหตุ |
+| --- | --- | --- | --- |
+| `_id` | str | req | `IK-{ulid}` |
+| `client_id` | str | req | จาก JWT claims — key ผูกกับ client เดียว (client อื่นใช้ key เดียวกันได้) |
+| `key` | str | req | ค่า header `Idempotency-Key` (1–255 ตัวอักษร) |
+| `request_hash` | str | req | `sha256` ของคำขอที่ normalize แล้ว: `location_code` + `persons[]` ทั้งหมด (`cid` แทนด้วย `national_id_hash` ก่อน hash; ชื่อ/เบอร์ถูก hash แต่ไม่เก็บ) — **ห้ามเก็บ CID/ชื่อ/เบอร์ดิบ** |
+| `booking_id` | str | req | `BK-{ulid}` ที่รอบแรกจองไว้ (ตั้งแต่แถวเป็น `in_progress`) |
+| `status` | enum(`in_progress`,`completed`) | req | `in_progress` ก่อน stage แถว `external_bookings` · `completed` หลัง commit สำเร็จ (รวม G5) · default `in_progress` |
+| `created_at` | ts | req | เวลาที่รอบแรกเริ่ม — TTL อ้างอิงฟิลด์นี้; ถูกตั้งใหม่เมื่อ claim key ที่ค้าง (ดู claim ด้านล่าง) |
+
+**Index:** `(client_id, key)` unique (`uniq_idempotency_key_per_client`) — key ซ้ำได้เฉพาะภายใน client เดียวกัน (ชนกันที่ index นี้) · `(created_at)` **TTL 86400 วินาที** (`ttl_idempotency_created_at`) — หมดอายุ 24 ชม. หลังรอบแรก
+
+**Lifecycle (EXT-008):**
+- ไม่มี header → ไม่สร้างแถว
+- มี header → หลัง validate body แล้ว ก่อนตรวจ shelter/duplicate: มีแถวเดิม → hash ต่าง = `idempotency_key_reused` (409) · hash เดียวกัน + `in_progress` อายุ ≤ 60 วินาที (`created_at`) = `idempotency_in_progress` (409) · hash เดียวกัน + `in_progress` อายุ > 60 วินาที = ตัดสินจากแถวจริงของ `booking_id` (ดูด้านล่าง) · hash เดียวกัน + `completed` = 201 body เดิม
+- ไม่มีแถว → ตรวจ shelter ตามปกติ → insert แถว `in_progress` ก่อนตรวจ duplicate (unique; ถ้าชนกับรอบที่ชนะก่อน ให้ตอบตามแถวนั้น; คำขอที่ overlap จึงไม่ถูกนับเป็น duplicate ของตัวเอง) → ตรวจ duplicate → stage `external_bookings`
+- insert แถว key ที่ error หรือถูก cancel ระหว่างนั้น → ลบแถวของ request นั้นเอง (ไม่แตะแถวของรอบอื่น)
+- รอบแรกล้มโดยยังไม่มี booking (4xx/5xx รวม `duplicate_booking`) → **ลบแถว** (`release`) เพื่อให้ retry ทำได้ · ยกเว้น flip ตอบ error / ถูกยกเลิก แล้วลบแถว `pending` ของ `booking_id` ไม่สำเร็จ → ไม่ release (ดูข้อรอบแรกถูกยกเลิกด้านล่าง)
+- commit สำเร็จ หรือ G5 (flip ตอบ error แต่ทุกแถวของ `booking_id` `committed: true` ครบ `group_size`) → `status = completed`
+- รอบแรกถูกยกเลิกกลางคัน (client หลุด) ระหว่าง commit → รอ flip จบก่อนนับ: ทุกแถว `committed: true` ครบ → `status = completed` (แถว `external_bookings` คงไว้); ไม่ครบ → ลบแถว `pending` ของ `booking_id` และ **ลบแถว key** (เหมือน release) · ถ้าลบแถว `pending` ไม่สำเร็จ (retry ครบแล้ว) → **ไม่ release แถว key** (คง `in_progress`) เพื่อให้ retry ด้วย key เดิมที่อายุ > 60 วินาทีจัดการกลุ่มตามกติกา `in_progress` ค้างด้านล่าง (ถ้า release แล้วแถวที่ค้างจะกัน CID เหล่านี้ด้วย `duplicate_booking`)
+- **ทุกการเขียนแถว key ของรอบหนึ่ง guard ด้วย lease ของรอบนั้นเอง** (`_id` + `status: in_progress` + `created_at` ที่รอบนั้นตั้งไว้ หรือที่ claim ตั้งไว้) — ทั้ง release (ลบแถว) และ mark `completed` · ถ้า lease หายแล้ว (key ถูก claim ไป ซึ่งตั้ง `created_at` ใหม่ หรือแถวเป็น `completed` แล้ว) การเขียนนั้น match ไม่ได้และ**ไม่เปลี่ยนอะไร** — รอบที่เสีย lease ไม่ลบหรือเขียนทับแถว key ของรอบอื่นเด็ดขาด (เจ้าของ lease ปัจจุบันหรือ retry ถัดไปตัดสินจากแถวจริงแทน); แถว `completed` ไม่ถูก release
+- commit ล้ม/ถูกยกเลิกและ **นับแถว committed ไม่ได้** (read error): มี key → release แถว key ด้วย lease ก่อน แล้วลบแถว `pending` ของ `booking_id` **เฉพาะเมื่อแถว key หายไปแล้ว** (ไม่มีรอบอื่นถือ booking นี้); ถ้าแถว key ยังอยู่ (ถูก claim/completed โดยรอบอื่น ซึ่งอาจตอบ 201 booking นี้ไปแล้ว) → ไม่แตะแถว `external_bookings` (เจ้าของ lease / sweeper จัดการ) · ไม่มี key → ลบแถว `pending` ตามเดิม · ทั้งสองกรณีตอบ 500 `internal_error`
+- ไม่มีการ migrate: collection ใหม่ สร้าง index ตอน Beanie init
+
+**`in_progress` ค้าง (decision sync CR-169 2026-10-17, จาก code review PR #666):** แถว key เก็บ `booking_id` ตั้งแต่ตอน insert ดังนั้น request ที่เจอแถว `in_progress` อายุ > 60 วินาที (รอบแรกอาจถูก kill ก่อน release/complete) ตัดสินจากแถว `external_bookings` ที่มี `booking_id` นั้น:
+- **committed ครบ `group_size`** → **201** body เดิม (`booking_id` เดิม, ไม่สร้างแถวใหม่) และ mark key เป็น `completed`
+- **ไม่มีแถว `committed: true` เลย** หรือ **committed บางส่วนแต่ไม่เหลือแถว `committed: false`** → **claim** (ลำดับด้านล่าง). ได้สิทธิ์ → คำขอนี้ทำเป็นคำขอใหม่ (`booking_id` ใหม่, insert key ใหม่); ไม่ได้สิทธิ์ → **409** `idempotency_in_progress`
+  - **claim:** (1) **lease** — `update` ด้วย `_id` + `status: in_progress` + `created_at` เดิม ตั้ง `created_at` = ตอนนี้ (guard ด้วยค่าเดิม → คำขอที่แข่งกันได้สิทธิ์เพียงคำขอเดียว; คำขออื่นเห็นแถวอายุน้อยและ fence ของรอบเดิมไม่ผ่านอีก) · (2) ลบแถว `committed: false` ของ `booking_id` เดิม (ต้องสำเร็จก่อนนับ ถ้าไม่สำเร็จ → 409) · (3) นับแถว `committed: true` ของ `booking_id` เดิมอีกครั้ง:
+    - ครบ `group_size` (flip ที่ค้างจบก่อน lease) → mark key `completed` → **201** booking เดิม
+    - ไม่มีเลย → ลบแถว key ด้วย `_id` + `status: in_progress` + `created_at` ที่ lease ตั้งไว้ (`deleted_count = 1` ได้เพียงครั้งเดียว) → คำขอนี้ทำเป็นคำขอใหม่
+    - บางส่วน (flip แข่งกับ lease) → ลบแถว `state: pending` ที่เหลือของ `booking_id` (เทียบเท่า phase 2 ของ sweeper ไม่ให้ PII ค้าง) → **409** `idempotency_in_progress`; แถว key คงอยู่ที่ `in_progress` และรอบ retry ถัดไป (อายุ > 60 วินาทีหลัง lease) เข้าเงื่อนไข "ไม่มีแถว committed" · ถ้าลบไม่สำเร็จ (retry ครบแล้ว) ก็ตอบ 409 เหมือนกัน กลุ่มค้างแบบ committed บางส่วนที่ไม่มีแถว staged ซึ่ง sweeper ไม่กวาด → retry ถัดไป (อายุ > 60 วินาที) claim อีกครั้งและลองลบใหม่
+  - `created_at` ของแถว key ถูกตั้งใหม่ทุกครั้งที่ claim สำเร็จ (lease) — TTL 24 ชม. นับจากค่านี้
+- **fence ก่อน commit (ทุกรอบที่ key ถูกสร้าง):** หลัง insert แถว staged และก่อน flip `committed` ตรวจว่าแถว key ยังเป็นของรอบนี้ (`_id` + `status: in_progress` + `created_at` ที่รอบนี้ตั้งไว้); ถ้าถูก claim แล้ว (lease เปลี่ยน `created_at` หรือแถวถูกลบ) → ลบแถว staged ของรอบนี้ ตอบ **409** `idempotency_in_progress` และไม่ commit · ถ้า flip มาถึงหลัง claim ลบแถว staged ไปแล้ว flip จะ match น้อยกว่า `group_size` → shortfall → **500** `internal_error` ตามกติกาเดิม (ไม่มีแถวที่ commit)
+- **committed บางส่วน และยังมีแถว `committed: false`** → **409** `idempotency_in_progress` และคำขอนี้ไม่แก้ไขแถวใด ๆ · worker sweeper (`sweep_stale_staged`, FR-33) กวาดกลุ่มนี้เมื่อแถว staged อายุเกิน 60 วินาที: phase 1 ลบแถว `committed: false`, phase 2 ลบแถว `state: pending` ที่เหลือของ `booking_id` (รวมแถว `committed: true`) → หลังกวาด กลุ่มไม่มีแถว committed แล้ว รอบ retry ถัดไปจึงเข้า claim ได้ (ไม่ใช่ 409 จนหมด TTL)
+- อายุ ≤ 60 วินาที → 409 `idempotency_in_progress` ไม่แตะข้อมูล

@@ -6,7 +6,7 @@ import asyncio
 import logging
 import traceback
 from collections.abc import Awaitable, Callable
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from typing import Any
 
@@ -14,6 +14,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 from pymongo.errors import BulkWriteError, DuplicateKeyError
 from tent_model.external_booking import ExternalBooking
+from tent_model.external_booking_idempotency import ExternalBookingIdempotency
 from tent_model.public_person import PublicPerson
 from tent_model.public_shelter import PublicShelter
 from tent_model.third_party_access_log import ThirdPartyAccessLog
@@ -256,12 +257,15 @@ async def _drain_detached() -> None:
         await asyncio.gather(*list(use_case._detached_tasks), return_exceptions=True)
 
 
-def _create_directly(body: dict[str, Any]) -> Any:
+def _create_directly(body: dict[str, Any], idempotency_key: str | None = None) -> Any:
     from apiapp.modules.thirdparty_bookings.use_case import ThirdPartyBookingsUseCase
 
     claims = ThirdPartyClaims(client_id="m2-test", module_name="M2", scopes=["booking-write"])
     return ThirdPartyBookingsUseCase().create_booking(
-        body=BookingCreateRequest.model_validate(body), claims=claims, client_ip="127.0.0.1"
+        body=BookingCreateRequest.model_validate(body),
+        claims=claims,
+        client_ip="127.0.0.1",
+        idempotency_key=idempotency_key,
     )
 
 
@@ -2698,3 +2702,1116 @@ async def test_cancel_group_pending_only_past_commit_budget_is_still_200(
         ("cancelled", None),
         ("cancelled", None),
     ]
+
+
+# --- #614 Idempotency-Key (CR-169 decision sync 2026-10-17) ----------------------------
+
+
+def _idem(key: str, headers: dict[str, str] | None = None) -> dict[str, str]:
+    return {**(headers or GRANTED), "Idempotency-Key": key}
+
+
+async def _keys(client_id: str = "m2-test") -> list[Any]:
+    from tent_model.external_booking_idempotency import ExternalBookingIdempotency
+
+    return await ExternalBookingIdempotency.find(
+        ExternalBookingIdempotency.client_id == client_id
+    ).to_list()
+
+
+async def test_replay_with_same_key_and_body_returns_the_original_201(
+    client: AsyncClient, shelters: None
+) -> None:
+    body = _group_payload(3)
+    first = await client.post(URL, json=body, headers=_idem("retry-1"))
+    assert first.status_code == 201
+    replay = await client.post(URL, json=body, headers=_idem("retry-1"))
+    assert replay.status_code == 201
+    assert replay.json() == first.json()
+    booking_id = first.json()["result"]["booking_id"]
+    assert len(await _rows(booking_id)) == 3
+    assert len(await _rows()) == 3  # the replay created nothing
+    # replay is an accepted request: one granted access-log row per request
+    assert await _log_statuses() == ["granted", "granted"]
+    logs = await ThirdPartyAccessLog.find_all().to_list()
+    assert [log.result_count for log in logs] == [3, 3]
+
+
+async def test_replay_with_legacy_single_body_keeps_booking_status(
+    client: AsyncClient, shelters: None
+) -> None:
+    first = await client.post(URL, json=_payload(), headers=_idem("legacy-1"))
+    replay = await client.post(URL, json=_payload(), headers=_idem("legacy-1"))
+    assert first.status_code == 201
+    assert replay.status_code == 201
+    assert replay.json()["result"] == first.json()["result"]
+    assert replay.json()["result"]["booking_status"] == "BOOKED"
+    assert replay.json()["result"]["persons_count"] == 1
+
+
+async def test_same_key_with_a_different_body_is_refused(
+    client: AsyncClient, shelters: None
+) -> None:
+    first = await client.post(URL, json=_group_payload(3), headers=_idem("reused-1"))
+    assert first.status_code == 201
+    booking_id = first.json()["result"]["booking_id"]
+    other = await client.post(URL, json=_group_payload(2), headers=_idem("reused-1"))
+    assert other.status_code == 409
+    assert other.json()["code"] == "idempotency_key_reused"
+    assert [row["booking_id"] for row in await _rows()] == [booking_id] * 3
+    assert await _log_statuses() == ["granted", "denied_idempotency_key_reused"]
+
+
+async def test_retry_while_the_first_request_is_in_progress_is_refused(
+    client: AsyncClient, shelters: None
+) -> None:
+    from tent_model.external_booking_idempotency import ExternalBookingIdempotency
+
+    from apiapp.modules.thirdparty_bookings import use_case
+
+    body = _payload()
+    person = use_case._Person(cid=CID, first_name="สมชาย", last_name="ใจดี", phone="0812345678")
+    await ExternalBookingIdempotency(
+        id="IK-BUSY",
+        client_id="m2-test",
+        key="busy-1",
+        request_hash=use_case._request_hash("SH001", [person]),
+        booking_id="BK-BUSY",
+        status="in_progress",
+        created_at=datetime.now(UTC),
+    ).insert()
+    response = await client.post(URL, json=body, headers=_idem("busy-1"))
+    assert response.status_code == 409
+    assert response.json()["code"] == "idempotency_in_progress"
+    assert await _rows() == []
+
+
+def _group_hash(count: int) -> str:
+    """The request_hash `_group_payload(count)` produces at SH001 (for seeded key rows)."""
+    from apiapp.modules.thirdparty_bookings import use_case
+
+    persons = [
+        use_case._Person(cid=_cid(i), first_name=f"ชื่อ{i}", last_name="ใจดี", phone=f"08{i:08d}")
+        for i in range(count)
+    ]
+    return use_case._request_hash("SH001", persons)
+
+
+async def _seed_key(
+    key: str,
+    *,
+    count: int,
+    booking_id: str,
+    age_seconds: int,
+    status: str = "in_progress",
+) -> Any:
+    from tent_model.external_booking_idempotency import ExternalBookingIdempotency
+
+    return await ExternalBookingIdempotency(
+        id=f"IK-{booking_id}",
+        client_id="m2-test",
+        key=key,
+        request_hash=_group_hash(count),
+        booking_id=booking_id,
+        status=status,
+        created_at=datetime.now(UTC) - timedelta(seconds=age_seconds),
+    ).insert()
+
+
+async def test_stale_key_whose_group_is_fully_committed_answers_the_original_201(
+    client: AsyncClient, shelters: None
+) -> None:
+    """in_progress > 60 s and every row committed: the booking exists, so 201 with its
+    original booking_id, the key is completed and nothing new is written."""
+    await _group(3, booking_id="BK-STALE-A", committed=True)
+    await _seed_key("stale-a", count=3, booking_id="BK-STALE-A", age_seconds=120)
+    response = await client.post(URL, json=_group_payload(3), headers=_idem("stale-a"))
+    assert response.status_code == 201
+    assert response.json()["result"] == {
+        "booking_id": "BK-STALE-A",
+        "location_code": "SH001",
+        "persons_count": 3,
+        "booking_status": "BOOKED",
+    }
+    assert [(k.status, k.booking_id) for k in await _keys()] == [("completed", "BK-STALE-A")]
+    assert len(await _rows()) == 3
+    assert await _log_statuses() == ["granted"]
+
+
+async def test_stale_key_with_no_committed_row_is_taken_over_and_proceeds_as_new(
+    client: AsyncClient, shelters: None
+) -> None:
+    """in_progress > 60 s and no committed row: the key is released and this request creates
+    a new booking. The dead attempt's staged rows are removed; the new key completes."""
+    await _group(3, committed=False, booking_id="BK-STALE-B")
+    await _seed_key("stale-b", count=3, booking_id="BK-STALE-B", age_seconds=120)
+    response = await client.post(URL, json=_group_payload(3), headers=_idem("stale-b"))
+    assert response.status_code == 201
+    new_id = response.json()["result"]["booking_id"]
+    assert new_id != "BK-STALE-B"
+    keys = await _keys()
+    assert [(k.status, k.booking_id) for k in keys] == [("completed", new_id)]
+    rows = await _rows()
+    assert len(rows) == 3
+    assert {row["booking_id"] for row in rows} == {new_id}
+    assert all(row["committed"] is True for row in rows)
+    assert await _log_statuses() == ["granted"]
+
+
+async def test_stale_key_with_a_partial_commit_answers_409_and_touches_nothing(
+    client: AsyncClient, shelters: None
+) -> None:
+    """in_progress > 60 s with 2 of 3 rows committed: neither the 201 nor the takeover
+    applies. 409 `idempotency_in_progress`; the key and every row are left as they are."""
+    for index in range(3):
+        await _booking(
+            booking_id="BK-STALE-C",
+            row_id=f"BP-STALE-C-{index}",
+            cid=_cid(index),
+            person_seq=index,
+            group_size=3,
+            committed=index < 2,
+        )
+    await _seed_key("stale-c", count=3, booking_id="BK-STALE-C", age_seconds=120)
+    response = await client.post(URL, json=_group_payload(3), headers=_idem("stale-c"))
+    assert response.status_code == 409
+    assert response.json()["code"] == "idempotency_in_progress"
+    keys = await _keys()
+    assert [(k.status, k.booking_id) for k in keys] == [("in_progress", "BK-STALE-C")]
+    assert len(await _rows()) == 3
+    assert await _log_statuses() == ["denied_idempotency_in_progress"]
+
+
+async def test_in_progress_younger_than_60_seconds_is_refused_and_touches_nothing(
+    client: AsyncClient, shelters: None
+) -> None:
+    """59 s old with staged rows and no commit: still 409, the staged rows are not swept."""
+    await _group(3, committed=False, booking_id="BK-YOUNG")
+    await _seed_key("young-1", count=3, booking_id="BK-YOUNG", age_seconds=59)
+    response = await client.post(URL, json=_group_payload(3), headers=_idem("young-1"))
+    assert response.status_code == 409
+    assert response.json()["code"] == "idempotency_in_progress"
+    assert [(k.status, k.booking_id) for k in await _keys()] == [("in_progress", "BK-YOUNG")]
+    assert len(await _rows()) == 3
+
+
+async def test_racing_retries_on_one_stale_key_create_exactly_one_booking(
+    client: AsyncClient, shelters: None
+) -> None:
+    """Two same-key retries hit a stale key with no rows at once: at most one booking is
+    created; every 201 carries that booking_id and the other retry is refused or replayed."""
+    await _seed_key("race-retry", count=3, booking_id="BK-RACE-RETRY", age_seconds=120)
+    body = _group_payload(3)
+    first, second = await asyncio.gather(
+        client.post(URL, json=body, headers=_idem("race-retry")),
+        client.post(URL, json=body, headers=_idem("race-retry")),
+    )
+    responses = [first, second]
+    assert {r.status_code for r in responses} <= {201, 409}
+    ok = [r.json()["result"]["booking_id"] for r in responses if r.status_code == 201]
+    assert ok, "one racing retry must get the booking"
+    assert len(set(ok)) == 1
+    assert {row["booking_id"] for row in await _rows()} == {ok[0]}
+    assert len(await _rows()) == 3
+    assert [k.status for k in await _keys()] == ["completed"]
+
+
+async def test_only_one_of_two_racing_claims_wins_the_stale_key(client: AsyncClient) -> None:
+    """Two requests judged the same stale row: the lease succeeds for one only; the other
+    sees a renewed `created_at` and answers busy. The winner removes the key (no rows left)."""
+    from tent_model.external_booking_idempotency import ExternalBookingIdempotency
+
+    from apiapp.modules.thirdparty_bookings import use_case
+
+    await _seed_key("race-takeover", count=3, booking_id="BK-RACE", age_seconds=120)
+    record = await ExternalBookingIdempotency.find_one(
+        ExternalBookingIdempotency.key == "race-takeover"
+    )
+    assert record is not None
+    results = await asyncio.gather(
+        use_case._claim_stale_key(record, 3), use_case._claim_stale_key(record, 3)
+    )
+    assert sorted(results) == ["busy", "free"]
+    assert await _keys() == []
+
+
+async def _age_key(key: str, seconds: int = 120) -> None:
+    """Make an in_progress key look stalled (its created_at older than the 60 s window)."""
+    await ExternalBookingIdempotency.get_pymongo_collection().update_one(
+        {"client_id": "m2-test", "key": key},
+        {"$set": {"created_at": datetime.now(UTC) - timedelta(seconds=seconds)}},
+    )
+
+
+async def test_retry_between_fence_and_flip_takes_over_and_the_stalled_attempt_commits_nothing(
+    client: AsyncClient, shelters: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """#614 race, takeover between the fence and the flip: the stalled attempt passed its fence,
+    then a retry judged the key stale, claimed it and removed the staged rows. The stalled flip
+    matches nothing, so it fails (500) and commits nothing; the retry books one new group."""
+    from apiapp.modules.thirdparty_bookings import use_case
+
+    real_fence = use_case._still_owns_key
+    state: dict[str, Any] = {"fired": False, "retry": None}
+
+    async def fence_then_stall(record_id: str | None, created_at: datetime) -> bool:
+        owned = await real_fence(record_id, created_at)
+        if not state["fired"]:
+            state["fired"] = True
+            await _age_key("stall-1")
+            state["retry"] = await client.post(
+                URL, json=_group_payload(3), headers=_idem("stall-1")
+            )
+        return owned
+
+    monkeypatch.setattr(use_case, "_still_owns_key", fence_then_stall)
+    first = await client.post(URL, json=_group_payload(3), headers=_idem("stall-1"))
+    retry = state["retry"]
+    assert retry is not None and retry.status_code == 201
+    _assert_sanitized_500(first)
+    new_id = retry.json()["result"]["booking_id"]
+    assert [(k.status, k.booking_id) for k in await _keys()] == [("completed", new_id)]
+    rows = await _rows()
+    assert len(rows) == 3
+    assert {row["booking_id"] for row in rows} == {new_id}
+    assert all(row["committed"] is True for row in rows)
+
+
+async def test_flip_between_fence_and_takeover_answers_the_original_201(
+    client: AsyncClient, shelters: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """#614 race, flip between the fence and the takeover: the stalled attempt's commit lands
+    (every row committed) before a retry judges the key stale. The retry answers 201 with the
+    original booking_id and completes the key; the stalled attempt's own commit then also
+    succeeds on the same rows, so there is exactly one booking."""
+    from apiapp.modules.thirdparty_bookings import use_case
+
+    real_fence = use_case._still_owns_key
+    state: dict[str, Any] = {"fired": False, "retry": None}
+
+    async def fence_then_flip(record_id: str | None, created_at: datetime) -> bool:
+        owned = await real_fence(record_id, created_at)
+        if not state["fired"]:
+            state["fired"] = True
+            await ExternalBooking.get_pymongo_collection().update_many(
+                {"committed": False}, {"$set": {"committed": True}}
+            )
+            await _age_key("flip-1")
+            state["retry"] = await client.post(URL, json=_group_payload(3), headers=_idem("flip-1"))
+        return owned
+
+    monkeypatch.setattr(use_case, "_still_owns_key", fence_then_flip)
+    first = await client.post(URL, json=_group_payload(3), headers=_idem("flip-1"))
+    retry = state["retry"]
+    assert first.status_code == 201
+    assert retry is not None and retry.status_code == 201
+    booking_id = first.json()["result"]["booking_id"]
+    assert retry.json()["result"]["booking_id"] == booking_id
+    assert [(k.status, k.booking_id) for k in await _keys()] == [("completed", booking_id)]
+    rows = await _rows()
+    assert len(rows) == 3
+    assert {row["booking_id"] for row in rows} == {booking_id}
+
+
+async def test_claim_on_a_partly_committed_group_clears_it_and_answers_busy(
+    client: AsyncClient, shelters: None
+) -> None:
+    """A flip that raced the lease leaves 2 of 3 rows committed: the claim removes the rest of
+    the group (no committed PII outlives the decision), keeps the key in_progress and answers
+    busy. Once the key is old again, the next retry finds no rows and proceeds as new."""
+    from tent_model.external_booking_idempotency import ExternalBookingIdempotency
+
+    from apiapp.modules.thirdparty_bookings import use_case
+
+    for index in range(3):
+        await _booking(
+            booking_id="BK-CLAIM-P",
+            row_id=f"BP-CLAIM-P-{index}",
+            cid=_cid(index),
+            person_seq=index,
+            group_size=3,
+            committed=index < 2,
+        )
+    await _seed_key("claim-p", count=3, booking_id="BK-CLAIM-P", age_seconds=120)
+    record = await ExternalBookingIdempotency.find_one(ExternalBookingIdempotency.key == "claim-p")
+    assert record is not None
+    assert await use_case._claim_stale_key(record, 3) == "busy"
+    assert await _rows() == []
+    assert [k.status for k in await _keys()] == ["in_progress"]
+
+    young = await client.post(URL, json=_group_payload(3), headers=_idem("claim-p"))
+    assert young.status_code == 409
+    assert young.json()["code"] == "idempotency_in_progress"
+
+    await _age_key("claim-p")
+    response = await client.post(URL, json=_group_payload(3), headers=_idem("claim-p"))
+    assert response.status_code == 201
+    assert response.json()["result"]["booking_id"] != "BK-CLAIM-P"
+    assert [k.status for k in await _keys()] == ["completed"]
+
+
+def _fail_pending_delete(monkeypatch: pytest.MonkeyPatch, failures: int | None) -> list[int]:
+    """Make `delete_many` on `external_bookings` raise `failures` times (None = always), only for
+    a filter on `state: pending`; the `committed: false` drop of a claim still runs."""
+    collection = ExternalBooking.get_pymongo_collection()
+    real = type(collection).delete_many
+    calls = [0]
+
+    async def flaky(self: Any, flt: dict[str, Any], *args: Any, **kwargs: Any) -> Any:
+        if self.name == collection.name and flt.get("state") == "pending":
+            calls[0] += 1
+            if failures is None or calls[0] <= failures:
+                raise RuntimeError("boom")
+        return await real(self, flt, *args, **kwargs)
+
+    monkeypatch.setattr(type(collection), "delete_many", flaky)
+    return calls
+
+
+async def _partial_group(booking_id: str, *, committed: int, staged: int = 0) -> None:
+    """A 3-person group with `committed` committed rows and `staged` staged rows."""
+    for index in range(committed + staged):
+        await _booking(
+            booking_id=booking_id,
+            row_id=f"BP-{booking_id}-{index}",
+            cid=_cid(index),
+            person_seq=index,
+            group_size=3,
+            committed=index < committed,
+        )
+
+
+async def _key_doc(key: str) -> Any:
+    return await ExternalBookingIdempotency.get_pymongo_collection().find_one(
+        {"client_id": "m2-test", "key": key}
+    )
+
+
+async def test_claim_whose_partial_removal_gives_up_is_retried_by_a_later_stale_retry(
+    client: AsyncClient, shelters: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """#614 review r1 (PR #666): the claim's removal of a partly committed group gives up (3
+    failed deletes). The claim still answers busy and the committed rows survive, with no staged
+    row left for the sweeper. Once the key is stale again the next retry claims the group again,
+    removes it (409), and the retry after that proceeds as new — not 409 until the TTL."""
+    from apiapp.modules.thirdparty_bookings import use_case
+
+    await _partial_group("BK-GIVEUP", committed=2, staged=1)
+    await _seed_key("giveup", count=3, booking_id="BK-GIVEUP", age_seconds=120)
+    record = await ExternalBookingIdempotency.find_one(ExternalBookingIdempotency.key == "giveup")
+    assert record is not None
+    calls = _fail_pending_delete(monkeypatch, failures=None)
+    assert await use_case._claim_stale_key(record, 3) == "busy"
+    assert calls[0] == use_case._CLEANUP_ATTEMPTS
+    rows = await _rows()
+    assert len(rows) == 2
+    assert all(row["committed"] is True for row in rows)
+    assert [k.status for k in await _keys()] == ["in_progress"]
+    monkeypatch.undo()
+
+    young = await client.post(URL, json=_group_payload(3), headers=_idem("giveup"))
+    assert young.status_code == 409
+    assert len(await _rows()) == 2
+
+    await _age_key("giveup")
+    cleared = await client.post(URL, json=_group_payload(3), headers=_idem("giveup"))
+    assert cleared.status_code == 409
+    assert cleared.json()["code"] == "idempotency_in_progress"
+    assert await _rows() == []
+    assert [k.status for k in await _keys()] == ["in_progress"]
+
+    await _age_key("giveup")
+    response = await client.post(URL, json=_group_payload(3), headers=_idem("giveup"))
+    assert response.status_code == 201
+    new_id = response.json()["result"]["booking_id"]
+    assert new_id != "BK-GIVEUP"
+    assert {row["booking_id"] for row in await _rows()} == {new_id}
+    assert [k.status for k in await _keys()] == ["completed"]
+
+
+async def test_stale_partial_group_with_staged_rows_is_left_to_the_sweeper(
+    client: AsyncClient, shelters: None
+) -> None:
+    """A partly committed group that still has a staged row is the sweeper's (FR-33): the
+    stale retry answers 409, does not lease the key and touches no row."""
+    await _partial_group("BK-SWEEP", committed=1, staged=2)
+    await _seed_key("sweep", count=3, booking_id="BK-SWEEP", age_seconds=120)
+    before = await _key_doc("sweep")
+    response = await client.post(URL, json=_group_payload(3), headers=_idem("sweep"))
+    assert response.status_code == 409
+    assert response.json()["code"] == "idempotency_in_progress"
+    assert len(await _rows()) == 3
+    assert (await _key_doc("sweep"))["created_at"] == before["created_at"]
+
+
+async def test_stale_partial_group_with_no_staged_row_is_removed_then_taken_over(
+    client: AsyncClient, shelters: None
+) -> None:
+    """2 of 3 rows committed and nothing staged (a removal gave up earlier): the sweeper never
+    reaches it, so the stale retry claims the key, removes the group and answers 409; the next
+    stale retry proceeds as new."""
+    await _partial_group("BK-ORPHAN", committed=2)
+    await _seed_key("orphan", count=3, booking_id="BK-ORPHAN", age_seconds=120)
+    before = await _key_doc("orphan")
+    response = await client.post(URL, json=_group_payload(3), headers=_idem("orphan"))
+    assert response.status_code == 409
+    assert response.json()["code"] == "idempotency_in_progress"
+    assert await _rows() == []
+    after = await _key_doc("orphan")
+    assert after["status"] == "in_progress"
+    assert after["created_at"] > before["created_at"]  # leased
+
+    await _age_key("orphan")
+    retry = await client.post(URL, json=_group_payload(3), headers=_idem("orphan"))
+    assert retry.status_code == 201
+    assert retry.json()["result"]["booking_id"] != "BK-ORPHAN"
+
+
+async def test_unconfirmed_commit_whose_removal_gives_up_keeps_the_key_for_a_retry(
+    client: AsyncClient, shelters: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """#614 review r1 (PR #666): a failed commit left 2 of 3 rows committed and the removal of
+    the group gives up. The key is not released (a released key would leave the rows blocking
+    these CIDs with duplicate_booking); the same-key retry, once stale, removes the group and
+    the one after it proceeds as new."""
+    from apiapp.modules.thirdparty_bookings import use_case
+
+    await _partial_group("BK-SETTLE", committed=2)
+    await _seed_key("settle", count=3, booking_id="BK-SETTLE", age_seconds=0)
+    lease = (await _key_doc("settle"))["created_at"]
+    calls = _fail_pending_delete(monkeypatch, failures=None)
+    kept = await use_case._settle_unconfirmed_commit(
+        ExternalBooking.get_pymongo_collection(),
+        booking_id="BK-SETTLE",
+        group_size=3,
+        record_id="IK-BK-SETTLE",
+        created_at=lease,
+    )
+    assert kept is False
+    assert calls[0] == use_case._CLEANUP_ATTEMPTS
+    assert len(await _rows()) == 2
+    assert [k.status for k in await _keys()] == ["in_progress"]
+    monkeypatch.undo()
+
+    await _age_key("settle")
+    cleared = await client.post(URL, json=_group_payload(3), headers=_idem("settle"))
+    assert cleared.status_code == 409
+    assert await _rows() == []
+
+    await _age_key("settle")
+    retry = await client.post(URL, json=_group_payload(3), headers=_idem("settle"))
+    assert retry.status_code == 201
+    assert retry.json()["result"]["booking_id"] != "BK-SETTLE"
+
+
+async def test_unconfirmed_commit_whose_removal_succeeds_releases_the_key(
+    client: AsyncClient, shelters: None
+) -> None:
+    """Count readable and below the group size: the group is removed and the key released."""
+    from apiapp.modules.thirdparty_bookings import use_case
+
+    await _partial_group("BK-SETTLE-OK", committed=2)
+    await _seed_key("settle-ok", count=3, booking_id="BK-SETTLE-OK", age_seconds=0)
+    lease = (await _key_doc("settle-ok"))["created_at"]
+    kept = await use_case._settle_unconfirmed_commit(
+        ExternalBooking.get_pymongo_collection(),
+        booking_id="BK-SETTLE-OK",
+        group_size=3,
+        record_id="IK-BK-SETTLE-OK",
+        created_at=lease,
+    )
+    assert kept is False
+    assert await _rows() == []
+    assert await _keys() == []
+
+
+async def test_failed_first_attempt_releases_the_key_so_a_retry_can_proceed(
+    client: AsyncClient, shelters: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    body = _group_payload(3)
+    # three failed commit attempts (the whole retry budget) → 500, nothing booked
+    _fail_update_many(monkeypatch, failures=3)
+    failed = await client.post(URL, json=body, headers=_idem("release-1"))
+    _assert_sanitized_500(failed)
+    assert await _keys() == []
+    assert await _rows() == []
+
+    monkeypatch.undo()
+    retry = await client.post(URL, json=body, headers=_idem("release-1"))
+    assert retry.status_code == 201
+    assert len(await _rows(retry.json()["result"]["booking_id"])) == 3
+    assert len(await _keys()) == 1
+
+
+async def test_key_is_scoped_per_client(client: AsyncClient, shelters: None) -> None:
+    first = await client.post(URL, json=_group_payload(1), headers=_idem("shared-key"))
+    other = await client.post(
+        URL, json=_payload(cid=_cid(50)), headers=_idem("shared-key", OTHER_CLIENT)
+    )
+    assert first.status_code == 201
+    assert other.status_code == 201
+    assert first.json()["result"]["booking_id"] != other.json()["result"]["booking_id"]
+    assert len(await _keys("m2-test")) == 1
+    assert len(await _keys("other-client")) == 1
+
+
+async def test_key_row_holds_no_pii_and_the_ttl_index_exists(
+    client: AsyncClient, shelters: None
+) -> None:
+    from tent_model.external_booking_idempotency import ExternalBookingIdempotency
+
+    response = await client.post(URL, json=_payload(), headers=_idem("pii-1"))
+    assert response.status_code == 201
+    dumped = str([doc.model_dump() for doc in await _keys()])
+    for secret in _PII:
+        assert secret not in dumped
+    indexes = await ExternalBookingIdempotency.get_pymongo_collection().index_information()
+    ttl = [info for info in indexes.values() if "expireAfterSeconds" in info]
+    assert [info["expireAfterSeconds"] for info in ttl] == [24 * 60 * 60]
+    assert [info["key"] for info in ttl] == [[("created_at", 1)]]
+    unique = [info for info in indexes.values() if info.get("unique")]
+    assert [info["key"] for info in unique] == [[("client_id", 1), ("key", 1)]]
+
+
+@pytest.mark.parametrize("key", ["", "x" * 256], ids=["empty", "too-long"])
+async def test_invalid_idempotency_key_is_a_validation_error(
+    client: AsyncClient, shelters: None, key: str
+) -> None:
+    response = await client.post(URL, json=_payload(), headers=_idem(key))
+    assert response.status_code == 422
+    assert response.json()["code"] == "validation_error"
+    assert await _rows() == []
+
+
+async def test_a_255_character_key_is_accepted(client: AsyncClient, shelters: None) -> None:
+    response = await client.post(URL, json=_payload(), headers=_idem("k" * 255))
+    assert response.status_code == 201
+
+
+async def test_commit_ack_lost_after_all_rows_committed_answers_201(
+    client: AsyncClient, shelters: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """G5 — every commit attempt applied the flip but raised: the group is committed → 201."""
+    collection = ExternalBooking.get_pymongo_collection()
+    real = type(collection).update_many
+
+    async def applied_then_lost(self: Any, *args: Any, **kwargs: Any) -> Any:
+        if self.name == collection.name:
+            await real(self, *args, **kwargs)
+            raise RuntimeError("ack lost")
+        return await real(self, *args, **kwargs)
+
+    monkeypatch.setattr(type(collection), "update_many", applied_then_lost)
+    response = await client.post(URL, json=_group_payload(3), headers=_idem("g5-1"))
+    assert response.status_code == 201
+    booking_id = response.json()["result"]["booking_id"]
+    rows = await _rows(booking_id)
+    assert len(rows) == 3
+    assert all(row["committed"] is True for row in rows)
+    assert await _log_statuses() == ["granted"]
+    # the key is completed, so a retry gets the same booking back
+    monkeypatch.undo()
+    replay = await client.post(URL, json=_group_payload(3), headers=_idem("g5-1"))
+    assert replay.status_code == 201
+    assert replay.json()["result"]["booking_id"] == booking_id
+
+
+async def test_commit_ack_lost_without_a_key_answers_201(
+    client: AsyncClient, shelters: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    collection = ExternalBooking.get_pymongo_collection()
+    real = type(collection).update_many
+
+    async def applied_then_lost(self: Any, *args: Any, **kwargs: Any) -> Any:
+        if self.name == collection.name:
+            await real(self, *args, **kwargs)
+            raise RuntimeError("ack lost")
+        return await real(self, *args, **kwargs)
+
+    monkeypatch.setattr(type(collection), "update_many", applied_then_lost)
+    response = await client.post(URL, json=_group_payload(3), headers=GRANTED)
+    assert response.status_code == 201
+    assert len(await _rows(response.json()["result"]["booking_id"])) == 3
+
+
+async def test_cancel_after_the_flip_keeps_the_group_and_completes_the_key(
+    client: AsyncClient, shelters: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The request is cancelled after `update_many` applied the flip: the booking exists,
+    so the rows are kept and the key completes; a retry returns the original 201 body."""
+
+    collection = ExternalBooking.get_pymongo_collection()
+    real = type(collection).update_many
+    flipped, release = asyncio.Event(), asyncio.Event()
+
+    async def applied_then_held(self: Any, *args: Any, **kwargs: Any) -> Any:
+        if self.name == collection.name:
+            result = await real(self, *args, **kwargs)
+            flipped.set()
+            await release.wait()
+            return result
+        return await real(self, *args, **kwargs)
+
+    monkeypatch.setattr(type(collection), "update_many", applied_then_held)
+    request = asyncio.create_task(_create_directly(_group_payload(3), idempotency_key="cancel-1"))
+    await flipped.wait()
+    request.cancel()
+    await asyncio.sleep(0)
+    release.set()
+    with pytest.raises(asyncio.CancelledError):
+        await request
+    await _drain_detached()
+
+    rows = await _rows()
+    assert len(rows) == 3
+    assert all(row["committed"] is True for row in rows)
+    booking_id = rows[0]["booking_id"]
+    keys = await _keys()
+    assert [(key.status, key.booking_id) for key in keys] == [("completed", booking_id)]
+
+    monkeypatch.undo()
+    replay = await client.post(URL, json=_group_payload(3), headers=_idem("cancel-1"))
+    assert replay.status_code == 201
+    assert replay.json()["result"]["booking_id"] == booking_id
+    assert len(await _rows()) == 3  # the replay created nothing
+
+
+async def test_key_taken_over_before_the_commit_is_never_committed(
+    client: AsyncClient, shelters: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """#614 fence (review r1 on #666): an attempt that stalled past the takeover must not commit.
+
+    The key row is removed right after this attempt staged its rows (as a stale-key takeover
+    would). The attempt answers 409, removes its own staged rows and commits nothing, so no
+    booking exists without a key row to replay it.
+    """
+    real_insert = ExternalBooking.insert_many
+
+    async def taken_over_after_insert(docs: Any, **kwargs: Any) -> Any:
+        result = await real_insert(docs, **kwargs)
+        await ExternalBookingIdempotency.get_pymongo_collection().delete_many({"key": "fenced-1"})
+        return result
+
+    monkeypatch.setattr(ExternalBooking, "insert_many", taken_over_after_insert)
+    response = await client.post(URL, json=_group_payload(3), headers=_idem("fenced-1"))
+    assert response.status_code == 409
+    assert response.json()["code"] == "idempotency_in_progress"
+    assert await _rows() == []
+    assert await _keys() == []
+
+
+async def test_cancel_before_the_flip_releases_the_key(
+    client: AsyncClient, shelters: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Cancelled while the flip never applies: no booking exists, so rows are removed and
+    the key is released for a retry."""
+    collection = ExternalBooking.get_pymongo_collection()
+    real = type(collection).update_many
+    started, release = asyncio.Event(), asyncio.Event()
+
+    async def never_applied(self: Any, *args: Any, **kwargs: Any) -> Any:
+        if self.name == collection.name:
+            started.set()
+            await release.wait()
+            raise RuntimeError("flip never applied")
+        return await real(self, *args, **kwargs)
+
+    monkeypatch.setattr(type(collection), "update_many", never_applied)
+    request = asyncio.create_task(_create_directly(_group_payload(3), idempotency_key="cancel-2"))
+    await started.wait()
+    request.cancel()
+    await asyncio.sleep(0)
+    release.set()
+    with pytest.raises(asyncio.CancelledError):
+        await request
+    await _drain_detached()
+    assert await _rows() == []
+    assert await _keys() == []
+
+
+async def test_reserve_key_answers_the_row_that_won_the_race(
+    client: AsyncClient, shelters: None
+) -> None:
+    """DuplicateKeyError in _reserve_key: the winner's row is answered, nothing is inserted."""
+    from tent_model.external_booking_idempotency import ExternalBookingIdempotency
+
+    from apiapp.modules.thirdparty_bookings import use_case
+
+    person = use_case._Person(cid=CID, first_name="สมชาย", last_name="ใจดี", phone="0812345678")
+    request_hash = use_case._request_hash("SH001", [person])
+    now = datetime.now(UTC)
+    await ExternalBookingIdempotency(
+        id="IK-WON",
+        client_id="m2-test",
+        key="race-1",
+        request_hash=request_hash,
+        booking_id="BK-WON",
+        status="completed",
+        created_at=now,
+    ).insert()
+    claims = ThirdPartyClaims(client_id="m2-test", module_name="M2", scopes=["booking-write"])
+    answer = await use_case.ThirdPartyBookingsUseCase()._reserve_key(
+        key="race-1",
+        request_hash=request_hash,
+        booking_id="BK-LOSER",
+        now=now,
+        location_code="SH001",
+        persons_count=1,
+        claims=claims,
+        client_ip="127.0.0.1",
+    )
+    assert not isinstance(answer, str)
+    assert answer.result.booking_id == "BK-WON"
+    assert [key.booking_id for key in await _keys()] == ["BK-WON"]
+
+
+async def test_partial_flip_then_ack_lost_is_a_500_and_removes_the_group(
+    client: AsyncClient, shelters: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Only 2 of 3 rows flipped before the ack was lost: the group is not fully committed,
+    so the request fails with the sanitized 500, the pending rows are removed and the key
+    is released so a retry can proceed."""
+    collection = ExternalBooking.get_pymongo_collection()
+    real = type(collection).update_many
+
+    async def partial_then_lost(self: Any, *args: Any, **kwargs: Any) -> Any:
+        if self.name == collection.name:
+            flt = {**args[0], "person_seq": {"$lt": 2}}
+            await real(self, flt, *args[1:], **kwargs)
+            raise RuntimeError("ack lost")
+        return await real(self, *args, **kwargs)
+
+    monkeypatch.setattr(type(collection), "update_many", partial_then_lost)
+    response = await client.post(URL, json=_group_payload(3), headers=_idem("partial-1"))
+    _assert_sanitized_500(response)
+    assert await _rows() == []
+    assert await _keys() == []
+    assert await _log_statuses() == ["denied_internal_error"]
+
+
+async def test_overlapping_retry_during_the_duplicate_check_is_not_a_duplicate(
+    client: AsyncClient, shelters: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Same key + same body overlapping the first request: the retry meets the key row
+    (in_progress → 409 idempotency_in_progress), never this request's own committed-to-be rows
+    as a duplicate_booking. The first request still completes with 201."""
+    from apiapp.modules.thirdparty_bookings import use_case
+
+    body = _group_payload(3)
+    real = use_case.ThirdPartyBookingsUseCase._taken_cid_hashes
+    nested: list[Any] = []
+
+    async def retry_overlaps_first(self: Any, location_code: str, cid_hashes: list[str]) -> Any:
+        if not nested:  # the retry runs while the first request is past its key lookup
+            nested.append(await client.post(URL, json=body, headers=_idem("race-k")))
+        return await real(self, location_code, cid_hashes)
+
+    monkeypatch.setattr(
+        use_case.ThirdPartyBookingsUseCase, "_taken_cid_hashes", retry_overlaps_first
+    )
+    first = await client.post(URL, json=body, headers=_idem("race-k"))
+    assert first.status_code == 201
+    assert nested[0].status_code == 409
+    assert nested[0].json()["code"] == "idempotency_in_progress"
+    booking_id = first.json()["result"]["booking_id"]
+    assert len(await _rows(booking_id)) == 3
+    assert len(await _rows()) == 3
+    assert [key.status for key in await _keys()] == ["completed"]
+
+
+async def test_duplicate_rejection_releases_the_key(client: AsyncClient, shelters: None) -> None:
+    first = await client.post(URL, json=_payload(), headers=GRANTED)
+    assert first.status_code == 201
+    rejected = await client.post(URL, json=_payload(), headers=_idem("dup-release"))
+    assert rejected.status_code == 409
+    assert rejected.json()["code"] == "duplicate_booking"
+    assert await _keys() == []
+    assert len(await _rows()) == 1
+
+
+async def test_key_insert_whose_ack_is_lost_releases_its_own_row(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The key row was applied but its insert raised: the row is removed, nothing else is."""
+    from tent_model.external_booking_idempotency import ExternalBookingIdempotency
+
+    from apiapp.modules.thirdparty_bookings import use_case
+
+    real_insert = ExternalBookingIdempotency.insert
+
+    async def insert_then_lose_ack(self: Any, *args: Any, **kwargs: Any) -> Any:
+        await real_insert(self, *args, **kwargs)
+        raise RuntimeError("ack lost")
+
+    monkeypatch.setattr(ExternalBookingIdempotency, "insert", insert_then_lose_ack)
+    claims = ThirdPartyClaims(client_id="m2-test", module_name="M2", scopes=["booking-write"])
+    with pytest.raises(RuntimeError):
+        await use_case.ThirdPartyBookingsUseCase()._reserve_key(
+            key="ack-lost",
+            request_hash="h",
+            booking_id="BK-ACK",
+            now=datetime.now(UTC),
+            location_code="SH001",
+            persons_count=1,
+            claims=claims,
+            client_ip="127.0.0.1",
+        )
+    assert await _keys() == []
+
+
+async def test_cancel_during_the_commit_failure_check_still_cleans_up(
+    client: AsyncClient, shelters: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The flip keeps failing and the request is cancelled while the G5 count runs: the staged
+    rows are still removed and the key released, because the settle step is detached."""
+    from apiapp.modules.thirdparty_bookings import use_case
+
+    _fail_update_many(monkeypatch, failures=3)
+    real = use_case._all_rows_committed
+    entered, release = asyncio.Event(), asyncio.Event()
+
+    async def slow_count(collection: Any, booking_id: str, group_size: int) -> bool:
+        entered.set()
+        await release.wait()
+        return await real(collection, booking_id, group_size)
+
+    monkeypatch.setattr(use_case, "_all_rows_committed", slow_count)
+    request = asyncio.create_task(_create_directly(_group_payload(3), "cancel-g5"))
+    await entered.wait()
+    request.cancel()
+    await asyncio.sleep(0)
+    release.set()
+    with pytest.raises(asyncio.CancelledError):
+        await request
+    await _drain_detached()
+    assert await _rows() == []
+    assert await _keys() == []
+
+
+# --- #614 lease guard: a lost lease never releases or completes another attempt's key -------
+
+
+async def _key_doc(key: str) -> dict[str, Any] | None:
+    return await ExternalBookingIdempotency.get_pymongo_collection().find_one(
+        {"client_id": "m2-test", "key": key}
+    )
+
+
+def _lease_then_partial_flip(key: str, state: dict[str, Any]) -> Any:
+    """A `_still_owns_key` stand-in: after the real fence passed, a flip races a retry's claim.
+
+    Two of the stalled attempt's three rows get committed (a flip that raced the lease), the key
+    looks stale, and retry B claims it: B leases the key (same `_id`, renewed `created_at`),
+    removes the staged row, counts 2 of 3 committed, removes the rest and answers busy, keeping
+    the key `in_progress` under its own lease. Control then returns to the stalled attempt A.
+    """
+    from apiapp.modules.thirdparty_bookings import use_case
+
+    real_fence = use_case._still_owns_key
+
+    async def fence(record_id: str | None, created_at: datetime) -> bool:
+        owned = await real_fence(record_id, created_at)
+        if state.get("claim") is None:
+            doc = await _key_doc(key)
+            assert doc is not None
+            await ExternalBooking.get_pymongo_collection().update_many(
+                {"booking_id": doc["booking_id"], "person_seq": {"$lt": 2}},
+                {"$set": {"committed": True}},
+            )
+            await _age_key(key)
+            record = await ExternalBookingIdempotency.find_one(
+                ExternalBookingIdempotency.key == key
+            )
+            assert record is not None
+            state["claim"] = await use_case._claim_stale_key(record, 3)
+            state["lease"] = await _key_doc(key)
+        return owned
+
+    return fence
+
+
+async def _assert_retry_b_still_holds_the_key(
+    client: AsyncClient, key: str, state: dict[str, Any]
+) -> None:
+    """B's leased row survived A's failure; the partner's retries follow the decided semantics."""
+    assert state["claim"] == "busy"
+    lease = state["lease"]
+    assert lease is not None
+    after = await _key_doc(key)
+    assert after == lease  # same _id, still in_progress, B's created_at: untouched by A
+    assert after["status"] == "in_progress"
+    assert await _rows() == []
+
+    young = await client.post(URL, json=_group_payload(3), headers=_idem(key))
+    assert young.status_code == 409
+    assert young.json()["code"] == "idempotency_in_progress"
+    assert await _rows() == []
+
+    await _age_key(key)
+    retry = await client.post(URL, json=_group_payload(3), headers=_idem(key))
+    assert retry.status_code == 201
+    new_id = retry.json()["result"]["booking_id"]
+    assert new_id != lease["booking_id"]
+    assert [(k.status, k.booking_id) for k in await _keys()] == [("completed", new_id)]
+    rows = await _rows()
+    assert len(rows) == 3
+    assert {row["booking_id"] for row in rows} == {new_id}
+
+
+async def test_failed_commit_after_a_lost_lease_keeps_the_new_owners_key(
+    client: AsyncClient, shelters: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """#614 review (PR #666): A passed the fence, B claimed the stale key and answered busy,
+    then A's flip matched nothing (shortfall). A's failure settle must not delete the key row
+    B now holds — else the partner's next retry would create a second booking at once."""
+    from apiapp.modules.thirdparty_bookings import use_case
+
+    state: dict[str, Any] = {}
+    monkeypatch.setattr(use_case, "_still_owns_key", _lease_then_partial_flip("lost-1", state))
+    first = await client.post(URL, json=_group_payload(3), headers=_idem("lost-1"))
+    _assert_sanitized_500(first)
+    monkeypatch.undo()
+    await _assert_retry_b_still_holds_the_key(client, "lost-1", state)
+
+
+async def test_flip_error_after_a_lost_lease_keeps_the_new_owners_key(
+    client: AsyncClient, shelters: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """#614 re-audit: A passed the fence, B took the stale key over (lease renewed, staged rows
+    dropped, busy), then A's flip raises a plain error (not a shortfall). The failed-commit
+    settle must find the lease lost and leave B's key row alone, not release it."""
+    from apiapp.modules.thirdparty_bookings import use_case
+
+    state: dict[str, Any] = {}
+    monkeypatch.setattr(use_case, "_still_owns_key", _lease_then_partial_flip("lost-3", state))
+
+    async def failing_flip(collection: Any, booking_id: str, group_size: int) -> None:
+        raise RuntimeError("flip lost its connection")
+
+    monkeypatch.setattr(use_case, "_commit_group", failing_flip)
+    first = await client.post(URL, json=_group_payload(3), headers=_idem("lost-3"))
+    _assert_sanitized_500(first)
+    monkeypatch.undo()
+    await _assert_retry_b_still_holds_the_key(client, "lost-3", state)
+
+
+async def test_cancelled_commit_after_a_lost_lease_keeps_the_new_owners_key(
+    client: AsyncClient, shelters: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Same interleaving, but A is cancelled while its flip is in flight: the cancelled-commit
+    settle also leaves B's leased key row alone."""
+    from apiapp.modules.thirdparty_bookings import use_case
+
+    state: dict[str, Any] = {}
+    monkeypatch.setattr(use_case, "_still_owns_key", _lease_then_partial_flip("lost-2", state))
+    collection = ExternalBooking.get_pymongo_collection()
+    real = type(collection).update_many
+    started, release = asyncio.Event(), asyncio.Event()
+
+    async def held_flip(self: Any, *args: Any, **kwargs: Any) -> Any:
+        if self.name == collection.name and args and args[1] == {"$set": {"committed": True}}:
+            if "booking_id" in args[0] and len(args[0]) == 1:  # A's own flip, not the hook's
+                started.set()
+                await release.wait()
+        return await real(self, *args, **kwargs)
+
+    monkeypatch.setattr(type(collection), "update_many", held_flip)
+    request = asyncio.create_task(_create_directly(_group_payload(3), idempotency_key="lost-2"))
+    await started.wait()
+    request.cancel()
+    await asyncio.sleep(0)
+    release.set()
+    with pytest.raises(asyncio.CancelledError):
+        await request
+    await _drain_detached()
+    monkeypatch.undo()
+    await _assert_retry_b_still_holds_the_key(client, "lost-2", state)
+
+
+async def test_unreadable_count_after_a_lost_lease_keeps_the_booking_a_retry_answered(
+    client: AsyncClient, shelters: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A's flip was applied but its ack lost; meanwhile a retry found every row committed and
+    answered 201 (key completed). A cannot read the count: it must not remove that booking's
+    rows, since it no longer owns the key. A answers 500; the booking and the key stand."""
+    from apiapp.modules.thirdparty_bookings import use_case
+
+    collection = ExternalBooking.get_pymongo_collection()
+    real = type(collection).update_many
+    retry: list[Any] = []
+
+    async def applied_then_lost(self: Any, *args: Any, **kwargs: Any) -> Any:
+        result = await real(self, *args, **kwargs)
+        if self.name != collection.name:
+            return result
+        if not retry:
+            await _age_key("unknown-1")
+            retry.append(await client.post(URL, json=_group_payload(3), headers=_idem("unknown-1")))
+        raise RuntimeError("ack lost")  # every attempt of the commit retry budget
+
+    async def unreadable(collection: Any, booking_id: str, group_size: int) -> bool | None:
+        return None
+
+    monkeypatch.setattr(type(collection), "update_many", applied_then_lost)
+    monkeypatch.setattr(use_case, "_all_rows_committed", unreadable)
+    first = await client.post(URL, json=_group_payload(3), headers=_idem("unknown-1"))
+    _assert_sanitized_500(first)
+    assert retry[0].status_code == 201
+    booking_id = retry[0].json()["result"]["booking_id"]
+    assert [(k.status, k.booking_id) for k in await _keys()] == [("completed", booking_id)]
+    rows = await _rows()
+    assert len(rows) == 3
+    assert all(row["committed"] is True and row["booking_id"] == booking_id for row in rows)
+
+
+async def test_unreadable_count_while_still_owning_the_key_releases_it_and_removes_the_rows(
+    client: AsyncClient, shelters: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Commit failed and the G5 count cannot be read, but nobody took the key over: the key is
+    released (lease-guarded) first, then the pending rows are removed; the retry proceeds."""
+    from apiapp.modules.thirdparty_bookings import use_case
+
+    async def unreadable(collection: Any, booking_id: str, group_size: int) -> bool | None:
+        return None
+
+    _fail_update_many(monkeypatch, failures=3)
+    monkeypatch.setattr(use_case, "_all_rows_committed", unreadable)
+    failed = await client.post(URL, json=_group_payload(3), headers=_idem("unknown-2"))
+    _assert_sanitized_500(failed)
+    assert await _rows() == []
+    assert await _keys() == []
+
+
+async def test_release_and_complete_with_a_stale_lease_leave_the_row_untouched(
+    client: AsyncClient,
+) -> None:
+    """Every key write is guarded by `{_id, status: in_progress, created_at: <lease>}`."""
+    from apiapp.modules.thirdparty_bookings import use_case
+
+    await _seed_key("guard-1", count=1, booking_id="BK-GUARD", age_seconds=0)
+    before = await _key_doc("guard-1")
+    assert before is not None
+    stale = before["created_at"] - timedelta(seconds=90)
+
+    assert await use_case._release_key(before["_id"], stale, "BK-GUARD") is False
+    await use_case._complete_key(before["_id"], stale, "BK-GUARD")
+    assert await _key_doc("guard-1") == before
+
+    await use_case._complete_key(before["_id"], before["created_at"], "BK-GUARD")
+    completed = await _key_doc("guard-1")
+    assert completed is not None and completed["status"] == "completed"
+    # a completed key is never released, not even with its own lease value
+    assert await use_case._release_key(before["_id"], before["created_at"], "BK-GUARD") is False
+    assert await _key_doc("guard-1") == completed
+
+
+async def test_release_with_the_own_lease_removes_the_row(client: AsyncClient) -> None:
+    from apiapp.modules.thirdparty_bookings import use_case
+
+    await _seed_key("guard-2", count=1, booking_id="BK-GUARD-2", age_seconds=0)
+    doc = await _key_doc("guard-2")
+    assert doc is not None
+    assert await use_case._release_key(doc["_id"], doc["created_at"], "BK-GUARD-2") is True
+    assert await _key_doc("guard-2") is None
+    # already gone (e.g. an earlier attempt's ack was lost): still reported as released
+    assert await use_case._release_key(doc["_id"], doc["created_at"], "BK-GUARD-2") is True
