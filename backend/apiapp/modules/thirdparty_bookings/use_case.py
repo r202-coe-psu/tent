@@ -793,16 +793,17 @@ class ThirdPartyBookingsUseCase:
             # Phase 2 is two `update_many` steps (no per-row loop on the common path). The written
             # rows are flagged first, so a check-in that lands meanwhile is caught before any
             # pending row is cancelled. Residual race: a step-2b conflict can still leave the
-            # pending rows cancelled while the 409 is returned, and the written rows flagged in
-            # step 2a stay `cancel_requested=True` (the worker will still cancel them). The retry
-            # skips the cancelled rows (FINISHED) and the flagged rows (not OPEN).
+            # pending rows that 2b already cancelled stay cancelled while the 409 is returned (the
+            # bulk cancel clears PII and cannot be rolled back). The flags set in step 2a are
+            # reverted on that 409 (CR-169 FR-40, all-or-nothing for the flags). The retry skips the
+            # cancelled rows (FINISHED).
             if requested and not await self._flag_requested(
                 collection, requested, reason, now, token
             ):
                 raise await self._not_cancellable(endpoint, claims, client_ip, rows[0])
             # Any unexpected error after phase 2a reverts the flags this request set (guarded by
             # `now` and `token`), so it never leaves `cancel_requested=True` behind. A 409 from 2b
-            # is the documented residual race and keeps the flags, as before.
+            # reverts them the same way before it is returned.
             if direct:
                 try:
                     cancelled = await self._cancel_pending(collection, direct, reason, now, token)
@@ -810,6 +811,7 @@ class ThirdPartyBookingsUseCase:
                     await self._revert_after_error(collection, planned, now, token)
                     raise
                 if not cancelled:
+                    await self._revert_after_error(collection, planned, now, token)
                     raise await self._not_cancellable(endpoint, claims, client_ip, rows[0])
             # Phase 2c — the granted access-log write after 2b. An error here reverts the 2a flags
             # too, so a failed 2c never leaves `cancel_requested=True` behind.
@@ -913,8 +915,8 @@ class ThirdPartyBookingsUseCase:
 
         Residual race: the worker may process a `cancel_requested` flag between the flag
         write below and the revert, so a stay that has just checked in can be asked to cancel.
-        A 409 from this step reverts the flags; a 409 from step 2b (`_cancel_pending`) does not,
-        so the rows flagged here stay `cancel_requested=True` and the worker will cancel them.
+        A 409 from this step reverts the flags; a 409 from step 2b (`_cancel_pending`) reverts
+        them too, in `cancel_booking`.
         """
         ids = [row.id for row in rows]
         result = await collection.update_many(

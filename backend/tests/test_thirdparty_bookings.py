@@ -1692,6 +1692,46 @@ async def test_cancel_group_pending_row_flagged_elsewhere_mid_way_is_409(
     assert await _log_statuses() == ["denied_booking_not_cancellable"]
 
 
+async def test_cancel_group_pending_conflict_reverts_our_written_flags(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Phase 2b conflict after phase 2a flagged a written row: 409, and our 2a flag is reverted.
+
+    Row 0 is written with no stay yet (cancellable), so phase 2a flags it. Row 2 is pending and a
+    concurrent request flags it while the bulk pending cancel runs, so 2b is a conflict. Row 0
+    must not stay `cancel_requested=True` with the worker still cancelling it (CR-169 FR-40,
+    decision sync 2026-10-17: all-or-nothing, our flags are reverted). Row 1 was cancelled by the
+    bulk step before the conflict and cannot be restored; the foreign flag on row 2 is left alone.
+    """
+    await _group(3, ["written", "pending", "pending"])
+    foreign_at = datetime(2026, 9, 1)
+    _around_update_many(
+        monkeypatch,
+        when=lambda flt: flt.get("state") == "pending",
+        before=lambda: _set_row(
+            "BP-BK-GROUP001-2",
+            {
+                "state": "written",
+                "cancel_requested": True,
+                "cancel_reason": "foreign",
+                "cancel_flag_token": "other-request",
+                "updated_at": foreign_at,
+            },
+        ),
+    )
+    response = await client.post(_cancel_url("BK-GROUP001"), json={"reason": "r"}, headers=GRANTED)
+    assert response.status_code == 409
+    assert response.json()["code"] == "booking_not_cancellable"
+    rows = await _rows("BK-GROUP001")
+    assert (rows[0]["state"], rows[0]["cancel_requested"]) == ("written", False)
+    assert (rows[0]["cancel_reason"], rows[0]["cancel_flag_token"]) == (None, None)
+    assert (rows[1]["state"], rows[1]["cancel_requested"]) == ("cancelled", False)
+    assert (rows[2]["state"], rows[2]["cancel_requested"]) == ("written", True)
+    assert (rows[2]["cancel_reason"], rows[2]["updated_at"]) == ("foreign", foreign_at)
+    assert rows[2]["cancel_flag_token"] == "other-request"
+    assert await _log_statuses() == ["denied_booking_not_cancellable"]
+
+
 async def test_cancel_group_revert_keeps_a_flag_set_after_our_marker(
     client: AsyncClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
