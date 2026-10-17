@@ -32,6 +32,11 @@ Endpoints exercised (prefix + path):
   GET  {prefix}/external/persons/shelter-residency     (M2, EXT-011, scope residency-read)
   POST {prefix}/external/bookings/{booking_id}/cancel  (M2, EXT-009)
 
+Normal mode also covers the CR-169 group rules at API level (persons[] of 2-3, cid
+duplicates in one request, several bad persons, duplicate vs existing booking, group
+cancel, EXT-010 persons[]). Repeat-cancel → 200 (CR-169 FR-40, #592) is an EXPECTED-FAIL
+until #592 is deployed, then it passes.
+
 M2 checks (EXT-008..011) are scope-aware: when the token lacks `booking-write` /
 `residency-read` the script asserts the 403 insufficient_scope gate instead of
 skipping silently. The booking checks WRITE one booking (random checksum-valid CID,
@@ -265,6 +270,18 @@ def make_valid_cid() -> str:
     return "".join(str(d) for d in digits)
 
 
+def make_group_person(cid: Optional[str], **overrides: Any) -> Dict[str, Any]:
+    """One `persons[]` entry for EXT-008 (CR-169); valid unless overridden."""
+    person: Dict[str, Any] = {
+        "cid": cid,
+        "first_name": "Smoke",
+        "last_name": "Test",
+        "phone": "+66812345678",
+    }
+    person.update(overrides)
+    return person
+
+
 _USERINFO_RE = re.compile(r"([A-Za-z][A-Za-z0-9+.\-]*://)[^/\s@?#]*@")
 
 
@@ -363,6 +380,13 @@ class SmokeTestRunner:
     def record_expected_fail(self, issue: str, test_name: str, reason: str) -> None:
         self.expected_fail.append((issue, test_name, reason))
         self.log(f"  {YELLOW}~ EXPECTED-FAIL{RESET} {BOLD}[{issue}]{RESET} {test_name} ({reason})")
+
+    def pending_592(self, name: str, passed: bool, detail: str = "") -> None:
+        """CR-169 FR-40/42 (#592): PASS once the new rule is deployed, else EXPECTED-FAIL."""
+        if passed:
+            self.record_result("M2", f"{name} [pending #592]", True, "#592 behaviour present")
+        else:
+            self.record_expected_fail("M2", name, f"pending #592: {detail}")
 
     def http_request(
         self,
@@ -1031,6 +1055,75 @@ class SmokeTestRunner:
             f"HTTP {status} (code={err_code})",
         )
 
+        # M2.3b Group validation (CR-169 FR-1/FR-4) — nothing is written by these requests
+        status, data = self.http_request(
+            "POST",
+            bookings,
+            headers=headers,
+            body={
+                "location_code": candidates[0],
+                "persons": [
+                    make_group_person(make_valid_cid()),
+                    make_group_person("1234567890123", first_name=""),
+                    make_group_person(make_valid_cid()),
+                    make_group_person("9999999999999", phone="123"),
+                ],
+            },
+        )
+        err_msg = get_error_detail(data)
+        self.record_result(
+            "M2",
+            "EXT-008 persons[] with several bad people → 422 naming every bad index",
+            status == 422
+            and get_error_code(data) == "validation_error"
+            and "persons[1]" in err_msg
+            and "persons[3]" in err_msg
+            and "1234567890123" not in err_msg
+            and "9999999999999" not in err_msg,
+            f"HTTP {status} (code={get_error_code(data)})",
+        )
+
+        shared_cid = make_valid_cid()
+        status, data = self.http_request(
+            "POST",
+            bookings,
+            headers=headers,
+            body={
+                "location_code": candidates[0],
+                "persons": [
+                    make_group_person(make_valid_cid()),
+                    make_group_person(shared_cid),
+                    make_group_person(shared_cid),
+                ],
+            },
+        )
+        self.record_result(
+            "M2",
+            "EXT-008 same CID twice inside one persons[] → 422 validation_error",
+            status == 422
+            and get_error_code(data) == "validation_error"
+            and "persons[2]" in get_error_detail(data)
+            and shared_cid not in json.dumps(data),
+            f"HTTP {status} (code={get_error_code(data)})",
+        )
+
+        for label, persons in (
+            ("empty persons[]", []),
+            ("persons[] over the 100-person cap", [make_group_person(None)] * 101),
+        ):
+            status, data = self.http_request(
+                "POST",
+                bookings,
+                headers=headers,
+                body={"location_code": candidates[0], "persons": persons},
+            )
+            self.record_result(
+                "M2",
+                f"EXT-008 {label} rejected with 422 validation_error",
+                status == 422 and get_error_code(data) == "validation_error",
+                f"HTTP {status} (code={get_error_code(data)})",
+            )
+
         # M2.4 Unknown location → 404 location_not_found
         status, data = self.http_request(
             "POST",
@@ -1100,6 +1193,13 @@ class SmokeTestRunner:
             )
             return False
 
+        self.record_result(
+            "M2",
+            "EXT-008 legacy single-person body still accepted (persons_count 1)",
+            res.get("persons_count") == 1,
+            f"persons_count={res.get('persons_count')}",
+        )
+
         # M2.7 Same CID, same shelter → 409 duplicate_booking
         status, data = self.http_request(
             "POST",
@@ -1131,7 +1231,158 @@ class SmokeTestRunner:
             and stamps_ok,
             f"HTTP {status}, booking_status={res.get('booking_status')}",
         )
+
+        self._group_booking_checks(headers, bookings, location)
         return True
+
+    def _group_booking_checks(self, headers: Dict[str, str], bookings: str, location: str) -> None:
+        """CR-169 group scenarios (EXT-008/009/010, API level). Every group made here is
+        cancelled again before returning, like the single booking."""
+        # G1 Group of 3 → 201 with one BK- group id and persons_count 3
+        group_cids = [make_valid_cid() for _ in range(3)]
+        status, data = self.http_request(
+            "POST",
+            bookings,
+            headers=headers,
+            body={"location_code": location, "persons": [make_group_person(c) for c in group_cids]},
+        )
+        res = data.get("result", {}) if isinstance(data, dict) else {}
+        group_id = str(res.get("booking_id", ""))
+        group_ok = (
+            status == 201
+            and group_id.startswith("BK-")
+            and res.get("persons_count") == 3
+            and res.get("location_code") == location
+            and res.get("booking_status") == "BOOKED"
+        )
+        self.record_result(
+            "M2",
+            "EXT-008 persons[] of 3 → 201 BOOKED with persons_count 3 and a BK- group id",
+            group_ok,
+            f"HTTP {status} - {data}" if not group_ok else f"booking_id={group_id}",
+        )
+        if not group_ok:
+            return
+
+        # G2 Status of the group: one aggregate + one entry per person, no PII
+        status, data = self.http_request("GET", f"{bookings}/{group_id}", headers=headers)
+        res = data.get("result", {}) if isinstance(data, dict) else {}
+        persons_out = res.get("persons") or []
+        pii_keys = ("cid", "first_name", "last_name", "phone")
+        self.record_result(
+            "M2",
+            "EXT-010 group status: BOOKED aggregate, persons[] index 0..2, no PII",
+            status == 200
+            and res.get("booking_status") == "BOOKED"
+            and [p.get("index") for p in persons_out] == [0, 1, 2]
+            and all(
+                p.get("booking_status") == "BOOKED" and p.get("reject_reason") is None
+                for p in persons_out
+            )
+            and not any(key in p for p in persons_out for key in pii_keys),
+            f"HTTP {status}, booking_status={res.get('booking_status')}",
+        )
+
+        # G3 Duplicate of an existing booking in the group → 409, detail = first duplicate index
+        fresh_cid = make_valid_cid()
+        status, data = self.http_request(
+            "POST",
+            bookings,
+            headers=headers,
+            body={
+                "location_code": location,
+                "persons": [
+                    make_group_person(fresh_cid),
+                    make_group_person(self.booking_cid),
+                    make_group_person(make_valid_cid()),
+                ],
+            },
+        )
+        self.record_result(
+            "M2",
+            "EXT-008 group with a person already booked here → 409 duplicate_booking, detail persons[1]",
+            status == 409
+            and get_error_code(data) == "duplicate_booking"
+            and get_error_detail(data) == "persons[1]"
+            and self.booking_cid not in json.dumps(data),
+            f"HTTP {status} (code={get_error_code(data)}, detail={get_error_detail(data)})",
+        )
+
+        # G4 Nothing from the refused group is held: the other person can still book alone
+        status, data = self.http_request(
+            "POST",
+            bookings,
+            headers=headers,
+            body={"location_code": location, "persons": [make_group_person(fresh_cid)]},
+        )
+        res = data.get("result", {}) if isinstance(data, dict) else {}
+        lone_id = str(res.get("booking_id", ""))
+        self.record_result(
+            "M2",
+            "EXT-008 person from the refused group can still be booked (409 left nothing behind)",
+            status == 201 and lone_id.startswith("BK-"),
+            f"HTTP {status} (code={get_error_code(data)})",
+        )
+        if lone_id.startswith("BK-"):
+            status, _ = self.http_request(
+                "POST",
+                f"{bookings}/{lone_id}/cancel",
+                headers=headers,
+                body={"reason": "smoke test cleanup"},
+            )
+            self.record_result(
+                "M2",
+                "EXT-009 cancel of the one-person group → 200",
+                status == 200,
+                f"HTTP {status}",
+            )
+
+        # G5 Cancel the whole group in one call → 200 CANCELLED
+        status, data = self.http_request(
+            "POST",
+            f"{bookings}/{group_id}/cancel",
+            headers=headers,
+            body={"reason": "smoke test cleanup"},
+        )
+        res = data.get("result", {}) if isinstance(data, dict) else {}
+        self.record_result(
+            "M2",
+            "EXT-009 group cancel (one call for every person) → 200 CANCELLED",
+            status == 200
+            and res.get("booking_id") == group_id
+            and res.get("booking_status") == "CANCELLED",
+            f"HTTP {status} - {data}" if status != 200 else "",
+        )
+
+        # G6 Every person reads CANCELLED afterwards
+        status, data = self.http_request("GET", f"{bookings}/{group_id}", headers=headers)
+        res = data.get("result", {}) if isinstance(data, dict) else {}
+        self.record_result(
+            "M2",
+            "EXT-010 group reads CANCELLED for the aggregate and every person",
+            status == 200
+            and res.get("booking_status") == "CANCELLED"
+            and all(p.get("booking_status") == "CANCELLED" for p in res.get("persons") or []),
+            f"HTTP {status}, booking_status={res.get('booking_status')}",
+        )
+
+        # G7 Repeat group cancel → 200 idempotent (CR-169 FR-40, #592; today 409)
+        status, data = self.http_request(
+            "POST", f"{bookings}/{group_id}/cancel", headers=headers, body=None
+        )
+        res = data.get("result", {}) if isinstance(data, dict) else {}
+        self.pending_592(
+            "EXT-009 repeat group cancel is idempotent (200 CANCELLED)",
+            status == 200 and res.get("booking_status") == "CANCELLED",
+            f"HTTP {status} (code={get_error_code(data)})",
+        )
+
+        # G8 Cases that need a worker-rejected or checked-in member cannot be built here
+        self.record_skip(
+            "M2",
+            "EXT-009/010 partial groups (rejected member, cancel after check-in) [#592]",
+            "needs a CouchDB-side duplicate or staff check-in; covered by --e2e (#597)",
+        )
 
     def test_m2_residency(self) -> bool:
         """EXT-011 — purpose + scope gates, 404 for a booked-but-not-checked-in CID."""
@@ -1270,14 +1521,13 @@ class SmokeTestRunner:
             f"HTTP {status}, booking_status={res.get('booking_status')}",
         )
 
-        # M2.18 Cancelling twice → 409 booking_not_cancellable
+        # M2.18 Cancelling twice → 200 idempotent (CR-169 FR-40, #592; today still 409)
         status, data = self.http_request("POST", f"{base}/cancel", headers=headers)
-        err_code = get_error_code(data)
-        self.record_result(
-            "M2",
-            "EXT-009 second cancel rejected with 409 booking_not_cancellable",
-            status == 409 and err_code == "booking_not_cancellable",
-            f"HTTP {status} (code={err_code})",
+        res = data.get("result", {}) if isinstance(data, dict) else {}
+        self.pending_592(
+            "EXT-009 second cancel is idempotent (200 CANCELLED)",
+            status == 200 and res.get("booking_status") == "CANCELLED",
+            f"HTTP {status} (code={get_error_code(data)})",
         )
         return True
 
@@ -1470,7 +1720,7 @@ class SmokeTestRunner:
         )
         if self.expected_fail or self.skipped:
             self.log(
-                f"Expected-fail (pending #578): {YELLOW}{len(self.expected_fail)}{RESET} | "
+                f"Expected-fail (pending #578 / #592): {YELLOW}{len(self.expected_fail)}{RESET} | "
                 f"Skipped: {YELLOW}{len(self.skipped)}{RESET}"
             )
         self.log(
