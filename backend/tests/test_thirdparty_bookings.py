@@ -474,12 +474,24 @@ async def test_create_group_upper_bound_is_100(client: AsyncClient, shelters: No
     assert len(await _rows(response.json()["result"]["booking_id"])) == 100
 
 
-async def test_create_group_over_cap_is_422(client: AsyncClient, shelters: None) -> None:
-    response = await client.post(URL, json=_group_payload(101), headers=GRANTED)
+@pytest.mark.parametrize("count", [101, 1000])
+async def test_create_group_over_cap_is_422(
+    client: AsyncClient, shelters: None, count: int
+) -> None:
+    """Above the use-case cap but within the schema bound: same 422 and access log row."""
+    response = await client.post(URL, json=_group_payload(count), headers=GRANTED)
     assert response.status_code == 422
     assert response.json()["code"] == "validation_error"
-    assert "between 1 and 100" in response.json()["message"]
+    assert response.json()["message"] == "persons must contain between 1 and 100 items."
     assert await _log_statuses() == ["denied_validation_error"]
+    assert await _rows() == []
+
+
+async def test_create_group_beyond_schema_bound_is_422(client: AsyncClient, shelters: None) -> None:
+    """Above the schema hard bound the body is rejected before the use case runs."""
+    response = await client.post(URL, json=_group_payload(1001), headers=GRANTED)
+    assert response.status_code == 422
+    assert response.json()["code"] == "validation_error"
     assert await _rows() == []
 
 
@@ -580,6 +592,67 @@ async def test_group_race_loser_leaves_nothing_behind(
     rows = await _rows()
     assert [row["booking_id"] for row in rows] == ["BK-WINNER"]
     assert await _log_statuses() == ["denied_duplicate_booking"]
+
+
+async def test_race_reports_lowest_colliding_index_not_first_in_insert_order(
+    client: AsyncClient, shelters: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Two rows collide at insert time; the higher index sorts first by cid_hash.
+
+    The unique-index error names only the first colliding row in insert order (index 3
+    here), but the 409 must report the lowest colliding index (1), like the pre-check.
+    """
+    from apiapp.modules.thirdparty_bookings import use_case
+
+    # Precondition: in cid_hash order index 3 comes before index 1.
+    assert national_id_hash(_cid(3)) < national_id_hash(_cid(1))
+
+    real = use_case.ExternalBooking.insert_many
+
+    async def racing(rows: Any, **kwargs: Any) -> Any:
+        await _booking(cid=_cid(1), booking_id="BK-WINNER-1")
+        await _booking(cid=_cid(3), booking_id="BK-WINNER-3")
+        return await real(rows, **kwargs)
+
+    monkeypatch.setattr(use_case.ExternalBooking, "insert_many", racing)
+    response = await client.post(URL, json=_group_payload(4), headers=GRANTED)
+    assert response.status_code == 409
+    assert response.json()["code"] == "duplicate_booking"
+    assert response.json()["detail"] == "persons[1]"
+    assert _cid(1) not in response.text and _cid(3) not in response.text
+    assert sorted(row["booking_id"] for row in await _rows()) == [
+        "BK-WINNER-1",
+        "BK-WINNER-3",
+    ]
+    assert await _log_statuses() == ["denied_duplicate_booking"]
+
+
+async def test_race_falls_back_to_colliding_row_when_recheck_finds_nothing(
+    client: AsyncClient, shelters: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from apiapp.modules.thirdparty_bookings import use_case
+
+    real_insert = use_case.ExternalBooking.insert_many
+    real_taken = use_case.ThirdPartyBookingsUseCase._taken_cid_hashes
+    calls: list[int] = []
+
+    async def racing(rows: Any, **kwargs: Any) -> Any:
+        await _booking(cid=_cid(2), booking_id="BK-WINNER")
+        return await real_insert(rows, **kwargs)
+
+    async def pre_check_only(self: Any, location_code: str, cid_hashes: list[str]) -> set[str]:
+        calls.append(1)
+        if len(calls) == 1:
+            return await real_taken(self, location_code, cid_hashes)
+        return set()  # the re-check after the race sees nothing
+
+    monkeypatch.setattr(use_case.ExternalBooking, "insert_many", racing)
+    monkeypatch.setattr(use_case.ThirdPartyBookingsUseCase, "_taken_cid_hashes", pre_check_only)
+    response = await client.post(URL, json=_group_payload(4), headers=GRANTED)
+    assert response.status_code == 409
+    assert response.json()["detail"] == "persons[2]"
+    assert len(calls) == 2
+    assert [row["booking_id"] for row in await _rows()] == ["BK-WINNER"]
 
 
 async def test_staged_insert_failure_leaves_nothing_behind(
