@@ -21,9 +21,10 @@ ExternalBookingState = Literal["pending", "written", "cancelled", "rejected"]
 OPEN_BOOKING_STATES: tuple[str, ...] = ("pending", "written")
 
 # Result of the worker's reconcile pass over a terminal row (#613). `cancelled`: a stay or
-# household reserved by the row was cancelled now; `advanced`: the stay had moved past
-# pre_registered and was left alone; `missing`: no reserved doc exists; `noop`: nothing
-# left to do.
+# household reserved by the row was cancelled now (or its missing partner audit was written
+# now); `advanced`: the stay had moved past pre_registered and was left alone; `missing`: no
+# reserved doc exists; `noop`: nothing left to do, including a doc cancelled by someone else
+# (no partner audit is written for it).
 ExternalBookingReconcileOutcome = Literal["cancelled", "advanced", "missing", "noop"]
 
 
@@ -62,6 +63,10 @@ class ExternalBooking(Document):
 	# transient CouchDB error leaves it unset so the next pass retries.
 	reconciled_at: datetime | None = None
 	reconcile_outcome: ExternalBookingReconcileOutcome | None = None
+	# Set before the reconcile pass cancels a stay or household of this row (#613). The
+	# retry pass writes the partner audit of a cancelled doc only when this marker is set;
+	# a doc cancelled by someone else (no marker) gets no partner audit.
+	reconcile_cancelled_at: datetime | None = None
 	created_at: datetime
 	updated_at: datetime
 
