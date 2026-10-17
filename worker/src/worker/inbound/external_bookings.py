@@ -24,20 +24,21 @@ group whose CouchDB write keeps failing is retried with an in-memory exponential
 backoff (``FailureTracker``; resets on restart, nothing is persisted) so it neither
 hammers CouchDB nor floods the log every ``POLL_INTERVAL_SECONDS``.
 
-Residual case (R5, not fixable without a new persisted field — a spec change): if the
-process dies after the ``_bulk_docs`` of a group and the API then cancels *every*
-still-``pending`` row of it, no ``pending`` row is left, so the group is never due
-again and those evacuees stay ``pre_registered`` in CouchDB until staff cancel them (accepted risk, tracked in #595).
-While at least one row of the group is still ``pending``, the next pass cancels the
-stranded stays (``_cancel_stranded_rows``).
+Residual case (R5): if the process dies after the ``_bulk_docs`` of a group and the API
+then cancels *every* still-``pending`` row of it, no ``pending`` row is left, so the group
+is never due again. The reconcile pass (``reconcile_terminal_bookings``, #613) closes this:
+it reads the reserved ``evacuee_id`` / ``household_id`` of every terminal row directly and
+cancels the stays still ``pre_registered``, so it no longer depends on a ``pending``
+sibling. While at least one row of the group is still ``pending``, the next pass also
+cancels the stranded stays (``_cancel_stranded_rows``).
 
 The same gap applies when a row stays ``cancelled`` / ``rejected`` and the direct stay
 cancel fails on a CouchDB error (a stranded row, a row the API cancelled during the write,
 or a row rejected as duplicate after its docs reached CouchDB — see
 ``_cancel_stranded_rows`` / ``_mark_written`` / ``_reject_duplicated_rows``). While a
 ``pending`` sibling is left, the next pass retries that stay cancel for both ``cancelled``
-and D4-``rejected`` rows (``_cancel_stranded_rows``); with none left, nothing retries it
-(the #595 residual).
+and D4-``rejected`` rows (``_cancel_stranded_rows``); the reconcile pass (#613) retries it for every terminal row
+that has not been reconciled yet.
 
 The API changes the same rows concurrently (EXT-009), so every Mongo write here is a
 conditional ``update_one`` on the observed state (``_transition``), never a Beanie
@@ -971,15 +972,17 @@ async def _cancel_household_if_empty(
     database: str,
     *,
     household_id: str,
-    evacuee_id: str,
+    evacuee_id: str | None,
     actor: str,
     now: str,
-) -> None:
+) -> bool:
     """Cancel the household once no member is left ``pre_registered`` (+ audit).
 
     The whole precondition (household still ``pre_registered``, no other
     ``pre_registered`` member) runs inside ``update_doc``'s mutate, so after a ``409``
     (staff merged/moved members meanwhile) it is evaluated again on the fresh document.
+    ``evacuee_id`` is excluded from the member check (``None`` for a household-only row).
+    Returns True when this call cancelled the household. Raises on a CouchDB error.
     """
 
     async def cancel(household: dict[str, Any]) -> dict[str, Any] | None:
@@ -1002,7 +1005,7 @@ async def _cancel_household_if_empty(
 
     cancelled = await couch.update_doc(database, household_id, cancel)
     if cancelled is None:
-        return
+        return False
     await couch.put_doc(
         database,
         build_audit_doc(
@@ -1019,6 +1022,7 @@ async def _cancel_household_if_empty(
             now=now,
         ),
     )
+    return True
 
 
 async def _process_cancel(couch: CouchClient, booking: ExternalBooking) -> bool:
@@ -1073,6 +1077,146 @@ async def _process_cancel(couch: CouchClient, booking: ExternalBooking) -> bool:
     )
     logger.info("Cancelled booking %s in %s", _ref(booking), database)
     return True
+
+
+#: Reconcile pass cadence (#613): it shares the sweeper's loop pass but runs at most once
+#: per this interval.
+RECONCILE_INTERVAL_SECONDS = 60.0
+#: Terminal rows handled per reconcile pass (oldest first); the rest wait for the next one.
+RECONCILE_BATCH_SIZE = 50
+
+_RECONCILE_CANCELLED = "cancelled"
+_RECONCILE_ADVANCED = "advanced"
+_RECONCILE_MISSING = "missing"
+_RECONCILE_NOOP = "noop"
+
+
+class _ReconcileRetry(Exception):
+    """A reconcile step could not finish this pass; the row stays unreconciled."""
+
+
+def _stay_status(doc: dict[str, Any] | None) -> str | None:
+    return ((doc or {}).get("current_stay") or {}).get("status")
+
+
+async def _reconcile_row(couch: CouchClient, booking: ExternalBooking) -> str:
+    """Finish one terminal row against the docs it reserved in ``shelter_{code}`` (#613).
+
+    Reads the reserved ``evacuee_id`` / ``household_id`` directly (no Mango for the docs):
+
+    * neither doc exists (or the shelter database is gone) → ``missing``;
+    * the stay moved past ``pre_registered`` → ``advanced``, nothing is written and the
+      household is left alone (its status may already reflect that member);
+    * a ``pre_registered`` stay → cancelled through ``_cancel_stay``; a failed or changed
+      write raises ``_ReconcileRetry`` so the row is retried;
+    * then the household is re-read and, if it is still ``pre_registered``, cancelled by
+      ``_cancel_household_if_empty`` (covers a household left behind when the stay's own
+      household roll-up failed inside ``_cancel_stay``, and household-only rows);
+    * anything cancelled → ``cancelled``; otherwise → ``noop``.
+
+    Raises on a CouchDB error (the caller leaves the row unreconciled). Logs ids only.
+    """
+    database = shelter_db_name(booking.shelter_code)
+    evacuee = (
+        await couch.get_doc(database, booking.evacuee_id)
+        if booking.evacuee_id
+        else None
+    )
+    household = (
+        await couch.get_doc(database, booking.household_id)
+        if booking.household_id
+        else None
+    )
+    if evacuee is None and household is None:
+        return _RECONCILE_MISSING
+
+    status = _stay_status(evacuee)
+    if status not in (None, "pre_registered", "cancelled"):
+        logger.warning(
+            "Booking %s: stay is past pre_registered — left untouched", _ref(booking)
+        )
+        return _RECONCILE_ADVANCED
+
+    cancelled = False
+    if status == "pre_registered":
+        outcome = await _cancel_stay(couch, database, booking, booking.evacuee_id)
+        if outcome != _CANCELLED:
+            raise _ReconcileRetry(outcome)
+        cancelled = True
+
+    if booking.household_id:
+        fresh = await couch.get_doc(database, booking.household_id)
+        if fresh is not None and fresh.get("status") == "pre_registered":
+            cancelled |= await _cancel_household_if_empty(
+                couch,
+                database,
+                household_id=booking.household_id,
+                evacuee_id=booking.evacuee_id,
+                actor=partner_actor(booking.module_name, booking.client_id),
+                now=_now_iso(),
+            )
+
+    return _RECONCILE_CANCELLED if cancelled else _RECONCILE_NOOP
+
+
+async def _reconcile_booking(couch: CouchClient, booking: ExternalBooking) -> bool:
+    """Reconcile one row and stamp ``reconciled_at`` / ``reconcile_outcome``.
+
+    False = left unreconciled for the next pass (a CouchDB error, a stay changed during
+    the pass, or the row moved under the guarded write). The stamp is guarded on the
+    row's state and ``reconciled_at`` still unset, so a row is never stamped twice.
+    """
+    try:
+        outcome = await _reconcile_row(couch, booking)
+    except _ReconcileRetry:
+        logger.info("Reconcile of booking %s deferred to the next pass", _ref(booking))
+        return False
+    except Exception:
+        # logger.exception: the _ExceptionTypeOnly filter logs the type and location only.
+        logger.exception(
+            "Reconcile of booking %s failed — retry next pass", _ref(booking)
+        )
+        return False
+
+    stamped = await _transition(
+        booking,
+        {"state": booking.state, "reconciled_at": None},
+        {"reconciled_at": datetime.now(UTC), "reconcile_outcome": outcome},
+    )
+    if not stamped:
+        logger.info(
+            "Booking %s moved during reconcile — retry next pass", _ref(booking)
+        )
+    return stamped
+
+
+async def reconcile_terminal_bookings(couch: CouchClient) -> int:
+    """Reconcile up to ``RECONCILE_BATCH_SIZE`` unreconciled terminal rows (#613).
+
+    Selects ``cancelled`` / ``rejected`` rows that reserved a ``evacuee_id`` or
+    ``household_id`` and have no ``reconciled_at`` (legacy rows without the field match
+    too: Mongo ``null`` matches a missing key). Returns the number of rows stamped.
+    """
+    rows = (
+        await ExternalBooking.find(
+            {
+                "state": {"$in": ["cancelled", "rejected"]},
+                "reconciled_at": None,
+                "$or": [
+                    {"evacuee_id": {"$ne": None}},
+                    {"household_id": {"$ne": None}},
+                ],
+            }
+        )
+        .sort("updated_at", "_id")
+        .limit(RECONCILE_BATCH_SIZE)
+        .to_list()
+    )
+    stamped = 0
+    for booking in rows:
+        if await _reconcile_booking(couch, booking):
+            stamped += 1
+    return stamped
 
 
 async def _find_due() -> list[ExternalBooking]:
@@ -1157,12 +1301,25 @@ async def run_external_booking_inbound_loop(
     couch: CouchClient, *, stop_event: asyncio.Event
 ) -> None:
     health = FailureTracker()
+    last_reconcile: float | None = None
     while not stop_event.is_set():
         # Own try/except: a sweeper failure must not stop bookings being written.
         try:
             await sweep_stale_staged()
         except Exception:
             logger.exception("Staged external booking sweep failed")
+        # Reconcile terminal rows in the same pass, at most once per interval (#613).
+        # Own try/except for the same reason; the timer is set first so a failing pass is
+        # not retried on every 3 s poll.
+        if (
+            last_reconcile is None
+            or _clock() - last_reconcile >= RECONCILE_INTERVAL_SECONDS
+        ):
+            last_reconcile = _clock()
+            try:
+                await reconcile_terminal_bookings(couch)
+            except Exception:
+                logger.exception("Terminal booking reconcile pass failed")
         try:
             due = await _find_due()
         except Exception:

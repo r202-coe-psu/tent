@@ -20,6 +20,12 @@ ExternalBookingState = Literal["pending", "written", "cancelled", "rejected"]
 # shelter is refused while one of these exists (D5 — duplicates across shelters OK).
 OPEN_BOOKING_STATES: tuple[str, ...] = ("pending", "written")
 
+# Result of the worker's reconcile pass over a terminal row (#613). `cancelled`: a stay or
+# household reserved by the row was cancelled now; `advanced`: the stay had moved past
+# pre_registered and was left alone; `missing`: no reserved doc exists; `noop`: nothing
+# left to do.
+ExternalBookingReconcileOutcome = Literal["cancelled", "advanced", "missing", "noop"]
+
 
 class ExternalBooking(Document):
 	model_config = ConfigDict(populate_by_name=True)
@@ -51,6 +57,11 @@ class ExternalBooking(Document):
 	# Reserved before the first CouchDB write so worker retries stay idempotent.
 	evacuee_id: str | None = None
 	household_id: str | None = None
+	# Set once the worker's reconcile pass has finished a terminal (`cancelled` / `rejected`)
+	# row against its reserved CouchDB docs (#613). Unset (missing or null) = not yet; a
+	# transient CouchDB error leaves it unset so the next pass retries.
+	reconciled_at: datetime | None = None
+	reconcile_outcome: ExternalBookingReconcileOutcome | None = None
 	created_at: datetime
 	updated_at: datetime
 
@@ -71,6 +82,7 @@ class ExternalBooking(Document):
 			),
 			IndexModel([("booking_id", 1), ("person_seq", 1)]),
 			IndexModel([("state", 1), ("updated_at", 1)]),
+			IndexModel([("state", 1), ("reconciled_at", 1)]),
 			IndexModel([("cancel_requested", 1)]),
 			IndexModel([("client_id", 1)]),
 		]
