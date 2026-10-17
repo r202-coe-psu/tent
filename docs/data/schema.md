@@ -2420,6 +2420,9 @@ CouchDB `_users` DB ไม่ใช่ operational doc ธรรมดา — �
 | `active` | bool | req | default `true` (เปิด/ปิดการเข้าใช้งานระบบ) |
 | `must_change_password` | bool | opt | default `false` (บังคับเปลี่ยนรหัสผ่านและตั้งคำถามความปลอดภัยเมื่อเข้าสู่ระบบ) |
 | `affiliation_tags` | [str] | opt | แท็กสังกัดหรือกลุ่มสังกัดเพิ่มเติม |
+| `edge_shelters` | [str] | opt | CR-171 — รหัสศูนย์ (`SH001`) ทุกศูนย์ที่ user **เคย** มี `shelter:{code}` · **append-only** (ห้ามลบค่าออก แม้ถอด role หรือลบ user) · ใช้เป็น selector ของ filtered `_users` replica ไป edge เท่านั้น — **ไม่ให้สิทธิ์ใด ๆ** (สิทธิ์ดูจาก `roles`) · doc ที่เขียนผ่าน `user-service` ต้องมีเสมอ |
+| `deleted_at` | ts\|null | opt | CR-171 — เวลาที่ soft delete · `null`/ไม่มี = บัญชีปกติ |
+| `deleted_by` | str\|null | opt | CR-171 — `_users` name ของผู้ลบ |
 
 **`mfa` (CR-124 Google MFA & CR-ThaID Staff ThaID Digital ID BORA):**
 
@@ -2444,6 +2447,11 @@ CouchDB `_users` DB ไม่ใช่ operational doc ธรรมดา — �
 - สิทธิ์การบันทึกเอกสาร (`{code}:{capability}`): ตรวจสอบใน `validate_doc_update` ของแต่ละศูนย์
 - ผู้ดูแลระบบส่วนกลาง (`system_admin`): ไม่มี prefix รหัสศูนย์ และมีสิทธิ์ครอบคลุมทุกฐานข้อมูล
 - dynamic time-bound role: Worker Sweeper จะเพิ่ม/ถอน `{code}:{capability}` ตามเวลากะงานจริง
+
+**การลบ user (CR-171) — soft delete เท่านั้น:**
+- ห้าม `DELETE` doc ใน `_users` (tombstone ไม่ผ่าน selector ของ edge → edge ไม่รู้ว่าถูกลบ)
+- ลบ = PUT doc เดิมด้วย `roles: []`, `shelter_id: null`, `active: false`, `password` สุ่มใหม่, `deleted_at`, `deleted_by` — field อื่นรวม PII และ `edge_shelters` คงเดิม
+- doc ที่ `deleted_at` ไม่ว่างไม่ใช่ user สำหรับ management API / login ด้วยเบอร์ / OAuth login · ชื่อของบัญชีที่ถูกลบถูกจองถาวร — สร้างชื่อเดิมซ้ำได้ `CONFLICT` (ห้ามเขียนทับ doc เดิม)
 
 ---
 

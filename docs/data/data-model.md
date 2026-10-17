@@ -2,7 +2,7 @@
 title: Smart Shelter — Data Model (CouchDB remote-first) v3
 status: draft for review
 created: 2026-06-11
-updated: 2026-10-14
+updated: 2026-10-17
 note: ออกแบบใหม่ทั้งหมด — ไม่สืบทอดจาก docs/data v2.0 (retired 2026-06-11); decision sync 2026-06-15 เลือก MongoDB projection สำหรับ public tier และ EOC read-model
 ---
 
@@ -49,7 +49,7 @@ device app  ⇄ WAN ⇄  central (CouchDB)
 | `registry` | ✓ master | ✓ replica | no disconnected read cache (status-only when unreachable) | app read จาก central (pull/read-through) | central → edge; app read จาก edge เฉพาะ outage |
 | `shelter_import_audit` | ✓ private | — | no browser access | server-side `adminRaw` + SA-only BFF | — |
 | `catalog` | ✓ master | ✓ replica | no disconnected read cache (status-only when unreachable) | app read จาก central (pull/read-through) | central → edge; app read จาก edge เฉพาะ outage |
-| `_users` | ✓ master | ✓ **filtered replica** (เฉพาะ user ของศูนย์ตน) | — | central `_session` | central → edge (selector by role `shelter:{id}`) เพื่อ fallback login |
+| `_users` | ✓ master | ✓ **filtered replica** (เฉพาะ user ของศูนย์ตน) | — | central `_session` | central → edge (selector `edge_shelters` มี `{id}` — CR-171; append-only จึงส่งการถอดสิทธิ์/soft delete ตามไปด้วย) เพื่อ fallback login |
 | `central_ops` | ✓ เท่านั้น | — | — | central-only service/read model & cross-tenant store | — (search_audit, export_job, `counter:shelter`, `referral`, `referral_close_job`, `referral_close_lock` — CR-168) |
 
 - 1 ศูนย์ = 1 db → ปิดศูนย์ = หยุด replication + purge ทั้ง db ที่ central, ล้าง edge server ทั้งเครื่อง

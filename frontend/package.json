@@ -44,6 +44,7 @@
 		"unseed:master": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/unseed.ts --master",
 		"unseed:master-data": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/unseed.ts --master-data",
 		"unseed:stock": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/unseed-stock.ts",
+		"backfill:edge-shelters": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/backfill-edge-shelters.ts",
 		"audit:ledger-refid": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/audit-stock-ledger-refid.ts",
 		"migrate:shelter": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/migrate-shelter.ts",
 		"migrate:volunteer-review": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/migrate-volunteer-review.ts",

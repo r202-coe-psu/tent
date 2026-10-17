@@ -84,6 +84,9 @@ describe('google-oauth helpers (CR-124)', () => {
 			ok: false,
 			reason: 'missing_salt'
 		});
+		expect(
+			resolveGoogleLoginUser({ name: 'alice', salt: 's1', deleted_at: '2026-10-17T00:00:00Z' })
+		).toEqual({ ok: false, reason: 'google_not_linked' });
 		expect(resolveGoogleLoginUser({ name: 'alice', salt: 's1' })).toEqual({
 			ok: true,
 			name: 'alice',

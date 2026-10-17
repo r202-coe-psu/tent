@@ -1,7 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as couchAdmin from './couch-admin';
 import {
+	createOrMergeUser,
 	createUser,
+	deleteUser,
+	updateUser,
 	resetUserPasswordByAdmin,
 	getCurrentUserProfile,
 	getSecurityQuestionChallenge,
@@ -682,6 +685,188 @@ describe('user-service', () => {
 			await expect(updateOwnProfile('missing-user', { display_name: 'x' })).rejects.toMatchObject({
 				code: 'VALIDATION'
 			});
+		});
+	});
+	describe('edge_shelters + soft delete (CR-171)', () => {
+		const sa = { name: 'root-sa', roles: ['system_admin'], isSA: true, shelterCode: null };
+		const manager = (code: string) => ({
+			name: `mgr-${code}`,
+			roles: [`shelter:${code}`, `${code}:shelter_manager`],
+			isSA: false,
+			shelterCode: code
+		});
+		const idOf = (name: string) => `org.couchdb.user:${name}`;
+		const base = {
+			password: 'Password123!',
+			display_name: 'Staff'
+		};
+
+		it('createUser seeds edge_shelters; update appends and never removes', async () => {
+			await createUser({ ...base, name: 'e1', roles: ['shelter:SH001', 'registration_staff'] });
+			expect(fakeUsersDb[idOf('e1')].edge_shelters).toEqual(['SH001']);
+
+			await updateUser('e1', { roles: ['shelter:SH001', 'shelter:SH002'] }, sa);
+			expect(fakeUsersDb[idOf('e1')].edge_shelters).toEqual(['SH001', 'SH002']);
+
+			await updateUser('e1', { roles: ['shelter:SH002'] }, sa);
+			expect(fakeUsersDb[idOf('e1')].edge_shelters).toEqual(['SH001', 'SH002']);
+		});
+
+		it('manager strip keeps edge_shelters and does not soft delete when shelters remain', async () => {
+			await createUser({
+				...base,
+				name: 'e2',
+				roles: [
+					'shelter:SH001',
+					'shelter:SH002',
+					'SH001:registration_staff',
+					'SH002:registration_staff'
+				]
+			});
+			await deleteUser('e2', manager('SH001'));
+			const saved = fakeUsersDb[idOf('e2')];
+			expect(saved.roles).toContain('shelter:SH002');
+			expect(saved.roles).not.toContain('shelter:SH001');
+			expect(saved.edge_shelters).toEqual(['SH001', 'SH002']);
+			expect(saved.deleted_at ?? null).toBeNull();
+		});
+
+		it('pre-backfill doc (no edge_shelters) records the shelter being removed', async () => {
+			fakeUsersDb[idOf('legacy')] = {
+				_id: idOf('legacy'),
+				_rev: '1-a',
+				name: 'legacy',
+				type: 'user',
+				roles: ['shelter:SH001', 'shelter:SH002', 'SH001:registration_staff']
+			};
+			await updateUser('legacy', { roles: ['shelter:SH002'] }, sa);
+			expect(fakeUsersDb[idOf('legacy')].edge_shelters).toEqual(['SH001', 'SH002']);
+
+			fakeUsersDb[idOf('legacy2')] = {
+				_id: idOf('legacy2'),
+				_rev: '1-a',
+				name: 'legacy2',
+				type: 'user',
+				roles: [
+					'shelter:SH001',
+					'shelter:SH002',
+					'SH001:registration_staff',
+					'SH002:registration_staff'
+				]
+			};
+			await deleteUser('legacy2', manager('SH001'));
+			expect(fakeUsersDb[idOf('legacy2')].edge_shelters).toEqual(['SH001', 'SH002']);
+		});
+
+		it('SA delete soft-deletes (PUT, never DELETE) and keeps PII + edge_shelters', async () => {
+			await createUser({
+				...base,
+				name: 'e3',
+				phone: '0811111111',
+				roles: ['shelter:SH001', 'registration_staff']
+			});
+			const spy = vi.mocked(couchAdmin.adminRaw);
+			spy.mockClear();
+			await deleteUser('e3', sa);
+
+			expect(spy.mock.calls.some(([, method]) => method === 'DELETE')).toBe(false);
+			const saved = fakeUsersDb[idOf('e3')];
+			expect(saved).toBeDefined();
+			expect(saved.roles).toEqual([]);
+			expect(saved.shelter_id).toBeNull();
+			expect(saved.active).toBe(false);
+			expect(saved.deleted_by).toBe('root-sa');
+			expect(Date.parse(saved.deleted_at as string)).not.toBeNaN();
+			expect(saved.edge_shelters).toEqual(['SH001']);
+			expect(saved.phone).toBe('0811111111');
+			expect(saved.password).toMatch(/^[0-9a-f]{64}$/);
+		});
+
+		it('manager removing the last shelter soft-deletes', async () => {
+			await createUser({ ...base, name: 'e4', roles: ['shelter:SH001', 'registration_staff'] });
+			await deleteUser('e4', manager('SH001'));
+			const saved = fakeUsersDb[idOf('e4')];
+			expect(saved.roles).toEqual([]);
+			expect(saved.deleted_by).toBe('mgr-SH001');
+			expect(saved.edge_shelters).toEqual(['SH001']);
+		});
+
+		it('deleted users are hidden from list, phone checks and mutations', async () => {
+			await createUser({
+				...base,
+				name: 'e5',
+				phone: '0822222222',
+				roles: ['shelter:SH001', 'registration_staff']
+			});
+			await deleteUser('e5', sa);
+
+			expect((await listUsers(sa)).map((u) => u.name)).not.toContain('e5');
+			expect(await findUserNameByPhone('0822222222')).toBeNull();
+			await expect(resetUserPasswordByAdmin('e5', sa)).rejects.toMatchObject({
+				code: 'VALIDATION'
+			});
+			await expect(updateUser('e5', { display_name: 'x' }, sa)).rejects.toMatchObject({
+				code: 'VALIDATION'
+			});
+			await expect(deleteUser('e5', sa)).rejects.toMatchObject({ code: 'VALIDATION' });
+			// phone is free again for another account
+			await expect(
+				createUser({ ...base, name: 'other', phone: '0822222222', roles: ['shelter:SH001'] })
+			).resolves.toBeUndefined();
+		});
+
+		it('deleted SA is not counted by the last-SA guard', async () => {
+			await createUser({ ...base, name: 'sa-a', roles: ['system_admin'] });
+			await createUser({ ...base, name: 'sa-b', roles: ['system_admin'] });
+			await deleteUser('sa-b', sa);
+			await expect(deleteUser('sa-a', sa)).rejects.toMatchObject({ code: 'FORBIDDEN' });
+		});
+
+		const DELETED_MSG = 'ชื่อผู้ใช้นี้เคยถูกใช้และถูกลบไปแล้ว กรุณาใช้ชื่ออื่น';
+
+		it('createUser on a soft-deleted name conflicts and leaves the doc untouched', async () => {
+			await createUser({ ...base, name: 'e6', roles: ['shelter:SH001', 'registration_staff'] });
+			await deleteUser('e6', sa);
+			const before = structuredClone(fakeUsersDb[idOf('e6')]);
+
+			await expect(
+				createUser({ ...base, name: 'e6', roles: ['shelter:SH002', 'registration_staff'] })
+			).rejects.toMatchObject({ code: 'CONFLICT', message: DELETED_MSG });
+
+			const after = fakeUsersDb[idOf('e6')];
+			expect(after).toEqual(before);
+			expect(after._rev).toBe(before._rev);
+			expect(after.deleted_at).toBeTruthy();
+			expect(after.roles).toEqual([]);
+		});
+
+		it('createUser on a live name conflicts with the "already exists" message', async () => {
+			await createUser({ ...base, name: 'e7', roles: ['shelter:SH001'] });
+			const err = await createUser({ ...base, name: 'e7', roles: ['shelter:SH001'] }).catch(
+				(e: unknown) => e
+			);
+			expect(err).toMatchObject({ code: 'CONFLICT', message: 'User "e7" already exists' });
+		});
+
+		it('manager createOrMergeUser on a soft-deleted name rejects and leaves the doc untouched', async () => {
+			await createUser({ ...base, name: 'e9', roles: ['shelter:SH001', 'registration_staff'] });
+			await deleteUser('e9', sa);
+			const before = structuredClone(fakeUsersDb[idOf('e9')]);
+
+			await expect(
+				createOrMergeUser(
+					{ ...base, name: 'e9', roles: ['shelter:SH002', 'registration_staff'] },
+					manager('SH002')
+				)
+			).rejects.toMatchObject({ code: 'CONFLICT', message: DELETED_MSG });
+			expect(fakeUsersDb[idOf('e9')]).toEqual(before);
+		});
+
+		it('findUserBy*Subject ignore deleted accounts', async () => {
+			await createUser({ ...base, name: 'e8', roles: ['shelter:SH001'] });
+			await linkGoogleMfa('e8', { subject: 'g-sub-8' });
+			await deleteUser('e8', sa);
+			expect(await findUserByGoogleSubject('g-sub-8')).toBeNull();
 		});
 	});
 });
