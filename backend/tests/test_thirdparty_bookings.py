@@ -1399,6 +1399,13 @@ def _spy_bulk_writes(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, dict[st
     return calls
 
 
+def _bulk_state_writes(
+    calls: list[tuple[str, dict[str, Any]]],
+) -> list[tuple[str, dict[str, Any]]]:
+    """The state-changing writes only: the token clear (CR-169 FR-40) filters on token."""
+    return [(name, flt) for name, flt in calls if "state" in flt]
+
+
 def _around_update_many(
     monkeypatch: pytest.MonkeyPatch,
     *,
@@ -1471,7 +1478,7 @@ async def test_cancel_group_flags_written_rows_before_cancelling_pending(
     calls = _spy_bulk_writes(monkeypatch)
     response = await client.post(_cancel_url("BK-GROUP001"), json={"reason": "r"}, headers=GRANTED)
     assert response.status_code == 200
-    assert [(name, flt["state"]) for name, flt in calls] == [
+    assert [(name, flt["state"]) for name, flt in _bulk_state_writes(calls)] == [
         ("update_many", "written"),
         ("update_many", "pending"),
     ]
@@ -1491,7 +1498,7 @@ async def test_cancel_group_common_path_uses_two_bulk_writes(
     calls = _spy_bulk_writes(monkeypatch)
     response = await client.post(_cancel_url("BK-GROUP001"), json={"reason": "r"}, headers=GRANTED)
     assert response.status_code == 200
-    assert [name for name, _ in calls] == ["update_many", "update_many"]
+    assert [name for name, _ in _bulk_state_writes(calls)] == ["update_many", "update_many"]
     rows = await _rows("BK-GROUP001")
     assert len(rows) == 20
     assert [(row["state"], row["cancel_requested"]) for row in rows] == [
@@ -1543,7 +1550,9 @@ async def test_cancel_group_conflict_with_failing_revert_keeps_409(
         after=lambda: _set_stay("evacuee:BK-GROUP001-1", "active"),
     )
 
-    async def failing_revert(self: Any, collection: Any, ids: list[str], now: Any) -> None:
+    async def failing_revert(
+        self: Any, collection: Any, ids: list[str], now: Any, token: Any
+    ) -> None:
         raise RuntimeError("revert boom")
 
     monkeypatch.setattr(use_case.ThirdPartyBookingsUseCase, "_revert_flags", failing_revert)
@@ -1578,7 +1587,12 @@ async def test_cancel_group_foreign_flag_set_mid_request_is_left_alone(
         when=lambda flt: flt.get("cancel_requested") is False,
         before=lambda: _set_row(
             "BP-BK-GROUP001-0",
-            {"cancel_requested": True, "cancel_reason": "foreign", "updated_at": foreign_at},
+            {
+                "cancel_requested": True,
+                "cancel_reason": "foreign",
+                "cancel_flag_token": "other-request",
+                "updated_at": foreign_at,
+            },
         ),
         after=lambda: _set_stay("evacuee:BK-GROUP001-1", "active"),
     )
@@ -1616,7 +1630,12 @@ async def test_cancel_group_foreign_flag_on_written_row_is_409_not_200(
         when=lambda flt: flt.get("cancel_requested") is False,
         before=lambda: _set_row(
             "BP-BK-GROUP001-0",
-            {"cancel_requested": True, "cancel_reason": "foreign", "updated_at": foreign_at},
+            {
+                "cancel_requested": True,
+                "cancel_reason": "foreign",
+                "cancel_flag_token": "other-request",
+                "updated_at": foreign_at,
+            },
         ),
     )
     response = await client.post(_cancel_url("BK-GROUP001"), json={"reason": "r"}, headers=GRANTED)
@@ -1624,7 +1643,7 @@ async def test_cancel_group_foreign_flag_on_written_row_is_409_not_200(
     assert response.json()["code"] == "booking_not_cancellable"
     after = await _rows("BK-GROUP001")
     assert (after[0]["cancel_requested"], after[0]["cancel_reason"]) == (True, "foreign")
-    assert after[0]["updated_at"] == foreign_at
+    assert (after[0]["cancel_flag_token"], after[0]["updated_at"]) == ("other-request", foreign_at)
     assert (after[1]["state"], after[1]["cancel_requested"], after[1]["cancel_reason"]) == (
         "written",
         False,
@@ -1655,6 +1674,7 @@ async def test_cancel_group_pending_row_flagged_elsewhere_mid_way_is_409(
                 "state": "written",
                 "cancel_requested": True,
                 "cancel_reason": "foreign",
+                "cancel_flag_token": "other-request",
                 "updated_at": foreign_at,
             },
         ),
@@ -1693,7 +1713,12 @@ async def test_cancel_group_revert_keeps_a_flag_set_after_our_marker(
         when=lambda flt: flt.get("cancel_requested") is True,
         before=lambda: _set_row(
             "BP-BK-GROUP001-0",
-            {"cancel_requested": True, "cancel_reason": "foreign", "updated_at": foreign_at},
+            {
+                "cancel_requested": True,
+                "cancel_reason": "foreign",
+                "cancel_flag_token": "other-request",
+                "updated_at": foreign_at,
+            },
         ),
     )
     response = await client.post(_cancel_url("BK-GROUP001"), json={"reason": "r"}, headers=GRANTED)
@@ -2026,7 +2051,9 @@ async def test_cancel_group_stay_reread_error_keeps_original_error_when_revert_f
     await _group(3, ["pending", "written", "pending"])
     _fail_person_find_after(monkeypatch, ok_calls=1, message="find boom")
 
-    async def failing_revert(self: Any, collection: Any, ids: list[str], now: Any) -> None:
+    async def failing_revert(
+        self: Any, collection: Any, ids: list[str], now: Any, token: Any
+    ) -> None:
         raise RuntimeError("revert boom")
 
     monkeypatch.setattr(use_case.ThirdPartyBookingsUseCase, "_revert_flags", failing_revert)
@@ -2205,3 +2232,150 @@ async def test_unique_index_guards_open_bookings(client: AsyncClient) -> None:
 async def test_group_lookup_index_exists(client: AsyncClient) -> None:
     indexes = await ExternalBooking.get_pymongo_collection().index_information()
     assert any(info["key"] == [("booking_id", 1), ("person_seq", 1)] for info in indexes.values())
+
+
+# --- CR-169 FR-40 (decision sync 2026-10-17, #612): cancel_flag_token -----------------------------
+
+
+async def test_cancel_group_foreign_token_cleared_then_row_is_skipped(
+    client: AsyncClient,
+) -> None:
+    """Another request's token clears during the wait: the flagged row is FINISHED and skipped."""
+    await _person(status="pre_registered", person_id="evacuee:BK-GROUP001-1")
+    await _group(2, ["written", "written"])
+    await _set_row(
+        "BP-BK-GROUP001-0",
+        {"cancel_requested": True, "cancel_reason": "foreign", "cancel_flag_token": "other"},
+    )
+
+    async def settle() -> None:
+        await asyncio.sleep(0.2)
+        await _set_row("BP-BK-GROUP001-0", {"cancel_flag_token": None})
+
+    settler = asyncio.create_task(settle())
+    response = await client.post(_cancel_url("BK-GROUP001"), json={"reason": "r"}, headers=GRANTED)
+    await settler
+    assert response.status_code == 200
+    rows = await _rows("BK-GROUP001")
+    assert (rows[0]["cancel_requested"], rows[0]["cancel_reason"]) == (True, "foreign")
+    assert (rows[1]["cancel_requested"], rows[1]["cancel_reason"]) == (True, "r")
+    assert await _log_statuses() == ["granted"]
+
+
+async def test_cancel_group_foreign_flag_reverted_during_wait_proceeds(client: AsyncClient) -> None:
+    """Another request reverts its flag during the wait: the row is OPEN again and is cancelled."""
+    await _person(status="pre_registered", person_id="evacuee:BK-GROUP001-0")
+    await _person(status="pre_registered", person_id="evacuee:BK-GROUP001-1")
+    await _group(2, ["written", "written"])
+    await _set_row(
+        "BP-BK-GROUP001-0",
+        {"cancel_requested": True, "cancel_reason": "foreign", "cancel_flag_token": "other"},
+    )
+
+    async def revert() -> None:
+        await asyncio.sleep(0.2)
+        await _set_row(
+            "BP-BK-GROUP001-0",
+            {"cancel_requested": False, "cancel_reason": None, "cancel_flag_token": None},
+        )
+
+    reverter = asyncio.create_task(revert())
+    response = await client.post(_cancel_url("BK-GROUP001"), json={"reason": "r"}, headers=GRANTED)
+    await reverter
+    assert response.status_code == 200
+    rows = await _rows("BK-GROUP001")
+    assert [(row["cancel_requested"], row["cancel_reason"]) for row in rows] == [
+        (True, "r"),
+        (True, "r"),
+    ]
+    assert [row["cancel_flag_token"] for row in rows] == [None, None]
+    assert await _log_statuses() == ["granted"]
+
+
+async def test_cancel_group_foreign_token_still_in_flight_is_409_and_changes_nothing(
+    client: AsyncClient,
+) -> None:
+    """A foreign token that never clears: the wait times out, 409, nothing of ours is flagged."""
+    await _group(2, ["pending", "written"])
+    await _set_row(
+        "BP-BK-GROUP001-1",
+        {"cancel_requested": True, "cancel_reason": "foreign", "cancel_flag_token": "other"},
+    )
+    response = await client.post(_cancel_url("BK-GROUP001"), json={"reason": "r"}, headers=GRANTED)
+    assert response.status_code == 409
+    assert response.json()["code"] == "booking_not_cancellable"
+    rows = await _rows("BK-GROUP001")
+    assert (rows[0]["state"], rows[0]["cancel_requested"], rows[0]["cancel_flag_token"]) == (
+        "pending",
+        False,
+        None,
+    )
+    assert (rows[1]["cancel_requested"], rows[1]["cancel_flag_token"]) == (True, "other")
+    assert await _log_statuses() == ["denied_booking_not_cancellable"]
+
+
+async def test_cancel_group_success_clears_own_token_and_keeps_flags(client: AsyncClient) -> None:
+    """A successful request flags its written rows, then clears its token; the flags stay."""
+    await _person(status="pre_registered", person_id="evacuee:BK-GROUP001-0")
+    await _person(status="pre_registered", person_id="evacuee:BK-GROUP001-1")
+    await _group(2, ["written", "written"])
+    response = await client.post(_cancel_url("BK-GROUP001"), json={"reason": "r"}, headers=GRANTED)
+    assert response.status_code == 200
+    rows = await _rows("BK-GROUP001")
+    assert [(row["cancel_requested"], row["cancel_flag_token"]) for row in rows] == [
+        (True, None),
+        (True, None),
+    ]
+
+
+async def test_cancel_group_revert_clears_flags_and_token(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A check-in after the flag write reverts both flags and drops the token with them."""
+    await _person(status="pre_registered", person_id="evacuee:BK-GROUP001-0")
+    await _person(status="pre_registered", person_id="evacuee:BK-GROUP001-1")
+    await _group(2, ["written", "written"])
+    _around_update_many(
+        monkeypatch,
+        when=lambda flt: flt.get("cancel_requested") is False,
+        after=lambda: _set_stay("evacuee:BK-GROUP001-1", "active"),
+    )
+    response = await client.post(_cancel_url("BK-GROUP001"), json={"reason": "r"}, headers=GRANTED)
+    assert response.status_code == 409
+    rows = await _rows("BK-GROUP001")
+    assert [
+        (row["cancel_requested"], row["cancel_reason"], row["cancel_flag_token"]) for row in rows
+    ] == [(False, None, None), (False, None, None)]
+
+
+async def test_cancel_group_legacy_flag_without_token_is_finished_and_skipped(
+    client: AsyncClient,
+) -> None:
+    """A flagged row with no token (legacy, or its request finished) is FINISHED per FR-40."""
+    await _group(2, ["written", "pending"])
+    await _set_row(
+        "BP-BK-GROUP001-0",
+        {"cancel_requested": True, "cancel_reason": "legacy", "cancel_flag_token": None},
+    )
+    response = await client.post(_cancel_url("BK-GROUP001"), json={"reason": "r"}, headers=GRANTED)
+    assert response.status_code == 200
+    rows = await _rows("BK-GROUP001")
+    assert (rows[0]["cancel_requested"], rows[0]["cancel_reason"]) == (True, "legacy")
+    assert (rows[1]["state"], rows[1]["cancel_reason"]) == ("cancelled", "r")
+    assert await _log_statuses() == ["granted"]
+
+
+async def test_clear_flag_tokens_only_clears_the_requests_own_token(
+    client: AsyncClient,
+) -> None:
+    """The token clear is guarded on this request's token: another request's token survives."""
+    from apiapp.modules.thirdparty_bookings import use_case
+
+    rows = await _group(2, ["written", "written"])
+    await _set_row("BP-BK-GROUP001-0", {"cancel_requested": True, "cancel_flag_token": "other"})
+    await _set_row("BP-BK-GROUP001-1", {"cancel_requested": True, "cancel_flag_token": "mine"})
+    uc = use_case.ThirdPartyBookingsUseCase()
+    await uc._clear_flag_tokens(ExternalBooking.get_pymongo_collection(), rows, "mine")
+    stored = await _rows("BK-GROUP001")
+    assert [row["cancel_flag_token"] for row in stored] == ["other", None]
+    assert [row["cancel_requested"] for row in stored] == [True, True]

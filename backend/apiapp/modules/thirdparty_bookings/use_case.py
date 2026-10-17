@@ -74,6 +74,9 @@ _COMMIT_ATTEMPTS = 3
 _CLEANUP_ATTEMPTS = 3
 _CANCEL_ROW_ATTEMPTS = 3
 _RETRY_BACKOFF_SECONDS = 0.05  # multiplied by the attempt number
+# CR-169 FR-40: how long a request waits on another request's in-flight cancel flag.
+_FLAG_WAIT_SECONDS = 1.0
+_FLAG_POLL_SECONDS = 0.1
 
 # Messages here must never carry a CID, phone, name or document body: only the booking_id
 # and the exception *type* are logged.
@@ -276,13 +279,20 @@ def _to_milliseconds(value: datetime) -> datetime:
     return value.replace(microsecond=value.microsecond // 1000 * 1000)
 
 
-def _flag_in_flight(row: ExternalBooking) -> bool:
-    """A written row flagged for cancel whose worker cancel has not landed yet.
+def _foreign_flag(row: ExternalBooking, token: str) -> bool:
+    """A written row flagged for cancel by another request whose cancel is still in flight.
 
-    It is not FINISHED (the worker has not cancelled it) and this request did not set its flag,
-    so a step that finds it must refuse (409) rather than skip it.
+    CR-169 FR-40 (decision sync 2026-10-17): a flag carries the `cancel_flag_token` of the request
+    that set it and that request clears the token when it is over. A flag with a token other than
+    `token` is in flight and is waited on (`_await_foreign_flag`). A flag without a token is
+    FINISHED: a legacy flag, or a flag whose request has finished.
     """
-    return row.state == "written" and bool(row.cancel_requested)
+    return (
+        row.state == "written"
+        and bool(row.cancel_requested)
+        and row.cancel_flag_token is not None
+        and row.cancel_flag_token != token
+    )
 
 
 def _is_open(row: ExternalBooking) -> bool:
@@ -738,8 +748,13 @@ class ThirdPartyBookingsUseCase:
                 message=f"reason must be at most {_MAX_CANCEL_REASON} characters.",
             )
 
+        # This request's id: the `cancel_flag_token` of every flag it sets (CR-169 FR-40).
+        token = new_ulid()
         rows = await self._load_owned_group(
             booking_id=booking_id, endpoint=endpoint, claims=claims, client_ip=client_ip
+        )
+        rows = await self._settle_foreign_flags(
+            rows, token, endpoint=endpoint, claims=claims, client_ip=client_ip
         )
         open_rows = [row for row in rows if _is_open(row)]
         if not open_rows and not any(_booking_status(row) == "CANCELLED" for row in rows):
@@ -774,32 +789,88 @@ class ThirdPartyBookingsUseCase:
         # Every planned row: 2b can re-flag a pending row that became written (`_cancel_row`),
         # so the revert after 2a must cover those rows too, not only `requested`.
         planned = [row for row, _ in plan]
-        # Phase 2 is two `update_many` steps (no per-row loop on the common path). The written
-        # rows are flagged first, so a check-in that lands meanwhile is caught before any
-        # pending row is cancelled. Residual race: a step-2b conflict can still leave the
-        # pending rows cancelled while the 409 is returned, and the written rows flagged in
-        # step 2a stay `cancel_requested=True` (the worker will still cancel them). The retry
-        # skips the cancelled rows (FINISHED) and the flagged rows (not OPEN).
-        if requested and not await self._flag_requested(collection, requested, reason, now):
-            raise await self._not_cancellable(endpoint, claims, client_ip, rows[0])
-        # Any unexpected error after phase 2a reverts the flags this request set (guarded by
-        # `now`), so it never leaves `cancel_requested=True` behind. A 409 from 2b is the
-        # documented residual race and keeps the flags, as before.
-        if direct:
-            try:
-                cancelled = await self._cancel_pending(collection, direct, reason, now)
-            except BaseException:
-                await self._revert_after_error(collection, planned, now)
-                raise
-            if not cancelled:
-                raise await self._not_cancellable(endpoint, claims, client_ip, rows[0])
-        # Phase 2c — the granted access-log write after 2b. An error here reverts the 2a flags
-        # too, so a failed 2c never leaves `cancel_requested=True` behind.
         try:
-            return await self._cancelled(endpoint, claims, client_ip, rows[0])
-        except BaseException:
-            await self._revert_after_error(collection, planned, now)
-            raise
+            # Phase 2 is two `update_many` steps (no per-row loop on the common path). The written
+            # rows are flagged first, so a check-in that lands meanwhile is caught before any
+            # pending row is cancelled. Residual race: a step-2b conflict can still leave the
+            # pending rows cancelled while the 409 is returned, and the written rows flagged in
+            # step 2a stay `cancel_requested=True` (the worker will still cancel them). The retry
+            # skips the cancelled rows (FINISHED) and the flagged rows (not OPEN).
+            if requested and not await self._flag_requested(
+                collection, requested, reason, now, token
+            ):
+                raise await self._not_cancellable(endpoint, claims, client_ip, rows[0])
+            # Any unexpected error after phase 2a reverts the flags this request set (guarded by
+            # `now` and `token`), so it never leaves `cancel_requested=True` behind. A 409 from 2b
+            # is the documented residual race and keeps the flags, as before.
+            if direct:
+                try:
+                    cancelled = await self._cancel_pending(collection, direct, reason, now, token)
+                except BaseException:
+                    await self._revert_after_error(collection, planned, now, token)
+                    raise
+                if not cancelled:
+                    raise await self._not_cancellable(endpoint, claims, client_ip, rows[0])
+            # Phase 2c — the granted access-log write after 2b. An error here reverts the 2a flags
+            # too, so a failed 2c never leaves `cancel_requested=True` behind.
+            try:
+                return await self._cancelled(endpoint, claims, client_ip, rows[0])
+            except BaseException:
+                await self._revert_after_error(collection, planned, now, token)
+                raise
+        finally:
+            # The request is over: flags it kept (2b 409) or set and granted are no longer in
+            # flight, so its token goes. Reverted flags already lost it. Guarded on `token`.
+            if planned:
+                await self._clear_flag_tokens(collection, planned, token)
+
+    async def _settle_foreign_flags(
+        self,
+        rows: list[ExternalBooking],
+        token: str,
+        *,
+        endpoint: str,
+        claims: ThirdPartyClaims,
+        client_ip: str,
+    ) -> list[ExternalBooking]:
+        """CR-169 FR-40 — wait (one shared deadline) for other requests' in-flight cancel flags.
+
+        A flag still in flight when the wait ends is a conflict: this request cannot tell whether
+        the row will be cancelled, so it is refused before it flags anything.
+        """
+        if not any(_foreign_flag(row, token) for row in rows):
+            return rows
+        deadline = asyncio.get_running_loop().time() + _FLAG_WAIT_SECONDS
+        settled: list[ExternalBooking] = []
+        for row in rows:
+            if _foreign_flag(row, token):
+                fresh = await self._await_foreign_flag(row, token, deadline)
+                if fresh is None:
+                    raise await self._not_cancellable(endpoint, claims, client_ip, rows[0])
+                row = fresh
+            settled.append(row)
+        return settled
+
+    async def _await_foreign_flag(
+        self, row: ExternalBooking, token: str, deadline: float
+    ) -> ExternalBooking | None:
+        """Re-read `row` until another request's flag settles; None if still in flight.
+
+        Settled means the token was cleared (the row is FINISHED and the flag stays) or the flag
+        was reverted (the row is OPEN again). A row that vanished counts as unsettled.
+        """
+        loop = asyncio.get_running_loop()
+        current = row
+        while _foreign_flag(current, token):
+            if loop.time() >= deadline:
+                logger.warning("cancel flag still in flight (booking_id=%s)", row.booking_id)
+                return None
+            await asyncio.sleep(_FLAG_POLL_SECONDS)
+            fresh = await ExternalBooking.get(row.id)
+            if fresh is None:
+                return None
+            current = fresh
+        return current
 
     async def _flag_requested(
         self,
@@ -807,6 +878,7 @@ class ThirdPartyBookingsUseCase:
         rows: list[ExternalBooking],
         reason: str | None,
         now: datetime,
+        token: str,
     ) -> bool:
         """Phase 2a (FR-32) — flag the written rows for the worker. False after a full revert.
 
@@ -814,9 +886,9 @@ class ThirdPartyBookingsUseCase:
         request set before it propagates (see `_revert_after_error`).
         """
         try:
-            return await self._flag_and_check(collection, rows, reason, now)
+            return await self._flag_and_check(collection, rows, reason, now, token)
         except BaseException:
-            await self._revert_after_error(collection, rows, now)
+            await self._revert_after_error(collection, rows, now, token)
             raise
 
     async def _flag_and_check(
@@ -825,6 +897,7 @@ class ThirdPartyBookingsUseCase:
         rows: list[ExternalBooking],
         reason: str | None,
         now: datetime,
+        token: str,
     ) -> bool:
         """Body of phase 2a: flag the written rows, then re-read their stays.
 
@@ -833,9 +906,10 @@ class ThirdPartyBookingsUseCase:
         FINISHED by someone else, or moved on and need a fresh flag). The stays of every row
         this request flagged are then read again: a check-in since phase 1 reverts the flags.
 
-        A written row flagged by a concurrent request (not this one) is never skipped: it makes
-        this step a 409 (`_cancel_row` returns False), so the request cannot return 200 while
-        that row stays open. Our own flags are reverted; the foreign flag is left alone.
+        A written row flagged by a concurrent request is waited on (`_cancel_row`): when its
+        flag settles as FINISHED it is skipped, and when it is still in flight at the deadline
+        this step is a 409, so the request cannot return 200 while that row stays open. Our own
+        flags are reverted; the foreign flag is left alone.
 
         Residual race: the worker may process a `cancel_requested` flag between the flag
         write below and the revert, so a stay that has just checked in can be asked to cancel.
@@ -845,19 +919,26 @@ class ThirdPartyBookingsUseCase:
         ids = [row.id for row in rows]
         result = await collection.update_many(
             {"_id": {"$in": ids}, "state": "written", "cancel_requested": False},
-            {"$set": {"cancel_requested": True, "cancel_reason": reason, "updated_at": now}},
+            {
+                "$set": {
+                    "cancel_requested": True,
+                    "cancel_reason": reason,
+                    "cancel_flag_token": token,
+                    "updated_at": now,
+                }
+            },
         )
         flagged: set[str] = set(ids)
         ok = True
         if result.modified_count < len(ids):
-            flagged = set(await self._flagged_by(collection, ids, now))
+            flagged = set(await self._flagged_by(collection, ids, now, token))
             for row in rows:
                 if row.id in flagged:
                     continue
-                if not await self._cancel_row(collection, row, "request", reason, now):
+                if not await self._cancel_row(collection, row, "request", reason, now, token):
                     ok = False
                     break
-            flagged = set(await self._flagged_by(collection, ids, now))
+            flagged = set(await self._flagged_by(collection, ids, now, token))
 
         ours = [row for row in rows if row.id in flagged]
         if ok:
@@ -875,44 +956,56 @@ class ThirdPartyBookingsUseCase:
         if not ok:
             # The 409 must win over a failing revert: `_revert_after_error` logs a failed revert
             # (booking_id and error type only) and never replaces the conflict outcome.
-            await self._revert_after_error(collection, ours, now)
+            await self._revert_after_error(collection, ours, now, token)
         return ok
 
-    async def _flagged_by(self, collection: Any, ids: list[str], now: datetime) -> list[str]:
-        """The `ids` whose `cancel_requested` flag carries this request's marker."""
+    async def _flagged_by(
+        self, collection: Any, ids: list[str], now: datetime, token: str
+    ) -> list[str]:
+        """The `ids` whose `cancel_requested` flag carries this request's marker and token."""
         docs = await collection.find(
             {
                 "_id": {"$in": ids},
                 "state": "written",
                 "cancel_requested": True,
                 "updated_at": now,
+                "cancel_flag_token": token,
             },
             {"_id": 1},
         ).to_list()
         return [doc["_id"] for doc in docs]
 
-    async def _revert_flags(self, collection: Any, ids: list[str], now: datetime) -> None:
-        """Undo the flags this request set; the marker keeps other requests' flags intact."""
+    async def _revert_flags(
+        self, collection: Any, ids: list[str], now: datetime, token: str
+    ) -> None:
+        """Undo the flags this request set and drop its token; other requests' flags stay intact."""
         await collection.update_many(
-            {"_id": {"$in": ids}, "state": "written", "cancel_requested": True, "updated_at": now},
+            {
+                "_id": {"$in": ids},
+                "state": "written",
+                "cancel_requested": True,
+                "updated_at": now,
+                "cancel_flag_token": token,
+            },
             {
                 "$set": {
                     "cancel_requested": False,
                     "cancel_reason": None,
+                    "cancel_flag_token": None,
                     "updated_at": _to_milliseconds(datetime.now(UTC)),
                 }
             },
         )
 
     async def _revert_after_error(
-        self, collection: Any, rows: list[ExternalBooking], now: datetime
+        self, collection: Any, rows: list[ExternalBooking], now: datetime, token: str
     ) -> None:
         """Revert the flags of `rows` before an unexpected error is re-raised.
 
         Called from an exception handler or from the 409 path of phase 2a, so a failing revert
         is logged (booking_id and error type only, no PII) and never replaces the original
-        outcome. Rows not flagged by this
-        request do not carry the `now` marker and are left alone by the guarded revert.
+        outcome. Rows not flagged by this request do not carry its marker and token, so the
+        guarded revert leaves them alone.
 
         Only `Exception` is caught here. A `BaseException` such as `CancelledError` raised by
         the revert itself propagates and replaces the original error; that is accepted because
@@ -921,7 +1014,7 @@ class ThirdPartyBookingsUseCase:
         if not rows:
             return
         try:
-            await self._revert_flags(collection, [row.id for row in rows], now)
+            await self._revert_flags(collection, [row.id for row in rows], now, token)
         except Exception as exc:
             logger.error(
                 "cancel flag revert failed (booking_id=%s error=%s)",
@@ -929,12 +1022,43 @@ class ThirdPartyBookingsUseCase:
                 type(exc).__name__,
             )
 
+    async def _clear_flag_tokens(
+        self, collection: Any, rows: list[ExternalBooking], token: str
+    ) -> None:
+        """Clear this request's `cancel_flag_token` once it is over (CR-169 FR-40).
+
+        Guarded on `token`, so a row carrying another request's token keeps it. The flag itself
+        stays: a row that is still `cancel_requested` is then FINISHED for later requests. Shielded
+        and retried like the staged cleanup; a failure is logged and never changes the outcome.
+        """
+        ids = [row.id for row in rows]
+
+        async def clear() -> None:
+            await collection.update_many(
+                {"_id": {"$in": ids}, "cancel_flag_token": token},
+                {"$set": {"cancel_flag_token": None}},
+            )
+
+        await asyncio.shield(
+            _detach(
+                _with_retry(
+                    clear,
+                    what="cancel flag token clear",
+                    booking_id=rows[0].booking_id,
+                    attempts=_CANCEL_ROW_ATTEMPTS,
+                    reraise=False,
+                    give_up="cancel flag token could not be cleared",
+                )
+            )
+        )
+
     async def _cancel_pending(
         self,
         collection: Any,
         rows: list[ExternalBooking],
         reason: str | None,
         now: datetime,
+        token: str,
     ) -> bool:
         """Phase 2b (FR-31) — cancel the pending rows and clear their PII in one `update_many`.
 
@@ -968,12 +1092,20 @@ class ThirdPartyBookingsUseCase:
             if row.id in cancelled:
                 continue
             fresh = await ExternalBooking.get(row.id)
-            if fresh is None or _flag_in_flight(fresh):
+            if fresh is None:
                 return False
+            if _foreign_flag(fresh, token):
+                fresh = await self._await_foreign_flag(
+                    fresh, token, asyncio.get_running_loop().time() + _FLAG_WAIT_SECONDS
+                )
+                if fresh is None:
+                    return False
             if not _is_open(fresh):
                 continue
             kind = await self._classify_fresh(fresh)
-            if kind is None or not await self._cancel_row(collection, fresh, kind, reason, now):
+            if kind is None or not await self._cancel_row(
+                collection, fresh, kind, reason, now, token
+            ):
                 return False
         return True
 
@@ -984,12 +1116,14 @@ class ThirdPartyBookingsUseCase:
         kind: Literal["direct", "request"],
         reason: str | None,
         now: datetime,
+        token: str,
     ) -> bool:
         """Cancel one OPEN row that a bulk step missed. False only when it can no longer be.
 
-        A guarded update that misses means the row moved on meanwhile (worker write or a
-        concurrent cancel). The fresh row is re-evaluated: FINISHED → skipped (success),
-        still OPEN and cancellable → retried with its new kind, anything else → conflict.
+        A guarded update that misses means the row moved on meanwhile (worker write, a concurrent
+        cancel, or another request's in-flight flag). The fresh row is re-evaluated: a foreign
+        flag is waited on, FINISHED → skipped (success), still OPEN and cancellable → retried
+        with its new kind, anything else → conflict.
         """
         current, current_kind = row, kind
         # `attempts` is the number of guarded writes made when the loop ends, whether it ran
@@ -997,16 +1131,18 @@ class ThirdPartyBookingsUseCase:
         attempts = 0
         for _ in range(_CANCEL_ROW_ATTEMPTS):
             attempts += 1
-            if await self._guarded_cancel(collection, current, current_kind, reason, now):
+            if await self._guarded_cancel(collection, current, current_kind, reason, now, token):
                 return True
             fresh = await ExternalBooking.get(current.id)
             if fresh is None:
                 logger.warning("cancel row no longer exists (booking_id=%s)", row.booking_id)
                 return False
-            if _flag_in_flight(fresh):
-                # Another request flagged it and the worker has not finished yet: not FINISHED,
-                # and not ours to skip. Refuse, so this request never returns 200 without it.
-                return False
+            if _foreign_flag(fresh, token):
+                fresh = await self._await_foreign_flag(
+                    fresh, token, asyncio.get_running_loop().time() + _FLAG_WAIT_SECONDS
+                )
+                if fresh is None:
+                    return False
             if not _is_open(fresh):
                 return True
             next_kind = await self._classify_fresh(fresh)
@@ -1027,6 +1163,7 @@ class ThirdPartyBookingsUseCase:
         kind: Literal["direct", "request"],
         reason: str | None,
         now: datetime,
+        token: str,
     ) -> bool:
         if kind == "direct":
             # FR-31 — guarded on state so a concurrent worker write is not overwritten.
@@ -1047,7 +1184,14 @@ class ThirdPartyBookingsUseCase:
             return result.modified_count == 1
         result = await collection.update_one(
             {"_id": row.id, "state": "written", "cancel_requested": False},
-            {"$set": {"cancel_requested": True, "cancel_reason": reason, "updated_at": now}},
+            {
+                "$set": {
+                    "cancel_requested": True,
+                    "cancel_reason": reason,
+                    "cancel_flag_token": token,
+                    "updated_at": now,
+                }
+            },
         )
         return result.modified_count == 1
 

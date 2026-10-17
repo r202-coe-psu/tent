@@ -46,6 +46,9 @@ class ExternalBooking(Document):
 	state: ExternalBookingState = "pending"
 	cancel_requested: bool = False
 	cancel_reason: str | None = None
+	# Id of the cancel request that set `cancel_requested` while it is in flight; cleared when that
+	# request is over (CR-169 FR-40). A flag without a token is finished.
+	cancel_flag_token: str | None = None
 	# "duplicate" | "not_cancellable"
 	reject_reason: str | None = None
 	# Reserved before the first CouchDB write so worker retries stay idempotent.

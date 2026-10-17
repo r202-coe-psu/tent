@@ -2689,6 +2689,7 @@ Buffer ของ partner booking (M2) — FastAPI insert ตอนรับค�
 | `state` | enum(`pending`,`written`,`cancelled`,`rejected`) | req | `pending` → worker → `written` · cancel ก่อนเขียน → `cancelled` · ซ้ำตอนเขียน → `rejected` |
 | `cancel_requested` | bool | req | default `false` — EXT-009 หลัง `written`; worker เปลี่ยน stay เป็น `cancelled` ถ้ายัง `pre_registered` |
 | `cancel_reason` | str\|null | opt | จาก body EXT-009 (≤200) |
+| `cancel_flag_token` | str\|null | opt | id ของ EXT-009 request ที่ตั้ง `cancel_requested` และยังไม่จบ (CR-169 FR-40, decision sync 2026-10-17 #612). ตั้งพร้อม flag ตอน 2a/2b; request นั้นลบเมื่อจบ (สำเร็จ / 409 ที่คง flag / revert ล้าง flag + token). flag ที่ไม่มี token = FINISHED (legacy หรือ request จบแล้ว). ไม่ใช่ field ใน response |
 | `reject_reason` | str\|null | opt | `duplicate` · `not_cancellable` |
 | `evacuee_id` / `household_id` | str\|null | opt | `evacuee:{ulid}` / `household:{ulid}` — สร้างไว้ก่อนเขียน Couch เพื่อ retry แบบ idempotent |
 | `created_at` / `updated_at` | ts | req | — |
