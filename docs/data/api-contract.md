@@ -2,7 +2,7 @@
 title: Smart Shelter — API Contract v1
 status: draft for review
 created: 2026-06-11
-updated: 2026-10-14
+updated: 2026-10-17
 note: คู่กับ data-model.md v3 — ตัดสิน sync boundary: staff app คุย CouchDB ตรง, service API มีเฉพาะที่ CouchDB ทำเองไม่ได้; CR-112/CR-113 occupancy + unassigned registration; Partner Data API EXT-001–007 (#214); CR-124 staff Google step-up MFA + Google SSO login (enrolled + mint AuthSession); decision sync 2026-10-08 — เพิ่ม GET /public/v1/unassigned-registrations/{id}/status (service secret, status-only) แทนการเรียก staff detail จาก BFF registrations/status — แก้ ticket คิวกลางหายจากอุปกรณ์ (QA pre-register 2026-10-08); decision sync 2026-10-09 — `breakdown` ของ EXT-005 เพิ่ม `gender_unspecified` (null+other; `male+female+gender_unspecified = occupancy_total`) และ `POST /public/v1/unassigned-registrations` รับ `members[].gender = null`; CR-157 (2026-10-10) — เพิ่ม `GET /api/public/v1/donations/slots` (BFF-only อ่าน CouchDB ฝั่ง server) และ error code ของ slot ใน `POST /public/v1/donations` (`SLOT_REQUIRED`, `SLOT_UNAVAILABLE`, `SLOT_FULL`, `SLOTS_UNAVAILABLE`); CR-162 — §2.3 kiosk banner (`POST /api/v1/scanner/kiosk/banners`, signed image GET, back-office `/api/back-office/kiosk-banners/**`)
 ---
 
@@ -15,7 +15,7 @@ note: คู่กับ data-model.md v3 — ตัดสิน sync boundary: 
 | **A. Sync plane** | staff app (login แล้ว) | **Remote-first** กับ active endpoint เดียว: **central CouchDB** ปกติ; **edge CouchDB @ศูนย์** เฉพาะ WAN/central outage; ถ้าไม่เห็นทั้งคู่ให้ fail/retry (ไม่มี local-only write queue) (topology ดู data-model.md §1) |
 | **B. Service plane** | staff app เรียกเสริม | REST `/api/v1/*` ที่ **central เท่านั้น** (ต้องมี WAN + central session) — เฉพาะงานที่ CouchDB ทำไม่ได้: export, provisioning |
 | **C. Public plane** | ไม่ login | REST `/public/v1/*` ที่ central — ดู [public-tier-flow-spec](../features/public-tier-flow-spec.html) |
-| **D. Partner Data API** | ระบบพันธมิตร M6/M7 (machine) | OAuth2 `POST /external/token` + REST `/external/*` อ่านจาก MongoDB projection — ดู [as-built (reports)](../reports/2026-09-10/partner-api-as-built.md) ([stub](./partner-api.md)), [ADR 0002](../adr/0002-partner-integration-architecture.md) |
+| **D. Partner Data API** | ระบบพันธมิตร M6/M7 (machine) | OAuth2 `POST /external/token` + REST `/external/*` อ่านจาก MongoDB projection — ดู §5.3 ของเอกสารนี้ ([stub](./partner-api.md)), [ADR 0002](../adr/0002-partner-integration-architecture.md) |
 
 ผลที่ตามมา: endpoint อย่าง `POST /evacuees` ใน feature specs เดิม **ไม่มีอยู่จริง** — การ
 "สร้าง evacuee" = เขียน doc ไปที่ CouchDB endpoint ที่ active (central ก่อน, edge ตอน failover);
@@ -554,7 +554,7 @@ Claim = Mongo mark (คน+สัตว์) แล้ว birth/append Couch (opt
 
 ### 5.3 Partner Data API — OAuth2 `/external` (EXT-001–011, #214, CR-154)
 
-Machine-to-machine สำหรับ **M6 Resource Logistics / M7 Command Center / M2 กลุ่มเปราะบาง (CR-154)** — อ่าน MongoDB projection; ข้อยกเว้นเดียวที่เขียน = EXT-008/009 booking ผ่าน Mongo buffer `external_bookings` → worker inbound → CouchDB (FastAPI ไม่แตะ CouchDB SoR ตรง) — สถาปัตยกรรมใน [ADR 0002](../adr/0002-partner-integration-architecture.md); **as-built ส่งมอบพันธมิตร:** [partner-api-as-built.md](../reports/2026-09-10/partner-api-as-built.md) (ODT ใน `docs/source/` เป็น immutable archive; [stub](./partner-api.md) คงลิงก์ `docs/data/`).
+Machine-to-machine สำหรับ **M6 Resource Logistics / M7 Command Center / M2 กลุ่มเปราะบาง (CR-154)** — อ่าน MongoDB projection; ข้อยกเว้นเดียวที่เขียน = EXT-008/009 booking ผ่าน Mongo buffer `external_bookings` → worker inbound → CouchDB (FastAPI ไม่แตะ CouchDB SoR ตรง) — สถาปัตยกรรมใน [ADR 0002](../adr/0002-partner-integration-architecture.md); **as-built ส่งมอบพันธมิตร:** รายงาน as-built ส่งมอบพันธมิตรถูกลบออกจาก repo แล้ว (commit `4374bcc20`) — **§5.3 นี้คือแหล่งอ้างอิงหลัก** (ODT ใน `docs/source/` เป็น immutable archive; [stub](./partner-api.md) คงไว้เพื่อลิงก์เดิม).
 
 | Endpoint | Method | Auth / scope | หมายเหตุสั้น |
 | --- | --- | --- | --- |
@@ -565,9 +565,9 @@ Machine-to-machine สำหรับ **M6 Resource Logistics / M7 Command Cente
 | `/external/locations/{code}/occupancy` | GET | Bearer · `occupancy-read` | breakdown (`male`, `female`, `gender_unspecified`, `child_under_5`, `elderly_over_60`, `pregnant`, `bedridden`, `disabled`) + `updated_by_role` คงที่ (EXT-005); `gender_unspecified` = `gender` เป็น `null`/`'other'`, invariant `male+female+gender_unspecified = occupancy_total` (decision sync 2026-10-09) |
 | `/external/summary` | GET | Bearer · `location-read` (+ `occupancy-read` สำหรับ top-level `occupancy_total`) | `critical_items` เฉพาะ `low`/`critical` (EXT-006) |
 | `/external/locations/{code}/occupants` | GET | Bearer · `occupancy-pii-read` + `?purpose=` | **denied by default**; ได้ scope แล้วยังคืน `result: []` จนกว่ามี data source (EXT-007 scaffold) |
-| `/external/bookings` | POST | Bearer · `booking-write` | จองศูนย์แทนประชาชน (M2 booking-shelter) — body `{location_code, cid, first_name, last_name, phone}` → **201** `result: {booking_id: "BK-{ulid}", location_code, booking_status: "BOOKED"}` = **รับเข้าคิว** (worker เขียน CouchDB `evacuee`+`household` `pre_registered`, `registered_via: api` ภายใน ~10s); กันซ้ำ **เฉพาะภายในศูนย์เดียวกัน**; ศูนย์ `full` จองได้ (EXT-008) |
-| `/external/bookings/{booking_id}/cancel` | POST | Bearer · `booking-write` | body `{reason?}` → `booking_status: "CANCELLED"`; เฉพาะ booking ของ client เดียวกัน และ stay ยัง `pre_registered` (EXT-009) |
-| `/external/bookings/{booking_id}` | GET | Bearer · `booking-write` | `booking_status`: `BOOKED`\|`CANCELLED`\|`REJECTED` (+`reject_reason`) — ใช้ poll ผลหลัง 201 (EXT-010) |
+| `/external/bookings` | POST | Bearer · `booking-write` | จองศูนย์แทนประชาชน (M2) — body **`{location_code, persons: [{cid, first_name, last_name, phone}, …]}`** 1–100 คนต่อ request (CR-169 FR-1/FR-6) หรือ body เดิม `{location_code, cid, first_name, last_name, phone}` (= `persons` ยาว 1, D1; ส่งสองรูปแบบพร้อมกัน → 422) → **201** `result: {booking_id: "BK-{ulid}", location_code, booking_status: "BOOKED", persons_count: N}`; `booking_id` เดียวต่อกลุ่ม (ใช้กับ EXT-009/010) · **all-or-nothing** — ผิดกี่คนก็ตอบ 422 ครั้งเดียวพร้อมดัชนีทุกคนที่ผิด · ซ้ำกับศูนย์เดียวกัน → **409** `duplicate_booking` `detail: "persons[i]"` (0-based, คนแรกที่ซ้ำ; body เดี่ยว = `persons[0]`) และไม่สร้างอะไรเลย · worker เขียน `household` + `evacuee` (`pre_registered`, `registered_via: api`) **ต่อคน** ภายใน ~10s (1 คน = 1 household, `booking_ref` = `booking_id`) · ศูนย์ `full` จองได้ (EXT-008) |
+| `/external/bookings/{booking_id}/cancel` | POST | Bearer · `booking-write` | body `{reason?}` (≤200) → **200** `result: {booking_id, booking_status: "CANCELLED"}` — ยกเลิก**ทั้งกลุ่ม**ด้วย call เดียว; เฉพาะ booking ของ client เดียวกัน (อื่น → 404); มีคนที่ยกเลิกไม่ได้ (เช่น check-in แล้ว) → **409** `booking_not_cancellable` และไม่เปลี่ยนแถวใดเลย (EXT-009; caveat: ยังไม่ atomic — คนที่ check-in แทรกระหว่าง phase อาจทำให้แถวก่อนหน้าถูกยกเลิกไปแล้ว รอ [#612](https://github.com/r202-coe-psu/tent/issues/612)) · **[มีผลเมื่อ #592 deploy]** ยกเลิกเฉพาะคนที่ยังเปิดอยู่ ข้ามคนที่จบแล้ว, ยกเลิกซ้ำ (ไม่เหลือคนเปิดอยู่ และมี `cancelled`/`cancel_requested` ≥ 1) → 200 idempotent, ทุกคน `rejected` → 409 (CR-169 FR-40) · *ปัจจุบัน (ก่อน #592):* ยกเลิกซ้ำ → 409 และแถวใดแถวหนึ่งที่จบแล้วทำให้ทั้งกลุ่ม 409 |
+| `/external/bookings/{booking_id}` | GET | Bearer · `booking-write` | **200** `result: {booking_id, location_code, booking_status, reject_reason, persons: [{index, booking_status, reject_reason}], created_at, updated_at}` — `booking_status` = aggregate ของกลุ่ม; `persons[]` รายคน `index` = ลำดับใน request (0-based) — **ไม่มี CID/ชื่อ/เบอร์**; `reject_reason` ระดับบน = ของคน `REJECTED` คนแรก; ใช้ poll ผลหลัง 201 (EXT-010). **[มีผลเมื่อ #592 deploy]** aggregate ตามลำดับ: ไม่มีคนที่ยังเปิดอยู่และมี `cancelled`/`cancel_requested` ≥ 1 → `CANCELLED` (แม้มี `REJECTED` ปน) → มี `REJECTED` → `REJECTED` → อื่น → `BOOKED` (CR-169 FR-42). *ปัจจุบัน (ก่อน #592):* ทุกคน `CANCELLED` → `CANCELLED`, มีคน `REJECTED` → `REJECTED`, อื่น → `BOOKED` |
 | `/external/persons/shelter-residency` | GET | Bearer · `residency-read` + `?cid=&purpose=` | M2 get-person-shelter-residency — `result: {location_code, name_th, checkin_datetime (+07:00), residency_status: CHECKED_IN\|CHECKED_OUT, stay_status, in_zone}`; ค้นด้วย `national_id_hash`; หลาย record → เลือก Present ก่อน แล้ว `updated_at` ล่าสุด; `pre_registered` = 404; log ทุก call ลง `third_party_access_logs` (ไม่เก็บ CID) (EXT-011) |
 
 ```
@@ -577,6 +577,90 @@ Error   : { "status": <http>, "message": "…", "code"?: "…", "detail"?: "…"
 ```
 
 **Error codes (CR-154 — ใช้ทั้ง plane):** `400 missing_purpose` · `401 invalid_token` · `403 insufficient_scope` · `404 location_not_found` / `booking_not_found` / `residency_not_found` · `409 location_not_bookable` / `duplicate_booking` / `booking_not_cancellable` · `422 validation_error` · `500 internal_error`.
+
+#### EXT-008–010 — ตัวอย่างและกฎกลุ่ม (CR-169, เทียบ `fastapi.json` ที่ regenerate แล้ว)
+
+- **FR-1/FR-6** `persons` 1–100 คน (`MAX_PERSONS = 100`); ว่างหรือเกิน → 422 `validation_error`
+- **FR-4** `cid` ซ้ำใน request เดียว → 422 (ระบุดัชนีที่ซ้ำ)
+- **422 รวมทุกคนที่ผิด:** message ระบุทุกดัชนีที่ผิดในครั้งเดียว เช่น `persons[1].phone`, `persons[3].cid` · **ไม่มีค่า CID / ชื่อ / เบอร์ใน message** · body เดี่ยวเดิมใช้ message เดิม
+- **409 `duplicate_booking`:** `detail` = `"persons[i]"` (0-based, คนแรกที่ซ้ำ; body เดี่ยวเดิมได้ `persons[0]`) · ไม่มี CID/ชื่อ · ทั้งกลุ่มไม่ถูกสร้าง ไม่มีแถวค้างใน buffer
+- **booking_id** = `BK-{ulid}` เดียวทุกคนในกลุ่ม (รหัสกลุ่ม) · แต่ละคนมี `_id` เป็น `BP-{ulid}` ของตัวเอง (อย่าคาดว่า `_id == booking_id`)
+- **Access log (EXT-008–010):** 1 แถวต่อ request ใน `third_party_access_logs` (§9.4) · `result_count = persons_count` เมื่อ `granted` (EXT-008) และ `0` เมื่อ `denied` · ไม่เก็บ CID/ชื่อ/เบอร์
+
+**ตัวอย่าง — EXT-008 กลุ่ม (2 คน)**
+
+```json
+POST /external/bookings
+{
+  "location_code": "SH014",
+  "persons": [
+    { "cid": "1909800123458", "first_name": "สมชาย", "last_name": "ใจดี", "phone": "0812345678" },
+    { "cid": "1101700207030", "first_name": "สมหญิง", "last_name": "ใจดี", "phone": "0898765432" }
+  ]
+}
+
+201
+{ "status": 201, "message": "Booking accepted.",
+  "result": { "booking_id": "BK-01J…", "location_code": "SH014", "booking_status": "BOOKED", "persons_count": 2 } }
+```
+
+**ตัวอย่าง — EXT-008 รูปแบบเดิม (คนเดียว)** — ตอบ 201 เหมือนเดิม โดย `persons_count: 1`
+
+```json
+POST /external/bookings
+{ "location_code": "SH014", "cid": "1909800123458", "first_name": "สมชาย", "last_name": "ใจดี", "phone": "0812345678" }
+
+201
+{ "status": 201, "message": "Booking accepted.",
+  "result": { "booking_id": "BK-01J…", "location_code": "SH014", "booking_status": "BOOKED", "persons_count": 1 } }
+```
+
+**ตัวอย่าง — EXT-008 422 หลายคนผิด** (ดัชนี 1 และ 3 ผิด — ไม่มีค่าที่ส่งมาใน message)
+
+```json
+422
+{ "status": 422, "code": "validation_error",
+  "message": "Required fields missing or blank: persons[1].first_name. persons[1].cid must be 13 digits with a valid checksum. persons[3].phone must be a 9–10 digit Thai number." }
+```
+
+**ตัวอย่าง — EXT-008 409 duplicate** (คนที่ดัชนี 1 มีผู้จองอยู่แล้วที่ศูนย์เดียวกัน)
+
+```json
+409
+{ "status": 409, "code": "duplicate_booking",
+  "message": "This person already holds a booking at this location.", "detail": "persons[1]" }
+```
+
+**ตัวอย่าง — EXT-009 ยกเลิกทั้งกลุ่ม** (`POST /external/bookings/BK-01J…/cancel`, body `{"reason": "…"}` ไม่บังคับ)
+
+```json
+200
+{ "status": 200, "message": "Booking cancelled.", "result": { "booking_id": "BK-01J…", "booking_status": "CANCELLED" } }
+```
+
+**ตัวอย่าง — EXT-010 สถานะกลุ่ม** (`GET /external/bookings/BK-01J…`)
+
+```json
+200
+{ "status": 200, "message": "Found Data.",
+  "result": {
+    "booking_id": "BK-01J…", "location_code": "SH014",
+    "booking_status": "BOOKED", "reject_reason": null,
+    "persons": [
+      { "index": 0, "booking_status": "BOOKED", "reject_reason": null },
+      { "index": 1, "booking_status": "BOOKED", "reject_reason": null }
+    ],
+    "created_at": "2026-10-17T10:00:00+07:00", "updated_at": "2026-10-17T10:00:03+07:00"
+  } }
+```
+
+**EXT-009/010 — กฎที่มีผลเมื่อ #592 deploy** (CR-169 FR-40/FR-42, decided 2026-10-17; ตาม change record `CR-169`, #592): *ปัจจุบันยังไม่ deploy — พฤติกรรมจริงคือกฎเดิมในแถวของ EXT-009/010 ด้านบน*
+
+- **FR-40 (ยกเลิกทั้งกลุ่ม):** ยกเลิกเฉพาะคนที่ยังเปิดอยู่ (`pending` หรือ `written` ที่ยังไม่ขอยกเลิก); คนที่จบแล้ว (`cancelled`, `rejected`, `written` ที่ขอยกเลิกแล้ว) ถูกข้ามและไม่เขียนทับ `cancel_reason` เดิม · ถ้ามีคนเปิดอยู่ที่ยกเลิกไม่ได้ → 409 `booking_not_cancellable` และไม่เปลี่ยนแถวใด · ไม่เหลือคนเปิดอยู่ และมี `cancelled` หรือ `cancel_requested` อย่างน้อย 1 คน → **200 idempotent** · ทุกคน `rejected` → 409 `booking_not_cancellable`
+- **FR-42 (`booking_status` aggregate):** ไม่มีคนเปิดอยู่และมี `cancelled`/`cancel_requested` ≥ 1 → `CANCELLED` · มี `REJECTED` → `REJECTED` · อื่น → `BOOKED` · `persons[]` ไม่เปลี่ยน
+- **ผลข้างเคียง:** cancel ที่ล้มกลางทางแล้ว retry สำเร็จได้ เพราะคนที่ยกเลิกไปแล้วถูกข้าม
+- **Legacy single-person booking** ใช้กฎ FR-40 เดียวกัน — ยกเลิกซ้ำตอบ 200 (partially supersede CR-154 FR-33; `rejected` ยังตอบ 409)
+- **นอกขอบเขต:** ล้าง stay `pre_registered` ค้างของแถว rejected → #613 · cancel แบบ atomic (`update_many`) → #612
 
 แยกจาก §5.1: ไม่ใช้ `X-API-Key` / `/external/v1`; ไม่มี partner-plane rate limit 429 ในรุ่นนี้
 

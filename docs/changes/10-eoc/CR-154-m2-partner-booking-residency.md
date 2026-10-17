@@ -81,7 +81,7 @@ affects:
 | 404 | `residency_not_found` | EXT-011 | ไม่พบการเข้าพัก (รวมกรณี `pre_registered`) |
 | 409 | `location_not_bookable` | EXT-008 | ศูนย์ `closed` หรือ `feature_flags.accepts_pre_registration = false` |
 | 409 | `duplicate_booking` | EXT-008 | CID นี้มี hold อยู่แล้วใน **ศูนย์เดียวกัน** |
-| 409 | `booking_not_cancellable` | EXT-009 | booking ถูกยกเลิกไปแล้ว, ถูก reject ไปแล้ว หรือ stay ผ่าน `pre_registered` ไปแล้ว |
+| 409 | `booking_not_cancellable` | EXT-009 | ค่าตอนเขียน CR-154 — booking ถูกยกเลิกไปแล้ว, ถูก reject ไปแล้ว หรือ stay ผ่าน `pre_registered` ไปแล้ว. **Partially superseded by CR-169 FR-40 (2026-10-17, #592), มีผลเมื่อ deploy:** ยกเลิกซ้ำ (`cancelled`) → 200 idempotent; 409 เหลือเฉพาะ (ก) ทุกคนในกลุ่ม `rejected` และ (ข) มีคนที่ยังเปิดอยู่แต่ stay ผ่าน `pre_registered` ไปแล้ว (check-in) — ไม่เปลี่ยนแถวใด |
 | 422 | `validation_error` | ทุกตัว | ข้อมูลไม่ผ่าน validation |
 | 500 | `internal_error` | ทุกตัว | ข้อผิดพลาดภายในระบบ |
 
@@ -125,12 +125,13 @@ affects:
   **Partially superseded by CR-169 FR-40 (2026-10-17, #592):** booking ที่ `cancelled` แล้ว ยกเลิกซ้ำตอบ **200** (idempotent) แทน 409; booking ที่ `rejected` (ทุกแถว) ยังตอบ 409 `booking_not_cancellable`; stay ที่ผ่าน `pre_registered` แล้ว (check-in) ยังตอบ 409 เหมือนเดิม
 - **FR-34** log `endpoint = "EXT-009"` ตาม FR-20
 
-**EXT-010** `GET /external/bookings/{booking_id}` → 200 `result: {booking_id, location_code, booking_status, created_at, updated_at}`
+**EXT-010** `GET /external/bookings/{booking_id}` → 200 `result: {booking_id, location_code, booking_status, created_at, updated_at}` (+ `persons[]` และ `reject_reason` ระดับบน ตาม CR-169 C5 — additive)
 
 - **FR-35** `booking_status` map จาก state ดังนี้:
   - `pending` / `written` → `BOOKED`
   - `cancelled` หรือมี `cancel_requested` → `CANCELLED`
   - `rejected` → `REJECTED` พร้อม `reject_reason`
+  - **Aggregate ของกลุ่ม** (CR-169): ตอนเขียน CR-154 ประเมินจากแถวเดียว · **Superseded by CR-169 FR-42 (2026-10-17, #592), มีผลเมื่อ deploy:** ไม่มีคนที่ยังเปิดอยู่และมี `CANCELLED` ≥ 1 → `CANCELLED` (แม้มี `REJECTED` ปน) → มี `REJECTED` → `REJECTED` → อื่น → `BOOKED`. การแมปรายคนข้างบนยังใช้ได้
 - **FR-36** ใช้กติกาเจ้าของ booking เดียวกับ FR-30
 
 ### C5 — EXT-011 residency
@@ -232,6 +233,7 @@ affects:
 - [ ] หลังเขียน Couch, cancel หรือ reject แล้ว ใน `external_bookings` ไม่มี `cid`, `phone`, `first_name` หรือ `last_name` plaintext เหลืออยู่
 - [ ] EXT-011 ที่ไม่ส่ง `purpose` ได้ 400 ทุก call มีแถวใน `third_party_access_logs` ที่ไม่มี CID และเมื่อมีหลาย record จะเลือก record ที่ Present ก่อน
 - [ ] `/external/v1/shelters` และ `/external/v1/persons/shelter-residency` ตอบ 404 ส่วน endpoint `/external/v1` อื่นทำงานเหมือนเดิม
+- [ ] (CR-169 / #592) cancel ซ้ำ → 200 idempotent; กลุ่มที่ทุกคน `rejected` → 409; EXT-010 aggregate ตาม FR-42 — **เกณฑ์ฉบับเต็มอยู่ใน CR-169 Acceptance** (รายการข้างบนที่เกี่ยวกับ cancel ซ้ำ/aggregate ใช้ค่าตาม FR-33/FR-35 ก่อน #592)
 - [ ] `pnpm lint`, `pnpm check`, `pnpm test`, backend `pytest` และ worker tests ผ่าน
 
 ---

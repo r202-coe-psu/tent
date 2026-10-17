@@ -212,7 +212,7 @@ affects:
 ## Impact
 
 - **Docs:** `api-contract.md` §5.3 (EXT-008/009/010) · `schema.md` §1.1 (+ `booking_ref`, schema_v 14 note, frontmatter `updated:`), §9.7, §9.4 · ADR 0002 · handover M2
-  - ⚠️ `docs/data/partner-api.md` ชี้ไป `docs/reports/2026-09-10/partner-api-as-built.md` ซึ่ง **ไม่มีอยู่จริงใน repo** — ลิงก์เสียอยู่แล้ว ไม่แก้ในงานนี้ (แจ้งเจ้าของโครงการแยกต่างหาก)
+  - `docs/data/partner-api.md` เคยอ้างรายงาน as-built ที่ถูกลบออกจาก repo (commit `4374bcc20`) — **แก้แล้ว** (#579, owner decision): stub ระบุว่ารายงานถูกลบ และ `api-contract.md` §5.3 เป็นแหล่งอ้างอิงหลัก; ลิงก์ใน `api-contract.md` / ADR 0002 ถูกแทนด้วยการอ้าง §5.3 เช่นกัน
 - **tent-model:** `ExternalBooking` (+ `person_seq`, `group_size`, `committed`, index)
 - **Backend:** `thirdparty_bookings` schemas/use_case/router + 30 tests เดิม
 - **Worker:** `external_bookings.py` (`build_evacuee_doc` + `booking_ref`, `EVACUEE_SCHEMA_V` 12→14, group pre-check, sweeper) + tests
