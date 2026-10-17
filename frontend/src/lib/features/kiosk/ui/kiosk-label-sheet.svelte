@@ -6,6 +6,8 @@
 		qrSizeMm: number | undefined;
 		name: string;
 		phone: string | null | undefined;
+		/** Current zone name; missing or null leaves a dotted line to write the zone on. */
+		zone?: string | null;
 	};
 </script>
 
@@ -19,7 +21,8 @@
 		KIOSK_LABEL_OFFSET_X_MM,
 		KIOSK_LABEL_PADDING_MM,
 		kioskLabelPageCss,
-		kioskQrBoxMm
+		kioskQrBoxMm,
+		labelZoneLine
 	} from '../domain/print-label';
 
 	interface Props {
@@ -62,6 +65,7 @@
 					alt="QR ประจำตัวสำหรับใช้ภายในศูนย์"
 					name={label.name}
 					phone={label.phone}
+					zone={labelZoneLine(label.zone)}
 					footer={KIOSK_LABEL_LINK}
 					checklist={KIOSK_LABEL_CHECKLIST}
 				/>

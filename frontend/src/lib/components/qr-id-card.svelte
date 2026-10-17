@@ -9,6 +9,11 @@
 		phone?: string | null;
 		/** Small line centred under the QR (`label` variant only), e.g. the site address. */
 		footer?: string;
+		/**
+		 * Zone row under the phone: `value` is the assigned zone's name, or null for a blank dotted
+		 * line staff fill in by hand. Omit for no zone row.
+		 */
+		zone?: { label: string; value: string | null };
 		/** Station boxes ticked by hand (e.g. เช็คอิน · คัดกรอง · ที่พัก). */
 		checklist: readonly string[];
 		/**
@@ -26,6 +31,7 @@
 		alt,
 		name,
 		phone,
+		zone,
 		footer,
 		checklist,
 		variant = 'screen',
@@ -52,6 +58,9 @@
 				'card-details order-2 flex min-w-0 flex-1 flex-col justify-start gap-0.5 px-4 py-5 sm:order-1 sm:min-h-44 sm:px-5',
 			name: 'card-name text-base leading-tight font-bold text-slate-900 sm:text-xl',
 			phone: 'card-phone font-mono text-2xs font-bold tracking-widest text-slate-900 sm:text-xs',
+			zone: 'card-zone mt-1 flex items-baseline gap-1.5 text-xs font-bold text-slate-900 sm:text-sm',
+			zoneValue: 'min-w-0 truncate',
+			zoneBlank: 'card-zone-blank max-w-48 min-w-0 flex-1 border-b border-dotted border-slate-900',
 			checklist:
 				'card-checklist mt-auto flex flex-wrap items-center gap-x-4 gap-y-2 pt-4 text-2xs font-medium text-slate-900 sm:text-xs',
 			item: 'inline-flex items-center gap-1.5',
@@ -69,6 +78,9 @@
 			details: 'order-1 flex min-w-0 flex-1 flex-col gap-[0.5mm]',
 			name: 'line-clamp-3 text-[16pt] leading-[1.3] font-bold [overflow-wrap:anywhere]',
 			phone: 'font-mono text-[12pt] leading-[1.3] font-bold tracking-[0.1em]',
+			zone: 'mt-[0.5mm] flex items-baseline gap-[1.5mm] text-[12pt] leading-[1.3] font-bold',
+			zoneValue: 'min-w-0 truncate',
+			zoneBlank: 'card-zone-blank min-w-0 flex-1 border-b-[0.375mm] border-dotted border-black',
 			checklist:
 				'mt-auto flex flex-wrap items-center gap-x-[4mm] gap-y-[1.5mm] text-[10pt] leading-[1.3] font-medium',
 			item: 'inline-flex items-center gap-[1.5mm]',
@@ -97,6 +109,16 @@
 		<p class={styles.name}>{name}</p>
 		{#if phone}
 			<span class={styles.phone}>{phone}</span>
+		{/if}
+		{#if zone}
+			<p class={styles.zone}>
+				<span>{zone.label}</span>
+				{#if zone.value}
+					<span class={styles.zoneValue}>{zone.value}</span>
+				{:else}
+					<span class={styles.zoneBlank}></span>
+				{/if}
+			</p>
 		{/if}
 		<div class={styles.checklist}>
 			{#each checklist as item (item)}
@@ -140,6 +162,10 @@
 	:global(.qr-identity-card.print-capture .card-phone) {
 		font-size: 1rem !important;
 		color: #0f172a !important;
+	}
+
+	:global(.qr-identity-card.print-capture .card-zone) {
+		font-size: 1rem !important;
 	}
 
 	:global(.qr-identity-card.print-capture .card-name) {

@@ -79,6 +79,51 @@ describe('QrIdCard', () => {
 		expect(label.body).toContain('>QR</div>');
 	});
 
+	it('prints the assigned zone after its label', () => {
+		for (const variant of ['screen', 'label'] as const) {
+			const result = render(QrIdCard, {
+				props: {
+					src: null,
+					alt: 'QR',
+					name: 'ทดสอบ',
+					checklist,
+					variant,
+					zone: { label: 'Zone:', value: 'A3' }
+				}
+			});
+
+			expect(result.body).toMatch(/<span>Zone:<\/span>.*>A3<\/span>/);
+			expect(result.body).not.toContain('card-zone-blank');
+		}
+	});
+
+	it('leaves a blank dotted line to write the zone on when none is assigned', () => {
+		for (const variant of ['screen', 'label'] as const) {
+			const result = render(QrIdCard, {
+				props: {
+					src: null,
+					alt: 'QR',
+					name: 'ทดสอบ',
+					checklist,
+					variant,
+					zone: { label: 'Zone:', value: null }
+				}
+			});
+
+			expect(result.body).toContain('Zone:');
+			expect(result.body).toContain('card-zone-blank');
+			expect(result.body).toContain('border-dotted');
+		}
+	});
+
+	it('has no zone row unless asked for one', () => {
+		const result = render(QrIdCard, {
+			props: { src: null, alt: 'QR', name: 'ทดสอบ', checklist }
+		});
+
+		expect(result.body).not.toContain('card-zone');
+	});
+
 	it('escapes markup in the name', () => {
 		const result = render(QrIdCard, {
 			props: { src: null, alt: 'QR', name: '<script>alert(1)</script>', checklist }
