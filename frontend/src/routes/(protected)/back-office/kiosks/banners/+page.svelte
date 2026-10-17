@@ -16,6 +16,7 @@
 		type KioskBannerView
 	} from '$lib/features/kiosk-banners';
 	import Eye from '@lucide/svelte/icons/eye';
+	import ArrowUpDown from '@lucide/svelte/icons/arrow-up-down';
 	import Plus from '@lucide/svelte/icons/plus';
 
 	/** Every role (SA included) works on the shelter picked in the back-office shelter switcher. */
@@ -66,6 +67,10 @@
 	}
 
 	const newHref = resolve('/back-office/kiosks/banners/new');
+	const orderHref = $derived(
+		resolve('/back-office/kiosks/banners/order') +
+			(screenFilter === 'all' ? '' : `?screen=${screenFilter}`)
+	);
 </script>
 
 <svelte:head>
@@ -86,6 +91,10 @@
 		<Button variant="outline" class="min-h-11 shrink-0 gap-2" onclick={openPreview}>
 			<Eye class="h-4 w-4" />
 			ดูตัวอย่างบน kiosk
+		</Button>
+		<Button variant="outline" href={orderHref} class="min-h-11 shrink-0 gap-2">
+			<ArrowUpDown class="h-4 w-4" />
+			จัดลำดับ
 		</Button>
 		<Button href={newHref} class="btn-primary-brand min-h-11 shrink-0 gap-2">
 			<Plus class="h-4 w-4" />

@@ -15,3 +15,8 @@ export function moveItem<T>(list: readonly T[], from: number, to: number): T[] {
 export function dropIndex(midpoints: readonly number[], pointerY: number): number {
 	return midpoints.filter((m) => m < pointerY).length;
 }
+
+/** Whether two lists hold the same documents (by `_id`) in the same sequence. */
+export function sameOrder(a: readonly { _id: string }[], b: readonly { _id: string }[]): boolean {
+	return a.length === b.length && a.every((item, i) => item._id === b[i]._id);
+}

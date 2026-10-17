@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { dropIndex, moveItem } from './kiosk-banner-order';
+import { dropIndex, moveItem, sameOrder } from './kiosk-banner-order';
 
 describe('moveItem', () => {
 	it('moves an item up so it ends at the target index', () => {
@@ -45,5 +45,22 @@ describe('dropIndex', () => {
 
 	it('is 0 when there are no other rows', () => {
 		expect(dropIndex([], 100)).toBe(0);
+	});
+});
+
+describe('sameOrder', () => {
+	const row = (_id: string) => ({ _id });
+
+	it('is true when both lists hold the same ids in the same sequence', () => {
+		expect(sameOrder([row('a'), row('b')], [row('a'), row('b')])).toBe(true);
+		expect(sameOrder([], [])).toBe(true);
+	});
+
+	it('is false when the sequence differs', () => {
+		expect(sameOrder([row('a'), row('b')], [row('b'), row('a')])).toBe(false);
+	});
+
+	it('is false when the lengths differ', () => {
+		expect(sameOrder([row('a')], [row('a'), row('b')])).toBe(false);
 	});
 });
