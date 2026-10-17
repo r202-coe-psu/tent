@@ -33,11 +33,11 @@ export const useSearchShelters = () =>
 		queryFn: () => sheltersRepository().searchShelters()
 	}));
 
-export const useShelter = (code: () => string) =>
+export const useShelter = (code: () => string, enabled: () => boolean = () => true) =>
 	createQuery(() => ({
 		queryKey: sheltersKeys.detail(code()),
 		queryFn: () => sheltersRepository().getShelter(code()),
-		enabled: !!code()
+		enabled: !!code() && enabled()
 	}));
 
 // ===== Thailand province/district/subdistrict cascade (address selects) =====
