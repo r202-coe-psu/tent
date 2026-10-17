@@ -841,7 +841,10 @@ class ThirdPartyBookingsUseCase:
         # on PR #635): a commit that fails after the granted log leaves that log entry on a
         # request answered 500, and a commit that cleared only some tokens before failing leaves
         # those rows FINISHED (the revert is guarded on the token, so it reverts only the rest);
-        # a partner retry settles both.
+        # a partner retry settles both. Same class: a client disconnect during the commit lets
+        # the detached token clear run on while the handler below starts a detached revert;
+        # both are guarded only on the token, so which rows end committed vs reverted is not
+        # determined (the partner got no response; a retry settles it).
         try:
             result = await self._cancelled(endpoint, claims, client_ip, rows[0])
             if planned:
