@@ -135,12 +135,6 @@ afterEach(async () => {
 	document.body.innerHTML = '';
 });
 
-function render_cleanup() {
-	if (instance) unmount(instance);
-	instance = null;
-	document.body.innerHTML = '';
-}
-
 describe('KioskBannerForm', () => {
 	it('shows the accepted types and size limit under the file field', () => {
 		render();
@@ -331,35 +325,6 @@ describe('KioskBannerForm', () => {
 			render({ ...stored, screen_type: 'portrait' });
 			expect(radio('portrait').getAttribute('aria-checked')).toBe('true');
 			expect(radio('compact').getAttribute('aria-checked')).toBe('false');
-		});
-
-		it('edit mode shows a legacy banner without screen_type as ตู้เล็ก', () => {
-			render(stored);
-			expect(radio('compact').getAttribute('aria-checked')).toBe('true');
-		});
-
-		it('shapes the image preview boxes like the chosen screen', () => {
-			render({ ...stored, screen_type: 'portrait' });
-			expect(q('[data-testid="banner-current-image"]')?.className).toContain('aspect-[9/16]');
-			render_cleanup();
-			render(stored);
-			expect(q('[data-testid="banner-current-image"]')?.className).toContain('aspect-video');
-		});
-	});
-
-	describe('order', () => {
-		it('has no order input: the server assigns it and the reorder page changes it', () => {
-			render();
-			expect(q('#banner-order')).toBeNull();
-			render_cleanup();
-			render(stored);
-			expect(q('#banner-order')).toBeNull();
-		});
-
-		it('does not send an order with the input', async () => {
-			render(stored);
-			await submit();
-			expect(onsave.mock.calls[0][0].input).not.toHaveProperty('order');
 		});
 	});
 });

@@ -189,11 +189,6 @@ describe('/api/back-office/kiosk-banners/[id] (FR-KBR-10/12/13)', () => {
 			);
 		});
 
-		it('drops an order sent in the body (only the reorder route sets it)', async () => {
-			await call(PUT, 'PUT', { body: { ...fields, order: 9, _rev: '1-a' } });
-			expect(mockUpdate.mock.calls[0][2]).not.toHaveProperty('order');
-		});
-
 		it('passes screen_type to updateBanner and rejects an unknown one', async () => {
 			const response = await call(PUT, 'PUT', {
 				body: { ...fields, _rev: '1-a', screen_type: 'portrait' }

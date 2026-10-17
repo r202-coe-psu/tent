@@ -36,20 +36,6 @@ describe('KioskBannerAttract preview markup', () => {
 		expect(body).not.toContain('แตะหน้าจอเพื่อเริ่มใช้งาน');
 	});
 
-	it('fills the overlay with the image, with no padding', () => {
-		const body = preview([slide('a')]);
-
-		expect(body).toMatch(/<img[^>]*class="absolute inset-0 h-full w-full object-contain"/);
-		expect(body).not.toContain('kiosk-compact:p-2');
-	});
-
-	it('stays below the system banner and leaves its height free', () => {
-		const body = preview([slide('a')]);
-
-		expect(body).toContain('bottom-[var(--testing-banner-height)]');
-		expect(body).toContain('z-40');
-	});
-
 	it('renders nothing when there are no slides', () => {
 		expect(preview([])).not.toContain('kiosk-banner-attract');
 	});

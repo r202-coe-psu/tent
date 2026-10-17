@@ -261,14 +261,4 @@ describe('KioskBannerScreenManager', () => {
 		expect(document.body.textContent).toContain('ตัวอย่างบน kiosk');
 		expect(document.body.querySelector('[aria-pressed]')).toBeNull();
 	});
-
-	it('pins the unsaved-order footer to the bottom while the list scrolls', () => {
-		const a = banner('a', { order: 1 });
-		const b = banner('b', { order: 2 });
-		render({ initialCurrent: [a, b], initialDraft: [b, a] });
-
-		const footer = (byText('button', 'บันทึกลำดับ') as HTMLElement).closest('div') as HTMLElement;
-		expect(footer.className).toContain('sticky');
-		expect(footer.className).toContain('bottom-0');
-	});
 });

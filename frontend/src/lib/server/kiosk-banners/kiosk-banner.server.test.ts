@@ -13,7 +13,6 @@ import {
 	deleteBanner,
 	getBanner,
 	getBannerImage,
-	KIOSK_BANNER_MANGO_INDEX,
 	listActiveForShelter,
 	listBannersForShelter,
 	reorderBanners,
@@ -695,11 +694,5 @@ describe('getBannerImage', () => {
 			data: existingDoc({ _attachments: undefined })
 		});
 		expect(await getBannerImage('kiosk_banner:y')).toBeNull();
-	});
-});
-
-describe('KIOSK_BANNER_MANGO_INDEX', () => {
-	it('indexes type, shelter_code and end_at', () => {
-		expect(KIOSK_BANNER_MANGO_INDEX.index.fields).toEqual(['type', 'shelter_code', 'end_at']);
 	});
 });

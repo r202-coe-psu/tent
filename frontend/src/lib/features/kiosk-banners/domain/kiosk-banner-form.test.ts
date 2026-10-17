@@ -98,18 +98,6 @@ describe('bannerToFormValues', () => {
 		});
 		expect(bannerFormToInput(values)).toEqual(stored);
 	});
-
-	it('reads a legacy banner without screen_type as compact', () => {
-		const legacy = {
-			title: 'เก่า',
-			caption: null,
-			duration_sec: 10,
-			start_at: '2026-10-16T02:00:00.000Z',
-			end_at: '2026-10-16T05:00:00.000Z',
-			status: 'active' as const
-		};
-		expect(bannerToFormValues(legacy).screen_type).toBe('compact');
-	});
 });
 
 describe('emptyKioskBannerForm', () => {

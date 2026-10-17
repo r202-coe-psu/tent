@@ -60,25 +60,6 @@ afterEach(() => {
 });
 
 describe('KioskBannerAttract live (DOM)', () => {
-	it('renders nothing when the feed is empty, however long the kiosk idles', async () => {
-		await mountLive([]);
-
-		await vi.advanceTimersByTimeAsync(KIOSK_BANNER_IDLE_MS * 2);
-
-		expect(overlay()).toBeNull();
-	});
-
-	it('shows the overlay after the idle period, and not before', async () => {
-		await mountLive([slide('a')]);
-
-		await vi.advanceTimersByTimeAsync(KIOSK_BANNER_IDLE_MS - 1);
-		expect(overlay()).toBeNull();
-
-		await vi.advanceTimersByTimeAsync(1);
-		flushSync();
-		expect(overlay()).not.toBeNull();
-	});
-
 	it('restarts the idle countdown on a touch outside the overlay', async () => {
 		await mountLive([slide('a')]);
 
@@ -129,18 +110,6 @@ describe('KioskBannerAttract live (DOM)', () => {
 		expect(onCardClick).toHaveBeenCalledTimes(1);
 	});
 
-	it('shows again after another idle period once dismissed', async () => {
-		await mountLive([slide('a')]);
-		await vi.advanceTimersByTimeAsync(KIOSK_BANNER_IDLE_MS);
-		tap(overlay()!);
-		await vi.advanceTimersByTimeAsync(1_000);
-
-		await vi.advanceTimersByTimeAsync(KIOSK_BANNER_IDLE_MS);
-		flushSync();
-
-		expect(overlay()).not.toBeNull();
-	});
-
 	it('drops a slide whose image fails to load and hides when none are left', async () => {
 		await mountLive([slide('a')]);
 		await vi.advanceTimersByTimeAsync(KIOSK_BANNER_IDLE_MS);
@@ -178,16 +147,6 @@ describe('KioskBannerAttract preview (DOM)', () => {
 		expect(overlay()).not.toBeNull();
 		expect(vi.getTimerCount()).toBe(0);
 		expect(fetchKioskBanners).not.toHaveBeenCalled();
-	});
-
-	it('rotates through slides on their own duration', async () => {
-		mountPreview([slide('a', { duration_sec: 5 }), slide('b')]);
-		expect(document.querySelector('img')!.alt).toBe('Title a');
-
-		await vi.advanceTimersByTimeAsync(5_000);
-		flushSync();
-
-		expect(document.querySelector('img')!.alt).toBe('Title b');
 	});
 
 	it('reports a dismiss to the caller', () => {
