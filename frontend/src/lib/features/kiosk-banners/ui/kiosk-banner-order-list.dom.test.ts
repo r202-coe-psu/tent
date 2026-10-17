@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it } from 'vitest';
-import { flushSync, mount, unmount } from 'svelte';
+import { flushSync, mount, tick, unmount } from 'svelte';
 import type { KioskBannerSummary } from '../data/kiosk-banner.repository';
 import Harness from './__fixtures__/order-list-harness.svelte';
 
@@ -28,8 +28,11 @@ const banner = (id: string, over: Partial<KioskBannerSummary> = {}): KioskBanner
 
 let instance: ReturnType<typeof mount> | null = null;
 
-function render(initial: KioskBannerSummary[], disabled = false) {
-	instance = mount(Harness, { target: document.body, props: { initial, now: NOW, disabled } });
+function render(initial: KioskBannerSummary[], disabled = false, withRowActions = false) {
+	instance = mount(Harness, {
+		target: document.body,
+		props: { initial, now: NOW, disabled, withRowActions }
+	});
 	flushSync();
 }
 
@@ -86,6 +89,63 @@ describe('KioskBannerOrderList', () => {
 		expect(document.body.querySelector('[aria-live="polite"]')?.textContent).toBe(
 			'ย้าย แบนเนอร์ a ไปลำดับ 2'
 		);
+	});
+
+	it('renders the rowActions snippet once per row, before the arrow buttons', () => {
+		render([banner('a'), banner('b'), banner('c')], false, true);
+
+		const actions = [...document.body.querySelectorAll('[data-testid="row-action"]')];
+		expect(actions.map((node) => node.textContent)).toEqual([
+			'kiosk_banner:a',
+			'kiosk_banner:b',
+			'kiosk_banner:c'
+		]);
+		rows().forEach((row, i) => {
+			expect(row.contains(actions[i])).toBe(true);
+			const up = row.querySelector('button[data-move="up"]')!;
+			expect(
+				actions[i].compareDocumentPosition(up) & Node.DOCUMENT_POSITION_FOLLOWING
+			).toBeTruthy();
+		});
+	});
+
+	describe('keyboard focus after an arrow move', () => {
+		/** The click handler awaits `tick()` before refocusing, so wait one more turn. */
+		const settle = async () => {
+			await tick();
+			await tick();
+		};
+		const arrow = (title: string, dir: 'ขึ้น' | 'ลง') =>
+			document.body.querySelector<HTMLButtonElement>(
+				`button[aria-label="เลื่อน ${title} ${dir}"]`
+			)!;
+
+		it("keeps focus on the moved row's same arrow button", async () => {
+			render([banner('a'), banner('b'), banner('c')]);
+
+			const down = arrow('แบนเนอร์ a', 'ลง');
+			down.focus();
+			down.click();
+			await settle();
+
+			const active = document.activeElement as HTMLElement;
+			expect(active.dataset.move).toBe('down');
+			expect(active.dataset.bannerId).toBe('kiosk_banner:a');
+		});
+
+		it('focuses the other arrow when the row reaches the edge and the pressed one is disabled', async () => {
+			render([banner('a'), banner('b'), banner('c')]);
+
+			const down = arrow('แบนเนอร์ b', 'ลง');
+			down.focus();
+			down.click();
+			await settle();
+
+			expect(arrow('แบนเนอร์ b', 'ลง').disabled).toBe(true);
+			const active = document.activeElement as HTMLElement;
+			expect(active.dataset.move).toBe('up');
+			expect(active.dataset.bannerId).toBe('kiosk_banner:b');
+		});
 	});
 
 	describe('dragging', () => {

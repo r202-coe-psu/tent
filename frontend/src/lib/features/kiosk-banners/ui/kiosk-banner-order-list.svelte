@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tick, type Snippet } from 'svelte';
 	import ArrowDown from '@lucide/svelte/icons/arrow-down';
 	import ArrowUp from '@lucide/svelte/icons/arrow-up';
 	import GripVertical from '@lucide/svelte/icons/grip-vertical';
@@ -18,8 +19,14 @@
 	let {
 		items = $bindable(),
 		now,
-		disabled = false
-	}: { items: KioskBannerSummary[]; now: Date; disabled?: boolean } = $props();
+		disabled = false,
+		rowActions
+	}: {
+		items: KioskBannerSummary[];
+		now: Date;
+		disabled?: boolean;
+		rowActions?: Snippet<[KioskBannerSummary]>;
+	} = $props();
 
 	const statusOf = (banner: KioskBannerSummary) =>
 		isActiveAt(banner, now)
@@ -42,6 +49,23 @@
 		announcement = `ย้าย ${title} ไปลำดับ ${to + 1}`;
 	}
 
+	let listEl = $state<HTMLOListElement>();
+
+	/**
+	 * Moves a row with an arrow button, then keeps keyboard focus on that row's arrow (the keyed
+	 * `<li>` is relocated, which drops focus); falls back to the other arrow when it is now disabled.
+	 */
+	async function moveWithArrow(banner: KioskBannerSummary, index: number, dir: 'up' | 'down') {
+		move(index, dir === 'up' ? index - 1 : index + 1);
+		await tick();
+		const arrowOf = (which: string) =>
+			[...(listEl?.querySelectorAll<HTMLButtonElement>('button[data-move]') ?? [])].find(
+				(button) => button.dataset.bannerId === banner._id && button.dataset.move === which
+			);
+		const same = arrowOf(dir);
+		(same && !same.disabled ? same : arrowOf(dir === 'up' ? 'down' : 'up'))?.focus();
+	}
+
 	const drag = new SortableDrag(move);
 </script>
 
@@ -52,7 +76,7 @@
 		ไม่มีแบนเนอร์ที่ยังไม่หมดอายุสำหรับขนาดจอนี้
 	</p>
 {:else}
-	<ol class="divide-y divide-border/60">
+	<ol bind:this={listEl} class="divide-y divide-border/60">
 		{#each items as banner, index (banner._id)}
 			{@const status = statusOf(banner)}
 			<li
@@ -99,13 +123,16 @@
 				</div>
 				<span class={status.class}>{status.label}</span>
 				<div class="flex items-center gap-1">
+					{@render rowActions?.(banner)}
 					<Button
 						variant="ghost"
 						size="sm"
 						class="min-h-11 min-w-11 p-0"
 						aria-label="เลื่อน {banner.title} ขึ้น"
+						data-move="up"
+						data-banner-id={banner._id}
 						disabled={disabled || index === 0}
-						onclick={() => move(index, index - 1)}
+						onclick={() => moveWithArrow(banner, index, 'up')}
 					>
 						<ArrowUp class="h-4 w-4" />
 					</Button>
@@ -114,8 +141,10 @@
 						size="sm"
 						class="min-h-11 min-w-11 p-0"
 						aria-label="เลื่อน {banner.title} ลง"
+						data-move="down"
+						data-banner-id={banner._id}
 						disabled={disabled || index === items.length - 1}
-						onclick={() => move(index, index + 1)}
+						onclick={() => moveWithArrow(banner, index, 'down')}
 					>
 						<ArrowDown class="h-4 w-4" />
 					</Button>

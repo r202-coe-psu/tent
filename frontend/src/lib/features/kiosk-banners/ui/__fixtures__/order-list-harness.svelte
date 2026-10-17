@@ -6,12 +6,27 @@
 	let {
 		initial,
 		now,
-		disabled = false
-	}: { initial: KioskBannerSummary[]; now: Date; disabled?: boolean } = $props();
+		disabled = false,
+		withRowActions = false
+	}: {
+		initial: KioskBannerSummary[];
+		now: Date;
+		disabled?: boolean;
+		withRowActions?: boolean;
+	} = $props();
 
 	// svelte-ignore state_referenced_locally
 	let items = $state.raw(initial);
 </script>
 
-<KioskBannerOrderList bind:items {now} {disabled} />
+{#snippet action(banner: KioskBannerSummary)}
+	<span data-testid="row-action">{banner._id}</span>
+{/snippet}
+
+<KioskBannerOrderList
+	bind:items
+	{now}
+	{disabled}
+	rowActions={withRowActions ? action : undefined}
+/>
 <output data-testid="order">{items.map((item) => item._id).join(',')}</output>
