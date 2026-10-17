@@ -33,6 +33,7 @@ import {
 	STAFF_CAPABILITIES,
 	shelterCodeFromRoles,
 	shelterCodesFromRoles,
+	mergeEdgeShelters,
 	shelterCodesWithCapability,
 	shelterScopeRole
 } from './roles';
@@ -495,5 +496,35 @@ describe('isKioskStaffOnly', () => {
 		expect(isKioskStaffOnly(['system_admin'], 'A')).toBe(false);
 		expect(isKioskStaffOnly(['shelter:A'], 'A')).toBe(false);
 		expect(isKioskStaffOnly([], null)).toBe(false);
+	});
+});
+
+describe('mergeEdgeShelters (CR-171)', () => {
+	it('seeds from roles when there is no existing value', () => {
+		expect(mergeEdgeShelters(undefined, ['shelter:SH001', 'SH001:shelter_manager'])).toEqual([
+			'SH001'
+		]);
+		expect(mergeEdgeShelters(null, ['shelter:SH001', 'shelter:SH002'])).toEqual(['SH001', 'SH002']);
+	});
+
+	it('is append-only: removing a shelter from roles keeps it', () => {
+		expect(mergeEdgeShelters(['SH001', 'SH002'], ['shelter:SH002'])).toEqual(['SH001', 'SH002']);
+		expect(mergeEdgeShelters(['SH001'], [])).toEqual(['SH001']);
+	});
+
+	it('keeps order, appends new codes, dedupes, ignores non-strings', () => {
+		expect(
+			mergeEdgeShelters(
+				['SH002', 'SH002', 7 as unknown as string],
+				['shelter:SH001', 'shelter:SH002']
+			)
+		).toEqual(['SH002', 'SH001']);
+	});
+
+	it('returns [] for system_admin without shelters and does not mutate input', () => {
+		const existing = ['SH001'];
+		expect(mergeEdgeShelters([], ['system_admin'])).toEqual([]);
+		mergeEdgeShelters(existing, ['shelter:SH009']);
+		expect(existing).toEqual(['SH001']);
 	});
 });

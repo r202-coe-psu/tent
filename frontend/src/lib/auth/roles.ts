@@ -86,6 +86,27 @@ export function shelterCodesFromRoles(roles: readonly string[]): string[] {
 	return roles.filter((r) => r.startsWith('shelter:')).map((r) => r.slice('shelter:'.length));
 }
 
+/**
+ * `_users.edge_shelters` (CR-171): every shelter code the user has ever held `shelter:{code}` for.
+ * Append-only — existing values (deduped, order kept, non-strings ignored) first, then any code
+ * from `roles` not yet present. Drives edge `_users` replication only; grants no access.
+ */
+export function mergeEdgeShelters(
+	existing: readonly string[] | null | undefined,
+	roles: readonly string[]
+): string[] {
+	const out: string[] = [];
+	const seen = new Set<string>();
+	const push = (code: unknown) => {
+		if (typeof code !== 'string' || seen.has(code)) return;
+		seen.add(code);
+		out.push(code);
+	};
+	for (const code of Array.isArray(existing) ? existing : []) push(code);
+	for (const code of shelterCodesFromRoles(roles)) push(code);
+	return out;
+}
+
 /** Extract the first shelter code from a role list, or null. Prefer {@link shelterCodesFromRoles} for multi. */
 export function shelterCodeFromRoles(roles: readonly string[]): string | null {
 	const codes = shelterCodesFromRoles(roles);
