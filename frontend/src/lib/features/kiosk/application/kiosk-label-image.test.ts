@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+	KIOSK_LABEL_CHECKBOX,
 	KIOSK_LABEL_LINK,
 	KIOSK_LABEL_ZONE,
 	KIOSK_LABEL_ZONE_PREFIX,
@@ -29,8 +30,16 @@ function installFakeCanvas() {
 		textAlign: '',
 		textBaseline: '',
 		imageSmoothingEnabled: true,
+		strokeStyle: '',
+		lineWidth: 1,
+		lineCap: '',
+		lineJoin: '',
 		fillRect: vi.fn(),
 		drawImage: vi.fn(),
+		beginPath: vi.fn(),
+		moveTo: vi.fn(),
+		lineTo: vi.fn(),
+		stroke: vi.fn(),
 		measureText: vi.fn((text: string) => ({ width: text.length * 6 })),
 		getImageData: vi.fn(() => ({ data: new Uint8ClampedArray(4) })),
 		putImageData: vi.fn(),
@@ -149,6 +158,33 @@ describe('renderKioskLabelPng', () => {
 		expect(ys[0]).toBeLessThan(ys[1]!);
 		expect(ys[1]).toBeLessThan(ys[2]!);
 		expect(ys[2]).toBeLessThan(kioskLabelLayout(264).link.y);
+	});
+
+	describe('station ticks', () => {
+		it('leaves every checklist box empty by default', async () => {
+			await renderKioskLabelPng(label);
+
+			expect(harness.fakeContext.stroke).not.toHaveBeenCalled();
+		});
+
+		it('ticks the first boxes, one per station passed', async () => {
+			await renderKioskLabelPng({ ...label, checkedCount: 2 });
+
+			expect(harness.fakeContext.stroke).toHaveBeenCalledTimes(2);
+			// Each tick starts inside its own box, top row first.
+			const starts = harness.fakeContext.moveTo.mock.calls.map(([, y]) => y as number);
+			const rows = harness.fakeContext.fillText.mock.calls
+				.filter(([text]) => ['เช็คอิน', 'คัดกรอง'].includes(text))
+				.map((call) => (call as unknown as [string, number, number])[2]);
+			const boxSize = Math.round(mmToDots(KIOSK_LABEL_CHECKBOX.sizeMm));
+			starts.forEach((y, index) => expect(Math.abs(y - rows[index]!)).toBeLessThan(boxSize / 2));
+		});
+
+		it('ticks all three boxes after the last station', async () => {
+			await renderKioskLabelPng({ ...label, checkedCount: 3 });
+
+			expect(harness.fakeContext.stroke).toHaveBeenCalledTimes(3);
+		});
 	});
 
 	describe('zone row', () => {

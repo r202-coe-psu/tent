@@ -21,6 +21,8 @@ export type KioskLabelContent = {
 	/** Current zone name; missing or null leaves a dotted rule to write the zone on. */
 	zone?: string | null;
 	checklist?: readonly string[];
+	/** Intake stations passed: this many checklist boxes are ticked, top first. */
+	checkedCount?: number;
 };
 
 /** Thermal heads print dots, not greys: anything darker than this becomes black. */
@@ -130,10 +132,13 @@ export async function renderKioskLabelPng(label: KioskLabelContent): Promise<str
 
 	// The checklist sits right above the site address, printed small at the very bottom.
 	const linkRow = ptToDots(linkStyle.pt) * linkStyle.lineHeight;
-	drawChecklist(context, label.checklist ?? KIOSK_LABEL_CHECKLIST, fonts.checklist, {
-		...layout.text,
-		bottom: layout.text.bottom - linkRow - mmToDots(KIOSK_LABEL_LINK_GAP_MM)
-	});
+	drawChecklist(
+		context,
+		label.checklist ?? KIOSK_LABEL_CHECKLIST,
+		label.checkedCount ?? 0,
+		fonts.checklist,
+		{ ...layout.text, bottom: layout.text.bottom - linkRow - mmToDots(KIOSK_LABEL_LINK_GAP_MM) }
+	);
 	context.font = fonts.link;
 	context.fillText(KIOSK_LABEL_LINK, layout.link.x, layout.link.y, layout.text.width);
 
@@ -173,10 +178,14 @@ function drawZone(
 	}
 }
 
-/** One checkbox row per item, anchored to the bottom of the text column like the card's `mt-auto`. */
+/**
+ * One checkbox row per item, anchored to the bottom of the text column like the card's `mt-auto`;
+ * the first `checkedCount` boxes get a tick.
+ */
 function drawChecklist(
 	context: CanvasRenderingContext2D,
 	items: readonly string[],
+	checkedCount: number,
 	font: string,
 	column: { x: number; width: number; bottom: number }
 ): void {
@@ -190,7 +199,7 @@ function drawChecklist(
 	context.font = font;
 	const boxX = Math.round(column.x);
 	let y = column.bottom - items.length * rowHeight - (items.length - 1) * rowGap;
-	for (const item of items) {
+	for (const [index, item] of items.entries()) {
 		const middle = y + rowHeight / 2;
 		const boxY = Math.round(middle - boxSize / 2);
 		context.fillStyle = '#000000';
@@ -198,7 +207,21 @@ function drawChecklist(
 		context.fillStyle = '#FFFFFF';
 		context.fillRect(boxX + border, boxY + border, boxSize - border * 2, boxSize - border * 2);
 		context.fillStyle = '#000000';
+		if (index < checkedCount) drawTick(context, boxX, boxY, boxSize);
 		context.fillText(item, boxX + boxSize + textGap, middle, column.width - boxSize - textGap);
 		y += rowHeight + rowGap;
 	}
+}
+
+/** A check mark inside the `size`-dot box at (`x`, `y`), as on the card's ticked boxes. */
+function drawTick(context: CanvasRenderingContext2D, x: number, y: number, size: number): void {
+	context.strokeStyle = '#000000';
+	context.lineWidth = Math.max(2, Math.round(mmToDots(KIOSK_LABEL_CHECKBOX.tickMm)));
+	context.lineCap = 'square';
+	context.lineJoin = 'miter';
+	context.beginPath();
+	context.moveTo(x + size * 0.2, y + size * 0.52);
+	context.lineTo(x + size * 0.42, y + size * 0.75);
+	context.lineTo(x + size * 0.8, y + size * 0.25);
+	context.stroke();
 }

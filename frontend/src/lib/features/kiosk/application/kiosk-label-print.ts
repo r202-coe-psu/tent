@@ -10,6 +10,8 @@ export type KioskQrLabel = {
 	qrSrc: string;
 	name: string;
 	zone?: string | null;
+	/** Intake stations passed: this many checklist boxes are ticked. */
+	checkedCount?: number;
 };
 
 /** QR payload → data URL sized for the label (module-count based), in the kiosk print colour. */

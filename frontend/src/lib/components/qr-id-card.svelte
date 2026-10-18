@@ -13,12 +13,23 @@
 		zone?: { label: string; value: string | null };
 		/** Small line at the bottom of the text column, e.g. the site address. */
 		footer?: string;
-		/** Station boxes ticked by hand (e.g. เช็คอิน · คัดกรอง · ที่พัก), one per row. */
+		/** Station boxes (e.g. เช็คอิน · คัดกรอง · ที่พัก), one per row. */
 		checklist: readonly string[];
+		/** Stations already passed: this many boxes are ticked, top first. */
+		checkedCount?: number;
 		class?: string;
 	};
 
-	let { src, alt, name, zone, footer, checklist, class: className }: Props = $props();
+	let {
+		src,
+		alt,
+		name,
+		zone,
+		footer,
+		checklist,
+		checkedCount = 0,
+		class: className
+	}: Props = $props();
 
 	/*
 		80×60 mm thermal label sized by the `--qr-size` / `--label-gap` CSS vars. Sizes mirror
@@ -43,9 +54,21 @@
 		<div
 			class="label-checklist mt-auto flex flex-col items-start gap-[1.5mm] text-[10pt] leading-[1.3] font-medium"
 		>
-			{#each checklist as item (item)}
+			{#each checklist as item, index (item)}
 				<span class="inline-flex items-center gap-[1.5mm]">
-					<span class="size-[3.5mm] shrink-0 border-[0.3mm] border-black" aria-hidden="true"></span>
+					<span class="size-[3.5mm] shrink-0 border-[0.3mm] border-black" aria-hidden="true">
+						{#if index < checkedCount}
+							<svg viewBox="0 0 10 10" class="block size-full">
+								<polyline
+									points="2,5.2 4.2,7.5 8,2.5"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="1.4"
+									stroke-linecap="square"
+								/>
+							</svg>
+						{/if}
+					</span>
 					{item}
 				</span>
 			{/each}

@@ -7,6 +7,8 @@
 		name: string;
 		/** Current zone name; missing or null leaves a dotted line to write the zone on. */
 		zone?: string | null;
+		/** Intake stations passed: this many checklist boxes are ticked. */
+		checkedCount?: number;
 	};
 </script>
 
@@ -63,6 +65,7 @@
 					alt="QR ประจำตัวสำหรับใช้ภายในศูนย์"
 					name={label.name}
 					zone={labelZoneLine(label.zone)}
+					checkedCount={label.checkedCount}
 					footer={KIOSK_LABEL_LINK}
 					checklist={KIOSK_LABEL_CHECKLIST}
 				/>

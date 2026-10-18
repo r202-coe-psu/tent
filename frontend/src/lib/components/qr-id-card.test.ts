@@ -23,6 +23,17 @@ describe('QrIdCard', () => {
 		expect(result.body).toMatch(/class="label-checklist[^"]*flex-col/);
 	});
 
+	it('ticks the first boxes, one per station passed', () => {
+		const none = render(QrIdCard, { props: base });
+		const two = render(QrIdCard, { props: { ...base, checkedCount: 2 } });
+
+		expect(none.body).not.toContain('<polyline');
+		expect(two.body.match(/<polyline/g)).toHaveLength(2);
+		expect(two.body.indexOf('<polyline')).toBeLessThan(two.body.indexOf('เช็คอิน'));
+		expect(two.body.lastIndexOf('<polyline')).toBeLessThan(two.body.indexOf('คัดกรอง'));
+		expect(two.body.lastIndexOf('<polyline')).toBeGreaterThan(two.body.indexOf('เช็คอิน'));
+	});
+
 	it('prints the footer small under the checklist, left of the QR', () => {
 		const result = render(QrIdCard, { props: { ...base, footer: 'shelter.psu.ac.th' } });
 		const body = result.body;

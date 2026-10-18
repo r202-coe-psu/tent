@@ -126,6 +126,8 @@ export const KIOSK_LABEL_CHECKLIST = ['เช็คอิน', 'คัดกร�
 export const KIOSK_LABEL_CHECKBOX = {
 	sizeMm: 3.5,
 	borderMm: 0.3,
+	/** Stroke of the tick in a box whose station is done. */
+	tickMm: 0.4,
 	/** Box → its text. */
 	textGapMm: 1.5,
 	/** Between checklist rows (one item per row). */
