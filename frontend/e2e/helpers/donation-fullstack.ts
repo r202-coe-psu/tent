@@ -15,6 +15,7 @@ import {
 	couchLogin,
 	couchReq,
 	seedSecurityQuestion,
+	SA_ROLES,
 	type TestUser
 } from './couch';
 import { bangkokToday } from '../../src/lib/utils/date';
@@ -255,6 +256,20 @@ export async function createWarehouseStaff(
 	return { ...user, session: await couchLogin(user.name, user.password) };
 }
 
+/** A system admin — no shelter of their own, so `openBackOffice` needs `workingShelter`. */
+export async function createSystemAdmin(ledger: RunLedger, tag: string): Promise<Staff> {
+	const user: TestUser = {
+		name: `dn_${tag}_${RUN_ID}`,
+		password: 'Password1!',
+		roles: SA_ROLES,
+		display_name: `Donation E2E ${tag}`
+	};
+	ledger.add('staff', user.name);
+	await createCouchUser(user);
+	await seedSecurityQuestion(user.name);
+	return { ...user, session: await couchLogin(user.name, user.password) };
+}
+
 export type DeliveryMode =
 	| { kind: 'self'; slot?: RegExp }
 	| { kind: 'parcel'; trackingNo?: string }
@@ -440,13 +455,14 @@ const routedPages = new WeakSet<Page>();
  * `undefined` to a code after the shelter list loads. Unpinned, that remount lands after the
  * tab is visible and resets the sub-tab / detaches forms the test is already filling in.
  */
-export async function openBackOffice(page: Page, staff: Staff) {
+export async function openBackOffice(page: Page, staff: Staff, workingShelter?: string) {
 	if (!routedPages.has(page)) {
 		routedPages.add(page);
 		await routeBrowserCouchThroughApp(page);
 	}
 	await injectSession(page, staff, staff.session);
-	const shelterCode = staff.roles.find((r) => r.startsWith('shelter:'))?.slice('shelter:'.length);
+	const shelterCode =
+		workingShelter ?? staff.roles.find((r) => r.startsWith('shelter:'))?.slice('shelter:'.length);
 	if (shelterCode) await pinActiveShelter(page, shelterCode);
 	await page.goto('/back-office/stock-donations');
 	await expect(page.getByRole('tab', { name: /รอการประเมิน/ })).toBeVisible({ timeout: 15_000 });

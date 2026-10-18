@@ -10,6 +10,7 @@ import {
 	boardLineFor,
 	catalogItem,
 	createCampaignViaUi,
+	createSystemAdmin,
 	createWarehouseStaff,
 	expectRunGone,
 	fillExpiry,
@@ -371,6 +372,46 @@ test.describe('Donation full-stack: donor and staff', { tag: ['@critical', '@don
 				BOARD_SYNC
 			)
 			.not.toBe('open');
+	});
+
+	test('a booking for another shelter is not received while working in this one', async ({
+		page
+	}) => {
+		// A system admin can open any shelter's booking, but the goods are at the counter
+		// of the shelter they are working in. Receiving it would book the stock into the
+		// booking's shelter instead, so the scan station holds both actions until they
+		// switch to that shelter.
+		const admin = await createSystemAdmin(ledger, 'sa');
+		const { bookingRef } = await bookAsDonor(page, {
+			shelter,
+			need,
+			ledger,
+			donorName: `E2E ผิดศูนย์ ${RUN_ID}`,
+			phone: '0867770021'
+		});
+		await openBackOffice(page, ws);
+		await approvePending(page, shelter.code, bookingRef);
+
+		await openBackOffice(page, admin, 'SH001');
+		await openInScanStation(page, bookingRef);
+		const wrongShelter = page.getByRole('alert').filter({ hasText: 'ใบนี้จองส่งไปศูนย์' });
+		await expect(wrongShelter).toContainText('SH001');
+		await expect(page.getByRole('button', { name: 'ยืนยันรับเข้าคลัง' })).toBeDisabled();
+		await expect(page.getByRole('button', { name: 'ปฏิเสธคำขอ' })).toBeDisabled();
+
+		await openBackOffice(page, admin, shelter.code);
+		await openInScanStation(page, bookingRef);
+		await expect(page.getByText('ใบนี้จองส่งไปศูนย์')).toHaveCount(0);
+		// Working in the booking's shelter, the actions are back — and closing the booking
+		// here keeps the run's teardown, which wants every booking finished, satisfied.
+		await page.getByRole('button', { name: 'ปฏิเสธคำขอ' }).click();
+		await page
+			.getByPlaceholder('เช่น พื้นที่จัดเก็บไม่เพียงพอ, งดรับเสื้อผ้าชั่วคราว...')
+			.fill(`ส่งผิดศูนย์ (e2e ${RUN_ID})`);
+		await page.getByRole('button', { name: 'ยืนยันการปฏิเสธคำขอ' }).click();
+		await expect
+			.poll(async () => (await findDonation(shelter.code, bookingRef))?.status)
+			.toBe('rejected');
 	});
 
 	test.describe('donor self-service on the track page', () => {

@@ -9,6 +9,7 @@
 	import Trash2 from '@lucide/svelte/icons/trash-2';
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import ClipboardCheck from '@lucide/svelte/icons/clipboard-check';
+	import TriangleAlert from '@lucide/svelte/icons/triangle-alert';
 	import Loader2 from '@lucide/svelte/icons/loader-2';
 	import AlertTriangle from '@lucide/svelte/icons/alert-triangle';
 	import PackageCheck from '@lucide/svelte/icons/package-check';
@@ -107,10 +108,24 @@
 	// merged list above kept, so an item that exists in both generations shows once.
 	const pickerItems = $derived.by(() => {
 		const keep = new Set(catalogItems.map((c) => c._id));
-		return toStockFormItems(supplyItemsQuery.data ?? [], itemMastersQuery.data ?? []).filter((i) =>
-			keep.has(i._id)
-		);
+		const listed = toStockFormItems(
+			supplyItemsQuery.data ?? [],
+			itemMastersQuery.data ?? []
+		).filter((i) => keep.has(i._id));
+		const listedIds = new Set(listed.map((i) => i._id));
+		return [...listed, ...pickedOffList.filter((i) => !listedIds.has(i._id))];
 	});
+
+	// Items picked that the catalog query does not list yet — one just created from the
+	// picker shows up there only after the refetch. Until then its name and expiry rule
+	// come from here, so the lot panel does not print the raw id and the expiry check
+	// does not let the line through.
+	let pickedOffList = $state<StockFormItem[]>([]);
+
+	function rememberPicked(picked: StockFormItem | null) {
+		if (!picked || catalogItems.some((c) => c._id === picked._id)) return;
+		pickedOffList = [...pickedOffList.filter((i) => i._id !== picked._id), picked];
+	}
 
 	/** A picker row's unit in the staff's language (#636) — the option list showed raw codes. */
 	function pickerUnitLabel(item: StockFormItem): string {
@@ -129,12 +144,18 @@
 
 	/** A stock item's name for the lot panel; the raw id only when it is no longer listed. */
 	function catalogName(itemId: string): string {
-		return catalogItems.find((c) => c._id === itemId)?.name ?? itemId;
+		return (
+			catalogItems.find((c) => c._id === itemId)?.name ??
+			pickedOffList.find((i) => i._id === itemId)?.name ??
+			itemId
+		);
 	}
 
 	/** Does this catalog id require an expiry date (CR-143 FR-D1)? Drives the check below. */
 	function isPerishable(itemId: string): boolean {
-		return catalogItems.find((c) => c._id === itemId)?.requiresExpiry === true;
+		const item =
+			catalogItems.find((c) => c._id === itemId) ?? pickedOffList.find((i) => i._id === itemId);
+		return item?.requiresExpiry === true;
 	}
 
 	const redirectTargetLabel = $derived.by(() => {
@@ -144,6 +165,17 @@
 
 	// Scanned booking data
 	let donationDoc = $state<ScanDonationView | null>(null);
+
+	// The goods are at the counter of the shelter staff are working in. A booking made
+	// out to another shelter is not received or rejected here — staff switch shelter
+	// first, or the stock would land in the other shelter's ledger. Only system admins
+	// ever reach this: the route already refuses other staff a booking outside their own.
+	const otherShelterCode = $derived(
+		donationDoc && donationDoc.shelter_code !== getShelterCode() ? donationDoc.shelter_code : null
+	);
+	const otherShelterName = $derived(
+		(sheltersQuery.data ?? []).find((s) => s.code === otherShelterCode)?.name ?? otherShelterCode
+	);
 	// What staff read off the ticket — display only; a walk-in has none.
 	let bookingRef = $state('');
 	/**
@@ -315,7 +347,8 @@
 
 	// Validation check for receiving into stock
 	const canReceive = $derived(
-		scannedItems.length > 0 &&
+		!otherShelterCode &&
+			scannedItems.length > 0 &&
 			!storagePoints.isLoading &&
 			scannedItems.every(
 				(it) =>
@@ -364,6 +397,7 @@
 	 * what failed every receipt with `CATALOG_MISMATCH` ("expected bottle, got box", #623).
 	 */
 	function mapScannedItem(item: ScannedItem, picked: StockFormItem | null) {
+		rememberPicked(picked);
 		item.item_id = picked?._id ?? '';
 		if (picked) item.unit = picked.unit;
 	}
@@ -520,7 +554,7 @@
 	}
 
 	async function handleSaveScan() {
-		if (!actionRef || saving) return;
+		if (!actionRef || saving || otherShelterCode) return;
 		saving = true;
 		try {
 			const res = await fetch(`/api/back-office/donations/${encodeURIComponent(actionRef)}`, {
@@ -603,7 +637,7 @@
 	}
 
 	async function handleConfirmReject() {
-		if (!actionRef || saving) return;
+		if (!actionRef || saving || otherShelterCode) return;
 		if (!rejectReason.trim()) {
 			toast.error('กรุณาระบุเหตุผลในการปฏิเสธคำขอ');
 			return;
@@ -653,6 +687,7 @@
 	function handleWalkinItemSelect(index: number, picked: StockFormItem | null) {
 		const item = walkinItems[index];
 		if (!item) return;
+		rememberPicked(picked);
 		item.itemId = picked?._id ?? '';
 		if (picked) {
 			item.name = picked.name;
@@ -1016,6 +1051,19 @@
 							/>
 						</div>
 
+						{#if otherShelterCode}
+							<div
+								role="alert"
+								class="flex items-start gap-2 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900"
+							>
+								<TriangleAlert class="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+								<p>
+									ใบนี้จองส่งไปศูนย์ <strong>{otherShelterName}</strong> แต่คุณกำลังทำงานที่ศูนย์
+									<strong>{getShelterCode()}</strong> — สลับศูนย์ที่เมนูด้านซ้ายก่อนรับเข้าคลังหรือปฏิเสธ
+								</p>
+							</div>
+						{/if}
+
 						<div class="space-y-4 rounded-xl border border-slate-200/80 bg-white p-4 shadow-2xs">
 							<h4 class="text-sm font-semibold text-slate-700">ก่อนรับเข้าคลัง</h4>
 							<ul class="space-y-2 text-sm">
@@ -1079,7 +1127,7 @@
 									variant="outline"
 									type="button"
 									onclick={() => (actionPanel = actionPanel === 'reject' ? 'none' : 'reject')}
-									disabled={saving}
+									disabled={saving || !!otherShelterCode}
 									class="h-11 w-full border-red-200 text-sm font-semibold text-red-700 hover:bg-red-50 hover:text-red-800"
 								>
 									ปฏิเสธคำขอ
