@@ -196,9 +196,35 @@ describe('PATCH /api/v1/kiosk/devices/[id]', () => {
 			status: 'inactive',
 			last_seen_at: null,
 			staff_pin_set: false,
-			staff_pin_is_default: false
+			staff_pin_is_default: false,
+			banner_enabled: true,
+			screen_type: 'compact'
 		});
 		expect(JSON.stringify(data)).not.toContain('secret_hash');
+	});
+
+	it('persists banner_enabled=false and returns it in the summary (FR-KBR-36)', async () => {
+		mockUpdate.mockResolvedValueOnce(persisted('SH001', { banner_enabled: false }));
+		const response = await patch({ banner_enabled: false });
+		expect(response.status).toBe(200);
+		expect(mockUpdate).toHaveBeenCalledWith(DOC_ID, { banner_enabled: false }, 'sa-user');
+		expect(await response.json()).toMatchObject({ device_id: DEVICE_ID, banner_enabled: false });
+	});
+
+	it('persists screen_type=portrait and returns it in the summary', async () => {
+		mockUpdate.mockResolvedValueOnce(persisted('SH001', { screen_type: 'portrait' }));
+		const response = await patch({ screen_type: 'portrait' });
+		expect(response.status).toBe(200);
+		expect(mockUpdate).toHaveBeenCalledWith(DOC_ID, { screen_type: 'portrait' }, 'sa-user');
+		expect(await response.json()).toMatchObject({ device_id: DEVICE_ID, screen_type: 'portrait' });
+	});
+
+	it('lets kiosk_staff switch banners of their shelter and reads another shelter as 404', async () => {
+		mockSession.mockResolvedValue(SESSIONS.kioskA);
+		expect((await patch({ banner_enabled: false })).status).toBe(200);
+		mockGet.mockResolvedValue(persisted('SH002'));
+		expect((await patch({ banner_enabled: true })).status).toBe(404);
+		expect(mockUpdate).toHaveBeenCalledTimes(1);
 	});
 
 	it('returns 401 for anonymous and 403 for registration staff without touching the device', async () => {
@@ -253,6 +279,8 @@ describe('PATCH /api/v1/kiosk/devices/[id]', () => {
 		['device id change', { device_id: 'other-01' }],
 		['PIN metadata', { staff_pin_set: true }],
 		['blank name', { name: ' ' }],
+		['non-boolean banner_enabled', { banner_enabled: 'false' }],
+		['unknown screen_type', { screen_type: 'wide' }],
 		['not an object', 'not json']
 	])('returns 400 for a %s body before reading the device', async (_label, body) => {
 		const response = await patch(body);

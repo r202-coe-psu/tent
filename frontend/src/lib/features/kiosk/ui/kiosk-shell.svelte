@@ -153,6 +153,12 @@
 		padding-block: 0.75rem;
 	}
 
+	/* app.css reserves a stable scrollbar gutter on <html>; on the kiosk's classic-scrollbar
+	   Chromium that leaves a blank ~15px strip down the right edge of every kiosk screen. */
+	:global(html:has([data-kiosk-shell])) {
+		scrollbar-gutter: auto;
+	}
+
 	@media (max-height: 650px) {
 		.kiosk-main {
 			padding-block: 0.25rem;

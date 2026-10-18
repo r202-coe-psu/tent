@@ -1,25 +1,64 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { GET } from './+server';
 import { searchHouseholds } from '$lib/server/system-overview';
+import { requireShelterScopeOrSA } from '$lib/server/couch-admin';
 
-vi.mock('$lib/server/system-overview', () => ({
-	searchHouseholds: vi.fn(),
-	noStore: { 'Cache-Control': 'no-store' }
-}));
+vi.mock('$lib/server/system-overview', async (importOriginal) => {
+	const actual = await importOriginal<typeof import('$lib/server/system-overview')>();
+	return { ...actual, searchHouseholds: vi.fn() };
+});
 
 vi.mock('$lib/server/couch-admin', async (importOriginal) => {
 	const actual = await importOriginal<typeof import('$lib/server/couch-admin')>();
 	return {
 		...actual,
-		requireShelterScopeOrSA: vi.fn().mockResolvedValue({ name: 'sa', isSA: true }),
-		serviceError: (e: unknown) =>
-			new Response(JSON.stringify({ error: String(e) }), { status: 500 })
+		requireShelterScopeOrSA: vi.fn()
 	};
 });
 
 describe('GET /api/back-office/overview/households', () => {
+	const callAs = (roles: string[], isSA: boolean) => {
+		vi.mocked(requireShelterScopeOrSA).mockResolvedValue({
+			name: 'tester',
+			roles,
+			isSA,
+			shelterCode: roles.find((r) => r.startsWith('shelter:'))?.slice(8) ?? null
+		});
+		const href = 'http://localhost/api/back-office/overview/households?scope=universal&q=x';
+		return GET({
+			request: new Request(href),
+			url: new URL(href),
+			fetch: globalThis.fetch
+		} as never);
+	};
+
 	beforeEach(() => {
 		vi.clearAllMocks();
+		vi.mocked(requireShelterScopeOrSA).mockResolvedValue({
+			name: 'sa',
+			roles: ['system_admin'],
+			isSA: true,
+			shelterCode: null
+		});
+	});
+
+	it.each([
+		['no roles', [] as string[]],
+		['shelter_manager', ['shelter_manager', 'shelter:SH001']],
+		['staff', ['staff', 'shelter:SH001']]
+	])('rejects non-SA caller (%s) with 403 and does not search', async (_label, roles) => {
+		const res = await callAs(roles, false);
+		expect(res.status).toBe(403);
+		const body = await res.json();
+		expect(body.error.code).toBe('FORBIDDEN');
+		expect(searchHouseholds).not.toHaveBeenCalled();
+	});
+
+	it('allows system_admin', async () => {
+		vi.mocked(searchHouseholds).mockResolvedValue([]);
+		const res = await callAs(['system_admin'], true);
+		expect(res.status).toBe(200);
+		expect(searchHouseholds).toHaveBeenCalledTimes(1);
 	});
 
 	it('returns universal households list', async () => {

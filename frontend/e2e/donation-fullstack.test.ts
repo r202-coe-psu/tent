@@ -3,9 +3,11 @@ import { CAN_WRITE, READ_ONLY_REASON } from './helpers/e2e-env';
 import { clearSession } from './helpers/login';
 import {
 	RUN_ID,
+	BOARD_SYNC,
 	RunLedger,
 	approvePending,
 	bookAsDonor,
+	boardLineFor,
 	catalogItem,
 	createCampaignViaUi,
 	createWarehouseStaff,
@@ -51,6 +53,8 @@ import {
 
 // A catalog item with `shelf_life_days`: receiving it needs an expiry (`fillExpiry`).
 const NEED_ITEM = 'ยาสีฟัน';
+// No `shelf_life_days`, so the scan station receives it without an expiry.
+const SHELVED_ITEM = 'แปรงสีฟัน';
 
 const ledger = new RunLedger('donation-fullstack');
 let shelter: PublicShelter;
@@ -221,12 +225,13 @@ test.describe('Donation full-stack: donor and staff', { tag: ['@critical', '@don
 	}) => {
 		// The donor types the item and counts it in boxes; the stock item counts pieces.
 		// Mapping the line used to keep the donor's "box" and every receipt failed with
-		// CATALOG_MISMATCH ("expected piece, got box").
-		const brush = await catalogItem('แปรงสีฟัน');
+		// CATALOG_MISMATCH ("expected piece, got box"). Not SHELVED_ITEM: the stock this
+		// receipt leaves on the run's shelter would close that test's campaign on arrival.
+		const diaper = await catalogItem('ผ้าอ้อมเด็ก ไซส์ M');
 		const { bookingRef } = await bookAsDonor(page, {
 			shelter,
 			ledger,
-			unsolicited: { itemName: `แปรงสีฟันยกกล่อง ${RUN_ID}`, unitLabel: 'กล่อง' },
+			unsolicited: { itemName: `ผ้าอ้อมเด็กยกกล่อง ${RUN_ID}`, unitLabel: 'กล่อง' },
 			donorName: `E2E หน่วยไม่ตรง ${RUN_ID}`,
 			phone: '0867770011'
 		});
@@ -244,13 +249,15 @@ test.describe('Donation full-stack: donor and staff', { tag: ['@critical', '@don
 		// Thai text is inserted without key events, so open the list with ArrowDown first.
 		await picker.click();
 		await picker.press('ArrowDown');
-		await picker.pressSequentially('แปรงสี');
-		const option = page.getByRole('option', { name: /^แปรงสีฟัน/ }).first();
+		await picker.pressSequentially('ผ้าอ้อมเด็ก');
+		const option = page.getByRole('option', { name: /^ผ้าอ้อมเด็ก ไซส์ M/ }).first();
 		await expect(option).toContainText('ชิ้น');
 		await expect(option).not.toContainText('piece');
 		await option.click();
 
 		await page.getByRole('textbox', { name: 'จำนวนรับจริง *' }).fill('12');
+		// Diapers carry a shelf life, so the lot needs an expiry before it can be received.
+		await fillExpiry(page.getByRole('textbox', { name: 'วันหมดอายุ' }));
 		// Boxes against pieces do not compare, so no "more/less than declared" badge.
 		await expect(page.getByText(/(มากกว่า|น้อยกว่า)ที่แจ้ง/)).toHaveCount(0);
 		await page.getByRole('checkbox', { name: 'ผ่านการตรวจสอบแล้ว' }).check();
@@ -275,19 +282,95 @@ test.describe('Donation full-stack: donor and staff', { tag: ['@critical', '@don
 			lot?: { lot_no?: string };
 		}[];
 		expect(rows).toEqual([
-			expect.objectContaining({ item_id: brush.id, qty: '12', unit: brush.unit })
+			expect.objectContaining({ item_id: diaper.id, qty: '12', unit: diaper.unit })
 		]);
 
 		// The lot panel names the item and links into the stock movements for that lot.
 		const lotNo = rows[0].lot?.lot_no;
 		expect(lotNo, 'receipt minted no lot number').toBeTruthy();
 		await expect(page.getByText('เลขล็อตที่ระบบออกให้ (เขียนติดกล่อง)')).toBeVisible();
-		await expect(page.getByText('แปรงสีฟัน', { exact: true })).toBeVisible();
+		await expect(page.getByText('ผ้าอ้อมเด็ก ไซส์ M', { exact: true })).toBeVisible();
 		const toStock = page.getByRole('link', { name: 'ดูในคลัง' }).first();
 		await expect(toStock).toHaveAttribute('href', new RegExp(`tab=movements&lq=${lotNo}`));
 		await toStock.click();
 		await expect(page).toHaveURL(/\/back-office\/supply\?tab=movements/);
 		await expect(page.getByText(lotNo!).first()).toBeVisible({ timeout: 15_000 });
+	});
+
+	test('goods received into stock leave the whole remaining need bookable', async ({
+		page,
+		request,
+		browser
+	}) => {
+		// The need's quota counter caps a booking at qty_target − on_hand − reserved. A
+		// received donation used to stay in `reserved` after its goods reached the ledger
+		// (and so `on_hand`), so the board showed 2 open while a booking of 2 came back
+		// NEED_FULL. Own campaign and item: the board sums an item across campaigns.
+		const context = await browser.newContext();
+		let brushNeed: PublicNeed;
+		try {
+			brushNeed = await createCampaignViaUi(await context.newPage(), request, ws, shelter.code, {
+				item: SHELVED_ITEM,
+				target: 3,
+				notes: `e2e shelved ${RUN_ID}`
+			});
+		} finally {
+			await context.close();
+		}
+		expect(Number(brushNeed.qty_needed)).toBe(3);
+
+		// ── Donor 1 brings one in; staff receive it into stock ───────────────────
+		const first = await bookAsDonor(page, {
+			shelter,
+			need: brushNeed,
+			ledger,
+			donorName: `E2E ของเข้าคลัง ${RUN_ID}`,
+			phone: '0867770001'
+		});
+		await openBackOffice(page, ws);
+		await approvePending(page, shelter.code, first.bookingRef);
+		await openBackOffice(page, ws);
+		await openInScanStation(page, first.bookingRef);
+		await page.getByRole('checkbox', { name: 'ผ่านการตรวจสอบแล้ว' }).check();
+		// No storage points on the run's own shelter: the line goes to the main store.
+		await expect(page.getByRole('button', { name: /^สถานที่จัดเก็บ/ })).toContainText('คลังหลัก');
+		const confirm = page.getByRole('button', { name: 'ยืนยันรับเข้าคลัง' });
+		await expect(confirm).toBeEnabled();
+		const received = page.waitForResponse(
+			(r) =>
+				r.url().endsWith(`/api/back-office/donations/${first.bookingRef}`) &&
+				r.request().method() === 'POST'
+		);
+		await confirm.click();
+		expect((await received).ok()).toBe(true);
+
+		// The worker settles the counter before it re-projects the board, so once the
+		// board shows the unit on the shelf the counter has let go of it too.
+		await expect
+			.poll(async () => {
+				const line = await boardLineFor(request, shelter.code, SHELVED_ITEM);
+				return line && [Number(line.on_hand), Number(line.qty_needed)];
+			}, BOARD_SYNC)
+			.toEqual([1, 2]);
+
+		// ── Donor 2 books everything the board still asks for ────────────────────
+		await clearSession(page);
+		await bookAsDonor(page, {
+			shelter,
+			need: brushNeed,
+			ledger,
+			donorName: `E2E จองที่เหลือ ${RUN_ID}`,
+			phone: '0867770002',
+			qty: 2
+		});
+
+		// Filled — the board stops offering it.
+		await expect
+			.poll(
+				async () => (await boardLineFor(request, shelter.code, SHELVED_ITEM))?.status ?? 'gone',
+				BOARD_SYNC
+			)
+			.not.toBe('open');
 	});
 
 	test.describe('donor self-service on the track page', () => {

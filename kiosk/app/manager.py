@@ -363,6 +363,7 @@ class ScannerClientManager:
             "/api/v1/kiosk/thaid/session",
             "/api/v1/kiosk/thaid/session/status",
             "/api/v1/kiosk/thaid/session/cancel",
+            "/api/v1/kiosk/banners",
         }
 
         headers = dict(request.headers)
