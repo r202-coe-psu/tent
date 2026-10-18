@@ -1,13 +1,14 @@
 ---
-id: draft
+id: CR-172
 title: "เหตุผลปฏิเสธบนใบบริจาค + ไม่รับรายบรรทัดตอนตรวจรับ (แสดงบนหน้าติดตาม)"
-status: proposed
+status: approved
 date: 2026-10-17
-requested_by: "เจ้าของโครงการ — issue #621 และ feedback 2026-10-17 (ปฏิเสธเป็น modal, เหตุผลต้องไปถึงหน้าติดตาม)"
-decided_by: <เจ้าของโครงการ>
+approved_at: 2026-10-18
+requested_by: "Kan"
+decided_by: "Soravit Sukkarn (Team Lead)"
 layer: volatile
 affects:
-  - docs/data/schema.md §2.3 `donation` — field ใหม่ `reject_reason`, `reject_reason_code`; เขียน `received_summary` ลง spec ครั้งแรก + `items[].rejected`, `items[].reject_reason`
+  - docs/data/schema.md §2.3 `donation` — field ใหม่ `reject_reason`, `reject_reason_code`; เขียน `received_summary` ลง spec ครั้งแรก + `items[].rejected`, `items[].reject_reason`, `items[].reject_reason_code`
   - schema_v donation 5 → 6
   - docs/data/couchdb-mongodb-sync.md §3.2 (`public_donations`)
   - docs/data/api-contract.md — response ของ `GET /public/v1/donations/{tracking_token}`
@@ -36,8 +37,8 @@ migration: field ใหม่ทั้งหมด optional — doc เดิม
 
 ### ข้อมูล
 - **FR-1** — `donation` เพิ่ม `reject_reason: str|null` (≤ 500 ตัวอักษร) เขียนเมื่อ `status → rejected` เท่านั้น
-- **FR-2** — `donation` เพิ่ม `reject_reason_code: enum|null` ค่า: `not_needed`, `expired`, `damaged`, `other`
-- **FR-3** — `received_summary.items[]` เพิ่ม `rejected: bool?` และ `reject_reason: str?` (≤ 500) ต่อบรรทัด
+- **FR-2** — `donation` เพิ่ม `reject_reason_code: enum|null` ค่า: `not_needed`, `expired`, `damaged`, `other` (label ภาษาไทยของ `not_needed` สื่อถึง "ไม่ตรงเกณฑ์การรับ / เกินความต้องการ")
+- **FR-3** — `received_summary.items[]` เพิ่ม `rejected: bool?`, `reject_reason_code: enum?` (FR-2), และ `reject_reason: str?` (≤ 500) ต่อบรรทัด
 - **FR-4** — `schema.md` §2.3 ต้องระบุรูปของ `received_summary` ทั้งก้อน (ตอนนี้โค้ดเขียนอยู่แล้วแต่ spec ไม่มี): `{total_items, received_at, remarks?, shortfalls?[], items?[]}`
 
 ### ปฏิเสธทั้งใบ
@@ -47,14 +48,14 @@ migration: field ใหม่ทั้งหมด optional — doc เดิม
 - **FR-8** — route ปฏิเสธเขียน `reject_reason` + `reject_reason_code` ลง doc และเขียน `audit` (ใครกด/เมื่อไร/เหตุผล) เหมือนเดิม
 
 ### ไม่รับรายบรรทัดตอนตรวจรับ
-- **FR-9** — ฟอร์มตรวจรับต้องมีสวิตช์ "ไม่รับรายการนี้" ต่อบรรทัด เปิดแล้วต้องเลือกเหตุผล (FR-2) และซ่อนช่องจำนวน/ที่เก็บ
-- **FR-10** — บรรทัดที่ไม่รับ: ไม่สร้างแถว `stock_ledger` ไม่มี lot และลงใน `received_summary.items[]` พร้อม `rejected: true` + `reject_reason`
+- **FR-9** — ฟอร์มตรวจรับต้องมีสวิตช์ "ไม่รับรายการนี้" ต่อบรรทัด (เป็นการปฏิเสธทั้งบรรทัด All-or-Nothing ไม่รองรับ split qty) เปิดแล้วต้องเลือกเหตุผล (FR-2) และซ่อนช่องจำนวน/ที่เก็บ
+- **FR-10** — บรรทัดที่ไม่รับ: ไม่สร้างแถว `stock_ledger` ไม่มี lot และลงใน `received_summary.items[]` พร้อม `rejected: true` + `reject_reason` + `reject_reason_code`
 - **FR-11** — รับอย่างน้อย 1 บรรทัด → `status: received` (ไม่เพิ่มสถานะใหม่ ตาม CR-143 §B)
-- **FR-12** — ไม่รับทุกบรรทัด → `status: rejected` · `reject_reason` = รวมเหตุผลของทุกบรรทัด · `received_summary.items[]` เก็บเหตุผลรายบรรทัด · ไม่มีแถว ledger
-- **FR-13** — "ไม่รับ" ≠ "ขาด": บรรทัดที่ `rejected: true` ไม่นับใน `shortfalls`
+- **FR-12** — ไม่รับทุกบรรทัด → `status: rejected` · `reject_reason` = รวมเหตุผลของทุกบรรทัด (คั่นด้วย `; ` และ truncate ไม่เกิน 500 ตัวอักษร) · `reject_reason_code` = ค่านั้นหากทุกบรรทัดตรงกัน หรือ `other` หากคละเหตุผล · `received_summary.items[]` เก็บเหตุผลรายบรรทัด · ไม่มีแถว ledger
+- **FR-13** — "ไม่รับ" ≠ "ขาด": บรรทัดที่ `rejected: true` ไม่นับใน `shortfalls` (ทั้งฝั่ง backend คำนวณ shortfalls และ client fallback ในหน้าติดตาม)
 
 ### หน้าติดตามสถานะ (ประชาชน)
-- **FR-14** — `public_donations` และ response ติดตามต้องส่ง `reject_reason` และ `received_summary.items[].rejected/reject_reason`
+- **FR-14** — `public_donations` และ response ติดตามต้องส่ง `reject_reason` และ `received_summary.items[].rejected/reject_reason/reject_reason_code`
 - **FR-15** — สถานะ `rejected`: แสดงกล่อง "เหตุผลจากศูนย์พักพิง" ใต้ป้ายสถานะ
 - **FR-16** — สถานะ `received`: บรรทัดที่ไม่รับแสดงป้าย "ไม่รับ" พร้อมเหตุผล แยกจากป้าย "รับไม่ครบ"
 - **FR-17** — doc ที่ไม่มี field ใหม่ (สร้างก่อน schema_v 6) แสดงผลได้ตามเดิมโดยไม่มีกล่องเหตุผล
@@ -102,5 +103,5 @@ migration: field ใหม่ทั้งหมด optional — doc เดิม
 
 ## Decision log
 
-- 2026-10-17 — เจ้าของโครงการ: เหตุผลแสดงบนหน้าติดตามในรายการนั้นเลย · ไม่รับทุกบรรทัด → ทั้งใบ "ปฏิเสธ" พร้อมเหตุผลทุกรายการ · modal ปฏิเสธตาม mockup ผ่าน
 - 2026-10-17 — proposed (track ด้วย CR file แยก branch ตามที่เจ้าของโครงการกำหนด)
+- 2026-10-18 — approved by Soravit Sukkarn (Team Lead) — requested by Kan (รันเลข CR-172 ย้ายเข้าหมวด 04-donation)
