@@ -1,6 +1,6 @@
 ---
 id: draft
-title: "ประเมินใบบริจาครายบรรทัด — บรรทัดที่อยู่ในแคมเปญข้ามการประเมิน (ใบที่ทุกบรรทัดอยู่ในแคมเปญได้ QR ทันที)"
+title: "ประเมินใบบริจาคทีละรายการ — รายการที่อยู่ในแคมเปญไม่ต้องรอประเมิน (ใบที่ทุกรายการอยู่ในแคมเปญได้ QR ทันที)"
 status: proposed
 date: 2026-10-17
 requested_by: "เจ้าของโครงการ — issue #610 (ข้อกำหนดในคำอธิบาย issue)"
@@ -9,70 +9,85 @@ layer: volatile
 affects:
   - docs/changes/04-donation/CR-052-donation-system-design-v8.md §1.4 (บังคับประเมินทุกรายการ), flowchart B1, §2.6 (QR เมื่ออนุมัติ)
   - docs/task-breakdown/04-donation.md T-16 (ข้อ "CR-052 (Task #52)" และ "CR-052 Cold-chain")
-  - docs/data/schema.md §2.3 `donation` — field ระดับบรรทัด `items[].review_status`, `items[].review_reason`; เส้นทางสถานะ
-  - schema_v donation 5 → 6 (หรือเลขถัดไปถ้า draft-donation-reject-reason อนุมัติก่อน)
+  - docs/data/schema.md §2.3 `donation` — field ระดับรายการ `items[].review_status`, `items[].review_reason`, `items[].review_reason_code`; เส้นทางสถานะ
+  - schema_v donation 6 → 7 (CR-172 ใช้ 6 แล้ว)
+  - docs/data/couchdb-mongodb-sync.md §3.2 (`public_donations.items_declared[]`)
   - docs/features/public-tier-donation-spec.html — สถานะที่ผู้บริจาคเห็น
   - docs/data/api-contract.md — response ของ `POST /public/v1/donations` (`status`), เส้นทาง donor edit, แถว `400` ที่อ้าง `DONOR_EDITABLE_STATUSES` (`{declared, pending_review}` → เพิ่ม `verifying`)
   - docs/changes/04-donation/CR-080-donor-edit-reservation-via-token.md (สิทธิ์แก้รายการ)
-  - backend/apiapp/modules/donations (use_case: create, update_items) · packages/tent-model (DonationBuffer)
-  - worker/src/worker/inbound/donations.py (copy field ใหม่)
+  - backend/apiapp/modules/donations (use_case: create, update_items · schemas: `DonationCreateResponse`, `DonationItemsPatchResponse`) · packages/tent-model (`DonationBuffer`, `PublicDonation.DeclaredItem`)
+  - worker/src/worker/inbound/donations.py (copy field ใหม่ + audit) · worker/src/worker/projectors/donation.py · worker/src/worker/projection_version.py
   - frontend/src/lib/features/operations/domain/operations.ts (type, `DONATION_TRANSITIONS`)
-  - frontend/src/lib/components/pending-review-detail.svelte · routes/api/back-office/donations/[query]/approve (+ reject)
+  - frontend/src/lib/features/donations/domain/public-donation.ts (`receiveDonationInputSchema`)
+  - frontend/src/routes/api/back-office/donations/[query]/+server.ts (รับของ) · [query]/approve (+ reject) · frontend/src/lib/components/pending-review-detail.svelte
+  - frontend/src/routes/(protected)/back-office/stock-donations/components/scan-station.svelte
+  - frontend/src/routes/api/public/v1/donations/[tracking_token]/items/+server.ts (เขียน `status`, `schema_v`)
   - frontend/src/lib/components/public-donor-success-ticket.svelte · lib/features/donations/domain/tracking.ts
-why: ของที่ศูนย์ประกาศขอในแคมเปญไม่ต้องรอเจ้าหน้าที่ประเมิน คิว "รอการประเมิน" จะเหลือเฉพาะของนอกรายการ
+why: ของที่ศูนย์ประกาศขอในแคมเปญไม่ต้องรอเจ้าหน้าที่ประเมิน คิว "รอการประเมิน" จะเหลือเฉพาะของนอกแคมเปญ
 migration: field ใหม่ optional — doc เดิมไม่ต้อง backfill (ไม่มี `review_status` = ใช้สถานะระดับใบตามเดิม)
 ---
 
-# ประเมินใบบริจาครายบรรทัด — บรรทัดในแคมเปญข้ามการประเมิน
+# ประเมินใบบริจาคทีละรายการ — รายการในแคมเปญไม่ต้องรอประเมิน
 
 ## สรุป
 
-- **เปลี่ยน:** การประเมินย้ายจากระดับใบเป็น**ระดับบรรทัด** บรรทัดที่เป็นของในแคมเปญถือว่าอนุมัติแล้วตั้งแต่จอง ส่วนบรรทัดพิมพ์เอง/นอกรายการยังต้องประเมิน · ใบที่ทุกบรรทัดอยู่ในแคมเปญเริ่มที่ `verifying` และได้ QR ทันที · กลับกฎ CR-052 §1.4
+- **เปลี่ยน:** การประเมินย้ายจากระดับใบเป็น**ระดับรายการ** รายการที่เป็นของในแคมเปญถือว่าอนุมัติแล้วตั้งแต่จอง ส่วนรายการที่พิมพ์เอง/นอกแคมเปญยังต้องประเมิน · ใบที่ทุกรายการอยู่ในแคมเปญเริ่มที่ `verifying` และได้ QR ทันที · ยกเลิกกฎ CR-052 §1.4
 - **เพื่อ:** ลดงานในคิว "รอการประเมิน" ที่ล้นโดยไม่จำเป็น
-- **dev ต้อง build:** `items[].review_status` + คำนวณสถานะใบจากบรรทัด (ตอนสร้างและตอนผู้บริจาคแก้) · หน้าประเมินแสดงเฉพาะบรรทัดที่ต้องประเมิน · ตั๋ว/หน้าติดตามแสดงสถานะใหม่
-- **สิทธิ์ผู้บริจาคหลังได้ QR:** ยกเลิก แก้รายการ และใส่เลขพัสดุได้ (แก้แล้วบรรทัดที่ต้องประเมินทำให้ใบกลับไปรอประเมิน) · บันทึก audit การอนุมัติอัตโนมัติ
-- **กระทบ:** `donation` schema_v +1 · CR-052 §1.4 · CR-080 (สิทธิ์แก้รายการ) · quota/slot ไม่เปลี่ยน
+- **dev ต้อง build:** `items[].review_status` + คำนวณสถานะใบจากรายการ (ตอนสร้างและตอนผู้บริจาคแก้) · BFF เขียนสถานะใบที่คำนวณใหม่ลง CouchDB · route รับของเช็ค `expected_rev` · หน้าประเมินแสดงเฉพาะรายการที่ต้องประเมิน · ตั๋ว/หน้าติดตามแสดงสถานะใหม่
+- **สิทธิ์ผู้บริจาคหลังได้ QR:** ยกเลิก แก้รายการ และใส่เลขพัสดุได้ (ถ้าแก้แล้วมีรายการที่ต้องประเมิน ใบจะกลับไปรอประเมิน) · บันทึก audit การอนุมัติอัตโนมัติ
+- **กระทบ:** `donation` schema_v 6 → 7 · projection `public_donations` (bump `PROJECTION_VERSION`) · CR-052 §1.4 · CR-080 (สิทธิ์แก้รายการ) · quota/slot ไม่เปลี่ยน
 
 ## Requirements
 
-### สถานะรายบรรทัด
-- **FR-1** — `donation.items[]` เพิ่ม `review_status: enum('approved','pending','rejected')` และ `review_reason: str|null` (≤ 500, เขียนเมื่อ `rejected`)
-- **FR-2** — ตอนสร้าง บรรทัดที่มี `item_id` อยู่ในแคมเปญที่เปิดอยู่ของใบนั้น และจองโควต้าได้ → `approved` · บรรทัดอื่น (free text, ไม่มีแคมเปญ, counter `NOT_SEEDED`) → `pending`
+### สถานะแยกตามรายการ
+- **FR-1** — `donation.items[]` เพิ่ม `review_status: enum('approved','pending','rejected')`, `review_reason_code: enum|null` (ค่าเดียวกับ `reject_reason_code` ของ CR-172 FR-2: `not_needed`, `expired`, `damaged`, `other`) และ `review_reason: str|null` (≤ 500) — สอง field เหตุผลเขียนเมื่อ `rejected` เท่านั้น
+- **FR-2** — ตอนสร้าง รายการที่มี `item_id` อยู่ในแคมเปญที่เปิดอยู่ของใบนั้น และจองโควต้าได้ → `approved` · รายการอื่น (พิมพ์เอง, ไม่มีแคมเปญ, counter `NOT_SEEDED`) → `pending`
 - **FR-3** — ฝั่ง client กำหนด `review_status` เองไม่ได้ (FastAPI คำนวณหลังจองโควต้า)
 
-### สถานะระดับใบ (derived จากบรรทัด)
-- **FR-4** — มีบรรทัด `pending` อย่างน้อย 1 → ใบเป็น `pending_review`
-- **FR-5** — ไม่มีบรรทัด `pending` และมี `approved` อย่างน้อย 1 → ใบเป็น `verifying`
-- **FR-6** — ทุกบรรทัด `rejected` → ใบเป็น `rejected`
-- **FR-7** — ใบที่ทุกบรรทัดอยู่ในแคมเปญจึงเริ่มที่ `verifying` ทันที ไม่ขึ้นในคิว "รอการประเมิน" · ใบที่มีแต่ free text เริ่มที่ `pending_review` (เหมือนเดิม)
+### สถานะระดับใบ (derived จากรายการ)
+- **FR-4** — มีรายการ `pending` อย่างน้อย 1 → ใบเป็น `pending_review`
+- **FR-5** — ไม่มีรายการ `pending` และมี `approved` อย่างน้อย 1 → ใบเป็น `verifying`
+- **FR-6** — ทุกรายการ `rejected` → ใบเป็น `rejected`
+- **FR-7** — ใบที่ทุกรายการอยู่ในแคมเปญเริ่มที่ `verifying` ทันที ไม่ขึ้นในคิว "รอการประเมิน" · ใบที่มีแต่รายการที่พิมพ์เองเริ่มที่ `pending_review` (เหมือนเดิม)
 
 ### หน้าประเมิน (เจ้าหน้าที่)
-- **FR-8** — หน้าประเมิน (`pending-review-detail`) แสดงเฉพาะบรรทัด `pending` ให้อนุมัติหรือปฏิเสธ บรรทัด `approved` แสดงเป็นข้อมูลว่า "อยู่ในแคมเปญ · อนุมัติแล้ว"
-- **FR-9** — ปฏิเสธบรรทัดต้องใส่เหตุผล (`review_reason`) — ใช้ชุดเหตุผลเดียวกับ `draft-donation-reject-reason`
-- **FR-10** — ประเมินครบทุกบรรทัดที่ `pending` แล้ว ระบบคำนวณสถานะใบตาม FR-4..FR-6 (ใบไป `verifying` หรือ `rejected`)
-- **FR-11** — การอนุมัติ/ปฏิเสธเขียน `audit` เหมือนเดิม (route `/approve`, `/reject` เดิมขยายให้รับรายการบรรทัด)
-- **FR-12** — ปุ่ม "ปฏิเสธคำขอ" ทั้งใบยังอยู่
+- **FR-8** — หน้าประเมิน (`pending-review-detail`) แสดงเฉพาะรายการ `pending` ให้อนุมัติหรือปฏิเสธ รายการ `approved` แสดงเป็นข้อมูล (read-only) แยกป้ายตามที่มา: อนุมัติอัตโนมัติตาม FR-2 → "อยู่ในแคมเปญ · อนุมัติอัตโนมัติ" · เจ้าหน้าที่อนุมัติ → "อนุมัติแล้ว"
+- **FR-9** — ปฏิเสธรายการต้องเลือกเหตุผลสำเร็จรูป (`review_reason_code`) และกรอกรายละเอียด (`review_reason`) — กติกาเดียวกับ CR-172 FR-6 (รายละเอียดบังคับเมื่อเลือก `other`)
+- **FR-10** — ประเมินครบทุกรายการที่ `pending` แล้ว ระบบคำนวณสถานะใบตาม FR-4..FR-6 (ใบไป `verifying` หรือ `rejected`)
+- **FR-11** — การอนุมัติ/ปฏิเสธเขียน `audit` เหมือนเดิม (route `/approve`, `/reject` เดิมขยายให้รับผลแยกตามรายการ)
+- **FR-12** — ปุ่ม "ปฏิเสธคำขอ" ทั้งใบยังอยู่ · **ทุกทาง**ที่ใบเปลี่ยนเป็น `rejected` (ปุ่มบนหน้าประเมิน · ปุ่มปฏิเสธบนหน้าสแกน `verifying → rejected` · ไม่รับทุกรายการตอนตรวจรับตาม CR-172 FR-12) → ทุกรายการที่ยังไม่ `rejected` (ทั้ง `approved` และ `pending`) เปลี่ยนเป็น `rejected` ในการบันทึกครั้งเดียวกับที่ใบเปลี่ยนเป็น `rejected` · เหตุผลเก็บที่ระดับใบ (`reject_reason`, `reject_reason_code` ตาม CR-172) ไม่ copy ลง `review_reason` ของแต่ละรายการ · โควต้าและ slot คืนตามกลไกเดิมของ `rejected`
 
 ### ของสด / แช่เย็น
-- **FR-13** — ไม่มีข้อยกเว้นสำหรับของสด/แช่เย็น บรรทัดในแคมเปญข้ามการประเมินเท่ากันทุกชนิด · เจ้าหน้าที่ปฏิเสธได้ที่หน้าตรวจรับตอนของมาถึง (`verifying → rejected` มีอยู่แล้ว · ไม่รับรายบรรทัดตาม #621)
+- **FR-13** — ไม่มีข้อยกเว้นสำหรับของสด/แช่เย็น รายการในแคมเปญไม่ต้องรอประเมินเหมือนกันทุกชนิด · เจ้าหน้าที่ปฏิเสธได้ที่หน้าตรวจรับตอนของมาถึง (`verifying → rejected` มีอยู่แล้ว · ไม่รับบางรายการตาม CR-172)
 - **FR-14** — ตัดข้อ "CR-052 Cold-chain" (เช็ค `is_cold_chain` จาก item master) ออกจาก T-16 — field นี้ไม่เคยมีในโค้ดหรือ schema
 
 ### ผู้บริจาค
 - **FR-15** — response ของ `POST /public/v1/donations` (FastAPI และ BFF) ส่ง `status` กลับ
-- **FR-16** — ตั๋วหลังจอง: ไม่มีบรรทัดรอประเมิน → แสดง QR ทันที · มีบรรทัดรอประเมิน → ข้อความรอเจ้าหน้าที่ตรวจสอบ
-- **FR-17** — หน้าติดตามแสดงสถานะรายบรรทัด: "อนุมัติแล้ว / รอนำส่ง" (`approved`) · "รอประเมิน" (`pending`) · "ไม่รับ" + เหตุผล (`rejected`)
-- **FR-18** — ผู้บริจาคแก้รายการ (PATCH items) → FastAPI คำนวณ `review_status` ของทุกบรรทัดใหม่ตาม FR-2 แล้วคำนวณสถานะใบตาม FR-4..FR-6 · บรรทัดที่เจ้าหน้าที่ประเมินไปแล้วและไม่ถูกแก้คงผลเดิม
+- **FR-16** — ตั๋วหลังจอง: ไม่มีรายการรอประเมิน → แสดง QR ทันที · มีรายการรอประเมิน → ข้อความรอเจ้าหน้าที่ตรวจสอบ
+- **FR-17** — หน้าติดตามแสดงสถานะแยกตามรายการ: "อนุมัติแล้ว / รอนำส่ง" (`approved`) · "รอประเมิน" (`pending`) · "ไม่รับ" + เหตุผล (`rejected`) · ใบที่ `rejected` ทั้งใบแสดงเหตุผลระดับใบตาม CR-172 FR-15
+- **FR-18** — ผู้บริจาคแก้รายการ (PATCH items) → FastAPI คำนวณ `review_status` ของทุกรายการใหม่ตาม FR-2 แล้วคำนวณสถานะใบตาม FR-4..FR-6 และเขียนทั้งสองลง `DonationBuffer` (ใบที่ยังไม่ sync ลง CouchDB ได้สถานะใหม่ผ่าน inbound ซึ่ง copy `status` จาก buffer) · รายการที่เจ้าหน้าที่ประเมินไปแล้วและไม่ถูกแก้คงผลเดิม
+- **FR-18a** — "รายการไม่ถูกแก้" = มีรายการในใบเดิมที่ `item_id`, `category`, `free_text`, `qty`, `unit`, `condition`, `note` ตรงกันทุก field (ทุก field ของ `DonationItemInput`; ค่าว่างกับไม่มี field ถือว่าเท่ากัน; `qty` เทียบเป็นตัวเลข) · รายการเดิมหนึ่งรายการจับคู่ได้ครั้งเดียว · ต่างแม้ field เดียว (รวม `note`, `condition`, `category`) = ถูกแก้ → คำนวณใหม่ตาม FR-2
+- **FR-18b** — `DonationItemsPatchResponse` ส่ง `status` (สถานะใบหลังคำนวณ) กลับ · BFF `items/+server.ts` เขียน `items`, `revisions`, `status` และ `schema_v` ปัจจุบันของ donation (อ้างค่าคงที่ร่วม ไม่ hard-code) ลง CouchDB ใน `PUT` เดียวกัน (เลิกเขียน `schema_v = 4` ตายตัว)
+- **FR-18c** — ใบที่ไม่มี `review_status` (สร้างก่อน schema_v 7) ผู้บริจาคแก้รายการ:
+  - `verifying` → ก่อนใช้ FR-18a ถือว่าทุกรายการเดิม `approved` (เจ้าหน้าที่อนุมัติทั้งใบแล้ว)
+  - `pending_review` → ถือว่ายังไม่มีรายการใดถูกประเมิน · คำนวณทุกรายการตาม FR-2 (เงื่อนไข "จองโควต้าได้" ใช้ผลการจองของ `update_items` ครั้งนั้น) แล้วคำนวณสถานะใบตาม FR-4..FR-6 — ผลเท่ากับใบใหม่
+  - `declared` → ไม่เขียน `review_status` ลงรายการใด และไม่คำนวณสถานะใบใหม่ (คง `declared`)
 
 ### สิทธิ์ผู้บริจาคหลังได้ QR (`verifying`)
 - **FR-20** — ใบ `verifying` ผู้บริจาค**ยกเลิกได้** (เหมือน `pending_review`) · ยกเลิกแล้วคืนโควต้าและ slot ทันทีตามกลไกเดิมของการยกเลิก
-- **FR-21** — ใบ `verifying` ผู้บริจาค**แก้รายการได้** ตามกฎ FR-18: บรรทัดที่แก้หรือเพิ่มถูกคำนวณ `review_status` ใหม่ (บรรทัดพิมพ์เองที่แก้/เพิ่ม → `pending` แม้เจ้าหน้าที่เคยอนุมัติบรรทัดนั้นแล้ว) · ถ้ามีบรรทัด `pending` ใบกลับไป `pending_review` และ QR ใช้ไม่ได้จนกว่าประเมินครบ
+- **FR-21** — ใบ `verifying` ผู้บริจาค**แก้รายการได้** ตามกฎ FR-18: รายการที่แก้หรือเพิ่มถูกคำนวณ `review_status` ใหม่ (ถ้าเป็นรายการที่พิมพ์เอง → `pending` แม้เจ้าหน้าที่เคยอนุมัติรายการนั้นแล้ว) · ถ้ามีรายการ `pending` ใบกลับไป `pending_review` และ QR ใช้ไม่ได้จนกว่าประเมินครบ
 - **FR-22** — ใบ `verifying` ผู้บริจาค**ใส่/แก้เลขพัสดุได้**
 - **FR-23** — กฎสิทธิ์ (แก้ / ยกเลิก / เลขพัสดุ) ใช้ชุดสถานะเดียวกันทั้ง backend (`DONOR_EDITABLE_STATUSES`) และ frontend (`public-donation.ts`, `tracking.ts`) → `{declared, pending_review, verifying}`
 - **FR-24** — หน้าติดตามเตือนก่อนบันทึกการแก้ใบที่ได้ QR แล้วว่า "ถ้ามีรายการที่ต้องประเมิน QR จะใช้ไม่ได้จนกว่าเจ้าหน้าที่ประเมินเสร็จ"
-- **FR-25** — route รับของเข้าคลังรับเฉพาะ doc revision ล่าสุด (เช็ค `_rev`) — ผู้บริจาคแก้ระหว่างเจ้าหน้าที่เปิดหน้าตรวจรับค้างไว้ → 409 ให้โหลดใหม่
+- **FR-25** — `receiveDonationInputSchema` เพิ่ม `expected_rev: str` (req) · `scan-station.svelte` ส่ง `_rev` ของใบที่โหลดมาตอนเปิดหน้าตรวจรับ · route รับของ (`[query]/+server.ts`) เทียบกับ `_rev` ของใบล่าสุด ไม่ตรง → 409 ให้โหลดใหม่
+- **FR-25a** — การเช็ค FR-25 ต้องทำก่อนเขียน `stock_ledger` / `audit` ใด ๆ → 409 จาก FR-25 ไม่มีแถวใหม่
+  > [NEEDS DECISION: `PUT` donation ชนหลังเขียน ledger แล้ว (bug เดิม — route เขียน ledger ที่ `[query]/+server.ts:233` ก่อน `PUT` ที่ `:280`) ทำให้เหลือแถว ledger ของการตรวจรับที่ไม่สำเร็จ · `stock_ledger` เป็น append-only (`schema.md` §2.1) ลบย้อนไม่ได้ · `_bulk_docs` ไม่ atomic ข้าม doc · แก้ใน CR นี้หรือแยก issue]
 
 ### Audit
-- **FR-26** — บรรทัดที่อนุมัติอัตโนมัติ (FR-2) บันทึก `audit` (`action: manual_adjust`, `context: {approved_by: 'system', rule: 'campaign_line', lines: [...]}`) — worker inbound เป็นคนเขียนตอนเขียน doc ลง CouchDB (FastAPI เขียน CouchDB ไม่ได้)
+- **FR-26** — รายการที่อนุมัติอัตโนมัติ (FR-2) บันทึก `audit` (`action: manual_adjust`, `context: {approved_by: 'system', rule: 'campaign_line', lines: [...]}`) — worker inbound เป็นคนเขียนตอนเขียน doc ลง CouchDB (FastAPI เขียน CouchDB ไม่ได้) · ผู้บริจาคแก้ใบแล้วมีรายการที่ได้ `approved` อัตโนมัติเพิ่ม (รวมใบที่ไป `verifying` เพราะลบรายการที่พิมพ์เองออก) → BFF `items/+server.ts` เขียน audit รูปเดียวกัน (`lines` = เฉพาะรายการที่เพิ่งได้ `approved`) หลัง `PUT` donation สำเร็จ · ใบที่ยังไม่ sync ลง CouchDB ให้ inbound เขียนตามสถานะสุดท้ายใน buffer · ใช้ `manual_adjust` เพราะ enum `audit.action` (schema §2.12) ไม่มีค่าสำหรับการอนุมัติ และการอนุมัติ/ปฏิเสธโดยเจ้าหน้าที่ใช้ค่านี้อยู่แล้ว · แยกระบบกับคนด้วย `context.approved_by` ไม่เพิ่มค่า enum ใน CR นี้
+
+### Projection (`public_donations`)
+- **FR-27** — `DeclaredItem` (`packages/tent-model/src/tent_model/public_donation.py`) เพิ่ม `review_status`, `review_reason_code`, `review_reason` · projector `donation.py` ส่งต่อทั้งสามไปที่ `items_declared[]` · bump `PROJECTION_VERSION` (หน้าติดตามอ่าน `items` จาก CouchDB ก่อน — projection เป็น fallback และต้องมีข้อมูลเท่ากัน)
 
 ### Quota / slot
 - **FR-19** — quota counter และ slot นับเหมือนเดิม (`pending_review` และ `verifying` อยู่ใน `DONATION_OUTSTANDING_STATUSES` ทั้งสองฝั่ง)
@@ -81,53 +96,62 @@ migration: field ใหม่ optional — doc เดิมไม่ต้อง
 
 | เรื่อง | ก่อน | หลัง |
 | --- | --- | --- |
-| ระดับการประเมิน | ทั้งใบ | รายบรรทัด (`items[].review_status`) |
-| สถานะตั้งต้น | `pending_review` ทุกใบ (`use_case.py` `INITIAL_DONATION_STATUS`) | คำนวณจากบรรทัด (FR-4..FR-7) |
-| CR-052 §1.4 | บังคับประเมินทุกรายการ ห้ามออก QR อัตโนมัติทุกกรณี | บรรทัดในแคมเปญไม่ต้องประเมิน · ใบที่ทุกบรรทัดอยู่ในแคมเปญได้ QR ทันที |
+| ระดับการประเมิน | ทั้งใบ | แยกตามรายการ (`items[].review_status`) |
+| สถานะตั้งต้น | `pending_review` ทุกใบ (`use_case.py` `INITIAL_DONATION_STATUS`) | คำนวณจากรายการ (FR-4..FR-7) |
+| CR-052 §1.4 | บังคับประเมินทุกรายการ ห้ามออก QR อัตโนมัติทุกกรณี | รายการในแคมเปญไม่ต้องประเมิน · ใบที่ทุกรายการอยู่ในแคมเปญได้ QR ทันที |
 | T-16 "CR-052 Cold-chain" | เช็ค `is_cold_chain` แล้วบังคับประเมิน | ตัดออก (FR-14) |
-| หน้าประเมิน | อนุมัติ/ปฏิเสธทั้งใบ | อนุมัติ/ปฏิเสธเฉพาะบรรทัดที่รอประเมิน (ปฏิเสธทั้งใบยังทำได้) |
-| ตั๋วหลังจอง | "ส่งรายการรอเจ้าหน้าที่ตรวจสอบ" เสมอ | QR ทันทีเมื่อไม่มีบรรทัดรอประเมิน |
+| หน้าประเมิน | อนุมัติ/ปฏิเสธทั้งใบ | อนุมัติ/ปฏิเสธเฉพาะรายการที่รอประเมิน (ปฏิเสธทั้งใบยังทำได้) |
+| ตั๋วหลังจอง | "ส่งรายการรอเจ้าหน้าที่ตรวจสอบ" เสมอ | QR ทันทีเมื่อไม่มีรายการรอประเมิน |
 
 ## Acceptance
 
-- **AC-1** — ใบที่ทุกบรรทัดเป็นของในแคมเปญ → สร้างเป็น `verifying` · ไม่ขึ้นในคิว "รอประเมิน" · ตั๋วแสดง QR
-- **AC-2** — ใบผสม → บรรทัดในแคมเปญ `approved` · บรรทัด free text `pending` ขึ้นให้ประเมิน · อนุมัติครบ → ใบไป `verifying`
-- **AC-3** — ใบผสม ปฏิเสธบรรทัด free text ทุกบรรทัด → ใบไป `verifying` (เหลือบรรทัดในแคมเปญ) · ผู้บริจาคเห็นเหตุผลที่บรรทัดนั้น
-- **AC-4** — ใบที่มีแต่ free text → เริ่มที่ `pending_review` · ปฏิเสธทุกบรรทัด → `rejected`
-- **AC-5** — ของสด/แช่เย็นในแคมเปญข้ามการประเมินเหมือนรายการอื่น และปฏิเสธได้ที่หน้าตรวจรับ
+- **AC-1** — ใบที่ทุกรายการเป็นของในแคมเปญ → สร้างเป็น `verifying` · ไม่ขึ้นในคิว "รอการประเมิน" · ตั๋วแสดง QR
+- **AC-2** — ใบผสม (มีทั้งรายการในแคมเปญและรายการที่พิมพ์เอง) → รายการในแคมเปญ `approved` · รายการที่พิมพ์เอง `pending` ขึ้นให้ประเมิน · อนุมัติครบ → ใบไป `verifying`
+- **AC-3** — ใบผสม ปฏิเสธรายการที่พิมพ์เองทุกรายการ → ใบไป `verifying` (เหลือรายการในแคมเปญ) · ผู้บริจาคเห็นเหตุผลของแต่ละรายการที่ถูกปฏิเสธ
+- **AC-4** — ใบที่มีแต่รายการที่พิมพ์เอง → เริ่มที่ `pending_review` · ปฏิเสธทุกรายการ → `rejected`
+- **AC-5** — ของสด/แช่เย็นในแคมเปญไม่ต้องรอประเมินเหมือนรายการอื่น และปฏิเสธได้ที่หน้าตรวจรับ
 - **AC-6** — quota counter และ slot นับเหมือนเดิม
-- **AC-7** — ผู้บริจาคแก้ใบที่ `verifying` ให้มีบรรทัด free text เพิ่ม → ใบกลับไป `pending_review` และบรรทัดใหม่ `pending`
-- **AC-8** — doc schema_v 5 (ไม่มี `review_status`) แสดงผลและประเมินแบบทั้งใบได้ตามเดิม
+- **AC-7** — ผู้บริจาคแก้ใบที่ `verifying` โดยเพิ่มรายการที่พิมพ์เอง → ใบกลับไป `pending_review` และรายการใหม่ `pending`
+- **AC-8** — doc ก่อน schema_v 7 (ไม่มี `review_status`) แสดงผลและประเมินแบบทั้งใบได้ตามเดิม
 - **AC-9** — ใบ `verifying` ผู้บริจาคกดยกเลิกได้ · โควต้าและ slot คืนทันที (จองต่อได้)
-- **AC-10** — ใบ `verifying` ที่เจ้าหน้าที่อนุมัติบรรทัดพิมพ์เองไปแล้ว ผู้บริจาคแก้บรรทัดนั้น → บรรทัดกลับเป็น `pending` ใบกลับ `pending_review`
+- **AC-10** — ใบ `verifying` ที่เจ้าหน้าที่อนุมัติรายการที่พิมพ์เองไปแล้ว ผู้บริจาคแก้รายการนั้น → รายการกลับเป็น `pending` ใบกลับ `pending_review`
 - **AC-11** — ใบ `verifying` ใส่เลขพัสดุได้
-- **AC-12** — ใบที่ทุกบรรทัดอยู่ในแคมเปญมี audit `approved_by: system`
-- **AC-13** — ผู้บริจาคแก้ใบขณะเจ้าหน้าที่เปิดหน้าตรวจรับค้าง → กดยืนยันรับเข้าคลังได้ 409
+- **AC-12** — ใบที่ทุกรายการอยู่ในแคมเปญมี audit `approved_by: system`
+- **AC-13** — ผู้บริจาคแก้ใบขณะเจ้าหน้าที่เปิดหน้าตรวจรับค้าง → กดยืนยันรับเข้าคลังแล้วได้ 409 · ไม่มีแถว `stock_ledger` ใหม่ · โหลดใหม่แล้วรับได้ปกติ
+- **AC-14** — ผู้บริจาคแก้ใบ `verifying` ให้มีรายการ `pending` → doc ใน CouchDB เป็น `pending_review` และ `schema_v` 7 · ใบขึ้นในคิว "รอการประเมิน"
+- **AC-15** — ปฏิเสธทั้งใบที่มีรายการ `approved` จากหน้าประเมินและจากหน้าสแกน → ทุกรายการเป็น `rejected` · หน้าติดตามแสดงเหตุผลระดับใบ
+- **AC-16** — ผู้บริจาคแก้เฉพาะ `note` ของรายการที่พิมพ์เองซึ่งเจ้าหน้าที่อนุมัติแล้ว → รายการนั้นกลับเป็น `pending` · รายการอื่นที่ไม่แตะคงผลเดิม
+- **AC-17** — ปฏิเสธรายการด้วยเหตุผล `other` โดยไม่กรอกรายละเอียด → ยืนยันไม่ได้ (422 จาก API ด้วย)
+- **AC-18** — `public_donations.items_declared[]` ของใบใหม่มี `review_status` ตรงกับ CouchDB
+- **AC-19** — ใบ `verifying` ก่อน schema_v 7 ที่มีรายการที่พิมพ์เองด้วย ผู้บริจาคแก้เฉพาะจำนวนของรายการในแคมเปญ → รายการที่พิมพ์เองคง `approved` · ใบคง `verifying`
+- **AC-20** — ใบ `pending_review` ก่อน schema_v 7 ที่มีทั้งรายการในแคมเปญและรายการที่พิมพ์เอง ผู้บริจาคแก้รายการใดก็ได้ → รายการในแคมเปญทุกรายการ `approved` · รายการที่พิมพ์เอง `pending` · ใบคง `pending_review`
+- **AC-21** — ใบ `declared` ผู้บริจาคแก้รายการ → ใบคง `declared` · ไม่มีรายการที่มี `review_status`
+- **AC-22** — ใบ `pending_review` ผู้บริจาคลบรายการที่พิมพ์เองออกจนเหลือแต่รายการในแคมเปญ → ใบเป็น `verifying` · ทุกรายการที่เหลือมี audit `approved_by: system` (จากตอนสร้าง หรือจากการแก้ครั้งนี้สำหรับใบก่อน schema_v 7) · ไม่มี audit ซ้ำของรายการที่เคยได้ `approved` แล้ว
 
 ## Impact
 
-- **backend:** ฟังก์ชัน pure คำนวณ `review_status` และสถานะใบ (ใช้ทั้ง create และ `update_items`) + test ครบทุกกรณี · `DonationCreateResponse.status` · `DONOR_EDITABLE_STATUSES` เพิ่ม `verifying` (gate ของ edit / cancel / courier) · `pnpm openapi:update`
-- **worker:** inbound เขียน audit อนุมัติอัตโนมัติ (FR-26)
-- **tent-model:** `DonationBuffer.items_declared[].review_status`
-- **worker:** inbound copy `items` อยู่แล้วทั้งก้อน — ตรวจว่า field ใหม่ผ่านถึง CouchDB และ projector ส่งต่อให้หน้าติดตาม
-- **frontend:** type `Donation` + `DONATION_TRANSITIONS` (เพิ่ม edge `verifying → pending_review` สำหรับ FR-18/FR-21) · gate สิทธิ์ผู้บริจาคใน BFF (`[tracking_token]/+server.ts` DELETE + courier, `items/+server.ts`) และ `public-donation.ts` / `tracking.ts` · route รับของเช็ค `_rev` · route approve/reject รับรายบรรทัด · `pending-review-detail.svelte` · ตั๋ว · `tracking.ts` + หน้าติดตาม
+- **backend:** ฟังก์ชัน pure คำนวณ `review_status` และสถานะใบ (ใช้ทั้ง create และ `update_items`) + กฎจับคู่รายการไม่ถูกแก้ (FR-18a) และใบก่อน schema_v 7 (FR-18c) + test ครบทุกกรณี · `DonationCreateResponse.status` และ `DonationItemsPatchResponse.status` (FR-18b) · `DONOR_EDITABLE_STATUSES` เพิ่ม `verifying` (gate ของ edit / cancel / courier) · `pnpm openapi:update`
+- **tent-model:** `DonationBuffer.items_declared[]` และ `PublicDonation.DeclaredItem` เพิ่ม `review_status`, `review_reason_code`, `review_reason`
+- **worker:** inbound copy `items` ทั้งก้อน (field ใหม่ผ่านถึง CouchDB) + เขียน audit อนุมัติอัตโนมัติ (FR-26) · projector `donation.py` ส่งต่อ field ใหม่ + bump `PROJECTION_VERSION` (FR-27)
+- **frontend:** type `Donation` + `DONATION_TRANSITIONS` (เพิ่ม edge `verifying → pending_review` สำหรับ FR-18/FR-21) · gate สิทธิ์ผู้บริจาคใน BFF (`[tracking_token]/+server.ts` DELETE + courier, `items/+server.ts`) และ `public-donation.ts` / `tracking.ts` · BFF `items/+server.ts` เขียน `status` + `schema_v` ปัจจุบัน (FR-18b) และ audit อนุมัติอัตโนมัติจากการแก้ (FR-26) · `receiveDonationInputSchema.expected_rev` + `scan-station.svelte` ส่ง `_rev` + route รับของเช็คก่อนเขียน ledger (FR-25, FR-25a) · route approve/reject รับผลแยกตามรายการ · ทุก route ที่เปลี่ยนใบเป็น `rejected` (reject, รับของเมื่อไม่รับทุกรายการ) เปลี่ยนทุกรายการ (FR-12) · `pending-review-detail.svelte` (ป้าย FR-8, ฟอร์มเหตุผล FR-9) · ตั๋ว · `tracking.ts` + หน้าติดตาม
 - **e2e:** `bookAsDonor` จองจากการ์ดแคมเปญ → จะได้ `verifying` ทันที ต้องแยก helper (`bookFromCampaign` / `bookUnsolicited`) · test ที่ต้องการใบรอประเมินใช้ `bookUnsolicited`
-- **ซ้อนกับ #621 (`draft-donation-reject-reason`):** การไม่รับรายบรรทัด**ตอนตรวจรับ**ใช้ `received_summary.items[].rejected` ส่วน FR-9 นี้คือการปฏิเสธรายบรรทัด**ตอนประเมิน** ใช้ชุดเหตุผลเดียวกัน และหน้าติดตามแสดงแบบเดียวกัน
+- **ซ้อนกับ CR-172 (#621):** การไม่รับบางรายการ**ตอนตรวจรับ**ใช้ `received_summary.items[].rejected` ส่วน FR-9 นี้คือการปฏิเสธบางรายการ**ตอนประเมิน** ใช้ชุดเหตุผลเดียวกัน และหน้าติดตามแสดงแบบเดียวกัน · ทั้งสอง CR แก้ route รับของ, projector และ `PROJECTION_VERSION` — ถ้า implement พร้อมกัน bump ครั้งเดียว
 
 ## Migration
 
-- **schema_v +1:** `items[].review_status` / `review_reason` optional → doc เดิมไม่ต้อง backfill · reader ที่เจอใบไม่มี `review_status` ใช้สถานะระดับใบตามเดิม
-- **ลำดับเลข:** เรียงกับ `draft-donation-reject-reason` (#621) ที่เพิ่ม field บน `donation` เช่นกัน
+- **schema_v 6 → 7:** `items[].review_status` / `review_reason_code` / `review_reason` optional → doc เดิมไม่ต้อง backfill · reader ที่เจอใบไม่มี `review_status` ใช้สถานะระดับใบตามเดิม · donation ใหม่และใบที่ผู้บริจาคแก้ เขียนเป็น schema_v 7
+- `public_donations`: bump `PROJECTION_VERSION` เพื่อ re-project ใบเดิม (ใบเดิมไม่มี field ใหม่ ผลคือรูปเท่าเดิม)
 
 ## Why
 
 - ของในแคมเปญคือของที่ศูนย์ประกาศขอเอง การบังคับประเมินซ้ำทำให้คิว "รอการประเมิน" ล้นโดยไม่จำเป็น
-- บรรทัดนอกรายการยังต้องประเมิน เพราะศูนย์ยังไม่รู้ว่าเป็นของอะไร — การแยกระดับบรรทัดทำให้ใบผสมไม่ต้องรอทั้งใบเพราะบรรทัดเดียว
+- รายการนอกแคมเปญยังต้องประเมิน เพราะศูนย์ยังไม่รู้ว่าเป็นของอะไร — การประเมินทีละรายการทำให้ใบผสมไม่ต้องรอทั้งใบเพราะรายการเดียว
 - เหตุผลเดิมของ CR-052 §1.4 คือของแช่เย็น — ของมาถึงแล้วเจ้าหน้าที่ยังตรวจจริงที่หน้างานและปฏิเสธได้ จึงไม่ต้องกั้นไว้ที่ขั้นประเมิน
-- ทางเลือกที่ตัดทิ้ง: ข้ามการประเมินทั้งใบเฉพาะใบที่ทุกบรรทัดอยู่ในแคมเปญ (ใบผสมรอประเมินทั้งใบ) — ใบผสมจะยังติดคิวทั้งที่ส่วนใหญ่อยู่ในแคมเปญ
+- ทางเลือกที่ตัดทิ้ง: ยกเว้นการประเมินทั้งใบเฉพาะใบที่ทุกรายการอยู่ในแคมเปญ (ใบผสมรอประเมินทั้งใบ) — ใบผสมจะยังติดคิวทั้งที่ส่วนใหญ่อยู่ในแคมเปญ
 
 ## Decision log
 
-- 2026-10-17 — เจ้าของโครงการ: ใช้ข้อกำหนดตามคำอธิบาย issue #610 (ประเมินรายบรรทัด · ไม่มีข้อยกเว้น cold-chain · quota/slot ไม่เปลี่ยน)
+- 2026-10-17 — เจ้าของโครงการ: ใช้ข้อกำหนดตามคำอธิบาย issue #610 (ประเมินทีละรายการ · ไม่มีข้อยกเว้น cold-chain · quota/slot ไม่เปลี่ยน)
 - 2026-10-18 — เจ้าของโครงการ: ใบที่ได้ QR แล้ว (`verifying`) ผู้บริจาคยังยกเลิกได้ (คืนโควต้า — ช่วงน้ำท่วมอาจเดินทางมาส่งไม่ได้) และแก้ไขได้ · เก็บ audit การอนุมัติอัตโนมัติ
 - 2026-10-17 — proposed (track ด้วย CR file แยก branch)
+- 2026-10-18 — แก้ตาม review PR #676: `expected_rev` เช็คก่อนเขียน ledger (FR-25, FR-25a; ledger ค้างเมื่อ `PUT` ชนรอตัดสิน) · BFF sync `status` และ `schema_v` (FR-18b) · projector (FR-27) · `review_reason_code` · ปฏิเสธทั้งใบ (FR-12) · กฎรายการไม่ถูกแก้ (FR-18a) และใบก่อน schema_v 7 (FR-18c: `pending_review` เดิมคำนวณใหม่เหมือนใบใหม่ · `declared` ไม่เขียน `review_status`) · audit อนุมัติอัตโนมัติจากการแก้ของผู้บริจาค (FR-26) · schema_v 6 → 7 หลัง CR-172 · ข้อเสนอ "ปฏิเสธรายการในแคมเปญได้ที่หน้าประเมิน" รอเจ้าของโครงการตัดสิน
