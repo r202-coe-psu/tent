@@ -138,6 +138,19 @@ export function buildRegistryDesignDoc(): RegistryDesignDoc {
 	};
 }
 
+/**
+ * Mango index for the shelter banner list (`findRawBanners`). CouchDB only uses a json index
+ * when the selector names every indexed field, so this mirrors `{ type, shelter_code }` exactly.
+ */
+export const KIOSK_BANNER_MANGO_INDEX = {
+	index: { fields: ['type', 'shelter_code'] },
+	name: 'kiosk-banner-by-shelter',
+	type: 'json'
+} as const;
+
+/** Mango indexes deployed with `_design/app`; `POST /_index` is idempotent. */
+export const REGISTRY_MANGO_INDEXES = [KIOSK_BANNER_MANGO_INDEX] as const;
+
 /** Path for a single-shelter lookup by code (already URL-encoded). */
 export function registryByCodePath(code: string): string {
 	return `/${REGISTRY_DB}/${REGISTRY_DESIGN_ID}/_view/by_code?key=${encodeURIComponent(

@@ -179,16 +179,10 @@ export async function deleteBanner(id: string, rev: string): Promise<void> {
 	}
 }
 
-/** Mango index for the shelter banner list; deploy alongside the other registry indexes. */
-export const KIOSK_BANNER_MANGO_INDEX = {
-	index: { fields: ['type', 'shelter_code', 'end_at'] },
-	name: 'kiosk-banner-by-shelter-end',
-	type: 'json'
-} as const;
-
 const LIST_LIMIT = 500;
 const ACTIVE_CAP = 20;
 
+/** Served by `KIOSK_BANNER_MANGO_INDEX` (registry-design), deployed by `pnpm db:sync`. */
 async function findRawBanners(shelterCode: string): Promise<RawBannerDoc[]> {
 	const res = await adminRaw(`/${REGISTRY_DB}/_find`, 'POST', {
 		selector: { type: 'kiosk_banner', shelter_code: shelterCode },

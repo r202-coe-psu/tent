@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
 	buildRegistryDesignDoc,
 	buildRegistryValidateDocUpdate,
+	KIOSK_BANNER_MANGO_INDEX,
 	REGISTRY_DESIGN_VERSION,
 	registryByNamePath
 } from './registry-design';
@@ -150,5 +151,13 @@ describe('registry kiosk_banner validate_doc_update', () => {
 		expect(() =>
 			runVdu({ _id: 'shelter:01H', type: 'shelter', code: 'SH001', name: 'A' })
 		).not.toThrow();
+	});
+});
+
+describe('registry Mango indexes', () => {
+	// CouchDB only picks a json index when the selector names every indexed field, so the index
+	// must match the banner list selector `{ type, shelter_code }` exactly.
+	it('indexes exactly the fields the shelter banner list selects on', () => {
+		expect(KIOSK_BANNER_MANGO_INDEX.index.fields).toEqual(['type', 'shelter_code']);
 	});
 });
