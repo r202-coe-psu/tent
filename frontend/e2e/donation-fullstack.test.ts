@@ -3,9 +3,11 @@ import { CAN_WRITE, READ_ONLY_REASON } from './helpers/e2e-env';
 import { clearSession } from './helpers/login';
 import {
 	RUN_ID,
+	BOARD_SYNC,
 	RunLedger,
 	approvePending,
 	bookAsDonor,
+	boardLineFor,
 	createCampaignViaUi,
 	createWarehouseStaff,
 	expectRunGone,
@@ -50,6 +52,8 @@ import {
 
 // A catalog item with `shelf_life_days`: receiving it needs an expiry (`fillExpiry`).
 const NEED_ITEM = 'ยาสีฟัน';
+// No `shelf_life_days`, so the scan station receives it without an expiry.
+const SHELVED_ITEM = 'แปรงสีฟัน';
 
 const ledger = new RunLedger('donation-fullstack');
 let shelter: PublicShelter;
@@ -213,6 +217,82 @@ test.describe('Donation full-stack: donor and staff', { tag: ['@critical', '@don
 			const donation = await findDonation(shelter.code, bookingRef);
 			expect(await ledgerRowsFor(shelter.code, donation._id as string)).toEqual([]);
 		});
+	});
+
+	test('goods received into stock leave the whole remaining need bookable', async ({
+		page,
+		request,
+		browser
+	}) => {
+		// The need's quota counter caps a booking at qty_target − on_hand − reserved. A
+		// received donation used to stay in `reserved` after its goods reached the ledger
+		// (and so `on_hand`), so the board showed 2 open while a booking of 2 came back
+		// NEED_FULL. Own campaign and item: the board sums an item across campaigns.
+		const context = await browser.newContext();
+		let brushNeed: PublicNeed;
+		try {
+			brushNeed = await createCampaignViaUi(await context.newPage(), request, ws, shelter.code, {
+				item: SHELVED_ITEM,
+				target: 3,
+				notes: `e2e shelved ${RUN_ID}`
+			});
+		} finally {
+			await context.close();
+		}
+		expect(Number(brushNeed.qty_needed)).toBe(3);
+
+		// ── Donor 1 brings one in; staff receive it into stock ───────────────────
+		const first = await bookAsDonor(page, {
+			shelter,
+			need: brushNeed,
+			ledger,
+			donorName: `E2E ของเข้าคลัง ${RUN_ID}`,
+			phone: '0867770001'
+		});
+		await openBackOffice(page, ws);
+		await approvePending(page, shelter.code, first.bookingRef);
+		await openBackOffice(page, ws);
+		await openInScanStation(page, first.bookingRef);
+		await page.getByRole('checkbox', { name: 'ผ่านการตรวจสอบแล้ว' }).check();
+		// No storage points on the run's own shelter: the line goes to the main store.
+		await expect(page.getByRole('button', { name: /^สถานที่จัดเก็บ/ })).toContainText('คลังหลัก');
+		const confirm = page.getByRole('button', { name: 'ยืนยันรับเข้าคลัง' });
+		await expect(confirm).toBeEnabled();
+		const received = page.waitForResponse(
+			(r) =>
+				r.url().endsWith(`/api/back-office/donations/${first.bookingRef}`) &&
+				r.request().method() === 'POST'
+		);
+		await confirm.click();
+		expect((await received).ok()).toBe(true);
+
+		// The worker settles the counter before it re-projects the board, so once the
+		// board shows the unit on the shelf the counter has let go of it too.
+		await expect
+			.poll(async () => {
+				const line = await boardLineFor(request, shelter.code, SHELVED_ITEM);
+				return line && [Number(line.on_hand), Number(line.qty_needed)];
+			}, BOARD_SYNC)
+			.toEqual([1, 2]);
+
+		// ── Donor 2 books everything the board still asks for ────────────────────
+		await clearSession(page);
+		await bookAsDonor(page, {
+			shelter,
+			need: brushNeed,
+			ledger,
+			donorName: `E2E จองที่เหลือ ${RUN_ID}`,
+			phone: '0867770002',
+			qty: 2
+		});
+
+		// Filled — the board stops offering it.
+		await expect
+			.poll(
+				async () => (await boardLineFor(request, shelter.code, SHELVED_ITEM))?.status ?? 'gone',
+				BOARD_SYNC
+			)
+			.not.toBe('open');
 	});
 
 	test.describe('donor self-service on the track page', () => {

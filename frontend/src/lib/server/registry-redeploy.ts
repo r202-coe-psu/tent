@@ -10,7 +10,12 @@
  */
 
 import type { CouchReq } from './ensure-public-writer';
-import { buildRegistryDesignDoc, REGISTRY_DB, REGISTRY_DESIGN_ID } from './registry-design';
+import {
+	buildRegistryDesignDoc,
+	REGISTRY_DB,
+	REGISTRY_DESIGN_ID,
+	REGISTRY_MANGO_INDEXES
+} from './registry-design';
 
 export interface ShelterMasterRow {
 	code: string;
@@ -34,9 +39,31 @@ export async function listShelterMasters(couchReq: CouchReq): Promise<ShelterMas
 /**
  * Idempotent PUT of the registry `_design/app` (views + write policy) so
  * `findMasterByCode` / `findMasterByName` and the public booking BFF resolve a
- * shelter through an index instead of scanning the whole registry.
+ * shelter through an index instead of scanning the whole registry. The Mango
+ * indexes are POSTed on every write run, since `_index` answers `exists` when current.
  */
 export async function deployRegistryDesign(
+	couchReq: CouchReq,
+	dryRun: boolean
+): Promise<'current' | 'deployed'> {
+	const design = await putRegistryDesign(couchReq, dryRun);
+	if (!dryRun) await deployRegistryIndexes(couchReq);
+	return design;
+}
+
+async function deployRegistryIndexes(couchReq: CouchReq): Promise<void> {
+	for (const def of REGISTRY_MANGO_INDEXES) {
+		const res = await couchReq('POST', `/${REGISTRY_DB}/_index`, def);
+		if (res.status >= 400) {
+			const detail = (res.data as { reason?: string; error?: string } | null) ?? {};
+			throw new Error(
+				`registry Mango index ${def.name} failed (${res.status}): ${detail.reason ?? detail.error ?? 'unknown'}`
+			);
+		}
+	}
+}
+
+async function putRegistryDesign(
 	couchReq: CouchReq,
 	dryRun: boolean
 ): Promise<'current' | 'deployed'> {

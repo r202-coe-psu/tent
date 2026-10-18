@@ -4,6 +4,8 @@
 	import {
 		backofficeNavbarGroups,
 		isGroup,
+		activeNavHref,
+		navLeafHrefs,
 		type BackofficeNavbarNode,
 		type BackofficeNavbarLeaf
 	} from '$lib/components/backoffice-navbar/static';
@@ -28,21 +30,17 @@
 	const roles = $derived(authStore.user?.roles ?? []);
 	const isSA = $derived(isSystemAdmin(roles));
 
-	function findMatchingLeaf(
-		node: BackofficeNavbarNode,
-		currentPath: string
-	): BackofficeNavbarLeaf | null {
+	const navHrefs = navLeafHrefs(backofficeNavbarGroups);
+
+	function findLeafByHref(node: BackofficeNavbarNode, href: string): BackofficeNavbarLeaf | null {
 		if (isGroup(node)) {
 			for (const child of node.children) {
-				const match = findMatchingLeaf(child, currentPath);
+				const match = findLeafByHref(child, href);
 				if (match) return match;
 			}
 			return null;
 		}
-		if (node.href && currentPath.startsWith(node.href)) {
-			return node;
-		}
-		return null;
+		return node.href && String(node.href) === href ? node : null;
 	}
 	// Find the current page info (label, icon) dynamically
 	const currentPageNode = $derived.by(() => {
@@ -64,9 +62,12 @@
 		) {
 			currentPath = '/back-office/tickets/kitchen';
 		}
+		// Longest-match so a nested page (e.g. /kiosks/banners) keeps its own header label.
+		const href = activeNavHref(currentPath, navHrefs);
+		if (!href) return null;
 		for (const group of backofficeNavbarGroups) {
 			for (const item of group.items) {
-				const match = findMatchingLeaf(item, currentPath);
+				const match = findLeafByHref(item, href);
 				if (match) return match;
 			}
 		}

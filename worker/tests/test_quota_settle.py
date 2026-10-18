@@ -369,3 +369,41 @@ async def test_receiving_keeps_the_place(db: None) -> None:
     await settle_donation_quota(_doc("received"), now=datetime.now(UTC))
 
     assert await _booked() == 1
+
+
+# --- settle_shelved_quota: goods reaching the ledger ---
+
+
+async def _shelved_reconcile_calls(*reports) -> int:
+    """Run settle_shelved_quota with reconcile answering ``reports`` in turn."""
+    from unittest.mock import AsyncMock, patch
+
+    from worker.quota.settle import settle_shelved_quota
+
+    with patch(
+        "worker.quota.settle.reconcile_shelter",
+        new_callable=AsyncMock,
+        side_effect=list(reports),
+    ) as reconcile:
+        await settle_shelved_quota(AsyncMock(), SHELTER, now=datetime.now(UTC))
+    return reconcile.await_count
+
+
+def _report(conflicted: int = 0):
+    from worker.quota.reconcile import ShelterReconcileReport
+
+    return ShelterReconcileReport(shelter_code=SHELTER, counters_conflicted=conflicted)
+
+
+async def test_shelved_settle_runs_once_when_nothing_raced() -> None:
+    assert await _shelved_reconcile_calls(_report()) == 1
+
+
+async def test_shelved_settle_retries_once_after_a_conflict() -> None:
+    """A conflicted counter keeps the doubled-up value; one more pass picks it up."""
+    assert await _shelved_reconcile_calls(_report(conflicted=1), _report()) == 2
+
+
+async def test_shelved_settle_gives_up_after_the_second_conflict() -> None:
+    calls = await _shelved_reconcile_calls(_report(conflicted=1), _report(conflicted=1))
+    assert calls == 2
