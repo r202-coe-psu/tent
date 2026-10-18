@@ -20,6 +20,7 @@ export {
 export { default as KioskCardInsertScene } from './ui/kiosk-card-insert-scene.svelte';
 export { default as KioskReaderPointer } from './ui/kiosk-reader-pointer.svelte';
 export { default as KioskReprint } from './ui/kiosk-reprint.svelte';
+export { default as KioskVolunteerCard } from './ui/kiosk-volunteer-card.svelte';
 export { default as KioskPrintQrChooser } from './ui/kiosk-print-qr-chooser.svelte';
 export { default as KioskThaidIdentityScan } from './ui/thaid-identity-scan.svelte';
 export { default as KioskBannerAttract } from './ui/kiosk-banner-attract.svelte';
