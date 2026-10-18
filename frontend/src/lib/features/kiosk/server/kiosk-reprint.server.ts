@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { isListedHouseholdMember, isReprintableStatus } from '../domain/check-in-status';
 import { normalizeKioskPhone, phoneVariants } from '../domain/phone';
 import { intakeStationsPassed } from '$lib/features/people/domain/intake-pipeline';
-import { stayZoneName, type ZoneLabelSource } from '$lib/features/people/domain/people';
+import { labelZoneName, type ZoneLabelSource } from '$lib/features/people/domain/people';
 import { adminFetch } from '$lib/server/couch-admin';
 import { shelterDbName } from '$lib/server/shelter-access-design';
 import { findMasterByCode } from '$lib/server/shelters.admin';
@@ -34,8 +34,8 @@ export type KioskReprintMember = {
 	evacuee_id: string;
 	qr_payload: string;
 	/**
-	 * `zone` is the member's current zone name, or null before Station 3 assigns one;
-	 * `stations_passed` (0–3) is how many checklist boxes the label ticks.
+	 * `zone` is the member's current zone (short name, else full name), or null before Station 3
+	 * assigns one; `stations_passed` (0–3) is how many checklist boxes the label ticks.
 	 */
 	label: KioskLabelIdentity & { zone: string | null; stations_passed: number };
 };
@@ -76,7 +76,7 @@ async function shelterZones(shelterCode: string): Promise<readonly ZoneLabelSour
 	}
 }
 
-/** Which of `ids` have a screening record; none if the lookup fails (the label then ticks fewer). */
+/** Which of `ids` have a screening record; none if the lookup fails (the label ticks fewer). */
 async function screenedEvacueeIds(dbName: string, ids: string[]): Promise<Set<string>> {
 	if (ids.length === 0) return new Set();
 	try {
@@ -178,7 +178,7 @@ export async function reprintKioskLabels(
 		qr_payload: member._id,
 		label: {
 			...toLabelIdentity(member),
-			zone: stayZoneName(member.current_stay?.zone, zones),
+			zone: labelZoneName(member.current_stay?.zone, zones),
 			stations_passed: intakeStationsPassed(member.current_stay, screened.has(member._id))
 		}
 	}));

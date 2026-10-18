@@ -9,7 +9,7 @@
 	import {
 		formatPersonName,
 		intakeStationsPassed,
-		stayZoneName,
+		labelZoneName,
 		useScreeningsByEvacuee
 	} from '$lib/features/people';
 	import { KIOSK_LABEL_MM, renderKioskQrLabelPng } from '$lib/features/kiosk';
@@ -63,7 +63,7 @@
 		show
 			? renderKioskQrLabelPng(evacuee._id, {
 					name,
-					zone: stayZoneName(evacuee.current_stay?.zone, shelterQuery.data?.zones),
+					zone: labelZoneName(evacuee.current_stay?.zone, shelterQuery.data?.zones),
 					checklist: [t.checklistCheckIn, t.checklistScreening, t.checklistLodging],
 					checkedCount: intakeStationsPassed(
 						evacuee.current_stay,

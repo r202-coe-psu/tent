@@ -2204,7 +2204,17 @@ export function evacueeAgeYears(doc: {
 export type ZoneLabelSource = {
 	code: string;
 	name?: string | null;
+	/** Abbreviation printed on the QR label (shelter `zones[].short_name`). */
+	short_name?: string | null;
 };
+
+function findZone(
+	code: string,
+	zones: readonly ZoneLabelSource[] | null | undefined
+): ZoneLabelSource | undefined {
+	const lower = code.toLowerCase();
+	return zones?.find((z) => z.code.toLowerCase() === lower);
+}
 
 /**
  * Name of a stay-zone code, or null when no zone is assigned. Prefers the shelter zone `name`
@@ -2216,9 +2226,21 @@ export function stayZoneName(
 ): string | null {
 	const code = zone?.trim();
 	if (!code) return null;
-	const lower = code.toLowerCase();
-	const name = zones?.find((z) => z.code.toLowerCase() === lower)?.name?.trim();
-	return name || code;
+	return findZone(code, zones)?.name?.trim() || code;
+}
+
+/**
+ * Zone text for the printed QR label: the zone's short name, else its full name (the label cuts
+ * one too long for the row with an ellipsis), else the raw code; null when no zone is assigned.
+ */
+export function labelZoneName(
+	zone: string | null | undefined,
+	zones?: readonly ZoneLabelSource[] | null
+): string | null {
+	const code = zone?.trim();
+	if (!code) return null;
+	const match = findZone(code, zones);
+	return match?.short_name?.trim() || match?.name?.trim() || code;
 }
 
 /**

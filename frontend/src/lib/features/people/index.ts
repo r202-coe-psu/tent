@@ -118,6 +118,7 @@ export {
 	matchesEvacueeSearch,
 	zoneLabel,
 	stayZoneName,
+	labelZoneName,
 	type ZoneLabelSource,
 	evacueeAgeYears,
 	EWAR_SYMPTOM_GROUPS,

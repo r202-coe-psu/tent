@@ -122,8 +122,8 @@ export interface KioskReprintMember {
 	evacuee_id: string;
 	qr_payload: string;
 	/**
-	 * `zone` is the member's current zone name, or null before one is assigned;
-	 * `stations_passed` (0–3) is how many checklist boxes the label ticks.
+	 * `zone` is the member's current zone (short name, else full name), or null before one is
+	 * assigned; `stations_passed` (0–3) is how many checklist boxes the label ticks.
 	 */
 	label: { name: string; phone: string | null; zone: string | null; stations_passed: number };
 }

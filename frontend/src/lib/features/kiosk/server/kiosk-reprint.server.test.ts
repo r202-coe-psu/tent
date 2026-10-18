@@ -187,6 +187,17 @@ describe('reprintKioskLabels', () => {
 		expect(member?.label.stations_passed).toBe(1);
 	});
 
+	it('prints the zone short name when the shelter gives it one', async () => {
+		docs = [evacuee(0, { current_stay: { status: 'room_confirmed', zone: 'z3' } })];
+		mockFindMasterByCode.mockResolvedValue({
+			zones: [{ code: 'z3', name: 'โซนผู้สูงอายุ อาคารเรียนรวม 2', short_name: 'A3' }]
+		} as never);
+
+		const [member] = await reprintKioskLabels(shelterCode, input());
+
+		expect(member?.label.zone).toBe('A3');
+	});
+
 	it('falls back to the zone code when the shelter zones cannot be read', async () => {
 		docs = [evacuee(0, { current_stay: { status: 'room_confirmed', zone: 'z3' } })];
 		mockFindMasterByCode.mockRejectedValue(new Error('registry down'));
