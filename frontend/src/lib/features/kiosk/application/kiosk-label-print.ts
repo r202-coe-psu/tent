@@ -1,7 +1,7 @@
 import { generateQrDataUrl, qrModuleCount } from '$lib/utils/qrcode';
 import { printKioskLabels } from '../data/kiosk-print.api';
 import { KIOSK_QR_COLOR, kioskQrPrintSize } from '../domain/print-label';
-import { renderKioskLabelPng } from './kiosk-label-image';
+import { renderKioskLabelPng, type KioskLabelContent } from './kiosk-label-image';
 import { runKioskPrintFlow, type KioskPrintFlowResult } from './kiosk-print-flow';
 
 export type KioskQrImage = { src: string; sizeMm: number };
@@ -23,6 +23,18 @@ export async function prepareKioskQrImage(qrPayload: string): Promise<KioskQrIma
 	});
 	if (!src) throw new Error('QR render returned empty');
 	return { src, sizeMm: size.sizeMm };
+}
+
+/**
+ * One label as base64 PNG for a QR payload: the same 80×60 mm image the kiosk sends to its
+ * printer, for staff stations that print the label themselves.
+ */
+export async function renderKioskQrLabelPng(
+	qrPayload: string,
+	label: Omit<KioskLabelContent, 'qrSrc'>
+): Promise<string> {
+	const image = await prepareKioskQrImage(qrPayload);
+	return renderKioskLabelPng({ ...label, qrSrc: image.src });
 }
 
 /**
