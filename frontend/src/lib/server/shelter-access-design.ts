@@ -113,6 +113,18 @@ export const KIOSK_LOOKUP_MANGO_INDEXES = [
 	}
 ];
 
+/**
+ * Warm-up `_find` selector per kiosk lookup index, keyed by index name. Every deploy path runs
+ * one query per index after creating it so CouchDB builds the index before the first kiosk
+ * lookup. Must cover every entry of `KIOSK_LOOKUP_MANGO_INDEXES` (see the unit test).
+ */
+export const KIOSK_LOOKUP_WARMUP_SELECTORS: Readonly<Record<string, Record<string, string>>> = {
+	'evacuee-type-phone-idx': { type: 'evacuee', phone: '__warmup__' },
+	'evacuee-type-person-id-idx': { type: 'evacuee', 'person_id.number': '__warmup__' },
+	'evacuee-type-household-idx': { type: 'evacuee', household_id: '__warmup__' },
+	'evacuee-type-card-address-no-idx': { type: 'evacuee', 'card_snapshot.address_no': '__warmup__' }
+};
+
 /** Mango index definitions required by stock_transfer list/find (CR-059). */
 export const TRANSFER_MANGO_INDEXES = [
 	{

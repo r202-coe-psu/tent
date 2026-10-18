@@ -32,6 +32,10 @@ Endpoints exercised (prefix + path):
   GET  {prefix}/external/persons/shelter-residency     (M2, EXT-011, scope residency-read)
   POST {prefix}/external/bookings/{booking_id}/cancel  (M2, EXT-009)
 
+Normal mode also covers the CR-169 group rules at API level (persons[] of 2-3, cid
+duplicates in one request, several bad persons, duplicate vs existing booking, group
+cancel, EXT-010 persons[]). Repeat-cancel → 200 (CR-169 FR-40, #592) is a normal assertion.
+
 M2 checks (EXT-008..011) are scope-aware: when the token lacks `booking-write` /
 `residency-read` the script asserts the 403 insufficient_scope gate instead of
 skipping silently. The booking checks WRITE one booking (random checksum-valid CID,
@@ -99,12 +103,14 @@ Run (local; admin provision mode, secrets from env / repo-root .env, never echoe
     PARTNER_E2E_MONGO_URI.
   * Useful flags: --e2e-big-size N (default 100; use 20 for a quick run),
     --skip-e2e-big, --e2e-timeout, --e2e-big-timeout, --e2e-race-rounds,
-    --e2e-big-budget SECONDS (fail the 100-person check when slower), --require-578.
+    --e2e-big-budget SECONDS (fail the 100-person check when slower). --require-578 is a
+    no-op kept for old invocations: every case below is a plain assertion now.
 
 Scenarios (all CIDs are random checksum-valid; only counts, booking_ids and timings
 are printed, never CIDs / phones / names):
   1. group of 3 -> 201 persons_count 3, then 3 households + 3 evacuees in CouchDB
-     (`pre_registered`, `registered_via: api`, gender null, 1 person = 1 household)
+     (`pre_registered`, `registered_via: api`, gender null, 1 person = 1 household), and
+     every evacuee has `booking_ref` == booking_id and `schema_v` 14 (CR-169)
   2. group with a duplicate person -> 409 duplicate_booking, detail `persons[i]`,
      no docs in CouchDB for the rest of the group, and the rest can be booked
      afterwards (API-level proof that no staged row was left holding the index)
@@ -115,12 +121,23 @@ are printed, never CIDs / phones / names):
      people can be booked afterwards)
   5. 100-person group: timing report (POST, 201 -> first/all households+evacuees
      visible, cancel -> all cancelled; min/avg/max per person) = the gate for the cap
-  Pending #578 (run for real, but a failure is reported as EXPECTED-FAIL and does
-  not fail the run; they flip to PASS when #578 lands; --require-578 makes them
-  fail so the suite can serve as #578 acceptance):
-     evacuee.booking_ref == booking_id with schema_v 14, group-level reject on a
-     CouchDB-side duplicate, sweeper removing orphan committed=false rows (needs
-     Mongo, else SKIPPED). With --require-578 a SKIPPED pending case also fails.
+  6. (banner "E2E 6") CouchDB-side duplicate planted before the worker writes anything:
+     the whole group is REJECTED (duplicate) and no doc is written (FR-21, first pass).
+     The per-person retry rule (D1/D4, part of the group already in CouchDB) is covered by
+     scenario 8, which reserves a member's ids so the worker takes that path without a crash.
+  7. (banner "E2E 7") sweeper: an orphan committed=false row older than 60 s is removed
+     (FR-33; needs Mongo, else SKIPPED)
+  8. (banner "E2E 8") partial group, the CR-169 retry rule (D1/D4): member 1's own
+     pre-registration is already in CouchDB and its CID is held by a foreign live
+     evacuee. The worker rejects member 1 only (its stay cancelled) and writes the others;
+     aggregate REJECTED. Then group cancel -> 200 and aggregate CANCELLED, the other
+     members cancelled, repeat cancel -> 200 (FR-21 D1/D4, FR-40/42; needs Mongo, else
+     SKIPPED). Member 1's ids are reserved through the test's own Mongo row (CAS), which
+     is what lets the worker take the retry path without a crash. If the worker reserves
+     member 1 before the CAS, the case reports "race lost" as a FAIL (fail-closed): rerun it.
+  9. (banner "E2E 9") group with a checked-in member (stay set to `arriving` in the test
+     shelter's CouchDB and waited for in the API projection, restored afterwards) -> cancel
+     409 booking_not_cancellable and nothing changed (FR-40/53; needs Mongo, else SKIPPED)
 
 Pre-flight: before any group is sent, the freshly generated CIDs are looked up in the
 test shelter's CouchDB; a CID that already has an evacuee doc is regenerated (bounded
@@ -186,7 +203,7 @@ the same signal within 1 s count as one press (a Ctrl-C under `uv run` arrives t
 wait about a second between presses. SIGKILL cannot be handled: the manifest is the
 recovery path.
 
-"green" = exit code 0: no FAIL lines; EXPECTED-FAIL / SKIPPED lines are listed.
+"green" = exit code 0: no FAIL lines; SKIPPED lines (no Mongo, --skip-e2e-big) are listed.
 """
 
 from __future__ import annotations
@@ -265,6 +282,18 @@ def make_valid_cid() -> str:
     return "".join(str(d) for d in digits)
 
 
+def make_group_person(cid: Optional[str], **overrides: Any) -> Dict[str, Any]:
+    """One `persons[]` entry for EXT-008 (CR-169); valid unless overridden."""
+    person: Dict[str, Any] = {
+        "cid": cid,
+        "first_name": "Smoke",
+        "last_name": "Test",
+        "phone": "+66812345678",
+    }
+    person.update(overrides)
+    return person
+
+
 _USERINFO_RE = re.compile(r"([A-Za-z][A-Za-z0-9+.\-]*://)[^/\s@?#]*@")
 
 
@@ -330,8 +359,6 @@ class SmokeTestRunner:
         self.booking_location: Optional[str] = None
 
         self.results: List[Tuple[str, str, bool, str]] = []  # (issue, test_name, passed, detail)
-        # e2e mode only: (issue, test_name, detail) — never counted as failures
-        self.expected_fail: List[Tuple[str, str, str]] = []
         self.skipped: List[Tuple[str, str, str]] = []
 
     def _on_client_created(self) -> None:
@@ -359,10 +386,6 @@ class SmokeTestRunner:
     def record_skip(self, issue: str, test_name: str, reason: str) -> None:
         self.skipped.append((issue, test_name, reason))
         self.log(f"  {YELLOW}○ SKIPPED{RESET} {BOLD}[{issue}]{RESET} {test_name} ({reason})")
-
-    def record_expected_fail(self, issue: str, test_name: str, reason: str) -> None:
-        self.expected_fail.append((issue, test_name, reason))
-        self.log(f"  {YELLOW}~ EXPECTED-FAIL{RESET} {BOLD}[{issue}]{RESET} {test_name} ({reason})")
 
     def http_request(
         self,
@@ -1031,6 +1054,75 @@ class SmokeTestRunner:
             f"HTTP {status} (code={err_code})",
         )
 
+        # M2.3b Group validation (CR-169 FR-1/FR-4) — nothing is written by these requests
+        status, data = self.http_request(
+            "POST",
+            bookings,
+            headers=headers,
+            body={
+                "location_code": candidates[0],
+                "persons": [
+                    make_group_person(make_valid_cid()),
+                    make_group_person("1234567890123", first_name=""),
+                    make_group_person(make_valid_cid()),
+                    make_group_person("9999999999999", phone="123"),
+                ],
+            },
+        )
+        err_msg = get_error_detail(data)
+        self.record_result(
+            "M2",
+            "EXT-008 persons[] with several bad people → 422 naming every bad index",
+            status == 422
+            and get_error_code(data) == "validation_error"
+            and "persons[1]" in err_msg
+            and "persons[3]" in err_msg
+            and "1234567890123" not in err_msg
+            and "9999999999999" not in err_msg,
+            f"HTTP {status} (code={get_error_code(data)})",
+        )
+
+        shared_cid = make_valid_cid()
+        status, data = self.http_request(
+            "POST",
+            bookings,
+            headers=headers,
+            body={
+                "location_code": candidates[0],
+                "persons": [
+                    make_group_person(make_valid_cid()),
+                    make_group_person(shared_cid),
+                    make_group_person(shared_cid),
+                ],
+            },
+        )
+        self.record_result(
+            "M2",
+            "EXT-008 same CID twice inside one persons[] → 422 validation_error",
+            status == 422
+            and get_error_code(data) == "validation_error"
+            and "persons[2]" in get_error_detail(data)
+            and shared_cid not in json.dumps(data),
+            f"HTTP {status} (code={get_error_code(data)})",
+        )
+
+        for label, persons in (
+            ("empty persons[]", []),
+            ("persons[] over the 100-person cap", [make_group_person(None)] * 101),
+        ):
+            status, data = self.http_request(
+                "POST",
+                bookings,
+                headers=headers,
+                body={"location_code": candidates[0], "persons": persons},
+            )
+            self.record_result(
+                "M2",
+                f"EXT-008 {label} rejected with 422 validation_error",
+                status == 422 and get_error_code(data) == "validation_error",
+                f"HTTP {status} (code={get_error_code(data)})",
+            )
+
         # M2.4 Unknown location → 404 location_not_found
         status, data = self.http_request(
             "POST",
@@ -1100,6 +1192,13 @@ class SmokeTestRunner:
             )
             return False
 
+        self.record_result(
+            "M2",
+            "EXT-008 legacy single-person body still accepted (persons_count 1)",
+            res.get("persons_count") == 1,
+            f"persons_count={res.get('persons_count')}",
+        )
+
         # M2.7 Same CID, same shelter → 409 duplicate_booking
         status, data = self.http_request(
             "POST",
@@ -1131,7 +1230,263 @@ class SmokeTestRunner:
             and stamps_ok,
             f"HTTP {status}, booking_status={res.get('booking_status')}",
         )
+
+        self._group_booking_checks(headers, bookings, location)
+        self._idempotency_checks(headers, bookings, location)
         return True
+
+    def _idempotency_checks(self, headers: Dict[str, str], bookings: str, location: str) -> None:
+        """#614 Idempotency-Key (API level). The booking made here is cancelled again."""
+        key = f"smoke-{os.urandom(8).hex()}"
+        keyed = {**headers, "Idempotency-Key": key}
+        cid = make_valid_cid()
+        body = {**make_group_person(cid), "location_code": location}
+        status, data = self.http_request("POST", bookings, headers=keyed, body=body)
+        result = data.get("result") if isinstance(data, dict) else None
+        first_id = str((result or {}).get("booking_id", ""))
+        if status != 201 or not first_id.startswith("BK-"):
+            self.record_result(
+                "M2",
+                "EXT-008 Idempotency-Key first request → 201",
+                False,
+                f"HTTP {status} - {data}",
+            )
+            return
+
+        try:
+            status, data = self.http_request("POST", bookings, headers=keyed, body=body)
+            result = data.get("result") if isinstance(data, dict) else None
+            replay_id = str((result or {}).get("booking_id", ""))
+            self.record_result(
+                "M2",
+                "EXT-008 same Idempotency-Key and body replays 201 with the same booking_id",
+                status == 201 and replay_id == first_id,
+                f"HTTP {status}, booking_id={replay_id}",
+            )
+
+            different = {**body, "first_name": "Other"}
+            status, data = self.http_request("POST", bookings, headers=keyed, body=different)
+            err_code = get_error_code(data)
+            self.record_result(
+                "M2",
+                "EXT-008 reused Idempotency-Key, different body → 409 idempotency_key_reused",
+                status == 409 and err_code == "idempotency_key_reused",
+                f"HTTP {status} (code={err_code})",
+            )
+        finally:
+            self.http_request(
+                "POST",
+                f"{bookings}/{first_id}/cancel",
+                headers=headers,
+                body={"reason": "smoke test cleanup"},
+            )
+
+    def _group_booking_checks(self, headers: Dict[str, str], bookings: str, location: str) -> None:
+        """CR-169 group scenarios (EXT-008/009/010, API level). Every group made here is
+        cancelled again before returning, like the single booking."""
+        # G1 Group of 3 → 201 with one BK- group id and persons_count 3
+        group_cids = [make_valid_cid() for _ in range(3)]
+        status, data = self.http_request(
+            "POST",
+            bookings,
+            headers=headers,
+            body={"location_code": location, "persons": [make_group_person(c) for c in group_cids]},
+        )
+        res = data.get("result", {}) if isinstance(data, dict) else {}
+        group_id = str(res.get("booking_id", ""))
+        group_ok = (
+            status == 201
+            and group_id.startswith("BK-")
+            and res.get("persons_count") == 3
+            and res.get("location_code") == location
+            and res.get("booking_status") == "BOOKED"
+        )
+        self.record_result(
+            "M2",
+            "EXT-008 persons[] of 3 → 201 BOOKED with persons_count 3 and a BK- group id",
+            group_ok,
+            f"HTTP {status} - {data}" if not group_ok else f"booking_id={group_id}",
+        )
+        if not group_ok:
+            # A group that was created despite a wrong shape must still be cleaned up
+            if group_id.startswith("BK-"):
+                self.http_request(
+                    "POST",
+                    f"{bookings}/{group_id}/cancel",
+                    headers=headers,
+                    body={"reason": "smoke test cleanup"},
+                )
+            return
+
+        # G2 Status of the group: one aggregate + one entry per person, no PII
+        status, data = self.http_request("GET", f"{bookings}/{group_id}", headers=headers)
+        res = data.get("result", {}) if isinstance(data, dict) else {}
+        persons_out = res.get("persons") or []
+        pii_keys = ("cid", "first_name", "last_name", "phone")
+        self.record_result(
+            "M2",
+            "EXT-010 group status: BOOKED aggregate, persons[] index 0..2, no PII",
+            status == 200
+            and res.get("booking_status") == "BOOKED"
+            and [p.get("index") for p in persons_out] == [0, 1, 2]
+            and all(
+                p.get("booking_status") == "BOOKED" and p.get("reject_reason") is None
+                for p in persons_out
+            )
+            and not any(key in p for p in persons_out for key in pii_keys),
+            f"HTTP {status}, booking_status={res.get('booking_status')}",
+        )
+
+        # G3 Duplicate of an existing booking in the group → 409, detail = first duplicate index
+        fresh_cid = make_valid_cid()
+        status, data = self.http_request(
+            "POST",
+            bookings,
+            headers=headers,
+            body={
+                "location_code": location,
+                "persons": [
+                    make_group_person(fresh_cid),
+                    make_group_person(self.booking_cid),
+                    make_group_person(make_valid_cid()),
+                ],
+            },
+        )
+        self.record_result(
+            "M2",
+            "EXT-008 group with a person already booked here → 409 duplicate_booking, detail persons[1]",
+            status == 409
+            and get_error_code(data) == "duplicate_booking"
+            and get_error_detail(data) == "persons[1]"
+            and self.booking_cid not in json.dumps(data),
+            f"HTTP {status} (code={get_error_code(data)}, detail={get_error_detail(data)})",
+        )
+
+        # The duplicate group must be refused; if the API booked it anyway, cancel it again
+        # so nothing from this smoke run stays booked.
+        if status == 201 and isinstance(data, dict):
+            stray = str((data.get("result") or {}).get("booking_id", ""))
+            if stray.startswith("BK-"):
+                c_status, c_data = self.http_request(
+                    "POST",
+                    f"{bookings}/{stray}/cancel",
+                    headers=headers,
+                    body={"reason": "smoke test cleanup"},
+                )
+                self.record_result(
+                    "M2",
+                    "cleanup: stray group booked by the duplicate-group check was cancelled",
+                    c_status == 200,
+                    f"HTTP {c_status} (code={get_error_code(c_data)})",
+                )
+
+        # G4 Nothing from the refused group is held: the other person can still book alone
+        status, data = self.http_request(
+            "POST",
+            bookings,
+            headers=headers,
+            body={"location_code": location, "persons": [make_group_person(fresh_cid)]},
+        )
+        res = data.get("result", {}) if isinstance(data, dict) else {}
+        lone_id = str(res.get("booking_id", ""))
+        self.record_result(
+            "M2",
+            "EXT-008 person from the refused group can still be booked (409 left nothing behind)",
+            status == 201 and lone_id.startswith("BK-"),
+            f"HTTP {status} (code={get_error_code(data)})",
+        )
+        if lone_id.startswith("BK-"):
+            status, _ = self.http_request(
+                "POST",
+                f"{bookings}/{lone_id}/cancel",
+                headers=headers,
+                body={"reason": "smoke test cleanup"},
+            )
+            self.record_result(
+                "M2",
+                "EXT-009 cancel of the one-person group → 200",
+                status == 200,
+                f"HTTP {status}",
+            )
+
+        # G5 Cancel the whole group in one call → 200 CANCELLED
+        status, data = self.http_request(
+            "POST",
+            f"{bookings}/{group_id}/cancel",
+            headers=headers,
+            body={"reason": "smoke test cleanup"},
+        )
+        res = data.get("result", {}) if isinstance(data, dict) else {}
+        self.record_result(
+            "M2",
+            "EXT-009 group cancel (one call for every person) → 200 CANCELLED",
+            status == 200
+            and res.get("booking_id") == group_id
+            and res.get("booking_status") == "CANCELLED",
+            f"HTTP {status} - {data}" if status != 200 else "",
+        )
+
+        # G6 Every person reads CANCELLED afterwards
+        status, data = self.http_request("GET", f"{bookings}/{group_id}", headers=headers)
+        res = data.get("result", {}) if isinstance(data, dict) else {}
+        self.record_result(
+            "M2",
+            "EXT-010 group reads CANCELLED for the aggregate and every person",
+            status == 200
+            and res.get("booking_status") == "CANCELLED"
+            and all(p.get("booking_status") == "CANCELLED" for p in res.get("persons") or []),
+            f"HTTP {status}, booking_status={res.get('booking_status')}",
+        )
+
+        # G7 Repeat group cancel → 200 idempotent (CR-169 FR-40, #592)
+        status, data = self.http_request(
+            "POST", f"{bookings}/{group_id}/cancel", headers=headers, body=None
+        )
+        res = data.get("result", {}) if isinstance(data, dict) else {}
+        self.record_result(
+            "M2",
+            "EXT-009 repeat group cancel is idempotent (200 CANCELLED)",
+            status == 200 and res.get("booking_status") == "CANCELLED",
+            f"HTTP {status} (code={get_error_code(data)})",
+        )
+
+        # G9 Group of 2 (the lower bound of a multi-person group) → 201, then cancel it
+        pair_cids = [make_valid_cid(), make_valid_cid()]
+        status, data = self.http_request(
+            "POST",
+            bookings,
+            headers=headers,
+            body={"location_code": location, "persons": [make_group_person(c) for c in pair_cids]},
+        )
+        res = data.get("result", {}) if isinstance(data, dict) else {}
+        pair_id = str(res.get("booking_id", ""))
+        self.record_result(
+            "M2",
+            "EXT-008 persons[] of 2 → 201 BOOKED with persons_count 2 and a BK- id",
+            status == 201 and pair_id.startswith("BK-") and res.get("persons_count") == 2,
+            f"HTTP {status} - {data}" if not pair_id.startswith("BK-") else f"booking_id={pair_id}",
+        )
+        if pair_id.startswith("BK-"):
+            status, _ = self.http_request(
+                "POST",
+                f"{bookings}/{pair_id}/cancel",
+                headers=headers,
+                body={"reason": "smoke test cleanup"},
+            )
+            self.record_result(
+                "M2",
+                "EXT-009 cancel of the two-person group → 200",
+                status == 200,
+                f"HTTP {status}",
+            )
+
+        # G8 Partial groups (a worker-rejected member, a checked-in member) need the worker
+        # and CouchDB: covered by e2e scenarios 8 and 9 (run with --e2e)
+        self.record_skip(
+            "M2",
+            "EXT-009/010 partial groups (rejected member, cancel after check-in)",
+            "needs the worker and CouchDB; run with --e2e",
+        )
 
     def test_m2_residency(self) -> bool:
         """EXT-011 — purpose + scope gates, 404 for a booked-but-not-checked-in CID."""
@@ -1270,14 +1625,14 @@ class SmokeTestRunner:
             f"HTTP {status}, booking_status={res.get('booking_status')}",
         )
 
-        # M2.18 Cancelling twice → 409 booking_not_cancellable
+        # M2.18 Cancelling twice → 200 idempotent (CR-169 FR-40, #592)
         status, data = self.http_request("POST", f"{base}/cancel", headers=headers)
-        err_code = get_error_code(data)
+        res = data.get("result", {}) if isinstance(data, dict) else {}
         self.record_result(
             "M2",
-            "EXT-009 second cancel rejected with 409 booking_not_cancellable",
-            status == 409 and err_code == "booking_not_cancellable",
-            f"HTTP {status} (code={err_code})",
+            "EXT-009 second cancel is idempotent (200 CANCELLED)",
+            status == 200 and res.get("booking_status") == "CANCELLED",
+            f"HTTP {status} (code={get_error_code(data)})",
         )
         return True
 
@@ -1460,19 +1815,14 @@ class SmokeTestRunner:
                 f"  [{status_badge}] {BOLD}{issue_id}{RESET} - {issue_name} ({p_sub}/{len(tests)} checks passed)"
             )
 
-        for issue_id, name, reason in self.expected_fail:
-            self.log(f"  [{YELLOW}EXPECTED-FAIL{RESET}] {issue_id} {name} ({reason})")
         for issue_id, name, reason in self.skipped:
             self.log(f"  [{YELLOW}SKIPPED{RESET}] {issue_id} {name} ({reason})")
         self.log(f"-----------------------------------------------------------------")
         self.log(
             f"Total Checks: {BOLD}{total}{RESET} | Passed: {GREEN}{passed_count}{RESET} | Failed: {RED}{failed_count}{RESET} | Duration: {elapsed:.2f}s"
         )
-        if self.expected_fail or self.skipped:
-            self.log(
-                f"Expected-fail (pending #578): {YELLOW}{len(self.expected_fail)}{RESET} | "
-                f"Skipped: {YELLOW}{len(self.skipped)}{RESET}"
-            )
+        if self.skipped:
+            self.log(f"Skipped: {YELLOW}{len(self.skipped)}{RESET}")
         self.log(
             f"{BOLD}================================================================={RESET}\n"
         )
@@ -1512,7 +1862,6 @@ PURGE_ROUNDS = 3
 SCRUB_ROUNDS = 3
 #: Pre-flight: regeneration rounds for CIDs that already have a doc in the shelter.
 PREFLIGHT_ATTEMPTS = 5
-PENDING_578 = "pending #578"
 S1_REF_CASE = "evacuee.booking_ref == booking_id and schema_v 14"
 EVACUEE_FIELDS = [
     "_id",
@@ -1931,6 +2280,25 @@ class CouchAdmin:
         status, _ = self.request("PUT", f"/{self.database}/{doc['_id']}", doc)
         return status in (200, 201, 202)
 
+    def get_stay(self, doc_id: str) -> str | None:
+        """The `current_stay.status` of one doc (None when missing)."""
+        status, doc = self.request(
+            "GET", f"/{self.database}/{urllib.parse.quote(doc_id, safe=':')}"
+        )
+        if status != 200 or not isinstance(doc, dict):
+            return None
+        return (doc.get("current_stay") or {}).get("status")
+
+    def set_stay(self, doc_id: str, stay: dict[str, Any]) -> bool:
+        """Replace one evacuee's `current_stay` (read-modify-write of that doc only)."""
+        path = f"/{self.database}/{urllib.parse.quote(doc_id, safe=':')}"
+        status, doc = self.request("GET", path)
+        if status != 200 or not isinstance(doc, dict):
+            return False
+        doc["current_stay"] = stay
+        status, _ = self.request("PUT", path, doc)
+        return status in (200, 201, 202)
+
     def bulk_delete(self, docs: List[Dict[str, Any]]) -> List[str]:
         """Delete docs (needs `_id` + `_rev`); returns the ids that were NOT deleted."""
         failed: List[str] = []
@@ -1963,6 +2331,7 @@ class MongoProbe:
         self._client.admin.command("ping")
         database = self._client.get_default_database()
         self.bookings = database["external_bookings"]
+        self.persons = database["public_persons"]  # the API's projection of stays (FR-32)
 
     @staticmethod
     def owned_filter(
@@ -2117,6 +2486,47 @@ class MongoProbe:
     def orphan_exists(self, booking_id: str) -> bool:
         return self.bookings.count_documents({"booking_id": booking_id}) > 0
 
+    def count_rows(self, booking_id: str, extra: dict[str, Any]) -> int:
+        return int(self.bookings.count_documents({"booking_id": booking_id, **extra}))
+
+    def person_status(self, evacuee_id: str) -> str | None:
+        """The API projection of one stay (`public_persons`); None until the worker syncs it."""
+        doc = self.persons.find_one({"_id": evacuee_id}, {"status": 1})
+        return doc.get("status") if doc else None
+
+    def reserve_member(
+        self,
+        booking_id: str,
+        client_id: str,
+        person_seq: int,
+        shelter_code: str,
+        evacuee_id: str,
+        household_id: str,
+    ) -> int:
+        """Reserve the worker's ids on one still-pending row that has none (a CAS).
+
+        Returns 0 when the worker reserved the row first; the test then reports a race.
+        """
+        result = self.bookings.update_one(
+            {
+                "booking_id": booking_id,
+                "person_seq": person_seq,
+                "client_id": client_id,
+                "shelter_code": shelter_code,
+                "state": "pending",
+                "evacuee_id": None,
+                "household_id": None,
+            },
+            {
+                "$set": {
+                    "evacuee_id": evacuee_id,
+                    "household_id": household_id,
+                    "updated_at": dt.datetime.now(dt.UTC),
+                }
+            },
+        )
+        return int(result.modified_count)
+
     def delete_groups(
         self, booking_ids: List[str], states: List[str], client_id: str, shelter_code: str
     ) -> int:
@@ -2169,7 +2579,6 @@ class E2ERunner(SmokeTestRunner):
         race_rounds: int = 3,
         settle: float = 2 * WORKER_POLL_SECONDS + 2,
         cleanup_timeout: float = 180,
-        require_578: bool = False,
         skip_big: bool = False,
         recovery: bool = False,
         **kwargs: Any,
@@ -2186,7 +2595,6 @@ class E2ERunner(SmokeTestRunner):
         self.race_rounds = race_rounds
         self.settle = settle
         self.cleanup_timeout = cleanup_timeout
-        self.require_578 = require_578
         self.skip_big = skip_big
 
         # Everything this run created, so cleanup only ever touches its own data.
@@ -2226,7 +2634,7 @@ class E2ERunner(SmokeTestRunner):
         self.cancel_rounds: Dict[str, int] = {}
         self.timing_lines: List[str] = []
         self.baseline_doc_count: Optional[int] = None
-        #: True once the worker was seen writing a group (precondition for EXPECTED-FAIL).
+        #: True once the worker was seen writing a group (sweeper verdict wording).
         self.worker_proven = False
 
     # ------------------------------------------------------------------ helpers
@@ -2315,30 +2723,9 @@ class E2ERunner(SmokeTestRunner):
             i for i, kind in proven.items() if kind == "household"
         }
 
-    def pending_578(
-        self, name: str, passed: bool, detail: str = "", precondition: bool = True
-    ) -> None:
-        """A case that needs #578: PASS when it already holds, else EXPECTED-FAIL.
-
-        EXPECTED-FAIL is only valid when the precondition holds (worker healthy and the
-        group actually written/visible); otherwise the case could not run: real FAIL.
-        """
-        label = f"{name} [{PENDING_578}]"
-        if passed:
-            self.record_result("E2E", label, True, "#578 behaviour present")
-        elif not precondition:
-            self.record_result("E2E", label, False, f"precondition not met: {detail}")
-        elif self.require_578:
-            self.record_result("E2E", label, False, detail)
-        else:
-            self.record_expected_fail("E2E", name, f"{PENDING_578}: {detail}")
-
-    def pending_not_run(self, name: str, reason: str) -> None:
-        """A pending-#578 case that was not exercised: SKIPPED, or FAIL with --require-578."""
-        if self.require_578:
-            self.record_result("E2E", f"{name} [{PENDING_578}]", False, f"not exercised: {reason}")
-        else:
-            self.record_skip("E2E", name, f"{PENDING_578}: {reason}")
+    def not_run(self, name: str, reason: str) -> None:
+        """A case whose set-up failed or whose precondition was not reached: FAIL."""
+        self.e2e_result(name, False, f"not exercised: {reason}")
 
     # -- Mongo scoping: only rows of THIS run's client_id (+ tracked ids when shared) --
     def mongo_on(self) -> bool:
@@ -2550,7 +2937,7 @@ class E2ERunner(SmokeTestRunner):
         docs = list(watch["evac_docs"].values())
         refs_ok = bool(docs) and all(d.get("booking_ref") == booking_id for d in docs)
         schema_ok = bool(docs) and all(d.get("schema_v") == 14 for d in docs)
-        self.pending_578(
+        self.e2e_result(
             name,
             refs_ok and schema_ok,
             f"booking_ref matches={refs_ok}, schema_v==14={schema_ok} "
@@ -2571,7 +2958,7 @@ class E2ERunner(SmokeTestRunner):
             f"booking_id={res.get('booking_id')}" if ok else f"HTTP {status} - {data}",
         )
         if not ok:
-            self.pending_not_run(S1_REF_CASE, "group of 3 was not created")
+            self.not_run(S1_REF_CASE, "group of 3 was not created")
             return
         self.s1_booking = res["booking_id"]
         watch = self.watch_group(
@@ -2606,7 +2993,7 @@ class E2ERunner(SmokeTestRunner):
         if watch["complete"]:
             self.check_booking_ref(self.s1_booking, watch, S1_REF_CASE)
         else:
-            self.pending_not_run(S1_REF_CASE, "group of 3 was never written by the worker")
+            self.not_run(S1_REF_CASE, "group of 3 was never written by the worker")
         if self.mongo:
             left = self.mongo.plaintext_rows([self.s1_booking])
             self.e2e_result(
@@ -2753,9 +3140,6 @@ class E2ERunner(SmokeTestRunner):
         self._banner(f"E2E 5: {size}-person group -> timing (gate for the cap, CR-169 FR-6)")
         if self.skip_big:
             self.record_skip("E2E", f"{size}-person group timing", "--skip-e2e-big")
-            self.pending_not_run(
-                f"{size}-person evacuee.booking_ref + schema_v 14", "--skip-e2e-big"
-            )
             return
         cids = self.make_group(size)
         t_start = time.monotonic()
@@ -2770,7 +3154,7 @@ class E2ERunner(SmokeTestRunner):
             else f"HTTP {status} - {str(data)[:200]}",
         )
         if not ok:
-            self.pending_not_run(
+            self.not_run(
                 f"{size}-person evacuee.booking_ref + schema_v 14", "group was not created"
             )
             return
@@ -2807,7 +3191,7 @@ class E2ERunner(SmokeTestRunner):
                 booking_id, written, f"{size}-person evacuee.booking_ref + schema_v 14"
             )
         else:
-            self.pending_not_run(
+            self.not_run(
                 f"{size}-person evacuee.booking_ref + schema_v 14",
                 "group was not fully written by the worker",
             )
@@ -2861,10 +3245,26 @@ class E2ERunner(SmokeTestRunner):
             f"{max(written.get('max_query', 0.0), cancelled.get('max_query', 0.0)):.2f}s)",
         ]
 
+    def _wait_for(self, check: Callable[[], bool], timeout: float) -> bool:
+        """Poll `check` every WATCH_POLL_SECONDS until it is true or `timeout` passes."""
+        deadline = time.monotonic() + timeout
+        while True:
+            if check():
+                return True
+            if time.monotonic() >= deadline:
+                return False
+            time.sleep(WATCH_POLL_SECONDS)
+
+    @staticmethod
+    def _person_map(status: dict[str, Any]) -> dict[Any, Any]:
+        return {p.get("index"): p.get("booking_status") for p in status.get("persons") or []}
+
     def scenario_couch_side_duplicate(self) -> None:
-        """Pending #578 (FR-21): a CouchDB-only duplicate must reject the whole group."""
-        self._banner(f"E2E 6 ({PENDING_578}): CouchDB-side duplicate rejects the group")
-        case = "CouchDB-side duplicate rejects the whole group with no docs"
+        """FR-21, first pass: a CouchDB-side duplicate seen before the worker wrote anything
+        rejects the WHOLE group and writes no doc. The per-person retry rule (D1/D4: part of
+        the group already in CouchDB) is covered by scenario 8."""
+        self._banner("E2E 6: CouchDB-side duplicate rejects the whole group (FR-21, first pass)")
+        case = "CouchDB-side duplicate rejects the whole group with no docs written"
         cids = self.make_group(3)
         planted_id = f"evacuee:E2E-PLANT-{random.getrandbits(48):012x}"
         with self._manifest_lock:
@@ -2876,13 +3276,13 @@ class E2ERunner(SmokeTestRunner):
             self.e2e_result(
                 "set-up: group accepted before planting the duplicate", False, f"HTTP {status}"
             )
-            self.pending_not_run(case, "set-up failed")
+            self.not_run(case, "set-up failed")
             return
         booking_id = res["booking_id"]
         # Decide "race lost" BEFORE planting: if the worker already wrote any doc of the
         # group the duplicate can no longer be seen by it, so the case is not testable.
         if self.evacuees(cids):
-            self.pending_not_run(
+            self.not_run(
                 case, "race lost: worker wrote the group before the duplicate was planted; rerun"
             )
             return
@@ -2913,7 +3313,7 @@ class E2ERunner(SmokeTestRunner):
         )
         if not planted:
             self.e2e_result("set-up: CouchDB duplicate planted", False, "PUT failed")
-            self.pending_not_run(case, "set-up failed")
+            self.not_run(case, "set-up failed")
             return
 
         def written_docs() -> int:
@@ -2940,14 +3340,13 @@ class E2ERunner(SmokeTestRunner):
             for p in persons
         )
         processed = leaked > 0 or any(p.get("booking_status") == "REJECTED" for p in persons)
-        self.pending_578(
-            case,
-            all_rejected and leaked == 0,
+        detail = (
             f"statuses={[p.get('booking_status') for p in persons]}, "
             f"docs written for the group={leaked}"
-            + ("" if processed else " (worker did not process the group in time)"),
-            precondition=processed,
         )
+        if not processed:
+            detail += " (worker did not process the group in time)"
+        self.e2e_result(case, all_rejected and leaked == 0, detail)
         if self.mongo:
             left = self.mongo.plaintext_rows([booking_id])
             self.e2e_result(
@@ -2956,12 +3355,294 @@ class E2ERunner(SmokeTestRunner):
                 f"rows with plaintext={left}",
             )
 
-    def scenario_sweeper(self) -> None:
-        """Pending #578 (FR-33): orphan committed=false rows are swept after 60 s."""
-        self._banner(f"E2E 7 ({PENDING_578}): sweeper removes orphan committed=false rows")
-        case = "sweeper removes orphan committed=false rows"
+    def scenario_partial_group(self) -> None:
+        """CR-169 FR-21 retry rule (D1/D4) + EXT-009/010 (FR-40/42, #592).
+
+        Part of the group is already in CouchDB (member 1's own pre-registration, written
+        before the worker reserved its ids) and member 1's CID is also held by a foreign live
+        evacuee. The worker rejects member 1 only (its stay is cancelled) and writes the
+        others. Then group cancel and repeat cancel.
+        """
+        self._banner("E2E 8: partial group (D1/D4): one duplicate member, cancel -> CANCELLED")
+        case = "EXT-009/010 partial group (duplicate member rejected, others written)"
         if not self.mongo_on():
-            self.pending_not_run(case, "needs --mongo-uri (pymongo) to plant an orphan row")
+            self.record_skip("E2E", case, "needs --mongo-uri (pymongo)")
+            return
+        assert self.mongo is not None and self.created_client_id
+        cids = self.make_group(3)
+        token = f"{random.getrandbits(48):012x}"
+        member_ev = f"evacuee:E2E-PART-{token}"
+        member_hh = f"household:E2E-PART-{token}"
+        foreign_id = f"evacuee:E2E-PLANT-{token}"
+        now = dt.datetime.now(dt.UTC).isoformat().replace("+00:00", "Z")
+        # Every id goes into the manifest BEFORE the doc that uses it is written.
+        with self._manifest_lock:
+            self.e2e_planted_ids.extend([member_ev, member_hh, foreign_id])
+            self._save_manifest(strict=True)
+        shelter = self.e2e_shelter
+        own_stay = {
+            "_id": member_ev,
+            "type": "evacuee",
+            "schema_v": 14,
+            "shelter_code": shelter,
+            "created_at": now,
+            "updated_at": now,
+            "created_by": "e2e-smoke",
+            "first_name": "E2E",
+            "last_name": "Partial",
+            "gender": None,
+            "phone": None,
+            "person_id": {"cardType": "national_id", "number": cids[1]},
+            "country": "THAILAND",
+            "vulnerable_groups": [],
+            "special_needs": [],
+            "household_id": member_hh,
+            "registered_via": "api",
+            "current_stay": {"status": "pre_registered", "zone": None, "since": now},
+            "privacy": {"search_excluded": False},
+        }
+        own_house = {
+            "_id": member_hh,
+            "type": "household",
+            "schema_v": 1,
+            "shelter_code": shelter,
+            "created_at": now,
+            "updated_at": now,
+            "created_by": "e2e-smoke",
+            "label": "E2E partial",
+            "head_evacuee_id": member_ev,
+            "status": "pre_registered",
+            "pets": [],
+            "vehicles": [],
+        }
+        foreign = {
+            "_id": foreign_id,
+            "type": "evacuee",
+            "schema_v": 12,
+            "shelter_code": shelter,
+            "created_at": now,
+            "updated_at": now,
+            "created_by": "e2e-smoke",
+            "first_name": "E2E",
+            "last_name": "Foreign",
+            "gender": None,
+            "phone": None,
+            "person_id": {"cardType": "national_id", "number": cids[1]},
+            "country": "THAILAND",
+            "vulnerable_groups": [],
+            "special_needs": [],
+            "household_id": None,
+            "current_stay": {"status": "pre_registered", "zone": None, "since": now},
+            "privacy": {"search_excluded": False},
+        }
+        # The API refuses a CID its projection already shows as held, so the group is sent
+        # first and the docs follow (the same order as scenario 6). The reservation CAS below
+        # then decides whether the worker can still take the retry path.
+        status, data, t201 = self.create_group(cids)  # registers cids before sending
+        res = data.get("result", {}) if isinstance(data, dict) else {}
+        booking_id = str(res.get("booking_id", ""))
+        if status != 201 or not booking_id.startswith("BK-"):
+            self.e2e_result("set-up: group of 3 accepted", False, f"HTTP {status} - {data}")
+            self.not_run(case, "set-up failed")
+            return
+        if not (self.couch.put(own_stay) and self.couch.put(own_house) and self.couch.put(foreign)):
+            self.e2e_result(
+                "set-up: CouchDB docs of the partial group written", False, "PUT failed"
+            )
+            self.not_run(case, "set-up failed")
+            return
+        # CAS on the still-unreserved row: 0 means the worker got there first (race lost).
+        reserved = self.mongo.reserve_member(
+            booking_id, self.created_client_id, 1, shelter, member_ev, member_hh
+        )
+        self.e2e_result(
+            "set-up: member 1 reserved the partial group's ids before the worker's pass",
+            reserved == 1,
+            f"rows={reserved} (0 = worker reserved first: race lost, rerun)",
+        )
+        if reserved != 1:
+            return
+        watch = self.watch_group(
+            [cids[0], cids[2]],
+            t201,
+            self.group_timeout,
+            lambda d: self.stay(d) == "pre_registered",
+            lambda d: d.get("type") == "household",
+        )
+        self.e2e_result(
+            f"members 0 and 2 written by the worker within {self.group_timeout:.0f}s",
+            watch["complete"],
+        )
+        if not watch["complete"]:
+            return
+
+        expected_rows = {0: "BOOKED", 1: "REJECTED", 2: "BOOKED"}
+        last: dict[str, Any] = {}
+
+        def rejected_and_booked() -> bool:
+            nonlocal last
+            _, last = self.booking_status(booking_id)
+            return (
+                last.get("booking_status") == "REJECTED"
+                and self._person_map(last) == expected_rows
+            )
+
+        ok = self._wait_for(rejected_and_booked, self.group_timeout)
+        reason = {p.get("index"): p.get("reject_reason") for p in last.get("persons") or []}
+        self.e2e_result(
+            "EXT-010 aggregate REJECTED; persons 0 and 2 BOOKED, person 1 REJECTED (duplicate)",
+            ok and reason.get(1) == "duplicate",
+            f"booking_status={last.get('booking_status')}, persons={self._person_map(last)}, "
+            f"reject_reason[1]={reason.get(1)}",
+        )
+        stay_cancelled = self._wait_for(
+            lambda: self.couch.get_stay(member_ev) == "cancelled", self.group_timeout
+        )
+        self.e2e_result(
+            "rejected member's own stay cancelled in CouchDB (D4; not left live)", stay_cancelled
+        )
+
+        status, data, tcancel = self.cancel_group(booking_id)
+        res = data.get("result", {}) if isinstance(data, dict) else {}
+        self.e2e_result(
+            "EXT-009 cancel with a rejected member -> 200 CANCELLED",
+            status == 200 and res.get("booking_status") == "CANCELLED",
+            f"HTTP {status} - {data}" if status != 200 else "",
+        )
+        if status != 200:
+            return
+        done = self.watch_group(
+            [cids[0], cids[2]],
+            tcancel,
+            self.group_timeout,
+            lambda d: self.stay(d) == "cancelled",
+            lambda d: d.get("status") == "cancelled",
+        )
+        self.e2e_result(
+            f"remaining 2 evacuees and their households end cancelled "
+            f"within {self.group_timeout:.0f}s",
+            done["complete"],
+            f"{done['elapsed']:.1f}s after cancel",
+        )
+        expected_after = {0: "CANCELLED", 1: "REJECTED", 2: "CANCELLED"}
+
+        def cancelled_aggregate() -> bool:
+            nonlocal last
+            _, last = self.booking_status(booking_id)
+            return (
+                last.get("booking_status") == "CANCELLED"
+                and self._person_map(last) == expected_after
+            )
+
+        ok = self._wait_for(cancelled_aggregate, self.group_timeout)
+        self.e2e_result(
+            "EXT-010 aggregate CANCELLED; persons 0 and 2 CANCELLED, person 1 still REJECTED",
+            ok,
+            f"booking_status={last.get('booking_status')}, persons={self._person_map(last)}",
+        )
+        status, data, _ = self.cancel_group(booking_id)
+        self.e2e_result(
+            "EXT-009 repeat cancel of the partial group -> 200 (idempotent)",
+            status == 200,
+            f"HTTP {status} (code={get_error_code(data)})" if status != 200 else "",
+        )
+        left = self.mongo.plaintext_rows([booking_id])
+        self.e2e_result(
+            "no plaintext PII left in the partial group's rows", left == 0, f"rows={left}"
+        )
+
+    def scenario_checked_in(self) -> None:
+        """EXT-009 after check-in: 409 booking_not_cancellable and nothing changed (FR-40/53)."""
+        self._banner("E2E 9: group with a checked-in member -> cancel 409, nothing changed")
+        case = "EXT-009 cancel with a checked-in member"
+        if not self.mongo_on():
+            self.record_skip(
+                "E2E", case, "needs --mongo-uri (pymongo): waits for the API projection"
+            )
+            return
+        assert self.mongo is not None and self.created_client_id
+        cids = self.make_group(2)
+        status, data, t201 = self.create_group(cids)
+        res = data.get("result", {}) if isinstance(data, dict) else {}
+        booking_id = str(res.get("booking_id", ""))
+        if status != 201 or not booking_id.startswith("BK-"):
+            self.e2e_result("set-up: group of 2 accepted", False, f"HTTP {status} - {data}")
+            return
+        watch = self.watch_group(
+            cids,
+            t201,
+            self.group_timeout,
+            lambda d: self.stay(d) == "pre_registered",
+            lambda d: d.get("type") == "household",
+        )
+        if not watch["complete"]:
+            self.e2e_result("set-up: group of 2 written by the worker", False)
+            return
+        target = self.evacuees([cids[0]]).get(cids[0], [])
+        if not target:
+            self.e2e_result("set-up: member 0 found in CouchDB", False)
+            return
+        evac_id = target[0]["_id"]
+        original = dict(target[0].get("current_stay") or {})
+        # watch_group above waited for pre_registered, so `original` is that stay; the
+        # fallback only covers a doc that has no current_stay.
+        restore = original or {"status": "pre_registered", "zone": None, "since": None}
+        set_ok = False
+        try:
+            now = dt.datetime.now(dt.UTC).isoformat().replace("+00:00", "Z")
+            arriving = {"status": "arriving", "zone": None, "since": now}
+            set_ok = self.couch.set_stay(evac_id, arriving)
+            self.e2e_result("set-up: member 0 checked in (stay arriving) in CouchDB", set_ok)
+            if not set_ok:
+                return
+            # FR-32: the API decides from its projection, so wait until the worker has synced it.
+            projected = self._wait_for(
+                lambda: self.mongo.person_status(evac_id) == "arriving", self.group_timeout
+            )
+            self.e2e_result("API projection shows member 0 arriving", projected)
+            if not projected:
+                return
+            status, data, _ = self.cancel_group(booking_id)
+            err = get_error_code(data)
+            self.e2e_result(
+                "EXT-009 cancel with a checked-in member -> 409 booking_not_cancellable",
+                status == 409 and err == "booking_not_cancellable",
+                f"HTTP {status} (code={err})",
+            )
+            time.sleep(self.settle)
+            _, st = self.booking_status(booking_id)
+            untouched_rows = (
+                self.mongo.count_rows(booking_id, {"state": "written", "cancel_requested": False})
+                == 2
+            )
+            other_stay = self.stay(self.evacuees([cids[1]]).get(cids[1], [{}])[0])
+            self.e2e_result(
+                "nothing changed after the refused cancel (API BOOKED, rows and stays as before)",
+                st.get("booking_status") == "BOOKED"
+                and untouched_rows
+                and other_stay == "pre_registered"
+                and self.stay(self.evacuees([cids[0]]).get(cids[0], [{}])[0]) == "arriving",
+                f"booking_status={st.get('booking_status')}, untouched_rows={untouched_rows}, "
+                f"other member stay={other_stay}",
+            )
+        finally:
+            # Put the member back so this group can be cancelled by cleanup (only when changed).
+            if set_ok:
+                restored = self.couch.set_stay(evac_id, restore)
+                back = restored and self._wait_for(
+                    lambda: self.mongo.person_status(evac_id) == "pre_registered",
+                    self.group_timeout,
+                )
+                self.e2e_result(
+                    "restore: member 0 back to pre_registered (CouchDB and API)", bool(back)
+                )
+
+    def scenario_sweeper(self) -> None:
+        """FR-33: an orphan committed=false row older than 60 s is swept by the worker."""
+        self._banner("E2E 7: sweeper removes orphan committed=false rows")
+        case = "sweeper deletes a committed=false row older than 60s"
+        if not self.mongo_on():
+            self.record_skip("E2E", case, "needs --mongo-uri (pymongo) to plant an orphan row")
             return
         assert self.mongo is not None and self.created_client_id
         suffix = f"{random.getrandbits(64):016x}"
@@ -2978,13 +3659,12 @@ class E2ERunner(SmokeTestRunner):
                 gone = True
                 break
             time.sleep(1)
-        self.pending_578(
-            "sweeper deletes a committed=false row older than 60s",
-            gone,
-            "orphan row still present (no sweeper in the worker yet)"
-            + ("" if self.worker_proven else "; worker never proven healthy in this run"),
-            precondition=self.worker_proven,
-        )
+        detail = ""
+        if not gone:
+            detail = "orphan row still present (sweeper did not run)" + (
+                "" if self.worker_proven else "; worker never proven healthy in this run"
+            )
+        self.e2e_result(case, gone, detail)
 
     # ------------------------------------------------------------------ cleanup
     def _discover_run_bookings(self) -> List[str]:
@@ -3702,6 +4382,8 @@ class E2ERunner(SmokeTestRunner):
                     self.scenario_race,
                     self.scenario_big_group,
                     self.scenario_couch_side_duplicate,
+                    self.scenario_partial_group,
+                    self.scenario_checked_in,
                     self.scenario_sweeper,
                 ):
                     try:
@@ -3778,7 +4460,6 @@ def run_e2e_from_args(
         big_budget=args.e2e_big_budget,
         race_rounds=args.e2e_race_rounds,
         cleanup_timeout=args.e2e_cleanup_timeout,
-        require_578=args.require_578,
         skip_big=args.skip_e2e_big,
     )
     fingerprint = target_fingerprint(args)
@@ -4074,7 +4755,7 @@ def main():
     e2e.add_argument(
         "--require-578",
         action="store_true",
-        help="Treat the 'pending #578' cases as real failures (use once #578 has landed)",
+        help="No-op (kept for old invocations): the #578 cases are plain assertions now",
     )
     parser.add_argument(
         "-v",

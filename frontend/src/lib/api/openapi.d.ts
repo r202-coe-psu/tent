@@ -394,7 +394,10 @@ export interface paths {
 		};
 		get?: never;
 		put?: never;
-		/** Create Booking */
+		/**
+		 * Create Booking
+		 * @description Books one or more persons (`persons[]`, or the legacy single `cid` body) as one group. Optional `Idempotency-Key` header (1–255 characters, kept 24 hours per client): a retry with the same key and body returns the original 201 body (same `booking_id`); the same key with a different body returns 409 `idempotency_key_reused`; a retry while the first request is still running returns 409 `idempotency_in_progress`. A key whose first attempt failed without creating a booking is released, so a retry can proceed.
+		 */
 		post: operations['create_booking_external_bookings_post'];
 		delete?: never;
 		options?: never;
@@ -411,7 +414,10 @@ export interface paths {
 		};
 		get?: never;
 		put?: never;
-		/** Cancel Booking */
+		/**
+		 * Cancel Booking
+		 * @description Cancels the whole booking group. Only OPEN persons (pending, or written without a cancel request) are cancelled; finished persons (cancelled, rejected, or already cancel-requested) are skipped and left unchanged. Repeating a cancel that has already happened returns 200. Returns 409 `booking_not_cancellable` when every person is rejected, or when an open person can no longer be cancelled (e.g. checked in); in the latter case no person is changed.
+		 */
 		post: operations['cancel_booking_external_bookings__booking_id__cancel_post'];
 		delete?: never;
 		options?: never;
@@ -1424,7 +1430,7 @@ export interface components {
 			location_code: string;
 			/**
 			 * Booking Status
-			 * @description สรุปทั้งกลุ่ม: ทุกคน CANCELLED → CANCELLED, มีคน REJECTED → REJECTED, อื่น ๆ → BOOKED
+			 * @description สรุปทั้งกลุ่ม: ไม่มีคนที่ยังเปิดอยู่ (OPEN) และมีอย่างน้อย 1 คนที่ CANCELLED หรือ cancel_requested → CANCELLED, มีคน REJECTED → REJECTED, อื่น ๆ → BOOKED
 			 * @enum {string}
 			 */
 			booking_status: 'BOOKED' | 'CANCELLED' | 'REJECTED';
@@ -3365,7 +3371,7 @@ export interface components {
 			shelters_open: number;
 			/**
 			 * Occupancy Total
-			 * @description active + pre_registered across projected shelters (CR-070)
+			 * @description active + pre_registered + kiosk_registered across projected shelters (CR-070)
 			 */
 			occupancy_total?: number | null;
 			/**
@@ -4748,7 +4754,10 @@ export interface operations {
 	create_booking_external_bookings_post: {
 		parameters: {
 			query?: never;
-			header?: never;
+			header?: {
+				/** @description Optional retry key for this client (1–255 characters, valid 24 hours). */
+				'Idempotency-Key'?: string | null;
+			};
 			path?: never;
 			cookie?: never;
 		};

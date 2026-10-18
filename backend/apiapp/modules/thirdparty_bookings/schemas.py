@@ -14,6 +14,9 @@ BookingStatus = Literal["BOOKED", "CANCELLED", "REJECTED"]
 
 # CR-169 FR-6 — ceiling of one synchronous all-or-nothing request (checked in the use case).
 MAX_PERSONS = 100
+# Hard schema-level bound (ABOVE the use-case cap) so an oversized body is rejected at parse
+# time. 101..MAX_PERSONS_HARD_LIMIT still reach the use case and get the usual 422 message.
+MAX_PERSONS_HARD_LIMIT = 1000
 
 
 class BookingPersonInput(BaseModel):
@@ -27,6 +30,7 @@ class BookingCreateRequest(BaseModel):
     location_code: str | None = Field(default=None, description="รหัสศูนย์พักพิง (EXT-002)")
     persons: list[BookingPersonInput] | None = Field(
         default=None,
+        max_length=MAX_PERSONS_HARD_LIMIT,
         description=(
             f"ผู้จองในกลุ่มเดียวกัน 1–{MAX_PERSONS} คน (all-or-nothing) — "
             "ห้ามส่งพร้อม cid/first_name/last_name/phone ระดับบน"
@@ -78,7 +82,11 @@ class BookingStatusResult(BaseModel):
     booking_id: str
     location_code: str
     booking_status: BookingStatus = Field(
-        description="สรุปทั้งกลุ่ม: ทุกคน CANCELLED → CANCELLED, มีคน REJECTED → REJECTED, อื่น ๆ → BOOKED"
+        description=(
+            "สรุปทั้งกลุ่ม: ไม่มีคนที่ยังเปิดอยู่ (OPEN) และมีอย่างน้อย 1 คนที่ "
+            "CANCELLED หรือ cancel_requested → CANCELLED, มีคน REJECTED → REJECTED, "
+            "อื่น ๆ → BOOKED"
+        )
     )
     reject_reason: str | None = Field(default=None, description="เหตุผลของคนแรกที่ REJECTED (ถ้ามี)")
     persons: list[BookingPersonStatus]

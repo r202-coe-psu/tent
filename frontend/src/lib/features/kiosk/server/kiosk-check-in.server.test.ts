@@ -46,6 +46,7 @@ interface FixtureEvacuee {
 	updated_at?: string;
 	current_stay: { status: string; zone?: string | null; since?: string };
 	privacy?: { search_excluded?: boolean };
+	booking_ref?: string;
 }
 
 interface FixtureHousehold {
@@ -833,6 +834,23 @@ describe('checkInSelectedMembers', () => {
 		expect(householdWrite).toBeDefined();
 		const householdBody = JSON.parse(String(householdWrite?.[1]?.body)) as FixtureHousehold;
 		expect(householdBody).toMatchObject({ _rev: '1-household', status: 'arriving' });
+	});
+
+	it('keeps booking_ref when checking in an api-registered pre_registered member (CR-169 FR-62)', async () => {
+		const primary = evacuee(0, { registered_via: 'api', booking_ref: 'BK-01TEST' });
+		setHousehold([primary], primary);
+
+		const results = await checkInSelectedMembers(shelterCode, primary._id, [primary._id]);
+
+		expect(results[0]).toMatchObject({ evacuee_id: primary._id, status: 'checked_in' });
+		const write = mockAdminFetch.mock.calls.find(
+			([path, init]) => init?.method === 'PUT' && path.endsWith(encodeURIComponent(primary._id))
+		);
+		expect(write).toBeDefined();
+		const body = JSON.parse(String(write?.[1]?.body)) as FixtureEvacuee;
+		expect(body.booking_ref).toBe('BK-01TEST');
+		expect(body.registered_via).toBe('api');
+		expect(body.current_stay).toMatchObject({ status: 'arriving' });
 	});
 
 	it('returns the label for a reprint of arriving members and none for members past arrival', async () => {

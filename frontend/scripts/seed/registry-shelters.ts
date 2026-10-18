@@ -8,9 +8,12 @@ import { deployShelterViewsFn } from '$lib/features/shelters/server/deploy';
 import {
 	buildValidateDocUpdate,
 	DAILY_SOP_ROLE_MANGO_INDEX,
+	PEOPLE_MANGO_INDEXES,
 	REFERRAL_MANGO_INDEXES,
 	KIOSK_LOOKUP_MANGO_INDEXES,
-	shelterDbName
+	REQUISITION_TICKET_MANGO_INDEXES,
+	shelterDbName,
+	TRANSFER_LEDGER_MANGO_INDEXES
 } from '$lib/server/shelter-access-design';
 import { buildRegistryDesignDoc, REGISTRY_DESIGN_ID } from '$lib/server/registry-design';
 import { shelterScopeRole } from '$lib/auth/roles';
@@ -417,7 +420,14 @@ async function deployShelterAccessDesign(db: string, shelterCode: string): Promi
 }
 
 async function deployMangoIndexes(db: string): Promise<void> {
-	for (const def of [...REFERRAL_MANGO_INDEXES, DAILY_SOP_ROLE_MANGO_INDEX]) {
+	const defs = [
+		...REFERRAL_MANGO_INDEXES,
+		...TRANSFER_LEDGER_MANGO_INDEXES,
+		...PEOPLE_MANGO_INDEXES,
+		...REQUISITION_TICKET_MANGO_INDEXES,
+		DAILY_SOP_ROLE_MANGO_INDEX
+	];
+	for (const def of defs) {
 		const { status, data } = await couchReq('POST', `/${db}/_index`, def);
 		if (status >= 400) {
 			const detail = (data as { reason?: string; error?: string } | null) ?? {};
@@ -426,7 +436,9 @@ async function deployMangoIndexes(db: string): Promise<void> {
 			);
 		}
 	}
-	console.log(`  ✓ ${db}: referral and Daily SOP role Mango indexes deployed`);
+	console.log(
+		`  ✓ ${db}: referral, ledger, people, requisition and Daily SOP role Mango indexes deployed`
+	);
 }
 
 async function deployKioskLookupMangoIndexes(db: string): Promise<void> {

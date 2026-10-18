@@ -41,6 +41,7 @@ import {
 	MANUAL_HOUSEHOLD_STATUS_TRANSITIONS,
 	evacueeInputSchema,
 	station1EvacueeInputSchema,
+	withoutBookingRef,
 	triageLevelSchema,
 	screeningInputSchema,
 	householdPreRegisterEvacueeSchema,
@@ -172,7 +173,7 @@ describe('vulnerable_groups vs special_needs', () => {
 		);
 		expect(e.vulnerable_groups).toEqual(['wheelchair', 'pregnant']);
 		expect(e.special_needs).toEqual(['ใช้ออกซิเจน']);
-		expect(e.schema_v).toBe(13);
+		expect(e.schema_v).toBe(14);
 
 		const bare = createEvacuee(
 			{ first_name: 'A', last_name: 'B', gender: 'other', phone: null },
@@ -245,7 +246,7 @@ describe('Anonymous ID', () => {
 			},
 			ctx
 		);
-		expect(a.schema_v).toBe(13);
+		expect(a.schema_v).toBe(14);
 		expect(a.person_id?.cardType).toBe('anonymous');
 		expect(isAnonymousId(a.person_id?.number ?? '')).toBe(true);
 		expect(b.person_id?.number).not.toBe(a.person_id?.number);
@@ -314,7 +315,7 @@ describe('createEvacuee', () => {
 		);
 		expect(e._id.startsWith('evacuee:')).toBe(true);
 		expect(e.type).toBe('evacuee');
-		expect(e.schema_v).toBe(13);
+		expect(e.schema_v).toBe(14);
 		expect(e.shelter_code).toBe('SH001');
 		expect(e.created_by).toBe('staff1');
 		expect(e.created_at).toBe(e.updated_at);
@@ -338,7 +339,7 @@ describe('createEvacuee', () => {
 			},
 			ctx
 		);
-		expect(e.schema_v).toBe(13);
+		expect(e.schema_v).toBe(14);
 		expect(e.current_stay.status).toBe('arriving');
 	});
 
@@ -1873,5 +1874,48 @@ describe('preferred_zone (schema_v 13, CR-159)', () => {
 			'preferred_zone'
 		);
 		expect(createEvacuee(base, ctx)).not.toHaveProperty('preferred_zone');
+	});
+});
+
+describe('evacuee booking_ref (CR-169, schema_v 14)', () => {
+	const base = { first_name: 'A', last_name: 'B', gender: 'other' as const, phone: null };
+
+	it('keeps booking_ref when given', () => {
+		const e = createEvacuee({ ...base, booking_ref: 'BK-01TEST' }, ctx);
+		expect(e.booking_ref).toBe('BK-01TEST');
+		expect(e.schema_v).toBe(14);
+	});
+
+	it('omits the booking_ref key when not given, null, or empty', () => {
+		expect(createEvacuee(base, ctx)).not.toHaveProperty('booking_ref');
+		expect(createEvacuee({ ...base, booking_ref: null }, ctx)).not.toHaveProperty('booking_ref');
+		expect(createEvacuee({ ...base, booking_ref: '' }, ctx)).not.toHaveProperty('booking_ref');
+	});
+
+	it('omits the booking_ref key when it is whitespace only', () => {
+		expect(createEvacuee({ ...base, booking_ref: '   ' }, ctx)).not.toHaveProperty('booking_ref');
+	});
+
+	it('strips booking_ref from the form-facing schemas (FR-61)', () => {
+		expect(station1EvacueeInputSchema.parse({ ...base, booking_ref: 'BK-X' })).not.toHaveProperty(
+			'booking_ref'
+		);
+		expect(
+			householdPreRegisterEvacueeSchema.parse({
+				...base,
+				person_id: { cardType: 'national_id', number: '1234567890121' },
+				emergency_contact: { name: 'ก', phone: '0899999999', relation: 'ญาติ' },
+				booking_ref: 'BK-X'
+			})
+		).not.toHaveProperty('booking_ref');
+	});
+
+	it('withoutBookingRef drops only booking_ref and does not mutate the input', () => {
+		const input = { ...base, booking_ref: 'BK-X' };
+		const out = withoutBookingRef(input);
+		expect(out).not.toHaveProperty('booking_ref');
+		expect(out).toEqual(base);
+		expect(input.booking_ref).toBe('BK-X');
+		expect(withoutBookingRef(base)).toEqual(base);
 	});
 });

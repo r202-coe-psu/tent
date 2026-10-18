@@ -2,7 +2,7 @@
 title: "Full-System Role Permission Matrix (R2-R4 & V10)"
 status: approved
 created: 2026-06-04
-updated: 2026-10-11 # CR-162 banner_staff (11th role); เดิม: CR-093 (Compound Roles) & CR-104 (Volunteer Backoffice, 10-Role Taxonomy, Health Policy); decision sync 2026-10-10; CR-155 shelter_incident แทน shelter_report
+updated: 2026-10-18 # CR-165 kiosk_staff แทน banner_staff (11th role) + CR-162 path `/back-office/kiosks/banners`; 2026-10-11 CR-162 banner_staff; เดิม: CR-093 (Compound Roles) & CR-104 (Volunteer Backoffice, 10-Role Taxonomy, Health Policy); decision sync 2026-10-10; CR-155 shelter_incident แทน shelter_report
 note: decision sync 2026-10-10 — VC may access /back-office/volunteers (job board/shifts), REG may access Station 2 medical screening; portal groups menus by department (ฝ่าย): ทะเบียน(REG; TRG/MED เห็นเฉพาะ Station 2), ครัว(KS), พัสดุและคลัง(SC, warehouse_staff alias), อาสาสมัคร(VC), รักษาความปลอดภัย(SO), อาคารสถานที่(FAC), บริหารศูนย์(SM), ส่วนกลาง(SA)
 closes: K-12 (A1 RBAC phase-blocker)
 affects:
@@ -10,6 +10,7 @@ affects:
   - frontend/src/lib/auth/roles.ts
   - frontend/src/lib/server/shelter-access-design.ts
   - docs/changes/14-kiosk/CR-162-kiosk-banner.md
+  - docs/changes/14-kiosk/CR-165-kiosk-management-back-office.md
 ---
 
 # Full-System Role Permission Matrix (R2-R4 & V10)
@@ -36,13 +37,16 @@ affects:
 | **VC** | `volunteer_coordinator` | ผู้ประสานงานจิตอาสา | สร้างประกาศภารกิจงานอาสา (`job`), ดูแลกระดานงาน, จัดสรรกะงาน, ดูแลจุดเช็คอินแท็บเล็ตหน้าศูนย์, และออกสิทธิ์ระบบให้อาสาช่วยงาน |
 | **SO** | `security_officer` | เจ้าหน้าที่รักษาความปลอดภัย | ควบคุมความสงบเรียบร้อย, บันทึกเหตุการณ์ความไม่ปลอดภัย (Incidents), จัดการพื้นที่หวงห้าม, และเฝ้าระวังจุดเข้า-ออกศูนย์ |
 | **FAC** | `facility_staff` | เจ้าหน้าที่ฝ่ายอาคารสถานที่ | จัดการโซนที่พัก (Zoning), บริหารจัดการเต็นท์และพื้นที่นอน, ดูแลระบบไฟฟ้า น้ำประปา สุขาภิบาล และการซ่อมบำรุงอาคาร |
-| **BAN** | `banner_staff` | เจ้าหน้าที่ประชาสัมพันธ์ (แบนเนอร์ Kiosk) | สร้าง/แก้ไข/เปิดปิด/ลบแบนเนอร์รูปภาพที่แสดงบนตู้ kiosk ของศูนย์ตัวเอง — ไม่มีสิทธิ์อื่นของศูนย์ ([CR-162](../changes/14-kiosk/CR-162-kiosk-banner.md)) |
+| **KIO** | `kiosk_staff` | เจ้าหน้าที่ดูแลตู้ Kiosk | ดูแลตู้ kiosk ของศูนย์ตัวเอง — เครื่อง + staff PIN ([CR-165](../changes/14-kiosk/CR-165-kiosk-management-back-office.md)) และแบนเนอร์รูปภาพบนตู้ ([CR-162](../changes/14-kiosk/CR-162-kiosk-banner.md)) — ไม่มีสิทธิ์อื่นของศูนย์ |
 
-> **CR-162 (2026-10-11)** — เพิ่มบทบาทที่ 11 `banner_staff` (compound `{code}:banner_staff`, อยู่ใน `STAFF_CAPABILITIES` — SM ของศูนย์และ SA grant/revoke ได้)
+> **CR-165 FR-SBO-41 / CR-162** — บทบาทที่ 11 คือ `kiosk_staff` (compound `{code}:kiosk_staff`, อยู่ใน `STAFF_CAPABILITIES` — SM ของศูนย์และ SA grant/revoke ได้) · `banner_staff` ของ CR-162 ฉบับ 2026-10-11 ถูกแทนที่และไม่มีใน `roles.ts`
 
-| หมวดงาน / เอกสาร | การกระทำ (Action) | SA | SM | BAN | บทบาทอื่น |
+| หมวดงาน / เอกสาร | การกระทำ (Action) | SA | SM | KIO | บทบาทอื่น |
 | :--- | :--- | :---: | :---: | :---: | :---: |
-| **Kiosk Banner** (`/back-office/kiosk-banners`) | ดู / สร้าง / แก้ไข / เปิดปิด / ลบ | ✓ | scope | scope | — |
+| **Kiosk Device** (`/back-office/kiosks`) | ดู / สร้าง / แก้ไข / เปิดปิด / staff PIN / ลบ | ✓ | scope | scope | — |
+| **Kiosk Banner** (`/back-office/kiosks/banners`) | ดู / สร้าง / แก้ไข / เปิดปิด / จัดลำดับ / ลบ | ✓ | scope | scope | — |
+
+> scope = เฉพาะศูนย์ที่ถือ `{code}:shelter_manager` / `{code}:kiosk_staff` · เครื่องหรือ banner ของศูนย์อื่นที่เรียกด้วย `{id}` ตอบ `404`
 
 ---
 

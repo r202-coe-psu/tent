@@ -1,6 +1,7 @@
 /**
- * Redeploy `_design/access` (validate_doc_update allowlist), referral, kiosk
- * lookup and Daily SOP role Mango indexes on every shelter DB listed in the
+ * Redeploy `_design/access` (validate_doc_update allowlist), and every shelter
+ * Mango index family (referral, kiosk lookup, transfer ledger, people, requisition
+ * ticket, Daily SOP role) on every shelter DB listed in the
  * registry, and grant the public writer user `_security.members` access.
  *
  * Run after allowlist changes (e.g. new doc types in shelter-access-design)
@@ -39,10 +40,13 @@ import {
 import {
 	buildValidateDocUpdate,
 	DAILY_SOP_ROLE_MANGO_INDEX,
+	KIOSK_LOOKUP_WARMUP_SELECTORS,
+	PEOPLE_MANGO_INDEXES,
 	REFERRAL_MANGO_INDEXES,
 	KIOSK_LOOKUP_MANGO_INDEXES,
 	REQUISITION_TICKET_MANGO_INDEXES,
-	shelterDbName
+	shelterDbName,
+	TRANSFER_LEDGER_MANGO_INDEXES
 } from '$lib/server/shelter-access-design';
 
 // ─── env loader ─────────────────────────────────────────────────────────────
@@ -324,15 +328,9 @@ async function deployMangoIndexes(
 }
 
 async function warmUpKioskLookupMangoIndexes(db: string): Promise<void> {
-	const warmupSelectorByIndexName: Record<string, Record<string, string>> = {
-		'evacuee-type-phone-idx': { type: 'evacuee', phone: '__warmup__' },
-		'evacuee-type-person-id-idx': { type: 'evacuee', 'person_id.number': '__warmup__' },
-		'evacuee-type-household-idx': { type: 'evacuee', household_id: '__warmup__' }
-	};
-
 	for (const def of KIOSK_LOOKUP_MANGO_INDEXES) {
 		try {
-			const selector = warmupSelectorByIndexName[def.name];
+			const selector = KIOSK_LOOKUP_WARMUP_SELECTORS[def.name];
 			if (!selector) {
 				console.warn(`    ⚠ no kiosk lookup warm-up selector configured for ${def.name}`);
 				continue;
@@ -472,6 +470,8 @@ async function main() {
 				const indexCount =
 					REFERRAL_MANGO_INDEXES.length +
 					KIOSK_LOOKUP_MANGO_INDEXES.length +
+					TRANSFER_LEDGER_MANGO_INDEXES.length +
+					PEOPLE_MANGO_INDEXES.length +
 					REQUISITION_TICKET_MANGO_INDEXES.length +
 					1;
 				console.log(`    would ensure ${indexCount} shelter Mango indexes`);
@@ -511,6 +511,14 @@ async function main() {
 			const kioskIndexResult = await deployKioskLookupMangoIndexes(db, false);
 			console.log(
 				`    ✓ kiosk lookup mango indexes (${kioskIndexResult.created} created, ${kioskIndexResult.existing} existing)`
+			);
+			const ledgerIndexResult = await deployMangoIndexes(db, TRANSFER_LEDGER_MANGO_INDEXES, false);
+			console.log(
+				`    ✓ transfer ledger mango indexes (${ledgerIndexResult.created} created, ${ledgerIndexResult.existing} existing)`
+			);
+			const peopleIndexResult = await deployMangoIndexes(db, PEOPLE_MANGO_INDEXES, false);
+			console.log(
+				`    ✓ people mango indexes (${peopleIndexResult.created} created, ${peopleIndexResult.existing} existing)`
 			);
 			if (PUBLIC_WRITER_NAME) {
 				console.log(

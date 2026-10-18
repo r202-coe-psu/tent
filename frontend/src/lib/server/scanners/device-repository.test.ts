@@ -52,7 +52,8 @@ const input = {
 	name: 'จุดคัดกรอง 1',
 	shelter_code: 'SH001',
 	station_name: 'โต๊ะ 1',
-	status: 'active' as const
+	status: 'active' as const,
+	screen_type: 'compact' as const
 };
 
 const v1Doc = {
@@ -135,6 +136,18 @@ describe('ScannerDeviceRepository', () => {
 				staff_pin_is_default: true,
 				staff_pin_updated_by: 'sa-user'
 			});
+		});
+
+		it('writes the chosen screen_type on the registry doc', async () => {
+			await repository.createDevice({ ...input, screen_type: 'portrait' }, 'sa-user');
+
+			expect(mockRaw.mock.calls[1]?.[2]).toMatchObject({ screen_type: 'portrait' });
+		});
+
+		it('writes banner_enabled: true explicitly on a new device (FR-KBR-35)', async () => {
+			await repository.createDevice(input, 'sa-user');
+
+			expect(mockRaw.mock.calls[1]?.[2]).toMatchObject({ banner_enabled: true });
 		});
 
 		it('writes a random default PIN to scanner_secrets first and returns it once', async () => {
@@ -483,6 +496,35 @@ describe('ScannerDeviceRepository', () => {
 			expect(putBodyAt(1).updated_at).not.toBe(v2Doc.updated_at);
 			expect(updated.name).toBe('จุดคัดกรอง 9');
 			expect(updated.status).toBe('inactive');
+		});
+
+		it('writes banner_enabled and keeps it absent when not patched (FR-KBR-35)', async () => {
+			mockRaw
+				.mockResolvedValueOnce({ status: 200, data: v2Doc })
+				.mockResolvedValueOnce({ status: 201, data: { ok: true, rev: '4-def' } })
+				.mockResolvedValueOnce({ status: 200, data: v2Doc })
+				.mockResolvedValueOnce({ status: 201, data: { ok: true, rev: '4-def' } });
+
+			const updated = await repository.updateDevice(v2Doc._id, { banner_enabled: false }, 'sm-a');
+			expect(putBodyAt(1)).toEqual({
+				...v2Doc,
+				banner_enabled: false,
+				updated_at: expect.any(String)
+			});
+			expect(updated.banner_enabled).toBe(false);
+
+			await repository.updateDevice(v2Doc._id, { status: 'inactive' }, 'sm-a');
+			expect(putBodyAt(3)).not.toHaveProperty('banner_enabled');
+		});
+
+		it('writes screen_type through a patch', async () => {
+			mockRaw
+				.mockResolvedValueOnce({ status: 200, data: v2Doc })
+				.mockResolvedValueOnce({ status: 201, data: { ok: true, rev: '4-def' } });
+
+			const updated = await repository.updateDevice(v2Doc._id, { screen_type: 'portrait' }, 'sm-a');
+			expect(putBodyAt(1)).toMatchObject({ screen_type: 'portrait' });
+			expect(updated.screen_type).toBe('portrait');
 		});
 
 		it('keeps a v1 doc at v1 (no PIN metadata invented)', async () => {
