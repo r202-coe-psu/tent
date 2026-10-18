@@ -144,6 +144,12 @@ describe('ScannerDeviceRepository', () => {
 			expect(mockRaw.mock.calls[1]?.[2]).toMatchObject({ screen_type: 'portrait' });
 		});
 
+		it('writes banner_enabled: true explicitly on a new device (FR-KBR-35)', async () => {
+			await repository.createDevice(input, 'sa-user');
+
+			expect(mockRaw.mock.calls[1]?.[2]).toMatchObject({ banner_enabled: true });
+		});
+
 		it('writes a random default PIN to scanner_secrets first and returns it once', async () => {
 			const result = await repository.createDevice(input, 'sa-user');
 

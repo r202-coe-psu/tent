@@ -208,6 +208,7 @@ export class ScannerDeviceRepository {
 			shelter_code: input.shelter_code,
 			station_name: input.station_name,
 			screen_type: input.screen_type,
+			banner_enabled: true,
 			secret_hash: hashScannerSecret(plaintext_secret),
 			secret_prefix: `${plaintext_secret.slice(0, 16)}...`,
 			status: input.status,
