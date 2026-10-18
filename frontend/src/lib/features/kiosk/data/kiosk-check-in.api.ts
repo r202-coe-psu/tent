@@ -172,7 +172,7 @@ export class KioskPartialCheckInError extends Error {
 	}
 }
 
-async function requestError(response: Response): Promise<KioskRequestError> {
+export async function requestError(response: Response): Promise<KioskRequestError> {
 	const body = (await response.json().catch((error: unknown) => {
 		if (error instanceof Error && error.name === 'AbortError') throw error;
 		return null;
@@ -215,7 +215,7 @@ function withTimeout(
 	};
 }
 
-async function requestWithTimeout<T>(
+export async function requestWithTimeout<T>(
 	input: RequestInfo | URL,
 	init: RequestInit,
 	consume: (response: Response) => Promise<T>,
