@@ -1232,7 +1232,54 @@ class SmokeTestRunner:
         )
 
         self._group_booking_checks(headers, bookings, location)
+        self._idempotency_checks(headers, bookings, location)
         return True
+
+    def _idempotency_checks(self, headers: Dict[str, str], bookings: str, location: str) -> None:
+        """#614 Idempotency-Key (API level). The booking made here is cancelled again."""
+        key = f"smoke-{os.urandom(8).hex()}"
+        keyed = {**headers, "Idempotency-Key": key}
+        cid = make_valid_cid()
+        body = {**make_group_person(cid), "location_code": location}
+        status, data = self.http_request("POST", bookings, headers=keyed, body=body)
+        result = data.get("result") if isinstance(data, dict) else None
+        first_id = str((result or {}).get("booking_id", ""))
+        if status != 201 or not first_id.startswith("BK-"):
+            self.record_result(
+                "M2",
+                "EXT-008 Idempotency-Key first request → 201",
+                False,
+                f"HTTP {status} - {data}",
+            )
+            return
+
+        try:
+            status, data = self.http_request("POST", bookings, headers=keyed, body=body)
+            result = data.get("result") if isinstance(data, dict) else None
+            replay_id = str((result or {}).get("booking_id", ""))
+            self.record_result(
+                "M2",
+                "EXT-008 same Idempotency-Key and body replays 201 with the same booking_id",
+                status == 201 and replay_id == first_id,
+                f"HTTP {status}, booking_id={replay_id}",
+            )
+
+            different = {**body, "first_name": "Other"}
+            status, data = self.http_request("POST", bookings, headers=keyed, body=different)
+            err_code = get_error_code(data)
+            self.record_result(
+                "M2",
+                "EXT-008 reused Idempotency-Key, different body → 409 idempotency_key_reused",
+                status == 409 and err_code == "idempotency_key_reused",
+                f"HTTP {status} (code={err_code})",
+            )
+        finally:
+            self.http_request(
+                "POST",
+                f"{bookings}/{first_id}/cancel",
+                headers=headers,
+                body={"reason": "smoke test cleanup"},
+            )
 
     def _group_booking_checks(self, headers: Dict[str, str], bookings: str, location: str) -> None:
         """CR-169 group scenarios (EXT-008/009/010, API level). Every group made here is

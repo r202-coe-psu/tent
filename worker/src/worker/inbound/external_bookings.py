@@ -17,27 +17,33 @@ touches CouchDB (FR-54). This loop:
   still ``pre_registered`` (FR-53), mirroring the staff
   ``cancelEvacueePreRegistration`` path (stay → ``cancelled`` + ``audit`` doc, and the
   household → ``cancelled`` once no member is left ``pre_registered``). Staff cancel
-  writes no ``movement`` doc, so neither does this.
+  writes no ``movement`` doc, so neither does this. A flag that still carries a
+  ``cancel_flag_token`` belongs to an EXT-009 request that has not finished and is
+  never acted on (see ``revert_abandoned_cancel_flags``).
+* abandoned cancel flags → a ``cancel_flag_token`` older than
+  ``CANCEL_FLAG_TTL_SECONDS`` is a request that died or failed to revert its flag; the
+  flag is reverted without cancelling anything (the partner never got a 200).
 
 Failure handling: one broken group or cancel row never skips the rest of a poll, and a
 group whose CouchDB write keeps failing is retried with an in-memory exponential
 backoff (``FailureTracker``; resets on restart, nothing is persisted) so it neither
 hammers CouchDB nor floods the log every ``POLL_INTERVAL_SECONDS``.
 
-Residual case (R5, not fixable without a new persisted field — a spec change): if the
-process dies after the ``_bulk_docs`` of a group and the API then cancels *every*
-still-``pending`` row of it, no ``pending`` row is left, so the group is never due
-again and those evacuees stay ``pre_registered`` in CouchDB until staff cancel them (accepted risk, tracked in #595).
-While at least one row of the group is still ``pending``, the next pass cancels the
-stranded stays (``_cancel_stranded_rows``).
+Residual case (R5): if the process dies after the ``_bulk_docs`` of a group and the API
+then cancels *every* still-``pending`` row of it, no ``pending`` row is left, so the group
+is never due again. The reconcile pass (``reconcile_terminal_bookings``, #613) closes this:
+it reads the reserved ``evacuee_id`` / ``household_id`` of every terminal row directly and
+cancels the stays still ``pre_registered``, so it no longer depends on a ``pending``
+sibling. While at least one row of the group is still ``pending``, the next pass also
+cancels the stranded stays (``_cancel_stranded_rows``).
 
 The same gap applies when a row stays ``cancelled`` / ``rejected`` and the direct stay
 cancel fails on a CouchDB error (a stranded row, a row the API cancelled during the write,
 or a row rejected as duplicate after its docs reached CouchDB — see
 ``_cancel_stranded_rows`` / ``_mark_written`` / ``_reject_duplicated_rows``). While a
 ``pending`` sibling is left, the next pass retries that stay cancel for both ``cancelled``
-and D4-``rejected`` rows (``_cancel_stranded_rows``); with none left, nothing retries it
-(the #595 residual).
+and D4-``rejected`` rows (``_cancel_stranded_rows``); the reconcile pass (#613) retries it
+for every terminal row that has not been reconciled yet.
 
 The API changes the same rows concurrently (EXT-009), so every Mongo write here is a
 conditional ``update_one`` on the observed state (``_transition``), never a Beanie
@@ -104,6 +110,14 @@ POLL_INTERVAL_SECONDS = 3
 #: A `committed=False` row older than this was abandoned by a crashed API (FR-33).
 STAGED_TTL_SECONDS = 60
 
+#: A ``cancel_flag_token`` older than this belongs to an EXT-009 request that died or could
+#: not revert its flag (CR-169 decision sync 2026-10-17, review round 2 of PR #635). The API
+#: has no hold-time limit on its flags (a 60 s rule was rejected, review round 3), so a live
+#: request whose token clear runs past this TTL (Mongo slower than about a minute, or host
+#: clock skew) may have its flags reverted here while it answers 200: an accepted residual,
+#: closed only by #616.
+CANCEL_FLAG_TTL_SECONDS = 120
+
 #: First retry delay after a failed CouchDB write; doubles per failure up to the cap.
 BACKOFF_BASE_SECONDS = 6.0
 BACKOFF_MAX_SECONDS = 180.0
@@ -129,6 +143,11 @@ HOLD_STATUSES: tuple[str, ...] = (
     "room_confirmed",
     "temporary_leave",
 )
+
+#: Stay statuses that keep a household alive (schema.md §1.3 derive rules 2-4, CR-169 #613:
+#: a household is cancelled only when no member is still held): HOLD_STATUSES plus
+#: ``kiosk_registered``.
+_HOUSEHOLD_LIVE_STATUSES: tuple[str, ...] = (*HOLD_STATUSES, "kiosk_registered")
 
 _CANCEL_REASON = "ยกเลิกการลงทะเบียนล่วงหน้า (partner API)"
 _HOUSEHOLD_CANCEL_REASON = "ยกเลิกการลงทะเบียนครัวเรือนล่วงหน้า — ไม่มีสมาชิกค้าง pre_registered"
@@ -172,6 +191,10 @@ class FailureTracker:
         self._failures[key] = count
         self._retry_at[key] = _clock() + delay
         return count, delay
+
+    def keys(self, prefix: str) -> list[str]:
+        """Tracked keys starting with ``prefix`` — in backoff or not."""
+        return [key for key in self._failures if key.startswith(prefix)]
 
     def succeeded(self, key: str) -> None:
         self._failures.pop(key, None)
@@ -304,10 +327,16 @@ def build_audit_doc(
     shelter_code: str,
     created_by: str,
     now: str,
+    doc_id: str | None = None,
 ) -> dict[str, Any]:
-    """Couch ``audit`` entry — same shape the staff app's ``createAuditEntry`` writes."""
+    """Couch ``audit`` entry — same shape the staff app's ``createAuditEntry`` writes.
+
+    ``doc_id`` is set only for the partner cancel audits (`_stay_audit` /
+    `_household_audit`): a deterministic id makes the write idempotent, so the reconcile
+    pass can tell whether the audit of a cancel it finds already done exists (#613).
+    """
     return {
-        "_id": f"audit:{new_ulid()}",
+        "_id": doc_id or f"audit:{new_ulid()}",
         "type": "audit",
         "schema_v": AUDIT_SCHEMA_V,
         "shelter_code": shelter_code,
@@ -321,6 +350,68 @@ def build_audit_doc(
         "context": context,
         "occurred_at": now,
     }
+
+
+def _stay_audit_id(row_id: str) -> str:
+    """Deterministic id of the audit of a partner stay cancel (one per booking row)."""
+    return f"audit:ext-cancel-stay:{row_id}"
+
+
+def _household_audit_id(household_id: str) -> str:
+    """Deterministic id of the audit of a partner household cancel (one per household)."""
+    return f"audit:ext-cancel-household:{household_id}"
+
+
+def _stay_audit(
+    booking: ExternalBooking, evacuee_id: str, household_id: str | None, now: str
+) -> dict[str, Any]:
+    return build_audit_doc(
+        target_type="evacuee",
+        target_id=evacuee_id,
+        reason=_CANCEL_REASON,
+        context={
+            "previous_status": "pre_registered",
+            "next_status": "cancelled",
+            "household_id": household_id,
+            "booking_id": booking.booking_id,
+        },
+        shelter_code=booking.shelter_code,
+        created_by=partner_actor(booking.module_name, booking.client_id),
+        now=now,
+        doc_id=_stay_audit_id(booking.id),
+    )
+
+
+def _household_audit(
+    household_id: str, shelter_code: str, evacuee_id: str | None, actor: str, now: str
+) -> dict[str, Any]:
+    return build_audit_doc(
+        target_type="household",
+        target_id=household_id,
+        reason=_HOUSEHOLD_CANCEL_REASON,
+        context={
+            "previous_status": "pre_registered",
+            "next_status": "cancelled",
+            "triggered_by_evacuee_id": evacuee_id,
+        },
+        shelter_code=shelter_code,
+        created_by=actor,
+        now=now,
+        doc_id=_household_audit_id(household_id),
+    )
+
+
+async def _write_audit_once(
+    couch: CouchClient, database: str, doc: dict[str, Any]
+) -> bool:
+    """Write a deterministic-id audit doc unless it is already there. True = written now.
+
+    The existence check keeps `put_doc` from overwriting an audit an earlier pass wrote.
+    """
+    if await couch.get_doc(database, doc["_id"]) is not None:
+        return False
+    await couch.put_doc(database, doc)
+    return True
 
 
 _PII_CLEARED: dict[str, None] = {
@@ -360,7 +451,72 @@ _CHANGED = "changed"
 _FAILED = "failed"
 
 _PENDING = {"state": "pending"}
-_CANCEL_DUE = {"state": "written", "cancel_requested": True}
+# `cancel_flag_token: None` also matches rows without the field (flags set before #612).
+# A tokened flag is still owned by an in-flight EXT-009 request, which may yet revert it:
+# acting on it could cancel a stay although the partner gets a 409/500 (CR-169 decision
+# sync 2026-10-17, review round 2 of PR #635). The selector and every transition guard
+# share this filter so they cannot drift apart.
+_CANCEL_DUE = {"state": "written", "cancel_requested": True, "cancel_flag_token": None}
+
+
+async def revert_abandoned_cancel_flags() -> int:
+    """Revert ``cancel_requested`` flags whose request token is stale. Returns rows reverted.
+
+    An EXT-009 request clears its token when it succeeds or when it reverts its own flag.
+    A token still set after ``CANCEL_FLAG_TTL_SECONDS`` means the request's revert kept
+    failing or its process died: the partner never got a 200, so the flag is undone
+    (``cancel_requested=False``, reason/token/set time cleared) and nothing is cancelled in
+    CouchDB. Each write is guarded on the token observed here, so a request that finishes
+    meanwhile (its commit or revert clears the token first) is left alone, and an API revert
+    racing this one writes the same values.
+
+    Age is taken from ``cancel_flag_set_at`` (API clock vs. worker clock; skew only shifts
+    the effective TTL). A token without a set time (rows flagged before the field existed)
+    falls back to ``updated_at``, so such a row cannot stay tokened forever. Logs booking
+    ids only.
+    """
+    collection = ExternalBooking.get_pymongo_collection()
+    cutoff = datetime.now(UTC) - timedelta(seconds=CANCEL_FLAG_TTL_SECONDS)
+    stale = await collection.find(
+        {
+            "state": "written",
+            "cancel_requested": True,
+            "cancel_flag_token": {"$ne": None},
+            "$or": [
+                {"cancel_flag_set_at": {"$lt": cutoff}},
+                {"cancel_flag_set_at": None, "updated_at": {"$lt": cutoff}},
+            ],
+        },
+        {"_id": 1, "booking_id": 1, "cancel_flag_token": 1},
+    ).to_list()
+    reverted: list[str] = []
+    for row in stale:
+        result = await collection.update_one(
+            {
+                "_id": row["_id"],
+                "state": "written",
+                "cancel_requested": True,
+                "cancel_flag_token": row["cancel_flag_token"],
+            },
+            {
+                "$set": {
+                    "cancel_requested": False,
+                    "cancel_reason": None,
+                    "cancel_flag_token": None,
+                    "cancel_flag_set_at": None,
+                    "updated_at": datetime.now(UTC),
+                }
+            },
+        )
+        if result.modified_count:
+            reverted.append(str(row["booking_id"]))
+    if reverted:
+        logger.warning(
+            "Reverted %d abandoned cancel flag(s) from booking_id(s) %s",
+            len(reverted),
+            ", ".join(sorted(set(reverted))),
+        )
+    return len(reverted)
 
 
 async def sweep_stale_staged() -> int:
@@ -511,7 +667,13 @@ async def _reject_pending(booking_id: str) -> int:
 
 
 async def _cancel_stay(
-    couch: CouchClient, database: str, booking: ExternalBooking, evacuee_id: str
+    couch: CouchClient,
+    database: str,
+    booking: ExternalBooking,
+    evacuee_id: str,
+    *,
+    strict: bool = False,
+    now: str | None = None,
 ) -> str:
     """Cancel a ``pre_registered`` stay like the staff app does (FR-53).
 
@@ -522,12 +684,20 @@ async def _cancel_stay(
 
     Returns ``_CANCELLED``; ``_CHANGED`` when the evacuee is missing or no longer
     ``pre_registered`` (nothing written — callers re-evaluate); ``_FAILED`` when the stay
-    could not be written (caller retries). Audit + household are best effort — the stay
-    is the source of truth and the household status is derived from it (schema.md §1.3).
-    Logs ids and the exception type only.
+    could not be written (caller retries).
+
+    ``strict=False`` (EXT-009 cancel path): audit + household are best effort — the stay
+    is the source of truth and the household status is derived from it (schema.md §1.3);
+    a failure is logged (ids and exception type only) and ``_CANCELLED`` is still returned.
+    ``strict=True`` (reconcile, #613): an audit or household write failure is raised after
+    the stay was cancelled, so the row stays unreconciled; the next pass finishes it
+    (`_ensure_stay_audit`, then the household step of `_reconcile_row`).
+
+    ``now`` (default: the current time) is written as ``current_stay.since`` and, by the
+    household roll-up, as the household's ``updated_at``; reconcile passes the value it
+    stamped in the row's per-doc markers beforehand.
     """
-    now = _now_iso()
-    actor = partner_actor(booking.module_name, booking.client_id)
+    now = _now_iso() if now is None else now
 
     async def cancel(evacuee: dict[str, Any]) -> dict[str, Any] | None:
         if (evacuee.get("current_stay") or {}).get("status") != "pre_registered":
@@ -550,22 +720,10 @@ async def _cancel_stay(
         return _CHANGED
 
     try:
-        await couch.put_doc(
+        await _write_audit_once(
+            couch,
             database,
-            build_audit_doc(
-                target_type="evacuee",
-                target_id=evacuee_id,
-                reason=_CANCEL_REASON,
-                context={
-                    "previous_status": "pre_registered",
-                    "next_status": "cancelled",
-                    "household_id": cancelled.get("household_id"),
-                    "booking_id": booking.booking_id,
-                },
-                shelter_code=booking.shelter_code,
-                created_by=actor,
-                now=now,
-            ),
+            _stay_audit(booking, evacuee_id, cancelled.get("household_id"), now),
         )
         if cancelled.get("household_id"):
             await _cancel_household_if_empty(
@@ -573,10 +731,12 @@ async def _cancel_stay(
                 database,
                 household_id=cancelled["household_id"],
                 evacuee_id=evacuee_id,
-                actor=actor,
+                actor=partner_actor(booking.module_name, booking.client_id),
                 now=now,
             )
     except Exception:
+        if strict:
+            raise
         logger.exception(
             "Cancel audit/household update failed for booking %s",
             _ref(booking),
@@ -971,53 +1131,63 @@ async def _cancel_household_if_empty(
     database: str,
     *,
     household_id: str,
-    evacuee_id: str,
+    evacuee_id: str | None,
     actor: str,
     now: str,
-) -> None:
-    """Cancel the household once no member is left ``pre_registered`` (+ audit).
+    exclude_evacuee: bool = True,
+) -> bool:
+    """Cancel the household once no member is still held (+ audit).
 
-    The whole precondition (household still ``pre_registered``, no other
-    ``pre_registered`` member) runs inside ``update_doc``'s mutate, so after a ``409``
+    The whole precondition (household still ``pre_registered``, no member in a
+    ``_HOUSEHOLD_LIVE_STATUSES`` status; schema.md §1.3 derive rules 2-4 keep a household
+    alive, CR-169 decision #613) runs inside ``update_doc``'s mutate, so after a ``409``
     (staff merged/moved members meanwhile) it is evaluated again on the fresh document.
+    ``evacuee_id`` is excluded from the member check unless ``exclude_evacuee`` is False
+    (reconcile of a stay that is past ``pre_registered``: that member counts like any
+    other; #683). Returns True when this call cancelled the household. Raises on a
+    CouchDB error.
     """
 
     async def cancel(household: dict[str, Any]) -> dict[str, Any] | None:
         if household.get("status") != "pre_registered":
             return None
-        members = await couch.find(
-            database,
-            {"type": "evacuee", "household_id": household_id},
-            fields=["_id", "current_stay"],
-            limit=200,
-        )
-        still_pre_registered = any(
-            m.get("_id") != evacuee_id
-            and (m.get("current_stay") or {}).get("status") == "pre_registered"
-            for m in members
-        )
-        if still_pre_registered:
+        if await _household_still_held(
+            couch, database, household_id, evacuee_id if exclude_evacuee else None
+        ):
             return None
         return {**household, "status": "cancelled", "updated_at": now}
 
     cancelled = await couch.update_doc(database, household_id, cancel)
     if cancelled is None:
-        return
-    await couch.put_doc(
+        return False
+    await _write_audit_once(
+        couch,
         database,
-        build_audit_doc(
-            target_type="household",
-            target_id=household_id,
-            reason=_HOUSEHOLD_CANCEL_REASON,
-            context={
-                "previous_status": "pre_registered",
-                "next_status": "cancelled",
-                "triggered_by_evacuee_id": evacuee_id,
-            },
-            shelter_code=cancelled.get("shelter_code") or "",
-            created_by=actor,
-            now=now,
+        _household_audit(
+            household_id,
+            cancelled.get("shelter_code") or "",
+            evacuee_id,
+            actor,
+            now,
         ),
+    )
+    return True
+
+
+async def _household_still_held(
+    couch: CouchClient, database: str, household_id: str, evacuee_id: str | None
+) -> bool:
+    """True when a member other than ``evacuee_id`` is in a ``_HOUSEHOLD_LIVE_STATUSES`` stay."""
+    members = await couch.find(
+        database,
+        {"type": "evacuee", "household_id": household_id},
+        fields=["_id", "current_stay"],
+        limit=200,
+    )
+    return any(
+        m.get("_id") != evacuee_id
+        and (m.get("current_stay") or {}).get("status") in _HOUSEHOLD_LIVE_STATUSES
+        for m in members
     )
 
 
@@ -1025,6 +1195,10 @@ async def _process_cancel(couch: CouchClient, booking: ExternalBooking) -> bool:
     """Cancel a ``written`` booking's pre-registration (FR-53). False = retry next poll."""
     if booking.state != "written" or not booking.cancel_requested:
         return False
+    if booking.cancel_flag_token is not None:
+        # Still owned by an in-flight EXT-009 request: not due yet, and not a failure
+        # (no backoff). `_find_due` already excludes these; this guards direct callers.
+        return True
     database = shelter_db_name(booking.shelter_code)
     if not await couch.database_exists(database):
         logger.warning(
@@ -1075,6 +1249,312 @@ async def _process_cancel(couch: CouchClient, booking: ExternalBooking) -> bool:
     return True
 
 
+#: Reconcile pass cadence (#613): it shares the sweeper's loop pass but runs at most once
+#: per this interval.
+RECONCILE_INTERVAL_SECONDS = 60.0
+#: Terminal rows handled per reconcile pass (oldest first); the rest wait for the next one.
+RECONCILE_BATCH_SIZE = 50
+
+_RECONCILE_KEY_PREFIX = "reconcile:"
+_RECONCILE_CANCELLED = "cancelled"
+_RECONCILE_ADVANCED = "advanced"
+_RECONCILE_MISSING = "missing"
+_RECONCILE_NOOP = "noop"
+
+
+class _ReconcileRetry(Exception):
+    """A reconcile step could not finish this pass; the row stays unreconciled."""
+
+
+def _stay_status(doc: dict[str, Any] | None) -> str | None:
+    return ((doc or {}).get("current_stay") or {}).get("status")
+
+
+def _cancelled_by_reconcile(stamp: str | None, marker: str | None) -> bool:
+    """True when a cancelled doc carries the timestamp this row's reconcile wrote (#613 r3).
+
+    CouchDB docs have no ``updated_by``, so the worker records the exact timestamp it
+    writes on each doc as a per-doc marker; a mismatch (or no marker) means someone else,
+    e.g. staff, cancelled it.
+    """
+    return marker is not None and stamp == marker
+
+
+async def _ensure_stay_audit(
+    couch: CouchClient,
+    database: str,
+    booking: ExternalBooking,
+    evacuee: dict[str, Any],
+) -> bool:
+    """Audit retry for a stay the reconcile pass cancelled (#613). True = written now.
+
+    Called only for a ``cancelled`` stay whose ``current_stay.since`` equals the row's
+    ``reconcile_stay_cancelled_at``: its deterministic audit doc missing means the audit
+    write failed after the cancel; it is written now (idempotent by id). A stay cancelled
+    by someone else does not match the marker and never gets here.
+    """
+    return await _write_audit_once(
+        couch,
+        database,
+        _stay_audit(
+            booking, booking.evacuee_id or "", evacuee.get("household_id"), _now_iso()
+        ),
+    )
+
+
+async def _ensure_household_audit(
+    couch: CouchClient,
+    database: str,
+    booking: ExternalBooking,
+    household: dict[str, Any],
+) -> bool:
+    """Audit retry for a household the reconcile pass cancelled (#613). True = written now.
+
+    Called only for a ``cancelled`` household whose ``updated_at`` equals the row's
+    ``reconcile_household_cancelled_at`` (see `_ensure_stay_audit`).
+    """
+    return await _write_audit_once(
+        couch,
+        database,
+        _household_audit(
+            booking.household_id or "",
+            household.get("shelter_code") or "",
+            booking.evacuee_id,
+            partner_actor(booking.module_name, booking.client_id),
+            _now_iso(),
+        ),
+    )
+
+
+async def _mark_reconcile_cancel(
+    booking: ExternalBooking, *, now: str, stay: bool, household: bool
+) -> None:
+    """Stamp the per-doc markers with ``now`` before the pass cancels a CouchDB doc (#613 r3).
+
+    ``now`` is the exact timestamp the following write uses (``current_stay.since`` for the
+    stay, ``updated_at`` for the household), so it is re-stamped on every attempt. The stamp
+    is guarded on the state and ``reconciled_at`` observed by the pass; a moved row raises
+    `_ReconcileRetry` so nothing is cancelled under a stale view. A Mongo error propagates
+    and is retried as transient. A marker left behind by a write that did not happen is
+    harmless: no later cancel by someone else carries the same timestamp.
+    """
+    changes: dict[str, Any] = {}
+    if stay:
+        changes["reconcile_stay_cancelled_at"] = now
+    if household:
+        changes["reconcile_household_cancelled_at"] = now
+    stamped = await _transition(
+        booking, {"state": booking.state, "reconciled_at": None}, changes
+    )
+    if not stamped:
+        raise _ReconcileRetry("row moved before the cancel")
+
+
+async def _reconcile_row(couch: CouchClient, booking: ExternalBooking) -> str:
+    """Finish one terminal row against the docs it reserved in ``shelter_{code}`` (#613).
+
+    Reads the reserved ``evacuee_id`` / ``household_id`` directly (no Mango for the docs):
+
+    * neither doc exists (an absent shelter database also answers 404) → ``missing``;
+    * the stay moved past ``pre_registered`` → ``advanced``; the stay is left alone and
+      the household is still evaluated below (#683);
+    * a ``pre_registered`` stay → one timestamp ``now`` is stamped on the row as
+      ``reconcile_stay_cancelled_at`` (and ``reconcile_household_cancelled_at`` when the
+      row reserved a household, since the roll-up writes the same ``now``), then the stay
+      is cancelled through ``_cancel_stay(strict=True, now=now)``; a failed or changed
+      write, or a failed audit / household write after the cancel, raises so the row is
+      retried (``reconciled_at`` stays unset);
+    * a ``cancelled`` stay with its audit doc missing is audited only when its
+      ``current_stay.since`` equals ``reconcile_stay_cancelled_at`` (an earlier pass
+      cancelled it and its audit write failed); any other stamp means someone else (e.g.
+      staff) cancelled it → no partner audit;
+    * the household is re-read: still ``pre_registered`` → a fresh ``now`` is stamped as
+      ``reconcile_household_cancelled_at`` first, then it is cancelled by
+      ``_cancel_household_if_empty`` with that ``now`` (only once no member is still held,
+      i.e. none in pre_registered / kiosk_registered / arriving / active / room_confirmed /
+      temporary_leave; checked_out, transferred, deceased and cancelled members do not
+      hold it; when the stay itself is past ``pre_registered`` it counts as a member;
+      covers a household left behind by a failed roll-up and household-only rows); already ``cancelled`` → its audit is written only when its ``updated_at``
+      equals ``reconcile_household_cancelled_at``, as for the stay;
+    * anything cancelled or audited in this pass → ``cancelled``; otherwise ``advanced``
+      when the stay was past ``pre_registered`` (household kept, or already cancelled by
+      someone else), else ``noop``.
+
+    Raises on a CouchDB error (the caller leaves the row unreconciled). Logs ids only.
+    """
+    database = shelter_db_name(booking.shelter_code)
+    evacuee = (
+        await couch.get_doc(database, booking.evacuee_id)
+        if booking.evacuee_id
+        else None
+    )
+    household = (
+        await couch.get_doc(database, booking.household_id)
+        if booking.household_id
+        else None
+    )
+    if evacuee is None and household is None:
+        return _RECONCILE_MISSING
+
+    status = _stay_status(evacuee)
+    advanced = status not in (None, "pre_registered", "cancelled")
+    if advanced:
+        logger.warning(
+            "Booking %s: stay is past pre_registered — left untouched", _ref(booking)
+        )
+
+    cancelled = False
+    if advanced:
+        pass
+    elif status == "pre_registered":
+        now = _now_iso()
+        await _mark_reconcile_cancel(
+            booking, now=now, stay=True, household=booking.household_id is not None
+        )
+        outcome = await _cancel_stay(
+            couch, database, booking, booking.evacuee_id, strict=True, now=now
+        )
+        if outcome != _CANCELLED:
+            raise _ReconcileRetry(outcome)
+        cancelled = True
+    elif (
+        status == "cancelled"
+        and evacuee is not None
+        and _cancelled_by_reconcile(
+            (evacuee.get("current_stay") or {}).get("since"),
+            booking.reconcile_stay_cancelled_at,
+        )
+    ):
+        cancelled = await _ensure_stay_audit(couch, database, booking, evacuee)
+
+    if booking.household_id:
+        fresh = await couch.get_doc(database, booking.household_id)
+        if fresh is not None and fresh.get("status") == "pre_registered":
+            now_household = _now_iso()
+            await _mark_reconcile_cancel(
+                booking, now=now_household, stay=False, household=True
+            )
+            cancelled |= await _cancel_household_if_empty(
+                couch,
+                database,
+                household_id=booking.household_id,
+                evacuee_id=booking.evacuee_id,
+                actor=partner_actor(booking.module_name, booking.client_id),
+                now=now_household,
+                exclude_evacuee=not advanced,
+            )
+        elif (
+            fresh is not None
+            and fresh.get("status") == "cancelled"
+            and _cancelled_by_reconcile(
+                fresh.get("updated_at"), booking.reconcile_household_cancelled_at
+            )
+        ):
+            cancelled |= await _ensure_household_audit(couch, database, booking, fresh)
+
+    if cancelled:
+        return _RECONCILE_CANCELLED
+    return _RECONCILE_ADVANCED if advanced else _RECONCILE_NOOP
+
+
+def _reconcile_key(booking_id: str) -> str:
+    return f"{_RECONCILE_KEY_PREFIX}{booking_id}"
+
+
+async def _reconcile_booking(
+    couch: CouchClient, booking: ExternalBooking, health: FailureTracker
+) -> bool:
+    """Reconcile one row and stamp ``reconciled_at`` / ``reconcile_outcome``.
+
+    False = left unreconciled for the next pass (a CouchDB error, a stay changed during
+    the pass, or the row moved under the guarded write). The stamp is guarded on the
+    row's state and ``reconciled_at`` still unset, so a row is never stamped twice.
+
+    A failed row is recorded in ``health`` only so that ``reconcile_terminal_bookings``
+    can take it after the healthy rows; it is retried on the next pass, not held back by a
+    timer (decision #613: a transient error is retried in the next reconcile cycle).
+    """
+    key = _reconcile_key(booking.id)
+    try:
+        outcome = await _reconcile_row(couch, booking)
+    except _ReconcileRetry as exc:
+        if health.should_log(key):
+            logger.info(
+                "Reconcile of booking %s deferred (%s) — retry next pass",
+                _ref(booking),
+                exc,
+            )
+        health.failed(key)
+        return False
+    except Exception:
+        # logger.exception: the _ExceptionTypeOnly filter logs the type and location only.
+        if health.should_log(key):
+            logger.exception(
+                "Reconcile of booking %s failed — retry next pass", _ref(booking)
+            )
+        health.failed(key)
+        return False
+    health.succeeded(key)
+
+    stamped = await _transition(
+        booking,
+        {"state": booking.state, "reconciled_at": None},
+        {"reconciled_at": datetime.now(UTC), "reconcile_outcome": outcome},
+    )
+    if not stamped:
+        logger.info(
+            "Booking %s moved during reconcile — retry next pass", _ref(booking)
+        )
+    return stamped
+
+
+async def reconcile_terminal_bookings(
+    couch: CouchClient, health: FailureTracker | None = None
+) -> int:
+    """Reconcile up to ``RECONCILE_BATCH_SIZE`` unreconciled terminal rows (#613).
+
+    Selects ``cancelled`` / ``rejected`` rows that reserved a ``evacuee_id`` or
+    ``household_id`` and have no ``reconciled_at`` (legacy rows without the field match
+    too: Mongo ``null`` matches a missing key). Returns the number of rows stamped.
+
+    Rows that have not failed in an earlier pass come first (oldest first). Rows that
+    failed earlier are retried on every pass but only fill the slots left over, so a set
+    of rows that fail every time cannot push newer healthy rows out of the batch. ``health``
+    holds only those failure marks and the log throttle; no retry timer applies.
+    """
+    health = FailureTracker() if health is None else health
+    base: dict[str, Any] = {
+        "state": {"$in": ["cancelled", "rejected"]},
+        "reconciled_at": None,
+        "$or": [
+            {"evacuee_id": {"$ne": None}},
+            {"household_id": {"$ne": None}},
+        ],
+    }
+    failing_ids = [
+        key[len(_RECONCILE_KEY_PREFIX) :] for key in health.keys(_RECONCILE_KEY_PREFIX)
+    ]
+
+    rows = (
+        await ExternalBooking.find({**base, "_id": {"$nin": failing_ids}})
+        .sort("updated_at", "_id")
+        .limit(RECONCILE_BATCH_SIZE)
+        .to_list()
+    )
+    if len(rows) < RECONCILE_BATCH_SIZE and failing_ids:
+        rows += (
+            await ExternalBooking.find({**base, "_id": {"$in": failing_ids}})
+            .sort("updated_at", "_id")
+            .limit(RECONCILE_BATCH_SIZE - len(rows))
+            .to_list()
+        )
+    stamped = 0
+    for booking in rows:
+        if await _reconcile_booking(couch, booking, health):
+            stamped += 1
+    return stamped
+
+
 async def _find_due() -> list[ExternalBooking]:
     """Rows to act on; `committed=False` rows are still being staged by the API (FR-32)."""
     return await ExternalBooking.find(
@@ -1082,7 +1562,7 @@ async def _find_due() -> list[ExternalBooking]:
             "committed": {"$ne": False},
             "$or": [
                 {"state": "pending"},
-                {"state": "written", "cancel_requested": True},
+                _CANCEL_DUE,
             ],
         }
     ).to_list()
@@ -1157,12 +1637,30 @@ async def run_external_booking_inbound_loop(
     couch: CouchClient, *, stop_event: asyncio.Event
 ) -> None:
     health = FailureTracker()
+    reconcile_health = FailureTracker()
+    last_reconcile: float | None = None
     while not stop_event.is_set():
         # Own try/except: a sweeper failure must not stop bookings being written.
         try:
             await sweep_stale_staged()
         except Exception:
             logger.exception("Staged external booking sweep failed")
+        # Reconcile terminal rows in the same pass, at most once per interval (#613).
+        # Own try/except for the same reason; the timer is set first so a failing pass is
+        # not retried on every 3 s poll.
+        if (
+            last_reconcile is None
+            or _clock() - last_reconcile >= RECONCILE_INTERVAL_SECONDS
+        ):
+            last_reconcile = _clock()
+            try:
+                await reconcile_terminal_bookings(couch, reconcile_health)
+            except Exception:
+                logger.exception("Terminal booking reconcile pass failed")
+        try:
+            await revert_abandoned_cancel_flags()
+        except Exception:
+            logger.exception("Abandoned cancel flag revert failed")
         try:
             due = await _find_due()
         except Exception:
