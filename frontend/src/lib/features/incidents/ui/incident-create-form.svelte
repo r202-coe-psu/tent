@@ -60,6 +60,9 @@
 			dataType: 'json',
 			validators: zod4(incidentCreateSchema),
 			resetForm: false,
+			// The default SPA invalidateAll() re-runs this route's load after onUpdate and cancels
+			// the goto() that `oncreated` starts — the user would stay on the form.
+			invalidateAll: false,
 			onUpdate: async ({ form: validated }) => {
 				if (!validated.valid) {
 					toast.error('กรุณาตรวจสอบข้อมูลในฟอร์ม');
