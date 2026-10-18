@@ -18,13 +18,12 @@ import {
 	KIOSK_LABEL_TEXT,
 	KIOSK_LABEL_TEXT_MIN_WIDTH_MM,
 	KIOSK_LABEL_TEXT_OFFSET_Y_MM,
-	KIOSK_LABEL_TEXT_ROW_GAP_MM,
+	KIOSK_LABEL_LINK_GAP_MM,
 	KIOSK_LABEL_ZONE,
 	KIOSK_LABEL_ZONE_PREFIX,
 	kioskLabelDots,
 	kioskLabelLayout,
 	kioskLabelPageCss,
-	layoutChecklist,
 	kioskQrBoxMm,
 	kioskQrPrintSize,
 	labelZoneLine,
@@ -122,22 +121,22 @@ describe('kiosk label canvas', () => {
 		expect(ptToDots(KIOSK_LABEL_TEXT.name.pt)).toBeCloseTo(45.11, 2);
 	});
 
-	it('fits the name, phone, zone and a two-row checklist inside the label height', () => {
-		const { name, phone, zone, checklist } = KIOSK_LABEL_TEXT;
+	it('fits a 3-line name, the zone, one checklist row per item and the link in the label', () => {
+		const { name, zone, checklist, link } = KIOSK_LABEL_TEXT;
 		const checkRow = Math.max(
 			mmToDots(KIOSK_LABEL_CHECKBOX.sizeMm),
 			ptToDots(checklist.pt) * checklist.lineHeight
 		);
+		const rows = KIOSK_LABEL_CHECKLIST.length;
 		const used =
-			mmToDots(
-				KIOSK_LABEL_PADDING_MM * 2 + KIOSK_LABEL_TEXT_OFFSET_Y_MM + KIOSK_LABEL_TEXT_ROW_GAP_MM
-			) +
+			mmToDots(KIOSK_LABEL_PADDING_MM * 2 + KIOSK_LABEL_TEXT_OFFSET_Y_MM) +
 			ptToDots(name.pt) * name.lineHeight * name.maxLines +
-			ptToDots(phone.pt) * phone.lineHeight +
 			mmToDots(KIOSK_LABEL_ZONE.rowGapMm) +
 			ptToDots(zone.pt) * zone.lineHeight +
-			checkRow * 2 +
-			mmToDots(KIOSK_LABEL_CHECKBOX.rowGapMm);
+			checkRow * rows +
+			mmToDots(KIOSK_LABEL_CHECKBOX.rowGapMm) * (rows - 1) +
+			mmToDots(KIOSK_LABEL_LINK_GAP_MM) +
+			ptToDots(link.pt) * link.lineHeight;
 		expect(used).toBeLessThanOrEqual(kioskLabelDots().height);
 	});
 });
@@ -170,16 +169,13 @@ describe('kioskLabelLayout', () => {
 		expect(layout.text.bottom).toBe(height - Math.round(mmToDots(KIOSK_LABEL_PADDING_MM)));
 	});
 
-	it('centres the link under the QR, inside the right column and the bottom padding', () => {
-		const half = ptToDots(KIOSK_LABEL_TEXT.link.pt) / 2;
-		const padding = Math.round(mmToDots(KIOSK_LABEL_PADDING_MM));
+	it('prints the link small at the bottom-left of the text column', () => {
+		const half = (ptToDots(KIOSK_LABEL_TEXT.link.pt) * KIOSK_LABEL_TEXT.link.lineHeight) / 2;
 
 		expect(KIOSK_LABEL_LINK).toBe('shelter.psu.ac.th');
-		expect(layout.link.x).toBe(layout.qr.x + size.widthPx / 2);
-		expect(layout.link.x).toBeGreaterThan(layout.divider.x + layout.divider.width);
-		expect(layout.link.x).toBeLessThan(width);
-		expect(layout.link.y - half).toBeGreaterThan(layout.qr.y + size.widthPx);
-		expect(layout.link.y + half).toBeLessThanOrEqual(height - padding);
+		expect(KIOSK_LABEL_TEXT.link.pt).toBeLessThan(KIOSK_LABEL_TEXT.checklist.pt);
+		expect(layout.link.x).toBe(layout.text.x);
+		expect(Math.abs(layout.link.y + half - layout.text.bottom)).toBeLessThanOrEqual(1);
 	});
 
 	it('leaves the text column at least its minimum width', () => {
@@ -187,29 +183,7 @@ describe('kioskLabelLayout', () => {
 	});
 });
 
-describe('layoutChecklist', () => {
-	const metrics = { boxSize: 2, textGap: 1, itemGap: 2 };
-	const measure = (text: string) => text.length;
-
-	it('keeps every item on one row when they fit', () => {
-		expect(layoutChecklist(['ab', 'cd'], 20, measure, metrics)).toEqual([
-			[
-				{ text: 'ab', x: 0, width: 5 },
-				{ text: 'cd', x: 7, width: 5 }
-			]
-		]);
-	});
-
-	it('wraps the item that would cross the column edge', () => {
-		expect(layoutChecklist(['ab', 'cd', 'ef'], 12, measure, metrics)).toEqual([
-			[
-				{ text: 'ab', x: 0, width: 5 },
-				{ text: 'cd', x: 7, width: 5 }
-			],
-			[{ text: 'ef', x: 0, width: 5 }]
-		]);
-	});
-
+describe('KIOSK_LABEL_CHECKLIST', () => {
 	it('ships the staff ID card checklist', () => {
 		expect(KIOSK_LABEL_CHECKLIST).toEqual(['เช็คอิน', 'คัดกรอง', 'ที่พัก']);
 	});

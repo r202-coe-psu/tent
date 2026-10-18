@@ -53,7 +53,6 @@
 		show
 			? renderKioskQrLabelPng(evacuee._id, {
 					name,
-					phone: evacuee.phone?.trim() || null,
 					zone: stayZoneName(evacuee.current_stay?.zone, shelterQuery.data?.zones),
 					checklist: [t.checklistCheckIn, t.checklistScreening, t.checklistLodging]
 				})

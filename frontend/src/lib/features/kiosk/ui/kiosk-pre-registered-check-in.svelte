@@ -465,8 +465,7 @@
 			if (!qr) throw new Error('QR image missing');
 			return {
 				qrSrc: qr.src,
-				name: labelName(result, person),
-				phone: result.label?.phone ?? null
+				name: labelName(result, person)
 			};
 		});
 	}
@@ -950,8 +949,7 @@
 					name: labelName(
 						result,
 						lookup?.members.find((member) => member.evacuee_id === result.evacuee_id)
-					),
-					phone: result.label?.phone
+					)
 				}))}
 			/>
 		{/if}

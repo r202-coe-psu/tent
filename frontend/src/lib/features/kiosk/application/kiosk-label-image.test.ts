@@ -37,7 +37,7 @@ function installFakeCanvas() {
 		fillText: vi.fn<(text: string) => void>(() => {
 			// `fillText` is synchronous — if any row's font wasn't `document.fonts.load()`-ed
 			// (and awaited) before this call, the draw races the fetch (see kiosk-label-image.ts).
-			if (fontsLoaded.length < 5) orderViolation = true;
+			if (fontsLoaded.length < 4) orderViolation = true;
 		})
 	};
 	Object.defineProperty(fakeContext, 'font', {
@@ -85,28 +85,26 @@ describe('renderKioskLabelPng', () => {
 
 	const label = {
 		qrSrc: 'data:image/png;base64,AA==',
-		name: 'สมชาย ใจดี',
-		phone: '0804497982'
+		name: 'สมชาย ใจดี'
 	};
 
 	it('preloads every row font before drawing any of them', async () => {
 		await renderKioskLabelPng(label);
 
-		expect(harness.fontsLoaded).toHaveLength(5);
+		expect(harness.fontsLoaded).toHaveLength(4);
 		expect(harness.isOrderViolated()).toBe(false);
 	});
 
-	it('draws Thai rows with the Thai-capable family and the phone in the mono family', async () => {
+	it('draws every row with the Thai-capable family, and no phone number', async () => {
 		await renderKioskLabelPng(label);
 
 		expect(harness.fontsUsedInDrawing.length).toBeGreaterThan(0);
 		for (const font of harness.fontsUsedInDrawing) {
-			expect(font).toMatch(/'IBM Plex Sans Thai'|'Geist Mono'/);
+			expect(font).toMatch(/'IBM Plex Sans Thai'/);
 		}
 		const texts = harness.fakeContext.fillText.mock.calls.map(([text]) => text);
 		expect(texts).toEqual([
 			'สมชาย ใจดี',
-			'0804497982',
 			KIOSK_LABEL_ZONE_PREFIX,
 			'เช็คอิน',
 			'คัดกรอง',
@@ -115,7 +113,7 @@ describe('renderKioskLabelPng', () => {
 		]);
 	});
 
-	it('draws the link centred under the QR, then restores left alignment', async () => {
+	it('draws the link left-aligned at the bottom of the text column', async () => {
 		const aligns: string[] = [];
 		let align = '';
 		Object.defineProperty(harness.fakeContext, 'textAlign', {
@@ -126,25 +124,31 @@ describe('renderKioskLabelPng', () => {
 			},
 			get: () => align
 		});
-		let linkAlign = '';
-		harness.fakeContext.fillText.mockImplementation((text: string) => {
-			if (text === KIOSK_LABEL_LINK) linkAlign = align;
-		});
 
 		await renderKioskLabelPng(label);
 
-		const { x, y } = kioskLabelLayout(264).link;
-		expect(linkAlign).toBe('center');
-		expect(harness.fakeContext.fillText).toHaveBeenCalledWith(KIOSK_LABEL_LINK, x, y);
-		expect(aligns.at(-1)).toBe('left');
+		const { link, text } = kioskLabelLayout(264);
+		expect(harness.fakeContext.fillText).toHaveBeenCalledWith(
+			KIOSK_LABEL_LINK,
+			link.x,
+			link.y,
+			text.width
+		);
+		expect(aligns).not.toContain('center');
 	});
 
-	it('skips the phone line when there is no phone', async () => {
-		await renderKioskLabelPng({ ...label, phone: null });
+	it('puts each checklist item on its own row, boxes aligned at the column edge', async () => {
+		await renderKioskLabelPng(label);
 
-		const texts = harness.fakeContext.fillText.mock.calls.map(([text]) => text);
-		expect(texts).not.toContain('0804497982');
-		expect(harness.fontsUsedInDrawing.some((font) => font.includes('Geist Mono'))).toBe(false);
+		const rows = harness.fakeContext.fillText.mock.calls.filter(([text]) =>
+			['เช็คอิน', 'คัดกรอง', 'ที่พัก'].includes(text)
+		) as unknown as [string, number, number][];
+		expect(rows.map(([text]) => text)).toEqual(['เช็คอิน', 'คัดกรอง', 'ที่พัก']);
+		expect(new Set(rows.map(([, x]) => x)).size).toBe(1);
+		const ys = rows.map(([, , y]) => y);
+		expect(ys[0]).toBeLessThan(ys[1]!);
+		expect(ys[1]).toBeLessThan(ys[2]!);
+		expect(ys[2]).toBeLessThan(kioskLabelLayout(264).link.y);
 	});
 
 	describe('zone row', () => {
@@ -182,12 +186,6 @@ describe('renderKioskLabelPng', () => {
 			const value = texts()[texts().indexOf(KIOSK_LABEL_ZONE_PREFIX) + 1];
 			expect(value).toMatch(/…$/);
 			expect(value!.length).toBeLessThan(120);
-		});
-
-		it('keeps the zone row when there is no phone', async () => {
-			await renderKioskLabelPng({ ...label, phone: null });
-
-			expect(texts()).toContain(KIOSK_LABEL_ZONE_PREFIX);
 		});
 	});
 

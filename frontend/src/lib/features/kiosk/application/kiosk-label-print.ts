@@ -9,7 +9,6 @@ export type KioskQrImage = { src: string; sizeMm: number };
 export type KioskQrLabel = {
 	qrSrc: string;
 	name: string;
-	phone: string | null;
 	zone?: string | null;
 };
 

@@ -56,7 +56,6 @@
 			qrSrc: images[index].src,
 			qrSizeMm: images[index].sizeMm,
 			name: member.label.name,
-			phone: member.label.phone,
 			zone: member.label.zone
 		}));
 		try {
@@ -64,7 +63,6 @@
 				members.map((member, index) => ({
 					qrSrc: images[index].src,
 					name: member.label.name,
-					phone: member.label.phone,
 					zone: member.label.zone
 				})),
 				async () => {
