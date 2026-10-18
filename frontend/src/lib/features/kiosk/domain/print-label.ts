@@ -121,8 +121,10 @@ export function labelZoneLine(zone: string | null | undefined): LabelZoneLine {
 	return { label: KIOSK_LABEL_ZONE_PREFIX, value: zone?.trim() || null };
 }
 
-/** Staff ID card checklist, ticked by hand at each station. */
+/** Staff ID card checklist, one box per intake station. */
 export const KIOSK_LABEL_CHECKLIST = ['เช็คอิน', 'คัดกรอง', 'ที่พัก'] as const;
+/** A label printed right after a kiosk check-in or walk-in: only เช็คอิน is done. */
+export const KIOSK_CHECK_IN_TICKS = 1;
 export const KIOSK_LABEL_CHECKBOX = {
 	sizeMm: 3.5,
 	borderMm: 0.3,

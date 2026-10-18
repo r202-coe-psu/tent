@@ -12,6 +12,7 @@
 		KIOSK_IDLE_TIMEOUT_MS,
 		KIOSK_NOTICE_PRIMARY_ACTION,
 		KIOSK_NOTICE_SECONDARY_ACTION,
+		KIOSK_CHECK_IN_TICKS,
 		KioskCheckInWizard,
 		KioskInlineAlert,
 		KioskLabelSheet,
@@ -48,7 +49,8 @@
 						key: registration.evacuee_id,
 						qrSrc: qrImage?.src,
 						qrSizeMm: qrImage?.sizeMm,
-						name: registration.label.name
+						name: registration.label.name,
+						checkedCount: KIOSK_CHECK_IN_TICKS
 					}
 				]
 			: []
@@ -84,7 +86,13 @@
 			qrImage ??= await prepareKioskQrImage(registration.qr_payload);
 			// No scanner client (dev browser / browser print mode): print the CSS label instead.
 			const result = await printKioskQrLabels(
-				[{ qrSrc: qrImage.src, name: registration.label.name }],
+				[
+					{
+						qrSrc: qrImage.src,
+						name: registration.label.name,
+						checkedCount: KIOSK_CHECK_IN_TICKS
+					}
+				],
 				async () => {
 					await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 					window.print();

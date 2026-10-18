@@ -39,6 +39,7 @@
 		type KioskQrImage,
 		type KioskQrLabel
 	} from '../application/kiosk-label-print';
+	import { KIOSK_CHECK_IN_TICKS } from '../domain/print-label';
 	import { buildKioskPhotoPayload } from '../application/kiosk-card-photo';
 	import KioskBackButton from './kiosk-back-button.svelte';
 	import KioskWalkInOffer from './kiosk-walk-in-offer.svelte';
@@ -465,7 +466,8 @@
 			if (!qr) throw new Error('QR image missing');
 			return {
 				qrSrc: qr.src,
-				name: labelName(result, person)
+				name: labelName(result, person),
+				checkedCount: KIOSK_CHECK_IN_TICKS
 			};
 		});
 	}
@@ -949,7 +951,8 @@
 					name: labelName(
 						result,
 						lookup?.members.find((member) => member.evacuee_id === result.evacuee_id)
-					)
+					),
+					checkedCount: KIOSK_CHECK_IN_TICKS
 				}))}
 			/>
 		{/if}

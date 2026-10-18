@@ -12,6 +12,7 @@ import {
 	KIOSK_QR_QUIET_ZONE_MODULES,
 	KIOSK_LABEL_CHECKBOX,
 	KIOSK_LABEL_CHECKLIST,
+	KIOSK_CHECK_IN_TICKS,
 	KIOSK_LABEL_DIVIDER_MM,
 	KIOSK_LABEL_GAP_MM,
 	KIOSK_LABEL_LINK,
@@ -186,6 +187,10 @@ describe('kioskLabelLayout', () => {
 describe('KIOSK_LABEL_CHECKLIST', () => {
 	it('ships the staff ID card checklist', () => {
 		expect(KIOSK_LABEL_CHECKLIST).toEqual(['เช็คอิน', 'คัดกรอง', 'ที่พัก']);
+	});
+
+	it('ticks only เช็คอิน on a label printed at kiosk check-in', () => {
+		expect(KIOSK_LABEL_CHECKLIST.slice(0, KIOSK_CHECK_IN_TICKS)).toEqual(['เช็คอิน']);
 	});
 });
 

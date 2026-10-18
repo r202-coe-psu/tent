@@ -6,7 +6,12 @@
 	import { previewImageAsPdf } from '$lib/utils/pdf';
 	import { cn } from '$lib/utils/shadcn';
 	import type { Evacuee } from '$lib/features/people';
-	import { formatPersonName, stayZoneName } from '$lib/features/people';
+	import {
+		formatPersonName,
+		intakeStationsPassed,
+		stayZoneName,
+		useScreeningsByEvacuee
+	} from '$lib/features/people';
 	import { KIOSK_LABEL_MM, renderKioskQrLabelPng } from '$lib/features/kiosk';
 	import { useShelter } from '$lib/features/shelters';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
@@ -44,6 +49,11 @@
 
 	// Blank until Station 3 assigns a zone, so staff can write it on the printed label.
 	const shelterQuery = useShelter(() => shelterStore.selectedShelterCode ?? getShelterCode());
+	// A screening record ticks คัดกรอง on the label.
+	const screeningsQuery = useScreeningsByEvacuee(
+		() => evacuee._id,
+		() => show
+	);
 
 	/**
 	 * The kiosk's own 80×60 mm label (base64 PNG): the preview shows exactly what prints, and a
@@ -54,7 +64,11 @@
 			? renderKioskQrLabelPng(evacuee._id, {
 					name,
 					zone: stayZoneName(evacuee.current_stay?.zone, shelterQuery.data?.zones),
-					checklist: [t.checklistCheckIn, t.checklistScreening, t.checklistLodging]
+					checklist: [t.checklistCheckIn, t.checklistScreening, t.checklistLodging],
+					checkedCount: intakeStationsPassed(
+						evacuee.current_stay,
+						(screeningsQuery.data?.length ?? 0) > 0
+					)
 				})
 			: null
 	);

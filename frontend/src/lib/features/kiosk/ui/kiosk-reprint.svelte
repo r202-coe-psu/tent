@@ -56,14 +56,16 @@
 			qrSrc: images[index].src,
 			qrSizeMm: images[index].sizeMm,
 			name: member.label.name,
-			zone: member.label.zone
+			zone: member.label.zone,
+			checkedCount: member.label.stations_passed
 		}));
 		try {
 			return await printKioskQrLabels(
 				members.map((member, index) => ({
 					qrSrc: images[index].src,
 					name: member.label.name,
-					zone: member.label.zone
+					zone: member.label.zone,
+					checkedCount: member.label.stations_passed
 				})),
 				async () => {
 					// The sheet must be on the page before the browser prints it.
