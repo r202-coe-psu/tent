@@ -4,7 +4,7 @@
 	 * 2026-08-27).
 	 *
 	 * Same option set AND same selected colours as the "สถานะการรับสมัคร
-	 * (LIFECYCLE STATUS)" control in `job-form-dialog.svelte` — one status must
+	 * (LIFECYCLE STATUS)" control in `job-form.svelte` — one status must
 	 * not look different depending on which screen you change it from. Both
 	 * lists are the editable subset of `jobStatus`; only `cancelled` is left
 	 * out, because it is terminal.
