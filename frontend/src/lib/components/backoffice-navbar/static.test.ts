@@ -142,8 +142,8 @@ describe('real backofficeNavbarGroups — visible leaves per role (regression gu
 		'จัดการผู้ใช้งานและสิทธิ์',
 		'ข้อมูลหลัก',
 		'คลังสินค้า',
-		'5. พารามิเตอร์',
-		'7. โลจิสติกส์ & GIS'
+		'พารามิเตอร์',
+		'โลจิสติกส์ & GIS'
 	];
 	const scannerDevices = 'จัดการอุปกรณ์';
 	const bannerManagement = 'จัดการแบนเนอร์';
