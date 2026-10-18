@@ -182,11 +182,11 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 						icon: Warehouse
 					},
 					{
-						label: '5. พารามิเตอร์',
+						label: 'พารามิเตอร์',
 						href: resolve('/back-office/sop-parameters'),
 						icon: Calculator
 					},
-					{ label: '7. โลจิสติกส์ & GIS', href: null, icon: MapPin }
+					{ label: 'โลจิสติกส์ & GIS', href: null, icon: MapPin }
 				]
 			}
 		]
