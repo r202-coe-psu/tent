@@ -394,7 +394,10 @@ export interface paths {
 		};
 		get?: never;
 		put?: never;
-		/** Create Booking */
+		/**
+		 * Create Booking
+		 * @description Books one or more persons (`persons[]`, or the legacy single `cid` body) as one group. Optional `Idempotency-Key` header (1–255 characters, kept 24 hours per client): a retry with the same key and body returns the original 201 body (same `booking_id`); the same key with a different body returns 409 `idempotency_key_reused`; a retry while the first request is still running returns 409 `idempotency_in_progress`. A key whose first attempt failed without creating a booking is released, so a retry can proceed.
+		 */
 		post: operations['create_booking_external_bookings_post'];
 		delete?: never;
 		options?: never;
@@ -4751,7 +4754,10 @@ export interface operations {
 	create_booking_external_bookings_post: {
 		parameters: {
 			query?: never;
-			header?: never;
+			header?: {
+				/** @description Optional retry key for this client (1–255 characters, valid 24 hours). */
+				'Idempotency-Key'?: string | null;
+			};
 			path?: never;
 			cookie?: never;
 		};
