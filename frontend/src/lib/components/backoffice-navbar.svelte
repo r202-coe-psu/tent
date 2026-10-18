@@ -16,6 +16,8 @@
 		backofficeHomePath,
 		isGroup,
 		canSeeNavNode,
+		activeNavHref,
+		navLeafHrefs,
 		type BackofficeNavbarNode
 	} from './backoffice-navbar/static';
 
@@ -37,14 +39,19 @@
 		return path.replace(/\/$/, '');
 	}
 
-	function isActive(href: BackofficeNavbarNode['href']): boolean {
-		if (!href) return false;
+	const navHrefs = navLeafHrefs(backofficeNavbarGroups);
+
+	// Longest-match wins so a nested page (e.g. /kiosks/banners) never lights its parent (/kiosks).
+	const activeHref = $derived.by(() => {
 		let path = normalize(page.url.pathname);
 		if (path.startsWith('/back-office/households')) {
 			path = '/back-office/evacuee-management';
 		}
-		const target = normalize(String(href));
-		return path === target || path.startsWith(target + '/');
+		return activeNavHref(path, navHrefs);
+	});
+
+	function isActive(href: BackofficeNavbarNode['href']): boolean {
+		return !!href && String(href) === activeHref;
 	}
 
 	function groupIsActive(node: BackofficeNavbarNode): boolean {
