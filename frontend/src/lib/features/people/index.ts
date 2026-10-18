@@ -157,6 +157,7 @@ export {
 	parseZoningQrCode,
 	buildZoningPath,
 	isInShelterStatus,
+	intakeStationsPassed,
 	zoningQueueSince,
 	sortByZoningQueueSince,
 	formatQueueWait,
