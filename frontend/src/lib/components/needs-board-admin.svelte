@@ -11,7 +11,7 @@
 	import * as Table from '$lib/components/ui/table/index.js';
 	import { parseCampaignNotes, publicItemAggregate, type NeedItem } from '$lib/features/operations';
 	import { addQty, parseQty, qtyIsZero, roundQty } from '$lib/utils/qty';
-	import { formatUnit, useUnitsOfMeasure } from '$lib/features/catalog';
+	import { DEFAULT_ITEM_UNIT, formatUnit, useUnitsOfMeasure } from '$lib/features/catalog';
 	import { langState } from '$lib/states/i18n.svelte';
 	import BoardSectionHeader from '$lib/components/board-section-header.svelte';
 
@@ -68,6 +68,7 @@
 		reserved: string;
 		onHand: string;
 		target: string;
+		remaining: string;
 		progressPercent: number;
 		showOnHome: boolean;
 		isCutOff: boolean;
@@ -92,10 +93,11 @@
 					location: item.location,
 					description: parseCampaignNotes(item.location).description ?? '',
 					name: item.title,
-					unit: 'ชิ้น',
+					unit: DEFAULT_ITEM_UNIT,
 					reserved: '0',
 					onHand: '0',
 					target: '0',
+					remaining: '0',
 					progressPercent: 0,
 					showOnHome: item.showOnHome,
 					isCutOff: item.isCutOff,
@@ -123,10 +125,11 @@
 						location: item.location,
 						description: parseCampaignNotes(item.location).description ?? '',
 						name: need.name,
-						unit: need.unit || 'piece',
+						unit: need.unit || DEFAULT_ITEM_UNIT,
 						reserved: need.reserved,
 						onHand: need.onHand,
 						target: need.target,
+						remaining: need.remaining,
 						progressPercent: progress,
 						showOnHome: item.showOnHome,
 						isCutOff: need.isCutOff,
@@ -282,28 +285,18 @@
 							{/if}
 						</div>
 
-						<div class="grid grid-cols-3 gap-2">
-							<div class="rounded-lg border border-slate-200/80 bg-slate-50/80 p-2.5 text-center">
-								<p class="text-xs font-semibold text-slate-500">จองแล้ว</p>
-								<p class="mt-1 text-sm font-bold text-slate-900 tabular-nums">
-									{roundQty(row.reserved || '0')}
-								</p>
-							</div>
-							<div class="rounded-lg border border-slate-200/80 bg-slate-50/80 p-2.5 text-center">
-								<p class="text-xs font-semibold text-slate-500">ในคลัง</p>
-								<p class="mt-1 text-sm font-bold text-slate-900 tabular-nums">
-									{roundQty(row.onHand || '0')}
-								</p>
-							</div>
-							<div class="rounded-lg border border-slate-200/80 bg-slate-50/80 p-2.5 text-center">
-								<p class="text-xs font-semibold text-slate-500">เป้าหมาย</p>
-								<p class="mt-1 text-sm font-bold text-slate-900 tabular-nums">
-									{roundQty(row.target || '0')}
-									<span class="text-xs font-medium text-slate-500"
-										>{formatUnit(row.unit, units, langState.current)}</span
-									>
-								</p>
-							</div>
+						<div class="grid grid-cols-2 gap-2">
+							{#each [{ label: 'จองแล้ว', value: row.reserved }, { label: 'ในคลัง', value: row.onHand }, { label: 'เป้าหมาย', value: row.target }, { label: 'คงเหลือรับได้', value: row.remaining }] as stat (stat.label)}
+								<div class="rounded-lg border border-slate-200/80 bg-slate-50/80 p-2.5 text-center">
+									<p class="text-xs font-semibold text-slate-500">{stat.label}</p>
+									<p class="mt-1 text-sm font-bold text-slate-900 tabular-nums">
+										{roundQty(stat.value || '0')}
+										<span class="text-xs font-medium text-slate-500"
+											>{formatUnit(row.unit, units, langState.current)}</span
+										>
+									</p>
+								</div>
+							{/each}
 						</div>
 
 						<div class="space-y-1.5">
@@ -400,6 +393,9 @@
 						<Table.Head class="px-3 py-4 text-center text-xs font-bold text-foreground/80"
 							>ยอดจองเป้าหมาย</Table.Head
 						>
+						<Table.Head class="px-3 py-4 text-center text-xs font-bold text-foreground/80"
+							>คงเหลือรับได้</Table.Head
+						>
 						<Table.Head class="min-w-[220px] px-6 py-4 text-xs font-bold text-foreground/80">
 							<span
 								title="ความคืบหน้าคิดจาก (ยอดจอง + ยอดในคลัง) ÷ เป้าหมาย — เกณฑ์เดียวกับที่ระบบใช้ปิดรับอัตโนมัติ (T-22)"
@@ -418,7 +414,7 @@
 				<Table.Body class="divide-y divide-border/60 text-xs">
 					{#if flatRows.length === 0}
 						<Table.Row>
-							<Table.Cell colspan={7} class="px-6 py-12 text-center text-muted-foreground">
+							<Table.Cell colspan={8} class="px-6 py-12 text-center text-muted-foreground">
 								ไม่พบรายการความต้องการที่ค้นหา
 							</Table.Cell>
 						</Table.Row>
@@ -462,6 +458,7 @@
 								<Table.Cell class="px-3 py-4 text-center font-bold text-foreground">
 									<Badge variant="secondary" class="px-2.5 text-xs">
 										{roundQty(row.reserved || '0')}
+										{formatUnit(row.unit, units, langState.current)}
 									</Badge>
 								</Table.Cell>
 
@@ -469,12 +466,21 @@
 								<Table.Cell class="px-3 py-4 text-center font-bold text-foreground">
 									<Badge variant="secondary" class="px-2.5 text-xs">
 										{roundQty(row.onHand || '0')}
+										{formatUnit(row.unit, units, langState.current)}
 									</Badge>
 								</Table.Cell>
 
 								<!-- Target -->
 								<Table.Cell class="px-3 py-4 text-center font-bold text-foreground">
 									{roundQty(row.target || '0')}
+									<span class="ml-1 text-2xs font-medium text-muted-foreground"
+										>{formatUnit(row.unit, units, langState.current)}</span
+									>
+								</Table.Cell>
+
+								<!-- Remaining: what donors can still book -->
+								<Table.Cell class="px-3 py-4 text-center font-bold text-foreground">
+									{roundQty(row.remaining || '0')}
 									<span class="ml-1 text-2xs font-medium text-muted-foreground"
 										>{formatUnit(row.unit, units, langState.current)}</span
 									>

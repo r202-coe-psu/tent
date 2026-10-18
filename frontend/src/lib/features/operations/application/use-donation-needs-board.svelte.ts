@@ -207,6 +207,7 @@ export function useDonationNeedsBoard(options?: { onFormCreated?: () => void }) 
 					reserved: avail.qty_reserved,
 					onHand: avail.qty_on_hand,
 					target: avail.qty_target,
+					remaining: avail.qty_remaining,
 					// Catalog first, stored second: `avail.unit` only answers while the
 					// catalog query is still loading or for an id it no longer carries.
 					unit: itemDisplayUnit(avail.item_id) || avail.unit,
