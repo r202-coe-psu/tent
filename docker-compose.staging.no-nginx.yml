@@ -120,6 +120,8 @@ services:
     environment:
       # adapter-node requires ORIGIN in production
       ORIGIN: ${PUBLIC_ORIGIN:-http://localhost}
+      # Kiosk banner uploads are JSON base64 (2 MB image ≈ 2.7 MB body); adapter-node default is 512K
+      BODY_SIZE_LIMIT: ${BODY_SIZE_LIMIT:-4M}
       # Client IP for rate limiters (getClientAddress): the reverse proxy in front
       # (container nginx, or host nginx in the no-nginx variants) appends $remote_addr
       # to X-Forwarded-For, so depth 1 = the address that proxy saw. Spoofed entries a

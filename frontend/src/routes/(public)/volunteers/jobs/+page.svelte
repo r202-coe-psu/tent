@@ -6,7 +6,6 @@
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
 	import { PublicHeroMetrics, PublicPageShell } from '$lib/features/public-portal';
-	import LanguageSwitcher from '$lib/components/language-switcher.svelte';
 	import { languageStore } from '$lib/stores/language.svelte';
 	import { jobsI18n } from '$lib/features/volunteers/i18n/jobs.i18n';
 	import {
@@ -32,11 +31,6 @@
 </svelte:head>
 
 <PublicPageShell class="flex min-h-full flex-col space-y-8" maxWidth="max-w-6xl">
-	<!-- Top Bar with Language Switcher -->
-	<div class="flex items-center justify-end">
-		<LanguageSwitcher />
-	</div>
-
 	<PublicHeroMetrics
 		title={t.heroTitle}
 		description={t.heroDescription}
