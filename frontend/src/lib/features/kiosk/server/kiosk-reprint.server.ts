@@ -1,7 +1,9 @@
 import { z } from 'zod';
 import { isListedHouseholdMember, isReprintableStatus } from '../domain/check-in-status';
 import { normalizeKioskPhone, phoneVariants } from '../domain/phone';
+import { intakeStationsPassed } from '$lib/features/people/domain/intake-pipeline';
 import { stayZoneName, type ZoneLabelSource } from '$lib/features/people/domain/people';
+import { adminFetch } from '$lib/server/couch-admin';
 import { shelterDbName } from '$lib/server/shelter-access-design';
 import { findMasterByCode } from '$lib/server/shelters.admin';
 import {
@@ -31,8 +33,11 @@ export type KioskReprintInput = z.infer<typeof kioskReprintInputSchema>;
 export type KioskReprintMember = {
 	evacuee_id: string;
 	qr_payload: string;
-	/** `zone` is the member's current zone name, or null before Station 3 assigns one. */
-	label: KioskLabelIdentity & { zone: string | null };
+	/**
+	 * `zone` is the member's current zone name, or null before Station 3 assigns one;
+	 * `stations_passed` (0–3) is how many checklist boxes the label ticks.
+	 */
+	label: KioskLabelIdentity & { zone: string | null; stations_passed: number };
 };
 
 /** No such primary for this phone in this shelter (unknown, other shelter, wrong channel). */
@@ -68,6 +73,28 @@ async function shelterZones(shelterCode: string): Promise<readonly ZoneLabelSour
 		return (await findMasterByCode(shelterCode))?.zones ?? [];
 	} catch {
 		return [];
+	}
+}
+
+/** Which of `ids` have a screening record; none if the lookup fails (the label then ticks fewer). */
+async function screenedEvacueeIds(dbName: string, ids: string[]): Promise<Set<string>> {
+	if (ids.length === 0) return new Set();
+	try {
+		const result = await adminFetch<{ docs?: { evacuee_id?: unknown }[] }>(`/${dbName}/_find`, {
+			method: 'POST',
+			body: JSON.stringify({
+				selector: { type: 'screening', evacuee_id: { $in: ids } },
+				fields: ['evacuee_id'],
+				limit: 1000
+			})
+		});
+		return new Set(
+			(result.docs ?? [])
+				.map((doc) => doc.evacuee_id)
+				.filter((id): id is string => typeof id === 'string')
+		);
+	} catch {
+		return new Set();
 	}
 }
 
@@ -139,9 +166,20 @@ export async function reprintKioskLabels(
 	const zones = eligible.some((member) => member.current_stay?.zone?.trim())
 		? await shelterZones(shelterCode)
 		: [];
+	// Screening only changes the tick count for members not yet given a zone.
+	const screened = await screenedEvacueeIds(
+		dbName,
+		eligible
+			.filter((member) => intakeStationsPassed(member.current_stay, true) < 3)
+			.map((member) => member._id)
+	);
 	return eligible.map((member) => ({
 		evacuee_id: member._id,
 		qr_payload: member._id,
-		label: { ...toLabelIdentity(member), zone: stayZoneName(member.current_stay?.zone, zones) }
+		label: {
+			...toLabelIdentity(member),
+			zone: stayZoneName(member.current_stay?.zone, zones),
+			stations_passed: intakeStationsPassed(member.current_stay, screened.has(member._id))
+		}
 	}));
 }

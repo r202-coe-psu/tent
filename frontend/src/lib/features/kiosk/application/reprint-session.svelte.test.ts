@@ -45,12 +45,12 @@ const REPRINT_RESULT: KioskReprintResult = {
 		{
 			evacuee_id: 'EV1',
 			qr_payload: 'qr-1',
-			label: { name: 'สมชาย ใจดี', phone: '0812345678', zone: null }
+			label: { name: 'สมชาย ใจดี', phone: '0812345678', zone: null, stations_passed: 1 }
 		},
 		{
 			evacuee_id: 'EV2',
 			qr_payload: 'qr-2',
-			label: { name: 'สมหญิง ใจดี', phone: '0812345678', zone: null }
+			label: { name: 'สมหญิง ใจดี', phone: '0812345678', zone: null, stations_passed: 1 }
 		}
 	]
 };
