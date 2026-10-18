@@ -1,10 +1,11 @@
 ---
-id: draft
+id: CR-174
 title: "ประเมินใบบริจาคทีละรายการ — รายการที่อยู่ในแคมเปญไม่ต้องรอประเมิน (ใบที่ทุกรายการอยู่ในแคมเปญได้ QR ทันที)"
-status: proposed
+status: approved
 date: 2026-10-17
-requested_by: "เจ้าของโครงการ — issue #610 (ข้อกำหนดในคำอธิบาย issue)"
-decided_by: <เจ้าของโครงการ>
+approved_at: 2026-10-19
+requested_by: "Kan"
+decided_by: "Soravit Sukkarn (Team Lead)"
 layer: volatile
 affects:
   - docs/changes/04-donation/CR-052-donation-system-design-v8.md §1.4 (บังคับประเมินทุกรายการ), flowchart B1, §2.6 (QR เมื่ออนุมัติ)
@@ -27,7 +28,7 @@ why: ของที่ศูนย์ประกาศขอในแคมเ
 migration: field ใหม่ optional — doc เดิมไม่ต้อง backfill (ไม่มี `review_status` = ใช้สถานะระดับใบตามเดิม)
 ---
 
-# ประเมินใบบริจาคทีละรายการ — รายการในแคมเปญไม่ต้องรอประเมิน
+# CR-174 — ประเมินใบบริจาคทีละรายการ — รายการในแคมเปญไม่ต้องรอประเมิน
 
 ## สรุป
 
@@ -157,3 +158,4 @@ migration: field ใหม่ optional — doc เดิมไม่ต้อง
 - 2026-10-18 — แก้ตาม review PR #676: `expected_rev` เช็คก่อนเขียน ledger (FR-25, FR-25a) · BFF sync `status` และ `schema_v` (FR-18b) · projector (FR-27) · `review_reason_code` · ปฏิเสธทั้งใบ (FR-12) · กฎรายการไม่ถูกแก้ (FR-18a) และใบก่อน schema_v 7 (FR-18c: `pending_review` เดิมคำนวณใหม่เหมือนใบใหม่ · `declared` ไม่เขียน `review_status`) · audit อนุมัติอัตโนมัติจากการแก้ของผู้บริจาค (FR-26) · schema_v 6 → 7 หลัง CR-172
 - 2026-10-18 — เจ้าของโครงการ: รายการในแคมเปญคงอนุมัติอัตโนมัติ หน้าประเมินไม่มีปุ่มปฏิเสธรายการเหล่านี้ (ไม่รับได้ที่หน้าตรวจรับตาม FR-13)
 - 2026-10-18 — เจ้าของโครงการ: ledger ซ้ำเมื่อ `PUT` donation ชนหลังเขียน ledger เป็น bug เดิม แก้แยกจาก CR นี้ (#695)
+- 2026-10-19 — approved by Soravit Sukkarn (Team Lead) — requested by Kan (รันเลข CR-174 ย้ายเข้าหมวด 04-donation)
