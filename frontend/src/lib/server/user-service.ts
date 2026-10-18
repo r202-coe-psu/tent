@@ -380,17 +380,7 @@ export async function createOrMergeUser(
 		await updateUser(
 			input.name,
 			{
-				display_name: input.display_name,
-				roles: input.roles,
-				personnel_type: input.personnel_type,
-				organization: input.organization,
-				position: input.position,
-				phone: input.phone,
-				email: input.email,
-				notes: input.notes,
-				volunteer_id: input.volunteer_id,
-				duty_window: input.duty_window,
-				affiliation_tags: input.affiliation_tags
+				roles: input.roles
 			},
 			caller
 		);

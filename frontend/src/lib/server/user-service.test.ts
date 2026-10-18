@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as couchAdmin from './couch-admin';
 import {
 	createUser,
+	createOrMergeUser,
 	updateUser,
 	resetUserPasswordByAdmin,
 	getCurrentUserProfile,
@@ -774,6 +775,43 @@ describe('user-service', () => {
 			const doc = fakeUsersDb[key('0820000006')];
 			expect(doc.active).toBe(false);
 			expect(doc.phone).toBe('0877777777');
+		});
+
+		it('merges an existing user from another shelter via createOrMergeUser', async () => {
+			await seed('0820000007', ['shelter:SH002', 'registration_staff']);
+			const result = await createOrMergeUser(
+				{
+					name: '0820000007',
+					password: 'Password123!',
+					display_name: 'Existing Staff',
+					personnel_type: 'staff',
+					roles: ['shelter:SH001', 'triage_staff']
+				},
+				sm
+			);
+			expect(result.merged).toBe(true);
+			const doc = fakeUsersDb[key('0820000007')];
+			expect(doc.roles).toContain('shelter:SH001');
+			expect(doc.roles).toContain('shelter:SH002');
+			expect(doc.display_name).toBe('0820000007');
+		});
+
+		it('merges an existing user in the same shelter via createOrMergeUser without overwriting profile', async () => {
+			await seed('0820000008', ['shelter:SH001', 'registration_staff']);
+			const result = await createOrMergeUser(
+				{
+					name: '0820000008',
+					password: 'Password123!',
+					display_name: 'Attempted Overwrite',
+					personnel_type: 'staff',
+					roles: ['shelter:SH001', 'triage_staff']
+				},
+				sm
+			);
+			expect(result.merged).toBe(true);
+			const doc = fakeUsersDb[key('0820000008')];
+			expect(doc.roles).toContain('shelter:SH001');
+			expect(doc.display_name).toBe('0820000008');
 		});
 	});
 });
