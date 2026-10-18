@@ -15,6 +15,7 @@
 	import Rocket from '@lucide/svelte/icons/rocket';
 	import X from '@lucide/svelte/icons/x';
 	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import { onMount } from 'svelte';
 	import { useQueryClient } from '@tanstack/svelte-query';
 	import { generateQrDataUrl } from '$lib/utils/qrcode';
@@ -23,6 +24,8 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
+	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
+	import { Label } from '$lib/components/ui/label/index.js';
 	import VolunteerQrScannerModal from '$lib/features/volunteers/ui/volunteer-qr-scanner-modal.svelte';
 	import DatePicker from '$lib/components/date-picker.svelte';
 	import TimePicker from '$lib/components/time-picker.svelte';
@@ -40,13 +43,16 @@
 	import JobBoard from '$lib/features/volunteers/ui/public-job-board.svelte';
 	import ProfileEditDialog from './profile-edit-dialog.svelte';
 	import {
+		buildRememberedPortalCredential,
 		buildStoredPortalSession,
 		isJobApplicable,
 		isStoredPortalSessionExpired,
 		normalizeTicketToken,
 		portalCredentialSchema,
+		PORTAL_REMEMBER_KEY,
 		PORTAL_SESSION_KEY,
 		PORTAL_TOKEN_HANDOFF_KEY,
+		readRememberedPortalCredential,
 		responseCodeSchema,
 		ticketFindSchema,
 		ticketTokenFromScan,
@@ -89,6 +95,8 @@
 	let inputPhone = $state('');
 	let inputToken = $state('');
 	let loginError = $state('');
+	/** Opt-in "จดจำเครื่องนี้" for the next sign-in on this tab (#625). Unticked by default. */
+	let rememberDevice = $state(false);
 
 	/**
 	 * What this session signed in with — a phone number or a ticket token. `null` =
@@ -123,8 +131,9 @@
 		}
 	}
 
-	function portalPath(id: string, section = 'dashboard') {
-		return `/volunteers/portal/volunteer/${encodeURIComponent(id)}/${section}`;
+	/** Typed so `resolve()` can check it against the real `[portalId]/{section}` routes. */
+	function portalPath(id: string, section: 'dashboard' | 'openings' = 'dashboard') {
+		return `/volunteers/portal/volunteer/${encodeURIComponent(id)}/${section}` as const;
 	}
 
 	function clearPortalSession() {
@@ -136,10 +145,46 @@
 		}
 	}
 
+	/**
+	 * "จดจำเครื่องนี้" (#625, CR-127 note): the token sign-in kept in `localStorage` for
+	 * `PORTAL_REMEMBER_TTL_MS`. A phone sign-in is never remembered.
+	 */
+	function rememberThisDevice(credential: PortalCredential & { portal_id: string }) {
+		const record = buildRememberedPortalCredential(credential);
+		if (!record) return;
+		try {
+			localStorage.setItem(PORTAL_REMEMBER_KEY, JSON.stringify(record));
+		} catch {
+			// Storage unavailable (private mode); this sign-in still works, it just is not kept.
+		}
+	}
+
+	function forgetThisDevice() {
+		try {
+			localStorage.removeItem(PORTAL_REMEMBER_KEY);
+		} catch {
+			// Storage unavailable.
+		}
+	}
+
+	/** The remembered sign-in, or `null` — an expired or malformed record is forgotten. */
+	function readThisDevice() {
+		try {
+			const raw = localStorage.getItem(PORTAL_REMEMBER_KEY);
+			if (!raw) return null;
+			const remembered = readRememberedPortalCredential(JSON.parse(raw));
+			if (!remembered) forgetThisDevice();
+			return remembered;
+		} catch {
+			forgetThisDevice();
+			return null;
+		}
+	}
+
 	function enterDashboard(credential: PortalCredential & { portal_id: string }) {
 		session = credential;
 		persistSession(credential);
-		void goto(portalPath(credential.portal_id));
+		void goto(resolve(portalPath(credential.portal_id)));
 	}
 
 	const resolveAccess = useResolvePortalAccessMutation();
@@ -172,29 +217,69 @@
 			});
 	});
 
-	async function resolveAndEnter(credential: PortalCredential) {
+	/**
+	 * @param options.remember   keep this sign-in on the device ("จดจำเครื่องนี้")
+	 * @param options.remembered this credential came from a remembered device — if the
+	 *   server no longer knows it (token revoked / reissued), forget the device
+	 */
+	async function resolveAndEnter(
+		credential: PortalCredential,
+		options: { remember?: boolean; remembered?: boolean } = {}
+	) {
 		isLoggingIn = true;
 		loginError = '';
 		try {
 			const profile = await resolveAccess.mutateAsync(credential);
 			if (!profile?.portal_id) {
-				loginError = 'ไม่พบเบอร์โทรศัพท์นี้ในระบบอาสาสมัคร กรุณาตรวจสอบเบอร์ที่ใช้สมัครอีกครั้ง';
+				if (options.remembered) {
+					forgetThisDevice();
+					loginError =
+						'เครื่องนี้ไม่ได้จดจำการเข้าสู่ระบบแล้ว — รหัสตั๋วถูกยกเลิกหรือออกใหม่ กรุณาสแกนตั๋วอีกครั้ง';
+				} else if (credential.token) {
+					loginError = 'ไม่พบรหัสตั๋วนี้ในระบบอาสาสมัคร กรุณาตรวจสอบตั๋วแล้วสแกนอีกครั้ง';
+				} else {
+					loginError = 'ไม่พบเบอร์โทรศัพท์นี้ในระบบอาสาสมัคร กรุณาตรวจสอบเบอร์ที่ใช้สมัครอีกครั้ง';
+				}
+				toast.error(loginError);
 				return;
 			}
+			if (options.remember) rememberThisDevice({ ...credential, portal_id: profile.portal_id });
 			toast.success('เข้าสู่ระบบสำเร็จ');
 			enterDashboard({ ...credential, portal_id: profile.portal_id });
 		} catch (error) {
+			// A failure right after a scan used to show only as small text under the form,
+			// which read as "the scan did nothing" (#625) — say it in a toast as well.
 			loginError = error instanceof Error ? error.message : 'ไม่สามารถตรวจสอบข้อมูลจิตอาสาได้';
+			toast.error(`เข้าสู่ระบบไม่สำเร็จ: ${loginError}`);
 		} finally {
 			isLoggingIn = false;
 		}
 	}
 
-	/** Restore a short-lived session or the token handed over after a new booking. */
+	/**
+	 * Sign in from a remembered device ("จดจำเครื่องนี้", #625), re-checking the token
+	 * with the server — it may have been revoked or reissued since. The screen stays in
+	 * its restoring state meanwhile. `false` when nothing valid is remembered.
+	 */
+	function enterRememberedDevice(): boolean {
+		const remembered = readThisDevice();
+		if (!remembered) return false;
+		restoring = true;
+		void resolveAndEnter(remembered, { remembered: true }).finally(() => {
+			restoring = false;
+			if (!session && mode !== 'entry') void goto(resolve('/volunteers/portal'));
+		});
+		return true;
+	}
+
+	/**
+	 * Restore a short-lived session, the token handed over after a new booking, or a
+	 * remembered device — in that order.
+	 */
 	onMount(() => {
 		if (session) {
 			restoring = false;
-			if (mode === 'entry' && session.portal_id) void goto(portalPath(session.portal_id));
+			if (mode === 'entry' && session.portal_id) void goto(resolve(portalPath(session.portal_id)));
 			return;
 		}
 		let handed: string | null = null;
@@ -213,8 +298,9 @@
 			return;
 		}
 		if (!stored) {
+			if (enterRememberedDevice()) return;
 			restoring = false;
-			if (mode !== 'entry') void goto('/volunteers/portal');
+			if (mode !== 'entry') void goto(resolve('/volunteers/portal'));
 			return;
 		}
 		try {
@@ -223,21 +309,24 @@
 			if (parsed.success && parsed.data.portal_id && !isStoredPortalSessionExpired(rawStored)) {
 				if (mode !== 'entry' && portalId !== parsed.data.portal_id) {
 					clearPortalSession();
-					void goto('/volunteers/portal');
+					void goto(resolve('/volunteers/portal'));
 					restoring = false;
 					return;
 				}
 				session = parsed.data;
-				if (mode === 'entry') void goto(portalPath(parsed.data.portal_id));
+				if (mode === 'entry') void goto(resolve(portalPath(parsed.data.portal_id)));
 			} else {
 				// Covers a malformed record and an expired token session alike: both land the
-				// volunteer back on the sign-in screen rather than a stale dashboard.
+				// volunteer back on the sign-in screen rather than a stale dashboard — unless the
+				// device is remembered, which signs straight back in.
 				clearPortalSession();
-				if (mode !== 'entry') void goto('/volunteers/portal');
+				if (enterRememberedDevice()) return;
+				if (mode !== 'entry') void goto(resolve('/volunteers/portal'));
 			}
 		} catch {
 			clearPortalSession();
-			if (mode !== 'entry') void goto('/volunteers/portal');
+			if (enterRememberedDevice()) return;
+			if (mode !== 'entry') void goto(resolve('/volunteers/portal'));
 		}
 		restoring = false;
 	});
@@ -522,7 +611,8 @@
 	function handleScanToken(scanned: string) {
 		const token = ticketTokenFromScan(scanned);
 		if (!token) {
-			loginError = 'ไม่พบรหัสตั๋วใน QR Code นี้ กรุณาลองใหม่อีกครั้ง';
+			loginError = 'QR Code นี้ไม่ใช่ตั๋วจิตอาสา — กรุณาสแกน QR บนตั๋วหรือบัตรอาสาสมัคร';
+			toast.error(loginError);
 			return;
 		}
 		if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(100);
@@ -597,7 +687,7 @@
 			loginError = 'รูปแบบรหัสไม่ถูกต้อง — ต้องขึ้นต้นด้วย TKT-VOL-';
 			return;
 		}
-		await resolveAndEnter({ token });
+		await resolveAndEnter({ token }, { remember: rememberDevice });
 	}
 
 	function handleTokenLogin(e: SubmitEvent) {
@@ -638,6 +728,8 @@
 	}
 
 	function handleLogout() {
+		const wasRemembered = readThisDevice() !== null;
+		forgetThisDevice();
 		session = null;
 		roleCardPayload = '';
 		roleCardLookupKey = '';
@@ -648,8 +740,8 @@
 		inputToken = '';
 		loginError = '';
 		queryClient.removeQueries({ queryKey: volunteerPortalKeys.all });
-		toast.info('ออกจากระบบแล้ว');
-		void goto('/volunteers/portal');
+		toast.info(wasRemembered ? 'ออกจากระบบและลืมเครื่องนี้แล้ว' : 'ออกจากระบบแล้ว');
+		void goto(resolve('/volunteers/portal'));
 	}
 
 	function downloadRoleCardQr() {
@@ -672,9 +764,12 @@
 			!profileQuery.isPending &&
 			(profileQuery.isError || profileQuery.data === null)
 		) {
+			// The server no longer knows this credential (revoked / reissued token): a
+			// remembered device must not keep trying it. A transient error keeps it.
+			if (profileQuery.data === null) forgetThisDevice();
 			session = null;
 			clearPortalSession();
-			void goto('/volunteers/portal');
+			void goto(resolve('/volunteers/portal'));
 		}
 	});
 </script>
@@ -778,6 +873,27 @@
 				{:else}
 					<!-- TAB 2: QR & TOKEN LOGIN -->
 					<div class="space-y-6">
+						<!-- Before the scanner: a scan signs in at once, so this must be ticked first. -->
+						<div class="flex items-start gap-3 rounded-xl border border-border bg-muted/20 p-3">
+							<Checkbox
+								id="volunteer-remember-device"
+								bind:checked={rememberDevice}
+								class="mt-0.5"
+							/>
+							<div class="space-y-0.5">
+								<Label
+									for="volunteer-remember-device"
+									class="text-sm font-semibold text-foreground"
+								>
+									จดจำเครื่องนี้ 7 วัน
+								</Label>
+								<p class="text-xs text-muted-foreground">
+									ครั้งหน้าเปิดหน้านี้แล้วเข้าระบบได้เลยโดยไม่ต้องสแกน —
+									อย่าติ๊กบนเครื่องที่ใช้ร่วมกัน เช่น เครื่องของศูนย์
+								</p>
+							</div>
+						</div>
+
 						<form onsubmit={handleTokenLogin} class="space-y-2">
 							<label for="volunteer-token-input" class="text-xs font-bold text-foreground">
 								กรอกรหัส Token หรือ รหัสตั๋วจิตอาสา
@@ -891,7 +1007,8 @@
 				<button
 					type="button"
 					onclick={handleLogout}
-					title="สลับบัญชี / ออกจากระบบ"
+					title="ออกจากระบบ / ลืมเครื่องนี้"
+					aria-label="ออกจากระบบ / ลืมเครื่องนี้"
 					class="flex size-9 cursor-pointer items-center justify-center rounded-xl border border-border bg-card text-muted-foreground shadow-xs transition-colors hover:border-destructive hover:bg-destructive/10 hover:text-destructive"
 				>
 					<LogOut class="size-4" />
@@ -904,7 +1021,7 @@
 			<div class="inline-flex rounded-t-2xl border-x border-t border-border/60 bg-muted/20 p-1">
 				<button
 					type="button"
-					onclick={() => void goto(portalPath(currentVolunteer.id, 'dashboard'))}
+					onclick={() => void goto(resolve(portalPath(currentVolunteer.id, 'dashboard')))}
 					class="flex cursor-pointer items-center gap-2 rounded-xl px-5 py-2.5 text-xs font-bold transition-all {dashboardTab ===
 					'schedule'
 						? 'bg-card text-foreground shadow-sm'
@@ -921,7 +1038,7 @@
 
 				<button
 					type="button"
-					onclick={() => void goto(portalPath(currentVolunteer.id, 'openings'))}
+					onclick={() => void goto(resolve(portalPath(currentVolunteer.id, 'openings')))}
 					class="flex cursor-pointer items-center gap-2 rounded-xl px-5 py-2.5 text-xs font-bold transition-all {dashboardTab ===
 					'openings'
 						? 'bg-card text-foreground shadow-sm'
@@ -1044,7 +1161,7 @@
 							<p class="mt-1 text-xs">เมื่อมีการจองหรือได้รับมอบหมาย งานจะปรากฏรวมกันที่นี่</p>
 							<button
 								type="button"
-								onclick={() => void goto(portalPath(currentVolunteer.id, 'openings'))}
+								onclick={() => void goto(resolve(portalPath(currentVolunteer.id, 'openings')))}
 								class="mt-4 rounded-xl bg-primary px-4 py-2 text-xs font-bold text-white shadow-sm hover:opacity-95"
 							>
 								ดูงานจิตอาสา

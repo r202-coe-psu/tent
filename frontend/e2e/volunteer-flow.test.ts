@@ -892,7 +892,7 @@ test.describe('Volunteer end-to-end operational flow', () => {
 			await page.locator('#volunteer-phone-input').fill(APPLICANT_PHONE);
 			await page.getByRole('button', { name: 'เข้าสู่ระบบทันที' }).click();
 
-			await expect(page.getByTitle('สลับบัญชี / ออกจากระบบ')).toBeVisible();
+			await expect(page.getByRole('button', { name: 'ออกจากระบบ / ลืมเครื่องนี้' })).toBeVisible();
 			// The shift assigned in step 5 already shows up on the volunteer's own schedule.
 			await expect(page.getByText(JOB_TITLE).first()).toBeVisible();
 

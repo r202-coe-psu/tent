@@ -1,7 +1,10 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { portalCredentialSchema } from '$lib/features/volunteer-portal/server';
-import { volunteerTicketFindLimiter } from '$lib/server/security/rate-limiter';
+import { portalCredentialSchema, isMintedTicketToken } from '$lib/features/volunteer-portal/server';
+import {
+	volunteerTicketFindLimiter,
+	volunteerTicketLimiter
+} from '$lib/server/security/rate-limiter';
 import {
 	PublicScheduleError,
 	readPublicVolunteerSchedule
@@ -27,8 +30,12 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
 			return json({ success: false, error: 'INVALID_INPUT' }, { status: 422 });
 		}
 		// Validate first so malformed requests do not consume the lookup budget and
-		// can consistently return the contract's 422 response.
-		if (!volunteerTicketFindLimiter.check(getClientAddress())) {
+		// can consistently return the contract's 422 response. A minted token (128 random
+		// bits) gets the looser token budget; a phone keeps the strict one (#625).
+		const limiter = isMintedTicketToken(parsed.data)
+			? volunteerTicketLimiter
+			: volunteerTicketFindLimiter;
+		if (!limiter.check(getClientAddress())) {
 			return json({ success: false, error: 'RATE_LIMITED' }, { status: 429 });
 		}
 		return json(await readPublicVolunteerSchedule(parsed.data), {

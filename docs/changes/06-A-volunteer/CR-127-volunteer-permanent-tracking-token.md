@@ -3,7 +3,7 @@ id: CR-127
 title: Volunteer — permanent per-volunteer tracking token (`tracking_token_hash`)
 status: approved
 date: 2026-09-16
-updated: 2026-09-18
+updated: 2026-10-18
 requested_by: Dev Team B
 decided_by: Project Owner (Jakee / net-lynx) — approved permanent volunteer tracking_token_hash design 2026-09-18
 layer: volatile
@@ -15,6 +15,8 @@ affects:
   - worker/src/worker/projectors/volunteer.py (sync `tracking_token_hash` → Mongo)
   - backend/apiapp/modules/volunteers/use_case.py (credential resolution, ticket lookup)
   - frontend/src/lib/features/volunteers/ui/volunteer-check-in.svelte + data/domain layer
+  - frontend/src/lib/features/volunteer-portal/ui/volunteer-access-portal.svelte + domain/volunteer.ts (note 2026-10-18, #625 — remembered device)
+  - frontend/src/routes/api/public/v1/volunteer/{access/resolve,profile,schedule,schedule/action,ticket/find} (note 2026-10-18, #625 — token rate budget)
 why: >
   `job_application.tracking_token` (schema.md §2.18, CR-104) is minted fresh per
   application, so a volunteer with more than one application has more than one token and
@@ -76,6 +78,41 @@ themself, which the portal sign-in and on-site check-in both need one of.
 - After schema bump: update `docs/data/couchdb-mongodb-sync.md` to add
   `tracking_token_hash` to the synced field list for `PublicVolunteer`.
 
+## Note 2026-10-18 — portal "จดจำเครื่องนี้" + token rate budget (#625)
+
+> **สรุป:** portal อาสาจดจำการเข้าสู่ระบบด้วย token ได้แบบ opt-in 7 วันใน `localStorage` และ lookup
+> ที่ใช้ token `TKT-VOL-` ที่ mint แล้วย้ายไปใช้โควตา token (30/นาที/IP) แทนโควตาค้นหา (5/นาที/IP)
+> ซึ่งทำให้อาสาคนที่ 2 ที่ศูนย์เดียวกัน (NAT IP เดียว) สแกนเข้าไม่ได้ · ไม่เปลี่ยน token ฝั่ง backend · ไม่ bump `schema_v`
+
+### Requirements — จดจำเครื่องนี้
+
+- **R-1** — แท็บ "สแกน QR ตั๋ว / รหัส Token" มี checkbox "จดจำเครื่องนี้ 7 วัน" ค่าเริ่มต้น**ไม่ติ๊ก**
+- **R-2** — ติ๊กแล้วเข้าสู่ระบบสำเร็จ → เก็บ `{ token, portal_id, remembered_until }` ใน `localStorage`
+  key `volunteer-portal-remembered`; `remembered_until` = เวลาที่ติ๊ก + 7 วัน (ไม่ต่ออายุเอง)
+- **R-3** — จดจำ**เฉพาะการเข้าด้วย token**; การเข้าด้วยเบอร์โทรไม่ถูกจดจำ
+- **R-4** — เปิด portal โดยไม่มี session 30 นาทีที่ใช้ได้ แต่มีการจดจำที่ยังไม่หมดอายุ → resolve token กับ server
+  ใหม่แล้วเข้า dashboard; record ที่หมดอายุ / ผิดรูป / อายุเกิน 7 วันจากปัจจุบัน → ลบทิ้ง
+- **R-5** — server ไม่รู้จัก token แล้ว (ยกเลิก / ออกใหม่) → ลบการจดจำ และกลับหน้า login พร้อมข้อความ;
+  error ชั่วคราว (network / 429) ไม่ลบ
+- **R-6** — "ออกจากระบบ / ลืมเครื่องนี้" ลบการจดจำทุกครั้ง
+- **R-7** — เครื่องที่ไม่ติ๊กทำงานเหมือนเดิม (`sessionStorage`, token session 30 นาที — `PORTAL_TOKEN_SESSION_TTL_MS`)
+
+### Requirements — token rate budget
+
+- **R-8** — `access/resolve`, `profile`, `schedule`, `schedule/action`, `ticket/find`: credential ที่เป็น token
+  รูปแบบ `TKT-VOL-` + hex 32 ตัว (128-bit, `isMintedTicketToken`) ใช้ `volunteerTicketLimiter` (60 s / 30)
+- **R-9** — เบอร์โทร, token สั้นหรือรูปแบบอื่น และ body ที่อ่านไม่ได้ ใช้ `volunteerTicketFindLimiter` (60 s / 5) เหมือนเดิม;
+  `access/role-card` (รับเฉพาะเบอร์) ไม่เปลี่ยน; ทั้งสอง limiter ยัง**ห้ามปิด** ตาม CR-160
+
+### Why
+
+- token เป็น bearer credential ถาวร: เก็บใน `localStorage` บนเครื่องที่ใช้ร่วมกัน (เครื่องศูนย์ / kiosk) ทำให้คนถัดไป
+  เข้าบัญชีอาสาคนก่อนได้ — จึงเป็น opt-in, มีวันหมดอายุ, ลบเมื่อออกจากระบบหรือ token ใช้ไม่ได้ (owner เลือก 7 วัน)
+- การเข้าระบบด้วย token 1 ครั้งเรียก 4 endpoint ที่ใช้โควตาค้นหาก้อนเดียวกัน (5/นาที/IP) — ที่ศูนย์ซึ่งทุกคนออกเน็ต
+  ผ่าน NAT IP เดียว การสแกนคนที่ 2 ภายใน 1 นาทีได้ 429 ตรงกับ feedback "สแกนแล้วต้องกดเข้าสู่ระบบเอง"
+  (reproduce ด้วยกล้องปลอม: เส้นทาง auto-submit ทำงานถูกต้อง) token 128-bit เดาไม่ได้ จึงไม่ต้องใช้โควตาที่กัน enumeration
+- ข้อจำกัดที่รู้: โควตา token ยังนับต่อ IP — ศูนย์เดียวเข้าระบบด้วย token ได้ ~7 ครั้ง/นาที (4 request ต่อครั้ง)
+
 ## Decision log
 
 - 2026-09-16 — proposed as `draft-volunteer-permanent-tracking-token` (hash-only permanent
@@ -83,3 +120,6 @@ themself, which the portal sign-in and on-site check-in both need one of.
 - 2026-09-18 — Project Owner (Jakee / net-lynx) approved the permanent
   `tracking_token_hash` design. Ratified as **CR-127**. Schema.md bump remains follow-up
   with #275; this record is the design decision only.
+- 2026-10-18 — Note (#625): portal "จดจำเครื่องนี้" (opt-in, token only, `localStorage`, 7 วัน) และย้าย
+  lookup ด้วย minted token ไป `volunteerTicketLimiter`; owner เลือก track เป็น note ต่อท้าย CR-127, อายุ 7 วัน,
+  และแยกโควตาตาม credential

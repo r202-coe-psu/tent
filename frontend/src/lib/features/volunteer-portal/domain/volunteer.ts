@@ -321,6 +321,64 @@ export function buildStoredPortalSession(
 }
 
 /**
+ * `localStorage` key for an opt-in "จดจำเครื่องนี้" sign-in (#625, CR-127 note).
+ *
+ * The `TKT-VOL-` token is a permanent bearer credential, so remembering it lets anyone
+ * using this browser in the next week open that volunteer's portal. It is therefore
+ * opt-in (unticked by default), token sign-ins only, bounded by
+ * `PORTAL_REMEMBER_TTL_MS`, and dropped on sign-out or when the server no longer
+ * recognises the token.
+ */
+export const PORTAL_REMEMBER_KEY = 'volunteer-portal-remembered';
+
+/** How long a remembered device keeps signing in on its own — fixed from when it was ticked. */
+export const PORTAL_REMEMBER_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+/** What lands in `localStorage` for a remembered device. */
+export type RememberedPortalCredential = {
+	token: string;
+	portal_id: string;
+	remembered_until: number;
+};
+
+/**
+ * The record to remember for a sign-in, or `null` when it may not be remembered — only
+ * a ticket token is (a phone sign-in is cheap to repeat and not a secret worth keeping).
+ */
+export function buildRememberedPortalCredential(
+	credential: PortalCredential & { portal_id: string },
+	now: number = Date.now()
+): RememberedPortalCredential | null {
+	const token = credential.token ? normalizeTicketToken(credential.token) : null;
+	if (!token) return null;
+	return {
+		token,
+		portal_id: credential.portal_id,
+		remembered_until: now + PORTAL_REMEMBER_TTL_MS
+	};
+}
+
+/**
+ * Read a remembered device back out of `localStorage` (the parsed JSON). `null` when it
+ * is missing, malformed, expired, or claims to last longer than a remembered device
+ * ever may — the caller then forgets it and shows the sign-in screen.
+ */
+export function readRememberedPortalCredential(
+	raw: unknown,
+	now: number = Date.now()
+): (PortalCredential & { token: string; portal_id: string }) | null {
+	if (!raw || typeof raw !== 'object') return null;
+	const until = (raw as { remembered_until?: unknown }).remembered_until;
+	if (typeof until !== 'number' || now > until || until - now > PORTAL_REMEMBER_TTL_MS) {
+		return null;
+	}
+	const parsed = portalCredentialSchema.safeParse(raw);
+	if (!parsed.success || !('token' in parsed.data) || !parsed.data.portal_id) return null;
+	const token = normalizeTicketToken(parsed.data.token);
+	return token ? { token, portal_id: parsed.data.portal_id } : null;
+}
+
+/**
  * Whether a record just read back out of `sessionStorage` has aged past its clock.
  *
  * `raw` is the untyped, parsed JSON — not the schema-validated credential — because
@@ -340,6 +398,21 @@ const TRACKING_TOKEN_PREFIX = 'TKT-VOL-';
  * checker compares the embedded hash directly with `volunteer.tracking_token_hash`.
  */
 export const TRACKING_TOKEN_HASH_PREFIX = 'TKT-VOL-HASH-';
+
+/** A minted tracking token: the prefix plus 16 random bytes as 32 hex digits (128 bits). */
+const MINTED_TOKEN_RE = /^TKT-VOL-[0-9A-F]{32}$/i;
+
+/**
+ * True only for a full, freshly minted `TKT-VOL-` token — 128 random bits, so it cannot
+ * be guessed. Lookups with one may use the looser token rate limit; anything else
+ * (a phone number, a short or legacy code) keeps the strict lookup limit, because those
+ * can be enumerated (#625).
+ */
+export function isMintedTicketToken(credential: unknown): boolean {
+	if (!credential || typeof credential !== 'object') return false;
+	const token = (credential as { token?: unknown }).token;
+	return typeof token === 'string' && MINTED_TOKEN_RE.test(token.trim());
+}
 
 /**
  * Clean up a code that was typed, pasted or scanned, or `null` if it is not a tracking

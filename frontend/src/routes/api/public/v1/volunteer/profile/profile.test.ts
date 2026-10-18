@@ -22,6 +22,7 @@ const update = UPDATE as unknown as PortalHandler;
 
 vi.mock('$lib/server/security/rate-limiter', () => ({
 	volunteerTicketFindLimiter: { check: vi.fn(() => true) },
+	volunteerTicketLimiter: { check: vi.fn(() => true) },
 	volunteerProfileUpdateLimiter: { check: vi.fn(() => true) }
 }));
 

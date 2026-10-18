@@ -11,6 +11,7 @@
  */
 export {
 	dispatchRespondSchema,
+	isMintedTicketToken,
 	isValidThaiNationalId,
 	portalCredentialSchema,
 	responseCodeSchema,

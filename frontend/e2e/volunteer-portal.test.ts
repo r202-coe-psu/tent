@@ -201,9 +201,9 @@ async function signInWithToken(page: Page, value: string) {
 	await page.getByRole('button', { name: 'เข้าสู่ระบบ', exact: true }).click();
 }
 
-/** The signed-in marker — the sign-out control is icon-only, so it goes by title. */
+/** The signed-in marker — the icon-only sign-out control, found by its aria-label. */
 function signOutButton(page: Page) {
-	return page.getByTitle('สลับบัญชี / ออกจากระบบ');
+	return page.getByRole('button', { name: 'ออกจากระบบ / ลืมเครื่องนี้' });
 }
 
 test.describe('Volunteer Access Portal (CR-092 หน้าจอ 6)', () => {
@@ -237,7 +237,7 @@ test.describe('Volunteer Access Portal (CR-092 หน้าจอ 6)', () => {
 		await openPortalTab(page);
 		await signIn(page, '081-9992211');
 
-		await expect(page.getByText('ไม่พบเบอร์โทรศัพท์นี้ในระบบอาสาสมัคร')).toBeVisible();
+		await expect(page.getByText('ไม่พบเบอร์โทรศัพท์นี้ในระบบอาสาสมัคร').first()).toBeVisible();
 		await expect(signOutButton(page)).toHaveCount(0);
 		await expect(page.getByText('Heavy Lifting')).toHaveCount(0);
 		await expect(page.getByText('นายเก่งกล้า')).toHaveCount(0);

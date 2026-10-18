@@ -1,8 +1,11 @@
 import { json } from '@sveltejs/kit';
 import { z } from 'zod';
 import type { RequestHandler } from './$types';
-import { portalCredentialSchema } from '$lib/features/volunteer-portal/server';
-import { volunteerTicketFindLimiter } from '$lib/server/security/rate-limiter';
+import { portalCredentialSchema, isMintedTicketToken } from '$lib/features/volunteer-portal/server';
+import {
+	volunteerTicketFindLimiter,
+	volunteerTicketLimiter
+} from '$lib/server/security/rate-limiter';
 import {
 	applyPublicScheduleAction,
 	PublicScheduleError
@@ -23,11 +26,17 @@ const actionBodySchema = z.union([
 
 /** Volunteer-owned check-in, check-out and withdrawal action. */
 export const POST: RequestHandler = async ({ request, getClientAddress }) => {
-	if (!volunteerTicketFindLimiter.check(getClientAddress())) {
+	// A minted `TKT-VOL-` token is 128 random bits and cannot be guessed, so it gets the
+	// looser token budget; a phone (or any other code) keeps the strict lookup budget that
+	// guards enumeration. Sharing the strict one throttled the second volunteer to sign in
+	// from a shelter's single NAT address (#625, CR-127 note).
+	const body: unknown = await request.json().catch(() => null);
+	const limiter = isMintedTicketToken(body) ? volunteerTicketLimiter : volunteerTicketFindLimiter;
+	if (!limiter.check(getClientAddress())) {
 		return json({ success: false, error: 'RATE_LIMITED' }, { status: 429 });
 	}
 	try {
-		const parsed = actionBodySchema.safeParse(await request.json());
+		const parsed = actionBodySchema.safeParse(body);
 		if (!parsed.success) {
 			return json({ success: false, error: 'INVALID_INPUT' }, { status: 422 });
 		}
