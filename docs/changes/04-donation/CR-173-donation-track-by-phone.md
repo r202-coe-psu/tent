@@ -1,10 +1,11 @@
 ---
-id: draft
+id: CR-173
 title: "ติดตามและจัดการการบริจาคด้วยเบอร์โทรอย่างเดียว (เข้าถึงเต็ม + มาตรการกันไล่สุ่มเบอร์)"
-status: proposed
+status: approved
 date: 2026-10-17
-requested_by: "เจ้าของโครงการ — issue #618 (ข้อกำหนดในคำอธิบาย issue) และ #459 (แยก limiter)"
-decided_by: <เจ้าของโครงการ>
+approved_at: 2026-10-18
+requested_by: "Kan"
+decided_by: "Soravit Sukkarn (Team Lead)"
 layer: volatile
 affects:
   - docs/changes/04-donation/CR-052-donation-system-design-v8.md §2.6 (ค้นด้วย Ref ID + เบอร์ / ส่งเบอร์ไปเติมหน้าติดตาม)
@@ -19,7 +20,7 @@ why: ผู้บริจาคจำเลขจอง (DN) ไม่ได้
 migration: CouchDB doc ไม่เปลี่ยนรูป ไม่ bump schema_v · Mongo DonationBuffer เพิ่ม field + index · ไม่กระทบ PROJECTION_VERSION
 ---
 
-# ติดตามและจัดการการบริจาคด้วยเบอร์โทรอย่างเดียว
+# CR-173 — ติดตามและจัดการการบริจาคด้วยเบอร์โทรอย่างเดียว
 
 ## สรุป
 
@@ -103,3 +104,4 @@ migration: CouchDB doc ไม่เปลี่ยนรูป ไม่ bump sc
 - 2026-10-17 — ไม่ backfill buffer เดิม เพราะ production ยังไม่เปิดใช้งานจริง
 - 2026-10-17 — proposed (track ด้วย CR file แยก branch)
 - 2026-10-18 — ตัดการค้นหาใน `public_donations` ออก คงการค้นหาเฉพาะใน `DonationBuffer` (active 72 ชม.) เพื่อให้สามารถคืน `tracking_token` ได้อย่างถูกต้องตามสถาปัตยกรรม, ปรับ FR-1 ให้รองรับ `captcha_token` และกำหนดเกณฑ์ป้องกัน enumeration ใน FR-8 ให้ชัดเจน
+- 2026-10-18 — approved โดย Soravit Sukkarn (Team Lead) ตามคำขอของ Kan (รันเลข CR-173 ย้ายเข้าหมวด 04-donation)
