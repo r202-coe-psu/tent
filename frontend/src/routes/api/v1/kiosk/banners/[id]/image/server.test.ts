@@ -65,9 +65,25 @@ describe('GET /api/v1/kiosk/banners/[id]/image', () => {
 		expect(response.status).toBe(200);
 		expect(response.headers.get('content-type')).toBe('image/png');
 		expect(new Uint8Array(await response.arrayBuffer())).toEqual(new Uint8Array(BYTES));
-		expectNoStore(response);
 		expect(mockGetBanner).toHaveBeenCalledWith('banner-1');
 		expect(mockGetImage).toHaveBeenCalledWith('banner-1');
+	});
+
+	it('lets the kiosk cache the image privately until the signed url expires', async () => {
+		const response = await GET(event());
+
+		expect(response.headers.get('cache-control')).toBe(
+			`private, max-age=${KIOSK_BANNER_URL_TTL_MS / 1000}`
+		);
+		expect(response.headers.get('pragma')).toBeNull();
+	});
+
+	it('shortens the cache lifetime to what is left of the signature', async () => {
+		const ev = event();
+		vi.setSystemTime(NOW.getTime() + KIOSK_BANNER_URL_TTL_MS - 60_000);
+		const response = await GET(ev);
+
+		expect(response.headers.get('cache-control')).toBe('private, max-age=60');
 	});
 
 	it('rejects a tampered signature with 403 without touching the repository', async () => {

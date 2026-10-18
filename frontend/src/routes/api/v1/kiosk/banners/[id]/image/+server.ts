@@ -18,12 +18,8 @@ const notFound = () => fail(404, 'NOT_FOUND', 'ไม่พบรูปแบน
 export const GET: RequestHandler = async ({ params, url }) => {
 	try {
 		const now = new Date();
-		const valid = verifyBannerImageSig(
-			params.id,
-			url.searchParams.get('exp'),
-			url.searchParams.get('sig'),
-			now.getTime()
-		);
+		const exp = url.searchParams.get('exp');
+		const valid = verifyBannerImageSig(params.id, exp, url.searchParams.get('sig'), now.getTime());
 		if (!valid) return fail(403, 'INVALID_SIGNATURE', 'ลายเซ็นของลิงก์รูปไม่ถูกต้องหรือหมดอายุ');
 
 		const banner = await getBanner(params.id);
@@ -31,9 +27,12 @@ export const GET: RequestHandler = async ({ params, url }) => {
 		const image = await getBannerImage(params.id);
 		if (!image) return notFound();
 
+		// The attract loop re-shows the same signed URL every rotation; cache it only as long as
+		// the signature lives, so a revoked banner drops off with the next poll's new URL.
+		const maxAge = Math.max(0, Number(exp) - Math.ceil(now.getTime() / 1000));
 		return new Response(image.bytes, {
 			status: 200,
-			headers: { 'content-type': image.contentType, ...noStoreHeaders }
+			headers: { 'content-type': image.contentType, 'cache-control': `private, max-age=${maxAge}` }
 		});
 	} catch {
 		return fail(503, DEPENDENCY_UNAVAILABLE, 'บริการแบนเนอร์ kiosk ไม่พร้อมใช้งาน');
