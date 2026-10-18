@@ -4,10 +4,10 @@ title: Kiosk banner — แบนเนอร์รูปภาพประช�
 status: approved
 date: 2026-10-11
 created: 2026-10-11
-updated: 2026-10-17
+updated: 2026-10-18
 requested_by: ทีม kiosk
-decided_by: Soravit Sukkarn (Team Lead) — อนุมัติ 2026-10-11 (Asia/Bangkok) เฉพาะ scope เดิม · ส่วนที่ปรับ/เพิ่ม 2026-10-15..17 (รวมจาก `draft-kiosk-banner-design-revision`) รอ Team Lead / Project Owner เคาะ
-decision_date: 2026-10-11
+decided_by: Soravit Sukkarn (Team Lead) — อนุมัติ 2026-10-11 (Asia/Bangkok) scope เดิม · Team Lead อนุมัติส่วนที่ปรับ/เพิ่ม 2026-10-15..17 ทั้งหมด รวม §7 Q1–Q5 ตามข้อเสนอ เมื่อ 2026-10-18
+decision_date: 2026-10-18
 layer: volatile
 base_branch: feat/pre-register_kiosk
 depends_on:
@@ -24,7 +24,7 @@ affects:
   - frontend/src/lib/features/kiosk-banners/{domain,data,application,ui,index.ts} (ใหม่ — back-office) · ui/{kiosk-banner-form,kiosk-banner-screen-card,kiosk-banner-screen-manager,kiosk-banner-order-list,kiosk-banner-row-actions,kiosk-banner-preview-dialog}.svelte
   - frontend/src/lib/features/shared/domain/kiosk-screen.ts (ใหม่ — enum + ขนาดจอ) · frontend/src/params/kioskScreen.ts (ใหม่)
   - frontend/src/lib/server/kiosk-banners/** (ใหม่ — signed-image-url, kiosk-banner.server, kiosk-banner-access)
-  - frontend/src/lib/server/registry-design.ts (VDU branch `kiosk_banner` · `REGISTRY_DESIGN_VERSION` 5 → 6)
+  - frontend/src/lib/server/registry-design.ts (VDU branch `kiosk_banner` · `REGISTRY_DESIGN_VERSION` 5 → 6 → 7 · `KIOSK_BANNER_MANGO_INDEX`) · frontend/src/lib/server/registry-redeploy.ts (deploy Mango index ของ `registry` ใน `pnpm db:sync` / `sync:central`)
   - frontend/src/lib/features/kiosk/{data/kiosk-banners.api.ts,domain/kiosk-banner-feed.ts,ui/kiosk-banner-attract.svelte.ts,ui/kiosk-banner-attract.svelte,index.ts} (ใหม่) · frontend/src/routes/kiosk/+page.svelte (mount attract overlay)
   - frontend/src/routes/(protected)/back-office/kiosks/banners/{+page.svelte,new/+page.{ts,svelte},[id]/+page.{ts,svelte},[screen=kioskScreen]/+page.{ts,svelte}} (ใหม่)
   - frontend/src/routes/api/back-office/kiosk-banners/** (ใหม่ + `order/+server.ts` + server.test.ts)
@@ -50,9 +50,9 @@ migration: >
 
 # CR-162: Kiosk banner — แบนเนอร์รูปภาพบนหน้าแรก kiosk
 
-> **สถานะ:** approved เป็น spec เมื่อ 2026-10-11 (Asia/Bangkok) โดย Soravit Sukkarn (Team Lead) สำหรับ scope เดิม · implementation อยู่บน branch `feat-kiosk-banner` (ยังไม่ merge) · docs (schema.md §3.12, api-contract.md, role-permission-matrix.md) ที่อัปเดตใน PR เดิมของ CR นี้ยังเขียน `shelter_codes` / `banner_staff` / `/scanner/` และต้อง sync ใหม่ตามไฟล์นี้หลังส่วนที่ปรับได้รับการอนุมัติ
+> **สถานะ:** approved เป็น spec เมื่อ 2026-10-11 (Asia/Bangkok) โดย Soravit Sukkarn (Team Lead) สำหรับ scope เดิม · ส่วนที่ปรับ 2026-10-15..17 Team Lead อนุมัติแล้วเมื่อ 2026-10-18 · implementation อยู่บน branch `feat-kiosk-banner` (ยังไม่ merge) · schema.md §3.11 / §3.12 / §6 / §7, api-contract.md §2.2 / §2.3 และ role-permission-matrix.md §1.1 sync ตามไฟล์นี้แล้ว (2026-10-18)
 
-> **ส่วนที่ปรับ/เพิ่มเมื่อ 2026-10-15..17 — เสนอโดย ทีม kiosk และ _รอ Team Lead / Project Owner อนุมัติ_ (ยังไม่ได้รับการอนุมัติ):**
+> **ส่วนที่ปรับ/เพิ่มเมื่อ 2026-10-15..17 — เสนอโดย ทีม kiosk · Team Lead อนุมัติแล้ว 2026-10-18:**
 >
 > - **Section ที่เพิ่ม/เขียนใหม่:** §1.2 · §2.1–§2.5 · §3.6 (FR-KBR-01..46) · §4.2 (AC-KBR-01..20) · §5 · §6 · §7
 > - **แถวที่แก้ในที่เดิม:** FR-KBN-01, 03, 05, 09, 19 (เดิมใช้เลขซ้ำ FR-KBN-30), 20, 21, 24, 26, 27, 29, 30, 32, 34, 35, 43, 44, 45 · §3.5 ข้อ「รูปแยกตามแนวจอ」· §4.1 ข้อสิทธิ์ข้ามศูนย์ / role / kiosk client / path
@@ -180,7 +180,7 @@ SA / SM / kiosk_staff  (_session, active shelter = X)
 - **`scanner_device` (schema.md §3.11) เพิ่ม field optional:** `screen_type` (`compact` \| `portrait` · ไม่มี = `compact`) · `banner_enabled` (boolean · ไม่มี = `true`) · ไม่ bump `schema_v`
 - **แสดงบนตู้เมื่อ:** เครื่องมี `banner_enabled ≠ false` และ banner `status = active` และ `start_at ≤ now < end_at` (เวลา server) และ `shelter_code` = ศูนย์ของเครื่อง และ `screen_type` = ขนาดจอของเครื่อง (ไม่มี field = `compact` ทั้งสองฝั่ง) · เรียง `order` → `start_at` → `_id` · สูงสุด 20 (กรองก่อนตัด cap)
 - **VDU:** reject เมื่อ `shelter_code` ว่าง/ไม่ใช่ string, `screen_type` นอก enum, `title` ว่างหรือ >120, `caption` >200, `order` ไม่ใช่ int ≥1, `duration_sec` ไม่ใช่ int 3–60, `status` นอก enum, `end_at ≤ start_at`, `schema_v ≠ 1` · ไม่ตรวจ doc ที่ `_deleted` · เงื่อนไขผู้เขียนเดิมของ `registry` (`_admin` / SA) คงไว้
-- **Index (Mango):** `["type", "shelter_code", "end_at"]` (แทน `(type, status, end_at)` เดิม)
+- **Index (Mango):** `kiosk-banner-by-shelter` = `["type", "shelter_code"]` (แทน `(type, status, end_at)` เดิม) · CouchDB ใช้ json index เฉพาะเมื่อ selector ระบุครบทุก field จึงตรงกับ selector ของรายการ banner พอดี · deploy โดย `pnpm db:sync` / `sync:central` (`registry-redeploy.ts`)
 - **ลบ:** hard delete ทั้ง doc
 
 ### 2.4 API
@@ -190,7 +190,7 @@ SA / SM / kiosk_staff  (_session, active shelter = X)
 | Method | Path                                                        | Auth              | ผล                                                                                                                                                                                                       |
 | ------ | ----------------------------------------------------------- | ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `POST` | `/api/v1/kiosk/banners`                                     | device credential | `200 { banners: [{ id, title, caption, duration_sec, image_url }], fetched_at }` · `401 DEVICE_AUTH_FAILED` · `503 DEPENDENCY_UNAVAILABLE` · ทุก response `cache-control: no-store` + `pragma: no-cache` |
-| `GET`  | `/api/v1/kiosk/banners/{id}/image?exp={unix_sec}&sig={hex}` | signed URL        | `200` + `content-type` ของรูป · sig ผิด / หมดอายุ `403` · ไม่พบ / inactive / นอกช่วงเวลา `404` · `no-store`                                                                                              |
+| `GET`  | `/api/v1/kiosk/banners/{id}/image?exp={unix_sec}&sig={hex}` | signed URL        | `200` + `content-type` ของรูป · sig ผิด / หมดอายุ `403` · ไม่พบ / inactive / นอกช่วงเวลา `404` · `200` ส่ง `cache-control: private, max-age={วินาทีที่ลายเซ็นเหลือ}` (≤900) · error `no-store` |
 
 **ฝั่ง back-office — `_session`**
 
@@ -287,7 +287,7 @@ SA / SM / kiosk_staff  (_session, active shelter = X)
 
 ## 3. Requirements
 
-> ตาราง FR-KBN (§3.1–§3.4) = requirement ตั้งต้นของ CR-162 · แถวที่ปรับ 2026-10-15..17 ลงท้ายด้วย「(ปรับ 2026-10-15/17 — ดู FR-KBR-xx)」· ตาราง FR-KBR (§3.6) = requirement ที่เพิ่มจากการปรับ design หลัง CR-165 (ทั้งหมดรออนุมัติ)
+> ตาราง FR-KBN (§3.1–§3.4) = requirement ตั้งต้นของ CR-162 · แถวที่ปรับ 2026-10-15..17 ลงท้ายด้วย「(ปรับ 2026-10-15/17 — ดู FR-KBR-xx)」· ตาราง FR-KBR (§3.6) = requirement ที่เพิ่มจากการปรับ design หลัง CR-165 (อนุมัติ 2026-10-18)
 
 ### 3.1 Data — `kiosk_banner` (schema.md §3.12)
 
@@ -357,7 +357,7 @@ SA / SM / kiosk_staff  (_session, active shelter = X)
 
 ### 3.6 ปรับ design หลัง CR-165 (FR-KBR-01..46)
 
-> เสนอโดย ทีม kiosk 2026-10-15..17 — **รอ Team Lead / Project Owner อนุมัติ** · FR-KBR ขยายและแทนที่ส่วนที่เกี่ยวข้องของ FR-KBN (แถว FR-KBN ที่เกี่ยวข้องถูกแก้ในที่เดิมและอ้าง FR-KBR แล้ว)
+> เสนอโดย ทีม kiosk 2026-10-15..17 — **Team Lead อนุมัติ 2026-10-18** · FR-KBR ขยายและแทนที่ส่วนที่เกี่ยวข้องของ FR-KBN (แถว FR-KBN ที่เกี่ยวข้องถูกแก้ในที่เดิมและอ้าง FR-KBR แล้ว)
 
 #### 3.6.1 Data
 
@@ -453,7 +453,7 @@ SA / SM / kiosk_staff  (_session, active shelter = X)
 - หน้าตู้เล็ก (A, B, C) ลาก C ขึ้นบนสุด (เมาส์และจอสัมผัส) · ปิด Switch ของ B ระหว่างมีร่าง · บันทึก → ไม่ 409 · ลำดับ C, A, B · reload แล้วคงอยู่ · feed ตู้เล็กเรียงตามใหม่ · ตู้ใหญ่ไม่เปลี่ยน
 - เปิดหน้าเดียวกัน 2 แท็บ บันทึกแท็บแรกแล้วบันทึกแท็บสอง → `409` + toast ให้โหลดใหม่ · มีร่างแล้วกดออก/ย้อนกลับ → dialog ยืนยันก่อน
 
-### 4.2 Acceptance หลังปรับ design (AC-KBR-01..20 — รออนุมัติ)
+### 4.2 Acceptance หลังปรับ design (AC-KBR-01..20 — อนุมัติ 2026-10-18)
 
 | ID        | ขั้นตอน                                                                                             | ผลที่คาด                                                                                                                                        | FR     |
 | --------- | --------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
@@ -504,7 +504,7 @@ SA / SM / kiosk_staff  (_session, active shelter = X)
 - **Deploy:** ตั้ง `BODY_SIZE_LIMIT=4M` ให้ service frontend (ไม่มี env ใหม่สำหรับ signed URL — ใช้ `EXTERNAL_API_SECRET` เดิม) · deploy kiosk client ที่มี allowlist ใหม่ (ตู้ที่ยังไม่อัปเดตแค่ไม่เห็น banner — feed POST ไม่ได้ credential → `401` → fail soft)
 - **Registry design:** version 6 ถูก push ตอน server start ตามกลไกเดิมของ `registry-design.ts`
 
-## 7. Open questions (ข้อเสนอของทีม kiosk — รอ Team Lead / Project Owner เคาะ)
+## 7. Open questions (ข้อเสนอของทีม kiosk — Team Lead อนุมัติตามข้อเสนอทั้งหมด 2026-10-18)
 
 | #   | คำถาม                                                                                      | ข้อเสนอ                                                                        |
 | --- | ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------ |
@@ -536,3 +536,5 @@ SA / SM / kiosk_staff  (_session, active shelter = X)
 - 2026-10-17 — proposed โดยทีม kiosk (แก้ในไฟล์นี้): ลำดับกำหนดโดย server · ฟอร์มไม่มีช่องลำดับ · หน้ารายการเป็น card ต่อขนาดจอ → หน้าจัดการต่อขนาดจอ · จัดลำดับแบบลากวาง + `PUT …/order` (FR-KBN-05/19/20/21 + Acceptance · แถวจัดลำดับเดิมใช้เลข FR-KBN-30 ซ้ำกับ kiosk API จึงเปลี่ยนเป็น FR-KBN-19) · รอ Team Lead เคาะ
 - 2026-10-17 — proposed โดยทีม kiosk (เพิ่ม): overlay บนตู้แสดงรูปอย่างเดียวเต็มพื้นที่ทั้ง 2 ขนาด (`object-contain` ไม่ crop) · เอา caption, dot indicator และข้อความ「แตะหน้าจอเพื่อเริ่มใช้งาน」ออก (แทนส่วนนั้นของ FR-KBN-44/45 · FR-KBR-46, AC-KBR-20) · รอ Team Lead / Project Owner เคาะ
 - 2026-10-17 — รวม `draft-kiosk-banner-design-revision.md` เข้ามาใน CR นี้ (FR-KBR-01..46, AC-KBR-01..20 คง id เดิม) · ลบไฟล์ draft · รอ Team Lead / Project Owner เคาะส่วนที่ปรับ
+- 2026-10-18 — **approved** โดย Team Lead: ส่วนที่ปรับ/เพิ่ม 2026-10-15..17 ทั้งหมด (FR-KBR-01..46, AC-KBR-01..20, แถว FR-KBN ที่แก้) และ §7 Q1–Q5 ตามข้อเสนอ · sync schema.md / api-contract.md / role-permission-matrix.md ตามไฟล์นี้
+- 2026-10-18 — แก้ตาม PR review: Mango index เป็น `["type", "shelter_code"]` (index 3 field เดิมไม่ถูกใช้เพราะ selector ไม่มี `end_at`) และ deploy ใน `registry-redeploy.ts` · GET รูปฝั่งตู้ cache ได้ `private` ตามอายุลายเซ็นที่เหลือ (รูปเดิมวนซ้ำทุกรอบสไลด์)
