@@ -898,18 +898,19 @@
 							<label for="volunteer-token-input" class="text-xs font-bold text-foreground">
 								กรอกรหัส Token หรือ รหัสตั๋วจิตอาสา
 							</label>
-							<div class="flex gap-2">
+							<!-- Stacked on a phone: side by side, the button overflowed the card at 390px. -->
+							<div class="flex flex-col gap-2 sm:flex-row">
 								<input
 									id="volunteer-token-input"
 									type="text"
 									bind:value={inputToken}
 									placeholder="เช่น TKT-VOL-1001 หรือ V-1001"
-									class="flex-1 rounded-xl border border-border bg-muted/20 px-3.5 py-3 text-xs font-medium text-foreground outline-hidden transition-all focus:border-primary focus:bg-card focus:ring-1 focus:ring-primary md:text-sm"
+									class="min-h-11 min-w-0 flex-1 rounded-xl border border-border bg-muted/20 px-3.5 py-3 text-xs font-medium text-foreground outline-hidden transition-all focus:border-primary focus:bg-card focus:ring-1 focus:ring-primary md:text-sm"
 								/>
 								<button
 									type="submit"
 									disabled={isLoggingIn}
-									class="flex shrink-0 cursor-pointer items-center gap-1.5 rounded-xl bg-primary px-5 py-3 text-xs font-bold text-primary-foreground shadow-sm hover:opacity-95 disabled:cursor-wait disabled:opacity-60"
+									class="flex min-h-11 shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-xl bg-primary px-5 py-3 text-xs font-bold whitespace-nowrap text-primary-foreground shadow-sm hover:opacity-95 disabled:cursor-wait disabled:opacity-60"
 								>
 									<Rocket class="size-3.5" />
 									<span>เข้าสู่ระบบ</span>
@@ -945,30 +946,37 @@
 	{:else}
 		<!-- ── SIGNED IN VOLUNTEER DASHBOARD ─────────────────────────────────── -->
 
-		<!-- TOP PROFILE HEADER CARD -->
+		<!-- TOP PROFILE HEADER CARD — stacked on a phone (actions as a full-width row), side
+		     by side from `sm` with the actions top-right; it used to stay stacked up to `lg`,
+		     leaving the actions stranded under a half-empty card on a tablet. -->
 		<div
-			class="flex flex-col justify-between gap-6 rounded-3xl border border-border bg-card p-6 shadow-sm lg:flex-row lg:items-center"
+			class="flex flex-col gap-4 rounded-3xl border border-border bg-card p-4 shadow-sm sm:flex-row sm:items-start sm:justify-between sm:gap-6 sm:p-6"
 		>
-			<!-- Left: Avatar + Details -->
-			<div class="flex items-start gap-4">
+			<!-- Left: Avatar + Details — one centred column on a phone (a large avatar above
+			     the details), side by side, left-aligned and more compact from `sm`. -->
+			<div
+				class="flex min-w-0 flex-col items-center gap-3 text-center sm:flex-row sm:items-start sm:gap-4 sm:text-left"
+			>
 				<div
-					class="flex size-14 shrink-0 items-center justify-center rounded-2xl bg-primary text-xl font-black text-primary-foreground shadow-md"
+					class="flex size-20 shrink-0 items-center justify-center rounded-3xl bg-primary text-3xl font-black text-primary-foreground shadow-md sm:size-14 sm:rounded-2xl sm:text-xl"
 				>
 					{currentVolunteer.avatar}
 				</div>
-				<div class="space-y-1">
-					<div class="flex flex-wrap items-center gap-2">
-						<h2 class="text-lg font-black text-foreground md:text-xl">{currentVolunteer.name}</h2>
+				<div class="min-w-0 space-y-2 sm:space-y-1.5">
+					<div class="flex flex-wrap items-center justify-center gap-2 sm:justify-start">
+						<h2 class="w-full text-2xl font-black text-foreground sm:w-auto sm:text-lg md:text-xl">
+							{currentVolunteer.name}
+						</h2>
 						<span
-							class="inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-2xs font-bold {currentVolunteer.verified
+							class="inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs font-bold sm:text-2xs {currentVolunteer.verified
 								? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
 								: 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950/60 dark:text-amber-300'}"
 						>
-							<CircleCheck class="size-3" />
+							<CircleCheck class="size-3.5 sm:size-3" />
 							{currentVolunteer.verified ? 'ยืนยันตัวตนแล้ว' : 'ยังไม่ยืนยันตัวตน'}
 						</span>
 						<span
-							class="inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-2xs font-bold {currentVolunteer.statusType ===
+							class="inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs font-bold sm:text-2xs {currentVolunteer.statusType ===
 							'active'
 								? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
 								: 'border-border bg-muted text-muted-foreground'}"
@@ -977,16 +985,23 @@
 						</span>
 					</div>
 
-					<p class="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
-						<span class="flex items-center gap-1">
-							<MapPin class="size-3.5 text-primary" /> สังกัด: {currentVolunteer.shelterName}
+					<p
+						class="flex flex-wrap items-start justify-center gap-x-3 gap-y-1 text-sm text-muted-foreground sm:justify-start sm:text-xs"
+					>
+						<!-- Icon inline with the text: it stays beside the first word whether the line is
+						     centred (phone) or left-aligned, and a long shelter name wraps under it. -->
+						<span class="min-w-0">
+							<MapPin
+								class="mr-1 inline size-4 -translate-y-px align-middle text-primary sm:size-3.5"
+							/>สังกัด:
+							{currentVolunteer.shelterName}
 						</span>
-						<span>📞 {currentVolunteer.phone}</span>
+						<span class="whitespace-nowrap">📞 {currentVolunteer.phone}</span>
 					</p>
 
 					<div class="pt-1">
 						<span
-							class="inline-flex items-center gap-1 rounded-lg border border-sky-200 bg-sky-50 px-2.5 py-0.5 text-2xs font-bold text-sky-800 dark:border-sky-800 dark:bg-sky-950/50 dark:text-sky-300"
+							class="inline-flex items-center gap-1 rounded-lg border border-sky-200 bg-sky-50 px-2.5 py-0.5 text-xs font-bold text-sky-800 sm:text-2xs dark:border-sky-800 dark:bg-sky-950/50 dark:text-sky-300"
 						>
 							{currentVolunteer.roleType}
 						</span>
@@ -995,11 +1010,11 @@
 			</div>
 
 			<!-- Right: Actions -->
-			<div class="flex flex-wrap items-center gap-3">
+			<div class="flex w-full shrink-0 items-center gap-2 sm:w-auto">
 				<button
 					type="button"
 					onclick={() => (profileDialogOpen = true)}
-					class="rounded-xl border border-border bg-card px-3.5 py-2 text-xs font-bold text-foreground shadow-xs transition-colors hover:bg-muted"
+					class="min-h-11 flex-1 rounded-xl border border-border bg-card px-4 py-2 text-sm font-bold whitespace-nowrap text-foreground shadow-xs transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none sm:flex-none"
 				>
 					แก้ไขโปรไฟล์
 				</button>
@@ -1009,7 +1024,7 @@
 					onclick={handleLogout}
 					title="ออกจากระบบ / ลืมเครื่องนี้"
 					aria-label="ออกจากระบบ / ลืมเครื่องนี้"
-					class="flex size-9 cursor-pointer items-center justify-center rounded-xl border border-border bg-card text-muted-foreground shadow-xs transition-colors hover:border-destructive hover:bg-destructive/10 hover:text-destructive"
+					class="flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-xl border border-border bg-card text-muted-foreground shadow-xs transition-colors hover:border-destructive hover:bg-destructive/10 hover:text-destructive focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none"
 				>
 					<LogOut class="size-4" />
 				</button>
@@ -1017,12 +1032,15 @@
 		</div>
 
 		<!-- PRIMARY TABS -->
+		<!-- Two equal halves on a phone; at 320px the second tab used to run off-screen. -->
 		<div class="flex border-b border-border">
-			<div class="inline-flex rounded-t-2xl border-x border-t border-border/60 bg-muted/20 p-1">
+			<div
+				class="grid w-full grid-cols-2 gap-1 rounded-t-2xl border-x border-t border-border/60 bg-muted/20 p-1 sm:inline-flex sm:w-auto"
+			>
 				<button
 					type="button"
 					onclick={() => void goto(resolve(portalPath(currentVolunteer.id, 'dashboard')))}
-					class="flex cursor-pointer items-center gap-2 rounded-xl px-5 py-2.5 text-xs font-bold transition-all {dashboardTab ===
+					class="flex min-h-11 cursor-pointer items-center justify-center gap-1.5 rounded-xl px-3 py-2.5 text-xs font-bold whitespace-nowrap transition-all sm:gap-2 sm:px-5 {dashboardTab ===
 					'schedule'
 						? 'bg-card text-foreground shadow-sm'
 						: 'text-muted-foreground hover:text-foreground'}"
@@ -1039,13 +1057,13 @@
 				<button
 					type="button"
 					onclick={() => void goto(resolve(portalPath(currentVolunteer.id, 'openings')))}
-					class="flex cursor-pointer items-center gap-2 rounded-xl px-5 py-2.5 text-xs font-bold transition-all {dashboardTab ===
+					class="flex min-h-11 cursor-pointer items-center justify-center gap-1.5 rounded-xl px-3 py-2.5 text-xs font-bold whitespace-nowrap transition-all sm:gap-2 sm:px-5 {dashboardTab ===
 					'openings'
 						? 'bg-card text-foreground shadow-sm'
 						: 'text-muted-foreground hover:text-foreground'}"
 				>
 					<Rocket class="size-4" />
-					<span>งานจิตอาสา (Openings)</span>
+					<span>งานจิตอาสา<span class="ml-1 hidden sm:inline">(Openings)</span></span>
 					<span
 						class="rounded-full bg-amber-500/20 px-2 py-0.5 text-3xs font-black text-amber-800 dark:text-amber-300"
 					>
@@ -1363,27 +1381,34 @@
 					</div>
 
 					<!-- WIDGET 2: บัตรอาสาสมัครอัจฉริยะ (QR Role Card) -->
-					<div class="rounded-3xl border border-border bg-card p-6 shadow-sm">
-						<div class="flex items-center justify-between">
-							<h4 class="text-xs font-bold text-foreground">
+					<div class="rounded-3xl border border-border bg-card p-4 shadow-sm sm:p-6">
+						<!-- Wraps rather than squeezes (#626): when the title and both buttons do not fit
+						     — a phone, or this card's narrow column on desktop — the buttons drop to
+						     their own line instead of breaking their labels. -->
+						<div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+							<h4 class="min-w-0 flex-1 basis-48 text-sm font-bold text-foreground">
 								บัตรอาสาสมัครอัจฉริยะ (QR Role Card)
 							</h4>
-							<div class="flex items-center gap-3">
-								<button
+							<div class="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+								<Button
 									type="button"
+									variant="outline"
+									size="sm"
+									class="min-h-11 grow gap-1.5 px-3 text-xs whitespace-nowrap sm:grow-0"
 									onclick={downloadRoleCardQr}
 									disabled={!qrDataUrl}
-									class="flex items-center gap-1 text-2xs font-bold text-primary hover:underline disabled:cursor-wait disabled:opacity-50"
 								>
-									<Download class="size-3" /> ดาวน์โหลด QR
-								</button>
-								<button
+									<Download class="size-4" /> ดาวน์โหลด QR
+								</Button>
+								<Button
 									type="button"
+									variant="outline"
+									size="sm"
+									class="min-h-11 grow gap-1.5 px-3 text-xs whitespace-nowrap sm:grow-0"
 									onclick={() => (isPassModalOpen = true)}
-									class="flex items-center gap-1 text-2xs font-bold text-primary hover:underline"
 								>
-									<Maximize2 class="size-3" /> ขยายบัตร
-								</button>
+									<Maximize2 class="size-4" /> ขยายบัตร
+								</Button>
 							</div>
 						</div>
 						<p class="mt-2 text-2xs text-muted-foreground">
@@ -1529,14 +1554,16 @@
 					type="button"
 					onclick={togglePassFullscreen}
 					title={isPassFullscreen ? 'ย่อจากเต็มจอ' : 'ขยายเต็มจอ'}
-					class="flex size-8 items-center justify-center rounded-full bg-muted text-muted-foreground hover:text-foreground"
+					aria-label={isPassFullscreen ? 'ย่อจากเต็มจอ' : 'ขยายเต็มจอ'}
+					class="flex size-11 items-center justify-center rounded-full bg-muted text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none"
 				>
 					<Maximize2 class="size-4" />
 				</button>
 				<button
 					type="button"
 					onclick={closePassModal}
-					class="flex size-8 items-center justify-center rounded-full bg-muted text-muted-foreground hover:text-foreground"
+					aria-label="ปิดบัตร"
+					class="flex size-11 items-center justify-center rounded-full bg-muted text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none"
 				>
 					<X class="size-4" />
 				</button>

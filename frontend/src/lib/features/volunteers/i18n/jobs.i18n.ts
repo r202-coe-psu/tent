@@ -33,6 +33,13 @@ export interface JobsTranslations {
 	tagFull: string;
 	shiftsAndQuota: string;
 	shiftsUnit: string;
+	moreShiftsPrefix: string;
+	moreShiftsIn: string;
+	daysUnit: string;
+	moreShiftsDates: string;
+	moreShiftsTimes: string;
+	showAllShifts: string;
+	collapseShifts: string;
 	peopleUnit: string;
 	seatsUnit: string;
 	skillsUnit: string;
@@ -67,6 +74,17 @@ export interface JobsTranslations {
 	ticketErrorEmpty: string;
 	cameraPermissionError: string;
 	cameraScanHint: string;
+	qrUploadButton: string;
+	applyPickShift: string;
+	applySeatsLeftPrefix: string;
+	applySeatsLeftSuffix: string;
+	applyMoreDatesPrefix: string;
+	applyMoreDatesSuffix: string;
+	qrUploadReading: string;
+	qrUploadHint: string;
+	qrUploadNotFound: string;
+	qrUploadNotImage: string;
+	qrUploadTooLarge: string;
 	closeModal: string;
 	// Quick Apply Modal
 	shiftDateLabel: string;
@@ -147,6 +165,13 @@ export const jobsI18n: Record<LanguageCode, JobsTranslations> = {
 		tagFull: 'เต็มแล้ว',
 		shiftsAndQuota: 'รอบกะเวลาและโควตาปฏิบัติงาน',
 		shiftsUnit: 'กะ',
+		moreShiftsPrefix: 'ยังมีอีก',
+		moreShiftsIn: 'ใน',
+		daysUnit: 'วัน',
+		moreShiftsDates: 'วันที่',
+		moreShiftsTimes: 'ช่วงเวลา',
+		showAllShifts: 'ดูกะทั้งหมด',
+		collapseShifts: 'ย่อรายการกะ',
 		peopleUnit: 'คน',
 		seatsUnit: 'ที่',
 		skillsUnit: 'ทักษะ',
@@ -183,6 +208,17 @@ export const jobsI18n: Record<LanguageCode, JobsTranslations> = {
 		ticketErrorEmpty: 'กรุณากรอกรหัสบัตร หรือ รหัส Token ตั๋วจิตอาสา',
 		cameraPermissionError: 'ไม่สามารถเข้าถึงกล้องได้ โปรดตรวจสอบการอนุญาตใช้งานกล้อง',
 		cameraScanHint: 'หันกล้องไปยัง QR Code บนตั๋วดิจิทัลหรือบัตรงานจิตอาสา',
+		qrUploadButton: 'เลือกรูป QR จากเครื่อง',
+		applyPickShift: 'เลือกวันและช่วงเวลา',
+		applySeatsLeftPrefix: 'เหลือ',
+		applySeatsLeftSuffix: 'ที่',
+		applyMoreDatesPrefix: 'แสดงวันที่เหลืออีก',
+		applyMoreDatesSuffix: 'วัน',
+		qrUploadReading: 'กำลังอ่าน QR จากรูป…',
+		qrUploadHint: 'อ่าน QR จากรูปบนเครื่องนี้เท่านั้น — รูปไม่ถูกส่งขึ้นระบบ',
+		qrUploadNotFound: 'อ่าน QR จากรูปนี้ไม่ได้ — ลองรูปที่ชัดขึ้น หรือครอบให้เห็นเฉพาะ QR',
+		qrUploadNotImage: 'ไฟล์นี้ไม่ใช่รูปภาพ — กรุณาเลือกรูป QR (JPG หรือ PNG)',
+		qrUploadTooLarge: 'รูปใหญ่เกิน 10 MB — กรุณาเลือกรูปที่เล็กกว่านี้',
 		closeModal: 'ปิดหน้าต่าง',
 		// Quick Apply Modal
 		shiftDateLabel: 'กะวันที่',
@@ -263,6 +299,13 @@ export const jobsI18n: Record<LanguageCode, JobsTranslations> = {
 		tagFull: 'Full',
 		shiftsAndQuota: 'Shifts & Capacity Quota',
 		shiftsUnit: 'shifts',
+		moreShiftsPrefix: 'Plus',
+		moreShiftsIn: 'on',
+		daysUnit: 'days',
+		moreShiftsDates: 'Dates',
+		moreShiftsTimes: 'Times',
+		showAllShifts: 'Show all shifts',
+		collapseShifts: 'Show fewer shifts',
 		peopleUnit: 'people',
 		seatsUnit: 'seats',
 		skillsUnit: 'skills',
@@ -299,6 +342,17 @@ export const jobsI18n: Record<LanguageCode, JobsTranslations> = {
 		ticketErrorEmpty: 'Please enter your ticket card code or volunteer token',
 		cameraPermissionError: 'Unable to access camera. Please check camera permissions.',
 		cameraScanHint: 'Point camera at the QR code on your Digital Pass or volunteer badge',
+		qrUploadButton: 'Choose a QR image',
+		applyPickShift: 'Pick a date and time',
+		applySeatsLeftPrefix: '',
+		applySeatsLeftSuffix: 'left',
+		applyMoreDatesPrefix: 'Show',
+		applyMoreDatesSuffix: 'more dates',
+		qrUploadReading: 'Reading the QR from the image…',
+		qrUploadHint: 'Read on this device only — the image is never uploaded',
+		qrUploadNotFound: 'No QR found in this image — try a sharper photo or crop to the QR',
+		qrUploadNotImage: 'This file is not an image — please choose a QR image (JPG or PNG)',
+		qrUploadTooLarge: 'The image is over 10 MB — please choose a smaller one',
 		closeModal: 'Close',
 		// Quick Apply Modal
 		shiftDateLabel: 'Shift Date',

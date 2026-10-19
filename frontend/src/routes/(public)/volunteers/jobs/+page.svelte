@@ -31,7 +31,7 @@
 	<title>{t.pageTitle}</title>
 </svelte:head>
 
-<PublicPageShell class="flex min-h-full flex-col space-y-8" maxWidth="max-w-6xl">
+<PublicPageShell class="flex min-h-full flex-col space-y-8 lg:px-8" maxWidth="max-w-7xl">
 	<!-- Top Bar with Language Switcher -->
 	<div class="flex items-center justify-end">
 		<LanguageSwitcher />

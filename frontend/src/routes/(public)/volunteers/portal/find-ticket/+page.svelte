@@ -12,7 +12,7 @@
 	to directly (CR-092 §5) — a volunteer who lost their pass link is told to come here,
 	not "open the board and switch tabs".
 -->
-<PublicPageShell class="space-y-6 py-6">
+<PublicPageShell class="space-y-6 lg:px-8" maxWidth="max-w-7xl">
 	<header class="space-y-1 text-center">
 		<h1 class="text-2xl font-bold">ค้นหาตั๋วของฉัน</h1>
 		<p class="text-sm text-muted-foreground">กรอกเบอร์โทรศัพท์ที่ใช้สมัครเพื่อดูตั๋วดิจิทัล</p>
