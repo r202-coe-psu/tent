@@ -41,8 +41,8 @@
 			description: 'พิมพ์บัตร QR จิตอาสาด้วยเบอร์โทร',
 			path: KIOSK_VOLUNTEER_CARD_PATH,
 			icon: HeartHandshake,
-			cardTone: 'border-violet-200 bg-violet-50',
-			iconTone: 'bg-white text-[#1E3A8A]'
+			cardTone: 'border-domain-volunteer-border bg-domain-volunteer-subtle',
+			iconTone: 'bg-white text-domain-volunteer-text'
 		}
 	];
 

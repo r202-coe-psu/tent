@@ -125,7 +125,7 @@
 			headingTag="h1"
 			role="status"
 		>
-			<p>รับ QR Code 1 ดวงที่ช่องพิมพ์ แล้วไปที่จุดคัดกรอง</p>
+			<p>รับ QR Code 1 ดวงที่ช่องพิมพ์ แล้วนำไปให้เจ้าหน้าที่สแกนก่อนเริ่มปฏิบัติงาน</p>
 			{#snippet actions()}
 				<Button type="button" onclick={returnHome} class={KIOSK_NOTICE_PRIMARY_ACTION}
 					>กลับหน้าแรก</Button
