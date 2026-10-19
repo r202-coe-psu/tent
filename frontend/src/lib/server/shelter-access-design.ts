@@ -533,6 +533,30 @@ export function buildValidateDocUpdate(code: string): string {
       if (typeof newDoc.title !== 'string' || !newDoc.title.trim() || newDoc.title.length > 120) {
         throw { forbidden: 'shelter_incident title is required (1-120 characters)' };
       }
+      // Facts are immutable after create, so shape is checked once here (IL-D4/D5/D7/D8).
+      var incCategories = ['harassment_violence', 'theft_property_damage', 'substance_rule_violation',
+        'fraud_resource_abuse', 'medical_mental_health', 'dispute', 'other'];
+      if (incCategories.indexOf(newDoc.category) === -1 ||
+          ['low', 'medium', 'high', 'critical'].indexOf(newDoc.severity) === -1) {
+        throw { forbidden: 'Invalid shelter_incident category or severity' };
+      }
+      if (typeof newDoc.occurred_at !== 'string' || isNaN(Date.parse(newDoc.occurred_at))) {
+        throw { forbidden: 'shelter_incident occurred_at must be a timestamp' };
+      }
+      var incComplainant = newDoc.complainant || {};
+      var incRespondent = newDoc.respondent || {};
+      if (['evacuee', 'staff', 'external', 'shelter_property', 'anonymous']
+            .indexOf(incComplainant.type) === -1 ||
+          (incComplainant.type === 'evacuee' && !incComplainant.evacuee_id) ||
+          ((incComplainant.type === 'staff' || incComplainant.type === 'external') &&
+            !incComplainant.name_or_detail)) {
+        throw { forbidden: 'Invalid shelter_incident complainant' };
+      }
+      if (['known_evacuee', 'known_external', 'unknown', 'none'].indexOf(incRespondent.status) === -1 ||
+          (incRespondent.status === 'known_evacuee' && !incRespondent.evacuee_id) ||
+          (incRespondent.status === 'known_external' && !incRespondent.name_or_detail)) {
+        throw { forbidden: 'Invalid shelter_incident respondent' };
+      }
     } else {
       if (oldDoc.current_status === 'closed' || oldDoc.current_status === 'cancelled') {
         throw { forbidden: 'Closed or cancelled shelter_incident cannot be modified' };

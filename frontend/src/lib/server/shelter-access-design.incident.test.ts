@@ -72,6 +72,41 @@ describe('validate_doc_update — shelter_incident', () => {
 		expectForbidden(run(created(), null, OUTSIDER), /Only staff of this shelter/);
 	});
 
+	it('rejects a record with an unknown category, severity or bad occurred_at', () => {
+		const base = created();
+		const bad = (over: Record<string, unknown>) =>
+			run({ ...base, ...over } as ShelterIncident, null, ctx(OWNER));
+		expectForbidden(bad({ category: 'x' }), /Invalid shelter_incident category or severity/);
+		expectForbidden(bad({ severity: 'urgent' }), /Invalid shelter_incident category or severity/);
+		expectForbidden(bad({ occurred_at: 'yesterday' }), /occurred_at must be a timestamp/);
+	});
+
+	it('rejects malformed parties (IL-D7/D8)', () => {
+		const base = created();
+		const bad = (over: Record<string, unknown>) =>
+			run({ ...base, ...over } as ShelterIncident, null, ctx(OWNER));
+		expectForbidden(
+			bad({ complainant: { type: 'alien' } }),
+			/Invalid shelter_incident complainant/
+		);
+		expectForbidden(
+			bad({ complainant: { type: 'evacuee', evacuee_id: null, name_or_detail: null } }),
+			/Invalid shelter_incident complainant/
+		);
+		expectForbidden(bad({ respondent: null }), /Invalid shelter_incident respondent/);
+		expectForbidden(
+			bad({
+				respondent: {
+					status: 'known_external',
+					evacuee_id: null,
+					name_or_detail: null,
+					unknown_description: null
+				}
+			}),
+			/Invalid shelter_incident respondent/
+		);
+	});
+
 	it('requires a title on create and freezes it afterwards (IL-D12)', () => {
 		expectForbidden(run({ ...created(), title: '  ' }, null, ctx(OWNER)), /title is required/);
 		expectForbidden(run({ ...created(), title: undefined }, null, ctx(OWNER)), /title is required/);

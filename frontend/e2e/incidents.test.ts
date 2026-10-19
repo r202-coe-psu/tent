@@ -43,7 +43,7 @@ const MAIN_TITLE = `E2E ทะเลาะหน้าโรงอาหาร $
 const SECOND_TITLE = `E2E แจ้งเหตุซ้ำ ${RUN_ID}`;
 const RESPONDENT_NAME = `E2E บุคคลภายนอก ${RUN_ID}`;
 
-type Role = 'owner' | 'peer' | 'manager' | 'outsider';
+type Role = 'owner' | 'peer' | 'manager' | 'outsider' | 'volunteer';
 
 let shelterCode: string | undefined;
 let mainId: string | undefined;
@@ -62,16 +62,89 @@ function staff(role: Role, code: string, cap: string, display: string): TestUser
 }
 
 async function ensureStaff(code: string): Promise<void> {
-	if (sessions.size === 4) return;
+	if (sessions.size > 0) return;
 	users.set('owner', staff('owner', code, 'registration_staff', `E2E Owner ${RUN_ID}`));
 	users.set('peer', staff('peer', code, 'kitchen_staff', `E2E Peer ${RUN_ID}`));
 	users.set('manager', staff('manager', code, 'shelter_manager', `E2E Manager ${RUN_ID}`));
 	users.set('outsider', staff('outsider', 'SH001', 'registration_staff', `E2E Out ${RUN_ID}`));
+	// Volunteer account with a shelter capability — must never appear in the handover picker.
+	users.set('volunteer', staff('volunteer', code, 'registration_staff', `E2E Vol ${RUN_ID}`));
 	for (const [role, user] of users) {
 		await createCouchUser(user);
 		await seedSecurityQuestion(user.name);
 		sessions.set(role, await couchLogin(user.name, user.password));
 	}
+	await markVolunteer(users.get('volunteer')!.name);
+}
+
+async function markVolunteer(name: string): Promise<void> {
+	const path = `/_users/org.couchdb.user:${encodeURIComponent(name)}`;
+	const got = await couchReq('GET', path);
+	const res = await couchReq('PUT', path, {
+		...(got.data as Record<string, unknown>),
+		personnel_type: 'volunteer'
+	});
+	expect(res.status, `mark ${name} as volunteer`).toBeLessThan(400);
+}
+
+/** Write a doc straight to the shelter DB with a role's own session — no UI, no client policy. */
+async function putAs(
+	role: Role,
+	doc: Record<string, unknown> & { _id: string }
+): Promise<{ status: number; reason: string }> {
+	const res = await fetch(`${COUCH_BASE}/${shelterDb()}/${encodeURIComponent(doc._id)}`, {
+		method: 'PUT',
+		headers: {
+			Cookie: `AuthSession=${sessions.get(role)}`,
+			'Content-Type': 'application/json',
+			Accept: 'application/json'
+		},
+		body: JSON.stringify(doc)
+	});
+	const body = (await res.json().catch(() => ({}))) as { reason?: string };
+	return { status: res.status, reason: body.reason ?? '' };
+}
+
+const CROCKFORD = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
+/** A fresh ULID-shaped id (26 Crockford chars) — enough for VDU's `_id` pattern. */
+function incidentId(): string {
+	let out = '';
+	for (let i = 0; i < 26; i++) out += CROCKFORD[Math.floor(Math.random() * 32)];
+	return `shelter_incident:${out}`;
+}
+
+/** A create the VDU would accept as-is from `owner` — tests break one field at a time. */
+function validNewIncident(): Record<string, unknown> & { _id: string } {
+	const owner = users.get('owner')!.name;
+	const now = new Date().toISOString();
+	return {
+		_id: incidentId(),
+		type: 'shelter_incident',
+		schema_v: 1,
+		shelter_code: shelterCode,
+		created_at: now,
+		updated_at: now,
+		created_by: owner,
+		incident_no: 'INC-20260101-900',
+		title: `E2E direct write ${RUN_ID}`,
+		location_detail: 'E2E',
+		category: 'dispute',
+		severity: 'low',
+		occurred_at: now,
+		reported_by: owner,
+		assigned_to: owner,
+		description: 'E2E direct write',
+		attachments: [],
+		current_status: 'reported',
+		complainant: { type: 'anonymous', evacuee_id: null, name_or_detail: null },
+		respondent: {
+			status: 'none',
+			evacuee_id: null,
+			name_or_detail: null,
+			unknown_description: null
+		},
+		timeline: []
+	};
 }
 
 async function openAs(browser: Browser, role: Role): Promise<Page> {
@@ -244,6 +317,120 @@ test.describe(
 			await page.context().close();
 		});
 
+		test('the VDU refuses a peer who forges a status change, handover or identify', async () => {
+			const prev = await readIncident(mainId!);
+			const peer = users.get('peer')!.name;
+			const entry = (extra: Record<string, unknown>) => ({
+				timestamp: new Date().toISOString(),
+				actor_id: peer,
+				details: 'E2E forged by a non-owner',
+				...extra
+			});
+			const forged: Array<[string, Record<string, unknown>]> = [
+				[
+					'status',
+					{
+						current_status: 'action_in_progress',
+						timeline: [
+							...prev.timeline,
+							entry({
+								type: 'status_change',
+								from_status: 'reported',
+								to_status: 'action_in_progress'
+							})
+						]
+					}
+				],
+				[
+					'handover',
+					{
+						assigned_to: peer,
+						timeline: [
+							...prev.timeline,
+							entry({
+								type: 'reassignment',
+								from_assignee: prev.assigned_to,
+								to_assignee: peer
+							})
+						]
+					}
+				],
+				[
+					'identify',
+					{
+						respondent: {
+							...prev.respondent,
+							status: 'known_external',
+							name_or_detail: 'E2E forged'
+						},
+						timeline: [...prev.timeline, entry({ type: 'identify_respondent' })]
+					}
+				]
+			];
+			for (const [label, patch] of forged) {
+				const res = await putAs('peer', { ...prev, ...patch } as typeof prev & { _id: string });
+				expect(res.status, label).toBe(403);
+				expect(res.reason, label).toMatch(/assignee or a shelter manager/);
+			}
+
+			const after = await readIncident(mainId!);
+			expect(after._rev).toBe(prev._rev);
+			expect(after.current_status).toBe('reported');
+			expect(after.assigned_to).toBe(users.get('owner')!.name);
+		});
+
+		test('the VDU refuses malformed records written straight to CouchDB', async () => {
+			const cases: Array<[string, Record<string, unknown>, RegExp]> = [
+				['category', { category: 'not_a_category' }, /category or severity/],
+				['severity', { severity: 'urgent' }, /category or severity/],
+				['complainant', { complainant: { type: 'alien' } }, /Invalid shelter_incident complainant/],
+				[
+					'respondent',
+					{
+						respondent: {
+							status: 'known_evacuee',
+							evacuee_id: null,
+							name_or_detail: null,
+							unknown_description: null
+						}
+					},
+					/Invalid shelter_incident respondent/
+				],
+				['title', { title: '   ' }, /title is required/],
+				['owner', { assigned_to: users.get('peer')!.name }, /assigned to its creator/]
+			];
+			for (const [label, patch, reason] of cases) {
+				const doc = { ...validNewIncident(), ...patch };
+				const res = await putAs('owner', doc);
+				expect(res.status, label).toBe(403);
+				expect(res.reason, label).toMatch(reason);
+				expect(await getDocument(shelterDb(), doc._id), label).toBeNull();
+			}
+		});
+
+		test('the staff directory lists colleagues only, without volunteers or contact data', async ({
+			request
+		}) => {
+			const url = `/api/v1/shelters/${encodeURIComponent(shelterCode!)}/staff`;
+			const asRole = (role: Role) =>
+				request.get(url, { headers: { Cookie: `AuthSession=${sessions.get(role)}` } });
+
+			const res = await asRole('peer');
+			expect(res.status()).toBe(200);
+			const entries = (await res.json()) as Array<Record<string, unknown>>;
+			for (const entry of entries)
+				expect(Object.keys(entry).sort()).toEqual(['display_name', 'name']);
+			const names = entries.map((e) => e.name);
+			for (const role of ['owner', 'peer', 'manager'] as const) {
+				expect(names, role).toContain(users.get(role)!.name);
+			}
+			expect(names).not.toContain(users.get('volunteer')!.name);
+			expect(names).not.toContain(users.get('outsider')!.name);
+
+			expect((await asRole('outsider')).status()).toBe(403);
+			expect((await request.get(url)).status()).toBe(401);
+		});
+
 		test('the owner works the case, identifies the respondent and hands it over', async ({
 			browser
 		}) => {
@@ -370,6 +557,24 @@ test.describe(
 			await page.goto('/back-office/incidents');
 			await expect(page).toHaveURL(/\/portal/, { timeout: 30_000 });
 			await page.context().close();
+
+			// The route guard is UX only — the shelter DB itself must refuse them too.
+			const cookie = `AuthSession=${sessions.get('outsider')}`;
+			const read = await fetch(`${COUCH_BASE}/${shelterDb()}/${encodeURIComponent(secondId!)}`, {
+				headers: { Cookie: cookie, Accept: 'application/json' }
+			});
+			expect([401, 403]).toContain(read.status);
+
+			const outsider = users.get('outsider')!.name;
+			const doc = {
+				...validNewIncident(),
+				created_by: outsider,
+				reported_by: outsider,
+				assigned_to: outsider
+			};
+			const write = await putAs('outsider', doc);
+			expect([401, 403]).toContain(write.status);
+			expect(await getDocument(shelterDb(), doc._id)).toBeNull();
 		});
 
 		test('Z teardown leaves no E2E shelter or staff of this run', async () => {
