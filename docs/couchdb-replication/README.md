@@ -603,13 +603,40 @@ docker logs couch-edge 2>&1 | grep -i replicat   # log ฝั่ง replicator
 - doc ที่ถูกลบ (พร้อม PII และ hash ของรหัสสุ่ม) ค้างที่ central และที่ edge ทุกศูนย์ใน `edge_shelters` จนกว่าจะ wipe edge ตอนปิดศูนย์ · ชื่อ user ที่ถูกลบถูกจองถาวร
 - user ที่ถูก `DELETE` ไปก่อน CR-171 (tombstone) ไม่ถูกแก้ย้อนหลัง — ลบที่ edge ด้วยมือ หรือ wipe edge
 
-**สถานะ:** แก้แล้ว (CR-171) — ยังไม่ได้ทดสอบบน edge จริง; เกณฑ์รับรองดูหัวข้อ Acceptance ใน CR
+**สถานะ:** แก้แล้ว (CR-171) — owner อนุมัติ 2026-10-18 (PR #348) หลังผ่าน acceptance รวมเทสบน edge จริง
 
-**B. job push ส่ง `_design/*` จาก edge ขึ้น central**
+**A2. เขียน `_users` ที่ edge ทำให้เกิด conflict และ login ไม่ได้ (พบ 2026-10-18)**
 
-OD-6 ยอมรับความเสี่ยงนี้ไว้แล้ว · ถ้าเครื่อง edge ถูกขโมย/แก้ไข `_design/access` (`validate_doc_update`) ที่ central อาจถูกเขียนทับด้วยสิทธิ์ admin · §5.4 / T11 เคยเสนอ `"selector":{"_id":{"$regex":"^(?!_design/)"}}` บน job `<code>_push`
+- **ข้อค้นพบ:** frontend ที่ edge มี `COUCHDB_ADMIN_URL` (`/api/back-office/*` ใช้ จึงถอดไม่ได้) → BFF เขียน `_users` ที่ edge ได้ แต่ job `users_<code>_pull` เป็นทางเดียว (central → edge) · ทดสอบบน CouchDB 3.5: แก้ user ที่ edge 2 ครั้ง แล้ว soft delete ที่ central → doc ที่ edge เกิด conflict และ login ไม่ได้ด้วย `{"error":"unauthorized","reason":"User document conflicts must be resolved before the document is used for authentication purposes."}`
+- **การตัดสินใจ (owner @net-lynx, 2026-10-18):** บล็อกการเขียน `_users` ที่ edge ด้วย flag `EDGE_MODE` (D5) — **edge mode ทำใน PR แยก** · CR-171 amendment pending (ยังไม่เพิ่ม FR ใน CR)
+- **ผลที่ตามมา (A3):** login ครั้งแรกที่ edge (`must_change_password`) ถูกบล็อกเหมือนการเขียนอื่น → บัญชีต้อง activate ที่ central ก่อนเปิดศูนย์
+- **ผลที่ตามมา (A4):** ไม่สร้าง user ที่ edge (คง A1 ของ idea doc) → เตรียม spare account ที่ provision + activate ที่ central ล่วงหน้า · ผู้จัดการศูนย์ประมาณจำนวนที่ต้องใช้
 
-**สถานะ:** รอ owner ตัดสินว่าจะแก้ OD-6 หรือไม่ — ยังไม่แก้
+**สถานะ A2:** ตัดสินแล้ว — implement ใน PR edge mode (แยกจาก #348)
+
+**B. job push ส่ง `_design/*` จาก edge ขึ้น central — ✅ ตัดสินแล้ว (decision sync 2026-10-18)**
+
+- **ปัญหา:** ถ้ามี `_design/*` ใน `shelter_<code>` ที่ edge (เช่น edge มี design doc เก่ากว่า central หรือมีคนสร้างโดยไม่ตั้งใจ) job `<code>_push` จะส่งขึ้น central ด้วยสิทธิ์ admin และอาจเขียนทับ `_design/access` (`validate_doc_update`) · §5.4 / T11 เคยเสนอ selector นี้ไว้
+- **ตัดสิน:** job `<code>_push` กรอง `_design/*` ด้วย `"selector":{"_id":{"$not":{"$regex":"^_design/"}}}` (`scripts/edge-init.sh`) · `edge_init_hash` เปลี่ยน → รัน `edge-init` ซ้ำแล้ว job `<code>_push` ของ edge เดิมจะถูกลบและสร้างใหม่ (`stale`)
+- **ขอบเขตการป้องกัน:** กัน **อุบัติเหตุ / edge ที่มี design doc เก่ากว่า central** เท่านั้น · **ไม่กัน edge ที่ถูกขโมย** — OD-6 ยังให้ edge ถือ central admin จึงเขียน central ตรง ๆ ได้
+- **ทบทวน OD-6** (เปลี่ยนเป็น replication user ต่อศูนย์): ก่อนติดตั้ง edge ของศูนย์ที่สอง (หลัง pilot) หรือเมื่อเครื่อง edge หาย
+
+**สถานะ:** ตัดสินแล้ว + แก้ใน `edge-init.sh` (decision sync 2026-10-18)
+
+**Gate และลำดับ deploy**
+
+- **Gate:** ห้ามติดตั้ง edge ที่ศูนย์จริงจนกว่า PR edge mode (A2) จะ merge · PR #348 merge ได้ตามปกติ
+- **ลำดับ deploy:** (1) deploy CR-171 ที่ central ก่อน (`edge_shelters` + soft delete + backfill) → (2) ติดตั้ง edge เครื่องแรก (หลัง PR edge mode merge)
+
+**เลื่อน / ไม่ทำ (decision sync 2026-10-18)**
+
+| รายการ | สถานะ | เงื่อนไข / เหตุผล |
+| --- | --- | --- |
+| VDU ที่ central กัน hard delete / `edge_shelters` หดตัว | เลื่อน | ทำเมื่อพบการแก้ `_users` นอก `user-service` แม้ครั้งเดียว |
+| สร้าง user ที่ edge ตอน incident | เลื่อน | ทำเมื่อ incident จริงใช้ spare account หมด · ต้องมี CR แก้ A1 |
+| เปลี่ยน OD-6 เป็น replication user ต่อศูนย์ | เลื่อน | ทบทวนก่อนติดตั้ง edge ศูนย์ที่สอง (หลัง pilot) หรือเมื่อเครื่อง edge หาย |
+| การถอดสิทธิ์ช่วง WAN ล่มไม่ถึง edge | ไม่ทำ | ยอมรับเป็นข้อจำกัด |
+| reconcile tombstone ก่อน CR-171 | ไม่ทำ | ยังไม่มี edge ใน prod |
 
 ### คำถามเปิด (ต้องให้เจ้าของโครงการตัดสิน ไม่ใช่แค่ config)
 
@@ -622,7 +649,7 @@ OD-6 ยอมรับความเสี่ยงนี้ไว้แล้
    ยอมรับว่าเครื่อง edge หลุด = central admin หลุด และเปลี่ยนรหัส admin กระทบ edge ทุกศูนย์ (T11 · SETUP-CENTRAL ขั้น 3)
 3. **CR-064 ยังรอ owner approve** — ไฟล์ edge / `location /sync/` ใน `nginx/nginx.conf` ใน repo เป็นส่วนของ work package 3 ต้องผ่าน review ก่อน deploy
 4. ~~**ข้อจำกัด A — ถอดสิทธิ์/ลบ user ที่ central ไม่ตามไป edge**~~ — **ตัดสินแล้ว (CR-171, 2026-10-17):** field `edge_shelters` + soft delete · เหลือข้อจำกัดที่ยอมรับตามหัวข้อ "ข้อจำกัดที่รู้แล้ว" ด้านบน
-5. **ข้อจำกัด B — push `_design/*` จาก edge** — จะแก้ OD-6 เพื่อกรอง `_design/*` หรือไม่ (ดู subsection เดียวกัน)
+5. ~~**ข้อจำกัด B — push `_design/*` จาก edge**~~ — **ตัดสินแล้ว (decision sync 2026-10-18):** กรอง `_design/*` ด้วย selector ใน job `<code>_push` · กันอุบัติเหตุ ไม่กัน edge ถูกขโมย (OD-6 ยังอยู่) — ดู §7 ข้อจำกัด B
 
 ข้อค้นพบ F1–F3 กระทบ runbook ของ CR-064 (WP5) และเกณฑ์ "ops UI สถานะต่อ shelter" (OD-4: ต้องเห็น job ฝั่งดึงค้าง) —
 ควรยกให้เจ้าของโครงการตัดสินใจ
