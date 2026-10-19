@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from worker.couch.checkpoint import save_checkpoint
-from worker.masking import shelter_code_from_db_name
+from worker.masking import shelter_code_from_db_name, shelter_db_name
 from worker.mongo import (
     apply_donation,
     apply_job,
@@ -19,10 +19,12 @@ from worker.mongo import (
     apply_shelter_deactivate,
     apply_shift_assignment,
     apply_volunteer,
+    delete_jobs_for_shelter,
     delete_needs_for_shelter,
     delete_occupants_for_shelter,
     delete_persons_for_shelter,
     delete_stocks_for_shelter,
+    is_shelter_projected,
     refresh_occupancy,
     refresh_shelter_occupants,
     refresh_shelter_stock,
@@ -57,10 +59,33 @@ async def _reproject_needs(couch: Any, shelter_code: str) -> None:
         await apply_need(action, payload)
 
 
+async def _reproject_shelter_database(couch: Any, shelter_code: str) -> None:
+    """Rebuild a shelter DB's projections when its shelter (re)appears in public.
+
+    A cancelled shelter's projections were purged and its changes skipped meanwhile
+    (draft-shelter-cancelled-status.md), so reverting the status has to rescan the DB —
+    tailing from its checkpoint alone would leave the untouched docs missing."""
+    database = shelter_db_name(shelter_code)
+    if not await couch.database_exists(database):
+        return
+    # Imported here: bootstrap → worker.quota → expiry imports bootstrap back.
+    from worker.couch.bootstrap import bootstrap_database
+
+    await bootstrap_database(couch, database)
+
+
 async def process_change(couch: Any, database: str, change: dict[str, Any]) -> None:
     seq = change.get("seq")
     if seq is None:
         return
+
+    if database != REGISTRY_DB:
+        gated_code = shelter_code_from_db_name(database)
+        if gated_code and not await is_shelter_projected(gated_code):
+            # Cancelled shelter (no public row): project nothing for it. Reverting the
+            # status rescans the DB via _reproject_shelter_database.
+            await save_checkpoint(database, seq)
+            return
 
     if change.get("deleted"):
         doc_id = change.get("id")
@@ -134,13 +159,22 @@ async def process_change(couch: Any, database: str, change: dict[str, Any]) -> N
         doc_type = doc.get("type")
         if doc_type == "shelter":
             action, payload = project_shelter(doc)
+            code = str(payload["_id"]) if payload and payload.get("_id") else None
+            relisted = (
+                action == "upsert"
+                and code is not None
+                and not await is_shelter_projected(code)
+            )
             await apply_shelter(action, payload)
-            if action == "delete" and payload and payload.get("_id"):
-                code = str(payload["_id"])
+            if action == "delete" and code:
                 await delete_persons_for_shelter(code)
                 await delete_occupants_for_shelter(code)
                 await delete_needs_for_shelter(code)
                 await delete_stocks_for_shelter(code)
+                # Cancelled shelter: its postings leave the volunteer board too.
+                await delete_jobs_for_shelter(code)
+            elif relisted and code:
+                await _reproject_shelter_database(couch, code)
         elif doc_type == "announcement":
             action, payload = project_announcement(doc)
             await apply_announcement(action, payload)

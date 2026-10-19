@@ -13,6 +13,8 @@ import {
 	foodDistributionPointSchema,
 	migrateShelterV2ToCurrent,
 	isShelterBookable,
+	isShelterCancelled,
+	operationStatusSchema,
 	SHELTER_MASTER_SCHEMA_V,
 	type ShelterMasterV2
 } from './schema';
@@ -1053,6 +1055,28 @@ describe('isShelterBookable', () => {
 		).toBe(false);
 		expect(isShelterBookable(null)).toBe(false);
 		expect(isShelterBookable({})).toBe(false);
+	});
+
+	it('blocks a cancelled shelter even with the flag on (draft-shelter-cancelled-status)', () => {
+		expect(
+			isShelterBookable({
+				operation_status: 'cancelled',
+				feature_flags: { accepts_pre_registration: true }
+			})
+		).toBe(false);
+	});
+});
+
+describe('isShelterCancelled', () => {
+	it('is true only for operation_status cancelled', () => {
+		expect(isShelterCancelled({ operation_status: 'cancelled' })).toBe(true);
+		expect(isShelterCancelled({ operation_status: 'closed' })).toBe(false);
+		expect(isShelterCancelled({ operation_status: 'active' })).toBe(false);
+		expect(isShelterCancelled(null)).toBe(false);
+	});
+
+	it('is accepted by the operation_status enum (reversible like any other status)', () => {
+		expect(operationStatusSchema.parse('cancelled')).toBe('cancelled');
 	});
 });
 

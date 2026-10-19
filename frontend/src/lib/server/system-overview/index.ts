@@ -350,8 +350,9 @@ export async function buildOverviewSummary(
 		sites_by_status,
 		checkouts_in_window: checkouts,
 		sites_closed: sites.filter((s) => s.operation_status === 'closed').length,
-		sites_open_with_present: sites.filter((s) => s.operation_status !== 'closed' && s.present > 0)
-			.length,
+		sites_open_with_present: sites.filter(
+			(s) => s.operation_status !== 'closed' && s.operation_status !== 'cancelled' && s.present > 0
+		).length,
 		sites_total: sites.length,
 		movement_window: filters.movement_window
 	});

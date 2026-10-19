@@ -1460,7 +1460,7 @@ Authorization และ Bangkok current-day write rule ถูกบังคั�
 | `code` | str | sys | code ที่อ่านออก เช่น `SH001` — **unique**, immutable; central mint ตอน provisioning (จาก `central_ops` counter §5.3) เป็นชื่อ db `shelter_{code}` + ใช้อ้างข้ามศูนย์ทุกที่ (`shelter_code`). pattern `^SH\d{3,}$`: เลข 1–999 pad 3 หลัก (`SH001`), ≥1000 ความกว้างตามจริง (`SH1000`) |
 | `site_kind` | enum(`evacuation_center`,`host_house`) | req | ชนิดสถานที่; เอกสารเก่าที่ไม่มี field อ่านเป็น `evacuation_center`; ใช้ doc type และ code sequence เดิมร่วมกัน |
 | `name` | str | req | — |
-| `operation_status` | enum(`standby`,`active`,`full_capacity`,`closed`) | req | default `standby`; ใช้แทน `status` เดิม |
+| `operation_status` | enum(`standby`,`active`,`full_capacity`,`closed`,`cancelled`) | req | default `standby`; ใช้แทน `status` เดิม
 | `capacity` | int>0 | req | จำนวนคนสูงสุด — ควรสอดคล้องกับ `area_m2` (Sphere ≥3.5 m²/คน); ผลรวม zone capacity ≤ ค่านี้ |
 | `shelter_type` | str\|null | opt | code จาก `master_data:shelter_type` (ไม่ใช่ free text) |
 | `project_level` | enum(`community`,`lao`,`provincial`)\|null | opt | ระดับศูนย์ |
@@ -2500,6 +2500,11 @@ Partner API EXT-002/003/005/006 (`docs/adr/0002-partner-integration-architecture
 เป็นผู้คัดลอกข้อมูลจาก CouchDB มาเขียนลงที่นี่แบบต่อเนื่อง (`worker/src/worker/projectors/shelter.py`,
 `.../occupancy.py`). ตารางนี้ถูกปรับให้ตรงกับ field ที่มีจริงในโค้ด ณ CR-111 (field ที่มาจาก EXT-002/003,
 `e4d69d95`, ไม่เคยถูกบันทึกลง schema.md มาก่อน ถูกเพิ่มพร้อมกันคราวนี้).
+
+> **ศูนย์ `operation_status = cancelled` ไม่มีแถวในตารางนี้** (draft-shelter-cancelled-status): worker ลบแถว
+> `public_shelters` พร้อม `public_persons`, `shelter_occupants`, `public_needs`, `shelter_stocks`, `public_jobs`
+> ของศูนย์นั้น และข้าม change ของ DB `shelter_{code}` จนกว่าจะเปลี่ยนสถานะกลับ (แล้ว rescan DB นั้นใหม่).
+> ข้อยกเว้นนี้ไม่ขัดกับ "Soft Delete" ด้านล่าง — `closed` และการลบ/archive จริงยังคงแถวไว้เหมือนเดิม.
 
 | Field | ชนิด | req | หมายเหตุ |
 | --- | --- | --- | --- |
