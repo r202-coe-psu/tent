@@ -275,7 +275,6 @@ export const PUBLIC_DONATIONS_I18N = {
 		whyPhoneDesc1:
 			'ผลการค้นแสดงการจองทุกใบของเบอร์นี้ที่ยังอยู่ในระบบ และเปิดดู แก้ไข หรือยกเลิกได้ — อย่าให้ผู้อื่นใช้เบอร์ของคุณค้นหา',
 		whyPhoneDesc2: 'ถ้ามีลิงก์/QR จากตั๋ว (รหัส TX-…) สามารถเปิดตรงได้โดยไม่ต้องค้นหา',
-		valBookingRefRequired: 'กรุณาระบุรหัสอ้างอิง (เช่น DN-905176)',
 		valPhoneRequired: 'กรุณาระบุเบอร์โทรศัพท์ที่ใช้ตอนจองคิว',
 		searchFailed: 'ค้นหาไม่สำเร็จ',
 
@@ -662,7 +661,6 @@ export const PUBLIC_DONATIONS_I18N = {
 			'It lists every booking of this number still in the system, and each can be viewed, edited or cancelled — do not let others search with your number.',
 		whyPhoneDesc2:
 			'If you have the direct ticket URL or QR (code TX-…), you can open it directly without searching.',
-		valBookingRefRequired: 'Please enter booking reference (e.g. DN-905176)',
 		valPhoneRequired: 'Please enter the phone number used when booking',
 		searchFailed: 'Search failed',
 
