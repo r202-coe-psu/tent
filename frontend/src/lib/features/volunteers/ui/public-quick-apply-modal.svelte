@@ -896,9 +896,9 @@
 
 							{#if job?.skills_required && job.skills_required.length > 0}
 								<div
-									class="mb-3.5 flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs font-medium text-emerald-900"
+									class="mb-3.5 flex items-center gap-2 rounded-xl border border-domain-volunteer-border bg-domain-volunteer-subtle p-3 text-xs font-medium text-domain-volunteer-text"
 								>
-									<Tag class="h-4 w-4 shrink-0 text-emerald-600" />
+									<Tag class="h-4 w-4 shrink-0 text-domain-volunteer" />
 									<span>{t.applySkillsSuggestion}</span>
 								</div>
 							{/if}
@@ -918,9 +918,9 @@
 											type="button"
 											onclick={() => toggleSkill(skill.code)}
 											class="flex cursor-pointer items-center gap-2 rounded-2xl border px-4 py-2.5 text-xs font-bold transition-all {isSelected
-												? 'border-emerald-600 bg-emerald-600 text-white shadow-sm ring-2 ring-emerald-200'
+												? 'border-domain-volunteer-strong bg-domain-volunteer-strong text-white shadow-sm ring-2 ring-domain-volunteer-border'
 												: isSuggested
-													? 'border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
+													? 'border-domain-volunteer-border bg-domain-volunteer-subtle text-domain-volunteer-text hover:bg-domain-volunteer-border/40'
 													: 'border-border bg-card text-foreground hover:bg-muted'}"
 										>
 											{#if isSelected}

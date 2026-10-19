@@ -77,7 +77,7 @@
 			href={resolve('/volunteer/portal')}
 			class="hover:bg-opacity-90 flex w-full shrink-0 items-center justify-center gap-2.5 rounded-[20px] bg-domain-volunteer-strong px-7 py-4 text-sm font-bold text-white shadow-sm transition-all active:scale-[0.98] md:w-auto"
 		>
-			<Lock class="h-4 w-4 text-warning" />
+			<Lock class="h-4 w-4 text-domain-volunteer-border" />
 			{t.portalLink}
 		</a>
 	</div>

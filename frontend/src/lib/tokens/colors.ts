@@ -97,11 +97,11 @@ export const baseDomain = {
 	},
 	volunteer: {
 		name: 'จิตอาสา',
-		base: '#059669',
-		strong: '#047857',
-		subtle: '#ECFDF5',
-		border: '#A7F3D0',
-		text: '#065F46'
+		base: '#295F8E',
+		strong: '#1E4A71',
+		subtle: '#F0F5FA',
+		border: '#C2D5E5',
+		text: '#11304A'
 	},
 	kitchen: {
 		name: 'ครัว',
