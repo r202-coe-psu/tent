@@ -3,7 +3,7 @@ title: Smart Shelter — API Contract v1
 status: draft for review
 created: 2026-06-11
 updated: 2026-10-18
-note: คู่กับ data-model.md v3 — ตัดสิน sync boundary: staff app คุย CouchDB ตรง, service API มีเฉพาะที่ CouchDB ทำเองไม่ได้; CR-112/CR-113 occupancy + unassigned registration; Partner Data API EXT-001–007 (#214); CR-124 staff Google step-up MFA + Google SSO login (enrolled + mint AuthSession); decision sync 2026-10-08 — เพิ่ม GET /public/v1/unassigned-registrations/{id}/status (service secret, status-only) แทนการเรียก staff detail จาก BFF registrations/status — แก้ ticket คิวกลางหายจากอุปกรณ์ (QA pre-register 2026-10-08); decision sync 2026-10-09 — `breakdown` ของ EXT-005 เพิ่ม `gender_unspecified` (null+other; `male+female+gender_unspecified = occupancy_total`) และ `POST /public/v1/unassigned-registrations` รับ `members[].gender = null`; CR-157 (2026-10-10) — เพิ่ม `GET /api/public/v1/donations/slots` (BFF-only อ่าน CouchDB ฝั่ง server) และ error code ของ slot ใน `POST /public/v1/donations` (`SLOT_REQUIRED`, `SLOT_UNAVAILABLE`, `SLOT_FULL`, `SLOTS_UNAVAILABLE`); CR-162 — §2.3 kiosk banner (`POST /api/v1/kiosk/banners`, signed image GET, back-office `/api/back-office/kiosk-banners/**` + `PUT …/order`) และ §2.2 field เครื่อง `screen_type` / `banner_enabled` (ส่วนที่ปรับ 2026-10-15..17 Team Lead อนุมัติ 2026-10-18)
+note: คู่กับ data-model.md v3 — ตัดสิน sync boundary: staff app คุย CouchDB ตรง, service API มีเฉพาะที่ CouchDB ทำเองไม่ได้; CR-112/CR-113 occupancy + unassigned registration; Partner Data API EXT-001–007 (#214); CR-124 staff Google step-up MFA + Google SSO login (enrolled + mint AuthSession); decision sync 2026-10-08 — เพิ่ม GET /public/v1/unassigned-registrations/{id}/status (service secret, status-only) แทนการเรียก staff detail จาก BFF registrations/status — แก้ ticket คิวกลางหายจากอุปกรณ์ (QA pre-register 2026-10-08); decision sync 2026-10-09 — `breakdown` ของ EXT-005 เพิ่ม `gender_unspecified` (null+other; `male+female+gender_unspecified = occupancy_total`) และ `POST /public/v1/unassigned-registrations` รับ `members[].gender = null`; CR-157 (2026-10-10) — เพิ่ม `GET /api/public/v1/donations/slots` (BFF-only อ่าน CouchDB ฝั่ง server) และ error code ของ slot ใน `POST /public/v1/donations` (`SLOT_REQUIRED`, `SLOT_UNAVAILABLE`, `SLOT_FULL`, `SLOTS_UNAVAILABLE`); CR-162 — §2.3 kiosk banner (`POST /api/v1/kiosk/banners`, signed image GET, back-office `/api/back-office/kiosk-banners/**` + `PUT …/order`) และ §2.2 field เครื่อง `screen_type` / `banner_enabled` (ส่วนที่ปรับ 2026-10-15..17 Team Lead อนุมัติ 2026-10-18); draft-kiosk-volunteer-role-card-print (2026-10-18, ข้อเสนอทีม kiosk) — §2.1.2 `POST /api/v1/kiosk/volunteer-card` พิมพ์ QR จิตอาสาแบบอ่านอย่างเดียว
 ---
 
 # Smart Shelter — API Contract v1
@@ -266,6 +266,52 @@ PRE_REGISTRATION_NOT_FOUND` พร้อม `can_register: false` (walk-in ด�
 - ช่องทาง ThaiD ไม่ใช้ face check / staff PIN
 
 `scanner_client` แนบ device credential ให้ 3 path `thaid/session{,/status,/cancel}` เพิ่มจาก allowlist เดิม.
+
+### 2.1.2 Kiosk พิมพ์ QR จิตอาสา ([draft](../changes/draft-kiosk-volunteer-role-card-print.md), #609)
+
+> ข้อเสนอทีม kiosk — รอ PO อนุมัติผ่าน CR draft
+
+จิตอาสากรอกเบอร์โทรที่ตู้ → server หา volunteer ใน `shelter_{code}` ของเครื่องเท่านั้น แล้วคืน
+role-card payload **ที่มีอยู่แล้ว** (`TKT-VOL-HASH-` + `tracking_token_hash` ตัวพิมพ์ใหญ่). Endpoint
+**อ่านอย่างเดียว** — ไม่ mint, rotate หรือ backfill token และไม่เขียน CouchDB (ยกเว้น device last-seen).
+
+```http
+POST /api/v1/kiosk/volunteer-card
+X-Device-ID: kiosk-sh001-01
+X-Device-Secret: …
+Content-Type: application/json
+
+{ "phone": "0812345678" }
+```
+
+```json
+{
+  "shelter_code": "SH001",
+  "volunteer": {
+    "display_name": "สมชาย ใจ****ดี",
+    "volunteer_code": "V-012",
+    "qr_payload": "TKT-VOL-HASH-…"
+  }
+}
+```
+
+- `display_name` = `first_name` + `maskLastName(last_name)` (+ ` (ชื่อเล่น)` ถ้ามี); ไม่คืนเบอร์หรือชื่อเต็ม
+- เงื่อนไขพิมพ์ได้: `type: "volunteer"`, `status: "active"`, เบอร์ตรงกับ `phone` (หรือ `phone_hash` ที่ `phone`
+  ปัจจุบันยังตรง) **เพียง 1 คน**, และมี `tracking_token_hash` เป็น hex 64 ตัว
+- ตรวจ `kiosk_phone_check_in_enabled` ฝั่ง server (ใช้ toggle เดียวกับ reprint)
+- Rate limit: ต่อเครื่อง 10/นาที, ต่อเบอร์ (sha256) 3/10 นาที ข้ามเครื่อง — นับทุก request
+- ตอบ `cache-control: no-store`, `pragma: no-cache`
+
+| Status | Code | เมื่อ |
+|---|---|---|
+| 400 | `INVALID_VOLUNTEER_CARD_INPUT` | body ผิด / เบอร์ normalize ไม่ได้ |
+| 401 | `DEVICE_AUTH_FAILED` | device credential ไม่ผ่าน |
+| 403 | `KIOSK_METHOD_DISABLED` | ศูนย์ปิด kiosk phone check-in |
+| 404 | `KIOSK_VOLUNTEER_CARD_NOT_FOUND` | ไม่พบ / ต่าง shelter / `inactive` / ไม่มี hash / เบอร์ซ้ำ — **body เดียวกันทุกกรณี** |
+| 429 | `KIOSK_RATE_LIMITED` | เกิน limit (`retry-after: 60`) |
+| 503 | `DEPENDENCY_UNAVAILABLE` | registry/CouchDB อ่านไม่ได้ |
+
+`scanner_client` แนบ device credential ให้ path `/api/v1/kiosk/volunteer-card` (same-origin POST เท่านั้น).
 
 ### 2.2 Scanner staff PIN — ข้ามการตรวจใบหน้าด้วย PIN ของเครื่อง
 
