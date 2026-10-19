@@ -4,7 +4,26 @@
  * FastAPI `/public/v1/donations/{token}` requires EXTERNAL_API_SECRET — the browser
  * must not call it with publicClient. Same pattern as POST/PATCH in the donate wizard.
  */
-import { toDonationTrackView, type DonationTrackView } from '../domain/tracking';
+import {
+	toDonationTrackView,
+	type DonationLookupItem,
+	type DonationTrackView
+} from '../domain/tracking';
+
+/**
+ * The lookup was refused for want of a captcha, or for one that did not verify (CR-173
+ * FR-8). `failed` tells the two apart: with none the caller gets a token and asks again.
+ */
+export class DonationLookupCaptchaError extends Error {
+	constructor(readonly failed: boolean) {
+		super(
+			failed
+				? 'ยืนยันตัวตนไม่ผ่าน กรุณาลองใหม่อีกครั้ง'
+				: 'กรุณายืนยันว่าไม่ใช่โปรแกรมอัตโนมัติก่อนค้นหาต่อ'
+		);
+		this.name = 'DonationLookupCaptchaError';
+	}
+}
 
 /** The shelter has started taking this booking's goods into stock (BFF 409). */
 const GOODS_IN_STOCK_MESSAGE =
@@ -66,6 +85,35 @@ export async function searchDonationTracking(input: {
 	const bookingRef = (body as { bookingRef?: string }).bookingRef;
 	if (!trackingToken) throw new Error('ไม่พบรายการบริจาคสำหรับรหัสนี้');
 	return { trackingToken, bookingRef: bookingRef ?? input.bookingRef };
+}
+
+/**
+ * Every booking of a phone number that is still in the system (CR-173). The phone goes in
+ * the body — never the URL (FR-1). A number with no bookings resolves to `[]`.
+ */
+export async function lookupDonationsByPhone(input: {
+	phone: string;
+	captchaToken?: string;
+}): Promise<DonationLookupItem[]> {
+	const res = await fetch('/api/public/v1/donations/lookup-by-phone', {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({
+			phone: input.phone.trim(),
+			...(input.captchaToken ? { captcha_token: input.captchaToken } : {})
+		})
+	});
+	const body = await res.json().catch(() => ({}));
+	if (!res.ok) {
+		const error = (body as { error?: string }).error;
+		if (error === 'CAPTCHA_REQUIRED') throw new DonationLookupCaptchaError(false);
+		if (error === 'CAPTCHA_FAILED') throw new DonationLookupCaptchaError(true);
+		if (res.status === 422) throw new Error('กรุณาระบุเบอร์โทรให้ถูกต้อง (เช่น 0812345678)');
+		if (res.status === 429) throw new Error('คุณค้นหาบ่อยเกินไป กรุณารอสักครู่');
+		throw new Error(unwrapError(body, 'ไม่สามารถค้นหารายการบริจาคได้'));
+	}
+	const items = (body as { items?: DonationLookupItem[] }).items;
+	return Array.isArray(items) ? items : [];
 }
 
 export async function updateCourierTracking(
