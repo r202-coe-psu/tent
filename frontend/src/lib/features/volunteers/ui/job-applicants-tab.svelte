@@ -147,6 +147,7 @@
 								? (codeByVolunteerId.get(application.volunteer_id) ?? null)
 								: null}
 							shiftLabel={shiftLabelFor(application)}
+							requiredSkills={job.skills_required ?? []}
 							skillOptions={skillCatalog.options}
 							onreview={openReview}
 						/>
@@ -173,6 +174,7 @@
 									? (codeByVolunteerId.get(application.volunteer_id) ?? null)
 									: null}
 								shiftLabel={shiftLabelFor(application)}
+								requiredSkills={job.skills_required ?? []}
 								skillOptions={skillCatalog.options}
 								onreview={openReview}
 							/>

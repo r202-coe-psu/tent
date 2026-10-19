@@ -27,12 +27,18 @@
 	import { SvelteMap } from 'svelte/reactivity';
 	import { APPLICATION_STATUS_META } from '../domain/applicant-queue';
 	import { resolveSkillOption, type SkillOption } from '../domain/skill-catalog';
+	import { checkRequiredSkills } from '../domain/required-skills';
 	import {
 		JOB_APPLICATION_REVIEW_REASON_LABEL,
+		outstandingReviewReasons,
 		type JobApplication
 	} from '../domain/job-application.schema';
 	import type { Volunteer } from '../domain/volunteer.schema';
-	import { identityVerificationStatus, VERIFICATION_STATUS_LABEL } from '../domain/verification';
+	import {
+		identityVerificationStatus,
+		skillVerificationStatus,
+		VERIFICATION_STATUS_LABEL
+	} from '../domain/verification';
 
 	let {
 		application,
@@ -40,6 +46,7 @@
 		volunteerCode = null,
 		shiftLabel = null,
 		skillOptions = [],
+		requiredSkills = [],
 		onreview
 	}: {
 		application: JobApplication;
@@ -57,6 +64,8 @@
 		shiftLabel?: string | null;
 		/** Effective volunteer skill master data for the current shelter. */
 		skillOptions?: readonly SkillOption[];
+		/** `job.skills_required` — to warn when a certificate skill the job asks for is missing. */
+		requiredSkills?: readonly string[];
 		onreview: (application: JobApplication, decision: 'confirmed' | 'rejected') => void;
 	} = $props();
 
@@ -76,6 +85,21 @@
 		}
 		return Array.from(map.values());
 	});
+	/** Certificate skills the job asks for that this applicant did not claim (warning only). */
+	const missingCertifiedSkills = $derived(
+		checkRequiredSkills(requiredSkills, a.skills, skillOptions, volunteer).filter(
+			(check) => check.controlled && check.state === 'missing'
+		)
+	);
+	const openReasons = $derived(
+		outstandingReviewReasons(application.review_reasons ?? [], {
+			identityVerified: identityStatus === 'verified',
+			uncertifiedSkill: skills.some(
+				(s) =>
+					s.controlled && (!volunteer || skillVerificationStatus(volunteer, s.key) !== 'verified')
+			)
+		})
+	);
 </script>
 
 <li class="space-y-2.5 rounded-xl border border-border bg-muted/40 p-3.5">
@@ -148,22 +172,34 @@
 		</div>
 	{/if}
 
+	{#if missingCertifiedSkills.length > 0}
+		<p
+			class="flex items-start gap-1.5 rounded-lg bg-amber-50 px-2 py-1.5 text-xs text-amber-900 ring-1 ring-amber-200"
+		>
+			<TriangleAlert class="mt-0.5 h-3.5 w-3.5 shrink-0" />
+			<span>
+				ไม่มีทักษะที่งานนี้ต้องการ (ต้องมีใบรับรอง):
+				{missingCertifiedSkills.map((check) => check.label).join(', ')}
+			</span>
+		</p>
+	{/if}
+
 	<div class="flex flex-wrap items-center gap-1.5 text-xs">
-		<span class="font-semibold text-muted-foreground">ระดับการตรวจ:</span>
+		<span class="font-semibold text-muted-foreground">ผลการตรวจ:</span>
 		{#if volunteer}
 			<span
 				class="rounded-md px-1.5 py-0.5 font-medium {identityStatus === 'verified'
 					? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200'
 					: 'bg-amber-50 text-amber-800 ring-1 ring-amber-200'}"
 			>
-				ตัวตน: {identityStatus ? VERIFICATION_STATUS_LABEL[identityStatus] : '—'}
+				ยืนยันตัวตน: {identityStatus ? VERIFICATION_STATUS_LABEL[identityStatus] : '—'}
 			</span>
 		{:else}
 			<span class="rounded-md bg-muted px-1.5 py-0.5 text-muted-foreground ring-1 ring-border">
-				ตัวตน: ไม่พบโปรไฟล์ที่เชื่อม
+				ยืนยันตัวตน: ยังไม่มีข้อมูลอาสาในระบบ
 			</span>
 		{/if}
-		{#each application.review_reasons ?? [] as reason (reason)}
+		{#each openReasons as reason (reason)}
 			<span class="rounded-md bg-sky-50 px-1.5 py-0.5 font-medium text-sky-700 ring-1 ring-sky-200">
 				{JOB_APPLICATION_REVIEW_REASON_LABEL[reason]}
 			</span>
