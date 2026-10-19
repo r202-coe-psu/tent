@@ -18,7 +18,7 @@ affects:
   - frontend/src/lib/features/kiosk/domain/kiosk-photo.ts (`detectImageMime` ใช้ร่วม)
   - frontend/src/lib/server/shelter-access-design.ts (Mango partial index ใหม่) · frontend/src/lib/server/security/rate-limiter.ts (limiter ใหม่)
   - frontend/src/lib/components/form/form-donor.svelte · lib/components/pending-review-detail.svelte · stock-donations/components/scan-station.svelte
-  - backend/apiapp/modules/donations (schemas, create) · packages/tent-model (DonationBuffer)
+  - backend/apiapp/modules/donations (schemas, create) · packages/tent-model (DonationBuffer: `photos`, `photos_linked`)
   - worker/src/worker/inbound/donations.py (copy `photos` + ผูกรูปกับใบ) · worker/src/worker/retention/job.py (ลบรูปที่ไม่ถูกใช้)
 why: เจ้าหน้าที่ประเมินของบริจาคที่ผู้บริจาคพิมพ์เองได้จากชื่ออย่างเดียว ไม่เห็นสภาพของจริง
 migration: field ใหม่ optional ทั้งสอง doc type — doc เดิมไม่ต้อง backfill
@@ -56,8 +56,8 @@ migration: field ใหม่ optional ทั้งสอง doc type — doc �
   - ไม่ใช่ `purpose: 'donation'` → `PHOTO_INVALID`
   - มี `donation_id` แล้ว (ผูกกับใบอื่น) → `PHOTO_ALREADY_USED`
   - ขนาดรวมเกิน FR-7 → `PHOTOS_TOO_LARGE`
-- **FR-11** — FastAPI `DonationCreateRequest` และ `DonationBuffer` เก็บ `photos` · worker inbound copy `photos` ลง CouchDB doc
-- **FR-11a** — worker inbound เขียน `donation_id` ลงเอกสารรูปทุกรูปใน `photos` ตอนเขียนใบลง CouchDB · รูปที่มี `donation_id` ของใบอื่นอยู่แล้ว → ไม่เขียนทับ และตัด id นั้นออกจาก `photos` ของใบใหม่ · เขียนแบบอ่าน-แก้-เขียนด้วย `_rev` ล่าสุด ได้ 409 → อ่านใหม่แล้วลองอีก (สูงสุด 3 ครั้ง) ถ้ารอบที่อ่านใหม่เจอ `donation_id` ของใบอื่นแล้วให้ทำตามกรณีข้างต้น
+- **FR-11** — FastAPI `DonationCreateRequest` และ `DonationBuffer` เก็บ `photos` · `DonationBuffer.photos_linked: bool` (ใบที่ไม่มีรูป = `True` · มีรูป = `False` จนผูกครบ) · worker inbound copy `photos` ลง CouchDB doc
+- **FR-11a** — worker inbound เขียน `donation_id` ลงเอกสารรูปทุกรูปใน `photos` ตอนเขียนใบลง CouchDB · รูปที่มี `donation_id` ของใบอื่นอยู่แล้ว → ไม่เขียนทับ และตัด id นั้นออกจาก `photos` ของใบใหม่ · เขียนแบบอ่าน-แก้-เขียนด้วย `_rev` ล่าสุด ได้ 409 → อ่านใหม่แล้วลองอีก (สูงสุด 3 ครั้ง) ถ้ารอบที่อ่านใหม่เจอ `donation_id` ของใบอื่นแล้วให้ทำตามกรณีข้างต้น · ครบ 3 ครั้งแล้วยังไม่สำเร็จ → ใบยังเขียนลง CouchDB ตามปกติ (`photos` คง id นั้นไว้) · log ระดับ warning พร้อม id รูป · `photos_linked` คง `False` → loop inbound หยิบใบที่ `synced_to_couch == True` และ `photos_linked == False` มาลองผูกรูปที่ยังไม่มี `donation_id` ซ้ำทุกรอบ จนผูกครบหรือรูปถูกลบไปแล้วจึงตั้ง `True` (inbound เดิมเขียนใบครั้งเดียวแล้วไม่กลับมาแตะอีก — `worker/src/worker/inbound/donations.py:83`, `:101`) · ถ้ารูปถูกลบไปก่อนตาม FR-16 หน้าเจ้าหน้าที่แสดงตาม FR-13b
 
 ### เจ้าหน้าที่
 - **FR-12** — หน้าประเมิน (`pending-review-detail`) และหน้าตรวจรับแสดงแถบ thumbnail เมื่อใบมีรูป · กดแล้วเปิดรูปเต็ม (อ่านผ่าน session `/couch` ของเจ้าหน้าที่ — `imageRepository`)
@@ -95,7 +95,7 @@ migration: field ใหม่ optional ทั้งสอง doc type — doc �
 - **AC-8** — ฟอร์มเลือกรูปที่ 31 ไม่ได้ · ส่ง 31 id ตรงเข้า API → 422 `PHOTO_LIMIT_EXCEEDED`
 - **AC-9** — ใช้ id รูปที่ผูกกับใบอื่นแล้วตอนจองใบใหม่ → 422 `PHOTO_ALREADY_USED`
 - **AC-10** — ส่งต่อใบที่มีรูปไปศูนย์อื่น → ตั๋วปลายทางไม่มีรูป · ใบต้นทางยังเห็นรูปตามเดิม
-- **AC-11** — รูปจาก kiosk, ลงทะเบียนล่วงหน้า และเจ้าหน้าที่ที่สร้างหลังเปลี่ยน มี schema_v 2 และไม่มี `purpose` → ไม่ถูกลบโดย FR-16
+- **AC-11** — รูปจาก kiosk, ลงทะเบียนล่วงหน้า, เคลม unassigned registration และเจ้าหน้าที่ที่สร้างหลังเปลี่ยน มี schema_v 2 และไม่มี `purpose` → ไม่ถูกลบโดย FR-16
 - **AC-12** — ผู้บริจาคแก้รายการในใบที่มีรูป → รูปเดิมยังอยู่ครบ · หน้าแก้ใบไม่มีช่องเพิ่มหรือลบรูป
 - **AC-13** — ใบที่มี 2 รูป ลบเอกสารรูป 1 รูปออก → หน้าประเมินแสดงรูปที่เหลือ 1 รูป และช่อง "รูปไม่พร้อมใช้" 1 ช่อง ไม่มี error
 
@@ -107,7 +107,7 @@ migration: field ใหม่ optional ทั้งสอง doc type — doc �
   - `detectImageMime` (`features/kiosk/domain/kiosk-photo.ts:34`) ใช้ร่วมกับ BFF ใหม่ · ย้ายไปที่ส่วนกลางได้ถ้าจำเป็นต่อ layer boundary
   - หมายเหตุ: `savePublicBookingImage` อยู่ใน `features/public-register` · ใช้ผ่าน barrel ได้ ย้ายไป `features/images` เป็นงานแยกถ้าต้องการ
 - **backend:** `IMAGE_SCHEMA_V` 1 → 2 (`modules/unassigned_registrations/couch_birth.py:26` — writer ของ `image` ฝั่ง FastAPI ตอนเคลม unassigned registration) · schemas + create + test · `pnpm openapi:update`
-- **tent-model / worker:** `DonationBuffer.photos` · inbound copy + ผูก `donation_id` (FR-11a) · retention job ลบรูปกำพร้า (FR-16) + test
+- **tent-model / worker:** `DonationBuffer.photos`, `photos_linked` · inbound copy + ผูก `donation_id` + loop ลองผูกซ้ำใบที่ `photos_linked == False` (FR-11a) · retention job ลบรูปกำพร้า (FR-16) + test
 - **CouchDB:** `image` อยู่ใน allow-list ของ VDU แล้ว (`shelter-access-design.ts`) — ตรวจว่า `public_writer` เขียน `purpose` ได้ · Mango partial index ใหม่ตาม FR-16 (CouchDB 3.5 รองรับ `partial_filter_selector`)
 - **e2e:** จองแบบพิมพ์เองพร้อมรูป (fixture รูปเล็ก) → เจ้าหน้าที่เห็นรูป · helper จองแบบพิมพ์เองใช้ร่วมกับงาน #610
 
@@ -132,4 +132,4 @@ migration: field ใหม่ optional ทั้งสอง doc type — doc �
 - 2026-10-18 — เจ้าของโครงการ: **สูงสุด 30 รูปต่อใบ** (แทน "ไม่จำกัดจำนวน") ตามที่ review PR #679 ยกเรื่องคำขอที่มี id รูปจำนวนมาก
 - 2026-10-18 — แก้ตาม review PR #679: schema_v เรียงต่อ CR-172 · ผูกรูปกับใบด้วย `image.donation_id` + Mango index สำหรับลบรูปกำพร้า (FR-10, FR-11a, FR-16) · writer ของ `image` ทุกจุดเขียน schema_v 2 · รูปไม่ตามไปเมื่อส่งต่อศูนย์ (FR-13a) · error code ของ 422 · ใช้ `detectImageMime` ร่วม
 - 2026-10-18 — เจ้าของโครงการ: แนบรูปได้ตอนจองเท่านั้น แก้ใบภายหลังไม่เปลี่ยนรูป (FR-3a) · รูปที่หายแสดง "รูปไม่พร้อมใช้" (FR-13b) · รูปของใบที่จบแล้ว (ยกเลิก/ปฏิเสธ/หมดอายุ) **เก็บไว้ก่อน** ไม่ลบในรอบนี้ — ทบทวนนโยบายเก็บรูปภายหลัง
-- 2026-10-19 — แก้ตาม review รอบ 2 PR #679: partial index สำหรับรูปที่ยังไม่ผูกกับใบ (FR-16) · `couch_birth.py` อยู่ในรายการ writer ของ `image` · schema_v donation 7 → 8 หลัง CR-174 · limiter 60 ครั้ง/นาที/IP (FR-9) · `savePublicBookingImage` รับ `purpose` · 409 ตอนผูกรูปลองใหม่ 3 ครั้ง (FR-11a) · คืน `photo_id`
+- 2026-10-19 — แก้ตาม review รอบ 2 PR #679: partial index สำหรับรูปที่ยังไม่ผูกกับใบ (FR-16) · `couch_birth.py` อยู่ในรายการ writer ของ `image` · schema_v donation 7 → 8 หลัง CR-174 · limiter 60 ครั้ง/นาที/IP (FR-9) · `savePublicBookingImage` รับ `purpose` · 409 ตอนผูกรูปลองใหม่ 3 ครั้ง ไม่สำเร็จให้ loop inbound ลองซ้ำด้วย `DonationBuffer.photos_linked` (FR-11a) · คืน `photo_id`
