@@ -30,7 +30,9 @@ const config = {
 				// maplibre-gl runs its tile worker from a blob: URL.
 				'worker-src': ['self', 'blob:'],
 				'object-src': ['none'],
-				'base-uri': ['self']
+				'base-uri': ['self'],
+				// No other site may frame the app (clickjacking).
+				'frame-ancestors': ['none']
 			}
 		}
 	}

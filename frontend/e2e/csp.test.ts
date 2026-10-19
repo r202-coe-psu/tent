@@ -33,6 +33,7 @@ test('sends a nonce-based script policy, never unsafe-inline', async ({ request 
 	expect(csp).not.toContain('unsafe-inline');
 	expect(csp).not.toContain('unsafe-eval');
 	expect(csp).toContain("object-src 'none'");
+	expect(csp).toContain("frame-ancestors 'none'");
 });
 
 test('blocks a script injected into the page', async ({ page }) => {
