@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { StockLedger } from '$lib/features/operations';
 import { createStockLedger } from '$lib/features/operations';
 import type { AuthorContext } from '$lib/db/model';
-import { getEligiblePhysicalLots, isLotDateExpired } from './physical-lot';
+import { getEligiblePhysicalLots, getItemLotBalances, isLotDateExpired } from './physical-lot';
 
 const ctx: AuthorContext = {
 	shelterCode: 'SH001',
@@ -157,6 +157,23 @@ describe('Physical Lot Projection & FEFO Ordering (Slice 5.3)', () => {
 
 		expect(small?.hasSufficientQty).toBe(false);
 		expect(large?.hasSufficientQty).toBe(true);
+	});
+
+	it('getItemLotBalances returns positive remaining balances of the item only', () => {
+		const inEntry = createInboundLedger('L1', 'item:meal', '5', '2026-05-01T08:00:00Z');
+		const other = createInboundLedger('L2', 'item:water', '9', '2026-05-01T09:00:00Z');
+		const out = createOutboundLedger(
+			'OUT1',
+			'item:meal',
+			'2',
+			'2026-05-02T08:00:00Z',
+			inEntry.lot_ref ?? inEntry._id
+		);
+
+		const balances = getItemLotBalances([inEntry, other, out], 'item:meal');
+		expect(balances).toHaveLength(1);
+		expect(balances[0].qty).toBe('3');
+		expect(getItemLotBalances(undefined, 'item:meal')).toEqual([]);
 	});
 
 	it('flags expired lots accurately based on reference time', () => {
