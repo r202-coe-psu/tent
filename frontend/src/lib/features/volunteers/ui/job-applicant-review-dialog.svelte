@@ -160,7 +160,7 @@
 				รับ <span class="font-bold text-foreground">{applicantName}</span> เข้างาน
 				<span class="font-bold text-foreground">{job.title}</span> — งานนี้จะรับคนได้น้อยลง 1 คนทันที
 			{:else}
-				ปฏิเสธใบการเข้าร่วมงานของ <span class="font-bold text-foreground">{applicantName}</span>
+				ปฏิเสธการเข้าร่วมงานของ <span class="font-bold text-foreground">{applicantName}</span>
 				สำหรับงาน <span class="font-bold text-foreground">{job.title}</span> — จำนวนคนที่งานรับได้ไม่เปลี่ยน
 			{/if}
 		</p>
