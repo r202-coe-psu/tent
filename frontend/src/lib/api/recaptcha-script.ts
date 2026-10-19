@@ -64,3 +64,26 @@ export function ensureRecaptchaLoaded(siteKey: string): Promise<boolean> {
 	}
 	return pending;
 }
+
+/**
+ * A fresh reCAPTCHA token for `action`, loading the script first if the page has not.
+ * `window.__captchaToken` (e2e) wins. Resolves `null` when no token can be had — no site
+ * key, the script would not load, or `execute` threw — so the caller can say so.
+ */
+export async function executeRecaptcha(siteKey: string, action: string): Promise<string | null> {
+	if (typeof window === 'undefined') return null;
+	if (window.__captchaToken) return window.__captchaToken;
+	if (!(await ensureRecaptchaLoaded(siteKey))) return null;
+	const g = window.grecaptcha;
+	try {
+		if (g?.enterprise) {
+			const enterprise = g.enterprise;
+			await new Promise<void>((resolve) => enterprise.ready(() => resolve()));
+			return await enterprise.execute(siteKey, { action });
+		}
+		if (g?.execute) return await g.execute(siteKey, { action });
+	} catch {
+		return null;
+	}
+	return null;
+}

@@ -34,7 +34,8 @@ export type {
 	DonationTrackStatus,
 	DonationTrackItem,
 	DonationTrackLogistics,
-	DonationTrackDonor
+	DonationTrackDonor,
+	DonationLookupItem
 } from './domain/tracking';
 export {
 	toDonationTrackView,
@@ -45,7 +46,9 @@ export {
 	formatTrackSchedule,
 	canCancelDonation,
 	canEditCourierTracking,
-	isTerminalDonationStatus
+	isTerminalDonationStatus,
+	lookupItemSchedule,
+	maskLookupPhone
 } from './domain/tracking';
 
 // Domain — shared PURE computation (needs board + POST donations). Server-side
@@ -85,7 +88,9 @@ export { fetchDonationSlots } from './data/public-slots';
 export {
 	cancelDonation,
 	fetchDonationTracking,
+	lookupDonationsByPhone,
 	searchDonationTracking,
+	DonationLookupCaptchaError,
 	updateCourierTracking,
 	updateDonationItems,
 	type DonationItemEdit
@@ -97,6 +102,7 @@ export {
 	useCancelDonation,
 	useDonationTracking,
 	useDonationTrackSearch,
+	useDonationPhoneLookup,
 	useUpdateCourierTracking,
 	useUpdateDonationItems
 } from './application/queries';
