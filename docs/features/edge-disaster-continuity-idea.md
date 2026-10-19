@@ -2,7 +2,7 @@
 title: Edge disaster continuity — operational idea (parked)
 status: idea / elevated-via-CR-064
 created: 2026-08-12
-updated: 2026-10-05
+updated: 2026-10-18
 note: >
   แนวคิดปฏิบัติการ LAN edge — elevate ผ่าน CR-064 (proposed) + T-54 Package B.
   Topology binding ยังอยู่ที่ docs/data/* จนกว่า CR-064 จะ approved แล้ว reconcile.
@@ -111,6 +111,7 @@ related:
 | **OD-4** | Cutback / continuity มองผ่าน **ops UI**: (1) หน้า central เห็นสถานะ **shelter ทีละศูนย์** (2) ที่ศูนย์ staff เห็นสถานะ **WAN** | เกณฑ์ lag/conflict + ใครประกาศ cutback ผูกกับ UI นี้ (รายละเอียด SLO ลงใน CR/T-54) |
 | **OD-5** | Track = **เปิด CR ใหม่** (ต่อ CR-033 follow-up) + **ขยาย T-54** + **sync ขึ้น Notion** | ✅ [CR-064](../changes/01-core/CR-064-edge-disaster-continuity.md) proposed · T-54 Package B · Notion sync |
 | **OD-6** | Replicator credential (A5) = **central CouchDB admin ชุดเดียว** (`CENTRAL_REPL_*`) กับทุก job รวม filtered `_users` pull — เอา `CENTRAL_USERS_REPL_*` / per-shelter `repl_<code>` ออกจาก setup · เหตุผล: `_users/_changes` เปิดเฉพาะ server admin (ทดสอบ CouchDB 3.5: role member / db admin ของ `_users` ยังได้ 401) และเมื่อ edge ต้องถือ admin อยู่แล้ว `repl_<code>` ไม่ลดความเสี่ยงตอนเครื่อง edge หลุด | ยอมรับ: เครื่อง edge หลุด = central admin หลุด · `SHELTER_CODE` ผิดไม่ถูก central ปฏิเสธ · `_design/*` จาก edge push ขึ้น central ได้ · เปลี่ยนรหัส admin กระทบ edge ทุกศูนย์ · ทางเลือก least-privilege ที่เลื่อนไว้: per-shelter users mirror DB ที่ central (`scripts/central-repl-user.sh` เก็บไว้) · กระทบ `scripts/edge-init.sh`, `docker-compose.edge.yml`, `.env.edge.example`, `docs/couchdb-replication/*` |
+| **OD-6 (ต่อ — decision sync 2026-10-18)** | push job `<code>_push` กรอง `_design/*` ด้วย `selector` `{"_id":{"$not":{"$regex":"^_design/"}}}` · A2–A4: บล็อกเขียน `_users` + login ครั้งแรกที่ edge, ไม่สร้าง user ที่ edge (คง A1) ใช้ spare account ที่ activate ที่ central ล่วงหน้า — edge mode — PR แยก, CR-171 amendment pending | กัน**อุบัติเหตุ / edge ที่มี design doc เก่ากว่า central** เท่านั้น — **ไม่กัน edge ที่ถูกขโมย** (ยังถือ central admin ตาม OD-6) · ทบทวน OD-6 (replication user ต่อศูนย์) ก่อนติดตั้ง edge ศูนย์ที่สอง (หลัง pilot) หรือเมื่อเครื่อง edge หาย · **Gate:** ห้ามติดตั้ง edge ที่ศูนย์จริงก่อน PR edge mode merge |
 
 
 
@@ -272,4 +273,5 @@ related:
 | 2026-08-12 | **Locked OD-1..OD-5:** staff stack ยกเว้น FastAPI/Mongo · network-only · re-login OK · ops UI shelter+WAN · track = CR + T-54 + Notion |
 | 2026-08-12 | Elevated: [CR-064](../changes/01-core/CR-064-edge-disaster-continuity.md) proposed · T-54 Package B · Notion T-54 sync |
 | 2026-10-05 | **Decision sync OD-6:** edge ใช้ central CouchDB admin ชุดเดียว (`CENTRAL_REPL_*`) กับทุก replication job (A5) — ปิดคำถามเปิดข้อ 2 ใน [couchdb-replication/README.md](../couchdb-replication/README.md) |
+| 2026-10-18 | **Decision sync (owner @net-lynx, PR #348):** push กรอง `_design/*` (กันอุบัติเหตุ ไม่กัน edge ถูกขโมย — OD-6 ยังอยู่; ทบทวนก่อน edge ศูนย์ที่สอง/เมื่อเครื่องหาย) · A2 บล็อกเขียน `_users` ที่ edge (`EDGE_MODE`) · A3 login ครั้งแรกที่ edge ถูกบล็อก · A4 ไม่สร้าง user ที่ edge ใช้ spare account — edge mode — PR แยก, CR-171 amendment pending · gate: ไม่ติดตั้ง edge ศูนย์จริงก่อน PR edge mode merge |
 
