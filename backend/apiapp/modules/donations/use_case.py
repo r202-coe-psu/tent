@@ -123,6 +123,12 @@ class _PhoneLookupWatch:
 phone_lookup_watch = _PhoneLookupWatch()
 
 
+def _utc(value: datetime) -> datetime:
+    """Mongo hands datetimes back naive (UTC, no offset); without one a browser reads the
+    ISO string as local time and the donor sees a booking time hours off."""
+    return value if value.tzinfo else value.replace(tzinfo=UTC)
+
+
 def _lookup_slot(logistics: dict[str, Any] | None) -> DonationPhoneLookupSlot | None:
     slot = (logistics or {}).get("slot")
     if not isinstance(slot, dict):
@@ -790,7 +796,7 @@ class DonationsUseCase:
                     item_count=(
                         len(donation.items_declared) if donation else len(buffer.items_declared)
                     ),
-                    created_at=buffer.created_at.isoformat(),
+                    created_at=_utc(buffer.created_at).isoformat(),
                 )
             )
 

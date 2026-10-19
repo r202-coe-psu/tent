@@ -125,6 +125,8 @@ async def test_every_booking_of_the_number_newest_first(
     assert newest["item_count"] == 1
     assert older["item_count"] == 2
     assert older["slot"] is None
+    # Read back from Mongo naive; must still say it is UTC or the browser shifts it.
+    assert datetime.fromisoformat(newest["created_at"]).utcoffset() == timedelta(0)
 
 
 @pytest.mark.parametrize("typed", ["0812345678", "081-234-5678", "+66812345678", "081 234 5678"])
