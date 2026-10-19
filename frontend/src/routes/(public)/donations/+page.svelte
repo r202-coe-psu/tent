@@ -122,7 +122,7 @@
 					<button
 						type="button"
 						onclick={() => {
-							donationStore.activeTab = step.id;
+							donationStore.goToStep(step.id);
 						}}
 						disabled={isStepDisabled}
 						class="relative z-10 flex flex-col items-center gap-2 rounded-xl bg-white p-1 transition-all sm:flex-row sm:px-4 sm:py-2.5
