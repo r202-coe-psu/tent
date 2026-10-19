@@ -643,6 +643,63 @@ test.describe('Booking a mission from the board (CR-092 FR-VOL-02)', () => {
 		await expect(applyButtons).toHaveCount(4);
 		await expect(page.getByText('ยังมีอีก 10 กะ ใน 5 วัน')).toBeVisible();
 	});
+
+	test('picking another page takes the reader to its first job', async ({ page }) => {
+		const day = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
+		await mockPortalApi(page);
+		await mockJobBoard(page, { success: true });
+		// Eight jobs: page 1 holds six, page 2 the last two.
+		await page.route('**/api/public/v1/volunteer/jobs*', (route) =>
+			route.fulfill(
+				json({
+					success: true,
+					jobs: Array.from({ length: 8 }, (_, i) => ({
+						job_id: `job:01PAGE${i}`,
+						shelter_code: 'SH001',
+						shelter_name: 'ศูนย์ทดสอบ',
+						title: `งานหน้า ${i + 1}`,
+						description: 'ทดสอบการเปลี่ยนหน้า',
+						tier: 'operational',
+						skills_required: [],
+						shifts: [
+							{
+								shift_id: `s${i}`,
+								date: day,
+								start_time: '08:00',
+								end_time: '12:00',
+								quota: 5,
+								slots_confirmed: 0
+							}
+						],
+						quota: 5,
+						slots_confirmed: 0,
+						slots_remaining: 5,
+						status: 'open',
+						requires_review: false
+					}))
+				})
+			)
+		);
+		await page.emulateMedia({ reducedMotion: 'reduce' });
+		await page.setViewportSize({ width: 375, height: 812 });
+		await page.goto('/volunteers/jobs');
+		const pageTwo = page.locator('[data-slot="pagination-link"]', { hasText: '2' });
+		await pageTwo.scrollIntoViewIfNeeded();
+
+		await pageTwo.click();
+
+		const firstOfPageTwo = page.getByRole('heading', { name: 'งานหน้า 7' });
+		await expect(firstOfPageTwo).toBeInViewport();
+		// Not hidden under the fixed navbar.
+		const navbar = await page.locator('header').first().boundingBox();
+		expect((await firstOfPageTwo.boundingBox())!.y).toBeGreaterThanOrEqual(
+			navbar!.y + navbar!.height
+		);
+		// Keyboard and screen-reader users land on the new page's jobs too.
+		await expect(
+			page.locator('[tabindex="-1"][aria-label="งานอาสาสมัครในศูนย์พักพิง"]')
+		).toBeFocused();
+	});
 });
 
 test.describe('Editing your own profile', () => {
