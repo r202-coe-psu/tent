@@ -16,6 +16,7 @@
 		looksLikeBarcode,
 		type ItemMaster
 	} from '$lib/features/catalog';
+	import { partitionInStockFirst, sortInStockFirstByName } from '../domain/stock-availability-sort';
 	import {
 		filterStockFormItems,
 		toStockFormItems,
@@ -80,9 +81,20 @@
 
 	const selectedItem = $derived(items.find((item) => item._id === value) ?? null);
 
-	const filteredItems = $derived(filterStockFormItems(items, searchValue));
-
 	const query = $derived(searchValue.trim());
+
+	const filteredItems = $derived.by(() => {
+		const ranked = filterStockFormItems(items, searchValue);
+		const balances = balanceByItemId;
+		if (!balances) return ranked;
+		const getBalance = (item: StockFormItem) => balances.get(item._id);
+		if (query === '') return sortInStockFirstByName(ranked, getBalance, (item) => item.name);
+		// Keep search relevance; an exact barcode match stays pinned on top regardless of stock.
+		const scannedId = findItemByBarcode(items, query)?.item._id;
+		const pinned = scannedId ? ranked.filter((item) => item._id === scannedId) : [];
+		const rest = scannedId ? ranked.filter((item) => item._id !== scannedId) : ranked;
+		return [...pinned, ...partitionInStockFirst(rest, getBalance)];
+	});
 	const queryIsBarcode = $derived(looksLikeBarcode(query));
 	const shelterCode = $derived(getShelterCode());
 	const canCreate = $derived(
@@ -323,6 +335,7 @@
 					{#each filteredItems as item (item._id)}
 						{@const bal = balanceOf(item)}
 						{@const itemDisabled = isItemDisabled(item)}
+						{@const outOfStock = !!balanceByItemId && !qtyGt(bal, 0)}
 						<Combobox.Item
 							value={item._id}
 							label={item.name}
@@ -333,7 +346,7 @@
 								<div class="min-w-0 flex-1">
 									<div class="flex items-center gap-2">
 										<span
-											class="truncate font-semibold text-foreground {itemDisabled
+											class="truncate font-semibold text-foreground {itemDisabled || outOfStock
 												? 'opacity-50'
 												: ''}"
 										>
@@ -353,8 +366,12 @@
 											? 'border-primary/20 bg-primary/10 text-primary'
 											: 'border-destructive/20 bg-destructive/10 text-destructive'}"
 									>
-										{bal}
-										{unitLabel(item)}
+										{#if outOfStock}
+											หมด
+										{:else}
+											{bal}
+											{unitLabel(item)}
+										{/if}
 									</span>
 								{/if}
 							{/snippet}
