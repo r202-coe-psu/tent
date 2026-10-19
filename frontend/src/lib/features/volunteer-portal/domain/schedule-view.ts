@@ -137,6 +137,19 @@ function ticketWindow(ticket: TicketSummary): { start_ts: string; end_ts: string
  * attendance state. Applications that have not been rostered yet remain as a
  * booking-only row so the volunteer can still see that the request is in progress.
  */
+/**
+ * A station worth showing. No job or shift form has a station field, so every
+ * assignment records the job title as its station (`job-assign-page.svelte`) — shown,
+ * it only repeats the card's title. A real station, if one is ever entered, still shows.
+ */
+export function distinctStation(
+	station: string | null | undefined,
+	jobTitle: string | null | undefined
+): boolean {
+	const value = station?.trim() ?? '';
+	return value !== '' && value.toLowerCase() !== (jobTitle?.trim() ?? '').toLowerCase();
+}
+
 export function mergePortalActivities(
 	shifts: ScheduleShift[],
 	tickets: TicketSummary[]
@@ -147,7 +160,9 @@ export function mergePortalActivities(
 		shiftId: shift.shift_id ?? null,
 		assignmentId: shift.assignment_id,
 		title: shift.job_title || 'งานอาสาสมัคร',
-		description: shift.station ? `จุดปฏิบัติงาน: ${shift.station}` : '',
+		description: distinctStation(shift.station, shift.job_title)
+			? `จุดปฏิบัติงาน: ${shift.station}`
+			: '',
 		location: shift.shelter_name || shift.shelter_code,
 		shelterCode: shift.shelter_code,
 		date: shift.date,

@@ -1199,9 +1199,11 @@
 										</div>
 
 										<h4 class="text-base font-bold text-foreground">{activity.title}</h4>
-										<p class="text-xs leading-relaxed text-muted-foreground">
-											{activity.description}
-										</p>
+										{#if activity.description}
+											<p class="text-xs leading-relaxed text-muted-foreground">
+												{activity.description}
+											</p>
+										{/if}
 
 										<div
 											class="flex flex-wrap items-center gap-x-4 gap-y-1 text-2xs text-muted-foreground"

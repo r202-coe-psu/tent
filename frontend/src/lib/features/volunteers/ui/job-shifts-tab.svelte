@@ -363,6 +363,7 @@
 		shift={rosterRow?.shift ?? null}
 		roster={rosterRow?.roster ?? []}
 		pending={saving || unassignMutation.isPending}
+		jobTitle={job.title}
 		onunassign={(entry) => (unassignTarget = entry)}
 	/>
 
