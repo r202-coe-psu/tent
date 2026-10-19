@@ -14,6 +14,14 @@ function rateLimitSwitchedOff(): boolean {
 	return raw === 'false' || raw === '0';
 }
 
+/** The dev server's own address — local runs and e2e are never limited. */
+function isDevLoopback(key: string): boolean {
+	return (
+		dev &&
+		(key === '127.0.0.1' || key === '::1' || key === 'localhost' || key === '::ffff:127.0.0.1')
+	);
+}
+
 interface RateLimitEntry {
 	timestamps: number[];
 }
@@ -47,12 +55,7 @@ export class RateLimiter {
 		if (!key) return true;
 		// CR-160 switch: allow without counting, so re-enabling starts from a clean slate.
 		if (this.bypassable && rateLimitSwitchedOff()) return true;
-		if (
-			dev &&
-			(key === '127.0.0.1' || key === '::1' || key === 'localhost' || key === '::ffff:127.0.0.1')
-		) {
-			return true;
-		}
+		if (isDevLoopback(key)) return true;
 
 		const now = Date.now();
 		const entry = this.store.get(key) || { timestamps: [] };
@@ -98,6 +101,48 @@ export class RateLimiter {
 					this.store.set(k, { timestamps: active });
 				}
 			}
+		}
+	}
+}
+
+/**
+ * How many different values one key has used in a window — "how many different phone
+ * numbers has this IP searched" (CR-173 FR-8). A rate limit caps how often; this caps how
+ * widely, which is what walking through numbers looks like. Same exemptions as
+ * `RateLimiter`.
+ */
+export class DistinctValueWindow {
+	private store = new Map<string, Map<string, number>>();
+
+	constructor(
+		private readonly windowMs: number,
+		private readonly maxDistinct: number,
+		private readonly options: { bypassable?: boolean } = {}
+	) {}
+
+	/**
+	 * Records `value` against `key`. True while `key` has used no more than `maxDistinct`
+	 * different values in the window, counting this one; repeating a value never adds.
+	 */
+	record(key: string, value: string): boolean {
+		if (!key || !value) return true;
+		if (this.options.bypassable && rateLimitSwitchedOff()) return true;
+		if (isDevLoopback(key)) return true;
+
+		const now = Date.now();
+		const seen = this.store.get(key) ?? new Map<string, number>();
+		for (const [v, ts] of seen) if (now - ts >= this.windowMs) seen.delete(v);
+		seen.set(value, now);
+		this.store.set(key, seen);
+		this.cleanup(now);
+		return seen.size <= this.maxDistinct;
+	}
+
+	private cleanup(now: number) {
+		if (Math.random() >= 0.01) return;
+		for (const [k, seen] of this.store) {
+			for (const [v, ts] of seen) if (now - ts >= this.windowMs) seen.delete(v);
+			if (seen.size === 0) this.store.delete(k);
 		}
 	}
 }
@@ -166,6 +211,19 @@ export const donationReadLimiter = new RateLimiter(60000, 30, { bypassable: true
  * limiters added after it on in every environment, and this one has room for e2e.
  */
 export const donationTrackSearchLimiter = new RateLimiter(60000, 10);
+/**
+ * Finding every booking of a phone number (CR-173 FR-7). The widest door into donor PII
+ * there is — a number alone hands back full access — so it is held per IP and per number:
+ * 5 a minute per IP, 10 an hour per number so spreading across IPs does not help. Never
+ * bypassable (CR-160), like the volunteer ticket find it mirrors.
+ */
+export const donationPhoneLookupIpLimiter = new RateLimiter(60_000, 5);
+export const donationPhoneLookupPhoneLimiter = new RateLimiter(60 * 60_000, 10);
+/**
+ * More than 3 different numbers from one IP inside 5 minutes asks for a captcha before
+ * the next (CR-173 FR-8). A donor has one number, maybe a relative's; a walk has many.
+ */
+export const donationPhoneLookupSpread = new DistinctValueWindow(5 * 60_000, 3);
 /**
  * The wizard's window grid (`GET /donations/slots`). Anonymous and keyed by IP only, and
  * each call scans every `donation_slot:` and `donation:` doc of a shelter with admin

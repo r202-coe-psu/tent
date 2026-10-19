@@ -3,7 +3,7 @@ import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 const mockEnv = vi.hoisted(() => ({ env: {} as Record<string, string | undefined> }));
 vi.mock('$env/dynamic/private', () => mockEnv);
 
-import { RateLimiter } from './rate-limiter';
+import { DistinctValueWindow, RateLimiter } from './rate-limiter';
 
 describe('RateLimiter', () => {
 	beforeEach(() => {
@@ -220,6 +220,8 @@ describe('RATE_LIMIT switch (CR-160)', () => {
 			'registerPhoneLimiter'
 		]);
 		expect(closed).toEqual([
+			'donationPhoneLookupIpLimiter',
+			'donationPhoneLookupPhoneLimiter',
 			'donationSlotsLimiter',
 			'donationTrackSearchLimiter',
 			'kioskPhoneDeviceLimiter',
@@ -240,5 +242,54 @@ describe('RATE_LIMIT switch (CR-160)', () => {
 			'volunteerTicketFindLimiter',
 			'volunteerTicketLimiter'
 		]);
+	});
+});
+
+describe('DistinctValueWindow', () => {
+	beforeEach(() => vi.useFakeTimers());
+	afterEach(() => {
+		vi.useRealTimers();
+		delete mockEnv.env.RATE_LIMIT;
+	});
+
+	it('allows up to the cap of different values, then refuses the next', () => {
+		const spread = new DistinctValueWindow(5 * 60_000, 3);
+		expect(spread.record('ip', 'a')).toBe(true);
+		expect(spread.record('ip', 'b')).toBe(true);
+		expect(spread.record('ip', 'c')).toBe(true);
+		expect(spread.record('ip', 'd')).toBe(false);
+	});
+
+	it('does not count a value it has already seen', () => {
+		const spread = new DistinctValueWindow(5 * 60_000, 2);
+		expect(spread.record('ip', 'a')).toBe(true);
+		expect(spread.record('ip', 'a')).toBe(true);
+		expect(spread.record('ip', 'b')).toBe(true);
+		expect(spread.record('ip', 'a')).toBe(true);
+	});
+
+	it('forgets values once they leave the window', () => {
+		const spread = new DistinctValueWindow(5 * 60_000, 1);
+		spread.record('ip', 'a');
+		expect(spread.record('ip', 'b')).toBe(false);
+		vi.advanceTimersByTime(5 * 60_000);
+		// `b` was seen at the same moment as `a`, so both have aged out.
+		expect(spread.record('ip', 'c')).toBe(true);
+	});
+
+	it('keeps keys apart', () => {
+		const spread = new DistinctValueWindow(5 * 60_000, 1);
+		spread.record('ip1', 'a');
+		expect(spread.record('ip2', 'b')).toBe(true);
+	});
+
+	it('honours RATE_LIMIT=false only when bypassable', () => {
+		mockEnv.env.RATE_LIMIT = 'false';
+		const strict = new DistinctValueWindow(5 * 60_000, 1);
+		const bypassable = new DistinctValueWindow(5 * 60_000, 1, { bypassable: true });
+		strict.record('ip', 'a');
+		bypassable.record('ip', 'a');
+		expect(strict.record('ip', 'b')).toBe(false);
+		expect(bypassable.record('ip', 'b')).toBe(true);
 	});
 });
