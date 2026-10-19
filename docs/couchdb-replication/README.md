@@ -2,7 +2,7 @@
 
 POC นี้ใช้ทดสอบว่า CouchDB 2 ตัว (**central** และ **edge @ศูนย์**) sync ข้อมูลกันได้ตามที่ออกแบบไว้ใน
 [`docs/data/data-model.md` §1](../data/data-model.md) และ
-[CR-064 edge disaster continuity](../changes/CR-064-edge-disaster-continuity.md)
+[CR-064 edge disaster continuity](../changes/01-core/CR-064-edge-disaster-continuity.md)
 ได้แก่ sync ปกติ, ตอน WAN ขาด, การไล่ backlog ตอน WAN กลับมา และ conflict
 
 > 📘 คู่มือ setup แยกตามเครื่อง: [SETUP-CENTRAL.md](SETUP-CENTRAL.md) · [SETUP-EDGE.md](SETUP-EDGE.md)

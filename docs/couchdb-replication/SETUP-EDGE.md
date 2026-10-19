@@ -395,7 +395,7 @@ sudo rm -rf ../deployment/tent-edge
 
 | เอกสาร | ใช้ดูอะไร |
 | --- | --- |
-| [`docs/changes/CR-064-edge-disaster-continuity.md`](../changes/CR-064-edge-disaster-continuity.md) | OD-1 (edge ไม่มี FastAPI/Mongo), OD-2 (cutover ที่ DNS), OD-3 (login ใหม่) |
+| [`docs/changes/CR-064-edge-disaster-continuity.md`](../changes/01-core/CR-064-edge-disaster-continuity.md) | OD-1 (edge ไม่มี FastAPI/Mongo), OD-2 (cutover ที่ DNS), OD-3 (login ใหม่) |
 | [`docs/data/data-model.md` §1, §5, §6, §7](../data/data-model.md) | topology, conflict, `_security` / VDU, การ wipe edge |
 | [`docs/features/edge-disaster-continuity-idea.md` §7](../features/edge-disaster-continuity-idea.md) | gap checklist |
 | [README.md](README.md) | test T1–T11 (WAN ขาด, conflict, backlog, นาฬิกา) |

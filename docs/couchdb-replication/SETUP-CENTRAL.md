@@ -238,7 +238,7 @@ curl -s -u admin:'<รหัส admin ของ central>' <SYNC_URL>/shelter_sh0
 | เอกสาร | ใช้ดูอะไร |
 | --- | --- |
 | [`docs/data/data-model.md` §1, §6](../data/data-model.md) | topology และ `_security` / `_users` |
-| [`docs/changes/CR-064-edge-disaster-continuity.md`](../changes/CR-064-edge-disaster-continuity.md) | OD-1..OD-5 |
+| [`docs/changes/CR-064-edge-disaster-continuity.md`](../changes/01-core/CR-064-edge-disaster-continuity.md) | OD-1..OD-5 |
 | [`nginx/nginx.conf`](../../nginx/nginx.conf) | nginx ของ compose stack (`location /sync/`) |
 | [Replication intro](https://docs.couchdb.org/en/stable/replication/intro.html) · [protocol](https://docs.couchdb.org/en/stable/replication/protocol.html) | หลักการ `_changes` / `_revs_diff` / `_bulk_docs` |
 | [`/{db}/_security`](https://docs.couchdb.org/en/stable/api/database/security.html) | สิทธิ์ของ DB |
