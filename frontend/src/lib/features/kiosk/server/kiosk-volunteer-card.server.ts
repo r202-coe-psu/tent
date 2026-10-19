@@ -67,9 +67,11 @@ export async function resolveKioskVolunteerCard(
 		throw new KioskVolunteerCardNotFoundError();
 	}
 
-	const nickname = doc.nickname ? ` (${doc.nickname})` : '';
+	// Legacy or imported docs may lack a name part; never print "undefined" or stray spaces.
+	const name = [doc.first_name?.trim(), maskLastName(doc.last_name)].filter(Boolean).join(' ');
+	const nickname = doc.nickname?.trim();
 	return {
-		display_name: `${doc.first_name} ${maskLastName(doc.last_name)}${nickname}`,
+		display_name: nickname ? `${name} (${nickname})` : name,
 		volunteer_code: doc.volunteer_code ?? '',
 		qr_payload: `${TRACKING_TOKEN_HASH_PREFIX}${doc.tracking_token_hash!.toUpperCase()}`
 	};

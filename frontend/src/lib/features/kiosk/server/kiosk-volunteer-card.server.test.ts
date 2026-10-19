@@ -78,6 +78,18 @@ describe('resolveKioskVolunteerCard', () => {
 		expect(card.display_name).toBe('Somchai Wo****t (Chai)');
 	});
 
+	it.each([
+		['the last name is missing', { last_name: undefined, nickname: 'Chai' }, 'Somchai (Chai)'],
+		['the first name is missing', { first_name: undefined }, 'Wo****t'],
+		['names carry stray spaces', { first_name: ' Somchai ', nickname: '  ' }, 'Somchai Wo****t']
+	])('builds a clean display name when %s', async (_label, overrides, expected) => {
+		databases.shelter_sh001 = [volunteer(overrides)];
+
+		const card = await resolveKioskVolunteerCard('SH001', '0812345678');
+
+		expect(card.display_name).toBe(expected);
+	});
+
 	it('matches a volunteer whose stored phone is the +66 variant', async () => {
 		databases.shelter_sh001 = [volunteer({ phone: '+66812345678' })];
 
