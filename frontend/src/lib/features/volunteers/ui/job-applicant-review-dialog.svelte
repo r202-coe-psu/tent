@@ -149,10 +149,10 @@
 		<Dialog.Title class="flex items-center gap-2">
 			{#if approving}
 				<Check class="h-4.5 w-4.5 text-emerald-600" />
-				อนุมัติการเข้าร่วมสมัครงาน
+				อนุมัติการเข้าร่วมงาน
 			{:else}
 				<X class="h-4.5 w-4.5 text-rose-600" />
-				ปฏิเสธการเข้าร่วมสมัครงาน
+				ปฏิเสธการเข้าร่วมงาน
 			{/if}
 		</Dialog.Title>
 		<p class="text-sm text-muted-foreground">
@@ -160,7 +160,7 @@
 				รับ <span class="font-bold text-foreground">{applicantName}</span> เข้างาน
 				<span class="font-bold text-foreground">{job.title}</span> — งานนี้จะรับคนได้น้อยลง 1 คนทันที
 			{:else}
-				ปฏิเสธใบสมัครของ <span class="font-bold text-foreground">{applicantName}</span>
+				ปฏิเสธใบการเข้าร่วมงานของ <span class="font-bold text-foreground">{applicantName}</span>
 				สำหรับงาน <span class="font-bold text-foreground">{job.title}</span> — จำนวนคนที่งานรับได้ไม่เปลี่ยน
 			{/if}
 		</p>
