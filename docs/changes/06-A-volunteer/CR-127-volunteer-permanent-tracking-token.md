@@ -3,7 +3,7 @@ id: CR-127
 title: Volunteer — permanent per-volunteer tracking token (`tracking_token_hash`)
 status: approved
 date: 2026-09-16
-updated: 2026-10-18
+updated: 2026-10-19
 requested_by: Dev Team B
 decided_by: Project Owner (Jakee / net-lynx) — approved permanent volunteer tracking_token_hash design 2026-09-18
 layer: volatile
@@ -17,6 +17,7 @@ affects:
   - frontend/src/lib/features/volunteers/ui/volunteer-check-in.svelte + data/domain layer
   - frontend/src/lib/features/volunteer-portal/ui/volunteer-access-portal.svelte + domain/volunteer.ts (note 2026-10-18, #625 — remembered device)
   - frontend/src/routes/api/public/v1/volunteer/{access/resolve,profile,schedule,schedule/action,ticket/find} (note 2026-10-18, #625 — token rate budget)
+  - frontend/svelte.config.js `kit.csp` + frontend/src/hooks.client.ts (note 2026-10-19 — Content-Security-Policy)
 why: >
   `job_application.tracking_token` (schema.md §2.18, CR-104) is minted fresh per
   application, so a volunteer with more than one application has more than one token and
@@ -115,6 +116,30 @@ themself, which the portal sign-in and on-site check-in both need one of.
   (reproduce ด้วยกล้องปลอม: เส้นทาง auto-submit ทำงานถูกต้อง) token 128-bit เดาไม่ได้ จึงไม่ต้องใช้โควตาที่กัน enumeration
 - ข้อจำกัดที่รู้: โควตา token ยังนับต่อ IP — ศูนย์เดียวเข้าระบบด้วย token ได้ ~7 ครั้ง/นาที (4 request ต่อครั้ง)
 
+## Note 2026-10-19 — Content-Security-Policy ปกป้อง token ที่จดจำไว้
+
+> **สรุป:** token ที่ "จดจำเครื่องนี้" (R-2) อยู่ใน `localStorage` ซึ่งสคริปต์ใดก็ตามบนหน้าอ่านได้ — ช่อง XSS
+> เพียงจุดเดียวในเว็บจะขโมย token ถาวรได้ จึงเพิ่ม Content-Security-Policy ทั้งแอป · ไม่เปลี่ยน data · ไม่ bump `schema_v`
+
+### Requirements
+
+- **R-10** — ทุก response ของ SvelteKit ส่ง header `Content-Security-Policy` (`kit.csp`, `mode: 'auto'`):
+  `script-src 'self'` + reCAPTCHA (`https://www.google.com/recaptcha/`, `https://www.gstatic.com/recaptcha/`)
+  + nonce ต่อ response — **ห้าม** `unsafe-inline` / `unsafe-eval`
+- **R-11** — `worker-src 'self' blob:` (worker ของ maplibre), `object-src 'none'`, `base-uri 'self'`,
+  `frame-ancestors 'none'` (ห้ามเว็บอื่นฝังหน้าเราใน iframe)
+- **R-12** — `connect-src` / `img-src` / `style-src` / `font-src` **ไม่จำกัด**: CouchDB edge, tile แผนที่ และรูปมาจาก
+  origin ที่ต่างกันตาม deployment; เมื่อสคริปต์แปลกปลอมรันไม่ได้ (R-10) ก็ใช้ช่องทางเหล่านี้ขโมยข้อมูลไม่ได้
+- **R-13** — zod v4 ตั้ง `jitless` ใน `hooks.client.ts` (ก่อน route ใด ๆ โหลด) เพื่อไม่ให้ probe `Function('')`
+  ชน policy ทุกหน้า
+
+### Why
+
+- R-2 เก็บ bearer credential ถาวรใน `localStorage`; CSP ทำให้สคริปต์ที่ถูกแทรกเข้ามารันไม่ได้ตั้งแต่ต้น
+- ตรวจแล้ว: `e2e/csp.test.ts` (header, สคริปต์ที่แทรกถูกบล็อก, หน้าแรก / job board / แผนที่ / สแกน QR ด้วยกล้อง
+  ไม่มี violation) และรัน e2e ทั้งชุดเทียบเปิด/ปิด policy — ไม่มีเทสต์ที่พังเพราะ CSP
+- ข้อจำกัดที่รู้: ถ้าเพิ่ม script / iframe จาก origin ภายนอกใหม่ ต้องเพิ่มใน `kit.csp` ด้วย
+
 ## Decision log
 
 - 2026-09-16 — proposed as `draft-volunteer-permanent-tracking-token` (hash-only permanent
@@ -127,3 +152,5 @@ themself, which the portal sign-in and on-site check-in both need one of.
   และแยกโควตาตาม credential
 - 2026-10-18 — แก้ R-8: เลือกโควตาจาก credential หลัง parse (body ที่มีทั้ง phone และ token เคยได้โควตา token
   ทั้งที่ค้นด้วยเบอร์โทร — พบตอนตรวจ security)
+- 2026-10-19 — Note (CSP): เพิ่ม Content-Security-Policy ทั้งแอปเพื่อปกป้อง token ที่จดจำไว้ (R-10–R-13);
+  owner เลือก track เป็น note ต่อท้าย CR-127 และให้ใส่ `frame-ancestors 'none'`
