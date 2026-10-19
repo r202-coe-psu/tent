@@ -63,8 +63,13 @@
 	let dialogOpen = $state(false);
 	let mode = $state<ActionMode>({ kind: 'note' });
 
+	// Bumped per open so the dialog remounts with empty fields — a reason typed for one action
+	// (or the previous handover target) must never carry over into the next one.
+	let dialogKey = $state(0);
+
 	function openAction(next: ActionMode) {
 		mode = next;
+		dialogKey += 1;
 		dialogOpen = true;
 	}
 </script>
@@ -287,5 +292,7 @@
 		</div>
 	</div>
 
-	<IncidentActionDialog bind:open={dialogOpen} {mode} {incident} />
+	{#key dialogKey}
+		<IncidentActionDialog bind:open={dialogOpen} {mode} {incident} />
+	{/key}
 {/if}

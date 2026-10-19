@@ -81,6 +81,26 @@ describe('validate_doc_update — shelter_incident', () => {
 		expectForbidden(bad({ occurred_at: 'yesterday' }), /occurred_at must be a timestamp/);
 	});
 
+	it('requires incident_no, location_detail and description as non-blank text', () => {
+		const base = created();
+		for (const field of ['incident_no', 'location_detail', 'description'] as const) {
+			for (const value of [undefined, '   ', 42]) {
+				expectForbidden(
+					run({ ...base, [field]: value } as unknown as ShelterIncident, null, ctx(OWNER)),
+					new RegExp(`${field} is required`)
+				);
+			}
+		}
+		expectForbidden(
+			run({ ...base, location_detail: 'ก'.repeat(201) }, null, ctx(OWNER)),
+			/location_detail is required/
+		);
+		expectForbidden(
+			run({ ...base, attachments: null } as unknown as ShelterIncident, null, ctx(OWNER)),
+			/attachments must be an array/
+		);
+	});
+
 	it('rejects malformed parties (IL-D7/D8)', () => {
 		const base = created();
 		const bad = (over: Record<string, unknown>) =>

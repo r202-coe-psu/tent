@@ -543,6 +543,16 @@ export function buildValidateDocUpdate(code: string): string {
       if (typeof newDoc.occurred_at !== 'string' || isNaN(Date.parse(newDoc.occurred_at))) {
         throw { forbidden: 'shelter_incident occurred_at must be a timestamp' };
       }
+      var incTexts = [['incident_no', 40], ['location_detail', 200], ['description', 4000]];
+      for (var incTextIndex = 0; incTextIndex < incTexts.length; incTextIndex++) {
+        var incText = newDoc[incTexts[incTextIndex][0]];
+        if (typeof incText !== 'string' || !incText.trim() || incText.length > incTexts[incTextIndex][1]) {
+          throw { forbidden: 'shelter_incident ' + incTexts[incTextIndex][0] + ' is required' };
+        }
+      }
+      if (!Array.isArray(newDoc.attachments)) {
+        throw { forbidden: 'shelter_incident attachments must be an array' };
+      }
       var incComplainant = newDoc.complainant || {};
       var incRespondent = newDoc.respondent || {};
       if (['evacuee', 'staff', 'external', 'shelter_property', 'anonymous']

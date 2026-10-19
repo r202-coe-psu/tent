@@ -341,7 +341,10 @@ export function filterIncidents(
 		if (f.assignedTo && i.assigned_to !== f.assignedTo) return false;
 		if (
 			q &&
-			![incidentTitle(i), i.incident_no, i.location_detail].some((t) => t.toLowerCase().includes(q))
+			// `?? ''` — a record written outside the app must not break search for the whole shelter.
+			![incidentTitle(i), i.incident_no, i.location_detail].some((t) =>
+				(t ?? '').toLowerCase().includes(q)
+			)
 		)
 			return false;
 		return true;

@@ -291,6 +291,14 @@ describe('list helpers', () => {
 		expect(f('   ')).toEqual(['t', 'n', 'l']);
 	});
 
+	it('search does not crash on a record missing text fields (written outside the app)', () => {
+		const broken = { ...open(), location_detail: undefined } as unknown as ShelterIncident;
+		const run = () =>
+			filterIncidents([broken], { status: 'all', severity: 'all', category: 'all', query: 'x' });
+		expect(run).not.toThrow();
+		expect(run()).toEqual([]);
+	});
+
 	it('falls back to the category label when an older record has no title', () => {
 		const legacy = { ...open(), title: undefined };
 		expect(incidentTitle(legacy)).toBe('การลักขโมย / ทรัพย์สินเสียหาย');

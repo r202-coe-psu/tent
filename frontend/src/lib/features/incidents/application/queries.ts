@@ -29,8 +29,15 @@ export const incidentKeys = {
 	all: ['incidents'] as const,
 	list: (shelterCode: string) => [...incidentKeys.all, shelterCode, 'list'] as const,
 	detail: (shelterCode: string, id: string) =>
-		[...incidentKeys.all, shelterCode, 'detail', id] as const,
-	staff: (shelterCode: string) => [...incidentKeys.all, shelterCode, 'staff'] as const
+		[...incidentKeys.all, shelterCode, 'detail', id] as const
+};
+
+/**
+ * Not under `incidentKeys.all` on purpose — every incident change invalidates that prefix, and
+ * the directory endpoint scans all of `_users` server-side.
+ */
+export const shelterStaffKeys = {
+	list: (shelterCode: string) => ['shelter-staff', shelterCode] as const
 };
 
 export const useIncidents = (shelterCode: () => string) =>
@@ -48,7 +55,7 @@ export const useIncident = (shelterCode: () => string, id: () => string) =>
 
 export const useShelterStaff = (shelterCode: () => string) =>
 	createQuery(() => ({
-		queryKey: incidentKeys.staff(shelterCode()),
+		queryKey: shelterStaffKeys.list(shelterCode()),
 		queryFn: () => listShelterStaff(shelterCode()),
 		staleTime: 5 * 60_000
 	}));
