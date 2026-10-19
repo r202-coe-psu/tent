@@ -7,7 +7,8 @@
 # Steps (idempotent — safe to re-run; each one reports ✅/⚠️/❌ and the run continues):
 #   1 hardware check   2 apt packages   3 Python venv   4 .env hardware keys (never secrets)
 #   5 printer group lp   6 card reader udev (setup_card_reader.sh)   7 disable cups-browsed
-#   8 autostart (setup_autostart.sh)   9 no sleep / no screen blanking   10 summary
+#   8 autostart (setup_autostart.sh)   9 Chromium policy (setup_chromium_policy.sh)
+#   10 no sleep / no screen blanking   11 summary
 # Run as the kiosk user (NOT with sudo) — the script calls sudo itself where needed.
 #
 # Usage: ./setup_big_kiosk.sh [options]
@@ -77,7 +78,7 @@ while [ $# -gt 0 ]; do
     --skip-apt) SKIP_APT=true; shift ;;
     --skip-venv) SKIP_VENV=true; shift ;;
     --test-print) TEST_PRINT=true; shift ;;
-    -h | --help) sed -n '2,18p' "$0"; exit 0 ;;
+    -h | --help) sed -n '2,19p' "$0"; exit 0 ;;
     *) echo "ไม่รู้จัก option: $1 (ดู --help)" >&2; exit 1 ;;
     esac
 done
@@ -247,7 +248,15 @@ fi
     bad "ยังไม่ได้ตั้ง autostart (./setup_autostart.sh)"
 
 # ------------------------------------------------------------------------------
-section "9) ไม่ให้เครื่อง sleep / จอดับ"
+section "9) Chromium policy (ไม่ให้ bubble แปลภาษาเด้ง)"
+if $STATUS_ONLY; then
+    ./setup_chromium_policy.sh --status || warn "ยังไม่ได้ติดตั้ง Chromium policy (./setup_chromium_policy.sh)"
+else
+    ./setup_chromium_policy.sh || bad "setup_chromium_policy.sh ไม่สำเร็จ"
+fi
+
+# ------------------------------------------------------------------------------
+section "10) ไม่ให้เครื่อง sleep / จอดับ"
 SLEEP_TARGETS=(sleep.target suspend.target hibernate.target hybrid-sleep.target)
 if [ "$(systemctl is-enabled suspend.target 2>/dev/null)" = "masked" ]; then
     ok "ปิด sleep/suspend ของระบบแล้ว"

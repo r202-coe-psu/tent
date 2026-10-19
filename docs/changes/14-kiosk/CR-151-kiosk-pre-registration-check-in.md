@@ -4,7 +4,7 @@ title: Kiosk — เปลี่ยนจาก "เสียบบัตรเ�
 status: approved
 date: 2026-09-24
 created: 2026-09-24
-updated: 2026-10-17 # decision sync (#604): ฐาน local ขาด kiosk index → redeploy แล้ว + redeploy/seed deploy index ครบชุด · 2026-10-15 ทีม kiosk ขอเลิกกรอง registered_via ใน §15 (FR-KPC-101/104) · 2026-10-13 ข้อเสนอแก้ไข §15 approved โดย Dev/Team Lead Soravit Sukkarn (รับ requirement จากหัวหน้าโครงการเมื่อวาน 2026-10-12) · 2026-10-04 approved และ merge โดย Soravit Sukkar (Team Lead) + รันเลข CR-151 และลงทะเบียนใน _index.md
+updated: 2026-10-18 # ทีม kiosk เสนอ §16 (#654): แถว Zone + checklist บน QR label, `zones[].short_name`, reprint คืน `label.zone`/`stations_passed` — รอ PO เคาะ · 2026-10-17 decision sync (#604): ฐาน local ขาด kiosk index → redeploy แล้ว + redeploy/seed deploy index ครบชุด · 2026-10-15 ทีม kiosk ขอเลิกกรอง registered_via ใน §15 (FR-KPC-101/104) · 2026-10-13 ข้อเสนอแก้ไข §15 approved โดย Dev/Team Lead Soravit Sukkarn (รับ requirement จากหัวหน้าโครงการเมื่อวาน 2026-10-12) · 2026-10-04 approved และ merge โดย Soravit Sukkar (Team Lead) + รันเลข CR-151 และลงทะเบียนใน _index.md
 requested_by: ทีม kiosk (branch feat/pre-register_kiosk)
 decided_by: Soravit Sukkar (Team Lead)
 decision_date: 2026-10-04
@@ -26,6 +26,9 @@ affects:
   - frontend/src/lib/server/shelter-access-design.ts · shelters.admin.ts · features/shelters/server/provisioner.ts · scripts/redeploy-access.ts · scripts/seed/registry-shelters.ts
   - scanner_client/app/{manager,config,scard}.py · scanner_client/tests · scanner_client/README.md
   - (§15 proposed) frontend/src/lib/features/kiosk/server/{kiosk-check-in.server.ts,kiosk-reprint.server.ts} · domain/{check-in-status.ts,identity-method.ts} · application/{reprint-session.svelte.ts,kiosk-label-print.ts} · ui/{identity-method-selector,kiosk-reprint,reprint-member-list,phone-household-picker}.svelte
+  - (§16 proposed) docs/data/schema.md shelter master `zones[].short_name` · frontend/src/lib/features/shelters/{domain/schema.ts,ui/zones-facilities-section.svelte}
+  - (§16 proposed) frontend/src/lib/features/kiosk/{domain/print-label.ts,application/kiosk-label-image.ts,application/kiosk-label-print.ts,ui/kiosk-label-sheet.svelte,server/kiosk-reprint.server.ts,data/kiosk-check-in.api.ts} · frontend/src/lib/components/qr-id-card.svelte
+  - (§16 proposed) frontend/src/lib/features/people/domain/{people.ts,intake-pipeline.ts} · people/ui/evacuee-profile/evacuee-qr-modal.svelte · frontend/src/routes/kiosk/register/done/+page.svelte
   - (§15 proposed) frontend/src/routes/api/v1/kiosk/reprint/+server.ts · frontend/src/routes/kiosk/{reprint,phone}/** · frontend/src/lib/server/security/rate-limiter.ts · kiosk/app/manager.py (allowlist)
 why: >
   Kiosk แบบเดิม (CR-097) สร้าง evacuee จากบัตรโดยไม่มีครัวเรือนและไม่มีเบอร์ เจ้าหน้าที่ต้องกรอกซ้ำที่ Station 1
@@ -36,6 +39,8 @@ migration: ไม่มี — ไม่มี field ใหม่ ไม่ bump
 # CR-151: Kiosk รับรายงานตัวผู้ลงทะเบียนล่วงหน้า
 
 > **ข้อเสนอแก้ไข 2026-10-13 (proposed, ยังไม่ approve):** §15 ท้ายเอกสาร — หัวข้อหน้าแรก「ลงทะเบียน」· รับ walk-in `registered_via:'kiosk'` · ช่องทางเบอร์ → เมนู「พิมพ์ QR」ยืนยันเลขบัตร 4 ตัวท้าย · ระหว่างรอ PO ข้อความ §1–§14 ยังมีผล
+
+> **ข้อเสนอแก้ไข 2026-10-18 (#654, proposed, รอ PO เคาะ):** §16 ท้ายเอกสาร — QR label มีแถว Zone + checklist ติ๊กตาม station ที่ผ่าน · ตัดเบอร์โทร · shelter `zones[].short_name` · reprint คืน `label.zone` / `label.stations_passed`
 
 > **สรุป (TL;DR)**
 >
@@ -451,6 +456,7 @@ migration: ไม่มี — ไม่มี field ใหม่ ไม่ bump
 - 2026-10-13 — Soravit Sukkarn (Team Lead) approved ข้อเสนอแก้ไข §15 โดยรับ requirement จากหัวหน้าโครงการเมื่อวาน (2026-10-12)
 - 2026-10-15 — ทีม kiosk ขอเลิกกรอง `registered_via` (เดิม {`web`, `kiosk`}): lookup บัตร/QR/ThaiD/เบอร์, `/kiosk/check-in` และ `/kiosk/reprint` ค้นทั้งศูนย์ของเครื่อง · กฎสถานะคงเดิม (check-in = `pre_registered` · พิมพ์ซ้ำทางเบอร์ = `arriving`/`active`/`room_confirmed`) · สมาชิกที่เจ้าหน้าที่เพิ่มที่ Station 1 เลือกได้ตามสถานะ (แก้ FR-KPC-29, E-11, E-23) · Mango selector เบอร์ไม่มี `registered_via` แล้ว ยังใช้ `evacuee-type-phone-idx`
 - 2026-10-17 — **decision sync** (#604; ไม่เปิด CR ใหม่ ตามที่เจ้าของโครงการเลือก): (1) ผลตรวจ local 2026-09-25 (§4) ล้าสมัย — `shelter_sh001`–`sh004` ไม่มี index ใน `KIOSK_LOOKUP_MANGO_INDEXES` (รวม people / transfer-ledger / Daily SOP) เพราะไม่ได้รัน redeploy/seed หลัง merge #457 (2026-10-11); รัน `scripts/redeploy-access.ts --write --confirm` บน local แล้ว (ok 4/4) และ `_explain` ของ selector เลขบัตรเลือก `evacuee-type-person-id-idx` ทุกฐาน · (2) FR-KPC-64 เพิ่มเติม: provisioning ทุกจุดต้อง deploy ชุด index ของ shelter DB **เท่ากัน** — เดิม `redeploy-access.ts` ขาด people + transfer-ledger และ seed ขาด requisition + people + transfer-ledger; warm-up selector ใช้ map กลาง `KIOSK_LOOKUP_WARMUP_SELECTORS` (ครบทุก index รวม `evacuee-type-card-address-no-idx`) และมี test กันนิยาม index ชื่อซ้ำไม่ตรงกัน (branch `fix/604-shelter-mango-index`, commit `748ebe2d6`) · (3) staging/production: Jenkins รัน `pnpm db:sync` (รวม `redeploy:access --write --confirm`) ทุกครั้งที่ deploy branch `staging` / `main` อยู่แล้ว — ไม่ต้องรันเอง แต่ยังไม่ได้ตรวจ `_index` / `_explain` บน staging/production หลัง deploy · (4) FR-KPC-63 แก้เป็น 4 ตัวให้ตรงกับ CR-149 / #525 (เพิ่ม `evacuee-type-card-address-no-idx` บน `card_snapshot.address_no`; เดิมนับ 3 ตัว)
+- 2026-10-18 — ทีม kiosk เสนอ §16 (#654): แถว Zone + checklist บน QR label, ตัดเบอร์โทร, `zones[].short_name`, reprint คืน `label.zone`/`stations_passed` · รวม draft `draft-zone-short-name` เข้า CR นี้แทนการเปิด draft ใหม่ · proposed โดยทีม รอ PO เคาะ
 
 ## 15. ข้อเสนอแก้ไข 2026-10-13 (approved โดย Team Lead)
 
@@ -500,3 +506,64 @@ migration: ไม่มี — ไม่มี field ใหม่ ไม่ bump
 - ผู้จองล่วงหน้าที่ยังไม่รายงานตัวใช้เบอร์รายงานตัวไม่ได้แล้ว ต้องใช้ QR ใบจอง / บัตร / ThaiD
 
 ---
+
+## 16. ข้อเสนอแก้ไข 2026-10-18 — โซนและ checklist บน QR label (#654, รอ PO เคาะ)
+
+> **สถานะ:** proposed โดยทีม kiosk — Project Owner (รอเคาะ) · implement แล้วบน branch `feat/654-label-zone` · ที่มา: เอกสารหน้างาน หมวด 2 (issue #654) · รวม draft `draft-zone-short-name` เข้ามาในหัวข้อนี้แทนการเปิด draft CR ใหม่
+
+> **สรุป (TL;DR)**
+>
+> - **เปลี่ยนอะไร:** (1) QR label 80×60 มีแถว `Zone:` ใต้ชื่อ (2) checklist「เช็คอิน · คัดกรอง · ที่พัก」ติ๊กตามจำนวน station ที่ผ่าน (3) ตัดเบอร์โทรออกจาก label (4) shelter `zones[].short_name` (optional) ใช้พิมพ์บน label แทนชื่อเต็ม (5) `POST /api/v1/kiosk/reprint` คืน `label.zone` + `label.stations_passed`
+> - **เพื่อใคร/ทำไม:** เจ้าหน้าที่หน้างานเห็นโซนและ station ที่ผ่านแล้วจาก label · พิมพ์ครั้งแรกยังไม่มีโซน จึงเว้นช่องให้เขียนมือ · ชื่อโซนเต็มยาวเกินพื้นที่ label
+> - **Dev ต้อง build:** implement แล้ว — ต้องทดสอบพิมพ์จริงบน XP-365B (AC-KPC-114)
+> - **กระทบ schema:** `shelter.zones[].short_name` str\|null opt (`docs/data/schema.md` shelter master) — additive ไม่ backfill ไม่ bump `schema_v` (แนวเดียวกับ CR-163)
+
+**แก้ข้อเดิม:** FR-KPC-107 (รูปร่าง `label` ใน response reprint) · ไม่ขัดกับ CR-106 FR-04b (พิมพ์ซ้ำใช้ zone จาก profile ไม่สร้าง zone ที่ S1)
+
+### 16.1 เนื้อหา label
+
+| ID         | Requirement |
+| :--------- | :---------- |
+| FR-KPC-110 | label ทุกทางพิมพ์ (kiosk check-in · walk-in `/kiosk/register/done` · `/kiosk/reprint` · staff หน้า profile「QR」) ใช้ layout 80×60 เดียวกัน: ซ้าย = ชื่อ (≤3 บรรทัด) → แถว Zone → checklist → `shelter.psu.ac.th` มุมซ้ายล่าง · ขวา = QR · **ไม่พิมพ์เบอร์โทร** · staff พิมพ์จาก PNG เดียวกับ kiosk (preview = สิ่งที่พิมพ์) |
+| FR-KPC-111 | แถว Zone: มีโซน → `Zone: <ข้อความโซน>` (ยาวเกินแถว → ตัดด้วย `…`) · ไม่มีโซน → `Zone:` ตามด้วยเส้นจุดว่างให้เจ้าหน้าที่เขียนมือ |
+| FR-KPC-112 | ข้อความโซน = `zones[].short_name` ของโซนที่ `code` ตรงกับ `current_stay.zone` (ไม่สนตัวพิมพ์) → ไม่มีใช้ `name` → ไม่มีใช้ code ดิบ · `current_stay.zone` ว่าง → ไม่มีโซน |
+| FR-KPC-113 | checklist 3 ช่อง แถวละช่อง ติ๊กตาม `stations_passed`: **0** = ไม่มี stay หรือ `pre_registered`/`kiosk_registered`/`cancelled` · **3** = สถานะไม่ใช่ `arriving` และ (มีโซน หรือ `room_confirmed`/`temporary_leave`) — นับ 3 แม้ศูนย์ปิด medical screening · **2** = มี doc `type:'screening'` ของคนนั้น · **1** = อื่น ๆ (`arriving` ชนะโซนค้าง) |
+| FR-KPC-114 | พิมพ์ครั้งแรกที่ kiosk (check-in / walk-in) → ติ๊ก 1 ช่อง (เช็คอิน) และแถว Zone ว่าง |
+
+### 16.2 Reprint API
+
+| ID         | Requirement |
+| :--------- | :---------- |
+| FR-KPC-115 | (แก้ FR-KPC-107) `label` = `{ name, phone, zone, stations_passed }` · `zone` ตาม FR-KPC-112 (`null` ก่อน Station 3) · `stations_passed` 0–3 ตาม FR-KPC-113 · ยังไม่เขียน doc ใด ๆ |
+| FR-KPC-116 | อ่าน shelter registry เฉพาะเมื่อมีสมาชิกที่มีโซน · อ่านไม่ได้ → ใช้ code ดิบ (reprint ไม่ fail) · ค้น screening เฉพาะสมาชิกที่ยังไม่ถึง 3 ช่อง · ค้นไม่ได้ → ถือว่ายังไม่คัดกรอง (ติ๊กน้อยลง ไม่ fail) |
+
+### 16.3 ชื่อย่อโซน (`zones[].short_name`)
+
+| ID         | Requirement |
+| :--------- | :---------- |
+| FR-KPC-117 | shelter form แสดงช่อง「ชื่อย่อ」ต่อโซน ไม่บังคับ · สูงสุด 10 ตัวอักษร (input จำกัด + Zod `max(10)`) |
+| FR-KPC-118 | พิมพ์เว้นวรรคได้ระหว่างกรอก · trim หัว-ท้ายตอนบันทึก · ค่าว่างเก็บเป็น `null` · doc เดิมที่ไม่มี field เปิดแก้/บันทึกได้ตามปกติ |
+| FR-KPC-119 | staff-only — ยังไม่ส่งออก shelter import / worker projection / public / external API (worker ใช้แค่ `zones[].capacity`) |
+
+### 16.4 Acceptance
+
+- **AC-KPC-110** kiosk check-in / walk-in → label มี `Zone:` + เส้นจุด และติ๊กเช็คอิน 1 ช่อง
+- **AC-KPC-111** พิมพ์ซ้ำหลัง Station 3 จัดโซน → `Zone: <short_name หรือชื่อโซน>` และติ๊กครบ 3 ช่อง
+- **AC-KPC-112** คัดกรองแล้วยังไม่มีโซน → ติ๊ก 2 ช่อง, Zone ว่าง
+- **AC-KPC-113** ไม่มี label ใดพิมพ์เบอร์โทร
+- **AC-KPC-114** พิมพ์จริงบน XP-365B: ชื่อ 3 บรรทัด + แถว Zone + checklist ไม่ล้น/ไม่ถูกตัด (ยังต้องทดสอบ)
+- **AC-KPC-115** shelter form: ชื่อย่อเกิน 10 ตัวอักษรบันทึกไม่ได้ · เว้นว่างบันทึกได้
+
+### 16.5 Open questions (เสนอให้ PO เคาะ)
+
+1. `short_name` ต้อง unique ภายในศูนย์หรือไม่ — ทีมเสนอ: ยังไม่บังคับ (`code` เป็น id อยู่แล้ว)
+2. จำกัดอักขระ (เช่น A–Z/0–9) หรืออนุญาตภาษาไทย — ทีมเสนอ: อนุญาตทุกอักขระ
+3. ความยาวสูงสุด 10 เหมาะกับ label 80×60 หรือไม่
+4. ส่งออก `short_name` ใน shelter import / public projection หรือไม่ — ทีมเสนอ: ยังไม่ (staff-only)
+5. label ไม่มีเบอร์โทรแล้ว — ยืนยันว่าหน้างานไม่ต้องใช้เบอร์บน label
+
+### 16.6 Impact / Risks
+
+- ติ๊ก checklist คำนวณจากข้อมูล ณ ตอนพิมพ์ — label ที่พิมพ์ไปแล้วไม่อัปเดตเอง ต้องพิมพ์ซ้ำ
+- ช่อง「ชื่อย่อ」ที่กรอกแต่เว้นวรรคล้วน อาจถูกเก็บเป็น `""` แทน `null` (Zod trim หลัง form แปลงค่าว่างเป็น `null`) — label ถือว่าไม่มีชื่อย่อ จึงไม่กระทบการพิมพ์
+- reprint อ่าน registry + `_find` screening เพิ่ม (ทั้งคู่ fail-soft)

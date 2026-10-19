@@ -39,6 +39,7 @@
 		type KioskQrImage,
 		type KioskQrLabel
 	} from '../application/kiosk-label-print';
+	import { KIOSK_CHECK_IN_TICKS } from '../domain/print-label';
 	import { buildKioskPhotoPayload } from '../application/kiosk-card-photo';
 	import KioskBackButton from './kiosk-back-button.svelte';
 	import KioskWalkInOffer from './kiosk-walk-in-offer.svelte';
@@ -466,7 +467,7 @@
 			return {
 				qrSrc: qr.src,
 				name: labelName(result, person),
-				phone: result.label?.phone ?? null
+				checkedCount: KIOSK_CHECK_IN_TICKS
 			};
 		});
 	}
@@ -951,7 +952,7 @@
 						result,
 						lookup?.members.find((member) => member.evacuee_id === result.evacuee_id)
 					),
-					phone: result.label?.phone
+					checkedCount: KIOSK_CHECK_IN_TICKS
 				}))}
 			/>
 		{/if}

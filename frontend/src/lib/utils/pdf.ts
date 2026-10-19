@@ -126,13 +126,37 @@ export async function previewElementAsPdf(
 	title: string,
 	options: RenderPdfOptions & { previewWindow?: Window } = {}
 ): Promise<void> {
-	const doc = await renderElementToPdf(element, title, options);
+	openPdfPreview(await renderElementToPdf(element, title, options), options.previewWindow);
+}
+
+/**
+ * Opens an already-rendered image as a one-page PDF of exactly `widthMm`×`heightMm` — e.g. the
+ * kiosk's 80×60 mm label PNG, so a label printer gets the same page size as the kiosk.
+ */
+export function previewImageAsPdf(
+	pngDataUrl: string,
+	title: string,
+	options: { widthMm: number; heightMm: number; previewWindow?: Window }
+): void {
+	const { widthMm, heightMm } = options;
+	const doc = new jsPDF({
+		orientation: widthMm >= heightMm ? 'landscape' : 'portrait',
+		unit: 'mm',
+		format: [widthMm, heightMm]
+	});
+	doc.setProperties({ title });
+	doc.addImage(pngDataUrl, 'PNG', 0, 0, widthMm, heightMm);
+	openPdfPreview(doc, options.previewWindow);
+}
+
+/** Shows `doc` in `previewWindow` (opened during the click) or else a new tab. */
+function openPdfPreview(doc: jsPDF, previewWindow: Window | undefined): void {
 	const blobUrl = doc.output('bloburl');
-	if (options.previewWindow) {
-		if (options.previewWindow.closed) {
+	if (previewWindow) {
+		if (previewWindow.closed) {
 			throw new Error('หน้าต่างตัวอย่าง PDF ถูกปิด กรุณาลองใหม่อีกครั้ง');
 		}
-		options.previewWindow.location.href = blobUrl.toString();
+		previewWindow.location.href = blobUrl.toString();
 		return;
 	}
 

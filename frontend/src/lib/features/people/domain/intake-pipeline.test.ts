@@ -6,6 +6,7 @@ import {
 	classifyZoningQueueTab,
 	countPresentOccupantsByZone,
 	formatQueueWait,
+	intakeStationsPassed,
 	isInShelterStatus,
 	nextQueueLabel,
 	nextScreeningQueueEvacuee,
@@ -411,5 +412,38 @@ describe('resolvePreferredZone (CR-159)', () => {
 	it('does nothing when Station 1 left it empty', () => {
 		expect(resolvePreferredZone(null, zones, 'general')).toEqual({ kind: 'none' });
 		expect(resolvePreferredZone('  ', zones, 'general')).toEqual({ kind: 'none' });
+	});
+});
+
+describe('intakeStationsPassed', () => {
+	it('is 0 before reporting in', () => {
+		expect(intakeStationsPassed(undefined, false)).toBe(0);
+		expect(intakeStationsPassed({ status: 'pre_registered' }, false)).toBe(0);
+		expect(intakeStationsPassed({ status: 'kiosk_registered' }, false)).toBe(0);
+		expect(intakeStationsPassed({ status: 'cancelled' }, true)).toBe(0);
+	});
+
+	it('is 1 once reported in (เช็คอิน)', () => {
+		expect(intakeStationsPassed({ status: 'arriving', zone: null }, false)).toBe(1);
+	});
+
+	it('is 2 once medically screened (คัดกรอง)', () => {
+		expect(intakeStationsPassed({ status: 'arriving', zone: null }, true)).toBe(2);
+	});
+
+	it('ignores a stale zone while still arriving', () => {
+		expect(intakeStationsPassed({ status: 'arriving', zone: 'Z1' }, false)).toBe(1);
+	});
+
+	it('is 3 once given a zone (ที่พัก), screened or not', () => {
+		expect(intakeStationsPassed({ status: 'active', zone: 'Z1' }, false)).toBe(3);
+		expect(intakeStationsPassed({ status: 'active', zone: 'Z1' }, true)).toBe(3);
+		expect(intakeStationsPassed({ status: 'room_confirmed', zone: 'Z1' }, false)).toBe(3);
+		expect(intakeStationsPassed({ status: 'temporary_leave', zone: null }, false)).toBe(3);
+	});
+
+	it('does not count an active stay without a zone as lodged', () => {
+		expect(intakeStationsPassed({ status: 'active', zone: null }, false)).toBe(1);
+		expect(intakeStationsPassed({ status: 'active', zone: '' }, true)).toBe(2);
 	});
 });

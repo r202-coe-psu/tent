@@ -6,7 +6,15 @@ from unittest.mock import AsyncMock
 
 import bson
 import pytest
-from tent_model import DonationBuffer, DonationNeedCounter, DonorBuffer, seed_counter
+from tent_model import (
+    DonationBuffer,
+    DonationNeedCounter,
+    DonorBuffer,
+    ReserveResult,
+    reserve_quota,
+    seed_counter,
+    set_on_hand_qty,
+)
 
 from worker.quota.reconcile import (
     ShelterReconcileReport,
@@ -102,6 +110,89 @@ def test_skips_unusable_qty():
         },
     ]
     assert sum_reserved_by_key(donations) == {RICE: Decimal(2)}
+
+
+def _ledger(
+    ref_id: str, qty: str, item_id: str = "item:rice", reason: str = "donation"
+):
+    return {
+        "_id": f"stock_ledger:{ref_id}:{item_id}:{qty}",
+        "type": "stock_ledger",
+        "reason": reason,
+        "ref_id": ref_id,
+        "item_id": item_id,
+        "qty": qty,
+    }
+
+
+def test_received_and_shelved_donation_no_longer_holds_quota():
+    """Goods in the ledger sit in on_hand_qty — counting them here too took them off
+    the ceiling twice (board showed 89 open, a booking of 89 came back NEED_FULL)."""
+    donations = [
+        {
+            "_id": "donation:1",
+            "campaign_id": CAMPAIGN,
+            "status": "received",
+            "items": [{"item_id": "item:rice", "qty": "11"}],
+        },
+        {
+            "_id": "donation:2",
+            "campaign_id": CAMPAIGN,
+            "status": "declared",
+            "items": [{"item_id": "item:rice", "qty": "5"}],
+        },
+    ]
+    ledgers = [_ledger("donation:1", "11")]
+    assert sum_reserved_by_key(donations, stock_ledgers=ledgers) == {RICE: Decimal(5)}
+
+
+def test_received_donation_not_yet_shelved_still_holds_quota():
+    donations = [
+        {
+            "_id": "donation:1",
+            "campaign_id": CAMPAIGN,
+            "status": "received",
+            "items": [{"item_id": "item:rice", "qty": "11"}],
+        },
+    ]
+    ledgers = [_ledger("donation:other", "11")]
+    assert sum_reserved_by_key(donations, stock_ledgers=ledgers) == {RICE: Decimal(11)}
+
+
+def test_interrupted_batch_receipt_holds_only_what_is_still_owed():
+    """CR-143 FR-B7: an outstanding donation with some rows keyed owes the rest."""
+    donations = [
+        {
+            "_id": "donation:1",
+            "campaign_id": CAMPAIGN,
+            "status": "declared",
+            "items": [
+                {"item_id": "item:rice", "qty": "10"},
+                {"item_id": "item:water", "qty": "6"},
+            ],
+        },
+    ]
+    ledgers = [
+        _ledger("donation:1", "4"),
+        _ledger("donation:1", "6", item_id="item:water"),
+    ]
+    assert sum_reserved_by_key(donations, stock_ledgers=ledgers) == {RICE: Decimal(6)}
+
+
+def test_non_donation_and_issue_rows_do_not_count_as_recorded():
+    donations = [
+        {
+            "_id": "donation:1",
+            "campaign_id": CAMPAIGN,
+            "status": "declared",
+            "items": [{"item_id": "item:rice", "qty": "10"}],
+        },
+    ]
+    ledgers = [
+        _ledger("donation:1", "3", reason="receive"),
+        _ledger("donation:1", "-2"),
+    ]
+    assert sum_reserved_by_key(donations, stock_ledgers=ledgers) == {RICE: Decimal(10)}
 
 
 # --- reconcile against Mongo ---
@@ -302,6 +393,40 @@ async def test_synced_buffer_and_couch_doc_are_not_double_counted(db: None) -> N
     await reconcile_shelter(couch, SHELTER, now=now, apply=True)
 
     assert await _reserved() == Decimal(6)
+
+
+async def test_booking_reserved_while_the_truth_set_is_read_is_not_erased(
+    db: None,
+) -> None:
+    """FastAPI reserves the counter first and inserts the buffer after. A booking that
+    lands while the shelter is being scanned is in the counter but not in the truth set;
+    reading the counters last let set_reserved_qty erase it. Now that reconcile runs on
+    every stock ledger change, the counters are read first so the filter catches it."""
+    await _seed()
+    collection = DonationNeedCounter.get_pymongo_collection()
+
+    async def iter_all_docs(_database):
+        yield {
+            "_id": "donation:1",
+            "type": "donation",
+            "campaign_id": CAMPAIGN,
+            "status": "declared",
+            "items": [{"item_id": "item:rice", "qty": "5"}],
+        }
+        # Mid-scan: a public booking takes 2 and has not written its buffer yet.
+        await collection.update_one(
+            {"shelter_code": SHELTER},
+            {"$inc": {"reserved_qty": bson.Decimal128("2")}},
+        )
+
+    couch = AsyncMock()
+    couch.database_exists = AsyncMock(return_value=True)
+    couch.iter_all_docs = iter_all_docs
+
+    report = await reconcile_shelter(couch, SHELTER, now=datetime.now(UTC), apply=True)
+
+    assert report.conflicts == [RICE]
+    assert await _reserved() == Decimal(2)
 
 
 async def test_concurrent_booking_is_reported_as_conflict_not_overwritten(
@@ -539,3 +664,46 @@ async def test_targets_is_idempotent(db: None) -> None:
 
     assert second.target_changes == []
     assert await _target() == Decimal(9989)
+
+
+async def test_shelved_goods_leave_the_whole_remainder_bookable(db: None) -> None:
+    """End to end on the counter: target 100, 11 received and keyed → 89 bookable."""
+    await _seed("100")
+    couch = _couch_stub(
+        [
+            {
+                "_id": "donation:1",
+                "type": "donation",
+                "campaign_id": CAMPAIGN,
+                "status": "received",
+                "items": [{"item_id": "item:rice", "qty": "11"}],
+            },
+            _ledger("donation:1", "11"),
+        ]
+    )
+    now = datetime.now(UTC)
+    # The state the bug left behind: the booking still reserved, and on the shelf.
+    await DonationNeedCounter.get_pymongo_collection().update_one(
+        {"shelter_code": SHELTER}, {"$set": {"reserved_qty": bson.Decimal128("11")}}
+    )
+    await set_on_hand_qty(
+        shelter_code=SHELTER, item_id="item:rice", qty=Decimal(11), now=now
+    )
+
+    async def book(qty: str) -> ReserveResult:
+        return await reserve_quota(
+            shelter_code=SHELTER,
+            campaign_id=CAMPAIGN,
+            item_id="item:rice",
+            qty=Decimal(qty),
+            now=now,
+        )
+
+    assert await book("89") is ReserveResult.NEED_FULL
+
+    report = await reconcile_shelter(couch, SHELTER, now=now, apply=True)
+
+    assert report.counters_changed == 1
+    assert await _reserved() == Decimal(0)
+    assert await book("90") is ReserveResult.NEED_FULL
+    assert await book("89") is ReserveResult.RESERVED
