@@ -7,7 +7,7 @@
 </script>
 
 <svelte:head>
-	<title>ประกาศภารกิจงานอาสาใหม่ · SmartShelter</title>
+	<title>ประกาศงานอาสาสมัครใหม่ · SmartShelter</title>
 </svelte:head>
 
 <JobFormPage />

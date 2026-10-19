@@ -90,10 +90,12 @@
 	const renderedSkills = $derived.by(() => {
 		if (!ticket?.skills || !Array.isArray(ticket.skills)) return [];
 		const masterList = skillsQuery.data ?? [];
-		return skillLabels(ticket.skills, masterList).map(({ value, label }) => ({
-			code: value,
-			name: label
-		}));
+		return skillLabels(ticket.skills, masterList, languageStore.current).map(
+			({ value, label }) => ({
+				code: value,
+				name: label
+			})
+		);
 	});
 
 	async function copyLink() {

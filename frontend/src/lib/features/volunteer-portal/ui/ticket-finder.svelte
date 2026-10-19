@@ -10,6 +10,10 @@
 	import { useFindTicketsMutation } from '../application/queries';
 	import { resolvePortalAccess } from '../data/volunteer-api';
 	import { ticketFindSchema, ticketStatusLabel, PORTAL_SESSION_KEY } from '../domain/volunteer';
+	import { ticketI18n } from '../i18n/ticket.i18n';
+	import { languageStore } from '$lib/stores/language.svelte';
+
+	const t = $derived(ticketI18n[languageStore.current]);
 
 	let phone = $state('');
 	let error = $state('');
@@ -24,14 +28,14 @@
 		error = '';
 		const parsed = ticketFindSchema.safeParse({ phone });
 		if (!parsed.success) {
-			error = parsed.error.issues[0]?.message ?? 'เบอร์โทรศัพท์ไม่ถูกต้อง';
+			error = t.finderInvalidPhone;
 			return;
 		}
 		try {
 			await find.mutateAsync(parsed.data.phone);
 			searched = true;
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'ค้นหาตั๋วไม่สำเร็จ';
+			error = err instanceof Error ? err.message : t.finderSearchFailed;
 		}
 	}
 
@@ -41,7 +45,7 @@
 		try {
 			const profile = await resolvePortalAccess({ phone });
 			if (!profile?.portal_id) {
-				error = 'ไม่พบเบอร์โทรศัพท์นี้ในระบบอาสาสมัคร กรุณาตรวจสอบเบอร์ที่ใช้สมัครอีกครั้ง';
+				error = t.finderPhoneNotFound;
 				return;
 			}
 			try {
@@ -55,7 +59,7 @@
 			}
 			await goto(resolve('/volunteers/portal'));
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'ไม่สามารถเข้าสู่ระบบได้';
+			error = err instanceof Error ? err.message : t.finderSignInFailed;
 		} finally {
 			isEnteringPortal = false;
 		}
@@ -67,9 +71,9 @@
 		<Input
 			bind:value={phone}
 			inputmode="tel"
-			placeholder="กรอกเบอร์โทรศัพท์ที่ใช้สมัคร"
+			placeholder={t.finderPhonePlaceholder}
 			class="min-h-11 flex-1"
-			aria-label="เบอร์โทรศัพท์"
+			aria-label={t.finderPhoneLabel}
 		/>
 		<Button type="submit" disabled={find.isPending} class="min-h-11 w-full sm:w-auto">
 			{#if find.isPending}
@@ -77,7 +81,7 @@
 			{:else}
 				<Search class="size-4" aria-hidden="true" />
 			{/if}
-			<span class="ml-2">ค้นหา</span>
+			<span class="ml-2">{t.finderSearch}</span>
 		</Button>
 	</form>
 
@@ -88,7 +92,7 @@
 	{#if searched && tickets.length === 0}
 		<Card.Root>
 			<Card.Content class="py-8 text-center text-sm text-muted-foreground">
-				ไม่พบตั๋วสำหรับเบอร์นี้ หากเพิ่งสมัคร กรุณาเปิดจากลิงก์ตั๋วที่ได้รับ
+				{t.finderNoTickets}
 			</Card.Content>
 		</Card.Root>
 	{/if}
@@ -98,10 +102,10 @@
 			<Card.Header>
 				<div class="flex items-start justify-between gap-2">
 					<Card.Title class="min-w-0 text-base break-words"
-						>{ticket.job_title || 'งานอาสาสมัคร'}</Card.Title
+						>{ticket.job_title || t.defaultJobTitle}</Card.Title
 					>
 					<Badge class="shrink-0" variant={ticket.status === 'confirmed' ? 'default' : 'secondary'}>
-						{ticketStatusLabel(ticket.status)}
+						{ticketStatusLabel(ticket.status, languageStore.current)}
 					</Badge>
 				</div>
 				<Card.Description>
@@ -118,7 +122,7 @@
 					{#if isEnteringPortal}
 						<Loader2 class="size-4 animate-spin" aria-hidden="true" />
 					{/if}
-					เข้าสู่ตารางงานจิตอาสา
+					{t.finderOpenPortal}
 				</Button>
 				<!--
 					Reached by phone number, so this signs in read-only. Cancelling needs the
@@ -126,7 +130,7 @@
 					guessable and a withdrawn shift cannot be taken back.
 				-->
 				<p class="text-xs text-muted-foreground">
-					เปิดจากการค้นด้วยเบอร์โทร — ดูได้อย่างเดียว หากต้องการยกเลิก ใช้ลิงก์ตั๋วที่ได้รับตอนสมัคร
+					{t.finderReadOnlyNote}
 				</p>
 			</Card.Footer>
 		</Card.Root>

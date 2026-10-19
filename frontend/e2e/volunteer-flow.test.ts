@@ -667,12 +667,12 @@ test.describe('Volunteer end-to-end operational flow', () => {
 			await page.goto(`${BASE}/back-office/volunteers`);
 			await expect(page.getByText('Smart Volunteer Control Hub')).toBeVisible();
 
-			await page.getByRole('button', { name: 'ประกาศภารกิจงานอาสาใหม่', exact: true }).click();
+			await page.getByRole('button', { name: 'ประกาศงานอาสาสมัครใหม่', exact: true }).click();
 			// Create is its own page, not a modal (#639).
 			await expect(page).toHaveURL(/\/back-office\/volunteers\/jobs\/new$/);
-			await expect(page.getByLabel(/หัวข้อภารกิจอาสา/)).toBeVisible();
+			await expect(page.getByLabel(/หัวข้องานอาสาสมัคร/)).toBeVisible();
 
-			await page.getByLabel(/หัวข้อภารกิจอาสา/).fill(JOB_TITLE);
+			await page.getByLabel(/หัวข้องานอาสาสมัคร/).fill(JOB_TITLE);
 			await page.getByLabel(/รายละเอียดงาน/).fill('แจกจ่ายอาหารกลางวันให้ผู้พักพิงที่จุดครัวกลาง');
 			await page.getByRole('button', { name: 'เปิดรับ' }).click();
 			await page
@@ -750,7 +750,7 @@ test.describe('Volunteer end-to-end operational flow', () => {
 
 			await page.reload();
 			await expect(page).toHaveURL(/\/edit$/);
-			await expect(page.getByLabel(/หัวข้อภารกิจอาสา/)).toHaveValue(JOB_TITLE);
+			await expect(page.getByLabel(/หัวข้องานอาสาสมัคร/)).toHaveValue(JOB_TITLE);
 
 			// Batch Generator flags weekdays the picked range does not contain, before Generate.
 			await page.getByRole('button', { name: 'สร้างกะเป็นช่วงวัน', exact: true }).click();
@@ -972,14 +972,14 @@ test.describe('Volunteer end-to-end operational flow', () => {
 
 		await test.step('cancel with nothing typed goes back without a warning (#639)', async () => {
 			await page.goto(`${BASE}/back-office/volunteers`);
-			await page.getByRole('button', { name: 'ประกาศภารกิจงานอาสาใหม่', exact: true }).click();
+			await page.getByRole('button', { name: 'ประกาศงานอาสาสมัครใหม่', exact: true }).click();
 			await expect(page).toHaveURL(/\/jobs\/new$/);
 			await page.getByRole('button', { name: 'ยกเลิก', exact: true }).click();
 			await expect(page).toHaveURL(board);
 
 			// Opened directly, there is no previous page — cancel lands on the board.
 			await page.goto(`${BASE}/back-office/volunteers/jobs/new`);
-			await expect(page.getByLabel(/หัวข้อภารกิจอาสา/)).toBeVisible();
+			await expect(page.getByLabel(/หัวข้องานอาสาสมัคร/)).toBeVisible();
 			await page.getByRole('button', { name: 'ยกเลิก', exact: true }).click();
 			await expect(page).toHaveURL(board);
 			expect(leaveWarnings).toEqual([]);
@@ -990,7 +990,7 @@ test.describe('Volunteer end-to-end operational flow', () => {
 			await expect(page).toHaveURL(
 				`${BASE}/back-office/volunteers/jobs/${encodeURIComponent(SECOND_JOB._id)}/edit`
 			);
-			await expect(page.getByLabel(/หัวข้อภารกิจอาสา/)).toHaveValue(SECOND_JOB.title);
+			await expect(page.getByLabel(/หัวข้องานอาสาสมัคร/)).toHaveValue(SECOND_JOB.title);
 		});
 
 		await test.step('detail page generator: add, flag a duplicate, remove, save (#624)', async () => {

@@ -334,7 +334,7 @@
 	const scheduleQuery = useVolunteerSchedule(() => session);
 	const ticketsQuery = useVolunteerTickets(() => session);
 	/**
-	 * Only for the count on the "ภารกิจที่เปิดรับ" tab button. The board itself fetches
+	 * Only for the count on the "งานอาสาสมัครที่เปิดรับ" tab button. The board itself fetches
 	 * with the same key, so this costs no extra request — and the badge counts jobs that
 	 * can actually be applied to, not, as it once did, the volunteer's own tickets.
 	 */
@@ -441,7 +441,7 @@
 		{ value: 'assigned', label: 'รอ Check-in' },
 		{ value: 'standby', label: 'รอ Check-in (สำรอง)' },
 		{ value: 'checked_in', label: 'กำลังปฏิบัติงาน' },
-		{ value: 'completed', label: 'เสร็จสิ้นภารกิจ' },
+		{ value: 'completed', label: 'เสร็จสิ้นงานอาสาสมัคร' },
 		{ value: 'no_show', label: 'ไม่มาปฏิบัติงาน' }
 	] as const;
 
@@ -472,8 +472,8 @@
 					assigned: 'รอ Check-in',
 					standby: 'รอ Check-in',
 					checked_in: 'กำลังปฏิบัติงาน',
-					completed: 'เสร็จสิ้นภารกิจแล้ว',
-					done: 'เสร็จสิ้นภารกิจแล้ว',
+					completed: 'เสร็จสิ้นงานอาสาสมัครแล้ว',
+					done: 'เสร็จสิ้นงานอาสาสมัครแล้ว',
 					no_show: 'ไม่มาปฏิบัติงาน',
 					cancelled: 'ถอนกะแล้ว'
 				} as Record<string, string>
@@ -716,10 +716,10 @@
 		answering = assignmentId;
 		try {
 			await respond.mutateAsync({ assignment_id: assignmentId, code: parsed.data, action });
-			toast.success(action === 'accepted' ? 'ยอมรับภารกิจแล้ว' : 'ปฏิเสธภารกิจแล้ว');
+			toast.success(action === 'accepted' ? 'ยอมรับงานอาสาสมัครแล้ว' : 'ปฏิเสธงานอาสาสมัครแล้ว');
 			dispatchCodes[assignmentId] = '';
 		} catch (err) {
-			const message = err instanceof Error ? err.message : 'ตอบรับภารกิจไม่สำเร็จ';
+			const message = err instanceof Error ? err.message : 'ตอบรับงานอาสาสมัครไม่สำเร็จ';
 			dispatchErrors[assignmentId] = message;
 			toast.error(message);
 		} finally {
@@ -1080,7 +1080,9 @@
 				<div class="space-y-4 lg:col-span-2">
 					<div class="flex items-center justify-between pt-2">
 						<div>
-							<h3 class="text-sm font-bold text-foreground md:text-base">รายการภารกิจของฉัน</h3>
+							<h3 class="text-sm font-bold text-foreground md:text-base">
+								รายการงานอาสาสมัครของฉัน
+							</h3>
 							<p class="mt-1 text-2xs text-muted-foreground">เรียงจากวันที่ใกล้ที่สุดก่อน</p>
 						</div>
 						<span class="rounded-full bg-primary/10 px-2.5 py-1 text-2xs font-bold text-primary">
@@ -1090,7 +1092,7 @@
 
 					<div class="rounded-2xl border border-border bg-card p-4 shadow-sm">
 						<div class="mb-3 flex items-center gap-2 text-xs font-bold text-foreground">
-							<Filter class="size-4 text-primary" /> ตัวกรองภารกิจ
+							<Filter class="size-4 text-primary" /> ตัวกรองงานอาสาสมัคร
 						</div>
 						<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
 							<label class="space-y-1 text-2xs font-semibold text-muted-foreground">
@@ -1175,7 +1177,7 @@
 							class="rounded-3xl border border-dashed border-border bg-card p-10 text-center text-muted-foreground"
 						>
 							<ClipboardList class="mx-auto mb-3 size-10 text-muted-foreground/60" />
-							<p class="text-sm font-bold text-foreground">ตอนนี้ยังไม่มีภารกิจ</p>
+							<p class="text-sm font-bold text-foreground">ตอนนี้ยังไม่มีงานอาสาสมัคร</p>
 							<p class="mt-1 text-xs">เมื่อมีการจองหรือได้รับมอบหมาย งานจะปรากฏรวมกันที่นี่</p>
 							<button
 								type="button"
@@ -1190,7 +1192,7 @@
 							class="rounded-3xl border border-dashed border-border bg-card p-10 text-center text-muted-foreground"
 						>
 							<Filter class="mx-auto mb-3 size-10 text-muted-foreground/60" />
-							<p class="text-sm font-bold text-foreground">ไม่พบภารกิจตามตัวกรอง</p>
+							<p class="text-sm font-bold text-foreground">ไม่พบงานอาสาสมัครตามตัวกรอง</p>
 							<p class="mt-1 text-xs">ลองขยายช่วงวันที่หรือเวลา แล้วค้นหาใหม่</p>
 						</div>
 					{:else}
@@ -1268,13 +1270,13 @@
 												class="w-full space-y-2 rounded-xl border border-warning-border/50 bg-warning/5 p-3 md:w-64"
 											>
 												<p class="text-2xs leading-relaxed font-bold text-warning-foreground">
-													ศูนย์เสนอมอบหมายภารกิจนี้ให้คุณ — กรอกรหัสที่เจ้าหน้าที่แจ้ง
+													ศูนย์เสนอมอบหมายงานอาสาสมัครนี้ให้คุณ — กรอกรหัสที่เจ้าหน้าที่แจ้ง
 												</p>
 												<input
 													type="text"
 													bind:value={dispatchCodes[activity.assignmentId]}
 													placeholder="เช่น 4K7-2M9"
-													aria-label="รหัสยืนยันภารกิจ"
+													aria-label="รหัสยืนยันงานอาสาสมัคร"
 													autocomplete="off"
 													maxlength={10}
 													class="w-full rounded-lg border border-border bg-card px-3 py-2 text-xs text-foreground uppercase outline-hidden focus:border-primary focus:ring-1 focus:ring-primary"
@@ -1292,7 +1294,7 @@
 														class="flex flex-1 cursor-pointer items-center justify-center gap-1 rounded-lg bg-primary px-3 py-2 text-2xs font-bold text-primary-foreground shadow-sm hover:opacity-95 disabled:opacity-60"
 													>
 														<Check class="size-3.5" />
-														ยอมรับภารกิจ
+														ยอมรับงานอาสาสมัคร
 													</button>
 													<button
 														type="button"
@@ -1301,7 +1303,7 @@
 														class="flex flex-1 cursor-pointer items-center justify-center gap-1 rounded-lg border border-border px-3 py-2 text-2xs font-bold text-muted-foreground transition-colors hover:border-destructive hover:text-destructive disabled:opacity-60"
 													>
 														<X class="size-3.5" />
-														ปฏิเสธภารกิจ
+														ปฏิเสธงานอาสาสมัคร
 													</button>
 												</div>
 											</div>

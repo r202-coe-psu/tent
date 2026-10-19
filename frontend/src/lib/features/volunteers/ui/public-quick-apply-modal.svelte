@@ -417,7 +417,7 @@
 			'token' in applicantCredential &&
 			!formData.phone.trim()
 		) {
-			showSubmitError('กรุณากรอกเบอร์โทรศัพท์ที่ใช้สมัครเดิมเพื่อสมัครภารกิจจาก portal');
+			showSubmitError('กรุณากรอกเบอร์โทรศัพท์ที่ใช้สมัครเดิมเพื่อสมัครงานอาสาสมัครจาก portal');
 			return;
 		}
 		errorMessage = null;
@@ -616,7 +616,7 @@
 						>
 							<p class="font-bold">คุณเข้าสู่ระบบด้วย QR Code ตั๋วอาสาสมัคร</p>
 							<p class="mt-1 leading-relaxed">
-								เพื่อสมัครภารกิจใหม่ กรุณากรอกเบอร์โทรศัพท์ที่ใช้สมัครเดิม
+								เพื่อสมัครงานอาสาสมัครใหม่ กรุณากรอกเบอร์โทรศัพท์ที่ใช้สมัครเดิม
 								ระบบจะใช้เบอร์นี้เชื่อมใบสมัครกับโปรไฟล์ Volunteer ของคุณ
 							</p>
 							<label for="portalApplyPhone" class="mt-3 block font-bold">
@@ -862,7 +862,8 @@
 											</span>
 										</div>
 										<p class="mt-1 text-sm font-black text-primary">
-											{activeShift.time || `${activeShift.start_time} - ${activeShift.end_time} น.`}
+											{activeShift.time ||
+												`${activeShift.start_time} - ${activeShift.end_time}`}{t.timeSuffix}
 										</p>
 										<p class="mt-2 text-2xs text-muted-foreground">
 											{t.applyQuotaLabel}: {activeShift.quota}
@@ -928,7 +929,7 @@
 											{:else if isControlled}
 												<ShieldAlert class="h-3.5 w-3.5 text-warning-foreground" />
 											{:else}
-												<Sparkles class="h-3.5 w-3.5 text-success" />
+												<Sparkles class="h-3.5 w-3.5 text-domain-volunteer" />
 											{/if}
 
 											<span>{localizedSkillLabel(skill, languageStore.current)}</span>

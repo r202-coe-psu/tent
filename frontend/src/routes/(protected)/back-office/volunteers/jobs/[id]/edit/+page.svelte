@@ -9,7 +9,7 @@
 </script>
 
 <svelte:head>
-	<title>แก้ไขภารกิจงานอาสา · SmartShelter</title>
+	<title>แก้ไขงานอาสาสมัคร · SmartShelter</title>
 </svelte:head>
 
 <JobFormPage jobId={data.id} />

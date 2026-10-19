@@ -101,7 +101,7 @@
 		<JobFilterChips bind:status={statusFilter} bind:excludeClosed bind:urgentOnly />
 		<Button onclick={openCreate} class="gap-1.5">
 			<Plus class="h-4 w-4" />
-			ประกาศภารกิจงานอาสาใหม่
+			ประกาศงานอาสาสมัครใหม่
 		</Button>
 	</div>
 
@@ -129,7 +129,7 @@
 			</p>
 			{#if jobs.length === 0}
 				<Button variant="outline" size="sm" onclick={openCreate} class="mt-1">
-					ประกาศภารกิจงานอาสาแรก
+					ประกาศงานอาสาสมัครแรก
 				</Button>
 			{/if}
 		</div>

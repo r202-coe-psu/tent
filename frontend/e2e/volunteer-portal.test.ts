@@ -793,8 +793,8 @@ test.describe('Answering an offered shift (CR-092 FR-VOL-06)', () => {
 		await openPortalTab(page);
 		await signIn(page, PHONE);
 
-		await page.getByLabel('รหัสยืนยันภารกิจ').fill(CODE);
-		await page.getByRole('button', { name: /ยอมรับภารกิจ/ }).click();
+		await page.getByLabel('รหัสยืนยันงานอาสาสมัคร').fill(CODE);
+		await page.getByRole('button', { name: /ยอมรับงานอาสาสมัคร/ }).click();
 
 		await expect.poll(() => sent).not.toBeNull();
 		expect(sent).toMatchObject({
@@ -818,8 +818,8 @@ test.describe('Answering an offered shift (CR-092 FR-VOL-06)', () => {
 		await openPortalTab(page);
 		await signIn(page, PHONE);
 
-		await page.getByLabel('รหัสยืนยันภารกิจ').fill(CODE);
-		await page.getByRole('button', { name: /ปฏิเสธภารกิจ/ }).click();
+		await page.getByLabel('รหัสยืนยันงานอาสาสมัคร').fill(CODE);
+		await page.getByRole('button', { name: /ปฏิเสธงานอาสาสมัคร/ }).click();
 
 		await expect.poll(() => sent).not.toBeNull();
 		expect(sent).toMatchObject({ action: 'declined' });
@@ -836,8 +836,8 @@ test.describe('Answering an offered shift (CR-092 FR-VOL-06)', () => {
 		await signIn(page, PHONE);
 
 		// `O` is not in the spoken alphabet — it is what someone hears instead of a zero.
-		await page.getByLabel('รหัสยืนยันภารกิจ').fill('SEED-O9');
-		await page.getByRole('button', { name: /ยอมรับภารกิจ/ }).click();
+		await page.getByLabel('รหัสยืนยันงานอาสาสมัคร').fill('SEED-O9');
+		await page.getByRole('button', { name: /ยอมรับงานอาสาสมัคร/ }).click();
 
 		await expect(page.getByText('รหัสไม่ถูกต้อง')).toBeVisible();
 		expect(called, 'a malformed code must not reach the server').toBe(false);
@@ -851,11 +851,11 @@ test.describe('Answering an offered shift (CR-092 FR-VOL-06)', () => {
 		await openPortalTab(page);
 		await signIn(page, PHONE);
 
-		await page.getByLabel('รหัสยืนยันภารกิจ').fill(CODE);
-		await page.getByRole('button', { name: /ยอมรับภารกิจ/ }).click();
+		await page.getByLabel('รหัสยืนยันงานอาสาสมัคร').fill(CODE);
+		await page.getByRole('button', { name: /ยอมรับงานอาสาสมัคร/ }).click();
 
 		// Scoped to the card's own message — the same copy also goes out as a toast.
-		await expect(page.getByRole('alert')).toContainText('ไม่พบภารกิจนี้ หรือรหัสไม่ถูกต้อง');
+		await expect(page.getByRole('alert')).toContainText('ไม่พบงานอาสาสมัครนี้ หรือรหัสไม่ถูกต้อง');
 	});
 
 	test('only the offered shift asks for a code', async ({ page }) => {
@@ -864,7 +864,7 @@ test.describe('Answering an offered shift (CR-092 FR-VOL-06)', () => {
 		await signIn(page, PHONE);
 
 		// Three shifts on screen; only the `dispatched` one is awaiting an answer.
-		await expect(page.getByLabel('รหัสยืนยันภารกิจ')).toHaveCount(1);
-		await expect(page.getByText(/ศูนย์เสนอมอบหมายภารกิจนี้ให้คุณ/)).toHaveCount(1);
+		await expect(page.getByLabel('รหัสยืนยันงานอาสาสมัคร')).toHaveCount(1);
+		await expect(page.getByText(/ศูนย์เสนอมอบหมายงานอาสาสมัครนี้ให้คุณ/)).toHaveCount(1);
 	});
 });

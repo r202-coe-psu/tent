@@ -169,7 +169,7 @@ export function mergePortalActivities(
 			jobId: ticket.job_id,
 			shiftId: ticket.shift_id ?? null,
 			assignmentId: null,
-			title: ticket.job_title || 'ภารกิจอาสาสมัคร',
+			title: ticket.job_title || 'งานอาสาสมัคร',
 			description: 'การสมัครของคุณอยู่ระหว่างรอเจ้าหน้าที่จัดกะให้',
 			location: ticket.shelter_code,
 			shelterCode: ticket.shelter_code,

@@ -1,6 +1,6 @@
 <script lang="ts">
 	/**
-	 * Job create/edit form — "ประกาศภารกิจงานอาสาใหม่"
+	 * Job create/edit form — "ประกาศงานอาสาสมัครใหม่"
 	 * (CR-094 FR-VOL-09.1/09.5, 01-tab-job-board.md §01.4). Rendered on its own
 	 * page (`job-create-page.svelte` / `job-edit-page.svelte`, #639) rather than in
 	 * a modal: the form is long, and a stray click outside a modal lost the input.
@@ -332,7 +332,7 @@
 		<Form.Field {form} name="title">
 			<Form.Control>
 				{#snippet children({ props })}
-					<Form.Label>หัวข้อภารกิจอาสา <span class="text-destructive">*</span></Form.Label>
+					<Form.Label>หัวข้องานอาสาสมัคร <span class="text-destructive">*</span></Form.Label>
 					<Input
 						{...props}
 						bind:value={$formData.title}
@@ -362,7 +362,7 @@
 		</Form.Field>
 
 		<div class="space-y-2">
-			<span class="text-sm font-medium">ความด่วนของภารกิจ / URGENCY</span>
+			<span class="text-sm font-medium">ความด่วนของงานอาสาสมัคร / URGENCY</span>
 			<div class="grid grid-cols-2 gap-2">
 				<Button
 					type="button"

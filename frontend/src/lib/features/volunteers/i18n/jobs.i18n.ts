@@ -17,6 +17,10 @@ export interface JobsTranslations {
 	filterNearFull: string;
 	filterControlled: string;
 	skillsLabel: string;
+	/** Heading above a job card's required skills. */
+	cardSkillsTitle: string;
+	/** Appended to a shift's `HH:MM - HH:MM` range (Thai " น.", nothing in English). */
+	timeSuffix: string;
 	clearFilter: string;
 	shelterLabel: string;
 	allShelters: string;
@@ -135,20 +139,22 @@ export const jobsI18n: Record<LanguageCode, JobsTranslations> = {
 		pageTitle: 'กระดานรับสมัครอาสาสมัคร — Smart Shelter',
 		heroTitle: 'งานอาสาสมัครในศูนย์พักพิง',
 		heroDescription:
-			'ร่วมเป็นส่วนหนึ่งในการช่วยเหลือผู้ประสบภัย เลือกภารกิจที่คุณถนัดและเวลาที่สะดวก พร้อมรับตั๋วดิจิทัล (QR Code Pass) ',
+			'ร่วมเป็นส่วนหนึ่งในการช่วยเหลือผู้ประสบภัย เลือกงานอาสาสมัครที่คุณถนัดและเวลาที่สะดวก พร้อมรับตั๋วดิจิทัล',
 		heroBadge: 'Volunteer Job Board',
-		tabJobBoard: 'งานอาสาสมัคร (Job Board)',
-		tabFindTicket: 'ค้นหาตั๋วของฉัน (Find My Ticket)',
+		tabJobBoard: 'งานอาสาสมัคร',
+		tabFindTicket: 'ค้นหาตั๋วของฉัน',
 		portalLink: 'เข้าสู่ระบบอาสาสมัคร / ตารางงานของฉัน →',
 		// Job Board Search & Filters
 		jobBoardSectionTitle: 'งานอาสาสมัครในศูนย์พักพิง',
 		searchPlaceholder: 'ค้นหาชื่องาน, ทักษะ, หรือชื่อศูนย์...',
 		filterLabel: 'ตัวกรอง:',
 		filterAll: 'ทั้งหมด',
-		filterOpen: 'เปิดรับสมัคร (Open)',
-		filterNearFull: 'ใกล้เต็ม (Near Full)',
+		filterOpen: 'เปิดรับสมัคร',
+		filterNearFull: 'ใกล้เต็ม',
 		filterControlled: 'ทักษะวิชาชีพ/ควบคุม',
 		skillsLabel: 'ทักษะ:',
+		cardSkillsTitle: 'ความสามารถ',
+		timeSuffix: ' น.',
 		clearFilter: '✕ ล้างตัวกรอง',
 		shelterLabel: 'ศูนย์:',
 		allShelters: 'ทุกศูนย์พักพิง',
@@ -158,8 +164,8 @@ export const jobsI18n: Record<LanguageCode, JobsTranslations> = {
 		noJobsFoundDesc: 'โปรดลองเปลี่ยนตัวกรองหรือคำค้นหาเพื่อดูกะงานอื่น',
 		paginationSummary: (from, to, total) => `แสดงงานที่ ${from} - ${to} จากทั้งหมด ${total} งาน`,
 		clearAllFilters: 'ล้างตัวกรองทั้งหมด',
-		generalMission: 'ภารกิจทั่วไป',
-		controlledMission: 'ภารกิจควบคุม',
+		generalMission: 'งานอาสาสมัครทั่วไป',
+		controlledMission: 'งานอาสาสมัครทักษะควบคุม',
 		tagOpen: 'เปิดรับสมัคร',
 		tagNearFull: 'ใกล้เต็ม',
 		tagFull: 'เต็มแล้ว',
@@ -186,10 +192,10 @@ export const jobsI18n: Record<LanguageCode, JobsTranslations> = {
 		quotaCap: 'รับ',
 		appliedCount: 'สมัครแล้ว',
 		confirmedCount: 'ยืนยันแล้ว',
-		defaultJobDesc: 'ช่วยเหลืองานในศูนย์พักพิงตามภารกิจที่ได้รับมอบหมาย',
+		defaultJobDesc: 'ช่วยเหลืองานในศูนย์พักพิงตามงานอาสาสมัครที่ได้รับมอบหมาย',
 		// Ticket Search
-		ticketSearchTitle: 'ค้นหาตั๋วของฉัน (Find My Ticket Pass)',
-		ticketSearchDesc: 'ระบุรหัสบัตร หรือ สแกน QR Code เพื่อเปิดตั๋วดิจิทัล (Digital Pass)',
+		ticketSearchTitle: 'ค้นหาตั๋วของฉัน',
+		ticketSearchDesc: 'ระบุรหัสบัตร หรือ สแกน QR Code เพื่อเปิดตั๋วดิจิทัล',
 		ticketSearchPlaceholder: 'กรอกรหัสบัตร เช่น TKT-VOL-123456 หรือ Token ตั๋ว',
 		ticketSearchButton: 'ค้นหาตั๋ว',
 		ticketSearching: 'กำลังค้นหา...',
@@ -223,7 +229,7 @@ export const jobsI18n: Record<LanguageCode, JobsTranslations> = {
 		// Quick Apply Modal
 		shiftDateLabel: 'กะวันที่',
 		applyStep1Title: '1. ข้อมูลประจำตัวอาสาสมัคร',
-		applyStep2Title: '2. เลือกรอบกะเวลาปฏิบัติงาน (Shifts)',
+		applyStep2Title: '2. เลือกรอบกะเวลาปฏิบัติงาน',
 		applyStep3Title: '3. ทักษะความสามารถ',
 		applyStep3Subtitle: 'เลือกทักษะที่คุณมีความพร้อมหรือความชำนาญ (เลือกได้ ไม่บังคับ)',
 		applyFirstName: 'ชื่อ',
@@ -242,7 +248,7 @@ export const jobsI18n: Record<LanguageCode, JobsTranslations> = {
 		applyLoadingSkills: 'กำลังโหลดรายการทักษะมาตรฐาน...',
 		applyControlledSkillBadge: 'ทักษะควบคุม',
 		applyMatchesJobBadge: 'แนะนำ',
-		applySkillsSuggestion: 'ทักษะที่มีป้ายกำกับสีเขียวเป็นทักษะแนะนำสำหรับภารกิจนี้',
+		applySkillsSuggestion: 'ทักษะที่มีไอคอนประกายเป็นทักษะแนะนำสำหรับงานอาสาสมัครนี้',
 		applyPdpaTitle: 'ความยินยอม PDPA:',
 		applyPdpaText:
 			'ข้าพเจ้ายินยอมให้ศูนย์พักพิงและระบบจัดสรรจิตอาสาเก็บรวบรวมและประมวลผลข้อมูลส่วนบุคคลข้างต้น เพื่อการประสานงานและจัดสรรงานจิตอาสาตาม พ.ร.บ. คุ้มครองข้อมูลส่วนบุคคล พ.ศ. 2562',
@@ -251,7 +257,7 @@ export const jobsI18n: Record<LanguageCode, JobsTranslations> = {
 		applySubmitting: 'กำลังส่งข้อมูล...',
 		applyCancelButton: 'ยกเลิก',
 		applySuccessTitle: 'สมัครงานจิตอาสาสำเร็จ!',
-		applySuccessDesc: 'ระบบได้ออกบัตรตั๋วดิจิทัล (Digital Pass) ประจำตัวของคุณเรียบร้อยแล้ว',
+		applySuccessDesc: 'ระบบได้ออกบัตรตั๋วดิจิทัลประจำตัวของคุณเรียบร้อยแล้ว',
 		applyViewPassButton: 'เปิดดูตั๋วดิจิทัลของคุณ',
 		toastApplySuccess: 'ส่งใบสมัครสำเร็จ!',
 		errPdpaRequired: 'กรุณายอมรับเงื่อนไข PDPA ก่อนดำเนินการต่อ',
@@ -283,6 +289,8 @@ export const jobsI18n: Record<LanguageCode, JobsTranslations> = {
 		filterNearFull: 'Almost Full',
 		filterControlled: 'Controlled / Professional',
 		skillsLabel: 'Skills:',
+		cardSkillsTitle: 'Skills',
+		timeSuffix: '',
 		clearFilter: '✕ Clear Filter',
 		shelterLabel: 'Shelter:',
 		allShelters: 'All Shelters',
@@ -377,7 +385,7 @@ export const jobsI18n: Record<LanguageCode, JobsTranslations> = {
 		applyControlledSkillBadge: 'Controlled Skill',
 		applyMatchesJobBadge: 'Suggested',
 		applySkillsSuggestion:
-			'Skills highlighted in green are suggestions for this job. Choose what matches your capabilities; selection is optional.',
+			'Skills marked with a sparkle are suggestions for this job. Choose what matches your capabilities; selection is optional.',
 		applyPdpaTitle: 'PDPA Consent:',
 		applyPdpaText:
 			'I consent to the evacuation shelter and volunteer coordination system collecting and processing my personal data for volunteer management in accordance with the Personal Data Protection Act (PDPA).',

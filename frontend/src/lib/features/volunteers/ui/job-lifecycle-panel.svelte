@@ -63,7 +63,7 @@
 		{
 			value: 'closed',
 			label: 'ปิดงาน',
-			hint: 'จบภารกิจ ไม่รับสมัครเพิ่ม',
+			hint: 'จบงานอาสาสมัคร ไม่รับสมัครเพิ่ม',
 			selectedClass: 'border-red-300 bg-red-50 text-red-700 hover:bg-red-100'
 		}
 	];

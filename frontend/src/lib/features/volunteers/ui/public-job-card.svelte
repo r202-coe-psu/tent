@@ -176,7 +176,7 @@
 			<div class="border-t border-border/60 pt-3">
 				<div class="mb-2 flex items-center gap-1.5 text-xs font-bold text-muted-foreground">
 					<Tag class="h-3.5 w-3.5 text-primary" />
-					<span>ความสามารถ</span>
+					<span>{t.cardSkillsTitle}</span>
 				</div>
 				<div class="flex flex-wrap gap-1.5">
 					{#each job.skills as skill (skill.value)}
@@ -257,7 +257,7 @@
 								: 'text-primary'}"
 						>
 							<Clock class="h-4 w-4" />
-							{shift.time}
+							{shift.time}{t.timeSuffix}
 						</div>
 					</div>
 
@@ -270,7 +270,7 @@
 								<div class="min-w-0">
 									<p class="font-bold">เวลาชนกับกะที่จองไว้</p>
 									<p class="mt-1 line-clamp-2 leading-relaxed">
-										{shift.conflict.title} · {shift.conflict.time}
+										{shift.conflict.title} · {shift.conflict.time}{t.timeSuffix}
 									</p>
 								</div>
 							</div>
