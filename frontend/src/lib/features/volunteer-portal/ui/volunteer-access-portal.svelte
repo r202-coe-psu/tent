@@ -569,31 +569,7 @@
 		if (mode === 'dashboard') dashboardTab = 'schedule';
 	});
 	let isPassModalOpen = $state(false);
-	let passModalEl = $state<HTMLElement | null>(null);
-	let isPassFullscreen = $state(false);
-
-	/**
-	 * Blow the pass up to the whole screen for the gate.
-	 *
-	 * The volunteer holds this out to be scanned, often outdoors — filling the screen
-	 * makes the QR bigger and lets the device brightness work on it. Fails quietly:
-	 * iOS Safari does not grant fullscreen on arbitrary elements, and the modal is
-	 * still perfectly usable without it.
-	 */
-	async function togglePassFullscreen() {
-		try {
-			if (document.fullscreenElement) {
-				await document.exitFullscreen();
-			} else if (passModalEl) {
-				await passModalEl.requestFullscreen();
-			}
-		} catch {
-			toast.info('อุปกรณ์นี้ไม่รองรับการขยายเต็มจอ');
-		}
-	}
-
 	function closePassModal() {
-		if (document.fullscreenElement) void document.exitFullscreen().catch(() => {});
 		isPassModalOpen = false;
 	}
 	/**
@@ -1364,7 +1340,7 @@
 							<li class="flex items-start gap-2">
 								<span class="text-primary">•</span>
 								<span
-									>เมื่อปฏิบัติภารกิจเสร็จสิ้นตามกรอบเวลา ให้กดปุ่ม Check-out
+									>เมื่อปฏิบัติงานอาสาสมัครเสร็จสิ้นตามกรอบเวลา ให้กดปุ่ม Check-out
 									เพื่อสะสมเวลาปฏิบัติงานและคืนข้อมูลทรัพยากร</span
 								>
 							</li>
@@ -1537,30 +1513,13 @@
 	{/if}
 </div>
 
-<!-- Esc and the browser's own control leave fullscreen without touching our flag. -->
-<svelte:document
-	onfullscreenchange={() => (isPassFullscreen = Boolean(document.fullscreenElement))}
-/>
-
 <!-- ── MODAL: DIGITAL PASS VIEW ───────────────────────────────────────────── -->
 {#if isPassModalOpen && currentVolunteer}
 	<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
 		<div
-			bind:this={passModalEl}
-			class="w-full max-w-sm rounded-3xl border border-border bg-card p-6 text-center shadow-2xl {isPassFullscreen
-				? 'flex max-w-none flex-col justify-center'
-				: ''}"
+			class="w-full max-w-sm rounded-3xl border border-border bg-card px-4 py-2 text-center shadow-2xl"
 		>
-			<div class="flex justify-between">
-				<button
-					type="button"
-					onclick={togglePassFullscreen}
-					title={isPassFullscreen ? 'ย่อจากเต็มจอ' : 'ขยายเต็มจอ'}
-					aria-label={isPassFullscreen ? 'ย่อจากเต็มจอ' : 'ขยายเต็มจอ'}
-					class="flex size-11 items-center justify-center rounded-full bg-muted text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none"
-				>
-					<Maximize2 class="size-4" />
-				</button>
+			<div class="flex justify-end">
 				<button
 					type="button"
 					onclick={closePassModal}
