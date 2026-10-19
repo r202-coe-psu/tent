@@ -380,17 +380,7 @@ export async function createOrMergeUser(
 		await updateUser(
 			input.name,
 			{
-				display_name: input.display_name,
-				roles: input.roles,
-				personnel_type: input.personnel_type,
-				organization: input.organization,
-				position: input.position,
-				phone: input.phone,
-				email: input.email,
-				notes: input.notes,
-				volunteer_id: input.volunteer_id,
-				duty_window: input.duty_window,
-				affiliation_tags: input.affiliation_tags
+				roles: input.roles
 			},
 			caller
 		);
@@ -518,6 +508,18 @@ export async function updateUser(
 
 	if (!caller.isSA) {
 		const code = managerMayMutateTarget(caller, doc.roles ?? []);
+		if (!hasShelterScope(doc.roles ?? [], code)) {
+			// Add-from-outside: a target not yet in this shelter may only be pulled in via `roles`.
+			// Allow-list (not deny-list) so any other/new field is rejected by default; a mixed
+			// request (roles + any other field) is rejected whole, never partially applied.
+			const extra = Object.entries(input).filter(([k, v]) => k !== 'roles' && v !== undefined);
+			if (!input.roles || extra.length > 0) {
+				throw new ServiceError(
+					'FORBIDDEN',
+					'A manager may only edit users in their own shelter (outside users: roles only)'
+				);
+			}
+		}
 		if (input.roles) {
 			const { assertCanGrant } = await import('./couch-admin');
 			assertCanGrant(caller, input.roles);

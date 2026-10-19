@@ -437,3 +437,83 @@ test.describe('Non-secure context (LAN HTTP over an IP)', TAGS, () => {
 		expect(crashes).toEqual([]);
 	});
 });
+
+/**
+ * #619 / #620 — the donor form puts the item name before its category, and every step
+ * change brings the new step's header into view. Steps are state on one page, not routes,
+ * so the layout's `afterNavigate` scroll never ran: the page stayed where the donor last
+ * scrolled (usually down at the button) and the next step opened off-screen.
+ */
+test.describe('Donor wizard layout and step scrolling (#619, #620)', TAGS, () => {
+	test.beforeEach(async ({ page }) => {
+		await page.route('**/api/public/v1/needs', async (route) => {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify([
+					{
+						code: 'SH001',
+						name: 'ศูนย์ทดสอบการเลื่อนหน้า',
+						needs: [
+							{
+								item_id: 'item:rice',
+								name: 'ข้าวสาร',
+								category: 'food',
+								qty_needed: 50,
+								unit: 'kg',
+								urgency: 'critical',
+								status: 'open'
+							}
+						]
+					}
+				])
+			});
+		});
+	});
+
+	async function openDonorForm(page: import('@playwright/test').Page) {
+		await page.goto('/donations');
+		await page.getByRole('button', { name: 'ดูรายละเอียดและบริจาค' }).first().click();
+		await page.getByRole('button', { name: 'บริจาครายการนี้' }).first().click();
+		await expect(page.getByRole('heading', { name: 'ส่วนที่ 1: ข้อมูลผู้บริจาค' })).toBeVisible();
+	}
+
+	const scrollY = (page: import('@playwright/test').Page) => page.evaluate(() => window.scrollY);
+
+	test('item name comes before its category', async ({ page }) => {
+		await openDonorForm(page);
+
+		const name = page.locator('input[id^="name-"]').first();
+		const category = page.locator('input[id^="category-"]').first();
+		const precedes = await name.evaluate(
+			(el, other) => !!(el.compareDocumentPosition(other!) & Node.DOCUMENT_POSITION_FOLLOWING),
+			await category.elementHandle()
+		);
+		expect(precedes).toBe(true);
+	});
+
+	test('going to the next step and back scrolls to the top', async ({ page }) => {
+		await page.setViewportSize({ width: 390, height: 700 });
+		await openDonorForm(page);
+		await page.locator('#donor-name').fill('ผู้ทดสอบเลื่อนหน้า');
+		await page.locator('#donor-phone').fill('0899999999');
+
+		const next = page.getByRole('button', { name: 'ถัดไป: เลือกจุดส่งมอบ' });
+		await next.scrollIntoViewIfNeeded();
+		expect(await scrollY(page)).toBeGreaterThan(0);
+		await next.click();
+
+		await expect(
+			page.getByRole('heading', { name: 'ส่วนที่ 3: ข้อมูลการจัดส่ง โลจิสติกส์' })
+		).toBeVisible();
+		await expect.poll(() => scrollY(page)).toBe(0);
+
+		const back = page.getByRole('button', { name: 'กลับ', exact: true });
+		await back.scrollIntoViewIfNeeded();
+		expect(await scrollY(page)).toBeGreaterThan(0);
+		await back.click();
+
+		await expect(page.getByRole('heading', { name: 'ส่วนที่ 1: ข้อมูลผู้บริจาค' })).toBeVisible();
+		await expect.poll(() => scrollY(page)).toBe(0);
+	});
+});

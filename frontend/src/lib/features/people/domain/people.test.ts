@@ -29,6 +29,8 @@ import {
 	matchesEvacueePhoneSearch,
 	matchesEvacueeSearch,
 	zoneLabel,
+	stayZoneName,
+	labelZoneName,
 	isEvacuee,
 	createHousehold,
 	isHousehold,
@@ -1721,6 +1723,53 @@ describe('matchesEvacueeSearch', () => {
 	it('an empty query still short-circuits to true even when search_excluded + isPublicSearch', () => {
 		const excluded = { ...evacuee, privacy: { search_excluded: true } };
 		expect(matchesEvacueeSearch(excluded, '', { isPublicSearch: true })).toBe(true);
+	});
+});
+
+describe('stayZoneName', () => {
+	const zones = [{ code: 'z1', name: 'โซนชาย' }];
+
+	it('returns null when no zone is assigned', () => {
+		expect(stayZoneName(null, zones)).toBeNull();
+		expect(stayZoneName(undefined, zones)).toBeNull();
+		expect(stayZoneName('  ', zones)).toBeNull();
+	});
+
+	it('resolves the zone name by code, case-insensitively', () => {
+		expect(stayZoneName('Z1', zones)).toBe('โซนชาย');
+	});
+
+	it('falls back to the code when the name is unknown', () => {
+		expect(stayZoneName('z9', zones)).toBe('z9');
+		expect(stayZoneName('z1')).toBe('z1');
+		expect(stayZoneName('z1', [{ code: 'z1', name: '  ' }])).toBe('z1');
+	});
+});
+
+describe('labelZoneName', () => {
+	const zones = [
+		{ code: 'z1', name: 'โซนผู้สูงอายุ อาคาร 2', short_name: 'A3' },
+		{ code: 'z2', name: 'โซนหญิง', short_name: null },
+		{ code: 'z3', name: 'โซนชาย', short_name: '  ' }
+	];
+
+	it('returns null when no zone is assigned', () => {
+		expect(labelZoneName(null, zones)).toBeNull();
+		expect(labelZoneName(' ', zones)).toBeNull();
+	});
+
+	it('prints the short name when the zone has one', () => {
+		expect(labelZoneName('Z1', zones)).toBe('A3');
+	});
+
+	it('falls back to the full zone name without a short name', () => {
+		expect(labelZoneName('z2', zones)).toBe('โซนหญิง');
+		expect(labelZoneName('z3', zones)).toBe('โซนชาย');
+	});
+
+	it('falls back to the code for an unknown zone', () => {
+		expect(labelZoneName('z9', zones)).toBe('z9');
+		expect(labelZoneName('z1')).toBe('z1');
 	});
 });
 

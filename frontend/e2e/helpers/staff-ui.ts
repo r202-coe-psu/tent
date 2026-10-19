@@ -159,7 +159,7 @@ export interface OnsiteShelterConfig {
 	/** Toggle 「รับลงทะเบียนเข้าพักล่วงหน้าจากหน้าสาธารณะ」. */
 	acceptsPreRegistration?: boolean;
 	/** Living zones to add (empty shelter has none). */
-	zones?: { name: string; capacity: number }[];
+	zones?: { name: string; capacity: number; shortName?: string }[];
 }
 
 /**
@@ -198,6 +198,9 @@ export async function configureOnsiteShelterViaUi(
 		await expect(row).toBeVisible();
 		await row.fill(zone.name);
 		await page.locator('input[placeholder="ความจุ"]').last().fill(String(zone.capacity));
+		if (zone.shortName !== undefined) {
+			await page.getByRole('textbox', { name: 'ชื่อย่อโซน' }).last().fill(zone.shortName);
+		}
 	}
 
 	await page.getByRole('button', { name: 'บันทึกข้อมูล' }).first().click();
