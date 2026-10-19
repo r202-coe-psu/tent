@@ -1,7 +1,8 @@
 /**
  * GET /api/back-office/shelter/[code]/dashboard/demographics
  *
- * Returns age-group and nationality breakdowns for currently checked-in evacuees
+ * Returns age-group and nationality breakdowns for evacuees in the shelter
+ * (`active` + `room_confirmed`, CR-170)
  * by querying the Dashboard-owned CouchDB Map/Reduce views in
  * `_design/app`.
  *

@@ -50,7 +50,7 @@ const members = [
 	{
 		evacuee_id: primaryId,
 		qr_payload: primaryId,
-		label: { name: 'สมชาย ใจดี', phone: '0812345678' }
+		label: { name: 'สมชาย ใจดี', phone: '0812345678', zone: null, stations_passed: 1 }
 	}
 ];
 const validBody = {

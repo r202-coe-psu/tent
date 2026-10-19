@@ -11,6 +11,7 @@ import {
 	togglePetSpecies,
 	householdToUnifiedInput,
 	evacueeToUnifiedMember,
+	unifiedMemberInputSchema,
 	unifiedRegistrationInputSchema,
 	type UnifiedRegistrationInput
 } from './unified-registration';
@@ -139,6 +140,13 @@ describe('unified registration — homeless Residence', () => {
 			'onsite'
 		);
 		expect(plan.householdInput.address_no).toBeNull();
+	});
+});
+
+describe('unified registration — worker-owned booking_ref (CR-169 FR-61)', () => {
+	it('unifiedMemberInputSchema strips a client-supplied booking_ref', () => {
+		const parsed = unifiedMemberInputSchema.parse({ ...validMember(), booking_ref: 'BK-X' });
+		expect(parsed).not.toHaveProperty('booking_ref');
 	});
 });
 

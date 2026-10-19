@@ -647,6 +647,13 @@ describe('kiosk walk-in joining the household at the same card address', () => {
 		expect(db.ofType('household')[0]).toMatchObject({ head_evacuee_id: 'evacuee:01EARLIER' });
 	});
 
+	it('joins a kiosk-made household whose head is registered through another channel', async () => {
+		const [household, head] = seededHousehold();
+		fakeShelterDb([household, { ...head, registered_via: 'station_1' }]);
+		const joined = await register({ ...card, ...address });
+		expect(joined.household_id).toBe('household:01EARLIER');
+	});
+
 	it.each([
 		['cancelled', { status: 'cancelled' }],
 		['checked out', { status: 'checked_out' }],

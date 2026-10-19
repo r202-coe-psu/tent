@@ -224,8 +224,8 @@ const ADDRESS_PAGE_SIZE = 200;
 
 /**
  * The household a kiosk created earlier for this card address (`addressKey`; roads must not
- * conflict), when it is still open and its head is the kiosk walk-in who made it; the oldest one
- * if several qualify.
+ * conflict), when it is still open and its head is an evacuee whose card shows that address,
+ * whatever channel registered them; the oldest one if several qualify.
  * Staff-made households, and ones whose head changed, are never joined.
  */
 async function findJoinableKioskHousehold(
@@ -243,7 +243,6 @@ async function findJoinableKioskHousehold(
 				selector: {
 					type: 'evacuee',
 					shelter_code: shelterCode,
-					registered_via: 'kiosk',
 					'card_snapshot.address_no': cardSnapshot.address_no
 				},
 				fields: ['_id', 'household_id', 'card_snapshot'],

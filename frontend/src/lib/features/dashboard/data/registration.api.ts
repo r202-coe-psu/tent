@@ -11,7 +11,7 @@ import { serviceFetch } from '$lib/api/service';
  * Fetch daily registration statistics for a shelter from the BFF.
  *
  * @param shelterCode  e.g. 'SH001'
- * @param from         Optional inclusive start date (YYYY-MM-DD). Defaults to 30 days ago.
+ * @param from         Optional inclusive start date (YYYY-MM-DD). Defaults to the day the shelter was created.
  * @param to           Optional inclusive end date (YYYY-MM-DD). Defaults to today.
  * @throws on network errors or non-OK HTTP responses
  */

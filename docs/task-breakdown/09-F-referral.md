@@ -2,7 +2,7 @@
 title: "Task Breakdown — Module F — Referral"
 status: active
 created: 2026-06-05
-updated: 2026-07-24 # CR-045 — destination-gated capacity + single-evacuee DoD wording
+updated: 2026-10-14 # CR-167/CR-168 — sent→closed, close_reason, bulk endpoint, shelter-closure worker (DoD line เท่านั้น; ยังไม่เพิ่ม T-id)
 module: F
 note: decision-synced 2026-06-15 — task details and DoD maintained directly in Markdown
 ---
@@ -33,7 +33,7 @@ note: decision-synced 2026-06-15 — task details and DoD maintained directly in
 
 **Definition of Done:**
 - สร้าง referral 3 ประเภท (capacity / resource / medical-emergency) พร้อมเหตุผล, ต้นทาง, ปลายทาง, ความเร่งด่วน — สิทธิ์สร้าง/อนุมัติเป็นของ shelter_manager ตาม FD-13
-- State machine ครบตาม `docs/data/schema.md`: draft → sent → accepted/rejected → closed และ **draft → closed** (ยกเลิกร่างก่อนส่ง — CR-046); **ปลายทาง**ตอบรับ/ปฏิเสธพร้อมเหตุผลได้ (capacity ต้องปลายทางกดรับก่อนย้าย — CR-045)
+- State machine ครบตาม `docs/data/schema.md`: draft → sent → accepted/rejected → closed และ **draft → closed** (ยกเลิกร่างก่อนส่ง — CR-046); **ปลายทาง**ตอบรับ/ปฏิเสธพร้อมเหตุผลได้ (capacity ต้องปลายทางกดรับก่อนย้าย — CR-045) · **sent → closed** (ถอนคำขอ, ต้นทางเท่านั้น — [CR-167](../changes/09-F-referral/CR-167-referral-withdraw-close-reason-bulk.md)); เหตุผลปิดเก็บที่ `close_reason` แยกจาก `response_reason`; bulk ใน list ผ่าน `bulk-transition`; flow ปิดศูนย์ด้วย worker job ([CR-168](../changes/09-F-referral/CR-168-referral-shelter-closure-worker.md))
 - Medical referral: อยู่ใน internal shelter scope เท่านั้น; public/FAM/EOC/Open API ไม่ได้รับ medical detail หรือ national ID ทุกกรณี (FR-48/NFR-5, ใช้ RBAC/`redactForScope` จาก T-01/T-34)
 - ส่งต่อ capacity สำเร็จ → ผู้ประสบภัย (`evacuee_id`) ย้ายศูนย์แล้วยอด occupancy สองฝั่งถูกต้อง (ไม่ claim การย้ายทั้งครัวเรือนใน R3)
 - Test state machine + demo ส่งต่อครบ 1 case ต่อประเภท

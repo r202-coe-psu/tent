@@ -148,15 +148,15 @@ test.describe('Public Donation & Queue Booking Wizard (T-60)', TAGS, () => {
 });
 
 /**
- * Cancel-from-track coverage. Both are `fixme`: under Playwright route mocking the
- * track page's tracking query never settles — the mock fulfils with 200 (the request
- * and response both show in the trace) yet the query stays `status: pending,
- * fetchStatus: fetching` indefinitely, so no branch of the page renders. Reproduced
- * with an unconditional debug element, against both `vite preview` and the dev server,
- * and on the page as it stood *before* the cancel button was added — so it is a
- * problem with mocking this route, not with the cancel wiring. The gating logic is
- * covered by unit tests on `canCancelDonation`; un-fixme these once the mocking issue
- * is understood.
+ * Cancel-from-track coverage with the track BFF mocked: a declared booking can be
+ * cancelled from the page, and a received one offers no cancel. Which statuses allow a
+ * cancel is unit-tested on `canCancelDonation`.
+ *
+ * Both were `fixme` from 2026-08-21 to 2026-10-13: under this route mock the tracking
+ * query stayed `status: pending, fetchStatus: fetching` although the mock answered 200,
+ * so nothing rendered (seen on `vite preview` and the dev server). It no longer does,
+ * and no app change was traced as the fix — if these start timing out with an empty
+ * page, that hang is back.
  */
 test.describe('Donor cancels their own reservation from the track page (T-21 DoD 4)', TAGS, () => {
 	const TOKEN = 'TX-SH001-CANCELME';
@@ -179,7 +179,7 @@ test.describe('Donor cancels their own reservation from the track page (T-21 DoD
 		};
 	}
 
-	test.fixme('cancels a declared booking and reflects the new status', async ({ page }) => {
+	test('cancels a declared booking and reflects the new status', async ({ page }) => {
 		let cancelled = false;
 
 		await page.route(`**/api/public/v1/donations/${TOKEN}`, async (route) => {
@@ -206,15 +206,18 @@ test.describe('Donor cancels their own reservation from the track page (T-21 DoD
 		await openCancel.click();
 
 		await expect(page.getByText('ยกเลิกการจองบริจาคนี้?')).toBeVisible();
-		await expect(page.getByText('DN-777001')).toBeVisible();
+		// The card heading shows the ref too, so look inside the dialog.
+		await expect(page.getByRole('alertdialog').getByText('DN-777001')).toBeVisible();
 		await page.getByRole('button', { name: 'ยืนยันยกเลิกการจอง' }).click();
 
 		await expect(page.getByText('ยกเลิกการจองบริจาคแล้ว')).toBeVisible();
-		// Refetch drove the page to the cancelled status, so the button is gone.
+		// Refetch drove the page to the cancelled status (shown on the badge and the status
+		// line), so the button is gone.
+		await expect(page.getByText('ยกเลิกการจองแล้ว', { exact: true }).first()).toBeVisible();
 		await expect(openCancel).toBeHidden();
 	});
 
-	test.fixme('offers no cancel once the goods were received', async ({ page }) => {
+	test('offers no cancel once the goods were received', async ({ page }) => {
 		await page.route(`**/api/public/v1/donations/${TOKEN}`, async (route) => {
 			await route.fulfill({
 				status: 200,
@@ -225,7 +228,7 @@ test.describe('Donor cancels their own reservation from the track page (T-21 DoD
 
 		await page.goto(`/donations/track/${TOKEN}`);
 
-		await expect(page.getByText('DN-777001')).toBeVisible();
+		await expect(page.getByRole('heading', { name: 'DN-777001' })).toBeVisible();
 		await expect(page.getByRole('button', { name: 'ยกเลิกการจองนี้' })).toHaveCount(0);
 	});
 });
@@ -432,5 +435,85 @@ test.describe('Non-secure context (LAN HTTP over an IP)', TAGS, () => {
 		await expect(page.getByRole('heading', { name: 'ส่วนที่ 1: ข้อมูลผู้บริจาค' })).toBeVisible();
 		await expect(page.locator('input[id^="name-"]').first()).toHaveValue('ข้าวสาร');
 		expect(crashes).toEqual([]);
+	});
+});
+
+/**
+ * #619 / #620 — the donor form puts the item name before its category, and every step
+ * change brings the new step's header into view. Steps are state on one page, not routes,
+ * so the layout's `afterNavigate` scroll never ran: the page stayed where the donor last
+ * scrolled (usually down at the button) and the next step opened off-screen.
+ */
+test.describe('Donor wizard layout and step scrolling (#619, #620)', TAGS, () => {
+	test.beforeEach(async ({ page }) => {
+		await page.route('**/api/public/v1/needs', async (route) => {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify([
+					{
+						code: 'SH001',
+						name: 'ศูนย์ทดสอบการเลื่อนหน้า',
+						needs: [
+							{
+								item_id: 'item:rice',
+								name: 'ข้าวสาร',
+								category: 'food',
+								qty_needed: 50,
+								unit: 'kg',
+								urgency: 'critical',
+								status: 'open'
+							}
+						]
+					}
+				])
+			});
+		});
+	});
+
+	async function openDonorForm(page: import('@playwright/test').Page) {
+		await page.goto('/donations');
+		await page.getByRole('button', { name: 'ดูรายละเอียดและบริจาค' }).first().click();
+		await page.getByRole('button', { name: 'บริจาครายการนี้' }).first().click();
+		await expect(page.getByRole('heading', { name: 'ส่วนที่ 1: ข้อมูลผู้บริจาค' })).toBeVisible();
+	}
+
+	const scrollY = (page: import('@playwright/test').Page) => page.evaluate(() => window.scrollY);
+
+	test('item name comes before its category', async ({ page }) => {
+		await openDonorForm(page);
+
+		const name = page.locator('input[id^="name-"]').first();
+		const category = page.locator('input[id^="category-"]').first();
+		const precedes = await name.evaluate(
+			(el, other) => !!(el.compareDocumentPosition(other!) & Node.DOCUMENT_POSITION_FOLLOWING),
+			await category.elementHandle()
+		);
+		expect(precedes).toBe(true);
+	});
+
+	test('going to the next step and back scrolls to the top', async ({ page }) => {
+		await page.setViewportSize({ width: 390, height: 700 });
+		await openDonorForm(page);
+		await page.locator('#donor-name').fill('ผู้ทดสอบเลื่อนหน้า');
+		await page.locator('#donor-phone').fill('0899999999');
+
+		const next = page.getByRole('button', { name: 'ถัดไป: เลือกจุดส่งมอบ' });
+		await next.scrollIntoViewIfNeeded();
+		expect(await scrollY(page)).toBeGreaterThan(0);
+		await next.click();
+
+		await expect(
+			page.getByRole('heading', { name: 'ส่วนที่ 3: ข้อมูลการจัดส่ง โลจิสติกส์' })
+		).toBeVisible();
+		await expect.poll(() => scrollY(page)).toBe(0);
+
+		const back = page.getByRole('button', { name: 'กลับ', exact: true });
+		await back.scrollIntoViewIfNeeded();
+		expect(await scrollY(page)).toBeGreaterThan(0);
+		await back.click();
+
+		await expect(page.getByRole('heading', { name: 'ส่วนที่ 1: ข้อมูลผู้บริจาค' })).toBeVisible();
+		await expect.poll(() => scrollY(page)).toBe(0);
 	});
 });

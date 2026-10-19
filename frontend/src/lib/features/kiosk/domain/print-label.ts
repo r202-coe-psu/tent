@@ -21,7 +21,7 @@ export const KIOSK_LABEL_TEXT_OFFSET_Y_MM = 2;
 export const KIOSK_LABEL_GAP_MM = 2;
 /** Vertical divider between the text column and the QR (the ID card's panel border). */
 export const KIOSK_LABEL_DIVIDER_MM = 0.25;
-/** Narrowest text column the QR may leave: a 3-line name and the wrapped checklist need it. */
+/** Narrowest text column the QR may leave: a 3-line name and the zone row need it. */
 export const KIOSK_LABEL_TEXT_MIN_WIDTH_MM = 37;
 export const KIOSK_QR_MIN_MM = 20;
 export const KIOSK_QR_MARGIN_MODULES = 2;
@@ -87,30 +87,52 @@ export function kioskLabelPageCss(): string {
 
 /**
  * Label text styles (pt + unitless line height), shared by the print CSS and the PNG renderer.
- * Mirrors the staff ID card (`QrIdCard`): bold name, tracked mono phone, checklist at the bottom.
+ * Mirrors `QrIdCard`: bold name, zone, then the checklist and the small site address at the bottom.
  */
 export const KIOSK_LABEL_TEXT = {
 	name: { pt: 16, lineHeight: 1.3, weight: 700, maxLines: 3 },
-	phone: { pt: 12, lineHeight: 1.3, weight: 700, letterSpacingEm: 0.1 },
+	zone: { pt: 12, lineHeight: 1.3, weight: 700 },
 	checklist: { pt: 10, lineHeight: 1.3, weight: 500 },
-	link: { pt: 9, lineHeight: 1.3, weight: 500 }
+	link: { pt: 7, lineHeight: 1.3, weight: 500 }
 } as const;
-/** Site address printed centred under the QR. */
+/** Site address printed small at the bottom of the text column. */
 export const KIOSK_LABEL_LINK = 'shelter.psu.ac.th';
-/** Space between the QR's bottom edge and the link. */
+/** Space between the checklist and the link under it. */
 export const KIOSK_LABEL_LINK_GAP_MM = 1;
-/** Space between the name and the phone line. */
-export const KIOSK_LABEL_TEXT_ROW_GAP_MM = 0.5;
-/** Staff ID card checklist, ticked by hand at each station. */
+/** Zone row under the name, as on the field form. */
+export const KIOSK_LABEL_ZONE_PREFIX = 'Zone:';
+export const KIOSK_LABEL_ZONE = {
+	/** Name → zone row. */
+	rowGapMm: 1,
+	/** Prefix → zone name or the dotted rule. */
+	textGapMm: 1.5,
+	/** Square dots of the blank rule staff write the zone on (3 dots every 8 at 203 dpi). */
+	dotMm: 0.375,
+	dotPitchMm: 1
+} as const;
+
+export type LabelZoneLine = { label: string; value: string | null };
+
+/**
+ * The zone row of a QR label: the assigned zone's name, or a null value for a blank dotted rule
+ * staff fill in by hand (first print, before Station 3 assigns a zone).
+ */
+export function labelZoneLine(zone: string | null | undefined): LabelZoneLine {
+	return { label: KIOSK_LABEL_ZONE_PREFIX, value: zone?.trim() || null };
+}
+
+/** Staff ID card checklist, one box per intake station. */
 export const KIOSK_LABEL_CHECKLIST = ['เช็คอิน', 'คัดกรอง', 'ที่พัก'] as const;
+/** A label printed right after a kiosk check-in or walk-in: only เช็คอิน is done. */
+export const KIOSK_CHECK_IN_TICKS = 1;
 export const KIOSK_LABEL_CHECKBOX = {
 	sizeMm: 3.5,
 	borderMm: 0.3,
+	/** Stroke of the tick in a box whose station is done. */
+	tickMm: 0.4,
 	/** Box → its text. */
 	textGapMm: 1.5,
-	/** Between checklist items on one row. */
-	itemGapMm: 4,
-	/** Between wrapped checklist rows. */
+	/** Between checklist rows (one item per row). */
 	rowGapMm: 1.5
 } as const;
 
@@ -172,7 +194,7 @@ export type KioskLabelLayout = {
 	qr: { x: number; y: number };
 	divider: { x: number; y: number; width: number; height: number };
 	text: { x: number; y: number; width: number; bottom: number };
-	/** Horizontal centre of the QR and the vertical middle of the link line below it. */
+	/** Left edge and vertical middle of the link line at the bottom of the text column. */
 	link: { x: number; y: number };
 };
 
@@ -191,43 +213,12 @@ export function kioskLabelLayout(qrPx: number): KioskLabelLayout {
 	const textX = padding + offset;
 	const textY = padding + Math.round(mmToDots(KIOSK_LABEL_TEXT_OFFSET_Y_MM));
 	const qrY = Math.round((height - qrPx) / 2);
-	const linkY =
-		qrY + qrPx + mmToDots(KIOSK_LABEL_LINK_GAP_MM) + ptToDots(KIOSK_LABEL_TEXT.link.pt) / 2;
+	const { pt, lineHeight } = KIOSK_LABEL_TEXT.link;
+	const linkY = height - padding - (ptToDots(pt) * lineHeight) / 2;
 	return {
 		qr: { x: qrX, y: qrY },
 		divider: { x: dividerX, y: padding, width: dividerWidth, height: height - padding * 2 },
 		text: { x: textX, y: textY, width: dividerX - gap - textX, bottom: height - padding },
-		link: { x: qrX + qrPx / 2, y: Math.round(linkY) }
+		link: { x: textX, y: Math.round(linkY) }
 	};
-}
-
-export type ChecklistPlacement = { text: string; x: number; width: number };
-
-/**
- * Lay the checklist out like the card's `flex-wrap`: items left to right, wrapping to a new row
- * when the next one would cross `maxWidth`. `x` and `width` include the checkbox.
- */
-export function layoutChecklist(
-	items: readonly string[],
-	maxWidth: number,
-	measure: (text: string) => number,
-	metrics: { boxSize: number; textGap: number; itemGap: number }
-): ChecklistPlacement[][] {
-	const rows: ChecklistPlacement[][] = [];
-	let row: ChecklistPlacement[] = [];
-	let x = 0;
-	for (const text of items) {
-		const width = metrics.boxSize + metrics.textGap + measure(text);
-		const start = row.length === 0 ? 0 : x + metrics.itemGap;
-		if (row.length > 0 && start + width > maxWidth) {
-			rows.push(row);
-			row = [{ text, x: 0, width }];
-			x = width;
-			continue;
-		}
-		row.push({ text, x: start, width });
-		x = start + width;
-	}
-	if (row.length > 0) rows.push(row);
-	return rows;
 }
