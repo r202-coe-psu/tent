@@ -3,9 +3,9 @@ id: CR-171
 title: "`_users.edge_shelters` + soft delete — ถอดสิทธิ์/ลบ user ที่ central ต้องตามไปถึง edge"
 status: approved
 date: 2026-10-17
-updated: 2026-10-17
+updated: 2026-10-18
 requested_by: ทีม (review PR #348 edge replication — ข้อจำกัด A ใน docs/couchdb-replication/README.md §7)
-decided_by: Fishcanwalk (project owner) — อนุมัติ 2026-10-17
+decided_by: "@net-lynx (project owner) — อนุมัติ 2026-10-18"
 layer: stable
 affects:
   - docs/data/schema.md §6 (`_users` — field ใหม่ `edge_shelters`, `deleted_at`, `deleted_by` + กฎ soft delete)
@@ -143,3 +143,4 @@ user ที่ถูก `DELETE` ไปก่อน CR นี้ (tombstone) ไ
 - 2026-10-17 — แก้ FR-6 (owner): ชื่อที่ถูกลบ → `CONFLICT` แทน reactivate. เหตุผล: audit trail อ้าง user ด้วย `name`
   (`created_by` ฯลฯ) — ใช้ชื่อซ้ำทำให้ประวัติคนเก่าปนกับคนใหม่, `edge_shelters` ของคนเก่าติดไปกับคนใหม่, และ doc ของคนเก่าถูกเขียนทับ.
   ราคา: ชื่อถูกจองถาวร. กู้คืนบัญชีโดย SA ให้ทำเป็นฟีเจอร์แยกถ้าจำเป็น.
+- 2026-10-18 — owner (@net-lynx) อนุมัติ CR-171 ใน PR #348 · ผ่าน acceptance รวมเทสบน edge จริง
