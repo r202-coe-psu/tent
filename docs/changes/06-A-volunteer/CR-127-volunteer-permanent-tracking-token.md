@@ -17,7 +17,7 @@ affects:
   - frontend/src/lib/features/volunteers/ui/volunteer-check-in.svelte + data/domain layer
   - frontend/src/lib/features/volunteer-portal/ui/volunteer-access-portal.svelte + domain/volunteer.ts (note 2026-10-18, #625 — remembered device)
   - frontend/src/routes/api/public/v1/volunteer/{access/resolve,profile,schedule,schedule/action,ticket/find} (note 2026-10-18, #625 — token rate budget)
-  - frontend/svelte.config.js `kit.csp` + frontend/src/hooks.client.ts (note 2026-10-19 — Content-Security-Policy)
+  - frontend/svelte.config.js `kit.csp` + frontend/src/app.html (note 2026-10-19 — Content-Security-Policy)
 why: >
   `job_application.tracking_token` (schema.md §2.18, CR-104) is minted fresh per
   application, so a volunteer with more than one application has more than one token and
@@ -130,8 +130,9 @@ themself, which the portal sign-in and on-site check-in both need one of.
   `frame-ancestors 'none'` (ห้ามเว็บอื่นฝังหน้าเราใน iframe)
 - **R-12** — `connect-src` / `img-src` / `style-src` / `font-src` **ไม่จำกัด**: CouchDB edge, tile แผนที่ และรูปมาจาก
   origin ที่ต่างกันตาม deployment; เมื่อสคริปต์แปลกปลอมรันไม่ได้ (R-10) ก็ใช้ช่องทางเหล่านี้ขโมยข้อมูลไม่ได้
-- **R-13** — zod v4 ตั้ง `jitless` ใน `hooks.client.ts` (ก่อน route ใด ๆ โหลด) เพื่อไม่ให้ probe `Function('')`
-  ชน policy ทุกหน้า
+- **R-13** — zod v4 ตั้ง `jitless` ผ่าน `globalThis.__zod_globalConfig` ใน `app.html` (script ที่มี nonce) ก่อนโมดูลใด ๆ
+  ของแอปโหลด เพื่อไม่ให้ probe `Function('')` ชน policy ทุกหน้า — ตั้งใน client hooks ไม่พอ เพราะ route matcher
+  (`params/kioskScreen.ts`) สร้าง schema ก่อน hooks
 
 ### Why
 
