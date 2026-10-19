@@ -517,6 +517,7 @@ curl -s "$E/_scheduler/docs/_replicator" \
 
 ทดลองต่อ: เขียน `_design/edge_only` ที่ edge แล้วดูว่า `sh001_push` เป็น error ไหม แล้วลองเพิ่ม
 `"selector": {"_id": {"$regex": "^(?!_design/)"}}` ใน `sh001_push` เพื่อกัน design doc ออก
+(ตัดสินแล้ว 2026-10-18: ใช้ selector `{"_id":{"$not":{"$regex":"^_design/"}}}` ใน `edge-init.sh` — ดู §7 ข้อจำกัด B)
 
 **ผ่านเมื่อ:** รู้ว่า job ไหนต้องใช้สิทธิ์ระดับไหน และได้ทางเลือกสำหรับ `_users`
 (เช่น แยก credential เฉพาะ job นี้ หรือให้ central เป็นฝ่าย push user ลง edge)
@@ -565,7 +566,7 @@ docker logs couch-edge 2>&1 | grep -i replicat   # log ฝั่ง replicator
 | T9 DNS cutover | ยังไม่ได้ทดสอบ | | lab ใช้ IP ตรง ไม่ได้ผ่าน `/sync` บน domain แอป |
 | T10a นาฬิกาอุปกรณ์เพี้ยน | ยังไม่ได้ทดสอบ | | LWW เลือกผิดตัว? |
 | T10b นาฬิกา server edge เพี้ยน | ยังไม่ได้ทดสอบ | | lab ใช้ `http://` จึงไม่มี TLS ให้ทดสอบ |
-| T11 non-admin replication user | ✅ ผ่านบางส่วน (lab 2 เครื่อง) | — | `repl_sh001` (ไม่ใช่ admin) ใช้ได้กับ `registry` / `catalog` / `shelter_sh001` ทั้ง pull และ push · ได้ 403 กับ `shelter_sh002` และ `_users` · **job `_users` ต้องใช้ central admin** (ยืนยันแล้ว) · การ push `_design/*` ด้วย user นี้ ยังไม่ได้ทดสอบ · **decision sync 2026-10-05: ใช้ central admin ชุดเดียว** |
+| T11 non-admin replication user | ✅ ผ่านบางส่วน (lab 2 เครื่อง) | — | `repl_sh001` (ไม่ใช่ admin) ใช้ได้กับ `registry` / `catalog` / `shelter_sh001` ทั้ง pull และ push · ได้ 403 กับ `shelter_sh002` และ `_users` · **job `_users` ต้องใช้ central admin** (ยืนยันแล้ว) · การ push `_design/*` ด้วย user นี้ ยังไม่ได้ทดสอบ · **decision sync 2026-10-05: ใช้ central admin ชุดเดียว** · **decision sync 2026-10-18: job `<code>_push` กรอง `_design/*` ด้วย selector (ข้อจำกัด B) — ข้อความ "ยังไม่ได้ทดสอบ" ด้านบนเป็นผลทดสอบเดิมก่อนตัดสินใจ** |
 
 ### ข้อค้นพบจาก lab (ไม่อยู่ในแผนเดิมของ T1–T11)
 

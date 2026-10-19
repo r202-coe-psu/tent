@@ -97,7 +97,10 @@ CEN_AUTH=$(auth "$CENTRAL_REPL_USER" "$CENTRAL_REPL_PASSWORD")
 job registry_pull "$CEN/registry" "$CEN_AUTH" "$LOC/registry" "$LOC_AUTH"
 job catalog_pull "$CEN/catalog" "$CEN_AUTH" "$LOC/catalog" "$LOC_AUTH"
 job "${CODE_LC}_pull" "$CEN/$SHELTER_DB" "$CEN_AUTH" "$LOC/$SHELTER_DB" "$LOC_AUTH"
-job "${CODE_LC}_push" "$LOC/$SHELTER_DB" "$LOC_AUTH" "$CEN/$SHELTER_DB" "$CEN_AUTH"
+# กรอง `_design/*` ออกจาก push (decision sync 2026-10-18, OD-6) — กันอุบัติเหตุ / edge ที่มี design doc เก่ากว่า central
+# เท่านั้น ไม่ป้องกันเครื่อง edge ที่ถูกขโมย (ยังถือ central admin ตาม OD-6)
+job "${CODE_LC}_push" "$LOC/$SHELTER_DB" "$LOC_AUTH" "$CEN/$SHELTER_DB" "$CEN_AUTH" \
+	"\"selector\":{\"_id\":{\"\$not\":{\"\$regex\":\"^_design/\"}}}"
 
 # _users ที่ central อ่านได้เฉพาะ server admin → CENTRAL_REPL_USER ต้องเป็น central admin
 # CR-171: selector ประเมินเฉพาะ revision ใหม่ — revision ที่ถอด role ออกจะหลุด selector `roles` และไม่ถึง edge

@@ -80,7 +80,7 @@ admin อยู่แล้ว การแยก user สิทธิ์น้�
 | --- | --- | --- |
 | รหัสผ่านอยู่ในเครื่องที่ศูนย์ | อยู่ใน `.env` และ doc ของ `_replicator` (plaintext) ถ้าเครื่อง edge หลุด = central ทั้งระบบหลุด | ดูแลเครื่อง edge เหมือนเป็นความลับระดับ central · ถ้าหลุดให้เปลี่ยนรหัส admin ทันที |
 | `SHELTER_CODE` ผิด | central ไม่ปฏิเสธ (admin เข้าได้ทุก DB) job จะ sync ข้อมูลของศูนย์อื่นโดยไม่มี error | ตรวจ `SHELTER_CODE` ก่อน `up` ทุกครั้ง (SETUP-EDGE ขั้น 4) |
-| `_design/*` ที่ edge | job `<code>_push` ส่ง design doc ขึ้น central ได้ ถ้ามี `validate_doc_update` ที่ผิดหลุดขึ้นไป การเขียนของศูนย์นั้นที่ central จะถูกปฏิเสธ | อย่าสร้าง design doc ใน `shelter_<code>` ที่ edge |
+| `_design/*` ที่ edge | job `<code>_push` กรอง `_design/*` ด้วย selector แล้ว (decision sync 2026-10-18) — กันอุบัติเหตุ / edge ที่มี design doc เก่ากว่า central · **ไม่กัน edge ที่ถูกขโมย** (ถือ central admin ตาม OD-6 เขียน central ตรง ๆ ได้) | อย่าสร้าง design doc ใน `shelter_<code>` ที่ edge · ทบทวน OD-6 ก่อนติดตั้ง edge ศูนย์ที่สอง หรือเมื่อเครื่อง edge หาย |
 | เปลี่ยนรหัส admin ของ central | edge **ทุกศูนย์** หยุด sync พร้อมกัน และ service ของ central ที่ใช้ admin (`COUCHDB_ADMIN_URL` ฯลฯ) ต้องอัปเดตด้วย | อัปเดต `.env` ของ edge ทุกเครื่องแล้ว "เตะ" job ทันที (SETUP-EDGE "งานประจำ") — job ที่ retry ด้วยรหัสเก่าจะโดนล็อกเอาต์ (403) ราว 5 นาที |
 
 **ตรวจ:**

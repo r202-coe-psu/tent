@@ -230,7 +230,7 @@ curl -s -X PUT -u <staff>:<pw> $EDGE/couch/shelter_sh001/evacuee:01OUTAGE0000000
 | `registry_pull` | central → edge | `CENTRAL_REPL_USER` (central admin) | master data ให้อ่านตอน WAN ขาด |
 | `catalog_pull` | central → edge | `CENTRAL_REPL_USER` | catalog |
 | `sh001_pull` | central → edge | `CENTRAL_REPL_USER` | ข้อมูลศูนย์ที่เขียนที่ central |
-| `sh001_push` | edge → central | `CENTRAL_REPL_USER` | ข้อมูลที่เขียนที่ edge ตอน WAN ขาด (backlog) |
+| `sh001_push` | edge → central | `CENTRAL_REPL_USER` | ข้อมูลที่เขียนที่ edge ตอน WAN ขาด (backlog) · `selector` กรอง `_design/*` ออก (decision sync 2026-10-18) |
 | `users_sh001_pull` | central → edge | `CENTRAL_REPL_USER` | ให้ staff ของศูนย์นี้ login ที่ edge ได้ · `selector` (`edge_shelters` มี `<CODE>` **หรือ** `roles` มี `shelter:<CODE>` — [CR-171](../changes/01-core/CR-171-users-edge-shelters-soft-delete.md)) กรองที่ central จึงไม่ส่ง user ศูนย์อื่นมา และ revision ที่ถอด role / soft delete ยังถึง edge |
 
 - URL ฝั่ง edge ใน job คือ `http://127.0.0.1:5984` เพราะ job รัน **ภายใน container CouchDB** เอง
