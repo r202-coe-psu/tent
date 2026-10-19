@@ -221,6 +221,7 @@ describe('RATE_LIMIT switch (CR-160)', () => {
 		]);
 		expect(closed).toEqual([
 			'donationSlotsLimiter',
+			'donationTrackSearchLimiter',
 			'kioskPhoneDeviceLimiter',
 			'kioskPhoneNumberLimiter',
 			'kioskRegisterDeviceLimiter',

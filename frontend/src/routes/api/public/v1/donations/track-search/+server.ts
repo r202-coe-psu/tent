@@ -1,5 +1,5 @@
 import { json } from '@sveltejs/kit';
-import { donationIpLimiter } from '$lib/server/security/rate-limiter';
+import { donationTrackSearchLimiter } from '$lib/server/security/rate-limiter';
 import { fastapiBaseUrl, fastapiServiceHeaders, unwrapFastapiError } from '$lib/server/fastapi';
 
 /**
@@ -17,7 +17,7 @@ export const POST = async ({ request, getClientAddress }) => {
 		}
 
 		const ip = getClientAddress();
-		if (!donationIpLimiter.check(ip)) {
+		if (!donationTrackSearchLimiter.check(ip)) {
 			return json({ success: false, error: 'RATE_LIMITED' }, { status: 429 });
 		}
 

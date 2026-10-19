@@ -159,6 +159,14 @@ export const donationEditLimiter = new RateLimiter(60000, 10, { bypassable: true
  */
 export const donationReadLimiter = new RateLimiter(60000, 30, { bypassable: true });
 /**
+ * Finding a ticket by booking ref + phone (`track-search`). Its own bucket (#459): it
+ * used to share `donationIpLimiter`, so a donor checking a booking spent the budget for
+ * making one. Ten a minute leaves room for typos; the ref + phone pair is what makes a
+ * guess expensive, as with `registerLookupIpLimiter`. Not bypassable: CR-160 keeps
+ * limiters added after it on in every environment, and this one has room for e2e.
+ */
+export const donationTrackSearchLimiter = new RateLimiter(60000, 10);
+/**
  * The wizard's window grid (`GET /donations/slots`). Anonymous and keyed by IP only, and
  * each call scans every `donation_slot:` and `donation:` doc of a shelter with admin
  * credentials — the heaviest public read — so it gets its own bucket rather than sharing
