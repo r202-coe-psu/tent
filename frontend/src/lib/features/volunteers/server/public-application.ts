@@ -4,7 +4,11 @@ import { ulid } from '$lib/db/ulid';
 import { nextVolunteerCode } from '../domain/volunteer-code';
 import { DEFAULT_CONTROLLED_SKILLS } from '../domain/skills';
 import { resolveSkillLabel, skillOptionsFromMaster } from '../domain/skill-catalog';
-import type { VolunteerApplyInput } from '$lib/features/volunteer-portal/domain/volunteer';
+import {
+	formatMintedTicketToken,
+	TRACKING_TOKEN_RANDOM_BYTES,
+	type VolunteerApplyInput
+} from '$lib/features/volunteer-portal/domain/volunteer';
 import {
 	findAsPublicWriter,
 	getAsPublicWriter,
@@ -574,7 +578,7 @@ export async function applyPublicVolunteerApplication(
 	// 16 random bytes, hex-encoded (32 hex chars) — same convention as the backend's
 	// `secrets.token_hex(16)` for this prefix, not a ULID: this is a bearer secret, not an
 	// identifier, so it must come from a CSPRNG rather than something with a time component.
-	const trackingToken = `TKT-VOL-${randomBytes(16).toString('hex').toUpperCase()}`;
+	const trackingToken = formatMintedTicketToken(randomBytes(TRACKING_TOKEN_RANDOM_BYTES));
 	const trackingTokenHash = await sha256Hex(trackingToken);
 
 	// Per-volunteer token (separate from the per-application `trackingToken` above): minted
@@ -585,7 +589,7 @@ export async function applyPublicVolunteerApplication(
 	const existingVolunteerToken = existing?.tracking_token_hash;
 	const mintedVolunteerToken = existingVolunteerToken
 		? null
-		: `TKT-VOL-${randomBytes(16).toString('hex').toUpperCase()}`;
+		: formatMintedTicketToken(randomBytes(TRACKING_TOKEN_RANDOM_BYTES));
 	const volunteerTokenHash = mintedVolunteerToken
 		? await sha256Hex(mintedVolunteerToken)
 		: existingVolunteerToken;

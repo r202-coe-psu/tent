@@ -12,7 +12,9 @@ import {
 import { adminRaw } from '$lib/server/couch-admin';
 import { shelterDbName } from '$lib/server/shelter-access-design';
 import {
+	formatMintedTicketToken,
 	TRACKING_TOKEN_HASH_PREFIX,
+	TRACKING_TOKEN_RANDOM_BYTES,
 	trackingTokenHashFromPayload
 } from '$lib/features/volunteer-portal/domain/volunteer';
 import { isWithinDutyWindow } from '../domain/duty-window';
@@ -484,7 +486,7 @@ export async function readOrMintRoleCardToken(
 				throw new PublicScheduleError('ROLE_CARD_WRITE_FAILED', 503);
 			}
 
-			const token = `TKT-VOL-${randomBytes(16).toString('hex').toUpperCase()}`;
+			const token = formatMintedTicketToken(randomBytes(TRACKING_TOKEN_RANDOM_BYTES));
 			const updated = {
 				...current,
 				tracking_token_hash: await sha256Hex(token),

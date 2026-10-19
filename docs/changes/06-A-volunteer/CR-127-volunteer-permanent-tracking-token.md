@@ -101,6 +101,8 @@ themself, which the portal sign-in and on-site check-in both need one of.
 
 - **R-8** — `access/resolve`, `profile`, `schedule`, `schedule/action`, `ticket/find`: credential ที่เป็น token
   รูปแบบ `TKT-VOL-` + hex 32 ตัว (128-bit, `isMintedTicketToken`) ใช้ `volunteerTicketLimiter` (60 s / 30)
+  — ตัดสินจาก credential **หลัง parse** (ตัวที่ใช้ค้นจริง) ไม่ใช่ body ดิบ: body ที่มีทั้ง `phone` และ `token`
+  parse เป็นเบอร์โทร จึงต้องใช้โควตาเข้ม
 - **R-9** — เบอร์โทร, token สั้นหรือรูปแบบอื่น และ body ที่อ่านไม่ได้ ใช้ `volunteerTicketFindLimiter` (60 s / 5) เหมือนเดิม;
   `access/role-card` (รับเฉพาะเบอร์) ไม่เปลี่ยน; ทั้งสอง limiter ยัง**ห้ามปิด** ตาม CR-160
 
@@ -123,3 +125,5 @@ themself, which the portal sign-in and on-site check-in both need one of.
 - 2026-10-18 — Note (#625): portal "จดจำเครื่องนี้" (opt-in, token only, `localStorage`, 7 วัน) และย้าย
   lookup ด้วย minted token ไป `volunteerTicketLimiter`; owner เลือก track เป็น note ต่อท้าย CR-127, อายุ 7 วัน,
   และแยกโควตาตาม credential
+- 2026-10-18 — แก้ R-8: เลือกโควตาจาก credential หลัง parse (body ที่มีทั้ง phone และ token เคยได้โควตา token
+  ทั้งที่ค้นด้วยเบอร์โทร — พบตอนตรวจ security)

@@ -30,13 +30,19 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
 	// looser token budget; a phone (or any other code) keeps the strict lookup budget that
 	// guards enumeration. Sharing the strict one throttled the second volunteer to sign in
 	// from a shelter's single NAT address (#625, CR-127 note).
+	// The budget follows the PARSED credential — the one the lookup will actually use. A
+	// body carrying both a phone and a token parses as the phone (the token is stripped),
+	// so judging the raw body would let a phone lookup ride the looser token budget.
 	const body: unknown = await request.json().catch(() => null);
-	const limiter = isMintedTicketToken(body) ? volunteerTicketLimiter : volunteerTicketFindLimiter;
+	const parsed = actionBodySchema.safeParse(body);
+	const limiter =
+		parsed.success && isMintedTicketToken(parsed.data)
+			? volunteerTicketLimiter
+			: volunteerTicketFindLimiter;
 	if (!limiter.check(getClientAddress())) {
 		return json({ success: false, error: 'RATE_LIMITED' }, { status: 429 });
 	}
 	try {
-		const parsed = actionBodySchema.safeParse(body);
 		if (!parsed.success) {
 			return json({ success: false, error: 'INVALID_INPUT' }, { status: 422 });
 		}

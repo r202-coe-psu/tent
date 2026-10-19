@@ -10,7 +10,11 @@ import {
 	type VolunteerInput,
 	type VolunteerStatus
 } from '../domain/volunteer.schema';
-import { trackingTokenHashFromPayload } from '$lib/features/volunteer-portal/domain/volunteer';
+import {
+	formatMintedTicketToken,
+	trackingTokenHashFromPayload,
+	TRACKING_TOKEN_RANDOM_BYTES
+} from '$lib/features/volunteer-portal/domain/volunteer';
 import { nextVolunteerCode } from '../domain/volunteer-code';
 import type { VerificationStatus } from '../domain/verification';
 import type { VolunteerFilter, VolunteerRepository } from './volunteer.repository';
@@ -24,10 +28,9 @@ function normalizePhone(value: string): string {
 
 /** Mint the permanent role-card secret without ever persisting its plaintext. */
 function mintTrackingToken(): string {
-	const bytes = new Uint8Array(16);
-	crypto.getRandomValues(bytes);
-	const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
-	return `TKT-VOL-${hex.toUpperCase()}`;
+	return formatMintedTicketToken(
+		crypto.getRandomValues(new Uint8Array(TRACKING_TOKEN_RANDOM_BYTES))
+	);
 }
 
 /**

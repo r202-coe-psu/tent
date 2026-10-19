@@ -399,8 +399,28 @@ const TRACKING_TOKEN_PREFIX = 'TKT-VOL-';
  */
 export const TRACKING_TOKEN_HASH_PREFIX = 'TKT-VOL-HASH-';
 
-/** A minted tracking token: the prefix plus 16 random bytes as 32 hex digits (128 bits). */
-const MINTED_TOKEN_RE = /^TKT-VOL-[0-9A-F]{32}$/i;
+/** Random bytes in a minted tracking token — 128 bits, so it cannot be guessed. */
+export const TRACKING_TOKEN_RANDOM_BYTES = 16;
+
+/**
+ * Turn CSPRNG output into a tracking token: the prefix plus the bytes as uppercase hex.
+ * The one place the minted format is written down — every mint site passes its own
+ * random bytes here (`randomBytes` on the server, `crypto.getRandomValues` in the
+ * browser), and {@link isMintedTicketToken} checks against the same constants, so the
+ * two can never drift apart.
+ */
+export function formatMintedTicketToken(bytes: Uint8Array): string {
+	if (bytes.length !== TRACKING_TOKEN_RANDOM_BYTES) {
+		throw new RangeError(`expected ${TRACKING_TOKEN_RANDOM_BYTES} random bytes`);
+	}
+	const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+	return `${TRACKING_TOKEN_PREFIX}${hex.toUpperCase()}`;
+}
+
+const MINTED_TOKEN_RE = new RegExp(
+	`^${TRACKING_TOKEN_PREFIX}[0-9A-F]{${TRACKING_TOKEN_RANDOM_BYTES * 2}}$`,
+	'i'
+);
 
 /**
  * True only for a full, freshly minted `TKT-VOL-` token — 128 random bits, so it cannot

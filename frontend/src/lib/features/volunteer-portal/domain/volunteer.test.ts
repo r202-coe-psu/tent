@@ -18,7 +18,9 @@ import {
 	volunteerProfileUpdateSchema,
 	type PublicJob,
 	type ScheduleShift,
+	formatMintedTicketToken,
 	isMintedTicketToken,
+	TRACKING_TOKEN_RANDOM_BYTES,
 	buildRememberedPortalCredential,
 	readRememberedPortalCredential,
 	PORTAL_REMEMBER_TTL_MS
@@ -346,6 +348,24 @@ describe('volunteerProfileUpdateSchema', () => {
 			status: 'inactive'
 		});
 		expect(parsed.success && parsed.data).toEqual({ skills: ['ครัว'] });
+	});
+});
+
+describe('formatMintedTicketToken', () => {
+	it('writes the bytes as uppercase hex after the prefix', () => {
+		const bytes = Uint8Array.from({ length: TRACKING_TOKEN_RANDOM_BYTES }, (_, i) => i * 17);
+		expect(formatMintedTicketToken(bytes)).toBe('TKT-VOL-00112233445566778899AABBCCDDEEFF');
+	});
+
+	it('mints exactly what the token rate limit treats as unguessable', () => {
+		const token = formatMintedTicketToken(
+			crypto.getRandomValues(new Uint8Array(TRACKING_TOKEN_RANDOM_BYTES))
+		);
+		expect(isMintedTicketToken({ token })).toBe(true);
+	});
+
+	it('refuses too few bytes rather than minting a guessable token', () => {
+		expect(() => formatMintedTicketToken(new Uint8Array(4))).toThrow(RangeError);
 	});
 });
 

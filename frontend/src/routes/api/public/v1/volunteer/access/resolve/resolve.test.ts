@@ -78,6 +78,18 @@ describe('POST /api/public/v1/volunteer/access/resolve — rate budget (#625)', 
 		expect(volunteerTicketLimiter.check).not.toHaveBeenCalled();
 	});
 
+	it('keeps a phone on the strict budget even when a minted token rides along', async () => {
+		// The body parses as the phone (the token is stripped), so the phone is what gets
+		// looked up — it must not borrow the token's looser budget.
+		vi.mocked(volunteerTicketFindLimiter.check).mockReturnValue(false);
+		const { response, fetch } = call({ phone: '0812345678', token: MINTED });
+		const result = await response;
+
+		expect(result.status).toBe(429);
+		expect(volunteerTicketLimiter.check).not.toHaveBeenCalled();
+		expect(fetch).not.toHaveBeenCalled();
+	});
+
 	it('keeps a short, guessable code on the strict budget', async () => {
 		vi.mocked(volunteerTicketFindLimiter.check).mockReturnValue(false);
 
