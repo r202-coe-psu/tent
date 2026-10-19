@@ -18,6 +18,8 @@ from .schemas import (
     DonationCreateResponse,
     DonationItemsPatchRequest,
     DonationItemsPatchResponse,
+    DonationPhoneLookupRequest,
+    DonationPhoneLookupResponse,
     DonationTrackingResponse,
     DonationTrackSearchRequest,
     DonationTrackSearchResponse,
@@ -85,6 +87,28 @@ async def track_search_donation(
     _enforce_rate_limit(request)
     response.headers["Cache-Control"] = "no-store"
     return await use_case.track_search(payload.booking_ref, payload.phone)
+
+
+@router.post(
+    "/lookup-by-phone",
+    response_model=DonationPhoneLookupResponse,
+    dependencies=[Depends(verify_external_secret)],
+)
+async def lookup_donations_by_phone(
+    request: Request,
+    response: Response,
+    payload: DonationPhoneLookupRequest,
+    use_case: DonationsUseCase = Depends(get_donations_use_case),  # noqa: B008
+) -> DonationPhoneLookupResponse:
+    """Phone number alone → every booking of it still in the buffer (CR-173).
+
+    Full access: each item carries its ``tracking_token``. The enumeration guards (per-IP
+    and per-number limits, the captcha gate) live on the BFF; this logs every call and
+    alerts on volume. The BFF sends the donor's IP as ``X-Real-IP``.
+    """
+    _enforce_rate_limit(request)
+    response.headers["Cache-Control"] = "no-store"
+    return await use_case.lookup_by_phone(payload.phone, client_ip(request))
 
 
 @router.get(
