@@ -188,6 +188,10 @@
 		toast.success('เพิ่มโซนสำเร็จ');
 	}
 
+	// Raw short-name text while its input is focused: superforms writes the
+	// schema-trimmed value back on a valid form, which would eat a typed space.
+	let shortNameDrafts = $state<Record<string, string>>({});
+
 	function deleteZone(code: string) {
 		$formData.zones = $formData.zones.filter((z: Zone) => z.code !== code);
 		toast.success('ลบโซนสำเร็จ');
@@ -474,8 +478,29 @@
 					{@render zoneActions(false)}
 				</div>
 
-				<!-- Row 2: Area & Specifics -->
-				<div class="grid grid-cols-1 gap-2 md:grid-cols-[160px_1fr]">
+				<!-- Row 2: Short name & Area & Specifics -->
+				<div class="grid grid-cols-2 gap-2 md:grid-cols-[140px_160px_1fr]">
+					<Form.Field {form} name={`zones[${index}].short_name`} class="space-y-0">
+						<Form.Control>
+							{#snippet children({ props })}
+								<Input
+									{...props}
+									value={shortNameDrafts[zone.code] ?? zone.short_name ?? ''}
+									oninput={(e) => {
+										shortNameDrafts[zone.code] = e.currentTarget.value;
+										zone.short_name = e.currentTarget.value || null;
+									}}
+									onblur={() => delete shortNameDrafts[zone.code]}
+									maxlength={10}
+									aria-label="ชื่อย่อโซน"
+									placeholder="ชื่อย่อ"
+									class="bg-white"
+									{disabled}
+								/>
+							{/snippet}
+						</Form.Control>
+						<Form.FieldErrors />
+					</Form.Field>
 					<div class="relative">
 						<Input
 							type="number"
@@ -496,7 +521,7 @@
 					<Input
 						value={zone.specifics ?? ''}
 						oninput={(e) => (zone.specifics = e.currentTarget.value || null)}
-						class="bg-white"
+						class="col-span-2 bg-white md:col-span-1"
 						placeholder="ข้อจำกัด/สิ่งอำนวยความสะดวกเฉพาะโซน (Zone Specifics)"
 						{disabled}
 					/>

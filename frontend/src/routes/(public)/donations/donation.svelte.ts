@@ -1,5 +1,6 @@
-import { setContext, getContext } from 'svelte';
+import { setContext, getContext, tick } from 'svelte';
 import { ulid } from '$lib/db/ulid';
+import { scrollAppToTop } from '$lib/utils/scroll-app-to-top';
 
 export interface DonationItem {
 	id: string;
@@ -27,7 +28,7 @@ export interface DonationItem {
 
 export type TabStep = 'needs' | 'shelter-details' | 'form' | 'time' | 'ticket';
 
-class DonationStore {
+export class DonationStore {
 	activeTab = $state<TabStep>('needs');
 	reachedStep = $state(1); // 1: needs, 2: form, 3: time, 4: ticket
 	flowMode = $state<'solicited' | 'unsolicited'>('solicited');
@@ -72,6 +73,16 @@ class DonationStore {
 	trackingToken = $state('');
 	bookingRef = $state('');
 
+	/**
+	 * Move the wizard to `step` and bring its header into view. Steps are state on this
+	 * page, not routes, so the layout's `afterNavigate → scrollAppToTop` never runs — every
+	 * step change goes through here instead of assigning `activeTab` directly (#620).
+	 */
+	goToStep(step: TabStep) {
+		this.activeTab = step;
+		void tick().then(scrollAppToTop);
+	}
+
 	addItem() {
 		this.items.push({
 			id: ulid(),
@@ -90,7 +101,7 @@ class DonationStore {
 	}
 
 	reset() {
-		this.activeTab = 'needs';
+		this.goToStep('needs');
 		this.reachedStep = 1;
 		this.flowMode = 'solicited';
 		this.selectedShelterForNeeds = null;
