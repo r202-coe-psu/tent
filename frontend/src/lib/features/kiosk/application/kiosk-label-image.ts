@@ -2,12 +2,14 @@ import {
 	KIOSK_LABEL_CHECKBOX,
 	KIOSK_LABEL_CHECKLIST,
 	KIOSK_LABEL_LINK,
+	KIOSK_LABEL_LINK_GAP_MM,
 	KIOSK_LABEL_TEXT,
-	KIOSK_LABEL_TEXT_ROW_GAP_MM,
+	KIOSK_LABEL_ZONE,
 	kioskLabelDots,
 	kioskLabelLayout,
-	layoutChecklist,
+	labelZoneLine,
 	mmToDots,
+	type LabelZoneLine,
 	ptToDots,
 	wrapLabelText
 } from '../domain/print-label';
@@ -16,8 +18,11 @@ export type KioskLabelContent = {
 	/** QR data URL rendered at 1 px per printer dot (see `kioskQrPrintSize`). */
 	qrSrc: string;
 	name: string;
-	phone: string | null;
+	/** Current zone name; missing or null leaves a dotted rule to write the zone on. */
+	zone?: string | null;
 	checklist?: readonly string[];
+	/** Intake stations passed: this many checklist boxes are ticked, top first. */
+	checkedCount?: number;
 };
 
 /** Thermal heads print dots, not greys: anything darker than this becomes black. */
@@ -25,8 +30,6 @@ const INK_THRESHOLD = 160;
 /** Matches the app's typography stack (`$lib/tokens/typography.ts`) so Thai glyphs render
  * instead of the generic sans-serif fallback's tofu boxes on a kiosk without a system Thai font. */
 const FONT_FAMILY = "'IBM Plex Sans Thai', sans-serif";
-/** The card's `font-mono` phone line (`--font-mono` in app.css). */
-const MONO_FAMILY = "'Geist Mono', monospace";
 
 function loadImage(src: string): Promise<HTMLImageElement> {
 	const image = new Image();
@@ -69,13 +72,13 @@ export async function renderKioskLabelPng(label: KioskLabelContent): Promise<str
 
 	const {
 		name: nameStyle,
-		phone: phoneStyle,
+		zone: zoneStyle,
 		checklist: checkStyle,
 		link: linkStyle
 	} = KIOSK_LABEL_TEXT;
 	const fonts = {
 		name: `${nameStyle.weight} ${ptToDots(nameStyle.pt)}px ${FONT_FAMILY}`,
-		phone: `${phoneStyle.weight} ${ptToDots(phoneStyle.pt)}px ${MONO_FAMILY}`,
+		zone: `${zoneStyle.weight} ${ptToDots(zoneStyle.pt)}px ${FONT_FAMILY}`,
 		checklist: `${checkStyle.weight} ${ptToDots(checkStyle.pt)}px ${FONT_FAMILY}`,
 		link: `${linkStyle.weight} ${ptToDots(linkStyle.pt)}px ${FONT_FAMILY}`
 	};
@@ -124,36 +127,65 @@ export async function renderKioskLabelPng(label: KioskLabelContent): Promise<str
 		y += nameSize * nameStyle.lineHeight;
 	}
 
-	if (label.phone) {
-		const phoneSize = ptToDots(phoneStyle.pt);
-		y += mmToDots(KIOSK_LABEL_TEXT_ROW_GAP_MM);
-		context.font = fonts.phone;
-		context.letterSpacing = `${phoneSize * phoneStyle.letterSpacingEm}px`;
-		context.fillText(
-			label.phone,
-			layout.text.x,
-			y + (phoneSize * phoneStyle.lineHeight) / 2,
-			layout.text.width
-		);
-		context.letterSpacing = '0px';
-	}
+	y += mmToDots(KIOSK_LABEL_ZONE.rowGapMm);
+	drawZone(context, labelZoneLine(label.zone), fonts.zone, layout.text, y, { words, graphemes });
 
-	drawChecklist(context, label.checklist ?? KIOSK_LABEL_CHECKLIST, fonts.checklist, layout.text);
-
-	// Centred under the QR (the one centred row; everything else is left-aligned).
+	// The checklist sits right above the site address, printed small at the very bottom.
+	const linkRow = ptToDots(linkStyle.pt) * linkStyle.lineHeight;
+	drawChecklist(
+		context,
+		label.checklist ?? KIOSK_LABEL_CHECKLIST,
+		label.checkedCount ?? 0,
+		fonts.checklist,
+		{ ...layout.text, bottom: layout.text.bottom - linkRow - mmToDots(KIOSK_LABEL_LINK_GAP_MM) }
+	);
 	context.font = fonts.link;
-	context.textAlign = 'center';
-	context.fillText(KIOSK_LABEL_LINK, layout.link.x, layout.link.y);
-	context.textAlign = 'left';
+	context.fillText(KIOSK_LABEL_LINK, layout.link.x, layout.link.y, layout.text.width);
 
 	binarize(context, width, height);
 	return canvas.toDataURL('image/png').slice('data:image/png;base64,'.length);
 }
 
-/** Checkbox rows anchored to the bottom of the text column, like the card's `mt-auto`. */
+/** `Zone:` then the zone name cut to one line, or a dotted rule to write the zone on by hand. */
+function drawZone(
+	context: CanvasRenderingContext2D,
+	zone: LabelZoneLine,
+	font: string,
+	column: { x: number; width: number },
+	top: number,
+	segment: { words: (text: string) => string[]; graphemes: (text: string) => string[] }
+): void {
+	const { pt, lineHeight } = KIOSK_LABEL_TEXT.zone;
+	const size = ptToDots(pt);
+	const middle = top + (size * lineHeight) / 2;
+	const end = column.x + column.width;
+	context.font = font;
+	const measure = (text: string) => context.measureText(text).width;
+	context.fillText(zone.label, column.x, middle);
+	const x = column.x + measure(zone.label) + mmToDots(KIOSK_LABEL_ZONE.textGapMm);
+
+	if (zone.value) {
+		const [line] = wrapLabelText(segment.words(zone.value), end - x, measure, 1, segment.graphemes);
+		if (line) context.fillText(line, x, middle);
+		return;
+	}
+	// Square dots on whole printer dots, about on the text baseline (rows use `middle`).
+	const dot = Math.round(mmToDots(KIOSK_LABEL_ZONE.dotMm));
+	const pitch = Math.round(mmToDots(KIOSK_LABEL_ZONE.dotPitchMm));
+	const ruleY = Math.round(middle + size * 0.35);
+	for (let dotX = Math.round(x); dotX + dot <= end; dotX += pitch) {
+		context.fillRect(dotX, ruleY, dot, dot);
+	}
+}
+
+/**
+ * One checkbox row per item, anchored to the bottom of the text column like the card's `mt-auto`;
+ * the first `checkedCount` boxes get a tick.
+ */
 function drawChecklist(
 	context: CanvasRenderingContext2D,
 	items: readonly string[],
+	checkedCount: number,
 	font: string,
 	column: { x: number; width: number; bottom: number }
 ): void {
@@ -165,24 +197,31 @@ function drawChecklist(
 	const rowHeight = Math.max(boxSize, ptToDots(pt) * lineHeight);
 
 	context.font = font;
-	const rows = layoutChecklist(items, column.width, (text) => context.measureText(text).width, {
-		boxSize,
-		textGap,
-		itemGap: mmToDots(KIOSK_LABEL_CHECKBOX.itemGapMm)
-	});
-	let y = column.bottom - rows.length * rowHeight - (rows.length - 1) * rowGap;
-	for (const row of rows) {
+	const boxX = Math.round(column.x);
+	let y = column.bottom - items.length * rowHeight - (items.length - 1) * rowGap;
+	for (const [index, item] of items.entries()) {
 		const middle = y + rowHeight / 2;
-		for (const item of row) {
-			const boxX = Math.round(column.x + item.x);
-			const boxY = Math.round(middle - boxSize / 2);
-			context.fillStyle = '#000000';
-			context.fillRect(boxX, boxY, boxSize, boxSize);
-			context.fillStyle = '#FFFFFF';
-			context.fillRect(boxX + border, boxY + border, boxSize - border * 2, boxSize - border * 2);
-			context.fillStyle = '#000000';
-			context.fillText(item.text, boxX + boxSize + textGap, middle);
-		}
+		const boxY = Math.round(middle - boxSize / 2);
+		context.fillStyle = '#000000';
+		context.fillRect(boxX, boxY, boxSize, boxSize);
+		context.fillStyle = '#FFFFFF';
+		context.fillRect(boxX + border, boxY + border, boxSize - border * 2, boxSize - border * 2);
+		context.fillStyle = '#000000';
+		if (index < checkedCount) drawTick(context, boxX, boxY, boxSize);
+		context.fillText(item, boxX + boxSize + textGap, middle, column.width - boxSize - textGap);
 		y += rowHeight + rowGap;
 	}
+}
+
+/** A check mark inside the `size`-dot box at (`x`, `y`), as on the card's ticked boxes. */
+function drawTick(context: CanvasRenderingContext2D, x: number, y: number, size: number): void {
+	context.strokeStyle = '#000000';
+	context.lineWidth = Math.max(2, Math.round(mmToDots(KIOSK_LABEL_CHECKBOX.tickMm)));
+	context.lineCap = 'square';
+	context.lineJoin = 'miter';
+	context.beginPath();
+	context.moveTo(x + size * 0.2, y + size * 0.52);
+	context.lineTo(x + size * 0.42, y + size * 0.75);
+	context.lineTo(x + size * 0.8, y + size * 0.25);
+	context.stroke();
 }
