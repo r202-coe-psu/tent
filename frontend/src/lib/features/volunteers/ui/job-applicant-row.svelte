@@ -161,7 +161,9 @@
 							? 'bg-amber-50 text-amber-800 ring-1 ring-amber-200'
 							: 'bg-background text-foreground ring-1 ring-border'
 					]}
-					title={skill.controlled ? 'ทักษะควบคุม — ต้องตรวจเอกสาร/ใบรับรองก่อนอนุมัติ' : undefined}
+					title={skill.controlled
+						? 'ทักษะที่ต้องมีใบรับรอง — ต้องตรวจใบรับรองก่อนอนุมัติ'
+						: undefined}
 				>
 					{#if skill.controlled}
 						<ShieldAlert class="h-3 w-3" />
