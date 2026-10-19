@@ -46,7 +46,6 @@
 		placeholder = 'ค้นหา…',
 		emptyText = 'ไม่พบสินค้า',
 		allowCreate = false,
-		createInitialName = '',
 		onSelect,
 		id,
 		name,
@@ -66,8 +65,6 @@
 		emptyText?: string;
 		/** Offer "+ สร้างสินค้าใหม่" (quick-create) to roles that may write the shelter catalog. */
 		allowCreate?: boolean;
-		/** Name to start quick-create with when nothing has been typed (e.g. what a donor declared). */
-		createInitialName?: string;
 		onSelect?: (item: StockFormItem | null, meta?: ItemSelectMeta) => void;
 		id?: string;
 		name?: string;
@@ -203,7 +200,7 @@
 	function openCreate(barcode?: string) {
 		const code = barcode ?? (queryIsBarcode ? query : '');
 		createBarcode = code;
-		createName = code ? '' : query || createInitialName;
+		createName = code ? '' : query;
 		open = false;
 		createOpen = true;
 	}

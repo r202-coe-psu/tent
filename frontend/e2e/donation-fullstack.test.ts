@@ -245,6 +245,16 @@ test.describe('Donation full-stack: donor and staff', { tag: ['@critical', '@don
 		// What the donor declared stays visible, in their unit and in Thai.
 		await expect(page.getByText(/แจ้งไว้\s*1\s*กล่อง/)).toBeVisible();
 
+		// "เพิ่มสินค้าใหม่" beside the picker opens the create form in a side sheet, started
+		// from what the donor typed. Cancelled here: an item created by the run would stay
+		// in the catalog after teardown.
+		await page.getByRole('button', { name: 'เพิ่มสินค้าใหม่' }).click();
+		const createSheet = page.getByRole('dialog', { name: 'สร้างสินค้าใหม่' });
+		await expect(createSheet).toBeVisible();
+		await expect(createSheet.locator('#qc-name')).toHaveValue(`ผ้าอ้อมเด็กยกกล่อง ${RUN_ID}`);
+		await createSheet.getByRole('button', { name: 'ยกเลิก' }).click();
+		await expect(createSheet).toBeHidden();
+
 		// Searchable picker (#638); its rows show the unit in Thai, not the raw code (#636).
 		const picker = page.getByRole('combobox', { name: /^รายการในคลัง/ });
 		// Thai text is inserted without key events, so open the list with ArrowDown first.

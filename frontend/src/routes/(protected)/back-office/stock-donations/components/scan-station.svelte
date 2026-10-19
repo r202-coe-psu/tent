@@ -6,6 +6,7 @@
 	import Check from '@lucide/svelte/icons/check';
 	import User from '@lucide/svelte/icons/user';
 	import PlusCircle from '@lucide/svelte/icons/plus-circle';
+	import Plus from '@lucide/svelte/icons/plus';
 	import Trash2 from '@lucide/svelte/icons/trash-2';
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import ClipboardCheck from '@lucide/svelte/icons/clipboard-check';
@@ -21,6 +22,9 @@
 	import Circle from '@lucide/svelte/icons/circle';
 
 	import { Button } from '$lib/components/ui/button/index.js';
+	import * as Sheet from '$lib/components/ui/sheet/index.js';
+	import { IsMobile } from '$lib/hooks/is-mobile.svelte';
+	import { authStore } from '$lib/stores/auth.svelte';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
 	import { DatePicker } from '$lib/components/ui/date-picker/index.js';
@@ -44,10 +48,13 @@
 	import { useSupplyItems } from '$lib/features/supply';
 	import {
 		canonicalizeUnitCode,
+		canWriteShelterCatalog,
 		formatUnit,
 		mergeCatalogGenerations,
+		QuickCreateItem,
 		useItemMasters,
-		useUnitsOfMeasure
+		useUnitsOfMeasure,
+		type ItemMaster
 	} from '$lib/features/catalog';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { ulid } from '$lib/db/ulid';
@@ -125,6 +132,39 @@
 	function rememberPicked(picked: StockFormItem | null) {
 		if (!picked || catalogItems.some((c) => c._id === picked._id)) return;
 		pickedOffList = [...pickedOffList.filter((i) => i._id !== picked._id), picked];
+	}
+
+	// "เพิ่มสินค้าใหม่" sits beside the picker and opens a side sheet — the same shape as
+	// the stock page's receive panel — instead of the picker's own create entry, which is
+	// a centred dialog. Here the form is a full page, so the sheet has room and the
+	// donor's lines stay in view while the item is filled in.
+	const canCreateItem = $derived(canWriteShelterCatalog(authStore.user?.roles ?? []));
+	const isMobileViewport = new IsMobile();
+	let createOpen = $state(false);
+	let createTarget = $state<
+		| { kind: 'scan'; index: number; name: string }
+		| { kind: 'walkin'; index: number; name: string }
+		| null
+	>(null);
+
+	function openCreateItem(target: NonNullable<typeof createTarget>) {
+		createTarget = target;
+		createOpen = true;
+	}
+
+	/** A created item, or the existing one picked instead, lands on the line that asked. */
+	function finishCreateItem(master: ItemMaster) {
+		const target = createTarget;
+		createOpen = false;
+		createTarget = null;
+		if (!target) return;
+		const picked = toStockFormItems([], [master])[0] ?? null;
+		if (target.kind === 'scan') {
+			const line = scannedItems[target.index];
+			if (line) mapScannedItem(line, picked);
+		} else {
+			handleWalkinItemSelect(target.index, picked);
+		}
 	}
 
 	/** A picker row's unit in the staff's language (#636) — the option list showed raw codes. */
@@ -899,10 +939,20 @@
 											isLoading={supplyItemsQuery.isLoading || itemMastersQuery.isLoading}
 											placeholder="ค้นหารายการในคลัง…"
 											formatBalanceUnit={pickerUnitLabel}
-											allowCreate
-											createInitialName={item.name}
 											onSelect={(picked) => mapScannedItem(item, picked)}
 										/>
+										{#if canCreateItem && !otherShelterCode}
+											<Button
+												type="button"
+												variant="ghost"
+												class="min-h-9 gap-1 px-2 text-sm font-semibold text-sky-800"
+												onclick={() =>
+													openCreateItem({ kind: 'scan', index: idx, name: item.name })}
+											>
+												<Plus class="size-4" aria-hidden="true" />
+												เพิ่มสินค้าใหม่
+											</Button>
+										{/if}
 									</div>
 
 									<div class="space-y-1.5">
@@ -1598,9 +1648,20 @@
 											isLoading={supplyItemsQuery.isLoading || itemMastersQuery.isLoading}
 											placeholder="ค้นหาและเลือกสินค้า…"
 											formatBalanceUnit={pickerUnitLabel}
-											allowCreate
 											onSelect={(picked) => handleWalkinItemSelect(idx, picked)}
 										/>
+										{#if canCreateItem}
+											<Button
+												type="button"
+												variant="ghost"
+												class="min-h-9 gap-1 px-2 text-sm font-semibold text-sky-800"
+												onclick={() =>
+													openCreateItem({ kind: 'walkin', index: idx, name: item.name })}
+											>
+												<Plus class="size-4" aria-hidden="true" />
+												เพิ่มสินค้าใหม่
+											</Button>
+										{/if}
 									</div>
 
 									<!-- Qty Input -->
@@ -1711,3 +1772,35 @@
 		</div>
 	{/if}
 </div>
+
+<!-- Create a stock item for a line: a side sheet (bottom on mobile), like the stock page's
+	receive panel. Mounted only while open so each opening starts from a clean form. -->
+<Sheet.Root bind:open={createOpen} onOpenChange={(open) => !open && (createTarget = null)}>
+	<Sheet.Content
+		side={isMobileViewport.current ? 'bottom' : 'right'}
+		class={[
+			'flex flex-col gap-0 overflow-hidden border-0 p-0 pb-[env(safe-area-inset-bottom)]',
+			isMobileViewport.current
+				? 'h-[100dvh] max-h-[100dvh] rounded-none'
+				: 'h-[100dvh] w-full sm:max-w-none md:w-[37.5rem] md:border-l'
+		]}
+	>
+		<Sheet.Header class="shrink-0 border-b border-slate-200/80 px-4 py-4 pr-14 text-left sm:px-6">
+			<Sheet.Title class="text-xl font-bold text-slate-900">สร้างสินค้าใหม่</Sheet.Title>
+			<Sheet.Description class="text-sm text-slate-500">
+				กรอกแค่ที่จำเป็นต่อการรับของ ข้อมูลอื่นเติมทีหลังได้
+			</Sheet.Description>
+		</Sheet.Header>
+		<div class="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
+			{#if createOpen && createTarget}
+				<QuickCreateItem
+					shelterCode={getShelterCode()}
+					initialName={createTarget.name}
+					onCreated={finishCreateItem}
+					onUseExisting={finishCreateItem}
+					onCancel={() => (createOpen = false)}
+				/>
+			{/if}
+		</div>
+	</Sheet.Content>
+</Sheet.Root>
