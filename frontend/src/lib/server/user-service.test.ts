@@ -628,6 +628,23 @@ describe('user-service', () => {
 			const names = (await listShelterStaffDirectory('SH001')).map((s) => s.name).sort();
 			expect(names).toEqual(['legacy_b', 'staff_a']);
 		});
+
+		it('filters by capabilities when given, default stays unfiltered', async () => {
+			put('sec', { roles: ['shelter:SH001', 'SH001:security_officer'] });
+			put('mgr', { roles: ['shelter:SH001', 'SH001:shelter_manager'] });
+			put('kit', { roles: ['shelter:SH001', 'SH001:kitchen_staff'] });
+			put('sec_other', { roles: ['shelter:SH002', 'SH002:security_officer'] });
+
+			const names = (
+				await listShelterStaffDirectory('SH001', {
+					capabilities: ['security_officer', 'shelter_manager']
+				})
+			)
+				.map((s) => s.name)
+				.sort();
+			expect(names).toEqual(['mgr', 'sec']);
+			expect(await listShelterStaffDirectory('SH001')).toHaveLength(3);
+		});
 	});
 
 	describe('updateOwnProfile', () => {

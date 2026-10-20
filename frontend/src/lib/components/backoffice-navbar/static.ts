@@ -6,6 +6,7 @@ import {
 	isKioskStaffOnly,
 	isShelterManager,
 	isSystemAdmin,
+	canAccessIncidents,
 	SCANNER_MANAGER_CAPABILITIES
 } from '$lib/auth/roles';
 import Users from '@lucide/svelte/icons/users';
@@ -145,7 +146,8 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 			{
 				label: 'บันทึกเหตุการณ์ประจำวัน',
 				href: resolve('/back-office/incidents'),
-				icon: NotebookPen
+				icon: NotebookPen,
+				visibleTo: (roles) => canAccessIncidents(roles)
 			},
 			{ label: 'รายงานความโปร่งใส', href: null, icon: FileCheck },
 			{ label: 'รายงานสรุปหลังเหตุการณ์', href: null, icon: FileText }

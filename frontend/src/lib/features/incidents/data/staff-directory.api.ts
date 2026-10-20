@@ -6,8 +6,14 @@ export interface StaffDirectoryEntry {
 }
 
 /** Colleagues in a shelter (handover picker) — `GET /api/v1/shelters/{code}/staff`. */
-export function listShelterStaff(shelterCode: string): Promise<StaffDirectoryEntry[]> {
+export function listShelterStaff(
+	shelterCode: string,
+	capabilities?: readonly string[]
+): Promise<StaffDirectoryEntry[]> {
+	const query = capabilities?.length
+		? `?capabilities=${encodeURIComponent(capabilities.join(','))}`
+		: '';
 	return serviceFetch<StaffDirectoryEntry[]>(
-		`/api/v1/shelters/${encodeURIComponent(shelterCode)}/staff`
+		`/api/v1/shelters/${encodeURIComponent(shelterCode)}/staff${query}`
 	);
 }

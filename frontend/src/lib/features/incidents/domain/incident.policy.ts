@@ -1,9 +1,10 @@
 /**
- * Who may do what on a `shelter_incident` + the status graph. Pure — mirrored by the
+ * Who may do what on a `shelter_incident` + the status graph. Access is limited to incident staff
+ * (system_admin, or security_officer / shelter_manager of the shelter — CR-155 IL-P1). Pure — mirrored by the
  * CouchDB `validate_doc_update` rules in `$lib/server/shelter-access-design.ts`, which are
  * the authoritative guard (clients write directly with their session).
  */
-import { hasShelterScope, isShelterManager, isSystemAdmin } from '$lib/auth/roles';
+import { canAccessIncidents, isShelterManager, isSystemAdmin } from '$lib/auth/roles';
 import { isTerminalStatus, type IncidentStatus, type ShelterIncident } from './incident';
 
 /**
@@ -34,9 +35,9 @@ export function isIncidentManager(actor: IncidentActor): boolean {
 	return isSystemAdmin(actor.roles) || isShelterManager(actor.roles, actor.shelterCode);
 }
 
-/** Any staff of the shelter — may open a record and add observation notes. */
+/** Incident staff (SO / SM / SA) — may open a record and add observation notes. */
 export function isShelterStaff(actor: IncidentActor): boolean {
-	return isSystemAdmin(actor.roles) || hasShelterScope(actor.roles, actor.shelterCode);
+	return canAccessIncidents(actor.roles, actor.shelterCode);
 }
 
 export function isIncidentOwner(incident: ShelterIncident, actor: IncidentActor): boolean {

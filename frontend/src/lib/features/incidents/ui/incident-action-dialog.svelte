@@ -6,6 +6,7 @@
 	import { Textarea } from '$lib/components/ui/textarea/index.js';
 	import { toast } from 'svelte-sonner';
 	import {
+		INCIDENT_STAFF_CAPABILITIES,
 		INCIDENT_STATUS_LABELS,
 		RESPONDENT_STATUS_LABELS,
 		incidentNoteSchema,
@@ -24,7 +25,7 @@
 	}: { open?: boolean; mode: ActionMode; incident: ShelterIncident } = $props();
 
 	const actionMutation = useIncidentAction();
-	const staffQuery = useShelterStaff(() => incident.shelter_code);
+	const staffQuery = useShelterStaff(() => incident.shelter_code, INCIDENT_STAFF_CAPABILITIES);
 
 	let note = $state('');
 	let assignee = $state('');
@@ -44,6 +45,13 @@
 				label:
 					s.display_name && s.display_name !== s.name ? `${s.display_name} (${s.name})` : s.name
 			}))
+	);
+
+	const noReassignTarget = $derived(
+		mode.kind === 'reassign' &&
+			!staffQuery.isLoading &&
+			!staffQuery.isError &&
+			staffOptions.length === 0
 	);
 
 	const title = $derived(
@@ -134,7 +142,9 @@
 					{:else if staffQuery.isError}
 						<p class="text-sm text-destructive">โหลดรายชื่อเจ้าหน้าที่ไม่สำเร็จ</p>
 					{:else if staffOptions.length === 0}
-						<p class="text-sm text-muted-foreground">ไม่มีเจ้าหน้าที่คนอื่นในศูนย์นี้</p>
+						<p class="text-sm text-muted-foreground">
+							ไม่มีเจ้าหน้าที่รักษาความปลอดภัยหรือผู้จัดการศูนย์คนอื่นให้ส่งต่อ
+						</p>
 					{:else}
 						<SearchSelect
 							name="assigned_to"
@@ -211,7 +221,7 @@
 					type="submit"
 					class="min-h-11 rounded-xl font-semibold"
 					variant={mode.kind === 'status' && mode.to === 'cancelled' ? 'destructive' : 'default'}
-					disabled={actionMutation.isPending}
+					disabled={actionMutation.isPending || noReassignTarget}
 				>
 					{actionMutation.isPending ? 'กำลังบันทึก…' : 'ยืนยัน'}
 				</Button>

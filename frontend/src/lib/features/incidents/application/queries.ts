@@ -37,7 +37,8 @@ export const incidentKeys = {
  * the directory endpoint scans all of `_users` server-side.
  */
 export const shelterStaffKeys = {
-	list: (shelterCode: string) => ['shelter-staff', shelterCode] as const
+	list: (shelterCode: string, capabilities?: readonly string[]) =>
+		['shelter-staff', shelterCode, capabilities?.join(',') ?? 'all'] as const
 };
 
 export const useIncidents = (shelterCode: () => string) =>
@@ -53,10 +54,10 @@ export const useIncident = (shelterCode: () => string, id: () => string) =>
 		enabled: !!id()
 	}));
 
-export const useShelterStaff = (shelterCode: () => string) =>
+export const useShelterStaff = (shelterCode: () => string, capabilities?: readonly string[]) =>
 	createQuery(() => ({
-		queryKey: shelterStaffKeys.list(shelterCode()),
-		queryFn: () => listShelterStaff(shelterCode()),
+		queryKey: shelterStaffKeys.list(shelterCode(), capabilities),
+		queryFn: () => listShelterStaff(shelterCode(), capabilities),
 		staleTime: 5 * 60_000
 	}));
 

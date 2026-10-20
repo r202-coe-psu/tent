@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest';
 import {
 	bangkokDayKey,
 	complainantSchema,
+	countIncidentsByStatus,
+	INCIDENT_STAFF_CAPABILITIES,
+	INCIDENT_STATUSES,
 	filterIncidents,
 	incidentTitle,
 	incidentCreateSchema,
@@ -16,6 +19,7 @@ import {
 import {
 	availableTransitions,
 	canAddNote,
+	canCreateIncident,
 	canChangeStatus,
 	canIdentifyRespondent,
 	canReassign,
@@ -33,12 +37,17 @@ import {
 
 const OWNER: IncidentActor = {
 	name: 'staff_a',
-	roles: ['shelter:SH001', 'SH001:registration_staff'],
+	roles: ['shelter:SH001', 'SH001:security_officer'],
 	shelterCode: 'SH001'
 };
 const PEER: IncidentActor = {
 	name: 'staff_b',
-	roles: ['shelter:SH001', 'SH001:facility_staff'],
+	roles: ['shelter:SH001', 'SH001:security_officer'],
+	shelterCode: 'SH001'
+};
+const KITCHEN: IncidentActor = {
+	name: 'kitchen',
+	roles: ['shelter:SH001', 'SH001:kitchen_staff'],
 	shelterCode: 'SH001'
 };
 const MANAGER: IncidentActor = {
@@ -184,6 +193,14 @@ describe('permissions', () => {
 		expect(canReassign(cancelled, MANAGER)).toBe(false);
 	});
 
+	it('non-incident staff (kitchen) cannot create or add a note', () => {
+		const doc = open();
+		expect(canCreateIncident(KITCHEN)).toBe(false);
+		expect(canAddNote(doc, KITCHEN)).toBe(false);
+		expect(canCreateIncident(OWNER)).toBe(true);
+		expect(canCreateIncident(MANAGER)).toBe(true);
+	});
+
 	it('manager of another shelter has no authority here', () => {
 		const doc = open();
 		expect(canChangeStatus(doc, 'action_in_progress', OUTSIDER)).toBe(false);
@@ -302,5 +319,26 @@ describe('list helpers', () => {
 	it('falls back to the category label when an older record has no title', () => {
 		const legacy = { ...open(), title: undefined };
 		expect(incidentTitle(legacy)).toBe('การลักขโมย / ทรัพย์สินเสียหาย');
+	});
+});
+
+describe('incident staff helpers', () => {
+	it('INCIDENT_STAFF_CAPABILITIES is security_officer + shelter_manager', () => {
+		expect([...INCIDENT_STAFF_CAPABILITIES]).toEqual(['security_officer', 'shelter_manager']);
+	});
+
+	it('countIncidentsByStatus zero-fills all statuses', () => {
+		const empty = countIncidentsByStatus([]);
+		expect(Object.keys(empty).sort()).toEqual([...INCIDENT_STATUSES].sort());
+		expect(Object.values(empty).every((n) => n === 0)).toBe(true);
+		const a = open();
+		const counts = countIncidentsByStatus([
+			a,
+			{ ...a, current_status: 'closed' },
+			{ ...a, current_status: 'closed' }
+		]);
+		expect(counts.reported).toBe(1);
+		expect(counts.closed).toBe(2);
+		expect(counts.resolved).toBe(0);
 	});
 });

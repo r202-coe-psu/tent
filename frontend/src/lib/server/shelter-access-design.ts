@@ -488,9 +488,9 @@ export function buildValidateDocUpdate(code: string): string {
       throw { forbidden: 'Cannot update finalized kitchen_requisition documents' };
     }
   }
-  // Shelter Incident Log (CR-155, schema.md §2.10): any shelter staff opens a record and
-  // becomes owner; each update appends exactly one timeline entry by the caller. Owner or
-  // manager changes status / hands over / identifies the respondent; anyone in the shelter may
+  // Shelter Incident Log (CR-155, schema.md §2.10): incident staff (system_admin, or a security officer /
+  // shelter manager of this shelter) open a record and become owner; each update appends exactly one timeline entry by the caller. Owner or
+  // manager changes status / hands over / identifies the respondent; any incident staff may
   // add a note; cancel is manager-only; closed/cancelled are final and records are never deleted.
   if (newDoc.type === 'shelter_incident') {
     var incStatuses = ['reported', 'action_in_progress', 'resolved', 'closed', 'cancelled'];
@@ -503,9 +503,10 @@ export function buildValidateDocUpdate(code: string): string {
     };
     var incManager = isRole('shelter_manager');
     var incStaff = userCtx.roles.indexOf('system_admin') !== -1 ||
-      userCtx.roles.indexOf('shelter:${code}') !== -1;
+      (userCtx.roles.indexOf('shelter:${code}') !== -1 &&
+        (isRole('security_officer') || isRole('shelter_manager')));
     if (!incStaff) {
-      throw { forbidden: 'Only staff of this shelter can write shelter_incident' };
+      throw { forbidden: 'Only security officers or shelter managers of this shelter can write shelter_incident' };
     }
     if (!/^shelter_incident:[0-9A-HJKMNP-TV-Z]{26}$/.test(newDoc._id)) {
       throw { forbidden: 'shelter_incident id must be shelter_incident:{ulid}' };

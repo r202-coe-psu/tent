@@ -31,7 +31,9 @@ export {
 	isTerminalStatus,
 	nextIncidentNo,
 	sortIncidents,
-	filterIncidents
+	filterIncidents,
+	INCIDENT_STAFF_CAPABILITIES,
+	countIncidentsByStatus
 } from './domain/incident';
 export type {
 	ShelterIncident,

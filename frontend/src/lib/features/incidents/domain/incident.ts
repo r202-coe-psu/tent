@@ -1,7 +1,7 @@
 /**
  * Shelter Incident Log — doc `shelter_incident:{ulid}` in `shelter_{code}` (schema_v 1).
  *
- * "Daily Occurrence Book": any shelter staff opens a record and becomes its owner
+ * "Daily Occurrence Book": incident staff (SO / SM of the shelter, or SA) open a record and become its owner
  * (`assigned_to`), every status change / handover carries a reason note in `timeline[]`
  * (append-only), and parties are split into complainant vs respondent so a respondent can
  * be identified later (late binding).
@@ -10,6 +10,7 @@
  */
 import { z } from 'zod';
 import type { BaseDoc, Timestamp } from '$lib/db/model';
+import { SECURITY_OFFICER, SHELTER_MANAGER } from '$lib/auth/roles';
 
 export const INCIDENT_DOC_TYPE = 'shelter_incident' as const;
 export const INCIDENT_SCHEMA_V = 1 as const;
@@ -303,6 +304,21 @@ export function nextIncidentNo(existing: readonly string[], at: Date): string {
 }
 
 // ---------------------------------------------------------------- list helpers
+
+/** Capabilities that grant access to the incident log (besides system_admin). */
+export const INCIDENT_STAFF_CAPABILITIES = [SECURITY_OFFICER, SHELTER_MANAGER] as const;
+
+/** Count per status; every status is present (zero-filled). */
+export function countIncidentsByStatus(
+	incidents: readonly ShelterIncident[]
+): Record<IncidentStatus, number> {
+	const counts = Object.fromEntries(INCIDENT_STATUSES.map((s) => [s, 0])) as Record<
+		IncidentStatus,
+		number
+	>;
+	for (const i of incidents) counts[i.current_status] += 1;
+	return counts;
+}
 
 const SEVERITY_RANK: Record<IncidentSeverity, number> = { critical: 0, high: 1, medium: 2, low: 3 };
 

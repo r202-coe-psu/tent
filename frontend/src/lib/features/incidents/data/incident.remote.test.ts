@@ -9,7 +9,7 @@ import { IncidentRemoteRepository } from './incident.remote';
 
 const ACTOR: IncidentActor = {
 	name: 'staff_a',
-	roles: ['shelter:SH001', 'SH001:registration_staff'],
+	roles: ['shelter:SH001', 'SH001:security_officer'],
 	shelterCode: 'SH001'
 };
 

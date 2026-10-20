@@ -34,14 +34,20 @@ const actor = (name: string, cap: string): IncidentActor => ({
 	roles: ['shelter:SH001', `SH001:${cap}`],
 	shelterCode: 'SH001'
 });
-const OWNER = actor('staff_a', 'registration_staff');
-const PEER = actor('staff_b', 'kitchen_staff');
+const OWNER = actor('staff_a', 'security_officer');
+const PEER = actor('staff_b', 'security_officer');
+const KITCHEN = actor('kitchen', 'kitchen_staff');
+const REGISTRAR = actor('reg', 'registration_staff');
+const ADMIN: UserCtx = { name: 'sa', roles: ['system_admin'] };
 const MANAGER = actor('sm', 'shelter_manager');
 const OUTSIDER: UserCtx = { name: 'x', roles: ['shelter:SH002', 'SH002:shelter_manager'] };
 
 const ULID = '01J8Z6Q4ZKX0W3M2N1P5R7T9VB';
 
-function created(severity: 'medium' | 'critical' = 'medium'): ShelterIncident {
+function created(
+	severity: 'medium' | 'critical' = 'medium',
+	by: IncidentActor = OWNER
+): ShelterIncident {
 	const doc = createIncident(
 		incidentCreateSchema.parse({
 			title: 'ชายชุดดำขโมยรองเท้า',
@@ -53,7 +59,7 @@ function created(severity: 'medium' | 'critical' = 'medium'): ShelterIncident {
 			complainant: { type: 'anonymous' },
 			respondent: { status: 'unknown', unknown_description: 'ชายเสื้อแดง' }
 		}),
-		OWNER,
+		by,
 		'INC-20260922-001'
 	);
 	return { ...doc, _id: `shelter_incident:${ULID}`, _rev: '1-a' };
@@ -64,12 +70,45 @@ const run = (next: ShelterIncident, prev: ShelterIncident | null, user: UserCtx)
 	validate(asDoc(next), prev ? asDoc(prev) : null, user);
 
 describe('validate_doc_update — shelter_incident', () => {
-	it('lets any shelter staff open a record they own', () => {
+	it('lets a security officer, shelter manager or system admin open a record', () => {
+		const adminActor: IncidentActor = { ...ADMIN, shelterCode: 'SH001' };
 		expect(run(created(), null, ctx(OWNER))).not.toThrow();
+		expect(run(created('medium', MANAGER), null, ctx(MANAGER))).not.toThrow();
+		expect(run(created('medium', adminActor), null, ADMIN)).not.toThrow();
+		const soElsewhere: UserCtx = {
+			name: OWNER.name,
+			roles: ['shelter:SH002', 'SH002:security_officer']
+		};
+		expectForbidden(
+			run(created(), null, soElsewhere),
+			/Only security officers or shelter managers/
+		);
+	});
+
+	it('rejects generic staff (kitchen, registration) creating or noting', () => {
+		const denied = /Only security officers or shelter managers of this shelter/;
+		expectForbidden(
+			run(
+				{ ...created(), reported_by: KITCHEN.name, assigned_to: KITCHEN.name },
+				null,
+				ctx(KITCHEN)
+			),
+			denied
+		);
+		const prev = created();
+		const note = addIncidentNote(prev, 'x', OWNER);
+		const asRegistrar = {
+			...note,
+			timeline: note.timeline.map((t) => ({ ...t, actor_id: REGISTRAR.name }))
+		};
+		expectForbidden(run(asRegistrar, prev, ctx(REGISTRAR)), denied);
 	});
 
 	it('rejects staff of another shelter', () => {
-		expectForbidden(run(created(), null, OUTSIDER), /Only staff of this shelter/);
+		expectForbidden(
+			run(created(), null, OUTSIDER),
+			/Only security officers or shelter managers of this shelter/
+		);
 	});
 
 	it('rejects a record with an unknown category, severity or bad occurred_at', () => {
@@ -208,7 +247,7 @@ describe('validate_doc_update — shelter_incident', () => {
 		expectForbidden(run(byOwner, prev, ctx(OWNER)), /Only shelter managers can cancel/);
 	});
 
-	it('any staff may add a note, but only as themselves', () => {
+	it('incident staff may add a note, but only as themselves', () => {
 		const prev = created();
 		expect(run(addIncidentNote(prev, 'เห็นเหตุ', PEER), prev, ctx(PEER))).not.toThrow();
 		expectForbidden(
