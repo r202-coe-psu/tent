@@ -202,6 +202,10 @@ export const PUBLIC_PORTAL_HOME_I18N = {
 		volunteersNeededText: (count: number) => `ต้องการอีก ${count.toLocaleString()} คน`,
 		volunteersActiveText: (count: number) => `มีแล้ว ${count.toLocaleString()} คน`,
 		volunteersDesc: 'จิตอาสาสำหรับงานอาสาสมัครเร่งด่วน',
+		/** Shown while the jobs load or when they cannot be read — never a misleading 0 (#709). */
+		volunteersNeededUnknown: 'ต้องการอีก — คน',
+		volunteersActiveUnknown: 'มีแล้ว — คน',
+		volunteerDeficitText: (count: number) => `ขาดอีก ${count.toLocaleString()} คน`,
 
 		// Urgent Donations
 		urgentDonationsTitle: 'รับบริจาคด่วน',
@@ -287,6 +291,9 @@ export const PUBLIC_PORTAL_HOME_I18N = {
 		volunteersNeededText: (count: number) => `${count.toLocaleString()} Needed`,
 		volunteersActiveText: (count: number) => `${count.toLocaleString()} enrolled`,
 		volunteersDesc: 'Urgent mission volunteers',
+		volunteersNeededUnknown: '— Needed',
+		volunteersActiveUnknown: '— enrolled',
+		volunteerDeficitText: (count: number) => `Need ${count.toLocaleString()} more`,
 
 		// Urgent Donations
 		urgentDonationsTitle: 'Urgent Donation Needs',

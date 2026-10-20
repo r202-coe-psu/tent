@@ -21,6 +21,7 @@
 	import PublicVolunteerCard from '$lib/components/public-volunteer-card.svelte';
 	import PublicNotificationMenu from '$lib/components/public-notification-menu.svelte';
 	import { FamilySearchModal } from '$lib/features/public-portal';
+	import { summarizeUrgentVolunteerNeed, useVolunteerJobs } from '$lib/features/volunteer-portal';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { getTranslation } from '$lib/utils/i18n';
 	import { PUBLIC_PORTAL_HOME_I18N } from '$lib/constants/i18n';
@@ -182,7 +183,13 @@
 
 	const urgentDonations = $derived(liveDonationCards);
 
-	// 3. Urgent Volunteers Data (Real data only - empty until API/jobs dispatched)
+	// 3. Urgent Volunteers — open jobs staff flagged urgent, from the public board's BFF (#709).
+	const volunteerJobs = useVolunteerJobs();
+	/** `null` while loading or when the board cannot be read: the card shows "—", not 0. */
+	const urgentNeed = $derived(
+		volunteerJobs.data ? summarizeUrgentVolunteerNeed(volunteerJobs.data) : null
+	);
+
 	type VolunteerItem = {
 		id: string;
 		name: string;
@@ -193,9 +200,25 @@
 		deficitText: string;
 	};
 
-	const urgentVolunteers = $derived<VolunteerItem[]>([]);
-	const volunteersNeeded = $derived(0);
-	const volunteersActive = $derived(0);
+	const urgentVolunteers = $derived<VolunteerItem[]>(
+		(urgentNeed?.shelters ?? []).map((shelter) => {
+			const geo = sheltersGeoMap.get(shelter.shelter_code);
+			return {
+				id: shelter.shelter_code,
+				name: shelter.shelter_name,
+				status: t.criticalBadge,
+				location: geo
+					? t.locationText(geo.subdistrict, geo.district, geo.province)
+					: t.defaultLocation,
+				missions: shelter.job_titles,
+				volunteerPercent:
+					shelter.quota > 0
+						? Math.min(100, Math.round((shelter.enrolled / shelter.quota) * 100))
+						: 0,
+				deficitText: t.volunteerDeficitText(shelter.needed)
+			};
+		})
+	);
 
 	// 4. FAQs from API / CMS (Real data only)
 	const faqList = $derived(
@@ -383,10 +406,12 @@
 				<div class="space-y-0.5">
 					<div class="flex flex-wrap items-baseline gap-1.5">
 						<span class="text-xl font-extrabold text-slate-900 tabular-nums sm:text-2xl">
-							{t.volunteersNeededText(volunteersNeeded)}
+							{urgentNeed ? t.volunteersNeededText(urgentNeed.needed) : t.volunteersNeededUnknown}
 						</span>
 						<span class="text-xs font-bold text-domain-volunteer-strong sm:text-sm">
-							({t.volunteersActiveText(volunteersActive)})
+							({urgentNeed
+								? t.volunteersActiveText(urgentNeed.enrolled)
+								: t.volunteersActiveUnknown})
 						</span>
 					</div>
 					<div class="text-xs font-medium text-slate-500">{t.volunteersDesc}</div>

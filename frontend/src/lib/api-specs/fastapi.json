@@ -4235,6 +4235,7 @@
 					"slots_remaining": { "type": "integer", "title": "Slots Remaining" },
 					"applicants_count": { "type": "integer", "title": "Applicants Count", "default": 0 },
 					"status": { "type": "string", "title": "Status" },
+					"is_urgent": { "type": "boolean", "title": "Is Urgent", "default": false },
 					"requires_review": { "type": "boolean", "title": "Requires Review", "default": false }
 				},
 				"type": "object",

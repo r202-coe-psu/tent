@@ -2536,6 +2536,11 @@ export interface components {
 			/** Status */
 			status: string;
 			/**
+			 * Is Urgent
+			 * @default false
+			 */
+			is_urgent: boolean;
+			/**
 			 * Requires Review
 			 * @default false
 			 */
