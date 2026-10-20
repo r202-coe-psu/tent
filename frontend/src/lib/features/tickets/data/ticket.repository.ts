@@ -23,13 +23,16 @@ export interface TicketRepository {
 		items: TicketItemInput[]
 	): Promise<RequisitionTicket>;
 
-	// PENDING_PICK → COMPLETED in one step (CR-143, kitchen only). Auto-allocates
-	// every line to requested_qty, checks + deducts stock same as dispatchTicket,
-	// and sets approved_by/dispatched_by/received_by together. All-or-nothing.
-	oneStepApproveTicket(ticket: RequisitionTicket, ctx: AuthorContext): Promise<RequisitionTicket>;
-
-	// PENDING_PICK → READY_FOR_DISPATCH (shelter_manager/system_admin only — VDU-enforced).
+	// PENDING_PICK → READY_FOR_DISPATCH (warehouse_staff/shelter_manager/system_admin — VDU-enforced).
 	approveTicket(ticket: RequisitionTicket, ctx: AuthorContext): Promise<RequisitionTicket>;
+
+	// Single-write approve: applies allocations (itemId → qty_str) and transitions
+	// PENDING_PICK → READY_FOR_DISPATCH in one put.
+	approveTicketWithAllocations(
+		ticket: RequisitionTicket,
+		allocations: Record<string, string>,
+		ctx: AuthorContext
+	): Promise<RequisitionTicket>;
 
 	// READY_FOR_DISPATCH → IN_TRANSIT. Checks stock balance, then writes the
 	// ticket status update alongside stock_ledger rows in one bulkDocs

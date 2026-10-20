@@ -157,7 +157,8 @@
 	): 'A' | 'B' | 'C' {
 		if (hasService) return 'C';
 		if (!ticket) return 'A';
-		if (ticket.status === 'IN_TRANSIT' || ticket.status === 'COMPLETED') return 'C';
+		// IN_TRANSIT stays on B — the kitchen's "ยืนยันรับวัตถุดิบ" lives there.
+		if (ticket.status === 'COMPLETED') return 'C';
 		return 'B';
 	}
 

@@ -2954,6 +2954,78 @@ describe('buildValidateDocUpdate', () => {
 			expect(() => compile()(edited, ticket, KITCHEN)).not.toThrow();
 		});
 
+		it('rejects kitchen_staff changing allocated_qty on an existing line', () => {
+			const ticket = newTicket();
+			const edited = newTicket({
+				items: [{ ...(ticket.items as Doc[])[0], allocated_qty: '30' }]
+			});
+			expectForbidden(
+				() => compile()(edited, ticket, KITCHEN),
+				/Kitchen staff cannot change allocated_qty/
+			);
+		});
+
+		it('rejects kitchen_staff adding a new line with non-zero allocated_qty', () => {
+			const ticket = newTicket();
+			const edited = newTicket({
+				items: [
+					...(ticket.items as Doc[]),
+					{
+						item_id: 'item_master:oil',
+						item_name: 'น้ำมัน',
+						unit: 'l',
+						requested_qty: '5',
+						allocated_qty: '5'
+					}
+				]
+			});
+			expectForbidden(
+				() => compile()(edited, ticket, KITCHEN),
+				/new requisition_ticket items with allocated_qty "0"/
+			);
+		});
+
+		it('kitchen_staff can add a new line with allocated_qty "0" and keep existing allocations', () => {
+			const ticket = newTicket({
+				items: [
+					{
+						item_id: 'item_master:rice',
+						item_name: 'ข้าวสาร',
+						unit: 'kg',
+						requested_qty: '30',
+						allocated_qty: '20'
+					}
+				]
+			});
+			const edited = newTicket({
+				items: [
+					{ ...(ticket.items as Doc[])[0], requested_qty: '40' },
+					{
+						item_id: 'item_master:oil',
+						item_name: 'น้ำมัน',
+						unit: 'l',
+						requested_qty: '5',
+						allocated_qty: '0'
+					}
+				]
+			});
+			expect(() => compile()(edited, ticket, KITCHEN)).not.toThrow();
+		});
+
+		it.each([
+			['system_admin', ADMIN],
+			[
+				'warehouse_staff + kitchen_staff',
+				{ name: 'both', roles: ['shelter:SH001', 'warehouse_staff', 'kitchen_staff'] }
+			]
+		] as [string, UserCtx][])('%s can change allocated_qty while PENDING_PICK', (_role, ctx) => {
+			const ticket = newTicket();
+			const allocated = newTicket({
+				items: [{ ...(ticket.items as Doc[])[0], allocated_qty: '30' }]
+			});
+			expect(() => compile()(allocated, ticket, ctx)).not.toThrow();
+		});
+
 		it('rejects PENDING_PICK item updates from a role with neither warehouse_staff nor kitchen_staff', () => {
 			const ticket = newTicket();
 			const allocated = newTicket({
@@ -2981,7 +3053,38 @@ describe('buildValidateDocUpdate', () => {
 			expect(() => compile()(approved, ticket, MANAGER)).not.toThrow();
 		});
 
-		it('rejects approval from warehouse_staff (manager-only, AC-TKT-03.1)', () => {
+		it.each([
+			['shelter_manager', MANAGER],
+			['warehouse_staff', WAREHOUSE]
+		])(
+			'%s can approve and set allocated_qty in the same write (one-write approve)',
+			(_name, user) => {
+				const ticket = newTicket();
+				const approved = {
+					...ticket,
+					status: 'READY_FOR_DISPATCH',
+					approved_by: user.name,
+					items: [{ ...(ticket.items as Doc[])[0], allocated_qty: '20' }]
+				};
+				expect(() => compile()(approved, ticket, user)).not.toThrow();
+			}
+		);
+
+		it('rejects a one-write approve from kitchen_staff', () => {
+			const ticket = newTicket();
+			const approved = {
+				...ticket,
+				status: 'READY_FOR_DISPATCH',
+				approved_by: KITCHEN.name,
+				items: [{ ...(ticket.items as Doc[])[0], allocated_qty: '20' }]
+			};
+			expectForbidden(
+				() => compile()(approved, ticket, KITCHEN),
+				/Only warehouse staff, shelter manager or system admin can approve/
+			);
+		});
+
+		it('allows warehouse_staff to approve PENDING_PICK → READY_FOR_DISPATCH', () => {
 			const ticket = newTicket({
 				items: [
 					{
@@ -2994,19 +3097,61 @@ describe('buildValidateDocUpdate', () => {
 				]
 			});
 			const approved = { ...ticket, status: 'READY_FOR_DISPATCH', approved_by: 'ws' };
+			expect(() => compile()(approved, ticket, WAREHOUSE)).not.toThrow();
+		});
+
+		it('rejects approval from kitchen_staff', () => {
+			const ticket = newTicket({
+				items: [
+					{
+						item_id: 'item_master:rice',
+						item_name: 'ข้าวสาร',
+						unit: 'kg',
+						requested_qty: '30',
+						allocated_qty: '30'
+					}
+				]
+			});
+			const approved = { ...ticket, status: 'READY_FOR_DISPATCH', approved_by: 'kt' };
 			expectForbidden(
-				() => compile()(approved, ticket, WAREHOUSE),
-				/Only shelter manager or system admin can approve/
+				() => compile()(approved, ticket, KITCHEN),
+				/Only warehouse staff, shelter manager or system admin can approve/
 			);
 		});
 
-		it('rejects approval while any line is still allocated_qty 0', () => {
-			const ticket = newTicket();
-			const approved = { ...ticket, status: 'READY_FOR_DISPATCH', approved_by: 'mgr' };
-			expectForbidden(
-				() => compile()(approved, ticket, MANAGER),
-				/needs allocated_qty > 0 before approval/
-			);
+		describe('approve with zero-allocated lines ("ไม่มีให้")', () => {
+			const twoLines = (a: string, b: string) => {
+				const base = (newTicket().items as Doc[])[0];
+				return [
+					{ ...base, allocated_qty: a },
+					{ ...base, item_id: 'item_master:salt', item_name: 'เกลือ', allocated_qty: b }
+				];
+			};
+			const pending = () => newTicket({ items: twoLines('0', '0') });
+			const approveWith = (items: Doc[]) => ({
+				...pending(),
+				status: 'READY_FOR_DISPATCH',
+				approved_by: 'mgr',
+				items
+			});
+
+			it('allows approval when one line is 0 and another is > 0', () => {
+				expect(() => compile()(approveWith(twoLines('20', '0')), pending(), MANAGER)).not.toThrow();
+			});
+
+			it('rejects approval when every line is 0', () => {
+				expectForbidden(
+					() => compile()(approveWith(twoLines('0', '0')), pending(), MANAGER),
+					/At least one requisition_ticket item needs allocated_qty > 0/
+				);
+			});
+
+			it.each(['-1', 'abc', '', '1.23456'])('rejects invalid allocated_qty %j', (bad) => {
+				expectForbidden(
+					() => compile()(approveWith(twoLines('20', bad)), pending(), MANAGER),
+					/valid allocated_qty >= 0/
+				);
+			});
 		});
 
 		it('warehouse_staff dispatches READY_FOR_DISPATCH → IN_TRANSIT', () => {
@@ -3059,7 +3204,7 @@ describe('buildValidateDocUpdate', () => {
 			);
 		});
 
-		it('shelter_manager one-click approves PENDING_PICK → COMPLETED (CR-143)', () => {
+		it('rejects a direct PENDING_PICK → COMPLETED jump (no one-click approve)', () => {
 			const ticket = newTicket({
 				items: [
 					{
@@ -3067,49 +3212,10 @@ describe('buildValidateDocUpdate', () => {
 						item_name: 'ข้าวสาร',
 						unit: 'kg',
 						requested_qty: '30',
-						allocated_qty: '0'
+						allocated_qty: '30'
 					}
 				]
 			});
-			const completed = {
-				...ticket,
-				status: 'COMPLETED',
-				items: [{ ...(ticket.items as Doc[])[0], allocated_qty: '30' }],
-				approved_by: 'mgr',
-				dispatched_by: 'mgr',
-				received_by: 'mgr'
-			};
-			expect(() => compile()(completed, ticket, MANAGER)).not.toThrow();
-		});
-
-		it('rejects one-click approve from kitchen_staff (manager-only, CR-143)', () => {
-			const ticket = newTicket({
-				items: [
-					{
-						item_id: 'item_master:rice',
-						item_name: 'ข้าวสาร',
-						unit: 'kg',
-						requested_qty: '30',
-						allocated_qty: '0'
-					}
-				]
-			});
-			const completed = {
-				...ticket,
-				status: 'COMPLETED',
-				items: [{ ...(ticket.items as Doc[])[0], allocated_qty: '30' }],
-				approved_by: 'kt',
-				dispatched_by: 'kt',
-				received_by: 'kt'
-			};
-			expectForbidden(
-				() => compile()(completed, ticket, KITCHEN),
-				/Only shelter manager or system admin can one-click approve/
-			);
-		});
-
-		it('rejects one-click approve while any line is still allocated_qty 0', () => {
-			const ticket = newTicket();
 			const completed = {
 				...ticket,
 				status: 'COMPLETED',
@@ -3119,7 +3225,7 @@ describe('buildValidateDocUpdate', () => {
 			};
 			expectForbidden(
 				() => compile()(completed, ticket, MANAGER),
-				/needs allocated_qty > 0 before approval/
+				/Invalid requisition_ticket transition from PENDING_PICK to COMPLETED/
 			);
 		});
 

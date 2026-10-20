@@ -6,8 +6,8 @@ import {
 	createTicket as createTicketDoc,
 	allocateTicketItem as allocateTicketItemDoc,
 	updateTicketRequestedItems as updateTicketRequestedItemsDoc,
-	oneStepApproveTicket as oneStepApproveTicketDoc,
 	approveTicket as approveTicketDoc,
+	approveTicketWithAllocations as approveTicketWithAllocationsDoc,
 	markTicketDispatched,
 	receiveTicket as receiveTicketDoc,
 	cancelTicket as cancelTicketDoc,
@@ -89,44 +89,16 @@ export class TicketRemoteRepository implements TicketRepository {
 		return this.repo.put(updateTicketRequestedItemsDoc(ticket, items));
 	}
 
-	async oneStepApproveTicket(
-		ticket: RequisitionTicket,
-		ctx: AuthorContext
-	): Promise<RequisitionTicket> {
-		const completed = oneStepApproveTicketDoc(ticket, ctx);
-
-		// Same stock-check-then-deduct as dispatchTicket, run against the
-		// newly-allocated (= requested_qty) amounts.
-		const ledger = await this.repo.allByType<StockLedger>('stock_ledger', isStockLedger);
-		const balance = stockBalance(ledger);
-		for (const item of completed.items) {
-			const onHand = balance.get(item.item_id) ?? '0';
-			if (qtyGt(item.allocated_qty, onHand)) {
-				throw new Error(
-					`oneStepApproveTicket: cannot approve ${item.allocated_qty} ${item.unit} of ${item.item_id} — only ${onHand} on hand`
-				);
-			}
-		}
-
-		const stockLedgerEntries = completed.items.map((item) =>
-			createStockLedger(
-				{
-					item_id: item.item_id,
-					qty: qtyNeg(item.allocated_qty),
-					unit: item.unit,
-					reason: 'requisition',
-					ref_id: completed._id
-				},
-				ctx
-			)
-		);
-
-		await bulkDocs(this.dbName, [completed, ...stockLedgerEntries]);
-		return completed;
-	}
-
 	async approveTicket(ticket: RequisitionTicket, ctx: AuthorContext): Promise<RequisitionTicket> {
 		return this.repo.put(approveTicketDoc(ticket, ctx));
+	}
+
+	async approveTicketWithAllocations(
+		ticket: RequisitionTicket,
+		allocations: Record<string, string>,
+		ctx: AuthorContext
+	): Promise<RequisitionTicket> {
+		return this.repo.put(approveTicketWithAllocationsDoc(ticket, allocations, ctx));
 	}
 
 	async dispatchTicket(ticket: RequisitionTicket, ctx: AuthorContext): Promise<RequisitionTicket> {
@@ -135,7 +107,9 @@ export class TicketRemoteRepository implements TicketRepository {
 		// 1. Check stock balance for every line before writing anything.
 		const ledger = await this.repo.allByType<StockLedger>('stock_ledger', isStockLedger);
 		const balance = stockBalance(ledger);
-		for (const item of dispatched.items) {
+		// Lines the warehouse allocated 0 to ("ไม่มีให้") are skipped entirely.
+		const suppliedItems = dispatched.items.filter((i) => qtyGt(i.allocated_qty, 0));
+		for (const item of suppliedItems) {
 			const onHand = balance.get(item.item_id) ?? '0';
 			if (qtyGt(item.allocated_qty, onHand)) {
 				throw new Error(
@@ -145,7 +119,7 @@ export class TicketRemoteRepository implements TicketRepository {
 		}
 
 		// 2. Mint stock_ledger rows (reason: requisition, ref_id: this ticket).
-		const stockLedgerEntries = dispatched.items.map((item) =>
+		const stockLedgerEntries = suppliedItems.map((item) =>
 			createStockLedger(
 				{
 					item_id: item.item_id,

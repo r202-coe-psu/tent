@@ -88,14 +88,22 @@ export const useUpdateTicketItems = () =>
 		ticketRepository().updateTicketItems(ticket, items)
 	);
 
-export const useOneStepApproveTicket = () =>
-	ticketMutation(({ ticket, ctx }: { ticket: RequisitionTicket; ctx: AuthorContext }) =>
-		ticketRepository().oneStepApproveTicket(ticket, ctx)
-	);
-
 export const useApproveTicket = () =>
 	ticketMutation(({ ticket, ctx }: { ticket: RequisitionTicket; ctx: AuthorContext }) =>
 		ticketRepository().approveTicket(ticket, ctx)
+	);
+
+export const useApproveTicketWithAllocations = () =>
+	ticketMutation(
+		({
+			ticket,
+			allocations,
+			ctx
+		}: {
+			ticket: RequisitionTicket;
+			allocations: Record<string, string>;
+			ctx: AuthorContext;
+		}) => ticketRepository().approveTicketWithAllocations(ticket, allocations, ctx)
 	);
 
 export const useDispatchTicket = () =>

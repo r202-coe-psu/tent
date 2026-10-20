@@ -167,42 +167,34 @@ describe('dispatchTicket', () => {
 	});
 });
 
-describe('oneStepApproveTicket', () => {
-	it('auto-allocates to requested_qty, writes stock_ledger, and jumps PENDING_PICK → COMPLETED', async () => {
-		await seedStock('item_master:rice', '100');
-		const created = await repo.createTicket(baseInput(), ctx);
-		const completed = await repo.oneStepApproveTicket(created, managerCtx);
-
-		expect(completed.status).toBe('COMPLETED');
-		expect(completed.approved_by).toBe('shelter_manager');
-		expect(completed.dispatched_by).toBe('shelter_manager');
-		expect(completed.received_by).toBe('shelter_manager');
-		expect(completed.items[0].allocated_qty).toBe('30');
-
-		const ledger = await memoryRepo.allByType<StockLedger>('stock_ledger', isStockLedger);
-		const requisitionRows = ledger.filter((l) => l.reason === 'requisition');
-		expect(requisitionRows).toHaveLength(1);
-		expect(requisitionRows[0].qty).toBe('-30');
-		expect(requisitionRows[0].ref_id).toBe(completed._id);
-	});
-
-	it('throws and writes nothing when stock is insufficient (all-or-nothing)', async () => {
-		await seedStock('item_master:rice', '10'); // less than the 30 requested
-		const created = await repo.createTicket(baseInput(), ctx);
-		await expect(repo.oneStepApproveTicket(created, managerCtx)).rejects.toThrow(/only 10 on hand/);
-		const ledger = await memoryRepo.allByType<StockLedger>('stock_ledger', isStockLedger);
-		expect(ledger.filter((l) => l.reason === 'requisition')).toHaveLength(0);
-		const reloaded = await repo.getTicketById(created._id);
-		expect(reloaded?.status).toBe('PENDING_PICK');
-	});
-
-	it('rejects a ticket that already moved past PENDING_PICK', async () => {
-		await seedStock('item_master:rice', '100');
-		const created = await repo.createTicket(baseInput(), ctx);
-		const completed = await repo.oneStepApproveTicket(created, managerCtx);
-		await expect(repo.oneStepApproveTicket(completed, managerCtx)).rejects.toThrow(
-			/ticket is COMPLETED/
+describe('dispatchTicket with zero-allocated lines', () => {
+	async function mixedReadyTicket() {
+		const created = await repo.createTicket(
+			{
+				...baseInput(),
+				items: [
+					...baseInput().items,
+					{ item_id: 'item_master:salt', item_name: 'เกลือ', unit: 'kg', requested_qty: '5' }
+				]
+			},
+			ctx
 		);
+		return repo.approveTicketWithAllocations(
+			created,
+			{ 'item_master:rice': '30', 'item_master:salt': '0' },
+			managerCtx
+		);
+	}
+
+	it('skips 0 lines: no stock check and no stock_ledger row for them', async () => {
+		await seedStock('item_master:rice', '100'); // salt has no stock at all
+		const dispatched = await repo.dispatchTicket(await mixedReadyTicket(), warehouseCtx);
+		expect(dispatched.status).toBe('IN_TRANSIT');
+		const ledger = await memoryRepo.allByType<StockLedger>('stock_ledger', isStockLedger);
+		const rows = ledger.filter((l) => l.reason === 'requisition');
+		expect(rows).toHaveLength(1);
+		expect(rows[0].item_id).toBe('item_master:rice');
+		expect(rows[0].qty).toBe('-30');
 	});
 });
 
@@ -219,5 +211,51 @@ describe('receiveTicket', () => {
 		expect(received.received_by).toBe('kitchen_staff');
 
 		await expect(repo.receiveTicket(received, ctx)).rejects.toThrow(/ticket is COMPLETED/);
+	});
+});
+
+describe('TicketRemoteRepository.approveTicketWithAllocations', () => {
+	it('saves allocations and approves with a single write', async () => {
+		const created = await repo.createTicket(baseInput(), ctx);
+		const putSpy = vi.spyOn(memoryRepo, 'put');
+		const approved = await repo.approveTicketWithAllocations(
+			created,
+			{ 'item_master:rice': '20' },
+			managerCtx
+		);
+		expect(putSpy).toHaveBeenCalledTimes(1);
+		expect(approved.status).toBe('READY_FOR_DISPATCH');
+		expect(approved.items[0].allocated_qty).toBe('20');
+		const stored = await repo.getTicketById(created._id);
+		expect(stored?.status).toBe('READY_FOR_DISPATCH');
+		expect(stored?.items[0].allocated_qty).toBe('20');
+	});
+
+	it('approves when some lines are 0 but at least one is > 0', async () => {
+		const created = await repo.createTicket(
+			{
+				...baseInput(),
+				items: [
+					...baseInput().items,
+					{ item_id: 'item_master:salt', item_name: 'เกลือ', unit: 'kg', requested_qty: '5' }
+				]
+			},
+			ctx
+		);
+		const approved = await repo.approveTicketWithAllocations(
+			created,
+			{ 'item_master:rice': '20', 'item_master:salt': '0' },
+			managerCtx
+		);
+		expect(approved.status).toBe('READY_FOR_DISPATCH');
+		expect(approved.items.map((i) => i.allocated_qty)).toEqual(['20', '0']);
+	});
+
+	it('throws and writes nothing when every allocation is 0', async () => {
+		const created = await repo.createTicket(baseInput(), ctx);
+		await expect(
+			repo.approveTicketWithAllocations(created, { 'item_master:rice': '0' }, managerCtx)
+		).rejects.toThrow(/at least one item must have allocated_qty > 0/);
+		expect((await repo.getTicketById(created._id))?.status).toBe('PENDING_PICK');
 	});
 });

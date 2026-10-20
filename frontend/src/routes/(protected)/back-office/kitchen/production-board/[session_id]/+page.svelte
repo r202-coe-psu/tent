@@ -27,7 +27,14 @@
 		useReceiveTicket,
 		TICKET_STATUS_LABELS
 	} from '$lib/features/tickets';
-	import { useRecipes, useItemMasters, getItemDisplayName } from '$lib/features/catalog';
+	import {
+		useRecipes,
+		useItemMasters,
+		getItemDisplayName,
+		formatUnit,
+		useUnitsOfMeasure
+	} from '$lib/features/catalog';
+	import { langState } from '$lib/states/i18n.svelte';
 	import { useSupplyItems } from '$lib/features/supply';
 	import { useStockBalance } from '$lib/features/operations';
 	import * as Card from '$lib/components/ui/card';
@@ -51,6 +58,7 @@
 	import Check from '@lucide/svelte/icons/check';
 	import Sparkles from '@lucide/svelte/icons/sparkles';
 	import PackageCheck from '@lucide/svelte/icons/package-check';
+	import PackageX from '@lucide/svelte/icons/package-x';
 	import Plus from '@lucide/svelte/icons/plus';
 	import Trash2 from '@lucide/svelte/icons/trash-2';
 	import RotateCcw from '@lucide/svelte/icons/rotate-ccw';
@@ -67,6 +75,9 @@
 	const tickets = useTickets();
 	const recipes = useRecipes(() => getShelterCode());
 	const itemMasters = useItemMasters(() => getShelterCode());
+	const unitsQuery = useUnitsOfMeasure();
+	const units = $derived(unitsQuery.data ?? []);
+	const unitLabel = (code: string) => formatUnit(code, units, langState.current);
 	const supplyItems = useSupplyItems();
 	const stock = useStockBalance();
 
@@ -135,6 +146,21 @@
 
 	// CR-144/CR-145: warehouse must decide (confirm/reject) before this batch
 	// counts as delivered; a rejected service can be superseded by re-recording.
+	// Tab locks — C opens only once the kitchen has received the ingredients
+	// (ticket COMPLETED) or a service is already recorded. A ?stage= link can't
+	// land on a locked tab; once tickets/services have loaded it falls back to
+	// the furthest unlocked stage.
+	const stageBLocked = $derived(!activeTicket);
+	const stageCLocked = $derived(
+		!activePlanId || (!activeService && !!activeTicket && activeTicket.status !== 'COMPLETED')
+	);
+	const shownStage = $derived.by((): 'A' | 'B' | 'C' => {
+		if (!tickets.isSuccess || !services.isSuccess) return currentStage;
+		if (currentStage === 'C' && stageCLocked) return stageBLocked ? 'A' : 'B';
+		if (currentStage === 'B' && stageBLocked) return 'A';
+		return currentStage;
+	});
+
 	const activeServiceReceipt = $derived.by(() => {
 		if (!activeService) return null;
 		return (
@@ -349,7 +375,7 @@
 	const ingredientComboItems = $derived(
 		(itemMasters.data ?? []).map((item) => ({
 			value: item._id,
-			label: `${item.name} (${item.base_unit})`,
+			label: `${item.name} (${unitLabel(item.base_unit)})`,
 			keywords: [item.name]
 		}))
 	);
@@ -566,7 +592,7 @@
 
 	// Init stage C defaults from activeService or allocatedTarget
 	$effect(() => {
-		if (currentStage === 'C') {
+		if (shownStage === 'C') {
 			if (activeService && !serviceRejected) {
 				yieldActualPortions = activeService.actual_yield ?? activePlan?.allocated_target ?? 50;
 				servedInShelter = activeService.served;
@@ -735,7 +761,7 @@
 
 	<!-- 3-Stage Progress Stepper -->
 	<Tabs.Root
-		value={currentStage}
+		value={shownStage}
 		onValueChange={(v) => (currentStage = v as 'A' | 'B' | 'C')}
 		class="gap-0 rounded-xl border bg-white p-1.5 shadow-2xs"
 	>
@@ -754,7 +780,7 @@
 				disabled={!activeTicket}
 				class="flex-1 gap-2 rounded-lg px-3 py-2 text-xs font-semibold text-muted-foreground disabled:text-muted-foreground/50 data-[state=active]:bg-[#0A2647] data-[state=active]:text-white data-[state=active]:shadow-sm"
 			>
-				{#if currentStage !== 'B' && !activeTicket}
+				{#if shownStage !== 'B' && stageBLocked}
 					<Lock class="h-3.5 w-3.5" />
 				{:else}
 					<span class="flex h-5 w-5 items-center justify-center rounded-full bg-white/20 text-2xs"
@@ -765,11 +791,10 @@
 			</Tabs.Trigger>
 			<Tabs.Trigger
 				value="C"
-				disabled={!activePlanId ||
-					(!activeService && activeTicket && activeTicket.status !== 'COMPLETED')}
+				disabled={stageCLocked}
 				class="flex-1 gap-2 rounded-lg px-3 py-2 text-xs font-semibold text-muted-foreground disabled:text-muted-foreground/50 data-[state=active]:bg-[#0A2647] data-[state=active]:text-white data-[state=active]:shadow-sm"
 			>
-				{#if currentStage !== 'C' && (!activePlanId || (!activeService && activeTicket && activeTicket.status !== 'COMPLETED'))}
+				{#if shownStage !== 'C' && stageCLocked}
 					<Lock class="h-3.5 w-3.5" />
 				{:else}
 					<span class="flex h-5 w-5 items-center justify-center rounded-full bg-white/20 text-2xs"
@@ -782,7 +807,7 @@
 	</Tabs.Root>
 
 	<!-- Stage Content -->
-	{#if currentStage === 'A'}
+	{#if shownStage === 'A'}
 		<!-- STAGE A: Plan, BOM & Requisition Creation -->
 		<div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
 			<!-- Column 1: Menu & Target Groups -->
@@ -959,19 +984,19 @@
 						ปรับเปลี่ยนจำนวน เพิ่ม หรือลบวัตถุดิบที่ต้องการเบิกได้ตามความเหมาะสม
 					</Card.Description>
 				</Card.Header>
-				<Card.Content class="space-y-3 text-xs">
+				<Card.Content class="space-y-3 text-sm">
 					<div class="overflow-hidden rounded-lg border">
 						<Table.Root>
-							<Table.Header class="bg-muted/40 text-2xs">
+							<Table.Header class="bg-muted/40 text-sm">
 								<Table.Row>
 									<Table.Head>วัตถุดิบ</Table.Head>
 									<Table.Head class="w-28 text-right">ต้องใช้</Table.Head>
 									<Table.Head class="text-right">ในคลัง</Table.Head>
-									<Table.Head class="w-16 text-center">สถานะ</Table.Head>
+									<Table.Head class="w-24 text-center">สถานะ</Table.Head>
 									<Table.Head class="w-8"></Table.Head>
 								</Table.Row>
 							</Table.Header>
-							<Table.Body class="text-xs">
+							<Table.Body class="text-sm">
 								{#if ingredientsList.length === 0}
 									<Table.Row>
 										<Table.Cell colspan={5} class="py-4 text-center text-muted-foreground">
@@ -996,27 +1021,27 @@
 													oninput={() => {
 														isIngredientsManuallyEdited = true;
 													}}
-													class="h-7 w-20 text-right font-mono text-xs font-bold"
+													class="h-8 w-24 [appearance:textfield] text-right text-sm font-semibold tabular-nums [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
 												/>
-												<span class="w-5 truncate text-left text-2xs text-muted-foreground"
-													>{ing.unit}</span
+												<span class="w-16 truncate text-left text-xs text-muted-foreground"
+													>{unitLabel(ing.unit)}</span
 												>
 											</div>
 										</Table.Cell>
-										<Table.Cell class="text-right font-mono text-muted-foreground">
+										<Table.Cell class="text-right text-slate-700 tabular-nums">
 											{onHand}
-											{ing.unit}
+											{unitLabel(ing.unit)}
 										</Table.Cell>
 										<Table.Cell class="text-center">
 											{#if isShort}
 												<span
-													class="inline-flex items-center rounded bg-rose-100 px-1.5 py-0.5 text-2xs font-bold text-rose-700"
+													class="inline-flex items-center rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-xs font-semibold whitespace-nowrap text-red-900"
 												>
 													ขาดสต็อก
 												</span>
 											{:else}
 												<span
-													class="inline-flex items-center rounded bg-green-100 px-1.5 py-0.5 text-2xs font-bold text-green-700"
+													class="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-semibold whitespace-nowrap text-emerald-900"
 												>
 													พร้อม
 												</span>
@@ -1071,7 +1096,7 @@
 								<div class="sm:col-span-3">
 									<Label class="text-2xs text-muted-foreground">หน่วย</Label>
 									<Input
-										value={newUnit}
+										value={unitLabel(newUnit)}
 										readonly
 										tabindex={-1}
 										placeholder="หน่วย"
@@ -1121,7 +1146,7 @@
 						</Button>
 					{/if}
 
-					<p class="text-2xs text-muted-foreground">
+					<p class="text-xs text-muted-foreground">
 						* หากสต็อกในคลังไม่พอ คลังสินค้าสามารถตัดจ่ายบางส่วนในขั้นตอนอนุมัติได้
 					</p>
 				</Card.Content>
@@ -1156,11 +1181,11 @@
 				</Button>
 			</div>
 		{/if}
-	{:else if currentStage === 'B'}
+	{:else if shownStage === 'B'}
 		<!-- STAGE B: Ticket status (read-only — allocate/approve/dispatch happen at
 		     /back-office/tickets/[id], not here — CR-121/CR-141 role split) -->
-		<Card.Root class="border shadow-sm">
-			<Card.Header class="border-b bg-muted/20">
+		<Card.Root class="gap-0 overflow-hidden border py-0 shadow-sm">
+			<Card.Header class="border-b bg-muted/20 py-4 [.border-b]:pb-4">
 				<div class="flex flex-wrap items-center justify-between gap-3">
 					<div>
 						<Card.Title class="flex items-center gap-2 text-lg font-bold">
@@ -1203,7 +1228,7 @@
 				</div>
 			</Card.Header>
 
-			<Card.Content class="space-y-4 p-5 text-xs">
+			<Card.Content class="space-y-4 p-5 text-sm">
 				<!-- Status Notification Banner -->
 				{#if activeTicket?.status === 'PENDING_PICK'}
 					<div
@@ -1213,7 +1238,7 @@
 						<div>
 							<h4 class="font-bold">รอคลังจัดของ</h4>
 							<p class="mt-1 text-xs text-amber-700">
-								ยังแก้ไขรายการที่ Stage A ได้จนกว่าคลังจะเริ่มจัดของ
+								ยังแก้ไขรายการวัตถุดิบได้ที่แท็บ "1. วางแผนเมนู" จนกว่าคลังจะกดอนุมัติ
 							</p>
 						</div>
 					</div>
@@ -1223,7 +1248,7 @@
 					>
 						<PackageCheck class="h-5 w-5 shrink-0 text-blue-600" />
 						<div>
-							<h4 class="font-bold">ผู้จัดการอนุมัติแล้ว รอคลังปล่อยของ</h4>
+							<h4 class="font-bold">อนุมัติแล้ว รอคลังปล่อยของ</h4>
 							<p class="mt-1 text-xs text-blue-700">อนุมัติโดย: {activeTicket.approved_by}</p>
 						</div>
 					</div>
@@ -1257,7 +1282,7 @@
 						<AlertCircle class="h-5 w-5 shrink-0 text-rose-600" />
 						<div class="flex-1">
 							<h4 class="font-bold">ตั๋วนี้ถูกยกเลิกแล้ว</h4>
-							<p class="mt-1 text-xs text-rose-700">เปิดตั๋วใหม่ได้จากขั้นตอน A</p>
+							<p class="mt-1 text-xs text-rose-700">เปิดตั๋วใหม่ได้จากแท็บ "1. วางแผนเมนู"</p>
 						</div>
 					</div>
 				{/if}
@@ -1268,26 +1293,41 @@
 						รายการวัตถุดิบที่ขอเบิก
 					</div>
 					<Table.Root>
-						<Table.Header class="text-2xs">
+						<Table.Header class="text-sm">
 							<Table.Row>
 								<Table.Head>รายการ</Table.Head>
 								<Table.Head class="text-right">จำนวนที่ขอ</Table.Head>
 								<Table.Head class="text-right">จำนวนที่คลังจัด</Table.Head>
 							</Table.Row>
 						</Table.Header>
-						<Table.Body class="text-xs">
+						<Table.Body class="text-sm">
 							{#each activeTicket?.items ?? [] as it (it.item_id)}
 								<Table.Row>
 									<Table.Cell>
 										<span class="font-medium text-foreground">{it.item_name}</span>
 									</Table.Cell>
-									<Table.Cell class="text-right font-mono">{it.requested_qty} {it.unit}</Table.Cell>
-									<Table.Cell
-										class="text-right font-mono font-bold {it.allocated_qty !== '0'
-											? 'text-green-700'
-											: 'text-muted-foreground'}"
+									<Table.Cell class="text-right tabular-nums"
+										>{it.requested_qty} {unitLabel(it.unit)}</Table.Cell
 									>
-										{it.allocated_qty !== '0' ? `${it.allocated_qty} ${it.unit}` : 'รอดำเนินการ'}
+									{@const allocated = it.allocated_qty !== '0'}
+									{@const awaiting = !allocated && activeTicket?.status === 'PENDING_PICK'}
+									<Table.Cell
+										class="text-right font-semibold tabular-nums {allocated
+											? 'text-green-700'
+											: awaiting
+												? 'text-muted-foreground'
+												: 'text-amber-700'}"
+									>
+										{#if allocated}
+											{it.allocated_qty} {unitLabel(it.unit)}
+										{:else if awaiting}
+											รอดำเนินการ
+										{:else}
+											<span class="inline-flex items-center justify-end gap-1">
+												<PackageX class="h-3.5 w-3.5" />
+												คลังไม่มีให้
+											</span>
+										{/if}
 									</Table.Cell>
 								</Table.Row>
 							{/each}
@@ -1308,7 +1348,7 @@
 				</div>
 			</Card.Content>
 		</Card.Root>
-	{:else if currentStage === 'C'}
+	{:else if shownStage === 'C'}
 		<!-- STAGE C: Actual Yield & Meal Service Recording -->
 		<Card.Root class="border shadow-sm">
 			<Card.Header class="flex flex-wrap items-start justify-between gap-4 border-b bg-muted/20">
@@ -1387,7 +1427,7 @@
 									เป้าหมายตามแผน: {activePlan?.allocated_target ?? allocatedTarget} จาน
 								</p>
 							</div>
-							{#if activeTicket}
+							{#if activeTicket?.status === 'COMPLETED'}
 								<span
 									class="rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-bold text-green-800"
 								>
