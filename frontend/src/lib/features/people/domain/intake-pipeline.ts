@@ -3,6 +3,7 @@
  * No I/O — unit-tested.
  */
 import type { Evacuee, TriageLevel } from './people';
+import { isInShelterStayStatus } from '$lib/features/shared';
 
 export type NextQueueLabel = 'รอแพทย์' | 'รอโซน' | 'รอยืนยันถึงโซน' | 'พักแล้ว' | '—';
 
@@ -78,8 +79,7 @@ export function intakeStationsPassed(
  * Never includes arriving / pre_registered — those are still in the intake pipeline.
  */
 export function isInShelterStatus(evacuee: Evacuee): boolean {
-	const status = evacuee.current_stay?.status;
-	return status === 'active' || status === 'room_confirmed';
+	return isInShelterStayStatus(evacuee.current_stay?.status);
 }
 
 /**
