@@ -11,10 +11,10 @@
 | ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Playwright                     | 1.64, Chromium only                                                                                                                                                                                                                 |
 | `playwright.config.ts`         | local: `vite preview` (:4173) + `e2e/mock-api.js` (:9001); `grepInvert: /@quarantine/`                                                                                                                                              |
-| `playwright.staging.config.ts` | remote: `grep: /@release\|@smoke/`, `grepInvert: /@quarantine/`, workers=1, `globalTimeout` 30 min                                                                                                                                  |
+| `playwright.staging.config.ts` | remote: `grep: /@critical\|@smoke/`, `grepInvert: /@quarantine/`, workers=1, `globalTimeout` 30 min                                                                                                                                 |
 | `playwright.prod.config.ts`    | remote read-only: `grep: /@prod/`, `globalTimeout` 2 min                                                                                                                                                                            |
 | `playwright.public.config.ts`  | remote read-only public suites (incl. pre-register) — **not wired to any job**                                                                                                                                                      |
-| Suites                         | J1–J6 carry `@release` where green locally; unsafe SH001 suites are `@quarantine`; donations are `@donation` (§8.3)                                                                                                                 |
+| Suites                         | J1–J6 carry `@release` where green locally; unsafe SH001 suites are `@quarantine`; donations are `@donation` (§8.3); the Partner API (`/external/*`) is `@partner-api` (§8.5)                                                       |
 | Automation                     | Staging deploy runs `tent-e2e-staging` with `wait: true, propagate: false` (manual review: no GitHub commit status; a person reads the Staging E2E Report before promoting). Prod deploy runs `@prod` after. Janitor job available. |
 | Pre-push (lefthook)            | lint / check / unit tests only — no e2e                                                                                                                                                                                             |
 
@@ -117,15 +117,15 @@ Use Playwright's native `{ tag: [...] }` on `test` / `test.describe`. Every test
 layer tag (`@smoke` / `@critical` / `@regression`) plus one feature tag. `@prod`, `@release` and
 `@quarantine` are optional extras.
 
-| Tag           | Meaning                                                                     | Runs in                 |
-| ------------- | --------------------------------------------------------------------------- | ----------------------- |
-| `@smoke`      | read-only; safe on staging/prod; not skipped when `IS_REMOTE`               | staging, prod, local    |
-| `@critical`   | writes real data (creates registrations, shelters…) with zero-leak teardown | nightly, staging, local |
-| `@regression` | API mocked via `page.route` / `mock-api.js`; no DB                          | PR gate, local          |
-| `@release`    | part of a release-gate journey (§8); combined with `@smoke` or `@critical`  | staging (blocks `main`) |
-| `@prod`       | a few `@smoke` tests: compact production smoke (< 2 min)                    | prod, staging           |
-| `@quarantine` | violates §4; excluded by default (`grepInvert`) until rewritten             | nowhere                 |
-| `@<feature>`  | e.g. `@pre-register`, `@public`, `@onsite`, `@back-office`, `@system-admin` | filtering               |
+| Tag           | Meaning                                                                                     | Runs in                 |
+| ------------- | ------------------------------------------------------------------------------------------- | ----------------------- |
+| `@smoke`      | read-only; safe on staging/prod; not skipped when `IS_REMOTE`                               | staging, prod, local    |
+| `@critical`   | writes real data (creates registrations, shelters…) with zero-leak teardown                 | nightly, staging, local |
+| `@regression` | API mocked via `page.route` / `mock-api.js`; no DB                                          | PR gate, local          |
+| `@release`    | part of a release-gate journey (§8); combined with `@smoke` or `@critical`                  | staging (blocks `main`) |
+| `@prod`       | a few `@smoke` tests: compact production smoke (< 2 min)                                    | prod, staging           |
+| `@quarantine` | violates §4; excluded by default (`grepInvert`) until rewritten                             | nowhere                 |
+| `@<feature>`  | e.g. `@pre-register`, `@public`, `@onsite`, `@back-office`, `@system-admin`, `@partner-api` | filtering               |
 
 Select a feature and a layer: `playwright test --grep "(?=.*@pre-register)(?=.*@smoke)"`.
 
@@ -356,6 +356,77 @@ How they obey §4:
 Run them (preview build, local CouchDB with `pnpm seed:master` + `pnpm db:sync`):
 `pnpm exec playwright test e2e/distribution`
 
+### 8.5 Partner API suite (`@partner-api`)
+
+`partner-api.test.ts` (+ `helpers/partner-api.ts`) drives EXT-001…011 end to end against the real
+`/external/*` plane — FastAPI directly (`E2E_FASTAPI_URL`, default `http://localhost:9000`; on
+staging the host nginx's `/public-api`), not through the BFF. It replaces running
+`scripts/smoke_test_partner_api.py` by hand for these checks. Tags: `@smoke` (auth gate) and
+`@critical` (everything that creates data); none carries `@release`. Both groups are in
+`playwright.staging.config.ts`'s allowlist; budget about 3 minutes, mostly worker polling.
+
+| Group       | What it proves                                                                                                                                                                                                                                                                                                                                       |
+| ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@smoke`    | S1: every endpoint refuses a missing or garbage token with 401 `invalid_token` and `WWW-Authenticate: Bearer`. S2: `/external/token` rejects a wrong `grant_type` (400), an unknown client (401 `invalid_client`) and a form-encoded body (422). No data created; runs on any target                                                                 |
+| `@critical` | A1 creates an `E2E partner <runId>` client with all six scopes **through the UI**; A2 mints; A3 happy path of every EXT (booking create / idempotent replay / key reuse 409 / worker write / residency 404 / cancel twice); A3b cross-client isolation; **A4 scope matrix**; A5 least privilege; A6–A8 edit scopes, revoke, delete through the UI; Z |
+
+How they obey §4:
+
+- **Own data.** The run creates its own `E2E partner <runId>` shelter (`createShelterViaUi`, pre-registration on)
+  and its own clients (`E2E partner <runId>`, `E2E partner-iso <runId>`). Bookings use `fictitiousNationalId`.
+- **Ledger.** `PartnerLedger` (`node_modules/.cache/partner-api-e2e-created.json`) records clients (BFF
+  row id + `client_id`), shelters and bookings the moment they exist. `teardownPartnerRun` is idempotent
+  and runs at the start of the next run, in the Z test and in afterAll: cancel still-open bookings as
+  their client, **then wait until the worker has applied each cancel to the shelter DB** (a `cancel_requested`
+  flag is only a request; deleting the shelter first would strand the Mongo row and the janitor would skip that
+  client; a booking with no CouchDB doc is accepted as never written only after 40 s, i.e. well over ten 3 s worker ticks, an assumption of this wait; a ledgered booking that cannot be resolved to an id, replay included, stays unconfirmed and fails teardown) → `teardownShelter` → revoke + soft-delete every ledgered client. An EXT-008 create is ledgered
+  **before** the request (client + `Idempotency-Key` + body, no booking id yet), resolved on 201 and dropped on a
+  4xx, so a lost response is recovered by replaying the key. Both clients' **exact names** are ledgered before their
+  create call too (`clientNames`); teardown first ledgers the listed client carrying one of those run-unique
+  names, so a run killed between the create and the moment its id is known is still recovered (a lookup of the
+  run's own recorded names, not a search). The UI-created client's id is ledgered as soon as it is visible in the
+  reveal dialog (polled from the BFF list until it appears). Every EXT-008 call (create, replay, key reuse) has its
+  own ledger intent, so a regression that made a second booking would still be cancelled. Client **secrets are never
+  written to the ledger or logs**; a teardown that lost them (crash recovery) regenerates one through the BFF
+  just to cancel the bookings. A1 closes the reveal dialog before any assertion, so failure screenshots / videos
+  never capture the secret (the staging config keeps them on failure). `expectPartnerRunGone` (Z) asserts no shelter DB / registry row, no open public
+  row, and no client left in the list.
+- **Admin identity.** The staff BFF `/api/v1/thirdparty-clients` is called with a `bootstrapAdminSession()` cookie
+  (CouchDB `_admin`, which the BFF treats as system admin) on local **and** staging, like every other `@critical`
+  suite: provisioning the run's shelter needs `_admin` anyway (`createShelterViaUi`), so no `E2E_ADMIN_*`
+  user is needed beyond `COUCHDB_ADMIN_URL`; the BFF adds `EXTERNAL_API_SECRET` toward FastAPI itself.
+  The preview server therefore needs `FASTAPI_INTERNAL_URL` + `EXTERNAL_API_SECRET` (`frontend/.env`).
+- **Approved exception to §4 rule 4.** Besides the UI, setup uses the BFF for the **second client** (A3b cross-client
+  isolation) and for the **scope matrix** (A4/A5: PATCH `allowed_scopes` six times is not UI-worthy; A6 covers the
+  edit-scopes dialog). Create / edit / revoke / delete of the main client still go through the UI.
+- **FastAPI origin guard.** `partnerApiUrl()` uses `E2E_FASTAPI_URL` only on a remote run (`E2E_BASE_URL` set); a local
+  run must stay on loopback and throws if a copied `.env` points `E2E_FASTAPI_URL` elsewhere. A remote run without
+  `E2E_FASTAPI_URL` throws a clear error instead of falling back to localhost.
+- **Scope matrix (A4).** For each of the six scopes: PATCH `allowed_scopes` to _all minus that scope_ (BFF),
+  mint a new token (it must not carry the scope), assert every endpoint that needs it answers 403
+  `insufficient_scope` (EXT-006 without `occupancy-read` stays 200 with `occupancy_total: null`) and that every
+  endpoint on another scope still answers. EXT-007 / EXT-011 always send `purpose` (checked before the scope).
+- **Current token behaviour is asserted, not wished for (ADR 0002 §6).** `verify_thirdparty_token` trusts the JWT
+  claims and never reads the DB, so a token minted before a scope removal (A6) or a revoke (A7) keeps working until
+  it expires (3,600 s); only a token minted afterwards reflects the change. The edit / revoke dialogs say so too.
+  If that policy changes, flip those two assertions.
+- **Known gaps** (`test.fixme`, app code is out of scope here):
+  - EXT-011 answers 200 (CHECKED_OUT residency) for a **cancelled, never-checked-in** booking: the cancel writes
+    `current_stay {status: 'cancelled', since: now}`, the evacuee projector sets `checked_in_at` from `since` for
+    every status except `pre_registered` / `kiosk_registered`, and the residency use case treats any non-null
+    `checked_in_at` as a stay. The matrix therefore probes EXT-011 with a fresh, never-booked CID.
+- **Per-location occupancy.** Only the summary's top-level `occupancy_total` needs `occupancy-read` (EXT-006, per
+  `docs/data/api-contract.md`); each `locations[].occupancy_total` is exposed under `location-read` alone, and A4/A5
+  assert exactly that.
+- **Accepted leftovers in Mongo** (a browser cannot delete them; PII-free): `external_bookings` rows (cancelled; PII
+  cleared by the worker), `third_party_access_logs`, `external_booking_idempotency` keys, and the soft-deleted
+  `third_party_clients` rows. They are swept by the partner janitor (§9.C).
+- EXT-011's 200 path needs someone really checked in and stays with the Python smoke script; here only 400 / 404.
+
+Local run (the preview server must see `FASTAPI_INTERNAL_URL` and `EXTERNAL_API_SECRET`; `fastapi` and `worker`
+images must be current — `docker compose up -d --build fastapi worker`):
+`env -u E2E_BASE_URL PLAYWRIGHT_TEST_BASE_URL=http://localhost:4187 npx playwright test e2e/partner-api.test.ts`
+
 ## 9. Agent handoff
 
 ### 9.0 Rules for every agent (non-negotiable)
@@ -444,6 +515,26 @@ assertion green; `--list` shows every touched test with exactly one layer tag; a
   `Jenkinsfile.e2e-janitor` — deletes only registry shelters whose **name starts with `E2E`** and
   are older than N hours; default **dry-run**; logs every id. Credential:
   `tent-staging-couch-admin-url`. Owner adds the Jenkins cron (keep dry-run until listings look right).
+- Partner Mongo janitor: `worker/src/worker/cli/e2e_partner_janitor.py` (`e2e-partner-janitor`), run by the
+  extra stage **Partner Mongo janitor** of `Jenkinsfile.e2e-janitor` (same `MODE` / `MAX_AGE_HOURS`, `tent-staging-ssh`,
+  over ssh into the `worker` container — the only place staging Mongo is reachable). It sweeps what the
+  `@partner-api` suite (§8.5) cannot delete: it selects **third-party clients only** whose name starts with `E2E `
+  and whose `created_at` is older than the age gate, then (if still active) revokes them and deletes their
+  `external_booking_idempotency`, `third_party_access_logs`, terminal `external_bookings` (`written` / `cancelled` /
+  `rejected`) and finally the client row. A client with an in-flight booking (`pending`, uncommitted, `cancel_requested`
+  or an unreconciled terminal row) is skipped whole (the worker may be writing it to CouchDB). **Stranded-booking
+  exception (owner-approved):** an in-flight row is swept with its client when BOTH (a) its shelter database
+  `shelter_<code>` no longer exists (a read-only CouchDB `GET /shelter_<code>`; only an HTTP 404 counts as gone, so any
+  other status, auth failure or connection error counts as "still exists") AND (b) its `updated_at` (else `created_at`)
+  is older than the age gate. This covers the e2e teardown deleting the shelter before the worker can apply a cancel;
+  if any in-flight row fails either condition the whole client is still skipped. Stranded rows are reported on a
+  separate `of which N stranded booking(s)` log line. Default **dry-run**; logs only name, `client_id`, age and row
+  counts. The janitor never writes to CouchDB (the shelter janitor owns that), and never touches clients not named
+  `E2E …` or other clients' data. Inside the worker container use
+  `uv run --no-sync --project worker e2e-partner-janitor …`. Locally:
+  `DATABASE_URI=mongodb://localhost:27017/tentdb uv run --project worker e2e-partner-janitor --max-age-hours=0 --dry-run`
+  (`0` combined with `--execute` is refused unless every `DATABASE_URI` host is local; Jenkins requires a positive
+  integer). Keep `MODE=dry-run` until the listing shows only `E2E partner …` clients.
 - Prod: `playwright.prod.config.ts` + `scripts/run-prod-e2e.sh`; root `Jenkinsfile` / `Jenkinsfile.prod`
   run `@prod` after deploy (`E2E_BASE_URL=https://shelter.psu.ac.th`, credential
   `tent-prod-e2e-env`). Failure fails the job and prints an ALERT line (wire Slack/email in Jenkins
