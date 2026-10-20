@@ -415,6 +415,22 @@ describe('KitchenRemoteRepository.recordMealService — record + read back (T-27
 		expect(await repo.listMealServices()).toHaveLength(2);
 	});
 
+	it('mints receipt_no as max+1, ignoring legacy docs without one (CR-177)', async () => {
+		const planless = { ...serviceInput, meal_plan_id: null };
+		await memoryRepo.put({
+			_id: 'meal_service:01ARZ3NDEKTSV4RRFFQ69G5FA0',
+			type: 'meal_service',
+			schema_v: 2,
+			...planless
+		} as never);
+		const first = await repo.recordMealService(planless, ctx);
+		expect(first.receipt_no).toBe('RCV-KITCHEN-0001');
+		const second = await repo.recordMealService(planless, ctx);
+		expect(second.receipt_no).toBe('RCV-KITCHEN-0002');
+		const stored = (await memoryRepo.get(second._id)) as Record<string, unknown>;
+		expect(stored.receipt_no).toBe('RCV-KITCHEN-0002');
+	});
+
 	it('persists actual_yield onto the stored doc (CR-084)', async () => {
 		const svc = await repo.recordMealService({ ...serviceInput, actual_yield: 90 }, ctx);
 		const stored = (await memoryRepo.get(svc._id)) as Record<string, unknown>;

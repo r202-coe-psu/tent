@@ -33,7 +33,8 @@
 	} from '$lib/features/kitchen';
 	import { useActiveSopProfile } from '$lib/features/sop-ratios';
 	import { useSupplyItems } from '$lib/features/supply';
-	import { useItemMasters } from '$lib/features/catalog';
+	import { useItemMasters, formatUnit, useUnitsOfMeasure } from '$lib/features/catalog';
+	import { langState } from '$lib/states/i18n.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { useStockBalance } from '$lib/features/operations';
 	import { useCreateTicket, useTickets } from '$lib/features/tickets';
@@ -45,6 +46,8 @@
 	const plans = useMealPlans();
 	const supplyItems = useSupplyItems();
 	const itemMasters = useItemMasters(() => getShelterCode());
+	const unitsQuery = useUnitsOfMeasure();
+	const units = $derived(unitsQuery.data ?? []);
 	const stockBalance = useStockBalance();
 	let createOpen = $state(false);
 	let createDefaultMode = $state<'sop' | 'recipe' | 'custom'>('sop');
@@ -314,21 +317,22 @@
 													: shortfall > 0
 														? 'ของขาดสต็อก — คลังมีไม่พอตามยอดที่ต้องใช้'
 														: recipe.recipe_id === RICE_RECIPE_ID
-															? 'คำนวณเป็นกรัมตามสัดส่วน SOP — ตอนเบิกจะถูกแปลงเป็นกิโลกรัม (kg) ให้ตรงหน่วยคลัง'
+															? 'คำนวณเป็นกรัมตามสัดส่วน SOP — ตอนเบิกจะถูกแปลงเป็นกิโลกรัม ให้ตรงหน่วยคลัง'
 															: undefined}
 											>
 												{#if unresolved || shortfall > 0}
 													<TriangleAlert class="h-3 w-3 shrink-0 text-amber-600" />
 												{/if}
 												{meta.label}: {recipe.planned_qty.toLocaleString()}
-												{meta.unit}
+												{formatUnit(meta.unit, units, langState.current)}
 												{#if unresolved}
 													<span class="text-amber-600"
 														>(ยังไม่เชื่อมกับสต็อกจริง — ชื่อไม่ตรงกับคลัง)</span
 													>
 												{:else if shortfall > 0}
 													<span class="text-amber-600"
-														>(ขาดอีก {shortfall.toLocaleString()} {meta.unit})</span
+														>(ขาดอีก {shortfall.toLocaleString()}
+														{formatUnit(meta.unit, units, langState.current)})</span
 													>
 												{/if}
 											</p>

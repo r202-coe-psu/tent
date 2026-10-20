@@ -25,6 +25,7 @@ import {
 	type MealSession,
 	type MealSessionInput
 } from '../domain/kitchen';
+import { nextReceiptNo } from '../domain/receipt-no';
 import {
 	createStockLedger,
 	deriveDeterministicLedgerId,
@@ -298,7 +299,9 @@ export class KitchenRemoteRepository implements KitchenRepository {
 				}
 			}
 		}
-		return this.repo.put(createMealService(input, ctx));
+		const services = await this.listMealServices();
+		const receiptNo = nextReceiptNo(services.map((s) => s.receipt_no));
+		return this.repo.put(createMealService(input, receiptNo, ctx));
 	}
 
 	// Finds the latest meal service recorded for a specific meal plan (ulid
