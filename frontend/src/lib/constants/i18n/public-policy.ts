@@ -51,7 +51,7 @@ export const PUBLIC_POLICY_I18N = {
 		],
 		closing:
 			'ทั้งนี้ เพื่อประโยชน์ในการใช้ข้อมูลส่วนบุคคลตามที่กล่าวไว้ มหาวิทยาลัยฯ จะไม่จัดเก็บข้อมูลส่วนบุคคลอื่น ๆ ของท่าน เว้นแต่ได้รับความยินยอมโดยชัดแจ้งจากเจ้าของข้อมูล',
-		footerLink: 'นโยบายความเป็นส่วนตัว'
+		footerLink: 'นโยบายความเป็นส่วนตัว (PDPA)'
 	},
 	en: {
 		pageTitle: 'Privacy Policy — Smart Shelters',
@@ -105,6 +105,6 @@ export const PUBLIC_POLICY_I18N = {
 		],
 		closing:
 			'For the purposes stated above, the University will not collect other personal data from you unless it has obtained the data subject’s explicit consent.',
-		footerLink: 'Privacy Policy'
+		footerLink: 'Privacy Policy (PDPA)'
 	}
 } as const;
