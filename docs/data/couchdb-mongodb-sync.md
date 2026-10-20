@@ -2,8 +2,8 @@
 title: Smart Shelter — CouchDB ⇄ MongoDB Sync (Public Plane)
 status: draft for review
 created: 2026-06-11
-updated: 2026-10-13
-note: คู่กับ data-model.md v3 + api-contract.md v1 + CR-017/CR-044 — public tier ทำงานบน MongoDB ผ่าน FastAPI; ตัด public_transparency (CR-017 Decision B); CR-113 unassigned_registrations; CR-166 (2026-10-13) — public_persons เพิ่ม `first_name_key`/`last_name_hash`, PROJECTION_VERSION 2→3, เลิก `$text`; decision sync 2026-10-09 — worker PROJECTION_VERSION + auto re-bootstrap on start (stored in Mongo _worker_meta); bootstrap reads update_seq before scan
+updated: 2026-10-20
+note: CR-176 (2026-10-20) — projector evacuee `checked_in_at` = null เมื่อ `cancelled` (PROJECTION_VERSION 4→5); คู่กับ data-model.md v3 + api-contract.md v1 + CR-017/CR-044 — public tier ทำงานบน MongoDB ผ่าน FastAPI; ตัด public_transparency (CR-017 Decision B); CR-113 unassigned_registrations; CR-166 (2026-10-13) — public_persons เพิ่ม `first_name_key`/`last_name_hash`, PROJECTION_VERSION 2→3, เลิก `$text`; decision sync 2026-10-09 — worker PROJECTION_VERSION + auto re-bootstrap on start (stored in Mongo _worker_meta); bootstrap reads update_seq before scan
 ---
 
 # Smart Shelter — CouchDB ⇄ MongoDB Sync
@@ -117,8 +117,8 @@ The worker resumes `_changes` from its checkpoint, so documents that never chang
 // projector: ถ้า evacuee.privacy.search_excluded == true → ลบ doc นี้ออกจาก Mongo (opt-out = หายทั้ง record)
 // ไม่มี: นามสกุลเต็ม, เบอร์ดิบ, medical, national_id plaintext — ไม่ project เด็ดขาด
 
-การเปลี่ยนสูตร projector ของ `checked_in_at` ให้เป็น `null` สำหรับ `pre_registered` และ
-`kiosk_registered` มีผลกับ event ใหม่เท่านั้น; ต้อง bootstrap/reproject `public_persons` เดิม
+การเปลี่ยนสูตร projector ของ `checked_in_at` ให้เป็น `null` สำหรับ `pre_registered`,
+`kiosk_registered` และ `cancelled` (CR-176) มีผลกับ event ใหม่เท่านั้น; ต้อง bootstrap/reproject `public_persons` เดิม
 หลัง deploy worker เพื่อให้ Mongo สะท้อนสูตรใหม่ด้วย (ติดตามใน CR ของ kiosk walk-in ก่อน deploy).
 
 // public_shelters — shelter list (จาก registry)
