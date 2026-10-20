@@ -659,7 +659,9 @@
 														class="min-w-0 flex-1 gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm sm:flex-none"
 													>
 														<Utensils class="h-3.5 w-3.5" />
-														ชุดการผลิต<span class="hidden sm:inline"> & แผนอาหาร</span>
+														<span class="sm:hidden">ชุดการผลิต</span><span class="hidden sm:inline"
+															>ชุดการผลิต & แผนอาหาร</span
+														>
 														({sessionPlans.length})
 													</Tabs.Trigger>
 													<Tabs.Trigger
@@ -667,7 +669,9 @@
 														class="min-w-0 flex-1 gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm sm:flex-none"
 													>
 														<ClipboardCheck class="h-3.5 w-3.5" />
-														สรุปบริการ<span class="hidden sm:inline">ของมื้อนี้</span>
+														<span class="sm:hidden">สรุปบริการ</span><span class="hidden sm:inline"
+															>สรุปบริการของมื้อนี้</span
+														>
 														({sessionServices.length})
 													</Tabs.Trigger>
 												</Tabs.List>

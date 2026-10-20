@@ -402,14 +402,16 @@ async function approveBatch(warehouse: Page, batch: Batch, onHand: number): Prom
 		String(batch.target / REGULAR_HEADCOUNT),
 		{ timeout: 15_000 }
 	);
-	await warehouse.getByRole('button', { name: 'ยกเลิก' }).click();
+	// Scope to the dialog — the action bar also has "ยกเลิกตั๋ว".
+	await warehouse.getByRole('dialog').getByRole('button', { name: 'ยกเลิก', exact: true }).click();
+	await expect(warehouse.getByRole('dialog')).toBeHidden();
 	const dispatch = warehouse.getByRole('button', { name: 'ปล่อยของและตัดสต็อก' });
 	await expect(dispatch).toBeEnabled({ timeout: 15_000 });
 	await dispatch.click();
 	await expect(toast(warehouse, 'ปล่อยของแล้ว ตัดสต็อกเรียบร้อย')).toBeVisible({
 		timeout: 15_000
 	});
-	await expect(warehouse.getByText('รอครัวตรวจรับวัตถุดิบ')).toBeVisible();
+	await expect(warehouse.getByText('รอครัวยืนยันรับวัตถุดิบ')).toBeVisible();
 }
 
 /** Kitchen: confirm the dispatched ingredients arrived (IN_TRANSIT → COMPLETED). */
