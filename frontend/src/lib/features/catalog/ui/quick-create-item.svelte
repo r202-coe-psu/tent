@@ -308,6 +308,7 @@
 							searchPlaceholder="ค้นหาหมวด…"
 							emptyText="ไม่พบหมวด"
 							class="min-h-11 w-auto rounded-full"
+							contentClass="w-72"
 						/>
 					{/if}
 				</div>
@@ -348,6 +349,7 @@
 							searchPlaceholder="ค้นหาหน่วย…"
 							emptyText="ไม่พบหน่วย"
 							class="min-h-11 w-auto rounded-full"
+							contentClass="w-56"
 						/>
 					{/if}
 				</div>

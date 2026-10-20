@@ -170,7 +170,7 @@ export const POST: RequestHandler = async ({ request }) => {
 			}))
 		);
 		try {
-			await assertCountedAgainstCatalog(counted);
+			await assertCountedAgainstCatalog(counted, shelterDb(shelterCode));
 		} catch (e) {
 			return json(
 				{
