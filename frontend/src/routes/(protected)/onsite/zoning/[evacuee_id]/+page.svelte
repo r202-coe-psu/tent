@@ -330,7 +330,7 @@
 		</Card.Root>
 	{:else}
 		<Card.Root class="border-border p-5 shadow-sm">
-			<div class="mb-4 space-y-2">
+			<div class="mb-2 space-y-2">
 				<div class="flex flex-wrap items-center gap-2">
 					<p class="text-lg font-bold">{formatPersonName(evacuee)}</p>
 					{#if isAwaitingConfirm}
@@ -371,29 +371,31 @@
 						</li>
 					{/each}
 				</ol>
-				<div class="flex flex-wrap items-center gap-2">
-					{#if latestScreening?.symptoms && latestScreening.symptoms.length > 0}
-						<Badge
-							variant="outline"
-							class="border-red-500/40 bg-red-500/15 text-red-800 dark:text-red-200"
-						>
-							เฝ้าระวัง EWAR ({latestScreening.symptoms.length} อาการ)
-						</Badge>
-					{/if}
-					{#if latestScreening?.track === 'fast_track'}
-						<Badge
-							variant="outline"
-							class="border-blue-500/40 bg-blue-500/15 text-blue-800 dark:text-blue-200"
-						>
-							Fast Track
-						</Badge>
-					{/if}
-					{#if isolationDefault}
-						<span class="text-xs text-amber-700 dark:text-amber-300"
-							>— แนะนำกักตัว (ไม่รวมครัวเรือนโดยปริยาย)</span
-						>
-					{/if}
-				</div>
+				{#if (latestScreening?.symptoms?.length ?? 0) > 0 || latestScreening?.track === 'fast_track' || isolationDefault}
+					<div class="flex flex-wrap items-center gap-2">
+						{#if latestScreening?.symptoms && latestScreening.symptoms.length > 0}
+							<Badge
+								variant="outline"
+								class="border-red-500/40 bg-red-500/15 text-red-800 dark:text-red-200"
+							>
+								เฝ้าระวัง EWAR ({latestScreening.symptoms.length} อาการ)
+							</Badge>
+						{/if}
+						{#if latestScreening?.track === 'fast_track'}
+							<Badge
+								variant="outline"
+								class="border-blue-500/40 bg-blue-500/15 text-blue-800 dark:text-blue-200"
+							>
+								Fast Track
+							</Badge>
+						{/if}
+						{#if isolationDefault}
+							<span class="text-xs text-amber-700 dark:text-amber-300"
+								>— แนะนำกักตัว (ไม่รวมครัวเรือนโดยปริยาย)</span
+							>
+						{/if}
+					</div>
+				{/if}
 				{#if evacuee.vulnerable_groups && evacuee.vulnerable_groups.length > 0}
 					<div class="flex flex-wrap items-center gap-1.5 pt-1">
 						<span class="text-xs font-medium text-muted-foreground">กลุ่มเปราะบาง:</span>
@@ -533,7 +535,7 @@
 									? 'ย้ายสมาชิกครัวเรือนที่พักอยู่ด้วย'
 									: 'จัดโซนสมาชิกครัวเรือนที่รอจัดด้วย'}
 							</p>
-							<p class="text-2xs text-muted-foreground">
+							<p class="text-xs text-muted-foreground">
 								เลือกเฉพาะคน — คนละโซนได้เมื่อจำเป็น (เช่น กักตัว)
 							</p>
 							{#each companionCandidates as member (member._id)}
@@ -545,7 +547,7 @@
 									/>
 									<div class="min-w-0 flex-1">
 										<p class="text-sm font-medium">{formatPersonName(member)}</p>
-										<p class="text-2xs text-muted-foreground">
+										<p class="text-xs text-muted-foreground">
 											{member.current_stay.status}
 											{#if member.current_stay.zone}
 												· {zoneLabel(member.current_stay.zone, shelterZones)}{/if}
@@ -557,9 +559,11 @@
 					{/if}
 				{/if}
 
-				<div class="mt-6 flex flex-wrap gap-2">
+				<div
+					class="mt-6 flex flex-col gap-2 border-t border-slate-200/80 pt-4 sm:flex-row sm:flex-wrap sm:items-center"
+				>
 					{#if canConfirmArrival}
-						<Button onclick={handleConfirmArrival} disabled={submitting}>
+						<Button class="w-full sm:w-auto" onclick={handleConfirmArrival} disabled={submitting}>
 							{#if submitting}
 								<Loader2 class="mr-2 size-4 animate-spin" />
 							{/if}
@@ -568,6 +572,7 @@
 						{#if evacuee.household_id}
 							<Button
 								variant="secondary"
+								class="w-full sm:w-auto"
 								onclick={handleConfirmHouseholdArrival}
 								disabled={submitting}
 							>
@@ -578,6 +583,7 @@
 					{#if showZoneEditor}
 						<Button
 							variant={isAwaitingConfirm ? 'outline' : 'default'}
+							class="w-full sm:w-auto"
 							onclick={handleSubmit}
 							disabled={submitting || !canSubmitZone}
 						>
@@ -589,6 +595,7 @@
 					{:else}
 						<Button
 							variant="outline"
+							class="w-full sm:w-auto"
 							onclick={() => (rezoneOpenFor = evacueeId)}
 							disabled={submitting}
 						>
