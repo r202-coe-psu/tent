@@ -233,6 +233,11 @@ export {
 	filterStockFormItems,
 	type StockFormItem
 } from './domain/stock-form-items';
+export {
+	isOutOfStock,
+	sortInStockFirstByName,
+	partitionInStockFirst
+} from './domain/stock-availability-sort';
 export type { NeedItem } from './application/need-item.types';
 
 // UI components
