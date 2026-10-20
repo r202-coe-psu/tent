@@ -26,12 +26,14 @@ const ERROR_COPY: Record<string, string> = {
 	SHIFT_ID_REQUIRED: 'กรุณาเลือกกะที่ต้องการสมัคร',
 	SHIFT_DATE_AMBIGUOUS: 'ไม่สามารถระบุกะงานที่ต้องการได้ กรุณาเลือกกะใหม่อีกครั้ง',
 	JOB_NOT_READY: 'งานอาสาสมัครนี้กำลังเตรียมระบบรับสมัคร กรุณาลองใหม่อีกครั้งภายหลัง',
+	WRITER_UNAVAILABLE: 'ระบบรับสมัครขัดข้องชั่วคราว กรุณาลองใหม่ภายหลังหรือแจ้งเจ้าหน้าที่',
 	ALREADY_APPLIED: 'เบอร์นี้สมัครงานอาสาสมัครนี้ไว้แล้ว — เปิดดูตั๋วเดิมได้จาก "ค้นหาตั๋วของฉัน"',
 	DUPLICATE_APPLICATION: 'คุณได้สมัครงานอาสาสมัครนี้ไว้แล้ว',
 	AMBIGUOUS_VOLUNTEER: 'พบข้อมูล volunteer มากกว่าหนึ่ง profile กรุณาติดต่อเจ้าหน้าที่',
 	TIME_CONFLICT: 'คุณมีกะงานอื่นที่เวลาทับซ้อนกัน',
 	WRITE_FAILED: 'ไม่สามารถบันทึกข้อมูลได้ กรุณาลองใหม่อีกครั้ง',
 	APPLY_FAILED: 'ไม่สามารถบันทึกใบสมัครได้ กรุณาลองใหม่อีกครั้ง',
+	PREFLIGHT_FAILED: 'ตรวจสอบข้อมูลก่อนสมัครไม่สำเร็จ กรุณาลองใหม่อีกครั้ง',
 	PROFILE_NOT_FOUND: 'ไม่พบโปรไฟล์ของคุณในระบบ — ลองจองงานอาสาสมัครสักงานก่อน',
 	PROFILE_UPDATE_FAILED: 'บันทึกโปรไฟล์ไม่สำเร็จ กรุณาลองใหม่อีกครั้ง',
 	CAPTCHA_REQUIRED: 'ไม่สามารถยืนยันว่าไม่ใช่บอทได้ กรุณารีเฟรชหน้าแล้วลองใหม่',
@@ -53,8 +55,11 @@ const ERROR_COPY: Record<string, string> = {
 
 function apiError(body: unknown, status: number, fallback: string): Error {
 	if (body && typeof body === 'object') {
-		const code = (body as { error?: unknown }).error;
-		if (typeof code === 'string') return new Error(ERROR_COPY[code] ?? code);
+		const { error: code, message } = body as { error?: unknown; message?: unknown };
+		if (typeof code === 'string') {
+			// A code with no copy here (a validation failure, say) may carry its own message.
+			return new Error(ERROR_COPY[code] ?? (typeof message === 'string' ? message : code));
+		}
 	}
 	return new Error(fallback || `คำขอไม่สำเร็จ (${status})`);
 }
@@ -175,6 +180,44 @@ export type ApplyResult = {
 	shift_id?: string | null;
 	volunteer_token?: string;
 };
+
+export type ApplyPreflightInput = Omit<VolunteerApplyInput, 'captchaToken'> & {
+	job_id: string;
+	start_time?: string;
+	end_time?: string;
+};
+
+export type ApplyPreflightResult = {
+	match: 'no_match' | 'matched_one' | 'ambiguous_match';
+	existing_profile?: {
+		volunteer_code: string;
+		display_name: string;
+		identity_status: string;
+		existing_skills: string[];
+		new_skills: string[];
+		new_controlled_skills: string[];
+	};
+	message: string;
+};
+
+/**
+ * Check an application before it is sent: whether the phone already has a volunteer
+ * profile, and whether the job and shift can still take it. Writes nothing.
+ */
+export async function preflightApplication(
+	input: ApplyPreflightInput
+): Promise<ApplyPreflightResult> {
+	const response = await fetch('/api/public/v1/volunteer/apply/preflight', {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify(input)
+	});
+	const data = await readJson(response);
+	if (!response.ok || !data || !(data as { success?: unknown }).success) {
+		throw apiError(data, response.status, ERROR_COPY.PREFLIGHT_FAILED);
+	}
+	return data as ApplyPreflightResult;
+}
 
 /**
  * Apply to one job (FR-VOL-02 / AC-VOL-02) — no account, no SMS OTP.

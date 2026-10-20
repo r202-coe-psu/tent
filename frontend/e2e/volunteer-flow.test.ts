@@ -827,7 +827,7 @@ test.describe('Volunteer end-to-end operational flow', () => {
 			// check-in actually checks (`blockedByIdentity`), not the application review.
 			await injectSession(page, ADMIN, adminSession);
 			await page.goto(`${BASE}/back-office/volunteers?tab=people`);
-			await expect(page.getByRole('heading', { name: 'จัดการอาสาสมัคร' })).toBeVisible();
+			await expect(page.getByRole('heading', { name: 'จัดการอาสาสมัคร', level: 2 })).toBeVisible();
 
 			const row = page.locator('tr', { hasText: FULL_NAME });
 			await expect(row).toBeVisible();

@@ -22,6 +22,7 @@
 	import {
 		applyToJob,
 		fetchVolunteerSkills,
+		preflightApplication,
 		resolvePortalAccess
 	} from '$lib/features/volunteer-portal/data/volunteer-api';
 	import {
@@ -188,7 +189,10 @@
 		formData.firstName = applicantProfile.first_name;
 		formData.lastName = applicantProfile.last_name;
 		formData.nickname = applicantProfile.nickname ?? '';
-		formData.phone = applicantProfile.phone_masked;
+		// Not `phone_masked`: it is never a usable number. A phone credential is sent as is
+		// (`cleanApplicantPhone`), and a QR-token sign-in has to type the full number — a
+		// prefilled mask there passed the empty check and went out as its leftover digits.
+		formData.phone = '';
 		formData.email = applicantProfile.email ?? '';
 		formData.skills = applicantProfile.skills.map(canonicalSkillId);
 	});
@@ -271,7 +275,7 @@
 		if (ddmmyyyy) date = `${ddmmyyyy[3]}-${ddmmyyyy[2]}-${ddmmyyyy[1]}`;
 		return {
 			shift_id: activeShift.id || undefined,
-			date,
+			shift_date: date,
 			start_time: startTime,
 			end_time: endTime
 		};
@@ -314,7 +318,7 @@
 				email: isPortalApplicant ? '' : formData.email.trim(),
 				skills: formData.skills,
 				shift_id: selectedShift?.shift_id,
-				shift_date: selectedShift?.date,
+				shift_date: selectedShift?.shift_date,
 				...(recaptchaToken ? { captchaToken: recaptchaToken } : {})
 			});
 			const trackingToken = result.tracking_token;
@@ -389,6 +393,11 @@
 		e.preventDefault();
 		if (!formData.consentPdpa) {
 			showSubmitError(t.errPdpaRequired);
+			// The checkbox sits at the end of a long form, under the sticky submit bar until the
+			// form is scrolled to the bottom — bring it to the applicant.
+			const consent = document.getElementById('applyConsentPdpa');
+			consent?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+			consent?.focus({ preventScroll: true });
 			return;
 		}
 		if (!job || !activeShift) {
@@ -415,7 +424,7 @@
 			isPortalApplicant &&
 			applicantCredential &&
 			'token' in applicantCredential &&
-			!formData.phone.trim()
+			!/^0\d{8,9}$/.test(cleanApplicantPhone())
 		) {
 			showSubmitError('กรุณากรอกเบอร์โทรศัพท์ที่ใช้สมัครเดิมเพื่อสมัครงานอาสาสมัครจาก portal');
 			return;
@@ -423,37 +432,29 @@
 		errorMessage = null;
 		isSubmitting = true;
 		try {
-			const preflightRes = await fetch('/api/public/v1/volunteer/apply/preflight', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({
-					job_id: job.id.startsWith('job:') ? job.id : `job:${job.id}`,
-					shelter_code: job.shelter_code || undefined,
-					first_name: formData.firstName.trim(),
-					last_name: formData.lastName.trim(),
-					phone: cleanApplicantPhone(),
-					email: isPortalApplicant ? '' : formData.email.trim(),
-					skills: formData.skills,
-					...(shiftPayload() ?? {})
-				})
+			// Throws with the copy for the server's error code (job closed, shift full, …).
+			const preflight = await preflightApplication({
+				job_id: job.id.startsWith('job:') ? job.id : `job:${job.id}`,
+				shelter_code: job.shelter_code || undefined,
+				first_name: formData.firstName.trim(),
+				last_name: formData.lastName.trim(),
+				phone: cleanApplicantPhone(),
+				email: isPortalApplicant ? '' : formData.email.trim(),
+				skills: formData.skills,
+				...(shiftPayload() ?? {})
 			});
-			const preflight = await preflightRes.json().catch(() => null);
-			if (!preflightRes.ok || !preflight?.success) {
-				let message = preflight?.message || 'ตรวจสอบข้อมูลก่อนสมัครไม่สำเร็จ';
-				if (preflight?.error === 'AMBIGUOUS_VOLUNTEER') {
-					message = 'พบข้อมูลที่อาจตรงกับมากกว่าหนึ่ง profile กรุณาติดต่อเจ้าหน้าที่';
-				}
-				showSubmitError(message);
-				return;
-			}
 
 			if (preflight.match === 'ambiguous_match') {
 				showSubmitError(preflight.message);
 				return;
 			}
 			if (preflight.match === 'matched_one') {
-				if (showExistingProfileConfirmation) {
-					preflightResult = preflight;
+				if (showExistingProfileConfirmation && preflight.existing_profile) {
+					preflightResult = {
+						match: 'matched_one',
+						existing_profile: preflight.existing_profile,
+						message: preflight.message
+					};
 					confirmationOpen = true;
 				} else {
 					// A signed-in portal volunteer has already identified this profile.
@@ -986,6 +987,7 @@
 								<input
 									type="checkbox"
 									required
+									id="applyConsentPdpa"
 									bind:checked={formData.consentPdpa}
 									class="mt-0.5 h-4 w-4 shrink-0 rounded border-border text-primary focus:ring-primary"
 								/>
