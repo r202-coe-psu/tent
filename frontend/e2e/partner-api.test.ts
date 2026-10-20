@@ -60,7 +60,12 @@ import {
 	type PartnerEndpoint,
 	type PartnerScope
 } from './helpers/partner-api';
-import { publicShelter, waitForProjection } from './helpers/public-cleanup';
+import {
+	publicSearchHits,
+	publicShelter,
+	waitForProjection,
+	type PublicSearchHit
+} from './helpers/public-cleanup';
 import { createShelterViaUi } from './helpers/staff-ui';
 
 const API_KEYS_PATH = '/system-management/api-keys';
@@ -256,7 +261,7 @@ async function expectOthersStillWork(r: Run, token: string, denied: readonly Par
 	for (const endpoint of PARTNER_ENDPOINTS) {
 		// EXT-008 would create a booking just to prove the gate stays open — covered by A3.
 		if (denied.includes(endpoint.scope) || endpoint.ext === 'EXT-008') continue;
-		// Fresh CID for EXT-011 so this probe does not depend on the state of the run's own booking.
+		// Fresh CID for every probe so none depends on the state of the run's own booking.
 		const res = await call(r, token, endpoint, { ...ctxOf(r), cid: freshCid() });
 		expectScopePassed(res, endpoint);
 	}
@@ -568,7 +573,31 @@ test.describe('Partner API', { tag: ['@partner-api', '@critical'] }, () => {
 
 	test('EXT-011 does not report a cancelled, never-checked-in booking as residency', async () => {
 		// A cancelled stay has no Station 1 check-in behind it: 404, like before the cancel (#710, CR-176).
+		test.setTimeout(120_000);
 		const r = state();
+		// Precondition (fails loudly when run alone or reordered): this run's booking is cancelled.
+		expect(r.bookingId, 'needs the booking created and cancelled by A3').not.toBe(
+			'bk_e2e_not_booked_yet'
+		);
+		const status = await call(r, r.token, byExt('EXT-010'));
+		expect(status.body.result.booking_status).toBe('CANCELLED');
+
+		// EXT-011 reads the Mongo `public_persons` projection, which lags the CouchDB write that
+		// `waitForWorkerWrite` sees. Wait until public search (same projection) shows the cancelled
+		// stay; before that the row is still `pre_registered` and a 404 would prove nothing.
+		let hits: PublicSearchHit[] = [];
+		await waitForProjection(
+			`cancelled stay of ${r.cid} on the public plane`,
+			async () => {
+				hits = await publicSearchHits(r.cid);
+				return hits.some((h) => h.status === 'cancelled');
+			},
+			{ timeoutMs: 60_000, intervalMs: 3_000 }
+		);
+		// The root of #710: the projector used to stamp the cancel time as `checked_in_at`.
+		for (const hit of hits.filter((h) => h.status === 'cancelled')) {
+			expect(hit.checked_in_at, 'cancelled stay carries no check-in time').toBeNull();
+		}
 		expectExtError(await call(r, r.token, byExt('EXT-011')), 404, 'residency_not_found');
 	});
 

@@ -411,7 +411,12 @@ How they obey §4:
   it expires (3,600 s); only a token minted afterwards reflects the change. The edit / revoke dialogs say so too.
   If that policy changes, flip those two assertions.
 - **EXT-011 after a cancel.** A cancelled, never-checked-in booking answers 404 `residency_not_found` (#710,
-  CR-176); the matrix still probes EXT-011 with a fresh, never-booked CID so it does not depend on that booking.
+  CR-176). EXT-011 reads the Mongo `public_persons` projection, which lags the CouchDB write that
+  `waitForWorkerWrite` polls, so the test first waits until public search (BFF `/occupants`, same projection) shows
+  the CID as `cancelled` and asserts that hit has `checked_in_at: null` (the pre-fix projector stamped the cancel
+  time there) before asserting the 404. It also asserts its own precondition (EXT-010 `CANCELLED`), so running it
+  alone fails loudly. The matrix still probes EXT-011 with a fresh, never-booked CID so it does not depend on that
+  booking. Deterministic backend guard: `backend/tests/test_thirdparty_residency.py`.
 - **Per-location occupancy.** Only the summary's top-level `occupancy_total` needs `occupancy-read` (EXT-006, per
   `docs/data/api-contract.md`); each `locations[].occupancy_total` is exposed under `location-read` alone, and A4/A5
   assert exactly that.
