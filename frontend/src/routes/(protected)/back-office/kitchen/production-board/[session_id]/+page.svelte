@@ -781,40 +781,43 @@
 		<Tabs.List class="h-auto w-full gap-2 bg-transparent p-0">
 			<Tabs.Trigger
 				value="A"
-				class="flex-1 gap-2 rounded-lg px-3 py-2 text-xs font-semibold text-muted-foreground data-[state=active]:bg-[#0A2647] data-[state=active]:text-white data-[state=active]:shadow-sm"
+				class="group min-h-11 min-w-0 flex-1 gap-2 rounded-lg px-3 py-2 text-sm leading-tight font-semibold whitespace-normal text-muted-foreground data-[state=active]:bg-[#0A2647] data-[state=active]:text-white data-[state=active]:shadow-sm"
 			>
-				<span class="flex h-5 w-5 items-center justify-center rounded-full bg-white/20 text-2xs"
-					>A</span
+				<span
+					class="flex h-5 w-5 items-center justify-center rounded-full bg-slate-100 text-xs tabular-nums group-data-[state=active]:bg-white/20"
+					>1</span
 				>
-				1. วางแผนเมนู (BOM)
+				วางแผนเมนู (BOM)
 			</Tabs.Trigger>
 			<Tabs.Trigger
 				value="B"
 				disabled={!activeTicket}
-				class="flex-1 gap-2 rounded-lg px-3 py-2 text-xs font-semibold text-muted-foreground disabled:text-muted-foreground/50 data-[state=active]:bg-[#0A2647] data-[state=active]:text-white data-[state=active]:shadow-sm"
+				class="group min-h-11 min-w-0 flex-1 gap-2 rounded-lg px-3 py-2 text-sm leading-tight font-semibold whitespace-normal text-muted-foreground disabled:text-muted-foreground/50 data-[state=active]:bg-[#0A2647] data-[state=active]:text-white data-[state=active]:shadow-sm"
 			>
 				{#if shownStage !== 'B' && stageBLocked}
 					<Lock class="h-3.5 w-3.5" />
 				{:else}
-					<span class="flex h-5 w-5 items-center justify-center rounded-full bg-white/20 text-2xs"
-						>B</span
+					<span
+						class="flex h-5 w-5 items-center justify-center rounded-full bg-slate-100 text-xs tabular-nums group-data-[state=active]:bg-white/20"
+						>2</span
 					>
 				{/if}
-				2. รอคลังอนุมัติ
+				รอคลังอนุมัติ
 			</Tabs.Trigger>
 			<Tabs.Trigger
 				value="C"
 				disabled={stageCLocked}
-				class="flex-1 gap-2 rounded-lg px-3 py-2 text-xs font-semibold text-muted-foreground disabled:text-muted-foreground/50 data-[state=active]:bg-[#0A2647] data-[state=active]:text-white data-[state=active]:shadow-sm"
+				class="group min-h-11 min-w-0 flex-1 gap-2 rounded-lg px-3 py-2 text-sm leading-tight font-semibold whitespace-normal text-muted-foreground disabled:text-muted-foreground/50 data-[state=active]:bg-[#0A2647] data-[state=active]:text-white data-[state=active]:shadow-sm"
 			>
 				{#if shownStage !== 'C' && stageCLocked}
 					<Lock class="h-3.5 w-3.5" />
 				{:else}
-					<span class="flex h-5 w-5 items-center justify-center rounded-full bg-white/20 text-2xs"
-						>C</span
+					<span
+						class="flex h-5 w-5 items-center justify-center rounded-full bg-slate-100 text-xs tabular-nums group-data-[state=active]:bg-white/20"
+						>3</span
 					>
 				{/if}
-				3. รายงานผลจริง
+				รายงานผลจริง
 			</Tabs.Trigger>
 		</Tabs.List>
 	</Tabs.Root>
@@ -1251,7 +1254,7 @@
 						<div>
 							<h4 class="font-bold">รอคลังจัดของ</h4>
 							<p class="mt-1 text-xs text-amber-700">
-								ยังแก้ไขรายการวัตถุดิบได้ที่แท็บ "1. วางแผนเมนู" จนกว่าคลังจะกดอนุมัติ
+								ยังแก้ไขรายการวัตถุดิบได้ที่แท็บ "วางแผนเมนู" จนกว่าคลังจะกดอนุมัติ
 							</p>
 						</div>
 					</div>
@@ -1295,7 +1298,7 @@
 						<AlertCircle class="h-5 w-5 shrink-0 text-rose-600" />
 						<div class="flex-1">
 							<h4 class="font-bold">ตั๋วนี้ถูกยกเลิกแล้ว</h4>
-							<p class="mt-1 text-xs text-rose-700">เปิดตั๋วใหม่ได้จากแท็บ "1. วางแผนเมนู"</p>
+							<p class="mt-1 text-xs text-rose-700">เปิดตั๋วใหม่ได้จากแท็บ "วางแผนเมนู"</p>
 						</div>
 					</div>
 				{/if}

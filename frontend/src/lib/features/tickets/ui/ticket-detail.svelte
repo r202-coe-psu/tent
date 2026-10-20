@@ -121,14 +121,21 @@
 	const GRID_PENDING = 'sm:grid-cols-[minmax(0,1fr)_7rem_8rem_14rem]';
 	const GRID_STOCK = 'sm:grid-cols-[minmax(0,1fr)_7rem_8rem_11rem]';
 	const GRID_PLAIN = 'sm:grid-cols-[minmax(0,1fr)_7rem_11rem]';
+	const GRID_LOT = 'sm:grid-cols-[minmax(0,1fr)_7rem_8rem_11rem_15rem]';
+	// Lot step column (CR-178): only while the warehouse can dispatch.
+	const showLotCol = $derived(
+		!!ticket && ticket.status === 'READY_FOR_DISPATCH' && actions.canDispatch
+	);
 	const gridClass = $derived(
 		!ticket
 			? ''
-			: ticket.status === 'PENDING_PICK' && showStock
-				? GRID_PENDING
-				: showStock
-					? GRID_STOCK
-					: GRID_PLAIN
+			: showLotCol
+				? GRID_LOT
+				: ticket.status === 'PENDING_PICK' && showStock
+					? GRID_PENDING
+					: showStock
+						? GRID_STOCK
+						: GRID_PLAIN
 	);
 
 	// ---- warehouse allocation (PENDING_PICK) ----
@@ -382,12 +389,15 @@
 						ตั๋วนี้ถูกยกเลิกแล้ว ไม่มีการตัดสต็อก
 					</div>
 				{:else}
-					<ol class="grid grid-cols-2 gap-3 sm:grid-cols-4" aria-label="ขั้นตอนของตั๋ว">
+					<ol
+						class="grid grid-cols-[repeat(2,minmax(0,1fr))] gap-3 sm:grid-cols-[repeat(4,minmax(0,1fr))]"
+						aria-label="ขั้นตอนของตั๋ว"
+					>
 						{#each STEPS as step, i (step.status)}
 							{@const done = i < currentStep || ticket.status === 'COMPLETED'}
 							{@const active = i === currentStep && ticket.status !== 'COMPLETED'}
 							<li
-								class="flex items-start gap-2.5 rounded-xl border p-3 {active
+								class="flex min-w-0 items-start gap-2.5 rounded-xl border p-3 {active
 									? 'border-sky-200 bg-sky-50'
 									: 'border-slate-200/80 bg-white'}"
 								aria-current={active ? 'step' : undefined}
@@ -416,7 +426,7 @@
 									>
 										{TICKET_STATUS_LABELS[step.status]}
 									</p>
-									<p class="flex flex-wrap gap-x-1 text-xs text-slate-500">
+									<p class="hidden flex-wrap gap-x-1 text-xs text-slate-500 sm:flex">
 										{#each step.who as phrase (phrase)}
 											<span class="whitespace-nowrap">{phrase}</span>
 										{/each}
@@ -425,6 +435,14 @@
 							</li>
 						{/each}
 					</ol>
+					{#if currentStep >= 0}
+						<!-- Phones: one line for whose turn it is, instead of four cramped subtitles. -->
+						<p class="text-sm text-slate-600 sm:hidden">
+							ขั้นนี้: <span class="font-semibold text-slate-900"
+								>{STEPS[currentStep].who.join(' ')}</span
+							>
+						</p>
+					{/if}
 				{/if}
 			</section>
 
@@ -477,6 +495,12 @@
 							</span>
 						{/if}
 					</div>
+					{#if showLotCol}
+						<p class="text-sm text-slate-500">
+							ระบบเติม lot ให้ตามลำดับที่ควรใช้ก่อน ปล่อยของได้เลยถ้าครบทุกรายการ หรือกด "จัดการ
+							lot" เพื่อแก้ ห้ามใช้ lot ที่หมดอายุ
+						</p>
+					{/if}
 					{#if actions.canAllocateApprove}
 						<p class="text-sm text-slate-500">
 							ตรวจจำนวนที่คลังจัดได้จริงของแต่ละรายการเทียบกับของคงเหลือในคลัง แก้ได้ถ้าของไม่พอ
@@ -499,6 +523,9 @@
 						<span class="text-right {actions.canAllocateApprove ? 'pr-[4.5rem]' : ''}"
 							>คลังจัดให้</span
 						>
+						{#if showLotCol}
+							<span class="text-right">lot ที่จะปล่อย</span>
+						{/if}
 					</div>
 					<ul class="divide-y divide-slate-200/80">
 						{#each ticket.items as item (item.item_id)}
@@ -514,7 +541,7 @@
 							{@const lockedShort =
 								diffShown && !lockedZero && qtyGt(item.requested_qty, item.allocated_qty)}
 							<li
-								class="grid gap-x-4 gap-y-2 px-4 py-3.5 sm:items-center sm:px-5 {gridClass} {stockShort
+								class="grid grid-cols-[minmax(0,1fr)] gap-x-4 gap-y-2 px-4 py-3.5 sm:items-center sm:px-5 {gridClass} {stockShort
 									? 'border border-red-200 bg-red-50'
 									: ''}"
 							>
@@ -623,12 +650,52 @@
 													ขาด {subQty(item.requested_qty, item.allocated_qty)}
 													{unitLabel(item.unit)}
 												</span>
-											{:else}
-												<span
-													class="inline-flex items-center gap-1 self-end text-sm text-emerald-800"
+											{/if}
+										{/if}
+									</div>
+								{/if}
+
+								{#if showLotCol}
+									{@const lotLine = qtyGt(item.allocated_qty, 0)}
+									{@const sel = lotSelection(item.item_id)}
+									{@const ok = sel?.valid === true}
+									{@const picked = sumDispatchAllocations(sel?.allocations ?? [])}
+									<div class="flex flex-col gap-2 sm:items-end">
+										<span class="text-sm text-slate-500 sm:hidden">lot ที่จะปล่อย</span>
+										{#if !lotLine}
+											<span class="text-base text-slate-400">—</span>
+										{:else if !lotsReady}
+											<span class="text-sm text-slate-500">กำลังโหลด lot...</span>
+										{:else}
+											<div class="flex flex-wrap items-center gap-2 sm:justify-end">
+												{#if ok}
+													<span
+														class="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-sm font-semibold text-emerald-800"
+													>
+														<Check class="h-4 w-4" />
+														<span class="tabular-nums">{sel?.allocations.length ?? 0} lot</span> พร้อมปล่อย
+													</span>
+												{:else}
+													<span
+														class="inline-flex items-center gap-1 rounded-full border border-red-200 bg-red-50 px-2.5 py-0.5 text-sm font-semibold text-red-800"
+													>
+														<CircleAlert class="h-4 w-4" />
+														{lotProblem(item.item_id)}
+													</span>
+												{/if}
+												<Button
+													variant="outline"
+													class="h-11 sm:h-9"
+													disabled={dispatch.isPending}
+													onclick={() => openLotDialog(item)}
 												>
-													<Check class="h-3.5 w-3.5" />
-													ครบ
+													จัดการ lot
+												</Button>
+											</div>
+											{#if !ok}
+												<span class="text-sm text-slate-600 tabular-nums">
+													เลือกแล้ว <span class="font-semibold">{picked}</span> / {item.allocated_qty}
+													{unitLabel(item.unit)}
 												</span>
 											{/if}
 										{/if}
@@ -639,74 +706,6 @@
 					</ul>
 				</Card.Content>
 			</Card.Root>
-
-			{#if dispatchLines.length > 0}
-				<Card.Root class="rounded-2xl border border-slate-200/80 bg-white shadow-2xs">
-					<Card.Header class="border-b pb-4">
-						<Card.Title class="flex items-center gap-2 text-base font-bold text-slate-900">
-							<Truck class="h-4 w-4 text-slate-500" />
-							เลือก lot ที่จะปล่อยของ
-						</Card.Title>
-						<p class="text-sm text-slate-500">
-							ระบบเติม lot ให้ตามลำดับที่ควรใช้ก่อน ปล่อยของได้เลยถ้าครบทุกรายการ หรือกด "จัดการ
-							lot" เพื่อแก้ ห้ามใช้ lot ที่หมดอายุ
-						</p>
-					</Card.Header>
-					<Card.Content class="p-0">
-						{#if !lotsReady}
-							<p class="p-4 text-sm text-slate-500 sm:p-5">กำลังโหลด lot ในคลัง...</p>
-						{:else}
-							<ul class="divide-y divide-slate-200/80" aria-label="สรุป lot ที่เลือกของแต่ละรายการ">
-								{#each dispatchLines as item (item.item_id)}
-									{@const sel = lotSelection(item.item_id)}
-									{@const ok = sel?.valid === true}
-									{@const picked = sumDispatchAllocations(sel?.allocations ?? [])}
-									<li
-										class="flex flex-col gap-3 px-4 py-3.5 sm:flex-row sm:items-center sm:gap-4 sm:px-5"
-									>
-										<div class="min-w-0 flex-1">
-											<p class="text-base font-semibold break-words text-slate-900">
-												{item.item_name}
-											</p>
-											<p class="text-sm text-slate-500 tabular-nums">
-												{sel?.allocations.length ?? 0} lot
-											</p>
-										</div>
-										<div class="flex items-baseline gap-1 text-base text-slate-700 tabular-nums">
-											<span class="font-semibold">{picked}</span>
-											<span>/ {item.allocated_qty}</span>
-											<span class="text-sm text-slate-500">{unitLabel(item.unit)}</span>
-										</div>
-										{#if ok}
-											<span
-												class="inline-flex items-center gap-1 self-start rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-sm font-semibold text-emerald-800 sm:self-auto"
-											>
-												<Check class="h-4 w-4" />
-												ครบ
-											</span>
-										{:else}
-											<span
-												class="inline-flex items-center gap-1 self-start rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-sm font-semibold text-red-800 sm:self-auto"
-											>
-												<CircleAlert class="h-4 w-4" />
-												{lotProblem(item.item_id)}
-											</span>
-										{/if}
-										<Button
-											variant="outline"
-											class="h-11 w-full sm:w-auto"
-											disabled={dispatch.isPending}
-											onclick={() => openLotDialog(item)}
-										>
-											จัดการ lot
-										</Button>
-									</li>
-								{/each}
-							</ul>
-						{/if}
-					</Card.Content>
-				</Card.Root>
-			{/if}
 
 			<!-- Action bar — controls are role-gated client-side (ticketActionsFor) and hidden, not
 			     disabled, when the user cannot act. The hint says whose turn it is. The CouchDB
@@ -762,11 +761,11 @@
 							รอครัวยืนยันรับวัตถุดิบ
 						{/if}
 					</p>
-					<div class="flex flex-wrap items-center gap-2">
+					<div class="flex w-full flex-wrap items-center gap-2 sm:w-auto">
 						{#if actions.canCancel}
 							<Button
 								variant="ghost"
-								class="h-10 text-destructive hover:bg-destructive/10"
+								class="h-11 flex-1 text-destructive hover:bg-destructive/10 sm:h-10 sm:flex-none"
 								disabled={cancel.isPending}
 								onclick={() => (cancelDialogOpen = true)}
 							>
@@ -775,7 +774,7 @@
 						{/if}
 						{#if actions.canAllocateApprove}
 							<Button
-								class="h-10 gap-1.5"
+								class="h-11 flex-1 gap-1.5 sm:h-10 sm:flex-none"
 								disabled={approve.isPending || !canApprove}
 								onclick={handleApprove}
 							>
@@ -784,7 +783,7 @@
 							</Button>
 						{:else if actions.canDispatch}
 							<Button
-								class="h-10 gap-1.5"
+								class="h-11 flex-1 gap-1.5 sm:h-10 sm:flex-none"
 								disabled={dispatch.isPending || !canDispatch}
 								onclick={handleDispatch}
 							>
@@ -792,7 +791,11 @@
 								{dispatch.isPending ? 'กำลังปล่อยของ...' : 'ปล่อยของและตัดสต็อก'}
 							</Button>
 						{:else if actions.canReceive}
-							<Button class="h-10 gap-1.5" disabled={receive.isPending} onclick={handleReceive}>
+							<Button
+								class="h-11 flex-1 gap-1.5 sm:h-10 sm:flex-none"
+								disabled={receive.isPending}
+								onclick={handleReceive}
+							>
 								<PackageCheck class="h-4 w-4" />
 								{receive.isPending ? 'กำลังยืนยัน...' : 'ยืนยันรับวัตถุดิบ'}
 							</Button>

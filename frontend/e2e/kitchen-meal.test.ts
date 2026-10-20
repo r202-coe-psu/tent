@@ -386,16 +386,15 @@ async function approveBatch(warehouse: Page, batch: Batch, onHand: number): Prom
 	await approve.click();
 	await expect(toast(warehouse, 'อนุมัติแล้ว รอคลังปล่อยของ')).toBeVisible({ timeout: 15_000 });
 
-	// CR-178: dispatch is per lot. The summary row shows the rice line pre-filled with the auto
+	// CR-178: dispatch is per lot. The items-table row shows the rice line pre-filled with the auto
 	// plan (the whole line from the seeded lot) as "ครบ", so the button is enabled without any clicks.
-	await expect(warehouse.getByText('เลือก lot ที่จะปล่อยของ')).toBeVisible();
 	const lotRow = warehouse
 		.getByRole('listitem')
 		.filter({ hasText: RICE })
 		.filter({
 			has: warehouse.getByRole('button', { name: 'จัดการ lot' })
 		});
-	await expect(lotRow).toContainText('ครบ', { timeout: 15_000 });
+	await expect(lotRow).toContainText('พร้อมปล่อย', { timeout: 15_000 });
 	// The modal shows the same prefill; open, check, close without saving.
 	await warehouse.getByRole('button', { name: 'จัดการ lot' }).click();
 	await expect(warehouse.getByLabel('จำนวนที่ใช้จาก Lot นี้')).toHaveValue(
