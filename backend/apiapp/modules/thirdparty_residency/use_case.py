@@ -18,7 +18,11 @@ from tent_model.third_party_access_log import ThirdPartyAccessLog
 from ...utils.masking import national_id_hash
 from ...utils.ulid import new_ulid
 from ..thirdparty_auth.scopes import ThirdPartyClaims
-from .residency import PRESENT_RESIDENCY_STATUSES, map_shelter_residency
+from .residency import (
+    NOT_RESIDENT_STAY_STATUSES,
+    PRESENT_RESIDENCY_STATUSES,
+    map_shelter_residency,
+)
 from .schemas import ResidencyEnvelope, ResidencyItem
 
 ENDPOINT = "EXT-011"
@@ -118,14 +122,22 @@ class ThirdPartyResidencyUseCase:
         people = await PublicPerson.find(
             PublicPerson.national_id_hash == national_id_hash(cleaned)
         ).to_list()
-        person = _pick_record(people)
-        if person is None or person.checked_in_at is None or person.status == "pre_registered":
+        # A cancelled booking is never a stay: drop it before FR-43 selection so a newer
+        # cancelled row (other shelter) cannot shadow a genuine stay (#710, CR-176).
+        person = _pick_record([p for p in people if p.status != "cancelled"])
+        if (
+            person is None
+            or person.checked_in_at is None
+            or person.status in NOT_RESIDENT_STAY_STATUSES
+        ):
+            # Denied rows keep the shelter of the best-matching record for audit attribution.
+            logged = person or _pick_record(people)
             await self._log(
                 claims=claims,
                 purpose=purpose,
                 client_ip=client_ip,
                 outcome="denied_residency_not_found",
-                location_code=person.shelter_code if person else "",
+                location_code=logged.shelter_code if logged else "",
             )
             raise _error(
                 status.HTTP_404_NOT_FOUND,

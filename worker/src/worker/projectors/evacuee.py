@@ -19,6 +19,13 @@ from worker.masking import (
 
 ProjectionAction = Literal["upsert", "delete"]
 
+#: Stay statuses with no Station 1 check-in behind them: `public_person.checked_in_at`
+#: stays null so EXT-011 answers 404 instead of a past stay. Mirrors
+#: `NOT_RESIDENT_STAY_STATUSES` in backend thirdparty_residency/residency.py — keep in sync.
+_NOT_CHECKED_IN_STATUSES = frozenset(
+    {"pre_registered", "kiosk_registered", "cancelled"}
+)
+
 
 def _parse_datetime(value: Any) -> datetime | None:
     if not isinstance(value, str):
@@ -123,10 +130,13 @@ def project_evacuee(
         "gender": doc.get("gender"),
         "address_masked": mask_address(household),
         # These statuses have not completed Station 1 check-in yet. A stale
-        # `since` value must not make either status appear resident externally.
+        # `since` value must not make any of them appear resident externally.
+        # `cancelled` is only reachable from `pre_registered` / `kiosk_registered`
+        # (partner EXT-009 cancel, staff cancelPreRegistration), so its `since` is the
+        # cancel time, never a check-in time (#710, CR-176).
         "checked_in_at": (
             None
-            if status in {"pre_registered", "kiosk_registered"}
+            if status in _NOT_CHECKED_IN_STATUSES
             else _parse_datetime(current_stay.get("since"))
         ),
         "care_zone": current_stay.get("zone"),

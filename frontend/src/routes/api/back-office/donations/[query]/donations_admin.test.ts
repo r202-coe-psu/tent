@@ -64,9 +64,14 @@ const catalogRows = [
 
 function mockCouch(
 	donation: PublicDonationDoc,
-	over: { putStatus?: number; existingLotNos?: string[] } = {}
+	over: { putStatus?: number; existingLotNos?: string[]; shelterItems?: object[] } = {}
 ) {
 	vi.mocked(adminRaw).mockImplementation((path: string, method: string) => {
+		// Items the shelter created itself live in its own DB, not in `catalog`.
+		if (method === 'GET' && path.includes('/shelter_sh001/') && path.includes('item_master:')) {
+			const rows = (over.shelterItems ?? []).map((doc) => ({ doc }));
+			return Promise.resolve({ status: 200, data: { rows } });
+		}
 		if (method === 'GET' && path.includes('/registry/')) {
 			return Promise.resolve({
 				status: 200,
@@ -322,6 +327,49 @@ describe('Back-office GET & POST /api/back-office/donations/[query]', () => {
 
 			expect(response.status).toBe(422);
 			expect((await response.json()).error).toMatch(/Unknown item/);
+		});
+
+		it('receives an item the shelter created in its own catalog', async () => {
+			const sweetPotato = {
+				_id: 'item_master:sweet-potato',
+				type: 'item_master',
+				name: 'หัวมัน',
+				base_unit: 'piece',
+				shelter_code: 'SH001',
+				storage_type: 'DRY'
+			};
+			mockCouch(withItems([{ free_text: 'หัวมัน', qty: '5', unit: 'piece' }]), {
+				shelterItems: [sweetPotato]
+			});
+
+			const response = await POST(
+				postEvent({
+					status: 'received',
+					items: [{ item_id: 'item_master:sweet-potato', qty: '5', unit: 'piece' }]
+				})
+			);
+
+			expect(response.status).toBe(200);
+			const ledgers = appendedDocs().filter((d): d is StockLedger => d.type === 'stock_ledger');
+			expect(ledgers).toHaveLength(1);
+			expect(ledgers[0]).toMatchObject({ item_id: 'item_master:sweet-potato', unit: 'piece' });
+		});
+
+		it('checks the unit against the shelter copy of a central item', async () => {
+			const flour = catalogRows.find((r) => r.doc._id === 'item_master:flour')!.doc;
+			const localFlour = { ...flour, base_unit: 'bag' };
+			mockCouch(withItems([{ item_id: 'item_master:flour', qty: '2', unit: 'bag' }]), {
+				shelterItems: [localFlour]
+			});
+
+			const response = await POST(
+				postEvent({
+					status: 'received',
+					items: [{ item_id: 'item_master:flour', qty: '2', unit: 'bag' }]
+				})
+			);
+
+			expect(response.status).toBe(200);
 		});
 
 		it('rejects a perishable item received without lot.expiry', async () => {
