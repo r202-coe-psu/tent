@@ -26,18 +26,12 @@
  */
 import { test, expect } from '@playwright/test';
 import { bootstrapAdminSession, couchReq } from './helpers/couch';
-import {
-	assertFixtureProvisioned,
-	CAN_WRITE,
-	READ_ONLY_REASON,
-	sheltersFixture
-} from './helpers/e2e-env';
+import { CAN_WRITE, READ_ONLY_REASON, sheltersFixture } from './helpers/e2e-env';
 import { injectSession, routeBrowserCouchThroughApp } from './helpers/login';
 import { publicShelter, teardownShelter } from './helpers/public-cleanup';
 import { createShelterViaUi } from './helpers/staff-ui';
 
-const FIXTURE = sheltersFixture();
-const { marker: MARKER, hostNear: HOST_NEAR, evacFar: EVAC_FAR } = FIXTURE;
+const { marker: MARKER, hostNear: HOST_NEAR, evacFar: EVAC_FAR } = sheltersFixture();
 const USER_LOCATION = { latitude: 7.0086, longitude: 100.4968 };
 
 let codes: string[] = [];
@@ -100,8 +94,6 @@ test.describe(
 	{ tag: ['@public', '@critical'] },
 	() => {
 		test.describe.configure({ mode: 'serial' });
-
-		test.beforeAll(() => assertFixtureProvisioned(FIXTURE));
 
 		test('staff creates a nearby host house and a distant evacuation centre', async ({ page }) => {
 			test.skip(!CAN_WRITE, READ_ONLY_REASON);
