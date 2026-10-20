@@ -66,35 +66,29 @@
 	{/if}
 </svelte:head>
 
-<PublicPageShell maxWidth="max-w-5xl" class="space-y-6">
-	<!-- Hero Banner (Only when activeTab is 'needs') -->
-	{#if donationStore.activeTab === 'needs'}
-		<div class="w-full animate-in duration-300 fade-in">
+<!-- Hero Banner (Only when activeTab is 'needs') — full-width band like the home hero -->
+{#if donationStore.activeTab === 'needs'}
+	<header
+		class="animate-in bg-domain-donation-strong px-4 pt-10 pb-12 text-center text-white duration-300 fade-in sm:px-6 sm:pt-14 sm:pb-16 lg:px-8"
+	>
+		<div class="mx-auto flex max-w-4xl flex-col items-center gap-3">
 			<div
-				class="relative flex flex-col items-start justify-start gap-6 overflow-hidden rounded-3xl bg-domain-donation-strong p-6 text-left text-white shadow-[0_8px_30px_rgb(0,0,0,0.04)] sm:p-10"
+				class="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-bold tracking-wider text-white uppercase"
 			>
-				<div
-					class="pointer-events-none absolute inset-0 bg-[linear-gradient(to_right,#ffffff_1px,transparent_1px),linear-gradient(to_bottom,#ffffff_1px,transparent_1px)] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)] bg-[size:4rem_4rem] opacity-10"
-				></div>
-
-				<div class="relative z-10 max-w-2xl space-y-3">
-					<div
-						class="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-bold tracking-wider text-white uppercase"
-					>
-						<HeartHandshake class="h-3.5 w-3.5 text-white" />
-						{t.donationBoard}
-					</div>
-					<h1 class="text-3xl font-extrabold tracking-tight text-white sm:text-4xl">
-						{t.heroTitlePrefix} <span>{t.heroTitleHighlight}</span>
-					</h1>
-					<p class="text-sm leading-relaxed font-medium text-white sm:text-base">
-						{t.heroDesc}
-					</p>
-				</div>
+				<HeartHandshake class="h-3.5 w-3.5 text-white" />
+				{t.donationBoard}
 			</div>
+			<h1 class="text-2xl font-extrabold tracking-tight text-white sm:text-3xl lg:text-4xl">
+				{t.heroTitlePrefix} <span>{t.heroTitleHighlight}</span>
+			</h1>
+			<p class="max-w-2xl text-sm leading-relaxed font-medium text-white/90 sm:text-base">
+				{t.heroDesc}
+			</p>
 		</div>
-	{/if}
+	</header>
+{/if}
 
+<PublicPageShell maxWidth="max-w-7xl" class="space-y-6 lg:px-8">
 	<!-- Full-width Step Navigation / Flow Progress -->
 	<!-- CR-052 §2.1: step indicator starts at step 2 — hidden on the needs board -->
 	{#if donationStore.activeTab !== 'needs' && donationStore.activeTab !== 'shelter-details'}
