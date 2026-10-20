@@ -2526,7 +2526,7 @@
 								</tr>
 								<tr class="hover:bg-slate-50/60">
 									<td class="flex items-center gap-2 px-4 py-2.5 font-bold text-slate-900">
-										<span class="h-3 w-3 rounded-full bg-domain-donation"></span>
+										<span class="h-3 w-3 rounded-full bg-domain-donation-strong"></span>
 										บริจาค (Card 3)
 									</td>
 									<td class="px-4 py-2.5 font-mono text-slate-500">#FF5C00 / #C2410C</td>

@@ -105,6 +105,10 @@ _Avoid_: Mixing forecast holds into “how many are here now” without labeling
 Headcount of Evacuees with stay `room_confirmed` only (physically confirmed at assigned zone/bed). Dropped while on `temporary_leave`.
 _Avoid_: Equating In-zone with Present.
 
+**Shelter Incident Log** (บันทึกเหตุการณ์ประจำวัน):
+The shelter's daily occurrence book: a record of safety, conduct, and grievance events inside the shelter, each with a responsible owner and an append-only history of actions and reasons. Kept by security officers and shelter managers (and system admins); the complainant and the respondent are recorded separately, and an unknown respondent may be identified once, later. Records are never deleted — a false or duplicate report is cancelled.
+_Avoid_: Shelter report, grievance ticket, security event, police report.
+
 ## Interoperability & External Exchange
 
 **Compound Scoped Role**:
@@ -122,4 +126,3 @@ _Avoid_: Third-party app, consumer, external client.
 **Administrative Code**:
 The official Department of Provincial Administration (DOPA) hierarchical numerical codes for provinces (2 digits), districts (4 digits), and subdistricts (6 digits).
 _Avoid_: Postal code, location text, geo string.
-

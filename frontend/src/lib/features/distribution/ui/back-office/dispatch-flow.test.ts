@@ -149,13 +149,16 @@ describe('Warehouse Picking, Lot Assignment & Dispatch Flow (Slice 5.3)', () => 
 		});
 	});
 
-	describe('One-Lot-Per-Item Dispatch Payload Invariants (P4-F03)', () => {
-		it('constructs a valid DispatchTicketOptions payload with one physical lot per item', () => {
+	describe('Multi-Lot-Per-Item Dispatch Payload Invariants (P4-F03, #655)', () => {
+		it('constructs a valid DispatchTicketOptions payload with physical lots per item', () => {
 			const ticket = createValidTicket('READY_FOR_DISPATCH');
 
-			const selectedLots: Record<string, string> = {
-				'item:meal_01': 'stock_ledger:01J11111111111111111111111',
-				'item:meal_02': 'stock_ledger:01J22222222222222222222222'
+			const selectedLots: Record<string, { lot_ref: string; qty: string }[]> = {
+				'item:meal_01': [
+					{ lot_ref: 'stock_ledger:01J11111111111111111111111', qty: '30' },
+					{ lot_ref: 'stock_ledger:01J33333333333333333333333', qty: '20' }
+				],
+				'item:meal_02': [{ lot_ref: 'stock_ledger:01J22222222222222222222222', qty: '30' }]
 			};
 
 			const options: DispatchTicketOptions = {
@@ -166,9 +169,11 @@ describe('Warehouse Picking, Lot Assignment & Dispatch Flow (Slice 5.3)', () => 
 
 			// Verify all ticket items have a corresponding lot_ref
 			for (const item of ticket.items) {
-				const lotRef = options.item_lots?.[item.item_id];
-				expect(lotRef).toBeDefined();
-				expect(lotRef?.startsWith('stock_ledger:')).toBe(true);
+				const allocations = options.item_lots?.[item.item_id];
+				expect(allocations?.length).toBeGreaterThan(0);
+				for (const allocation of allocations ?? []) {
+					expect(allocation.lot_ref.startsWith('stock_ledger:')).toBe(true);
+				}
 			}
 
 			expect(options.driver_name).toBe('นายสมชาย ใจดี');
@@ -178,7 +183,7 @@ describe('Warehouse Picking, Lot Assignment & Dispatch Flow (Slice 5.3)', () => 
 		it('ensures optional transport metadata can be omitted without schema violation', () => {
 			const options: DispatchTicketOptions = {
 				item_lots: {
-					'item:meal_01': 'stock_ledger:01J11111111111111111111111'
+					'item:meal_01': [{ lot_ref: 'stock_ledger:01J11111111111111111111111', qty: '1' }]
 				}
 			};
 

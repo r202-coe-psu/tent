@@ -456,6 +456,20 @@ class KioskApiRouteTests(unittest.IsolatedAsyncioTestCase):
                 True,
             ),
             (
+                "same-origin kiosk volunteer-card POST",
+                "https://tent.example.go.th/api/v1/kiosk/volunteer-card",
+                "POST",
+                "https://tent.example.go.th",
+                True,
+            ),
+            (
+                "kiosk volunteer-card POST from a foreign Origin header",
+                "https://tent.example.go.th/api/v1/kiosk/volunteer-card",
+                "POST",
+                "https://attacker.example",
+                False,
+            ),
+            (
                 "kiosk reprint GET",
                 "https://tent.example.go.th/api/v1/kiosk/reprint",
                 "GET",

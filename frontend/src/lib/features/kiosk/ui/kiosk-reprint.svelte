@@ -90,7 +90,7 @@
 	);
 	const idleTimeout = new KioskIdleTimeout(KIOSK_IDLE_TIMEOUT_MS, returnHome);
 
-	const homeUrl = $derived(resolve(`/kiosk${contextQuery}`));
+	const printQrUrl = $derived(resolve(`/kiosk/print-qr${contextQuery}`));
 	const reprintUrl = $derived(resolve(`/kiosk/reprint${contextQuery}`));
 	const displayPhone = $derived(formatPhoneForDisplay(session.phone));
 	const entryHint = $derived(phoneEntryHint(session.phone));
@@ -194,7 +194,7 @@
 					onclick={() => session.back()}
 				/>
 			{:else}
-				<KioskBackButton href={homeUrl} />
+				<KioskBackButton href={printQrUrl} />
 			{/if}
 		</div>
 

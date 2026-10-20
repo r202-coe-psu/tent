@@ -59,6 +59,7 @@
 		isLoading?: boolean;
 		balanceByItemId?: ReadonlyMap<string, string>;
 		disableWhenEmpty?: boolean;
+		/** Unit label for a row — beside the balance, or alone when there is no balance map. */
 		formatBalanceUnit?: (item: StockFormItem) => string;
 		placeholder?: string;
 		emptyText?: string;
@@ -354,6 +355,11 @@
 											: 'border-destructive/20 bg-destructive/10 text-destructive'}"
 									>
 										{bal}
+										{unitLabel(item)}
+									</span>
+								{:else if formatBalanceUnit}
+									<!-- No balance to show: still say which unit the item counts in (#636). -->
+									<span class="shrink-0 text-xs font-medium text-muted-foreground">
 										{unitLabel(item)}
 									</span>
 								{/if}

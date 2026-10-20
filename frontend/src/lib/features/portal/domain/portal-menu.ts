@@ -331,9 +331,9 @@ export const PORTAL_DEPARTMENTS: readonly PortalDepartment[] = [
 				label: 'ความปลอดภัยและเหตุการณ์',
 				desc: 'บันทึกเหตุไม่ปลอดภัย',
 				icon: 'shield-alert',
-				href: null,
+				href: '/back-office/incidents',
 				scope: 'shelter',
-				roles: [SO]
+				roles: [SO] // SM sees every shelter-scoped item
 			}
 		]
 	},
