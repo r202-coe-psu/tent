@@ -51,6 +51,8 @@
 
 	const tiles = $derived.by<Tile[]>(() => {
 		const m = hubMetrics.data;
+		// A volunteer's path, left to right: in the pool → identity checked → shift request
+		// confirmed → holds a shift today → checked in. The two queues to act on sit together.
 		return [
 			{
 				key: 'ready',
@@ -59,22 +61,6 @@
 				unit: 'คน',
 				icon: UsersRound,
 				iconClass: 'text-blue-500'
-			},
-			{
-				key: 'assigned',
-				label: 'รับกะแล้ว',
-				value: m?.assigned,
-				unit: 'คน',
-				icon: CalendarCheck,
-				iconClass: 'text-sky-500'
-			},
-			{
-				key: 'checkedInNow',
-				label: 'กำลังปฏิบัติงาน',
-				value: m?.checkedInNow,
-				unit: 'คน',
-				icon: LogIn,
-				iconClass: 'text-green-500'
 			},
 			{
 				key: 'pendingIdentity',
@@ -93,6 +79,22 @@
 				icon: Hourglass,
 				iconClass: 'text-amber-500',
 				actionable: true
+			},
+			{
+				key: 'assigned',
+				label: 'รับกะแล้ว',
+				value: m?.assigned,
+				unit: 'คน',
+				icon: CalendarCheck,
+				iconClass: 'text-sky-500'
+			},
+			{
+				key: 'checkedInNow',
+				label: 'กำลังปฏิบัติงาน',
+				value: m?.checkedInNow,
+				unit: 'คน',
+				icon: LogIn,
+				iconClass: 'text-green-500'
 			}
 		];
 	});
