@@ -12,15 +12,9 @@ import {
 } from '../domain/volunteer.schema';
 import { trackingTokenHashFromPayload } from '$lib/features/volunteer-portal/domain/volunteer';
 import { nextVolunteerCode } from '../domain/volunteer-code';
+import { normalizePhone } from '../domain/phone';
 import type { VerificationStatus } from '../domain/verification';
 import type { VolunteerFilter, VolunteerRepository } from './volunteer.repository';
-
-function normalizePhone(value: string): string {
-	const digits = value.replace(/[\s\-()]/g, '');
-	if (digits.startsWith('+66')) return `0${digits.slice(3)}`;
-	if (digits.startsWith('66') && digits.length >= 11) return `0${digits.slice(2)}`;
-	return digits;
-}
 
 /** Mint the permanent role-card secret without ever persisting its plaintext. */
 function mintTrackingToken(): string {
