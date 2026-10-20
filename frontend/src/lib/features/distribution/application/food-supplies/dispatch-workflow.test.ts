@@ -34,6 +34,7 @@ import type {
 import type { RequisitionTicketRepository } from '../../data/food-supplies';
 import {
 	createStockLedger,
+	deriveDeterministicLedgerId,
 	type OperationsRepository,
 	type StockLedger
 } from '$lib/features/operations';
@@ -231,6 +232,34 @@ describe('dispatch-workflow', () => {
 		opsRepo = new InMemoryOperationsRepository();
 	});
 
+	/** Seeds a received physical lot into the ledger and returns its lot_ref. */
+	function seedLot(
+		itemId: string,
+		qty: string,
+		opts: { expiry?: string; receivedAt?: string } = {}
+	): string {
+		const entry = createStockLedger(
+			{
+				item_id: itemId,
+				qty,
+				unit: itemId === 'item:rice' ? 'kg' : 'piece',
+				reason: 'receive',
+				ref_id: 'requisition_ticket:tkt_receive_001',
+				...(opts.expiry ? { lot: { expiry: opts.expiry } } : {}),
+				occurred_at: opts.receivedAt ?? '2026-01-01T00:00:00.000Z'
+			},
+			WH_CTX
+		);
+		opsRepo.ledger.push(entry);
+		return entry._id;
+	}
+
+	const distributeRows = () => opsRepo.ledger.filter((l) => l.reason === 'distribute');
+	const deps = () => ({
+		ticketRepo,
+		operationsRepo: opsRepo as unknown as OperationsRepository
+	});
+
 	it('dispatches multi-item ticket with exact negative stock ledger entries and lot_ref', async () => {
 		const ticket = await ticketRepo.create(
 			{
@@ -262,14 +291,17 @@ describe('dispatch-workflow', () => {
 			WH_CTX
 		);
 
+		const curryLot = seedLot('item:curry', '60');
+		const waterLot = seedLot('item:water', '100');
+
 		const result = await dispatchTicket(
 			ticket._id,
 			{
 				driver_name: 'Somchai',
 				license_plate: '1AB-1234',
 				item_lots: {
-					'item:curry': 'stock_ledger:01JLOTCURRY000000000000000',
-					'item:water': 'stock_ledger:01JLOTWATER000000000000000'
+					'item:curry': [{ lot_ref: curryLot, qty: '50' }],
+					'item:water': [{ lot_ref: waterLot, qty: '100' }]
 				}
 			},
 			WH_CTX,
@@ -282,16 +314,18 @@ describe('dispatch-workflow', () => {
 		expect(result.ticket.license_plate).toBe('1AB-1234');
 		expect(result.ledgerEntriesCreated).toBe(2);
 
-		// Assert StockLedger entries
-		expect(opsRepo.ledger).toHaveLength(2);
-		const curryEntry = opsRepo.ledger.find((l) => l.item_id === 'item:curry')!;
+		// Assert StockLedger entries (the two seeded receive rows come first)
+		const outbound = opsRepo.ledger.filter((l) => l.reason === 'distribute');
+		expect(outbound).toHaveLength(2);
+		const curryEntry = outbound.find((l) => l.item_id === 'item:curry')!;
 		expect(curryEntry.reason).toBe('distribute');
 		expect(curryEntry.ref_id).toBe(ticket._id);
 		expect(curryEntry.qty).toBe('-50');
 		expect(curryEntry.unit).toBe('piece');
-		expect(curryEntry.lot_ref).toBe('stock_ledger:01JLOTCURRY000000000000000');
+		expect(curryEntry.lot_ref).toBe(curryLot);
 
-		const waterEntry = opsRepo.ledger.find((l) => l.item_id === 'item:water')!;
+		const waterEntry = outbound.find((l) => l.item_id === 'item:water')!;
+		expect(waterEntry.lot_ref).toBe(waterLot);
 		expect(waterEntry.reason).toBe('distribute');
 		expect(waterEntry.ref_id).toBe(ticket._id);
 		expect(waterEntry.qty).toBe('-100');
@@ -319,13 +353,16 @@ describe('dispatch-workflow', () => {
 			WH_CTX
 		);
 
-		await dispatchTicket(ticket._id, undefined, WH_CTX, {
-			ticketRepo,
-			operationsRepo: opsRepo as unknown as OperationsRepository
-		});
+		const riceLot = seedLot('item:rice', '5');
+		await dispatchTicket(
+			ticket._id,
+			{ item_lots: { 'item:rice': [{ lot_ref: riceLot, qty: '2' }] } },
+			WH_CTX,
+			deps()
+		);
 
-		expect(opsRepo.ledger).toHaveLength(1);
-		expect(opsRepo.ledger[0]?.unit).toBe('kg');
+		expect(distributeRows()).toHaveLength(1);
+		expect(distributeRows()[0]?.unit).toBe('kg');
 	});
 
 	it('authorizes supply_coordinator for ticket dispatch (CR-121 FR-SEC-01 Step 3)', async () => {
@@ -349,10 +386,13 @@ describe('dispatch-workflow', () => {
 			WH_CTX
 		);
 
-		const result = await dispatchTicket(ticket._id, undefined, SC_CTX, {
-			ticketRepo,
-			operationsRepo: opsRepo as unknown as OperationsRepository
-		});
+		const blanketLot = seedLot('item:blanket', '25');
+		const result = await dispatchTicket(
+			ticket._id,
+			{ item_lots: { 'item:blanket': [{ lot_ref: blanketLot, qty: '25' }] } },
+			SC_CTX,
+			deps()
+		);
 
 		expect(result.ticket.status).toBe('IN_TRANSIT');
 		expect(result.ticket.dispatched_by).toBe(SC_CTX.createdBy);
@@ -409,24 +449,21 @@ describe('dispatch-workflow', () => {
 			WH_CTX
 		);
 
+		const soupLot = seedLot('item:soup', '30');
+		const options = { item_lots: { 'item:soup': [{ lot_ref: soupLot, qty: '30' }] } };
+
 		// First dispatch succeeds
-		await dispatchTicket(ticket._id, undefined, WH_CTX, {
-			ticketRepo,
-			operationsRepo: opsRepo as unknown as OperationsRepository
-		});
-		expect(opsRepo.ledger).toHaveLength(1);
+		await dispatchTicket(ticket._id, options, WH_CTX, deps());
+		expect(distributeRows()).toHaveLength(1);
 
 		// Reset ticket status to READY_FOR_DISPATCH to simulate retry after network blip
 		ticketRepo.tickets.get(ticket._id)!.status = 'READY_FOR_DISPATCH';
 
-		// Second dispatch retry
-		const retryResult = await dispatchTicket(ticket._id, undefined, WH_CTX, {
-			ticketRepo,
-			operationsRepo: opsRepo as unknown as OperationsRepository
-		});
+		// Second dispatch retry (lot is now fully drawn, own rows must not count against it)
+		const retryResult = await dispatchTicket(ticket._id, options, WH_CTX, deps());
 		expect(retryResult.ledgerEntriesCreated).toBe(0); // Detected existing ledger row
-		expect(opsRepo.ledger).toHaveLength(1); // No duplicate ledger entry
-		expect(opsRepo.getLedgerEntryCalls).toEqual([opsRepo.ledger[0]._id]);
+		expect(distributeRows()).toHaveLength(1); // No duplicate ledger entry
+		expect(opsRepo.getLedgerEntryCalls).toEqual([distributeRows()[0]._id]);
 	});
 
 	it('serializes concurrent dispatches through one deterministic ledger identity', async () => {
@@ -449,29 +486,25 @@ describe('dispatch-workflow', () => {
 			},
 			WH_CTX
 		);
+		const blanketLot = seedLot('item:blanket', '25');
+		const options = { item_lots: { 'item:blanket': [{ lot_ref: blanketLot, qty: '25' }] } };
 		const barrier = opsRepo.holdDispatchWrites();
 
-		const first = dispatchTicket(ticket._id, undefined, WH_CTX, {
-			ticketRepo,
-			operationsRepo: opsRepo as unknown as OperationsRepository
-		});
-		const second = dispatchTicket(ticket._id, undefined, WH_CTX, {
-			ticketRepo,
-			operationsRepo: opsRepo as unknown as OperationsRepository
-		});
+		const first = dispatchTicket(ticket._id, options, WH_CTX, deps());
+		const second = dispatchTicket(ticket._id, options, WH_CTX, deps());
 
 		await barrier.allArrived;
 		barrier.release();
 		await Promise.allSettled([first, second]);
 
-		expect(opsRepo.ledger).toHaveLength(1);
-		expect(opsRepo.ledger[0]).toMatchObject({
+		expect(distributeRows()).toHaveLength(1);
+		expect(distributeRows()[0]).toMatchObject({
 			item_id: 'item:blanket',
 			qty: '-25',
 			reason: 'distribute',
 			ref_id: ticket._id
 		});
-		expect(opsRepo.ledger[0]._id).toMatch(/^stock_ledger:[0-9A-HJKMNP-TV-Z]{26}$/);
+		expect(distributeRows()[0]._id).toMatch(/^stock_ledger:[0-9A-HJKMNP-TV-Z]{26}$/);
 		expect(ticketRepo.tickets.get(ticket._id)?.status).toBe('IN_TRANSIT');
 	});
 
@@ -495,19 +528,22 @@ describe('dispatch-workflow', () => {
 			},
 			WH_CTX
 		);
+		const matLot = seedLot('item:mat', '10');
 		opsRepo.beforeAdd = (entry) => {
 			opsRepo.ledger.push({ ...entry, qty: '-9' });
 		};
 
 		await expect(
-			dispatchTicket(ticket._id, undefined, WH_CTX, {
-				ticketRepo,
-				operationsRepo: opsRepo as unknown as OperationsRepository
-			})
+			dispatchTicket(
+				ticket._id,
+				{ item_lots: { 'item:mat': [{ lot_ref: matLot, qty: '10' }] } },
+				WH_CTX,
+				deps()
+			)
 		).rejects.toThrow(StockIntegrityError);
 
-		expect(opsRepo.ledger).toHaveLength(1);
-		expect(opsRepo.ledger[0].qty).toBe('-9');
+		expect(distributeRows()).toHaveLength(1);
+		expect(distributeRows()[0].qty).toBe('-9');
 		expect(ticketRepo.tickets.get(ticket._id)?.status).toBe('READY_FOR_DISPATCH');
 	});
 
@@ -531,18 +567,21 @@ describe('dispatch-workflow', () => {
 			},
 			WH_CTX
 		);
+		const lampLot = seedLot('item:lamp', '5');
 		opsRepo.beforeAdd = (entry) => {
 			opsRepo.ledger.push({ ...entry, lot_ref: 'stock_ledger:01JOTHERLOT000000000000000' });
 		};
 
 		await expect(
-			dispatchTicket(ticket._id, undefined, WH_CTX, {
-				ticketRepo,
-				operationsRepo: opsRepo as unknown as OperationsRepository
-			})
+			dispatchTicket(
+				ticket._id,
+				{ item_lots: { 'item:lamp': [{ lot_ref: lampLot, qty: '5' }] } },
+				WH_CTX,
+				deps()
+			)
 		).rejects.toThrow(StockIntegrityError);
 
-		expect(opsRepo.ledger).toHaveLength(1);
+		expect(distributeRows()).toHaveLength(1);
 		expect(ticketRepo.tickets.get(ticket._id)?.status).toBe('READY_FOR_DISPATCH');
 	});
 
@@ -582,26 +621,222 @@ describe('dispatch-workflow', () => {
 			},
 			WH_CTX
 		);
+		const options = {
+			item_lots: {
+				'item:a': [{ lot_ref: seedLot('item:a', '2'), qty: '2' }],
+				'item:b': [{ lot_ref: seedLot('item:b', '3'), qty: '3' }],
+				'item:c': [{ lot_ref: seedLot('item:c', '4'), qty: '4' }]
+			}
+		};
 		opsRepo.throwNonConflictForItemOnce = 'item:c';
 
-		await expect(
-			dispatchTicket(ticket._id, undefined, WH_CTX, {
-				ticketRepo,
-				operationsRepo: opsRepo as unknown as OperationsRepository
-			})
-		).rejects.toThrow('Transient write failure for item:c');
-		expect(opsRepo.ledger.map((entry) => entry.item_id)).toEqual(['item:a', 'item:b']);
+		await expect(dispatchTicket(ticket._id, options, WH_CTX, deps())).rejects.toThrow(
+			'Transient write failure for item:c'
+		);
+		expect(distributeRows().map((entry) => entry.item_id)).toEqual(['item:a', 'item:b']);
 		expect(ticketRepo.tickets.get(ticket._id)?.status).toBe('READY_FOR_DISPATCH');
 
-		const recovered = await dispatchTicket(ticket._id, undefined, WH_CTX, {
-			ticketRepo,
-			operationsRepo: opsRepo as unknown as OperationsRepository
-		});
+		const recovered = await dispatchTicket(ticket._id, options, WH_CTX, deps());
 
 		expect(recovered.ledgerEntriesCreated).toBe(1);
-		expect(opsRepo.ledger).toHaveLength(3);
-		expect(new Set(opsRepo.ledger.map((entry) => entry._id)).size).toBe(3);
+		expect(distributeRows()).toHaveLength(3);
+		expect(new Set(distributeRows().map((entry) => entry._id)).size).toBe(3);
 		expect(ticketRepo.tickets.get(ticket._id)?.status).toBe('IN_TRANSIT');
+	});
+
+	describe('multi-lot dispatch (#655)', () => {
+		async function readyTicket(itemId: string, qty: string): Promise<RequisitionTicket> {
+			return ticketRepo.create(
+				{
+					ticket_no: 'TKT-SUPPLIES-MULTI-0001',
+					requisition_type: 'supplies',
+					source_location: 'warehouse:main',
+					destination_location: 'point:a',
+					items: [
+						{
+							item_id: itemId,
+							item_name: 'Water Bottle',
+							type_class: 'CONSUMABLE',
+							returnable: false,
+							requested_qty: qty,
+							allocated_qty: qty
+						}
+					]
+				},
+				WH_CTX
+			);
+		}
+
+		it('splits 5 across lot 3 + lot 2 into two distribute rows with the same ref_id', async () => {
+			const ticket = await readyTicket('item:water', '5');
+			const lotA = seedLot('item:water', '3', { expiry: '2030-01-01' });
+			const lotB = seedLot('item:water', '2', { expiry: '2031-01-01' });
+
+			const result = await dispatchTicket(
+				ticket._id,
+				{
+					item_lots: {
+						'item:water': [
+							// given out of expiry order on purpose
+							{ lot_ref: lotB, qty: '2' },
+							{ lot_ref: lotA, qty: '3' }
+						]
+					}
+				},
+				WH_CTX,
+				deps()
+			);
+
+			expect(result.ticket.status).toBe('IN_TRANSIT');
+			expect(result.ledgerEntriesCreated).toBe(2);
+			const rows = distributeRows();
+			expect(rows).toHaveLength(2);
+			expect(rows.every((r) => r.ref_id === ticket._id && r.item_id === 'item:water')).toBe(true);
+			// Earliest-expiry lot is written first and keeps the legacy dispatch id
+			const legacyId = await deriveDeterministicLedgerId('dispatch', ticket._id, 'item:water');
+			expect(rows[0]).toMatchObject({ _id: legacyId, lot_ref: lotA, qty: '-3' });
+			expect(rows[1]).toMatchObject({ lot_ref: lotB, qty: '-2' });
+			expect(rows[1]._id).not.toBe(legacyId);
+		});
+
+		it('rejects dispatch when an item has no lot and writes nothing', async () => {
+			const ticket = await readyTicket('item:water', '5');
+			seedLot('item:water', '5');
+
+			await expect(dispatchTicket(ticket._id, undefined, WH_CTX, deps())).rejects.toThrow(
+				WorkflowValidationError
+			);
+			await expect(
+				dispatchTicket(ticket._id, { item_lots: { 'item:water': [] } }, WH_CTX, deps())
+			).rejects.toThrow(/no physical lot/);
+			expect(distributeRows()).toHaveLength(0);
+			expect(ticketRepo.tickets.get(ticket._id)?.status).toBe('READY_FOR_DISPATCH');
+		});
+
+		it('validates every item before writing any row', async () => {
+			const ticket = await ticketRepo.create(
+				{
+					ticket_no: 'TKT-SUPPLIES-MULTI-0002',
+					requisition_type: 'supplies',
+					source_location: 'warehouse:main',
+					destination_location: 'point:a',
+					items: ['item:a', 'item:b'].map((item_id) => ({
+						item_id,
+						item_name: item_id,
+						type_class: 'CONSUMABLE' as const,
+						returnable: false,
+						requested_qty: '2',
+						allocated_qty: '2'
+					}))
+				},
+				WH_CTX
+			);
+			const lotA = seedLot('item:a', '2');
+
+			await expect(
+				dispatchTicket(
+					ticket._id,
+					{ item_lots: { 'item:a': [{ lot_ref: lotA, qty: '2' }] } },
+					WH_CTX,
+					deps()
+				)
+			).rejects.toThrow(WorkflowValidationError);
+			expect(distributeRows()).toHaveLength(0);
+		});
+
+		it('rejects a short or over lot total', async () => {
+			const ticket = await readyTicket('item:water', '5');
+			const lotA = seedLot('item:water', '10');
+			const lotB = seedLot('item:water', '10');
+
+			for (const qtys of [
+				['2', '2'],
+				['3', '3']
+			]) {
+				await expect(
+					dispatchTicket(
+						ticket._id,
+						{
+							item_lots: {
+								'item:water': [
+									{ lot_ref: lotA, qty: qtys[0] },
+									{ lot_ref: lotB, qty: qtys[1] }
+								]
+							}
+						},
+						WH_CTX,
+						deps()
+					)
+				).rejects.toThrow(/add up to the allocated quantity/);
+			}
+			expect(distributeRows()).toHaveLength(0);
+		});
+
+		it('rejects a qty above the lot remaining balance', async () => {
+			const ticket = await readyTicket('item:water', '5');
+			const lotA = seedLot('item:water', '3');
+			const lotB = seedLot('item:water', '2');
+
+			await expect(
+				dispatchTicket(
+					ticket._id,
+					{
+						item_lots: {
+							'item:water': [
+								{ lot_ref: lotA, qty: '4' },
+								{ lot_ref: lotB, qty: '1' }
+							]
+						}
+					},
+					WH_CTX,
+					deps()
+				)
+			).rejects.toThrow(/exceeds the lot remaining balance/);
+			expect(distributeRows()).toHaveLength(0);
+		});
+
+		it('rejects an expired lot', async () => {
+			const ticket = await readyTicket('item:water', '2');
+			const expired = seedLot('item:water', '5', { expiry: '2020-01-01' });
+
+			await expect(
+				dispatchTicket(
+					ticket._id,
+					{ item_lots: { 'item:water': [{ lot_ref: expired, qty: '2' }] } },
+					WH_CTX,
+					deps()
+				)
+			).rejects.toThrow(/lot is expired/);
+			expect(distributeRows()).toHaveLength(0);
+		});
+
+		it('retries after a partial write without duplicating rows', async () => {
+			const ticket = await readyTicket('item:water', '5');
+			const lotA = seedLot('item:water', '3', { expiry: '2030-01-01' });
+			const lotB = seedLot('item:water', '2', { expiry: '2031-01-01' });
+			const options = {
+				item_lots: {
+					'item:water': [
+						{ lot_ref: lotA, qty: '3' },
+						{ lot_ref: lotB, qty: '2' }
+					]
+				}
+			};
+
+			await dispatchTicket(ticket._id, options, WH_CTX, deps());
+			// Simulate a crash after the first row: drop the second row, reopen the ticket
+			opsRepo.ledger = opsRepo.ledger.filter(
+				(entry) => !(entry.reason === 'distribute' && entry.lot_ref === lotB)
+			);
+			ticketRepo.tickets.get(ticket._id)!.status = 'READY_FOR_DISPATCH';
+
+			const retry = await dispatchTicket(ticket._id, options, WH_CTX, deps());
+
+			expect(retry.ledgerEntriesCreated).toBe(1);
+			expect(distributeRows()).toHaveLength(2);
+			expect(new Set(distributeRows().map((entry) => entry._id)).size).toBe(2);
+			expect(retry.ticket.status).toBe('IN_TRANSIT');
+		});
 	});
 
 	it('amends active ticket with in-flight top-up deduction and amendment record', async () => {
