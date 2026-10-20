@@ -4,13 +4,11 @@
 	 *
 	 * Renders the 5 live counters straight from `useHubMetrics()` — this
 	 * component must never recompute a counter itself (AC-094-09). The shelter
-	 * scope shown here is the same `shelterStore.selectedShelterCode` the
-	 * `(protected)/back-office/+layout.svelte` header picker already writes to;
-	 * this header only reads it, it does not add a second picker.
+	 * in scope is the back-office header picker's; this header does not repeat it.
 	 *
 	 * Visual: laid out like the other back-office pages (คลังของศูนย์, หน้าสรุปมื้อ) — a plain
-	 * page header (navy title, slate description, shelter scope where those pages put their
-	 * actions) and the counters as separate KPI cards in the evacuee dashboard's card style.
+	 * page header (navy title, slate description) and the counters as separate KPI cards in
+	 * the evacuee dashboard's card style.
 	 * A queue someone has to work through takes the warning treatment (amber-50 fill, amber
 	 * border) while it is not empty.
 	 *
@@ -22,19 +20,11 @@
 	import Hourglass from '@lucide/svelte/icons/hourglass';
 	import IdCard from '@lucide/svelte/icons/id-card';
 	import LogIn from '@lucide/svelte/icons/log-in';
-	import MapPin from '@lucide/svelte/icons/map-pin';
 	import UsersRound from '@lucide/svelte/icons/users-round';
 	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
-	import { shelterStore } from '$lib/stores/shelter.svelte';
-	import { getShelterCode } from '$lib/db/shelter';
-	import { useShelter } from '$lib/features/shelters';
 	import { useHubMetrics } from '../application/queries';
 
 	const hubMetrics = useHubMetrics();
-
-	const shelterCode = $derived(shelterStore.selectedShelterCode ?? getShelterCode());
-	const shelterQuery = useShelter(() => shelterCode);
-	const shelterLabel = $derived(shelterQuery.data?.name ?? shelterCode ?? '—');
 
 	type Tile = {
 		key: string;
@@ -51,8 +41,8 @@
 
 	const tiles = $derived.by<Tile[]>(() => {
 		const m = hubMetrics.data;
-		// A volunteer's path, left to right: in the pool → identity checked → shift request
-		// confirmed → holds a shift today → checked in. The two queues to act on sit together.
+		// Shift flow left to right — in the pool → shift request awaiting confirmation → holds a
+		// shift today → checked in — with the identity-check queue last.
 		return [
 			{
 				key: 'ready',
@@ -61,15 +51,6 @@
 				unit: 'คน',
 				icon: UsersRound,
 				iconClass: 'text-blue-500'
-			},
-			{
-				key: 'pendingIdentity',
-				label: 'รอตรวจสอบและอนุมัติ',
-				value: m?.pendingIdentity,
-				unit: 'คน',
-				icon: IdCard,
-				iconClass: 'text-amber-500',
-				actionable: true
 			},
 			{
 				key: 'pendingApproval',
@@ -95,6 +76,15 @@
 				unit: 'คน',
 				icon: LogIn,
 				iconClass: 'text-green-500'
+			},
+			{
+				key: 'pendingIdentity',
+				label: 'รอตรวจสอบและอนุมัติ',
+				value: m?.pendingIdentity,
+				unit: 'คน',
+				icon: IdCard,
+				iconClass: 'text-amber-500',
+				actionable: true
 			}
 		];
 	});
@@ -119,13 +109,6 @@
 				</p>
 			{/if}
 		</div>
-		<p class="flex items-start gap-1.5 text-sm text-slate-600 @2xl:max-w-sm @2xl:shrink-0">
-			<MapPin class="mt-0.5 h-4 w-4 shrink-0 text-slate-500" aria-hidden="true" />
-			<span>
-				ศูนย์ที่เลือก:
-				<span class="font-semibold break-words text-slate-900">{shelterLabel}</span>
-			</span>
-		</p>
 	</header>
 
 	<!-- Narrow: one card per row, icon and label left and number right, so Thai labels never

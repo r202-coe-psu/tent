@@ -665,7 +665,7 @@ test.describe('Volunteer end-to-end operational flow', () => {
 		await test.step('1. Admin creates a job with one shift', async () => {
 			await injectSession(page, ADMIN, adminSession);
 			await page.goto(`${BASE}/back-office/volunteers`);
-			await expect(page.getByText('Smart Volunteer Control Hub')).toBeVisible();
+			await expect(page.getByRole('heading', { name: 'จัดการอาสาสมัคร', level: 2 })).toBeVisible();
 
 			await page.getByRole('button', { name: 'ประกาศงานอาสาสมัครใหม่', exact: true }).click();
 			// Create is its own page, not a modal (#639).
