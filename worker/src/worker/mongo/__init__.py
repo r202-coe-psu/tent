@@ -7,6 +7,7 @@ from worker.mongo.job import (
     apply_job_application,
     apply_shift_assignment,
     apply_volunteer,
+    delete_jobs_for_shelter,
 )
 from worker.mongo.need import apply_need, delete_needs_for_shelter
 from worker.mongo.occupant import (
@@ -20,6 +21,7 @@ from worker.mongo.registry import resolve_shelter_code_for_registry_delete
 from worker.mongo.shelter import (
     apply_shelter,
     apply_shelter_deactivate,
+    is_shelter_projected,
     refresh_occupancy,
 )
 from worker.mongo.stock import (
@@ -43,10 +45,12 @@ __all__ = [
     "apply_shelter_stock",
     "apply_shift_assignment",
     "apply_volunteer",
+    "delete_jobs_for_shelter",
     "delete_needs_for_shelter",
     "delete_occupants_for_shelter",
     "delete_persons_for_shelter",
     "delete_stocks_for_shelter",
+    "is_shelter_projected",
     "refresh_occupancy",
     "refresh_on_hand",
     "refresh_shelter_occupants",

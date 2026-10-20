@@ -149,6 +149,23 @@ def test_project_shelter_closed_soft_retains():
     assert payload["is_active"] is True
 
 
+def test_project_shelter_cancelled_deletes_by_code():
+    """draft-shelter-cancelled-status.md — a cancelled shelter leaves the public plane
+    entirely; the `_id` lets the caller purge its shelter-scoped projections too."""
+    doc = {
+        "_id": "shelter:01CANCEL",
+        "type": "shelter",
+        "code": "SH009",
+        "name": "ศูนย์ที่สร้างผิด",
+        "operation_status": "cancelled",
+    }
+    assert project_shelter(doc) == ("delete", {"_id": "SH009"})
+
+
+def test_is_shelter_open_false_for_cancelled():
+    assert is_shelter_open({"operation_status": "cancelled"}) is False
+
+
 def test_project_shelter_malformed_doc_deletes():
     """Only malformed/non-shelter docs hard-delete here — the true archive signal (a
     CouchDB tombstone) is handled separately via `apply_shelter_deactivate`."""

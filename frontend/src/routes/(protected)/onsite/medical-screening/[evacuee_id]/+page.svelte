@@ -142,7 +142,7 @@
 
 <svelte:head>
 	<title>
-		{evacuee ? `คัดกรอง · ${evacuee.first_name} ${evacuee.last_name}` : 'คัดกรองการแพทย์'} | SmartShelter
+		{evacuee ? `คัดกรอง · ${evacuee.first_name} ${evacuee.last_name}` : 'คัดกรองผู้เข้าพัก'} | SmartShelter
 	</title>
 </svelte:head>
 
@@ -168,7 +168,7 @@
 						{evacuee.first_name}
 						{evacuee.last_name}
 					{:else}
-						ฟอร์มคัดกรองทางการแพทย์
+						ฟอร์มคัดกรองผู้เข้าพัก
 					{/if}
 				</h1>
 				<Badge
@@ -203,9 +203,9 @@
 				>
 					<Stethoscope class="size-6" />
 				</div>
-				<h2 class="text-base font-bold text-foreground">จุดคัดกรองการแพทย์ถูกปิดใช้งาน</h2>
+				<h2 class="text-base font-bold text-foreground">จุดคัดกรองผู้เข้าพักถูกปิดใช้งาน</h2>
 				<p class="mt-1.5 text-xs leading-relaxed text-muted-foreground">
-					ศูนย์พักพิงนี้ไม่ได้เปิดใช้งานจุดคัดกรองทางการแพทย์ (Station 2) ตามการตั้งค่าศูนย์พักพิง
+					ศูนย์พักพิงนี้ไม่ได้เปิดใช้งานจุดคัดกรองผู้เข้าพัก (Station 2) ตามการตั้งค่าศูนย์พักพิง
 				</p>
 				<div class="mt-5 flex flex-col gap-2">
 					<Button variant="default" class="w-full" onclick={() => goto(resolve('/portal'))}>
