@@ -4,7 +4,7 @@ title: Kiosk — เปลี่ยนจาก "เสียบบัตรเ�
 status: approved
 date: 2026-09-24
 created: 2026-09-24
-updated: 2026-10-20 # ทีม kiosk เสนอ §17 พิมพ์ QR จิตอาสา (#609) — รอ PO · 2026-10-18 ทีม kiosk เสนอ §16 (#654): แถว Zone + checklist บน QR label, `zones[].short_name`, reprint คืน `label.zone`/`stations_passed` — รอ PO เคาะ · 2026-10-17 decision sync (#604): ฐาน local ขาด kiosk index → redeploy แล้ว + redeploy/seed deploy index ครบชุด · 2026-10-15 ทีม kiosk ขอเลิกกรอง registered_via ใน §15 (FR-KPC-101/104) · 2026-10-13 ข้อเสนอแก้ไข §15 approved โดย Dev/Team Lead Soravit Sukkarn (รับ requirement จากหัวหน้าโครงการเมื่อวาน 2026-10-12) · 2026-10-04 approved และ merge โดย Soravit Sukkar (Team Lead) + รันเลข CR-151 และลงทะเบียนใน _index.md
+updated: 2026-10-20 # ข้อเสนอแก้ไข §17 approved โดย Team Lead Soravit Sukkarn (2026-10-20) — พิมพ์ QR จิตอาสา (#609) · 2026-10-18 ทีม kiosk เสนอ §16 (#654): แถว Zone + checklist บน QR label, `zones[].short_name`, reprint คืน `label.zone`/`stations_passed` — รอ PO เคาะ · 2026-10-17 decision sync (#604): ฐาน local ขาด kiosk index → redeploy แล้ว + redeploy/seed deploy index ครบชุด · 2026-10-15 ทีม kiosk ขอเลิกกรอง registered_via ใน §15 (FR-KPC-101/104) · 2026-10-13 ข้อเสนอแก้ไข §15 approved โดย Dev/Team Lead Soravit Sukkarn (รับ requirement จากหัวหน้าโครงการเมื่อวาน 2026-10-12) · 2026-10-04 approved และ merge โดย Soravit Sukkar (Team Lead) + รันเลข CR-151 และลงทะเบียนใน _index.md
 requested_by: ทีม kiosk (branch feat/pre-register_kiosk)
 decided_by: Soravit Sukkar (Team Lead)
 decision_date: 2026-10-04
@@ -30,8 +30,8 @@ affects:
   - (§16 proposed) frontend/src/lib/features/kiosk/{domain/print-label.ts,application/kiosk-label-image.ts,application/kiosk-label-print.ts,ui/kiosk-label-sheet.svelte,server/kiosk-reprint.server.ts,data/kiosk-check-in.api.ts} · frontend/src/lib/components/qr-id-card.svelte
   - (§16 proposed) frontend/src/lib/features/people/domain/{people.ts,intake-pipeline.ts} · people/ui/evacuee-profile/evacuee-qr-modal.svelte · frontend/src/routes/kiosk/register/done/+page.svelte
   - (§15 proposed) frontend/src/routes/api/v1/kiosk/reprint/+server.ts · frontend/src/routes/kiosk/{reprint,phone}/** · frontend/src/lib/server/security/rate-limiter.ts · kiosk/app/manager.py (allowlist)
-  - (§17 proposed) docs/data/api-contract.md §2.1.2 · frontend/src/routes/api/v1/kiosk/volunteer-card/+server.ts · frontend/src/lib/features/kiosk/server/kiosk-volunteer-card.server.ts · frontend/src/lib/server/security/rate-limiter.ts
-  - (§17 proposed) frontend/src/lib/features/kiosk/** (label จิตอาสา, session, UI) · frontend/src/routes/kiosk/{print-qr,volunteer}/** · kiosk/app/manager.py (allowlist)
+  - (§17 approved 2026-10-20) docs/data/api-contract.md §2.1.2 · frontend/src/routes/api/v1/kiosk/volunteer-card/+server.ts · frontend/src/lib/features/kiosk/server/kiosk-volunteer-card.server.ts · frontend/src/lib/server/security/rate-limiter.ts
+  - (§17 approved 2026-10-20) frontend/src/lib/features/kiosk/** (label จิตอาสา, session, UI) · frontend/src/routes/kiosk/{print-qr,volunteer}/** · kiosk/app/manager.py (allowlist)
 why: >
   Kiosk แบบเดิม (CR-097) สร้าง evacuee จากบัตรโดยไม่มีครัวเรือนและไม่มีเบอร์ เจ้าหน้าที่ต้องกรอกซ้ำที่ Station 1
   และเกิด record ซ้อนกับผู้จองออนไลน์ kiosk รอบนี้จึงทำหน้าที่เดียว คือรับรายงานตัว (Report-in) ผู้ที่ลงทะเบียนล่วงหน้าทางเว็บแล้ว
@@ -44,7 +44,7 @@ migration: ไม่มี — ไม่มี field ใหม่ ไม่ bump
 
 > **ข้อเสนอแก้ไข 2026-10-18 (#654, proposed, รอ PO เคาะ):** §16 ท้ายเอกสาร — QR label มีแถว Zone + checklist ติ๊กตาม station ที่ผ่าน · ตัดเบอร์โทร · shelter `zones[].short_name` · reprint คืน `label.zone` / `label.stations_passed`
 
-> **ข้อเสนอแก้ไข 2026-10-18 (#609, proposed, รอ PO):** §17 ท้ายเอกสาร — เมนู「พิมพ์ QR」เพิ่มทางเลือก「จิตอาสา」พิมพ์ role-card QR ที่มีอยู่แล้วด้วยเบอร์โทร (`POST /api/v1/kiosk/volunteer-card`, อ่านอย่างเดียว)
+> **ข้อเสนอแก้ไข 2026-10-18 (#609, approved 2026-10-20):** §17 ท้ายเอกสาร — เมนู「พิมพ์ QR」เพิ่มทางเลือก「จิตอาสา」พิมพ์ role-card QR ที่มีอยู่แล้วด้วยเบอร์โทร (`POST /api/v1/kiosk/volunteer-card`, อ่านอย่างเดียว) — approved โดย Soravit Sukkarn (Team Lead)
 
 > **สรุป (TL;DR)**
 >
@@ -576,9 +576,9 @@ migration: ไม่มี — ไม่มี field ใหม่ ไม่ bump
 
 ---
 
-## 17. ข้อเสนอแก้ไข 2026-10-18 — พิมพ์ QR จิตอาสา (proposed, รอ PO)
+## 17. ข้อเสนอแก้ไข 2026-10-18 — พิมพ์ QR จิตอาสา (approved)
 
-> **สถานะ:** ข้อเสนอทีม kiosk (issue #609) — D1–D8 ตกลงในทีม 2026-10-18 · **รอ PO อนุมัติ** · implement แล้วบน branch `feat-volunteer-qr-printer`
+> **สถานะ:** ข้อเสนอทีม kiosk (issue #609) — D1–D8 ตกลงในทีม 2026-10-18 · **approved โดย Soravit Sukkarn (Team Lead) 2026-10-20** · implement แล้วบน branch `feat-volunteer-qr-printer`
 
 > **สรุป (TL;DR)**
 >
@@ -634,7 +634,7 @@ migration: ไม่มี — ไม่มี field ใหม่ ไม่ bump
 - **AC-KPC-122** flag ปิด → 403 และไม่มีปุ่ม「พิมพ์ QR」· เกิน limit → 429
 - **AC-KPC-123** volunteer-card ทุกกรณีไม่มี PUT / DELETE ไปที่ volunteer doc · `tracking_token_hash` ไม่เปลี่ยน
 
-### 17.6 Security trade-off (accepted risk — รอ PO ยืนยัน)
+### 17.6 Security trade-off (accepted risk — PO ยืนยันและอนุมัติแล้ว 2026-10-20)
 
 - **รู้เบอร์ = พิมพ์ credential ถาวรของจิตอาสาคนนั้นได้** ที่ตู้ในศูนย์เดียวกัน
 - ลดความเสี่ยงด้วย: shelter scope · rate limit ต่อเครื่อง/ต่อเบอร์ · error เดียว · mask ชื่อ · ไม่พิมพ์เบอร์

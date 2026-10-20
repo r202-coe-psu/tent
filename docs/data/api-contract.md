@@ -269,7 +269,7 @@ PRE_REGISTRATION_NOT_FOUND` พร้อม `can_register: false` (walk-in ด�
 
 ### 2.1.2 Kiosk พิมพ์ QR จิตอาสา ([CR-151 §17](../changes/14-kiosk/CR-151-kiosk-pre-registration-check-in.md), #609)
 
-> ข้อเสนอทีม kiosk — รอ PO อนุมัติ (CR-151 §17)
+> ข้อเสนอทีม kiosk — approved โดย Soravit Sukkarn (Team Lead) 2026-10-20 (CR-151 §17)
 
 จิตอาสากรอกเบอร์โทรที่ตู้ → server หา volunteer ใน `shelter_{code}` ของเครื่องเท่านั้น แล้วคืน
 role-card payload **ที่มีอยู่แล้ว** (`TKT-VOL-HASH-` + `tracking_token_hash` ตัวพิมพ์ใหญ่). Endpoint
