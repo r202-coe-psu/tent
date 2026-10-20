@@ -80,6 +80,7 @@
 	}
 
 	function handleAdd(item: ItemMaster) {
+		if (balancesLoaded && isOutOfStock(getStockOnHand(item._id))) return;
 		const rawQty = itemQuantities[item._id] ?? '1';
 		const validation = validatePositiveQuantity(rawQty);
 		if (!validation.isValid || !validation.value) {
@@ -216,6 +217,7 @@
 											onblur={(e) => {
 												handlePickerQtyBlur(e.currentTarget.value);
 											}}
+											disabled={outOfStock}
 											class="h-9 w-20 text-right text-sm font-semibold tabular-nums shadow-2xs"
 										/>
 										<span class="min-w-[30px] text-xs text-slate-500">{item.base_unit}</span>
@@ -225,7 +227,8 @@
 								<button
 									type="button"
 									onclick={() => handleAdd(item)}
-									class="inline-flex h-9 items-center gap-1 rounded-lg bg-[#0A2647] px-3 text-xs font-semibold text-white shadow-2xs transition-colors hover:bg-[#051930]"
+									disabled={outOfStock}
+									class="inline-flex h-9 items-center gap-1 rounded-lg bg-[#0A2647] px-3 text-xs font-semibold text-white shadow-2xs transition-colors hover:bg-[#051930] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-[#0A2647]"
 								>
 									<Plus class="h-3.5 w-3.5" />
 									<span>เลือก</span>
