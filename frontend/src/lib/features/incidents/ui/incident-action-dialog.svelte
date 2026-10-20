@@ -36,15 +36,11 @@
 
 	const IDENTIFY_OPTIONS = ['known_evacuee', 'known_external'] as const;
 
-	// Label carries the username too — SearchSelect filters on the label, so either can be typed.
+	// Full name only (SearchSelect filters on the label); username is the fallback when unset.
 	const staffOptions = $derived(
 		(staffQuery.data ?? [])
 			.filter((s) => s.name !== incident.assigned_to)
-			.map((s) => ({
-				value: s.name,
-				label:
-					s.display_name && s.display_name !== s.name ? `${s.display_name} (${s.name})` : s.name
-			}))
+			.map((s) => ({ value: s.name, label: s.display_name || s.name }))
 	);
 
 	const noReassignTarget = $derived(
@@ -151,7 +147,7 @@
 							bind:value={assignee}
 							options={staffOptions}
 							placeholder="-- เลือกเจ้าหน้าที่ --"
-							searchPlaceholder="พิมพ์ชื่อหรือ username เพื่อค้นหา..."
+							searchPlaceholder="พิมพ์ชื่อหรือนามสกุลเพื่อค้นหา..."
 							emptyText="ไม่พบเจ้าหน้าที่ที่ตรงกับคำค้น"
 							controlProps={{ id: 'incident-reassign-to' }}
 							class="h-11 rounded-xl bg-background shadow-xs"

@@ -456,22 +456,16 @@ test.describe(
 				// Only SO/SM colleagues are offered — not the kitchen user, not the current owner.
 				const kitchen = users.get('kitchen')!;
 				const manager = users.get('manager')!;
-				await expect(
-					page.getByRole('button', { name: `${peer.display_name} (${peer.name})` })
-				).toBeVisible();
-				await expect(
-					page.getByRole('button', { name: `${manager.display_name} (${manager.name})` })
-				).toBeVisible();
-				await expect(
-					page.getByRole('button', { name: `${kitchen.display_name} (${kitchen.name})` })
-				).toHaveCount(0);
+				await expect(page.getByRole('button', { name: peer.display_name })).toBeVisible();
+				await expect(page.getByRole('button', { name: manager.display_name })).toBeVisible();
+				await expect(page.getByRole('button', { name: kitchen.display_name })).toHaveCount(0);
 				await expect(
 					page.getByRole('button', {
-						name: `${users.get('owner')!.display_name} (${users.get('owner')!.name})`
+						name: users.get('owner')!.display_name
 					})
 				).toHaveCount(0);
-				await page.getByPlaceholder('พิมพ์ชื่อหรือ username เพื่อค้นหา...').fill(peer.name);
-				await page.getByRole('button', { name: `${peer.display_name} (${peer.name})` }).click();
+				await page.getByPlaceholder('พิมพ์ชื่อหรือนามสกุลเพื่อค้นหา...').fill(peer.display_name);
+				await page.getByRole('button', { name: peer.display_name }).click();
 			});
 			// Ownership moved — the former owner may only add notes now.
 			await expect(page.getByRole('button', { name: 'จัดการเรียบร้อย' })).toHaveCount(0);
