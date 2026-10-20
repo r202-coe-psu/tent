@@ -73,6 +73,10 @@ Behaviour notes:
   UTC ISO8601 timestamp, `allowed_mentions: {parse: []}` (a notification can never ping anyone).
 - Values are JSON-escaped in pure bash and truncated to Discord's limits (title 256, field value
   1024, description 4096; byte-based, UTF-8 safe).
+- Discord also caps the whole embed (title + description + field names/values) at 6000 chars. The
+  title and fields keep their own caps and the description is truncated to what remains of
+  6000 (minus a 50 char safety margin), so the total is always at most 6000.
+- `NOTIFY_USERNAME` is trimmed of leading/trailing whitespace; if nothing is left it is dropped.
 - POST uses `curl --fail --max-time 10 --retry 2`; the exit code is non-zero if it fails (Jenkins
   ignores it). The webhook URL is handed to curl through a config file descriptor, never echoed,
   never in `set -x` output (`set +x` is forced).

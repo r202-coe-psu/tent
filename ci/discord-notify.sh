@@ -47,7 +47,7 @@ json_escape() {
 	s="${s//$'\t'/\\t}"
 	if [[ "$s" == *[[:cntrl:]]* ]]; then
 		for ((c = 1; c < 32; c++)); do
-			printf -v ch "\\x$(printf '%02x' "$c")"
+			printf -v ch '%b' "\\x$(printf '%02x' "$c")"
 			printf -v ch_json '\\u%04x' "$c"
 			s="${s//"$ch"/$ch_json}"
 		done
@@ -91,10 +91,29 @@ if [[ "$commit" =~ ^[0-9a-fA-F]{7,40}$ ]]; then
 	commit="${commit:0:7}"
 fi
 
+# Discord caps the sum of title + description + field names/values (+ footer/author, unused here)
+# at 6000 chars per embed. Title and fields keep their own caps and are counted in bytes (never
+# fewer than chars); the description gets whatever is left, minus a safety margin.
+readonly EMBED_TOTAL_MAX=6000
+readonly EMBED_SAFETY_MARGIN=50
+readonly DESCRIPTION_MAX=4096
+
+byte_len() {
+	local LC_ALL=C
+	printf '%s' "${#1}"
+}
+
+title_text="$(truncate_str "$title" 256)"
+embed_used="$(byte_len "$title_text")"
+
 fields=()
 add_field() { # name value [inline=true]
 	[[ -n "$2" ]] || return 0
-	fields+=("{\"name\":\"$(js "$1" 256)\",\"value\":\"$(js "$2" 1024)\",\"inline\":${3:-true}}")
+	local name value
+	name="$(truncate_str "$1" 256)"
+	value="$(truncate_str "$2" 1024)"
+	embed_used=$((embed_used + $(byte_len "$name") + $(byte_len "$value")))
+	fields+=("{\"name\":\"$(json_escape "$name")\",\"value\":\"$(json_escape "$value")\",\"inline\":${3:-true}}")
 }
 add_field 'Branch' "${NOTIFY_BRANCH:-}"
 add_field 'Commit' "${commit:+\`$commit\`}"
@@ -108,11 +127,14 @@ done
 
 # Optional per-message webhook identity; unset keeps the webhook's default name/avatar.
 identity_json=''
-if [[ -n "${NOTIFY_USERNAME:-}" ]]; then
-	if [[ "${NOTIFY_USERNAME,,}" == *discord* ]]; then
+username="${NOTIFY_USERNAME:-}"
+username="${username#"${username%%[![:space:]]*}"}"
+username="${username%"${username##*[![:space:]]}"}"
+if [[ -n "$username" ]]; then
+	if [[ "${username,,}" == *discord* ]]; then
 		printf 'discord-notify: NOTIFY_USERNAME must not contain "discord" (rejected by Discord); ignoring it.\n' >&2
 	else
-		identity_json+="\"username\":\"$(js "$NOTIFY_USERNAME" 80)\","
+		identity_json+="\"username\":\"$(js "$username" 80)\","
 	fi
 fi
 if [[ -n "${NOTIFY_AVATAR_URL:-}" ]]; then
@@ -126,9 +148,13 @@ fi
 build_payload() {
 	local url_json='' desc_json=''
 	[[ -z "${NOTIFY_BUILD_URL:-}" ]] || url_json=",\"url\":\"$(js "$NOTIFY_BUILD_URL" 2048)\""
-	[[ -z "${NOTIFY_DETAIL:-}" ]] || desc_json=",\"description\":\"$(js "$NOTIFY_DETAIL" 4096)\""
+	local desc_max=$((EMBED_TOTAL_MAX - EMBED_SAFETY_MARGIN - embed_used))
+	((desc_max <= DESCRIPTION_MAX)) || desc_max=$DESCRIPTION_MAX
+	if [[ -n "${NOTIFY_DETAIL:-}" ]] && ((desc_max >= 4)); then
+		desc_json=",\"description\":\"$(js "$NOTIFY_DETAIL" "$desc_max")\""
+	fi
 	printf '{%s"allowed_mentions":{"parse":[]},"embeds":[{"title":"%s"%s%s,"color":%s,"fields":[%s],"timestamp":"%s"}]}\n' \
-		"$identity_json" "$(js "$title" 256)" "$url_json" "$desc_json" "$color" "$fields_json" \
+		"$identity_json" "$(json_escape "$title_text")" "$url_json" "$desc_json" "$color" "$fields_json" \
 		"$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 }
 
