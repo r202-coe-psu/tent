@@ -8,17 +8,23 @@
 	 * `(protected)/back-office/+layout.svelte` header picker already writes to;
 	 * this header only reads it, it does not add a second picker.
 	 *
-	 * Visual: dark `primary-dark` slab (owner-approved mockup 2026-08-27) —
-	 * identity block and the shelter-scope chip on top, one hairline-divided
-	 * counter strip below. A queue someone has to work through is outlined
-	 * in amber while it is not empty.
+	 * Visual: laid out like the other back-office pages (คลังของศูนย์, หน้าสรุปมื้อ) — a plain
+	 * page header (navy title, slate description, shelter scope where those pages put their
+	 * actions) and the counters as separate KPI cards in the evacuee dashboard's card style.
+	 * A queue someone has to work through takes the warning treatment (amber-50 fill, amber
+	 * border) while it is not empty.
 	 *
 	 * Deliberately absent (CR-094 FR-VOL-08.7 — mockup-only artifacts, not to be
 	 * built): the "LOCAL OFFLINE MODE" banner, the RBAC demo-mode switch, and a
 	 * Debug View button. This app is remote-first with no offline write path.
 	 */
-	import HeartHandshake from '@lucide/svelte/icons/heart-handshake';
+	import CalendarCheck from '@lucide/svelte/icons/calendar-check';
+	import Hourglass from '@lucide/svelte/icons/hourglass';
+	import IdCard from '@lucide/svelte/icons/id-card';
+	import LogIn from '@lucide/svelte/icons/log-in';
 	import MapPin from '@lucide/svelte/icons/map-pin';
+	import UsersRound from '@lucide/svelte/icons/users-round';
+	import type { Component } from 'svelte';
 	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
@@ -37,8 +43,9 @@
 		value: number | undefined;
 		/** Thai counting unit shown after the number, as in the approved mockup. */
 		unit: string;
-		/** Status marker before the label — the colour carries the meaning, the number stays white. */
-		dotClass: string;
+		/** Icon in the card's corner, coloured by meaning — as on the other back-office KPI cards. */
+		icon: Component<{ class?: string }>;
+		iconClass: string;
 		/** A queue someone has to work through: tinted while it is not empty. */
 		actionable?: boolean;
 	};
@@ -51,28 +58,32 @@
 				label: 'พร้อมปฏิบัติงาน',
 				value: m?.ready,
 				unit: 'คน',
-				dotClass: 'bg-white/70'
+				icon: UsersRound,
+				iconClass: 'text-blue-500'
 			},
 			{
 				key: 'assigned',
 				label: 'รับกะแล้ว',
 				value: m?.assigned,
 				unit: 'คน',
-				dotClass: 'bg-sky-300'
+				icon: CalendarCheck,
+				iconClass: 'text-sky-500'
 			},
 			{
 				key: 'checkedInNow',
 				label: 'เช็คอินอยู่ตอนนี้',
 				value: m?.checkedInNow,
 				unit: 'คน',
-				dotClass: 'bg-emerald-300'
+				icon: LogIn,
+				iconClass: 'text-green-500'
 			},
 			{
 				key: 'pendingIdentity',
 				label: 'รอตรวจสอบและอนุมัติ',
 				value: m?.pendingIdentity,
 				unit: 'คน',
-				dotClass: 'bg-amber-300',
+				icon: IdCard,
+				iconClass: 'text-amber-500',
 				actionable: true
 			},
 			{
@@ -80,7 +91,8 @@
 				label: 'รอยืนยันเข้ากะ',
 				value: m?.pendingApproval,
 				unit: 'ราย',
-				dotClass: 'bg-amber-300',
+				icon: Hourglass,
+				iconClass: 'text-amber-500',
 				actionable: true
 			}
 		];
@@ -88,98 +100,77 @@
 </script>
 
 <!--
-	Laid out by its own width (container query), not the viewport: in the back office the
-	sidebar leaves this slab far narrower than the screen. The shelter scope sits beside
-	the title as a labelled chip with its full name — it is context, not a sixth counter,
-	and was truncated when it lived in the counter grid.
+	Laid out by its own width (container query), not the viewport: the back-office sidebar
+	leaves this block far narrower than the screen.
 -->
-<section
-	class="@container relative overflow-hidden rounded-2xl bg-primary-dark px-5 py-5 text-white sm:px-6 sm:py-6"
->
-	<!-- Single ambient wash so the slab is not a flat block; no glow stacking. -->
-	<div
-		aria-hidden="true"
-		class="pointer-events-none absolute inset-0 bg-[radial-gradient(120%_140%_at_0%_0%,rgba(255,255,255,0.09),transparent_55%)]"
-	></div>
-
-	<div class="relative space-y-5">
-		<div class="flex flex-col gap-4 @2xl:flex-row @2xl:items-start @2xl:justify-between @2xl:gap-8">
-			<div class="flex min-w-0 items-start gap-3.5 sm:gap-4">
-				<div
-					class="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-white/8 ring-1 ring-white/10 sm:h-14 sm:w-14"
-				>
-					<HeartHandshake class="h-6 w-6 text-sky-300 sm:h-7 sm:w-7" aria-hidden="true" />
-				</div>
-				<div class="min-w-0">
-					<h2 class="text-lg font-bold tracking-tight text-balance sm:text-xl">
-						Smart Volunteer Control Hub
-					</h2>
-					<p class="mt-1 text-xs leading-relaxed text-white/65 sm:text-sm">
-						ศูนย์ปฏิบัติการจิตอาสา: คำนวณด้วยฟังก์ชันมาตรฐานเดียว (Single Source of Truth)
-					</p>
-					{#if hubMetrics.isError}
-						<p class="mt-2 text-xs font-medium text-rose-300" role="alert">
-							โหลดตัวนับไม่สำเร็จ: {hubMetrics.error instanceof Error
-								? hubMetrics.error.message
-								: 'เกิดข้อผิดพลาด'}
-						</p>
-					{/if}
-				</div>
-			</div>
-
-			<div
-				class="flex items-start gap-2.5 rounded-xl bg-white/8 px-3.5 py-2.5 ring-1 ring-white/10 @2xl:max-w-xs @2xl:shrink-0"
-			>
-				<MapPin class="mt-0.5 h-4 w-4 shrink-0 text-sky-300" aria-hidden="true" />
-				<div class="min-w-0">
-					<p class="text-xs font-medium text-white/65">ศูนย์ที่เลือก</p>
-					<p class="text-sm leading-snug font-bold break-words text-white">{shelterLabel}</p>
-				</div>
-			</div>
+<div class="@container space-y-5">
+	<header class="flex flex-col gap-3 @2xl:flex-row @2xl:items-end @2xl:justify-between @2xl:gap-8">
+		<div class="min-w-0 space-y-1">
+			<h2 class="text-2xl font-bold tracking-tight text-[#0A2647] sm:text-3xl">
+				Smart Volunteer Control Hub
+			</h2>
+			<p class="text-base text-slate-600">
+				ศูนย์ปฏิบัติการจิตอาสา: คำนวณด้วยฟังก์ชันมาตรฐานเดียว (Single Source of Truth)
+			</p>
+			{#if hubMetrics.isError}
+				<p class="text-sm font-medium text-red-700" role="alert">
+					โหลดตัวนับไม่สำเร็จ: {hubMetrics.error instanceof Error
+						? hubMetrics.error.message
+						: 'เกิดข้อผิดพลาด'}
+				</p>
+			{/if}
 		</div>
+		<p class="flex items-start gap-1.5 text-sm text-slate-600 @2xl:max-w-sm @2xl:shrink-0">
+			<MapPin class="mt-0.5 h-4 w-4 shrink-0 text-slate-500" aria-hidden="true" />
+			<span>
+				ศูนย์ที่เลือก:
+				<span class="font-semibold break-words text-slate-900">{shelterLabel}</span>
+			</span>
+		</p>
+	</header>
 
-		<!-- `gap-px` over a lighter container fill draws the hairline dividers, so
-		     they survive every wrap point. Narrow: one row per counter, label left and
-		     number right, so Thai labels never break mid-word in a half-width cell. -->
-		<dl
-			class="grid grid-cols-1 gap-px overflow-hidden rounded-xl bg-white/10 @sm:grid-cols-2 @xl:grid-cols-5"
-		>
-			{#each tiles as tile, index (tile.key)}
-				{@const needsAction = tile.actionable && (tile.value ?? 0) > 0}
+	<!-- Narrow: one card per row, icon and label left and number right, so Thai labels never
+	     break mid-word in a half-width card. -->
+	<dl class="grid grid-cols-1 gap-2 @md:grid-cols-2 @md:gap-3 @3xl:grid-cols-5 @3xl:gap-4">
+		{#each tiles as tile, index (tile.key)}
+			{@const needsAction = tile.actionable && (tile.value ?? 0) > 0}
+			<div
+				class={[
+					'flex items-center justify-between gap-3 rounded-xl border px-4 py-3 shadow-sm',
+					'@md:flex-col @md:items-stretch @md:p-4 @3xl:p-5',
+					needsAction ? 'border-amber-200 bg-amber-50' : 'border-border bg-card',
+					index === tiles.length - 1 && '@md:col-span-2 @3xl:col-span-1'
+				]}
+			>
 				<div
-					class={[
-						'flex items-center justify-between gap-3 bg-white/5 px-4 py-2.5 sm:px-5',
-						'@sm:flex-col @sm:items-stretch @sm:gap-2 @sm:py-3.5',
-						needsAction && 'ring-1 ring-amber-300/45 ring-inset',
-						index === tiles.length - 1 && '@sm:col-span-2 @xl:col-span-1'
-					]}
+					class="flex min-w-0 flex-row-reverse items-center justify-end gap-2 @md:flex-row @md:items-start @md:justify-between"
 				>
 					<dt
 						class={[
-							'flex items-start gap-1.5 text-xs leading-snug font-medium',
-							needsAction ? 'text-amber-100' : 'text-white/70'
+							'text-sm leading-snug font-medium',
+							needsAction ? 'text-amber-900' : 'text-slate-700'
 						]}
 					>
-						<span class="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full {tile.dotClass}"></span>
 						{tile.label}
 					</dt>
-					<dd class="flex shrink-0 items-baseline gap-1">
-						{#if hubMetrics.isPending}
-							<Skeleton class="h-7 w-12 bg-white/15" />
-						{:else}
-							<span
-								class={[
-									'text-xl leading-none font-bold tabular-nums @sm:text-2xl @3xl:text-3xl',
-									needsAction ? 'text-amber-200' : 'text-white'
-								]}
-							>
-								{(tile.value ?? 0).toLocaleString()}
-							</span>
-							<span class="text-xs font-medium text-white/60">{tile.unit}</span>
-						{/if}
-					</dd>
+					<tile.icon class="h-4 w-4 shrink-0 {tile.iconClass}" aria-hidden="true" />
 				</div>
-			{/each}
-		</dl>
-	</div>
-</section>
+				<dd class="flex shrink-0 items-baseline gap-1">
+					{#if hubMetrics.isPending}
+						<Skeleton class="h-7 w-12" />
+					{:else}
+						<span
+							class={[
+								'text-2xl leading-none font-bold tabular-nums',
+								needsAction ? 'text-amber-900' : 'text-slate-900'
+							]}
+						>
+							{(tile.value ?? 0).toLocaleString()}
+						</span>
+						<span class="text-xs font-medium text-slate-500">{tile.unit}</span>
+					{/if}
+				</dd>
+			</div>
+		{/each}
+	</dl>
+</div>

@@ -158,10 +158,10 @@
 		<p class="text-sm text-muted-foreground">
 			{#if approving}
 				รับ <span class="font-bold text-foreground">{applicantName}</span> เข้างาน
-				<span class="font-bold text-foreground">{job.title}</span> — งานนี้จะรับคนได้น้อยลง 1 คนทันที
+				<span class="font-bold text-foreground">{job.title}</span>
 			{:else}
 				ปฏิเสธการเข้าร่วมงานของ <span class="font-bold text-foreground">{applicantName}</span>
-				สำหรับงาน <span class="font-bold text-foreground">{job.title}</span> — จำนวนคนที่งานรับได้ไม่เปลี่ยน
+				สำหรับงาน <span class="font-bold text-foreground">{job.title}</span>
 			{/if}
 		</p>
 
@@ -169,9 +169,6 @@
 			<div class="space-y-2 rounded-xl border border-border bg-muted/30 p-3">
 				<div class="space-y-0.5">
 					<p class="text-xs font-bold text-foreground">สิ่งที่ควรตัดสินใจก่อนอนุมัติ</p>
-					<p class="text-xs text-muted-foreground">
-						<span class="font-semibold">หมายเหตุ:</span> การยืนยันตัวตนกับการรับเข้างานแตกต่างกัน แม้ยืนยันตัวตนแล้วแต่ยังต้องตัดสินว่าจะรับเข้างานนี้หรือไม่
-					</p>
 				</div>
 				<div class="grid gap-2 text-xs sm:grid-cols-2">
 					<div class="flex items-start gap-2 rounded-lg bg-background p-2">
@@ -235,8 +232,8 @@
 								</ul>
 								{#if missingCertifiedSkill}
 									<p class="text-muted-foreground">
-										ผู้สมัครไม่มีทักษะที่ต้องมีใบรับรองบางข้อ — ยังอนุมัติได้
-										ถ้ารับเข้าเป็นผู้ช่วยงานทั่วไป
+										ผู้สมัครไม่มีทักษะที่ต้องมีใบรับรองบางข้อ(ยังอนุมัติได้
+										ถ้ารับเข้าเป็นผู้ช่วยงานทั่วไป)
 									</p>
 								{/if}
 							</div>
@@ -258,9 +255,8 @@
 			</div>
 			{#if skillAuditPending}
 				<p class="rounded-lg border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900">
-					ผู้สมัครมีทักษะที่ต้องมีใบรับรอง (เช่น การแพทย์) แต่ยังไม่ได้ตรวจใบรับรอง —
-					ตรวจก่อนที่แท็บ "รายชื่อและการอนุมัติ" ปุ่ม "ตรวจสอบ &amp; อนุมัติ"
-					แล้วจึงอนุมัติเข้างานได้
+					ผู้สมัครมีทักษะที่ต้องมีใบรับรอง (เช่น การแพทย์) แต่ยังไม่ได้ตรวจใบรับรอง(ตรวจก่อนที่แท็บ
+					"รายชื่อและการอนุมัติ" ปุ่ม "ตรวจสอบ &amp; อนุมัติ" แล้วจึงอนุมัติเข้างานได้)
 				</p>
 			{/if}
 		{/if}
@@ -269,8 +265,8 @@
 			<div class="flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50/60 p-3">
 				<TriangleAlert class="mt-0.5 h-4 w-4 shrink-0 text-rose-700" />
 				<p class="text-xs text-rose-900">
-					งานนี้รับคนครบแล้ว — ถ้าต้องการรับเพิ่ม ให้เพิ่มจำนวนคนที่รับหรือเพิ่มกะในแท็บ
-					"กะและตารางกะ" ก่อน
+					งานนี้รับคนครบแล้ว(หากต้องการรับเพิ่ม ให้เพิ่มจำนวนคนที่รับหรือเพิ่มกะในแท็บ
+					"กะและตารางกะ")
 				</p>
 			</div>
 		{:else if approving}

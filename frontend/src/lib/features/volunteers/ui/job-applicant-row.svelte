@@ -162,7 +162,7 @@
 							: 'bg-background text-foreground ring-1 ring-border'
 					]}
 					title={skill.controlled
-						? 'ทักษะที่ต้องมีใบรับรอง — ต้องตรวจใบรับรองก่อนอนุมัติ'
+						? 'ทักษะที่ต้องมีใบรับรอง(ต้องตรวจใบรับรองก่อนอนุมัติ)'
 						: undefined}
 				>
 					{#if skill.controlled}

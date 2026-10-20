@@ -53,7 +53,7 @@
 <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
 	<Card.Root class="border-0 shadow-sm">
 		<Card.Content
-			class="flex flex-col items-start gap-2 pt-4 min-[480px]:flex-row min-[480px]:items-center min-[480px]:gap-3"
+			class="flex flex-col items-start gap-2 min-[480px]:flex-row min-[480px]:items-center min-[480px]:gap-3"
 		>
 			<div class="rounded-lg bg-primary/10 p-2">
 				<TrendingUp class="h-5 w-5 text-primary" />
@@ -72,7 +72,7 @@
 				: 'hover:shadow-md'}"
 		>
 			<Card.Content
-				class="flex flex-col items-start gap-2 pt-4 min-[480px]:flex-row min-[480px]:items-center min-[480px]:gap-3"
+				class="flex flex-col items-start gap-2 min-[480px]:flex-row min-[480px]:items-center min-[480px]:gap-3"
 			>
 				<div class="rounded-lg bg-destructive/10 p-2">
 					<AlertTriangle class="h-5 w-5 text-destructive" />
@@ -92,7 +92,7 @@
 				: 'hover:shadow-md'}"
 		>
 			<Card.Content
-				class="flex flex-col items-start gap-2 pt-4 min-[480px]:flex-row min-[480px]:items-center min-[480px]:gap-3"
+				class="flex flex-col items-start gap-2 min-[480px]:flex-row min-[480px]:items-center min-[480px]:gap-3"
 			>
 				<div class="rounded-lg bg-amber-500/10 p-2">
 					<Gauge class="h-5 w-5 text-amber-600" />
@@ -112,7 +112,7 @@
 				: 'hover:shadow-md'}"
 		>
 			<Card.Content
-				class="flex flex-col items-start gap-2 pt-4 min-[480px]:flex-row min-[480px]:items-center min-[480px]:gap-3"
+				class="flex flex-col items-start gap-2 min-[480px]:flex-row min-[480px]:items-center min-[480px]:gap-3"
 			>
 				<div class="rounded-lg bg-emerald-500/10 p-2">
 					<CheckCircle2 class="h-5 w-5 text-emerald-600" />

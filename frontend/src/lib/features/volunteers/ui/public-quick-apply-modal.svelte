@@ -471,6 +471,24 @@
 			isSubmitting = false;
 		}
 	}
+
+	/**
+	 * Keep the page behind still while the modal is open. This is a hand-built modal (not
+	 * the shadcn Dialog), so nothing locked the page: wheeling over the backdrop, or past
+	 * the end of the modal's own scroll, moved the job board behind it. The gutter stays
+	 * reserved so hiding the scrollbar does not shift the page sideways; both styles are
+	 * put back when the modal closes.
+	 */
+	function lockPageScroll() {
+		const root = document.documentElement;
+		const previous = { overflow: root.style.overflow, gutter: root.style.scrollbarGutter };
+		root.style.scrollbarGutter = 'stable';
+		root.style.overflow = 'hidden';
+		return () => {
+			root.style.overflow = previous.overflow;
+			root.style.scrollbarGutter = previous.gutter;
+		};
+	}
 </script>
 
 <svelte:head>
@@ -480,7 +498,10 @@
 </svelte:head>
 
 {#if isOpen && job}
-	<div class="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
+	<div
+		{@attach lockPageScroll}
+		class="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6"
+	>
 		<!-- Backdrop -->
 		<div
 			class="absolute inset-0 bg-background/80 backdrop-blur-sm"
@@ -495,7 +516,7 @@
 		<div
 			class="relative z-10 flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded-3xl border border-border bg-card shadow-2xl"
 		>
-			<div class="overflow-y-auto">
+			<div class="overflow-y-auto overscroll-contain">
 				<!-- Header Section -->
 				<div class="relative bg-primary-dark px-6 py-8 text-primary-foreground">
 					<button

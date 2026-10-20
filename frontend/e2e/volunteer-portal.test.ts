@@ -644,6 +644,34 @@ test.describe('Booking a mission from the board (CR-092 FR-VOL-02)', () => {
 		await expect(page.getByText('ยังมีอีก 10 กะ ใน 5 วัน')).toBeVisible();
 	});
 
+	test('scrolling inside the apply modal never moves the page behind it', async ({ page }) => {
+		await mockPortalApi(page);
+		await mockJobBoard(page, { success: true });
+		await page.setViewportSize({ width: 375, height: 667 });
+		await page.goto('/volunteers/jobs');
+		const apply = page.getByRole('button', { name: 'สมัครกะนี้' }).first();
+		await expect(apply).toBeVisible();
+		await page.mouse.move(187, 400);
+		await page.mouse.wheel(0, 300);
+		await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
+
+		await apply.click();
+		await expect(page.locator('#firstName')).toBeVisible();
+		// Measured once the modal is open — clicking scrolls the button into view first.
+		const before = await page.evaluate(() => window.scrollY);
+		expect(await page.evaluate(() => document.documentElement.style.overflow)).toBe('hidden');
+		// Past the end of the modal's own scroll, then over the backdrop.
+		await page.mouse.move(187, 400);
+		for (let i = 0; i < 6; i++) await page.mouse.wheel(0, 800);
+		await page.mouse.move(187, 8);
+		await page.mouse.wheel(0, 800);
+		expect(await page.evaluate(() => window.scrollY)).toBe(before);
+
+		await page.getByRole('button', { name: 'Close modal' }).click({ position: { x: 8, y: 8 } });
+		await expect(page.locator('#firstName')).toHaveCount(0);
+		expect(await page.evaluate(() => document.documentElement.style.overflow)).toBe('');
+	});
+
 	test('picking another page takes the reader to its first job', async ({ page }) => {
 		const day = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
 		await mockPortalApi(page);
@@ -830,8 +858,13 @@ test.describe('Portal BFF routes load server-side', () => {
 			data: { phone: 'nope' }
 		});
 
-		expect(response.status()).toBe(422);
-		expect(await response.json()).toMatchObject({ error: 'INVALID_INPUT' });
+		// The strict lookup budget is charged before validation (CR-127 R-9), and the
+		// requests above share this IP's budget: a malformed phone is turned away either as
+		// INVALID_INPUT or, once the budget is spent, RATE_LIMITED. Reaching upstream would
+		// be a 503 (FastAPI is not running here) — that must never happen.
+		const body = await response.json();
+		expect([422, 429], JSON.stringify(body)).toContain(response.status());
+		expect(['INVALID_INPUT', 'RATE_LIMITED']).toContain(body.error);
 	});
 });
 
