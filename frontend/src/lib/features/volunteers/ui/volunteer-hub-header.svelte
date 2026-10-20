@@ -106,9 +106,7 @@
 <div class="@container space-y-5">
 	<header class="flex flex-col gap-3 @2xl:flex-row @2xl:items-end @2xl:justify-between @2xl:gap-8">
 		<div class="min-w-0 space-y-1">
-			<h2 class="text-2xl font-bold tracking-tight text-[#0A2647] sm:text-3xl">
-				Smart Volunteer Control Hub
-			</h2>
+			<h2 class="text-2xl font-bold tracking-tight text-[#0A2647] sm:text-3xl">จัดการอาสาสมัคร</h2>
 			<p class="text-base text-slate-600">
 				ศูนย์ปฏิบัติการจิตอาสา: คำนวณด้วยฟังก์ชันมาตรฐานเดียว (Single Source of Truth)
 			</p>
