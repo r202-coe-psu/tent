@@ -28,16 +28,20 @@ def _partner_error_body(exc: HTTPException) -> dict:
 
 async def http_error_handler(request: Request, exc: HTTPException) -> JSONResponse:
     path = request.url.path
+    # Keep the exception's headers (e.g. `WWW-Authenticate: Bearer` on 401), as Starlette's
+    # default handler does.
+    headers = exc.headers
     if path.startswith(_M2_PREFIX):
         if isinstance(exc.detail, dict) and "error" in exc.detail:
-            return JSONResponse(exc.detail, status_code=exc.status_code)
+            return JSONResponse(exc.detail, status_code=exc.status_code, headers=headers)
         return JSONResponse(
             {"error": {"code": "error", "message": str(exc.detail)}},
             status_code=exc.status_code,
+            headers=headers,
         )
     if _is_partner_path(path):
-        return JSONResponse(_partner_error_body(exc), status_code=exc.status_code)
-    return JSONResponse({"errors": [exc.detail]}, status_code=exc.status_code)
+        return JSONResponse(_partner_error_body(exc), status_code=exc.status_code, headers=headers)
+    return JSONResponse({"errors": [exc.detail]}, status_code=exc.status_code, headers=headers)
 
 
 async def unhandled_error_handler(request: Request, exc: Exception) -> Response:

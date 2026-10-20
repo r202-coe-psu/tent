@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { render } from 'svelte/server';
 import IdentityMethodSelector from './identity-method-selector.svelte';
 
-const REPRINT_HREF = 'href="/kiosk/reprint';
+const PRINT_QR_HREF = 'href="/kiosk/print-qr';
 
 describe('IdentityMethodSelector', () => {
 	it('renders the main heading as ลงทะเบียน', () => {
@@ -57,7 +57,7 @@ describe('IdentityMethodSelector', () => {
 		expect(result.body.match(/class="method-card/g)).toHaveLength(2);
 	});
 
-	it('shows the reprint link under the grid, keeping the display context, when enabled', () => {
+	it('shows the «พิมพ์ QR» link to the chooser under the grid, keeping the display context, when enabled', () => {
 		const result = render(IdentityMethodSelector, {
 			props: {
 				contextQuery: '?shelter_code=SH001',
@@ -66,7 +66,7 @@ describe('IdentityMethodSelector', () => {
 			}
 		});
 
-		expect(result.body).toContain(`${REPRINT_HREF}?shelter_code=SH001"`);
+		expect(result.body).toContain(`${PRINT_QR_HREF}?shelter_code=SH001"`);
 		expect(result.body).toContain('พิมพ์ QR');
 		expect(result.body).toContain('กรอกเบอร์โทรที่ลงทะเบียนไว้ เพื่อพิมพ์ QR Code');
 		expect(result.body.indexOf('พิมพ์ QR')).toBeGreaterThan(result.body.indexOf('ThaiD'));
@@ -79,7 +79,7 @@ describe('IdentityMethodSelector', () => {
 			props: { contextQuery: '', reprintEnabled: false, thaidCheckInEnabled: true }
 		});
 
-		expect(result.body).not.toContain('/kiosk/reprint');
+		expect(result.body).not.toContain('/kiosk/print-qr');
 		expect(result.body).not.toContain('พิมพ์ QR');
 		expect(result.body.match(/class="method-card/g)).toHaveLength(3);
 	});
