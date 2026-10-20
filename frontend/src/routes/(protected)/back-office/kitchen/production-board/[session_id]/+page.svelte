@@ -25,7 +25,8 @@
 		useCreateTicket,
 		useUpdateTicketItems,
 		useReceiveTicket,
-		TICKET_STATUS_LABELS
+		TICKET_STATUS_LABELS,
+		type RequisitionTicket
 	} from '$lib/features/tickets';
 	import {
 		useRecipes,
@@ -99,6 +100,8 @@
 	// Plan & ticket currently tracked in the wizard
 	let activePlanId = $state<string | null>(null);
 	let activeTicketId = $state<string | null>(null);
+	// The ticket just opened here — shown until the tickets query refetches it.
+	let createdTicket = $state.raw<RequisitionTicket | null>(null);
 
 	// Sync activePlanId from query parameter
 	$effect(() => {
@@ -124,7 +127,10 @@
 
 	const activeTicket = $derived.by(() => {
 		if (activeTicketId) {
-			return (tickets.data ?? []).find((t) => t._id === activeTicketId) ?? null;
+			return (
+				(tickets.data ?? []).find((t) => t._id === activeTicketId) ??
+				(createdTicket?._id === activeTicketId ? createdTicket : null)
+			);
 		}
 		if (activePlanId) {
 			return (
@@ -147,12 +153,18 @@
 	// CR-144/CR-145: warehouse must decide (confirm/reject) before this batch
 	// counts as delivered; a rejected service can be superseded by re-recording.
 	// Tab locks — C opens only once the kitchen has received the ingredients
-	// (ticket COMPLETED) or a service is already recorded. A ?stage= link can't
-	// land on a locked tab; once tickets/services have loaded it falls back to
-	// the furthest unlocked stage.
+	// (ticket COMPLETED), a service is already recorded, or a legacy plan is
+	// already cooking without a ticket. A ?stage= link can't land on a locked
+	// tab; once tickets/services have loaded it falls back to the furthest
+	// unlocked stage.
 	const stageBLocked = $derived(!activeTicket);
 	const stageCLocked = $derived(
-		!activePlanId || (!activeService && !!activeTicket && activeTicket.status !== 'COMPLETED')
+		!activePlanId ||
+			!(
+				activeService ||
+				activeTicket?.status === 'COMPLETED' ||
+				(!activeTicket && activePlan?.cooking_started_at)
+			)
 	);
 	const shownStage = $derived.by((): 'A' | 'B' | 'C' => {
 		if (!tickets.isSuccess || !services.isSuccess) return currentStage;
@@ -488,6 +500,7 @@
 				ctx
 			});
 
+			createdTicket = ticket;
 			activePlanId = planDoc._id;
 			activeTicketId = ticket._id;
 			currentStage = 'B';
