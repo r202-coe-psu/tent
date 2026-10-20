@@ -593,7 +593,7 @@
 		}
 		if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(100);
 		inputToken = token;
-		submitToken(token);
+		void submitToken(token);
 	}
 	let qrDataUrl = $state<string>('');
 	let qrGeneration = 0;

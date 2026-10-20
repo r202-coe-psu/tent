@@ -24,19 +24,22 @@ import {
  * not reachable from here.
  */
 export const POST: RequestHandler = async ({ request, getClientAddress }) => {
-	try {
-		const parsed = portalCredentialSchema.safeParse(await request.json());
-		if (!parsed.success) {
-			return json({ success: false, error: 'INVALID_INPUT' }, { status: 422 });
-		}
-		// Validate first so malformed requests do not consume the lookup budget and
-		// can consistently return the contract's 422 response. A minted token (128 random
-		// bits) gets the looser token budget; a phone keeps the strict one (#625).
-		const limiter = isMintedTicketToken(parsed.data)
+	// Same order as the other portal endpoints (CR-127 R-8/R-9): the budget is chosen from
+	// the parsed credential — a minted token (128 random bits) gets the looser token
+	// budget, a phone or an unreadable body keeps the strict lookup one — and is charged
+	// before validation. A body that is not JSON is INVALID_INPUT, not a 503.
+	const body: unknown = await request.json().catch(() => null);
+	const parsed = portalCredentialSchema.safeParse(body);
+	const limiter =
+		parsed.success && isMintedTicketToken(parsed.data)
 			? volunteerTicketLimiter
 			: volunteerTicketFindLimiter;
-		if (!limiter.check(getClientAddress())) {
-			return json({ success: false, error: 'RATE_LIMITED' }, { status: 429 });
+	if (!limiter.check(getClientAddress())) {
+		return json({ success: false, error: 'RATE_LIMITED' }, { status: 429 });
+	}
+	try {
+		if (!parsed.success) {
+			return json({ success: false, error: 'INVALID_INPUT' }, { status: 422 });
 		}
 		return json(await readPublicVolunteerSchedule(parsed.data), {
 			headers: { 'Cache-Control': 'no-store' }
