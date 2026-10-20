@@ -1765,17 +1765,19 @@ export function buildValidateDocUpdate(code: string): string {
         ticketFrom === 'PENDING_PICK' &&
         ticketTo === 'PENDING_PICK' &&
         !isRole('warehouse_staff') &&
+        !isRole('supply_coordinator') &&
         !isRole('kitchen_staff')
       ) {
         // warehouse_staff allocates (allocated_qty); kitchen_staff edits its own
         // request while nothing's been picked yet (CR-142, requested_qty only).
-        throw { forbidden: 'Only warehouse staff, kitchen staff, or system admin can update requisition_ticket items while PENDING_PICK' };
+        throw { forbidden: 'Only warehouse staff, supply coordinator, kitchen staff, or system admin can update requisition_ticket items while PENDING_PICK' };
       }
       if (
         ticketFrom === 'PENDING_PICK' &&
         ticketTo === 'PENDING_PICK' &&
         isRole('kitchen_staff') &&
-        !isRole('warehouse_staff')
+        !isRole('warehouse_staff') &&
+        !isRole('supply_coordinator')
       ) {
         // Kitchen-only editors must not touch allocated_qty (warehouse's field):
         // existing lines keep their old value, new lines start at '0'.
@@ -1800,8 +1802,8 @@ export function buildValidateDocUpdate(code: string): string {
         }
       }
       if (ticketTo === 'READY_FOR_DISPATCH') {
-        if (!isRole('warehouse_staff') && !isRole('shelter_manager')) {
-          throw { forbidden: 'Only warehouse staff, shelter manager or system admin can approve a requisition_ticket' };
+        if (!isRole('warehouse_staff') && !isRole('supply_coordinator') && !isRole('shelter_manager')) {
+          throw { forbidden: 'Only warehouse staff, supply coordinator, shelter manager or system admin can approve a requisition_ticket' };
         }
         var approveAnyPositive = false;
         for (var approveIndex = 0; approveIndex < newDoc.items.length; approveIndex++) {
@@ -1819,8 +1821,8 @@ export function buildValidateDocUpdate(code: string): string {
         }
       }
       if (ticketTo === 'IN_TRANSIT') {
-        if (!isRole('warehouse_staff')) {
-          throw { forbidden: 'Only warehouse staff or system admin can dispatch a requisition_ticket' };
+        if (!isRole('warehouse_staff') && !isRole('supply_coordinator')) {
+          throw { forbidden: 'Only warehouse staff, supply coordinator or system admin can dispatch a requisition_ticket' };
         }
         if (newDoc.dispatched_by !== userCtx.name) {
           throw { forbidden: 'dispatched_by must match the authenticated user' };
@@ -1836,8 +1838,8 @@ export function buildValidateDocUpdate(code: string): string {
       }
       if (ticketTo === 'CANCELLED') {
         var canCancelTicket = ticketFrom === 'PENDING_PICK'
-          ? (isRole('kitchen_staff') || isRole('warehouse_staff') || isRole('shelter_manager'))
-          : (isRole('warehouse_staff') || isRole('shelter_manager'));
+          ? (isRole('kitchen_staff') || isRole('warehouse_staff') || isRole('supply_coordinator') || isRole('shelter_manager'))
+          : (isRole('warehouse_staff') || isRole('supply_coordinator') || isRole('shelter_manager'));
         if (!canCancelTicket) {
           throw { forbidden: 'Not authorized to cancel this requisition_ticket' };
         }

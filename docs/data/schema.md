@@ -1182,7 +1182,7 @@ delta ที่อ้าง `requisition_ticket:{ulid}`.
   (ไม่ตรวจสต็อก ไม่สร้าง `stock_ledger`) — decision sync 2026-10-21
 - **`allocated_qty` เป็นของคลัง:** ระหว่าง `PENDING_PICK` `kitchen_staff` แก้ได้เฉพาะ
   `requested_qty`/เพิ่มบรรทัดใหม่ (`allocated_qty:'0'`) — ห้ามเปลี่ยน `allocated_qty` ของบรรทัดเดิม
-- **Role ต่อ edge:** สร้างตั๋ว (`kitchen_staff`) → จัดของระหว่าง `PENDING_PICK` (`warehouse_staff`) →
+- **Role ต่อ edge** (`supply_coordinator` นับเป็น `warehouse_staff` ทุกขั้น — alias ตาม role matrix §1.1): สร้างตั๋ว (`kitchen_staff`) → จัดของระหว่าง `PENDING_PICK` (`warehouse_staff`) →
   `PENDING_PICK→READY_FOR_DISPATCH` อนุมัติ (`warehouse_staff`/`shelter_manager`/`system_admin`;
   update เดียวกันเขียน `allocated_qty` ได้ — decision sync 2026-10-21) →
   `READY_FOR_DISPATCH→IN_TRANSIT` ปล่อยของ (`warehouse_staff`) →

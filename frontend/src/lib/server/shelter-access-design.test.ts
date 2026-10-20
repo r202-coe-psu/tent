@@ -3041,7 +3041,7 @@ describe('buildValidateDocUpdate', () => {
 			});
 			expectForbidden(
 				() => compile()(allocated, ticket, REGISTRATION),
-				/Only warehouse staff, kitchen staff, or system admin can update requisition_ticket items/
+				/Only warehouse staff, supply coordinator, kitchen staff, or system admin can update requisition_ticket items/
 			);
 		});
 
@@ -3088,7 +3088,7 @@ describe('buildValidateDocUpdate', () => {
 			};
 			expectForbidden(
 				() => compile()(approved, ticket, KITCHEN),
-				/Only warehouse staff, shelter manager or system admin can approve/
+				/Only warehouse staff, supply coordinator, shelter manager or system admin can approve/
 			);
 		});
 
@@ -3123,7 +3123,7 @@ describe('buildValidateDocUpdate', () => {
 			const approved = { ...ticket, status: 'READY_FOR_DISPATCH', approved_by: 'kt' };
 			expectForbidden(
 				() => compile()(approved, ticket, KITCHEN),
-				/Only warehouse staff, shelter manager or system admin can approve/
+				/Only warehouse staff, supply coordinator, shelter manager or system admin can approve/
 			);
 		});
 
@@ -3185,7 +3185,7 @@ describe('buildValidateDocUpdate', () => {
 			const dispatched = { ...ready, status: 'IN_TRANSIT', dispatched_by: 'kt' };
 			expectForbidden(
 				() => compile()(dispatched, ready, KITCHEN),
-				/Only warehouse staff or system admin can dispatch/
+				/Only warehouse staff, supply coordinator or system admin can dispatch/
 			);
 		});
 
@@ -3235,6 +3235,77 @@ describe('buildValidateDocUpdate', () => {
 				() => compile()(completed, ticket, MANAGER),
 				/Invalid requisition_ticket transition from PENDING_PICK to COMPLETED/
 			);
+		});
+
+		// supply_coordinator is the warehouse alias on the client (isWarehouseStaff) — the
+		// kitchen carve-out must accept it at every warehouse step.
+		describe('supply_coordinator acts as warehouse on kitchen tickets', () => {
+			const SC: UserCtx = { name: 'sc', roles: ['shelter:SH001', 'supply_coordinator'] };
+			const allocatedLine = {
+				item_id: 'item_master:rice',
+				item_name: 'ข้าวสาร',
+				unit: 'kg',
+				requested_qty: '30',
+				allocated_qty: '30'
+			};
+
+			it('can allocate while PENDING_PICK', () => {
+				const ticket = newTicket();
+				expect(() => compile()(newTicket({ items: [allocatedLine] }), ticket, SC)).not.toThrow();
+			});
+
+			it('can approve PENDING_PICK → READY_FOR_DISPATCH (one write with allocations)', () => {
+				const ticket = newTicket();
+				const approved = newTicket({
+					items: [allocatedLine],
+					status: 'READY_FOR_DISPATCH',
+					approved_by: 'sc'
+				});
+				expect(() => compile()(approved, ticket, SC)).not.toThrow();
+			});
+
+			it('can dispatch READY_FOR_DISPATCH → IN_TRANSIT', () => {
+				const ready = newTicket({
+					status: 'READY_FOR_DISPATCH',
+					approved_by: 'mgr',
+					items: [allocatedLine]
+				});
+				const dispatched = { ...ready, status: 'IN_TRANSIT', dispatched_by: 'sc' };
+				expect(() => compile()(dispatched, ready, SC)).not.toThrow();
+			});
+
+			it('can cancel while PENDING_PICK and READY_FOR_DISPATCH', () => {
+				const pending = newTicket();
+				expect(() => compile()({ ...pending, status: 'CANCELLED' }, pending, SC)).not.toThrow();
+				const ready = newTicket({
+					status: 'READY_FOR_DISPATCH',
+					approved_by: 'mgr',
+					items: [allocatedLine]
+				});
+				expect(() => compile()({ ...ready, status: 'CANCELLED' }, ready, SC)).not.toThrow();
+			});
+
+			it('a kitchen_staff + supply_coordinator user may change allocated_qty', () => {
+				const both: UserCtx = {
+					name: 'ks',
+					roles: ['shelter:SH001', 'kitchen_staff', 'supply_coordinator']
+				};
+				const ticket = newTicket();
+				expect(() => compile()(newTicket({ items: [allocatedLine] }), ticket, both)).not.toThrow();
+			});
+
+			it('still cannot receive (kitchen only)', () => {
+				const transit = newTicket({
+					status: 'IN_TRANSIT',
+					approved_by: 'mgr',
+					dispatched_by: 'ws',
+					items: [allocatedLine]
+				});
+				expectForbidden(
+					() => compile()({ ...transit, status: 'COMPLETED', received_by: 'sc' }, transit, SC),
+					/Only kitchen staff or system admin can receive/
+				);
+			});
 		});
 
 		it('kitchen_staff can cancel while PENDING_PICK', () => {
