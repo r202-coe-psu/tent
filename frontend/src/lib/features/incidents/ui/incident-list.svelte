@@ -9,6 +9,8 @@
 	import MapPin from '@lucide/svelte/icons/map-pin';
 	import UserRound from '@lucide/svelte/icons/user-round';
 	import NotebookPen from '@lucide/svelte/icons/notebook-pen';
+	import Eye from '@lucide/svelte/icons/eye';
+	import { Button } from '$lib/components/ui/button/index.js';
 	import {
 		INCIDENT_CATEGORIES,
 		INCIDENT_CATEGORY_LABELS,
@@ -16,11 +18,13 @@
 		INCIDENT_SEVERITY_LABELS,
 		INCIDENT_STATUS_LABELS,
 		INCIDENT_STATUSES,
+		countIncidentsByStatus,
 		filterIncidents,
 		incidentTitle,
 		sortIncidents,
 		type IncidentCategory,
 		type IncidentSeverity,
+		type IncidentStatus,
 		type IncidentStatusFilter
 	} from '../domain/incident';
 	import { useIncidents, useShelterStaff } from '../application/queries';
@@ -28,6 +32,7 @@
 	import EnumSelect from './enum-select.svelte';
 	import IncidentSeverityBadge from './incident-severity-badge.svelte';
 	import IncidentStatusBadge from './incident-status-badge.svelte';
+	import IncidentStatusCards from './incident-status-cards.svelte';
 
 	const { shelterCode }: { shelterCode: string } = $props();
 
@@ -57,6 +62,8 @@
 	const staffNames = $derived(
 		new Map((staffQuery.data ?? []).map((s) => [s.name, s.display_name ?? s.name]))
 	);
+	// Counts cover every loaded incident — independent of search / other filters.
+	const statusCounts = $derived(countIncidentsByStatus(incidentsQuery.data ?? []));
 	const items = $derived(
 		sortIncidents(
 			filterIncidents(incidentsQuery.data ?? [], {
@@ -73,10 +80,16 @@
 	const page = $derived(Math.min(currentPage, pageCount));
 	const pageItems = $derived(items.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE));
 
+	const toggleStatus = (next: IncidentStatus) => {
+		status = status === next ? 'open' : next;
+	};
+
 	const assigneeName = (user: string) => staffNames.get(user) ?? user;
 </script>
 
 <div class="space-y-4">
+	<IncidentStatusCards counts={statusCounts} active={status} onselect={toggleStatus} />
+
 	<div class="relative">
 		<Search
 			class="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
@@ -175,6 +188,7 @@
 								{#if incident.assigned_to === me}(คุณ){/if}
 							</span>
 						</div>
+						<p class="text-right text-sm font-semibold text-slate-700">ดูรายละเอียด ›</p>
 					</a>
 				</li>
 			{/each}
@@ -191,6 +205,7 @@
 						<Table.Head class="font-semibold text-foreground">สถานะ</Table.Head>
 						<Table.Head class="font-semibold text-foreground">เกิดเหตุเมื่อ</Table.Head>
 						<Table.Head class="font-semibold text-foreground">ผู้รับผิดชอบ</Table.Head>
+						<Table.Head class="text-right font-semibold text-foreground">การดำเนินการ</Table.Head>
 					</Table.Row>
 				</Table.Header>
 				<Table.Body>
@@ -221,6 +236,17 @@
 								{#if incident.assigned_to === me}
 									<span class="text-xs text-muted-foreground">(คุณ)</span>
 								{/if}
+							</Table.Cell>
+							<Table.Cell class="text-right">
+								<Button
+									variant="outline"
+									size="sm"
+									href={resolve(`/back-office/incidents/${encodeURIComponent(incident._id)}`)}
+									class="gap-1.5"
+								>
+									<Eye class="size-4" aria-hidden="true" />
+									ดูรายละเอียด
+								</Button>
 							</Table.Cell>
 						</Table.Row>
 					{/each}
