@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { sha256Hex } from '$lib/db/hash';
 import { ulid } from '$lib/db/ulid';
 import { nextVolunteerCode } from '../domain/volunteer-code';
+import { normalizePhone } from '../domain/phone';
 import { DEFAULT_CONTROLLED_SKILLS } from '../domain/skills';
 import { resolveSkillLabel, skillOptionsFromMaster } from '../domain/skill-catalog';
 import {
@@ -113,13 +114,6 @@ export class PublicApplicationError extends Error {
 
 function normalizedJobId(value: string): string {
 	return value.startsWith('job:') ? value : `job:${value}`;
-}
-
-function normalizePhone(value: string): string {
-	const digits = value.replace(/[\s\-()]/g, '');
-	if (digits.startsWith('+66')) return `0${digits.slice(3)}`;
-	if (digits.startsWith('66') && digits.length >= 11) return `0${digits.slice(2)}`;
-	return digits;
 }
 
 function normalizedSkill(value: string): string {

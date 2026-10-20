@@ -6,9 +6,11 @@
 	import Check from '@lucide/svelte/icons/check';
 	import User from '@lucide/svelte/icons/user';
 	import PlusCircle from '@lucide/svelte/icons/plus-circle';
+	import Plus from '@lucide/svelte/icons/plus';
 	import Trash2 from '@lucide/svelte/icons/trash-2';
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import ClipboardCheck from '@lucide/svelte/icons/clipboard-check';
+	import TriangleAlert from '@lucide/svelte/icons/triangle-alert';
 	import Loader2 from '@lucide/svelte/icons/loader-2';
 	import AlertTriangle from '@lucide/svelte/icons/alert-triangle';
 	import PackageCheck from '@lucide/svelte/icons/package-check';
@@ -20,6 +22,9 @@
 	import Circle from '@lucide/svelte/icons/circle';
 
 	import { Button } from '$lib/components/ui/button/index.js';
+	import * as Sheet from '$lib/components/ui/sheet/index.js';
+	import { IsMobile } from '$lib/hooks/is-mobile.svelte';
+	import { authStore } from '$lib/stores/auth.svelte';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
 	import { DatePicker } from '$lib/components/ui/date-picker/index.js';
@@ -29,21 +34,27 @@
 	import { Textarea } from '$lib/components/ui/textarea/index.js';
 	import { toast } from 'svelte-sonner';
 	import { Html5Qrcode } from 'html5-qrcode';
-	import { qtyAbs, qtyGt, qtyIsZero, subQty } from '$lib/utils/qty';
+	import { qtyGt } from '$lib/utils/qty';
 	import { onMount } from 'svelte';
+	import { resolve } from '$app/paths';
 	import {
 		donationActionRef,
 		donationRefLabel,
 		linesMissingExpiry,
+		receivedQtyDifference,
 		type ScanDonationView,
 		type PendingDonationRow
 	} from '$lib/features/donations';
 	import { useSupplyItems } from '$lib/features/supply';
 	import {
+		canonicalizeUnitCode,
+		canWriteShelterCatalog,
 		formatUnit,
 		mergeCatalogGenerations,
+		QuickCreateItem,
 		useItemMasters,
-		useUnitsOfMeasure
+		useUnitsOfMeasure,
+		type ItemMaster
 	} from '$lib/features/catalog';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { ulid } from '$lib/db/ulid';
@@ -51,9 +62,12 @@
 	import { useShelters } from '$lib/features/shelters';
 	import {
 		isStoragePointChosen,
+		ItemCombobox,
 		storageLotFields,
 		StoragePointSelect,
-		useStoragePoints
+		toStockFormItems,
+		useStoragePoints,
+		type StockFormItem
 	} from '$lib/features/operations';
 	import BoardSectionHeader from '$lib/components/board-section-header.svelte';
 
@@ -97,6 +111,67 @@
 		}))
 	);
 
+	// The searchable picker (#638) takes the stock-form shape; keep it to the ids the
+	// merged list above kept, so an item that exists in both generations shows once.
+	const pickerItems = $derived.by(() => {
+		const keep = new Set(catalogItems.map((c) => c._id));
+		const listed = toStockFormItems(
+			supplyItemsQuery.data ?? [],
+			itemMastersQuery.data ?? []
+		).filter((i) => keep.has(i._id));
+		const listedIds = new Set(listed.map((i) => i._id));
+		return [...listed, ...pickedOffList.filter((i) => !listedIds.has(i._id))];
+	});
+
+	// Items picked that the catalog query does not list yet — one just created from the
+	// picker shows up there only after the refetch. Until then its name and expiry rule
+	// come from here, so the lot panel does not print the raw id and the expiry check
+	// does not let the line through.
+	let pickedOffList = $state<StockFormItem[]>([]);
+
+	function rememberPicked(picked: StockFormItem | null) {
+		if (!picked || catalogItems.some((c) => c._id === picked._id)) return;
+		pickedOffList = [...pickedOffList.filter((i) => i._id !== picked._id), picked];
+	}
+
+	// "เพิ่มสินค้าใหม่" sits beside the picker and opens a side sheet — the same shape as
+	// the stock page's receive panel — instead of the picker's own create entry, which is
+	// a centred dialog. Here the form is a full page, so the sheet has room and the
+	// donor's lines stay in view while the item is filled in.
+	const canCreateItem = $derived(canWriteShelterCatalog(authStore.user?.roles ?? []));
+	const isMobileViewport = new IsMobile();
+	let createOpen = $state(false);
+	let createTarget = $state<
+		| { kind: 'scan'; index: number; name: string }
+		| { kind: 'walkin'; index: number; name: string }
+		| null
+	>(null);
+
+	function openCreateItem(target: NonNullable<typeof createTarget>) {
+		createTarget = target;
+		createOpen = true;
+	}
+
+	/** A created item, or the existing one picked instead, lands on the line that asked. */
+	function finishCreateItem(master: ItemMaster) {
+		const target = createTarget;
+		createOpen = false;
+		createTarget = null;
+		if (!target) return;
+		const picked = toStockFormItems([], [master])[0] ?? null;
+		if (target.kind === 'scan') {
+			const line = scannedItems[target.index];
+			if (line) mapScannedItem(line, picked);
+		} else {
+			handleWalkinItemSelect(target.index, picked);
+		}
+	}
+
+	/** A picker row's unit in the staff's language (#636) — the option list showed raw codes. */
+	function pickerUnitLabel(item: StockFormItem): string {
+		return formatUnit(item.unit, unitsOfMeasure, langState.current) || item.unit;
+	}
+
 	// CR-139 FR-11: the shelter's own storage points ("จุดเก็บของ"), not a fixed Zone A–F
 	// list. Required only when the shelter has set some up (N1); none → main store.
 	const storagePoints = useStoragePoints(() => getShelterCode());
@@ -107,17 +182,20 @@
 		return storageLotFields(storagePoints.points.find((p) => p.id === pointId) ?? null);
 	}
 
-	/** The catalog row's display label, or the dropdown placeholder when unmapped. */
-	function catalogLabel(itemId: string | undefined, placeholder: string): string {
-		const found = catalogItems.find((c) => c._id === itemId);
-		return found
-			? `${found.name} (${formatUnit(found.unit, unitsOfMeasure, langState.current)})`
-			: placeholder;
+	/** A stock item's name for the lot panel; the raw id only when it is no longer listed. */
+	function catalogName(itemId: string): string {
+		return (
+			catalogItems.find((c) => c._id === itemId)?.name ??
+			pickedOffList.find((i) => i._id === itemId)?.name ??
+			itemId
+		);
 	}
 
 	/** Does this catalog id require an expiry date (CR-143 FR-D1)? Drives the check below. */
 	function isPerishable(itemId: string): boolean {
-		return catalogItems.find((c) => c._id === itemId)?.requiresExpiry === true;
+		const item =
+			catalogItems.find((c) => c._id === itemId) ?? pickedOffList.find((i) => i._id === itemId);
+		return item?.requiresExpiry === true;
 	}
 
 	const redirectTargetLabel = $derived.by(() => {
@@ -127,6 +205,17 @@
 
 	// Scanned booking data
 	let donationDoc = $state<ScanDonationView | null>(null);
+
+	// The goods are at the counter of the shelter staff are working in. A booking made
+	// out to another shelter is not received or rejected here — staff switch shelter
+	// first, or the stock would land in the other shelter's ledger. Only system admins
+	// ever reach this: the route already refuses other staff a booking outside their own.
+	const otherShelterCode = $derived(
+		donationDoc && donationDoc.shelter_code !== getShelterCode() ? donationDoc.shelter_code : null
+	);
+	const otherShelterName = $derived(
+		(sheltersQuery.data ?? []).find((s) => s.code === otherShelterCode)?.name ?? otherShelterCode
+	);
 	// What staff read off the ticket — display only; a walk-in has none.
 	let bookingRef = $state('');
 	/**
@@ -144,7 +233,10 @@
 		key: string;
 		name: string;
 		declaredQty: string;
+		/** The unit the donor declared — shown for reference, never sent (#623). */
+		declaredUnit: string;
 		qty: string;
+		/** The unit staff count in: the mapped stock item's `base_unit`. */
 		unit: string;
 		item_id?: string;
 		expiry: string;
@@ -295,7 +387,8 @@
 
 	// Validation check for receiving into stock
 	const canReceive = $derived(
-		scannedItems.length > 0 &&
+		!otherShelterCode &&
+			scannedItems.length > 0 &&
 			!storagePoints.isLoading &&
 			scannedItems.every(
 				(it) =>
@@ -326,16 +419,27 @@
 	 * How the counted quantity differs from what the donor declared, or null when it
 	 * does not (or the box is not a number yet). The field starts pre-filled with the
 	 * declared amount, so a "matches" badge would show before anyone had counted —
-	 * only a difference is worth flagging.
+	 * only a difference is worth flagging. Lines counted in another unit than the donor
+	 * declared do not compare at all (#623).
 	 */
 	function qtyDifference(item: ScannedItem): { more: boolean; amount: string } | null {
-		try {
-			const diff = subQty(item.qty, item.declaredQty);
-			if (qtyIsZero(diff)) return null;
-			return { more: qtyGt(diff, 0), amount: qtyAbs(diff) };
-		} catch {
-			return null;
-		}
+		return receivedQtyDifference({
+			declaredQty: item.declaredQty,
+			declaredUnit: canonicalizeUnitCode(item.declaredUnit, unitsOfMeasure),
+			qty: item.qty,
+			unit: canonicalizeUnitCode(item.unit, unitsOfMeasure) ?? item.unit
+		});
+	}
+
+	/**
+	 * Map a line to a stock item. The line's unit becomes that item's `base_unit`: the
+	 * ledger row is denominated in it (schema.md §2.1), and keeping the donor's unit is
+	 * what failed every receipt with `CATALOG_MISMATCH` ("expected bottle, got box", #623).
+	 */
+	function mapScannedItem(item: ScannedItem, picked: StockFormItem | null) {
+		rememberPicked(picked);
+		item.item_id = picked?._id ?? '';
+		if (picked) item.unit = picked.unit;
 	}
 
 	/** The one logistics detail staff act on at the counter, when the booking has one. */
@@ -451,8 +555,10 @@
 						key: `${it.item_id ?? it.free_text ?? 'line'}-${i}`,
 						name: it.free_text || it.item_id || 'ไม่ระบุรายการ',
 						declaredQty: declared,
+						declaredUnit: it.unit || '',
 						qty: declared,
-						unit: it.unit || '',
+						// Count in the matched item's own unit; the donor's stays for reference.
+						unit: matched?.unit || it.unit || '',
 						item_id: matched?._id || it.item_id || '',
 						expiry: '',
 						storage_point_id: '',
@@ -488,7 +594,7 @@
 	}
 
 	async function handleSaveScan() {
-		if (!actionRef || saving) return;
+		if (!actionRef || saving || otherShelterCode) return;
 		saving = true;
 		try {
 			const res = await fetch(`/api/back-office/donations/${encodeURIComponent(actionRef)}`, {
@@ -571,7 +677,7 @@
 	}
 
 	async function handleConfirmReject() {
-		if (!actionRef || saving) return;
+		if (!actionRef || saving || otherShelterCode) return;
 		if (!rejectReason.trim()) {
 			toast.error('กรุณาระบุเหตุผลในการปฏิเสธคำขอ');
 			return;
@@ -618,14 +724,14 @@
 		walkinItems = walkinItems.filter((i) => i.id !== id);
 	}
 
-	function handleWalkinItemSelect(index: number, selectedId: string) {
+	function handleWalkinItemSelect(index: number, picked: StockFormItem | null) {
 		const item = walkinItems[index];
 		if (!item) return;
-		item.itemId = selectedId;
-		const found = catalogItems.find((c) => c._id === selectedId);
-		if (found) {
-			item.name = found.name;
-			item.unit = found.unit;
+		rememberPicked(picked);
+		item.itemId = picked?._id ?? '';
+		if (picked) {
+			item.name = picked.name;
+			item.unit = picked.unit;
 		}
 	}
 
@@ -805,7 +911,8 @@
 									<span class="text-base font-bold text-slate-900">{item.name}</span>
 									<span class="text-sm text-slate-500">
 										แจ้งไว้ <span class="tabular-nums">{item.declaredQty}</span>
-										{formatUnit(item.unit, unitsOfMeasure, langState.current)}
+										{formatUnit(item.declaredUnit, unitsOfMeasure, langState.current) ||
+											item.declaredUnit}
 									</span>
 									{#if diff}
 										<span
@@ -825,26 +932,27 @@
 										<Label for="map-master-{idx}" class="text-sm font-semibold text-slate-700">
 											รายการในคลัง <span class="text-red-500">*</span>
 										</Label>
-										<Select.Root type="single" bind:value={item.item_id}>
-											<Select.Trigger
-												id="map-master-{idx}"
-												class="h-11 w-full text-sm data-[size=default]:h-11"
+										<ItemCombobox
+											id="map-master-{idx}"
+											items={pickerItems}
+											value={item.item_id}
+											isLoading={supplyItemsQuery.isLoading || itemMastersQuery.isLoading}
+											placeholder="ค้นหารายการในคลัง…"
+											formatBalanceUnit={pickerUnitLabel}
+											onSelect={(picked) => mapScannedItem(item, picked)}
+										/>
+										{#if canCreateItem && !otherShelterCode}
+											<Button
+												type="button"
+												variant="ghost"
+												class="min-h-9 gap-1 px-2 text-sm font-semibold text-sky-800"
+												onclick={() =>
+													openCreateItem({ kind: 'scan', index: idx, name: item.name })}
 											>
-												{catalogLabel(item.item_id, '-- เลือกรายการในคลัง --')}
-											</Select.Trigger>
-											<Select.Content>
-												{#each catalogItems as c (c._id)}
-													<Select.Item value={c._id} label="{c.name} ({c.unit})" />
-												{/each}
-											</Select.Content>
-										</Select.Root>
-										<!--
-										Creating an item master is not offered here: checking a booking in is
-										confirming what arrived, so a line that does not match goes in the
-										difference note, not into a new catalog entry. Walk-in intake does not
-										offer it either: goods the catalog lacks are added by whoever owns the
-										catalog, not keyed in at the counter.
-										-->
+												<Plus class="size-4" aria-hidden="true" />
+												เพิ่มสินค้าใหม่
+											</Button>
+										{/if}
 									</div>
 
 									<div class="space-y-1.5">
@@ -993,6 +1101,19 @@
 							/>
 						</div>
 
+						{#if otherShelterCode}
+							<div
+								role="alert"
+								class="flex items-start gap-2 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900"
+							>
+								<TriangleAlert class="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+								<p>
+									ใบนี้จองส่งไปศูนย์ <strong>{otherShelterName}</strong> แต่คุณกำลังทำงานที่ศูนย์
+									<strong>{getShelterCode()}</strong> — สลับศูนย์ที่เมนูด้านซ้ายก่อนรับเข้าคลังหรือปฏิเสธ
+								</p>
+							</div>
+						{/if}
+
 						<div class="space-y-4 rounded-xl border border-slate-200/80 bg-white p-4 shadow-2xs">
 							<h4 class="text-sm font-semibold text-slate-700">ก่อนรับเข้าคลัง</h4>
 							<ul class="space-y-2 text-sm">
@@ -1056,7 +1177,7 @@
 									variant="outline"
 									type="button"
 									onclick={() => (actionPanel = actionPanel === 'reject' ? 'none' : 'reject')}
-									disabled={saving}
+									disabled={saving || !!otherShelterCode}
 									class="h-11 w-full border-red-200 text-sm font-semibold text-red-700 hover:bg-red-50 hover:text-red-800"
 								>
 									ปฏิเสธคำขอ
@@ -1343,9 +1464,24 @@
 								</p>
 								<ul class="mt-1.5 space-y-1">
 									{#each lastLots as lot (lot.item_id + (lot.lot_no ?? ''))}
-										<li class="flex items-center justify-between gap-2 text-2xs">
-											<span class="text-muted-foreground">{lot.item_id}</span>
-											<span class="font-mono font-bold text-foreground">{lot.lot_no ?? '—'}</span>
+										<li class="flex flex-wrap items-center justify-between gap-2 text-sm">
+											<span class="text-slate-700">{catalogName(lot.item_id)}</span>
+											<span class="flex items-center gap-3">
+												<span class="font-bold text-slate-900 tabular-nums"
+													>{lot.lot_no ?? '—'}</span
+												>
+												{#if lot.lot_no}
+													<a
+														href={resolve(
+															`/back-office/supply?tab=movements&lq=${encodeURIComponent(lot.lot_no)}` as '/back-office/supply'
+														)}
+														title="เปิดรายการเคลื่อนไหวของล็อตนี้ในคลัง"
+														class="inline-flex min-h-11 items-center font-semibold text-sky-700 underline underline-offset-2 hover:text-sky-900"
+													>
+														ดูในคลัง
+													</a>
+												{/if}
+											</span>
 										</li>
 									{/each}
 								</ul>
@@ -1505,23 +1641,27 @@
 										>
 											เลือกประเภทสิ่งของ / ค้นหาสินค้าหลัก <span class="text-destructive">*</span>
 										</Label>
-										<Select.Root
-											type="single"
+										<ItemCombobox
+											id="walkin-item-{item.id}"
+											items={pickerItems}
 											value={item.itemId}
-											onValueChange={(v) => handleWalkinItemSelect(idx, v)}
-										>
-											<Select.Trigger
-												id="walkin-item-{item.id}"
-												class="h-10 w-full rounded-xl bg-card text-sm data-[size=default]:h-10"
+											isLoading={supplyItemsQuery.isLoading || itemMastersQuery.isLoading}
+											placeholder="ค้นหาและเลือกสินค้า…"
+											formatBalanceUnit={pickerUnitLabel}
+											onSelect={(picked) => handleWalkinItemSelect(idx, picked)}
+										/>
+										{#if canCreateItem}
+											<Button
+												type="button"
+												variant="ghost"
+												class="min-h-9 gap-1 px-2 text-sm font-semibold text-sky-800"
+												onclick={() =>
+													openCreateItem({ kind: 'walkin', index: idx, name: item.name })}
 											>
-												{catalogLabel(item.itemId, '-- ค้นหาและเลือก Item --')}
-											</Select.Trigger>
-											<Select.Content>
-												{#each catalogItems as c (c._id)}
-													<Select.Item value={c._id} label="{c.name} ({c.unit})" />
-												{/each}
-											</Select.Content>
-										</Select.Root>
+												<Plus class="size-4" aria-hidden="true" />
+												เพิ่มสินค้าใหม่
+											</Button>
+										{/if}
 									</div>
 
 									<!-- Qty Input -->
@@ -1632,3 +1772,35 @@
 		</div>
 	{/if}
 </div>
+
+<!-- Create a stock item for a line: a side sheet (bottom on mobile), like the stock page's
+	receive panel. Mounted only while open so each opening starts from a clean form. -->
+<Sheet.Root bind:open={createOpen} onOpenChange={(open) => !open && (createTarget = null)}>
+	<Sheet.Content
+		side={isMobileViewport.current ? 'bottom' : 'right'}
+		class={[
+			'flex flex-col gap-0 overflow-hidden border-0 p-0 pb-[env(safe-area-inset-bottom)]',
+			isMobileViewport.current
+				? 'h-[100dvh] max-h-[100dvh] rounded-none'
+				: 'h-[100dvh] w-full sm:max-w-none md:w-[37.5rem] md:border-l'
+		]}
+	>
+		<Sheet.Header class="shrink-0 border-b border-slate-200/80 px-4 py-4 pr-14 text-left sm:px-6">
+			<Sheet.Title class="text-xl font-bold text-slate-900">สร้างสินค้าใหม่</Sheet.Title>
+			<Sheet.Description class="text-sm text-slate-500">
+				กรอกแค่ที่จำเป็นต่อการรับของ ข้อมูลอื่นเติมทีหลังได้
+			</Sheet.Description>
+		</Sheet.Header>
+		<div class="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
+			{#if createOpen && createTarget}
+				<QuickCreateItem
+					shelterCode={getShelterCode()}
+					initialName={createTarget.name}
+					onCreated={finishCreateItem}
+					onUseExisting={finishCreateItem}
+					onCancel={() => (createOpen = false)}
+				/>
+			{/if}
+		</div>
+	</Sheet.Content>
+</Sheet.Root>

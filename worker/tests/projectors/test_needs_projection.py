@@ -255,3 +255,61 @@ async def test_deactivated_item_master_falls_back_instead_of_naming_the_card():
     doc = _upserts(await project_needs_for_shelter(_couch([campaign]), SHELTER))[0]
 
     assert doc["item_name"] == "item_master:retired"
+
+
+# A shelter creates its own items in `shelter_{code}` (quick-create, the shelter's item
+# form), not in `catalog`. The map read `catalog` only, so a need for such an item
+# reached the donor board as its raw id.
+SHELTER_ITEM = {
+    "_id": "item_master:sweet-potato",
+    "type": "item_master",
+    "name": "หัวมัน",
+    "category": "food",
+    "base_unit": "piece",
+    "shelter_code": SHELTER,
+}
+
+
+@pytest.mark.asyncio
+async def test_shelter_made_item_is_named_from_the_shelter_catalog():
+    campaign = _campaign("a", "20")
+    campaign["needs"] = [
+        {"item_id": "item_master:sweet-potato", "qty_target": "20", "unit": "หัว"}
+    ]
+
+    doc = _upserts(
+        await project_needs_for_shelter(_couch([campaign, SHELTER_ITEM]), SHELTER)
+    )[0]
+
+    assert doc["item_name"] == "หัวมัน"
+    assert doc["unit"] == "piece"
+    assert doc["category"] == "food"
+
+
+@pytest.mark.asyncio
+async def test_shelter_copy_of_a_central_item_wins():
+    campaign = _campaign("a", "50")
+    campaign["needs"] = [
+        {"item_id": "item_master:canned-fish", "qty_target": "50", "unit": "ลัง"}
+    ]
+    local = {**CATALOG[1], "name": "ปลากระป๋อง (ศูนย์)", "base_unit": "box"}
+
+    actions = await project_needs_for_shelter(_couch([campaign, local]), SHELTER)
+    doc = _upserts(actions)[0]
+
+    assert doc["item_name"] == "ปลากระป๋อง (ศูนย์)"
+    assert doc["unit"] == "box"
+
+
+@pytest.mark.asyncio
+async def test_deactivated_shelter_copy_hides_the_central_name():
+    campaign = _campaign("a", "50")
+    campaign["needs"] = [
+        {"item_id": "item_master:canned-fish", "qty_target": "50", "unit": "ลัง"}
+    ]
+    local = {**CATALOG[1], "deactivated": True}
+
+    actions = await project_needs_for_shelter(_couch([campaign, local]), SHELTER)
+    doc = _upserts(actions)[0]
+
+    assert doc["item_name"] == "item_master:canned-fish"

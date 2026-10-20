@@ -5,7 +5,7 @@ phase: R3
 month: ก.ค.–ส.ค. 2026 (Operations Gate 22 ส.ค.)
 gate: Operations Gate
 created: 2026-06-03
-updated: 2026-08-21
+updated: 2026-10-20 # CR-155 amend — incident log จำกัดเป็น SO/SM/SA; เดิม 2026-10-08 shelter_incident replaces shelter_report
 ---
 
 # Phase R3 PRD: Operations — Donation, Kitchen, Volunteer, SOP & Shelter Reports
@@ -32,7 +32,7 @@ R2 ทำให้ศูนย์เห็นคนเป็นครัวเ�
 - **Kitchen Lead** (`kitchen_staff`) ต้องวางแผนอาหารจากยอดผู้พักพิงจริง บันทึกการรับ/ปรุง/แจกจ่ายอาหาร และรู้ว่าต้องเบิกวัตถุดิบจากคลังเท่าไร
 - **Shelter Manager** (`shelter_manager`) ต้องรับสมัครอาสา จับคู่ทักษะกับงานที่ขาด และจัดกะ — Volunteer Coordinator ไม่ใช่ role แยก (CR-002)
 - **Shelter Manager** ต้องเห็นผลคำนวณ SOP รายวัน (ต้องการวัตถุดิบ/อาสา/ของเท่าไร) เพื่อวางแผนล่วงหน้า
-- **Shelter Manager** ต้องเปิดและติดตามรายงานในศูนย์ (ร้องเรียน/ร้องทุกข์ หรือเหตุการณ์ — `kind` grievance|incident) — ไม่มี Security Officer role แยก (CR-002 / CR-040)
+- **Security Officer / Shelter Manager** (incident staff) ต้องเปิดและติดตามบันทึกเหตุการณ์ประจำวันในศูนย์ (รวมเรื่องร้องทุกข์) — SO มีสิทธิ์ตาม CR-155 amend 2026-10-20 (แทน CR-040 ที่ให้ SM เท่านั้น)
 - **Shelter Manager** ต้องส่งต่อ (referral) เมื่อศูนย์เต็ม อาหารขาด หรือมีผู้ป่วยฉุกเฉิน
 
 ### 2.2 Non-Users (R3)
@@ -56,7 +56,7 @@ R2 ทำให้ศูนย์เห็นคนเป็นครัวเ�
   - **Climax:** ใบเบิกตัด stock จาก Inventory อัตโนมัติ และบันทึกแผนมื้อ
   - **Resolution:** หลังเสิร์ฟ ครรชิตบันทึกยอดผู้เข้ารับอาหารจริง เพื่อปรับแผนมื้อถัดไป
 
-## 3. Glossary *(เพิ่มจาก R2)*
+## 3. Glossary _(เพิ่มจาก R2)_
 
 - **Donation Reservation** — การจองบริจาคล่วงหน้าที่ระบบตรวจ stock คงค้างก่อนยืนยัน เพื่อกันการบริจาคพร้อมกันเกินเป้า
 - **Donation Cut-off** — การปิดรับ Supply Item อัตโนมัติเมื่อ stock ถึงเป้า (เช่น 100% ของ target) ต่อศูนย์
@@ -69,7 +69,7 @@ R2 ทำให้ศูนย์เห็นคนเป็นครัวเ�
 - **Skill Match** — การจับคู่ Volunteer กับงานที่ต้องการทักษะตรงกัน
 - **SOP Ratio** — อัตราส่วนมาตรฐาน (วัตถุดิบ/ของ/อาสา ต่อจำนวนผู้พักพิงต่อวัน) ที่ตั้งค่าได้
 - **Resource Calculation** — ผลคำนวณความต้องการรายวันจาก occupancy × SOP Ratio
-- **Shelter Report** — รายงานในศูนย์ (`shelter_report`) แยกประเภทด้วย `kind`: grievance (ร้องเรียน/ร้องทุกข์) | incident (เหตุที่ staff/SM บันทึก); ติดตามจนปิดหรือ escalate → referral — ไม่ใช่ gate check-in/out หรือ occupancy roster ([CR-040](../changes/08-E-reports/CR-040-shelter-case-grievance-reframe.md))
+- **Shelter Incident Log** — สมุดบันทึกเหตุการณ์ประจำวันในศูนย์ (`shelter_incident`) รวมเรื่องร้องทุกข์; staff ทุกคนเปิดได้ ติดตามจนปิดหรือยกเลิก — ไม่ใช่ gate check-in/out หรือ occupancy roster ([CR-155](../changes/08-E-reports/CR-155-shelter-incident-log.md) แทน CR-040)
 - **Referral** — การส่งต่อผู้พักพิง/ความต้องการไปยังศูนย์หรือหน่วยงานอื่น (ศูนย์เต็ม, อาหารขาด, ผู้ป่วยฉุกเฉิน)
 
 ## 4. Features
@@ -83,6 +83,7 @@ R2 ทำให้ศูนย์เห็นคนเป็นครัวเ�
 ผู้บริจาคจองบริจาคล่วงหน้า **โดยไม่ต้อง login** (FD-16) ระบบตรวจ stock คงค้างและความต้องการก่อนยืนยัน และผูกการจองกับ `tracking_token`
 
 **Consequences (testable):**
+
 - reservation แสดงความต้องการคงค้าง (target − on-hand) ต่อ item ต่อศูนย์ก่อนยืนยัน
 - reservation ที่ยืนยันแล้ว reserve โควตา กันบริจาคซ้อนเกินเป้าจากหลายผู้บริจาคพร้อมกัน
 - **no-auth (FD-16):** reservation ผูกกับ `tracking_token` + ผ่าน OTP/เบอร์เหมือน FR-32; donor แก้/ยกเลิกการจองของตนผ่าน token ได้โดยไม่ login
@@ -93,6 +94,7 @@ R2 ทำให้ศูนย์เห็นคนเป็นครัวเ�
 ระบบปิดรับ Supply Item อัตโนมัติเมื่อ stock (รวม reservation) ถึงเป้า
 
 **Consequences (testable):**
+
 - เมื่อ on-hand + reserved ≥ target → item แสดงสถานะ "รับแล้ว/ปิดรับ" ต่อศูนย์
 - cut-off ต่อ item ต่อศูนย์ ไม่กระทบ item อื่น
 - เปิดรับใหม่อัตโนมัติเมื่อ stock ลดต่ำกว่าเป้า (จากการแจกจ่าย)
@@ -102,6 +104,7 @@ R2 ทำให้ศูนย์เห็นคนเป็นครัวเ�
 เมื่อศูนย์เป้าหมายปิดรับ ระบบแนะนำศูนย์อื่นที่ต่ำกว่า reorder threshold
 
 **Consequences (testable):**
+
 - redirect list เรียงตามความขาดแคลน (gap จาก reorder threshold) ของ item เดียวกัน
 - ผู้บริจาคเลือก redirect แล้วรายการเข้า pipeline ศูนย์ปลายทาง (FR-32 pattern)
 - ไม่ redirect ไปศูนย์ที่ปิดรับ item นั้นเช่นกัน
@@ -111,6 +114,7 @@ R2 ทำให้ศูนย์เห็นคนเป็นครัวเ�
 ระบบสรุปการรับ/แจกจ่ายของบริจาคทุก 24 ชม. เผยแพร่สาธารณะพร้อม QR ตรวจสอบ
 
 **Consequences (testable):**
+
 - รายงานรวมยอดรับ/แจกต่อ item ต่อศูนย์ในรอบ 24 ชม. จาก Stock Ledger (R2)
 - report สาธารณะต้องไม่เปิด sensitive data ของผู้พักพิง (ต่อ NFR-5) — เป็น aggregate เท่านั้น
 - QR เปิดรายงานฉบับตรวจสอบได้
@@ -126,6 +130,7 @@ R2 ทำให้ศูนย์เห็นคนเป็นครัวเ�
 Kitchen Lead สร้าง Meal Plan ต่อมื้อต่อศูนย์ โดยระบบคำนวณวัตถุดิบจาก occupancy × SOP Ratio (FR-44)
 
 **Consequences (testable):**
+
 - Meal Plan ดึง occupancy ปัจจุบัน (รวม fast-track/diet ถ้ามี) เป็นฐานคำนวณ
 - แสดงวัตถุดิบที่ต้องใช้ต่อมื้อตาม SOP Ratio
 - ปรับจำนวนมื้อ/หัวด้วยมือได้ (override) พร้อม audit
@@ -135,6 +140,7 @@ Kitchen Lead สร้าง Meal Plan ต่อมื้อต่อศูน�
 Kitchen Lead เบิกวัตถุดิบจาก Inventory เข้าครัว
 
 **Consequences (testable):**
+
 - requisition ลด on-hand ของ Supply Item ที่เป็นวัตถุดิบและเขียน Stock Ledger (ใช้ FR-29 pattern)
 - เบิกเกิน on-hand ถูกเตือน/ปฏิเสธ (ต่อ NFR-13)
 - requisition ผูกกับ Meal Plan เพื่อ reconcile แผนกับการใช้จริง
@@ -144,6 +150,7 @@ Kitchen Lead เบิกวัตถุดิบจาก Inventory เข้�
 Kitchen Lead บันทึกการแจกจ่ายอาหารและยอดผู้เข้ารับจริง รวมอาหารที่แจกออกนอกศูนย์
 
 **Consequences (testable):**
+
 - บันทึกยอดเสิร์ฟจริงต่อมื้อ; ส่วนต่างจากแผนใช้ปรับมื้อถัดไป
 - แยกประเภท: ผู้พักพิงในศูนย์ / อาสา / แจกจ่ายนอกศูนย์ (ผู้ประสบภัยที่ยังอยู่ในที่ตั้ง)
 - [ASSUMPTION] การผูก meal กับ Person รายคน (ใครรับมื้อไหน) เป็น optional; R3 เน้นยอดรวม/ประเภท
@@ -157,6 +164,7 @@ Kitchen Lead บันทึกการแจกจ่ายอาหารแ�
 ประชาชนสามารถสมัครเป็นอาสาสมัครผ่านฟอร์มสาธารณะ (No-Auth) พร้อมรับ Digital Ticket / QR Code สำหรับตรวจสอบสถานะและรายงานตัว
 
 **Consequences (testable):**
+
 - ฟอร์มรับสมัครสาธารณะเก็บข้อมูลติดต่อ, skill tags, ความพร้อม (availability) และออก `tracking_token` + Digital Ticket ทันที
 - ป้องกันสแปมด้วย reCAPTCHA v3 + Rate Limiting (ไม่มีค่าใช้จ่าย SMS OTP)
 - อาสาสมัครสามารถบันทึก/เปิดลิงก์ Digital Ticket หรือ QR Code เพื่อตรวจสอบสถานะการอนุมัติ วันเวลานัดหมาย หรือกดยกเลิก
@@ -168,6 +176,7 @@ Kitchen Lead บันทึกการแจกจ่ายอาหารแ�
 Shelter Manager จัดการประกาศรับสมัครงาน (Job Board) ประจำศูนย์ ตั้งค่ากะงาน และควบคุมสิทธิ์การเข้าถึงระบบ
 
 **Consequences (testable):**
+
 - Job Board แสดงจำนวนโควตาที่ต้องการ, จำนวนที่ยืนยันแล้ว, และจำนวนที่รอคัดเลือก พร้อมสถานะเปิดรับ
 - กำหนด tier ของงาน: `operational` (งานทั่วไป ไม่ต้องมี login) vs `staff-capable` (งานที่ต้องใช้สิทธิ์ระบบ)
 - นโยบาย Auto-Accept: งาน `operational` สามารถเปิดตอบรับอัตโนมัติเมื่อโควตาว่าง; งาน `staff-capable` บังคับ Shelter Manager อนุมัติรายคน
@@ -183,6 +192,7 @@ Shelter Manager จัดการประกาศรับสมัครง�
 ผู้ดูแลตั้งค่า SOP Ratio (วัตถุดิบ/ของ/อาสา ต่อผู้พักพิงต่อวัน, ต่อเตาประกอบอาหาร ฯลฯ)
 
 **Consequences (testable):**
+
 - ตั้ง ratio ได้ต่อประเภททรัพยากร และต่อหน่วยอ้างอิง (ต่อหัว, ต่อเตา, ต่อครัวเรือน)
 - ค่า default อ้างอิงมาตรฐาน Sphere/SOP ต้นฉบับ; override ได้พร้อม audit
 
@@ -191,6 +201,7 @@ Shelter Manager จัดการประกาศรับสมัครง�
 ระบบคำนวณความต้องการรายวันต่อศูนย์จาก occupancy ปัจจุบัน × SOP Ratio
 
 **Consequences (testable):**
+
 - คำนวณวัตถุดิบ/ของ/จำนวนอาสาที่ต้องการต่อวันต่อศูนย์
 - เทียบกับ on-hand stock (R2) → แสดง gap (ต้องเบิก/ต้องบริจาคเพิ่มเท่าไร)
 - R3 runtime = **on-demand** จาก UI ([CR-042](../changes/07-B-sop/CR-042-daily-sop-calc-follow-up.md) OD-3=A) — ไม่บังคับรอบอัตโนมัติ
@@ -201,31 +212,37 @@ Shelter Manager จัดการประกาศรับสมัครง�
 Shelter Manager เห็นความต้องการรายวันและ gap เทียบ stock/อาสาในมุมมองเดียว
 
 **Consequences (testable):**
+
 - แสดง required vs on-hand vs gap ต่อทรัพยากรต่อวัน พร้อม last-updated
 - Drill-down ระบุว่า ratio มาจาก master หรือ override จาก snapshot (`ratio_source`) ([CR-042](../changes/07-B-sop/CR-042-daily-sop-calc-follow-up.md) OD-1=A)
 - ตัวเลข reconcile กับ occupancy + Stock Ledger ใน UAT
 
 ### 4.5 Shelter Reports & Referral (Modules E + F)
 
-**Description:** **Shelter Manager** เปิดและติดตามรายงานในศูนย์ (ร้องเรียน/ร้องทุกข์ หรือเหตุการณ์) และส่งต่อ (referral) เมื่อศูนย์เต็ม/อาหารขาด/ผู้ป่วยฉุกเฉิน — mutate report = SM (allow-list) · referral owner = `shelter_manager` · ไม่เพิ่ม role ใหม่ (FD-13 / CR-040)
+**Description:** **Incident staff** (`security_officer` / `shelter_manager` ของศูนย์ หรือ `system_admin`) เปิดและติดตามบันทึกเหตุการณ์ประจำวัน (รวมเรื่องร้องทุกข์) โดยไม่ต้องรอ SM และ **Shelter Manager** ส่งต่อ (referral) เมื่อศูนย์เต็ม/อาหารขาด/ผู้ป่วยฉุกเฉิน — referral owner = `shelter_manager` · ไม่เพิ่ม role ใหม่ (FD-13 / [CR-155](../changes/08-E-reports/CR-155-shelter-incident-log.md) แทน CR-040)
 
-#### FR-47: Shelter Report — grievance / incident
+#### FR-47: Shelter Incident Log (สมุดบันทึกเหตุการณ์ประจำวัน)
 
-Shelter Manager เปิดรายงานในศูนย์ ติดตามสถานะและ timeline มอบหมาย และปิด หรือ escalate ไป referral แบบ atomic — คน/สัตว์เป็น related refs เท่านั้น **ไม่ทำ** gate check-in/out หรือ live occupancy monitoring (อยู่ที่ People / movement)
+Incident staff (SO / SM ของศูนย์ / SA) เปิดบันทึกเหตุการณ์ (รวมเรื่องร้องทุกข์) และเป็นเจ้าของเคสทันที ทุกการเปลี่ยนสถานะ/ส่งต่อมีเหตุผลใน timeline รองรับคู่กรณีที่ยังไม่ทราบตัวตนแล้วระบุภายหลัง — **ไม่ทำ** gate check-in/out หรือ live occupancy monitoring (อยู่ที่ People / movement) · spec: [CR-155](../changes/08-E-reports/CR-155-shelter-incident-log.md)
 
 **Consequences (testable):**
-- Doc type `shelter_report` (state machine, forward-only) · ทุก report มี `kind` ∈ {`grievance`,`incident`}
-- เก็บ category/severity/zone/ผู้เกี่ยวข้อง/`actions[]` timeline; list default sort = severity แล้ว `occurred_at`
-- Escalate → สร้าง `referral` สำเร็จก่อนตั้ง `status=escalated` + `escalation.referral_id` (ห้าม escalated ไร้ referral_id)
-- Mutate = role ใน `SHELTER_REPORT_MUTATE_ROLES` (R3: `shelter_manager`) ใน shelter scope · `system_admin` = platform override · ไม่มี PUB
+
+- Doc type `shelter_incident` (schema.md §2.10) · status `reported → action_in_progress → resolved → closed` · `resolved → action_in_progress` · SM ยกเลิกได้จาก `reported` / `action_in_progress`
+- **เฉพาะ incident staff** เห็นเมนู/portal tile, เข้า route, สร้างเคสและเพิ่มบันทึกได้ · staff capability อื่นไม่มีสิทธิ์ · เจ้าของเคส (`assigned_to`) หรือ SM/SA เปลี่ยนสถานะ ส่งต่อ ระบุคู่กรณี และปิดเคส (ทุก severity)
+- ส่งต่อให้ได้เฉพาะ SO/SM ของศูนย์ (`GET …/staff?capabilities=`) · VDU ตรวจ writer แต่ตรวจ role ของ assignee ไม่ได้ และจำกัดการอ่านราย doc ไม่ได้ (Known limitations ใน CR-155)
+- List มีการ์ดนับ 5 สถานะ (คลิก = filter) + ปุ่ม "ดูรายละเอียด" · portal tile `security-incidents` → `/back-office/incidents`
+- ทุก update ต่อท้าย `timeline` หนึ่ง entry พร้อมเหตุผล · field ข้อเท็จจริง immutable · เคส `closed`/`cancelled` แก้ไม่ได้
+- ระบุคู่กรณีได้ครั้งเดียว `unknown → known_evacuee | known_external`
+- **ห้ามลบเอกสารทุก role** (VDU 403) · ไม่มี PUB · ไม่มี escalate → referral ในรอบนี้
+- List default = เคสยังไม่ปิด (ส่งเวร) · sort severity แล้ว `occurred_at` · ค้นหา `title` / `incident_no` / จุดเกิดเหตุ
 - ไม่มี write path จาก Module E ไป `movement` / occupancy
-- อ้างอิงสัตว์ผ่าน `pet_refs` (`household_id` + `pet_index`) เมื่อเกี่ยวข้อง (ผูก Pet Record FR-24)
 
 #### FR-48: Referral & Hand-off
 
 Shelter Manager (`shelter_manager`) สร้างคำขอส่งต่อ (ศูนย์เต็ม / อาหารขาด / ผู้ป่วยฉุกเฉิน) ไปศูนย์หรือหน่วยงานอื่น
 
 **Consequences (testable):**
+
 - referral ระบุประเภท (capacity / resource / medical-emergency), ต้นทาง, ปลายทาง, สถานะ
 - referral medical-emergency: SM เป็น referral owner; medical detail อยู่ใน internal shelter scope เท่านั้น และไม่ออก public/API/EOC (ต่อ NFR-5, FD-13)
 - สถานะ referral ติดตามได้จนปิด; auditable
@@ -248,7 +265,7 @@ Shelter Manager (`shelter_manager`) สร้างคำขอส่งต่�
 - Kitchen: meal plan, requisition (ตัด stock), meal service record
 - Volunteer: registration + skills, skill match + task/shift assignment
 - SOP: ratio config, daily resource calculation, calculation dashboard
-- Shelter Reports: เปิด/ติดตาม `shelter_report` (kind grievance|incident) + escalate atomic → referral ([CR-040](../changes/08-E-reports/CR-040-shelter-case-grievance-reframe.md))
+- Shelter Incident Log: เปิด/ติดตาม/ส่งต่อ `shelter_incident` โดย staff ทุกคนในศูนย์ ([CR-155](../changes/08-E-reports/CR-155-shelter-incident-log.md))
 - Referral: referral & hand-off ภายในเครือข่ายศูนย์
 
 ### 6.2 Out of Scope for R3
@@ -259,7 +276,7 @@ Shelter Manager (`shelter_manager`) สร้างคำขอส่งต่�
 - External-agency referral integration เต็มรูป → deferred (ผ่าน Open API)
 - Per-person meal/supply consumption ledger → optional, backlog
 
-## 7. Cross-Cutting NFRs *(เพิ่มจาก R2)*
+## 7. Cross-Cutting NFRs _(เพิ่มจาก R2)_
 
 - **NFR-17** (Reliability): Kitchen requisition และ donation intake/redirect ที่เขียน stock ต้องผ่าน Stock Ledger เดียวกับ R2 — ห้ามมี write path ที่ทำให้ on-hand ไม่ตรง ledger Validates FR-40, FR-35, FR-37
 - **NFR-18** (Consistency): Resource Calculation ต้องคำนวณจาก occupancy + Stock Ledger ล่าสุด ไม่ cache ค้างจน gap ผิด; แสดง last-updated เสมอ Validates FR-45, FR-46
@@ -267,18 +284,21 @@ Shelter Manager (`shelter_manager`) สร้างคำขอส่งต่�
 - **NFR-20** (Security): medical-emergency referral และ volunteer PII ต้อง mask ตาม role ทั้ง UI/API Validates FR-42, FR-48
 - **NFR-21** (Performance): 5 module รันขนานบน data เดียวกัน — read model ของ dashboard (stock, resource calc) ต้องไม่ scan record ทีละตัวต่อ request (ต่อ NFR-3) Validates FR-31, FR-46
 
-## 8. Success Metrics *(ต่อจาก SM-10)*
+## 8. Success Metrics _(ต่อจาก SM-10)_
 
 **Primary**
+
 - **SM-11**: Cut-off correctness — เมื่อ stock ถึงเป้า ระบบปิดรับ item นั้นและ redirect ไปศูนย์ที่ขาดใน UAT Validates FR-36, FR-37
 - **SM-12**: Kitchen-stock integrity — Kitchen requisition ตัด on-hand ถูกต้องและ reconcile กับ Meal Plan ใน UAT (ผลต่าง = 0) Validates FR-40, FR-39
 - **SM-13**: Resource calc correctness — Daily Resource Calculation ให้ตัวเลขตรงกับ occupancy × SOP Ratio และ gap ตรงกับ on-hand ใน UAT Validates FR-44, FR-45
 
 **Secondary**
+
 - **SM-14**: Skill match usefulness — งานที่ต้องการทักษะถูกจับคู่กับอาสาที่ skill ตรงและ available ใน UAT Validates FR-43
 - **SM-15**: Transparency integrity — Transparency Report ยอดรับ/แจกตรงกับ Stock Ledger และไม่มี PII รั่ว Validates FR-38
 
 **Counter-metrics (do not optimize)**
+
 - **SM-C6**: อย่าทำ donation cut-off จนของจำเป็นถูกปิดรับทั้งที่บางศูนย์ยังขาด (redirect ต้องทำงานคู่กัน) Counterbalances SM-11
 - **SM-C7**: อย่าเร่ง meal/requisition จนข้าม stock validation ทำให้ on-hand ติดลบ Counterbalances SM-12
 - **SM-C8**: อย่าเปิด transparency/redirect data มากจนรั่ว PII เพื่อความโปร่งใส Counterbalances SM-15

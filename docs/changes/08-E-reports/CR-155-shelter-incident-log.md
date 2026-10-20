@@ -3,9 +3,9 @@ id: CR-155
 title: "Shelter Incident Log — doc type shelter_incident (Daily Occurrence Book, owner-based) · supersede CR-040"
 status: approved
 date: 2026-09-25
-updated: 2026-10-07
+updated: 2026-10-20
 requested_by: den (feature spec "ระบบบันทึกเหตุการณ์ประจำวันในศูนย์")
-decided_by: kong (D1–D5, 2026-10-02 — PR #323 review; approved 2026-10-07)
+decided_by: kong (D1–D5, 2026-10-02 — PR #323 review; approved 2026-10-07 · D-a..D-f 2026-10-20 — amend สิทธิ์เข้าถึง)
 layer: volatile
 affects:
   - docs/data/schema.md §2.10 (`shelter_report` → `shelter_incident`, schema_v 1) · §7 index · §8 validation
@@ -20,6 +20,8 @@ affects:
   - frontend/src/lib/auth/roles.ts `canAccessIncidents` · src/lib/guards/auth.ts `requireIncidents`
   - frontend/src/routes/(protected)/back-office/incidents/**
   - frontend/src/lib/components/backoffice-navbar/static.ts (เมนูหมวด 3)
+  - frontend/src/lib/features/portal/domain/portal-menu.ts (tile `security-incidents` → `/back-office/incidents`, IL-U6)
+  - CONTEXT.md (glossary: Shelter Incident Log)
   - tests: features/incidents/domain/incident.test.ts · data/incident.remote.test.ts · lib/server/shelter-access-design.incident.test.ts · lib/server/user-service.test.ts
 why: แก้ปัญหา SM เป็นคอขวดในการเปิดเคสเหตุการณ์หน้างาน, เพิ่ม audit trail ในการส่งเวร, และแทนที่ shelter_report (CR-040) ทั้งหมด
 migration: N/A — doc type ใหม่เข้าแทนที่ shelter_report (ยังไม่มี production data สำหรับ shelter_report) · ศูนย์ที่ provision แล้วต้อง redeploy `_design/access`
@@ -29,7 +31,7 @@ migration: N/A — doc type ใหม่เข้าแทนที่ shelter_r
 
 ## สรุป (TL;DR)
 
-- **เปลี่ยนอะไร:** doc type `shelter_incident:{ulid}` (schema_v 1) ใน `shelter_{code}` **แทน `shelter_report` (CR-040) ทั้งหมด** — สมุดบันทึกเหตุการณ์ประจำวัน: staff ทุกคนเปิดบันทึกได้และเป็นเจ้าของเคสทันที
+- **เปลี่ยนอะไร:** doc type `shelter_incident:{ulid}` (schema_v 1) ใน `shelter_{code}` **แทน `shelter_report` (CR-040) ทั้งหมด** — สมุดบันทึกเหตุการณ์ประจำวัน: **incident staff** (SO / SM ของศูนย์ / SA) เปิดบันทึกได้และเป็นเจ้าของเคสทันที (amend 2026-10-20 — D-a)
 - **เพื่อใคร/ทำไม:** ไม่ให้ SM เป็นคอขวด · ทุกการเปลี่ยนสถานะ/ส่งต่อมี Action & Reason ใน timeline · รองรับคู่กรณีที่ยังไม่ทราบตัวตนแล้วระบุภายหลัง
 - **dev ต้อง build:** feature `incidents` + route `/back-office/incidents` (list ส่งเวร / สร้าง / detail + timeline + dialog) + VDU rules + endpoint รายชื่อ staff ในศูนย์
 - **กระทบ:** CR-040 → `superseded` · `shelter_report` / `/reports` / `features/shelter-reports` ไม่ถูก build (ไม่มี data ให้ migrate) · บันทึกลบไม่ได้ — ยกเลิกผ่านสถานะ `cancelled` เท่านั้น
@@ -41,7 +43,7 @@ migration: N/A — doc type ใหม่เข้าแทนที่ shelter_r
 | Doc type            | `shelter_report:{ulid}` schema_v 1 (ยังไม่ implement)                 | `shelter_incident:{ulid}` schema_v 1 — **แทนทั้งหมด** รวมเรื่อง grievance (D1)                             |
 | หัวข้อ              | `subject` str req                                                     | `title` str req ≤120 · immutable · ใช้ค้นหา (IL-D12)                                                       |
 | `kind`              | `grievance` \| `incident`                                             | ไม่มี — แยกด้วย `category` (IL-D4)                                                                         |
-| ใครสร้าง            | `shelter_manager` เท่านั้น (+ SA)                                     | staff ทุกคนในศูนย์ (IL-P1)                                                                                 |
+| ใครสร้าง            | `shelter_manager` เท่านั้น (+ SA)                                     | incident staff เท่านั้น — SA หรือ `security_officer` / `shelter_manager` ของศูนย์ (IL-P1, D-a)             |
 | ใครอัปเดตสถานะ      | SM                                                                    | เจ้าของเคส (`assigned_to`) หรือ SM/SA                                                                      |
 | เจ้าของเคส          | `assignee_user_id` opt                                                | `assigned_to` req · default = `reported_by` · ส่งต่อได้พร้อมเหตุผล                                         |
 | สถานะ               | `open → in_progress → resolved → closed` · `escalated` · forward-only | IL-S1 · `resolved → action_in_progress` (ปะทุซ้ำ) · SM ยกเลิกได้จาก `reported` / `action_in_progress` (D4) |
@@ -83,25 +85,27 @@ migration: N/A — doc type ใหม่เข้าแทนที่ shelter_r
 
 ### Permissions (IL-P) — บังคับทั้ง client policy และ CouchDB VDU
 
-| Action                                              | Owner (`assigned_to`) | Staff ในศูนย์ | SM / SA   |
-| --------------------------------------------------- | --------------------- | ------------- | --------- |
-| สร้าง (เป็น owner อัตโนมัติ)                        | ✅                    | ✅            | ✅        |
-| เปลี่ยนสถานะ + note                                 | ✅ เคสตัวเอง          | ❌            | ✅ ทุกเคส |
-| เพิ่มบันทึกสังเกตการณ์                              | ✅                    | ✅            | ✅        |
-| ส่งต่อ / มอบหมาย                                    | ✅                    | ❌            | ✅        |
-| ระบุคู่กรณี (unknown → known)                       | ✅                    | ❌            | ✅        |
-| ปิดเคส (ทุก severity — D3)                          | ✅                    | ❌            | ✅        |
-| ยกเลิก (จาก `reported` / `action_in_progress` — D4) | ❌                    | ❌            | ✅        |
-| ลบเอกสาร                                            | ❌                    | ❌            | ❌        |
+> **amend 2026-10-20 (D-a):** ทุกคอลัมน์ในตารางนี้หมายถึง **incident staff** (SO / SM ของศูนย์ / SA) เท่านั้น · role อื่นไม่มีสิทธิ์ทุก action · owner เป็นได้เฉพาะ incident staff (IL-P5)
 
-| ID        | Requirement                                                                                                                                                                                                                                                                                                                                                 |
-| --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **IL-P1** | "Staff ในศูนย์" = user ที่มี `shelter:{code}` (ทุก capability) หรือ `system_admin`                                                                                                                                                                                                                                                                          |
-| **IL-P2** | "Manager" = `{code}:shelter_manager` หรือ `system_admin`                                                                                                                                                                                                                                                                                                    |
-| **IL-P3** | VDU create: ต้อง `reported_by = assigned_to = created_by = userCtx.name`, `current_status = reported`, `timeline = []`, `title` เป็น string ไม่ว่าง ≤120 ตัวอักษร                                                                                                                                                                                           |
-| **IL-P4** | VDU update: ต้องต่อท้าย timeline **หนึ่ง** entry ที่ `actor_id = userCtx.name` และ entry type ต้องสอดคล้องกับ field ที่เปลี่ยน · `oldDoc` สถานะ terminal → reject ทุก update                                                                                                                                                                                |
-| **IL-P5** | Endpoint `GET /api/v1/shelters/{code}/staff` คืน `{ name, display_name }[]` เฉพาะ user ที่ **active**, มี **capability อย่างน้อย 1 ตัวของศูนย์นั้น** (`{code}:<cap>` หรือ legacy bare cap ของ user ศูนย์เดียว) และ **ไม่ใช่บัญชีอาสาสมัคร** (`personnel_type ≠ volunteer`) — ไม่คืน contact/PII · caller ต้องอยู่ใน scope ศูนย์หรือ SA (ใช้เลือกผู้รับช่วง) |
-| **IL-P6** | VDU delete: ถ้า `oldDoc.type = shelter_incident` และ `newDoc._deleted = true` → **reject ทุก role** (รวม `system_admin`) · ยกเว้นเฉพาะ CouchDB `_admin` ซึ่ง VDU ข้ามทั้งหมดตามกลไกของ CouchDB (ใช้สำหรับงาน ops เท่านั้น)                                                                                                                                  |
+| Action                                              | Owner (`assigned_to`) | SO (ไม่ใช่ owner) | SM / SA   |
+| --------------------------------------------------- | --------------------- | ----------------- | --------- |
+| สร้าง (เป็น owner อัตโนมัติ)                        | ✅                    | ✅                | ✅        |
+| เปลี่ยนสถานะ + note                                 | ✅ เคสตัวเอง          | ❌                | ✅ ทุกเคส |
+| เพิ่มบันทึกสังเกตการณ์                              | ✅                    | ✅                | ✅        |
+| ส่งต่อ / มอบหมาย                                    | ✅                    | ❌                | ✅        |
+| ระบุคู่กรณี (unknown → known)                       | ✅                    | ❌                | ✅        |
+| ปิดเคส (ทุก severity — D3)                          | ✅                    | ❌                | ✅        |
+| ยกเลิก (จาก `reported` / `action_in_progress` — D4) | ❌                    | ❌                | ✅        |
+| ลบเอกสาร                                            | ❌                    | ❌                | ❌        |
+
+| ID        | Requirement                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **IL-P1** | **"Incident staff"** = `system_admin` หรือ user ที่มี `{code}:security_officer` / `{code}:shelter_manager` ของศูนย์นั้น (D-a, 2026-10-20 — แทน "staff ทุกคนในศูนย์") · **เฉพาะ incident staff** เท่านั้นที่ เห็นเมนู / portal tile / เข้า route / สร้างเคส / เพิ่มบันทึก · staff capability อื่นของศูนย์ (REG, TRG, MED, KS, SC, VC, FAC) ไม่มีสิทธิ์ทุก action                                                                                                                                                                                                                                                                                                                          |
+| **IL-P2** | "Manager" = `{code}:shelter_manager` หรือ `system_admin`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| **IL-P3** | VDU create: **writer ต้องเป็น incident staff (IL-P1)** (D-c) · ต้อง `reported_by = assigned_to = created_by = userCtx.name`, `current_status = reported`, `timeline = []`, `title` เป็น string ไม่ว่าง ≤120 ตัวอักษร                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| **IL-P4** | VDU update: writer ต้องเป็น incident staff (IL-P1) · ต้องต่อท้าย timeline **หนึ่ง** entry ที่ `actor_id = userCtx.name` และ entry type ต้องสอดคล้องกับ field ที่เปลี่ยน · `oldDoc` สถานะ terminal → reject ทุก update                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| **IL-P5** | Endpoint `GET /api/v1/shelters/{code}/staff` คืน `{ name, display_name }[]` เฉพาะ user ที่ **active**, มี **capability อย่างน้อย 1 ตัวของศูนย์นั้น** (`{code}:<cap>` หรือ legacy bare cap ของ user ศูนย์เดียว) และ **ไม่ใช่บัญชีอาสาสมัคร** (`personnel_type ≠ volunteer`) — ไม่คืน contact/PII · caller ต้องอยู่ใน scope ศูนย์หรือ SA (ใช้เลือกผู้รับช่วง) · **D-b:** รับ query optional `?capabilities=a,b` — กรองเหลือเฉพาะ user ที่มี capability ใดตัวหนึ่งในรายการ · picker ส่งต่อเคสเรียก `?capabilities=security_officer,shelter_manager` → เลือกผู้รับช่วงได้เฉพาะ SO/SM · ผลว่าง → แสดงข้อความ + ปุ่มยืนยันถูก disable · **บังคับที่ API + UI เท่านั้น** (ดู Known limitations) |
+| **IL-P6** | VDU delete: ถ้า `oldDoc.type = shelter_incident` และ `newDoc._deleted = true` → **reject ทุก role** (รวม `system_admin`) · ยกเว้นเฉพาะ CouchDB `_admin` ซึ่ง VDU ข้ามทั้งหมดตามกลไกของ CouchDB (ใช้สำหรับงาน ops เท่านั้น)                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 
 ### UI (IL-U)
 
@@ -110,23 +114,29 @@ migration: N/A — doc type ใหม่เข้าแทนที่ shelter_r
 | **IL-U1** | `/back-office/incidents` — ช่องค้นหาข้อความ (case-insensitive substring บน `title`, `incident_no`, `location_detail` — ใช้ร่วมกับ filter อื่น · กรองใน client จากชุด `_all_docs` เดียวกัน ไม่ต้องมี index) · ตารางใช้ `title` เป็นคอลัมน์หลัก · default filter "ยังไม่ปิด" (status ∉ closed/cancelled) สำหรับส่งเวร · filter status/severity/category/"เฉพาะเคสของฉัน" · **sort in-memory บน client** (ไม่ใช้ Mango sort — `severity` เป็น string enum เรียงตามตัวอักษรไม่ตรงลำดับความรุนแรง): rank `critical`=0 → `high` → `medium` → `low` แล้ว `occurred_at` ใหม่→เก่า · โหลดด้วย `_all_docs` prefix `shelter_incident:` (ไม่ต้องมี Mango index / view) · ถ้าจำนวนต่อศูนย์โตจนกระทบ performance → เปิด CR ใหม่เพื่อเพิ่ม view ที่ emit `[status_bucket, severity_rank, occurred_at]` |
 | **IL-U2** | `/back-office/incidents/new` — ช่องแรก "หัวข้อเหตุการณ์ *" · ไม่บังคับผู้เข้าพัก · ช่องตามประเภทฝ่าย (ค้นหา evacuee / ชื่อ / รูปพรรณ) · หลังบันทึก → detail + toast                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | **IL-U3** | `/back-office/incidents/{id}` — ข้อมูล, สองฝั่งคู่กรณี, timeline ใหม่→เก่า, ปุ่มเฉพาะ action ที่ actor มีสิทธิ์ · ทุก action เปิด dialog บังคับกรอกเหตุผล                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| **IL-U4** | เมนู "บันทึกเหตุการณ์ประจำวัน" ใน sidebar back-office หมวด "3. รายงานและการตรวจสอบ" — แสดงให้ทุก staff (IL-P1); สิทธิ์จริงตัดสินที่ route guard                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| **IL-U4** | เมนู "บันทึกเหตุการณ์ประจำวัน" ใน sidebar back-office หมวด "3. รายงานและการตรวจสอบ" — แสดงเฉพาะ incident staff (IL-P1) — **supersede** "แสดงให้ทุก staff" (D-a); route guard `requireIncidents` ตัดสินสิทธิ์จริงอีกชั้น                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| **IL-U5** | หน้า list `/back-office/incidents` — (1) **5 การ์ดนับสถานะ** (`reported`, `action_in_progress`, `resolved`, `closed`, `cancelled`) · นับจากเคสทั้งหมดที่ผู้ใช้เห็น **ไม่ขึ้นกับ** ช่องค้นหา/filter อื่น · คลิกการ์ด = ตั้ง filter status เป็นสถานะนั้น · คลิกการ์ดเดิมซ้ำ = reset กลับ default "ยังไม่ปิด" (`open`) (2) **desktop:** คอลัมน์ปุ่ม "ดูรายละเอียด" ชัดเจนต่อแถว · **mobile:** card มี hint ว่ากดเพื่อดูรายละเอียด                                                                                                                                                                                                                                                                                                                                                          |
+| **IL-U6** | Portal tile `security-incidents` (ฝ่ายรักษาความปลอดภัย, ชื่อ "ความปลอดภัยและเหตุการณ์") ลิงก์ไป `/back-office/incidents` · แสดงให้ SO + SM (IL-P1)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 
 ## Acceptance
 
-- [ ] staff ที่ไม่ใช่ SM สร้างเคสได้ และเป็น `assigned_to`
+- [ ] SO (ไม่ใช่ SM) สร้างเคสได้ และเป็น `assigned_to`
+- [ ] staff capability อื่น (REG/TRG/MED/KS/SC/VC/FAC) ไม่เห็นเมนู/portal tile, เข้า route ไม่ได้, สร้าง/เพิ่ม note ไม่ได้ (VDU 403)
+- [ ] ส่งต่อ: picker แสดงเฉพาะ SO/SM ของศูนย์ (`?capabilities=security_officer,shelter_manager`) · รายชื่อว่าง → มีข้อความ + ปุ่มยืนยัน disabled
+- [ ] หน้า list มี 5 การ์ดนับสถานะ (ไม่ขึ้นกับ filter) · คลิก = filter · คลิกซ้ำ = กลับ `open` · มีปุ่ม "ดูรายละเอียด" (desktop) / hint (mobile)
+- [ ] portal tile `security-incidents` ลิงก์ `/back-office/incidents` เห็นเฉพาะ SO + SM
 - [ ] owner: reported → action_in_progress → resolved → closed ได้ พร้อม note ทุกขั้น; ข้ามขั้นถูก reject (client + VDU)
 - [ ] owner ปิดเคส `critical` ได้ (D3)
-- [ ] staff อื่นเพิ่ม note ได้ แต่เปลี่ยนสถานะ/ส่งต่อไม่ได้ (VDU 403)
+- [ ] SO อื่นที่ไม่ใช่ owner เพิ่ม note ได้ แต่เปลี่ยนสถานะ/ส่งต่อไม่ได้ (VDU 403)
 - [ ] owner ส่งต่อให้ staff B → B เปลี่ยนสถานะได้, owner เดิมไม่ได้
 - [ ] owner ยกเลิกไม่ได้ · SM ยกเลิกได้จาก `reported` และ `action_in_progress` · ยกเลิกจาก `resolved` ไม่ได้ (D4)
 - [ ] เคส `unknown` → ระบุเป็น `known_evacuee` หรือ `known_external` ได้ครั้งเดียว + timeline `identify_respondent` · ระบุซ้ำ / กลับเป็น `unknown` ถูก reject (IL-D11)
 - [ ] เคส closed/cancelled แก้อะไรไม่ได้
 - [ ] ลบเอกสาร `shelter_incident` ไม่ได้ทุก role รวม SA (VDU 403 `Cannot delete shelter_incident documents`)
-- [ ] staff ศูนย์อื่นเขียนไม่ได้
+- [ ] staff ศูนย์อื่นเขียนไม่ได้ · SO/SM ของศูนย์อื่นเขียนไม่ได้
 - [ ] สร้างเคสโดยไม่กรอกหัวข้อ / หัวข้อเกิน 120 ตัวอักษรไม่ได้ (client + VDU) · แก้หัวข้อหลังสร้างไม่ได้ (VDU 403 `title is immutable`)
 - [ ] พิมพ์ส่วนหนึ่งของหัวข้อ / เลขที่บันทึก / จุดเกิดเหตุในช่องค้นหาแล้วเจอเคส
-- [ ] รายชื่อผู้รับช่วงไม่มีบัญชีอาสาสมัคร / user ที่ไม่มี capability ในศูนย์
+- [ ] รายชื่อผู้รับช่วงไม่มีบัญชีอาสาสมัคร / user ที่ไม่มี capability ในศูนย์ (endpoint ไม่กรอง `capabilities` = ทุก capability เหมือนเดิม)
 
 ## Decisions (เคาะโดย kong · 2026-10-02 · PR #323)
 
@@ -138,6 +148,22 @@ migration: N/A — doc type ใหม่เข้าแทนที่ shelter_r
 | D4  | SM ยกเลิกเคส           | ได้ทั้งจาก `reported` และ `action_in_progress` (แจ้งเท็จ / ซ้ำซ้อน) |
 | D5  | Escalate → referral    | **ตัดออก** รอบนี้                                                   |
 | D6  | วิธี track             | CR ไฟล์ (draft ใน `docs/changes/`) — 2026-09-28                     |
+
+### Amend 2026-10-20 (เคาะโดย kong · track ด้วยการแก้ CR-155 นี้ ไม่เปิด CR ใหม่)
+
+| #   | หัวข้อ          | คำตัดสิน                                                                                                                                                            |
+| --- | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| D-a | สิทธิ์เข้าถึง   | จำกัดเป็น "incident staff" = SA หรือ SO/SM ของศูนย์ (เมนู · portal tile · route · สร้าง · เพิ่ม note) — supersede IL-P1 "staff ทุกคน" และ IL-U4 "เมนูแสดงทุก staff" |
+| D-b | Handover picker | `GET /shelters/{code}/staff?capabilities=a,b` · picker ขอ `security_officer,shelter_manager` · ว่าง → ข้อความ + disable submit                                      |
+| D-c | การบังคับ       | VDU ต้องการ writer = SA หรือ SO/SM ของศูนย์ · ข้อจำกัดที่ยอมรับ ดู Known limitations                                                                                |
+| D-d | ผู้สร้าง        | ผู้สร้างยังเป็น owner คนแรก (IL-P3 คงเดิม) — แต่สร้างได้เฉพาะ incident staff                                                                                        |
+| D-e | UI              | เพิ่ม IL-U5 (การ์ดนับสถานะ + ปุ่มดูรายละเอียด) · IL-U6 (portal tile)                                                                                                |
+| D-f | ข้อมูลเดิม      | ไม่ migrate (branch ยังไม่ merge, ไม่มี production data) · seed/e2e ใช้ user SO                                                                                     |
+
+## Known limitations (D-c · ยอมรับแล้ว 2026-10-20)
+
+- **Assignee ตรวจที่ VDU ไม่ได้:** VDU มองไม่เห็น role ของ user เป้าหมาย (`assigned_to`) → การจำกัดผู้รับช่วงให้เป็น SO/SM บังคับที่ **API (`?capabilities`) + UI เท่านั้น** · client ที่เขียนตรงเข้า CouchDB ตั้ง `assigned_to` เป็น user อื่นได้ (แต่ writer ยังต้องเป็น incident staff)
+- **CouchDB จำกัดการอ่านราย doc ไม่ได้:** staff อื่นของศูนย์ที่เข้าถึง DB `shelter_{code}` ได้ ยังอ่าน doc `shelter_incident` ตรงจาก DB ได้ → **การจำกัดการอ่านเป็นระดับ UI/route เท่านั้น** (ไม่ใช่ security boundary) · หัวข้อ `title` ยังควรไม่ใส่ชื่อ-นามสกุลผู้เสียหาย (IL-D12)
 
 ## Open (ไม่บล็อก merge — ยกเป็น CR ถัดไปถ้าต้องการ)
 
@@ -160,25 +186,25 @@ migration: N/A — doc type ใหม่เข้าแทนที่ shelter_r
 
 ## Impact
 
-| ส่วน                                                          | สิ่งที่ต้องแก้                                                                                                                                                        | สถานะใน branch `feat/shelter-incident-log` |
-| ------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------ |
-| `docs/data/schema.md`                                         | §2.10 `shelter_report` → `shelter_incident` (field ตาม IL-D) · §7 ตัด index ของ `shelter_report` (incident ไม่ต้องมี Mango index — IL-U1) · §8 state machine + ห้ามลบ | รอ approve                                 |
-| `docs/data/data-model.md` · `schema-er-diagram.md`            | แทนแถว `shelter_report` ด้วย `shelter_incident`                                                                                                                       | รอ approve                                 |
-| `docs/changes/CR-040-…` · `_index.md`                         | `status: superseded` + link มา CR นี้                                                                                                                                 | รอ approve                                 |
-| `docs/prd/` FR-47 · `role-permission-matrix.md`               | สิทธิ์ราย record (owner / staff / SM)                                                                                                                                 | รอ approve                                 |
-| `docs/features/shelter-report-flow.md`                        | แทนด้วย flow incident log                                                                                                                                             | รอ approve                                 |
-| `docs/task-breakdown/08-E-reports.md` · `docs/sitemap.md`     | T-19/T-33 · route `/back-office/incidents`                                                                                                                            | รอ approve                                 |
-| `features/incidents/**`                                       | domain · data · application · ui (D3/D4 แล้ว)                                                                                                                         | implement แล้ว                             |
-| `lib/server/shelter-access-design.ts`                         | VDU allow-list + rules (IL-P3/P4/P6, IL-D11)                                                                                                                          | implement แล้ว                             |
-| `lib/server/user-service.ts` + `api/v1/shelters/[code]/staff` | staff directory (IL-P5)                                                                                                                                               | implement แล้ว                             |
-| `lib/auth/roles.ts` · `lib/guards/auth.ts`                    | `canAccessIncidents` · `requireIncidents`                                                                                                                             | implement แล้ว                             |
-| `routes/(protected)/back-office/incidents/**` + sidebar       | IL-U1–U4                                                                                                                                                              | implement แล้ว                             |
-| Tests                                                         | domain 23 · VDU 14 · remote 3 · staff directory 1                                                                                                                     | ผ่าน (`pnpm test`)                         |
-| Deploy                                                        | redeploy `_design/access` ทุกศูนย์ที่ provision แล้ว                                                                                                                  | dev แล้ว · staging/prod หลัง merge         |
+| ส่วน                                                                  | สิ่งที่ต้องแก้                                                                                                                                                        | สถานะใน branch `feat/shelter-incident-log`         |
+| --------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
+| `docs/data/schema.md`                                                 | §2.10 `shelter_report` → `shelter_incident` (field ตาม IL-D) · §7 ตัด index ของ `shelter_report` (incident ไม่ต้องมี Mango index — IL-U1) · §8 state machine + ห้ามลบ | อัปเดตแล้ว 2026-10-08                              |
+| `docs/data/data-model.md` · `schema-er-diagram.md`                    | แทนแถว `shelter_report` ด้วย `shelter_incident`                                                                                                                       | อัปเดตแล้ว 2026-10-08                              |
+| `docs/changes/CR-040-…` · `_index.md`                                 | `status: superseded` + link มา CR นี้                                                                                                                                 | อัปเดตแล้ว 2026-10-08                              |
+| `docs/prd/` FR-47 · `role-permission-matrix.md`                       | สิทธิ์ราย record (owner / staff / SM)                                                                                                                                 | อัปเดตแล้ว 2026-10-08                              |
+| `docs/features/shelter-report-flow.md`                                | แทนด้วย flow incident log                                                                                                                                             | อัปเดตแล้ว 2026-10-08 (flow doc → superseded)      |
+| `docs/task-breakdown/08-E-reports.md` · `docs/sitemap.md`             | T-19/T-33 · route `/back-office/incidents`                                                                                                                            | อัปเดตแล้ว 2026-10-08                              |
+| `features/incidents/**`                                               | domain · data · application · ui (D3/D4 แล้ว)                                                                                                                         | implement แล้ว                                     |
+| `lib/server/shelter-access-design.ts`                                 | VDU allow-list + rules (IL-P3/P4/P6, IL-D11) + writer ต้องเป็น incident staff (D-c)                                                                                   | amend 2026-10-20 (doc) · redeploy `_design/access` |
+| `lib/server/user-service.ts` + `api/v1/shelters/[code]/staff`         | staff directory (IL-P5) + `?capabilities=` filter (D-b)                                                                                                               | amend 2026-10-20 (doc)                             |
+| `lib/auth/roles.ts` · `lib/guards/auth.ts`                            | `canAccessIncidents` · `requireIncidents` — จำกัดเป็น incident staff (D-a, 2026-10-20)                                                                                | amend 2026-10-20 (doc) · code ตามใน branch         |
+| `routes/(protected)/back-office/incidents/**` + sidebar + portal tile | IL-U1–U6 (U5/U6 เพิ่ม 2026-10-20)                                                                                                                                     | amend 2026-10-20 (doc) · code ตามใน branch         |
+| Tests                                                                 | domain 23 · VDU 14 · remote 3 · staff directory 1                                                                                                                     | ผ่าน (`pnpm test`)                                 |
+| Deploy                                                                | redeploy `_design/access` ทุกศูนย์ที่ provision แล้ว                                                                                                                  | dev แล้ว · staging/prod หลัง merge                 |
 
 ## Migration
 
-N/A — doc type ใหม่. ไม่มี `shelter_report` ใน production (CR-040 ยังไม่ถูก implement) → ไม่ต้อง backfill. ศูนย์ที่ provision แล้วต้อง redeploy `_design/access` (`pnpm redeploy:access --write --confirm`) เพื่อให้ VDU รู้จัก `shelter_incident` และกฎห้ามลบ.
+N/A — doc type ใหม่ · **amend 2026-10-20 (D-f):** ไม่ migrate ข้อมูลเดิม (branch ยังไม่ merge, ไม่มี production data) · seed/e2e ใช้ user SO. ไม่มี `shelter_report` ใน production (CR-040 ยังไม่ถูก implement) → ไม่ต้อง backfill. ศูนย์ที่ provision แล้วต้อง redeploy `_design/access` (`pnpm redeploy:access --write --confirm`) เพื่อให้ VDU รู้จัก `shelter_incident` และกฎห้ามลบ.
 
 ## Decision log
 
@@ -189,3 +215,5 @@ N/A — doc type ใหม่. ไม่มี `shelter_report` ใน productio
 - 2026-10-03 — เพิ่ม `title` (หัวข้อเหตุการณ์, IL-D12) + ช่องค้นหาในหน้ารวม (IL-U1) — owner อนุมัติให้ implement แล้ว; ยังอยู่ใน schema_v 1
 - 2026-10-05 — PR #323 review รอบ 2: resolve conflict markers (คงฉบับ 2026-10-03 ที่มี D1–D5 + IL-D12 เท่านั้น) · IL-D1 ไม่อ้าง `shelter_id` แล้ว
 - 2026-10-07 — approved: รันเลข CR-155 ตาม branch develop; ปรับสถานะเป็น approved
+- 2026-10-08 — apply canonical docs: schema.md §2.10/§7/§8 · data-model · ER · PRD FR-47 + glossary · role-permission-matrix · sitemap §2.8 · 08-E T-19/T-33 · 09-F / _timeline wording · schema-v3 status · shelter-report-flow.md → superseded (status คง `approved` จนกว่าโค้ดจะ merge → `done`)
+- 2026-10-20 — amend (kong, ผ่านแชท; track ด้วยการแก้ CR นี้ ไม่เปิด CR ใหม่): D-a จำกัดสิทธิ์เป็น incident staff (SA / SO / SM) — แก้ IL-P1, IL-U4 · D-b `?capabilities=` + picker SO/SM — แก้ IL-P5 · D-c VDU ตรวจ writer + Known limitations (assignee / read ระดับ DB) · D-d creator = owner คงเดิม (IL-P3) · D-e เพิ่ม IL-U5 (การ์ดนับสถานะ, ปุ่มดูรายละเอียด) / IL-U6 (portal tile `security-incidents`; ไม่มีปุ่ม "กลับไป Portal" ที่หน้า list — owner ให้ตัดออก) · D-f ไม่ migrate · เพิ่มคำนิยาม "บันทึกเหตุการณ์ประจำวัน (Shelter Incident Log)" ใน `CONTEXT.md` — **แก้ที่ CR/PRD ก่อนหน้าอ้างว่ามี glossary entry แต่ยังไม่มีจริง** · sync: PRD FR-47 · role-permission-matrix · sitemap §2.8 · schema.md §2.10 · ไม่ bump `schema_v` (รูปแบบ doc ไม่เปลี่ยน)

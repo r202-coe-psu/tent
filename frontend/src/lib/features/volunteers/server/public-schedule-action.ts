@@ -18,6 +18,7 @@ import {
 	trackingTokenHashFromPayload
 } from '$lib/features/volunteer-portal/domain/volunteer';
 import { isWithinDutyWindow } from '../domain/duty-window';
+import { normalizePhone } from '../domain/phone';
 
 const MAX_WRITE_RETRIES = 5;
 
@@ -75,13 +76,6 @@ function docsFrom(data: unknown): CouchDoc[] {
 		(doc): doc is CouchDoc =>
 			Boolean(doc) && typeof doc === 'object' && typeof (doc as CouchDoc)._id === 'string'
 	);
-}
-
-function normalizePhone(value: string): string {
-	const digits = value.replace(/[\s\-()]/g, '');
-	if (digits.startsWith('+66')) return `0${digits.slice(3)}`;
-	if (digits.startsWith('66') && digits.length >= 11) return `0${digits.slice(2)}`;
-	return digits;
 }
 
 function tokenHash(value: string): Promise<string> {
