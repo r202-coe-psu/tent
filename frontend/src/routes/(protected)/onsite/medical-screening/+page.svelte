@@ -246,7 +246,7 @@
 				<div>
 					<div class="flex items-center gap-2.5">
 						<div
-							class="flex size-8 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+							class="flex size-8 items-center justify-center rounded-lg bg-station-2-subtle text-station-2"
 						>
 							<Stethoscope class="size-5" />
 						</div>
@@ -255,7 +255,7 @@
 						</h1>
 						<Badge
 							variant="outline"
-							class="border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+							class="border-station-2-border bg-station-2-subtle text-station-2-text"
 						>
 							Station 2
 						</Badge>

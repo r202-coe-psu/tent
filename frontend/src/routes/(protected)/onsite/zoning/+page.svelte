@@ -657,11 +657,11 @@
 			</a>
 			<div class="min-w-0">
 				<div class="flex flex-wrap items-center gap-x-2 gap-y-1">
-					<MapPin class="size-6 shrink-0 text-[#0A2647]" />
+					<MapPin class="size-6 shrink-0 text-station-3" />
 					<h1 class="text-2xl font-bold tracking-tight text-slate-900 md:text-3xl">จัดสรรที่พัก</h1>
 					<Badge
 						variant="outline"
-						class="border-amber-200 bg-amber-50 font-semibold text-amber-900"
+						class="border-station-3-border bg-station-3-subtle font-semibold text-station-3-text"
 					>
 						Station 3
 					</Badge>
@@ -729,7 +729,7 @@
 					variant="default"
 					size="default"
 					onclick={() => (showCameraModal = true)}
-					class="h-12 shrink-0 gap-1.5 rounded-xl bg-amber-600 font-semibold text-white hover:bg-amber-700"
+					class="h-12 shrink-0 gap-1.5 rounded-xl bg-station-3-strong font-semibold text-white hover:bg-station-3-text"
 				>
 					<Camera class="size-4" />
 					<span>สแกนกล้อง</span>
@@ -870,7 +870,7 @@
 			<div
 				class="flex flex-wrap items-center gap-2 border-b border-slate-200/80 bg-white px-5 py-3.5"
 			>
-				<Users class="size-4 text-amber-600" />
+				<Users class="size-4 text-station-3" />
 				<span class="text-base font-semibold text-slate-900">
 					{#if activeTab === 'pending'}
 						Cleared for Zoning — คิวพร้อมจัดสรรที่พัก
