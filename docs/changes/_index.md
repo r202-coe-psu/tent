@@ -2,7 +2,7 @@
 title: Change Records — Index
 status: active
 created: 2026-06-16
-updated: 2026-10-20 # 2026-10-20 CR-176 approved (EXT-011 cancelled booking is not a residency) · 2026-10-20 CR-175 approved (donor photos for donation review) · 2026-10-19 CR-174 approved (campaign donation per-line auto-approve) · 2026-10-18 CR-173 approved (donation track by phone) · 2026-10-18 CR-172 approved (donation reject reason and line rejection on track page) · decision sync hardening #612–#616 ใน CR-169 · #592 FR-40/FR-42 แก้ใน CR-169 (+ CR-154 FR-33) · decision sync 2026-10-17 (#604) ใน CR-151 + CR-169 (kiosk Mango index provisioning) · 2026-10-16 CR-170 approved (evacuee dashboard range filter + stay counts)
+updated: 2026-10-21 # 2026-10-21 CR-177 approved (meal_service receipt_no RCV-KITCHEN) · 2026-10-20 CR-176 approved (EXT-011 cancelled booking is not a residency) · 2026-10-20 CR-175 approved (donor photos for donation review) · 2026-10-19 CR-174 approved (campaign donation per-line auto-approve) · 2026-10-18 CR-173 approved (donation track by phone) · 2026-10-18 CR-172 approved (donation reject reason and line rejection on track page) · decision sync hardening #612–#616 ใน CR-169 · #592 FR-40/FR-42 แก้ใน CR-169 (+ CR-154 FR-33) · decision sync 2026-10-17 (#604) ใน CR-151 + CR-169 (kiosk Mango index provisioning) · 2026-10-16 CR-170 approved (evacuee dashboard range filter + stay counts)
 
 note: ดัชนี Change Record ทุกตัว — กติกาอยู่ใน ../change-management.md
 ---
@@ -26,7 +26,7 @@ CR แต่ละตัวเก็บในโฟลเดอร์ตาม�
 | [02-people — Household & Zoning](#02-people)     | [`02-people/`](02-people/)           | 9        |
 | [03-C — Supply & Inventory](#03-c-supply)        | [`03-C-supply/`](03-C-supply/)       | 24       |
 | [04-donation — Donation](#04-donation)           | [`04-donation/`](04-donation/)       | 15       |
-| [05-D — Kitchen & Food](#05-d-kitchen)           | [`05-D-kitchen/`](05-D-kitchen/)     | 12       |
+| [05-D — Kitchen & Food](#05-d-kitchen)           | [`05-D-kitchen/`](05-D-kitchen/)     | 13       |
 | [06-A — Volunteer](#06-a-volunteer)              | [`06-A-volunteer/`](06-A-volunteer/) | 8        |
 | [07-B — SOP & Resource Calc](#07-b-sop)          | [`07-B-sop/`](07-B-sop/)             | 11       |
 | [08-E — Shelter Reports](#08-e-reports)          | [`08-E-reports/`](08-E-reports/)     | 3        |
@@ -194,6 +194,7 @@ CR แต่ละตัวเก็บในโฟลเดอร์ตาม�
 | [CR-095](05-D-kitchen/CR-095-food-sphere-replenishment-schema.md)                | Food Sphere Standard, Requirement Group และ Replenishment Policy Canonical Schemas (โภชนาการและการเติมสต็อกเสบียง) (renumbered from CR-093)                                                                                                      | done     | volatile | 2026-08-27 (done 2026-09-01)     | docs/data/schema.md §4.6/§4.7/§4.8, docs/changes/05-D-kitchen/CR-058-food-warehouse-nutrition-kitchen-overhaul.md, docs/task-breakdown/05-D-kitchen.md T-17/T-22, docs/data/data-model.md §4 |
 | [CR-109](05-D-kitchen/CR-109-meal-distribution-onsite-scan.md)                   | เพิ่ม meal_distribution log สำหรับแจกจ่ายอาหารหน้างาน + คุมเพดาน Distribution Limit (Soft Warning)                                                                                                                                               | approved | volatile | 2026-09-02 (approved 2026-09-06) | docs/data/schema.md §2, frontend/src/lib/features/meal-distribution/, frontend/src/lib/features/kitchen/                                                                                     |
 | [CR-130](05-D-kitchen/CR-130-food-sphere-target-segments.md)                     | Food Sphere Standard target_segment ตาม 7 กลุ่มอายุ Dashboard (schema_v 1 → 2) + ซ่อนตัวแปร SOP ratio ในหน้าจอเหลือ 9 คีย์ (แบบ A)                                                                                                               | approved | volatile | 2026-09-18 (approved 2026-09-25) | docs/data/schema.md §4.6, frontend/src/lib/features/sop-ratios/**, scripts/seed/**, PR #285                                                                                                  |
+| [CR-177](05-D-kitchen/CR-177-meal-service-receipt-no.md) | เลขรันอ้างอิง `meal_service.receipt_no` รูปแบบ `RCV-KITCHEN-NNNN` (opt, additive) ออกตอนบันทึกผลผลิต; doc เดิมไม่ backfill — UI fallback `RCV-{_id[-6:]}`; ไม่ bump schema_v | done | volatile | 2026-10-21 (approved 2026-10-21 โดย kong) | docs/data/schema.md §2.7, frontend kitchen domain/data, tickets ticket-list.svelte |
 
 ## 06-A-volunteer
 
