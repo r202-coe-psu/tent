@@ -2,7 +2,7 @@
 title: Change Records — Index
 status: active
 created: 2026-06-16
-updated: 2026-10-19 # 2026-10-19 CR-174 approved (campaign donation per-line auto-approve) · 2026-10-18 CR-173 approved (donation track by phone) · 2026-10-18 CR-172 approved (donation reject reason and line rejection on track page) · decision sync hardening #612–#616 ใน CR-169 · #592 FR-40/FR-42 แก้ใน CR-169 (+ CR-154 FR-33) · decision sync 2026-10-17 (#604) ใน CR-151 + CR-169 (kiosk Mango index provisioning) · 2026-10-16 CR-170 approved (evacuee dashboard range filter + stay counts)
+updated: 2026-10-20 # 2026-10-20 CR-175 approved (donor photos for donation review) · 2026-10-19 CR-174 approved (campaign donation per-line auto-approve) · 2026-10-18 CR-173 approved (donation track by phone) · 2026-10-18 CR-172 approved (donation reject reason and line rejection on track page) · decision sync hardening #612–#616 ใน CR-169 · #592 FR-40/FR-42 แก้ใน CR-169 (+ CR-154 FR-33) · decision sync 2026-10-17 (#604) ใน CR-151 + CR-169 (kiosk Mango index provisioning) · 2026-10-16 CR-170 approved (evacuee dashboard range filter + stay counts)
 
 note: ดัชนี Change Record ทุกตัว — กติกาอยู่ใน ../change-management.md
 ---
@@ -25,7 +25,7 @@ CR แต่ละตัวเก็บในโฟลเดอร์ตาม�
 | [01-core — Platform/Core](#01-core)              | [`01-core/`](01-core/)               | 31       |
 | [02-people — Household & Zoning](#02-people)     | [`02-people/`](02-people/)           | 9        |
 | [03-C — Supply & Inventory](#03-c-supply)        | [`03-C-supply/`](03-C-supply/)       | 23       |
-| [04-donation — Donation](#04-donation)           | [`04-donation/`](04-donation/)       | 13       |
+| [04-donation — Donation](#04-donation)           | [`04-donation/`](04-donation/)       | 15       |
 | [05-D — Kitchen & Food](#05-d-kitchen)           | [`05-D-kitchen/`](05-D-kitchen/)     | 12       |
 | [06-A — Volunteer](#06-a-volunteer)              | [`06-A-volunteer/`](06-A-volunteer/) | 8        |
 | [07-B — SOP & Resource Calc](#07-b-sop)          | [`07-B-sop/`](07-B-sop/)             | 11       |
@@ -173,6 +173,7 @@ CR แต่ละตัวเก็บในโฟลเดอร์ตาม�
 | [CR-172](04-donation/CR-172-donation-reject-reason.md)                  | เหตุผลปฏิเสธบนใบบริจาค + ไม่รับรายบรรทัดตอนตรวจรับ (แสดงบนหน้าติดตาม) — `reject_reason`, `reject_reason_code`, `received_summary.items[].rejected/reject_reason/reject_reason_code`, modal ปฏิเสธสำเร็จรูป, ไม่รับรายบรรทัดไม่นับเป็น shortfall, donation schema_v 5 → 6 | approved | volatile          | 2026-10-17 (approved 2026-10-18) | docs/data/schema.md §2.3, schema_v donation 5 → 6, docs/data/couchdb-mongodb-sync.md §3.2, docs/data/api-contract.md, frontend donations/operations, worker, backend |
 | [CR-173](04-donation/CR-173-donation-track-by-phone.md)                  | ติดตามและจัดการการบริจาคด้วยเบอร์โทรอย่างเดียว (เข้าถึงเต็ม + มาตรการกันไล่สุ่มเบอร์) — ค้นหาการจองที่ยัง active ใน `DonationBuffer` (ไม่เกิน 72 ชม.) ด้วยเบอร์โทร, คืน `tracking_token` เปิดตั๋วเต็ม/แก้ไข/ยกเลิกได้, limiter แยก + reCAPTCHA gate ป้องกัน enumeration, แก้ worker inbound ให้ normalize เบอร์ก่อน hash | approved | volatile          | 2026-10-17 (approved 2026-10-18) | docs/changes/04-donation/CR-052-donation-system-design-v8.md §2.6, docs/data/api-contract.md §public, docs/features/public-tier-donation-spec.html, docs/data/schema.md §2.3, packages/tent-model (DonationBuffer), worker/src/worker/inbound/donations.py, backend/apiapp/modules/donations, frontend/src/routes/api/public/v1/donations/, frontend/src/routes/(public)/donations/track/ |
 | [CR-174](04-donation/CR-174-donation-campaign-auto-approve.md)          | ประเมินใบบริจาคทีละรายการ — รายการในแคมเปญอนุมัติอัตโนมัติ (ได้ QR ทันที), รายการนอกแคมเปญรอประเมิน, สิทธิ์ผู้บริจาคหลังได้ QR (แก้/ยกเลิก/เลขพัสดุ), Concurrency expected_rev ตอนตรวจรับ, donation schema_v 6 → 7 | approved | volatile          | 2026-10-17 (approved 2026-10-19) | docs/changes/04-donation/CR-052-donation-system-design-v8.md §1.4, docs/data/schema.md §2.3, schema_v donation 6 → 7, docs/data/couchdb-mongodb-sync.md §3.2, docs/data/api-contract.md, frontend donations/operations, worker, backend |
+| [CR-175](04-donation/CR-175-donation-donor-photos.md)                   | ผู้บริจาคแนบรูปของบริจาค (ทั้งใบ) และแสดงให้เจ้าหน้าที่ดูตอนประเมิน/ตรวจรับ — ช่องรูปเฉพาะโหมดพิมพ์เอง สูงสุด 30 รูป/ใบ รวม ≤10MB, BFF ตรวจ magic bytes/ขนาด, worker inbound ผูก `image.donation_id`, worker retention ลบรูปกำพร้าด้วย Mango partial index, donation schema_v 7 → 8, image schema_v 1 → 2 | approved | volatile          | 2026-10-18 (approved 2026-10-20) | docs/data/schema.md §2.3/§1.6, schema_v donation 7 → 8, image 1 → 2, docs/data/api-contract.md, docs/features/public-tier-donation-spec.html, frontend donations/images/kiosk, worker inbound/retention, backend |
 
 ## 05-D-kitchen
 
