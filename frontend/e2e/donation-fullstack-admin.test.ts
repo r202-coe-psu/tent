@@ -482,7 +482,12 @@ test.describe('Donation full-stack: back office', { tag: ['@critical', '@donatio
 				.getByRole('textbox', { name: 'ชื่อผู้บริจาค/ผู้ติดต่อ *' })
 				.fill(`E2E Walk-in ${RUN_ID}`);
 			await page.getByRole('textbox', { name: 'เบอร์โทรศัพท์ (ถ้ามี)' }).fill('0801234567');
-			await page.getByRole('button', { name: /^เลือกประเภทสิ่งของ/ }).click();
+			// Searchable item picker (#638): type part of the name, then pick the row.
+			const itemPicker = page.getByRole('combobox', { name: /^เลือกประเภทสิ่งของ/ });
+			// Thai text is inserted without key events, so open the list with ArrowDown first.
+			await itemPicker.click();
+			await itemPicker.press('ArrowDown');
+			await itemPicker.pressSequentially('สบู่');
 			await page.getByRole('option', { name: /^สบู่ก้อน/ }).click();
 			await page.getByRole('textbox', { name: 'จำนวนที่รับจริง *' }).fill('3');
 			// สบู่ก้อน carries `shelf_life_days`, so the walk-in will not save without an expiry.
