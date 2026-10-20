@@ -26,6 +26,7 @@
 import { test, expect } from '@playwright/test';
 import { bootstrapAdminSession, couchReq } from './helpers/couch';
 import {
+	assertFixtureProvisioned,
 	CAN_WRITE,
 	FIXTURE_LAST_NAME as LAST_NAME,
 	FIXTURE_LAST_NAME_MASKED as LAST_NAME_MASKED,
@@ -140,6 +141,8 @@ test.describe('Public family search: server errors', { tag: ['@public', '@smoke'
 
 test.describe('Public family search: live results', { tag: ['@public', '@critical'] }, () => {
 	test.describe.configure({ mode: 'serial' });
+
+	test.beforeAll(() => assertFixtureProvisioned(FIXTURE));
 
 	// The PII checks below assert the full fixture surname never appears anywhere on the page, so
 	// the target's live system banner must not be able to say the same words (it reads
