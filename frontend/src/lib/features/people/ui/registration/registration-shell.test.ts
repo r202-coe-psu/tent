@@ -152,4 +152,22 @@ describe('RegistrationShell Station 1 single-page (CR-106 / FR-03b-H)', () => {
 		expect(result.body).not.toContain('สัตว์เลี้ยง/ทรัพย์สิน');
 		expect(result.body).not.toContain('เป็นของทั้งครอบครัว');
 	});
+
+	it('scroll-spy jump buttons are type="button" so they never submit the form', () => {
+		const result = render(RegistrationShell, {
+			props: {
+				mode: 'walk-in',
+				onsubmit: vi.fn(),
+				enableMedicalScreening: false
+			}
+		});
+
+		const nav = result.body.match(/<nav class="sticky-section-nav[\s\S]*?<\/nav>/)?.[0] ?? '';
+		const jumpButtons = nav.match(/<button\b[^>]*>/g) ?? [];
+
+		expect(jumpButtons.length).toBeGreaterThanOrEqual(5);
+		for (const tag of jumpButtons) {
+			expect(tag).toContain('type="button"');
+		}
+	});
 });

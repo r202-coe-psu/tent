@@ -5,14 +5,16 @@
  * Source-of-truth for CouchDB view → API mapping (CR-020, T-52).
  *
  * CouchDB view: `_design/app/_view/occupancy?group=true`
- * Keys emitted: 'pre_registered' | 'active' | 'temporary_leave' | 'transferred' |
- *               'checked_out' | 'deceased' | 'cancelled' (schema.md schema_v 6 —
- *               `StayStatus` verbatim). `cancelled` is ignored by the payload
- *               mapper (unknown/extra keys discarded) so it does not inflate total.
+ * Keys emitted: every `current_stay.status` (`StayStatus` verbatim — schema.md §1.1).
+ *               `cancelled` is ignored by the payload mapper (unknown/extra keys
+ *               discarded) so it does not inflate total. `arriving` (CR-106) and
+ *               `room_confirmed` (CR-112) count toward total; only `active` and
+ *               `room_confirmed` count as in the shelter (CR-170).
  *
  * No PII: only aggregate counts leave the server (security-rbac-bestpractices §3).
  */
 import { z } from 'zod';
+import { inShelterFromStatusCounts } from '$lib/features/shared';
 
 /**
  * Shape of one row returned by the occupancy view (?group=true).
@@ -30,8 +32,17 @@ export const OccupancyPayloadSchema = z.object({
 	/** Count of evacuees with status = 'pre_registered' (registered, not yet checked in). */
 	pre_registered: z.number().int().nonnegative(),
 	kiosk_registered: z.number().int().nonnegative(),
-	/** Count of evacuees with status = 'active' (physically present in the shelter). */
+	/** Count of evacuees with status = 'arriving' (reported on site, awaiting screening/allocation — CR-106). */
+	arriving: z.number().int().nonnegative(),
+	/** Count of evacuees with status = 'active' (checked in, zone not yet confirmed). */
 	active: z.number().int().nonnegative(),
+	/** Count of evacuees with status = 'room_confirmed' (arrived at their zone — CR-112). */
+	room_confirmed: z.number().int().nonnegative(),
+	/**
+	 * Physically in the shelter right now = active + room_confirmed (CR-170). Narrower than
+	 * CR-112 "Present", which also counts temporary_leave — that has its own card here.
+	 */
+	in_shelter: z.number().int().nonnegative(),
 	/** Count of evacuees with status = 'temporary_leave' (checked in, temporarily away). */
 	temporary_leave: z.number().int().nonnegative(),
 	/** Count of evacuees with status = 'transferred' (moved to another shelter). */
@@ -60,7 +71,9 @@ export function rowsToOccupancyPayload(
 	}
 	const pre_registered = counts['pre_registered'] ?? 0;
 	const kiosk_registered = counts['kiosk_registered'] ?? 0;
+	const arriving = counts['arriving'] ?? 0;
 	const active = counts['active'] ?? 0;
+	const room_confirmed = counts['room_confirmed'] ?? 0;
 	const temporary_leave = counts['temporary_leave'] ?? 0;
 	const transferred = counts['transferred'] ?? 0;
 	const checked_out = counts['checked_out'] ?? 0;
@@ -69,7 +82,10 @@ export function rowsToOccupancyPayload(
 		shelter_code: shelterCode,
 		pre_registered,
 		kiosk_registered,
+		arriving,
 		active,
+		room_confirmed,
+		in_shelter: inShelterFromStatusCounts(counts),
 		temporary_leave,
 		transferred,
 		checked_out,
@@ -77,7 +93,9 @@ export function rowsToOccupancyPayload(
 		total:
 			pre_registered +
 			kiosk_registered +
+			arriving +
 			active +
+			room_confirmed +
 			temporary_leave +
 			transferred +
 			checked_out +

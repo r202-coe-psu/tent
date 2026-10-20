@@ -48,15 +48,20 @@
 		id = '',
 		isEdit,
 		basePath,
+		editBasePath,
 		siteKind
 	}: {
 		id?: string;
 		isEdit: boolean;
+		/** Cancel/back target. */
 		basePath?: string;
+		/** Prefix of the `…/edit/{code}` route opened after create; defaults to `basePath`. */
+		editBasePath?: string;
 		siteKind?: SiteKind;
 	} = $props();
 
 	const resolvedBasePath = $derived(basePath ?? resolve('/portal'));
+	const resolvedEditBasePath = $derived(editBasePath ?? resolvedBasePath);
 
 	function handleCancelOrBack(e?: MouseEvent) {
 		if (e) e.preventDefault();
@@ -126,7 +131,7 @@
 						// Deep-link to edit so further saves are updates and users unlock.
 						// Success toast comes from useCreateShelter.
 						if (result?.code) {
-							goto(`${resolvedBasePath}/edit/${encodeURIComponent(result.code)}`);
+							goto(`${resolvedEditBasePath}/edit/${encodeURIComponent(result.code)}`);
 						}
 					}
 				});
@@ -257,6 +262,12 @@
 					label: 'เต็มความจุ (Full)',
 					classes: 'border border-amber-200 bg-amber-50 text-amber-900',
 					dot: 'bg-amber-500'
+				};
+			case 'cancelled':
+				return {
+					label: 'ยกเลิกศูนย์ (Cancelled)',
+					classes: 'border border-red-200 bg-red-50 text-red-900',
+					dot: 'bg-red-500'
 				};
 			case 'closed':
 				return {

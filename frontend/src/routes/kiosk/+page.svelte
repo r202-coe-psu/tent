@@ -5,7 +5,9 @@
 		buildKioskContextQuery,
 		getKioskDisplayContext,
 		readKioskDisplayQuery,
-		IdentityMethodSelector
+		IdentityMethodSelector,
+		KioskBannerAttract,
+		KioskTestPrint
 	} from '$lib/features/kiosk';
 	let { data }: PageProps = $props();
 
@@ -22,6 +24,8 @@
 <IdentityMethodSelector
 	{contextQuery}
 	qrCheckInEnabled={data.qrCheckInEnabled}
-	phoneCheckInEnabled={data.phoneCheckInEnabled}
+	reprintEnabled={data.phoneCheckInEnabled}
 	thaidCheckInEnabled={data.thaidCheckInEnabled}
 />
+<KioskTestPrint />
+<KioskBannerAttract mode="live" />

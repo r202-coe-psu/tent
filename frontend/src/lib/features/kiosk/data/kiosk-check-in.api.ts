@@ -57,7 +57,14 @@ export interface KioskCheckInBatchResult extends KioskCheckInResult {
 	retryable_evacuee_ids: string[];
 }
 
-function postKioskRegistration(body: Record<string, unknown>): Promise<{ evacuee_id: string }> {
+/** What the register endpoint returns: the new record plus what the kiosk prints (QR + label). */
+export interface KioskRegistrationResult {
+	evacuee_id: string;
+	qr_payload: string;
+	label: { name: string; phone: string | null };
+}
+
+function postKioskRegistration(body: Record<string, unknown>): Promise<KioskRegistrationResult> {
 	return requestWithTimeout(
 		'/api/v1/kiosk/register',
 		{
@@ -68,7 +75,7 @@ function postKioskRegistration(body: Record<string, unknown>): Promise<{ evacuee
 		},
 		async (response) => {
 			if (!response.ok) throw await requestError(response);
-			return (await response.json()) as { evacuee_id: string };
+			return (await response.json()) as KioskRegistrationResult;
 		}
 	);
 }
@@ -79,7 +86,7 @@ export async function registerKioskWalkIn(
 	photo: KioskPhotoPayload | null,
 	consentedAt: string,
 	phone: string | null = null
-): Promise<{ evacuee_id: string }> {
+): Promise<KioskRegistrationResult> {
 	return postKioskRegistration({
 		source: 'smart-card',
 		card,
@@ -94,13 +101,60 @@ export async function registerKioskThaidWalkIn(
 	sessionId: string,
 	consentedAt: string,
 	phone: string | null
-): Promise<{ evacuee_id: string }> {
+): Promise<KioskRegistrationResult> {
 	return postKioskRegistration({
 		source: 'thaid',
 		session_id: sessionId,
 		phone,
 		consented_at: consentedAt
 	});
+}
+
+/** What the reprint endpoint needs: the phone, who owns it, their id's last four, the members. */
+export interface KioskReprintInput {
+	phone: string;
+	primary_evacuee_id: string;
+	id_last4: string;
+	evacuee_ids: string[];
+}
+
+export interface KioskReprintMember {
+	evacuee_id: string;
+	qr_payload: string;
+	/**
+	 * `zone` is the member's current zone (short name, else full name), or null before one is
+	 * assigned; `stations_passed` (0–3) is how many checklist boxes the label ticks.
+	 */
+	label: { name: string; phone: string | null; zone: string | null; stations_passed: number };
+}
+
+export interface KioskReprintResult {
+	shelter_code: string;
+	members: KioskReprintMember[];
+}
+
+/**
+ * Labels of the phone owner's checked-in household after the visitor typed the last four digits
+ * of the owner's citizen id. Read-only on the server; 403 `KIOSK_REPRINT_VERIFY_FAILED` on a miss.
+ */
+export function reprintKioskLabels(
+	input: KioskReprintInput,
+	options: { signal?: AbortSignal } = {}
+): Promise<KioskReprintResult> {
+	return requestWithTimeout(
+		'/api/v1/kiosk/reprint',
+		{
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			cache: 'no-store',
+			body: JSON.stringify(input)
+		},
+		async (response) => {
+			if (!response.ok) throw await requestError(response);
+			return (await response.json()) as KioskReprintResult;
+		},
+		options.signal
+	);
 }
 
 export class KioskRequestError extends Error {
@@ -122,7 +176,7 @@ export class KioskPartialCheckInError extends Error {
 	}
 }
 
-async function requestError(response: Response): Promise<KioskRequestError> {
+export async function requestError(response: Response): Promise<KioskRequestError> {
 	const body = (await response.json().catch((error: unknown) => {
 		if (error instanceof Error && error.name === 'AbortError') throw error;
 		return null;
@@ -165,7 +219,7 @@ function withTimeout(
 	};
 }
 
-async function requestWithTimeout<T>(
+export async function requestWithTimeout<T>(
 	input: RequestInfo | URL,
 	init: RequestInit,
 	consume: (response: Response) => Promise<T>,

@@ -51,7 +51,7 @@
 	const total = $derived(members.length);
 	const nextStation = $derived<IntakeNextStation>(showHandover ? 'medical' : 'zoning');
 	const nextStationLabel = $derived(
-		nextStation === 'medical' ? 'ไปคัดกรองแพทย์ (สถานี 2)' : 'ไปจัดโซน (สถานี 3)'
+		nextStation === 'medical' ? 'ไปคัดกรองผู้เข้าพัก (สถานี 2)' : 'ไปจัดโซน (สถานี 3)'
 	);
 	const facts = $derived([
 		{ label: 'ครอบครัว', value: household.label || '—' },
@@ -59,7 +59,7 @@
 		{ label: 'สถานะ', value: 'รายงานตัวแล้ว · รอเข้าพัก' },
 		{
 			label: 'ขั้นถัดไป',
-			value: nextStation === 'medical' ? 'คัดกรองแพทย์ (สถานี 2)' : 'จัดโซน (สถานี 3)'
+			value: nextStation === 'medical' ? 'คัดกรองผู้เข้าพัก (สถานี 2)' : 'จัดโซน (สถานี 3)'
 		}
 	]);
 

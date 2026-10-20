@@ -16,6 +16,8 @@
 		backofficeHomePath,
 		isGroup,
 		canSeeNavNode,
+		activeNavHref,
+		navLeafHrefs,
 		type BackofficeNavbarNode
 	} from './backoffice-navbar/static';
 
@@ -37,14 +39,19 @@
 		return path.replace(/\/$/, '');
 	}
 
-	function isActive(href: BackofficeNavbarNode['href']): boolean {
-		if (!href) return false;
+	const navHrefs = navLeafHrefs(backofficeNavbarGroups);
+
+	// Longest-match wins so a nested page (e.g. /kiosks/banners) never lights its parent (/kiosks).
+	const activeHref = $derived.by(() => {
 		let path = normalize(page.url.pathname);
 		if (path.startsWith('/back-office/households')) {
 			path = '/back-office/evacuee-management';
 		}
-		const target = normalize(String(href));
-		return path === target || path.startsWith(target + '/');
+		return activeNavHref(path, navHrefs);
+	});
+
+	function isActive(href: BackofficeNavbarNode['href']): boolean {
+		return !!href && String(href) === activeHref;
 	}
 
 	function groupIsActive(node: BackofficeNavbarNode): boolean {
@@ -173,7 +180,7 @@
 										{#if !collapsed}
 											<span class="flex-1 text-left whitespace-nowrap">{item.label}</span>
 											<ChevronDown
-												class="h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform duration-200 {expanded
+												class="h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 {expanded
 													? 'rotate-180'
 													: ''}"
 											/>
@@ -202,7 +209,7 @@
 														/>
 														<span class="flex-1 text-left whitespace-nowrap">{child.label}</span>
 														<ChevronDown
-															class="h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform duration-200 {subExpanded
+															class="h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 {subExpanded
 																? 'rotate-180'
 																: ''}"
 														/>
@@ -342,7 +349,11 @@
 	class="sticky top-0 z-50 w-full shrink-0 border-b border-sidebar-border bg-card pt-[env(safe-area-inset-top)] lg:hidden"
 >
 	<div class="flex h-16 w-full items-center justify-between px-4">
-		<a href={backofficeHomePath} class="flex min-h-11 items-center gap-3" onclick={closeMobileMenu}>
+		<a
+			href={backofficeHomePath}
+			class="flex min-h-11 min-w-0 items-center gap-3"
+			onclick={closeMobileMenu}
+		>
 			<img
 				src="/logo.png"
 				alt="PSU Smart Shelter"
@@ -362,21 +373,21 @@
 
 		<button
 			type="button"
-			class="flex min-h-11 min-w-11 items-center justify-center rounded-lg border border-sidebar-border bg-card text-muted-foreground transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none"
+			class="flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-lg border border-sidebar-border bg-card text-muted-foreground transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none"
 			onclick={() => (mobileMenuOpen = !mobileMenuOpen)}
 			aria-label={mobileMenuOpen ? 'ปิดเมนู' : 'เปิดเมนู'}
 			aria-expanded={mobileMenuOpen}
 			aria-controls="backoffice-mobile-nav"
 		>
-			<Menu class="h-5 w-5" />
+			<Menu class="h-6 w-6" />
 		</button>
 	</div>
 
 	<Sheet.Root bind:open={mobileMenuOpen}>
 		<Sheet.Content
 			id="backoffice-mobile-nav"
-			side="left"
-			class="gap-0 border-sidebar-border bg-card p-0 text-foreground shadow-none"
+			side="right"
+			class="h-dvh w-[88%] gap-0 border-sidebar-border bg-card p-0 text-foreground shadow-none"
 		>
 			<Sheet.Header class="border-b border-sidebar-border p-4 pr-14">
 				<Sheet.Title
@@ -398,7 +409,7 @@
 						onclick={closeMobileMenu}
 						title="กลับหน้าเลือกเมนูหลัก"
 					>
-						<House class="h-4 w-4 shrink-0 text-muted-foreground" />
+						<House class="h-5 w-5 shrink-0 text-muted-foreground" />
 						<span>กลับหน้าเลือกเมนูหลัก</span>
 					</a>
 					<BackofficeShelterSelect />
@@ -429,13 +440,13 @@
 												aria-expanded={expanded}
 											>
 												<Icon
-													class="h-4 w-4 shrink-0 {active
+													class="h-5 w-5 shrink-0 {active
 														? 'text-primary'
 														: 'text-muted-foreground'}"
 												/>
 												<span class="flex-1 text-left whitespace-nowrap">{item.label}</span>
 												<ChevronDown
-													class="h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform duration-200 {expanded
+													class="h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 {expanded
 														? 'rotate-180'
 														: ''}"
 												/>
@@ -456,14 +467,14 @@
 																aria-expanded={subExpanded}
 															>
 																<SubIcon
-																	class="h-4 w-4 shrink-0 {subActive
+																	class="h-5 w-5 shrink-0 {subActive
 																		? 'text-primary'
 																		: 'text-muted-foreground'}"
 																/>
 																<span class="flex-1 text-left whitespace-nowrap">{child.label}</span
 																>
 																<ChevronDown
-																	class="h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform duration-200 {subExpanded
+																	class="h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 {subExpanded
 																		? 'rotate-180'
 																		: ''}"
 																/>
@@ -483,7 +494,7 @@
 																				aria-current={subChildActive ? 'page' : undefined}
 																			>
 																				<SubChildIcon
-																					class="h-4 w-4 shrink-0 {subChildActive
+																					class="h-5 w-5 shrink-0 {subChildActive
 																						? 'text-primary-foreground'
 																						: 'text-muted-foreground'}"
 																				/>
@@ -495,7 +506,7 @@
 																				aria-disabled="true"
 																			>
 																				<SubChildIcon
-																					class="h-4 w-4 shrink-0 text-muted-foreground"
+																					class="h-5 w-5 shrink-0 text-muted-foreground"
 																				/>
 																				<span class="whitespace-nowrap">{subChild.label}</span>
 																			</span>
@@ -516,7 +527,7 @@
 																	aria-current={childActive ? 'page' : undefined}
 																>
 																	<ChildIcon
-																		class="h-4 w-4 shrink-0 {childActive
+																		class="h-5 w-5 shrink-0 {childActive
 																			? 'text-primary-foreground'
 																			: 'text-muted-foreground'}"
 																	/>
@@ -527,7 +538,7 @@
 																	class="ml-4 flex min-h-11 cursor-not-allowed items-center gap-3 rounded-xl px-4 py-3 text-muted-foreground opacity-50"
 																	aria-disabled="true"
 																>
-																	<ChildIcon class="h-4 w-4 shrink-0 text-muted-foreground" />
+																	<ChildIcon class="h-5 w-5 shrink-0 text-muted-foreground" />
 																	<span class="whitespace-nowrap">{child.label}</span>
 																</span>
 															{/if}
@@ -547,7 +558,7 @@
 													aria-current={active ? 'page' : undefined}
 												>
 													<Icon
-														class="h-4 w-4 shrink-0 {active
+														class="h-5 w-5 shrink-0 {active
 															? 'text-primary-foreground'
 															: 'text-muted-foreground'}"
 													/>
@@ -558,7 +569,7 @@
 													class="flex min-h-11 cursor-not-allowed items-center gap-3 rounded-xl px-4 py-3 text-muted-foreground opacity-50"
 													aria-disabled="true"
 												>
-													<Icon class="h-4 w-4 shrink-0 text-muted-foreground" />
+													<Icon class="h-5 w-5 shrink-0 text-muted-foreground" />
 													<span class="whitespace-nowrap">{item.label}</span>
 												</span>
 											{/if}

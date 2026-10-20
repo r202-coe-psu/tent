@@ -1,5 +1,6 @@
 import Decimal from 'decimal.js';
 import { z } from 'zod';
+import { isSystemAdmin } from '$lib/auth/roles';
 import { SOP_RATIO_KEYS, type SopRatioKey } from '$lib/features/sop-ratios/domain/sop-ratio';
 import {
 	DAILY_SOP_ROLE_QUESTION_IDS,
@@ -429,8 +430,7 @@ export const canAssessRole = (
 	roles: readonly string[],
 	shelterCode: string
 ) => {
-	if (roles.includes('system_admin') || hasCapability('shelter_manager', roles, shelterCode))
-		return true;
+	if (isSystemAdmin(roles) || hasCapability('shelter_manager', roles, shelterCode)) return true;
 	const roleDefinition = roleForCode(role);
 	return (
 		roleDefinition?.capabilities.some((capability) =>

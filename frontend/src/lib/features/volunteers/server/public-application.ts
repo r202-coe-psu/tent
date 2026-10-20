@@ -2,9 +2,14 @@ import { randomBytes } from 'node:crypto';
 import { sha256Hex } from '$lib/db/hash';
 import { ulid } from '$lib/db/ulid';
 import { nextVolunteerCode } from '../domain/volunteer-code';
+import { normalizePhone } from '../domain/phone';
 import { DEFAULT_CONTROLLED_SKILLS } from '../domain/skills';
 import { resolveSkillLabel, skillOptionsFromMaster } from '../domain/skill-catalog';
-import type { VolunteerApplyInput } from '$lib/features/volunteer-portal/domain/volunteer';
+import {
+	formatMintedTicketToken,
+	TRACKING_TOKEN_RANDOM_BYTES,
+	type VolunteerApplyInput
+} from '$lib/features/volunteer-portal/domain/volunteer';
 import {
 	findAsPublicWriter,
 	getAsPublicWriter,
@@ -99,6 +104,7 @@ export class PublicApplicationError extends Error {
 			| 'AMBIGUOUS_VOLUNTEER'
 			| 'TIME_CONFLICT'
 			| 'JOB_NOT_READY'
+			| 'WRITER_UNAVAILABLE'
 			| 'WRITE_FAILED',
 		readonly httpStatus: number = 409
 	) {
@@ -109,13 +115,6 @@ export class PublicApplicationError extends Error {
 
 function normalizedJobId(value: string): string {
 	return value.startsWith('job:') ? value : `job:${value}`;
-}
-
-function normalizePhone(value: string): string {
-	const digits = value.replace(/[\s\-()]/g, '');
-	if (digits.startsWith('+66')) return `0${digits.slice(3)}`;
-	if (digits.startsWith('66') && digits.length >= 11) return `0${digits.slice(2)}`;
-	return digits;
 }
 
 function normalizedSkill(value: string): string {
@@ -169,6 +168,28 @@ async function hasActiveBookingConflict(
 		const existing = bookingWindowFrom(assignment);
 		return existing ? windowsOverlap(candidate, existing) : true;
 	});
+}
+
+/**
+ * Read the job as the public writer.
+ *
+ * A 401/403 means CouchDB refused the `public_writer` user itself — missing, wrong
+ * password, or not a member of this shelter's database — which is a deployment fault, not
+ * a job that is still being set up. It gets its own code and a server log naming the fix,
+ * instead of reaching the applicant as "JOB_NOT_READY" and leaving everyone guessing.
+ */
+async function readJob(dbName: string, jobId: string): Promise<CouchJob> {
+	const res = await getAsPublicWriter(dbName, jobId);
+	if (res.status === 404) throw new PublicApplicationError('JOB_NOT_FOUND', 404);
+	if (res.status === 401 || res.status === 403) {
+		console.error(
+			`[public-volunteer-apply] CouchDB refused public_writer on ${dbName} (HTTP ${res.status}) — ` +
+				'check COUCHDB_PUBLIC_WRITER_URL and run `pnpm redeploy:access --write --confirm`'
+		);
+		throw new PublicApplicationError('WRITER_UNAVAILABLE', 503);
+	}
+	if (res.status >= 400 || !res.data) throw new PublicApplicationError('JOB_NOT_READY', 409);
+	return res.data as CouchJob;
 }
 
 async function findShelterCodeForJob(jobId: string, preferred?: string): Promise<string | null> {
@@ -385,11 +406,7 @@ async function reserveSlot(
 	selected: CouchJobShift | null
 ): Promise<void> {
 	for (let attempt = 0; attempt < MAX_QUOTA_RETRIES; attempt++) {
-		const currentRes = await getAsPublicWriter(dbName, jobId);
-		if (currentRes.status === 404) throw new PublicApplicationError('JOB_NOT_FOUND', 404);
-		if (currentRes.status >= 400 || !currentRes.data)
-			throw new PublicApplicationError('JOB_NOT_READY', 409);
-		const current = currentRes.data as CouchJob;
+		const current = await readJob(dbName, jobId);
 		if (current.status !== 'open') throw new PublicApplicationError('JOB_NOT_OPEN', 409);
 
 		const next = structuredClone(current) as CouchJob;
@@ -466,9 +483,14 @@ export async function preflightPublicVolunteerApplication(
 	const jobId = normalizedJobId(jobIdInput);
 	const shelterCode = await findShelterCodeForJob(jobId, input.shelter_code);
 	if (!shelterCode) throw new PublicApplicationError('JOB_NOT_FOUND', 404);
-	const jobRes = await getAsPublicWriter(shelterDbName(shelterCode), jobId);
-	if (jobRes.status === 404) throw new PublicApplicationError('JOB_NOT_FOUND', 404);
-	if (jobRes.status >= 400 || !jobRes.data) throw new PublicApplicationError('JOB_NOT_READY', 409);
+	// The same job and shift checks as the apply below, so a closed job or a shift that is
+	// gone fails here with its own message rather than after the applicant has confirmed.
+	const job = await readJob(shelterDbName(shelterCode), jobId);
+	if (job.type !== 'job' || job.shelter_code.toUpperCase() !== shelterCode) {
+		throw new PublicApplicationError('JOB_NOT_FOUND', 404);
+	}
+	if (job.status !== 'open') throw new PublicApplicationError('JOB_NOT_OPEN', 409);
+	selectedShift(job, input);
 	const hash = await sha256Hex(normalizePhone(input.phone));
 	const volunteers = await matchingVolunteers(shelterDbName(shelterCode), hash);
 	if (volunteers.length === 0) {
@@ -528,10 +550,7 @@ export async function applyPublicVolunteerApplication(
 	const shelterCode = await findShelterCodeForJob(jobId, input.shelter_code);
 	if (!shelterCode) throw new PublicApplicationError('JOB_NOT_FOUND', 404);
 	const dbName = shelterDbName(shelterCode);
-	const jobRes = await getAsPublicWriter(dbName, jobId);
-	if (jobRes.status === 404) throw new PublicApplicationError('JOB_NOT_FOUND', 404);
-	if (jobRes.status >= 400 || !jobRes.data) throw new PublicApplicationError('JOB_NOT_READY', 409);
-	const job = jobRes.data as CouchJob;
+	const job = await readJob(dbName, jobId);
 	if (job.type !== 'job' || job.shelter_code.toUpperCase() !== shelterCode) {
 		throw new PublicApplicationError('JOB_NOT_FOUND', 404);
 	}
@@ -574,7 +593,7 @@ export async function applyPublicVolunteerApplication(
 	// 16 random bytes, hex-encoded (32 hex chars) — same convention as the backend's
 	// `secrets.token_hex(16)` for this prefix, not a ULID: this is a bearer secret, not an
 	// identifier, so it must come from a CSPRNG rather than something with a time component.
-	const trackingToken = `TKT-VOL-${randomBytes(16).toString('hex').toUpperCase()}`;
+	const trackingToken = formatMintedTicketToken(randomBytes(TRACKING_TOKEN_RANDOM_BYTES));
 	const trackingTokenHash = await sha256Hex(trackingToken);
 
 	// Per-volunteer token (separate from the per-application `trackingToken` above): minted
@@ -585,7 +604,7 @@ export async function applyPublicVolunteerApplication(
 	const existingVolunteerToken = existing?.tracking_token_hash;
 	const mintedVolunteerToken = existingVolunteerToken
 		? null
-		: `TKT-VOL-${randomBytes(16).toString('hex').toUpperCase()}`;
+		: formatMintedTicketToken(randomBytes(TRACKING_TOKEN_RANDOM_BYTES));
 	const volunteerTokenHash = mintedVolunteerToken
 		? await sha256Hex(mintedVolunteerToken)
 		: existingVolunteerToken;

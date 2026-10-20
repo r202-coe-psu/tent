@@ -109,15 +109,26 @@ export async function teardownShelter(code: string): Promise<void> {
 	if (docGone && dbGone) forgetCreatedShelter(code);
 }
 
-/** Number of public search hits for `query` via the BFF. */
-export async function publicSearchCount(query: string): Promise<number> {
+/** A public search hit as the BFF returns it (the fields the suites assert on). */
+export interface PublicSearchHit {
+	status: string;
+	checked_in_at: string | null;
+}
+
+/** Public search hits for `query` via the BFF — the `public_persons` projection as the public sees it. */
+export async function publicSearchHits(query: string): Promise<PublicSearchHit[]> {
 	const res = await fetch(`${bffBase()}/occupants`, {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
 		body: JSON.stringify({ search: query })
 	});
 	if (!res.ok) throw new Error(`search HTTP ${res.status}`);
-	return ((await res.json()) as { results: unknown[] }).results.length;
+	return ((await res.json()) as { results: PublicSearchHit[] }).results;
+}
+
+/** Number of public search hits for `query` via the BFF. */
+export async function publicSearchCount(query: string): Promise<number> {
+	return (await publicSearchHits(query)).length;
 }
 
 interface FaqEntry {

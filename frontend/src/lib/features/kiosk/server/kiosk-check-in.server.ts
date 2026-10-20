@@ -1,7 +1,11 @@
 import { z } from 'zod';
 import { now } from '$lib/db/model';
 import { deriveHouseholdStatus, stayStatusSchema } from '$lib/features/people/domain/people';
-import { isAlreadyCheckedInStatus, isListedHouseholdMember } from '../domain/check-in-status';
+import {
+	isAlreadyCheckedInStatus,
+	isListedHouseholdMember,
+	isReprintableStatus
+} from '../domain/check-in-status';
 import { normalizeKioskPhone, phoneVariants } from '../domain/phone';
 import {
 	groupPhoneMatches,
@@ -20,7 +24,7 @@ import {
 } from './kiosk-photo.server';
 
 const ULID = '[0-7][0-9A-HJKMNP-TV-Z]{25}';
-const evacueeIdSchema = z.string().regex(new RegExp(`^evacuee:${ULID}$`, 'i'));
+export const evacueeIdSchema = z.string().regex(new RegExp(`^evacuee:${ULID}$`, 'i'));
 
 const thaidSessionIdSchema = z.string().regex(/^[0-9a-f]{32}$/);
 
@@ -92,7 +96,7 @@ export const kioskCheckInInputSchema = z
 	});
 
 type Stay = { status?: string; zone?: string | null; since?: string };
-type EvacueeDoc = {
+export type EvacueeDoc = {
 	_id: string;
 	_rev?: string;
 	type?: string;
@@ -192,13 +196,24 @@ function responseStatus(error: unknown): number | null {
 	return typeof status === 'number' ? status : null;
 }
 
+/**
+ * What a household member can be selected for: a check-in (`pre_registered` only, the card / QR /
+ * ThaiD gates) or a QR reprint (arriving / active / room_confirmed only, the phone gate).
+ */
+type SelectableFor = 'check_in' | 'reprint';
+
+function isSelectableFor(doc: EvacueeDoc, mode: SelectableFor): boolean {
+	const status = doc.current_stay?.status;
+	return mode === 'reprint' ? isReprintableStatus(status) : status === 'pre_registered';
+}
+
 function toSummary(
 	doc: EvacueeDoc,
 	primaryId: string,
-	options: { matchedPhoneIds?: ReadonlySet<string> } = {}
+	options: { matchedPhoneIds?: ReadonlySet<string>; selectableFor?: SelectableFor } = {}
 ): KioskEvacueeSummary {
 	const status = doc.current_stay?.status ?? 'unknown';
-	const selectable = doc.registered_via === 'web' && status === 'pre_registered';
+	const selectable = isSelectableFor(doc, options.selectableFor ?? 'check_in');
 	return {
 		evacuee_id: doc._id,
 		first_name: doc.first_name ?? '',
@@ -212,7 +227,10 @@ function toSummary(
 	};
 }
 
-function toLabelIdentity(doc: EvacueeDoc): KioskLabelIdentity {
+/** Unmasked name + phone for the printed label (check-in and a fresh walk-in registration). */
+export function toLabelIdentity(
+	doc: Pick<EvacueeDoc, 'first_name' | 'last_name' | 'phone'>
+): KioskLabelIdentity {
 	const name = [doc.first_name, doc.last_name]
 		.map((part) => part?.trim())
 		.filter(Boolean)
@@ -252,7 +270,7 @@ async function expandHousehold(
 	return members;
 }
 
-async function getById(dbName: string, id: string): Promise<EvacueeDoc | null> {
+export async function getById(dbName: string, id: string): Promise<EvacueeDoc | null> {
 	try {
 		const doc = await adminFetch<EvacueeDoc>(`/${dbName}/${encodeURIComponent(id)}`);
 		return isEvacueeDoc(doc) ? doc : null;
@@ -272,8 +290,8 @@ async function lookupByPhone(
 
 	const dbName = shelterDbName(shelterCode);
 	const variants = phoneVariants(canonical);
-	// Query each stored representation with equality so CouchDB can use the
-	// (type, phone) index. The second query covers legacy +66 values.
+	// Query each stored representation with equality so CouchDB can use the (type, phone) index.
+	// The +66 variant covers legacy values. Every channel in the shelter is in scope.
 	const pageLimit = 50;
 	const maxPages = 20;
 	const docsById = new Map<string, EvacueeDoc>();
@@ -287,14 +305,12 @@ async function lookupByPhone(
 					selector: {
 						type: 'evacuee',
 						shelter_code: shelterCode,
-						registered_via: 'web',
 						phone
 					},
 					fields: [
 						'_id',
 						'type',
 						'shelter_code',
-						'registered_via',
 						'household_id',
 						'created_at',
 						'current_stay',
@@ -398,10 +414,9 @@ async function lookupByPhone(
 						.filter(Boolean)
 						.join(' '),
 					member_count: visibleMembers.length,
-					pending_count: visibleMembers.filter(
-						(member) =>
-							member.registered_via === 'web' && member.current_stay?.status === 'pre_registered'
-					).length
+					// Phone is the reprint gate: counts members whose QR can be reprinted.
+					pending_count: visibleMembers.filter((member) => isSelectableFor(member, 'reprint'))
+						.length
 				};
 			});
 			return { kind: 'candidates', shelter_code: shelterCode, candidates };
@@ -419,7 +434,9 @@ async function lookupByPhone(
 		name_masked: true,
 		shelter_code: shelterCode,
 		primary_evacuee_id: primary._id,
-		members: members.map((member) => toSummary(member, primary._id, { matchedPhoneIds }))
+		members: members.map((member) =>
+			toSummary(member, primary._id, { matchedPhoneIds, selectableFor: 'reprint' })
+		)
 	};
 }
 
@@ -478,10 +495,7 @@ export async function lookupPreRegisteredEvacuee(
 	}
 
 	const eligible = candidates.filter(
-		(doc) =>
-			doc.shelter_code === shelterCode &&
-			doc.registered_via === 'web' &&
-			isListedHouseholdMember(doc)
+		(doc) => doc.shelter_code === shelterCode && isListedHouseholdMember(doc)
 	);
 	if (eligible.length !== 1) return { kind: 'not_found', can_register: false };
 
@@ -515,12 +529,7 @@ export async function checkInSelectedMembers(
 	) {
 		throw new KioskThaidIdentityMismatchError();
 	}
-	if (
-		!primary ||
-		primary.shelter_code !== shelterCode ||
-		primary.registered_via !== 'web' ||
-		!isListedHouseholdMember(primary)
-	) {
+	if (!primary || primary.shelter_code !== shelterCode || !isListedHouseholdMember(primary)) {
 		return normalizedEvacueeIds.map((evacueeId) => ({
 			evacuee_id: evacueeId,
 			status: 'not_eligible'
@@ -544,11 +553,7 @@ export async function checkInSelectedMembers(
 		const belongsToHousehold =
 			member._id === primary._id ||
 			(Boolean(primary.household_id) && member.household_id === primary.household_id);
-		if (
-			!belongsToHousehold ||
-			member.registered_via !== 'web' ||
-			!isListedHouseholdMember(member)
-		) {
+		if (!belongsToHousehold || !isListedHouseholdMember(member)) {
 			results.push({ evacuee_id: evacueeId, status: 'not_eligible' });
 			continue;
 		}
@@ -611,7 +616,7 @@ export async function checkInSelectedMembers(
 }
 
 /** Keep the legacy household status projection aligned with the member stay records. */
-async function refreshHouseholdStatus(
+export async function refreshHouseholdStatus(
 	dbName: string,
 	householdId: string,
 	shelterCode: string

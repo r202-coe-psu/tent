@@ -162,7 +162,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
 		const counted = toCountedItems(countedLines);
 
 		try {
-			await assertCountedAgainstCatalog(counted);
+			await assertCountedAgainstCatalog(counted, dbName);
 		} catch (e) {
 			return json(
 				{

@@ -109,7 +109,9 @@ const summary = {
 	status: 'active',
 	last_seen_at: null,
 	staff_pin_set: true,
-	staff_pin_is_default: false
+	staff_pin_is_default: false,
+	banner_enabled: true,
+	screen_type: 'compact'
 };
 
 describe('listScannerDevices', () => {
@@ -159,6 +161,14 @@ describe('updateScannerDevice', () => {
 		expect(init.method).toBe('PATCH');
 		expect(new Headers(init.headers).get('content-type')).toBe('application/json');
 		expect(JSON.parse(init.body as string)).toEqual({ status: 'inactive' });
+	});
+
+	it('patches banner_enabled and returns it from the summary (FR-KBR-36)', async () => {
+		const updated = { ...summary, banner_enabled: false };
+		fetchMock.mockResolvedValueOnce(respond(200, updated));
+		expect(await updateScannerDevice('kiosk-01', { banner_enabled: false })).toEqual(updated);
+		const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+		expect(JSON.parse(init.body as string)).toEqual({ banner_enabled: false });
 	});
 
 	it('throws the server message on an error envelope', async () => {

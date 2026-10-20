@@ -68,7 +68,7 @@
 		assigned: 'รับกะแล้ว',
 		standby: 'รอสแตนด์บาย',
 		checked_in: 'ปฏิบัติหน้าที่อยู่',
-		completed: 'เสร็จสิ้นภารกิจ',
+		completed: 'เสร็จสิ้นงานอาสาสมัคร',
 		no_show: 'ขาดปฏิบัติงาน',
 		cancelled: 'ยกเลิก'
 	};
@@ -166,7 +166,7 @@
 		{/if}
 	</div>
 
-	<!-- กะ / ภารกิจ -->
+	<!-- กะ / งานอาสาสมัคร -->
 	<div class="min-w-0 space-y-1">
 		<p class="text-sm font-semibold break-words text-foreground">
 			{jobTitle ?? assignment.station}

@@ -3,7 +3,9 @@
  *
  * Returns daily evacuee registration counts for the shelter, optionally
  * filtered to a date range via `?from=YYYY-MM-DD&to=YYYY-MM-DD`.
- * When absent the range defaults to the past 30 days (see domain/schema.ts).
+ * When `from` is absent the range starts the day the shelter was created (registry
+ * `created_at`, or the earliest movement if one predates it); `to` defaults to today,
+ * both Asia/Bangkok (see `defaultRangeFrom` in domain/registration.schema.ts).
  *
  * CouchDB view: `registrations_by_date_status?group=true`
  * Key shape: [YYYY-MM-DD, series]  →  count
@@ -26,9 +28,10 @@ import {
 	RegistrationsQuerySchema,
 	RegistrationsPayloadSchema,
 	rowsToRegistrationsPayload,
-	defaultDateRange
+	defaultRangeFrom
 } from '$lib/features/dashboard';
-import type { ViewResult } from '$lib/server/shelters.admin';
+import { findMasterByCode, type ViewResult } from '$lib/server/shelters.admin';
+import { bangkokToday } from '$lib/utils/date';
 import { checkViewDeployment } from '$lib/features/shelters/server/view-version-guard';
 
 export const prerender = false;
@@ -36,6 +39,12 @@ export const prerender = false;
 // High-value sentinel: ensures all string sub-keys under a date prefix are included
 // when used as endkey. (couchdb-pouchdb-bestpractices §6 CONVENTIONS.md §5)
 const SENTINEL = '\ufff0';
+
+/** The date of the first grouped row — rows come back sorted by `[date, series]`. */
+function firstRowDate(rows: { key: string | string[] }[]): string | undefined {
+	const key = rows[0]?.key;
+	return Array.isArray(key) ? key[0] : key;
+}
 
 export const GET: RequestHandler = async ({ params, request, url }) => {
 	try {
@@ -47,12 +56,13 @@ export const GET: RequestHandler = async ({ params, request, url }) => {
 			from: url.searchParams.get('from') ?? undefined,
 			to: url.searchParams.get('to') ?? undefined
 		};
-		const query = RegistrationsQuerySchema.parse(rawQuery);
+		const parsed = RegistrationsQuerySchema.safeParse(rawQuery);
+		if (!parsed.success) {
+			throw new ServiceError('VALIDATION', parsed.error.issues[0]?.message ?? 'Invalid date range');
+		}
+		const query = parsed.data;
 
-		// Apply defaults when params are absent.
-		const defaults = defaultDateRange();
-		const from = query.from ?? defaults.from;
-		const to = query.to ?? defaults.to;
+		const to = query.to ?? bangkokToday();
 
 		const db = `shelter_${code.toLowerCase()}`;
 
@@ -66,9 +76,14 @@ export const GET: RequestHandler = async ({ params, request, url }) => {
 
 		// CouchDB date-range query with the high-value sentinel on endkey
 		// so all documents on the `to` date are included. Array keys are used for [date, series].
+		// Without `from` the view is read from its first key, which also tells us the
+		// earliest movement — one grouped row per day and series, so this stays small.
+		const startkey = query.from
+			? `&startkey=${encodeURIComponent(JSON.stringify([query.from, '']))}`
+			: '';
 		const viewPath =
 			`/${db}/_design/app/_view/registrations_by_date_status?group=true` +
-			`&startkey=${encodeURIComponent(JSON.stringify([from, '']))}` +
+			startkey +
 			`&endkey=${encodeURIComponent(JSON.stringify([to + SENTINEL, SENTINEL]))}`;
 
 		const res = await adminRaw(viewPath, 'GET');
@@ -81,6 +96,9 @@ export const GET: RequestHandler = async ({ params, request, url }) => {
 		}
 
 		const rows = (res.data as ViewResult).rows ?? [];
+		const from =
+			query.from ??
+			defaultRangeFrom((await findMasterByCode(code))?.created_at, firstRowDate(rows), to);
 		const payload = RegistrationsPayloadSchema.parse(
 			rowsToRegistrationsPayload(code, rows, from, to)
 		);

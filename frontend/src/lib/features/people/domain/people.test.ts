@@ -29,6 +29,8 @@ import {
 	matchesEvacueePhoneSearch,
 	matchesEvacueeSearch,
 	zoneLabel,
+	stayZoneName,
+	labelZoneName,
 	isEvacuee,
 	createHousehold,
 	isHousehold,
@@ -41,6 +43,7 @@ import {
 	MANUAL_HOUSEHOLD_STATUS_TRANSITIONS,
 	evacueeInputSchema,
 	station1EvacueeInputSchema,
+	withoutBookingRef,
 	triageLevelSchema,
 	screeningInputSchema,
 	householdPreRegisterEvacueeSchema,
@@ -172,7 +175,7 @@ describe('vulnerable_groups vs special_needs', () => {
 		);
 		expect(e.vulnerable_groups).toEqual(['wheelchair', 'pregnant']);
 		expect(e.special_needs).toEqual(['ใช้ออกซิเจน']);
-		expect(e.schema_v).toBe(13);
+		expect(e.schema_v).toBe(14);
 
 		const bare = createEvacuee(
 			{ first_name: 'A', last_name: 'B', gender: 'other', phone: null },
@@ -245,7 +248,7 @@ describe('Anonymous ID', () => {
 			},
 			ctx
 		);
-		expect(a.schema_v).toBe(13);
+		expect(a.schema_v).toBe(14);
 		expect(a.person_id?.cardType).toBe('anonymous');
 		expect(isAnonymousId(a.person_id?.number ?? '')).toBe(true);
 		expect(b.person_id?.number).not.toBe(a.person_id?.number);
@@ -314,7 +317,7 @@ describe('createEvacuee', () => {
 		);
 		expect(e._id.startsWith('evacuee:')).toBe(true);
 		expect(e.type).toBe('evacuee');
-		expect(e.schema_v).toBe(13);
+		expect(e.schema_v).toBe(14);
 		expect(e.shelter_code).toBe('SH001');
 		expect(e.created_by).toBe('staff1');
 		expect(e.created_at).toBe(e.updated_at);
@@ -338,7 +341,7 @@ describe('createEvacuee', () => {
 			},
 			ctx
 		);
-		expect(e.schema_v).toBe(13);
+		expect(e.schema_v).toBe(14);
 		expect(e.current_stay.status).toBe('arriving');
 	});
 
@@ -363,7 +366,7 @@ describe('createEvacuee', () => {
 		expect(kioskEv.last_name).toBe('รักชาติ');
 		expect(kioskEv.birth_year).toBe(2533);
 		expect(kioskEv.age).toBe(36);
-		expect(kioskEv.current_stay.status).toBe('kiosk_registered');
+		expect(kioskEv.current_stay.status).toBe('arriving');
 		expect(kioskEv.household_id).toBeNull();
 		expect(kioskEv.registered_via).toBe('kiosk');
 		expect(kioskEv.person_id?.number).toBe('1234567890121');
@@ -1723,6 +1726,53 @@ describe('matchesEvacueeSearch', () => {
 	});
 });
 
+describe('stayZoneName', () => {
+	const zones = [{ code: 'z1', name: 'โซนชาย' }];
+
+	it('returns null when no zone is assigned', () => {
+		expect(stayZoneName(null, zones)).toBeNull();
+		expect(stayZoneName(undefined, zones)).toBeNull();
+		expect(stayZoneName('  ', zones)).toBeNull();
+	});
+
+	it('resolves the zone name by code, case-insensitively', () => {
+		expect(stayZoneName('Z1', zones)).toBe('โซนชาย');
+	});
+
+	it('falls back to the code when the name is unknown', () => {
+		expect(stayZoneName('z9', zones)).toBe('z9');
+		expect(stayZoneName('z1')).toBe('z1');
+		expect(stayZoneName('z1', [{ code: 'z1', name: '  ' }])).toBe('z1');
+	});
+});
+
+describe('labelZoneName', () => {
+	const zones = [
+		{ code: 'z1', name: 'โซนผู้สูงอายุ อาคาร 2', short_name: 'A3' },
+		{ code: 'z2', name: 'โซนหญิง', short_name: null },
+		{ code: 'z3', name: 'โซนชาย', short_name: '  ' }
+	];
+
+	it('returns null when no zone is assigned', () => {
+		expect(labelZoneName(null, zones)).toBeNull();
+		expect(labelZoneName(' ', zones)).toBeNull();
+	});
+
+	it('prints the short name when the zone has one', () => {
+		expect(labelZoneName('Z1', zones)).toBe('A3');
+	});
+
+	it('falls back to the full zone name without a short name', () => {
+		expect(labelZoneName('z2', zones)).toBe('โซนหญิง');
+		expect(labelZoneName('z3', zones)).toBe('โซนชาย');
+	});
+
+	it('falls back to the code for an unknown zone', () => {
+		expect(labelZoneName('z9', zones)).toBe('z9');
+		expect(labelZoneName('z1')).toBe('z1');
+	});
+});
+
 describe('zoneLabel', () => {
 	it('returns em dash when zone is missing', () => {
 		expect(zoneLabel(null)).toBe('—');
@@ -1873,5 +1923,48 @@ describe('preferred_zone (schema_v 13, CR-159)', () => {
 			'preferred_zone'
 		);
 		expect(createEvacuee(base, ctx)).not.toHaveProperty('preferred_zone');
+	});
+});
+
+describe('evacuee booking_ref (CR-169, schema_v 14)', () => {
+	const base = { first_name: 'A', last_name: 'B', gender: 'other' as const, phone: null };
+
+	it('keeps booking_ref when given', () => {
+		const e = createEvacuee({ ...base, booking_ref: 'BK-01TEST' }, ctx);
+		expect(e.booking_ref).toBe('BK-01TEST');
+		expect(e.schema_v).toBe(14);
+	});
+
+	it('omits the booking_ref key when not given, null, or empty', () => {
+		expect(createEvacuee(base, ctx)).not.toHaveProperty('booking_ref');
+		expect(createEvacuee({ ...base, booking_ref: null }, ctx)).not.toHaveProperty('booking_ref');
+		expect(createEvacuee({ ...base, booking_ref: '' }, ctx)).not.toHaveProperty('booking_ref');
+	});
+
+	it('omits the booking_ref key when it is whitespace only', () => {
+		expect(createEvacuee({ ...base, booking_ref: '   ' }, ctx)).not.toHaveProperty('booking_ref');
+	});
+
+	it('strips booking_ref from the form-facing schemas (FR-61)', () => {
+		expect(station1EvacueeInputSchema.parse({ ...base, booking_ref: 'BK-X' })).not.toHaveProperty(
+			'booking_ref'
+		);
+		expect(
+			householdPreRegisterEvacueeSchema.parse({
+				...base,
+				person_id: { cardType: 'national_id', number: '1234567890121' },
+				emergency_contact: { name: 'ก', phone: '0899999999', relation: 'ญาติ' },
+				booking_ref: 'BK-X'
+			})
+		).not.toHaveProperty('booking_ref');
+	});
+
+	it('withoutBookingRef drops only booking_ref and does not mutate the input', () => {
+		const input = { ...base, booking_ref: 'BK-X' };
+		const out = withoutBookingRef(input);
+		expect(out).not.toHaveProperty('booking_ref');
+		expect(out).toEqual(base);
+		expect(input.booking_ref).toBe('BK-X');
+		expect(withoutBookingRef(base)).toEqual(base);
 	});
 });

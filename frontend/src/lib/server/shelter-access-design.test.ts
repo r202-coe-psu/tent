@@ -11,8 +11,13 @@ import {
 import { adjustReasonSchema } from '$lib/features/operations';
 import {
 	buildValidateDocUpdate,
+	DAILY_SOP_ROLE_MANGO_INDEX,
 	KIOSK_LOOKUP_MANGO_INDEXES,
-	REFERRAL_MANGO_INDEXES
+	KIOSK_LOOKUP_WARMUP_SELECTORS,
+	PEOPLE_MANGO_INDEXES,
+	REFERRAL_MANGO_INDEXES,
+	REQUISITION_TICKET_MANGO_INDEXES,
+	TRANSFER_LEDGER_MANGO_INDEXES
 } from './shelter-access-design';
 
 const validRatios = {
@@ -261,6 +266,11 @@ describe('buildValidateDocUpdate', () => {
 				index: { fields: ['type', 'household_id'] },
 				name: 'evacuee-type-household-idx',
 				type: 'json'
+			},
+			{
+				index: { fields: ['type', 'card_snapshot.address_no'] },
+				name: 'evacuee-type-card-address-no-idx',
+				type: 'json'
 			}
 		]);
 		for (const definition of KIOSK_LOOKUP_MANGO_INDEXES) {
@@ -271,6 +281,36 @@ describe('buildValidateDocUpdate', () => {
 		expect(KIOSK_LOOKUP_MANGO_INDEXES.every(({ name }) => referralNames.includes(name))).toBe(
 			false
 		);
+	});
+
+	it('gives every kiosk lookup index a warm-up selector on its own leading field', () => {
+		for (const { name, index } of KIOSK_LOOKUP_MANGO_INDEXES) {
+			const selector = KIOSK_LOOKUP_WARMUP_SELECTORS[name];
+			expect(selector, name).toBeDefined();
+			expect(Object.keys(selector).sort(), name).toEqual([...index.fields].sort());
+		}
+		expect(Object.keys(KIOSK_LOOKUP_WARMUP_SELECTORS).sort()).toEqual(
+			KIOSK_LOOKUP_MANGO_INDEXES.map(({ name }) => name).sort()
+		);
+	});
+
+	it('gives a shared index name one identical definition across every shelter DB list', () => {
+		// CouchDB dedupes by definition, so two same-named lists that diverge would
+		// silently create a second index under the same name.
+		const lists = [
+			REFERRAL_MANGO_INDEXES,
+			KIOSK_LOOKUP_MANGO_INDEXES,
+			TRANSFER_LEDGER_MANGO_INDEXES,
+			PEOPLE_MANGO_INDEXES,
+			REQUISITION_TICKET_MANGO_INDEXES,
+			[DAILY_SOP_ROLE_MANGO_INDEX]
+		];
+		const byName = new Map<string, string>();
+		for (const { name, index } of lists.flat()) {
+			const definition = JSON.stringify(index.fields);
+			expect(byName.get(name) ?? definition, name).toBe(definition);
+			byName.set(name, definition);
+		}
 	});
 
 	it('keeps referral indexes separate and unchanged', () => {

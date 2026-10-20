@@ -37,6 +37,12 @@ from tent_model import (
 )
 
 from worker.couch.client import CouchClient
+from worker.donation_ledger import (
+    keyed_donation_ids,
+    normalize_donation_id,
+    recorded_donation_qty,
+    still_owed,
+)
 from worker.donation_status import DONATION_OUTSTANDING_STATUSES
 from worker.masking import shelter_db_name
 from worker.quota_target_rules import TargetDecision, decide_target_change
@@ -44,7 +50,9 @@ from worker.quota_target_rules import TargetDecision, decide_target_change
 logger = logging.getLogger(__name__)
 
 # A donation holds quota until it is explicitly given back. "cancelled"/"expired"
-# release via cancel()/purge_expired_buffers(); everything else still consumes.
+# release via cancel()/purge_expired_buffers(); everything else still consumes —
+# except the part already in the stock ledger, which ``on_hand_qty`` carries instead
+# (see ``sum_reserved_by_key``).
 #
 # The pre-shelf half of this is every outstanding status, not just "declared": since
 # CR-052 a public booking sits in "pending_review"/"verifying" while it waits, and
@@ -86,20 +94,10 @@ class ShelterReconcileReport:
     missing_counters: list[tuple[QuotaKey, Decimal]] = field(default_factory=list)
 
 
-def _to_decimal(value: Any) -> Decimal | None:
-    try:
-        return Decimal(str(value))
-    except InvalidOperation, TypeError:
-        return None
-
-
-def _normalize_donation_id(raw: str) -> str:
-    return raw if raw.startswith("donation:") else f"donation:{raw}"
-
-
 def sum_reserved_by_key(
     donations: list[dict[str, Any]],
     *,
+    stock_ledgers: list[dict[str, Any]] | None = None,
     report: ShelterReconcileReport | None = None,
 ) -> dict[QuotaKey, Decimal]:
     """Total outstanding qty per ``(campaign_id, item_id)``.
@@ -110,18 +108,24 @@ def sum_reserved_by_key(
     purpose: a donation that slipped through FastAPI's ``NOT_SEEDED`` fail-open path
     carries no ``reserved_qty`` but still consumes real goods, and recalculation is
     supposed to reflect reality rather than replay what the counter happened to record.
+
+    Goods already booked into the stock ledger are left out. ``reserve_quota`` caps at
+    ``qty_target − on_hand_qty``, and ``on_hand_qty`` already holds them — keeping them
+    in ``reserved_qty`` as well took them off the ceiling twice, so a need the board
+    showed 89 open for refused a booking of 89. Same terms as ``compute_needs``: a
+    ``received`` donation with ledger rows is done; any other holding donation still
+    owes only what is not recorded yet (CR-143 FR-B7 interrupted batch receipt).
     """
+    ledgers = stock_ledgers or []
+    keyed = keyed_donation_ids(ledgers)
+    recorded = recorded_donation_qty(ledgers)
     totals: dict[QuotaKey, Decimal] = {}
     for donation in donations:
         if donation.get("status") not in QUOTA_HOLDING_STATUSES:
             continue
         campaign_id = donation.get("campaign_id")
         donation_id = str(donation.get("_id", "?"))
-        for item in donation.get("items") or []:
-            qty = _to_decimal(item.get("qty"))
-            item_id = item.get("item_id")
-            if qty is None or qty <= 0:
-                continue
+        for item_id, qty in still_owed(donation, keyed, recorded):
             if not campaign_id or not item_id:
                 if report is not None:
                     report.unattributed_items.append(
@@ -138,18 +142,24 @@ def sum_reserved_by_key(
 
 async def _collect_truth_set(
     couch: CouchClient, shelter_code: str
-) -> list[dict[str, Any]]:
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Donations holding quota, plus the stock ledger that says what already arrived."""
     donations: dict[str, dict[str, Any]] = {}
+    stock_ledgers: list[dict[str, Any]] = []
 
     database = shelter_db_name(shelter_code)
     if await couch.database_exists(database):
         async for doc in couch.iter_all_docs(database):
-            if doc.get("type") != "donation":
+            doc_type = doc.get("type")
+            if doc_type == "stock_ledger":
+                stock_ledgers.append(doc)
+                continue
+            if doc_type != "donation":
                 continue
             doc_id = doc.get("_id")
             if not doc_id:
                 continue
-            donations[_normalize_donation_id(str(doc_id))] = doc
+            donations[normalize_donation_id(str(doc_id))] = doc
     else:
         logger.warning("CouchDB database %s missing — counting buffers only", database)
 
@@ -158,7 +168,7 @@ async def _collect_truth_set(
         DonationBuffer.synced_to_couch == False,
     ).to_list()
     for buffer in unsynced:
-        key = _normalize_donation_id(buffer.id)
+        key = normalize_donation_id(buffer.id)
         # A CouchDB doc always wins — inbound has already persisted this one and the
         # buffer's synced flag is merely stale.
         donations.setdefault(
@@ -171,7 +181,7 @@ async def _collect_truth_set(
             },
         )
 
-    return list(donations.values())
+    return list(donations.values()), stock_ledgers
 
 
 async def _campaign_targets(
@@ -301,15 +311,22 @@ async def reconcile_shelter(
     """
     report = ShelterReconcileReport(shelter_code=shelter_code)
 
-    truth = await _collect_truth_set(couch, shelter_code)
-    report.computed = sum_reserved_by_key(truth, report=report)
-    campaign_targets = await _campaign_targets(couch, shelter_code) if targets else {}
-
     # Read raw so the exact Decimal128 can be handed back as the optimistic filter.
+    # Counters BEFORE the truth set: FastAPI reserves first and inserts the buffer
+    # after, so a booking landing between the two reads would be in a counter read
+    # last but missing from the truth — and set_reserved_qty would erase it. Read
+    # first, any booking after this point moves the counter and fails the filter.
+    # This runs on every stock ledger change (settle_shelved_quota), not just the CLI.
     collection = DonationNeedCounter.get_pymongo_collection()
     counters = await collection.find({"shelter_code": shelter_code}).to_list(
         length=None
     )
+
+    truth, stock_ledgers = await _collect_truth_set(couch, shelter_code)
+    report.computed = sum_reserved_by_key(
+        truth, stock_ledgers=stock_ledgers, report=report
+    )
+    campaign_targets = await _campaign_targets(couch, shelter_code) if targets else {}
 
     seen_keys: set[QuotaKey] = set()
     for counter in counters:

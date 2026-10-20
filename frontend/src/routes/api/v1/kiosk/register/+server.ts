@@ -5,6 +5,7 @@ import { findMasterByCode } from '$lib/server/shelters.admin';
 import { ServiceError } from '$lib/server/couch-admin';
 import { isKioskWalkInRegistrationEnabled } from '$lib/features/kiosk/config';
 import {
+	KioskPhoneDuplicateError,
 	KioskRegistrationBlockedError,
 	KioskPhotoValidationError,
 	decodeKioskPhoto,
@@ -12,6 +13,7 @@ import {
 	registerKioskThaidWalkIn,
 	registerKioskWalkIn
 } from '$lib/features/kiosk/server/kiosk-register.server';
+import { toLabelIdentity } from '$lib/features/kiosk/server/kiosk-check-in.server';
 import { isKioskThaidCheckInAllowed } from '$lib/features/kiosk/server/kiosk-thaid-gate.server';
 import {
 	consumeKioskSession,
@@ -142,7 +144,16 @@ export const POST: RequestHandler = async ({ request }) => {
 			);
 		}
 		await scannerServerRepository.updateDeviceLastSeen(principal.registry_id).catch(() => {});
-		return json({ status: 'created', evacuee_id: evacuee._id }, { headers: noStoreHeaders });
+		// The QR is the evacuee id itself (same as check-in), so the kiosk can print the label at once.
+		return json(
+			{
+				status: 'created',
+				evacuee_id: evacuee._id,
+				qr_payload: evacuee._id,
+				label: toLabelIdentity(evacuee)
+			},
+			{ headers: noStoreHeaders }
+		);
 	} catch (error) {
 		if (error instanceof ScannerAuthError) {
 			return json(
@@ -173,6 +184,17 @@ export const POST: RequestHandler = async ({ request }) => {
 					error: {
 						code: 'KIOSK_REGISTRATION_BLOCKED',
 						message: 'พบข้อมูลเดิม กรุณาไปพบเจ้าหน้าที่'
+					}
+				},
+				{ status: 409, headers: noStoreHeaders }
+			);
+		}
+		if (error instanceof KioskPhoneDuplicateError) {
+			return json(
+				{
+					error: {
+						code: 'KIOSK_PHONE_DUPLICATE',
+						message: 'เบอร์โทรศัพท์นี้ถูกใช้ลงทะเบียนแล้ว กรุณากรอกเบอร์อื่น หรือกด「ไม่มีเบอร์」'
 					}
 				},
 				{ status: 409, headers: noStoreHeaders }

@@ -26,7 +26,11 @@ import {
 } from './people.remote';
 import { UlidReservation } from '$lib/db/ulid-reservation';
 import type { EvacueeInput, Medical } from '../domain/people';
-import { createKioskEvacueeFromCard, type CardSnapshot } from '../domain/people';
+import {
+	createKioskEvacueeFromCard,
+	createKioskWalkInHousehold,
+	type CardSnapshot
+} from '../domain/people';
 
 const ctx = { shelterCode: 'SH001', createdBy: 'tester' };
 
@@ -1557,6 +1561,7 @@ describe('check-in / check-out', () => {
 			);
 			const evacuee = {
 				...generated,
+				current_stay: { ...generated.current_stay, status: 'kiosk_registered' as const },
 				card_snapshot: {
 					...generated.card_snapshot!,
 					photo_base64: 'data:image/jpeg;base64,AA=='
@@ -2476,5 +2481,249 @@ describe('peopleRepository singleton', () => {
 		mockShelterDb = 'shelter_sh002';
 		const repo2 = peopleRepository();
 		expect(repo2).not.toBe(repo1);
+	});
+});
+
+describe('kiosk walk-in household at Station 1', () => {
+	let repo: PeopleRemoteRepository;
+	const kioskCtx = { shelterCode: 'SH001', createdBy: 'scanner:KIOSK-01' };
+	const household = {
+		housing_type: 'owned_house' as const,
+		address_no: '1',
+		subdistrict: 'ในเมือง',
+		district: 'เมือง',
+		province: 'เชียงใหม่',
+		pets: [],
+		vehicles: [],
+		assets: null
+	};
+
+	beforeEach(() => {
+		memoryRepo = createInMemoryRepository();
+		repo = new PeopleRemoteRepository('shelter_sh001');
+	});
+
+	/**
+	 * A legacy walk-in (written before kiosk walk-ins were created `arriving`): the record sits
+	 * `kiosk_registered` in its own `pre_registered` household at the card address.
+	 */
+	async function kioskWalkIn() {
+		const snapshot: CardSnapshot = {
+			citizen_id: '1234567890123',
+			first_name_th: 'สมชาย',
+			last_name_th: 'ใจดี',
+			address_no: '99/1',
+			subdistrict: 'บางนา',
+			district: 'บางนา',
+			province: 'กรุงเทพมหานคร',
+			scanned_at: new Date().toISOString(),
+			device_id: 'KIOSK-01'
+		};
+		const created = createKioskEvacueeFromCard(snapshot, kioskCtx);
+		const unlinked = {
+			...created,
+			current_stay: { ...created.current_stay, status: 'kiosk_registered' as const }
+		};
+		const walkInHousehold = {
+			...createKioskWalkInHousehold(unlinked, snapshot, kioskCtx),
+			status: 'pre_registered' as const
+		};
+		await memoryRepo.put(walkInHousehold);
+		const evacuee = await memoryRepo.put({ ...unlinked, household_id: walkInHousehold._id });
+		return { evacuee, householdId: walkInHousehold._id };
+	}
+
+	it('moves the walk-in household to arriving when the walk-in reports in', async () => {
+		const { evacuee, householdId } = await kioskWalkIn();
+
+		await repo.promoteReportIn(evacuee._id);
+
+		expect((await repo.getHousehold(householdId))?.status).toBe('arriving');
+	});
+
+	it('cancels the walk-in household when the walk-in is pulled into another family', async () => {
+		const { evacuee, householdId } = await kioskWalkIn();
+		const family = await repo.createFamilyRegistration(
+			{
+				members: [
+					{
+						first_name: 'สมหญิง',
+						last_name: 'ใจดี',
+						gender: 'female',
+						phone: '0812345678',
+						country: 'THAILAND'
+					}
+				],
+				household
+			},
+			ctx,
+			'public'
+		);
+
+		await repo.submitFamilyReportIn({
+			householdId: family.household._id,
+			household,
+			members: [
+				{
+					_id: family.members[0]!._id,
+					first_name: 'สมหญิง',
+					last_name: 'ใจดี',
+					gender: 'female',
+					phone: '0812345678',
+					country: 'THAILAND',
+					reporting_in: true
+				},
+				{
+					_id: evacuee._id,
+					first_name: 'สมชาย',
+					last_name: 'ใจดี',
+					gender: 'male',
+					phone: '0898765432',
+					country: 'THAILAND',
+					reporting_in: true
+				}
+			],
+			ctx
+		});
+
+		expect((await repo.getEvacuee(evacuee._id))?.household_id).toBe(family.household._id);
+		expect((await repo.getHousehold(householdId))?.status).toBe('cancelled');
+	});
+
+	it('cancels the walk-in household when the walk-in registration is cancelled', async () => {
+		const { evacuee, householdId } = await kioskWalkIn();
+
+		await repo.cancelEvacueePreRegistration(evacuee._id, ctx);
+
+		expect((await repo.getHousehold(householdId))?.status).toBe('cancelled');
+	});
+});
+
+describe('evacuee booking_ref survives household writes (CR-169 FR-62)', () => {
+	let repo: PeopleRemoteRepository;
+
+	beforeEach(() => {
+		memoryRepo = createInMemoryRepository();
+		repo = new PeopleRemoteRepository('shelter_sh001');
+	});
+
+	const householdInput = (label: string) => ({
+		label,
+		head_evacuee_id: null,
+		status: 'pre_registered' as const,
+		municipality_zone: null,
+		community: null,
+		pets: [],
+		vehicles: []
+	});
+
+	it('keeps booking_ref through updateEvacuee with a spread of the caller doc', async () => {
+		const ev = await repo.createEvacuee(evInput({ booking_ref: 'BK-01TEST' }), ctx);
+		const hh = await repo.createHousehold(householdInput('บ้านหนึ่ง'), ctx);
+
+		const saved = await repo.updateEvacuee({ ...ev, household_id: hh._id });
+
+		expect(saved.household_id).toBe(hh._id);
+		expect(saved.booking_ref).toBe('BK-01TEST');
+		expect((await repo.getEvacuee(ev._id))?.booking_ref).toBe('BK-01TEST');
+	});
+
+	it('keeps booking_ref through patchEvacuee', async () => {
+		const ev = await repo.createEvacuee(evInput({ booking_ref: 'BK-01TEST' }), ctx);
+		const hh = await repo.createHousehold(householdInput('บ้านสอง'), ctx);
+
+		await repo.patchEvacuee(ev._id, { household_id: hh._id });
+		await repo.patchEvacuee(ev._id, { first_name: 'ชื่อใหม่' });
+
+		const saved = await repo.getEvacuee(ev._id);
+		expect(saved?.household_id).toBe(hh._id);
+		expect(saved?.booking_ref).toBe('BK-01TEST');
+	});
+
+	it('keeps booking_ref through mergeHouseholds', async () => {
+		const ev = await repo.createEvacuee(evInput({ booking_ref: 'BK-01TEST' }), ctx);
+		const source = await repo.createHousehold(householdInput('ต้นทาง'), ctx);
+		const target = await repo.createHousehold(householdInput('ปลายทาง'), ctx);
+		await repo.updateEvacuee({ ...ev, household_id: source._id });
+
+		const { mergedMembers } = await repo.mergeHouseholds(source._id, target._id, ctx);
+
+		expect(mergedMembers.map((m) => m._id)).toContain(ev._id);
+		expect((await repo.getEvacuee(ev._id))?.booking_ref).toBe('BK-01TEST');
+		expect(mergedMembers.find((m) => m._id === ev._id)?.booking_ref).toBe('BK-01TEST');
+	});
+
+	describe('submitFamilyReportIn', () => {
+		const reportInHousehold = {
+			housing_type: 'owned_house' as const,
+			address_no: '1',
+			subdistrict: 'ในเมือง',
+			district: 'เมือง',
+			province: 'เชียงใหม่',
+			pets: [],
+			vehicles: [],
+			assets: null
+		};
+
+		it('keeps booking_ref when an api-registered pre_registered member reports in', async () => {
+			const hh = await repo.createHousehold(householdInput('จองผ่านพาร์ทเนอร์'), ctx);
+			const ev = await repo.createEvacuee(
+				evInput({
+					booking_ref: 'BK-01TEST',
+					registered_via: 'api',
+					status: 'pre_registered',
+					household_id: hh._id
+				}),
+				ctx
+			);
+
+			const { members } = await repo.submitFamilyReportIn({
+				householdId: hh._id,
+				household: reportInHousehold,
+				members: [
+					{
+						_id: ev._id,
+						first_name: 'Somchai',
+						last_name: 'Jaidee',
+						gender: 'male',
+						phone: '0812345678',
+						country: 'THAILAND',
+						reporting_in: true
+					}
+				],
+				ctx
+			});
+
+			const saved = await repo.getEvacuee(ev._id);
+			expect(saved?.current_stay.status).toBe('arriving');
+			expect(saved?.registered_via).toBe('api');
+			expect(saved?.booking_ref).toBe('BK-01TEST');
+			expect(members.find((m) => m._id === ev._id)?.booking_ref).toBe('BK-01TEST');
+		});
+
+		it('never stamps a booking_ref smuggled onto a new report-in member', async () => {
+			const hh = await repo.createHousehold(householdInput('สมาชิกใหม่'), ctx);
+
+			const { members } = await repo.submitFamilyReportIn({
+				householdId: hh._id,
+				household: reportInHousehold,
+				members: [
+					{
+						first_name: 'Somying',
+						last_name: 'Jaidee',
+						gender: 'female',
+						phone: '0812345678',
+						country: 'THAILAND',
+						reporting_in: true,
+						booking_ref: 'BK-FORGED'
+					} as never
+				],
+				ctx
+			});
+
+			expect(members).toHaveLength(1);
+			expect(members[0]).not.toHaveProperty('booking_ref');
+			expect(await repo.getEvacuee(members[0]!._id)).not.toHaveProperty('booking_ref');
+		});
 	});
 });

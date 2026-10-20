@@ -17,7 +17,7 @@ pipeline {
         string(
             name: 'MAX_AGE_HOURS',
             defaultValue: '6',
-            description: 'Only touch registry shelters whose name starts with E2E and are older than this many hours'
+            description: 'Only touch registry shelters and partner clients whose name starts with E2E and are older than this many hours'
         )
     }
 
@@ -58,11 +58,81 @@ pipeline {
                 }
             }
         }
+
+        stage('Partner Mongo janitor') {
+            // Sweeps the Mongo leftovers of the partner-API e2e suite (E2E third-party clients,
+            // their bookings, access logs and idempotency keys). Staging Mongo is only reachable
+            // from the docker network, so the CLI runs inside the worker container over ssh
+            // (same credentials as Jenkinsfile 'Deploy to Staging Server').
+            steps {
+                withCredentials([
+                    sshUserPrivateKey(credentialsId: 'tent-staging-ssh', keyFileVariable: 'SSH_KEY', usernameVariable: 'SSH_USER'),
+                    string(credentialsId: 'tent-staging-host', variable: 'SSH_HOST'),
+                    string(credentialsId: 'tent-staging-port', variable: 'SSH_PORT')
+                ]) {
+                    script {
+                        def modeFlag = params.MODE == 'execute' ? '--execute' : '--dry-run'
+                        def maxAge = params.MAX_AGE_HOURS?.trim()
+                        if (!(maxAge ==~ /[1-9][0-9]*/)) {
+                            error('MAX_AGE_HOURS must be a positive integer')
+                        }
+                        withEnv([
+                            "JANITOR_MODE_FLAG=${modeFlag}",
+                            "JANITOR_MAX_AGE_HOURS=${maxAge}"
+                        ]) {
+                            // Console scripts live in the worker image's uv venv, which is not on
+                            // PATH, so go through `uv run`; --no-sync only executes the already
+                            // built environment (never re-syncs the live worker's venv). The worker
+                            // image must be redeployed with the CLI before this stage can run.
+                            sh '''
+                                set -eu
+                                ssh -i "$SSH_KEY" -p "$SSH_PORT" -o StrictHostKeyChecking=no "$SSH_USER@$SSH_HOST" "
+                                    set -eu
+                                    cd /home/projects/tent
+                                    docker compose -f docker-compose.staging.no-nginx.yml exec -T worker \
+                                        uv run --no-sync --project worker e2e-partner-janitor \
+                                        ${JANITOR_MODE_FLAG} --max-age-hours=${JANITOR_MAX_AGE_HOURS}
+                                "
+                            '''
+                        }
+                    }
+                }
+            }
+        }
     }
 
     post {
         always {
             archiveArtifacts allowEmptyArchive: true, artifacts: 'scripts/staging-e2e-janitor.mjs', fingerprint: false
+            // Discord notification (ci/README.md): on failure, or when MODE=execute (it deleted
+            // data). Dry-run successes stay quiet. Never fails the build.
+            script {
+                try {
+                    if ((currentBuild.currentResult != 'SUCCESS' || params.MODE == 'execute') && fileExists('ci/discord-notify.sh')) {
+                        withCredentials([string(credentialsId: 'tent-discord-webhook-ci', variable: 'DISCORD_WEBHOOK_URL')]) {
+                            withEnv([
+                                'NOTIFY_KIND=janitor',
+                                'NOTIFY_USERNAME=Tent Janitor',
+                                "NOTIFY_RESULT=${currentBuild.currentResult}",
+                                "NOTIFY_JOB=${env.JOB_NAME ?: ''}",
+                                "NOTIFY_BRANCH=${env.BRANCH_NAME ?: ''}",
+                                "NOTIFY_BUILD_NUMBER=${env.BUILD_NUMBER ?: ''}",
+                                "NOTIFY_BUILD_URL=${env.BUILD_URL ?: ''}",
+                                "NOTIFY_COMMIT=${env.GIT_COMMIT ?: ''}",
+                                "NOTIFY_DURATION=${currentBuild.durationString.replace(' and counting', '')}",
+                                "NOTIFY_DETAIL=Mode: ${params.MODE}, max age: ${params.MAX_AGE_HOURS}h"
+                            ]) {
+                                def rc = sh(script: './ci/discord-notify.sh', returnStatus: true)
+                                if (rc != 0) {
+                                    echo "WARNING: Discord notification failed (exit ${rc}); ignoring."
+                                }
+                            }
+                        }
+                    }
+                } catch (err) {
+                    echo "WARNING: Discord notification skipped: ${err.message}"
+                }
+            }
             cleanWs(cleanWhenNotBuilt: false,
                     deleteDirs: true,
                     disableDeferredWipeout: true,

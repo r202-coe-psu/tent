@@ -1,7 +1,7 @@
 export const EVACUEE_HANDOVER_SLIP_I18N = {
 	th: {
 		title: 'ใบส่งตัวผู้ประสบภัย (Handover Slip)',
-		subtitle: 'ส่งต่อโต๊ะคัดกรองการแพทย์ (Station 2)',
+		subtitle: 'ส่งต่อโต๊ะคัดกรองผู้เข้าพัก (Station 2)',
 		name: 'ชื่อ-นามสกุล',
 		nickname: 'ชื่อเล่น',
 		idNumber: 'เลขประจำตัวประชาชน / บัตรยืนยันตัวตน',
@@ -13,7 +13,7 @@ export const EVACUEE_HANDOVER_SLIP_I18N = {
 		noSymptoms: 'ไม่มีอาการป่วย',
 		status: 'สถานะ',
 		statusArriving: 'รอตรวจคัดกรอง (Arriving)',
-		scanInstruction: 'เจ้าหน้าที่แพทย์สแกน QR Code นี้เพื่อเปิดหน้าคัดกรองการแพทย์ทันที',
+		scanInstruction: 'เจ้าหน้าที่แพทย์สแกน QR Code นี้เพื่อเปิดหน้าคัดกรองผู้เข้าพักทันที',
 		deepLink: 'ลิงก์ระบบคัดกรอง',
 		print: 'พิมพ์ใบนำทาง',
 		doneNext: 'เสร็จสิ้น / ลงทะเบียนคนถัดไป',
@@ -23,7 +23,7 @@ export const EVACUEE_HANDOVER_SLIP_I18N = {
 	},
 	en: {
 		title: 'Evacuee Handover Slip',
-		subtitle: 'Station 1 Handover to Station 2 Medical Screening',
+		subtitle: 'Station 1 Handover to Station 2 Occupant Screening',
 		name: 'Full Name',
 		nickname: 'Nickname',
 		idNumber: 'Citizen ID / Person ID',
@@ -35,7 +35,7 @@ export const EVACUEE_HANDOVER_SLIP_I18N = {
 		noSymptoms: 'No symptoms',
 		status: 'Status',
 		statusArriving: 'Waiting for Screening (Arriving)',
-		scanInstruction: 'Medical staff: scan this QR code to open medical screening immediately',
+		scanInstruction: 'Medical staff: scan this QR code to open occupant screening immediately',
 		deepLink: 'Screening Link',
 		print: 'Print Slip',
 		doneNext: 'Done / Next Registration',

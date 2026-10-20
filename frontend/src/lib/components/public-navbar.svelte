@@ -146,11 +146,11 @@
 					'/pre-register'
 				)
 					? 'size-9 px-0'
-					: 'px-2.5 sm:px-3 sm:text-sm'}"
+					: 'size-9 px-0 min-[400px]:w-auto min-[400px]:px-2.5 sm:px-3 sm:text-sm'}"
 			>
 				<ClipboardPenLine class="h-4 w-4" aria-hidden="true" />
 				{#if !isActive('/pre-register')}
-					{t.registerShort}
+					<span class="hidden min-[400px]:inline">{t.registerShort}</span>
 				{/if}
 			</a>
 
@@ -347,7 +347,7 @@
 					class="inline-flex cursor-pointer items-center justify-center rounded-full border border-slate-300 bg-white px-3 py-1 text-xs font-bold text-[#0A2647] shadow-2xs transition-all hover:border-slate-400 hover:bg-slate-50 active:scale-95 2xl:px-3.5"
 					aria-label={t.switchLanguageAria}
 				>
-					{langState.current === 'th' ? 'EN' : 'TH'}
+					{langState.current === 'th' ? 'TH' : 'EN'}
 				</button>
 			</div>
 		</nav>
@@ -355,11 +355,15 @@
 
 	<!-- Compact menu sheet (phone + tablet + iPad Pro mid-range) -->
 	<Sheet.Root bind:open={mobileMenuOpen}>
-		<Sheet.Content id="public-mobile-nav" side="right" class="gap-0 p-0">
-			<Sheet.Header class="border-b p-4 pr-14">
+		<Sheet.Content
+			id="public-mobile-nav"
+			side="right"
+			class="h-dvh w-[88%] gap-0 overflow-hidden p-0"
+		>
+			<Sheet.Header class="shrink-0 border-b p-4 pr-14">
 				<Sheet.Title>{t.menuTitle}</Sheet.Title>
 			</Sheet.Header>
-			<nav class="flex flex-col gap-1 p-4">
+			<nav class="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto overscroll-contain p-4">
 				<button
 					type="button"
 					onclick={() => {
@@ -369,7 +373,7 @@
 					class="flex min-h-11 items-center justify-between rounded-xl px-4 py-3 text-left text-sm font-medium text-muted-foreground transition-colors hover:bg-muted/50"
 				>
 					<div class="flex items-center gap-3">
-						<Bell class="h-5 w-5 text-sky-600" />
+						<Bell class="h-5 w-5 shrink-0 text-sky-600" />
 						<span>{t.alerts}</span>
 					</div>
 					{#if announcementsCount > 0}
@@ -385,7 +389,7 @@
 						? 'bg-primary-muted text-primary'
 						: 'text-muted-foreground'}"
 				>
-					<Home class="h-5 w-5" />
+					<Home class="h-5 w-5 shrink-0" />
 					{t.home}
 				</a>
 
@@ -398,7 +402,7 @@
 						? 'bg-primary-muted text-primary'
 						: 'text-muted-foreground'}"
 				>
-					<ClipboardPenLine class="h-5 w-5" />
+					<ClipboardPenLine class="h-5 w-5 shrink-0" />
 					{t.preRegister}
 				</a>
 
@@ -411,7 +415,7 @@
 						? 'bg-primary-muted text-primary'
 						: 'text-muted-foreground'}"
 				>
-					<Building class="h-5 w-5" />
+					<Building class="h-5 w-5 shrink-0" />
 					{t.shelters}
 				</a>
 
@@ -424,7 +428,7 @@
 						? 'bg-primary-muted text-primary'
 						: 'text-muted-foreground'}"
 				>
-					<Search class="h-5 w-5" />
+					<Search class="h-5 w-5 shrink-0" />
 					{t.search}
 				</a>
 
@@ -435,7 +439,7 @@
 						? 'bg-primary-muted text-primary'
 						: 'text-muted-foreground'}"
 				>
-					<Heart class="h-5 w-5" />
+					<Heart class="h-5 w-5 shrink-0" />
 					{t.donateAndBook}
 				</a>
 
@@ -446,7 +450,7 @@
 						? 'bg-primary-muted text-primary'
 						: 'text-muted-foreground'}"
 				>
-					<Package class="h-5 w-5" />
+					<Package class="h-5 w-5 shrink-0" />
 					{t.trackDonationLong}
 				</a>
 
@@ -463,7 +467,7 @@
 							? 'bg-primary-muted text-primary'
 							: 'text-muted-foreground'}"
 					>
-						<UserPlus class="h-5 w-5" />
+						<UserPlus class="h-5 w-5 shrink-0" />
 						{t.volunteerJobBoard}
 					</a>
 					<a
@@ -489,7 +493,7 @@
 						? 'bg-primary-muted text-primary'
 						: ''}"
 				>
-					<Building2 class="h-5 w-5" />
+					<Building2 class="h-5 w-5 shrink-0" />
 					{t.backoffice}
 				</a>
 
@@ -508,7 +512,7 @@
 						<span
 							class="inline-flex items-center justify-center rounded-full border border-slate-300 bg-white px-3 py-1 text-xs font-bold text-[#0A2647] shadow-2xs"
 						>
-							{langState.current === 'th' ? 'EN' : 'TH'}
+							{langState.current === 'th' ? 'TH' : 'EN'}
 						</span>
 					</button>
 				</div>

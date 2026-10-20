@@ -69,5 +69,6 @@ export {
 } from './application/queries';
 
 export { default as TicketFinder } from './ui/ticket-finder.svelte';
+export { ticketI18n } from './i18n/ticket.i18n';
 export { default as DigitalPass } from './ui/digital-pass.svelte';
 export { default as VolunteerAccessPortal } from './ui/volunteer-access-portal.svelte';

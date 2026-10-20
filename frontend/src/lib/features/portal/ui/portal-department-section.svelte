@@ -63,29 +63,31 @@
 		<span
 			class={[
 				'flex shrink-0 items-center justify-center rounded-xl bg-(--c-strong) text-white',
-				compact ? 'size-9' : 'size-11'
+				compact ? 'size-9' : 'size-9 sm:size-11'
 			]}
 			aria-hidden="true"
 		>
-			<Icon class={compact ? 'size-5' : 'size-6'} />
+			<Icon class={compact ? 'size-5' : 'size-5 sm:size-6'} />
 		</span>
 		<div class="min-w-0 flex-1">
 			<h2
 				id={headingId}
-				class={['font-bold text-(color:--c-text)', compact ? 'text-base' : 'text-lg sm:text-xl']}
+				class={['font-bold text-(color:--c-text)', compact ? 'text-base' : 'text-base sm:text-xl']}
 			>
 				{department.label}
 			</h2>
-			<p class={['text-sm text-slate-600', compact && 'line-clamp-1']}>{department.desc}</p>
+			<p class={['text-sm text-slate-600', compact && 'line-clamp-2 sm:line-clamp-1']}>
+				{department.desc}
+			</p>
 		</div>
 		<span
 			class="shrink-0 rounded-full border border-(color:--c-border) bg-white px-2.5 py-0.5 text-xs font-semibold whitespace-nowrap text-(color:--c-text) tabular-nums"
 		>
-			{department.items.length} เมนู
+			{department.items.length}<span class="sr-only sm:not-sr-only">&nbsp;เมนู</span>
 		</span>
 	</header>
 
-	<div class={compact ? 'space-y-4 p-3 sm:p-4' : 'space-y-5 p-4 sm:p-6'}>
+	<div class={compact ? 'space-y-4 p-3 sm:p-4' : 'space-y-5 p-2.5 sm:p-6'}>
 		{#each blocks as block (block.key)}
 			<div class="space-y-2">
 				{#if block.label}

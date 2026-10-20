@@ -198,6 +198,7 @@ describe('Daily SOP role question set', () => {
 		).toBe(false);
 		expect(assessableRoles(['SH001:shelter_manager'], 'SH001')).toHaveLength(9);
 		expect(assessableRoles(['system_admin'], 'SH001')).toHaveLength(9);
+		expect(assessableRoles(['_admin'], 'SH001')).toHaveLength(9);
 	});
 
 	it('calculates numeric context without choosing an evaluator status', () => {

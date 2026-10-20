@@ -6,7 +6,7 @@
  * is the single source of truth for these cache keys — consumers (dashboard tab,
  * shelter list occupancy cell) must go through these hooks, never hardcode keys.
  */
-import { createQuery } from '@tanstack/svelte-query';
+import { createQuery, keepPreviousData } from '@tanstack/svelte-query';
 import { fetchOccupancy } from '../data/occupancy.api';
 import { fetchDemographics } from '../data/demographics.api';
 import { fetchRegistrations } from '../data/registration.api';
@@ -47,5 +47,7 @@ export const useDashboardRegistrations = (
 		queryKey: dashboardKeys.registrations(code(), from?.(), to?.()),
 		queryFn: () => fetchRegistrations(code(), from?.(), to?.()),
 		enabled: !!code(),
-		staleTime: DASHBOARD_STALE_TIME
+		staleTime: DASHBOARD_STALE_TIME,
+		// Keep the current chart on screen while a new range loads (CR-170 FR-6).
+		placeholderData: keepPreviousData
 	}));

@@ -5,6 +5,7 @@ export {
 	SITE_KIND_LABELS,
 	resolveOperationStatus,
 	isShelterBookable,
+	isShelterCancelled,
 	zoneTypeSchema,
 	ZONE_TYPE_LABELS,
 	zoneStatusSchema,

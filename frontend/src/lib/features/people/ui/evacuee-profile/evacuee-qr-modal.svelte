@@ -1,13 +1,21 @@
 <script lang="ts">
-	import { tick } from 'svelte';
-	import QrIdCard from '$lib/components/qr-id-card.svelte';
-	import { generateQrDataUrl } from '$lib/utils/qrcode';
 	import X from '@lucide/svelte/icons/x';
 	import Printer from '@lucide/svelte/icons/printer';
 	import { toast } from 'svelte-sonner';
-	import { previewElementAsPdf } from '$lib/utils/pdf';
+	import { Button } from '$lib/components/ui/button/index.js';
+	import { previewImageAsPdf } from '$lib/utils/pdf';
+	import { cn } from '$lib/utils/shadcn';
 	import type { Evacuee } from '$lib/features/people';
-	import { formatPersonName } from '$lib/features/people';
+	import {
+		formatPersonName,
+		intakeStationsPassed,
+		labelZoneName,
+		useScreeningsByEvacuee
+	} from '$lib/features/people';
+	import { KIOSK_LABEL_MM, renderKioskQrLabelPng } from '$lib/features/kiosk';
+	import { useShelter } from '$lib/features/shelters';
+	import { shelterStore } from '$lib/stores/shelter.svelte';
+	import { getShelterCode } from '$lib/db/shelter';
 	import { getTranslation } from '$lib/utils/i18n';
 	import { languageStore } from '$lib/stores/language.svelte';
 	import { EVACUEE_QR_MODAL_I18N } from '../_constants/evacuee-qr-modal.i18n';
@@ -33,14 +41,42 @@
 
 	const effectiveCloseLabel = $derived(closeLabel ?? t.closeWindow);
 
-	let qrUrl = $state<string | null>(null);
-	let cardEl = $state<HTMLDivElement | null>(null);
 	let isExportingPdf = $state(false);
 
+	const fullId = $derived(evacuee._id.split(':')[1] ?? evacuee._id);
+	const name = $derived(formatPersonName(evacuee));
+	const titleId = $derived(`evacuee-qr-title-${fullId}`);
+
+	// Blank until Station 3 assigns a zone, so staff can write it on the printed label.
+	const shelterQuery = useShelter(() => shelterStore.selectedShelterCode ?? getShelterCode());
+	// A screening record ticks คัดกรอง on the label.
+	const screeningsQuery = useScreeningsByEvacuee(
+		() => evacuee._id,
+		() => show
+	);
+
+	/**
+	 * The kiosk's own 80×60 mm label (base64 PNG): the preview shows exactly what prints, and a
+	 * station label printer gets the same page as the kiosk.
+	 */
+	const labelPng = $derived(
+		show
+			? renderKioskQrLabelPng(evacuee._id, {
+					name,
+					zone: labelZoneName(evacuee.current_stay?.zone, shelterQuery.data?.zones),
+					checklist: [t.checklistCheckIn, t.checklistScreening, t.checklistLodging],
+					checkedCount: intakeStationsPassed(
+						evacuee.current_stay,
+						(screeningsQuery.data?.length ?? 0) > 0
+					)
+				})
+			: null
+	);
+
 	async function handlePrintPreview() {
-		if (!cardEl) return;
-		// Open while the click still has user activation. Opening after html2canvas finishes
-		// can be treated as an unsolicited popup, especially outside localhost.
+		if (!labelPng) return;
+		// Open while the click still has user activation; opening after the render finishes can be
+		// treated as an unsolicited popup, especially outside localhost.
 		const previewWindow = window.open('', '_blank');
 		if (!previewWindow) {
 			toast.error(t.pdfBlockedToast);
@@ -48,38 +84,20 @@
 		}
 
 		isExportingPdf = true;
-		cardEl.classList.add('print-capture');
 		try {
-			await tick();
-			await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-			await previewElementAsPdf(cardEl, `evacuee-id-${fullId}`, {
-				maxWidthMm: 100,
+			const png = await labelPng;
+			previewImageAsPdf(`data:image/png;base64,${png}`, `evacuee-id-${fullId}`, {
+				widthMm: KIOSK_LABEL_MM.width,
+				heightMm: KIOSK_LABEL_MM.height,
 				previewWindow
 			});
-		} catch (err) {
+		} catch {
 			previewWindow.close();
-			toast.error(err instanceof Error ? err.message : t.pdfFailedToast);
+			toast.error(t.pdfFailedToast);
 		} finally {
-			cardEl.classList.remove('print-capture');
 			isExportingPdf = false;
 		}
 	}
-
-	$effect(() => {
-		if (!show) return;
-		qrUrl = null;
-		generateQrDataUrl(evacuee._id, {
-			// Generate a larger source image so the QR remains crisp at every responsive size.
-			width: 384,
-			margin: 1,
-			color: { dark: '#0f172a', light: '#ffffff' }
-		}).then((url) => {
-			qrUrl = url;
-		});
-	});
-
-	const fullId = $derived(evacuee._id.split(':')[1] ?? evacuee._id);
-	const phone = $derived(evacuee.phone?.trim() || null);
 </script>
 
 {#if show}
@@ -92,121 +110,78 @@
 			: 'fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-950/60 p-3 backdrop-blur-xs sm:p-6'}
 	>
 		<div
-			class={embedded
-				? 'w-full max-w-2xl rounded-3xl border border-border bg-white px-4 py-6 shadow-sm sm:px-8 sm:py-10 dark:bg-card'
-				: 'my-auto w-full max-w-2xl animate-in rounded-3xl border border-border bg-white px-4 py-6 shadow-sm duration-150 zoom-in-95 fade-in sm:px-8 sm:py-10 dark:bg-card'}
+			role={embedded ? undefined : 'dialog'}
+			aria-modal={embedded ? undefined : 'true'}
+			aria-labelledby={titleId}
+			class={cn(
+				'w-full max-w-lg rounded-2xl border border-slate-200/80 bg-white p-4 sm:p-6',
+				embedded ? 'shadow-2xs' : 'my-auto animate-in shadow-md duration-150 zoom-in-95 fade-in'
+			)}
 		>
-			{#if !embedded && dismissible}
-				<div class="mb-2 flex justify-end">
-					<button
+			<div class="mb-4 flex items-start justify-between gap-3">
+				<div class="min-w-0">
+					<h2 id={titleId} class="text-lg font-bold text-slate-900 sm:text-xl">
+						{t.cardTitle}
+					</h2>
+					<p class="truncate text-sm text-slate-500">{name}</p>
+				</div>
+				{#if !embedded && dismissible}
+					<Button
+						variant="ghost"
+						size="icon"
+						class="size-11 shrink-0 text-slate-500 hover:text-slate-900"
 						onclick={onClose}
-						class="cursor-pointer rounded-lg p-1 text-muted-foreground transition-colors hover:text-foreground"
 					>
 						<X class="size-5" />
-					</button>
+						<span class="sr-only">{effectiveCloseLabel}</span>
+					</Button>
+				{/if}
+			</div>
+
+			<!-- Label preview: the same image that prints -->
+			<figure class="rounded-xl border border-slate-200/80 bg-slate-50 p-3 sm:p-4">
+				<div
+					class="mx-auto aspect-4/3 w-full max-w-sm overflow-hidden rounded-md border border-slate-300 bg-white shadow-2xs"
+				>
+					{#if labelPng}
+						{#await labelPng}
+							<div class="size-full animate-pulse bg-slate-100"></div>
+						{:then png}
+							<img
+								src="data:image/png;base64,{png}"
+								alt={t.qrAlt(name)}
+								class="size-full object-contain"
+							/>
+						{:catch}
+							<div
+								class="flex size-full items-center justify-center p-4 text-center text-sm text-slate-500"
+							>
+								{t.labelRenderFailed}
+							</div>
+						{/await}
+					{/if}
 				</div>
-			{/if}
+				<figcaption class="mt-3 text-center text-sm text-slate-500">
+					<span class="font-semibold text-slate-700">{t.labelSize}</span>
+					· {t.printHint}
+				</figcaption>
+			</figure>
 
-			<!-- Header -->
-			<div class="mb-6 flex flex-col items-center gap-1 text-center sm:mb-8">
-				<h2 class="text-2xl font-bold text-slate-900 dark:text-slate-50">
-					{t.cardTitle}
-				</h2>
-				<p class="text-sm text-muted-foreground">
-					{formatPersonName(evacuee)}
-				</p>
-			</div>
-
-			<!-- ID card preview -->
-			<div class="mb-6 rounded-2xl bg-slate-100 p-3 sm:p-6 dark:bg-slate-800">
-				<QrIdCard
-					id="qr-identity-card-{fullId}"
-					bind:ref={cardEl}
-					src={qrUrl}
-					alt={t.qrAlt(formatPersonName(evacuee))}
-					name={formatPersonName(evacuee)}
-					{phone}
-					checklist={[t.checklistCheckIn, t.checklistScreening, t.checklistLodging]}
-				/>
-			</div>
-
-			<!-- Actions -->
-			<div class="flex flex-col gap-3">
-				<button
+			<div class="mt-5 flex flex-col gap-2">
+				<Button
+					class="h-12 w-full gap-2 text-base"
 					onclick={handlePrintPreview}
-					disabled={isExportingPdf}
-					class="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-[#0d2240] py-3.5 text-sm font-semibold text-white transition-colors hover:bg-[#1a3a5c] disabled:cursor-not-allowed disabled:opacity-60"
+					disabled={isExportingPdf || !labelPng}
 				>
 					<Printer class="size-4" />
 					{isExportingPdf ? t.generatingPdf : t.printIdCard}
-				</button>
+				</Button>
 				{#if dismissible}
-					<button
-						onclick={onClose}
-						class="cursor-pointer py-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
-					>
+					<Button variant="ghost" class="h-11 w-full text-slate-600" onclick={onClose}>
 						{effectiveCloseLabel}
-					</button>
+					</Button>
 				{/if}
 			</div>
 		</div>
 	</div>
 {/if}
-
-<style>
-	@media print {
-		:global(body *) {
-			visibility: hidden;
-		}
-		:global(.qr-identity-card),
-		:global(.qr-identity-card *) {
-			visibility: visible;
-		}
-		:global(.qr-identity-card) {
-			position: absolute;
-			left: 50%;
-			top: 50%;
-			width: 760px !important;
-			max-width: none !important;
-			min-height: 210px !important;
-			flex-direction: row !important;
-			transform: translate(-50%, -50%);
-			border: 1px solid #ccc !important;
-			box-shadow: none !important;
-			background-color: #fff !important;
-		}
-		:global(.qr-identity-card .card-qr-panel) {
-			order: 2 !important;
-			width: auto !important;
-			border-top: 0 !important;
-			border-left: 1px solid #e2e8f0 !important;
-			padding: 20px 28px !important;
-		}
-		:global(.qr-identity-card .card-details) {
-			order: 1 !important;
-			justify-content: flex-start !important;
-			padding: 24px 28px !important;
-		}
-		:global(.qr-identity-card .card-qr-image) {
-			height: 160px !important;
-			width: 160px !important;
-		}
-		:global(.qr-identity-card .card-phone) {
-			font-size: 1rem !important;
-			color: #0f172a !important;
-		}
-		:global(.qr-identity-card .card-name) {
-			font-size: 1.875rem !important;
-		}
-		:global(.qr-identity-card .card-checklist) {
-			font-size: 0.875rem !important;
-			gap: 1rem !important;
-			padding-top: 1.25rem !important;
-		}
-		:global(.qr-identity-card .card-check-box) {
-			height: 16px !important;
-			width: 16px !important;
-			border-color: #0f172a !important;
-		}
-	}
-</style>

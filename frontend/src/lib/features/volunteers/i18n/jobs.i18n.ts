@@ -17,6 +17,10 @@ export interface JobsTranslations {
 	filterNearFull: string;
 	filterControlled: string;
 	skillsLabel: string;
+	/** Heading above a job card's required skills. */
+	cardSkillsTitle: string;
+	/** Appended to a shift's `HH:MM - HH:MM` range (Thai " น.", nothing in English). */
+	timeSuffix: string;
 	clearFilter: string;
 	shelterLabel: string;
 	allShelters: string;
@@ -33,6 +37,13 @@ export interface JobsTranslations {
 	tagFull: string;
 	shiftsAndQuota: string;
 	shiftsUnit: string;
+	moreShiftsPrefix: string;
+	moreShiftsIn: string;
+	daysUnit: string;
+	moreShiftsDates: string;
+	moreShiftsTimes: string;
+	showAllShifts: string;
+	collapseShifts: string;
 	peopleUnit: string;
 	seatsUnit: string;
 	skillsUnit: string;
@@ -67,6 +78,17 @@ export interface JobsTranslations {
 	ticketErrorEmpty: string;
 	cameraPermissionError: string;
 	cameraScanHint: string;
+	qrUploadButton: string;
+	applyPickShift: string;
+	applySeatsLeftPrefix: string;
+	applySeatsLeftSuffix: string;
+	applyMoreDatesPrefix: string;
+	applyMoreDatesSuffix: string;
+	qrUploadReading: string;
+	qrUploadHint: string;
+	qrUploadNotFound: string;
+	qrUploadNotImage: string;
+	qrUploadTooLarge: string;
 	closeModal: string;
 	// Quick Apply Modal
 	shiftDateLabel: string;
@@ -117,20 +139,22 @@ export const jobsI18n: Record<LanguageCode, JobsTranslations> = {
 		pageTitle: 'กระดานรับสมัครอาสาสมัคร — Smart Shelter',
 		heroTitle: 'งานอาสาสมัครในศูนย์พักพิง',
 		heroDescription:
-			'ร่วมเป็นส่วนหนึ่งในการช่วยเหลือผู้ประสบภัย เลือกภารกิจที่คุณถนัดและเวลาที่สะดวก พร้อมรับตั๋วดิจิทัล (QR Code Pass) ',
+			'ร่วมเป็นส่วนหนึ่งในการช่วยเหลือผู้ประสบภัย เลือกงานอาสาสมัครที่คุณถนัดและเวลาที่สะดวก พร้อมรับตั๋วดิจิทัล',
 		heroBadge: 'Volunteer Job Board',
-		tabJobBoard: 'งานอาสาสมัคร (Job Board)',
-		tabFindTicket: 'ค้นหาตั๋วของฉัน (Find My Ticket)',
+		tabJobBoard: 'งานอาสาสมัคร',
+		tabFindTicket: 'ค้นหาตั๋วของฉัน',
 		portalLink: 'เข้าสู่ระบบอาสาสมัคร / ตารางงานของฉัน →',
 		// Job Board Search & Filters
 		jobBoardSectionTitle: 'งานอาสาสมัครในศูนย์พักพิง',
 		searchPlaceholder: 'ค้นหาชื่องาน, ทักษะ, หรือชื่อศูนย์...',
 		filterLabel: 'ตัวกรอง:',
 		filterAll: 'ทั้งหมด',
-		filterOpen: 'เปิดรับสมัคร (Open)',
-		filterNearFull: 'ใกล้เต็ม (Near Full)',
+		filterOpen: 'เปิดรับสมัคร',
+		filterNearFull: 'ใกล้เต็ม',
 		filterControlled: 'ทักษะวิชาชีพ/ควบคุม',
 		skillsLabel: 'ทักษะ:',
+		cardSkillsTitle: 'ความสามารถ',
+		timeSuffix: ' น.',
 		clearFilter: '✕ ล้างตัวกรอง',
 		shelterLabel: 'ศูนย์:',
 		allShelters: 'ทุกศูนย์พักพิง',
@@ -140,13 +164,20 @@ export const jobsI18n: Record<LanguageCode, JobsTranslations> = {
 		noJobsFoundDesc: 'โปรดลองเปลี่ยนตัวกรองหรือคำค้นหาเพื่อดูกะงานอื่น',
 		paginationSummary: (from, to, total) => `แสดงงานที่ ${from} - ${to} จากทั้งหมด ${total} งาน`,
 		clearAllFilters: 'ล้างตัวกรองทั้งหมด',
-		generalMission: 'ภารกิจทั่วไป',
-		controlledMission: 'ภารกิจควบคุม',
+		generalMission: 'งานอาสาสมัครทั่วไป',
+		controlledMission: 'งานอาสาสมัครทักษะควบคุม',
 		tagOpen: 'เปิดรับสมัคร',
 		tagNearFull: 'ใกล้เต็ม',
 		tagFull: 'เต็มแล้ว',
 		shiftsAndQuota: 'รอบกะเวลาและโควตาปฏิบัติงาน',
 		shiftsUnit: 'กะ',
+		moreShiftsPrefix: 'ยังมีอีก',
+		moreShiftsIn: 'ใน',
+		daysUnit: 'วัน',
+		moreShiftsDates: 'วันที่',
+		moreShiftsTimes: 'ช่วงเวลา',
+		showAllShifts: 'ดูกะทั้งหมด',
+		collapseShifts: 'ย่อรายการกะ',
 		peopleUnit: 'คน',
 		seatsUnit: 'ที่',
 		skillsUnit: 'ทักษะ',
@@ -161,10 +192,10 @@ export const jobsI18n: Record<LanguageCode, JobsTranslations> = {
 		quotaCap: 'รับ',
 		appliedCount: 'สมัครแล้ว',
 		confirmedCount: 'ยืนยันแล้ว',
-		defaultJobDesc: 'ช่วยเหลืองานในศูนย์พักพิงตามภารกิจที่ได้รับมอบหมาย',
+		defaultJobDesc: 'ช่วยเหลืองานในศูนย์พักพิงตามงานอาสาสมัครที่ได้รับมอบหมาย',
 		// Ticket Search
-		ticketSearchTitle: 'ค้นหาตั๋วของฉัน (Find My Ticket Pass)',
-		ticketSearchDesc: 'ระบุรหัสบัตร หรือ สแกน QR Code เพื่อเปิดตั๋วดิจิทัล (Digital Pass)',
+		ticketSearchTitle: 'ค้นหาตั๋วของฉัน',
+		ticketSearchDesc: 'ระบุรหัสบัตร หรือ สแกน QR Code เพื่อเปิดตั๋วดิจิทัล',
 		ticketSearchPlaceholder: 'กรอกรหัสบัตร เช่น TKT-VOL-123456 หรือ Token ตั๋ว',
 		ticketSearchButton: 'ค้นหาตั๋ว',
 		ticketSearching: 'กำลังค้นหา...',
@@ -183,11 +214,22 @@ export const jobsI18n: Record<LanguageCode, JobsTranslations> = {
 		ticketErrorEmpty: 'กรุณากรอกรหัสบัตร หรือ รหัส Token ตั๋วจิตอาสา',
 		cameraPermissionError: 'ไม่สามารถเข้าถึงกล้องได้ โปรดตรวจสอบการอนุญาตใช้งานกล้อง',
 		cameraScanHint: 'หันกล้องไปยัง QR Code บนตั๋วดิจิทัลหรือบัตรงานจิตอาสา',
+		qrUploadButton: 'เลือกรูป QR จากเครื่อง',
+		applyPickShift: 'เลือกวันและช่วงเวลา',
+		applySeatsLeftPrefix: 'เหลือ',
+		applySeatsLeftSuffix: 'ที่',
+		applyMoreDatesPrefix: 'แสดงวันที่เหลืออีก',
+		applyMoreDatesSuffix: 'วัน',
+		qrUploadReading: 'กำลังอ่าน QR จากรูป…',
+		qrUploadHint: 'อ่าน QR จากรูปบนเครื่องนี้เท่านั้น — รูปไม่ถูกส่งขึ้นระบบ',
+		qrUploadNotFound: 'อ่าน QR จากรูปนี้ไม่ได้ — ลองรูปที่ชัดขึ้น หรือครอบให้เห็นเฉพาะ QR',
+		qrUploadNotImage: 'ไฟล์นี้ไม่ใช่รูปภาพ — กรุณาเลือกรูป QR (JPG หรือ PNG)',
+		qrUploadTooLarge: 'รูปใหญ่เกิน 10 MB — กรุณาเลือกรูปที่เล็กกว่านี้',
 		closeModal: 'ปิดหน้าต่าง',
 		// Quick Apply Modal
 		shiftDateLabel: 'กะวันที่',
 		applyStep1Title: '1. ข้อมูลประจำตัวอาสาสมัคร',
-		applyStep2Title: '2. เลือกรอบกะเวลาปฏิบัติงาน (Shifts)',
+		applyStep2Title: '2. เลือกรอบกะเวลาปฏิบัติงาน',
 		applyStep3Title: '3. ทักษะความสามารถ',
 		applyStep3Subtitle: 'เลือกทักษะที่คุณมีความพร้อมหรือความชำนาญ (เลือกได้ ไม่บังคับ)',
 		applyFirstName: 'ชื่อ',
@@ -206,7 +248,7 @@ export const jobsI18n: Record<LanguageCode, JobsTranslations> = {
 		applyLoadingSkills: 'กำลังโหลดรายการทักษะมาตรฐาน...',
 		applyControlledSkillBadge: 'ทักษะควบคุม',
 		applyMatchesJobBadge: 'แนะนำ',
-		applySkillsSuggestion: 'ทักษะที่มีป้ายกำกับสีเขียวเป็นทักษะแนะนำสำหรับภารกิจนี้',
+		applySkillsSuggestion: 'ทักษะที่มีไอคอนประกายเป็นทักษะแนะนำสำหรับงานอาสาสมัครนี้',
 		applyPdpaTitle: 'ความยินยอม PDPA:',
 		applyPdpaText:
 			'ข้าพเจ้ายินยอมให้ศูนย์พักพิงและระบบจัดสรรจิตอาสาเก็บรวบรวมและประมวลผลข้อมูลส่วนบุคคลข้างต้น เพื่อการประสานงานและจัดสรรงานจิตอาสาตาม พ.ร.บ. คุ้มครองข้อมูลส่วนบุคคล พ.ศ. 2562',
@@ -215,7 +257,7 @@ export const jobsI18n: Record<LanguageCode, JobsTranslations> = {
 		applySubmitting: 'กำลังส่งข้อมูล...',
 		applyCancelButton: 'ยกเลิก',
 		applySuccessTitle: 'สมัครงานจิตอาสาสำเร็จ!',
-		applySuccessDesc: 'ระบบได้ออกบัตรตั๋วดิจิทัล (Digital Pass) ประจำตัวของคุณเรียบร้อยแล้ว',
+		applySuccessDesc: 'ระบบได้ออกบัตรตั๋วดิจิทัลประจำตัวของคุณเรียบร้อยแล้ว',
 		applyViewPassButton: 'เปิดดูตั๋วดิจิทัลของคุณ',
 		toastApplySuccess: 'ส่งใบสมัครสำเร็จ!',
 		errPdpaRequired: 'กรุณายอมรับเงื่อนไข PDPA ก่อนดำเนินการต่อ',
@@ -247,6 +289,8 @@ export const jobsI18n: Record<LanguageCode, JobsTranslations> = {
 		filterNearFull: 'Almost Full',
 		filterControlled: 'Controlled / Professional',
 		skillsLabel: 'Skills:',
+		cardSkillsTitle: 'Skills',
+		timeSuffix: '',
 		clearFilter: '✕ Clear Filter',
 		shelterLabel: 'Shelter:',
 		allShelters: 'All Shelters',
@@ -263,6 +307,13 @@ export const jobsI18n: Record<LanguageCode, JobsTranslations> = {
 		tagFull: 'Full',
 		shiftsAndQuota: 'Shifts & Capacity Quota',
 		shiftsUnit: 'shifts',
+		moreShiftsPrefix: 'Plus',
+		moreShiftsIn: 'on',
+		daysUnit: 'days',
+		moreShiftsDates: 'Dates',
+		moreShiftsTimes: 'Times',
+		showAllShifts: 'Show all shifts',
+		collapseShifts: 'Show fewer shifts',
 		peopleUnit: 'people',
 		seatsUnit: 'seats',
 		skillsUnit: 'skills',
@@ -299,6 +350,17 @@ export const jobsI18n: Record<LanguageCode, JobsTranslations> = {
 		ticketErrorEmpty: 'Please enter your ticket card code or volunteer token',
 		cameraPermissionError: 'Unable to access camera. Please check camera permissions.',
 		cameraScanHint: 'Point camera at the QR code on your Digital Pass or volunteer badge',
+		qrUploadButton: 'Choose a QR image',
+		applyPickShift: 'Pick a date and time',
+		applySeatsLeftPrefix: '',
+		applySeatsLeftSuffix: 'left',
+		applyMoreDatesPrefix: 'Show',
+		applyMoreDatesSuffix: 'more dates',
+		qrUploadReading: 'Reading the QR from the image…',
+		qrUploadHint: 'Read on this device only — the image is never uploaded',
+		qrUploadNotFound: 'No QR found in this image — try a sharper photo or crop to the QR',
+		qrUploadNotImage: 'This file is not an image — please choose a QR image (JPG or PNG)',
+		qrUploadTooLarge: 'The image is over 10 MB — please choose a smaller one',
 		closeModal: 'Close',
 		// Quick Apply Modal
 		shiftDateLabel: 'Shift Date',
@@ -323,7 +385,7 @@ export const jobsI18n: Record<LanguageCode, JobsTranslations> = {
 		applyControlledSkillBadge: 'Controlled Skill',
 		applyMatchesJobBadge: 'Suggested',
 		applySkillsSuggestion:
-			'Skills highlighted in green are suggestions for this job. Choose what matches your capabilities; selection is optional.',
+			'Skills marked with a sparkle are suggestions for this job. Choose what matches your capabilities; selection is optional.',
 		applyPdpaTitle: 'PDPA Consent:',
 		applyPdpaText:
 			'I consent to the evacuation shelter and volunteer coordination system collecting and processing my personal data for volunteer management in accordance with the Personal Data Protection Act (PDPA).',

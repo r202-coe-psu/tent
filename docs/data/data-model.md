@@ -2,7 +2,7 @@
 title: Smart Shelter — Data Model (CouchDB remote-first) v3
 status: draft for review
 created: 2026-06-11
-updated: 2026-10-12
+updated: 2026-10-14
 note: ออกแบบใหม่ทั้งหมด — ไม่สืบทอดจาก docs/data v2.0 (retired 2026-06-11); decision sync 2026-06-15 เลือก MongoDB projection สำหรับ public tier และ EOC read-model
 ---
 
@@ -50,7 +50,7 @@ device app  ⇄ WAN ⇄  central (CouchDB)
 | `shelter_import_audit` | ✓ private | — | no browser access | server-side `adminRaw` + SA-only BFF | — |
 | `catalog` | ✓ master | ✓ replica | no disconnected read cache (status-only when unreachable) | app read จาก central (pull/read-through) | central → edge; app read จาก edge เฉพาะ outage |
 | `_users` | ✓ master | ✓ **filtered replica** (เฉพาะ user ของศูนย์ตน) | — | central `_session` | central → edge (selector by role `shelter:{id}`) เพื่อ fallback login |
-| `central_ops` | ✓ เท่านั้น | — | — | central-only service/read model & cross-tenant store | — (search_audit, export_job, `counter:shelter`, `referral`) |
+| `central_ops` | ✓ เท่านั้น | — | — | central-only service/read model & cross-tenant store | — (search_audit, export_job, `counter:shelter`, `referral`, `referral_close_job`, `referral_close_lock` — CR-168) |
 
 - 1 ศูนย์ = 1 db → ปิดศูนย์ = หยุด replication + purge ทั้ง db ที่ central, ล้าง edge server ทั้งเครื่อง
 - ศูนย์ 20,000 คน: traffic ปกติวิ่งกับ **central**; ถ้า WAN/central ล่มระหว่าง onboarding จึง failover ไป
@@ -132,8 +132,9 @@ device app  ⇄ WAN ⇄  central (CouchDB)
 | `job_application` | state machine | ใบสมัครงานอาสา (`pending_review→confirmed|rejected|cancelled`, tracking_token) — v2 CR-041 + CR-094 |
 | `shift_assignment` | mutable (LWW) | ตารางเวร + duty_window + เช็คอิน/เช็คเอาต์หน้างาน (QR หรือ manual override) + dispatch — v3 CR-094, บังคับ Time-Bound Write Access ที่ CouchDB (role grant ตามกะ) |
 | `volunteer_transfer` | state machine | คำขอโอนย้ายอาสาข้ามศูนย์ (`pending→accepted|rejected`) — doc ใหม่ CR-094 §3.5, accepted แล้วอัปเดต `volunteer.current_shelter_code` |
-| `shelter_report` | state machine | รายงานในศูนย์ (`kind`: grievance \| incident) — [CR-040](../changes/08-E-reports/CR-040-shelter-case-grievance-reframe.md) |
-| `referral` | state machine | ส่งต่อหน่วยงานนอก/ข้ามศูนย์: `draft→sent→accepted|rejected→closed` (จัดเก็บที่ `central_ops` — ดู schema.md §5.4) |
+| `shelter_incident` | state machine (ห้ามลบ) | บันทึกเหตุการณ์ประจำวันในศูนย์ — staff ทุกคนเปิดได้ · timeline append-only · แทน `shelter_report` — [CR-155](../changes/08-E-reports/CR-155-shelter-incident-log.md) |
+| `referral` | state machine | ส่งต่อหน่วยงานนอก/ข้ามศูนย์: `draft→sent→accepted|rejected→closed`, `draft→closed` (CR-048), `sent→closed` ถอนคำขอ (CR-167) (จัดเก็บที่ `central_ops` — ดู schema.md §5.4) |
+| `referral_close_job` / `referral_close_lock` | job + lock | ปิด referral ทั้งศูนย์ด้วย worker (CR-168): job doc เดียว + cursor, lock ต่อศูนย์ — `schema.md` §5.4.1–5.4.2 · ประมวลผลโดย service `referral-worker` (Node, image เดียวกับ frontend) แยกจาก Python `sync-worker` และ `import-worker` · ไม่ใช้ Redis · Python projection ไม่ consume doc type นี้ |
 | `audit` | **append-only** | การกระทำสำคัญ (override duplicate-hint, แก้ retroactive, export, ลบ) |
 
 State machine บน CouchDB = เขียน doc ใหม่ทั้ง doc พร้อม `status` ใหม่ (LWW) — ตัว transition ที่ขัดกัน
