@@ -2,10 +2,11 @@
  * Shelter Incident Log (CR-155) — `/back-office/incidents` on an own `E2E` shelter.
  *
  * Real roles, all scoped to the run's shelter (compound `{code}:{cap}` roles):
- *   - owner   (registration_staff) — opens a record and becomes its owner
- *   - peer    (kitchen_staff)      — any staff: may add notes, not change status
- *   - manager (shelter_manager)    — may cancel
- *   - outsider (staff of SH001)    — refused (read-only role; nothing is written to SH001)
+ *   - owner   (security_officer)  — opens a record and becomes its owner
+ *   - peer    (security_officer)  — incident staff, not the owner: may add notes, not change status
+ *   - manager (shelter_manager)   — may cancel
+ *   - kitchen (kitchen_staff)     — not incident staff: turned back to /portal, never a handover target
+ *   - outsider (staff of SH001)   — refused (read-only role; nothing is written to SH001)
  *
  * Proves: create form validation, create → detail, notes by non-owners, status graph,
  * late-binding of the respondent, handover (D2), owner close (D3), manager cancel (D4),
@@ -43,7 +44,7 @@ const MAIN_TITLE = `E2E ทะเลาะหน้าโรงอาหาร $
 const SECOND_TITLE = `E2E แจ้งเหตุซ้ำ ${RUN_ID}`;
 const RESPONDENT_NAME = `E2E บุคคลภายนอก ${RUN_ID}`;
 
-type Role = 'owner' | 'peer' | 'manager' | 'outsider' | 'volunteer';
+type Role = 'owner' | 'peer' | 'manager' | 'kitchen' | 'outsider' | 'volunteer';
 
 let shelterCode: string | undefined;
 let mainId: string | undefined;
@@ -63,9 +64,10 @@ function staff(role: Role, code: string, cap: string, display: string): TestUser
 
 async function ensureStaff(code: string): Promise<void> {
 	if (sessions.size > 0) return;
-	users.set('owner', staff('owner', code, 'registration_staff', `E2E Owner ${RUN_ID}`));
-	users.set('peer', staff('peer', code, 'kitchen_staff', `E2E Peer ${RUN_ID}`));
+	users.set('owner', staff('owner', code, 'security_officer', `E2E Owner ${RUN_ID}`));
+	users.set('peer', staff('peer', code, 'security_officer', `E2E Peer ${RUN_ID}`));
 	users.set('manager', staff('manager', code, 'shelter_manager', `E2E Manager ${RUN_ID}`));
+	users.set('kitchen', staff('kitchen', code, 'kitchen_staff', `E2E Kitchen ${RUN_ID}`));
 	users.set('outsider', staff('outsider', 'SH001', 'registration_staff', `E2E Out ${RUN_ID}`));
 	// Volunteer account with a shelter capability — must never appear in the handover picker.
 	users.set('volunteer', staff('volunteer', code, 'registration_staff', `E2E Vol ${RUN_ID}`));
@@ -451,6 +453,23 @@ test.describe(
 			const peer = users.get('peer')!;
 			await runAction(page, 'ส่งต่อเคส', 'ส่งเวรให้ฝ่ายครัวติดตาม', async (dialog) => {
 				await dialog.locator('[data-name="assigned_to"]').click();
+				// Only SO/SM colleagues are offered — not the kitchen user, not the current owner.
+				const kitchen = users.get('kitchen')!;
+				const manager = users.get('manager')!;
+				await expect(
+					page.getByRole('button', { name: `${peer.display_name} (${peer.name})` })
+				).toBeVisible();
+				await expect(
+					page.getByRole('button', { name: `${manager.display_name} (${manager.name})` })
+				).toBeVisible();
+				await expect(
+					page.getByRole('button', { name: `${kitchen.display_name} (${kitchen.name})` })
+				).toHaveCount(0);
+				await expect(
+					page.getByRole('button', {
+						name: `${users.get('owner')!.display_name} (${users.get('owner')!.name})`
+					})
+				).toHaveCount(0);
 				await page.getByPlaceholder('พิมพ์ชื่อหรือ username เพื่อค้นหา...').fill(peer.name);
 				await page.getByRole('button', { name: `${peer.display_name} (${peer.name})` }).click();
 			});
@@ -534,6 +553,78 @@ test.describe(
 
 			await table.getByRole('link', { name: MAIN_TITLE }).click();
 			await expect(page).toHaveURL(new RegExp(encodeURIComponent(mainId!)));
+			await page.context().close();
+		});
+
+		test('status cards count the cases and filter the table', async ({ browser }) => {
+			const page = await openAs(browser, 'owner');
+			await page.goto('/back-office/incidents');
+			const cards = page.getByRole('region', { name: 'สรุปจำนวนเคสตามสถานะ' });
+			await expect(cards).toBeVisible({ timeout: 30_000 });
+			const card = (label: string, count: number) =>
+				cards.getByRole('button', { name: new RegExp(`^${label}\\s*${count}$`) });
+
+			// This run's shelter holds exactly: one closed (main) and one cancelled (second).
+			await expect(card('รับแจ้งเหตุ', 0)).toBeVisible();
+			await expect(card('กำลังดำเนินการ', 0)).toBeVisible();
+			await expect(card('จัดการเรียบร้อย', 0)).toBeVisible();
+			await expect(card('ปิดเคส', 1)).toBeVisible();
+			await expect(card('ยกเลิก', 1)).toBeVisible();
+
+			const mainLink = page.getByRole('link', { name: MAIN_TITLE });
+			const secondLink = page.getByRole('link', { name: SECOND_TITLE });
+			// Default filter is "open" — both finished cases are hidden.
+			await expect(mainLink).toHaveCount(0);
+
+			await card('ปิดเคส', 1).click();
+			await expect(card('ปิดเคส', 1)).toHaveAttribute('aria-pressed', 'true');
+			await expect(mainLink).toBeVisible();
+			await expect(secondLink).toHaveCount(0);
+
+			await card('ยกเลิก', 1).click();
+			await expect(secondLink).toBeVisible();
+			await expect(mainLink).toHaveCount(0);
+
+			// Clicking the active card again resets to the default filter.
+			await card('ยกเลิก', 1).click();
+			await expect(card('ยกเลิก', 1)).toHaveAttribute('aria-pressed', 'false');
+			await expect(secondLink).toHaveCount(0);
+			await page.context().close();
+		});
+
+		test('the row action button opens the detail page', async ({ browser }) => {
+			const page = await openAs(browser, 'owner');
+			await page.goto('/back-office/incidents');
+			await page
+				.getByRole('region', { name: 'สรุปจำนวนเคสตามสถานะ' })
+				.getByRole('button', { name: /^ปิดเคส/ })
+				.click();
+			const row = page.getByRole('row').filter({ hasText: MAIN_TITLE });
+			await row.getByRole('link', { name: 'ดูรายละเอียด' }).click();
+			await expect(page).toHaveURL(new RegExp(encodeURIComponent(mainId!)), { timeout: 30_000 });
+			await expect(page.getByText('ไทม์ไลน์', { exact: true })).toBeVisible({ timeout: 30_000 });
+			await page.context().close();
+		});
+
+		test('the portal tile links security staff to the incident log', async ({ browser }) => {
+			const page = await openAs(browser, 'owner');
+			await page.goto('/portal');
+			const tile = page.getByRole('link', { name: /ความปลอดภัยและเหตุการณ์/ });
+			await expect(tile).toBeVisible({ timeout: 30_000 });
+			await expect(tile).toHaveAttribute('href', /\/back-office\/incidents$/);
+			await tile.click();
+			await expect(page).toHaveURL(/\/back-office\/incidents$/, { timeout: 30_000 });
+			await page.context().close();
+		});
+
+		test('non-incident staff (kitchen) are redirected and see no navbar item', async ({
+			browser
+		}) => {
+			const page = await openAs(browser, 'kitchen');
+			await page.goto('/back-office/incidents');
+			await expect(page).toHaveURL(/\/portal/, { timeout: 30_000 });
+			await expect(page.getByRole('link', { name: 'บันทึกเหตุการณ์ประจำวัน' })).toHaveCount(0);
+			await expect(page.getByRole('link', { name: /ความปลอดภัยและเหตุการณ์/ })).toHaveCount(0);
 			await page.context().close();
 		});
 
