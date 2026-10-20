@@ -1,6 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { findMasterByCode } from '$lib/server/shelters.admin';
+import { isShelterCancelled } from '$lib/features/shelters/server';
 
 export const prerender = false;
 
@@ -27,7 +28,8 @@ export const GET: RequestHandler = async ({ url }) => {
 
 	try {
 		const master = await findMasterByCode(shelterCode);
-		if (!master) {
+		// A cancelled shelter is not public (draft-shelter-cancelled-status) — answer as unknown.
+		if (!master || isShelterCancelled(master)) {
 			return json(
 				{
 					feature_flags: { allow_pets: false, allow_assets: false, allow_vehicles: false },
