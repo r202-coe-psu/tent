@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { partitionApplicantQueue } from './applicant-queue';
+import { groupApplicationsByApplicant, partitionApplicantQueue } from './applicant-queue';
 import type { JobApplication } from './job-application.schema';
 
 function app(overrides: Partial<JobApplication> & { _id: string }): JobApplication {
@@ -78,5 +78,68 @@ describe('partitionApplicantQueue', () => {
 
 	it('handles an empty list', () => {
 		expect(partitionApplicantQueue([], 'job:A')).toEqual({ pending: [], reviewed: [] });
+	});
+});
+
+describe('groupApplicationsByApplicant', () => {
+	const shift = (date: string, start: string) => ({
+		date,
+		start_time: start,
+		end_time: '17:00'
+	});
+
+	it('puts one applicant’s shifts on one card, in date-then-time order', () => {
+		const groups = groupApplicationsByApplicant([
+			app({ _id: 'd2', volunteer_id: 'volunteer:a', selected_shift: shift('2026-08-11', '08:00') }),
+			app({
+				_id: 'd1-pm',
+				volunteer_id: 'volunteer:a',
+				selected_shift: shift('2026-08-10', '13:00')
+			}),
+			app({
+				_id: 'd1-am',
+				volunteer_id: 'volunteer:a',
+				selected_shift: shift('2026-08-10', '08:00')
+			})
+		]);
+		expect(groups).toHaveLength(1);
+		expect(groups[0].applications.map((a) => a._id)).toEqual(['d1-am', 'd1-pm', 'd2']);
+	});
+
+	it('keeps the input order of each applicant’s first application (first come, first served)', () => {
+		const groups = groupApplicationsByApplicant([
+			app({ _id: 'b1', volunteer_id: 'volunteer:b' }),
+			app({ _id: 'a1', volunteer_id: 'volunteer:a' }),
+			app({ _id: 'b2', volunteer_id: 'volunteer:b', selected_shift: shift('2026-08-12', '08:00') })
+		]);
+		expect(groups.map((g) => g.key)).toEqual(['volunteer:b', 'volunteer:a']);
+		expect(groups[0].applications.map((a) => a._id)).toEqual(['b1', 'b2']);
+	});
+
+	it('falls back to the phone hash for an application with no linked volunteer', () => {
+		const other = {
+			first_name: 'สมหญิง',
+			last_name: 'ใจงาม',
+			phone: '0899999999',
+			phone_hash: 'hash-2',
+			email: null,
+			skills: [],
+			national_id: null
+		};
+		const groups = groupApplicationsByApplicant([
+			app({ _id: 'x1' }),
+			app({ _id: 'y1', applicant: other }),
+			app({ _id: 'x2', selected_shift: shift('2026-08-12', '08:00') })
+		]);
+		expect(groups.map((g) => g.applications.map((a) => a._id))).toEqual([['x1', 'x2'], ['y1']]);
+	});
+
+	it('does not mutate its input', () => {
+		const input = [
+			app({ _id: 'late', selected_shift: shift('2026-08-12', '08:00') }),
+			app({ _id: 'early', selected_shift: shift('2026-08-10', '08:00') })
+		];
+		groupApplicationsByApplicant(input);
+		expect(input.map((a) => a._id)).toEqual(['late', 'early']);
 	});
 });
