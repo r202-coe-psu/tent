@@ -112,6 +112,7 @@ pipeline {
                         withCredentials([string(credentialsId: 'tent-discord-webhook-ci', variable: 'DISCORD_WEBHOOK_URL')]) {
                             withEnv([
                                 'NOTIFY_KIND=janitor',
+                                'NOTIFY_USERNAME=Tent Janitor',
                                 "NOTIFY_RESULT=${currentBuild.currentResult}",
                                 "NOTIFY_JOB=${env.JOB_NAME ?: ''}",
                                 "NOTIFY_BRANCH=${env.BRANCH_NAME ?: ''}",

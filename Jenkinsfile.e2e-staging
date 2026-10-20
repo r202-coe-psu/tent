@@ -108,6 +108,7 @@ pipeline {
                         withCredentials([string(credentialsId: 'tent-discord-webhook-ci', variable: 'DISCORD_WEBHOOK_URL')]) {
                             withEnv([
                                 'NOTIFY_KIND=e2e',
+                                'NOTIFY_USERNAME=Tent E2E',
                                 "NOTIFY_RESULT=${currentBuild.currentResult}",
                                 "NOTIFY_JOB=${env.JOB_NAME ?: ''}",
                                 "NOTIFY_BRANCH=${env.BRANCH_NAME ?: ''}",

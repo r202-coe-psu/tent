@@ -169,6 +169,7 @@ pipeline {
                         withCredentials([string(credentialsId: 'tent-discord-webhook-ci', variable: 'DISCORD_WEBHOOK_URL')]) {
                             withEnv([
                                 'NOTIFY_KIND=deploy',
+                                'NOTIFY_USERNAME=Tent Deploy',
                                 "NOTIFY_TARGET=${env.BRANCH_NAME == 'main' ? 'prod' : 'staging'}",
                                 "NOTIFY_RESULT=${currentBuild.currentResult}",
                                 "NOTIFY_JOB=${env.JOB_NAME ?: ''}",

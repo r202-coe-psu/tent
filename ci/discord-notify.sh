@@ -106,12 +106,29 @@ for f in "${fields[@]+"${fields[@]}"}"; do
 	fields_json+="${fields_json:+,}${f}"
 done
 
+# Optional per-message webhook identity; unset keeps the webhook's default name/avatar.
+identity_json=''
+if [[ -n "${NOTIFY_USERNAME:-}" ]]; then
+	if [[ "${NOTIFY_USERNAME,,}" == *discord* ]]; then
+		printf 'discord-notify: NOTIFY_USERNAME must not contain "discord" (rejected by Discord); ignoring it.\n' >&2
+	else
+		identity_json+="\"username\":\"$(js "$NOTIFY_USERNAME" 80)\","
+	fi
+fi
+if [[ -n "${NOTIFY_AVATAR_URL:-}" ]]; then
+	if [[ "$NOTIFY_AVATAR_URL" =~ ^https:// ]]; then
+		identity_json+="\"avatar_url\":\"$(js "$NOTIFY_AVATAR_URL" 2048)\","
+	else
+		printf 'discord-notify: NOTIFY_AVATAR_URL must start with https://; ignoring it.\n' >&2
+	fi
+fi
+
 build_payload() {
 	local url_json='' desc_json=''
 	[[ -z "${NOTIFY_BUILD_URL:-}" ]] || url_json=",\"url\":\"$(js "$NOTIFY_BUILD_URL" 2048)\""
 	[[ -z "${NOTIFY_DETAIL:-}" ]] || desc_json=",\"description\":\"$(js "$NOTIFY_DETAIL" 4096)\""
-	printf '{"allowed_mentions":{"parse":[]},"embeds":[{"title":"%s"%s%s,"color":%s,"fields":[%s],"timestamp":"%s"}]}\n' \
-		"$(js "$title" 256)" "$url_json" "$desc_json" "$color" "$fields_json" \
+	printf '{%s"allowed_mentions":{"parse":[]},"embeds":[{"title":"%s"%s%s,"color":%s,"fields":[%s],"timestamp":"%s"}]}\n' \
+		"$identity_json" "$(js "$title" 256)" "$url_json" "$desc_json" "$color" "$fields_json" \
 		"$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 }
 

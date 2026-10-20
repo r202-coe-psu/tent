@@ -63,6 +63,8 @@ Inputs are environment variables only (never argv, so nothing secret reaches `ps
 | `NOTIFY_DURATION` | optional | `Duration` field |
 | `NOTIFY_E2E_RESULT` | optional | `E2E` field |
 | `NOTIFY_DETAIL` | optional | Embed description |
+| `NOTIFY_USERNAME` | optional | Per-message webhook name (top-level `username`, max 80 chars). Dropped with a stderr warning if it contains "discord" (Discord rejects it). Unset -> the webhook's default name |
+| `NOTIFY_AVATAR_URL` | optional | Per-message avatar image (top-level `avatar_url`). Must start with `https://`, otherwise dropped with a stderr warning. Unset -> the webhook's default avatar |
 | `DRY_RUN` | optional | `1` prints the JSON payload to stdout and sends nothing |
 
 Behaviour notes:
@@ -74,6 +76,15 @@ Behaviour notes:
 - POST uses `curl --fail --max-time 10 --retry 2`; the exit code is non-zero if it fails (Jenkins
   ignores it). The webhook URL is handed to curl through a config file descriptor, never echoed,
   never in `set -x` output (`set +x` is forced).
+
+### Webhook identity (name and avatar)
+
+The Jenkinsfiles set `NOTIFY_USERNAME` per job (`Tent Deploy`, `Tent E2E`, `Tent Janitor`) so the
+messages are distinguishable in the channel. No avatar is set yet (no hosted image). To use one,
+host a square image at a public `https://` URL and add `"NOTIFY_AVATAR_URL=https://..."` to the
+`withEnv([...])` list in the `post` block of the Jenkinsfile(s), or change the webhook's default
+avatar in Discord (channel settings -> Integrations -> Webhooks), which applies when the variable is
+unset.
 
 ### Test locally
 
