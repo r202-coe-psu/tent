@@ -60,7 +60,7 @@ export function hasPendingControlledSkill(
 }
 
 export const VERIFICATION_STATUS_LABEL: Record<VerificationStatus, string> = {
-	pending: 'รอตรวจ',
-	verified: 'รับรองแล้ว',
-	rejected: 'ไม่ผ่าน'
+	pending: 'ยังไม่ได้ตรวจ',
+	verified: 'ตรวจแล้ว ผ่าน',
+	rejected: 'ตรวจแล้ว ไม่ผ่าน'
 };

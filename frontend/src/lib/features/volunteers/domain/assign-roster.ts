@@ -152,7 +152,7 @@ export function buildAssignRoster(input: AssignRosterInput): AssignCandidate[] {
 				});
 				state = {
 					kind: 'collision',
-					jobTitle: clashJob?.title ?? 'ภารกิจอื่น',
+					jobTitle: clashJob?.title ?? 'งานอาสาสมัครอื่น',
 					...windowLabel(clashShift)
 				};
 			} else {

@@ -31,12 +31,15 @@
 		shift,
 		roster,
 		pending = false,
+		jobTitle = '',
 		onunassign
 	}: {
 		open?: boolean;
 		shift: JobShift | null;
 		roster: ShiftRosterEntry[];
 		pending?: boolean;
+		/** The job's title — a station equal to it is the default, not a real place, so it is hidden. */
+		jobTitle?: string;
 		onunassign: (entry: ShiftRosterEntry) => void;
 	} = $props();
 
@@ -125,11 +128,15 @@
 						<div
 							class="mt-2.5 grid grid-cols-1 gap-1.5 border-t border-border pt-2.5 text-xs sm:grid-cols-2"
 						>
-							<p class="flex items-center gap-1.5 text-muted-foreground">
-								<MapPin class="h-3.5 w-3.5 shrink-0" />
-								จุดปฏิบัติงาน:
-								<span class="font-medium text-foreground">{entry.station}</span>
-							</p>
+							{#if entry.station?.trim() && entry.station.trim().toLowerCase() !== jobTitle
+										.trim()
+										.toLowerCase()}
+								<p class="flex items-center gap-1.5 text-muted-foreground">
+									<MapPin class="h-3.5 w-3.5 shrink-0" />
+									จุดปฏิบัติงาน:
+									<span class="font-medium text-foreground">{entry.station}</span>
+								</p>
+							{/if}
 							<p class="flex items-center gap-1.5 text-muted-foreground">
 								<Phone class="h-3.5 w-3.5 shrink-0" />
 								เบอร์โทร:

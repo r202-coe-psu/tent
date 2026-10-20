@@ -171,7 +171,7 @@ test.describe('Public landing: smoke extras', { tag: ['@public', '@smoke'] }, ()
 
 	test('volunteer missions show the under-development notice', async ({ page }) => {
 		await page.goto('/');
-		await page.getByRole('button', { name: 'ดูภารกิจทั้งหมด' }).first().click();
+		await page.getByRole('button', { name: 'ดูงานอาสาสมัครทั้งหมด' }).first().click();
 
 		await expect(page.getByRole('dialog', { name: 'ระบบอยู่ระหว่างการพัฒนา' })).toBeVisible();
 		await page.getByRole('button', { name: 'รับทราบ' }).click();

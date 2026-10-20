@@ -22,6 +22,7 @@
 	import {
 		applyToJob,
 		fetchVolunteerSkills,
+		preflightApplication,
 		resolvePortalAccess
 	} from '$lib/features/volunteer-portal/data/volunteer-api';
 	import {
@@ -29,6 +30,12 @@
 		localizedSkillLabel
 	} from '$lib/features/volunteer-portal/domain/skill-label';
 	import { PORTAL_SESSION_KEY } from '$lib/features/volunteer-portal/domain/volunteer';
+	import {
+		formatShiftDate,
+		groupShiftsByDate,
+		seatsLeft,
+		visibleDateCount
+	} from '../domain/shift-picker';
 	import type {
 		PortalCredential,
 		VolunteerProfile,
@@ -141,6 +148,24 @@
 		return job.selectedShift ?? job.shifts?.[0] ?? null;
 	});
 
+	/** This job's shifts grouped by date, for the agenda picker (earliest first). */
+	const shiftDateGroups = $derived(groupShiftsByDate<ShiftDetail>(job?.shifts ?? []));
+	let showAllDates = $state(false);
+	const visibleDateGroups = $derived(
+		showAllDates
+			? shiftDateGroups
+			: shiftDateGroups.slice(0, visibleDateCount(shiftDateGroups, activeShift?.date))
+	);
+	const hiddenDateCount = $derived(shiftDateGroups.length - visibleDateGroups.length);
+
+	const dateLocale = $derived(languageStore.current === 'en' ? 'en-GB' : 'th-TH');
+	function weekdayLabel(date: string): string {
+		return formatShiftDate(date, dateLocale, { weekday: 'short' });
+	}
+	function dayMonthLabel(date: string): string {
+		return formatShiftDate(date, dateLocale, { day: 'numeric', month: 'short' });
+	}
+
 	$effect(() => {
 		if (job?.selectedShift?.id) {
 			selectedShiftId = job.selectedShift.id;
@@ -164,7 +189,10 @@
 		formData.firstName = applicantProfile.first_name;
 		formData.lastName = applicantProfile.last_name;
 		formData.nickname = applicantProfile.nickname ?? '';
-		formData.phone = applicantProfile.phone_masked;
+		// Not `phone_masked`: it is never a usable number. A phone credential is sent as is
+		// (`cleanApplicantPhone`), and a QR-token sign-in has to type the full number — a
+		// prefilled mask there passed the empty check and went out as its leftover digits.
+		formData.phone = '';
 		formData.email = applicantProfile.email ?? '';
 		formData.skills = applicantProfile.skills.map(canonicalSkillId);
 	});
@@ -247,7 +275,7 @@
 		if (ddmmyyyy) date = `${ddmmyyyy[3]}-${ddmmyyyy[2]}-${ddmmyyyy[1]}`;
 		return {
 			shift_id: activeShift.id || undefined,
-			date,
+			shift_date: date,
 			start_time: startTime,
 			end_time: endTime
 		};
@@ -290,7 +318,7 @@
 				email: isPortalApplicant ? '' : formData.email.trim(),
 				skills: formData.skills,
 				shift_id: selectedShift?.shift_id,
-				shift_date: selectedShift?.date,
+				shift_date: selectedShift?.shift_date,
 				...(recaptchaToken ? { captchaToken: recaptchaToken } : {})
 			});
 			const trackingToken = result.tracking_token;
@@ -321,8 +349,10 @@
 			if (result.volunteer_token) {
 				// First application ever for this phone number — the permanent per-volunteer
 				// digital-pass token was just minted, so go straight to the pass.
-				const ticketPath = `/volunteer/ticket/${encodeURIComponent(result.volunteer_token)}`;
-				await goto(`${ticketPath}${isPortalApplicant ? '?from=portal' : ''}`);
+				const token = encodeURIComponent(result.volunteer_token);
+				// `resolve()` only prefixes `base`, so the query rides along unchanged.
+				if (isPortalApplicant) await goto(resolve(`/volunteer/ticket/${token}?from=portal`));
+				else await goto(resolve(`/volunteer/ticket/${token}`));
 			} else if (isPortalApplicant) {
 				if (applicantCredential?.portal_id) {
 					await goto(
@@ -363,6 +393,11 @@
 		e.preventDefault();
 		if (!formData.consentPdpa) {
 			showSubmitError(t.errPdpaRequired);
+			// The checkbox sits at the end of a long form, under the sticky submit bar until the
+			// form is scrolled to the bottom — bring it to the applicant.
+			const consent = document.getElementById('applyConsentPdpa');
+			consent?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+			consent?.focus({ preventScroll: true });
 			return;
 		}
 		if (!job || !activeShift) {
@@ -389,45 +424,37 @@
 			isPortalApplicant &&
 			applicantCredential &&
 			'token' in applicantCredential &&
-			!formData.phone.trim()
+			!/^0\d{8,9}$/.test(cleanApplicantPhone())
 		) {
-			showSubmitError('กรุณากรอกเบอร์โทรศัพท์ที่ใช้สมัครเดิมเพื่อสมัครภารกิจจาก portal');
+			showSubmitError('กรุณากรอกเบอร์โทรศัพท์ที่ใช้สมัครเดิมเพื่อสมัครงานอาสาสมัครจาก portal');
 			return;
 		}
 		errorMessage = null;
 		isSubmitting = true;
 		try {
-			const preflightRes = await fetch('/api/public/v1/volunteer/apply/preflight', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({
-					job_id: job.id.startsWith('job:') ? job.id : `job:${job.id}`,
-					shelter_code: job.shelter_code || undefined,
-					first_name: formData.firstName.trim(),
-					last_name: formData.lastName.trim(),
-					phone: cleanApplicantPhone(),
-					email: isPortalApplicant ? '' : formData.email.trim(),
-					skills: formData.skills,
-					...(shiftPayload() ?? {})
-				})
+			// Throws with the copy for the server's error code (job closed, shift full, …).
+			const preflight = await preflightApplication({
+				job_id: job.id.startsWith('job:') ? job.id : `job:${job.id}`,
+				shelter_code: job.shelter_code || undefined,
+				first_name: formData.firstName.trim(),
+				last_name: formData.lastName.trim(),
+				phone: cleanApplicantPhone(),
+				email: isPortalApplicant ? '' : formData.email.trim(),
+				skills: formData.skills,
+				...(shiftPayload() ?? {})
 			});
-			const preflight = await preflightRes.json().catch(() => null);
-			if (!preflightRes.ok || !preflight?.success) {
-				let message = preflight?.message || 'ตรวจสอบข้อมูลก่อนสมัครไม่สำเร็จ';
-				if (preflight?.error === 'AMBIGUOUS_VOLUNTEER') {
-					message = 'พบข้อมูลที่อาจตรงกับมากกว่าหนึ่ง profile กรุณาติดต่อเจ้าหน้าที่';
-				}
-				showSubmitError(message);
-				return;
-			}
 
 			if (preflight.match === 'ambiguous_match') {
 				showSubmitError(preflight.message);
 				return;
 			}
 			if (preflight.match === 'matched_one') {
-				if (showExistingProfileConfirmation) {
-					preflightResult = preflight;
+				if (showExistingProfileConfirmation && preflight.existing_profile) {
+					preflightResult = {
+						match: 'matched_one',
+						existing_profile: preflight.existing_profile,
+						message: preflight.message
+					};
 					confirmationOpen = true;
 				} else {
 					// A signed-in portal volunteer has already identified this profile.
@@ -445,6 +472,24 @@
 			isSubmitting = false;
 		}
 	}
+
+	/**
+	 * Keep the page behind still while the modal is open. This is a hand-built modal (not
+	 * the shadcn Dialog), so nothing locked the page: wheeling over the backdrop, or past
+	 * the end of the modal's own scroll, moved the job board behind it. The gutter stays
+	 * reserved so hiding the scrollbar does not shift the page sideways; both styles are
+	 * put back when the modal closes.
+	 */
+	function lockPageScroll() {
+		const root = document.documentElement;
+		const previous = { overflow: root.style.overflow, gutter: root.style.scrollbarGutter };
+		root.style.scrollbarGutter = 'stable';
+		root.style.overflow = 'hidden';
+		return () => {
+			root.style.overflow = previous.overflow;
+			root.style.scrollbarGutter = previous.gutter;
+		};
+	}
 </script>
 
 <svelte:head>
@@ -454,7 +499,10 @@
 </svelte:head>
 
 {#if isOpen && job}
-	<div class="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
+	<div
+		{@attach lockPageScroll}
+		class="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6"
+	>
 		<!-- Backdrop -->
 		<div
 			class="absolute inset-0 bg-background/80 backdrop-blur-sm"
@@ -469,7 +517,7 @@
 		<div
 			class="relative z-10 flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded-3xl border border-border bg-card shadow-2xl"
 		>
-			<div class="overflow-y-auto">
+			<div class="overflow-y-auto overscroll-contain">
 				<!-- Header Section -->
 				<div class="relative bg-primary-dark px-6 py-8 text-primary-foreground">
 					<button
@@ -559,14 +607,15 @@
 										เจ้าหน้าที่ต้องรับรองก่อนจึงจะใช้ทักษะนี้กับงานได้
 									</div>
 								{/if}
-								<div class="mt-6 flex gap-3">
+								<!-- Stacked on a phone so the long confirm label never breaks over 3 lines. -->
+								<div class="mt-6 flex flex-col-reverse gap-3 sm:flex-row">
 									<button
 										type="button"
 										onclick={() => {
 											confirmationOpen = false;
 											preflightResult = null;
 										}}
-										class="flex-1 rounded-xl border border-border bg-muted/30 py-3 text-sm font-bold text-foreground hover:bg-muted"
+										class="min-h-11 rounded-xl border border-border bg-muted/30 px-4 py-3 text-sm font-bold text-foreground hover:bg-muted sm:flex-1"
 									>
 										ยกเลิก
 									</button>
@@ -574,7 +623,7 @@
 										type="button"
 										disabled={isSubmitting}
 										onclick={submitApplication}
-										class="flex-[2] rounded-xl bg-primary py-3 text-sm font-bold text-primary-foreground hover:bg-primary-strong disabled:opacity-70"
+										class="min-h-11 rounded-xl bg-primary px-4 py-3 text-sm font-bold text-primary-foreground hover:bg-primary-strong disabled:opacity-70 sm:flex-[2]"
 									>
 										{isSubmitting ? 'กำลังบันทึก...' : 'ยืนยันอัปเดตโปรไฟล์และสมัครงาน'}
 									</button>
@@ -589,7 +638,7 @@
 						>
 							<p class="font-bold">คุณเข้าสู่ระบบด้วย QR Code ตั๋วอาสาสมัคร</p>
 							<p class="mt-1 leading-relaxed">
-								เพื่อสมัครภารกิจใหม่ กรุณากรอกเบอร์โทรศัพท์ที่ใช้สมัครเดิม
+								เพื่อสมัครงานอาสาสมัครใหม่ กรุณากรอกเบอร์โทรศัพท์ที่ใช้สมัครเดิม
 								ระบบจะใช้เบอร์นี้เชื่อมใบสมัครกับโปรไฟล์ Volunteer ของคุณ
 							</p>
 							<label for="portalApplyPhone" class="mt-3 block font-bold">
@@ -727,63 +776,101 @@
 								{/if}
 							</div>
 
-							<!-- Shift Cards Grid -->
-							<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+							<!-- Shift picker as an agenda: one row per date, its times beside it. Every
+							     date stays on screen (no sideways scroll hiding dates) and a time is
+							     never separated from its date; a long job shows its first week plus a
+							     button that says how many dates remain. -->
+							<div>
 								{#if job.shifts && job.shifts.length > 0}
-									{#each job.shifts as shift (shift.id)}
-										{@const isSelected = activeShift?.id === shift.id}
-										{@const remaining = Math.max(0, shift.quota - shift.confirmed)}
-										{@const isFull = remaining === 0}
-										<button
-											type="button"
-											disabled={isFull}
-											onclick={() => (selectedShiftId = shift.id)}
-											class="relative flex cursor-pointer flex-col rounded-2xl border-2 p-4 text-left transition-all {isSelected
-												? 'border-primary bg-primary/5 shadow-sm'
-												: isFull
-													? 'cursor-not-allowed border-border/60 bg-muted/20 opacity-60'
-													: 'border-border bg-card hover:border-primary/40 hover:bg-muted/30'}"
-										>
-											<div class="mb-1 flex items-center justify-between">
-												<span class="text-xs font-bold text-foreground">
-													{t.applyDatePrefix}
-													{shift.date}
-												</span>
-												{#if isSelected}
-													<span class="rounded-full bg-primary p-0.5 text-primary-foreground">
-														<Check class="h-3 w-3" />
+									<div class="space-y-2" role="group" aria-label={t.applyPickShift}>
+										{#each visibleDateGroups as group (group.date)}
+											<div
+												data-shift-date={group.date}
+												class="flex flex-col gap-2 rounded-xl border px-3 py-2.5 min-[420px]:flex-row min-[420px]:items-center {group.date ===
+												activeShift?.date
+													? 'border-primary/40 bg-primary/5'
+													: 'border-border'}"
+											>
+												<p
+													class="flex shrink-0 items-baseline gap-1.5 min-[420px]:w-20 min-[420px]:flex-col min-[420px]:gap-0 {group.hasSeat
+														? 'text-foreground'
+														: 'text-muted-foreground'}"
+												>
+													<span class="text-sm font-bold whitespace-nowrap tabular-nums">
+														{dayMonthLabel(group.date)}
 													</span>
-												{/if}
-											</div>
-											<p class="text-sm font-black text-primary">
-												{shift.time || `${shift.start_time} - ${shift.end_time} น.`}
-											</p>
-
-											<div class="mt-2.5 h-1.5 w-full overflow-hidden rounded-full bg-muted">
+													<span class="text-xs">{weekdayLabel(group.date)}</span>
+												</p>
+												<!-- Below 400px one full-width chip per time (time left, seats right) so nothing
+												     is cut off; two columns from 400px; a free-flowing row from 420px. -->
 												<div
-													class="h-full bg-success transition-all"
-													style="width: {shift.quota > 0
-														? (shift.confirmed / shift.quota) * 100
-														: 0}%"
-												></div>
-											</div>
-
-											<div class="mt-2 flex items-center justify-between text-2xs font-bold">
-												<span class="text-success"
-													>{t.applyShiftReceived}: {shift.confirmed} {t.peopleUnit}</span
+													class="grid flex-1 grid-cols-1 gap-2 min-[400px]:grid-cols-2 min-[420px]:flex min-[420px]:flex-wrap"
 												>
-												<span
-													class={remaining <= 2
-														? 'text-warning-foreground'
-														: 'text-muted-foreground'}
-												>
-													{isFull
-														? t.shiftFull
-														: `${t.applyShiftNeedMore}: ${remaining} ${t.peopleUnit}`}
-												</span>
+													{#each group.shifts as shift (shift.id)}
+														{@const isSelected = activeShift?.id === shift.id}
+														{@const remaining = seatsLeft(shift)}
+														{@const isFull = remaining === 0}
+														{@const timeLabel =
+															shift.start_time && shift.end_time
+																? `${shift.start_time}–${shift.end_time}`
+																: shift.time}
+														{@const seatLabel = isFull
+															? t.shiftFull
+															: `${t.applyShiftNeedMore}: ${remaining} ${t.peopleUnit}`}
+														{@const seatShort = isFull
+															? t.shiftFull
+															: `${t.applySeatsLeftPrefix} ${remaining} ${t.applySeatsLeftSuffix}`.trim()}
+														<button
+															type="button"
+															disabled={isFull}
+															aria-pressed={isSelected}
+															aria-label="{dayMonthLabel(group.date)} {timeLabel} — {seatLabel}"
+															onclick={() => (selectedShiftId = shift.id)}
+															class="relative flex min-h-11 cursor-pointer items-center gap-1.5 rounded-lg border-2 px-2.5 py-1.5 text-left transition-all focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none {isSelected
+																? 'border-primary bg-primary/10 text-foreground shadow-sm'
+																: isFull
+																	? 'cursor-not-allowed border-border/60 bg-muted/30 text-muted-foreground'
+																	: 'border-border bg-card hover:border-primary/40'}"
+														>
+															{#if isSelected}
+																<!-- A corner badge, so the tick never takes width from the time. -->
+																<span
+																	class="absolute -top-2 -right-2 grid size-5 place-items-center rounded-full bg-primary text-primary-foreground ring-2 ring-card"
+																>
+																	<Check class="size-3" />
+																</span>
+															{/if}
+															<span
+																class="flex flex-1 items-center justify-between gap-2 leading-tight min-[400px]:flex-col min-[400px]:items-start min-[400px]:justify-start min-[400px]:gap-0"
+															>
+																<span class="text-sm font-bold whitespace-nowrap tabular-nums"
+																	>{timeLabel}</span
+																>
+																<span
+																	class="text-xs font-semibold whitespace-nowrap {isFull
+																		? 'text-muted-foreground'
+																		: remaining <= 2
+																			? 'text-warning-foreground'
+																			: 'text-success'}">{seatShort}</span
+																>
+															</span>
+														</button>
+													{/each}
+												</div>
 											</div>
-										</button>
-									{/each}
+										{/each}
+										{#if hiddenDateCount > 0}
+											<button
+												type="button"
+												onclick={() => (showAllDates = true)}
+												class="min-h-11 w-full rounded-xl border border-dashed border-border px-4 py-2 text-sm font-bold text-primary transition-colors hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none"
+											>
+												{t.applyMoreDatesPrefix}
+												{hiddenDateCount}
+												{t.applyMoreDatesSuffix}
+											</button>
+										{/if}
+									</div>
 								{:else if activeShift}
 									<div
 										class="relative rounded-2xl border-2 border-primary/20 bg-card p-4 shadow-sm"
@@ -797,7 +884,8 @@
 											</span>
 										</div>
 										<p class="mt-1 text-sm font-black text-primary">
-											{activeShift.time || `${activeShift.start_time} - ${activeShift.end_time} น.`}
+											{activeShift.time ||
+												`${activeShift.start_time} - ${activeShift.end_time}`}{t.timeSuffix}
 										</p>
 										<p class="mt-2 text-2xs text-muted-foreground">
 											{t.applyQuotaLabel}: {activeShift.quota}
@@ -831,9 +919,9 @@
 
 							{#if job?.skills_required && job.skills_required.length > 0}
 								<div
-									class="mb-3.5 flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs font-medium text-emerald-900"
+									class="mb-3.5 flex items-center gap-2 rounded-xl border border-domain-volunteer-border bg-domain-volunteer-subtle p-3 text-xs font-medium text-domain-volunteer-text"
 								>
-									<Tag class="h-4 w-4 shrink-0 text-emerald-600" />
+									<Tag class="h-4 w-4 shrink-0 text-domain-volunteer" />
 									<span>{t.applySkillsSuggestion}</span>
 								</div>
 							{/if}
@@ -853,9 +941,9 @@
 											type="button"
 											onclick={() => toggleSkill(skill.code)}
 											class="flex cursor-pointer items-center gap-2 rounded-2xl border px-4 py-2.5 text-xs font-bold transition-all {isSelected
-												? 'border-emerald-600 bg-emerald-600 text-white shadow-sm ring-2 ring-emerald-200'
+												? 'border-domain-volunteer-strong bg-domain-volunteer-strong text-white shadow-sm ring-2 ring-domain-volunteer-border'
 												: isSuggested
-													? 'border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
+													? 'border-domain-volunteer-border bg-domain-volunteer-subtle text-domain-volunteer-text hover:bg-domain-volunteer-border/40'
 													: 'border-border bg-card text-foreground hover:bg-muted'}"
 										>
 											{#if isSelected}
@@ -863,7 +951,7 @@
 											{:else if isControlled}
 												<ShieldAlert class="h-3.5 w-3.5 text-warning-foreground" />
 											{:else}
-												<Sparkles class="h-3.5 w-3.5 text-success" />
+												<Sparkles class="h-3.5 w-3.5 text-domain-volunteer" />
 											{/if}
 
 											<span>{localizedSkillLabel(skill, languageStore.current)}</span>
@@ -899,6 +987,7 @@
 								<input
 									type="checkbox"
 									required
+									id="applyConsentPdpa"
 									bind:checked={formData.consentPdpa}
 									class="mt-0.5 h-4 w-4 shrink-0 rounded border-border text-primary focus:ring-primary"
 								/>
@@ -918,26 +1007,33 @@
 								</div>
 							</div>
 						</div>
+					</div>
 
-						<div class="flex gap-3">
-							<button
-								type="button"
-								onclick={() => (isOpen = false)}
-								class="flex-1 cursor-pointer rounded-2xl border border-border bg-muted/30 py-3.5 text-sm font-bold text-foreground transition-colors hover:bg-muted"
-							>
-								{t.applyCancelButton}
-							</button>
-							<button
-								type="submit"
-								disabled={isSubmitting}
-								class="flex flex-[2] cursor-pointer items-center justify-center gap-2 rounded-2xl bg-primary py-3.5 text-sm font-bold text-primary-foreground shadow-sm transition-all hover:bg-primary-strong disabled:cursor-not-allowed disabled:opacity-70"
-							>
-								{isSubmitting ? t.applySubmitting : t.applySubmitButton}
-								{#if !isSubmitting}
-									<ArrowRight class="h-4 w-4" />
-								{/if}
-							</button>
-						</div>
+					<!-- Sticky to the bottom of the modal, so submit is in reach without scrolling
+					     past every shift and skill. A direct child of the form on purpose: a sticky
+					     element only sticks within its parent. `-mx-6 -mb-6` spans the form's padding, so the
+					     bar is flush with the modal's edges. Stacked on a phone (#626 follow-up):
+					     side by side at 320–375px the submit label broke over three lines. -->
+					<div
+						class="sticky bottom-0 z-10 -mx-6 mt-5 -mb-6 flex flex-col-reverse gap-2 border-t border-border bg-card/95 px-6 py-3 backdrop-blur sm:flex-row sm:gap-3"
+					>
+						<button
+							type="button"
+							onclick={() => (isOpen = false)}
+							class="min-h-11 cursor-pointer rounded-2xl border border-border bg-muted/30 px-4 py-2.5 text-sm font-bold text-foreground transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none sm:flex-1 sm:py-3"
+						>
+							{t.applyCancelButton}
+						</button>
+						<button
+							type="submit"
+							disabled={isSubmitting}
+							class="flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-2xl bg-primary px-4 py-2.5 text-sm font-bold text-primary-foreground shadow-sm transition-all hover:bg-primary-strong focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-70 sm:flex-[2] sm:py-3"
+						>
+							{isSubmitting ? t.applySubmitting : t.applySubmitButton}
+							{#if !isSubmitting}
+								<ArrowRight class="h-4 w-4" />
+							{/if}
+						</button>
 					</div>
 				</form>
 			</div>

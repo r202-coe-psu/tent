@@ -33,7 +33,8 @@
 	);
 
 	const occupancyQuery = useDashboardOccupancy(() => shelterCode);
-	const occupancy = $derived(occupancyQuery.data?.active ?? 0);
+	// In the shelter = active + room_confirmed (draft-in-shelter-headcount).
+	const occupancy = $derived(occupancyQuery.data?.in_shelter ?? 0);
 
 	// The master list shows on-hand quantity; the ledger lives in `operations`, so the page joins them.
 	const balanceQuery = useStockBalance();

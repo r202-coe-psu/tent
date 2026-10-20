@@ -15,6 +15,7 @@
 	import Rocket from '@lucide/svelte/icons/rocket';
 	import X from '@lucide/svelte/icons/x';
 	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import { onMount } from 'svelte';
 	import { useQueryClient } from '@tanstack/svelte-query';
 	import { generateQrDataUrl } from '$lib/utils/qrcode';
@@ -23,6 +24,8 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
+	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
+	import { Label } from '$lib/components/ui/label/index.js';
 	import VolunteerQrScannerModal from '$lib/features/volunteers/ui/volunteer-qr-scanner-modal.svelte';
 	import DatePicker from '$lib/components/date-picker.svelte';
 	import TimePicker from '$lib/components/time-picker.svelte';
@@ -40,13 +43,16 @@
 	import JobBoard from '$lib/features/volunteers/ui/public-job-board.svelte';
 	import ProfileEditDialog from './profile-edit-dialog.svelte';
 	import {
+		buildRememberedPortalCredential,
 		buildStoredPortalSession,
 		isJobApplicable,
 		isStoredPortalSessionExpired,
 		normalizeTicketToken,
 		portalCredentialSchema,
+		PORTAL_REMEMBER_KEY,
 		PORTAL_SESSION_KEY,
 		PORTAL_TOKEN_HANDOFF_KEY,
+		readRememberedPortalCredential,
 		responseCodeSchema,
 		ticketFindSchema,
 		ticketTokenFromScan,
@@ -89,6 +95,8 @@
 	let inputPhone = $state('');
 	let inputToken = $state('');
 	let loginError = $state('');
+	/** Opt-in "จดจำเครื่องนี้" for the next sign-in on this tab (#625). Unticked by default. */
+	let rememberDevice = $state(false);
 
 	/**
 	 * What this session signed in with — a phone number or a ticket token. `null` =
@@ -123,8 +131,9 @@
 		}
 	}
 
-	function portalPath(id: string, section = 'dashboard') {
-		return `/volunteers/portal/volunteer/${encodeURIComponent(id)}/${section}`;
+	/** Typed so `resolve()` can check it against the real `[portalId]/{section}` routes. */
+	function portalPath(id: string, section: 'dashboard' | 'openings' = 'dashboard') {
+		return `/volunteers/portal/volunteer/${encodeURIComponent(id)}/${section}` as const;
 	}
 
 	function clearPortalSession() {
@@ -136,10 +145,46 @@
 		}
 	}
 
+	/**
+	 * "จดจำเครื่องนี้" (#625, CR-127 note): the token sign-in kept in `localStorage` for
+	 * `PORTAL_REMEMBER_TTL_MS`. A phone sign-in is never remembered.
+	 */
+	function rememberThisDevice(credential: PortalCredential & { portal_id: string }) {
+		const record = buildRememberedPortalCredential(credential);
+		if (!record) return;
+		try {
+			localStorage.setItem(PORTAL_REMEMBER_KEY, JSON.stringify(record));
+		} catch {
+			// Storage unavailable (private mode); this sign-in still works, it just is not kept.
+		}
+	}
+
+	function forgetThisDevice() {
+		try {
+			localStorage.removeItem(PORTAL_REMEMBER_KEY);
+		} catch {
+			// Storage unavailable.
+		}
+	}
+
+	/** The remembered sign-in, or `null` — an expired or malformed record is forgotten. */
+	function readThisDevice() {
+		try {
+			const raw = localStorage.getItem(PORTAL_REMEMBER_KEY);
+			if (!raw) return null;
+			const remembered = readRememberedPortalCredential(JSON.parse(raw));
+			if (!remembered) forgetThisDevice();
+			return remembered;
+		} catch {
+			forgetThisDevice();
+			return null;
+		}
+	}
+
 	function enterDashboard(credential: PortalCredential & { portal_id: string }) {
 		session = credential;
 		persistSession(credential);
-		void goto(portalPath(credential.portal_id));
+		void goto(resolve(portalPath(credential.portal_id)));
 	}
 
 	const resolveAccess = useResolvePortalAccessMutation();
@@ -172,29 +217,69 @@
 			});
 	});
 
-	async function resolveAndEnter(credential: PortalCredential) {
+	/**
+	 * @param options.remember   keep this sign-in on the device ("จดจำเครื่องนี้")
+	 * @param options.remembered this credential came from a remembered device — if the
+	 *   server no longer knows it (token revoked / reissued), forget the device
+	 */
+	async function resolveAndEnter(
+		credential: PortalCredential,
+		options: { remember?: boolean; remembered?: boolean } = {}
+	) {
 		isLoggingIn = true;
 		loginError = '';
 		try {
 			const profile = await resolveAccess.mutateAsync(credential);
 			if (!profile?.portal_id) {
-				loginError = 'ไม่พบเบอร์โทรศัพท์นี้ในระบบอาสาสมัคร กรุณาตรวจสอบเบอร์ที่ใช้สมัครอีกครั้ง';
+				if (options.remembered) {
+					forgetThisDevice();
+					loginError =
+						'เครื่องนี้ไม่ได้จดจำการเข้าสู่ระบบแล้ว — รหัสตั๋วถูกยกเลิกหรือออกใหม่ กรุณาสแกนตั๋วอีกครั้ง';
+				} else if (credential.token) {
+					loginError = 'ไม่พบรหัสตั๋วนี้ในระบบอาสาสมัคร กรุณาตรวจสอบตั๋วแล้วสแกนอีกครั้ง';
+				} else {
+					loginError = 'ไม่พบเบอร์โทรศัพท์นี้ในระบบอาสาสมัคร กรุณาตรวจสอบเบอร์ที่ใช้สมัครอีกครั้ง';
+				}
+				toast.error(loginError);
 				return;
 			}
+			if (options.remember) rememberThisDevice({ ...credential, portal_id: profile.portal_id });
 			toast.success('เข้าสู่ระบบสำเร็จ');
 			enterDashboard({ ...credential, portal_id: profile.portal_id });
 		} catch (error) {
+			// A failure right after a scan used to show only as small text under the form,
+			// which read as "the scan did nothing" (#625) — say it in a toast as well.
 			loginError = error instanceof Error ? error.message : 'ไม่สามารถตรวจสอบข้อมูลจิตอาสาได้';
+			toast.error(`เข้าสู่ระบบไม่สำเร็จ: ${loginError}`);
 		} finally {
 			isLoggingIn = false;
 		}
 	}
 
-	/** Restore a short-lived session or the token handed over after a new booking. */
+	/**
+	 * Sign in from a remembered device ("จดจำเครื่องนี้", #625), re-checking the token
+	 * with the server — it may have been revoked or reissued since. The screen stays in
+	 * its restoring state meanwhile. `false` when nothing valid is remembered.
+	 */
+	function enterRememberedDevice(): boolean {
+		const remembered = readThisDevice();
+		if (!remembered) return false;
+		restoring = true;
+		void resolveAndEnter(remembered, { remembered: true }).finally(() => {
+			restoring = false;
+			if (!session && mode !== 'entry') void goto(resolve('/volunteers/portal'));
+		});
+		return true;
+	}
+
+	/**
+	 * Restore a short-lived session, the token handed over after a new booking, or a
+	 * remembered device — in that order.
+	 */
 	onMount(() => {
 		if (session) {
 			restoring = false;
-			if (mode === 'entry' && session.portal_id) void goto(portalPath(session.portal_id));
+			if (mode === 'entry' && session.portal_id) void goto(resolve(portalPath(session.portal_id)));
 			return;
 		}
 		let handed: string | null = null;
@@ -213,8 +298,9 @@
 			return;
 		}
 		if (!stored) {
+			if (enterRememberedDevice()) return;
 			restoring = false;
-			if (mode !== 'entry') void goto('/volunteers/portal');
+			if (mode !== 'entry') void goto(resolve('/volunteers/portal'));
 			return;
 		}
 		try {
@@ -223,21 +309,24 @@
 			if (parsed.success && parsed.data.portal_id && !isStoredPortalSessionExpired(rawStored)) {
 				if (mode !== 'entry' && portalId !== parsed.data.portal_id) {
 					clearPortalSession();
-					void goto('/volunteers/portal');
+					void goto(resolve('/volunteers/portal'));
 					restoring = false;
 					return;
 				}
 				session = parsed.data;
-				if (mode === 'entry') void goto(portalPath(parsed.data.portal_id));
+				if (mode === 'entry') void goto(resolve(portalPath(parsed.data.portal_id)));
 			} else {
 				// Covers a malformed record and an expired token session alike: both land the
-				// volunteer back on the sign-in screen rather than a stale dashboard.
+				// volunteer back on the sign-in screen rather than a stale dashboard — unless the
+				// device is remembered, which signs straight back in.
 				clearPortalSession();
-				if (mode !== 'entry') void goto('/volunteers/portal');
+				if (enterRememberedDevice()) return;
+				if (mode !== 'entry') void goto(resolve('/volunteers/portal'));
 			}
 		} catch {
 			clearPortalSession();
-			if (mode !== 'entry') void goto('/volunteers/portal');
+			if (enterRememberedDevice()) return;
+			if (mode !== 'entry') void goto(resolve('/volunteers/portal'));
 		}
 		restoring = false;
 	});
@@ -245,7 +334,7 @@
 	const scheduleQuery = useVolunteerSchedule(() => session);
 	const ticketsQuery = useVolunteerTickets(() => session);
 	/**
-	 * Only for the count on the "ภารกิจที่เปิดรับ" tab button. The board itself fetches
+	 * Only for the count on the "งานอาสาสมัครที่เปิดรับ" tab button. The board itself fetches
 	 * with the same key, so this costs no extra request — and the badge counts jobs that
 	 * can actually be applied to, not, as it once did, the volunteer's own tickets.
 	 */
@@ -352,7 +441,7 @@
 		{ value: 'assigned', label: 'รอ Check-in' },
 		{ value: 'standby', label: 'รอ Check-in (สำรอง)' },
 		{ value: 'checked_in', label: 'กำลังปฏิบัติงาน' },
-		{ value: 'completed', label: 'เสร็จสิ้นภารกิจ' },
+		{ value: 'completed', label: 'เสร็จสิ้นงานอาสาสมัคร' },
 		{ value: 'no_show', label: 'ไม่มาปฏิบัติงาน' }
 	] as const;
 
@@ -383,8 +472,8 @@
 					assigned: 'รอ Check-in',
 					standby: 'รอ Check-in',
 					checked_in: 'กำลังปฏิบัติงาน',
-					completed: 'เสร็จสิ้นภารกิจแล้ว',
-					done: 'เสร็จสิ้นภารกิจแล้ว',
+					completed: 'เสร็จสิ้นงานอาสาสมัครแล้ว',
+					done: 'เสร็จสิ้นงานอาสาสมัครแล้ว',
 					no_show: 'ไม่มาปฏิบัติงาน',
 					cancelled: 'ถอนกะแล้ว'
 				} as Record<string, string>
@@ -480,31 +569,7 @@
 		if (mode === 'dashboard') dashboardTab = 'schedule';
 	});
 	let isPassModalOpen = $state(false);
-	let passModalEl = $state<HTMLElement | null>(null);
-	let isPassFullscreen = $state(false);
-
-	/**
-	 * Blow the pass up to the whole screen for the gate.
-	 *
-	 * The volunteer holds this out to be scanned, often outdoors — filling the screen
-	 * makes the QR bigger and lets the device brightness work on it. Fails quietly:
-	 * iOS Safari does not grant fullscreen on arbitrary elements, and the modal is
-	 * still perfectly usable without it.
-	 */
-	async function togglePassFullscreen() {
-		try {
-			if (document.fullscreenElement) {
-				await document.exitFullscreen();
-			} else if (passModalEl) {
-				await passModalEl.requestFullscreen();
-			}
-		} catch {
-			toast.info('อุปกรณ์นี้ไม่รองรับการขยายเต็มจอ');
-		}
-	}
-
 	function closePassModal() {
-		if (document.fullscreenElement) void document.exitFullscreen().catch(() => {});
 		isPassModalOpen = false;
 	}
 	/**
@@ -522,12 +587,13 @@
 	function handleScanToken(scanned: string) {
 		const token = ticketTokenFromScan(scanned);
 		if (!token) {
-			loginError = 'ไม่พบรหัสตั๋วใน QR Code นี้ กรุณาลองใหม่อีกครั้ง';
+			loginError = 'QR Code นี้ไม่ใช่ตั๋วจิตอาสา — กรุณาสแกน QR บนตั๋วหรือบัตรอาสาสมัคร';
+			toast.error(loginError);
 			return;
 		}
 		if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(100);
 		inputToken = token;
-		submitToken(token);
+		void submitToken(token);
 	}
 	let qrDataUrl = $state<string>('');
 	let qrGeneration = 0;
@@ -597,7 +663,7 @@
 			loginError = 'รูปแบบรหัสไม่ถูกต้อง — ต้องขึ้นต้นด้วย TKT-VOL-';
 			return;
 		}
-		await resolveAndEnter({ token });
+		await resolveAndEnter({ token }, { remember: rememberDevice });
 	}
 
 	function handleTokenLogin(e: SubmitEvent) {
@@ -626,10 +692,10 @@
 		answering = assignmentId;
 		try {
 			await respond.mutateAsync({ assignment_id: assignmentId, code: parsed.data, action });
-			toast.success(action === 'accepted' ? 'ยอมรับภารกิจแล้ว' : 'ปฏิเสธภารกิจแล้ว');
+			toast.success(action === 'accepted' ? 'ยอมรับงานอาสาสมัครแล้ว' : 'ปฏิเสธงานอาสาสมัครแล้ว');
 			dispatchCodes[assignmentId] = '';
 		} catch (err) {
-			const message = err instanceof Error ? err.message : 'ตอบรับภารกิจไม่สำเร็จ';
+			const message = err instanceof Error ? err.message : 'ตอบรับงานอาสาสมัครไม่สำเร็จ';
 			dispatchErrors[assignmentId] = message;
 			toast.error(message);
 		} finally {
@@ -638,6 +704,8 @@
 	}
 
 	function handleLogout() {
+		const wasRemembered = readThisDevice() !== null;
+		forgetThisDevice();
 		session = null;
 		roleCardPayload = '';
 		roleCardLookupKey = '';
@@ -648,8 +716,8 @@
 		inputToken = '';
 		loginError = '';
 		queryClient.removeQueries({ queryKey: volunteerPortalKeys.all });
-		toast.info('ออกจากระบบแล้ว');
-		void goto('/volunteers/portal');
+		toast.info(wasRemembered ? 'ออกจากระบบและลืมเครื่องนี้แล้ว' : 'ออกจากระบบแล้ว');
+		void goto(resolve('/volunteers/portal'));
 	}
 
 	function downloadRoleCardQr() {
@@ -672,9 +740,12 @@
 			!profileQuery.isPending &&
 			(profileQuery.isError || profileQuery.data === null)
 		) {
+			// The server no longer knows this credential (revoked / reissued token): a
+			// remembered device must not keep trying it. A transient error keeps it.
+			if (profileQuery.data === null) forgetThisDevice();
 			session = null;
 			clearPortalSession();
-			void goto('/volunteers/portal');
+			void goto(resolve('/volunteers/portal'));
 		}
 	});
 </script>
@@ -778,22 +849,44 @@
 				{:else}
 					<!-- TAB 2: QR & TOKEN LOGIN -->
 					<div class="space-y-6">
+						<!-- Before the scanner: a scan signs in at once, so this must be ticked first. -->
+						<div class="flex items-start gap-3 rounded-xl border border-border bg-muted/20 p-3">
+							<Checkbox
+								id="volunteer-remember-device"
+								bind:checked={rememberDevice}
+								class="mt-0.5"
+							/>
+							<div class="space-y-0.5">
+								<Label
+									for="volunteer-remember-device"
+									class="text-sm font-semibold text-foreground"
+								>
+									จดจำเครื่องนี้ 7 วัน
+								</Label>
+								<p class="text-xs text-muted-foreground">
+									ครั้งหน้าเปิดหน้านี้แล้วเข้าระบบได้เลยโดยไม่ต้องสแกน —
+									อย่าติ๊กบนเครื่องที่ใช้ร่วมกัน เช่น เครื่องของศูนย์
+								</p>
+							</div>
+						</div>
+
 						<form onsubmit={handleTokenLogin} class="space-y-2">
 							<label for="volunteer-token-input" class="text-xs font-bold text-foreground">
 								กรอกรหัส Token หรือ รหัสตั๋วจิตอาสา
 							</label>
-							<div class="flex gap-2">
+							<!-- Stacked on a phone: side by side, the button overflowed the card at 390px. -->
+							<div class="flex flex-col gap-2 sm:flex-row">
 								<input
 									id="volunteer-token-input"
 									type="text"
 									bind:value={inputToken}
 									placeholder="เช่น TKT-VOL-1001 หรือ V-1001"
-									class="flex-1 rounded-xl border border-border bg-muted/20 px-3.5 py-3 text-xs font-medium text-foreground outline-hidden transition-all focus:border-primary focus:bg-card focus:ring-1 focus:ring-primary md:text-sm"
+									class="min-h-11 min-w-0 flex-1 rounded-xl border border-border bg-muted/20 px-3.5 py-3 text-xs font-medium text-foreground outline-hidden transition-all focus:border-primary focus:bg-card focus:ring-1 focus:ring-primary md:text-sm"
 								/>
 								<button
 									type="submit"
 									disabled={isLoggingIn}
-									class="flex shrink-0 cursor-pointer items-center gap-1.5 rounded-xl bg-primary px-5 py-3 text-xs font-bold text-primary-foreground shadow-sm hover:opacity-95 disabled:cursor-wait disabled:opacity-60"
+									class="flex min-h-11 shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-xl bg-primary px-5 py-3 text-xs font-bold whitespace-nowrap text-primary-foreground shadow-sm hover:opacity-95 disabled:cursor-wait disabled:opacity-60"
 								>
 									<Rocket class="size-3.5" />
 									<span>เข้าสู่ระบบ</span>
@@ -829,30 +922,37 @@
 	{:else}
 		<!-- ── SIGNED IN VOLUNTEER DASHBOARD ─────────────────────────────────── -->
 
-		<!-- TOP PROFILE HEADER CARD -->
+		<!-- TOP PROFILE HEADER CARD — stacked on a phone (actions as a full-width row), side
+		     by side from `sm` with the actions top-right; it used to stay stacked up to `lg`,
+		     leaving the actions stranded under a half-empty card on a tablet. -->
 		<div
-			class="flex flex-col justify-between gap-6 rounded-3xl border border-border bg-card p-6 shadow-sm lg:flex-row lg:items-center"
+			class="flex flex-col gap-4 rounded-3xl border border-border bg-card p-4 shadow-sm sm:flex-row sm:items-start sm:justify-between sm:gap-6 sm:p-6"
 		>
-			<!-- Left: Avatar + Details -->
-			<div class="flex items-start gap-4">
+			<!-- Left: Avatar + Details — one centred column on a phone (a large avatar above
+			     the details), side by side, left-aligned and more compact from `sm`. -->
+			<div
+				class="flex min-w-0 flex-col items-center gap-3 text-center sm:flex-row sm:items-start sm:gap-4 sm:text-left"
+			>
 				<div
-					class="flex size-14 shrink-0 items-center justify-center rounded-2xl bg-primary text-xl font-black text-primary-foreground shadow-md"
+					class="flex size-20 shrink-0 items-center justify-center rounded-3xl bg-primary text-3xl font-black text-primary-foreground shadow-md sm:size-14 sm:rounded-2xl sm:text-xl"
 				>
 					{currentVolunteer.avatar}
 				</div>
-				<div class="space-y-1">
-					<div class="flex flex-wrap items-center gap-2">
-						<h2 class="text-lg font-black text-foreground md:text-xl">{currentVolunteer.name}</h2>
+				<div class="min-w-0 space-y-2 sm:space-y-1.5">
+					<div class="flex flex-wrap items-center justify-center gap-2 sm:justify-start">
+						<h2 class="w-full text-2xl font-black text-foreground sm:w-auto sm:text-lg md:text-xl">
+							{currentVolunteer.name}
+						</h2>
 						<span
-							class="inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-2xs font-bold {currentVolunteer.verified
+							class="inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs font-bold sm:text-2xs {currentVolunteer.verified
 								? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
 								: 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950/60 dark:text-amber-300'}"
 						>
-							<CircleCheck class="size-3" />
+							<CircleCheck class="size-3.5 sm:size-3" />
 							{currentVolunteer.verified ? 'ยืนยันตัวตนแล้ว' : 'ยังไม่ยืนยันตัวตน'}
 						</span>
 						<span
-							class="inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-2xs font-bold {currentVolunteer.statusType ===
+							class="inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs font-bold sm:text-2xs {currentVolunteer.statusType ===
 							'active'
 								? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
 								: 'border-border bg-muted text-muted-foreground'}"
@@ -861,16 +961,23 @@
 						</span>
 					</div>
 
-					<p class="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
-						<span class="flex items-center gap-1">
-							<MapPin class="size-3.5 text-primary" /> สังกัด: {currentVolunteer.shelterName}
+					<p
+						class="flex flex-wrap items-start justify-center gap-x-3 gap-y-1 text-sm text-muted-foreground sm:justify-start sm:text-xs"
+					>
+						<!-- Icon inline with the text: it stays beside the first word whether the line is
+						     centred (phone) or left-aligned, and a long shelter name wraps under it. -->
+						<span class="min-w-0">
+							<MapPin
+								class="mr-1 inline size-4 -translate-y-px align-middle text-primary sm:size-3.5"
+							/>สังกัด:
+							{currentVolunteer.shelterName}
 						</span>
-						<span>📞 {currentVolunteer.phone}</span>
+						<span class="whitespace-nowrap">📞 {currentVolunteer.phone}</span>
 					</p>
 
 					<div class="pt-1">
 						<span
-							class="inline-flex items-center gap-1 rounded-lg border border-sky-200 bg-sky-50 px-2.5 py-0.5 text-2xs font-bold text-sky-800 dark:border-sky-800 dark:bg-sky-950/50 dark:text-sky-300"
+							class="inline-flex items-center gap-1 rounded-lg border border-sky-200 bg-sky-50 px-2.5 py-0.5 text-xs font-bold text-sky-800 sm:text-2xs dark:border-sky-800 dark:bg-sky-950/50 dark:text-sky-300"
 						>
 							{currentVolunteer.roleType}
 						</span>
@@ -879,11 +986,11 @@
 			</div>
 
 			<!-- Right: Actions -->
-			<div class="flex flex-wrap items-center gap-3">
+			<div class="flex w-full shrink-0 items-center gap-2 sm:w-auto">
 				<button
 					type="button"
 					onclick={() => (profileDialogOpen = true)}
-					class="rounded-xl border border-border bg-card px-3.5 py-2 text-xs font-bold text-foreground shadow-xs transition-colors hover:bg-muted"
+					class="min-h-11 flex-1 rounded-xl border border-border bg-card px-4 py-2 text-sm font-bold whitespace-nowrap text-foreground shadow-xs transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none sm:flex-none"
 				>
 					แก้ไขโปรไฟล์
 				</button>
@@ -891,8 +998,9 @@
 				<button
 					type="button"
 					onclick={handleLogout}
-					title="สลับบัญชี / ออกจากระบบ"
-					class="flex size-9 cursor-pointer items-center justify-center rounded-xl border border-border bg-card text-muted-foreground shadow-xs transition-colors hover:border-destructive hover:bg-destructive/10 hover:text-destructive"
+					title="ออกจากระบบ / ลืมเครื่องนี้"
+					aria-label="ออกจากระบบ / ลืมเครื่องนี้"
+					class="flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-xl border border-border bg-card text-muted-foreground shadow-xs transition-colors hover:border-destructive hover:bg-destructive/10 hover:text-destructive focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none"
 				>
 					<LogOut class="size-4" />
 				</button>
@@ -900,12 +1008,15 @@
 		</div>
 
 		<!-- PRIMARY TABS -->
+		<!-- Two equal halves on a phone; at 320px the second tab used to run off-screen. -->
 		<div class="flex border-b border-border">
-			<div class="inline-flex rounded-t-2xl border-x border-t border-border/60 bg-muted/20 p-1">
+			<div
+				class="grid w-full grid-cols-2 gap-1 rounded-t-2xl border-x border-t border-border/60 bg-muted/20 p-1 sm:inline-flex sm:w-auto"
+			>
 				<button
 					type="button"
-					onclick={() => void goto(portalPath(currentVolunteer.id, 'dashboard'))}
-					class="flex cursor-pointer items-center gap-2 rounded-xl px-5 py-2.5 text-xs font-bold transition-all {dashboardTab ===
+					onclick={() => void goto(resolve(portalPath(currentVolunteer.id, 'dashboard')))}
+					class="flex min-h-11 cursor-pointer items-center justify-center gap-1.5 rounded-xl px-3 py-2.5 text-xs font-bold whitespace-nowrap transition-all sm:gap-2 sm:px-5 {dashboardTab ===
 					'schedule'
 						? 'bg-card text-foreground shadow-sm'
 						: 'text-muted-foreground hover:text-foreground'}"
@@ -921,14 +1032,14 @@
 
 				<button
 					type="button"
-					onclick={() => void goto(portalPath(currentVolunteer.id, 'openings'))}
-					class="flex cursor-pointer items-center gap-2 rounded-xl px-5 py-2.5 text-xs font-bold transition-all {dashboardTab ===
+					onclick={() => void goto(resolve(portalPath(currentVolunteer.id, 'openings')))}
+					class="flex min-h-11 cursor-pointer items-center justify-center gap-1.5 rounded-xl px-3 py-2.5 text-xs font-bold whitespace-nowrap transition-all sm:gap-2 sm:px-5 {dashboardTab ===
 					'openings'
 						? 'bg-card text-foreground shadow-sm'
 						: 'text-muted-foreground hover:text-foreground'}"
 				>
 					<Rocket class="size-4" />
-					<span>งานจิตอาสา (Openings)</span>
+					<span>งานจิตอาสา<span class="ml-1 hidden sm:inline">(Openings)</span></span>
 					<span
 						class="rounded-full bg-amber-500/20 px-2 py-0.5 text-3xs font-black text-amber-800 dark:text-amber-300"
 					>
@@ -945,7 +1056,9 @@
 				<div class="space-y-4 lg:col-span-2">
 					<div class="flex items-center justify-between pt-2">
 						<div>
-							<h3 class="text-sm font-bold text-foreground md:text-base">รายการภารกิจของฉัน</h3>
+							<h3 class="text-sm font-bold text-foreground md:text-base">
+								รายการงานอาสาสมัครของฉัน
+							</h3>
 							<p class="mt-1 text-2xs text-muted-foreground">เรียงจากวันที่ใกล้ที่สุดก่อน</p>
 						</div>
 						<span class="rounded-full bg-primary/10 px-2.5 py-1 text-2xs font-bold text-primary">
@@ -955,7 +1068,7 @@
 
 					<div class="rounded-2xl border border-border bg-card p-4 shadow-sm">
 						<div class="mb-3 flex items-center gap-2 text-xs font-bold text-foreground">
-							<Filter class="size-4 text-primary" /> ตัวกรองภารกิจ
+							<Filter class="size-4 text-primary" /> ตัวกรองงานอาสาสมัคร
 						</div>
 						<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
 							<label class="space-y-1 text-2xs font-semibold text-muted-foreground">
@@ -1040,11 +1153,11 @@
 							class="rounded-3xl border border-dashed border-border bg-card p-10 text-center text-muted-foreground"
 						>
 							<ClipboardList class="mx-auto mb-3 size-10 text-muted-foreground/60" />
-							<p class="text-sm font-bold text-foreground">ตอนนี้ยังไม่มีภารกิจ</p>
+							<p class="text-sm font-bold text-foreground">ตอนนี้ยังไม่มีงานอาสาสมัคร</p>
 							<p class="mt-1 text-xs">เมื่อมีการจองหรือได้รับมอบหมาย งานจะปรากฏรวมกันที่นี่</p>
 							<button
 								type="button"
-								onclick={() => void goto(portalPath(currentVolunteer.id, 'openings'))}
+								onclick={() => void goto(resolve(portalPath(currentVolunteer.id, 'openings')))}
 								class="mt-4 rounded-xl bg-primary px-4 py-2 text-xs font-bold text-white shadow-sm hover:opacity-95"
 							>
 								ดูงานจิตอาสา
@@ -1055,7 +1168,7 @@
 							class="rounded-3xl border border-dashed border-border bg-card p-10 text-center text-muted-foreground"
 						>
 							<Filter class="mx-auto mb-3 size-10 text-muted-foreground/60" />
-							<p class="text-sm font-bold text-foreground">ไม่พบภารกิจตามตัวกรอง</p>
+							<p class="text-sm font-bold text-foreground">ไม่พบงานอาสาสมัครตามตัวกรอง</p>
 							<p class="mt-1 text-xs">ลองขยายช่วงวันที่หรือเวลา แล้วค้นหาใหม่</p>
 						</div>
 					{:else}
@@ -1086,9 +1199,11 @@
 										</div>
 
 										<h4 class="text-base font-bold text-foreground">{activity.title}</h4>
-										<p class="text-xs leading-relaxed text-muted-foreground">
-											{activity.description}
-										</p>
+										{#if activity.description}
+											<p class="text-xs leading-relaxed text-muted-foreground">
+												{activity.description}
+											</p>
+										{/if}
 
 										<div
 											class="flex flex-wrap items-center gap-x-4 gap-y-1 text-2xs text-muted-foreground"
@@ -1133,13 +1248,13 @@
 												class="w-full space-y-2 rounded-xl border border-warning-border/50 bg-warning/5 p-3 md:w-64"
 											>
 												<p class="text-2xs leading-relaxed font-bold text-warning-foreground">
-													ศูนย์เสนอมอบหมายภารกิจนี้ให้คุณ — กรอกรหัสที่เจ้าหน้าที่แจ้ง
+													ศูนย์เสนอมอบหมายงานอาสาสมัครนี้ให้คุณ — กรอกรหัสที่เจ้าหน้าที่แจ้ง
 												</p>
 												<input
 													type="text"
 													bind:value={dispatchCodes[activity.assignmentId]}
 													placeholder="เช่น 4K7-2M9"
-													aria-label="รหัสยืนยันภารกิจ"
+													aria-label="รหัสยืนยันงานอาสาสมัคร"
 													autocomplete="off"
 													maxlength={10}
 													class="w-full rounded-lg border border-border bg-card px-3 py-2 text-xs text-foreground uppercase outline-hidden focus:border-primary focus:ring-1 focus:ring-primary"
@@ -1157,7 +1272,7 @@
 														class="flex flex-1 cursor-pointer items-center justify-center gap-1 rounded-lg bg-primary px-3 py-2 text-2xs font-bold text-primary-foreground shadow-sm hover:opacity-95 disabled:opacity-60"
 													>
 														<Check class="size-3.5" />
-														ยอมรับภารกิจ
+														ยอมรับงานอาสาสมัคร
 													</button>
 													<button
 														type="button"
@@ -1166,7 +1281,7 @@
 														class="flex flex-1 cursor-pointer items-center justify-center gap-1 rounded-lg border border-border px-3 py-2 text-2xs font-bold text-muted-foreground transition-colors hover:border-destructive hover:text-destructive disabled:opacity-60"
 													>
 														<X class="size-3.5" />
-														ปฏิเสธภารกิจ
+														ปฏิเสธงานอาสาสมัคร
 													</button>
 												</div>
 											</div>
@@ -1227,7 +1342,7 @@
 							<li class="flex items-start gap-2">
 								<span class="text-primary">•</span>
 								<span
-									>เมื่อปฏิบัติภารกิจเสร็จสิ้นตามกรอบเวลา ให้กดปุ่ม Check-out
+									>เมื่อปฏิบัติงานอาสาสมัครเสร็จสิ้นตามกรอบเวลา ให้กดปุ่ม Check-out
 									เพื่อสะสมเวลาปฏิบัติงานและคืนข้อมูลทรัพยากร</span
 								>
 							</li>
@@ -1246,27 +1361,34 @@
 					</div>
 
 					<!-- WIDGET 2: บัตรอาสาสมัครอัจฉริยะ (QR Role Card) -->
-					<div class="rounded-3xl border border-border bg-card p-6 shadow-sm">
-						<div class="flex items-center justify-between">
-							<h4 class="text-xs font-bold text-foreground">
+					<div class="rounded-3xl border border-border bg-card p-4 shadow-sm sm:p-6">
+						<!-- Wraps rather than squeezes (#626): when the title and both buttons do not fit
+						     — a phone, or this card's narrow column on desktop — the buttons drop to
+						     their own line instead of breaking their labels. -->
+						<div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+							<h4 class="min-w-0 flex-1 basis-48 text-sm font-bold text-foreground">
 								บัตรอาสาสมัครอัจฉริยะ (QR Role Card)
 							</h4>
-							<div class="flex items-center gap-3">
-								<button
+							<div class="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+								<Button
 									type="button"
+									variant="outline"
+									size="sm"
+									class="min-h-11 grow gap-1.5 px-3 text-xs whitespace-nowrap sm:grow-0"
 									onclick={downloadRoleCardQr}
 									disabled={!qrDataUrl}
-									class="flex items-center gap-1 text-2xs font-bold text-primary hover:underline disabled:cursor-wait disabled:opacity-50"
 								>
-									<Download class="size-3" /> ดาวน์โหลด QR
-								</button>
-								<button
+									<Download class="size-4" /> ดาวน์โหลด QR
+								</Button>
+								<Button
 									type="button"
+									variant="outline"
+									size="sm"
+									class="min-h-11 grow gap-1.5 px-3 text-xs whitespace-nowrap sm:grow-0"
 									onclick={() => (isPassModalOpen = true)}
-									class="flex items-center gap-1 text-2xs font-bold text-primary hover:underline"
 								>
-									<Maximize2 class="size-3" /> ขยายบัตร
-								</button>
+									<Maximize2 class="size-4" /> ขยายบัตร
+								</Button>
 							</div>
 						</div>
 						<p class="mt-2 text-2xs text-muted-foreground">
@@ -1393,33 +1515,18 @@
 	{/if}
 </div>
 
-<!-- Esc and the browser's own control leave fullscreen without touching our flag. -->
-<svelte:document
-	onfullscreenchange={() => (isPassFullscreen = Boolean(document.fullscreenElement))}
-/>
-
 <!-- ── MODAL: DIGITAL PASS VIEW ───────────────────────────────────────────── -->
 {#if isPassModalOpen && currentVolunteer}
 	<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
 		<div
-			bind:this={passModalEl}
-			class="w-full max-w-sm rounded-3xl border border-border bg-card p-6 text-center shadow-2xl {isPassFullscreen
-				? 'flex max-w-none flex-col justify-center'
-				: ''}"
+			class="w-full max-w-sm rounded-3xl border border-border bg-card px-4 py-2 text-center shadow-2xl"
 		>
-			<div class="flex justify-between">
-				<button
-					type="button"
-					onclick={togglePassFullscreen}
-					title={isPassFullscreen ? 'ย่อจากเต็มจอ' : 'ขยายเต็มจอ'}
-					class="flex size-8 items-center justify-center rounded-full bg-muted text-muted-foreground hover:text-foreground"
-				>
-					<Maximize2 class="size-4" />
-				</button>
+			<div class="flex justify-end">
 				<button
 					type="button"
 					onclick={closePassModal}
-					class="flex size-8 items-center justify-center rounded-full bg-muted text-muted-foreground hover:text-foreground"
+					aria-label="ปิดบัตร"
+					class="flex size-11 items-center justify-center rounded-full bg-muted text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none"
 				>
 					<X class="size-4" />
 				</button>
