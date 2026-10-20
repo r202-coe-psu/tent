@@ -26,7 +26,7 @@
  *                                      assignment in `assigned`/`standby`
  *   checkedInNow    เช็คอินอยู่ตอนนี้ — distinct volunteers with a TODAY
  *                                      assignment in `checked_in`
- *   completed       เสร็จสิ้นภารกิจ    — distinct volunteers with a TODAY
+ *   completed       เสร็จสิ้นงานอาสาสมัคร    — distinct volunteers with a TODAY
  *                                      assignment in `completed`
  *                                      (FR-VOL-11.3 attendance bar — kept
  *                                      here so the roster tab never

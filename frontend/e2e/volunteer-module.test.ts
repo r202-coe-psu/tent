@@ -375,7 +375,7 @@ test.describe('Volunteer backoffice module', () => {
 		await injectSession(page, ACCOUNTS.sm, sessions.sm);
 		await page.goto(`${BASE}/back-office/volunteers`);
 
-		await expect(page.getByText('Smart Volunteer Control Hub')).toBeVisible();
+		await expect(page.getByRole('heading', { name: 'จัดการอาสาสมัคร', level: 2 })).toBeVisible();
 		await expect(page.getByRole('heading', { name: JOB_DOC.title })).toBeVisible();
 
 		await page.getByRole('tab', { name: /ตารางกะและเช็คอิน/ }).click();

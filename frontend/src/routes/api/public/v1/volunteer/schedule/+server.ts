@@ -1,7 +1,10 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { portalCredentialSchema } from '$lib/features/volunteer-portal/server';
-import { volunteerTicketFindLimiter } from '$lib/server/security/rate-limiter';
+import { portalCredentialSchema, isMintedTicketToken } from '$lib/features/volunteer-portal/server';
+import {
+	volunteerTicketFindLimiter,
+	volunteerTicketLimiter
+} from '$lib/server/security/rate-limiter';
 import {
 	PublicScheduleError,
 	readPublicVolunteerSchedule
@@ -21,15 +24,22 @@ import {
  * not reachable from here.
  */
 export const POST: RequestHandler = async ({ request, getClientAddress }) => {
+	// Same order as the other portal endpoints (CR-127 R-8/R-9): the budget is chosen from
+	// the parsed credential — a minted token (128 random bits) gets the looser token
+	// budget, a phone or an unreadable body keeps the strict lookup one — and is charged
+	// before validation. A body that is not JSON is INVALID_INPUT, not a 503.
+	const body: unknown = await request.json().catch(() => null);
+	const parsed = portalCredentialSchema.safeParse(body);
+	const limiter =
+		parsed.success && isMintedTicketToken(parsed.data)
+			? volunteerTicketLimiter
+			: volunteerTicketFindLimiter;
+	if (!limiter.check(getClientAddress())) {
+		return json({ success: false, error: 'RATE_LIMITED' }, { status: 429 });
+	}
 	try {
-		const parsed = portalCredentialSchema.safeParse(await request.json());
 		if (!parsed.success) {
 			return json({ success: false, error: 'INVALID_INPUT' }, { status: 422 });
-		}
-		// Validate first so malformed requests do not consume the lookup budget and
-		// can consistently return the contract's 422 response.
-		if (!volunteerTicketFindLimiter.check(getClientAddress())) {
-			return json({ success: false, error: 'RATE_LIMITED' }, { status: 429 });
 		}
 		return json(await readPublicVolunteerSchedule(parsed.data), {
 			headers: { 'Cache-Control': 'no-store' }

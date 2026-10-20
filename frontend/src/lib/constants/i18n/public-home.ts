@@ -201,7 +201,7 @@ export const PUBLIC_PORTAL_HOME_I18N = {
 		volunteersActiveSuffix: 'คน',
 		volunteersNeededText: (count: number) => `ต้องการอีก ${count.toLocaleString()} คน`,
 		volunteersActiveText: (count: number) => `มีแล้ว ${count.toLocaleString()} คน`,
-		volunteersDesc: 'จิตอาสาในภารกิจเร่งด่วน',
+		volunteersDesc: 'จิตอาสาสำหรับงานอาสาสมัครเร่งด่วน',
 
 		// Urgent Donations
 		urgentDonationsTitle: 'รับบริจาคด่วน',
@@ -225,16 +225,16 @@ export const PUBLIC_PORTAL_HOME_I18N = {
 		// Volunteers
 		volunteersTitle: 'จิตอาสา',
 		volunteersSubtitle: 'ร่วมเป็นกำลังสำคัญช่วยเหลือผู้ประสบภัย',
-		allMissionsBtn: 'ดูภารกิจทั้งหมด',
-		urgentRolesNeededLabel: 'ภารกิจจิตอาสาที่เปิดรับ:',
+		allMissionsBtn: 'ดูงานอาสาสมัครทั้งหมด',
+		urgentRolesNeededLabel: 'งานอาสาสมัครที่เปิดรับ:',
 		enrolledLabel: 'มีอาสาแล้ว',
 		needMorePrefix: 'ต้องการอีก',
 		needMoreMiddle: 'จาก',
 		needMoreSuffix: 'คน',
 		volunteerBtn: 'ร่วมเป็นจิตอาสา',
-		volunteersEmptyTitle: 'ขณะนี้ยังไม่มีภารกิจจิตอาสาที่เปิดรับสมัครเร่งด่วน',
+		volunteersEmptyTitle: 'ขณะนี้ยังไม่มีงานอาสาสมัครที่เปิดรับสมัครเร่งด่วน',
 		volunteersEmptyDesc:
-			'กำลังพลจิตอาสาในแต่ละจุดมีจำนวนเพียงพอสำหรับการปฏิบัติงานในปัจจุบัน ท่านสามารถลงทะเบียนความพร้อมล่วงหน้าเพื่อรับการแจ้งเตือนทันทีเมื่อมีภารกิจใหม่',
+			'กำลังพลจิตอาสาในแต่ละจุดมีจำนวนเพียงพอสำหรับการปฏิบัติงานในปัจจุบัน ท่านสามารถลงทะเบียนความพร้อมล่วงหน้าเพื่อรับการแจ้งเตือนทันทีเมื่อมีงานอาสาสมัครใหม่',
 		preRegisterVolunteerBtn: 'ลงทะเบียนจิตอาสาล่วงหน้า',
 
 		// FAQ
@@ -255,7 +255,7 @@ export const PUBLIC_PORTAL_HOME_I18N = {
 		// Feature-under-development dialog
 		devModalTitle: 'ระบบอยู่ระหว่างการพัฒนา',
 		devModalDesc:
-			'ระบบดูภารกิจและการประสานงานจิตอาสากำลังอยู่ระหว่างการพัฒนา ขออภัยในความไม่สะดวก และขอขอบคุณที่ให้ความสนใจ',
+			'ระบบดูงานอาสาสมัครและการประสานงานจิตอาสากำลังอยู่ระหว่างการพัฒนา ขออภัยในความไม่สะดวก และขอขอบคุณที่ให้ความสนใจ',
 		devModalClose: 'รับทราบ',
 
 		// Floating button
