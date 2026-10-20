@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { adminFetch } from '$lib/server/couch-admin';
+import { findMasterByCode } from '$lib/server/shelters.admin';
 import { KioskInputError, KioskLookupUnavailableError } from './kiosk-check-in.server';
 import {
 	KioskReprintNotFoundError,
@@ -10,8 +11,10 @@ import {
 } from './kiosk-reprint.server';
 
 vi.mock('$lib/server/couch-admin', () => ({ adminFetch: vi.fn() }));
+vi.mock('$lib/server/shelters.admin', () => ({ findMasterByCode: vi.fn() }));
 
 const mockAdminFetch = vi.mocked(adminFetch);
+const mockFindMasterByCode = vi.mocked(findMasterByCode);
 const shelterCode = 'SH001';
 const phone = '0812345678';
 const ids = [
@@ -34,11 +37,12 @@ interface Fixture {
 	phone: string | null;
 	person_id?: { number?: string };
 	household_id: string | null;
-	current_stay: { status: string };
+	current_stay: { status: string; zone?: string | null };
 	privacy?: { search_excluded?: boolean };
 }
 
 let docs: Fixture[] = [];
+let screenings: { evacuee_id: string }[] = [];
 
 function evacuee(index: number, overrides: Partial<Fixture> = {}): Fixture {
 	return {
@@ -67,14 +71,29 @@ function input(overrides: Partial<Parameters<typeof reprintKioskLabels>[1]> = {}
 }
 
 function writes(): unknown[] {
-	return mockAdminFetch.mock.calls.filter(([, init]) => init?.method && init.method !== 'GET');
+	return mockAdminFetch.mock.calls.filter(
+		([path, init]) => init?.method && init.method !== 'GET' && !path.endsWith('/_find')
+	);
+}
+
+function screeningLookups(): unknown[] {
+	return mockAdminFetch.mock.calls.filter(([path]) => path.endsWith('/_find'));
 }
 
 describe('reprintKioskLabels', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
 		docs = [];
-		mockAdminFetch.mockImplementation(async (path) => {
+		screenings = [];
+		mockAdminFetch.mockImplementation(async (path, init) => {
+			if (path.endsWith('/_find')) {
+				const { selector } = JSON.parse(String(init?.body)) as {
+					selector: { evacuee_id: { $in: string[] } };
+				};
+				return {
+					docs: screenings.filter((doc) => selector.evacuee_id.$in.includes(doc.evacuee_id))
+				} as never;
+			}
 			const id = decodeURIComponent(path.slice(path.lastIndexOf('/') + 1));
 			const doc = docs.find((candidate) => candidate._id === id);
 			if (!doc) throw Object.assign(new Error('not found'), { status: 404 });
@@ -91,11 +110,101 @@ describe('reprintKioskLabels', () => {
 			{
 				evacuee_id: ids[0],
 				qr_payload: ids[0],
-				label: { name: 'สมชาย0 ใจดี', phone }
+				label: { name: 'สมชาย0 ใจดี', phone, zone: null, stations_passed: 1 }
 			},
-			{ evacuee_id: ids[1], qr_payload: ids[1], label: { name: 'สมชาย1 ใจดี', phone: null } }
+			{
+				evacuee_id: ids[1],
+				qr_payload: ids[1],
+				label: { name: 'สมชาย1 ใจดี', phone: null, zone: null, stations_passed: 1 }
+			}
 		]);
 		expect(writes()).toEqual([]);
+		// Nobody has a zone yet: the shelter's zone names are not needed.
+		expect(mockFindMasterByCode).not.toHaveBeenCalled();
+	});
+
+	it('prints the current zone name of members already given a zone', async () => {
+		docs = [
+			evacuee(0, { current_stay: { status: 'room_confirmed', zone: 'z3' } }),
+			evacuee(1, { current_stay: { status: 'active', zone: 'z9' } })
+		];
+		mockFindMasterByCode.mockResolvedValue({
+			zones: [{ code: 'Z3', name: 'A3' }]
+		} as never);
+
+		const members = await reprintKioskLabels(shelterCode, input({ evacuee_ids: [ids[0], ids[1]] }));
+
+		expect(members.map((member) => member.label.zone)).toEqual(['A3', 'z9']);
+		expect(mockFindMasterByCode).toHaveBeenCalledTimes(1);
+		expect(mockFindMasterByCode).toHaveBeenCalledWith(shelterCode);
+	});
+
+	it('ticks one box per intake station passed', async () => {
+		docs = [
+			evacuee(0),
+			evacuee(1),
+			evacuee(2, { current_stay: { status: 'active', zone: 'z3' } }),
+			evacuee(3, { current_stay: { status: 'room_confirmed', zone: 'z3' } })
+		];
+		screenings = [{ evacuee_id: ids[1] }, { evacuee_id: ids[2] }];
+		mockFindMasterByCode.mockResolvedValue({ zones: [] } as never);
+
+		const members = await reprintKioskLabels(
+			shelterCode,
+			input({ evacuee_ids: [ids[0], ids[1], ids[2], ids[3]] })
+		);
+
+		expect(members.map((member) => member.label.stations_passed)).toEqual([1, 2, 3, 3]);
+		// Only the members not yet given a zone need their screening looked up.
+		expect(screeningLookups()).toHaveLength(1);
+		const [[, init]] = screeningLookups() as [[string, RequestInit]];
+		expect(JSON.parse(String(init.body)).selector).toEqual({
+			type: 'screening',
+			evacuee_id: { $in: [ids[0], ids[1]] }
+		});
+	});
+
+	it('skips the screening lookup when everyone already has a zone', async () => {
+		docs = [evacuee(0, { current_stay: { status: 'room_confirmed', zone: 'z3' } })];
+		mockFindMasterByCode.mockResolvedValue({ zones: [] } as never);
+
+		const [member] = await reprintKioskLabels(shelterCode, input());
+
+		expect(member?.label.stations_passed).toBe(3);
+		expect(screeningLookups()).toEqual([]);
+	});
+
+	it('still prints, ticking check-in only, when the screening lookup fails', async () => {
+		docs = [evacuee(0)];
+		const lookup = mockAdminFetch.getMockImplementation()!;
+		mockAdminFetch.mockImplementation(async (path, init) => {
+			if (path.endsWith('/_find')) throw new Error('down');
+			return lookup(path, init);
+		});
+
+		const [member] = await reprintKioskLabels(shelterCode, input());
+
+		expect(member?.label.stations_passed).toBe(1);
+	});
+
+	it('prints the zone short name when the shelter gives it one', async () => {
+		docs = [evacuee(0, { current_stay: { status: 'room_confirmed', zone: 'z3' } })];
+		mockFindMasterByCode.mockResolvedValue({
+			zones: [{ code: 'z3', name: 'โซนผู้สูงอายุ อาคารเรียนรวม 2', short_name: 'A3' }]
+		} as never);
+
+		const [member] = await reprintKioskLabels(shelterCode, input());
+
+		expect(member?.label.zone).toBe('A3');
+	});
+
+	it('falls back to the zone code when the shelter zones cannot be read', async () => {
+		docs = [evacuee(0, { current_stay: { status: 'room_confirmed', zone: 'z3' } })];
+		mockFindMasterByCode.mockRejectedValue(new Error('registry down'));
+
+		const [member] = await reprintKioskLabels(shelterCode, input());
+
+		expect(member?.label.zone).toBe('z3');
 	});
 
 	it('accepts a legacy +66 stored phone for the same number', async () => {

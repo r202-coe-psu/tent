@@ -305,6 +305,8 @@ export type BookingOptions = {
 	donorName: string;
 	phone: string;
 	mode?: DeliveryMode;
+	/** How many units to declare — 1 unless a test needs more. */
+	qty?: number;
 	/** Every accepted booking is recorded here for `teardownRun`. */
 	ledger: RunLedger;
 };
@@ -315,7 +317,7 @@ export type BookingResponse = Partial<Booking> & {
 };
 
 /**
- * Walk the public wizard up to — not past — "ยืนยันการจองคิวบริจาค", qty 1.
+ * Walk the public wizard up to — not past — "ยืนยันการจองคิวบริจาค" (qty 1 unless `opts.qty`).
  * Returns `submit`, which presses it and hands back the BFF's answer unasserted, so
  * two donors can be brought to the button first and made to press it together (the
  * caller then paces both itself: `submit({ paced: false })` after `bookingPacer.acquire(2)`).
@@ -334,7 +336,7 @@ export async function fillBooking(
 	await page.locator('#donor-name').fill(donorName);
 	await page.locator('#donor-phone').fill(phone);
 	await expect(page.getByRole('textbox', { name: 'ประเภทสิ่งของ' })).toHaveValue(need.name);
-	await page.getByRole('spinbutton', { name: 'ปริมาณ' }).fill('1');
+	await page.getByRole('spinbutton', { name: 'ปริมาณ' }).fill(String(opts.qty ?? 1));
 	await page.getByRole('button', { name: 'ถัดไป: เลือกจุดส่งมอบ' }).click();
 
 	// Step 3 — logistics. The destination is locked to the card's shelter.
@@ -388,7 +390,7 @@ export async function fillBooking(
 	};
 }
 
-/** Walk the public wizard for `need` at `shelter` with qty 1; asserts the ticket. */
+/** Walk the public wizard for `need` at `shelter` (qty 1 unless `opts.qty`); asserts the ticket. */
 export async function bookAsDonor(page: Page, opts: BookingOptions): Promise<Booking> {
 	const { submit } = await fillBooking(page, opts);
 	const body = await submit();

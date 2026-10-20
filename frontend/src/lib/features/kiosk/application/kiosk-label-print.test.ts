@@ -19,7 +19,11 @@ vi.mock('../data/kiosk-print.api', async (importOriginal) => ({
 	printKioskLabels: mocks.printKioskLabels
 }));
 
-import { prepareKioskQrImage, printKioskQrLabels } from './kiosk-label-print';
+import {
+	prepareKioskQrImage,
+	printKioskQrLabels,
+	renderKioskQrLabelPng
+} from './kiosk-label-print';
 
 const labels = [
 	{ qrSrc: 'data:qr-a', name: 'สมชาย ใจดี', phone: '0812345678' },
@@ -28,6 +32,22 @@ const labels = [
 
 beforeEach(() => {
 	vi.resetAllMocks();
+});
+
+describe('renderKioskQrLabelPng', () => {
+	it('renders the kiosk label for a QR payload, as sent to the kiosk printer', async () => {
+		mocks.qrModuleCount.mockResolvedValue(33);
+		mocks.generateQrDataUrl.mockResolvedValue('data:image/png;base64,qr');
+		mocks.renderKioskLabelPng.mockResolvedValue('cG5n');
+		const label = { name: 'สมชาย ใจดี', phone: null, zone: 'A3', checklist: ['Check-in'] };
+
+		expect(await renderKioskQrLabelPng('PAYLOAD', label)).toBe('cG5n');
+		expect(mocks.generateQrDataUrl).toHaveBeenCalledWith('PAYLOAD', expect.any(Object));
+		expect(mocks.renderKioskLabelPng).toHaveBeenCalledWith({
+			...label,
+			qrSrc: 'data:image/png;base64,qr'
+		});
+	});
 });
 
 describe('prepareKioskQrImage', () => {

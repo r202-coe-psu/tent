@@ -212,7 +212,9 @@ export const zoneSchema = z.object({
 	reason: z.string().nullish().default(null),
 	// CR-023 FR-23-4/5
 	area_m2: z.coerce.number().min(0).nullish(),
-	specifics: z.string().trim().nullish()
+	specifics: z.string().trim().nullish(),
+	// draft-zone-short-name — optional abbreviation printed on the station QR label
+	short_name: z.string().trim().max(10, 'ชื่อย่อโซนต้องไม่เกิน 10 ตัวอักษร').nullish()
 });
 export type Zone = z.infer<typeof zoneSchema>;
 
