@@ -37,3 +37,8 @@ export {
 	kioskThaidNoStoreHeaders,
 	kioskThaidSessionRefSchema
 } from './kiosk-thaid.server';
+export {
+	KioskVolunteerCardNotFoundError,
+	resolveKioskVolunteerCard,
+	type KioskVolunteerCard
+} from './kiosk-volunteer-card.server';
