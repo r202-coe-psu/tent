@@ -15,6 +15,12 @@ describe('assessLinkEligibility (CR-141 FR-16)', () => {
 		expect(assessLinkEligibility(fresh, 'admin')).toBe('ok');
 	});
 
+	it('rejects a soft-deleted account (CR-171 FR-8)', () => {
+		expect(assessLinkEligibility({ ...fresh, deleted_at: '2026-10-17T00:00:00Z' }, 'admin')).toBe(
+			'deleted'
+		);
+	});
+
 	it('rejects an account that finished force-setup', () => {
 		expect(assessLinkEligibility({ ...fresh, must_change_password: false }, 'admin')).toBe(
 			'not_new'
