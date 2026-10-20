@@ -1,10 +1,11 @@
 ---
-id: draft
+id: CR-175
 title: "ผู้บริจาคแนบรูปของบริจาค (ทั้งใบ) และแสดงให้เจ้าหน้าที่ดูตอนประเมิน/ตรวจรับ"
-status: proposed
+status: approved
 date: 2026-10-18
-requested_by: "เจ้าของโครงการ — issue #678 (ขอบเขตตัดสินแล้ว 2026-10-17)"
-decided_by: <เจ้าของโครงการ>
+approved_at: 2026-10-20
+requested_by: "Kan"
+decided_by: "Soravit Sukkarn (Team Lead)"
 layer: volatile
 affects:
   - docs/data/schema.md §2.3 `donation` — field ใหม่ `photos`
@@ -133,3 +134,4 @@ migration: field ใหม่ optional ทั้งสอง doc type — doc �
 - 2026-10-18 — แก้ตาม review PR #679: schema_v เรียงต่อ CR-172 · ผูกรูปกับใบด้วย `image.donation_id` + Mango index สำหรับลบรูปกำพร้า (FR-10, FR-11a, FR-16) · writer ของ `image` ทุกจุดเขียน schema_v 2 · รูปไม่ตามไปเมื่อส่งต่อศูนย์ (FR-13a) · error code ของ 422 · ใช้ `detectImageMime` ร่วม
 - 2026-10-18 — เจ้าของโครงการ: แนบรูปได้ตอนจองเท่านั้น แก้ใบภายหลังไม่เปลี่ยนรูป (FR-3a) · รูปที่หายแสดง "รูปไม่พร้อมใช้" (FR-13b) · รูปของใบที่จบแล้ว (ยกเลิก/ปฏิเสธ/หมดอายุ) **เก็บไว้ก่อน** ไม่ลบในรอบนี้ — ทบทวนนโยบายเก็บรูปภายหลัง
 - 2026-10-19 — แก้ตาม review รอบ 2 PR #679: partial index สำหรับรูปที่ยังไม่ผูกกับใบ (FR-16) · `couch_birth.py` อยู่ในรายการ writer ของ `image` · schema_v donation 7 → 8 หลัง CR-174 · limiter 60 ครั้ง/นาที/IP (FR-9) · `savePublicBookingImage` รับ `purpose` · 409 ตอนผูกรูปลองใหม่ 3 ครั้ง ไม่สำเร็จให้ loop inbound ลองซ้ำด้วย `DonationBuffer.photos_linked` (FR-11a) · คืน `photo_id`
+- 2026-10-20 — approved โดย Soravit Sukkarn (Team Lead) รันเลข CR-175 ย้ายเข้าหมวด `04-donation/`
