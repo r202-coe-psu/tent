@@ -1,12 +1,12 @@
 /**
- * Kitchen journey (ครัวกลางและอาหาร ↔ โรงครัวและเสบียงอาหาร) against the real local CouchDB.
+ * Kitchen journey (ครัวกลางและอาหาร ↔ เบิกวัตถุดิบครัว) against the real local CouchDB.
  *
  * 1. Shelter manager adds an E2E recipe (BOM) from "ฐานสูตร BOM" — kitchen staff can only read
  *    recipes (recipe-tab gates editing to shelter manager / warehouse staff).
  * 2. Kitchen staff creates a meal session ("สร้างมื้อใหม่") for two target groups.
  * 3. Kitchen staff adds two production batches (ชุดการผลิต) to that one session — one per group —
  *    deleting every ingredient flagged "ขาดสต็อก" and opening one requisition ticket per batch.
- * 4. Warehouse staff works both tickets in "โรงครัวและเสบียงอาหาร": check the allocation and the
+ * 4. Warehouse staff works both tickets in "เบิกวัตถุดิบครัว": check the allocation and the
  *    on-hand stock, "อนุมัติ" (PENDING_PICK → READY_FOR_DISPATCH), then "ปล่อยของและตัดสต็อก"
  *    (→ IN_TRANSIT, writes the stock_ledger rows). Kitchen staff then confirms receipt
  *    ("ยืนยันรับวัตถุดิบ", → COMPLETED) from the production board.
@@ -386,6 +386,23 @@ async function approveBatch(warehouse: Page, batch: Batch, onHand: number): Prom
 	await approve.click();
 	await expect(toast(warehouse, 'อนุมัติแล้ว รอคลังปล่อยของ')).toBeVisible({ timeout: 15_000 });
 
+	// CR-178: dispatch is per lot. The summary row shows the rice line pre-filled with the auto
+	// plan (the whole line from the seeded lot) as "ครบ", so the button is enabled without any clicks.
+	await expect(warehouse.getByText('เลือก lot ที่จะปล่อยของ')).toBeVisible();
+	const lotRow = warehouse
+		.getByRole('listitem')
+		.filter({ hasText: RICE })
+		.filter({
+			has: warehouse.getByRole('button', { name: 'จัดการ lot' })
+		});
+	await expect(lotRow).toContainText('ครบ', { timeout: 15_000 });
+	// The modal shows the same prefill; open, check, close without saving.
+	await warehouse.getByRole('button', { name: 'จัดการ lot' }).click();
+	await expect(warehouse.getByLabel('จำนวนที่ใช้จาก Lot นี้')).toHaveValue(
+		String(batch.target / REGULAR_HEADCOUNT),
+		{ timeout: 15_000 }
+	);
+	await warehouse.getByRole('button', { name: 'ยกเลิก' }).click();
 	const dispatch = warehouse.getByRole('button', { name: 'ปล่อยของและตัดสต็อก' });
 	await expect(dispatch).toBeEnabled({ timeout: 15_000 });
 	await dispatch.click();
@@ -444,10 +461,10 @@ async function cookBatch(kitchen: Page, batch: Batch): Promise<void> {
 	);
 }
 
-/** Manager: confirm one batch's cooked food into stock from โรงครัวและเสบียงอาหาร. */
+/** Manager: confirm one batch's cooked food into stock from เบิกวัตถุดิบครัว. */
 async function receiveBatch(manager: Page, batch: Batch): Promise<void> {
 	const mission = `รับอาหารปรุงเสร็จ: ${batch.label}`;
-	await openSidebar(manager, 'โรงครัวและเสบียงอาหาร', 'จัดการคำร้องเบิกจ่าย');
+	await openSidebar(manager, 'เบิกวัตถุดิบครัว', 'จัดการคำร้องเบิกจ่าย');
 	await refresh(manager);
 	const row = await findTicketRow(manager, mission);
 	await expect(row).toContainText('รอตรวจรับเข้าคลัง');
@@ -468,7 +485,7 @@ async function receiveBatch(manager: Page, batch: Batch): Promise<void> {
 	await expect(toast(manager, 'ยืนยันตรวจรับเข้าสต็อกแล้ว')).toBeVisible({ timeout: 15_000 });
 	await expect(manager.getByText('ตรวจรับเข้าคลังเรียบร้อยแล้ว')).toBeVisible();
 
-	await openSidebar(manager, 'โรงครัวและเสบียงอาหาร', 'จัดการคำร้องเบิกจ่าย');
+	await openSidebar(manager, 'เบิกวัตถุดิบครัว', 'จัดการคำร้องเบิกจ่าย');
 	await expect(await findTicketRow(manager, mission)).toContainText('รับเข้าคลังแล้ว');
 }
 

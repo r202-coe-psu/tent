@@ -1,4 +1,5 @@
 import type { AuthorContext } from '$lib/db/model';
+import type { TicketLotAllocations } from '../domain/ticket-dispatch';
 import type { CreateTicketInput, RequisitionTicket, TicketItemInput } from '../domain/ticket';
 
 export interface TicketRepository {
@@ -34,11 +35,16 @@ export interface TicketRepository {
 		ctx: AuthorContext
 	): Promise<RequisitionTicket>;
 
-	// READY_FOR_DISPATCH → IN_TRANSIT. Checks stock balance, then writes the
-	// ticket status update alongside stock_ledger rows in one bulkDocs
-	// call (mirrors kitchen.remote.ts's approveKitchenRequisition). Throws before
-	// any write if balance is insufficient (all-or-nothing).
-	dispatchTicket(ticket: RequisitionTicket, ctx: AuthorContext): Promise<RequisitionTicket>;
+	// READY_FOR_DISPATCH → IN_TRANSIT (CR-178). `lotsByItem` maps item_id → physical lots the
+	// warehouse picked. Validates every line with allocated_qty > 0 against live lot balances
+	// (sum = allocated_qty, not expired, <= lot balance, no duplicates) and throws before any
+	// write on failure. Then writes one `requisition` stock_ledger row per (item, lot) with a
+	// deterministic _id (retry-safe), and the ticket status last.
+	dispatchTicket(
+		ticket: RequisitionTicket,
+		lotsByItem: TicketLotAllocations,
+		ctx: AuthorContext
+	): Promise<RequisitionTicket>;
 
 	// IN_TRANSIT → COMPLETED — kitchen confirms receipt.
 	receiveTicket(ticket: RequisitionTicket, ctx: AuthorContext): Promise<RequisitionTicket>;

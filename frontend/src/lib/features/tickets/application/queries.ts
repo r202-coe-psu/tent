@@ -13,6 +13,7 @@ import type { AuthorContext } from '$lib/db/model';
 import { ticketRepository } from '../data/ticket.remote';
 import { operationsKeys } from '$lib/features/operations';
 import type { CreateTicketInput, RequisitionTicket, TicketItemInput } from '../domain/ticket';
+import type { TicketLotAllocations } from '../domain/ticket-dispatch';
 
 export const ticketKeys = {
 	all: ['tickets'] as const,
@@ -107,8 +108,16 @@ export const useApproveTicketWithAllocations = () =>
 	);
 
 export const useDispatchTicket = () =>
-	ticketMutation(({ ticket, ctx }: { ticket: RequisitionTicket; ctx: AuthorContext }) =>
-		ticketRepository().dispatchTicket(ticket, ctx)
+	ticketMutation(
+		({
+			ticket,
+			lotsByItem,
+			ctx
+		}: {
+			ticket: RequisitionTicket;
+			lotsByItem: TicketLotAllocations;
+			ctx: AuthorContext;
+		}) => ticketRepository().dispatchTicket(ticket, lotsByItem, ctx)
 	);
 
 export const useReceiveTicket = () =>

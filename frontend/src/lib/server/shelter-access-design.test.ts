@@ -1423,7 +1423,15 @@ describe('buildValidateDocUpdate', () => {
 		it.each([
 			['donation', { reason: 'donation', qty: '5', ref_id: 'donation:01J' }],
 			['receive', { reason: 'receive', qty: '5', ref_id: 'distribution_log:01J' }],
-			['requisition', { reason: 'requisition', qty: '-5', ref_id: 'requisition_ticket:01J' }],
+			[
+				'requisition',
+				{
+					reason: 'requisition',
+					qty: '-5',
+					ref_id: 'requisition_ticket:01J',
+					lot_ref: 'stock_ledger:01J'
+				}
+			],
 			[
 				'distribute',
 				{
@@ -3526,12 +3534,49 @@ describe('buildValidateDocUpdate', () => {
 				);
 			});
 
+			describe('CR-179 Step 2 approve roles (non-kitchen)', () => {
+				const pending = () => ticketFor(WAREHOUSE);
+				const approvedBy = (user: UserCtx) => ({
+					...pending(),
+					status: 'READY_FOR_DISPATCH',
+					approved_by: user.name
+				});
+
+				it.each([
+					['warehouse_staff', WAREHOUSE],
+					['supply_coordinator', SUPPLY_COORD],
+					['shelter_manager', MANAGER],
+					['system_admin', ADMIN]
+				] as [string, UserCtx][])(
+					'allows %s to approve PENDING_PICK -> READY_FOR_DISPATCH',
+					(_r, user) => {
+						expect(() => compile()(approvedBy(user), pending(), user)).not.toThrow();
+					}
+				);
+
+				it.each([
+					['kitchen_staff', KITCHEN],
+					['registration_staff', REGISTRATION],
+					['distribution_staff', DISTRIBUTION]
+				] as [string, UserCtx][])('rejects %s approving', (_r, user) => {
+					expectForbidden(
+						() => compile()(approvedBy(user), pending(), user),
+						/can approve requisition_tickets/
+					);
+				});
+
+				it('rejects warehouse_staff scoped to another shelter', () => {
+					const other: UserCtx = { name: 'ws2', roles: ['shelter:SH999', 'warehouse_staff'] };
+					expectForbidden(() => compile()(approvedBy(other), pending(), other), /.+/);
+				});
+			});
+
 			it('gates ticket transitions, binds newly introduced actors, and preserves prior provenance', () => {
 				const pending = ticketFor(WAREHOUSE);
 				const ready = { ...pending, status: 'READY_FOR_DISPATCH', approved_by: MANAGER.name };
 				expect(() => compile()(ready, pending, MANAGER)).not.toThrow();
 				expectForbidden(
-					() => compile()(ready, pending, WAREHOUSE),
+					() => compile()(ready, pending, REGISTRATION),
 					/can approve requisition_tickets/
 				);
 				expectForbidden(
@@ -4633,7 +4678,8 @@ describe('buildValidateDocUpdate', () => {
 				const reqTicket = ledger({
 					qty: '-10',
 					reason: 'requisition',
-					ref_id: 'requisition_ticket:01J00000000000000000000001'
+					ref_id: 'requisition_ticket:01J00000000000000000000001',
+					lot_ref: 'stock_ledger:01J00000000000000000000001'
 				});
 				expect(() => compile()(reqTicket, null, WAREHOUSE)).not.toThrow();
 
@@ -4643,6 +4689,74 @@ describe('buildValidateDocUpdate', () => {
 					ref_id: 'kitchen_requisition:01J00000000000000000000001'
 				});
 				expect(() => compile()(reqKitchen, null, WAREHOUSE)).not.toThrow();
+			});
+
+			describe('requisition per-lot rule (CR-178)', () => {
+				const TICKET_REF = 'requisition_ticket:01J00000000000000000000001';
+				const LOT = 'stock_ledger:01J00000000000000000000002';
+
+				it('rejects a requisition_ticket row without lot_ref', () => {
+					expectForbidden(
+						() =>
+							compile()(
+								ledger({ qty: '-10', reason: 'requisition', ref_id: TICKET_REF }),
+								null,
+								WAREHOUSE
+							),
+						/requires physical stock_ledger lot_ref/
+					);
+				});
+
+				it('rejects a requisition_ticket row with a malformed lot_ref', () => {
+					expectForbidden(
+						() =>
+							compile()(
+								ledger({ qty: '-10', reason: 'requisition', ref_id: TICKET_REF, lot_ref: 'bogus' }),
+								null,
+								WAREHOUSE
+							),
+						/requires physical stock_ledger lot_ref/
+					);
+				});
+
+				it.each(['10', '0', '-1.12345', '-abc'])(
+					'rejects a requisition_ticket row with non-negative/invalid qty %s',
+					(qty) => {
+						expectForbidden(
+							() =>
+								compile()(
+									ledger({ qty, reason: 'requisition', ref_id: TICKET_REF, lot_ref: LOT }),
+									null,
+									WAREHOUSE
+								),
+							/qty must be a negative decimal string/
+						);
+					}
+				);
+
+				it('accepts a requisition_ticket row with lot_ref and a negative decimal qty', () => {
+					expect(() =>
+						compile()(
+							ledger({ qty: '-2.5', reason: 'requisition', ref_id: TICKET_REF, lot_ref: LOT }),
+							null,
+							WAREHOUSE
+						)
+					).not.toThrow();
+				});
+
+				it('keeps legacy kitchen_requisition rows unrestricted (no lot_ref needed)', () => {
+					expect(() =>
+						compile()(
+							ledger({
+								qty: '-10',
+								reason: 'requisition',
+								ref_id: 'kitchen_requisition:01J00000000000000000000001'
+							}),
+							null,
+							WAREHOUSE
+						)
+					).not.toThrow();
+				});
 			});
 
 			it('allows receive referencing meal_service, requisition_ticket, distribution_log, or bulk_return_pool', () => {

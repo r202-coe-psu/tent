@@ -16,6 +16,7 @@
 	import { toast } from 'svelte-sonner';
 	import * as AlertDialog from '$lib/components/ui/alert-dialog';
 	import * as Card from '$lib/components/ui/card';
+	import * as Dialog from '$lib/components/ui/dialog';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import { authStore } from '$lib/stores/auth.svelte';
@@ -32,9 +33,15 @@
 		type TicketItem,
 		type TicketStatus
 	} from '$lib/features/tickets';
-	import { useStockBalance } from '$lib/features/operations';
+	import { toLotPriorityItems, useLedger, useStockBalance } from '$lib/features/operations';
+	import {
+		PhysicalLotPicker,
+		planAutoLotAllocation,
+		sumDispatchAllocations,
+		type DispatchLotAllocation
+	} from '$lib/features/distribution';
 	import { useMealPlans, toMealPlanMap } from '$lib/features/kitchen';
-	import { useRecipes, formatUnit, useUnitsOfMeasure } from '$lib/features/catalog';
+	import { useRecipes, formatUnit, useItemMasters, useUnitsOfMeasure } from '$lib/features/catalog';
 	import { ticketActionsFor } from '../domain/ticket-actions';
 	import { langState } from '$lib/states/i18n.svelte';
 
@@ -62,6 +69,8 @@
 	const approve = useApproveTicketWithAllocations();
 	const stock = useStockBalance();
 	const dispatch = useDispatchTicket();
+	const ledgerQuery = useLedger();
+	const itemMastersQuery = useItemMasters(() => getShelterCode());
 	const receive = useReceiveTicket();
 	const cancel = useCancelTicket();
 
@@ -85,11 +94,13 @@
 	};
 
 	// Lifecycle shown as a stepper; `who` tells staff whose turn each step is.
-	const STEPS: { status: Exclude<TicketStatus, 'CANCELLED'>; who: string }[] = [
-		{ status: 'PENDING_PICK', who: 'คลังจัดของและอนุมัติ' },
-		{ status: 'READY_FOR_DISPATCH', who: 'คลังปล่อยของ ตัดสต็อก' },
-		{ status: 'IN_TRANSIT', who: 'ครัวยืนยันรับ' },
-		{ status: 'COMPLETED', who: 'ครัวได้รับวัตถุดิบแล้ว' }
+	// `who` is split into phrases that never break mid-word: Thai has no spaces, so the browser
+	// would otherwise cut a word like "ตัดสต็อก" in two at narrow widths.
+	const STEPS: { status: Exclude<TicketStatus, 'CANCELLED'>; who: string[] }[] = [
+		{ status: 'PENDING_PICK', who: ['คลังจัดของและอนุมัติ'] },
+		{ status: 'READY_FOR_DISPATCH', who: ['คลังเลือก lot', 'ปล่อยของ', 'ตัดสต็อก'] },
+		{ status: 'IN_TRANSIT', who: ['ครัวยืนยันรับ'] },
+		{ status: 'COMPLETED', who: ['ครัวได้รับวัตถุดิบแล้ว'] }
 	];
 	const currentStep = $derived(ticket ? STEPS.findIndex((s) => s.status === ticket.status) : -1);
 
@@ -173,7 +184,74 @@
 			stockReady &&
 			shortStockCount === 0
 	);
-	const canDispatch = $derived(actions.canDispatch && stockReady && shortStockCount === 0);
+
+	// ---- lot picking at dispatch (CR-178) ----
+	// Lines the warehouse supplies (allocated > 0); a 0 line needs no lot and writes no ledger row.
+	const dispatchLines = $derived(
+		ticket && actions.canDispatch && ticket.status === 'READY_FOR_DISPATCH'
+			? ticket.items.filter((i) => qtyGt(i.allocated_qty, 0))
+			: []
+	);
+	const lotsReady = $derived(!ledgerQuery.isPending && !itemMastersQuery.isPending);
+	/** Auto plan per line (CR-143 §A order, expired lots excluded) — the default the picker starts from. */
+	const autoPlans = $derived.by(() => {
+		const plans: Record<string, { allocations: DispatchLotAllocation[]; valid: boolean }> = {};
+		if (!lotsReady) return plans;
+		const priority = toLotPriorityItems(itemMastersQuery.data ?? []);
+		for (const item of dispatchLines) {
+			const plan = planAutoLotAllocation(
+				ledgerQuery.data,
+				item.item_id,
+				item.allocated_qty,
+				priority
+			);
+			plans[item.item_id] = {
+				allocations: plan.allocations.map((a) => ({ lot_ref: a.lot_ref, qty: a.qty })),
+				valid: plan.complete
+			};
+		}
+		return plans;
+	});
+	// What the warehouse changed in a picker; falls back to the auto plan until touched.
+	let lotEdits = $state<Record<string, { allocations: DispatchLotAllocation[]; valid: boolean }>>(
+		{}
+	);
+	const lotSelection = (itemId: string) => lotEdits[itemId] ?? autoPlans[itemId];
+	const invalidLotCount = $derived(
+		dispatchLines.filter((i) => !lotSelection(i.item_id)?.valid).length
+	);
+	const canDispatch = $derived(actions.canDispatch && lotsReady && invalidLotCount === 0);
+
+	/** Why a line's lot selection is not valid, for the summary badge. */
+	function lotProblem(itemId: string): string {
+		const edited = lotEdits[itemId];
+		if (!edited && autoPlans[itemId] && !autoPlans[itemId].valid) return 'lot ที่ใช้ได้ไม่พอ';
+		return 'ยังเลือกไม่ครบ';
+	}
+
+	// "จัดการ lot" modal: works on a draft copy of one line; commit only on save.
+	let lotDialogOpen = $state(false);
+	let lotDialogItemId = $state<string | null>(null);
+	let lotDraft = $state<{ allocations: DispatchLotAllocation[]; valid: boolean }>({
+		allocations: [],
+		valid: false
+	});
+	const lotDialogItem = $derived(dispatchLines.find((i) => i.item_id === lotDialogItemId) ?? null);
+
+	function openLotDialog(item: TicketItem) {
+		const current = lotSelection(item.item_id);
+		lotDraft = {
+			allocations: (current?.allocations ?? []).map((a) => ({ ...a })),
+			valid: current?.valid ?? false
+		};
+		lotDialogItemId = item.item_id;
+		lotDialogOpen = true;
+	}
+	function saveLotDraft() {
+		if (!lotDialogItemId || !lotDraft.valid) return;
+		lotEdits[lotDialogItemId] = { allocations: lotDraft.allocations, valid: true };
+		lotDialogOpen = false;
+	}
 
 	async function handleApprove() {
 		if (!ticket) return;
@@ -198,7 +276,11 @@
 	async function handleDispatch() {
 		if (!ticket || !canDispatch) return;
 		try {
-			await dispatch.mutateAsync({ ticket, ctx: ctx() });
+			const lotsByItem: Record<string, DispatchLotAllocation[]> = {};
+			for (const item of dispatchLines) {
+				lotsByItem[item.item_id] = lotSelection(item.item_id)?.allocations ?? [];
+			}
+			await dispatch.mutateAsync({ ticket, lotsByItem, ctx: ctx() });
 			toast.success('ปล่อยของแล้ว ตัดสต็อกเรียบร้อย');
 		} catch (err) {
 			toast.error(err instanceof Error ? err.message : 'ปล่อยของไม่สำเร็จ');
@@ -334,7 +416,11 @@
 									>
 										{TICKET_STATUS_LABELS[step.status]}
 									</p>
-									<p class="text-xs text-slate-500">{step.who}</p>
+									<p class="flex flex-wrap gap-x-1 text-xs text-slate-500">
+										{#each step.who as phrase (phrase)}
+											<span class="whitespace-nowrap">{phrase}</span>
+										{/each}
+									</p>
 								</div>
 							</li>
 						{/each}
@@ -408,7 +494,11 @@
 						{#if showStock}
 							<span class="text-right">คงเหลือในคลัง</span>
 						{/if}
-						<span class="text-right">คลังจัดให้</span>
+						<!-- Editable rows put a fixed-width unit (w-16 + gap-2) after the input — line the
+						     header up with the input, not the unit. -->
+						<span class="text-right {actions.canAllocateApprove ? 'pr-[4.5rem]' : ''}"
+							>คลังจัดให้</span
+						>
 					</div>
 					<ul class="divide-y divide-slate-200/80">
 						{#each ticket.items as item (item.item_id)}
@@ -550,6 +640,74 @@
 				</Card.Content>
 			</Card.Root>
 
+			{#if dispatchLines.length > 0}
+				<Card.Root class="rounded-2xl border border-slate-200/80 bg-white shadow-2xs">
+					<Card.Header class="border-b pb-4">
+						<Card.Title class="flex items-center gap-2 text-base font-bold text-slate-900">
+							<Truck class="h-4 w-4 text-slate-500" />
+							เลือก lot ที่จะปล่อยของ
+						</Card.Title>
+						<p class="text-sm text-slate-500">
+							ระบบเติม lot ให้ตามลำดับที่ควรใช้ก่อน ปล่อยของได้เลยถ้าครบทุกรายการ หรือกด "จัดการ
+							lot" เพื่อแก้ ห้ามใช้ lot ที่หมดอายุ
+						</p>
+					</Card.Header>
+					<Card.Content class="p-0">
+						{#if !lotsReady}
+							<p class="p-4 text-sm text-slate-500 sm:p-5">กำลังโหลด lot ในคลัง...</p>
+						{:else}
+							<ul class="divide-y divide-slate-200/80" aria-label="สรุป lot ที่เลือกของแต่ละรายการ">
+								{#each dispatchLines as item (item.item_id)}
+									{@const sel = lotSelection(item.item_id)}
+									{@const ok = sel?.valid === true}
+									{@const picked = sumDispatchAllocations(sel?.allocations ?? [])}
+									<li
+										class="flex flex-col gap-3 px-4 py-3.5 sm:flex-row sm:items-center sm:gap-4 sm:px-5"
+									>
+										<div class="min-w-0 flex-1">
+											<p class="text-base font-semibold break-words text-slate-900">
+												{item.item_name}
+											</p>
+											<p class="text-sm text-slate-500 tabular-nums">
+												{sel?.allocations.length ?? 0} lot
+											</p>
+										</div>
+										<div class="flex items-baseline gap-1 text-base text-slate-700 tabular-nums">
+											<span class="font-semibold">{picked}</span>
+											<span>/ {item.allocated_qty}</span>
+											<span class="text-sm text-slate-500">{unitLabel(item.unit)}</span>
+										</div>
+										{#if ok}
+											<span
+												class="inline-flex items-center gap-1 self-start rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-sm font-semibold text-emerald-800 sm:self-auto"
+											>
+												<Check class="h-4 w-4" />
+												ครบ
+											</span>
+										{:else}
+											<span
+												class="inline-flex items-center gap-1 self-start rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-sm font-semibold text-red-800 sm:self-auto"
+											>
+												<CircleAlert class="h-4 w-4" />
+												{lotProblem(item.item_id)}
+											</span>
+										{/if}
+										<Button
+											variant="outline"
+											class="h-11 w-full sm:w-auto"
+											disabled={dispatch.isPending}
+											onclick={() => openLotDialog(item)}
+										>
+											จัดการ lot
+										</Button>
+									</li>
+								{/each}
+							</ul>
+						{/if}
+					</Card.Content>
+				</Card.Root>
+			{/if}
+
 			<!-- Action bar — controls are role-gated client-side (ticketActionsFor) and hidden, not
 			     disabled, when the user cannot act. The hint says whose turn it is. The CouchDB
 			     validate_doc_update guard (shelter-access-design.ts) is the real authorization boundary. -->
@@ -558,7 +716,19 @@
 					class="sticky bottom-3 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200/80 bg-white p-3 shadow-xs"
 				>
 					<p class="text-sm text-slate-600">
-						{#if actions.canAllocateApprove || actions.canDispatch}
+						{#if actions.canDispatch && ticket.status === 'READY_FOR_DISPATCH'}
+							{#if !lotsReady}
+								กำลังโหลด lot ในคลัง...
+							{:else if invalidLotCount > 0}
+								<span class="inline-flex items-center gap-1.5 font-semibold text-red-800">
+									<CircleAlert class="h-4 w-4" />
+									เลือก lot ยังไม่ครบหรือไม่ถูกต้อง {invalidLotCount} รายการ ผลรวมต้องเท่ากับจำนวนที่ปล่อย
+									และห้ามใช้ lot ที่หมดอายุ
+								</span>
+							{:else}
+								ปล่อยของแล้วระบบจะตัดสต็อกตาม lot ที่เลือก
+							{/if}
+						{:else if actions.canAllocateApprove || actions.canDispatch}
 							{#if stock.isPending}
 								กำลังตรวจสต็อกคงเหลือ...
 							{:else if !stockReady}
@@ -664,3 +834,32 @@
 		</AlertDialog.Footer>
 	</AlertDialog.Content>
 </AlertDialog.Root>
+
+<Dialog.Root bind:open={lotDialogOpen}>
+	<Dialog.Content class="flex max-h-[90dvh] flex-col gap-3 sm:max-w-2xl">
+		<Dialog.Header>
+			<Dialog.Title>จัดการ lot</Dialog.Title>
+			<Dialog.Description>
+				เลือกจำนวนจากแต่ละ lot ให้รวมเท่ากับจำนวนที่ต้องปล่อย แล้วกดบันทึก
+			</Dialog.Description>
+		</Dialog.Header>
+		<div class="min-h-0 flex-1 overflow-y-auto pr-1">
+			{#if lotDialogItem}
+				{#key lotDialogItem.item_id}
+					<PhysicalLotPicker
+						itemId={lotDialogItem.item_id}
+						itemName={lotDialogItem.item_name}
+						unit={unitLabel(lotDialogItem.unit)}
+						allocatedQty={lotDialogItem.allocated_qty}
+						allocations={lotDraft.allocations}
+						onChange={(allocations, valid) => (lotDraft = { allocations, valid })}
+					/>
+				{/key}
+			{/if}
+		</div>
+		<Dialog.Footer class="gap-2">
+			<Button variant="outline" class="h-11" onclick={() => (lotDialogOpen = false)}>ยกเลิก</Button>
+			<Button class="h-11" disabled={!lotDraft.valid} onclick={saveLotDraft}>บันทึก</Button>
+		</Dialog.Footer>
+	</Dialog.Content>
+</Dialog.Root>

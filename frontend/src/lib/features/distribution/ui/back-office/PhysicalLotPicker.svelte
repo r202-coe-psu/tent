@@ -1,12 +1,7 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
 	import { toast } from 'svelte-sonner';
-	import {
-		planLotSplit,
-		rankLotsForIssue,
-		toLotPriorityItems,
-		useLedger
-	} from '$lib/features/operations';
+	import { toLotPriorityItems, useLedger } from '$lib/features/operations';
 	import { useItemMasters } from '$lib/features/catalog';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { Button } from '$lib/components/ui/button/index.js';
@@ -17,7 +12,11 @@
 		validateDispatchLotAllocations,
 		type DispatchLotAllocation
 	} from '../../domain/food-supplies';
-	import { getEligiblePhysicalLots, getItemLotBalances } from '../model/physical-lot';
+	import {
+		getEligiblePhysicalLots,
+		lotInputMax,
+		planAutoLotAllocation
+	} from '../model/physical-lot';
 	import AlertCircle from '@lucide/svelte/icons/alert-circle';
 	import Calendar from '@lucide/svelte/icons/calendar';
 	import MapPin from '@lucide/svelte/icons/map-pin';
@@ -109,17 +108,26 @@
 		onChange(list, validateDispatchLotAllocations(allocatedQty, list, candidates).ok);
 	}
 
-	function setQty(lotRef: string, value: string) {
-		draft = { ...draft, [lotRef]: value };
+	/** Cap for one lot's input: its balance, and what the other lots leave of the allocation. */
+	function maxFor(lotRef: string, lotQty: string): string {
+		const others = sumDispatchAllocations(current.filter((a) => a.lot_ref !== lotRef));
+		return lotInputMax(lotQty, allocatedQty, others);
+	}
+
+	function setQty(lotRef: string, lotQty: string, value: string) {
+		let next = value;
+		if (isUsableQty(value)) {
+			const max = maxFor(lotRef, lotQty);
+			if (qtyGt(value, max)) next = max;
+		}
+		draft = { ...draft, [lotRef]: next };
 		emit(draft);
 	}
 
 	function autoAllocate() {
 		const nowMs = Date.now();
-		const balances = getItemLotBalances(ledgerQuery.data, itemId);
 		const priorityMap = toLotPriorityItems(itemMastersQuery.data ?? []);
-		const ranked = rankLotsForIssue(balances, priorityMap, nowMs, { excludeExpired: true });
-		const plan = planLotSplit(ranked, allocatedQty, nowMs, priorityMap);
+		const plan = planAutoLotAllocation(ledgerQuery.data, itemId, allocatedQty, priorityMap, nowMs);
 		if (!plan.complete) {
 			toast.error(
 				`สต็อกที่ใช้ได้ไม่พอ: มี ${plan.available} ${unit} แต่ต้องจ่าย ${allocatedQty} ${unit}`
@@ -153,7 +161,7 @@
 		</div>
 		<div class="flex items-center gap-2">
 			<span
-				class="text-2xs font-semibold tabular-nums {totalState === 'ok'
+				class="text-xs font-semibold tabular-nums {totalState === 'ok'
 					? 'text-emerald-700'
 					: totalState === 'short'
 						? 'text-amber-700'
@@ -172,7 +180,7 @@
 				type="button"
 				variant="outline"
 				size="sm"
-				class="h-7 text-2xs font-semibold"
+				class="h-9 text-xs font-semibold"
 				disabled={disabled || isLoading || hasNoLots}
 				onclick={autoAllocate}
 			>
@@ -196,7 +204,7 @@
 			<AlertCircle class="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
 			<div>
 				<strong>ไม่พบ Lot สินค้าคงคลังพร้อมใช้ในคลังสินค้า</strong>
-				<p class="mt-0.5 text-2xs text-amber-800">
+				<p class="mt-0.5 text-xs text-amber-800">
 					ไม่พบประวัติรับสินค้าที่มีคงเหลือมากกว่า 0 ชิ้นสำหรับรายการนี้
 					กรุณาตรวจสอบการรับสินค้าเข้าสต็อกก่อนดำเนินการปล่อยของ
 				</p>
@@ -209,6 +217,8 @@
 				{@const isUsed = isUsableQty(draft[lot.lot_ref])}
 				{@const canEdit = !disabled && !lot.isExpired}
 				{@const isOver = !lot.isExpired && overBalance(lot.lot_ref, lot.qty)}
+				{@const maxQty = maxFor(lot.lot_ref, lot.qty)}
+				{@const capped = canEdit && !isUsed && !qtyGt(maxQty, 0)}
 				{@const inputId = `lot-qty-${itemId}-${lot.lot_ref}`}
 
 				<li
@@ -223,7 +233,10 @@
 					<div class="min-w-0 flex-1 space-y-1">
 						<!-- Lot Identifier & priority tag -->
 						<div class="flex flex-wrap items-center gap-2">
-							<span class="font-mono text-xs font-bold text-slate-900">
+							<span
+								class="text-xs font-bold break-all text-slate-900 tabular-nums"
+								title={lot.lot_no ?? lot.lot_ref}
+							>
 								{lot.lot_no ?? lot.lot_ref.replace('stock_ledger:', 'LOT-')}
 							</span>
 
@@ -245,7 +258,7 @@
 						</div>
 
 						<!-- Provenance Metadata -->
-						<div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-2xs text-slate-500">
+						<div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
 							<div class="flex items-center gap-1">
 								<Calendar class="h-3 w-3 text-slate-400" />
 								<span
@@ -267,7 +280,7 @@
 								<span class="text-slate-400">({lot.note})</span>
 							{/if}
 						</div>
-						<p class="text-2xs font-medium {lot.isExpired ? 'text-red-700' : 'text-slate-600'}">
+						<p class="text-xs font-medium {lot.isExpired ? 'text-red-700' : 'text-slate-600'}">
 							{lot.reason}
 						</p>
 					</div>
@@ -275,30 +288,35 @@
 					<!-- Remaining Qty & per-lot quantity input -->
 					<div class="ml-3 flex shrink-0 flex-col items-end justify-center gap-1">
 						<div class="text-right">
-							<span class="text-2xs text-slate-400">คงเหลือใน Lot</span>
+							<span class="text-xs text-slate-400">คงเหลือใน Lot</span>
 							<div class="text-sm font-bold text-slate-900 tabular-nums">
-								{lot.qty} <span class="text-2xs font-normal text-slate-500">{unit}</span>
+								{lot.qty} <span class="text-xs font-normal text-slate-500">{unit}</span>
 							</div>
 						</div>
-						<label for={inputId} class="text-2xs font-semibold text-slate-600">
+						<label for={inputId} class="text-xs font-semibold text-slate-600">
 							จำนวนที่ใช้จาก Lot นี้
 						</label>
 						<Input
 							id={inputId}
 							type="number"
 							min="0"
-							max={lot.qty}
+							max={maxQty}
 							step="any"
 							inputmode="decimal"
 							value={draft[lot.lot_ref] ?? ''}
 							oninput={(e: Event) =>
-								setQty(lot.lot_ref, (e.currentTarget as HTMLInputElement).value)}
+								setQty(lot.lot_ref, lot.qty, (e.currentTarget as HTMLInputElement).value)}
 							disabled={!canEdit}
+							readonly={capped}
+							aria-disabled={capped || !canEdit}
 							aria-invalid={isOver}
-							class="h-8 w-28 text-right text-xs tabular-nums"
+							title={capped ? 'ครบจำนวนที่ต้องจ่ายแล้ว' : undefined}
+							class="h-11 w-28 [appearance:textfield] text-right text-xs tabular-nums sm:h-9 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none {capped
+								? 'cursor-not-allowed bg-slate-100 text-slate-400'
+								: ''}"
 						/>
 						{#if isOver}
-							<p class="text-2xs font-semibold text-red-700" role="alert">
+							<p class="text-xs font-semibold text-red-700" role="alert">
 								เกินยอดคงเหลือใน Lot ({lot.qty})
 							</p>
 						{/if}
@@ -307,7 +325,7 @@
 			{/each}
 		</ul>
 		{#if !validation.ok && validation.reason === 'expired_lot'}
-			<p class="text-2xs font-semibold text-red-700" role="alert">
+			<p class="text-xs font-semibold text-red-700" role="alert">
 				ไม่สามารถใช้ Lot ที่หมดอายุแล้วได้
 			</p>
 		{/if}

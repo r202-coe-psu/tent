@@ -28,6 +28,7 @@ export {
 	resolveTicketItemUnit
 } from './domain/ticket';
 export { nextTicketNo } from './domain/ticket-no';
+export { describeLotFailure, type TicketLotAllocations } from './domain/ticket-dispatch';
 
 // Data — repository and remote CouchDB binding
 export type { TicketRepository } from './data/ticket.repository';

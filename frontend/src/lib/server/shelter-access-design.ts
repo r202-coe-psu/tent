@@ -314,8 +314,9 @@ export function buildValidateDocUpdate(code: string): string {
   function canCreateTicket() {
     return isRole('warehouse_staff') || isRole('supply_coordinator') || isRole('shelter_manager');
   }
+  // CR-179: Step 2 approve (PENDING_PICK -> READY_FOR_DISPATCH) is WH, SC, SM, SA.
   function canApproveTicket() {
-    return isRole('shelter_manager');
+    return isRole('warehouse_staff') || isRole('supply_coordinator') || isRole('shelter_manager');
   }
   function canDispatchTicket() {
     return isRole('warehouse_staff') || isRole('supply_coordinator') || isRole('shelter_manager');
@@ -1206,6 +1207,15 @@ export function buildValidateDocUpdate(code: string): string {
       if (typeof newDoc.ref_id !== 'string' || (!/^requisition_ticket:.+/.test(newDoc.ref_id) && !/^kitchen_requisition:.+/.test(newDoc.ref_id))) {
         throw { forbidden: 'Requisition stock ledger requires requisition_ticket or kitchen_requisition ref_id' };
       }
+      // CR-178: ticket-era requisition dispatch is per lot; legacy kitchen_requisition rows stay unrestricted.
+      if (/^requisition_ticket:.+/.test(newDoc.ref_id)) {
+        if (typeof newDoc.lot_ref !== 'string' || !/^stock_ledger:.+/.test(newDoc.lot_ref)) {
+          throw { forbidden: 'Requisition stock ledger for a requisition_ticket requires physical stock_ledger lot_ref' };
+        }
+        if (typeof newDoc.qty !== 'string' || !/^-\\d+(\\.\\d{1,4})?$/.test(newDoc.qty)) {
+          throw { forbidden: 'Requisition stock ledger qty must be a negative decimal string' };
+        }
+      }
     }
     if (newDoc.reason === 'receive') {
       if (newDoc.ref_id !== null && typeof newDoc.ref_id !== 'undefined') {
@@ -2039,7 +2049,7 @@ export function buildValidateDocUpdate(code: string): string {
           throw { forbidden: 'Illegal requisition_ticket transition: ' + oldDoc.status + ' -> ' + newDoc.status };
         }
         if (oldDoc.status === 'PENDING_PICK' && newDoc.status === 'READY_FOR_DISPATCH') {
-          if (!canApproveTicket()) throw { forbidden: 'Only shelter managers or system admins can approve requisition_tickets' };
+          if (!canApproveTicket()) throw { forbidden: 'Only warehouse staff, supply coordinators, shelter managers, or system admins can approve requisition_tickets' };
           if (newDoc.approved_by !== userCtx.name) throw { forbidden: 'requisition_ticket.approved_by must match the current actor' };
         } else if (oldDoc.status === 'PENDING_PICK' && newDoc.status === 'CANCELLED') {
           if (!canCreateTicket()) throw { forbidden: 'Only warehouse staff, supply coordinators, shelter managers, or system admins can cancel requisition_tickets' };
