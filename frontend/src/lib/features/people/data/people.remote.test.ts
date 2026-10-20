@@ -643,6 +643,63 @@ describe('PeopleRemoteRepository', () => {
 			expect(ids).toEqual([arriving._id]);
 		});
 	});
+
+	describe('listCancellableEvacueeIds', () => {
+		it('keeps only hold-cancellable stays and ignores ids that were not selected', async () => {
+			const pre = await repo.createEvacuee(evInput({ first_name: 'Pre' }), ctx);
+			const checkedIn = await repo.createEvacuee(evInput({ first_name: 'In' }), ctx);
+			await repo.checkInEvacuee(checkedIn, ctx, 'zone-a');
+			const unselected = await repo.createEvacuee(evInput({ first_name: 'Other' }), ctx);
+
+			const ids = await repo.listCancellableEvacueeIds([pre._id, checkedIn._id]);
+
+			expect(ids).toEqual([pre._id]);
+			expect(ids).not.toContain(unselected._id);
+		});
+
+		it('returns an empty list for an empty selection', async () => {
+			await expect(repo.listCancellableEvacueeIds([])).resolves.toEqual([]);
+		});
+
+		it('ignores ids that no longer exist', async () => {
+			const pre = await repo.createEvacuee(evInput({ first_name: 'Pre' }), ctx);
+
+			const ids = await repo.listCancellableEvacueeIds([pre._id, 'evacuee:missing']);
+
+			expect(ids).toEqual([pre._id]);
+		});
+	});
+
+	describe('listCancellableHouseholdIds', () => {
+		async function makeHousehold(label: string, status: 'pre_registered' | 'arriving') {
+			const head = await repo.createEvacuee(evInput({ first_name: label }), ctx);
+			return repo.createHousehold(
+				{
+					label,
+					head_evacuee_id: head._id,
+					status,
+					municipality_zone: null,
+					community: null,
+					pets: [],
+					vehicles: []
+				},
+				ctx
+			);
+		}
+
+		it('keeps only pre_registered households', async () => {
+			const pre = await makeHousehold('Pre', 'pre_registered');
+			const arriving = await makeHousehold('Arriving', 'arriving');
+
+			const ids = await repo.listCancellableHouseholdIds([pre._id, arriving._id]);
+
+			expect(ids).toEqual([pre._id]);
+		});
+
+		it('returns an empty list for an empty selection', async () => {
+			await expect(repo.listCancellableHouseholdIds([])).resolves.toEqual([]);
+		});
+	});
 });
 
 describe('check-in / check-out', () => {
