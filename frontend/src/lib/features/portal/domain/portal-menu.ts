@@ -165,7 +165,7 @@ export const PORTAL_DEPARTMENTS: readonly PortalDepartment[] = [
 			},
 			{
 				id: 'station-2',
-				label: 'คัดกรองการแพทย์',
+				label: 'คัดกรองผู้เข้าพัก',
 				desc: 'คัดกรองอาการและกลุ่มเปราะบางก่อนจัดโซน',
 				icon: 'heart-pulse',
 				href: '/onsite/medical-screening',

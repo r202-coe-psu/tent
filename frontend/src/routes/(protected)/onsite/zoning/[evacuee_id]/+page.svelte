@@ -495,15 +495,17 @@
 					role="alert"
 					class="mb-4 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-900 dark:text-amber-100"
 				>
-					<p class="font-semibold">ยังไม่ผ่านคัดกรองแพทย์ — จัดโซนไม่ได้</p>
-					<p class="mt-0.5 text-xs">ศูนย์นี้เปิดคัดกรองแพทย์ ให้ส่งไปสถานี 2 ก่อน แล้วจึงจัดโซน</p>
+					<p class="font-semibold">ยังไม่ผ่านคัดกรองผู้เข้าพัก — จัดโซนไม่ได้</p>
+					<p class="mt-0.5 text-xs">
+						ศูนย์นี้เปิดคัดกรองผู้เข้าพัก ให้ส่งไปสถานี 2 ก่อน แล้วจึงจัดโซน
+					</p>
 					<Button
 						class="mt-2"
 						size="sm"
 						variant="outline"
 						href={resolve(`/onsite/medical-screening/${evacuee._id}`)}
 					>
-						ไปคัดกรองแพทย์ (สถานี 2)
+						ไปคัดกรองผู้เข้าพัก (สถานี 2)
 					</Button>
 				</div>
 			{/if}

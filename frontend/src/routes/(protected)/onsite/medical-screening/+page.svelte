@@ -207,7 +207,7 @@
 </script>
 
 <svelte:head>
-	<title>คัดกรองการแพทย์ (Station 2) | SmartShelter</title>
+	<title>คัดกรองผู้เข้าพัก (Station 2) | SmartShelter</title>
 </svelte:head>
 
 {#if !enableMedical && !shelterQuery.isPending}
@@ -218,9 +218,9 @@
 			>
 				<Stethoscope class="size-6" />
 			</div>
-			<h2 class="text-base font-bold text-foreground">จุดคัดกรองการแพทย์ถูกปิดใช้งาน</h2>
+			<h2 class="text-base font-bold text-foreground">จุดคัดกรองผู้เข้าพักถูกปิดใช้งาน</h2>
 			<p class="mt-1.5 text-xs leading-relaxed text-muted-foreground">
-				ศูนย์พักพิงนี้ไม่ได้เปิดใช้งานจุดคัดกรองทางการแพทย์ (Station 2) ตามการตั้งค่าศูนย์พักพิง
+				ศูนย์พักพิงนี้ไม่ได้เปิดใช้งานจุดคัดกรองผู้เข้าพัก (Station 2) ตามการตั้งค่าศูนย์พักพิง
 			</p>
 			<div class="mt-5 flex flex-col gap-2">
 				<Button variant="default" class="w-full" onclick={() => goto(resolve('/portal'))}>
@@ -251,7 +251,7 @@
 							<Stethoscope class="size-5" />
 						</div>
 						<h1 class="text-2xl font-bold tracking-tight text-foreground">
-							จุดตรวจคัดกรองทางการแพทย์
+							จุดตรวจคัดกรองผู้เข้าพัก
 						</h1>
 						<Badge
 							variant="outline"
