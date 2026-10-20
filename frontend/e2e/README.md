@@ -539,8 +539,9 @@ assertion green; `--list` shows every touched test with exactly one layer tag; a
   integer). Keep `MODE=dry-run` until the listing shows only `E2E partner …` clients.
 - Prod: `playwright.prod.config.ts` + `scripts/run-prod-e2e.sh`; root `Jenkinsfile` / `Jenkinsfile.prod`
   run `@prod` after deploy (`E2E_BASE_URL=https://shelter.psu.ac.th`, credential
-  `tent-prod-e2e-env`). Failure fails the job and prints an ALERT line (wire Slack/email in Jenkins
-  if desired).
+  `tent-prod-e2e-env`). Failure fails the job and prints an ALERT line; the root `Jenkinsfile`,
+  `Jenkinsfile.e2e-staging` and `Jenkinsfile.e2e-janitor` also post Discord notifications (setup:
+  [`ci/README.md`](../../ci/README.md)).
 - **Owner follow-ups (not in code):** ~~enable `main` branch protection requiring status
   `staging/e2e`; provision `tent-github-status-token`, `tent-staging-couch-admin-url`,
   `tent-prod-e2e-env`;~~ provision `tent-staging-couch-admin-url` and `tent-prod-e2e-env`; fill

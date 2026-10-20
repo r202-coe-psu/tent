@@ -4,8 +4,10 @@ import {
 	KIOSK_CARD_PATH,
 	KIOSK_QR_PATH,
 	KIOSK_REPRINT_ENTRY,
+	KIOSK_PRINT_QR_PATH,
 	KIOSK_REPRINT_PATH,
 	KIOSK_THAID_PATH,
+	KIOSK_VOLUNTEER_CARD_PATH,
 	visibleIdentityMethods
 } from './identity-method';
 
@@ -26,12 +28,14 @@ describe('kiosk identity methods', () => {
 		});
 	});
 
-	it('describes the QR reprint entry that sits under the method grid', () => {
+	it('describes the QR print entry (it opens the chooser) that sits under the method grid', () => {
 		expect(KIOSK_REPRINT_PATH).toBe('/kiosk/reprint');
+		expect(KIOSK_VOLUNTEER_CARD_PATH).toBe('/kiosk/volunteer');
+		expect(KIOSK_PRINT_QR_PATH).toBe('/kiosk/print-qr');
 		expect(KIOSK_REPRINT_ENTRY).toEqual({
 			title: 'พิมพ์ QR',
 			description: 'กรอกเบอร์โทรที่ลงทะเบียนไว้ เพื่อพิมพ์ QR Code',
-			href: KIOSK_REPRINT_PATH
+			href: '/kiosk/print-qr'
 		});
 	});
 

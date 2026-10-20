@@ -38,19 +38,11 @@ export function isLotDateExpired(
 	return expiry.getTime() <= referenceDate.getTime();
 }
 
-/**
- * Projects available physical lots from stock ledger history for a given item,
- * filters for positive balances, and sorts them by the weighted issue priority shared with
- * the stock page (CR-143 §A, FR-A5). `item` supplies shelf life / storage type; without it a
- * 365-day horizon is assumed. Expired lots are listed last and flagged, never ranked first.
- */
-export function getEligiblePhysicalLots(
+/** Per-lot remaining balances (> 0) of one item, projected from ledger history. */
+export function getItemLotBalances(
 	ledger: readonly StockLedger[] | undefined,
-	itemId: string,
-	requiredQty: string = '0',
-	referenceDate: Date = new Date(),
-	item?: LotPriorityItem
-): EligiblePhysicalLot[] {
+	itemId: string
+): StockLotBalance[] {
 	if (!ledger || ledger.length === 0 || !itemId) {
 		return [];
 	}
@@ -69,7 +61,24 @@ export function getEligiblePhysicalLots(
 	}
 
 	// Filter for this item and positive remaining balance
-	const itemLots = balances.filter((lot) => lot.item_id === itemId && qtyGt(lot.qty, 0));
+	return balances.filter((lot) => lot.item_id === itemId && qtyGt(lot.qty, 0));
+}
+
+/**
+ * Projects available physical lots from stock ledger history for a given item,
+ * filters for positive balances, and sorts them by the weighted issue priority shared with
+ * the stock page (CR-143 §A, FR-A5). `item` supplies shelf life / storage type; without it a
+ * 365-day horizon is assumed. Expired lots are listed last and flagged, never ranked first.
+ */
+export function getEligiblePhysicalLots(
+	ledger: readonly StockLedger[] | undefined,
+	itemId: string,
+	requiredQty: string = '0',
+	referenceDate: Date = new Date(),
+	item?: LotPriorityItem
+): EligiblePhysicalLot[] {
+	const itemLots = getItemLotBalances(ledger, itemId);
+	if (itemLots.length === 0) return [];
 
 	// Same ordering function as the stock page (FR-A5)
 	const nowMs = referenceDate.getTime();

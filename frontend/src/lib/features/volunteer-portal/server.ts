@@ -16,6 +16,7 @@ export {
 	responseCodeSchema,
 	ticketFindSchema,
 	ticketStatusLabel,
+	TRACKING_TOKEN_HASH_PREFIX,
 	volunteerApplySchema,
 	volunteerProfileUpdateSchema
 } from './domain/volunteer';
