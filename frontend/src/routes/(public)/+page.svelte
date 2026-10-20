@@ -192,6 +192,7 @@
 
 	type VolunteerItem = {
 		id: string;
+		shelterCode: string;
 		name: string;
 		status: string;
 		location: string;
@@ -205,6 +206,7 @@
 			const geo = sheltersGeoMap.get(shelter.shelter_code);
 			return {
 				id: shelter.shelter_code,
+				shelterCode: shelter.shelter_code,
 				name: shelter.shelter_name,
 				status: t.criticalBadge,
 				location: geo

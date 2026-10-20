@@ -290,6 +290,11 @@ test.describe('Public landing: volunteer card (#709)', { tag: ['@public', '@smok
 		await expect(page.getByRole('heading', { name: 'ศูนย์ทดสอบการ์ดจิตอาสา' })).toBeVisible();
 		await expect(page.getByText('งานครัวด่วน')).toBeVisible();
 		await expect(page.getByText('งานทั่วไป')).toHaveCount(0);
+		// The card's apply button opens the board filtered to that shelter.
+		await expect(page.getByRole('link', { name: 'สมัครจิตอาสา' })).toHaveAttribute(
+			'href',
+			'/volunteers/jobs?shelter=SH901'
+		);
 	});
 
 	test('shows a dash, not 0, when the job board cannot be read', async ({ page }) => {
