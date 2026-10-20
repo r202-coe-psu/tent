@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+import pytest
+
 from worker.projectors.occupant import (
     compute_age_range,
     mask_occupant_name,
@@ -141,11 +143,12 @@ def test_project_shelter_occupant_null_gender():
     assert payload["gender"] is None
 
 
-def test_project_shelter_occupant_skips_inactive():
+@pytest.mark.parametrize("status", ["checked_out", "cancelled", "pre_registered"])
+def test_project_shelter_occupant_skips_inactive(status):
     doc = {
         "_id": "evacuee:02",
         "type": "evacuee",
-        "current_stay": {"status": "checked_out"},
+        "current_stay": {"status": status, "since": "2026-01-01T00:00:00.000Z"},
     }
     assert project_shelter_occupant(doc, "SH001") is None
 
