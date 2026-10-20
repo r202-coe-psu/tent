@@ -1,10 +1,11 @@
 ---
-id: draft # CR-TBD — PM/lead กำหนดเลข CR และวิธี track ตอน approve (ยังไม่ใส่ใน _index.md)
-title: CR-TBD — ปล่อยของตามตั๋วเบิกเลือกได้หลาย lot ต่อรายการ (multi-lot dispatch)
-status: proposed
+id: CR-175
+title: "CR-175 — ปล่อยของตามตั๋วเบิกเลือกได้หลาย lot ต่อรายการ (multi-lot dispatch)"
+status: approved
 date: 2026-10-20
+approved_at: 2026-10-20
 requested_by: feedback ระบบคลัง & เบิกของ ข้อ 1 (GitHub #655)
-decided_by: project owner
+decided_by: "kong"
 layer: volatile
 affects:
   - docs/changes/03-C-supply/CR-121-spec-ticket.md FR-TKT-04 / AC-TKT-04.1 (แถว ledger ต่อ item → ต่อ lot)
@@ -16,7 +17,7 @@ affects:
   - frontend/src/lib/features/distribution/ui/model/physical-lot.ts
 ---
 
-# CR-TBD — ปล่อยของตามตั๋วเบิกเลือกได้หลาย lot ต่อรายการ
+# CR-175 — ปล่อยของตามตั๋วเบิกเลือกได้หลาย lot ต่อรายการ
 
 > **สรุป (TL;DR):**
 >
@@ -154,3 +155,4 @@ affects:
 ## Decision log
 
 - 2026-10-20 — proposed (draft คู่กับ #655; รอ PM/lead กำหนดเลข CR และวิธี track)
+- 2026-10-20 — approved by kong (รันเลข CR-175 ย้ายเข้าหมวด 03-C-supply)
