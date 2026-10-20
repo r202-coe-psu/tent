@@ -454,14 +454,14 @@
 				for="enable-medical-screening"
 				class="min-w-0 flex-1 text-sm font-semibold text-slate-800"
 			>
-				เปิดคัดกรองการแพทย์ (Station 2)
+				เปิดคัดกรองผู้เข้าพัก (Station 2)
 			</label>
 			<Switch
 				id="enable-medical-screening"
 				checked={$formData.feature_flags?.enable_medical_screening ?? false}
 				onCheckedChange={(v) => setEnableMedicalScreening(v === true)}
 				{disabled}
-				aria-label="เปิดคัดกรองการแพทย์ Station 2"
+				aria-label="เปิดคัดกรองผู้เข้าพัก Station 2"
 			/>
 		</div>
 

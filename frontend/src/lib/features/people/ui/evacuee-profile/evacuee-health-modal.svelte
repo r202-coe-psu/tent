@@ -203,7 +203,7 @@
 							id="evacuee-health-modal-title"
 							class="truncate text-base font-bold text-foreground"
 						>
-							แก้ไขข้อมูลสุขภาพ (Station 2 Medical Screening)
+							แก้ไขข้อมูลสุขภาพ (Station 2 Occupant Screening)
 						</h2>
 						<p class="truncate text-xs text-muted-foreground">
 							{evacuee.first_name}

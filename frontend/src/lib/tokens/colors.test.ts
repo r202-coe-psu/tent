@@ -1,6 +1,14 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { baseDomain, colors, DOMAIN_IDS, type DomainId } from './colors';
+import {
+	baseDomain,
+	baseStation,
+	colors,
+	DOMAIN_IDS,
+	STATION_IDS,
+	type DomainId,
+	type StationId
+} from './colors';
 
 const STEPS = ['base', 'strong', 'subtle', 'border', 'text'] as const;
 type Step = (typeof STEPS)[number];
@@ -16,6 +24,9 @@ function cssVar(name: string): string {
 
 const cssName = (id: DomainId, step: Step) =>
 	step === 'base' ? `--domain-${id}` : `--domain-${id}-${step}`;
+
+const stationCssName = (id: StationId, step: Step) =>
+	step === 'base' ? `--station-${id}` : `--station-${id}-${step}`;
 
 function luminance(hex: string): number {
 	const channel = (i: number) => {
@@ -120,6 +131,53 @@ describe('--domain-* in app.css mirrors baseDomain', () => {
 			} else {
 				expect(value.toUpperCase()).toBe(tsHex);
 			}
+		}
+	);
+});
+
+describe('baseStation', () => {
+	it('defines the three onsite stations', () => {
+		expect(STATION_IDS).toEqual([1, 2, 3]);
+	});
+
+	it.each(STATION_IDS)('station %s has a Thai name and all 5 steps as hex', (id) => {
+		expect(baseStation[id].name.length).toBeGreaterThan(0);
+		for (const step of STEPS) expect(baseStation[id][step]).toMatch(/^#[0-9A-F]{6}$/);
+	});
+
+	it.each(STATION_IDS)('station %s: band and tinted text reach WCAG AA (4.5)', (id) => {
+		const s = baseStation[id];
+		expect(contrast('#FFFFFF', s.strong)).toBeGreaterThanOrEqual(4.5);
+		expect(contrast(s.text, s.subtle)).toBeGreaterThanOrEqual(4.5);
+	});
+
+	it('keeps status colours out of the station palette', () => {
+		const reserved = ['#DC2626', '#F59E0B', '#16A34A', '#9333EA'];
+		for (const id of STATION_IDS) {
+			for (const step of STEPS) expect(reserved).not.toContain(baseStation[id][step]);
+		}
+	});
+
+	it('gives each station a distinguishable hue', () => {
+		const bases = STATION_IDS.map((id) => baseStation[id].base);
+		expect(new Set(bases).size).toBe(STATION_IDS.length);
+	});
+
+	it('exposes every station on colors.station with ready class strings', () => {
+		for (const id of STATION_IDS) {
+			const s = colors.station[id];
+			expect(s.band).toContain(`bg-station-${id}-strong`);
+			expect(s.canvas).toContain(`bg-station-${id}-subtle`);
+			expect(s.badge).toContain(`border-station-${id}-border`);
+		}
+	});
+});
+
+describe('--station-* in app.css mirrors baseStation', () => {
+	it.each(STATION_IDS.flatMap((id) => STEPS.map((step) => [id, step] as const)))(
+		'station %s %s',
+		(id, step) => {
+			expect(cssVar(stationCssName(id, step)).toUpperCase()).toBe(baseStation[id][step]);
 		}
 	);
 });
