@@ -125,6 +125,15 @@ class CouchClient:
         response = await self._client.get(f"/{database}")
         return response.status_code == 200
 
+    async def database_missing(self, database: str) -> bool:
+        """True only when CouchDB answers 404; auth failures and 5xx are NOT "missing".
+
+        Read-only. Callers that delete data on the strength of "the database is gone"
+        must use this rather than ``not database_exists`` (which also reads 401/500 as gone).
+        """
+        response = await self._client.get(f"/{database}")
+        return response.status_code == 404
+
     async def ensure_database(self, database: str) -> None:
         """Create DB if missing. CouchDB returns 201 (created) or 412 (already exists)."""
         if await self.database_exists(database):
