@@ -24,7 +24,6 @@
 	import LogIn from '@lucide/svelte/icons/log-in';
 	import MapPin from '@lucide/svelte/icons/map-pin';
 	import UsersRound from '@lucide/svelte/icons/users-round';
-	import type { Component } from 'svelte';
 	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
@@ -44,7 +43,7 @@
 		/** Thai counting unit shown after the number, as in the approved mockup. */
 		unit: string;
 		/** Icon in the card's corner, coloured by meaning — as on the other back-office KPI cards. */
-		icon: Component<{ class?: string }>;
+		icon: typeof UsersRound;
 		iconClass: string;
 		/** A queue someone has to work through: tinted while it is not empty. */
 		actionable?: boolean;
@@ -71,7 +70,7 @@
 			},
 			{
 				key: 'checkedInNow',
-				label: 'เช็คอินอยู่ตอนนี้',
+				label: 'กำลังปฏิบัติงาน',
 				value: m?.checkedInNow,
 				unit: 'คน',
 				icon: LogIn,
