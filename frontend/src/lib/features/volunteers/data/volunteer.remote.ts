@@ -120,7 +120,8 @@ export class VolunteerRemoteRepository implements VolunteerRepository {
 	async update(volunteer: Volunteer): Promise<Volunteer> {
 		const latest = await this.repo.get<Volunteer>(volunteer._id);
 		if (!latest) throw new Error(`ไม่พบข้อมูลอาสาสมัคร: ${volunteer._id}`);
-		return this.save(touch({ ...volunteer, _rev: latest._rev }));
+		const phone_hash = volunteer.phone ? await sha256Hex(normalizePhone(volunteer.phone)) : null;
+		return this.save(touch({ ...volunteer, phone_hash, _rev: latest._rev }));
 	}
 
 	async deactivate(id: string): Promise<Volunteer> {
