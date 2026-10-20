@@ -140,7 +140,7 @@ test.describe(
 			await configureOnsiteShelterViaUi(page, shelterCode, {
 				enableMedicalScreening: true,
 				acceptsPreRegistration: true,
-				zones: [{ name: ZONE_NAME, capacity: 20 }]
+				zones: [{ name: ZONE_NAME, capacity: 20, shortName: 'E2E' }]
 			});
 
 			await ensureStaff(shelterCode);

@@ -121,7 +121,11 @@ export interface KioskReprintInput {
 export interface KioskReprintMember {
 	evacuee_id: string;
 	qr_payload: string;
-	label: { name: string; phone: string | null };
+	/**
+	 * `zone` is the member's current zone (short name, else full name), or null before one is
+	 * assigned; `stations_passed` (0–3) is how many checklist boxes the label ticks.
+	 */
+	label: { name: string; phone: string | null; zone: string | null; stations_passed: number };
 }
 
 export interface KioskReprintResult {

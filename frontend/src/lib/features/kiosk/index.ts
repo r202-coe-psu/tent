@@ -57,6 +57,7 @@ export {
 export {
 	prepareKioskQrImage,
 	printKioskQrLabels,
+	renderKioskQrLabelPng,
 	type KioskQrImage,
 	type KioskQrLabel
 } from './application/kiosk-label-print';
@@ -64,3 +65,4 @@ export { loadKioskHardware } from './application/kiosk-qr-input';
 export { cancelKioskFaceCheck } from './data/kiosk-face.api';
 export type { KioskHardware } from './domain/kiosk-hardware';
 export { isFaceCheckEnabled, type FaceCheckOutcome } from './domain/face-check';
+export { KIOSK_CHECK_IN_TICKS, KIOSK_LABEL_MM } from './domain/print-label';
