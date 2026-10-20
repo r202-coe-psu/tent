@@ -112,13 +112,6 @@
 									>
 										{step.label}
 									</div>
-									<div
-										class="text-2xs leading-normal {isCurrent
-											? 'font-medium text-slate-600'
-											: 'text-slate-400'}"
-									>
-										{step.subLabel}
-									</div>
 								</div>
 							</div>
 						</li>
