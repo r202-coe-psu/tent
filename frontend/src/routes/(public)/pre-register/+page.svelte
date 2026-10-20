@@ -15,6 +15,7 @@
 	} from '$lib/features/public-register';
 	import {
 		listPublicShelters,
+		PublicPageShell,
 		toPublicShelterCard,
 		type PublicShelterCardModel
 	} from '$lib/features/public-portal';
@@ -106,7 +107,7 @@
 	<title>{t.pageTitle}</title>
 </svelte:head>
 
-<div class="mx-auto w-full max-w-6xl px-4 py-6 md:px-6 md:py-8 xl:max-w-7xl">
+<PublicPageShell maxWidth="max-w-7xl" class="lg:px-8">
 	<!-- Top Navigation -->
 	<div class="mb-6 flex flex-wrap items-center justify-between gap-4">
 		<a
@@ -233,7 +234,7 @@
 			{/key}
 		</div>
 	{/if}
-</div>
+</PublicPageShell>
 
 <style>
 	@keyframes ticketTabGlow {
