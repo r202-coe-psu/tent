@@ -82,5 +82,5 @@ N/A — ไม่ bump `schema_v`: `external_bookings` ไม่มี `schema_v
 ## Decision log
 
 - 2026-10-21 — owner ตัดสิน 7 ข้อ (issue #751 / plan); ทดสอบล็อกที่ commit `02ffa8266`
-- 2026-10-21 — proposed as `draft-partner-accepts-booking-bypass` (Dev เขียน CR ตาม memory "implementer writes the CR"; รอ owner อนุมัติเลข CR + ช่องทาง track)
+- 2026-10-21 — proposed เป็น draft CR (ก่อนได้เลข CR-182) (Dev เขียน CR ตาม memory "implementer writes the CR"; รอ owner อนุมัติเลข CR + ช่องทาง track)
 - 2026-10-21 — owner อนุมัติ (approved) ระหว่างรีวิว PR #753
