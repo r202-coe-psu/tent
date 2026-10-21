@@ -42,25 +42,41 @@ export type { DecodeBannerImageResult, KioskBannerImageMime } from './domain/kio
 export { fromBangkokLocalInput, toBangkokLocalInput } from './domain/kiosk-banner-datetime';
 export { readBannerFile, validateBannerFile } from './data/kiosk-banner-file';
 export type { BannerImagePayload } from './data/kiosk-banner-file';
-export { KioskBannerApiError, kioskBannerSummarySchema } from './data/kiosk-banner.repository';
+export {
+	KioskBannerApiError,
+	kioskBannerGroupSummarySchema,
+	kioskBannerSummarySchema
+} from './data/kiosk-banner.repository';
 export type {
+	KioskBannerGroupRepository,
+	KioskBannerGroupSummary,
 	KioskBannerRepository,
 	KioskBannerStatus,
 	KioskBannerSummary,
 	KioskBannerView
 } from './data/kiosk-banner.repository';
-export { kioskBannerRemoteRepository } from './data/kiosk-banner.remote';
+export {
+	kioskBannerGroupRemoteRepository,
+	kioskBannerRemoteRepository
+} from './data/kiosk-banner.remote';
 export {
 	KIOSK_BANNER_CONFLICT_MESSAGE,
 	kioskBannerErrorMessage,
+	kioskBannerGroupKeys,
 	kioskBannerKeys,
 	useCreateKioskBanner,
+	useCreateKioskBannerGroup,
 	useDeleteKioskBanner,
+	useDeleteKioskBannerGroup,
 	useKioskBanner,
+	useKioskBannerGroup,
+	useKioskBannerGroups,
 	useKioskBanners,
 	useReorderKioskBanners,
+	useSetKioskBannerGroupDevices,
 	useSetKioskBannerStatus,
-	useUpdateKioskBanner
+	useUpdateKioskBanner,
+	useUpdateKioskBannerGroup
 } from './application/kiosk-banner.queries';
 export { default as KioskBannerForm } from './ui/kiosk-banner-form.svelte';
 export { summarizeScreen } from './ui/kiosk-banner-order';

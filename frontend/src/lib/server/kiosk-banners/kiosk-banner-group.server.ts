@@ -78,11 +78,12 @@ function assertDevicesInShelter(devices: { device_id: string }[], deviceIds: str
 }
 
 const DUPLICATE_NAME_MESSAGE = 'ชื่อกลุ่มซ้ำกับกลุ่มอื่นในศูนย์นี้';
+const STALE_GROUP_MESSAGE = 'มีผู้อื่นแก้ไขกลุ่มนี้ โปรดโหลดใหม่';
 
 async function putGroupDoc(doc: KioskBannerGroupDoc): Promise<KioskBannerGroupDoc> {
 	const res = await adminRaw(docPath(doc._id), 'PUT', doc);
 	if (res.status === 409) {
-		throw new ServiceError('CONFLICT', 'Banner group was modified by someone else');
+		throw new ServiceError('CONFLICT', STALE_GROUP_MESSAGE);
 	}
 	if (res.status >= 400) {
 		throw new ServiceError(
@@ -117,7 +118,7 @@ export async function updateGroup(
 	const current = await readGroupDoc(id);
 	if (!current) throw new BannerNotFoundError(id);
 	if (current._rev !== rev) {
-		throw new ServiceError('CONFLICT', 'Banner group was modified by someone else');
+		throw new ServiceError('CONFLICT', STALE_GROUP_MESSAGE);
 	}
 	if (isDuplicateGroupName(await findGroupDocs(current.shelter_code), input.name, id)) {
 		throw new ServiceError('CONFLICT', DUPLICATE_NAME_MESSAGE);
@@ -169,7 +170,7 @@ export async function deleteGroup(id: string, rev: string, by: string): Promise<
 	const group = await readGroupDoc(id);
 	if (!group) throw new BannerNotFoundError(id);
 	if (group._rev !== rev) {
-		throw new ServiceError('CONFLICT', 'Banner group was modified by someone else');
+		throw new ServiceError('CONFLICT', STALE_GROUP_MESSAGE);
 	}
 	const banners = await listBannersForShelter(group.shelter_code);
 	if (banners.some((b) => groupOf(b) === id)) {
@@ -187,7 +188,7 @@ export async function deleteGroup(id: string, rev: string, by: string): Promise<
 	const res = await adminRaw(`${docPath(id)}?rev=${encodeURIComponent(rev)}`, 'DELETE');
 	if (res.status === 404) throw new BannerNotFoundError(id);
 	if (res.status === 409) {
-		throw new ServiceError('CONFLICT', 'Banner group was modified by someone else');
+		throw new ServiceError('CONFLICT', STALE_GROUP_MESSAGE);
 	}
 	if (res.status >= 400) {
 		throw new ServiceError(

@@ -1,10 +1,13 @@
 import { z } from 'zod';
 import type { KioskScreenType } from '$lib/features/shared/domain/kiosk-screen';
 import type { KioskBannerInput } from '../domain/kiosk-banner';
+import type { KioskBannerGroupInput } from '../domain/kiosk-banner-group';
 import type { BannerImagePayload } from './kiosk-banner-file';
 import {
 	KioskBannerApiError,
+	kioskBannerGroupSummarySchema,
 	kioskBannerSummarySchema,
+	type KioskBannerGroupRepository,
 	type KioskBannerRepository,
 	type KioskBannerStatus,
 	type KioskBannerView
@@ -96,5 +99,41 @@ export const kioskBannerRemoteRepository: KioskBannerRepository = {
 	imageUrl(id: string, rev?: string) {
 		const url = `${itemPath(id)}/image`;
 		return rev ? `${url}?v=${encodeURIComponent(rev)}` : url;
+	}
+};
+
+const GROUP_BASE = '/api/back-office/kiosk-banner-groups';
+
+const groupPath = (id: string) => `${GROUP_BASE}/${encodeURIComponent(id)}`;
+
+const parseGroup = async (response: Response) =>
+	kioskBannerGroupSummarySchema.parse(await response.json());
+
+export const kioskBannerGroupRemoteRepository: KioskBannerGroupRepository = {
+	async list(shelterCode: string) {
+		const response = await request(`${GROUP_BASE}?shelter_code=${encodeURIComponent(shelterCode)}`);
+		return z.array(kioskBannerGroupSummarySchema).parse(await response.json());
+	},
+
+	async get(id: string) {
+		return parseGroup(await request(groupPath(id)));
+	},
+
+	async create(shelterCode: string, input: KioskBannerGroupInput, deviceIds: string[]) {
+		const url = `${GROUP_BASE}?shelter_code=${encodeURIComponent(shelterCode)}`;
+		return parseGroup(await request(url, jsonInit('POST', { ...input, device_ids: deviceIds })));
+	},
+
+	async update(id: string, rev: string, input: KioskBannerGroupInput) {
+		return parseGroup(await request(groupPath(id), jsonInit('PUT', { _rev: rev, ...input })));
+	},
+
+	async remove(id: string, rev: string) {
+		await request(`${groupPath(id)}?rev=${encodeURIComponent(rev)}`, { method: 'DELETE' });
+	},
+
+	async setDevices(id: string, deviceIds: string[]) {
+		const url = `${groupPath(id)}/devices`;
+		return parseGroup(await request(url, jsonInit('PUT', { device_ids: deviceIds })));
 	}
 };
