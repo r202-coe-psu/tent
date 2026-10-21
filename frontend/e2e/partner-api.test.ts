@@ -7,12 +7,17 @@
  * `@critical` (local, or staging with `ALLOW_REMOTE_WRITES=true`): the run provisions its own
  * `E2E partner …` shelter and partner client through the staff UI (System management → API
  * Keys), then
- *   - A1/A2  creates a client with all seven scopes and mints a token for it,
+ *   - A1/A2  creates a client with all eight scopes and mints a token for it,
  *   - A3     walks every EXT endpoint's happy path (booking create / idempotency / cancel),
+ *   - B1/B2  `accepts_booking` (#751) on EXT-003 / EXT-002 (+ the `?accepts_booking=` filter), for the
+ *            run's bookable shelter and a second `E2E partner closed …` shelter that is not,
  *   - A3b    proves one client cannot read or cancel another client's booking,
+ *   - B3/B4  EXT-008 on the not-bookable shelter: `booking-write` alone is 409 `location_not_bookable`,
+ *            with `booking-bypass` (EOC) it is booked (201 → BOOKED → cancelled),
  *   - E12-1…5 EXT-012 person search (#736): masked hit, no-store, purpose, validation, cancelled dropped,
  *   - A4     scope matrix: removes each scope in turn via the BFF and asserts every endpoint
- *            that needs it answers 403 `insufficient_scope` while the rest keep working,
+ *            that needs it answers 403 `insufficient_scope` while the rest keep working; a scope
+ *            with no endpoint of its own (`booking-bypass`) is checked by its probe instead,
  *   - A5     least privilege (`location-read` only),
  *   - A6-A8  edit scopes / revoke / delete through the UI.
  *
@@ -48,12 +53,15 @@ import {
 	bookingBody,
 	callExt,
 	callExtPath,
+	createLedgeredClient,
 	expectExtError,
 	expectPartnerRunGone,
 	freshCid,
+	listAllLocations,
 	mintToken,
 	partnerApiUrl,
 	postToken,
+	SCOPE_PROBES,
 	teardownPartnerRun,
 	type CallOptions,
 	type ExtCtx,
@@ -72,7 +80,10 @@ import { createShelterViaUi } from './helpers/staff-ui';
 const API_KEYS_PATH = '/system-management/api-keys';
 const CLIENT_NAME = `E2E partner ${RUN_ID}`;
 const ISOLATION_CLIENT_NAME = `E2E partner-iso ${RUN_ID}`;
+const BYPASS_CLIENT_NAME = `E2E partner-bypass ${RUN_ID}`;
 const SHELTER_NAME = `E2E partner ${RUN_ID}`;
+/** Second shelter: pre-registration switch OFF, so it is not bookable by the normal rule. */
+const CLOSED_SHELTER_NAME = `E2E partner closed ${RUN_ID}`;
 
 /**
  * Per the contract only the summary's top-level `occupancy_total` needs `occupancy-read`; each
@@ -153,6 +164,10 @@ interface Run {
 	api: APIRequestContext;
 	admin: PartnerAdmin;
 	code: string;
+	/** Second shelter, pre-registration off: not bookable by the normal rule (#751). */
+	closedCode: string;
+	/** Set by A3b: a `booking-write`-only client (no `booking-bypass`). */
+	writeOnly?: { clientId: string; token: string };
 	clientRowId: string;
 	clientId: string;
 	/** In memory only — never written to the ledger, logs or reports. */
@@ -175,6 +190,8 @@ function state(): Run {
 }
 
 const ctxOf = (r: Run): ExtCtx => ({ code: r.code, bookingId: r.bookingId, cid: r.cid });
+/** Context aimed at the not-bookable shelter, with a fresh CID per use. */
+const closedCtxOf = (r: Run): ExtCtx => ({ ...ctxOf(r), code: r.closedCode, cid: freshCid() });
 
 /** Mint a token for the main client with its current scopes (cheap: no rate limit). */
 async function mintMain(r: Run) {
@@ -185,13 +202,15 @@ async function mintMain(r: Run) {
  * Call an endpoint. An EXT-008 create is ledgered BEFORE the request (client + idempotency key +
  * body), so a lost response still leaves teardown a way to recover and cancel the booking; the
  * entry is resolved on 201 and dropped when the call was answered without creating anything.
+ * `ownerClientId` is the client `token` belongs to (the main client unless another one books).
  */
 async function call(
 	r: Run,
 	token: string,
 	endpoint: PartnerEndpoint,
 	ctx: ExtCtx = ctxOf(r),
-	options: CallOptions = {}
+	options: CallOptions = {},
+	ownerClientId: string = r.clientId
 ): Promise<ExtResponse> {
 	if (endpoint.ext !== 'EXT-008') return callExt(r.api, token, endpoint, ctx, options);
 	const key = options.headers?.['Idempotency-Key'] ?? `e2e-${RUN_ID}-${freshCid()}`;
@@ -200,7 +219,7 @@ async function call(
 	const intent = `${key}#${freshCid()}`;
 	ledger.add('bookings', {
 		bookingId: '',
-		clientId: r.clientId,
+		clientId: ownerClientId,
 		intent,
 		idempotencyKey: key,
 		body
@@ -214,6 +233,25 @@ async function call(
 	else ledger.dropBookingIntent(intent);
 	return res;
 }
+
+/**
+ * EXT-008 aimed at the shelter that is closed to bookings, ledgered like any other create.
+ * `ownerClientId` is the client `token` belongs to; `ctx` carries the CID (fresh by default).
+ */
+const bookClosedShelter = (
+	r: Run,
+	token: string,
+	ownerClientId: string,
+	ctx: ExtCtx = closedCtxOf(r)
+): Promise<ExtResponse> =>
+	call(
+		r,
+		token,
+		byExt('EXT-008'),
+		ctx,
+		{ body: bookingBody(r.closedCode, ctx.cid) },
+		ownerClientId
+	);
 
 /** Row of the API Keys list for `clientId` (client ids are unique, names are not). */
 const clientRow = (page: Page, clientId: string) => page.locator('tr', { hasText: clientId });
@@ -293,7 +331,7 @@ test.describe('Partner API', { tag: ['@partner-api', '@critical'] }, () => {
 	});
 
 	test.beforeAll(async ({ browser, playwright }) => {
-		test.setTimeout(240_000);
+		test.setTimeout(360_000);
 		if (!CAN_WRITE) return;
 		const api = await playwright.request.newContext();
 		apiContext = api;
@@ -318,16 +356,29 @@ test.describe('Partner API', { tag: ['@partner-api', '@critical'] }, () => {
 			acceptsPreRegistration: true
 		});
 		ledger.add('shelters', code);
-		await waitForProjection(
-			`${code} open on the public plane`,
-			async () => (await publicShelter(code))?.status === 'open',
-			{ timeoutMs: 60_000, intervalMs: 2_000 }
-		);
+		// Same shelter with the pre-registration switch left off: not bookable by the normal rule.
+		const closedCode = await createShelterViaUi(page, {
+			name: CLOSED_SHELTER_NAME,
+			siteKind: 'evacuation_center',
+			lat: 7.013,
+			lng: 100.51,
+			subdistrict: 'คอหงส์',
+			capacity: 40
+		});
+		ledger.add('shelters', closedCode);
+		for (const shelter of [code, closedCode]) {
+			await waitForProjection(
+				`${shelter} open on the public plane`,
+				async () => (await publicShelter(shelter))?.status === 'open',
+				{ timeoutMs: 60_000, intervalMs: 2_000 }
+			);
+		}
 		run = {
 			page,
 			api,
 			admin,
 			code,
+			closedCode,
 			clientRowId: '',
 			clientId: '',
 			secret: '',
@@ -354,10 +405,13 @@ test.describe('Partner API', { tag: ['@partner-api', '@critical'] }, () => {
 		}
 	});
 
-	test('A1 UI: create a client with all seven scopes', async () => {
+	test('A1 UI: create a client with all eight scopes', async () => {
 		test.setTimeout(120_000);
 		const r = state();
 		const { page } = r;
+		// #751: `booking-bypass` joins the seven scopes of ADR 0002 and is ticked like the rest.
+		expect(PARTNER_SCOPES as readonly string[]).toContain('booking-bypass');
+		expect(PARTNER_SCOPES).toHaveLength(8);
 		await openApiKeys(page);
 		// Name first: if the run dies before the id is known, teardown still finds this client.
 		ledger.add('clientNames', CLIENT_NAME);
@@ -413,7 +467,7 @@ test.describe('Partner API', { tag: ['@partner-api', '@critical'] }, () => {
 		expect(created!.allowed_scopes.slice().sort()).toEqual([...PARTNER_SCOPES].sort());
 	});
 
-	test('A2 mint a token: exactly the seven scopes, Bearer, positive expiry', async () => {
+	test('A2 mint a token: exactly the eight scopes, Bearer, positive expiry', async () => {
 		const r = state();
 		const minted = await mintMain(r);
 		expect(minted.token_type).toBe('Bearer');
@@ -441,17 +495,63 @@ test.describe('Partner API', { tag: ['@partner-api', '@critical'] }, () => {
 		expect(detail.body.result.location_code).toBe(r.code);
 		expect(detail.body.result.name_th).toBe(SHELTER_NAME);
 
-		let found = false;
-		for (let page = 1; page <= 20 && !found; page++) {
-			const res = await callExtPath(r.api, r.token, 'GET', '/external/locations', {
-				query: { limit: '200', page: String(page) }
-			});
-			expect(res.status).toBe(200);
-			const rows = res.body.result as { location_code: string }[];
-			found = rows.some((l) => l.location_code === r.code);
-			if (rows.length < 200) break;
-		}
-		expect(found, `EXT-002 lists ${r.code}`).toBe(true);
+		const all = await listAllLocations(r.api, r.token);
+		expect(
+			all.some((l) => l.location_code === r.code),
+			`EXT-002 lists ${r.code}`
+		).toBe(true);
+	});
+
+	test('B1 EXT-003 accepts_booking: true for the bookable shelter, false for the closed one', async () => {
+		test.setTimeout(120_000);
+		const r = state();
+		const closed = closedCtxOf(r);
+		// The second shelter reaches the partner plane through the same projection as the first.
+		await expect
+			.poll(async () => (await call(r, r.token, byExt('EXT-003'), closed)).status, {
+				timeout: 60_000,
+				intervals: [2_000, 3_000]
+			})
+			.toBe(200);
+		const bookable = await call(r, r.token, byExt('EXT-003'));
+		expect(bookable.body.result.location_code).toBe(r.code);
+		expect(bookable.body.result.accepts_booking, `${r.code} accepts bookings`).toBe(true);
+		const notBookable = await call(r, r.token, byExt('EXT-003'), closed);
+		expect(notBookable.body.result.location_code).toBe(r.closedCode);
+		expect(notBookable.body.result.accepts_booking, `${r.closedCode} does not`).toBe(false);
+	});
+
+	test('B2 EXT-002 ?accepts_booking=true|false filters, and every row carries the field', async () => {
+		test.setTimeout(120_000);
+		const r = state();
+		const closed = closedCtxOf(r);
+		// Self-sufficient (does not rely on B1 having run): wait for the closed shelter's projection.
+		await expect
+			.poll(async () => (await call(r, r.token, byExt('EXT-003'), closed)).status, {
+				timeout: 60_000,
+				intervals: [2_000, 3_000]
+			})
+			.toBe(200);
+		const yes = await listAllLocations(r.api, r.token, { accepts_booking: 'true' });
+		expect(yes.map((l) => l.location_code)).toContain(r.code);
+		expect(yes.map((l) => l.location_code)).not.toContain(r.closedCode);
+		for (const row of yes) expect(row.accepts_booking, `${row.location_code} in true`).toBe(true);
+
+		const no = await listAllLocations(r.api, r.token, { accepts_booking: 'false' });
+		expect(no.map((l) => l.location_code)).toContain(r.closedCode);
+		expect(no.map((l) => l.location_code)).not.toContain(r.code);
+		for (const row of no) expect(row.accepts_booking, `${row.location_code} in false`).toBe(false);
+
+		// Unfiltered rows carry the field too, and it agrees with the filtered views.
+		const all = await listAllLocations(r.api, r.token);
+		expect(all.find((l) => l.location_code === r.code)?.accepts_booking).toBe(true);
+		expect(all.find((l) => l.location_code === r.closedCode)?.accepts_booking).toBe(false);
+
+		// A value that is not a boolean is a validation error, not a 500.
+		const bad = await callExtPath(r.api, r.token, 'GET', '/external/locations', {
+			query: { accepts_booking: 'abc' }
+		});
+		expectExtError(bad, 422, 'validation_error');
 	});
 
 	test('A3 EXT-004/005/006 stock, occupancy and summary', async () => {
@@ -609,12 +709,16 @@ test.describe('Partner API', { tag: ['@partner-api', '@critical'] }, () => {
 
 	test('A3b another client cannot read or cancel this client’s booking', async () => {
 		const r = state();
-		ledger.add('clientNames', ISOLATION_CLIENT_NAME);
-		const other = await r.admin.createClient(ISOLATION_CLIENT_NAME, ['booking-write'], (c) =>
-			ledger.add('clients', { rowId: c.id, clientId: c.client_id })
+		const other = await createLedgeredClient(
+			r.admin,
+			r.api,
+			ledger,
+			secrets,
+			ISOLATION_CLIENT_NAME,
+			['booking-write']
 		);
-		secrets.set(other.client_id, other.client_secret);
-		const otherToken = (await mintToken(r.api, other.client_id, other.client_secret)).access_token;
+		const otherToken = other.token;
+		r.writeOnly = { clientId: other.clientId, token: other.token };
 
 		expectExtError(
 			await callExt(r.api, otherToken, byExt('EXT-010'), ctxOf(r)),
@@ -629,6 +733,55 @@ test.describe('Partner API', { tag: ['@partner-api', '@critical'] }, () => {
 		// ...and the owner's booking is untouched.
 		const mine = await call(r, r.token, byExt('EXT-010'));
 		expect(mine.body.result.booking_status).toBe('CANCELLED');
+	});
+
+	test('B3 EXT-008 on a shelter closed to bookings: booking-write alone is 409', async () => {
+		test.setTimeout(120_000);
+		const r = state();
+		expect(r.writeOnly, 'needs the booking-write-only client made by A3b').toBeDefined();
+		const { clientId, token } = r.writeOnly!;
+		const res = await bookClosedShelter(r, token, clientId);
+		// Not 403 (it holds booking-write) and not 201 (the shelter does not accept bookings).
+		expectExtError(res, 409, 'location_not_bookable', 'EXT-008 on the closed shelter');
+	});
+
+	test('B4 EXT-008 with booking-bypass books the closed shelter, then cancels it', async () => {
+		test.setTimeout(180_000);
+		const r = state();
+		const eoc = await createLedgeredClient(r.admin, r.api, ledger, secrets, BYPASS_CLIENT_NAME, [
+			'booking-write',
+			'booking-bypass'
+		]);
+		expect(eoc.scopes.slice().sort()).toEqual(['booking-bypass', 'booking-write']);
+
+		const ctx = closedCtxOf(r);
+		const created = await bookClosedShelter(r, eoc.token, eoc.clientId, ctx);
+		expect(created.status, `bypass create (code ${created.body?.code})`).toBe(201);
+		expect(created.body.result).toMatchObject({
+			location_code: r.closedCode,
+			booking_status: 'BOOKED',
+			persons_count: 1
+		});
+		const bookingId = created.body.result.booking_id as string;
+		expect(bookingId).toBeTruthy();
+		const own: ExtCtx = { ...ctx, bookingId };
+
+		const status = await call(r, eoc.token, byExt('EXT-010'), own, {}, eoc.clientId);
+		expect(status.status).toBe(200);
+		expect(status.body.result).toMatchObject({
+			booking_id: bookingId,
+			location_code: r.closedCode,
+			booking_status: 'BOOKED'
+		});
+		await waitForWorkerWrite(r.closedCode, bookingId);
+
+		const cancel = await call(r, eoc.token, byExt('EXT-009'), own, {}, eoc.clientId);
+		expect(cancel.status, `cancel (code ${cancel.body?.code})`).toBe(200);
+		expect(cancel.body.result).toMatchObject({
+			booking_id: bookingId,
+			booking_status: 'CANCELLED'
+		});
+		await waitForWorkerWrite(r.closedCode, bookingId, 'cancelled');
 	});
 
 	test('EXT-011 does not report a cancelled, never-checked-in booking as residency', async () => {
@@ -686,13 +839,27 @@ test.describe('Partner API', { tag: ['@partner-api', '@critical'] }, () => {
 				expect(minted.scopes, `token minted without ${scope}`).not.toContain(scope);
 				expect(minted.scopes.slice().sort()).toEqual([...remaining].sort());
 
-				for (const endpoint of PARTNER_ENDPOINTS.filter((e) => e.scope === scope)) {
+				const gated = PARTNER_ENDPOINTS.filter((e) => e.scope === scope);
+				const probe = SCOPE_PROBES[scope];
+				// A scope that gates no endpoint must say how its absence is observed, else it would
+				// pass this matrix without a single assertion.
+				expect(
+					gated.length + (probe ? 1 : 0),
+					`${scope} has an endpoint or a probe`
+				).toBeGreaterThan(0);
+				for (const endpoint of gated) {
 					// A fresh CID per attempt: if the gate failed, the booking would be real.
 					const res = await call(r, minted.access_token, endpoint, {
 						...ctxOf(r),
 						cid: freshCid()
 					});
 					expectExtError(res, 403, 'insufficient_scope', `${endpoint.ext} without ${scope}`);
+				}
+				if (probe) {
+					// No endpoint of its own: without `booking-bypass` the closed-for-bookings shelter
+					// is refused by the normal rule (409), not by the scope gate (403).
+					const res = await bookClosedShelter(r, minted.access_token, r.clientId);
+					expectExtError(res, probe.status, probe.code, `${probe.ext} without ${scope}`);
 				}
 				if (scope === 'occupancy-read') {
 					// EXT-006 is gated on location-read: it stays 200 but hides the occupancy total.
@@ -800,8 +967,9 @@ test.describe('Partner API', { tag: ['@partner-api', '@critical'] }, () => {
 		test.setTimeout(240_000);
 		const r = state();
 		const done = await teardownPartnerRun(r.api, r.admin, ledger, secrets);
-		expect(done.shelters).toEqual([r.code]);
-		expect(done.clients.length).toBeGreaterThanOrEqual(2);
+		expect(done.shelters.slice().sort()).toEqual([r.code, r.closedCode].sort());
+		// Main + isolation (A3b) + bypass (B4) clients.
+		expect(done.clients.length).toBeGreaterThanOrEqual(3);
 		await expectPartnerRunGone(r.admin, done);
 		expect(ledger.read()).toEqual({ clients: [], clientNames: [], shelters: [], bookings: [] });
 	});

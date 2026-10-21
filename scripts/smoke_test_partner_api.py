@@ -77,8 +77,9 @@ everything runs on this host, so the no-Mongo mode is for all-local runs only.
 
 Prerequisites: local stack up (`docker compose up -d`), with fastapi + worker
 built from a branch that contains CR-169 (`docker compose up -d --build --no-deps
-fastapi worker`), a seeded shelter that is `open` and accepts pre-registration
-(local default data: SH004), CouchDB admin credentials.
+fastapi worker`), a seeded shelter that is `open` and has the pre-registration
+switch ON (#751: a shelter without the switch is not bookable; the seed data does not set
+it, so turn it on for the target shelter first, e.g. in the staff UI), CouchDB admin credentials.
 
 Run (local; admin provision mode, secrets from env / repo-root .env, never echoed):
   set -a; . ./.env; set +a          # COUCHDB_USER, COUCHDB_PASSWORD, EXTERNAL_API_SECRET
@@ -465,6 +466,8 @@ class SmokeTestRunner:
             payload = {
                 "name": f"smoke-m2-{ts}",
                 "module_name": ADMIN_CLIENT_MODULE,
+                # `booking-bypass` (#751, EOC override) is deliberately not granted: the smoke
+                # run checks the normal EXT-008 rule.
                 "allowed_scopes": [
                     "location-read",
                     "location-stock-read",
@@ -966,7 +969,10 @@ class SmokeTestRunner:
         self.log(f"{BOLD}{bar}{RESET}")
 
     def _booking_candidates(self, headers: Dict[str, str]) -> List[str]:
-        """Explicit --shelter-code only; otherwise `open` locations from EXT-002.
+        """Explicit --shelter-code only; otherwise bookable `open` locations from EXT-002.
+
+        #751: `accepts_booking=true` keeps shelters whose pre-registration switch is off (or was
+        never set) out of the list, since EXT-008 now answers 409 for them.
 
         Not `self.shelter_code`: #216 auto-fills it with the first listed location,
         which may be closed or opted out of pre-registration.
@@ -975,7 +981,7 @@ class SmokeTestRunner:
             return [self.explicit_shelter_code]
         status, data = self.http_request(
             "GET",
-            self.partner_path("/external/locations") + "?status=open&limit=20",
+            self.partner_path("/external/locations") + "?status=open&accepts_booking=true&limit=20",
             headers=headers,
         )
         result = data.get("result") if status == 200 else None
