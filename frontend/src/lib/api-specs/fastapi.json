@@ -1304,11 +1304,11 @@
 						"in": "query",
 						"required": false,
 						"schema": {
-							"anyOf": [{ "type": "boolean" }, { "type": "null" }],
-							"description": "Filter by the accepts_booking rule (EXT-008): true = bookable, false = not bookable",
+							"anyOf": [{ "enum": ["true", "false"], "type": "string" }, { "type": "null" }],
+							"description": "Filter by the accepts_booking rule (EXT-008): true = bookable, false = not bookable. Only the lowercase strings `true` / `false` are accepted; anything else is 422.",
 							"title": "Accepts Booking"
 						},
-						"description": "Filter by the accepts_booking rule (EXT-008): true = bookable, false = not bookable"
+						"description": "Filter by the accepts_booking rule (EXT-008): true = bookable, false = not bookable. Only the lowercase strings `true` / `false` are accepted; anything else is 422."
 					},
 					{
 						"name": "page",

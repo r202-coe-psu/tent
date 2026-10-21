@@ -508,3 +508,52 @@ async def test_list_locations_rejects_a_non_boolean_accepts_booking(
     )
     assert response.status_code == 422
     assert response.json()["code"] == "validation_error"
+
+
+@pytest.mark.parametrize(
+    "value",
+    ["yes", "no", "on", "off", "1", "0", "t", "f", "y", "n", "abc", "", " ", "True", "FALSE"],
+)
+async def test_list_locations_accepts_booking_takes_only_lowercase_true_or_false(
+    client: AsyncClient, location_read_headers: dict[str, str], value: str
+) -> None:
+    """Only lowercase `true` / `false` are valid (no bool coercion, no case folding)."""
+    response = await client.get(
+        "/external/locations",
+        headers=location_read_headers,
+        params={"accepts_booking": value},
+    )
+    assert response.status_code == 422
+    assert response.json()["code"] == "validation_error"
+
+
+MALFORMED_FLAG_RAW = [
+    {"feature_flags": "yes"},
+    {"feature_flags": None},
+    {"feature_flags": ["accepts_pre_registration"]},
+    {"feature_flags": [{"accepts_pre_registration": True}]},
+    {"feature_flags": {"accepts_pre_registration": "true"}},
+    {"feature_flags": {"accepts_pre_registration": 1}},
+    {"feature_flags": {"accepts_pre_registration": [True]}},
+]
+
+
+@pytest.mark.parametrize("raw", MALFORMED_FLAG_RAW)
+async def test_malformed_feature_flags_are_not_bookable_and_never_500(
+    client: AsyncClient, location_read_headers: dict[str, str], raw: dict[str, object]
+) -> None:
+    """EXT-003 / EXT-002 answer 200 with `accepts_booking: false`; the filter agrees (#751 F1)."""
+    await insert_shelter("SH900", raw_data=raw)
+    await insert_shelter("SH901", raw_data=flag_raw(True))
+
+    detail = await client.get("/external/locations/SH900", headers=location_read_headers)
+    assert detail.status_code == 200
+    assert detail.json()["result"]["accepts_booking"] is False
+
+    listing = await client.get("/external/locations", headers=location_read_headers)
+    assert listing.status_code == 200
+    by_code = {i["location_code"]: i["accepts_booking"] for i in listing.json()["result"]}
+    assert by_code == {"SH900": False, "SH901": True}
+
+    assert await _codes(client, location_read_headers, accepts_booking="true") == {"SH901"}
+    assert await _codes(client, location_read_headers, accepts_booking="false") == {"SH900"}

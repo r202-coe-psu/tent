@@ -48,7 +48,7 @@ migration: N/A — ไม่ bump `schema_v` (`external_bookings` เป็น B
 | 3 | Scope | `booking-bypass` ใหม่ — ใช้คู่ `booking-write` (ต้องมี `booking-write` ด้วย มิฉะนั้น 403 `insufficient_scope`); sensitive, ไม่อยู่ใน preset ใด (รวม M7), admin ติ๊กรายกรณี |
 | 4 | ขอบเขต bypass | ข้ามทุกเงื่อนไขการรับจอง รวม `closed`; ยังได้ 404 `location_not_found` ถ้าศูนย์ไม่มี / `is_active=false` |
 | 5 | วิธี bypass | อัตโนมัติเมื่อ token มี `booking-bypass` และศูนย์ไม่ผ่านกติกาปกติ (ไม่ส่ง field เพิ่ม); เฉพาะเมื่อใช้จริง: access log `status = "granted_bypass"` (`result_count = persons_count`) และ `external_bookings.bypass = true` ทุกแถวของกลุ่ม; ไม่ใช้จริง = `granted` / `bypass = false` |
-| 6 | Filter | EXT-002 `?accepts_booking=true\|false` กรองใน Mongo (total/pagination ถูกต้อง; ใช้ร่วม `status` ได้); ค่าไม่ใช่ bool → 422 `validation_error` |
+| 6 | Filter | EXT-002 `?accepts_booking=true\|false` กรองใน Mongo (total/pagination ถูกต้อง; ใช้ร่วม `status` ได้); รับเฉพาะสตริงตัวพิมพ์เล็ก `true` / `false` เท่านั้น — ค่าอื่น (`yes`, `on`, `1`, `t`, `True`, ค่าว่าง ฯลฯ) → 422 `validation_error` |
 | 7 | ไม่ทำ | EXT-006 ไม่เพิ่ม field; ไม่เพิ่มป้ายหน้า staff (ไม่แตะ evacuee schema) |
 
 หมายเหตุ implementation:
