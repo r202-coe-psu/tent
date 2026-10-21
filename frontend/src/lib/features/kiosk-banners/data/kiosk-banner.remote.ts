@@ -80,12 +80,13 @@ export const kioskBannerRemoteRepository: KioskBannerRepository = {
 
 	async reorder(
 		shelterCode: string,
-		screenType: KioskScreenType,
+		slot: { groupId: string; screenType: KioskScreenType },
 		items: { id: string; rev: string }[]
 	) {
 		const url = `${BASE}/order?shelter_code=${encodeURIComponent(shelterCode)}`;
 		const body = {
-			screen_type: screenType,
+			group_id: slot.groupId,
+			screen_type: slot.screenType,
 			items: items.map(({ id, rev }) => ({ id, _rev: rev }))
 		};
 		const response = await request(url, jsonInit('PUT', body));

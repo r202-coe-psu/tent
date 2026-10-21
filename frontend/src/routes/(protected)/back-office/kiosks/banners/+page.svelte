@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
+	import { page } from '$app/state';
 	import StaffPageShell from '$lib/components/staff-page-shell.svelte';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { spatial } from '$lib/tokens';
@@ -19,6 +20,9 @@
 
 	/** Every role (SA included) works on the shelter picked in the back-office shelter switcher. */
 	const activeShelter = $derived(shelterStore.selectedShelterCode ?? getShelterCode());
+
+	// Interim until the routes slice puts the banner group in the path.
+	const groupId = $derived(page.url.searchParams.get('group') ?? '');
 
 	const newHref = resolve('/back-office/kiosks/banners/new');
 
@@ -89,7 +93,12 @@
 				{#each KIOSK_SCREEN_TYPES as type (type)}
 					<KioskBannerScreenCard
 						screen={type}
-						summary={summarizeScreen(current, expired, type, now)}
+						summary={summarizeScreen(
+							current,
+							expired,
+							{ group_id: groupId, screen_type: type },
+							now
+						)}
 					/>
 				{/each}
 			</div>

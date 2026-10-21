@@ -44,6 +44,7 @@ beforeEach(() => {
 
 const BYTES = { bytes: png, contentType: 'image/png' } as const;
 const CTX = { shelterCode: 'SH1', createdBy: 'alice' };
+const SLOT = { groupId: GROUP_A, screenType: 'compact' } as const;
 const FOUND_NONE = { status: 200, data: { docs: [] } };
 
 describe('createBanner', () => {
@@ -511,7 +512,7 @@ describe('reorderBanners', () => {
 
 		await reorderBanners(
 			'SH1',
-			'compact',
+			SLOT,
 			[
 				{ id: 'kiosk_banner:b1', rev: '1-r1' },
 				{ id: 'kiosk_banner:b3', rev: '1-r3' },
@@ -532,12 +533,45 @@ describe('reorderBanners', () => {
 		});
 	});
 
+	it('renumbers only its own group slot, leaving other groups and ungrouped banners alone', async () => {
+		adminRawMock
+			.mockResolvedValueOnce({
+				status: 200,
+				data: {
+					docs: [
+						doc(1),
+						doc(2),
+						doc(3, { _id: 'kiosk_banner:other', group_id: GROUP_B }),
+						doc(4, { _id: 'kiosk_banner:v1', schema_v: 1, group_id: undefined })
+					]
+				}
+			})
+			.mockResolvedValueOnce({
+				status: 201,
+				data: rowsFor('kiosk_banner:b1', 'kiosk_banner:b2')
+			});
+
+		const records = await reorderBanners(
+			'SH1',
+			SLOT,
+			[
+				{ id: 'kiosk_banner:b2', rev: '1-r2' },
+				{ id: 'kiosk_banner:b1', rev: '1-r1' }
+			],
+			NOW
+		);
+
+		const body = adminRawMock.mock.calls[1][2] as { docs: { _id: string }[] };
+		expect(body.docs.map((d) => d._id)).toEqual(['kiosk_banner:b1', 'kiosk_banner:b2']);
+		expect(records.map((r) => r._id)).toEqual(['kiosk_banner:b2', 'kiosk_banner:b1']);
+	});
+
 	it('writes nothing when the order is unchanged and returns the current list', async () => {
 		adminRawMock.mockResolvedValueOnce({ status: 200, data: { docs: [doc(2), doc(1)] } });
 
 		const records = await reorderBanners(
 			'SH1',
-			'compact',
+			SLOT,
 			[
 				{ id: 'kiosk_banner:b1', rev: '1-r1' },
 				{ id: 'kiosk_banner:b2', rev: '1-r2' }
@@ -555,7 +589,7 @@ describe('reorderBanners', () => {
 		await expect(
 			reorderBanners(
 				'SH1',
-				'compact',
+				SLOT,
 				[
 					{ id: 'kiosk_banner:b2', rev: '0-old' },
 					{ id: 'kiosk_banner:b1', rev: '1-r1' }
@@ -569,7 +603,9 @@ describe('reorderBanners', () => {
 	it.each([
 		['an unknown id', [{ id: 'kiosk_banner:zz', rev: '1-zz' }]],
 		['a portrait banner', [{ id: 'kiosk_banner:p', rev: '1-p' }]],
-		['an expired banner', [{ id: 'kiosk_banner:old', rev: '1-old' }]]
+		['an expired banner', [{ id: 'kiosk_banner:old', rev: '1-old' }]],
+		['a banner of another group', [{ id: 'kiosk_banner:g', rev: '1-g' }]],
+		['an ungrouped banner', [{ id: 'kiosk_banner:v1', rev: '1-v1' }]]
 	])('rejects %s in the ordered ids with CONFLICT before any write', async (_name, extra) => {
 		adminRawMock.mockResolvedValueOnce({
 			status: 200,
@@ -591,7 +627,7 @@ describe('reorderBanners', () => {
 		await expect(
 			reorderBanners(
 				'SH1',
-				'compact',
+				SLOT,
 				[{ id: 'kiosk_banner:b2', rev: '1-r2' }, { id: 'kiosk_banner:b1', rev: '1-r1' }, ...extra],
 				NOW
 			)
@@ -605,7 +641,7 @@ describe('reorderBanners', () => {
 		await expect(
 			reorderBanners(
 				'SH1',
-				'compact',
+				SLOT,
 				[
 					{ id: 'kiosk_banner:b1', rev: '1-r1' },
 					{ id: 'kiosk_banner:b1', rev: '1-r1' }
@@ -625,7 +661,7 @@ describe('reorderBanners', () => {
 			adminRawMock
 				.mockResolvedValueOnce({ status: 200, data: { docs: [doc(1), doc(2)] } })
 				.mockResolvedValueOnce(bulk);
-			return reorderBanners('SH1', 'compact', swap, NOW);
+			return reorderBanners('SH1', SLOT, swap, NOW);
 		};
 
 		it('maps a conflicting row to CONFLICT', async () => {
@@ -666,7 +702,7 @@ describe('reorderBanners', () => {
 
 		const records = await reorderBanners(
 			'SH1',
-			'compact',
+			SLOT,
 			[
 				{ id: 'kiosk_banner:b3', rev: '1-r3' },
 				{ id: 'kiosk_banner:b2', rev: '1-r2' },
@@ -686,8 +722,6 @@ describe('reorderBanners', () => {
 		expect(records[0].image_content_type).toBe('image/jpeg');
 	});
 });
-
-const SLOT = { groupId: GROUP_A, screenType: 'compact' } as const;
 
 describe('listActiveForShelter', () => {
 	it('keeps only banners live now, sorted, capped at 20', async () => {

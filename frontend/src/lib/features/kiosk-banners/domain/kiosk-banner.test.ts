@@ -414,38 +414,62 @@ describe('next banner order', () => {
 
 describe('orderableBanners', () => {
 	const now = new Date('2026-10-16T00:00:00.000Z');
+	const GROUP_A = 'kiosk_banner_group:A';
+	const GROUP_B = 'kiosk_banner_group:B';
 	const banner = (
 		id: string,
 		order: number,
-		extra: { screen_type?: 'compact' | 'portrait'; start_at?: string; end_at?: string } = {}
+		extra: {
+			group_id?: string;
+			screen_type?: 'compact' | 'portrait';
+			start_at?: string;
+			end_at?: string;
+			status?: string;
+		} = {}
 	) => ({
 		_id: `kiosk_banner:${id}`,
 		order,
 		start_at: extra.start_at ?? '2026-10-15T00:00:00.000Z',
 		end_at: extra.end_at ?? '2026-10-20T00:00:00.000Z',
-		screen_type: extra.screen_type
+		screen_type: extra.screen_type,
+		group_id: 'group_id' in extra ? extra.group_id : GROUP_A,
+		status: extra.status
 	});
+	const slotA = { group_id: GROUP_A, screen_type: 'compact' as const };
 
-	it('keeps current banners of the screen type, sorted, and drops expired or other-screen ones', () => {
+	it('keeps current banners of the slot, sorted, and drops expired ones', () => {
 		const list = [
 			banner('c', 3, { screen_type: 'compact' }),
 			banner('a', 1),
-			banner('p', 1, { screen_type: 'portrait' }),
 			banner('old', 2, { end_at: '2026-10-15T23:59:59.000Z' }),
 			banner('b', 2, { screen_type: 'compact' })
 		];
-		const ids = (type: 'compact' | 'portrait') =>
-			orderableBanners(list, type, now).map((b) => b._id);
-		expect(ids('compact')).toEqual(['kiosk_banner:a', 'kiosk_banner:b', 'kiosk_banner:c']);
-		expect(ids('portrait')).toEqual(['kiosk_banner:p']);
+		expect(orderableBanners(list, slotA, now).map((b) => b._id)).toEqual([
+			'kiosk_banner:a',
+			'kiosk_banner:b',
+			'kiosk_banner:c'
+		]);
+	});
+
+	it('drops banners of another group, another screen type and ungrouped banners', () => {
+		const list = [
+			banner('mine', 1),
+			banner('other-group', 1, { group_id: GROUP_B }),
+			banner('other-screen', 1, { screen_type: 'portrait' }),
+			banner('ungrouped', 1, { group_id: undefined })
+		];
+		expect(orderableBanners(list, slotA, now).map((b) => b._id)).toEqual(['kiosk_banner:mine']);
+		expect(
+			orderableBanners(list, { group_id: GROUP_A, screen_type: 'portrait' }, now).map((b) => b._id)
+		).toEqual(['kiosk_banner:other-screen']);
 	});
 
 	it('includes inactive and not-yet-started banners', () => {
 		const list = [
-			{ ...banner('a', 1), status: 'inactive' },
+			banner('a', 1, { status: 'inactive' }),
 			banner('b', 2, { start_at: '2026-10-18T00:00:00.000Z' })
 		];
-		expect(orderableBanners(list, 'compact', now).map((b) => b._id)).toEqual([
+		expect(orderableBanners(list, slotA, now).map((b) => b._id)).toEqual([
 			'kiosk_banner:a',
 			'kiosk_banner:b'
 		]);

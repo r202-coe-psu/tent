@@ -26,6 +26,8 @@
 	// The `[screen=kioskScreen]` matcher guarantees a valid screen type.
 	const screen = $derived(page.params.screen as KioskScreenType);
 	const screenMeta = $derived(KIOSK_SCREENS[screen]);
+	// Interim until the routes slice puts the banner group in the path.
+	const groupId = $derived(page.url.searchParams.get('group') ?? '');
 
 	const listHref = resolve('/back-office/kiosks/banners');
 	const newHref = $derived(resolve(`/back-office/kiosks/banners/new?screen=${screen}`));
@@ -118,6 +120,7 @@
 	<div class={cn(spatial.container.staffPageCard, 'overflow-visible')}>
 		<KioskBannerScreenManager
 			{screen}
+			{groupId}
 			current={currentQuery.data ?? []}
 			expired={expiredQuery.data ?? []}
 			{now}

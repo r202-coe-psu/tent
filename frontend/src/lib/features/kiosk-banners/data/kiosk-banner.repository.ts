@@ -45,10 +45,10 @@ export interface KioskBannerRepository {
 	): Promise<KioskBannerSummary>;
 	setStatus(id: string, rev: string, status: KioskBannerStatus): Promise<KioskBannerSummary>;
 	remove(id: string, rev: string): Promise<void>;
-	/** Saves a new order; `items` are all current banners of that screen type, in the new order. */
+	/** Saves a new order; `items` are all current banners of that (group, screen type) slot, in the new order. */
 	reorder(
 		shelterCode: string,
-		screenType: KioskScreenType,
+		slot: { groupId: string; screenType: KioskScreenType },
 		items: { id: string; rev: string }[]
 	): Promise<KioskBannerSummary[]>;
 	/** URL of the stored image; pass `rev` so a replaced image is not served from cache. */

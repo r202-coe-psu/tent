@@ -221,16 +221,20 @@ export async function listBannersForShelter(shelterCode: string): Promise<KioskB
 }
 
 /**
- * Renumber the current banners of one screen type to the given order (1..n); only changed
+ * Renumber the current banners of one (group, screen type) slot to the given order (1..n); only changed
  * banners are written, with their `_attachments` stubs kept so CouchDB does not drop the image.
  */
 export async function reorderBanners(
 	shelterCode: string,
-	screenType: KioskScreenType,
+	slot: { groupId: string; screenType: KioskScreenType },
 	items: { id: string; rev: string }[],
 	now: Date = new Date()
 ): Promise<KioskBannerRecord[]> {
-	const orderable = orderableBanners(await findRawBanners(shelterCode), screenType, now);
+	const orderable = orderableBanners(
+		await findRawBanners(shelterCode),
+		{ group_id: slot.groupId, screen_type: slot.screenType },
+		now
+	);
 	const plan = planReorder(
 		orderable,
 		items.map((i) => i.id)

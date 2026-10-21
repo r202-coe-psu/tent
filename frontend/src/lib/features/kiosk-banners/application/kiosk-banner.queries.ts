@@ -102,8 +102,14 @@ export const useReorderKioskBanners = (repo: KioskBannerRepository = kioskBanner
 	useBannerMutation(
 		(input: {
 			shelterCode: string;
+			groupId: string;
 			screenType: KioskScreenType;
 			items: { id: string; rev: string }[];
-		}) => repo.reorder(input.shelterCode, input.screenType, input.items),
+		}) =>
+			repo.reorder(
+				input.shelterCode,
+				{ groupId: input.groupId, screenType: input.screenType },
+				input.items
+			),
 		'บันทึกลำดับไม่สำเร็จ'
 	);

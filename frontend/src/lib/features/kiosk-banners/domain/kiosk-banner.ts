@@ -213,14 +213,18 @@ export function nextBannerOrder(
 }
 
 /**
- * Rows the reorder page shows for one screen type: current banners (inactive and not-yet-started
- * included), in display order.
+ * Rows the reorder page shows for one (group, screen type) slot: current banners (inactive and
+ * not-yet-started included), in display order.
  */
 export function orderableBanners<
-	T extends Sortable & Pick<KioskBannerDoc, 'end_at'> & { screen_type?: KioskScreenType | null }
->(banners: readonly T[], screenType: KioskScreenType, now: Date): T[] {
+	T extends Sortable &
+		Pick<KioskBannerDoc, 'end_at'> & {
+			group_id?: string | null;
+			screen_type?: KioskScreenType | null;
+		}
+>(banners: readonly T[], slot: { group_id: string; screen_type: KioskScreenType }, now: Date): T[] {
 	const t = now.getTime();
-	return sortBanners(banners.filter((b) => matchesScreen(b, screenType) && isCurrentAt(b, t)));
+	return sortBanners(banners.filter((b) => matchesSlot(b, slot) && isCurrentAt(b, t)));
 }
 
 export type ReorderPlan =
