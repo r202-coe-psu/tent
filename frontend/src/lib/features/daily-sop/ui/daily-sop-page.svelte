@@ -2,6 +2,7 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
+	import { onMount } from 'svelte';
 	import { SvelteURLSearchParams } from 'svelte/reactivity';
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import CheckCircle2 from '@lucide/svelte/icons/circle-check';
@@ -258,7 +259,7 @@
 		)
 	);
 
-	$effect(() => {
+	onMount(() => {
 		const timer = setInterval(() => (today = dailySopBangkokDate()), 60_000);
 		return () => clearInterval(timer);
 	});
