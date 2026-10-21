@@ -17,7 +17,13 @@ import {
 	volunteerApplySchema,
 	volunteerProfileUpdateSchema,
 	type PublicJob,
-	type ScheduleShift
+	type ScheduleShift,
+	formatMintedTicketToken,
+	isMintedTicketToken,
+	TRACKING_TOKEN_RANDOM_BYTES,
+	buildRememberedPortalCredential,
+	readRememberedPortalCredential,
+	PORTAL_REMEMBER_TTL_MS
 } from './volunteer';
 
 describe('isValidThaiNationalId', () => {
@@ -342,5 +348,91 @@ describe('volunteerProfileUpdateSchema', () => {
 			status: 'inactive'
 		});
 		expect(parsed.success && parsed.data).toEqual({ skills: ['ครัว'] });
+	});
+});
+
+describe('formatMintedTicketToken', () => {
+	it('writes the bytes as uppercase hex after the prefix', () => {
+		const bytes = Uint8Array.from({ length: TRACKING_TOKEN_RANDOM_BYTES }, (_, i) => i * 17);
+		expect(formatMintedTicketToken(bytes)).toBe('TKT-VOL-00112233445566778899AABBCCDDEEFF');
+	});
+
+	it('mints exactly what the token rate limit treats as unguessable', () => {
+		const token = formatMintedTicketToken(
+			crypto.getRandomValues(new Uint8Array(TRACKING_TOKEN_RANDOM_BYTES))
+		);
+		expect(isMintedTicketToken({ token })).toBe(true);
+	});
+
+	it('refuses too few bytes rather than minting a guessable token', () => {
+		expect(() => formatMintedTicketToken(new Uint8Array(4))).toThrow(RangeError);
+	});
+});
+
+describe('isMintedTicketToken', () => {
+	const minted = 'TKT-VOL-0123456789ABCDEF0123456789ABCDEF';
+
+	it('accepts a full minted token, in any case and with stray spaces', () => {
+		expect(isMintedTicketToken({ token: minted })).toBe(true);
+		expect(isMintedTicketToken({ token: ` ${minted.toLowerCase()} ` })).toBe(true);
+	});
+
+	it('rejects anything that could be guessed — a short code, a phone, a hash payload', () => {
+		expect(isMintedTicketToken({ token: 'TKT-VOL-1001' })).toBe(false);
+		expect(isMintedTicketToken({ token: 'V-1001' })).toBe(false);
+		expect(isMintedTicketToken({ phone: '0812345678' })).toBe(false);
+		expect(isMintedTicketToken({ token: `TKT-VOL-HASH-${'a'.repeat(64)}` })).toBe(false);
+		expect(isMintedTicketToken({ token: `${minted}0` })).toBe(false);
+	});
+
+	it('rejects a body that is not a credential object', () => {
+		expect(isMintedTicketToken(null)).toBe(false);
+		expect(isMintedTicketToken('TKT-VOL-0123456789ABCDEF0123456789ABCDEF')).toBe(false);
+		expect(isMintedTicketToken({ token: 42 })).toBe(false);
+	});
+});
+
+describe('remembered device (#625)', () => {
+	const now = 1_760_000_000_000;
+	const token = 'TKT-VOL-0123456789ABCDEF0123456789ABCDEF';
+
+	it('remembers a token sign-in for seven days, normalising the token', () => {
+		expect(
+			buildRememberedPortalCredential({ token: token.toLowerCase(), portal_id: 'P-1' }, now)
+		).toEqual({ token, portal_id: 'P-1', remembered_until: now + PORTAL_REMEMBER_TTL_MS });
+		expect(PORTAL_REMEMBER_TTL_MS).toBe(7 * 24 * 60 * 60 * 1000);
+	});
+
+	it('never remembers a phone sign-in', () => {
+		expect(
+			buildRememberedPortalCredential({ phone: '0812345678', portal_id: 'P-1' }, now)
+		).toBeNull();
+	});
+
+	it('reads a remembered device back while it is still valid', () => {
+		const stored = buildRememberedPortalCredential({ token, portal_id: 'P-1' }, now);
+		expect(readRememberedPortalCredential(stored, now + 1000)).toEqual({ token, portal_id: 'P-1' });
+	});
+
+	it('forgets it once the seven days are up', () => {
+		const stored = buildRememberedPortalCredential({ token, portal_id: 'P-1' }, now);
+		expect(readRememberedPortalCredential(stored, now + PORTAL_REMEMBER_TTL_MS + 1)).toBeNull();
+	});
+
+	it('rejects a record that claims to last longer than a remembered device may', () => {
+		const tampered = { token, portal_id: 'P-1', remembered_until: now + 365 * 86_400_000 };
+		expect(readRememberedPortalCredential(tampered, now)).toBeNull();
+	});
+
+	it('rejects a malformed record', () => {
+		expect(readRememberedPortalCredential(null, now)).toBeNull();
+		expect(readRememberedPortalCredential('nope', now)).toBeNull();
+		expect(readRememberedPortalCredential({ token, remembered_until: now + 1000 }, now)).toBeNull();
+		expect(
+			readRememberedPortalCredential(
+				{ token: 'not-a-ticket', portal_id: 'P-1', remembered_until: now + 1000 },
+				now
+			)
+		).toBeNull();
 	});
 });

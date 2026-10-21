@@ -43,6 +43,20 @@ export interface TicketTranslations {
 	toastCancelError: string;
 	notFoundError: string;
 	pageTitle: string;
+	/** Ticket finder (find-ticket page and the job board's second tab). */
+	finderPageTitle: string;
+	finderTitle: string;
+	finderSubtitle: string;
+	finderPhonePlaceholder: string;
+	finderPhoneLabel: string;
+	finderSearch: string;
+	finderInvalidPhone: string;
+	finderSearchFailed: string;
+	finderPhoneNotFound: string;
+	finderSignInFailed: string;
+	finderNoTickets: string;
+	finderOpenPortal: string;
+	finderReadOnlyNote: string;
 }
 
 export const ticketI18n: Record<LanguageCode, TicketTranslations> = {
@@ -50,7 +64,7 @@ export const ticketI18n: Record<LanguageCode, TicketTranslations> = {
 		backToJobs: 'กลับไปยังกระดานงาน',
 		findOtherTicket: 'ค้นหาตั๋วใบอื่น',
 		offlineCached: 'แคชออฟไลน์พร้อมใช้',
-		digitalPassBadge: 'บัตรประจำตัวจิตอาสาดิจิทัล (Digital Pass)',
+		digitalPassBadge: 'บัตรประจำตัวจิตอาสาดิจิทัล',
 		tokenLabel: 'Token :',
 		appliedAtLabel: 'สมัครเมื่อ :',
 		defaultJobTitle: 'งานอาสาสมัคร',
@@ -91,7 +105,22 @@ export const ticketI18n: Record<LanguageCode, TicketTranslations> = {
 		toastCancelSuccess: 'ยกเลิกการสมัครเรียบร้อยแล้ว',
 		toastCancelError: 'ยกเลิกการสมัครไม่สำเร็จ',
 		notFoundError: 'ไม่พบตั๋วนี้',
-		pageTitle: 'ตั๋วประจำตัวจิตอาสา — Smart Shelter'
+		pageTitle: 'ตั๋วประจำตัวจิตอาสา — Smart Shelter',
+		finderPageTitle: 'ค้นหาตั๋วอาสาสมัคร — Smart Shelter',
+		finderTitle: 'ค้นหาตั๋วของฉัน',
+		finderSubtitle: 'กรอกเบอร์โทรศัพท์ที่ใช้สมัครเพื่อดูตั๋วดิจิทัล',
+		finderPhonePlaceholder: 'กรอกเบอร์โทรศัพท์ที่ใช้สมัคร',
+		finderPhoneLabel: 'เบอร์โทรศัพท์',
+		finderSearch: 'ค้นหา',
+		finderInvalidPhone: 'เบอร์โทรศัพท์ไม่ถูกต้อง',
+		finderSearchFailed: 'ค้นหาตั๋วไม่สำเร็จ',
+		finderPhoneNotFound:
+			'ไม่พบเบอร์โทรศัพท์นี้ในระบบอาสาสมัคร กรุณาตรวจสอบเบอร์ที่ใช้สมัครอีกครั้ง',
+		finderSignInFailed: 'ไม่สามารถเข้าสู่ระบบได้',
+		finderNoTickets: 'ไม่พบตั๋วสำหรับเบอร์นี้ หากเพิ่งสมัคร กรุณาเปิดจากลิงก์ตั๋วที่ได้รับ',
+		finderOpenPortal: 'เข้าสู่ตารางงานจิตอาสา',
+		finderReadOnlyNote:
+			'เปิดจากการค้นด้วยเบอร์โทร — ดูได้อย่างเดียว หากต้องการยกเลิก ใช้ลิงก์ตั๋วที่ได้รับตอนสมัคร'
 	},
 	en: {
 		backToJobs: 'Back to Job Board',
@@ -139,7 +168,23 @@ export const ticketI18n: Record<LanguageCode, TicketTranslations> = {
 		toastCancelSuccess: 'Application cancelled successfully',
 		toastCancelError: 'Failed to cancel application',
 		notFoundError: 'Ticket not found',
-		pageTitle: 'Volunteer Digital Pass — Smart Shelter'
+		pageTitle: 'Volunteer Digital Pass — Smart Shelter',
+		finderPageTitle: 'Find volunteer ticket — Smart Shelter',
+		finderTitle: 'Find my ticket',
+		finderSubtitle: 'Enter the phone number you applied with to see your digital pass',
+		finderPhonePlaceholder: 'Phone number you applied with',
+		finderPhoneLabel: 'Phone number',
+		finderSearch: 'Search',
+		finderInvalidPhone: 'Invalid phone number',
+		finderSearchFailed: 'Could not search for tickets',
+		finderPhoneNotFound:
+			'This phone number is not registered as a volunteer. Please check the number you applied with.',
+		finderSignInFailed: 'Could not sign in',
+		finderNoTickets:
+			'No tickets for this number. If you just applied, open the ticket link you were given.',
+		finderOpenPortal: 'Open my volunteer schedule',
+		finderReadOnlyNote:
+			'Opened by phone number — view only. To cancel, use the ticket link you got when you applied.'
 	}
 };
 

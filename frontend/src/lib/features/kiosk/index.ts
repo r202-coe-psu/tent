@@ -20,6 +20,8 @@ export {
 export { default as KioskCardInsertScene } from './ui/kiosk-card-insert-scene.svelte';
 export { default as KioskReaderPointer } from './ui/kiosk-reader-pointer.svelte';
 export { default as KioskReprint } from './ui/kiosk-reprint.svelte';
+export { default as KioskVolunteerCard } from './ui/kiosk-volunteer-card.svelte';
+export { default as KioskPrintQrChooser } from './ui/kiosk-print-qr-chooser.svelte';
 export { default as KioskThaidIdentityScan } from './ui/thaid-identity-scan.svelte';
 export { default as KioskBannerAttract } from './ui/kiosk-banner-attract.svelte';
 export { KioskIdleTimeout, KIOSK_IDLE_TIMEOUT_MS } from './ui/kiosk-idle-timeout.svelte.js';
@@ -55,6 +57,7 @@ export {
 export {
 	prepareKioskQrImage,
 	printKioskQrLabels,
+	renderKioskQrLabelPng,
 	type KioskQrImage,
 	type KioskQrLabel
 } from './application/kiosk-label-print';
@@ -62,3 +65,4 @@ export { loadKioskHardware } from './application/kiosk-qr-input';
 export { cancelKioskFaceCheck } from './data/kiosk-face.api';
 export type { KioskHardware } from './domain/kiosk-hardware';
 export { isFaceCheckEnabled, type FaceCheckOutcome } from './domain/face-check';
+export { KIOSK_CHECK_IN_TICKS, KIOSK_LABEL_MM } from './domain/print-label';

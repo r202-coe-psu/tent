@@ -25,6 +25,16 @@ async def test_partner_422_includes_validation_error_code(client: AsyncClient) -
     assert body["code"] == "validation_error"
 
 
+async def test_partner_401_keeps_www_authenticate_header(client: AsyncClient) -> None:
+    missing = await client.get("/external/locations")
+    garbage = await client.get("/external/locations", headers={"Authorization": "Bearer not-a-jwt"})
+
+    for response in (missing, garbage):
+        assert response.status_code == 401
+        assert response.json()["code"] == "invalid_token"
+        assert response.headers["www-authenticate"] == "Bearer"
+
+
 def _crashing_app() -> FastAPI:
     app = FastAPI()
     app.add_exception_handler(Exception, unhandled_error_handler)

@@ -56,14 +56,16 @@
 			qrSrc: images[index].src,
 			qrSizeMm: images[index].sizeMm,
 			name: member.label.name,
-			phone: member.label.phone
+			zone: member.label.zone,
+			checkedCount: member.label.stations_passed
 		}));
 		try {
 			return await printKioskQrLabels(
 				members.map((member, index) => ({
 					qrSrc: images[index].src,
 					name: member.label.name,
-					phone: member.label.phone
+					zone: member.label.zone,
+					checkedCount: member.label.stations_passed
 				})),
 				async () => {
 					// The sheet must be on the page before the browser prints it.
@@ -88,7 +90,7 @@
 	);
 	const idleTimeout = new KioskIdleTimeout(KIOSK_IDLE_TIMEOUT_MS, returnHome);
 
-	const homeUrl = $derived(resolve(`/kiosk${contextQuery}`));
+	const printQrUrl = $derived(resolve(`/kiosk/print-qr${contextQuery}`));
 	const reprintUrl = $derived(resolve(`/kiosk/reprint${contextQuery}`));
 	const displayPhone = $derived(formatPhoneForDisplay(session.phone));
 	const entryHint = $derived(phoneEntryHint(session.phone));
@@ -192,7 +194,7 @@
 					onclick={() => session.back()}
 				/>
 			{:else}
-				<KioskBackButton href={homeUrl} />
+				<KioskBackButton href={printQrUrl} />
 			{/if}
 		</div>
 

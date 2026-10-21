@@ -43,15 +43,14 @@ export class TestPrint {
 	}
 
 	/** The one sample label, for the browser-print sheet. Empty until its QR is ready. */
-	get labels(): { key: string; qrSrc: string; qrSizeMm: number; name: string; phone: null }[] {
+	get labels(): { key: string; qrSrc: string; qrSizeMm: number; name: string }[] {
 		return this.qrImage
 			? [
 					{
 						key: 'test-print',
 						qrSrc: this.qrImage.src,
 						qrSizeMm: this.qrImage.sizeMm,
-						name: TEST_PRINT_LABEL_NAME,
-						phone: null
+						name: TEST_PRINT_LABEL_NAME
 					}
 				]
 			: [];
@@ -86,7 +85,7 @@ export class TestPrint {
 			const image = await this.deps.prepareQrImage(TEST_PRINT_QR_PAYLOAD);
 			this.qrImage = image;
 			const result = await this.deps.printLabels(
-				[{ qrSrc: image.src, name: TEST_PRINT_LABEL_NAME, phone: null }],
+				[{ qrSrc: image.src, name: TEST_PRINT_LABEL_NAME }],
 				this.deps.fallbackPrint
 			);
 			switch (result.kind) {

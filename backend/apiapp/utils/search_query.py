@@ -52,6 +52,11 @@ def parse_search_query(raw_query: str) -> ParsedSearchQuery | None:
     # MongoDB rejects a NUL inside a $regex (the first-name prefix match) with a 500.
     if "\x00" in raw:
         return None
+    # A lone surrogate (valid in a JSON string) cannot be encoded to BSON — the query would 500.
+    try:
+        raw.encode("utf-8")
+    except UnicodeEncodeError:
+        return None
 
     compact = re.sub(r"[\s\-]+", "", raw)
 

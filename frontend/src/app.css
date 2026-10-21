@@ -203,11 +203,11 @@
 	--domain-donation-border: #fed7aa;
 	--domain-donation-text: #9a3412;
 
-	--domain-volunteer: #059669;
-	--domain-volunteer-strong: #047857;
-	--domain-volunteer-subtle: #ecfdf5;
-	--domain-volunteer-border: #a7f3d0;
-	--domain-volunteer-text: #065f46;
+	--domain-volunteer: #295f8e;
+	--domain-volunteer-strong: #1e4a71;
+	--domain-volunteer-subtle: #f0f5fa;
+	--domain-volunteer-border: #c2d5e5;
+	--domain-volunteer-text: #11304a;
 
 	--domain-kitchen: #db2777;
 	--domain-kitchen-strong: #be185d;
@@ -232,6 +232,26 @@
 	--domain-admin-subtle: #f1f5f9;
 	--domain-admin-border: #cbd5e1;
 	--domain-admin-text: #1e293b;
+
+	/* Onsite station families — station PAGES only (portal tiles keep the department colour).
+	   Keep in sync with baseStation in $lib/tokens/colors.ts — unit-tested. Never a status colour. */
+	--station-1: #124481;
+	--station-1-strong: #124481;
+	--station-1-subtle: #e4f0ff;
+	--station-1-border: #bfd4f2;
+	--station-1-text: #0b2647;
+
+	--station-2: #0d9488;
+	--station-2-strong: #0f766e;
+	--station-2-subtle: #f0fdfa;
+	--station-2-border: #99f6e4;
+	--station-2-text: #134e4a;
+
+	--station-3: #7c3aed;
+	--station-3-strong: #6d28d9;
+	--station-3-subtle: #f5f3ff;
+	--station-3-border: #ddd6fe;
+	--station-3-text: #5b21b6;
 }
 
 /* lg+: sidebar chrome — only the page header sticks; drop mobile-nav from offset */
@@ -416,6 +436,21 @@
 	--color-domain-admin-subtle: var(--domain-admin-subtle);
 	--color-domain-admin-border: var(--domain-admin-border);
 	--color-domain-admin-text: var(--domain-admin-text);
+	--color-station-1: var(--station-1);
+	--color-station-1-strong: var(--station-1-strong);
+	--color-station-1-subtle: var(--station-1-subtle);
+	--color-station-1-border: var(--station-1-border);
+	--color-station-1-text: var(--station-1-text);
+	--color-station-2: var(--station-2);
+	--color-station-2-strong: var(--station-2-strong);
+	--color-station-2-subtle: var(--station-2-subtle);
+	--color-station-2-border: var(--station-2-border);
+	--color-station-2-text: var(--station-2-text);
+	--color-station-3: var(--station-3);
+	--color-station-3-strong: var(--station-3-strong);
+	--color-station-3-subtle: var(--station-3-subtle);
+	--color-station-3-border: var(--station-3-border);
+	--color-station-3-text: var(--station-3-text);
 
 	/* Brand colors (SOP / SmartShelter) */
 	--color-brand: #013365;

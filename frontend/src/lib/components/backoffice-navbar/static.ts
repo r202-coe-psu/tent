@@ -6,6 +6,7 @@ import {
 	isKioskStaffOnly,
 	isShelterManager,
 	isSystemAdmin,
+	canAccessIncidents,
 	SCANNER_MANAGER_CAPABILITIES
 } from '$lib/auth/roles';
 import Users from '@lucide/svelte/icons/users';
@@ -23,6 +24,7 @@ import HandHeart from '@lucide/svelte/icons/hand-heart';
 import MapPin from '@lucide/svelte/icons/map-pin';
 import UtensilsCrossed from '@lucide/svelte/icons/utensils-crossed';
 import ClipboardCheck from '@lucide/svelte/icons/clipboard-check';
+import NotebookPen from '@lucide/svelte/icons/notebook-pen';
 import Cpu from '@lucide/svelte/icons/cpu';
 import MonitorSmartphone from '@lucide/svelte/icons/monitor-smartphone';
 import Images from '@lucide/svelte/icons/images';
@@ -125,9 +127,9 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 						icon: ClipboardList
 					},
 					{
-						label: 'โรงครัวและเสบียงอาหาร',
+						label: 'เบิกวัตถุดิบครัว',
 						href: resolve('/back-office/tickets/kitchen'),
-						icon: UtensilsCrossed
+						icon: ClipboardCheck
 					}
 				]
 			},
@@ -141,6 +143,12 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 	{
 		title: '3. รายงานและการตรวจสอบ',
 		items: [
+			{
+				label: 'บันทึกเหตุการณ์ประจำวัน',
+				href: resolve('/back-office/incidents'),
+				icon: NotebookPen,
+				visibleTo: (roles) => canAccessIncidents(roles)
+			},
 			{ label: 'รายงานความโปร่งใส', href: null, icon: FileCheck },
 			{ label: 'รายงานสรุปหลังเหตุการณ์', href: null, icon: FileText }
 		]

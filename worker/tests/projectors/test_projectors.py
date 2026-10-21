@@ -1,4 +1,5 @@
 import hashlib
+from datetime import UTC, datetime
 from decimal import Decimal
 
 import pytest
@@ -146,6 +147,23 @@ def test_project_shelter_closed_soft_retains():
     assert payload["status"] == "closed"
     assert payload["location_status"] == "closed"
     assert payload["is_active"] is True
+
+
+def test_project_shelter_cancelled_deletes_by_code():
+    """draft-shelter-cancelled-status.md — a cancelled shelter leaves the public plane
+    entirely; the `_id` lets the caller purge its shelter-scoped projections too."""
+    doc = {
+        "_id": "shelter:01CANCEL",
+        "type": "shelter",
+        "code": "SH009",
+        "name": "ศูนย์ที่สร้างผิด",
+        "operation_status": "cancelled",
+    }
+    assert project_shelter(doc) == ("delete", {"_id": "SH009"})
+
+
+def test_is_shelter_open_false_for_cancelled():
+    assert is_shelter_open({"operation_status": "cancelled"}) is False
 
 
 def test_project_shelter_malformed_doc_deletes():
@@ -298,7 +316,7 @@ def test_project_evacuee_passport():
     assert payload["passport_id_masked"] == mask_passport("AB1234567")
 
 
-@pytest.mark.parametrize("status", ["pre_registered", "kiosk_registered"])
+@pytest.mark.parametrize("status", ["pre_registered", "kiosk_registered", "cancelled"])
 def test_project_evacuee_pending_registration_has_no_checkin_time(status):
     doc = {
         "_id": "evacuee:pending",
@@ -314,6 +332,24 @@ def test_project_evacuee_pending_registration_has_no_checkin_time(status):
     assert action == "upsert"
     assert payload is not None
     assert payload["checked_in_at"] is None
+
+
+@pytest.mark.parametrize(
+    "status",
+    ["active", "room_confirmed", "temporary_leave", "checked_out", "transferred"],
+)
+def test_project_evacuee_checked_in_statuses_keep_checkin_time(status):
+    doc = {
+        "_id": "evacuee:stayed",
+        "type": "evacuee",
+        "current_stay": {"status": status, "since": "2026-01-01T00:00:00.000Z"},
+    }
+
+    action, payload = project_evacuee(doc, shelter_code="SH001")
+
+    assert action == "upsert"
+    assert payload is not None
+    assert payload["checked_in_at"] == datetime(2026, 1, 1, tzinfo=UTC)
 
 
 def test_project_evacuee_pink_card_hashes_national_id_field():

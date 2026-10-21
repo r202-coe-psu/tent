@@ -425,7 +425,7 @@ describe('reprintKioskLabels', () => {
 			{
 				evacuee_id: input.primary_evacuee_id,
 				qr_payload: input.primary_evacuee_id,
-				label: { name: 'สมชาย ใจดี', phone: '0812345678' }
+				label: { name: 'สมชาย ใจดี', phone: '0812345678', zone: 'A3', stations_passed: 3 }
 			}
 		];
 		const fetchMock = vi.fn(async (...args: [RequestInfo | URL, RequestInit?]) => {

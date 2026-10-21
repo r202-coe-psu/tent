@@ -26,7 +26,6 @@
 	import JobDetailOverviewTab from './job-detail-overview-tab.svelte';
 	import JobShiftsTab from './job-shifts-tab.svelte';
 	import JobApplicantsTab from './job-applicants-tab.svelte';
-	import JobFormDialog from './job-form-dialog.svelte';
 	import { useJob, useJobApplications, useShiftAssignments } from '../application/queries';
 
 	let { jobId }: { jobId: string } = $props();
@@ -65,7 +64,10 @@
 	 */
 	let activeTab = $state<DetailTab>('overview');
 
-	let editOpen = $state(false);
+	function openEdit() {
+		// `resolve()` here only prefixes `base`, so the id is interpolated by hand.
+		void goto(resolve(`/back-office/volunteers/jobs/${encodeURIComponent(jobId)}/edit`));
+	}
 
 	const TRIGGER_CLASS =
 		'h-auto flex-none gap-1.5 rounded-none border-0 border-b-2 border-transparent bg-transparent px-3 pb-2.5 text-xs font-medium text-muted-foreground data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:font-bold data-[state=active]:text-foreground data-[state=active]:shadow-none sm:text-sm';
@@ -92,7 +94,7 @@
 				variant="outline"
 				class="gap-1.5 rounded-xl text-xs"
 				disabled={!job}
-				onclick={() => (editOpen = true)}
+				onclick={openEdit}
 			>
 				<Pencil class="h-3.5 w-3.5" />
 				แก้ไขงานนี้
@@ -177,7 +179,5 @@
 				<JobApplicantsTab {job} />
 			</Tabs.Content>
 		</Tabs.Root>
-
-		<JobFormDialog bind:open={editOpen} {job} />
 	{/if}
 </div>

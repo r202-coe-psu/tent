@@ -226,3 +226,31 @@ async def test_update_doc_does_not_retry_other_errors():
         await client.update_doc("db", "d", touch)
     assert client._client.put.await_count == 1
     await client.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("status", "expected"),
+    [(404, True), (200, False), (401, False), (403, False), (500, False), (503, False)],
+)
+async def test_database_missing_is_true_only_for_404(status: int, expected: bool):
+    client = _client()
+    client._client.get = AsyncMock(
+        return_value=httpx.Response(
+            status, json={}, request=httpx.Request("GET", "http://x")
+        )
+    )
+
+    assert await client.database_missing("shelter_sh001") is expected
+    assert client._client.get.await_args.args[0] == "/shelter_sh001"
+    await client.close()
+
+
+@pytest.mark.asyncio
+async def test_database_missing_propagates_connection_errors():
+    client = _client()
+    client._client.get = AsyncMock(side_effect=httpx.ConnectError("down"))
+
+    with pytest.raises(httpx.ConnectError):  # never reported as "missing"
+        await client.database_missing("shelter_sh001")
+    await client.close()

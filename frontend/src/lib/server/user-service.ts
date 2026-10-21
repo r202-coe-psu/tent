@@ -380,17 +380,7 @@ export async function createOrMergeUser(
 		await updateUser(
 			input.name,
 			{
-				display_name: input.display_name,
-				roles: input.roles,
-				personnel_type: input.personnel_type,
-				organization: input.organization,
-				position: input.position,
-				phone: input.phone,
-				email: input.email,
-				notes: input.notes,
-				volunteer_id: input.volunteer_id,
-				duty_window: input.duty_window,
-				affiliation_tags: input.affiliation_tags
+				roles: input.roles
 			},
 			caller
 		);
@@ -408,6 +398,35 @@ export async function listUsers(caller: Caller): Promise<UserSummary[]> {
 	const managed = managerShelterCodes(caller.roles);
 	const codes = managed.length > 0 ? managed : caller.shelterCode ? [caller.shelterCode] : [];
 	return all.filter((u) => codes.some((code) => hasShelterScope(u.roles, code)));
+}
+
+/** Minimal colleague entry — enough to pick a handover target, no contact/PII fields. */
+export interface StaffDirectoryEntry {
+	name: string;
+	display_name: string | null;
+}
+
+/**
+ * Active staff of a shelter (incident handover picker, IL-P5): holds at least one shelter
+ * capability for `code` and is not a volunteer account (`personnel_type = volunteer`).
+ * Optional `capabilities` narrows to staff holding at least one of them in `code`.
+ * Callers are gated by `requireShelterScopeOrSA` — colleagues' names only, no contact/PII.
+ */
+export async function listShelterStaffDirectory(
+	code: string,
+	opts?: { capabilities?: readonly string[] }
+): Promise<StaffDirectoryEntry[]> {
+	const wanted = opts?.capabilities;
+	const bootstrap = bootstrapAdminName();
+	return (await fetchAllUserDocs())
+		.filter((d) => !isProtectedBootstrapAdmin(d, bootstrap))
+		.filter((d) => (d.active ?? true) && d.personnel_type !== 'volunteer')
+		.filter((d) => {
+			const caps = capabilitiesForShelter(d.roles ?? [], code);
+			return wanted ? caps.some((c) => wanted.includes(c)) : caps.length > 0;
+		})
+		.map((d) => ({ name: d.name, display_name: toSummary(d).display_name ?? null }))
+		.sort((a, b) => (a.display_name ?? a.name).localeCompare(b.display_name ?? b.name, 'th'));
 }
 
 function managerMayMutateTarget(caller: Caller, targetRoles: readonly string[]): string {
@@ -497,6 +516,18 @@ export async function updateUser(
 
 	if (!caller.isSA) {
 		const code = managerMayMutateTarget(caller, doc.roles ?? []);
+		if (!hasShelterScope(doc.roles ?? [], code)) {
+			// Add-from-outside: a target not yet in this shelter may only be pulled in via `roles`.
+			// Allow-list (not deny-list) so any other/new field is rejected by default; a mixed
+			// request (roles + any other field) is rejected whole, never partially applied.
+			const extra = Object.entries(input).filter(([k, v]) => k !== 'roles' && v !== undefined);
+			if (!input.roles || extra.length > 0) {
+				throw new ServiceError(
+					'FORBIDDEN',
+					'A manager may only edit users in their own shelter (outside users: roles only)'
+				);
+			}
+		}
 		if (input.roles) {
 			const { assertCanGrant } = await import('./couch-admin');
 			assertCanGrant(caller, input.roles);

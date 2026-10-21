@@ -7,7 +7,8 @@ export const GRANTABLE_SCOPES = [
 	'occupancy-read',
 	'occupancy-pii-read',
 	'booking-write',
-	'residency-read'
+	'residency-read',
+	'occupant-search'
 ] as const;
 export type GrantableScope = (typeof GRANTABLE_SCOPES)[number];
 
@@ -17,14 +18,17 @@ export const SCOPE_LABEL: Record<GrantableScope, string> = {
 	'occupancy-read': 'occupancy-read — Occupancy breakdown (EXT-005/006)',
 	'occupancy-pii-read': 'occupancy-pii-read — Individual occupant records (EXT-007)',
 	'booking-write': 'booking-write — Book / cancel shelter on behalf of citizens (EXT-008–010)',
-	'residency-read': 'residency-read — Per-person shelter residency by national ID (EXT-011)'
+	'residency-read': 'residency-read — Per-person shelter residency by national ID (EXT-011)',
+	'occupant-search':
+		'occupant-search — Search persons by name / national ID / passport / phone (EXT-012)'
 };
 
 /** Scopes that expose individual-level PII/sensitive data under PDPA — flagged in the UI. */
 export const SENSITIVE_SCOPES: readonly GrantableScope[] = [
 	'occupancy-pii-read',
 	'booking-write',
-	'residency-read'
+	'residency-read',
+	'occupant-search'
 ];
 
 /** Per-scope PDPA warning shown beside each sensitive scope in the create/edit dialogs. */
@@ -34,7 +38,9 @@ export const SENSITIVE_SCOPE_WARNING: Partial<Record<GrantableScope, string>> = 
 	'booking-write':
 		"Lets this partner create and cancel bookings with citizens' national ID, name and phone (PDPA-sensitive). Grant only with written approval on file for this module.",
 	'residency-read':
-		'Reveals whether a given national ID is staying at a shelter, and where (PDPA-sensitive). Grant only with written approval on file for this module.'
+		'Reveals whether a given national ID is staying at a shelter, and where (PDPA-sensitive). Grant only with written approval on file for this module.',
+	'occupant-search':
+		'Lets this partner search for people by name, national ID, passport or phone number and see their status and shelter (PDPA-sensitive). Grant only with written approval on file for this module.'
 };
 
 /** Partner systems on the OAuth plane (ADR 0002; M2 added by CR-154) — a closed set. */

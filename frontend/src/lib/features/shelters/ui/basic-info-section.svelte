@@ -19,6 +19,7 @@
 	import { Switch } from '$lib/components/ui/switch/index.js';
 	import * as Form from '$lib/components/ui/form/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
+	import * as AlertDialog from '$lib/components/ui/alert-dialog/index.js';
 	import SearchSelect from '$lib/components/search-select.svelte';
 	import { useMasterData, formatMasterLabel } from '$lib/features/master-data';
 	import { langState } from '$lib/states/i18n.svelte';
@@ -39,8 +40,22 @@
 		{ value: 'standby', label: 'กำลังเตรียมการ (Preparing)' },
 		{ value: 'active', label: 'เปิดรับผู้อพยพ (Active)' },
 		{ value: 'full_capacity', label: 'เต็มความจุ (Full Capacity)' },
-		{ value: 'closed', label: 'ปิดศูนย์ (Closed)' }
+		{ value: 'closed', label: 'ปิดศูนย์ (Closed)' },
+		{ value: 'cancelled', label: 'ยกเลิกศูนย์ (Cancelled)' }
 	];
+
+	// draft-shelter-cancelled-status: cancelling hides the shelter from every public page and the
+	// external API, so the switch to `cancelled` is confirmed first. Other changes apply at once.
+	let confirmCancelOpen = $state(false);
+
+	function selectOperationStatus(value: string) {
+		if (value === $formData.operation_status) return;
+		if (value === 'cancelled') {
+			confirmCancelOpen = true;
+			return;
+		}
+		$formData.operation_status = value as Shelter['operation_status'];
+	}
 
 	const siteKindOptions: { value: SiteKind; label: string }[] = [
 		{ value: 'evacuation_center', label: SITE_KIND_LABELS.evacuation_center },
@@ -258,7 +273,11 @@
 			<Form.Control>
 				{#snippet children({ props })}
 					<Form.Label>สถานะการปฏิบัติการ (Operating Status)</Form.Label>
-					<Select.Root type="single" bind:value={$formData.operation_status} {disabled}>
+					<Select.Root
+						type="single"
+						bind:value={() => $formData.operation_status, selectOperationStatus}
+						{disabled}
+					>
 						<Select.Trigger {...props} class={selectTriggerClass}>
 							{operationStatusOptions.find((o) => o.value === $formData.operation_status)?.label ??
 								'— เลือกสถานะ —'}
@@ -273,6 +292,31 @@
 			</Form.Control>
 			<Form.FieldErrors />
 		</Form.Field>
+
+		<AlertDialog.Root bind:open={confirmCancelOpen}>
+			<AlertDialog.Content>
+				<AlertDialog.Header>
+					<AlertDialog.Title>ยืนยันยกเลิกศูนย์นี้?</AlertDialog.Title>
+					<AlertDialog.Description>
+						ศูนย์ที่ยกเลิกจะไม่แสดงในหน้าสาธารณะทุกหน้าและ API ภายนอก
+						และรับจอง/ลงทะเบียนล่วงหน้าไม่ได้ — ใช้กับศูนย์ที่สร้างผิดหรือไม่เคยเปิดใช้งาน
+						(ปิดศูนย์ตามปกติให้เลือก「ปิดศูนย์」) เปลี่ยนกลับเป็นสถานะอื่นได้ภายหลัง
+					</AlertDialog.Description>
+				</AlertDialog.Header>
+				<AlertDialog.Footer>
+					<AlertDialog.Cancel>ไม่ยกเลิก</AlertDialog.Cancel>
+					<AlertDialog.Action
+						class="bg-destructive text-white hover:bg-destructive/90"
+						onclick={() => {
+							$formData.operation_status = 'cancelled';
+							confirmCancelOpen = false;
+						}}
+					>
+						ยืนยันยกเลิกศูนย์
+					</AlertDialog.Action>
+				</AlertDialog.Footer>
+			</AlertDialog.Content>
+		</AlertDialog.Root>
 
 		<Form.Field {form} name="shelter_type">
 			<Form.Control>
@@ -454,14 +498,14 @@
 				for="enable-medical-screening"
 				class="min-w-0 flex-1 text-sm font-semibold text-slate-800"
 			>
-				เปิดคัดกรองการแพทย์ (Station 2)
+				เปิดคัดกรองผู้เข้าพัก (Station 2)
 			</label>
 			<Switch
 				id="enable-medical-screening"
 				checked={$formData.feature_flags?.enable_medical_screening ?? false}
 				onCheckedChange={(v) => setEnableMedicalScreening(v === true)}
 				{disabled}
-				aria-label="เปิดคัดกรองการแพทย์ Station 2"
+				aria-label="เปิดคัดกรองผู้เข้าพัก Station 2"
 			/>
 		</div>
 

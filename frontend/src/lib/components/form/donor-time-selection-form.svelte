@@ -234,7 +234,7 @@
 				donationStore.trackingToken = data.trackingToken;
 				donationStore.bookingRef = data.bookingRef;
 				donationStore.slotDate = slotDateStr;
-				donationStore.activeTab = 'ticket';
+				donationStore.goToStep('ticket');
 				if (donationStore.reachedStep < 4) donationStore.reachedStep = 4;
 				toast.success(t.bookingSuccess);
 			}
@@ -583,7 +583,7 @@
 	<div class="mt-8 flex gap-4 border-t border-slate-100 pt-6">
 		<button
 			type="button"
-			onclick={() => (donationStore.activeTab = 'form')}
+			onclick={() => donationStore.goToStep('form')}
 			class="cursor-pointer rounded-xl bg-slate-100 px-6 py-4 text-lg font-bold text-slate-600 transition-colors hover:bg-slate-200"
 		>
 			{t.backBtn}

@@ -1,6 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { z } from 'zod';
+import { isShelterCancelled, resolveOperationStatus } from '$lib/features/shelters/server';
 import { registerLookupIpLimiter } from '$lib/server/security/rate-limiter';
 import { listShelterMasters } from '$lib/server/shelters.admin';
 import { findConflictingHold } from '$lib/features/public-register/booking-gate.server';
@@ -57,7 +58,10 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
 
 	// 1. Query shelters for active conflicting holds
 	try {
-		const masters = await listShelterMasters().catch(() => []);
+		const rawMasters = await listShelterMasters().catch(() => []);
+		const masters = rawMasters.filter(
+			(m) => resolveOperationStatus(m) !== 'closed' && !isShelterCancelled(m)
+		);
 		for (const master of masters) {
 			const conflict = await findConflictingHold(master.code, {
 				cardNumber: checkCard,

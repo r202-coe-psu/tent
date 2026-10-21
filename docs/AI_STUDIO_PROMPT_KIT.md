@@ -48,7 +48,7 @@ All downstream semantic and domain tokens inherit directly from Base Primitive T
 - **1. ค้นหาที่พักพิง (Shelters)**: Destructive Red #DC2626 ('portalServices.shelter': border-red-200, bg-red-50 icon container, primary btn-destructive)
 - **2. ผู้พักพิง (Family Tracing)**: Brand Navy #0A2647 & Cerulean #0284C7 ('portalServices.tracing': border-sky-200, bg-sky-50 icon container, primary btn-primary)
 - **3. บริจาค (Donations)**: Warm Amber #EA580C ('portalServices.donation': border-amber-200, bg-amber-50 icon container, primary amber button)
-- **4. อาสาสมัคร (Volunteers)**: Civic Emerald #059669 ('portalServices.volunteer': border-emerald-200, bg-emerald-50 icon container, primary emerald button)
+- **4. อาสาสมัคร (Volunteers)**: Volunteer domain deep blue #295F8E ('portalServices.volunteer': border-domain-volunteer-border, bg-domain-volunteer-subtle icon container, text-bearing button 'bg-domain-volunteer-strong' #1E4A71)
 - **Floating Emergency Controls**:
   - 1669 Hotline pill: 'bg-red-600' (Destructive Red)
   - Floating Alert Bell pill ("แจ้งเตือนภัย"): **'bg-[#0284C7]' (Secondary Cerulean)** — _Strictly Secondary Cerulean, not red!_
@@ -61,7 +61,7 @@ Divide the 5 specialized domain operations into 2 rows for cognitive clarity:
   1. **โรงครัว & พลังงาน (Kitchen & LPG)**: Warm Orange #EA580C ('border-orange-200 bg-orange-50 text-orange-900', '.badge-kitchen', '.card-ops-kitchen')
   2. **ครอบครัวและกลุ่มเปราะบาง (Family Care)**: Soft Rose #E11D48 ('border-rose-200 bg-rose-50 text-rose-900', '.badge-family', '.card-ops-family')
   3. **ผู้บริจาค & เสบียงประชาชน (Donors & Public)**: Civic Cerulean #0284C7 ('border-sky-200 bg-sky-50 text-sky-900', '.badge-donor', '.card-ops-donor' — inherits directly from Secondary)
-- **Row 2 (2 items, sm:grid-cols-2)**: 4. **อาสาสมัครและทีมแพทย์ (Volunteers & Responders)**: Civic Emerald #059669 ('border-emerald-200 bg-emerald-50 text-emerald-900', '.badge-volunteer', '.card-ops-volunteer') 5. **จัดสรรเต็นท์ & คลัง SPHERE (Shelter & Inventory)**: Clean Teal #0D9488 ('border-teal-200 bg-teal-50 text-teal-900', '.badge-inventory', '.card-ops-inventory')
+- **Row 2 (2 items, sm:grid-cols-2)**: 4. **อาสาสมัครและทีมแพทย์ (Volunteers & Responders)**: Volunteer domain deep blue #295F8E ('border-domain-volunteer-border bg-domain-volunteer-subtle text-domain-volunteer-text', '.badge-domain-volunteer', '.card-domain-volunteer') 5. **จัดสรรเต็นท์ & คลัง SPHERE (Shelter & Inventory)**: Clean Teal #0D9488 ('border-teal-200 bg-teal-50 text-teal-900', '.badge-inventory', '.card-ops-inventory')
 
 #### 4. 360° Refined Status Matrix
 

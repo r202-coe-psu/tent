@@ -145,3 +145,38 @@ async def test_refresh_occupancy_no_op_when_shelter_database_missing(db: None) -
     couch.database_exists = AsyncMock(return_value=False)
 
     assert await refresh_occupancy(couch, "SH911") is False
+
+
+async def test_delete_jobs_for_shelter_drops_only_that_shelters_postings(
+    db: None,
+) -> None:
+    """Cancelled shelter (draft-shelter-cancelled-status.md): its postings leave the
+    volunteer board; another shelter's stay."""
+    from tent_model.public_job import PublicJob
+
+    from worker.mongo.job import delete_jobs_for_shelter
+
+    collection = PublicJob.get_pymongo_collection()
+    await collection.insert_one({"_id": "gone", "shelter_code": "SH910"})
+    await collection.insert_one({"_id": "kept", "shelter_code": "SH911"})
+
+    await delete_jobs_for_shelter("SH910")
+
+    assert [row["_id"] async for row in collection.find({})] == ["kept"]
+
+
+async def test_is_shelter_projected(db: None) -> None:
+    from worker.mongo.shelter import is_shelter_projected
+
+    await PublicShelter(
+        id="SH920",
+        shelter_code="SH920",
+        name="ศูนย์ที่เปิด",
+        status="open",
+        is_active=True,
+        capacity=10,
+        updated_at=datetime.now(UTC),
+    ).insert()
+
+    assert await is_shelter_projected("SH920") is True
+    assert await is_shelter_projected("SH921") is False

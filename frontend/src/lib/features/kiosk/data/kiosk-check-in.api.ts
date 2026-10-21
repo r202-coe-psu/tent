@@ -121,7 +121,11 @@ export interface KioskReprintInput {
 export interface KioskReprintMember {
 	evacuee_id: string;
 	qr_payload: string;
-	label: { name: string; phone: string | null };
+	/**
+	 * `zone` is the member's current zone (short name, else full name), or null before one is
+	 * assigned; `stations_passed` (0–3) is how many checklist boxes the label ticks.
+	 */
+	label: { name: string; phone: string | null; zone: string | null; stations_passed: number };
 }
 
 export interface KioskReprintResult {
@@ -172,7 +176,7 @@ export class KioskPartialCheckInError extends Error {
 	}
 }
 
-async function requestError(response: Response): Promise<KioskRequestError> {
+export async function requestError(response: Response): Promise<KioskRequestError> {
 	const body = (await response.json().catch((error: unknown) => {
 		if (error instanceof Error && error.name === 'AbortError') throw error;
 		return null;
@@ -215,7 +219,7 @@ function withTimeout(
 	};
 }
 
-async function requestWithTimeout<T>(
+export async function requestWithTimeout<T>(
 	input: RequestInfo | URL,
 	init: RequestInit,
 	consume: (response: Response) => Promise<T>,

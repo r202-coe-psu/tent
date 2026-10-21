@@ -19,7 +19,7 @@
 	<title>ระบบงานข้อมูลอาสาสมัคร — Smart Shelter</title>
 </svelte:head>
 
-<PublicPageShell class="space-y-8">
+<PublicPageShell class="space-y-8 lg:px-8" maxWidth="max-w-7xl">
 	<PublicHeroMetrics
 		title="ระบบงานข้อมูลอาสาสมัครร่วมบูรณาการภัยพิบัติ"
 		description="เชื่อมประสานความดี ขจัดปัญหาร่วมกระจุกตัว ด้วยการคัดกรองทักษะ (Skill Matching) ออกรหัสลงทะเบียน (Role Card) ปฏิบัติอาสา และติดตามสวัสดิการตามมาตรฐาน Sphere"

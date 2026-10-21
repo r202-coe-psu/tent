@@ -83,9 +83,9 @@
 					<Stethoscope class="size-6" />
 				</div>
 				<div>
-					<h2 class="mb-1 text-2xl font-bold text-foreground">คัดกรองการแพทย์</h2>
+					<h2 class="mb-1 text-2xl font-bold text-foreground">คัดกรองผู้เข้าพัก</h2>
 					<p class="text-xs font-medium tracking-wider text-muted-foreground uppercase">
-						Medical Screening (Station 2)
+						Occupant Screening (Station 2)
 					</p>
 				</div>
 			</a>
