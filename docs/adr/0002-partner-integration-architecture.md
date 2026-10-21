@@ -9,7 +9,7 @@ To maintain high throughput, sub-second latency for command dashboards, strict P
 1. **OAuth2 Scoped Client Credentials (`EXT-001`)**:
    - Implement `POST /external/token` using `grant_type: "client_credentials"`.
    - Store machine credentials in a dedicated MongoDB collection `third_party_clients` (storing `client_id`, `client_secret_hash`, `module_name`, `allowed_scopes`, and `is_active`).
-   - Issue short-lived, cryptographically signed JWT access tokens (lifetime 3,600s) embedding specific scopes (`location-read`, `location-stock-read`, `occupancy-read`, `occupancy-pii-read`; **CR-154** adds `booking-write`, `residency-read`).
+   - Issue short-lived, cryptographically signed JWT access tokens (lifetime 3,600s) embedding specific scopes (`location-read`, `location-stock-read`, `occupancy-read`, `occupancy-pii-read`; **#736** adds `occupant-search`; **CR-154** adds `booking-write`, `residency-read`).
    - Reject arbitrary access without valid scopes; audit token issuances.
 
 2. **Decoupled MongoDB Read Projection Plane**:
@@ -38,7 +38,8 @@ To maintain high throughput, sub-second latency for command dashboards, strict P
    - Add partner module `M2` (vulnerable-group assessment system) to the same OAuth2 plane instead of the legacy `/external/v1` API-key plane; M2's shelter list reuses `EXT-002`.
    - `EXT-008`–`EXT-010` (`POST /external/bookings`, `.../{id}/cancel`, `GET .../{id}`, scope `booking-write`) are the plane's only write path: FastAPI inserts into the MongoDB buffer `external_bookings`; the sync worker's inbound loop creates `household` + `evacuee` (`pre_registered`, `registered_via: api`) in `shelter_{code}` and then clears PII from the buffer. FastAPI still never holds CouchDB credentials. **เส้นทางเขียนแบบกลุ่ม (CR-169):** `POST` หนึ่งครั้งรับ `persons[]` (1–100 คน) และคืน `booking_id` กลุ่มเดียว (`BK-{ulid}`) ร่วมกันทุกแถว; แต่ละคนเป็นหนึ่งแถว (`_id` = `BP-{ulid}`, `person_seq`, `group_size`). Mongo standalone ใช้ transaction ไม่ได้ จึง API insert แถวทั้งหมดด้วย `committed = false` แล้ว flip เป็น `committed = true` เมื่อครบ (201); ถ้า duplicate ตอบ 409 `duplicate_booking` (`detail` = `persons[i]`) และลบแถวที่ staged ไว้. Worker อ่านเฉพาะแถวที่ committed และเขียน `household` + `evacuee` หนึ่งชุดต่อคน โดยใส่ `booking_ref = booking_id` (`schema_v` 14). Sweeper ลบกลุ่มที่ไม่ครบค้างเกิน 60 วินาที
    - `EXT-011` (`GET /external/persons/shelter-residency`, scope `residency-read`) follows the `EXT-007` pattern: mandatory `purpose`, every attempt logged to `third_party_access_logs`, lookup by `national_id_hash` only.
-   - `booking-write` and `residency-read` are sensitive scopes: never preset, granted per case by a system admin.
+   - `EXT-012` (`POST /external/persons/search`, scope `occupant-search`, #736) follows the same pattern: mandatory `purpose` (query), the search text travels in the JSON body (never the URL), every attempt logged to `third_party_access_logs` without the query text, no `search_audits` row. It reuses the public search rules and masking, hides `cancelled` people and returns no `family_members`.
+   - `booking-write`, `residency-read` and `occupant-search` are sensitive scopes: never preset, granted per case by a system admin.
 
 ## Considered Options
 
