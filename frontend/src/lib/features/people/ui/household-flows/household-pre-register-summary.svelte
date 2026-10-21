@@ -11,7 +11,8 @@
 		formatPersonName,
 		type Evacuee,
 		type Household,
-		evacueeInputSchema,
+		station1EvacueeInputSchema,
+		withoutBookingRef,
 		currentBEYear,
 		minBirthYearBE,
 		MAX_AGE_YEARS,
@@ -123,10 +124,10 @@
 	let memberMedicalMedicationsStr = $state('');
 	let memberMedicalAllergiesStr = $state('');
 
-	const memberForm = superForm(defaults(zod4(evacueeInputSchema)), {
+	const memberForm = superForm(defaults(zod4(station1EvacueeInputSchema)), {
 		SPA: true,
 		dataType: 'json',
-		validators: zod4(evacueeInputSchema),
+		validators: zod4(station1EvacueeInputSchema),
 		resetForm: false,
 		onSubmit: ({ cancel }) => {
 			if (memberBirthYearError || memberAgeError) {
@@ -182,7 +183,10 @@
 
 				// Members follow the head's suggested zone; Station 3 assigns the real one.
 				await createEvacueeMutation.mutateAsync({
-					input: { ...f.data, preferred_zone: createdHead?.preferred_zone ?? null },
+					input: {
+						...withoutBookingRef(f.data),
+						preferred_zone: createdHead?.preferred_zone ?? null
+					},
 					ctx
 				});
 

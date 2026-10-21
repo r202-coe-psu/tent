@@ -28,12 +28,20 @@ const schema = z.object({
 	email: z.string().optional(),
 	skills: z.array(z.string().trim().min(1)).default([]),
 	shift_id: z.string().trim().min(1).optional(),
-	shift_date: z.string().optional(),
+	shift_date: z
+		.string()
+		.regex(/^\d{4}-\d{2}-\d{2}$/, 'รูปแบบวันที่ไม่ถูกต้อง (YYYY-MM-DD)')
+		.optional(),
 	start_time: z.string().optional(),
 	end_time: z.string().optional(),
 	station: z.string().optional()
 });
 
+/**
+ * Errors leave as a code only, like `POST /volunteer/jobs/[id]/apply`: the client turns it
+ * into copy through the same table it uses for the apply step (`volunteer-api.ts`), so the
+ * two steps can never word the same failure differently.
+ */
 const noStore = { 'Cache-Control': 'no-store' };
 
 export const POST: RequestHandler = async ({ request, getClientAddress }) => {
@@ -81,6 +89,7 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
 				{ status: error.httpStatus, headers: noStore }
 			);
 		}
+		console.error('[public-volunteer-apply] preflight failed', error);
 		return json({ success: false, error: 'PREFLIGHT_FAILED' }, { status: 503, headers: noStore });
 	}
 };

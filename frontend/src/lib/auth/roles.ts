@@ -22,6 +22,8 @@ export const VOLUNTEER_COORDINATOR = 'volunteer_coordinator';
 export const SECURITY_OFFICER = 'security_officer';
 export const FACILITY_STAFF = 'facility_staff';
 export const DISTRIBUTION_STAFF = 'distribution_staff';
+/** Looks after the kiosk devices of one shelter (draft CR scanner back-office FR-SBO-28). */
+export const KIOSK_STAFF = 'kiosk_staff';
 
 /** Capability roles a shelter_manager or coordinator is allowed to grant (per CR-104 §2.1). */
 export const STAFF_CAPABILITIES = [
@@ -34,7 +36,8 @@ export const STAFF_CAPABILITIES = [
 	VOLUNTEER_COORDINATOR,
 	SECURITY_OFFICER,
 	FACILITY_STAFF,
-	DISTRIBUTION_STAFF
+	DISTRIBUTION_STAFF,
+	KIOSK_STAFF
 ] as const;
 export type StaffCapability = (typeof STAFF_CAPABILITIES)[number];
 
@@ -127,6 +130,64 @@ export function capabilitiesForShelter(
 		}
 	}
 	return [...found];
+}
+
+/** Shelters where the user holds any of `capabilities` (SA → null = every shelter). */
+export function shelterCodesWithCapability(
+	roles: readonly string[],
+	capabilities: readonly string[]
+): string[] | null {
+	if (isSystemAdmin(roles)) return null;
+	return shelterCodesFromRoles(roles).filter((code) =>
+		capabilities.some((cap) => hasCapabilityInShelter(roles, code, cap))
+	);
+}
+
+/** True when every code is in the user's scope for one of `capabilities` (SA always; empty list never). */
+export function canManageInShelters(
+	roles: readonly string[],
+	shelterCodes: readonly string[],
+	capabilities: readonly string[]
+): boolean {
+	if (isSystemAdmin(roles)) return true;
+	if (shelterCodes.length === 0) return false;
+	return shelterCodes.every((code) =>
+		capabilities.some((cap) => hasCapabilityInShelter(roles, code, cap))
+	);
+}
+
+/** True when any of `capabilities` is held in at least one shelter (SA always) — nav visibility. */
+export function hasCapabilityAnywhere(
+	roles: readonly string[],
+	capabilities: readonly string[]
+): boolean {
+	const codes = shelterCodesWithCapability(roles, capabilities);
+	return codes === null || codes.length > 0;
+}
+
+/** Capabilities that manage scanner / kiosk devices (CR scanner back-office). */
+export const SCANNER_MANAGER_CAPABILITIES = [SHELTER_MANAGER, KIOSK_STAFF] as const;
+
+/**
+ * True when the user may manage scanner devices in `shelterCode` (SA, or its shelter_manager /
+ * kiosk_staff).
+ */
+export function canManageScanners(roles: readonly string[], shelterCode: string): boolean {
+	return canManageInShelters(roles, [shelterCode], SCANNER_MANAGER_CAPABILITIES);
+}
+
+/**
+ * True when `kiosk_staff` is the user's only capability in `shelterCode` (every shelter when
+ * null) — such a user sees nothing in back-office but the kiosk pages (FR-SBO-29).
+ */
+export function isKioskStaffOnly(
+	roles: readonly string[],
+	shelterCode: string | null | undefined
+): boolean {
+	if (isSystemAdmin(roles)) return false;
+	const codes = shelterCode ? [shelterCode] : shelterCodesFromRoles(roles);
+	const caps = codes.flatMap((code) => capabilitiesForShelter(roles, code));
+	return caps.length > 0 && caps.every((cap) => cap === KIOSK_STAFF);
 }
 
 /** Shelter codes where the user holds `shelter_manager` (compound or legacy). */
@@ -329,6 +390,20 @@ export function canAccessZoning(roles: readonly string[], shelterCode?: string |
 	);
 }
 
+/**
+ * Shelter Incident Log — incident staff only: system_admin, or security_officer / shelter_manager
+ * in the shelter (owner decision; other shelter staff lose access). Without `shelterCode`, true
+ * when either capability is held in any shelter. Per-record rights live in `features/incidents`
+ * policy + VDU.
+ */
+export function canAccessIncidents(roles: readonly string[], shelterCode?: string | null): boolean {
+	return (
+		isSystemAdmin(roles) ||
+		hasStaffCapability(roles, SECURITY_OFFICER, shelterCode) ||
+		isShelterManager(roles, shelterCode)
+	);
+}
+
 /** True when the role list includes warehouse/supply capability (any or scoped shelter). */
 export function isWarehouseStaff(roles: readonly string[], shelterCode?: string | null): boolean {
 	return (
@@ -382,7 +457,8 @@ const STAFF_CAPABILITY_LABELS: Record<StaffCapability, string> = {
 	volunteer_coordinator: 'ผู้ประสานงานจิตอาสา',
 	security_officer: 'เจ้าหน้าที่รักษาความปลอดภัย',
 	facility_staff: 'เจ้าหน้าที่ฝ่ายอาคารสถานที่',
-	distribution_staff: 'เจ้าหน้าที่แจกจ่าย'
+	distribution_staff: 'เจ้าหน้าที่แจกจ่าย',
+	kiosk_staff: 'เจ้าหน้าที่ดูแลตู้ Kiosk'
 };
 
 /**

@@ -1,6 +1,14 @@
 import type { ResolvedPathname } from '$app/types';
 import { resolve } from '$app/paths';
 import type { Icon } from '@lucide/svelte';
+import {
+	hasCapabilityAnywhere,
+	isKioskStaffOnly,
+	isShelterManager,
+	isSystemAdmin,
+	canAccessIncidents,
+	SCANNER_MANAGER_CAPABILITIES
+} from '$lib/auth/roles';
 import Users from '@lucide/svelte/icons/users';
 import HeartHandshake from '@lucide/svelte/icons/heart-handshake';
 import ClipboardList from '@lucide/svelte/icons/clipboard-list';
@@ -16,6 +24,10 @@ import HandHeart from '@lucide/svelte/icons/hand-heart';
 import MapPin from '@lucide/svelte/icons/map-pin';
 import UtensilsCrossed from '@lucide/svelte/icons/utensils-crossed';
 import ClipboardCheck from '@lucide/svelte/icons/clipboard-check';
+import NotebookPen from '@lucide/svelte/icons/notebook-pen';
+import Cpu from '@lucide/svelte/icons/cpu';
+import MonitorSmartphone from '@lucide/svelte/icons/monitor-smartphone';
+import Images from '@lucide/svelte/icons/images';
 
 type Leaf = {
 	label: string;
@@ -23,6 +35,8 @@ type Leaf = {
 	icon: typeof Icon;
 	requiresAdmin?: boolean;
 	requiresManager?: boolean;
+	/** Fine-grained visibility (e.g. capability in any shelter). Wins over the boolean flags. */
+	visibleTo?: (roles: readonly string[]) => boolean;
 };
 
 type Group = Leaf & {
@@ -32,6 +46,28 @@ type Group = Leaf & {
 export type BackofficeNavbarNode = Leaf | Group;
 
 const isGroup = (n: BackofficeNavbarNode): n is Group => 'children' in n;
+
+export type NavVisibilityContext = {
+	roles: readonly string[];
+	/** Active shelter — scopes `requiresManager` to a manager of this shelter. */
+	shelterCode?: string | null;
+};
+
+/**
+ * Whether the signed-in user sees a nav node. `visibleTo` wins; a group also needs at least one
+ * visible child (no empty parents); otherwise `requiresAdmin` / `requiresManager` apply. A
+ * kiosk_staff-only user of the active shelter sees only leaves whose `visibleTo` admits them
+ * (FR-SBO-29).
+ */
+export function canSeeNavNode(node: BackofficeNavbarNode, ctx: NavVisibilityContext): boolean {
+	if (node.visibleTo) return node.visibleTo(ctx.roles);
+	if (!isGroup(node) && isKioskStaffOnly(ctx.roles, ctx.shelterCode)) return false;
+	const isSA = isSystemAdmin(ctx.roles);
+	if (node.requiresAdmin && !isSA) return false;
+	if (node.requiresManager && !isSA && !isShelterManager(ctx.roles, ctx.shelterCode)) return false;
+	if (isGroup(node)) return node.children.some((child) => canSeeNavNode(child, ctx));
+	return true;
+}
 
 export type BackofficeNavbarGroup = {
 	title: string;
@@ -91,9 +127,9 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 						icon: ClipboardList
 					},
 					{
-						label: 'โรงครัวและเสบียงอาหาร',
+						label: 'เบิกวัตถุดิบครัว',
 						href: resolve('/back-office/tickets/kitchen'),
-						icon: UtensilsCrossed
+						icon: ClipboardCheck
 					}
 				]
 			},
@@ -107,6 +143,12 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 	{
 		title: '3. รายงานและการตรวจสอบ',
 		items: [
+			{
+				label: 'บันทึกเหตุการณ์ประจำวัน',
+				href: resolve('/back-office/incidents'),
+				icon: NotebookPen,
+				visibleTo: (roles) => canAccessIncidents(roles)
+			},
 			{ label: 'รายงานความโปร่งใส', href: null, icon: FileCheck },
 			{ label: 'รายงานสรุปหลังเหตุการณ์', href: null, icon: FileText }
 		]
@@ -120,6 +162,25 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 				icon: Building
 			},
 			{ label: 'จัดการผู้ใช้งานและสิทธิ์', href: resolve('/back-office/users'), icon: UserCog },
+			{
+				label: 'จัดการ Kiosk',
+				href: null,
+				icon: MonitorSmartphone,
+				children: [
+					{
+						label: 'จัดการอุปกรณ์',
+						href: resolve('/back-office/kiosks'),
+						icon: Cpu,
+						visibleTo: (roles) => hasCapabilityAnywhere(roles, SCANNER_MANAGER_CAPABILITIES)
+					},
+					{
+						label: 'จัดการแบนเนอร์',
+						href: resolve('/back-office/kiosks/banners'),
+						icon: Images,
+						visibleTo: (roles) => hasCapabilityAnywhere(roles, SCANNER_MANAGER_CAPABILITIES)
+					}
+				]
+			},
 			{
 				label: 'จัดการข้อมูลหลัก',
 				href: null,
@@ -136,11 +197,11 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 						icon: Warehouse
 					},
 					{
-						label: '5. พารามิเตอร์',
+						label: 'พารามิเตอร์',
 						href: resolve('/back-office/sop-parameters'),
 						icon: Calculator
 					},
-					{ label: '7. โลจิสติกส์ & GIS', href: null, icon: MapPin }
+					{ label: 'โลจิสติกส์ & GIS', href: null, icon: MapPin }
 				]
 			}
 		]
@@ -148,5 +209,42 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 ];
 
 export const backofficeHomePath: ResolvedPathname = resolve('/portal');
+
+const stripTrailingSlash = (path: string): string => path.replace(/\/$/, '');
+
+/** Every non-null nav href in the tree (groups included), depth-first. */
+export function navLeafHrefs(
+	items: readonly BackofficeNavbarNode[] | readonly BackofficeNavbarGroup[]
+): string[] {
+	const result: string[] = [];
+	const walk = (nodes: readonly (BackofficeNavbarNode | BackofficeNavbarGroup)[]): void => {
+		for (const node of nodes) {
+			if ('items' in node) {
+				walk(node.items);
+				continue;
+			}
+			if (node.href) result.push(String(node.href));
+			if (isGroup(node)) walk(node.children);
+		}
+	};
+	walk(items);
+	return result;
+}
+
+/**
+ * The single nav href that owns `path`: the LONGEST href equal to the path or a path-segment
+ * prefix of it (`href + '/'`). Lets a nested page (`/kiosks/banners`) win over its parent
+ * (`/kiosks`) — FR-KBR-24, draft CR kiosk-banner-design-revision. Null when no href matches.
+ */
+export function activeNavHref(path: string, hrefs: readonly string[]): string | null {
+	const current = stripTrailingSlash(path);
+	let best: string | null = null;
+	for (const href of hrefs) {
+		const target = stripTrailingSlash(href);
+		if (current !== target && !current.startsWith(target + '/')) continue;
+		if (best === null || target.length > stripTrailingSlash(best).length) best = href;
+	}
+	return best;
+}
 
 export { isGroup };

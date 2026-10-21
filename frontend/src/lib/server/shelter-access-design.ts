@@ -6,6 +6,12 @@
 // Keep this server/seed helper domain-only. Importing the feature barrel pulls
 // Svelte/TanStack modules into Node-only scripts such as `pnpm seed`.
 import { SOP_RATIO_KEYS, SOP_RATIO_KIND } from '$lib/features/sop-ratios/server';
+import {
+	DAILY_SOP_ROLE_METRIC_CONTRACTS,
+	DAILY_SOP_ROLES,
+	DAILY_SOP_ROLE_QUESTION_VERSION,
+	DAILY_SOP_ROLE_QUESTIONS
+} from '$lib/features/daily-sop/server';
 
 /** Database name for a shelter's own per-shelter CouchDB. */
 export function shelterDbName(code: string): string {
@@ -51,6 +57,37 @@ export const REFERRAL_MANGO_INDEXES = [
 	}
 ];
 
+/** Index required by role-based Daily SOP history (CR: daily-sop-role-assessment). */
+export const DAILY_SOP_ROLE_MANGO_INDEX = {
+	index: {
+		fields: [
+			{ type: 'desc' },
+			{ shelter_code: 'desc' },
+			{ assessment_date: 'desc' },
+			{ role_code: 'desc' }
+		]
+	},
+	ddoc: 'daily-sop-role-assessment',
+	name: 'daily-sop-role-assessment-by-shelter-date',
+	type: 'json' as const
+};
+
+const DAILY_SOP_ROLE_VDU_CONTRACT = JSON.stringify({
+	version: DAILY_SOP_ROLE_QUESTION_VERSION,
+	roles: DAILY_SOP_ROLES.map((role) => ({
+		code: role.code,
+		key: role.key,
+		label: role.label,
+		questions: DAILY_SOP_ROLE_QUESTIONS.filter((question) => question.role === role.code).map(
+			(question) => ({
+				id: question.id,
+				text: question.text,
+				metric: DAILY_SOP_ROLE_METRIC_CONTRACTS[question.id] ?? null
+			})
+		)
+	}))
+});
+
 /** Mango indexes for kiosk pre-registration lookup and report-in (FR-KPC-62..65). */
 export const KIOSK_LOOKUP_MANGO_INDEXES = [
 	{
@@ -67,8 +104,26 @@ export const KIOSK_LOOKUP_MANGO_INDEXES = [
 		index: { fields: ['type', 'household_id'] },
 		name: 'evacuee-type-household-idx',
 		type: 'json' as const
+	},
+	{
+		// Walk-in household join (`findJoinableKioskHousehold`) looks kiosk walk-ins up by card address.
+		index: { fields: ['type', 'card_snapshot.address_no'] },
+		name: 'evacuee-type-card-address-no-idx',
+		type: 'json' as const
 	}
 ];
+
+/**
+ * Warm-up `_find` selector per kiosk lookup index, keyed by index name. Every deploy path runs
+ * one query per index after creating it so CouchDB builds the index before the first kiosk
+ * lookup. Must cover every entry of `KIOSK_LOOKUP_MANGO_INDEXES` (see the unit test).
+ */
+export const KIOSK_LOOKUP_WARMUP_SELECTORS: Readonly<Record<string, Record<string, string>>> = {
+	'evacuee-type-phone-idx': { type: 'evacuee', phone: '__warmup__' },
+	'evacuee-type-person-id-idx': { type: 'evacuee', 'person_id.number': '__warmup__' },
+	'evacuee-type-household-idx': { type: 'evacuee', household_id: '__warmup__' },
+	'evacuee-type-card-address-no-idx': { type: 'evacuee', 'card_snapshot.address_no': '__warmup__' }
+};
 
 /** Mango index definitions required by stock_transfer list/find (CR-059). */
 export const TRANSFER_MANGO_INDEXES = [
@@ -209,8 +264,19 @@ export const TICKET_DISTRIBUTION_MANGO_INDEXES = [
 export function buildValidateDocUpdate(code: string): string {
 	const simulationResourceKeys = JSON.stringify(SOP_RATIO_KEYS);
 	const simulationResourceKinds = JSON.stringify(SOP_RATIO_KIND);
+	const dailySopRoleContract = DAILY_SOP_ROLE_VDU_CONTRACT;
 	return `function (newDoc, oldDoc, userCtx) {
-  if (userCtx.roles.indexOf('_admin') !== -1) return;
+  var isCouchAdmin = userCtx.roles.indexOf('_admin') !== -1;
+  var isRoleAssessmentWrite = newDoc.type === 'daily_sop_role_assessment' ||
+    (oldDoc && oldDoc.type === 'daily_sop_role_assessment');
+  if (isRoleAssessmentWrite && newDoc._deleted === true) {
+    throw { forbidden: 'Daily SOP role assessments cannot be deleted' };
+  }
+  if (isRoleAssessmentWrite && oldDoc && oldDoc.type === 'daily_sop_role_assessment' &&
+      newDoc.type !== 'daily_sop_role_assessment') {
+    throw { forbidden: 'Daily SOP role assessment type cannot change' };
+  }
+  if (isCouchAdmin && !isRoleAssessmentWrite) return;
   if (newDoc.type === 'unit_of_measure' || (oldDoc && oldDoc.type === 'unit_of_measure')) {
     throw { forbidden: 'unit_of_measure is central-only' };
   }
@@ -248,8 +314,9 @@ export function buildValidateDocUpdate(code: string): string {
   function canCreateTicket() {
     return isRole('warehouse_staff') || isRole('supply_coordinator') || isRole('shelter_manager');
   }
+  // CR-179: Step 2 approve (PENDING_PICK -> READY_FOR_DISPATCH) is WH, SC, SM, SA.
   function canApproveTicket() {
-    return isRole('shelter_manager');
+    return isRole('warehouse_staff') || isRole('supply_coordinator') || isRole('shelter_manager');
   }
   function canDispatchTicket() {
     return isRole('warehouse_staff') || isRole('supply_coordinator') || isRole('shelter_manager');
@@ -314,6 +381,9 @@ export function buildValidateDocUpdate(code: string): string {
   ];
   var wasAppendOnly = oldDoc && appendOnly.indexOf(oldDoc.type) !== -1;
   if (newDoc._deleted) {
+    if (oldDoc && oldDoc.type === 'daily_sop_assessment') {
+      throw { forbidden: 'Legacy Daily SOP documents are read-only' };
+    }
     if (oldDoc && oldDoc.type === 'item_category' && oldDoc.is_protected === true) {
       throw { forbidden: 'Cannot delete system protected category: ' + oldDoc._id };
     }
@@ -333,7 +403,9 @@ export function buildValidateDocUpdate(code: string): string {
     var protectedCoordinationDelete = oldDoc && [
       'distribution_issue_idempotency', 'distribution_issue_capacity', 'distribution_one_time_guard', 'distribution_issue_gate'
     ].indexOf(oldDoc.type) !== -1;
-    if (oldDoc && (oldDoc.type === 'distribution_log' || oldDoc.type === 'bulk_return_claim' || oldDoc.type === 'bulk_return_pool' || oldDoc.type === 'loan_return_reservation')) {
+    // Incident Log is an occurrence book — records are closed or cancelled, never deleted.
+    if (oldDoc && (oldDoc.type === 'distribution_log' || oldDoc.type === 'bulk_return_claim' || oldDoc.type === 'bulk_return_pool' || oldDoc.type === 'loan_return_reservation' ||
+        oldDoc.type === 'shelter_incident')) {
       throw { forbidden: 'Cannot delete ' + oldDoc.type + ' documents' };
     }
     if (wasAppendOnly || protectedCoordinationDelete || (oldDoc && oldDoc.type === 'kitchen_requisition')) {
@@ -400,10 +472,10 @@ export function buildValidateDocUpdate(code: string): string {
     'requirement_group', 'food_sphere_standard', 'replenishment_policy', 'sop_override',
     'distribution_request', 'distribution_batch', 'stock_lot_reservation',
     'distribution_issue', 'distribution_issue_idempotency', 'distribution_issue_capacity', 'distribution_one_time_guard', 'distribution_issue_gate',
-    'daily_sop_assessment',
-    'shelter_readiness_assessment',
+		'shelter_readiness_assessment',
     'requisition_ticket', 'distribution_log', 'bulk_return_pool', 'bulk_return_claim', 'loan_return_reservation',
-    'meal_service_receipt'
+    'meal_service_receipt',
+    'shelter_incident', 'daily_sop_role_assessment'
   ];
   if (allowed.indexOf(newDoc.type) === -1) {
     throw { forbidden: 'doc type not allowed yet: ' + newDoc.type };
@@ -415,6 +487,171 @@ export function buildValidateDocUpdate(code: string): string {
   if (newDoc.type === 'kitchen_requisition' && oldDoc) {
     if (oldDoc.status === 'approved' || oldDoc.status === 'rejected') {
       throw { forbidden: 'Cannot update finalized kitchen_requisition documents' };
+    }
+  }
+  // Shelter Incident Log (CR-155, schema.md §2.10): incident staff (system_admin, or a security officer /
+  // shelter manager of this shelter) open a record and become owner; each update appends exactly one timeline entry by the caller. Owner or
+  // manager changes status / hands over / identifies the respondent; any incident staff may
+  // add a note; cancel is manager-only; closed/cancelled are final and records are never deleted.
+  if (newDoc.type === 'shelter_incident') {
+    var incStatuses = ['reported', 'action_in_progress', 'resolved', 'closed', 'cancelled'];
+    var incTransitions = {
+      reported: ['action_in_progress', 'cancelled'],
+      action_in_progress: ['resolved', 'cancelled'],
+      resolved: ['closed', 'action_in_progress'],
+      closed: [],
+      cancelled: []
+    };
+    var incManager = isRole('shelter_manager');
+    var incStaff = userCtx.roles.indexOf('system_admin') !== -1 ||
+      (userCtx.roles.indexOf('shelter:${code}') !== -1 &&
+        (isRole('security_officer') || isRole('shelter_manager')));
+    if (!incStaff) {
+      throw { forbidden: 'Only security officers or shelter managers of this shelter can write shelter_incident' };
+    }
+    if (!/^shelter_incident:[0-9A-HJKMNP-TV-Z]{26}$/.test(newDoc._id)) {
+      throw { forbidden: 'shelter_incident id must be shelter_incident:{ulid}' };
+    }
+    if (newDoc.schema_v !== 1) {
+      throw { forbidden: 'shelter_incident schema_v must be 1' };
+    }
+    if (incStatuses.indexOf(newDoc.current_status) === -1) {
+      throw { forbidden: 'Invalid shelter_incident current_status' };
+    }
+    if (typeof newDoc.assigned_to !== 'string' || !newDoc.assigned_to) {
+      throw { forbidden: 'shelter_incident assigned_to is required' };
+    }
+    if (!Array.isArray(newDoc.timeline)) {
+      throw { forbidden: 'shelter_incident timeline must be an array' };
+    }
+    if (!oldDoc) {
+      if (newDoc.reported_by !== userCtx.name || newDoc.assigned_to !== userCtx.name ||
+          newDoc.created_by !== userCtx.name) {
+        throw { forbidden: 'New shelter_incident must be reported by and assigned to its creator' };
+      }
+      if (newDoc.current_status !== 'reported' || newDoc.timeline.length !== 0) {
+        throw { forbidden: 'New shelter_incident must start as reported with an empty timeline' };
+      }
+      if (typeof newDoc.title !== 'string' || !newDoc.title.trim() || newDoc.title.length > 120) {
+        throw { forbidden: 'shelter_incident title is required (1-120 characters)' };
+      }
+      // Facts are immutable after create, so shape is checked once here (IL-D4/D5/D7/D8).
+      var incCategories = ['harassment_violence', 'theft_property_damage', 'substance_rule_violation',
+        'fraud_resource_abuse', 'medical_mental_health', 'dispute', 'other'];
+      if (incCategories.indexOf(newDoc.category) === -1 ||
+          ['low', 'medium', 'high', 'critical'].indexOf(newDoc.severity) === -1) {
+        throw { forbidden: 'Invalid shelter_incident category or severity' };
+      }
+      if (typeof newDoc.occurred_at !== 'string' || isNaN(Date.parse(newDoc.occurred_at))) {
+        throw { forbidden: 'shelter_incident occurred_at must be a timestamp' };
+      }
+      var incTexts = [['incident_no', 40], ['location_detail', 200], ['description', 4000]];
+      for (var incTextIndex = 0; incTextIndex < incTexts.length; incTextIndex++) {
+        var incText = newDoc[incTexts[incTextIndex][0]];
+        if (typeof incText !== 'string' || !incText.trim() || incText.length > incTexts[incTextIndex][1]) {
+          throw { forbidden: 'shelter_incident ' + incTexts[incTextIndex][0] + ' is required' };
+        }
+      }
+      if (!Array.isArray(newDoc.attachments)) {
+        throw { forbidden: 'shelter_incident attachments must be an array' };
+      }
+      var incComplainant = newDoc.complainant || {};
+      var incRespondent = newDoc.respondent || {};
+      if (['evacuee', 'staff', 'external', 'shelter_property', 'anonymous']
+            .indexOf(incComplainant.type) === -1 ||
+          (incComplainant.type === 'evacuee' && !incComplainant.evacuee_id) ||
+          ((incComplainant.type === 'staff' || incComplainant.type === 'external') &&
+            !incComplainant.name_or_detail)) {
+        throw { forbidden: 'Invalid shelter_incident complainant' };
+      }
+      if (['known_evacuee', 'known_external', 'unknown', 'none'].indexOf(incRespondent.status) === -1 ||
+          (incRespondent.status === 'known_evacuee' && !incRespondent.evacuee_id) ||
+          (incRespondent.status === 'known_external' && !incRespondent.name_or_detail)) {
+        throw { forbidden: 'Invalid shelter_incident respondent' };
+      }
+    } else {
+      if (oldDoc.current_status === 'closed' || oldDoc.current_status === 'cancelled') {
+        throw { forbidden: 'Closed or cancelled shelter_incident cannot be modified' };
+      }
+      var incFixed = ['incident_no', 'title', 'location_detail', 'category', 'severity', 'occurred_at',
+        'reported_by', 'description', 'attachments', 'complainant', 'created_at', 'created_by'];
+      for (var incFixedIndex = 0; incFixedIndex < incFixed.length; incFixedIndex++) {
+        var incField = incFixed[incFixedIndex];
+        if (JSON.stringify(newDoc[incField]) !== JSON.stringify(oldDoc[incField])) {
+          throw { forbidden: 'shelter_incident ' + incField + ' is immutable' };
+        }
+      }
+      var oldTimeline = oldDoc.timeline || [];
+      if (newDoc.timeline.length !== oldTimeline.length + 1 ||
+          JSON.stringify(newDoc.timeline.slice(0, oldTimeline.length)) !== JSON.stringify(oldTimeline)) {
+        throw { forbidden: 'shelter_incident update must append exactly one timeline entry' };
+      }
+      var incEntry = newDoc.timeline[newDoc.timeline.length - 1] || {};
+      if (incEntry.actor_id !== userCtx.name) {
+        throw { forbidden: 'shelter_incident timeline actor must be the caller' };
+      }
+      if (typeof incEntry.timestamp !== 'string' || !incEntry.timestamp) {
+        throw { forbidden: 'shelter_incident timeline timestamp is required' };
+      }
+      if (typeof incEntry.details !== 'string' || !incEntry.details.trim()) {
+        throw { forbidden: 'shelter_incident timeline details (action & reason) are required' };
+      }
+      var incOwnerOrManager = oldDoc.assigned_to === userCtx.name || incManager;
+      var incStatusSame = newDoc.current_status === oldDoc.current_status;
+      var incAssigneeSame = newDoc.assigned_to === oldDoc.assigned_to;
+      var incRespondentSame = JSON.stringify(newDoc.respondent) === JSON.stringify(oldDoc.respondent);
+      if (incEntry.type === 'add_note') {
+        if (!incStatusSame || !incAssigneeSame || !incRespondentSame) {
+          throw { forbidden: 'shelter_incident add_note cannot change other fields' };
+        }
+      } else if (incEntry.type === 'status_change') {
+        var incFrom = oldDoc.current_status;
+        var incTo = newDoc.current_status;
+        if (incEntry.from_status !== incFrom || incEntry.to_status !== incTo ||
+            (incTransitions[incFrom] || []).indexOf(incTo) === -1) {
+          throw { forbidden: 'Invalid shelter_incident transition from ' + incFrom + ' to ' + incTo };
+        }
+        if (!incAssigneeSame || !incRespondentSame) {
+          throw { forbidden: 'shelter_incident status_change cannot change other fields' };
+        }
+        if (incTo === 'cancelled' && !incManager) {
+          throw { forbidden: 'Only shelter managers can cancel a shelter_incident' };
+        }
+        if (!incOwnerOrManager) {
+          throw { forbidden: 'Only the assignee or a shelter manager can change shelter_incident status' };
+        }
+      } else if (incEntry.type === 'reassignment') {
+        if (!incOwnerOrManager) {
+          throw { forbidden: 'Only the assignee or a shelter manager can reassign a shelter_incident' };
+        }
+        if (incAssigneeSame || incEntry.from_assignee !== oldDoc.assigned_to ||
+            incEntry.to_assignee !== newDoc.assigned_to) {
+          throw { forbidden: 'shelter_incident reassignment entry does not match assigned_to' };
+        }
+        if (!incStatusSame || !incRespondentSame) {
+          throw { forbidden: 'shelter_incident reassignment cannot change other fields' };
+        }
+      } else if (incEntry.type === 'identify_respondent') {
+        if (!incOwnerOrManager) {
+          throw { forbidden: 'Only the assignee or a shelter manager can identify the respondent' };
+        }
+        var incNextRespondent = newDoc.respondent || {};
+        if (!oldDoc.respondent || oldDoc.respondent.status !== 'unknown' ||
+            (incNextRespondent.status !== 'known_evacuee' && incNextRespondent.status !== 'known_external')) {
+          throw { forbidden: 'shelter_incident respondent can only go from unknown to known' };
+        }
+        if (incNextRespondent.status === 'known_evacuee' && !incNextRespondent.evacuee_id) {
+          throw { forbidden: 'known_evacuee respondent requires evacuee_id' };
+        }
+        if (incNextRespondent.status === 'known_external' && !incNextRespondent.name_or_detail) {
+          throw { forbidden: 'known_external respondent requires name_or_detail' };
+        }
+        if (!incStatusSame || !incAssigneeSame) {
+          throw { forbidden: 'shelter_incident identify_respondent cannot change other fields' };
+        }
+      } else {
+        throw { forbidden: 'Unknown shelter_incident timeline entry type' };
+      }
     }
   }
   // T-42: saved simulations are immutable snapshots and manager-owned planning evidence.
@@ -628,97 +865,228 @@ export function buildValidateDocUpdate(code: string): string {
       throw { forbidden: 'simulation document is too large' };
     }
   }
-  // CR-100: preserve the shelter/day identity; CouchDB _rev handles concurrent edits.
-  if (newDoc.type === 'daily_sop_assessment') {
+  // Each role assessment is checked against the embedded CR v1 contract. Keep
+  // this self-contained: CouchDB must not need external configuration at write time.
+  if (newDoc.type === 'daily_sop_role_assessment') {
+    var contract = ${dailySopRoleContract};
+    var roles = contract.roles;
+    var role = null;
+    for (var roleIndex = 0; roleIndex < roles.length; roleIndex++) {
+      if (roles[roleIndex].code === newDoc.role_code) role = roles[roleIndex];
+    }
+    function exactKeys(value, allowedKeys) {
+      if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+      var keys = Object.keys(value).sort();
+      var expected = allowedKeys.slice().sort();
+      if (keys.length !== expected.length) return false;
+      for (var keyIndex = 0; keyIndex < keys.length; keyIndex++) {
+        if (keys[keyIndex] !== expected[keyIndex]) return false;
+      }
+      return true;
+    }
+    function validDate(value) {
+      if (typeof value !== 'string' || !/^\\d{4}-\\d{2}-\\d{2}$/.test(value)) return false;
+      var parts = value.split('-');
+      var year = Number(parts[0]);
+      var month = Number(parts[1]);
+      var day = Number(parts[2]);
+      if (month < 1 || month > 12 || day < 1) return false;
+      var leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+      var days = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+      return day <= days[month - 1];
+    }
+    function validTimestamp(value) {
+      if (typeof value !== 'string') return false;
+      var match = /^(\\d{4}-\\d{2}-\\d{2})T(\\d{2}):(\\d{2}):(\\d{2})(?:\\.\\d+)?Z$/.exec(value);
+      return !!match && validDate(match[1]) && Number(match[2]) <= 23 &&
+        Number(match[3]) <= 59 && Number(match[4]) <= 59 && isFinite(Date.parse(value));
+    }
+    function nonEmpty(value) { return typeof value === 'string' && value.trim().length > 0; }
+    function validPositiveDecimal(value) {
+      return typeof value === 'string' && /^(?:0|[1-9]\\d*)(?:\\.\\d+)?$/.test(value) &&
+        isFinite(Number(value)) && Number(value) > 0;
+    }
+    function decimalPlaces(value) {
+      var text = String(value);
+      if (text.indexOf('e') !== -1 || text.indexOf('E') !== -1) {
+        var parts = text.toLowerCase().split('e');
+        var fraction = parts[0].split('.')[1] || '';
+        return Math.max(0, fraction.length - Number(parts[1]));
+      }
+      return (text.split('.')[1] || '').length;
+    }
+    function stepAligned(value, step) {
+      if (typeof value !== 'number' || !isFinite(value) || value < 0) return false;
+      var precision = Math.max(decimalPlaces(value), decimalPlaces(step));
+      var scale = Math.pow(10, precision);
+      var scaledValue = Math.round(value * scale);
+      var scaledStep = Math.round(Number(step) * scale);
+      return isFinite(scaledValue) && Math.abs(value * scale - scaledValue) < 1e-7 &&
+        scaledValue <= 9007199254740991 && scaledStep > 0 && scaledValue % scaledStep === 0;
+    }
+    function hasCapability(capability) {
+      if (userCtx.roles.indexOf('${code}:' + capability) !== -1) return true;
+      var shelterScopes = [];
+      for (var scopeIndex = 0; scopeIndex < userCtx.roles.length; scopeIndex++) {
+        if (/^shelter:[^:]+$/.test(userCtx.roles[scopeIndex])) shelterScopes.push(userCtx.roles[scopeIndex]);
+      }
+      return userCtx.roles.indexOf(capability) !== -1 && shelterScopes.length === 1 &&
+        shelterScopes[0] === 'shelter:${code}';
+    }
+    function validControlSnapshot(control, question) {
+      if (!exactKeys(control, ['id', 'question', 'metric_spec', 'status', 'notes', 'observations',
+          'measured_values', 'checked_by', 'checked_by_name', 'checked_at']) &&
+          !exactKeys(control, ['id', 'question', 'metric_spec', 'status', 'notes', 'observations',
+            'measured_values', 'checked_by', 'checked_at'])) return false;
+      if (control.id !== question.id || typeof control.question !== 'string' ||
+          ['Pass', 'Fail', 'Pending', null].indexOf(control.status) === -1 ||
+          typeof control.notes !== 'string' || typeof control.observations !== 'string' ||
+          !control.measured_values || typeof control.measured_values !== 'object' ||
+          Array.isArray(control.measured_values) ||
+          !nonEmpty(control.checked_by) || !validTimestamp(control.checked_at) ||
+          (typeof control.checked_by_name !== 'undefined' && !nonEmpty(control.checked_by_name))) return false;
+      if ((control.status === 'Fail' || control.status === 'Pending') && !control.notes.trim()) return false;
+      if (question.metric === null) {
+        return control.question === question.text && control.metric_spec === null &&
+          exactKeys(control.measured_values, []);
+      }
+      var definition = question.metric;
+      if (definition.parameterKey && control.metric_spec === null) {
+        return control.question === question.text && control.status === 'Pending' &&
+          !!control.notes.trim() && exactKeys(control.measured_values, []);
+      }
+      if (!exactKeys(control.metric_spec, ['fields', 'threshold']) &&
+          !exactKeys(control.metric_spec, ['fields', 'threshold', 'parameter'])) return false;
+      if (!Array.isArray(control.metric_spec.fields) || control.metric_spec.fields.length !== definition.fields.length) return false;
+      for (var fieldIndex = 0; fieldIndex < definition.fields.length; fieldIndex++) {
+        var actualField = control.metric_spec.fields[fieldIndex];
+        var expectedField = definition.fields[fieldIndex];
+        if (!exactKeys(actualField, ['key', 'label', 'unit', 'step']) ||
+            actualField.key !== expectedField.key || actualField.label !== expectedField.label ||
+            actualField.unit !== expectedField.unit || actualField.step !== expectedField.step ||
+            !validPositiveDecimal(actualField.step)) return false;
+      }
+      var threshold = definition.threshold;
+      if (definition.parameterKey) {
+        var parameter = control.metric_spec.parameter;
+        if (!exactKeys(parameter, ['key', 'value']) || parameter.key !== definition.parameterKey ||
+            !validPositiveDecimal(parameter.value)) return false;
+        threshold = threshold.replace('{parameter}', parameter.value);
+        if (control.question !== question.text.replace('{' + definition.parameterKey + '}', parameter.value)) return false;
+      } else if (typeof control.metric_spec.parameter !== 'undefined') {
+        return false;
+      } else if (control.question !== question.text) {
+        return false;
+      }
+      if (control.metric_spec.threshold !== threshold) return false;
+      var expectedKeys = [];
+      for (var expectedIndex = 0; expectedIndex < definition.fields.length; expectedIndex++) {
+        expectedKeys.push(definition.fields[expectedIndex].key);
+      }
+      if (!exactKeys(control.measured_values, expectedKeys)) return false;
+      for (var measureIndex = 0; measureIndex < definition.fields.length; measureIndex++) {
+        var measure = control.measured_values[definition.fields[measureIndex].key];
+        if (measure !== null && !stepAligned(measure, definition.fields[measureIndex].step)) return false;
+      }
+      return true;
+    }
+    var applicationKeys = ['_id', '_rev', '_revisions', 'type', 'schema_v', 'shelter_code',
+      'assessment_date', 'role_code', 'role_key', 'role_label', 'question_set_version', 'assessed_at',
+      'assessor_name', 'status', 'pass_count', 'fail_count', 'pending_count', 'unanswered_count',
+      'controls', 'created_at', 'updated_at', 'created_by'];
+    var topKeys = Object.keys(newDoc);
+    for (var topIndex = 0; topIndex < topKeys.length; topIndex++) {
+      if (applicationKeys.indexOf(topKeys[topIndex]) === -1) {
+        throw { forbidden: 'Daily SOP role assessment contains an unregistered field' };
+      }
+    }
+    if (!role || newDoc.type !== 'daily_sop_role_assessment' || newDoc.schema_v !== 1 ||
+        newDoc.shelter_code !== '${code}' || !validDate(newDoc.assessment_date) ||
+        newDoc._id !== 'daily_sop_role_assessment:' + newDoc.shelter_code + ':' +
+          newDoc.assessment_date + ':' + newDoc.role_code ||
+        newDoc.role_key !== role.key || newDoc.role_label !== role.label ||
+        (typeof newDoc.question_set_version !== 'undefined' && newDoc.question_set_version !== contract.version) ||
+        !validTimestamp(newDoc.assessed_at) || !nonEmpty(newDoc.assessor_name) ||
+        !validTimestamp(newDoc.created_at) || !validTimestamp(newDoc.updated_at) || !nonEmpty(newDoc.created_by) ||
+        ['InProgress', 'Completed'].indexOf(newDoc.status) === -1 || !Array.isArray(newDoc.controls) ||
+        newDoc.controls.length !== role.questions.length) {
+      throw { forbidden: 'Daily SOP role assessment schema, date, identity, or question set is invalid' };
+    }
+    var bangkokNow = new Date(new Date().getTime() + 7 * 60 * 60 * 1000);
+    var bangkokMonth = String(bangkokNow.getUTCMonth() + 1);
+    var bangkokDay = String(bangkokNow.getUTCDate());
+    var currentBangkokDate = bangkokNow.getUTCFullYear() + '-' +
+      (bangkokMonth.length === 1 ? '0' + bangkokMonth : bangkokMonth) + '-' +
+      (bangkokDay.length === 1 ? '0' + bangkokDay : bangkokDay);
+    if (!isCouchAdmin && newDoc.assessment_date !== currentBangkokDate) {
+      throw { forbidden: 'Daily SOP role assessments can only be saved for the current Bangkok date' };
+    }
+    var allowedOwner = role.code === 'SC'
+      ? hasCapability('supply_coordinator') || hasCapability('warehouse_staff')
+      : hasCapability(role.key);
+    if (!isCouchAdmin && userCtx.roles.indexOf('system_admin') === -1 &&
+        !hasCapability('shelter_manager') && !allowedOwner) {
+      throw { forbidden: 'Daily SOP role assessment requires the role owner or shelter manager' };
+    }
     if (oldDoc && (
-        newDoc._id !== oldDoc._id ||
-        newDoc.type !== oldDoc.type ||
-        newDoc.shelter_code !== oldDoc.shelter_code ||
-        newDoc.assessment_date !== oldDoc.assessment_date ||
-        newDoc.assessed_at !== oldDoc.assessed_at ||
-        newDoc.assessor_name !== oldDoc.assessor_name ||
-        newDoc.created_at !== oldDoc.created_at ||
+        newDoc._id !== oldDoc._id || newDoc.shelter_code !== oldDoc.shelter_code ||
+        newDoc.assessment_date !== oldDoc.assessment_date || newDoc.role_code !== oldDoc.role_code ||
+        newDoc.role_key !== oldDoc.role_key || newDoc.role_label !== oldDoc.role_label ||
+        newDoc.question_set_version !== oldDoc.question_set_version || newDoc.assessed_at !== oldDoc.assessed_at ||
+        newDoc.assessor_name !== oldDoc.assessor_name || newDoc.created_at !== oldDoc.created_at ||
         newDoc.created_by !== oldDoc.created_by)) {
-      throw { forbidden: 'Daily SOP identity and creation metadata cannot change' };
+      throw { forbidden: 'Daily SOP role identity, version, and creation metadata cannot change' };
     }
-    if (newDoc.schema_v !== 1 || ['InProgress', 'Completed'].indexOf(newDoc.status) === -1) {
-      throw { forbidden: 'Daily SOP assessment schema/status is invalid' };
+    if (!oldDoc && !isCouchAdmin && newDoc.created_by !== userCtx.name) {
+      throw { forbidden: 'Daily SOP role created_by must match the authenticated user' };
     }
-    if (!/^daily_sop_assessment:[^:]+:\\d{4}-\\d{2}-\\d{2}$/.test(newDoc._id) ||
-        newDoc._id !== 'daily_sop_assessment:' + newDoc.shelter_code + ':' + newDoc.assessment_date) {
-      throw { forbidden: 'Daily SOP assessment id must be shelter/date deterministic' };
-    }
-    if (!Array.isArray(newDoc.controls) || newDoc.controls.length !== 19) {
-      throw { forbidden: 'Daily SOP assessment requires 19 controls' };
-    }
-    var sopStatuses = ['Yes', 'No', 'Pending'];
-    var sopSectionById = {
-      'sop-reg-1': 'registration', 'sop-reg-2': 'registration', 'sop-reg-3': 'registration',
-      'sop-vul-1': 'vulnerable', 'sop-vul-2': 'vulnerable',
-      'sop-vol-1': 'volunteer', 'sop-vol-2': 'volunteer', 'sop-vol-3': 'volunteer', 'sop-vol-4': 'volunteer',
-      'sop-ut-1': 'utilities', 'sop-ut-2': 'utilities', 'sop-ut-3': 'utilities', 'sop-ut-4': 'utilities', 'sop-ut-5': 'utilities', 'sop-ut-6': 'utilities',
-      'sop-com-1': 'communications', 'sop-com-2': 'communications',
-      'sop-db-1': 'database', 'sop-db-2': 'database'
-    };
-    var seenSopIds = {};
-    var answeredControlCount = 0;
-    var passedControlCount = 0;
-    for (var controlIndex = 0; controlIndex < newDoc.controls.length; controlIndex++) {
+    var passCount = 0;
+    var failCount = 0;
+    var pendingCount = 0;
+    var unansweredCount = 0;
+    var hasRecordedInput = false;
+    for (var controlIndex = 0; controlIndex < role.questions.length; controlIndex++) {
       var control = newDoc.controls[controlIndex];
-      if (!control || typeof control.id !== 'string' || typeof control.section_id !== 'string' ||
-          typeof control.question !== 'string' || sopStatuses.indexOf(control.status) === -1 ||
-          typeof control.answered !== 'boolean' ||
-          typeof control.checked_by !== 'string' || !control.checked_by ||
-          typeof control.checked_at !== 'string' || !control.checked_at ||
-          !sopSectionById[control.id] || sopSectionById[control.id] !== control.section_id ||
-          seenSopIds[control.id] || (!control.answered && control.status !== 'Pending')) {
-        throw { forbidden: 'Daily SOP control shape/status is invalid' };
+      var question = role.questions[controlIndex];
+      if (!validControlSnapshot(control, question)) {
+        throw { forbidden: 'Daily SOP role control does not match the registered snapshot contract' };
       }
-      seenSopIds[control.id] = true;
-      var isAnsweredControl = control.answered;
-      if (isAnsweredControl) answeredControlCount++;
-      if (isAnsweredControl && control.status === 'Yes') passedControlCount++;
-      var oldControl = oldDoc && Array.isArray(oldDoc.controls) ? oldDoc.controls[controlIndex] : null;
-      var oldHasAudit = oldControl && typeof oldControl.checked_by === 'string' &&
-        typeof oldControl.checked_at === 'string';
-      var statusChanged = oldControl && oldControl.status !== control.status;
-      var oldAnswered = oldControl && oldControl.answered;
-      var answeredChanged = oldControl && oldAnswered !== isAnsweredControl;
-      var auditChanged = oldHasAudit &&
-        (oldControl.checked_by !== control.checked_by || oldControl.checked_at !== control.checked_at);
-      if ((!oldDoc || statusChanged || answeredChanged || auditChanged) && control.checked_by !== userCtx.name) {
-        throw { forbidden: 'Daily SOP checked_by must match the authenticated user' };
+      var previous = oldDoc && oldDoc.controls ? oldDoc.controls[controlIndex] : null;
+      if (oldDoc && (!previous || previous.id !== control.id || previous.question !== control.question ||
+          JSON.stringify(previous.metric_spec) !== JSON.stringify(control.metric_spec))) {
+        throw { forbidden: 'Daily SOP role question and metric snapshots cannot change' };
       }
-    }
-    if (!newDoc.lifelines ||
-        Object.keys(newDoc.lifelines).length !== 4 ||
-        newDoc.lifelines.electricity === undefined ||
-        newDoc.lifelines.water === undefined ||
-        newDoc.lifelines.gas === undefined ||
-        newDoc.lifelines.telecom === undefined) {
-      throw { forbidden: 'Daily SOP assessment requires four lifelines' };
-    }
-    var lifelineStatuses = ['Operational', 'Interrupted', 'Critical'];
-    var lifelineKeys = ['electricity', 'water', 'gas', 'telecom'];
-    var reportedLifelineCount = 0;
-    var allOperational = true;
-    for (var lifelineIndex = 0; lifelineIndex < lifelineKeys.length; lifelineIndex++) {
-      var lifelineStatus = newDoc.lifelines[lifelineKeys[lifelineIndex]];
-      if (lifelineStatus !== null && lifelineStatuses.indexOf(lifelineStatus) === -1) {
-        throw { forbidden: 'Daily SOP lifeline status is invalid' };
+      var controlChanged = !previous || previous.status !== control.status || previous.notes !== control.notes ||
+        previous.observations !== control.observations ||
+        JSON.stringify(previous.measured_values) !== JSON.stringify(control.measured_values) ||
+        previous.checked_by !== control.checked_by || previous.checked_by_name !== control.checked_by_name ||
+        previous.checked_at !== control.checked_at;
+      if (!isCouchAdmin && controlChanged && control.checked_by !== userCtx.name) {
+        throw { forbidden: 'Daily SOP role checked_by must match the authenticated user' };
       }
-      if (lifelineStatus !== null) reportedLifelineCount++;
-      if (lifelineStatus !== 'Operational') allOperational = false;
+      if (!oldDoc && !isCouchAdmin && control.checked_by !== userCtx.name) {
+        throw { forbidden: 'New Daily SOP role controls must record the authenticated creator' };
+      }
+      if (control.status !== null || control.notes.trim() || control.observations.trim()) hasRecordedInput = true;
+      var recordedKeys = Object.keys(control.measured_values);
+      for (var recordedIndex = 0; recordedIndex < recordedKeys.length; recordedIndex++) {
+        if (control.measured_values[recordedKeys[recordedIndex]] !== null) hasRecordedInput = true;
+      }
+      if (control.status === 'Pass') passCount++;
+      else if (control.status === 'Fail') failCount++;
+      else if (control.status === 'Pending') pendingCount++;
+      else unansweredCount++;
     }
-    var isCompleteDailySop = answeredControlCount === 19 && reportedLifelineCount === 4;
-    if ((newDoc.status === 'Completed') !== isCompleteDailySop) {
-      throw { forbidden: 'Daily SOP status must match answer completion' };
+    if (newDoc.pass_count !== passCount || newDoc.fail_count !== failCount ||
+        newDoc.pending_count !== pendingCount || newDoc.unanswered_count !== unansweredCount ||
+        newDoc.status !== (unansweredCount === 0 ? 'Completed' : 'InProgress')) {
+      throw { forbidden: 'Daily SOP role summary does not match its controls' };
     }
-    var expectedProgress = Math.round(((answeredControlCount + reportedLifelineCount) / 23) * 100);
-    var expectedPass = answeredControlCount === 0 ? 0 : Math.round((passedControlCount / answeredControlCount) * 100);
-    var expectedRisk = isCompleteDailySop && passedControlCount === 19 && allOperational ? 'ไม่พบความเสี่ยง' : 'พบความเสี่ยง';
-    if (newDoc.progress_percent !== expectedProgress || newDoc.pass_percent !== expectedPass || newDoc.risk_label !== expectedRisk) {
-      throw { forbidden: 'Daily SOP summary is inconsistent with answers' };
+    if (!oldDoc && !hasRecordedInput) {
+      throw { forbidden: 'Daily SOP role assessment cannot be saved without an answer or recorded observation' };
+    }
+    if (JSON.stringify(newDoc).length > 524288) {
+      throw { forbidden: 'Daily SOP role assessment document is too large' };
     }
   }
   // Shelter Readiness SOP Assessment
@@ -838,6 +1206,15 @@ export function buildValidateDocUpdate(code: string): string {
     if (newDoc.reason === 'requisition') {
       if (typeof newDoc.ref_id !== 'string' || (!/^requisition_ticket:.+/.test(newDoc.ref_id) && !/^kitchen_requisition:.+/.test(newDoc.ref_id))) {
         throw { forbidden: 'Requisition stock ledger requires requisition_ticket or kitchen_requisition ref_id' };
+      }
+      // CR-178: ticket-era requisition dispatch is per lot; legacy kitchen_requisition rows stay unrestricted.
+      if (/^requisition_ticket:.+/.test(newDoc.ref_id)) {
+        if (typeof newDoc.lot_ref !== 'string' || !/^stock_ledger:.+/.test(newDoc.lot_ref)) {
+          throw { forbidden: 'Requisition stock ledger for a requisition_ticket requires physical stock_ledger lot_ref' };
+        }
+        if (typeof newDoc.qty !== 'string' || !/^-\\d+(\\.\\d{1,4})?$/.test(newDoc.qty)) {
+          throw { forbidden: 'Requisition stock ledger qty must be a negative decimal string' };
+        }
       }
     }
     if (newDoc.reason === 'receive') {
@@ -1371,7 +1748,7 @@ export function buildValidateDocUpdate(code: string): string {
       var ticketFrom = oldDoc.status;
       var ticketTo = newDoc.status;
       var ticketTransitions = {
-        PENDING_PICK: ['PENDING_PICK', 'READY_FOR_DISPATCH', 'COMPLETED', 'CANCELLED'],
+        PENDING_PICK: ['PENDING_PICK', 'READY_FOR_DISPATCH', 'CANCELLED'],
         READY_FOR_DISPATCH: ['IN_TRANSIT', 'CANCELLED'],
         IN_TRANSIT: ['COMPLETED'],
         COMPLETED: [],
@@ -1388,50 +1765,67 @@ export function buildValidateDocUpdate(code: string): string {
         ticketFrom === 'PENDING_PICK' &&
         ticketTo === 'PENDING_PICK' &&
         !isRole('warehouse_staff') &&
+        !isRole('supply_coordinator') &&
         !isRole('kitchen_staff')
       ) {
         // warehouse_staff allocates (allocated_qty); kitchen_staff edits its own
         // request while nothing's been picked yet (CR-142, requested_qty only).
-        throw { forbidden: 'Only warehouse staff, kitchen staff, or system admin can update requisition_ticket items while PENDING_PICK' };
+        throw { forbidden: 'Only warehouse staff, supply coordinator, kitchen staff, or system admin can update requisition_ticket items while PENDING_PICK' };
+      }
+      if (
+        ticketFrom === 'PENDING_PICK' &&
+        ticketTo === 'PENDING_PICK' &&
+        isRole('kitchen_staff') &&
+        !isRole('warehouse_staff') &&
+        !isRole('supply_coordinator')
+      ) {
+        // Kitchen-only editors must not touch allocated_qty (warehouse's field):
+        // existing lines keep their old value, new lines start at '0'.
+        var kitchenOldItems = oldDoc.items || [];
+        var kitchenNewItems = newDoc.items || [];
+        for (var kitchenIdx = 0; kitchenIdx < kitchenNewItems.length; kitchenIdx++) {
+          var kitchenLine = kitchenNewItems[kitchenIdx];
+          var kitchenPrev = null;
+          for (var kitchenOldIdx = 0; kitchenOldIdx < kitchenOldItems.length; kitchenOldIdx++) {
+            if (kitchenOldItems[kitchenOldIdx].item_id === kitchenLine.item_id) {
+              kitchenPrev = kitchenOldItems[kitchenOldIdx];
+              break;
+            }
+          }
+          if (kitchenPrev) {
+            if (kitchenLine.allocated_qty !== kitchenPrev.allocated_qty) {
+              throw { forbidden: 'Kitchen staff cannot change allocated_qty on requisition_ticket items' };
+            }
+          } else if (kitchenLine.allocated_qty !== '0') {
+            throw { forbidden: 'Kitchen staff must add new requisition_ticket items with allocated_qty "0"' };
+          }
+        }
       }
       if (ticketTo === 'READY_FOR_DISPATCH') {
-        if (!isRole('shelter_manager')) {
-          throw { forbidden: 'Only shelter manager or system admin can approve a requisition_ticket' };
+        if (!isRole('warehouse_staff') && !isRole('supply_coordinator') && !isRole('shelter_manager')) {
+          throw { forbidden: 'Only warehouse staff, supply coordinator, shelter manager or system admin can approve a requisition_ticket' };
         }
+        var approveAnyPositive = false;
         for (var approveIndex = 0; approveIndex < newDoc.items.length; approveIndex++) {
-          if (!(parseFloat(newDoc.items[approveIndex].allocated_qty) > 0)) {
-            throw { forbidden: 'Every requisition_ticket item needs allocated_qty > 0 before approval' };
+          var approveAlloc = parseDecimal4(newDoc.items[approveIndex].allocated_qty);
+          if (isNaN(approveAlloc) || approveAlloc < 0) {
+            throw { forbidden: 'Every requisition_ticket item needs a valid allocated_qty >= 0 before approval' };
           }
+          if (approveAlloc > 0) approveAnyPositive = true;
+        }
+        if (!approveAnyPositive) {
+          throw { forbidden: 'At least one requisition_ticket item needs allocated_qty > 0 before approval' };
         }
         if (newDoc.approved_by !== userCtx.name) {
           throw { forbidden: 'approved_by must match the authenticated user' };
         }
       }
       if (ticketTo === 'IN_TRANSIT') {
-        if (!isRole('warehouse_staff')) {
-          throw { forbidden: 'Only warehouse staff or system admin can dispatch a requisition_ticket' };
+        if (!isRole('warehouse_staff') && !isRole('supply_coordinator')) {
+          throw { forbidden: 'Only warehouse staff, supply coordinator or system admin can dispatch a requisition_ticket' };
         }
         if (newDoc.dispatched_by !== userCtx.name) {
           throw { forbidden: 'dispatched_by must match the authenticated user' };
-        }
-      }
-      if (ticketTo === 'COMPLETED' && ticketFrom === 'PENDING_PICK') {
-        // One-click approve (CR-143, requisition_type 'kitchen' only): shelter_manager/
-        // system_admin does approve+dispatch+receive in one write, all 3 by-fields same actor.
-        if (!isRole('shelter_manager')) {
-          throw { forbidden: 'Only shelter manager or system admin can one-click approve a requisition_ticket' };
-        }
-        for (var oneStepIndex = 0; oneStepIndex < newDoc.items.length; oneStepIndex++) {
-          if (!(parseFloat(newDoc.items[oneStepIndex].allocated_qty) > 0)) {
-            throw { forbidden: 'Every requisition_ticket item needs allocated_qty > 0 before approval' };
-          }
-        }
-        if (
-          newDoc.approved_by !== userCtx.name ||
-          newDoc.dispatched_by !== userCtx.name ||
-          newDoc.received_by !== userCtx.name
-        ) {
-          throw { forbidden: 'approved_by/dispatched_by/received_by must match the authenticated user' };
         }
       }
       if (ticketTo === 'COMPLETED' && ticketFrom === 'IN_TRANSIT') {
@@ -1444,8 +1838,8 @@ export function buildValidateDocUpdate(code: string): string {
       }
       if (ticketTo === 'CANCELLED') {
         var canCancelTicket = ticketFrom === 'PENDING_PICK'
-          ? (isRole('kitchen_staff') || isRole('warehouse_staff') || isRole('shelter_manager'))
-          : (isRole('warehouse_staff') || isRole('shelter_manager'));
+          ? (isRole('kitchen_staff') || isRole('warehouse_staff') || isRole('supply_coordinator') || isRole('shelter_manager'))
+          : (isRole('warehouse_staff') || isRole('supply_coordinator') || isRole('shelter_manager'));
         if (!canCancelTicket) {
           throw { forbidden: 'Not authorized to cancel this requisition_ticket' };
         }
@@ -1657,7 +2051,7 @@ export function buildValidateDocUpdate(code: string): string {
           throw { forbidden: 'Illegal requisition_ticket transition: ' + oldDoc.status + ' -> ' + newDoc.status };
         }
         if (oldDoc.status === 'PENDING_PICK' && newDoc.status === 'READY_FOR_DISPATCH') {
-          if (!canApproveTicket()) throw { forbidden: 'Only shelter managers or system admins can approve requisition_tickets' };
+          if (!canApproveTicket()) throw { forbidden: 'Only warehouse staff, supply coordinators, shelter managers, or system admins can approve requisition_tickets' };
           if (newDoc.approved_by !== userCtx.name) throw { forbidden: 'requisition_ticket.approved_by must match the current actor' };
         } else if (oldDoc.status === 'PENDING_PICK' && newDoc.status === 'CANCELLED') {
           if (!canCreateTicket()) throw { forbidden: 'Only warehouse staff, supply coordinators, shelter managers, or system admins can cancel requisition_tickets' };

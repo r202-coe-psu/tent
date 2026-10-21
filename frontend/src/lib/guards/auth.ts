@@ -11,8 +11,11 @@ import {
 	isSystemAdmin,
 	canAccessDistributionDesk,
 	canAccessMedicalScreening,
+	canAccessIncidents,
 	canAccessVolunteerBackoffice,
 	canAccessZoning,
+	canManageScanners,
+	isKioskStaffOnly,
 	shelterCodeFromRoles
 } from '$lib/auth/roles';
 import { fetchAuthStatus, type AuthStatus } from '$lib/features/users';
@@ -124,6 +127,36 @@ export async function requireManager(fetchFn?: typeof fetch) {
 	if (!isSystemAdmin(roles) && !isShelterManager(roles, shelter)) {
 		throw redirect(302, resolve(LANDING_ROUTE));
 	}
+}
+
+/** The only back-office page a kiosk_staff-only user may open (FR-SBO-29). */
+export const KIOSK_STAFF_BACKOFFICE_ROUTE = '/back-office/kiosks';
+
+/**
+ * Kiosk device management (`/back-office/kiosks`) guard — system_admin, or shelter_manager /
+ * kiosk_staff of the selected shelter (draft CR scanner back-office FR-SBO-20). The scanner BFF
+ * routes re-check scope per device.
+ */
+export async function requireKioskManagement(fetchFn?: typeof fetch) {
+	await requireAuth(fetchFn);
+	const roles = authStore.user?.roles ?? [];
+	const shelter = activeShelterCode(roles);
+	if (!isSystemAdmin(roles) && !(shelter && canManageScanners(roles, shelter))) {
+		throw redirect(302, resolve(LANDING_ROUTE));
+	}
+}
+
+/**
+ * Back-office layout gate — a user whose only capability in the selected shelter is kiosk_staff
+ * may open the kiosk device page only (FR-SBO-29); every other back-office page sends them to the
+ * portal like any other denied page. Call after {@link requireAuth}.
+ */
+export function confineKioskStaffOnly(pathname: string) {
+	const roles = authStore.user?.roles ?? [];
+	if (!isKioskStaffOnly(roles, activeShelterCode(roles))) return;
+	const allowed = resolve(KIOSK_STAFF_BACKOFFICE_ROUTE);
+	if (pathname === allowed || pathname.startsWith(`${allowed}/`)) return;
+	throw redirect(302, resolve(LANDING_ROUTE));
 }
 
 /**
@@ -270,6 +303,15 @@ export async function requireZoning(fetchFn?: typeof fetch) {
 	await requireAuth(fetchFn);
 	const roles = authStore.user?.roles ?? [];
 	if (!canAccessZoning(roles, activeShelterCode(roles))) {
+		throw redirect(302, resolve(LANDING_ROUTE));
+	}
+}
+
+/** Shelter Incident Log — any staff with the active shelter scope (or SA). */
+export async function requireIncidents(fetchFn?: typeof fetch) {
+	await requireAuth(fetchFn);
+	const roles = authStore.user?.roles ?? [];
+	if (!canAccessIncidents(roles, activeShelterCode(roles))) {
 		throw redirect(302, resolve(LANDING_ROUTE));
 	}
 }

@@ -115,6 +115,7 @@ describe('filterPortalMenu — shelter manager', () => {
 			'shelter-manage',
 			'shelter-readiness',
 			'shelter-users',
+			'kiosk-devices',
 			'referrals',
 			'back-office'
 		]);
@@ -216,7 +217,12 @@ describe('filterPortalMenu — single-department roles', () => {
 	it('supply_coordinator sees only the supply department', () => {
 		const views = menu(staff('supply_coordinator'));
 		expect(deptIds(views)).toEqual(['supply']);
-		expect(itemIds(views[0])).toEqual(['warehouse', 'stock-donations', 'supply-distribution']);
+		expect(itemIds(views[0])).toEqual([
+			'warehouse',
+			'stock-donations',
+			'supply-distribution',
+			'supply-kitchen-requisition'
+		]);
 	});
 
 	it('distribution_staff sees only the distribution desk', () => {
@@ -234,6 +240,16 @@ describe('filterPortalMenu — single-department roles', () => {
 		expect(itemIds(dept(views, 'supply'))).toEqual(['frontline-distribution']);
 	});
 
+	it('kiosk_staff sees only the kiosk device management', () => {
+		const views = menu(staff('kiosk_staff'));
+		expect(deptIds(views)).toEqual(['management']);
+		expect(itemIds(views[0])).toEqual(['kiosk-devices']);
+	});
+
+	it('kiosk_staff of another shelter does not see it', () => {
+		expect(menu(staff('kiosk_staff', 'SH002'))).toEqual([]);
+	});
+
 	it('warehouse_staff is treated as supply_coordinator', () => {
 		expect(menu(staff('warehouse_staff'))).toEqual(menu(staff('supply_coordinator')));
 	});
@@ -244,10 +260,16 @@ describe('filterPortalMenu — single-department roles', () => {
 		expect(itemIds(views[0])).toEqual(['volunteer-management', 'volunteer-check-in']);
 	});
 
-	it('security_officer sees only the security placeholder', () => {
+	it('security_officer sees only the live incident log tile', () => {
 		const views = menu(staff('security_officer'));
 		expect(deptIds(views)).toEqual(['security']);
-		expect(stateOf(views, 'security-incidents')).toBe('soon');
+		expect(stateOf(views, 'security-incidents')).toBe('ready');
+	});
+
+	it('shelter_manager sees the live incident log tile', () => {
+		const views = menu(staff('shelter_manager'));
+		expect(deptIds(views)).toContain('security');
+		expect(stateOf(views, 'security-incidents')).toBe('ready');
 	});
 });
 
@@ -317,7 +339,7 @@ describe('portal data integrity', () => {
 			.filter((i) => i.state === 'soon')
 			.map((i) => i.item.id);
 		expect(soon.sort()).toEqual(noRoute.sort());
-		expect(noRoute.sort()).toEqual(['security-incidents', 'zone-settings']);
+		expect(noRoute.sort()).toEqual(['zone-settings']);
 	});
 
 	it('only the central item is system scope', () => {

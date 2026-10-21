@@ -4,7 +4,7 @@ title: Kiosk — เปิด/ปิดช่องทางรายงาน�
 status: approved
 date: 2026-09-25
 created: 2026-09-25
-updated: 2026-10-04
+updated: 2026-10-13 # ข้อเสนอแก้ไข §9 approved โดย Dev/Team Lead Soravit Sukkarn (รับ requirement จากหัวหน้าโครงการเมื่อวาน 2026-10-12)
 requested_by: ทีม kiosk (branch feat/pre-register_kiosk)
 decided_by: Jakee Indapanya (GitHub net-lynx), Project Owner — อนุมัติ 2026-10-04 (Asia/Bangkok)
 decision_date: 2026-10-04
@@ -22,12 +22,15 @@ affects:
   - frontend/src/routes/kiosk/{+page.ts,+page.svelte,phone/+page.ts}
   - scanner_client/app/manager.py (`_route_kiosk_api` allowlist) · scanner_client/tests/test_manager.py
   - scanner_client/{app/config.py,.env.example,README.md,tests/test_config.py} (ถอด `KIOSK_PHONE_CHECK_IN_ENABLED` จาก commit `d29ffcdb`)
+  - (§9 proposed) frontend/src/lib/features/shelters/ui/basic-info-section.svelte (label) · frontend/src/lib/features/kiosk/ui/identity-method-selector.svelte · frontend/src/routes/kiosk/{phone,reprint}/**
 why: >
   การเปิดช่องทางเบอร์โทรขึ้นกับความพร้อมของศูนย์ (index เบอร์ deploy แล้วหรือยัง, ศูนย์ต้องการให้เจ้าหน้าที่ดูแลเคสเบอร์เองหรือไม่)
   ผู้จัดการศูนย์ต้องเปิด/ปิดได้เองจาก backoffice โดยไม่ต้องเข้าไปแก้ไฟล์บนเครื่อง kiosk ทีละเครื่อง
 migration: ไม่มี backfill — flag ใหม่ใน `feature_flags` default `false`; doc เดิมที่ไม่มี key อ่านเป็นปิด
 ---
 # CR-152: Kiosk — เปิด/ปิดช่องทางเบอร์โทรรายศูนย์ผ่าน backoffice
+
+> **ข้อเสนอแก้ไข 2026-10-13 (approved โดย Team Lead):** §9 ท้ายเอกสาร — Soravit Sukkarn (Team Lead) อนุมัติแล้ว โดยรับ requirement จากหัวหน้าโครงการเมื่อ 2026-10-12: flag เดิมเปิด/ปิดเมนู「พิมพ์ QR」(CR-151 §15) แทนการ์ดรายงานตัวด้วยเบอร์
 
 > **สถานะ:** approved เป็น spec เมื่อ 2026-10-04 (Asia/Bangkok) โดย Project Owner Jakee Indapanya (GitHub net-lynx) · ยังไม่ implement · ยอมรับ flag รายศูนย์ผ่าน backoffice แล้ว
 
@@ -154,3 +157,21 @@ migration: ไม่มี backfill — flag ใหม่ใน `feature_flags` 
   - kiosk อ่านค่าผ่าน `POST /api/v1/scanner/kiosk/config` · อ่านค่าไม่ได้ = ปิด (fail closed)
   - §7 ไม่มี open decision
   - รันเลข CR-152 จาก `docs/changes/_index.md` บน `develop` (เลขที่จัดสรรล่าสุดคือ CR-151; ไม่ใช้ช่องว่าง 131–133 และ 144–147) · ถอด `docs/changes/draft-kiosk-phone-check-in-toggle.md`
+- 2026-10-13 — ทีม kiosk เสนอ §9: ช่องทางเบอร์เปลี่ยนเป็นเมนู「พิมพ์ QR」(CR-151 §15) · flag key เดิม เปลี่ยนเฉพาะสิ่งที่ flag คุมและ label ใน back-office
+- 2026-10-13 — Soravit Sukkarn (Team Lead) approved ข้อเสนอแก้ไข §9 โดยรับ requirement จากหัวหน้าโครงการเมื่อวาน (2026-10-12)
+
+## 9. ข้อเสนอแก้ไข 2026-10-13 (approved โดย Team Lead)
+
+> **สรุป (TL;DR):** `feature_flags.kiosk_phone_check_in_enabled` (key เดิม ไม่ migrate) คุมเมนู「พิมพ์ QR」ด้วยเบอร์โทร (CR-151 §15) แทนการ์ด「เบอร์โทรศัพท์」· หน้าแรกเป็น 3 การ์ดเสมอ · ไม่กระทบ schema
+
+**แก้ข้อเดิม:** FR-KPT-22 (layout 3/4 การ์ด) · FR-KPT-23 (redirect) · FR-KPT-24 (หน้าเบอร์)
+
+| ID        | Requirement                                                                                                                                           |
+| :-------- | :---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| FR-KPT-30 | หน้า `/kiosk` แสดง 3 การ์ด (QR · บัตร · ThaiD) เสมอ · flag เปิด → ปุ่มรอง「พิมพ์ QR」(ไอคอนเครื่องพิมพ์) เต็มความกว้างใต้ grid · flag ปิด → ไม่มีปุ่ม |
+| FR-KPT-31 | `/kiosk/reprint` โหลด config ก่อน render · flag ปิด → redirect 307 `/kiosk` · `/kiosk/phone` redirect 307 → `/kiosk/reprint` (คง context query)       |
+| FR-KPT-32 | `POST /api/v1/kiosk/reprint` และ lookup `source:'phone'` ตรวจ flag ที่ server · ปิด → 403 `KIOSK_METHOD_DISABLED` (ตาม FR-KPT-14)                     |
+| FR-KPT-33 | back-office label ของ Switch「เปิดพิมพ์ QR ด้วยเบอร์โทร」· ชื่อ key และค่า default (`false`) ไม่เปลี่ยน                                               |
+
+- **AC-KPT-30** flag เปิด → หน้าแรกมี 3 การ์ด + ปุ่ม「พิมพ์ QR」· ปิด → 3 การ์ด ไม่มีปุ่ม · `/kiosk/reprint` ถูก redirect
+- **Migration:** ไม่มี — key เดิม · ศูนย์ที่เปิด flag อยู่จะได้เมนู「พิมพ์ QR」แทนการรายงานตัวด้วยเบอร์ทันทีหลัง deploy

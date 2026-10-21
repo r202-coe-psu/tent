@@ -138,3 +138,119 @@ async def test_bulk_docs_raises_on_http_error():
         await client.bulk_docs("shelter_sh001", [])
 
     await client.close()
+
+
+def _response(status: int, **body) -> httpx.Response:
+    return httpx.Response(status, json=body, request=httpx.Request("PUT", "http://x"))
+
+
+@pytest.mark.asyncio
+async def test_update_doc_rereads_and_rederives_the_change_on_409():
+    client = _client()
+    client.get_doc = AsyncMock(
+        side_effect=[
+            {"_id": "d", "_rev": "1-a", "status": "open", "n": 1},
+            {"_id": "d", "_rev": "2-b", "status": "open", "n": 2},
+        ]
+    )
+    client._client.put = AsyncMock(
+        side_effect=[
+            _response(409, error="conflict"),
+            _response(201, ok=True, rev="3-c"),
+        ]
+    )
+
+    async def close(doc):
+        return {**doc, "status": "closed"}
+
+    written = await client.update_doc("db", "d", close)
+
+    first, second = (call.kwargs["json"] for call in client._client.put.await_args_list)
+    assert first == {"_id": "d", "_rev": "1-a", "status": "closed", "n": 1}
+    # the retry carries the *fresh* doc's other fields, not the stale body
+    assert second == {"_id": "d", "_rev": "2-b", "status": "closed", "n": 2}
+    assert written == {**second, "_rev": "3-c"}
+    await client.close()
+
+
+@pytest.mark.asyncio
+async def test_update_doc_stops_when_the_precondition_no_longer_holds_after_a_409():
+    client = _client()
+    client.get_doc = AsyncMock(
+        side_effect=[
+            {"_id": "d", "_rev": "1-a", "status": "open"},
+            {"_id": "d", "_rev": "2-b", "status": "taken"},
+        ]
+    )
+    client._client.put = AsyncMock(return_value=_response(409, error="conflict"))
+
+    async def close_if_open(doc):
+        return {**doc, "status": "closed"} if doc["status"] == "open" else None
+
+    assert await client.update_doc("db", "d", close_if_open) is None
+    assert client._client.put.await_count == 1  # no second write over the new state
+    await client.close()
+
+
+@pytest.mark.asyncio
+async def test_update_doc_returns_none_for_a_missing_doc_and_raises_after_the_attempts():
+    client = _client()
+    client.get_doc = AsyncMock(return_value=None)
+    client._client.put = AsyncMock()
+
+    async def touch(doc):
+        return doc
+
+    assert await client.update_doc("db", "gone", touch) is None
+    client._client.put.assert_not_awaited()
+
+    client.get_doc = AsyncMock(return_value={"_id": "d", "_rev": "1-a"})
+    client._client.put = AsyncMock(return_value=_response(409, error="conflict"))
+    with pytest.raises(httpx.HTTPStatusError):
+        await client.update_doc("db", "d", touch, attempts=3)
+    assert client._client.put.await_count == 3
+    assert client.get_doc.await_count == 3
+    await client.close()
+
+
+@pytest.mark.asyncio
+async def test_update_doc_does_not_retry_other_errors():
+    client = _client()
+    client.get_doc = AsyncMock(return_value={"_id": "d", "_rev": "1-a"})
+    client._client.put = AsyncMock(return_value=_response(500, error="boom"))
+
+    async def touch(doc):
+        return doc
+
+    with pytest.raises(httpx.HTTPStatusError):
+        await client.update_doc("db", "d", touch)
+    assert client._client.put.await_count == 1
+    await client.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("status", "expected"),
+    [(404, True), (200, False), (401, False), (403, False), (500, False), (503, False)],
+)
+async def test_database_missing_is_true_only_for_404(status: int, expected: bool):
+    client = _client()
+    client._client.get = AsyncMock(
+        return_value=httpx.Response(
+            status, json={}, request=httpx.Request("GET", "http://x")
+        )
+    )
+
+    assert await client.database_missing("shelter_sh001") is expected
+    assert client._client.get.await_args.args[0] == "/shelter_sh001"
+    await client.close()
+
+
+@pytest.mark.asyncio
+async def test_database_missing_propagates_connection_errors():
+    client = _client()
+    client._client.get = AsyncMock(side_effect=httpx.ConnectError("down"))
+
+    with pytest.raises(httpx.ConnectError):  # never reported as "missing"
+        await client.database_missing("shelter_sh001")
+    await client.close()

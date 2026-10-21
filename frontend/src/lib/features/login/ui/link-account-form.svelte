@@ -14,13 +14,20 @@
 	import { LANDING_ROUTE } from '$lib/guards/auth';
 	import { loginSchema } from '../domain/schema';
 	import {
+		LINK_TERMINAL_REDIRECTS,
+		linkErrorView,
+		RECAPTCHA_UNAVAILABLE,
+		type LoginErrorView
+	} from '../domain/errors';
+	import {
 		cancelPendingLink,
-		LINK_TERMINAL_CODES,
 		LinkAccountError,
 		linkAccount,
 		type PendingLinkInfo
 	} from '../data/link-account';
 	import { executeLoginCaptcha } from '../data/recaptcha';
+	import LoginErrorAlert from './login-error-alert.svelte';
+	import LinkSteps from './link-steps.svelte';
 	import Eye from '@lucide/svelte/icons/eye';
 	import EyeOff from '@lucide/svelte/icons/eye-off';
 
@@ -32,7 +39,7 @@
 	const siteKey = env.PUBLIC_RECAPTCHA_SITE_KEY || '';
 	let captchaEnabled = $state(false);
 
-	const RECAPTCHA_ERROR = 'ระบบยืนยันตัวตน (reCAPTCHA) ขัดข้อง กรุณาลองใหม่อีกครั้ง';
+	let error = $state<LoginErrorView | null>(null);
 
 	onMount(() => {
 		void fetchRecaptchaEnabled().then((enabled) => {
@@ -50,40 +57,42 @@
 		validators: zod4(loginSchema),
 		resetForm: false,
 		onUpdate: async ({ form }) => {
-			if (!form.valid) {
-				toast.error('กรุณากรอกข้อมูลให้ครบถ้วน');
+			error = null;
+			// Field errors render under each input.
+			if (!form.valid) return;
+
+			try {
+				let captcha_token = '';
+				if (captchaEnabled) {
+					const token = await executeLoginCaptcha(siteKey, true);
+					if (!token) {
+						error = { title: RECAPTCHA_UNAVAILABLE };
+						return;
+					}
+					captcha_token = token;
+				}
+				await linkAccount({
+					login: form.data.username,
+					password: form.data.password,
+					captcha_token
+				});
+			} catch (err) {
+				if (!(err instanceof LinkAccountError)) {
+					error = { title: 'เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ กรุณาตรวจสอบอินเทอร์เน็ตแล้วลองใหม่' };
+					return;
+				}
+				const redirectCode = LINK_TERMINAL_REDIRECTS[err.code];
+				if (redirectCode) {
+					// The pending identity is gone — `/login` shows why.
+					await goto(`${resolve('/login')}?error=${redirectCode}`);
+					return;
+				}
+				error = linkErrorView(err.code, err.message);
 				return;
 			}
-
-			toast.promise(
-				(async () => {
-					let captcha_token = '';
-					if (captchaEnabled) {
-						const token = await executeLoginCaptcha(siteKey, true);
-						if (!token) throw new Error(RECAPTCHA_ERROR);
-						captcha_token = token;
-					}
-					try {
-						await linkAccount({
-							login: form.data.username,
-							password: form.data.password,
-							captcha_token
-						});
-					} catch (err) {
-						if (err instanceof LinkAccountError && LINK_TERMINAL_CODES.has(err.code)) {
-							await goto(resolve('/login'));
-						}
-						throw err;
-					}
-					// Full reload: the server just minted AuthSession; guards route to force-setup.
-					window.location.assign(resolve(LANDING_ROUTE));
-				})(),
-				{
-					loading: 'กำลังเชื่อมบัญชี...',
-					success: 'เชื่อมบัญชีสำเร็จ!',
-					error: (err) => (err instanceof Error ? err.message : 'เชื่อมบัญชีไม่สำเร็จ')
-				}
-			);
+			toast.success('เชื่อมบัญชีสำเร็จ!');
+			// Full reload: the server just minted AuthSession; guards route to force-setup.
+			window.location.assign(resolve(LANDING_ROUTE));
 		}
 	});
 	const { form: formData, submitting } = form;
@@ -105,14 +114,11 @@
 	<Card.Header class="gap-1 pb-0 text-center">
 		<Card.Title class="text-xl font-bold text-[#0A2647] sm:text-2xl">เชื่อมบัญชีผู้ใช้</Card.Title>
 		<Card.Description class="text-xs text-slate-500 sm:text-sm">
-			เข้าสู่ระบบด้วย {providerLabel} สำเร็จ
-			{#if pending.display}
-				(<span class="font-medium text-slate-700">{pending.display}</span>)
-			{/if}
-			— กรอกชื่อผู้ใช้และรหัสผ่านที่ได้รับจากผู้ดูแลระบบ เพื่อเชื่อม {providerLabel} เข้ากับบัญชีของคุณ
+			เข้าสู่ระบบด้วย {providerLabel} สำเร็จ — กรอกบัญชีที่ได้รับจากผู้ดูแลระบบเพื่อเชื่อมบัญชี
 		</Card.Description>
 	</Card.Header>
-	<Card.Content>
+	<Card.Content class="flex flex-col gap-4">
+		<LinkSteps provider={pending.provider} providerDisplay={pending.display} current={3} />
 		<form method="POST" use:form.enhance class="flex flex-col gap-4">
 			<div class="flex flex-col gap-3.5">
 				<Form.Field {form} name="username">
@@ -174,8 +180,11 @@
 					disabled={$submitting}
 					class="h-11 w-full rounded-xl bg-[#0A2647] font-semibold text-white transition-colors hover:bg-[#051930]"
 				>
-					เชื่อมบัญชีและเข้าสู่ระบบ
+					{$submitting ? 'กำลังเชื่อมบัญชี...' : 'เชื่อมบัญชีและเข้าสู่ระบบ'}
 				</Form.Button>
+				{#if error}
+					<LoginErrorAlert {error} />
+				{/if}
 				<Button type="button" variant="ghost" class="h-11 w-full" onclick={() => void cancel()}>
 					ยกเลิก
 				</Button>

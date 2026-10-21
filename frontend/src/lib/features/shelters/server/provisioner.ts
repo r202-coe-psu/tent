@@ -5,6 +5,7 @@ import { adminRaw, ServiceError } from '$lib/server/couch-admin';
 import { CENTRAL_WRITE_POLICY_DESIGN, hasWritePolicy } from '$lib/server/central-db-security';
 import {
 	SHELTER_REGISTRY_DB,
+	deployDailySopRoleMangoIndexes,
 	deployPeopleMangoIndexes,
 	deployRegistryDesign,
 	deployReferralMangoIndexes,
@@ -391,6 +392,9 @@ async function provisionShelterUnlocked(
 	await assertActive?.();
 	await deployRequisitionTicketMangoIndexes(db);
 	steps.push({ step: 'requisition-ticket-mango', status: 200 });
+	await assertActive?.();
+	await deployDailySopRoleMangoIndexes(db);
+	steps.push({ step: 'daily-sop-role-mango', status: 200 });
 
 	await assertActive?.();
 	const registry = await adminRaw(`/${SHELTER_REGISTRY_DB}`, 'PUT');
@@ -449,79 +453,6 @@ async function provisionShelterUnlocked(
 		}
 	} else {
 		steps.push({ step: 'registry-master', status: 200 });
-	}
-
-	const seeds = [
-		{
-			_id: 'evacuee:seed-somchai',
-			first_name: 'Somchai',
-			last_name: 'Jaidee',
-			gender: 'male',
-			phone: '0811111111'
-		},
-		{
-			_id: 'evacuee:seed-malee',
-			first_name: 'Malee',
-			last_name: 'Suksai',
-			gender: 'female',
-			phone: null
-		}
-	];
-	for (const seed of seeds) {
-		await assertActive?.();
-		const ts = nowIso();
-		const seedDoc = {
-			...seed,
-			type: 'evacuee',
-			schema_v: 1,
-			shelter_code: code,
-			created_at: ts,
-			updated_at: ts,
-			created_by: 'seed',
-			special_needs: [],
-			household_id: null,
-			current_stay: { status: 'pre_registered', zone: null, since: ts },
-			privacy: { search_excluded: false },
-			registered_via: 'import'
-		};
-		let res: { status: number; data: unknown };
-		try {
-			res = await adminRaw(`/${db}/${encodeURIComponent(seed._id)}`, 'PUT', seedDoc);
-		} catch (error) {
-			const persisted = await adminRaw(`/${db}/${encodeURIComponent(seed._id)}`, 'GET').catch(
-				() => ({ status: 0, data: null })
-			);
-			const existing =
-				persisted.status === 200 ? (persisted.data as Record<string, unknown>) : null;
-			if (
-				!existing ||
-				existing.type !== 'evacuee' ||
-				existing.shelter_code !== code ||
-				existing.first_name !== seed.first_name ||
-				existing.last_name !== seed.last_name
-			) {
-				throw error;
-			}
-			res = { status: 409, data: { reason: 'response lost after commit' } };
-		}
-		if (res.status === 409) {
-			const persisted = await adminRaw(`/${db}/${encodeURIComponent(seed._id)}`, 'GET');
-			const existing =
-				persisted.status === 200 ? (persisted.data as Record<string, unknown>) : null;
-			if (
-				!existing ||
-				existing.type !== 'evacuee' ||
-				existing.shelter_code !== code ||
-				existing.first_name !== seed.first_name ||
-				existing.last_name !== seed.last_name
-			) {
-				throw new ServiceError('CONFLICT', `Seed ${seed._id} belongs to an unexpected document`);
-			}
-			steps.push({ step: `seed:${seed.first_name}`, status: 200 });
-		} else {
-			assertStatus(res.status, `seed:${seed.first_name}`, res.data);
-			steps.push({ step: `seed:${seed.first_name}`, status: res.status });
-		}
 	}
 
 	return { ok: true, code, db, steps };

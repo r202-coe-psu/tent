@@ -256,7 +256,7 @@
 						{#if qrUrl}
 							<img
 								src={qrUrl}
-								alt="Medical Screening QR Code"
+								alt="Occupant Screening QR Code"
 								class="size-48 rounded-lg bg-white p-2 shadow-xs"
 							/>
 						{:else}

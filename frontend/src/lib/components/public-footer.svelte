@@ -1,7 +1,6 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
-	import Building from '@lucide/svelte/icons/building';
 	import ExternalLink from '@lucide/svelte/icons/external-link';
 	import Mail from '@lucide/svelte/icons/mail';
 	import {
@@ -47,11 +46,11 @@
 			<!-- Column 1: Platform Branding -->
 			<div class="space-y-3 {hasOnlineChannels ? 'md:col-span-5' : 'md:col-span-7'}">
 				<div class="flex items-center gap-2.5">
-					<div
-						class="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-600 text-white shadow-sm"
-					>
-						<Building class="h-4 w-4" />
-					</div>
+					<img
+						src="/logo.png"
+						alt="PSU Smart Shelter"
+						class="h-8 w-8 shrink-0 rounded-lg object-contain"
+					/>
 					<h3 class="text-sm font-bold text-white">Smart Shelter Platform</h3>
 				</div>
 				<div class="flex items-center gap-2 text-xs text-white/80">

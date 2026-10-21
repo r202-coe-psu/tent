@@ -318,6 +318,15 @@ export interface Evacuee extends BaseDoc {
 	 * never zones — Station 3 only uses it as the default pick when there are no EWAR symptoms.
 	 */
 	preferred_zone?: string | null;
+	/**
+	 * Partner booking group id `BK-{ulid}` = `external_bookings.booking_id` (schema_v 14, CR-169).
+	 * Written only by the sync worker for partner bookings (`registered_via: 'api'`). Input paths
+	 * never set it (FR-61): the public BFF and kiosk strip it via `unifiedMemberInputSchema` /
+	 * `station1EvacueeInputSchema`, and the staff forms omit it by schema and `withoutBookingRef`.
+	 * Staff edit and merge paths preserve an existing value by spreading the stored doc (FR-62).
+	 * Opaque, not PII, never projected to `public_*`. Unrelated to `donation.booking_ref`.
+	 */
+	booking_ref?: string | null;
 	privacy: { search_excluded: boolean };
 	registered_via: z.infer<typeof registeredViaSchema>;
 	anonymized?: boolean; // set by the purge job
@@ -876,41 +885,59 @@ export const evacueeInputSchema = z.object({
 		.optional()
 		.default(null)
 		.transform((v) => v || null),
+	/**
+	 * CR-169: partner booking group id (schema_v 14). Worker-owned: kept on the base schema so
+	 * `createEvacuee` can persist it, but the derived public / kiosk / staff-form schemas omit it
+	 * (FR-61); form payloads are also passed through `withoutBookingRef`.
+	 */
+	booking_ref: z.string().trim().nullable().optional(),
 	registered_via: registeredViaSchema.default('staff')
 });
 export type EvacueeInput = z.input<typeof evacueeInputSchema>;
 
+/**
+ * Drop `booking_ref` (CR-169 FR-61) from a form / request payload. The key is worker-owned, so
+ * no staff, kiosk or public form payload may forward it, even when seeded from a stored doc.
+ */
+export function withoutBookingRef<T extends object>(input: T): Omit<T, 'booking_ref'> {
+	const rest = { ...input } as T & { booking_ref?: unknown };
+	delete rest.booking_ref;
+	return rest as Omit<T, 'booking_ref'>;
+}
+
 /** Station 1 walk-in + Report-in: same as base — emergency contact optional. */
-export const station1EvacueeInputSchema = evacueeInputSchema;
+export const station1EvacueeInputSchema = evacueeInputSchema.omit({ booking_ref: true });
 export type Station1EvacueeInput = z.input<typeof station1EvacueeInputSchema>;
 
 /** Required identity/contact fields used by the household pre-registration wizard. */
-export const householdPreRegisterEvacueeSchema = evacueeInputSchema.extend({
-	person_id: z
-		.object({
-			cardType: cardTypeSchema.default('national_id'),
-			number: z.string().trim().optional().default('')
-		})
-		.superRefine((data, ctx) => {
-			if (data.cardType === 'anonymous') return;
-			if (!data.number?.trim()) {
-				ctx.addIssue({
-					code: 'custom',
-					path: ['number'],
-					message: 'กรุณากรอกเลขประจำตัวหรือเลขที่เอกสาร'
-				});
-				return;
-			}
-			refineCardNumberMax(data.cardType, data.number, ctx, ['number']);
-		})
-		.default({ cardType: 'national_id', number: '' }),
-	religion: z
-		.enum(['buddhist', 'muslim', 'christian', 'other', 'unknown'], {
-			error: 'กรุณาเลือกศาสนา'
-		})
-		.default('buddhist'),
-	emergency_contact: emergencyContactRequiredSchema
-});
+export const householdPreRegisterEvacueeSchema = evacueeInputSchema
+	.omit({ booking_ref: true })
+	.extend({
+		person_id: z
+			.object({
+				cardType: cardTypeSchema.default('national_id'),
+				number: z.string().trim().optional().default('')
+			})
+			.superRefine((data, ctx) => {
+				if (data.cardType === 'anonymous') return;
+				if (!data.number?.trim()) {
+					ctx.addIssue({
+						code: 'custom',
+						path: ['number'],
+						message: 'กรุณากรอกเลขประจำตัวหรือเลขที่เอกสาร'
+					});
+					return;
+				}
+				refineCardNumberMax(data.cardType, data.number, ctx, ['number']);
+			})
+			.default({ cardType: 'national_id', number: '' }),
+		religion: z
+			.enum(['buddhist', 'muslim', 'christian', 'other', 'unknown'], {
+				error: 'กรุณาเลือกศาสนา'
+			})
+			.default('buddhist'),
+		emergency_contact: emergencyContactRequiredSchema
+	});
 
 export const medicalInputSchema = z.object({
 	evacuee_id: z.string().min(1),
@@ -1516,7 +1543,7 @@ export function createEvacuee(input: EvacueeInput, ctx: AuthorContext, id?: stri
 	const person_id = resolvePersonIdOnCreate(d.person_id);
 	return makeDoc(
 		'evacuee',
-		13, // schema_v 13: preferred_zone (CR-159); 12: gender nullable + registered_via `api` (CR-154); 11: religion_other + disability_other_detail (CR-148); 10: anonymous cardType + ANON mint (CR-112); 9: arriving (CR-106); 8: draft/card_snapshot (CR-084); 7 = registered_via `web` (CR-070); 6 = stay cancelled (CR-070); 5 = age (CR-057)
+		14, // schema_v 14: booking_ref (CR-169); 13: preferred_zone (CR-159); 12: gender nullable + registered_via `api` (CR-154); 11: religion_other + disability_other_detail (CR-148); 10: anonymous cardType + ANON mint (CR-112); 9: arriving (CR-106); 8: draft/card_snapshot (CR-084); 7 = registered_via `web` (CR-070); 6 = stay cancelled (CR-070); 5 = age (CR-057)
 		{
 			first_name: d.first_name,
 			last_name: d.last_name,
@@ -1537,6 +1564,8 @@ export function createEvacuee(input: EvacueeInput, ctx: AuthorContext, id?: stri
 			household_id: d.household_id,
 			current_stay: { status: d.zone ? 'active' : d.status, zone: d.zone ?? null, since: now() },
 			...(d.preferred_zone ? { preferred_zone: d.preferred_zone } : {}),
+			// Worker-owned (CR-169): only reachable via EvacueeInput; public/form schemas omit it.
+			...(d.booking_ref ? { booking_ref: d.booking_ref } : {}),
 			privacy: { search_excluded: false },
 			registered_via: d.registered_via
 		},
@@ -1545,10 +1574,16 @@ export function createEvacuee(input: EvacueeInput, ctx: AuthorContext, id?: stri
 	);
 }
 
+/**
+ * A kiosk walk-in is created `arriving`, like a web pre-registration that reported in: the visitor
+ * is physically at the shelter, so their QR (the evacuee id) is valid at once.
+ * `phone` is the canonical number the visitor typed at the kiosk (`null` = none given).
+ */
 export function createKioskEvacueeFromCard(
 	cardSnapshot: CardSnapshot,
 	ctx: AuthorContext,
 	photoId?: string,
+	phone: string | null = null,
 	id?: string
 ): Evacuee {
 	const firstName = cardSnapshot.first_name_th || 'ไม่ระบุชื่อ';
@@ -1572,7 +1607,7 @@ export function createKioskEvacueeFromCard(
 			first_name: firstName,
 			last_name: lastName,
 			gender,
-			phone: null,
+			phone,
 			...(birthYearBE ? { birth_year: birthYearBE } : {}),
 			...(age !== undefined ? { age } : {}),
 			person_id: {
@@ -1585,7 +1620,7 @@ export function createKioskEvacueeFromCard(
 			household_id: null,
 			card_snapshot: persistedCardSnapshot,
 			photo: photoId ?? null,
-			current_stay: { status: 'kiosk_registered', zone: null, since: now() },
+			current_stay: { status: 'arriving', zone: null, since: now() },
 			privacy: { search_excluded: false },
 			registered_via: 'kiosk'
 		},
@@ -1595,6 +1630,40 @@ export function createKioskEvacueeFromCard(
 }
 
 export const createDraftEvacueeFromCard = createKioskEvacueeFromCard;
+
+/** Auto Household label — UI never shows a label field (FR-03b-H). */
+export function autoHouseholdLabel(personName: string): string {
+	return `ครอบครัว${personName.trim()}`;
+}
+
+/**
+ * The household a kiosk walk-in gets on registering (`arriving`, like its head): theirs alone,
+ * headed by them, with the address read from the card or ThaiD as its starting Residence.
+ * Station 1 corrects or merges it when confirming. Lane and road stay in `card_snapshot`: a
+ * Residence has no field for them.
+ */
+export function createKioskWalkInHousehold(
+	head: Evacuee,
+	cardSnapshot: CardSnapshot,
+	ctx: AuthorContext,
+	id?: string
+): Household {
+	return createHousehold(
+		{
+			label: autoHouseholdLabel(formatPersonName(head)),
+			head_evacuee_id: head._id,
+			status: 'arriving',
+			address_no: cardSnapshot.address_no ?? null,
+			village_no: cardSnapshot.village_no ?? null,
+			subdistrict: cardSnapshot.subdistrict ?? null,
+			district: cardSnapshot.district ?? null,
+			province: cardSnapshot.province ?? null,
+			postal_code: cardSnapshot.postal_code ?? null
+		},
+		ctx,
+		id
+	);
+}
 
 export function createMedical(input: MedicalInput, ctx: AuthorContext, id?: string): Medical {
 	const d = medicalInputSchema.parse(input);
@@ -2135,7 +2204,44 @@ export function evacueeAgeYears(doc: {
 export type ZoneLabelSource = {
 	code: string;
 	name?: string | null;
+	/** Abbreviation printed on the QR label (shelter `zones[].short_name`). */
+	short_name?: string | null;
 };
+
+function findZone(
+	code: string,
+	zones: readonly ZoneLabelSource[] | null | undefined
+): ZoneLabelSource | undefined {
+	const lower = code.toLowerCase();
+	return zones?.find((z) => z.code.toLowerCase() === lower);
+}
+
+/**
+ * Name of a stay-zone code, or null when no zone is assigned. Prefers the shelter zone `name`
+ * (matched case-insensitively) and falls back to the raw code only when no name is available.
+ */
+export function stayZoneName(
+	zone: string | null | undefined,
+	zones?: readonly ZoneLabelSource[] | null
+): string | null {
+	const code = zone?.trim();
+	if (!code) return null;
+	return findZone(code, zones)?.name?.trim() || code;
+}
+
+/**
+ * Zone text for the printed QR label: the zone's short name, else its full name (the label cuts
+ * one too long for the row with an ellipsis), else the raw code; null when no zone is assigned.
+ */
+export function labelZoneName(
+	zone: string | null | undefined,
+	zones?: readonly ZoneLabelSource[] | null
+): string | null {
+	const code = zone?.trim();
+	if (!code) return null;
+	const match = findZone(code, zones);
+	return match?.short_name?.trim() || match?.name?.trim() || code;
+}
 
 /**
  * Display label for a stay-zone code. Prefer the shelter zone `name` when a
@@ -2146,14 +2252,7 @@ export function zoneLabel(
 	zone: string | null | undefined,
 	zones?: readonly ZoneLabelSource[] | null
 ): string {
-	if (!zone) return '—';
-	if (zones?.length) {
-		const lower = zone.toLowerCase();
-		const match = zones.find((z) => z.code.toLowerCase() === lower);
-		const name = match?.name?.trim();
-		if (name) return name;
-	}
-	return zone;
+	return stayZoneName(zone, zones) ?? '—';
 }
 
 // ---------------------------------------------------------------- type guards

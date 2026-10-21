@@ -347,7 +347,7 @@
 				class="flex items-center gap-4 rounded-2xl border border-domain-donation-border bg-domain-donation-subtle/40 p-4.5 shadow-2xs sm:p-5"
 			>
 				<div
-					class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-domain-donation text-white shadow-xs"
+					class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-domain-donation-strong text-white shadow-xs"
 				>
 					<Package class="h-6 w-6" />
 				</div>
@@ -404,7 +404,7 @@
 						<h2 class="text-lg font-bold tracking-tight text-slate-900 sm:text-2xl">
 							{t.urgentDonationsTitle}
 						</h2>
-						<p class="text-[11px] text-slate-400 sm:text-xs">{t.urgentDonationsSubtitle}</p>
+						<p class="text-xs text-slate-400">{t.urgentDonationsSubtitle}</p>
 					</div>
 				</div>
 
@@ -508,7 +508,7 @@
 						<h2 class="text-lg font-bold tracking-tight text-slate-900 sm:text-2xl">
 							{t.volunteersTitle}
 						</h2>
-						<p class="text-[11px] text-slate-400 sm:text-xs">
+						<p class="text-xs text-slate-400">
 							{t.volunteersSubtitle}
 						</p>
 					</div>

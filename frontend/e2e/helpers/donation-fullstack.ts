@@ -15,6 +15,7 @@ import {
 	couchLogin,
 	couchReq,
 	seedSecurityQuestion,
+	SA_ROLES,
 	type TestUser
 } from './couch';
 import { bangkokToday } from '../../src/lib/utils/date';
@@ -255,6 +256,20 @@ export async function createWarehouseStaff(
 	return { ...user, session: await couchLogin(user.name, user.password) };
 }
 
+/** A system admin — no shelter of their own, so `openBackOffice` needs `workingShelter`. */
+export async function createSystemAdmin(ledger: RunLedger, tag: string): Promise<Staff> {
+	const user: TestUser = {
+		name: `dn_${tag}_${RUN_ID}`,
+		password: 'Password1!',
+		roles: SA_ROLES,
+		display_name: `Donation E2E ${tag}`
+	};
+	ledger.add('staff', user.name);
+	await createCouchUser(user);
+	await seedSecurityQuestion(user.name);
+	return { ...user, session: await couchLogin(user.name, user.password) };
+}
+
 export type DeliveryMode =
 	| { kind: 'self'; slot?: RegExp }
 	| { kind: 'parcel'; trackingNo?: string }
@@ -289,20 +304,34 @@ export async function catalogItem(name: string): Promise<{ id: string; unit: str
 	return { id: doc._id, unit: doc.base_unit };
 }
 
+/** Public needs board → `shelter`'s card, opened. */
+export async function openShelter(page: Page, shelter: Pick<PublicShelter, 'name'>) {
+	await page.goto('/donations');
+	await expect(
+		page.getByRole('heading', { name: /ของที่ศูนย์พักพิง\s*ต้องการตอนนี้/ })
+	).toBeVisible();
+	await cardWith(page, shelter.name, 'ดูรายละเอียดและบริจาค').click();
+}
+
 /** Public needs board → `shelter`'s card → the line for `itemName` (as the board prints it). */
 export async function openNeed(page: Page, shelter: Pick<PublicShelter, 'name'>, itemName: string) {
-	await page.goto('/donations');
-	await expect(page.getByRole('heading', { name: /กระดาน\s*ความต้องการด่วน/ })).toBeVisible();
-	await cardWith(page, shelter.name, 'ดูรายละเอียดและบริจาค').click();
+	await openShelter(page, shelter);
 	await cardWith(page, itemName, 'บริจาครายการนี้').click();
 }
 
+/** An item the donor types in themselves ("บริจาคสิ่งของอื่นๆ") instead of picking a need card. */
+export type UnsolicitedItem = { itemName: string; unitLabel: string };
+
 export type BookingOptions = {
 	shelter: Pick<PublicShelter, 'code' | 'name'>;
-	need: Pick<PublicNeed, 'name'>;
+	/** The need card to book against — or `unsolicited` to type the item in yourself. */
+	need?: Pick<PublicNeed, 'name'>;
+	unsolicited?: UnsolicitedItem;
 	donorName: string;
 	phone: string;
 	mode?: DeliveryMode;
+	/** How many units to declare — 1 unless a test needs more. */
+	qty?: number;
 	/** Every accepted booking is recorded here for `teardownRun`. */
 	ledger: RunLedger;
 };
@@ -313,7 +342,7 @@ export type BookingResponse = Partial<Booking> & {
 };
 
 /**
- * Walk the public wizard up to — not past — "ยืนยันการจองคิวบริจาค", qty 1.
+ * Walk the public wizard up to — not past — "ยืนยันการจองคิวบริจาค" (qty 1 unless `opts.qty`).
  * Returns `submit`, which presses it and hands back the BFF's answer unasserted, so
  * two donors can be brought to the button first and made to press it together (the
  * caller then paces both itself: `submit({ paced: false })` after `bookingPacer.acquire(2)`).
@@ -322,17 +351,29 @@ export async function fillBooking(
 	page: Page,
 	opts: BookingOptions
 ): Promise<{ submit: (o?: { paced?: boolean }) => Promise<BookingResponse> }> {
-	const { shelter, need, donorName, phone } = opts;
+	const { shelter, need, unsolicited, donorName, phone } = opts;
 	const mode = opts.mode ?? { kind: 'self' };
 
-	await openNeed(page, shelter, need.name);
+	if (unsolicited) {
+		await openShelter(page, shelter);
+		await page.getByRole('button', { name: 'บริจาคสิ่งของอื่นๆ' }).click();
+	} else {
+		if (!need) throw new Error('fillBooking needs either `need` or `unsolicited`');
+		await openNeed(page, shelter, need.name);
+	}
 
-	// Step 2 — donor + item. Name/unit come from the need; only the qty is ours.
+	// Step 2 — donor + item. A need card brings its own name/unit; a typed item does not.
 	await expect(page.getByRole('heading', { name: 'ส่วนที่ 1: ข้อมูลผู้บริจาค' })).toBeVisible();
 	await page.locator('#donor-name').fill(donorName);
 	await page.locator('#donor-phone').fill(phone);
-	await expect(page.getByRole('textbox', { name: 'ประเภทสิ่งของ' })).toHaveValue(need.name);
-	await page.getByRole('spinbutton', { name: 'ปริมาณ' }).fill('1');
+	if (unsolicited) {
+		await page.getByRole('textbox', { name: 'ประเภทสิ่งของ' }).fill(unsolicited.itemName);
+		await page.getByRole('button', { name: /^หน่วย/ }).click();
+		await page.getByRole('option', { name: unsolicited.unitLabel, exact: true }).click();
+	} else {
+		await expect(page.getByRole('textbox', { name: 'ประเภทสิ่งของ' })).toHaveValue(need!.name);
+	}
+	await page.getByRole('spinbutton', { name: 'ปริมาณ' }).fill(String(opts.qty ?? 1));
 	await page.getByRole('button', { name: 'ถัดไป: เลือกจุดส่งมอบ' }).click();
 
 	// Step 3 — logistics. The destination is locked to the card's shelter.
@@ -386,7 +427,7 @@ export async function fillBooking(
 	};
 }
 
-/** Walk the public wizard for `need` at `shelter` with qty 1; asserts the ticket. */
+/** Walk the public wizard for `need` at `shelter` (qty 1 unless `opts.qty`); asserts the ticket. */
 export async function bookAsDonor(page: Page, opts: BookingOptions): Promise<Booking> {
 	const { submit } = await fillBooking(page, opts);
 	const body = await submit();
@@ -414,13 +455,14 @@ const routedPages = new WeakSet<Page>();
  * `undefined` to a code after the shelter list loads. Unpinned, that remount lands after the
  * tab is visible and resets the sub-tab / detaches forms the test is already filling in.
  */
-export async function openBackOffice(page: Page, staff: Staff) {
+export async function openBackOffice(page: Page, staff: Staff, workingShelter?: string) {
 	if (!routedPages.has(page)) {
 		routedPages.add(page);
 		await routeBrowserCouchThroughApp(page);
 	}
 	await injectSession(page, staff, staff.session);
-	const shelterCode = staff.roles.find((r) => r.startsWith('shelter:'))?.slice('shelter:'.length);
+	const shelterCode =
+		workingShelter ?? staff.roles.find((r) => r.startsWith('shelter:'))?.slice('shelter:'.length);
 	if (shelterCode) await pinActiveShelter(page, shelterCode);
 	await page.goto('/back-office/stock-donations');
 	await expect(page.getByRole('tab', { name: /รอการประเมิน/ })).toBeVisible({ timeout: 15_000 });
@@ -455,6 +497,9 @@ export async function approvePending(page: Page, shelterCode: string, bookingRef
 /** Open a booking in the scan station by typing its ref. */
 export async function openInScanStation(page: Page, bookingRef: string) {
 	await page.reload();
+	// The active tab is kept in `?tab=` and survives the reload, so coming from the
+	// pending queue the scan station has to be picked explicitly.
+	await page.getByRole('tab', { name: /สแกนรับของเข้าคลัง/ }).click();
 	await page.getByRole('textbox', { name: 'รหัสการจอง' }).fill(bookingRef);
 	await page.getByRole('button', { name: 'ค้นหา' }).click();
 	await expect(
@@ -557,6 +602,11 @@ export async function openSlots(page: Page, staff: Staff, mode: SlotMode) {
 	await page.getByRole('tab', { name: 'ช่วงเวลารับของ' }).click();
 	await expect(page.getByRole('heading', { name: 'ช่วงเวลารับของบริจาค' })).toBeVisible();
 	await page.getByRole('button', { name: mode, exact: true }).click();
+	// Under load the schedule and booking reads can trail past the 5 s default. Settle both
+	// first: the "คิวเต็ม" badge and the "จองแล้ว N / M" count only render once bookings load
+	// (until then each row shows "–" and the "รอข้อมูลการจองก่อน…" hint).
+	await expect(page.getByText('กำลังโหลดช่วงเวลา...')).toHaveCount(0, BOARD_SYNC);
+	await expect(page.getByText('รอข้อมูลการจองก่อน จึงจะลบได้')).toHaveCount(0, BOARD_SYNC);
 }
 
 /** Filtered on "จองแล้ว" too: the success toast is also an <li> carrying the window. */

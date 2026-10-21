@@ -83,14 +83,26 @@ export function verifyMfaOkCookie(value: string | undefined, expectedName: strin
 	}
 }
 
-/** Pure helper — enrolled && !valid cookie ⇒ pending_mfa. */
-export function computeMfaFlags(opts: { enrolled: boolean; mfaOkValid: boolean }): {
+/**
+ * Step-up MFA after password login (`/mfa-challenge`) is hidden unless
+ * `MFA_STEPUP_ENABLED=true`. OAuth login, link-on-first-login and /me linking are unaffected.
+ */
+export function isMfaStepupEnabled(): boolean {
+	return env.MFA_STEPUP_ENABLED?.trim().toLowerCase() === 'true';
+}
+
+/** Pure helper — step-up on && enrolled && !valid cookie ⇒ pending_mfa. */
+export function computeMfaFlags(opts: {
+	enrolled: boolean;
+	mfaOkValid: boolean;
+	stepupEnabled: boolean;
+}): {
 	mfa_enrolled: boolean;
 	pending_mfa: boolean;
 } {
 	return {
 		mfa_enrolled: opts.enrolled,
-		pending_mfa: opts.enrolled && !opts.mfaOkValid
+		pending_mfa: opts.stepupEnabled && opts.enrolled && !opts.mfaOkValid
 	};
 }
 

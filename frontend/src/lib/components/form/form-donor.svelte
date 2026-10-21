@@ -6,9 +6,10 @@
 	import ArrowRight from '@lucide/svelte/icons/arrow-right';
 	import AlertCircle from '@lucide/svelte/icons/alert-circle';
 	import { toast } from 'svelte-sonner';
+	import * as Select from '$lib/components/ui/select';
 	import { getDonationStore } from '../../../routes/(public)/donations/donation.svelte';
-	import { PUBLIC_DONATION_CATEGORIES } from '$lib/features/donations';
-	import { formatUnit, useUnitsOfMeasure } from '$lib/features/catalog';
+	import { PUBLIC_DONATION_CATEGORIES, donorUnitOptions } from '$lib/features/donations';
+	import { FALLBACK_UNIT_DEFINITIONS, formatUnit, useUnitsOfMeasure } from '$lib/features/catalog';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { getTranslation } from '$lib/utils/i18n';
 	import { PUBLIC_DONATIONS_I18N } from '$lib/constants/i18n';
@@ -16,6 +17,11 @@
 	const donationStore = getDonationStore();
 	const unitsQuery = useUnitsOfMeasure();
 	const units = $derived(unitsQuery.data ?? []);
+	// A donor is anonymous and cannot read the `catalog` database, so the query comes back
+	// empty on the public site; the bundled master keeps the picker filled.
+	const unitOptions = $derived(
+		donorUnitOptions(units.length > 0 ? units : FALLBACK_UNIT_DEFINITIONS)
+	);
 	const t = $derived(getTranslation(PUBLIC_DONATIONS_I18N, langState.current));
 
 	const CATEGORY_MAP: Record<string, { th: string; en: string }> = {
@@ -33,29 +39,27 @@
 		return PUBLIC_DONATION_CATEGORIES.find((c) => c.value === value)?.label ?? value ?? '';
 	}
 
+	const categoryOptions = $derived([
+		{ value: 'food', label: categoryLabel('food') },
+		{ value: 'clothing', label: categoryLabel('clothing') },
+		{ value: 'medicine', label: categoryLabel('medicine') },
+		{ value: 'supply', label: categoryLabel('supply') },
+		{ value: 'other', label: t.categoryOther }
+	]);
+	const conditionOptions = $derived([
+		{ value: 'new', label: t.conditionNew },
+		{ value: 'used', label: t.conditionUsed },
+		{ value: 'other', label: t.conditionOther }
+	]);
+
+	function optionLabel(options: { value: string; label: string }[], value: string | undefined) {
+		return options.find((option) => option.value === value)?.label;
+	}
+
+	const selectTriggerClass =
+		'w-full rounded-xl border-2 border-slate-200 p-3 text-base font-medium text-slate-800 focus-visible:border-domain-donation-strong data-placeholder:text-base data-[size=default]:h-auto';
+
 	let validationErrors = $state<string[]>([]);
-
-	function handleImageUpload(index: number, e: Event) {
-		const target = e.target as HTMLInputElement;
-		const file = target.files?.[0];
-		if (file) {
-			const reader = new FileReader();
-			reader.onload = (evt) => {
-				if (donationStore.items[index]) {
-					donationStore.items[index].image = (evt.target?.result as string) || '';
-				}
-			};
-			reader.readAsDataURL(file);
-		} else if (donationStore.items[index]) {
-			donationStore.items[index].image = '';
-		}
-	}
-
-	function removeImage(index: number) {
-		if (donationStore.items[index]) {
-			donationStore.items[index].image = '';
-		}
-	}
 
 	function handleNext() {
 		validationErrors = [];
@@ -91,7 +95,7 @@
 		}
 
 		if (validationErrors.length === 0) {
-			donationStore.activeTab = 'time';
+			donationStore.goToStep('time');
 			if (donationStore.reachedStep < 3) donationStore.reachedStep = 3;
 		} else {
 			toast.error(t.valToastError);
@@ -187,7 +191,7 @@
 		</div>
 
 		<div class="space-y-4">
-			{#each donationStore.items as item, idx (item.id)}
+			{#each donationStore.items as item (item.id)}
 				<div
 					class="relative flex flex-col gap-3 rounded-xl border border-slate-200 bg-[#f8f9fa] p-5"
 				>
@@ -202,33 +206,6 @@
 					</button>
 
 					<div class="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
-						<div>
-							<label class="mb-1 block text-xs font-bold text-slate-600" for="category-{item.id}">
-								{t.categoryLabel}
-							</label>
-							{#if donationStore.flowMode === 'solicited'}
-								<input
-									type="text"
-									id="category-{item.id}"
-									readonly
-									value={categoryLabel(item.category)}
-									class="w-full cursor-not-allowed rounded-xl border-2 border-transparent bg-slate-100 p-3 font-medium text-slate-500 outline-hidden"
-								/>
-							{:else}
-								<select
-									id="category-{item.id}"
-									bind:value={item.category}
-									class="w-full appearance-none rounded-xl border-2 border-slate-200 bg-white p-3 font-medium text-slate-800 outline-hidden transition-colors focus:border-domain-donation-strong"
-								>
-									<option value="" disabled>{t.categorySelectPlaceholder}</option>
-									<option value="food">{categoryLabel('food')}</option>
-									<option value="clothing">{categoryLabel('clothing')}</option>
-									<option value="medicine">{categoryLabel('medicine')}</option>
-									<option value="supply">{categoryLabel('supply')}</option>
-									<option value="other">{t.categoryOther}</option>
-								</select>
-							{/if}
-						</div>
 						<div>
 							<label class="mb-1 block text-xs font-bold text-slate-600" for="name-{item.id}">
 								{t.itemNameLabel}
@@ -249,6 +226,35 @@
 									bind:value={item.name}
 									class="w-full rounded-xl border-2 border-slate-200 bg-white p-3 font-medium text-slate-800 outline-hidden transition-colors focus:border-domain-donation-strong"
 								/>
+							{/if}
+						</div>
+						<div>
+							<label class="mb-1 block text-xs font-bold text-slate-600" for="category-{item.id}">
+								{t.categoryLabel}
+							</label>
+							{#if donationStore.flowMode === 'solicited'}
+								<input
+									type="text"
+									id="category-{item.id}"
+									readonly
+									value={categoryLabel(item.category)}
+									class="w-full cursor-not-allowed rounded-xl border-2 border-transparent bg-slate-100 p-3 font-medium text-slate-500 outline-hidden"
+								/>
+							{:else}
+								<Select.Root
+									type="single"
+									value={item.category ?? ''}
+									onValueChange={(v) => (item.category = v)}
+								>
+									<Select.Trigger id="category-{item.id}" class={selectTriggerClass}>
+										{optionLabel(categoryOptions, item.category) ?? t.categorySelectPlaceholder}
+									</Select.Trigger>
+									<Select.Content>
+										{#each categoryOptions as option (option.value)}
+											<Select.Item value={option.value} label={option.label} />
+										{/each}
+									</Select.Content>
+								</Select.Root>
 							{/if}
 						</div>
 					</div>
@@ -279,28 +285,39 @@
 									class="w-full cursor-not-allowed rounded-xl border-2 border-transparent bg-slate-100 p-3 font-medium text-slate-500 outline-hidden"
 								/>
 							{:else}
-								<input
-									type="text"
-									id="unit-{item.id}"
-									placeholder={t.unitPlaceholder}
-									bind:value={item.unit}
-									class="w-full rounded-xl border-2 border-slate-200 bg-white p-3 font-medium text-slate-800 outline-hidden transition-colors focus:border-domain-donation-strong"
-								/>
+								<Select.Root type="single" value={item.unit} onValueChange={(v) => (item.unit = v)}>
+									<Select.Trigger id="unit-{item.id}" class={selectTriggerClass}>
+										{formatUnit(item.unit, unitOptions, langState.current)}
+									</Select.Trigger>
+									<Select.Content>
+										{#each unitOptions as unit (unit.code)}
+											<Select.Item
+												value={unit.code}
+												label={formatUnit(unit.code, unitOptions, langState.current)}
+											/>
+										{/each}
+									</Select.Content>
+								</Select.Root>
 							{/if}
 						</div>
 						<div class="col-span-2 md:col-span-1">
 							<label class="mb-1 block text-xs font-bold text-slate-600" for="condition-{item.id}">
 								{t.conditionLabel}
 							</label>
-							<select
-								id="condition-{item.id}"
-								bind:value={item.condition}
-								class="w-full appearance-none rounded-xl border-2 border-slate-200 bg-white p-3 font-medium text-slate-800 outline-hidden transition-colors focus:border-domain-donation-strong"
+							<Select.Root
+								type="single"
+								value={item.condition ?? ''}
+								onValueChange={(v) => (item.condition = v)}
 							>
-								<option value="new">{t.conditionNew}</option>
-								<option value="used">{t.conditionUsed}</option>
-								<option value="other">{t.conditionOther}</option>
-							</select>
+								<Select.Trigger id="condition-{item.id}" class={selectTriggerClass}>
+									{optionLabel(conditionOptions, item.condition) ?? ''}
+								</Select.Trigger>
+								<Select.Content>
+									{#each conditionOptions as option (option.value)}
+										<Select.Item value={option.value} label={option.label} />
+									{/each}
+								</Select.Content>
+							</Select.Root>
 						</div>
 					</div>
 
@@ -317,39 +334,9 @@
 						/>
 					</div>
 
-					<!-- Optional Image Attachment — unsolicited flow only, per v8.5 -->
-					{#if donationStore.flowMode !== 'solicited'}
-						<div>
-							<label
-								class="mb-1 block text-xs font-bold text-slate-600"
-								for="file-upload-{item.id}"
-							>
-								{t.imageUploadLabel}
-							</label>
-							<input
-								type="file"
-								id="file-upload-{item.id}"
-								accept="image/*"
-								onchange={(e) => handleImageUpload(idx, e)}
-								class="w-full rounded-xl border-2 border-slate-200 bg-white p-1 text-sm text-slate-500 file:mr-4 file:cursor-pointer file:rounded-xl file:border-0 file:bg-domain-donation-subtle file:px-4 file:py-2.5 file:text-sm file:font-semibold file:text-domain-donation-text file:transition-colors hover:file:bg-domain-donation-border"
-							/>
-							{#if item.image}
-								<div
-									class="group relative mt-2 h-20 w-20 overflow-hidden rounded-xl border border-slate-200"
-								>
-									<img src={item.image} alt="Preview" class="h-full w-full object-cover" />
-									<button
-										type="button"
-										onclick={() => removeImage(idx)}
-										class="absolute top-1 right-1 cursor-pointer rounded-full bg-white/90 p-1 text-red-500 opacity-0 shadow-xs transition-opacity group-hover:opacity-100 hover:bg-red-50"
-										aria-label={t.removeImageAria}
-									>
-										<Trash2 class="h-3 w-3" />
-									</button>
-								</div>
-							{/if}
-						</div>
-					{/if}
+					<!-- No photo field: the booking payload never carried the image (schema.md has no
+					     field for it), so donors attached photos nobody received. Bring it back
+					     together with a real upload path. -->
 				</div>
 			{/each}
 

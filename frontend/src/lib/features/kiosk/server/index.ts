@@ -17,6 +17,14 @@ export {
 	putKioskCardImage,
 	type KioskCardImageRef
 } from './kiosk-photo.server';
+export {
+	KioskReprintNotFoundError,
+	KioskReprintUnverifiableError,
+	KioskReprintVerifyFailedError,
+	kioskReprintInputSchema,
+	reprintKioskLabels,
+	type KioskReprintMember
+} from './kiosk-reprint.server';
 export { normalizeKioskPhone } from '../domain/phone';
 export { isKioskThaidCheckInAllowed } from './kiosk-thaid-gate.server';
 export {
@@ -29,3 +37,8 @@ export {
 	kioskThaidNoStoreHeaders,
 	kioskThaidSessionRefSchema
 } from './kiosk-thaid.server';
+export {
+	KioskVolunteerCardNotFoundError,
+	resolveKioskVolunteerCard,
+	type KioskVolunteerCard
+} from './kiosk-volunteer-card.server';

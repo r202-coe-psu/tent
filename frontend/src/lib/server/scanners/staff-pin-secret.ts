@@ -5,7 +5,7 @@ import {
 	isTrivialStaffPin,
 	STAFF_PIN_LENGTH,
 	staffPinSchema
-} from '$lib/features/scanners/domain/scanner.schema';
+} from '$lib/features/kiosk-devices/domain/scanner.schema';
 import { ScannerConflictError, ScannerDependencyError } from './device-credentials';
 
 /**

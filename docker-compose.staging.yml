@@ -114,6 +114,8 @@ services:
     environment:
       # adapter-node requires ORIGIN in production
       ORIGIN: ${PUBLIC_ORIGIN:-http://localhost}
+      # Kiosk banner uploads are JSON base64 (2 MB image ≈ 2.7 MB body); adapter-node default is 512K
+      BODY_SIZE_LIMIT: ${BODY_SIZE_LIMIT:-4M}
       # Client IP for rate limiters (getClientAddress): the reverse proxy in front
       # (container nginx, or host nginx in the no-nginx variants) appends $remote_addr
       # to X-Forwarded-For, so depth 1 = the address that proxy saw. Spoofed entries a
@@ -144,6 +146,8 @@ services:
       # Staff Google step-up MFA (CR-124) — server-only; never PUBLIC_*
       GOOGLE_OAUTH_CLIENT_ID: ${GOOGLE_OAUTH_CLIENT_ID:-}
       GOOGLE_OAUTH_CLIENT_SECRET: ${GOOGLE_OAUTH_CLIENT_SECRET:-}
+      # Step-up MFA after password login (/mfa-challenge) — hidden unless "true"
+      MFA_STEPUP_ENABLED: ${MFA_STEPUP_ENABLED:-false}
       # Staff ThaID step-up MFA & linked login (BORA Digital ID) — server-only; never PUBLIC_*
       THAID_OAUTH_CLIENT_ID: ${THAID_OAUTH_CLIENT_ID:-}
       THAID_OAUTH_CLIENT_SECRET: ${THAID_OAUTH_CLIENT_SECRET:-}

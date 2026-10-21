@@ -26,6 +26,14 @@ async def apply_shelter_deactivate(shelter_code: str) -> None:
         await existing.save()
 
 
+async def is_shelter_projected(shelter_code: str) -> bool:
+    """Whether `public_shelters` holds a row for this code.
+
+    A cancelled shelter has none (its projection is purged), so shelter-DB changes for
+    it are skipped until the status is reverted and the registry re-projects it."""
+    return await PublicShelter.get(shelter_code) is not None
+
+
 async def refresh_occupancy(couch: CouchClient, shelter_code: str) -> bool:
     """Recompute `occupancy_total` / `occupancy_breakdown` from this shelter's active
     evacuees (EXT-005, ADR 0002 §2). No-op when the shelter has no `public_shelters`

@@ -49,6 +49,7 @@ export type PortalIconKey =
 	| 'house'
 	| 'map-pin'
 	| 'monitor'
+	| 'monitor-smartphone'
 	| 'package'
 	| 'package-check'
 	| 'scan-line'
@@ -73,7 +74,8 @@ export type PortalCapability =
 	| 'volunteer_coordinator'
 	| 'security_officer'
 	| 'facility_staff'
-	| 'distribution_staff';
+	| 'distribution_staff'
+	| 'kiosk_staff';
 
 /**
  * Per-shelter feature availability. `null` = not known yet (shelter still loading): items that
@@ -110,8 +112,10 @@ export type PortalDepartment = {
 	label: string;
 	desc: string;
 	/**
-	 * Work-domain colour family for the whole department; every item inherits it (items are told
-	 * apart by icon and station number, never by their own colour).
+	 * Work-domain colour family for the whole department; every portal tile inherits it (tiles are
+	 * told apart by icon and station number, never by their own colour). Station PAGES are the one
+	 * exception — they carry `baseStation` colours so staff can tell สถานี 1/2/3 apart across a
+	 * hall; the tiles here stay on the department colour.
 	 */
 	domain: DomainId;
 	/** Which step of the family is the department accent; defaults to `base`. */
@@ -140,6 +144,7 @@ const VC = 'volunteer_coordinator';
 const SO = 'security_officer';
 const FAC = 'facility_staff';
 const DST = 'distribution_staff';
+const KIO = 'kiosk_staff';
 
 export const PORTAL_DEPARTMENTS: readonly PortalDepartment[] = [
 	{
@@ -162,7 +167,7 @@ export const PORTAL_DEPARTMENTS: readonly PortalDepartment[] = [
 			},
 			{
 				id: 'station-2',
-				label: 'คัดกรองการแพทย์',
+				label: 'คัดกรองผู้เข้าพัก',
 				desc: 'คัดกรองอาการและกลุ่มเปราะบางก่อนจัดโซน',
 				icon: 'heart-pulse',
 				href: '/onsite/medical-screening',
@@ -278,6 +283,16 @@ export const PORTAL_DEPARTMENTS: readonly PortalDepartment[] = [
 				roles: [SC]
 			},
 			{
+				// Same queue the kitchen opens tickets into — warehouse approves and dispatches here.
+				id: 'supply-kitchen-requisition',
+				label: 'เบิกวัตถุดิบครัว',
+				desc: 'ใบเบิกวัตถุดิบและเสบียงอาหาร',
+				icon: 'clipboard-check',
+				href: '/back-office/tickets/kitchen',
+				scope: 'shelter',
+				roles: [SC]
+			},
+			{
 				id: 'frontline-distribution',
 				label: 'จุดแจกจ่ายพัสดุและอาหาร',
 				desc: 'แจกของรายครัวเรือนหน้างาน',
@@ -328,9 +343,9 @@ export const PORTAL_DEPARTMENTS: readonly PortalDepartment[] = [
 				label: 'ความปลอดภัยและเหตุการณ์',
 				desc: 'บันทึกเหตุไม่ปลอดภัย',
 				icon: 'shield-alert',
-				href: null,
+				href: '/back-office/incidents',
 				scope: 'shelter',
-				roles: [SO]
+				roles: [SO] // SM sees every shelter-scoped item
 			}
 		]
 	},
@@ -389,6 +404,16 @@ export const PORTAL_DEPARTMENTS: readonly PortalDepartment[] = [
 				href: '/back-office/users',
 				scope: 'shelter',
 				roles: []
+			},
+			{
+				id: 'kiosk-devices',
+				label: 'จัดการ Kiosk',
+				desc: 'ตู้ Kiosk และ PIN เจ้าหน้าที่ของศูนย์',
+				icon: 'monitor-smartphone',
+				href: '/back-office/kiosks',
+				scope: 'shelter',
+				// Draft CR scanner back-office: SA, SM and kiosk_staff of the selected shelter.
+				roles: [KIO]
 			},
 			{
 				id: 'referrals',

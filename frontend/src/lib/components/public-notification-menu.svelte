@@ -144,14 +144,14 @@
 					<div class="mt-1 flex items-center justify-end gap-2 pl-9">
 						{#if announcementsCount > 0}
 							<span
-								class="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-red-200 bg-red-50 px-2.5 py-0.5 text-2xs font-semibold whitespace-nowrap text-red-700"
+								class="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-red-200 bg-red-50 px-2.5 py-0.5 text-xs font-semibold whitespace-nowrap text-red-700"
 							>
 								<span class="h-1.5 w-1.5 rounded-full bg-red-600"></span>
 								{t.newAnnouncements}
 							</span>
 						{:else}
 							<span
-								class="shrink-0 rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-2xs font-medium whitespace-nowrap text-slate-500"
+								class="shrink-0 rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs font-medium whitespace-nowrap text-slate-500"
 							>
 								{t.noNewAnnouncements}
 							</span>
@@ -178,7 +178,7 @@
 							>
 								<div class="flex items-center justify-between gap-2">
 									<span
-										class="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-2xs font-bold {isDanger
+										class="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-bold {isDanger
 											? 'border-red-200 bg-red-50 text-red-700'
 											: isWarning
 												? 'border-amber-200 bg-amber-50 text-amber-800'
@@ -194,7 +194,7 @@
 										{isDanger ? t.emergencyBadge : isWarning ? t.warningBadge : t.infoBadge}
 									</span>
 									{#if ann.created_at}
-										<span class="text-2xs text-slate-400 tabular-nums">
+										<span class="text-xs text-slate-400 tabular-nums">
 											{formatThaiTime(ann.created_at)} น.
 										</span>
 									{/if}
@@ -212,7 +212,7 @@
 							class="rounded-xl border border-dashed border-slate-200 bg-slate-50/50 p-6 text-center text-slate-500"
 						>
 							<p class="text-xs font-medium">{t.emptyTitle}</p>
-							<p class="mt-0.5 text-2xs text-slate-400">
+							<p class="mt-0.5 text-xs text-slate-400">
 								{t.emptySubtitle}
 							</p>
 						</div>
@@ -311,14 +311,14 @@
 						<div class="mt-1 flex items-center justify-end gap-2 pl-9">
 							{#if announcementsCount > 0}
 								<span
-									class="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-red-200 bg-red-50 px-2.5 py-0.5 text-2xs font-semibold whitespace-nowrap text-red-700"
+									class="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-red-200 bg-red-50 px-2.5 py-0.5 text-xs font-semibold whitespace-nowrap text-red-700"
 								>
 									<span class="h-1.5 w-1.5 rounded-full bg-red-600"></span>
 									{t.newAnnouncements}
 								</span>
 							{:else}
 								<span
-									class="shrink-0 rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-2xs font-medium whitespace-nowrap text-slate-500"
+									class="shrink-0 rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs font-medium whitespace-nowrap text-slate-500"
 								>
 									{t.noNewAnnouncements}
 								</span>
@@ -345,7 +345,7 @@
 								>
 									<div class="flex items-center justify-between gap-2">
 										<span
-											class="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-2xs font-bold {isDanger
+											class="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-bold {isDanger
 												? 'border-red-200 bg-red-50 text-red-700'
 												: isWarning
 													? 'border-amber-200 bg-amber-50 text-amber-800'
@@ -361,7 +361,7 @@
 											{isDanger ? t.emergencyBadge : isWarning ? t.warningBadge : t.infoBadge}
 										</span>
 										{#if ann.created_at}
-											<span class="text-2xs text-slate-400 tabular-nums">
+											<span class="text-xs text-slate-400 tabular-nums">
 												{formatThaiTime(ann.created_at)} น.
 											</span>
 										{/if}
@@ -379,7 +379,7 @@
 								class="rounded-xl border border-dashed border-slate-200 bg-slate-50/50 p-6 text-center text-slate-500"
 							>
 								<p class="text-xs font-medium">{t.emptyTitle}</p>
-								<p class="mt-0.5 text-2xs text-slate-400">
+								<p class="mt-0.5 text-xs text-slate-400">
 									{t.emptySubtitle}
 								</p>
 							</div>

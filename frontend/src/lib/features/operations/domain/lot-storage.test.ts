@@ -5,7 +5,8 @@ import {
 	lotStorageLabel,
 	lotLocationFields,
 	lotStorageName,
-	storageLotFields
+	storageLotFields,
+	isStoragePointChosen
 } from './lot-storage';
 import { stockLotSchema } from './operations';
 
@@ -117,5 +118,25 @@ describe('lotLocationFields', () => {
 		]) {
 			expect(lotStorageKey(lotLocationFields(lot))).toBe(lotStorageKey(lot));
 		}
+	});
+});
+
+describe('isStoragePointChosen (CR-139 N1)', () => {
+	const shelterPoints = [
+		{ id: 'sp-1', name: 'ห้องเก็บอาหาร' },
+		{ id: 'sp-2', name: 'ตู้แช่' }
+	];
+
+	it('needs no choice when the shelter has no storage points (main store)', () => {
+		expect(isStoragePointChosen('', [])).toBe(true);
+	});
+
+	it('requires one of the shelter points once any exist', () => {
+		expect(isStoragePointChosen('', shelterPoints)).toBe(false);
+		expect(isStoragePointChosen('sp-2', shelterPoints)).toBe(true);
+	});
+
+	it('does not accept an id that is not one of the points', () => {
+		expect(isStoragePointChosen('sp-gone', shelterPoints)).toBe(false);
 	});
 });

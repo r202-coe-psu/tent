@@ -2,7 +2,12 @@ import { describe, expect, it } from 'vitest';
 import type { StockLedger } from '$lib/features/operations';
 import { createStockLedger } from '$lib/features/operations';
 import type { AuthorContext } from '$lib/db/model';
-import { getEligiblePhysicalLots, isLotDateExpired } from './physical-lot';
+import {
+	getEligiblePhysicalLots,
+	getItemLotBalances,
+	isLotDateExpired,
+	lotInputMax
+} from './physical-lot';
 
 const ctx: AuthorContext = {
 	shelterCode: 'SH001',
@@ -159,6 +164,23 @@ describe('Physical Lot Projection & FEFO Ordering (Slice 5.3)', () => {
 		expect(large?.hasSufficientQty).toBe(true);
 	});
 
+	it('getItemLotBalances returns positive remaining balances of the item only', () => {
+		const inEntry = createInboundLedger('L1', 'item:meal', '5', '2026-05-01T08:00:00Z');
+		const other = createInboundLedger('L2', 'item:water', '9', '2026-05-01T09:00:00Z');
+		const out = createOutboundLedger(
+			'OUT1',
+			'item:meal',
+			'2',
+			'2026-05-02T08:00:00Z',
+			inEntry.lot_ref ?? inEntry._id
+		);
+
+		const balances = getItemLotBalances([inEntry, other, out], 'item:meal');
+		expect(balances).toHaveLength(1);
+		expect(balances[0].qty).toBe('3');
+		expect(getItemLotBalances(undefined, 'item:meal')).toEqual([]);
+	});
+
 	it('flags expired lots accurately based on reference time', () => {
 		expect(isLotDateExpired('2026-05-01', refDate)).toBe(true);
 		expect(isLotDateExpired('2026-07-01', refDate)).toBe(false);
@@ -260,5 +282,21 @@ describe('Physical Lot Projection & FEFO Ordering (Slice 5.3)', () => {
 			const [lot] = getEligiblePhysicalLots(ledger, 'item:rice', '1', refDate);
 			expect(lot.reason).toBe('อยู่ในคลัง 200 วัน');
 		});
+	});
+});
+
+describe('lotInputMax', () => {
+	it('is the lot balance when the remaining need is larger', () => {
+		expect(lotInputMax('3', '10', '2')).toBe('3');
+	});
+	it('is the remaining need when the lot holds more', () => {
+		expect(lotInputMax('50', '10', '4')).toBe('6');
+	});
+	it('is 0 once the other lots already cover the allocation', () => {
+		expect(lotInputMax('50', '10', '10')).toBe('0');
+		expect(lotInputMax('50', '10', '12')).toBe('0');
+	});
+	it('handles decimals without float drift', () => {
+		expect(lotInputMax('5', '0.3', '0.1')).toBe('0.2');
 	});
 });

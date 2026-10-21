@@ -193,9 +193,9 @@ UAT-152,Public,Shelters list,P0,PUB,/shelters,รายการศูนย์ 
 UAT-153,Public,Shelter detail,P0,PUB,/shelters/[id],หน้ารายละเอียดศูนย์,มี shelter id สาธารณะ,"1) เปิดจากรายการ
 2) ตรวจโซน/สิ่งอำนวยความสะดวก/นโยบาย/ติดต่อ",ข้อมูลครบและไม่โชว์ PII ผู้ประสบภัย,Not Tested,,,,,Staging,
 UAT-154,Public,Shelter 404,P2,PUB,/shelters/invalid-id,ID ศูนย์ไม่พบ,-,1) เปิด id ปลอม,แสดงไม่พบข้อมูลศูนย์พักพิง,Not Tested,,,,,Staging,
-UAT-155,Public,Family search success,P0,FAM,/search,สืบค้นญาติด้วยคำค้น ≥ 3 ตัวอักษร,มีผู้ประสบภัยที่ไม่ได้ opt-out และยินยอมแสดง,"1) ค้นชื่อ/สกุล/เบอร์/บัตร ≥ 3 ตัว
+UAT-155,Public,Family search success,P0,FAM,/search,สืบค้นญาติด้วยคำค้น (ชื่อ/สกุลทุกคำ ≥ 2 ตัวอักษร),มีผู้ประสบภัยที่ไม่ได้ opt-out และยินยอมแสดง,"1) ค้นชื่อ/สกุล (ทุกคำ ≥ 2 ตัว)/เบอร์/บัตร
 2) ดูผล",ได้ผลแบบ masked (ชื่อ/ชื่อเล่น/สถานะศูนย์) ไม่โชว์ medical/national ID เต็ม,Not Tested,,,,,Staging,FR-53 anti-enumeration
-UAT-156,Public,Family search short query,P0,FAM,/search,ค้นน้อยกว่า 3 ตัวอักษรถูกกัน,-,1) พิมพ์ 1–2 ตัวแล้วค้น,ไม่ค้นได้ / บังคับ ≥ 3 ตัว,Not Tested,,,,,Staging,
+UAT-156,Public,Family search short query,P0,FAM,/search,ค้นคำที่สั้นกว่า 2 ตัวอักษรถูกกัน,-,1) พิมพ์ 1 ตัว หรือชื่อที่มีคำ 1 ตัว (เช่น สมหมาย ก) แล้วค้น,ไม่ค้นได้ / บังคับทุกคำ ≥ 2 ตัว,Not Tested,,,,,Staging,
 UAT-157,Public,Family search opt-out,P0,"FAM,SM",/search,ผู้ที่ opt-out ไม่ขึ้นในผลค้นหา,ตั้ง opt-out ให้คนทดสอบจาก staff,"1) Opt-out จาก staff (FR-52)
 2) ค้นด้วยชื่อคนนั้นฝั่ง public",ไม่พบในผลลัพธ์สาธารณะ,Not Tested,,,,,Staging,
 UAT-158,Public,Family search rate limit,P1,FAM,/search,Rate limit เมื่อค้นถี่เกินไป,-,1) ส่งคำค้นซ้ำเร็วๆ จำนวนมาก,ได้ 429 หรือข้อความจำกัดการใช้งาน,Not Tested,,,,,Staging,NFR anti-enumeration

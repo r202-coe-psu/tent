@@ -6,6 +6,7 @@ import {
 	buildGoogleAuthorizeUrl,
 	createOAuthState,
 	getGoogleOAuthConfig,
+	isMfaStepupEnabled,
 	resolveGoogleRedirectUri,
 	setOAuthStateCookie,
 	type GoogleOAuthMode
@@ -22,6 +23,8 @@ function parseMode(raw: string | null): GoogleOAuthMode {
 export const GET: RequestHandler = async ({ url, fetch, cookies }) => {
 	try {
 		const mode = parseMode(url.searchParams.get('mode'));
+		// Step-up MFA is hidden unless MFA_STEPUP_ENABLED — nothing to challenge.
+		if (mode === 'stepup' && !isMfaStepupEnabled()) throw redirect(302, '/portal');
 		const { clientId } = getGoogleOAuthConfig();
 		const redirectUri = resolveGoogleRedirectUri(url);
 

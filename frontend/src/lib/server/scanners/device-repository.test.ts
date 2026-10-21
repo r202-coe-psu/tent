@@ -52,7 +52,8 @@ const input = {
 	name: 'จุดคัดกรอง 1',
 	shelter_code: 'SH001',
 	station_name: 'โต๊ะ 1',
-	status: 'active' as const
+	status: 'active' as const,
+	screen_type: 'compact' as const
 };
 
 const v1Doc = {
@@ -135,6 +136,18 @@ describe('ScannerDeviceRepository', () => {
 				staff_pin_is_default: true,
 				staff_pin_updated_by: 'sa-user'
 			});
+		});
+
+		it('writes the chosen screen_type on the registry doc', async () => {
+			await repository.createDevice({ ...input, screen_type: 'portrait' }, 'sa-user');
+
+			expect(mockRaw.mock.calls[1]?.[2]).toMatchObject({ screen_type: 'portrait' });
+		});
+
+		it('writes banner_enabled: true explicitly on a new device (FR-KBR-35)', async () => {
+			await repository.createDevice(input, 'sa-user');
+
+			expect(mockRaw.mock.calls[1]?.[2]).toMatchObject({ banner_enabled: true });
 		});
 
 		it('writes a random default PIN to scanner_secrets first and returns it once', async () => {
@@ -391,6 +404,198 @@ describe('ScannerDeviceRepository', () => {
 		await expect(repository.revealStaffPin('shelter:SH001')).rejects.toBeInstanceOf(
 			ScannerDeviceNotFoundError
 		);
+	});
+
+	describe('getDevice', () => {
+		it('returns the registry doc for an id and maps a missing one to not-found', async () => {
+			mockRaw.mockResolvedValueOnce({ status: 200, data: v2Doc });
+			const device = await repository.getDevice(v2Doc._id);
+			expect(device.shelter_code).toBe('SH001');
+			expect(mockRaw.mock.calls[0]?.slice(0, 2)).toEqual([
+				'/registry/scanner_device%3Akiosk-sh001-01',
+				'GET'
+			]);
+
+			mockRaw.mockResolvedValueOnce({ status: 404, data: null });
+			await expect(repository.getDevice('scanner_device:nope')).rejects.toBeInstanceOf(
+				ScannerDeviceNotFoundError
+			);
+		});
+	});
+
+	describe('listDevices', () => {
+		const docB = {
+			...v2Doc,
+			_id: 'scanner_device:kiosk-sh002-01',
+			device_id: 'kiosk-sh002-01',
+			shelter_code: 'SH002'
+		};
+
+		it('returns every shelter for a system admin (null scope), selecting only scanner devices', async () => {
+			mockFetch.mockResolvedValueOnce({ docs: [v2Doc, docB] });
+			const devices = await repository.listDevices(null);
+			expect(devices.map((d) => d.device_id)).toEqual(['kiosk-sh001-01', 'kiosk-sh002-01']);
+			const [path, init] = mockFetch.mock.calls[0] as [string, { body: string }];
+			expect(path).toBe('/registry/_find');
+			expect(JSON.parse(init.body).selector).toEqual({ type: 'scanner_device' });
+		});
+
+		it('keeps only the shelters in scope', async () => {
+			mockFetch.mockResolvedValueOnce({ docs: [v2Doc, docB] });
+			const devices = await repository.listDevices(['SH002']);
+			expect(devices.map((d) => d.device_id)).toEqual(['kiosk-sh002-01']);
+		});
+
+		it('returns nothing for an empty scope', async () => {
+			mockFetch.mockResolvedValueOnce({ docs: [v2Doc, docB] });
+			expect(await repository.listDevices([])).toEqual([]);
+		});
+
+		it('skips a broken doc with a warning instead of failing the list', async () => {
+			const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+			mockFetch.mockResolvedValueOnce({
+				docs: [{ ...v2Doc, _id: 'scanner_device:broken', secret_hash: 'nope' }, docB]
+			});
+			const devices = await repository.listDevices(null);
+			expect(devices.map((d) => d.device_id)).toEqual(['kiosk-sh002-01']);
+			expect(warn).toHaveBeenCalledTimes(1);
+			expect(String(warn.mock.calls[0]?.[0])).toContain('scanner_device:broken');
+			warn.mockRestore();
+		});
+
+		it('maps a registry outage to a dependency error', async () => {
+			mockFetch.mockRejectedValueOnce(new Error('down'));
+			await expect(repository.listDevices(null)).rejects.toBeInstanceOf(ScannerDependencyError);
+		});
+	});
+
+	describe('updateDevice', () => {
+		const putBodyAt = (call: number) => mockRaw.mock.calls[call]?.[2] as Record<string, unknown>;
+
+		it('applies the patch under the current _rev and leaves server-owned fields alone', async () => {
+			mockRaw
+				.mockResolvedValueOnce({ status: 200, data: v2Doc })
+				.mockResolvedValueOnce({ status: 201, data: { ok: true, rev: '4-def' } });
+
+			const updated = await repository.updateDevice(
+				v2Doc._id,
+				{ name: 'จุดคัดกรอง 9', status: 'inactive' },
+				'sm-a'
+			);
+
+			expect(mockRaw.mock.calls[1]?.slice(0, 2)).toEqual([
+				'/registry/scanner_device%3Akiosk-sh001-01',
+				'PUT'
+			]);
+			expect(putBodyAt(1)).toEqual({
+				...v2Doc,
+				name: 'จุดคัดกรอง 9',
+				status: 'inactive',
+				updated_at: expect.any(String)
+			});
+			expect(putBodyAt(1).updated_at).not.toBe(v2Doc.updated_at);
+			expect(updated.name).toBe('จุดคัดกรอง 9');
+			expect(updated.status).toBe('inactive');
+		});
+
+		it('writes banner_enabled and keeps it absent when not patched (FR-KBR-35)', async () => {
+			mockRaw
+				.mockResolvedValueOnce({ status: 200, data: v2Doc })
+				.mockResolvedValueOnce({ status: 201, data: { ok: true, rev: '4-def' } })
+				.mockResolvedValueOnce({ status: 200, data: v2Doc })
+				.mockResolvedValueOnce({ status: 201, data: { ok: true, rev: '4-def' } });
+
+			const updated = await repository.updateDevice(v2Doc._id, { banner_enabled: false }, 'sm-a');
+			expect(putBodyAt(1)).toEqual({
+				...v2Doc,
+				banner_enabled: false,
+				updated_at: expect.any(String)
+			});
+			expect(updated.banner_enabled).toBe(false);
+
+			await repository.updateDevice(v2Doc._id, { status: 'inactive' }, 'sm-a');
+			expect(putBodyAt(3)).not.toHaveProperty('banner_enabled');
+		});
+
+		it('writes screen_type through a patch', async () => {
+			mockRaw
+				.mockResolvedValueOnce({ status: 200, data: v2Doc })
+				.mockResolvedValueOnce({ status: 201, data: { ok: true, rev: '4-def' } });
+
+			const updated = await repository.updateDevice(v2Doc._id, { screen_type: 'portrait' }, 'sm-a');
+			expect(putBodyAt(1)).toMatchObject({ screen_type: 'portrait' });
+			expect(updated.screen_type).toBe('portrait');
+		});
+
+		it('keeps a v1 doc at v1 (no PIN metadata invented)', async () => {
+			mockRaw
+				.mockResolvedValueOnce({ status: 200, data: v1Doc })
+				.mockResolvedValueOnce({ status: 201, data: { ok: true } });
+			await repository.updateDevice(v1Doc._id, { status: 'inactive' }, 'sm-a');
+			expect(putBodyAt(1).schema_v).toBe(1);
+			expect(putBodyAt(1)).not.toHaveProperty('staff_pin_set');
+		});
+
+		it('retries a _rev race on a fresh read and keeps the newer last_seen_at', async () => {
+			const heartbeat = { ...v2Doc, _rev: '4-hb', last_seen_at: '2026-10-12T01:00:00Z' };
+			mockRaw
+				.mockResolvedValueOnce({ status: 200, data: v2Doc })
+				.mockResolvedValueOnce({ status: 409, data: { error: 'conflict' } })
+				.mockResolvedValueOnce({ status: 200, data: heartbeat })
+				.mockResolvedValueOnce({ status: 201, data: { ok: true } });
+
+			await repository.updateDevice(v2Doc._id, { status: 'inactive' }, 'sm-a');
+
+			expect(putBodyAt(3)).toMatchObject({
+				_rev: '4-hb',
+				last_seen_at: '2026-10-12T01:00:00Z',
+				status: 'inactive'
+			});
+		});
+
+		it('gives up with a conflict after three _rev races', async () => {
+			mockRaw.mockImplementation(async (_path, method) =>
+				method === 'PUT'
+					? { status: 409, data: { error: 'conflict' } }
+					: { status: 200, data: v2Doc }
+			);
+			await expect(
+				repository.updateDevice(v2Doc._id, { status: 'inactive' }, 'sm-a')
+			).rejects.toBeInstanceOf(ScannerConflictError);
+			expect(mockRaw.mock.calls.filter(([, method]) => method === 'PUT')).toHaveLength(3);
+			mockRaw.mockReset();
+		});
+
+		it('maps a missing device to not-found without writing', async () => {
+			mockRaw.mockResolvedValueOnce({ status: 404, data: null });
+			await expect(
+				repository.updateDevice('scanner_device:nope', { status: 'inactive' }, 'sm-a')
+			).rejects.toBeInstanceOf(ScannerDeviceNotFoundError);
+			expect(mockRaw).toHaveBeenCalledTimes(1);
+		});
+
+		it('maps a failed write to a dependency error', async () => {
+			mockRaw
+				.mockResolvedValueOnce({ status: 200, data: v2Doc })
+				.mockResolvedValueOnce({ status: 500, data: { error: 'x' } });
+			await expect(
+				repository.updateDevice(v2Doc._id, { status: 'inactive' }, 'sm-a')
+			).rejects.toBeInstanceOf(ScannerDependencyError);
+		});
+
+		it('logs which fields changed, by whom, without any secret', async () => {
+			const info = vi.spyOn(console, 'info').mockImplementation(() => {});
+			mockRaw
+				.mockResolvedValueOnce({ status: 200, data: v2Doc })
+				.mockResolvedValueOnce({ status: 201, data: { ok: true } });
+			await repository.updateDevice(v2Doc._id, { name: 'x', status: 'inactive' }, 'sm-a');
+			const logged = info.mock.calls.flat().join(' ');
+			expect(logged).toContain(
+				'[scanner-device] updated device=kiosk-sh001-01 shelter=SH001 fields=name,status by=sm-a'
+			);
+			expect(logged).not.toContain(v2Doc.secret_hash);
+			info.mockRestore();
+		});
 	});
 
 	describe('deleteDevice', () => {

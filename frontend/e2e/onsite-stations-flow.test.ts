@@ -18,7 +18,6 @@
  *   PLAYWRIGHT_TEST_BASE_URL=http://localhost:4191 pnpm exec playwright test \
  *     e2e/onsite-stations-flow.test.ts --grep @release
  */
-import { createRequire } from 'node:module';
 import { test, expect, type Browser } from '@playwright/test';
 import {
 	bootstrapAdminSession,
@@ -55,9 +54,6 @@ import {
 	createShelterViaUi,
 	pinActiveShelter
 } from './helpers/staff-ui';
-
-// html5-qrcode must resolve at load (QR decode) — fail `--list` early if missing.
-createRequire(import.meta.url).resolve('html5-qrcode/html5-qrcode.min.js');
 
 test.describe.configure({ mode: 'serial' });
 test.use({ actionTimeout: 15_000 });
@@ -140,7 +136,7 @@ test.describe(
 			await configureOnsiteShelterViaUi(page, shelterCode, {
 				enableMedicalScreening: true,
 				acceptsPreRegistration: true,
-				zones: [{ name: ZONE_NAME, capacity: 20 }]
+				zones: [{ name: ZONE_NAME, capacity: 20, shortName: 'E2E' }]
 			});
 
 			await ensureStaff(shelterCode);

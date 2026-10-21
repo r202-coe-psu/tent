@@ -51,6 +51,8 @@ export class ThaidSession {
 	private pollSeq = 0;
 	/** Bumped on every start / restart / destroy so an answer for a replaced session is dropped. */
 	private generation = 0;
+	/** The completed session went on to a walk-in registration, which now owns (and cancels) it. */
+	private handedOff = false;
 
 	constructor(private readonly api: ThaidSessionApi) {}
 
@@ -82,10 +84,24 @@ export class ThaidSession {
 		this.generation += 1;
 	}
 
+	/**
+	 * Leave the page while a completed scan goes on to a walk-in registration: stop the timers but,
+	 * unlike `destroy()`, keep the server session alive. Whoever takes it over cancels it if the
+	 * visit is abandoned. Returns the handed-over session id (null when nothing was completed).
+	 */
+	handOff(): string | null {
+		const sessionId = this.state === 'completed' ? this.sessionId : null;
+		this.clearTimers();
+		this.generation += 1;
+		if (sessionId) this.handedOff = true;
+		return sessionId;
+	}
+
 	private async begin(): Promise<void> {
 		const generation = ++this.generation;
 		this.clearTimers();
 		this.sessionId = null;
+		this.handedOff = false;
 		this.qrUrl = null;
 		this.deadline = null;
 		this.errorKind = null;
@@ -130,7 +146,8 @@ export class ThaidSession {
 	/** Stop timers and cancel the server session when it is still live (pending or completed). */
 	private release(): void {
 		this.clearTimers();
-		if ((this.state === 'pending' || this.state === 'completed') && this.sessionId) {
+		const live = this.state === 'pending' || this.state === 'completed';
+		if (live && this.sessionId && !this.handedOff) {
 			void this.api.cancel(this.sessionId);
 		}
 	}

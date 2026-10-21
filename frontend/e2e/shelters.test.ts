@@ -14,6 +14,7 @@
  * [Create] client validation blocks submit when required fields are empty
  * [Create] SA can fill the form and submit a new shelter (incl. food point)
  * [Edit]   form pre-fills from the loaded shelter and PATCHes on save
+ * [Edit]   optional zone short name pre-fills, edits (≤10 chars) and PATCHes
  * [Nav]    all sections visible; sidebar click scrolls to section
  */
 
@@ -22,6 +23,7 @@ import {
 	createCouchUser,
 	deleteCouchUser,
 	couchLogin,
+	seedSecurityQuestion,
 	SA_ROLES,
 	SM_SH001_ROLES
 } from './helpers/couch';
@@ -46,6 +48,8 @@ const sessions: Record<string, string> = {};
 test.beforeAll(async () => {
 	await createCouchUser(SA);
 	await createCouchUser(SM);
+	await seedSecurityQuestion(SA.name);
+	await seedSecurityQuestion(SM.name);
 	sessions[SA.name] = await couchLogin(SA.name, SA.password);
 	sessions[SM.name] = await couchLogin(SM.name, SM.password);
 });
@@ -127,21 +131,29 @@ async function mockShelterDetail(
 }
 
 const BASIC_INFO_HEADING = 'ข้อมูลพื้นฐานและที่ตั้ง';
-const CAPACITY_HEADING = 'ข้อมูลความจุเชิงพื้นที่';
+const CAPACITY_HEADING = 'ความจุ โซน และสิ่งอำนวยความสะดวก';
 const FOOD_HEADING = 'จุดแจกอาหาร';
 const PARKING_HEADING = 'นโยบายยานพาหนะ';
 
 const SECTION_HEADINGS = [
 	BASIC_INFO_HEADING,
 	CAPACITY_HEADING,
-	'การจัดการโซนและสิ่งอำนวยความสะดวก',
 	FOOD_HEADING,
+	'จุดเก็บของ',
 	'สถานะสาธารณูปโภคพื้นฐาน',
 	'ข้อมูลการประเมินความเสี่ยงและโครงสร้าง',
 	'นโยบายการรับผู้อพยพและกลุ่มเปราะบาง',
 	'นโยบายทรัพย์สินมีค่า / สัมภาระ',
 	'นโยบายยานพาหนะและการจอดรถ'
 ];
+
+/** Desktop sidebar nav button (its name is prefixed with the section number). */
+function sectionNav(page: Page, label: string) {
+	return page
+		.locator('nav')
+		.filter({ hasText: 'สารบัญหมวดหมู่' })
+		.getByRole('button', { name: label });
+}
 
 test.describe('Shelter Form — Access Guard', () => {
 	test('a non-admin (shelter manager) is redirected away from the create page', async ({
@@ -168,11 +180,16 @@ test.describe('Shelter Form — Create', () => {
 		await page.getByRole('button', { name: 'บันทึกข้อมูล' }).click();
 
 		await expect(page.getByText('กรุณากรอกข้อมูลให้ครบถ้วนและถูกต้อง')).toBeVisible();
-		await expect(page.getByRole('alert')).toContainText('ยังมีข้อมูลที่ต้องกรอกหรือแก้ไข');
-		await expect(page.getByRole('alert')).toContainText('ชื่อศูนย์พักพิงต้องไม่ว่าง');
-		await expect(page.getByRole('alert')).toContainText(/ความจุ|กรุณาระบุความจุ/);
+		const formAlert = page
+			.getByRole('alert')
+			.filter({ hasText: 'ยังมีข้อมูลที่ต้องกรอกหรือแก้ไข' });
+		await expect(formAlert).toBeVisible();
+		await expect(formAlert).toContainText('ชื่อศูนย์พักพิงต้องไม่ว่าง');
+		await expect(formAlert).toContainText(/ความจุ|กรุณาระบุความจุ/);
 		await expect(page.getByRole('heading', { name: new RegExp(BASIC_INFO_HEADING) })).toBeVisible();
-		await expect(page.getByText('ชื่อศูนย์พักพิงต้องไม่ว่าง')).toBeVisible();
+		await expect(
+			page.locator('[data-fs-field-error]', { hasText: 'ชื่อศูนย์พักพิงต้องไม่ว่าง' })
+		).toBeVisible();
 		expect(wasCalled()).toBe(false);
 		await expect(page).toHaveURL(/\/back-office\/shelters\/create/);
 	});
@@ -188,12 +205,12 @@ test.describe('Shelter Form — Create', () => {
 		await expect(page.getByRole('heading', { name: new RegExp(BASIC_INFO_HEADING) })).toBeVisible();
 		await page.getByLabel('ชื่อศูนย์พักพิง').fill('ศูนย์พักพิงทดสอบ E2E');
 
-		await page.getByRole('button', { name: CAPACITY_HEADING }).click();
+		await sectionNav(page, CAPACITY_HEADING).click();
 		await expect(page.getByLabel('ความจุสูงสุด')).toBeVisible();
 		await page.getByLabel('ความจุสูงสุด').fill('120');
 
-		await page.getByRole('button', { name: FOOD_HEADING }).click();
-		await expect(page.getByRole('heading', { name: FOOD_HEADING })).toBeVisible();
+		await sectionNav(page, FOOD_HEADING).click();
+		await expect(page.getByRole('heading', { level: 2, name: FOOD_HEADING })).toBeVisible();
 		await page.getByRole('button', { name: /เพิ่มจุดแจกอาหาร/ }).click();
 		await page.getByLabel('ชื่อจุดแจกอาหาร').fill('จุดแจกหน้าโรงครัว');
 
@@ -244,21 +261,77 @@ test.describe('Shelter Form — Edit', () => {
 		await expect(nameInput).toHaveValue('ศูนย์พักพิงเดิม');
 		await nameInput.fill('ศูนย์พักพิงแก้ไขแล้ว');
 
-		await page.getByRole('button', { name: CAPACITY_HEADING }).click();
+		await sectionNav(page, CAPACITY_HEADING).click();
 		await expect(page.getByLabel('ความจุสูงสุด')).toHaveValue('80');
 
-		await page.getByRole('button', { name: 'บันทึกข้อมูล' }).click();
-
-		await page.waitForURL(
-			(url) =>
-				url.pathname === '/back-office/shelters' ||
-				url.pathname.startsWith('/back-office/shelters/edit/'),
-			{ timeout: 8000 }
+		const patched = page.waitForResponse(
+			(res) =>
+				res.request().method() === 'PATCH' && res.url().endsWith(`/api/back-office/shelter/${CODE}`)
 		);
+		await page.getByRole('button', { name: 'บันทึกข้อมูล' }).click();
+		await patched;
 
 		const body = getPatchBody() as { name: string; capacity: number };
 		expect(body.name).toBe('ศูนย์พักพิงแก้ไขแล้ว');
 		expect(body.capacity).toBe(80);
+	});
+
+	test('pre-fills, edits and PATCHes the optional zone short name', async ({ page }) => {
+		const CODE = 'SH903';
+		const { getPatchBody } = await mockShelterDetail(page, CODE, {
+			name: 'ศูนย์พักพิงชื่อย่อโซน',
+			operation_status: 'standby',
+			capacity: 80,
+			shelter_type: null,
+			project_level: null,
+			location: {},
+			contact: {},
+			facilities: {},
+			common_areas: { sub_storage: [] },
+			utilities: { communications: [] },
+			risk: {},
+			zones: [
+				{
+					code: 'Z1',
+					name: 'โซนหญิง',
+					capacity: 30,
+					type: 'female',
+					status: 'active',
+					short_name: 'F1'
+				},
+				{ code: 'Z2', name: 'โซนชาย', capacity: 20, type: 'male', status: 'active' }
+			],
+			food_distribution_points: []
+		});
+
+		await injectSession(page, SA, sessions[SA.name]);
+		await page.goto(`http://localhost:4173/back-office/shelters/edit/${CODE}`);
+
+		await sectionNav(page, CAPACITY_HEADING).click();
+		const shortNames = page.getByRole('textbox', { name: 'ชื่อย่อโซน' });
+		await expect(shortNames).toHaveCount(2);
+		await expect(shortNames.nth(0)).toHaveValue('F1');
+		await expect(shortNames.nth(1)).toHaveValue('');
+
+		// typing key by key keeps inner/trailing spaces (no trim while editing)
+		await shortNames.nth(0).clear();
+		await shortNames.nth(0).pressSequentially('A 1 ');
+		await expect(shortNames.nth(0)).toHaveValue('A 1 ');
+		await shortNames.nth(0).fill('');
+		// maxlength caps the input at 10 characters
+		await shortNames.nth(1).fill('M1ABCDEFGHIJ');
+		await expect(shortNames.nth(1)).toHaveValue('M1ABCDEFGH');
+
+		const patched = page.waitForResponse(
+			(res) =>
+				res.request().method() === 'PATCH' && res.url().endsWith(`/api/back-office/shelter/${CODE}`)
+		);
+		await page.getByRole('button', { name: 'บันทึกข้อมูล' }).click();
+		await patched;
+
+		const body = getPatchBody() as { zones: { code: string; short_name?: string | null }[] };
+		expect(body.zones.find((z) => z.code === 'Z1')?.short_name ?? null).toBe(null);
+		expect(body.zones.find((z) => z.code === 'Z2')?.short_name).toBe('M1ABCDEFGH');
 	});
 });
 
@@ -273,13 +346,15 @@ test.describe('Shelter Form — Single-page Navigation', () => {
 		await expect(page.getByRole('button', { name: 'ถัดไป' })).toHaveCount(0);
 
 		for (const heading of SECTION_HEADINGS) {
-			await expect(page.getByRole('heading', { name: new RegExp(heading) })).toBeVisible();
+			await expect(
+				page.getByRole('heading', { level: 2, name: new RegExp(heading) })
+			).toBeVisible();
 		}
 
-		await page.getByRole('button', { name: PARKING_HEADING }).click();
+		await sectionNav(page, PARKING_HEADING).click();
 		await expect(page.locator('#parking-policy')).toBeInViewport();
 
-		await page.getByRole('button', { name: FOOD_HEADING }).click();
+		await sectionNav(page, FOOD_HEADING).click();
 		await expect(page.locator('#food-distribution')).toBeInViewport();
 	});
 });

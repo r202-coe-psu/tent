@@ -27,4 +27,13 @@ describe('KioskWalkInOffer', () => {
 		expect(body).toContain('42');
 		expect(body).toMatch(/<button[^>]*disabled[^>]*>[^]*?ค้นหาอีกครั้งได้ใน/);
 	});
+
+	it('says the details come from the card, or from ThaiD without a photo', () => {
+		const card = render(KioskWalkInOffer, { props: defaultProps }).body;
+		const thaid = render(KioskWalkInOffer, { props: { ...defaultProps, source: 'thaid' } }).body;
+
+		expect(card).toContain('บัตรประชาชนที่เสียบอยู่');
+		expect(thaid).toContain('ยืนยันผ่าน ThaiD (ไม่มีรูปถ่าย)');
+		expect(thaid).not.toContain('บัตรประชาชนที่เสียบอยู่');
+	});
 });

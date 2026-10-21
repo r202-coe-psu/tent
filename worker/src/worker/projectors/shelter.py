@@ -10,6 +10,10 @@ ProjectionAction = Literal["upsert", "delete"]
 
 OPEN_STATUSES = frozenset({"open", "active", "standby", "full_capacity"})
 CLOSED_STATUSES = frozenset({"closed"})
+# A cancelled shelter (set up by mistake / never opened) is hidden from the whole
+# public plane — unlike `closed`, which stays listed as a closed location
+# (docs/changes/draft-shelter-cancelled-status.md).
+CANCELLED_STATUSES = frozenset({"cancelled"})
 SITE_KINDS = frozenset({"evacuation_center", "host_house"})
 
 
@@ -21,11 +25,15 @@ def resolve_operation_status(doc: dict[str, Any]) -> str | None:
     return None
 
 
+def is_shelter_cancelled(doc: dict[str, Any]) -> bool:
+    return resolve_operation_status(doc) in CANCELLED_STATUSES
+
+
 def is_shelter_open(doc: dict[str, Any]) -> bool:
     status = resolve_operation_status(doc)
     if status is None:
         return False
-    if status in CLOSED_STATUSES:
+    if status in CLOSED_STATUSES or status in CANCELLED_STATUSES:
         return False
     if status in OPEN_STATUSES:
         return True
@@ -100,13 +108,18 @@ def compose_address(doc: dict[str, Any]) -> str | None:
 def project_shelter(
     doc: dict[str, Any],
 ) -> tuple[ProjectionAction, dict[str, Any] | None]:
-    """Upsert every valid registry shelter doc — never delete on `operation_status` alone.
+    """Upsert every valid registry shelter doc — never delete on `closed`.
 
     Per the partner ODT (B_Data_We_Request_From_Partner_Systems, "Soft Delete" / "State
     Separation"): closing a location must never hard-delete its `public_shelters` row —
     only a true CouchDB delete/archive signal does that, and even then the processor
     flips `is_active` to `False` rather than removing the row (see
     ``worker.couch.processor`` / ``worker.mongo.shelter.apply_shelter_deactivate``).
+
+    The one status exception is ``cancelled`` (draft-shelter-cancelled-status.md): the
+    shelter was never a real location, so it answers ``("delete", {"_id": code})`` and
+    the caller deletes the row together with every shelter-scoped projection
+    (persons, occupants, needs, stocks, jobs). Reverting the status re-projects it.
     """
     if doc.get("type") != "shelter":
         return ("delete", None)
@@ -114,6 +127,9 @@ def project_shelter(
     code = doc.get("code")
     if not code:
         return ("delete", None)
+
+    if is_shelter_cancelled(doc):
+        return ("delete", {"_id": code})
 
     registry_id = doc.get("_id")
 

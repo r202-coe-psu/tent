@@ -116,7 +116,7 @@
 	let isLoading = $state(true);
 
 	function resolvedSkillLabel(value: string): string {
-		return skillLabel(value, skillOptions);
+		return skillLabel(value, skillOptions, languageStore.current);
 	}
 
 	/** Compare filter values and stored job values by Master Data code or label. */
@@ -200,10 +200,7 @@
 		if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()))
 			return 'ช่วงเวลาที่ตรวจสอบไม่ได้';
 		return (
-			start.toLocaleTimeString('th-TH', options) +
-			' - ' +
-			end.toLocaleTimeString('th-TH', options) +
-			' น.'
+			start.toLocaleTimeString('en-GB', options) + ' - ' + end.toLocaleTimeString('en-GB', options)
 		);
 	}
 
@@ -297,7 +294,7 @@
 						return {
 							id: s.shift_id || s.id || `s-${idx}`,
 							date: s.date || new Date().toISOString().slice(0, 10),
-							time: `${st} - ${et} น.`,
+							time: `${st} - ${et}`,
 							start_time: st,
 							end_time: et,
 							end_date: endDateFor(
@@ -325,7 +322,7 @@
 						return {
 							id: `st-${cleanJobId}-${idx}`,
 							date: asApplyDate(day, idx),
-							time: `${stTime} - ${edTime} น.`,
+							time: `${stTime} - ${edTime}`,
 							start_time: stTime,
 							end_time: edTime,
 							end_date: endDateFor(asApplyDate(day, idx), stTime, edTime, null),
@@ -341,7 +338,7 @@
 						{
 							id: `default-${cleanJobId}`,
 							date: new Date().toISOString().slice(0, 10),
-							time: '08:00 - 16:00 น.',
+							time: '08:00 - 16:00',
 							start_time: '08:00',
 							end_time: '16:00',
 							end_date: new Date().toISOString().slice(0, 10),
@@ -404,6 +401,21 @@
 	let selectedSkill = $state('all');
 	const PAGE_SIZE = 6;
 	let currentPage = $state(1);
+	let jobList = $state<HTMLElement>();
+
+	/**
+	 * Picking another page swaps the cards in place, leaving the reader at the bottom of a
+	 * list they have not seen. Take them to its first card — the list, not the page top:
+	 * on a phone the search and filters above it fill the whole screen. Focus goes there
+	 * too, so keyboard and screen-reader users land on the new page's jobs. Only a page
+	 * the reader picks triggers this; a filter resetting to page 1 does not.
+	 */
+	function showNewPage() {
+		if (!jobList) return;
+		const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+		jobList.focus({ preventScroll: true });
+		jobList.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' });
+	}
 
 	// Unique list of shelters for the filter
 	const availableShelters = $derived.by<{ code: string; name: string }[]>(() => {
@@ -429,7 +441,7 @@
 		// 1. Add skills from Master Data
 		for (const opt of baseList) {
 			const code = opt.code || opt.label;
-			const label = skillLabel(code, skillOptions);
+			const label = skillLabel(code, skillOptions, languageStore.current);
 			const normCode = code.trim().toLowerCase();
 			if (code && label && !seenCodes.has(normCode)) {
 				seenCodes.add(normCode);
@@ -701,9 +713,13 @@
 
 	<!-- Job Cards List -->
 	<div
-		class="grid min-h-0 items-stretch gap-4 sm:gap-5 {paginatedJobs.length > 0
-			? 'xl:grid-cols-2'
-			: ''}"
+		bind:this={jobList}
+		tabindex="-1"
+		aria-label={t.jobBoardSectionTitle}
+		class={[
+			'grid min-h-0 scroll-mt-28 items-stretch gap-4 focus:outline-none sm:gap-5',
+			paginatedJobs.length > 0 && 'xl:grid-cols-2'
+		]}
 		class:flex-1={!isLoading && paginatedJobs.length === 0}
 	>
 		{#if isLoading}
@@ -742,7 +758,12 @@
 
 			{#if totalPages > 1}
 				<div class="w-fit justify-self-center">
-					<Pagination.Root bind:page={currentPage} count={filteredJobs.length} perPage={PAGE_SIZE}>
+					<Pagination.Root
+						bind:page={currentPage}
+						count={filteredJobs.length}
+						perPage={PAGE_SIZE}
+						onPageChange={showNewPage}
+					>
 						{#snippet children({ pages })}
 							<Pagination.Content>
 								<Pagination.Previous />

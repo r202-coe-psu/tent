@@ -4,6 +4,8 @@ import {
 	KioskPartialCheckInError,
 	KioskRequestError,
 	lookupPreRegisteredEvacuee,
+	registerKioskThaidWalkIn,
+	reprintKioskLabels,
 	registerKioskWalkIn
 } from './kiosk-check-in.api';
 
@@ -305,6 +307,12 @@ describe('lookupPreRegisteredEvacuee ThaiD gate', () => {
 	});
 });
 
+const registered = {
+	evacuee_id: 'evacuee:01ARZ3NDEKTSV4RRFFQ69G5FAV',
+	qr_payload: 'evacuee:01ARZ3NDEKTSV4RRFFQ69G5FAV',
+	label: { name: 'สมชาย ใจดี', phone: '0812345678' }
+};
+
 describe('registerKioskWalkIn', () => {
 	afterEach(() => vi.unstubAllGlobals());
 
@@ -325,7 +333,7 @@ describe('registerKioskWalkIn', () => {
 			};
 			expect(body.card).not.toHaveProperty('photo_base64');
 			expect(body.photo).toEqual(photo);
-			return new Response(JSON.stringify({ evacuee_id: 'evacuee:01ARZ3NDEKTSV4RRFFQ69G5FAV' }), {
+			return new Response(JSON.stringify(registered), {
 				status: 200,
 				headers: { 'content-type': 'application/json' }
 			});
@@ -334,7 +342,125 @@ describe('registerKioskWalkIn', () => {
 
 		await expect(
 			registerKioskWalkIn({ citizen_id: '1234567890123' }, photo, new Date().toISOString())
-		).resolves.toEqual({ evacuee_id: 'evacuee:01ARZ3NDEKTSV4RRFFQ69G5FAV' });
+		).resolves.toEqual(registered);
 		expect(fetchMock).toHaveBeenCalledOnce();
+	});
+
+	it('sends the phone with a card registration', async () => {
+		const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+			const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+			expect(body).toMatchObject({ source: 'smart-card', phone: '0812345678', consented: true });
+			return new Response(JSON.stringify(registered), {
+				status: 200
+			});
+		});
+		vi.stubGlobal('fetch', fetchMock);
+
+		await registerKioskWalkIn(
+			{ citizen_id: '1234567890123' },
+			null,
+			new Date().toISOString(),
+			'0812345678'
+		);
+		expect(fetchMock).toHaveBeenCalledOnce();
+	});
+});
+
+describe('registerKioskThaidWalkIn', () => {
+	afterEach(() => vi.unstubAllGlobals());
+
+	it('sends only the session id, consent and phone', async () => {
+		const consentedAt = new Date().toISOString();
+		const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+			expect(JSON.parse(String(init?.body))).toEqual({
+				source: 'thaid',
+				session_id: 'a'.repeat(32),
+				phone: null,
+				consented: true,
+				consented_at: consentedAt
+			});
+			return new Response(JSON.stringify(registered), {
+				status: 200
+			});
+		});
+		vi.stubGlobal('fetch', fetchMock);
+
+		await expect(registerKioskThaidWalkIn('a'.repeat(32), consentedAt, null)).resolves.toEqual(
+			registered
+		);
+	});
+
+	it('surfaces an expired ThaiD session as its error code', async () => {
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(
+				async () =>
+					new Response(
+						JSON.stringify({
+							error: { code: 'KIOSK_THAID_SESSION_INVALID', message: 'กรุณาสแกนใหม่' }
+						}),
+						{ status: 409 }
+					)
+			)
+		);
+
+		await expect(
+			registerKioskThaidWalkIn('a'.repeat(32), new Date().toISOString(), null)
+		).rejects.toMatchObject({ status: 409, code: 'KIOSK_THAID_SESSION_INVALID' });
+	});
+});
+
+describe('reprintKioskLabels', () => {
+	afterEach(() => vi.unstubAllGlobals());
+
+	const input = {
+		phone: '0812345678',
+		primary_evacuee_id: 'evacuee:01ARZ3NDEKTSV4RRFFQ69G5FAV',
+		id_last4: '0123',
+		evacuee_ids: ['evacuee:01ARZ3NDEKTSV4RRFFQ69G5FAV']
+	};
+
+	it('posts the verification to the reprint endpoint and returns the labels', async () => {
+		const members = [
+			{
+				evacuee_id: input.primary_evacuee_id,
+				qr_payload: input.primary_evacuee_id,
+				label: { name: 'สมชาย ใจดี', phone: '0812345678', zone: 'A3', stations_passed: 3 }
+			}
+		];
+		const fetchMock = vi.fn(async (...args: [RequestInfo | URL, RequestInit?]) => {
+			void args;
+			return new Response(JSON.stringify({ shelter_code: 'SH001', members }), { status: 200 });
+		});
+		vi.stubGlobal('fetch', fetchMock);
+
+		expect(await reprintKioskLabels(input)).toEqual({ shelter_code: 'SH001', members });
+
+		const [url, init] = fetchMock.mock.calls[0];
+		expect(url).toBe('/api/v1/kiosk/reprint');
+		expect(init?.method).toBe('POST');
+		expect(JSON.parse(String(init?.body))).toEqual(input);
+	});
+
+	it('maps an error response to a KioskRequestError with its code', async () => {
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(
+				async () =>
+					new Response(
+						JSON.stringify({
+							error: { code: 'KIOSK_REPRINT_VERIFY_FAILED', message: 'เลข 4 หลักท้ายไม่ถูกต้อง' }
+						}),
+						{ status: 403 }
+					)
+			)
+		);
+
+		await expect(reprintKioskLabels(input)).rejects.toMatchObject({
+			name: 'KioskRequestError',
+			status: 403,
+			code: 'KIOSK_REPRINT_VERIFY_FAILED',
+			message: 'เลข 4 หลักท้ายไม่ถูกต้อง'
+		});
 	});
 });

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import UTC, datetime
 from typing import Any
 
 from worker.couch.checkpoint import (
@@ -23,6 +24,7 @@ from worker.mongo import (
     apply_shelter,
     apply_shift_assignment,
     apply_volunteer,
+    delete_jobs_for_shelter,
     delete_needs_for_shelter,
     delete_occupants_for_shelter,
     delete_persons_for_shelter,
@@ -80,6 +82,8 @@ async def bootstrap_database(couch: CouchClient, database: str) -> None:
                     await delete_occupants_for_shelter(code)
                     await delete_needs_for_shelter(code)
                     await delete_stocks_for_shelter(code)
+                    # Cancelled shelter: its postings leave the volunteer board too.
+                    await delete_jobs_for_shelter(code)
             elif doc_type == "announcement":
                 from worker.mongo.announcement import apply_announcement
                 from worker.projectors.announcement import project_announcement
@@ -154,6 +158,14 @@ async def bootstrap_database(couch: CouchClient, database: str) -> None:
     # never arrive as change events, and a counter left at on_hand_qty 0 enforces the
     # bare target instead of what is genuinely still needed.
     await refresh_on_hand(couch, shelter_code)
+    # …and reserved_qty has to stop holding what that ledger already put on the shelf.
+    # Counters written before settle_shelved_quota existed carry received goods in
+    # both terms; no change event will revisit an idle shelter to fix them.
+    # Imported here: worker.quota's package init pulls in expiry, which imports this
+    # module back for list_all_shelter_codes.
+    from worker.quota.settle import settle_shelved_quota
+
+    await settle_shelved_quota(couch, shelter_code, now=datetime.now(UTC))
     # EXT-005/006/007: occupancy first — shelter_stocks' reorder_threshold calc reads it.
     await refresh_occupancy(couch, shelter_code)
     await refresh_shelter_stock(couch, shelter_code)  # EXT-004/006

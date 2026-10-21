@@ -85,8 +85,9 @@
 				: null;
 	}
 
-	function startWalkInRegistration(citizenId: string): void {
-		walkInSession.begin(citizenId);
+	function startWalkInRegistration(identity: GateInput): void {
+		if (identity.source !== 'smart-card') return;
+		walkInSession.begin(identity.citizen_id);
 		void goto(
 			resolve(
 				`/kiosk/register/consent${contextQuery}` as

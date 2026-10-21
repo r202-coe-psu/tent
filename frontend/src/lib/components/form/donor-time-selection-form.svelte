@@ -13,6 +13,7 @@
 	import { Label } from '$lib/components/ui/label';
 	import { Input } from '$lib/components/ui/input';
 	import { Button } from '$lib/components/ui/button';
+	import * as Select from '$lib/components/ui/select';
 	import { Calendar } from '$lib/components/ui/calendar';
 	import { Popover, PopoverContent, PopoverTrigger } from '$lib/components/ui/popover';
 	import { today, type DateValue } from '@internationalized/date';
@@ -233,7 +234,7 @@
 				donationStore.trackingToken = data.trackingToken;
 				donationStore.bookingRef = data.bookingRef;
 				donationStore.slotDate = slotDateStr;
-				donationStore.activeTab = 'ticket';
+				donationStore.goToStep('ticket');
 				if (donationStore.reachedStep < 4) donationStore.reachedStep = 4;
 				toast.success(t.bookingSuccess);
 			}
@@ -442,17 +443,25 @@
 					{/if}
 				</label>
 
-				<select
-					id="shelter-select"
-					bind:value={donationStore.shelterCode}
+				<Select.Root
+					type="single"
+					value={donationStore.shelterCode}
+					onValueChange={(v) => (donationStore.shelterCode = v)}
 					disabled={donationStore.shelterLocked}
-					class="w-full appearance-none rounded-xl border-2 border-slate-200 bg-white p-4 font-bold text-slate-800 shadow-2xs outline-hidden focus:border-domain-donation disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
 				>
-					<option value="" disabled selected>{t.selectShelterPlaceholder}</option>
-					{#each shelters as shelter (shelter.code)}
-						<option value={shelter.code}>{shelter.name}</option>
-					{/each}
-				</select>
+					<Select.Trigger
+						id="shelter-select"
+						class="w-full rounded-xl border-2 border-slate-200 p-4 text-base font-bold text-slate-800 shadow-2xs focus-visible:border-domain-donation disabled:bg-slate-100 disabled:text-slate-500 disabled:opacity-100 data-placeholder:text-base data-[size=default]:h-auto"
+					>
+						{shelters.find((s) => s.code === donationStore.shelterCode)?.name ??
+							t.selectShelterPlaceholder}
+					</Select.Trigger>
+					<Select.Content>
+						{#each shelters as shelter (shelter.code)}
+							<Select.Item value={shelter.code} label={shelter.name} />
+						{/each}
+					</Select.Content>
+				</Select.Root>
 			</div>
 
 			<!-- 3. เลือกเวลา -->
@@ -574,7 +583,7 @@
 	<div class="mt-8 flex gap-4 border-t border-slate-100 pt-6">
 		<button
 			type="button"
-			onclick={() => (donationStore.activeTab = 'form')}
+			onclick={() => donationStore.goToStep('form')}
 			class="cursor-pointer rounded-xl bg-slate-100 px-6 py-4 text-lg font-bold text-slate-600 transition-colors hover:bg-slate-200"
 		>
 			{t.backBtn}

@@ -21,7 +21,7 @@
 		class="sticky top-0 z-50 border-b border-domain-volunteer-text bg-domain-volunteer-strong text-white shadow-sm"
 	>
 		<div
-			class="mx-auto flex min-h-[76px] w-full max-w-[1440px] items-center justify-between gap-4 px-4 py-3 sm:px-8"
+			class="mx-auto flex min-h-[76px] w-full max-w-7xl items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8"
 		>
 			<a
 				href={resolve('/')}
@@ -38,9 +38,7 @@
 					<p class="truncate text-base font-extrabold tracking-tight sm:text-lg">
 						PSU Smart Shelter
 					</p>
-					<p
-						class="line-clamp-2 text-[11px] leading-snug font-medium whitespace-normal text-white/90 sm:text-xs"
-					>
+					<p class="line-clamp-2 text-xs leading-snug font-medium whitespace-normal text-white/90">
 						เช็คงาน ติดตามสถานะ และรายงานตัวปฏิบัติหน้าที่
 					</p>
 				</div>
@@ -61,14 +59,12 @@
 	</header>
 
 	<main class="flex-1">
-		<div class="mx-auto w-full max-w-[1440px] px-4 py-8 sm:px-6 lg:px-8">
+		<div class="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
 			{@render children()}
 		</div>
 	</main>
 
-	<footer
-		class="border-t border-slate-200 bg-white px-6 py-5 text-center text-[11px] text-slate-500"
-	>
+	<footer class="border-t border-slate-200 bg-white px-6 py-5 text-center text-xs text-slate-500">
 		ระบบบริการจิตอาสา · Smart Shelter Project
 	</footer>
 </div>

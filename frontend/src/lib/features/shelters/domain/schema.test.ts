@@ -13,6 +13,8 @@ import {
 	foodDistributionPointSchema,
 	migrateShelterV2ToCurrent,
 	isShelterBookable,
+	isShelterCancelled,
+	operationStatusSchema,
 	SHELTER_MASTER_SCHEMA_V,
 	type ShelterMasterV2
 } from './schema';
@@ -865,6 +867,38 @@ describe('CR-023 — zone / facilities / common-area additions', () => {
 	});
 });
 
+describe('draft-zone-short-name — optional zone short name for QR labels', () => {
+	it('leaves short_name absent when not given (old docs stay valid)', () => {
+		const z = zoneSchema.parse({ code: 'Z1', name: 'โซน A', capacity: 10 });
+		expect(z.short_name).toBeUndefined();
+	});
+
+	it('accepts null and a trimmed short name', () => {
+		expect(
+			zoneSchema.parse({ code: 'Z1', name: 'A', capacity: 1, short_name: null }).short_name
+		).toBe(null);
+		expect(
+			zoneSchema.parse({ code: 'Z1', name: 'A', capacity: 1, short_name: '  A1 ' }).short_name
+		).toBe('A1');
+	});
+
+	it('rejects a short name longer than 10 characters', () => {
+		expect(() =>
+			zoneSchema.parse({ code: 'Z1', name: 'A', capacity: 1, short_name: 'ABCDEFGHIJK' })
+		).toThrow();
+		expect(
+			zoneSchema.parse({ code: 'Z1', name: 'A', capacity: 1, short_name: 'ABCDEFGHIJ' }).short_name
+		).toBe('ABCDEFGHIJ');
+	});
+
+	it('keeps short_name through updateShelterSchema (PATCH body is not stripped)', () => {
+		const r = updateShelterSchema.parse({
+			zones: [{ code: 'Z1', name: 'A', capacity: 1, short_name: 'ก1' }]
+		});
+		expect(r.zones?.[0].short_name).toBe('ก1');
+	});
+});
+
 describe('CR-023 — migrate v3 → v4 default-fill', () => {
 	it('fills new v4 fields on a v3 doc without them', () => {
 		const v3doc = {
@@ -1021,6 +1055,28 @@ describe('isShelterBookable', () => {
 		).toBe(false);
 		expect(isShelterBookable(null)).toBe(false);
 		expect(isShelterBookable({})).toBe(false);
+	});
+
+	it('blocks a cancelled shelter even with the flag on (draft-shelter-cancelled-status)', () => {
+		expect(
+			isShelterBookable({
+				operation_status: 'cancelled',
+				feature_flags: { accepts_pre_registration: true }
+			})
+		).toBe(false);
+	});
+});
+
+describe('isShelterCancelled', () => {
+	it('is true only for operation_status cancelled', () => {
+		expect(isShelterCancelled({ operation_status: 'cancelled' })).toBe(true);
+		expect(isShelterCancelled({ operation_status: 'closed' })).toBe(false);
+		expect(isShelterCancelled({ operation_status: 'active' })).toBe(false);
+		expect(isShelterCancelled(null)).toBe(false);
+	});
+
+	it('is accepted by the operation_status enum (reversible like any other status)', () => {
+		expect(operationStatusSchema.parse('cancelled')).toBe('cancelled');
 	});
 });
 

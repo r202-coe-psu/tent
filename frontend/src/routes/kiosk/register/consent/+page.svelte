@@ -4,6 +4,7 @@
 	import { resolve } from '$app/paths';
 	import { onMount } from 'svelte';
 	import {
+		abandonWalkIn,
 		buildKioskContextQuery,
 		getKioskDisplayContext,
 		KioskIdleTimeout,
@@ -21,27 +22,35 @@
 	const contextQuery = $derived(buildKioskContextQuery(displayContext));
 	const homeUrl = $derived(`/kiosk${contextQuery}`);
 	const idleTimeout = new KioskIdleTimeout(KIOSK_IDLE_TIMEOUT_MS, returnHome);
+	/** Going on to the next walk-in step; any other way off this page abandons the walk-in. */
+	let continuing = false;
 	onMount(() => {
-		if (!walkInSession.citizenId) {
+		if (!walkInSession.active) {
 			void goto(resolve(`/kiosk${contextQuery}` as '/kiosk' | `/kiosk?${string}`));
 			return;
 		}
 		idleTimeout.start();
-		return () => idleTimeout.stop();
+		return () => {
+			idleTimeout.stop();
+			if (!continuing && walkInSession.active) abandonWalkIn();
+		};
 	});
 	function activity() {
 		idleTimeout.recordActivity();
 	}
 	function returnHome() {
-		walkInSession.clear();
+		abandonWalkIn();
 		navigateToKioskHome(contextQuery);
 	}
 	function consent() {
 		walkInSession.consent();
+		continuing = true;
+		// ThaiD has proved who they are already: straight on to the phone. A card is read next.
 		void goto(
 			resolve(
-				`/kiosk/register/card${contextQuery}` as
-					'/kiosk/register/card' | `/kiosk/register/card?${string}`
+				walkInSession.source === 'thaid'
+					? `/kiosk/register/phone${contextQuery}`
+					: `/kiosk/register/card${contextQuery}`
 			)
 		);
 	}
@@ -54,7 +63,11 @@
 >
 	<KioskCheckInWizard currentStep={2} step2Label="ยินยอม" />
 	<div class="flex justify-start">
-		<KioskBackButton href={homeUrl} onclick={() => walkInSession.clear()} />
+		<KioskBackButton href={homeUrl} onclick={() => abandonWalkIn()} />
 	</div>
-	<KioskRegisterConsent onconsent={consent} oncancel={returnHome} />
+	<KioskRegisterConsent
+		source={walkInSession.source === 'thaid' ? 'thaid' : 'smart-card'}
+		onconsent={consent}
+		oncancel={returnHome}
+	/>
 </div>

@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { donationPayloadUnit, isDonorEditable, linesMissingExpiry } from './public-donation';
+import {
+	donationPayloadUnit,
+	donorUnitOptions,
+	isDonorEditable,
+	linesMissingExpiry
+} from './public-donation';
 
 /**
  * D-1 — CR-052 §1.4 opens every public booking in `pending_review` instead of
@@ -32,6 +37,22 @@ describe('isDonorEditable (T-21 / CR-080 / D-1)', () => {
  * code. Sending the label made every booking from a need card unreceivable
  * (`CATALOG_MISMATCH` at the intake counter, unfixable from that screen).
  */
+describe('donorUnitOptions', () => {
+	it('drops nutrition and dosage units and deactivated ones, keeping the order', () => {
+		const units = [
+			{ code: 'piece' },
+			{ code: 'kcal' },
+			{ code: 'bag' },
+			{ code: 'mg' },
+			{ code: 'box', deactivated: true },
+			{ code: 'mcg' },
+			{ code: 'kg' }
+		];
+
+		expect(donorUnitOptions(units).map((u) => u.code)).toEqual(['piece', 'bag', 'kg']);
+	});
+});
+
 describe('donationPayloadUnit (R-15.4)', () => {
 	it('sends the catalog code, not the label the donor was shown', () => {
 		expect(donationPayloadUnit({ unit_code: 'kg', unit: 'กก.' }, 'ชิ้น')).toBe('kg');

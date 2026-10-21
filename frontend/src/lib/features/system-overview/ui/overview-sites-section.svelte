@@ -30,7 +30,8 @@
 		standby: 'เตรียมการ',
 		active: 'เปิดรับ',
 		full_capacity: 'เต็มความจุ',
-		closed: 'ปิดศูนย์'
+		closed: 'ปิดศูนย์',
+		cancelled: 'ยกเลิกศูนย์'
 	};
 
 	function formatPct(value: number | null): string {
@@ -47,14 +48,14 @@
 </script>
 
 <Card.Root class="rounded-xl border border-slate-200/80 bg-white shadow-2xs">
-	<Card.Header class="space-y-4">
+	<Card.Header class="grid-cols-[minmax(0,1fr)] space-y-4">
 		<div>
 			<Card.Title class="text-lg font-bold text-slate-900">ศูนย์ / ไซต์</Card.Title>
 			<Card.Description class="text-sm text-slate-500">เรียงตาม คาดการณ์ % จาก API</Card.Description
 			>
 		</div>
 		<div class="flex flex-wrap items-end gap-3">
-			<div class="min-w-0 space-y-1.5">
+			<div class="max-w-full min-w-0 space-y-1.5">
 				<Label for="sites-movement-range" class="text-sm font-semibold text-slate-700">
 					ช่วงเข้า / ออก
 				</Label>
@@ -67,7 +68,7 @@
 					onRangeChange={({ from, to }) => {
 						onMovementRangeChange({ movement_from: from, movement_to: to });
 					}}
-					class="h-9"
+					class="h-9 min-w-0 sm:min-w-[16rem]"
 				/>
 			</div>
 		</div>
