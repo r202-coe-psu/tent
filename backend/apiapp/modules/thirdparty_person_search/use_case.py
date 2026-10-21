@@ -12,6 +12,7 @@ a `search_audits` document.
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from zoneinfo import ZoneInfo
 
 from fastapi import HTTPException, status
 from tent_model.third_party_access_log import ThirdPartyAccessLog
@@ -28,6 +29,16 @@ _REQUIRED_SCOPE = "occupant-search"
 _EXCLUDED_STATUSES = ("cancelled",)
 #: Same cap the public search form accepts (`SearchRequest.search`).
 _MAX_QUERY_LENGTH = 200
+_BANGKOK_TZ = ZoneInfo("Asia/Bangkok")
+
+
+def _to_bangkok_iso(value: datetime | None) -> str | None:
+    """ISO 8601 with an explicit +07:00 offset, like EXT-008–011 (Mongo hands back naive UTC)."""
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=UTC)
+    return value.astimezone(_BANGKOK_TZ).isoformat()
 
 
 def _error(status_code: int, code: str, message: str) -> HTTPException:
@@ -117,7 +128,13 @@ class ThirdPartyPersonSearchUseCase:
         persons = await self._evacuee.find_persons(parsed, exclude_statuses=_EXCLUDED_STATUSES)
         # No household lookup (#736 decision 4); `family_members` is dropped from the item.
         results = await self._evacuee.build_results(persons, include_family=False)
-        items = [PersonSearchItem(**r.model_dump(exclude={"family_members"})) for r in results]
+        items = [
+            PersonSearchItem(
+                **r.model_dump(exclude={"family_members", "checked_in_at"}),
+                checked_in_at=_to_bangkok_iso(r.checked_in_at),
+            )
+            for r in results
+        ]
 
         await self._log(
             claims=claims,
