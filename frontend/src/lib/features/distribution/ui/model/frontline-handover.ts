@@ -14,7 +14,7 @@ import {
 /**
  * Normalized UI-level recipient selection for frontline handover.
  * Ephemeral presentation state only — never persisted directly.
- * Volunteer recipient is omitted/unsupported because frontend referential existence lookup is missing.
+ * Volunteers carry no menu tags (CR-159 FR-MRM-02) and no household.
  */
 export type FrontlineRecipientSelection =
 	| {
@@ -26,6 +26,13 @@ export type FrontlineRecipientSelection =
 			stayInfo?: string;
 			/** Menu-matching tags derived from the evacuee doc at selection time. */
 			menuTags?: MenuTargetTag[];
+	  }
+	| {
+			recipientType: 'volunteer';
+			recipientId: string; // 'volunteer:{ulid}'
+			label: string;
+			phone?: string | null;
+			volunteerCode?: string;
 	  }
 	| {
 			recipientType: 'outside';
@@ -59,6 +66,11 @@ export function getItemCapacitySummary(
 	};
 }
 
+/** Evacuee or volunteer — someone a log can name, so a repeat meal can be caught (FR-DDS). */
+export function isIdentifiedRecipient(recipient: FrontlineRecipientSelection | null): boolean {
+	return recipient?.recipientType === 'evacuee' || recipient?.recipientType === 'volunteer';
+}
+
 /**
  * Validates whether the selected recipient is eligible to receive the given item.
  * Strictly enforces that returnable loan items require an identifiable evacuee recipient.
@@ -86,6 +98,9 @@ export function getRecipientValidationErrorMessage(
 	}
 	if (isReturnable && recipient.recipientType === 'outside') {
 		return "สิ่งของประเภท 'ต้องคืน' ต้องระบุผู้ประสบภัยผู้รับผิดชอบ (ไม่สามารถแจกให้บุคคลภายนอกได้)";
+	}
+	if (isReturnable && recipient.recipientType === 'volunteer') {
+		return "สิ่งของประเภท 'ต้องคืน' ต้องระบุผู้ประสบภัยผู้รับผิดชอบ (จิตอาสายืมในนามตนเองไม่ได้)";
 	}
 	if (isReturnable && !recipient.recipientId) {
 		return "สิ่งของประเภท 'ต้องคืน' จำเป็นต้องมีรหัสผู้รับที่ระบุตัวตนได้";
