@@ -28,7 +28,6 @@
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
 	import { DatePicker } from '$lib/components/ui/date-picker/index.js';
-	import { Badge } from '$lib/components/ui/badge/index.js';
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 	import { Switch } from '$lib/components/ui/switch/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
@@ -36,10 +35,9 @@
 	import { toast } from 'svelte-sonner';
 	import { Html5Qrcode } from 'html5-qrcode';
 	import { qtyGt } from '$lib/utils/qty';
-	import { onMount } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import { resolve } from '$app/paths';
 	import {
-		donationActionRef,
 		donationRefLabel,
 		linesMissingExpiry,
 		receivedQtyDifference,
@@ -48,8 +46,7 @@
 		RejectReasonFields,
 		type DonationRejectReasonCode,
 		type RejectDonationInput,
-		type ScanDonationView,
-		type PendingDonationRow
+		type ScanDonationView
 	} from '$lib/features/donations';
 	import { useSupplyItems } from '$lib/features/supply';
 	import {
@@ -79,11 +76,19 @@
 
 	let {
 		initialQuery = '',
+		initialView = 'scan',
 		onSaved,
 		onClose
-	}: { initialQuery?: string; onSaved?: () => void; onClose?: () => void } = $props();
+	}: {
+		initialQuery?: string;
+		/** Open straight on the walk-in form (the list's "ลงทะเบียน Walk-in" button). */
+		initialView?: 'scan' | 'walkin';
+		onSaved?: () => void;
+		onClose?: () => void;
+	} = $props();
 
-	let activeView = $state<'scan' | 'walkin'>('scan');
+	// The opening view only — staff switch between scan and walk-in from here on.
+	let activeView = $state<'scan' | 'walkin'>(untrack(() => initialView));
 	let scanState = $state<'idle' | 'scanning' | 'result'>('idle');
 	let searchQuery = $state('');
 
@@ -98,10 +103,6 @@
 	const redirectTargets = $derived(
 		(sheltersQuery.data ?? []).filter((s) => s.code !== donationDoc?.shelter_code)
 	);
-
-	// Awaiting dropoff bookings for dropdown
-	let awaitingBookings = $state<PendingDonationRow[]>([]);
-	let loadingBookings = $state(false);
 
 	// Catalog items query
 	const supplyItemsQuery = useSupplyItems();
@@ -516,39 +517,6 @@
 	]);
 	let walkinSaving = $state(false);
 
-	async function loadAwaitingBookings() {
-		loadingBookings = true;
-		try {
-			// One request per status the counter can act on. A failure is reported rather
-			// than swallowed: an empty queue and a rejected request looked identical, so
-			// "ยังไม่มีใบจองในคิว" was shown for permission and network errors too.
-			const statuses = ['verifying', 'pending_review', 'declared'] as const;
-			const responses = await Promise.all(
-				statuses.map(async (status) => {
-					const res = await fetch(`/api/back-office/donations?status=${status}`);
-					const data = await res.json().catch(() => ({ success: false }));
-					if (!res.ok || !data.success) {
-						throw new Error(data.error || `โหลดคิวสถานะ ${status} ไม่สำเร็จ`);
-					}
-					return (data.donations ?? []) as PendingDonationRow[];
-				})
-			);
-
-			// Keyed on whatever addresses the donation — a walk-in has no `booking_ref`,
-			// and filtering on one dropped every counter-keyed booking from the queue.
-			const all = responses.flat();
-			awaitingBookings = all.filter((d, i) => {
-				const ref = donationActionRef(d);
-				return !!ref && all.findIndex((o) => donationActionRef(o) === ref) === i;
-			});
-		} catch (err) {
-			awaitingBookings = [];
-			toast.error(err instanceof Error ? err.message : 'โหลดคิวรอตรวจรับไม่สำเร็จ');
-		} finally {
-			loadingBookings = false;
-		}
-	}
-
 	async function performLookup(query: string, simulateScanEffect = false) {
 		if (!query.trim()) return;
 		lastLots = [];
@@ -686,7 +654,6 @@
 				donationDoc = null;
 				remarks = '';
 				onSaved?.();
-				loadAwaitingBookings();
 			} else if (data.error_code === 'DONATION_CHANGED') {
 				toast.error('ผู้บริจาคแก้ใบนี้หลังจากเปิดหน้าตรวจรับ', {
 					description: 'ค้นหาใบใหม่แล้วตรวจรายการอีกครั้ง — ยังไม่มีของเข้าคลัง',
@@ -882,7 +849,6 @@
 				}
 			];
 			onSaved?.();
-			loadAwaitingBookings();
 		} catch {
 			toast.error('บันทึกไม่สำเร็จ — กรุณาลองใหม่อีกครั้ง');
 		} finally {
@@ -891,10 +857,9 @@
 	}
 
 	onMount(() => {
-		loadAwaitingBookings();
-		// The queue mounts a fresh station per row (the board is behind an `{#if}`), so
-		// the ref is looked up once here. It used to run in `onMount` AND an `$effect`,
-		// which fired the same request twice on every open.
+		// The list mounts a fresh station per row (it is behind an `{#if}`), so the ref is
+		// looked up once here. It used to run in `onMount` AND an `$effect`, which fired
+		// the same request twice on every open.
 		if (initialQuery) {
 			searchQuery = initialQuery;
 			performLookup(initialQuery);
@@ -1465,50 +1430,6 @@
 								<CameraOff class="mt-0.5 h-4 w-4 shrink-0" />
 								<span>{cameraError}</span>
 							</div>
-						{/if}
-
-						<!-- The queue the counter is actually holding. The camera button used to
-						     open whatever sat at the top of this list, which looked like a scan
-						     that had happened; picking a booking is now an explicit act. -->
-						{#if awaitingBookings.length}
-							<div class="mt-5 w-full border-t border-border/60 pt-5 text-left">
-								<p
-									class="mb-3 text-xs font-extrabold tracking-wider text-muted-foreground uppercase"
-								>
-									รอตรวจรับที่ศูนย์ ({awaitingBookings.length})
-								</p>
-								<!-- Taller than it looks: each row is a tap target for someone holding a
-								     parcel, so it gets the same 48px floor as the buttons above. -->
-								<ul class="max-h-64 space-y-2 overflow-y-auto">
-									{#each awaitingBookings as booking (donationActionRef(booking))}
-										{@const ref = donationActionRef(booking)}
-										<li>
-											<Button
-												variant="outline"
-												type="button"
-												onclick={() => ref && performLookup(ref)}
-												class="h-auto min-h-12 w-full justify-between gap-3 rounded-xl border-border/70 bg-card px-4 py-3 text-left"
-											>
-												<span class="min-w-0">
-													<span class="block truncate text-sm font-bold text-foreground">
-														{donationRefLabel(booking)}
-													</span>
-													<span class="block truncate text-xs text-muted-foreground">
-														{booking.donor_name || 'ไม่ระบุชื่อ'} · {booking.item_count} รายการ
-													</span>
-												</span>
-												<Badge variant="secondary" class="shrink-0 text-xs font-bold">
-													{booking.status}
-												</Badge>
-											</Button>
-										</li>
-									{/each}
-								</ul>
-							</div>
-						{:else if loadingBookings}
-							<p class="mt-4 w-full border-t border-border/60 pt-4 text-2xs text-muted-foreground">
-								กำลังโหลดคิวรอตรวจรับ...
-							</p>
 						{/if}
 
 						{#if lastLots.length}

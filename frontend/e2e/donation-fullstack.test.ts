@@ -126,8 +126,24 @@ test.describe('Donation full-stack: donor and staff', { tag: ['@critical', '@don
 			await expect(page.getByText('อนุมัติแล้ว / รอนำส่ง')).toBeVisible();
 
 			// ── Scan station: count it in ───────────────────────────────────────────
+			// #617 — the old scan-tab link lands on the one list, filtered to drop-off, with
+			// the status in Thai; opening the row goes straight to the counter.
 			await openBackOffice(page, ws);
-			await openInScanStation(page, bookingRef);
+			await page.goto('/back-office/stock-donations?tab=scan');
+			await expect(page.getByRole('tab', { name: /รายการของบริจาค/ })).toHaveAttribute(
+				'aria-selected',
+				'true'
+			);
+			await expect(page.getByRole('button', { name: /^รอมาส่ง/ })).toHaveAttribute(
+				'aria-pressed',
+				'true'
+			);
+			const listRow = page.getByRole('row').filter({ hasText: bookingRef });
+			await expect(listRow).toContainText('กำลังตรวจรับที่ศูนย์');
+			await listRow.getByRole('button', { name: 'จัดการ' }).click();
+			await expect(
+				page.getByRole('heading', { name: `${bookingRef} - ตรวจรับพัสดุบริจาค` })
+			).toBeVisible();
 			const confirm = page.getByRole('button', { name: 'ยืนยันรับเข้าคลัง' });
 			await expect(confirm).toBeDisabled();
 			await expect(page.getByRole('textbox', { name: 'จำนวนรับจริง *' })).toHaveValue('1');
@@ -539,7 +555,7 @@ test.describe('Donation full-stack: donor and staff', { tag: ['@critical', '@don
 				.toBe('cancelled');
 
 			await openBackOffice(page, ws);
-			await page.getByRole('tab', { name: /รอการประเมิน/ }).click();
+			await page.getByRole('tab', { name: /รายการของบริจาค/ }).click();
 			await expect(page.getByRole('table')).toBeVisible();
 			await expect(page.getByRole('row').filter({ hasText: bookingRef })).toHaveCount(0);
 		});

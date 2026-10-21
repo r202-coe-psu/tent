@@ -473,7 +473,7 @@ export async function openBackOffice(page: Page, staff: Staff, workingShelter?: 
 		workingShelter ?? staff.roles.find((r) => r.startsWith('shelter:'))?.slice('shelter:'.length);
 	if (shelterCode) await pinActiveShelter(page, shelterCode);
 	await page.goto('/back-office/stock-donations');
-	await expect(page.getByRole('tab', { name: /รอการประเมิน/ })).toBeVisible({ timeout: 15_000 });
+	await expect(page.getByRole('tab', { name: /รายการของบริจาค/ })).toBeVisible({ timeout: 15_000 });
 }
 
 /**
@@ -484,7 +484,8 @@ export async function openPendingRow(page: Page, bookingRef: string) {
 	const row = page.getByRole('row').filter({ hasText: bookingRef });
 	await expect(async () => {
 		await page.reload();
-		await page.getByRole('tab', { name: /รอการประเมิน/ }).click();
+		await page.getByRole('tab', { name: /รายการของบริจาค/ }).click();
+		await page.getByRole('button', { name: /^รอประเมิน/ }).click();
 		await expect(row).toBeVisible({ timeout: 3_000 });
 	}).toPass({ timeout: 30_000 });
 	await row.getByRole('button', { name: 'จัดการ' }).click();
@@ -535,9 +536,10 @@ export async function rejectInDialog(page: Page, reason: RegExp, note?: string) 
 
 export async function openInScanStation(page: Page, bookingRef: string) {
 	await page.reload();
-	// The active tab is kept in `?tab=` and survives the reload, so coming from the
-	// pending queue the scan station has to be picked explicitly.
-	await page.getByRole('tab', { name: /สแกนรับของเข้าคลัง/ }).click();
+	// The active tab is kept in `?tab=` and survives the reload, so the list is picked
+	// explicitly; the scanner sits at its top right (#617).
+	await page.getByRole('tab', { name: /รายการของบริจาค/ }).click();
+	await page.getByRole('button', { name: 'สแกนรับเข้าคลัง' }).click();
 	await page.getByRole('textbox', { name: 'รหัสการจอง' }).fill(bookingRef);
 	await page.getByRole('button', { name: 'ค้นหา' }).click();
 	await expect(

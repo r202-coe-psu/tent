@@ -48,6 +48,15 @@ export {
 	isTerminalDonationStatus,
 	rejectedLineReasons
 } from './domain/tracking';
+// Domain — back-office booking list (#617)
+export {
+	DONATION_QUEUE_FILTERS,
+	filterDonationQueue,
+	filterForLegacyTab,
+	parseQueueFilter,
+	queueGroupOf
+} from './domain/donation-queue';
+export type { DonationQueueFilter } from './domain/donation-queue';
 // Domain — per-line review (CR-174)
 export {
 	donationStatusFromLines,
@@ -121,7 +130,9 @@ export {
 	useDonationTracking,
 	useDonationTrackSearch,
 	useUpdateCourierTracking,
-	useUpdateDonationItems
+	useUpdateDonationItems,
+	donationQueueKeys,
+	useDonationQueue
 } from './application/queries';
 
 // UI
