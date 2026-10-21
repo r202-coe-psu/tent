@@ -16,6 +16,8 @@ THIRD_PARTY_SCOPES = (
 	# CR-154 (M2): EXT-008–010 booking writes, EXT-011 per-person residency lookup.
 	"booking-write",
 	"residency-read",
+	# #736: EXT-012 person search by name / national ID / passport / phone (sensitive).
+	"occupant-search",
 )
 
 

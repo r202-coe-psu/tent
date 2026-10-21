@@ -3,7 +3,7 @@ id: CR-160
 title: Temporary RATE_LIMIT env switch — bypass donation & pre-register BFF rate limiters on local e2e and staging
 status: approved
 date: 2026-10-11
-updated: 2026-10-11
+updated: 2026-10-18
 requested_by: team A (donation) — e2e @critical failures
 decided_by: เจ้าของโครงการ (PO, net-lynx) — approved 2026-10-11
 layer: volatile
@@ -77,6 +77,11 @@ affects:
 | Volunteer | `volunteerProfileUpdateLimiter` | `rate-limiter.ts:161` | ❌ **ห้ามปิด** (`false`) | แก้ไขโปรไฟล์อาสาสมัคร |
 | Volunteer | `volunteerDispatchRespondLimiter` | `rate-limiter.ts:163` | ❌ **ห้ามปิด** (`false`) | ตอบรับจัดสรรกะงานอาสาสมัคร |
 | อื่น ๆ ทั้งหมด | Instance ใหม่ในอนาคต | - | ❌ **ห้ามปิด** (`false`) | Default constructor คือ `bypassable: false` เพื่อความปลอดภัย (fail-closed) |
+
+> **หมายเหตุ 2026-10-18 (#625, [CR-127 note](../06-A-volunteer/CR-127-volunteer-permanent-tracking-token.md)):**
+> portal lookup (`access/resolve`, `profile`, `schedule`, `schedule/action`, `ticket/find`) ที่ใช้ minted token
+> `TKT-VOL-` นับใน `volunteerTicketLimiter`; เบอร์โทรและรหัสที่เดาได้ยังนับใน `volunteerTicketFindLimiter` —
+> ทั้งสองตัวยังห้ามปิดตามตารางนี้
 
 ### Requirements
 

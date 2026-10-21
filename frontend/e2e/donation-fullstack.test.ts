@@ -8,7 +8,9 @@ import {
 	approvePending,
 	bookAsDonor,
 	boardLineFor,
+	catalogItem,
 	createCampaignViaUi,
+	createSystemAdmin,
 	createWarehouseStaff,
 	expectRunGone,
 	fillExpiry,
@@ -231,6 +233,93 @@ test.describe('Donation full-stack: donor and staff', { tag: ['@critical', '@don
 		});
 	});
 
+	test('typed-in item in another unit maps to a stock item and is received in its own unit (#623, #636, #638)', async ({
+		page
+	}) => {
+		// The donor types the item and counts it in boxes; the stock item counts pieces.
+		// Mapping the line used to keep the donor's "box" and every receipt failed with
+		// CATALOG_MISMATCH ("expected piece, got box"). Not SHELVED_ITEM: the stock this
+		// receipt leaves on the run's shelter would close that test's campaign on arrival.
+		const diaper = await catalogItem('ผ้าอ้อมเด็ก ไซส์ M');
+		const { bookingRef } = await bookAsDonor(page, {
+			shelter,
+			ledger,
+			unsolicited: { itemName: `ผ้าอ้อมเด็กยกกล่อง ${RUN_ID}`, unitLabel: 'กล่อง' },
+			donorName: `E2E หน่วยไม่ตรง ${RUN_ID}`,
+			phone: '0867770011'
+		});
+
+		await openBackOffice(page, ws);
+		await approvePending(page, shelter.code, bookingRef);
+		await openBackOffice(page, ws);
+		await openInScanStation(page, bookingRef);
+
+		// What the donor declared stays visible, in their unit and in Thai.
+		await expect(page.getByText(/แจ้งไว้\s*1\s*กล่อง/)).toBeVisible();
+
+		// "เพิ่มสินค้าใหม่" beside the picker opens the create form in a side sheet, started
+		// from what the donor typed. Cancelled here: an item created by the run would stay
+		// in the catalog after teardown.
+		await page.getByRole('button', { name: 'เพิ่มสินค้าใหม่' }).click();
+		const createSheet = page.getByRole('dialog', { name: 'สร้างสินค้าใหม่' });
+		await expect(createSheet).toBeVisible();
+		await expect(createSheet.locator('#qc-name')).toHaveValue(`ผ้าอ้อมเด็กยกกล่อง ${RUN_ID}`);
+		await createSheet.getByRole('button', { name: 'ยกเลิก' }).click();
+		await expect(createSheet).toBeHidden();
+
+		// Searchable picker (#638); its rows show the unit in Thai, not the raw code (#636).
+		const picker = page.getByRole('combobox', { name: /^รายการในคลัง/ });
+		// Thai text is inserted without key events, so open the list with ArrowDown first.
+		await picker.click();
+		await picker.press('ArrowDown');
+		await picker.pressSequentially('ผ้าอ้อมเด็ก');
+		const option = page.getByRole('option', { name: /^ผ้าอ้อมเด็ก ไซส์ M/ }).first();
+		await expect(option).toContainText('ชิ้น');
+		await expect(option).not.toContainText('piece');
+		await option.click();
+
+		await page.getByRole('textbox', { name: 'จำนวนรับจริง *' }).fill('12');
+		// Diapers carry a shelf life, so the lot needs an expiry before it can be received.
+		await fillExpiry(page.getByRole('textbox', { name: 'วันหมดอายุ' }));
+		// Boxes against pieces do not compare, so no "more/less than declared" badge.
+		await expect(page.getByText(/(มากกว่า|น้อยกว่า)ที่แจ้ง/)).toHaveCount(0);
+		await page.getByRole('checkbox', { name: 'ผ่านการตรวจสอบแล้ว' }).check();
+		const confirm = page.getByRole('button', { name: 'ยืนยันรับเข้าคลัง' });
+		await expect(confirm).toBeEnabled();
+
+		const received = page.waitForResponse(
+			(r) =>
+				r.url().endsWith(`/api/back-office/donations/${bookingRef}`) &&
+				r.request().method() === 'POST'
+		);
+		await confirm.click();
+		const res = await received;
+		expect(res.ok(), `receive failed: ${await res.text()}`).toBe(true);
+
+		const donation = await findDonation(shelter.code, bookingRef);
+		expect(donation.status).toBe('received');
+		const rows = (await ledgerRowsFor(shelter.code, donation._id as string)) as {
+			item_id: string;
+			qty: string;
+			unit?: string;
+			lot?: { lot_no?: string };
+		}[];
+		expect(rows).toEqual([
+			expect.objectContaining({ item_id: diaper.id, qty: '12', unit: diaper.unit })
+		]);
+
+		// The lot panel names the item and links into the stock movements for that lot.
+		const lotNo = rows[0].lot?.lot_no;
+		expect(lotNo, 'receipt minted no lot number').toBeTruthy();
+		await expect(page.getByText('เลขล็อตที่ระบบออกให้ (เขียนติดกล่อง)')).toBeVisible();
+		await expect(page.getByText('ผ้าอ้อมเด็ก ไซส์ M', { exact: true })).toBeVisible();
+		const toStock = page.getByRole('link', { name: 'ดูในคลัง' }).first();
+		await expect(toStock).toHaveAttribute('href', new RegExp(`tab=movements&lq=${lotNo}`));
+		await toStock.click();
+		await expect(page).toHaveURL(/\/back-office\/supply\?tab=movements/);
+		await expect(page.getByText(lotNo!).first()).toBeVisible({ timeout: 15_000 });
+	});
+
 	test('goods received into stock leave the whole remaining need bookable', async ({
 		page,
 		request,
@@ -305,6 +394,46 @@ test.describe('Donation full-stack: donor and staff', { tag: ['@critical', '@don
 				BOARD_SYNC
 			)
 			.not.toBe('open');
+	});
+
+	test('a booking for another shelter is not received while working in this one', async ({
+		page
+	}) => {
+		// A system admin can open any shelter's booking, but the goods are at the counter
+		// of the shelter they are working in. Receiving it would book the stock into the
+		// booking's shelter instead, so the scan station holds both actions until they
+		// switch to that shelter.
+		const admin = await createSystemAdmin(ledger, 'sa');
+		const { bookingRef } = await bookAsDonor(page, {
+			shelter,
+			need,
+			ledger,
+			donorName: `E2E ผิดศูนย์ ${RUN_ID}`,
+			phone: '0867770021'
+		});
+		await openBackOffice(page, ws);
+		await approvePending(page, shelter.code, bookingRef);
+
+		await openBackOffice(page, admin, 'SH001');
+		await openInScanStation(page, bookingRef);
+		const wrongShelter = page.getByRole('alert').filter({ hasText: 'ใบนี้จองส่งไปศูนย์' });
+		await expect(wrongShelter).toContainText('SH001');
+		await expect(page.getByRole('button', { name: 'ยืนยันรับเข้าคลัง' })).toBeDisabled();
+		await expect(page.getByRole('button', { name: 'ปฏิเสธคำขอ' })).toBeDisabled();
+
+		await openBackOffice(page, admin, shelter.code);
+		await openInScanStation(page, bookingRef);
+		await expect(page.getByText('ใบนี้จองส่งไปศูนย์')).toHaveCount(0);
+		// Working in the booking's shelter, the actions are back — and closing the booking
+		// here keeps the run's teardown, which wants every booking finished, satisfied.
+		await page.getByRole('button', { name: 'ปฏิเสธคำขอ' }).click();
+		await page
+			.getByPlaceholder('เช่น พื้นที่จัดเก็บไม่เพียงพอ, งดรับเสื้อผ้าชั่วคราว...')
+			.fill(`ส่งผิดศูนย์ (e2e ${RUN_ID})`);
+		await page.getByRole('button', { name: 'ยืนยันการปฏิเสธคำขอ' }).click();
+		await expect
+			.poll(async () => (await findDonation(shelter.code, bookingRef))?.status)
+			.toBe('rejected');
 	});
 
 	test.describe('donor self-service on the track page', () => {

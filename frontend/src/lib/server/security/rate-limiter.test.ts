@@ -230,6 +230,8 @@ describe('RATE_LIMIT switch (CR-160)', () => {
 			'kioskReprintDeviceLimiter',
 			'kioskReprintVerifyFailureLimiter',
 			'kioskThaidSessionDeviceLimiter',
+			'kioskVolunteerCardDeviceLimiter',
+			'kioskVolunteerCardPhoneLimiter',
 			'linkAccountIpLimiter',
 			'linkAccountNonceLimiter',
 			'loginCaptchaIpLimiter',

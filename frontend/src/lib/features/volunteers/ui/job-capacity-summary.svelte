@@ -52,11 +52,13 @@
 
 <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
 	<Card.Root class="border-0 shadow-sm">
-		<Card.Content class="flex items-center gap-3 pt-4">
+		<Card.Content
+			class="flex flex-col items-start gap-2 min-[480px]:flex-row min-[480px]:items-center min-[480px]:gap-3"
+		>
 			<div class="rounded-lg bg-primary/10 p-2">
 				<TrendingUp class="h-5 w-5 text-primary" />
 			</div>
-			<div>
+			<div class="min-w-0">
 				<p class="text-xs text-muted-foreground">อัตราจองกะรวม</p>
 				<p class="mt-0.5 text-xl font-bold">{Math.round(overallRate * 100)}%</p>
 			</div>
@@ -69,11 +71,13 @@
 				? 'ring-2 ring-destructive'
 				: 'hover:shadow-md'}"
 		>
-			<Card.Content class="flex items-center gap-3 pt-4">
+			<Card.Content
+				class="flex flex-col items-start gap-2 min-[480px]:flex-row min-[480px]:items-center min-[480px]:gap-3"
+			>
 				<div class="rounded-lg bg-destructive/10 p-2">
 					<AlertTriangle class="h-5 w-5 text-destructive" />
 				</div>
-				<div>
+				<div class="min-w-0">
 					<p class="text-xs text-muted-foreground">ขาดแคลนหนัก (&lt;50%)</p>
 					<p class="mt-0.5 text-xl font-bold text-destructive">{counts.critical}</p>
 				</div>
@@ -87,11 +91,13 @@
 				? 'ring-2 ring-amber-500'
 				: 'hover:shadow-md'}"
 		>
-			<Card.Content class="flex items-center gap-3 pt-4">
+			<Card.Content
+				class="flex flex-col items-start gap-2 min-[480px]:flex-row min-[480px]:items-center min-[480px]:gap-3"
+			>
 				<div class="rounded-lg bg-amber-500/10 p-2">
 					<Gauge class="h-5 w-5 text-amber-600" />
 				</div>
-				<div>
+				<div class="min-w-0">
 					<p class="text-xs text-muted-foreground">ใกล้ครบเป้า (50–99%)</p>
 					<p class="mt-0.5 text-xl font-bold text-amber-600">{counts.near}</p>
 				</div>
@@ -105,11 +111,13 @@
 				? 'ring-2 ring-emerald-500'
 				: 'hover:shadow-md'}"
 		>
-			<Card.Content class="flex items-center gap-3 pt-4">
+			<Card.Content
+				class="flex flex-col items-start gap-2 min-[480px]:flex-row min-[480px]:items-center min-[480px]:gap-3"
+			>
 				<div class="rounded-lg bg-emerald-500/10 p-2">
 					<CheckCircle2 class="h-5 w-5 text-emerald-600" />
 				</div>
-				<div>
+				<div class="min-w-0">
 					<p class="text-xs text-muted-foreground">ครบตามเป้า (100%)</p>
 					<p class="mt-0.5 text-xl font-bold text-emerald-600">{counts.met}</p>
 				</div>

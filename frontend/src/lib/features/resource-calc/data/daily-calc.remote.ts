@@ -23,14 +23,14 @@ import {
 	type DailyCalcRecord,
 	type DailyCalcRepository
 } from './daily-calc.repository';
-import { countActive, loadCalculationSnapshot } from './calculation-snapshot';
+import { countOccupancy, loadCalculationSnapshot } from './calculation-snapshot';
 
 /** Minimal shape of a bounded `_all_docs?include_docs=true` response. */
 interface AllDocsResponse {
 	rows: Array<{ id: string; doc?: unknown }>;
 }
 
-export { countActive };
+export { countOccupancy };
 
 export class DailyCalcRemoteRepository implements DailyCalcRepository {
 	constructor(private readonly dbName: string = getShelterDb()) {}

@@ -109,6 +109,7 @@
 								size="icon"
 								variant="ghost"
 								class="shrink-0 text-muted-foreground opacity-70 transition-opacity group-hover:opacity-100"
+								aria-label="แก้ไขงาน {job.title}"
 								onclick={() => onedit(job)}
 							>
 								<Pencil class="h-4 w-4" />

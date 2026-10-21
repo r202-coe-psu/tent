@@ -118,4 +118,13 @@ export {
 	type MenuMatchResult
 } from './menu-matching';
 
+export {
+	validateDispatchLotAllocations,
+	sumDispatchAllocations,
+	type DispatchLotAllocation,
+	type DispatchLotCandidate,
+	type DispatchLotFailureReason,
+	type DispatchLotValidation
+} from './dispatch-lots';
+
 export { lotExpiryStatus, isLotExpired, type LotExpiryStatus } from './food-safety';

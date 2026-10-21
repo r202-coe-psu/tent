@@ -242,6 +242,30 @@ async def test_create_m2_client_with_booking_and_residency_scopes(
     assert {"booking-write", "residency-read"} <= set(created.allowed_scopes)
 
 
+async def test_create_allows_occupant_search_scope(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    """#736: EXT-012's `occupant-search` scope is grantable on create and on PATCH."""
+    response = await client.post(
+        "/v1/admin/thirdparty-clients",
+        headers=auth_headers,
+        json={"name": "Search partner", "allowed_scopes": ["location-read", "occupant-search"]},
+    )
+    assert response.status_code == 201, response.text
+
+    created = await ThirdPartyClient.get(response.json()["id"])
+    assert created is not None
+    assert "occupant-search" in created.allowed_scopes
+
+    updated = await client.patch(
+        f"/v1/admin/thirdparty-clients/{response.json()['id']}",
+        headers=auth_headers,
+        json={"allowed_scopes": ["occupant-search"]},
+    )
+    assert updated.status_code == 200, updated.text
+    assert updated.json()["allowed_scopes"] == ["occupant-search"]
+
+
 async def test_create_without_module_name(
     client: AsyncClient, auth_headers: dict[str, str]
 ) -> None:

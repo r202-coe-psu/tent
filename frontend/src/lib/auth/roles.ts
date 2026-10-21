@@ -390,6 +390,20 @@ export function canAccessZoning(roles: readonly string[], shelterCode?: string |
 	);
 }
 
+/**
+ * Shelter Incident Log — incident staff only: system_admin, or security_officer / shelter_manager
+ * in the shelter (owner decision; other shelter staff lose access). Without `shelterCode`, true
+ * when either capability is held in any shelter. Per-record rights live in `features/incidents`
+ * policy + VDU.
+ */
+export function canAccessIncidents(roles: readonly string[], shelterCode?: string | null): boolean {
+	return (
+		isSystemAdmin(roles) ||
+		hasStaffCapability(roles, SECURITY_OFFICER, shelterCode) ||
+		isShelterManager(roles, shelterCode)
+	);
+}
+
 /** True when the role list includes warehouse/supply capability (any or scoped shelter). */
 export function isWarehouseStaff(roles: readonly string[], shelterCode?: string | null): boolean {
 	return (

@@ -6,7 +6,8 @@ import {
 	jobApplicationInputSchema,
 	canTransitionJobApplication,
 	JOB_APPLICATION_TRANSITIONS,
-	type JobApplicationInput
+	type JobApplicationInput,
+	outstandingReviewReasons
 } from './job-application.schema';
 
 const ctx = { shelterCode: 'SH001', createdBy: 'tester' };
@@ -206,5 +207,34 @@ describe('JOB_APPLICATION_TRANSITIONS and canTransitionJobApplication (Story 3.3
 			rejected: [],
 			cancelled: []
 		});
+	});
+});
+
+describe('outstandingReviewReasons', () => {
+	const unchecked = { identityVerified: false, uncertifiedSkill: true };
+	const cleared = { identityVerified: true, uncertifiedSkill: false };
+
+	it('lists what is still unchecked on the volunteer now', () => {
+		expect(outstandingReviewReasons(['identity', 'skill_certification'], unchecked)).toEqual([
+			'identity',
+			'skill_certification'
+		]);
+	});
+
+	it('drops what staff have checked since the volunteer applied', () => {
+		expect(outstandingReviewReasons(['identity', 'skill_certification'], cleared)).toEqual([]);
+	});
+
+	it('still reports an unchecked identity the application was never stamped with', () => {
+		expect(
+			outstandingReviewReasons(['job_fit'], { identityVerified: false, uncertifiedSkill: false })
+		).toEqual(['identity']);
+	});
+
+	it('keeps a legacy review, and never shows job_fit', () => {
+		expect(outstandingReviewReasons(['job_fit', 'legacy_review'], cleared)).toEqual([
+			'legacy_review'
+		]);
+		expect(outstandingReviewReasons(['job_fit'], cleared)).toEqual([]);
 	});
 });

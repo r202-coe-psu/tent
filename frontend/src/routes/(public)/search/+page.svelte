@@ -110,7 +110,7 @@
 	<title>{t.pageTitle}</title>
 </svelte:head>
 
-<PublicPageShell class="space-y-8">
+<PublicPageShell maxWidth="max-w-7xl" class="space-y-8 lg:px-8">
 	<!-- <PublicHeroMetrics
 		title={t.heroTitle}
 		description={t.heroDesc}

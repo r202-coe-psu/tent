@@ -60,6 +60,7 @@ export {
 	type RequestedItem
 } from './domain/compute-needs';
 export { carryItemIds, type BareItem } from './domain/carry-item-ids';
+export { receivedQtyDifference, type ReceiveLineQty } from './domain/receive-line';
 
 // Domain — queue slots (DN-5 · schema.md §2.13)
 export {

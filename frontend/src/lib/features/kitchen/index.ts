@@ -127,6 +127,9 @@ export {
 	MEAL_PERIOD_LABELS
 } from './domain/kitchen';
 
+// Domain — meal_service receipt_no (CR-177)
+export { nextReceiptNo, mealServiceRef } from './domain/receipt-no';
+
 // Data — repository and remote CouchDB binding
 export type {
 	KitchenRepository,

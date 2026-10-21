@@ -67,7 +67,7 @@
 	const occupancyQuery = useDashboardOccupancy(() => cleanShelterCode);
 
 	const effectiveOccupancy = $derived(
-		occupancy > 0 ? occupancy : (occupancyQuery.data?.active ?? 0)
+		occupancy > 0 ? occupancy : (occupancyQuery.data?.in_shelter ?? 0)
 	);
 
 	const isLoading = $derived(

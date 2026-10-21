@@ -26,7 +26,7 @@ class ThirdPartyAccessLog(Document):
     location_code: str
     purpose: str
     ip: str
-    status: str  # "granted" | "denied_insufficient_scope" | "denied_missing_purpose"
+    status: str  # "granted" | "denied_missing_purpose" | "denied_insufficient_scope" | "denied_<code>"
     result_count: int = 0
     created_at: datetime
 

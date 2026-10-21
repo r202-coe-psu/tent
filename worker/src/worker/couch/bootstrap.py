@@ -24,6 +24,7 @@ from worker.mongo import (
     apply_shelter,
     apply_shift_assignment,
     apply_volunteer,
+    delete_jobs_for_shelter,
     delete_needs_for_shelter,
     delete_occupants_for_shelter,
     delete_persons_for_shelter,
@@ -81,6 +82,8 @@ async def bootstrap_database(couch: CouchClient, database: str) -> None:
                     await delete_occupants_for_shelter(code)
                     await delete_needs_for_shelter(code)
                     await delete_stocks_for_shelter(code)
+                    # Cancelled shelter: its postings leave the volunteer board too.
+                    await delete_jobs_for_shelter(code)
             elif doc_type == "announcement":
                 from worker.mongo.announcement import apply_announcement
                 from worker.projectors.announcement import project_announcement

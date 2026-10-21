@@ -252,6 +252,10 @@ export const kioskReprintDeviceLimiter = new RateLimiter(60_000, 10);
  * counted but a guesser of the 10 000 possible codes is locked out after five misses.
  */
 export const kioskReprintVerifyFailureLimiter = new RateLimiter(10 * 60_000, 5);
+/** Kiosk volunteer role card — per scanner device (registry_id). */
+export const kioskVolunteerCardDeviceLimiter = new RateLimiter(60_000, 10);
+/** Kiosk volunteer role card — per phone (sha256) across devices, counts every request. */
+export const kioskVolunteerCardPhoneLimiter = new RateLimiter(10 * 60_000, 3);
 /** Walk-in creation — per authenticated kiosk device. */
 export const kioskRegisterDeviceLimiter = new RateLimiter(60_000, 5);
 /** Kiosk ThaiD session creation — per scanner device (registry_id). D-5 proposal, pending PO decision. */
