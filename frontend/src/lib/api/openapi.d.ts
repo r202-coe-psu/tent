@@ -607,6 +607,23 @@ export interface paths {
 		patch?: never;
 		trace?: never;
 	};
+	'/external/persons/search': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/** Search Persons */
+		post: operations['search_persons_external_persons_search_post'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
 	'/external/persons/shelter-residency': {
 		parameters: {
 			query?: never;
@@ -2403,6 +2420,77 @@ export interface components {
 			cardType: 'national_id' | 'passport' | 'pink_card' | 'other' | 'anonymous';
 			/** Number */
 			number?: string | null;
+		};
+		/** PersonSearchEnvelope */
+		PersonSearchEnvelope: {
+			/**
+			 * Status
+			 * @default 200
+			 */
+			status: number;
+			/**
+			 * Message
+			 * @default Found Data.
+			 */
+			message: string;
+			/**
+			 * Result
+			 * @description สูงสุด 10 รายการ; ว่างเมื่อไม่พบ
+			 */
+			result: components['schemas']['PersonSearchItem'][];
+		};
+		/** PersonSearchErrorResponse */
+		PersonSearchErrorResponse: {
+			/** Status */
+			status: number;
+			/** Message */
+			message: string;
+			/** Code */
+			code?: string | null;
+			/** Detail */
+			detail?: string | null;
+		};
+		/**
+		 * PersonSearchItem
+		 * @description A masked match — same fields as public search minus `family_members` (#736 decision 4).
+		 */
+		PersonSearchItem: {
+			/** Name */
+			name: string;
+			/** Status */
+			status: string;
+			/** National Id */
+			national_id?: string | null;
+			/** Gender */
+			gender?: string | null;
+			/** Shelter Name */
+			shelter_name: string;
+			/** Shelter Address */
+			shelter_address?: string | null;
+			/** Origin Address */
+			origin_address?: string | null;
+			/** Checked In At */
+			checked_in_at?: string | null;
+			/** Care Zone */
+			care_zone?: string | null;
+			/** Zone Name */
+			zone_name?: string | null;
+		};
+		/**
+		 * PersonSearchRequest
+		 * @description Body of `POST /external/persons/search`.
+		 *
+		 *     No length / shape constraint here: the query is validated inside the use case (after the
+		 *     purpose and scope checks) so a rejected attempt is still logged and answered with the partner
+		 *     `validation_error`, not FastAPI's generic body error.
+		 */
+		PersonSearchRequest: {
+			/**
+			 * Search
+			 * @description คำค้น: ชื่อ / เลขบัตร 13 หลัก / พาสปอร์ต / เบอร์โทร (ไม่ส่งใน URL)
+			 * @default
+			 */
+			search: string;
 		};
 		/** PetCreated */
 		PetCreated: {
@@ -5352,6 +5440,69 @@ export interface operations {
 				};
 				content: {
 					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	search_persons_external_persons_search_post: {
+		parameters: {
+			query?: {
+				/** @description วัตถุประสงค์การค้นหา (บังคับ) */
+				purpose?: string | null;
+			};
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody?: {
+			content: {
+				'application/json': components['schemas']['PersonSearchRequest'] | null;
+			};
+		};
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['PersonSearchEnvelope'];
+				};
+			};
+			/** @description Bad Request */
+			400: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['PersonSearchErrorResponse'];
+				};
+			};
+			/** @description Unauthorized */
+			401: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['PersonSearchErrorResponse'];
+				};
+			};
+			/** @description Forbidden */
+			403: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['PersonSearchErrorResponse'];
+				};
+			};
+			/** @description Unprocessable Content */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['PersonSearchErrorResponse'];
 				};
 			};
 		};
