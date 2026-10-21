@@ -25,12 +25,17 @@ export function canCreateTicket(ctx: AuthorContext): boolean {
 
 /**
  * Checks if the actor is authorized to approve tickets for dispatch (Step 2).
- * Allowed: shelter_manager, system_admin (AC-TKT-03.1).
+ * Allowed: warehouse_staff, supply_coordinator, shelter_manager, system_admin
+ * (CR-179 widens AC-TKT-03.1; aligned with VDU rule 12 `canApproveTicket`).
  */
 export function canApproveTicket(ctx: AuthorContext): boolean {
 	if (!ctx.roles) return false;
 	if (isSystemAdmin(ctx.roles)) return true;
-	return hasCapabilityInShelter(ctx.roles, ctx.shelterCode, SHELTER_MANAGER);
+	return (
+		hasCapabilityInShelter(ctx.roles, ctx.shelterCode, WAREHOUSE_STAFF) ||
+		hasCapabilityInShelter(ctx.roles, ctx.shelterCode, SUPPLY_COORDINATOR) ||
+		hasCapabilityInShelter(ctx.roles, ctx.shelterCode, SHELTER_MANAGER)
+	);
 }
 
 /**
@@ -132,7 +137,7 @@ export function assertCanCancelTicket(ctx: AuthorContext): void {
 export function assertCanApproveTicket(ctx: AuthorContext): void {
 	if (!canApproveTicket(ctx)) {
 		throw new WorkflowAuthorizationError(
-			'Unauthorized: ticket approval requires shelter_manager or system_admin role'
+			'Unauthorized: ticket approval requires warehouse_staff, supply_coordinator, shelter_manager, or system_admin role'
 		);
 	}
 }

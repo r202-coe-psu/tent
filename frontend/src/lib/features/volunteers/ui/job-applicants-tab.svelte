@@ -20,7 +20,7 @@
 	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
 	import JobApplicantRow from './job-applicant-row.svelte';
 	import JobApplicantReviewDialog from './job-applicant-review-dialog.svelte';
-	import { partitionApplicantQueue } from '../domain/applicant-queue';
+	import { groupApplicationsByApplicant, partitionApplicantQueue } from '../domain/applicant-queue';
 	import type { Job } from '../domain/job.schema';
 	import type { JobApplication } from '../domain/job-application.schema';
 	import { useJobApplications, useSkillOptions, useVolunteers } from '../application/queries';
@@ -33,6 +33,8 @@
 
 	const loading = $derived(applicationsQuery.isPending);
 	const queue = $derived(partitionApplicantQueue(applicationsQuery.data ?? [], job._id));
+	/** Pending applications, one card per applicant with all their shifts (#716). */
+	const pendingGroups = $derived(groupApplicationsByApplicant(queue.pending));
 
 	/** `volunteer_id` → `volunteer_code`, so a linked application shows its roster code. */
 	const codeByVolunteerId = $derived(
@@ -40,8 +42,10 @@
 	);
 	const volunteerById = $derived(new Map((volunteersQuery.data ?? []).map((v) => [v._id, v])));
 
+	// People are counted once however many shifts they applied for; the other tiles count
+	// applications, which are one per shift (#716).
 	const counts = $derived({
-		total: queue.pending.length + queue.reviewed.length,
+		total: groupApplicationsByApplicant([...queue.pending, ...queue.reviewed]).length,
 		pending: queue.pending.length,
 		confirmed: queue.reviewed.filter((a) => a.status === 'confirmed').length,
 		declined: queue.reviewed.filter((a) => a.status === 'rejected' || a.status === 'cancelled')
@@ -49,23 +53,32 @@
 	});
 
 	const tiles = $derived([
-		{ key: 'total', label: 'ผู้สมัครทั้งหมด', value: counts.total, tone: 'border-border bg-card' },
+		{
+			key: 'total',
+			label: 'ผู้สมัครทั้งหมด',
+			value: counts.total,
+			unit: 'คน',
+			tone: 'border-border bg-card'
+		},
 		{
 			key: 'pending',
 			label: 'รอพิจารณา',
 			value: counts.pending,
+			unit: 'กะ',
 			tone: 'border-border bg-muted/50'
 		},
 		{
 			key: 'confirmed',
 			label: 'อนุมัติใบสมัครแล้ว',
 			value: counts.confirmed,
+			unit: 'กะ',
 			tone: 'border-emerald-200 bg-emerald-50/70'
 		},
 		{
 			key: 'declined',
 			label: '✕ ปฏิเสธ/ไม่สะดวก',
 			value: counts.declined,
+			unit: 'กะ',
 			tone: 'border-rose-200 bg-rose-50/70'
 		}
 	]);
@@ -86,14 +99,16 @@
 	}
 
 	let reviewOpen = $state(false);
-	let reviewTarget = $state<JobApplication | null>(null);
+	let reviewTargets = $state<JobApplication[]>([]);
 	let reviewDecision = $state<'confirmed' | 'rejected'>('confirmed');
 
-	function openReview(application: JobApplication, decision: 'confirmed' | 'rejected') {
-		reviewTarget = application;
+	function openReview(applications: JobApplication[], decision: 'confirmed' | 'rejected') {
+		reviewTargets = applications;
 		reviewDecision = decision;
 		reviewOpen = true;
 	}
+
+	const reviewVolunteerId = $derived(reviewTargets[0]?.volunteer_id ?? null);
 </script>
 
 <div class="space-y-4">
@@ -101,7 +116,7 @@
 		{#each tiles as tile (tile.key)}
 			<div class={['rounded-2xl border p-3.5', tile.tone]}>
 				<p class="text-xs font-medium text-muted-foreground">{tile.label}</p>
-				<p class="mt-1 text-2xl font-bold text-foreground tabular-nums">{tile.value} คน</p>
+				<p class="mt-1 text-2xl font-bold text-foreground tabular-nums">{tile.value} {tile.unit}</p>
 			</div>
 		{/each}
 	</div>
@@ -133,20 +148,19 @@
 		{:else}
 			{#if queue.pending.length > 0}
 				<div class="mt-4 flex items-center justify-between gap-3">
-					<h4 class="text-xs font-bold text-foreground">รอพิจารณา ({queue.pending.length} คน)</h4>
+					<h4 class="text-xs font-bold text-foreground">
+						รอพิจารณา ({pendingGroups.length} คน · {queue.pending.length} กะ)
+					</h4>
 					<span class="text-2xs text-muted-foreground">เรียงตามวันที่สมัคร</span>
 				</div>
 				<ul class="mt-3 space-y-3">
-					{#each queue.pending as application (application._id)}
+					{#each pendingGroups as group (group.key)}
+						{@const volunteerId = group.applications[0].volunteer_id}
 						<JobApplicantRow
-							{application}
-							volunteer={application.volunteer_id
-								? (volunteerById.get(application.volunteer_id) ?? null)
-								: null}
-							volunteerCode={application.volunteer_id
-								? (codeByVolunteerId.get(application.volunteer_id) ?? null)
-								: null}
-							shiftLabel={shiftLabelFor(application)}
+							applications={group.applications}
+							volunteer={volunteerId ? (volunteerById.get(volunteerId) ?? null) : null}
+							volunteerCode={volunteerId ? (codeByVolunteerId.get(volunteerId) ?? null) : null}
+							shiftLabelOf={shiftLabelFor}
 							requiredSkills={job.skills_required ?? []}
 							skillOptions={skillCatalog.options}
 							onreview={openReview}
@@ -159,21 +173,21 @@
 				<div class="mt-6 border-t border-border pt-4">
 					<div class="flex items-center justify-between gap-3">
 						<h4 class="text-xs font-bold text-foreground">
-							ประวัติการพิจารณา ({queue.reviewed.length} คน)
+							ประวัติการพิจารณา ({queue.reviewed.length} กะ)
 						</h4>
 						<span class="text-2xs text-muted-foreground">รวมอนุมัติ ปฏิเสธ และไม่สะดวก</span>
 					</div>
 					<ul class="mt-3 space-y-3">
 						{#each queue.reviewed as application (application._id)}
 							<JobApplicantRow
-								{application}
+								applications={[application]}
 								volunteer={application.volunteer_id
 									? (volunteerById.get(application.volunteer_id) ?? null)
 									: null}
 								volunteerCode={application.volunteer_id
 									? (codeByVolunteerId.get(application.volunteer_id) ?? null)
 									: null}
-								shiftLabel={shiftLabelFor(application)}
+								shiftLabelOf={shiftLabelFor}
 								requiredSkills={job.skills_required ?? []}
 								skillOptions={skillCatalog.options}
 								onreview={openReview}
@@ -188,10 +202,8 @@
 	<JobApplicantReviewDialog
 		bind:open={reviewOpen}
 		{job}
-		application={reviewTarget}
-		volunteer={reviewTarget?.volunteer_id
-			? (volunteerById.get(reviewTarget.volunteer_id) ?? null)
-			: null}
+		applications={reviewTargets}
+		volunteer={reviewVolunteerId ? (volunteerById.get(reviewVolunteerId) ?? null) : null}
 		decision={reviewDecision}
 	/>
 </div>

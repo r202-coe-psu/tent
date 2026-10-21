@@ -124,6 +124,16 @@ export {
 	type BulkReturnPool
 } from './domain/food-supplies';
 
+/** Per-lot dispatch validation (#655) — shared with the kitchen ticket dispatch (CR-178). */
+export {
+	validateDispatchLotAllocations,
+	sumDispatchAllocations,
+	type DispatchLotAllocation,
+	type DispatchLotCandidate,
+	type DispatchLotFailureReason,
+	type DispatchLotValidation
+} from './domain/food-supplies';
+
 export {
 	distributionTypeSnapshotSchema,
 	repeatOverrideReasonSchema,
@@ -323,6 +333,9 @@ export { default as DispatchTicketDialog } from './ui/back-office/DispatchTicket
 
 export {
 	getEligiblePhysicalLots,
+	getItemLotBalances,
+	planAutoLotAllocation,
+	lotInputMax,
 	isLotDateExpired,
 	type EligiblePhysicalLot
 } from './ui/model/physical-lot';
