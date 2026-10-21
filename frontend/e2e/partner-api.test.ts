@@ -524,6 +524,14 @@ test.describe('Partner API', { tag: ['@partner-api', '@critical'] }, () => {
 	test('B2 EXT-002 ?accepts_booking=true|false filters, and every row carries the field', async () => {
 		test.setTimeout(120_000);
 		const r = state();
+		const closed = closedCtxOf(r);
+		// Self-sufficient (does not rely on B1 having run): wait for the closed shelter's projection.
+		await expect
+			.poll(async () => (await call(r, r.token, byExt('EXT-003'), closed)).status, {
+				timeout: 60_000,
+				intervals: [2_000, 3_000]
+			})
+			.toBe(200);
 		const yes = await listAllLocations(r.api, r.token, { accepts_booking: 'true' });
 		expect(yes.map((l) => l.location_code)).toContain(r.code);
 		expect(yes.map((l) => l.location_code)).not.toContain(r.closedCode);
