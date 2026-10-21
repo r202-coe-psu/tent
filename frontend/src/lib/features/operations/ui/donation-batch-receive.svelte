@@ -112,7 +112,10 @@
 		void (async () => {
 			const matched: string[] = [];
 			for (const { line, line_no, item_id } of targets) {
-				if (!item_id) continue;
+				// A line refused at review stays at '0' even if a row was keyed for it before
+				// the refusal was honoured here — locking it would re-send that row's qty and
+				// the receipt could never close. The stray row is a stock adjustment for staff.
+				if (!item_id || line.refused !== undefined) continue;
 				const id = await deriveDonationReceiptLineId(donation._id, item_id, line_no);
 				if (run !== lockRun) return;
 				const row = rowsById.get(id);
@@ -192,9 +195,11 @@
 
 	// FR-B5 — "received less than declared" is derived, never stored.
 	const shortfalls = $derived.by(() => {
-		const declared = (donation.items ?? []).map((item, index) => {
+		// A line refused at review is "ไม่รับ", not "ขาด" (CR-172 FR-13).
+		const declared = (donation.items ?? []).flatMap((item, index) => {
+			if (item.review_status === 'rejected') return [];
 			const itemId = item.item_id || lines.find((line) => line.line_no === index)?.item_id || '';
-			return { item_id: itemId, ...toBase(item.qty, item.unit, itemId) };
+			return [{ item_id: itemId, ...toBase(item.qty, item.unit, itemId) }];
 		});
 		const counted = [
 			...lines

@@ -25,6 +25,7 @@ import {
 	createWalkInDonation,
 	keyDonationReceipt,
 	completeDonationReceipt,
+	isDonationOutstanding,
 	createDistributeEntry,
 	createAdjustEntry,
 	projectStockLotBalances,
@@ -232,6 +233,24 @@ export class OperationsRemoteRepository implements OperationsRepository {
 		if (donation.kind !== 'items') {
 			throw new Error('Only a goods donation can be received into stock');
 		}
+		// The booking as it is now, before anything is keyed — the form holds the copy it was
+		// opened with. Staff may have refused a line, and since CR-174 the donor may edit or
+		// cancel a booking that has its QR (FR-20/21); counting against an older copy keyed
+		// goods the booking no longer asks for. A booking already `received` is the FR-B8
+		// retry of a transition whose answer was lost: its rows are found by id below.
+		const onFile = (await this.repo.get<Donation>(donation._id)) ?? donation;
+		if (onFile.status !== 'received') {
+			if (!isDonationOutstanding(onFile.status)) {
+				throw new Error(
+					`ใบนี้ปิดไปแล้ว (สถานะ ${onFile.status}) — รับเข้าคลังไม่ได้ ยังไม่มีของเข้าคลัง`
+				);
+			}
+			if (onFile._rev !== donation._rev) {
+				throw new Error(
+					'ใบนี้ถูกแก้หลังจากเปิดหน้าไว้ — เลือกใบใหม่แล้วนับอีกครั้ง ยังไม่มีของเข้าคลัง'
+				);
+			}
+		}
 		const seenLineNos = new Set<number>();
 		for (const line of counted) {
 			if (!Number.isInteger(line.line_no) || line.line_no < 0) {
@@ -248,8 +267,10 @@ export class OperationsRemoteRepository implements OperationsRepository {
 				throw new Error(`Line ${line.line_no} has a negative quantity`);
 			}
 			// CR-174 AC-3 — a line refused at review is not received at the shelf either.
-			if (donation.items?.[line.line_no]?.review_status === 'rejected' && isReceivedLine(line)) {
-				throw new Error(`Line ${line.line_no} was refused at review and cannot be received`);
+			if (onFile.items?.[line.line_no]?.review_status === 'rejected' && isReceivedLine(line)) {
+				throw new Error(
+					`รายการที่ ${line.line_no + 1} ถูกปฏิเสธตอนประเมินแล้ว — รับเข้าคลังไม่ได้`
+				);
 			}
 		}
 		// Zero lines write nothing (FR-B3). A receipt with nothing received at all must not
@@ -372,21 +393,56 @@ export class OperationsRemoteRepository implements OperationsRepository {
 		try {
 			const latest = (await this.repo.get<Donation>(donation._id)) ?? donation;
 			const nextBase = completeDonationReceipt(latest);
-			const declaredForShortfall = (latest.items ?? []).map((i) => ({
-				item_id: i.item_id || i.free_text,
-				qty: String(i.qty)
-			}));
+			const declaredLines = latest.items ?? [];
+			const countedByLine = new Map(counted.map((c) => [c.line_no, c]));
+			// "ไม่รับ" is not "ขาด" (CR-172 FR-13): a line refused at review leaves the
+			// comparison. A typed-in line is compared under the item staff matched it to —
+			// keyed by its own words it never met its count and read as a shortfall.
+			const declaredForShortfall = declaredLines.flatMap((item, index) =>
+				item.review_status === 'rejected'
+					? []
+					: [
+							{
+								item_id: item.item_id || countedByLine.get(index)?.item_id || item.free_text,
+								qty: String(item.qty)
+							}
+						]
+			);
 			const countedForShortfall = counted.map((c) => ({
 				item_id: c.item_id,
 				qty: String(c.qty)
 			}));
 			const shortfalls = donationShortfall(declaredForShortfall, countedForShortfall);
+			// One entry per declared line, in order — the tracking page reads them by position —
+			// then any line counted off the ticket.
+			const summaryItems = [
+				...declaredLines.map((item, index) => {
+					if (item.review_status === 'rejected') {
+						return {
+							...(item.item_id ? { item_id: item.item_id } : {}),
+							...(item.free_text ? { free_text: item.free_text } : {}),
+							qty: '0',
+							unit: item.unit,
+							rejected: true,
+							...(item.review_reason ? { reject_reason: item.review_reason } : {}),
+							...(item.review_reason_code ? { reject_reason_code: item.review_reason_code } : {})
+						};
+					}
+					const line = countedByLine.get(index);
+					return line
+						? { item_id: line.item_id, qty: String(line.qty), unit: line.unit }
+						: { item_id: item.item_id, qty: '0', unit: item.unit };
+				}),
+				...counted
+					.filter((c) => c.line_no >= declaredLines.length)
+					.map((c) => ({ item_id: c.item_id, qty: String(c.qty), unit: c.unit }))
+			];
 			const next: Donation = {
 				...nextBase,
 				received_summary: {
 					total_items: receivedLines.length,
 					received_at: nextBase.received_at ?? new Date().toISOString(),
-					items: counted.map((c) => ({ item_id: c.item_id, qty: String(c.qty), unit: c.unit })),
+					items: summaryItems,
 					shortfalls: shortfalls.map((s) => ({
 						item_id: s.item_id,
 						declared: s.declared,

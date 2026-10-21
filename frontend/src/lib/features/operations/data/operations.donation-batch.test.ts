@@ -191,7 +191,7 @@ describe('receiveDonationBatch — complete receipts (CR-143 FR-B4)', () => {
 		docs.set(donation._id, clone(donation) as unknown as Doc);
 
 		await expect(repo.receiveDonationBatch(donation, fullCount(), ctx)).rejects.toThrow(
-			/refused at review/
+			/ถูกปฏิเสธตอนประเมิน/
 		);
 		expect(ledgerRows()).toHaveLength(0);
 		expect(bulkCalls).toHaveLength(0);
@@ -445,15 +445,95 @@ describe('receiveDonationBatch — partial failure and retry (CR-143 FR-B7 / FR-
 		expect(ledgerRows()).toHaveLength(2);
 	});
 
-	it('reports a transition error when the donation has meanwhile expired', async () => {
-		// the TTL job lapsed the booking while staff were counting
+	// The TTL job lapsed the booking while staff were counting. Its quota is already back
+	// with other donors: keying the goods first and failing the transition after left them
+	// in stock against a booking that no longer held anything.
+	it('refuses a booking that expired while it was being counted, keying nothing', async () => {
 		docs.set(donation._id, { ...clone(donation), status: 'expired' } as unknown as Doc);
 
-		const result = await repo.receiveDonationBatch(donation, fullCount(), ctx);
+		await expect(repo.receiveDonationBatch(donation, fullCount(), ctx)).rejects.toThrow(
+			/ปิดไปแล้ว/
+		);
+		expect(ledgerRows()).toHaveLength(0);
+		expect(bulkCalls).toHaveLength(0);
+	});
 
-		expect(result.rowsComplete).toBe(true);
-		expect(result.received).toBe(false);
-		expect(result.transitionError).toContain('Cannot receive');
+	// CR-174 — staff refused a line, or the donor edited / cancelled the booking, after the
+	// form was opened: the counted copy is stale.
+	it('refuses a count made against an older copy of the booking, keying nothing', async () => {
+		docs.set(donation._id, {
+			...clone(donation),
+			_rev: '9-changed',
+			items: donation.items!.map((item, i) =>
+				i === 1 ? { ...item, review_status: 'rejected' as const } : item
+			)
+		} as unknown as Doc);
+
+		await expect(
+			repo.receiveDonationBatch({ ...donation, _rev: '1-opened' }, fullCount(), ctx)
+		).rejects.toThrow(/ถูกแก้หลังจากเปิดหน้าไว้/);
+		expect(ledgerRows()).toHaveLength(0);
+	});
+
+	it('refuses a booking the donor cancelled while it was being counted', async () => {
+		docs.set(donation._id, { ...clone(donation), status: 'cancelled' } as unknown as Doc);
+
+		await expect(repo.receiveDonationBatch(donation, fullCount(), ctx)).rejects.toThrow(
+			/ปิดไปแล้ว/
+		);
+		expect(ledgerRows()).toHaveLength(0);
+	});
+});
+
+describe('receiveDonationBatch — lines refused at review (CR-172 FR-13, CR-174 AC-3)', () => {
+	function refuseLine(index: number) {
+		donation = {
+			...donation,
+			items: donation.items!.map((item, i) =>
+				i === index
+					? {
+							...item,
+							review_status: 'rejected' as const,
+							review_reason: 'หมดอายุ',
+							review_reason_code: 'expired'
+						}
+					: item
+			)
+		};
+		docs.set(donation._id, clone(donation) as unknown as Doc);
+	}
+
+	it('compares a typed-in line under the item staff matched it to', async () => {
+		donation = {
+			...donation,
+			items: donation.items!.map((item, i) =>
+				i === 0 ? { free_text: 'ของที่ผู้บริจาคพิมพ์เอง', qty: item.qty, unit: item.unit } : item
+			)
+		};
+		docs.set(donation._id, clone(donation) as unknown as Doc);
+
+		await repo.receiveDonationBatch(donation, fullCount(), ctx);
+
+		expect(storedDonation().received_summary?.shortfalls).toEqual([]);
+	});
+
+	it('records a refused line as not accepted, not as a shortfall', async () => {
+		refuseLine(1);
+		const counted = fullCount().map((line, i) => (i === 1 ? { ...line, qty: '0' } : line));
+
+		const result = await repo.receiveDonationBatch(donation, counted, ctx);
+
+		expect(result.received).toBe(true);
+		expect(ledgerRows()).toHaveLength(2);
+		const summary = storedDonation().received_summary!;
+		expect(summary.shortfalls).toEqual([]);
+		expect(summary.items?.[1]).toMatchObject({
+			qty: '0',
+			rejected: true,
+			reject_reason: 'หมดอายุ',
+			reject_reason_code: 'expired'
+		});
+		expect(summary.items?.[0]).not.toHaveProperty('rejected');
 	});
 });
 
