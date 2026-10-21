@@ -131,6 +131,7 @@ describe('GET /api/back-office/kiosk-banners (FR-KBR-10/11)', () => {
 
 describe('POST /api/back-office/kiosk-banners (FR-KBR-02/04/11)', () => {
 	const input = {
+		group_id: 'kiosk_banner_group:A',
 		title: 'ประกาศ',
 		caption: null,
 		duration_sec: 10,

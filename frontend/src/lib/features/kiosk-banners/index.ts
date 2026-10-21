@@ -1,6 +1,7 @@
 export {
 	KIOSK_BANNER_LIMITS,
 	createKioskBanner,
+	groupOf,
 	isActiveAt,
 	kioskBannerDocSchema,
 	kioskBannerInputSchema,
@@ -19,6 +20,18 @@ export type {
 	KioskBannerInput,
 	ReorderPlan
 } from './domain/kiosk-banner';
+export {
+	KIOSK_BANNER_GROUP_LIMITS,
+	createKioskBannerGroup,
+	isDuplicateGroupName,
+	kioskBannerGroupDocSchema,
+	kioskBannerGroupInputSchema
+} from './domain/kiosk-banner-group';
+export type {
+	KioskBannerGroupContext,
+	KioskBannerGroupDoc,
+	KioskBannerGroupInput
+} from './domain/kiosk-banner-group';
 export {
 	KIOSK_BANNER_IMAGE_MAX_BYTES,
 	KIOSK_BANNER_IMAGE_TYPES,

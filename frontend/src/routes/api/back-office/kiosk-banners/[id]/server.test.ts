@@ -61,6 +61,7 @@ function record(shelter: string): KioskBannerRecord {
 }
 
 const fields = {
+	group_id: 'kiosk_banner_group:A',
 	title: 'ใหม่',
 	caption: null,
 	duration_sec: 12,

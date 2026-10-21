@@ -1,6 +1,7 @@
 import { adminRaw, ServiceError } from '$lib/server/couch-admin';
 import {
 	createKioskBanner,
+	groupOf,
 	isActiveAt,
 	matchesSlot,
 	nextBannerOrder,
@@ -85,7 +86,11 @@ export async function createBanner(
 	now: Date = new Date()
 ): Promise<KioskBannerRecord> {
 	const banners = await findRawBanners(ctx.shelterCode);
-	const order = nextBannerOrder(banners, input.screen_type, now);
+	const order = nextBannerOrder(
+		banners,
+		{ group_id: input.group_id, screen_type: input.screen_type },
+		now
+	);
 	const doc = createKioskBanner(input, { ...ctx, order }, now);
 	return putDoc(doc, { [IMAGE_ATTACHMENT]: toInline(image) });
 }
@@ -99,10 +104,16 @@ async function readRaw(id: string): Promise<RawBannerDoc> {
 	return res.data as RawBannerDoc;
 }
 
+/** Fields a mutation may set; `schema_v`/`group_id` are the only ones that differ across versions. */
+type BannerPatch = Partial<Omit<KioskBannerDoc, 'schema_v' | 'group_id'>> & {
+	schema_v?: 2;
+	group_id?: string;
+};
+
 async function mutate(
 	id: string,
 	rev: string,
-	change: (current: RawBannerDoc) => Partial<KioskBannerDoc> | Promise<Partial<KioskBannerDoc>>,
+	change: (current: RawBannerDoc) => BannerPatch | Promise<BannerPatch>,
 	image: DecodedBannerImage | null,
 	now: Date
 ): Promise<KioskBannerRecord> {
@@ -111,11 +122,11 @@ async function mutate(
 		throw new ServiceError('CONFLICT', 'Banner was modified by someone else');
 	}
 	const { _attachments, ...kept } = current;
-	const doc: KioskBannerDoc = {
+	const doc = {
 		...kept,
 		...(await change(current)),
 		updated_at: now.toISOString()
-	};
+	} as KioskBannerDoc;
 	return putDoc(doc, image ? { [IMAGE_ATTACHMENT]: toInline(image) } : (_attachments ?? {}));
 }
 
@@ -126,7 +137,7 @@ export function updateBanner(
 	image: DecodedBannerImage | null,
 	now: Date = new Date()
 ): Promise<KioskBannerRecord> {
-	const { title, caption, duration_sec, start_at, end_at, status, screen_type } = input;
+	const { title, caption, duration_sec, start_at, end_at, status, screen_type, group_id } = input;
 	return mutate(
 		id,
 		rev,
@@ -138,11 +149,19 @@ export function updateBanner(
 			end_at,
 			status,
 			screen_type,
-			// Order is only set by the reorder page; a banner moved to another screen goes to its end.
+			group_id,
+			// Editing a v1 (ungrouped) banner always writes it back as v2.
+			schema_v: 2,
+			// Order is only set by the reorder page; a banner moved to another group or screen goes to
+			// the end of that slot.
 			order:
-				screenTypeOf(current) === screen_type
+				groupOf(current) === group_id && screenTypeOf(current) === screen_type
 					? current.order
-					: nextBannerOrder(await findRawBanners(current.shelter_code), screen_type, now)
+					: nextBannerOrder(
+							await findRawBanners(current.shelter_code),
+							{ group_id, screen_type },
+							now
+						)
 		}),
 		image,
 		now

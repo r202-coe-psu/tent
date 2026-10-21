@@ -4,10 +4,12 @@ import { kioskBannerDocSchema, type KioskBannerInput } from '../domain/kiosk-ban
 import type { BannerImagePayload } from './kiosk-banner-file';
 
 /** A banner as the back-office API returns it: the doc plus its current `_rev` and image type. */
-export const kioskBannerSummarySchema = kioskBannerDocSchema.safeExtend({
-	_rev: z.string().min(1),
-	image_content_type: z.string().nullable()
-});
+export const kioskBannerSummarySchema = kioskBannerDocSchema.and(
+	z.object({
+		_rev: z.string().min(1),
+		image_content_type: z.string().nullable()
+	})
+);
 
 export type KioskBannerSummary = z.infer<typeof kioskBannerSummarySchema>;
 

@@ -28,6 +28,7 @@ const summary = {
 };
 
 const input: KioskBannerInput = {
+	group_id: 'kiosk_banner_group:A',
 	title: 'ประกาศ',
 	caption: null,
 	duration_sec: 10,
