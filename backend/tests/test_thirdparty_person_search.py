@@ -163,10 +163,15 @@ async def test_invalid_query_is_422_and_logged(client: AsyncClient, query: str) 
     logs = await ThirdPartyAccessLog.find_all().to_list()
     assert [log.status for log in logs] == ["denied_validation_error"]
     assert logs[0].endpoint == "EXT-012"
-    assert query not in logs[0].model_dump_json()
+    # Compare field values, not the serialized JSON: a one-letter query like "a" is a
+    # substring of ordinary keys such as "created_at".
+    values = [v for v in logs[0].model_dump().values() if isinstance(v, str)]
+    assert query not in values
+    if len(query) >= 3:
+        assert not any(query in v for v in values)
 
 
-# 5 ────────────────────────────────────────────────────────────────────────────
+# 5────────────────────────────────────────────────────────────────────────────
 
 
 @pytest.mark.parametrize("query", [CID, NAME_QUERY, PHONE, PASSPORT, PASSPORT.lower()])
