@@ -17,6 +17,23 @@ async def _insert_shelter_doc(
     await db_client[db_name]["public_shelters"].insert_one(doc)
 
 
+def _shelter_doc(code: str, status: str = "open", feature_flags: dict | None = None) -> dict:
+    """public_shelters document; `feature_flags=None` leaves `feature_flags` out of raw_data."""
+    raw: dict = {"operation_status": "active", "capacity": 100}
+    if feature_flags is not None:
+        raw["feature_flags"] = feature_flags
+    return {
+        "_id": code,
+        "shelter_code": code,
+        "name": f"ศูนย์ {code}",
+        "status": status,
+        "capacity": 100,
+        "province": "สงขลา",
+        "updated_at": datetime.now(UTC),
+        "raw_data": raw,
+    }
+
+
 async def test_list_shelters_requires_bearer(client: AsyncClient):
     response = await client.get("/public/v1/shelters")
     assert response.status_code == 401
@@ -262,20 +279,10 @@ async def test_shelter_detail_occupancy_counts_pre_registered(
     auth_headers: dict[str, str],
 ):
     """CR-112 — public `occupancy` is Forecast; `present` / `in_zone` are additive."""
-    now = datetime.now(UTC)
     await _insert_shelter_doc(
         db_client,
         settings,
-        {
-            "_id": "SH001",
-            "shelter_code": "SH001",
-            "name": "ศูนย์ทดสอบ 1",
-            "status": "open",
-            "capacity": 100,
-            "province": "สงขลา",
-            "updated_at": now,
-            "raw_data": {"operation_status": "active", "capacity": 100},
-        },
+        _shelter_doc("SH001", "open"),
     )
 
     for idx, status in enumerate(["active", "active", "active"]):
@@ -314,22 +321,6 @@ async def test_shelter_detail_occupancy_counts_pre_registered(
 # status is NOT folded in (the SPA's `isShelterBookable` combines the two itself).
 
 
-def _flag_doc(code: str, status: str, feature_flags: dict | None) -> dict:
-    raw: dict = {"operation_status": "active", "capacity": 100}
-    if feature_flags is not None:
-        raw["feature_flags"] = feature_flags
-    return {
-        "_id": code,
-        "shelter_code": code,
-        "name": f"ศูนย์ {code}",
-        "status": status,
-        "capacity": 100,
-        "province": "สงขลา",
-        "updated_at": datetime.now(UTC),
-        "raw_data": raw,
-    }
-
-
 async def test_public_accepts_pre_registration_on_list_and_detail(
     client: AsyncClient,
     db_client: AsyncMongoClient,
@@ -344,7 +335,7 @@ async def test_public_accepts_pre_registration_on_list_and_detail(
         "SH105": ("full", {"accepts_pre_registration": True}, True),
     }
     for code, (status, flags, _) in cases.items():
-        await _insert_shelter_doc(db_client, settings, _flag_doc(code, status, flags))
+        await _insert_shelter_doc(db_client, settings, _shelter_doc(code, status, flags))
 
     listing = await client.get("/public/v1/shelters", headers=auth_headers)
     assert listing.status_code == 200
@@ -366,7 +357,7 @@ async def test_public_accepts_pre_registration_ignores_shelter_status(
 ):
     """Unlike the partner `accepts_booking`, the public field is the flag alone."""
     await _insert_shelter_doc(
-        db_client, settings, _flag_doc("SH106", "closed", {"accepts_pre_registration": True})
+        db_client, settings, _shelter_doc("SH106", "closed", {"accepts_pre_registration": True})
     )
     detail = await client.get("/public/v1/shelters/SH106", headers=auth_headers)
     assert detail.status_code == 200

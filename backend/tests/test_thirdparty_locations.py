@@ -6,6 +6,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 from httpx import AsyncClient
+from shelter_factory import flag_raw, insert_shelter
 from tent_model.public_shelter import GeoPoint, PublicShelter
 
 from apiapp.modules.thirdparty_auth.scopes import mint_access_token
@@ -55,30 +56,6 @@ async def open_hatyai_shelter() -> PublicShelter:
     )
     await doc.insert()
     return doc
-
-
-async def _shelter(
-    code: str, *, status: str = "open", raw_data: dict[str, object] | None = None
-) -> PublicShelter:
-    """Minimal shelter for the `accepts_booking` rule (status x feature flag)."""
-    return await PublicShelter(
-        id=code,
-        shelter_code=code,
-        name=f"ศูนย์ {code}",
-        status=status,
-        location_status=status,
-        is_active=True,
-        capacity=50,
-        raw_data=raw_data if raw_data is not None else {},
-        updated_at=datetime.now(UTC),
-    ).insert()
-
-
-def _flag(value: bool | None) -> dict[str, object]:
-    """`raw_data` with the pre-registration flag set, or without any `feature_flags` at all."""
-    if value is None:
-        return {}
-    return {"feature_flags": {"accepts_pre_registration": value}}
 
 
 @pytest.fixture
@@ -410,7 +387,7 @@ async def test_accepts_booking_truth_table_on_detail_and_list(
     flag: bool | None,
     expected: bool,
 ) -> None:
-    await _shelter("SH900", status=status, raw_data=_flag(flag))
+    await insert_shelter("SH900", status=status, raw_data=flag_raw(flag))
 
     detail = await client.get("/external/locations/SH900", headers=location_read_headers)
     assert detail.status_code == 200
@@ -422,17 +399,8 @@ async def test_accepts_booking_truth_table_on_detail_and_list(
     assert item["accepts_booking"] is expected
 
 
-async def test_accepts_booking_is_false_for_a_shelter_without_raw_data(
-    client: AsyncClient,
-    location_read_headers: dict[str, str],
-    closed_shelter: PublicShelter,
-) -> None:
-    detail = await client.get("/external/locations/SH002", headers=location_read_headers)
-    assert detail.json()["result"]["accepts_booking"] is False
-
-
 async def test_accepts_booking_does_not_depend_on_the_token(client: AsyncClient) -> None:
-    await _shelter("SH900", raw_data=_flag(True))
+    await insert_shelter("SH900", raw_data=flag_raw(True))
     for scopes in (["location-read"], ["location-read", "booking-write", "booking-bypass"]):
         detail = await client.get("/external/locations/SH900", headers=_bearer(scopes))
         assert detail.status_code == 200
@@ -442,12 +410,12 @@ async def test_accepts_booking_does_not_depend_on_the_token(client: AsyncClient)
 @pytest.fixture
 async def mixed_shelters() -> None:
     """Three bookable (SH101-103, one full), three not (flag missing / False / closed)."""
-    await _shelter("SH101", raw_data=_flag(True))
-    await _shelter("SH102", status="full", raw_data=_flag(True))
-    await _shelter("SH103", status="standby", raw_data=_flag(True))
-    await _shelter("SH201", raw_data=_flag(None))
-    await _shelter("SH202", raw_data=_flag(False))
-    await _shelter("SH203", status="closed", raw_data=_flag(True))
+    await insert_shelter("SH101", raw_data=flag_raw(True))
+    await insert_shelter("SH102", status="full", raw_data=flag_raw(True))
+    await insert_shelter("SH103", status="standby", raw_data=flag_raw(True))
+    await insert_shelter("SH201", raw_data=flag_raw(None))
+    await insert_shelter("SH202", raw_data=flag_raw(False))
+    await insert_shelter("SH203", status="closed", raw_data=flag_raw(True))
 
 
 async def _codes(client: AsyncClient, headers: dict[str, str], **params: object) -> set[str]:

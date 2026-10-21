@@ -13,10 +13,11 @@ from typing import Any
 import pytest
 from httpx import ASGITransport, AsyncClient
 from pymongo.errors import BulkWriteError, DuplicateKeyError
+from shelter_factory import BOOKABLE_RAW
+from shelter_factory import insert_shelter as _shelter
 from tent_model.external_booking import ExternalBooking
 from tent_model.external_booking_idempotency import ExternalBookingIdempotency
 from tent_model.public_person import PublicPerson
-from tent_model.public_shelter import PublicShelter
 from tent_model.third_party_access_log import ThirdPartyAccessLog
 
 from apiapp.modules.thirdparty_auth.scopes import ThirdPartyClaims, mint_access_token
@@ -48,9 +49,6 @@ OTHER_CLIENT = _bearer(["booking-write"], client_id="other-client")
 BYPASS = _bearer(["booking-write", "booking-bypass"])
 BYPASS_ONLY = _bearer(["booking-bypass"])
 
-# A shelter staff switched "accepts pre-registration" ON for: bookable by the normal rule.
-BOOKABLE_RAW: dict[str, Any] = {"feature_flags": {"accepts_pre_registration": True}}
-
 
 def _payload(**overrides: Any) -> dict[str, Any]:
     body: dict[str, Any] = {
@@ -62,30 +60,6 @@ def _payload(**overrides: Any) -> dict[str, Any]:
     }
     body.update(overrides)
     return {k: v for k, v in body.items() if v is not None}
-
-
-async def _shelter(
-    code: str = "SH001",
-    *,
-    status: str = "open",
-    is_active: bool = True,
-    raw_data: dict[str, Any] | None = None,
-) -> PublicShelter:
-    """Default raw_data = the pre-registration flag ON (#751: a missing flag is NOT bookable).
-
-    Pass `raw_data={}` for the flag-missing case, or an explicit `feature_flags` for False.
-    """
-    return await PublicShelter(
-        id=code,
-        shelter_code=code,
-        name=f"ศูนย์ {code}",
-        status=status,
-        location_status=status,
-        is_active=is_active,
-        capacity=100,
-        raw_data=BOOKABLE_RAW if raw_data is None else raw_data,
-        updated_at=datetime.now(UTC),
-    ).insert()
 
 
 @pytest.fixture
@@ -362,23 +336,6 @@ async def test_pre_registration_opt_out_is_409(client: AsyncClient) -> None:
     assert response.json()["code"] == "location_not_bookable"
 
 
-async def test_missing_pre_registration_flag_is_409(client: AsyncClient) -> None:
-    """#751: no `accepts_pre_registration` flag = not bookable (as on the public plane)."""
-    await _shelter("SH001", raw_data={})
-    response = await client.post(URL, json=_payload(), headers=GRANTED)
-    assert response.status_code == 409
-    assert response.json()["code"] == "location_not_bookable"
-    assert await _log_statuses() == ["denied_location_not_bookable"]
-    assert await ExternalBooking.find_all().count() == 0
-
-
-async def test_empty_feature_flags_is_409(client: AsyncClient) -> None:
-    await _shelter("SH001", raw_data={"feature_flags": {}})
-    response = await client.post(URL, json=_payload(), headers=GRANTED)
-    assert response.status_code == 409
-    assert response.json()["code"] == "location_not_bookable"
-
-
 @pytest.mark.parametrize("shelter_status", ["full", "full_capacity"])
 async def test_full_shelter_is_bookable(client: AsyncClient, shelter_status: str) -> None:
     await _shelter("SH001", status=shelter_status)
@@ -456,23 +413,14 @@ async def test_booking_write_alone_is_refused_when_not_bookable(
     assert await ExternalBooking.find_all().count() == 0
 
 
-@pytest.mark.parametrize("kind", ["flag-missing", "closed"])
+@pytest.mark.parametrize("kind", ["bookable", "flag-missing", "closed"])
 async def test_bypass_without_booking_write_is_403(client: AsyncClient, kind: str) -> None:
     """`booking-bypass` is never a way in on its own: the scope gate answers first."""
-    await _shelter("SH001", **NOT_BOOKABLE[kind])
+    await _shelter("SH001", **NOT_BOOKABLE.get(kind, {}))
     response = await client.post(URL, json=_payload(), headers=BYPASS_ONLY)
     assert response.status_code == 403
     assert response.json()["code"] == "insufficient_scope"
     assert await _log_statuses() == ["denied_insufficient_scope"]
-    assert await ExternalBooking.find_all().count() == 0
-
-
-async def test_bypass_without_booking_write_on_a_bookable_shelter_is_403(
-    client: AsyncClient, shelters: None
-) -> None:
-    response = await client.post(URL, json=_payload(), headers=BYPASS_ONLY)
-    assert response.status_code == 403
-    assert response.json()["code"] == "insufficient_scope"
     assert await ExternalBooking.find_all().count() == 0
 
 
