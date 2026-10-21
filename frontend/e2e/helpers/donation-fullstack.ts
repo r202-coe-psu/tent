@@ -730,6 +730,8 @@ export async function expectRunGone(request: APIRequestContext, run: TornDown) {
 			(await couchReq('GET', `/_users/org.couchdb.user:${encodeURIComponent(name)}`)).status
 		).toBe(404);
 	}
+	// FastAPI caps donation routes at 30/min per IP and the BFF does not forward the caller's
+	// IP yet (#458), so a busy run can see 429 here. Poll past one full 60 s window.
 	for (const b of run.bookings) {
 		await expect
 			.poll(
@@ -737,7 +739,7 @@ export async function expectRunGone(request: APIRequestContext, run: TornDown) {
 					const res = await request.get(`/api/public/v1/donations/${b.token}`);
 					return ((await res.json()) as { donation?: { status?: string } }).donation?.status;
 				},
-				{ timeout: 30_000, intervals: [2_000, 3_000] }
+				{ timeout: 75_000, intervals: [2_000, 3_000, 5_000] }
 			)
 			.toEqual(expect.stringMatching(new RegExp(`^(${RELEASED_STATUSES.join('|')})$`)));
 	}
