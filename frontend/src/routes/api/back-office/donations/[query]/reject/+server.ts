@@ -5,7 +5,8 @@ import {
 	authorizeWarehouse,
 	findDonationByQuery,
 	isInCallerScope,
-	routeErrorResponse as toRouteError
+	routeErrorResponse as toRouteError,
+	staleDecisionResponse
 } from '$lib/server/donation-intake';
 import {
 	donorRejectMessage,
@@ -45,7 +46,8 @@ export const POST: RequestHandler = async ({ params, request }) => {
 			return json({ success: false, error: 'Forbidden' }, { status: 403 });
 		}
 
-		const parsed = rejectDonationInputSchema.safeParse(await request.json().catch(() => ({})));
+		const body = await request.json().catch(() => ({}));
+		const parsed = rejectDonationInputSchema.safeParse(body);
 		if (!parsed.success) {
 			return json(
 				{
@@ -61,6 +63,8 @@ export const POST: RequestHandler = async ({ params, request }) => {
 		const reason = donorRejectMessage(reasonCode, parsed.data.note);
 
 		const { donation, dbName } = found;
+		const stale = staleDecisionResponse(body, donation);
+		if (stale) return stale;
 		if (!canTransitionDonation(donation.status, 'rejected')) {
 			return json(
 				{

@@ -1926,3 +1926,81 @@ async def test_ac11_a_verifying_booking_takes_a_courier_number(
 
     assert patched.status_code == 200
     assert ((await _buffer(token)).logistics or {})["courier_tracking_no"] == "TH123"
+
+
+# --- review follow-ups (PR review 2026-10-22) ---
+
+
+async def test_an_edit_keeping_only_refused_lines_is_refused_before_quota_moves(
+    client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    """Dropping every accepted line would read as "the shelter refused" — cancel instead."""
+    await _seed_counter("100")
+    token = (await _create(client, auth_headers, [_RICE, _BLANKET]))["tracking_token"]
+    couch_items = [
+        {**_RICE, "reserved_qty": "5", "review_status": "approved"},
+        {
+            **_BLANKET,
+            "review_status": "rejected",
+            "review_reason_code": "damaged",
+            "review_reason": "ชำรุดเสียหาย",
+        },
+    ]
+
+    donation_router._rate_buckets.clear()
+    response = await client.patch(
+        f"/public/v1/donations/{token}/items",
+        headers=auth_headers,
+        json={"items": [_BLANKET], "current_items": couch_items, "current_status": "verifying"},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["errors"][0]["error"] == "NO_ACCEPTED_ITEMS"
+    assert await _reserved() == Decimal("5")
+    assert [i.get("free_text") for i in (await _buffer(token)).items_declared] == [
+        "ข้าวสาร",
+        "ผ้าห่ม",
+    ]
+
+
+async def test_an_unseeded_line_stays_in_review_across_edits(
+    client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    """No counter = no reservation, so no "held" quantity for the next edit to lean on."""
+    token = (await _create(client, auth_headers, [_RICE]))["tracking_token"]
+
+    first = (await _edit(client, auth_headers, token, [{**_RICE, "qty": "6"}])).json()
+    second = (
+        await _edit(client, auth_headers, token, [{**_RICE, "qty": "6", "note": "แพ็คละ 1 kg"}])
+    ).json()
+
+    assert first["items"][0]["review_status"] == "pending"
+    assert "reserved_qty" not in first["items"][0]
+    assert second["items"][0]["review_status"] == "pending"
+    assert second["status"] == "pending_review"
+    assert second["auto_approved_lines"] == []
+
+
+async def test_a_synced_edit_leaves_the_projection_status_to_the_projector(
+    client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    await _seed_counter("100")
+    created = await _create(client, auth_headers, [_RICE])
+    token = created["tracking_token"]
+    assert (await _stub(token)).status == "verifying"
+
+    donation_router._rate_buckets.clear()
+    response = await client.patch(
+        f"/public/v1/donations/{token}/items",
+        headers=auth_headers,
+        json={
+            "items": [_RICE, _BLANKET],
+            "current_items": [{**_RICE, "reserved_qty": "5", "review_status": "approved"}],
+            "current_status": "verifying",
+        },
+    )
+
+    assert response.json()["status"] == "pending_review"
+    assert (await _buffer(token)).status == "pending_review"
+    # The BFF writes CouchDB next; the projector carries that to public_donations.
+    assert (await _stub(token)).status == "verifying"

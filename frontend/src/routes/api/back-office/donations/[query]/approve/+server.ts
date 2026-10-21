@@ -5,7 +5,8 @@ import {
 	authorizeWarehouse,
 	findDonationByQuery,
 	isInCallerScope,
-	routeErrorResponse as toRouteError
+	routeErrorResponse as toRouteError,
+	staleDecisionResponse
 } from '$lib/server/donation-intake';
 import {
 	applyLineReview,
@@ -61,7 +62,11 @@ export const POST: RequestHandler = async ({ params, request }) => {
 			);
 		}
 
-		const parsed = reviewDonationInputSchema.safeParse(await request.json().catch(() => ({})));
+		const body = await request.json().catch(() => ({}));
+		// Decisions are by line position (CR-174): they must be about the booking on file.
+		const stale = staleDecisionResponse(body, donation);
+		if (stale) return stale;
+		const parsed = reviewDonationInputSchema.safeParse(body);
 		if (!parsed.success) {
 			return json(
 				{

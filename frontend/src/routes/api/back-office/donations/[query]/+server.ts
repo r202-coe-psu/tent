@@ -80,6 +80,33 @@ function recordsSameLine(row: StockLedger, line: CountedItem): boolean {
 	);
 }
 
+/**
+ * What an earlier attempt at this receipt recorded, read off its audit entry (one per
+ * donation, fixed id) — or null when there was none.
+ */
+async function readEarlierReceipt(
+	dbName: string,
+	auditId: string
+): Promise<{ ledgerIds: string[]; rejectedLines: number[] } | null> {
+	const res = await adminRaw(`/${dbName}/${encodeURIComponent(auditId)}`, 'GET');
+	if (res.status === 404) return null;
+	if (res.status >= 400) {
+		throw new Error(`Failed to read the receipt audit: ${JSON.stringify(res.data)}`);
+	}
+	const context = ((res.data as AuditEntry).context ?? {}) as {
+		ledger_ids?: string[];
+		rejected_lines?: { line_no: number }[];
+	};
+	return {
+		ledgerIds: [...(context.ledger_ids ?? [])].sort(),
+		rejectedLines: (context.rejected_lines ?? []).map((line) => line.line_no).sort((a, b) => a - b)
+	};
+}
+
+function sameList<T>(a: readonly T[], b: readonly T[]): boolean {
+	return a.length === b.length && a.every((value, index) => value === b[index]);
+}
+
 function receiptMismatch(lineNo: number, row: StockLedger) {
 	return json(
 		{
@@ -91,8 +118,9 @@ function receiptMismatch(lineNo: number, row: StockLedger) {
 	);
 }
 
-// Project a raw donation doc to the redacted view the scan UI needs (no _rev,
-// tracking_token_hash, phone_hash, timestamps). Full phone kept for warehouse staff.
+// Project a raw donation doc to the redacted view the scan UI needs (no
+// tracking_token_hash, phone_hash, timestamps). Full phone kept for warehouse staff;
+// `_rev` goes out as `rev` and comes back as `expected_rev` (CR-174 FR-25).
 function toScanView(d: PublicDonationDoc): ScanDonationView {
 	return {
 		// CR-174 FR-25 — the counter sends it back so a booking the donor changed while
@@ -113,7 +141,8 @@ function toScanView(d: PublicDonationDoc): ScanDonationView {
 			unit: it.unit,
 			...(it.note?.trim() ? { note: it.note.trim() } : {}),
 			review_status: it.review_status,
-			review_reason_code: (it.review_reason_code ?? null) as DonationRejectReasonCode | null
+			review_reason_code: (it.review_reason_code ?? null) as DonationRejectReasonCode | null,
+			review_reason: it.review_reason ?? null
 		})),
 		logistics: d.logistics
 	};
@@ -243,7 +272,20 @@ export const POST: RequestHandler = async ({ params, request }) => {
 		// `line_no` is the line's position in what was sent, free-text lines included. The
 		// scan station sends one line per `donation.items[]` entry in order — the numbering
 		// of the batch receive page too (`initialBatchDrafts`) — so both address one row.
-		const rejections = (countedLines ?? []).map(rejectionOf);
+		// A line refused at review stays refused, with the reason the donor was already given
+		// (CR-174): the counter cannot quietly receive it, nor shorten what the donor reads.
+		const declaredLines = donation.items ?? [];
+		const rejections = (countedLines ?? []).map((line, lineNo) => {
+			const declared = declaredLines[lineNo];
+			if (declared?.review_status === 'rejected') {
+				const code = (declared.review_reason_code ?? 'other') as DonationRejectReasonCode;
+				return {
+					reject_reason_code: code,
+					reject_reason: declared.review_reason?.trim() || donorRejectMessage(code)
+				};
+			}
+			return rejectionOf(line);
+		});
 		// A rejected line keys no ledger row and gets no lot (CR-172 FR-10) — but keeps its
 		// number, so the lines after it still address the same rows.
 		const numbered = (countedLines ?? []).flatMap((line, lineNo) =>
@@ -286,6 +328,31 @@ export const POST: RequestHandler = async ({ params, request }) => {
 				deriveDonationReceiptLineId(donation._id, item.item_id, lineNo)
 			)
 		);
+		// A retry must repeat the receipt it retries (#695). Rows are found by id, so a line
+		// switched to "ไม่รับ", or mapped to another item, after an attempt that already
+		// keyed it would leave that row behind or key the goods twice. The earlier attempt's
+		// audit says which rows and refusals it recorded; anything else is refused.
+		const auditId = await deriveDonationReceiptAuditId(donation._id);
+		const earlier = await readEarlierReceipt(dbName, auditId);
+		if (
+			earlier &&
+			(!sameList(earlier.ledgerIds, [...ids].sort()) ||
+				!sameList(
+					earlier.rejectedLines,
+					rejections.flatMap((r, lineNo) => (r ? [lineNo] : []))
+				))
+		) {
+			return json(
+				{
+					success: false,
+					error_code: 'RECEIPT_MISMATCH',
+					error:
+						'ใบนี้เคยบันทึกเข้าคลังไปแล้วด้วยผลตรวจชุดเดิม — ผลที่ส่งมาต่างจากครั้งก่อน (รายการที่รับ/ไม่รับ หรือสินค้าที่จับคู่) ค้นหาใบใหม่แล้วตรวจให้ตรงกับครั้งก่อน หรือแจ้งผู้ดูแลระบบ'
+				},
+				{ status: 409 }
+			);
+		}
+
 		const recorded = await readLedgerRows(dbName, ids);
 		const pending: number[] = [];
 		for (const [index, { lineNo, item }] of numbered.entries()) {
@@ -350,7 +417,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
 			},
 			ctx,
 			// One entry per donation: a retry of the same receipt is not a second event.
-			await deriveDonationReceiptAuditId(donation._id)
+			auditId
 		);
 
 		// Ledger + audit go in FIRST. If this fails the donation stays `declared`

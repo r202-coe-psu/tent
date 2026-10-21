@@ -76,9 +76,18 @@ function mockCouch(
 		ledgerRows?: StockLedger[];
 		/** Per-doc answers of `_bulk_docs` (201 with refusals inside). */
 		bulkOutcomes?: object[];
+		/** The audit entry an earlier attempt at this receipt left (#695). */
+		earlierAudit?: AuditEntry;
 	} = {}
 ) {
 	vi.mocked(adminRaw).mockImplementation((path: string, method: string, body?: unknown) => {
+		if (method === 'GET' && path.includes('audit')) {
+			return Promise.resolve(
+				over.earlierAudit
+					? { status: 200, data: over.earlierAudit }
+					: { status: 404, data: { error: 'not_found' } }
+			);
+		}
 		if (method === 'POST' && path.includes('_all_docs')) {
 			const keys = (body as { keys: string[] }).keys;
 			const rows = keys.map((key) => {
@@ -906,6 +915,63 @@ describe('Back-office GET & POST /api/back-office/donations/[query]', () => {
 			expect((await retry.json()).error_code).toBe('RECEIPT_MISMATCH');
 			expect(appendedDocs()).toHaveLength(0);
 			expect(vi.mocked(adminRaw).mock.calls.some((c) => c[1] === 'PUT')).toBe(false);
+		});
+
+		/** First attempt keyed the rice line and lost its PUT; returns its rows and audit. */
+		async function firstAttemptLeftItsAudit() {
+			mockCouch(riceDonation, { putStatus: 500 });
+			await POST(postEvent(counted));
+			const docs = appendedDocs();
+			vi.mocked(adminRaw).mockReset();
+			return {
+				rows: docs.filter((d): d is StockLedger => d.type === 'stock_ledger'),
+				audit: docs.find((d): d is AuditEntry => d.type === 'audit')!
+			};
+		}
+
+		it('refuses a retry that turns away a line the first attempt keyed', async () => {
+			const { rows, audit } = await firstAttemptLeftItsAudit();
+			mockCouch(riceDonation, { ledgerRows: rows, earlierAudit: audit });
+
+			const retry = await POST(
+				postEvent({
+					status: 'received',
+					items: [
+						counted.items[0],
+						{ ...counted.items[1], qty: '0', rejected: true, reject_reason_code: 'damaged' }
+					]
+				})
+			);
+
+			expect(retry.status).toBe(409);
+			expect((await retry.json()).error_code).toBe('RECEIPT_MISMATCH');
+			expect(appendedDocs()).toHaveLength(0);
+			expect(vi.mocked(adminRaw).mock.calls.some((c) => c[1] === 'PUT')).toBe(false);
+		});
+
+		it('refuses a retry that maps the keyed line to another item', async () => {
+			const { rows, audit } = await firstAttemptLeftItsAudit();
+			mockCouch(riceDonation, { ledgerRows: rows, earlierAudit: audit });
+
+			const retry = await POST(
+				postEvent({
+					status: 'received',
+					items: [counted.items[0], { item_id: 'item_master:flour', qty: '10', unit: 'kg' }]
+				})
+			);
+
+			expect(retry.status).toBe(409);
+			expect(appendedDocs()).toHaveLength(0);
+		});
+
+		it('still closes the receipt when the retry repeats the first attempt', async () => {
+			const { rows, audit } = await firstAttemptLeftItsAudit();
+			mockCouch(riceDonation, { ledgerRows: rows, earlierAudit: audit });
+
+			const retry = await POST(postEvent(counted));
+
+			expect(retry.status).toBe(200);
+			expect(appendedDocs().filter((d) => d.type === 'stock_ledger')).toHaveLength(0);
 		});
 
 		it('accepts a row a concurrent receive wrote first when it records the same line', async () => {

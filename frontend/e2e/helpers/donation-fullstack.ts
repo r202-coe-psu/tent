@@ -427,6 +427,46 @@ export async function fillBooking(
 	};
 }
 
+/**
+ * A booking of two lines — the campaign `need` and one typed-in line — posted to the BFF
+ * the way the wizard does. The wizard books one line at a time, and per-line review
+ * (CR-174) and per-line refusal at the counter (CR-172) need two. Parcel, so no slot.
+ */
+export async function bookMixedViaApi(
+	request: APIRequestContext,
+	opts: {
+		shelter: Pick<PublicShelter, 'code'>;
+		need: Pick<PublicNeed, 'item_id' | 'name'>;
+		needUnit: string;
+		typedItem: string;
+		donorName: string;
+		phone: string;
+		ledger: RunLedger;
+	}
+): Promise<Booking> {
+	await bookingPacer.acquire();
+	const res = await request.post('/api/public/v1/donations', {
+		data: {
+			shelter_code: opts.shelter.code,
+			donor: { name: opts.donorName, phone: opts.phone },
+			items: [
+				{ item_id: opts.need.item_id, free_text: opts.need.name, qty: 1, unit: opts.needUnit },
+				{ free_text: opts.typedItem, category: 'other', qty: 2, unit: 'piece', condition: 'new' }
+			],
+			logistics: { delivery_method: 'parcel' }
+		}
+	});
+	const body = (await res.json()) as BookingResponse;
+	expect(body.success, `mixed booking POST failed: ${JSON.stringify(body)}`).toBe(true);
+	const { bookingRef, trackingToken } = body as Booking;
+	opts.ledger.add('bookings', {
+		token: trackingToken,
+		ref: bookingRef,
+		shelter: opts.shelter.code
+	});
+	return { bookingRef, trackingToken };
+}
+
 /** Walk the public wizard for `need` at `shelter` (qty 1 unless `opts.qty`); asserts the ticket. */
 export async function bookAsDonor(page: Page, opts: BookingOptions): Promise<Booking> {
 	const { submit } = await fillBooking(page, opts);

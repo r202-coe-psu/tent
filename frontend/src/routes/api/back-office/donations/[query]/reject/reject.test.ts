@@ -70,9 +70,14 @@ const putBody = () =>
 		Record<string, unknown> | undefined;
 
 function postEvent(body: unknown, query = 'DN-999999'): PostEvent {
+	// Decisions carry the `_rev` the screen was loaded at (CR-174); fixtures are `1-abc`.
+	const sent =
+		body && typeof body === 'object' && !('expected_rev' in body)
+			? { expected_rev: '1-abc', ...body }
+			: body;
 	return {
 		params: { query },
-		request: { headers: { get: () => 'session-cookie' }, json: () => Promise.resolve(body) }
+		request: { headers: { get: () => 'session-cookie' }, json: () => Promise.resolve(sent) }
 	} as unknown as PostEvent;
 }
 
@@ -168,6 +173,16 @@ describe('POST /api/back-office/donations/[query]/reject', () => {
 		expect(items.map((i) => i.review_status)).toEqual(['rejected', 'rejected']);
 		expect(items[0].review_reason).toBeUndefined();
 		expect(items[1].review_reason).toBe('หมดอายุ');
+	});
+
+	it('refuses to reject a booking the donor has edited since it was opened', async () => {
+		mockCouch({ ...baseDonation, _rev: '2-edited' } as PublicDonationDoc);
+
+		const response = await POST(postEvent({ reason_code: 'expired' }));
+
+		expect(response.status).toBe(409);
+		expect(writtenDocs()).toHaveLength(0);
+		expect(putBody()).toBeUndefined();
 	});
 
 	it('refuses a donation whose goods are already on the shelf', async () => {

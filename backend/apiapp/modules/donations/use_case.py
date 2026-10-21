@@ -341,6 +341,12 @@ def _tracking_payload(
     return payload
 
 
+# Thai copy for the donor; one line is easier to grep than a split string.
+_NO_ACCEPTED_ITEMS_MESSAGE = (
+    "ต้องเหลืออย่างน้อย 1 รายการที่ศูนย์ไม่ได้ปฏิเสธ — ถ้าไม่ต้องการบริจาคแล้ว ให้ยกเลิกการจองแทน"  # noqa: E501
+)
+
+
 class DonationsUseCase:
     async def create(self, payload: DonationCreateRequest) -> DonationCreateResponse:
         # Look the shelter up first, then judge its status: "no such shelter" (404) and
@@ -708,6 +714,28 @@ class DonationsUseCase:
         now = datetime.now(UTC)
         before = [dict(item) for item in buffer.items_declared]
         items = _carry_item_ids(items, before)
+
+        # Refuse before any quota moves: an edit that keeps only lines staff already refused
+        # would turn the booking `rejected` with no reason of the shelter's (CR-172 FR-1),
+        # though it was the donor who dropped the rest. Cancelling is how they withdraw.
+        # Every other line is approved or pending whatever the counter says, so assuming
+        # all reserved here only matters for the lines carried over as rejected.
+        preview = review_edited_booking(
+            previous_items=previous_items,
+            previous_status=previous_status,
+            items=[item.model_dump(exclude_none=True) for item in items],
+            reserved=[True] * len(items),
+        )
+        if preview.status == "rejected":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "success": False,
+                    "error": "NO_ACCEPTED_ITEMS",
+                    "message": _NO_ACCEPTED_ITEMS_MESSAGE,
+                },
+            )
+
         held = _held_by_item(before)
         wanted = _wanted_by_item(items)
 
@@ -772,7 +800,10 @@ class DonationsUseCase:
         after = [item.model_dump(exclude_none=True) for item in items]
         for row in after:
             item_id = row.get("item_id")
-            if item_id and item_id in wanted and buffer.campaign_id:
+            # Only what the counter really holds: a NOT_SEEDED line stamped as reserved read
+            # as "held" on the next edit — a zero delta then skipped the counter, approved it
+            # (CR-174 FR-2) and a cancel handed back quota it never took.
+            if item_id and item_id in wanted and buffer.campaign_id and item_id not in not_seeded:
                 row["reserved_qty"] = str(wanted[item_id])
 
         review = review_edited_booking(
@@ -805,7 +836,11 @@ class DonationsUseCase:
         # rather than waiting for inbound and CDC to come round.
         if stub is not None:
             stub.items_declared = _declared_items(after)
-            stub.status = review.status
+            # Synced bookings (the BFF sent the CouchDB state) get their status from the
+            # projector once the BFF has written CouchDB — set here, a refused write there
+            # would leave the projection ahead of the record of truth.
+            if current_status is None:
+                stub.status = review.status
             stub.updated_at = now
             await stub.save()
 

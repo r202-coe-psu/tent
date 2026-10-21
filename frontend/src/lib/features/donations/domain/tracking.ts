@@ -242,9 +242,10 @@ export function toDonationTrackView(raw: Record<string, unknown>): DonationTrack
 export function rejectedLineReasons(view: DonationTrackView): (string | null)[] {
 	const counted = view.received_summary?.items ?? [];
 	return view.items.map((item, index) => {
+		// The review's reason first: it is what the donor was told when the line was refused.
+		if (item.review_status === 'rejected') return item.review_reason?.trim() ?? '';
 		const line = counted[index];
 		if (line?.rejected) return line.reject_reason?.trim() ?? '';
-		if (item.review_status === 'rejected') return item.review_reason?.trim() ?? '';
 		return null;
 	});
 }

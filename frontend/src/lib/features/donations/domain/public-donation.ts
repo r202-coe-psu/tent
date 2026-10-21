@@ -94,6 +94,8 @@ export interface ScanDonationView {
 		/** A line refused at review arrives already turned away (CR-174 AC-3). */
 		review_status?: 'approved' | 'pending' | 'rejected';
 		review_reason_code?: DonationRejectReasonCode | null;
+		/** What the donor was told at review — kept as is through the counter. */
+		review_reason?: string | null;
 	}>;
 	logistics?: PublicDonationDoc['logistics'];
 }

@@ -8,6 +8,8 @@ import { qtyStrCoercePositiveSchema } from '$lib/utils/qty';
  * agree on shape without the UI reaching into a route module.
  */
 export interface PendingDonationRow {
+	/** `_rev` the row was read at — sent back with a review decision (CR-174). */
+	rev?: string;
 	booking_ref?: string;
 	/**
 	 * CouchDB doc id. Not decoration: a walk-in has no `booking_ref` (FastAPI mints

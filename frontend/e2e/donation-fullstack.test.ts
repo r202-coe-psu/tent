@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type APIRequestContext, type Page } from '@playwright/test';
 import { CAN_WRITE, READ_ONLY_REASON } from './helpers/e2e-env';
 import { clearSession } from './helpers/login';
 import {
@@ -6,6 +6,7 @@ import {
 	BOARD_SYNC,
 	RunLedger,
 	approvePending,
+	bookMixedViaApi,
 	expectReadyForDropoff,
 	bookAsDonor,
 	boardLineFor,
@@ -276,6 +277,128 @@ test.describe('Donation full-stack: donor and staff', { tag: ['@critical', '@don
 			await expect(page.getByTestId('donation-reject-reason')).toContainText('หมดอายุ');
 			await expect(page.getByText('ไม่รับ', { exact: true })).toBeVisible();
 		});
+	});
+
+	/** Book campaign line + typed line, then wait for CouchDB to hold it in review. */
+	async function bookMixed(
+		request: APIRequestContext,
+		typedItem: string,
+		donorName: string,
+		phone: string
+	) {
+		const needItem = await catalogItem(NEED_ITEM);
+		const booking = await bookMixedViaApi(request, {
+			shelter,
+			need,
+			needUnit: needItem.unit,
+			typedItem,
+			donorName,
+			phone,
+			ledger
+		});
+		// Campaign line approved by the rule, typed line waiting (CR-174 AC-2).
+		await expect
+			.poll(async () => (await findDonation(shelter.code, booking.bookingRef))?.status, {
+				timeout: 30_000
+			})
+			.toBe('pending_review');
+		return booking;
+	}
+
+	/** Count the campaign line in and confirm a receipt that keeps one line and refuses one. */
+	async function receiveCampaignLineOnly(page: Page) {
+		await page
+			.getByRole('group', { name: `ผลการตรวจรับ ${need.name}` })
+			.getByRole('button', { name: /^ผ่านการตรวจสอบแล้ว/ })
+			.click();
+		await fillExpiry(page.getByRole('textbox', { name: 'วันหมดอายุ' }));
+		await page.getByRole('button', { name: 'รับ 1 รายการ · ไม่รับ 1 รายการ' }).click();
+	}
+
+	test('mixed booking: review refuses the typed line, the campaign line is received, the donor reads why (CR-174 AC-2, AC-3)', async ({
+		page,
+		request
+	}) => {
+		const typed = `ผ้าห่มมือสอง ${RUN_ID}`;
+		const { bookingRef, trackingToken } = await bookMixed(
+			request,
+			typed,
+			`E2E ใบผสมประเมิน ${RUN_ID}`,
+			'0823456791'
+		);
+
+		await openBackOffice(page, ws);
+		await openPendingRow(page, bookingRef);
+		// The campaign line is shown, not decided (FR-8); only the typed line takes a decision.
+		await expect(page.getByText('อยู่ในแคมเปญ · อนุมัติอัตโนมัติ')).toBeVisible();
+		await page.getByRole('button', { name: /^ไม่รับรายการนี้/ }).click();
+		await page.getByRole('radio', { name: /ชำรุดเสียหาย/ }).click();
+		await page
+			.getByRole('textbox', { name: /รายละเอียดเพิ่มเติม/ })
+			.fill(`ขาดเป็นรู (e2e ${RUN_ID})`);
+		await page.getByRole('button', { name: 'บันทึกผลการประเมิน' }).click();
+		// One line still approved: the booking goes to drop-off, not rejected (AC-3).
+		await expectReadyForDropoff(shelter.code, bookingRef);
+		const reviewed = await findDonation(shelter.code, bookingRef);
+		expect((reviewed.items as { review_status?: string }[]).map((i) => i.review_status)).toEqual([
+			'approved',
+			'rejected'
+		]);
+
+		// The counter shows the refusal as settled and receives only the campaign line.
+		await openBackOffice(page, ws);
+		await openInScanStation(page, bookingRef);
+		await expect(page.getByText('ไม่รับตั้งแต่ตอนประเมิน')).toBeVisible();
+		await receiveCampaignLineOnly(page);
+		await expect
+			.poll(async () => (await findDonation(shelter.code, bookingRef))?.status)
+			.toBe('received');
+		const received = await findDonation(shelter.code, bookingRef);
+		expect(await ledgerRowsFor(shelter.code, received._id as string)).toHaveLength(1);
+
+		await clearSession(page);
+		await page.goto(`/donations/track/${trackingToken}`);
+		await expect(page.getByText('ไม่รับ', { exact: true })).toBeVisible();
+		await expect(page.getByText(`ชำรุดเสียหาย — ขาดเป็นรู (e2e ${RUN_ID})`)).toBeVisible();
+		await expect(page.getByText(/รับไม่ครบ/)).toHaveCount(0);
+	});
+
+	test('mixed booking: the counter turns one line away and receives the other (CR-172 AC-2)', async ({
+		page,
+		request
+	}) => {
+		const typed = `หมอนเก่า ${RUN_ID}`;
+		const { bookingRef, trackingToken } = await bookMixed(
+			request,
+			typed,
+			`E2E ใบผสมหน้างาน ${RUN_ID}`,
+			'0823456792'
+		);
+		await openBackOffice(page, ws);
+		await approvePending(page, shelter.code, bookingRef);
+
+		await openBackOffice(page, ws);
+		await openInScanStation(page, bookingRef);
+		await page
+			.getByRole('group', { name: `ผลการตรวจรับ ${typed}` })
+			.getByRole('button', { name: /^ไม่รับรายการนี้/ })
+			.click();
+		await page.getByRole('radio', { name: /^หมดอายุ$/ }).click();
+		await receiveCampaignLineOnly(page);
+
+		await expect
+			.poll(async () => (await findDonation(shelter.code, bookingRef))?.status)
+			.toBe('received');
+		const received = await findDonation(shelter.code, bookingRef);
+		expect(await ledgerRowsFor(shelter.code, received._id as string)).toHaveLength(1);
+		// "ไม่รับ" is not "ขาด" (FR-13).
+		expect((received.received_summary as { shortfalls?: unknown[] }).shortfalls).toEqual([]);
+
+		await clearSession(page);
+		await page.goto(`/donations/track/${trackingToken}`);
+		await expect(page.getByText('ไม่รับ', { exact: true })).toBeVisible();
+		await expect(page.getByText('หมดอายุ', { exact: true })).toBeVisible();
+		await expect(page.getByText(/รับไม่ครบ/)).toHaveCount(0);
 	});
 
 	test('typed-in item in another unit maps to a stock item and is received in its own unit (#623, #636, #638)', async ({

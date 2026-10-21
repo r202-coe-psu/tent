@@ -96,9 +96,6 @@
 	const pendingCount = $derived(
 		queueRows.filter((row) => queueGroupOf(row.status) === 'pending').length
 	);
-	$effect(() => {
-		if (queue.error) toast.error(queue.error.message);
-	});
 	const refreshQueue = () => queryClient.invalidateQueries({ queryKey: donationQueueKeys.all });
 
 	/** What the list tab shows: the list, a booking under review, or the counter. */
@@ -112,6 +109,13 @@
 			return;
 		}
 		station = { view: 'scan', query: donationActionRef(row) ?? '' };
+	}
+
+	/** The donor edited the booking while it was open: close it and show the list again. */
+	function staleDecision(message: string) {
+		toast.error(message, { duration: 10_000 });
+		selectedPendingRequest = null;
+		void refreshQueue();
 	}
 
 	function setQueueFilter(filter: DonationQueueFilter) {
@@ -152,7 +156,11 @@
 				{
 					method: 'POST',
 					headers: { 'Content-Type': 'application/json' },
-					body: JSON.stringify({ memo, ...(lines ? { lines } : {}) })
+					body: JSON.stringify({
+						memo,
+						...(lines ? { lines } : {}),
+						expected_rev: selectedPendingRequest?.rev
+					})
 				}
 			);
 			const data = await res.json();
@@ -164,6 +172,8 @@
 				);
 				selectedPendingRequest = null;
 				await refreshQueue();
+			} else if (data.error_code === 'DONATION_CHANGED') {
+				staleDecision(data.error);
 			} else {
 				toast.error(data.error || 'อนุมัติไม่สำเร็จ');
 			}
@@ -183,7 +193,7 @@
 				{
 					method: 'POST',
 					headers: { 'Content-Type': 'application/json' },
-					body: JSON.stringify(input)
+					body: JSON.stringify({ ...input, expected_rev: selectedPendingRequest?.rev })
 				}
 			);
 			const data = await res.json();
@@ -191,6 +201,8 @@
 				toast.success(`ปฏิเสธคำขอ ${bookingRef} เรียบร้อยแล้ว`);
 				selectedPendingRequest = null;
 				await refreshQueue();
+			} else if (data.error_code === 'DONATION_CHANGED') {
+				staleDecision(data.error);
 			} else {
 				toast.error(data.error || 'ปฏิเสธไม่สำเร็จ');
 			}
@@ -316,6 +328,8 @@
 				<PendingReviewBoard
 					requests={queueRows}
 					loading={queue.isPending}
+					error={queue.error?.message ?? null}
+					onRetry={() => queue.refetch()}
 					bind:filter={() => queueFilter, setQueueFilter}
 					onViewDetails={openRow}
 				>

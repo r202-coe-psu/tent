@@ -256,9 +256,15 @@
 		rejected: boolean;
 		rejectCode?: DonationRejectReasonCode;
 		rejectNote: string;
+		/**
+		 * Set when the line was refused at review (CR-174): it stays refused, with the
+		 * reason the donor was already given — shown here, not asked for again.
+		 */
+		reviewReason?: string;
 	};
 
 	function hasRejectReason(it: ScannedItem): boolean {
+		if (it.reviewReason !== undefined) return true;
 		return rejectDonationInputSchema.safeParse({ reason_code: it.rejectCode, note: it.rejectNote })
 			.success;
 	}
@@ -516,7 +522,11 @@
 	]);
 	let walkinSaving = $state(false);
 
-	async function performLookup(query: string, simulateScanEffect = false) {
+	/**
+	 * `fromList` — opened from a row of the booking list: a miss there sends staff back to
+	 * the list. A typed or scanned code that misses keeps the scanner open to try again.
+	 */
+	async function performLookup(query: string, simulateScanEffect = false, fromList = false) {
 		if (!query.trim()) return;
 		lastLots = [];
 		actionPanel = 'none';
@@ -532,7 +542,7 @@
 				const errorData = await res.json().catch(() => ({}));
 				toast.error(errorData.error || 'ไม่พบข้อมูลการจองบริจาคนี้');
 				scanState = 'idle';
-				onClose?.();
+				if (fromList) onClose?.();
 				return;
 			}
 			const data = await res.json();
@@ -569,8 +579,9 @@
 						// Refused at review (CR-174): it arrives turned away, with the same reason.
 						rejected: it.review_status === 'rejected',
 						rejectCode:
-							it.review_status === 'rejected' ? (it.review_reason_code ?? 'not_needed') : undefined,
-						rejectNote: ''
+							it.review_status === 'rejected' ? (it.review_reason_code ?? 'other') : undefined,
+						rejectNote: '',
+						...(it.review_status === 'rejected' ? { reviewReason: it.review_reason ?? '' } : {})
 					};
 				});
 
@@ -619,7 +630,13 @@
 								unit: it.unit || it.declaredUnit,
 								rejected: true,
 								reject_reason_code: it.rejectCode,
-								...(it.rejectNote.trim() ? { reject_note: it.rejectNote.trim() } : {})
+								// A review refusal is re-read from the doc by the server; the note only
+								// has to satisfy the request shape here.
+								...(it.reviewReason !== undefined
+									? { reject_note: (it.reviewReason || 'ไม่รับตั้งแต่ตอนประเมิน').slice(0, 400) }
+									: it.rejectNote.trim()
+										? { reject_note: it.rejectNote.trim() }
+										: {})
 							};
 						}
 						const location = lotLocation(it.storage_point_id);
@@ -712,7 +729,7 @@
 				{
 					method: 'POST',
 					headers: { 'Content-Type': 'application/json' },
-					body: JSON.stringify(input)
+					body: JSON.stringify({ ...input, expected_rev: donationDoc?.rev })
 				}
 			);
 			const data = await res.json();
@@ -861,7 +878,7 @@
 		// the same request twice on every open.
 		if (initialQuery) {
 			searchQuery = initialQuery;
-			performLookup(initialQuery);
+			performLookup(initialQuery, false, true);
 		}
 	});
 </script>
@@ -949,13 +966,24 @@
 									{/if}
 								</div>
 
-								{#if item.rejected}
+								{#if item.reviewReason !== undefined}
+									<!-- Refused at review: nothing to count and nothing to decide here. -->
+									<div class="p-4 sm:px-5">
+										<div class="rounded-xl border border-red-200 bg-white p-4">
+											<p class="text-sm font-semibold text-red-900">ไม่รับตั้งแต่ตอนประเมิน</p>
+											<p class="mt-1 text-base break-words text-slate-700">
+												{item.reviewReason || 'ไม่ได้ระบุเหตุผล'}
+											</p>
+										</div>
+									</div>
+								{:else if item.rejected}
 									<!-- Turned away (CR-172 FR-9): no stock fields, only why. -->
 									<div class="p-4 sm:px-5">
 										<RejectReasonFields
 											bind:code={item.rejectCode}
 											bind:note={item.rejectNote}
 											idPrefix="line-{idx}-reject"
+											disabled={saving || !!otherShelterCode}
 										/>
 									</div>
 								{:else}
@@ -1071,7 +1099,7 @@
 										acceptHint="ของจริงตรงกับรายการ จำนวน และสภาพ"
 										rejectHint="ไม่เข้าคลัง แจ้งเหตุผลให้ผู้บริจาค"
 										groupLabel="ผลการตรวจรับ {item.name}"
-										disabled={!!otherShelterCode}
+										disabled={saving || !!otherShelterCode || item.reviewReason !== undefined}
 									/>
 								</div>
 							</div>

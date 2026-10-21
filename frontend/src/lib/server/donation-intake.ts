@@ -1,4 +1,4 @@
-import { error } from '@sveltejs/kit';
+import { error, json } from '@sveltejs/kit';
 import { adminRaw, requireShelterScopeOrSA, type Caller } from '$lib/server/couch-admin';
 import { hasStaffCapability, isShelterManager } from '$lib/auth/roles';
 import type { PublicDonationDoc, ReceiveDonationInput } from '$lib/features/donations';
@@ -168,4 +168,31 @@ export async function assertCountedAgainstCatalog(
 			throw new Error(`Perishable item ${line.item_id} requires lot.expiry to be set`);
 		}
 	}
+}
+
+/**
+ * The booking staff decided on must still be the booking on file (CR-174, as FR-25 does
+ * for the counter): the donor may edit a `pending_review` / `verifying` booking, and a
+ * decision made on an older screen would land on lines nobody looked at. Returns the
+ * refusal to send, or null when `body.expected_rev` is the doc's `_rev`.
+ */
+export function staleDecisionResponse(body: unknown, donation: { _rev?: string }) {
+	const expected = (body as { expected_rev?: unknown } | null)?.expected_rev;
+	if (typeof expected !== 'string' || !expected) {
+		return json(
+			{ success: false, error_code: 'REV_REQUIRED', error: 'expected_rev is required' },
+			{ status: 422 }
+		);
+	}
+	if (expected !== donation._rev) {
+		return json(
+			{
+				success: false,
+				error_code: 'DONATION_CHANGED',
+				error: 'ผู้บริจาคแก้ใบนี้หลังจากเปิดหน้าไว้ — โหลดรายการใหม่แล้วตรวจอีกครั้ง'
+			},
+			{ status: 409 }
+		);
+	}
+	return null;
 }

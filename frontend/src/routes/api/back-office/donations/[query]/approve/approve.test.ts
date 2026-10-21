@@ -66,9 +66,14 @@ const putBody = () =>
 		Record<string, unknown> | undefined;
 
 function postEvent(body: unknown, query = 'DN-999999'): PostEvent {
+	// Decisions carry the `_rev` the screen was loaded at (CR-174); fixtures are `1-abc`.
+	const sent =
+		body && typeof body === 'object' && !('expected_rev' in body)
+			? { expected_rev: '1-abc', ...body }
+			: body;
 	return {
 		params: { query },
-		request: { headers: { get: () => 'session-cookie' }, json: () => Promise.resolve(body) }
+		request: { headers: { get: () => 'session-cookie' }, json: () => Promise.resolve(sent) }
 	} as unknown as PostEvent;
 }
 
@@ -160,6 +165,30 @@ describe('POST /api/back-office/donations/[query]/reject', () => {
 				reject_reason: 'หมดอายุ',
 				reject_reason_code: 'expired'
 			});
+		});
+
+		// The donor may edit a booking under review (FR-21): decisions by line position
+		// must be about the booking on file, or they land on lines nobody looked at.
+		it('refuses decisions made on a booking the donor has since edited', async () => {
+			mockCouch({ ...mixed, _rev: '2-edited' } as unknown as PublicDonationDoc);
+
+			const response = await POST(postEvent({ lines: [{ index: 1, decision: 'approved' }] }));
+
+			expect(response.status).toBe(409);
+			expect((await response.json()).error_code).toBe('DONATION_CHANGED');
+			expect(writtenDocs()).toHaveLength(0);
+			expect(putBody()).toBeUndefined();
+		});
+
+		it('refuses a decision that does not say which version it was made on', async () => {
+			mockCouch(mixed);
+
+			const response = await POST(
+				postEvent({ expected_rev: undefined, lines: [{ index: 1, decision: 'approved' }] })
+			);
+
+			expect(response.status).toBe(422);
+			expect(putBody()).toBeUndefined();
 		});
 
 		it('approves every pending line when no lines are sent (one-button approve)', async () => {
