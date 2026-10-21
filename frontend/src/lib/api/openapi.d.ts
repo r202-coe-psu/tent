@@ -5438,7 +5438,8 @@ export interface operations {
 			path?: never;
 			cookie?: never;
 		};
-		requestBody: {
+		/** @description A missing or malformed body is answered with 422 `validation_error`. */
+		requestBody?: {
 			content: {
 				'application/json': {
 					/**

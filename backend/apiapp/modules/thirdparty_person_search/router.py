@@ -31,7 +31,8 @@ router = APIRouter(prefix="/external", tags=["External"])
     # validation and is logged; declare its schema here so OpenAPI still documents it.
     openapi_extra={
         "requestBody": {
-            "required": True,
+            "required": False,
+            "description": "A missing or malformed body is answered with 422 `validation_error`.",
             "content": {"application/json": {"schema": PersonSearchRequest.model_json_schema()}},
         }
     },
@@ -62,6 +63,6 @@ async def _read_search(request: Request) -> Any:
     purpose and scope checks, and logged — instead of FastAPI rejecting the body up front."""
     try:
         payload = await request.json()
-    except ValueError:
+    except ValueError, RecursionError:  # bad JSON / bad UTF-8 / absurdly deep nesting
         return None
     return payload.get("search") if isinstance(payload, dict) else None

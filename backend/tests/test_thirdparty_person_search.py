@@ -178,6 +178,8 @@ _BAD_BODIES = [
     {"json": {"search": ["0101234567890"]}},
     {"json": ["not", "an", "object"]},
     {"content": b"{not json", "headers": {"Content-Type": "application/json"}},
+    {"content": b"[" * 200_000, "headers": {"Content-Type": "application/json"}},
+    {"content": b'{"search": "\\ud800x ab"}', "headers": {"Content-Type": "application/json"}},
     {},
 ]
 
