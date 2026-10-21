@@ -44,6 +44,12 @@ def _bearer(
 
 GRANTED = _bearer(["booking-write"])
 OTHER_CLIENT = _bearer(["booking-write"], client_id="other-client")
+# EOC (#751): `booking-bypass` rides on top of `booking-write`, never instead of it.
+BYPASS = _bearer(["booking-write", "booking-bypass"])
+BYPASS_ONLY = _bearer(["booking-bypass"])
+
+# A shelter staff switched "accepts pre-registration" ON for: bookable by the normal rule.
+BOOKABLE_RAW: dict[str, Any] = {"feature_flags": {"accepts_pre_registration": True}}
 
 
 def _payload(**overrides: Any) -> dict[str, Any]:
@@ -65,6 +71,10 @@ async def _shelter(
     is_active: bool = True,
     raw_data: dict[str, Any] | None = None,
 ) -> PublicShelter:
+    """Default raw_data = the pre-registration flag ON (#751: a missing flag is NOT bookable).
+
+    Pass `raw_data={}` for the flag-missing case, or an explicit `feature_flags` for False.
+    """
     return await PublicShelter(
         id=code,
         shelter_code=code,
@@ -73,7 +83,7 @@ async def _shelter(
         location_status=status,
         is_active=is_active,
         capacity=100,
-        raw_data=raw_data or {},
+        raw_data=BOOKABLE_RAW if raw_data is None else raw_data,
         updated_at=datetime.now(UTC),
     ).insert()
 
@@ -352,11 +362,149 @@ async def test_pre_registration_opt_out_is_409(client: AsyncClient) -> None:
     assert response.json()["code"] == "location_not_bookable"
 
 
+async def test_missing_pre_registration_flag_is_409(client: AsyncClient) -> None:
+    """#751: no `accepts_pre_registration` flag = not bookable (as on the public plane)."""
+    await _shelter("SH001", raw_data={})
+    response = await client.post(URL, json=_payload(), headers=GRANTED)
+    assert response.status_code == 409
+    assert response.json()["code"] == "location_not_bookable"
+    assert await _log_statuses() == ["denied_location_not_bookable"]
+    assert await ExternalBooking.find_all().count() == 0
+
+
+async def test_empty_feature_flags_is_409(client: AsyncClient) -> None:
+    await _shelter("SH001", raw_data={"feature_flags": {}})
+    response = await client.post(URL, json=_payload(), headers=GRANTED)
+    assert response.status_code == 409
+    assert response.json()["code"] == "location_not_bookable"
+
+
 @pytest.mark.parametrize("shelter_status", ["full", "full_capacity"])
 async def test_full_shelter_is_bookable(client: AsyncClient, shelter_status: str) -> None:
     await _shelter("SH001", status=shelter_status)
     response = await client.post(URL, json=_payload(), headers=GRANTED)
     assert response.status_code == 201
+
+
+# --- #751 booking-bypass (EOC) -----------------------------------------------------------
+
+# Every way a shelter fails the normal rule (status != closed AND flag is True).
+NOT_BOOKABLE = {
+    "flag-missing": {"status": "open", "raw_data": {}},
+    "flag-empty": {"status": "open", "raw_data": {"feature_flags": {}}},
+    "flag-false": {
+        "status": "open",
+        "raw_data": {"feature_flags": {"accepts_pre_registration": False}},
+    },
+    "closed": {"status": "closed", "raw_data": BOOKABLE_RAW},
+    "closed-flag-missing": {"status": "closed", "raw_data": {}},
+    "closed-flag-false": {
+        "status": "closed",
+        "raw_data": {"feature_flags": {"accepts_pre_registration": False}},
+    },
+}
+
+
+@pytest.mark.parametrize("kind", list(NOT_BOOKABLE))
+async def test_bypass_books_a_shelter_that_is_not_bookable(client: AsyncClient, kind: str) -> None:
+    await _shelter("SH001", **NOT_BOOKABLE[kind])
+    response = await client.post(URL, json=_group_payload(3), headers=BYPASS)
+    assert response.status_code == 201, response.text
+    result = response.json()["result"]
+    assert result["booking_status"] == "BOOKED"
+    assert result["persons_count"] == 3
+    rows = await _rows(result["booking_id"])
+    assert len(rows) == 3
+    assert [row["bypass"] for row in rows] == [True, True, True]
+    assert await _log_statuses() == ["granted_bypass"]
+    logs = await ThirdPartyAccessLog.find_all().to_list()
+    assert logs[0].endpoint == "EXT-008"
+    assert logs[0].location_code == "SH001"
+    assert logs[0].result_count == 3
+
+
+async def test_bypass_single_person_row_is_flagged(client: AsyncClient) -> None:
+    await _shelter("SH001", status="closed", raw_data={})
+    response = await client.post(URL, json=_payload(), headers=BYPASS)
+    assert response.status_code == 201
+    rows = await _rows(response.json()["result"]["booking_id"])
+    assert [row["bypass"] for row in rows] == [True]
+
+
+@pytest.mark.parametrize("shelter_status", ["open", "full", "full_capacity"])
+async def test_bypass_on_a_bookable_shelter_is_a_normal_booking(
+    client: AsyncClient, shelter_status: str
+) -> None:
+    """The scope is only exercised when the normal rule fails: no flag, log stays `granted`."""
+    await _shelter("SH001", status=shelter_status)
+    response = await client.post(URL, json=_group_payload(2), headers=BYPASS)
+    assert response.status_code == 201
+    rows = await _rows(response.json()["result"]["booking_id"])
+    assert [row["bypass"] for row in rows] == [False, False]
+    assert await _log_statuses() == ["granted"]
+
+
+@pytest.mark.parametrize("kind", list(NOT_BOOKABLE))
+async def test_booking_write_alone_is_refused_when_not_bookable(
+    client: AsyncClient, kind: str
+) -> None:
+    await _shelter("SH001", **NOT_BOOKABLE[kind])
+    response = await client.post(URL, json=_payload(), headers=GRANTED)
+    assert response.status_code == 409
+    assert response.json()["code"] == "location_not_bookable"
+    assert await _log_statuses() == ["denied_location_not_bookable"]
+    assert await ExternalBooking.find_all().count() == 0
+
+
+@pytest.mark.parametrize("kind", ["flag-missing", "closed"])
+async def test_bypass_without_booking_write_is_403(client: AsyncClient, kind: str) -> None:
+    """`booking-bypass` is never a way in on its own: the scope gate answers first."""
+    await _shelter("SH001", **NOT_BOOKABLE[kind])
+    response = await client.post(URL, json=_payload(), headers=BYPASS_ONLY)
+    assert response.status_code == 403
+    assert response.json()["code"] == "insufficient_scope"
+    assert await _log_statuses() == ["denied_insufficient_scope"]
+    assert await ExternalBooking.find_all().count() == 0
+
+
+async def test_bypass_without_booking_write_on_a_bookable_shelter_is_403(
+    client: AsyncClient, shelters: None
+) -> None:
+    response = await client.post(URL, json=_payload(), headers=BYPASS_ONLY)
+    assert response.status_code == 403
+    assert response.json()["code"] == "insufficient_scope"
+    assert await ExternalBooking.find_all().count() == 0
+
+
+async def test_bypass_does_not_reach_an_unknown_shelter(
+    client: AsyncClient, shelters: None
+) -> None:
+    response = await client.post(URL, json=_payload(location_code="NOPE"), headers=BYPASS)
+    assert response.status_code == 404
+    assert response.json()["code"] == "location_not_found"
+    assert await _log_statuses() == ["denied_location_not_found"]
+    assert await ExternalBooking.find_all().count() == 0
+
+
+@pytest.mark.parametrize("shelter_status", ["open", "closed"])
+async def test_bypass_does_not_reach_an_inactive_shelter(
+    client: AsyncClient, shelter_status: str
+) -> None:
+    """Deleted / `is_active=False` shelters are not in the projection: still 404 with bypass."""
+    await _shelter("SH001", status=shelter_status, is_active=False, raw_data={})
+    response = await client.post(URL, json=_payload(), headers=BYPASS)
+    assert response.status_code == 404
+    assert response.json()["code"] == "location_not_found"
+    assert await _log_statuses() == ["denied_location_not_found"]
+    assert await ExternalBooking.find_all().count() == 0
+
+
+async def test_bypass_still_validates_the_body(client: AsyncClient) -> None:
+    await _shelter("SH001", status="closed", raw_data={})
+    response = await client.post(URL, json=_payload(cid="1909800123456"), headers=BYPASS)
+    assert response.status_code == 422
+    assert response.json()["code"] == "validation_error"
+    assert await ExternalBooking.find_all().count() == 0
 
 
 async def test_create_happy_path(client: AsyncClient, shelters: None) -> None:
@@ -2698,6 +2846,21 @@ async def test_replay_with_same_key_and_body_returns_the_original_201(
     assert await _log_statuses() == ["granted", "granted"]
     logs = await ThirdPartyAccessLog.find_all().to_list()
     assert [log.result_count for log in logs] == [3, 3]
+
+
+async def test_replay_of_a_bypassed_booking_returns_the_original_201(client: AsyncClient) -> None:
+    await _shelter("SH001", status="closed", raw_data={})
+    headers = _idem("bypass-retry-1", BYPASS)
+    body = _group_payload(2)
+    first = await client.post(URL, json=body, headers=headers)
+    assert first.status_code == 201
+    replay = await client.post(URL, json=body, headers=headers)
+    assert replay.status_code == 201
+    assert replay.json() == first.json()
+    rows = await _rows()
+    assert len(rows) == 2  # the replay created nothing
+    assert [row["bypass"] for row in rows] == [True, True]
+    assert (await _log_statuses())[0] == "granted_bypass"
 
 
 async def test_replay_with_legacy_single_body_keeps_booking_status(

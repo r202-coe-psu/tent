@@ -306,3 +306,68 @@ async def test_shelter_detail_occupancy_counts_pre_registered(
     assert shelter["capacity"]["total"] == 100
     assert shelter["capacity"]["available"] == 91
     assert shelter["occupancy_rate"] == 9
+
+
+# --- #751 regression: public `accepts_pre_registration` is unchanged -----------------------
+# The flag logic moves into a helper shared with the partner plane (EXT-002/003/008). The public
+# field stays "the staff switch is exactly True" — a missing flag is False, and the shelter's
+# status is NOT folded in (the SPA's `isShelterBookable` combines the two itself).
+
+
+def _flag_doc(code: str, status: str, feature_flags: dict | None) -> dict:
+    raw: dict = {"operation_status": "active", "capacity": 100}
+    if feature_flags is not None:
+        raw["feature_flags"] = feature_flags
+    return {
+        "_id": code,
+        "shelter_code": code,
+        "name": f"ศูนย์ {code}",
+        "status": status,
+        "capacity": 100,
+        "province": "สงขลา",
+        "updated_at": datetime.now(UTC),
+        "raw_data": raw,
+    }
+
+
+async def test_public_accepts_pre_registration_on_list_and_detail(
+    client: AsyncClient,
+    db_client: AsyncMongoClient,
+    settings: Settings,
+    auth_headers: dict[str, str],
+):
+    cases = {
+        "SH101": ("open", {"accepts_pre_registration": True}, True),
+        "SH102": ("open", {"accepts_pre_registration": False}, False),
+        "SH103": ("open", {}, False),
+        "SH104": ("open", None, False),
+        "SH105": ("full", {"accepts_pre_registration": True}, True),
+    }
+    for code, (status, flags, _) in cases.items():
+        await _insert_shelter_doc(db_client, settings, _flag_doc(code, status, flags))
+
+    listing = await client.get("/public/v1/shelters", headers=auth_headers)
+    assert listing.status_code == 200
+    by_code = {s["code"]: s for s in listing.json()["shelters"]}
+    for code, (_, _, expected) in cases.items():
+        assert by_code[code]["accepts_pre_registration"] is expected, code
+
+    for code, (_, _, expected) in cases.items():
+        detail = await client.get(f"/public/v1/shelters/{code}", headers=auth_headers)
+        assert detail.status_code == 200
+        assert detail.json()["shelter"]["accepts_pre_registration"] is expected, code
+
+
+async def test_public_accepts_pre_registration_ignores_shelter_status(
+    client: AsyncClient,
+    db_client: AsyncMongoClient,
+    settings: Settings,
+    auth_headers: dict[str, str],
+):
+    """Unlike the partner `accepts_booking`, the public field is the flag alone."""
+    await _insert_shelter_doc(
+        db_client, settings, _flag_doc("SH106", "closed", {"accepts_pre_registration": True})
+    )
+    detail = await client.get("/public/v1/shelters/SH106", headers=auth_headers)
+    assert detail.status_code == 200
+    assert detail.json()["shelter"]["accepts_pre_registration"] is True

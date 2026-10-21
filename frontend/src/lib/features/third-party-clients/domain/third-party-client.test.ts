@@ -221,6 +221,34 @@ describe('#736 occupant-search scope (EXT-012)', () => {
 	});
 });
 
+describe('#751 booking-bypass scope (EOC)', () => {
+	const SCOPE = 'booking-bypass';
+
+	it('is grantable and has a label; the grantable set is now eight scopes', () => {
+		expect(GRANTABLE_SCOPES as readonly string[]).toContain(SCOPE);
+		expect(GRANTABLE_SCOPES).toHaveLength(8);
+		expect((SCOPE_LABEL as Record<string, string>)[SCOPE]).toBeTruthy();
+		expect(
+			createThirdPartyClientSchema.safeParse({
+				name: 'EOC partner',
+				module_name: 'M2',
+				allowed_scopes: ['booking-write', SCOPE]
+			}).success
+		).toBe(true);
+	});
+
+	it('is sensitive and carries a warning', () => {
+		expect(SENSITIVE_SCOPES as readonly string[]).toContain(SCOPE);
+		expect((SENSITIVE_SCOPE_WARNING as Record<string, string>)[SCOPE]).toBeTruthy();
+	});
+
+	it('is not in any module preset (M7 included) — an admin ticks it case by case', () => {
+		for (const scopes of Object.values(DEFAULT_SCOPES_BY_MODULE)) {
+			expect(scopes as readonly string[]).not.toContain(SCOPE);
+		}
+	});
+});
+
 describe('display helpers', () => {
 	const base: ThirdPartyClient = {
 		id: '1',
