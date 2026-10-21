@@ -3,6 +3,8 @@ import {
 	CLIENT_DESCRIPTION_MAX_LENGTH,
 	CLIENT_NAME_MAX_LENGTH,
 	DEFAULT_SCOPES_BY_MODULE,
+	GRANTABLE_SCOPES,
+	SCOPE_LABEL,
 	SENSITIVE_SCOPES,
 	SENSITIVE_SCOPE_WARNING,
 	createThirdPartyClientSchema,
@@ -189,6 +191,34 @@ describe('CR-154 M2 scopes', () => {
 		expect(SENSITIVE_SCOPES).toContain('booking-write');
 		expect(SENSITIVE_SCOPES).toContain('residency-read');
 		for (const scope of SENSITIVE_SCOPES) expect(SENSITIVE_SCOPE_WARNING[scope]).toBeTruthy();
+	});
+});
+
+describe('#736 occupant-search scope (EXT-012)', () => {
+	// Typed as string so this file still compiles before the scope exists in GRANTABLE_SCOPES.
+	const SCOPE: string = 'occupant-search';
+
+	it('is grantable and has a label', () => {
+		expect(GRANTABLE_SCOPES as readonly string[]).toContain(SCOPE);
+		expect((SCOPE_LABEL as Record<string, string>)[SCOPE]).toBeTruthy();
+		expect(
+			createThirdPartyClientSchema.safeParse({
+				name: 'Search partner',
+				module_name: '',
+				allowed_scopes: ['location-read', SCOPE]
+			}).success
+		).toBe(true);
+	});
+
+	it('is sensitive and carries a warning', () => {
+		expect(SENSITIVE_SCOPES as readonly string[]).toContain(SCOPE);
+		expect((SENSITIVE_SCOPE_WARNING as Record<string, string>)[SCOPE]).toBeTruthy();
+	});
+
+	it('is not in any module preset — an admin ticks it case by case', () => {
+		for (const scopes of Object.values(DEFAULT_SCOPES_BY_MODULE)) {
+			expect(scopes as readonly string[]).not.toContain(SCOPE);
+		}
 	});
 });
 

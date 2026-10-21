@@ -1,5 +1,5 @@
 /**
- * Helpers for the Partner API suite (`partner-api.test.ts`, EXT-001…011, ADR 0002).
+ * Helpers for the Partner API suite (`partner-api.test.ts`, EXT-001…012, ADR 0002).
  *
  * The suite drives the real `/external/*` plane (FastAPI, no BFF in between) with tokens it
  * mints itself, and manages its own `E2E partner …` clients through the staff BFF
@@ -28,7 +28,7 @@ import { publicShelter, teardownShelter } from './public-cleanup';
 // ─── Scopes + endpoint table ───────────────────────────────────────────────────
 
 /**
- * The six scopes a partner client can hold (`tent_model.third_party_client`, mirrored by the
+ * The seven scopes a partner client can hold (`tent_model.third_party_client`, mirrored by the
  * staff UI's `GRANTABLE_SCOPES`), imported so a new scope cannot be forgotten here.
  */
 export const PARTNER_SCOPES = GRANTABLE_SCOPES;
@@ -74,7 +74,7 @@ export interface PartnerEndpoint {
 	method: 'GET' | 'POST';
 	path: (ctx: ExtCtx) => string;
 	scope: PartnerScope;
-	/** 007 / 011 check `purpose` before the scope, so every call carries one. */
+	/** 007 / 011 / 012 check `purpose` before the scope, so every call carries one. */
 	query?: (ctx: ExtCtx) => Record<string, string>;
 	body?: (ctx: ExtCtx) => unknown;
 	/** Status a fully-scoped token gets for this request in the matrix (not the 401 sweep). */
@@ -174,6 +174,16 @@ export const PARTNER_ENDPOINTS: readonly PartnerEndpoint[] = [
 		query: (c) => ({ ...PURPOSE, cid: c.cid }),
 		// A CID nobody checked in under: 404 residency_not_found is the "scope passed" answer.
 		okStatus: 404
+	},
+	{
+		ext: 'EXT-012',
+		method: 'POST',
+		path: () => '/external/persons/search',
+		scope: 'occupant-search',
+		query: () => PURPOSE,
+		// A fresh CID nobody is registered under: 200 with an empty `result` is the "scope passed" answer.
+		body: (c) => ({ search: c.cid }),
+		okStatus: 200
 	}
 ];
 
