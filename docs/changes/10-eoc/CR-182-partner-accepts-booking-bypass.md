@@ -1,10 +1,10 @@
 ---
-id: draft
+id: CR-182
 title: Partner API — `accepts_booking` (EXT-002/003) + EXT-008 bookability rule + scope `booking-bypass`
-status: proposed
+status: approved
 date: 2026-10-21
 requested_by: Dev Team (issue #751; M2 ไม่มีทางรู้ล่วงหน้าว่าศูนย์ไหนรับจอง)
-decided_by: เจ้าของโครงการ (ตัดสิน 7 ข้อใน issue #751 / plan 2026-10-21) — รอ owner อนุมัติ CR นี้และรันเลข
+decided_by: เจ้าของโครงการ (ตัดสิน 7 ข้อใน issue #751 / plan 2026-10-21) — owner อนุมัติ CR นี้ 2026-10-21 (ระหว่างรีวิว PR #753)
 layer: volatile
 extends: CR-154 (FR-15/16 — EXT-008 bookability), CR-169 (EXT-008 group booking; Idempotency-Key #614)
 affects:
@@ -20,7 +20,7 @@ why: partner (M2) จองผ่าน EXT-008 แต่รู้ว่าศ�
 migration: N/A — ไม่ bump `schema_v` (`external_bookings` เป็น Beanie doc ไม่มี `schema_v`; เพิ่ม `bypass` แบบ additive default `false`), ไม่ bump `PROJECTION_VERSION` (อ่านจาก `raw_data`); breaking เชิงพฤติกรรมสำหรับ M2 — ดู Rollout
 ---
 
-# draft-partner-accepts-booking-bypass — `accepts_booking` + `booking-bypass`
+# CR-182 — `accepts_booking` + `booking-bypass`
 
 > **สรุป (TL;DR):**
 >
@@ -82,4 +82,5 @@ N/A — ไม่ bump `schema_v`: `external_bookings` ไม่มี `schema_v
 ## Decision log
 
 - 2026-10-21 — owner ตัดสิน 7 ข้อ (issue #751 / plan); ทดสอบล็อกที่ commit `02ffa8266`
-- 2026-10-21 — proposed (draft; Dev เขียน CR ตาม memory "implementer writes the CR"; รอ owner อนุมัติเลข CR + ช่องทาง track)
+- 2026-10-21 — proposed as `draft-partner-accepts-booking-bypass` (Dev เขียน CR ตาม memory "implementer writes the CR"; รอ owner อนุมัติเลข CR + ช่องทาง track)
+- 2026-10-21 — owner อนุมัติ (approved) ระหว่างรีวิว PR #753
