@@ -219,10 +219,18 @@ echo -e "${BLUE}=== SmartShelter label printer setup: queue $QUEUE, label ${LABE
 info "[1/7] ติดตั้ง CUPS + qrencode"
 sudo apt-get install -y cups cups-client cups-filters qrencode
 sudo systemctl enable --now cups
-sudo cupsctl --no-remote-admin --no-remote-any --no-share-printers # FR-P16
-# CUPS keeps a copy of every print job's document (the label PNG — name + QR) under
+# FR-P16. CUPS keeps a copy of every print job's document (the label PNG — name + QR) under
 # /var/spool/cups by default; PreserveJobFiles=No deletes it once the job completes.
-sudo cupsctl PreserveJobFiles=No
+# One call = one cupsd restart. On some Pis (kiosk2) cupsd exits instead of reloading and systemd
+# brings it back, so cupsctl reports "Host is down" — warn (--status shows what is missing) and
+# wait for the scheduler rather than stopping before the queue is set up.
+sudo cupsctl --no-remote-admin --no-remote-any --no-share-printers PreserveJobFiles=No ||
+    warn "cupsctl ไม่สำเร็จ — ทำขั้นต่อไปก่อน (ดูสาเหตุ: sudo tail -40 /var/log/cups/error_log)"
+for _ in $(seq 1 15); do
+    LC_ALL=C lpstat -r 2>/dev/null | grep -q 'scheduler is running' && break
+    sleep 1
+done
+LC_ALL=C lpstat -r 2>/dev/null | grep -q 'scheduler is running' || die "cupsd ไม่กลับมาทำงาน — sudo systemctl restart cups แล้วรันใหม่"
 
 # 2) Official Xprinter driver
 info "[2/7] Driver Xprinter"
