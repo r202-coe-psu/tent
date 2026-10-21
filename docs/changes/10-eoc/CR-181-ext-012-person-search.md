@@ -1,10 +1,10 @@
 ---
 id: CR-181
 title: EXT-012 — Partner person search (`POST /external/persons/search`, scope `occupant-search`) + sort deterministic ของ ID search
-status: proposed
+status: approved
 date: 2026-10-21
 requested_by: Dev Team (issue #736, As-Built v3.0 / Bruno collection 2026-10-20)
-decided_by: เจ้าของโครงการ (ตัดสิน 5 ข้อ + audit ใน issue #736 decisions comment 2026-10-21; **CR นี้ยังรอ owner อนุมัติ**)
+decided_by: เจ้าของโครงการ (ตัดสิน 5 ข้อ + audit ใน issue #736 decisions comment 2026-10-21; owner อนุมัติ CR นี้ 2026-10-21)
 layer: volatile
 extends: CR-154 (partner OAuth plane), CR-166 (name search + sort), CR-099 (public search + masking), CR-176 (ตัด `cancelled`)
 affects:
@@ -81,4 +81,5 @@ migration: N/A — ไม่เปลี่ยนรูป doc (ไม่ bump `
 ## Decision log
 
 - 2026-10-21 — เจ้าของโครงการตัดสิน 5 ข้อ (method/path, rate limit, สถานะ, family, sort) ใน issue #736 (decisions comment) และเพิ่ม: ไม่เขียน `search_audits` (ใช้ `ThirdPartyAccessLog` อย่างเดียว); rate limit อยู่ที่ nginx นอก scope
-- 2026-10-21 — ผู้ implement ร่าง CR นี้ (status `proposed`) — **รอ owner อนุมัติก่อนเปลี่ยนเป็น `approved`**
+- 2026-10-21 — ผู้ implement ร่าง CR นี้ (status `proposed`)
+- 2026-10-21 — owner อนุมัติ (`approved`) ระหว่างรีวิว PR #744
