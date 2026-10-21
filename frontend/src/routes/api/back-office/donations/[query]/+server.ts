@@ -15,6 +15,8 @@ import {
 	receiveDonationInputSchema
 } from '$lib/features/donations/server';
 import {
+	deriveDonationReceiptAuditId,
+	deriveDonationReceiptLineId,
 	keyDonationReceipt,
 	type CountedItem,
 	type Donation,
@@ -23,10 +25,48 @@ import {
 } from '$lib/features/operations/server';
 import { createAuditEntry, type AuditEntry } from '$lib/features/shared';
 import { allocateLotNos } from '$lib/server/lot-number';
+import { persistQty } from '$lib/utils/qty';
 
 function routeErrorResponse(e: unknown) {
 	const { message, status } = toRouteError(e);
 	return json({ success: false, error: message }, { status });
+}
+
+type BulkDocsOutcome = { id?: string; ok?: boolean; error?: string; reason?: string };
+
+/** Ledger rows already on the shelter's ledger, by `_id` (deleted or missing ids are absent). */
+async function readLedgerRows(dbName: string, ids: string[]): Promise<Map<string, StockLedger>> {
+	const rows = new Map<string, StockLedger>();
+	if (ids.length === 0) return rows;
+	const res = await adminRaw(`/${dbName}/_all_docs?include_docs=true`, 'POST', { keys: ids });
+	if (res.status >= 400) {
+		throw new Error(`Failed to read the stock ledger: ${JSON.stringify(res.data)}`);
+	}
+	for (const row of (res.data as { rows?: { key: string; doc?: StockLedger | null }[] }).rows ??
+		[]) {
+		if (row.doc) rows.set(row.key, row.doc);
+	}
+	return rows;
+}
+
+/** Same check as the batch receive path: an append-only row cannot be "edited" by a retry. */
+function recordsSameLine(row: StockLedger, line: CountedItem): boolean {
+	return (
+		row.item_id === line.item_id &&
+		row.unit === line.unit &&
+		persistQty(row.qty) === persistQty(line.qty)
+	);
+}
+
+function receiptMismatch(lineNo: number, row: StockLedger) {
+	return json(
+		{
+			success: false,
+			error_code: 'RECEIPT_MISMATCH',
+			error: `รายการที่ ${lineNo + 1} บันทึกเข้าคลังไปแล้วเป็น ${row.qty} ${row.unit} แก้จำนวนหรือสินค้าของรายการนี้ไม่ได้ — ค้นหาใบใหม่แล้วตรวจอีกครั้ง`
+		},
+		{ status: 409 }
+	);
 }
 
 // Project a raw donation doc to the redacted view the scan UI needs (no _rev,
@@ -159,7 +199,13 @@ export const POST: RequestHandler = async ({ params, request }) => {
 		// What staff actually counted; falls back to the declared lines when the
 		// UI sends none (walk-through with nothing changed).
 		const countedLines = parsed.data.items ?? donation.items;
-		const counted = toCountedItems(countedLines);
+		// `line_no` is the line's position in what was sent, free-text lines included. The
+		// scan station sends one line per `donation.items[]` entry in order — the numbering
+		// of the batch receive page too (`initialBatchDrafts`) — so both address one row.
+		const numbered = (countedLines ?? []).flatMap((line, lineNo) =>
+			toCountedItems([line]).map((item) => ({ lineNo, item }))
+		);
+		const counted = numbered.map(({ item }) => item);
 
 		try {
 			await assertCountedAgainstCatalog(counted, dbName);
@@ -176,22 +222,42 @@ export const POST: RequestHandler = async ({ params, request }) => {
 
 		const ctx = { shelterCode: donation.shelter_code, createdBy: caller.name };
 
+		// Row ids are fixed by (donation, item, line) (CR-143 FR-B4a), so a retry — e.g.
+		// after the donation PUT below lost a 409 — finds the rows the first attempt wrote
+		// instead of keying the same goods into stock twice (#695).
+		const ids = await Promise.all(
+			numbered.map(({ lineNo, item }) =>
+				deriveDonationReceiptLineId(donation._id, item.item_id, lineNo)
+			)
+		);
+		const recorded = await readLedgerRows(dbName, ids);
+		const pending: number[] = [];
+		for (const [index, { lineNo, item }] of numbered.entries()) {
+			const row = recorded.get(ids[index]);
+			if (!row) pending.push(index);
+			else if (!recordsSameLine(row, item)) return receiptMismatch(lineNo, row);
+		}
+
 		// Lot labels are minted here, not on the client: the per-day sequence needs
 		// to see every row already on this shelter's ledger (CR-088 · schema.md §2.1).
-		// One label per counted line, in the order the lines are keyed.
-		const lotNos = await allocateLotNos(dbName, counted.length);
-		const countedWithLots: CountedItem[] = counted.map((line, i) => ({
-			...line,
-			lot: { ...(line.lot ?? {}), lot_no: lotNos[i] }
+		// Only rows not written yet get one; a recorded row keeps the label it was given.
+		const lotNos = await allocateLotNos(dbName, pending.length);
+		const pendingWithLots: CountedItem[] = pending.map((index, i) => ({
+			...counted[index],
+			lot: { ...(counted[index].lot ?? {}), lot_no: lotNos[i] }
 		}));
 
 		// 1) Ledger — the ONLY path from a donation into stock. Positive entries,
 		//    reason `donation`, ref_id back to the donation (couchdb-mongodb-sync.md §4.2).
-		const ledgers: StockLedger[] = keyDonationReceipt(
+		const keyed = keyDonationReceipt(
 			donation as unknown as Donation,
-			countedWithLots,
-			ctx
+			pendingWithLots,
+			ctx,
+			pending.map((index) => ids[index])
 		);
+		const keyedById = new Map(keyed.map((row) => [row._id, row]));
+		const ledgerAt = (id: string): StockLedger =>
+			(recorded.get(id) ?? keyedById.get(id)) as StockLedger;
 
 		// 2) Audit — who received what, from which booking, declared vs actual.
 		//    No donor PII in `context`: the booking ref is the donor-facing handle.
@@ -219,24 +285,48 @@ export const POST: RequestHandler = async ({ params, request }) => {
 					declared_items: declaredSnapshot,
 					received_items: receivedSnapshot,
 					has_discrepancy: JSON.stringify(declaredSnapshot) !== JSON.stringify(receivedSnapshot),
-					ledger_ids: ledgers.map((l) => l._id),
-					lot_nos: lotNos,
+					ledger_ids: ids,
+					lot_nos: ids.map((id) => ledgerAt(id).lot?.lot_no ?? null),
 					free_text_lines_skipped: (countedLines ?? []).length - counted.length
 				}
 			},
-			ctx
+			ctx,
+			// One entry per donation: a retry of the same receipt is not a second event.
+			await deriveDonationReceiptAuditId(donation._id)
 		);
 
 		// Ledger + audit go in FIRST. If this fails the donation stays `declared`
-		// and staff can key it again — safer than a received donation whose goods
-		// never reached the ledger.
+		// and staff can key it again — the fixed ids make that retry safe.
 		const appendRes = await adminRaw(`/${dbName}/_bulk_docs`, 'POST', {
-			docs: [...ledgers, audit]
+			docs: [...keyed, audit]
 		});
 		if (appendRes.status >= 400) {
 			throw new Error(
 				`Failed to write stock ledger / audit trail: ${JSON.stringify(appendRes.data)}`
 			);
+		}
+		// `_bulk_docs` answers 201 even when single docs are refused. A conflict means the
+		// doc is already there — for the audit entry that is the earlier attempt; for a
+		// ledger row (a concurrent receive) it only counts if it recorded the same line.
+		const outcomes = Array.isArray(appendRes.data) ? (appendRes.data as BulkDocsOutcome[]) : [];
+		const refused = outcomes.filter((o) => o.error && o.error !== 'conflict');
+		if (refused.length > 0) {
+			throw new Error(`Failed to write stock ledger / audit trail: ${JSON.stringify(refused)}`);
+		}
+		const raced = outcomes
+			.filter((o) => o.error === 'conflict' && o.id && keyedById.has(o.id))
+			.map((o) => o.id as string);
+		if (raced.length > 0) {
+			const landed = await readLedgerRows(dbName, raced);
+			for (const id of raced) {
+				const index = ids.indexOf(id);
+				const row = landed.get(id);
+				if (!row) throw new Error(`Stock ledger row ${id} conflicted but cannot be read`);
+				if (!recordsSameLine(row, counted[index])) {
+					return receiptMismatch(numbered[index].lineNo, row);
+				}
+				recorded.set(id, row);
+			}
 		}
 
 		const nowStr = new Date().toISOString();
@@ -282,7 +372,10 @@ export const POST: RequestHandler = async ({ params, request }) => {
 			return json(
 				{
 					success: false,
-					error: 'Donation was updated by another process. Please search again and retry.'
+					error_code: 'DONATION_CONFLICT',
+					// The ledger rows are in and keep their ids: receiving again is safe (#695).
+					error:
+						'ใบบริจาคถูกแก้ไขระหว่างบันทึก — ค้นหาใบใหม่แล้วกดรับอีกครั้งได้ ของที่บันทึกไปแล้วจะไม่เข้าคลังซ้ำ'
 				},
 				{ status: 409 }
 			);
@@ -296,7 +389,10 @@ export const POST: RequestHandler = async ({ params, request }) => {
 			donation: toScanView(updated),
 			// Staff label the physical boxes from this (CR-088) — `toScanView` is the
 			// donation projection and has no room for per-ledger-row data.
-			lots: ledgers.map((l) => ({ item_id: l.item_id, lot_no: l.lot?.lot_no ?? null }))
+			lots: ids.map((id) => {
+				const row = ledgerAt(id);
+				return { item_id: row.item_id, lot_no: row.lot?.lot_no ?? null };
+			})
 		});
 	} catch (e) {
 		return routeErrorResponse(e);

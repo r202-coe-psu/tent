@@ -78,6 +78,8 @@ export {
 } from './domain/donation-slot';
 
 export {
+	deriveDonationReceiptAuditId,
+	deriveDonationReceiptLineId,
 	donationShortfall,
 	type DonationShortfall,
 	type DonationBatchLine

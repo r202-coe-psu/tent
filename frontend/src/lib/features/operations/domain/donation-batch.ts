@@ -10,6 +10,7 @@ import type { CountedItem, Donation } from './operations';
 
 /** Namespace of the deterministic `_id` of a batch-receipt row (FR-B4a). */
 const DONATION_RECEIPT_NAMESPACE = 'donation_receipt';
+const DONATION_RECEIPT_AUDIT_NAMESPACE = 'donation_receipt_audit';
 
 /**
  * One line of the batch. `line_no` is the line's identity for the lifetime of the
@@ -63,6 +64,15 @@ export function deriveDonationReceiptLineId(
 		itemId,
 		String(lineNo)
 	);
+}
+
+/**
+ * `_id` of the audit entry for receiving one donation at the scan station: one per
+ * donation, so a retried receive cannot log the same receipt twice (#695).
+ */
+export async function deriveDonationReceiptAuditId(donationId: string): Promise<string> {
+	const ledgerId = await deriveDeterministicLedgerId(DONATION_RECEIPT_AUDIT_NAMESPACE, donationId);
+	return `audit:${ledgerId.slice('stock_ledger:'.length)}`;
 }
 
 export interface DonationShortfall {

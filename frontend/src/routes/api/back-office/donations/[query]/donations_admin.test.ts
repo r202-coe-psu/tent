@@ -2,7 +2,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { GET, POST } from './+server';
 import { adminRaw, requireShelterScopeOrSA } from '$lib/server/couch-admin';
 import type { PublicDonationDoc } from '$lib/features/donations';
-import type { StockLedger } from '$lib/features/operations/server';
+import {
+	deriveDonationReceiptAuditId,
+	deriveDonationReceiptLineId,
+	type StockLedger
+} from '$lib/features/operations/server';
 import type { AuditEntry } from '$lib/features/shared';
 
 type GetEvent = Parameters<typeof GET>[0];
@@ -64,9 +68,25 @@ const catalogRows = [
 
 function mockCouch(
 	donation: PublicDonationDoc,
-	over: { putStatus?: number; existingLotNos?: string[]; shelterItems?: object[] } = {}
+	over: {
+		putStatus?: number;
+		existingLotNos?: string[];
+		shelterItems?: object[];
+		/** Rows already on the shelter's ledger, e.g. from an earlier attempt (#695). */
+		ledgerRows?: StockLedger[];
+		/** Per-doc answers of `_bulk_docs` (201 with refusals inside). */
+		bulkOutcomes?: object[];
+	} = {}
 ) {
-	vi.mocked(adminRaw).mockImplementation((path: string, method: string) => {
+	vi.mocked(adminRaw).mockImplementation((path: string, method: string, body?: unknown) => {
+		if (method === 'POST' && path.includes('_all_docs')) {
+			const keys = (body as { keys: string[] }).keys;
+			const rows = keys.map((key) => {
+				const doc = (over.ledgerRows ?? []).find((row) => row._id === key);
+				return doc ? { key, id: key, doc } : { key, error: 'not_found' };
+			});
+			return Promise.resolve({ status: 200, data: { rows } });
+		}
 		// Items the shelter created itself live in its own DB, not in `catalog`.
 		if (method === 'GET' && path.includes('/shelter_sh001/') && path.includes('item_master:')) {
 			const rows = (over.shelterItems ?? []).map((doc) => ({ doc }));
@@ -92,7 +112,7 @@ function mockCouch(
 			});
 		}
 		if (method === 'POST' && path.includes('_bulk_docs')) {
-			return Promise.resolve({ status: 201, data: [{ ok: true }] });
+			return Promise.resolve({ status: 201, data: over.bulkOutcomes ?? [{ ok: true }] });
 		}
 		if (method === 'PUT' && path.includes('/shelter_sh001/')) {
 			return Promise.resolve({ status: over.putStatus ?? 201, data: { ok: true } });
@@ -609,6 +629,126 @@ describe('Back-office GET & POST /api/back-office/donations/[query]', () => {
 			const response = await POST(postEvent({ status: 'received' }));
 
 			expect(response.status).toBe(409);
+			expect((await response.json()).error_code).toBe('DONATION_CONFLICT');
+		});
+	});
+
+	/**
+	 * #695 — the ledger is written before the donation is marked received. When that PUT
+	 * loses a 409 the rows stay (append-only) and staff press receive again: the retry
+	 * has to find those rows instead of keying the goods into stock a second time.
+	 */
+	describe('retry after a lost donation write (#695)', () => {
+		const riceDonation = withItems([
+			{ free_text: 'ของแห้ง', qty: '1', unit: 'kg' },
+			{ item_id: 'item:rice', qty: '10', unit: 'kg' }
+		]);
+		const counted = {
+			status: 'received',
+			items: [
+				{ free_text: 'ของแห้ง', qty: '1', unit: 'kg' },
+				{ item_id: 'item:rice', qty: '10', unit: 'kg' }
+			]
+		};
+
+		/** Receive once with the donation PUT conflicting; returns the rows that landed. */
+		async function firstAttemptLostThePut(): Promise<StockLedger[]> {
+			mockCouch(riceDonation, { putStatus: 409, existingLotNos: [] });
+			const first = await POST(postEvent(counted));
+			expect(first.status).toBe(409);
+			const rows = appendedDocs().filter((d): d is StockLedger => d.type === 'stock_ledger');
+			vi.mocked(adminRaw).mockReset();
+			return rows;
+		}
+
+		it('keys the row under the id the batch receive page uses for the same line', async () => {
+			const rows = await firstAttemptLostThePut();
+
+			// Line 1, not 0: the free-text line ahead of it keeps its place in the numbering.
+			expect(rows.map((r) => r._id)).toEqual([
+				await deriveDonationReceiptLineId('donation:123', 'item:rice', 1)
+			]);
+		});
+
+		it('writes no second row and closes the donation on the retry', async () => {
+			const rows = await firstAttemptLostThePut();
+			mockCouch(riceDonation, { ledgerRows: rows, existingLotNos: ['L-RECORDED'] });
+
+			const retry = await POST(postEvent(counted));
+			const body = await retry.json();
+
+			expect(retry.status).toBe(200);
+			expect(appendedDocs().filter((d) => d.type === 'stock_ledger')).toHaveLength(0);
+			const putCall = vi.mocked(adminRaw).mock.calls.find((c) => c[1] === 'PUT');
+			expect((putCall![2] as PublicDonationDoc).status).toBe('received');
+			// The boxes keep the label they were given the first time.
+			expect(body.lots).toEqual([{ item_id: 'item:rice', lot_no: rows[0].lot?.lot_no }]);
+		});
+
+		it('logs the receipt once — the retry re-sends the same audit entry', async () => {
+			mockCouch(riceDonation, { putStatus: 409 });
+			await POST(postEvent(counted));
+			const firstAudit = appendedDocs().find((d) => d.type === 'audit');
+			vi.mocked(adminRaw).mockReset();
+			mockCouch(riceDonation);
+			await POST(postEvent(counted));
+			const retryAudit = appendedDocs().find((d) => d.type === 'audit');
+
+			expect(retryAudit?._id).toBe(firstAudit?._id);
+			expect(firstAudit?._id).toBe(await deriveDonationReceiptAuditId('donation:123'));
+		});
+
+		it('refuses a retry that counts a recorded line differently, writing nothing', async () => {
+			const rows = await firstAttemptLostThePut();
+			mockCouch(riceDonation, { ledgerRows: rows });
+
+			const retry = await POST(
+				postEvent({
+					status: 'received',
+					items: [counted.items[0], { item_id: 'item:rice', qty: '12', unit: 'kg' }]
+				})
+			);
+
+			expect(retry.status).toBe(409);
+			expect((await retry.json()).error_code).toBe('RECEIPT_MISMATCH');
+			expect(appendedDocs()).toHaveLength(0);
+			expect(vi.mocked(adminRaw).mock.calls.some((c) => c[1] === 'PUT')).toBe(false);
+		});
+
+		it('accepts a row a concurrent receive wrote first when it records the same line', async () => {
+			const rows = await firstAttemptLostThePut();
+			let ledgerReads = 0;
+			mockCouch(riceDonation, {
+				// The concurrent receive took the day's next label — a fresh one would differ.
+				existingLotNos: [rows[0].lot?.lot_no ?? ''],
+				bulkOutcomes: [{ id: rows[0]._id, error: 'conflict', reason: 'Document update conflict.' }]
+			});
+			const base = vi.mocked(adminRaw).getMockImplementation()!;
+			// Not there on the first read, there once `_bulk_docs` reports the conflict.
+			vi.mocked(adminRaw).mockImplementation((path, method, body) => {
+				if (method === 'POST' && path.includes('_all_docs')) {
+					ledgerReads += 1;
+					const rowsNow = ledgerReads === 1 ? [] : rows;
+					const keys = (body as { keys: string[] }).keys;
+					return Promise.resolve({
+						status: 200,
+						data: {
+							rows: keys.map((key) => {
+								const doc = rowsNow.find((r) => r._id === key);
+								return doc ? { key, doc } : { key, error: 'not_found' };
+							})
+						}
+					});
+				}
+				return base(path, method, body);
+			});
+
+			const response = await POST(postEvent(counted));
+
+			expect(response.status).toBe(200);
+			expect((await response.json()).lots).toEqual([
+				{ item_id: 'item:rice', lot_no: rows[0].lot?.lot_no }
+			]);
 		});
 	});
 });
