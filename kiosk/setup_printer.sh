@@ -289,6 +289,14 @@ ok "URI: $URI"
 
 # 6) One queue for the label printer, set as default (FR-P6, FR-P16, FR-P18, FR-P21)
 info "[6/7] ตั้ง queue $QUEUE"
+# A job left waiting on the old printer would print as soon as the queue points at the new one —
+# a stale label with someone's name. The kiosk can reprint from the same result page.
+for q in "$QUEUE" $(xprinter_queues); do
+    if [ -n "$(lpstat -o "$q" 2>/dev/null)" ]; then
+        info "ยกเลิก job ค้างใน $q (label เก่า — กดพิมพ์ซ้ำจากหน้า kiosk ได้)"
+        sudo cancel -a "$q"
+    fi
+done
 sudo lpadmin -p "$QUEUE" -E -v "$URI" -m "$PPD" \
     -D "Xprinter XP-365B (kiosk label)" \
     -o PageSize="Custom.${LABEL}mm" \
