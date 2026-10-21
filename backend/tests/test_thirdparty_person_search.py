@@ -67,6 +67,7 @@ async def _person(
     first_name: str = FIRST_NAME,
     household_id: str | None = None,
     keyed: bool = True,
+    last_name_masked: str | None = None,
 ) -> PublicPerson:
     """One `public_persons` row findable by CID, phone, passport and name at once.
 
@@ -77,7 +78,7 @@ async def _person(
         shelter_code="SH001",
         first_name=first_name,
         first_name_key=name_key(first_name),
-        last_name_masked=mask_last_name(LAST_NAME),
+        last_name_masked=last_name_masked or mask_last_name(LAST_NAME),
         last_name_hash=last_name_hash(LAST_NAME) if keyed else None,
         national_id_masked="390-XXXX-XX-192",
         national_id_hash=national_id_hash(CID) if keyed else None,
@@ -304,6 +305,39 @@ async def test_cancelled_rows_are_filtered_before_the_ten_row_limit(
     assert response.status_code == 200
     result = response.json()["result"]
     assert [item["status"] for item in result] == ["active"]
+
+
+@pytest.mark.parametrize("query", [CID, PASSPORT, PHONE])
+async def test_id_search_returns_the_first_ten_by_first_name_key(
+    client: AsyncClient, shelter: PublicShelter, query: str
+) -> None:
+    """12 matches inserted in REVERSE order: the 10 returned are the first ten by first name
+    (CR-166), whatever the insert order — same contract as public / legacy occupants search."""
+    for index in range(12, 0, -1):
+        await _person(
+            f"{index:02d}",
+            first_name=f"ทดสอบ{index:02d}",
+            last_name_masked=f"ใจ{index:02d}",
+        )
+
+    response = await _search(client, query)
+    assert response.status_code == 200
+    names = [item["name"] for item in response.json()["result"]]
+    assert names == [f"ทดสอบ{index:02d} ใจ{index:02d}" for index in range(1, 11)]
+
+
+@pytest.mark.parametrize("query", [CID, PASSPORT, PHONE])
+async def test_id_search_breaks_first_name_ties_by_id(
+    client: AsyncClient, shelter: PublicShelter, query: str
+) -> None:
+    """Same first name for everyone: `_id` decides which 10 of 12 survive the cap."""
+    for index in range(12, 0, -1):
+        await _person(f"{index:02d}", first_name="สมศรี", last_name_masked=f"ใจ{index:02d}")
+
+    response = await _search(client, query)
+    assert response.status_code == 200
+    names = [item["name"] for item in response.json()["result"]]
+    assert names == [f"สมศรี ใจ{index:02d}" for index in range(1, 11)]
 
 
 # 7 ────────────────────────────────────────────────────────────────────────────
