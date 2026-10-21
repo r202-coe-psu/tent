@@ -195,8 +195,7 @@ describe('CR-154 M2 scopes', () => {
 });
 
 describe('#736 occupant-search scope (EXT-012)', () => {
-	// Typed as string so this file still compiles before the scope exists in GRANTABLE_SCOPES.
-	const SCOPE: string = 'occupant-search';
+	const SCOPE = 'occupant-search';
 
 	it('is grantable and has a label', () => {
 		expect(GRANTABLE_SCOPES as readonly string[]).toContain(SCOPE);

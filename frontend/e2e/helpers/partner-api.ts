@@ -181,7 +181,8 @@ export const PARTNER_ENDPOINTS: readonly PartnerEndpoint[] = [
 		path: () => '/external/persons/search',
 		scope: 'occupant-search',
 		query: () => PURPOSE,
-		// A fresh CID nobody is registered under: 200 with an empty `result` is the "scope passed" answer.
+		// E12-* send the run's own CID; the scope matrix overrides `cid` with a fresh, never-booked one,
+		// so 200 with an empty `result` is its "scope passed" answer.
 		body: (c) => ({ search: c.cid }),
 		okStatus: 200
 	}

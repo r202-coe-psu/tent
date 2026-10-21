@@ -31,8 +31,11 @@ _MAX_QUERY_LENGTH = 200
 
 
 def _error(status_code: int, code: str, message: str) -> HTTPException:
+    # Errors are personal-data adjacent too (they answer "was this search allowed"): never cache.
     return HTTPException(
-        status_code=status_code, detail={"error": {"code": code, "message": message}}
+        status_code=status_code,
+        detail={"error": {"code": code, "message": message}},
+        headers={"Cache-Control": "no-store"},
     )
 
 

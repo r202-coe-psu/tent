@@ -401,3 +401,23 @@ async def test_response_is_not_cacheable(client: AsyncClient, shelter: PublicShe
     response = await _search(client, CID)
     assert response.status_code == 200
     assert "no-store" in response.headers["cache-control"]
+
+
+@pytest.mark.parametrize(
+    ("headers", "params", "query", "expected"),
+    [
+        (GRANTED, None, CID, 400),
+        (_bearer(["location-read"]), PURPOSE, CID, 403),
+        (GRANTED, PURPOSE, "a", 422),
+    ],
+)
+async def test_error_responses_are_not_cacheable(
+    client: AsyncClient,
+    headers: dict[str, str],
+    params: dict[str, str] | None,
+    query: str,
+    expected: int,
+) -> None:
+    response = await _search(client, query, headers=headers, params=params)
+    assert response.status_code == expected
+    assert "no-store" in response.headers.get("cache-control", "")
