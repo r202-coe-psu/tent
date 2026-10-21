@@ -1,5 +1,5 @@
 /**
- * Partner API (EXT-001…011, ADR 0002) — end to end through the real `/external/*` plane.
+ * Partner API (EXT-001…012, ADR 0002) — end to end through the real `/external/*` plane.
  *
  * `@smoke` (no data created, any target): every endpoint refuses a missing / garbage token with
  * 401 `invalid_token`, and `/external/token` rejects bad grants.
@@ -7,9 +7,10 @@
  * `@critical` (local, or staging with `ALLOW_REMOTE_WRITES=true`): the run provisions its own
  * `E2E partner …` shelter and partner client through the staff UI (System management → API
  * Keys), then
- *   - A1/A2  creates a client with all six scopes and mints a token for it,
+ *   - A1/A2  creates a client with all seven scopes and mints a token for it,
  *   - A3     walks every EXT endpoint's happy path (booking create / idempotency / cancel),
  *   - A3b    proves one client cannot read or cancel another client's booking,
+ *   - E12-1…5 EXT-012 person search (#736): masked hit, no-store, purpose, validation, cancelled dropped,
  *   - A4     scope matrix: removes each scope in turn via the BFF and asserts every endpoint
  *            that needs it answers 403 `insufficient_scope` while the rest keep working,
  *   - A5     least privilege (`location-read` only),
@@ -247,10 +248,27 @@ async function waitForWorkerWrite(
 	);
 }
 
+/**
+ * EXT-012 reads the Mongo `public_persons` projection, which lags the CouchDB write that
+ * `waitForWorkerWrite` sees. Wait until public search (same projection) shows the stay as `stay`;
+ * before that an EXT-012 assertion would prove nothing.
+ */
+async function waitForProjectedStay(cid: string, stay: 'pre_registered' | 'cancelled') {
+	await waitForProjection(
+		`${stay} stay of ${cid} on the public plane`,
+		async () => (await publicSearchHits(cid)).some((h) => h.status === stay),
+		{ timeoutMs: 60_000, intervalMs: 3_000 }
+	);
+}
+
 /** Response of a fully scoped endpoint: 200 / 201 / 404 residency_not_found per the table. */
 function expectScopePassed(res: ExtResponse, endpoint: PartnerEndpoint) {
 	if (endpoint.ext === 'EXT-011') {
 		expectExtError(res, 404, 'residency_not_found', endpoint.ext);
+	} else if (endpoint.ext === 'EXT-012') {
+		// A fresh CID nobody is registered under: the gate is open and the search finds no one.
+		expect(res.status, `${endpoint.ext} (code ${res.body?.code})`).toBe(200);
+		expect(res.body?.result, `${endpoint.ext} finds nobody`).toEqual([]);
 	} else {
 		expect(res.status, `${endpoint.ext} (code ${res.body?.code})`).toBe(endpoint.okStatus);
 	}
@@ -336,7 +354,7 @@ test.describe('Partner API', { tag: ['@partner-api', '@critical'] }, () => {
 		}
 	});
 
-	test('A1 UI: create a client with all six scopes', async () => {
+	test('A1 UI: create a client with all seven scopes', async () => {
 		test.setTimeout(120_000);
 		const r = state();
 		const { page } = r;
@@ -395,7 +413,7 @@ test.describe('Partner API', { tag: ['@partner-api', '@critical'] }, () => {
 		expect(created!.allowed_scopes.slice().sort()).toEqual([...PARTNER_SCOPES].sort());
 	});
 
-	test('A2 mint a token: exactly the six scopes, Bearer, positive expiry', async () => {
+	test('A2 mint a token: exactly the seven scopes, Bearer, positive expiry', async () => {
 		const r = state();
 		const minted = await mintMain(r);
 		expect(minted.token_type).toBe('Bearer');
@@ -528,6 +546,48 @@ test.describe('Partner API', { tag: ['@partner-api', '@critical'] }, () => {
 		expectExtError(noPurpose, 400, 'missing_purpose');
 	});
 
+	test('E12-1 EXT-012 finds the pre-registered booking by CID: masked, no family, CID never echoed', async () => {
+		test.setTimeout(120_000);
+		const r = state();
+		await waitForProjectedStay(r.cid, 'pre_registered');
+		const res = await call(r, r.token, byExt('EXT-012'));
+		expect(res.status, `EXT-012 (code ${res.body?.code})`).toBe(200);
+		expect(res.body).toMatchObject({ status: 200, message: 'Found Data.' });
+		expect(res.body.result).toHaveLength(1);
+		const [hit] = res.body.result as Record<string, unknown>[];
+		expect(hit.status).toBe('pre_registered');
+		expect(hit.national_id).toMatch(/^\d{3}-XXXX-XX-\d{3}$/);
+		for (const key of ['family_members', 'phone', 'passport']) {
+			expect(hit, `EXT-012 hit has no "${key}"`).not.toHaveProperty(key);
+		}
+		// Boolean only: a failing assertion must not echo the CID or the body.
+		expect(
+			JSON.stringify(res.body).includes(r.cid),
+			'EXT-012 response never contains the CID in plaintext'
+		).toBe(false);
+	});
+
+	test('E12-2 EXT-012 answers Cache-Control: no-store', async () => {
+		const r = state();
+		const res = await call(r, r.token, byExt('EXT-012'));
+		expect(res.status, `EXT-012 (code ${res.body?.code})`).toBe(200);
+		expect(res.headers['cache-control'] ?? '').toContain('no-store');
+	});
+
+	test('E12-3 EXT-012 without a purpose is 400 missing_purpose', async () => {
+		const r = state();
+		const res = await callExtPath(r.api, r.token, 'POST', byExt('EXT-012').path(ctxOf(r)), {
+			body: { search: r.cid }
+		});
+		expectExtError(res, 400, 'missing_purpose');
+	});
+
+	test('E12-4 EXT-012 with a one-character query is 422 validation_error', async () => {
+		const r = state();
+		const res = await call(r, r.token, byExt('EXT-012'), ctxOf(r), { body: { search: 'a' } });
+		expectExtError(res, 422, 'validation_error');
+	});
+
 	test('A3 EXT-009 cancel, repeat cancel, then EXT-010 reports CANCELLED', async () => {
 		test.setTimeout(150_000);
 		const r = state();
@@ -599,6 +659,20 @@ test.describe('Partner API', { tag: ['@partner-api', '@critical'] }, () => {
 			expect(hit.checked_in_at, 'cancelled stay carries no check-in time').toBeNull();
 		}
 		expectExtError(await call(r, r.token, byExt('EXT-011')), 404, 'residency_not_found');
+	});
+
+	test('E12-5 EXT-012 drops a cancelled booking: 200 with an empty result', async () => {
+		test.setTimeout(120_000);
+		const r = state();
+		expect(r.bookingId, 'needs the booking created and cancelled by A3').not.toBe(
+			'bk_e2e_not_booked_yet'
+		);
+		// The same projection lag as EXT-011 above: before it shows `cancelled`, the row is still
+		// `pre_registered` and an empty result would prove nothing.
+		await waitForProjectedStay(r.cid, 'cancelled');
+		const res = await call(r, r.token, byExt('EXT-012'));
+		expect(res.status, `EXT-012 (code ${res.body?.code})`).toBe(200);
+		expect(res.body.result).toEqual([]);
 	});
 
 	test('A4 scope matrix: removing each scope closes exactly its endpoints', async () => {
