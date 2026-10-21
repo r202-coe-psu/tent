@@ -20,7 +20,7 @@ const device: ScannerDevice = {
 	last_seen_at: null,
 	staff_pin_set: true,
 	staff_pin_is_default: false,
-	banner_enabled: true,
+	banner_group_id: null,
 	screen_type: 'compact'
 };
 
@@ -32,10 +32,10 @@ const callbacks = {
 	ondelete: vi.fn()
 };
 
-async function render() {
+async function render(groupName?: string | null, over: Partial<ScannerDevice> = {}) {
 	instance = mount(EditScannerDialog, {
 		target: document.body,
-		props: { open: true, device, ...callbacks }
+		props: { open: true, device: { ...device, ...over }, groupName, ...callbacks }
 	});
 	flushSync();
 	await tick();
@@ -77,14 +77,13 @@ describe('EditScannerDialog', () => {
 		await render();
 		expect(buttonByText('บันทึก').disabled).toBe(true);
 
-		switchByLabel('แสดงแบนเนอร์').click();
+		switchByLabel('เปิดใช้งานเครื่อง').click();
 		flushSync();
 		expect(buttonByText('บันทึก').disabled).toBe(false);
 	});
 
 	it('saves only the changed fields as one patch', async () => {
 		await render();
-		switchByLabel('แสดงแบนเนอร์').click();
 		switchByLabel('เปิดใช้งานเครื่อง').click();
 		flushSync();
 
@@ -93,8 +92,24 @@ describe('EditScannerDialog', () => {
 
 		expect(mutateAsync).toHaveBeenCalledWith({
 			deviceId: 'SCAN-01',
-			patch: { banner_enabled: false, status: 'inactive' }
+			patch: { status: 'inactive' }
 		});
+	});
+
+	it('shows the banner group as a read-only row with a link to the banner page', async () => {
+		await render('ล็อบบี้', { banner_group_id: 'kiosk_banner_group:lobby' });
+		const text = document.body.textContent ?? '';
+		expect(text).toContain('กลุ่มแบนเนอร์');
+		expect(text).toContain('ล็อบบี้');
+		expect(text).not.toContain('ไม่มีกลุ่ม');
+		expect(switchByLabel('แสดงแบนเนอร์')).toBeNull();
+		const link = document.body.querySelector('a[href$="/back-office/kiosks/banners"]');
+		expect(link).not.toBeNull();
+	});
+
+	it('says the kiosk shows no banners when it has no group', async () => {
+		await render(null);
+		expect(document.body.textContent).toContain('ไม่มีกลุ่ม — เครื่องนี้ไม่แสดงแบนเนอร์');
 	});
 
 	it('shows the stored screen and saves a switch to ตู้ใหญ่ as a screen_type patch', async () => {

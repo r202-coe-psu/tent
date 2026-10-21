@@ -156,28 +156,33 @@ describe('scanner.schema', () => {
 			expect(Object.keys(scannerBootstrapDeviceSchema.shape)).not.toContain('staff_pin_set');
 		});
 
-		it('treats a missing banner_enabled as true and carries an explicit value (FR-KBR-35)', () => {
+		it('reads a doc without banner_group_id as null and carries a stored group id', () => {
 			expect(toScannerDeviceSummary(scannerDevicePersistedSchema.parse(v1Doc))).toMatchObject({
-				banner_enabled: true
+				banner_group_id: null
 			});
 			expect(toScannerDeviceSummary(scannerDevicePersistedSchema.parse(v2Doc))).toMatchObject({
-				banner_enabled: true
+				banner_group_id: null
 			});
 			for (const doc of [v1Doc, v2Doc]) {
-				const parsed = scannerDevicePersistedSchema.parse({ ...doc, banner_enabled: false });
-				expect(toScannerDeviceSummary(parsed)).toMatchObject({ banner_enabled: false });
+				const parsed = scannerDevicePersistedSchema.parse({
+					...doc,
+					banner_group_id: 'kiosk_banner_group:lobby'
+				});
+				expect(toScannerDeviceSummary(parsed)).toMatchObject({
+					banner_group_id: 'kiosk_banner_group:lobby'
+				});
 			}
 		});
 
-		it('rejects a non-boolean banner_enabled on the registry doc', () => {
-			expect(
-				scannerDevicePersistedSchema.safeParse({ ...v2Doc, banner_enabled: 'no' }).success
-			).toBe(false);
+		it('reads a legacy banner_enabled doc but no longer reports it in the summary', () => {
+			const parsed = scannerDevicePersistedSchema.parse({ ...v2Doc, banner_enabled: false });
+			expect(toScannerDeviceSummary(parsed)).not.toHaveProperty('banner_enabled');
 		});
 
-		it('keeps banner_enabled in the summary but out of the bootstrap payload', () => {
-			expect(Object.keys(scannerDeviceSummarySchema.shape)).toContain('banner_enabled');
-			expect(Object.keys(scannerBootstrapDeviceSchema.shape)).not.toContain('banner_enabled');
+		it('keeps banner_group_id in the summary but out of the bootstrap payload', () => {
+			expect(Object.keys(scannerDeviceSummarySchema.shape)).toContain('banner_group_id');
+			expect(Object.keys(scannerDeviceSummarySchema.shape)).not.toContain('banner_enabled');
+			expect(Object.keys(scannerBootstrapDeviceSchema.shape)).not.toContain('banner_group_id');
 		});
 
 		it('reads a doc without screen_type as compact and carries a stored one', () => {
@@ -287,12 +292,11 @@ describe('scannerDevicePatchSchema', () => {
 		expect(scannerDevicePatchSchema.parse({ name: ' เครื่อง 2 ' })).toEqual({ name: 'เครื่อง 2' });
 	});
 
-	it('accepts banner_enabled alone and rejects a non-boolean (FR-KBR-36)', () => {
-		expect(scannerDevicePatchSchema.parse({ banner_enabled: false })).toEqual({
-			banner_enabled: false
-		});
-		expect(scannerDevicePatchSchema.safeParse({ banner_enabled: 'false' }).success).toBe(false);
-		expect(scannerDevicePatchSchema.safeParse({ banner_enabled: null }).success).toBe(false);
+	it('rejects banner_enabled and banner_group_id (group is assigned from the group side)', () => {
+		expect(scannerDevicePatchSchema.safeParse({ banner_enabled: false }).success).toBe(false);
+		expect(
+			scannerDevicePatchSchema.safeParse({ banner_group_id: 'kiosk_banner_group:lobby' }).success
+		).toBe(false);
 	});
 
 	it('accepts screen_type alone and rejects an unknown screen', () => {
