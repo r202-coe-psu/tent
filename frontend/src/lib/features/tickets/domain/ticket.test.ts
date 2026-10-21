@@ -3,6 +3,7 @@ import {
 	createTicket,
 	allocateTicketItem,
 	approveTicket,
+	approveTicketWithAllocations,
 	markTicketDispatched,
 	receiveTicket,
 	cancelTicket,
@@ -100,8 +101,81 @@ describe('ticket lifecycle transitions', () => {
 		);
 	});
 
-	it('approveTicket rejects when any line is still allocated_qty 0 (AC-TKT-03.2)', () => {
-		expect(() => approveTicket(pendingTicket(), managerCtx)).toThrow(/allocated_qty > 0/);
+	function twoLineTicket(): RequisitionTicket {
+		return createTicket(
+			{
+				...baseInput(),
+				items: [
+					...baseInput().items,
+					{ item_id: 'item_master:salt', item_name: 'เกลือ', unit: 'kg', requested_qty: '2' }
+				]
+			},
+			'TKT-KITCHEN-0002',
+			ctx
+		);
+	}
+
+	it('approveTicket rejects when every line is allocated_qty 0 (at least one must be > 0)', () => {
+		expect(() => approveTicket(pendingTicket(), managerCtx)).toThrow(
+			/at least one item must have allocated_qty > 0/
+		);
+	});
+
+	it('approveTicket allows some lines at 0 as long as one is > 0', () => {
+		const partial = allocateTicketItem(twoLineTicket(), 'item_master:rice', '30');
+		const approved = approveTicket(partial, managerCtx);
+		expect(approved.status).toBe('READY_FOR_DISPATCH');
+		expect(approved.items.map((i) => i.allocated_qty)).toEqual(['30', '0']);
+	});
+
+	it('approveTicket rejects an invalid (negative) allocated_qty', () => {
+		const bad = {
+			...allocateTicketItem(twoLineTicket(), 'item_master:rice', '30'),
+			items: [
+				{ ...twoLineTicket().items[0], allocated_qty: '30' },
+				{ ...twoLineTicket().items[1], allocated_qty: '-1' }
+			]
+		};
+		expect(() => approveTicket(bad, managerCtx)).toThrow(/invalid allocated_qty/);
+	});
+
+	it('approveTicketWithAllocations keeps an explicit 0 (does not fall back to requested)', () => {
+		const approved = approveTicketWithAllocations(
+			twoLineTicket(),
+			{ 'item_master:rice': '10', 'item_master:salt': '0' },
+			managerCtx
+		);
+		expect(approved.items.map((i) => i.allocated_qty)).toEqual(['10', '0']);
+	});
+
+	it('approveTicketWithAllocations applies allocations and approves in one doc', () => {
+		const approved = approveTicketWithAllocations(
+			pendingTicket(),
+			{ 'item_master:rice': '25.5' },
+			managerCtx
+		);
+		expect(approved.status).toBe('READY_FOR_DISPATCH');
+		expect(approved.approved_by).toBe('shelter_manager');
+		expect(approved.items[0].allocated_qty).toBe('25.5');
+	});
+
+	it('approveTicketWithAllocations falls back to requested_qty for lines not in the map', () => {
+		const approved = approveTicketWithAllocations(pendingTicket(), {}, managerCtx);
+		expect(approved.items[0].allocated_qty).toBe(approved.items[0].requested_qty);
+	});
+
+	it('approveTicketWithAllocations rejects all-zero, invalid, unknown item and non-PENDING_PICK', () => {
+		expect(() =>
+			approveTicketWithAllocations(pendingTicket(), { 'item_master:rice': '0' }, managerCtx)
+		).toThrow(/at least one item must have allocated_qty > 0/);
+		expect(() =>
+			approveTicketWithAllocations(pendingTicket(), { 'item_master:rice': 'abc' }, managerCtx)
+		).toThrow();
+		expect(() =>
+			approveTicketWithAllocations(pendingTicket(), { 'item_master:nope': '5' }, managerCtx)
+		).toThrow(/not found/);
+		const ready = approveTicketWithAllocations(pendingTicket(), {}, managerCtx);
+		expect(() => approveTicketWithAllocations(ready, {}, managerCtx)).toThrow(/ticket is/);
 	});
 
 	it('approveTicket moves PENDING_PICK → READY_FOR_DISPATCH and stamps approved_by', () => {

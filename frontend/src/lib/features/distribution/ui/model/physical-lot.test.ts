@@ -2,7 +2,12 @@ import { describe, expect, it } from 'vitest';
 import type { StockLedger } from '$lib/features/operations';
 import { createStockLedger } from '$lib/features/operations';
 import type { AuthorContext } from '$lib/db/model';
-import { getEligiblePhysicalLots, getItemLotBalances, isLotDateExpired } from './physical-lot';
+import {
+	getEligiblePhysicalLots,
+	getItemLotBalances,
+	isLotDateExpired,
+	lotInputMax
+} from './physical-lot';
 
 const ctx: AuthorContext = {
 	shelterCode: 'SH001',
@@ -277,5 +282,21 @@ describe('Physical Lot Projection & FEFO Ordering (Slice 5.3)', () => {
 			const [lot] = getEligiblePhysicalLots(ledger, 'item:rice', '1', refDate);
 			expect(lot.reason).toBe('อยู่ในคลัง 200 วัน');
 		});
+	});
+});
+
+describe('lotInputMax', () => {
+	it('is the lot balance when the remaining need is larger', () => {
+		expect(lotInputMax('3', '10', '2')).toBe('3');
+	});
+	it('is the remaining need when the lot holds more', () => {
+		expect(lotInputMax('50', '10', '4')).toBe('6');
+	});
+	it('is 0 once the other lots already cover the allocation', () => {
+		expect(lotInputMax('50', '10', '10')).toBe('0');
+		expect(lotInputMax('50', '10', '12')).toBe('0');
+	});
+	it('handles decimals without float drift', () => {
+		expect(lotInputMax('5', '0.3', '0.1')).toBe('0.2');
 	});
 });

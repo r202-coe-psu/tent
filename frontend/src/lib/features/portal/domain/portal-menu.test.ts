@@ -217,7 +217,12 @@ describe('filterPortalMenu — single-department roles', () => {
 	it('supply_coordinator sees only the supply department', () => {
 		const views = menu(staff('supply_coordinator'));
 		expect(deptIds(views)).toEqual(['supply']);
-		expect(itemIds(views[0])).toEqual(['warehouse', 'stock-donations', 'supply-distribution']);
+		expect(itemIds(views[0])).toEqual([
+			'warehouse',
+			'stock-donations',
+			'supply-distribution',
+			'supply-kitchen-requisition'
+		]);
 	});
 
 	it('distribution_staff sees only the distribution desk', () => {
