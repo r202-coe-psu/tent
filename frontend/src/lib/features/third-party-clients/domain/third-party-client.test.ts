@@ -242,11 +242,8 @@ describe('#751 booking-bypass scope (EOC)', () => {
 		expect((SENSITIVE_SCOPE_WARNING as Record<string, string>)[SCOPE]).toBeTruthy();
 	});
 
-	it('is not in any module preset (M7 included) — an admin ticks it case by case', () => {
-		for (const scopes of Object.values(DEFAULT_SCOPES_BY_MODULE)) {
-			expect(scopes as readonly string[]).not.toContain(SCOPE);
-		}
-	});
+	// Not in any preset (M7 included): covered by 'never presets a sensitive scope' above, since
+	// this scope is sensitive.
 });
 
 describe('display helpers', () => {

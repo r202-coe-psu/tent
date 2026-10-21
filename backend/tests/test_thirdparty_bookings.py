@@ -307,18 +307,30 @@ async def test_missing_field_is_422(client: AsyncClient, shelters: None) -> None
     assert await _log_statuses() == ["denied_validation_error"]
 
 
-async def test_unknown_shelter_is_404(client: AsyncClient, shelters: None) -> None:
-    response = await client.post(URL, json=_payload(location_code="NOPE"), headers=GRANTED)
+# `booking-bypass` skips the bookability rule only: a shelter that is not in the projection
+# answers 404 whatever the token carries (#751).
+@pytest.mark.parametrize("headers", [GRANTED, BYPASS], ids=["booking-write", "bypass"])
+async def test_unknown_shelter_is_404(
+    client: AsyncClient, shelters: None, headers: dict[str, str]
+) -> None:
+    response = await client.post(URL, json=_payload(location_code="NOPE"), headers=headers)
     assert response.status_code == 404
     assert response.json()["code"] == "location_not_found"
     assert await _log_statuses() == ["denied_location_not_found"]
+    assert await ExternalBooking.find_all().count() == 0
 
 
-async def test_inactive_shelter_is_404(client: AsyncClient) -> None:
-    await _shelter("SH001", is_active=False)
-    response = await client.post(URL, json=_payload(), headers=GRANTED)
+@pytest.mark.parametrize("headers", [GRANTED, BYPASS], ids=["booking-write", "bypass"])
+@pytest.mark.parametrize("shelter_status", ["open", "closed"])
+async def test_inactive_shelter_is_404(
+    client: AsyncClient, shelter_status: str, headers: dict[str, str]
+) -> None:
+    await _shelter("SH001", status=shelter_status, is_active=False, raw_data={})
+    response = await client.post(URL, json=_payload(), headers=headers)
     assert response.status_code == 404
     assert response.json()["code"] == "location_not_found"
+    assert await _log_statuses() == ["denied_location_not_found"]
+    assert await ExternalBooking.find_all().count() == 0
 
 
 async def test_closed_shelter_is_409(client: AsyncClient) -> None:
@@ -362,30 +374,32 @@ NOT_BOOKABLE = {
 }
 
 
+# Body shape axis: a single person (`cid`, ...) and a group (`persons[]`) both flag every row.
+BODIES = {
+    "single": (lambda: _payload(), 1),
+    "group": (lambda: _group_payload(3), 3),
+}
+
+
+@pytest.mark.parametrize("shape", list(BODIES))
 @pytest.mark.parametrize("kind", list(NOT_BOOKABLE))
-async def test_bypass_books_a_shelter_that_is_not_bookable(client: AsyncClient, kind: str) -> None:
+async def test_bypass_books_a_shelter_that_is_not_bookable(
+    client: AsyncClient, kind: str, shape: str
+) -> None:
+    make_body, count = BODIES[shape]
     await _shelter("SH001", **NOT_BOOKABLE[kind])
-    response = await client.post(URL, json=_group_payload(3), headers=BYPASS)
+    response = await client.post(URL, json=make_body(), headers=BYPASS)
     assert response.status_code == 201, response.text
     result = response.json()["result"]
     assert result["booking_status"] == "BOOKED"
-    assert result["persons_count"] == 3
+    assert result["persons_count"] == count
     rows = await _rows(result["booking_id"])
-    assert len(rows) == 3
-    assert [row["bypass"] for row in rows] == [True, True, True]
+    assert [row["bypass"] for row in rows] == [True] * count
     assert await _log_statuses() == ["granted_bypass"]
     logs = await ThirdPartyAccessLog.find_all().to_list()
     assert logs[0].endpoint == "EXT-008"
     assert logs[0].location_code == "SH001"
-    assert logs[0].result_count == 3
-
-
-async def test_bypass_single_person_row_is_flagged(client: AsyncClient) -> None:
-    await _shelter("SH001", status="closed", raw_data={})
-    response = await client.post(URL, json=_payload(), headers=BYPASS)
-    assert response.status_code == 201
-    rows = await _rows(response.json()["result"]["booking_id"])
-    assert [row["bypass"] for row in rows] == [True]
+    assert logs[0].result_count == count
 
 
 @pytest.mark.parametrize("shelter_status", ["open", "full", "full_capacity"])
@@ -421,29 +435,6 @@ async def test_bypass_without_booking_write_is_403(client: AsyncClient, kind: st
     assert response.status_code == 403
     assert response.json()["code"] == "insufficient_scope"
     assert await _log_statuses() == ["denied_insufficient_scope"]
-    assert await ExternalBooking.find_all().count() == 0
-
-
-async def test_bypass_does_not_reach_an_unknown_shelter(
-    client: AsyncClient, shelters: None
-) -> None:
-    response = await client.post(URL, json=_payload(location_code="NOPE"), headers=BYPASS)
-    assert response.status_code == 404
-    assert response.json()["code"] == "location_not_found"
-    assert await _log_statuses() == ["denied_location_not_found"]
-    assert await ExternalBooking.find_all().count() == 0
-
-
-@pytest.mark.parametrize("shelter_status", ["open", "closed"])
-async def test_bypass_does_not_reach_an_inactive_shelter(
-    client: AsyncClient, shelter_status: str
-) -> None:
-    """Deleted / `is_active=False` shelters are not in the projection: still 404 with bypass."""
-    await _shelter("SH001", status=shelter_status, is_active=False, raw_data={})
-    response = await client.post(URL, json=_payload(), headers=BYPASS)
-    assert response.status_code == 404
-    assert response.json()["code"] == "location_not_found"
-    assert await _log_statuses() == ["denied_location_not_found"]
     assert await ExternalBooking.find_all().count() == 0
 
 

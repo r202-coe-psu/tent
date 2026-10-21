@@ -234,6 +234,25 @@ async function call(
 	return res;
 }
 
+/**
+ * EXT-008 aimed at the shelter that is closed to bookings, ledgered like any other create.
+ * `ownerClientId` is the client `token` belongs to; `ctx` carries the CID (fresh by default).
+ */
+const bookClosedShelter = (
+	r: Run,
+	token: string,
+	ownerClientId: string,
+	ctx: ExtCtx = closedCtxOf(r)
+): Promise<ExtResponse> =>
+	call(
+		r,
+		token,
+		byExt('EXT-008'),
+		ctx,
+		{ body: bookingBody(r.closedCode, ctx.cid) },
+		ownerClientId
+	);
+
 /** Row of the API Keys list for `clientId` (client ids are unique, names are not). */
 const clientRow = (page: Page, clientId: string) => page.locator('tr', { hasText: clientId });
 
@@ -713,15 +732,7 @@ test.describe('Partner API', { tag: ['@partner-api', '@critical'] }, () => {
 		const r = state();
 		expect(r.writeOnly, 'needs the booking-write-only client made by A3b').toBeDefined();
 		const { clientId, token } = r.writeOnly!;
-		const closed = closedCtxOf(r);
-		const res = await call(
-			r,
-			token,
-			byExt('EXT-008'),
-			closed,
-			{ body: bookingBody(r.closedCode, closed.cid) },
-			clientId
-		);
+		const res = await bookClosedShelter(r, token, clientId);
 		// Not 403 (it holds booking-write) and not 201 (the shelter does not accept bookings).
 		expectExtError(res, 409, 'location_not_bookable', 'EXT-008 on the closed shelter');
 	});
@@ -736,14 +747,7 @@ test.describe('Partner API', { tag: ['@partner-api', '@critical'] }, () => {
 		expect(eoc.scopes.slice().sort()).toEqual(['booking-bypass', 'booking-write']);
 
 		const ctx = closedCtxOf(r);
-		const created = await call(
-			r,
-			eoc.token,
-			byExt('EXT-008'),
-			ctx,
-			{ body: bookingBody(r.closedCode, ctx.cid) },
-			eoc.clientId
-		);
+		const created = await bookClosedShelter(r, eoc.token, eoc.clientId, ctx);
 		expect(created.status, `bypass create (code ${created.body?.code})`).toBe(201);
 		expect(created.body.result).toMatchObject({
 			location_code: r.closedCode,
@@ -846,10 +850,7 @@ test.describe('Partner API', { tag: ['@partner-api', '@critical'] }, () => {
 				if (probe) {
 					// No endpoint of its own: without `booking-bypass` the closed-for-bookings shelter
 					// is refused by the normal rule (409), not by the scope gate (403).
-					const closed = closedCtxOf(r);
-					const res = await call(r, minted.access_token, byExt(probe.ext), closed, {
-						body: bookingBody(r.closedCode, closed.cid)
-					});
+					const res = await bookClosedShelter(r, minted.access_token, r.clientId);
 					expectExtError(res, probe.status, probe.code, `${probe.ext} without ${scope}`);
 				}
 				if (scope === 'occupancy-read') {
