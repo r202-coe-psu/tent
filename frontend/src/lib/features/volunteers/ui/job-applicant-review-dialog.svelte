@@ -1,7 +1,12 @@
 <script lang="ts">
 	/**
-	 * Approve / reject confirmation for one `job_application`
+	 * Approve / reject confirmation for one applicant's `job_application`s
 	 * (01-tab-job-board.md §01.5 "คิวอนุมัติผู้สมัคร").
+	 *
+	 * `applications` are one person's applications for this job, one per shift: a single one
+	 * from a shift's own buttons, or every pending one from "อนุมัติทุกกะ" (#716). Several are
+	 * reviewed one after another (`reviewInOrder`); a shift that fails is reported and the
+	 * rest still go through.
 	 *
 	 * Wraps `useReviewApplication`, which is the only path that may move an
 	 * application out of `pending_review`: confirming consumes one job slot
@@ -42,17 +47,19 @@
 		VERIFICATION_STATUS_LABEL
 	} from '../domain/verification';
 	import { useReviewApplication, useSkillOptions } from '../application/queries';
+	import { reviewInOrder } from '../application/review-batch';
 
 	let {
 		open = $bindable(false),
 		job,
-		application,
+		applications,
 		volunteer = null,
 		decision
 	}: {
 		open?: boolean;
 		job: Job;
-		application: JobApplication | null;
+		/** One applicant's applications for this job; empty while nothing is under review. */
+		applications: JobApplication[];
 		volunteer?: Volunteer | null;
 		decision: 'confirmed' | 'rejected';
 	} = $props();
@@ -62,11 +69,16 @@
 	const skillCatalog = useSkillOptions();
 
 	let notes = $state('');
+	/** Held across a batch, where `reviewMutation.isPending` drops between applications. */
+	let submitting = $state(false);
 
 	$effect(() => {
 		if (!open) notes = '';
 	});
 
+	/** The person-level checks (identity, skills) read the first; they are one applicant's. */
+	const application = $derived<JobApplication | null>(applications[0] ?? null);
+	const several = $derived(applications.length > 1);
 	const approving = $derived(decision === 'confirmed');
 	const applicantName = $derived(
 		application ? `${application.applicant.first_name} ${application.applicant.last_name}` : ''
@@ -119,12 +131,42 @@
 			!jobFull &&
 			!skillAuditPending &&
 			!reviewMutation.isPending &&
+			!submitting &&
 			(!notesRequired || notes.trim().length > 0)
 	);
+
+	function shiftText(item: JobApplication): string {
+		const shift = item.selected_shift;
+		return `${shift.date} ${shift.start_time}-${shift.end_time} น.`;
+	}
 
 	async function submit() {
 		if (!application || !canSubmit) return;
 		const trimmed = notes.trim();
+		if (several) {
+			submitting = true;
+			const { done, failed } = await reviewInOrder(applications, (item) =>
+				reviewMutation.mutateAsync({
+					id: item._id,
+					decision,
+					notes: trimmed === '' ? null : trimmed
+				})
+			).finally(() => (submitting = false));
+			if (done.length > 0) {
+				toast.success(
+					approving
+						? `อนุมัติ ${applicantName} แล้ว ${done.length} กะ`
+						: `ปฏิเสธ ${applicantName} แล้ว ${done.length} กะ`
+				);
+			}
+			for (const failure of failed) {
+				toast.error(`กะ ${shiftText(failure.application)} ไม่สำเร็จ`, {
+					description: failure.message
+				});
+			}
+			if (failed.length === 0) open = false;
+			return;
+		}
 		try {
 			await reviewMutation.mutateAsync({
 				id: application._id,
@@ -164,6 +206,19 @@
 				สำหรับงาน <span class="font-bold text-foreground">{job.title}</span>
 			{/if}
 		</p>
+
+		{#if several}
+			<div class="space-y-1 text-xs">
+				<p class="font-semibold text-foreground">
+					{approving ? 'กะที่จะอนุมัติ' : 'กะที่จะปฏิเสธ'} ({applications.length} กะ)
+				</p>
+				<ul class="space-y-0.5 text-muted-foreground tabular-nums">
+					{#each applications as item (item._id)}
+						<li>{shiftText(item)}</li>
+					{/each}
+				</ul>
+			</div>
+		{/if}
 
 		{#if application}
 			<div class="space-y-2 rounded-xl border border-border bg-muted/30 p-3">
@@ -277,6 +332,11 @@
 			</div>
 		{:else if approving}
 			<p class="text-xs text-muted-foreground">ตอนนี้งานนี้ยังรับได้อีก {remaining} คน</p>
+			{#if several && remaining < applications.length}
+				<p class="text-xs text-amber-800">
+					อนุมัติได้ไม่ครบ {applications.length} กะ — กะที่เกินจำนวนที่รับได้จะไม่สำเร็จ และระบบจะแจ้งว่ากะไหน
+				</p>
+			{/if}
 		{/if}
 
 		<div class="space-y-1.5">
@@ -313,7 +373,11 @@
 				disabled={!canSubmit}
 				onclick={submit}
 			>
-				{approving ? 'ยืนยันอนุมัติ' : 'ยืนยันปฏิเสธ'}
+				{approving
+					? several
+						? `ยืนยันอนุมัติ ${applications.length} กะ`
+						: 'ยืนยันอนุมัติ'
+					: 'ยืนยันปฏิเสธ'}
 			</Button>
 		</div>
 	</Dialog.Content>

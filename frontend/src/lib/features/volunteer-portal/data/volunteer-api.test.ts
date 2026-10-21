@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { preflightApplication } from './volunteer-api';
+import { ApplyFailedError, applyToJob, preflightApplication } from './volunteer-api';
 
 const input = {
 	job_id: 'job:target',
@@ -58,5 +58,48 @@ describe('preflightApplication', () => {
 		await expect(preflightApplication(input)).rejects.toThrow(
 			'ไม่พบงานอาสาสมัครนี้ อาจถูกปิดรับสมัครไปแล้ว'
 		);
+	});
+});
+
+describe('applyToJob', () => {
+	const application = {
+		first_name: 'สมชาย',
+		last_name: 'ใจดี',
+		phone: '0812345678',
+		skills: [],
+		shifts: [{ shift_id: 'am' }, { shift_id: 'pm' }]
+	};
+
+	it('returns the per-shift results of a partly saved request', async () => {
+		const results = [
+			{ ok: true, shift_id: 'am', status: 'confirmed', tracking_token: 'TKT-AM' },
+			{ ok: false, shift_id: 'pm', error: 'SHIFT_FULL' }
+		];
+		respond(201, { success: true, tracking_token: 'TKT-AM', status: 'confirmed', results });
+
+		await expect(applyToJob('job:target', application)).resolves.toMatchObject({ results });
+	});
+
+	it('throws ApplyFailedError carrying every shift reason when nothing was saved', async () => {
+		const results = [
+			{ ok: false, shift_id: 'am', error: 'TIME_CONFLICT' },
+			{ ok: false, shift_id: 'pm', error: 'SHIFT_FULL' }
+		];
+		respond(409, { success: false, error: 'TIME_CONFLICT', results });
+
+		const error = await applyToJob('job:target', application).catch((e: unknown) => e);
+
+		expect(error).toBeInstanceOf(ApplyFailedError);
+		expect((error as ApplyFailedError).message).toBe('คุณมีกะงานอื่นที่เวลาทับซ้อนกัน');
+		expect((error as ApplyFailedError).results).toEqual(results);
+	});
+
+	it('throws a plain error for a refusal that is not about shifts', async () => {
+		respond(429, { success: false, error: 'RATE_LIMITED' });
+
+		const error = await applyToJob('job:target', application).catch((e: unknown) => e);
+
+		expect(error).not.toBeInstanceOf(ApplyFailedError);
+		expect((error as Error).message).toBe('ส่งคำขอถี่เกินไป กรุณารอสักครู่แล้วลองใหม่');
 	});
 });

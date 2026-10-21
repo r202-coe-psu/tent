@@ -8,6 +8,7 @@ import { resolveSkillLabel, skillOptionsFromMaster } from '../domain/skill-catal
 import {
 	formatMintedTicketToken,
 	TRACKING_TOKEN_RANDOM_BYTES,
+	type ApplyShift,
 	type VolunteerApplyInput
 } from '$lib/features/volunteer-portal/domain/volunteer';
 import {
@@ -89,6 +90,8 @@ type DirectApplicationInput = Omit<VolunteerApplyInput, 'captchaToken'> & {
 	start_time?: string;
 	end_time?: string;
 };
+
+export type PublicApplicationErrorCode = PublicApplicationError['code'];
 
 export class PublicApplicationError extends Error {
 	constructor(
@@ -490,7 +493,9 @@ export async function preflightPublicVolunteerApplication(
 		throw new PublicApplicationError('JOB_NOT_FOUND', 404);
 	}
 	if (job.status !== 'open') throw new PublicApplicationError('JOB_NOT_OPEN', 409);
-	selectedShift(job, input);
+	// A multi-shift request (#716) sends no shift here: each shift is judged at apply time,
+	// where one that fails is reported without stopping the others.
+	if (input.shift_id || input.shift_date) selectedShift(job, input);
 	const hash = await sha256Hex(normalizePhone(input.phone));
 	const volunteers = await matchingVolunteers(shelterDbName(shelterCode), hash);
 	if (volunteers.length === 0) {
@@ -538,7 +543,15 @@ export async function preflightPublicVolunteerApplication(
 
 export async function applyPublicVolunteerApplication(
 	jobIdInput: string,
-	input: DirectApplicationInput
+	input: DirectApplicationInput,
+	options: {
+		/**
+		 * Judge review as for an applicant with no profile, even though one exists now. Set by
+		 * a multi-shift request from a new phone: its first shift creates the profile, and the
+		 * shifts after it must not be held for identity review that the first one was not.
+		 */
+		reviewAsNewApplicant?: boolean;
+	} = {}
 ): Promise<{
 	tracking_token: string;
 	status: string;
@@ -566,7 +579,10 @@ export async function applyPublicVolunteerApplication(
 	if (volunteers.length > 1) throw new PublicApplicationError('AMBIGUOUS_VOLUNTEER', 409);
 	const existing = volunteers[0];
 	const volunteerId = existing?._id ?? `volunteer:${ulid().toLowerCase()}`;
-	const status = needsReview(job, skills, controlled, existing) ? 'pending_review' : 'confirmed';
+	const reviewProfile = options.reviewAsNewApplicant ? undefined : existing;
+	const status = needsReview(job, skills, controlled, reviewProfile)
+		? 'pending_review'
+		: 'confirmed';
 	const selectedShiftId = verifiedShiftId;
 	const duplicate = await findAsPublicWriter(
 		dbName,
@@ -719,7 +735,7 @@ export async function applyPublicVolunteerApplication(
 		},
 		tracking_token_hash: trackingTokenHash,
 		status,
-		review_reasons: reviewReasons(job, skills, controlled, existing),
+		review_reasons: reviewReasons(job, skills, controlled, reviewProfile),
 		review_notes: null,
 		reviewed_at: null,
 		reviewed_by: null,
@@ -768,4 +784,122 @@ export async function applyPublicVolunteerApplication(
 		shift_id: verifiedShiftId,
 		...(mintedVolunteerToken ? { volunteer_token: mintedVolunteerToken } : {})
 	};
+}
+
+/** What became of one shift of a multi-shift request (#716). */
+export type ShiftApplicationResult =
+	| { ok: true; shift_id: string | null; status: string; tracking_token: string }
+	| {
+			ok: false;
+			shift_id: string | null;
+			error: PublicApplicationErrorCode;
+			/** The status a single-shift request would have answered with. */
+			http_status: number;
+	  };
+
+/**
+ * Apply to several shifts of one job in one request (#716).
+ *
+ * Each shift goes through {@link applyPublicVolunteerApplication} on its own, so it gets the
+ * same checks and the same writes as a single-shift request and lands as its own
+ * `job_application` (CR-107: one application per shift). A shift that fails — full, already
+ * applied for, overlapping — is reported and skipped; the shifts that passed stay saved.
+ *
+ * Only job-level faults (no such job, job closed, the writer refused) reject the whole
+ * request, and they are checked once up front so they never come back once per shift.
+ *
+ * Every shift is judged for review against the applicant as they were before the request:
+ * a new phone's first shift creates the profile, and without this the shifts after it would
+ * be held for identity review that the first was not.
+ *
+ * Shifts are applied in the order given, and a shift that overlaps one already saved by this
+ * request is answered `TIME_CONFLICT`: the booking-conflict check only sees shift
+ * assignments, which a `pending_review` application does not have yet.
+ */
+export async function applyPublicVolunteerApplicationToShifts(
+	jobIdInput: string,
+	input: DirectApplicationInput,
+	shifts: readonly ApplyShift[]
+): Promise<{ job_id: string; volunteer_token?: string; results: ShiftApplicationResult[] }> {
+	const jobId = normalizedJobId(jobIdInput);
+	const shelterCode = await findShelterCodeForJob(jobId, input.shelter_code);
+	if (!shelterCode) throw new PublicApplicationError('JOB_NOT_FOUND', 404);
+	const job = await readJob(shelterDbName(shelterCode), jobId);
+	if (job.type !== 'job' || job.shelter_code.toUpperCase() !== shelterCode) {
+		throw new PublicApplicationError('JOB_NOT_FOUND', 404);
+	}
+	if (job.status !== 'open') throw new PublicApplicationError('JOB_NOT_OPEN', 409);
+	const phoneHash = await sha256Hex(normalizePhone(input.phone));
+	const newApplicant =
+		(await matchingVolunteers(shelterDbName(shelterCode), phoneHash)).length === 0;
+
+	const results: ShiftApplicationResult[] = [];
+	const savedWindows: BookingWindow[] = [];
+	const savedShiftIds = new Set<string>();
+	let volunteerToken: string | undefined;
+
+	for (const requested of shifts) {
+		const shiftInput = {
+			...input,
+			shelter_code: shelterCode,
+			shift_id: requested.shift_id,
+			shift_date: requested.shift_date,
+			start_time: requested.start_time,
+			end_time: requested.end_time
+		};
+		let selected: CouchJobShift | null;
+		try {
+			selected = selectedShift(job, shiftInput);
+		} catch (error) {
+			results.push(failedShift(requested.shift_id ?? null, error));
+			continue;
+		}
+		const id = shiftId(selected) ?? requested.shift_id ?? null;
+		if (id && savedShiftIds.has(id)) {
+			results.push({ ok: false, shift_id: id, error: 'DUPLICATE_APPLICATION', http_status: 409 });
+			continue;
+		}
+		const concrete = concreteShift(selected);
+		const window = concrete ? shiftDutyWindow(concrete) : null;
+		if (window && savedWindows.some((saved) => windowsOverlap(window, saved))) {
+			results.push({ ok: false, shift_id: id, error: 'TIME_CONFLICT', http_status: 409 });
+			continue;
+		}
+		try {
+			const result = await applyPublicVolunteerApplication(
+				jobId,
+				{
+					...shiftInput,
+					// The verified identity, so a date-only request cannot drift to another shift.
+					shift_id: id ?? undefined
+				},
+				{ reviewAsNewApplicant: newApplicant }
+			);
+			results.push({
+				ok: true,
+				shift_id: result.shift_id ?? id,
+				status: result.status,
+				tracking_token: result.tracking_token
+			});
+			volunteerToken ??= result.volunteer_token;
+			if (id) savedShiftIds.add(id);
+			if (window) savedWindows.push(window);
+		} catch (error) {
+			results.push(failedShift(id, error));
+		}
+	}
+
+	return {
+		job_id: jobId,
+		...(volunteerToken ? { volunteer_token: volunteerToken } : {}),
+		results
+	};
+}
+
+function failedShift(shiftIdValue: string | null, error: unknown): ShiftApplicationResult {
+	if (error instanceof PublicApplicationError) {
+		return { ok: false, shift_id: shiftIdValue, error: error.code, http_status: error.httpStatus };
+	}
+	console.error('[public-volunteer-apply] shift write failed', error);
+	return { ok: false, shift_id: shiftIdValue, error: 'WRITE_FAILED', http_status: 502 };
 }
