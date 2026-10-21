@@ -23,6 +23,7 @@
 		"test:e2e:public": "playwright test --config=playwright.public.config.ts",
 		"test:e2e:donations": "vite build --mode test && playwright test e2e/donation.test.ts e2e/stock-donations.test.ts",
 		"test:e2e:stock": "vite build --mode test && playwright test e2e/stock-inventory.test.ts",
+		"test:e2e:supply": "vite build --mode test && playwright test e2e/supply",
 		"test:e2e:pre-register": "vite build --mode test && playwright test e2e/public-pre-register-flow.test.ts e2e/public-register.test.ts",
 		"test:e2e:pre-register:smoke": "vite build --mode test && playwright test e2e/public-pre-register-flow.test.ts e2e/public-register.test.ts --grep \"(?=.*@pre-register)(?=.*@smoke)\"",
 		"test:e2e:regression": "vite build --mode test && playwright test e2e/public-register.test.ts --grep @regression",

@@ -429,6 +429,28 @@ Local run (the preview server must see `FASTAPI_INTERNAL_URL` and `EXTERNAL_API_
 images must be current — `docker compose up -d --build fastapi worker`):
 `env -u E2E_BASE_URL PLAYWRIGHT_TEST_BASE_URL=http://localhost:4187 npx playwright test e2e/partner-api.test.ts`
 
+### 8.6 Supply suite (`@supply`)
+
+`supply/supply-flows.test.ts` (layer `@critical`, no `@release` yet) follows the supply user guide in
+two journeys:
+
+| Test   | What it proves                                                                                                                                                                                                      |
+| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| flow 1 | Empty stock → receive (other + walk-in donation) → lots/history → distribute → adjust → cycle count → ledger (filters, CSV) → transfer (request, hold/resume, cancel, dispatch, receive), stock read back each step |
+| flow 2 | Merge a duplicate shelter item → resource needs (recalculate, CSV) → food sphere → per-item replenishment policy (validation, then the analysis status flips from the group policy's)                               |
+
+- **Own shelters.** Each test creates `E2E Supply …` shelters through system management and drops
+  them with their databases; stock, shelter items, donations, daily calcs and policies live there.
+  Users and `central_ops` transfers are recorded by id, deleted, then a zero-leak check runs.
+- **Seed it reads.** The central `น้ำดื่ม 600 มล.` and the food-sphere standards/policies from
+  `pnpm seed:master` (transfers must reference the central catalog). Flow 2 seeds 10 active
+  evacuees with the admin API — occupancy is a prerequisite, not the subject.
+- **Known gaps** (`test.fixme('GAP: …')`): adjust/cycle count count a direct distribution's
+  destination (`lot.note`) as a phantom negative lot; warehouse staff get no destination shelters
+  in the transfer form, so flow 1 raises transfer requests as a system admin.
+
+Run: `pnpm test:e2e:supply` (or `pnpm exec playwright test e2e/supply` against a running preview).
+
 ## 9. Agent handoff
 
 ### 9.0 Rules for every agent (non-negotiable)
