@@ -180,6 +180,19 @@ describe('POST /api/back-office/donations/[query]/reject', () => {
 			expect(putBody()).toBeUndefined();
 		});
 
+		it('says "changed" rather than "cannot approve" when an edit took the booking out of review', async () => {
+			mockCouch({
+				...mixed,
+				_rev: '3-edited',
+				status: 'verifying'
+			} as unknown as PublicDonationDoc);
+
+			const response = await POST(postEvent({ lines: [{ index: 1, decision: 'approved' }] }));
+
+			expect(response.status).toBe(409);
+			expect((await response.json()).error_code).toBe('DONATION_CHANGED');
+		});
+
 		it('refuses a decision that does not say which version it was made on', async () => {
 			mockCouch(mixed);
 

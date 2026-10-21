@@ -185,6 +185,15 @@ describe('POST /api/back-office/donations/[query]/reject', () => {
 		expect(putBody()).toBeUndefined();
 	});
 
+	it('refuses a rejection that does not say which version it was made on', async () => {
+		mockCouch(baseDonation);
+
+		const response = await POST(postEvent({ reason_code: 'expired', expected_rev: undefined }));
+
+		expect(response.status).toBe(422);
+		expect(putBody()).toBeUndefined();
+	});
+
 	it('refuses a donation whose goods are already on the shelf', async () => {
 		mockCouch({ ...baseDonation, status: 'received' } as PublicDonationDoc);
 

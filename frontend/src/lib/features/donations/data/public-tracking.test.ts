@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cancelDonation } from './public-tracking';
+import { cancelDonation, updateDonationItems, type DonationItemEdit } from './public-tracking';
 
 function mockFetch(status: number, body: unknown = {}) {
 	const fetchMock = vi.fn().mockResolvedValue({
@@ -42,5 +42,27 @@ describe('cancelDonation', () => {
 		mockFetch(429, { success: false, error: 'RATE_LIMITED' });
 
 		await expect(cancelDonation('tok')).rejects.toThrow('บ่อยเกินไป');
+	});
+});
+
+describe('updateDonationItems', () => {
+	const items: DonationItemEdit[] = [{ free_text: 'ผ้าห่ม', qty: '1', unit: 'piece' }];
+
+	// CR-174 — keeping only lines the shelter refused is refused; the booking itself is
+	// still the donor's, so the copy points at cancelling rather than "locked".
+	it('tells the donor to cancel when the edit would keep only refused lines', async () => {
+		mockFetch(400, {
+			success: false,
+			error: 'NO_ACCEPTED_ITEMS',
+			message: 'ต้องเหลืออย่างน้อย 1 รายการ'
+		});
+
+		await expect(updateDonationItems('tok', items)).rejects.toThrow('ยกเลิกการจองนี้');
+	});
+
+	it('still reads any other 400 as a booking staff have taken over', async () => {
+		mockFetch(400, { success: false, error: 'Cannot edit a donation in status "received"' });
+
+		await expect(updateDonationItems('tok', items)).rejects.toThrow('แก้ไม่ได้แล้ว');
 	});
 });

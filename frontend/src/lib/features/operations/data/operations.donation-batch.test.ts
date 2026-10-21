@@ -180,6 +180,23 @@ describe('receiveDonationBatch — complete receipts (CR-143 FR-B4)', () => {
 		expect(bulkCalls[0]).toHaveLength(3);
 	});
 
+	// CR-174 AC-3 — a refusal at review is not undone at the shelf.
+	it('refuses to receive a line that was refused at review, writing nothing', async () => {
+		donation = {
+			...donation,
+			items: donation.items!.map((item, i) =>
+				i === 1 ? { ...item, review_status: 'rejected' as const } : item
+			)
+		};
+		docs.set(donation._id, clone(donation) as unknown as Doc);
+
+		await expect(repo.receiveDonationBatch(donation, fullCount(), ctx)).rejects.toThrow(
+			/refused at review/
+		);
+		expect(ledgerRows()).toHaveLength(0);
+		expect(bulkCalls).toHaveLength(0);
+	});
+
 	it('writes each row under its deterministic id (FR-B4a)', async () => {
 		await repo.receiveDonationBatch(donation, fullCount(), ctx);
 

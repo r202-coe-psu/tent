@@ -111,6 +111,13 @@ export async function updateDonationItems(
 				'มีผู้บริจาคท่านอื่นจองตัดหน้าพอดี — จำนวนที่ขอเกินยอดที่เหลืออยู่ กรุณาลดจำนวนแล้วลองใหม่'
 			);
 		}
+		// Before the generic 400: the booking is still editable, this edit is not — it would
+		// keep only lines the shelter already refused. Cancelling is the way out (CR-174).
+		if ((body as { error?: string }).error === 'NO_ACCEPTED_ITEMS') {
+			throw new Error(
+				'ต้องเหลืออย่างน้อย 1 รายการที่ศูนย์ไม่ได้ปฏิเสธ — ถ้าไม่ต้องการบริจาคแล้ว ให้กด "ยกเลิกการจองนี้" แทน'
+			);
+		}
 		if (res.status === 400) {
 			throw new Error('รายการนี้แก้ไม่ได้แล้ว — เจ้าหน้าที่เริ่มตรวจรับหรือปิดรายการไปแล้ว');
 		}

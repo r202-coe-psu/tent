@@ -377,91 +377,101 @@
 					</div>
 				</div>
 
-				{#if !line.locked && (!line.item_id || line.declared_qty === undefined || line.free_text)}
-					<div class="space-y-1.5">
-						<Label class="text-sm font-semibold text-slate-700">
-							สินค้า <span class="text-red-500">*</span>
-						</Label>
-						<ItemCombobox
-							{items}
-							allowCreate
-							value={line.item_id}
-							isLoading={stockItems.isLoading}
-							{balanceByItemId}
-							formatBalanceUnit={(item) => unitLabel(item.unit)}
-							onSelect={(item) => chooseItem(line, item)}
-						/>
+				{#if line.refused !== undefined}
+					<!-- Refused at review (CR-174): nothing to count — the review stands. -->
+					<div class="rounded-xl border border-red-200 bg-white p-4">
+						<p class="text-sm font-semibold text-red-900">ไม่รับตั้งแต่ตอนประเมิน — ไม่เข้าคลัง</p>
+						<p class="mt-1 text-base break-words text-slate-700">
+							{line.refused || 'ไม่ได้ระบุเหตุผล'}
+						</p>
 					</div>
-				{/if}
-
-				<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-					<div class="space-y-1.5">
-						<Label for="batch-qty-{line.line_no}" class="text-sm font-semibold text-slate-700">
-							รับจริง{#if line.unit}
-								({unitLabel(line.unit)}){/if}
-						</Label>
-						<Input
-							id="batch-qty-{line.line_no}"
-							type="number"
-							inputmode="decimal"
-							min="0"
-							step="any"
-							placeholder="0"
-							value={line.qty}
-							oninput={(event) => {
-								line.qty = event.currentTarget.value;
-								line.error = undefined;
-							}}
-							onkeydown={(event) => {
-								if (event.key === 'Enter') event.preventDefault();
-							}}
-							disabled={line.locked}
-							aria-invalid={problem === 'qty' ? 'true' : undefined}
-							class="min-h-11 font-bold tabular-nums"
-						/>
-					</div>
-
-					{#if !line.locked}
+				{:else}
+					{#if !line.locked && (!line.item_id || line.declared_qty === undefined || line.free_text)}
 						<div class="space-y-1.5">
 							<Label class="text-sm font-semibold text-slate-700">
-								วันหมดอายุ
-								{#if requires(line)}
-									<span class="text-red-500">*</span>
-								{:else}
-									<span class="font-normal text-slate-500">(ไม่บังคับ)</span>
-								{/if}
+								สินค้า <span class="text-red-500">*</span>
 							</Label>
-							<DatePicker
-								bind:value={() => line.expiry.value, (value) => setExpiry(line, value)}
-								placeholder="วว/ดด/ปปปป"
+							<ItemCombobox
+								{items}
+								allowCreate
+								value={line.item_id}
+								isLoading={stockItems.isLoading}
+								{balanceByItemId}
+								formatBalanceUnit={(item) => unitLabel(item.unit)}
+								onSelect={(item) => chooseItem(line, item)}
 							/>
 						</div>
 					{/if}
-				</div>
 
-				{#if !line.locked && line.expiry.autoFilled && line.expiry.shelfLifeDays != null}
-					<div
-						class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-900"
-					>
-						<span>{shelfLifeExpiryLabel(line.expiry.shelfLifeDays)}</span>
-						<Button
-							type="button"
-							variant="outline"
-							class="min-h-11 rounded-lg px-3 text-xs font-bold"
-							onclick={() => (line.expiry = confirmExpiry(line.expiry))}
-						>
-							ตรวจสอบแล้ว
-						</Button>
+					<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+						<div class="space-y-1.5">
+							<Label for="batch-qty-{line.line_no}" class="text-sm font-semibold text-slate-700">
+								รับจริง{#if line.unit}
+									({unitLabel(line.unit)}){/if}
+							</Label>
+							<Input
+								id="batch-qty-{line.line_no}"
+								type="number"
+								inputmode="decimal"
+								min="0"
+								step="any"
+								placeholder="0"
+								value={line.qty}
+								oninput={(event) => {
+									line.qty = event.currentTarget.value;
+									line.error = undefined;
+								}}
+								onkeydown={(event) => {
+									if (event.key === 'Enter') event.preventDefault();
+								}}
+								disabled={line.locked}
+								aria-invalid={problem === 'qty' ? 'true' : undefined}
+								class="min-h-11 font-bold tabular-nums"
+							/>
+						</div>
+
+						{#if !line.locked}
+							<div class="space-y-1.5">
+								<Label class="text-sm font-semibold text-slate-700">
+									วันหมดอายุ
+									{#if requires(line)}
+										<span class="text-red-500">*</span>
+									{:else}
+										<span class="font-normal text-slate-500">(ไม่บังคับ)</span>
+									{/if}
+								</Label>
+								<DatePicker
+									bind:value={() => line.expiry.value, (value) => setExpiry(line, value)}
+									placeholder="วว/ดด/ปปปป"
+								/>
+							</div>
+						{/if}
 					</div>
-				{/if}
 
-				{#if line.error}
-					<p class="flex items-start gap-2 text-sm font-semibold text-red-700" role="alert">
-						<AlertTriangle class="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-						<span>{line.error}</span>
-					</p>
-				{:else if problem}
-					<p class="text-sm font-semibold text-red-700" role="alert">{problem}</p>
+					{#if !line.locked && line.expiry.autoFilled && line.expiry.shelfLifeDays != null}
+						<div
+							class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-900"
+						>
+							<span>{shelfLifeExpiryLabel(line.expiry.shelfLifeDays)}</span>
+							<Button
+								type="button"
+								variant="outline"
+								class="min-h-11 rounded-lg px-3 text-xs font-bold"
+								onclick={() => (line.expiry = confirmExpiry(line.expiry))}
+							>
+								ตรวจสอบแล้ว
+							</Button>
+						</div>
+					{/if}
+
+					{#if line.error}
+						<p class="flex items-start gap-2 text-sm font-semibold text-red-700" role="alert">
+							<AlertTriangle class="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+							<span>{line.error}</span>
+						</p>
+					{:else if problem}
+						<p class="text-sm font-semibold text-red-700" role="alert">{problem}</p>
+					{/if}
 				{/if}
 			</li>
 		{/each}

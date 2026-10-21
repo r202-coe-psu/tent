@@ -247,6 +247,10 @@ export class OperationsRemoteRepository implements OperationsRepository {
 			if (!qtyGte(line.qty, 0)) {
 				throw new Error(`Line ${line.line_no} has a negative quantity`);
 			}
+			// CR-174 AC-3 — a line refused at review is not received at the shelf either.
+			if (donation.items?.[line.line_no]?.review_status === 'rejected' && isReceivedLine(line)) {
+				throw new Error(`Line ${line.line_no} was refused at review and cannot be received`);
+			}
 		}
 		// Zero lines write nothing (FR-B3). A receipt with nothing received at all must not
 		// reach `received`: with no row to key it, `calculateReserved` would hold the whole

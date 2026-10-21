@@ -51,6 +51,12 @@ export const POST: RequestHandler = async ({ params, request }) => {
 		}
 
 		const { donation, dbName } = found;
+		const body = await request.json().catch(() => ({}));
+		// Decisions are by line position (CR-174): they must be about the booking on file.
+		// Checked before the status, so a booking the donor edited out of review reads as
+		// "changed, reload" rather than as a refused transition.
+		const stale = staleDecisionResponse(body, donation);
+		if (stale) return stale;
 		if (!canTransitionDonation(donation.status, 'verifying')) {
 			return json(
 				{
@@ -62,10 +68,6 @@ export const POST: RequestHandler = async ({ params, request }) => {
 			);
 		}
 
-		const body = await request.json().catch(() => ({}));
-		// Decisions are by line position (CR-174): they must be about the booking on file.
-		const stale = staleDecisionResponse(body, donation);
-		if (stale) return stale;
 		const parsed = reviewDonationInputSchema.safeParse(body);
 		if (!parsed.success) {
 			return json(
