@@ -58,9 +58,6 @@ PRINTER_NAME="${PRINTER_NAME:-tent_xprinter}"
 PRINTER_BACKEND="${PRINTER_BACKEND:-$(sed -n 's/^PRINTER_BACKEND=//p' "$SCRIPT_DIR/.env" 2>/dev/null | tail -1 | tr -d '"'\''[:space:]')}"
 PRINTER_BACKEND="$(printf '%s' "$PRINTER_BACKEND" | tr '[:upper:]' '[:lower:]')"
 if [ "$PRINTER_BACKEND" != "escpos" ] && command -v cupsenable >/dev/null 2>&1 && lpstat -p "$PRINTER_NAME" >/dev/null 2>&1; then
-    # The queue's device URI holds the USB serial of the printer it was set up with — after swapping
-    # in another XP-365B, point it at the one plugged in now.
-    "$SCRIPT_DIR/rebind_printer.sh" "$PRINTER_NAME" >> "$LOG_FILE" 2>&1
     cupsenable "$PRINTER_NAME" >> "$LOG_FILE" 2>&1 || echo "[$(date)] cupsenable $PRINTER_NAME failed (user needs lpadmin group)" >> "$LOG_FILE"
 fi
 

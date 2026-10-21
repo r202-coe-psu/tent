@@ -4,7 +4,8 @@
 # ------------------------------------------------------------------------------
 # ติดตั้ง driver ทางการของ Xprinter + ตั้งค่า CUPS ให้ปุ่ม "พิมพ์ QR Code" ของ kiosk
 # พิมพ์ label ได้ทันที (Chromium --kiosk-printing → CUPS default queue → XP-365B)
-# รันซ้ำได้ (idempotent) — ต้องรันใหม่ทุกครั้งที่ติดตั้ง/อัปเกรด .deb, เปลี่ยนเครื่อง หรือเปลี่ยนขนาดม้วน
+# รันซ้ำได้ (idempotent) — ต้องรันใหม่ทุกครั้งที่ติดตั้ง/อัปเกรด .deb, เปลี่ยนรุ่นเครื่อง หรือเปลี่ยนขนาดม้วน
+# (XP-365B ตัวอื่นรุ่นเดียวกันเสียบแทนได้เลย — queue ไม่ผูก serial)
 #
 # Usage: ./setup_printer.sh [printer-driver-xprinter_*.deb] [options]
 #   --label WxH      ขนาด label เป็น mm (default: KIOSK_LABEL_MM ใน frontend print-label.ts)
@@ -106,8 +107,10 @@ find_app_dir() {
     return 1
 }
 
+# Drop "?serial=…": the CUPS usb backend then accepts any printer of this make/model, so swapping in
+# another XP-365B prints right away instead of the queue waiting for the old unit.
 find_printer_uri() {
-    lpinfo -v 2>/dev/null | awk '$2 ~ /^usb:\/\// && tolower($2) ~ /xprinter|xp-365/ {print $2; exit}'
+    lpinfo -v 2>/dev/null | awk '$2 ~ /^usb:\/\// && tolower($2) ~ /xprinter|xp-365/ {sub(/\?serial=.*/, "", $2); print $2; exit}'
 }
 
 # Every queue (ours included) whose device URI is the XP-365B.
@@ -127,7 +130,7 @@ queue_option() { # queue_option <OptionName> → current default choice
 
 # --- --status ----------------------------------------------------------------
 show_status() {
-    local page_size shared queues crontab_out
+    local page_size shared queues crontab_out uri
     echo -e "${BLUE}=== Label printer status (queue: $QUEUE, label: ${LABEL} mm) ===${NC}"
 
     if lsusb 2>/dev/null | grep -qi "$USB_ID"; then ok "XP-365B ต่อ USB อยู่ ($USB_ID)"; else bad "ไม่พบ XP-365B บน USB ($USB_ID)"; fi
@@ -152,6 +155,12 @@ show_status() {
     if lpstat -p "$QUEUE" >/dev/null 2>&1; then
         ok "มี queue $QUEUE"
         lpstat -p "$QUEUE" | sed 's/^/    /'
+        uri="$(lpstat -v "$QUEUE" 2>/dev/null | awk '{print $NF; exit}')"
+        if [[ "$uri" == *serial=* ]]; then
+            bad "queue ผูกกับเครื่องตัวเดียว ($uri) — เปลี่ยนเครื่องแล้วจะพิมพ์ไม่ออก รัน setup ซ้ำเพื่อตัด serial"
+        else
+            ok "device URI = $uri (ใช้ XP-365B ตัวไหนก็ได้)"
+        fi
         page_size="$(queue_page_size || true)"
         if [ -z "$page_size" ]; then
             warn "อ่าน PageSize จาก /etc/cups/ppd/$QUEUE.ppd ไม่ได้ (ต้องใช้ sudo)"
