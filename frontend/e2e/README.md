@@ -7,16 +7,16 @@
 
 ## 1. Current state
 
-| Item                           | Today                                                                                                                                                                                                                               |
-| ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Playwright                     | 1.64, Chromium only                                                                                                                                                                                                                 |
-| `playwright.config.ts`         | local: `vite preview` (:4173) + `e2e/mock-api.js` (:9001); `grepInvert: /@quarantine/`                                                                                                                                              |
-| `playwright.staging.config.ts` | remote: `grep: /@critical\|@smoke/`, `grepInvert: /@quarantine/`, workers=1, `globalTimeout` 30 min                                                                                                                                 |
-| `playwright.prod.config.ts`    | remote read-only: `grep: /@prod/`, `globalTimeout` 2 min                                                                                                                                                                            |
-| `playwright.public.config.ts`  | remote read-only public suites (incl. pre-register) — **not wired to any job**                                                                                                                                                      |
-| Suites                         | J1–J6 carry `@release` where green locally; unsafe SH001 suites are `@quarantine`; donations are `@donation` (§8.3); the Partner API (`/external/*`) is `@partner-api` (§8.5)                                                       |
-| Automation                     | Staging deploy runs `tent-e2e-staging` with `wait: true, propagate: false` (manual review: no GitHub commit status; a person reads the Staging E2E Report before promoting). Prod deploy runs `@prod` after. Janitor job available. |
-| Pre-push (lefthook)            | lint / check / unit tests only — no e2e                                                                                                                                                                                             |
+| Item                           | Today                                                                                                                                                                                                                                   |
+| ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Playwright                     | 1.64, Chromium only                                                                                                                                                                                                                     |
+| `playwright.config.ts`         | local: `vite preview` (:4173) + `e2e/mock-api.js` (:9001); `grepInvert: /@quarantine/`                                                                                                                                                  |
+| `playwright.staging.config.ts` | remote: `grep: /@critical\|@smoke/`, `grepInvert: /@quarantine/`, workers=1, `globalTimeout` 30 min                                                                                                                                     |
+| `playwright.prod.config.ts`    | remote read-only: `grep: /@prod/`, `globalTimeout` 2 min                                                                                                                                                                                |
+| `playwright.public.config.ts`  | remote read-only public suites (incl. pre-register) — **not wired to any job**                                                                                                                                                          |
+| Suites                         | J1–J6 carry `@release` where green locally; unsafe SH001 suites are `@quarantine`; donations are `@donation` (§8.3); the Partner API (`/external/*`) is `@partner-api` (§8.5)                                                           |
+| Automation                     | Staging deploy triggers `tent-e2e-staging` with `wait: false` (fire and forget; manual review: no GitHub commit status; a person reads the Staging E2E Report before promoting). Prod deploy runs `@prod` after. Janitor job available. |
+| Pre-push (lefthook)            | lint / check / unit tests only — no e2e                                                                                                                                                                                                 |
 
 Known problems:
 
@@ -513,6 +513,8 @@ assertion green; `--list` shows every touched test with exactly one layer tag; a
 - Root `Jenkinsfile`: removed `catchError → UNSTABLE`; ~~**wait+propagate** on `tent-e2e-staging`
   so a red E2E fails the staging deploy job.~~ _Superseded by decision 2026-10-09: now
   `wait: true, propagate: false`, so the deploy stays green when the deploy itself succeeded._
+  _Since 2026-10-21: `wait: false` — the deploy job no longer holds its executor for the
+  15–30 min run; `tent-e2e-staging` posts its own result to Discord (ci/README.md)._
 - Staging janitor: `scripts/staging-e2e-janitor.mjs` + `scripts/run-staging-e2e-janitor.sh` +
   `Jenkinsfile.e2e-janitor` — deletes only registry shelters whose **name starts with `E2E`** and
   are older than N hours; default **dry-run**; logs every id. Credential:
@@ -564,7 +566,7 @@ assertion green; `--list` shows every touched test with exactly one layer tag; a
 ### Decision (2026-10-09) — manual review for now
 
 Staging E2E runs automatically after every staging deploy (`tent-e2e-staging`, triggered with
-`wait: true, propagate: false`), but it is **not** an automatic gate: no GitHub commit status is
+`wait: false` since 2026-10-21 — it reports its own result to Discord), but it is **not** an automatic gate: no GitHub commit status is
 posted and `main` branch protection does not require one. A person reads the "Staging E2E Report"
 in Jenkins and decides whether to promote `staging` → `main`. Credential `tent-github-status-token`
 is no longer needed; `tent-staging-e2e-env` still is. Re-introducing the automatic gate later means

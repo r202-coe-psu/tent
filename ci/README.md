@@ -32,8 +32,8 @@ If the credential is missing, the build is not affected: the pipeline logs a `WA
 
 | Job | `NOTIFY_KIND` | When |
 | --- | --- | --- |
-| root `Jenkinsfile` (staging + main branches) | `deploy` | every completion; title says `staging` or `prod` (main), and the embed carries the Staging E2E result and report link |
-| `Jenkinsfile.e2e-staging` (`tent-e2e-staging`) | `e2e` | non-SUCCESS only (success is already in the deploy message) |
+| root `Jenkinsfile` (staging + main branches) | `deploy` | every completion; title says `staging` or `prod` (main). On staging the `E2E` field reads `TRIGGERED` — the result follows in a separate `e2e` message |
+| `Jenkinsfile.e2e-staging` (`tent-e2e-staging`) | `e2e` | every result (the deploy job only triggers it, without waiting) |
 | `Jenkinsfile.e2e-janitor` | `janitor` | on failure, or when `MODE=execute` (dry-run successes stay quiet) |
 
 Notifications never fail a build: the script call uses `returnStatus: true` and the whole block is
