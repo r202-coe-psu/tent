@@ -5,6 +5,7 @@ import {
 	kioskBannerDocSchema,
 	kioskBannerInputSchema,
 	matchesScreen,
+	matchesSlot,
 	nextBannerOrder,
 	orderableBanners,
 	planReorder,
@@ -210,6 +211,40 @@ describe('matchesScreen', () => {
 		expect(matchesScreen({ screen_type: 'compact' }, 'compact')).toBe(true);
 		expect(matchesScreen({}, 'compact')).toBe(true);
 		expect(matchesScreen({}, 'portrait')).toBe(false);
+	});
+});
+
+describe('matchesSlot', () => {
+	const group = 'kiosk_banner_group:A';
+
+	it('matches only the same group and screen type; an ungrouped banner never matches', () => {
+		const slot = { group_id: group, screen_type: 'portrait' } as const;
+		expect(matchesSlot({ group_id: group, screen_type: 'portrait' }, slot)).toBe(true);
+		expect(matchesSlot({ group_id: group, screen_type: 'compact' }, slot)).toBe(false);
+		expect(matchesSlot({ group_id: 'kiosk_banner_group:B', screen_type: 'portrait' }, slot)).toBe(
+			false
+		);
+		expect(matchesSlot({ screen_type: 'portrait' }, slot)).toBe(false);
+		expect(matchesSlot({ group_id: group }, { group_id: group, screen_type: 'compact' })).toBe(
+			true
+		);
+	});
+
+	it('accepts a banner doc with group_id and still parses one without', () => {
+		const doc = {
+			_id: 'kiosk_banner:b1',
+			type: 'kiosk_banner',
+			schema_v: 1,
+			shelter_code: 'SH1',
+			...validInput,
+			order: 1,
+			created_at: validInput.start_at,
+			updated_at: validInput.start_at,
+			created_by: 'alice'
+		};
+		expect(kioskBannerDocSchema.parse({ ...doc, group_id: group }).group_id).toBe(group);
+		expect(kioskBannerDocSchema.parse(doc).group_id).toBeUndefined();
+		expect(kioskBannerDocSchema.safeParse({ ...doc, group_id: 'nope:1' }).success).toBe(false);
 	});
 });
 

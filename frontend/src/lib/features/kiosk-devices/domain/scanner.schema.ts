@@ -139,6 +139,8 @@ const scannerDevicePersistedBaseShape = {
 	last_seen_at: z.string().min(1).nullable(),
 	/** FR-KBR-35: absent = banners shown (additive flag, no `schema_v` bump). */
 	banner_enabled: z.boolean().optional(),
+	/** Banner group the kiosk is fed from; absent or null = no group, no banners. */
+	banner_group_id: z.string().min(1).nullable().optional(),
 	/** Absent = `compact` (additive field, no `schema_v` bump). */
 	screen_type: kioskScreenTypeSchema.optional()
 };

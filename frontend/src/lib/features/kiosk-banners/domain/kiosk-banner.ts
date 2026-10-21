@@ -46,7 +46,9 @@ const kioskBannerFieldsSchema = z.object({
 	end_at: z.string().datetime({ message: 'รูปแบบเวลาสิ้นสุดไม่ถูกต้อง' }),
 	status: kioskBannerStatusSchema.default('active'),
 	/** Absent on a doc stored before screen types existed = compact. */
-	screen_type: kioskScreenTypeSchema.optional()
+	screen_type: kioskScreenTypeSchema.optional(),
+	/** Absent on a doc stored before banner groups existed = ungrouped, never fed to a kiosk. */
+	group_id: z.string().startsWith('kiosk_banner_group:').optional()
 });
 
 type Period = { start_at: string; end_at: string };
@@ -117,6 +119,14 @@ export function matchesScreen(
 	type: KioskScreenType
 ): boolean {
 	return screenTypeOf(banner) === type;
+}
+
+/** True when the banner sits in this (group, screen type) slot; an ungrouped banner never does. */
+export function matchesSlot(
+	banner: { group_id?: string | null; screen_type?: KioskScreenType | null },
+	slot: { group_id: string; screen_type: KioskScreenType }
+): boolean {
+	return banner.group_id === slot.group_id && screenTypeOf(banner) === slot.screen_type;
 }
 
 export function isActiveAt(

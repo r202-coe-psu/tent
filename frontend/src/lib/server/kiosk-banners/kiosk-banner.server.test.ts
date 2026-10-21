@@ -593,29 +593,39 @@ describe('reorderBanners', () => {
 	});
 });
 
+const GROUP_A = 'kiosk_banner_group:A';
+const GROUP_B = 'kiosk_banner_group:B';
+const SLOT = { groupId: GROUP_A, screenType: 'compact' } as const;
+
 describe('listActiveForShelter', () => {
 	it('keeps only banners live now, sorted, capped at 20', async () => {
 		const live = (n: number, order: number) =>
-			existingDoc({ _id: `kiosk_banner:live-${String(n).padStart(2, '0')}`, order });
+			existingDoc({
+				_id: `kiosk_banner:live-${String(n).padStart(2, '0')}`,
+				order,
+				group_id: GROUP_A
+			});
 		const docs = [
 			...Array.from({ length: 22 }, (_, i) => live(i, 22 - i)),
-			existingDoc({ _id: 'kiosk_banner:off', status: 'inactive', order: 0 }),
+			existingDoc({ _id: 'kiosk_banner:off', status: 'inactive', order: 0, group_id: GROUP_A }),
 			existingDoc({
 				_id: 'kiosk_banner:future',
 				start_at: '2026-12-01T00:00:00.000Z',
 				end_at: '2026-12-31T00:00:00.000Z',
-				order: 0
+				order: 0,
+				group_id: GROUP_A
 			}),
 			existingDoc({
 				_id: 'kiosk_banner:expired',
 				start_at: '2026-01-01T00:00:00.000Z',
 				end_at: '2026-02-01T00:00:00.000Z',
-				order: 0
+				order: 0,
+				group_id: GROUP_A
 			})
 		];
 		adminRawMock.mockResolvedValue({ status: 200, data: { docs } });
 
-		const records = await listActiveForShelter('SH1', NOW, 'compact');
+		const records = await listActiveForShelter('SH1', NOW, SLOT);
 
 		expect(records).toHaveLength(20);
 		expect(records.map((r) => r.order)).toEqual(Array.from({ length: 20 }, (_, i) => i + 1));
@@ -625,46 +635,60 @@ describe('listActiveForShelter', () => {
 	});
 });
 
-describe('listActiveForShelter by screen type', () => {
-	it('returns only the requested screen type, a legacy doc counting as compact', async () => {
+describe('listActiveForShelter by slot', () => {
+	it('returns only the requested group and screen type, never an ungrouped banner', async () => {
 		adminRawMock.mockResolvedValue({
 			status: 200,
 			data: {
 				docs: [
-					existingDoc({ _id: 'kiosk_banner:legacy' }),
-					existingDoc({ _id: 'kiosk_banner:c', screen_type: 'compact' }),
-					existingDoc({ _id: 'kiosk_banner:p', screen_type: 'portrait' })
+					existingDoc({ _id: 'kiosk_banner:ungrouped' }),
+					existingDoc({ _id: 'kiosk_banner:a-c', group_id: GROUP_A, screen_type: 'compact' }),
+					existingDoc({ _id: 'kiosk_banner:a-legacy', group_id: GROUP_A }),
+					existingDoc({ _id: 'kiosk_banner:a-p', group_id: GROUP_A, screen_type: 'portrait' }),
+					existingDoc({ _id: 'kiosk_banner:b-c', group_id: GROUP_B, screen_type: 'compact' })
 				]
 			}
 		});
 
-		const compact = await listActiveForShelter('SH1', NOW, 'compact');
-		const portrait = await listActiveForShelter('SH1', NOW, 'portrait');
+		const compact = await listActiveForShelter('SH1', NOW, SLOT);
+		const portrait = await listActiveForShelter('SH1', NOW, {
+			groupId: GROUP_A,
+			screenType: 'portrait'
+		});
 
-		expect(compact.map((r) => r._id).sort()).toEqual(['kiosk_banner:c', 'kiosk_banner:legacy']);
-		expect(portrait.map((r) => r._id)).toEqual(['kiosk_banner:p']);
+		expect(compact.map((r) => r._id).sort()).toEqual(['kiosk_banner:a-c', 'kiosk_banner:a-legacy']);
+		expect(portrait.map((r) => r._id)).toEqual(['kiosk_banner:a-p']);
 	});
 
-	it('applies the cap of 20 after filtering by screen type', async () => {
+	it('applies the cap of 20 after filtering by slot', async () => {
 		const docs = [
 			...Array.from({ length: 5 }, (_, i) =>
-				existingDoc({ _id: `kiosk_banner:c-${i}`, order: 1, screen_type: 'compact' })
+				existingDoc({
+					_id: `kiosk_banner:c-${i}`,
+					order: 1,
+					group_id: GROUP_A,
+					screen_type: 'compact'
+				})
 			),
 			...Array.from({ length: 22 }, (_, i) =>
 				existingDoc({
 					_id: `kiosk_banner:p-${String(i).padStart(2, '0')}`,
 					order: 2 + i,
+					group_id: GROUP_A,
 					screen_type: 'portrait'
 				})
 			)
 		];
 		adminRawMock.mockResolvedValue({ status: 200, data: { docs } });
 
-		const portrait = await listActiveForShelter('SH1', NOW, 'portrait');
+		const portrait = await listActiveForShelter('SH1', NOW, {
+			groupId: GROUP_A,
+			screenType: 'portrait'
+		});
 
 		expect(portrait).toHaveLength(20);
 		expect(portrait.every((r) => r._id.startsWith('kiosk_banner:p-'))).toBe(true);
-		expect(await listActiveForShelter('SH1', NOW, 'compact')).toHaveLength(5);
+		expect(await listActiveForShelter('SH1', NOW, SLOT)).toHaveLength(5);
 	});
 });
 

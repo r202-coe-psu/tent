@@ -6,6 +6,7 @@ export {
 	kioskBannerInputSchema,
 	kioskBannerStatusSchema,
 	matchesScreen,
+	matchesSlot,
 	nextBannerOrder,
 	orderableBanners,
 	planReorder,

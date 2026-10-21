@@ -2,7 +2,7 @@ import { adminRaw, ServiceError } from '$lib/server/couch-admin';
 import {
 	createKioskBanner,
 	isActiveAt,
-	matchesScreen,
+	matchesSlot,
 	nextBannerOrder,
 	orderableBanners,
 	planReorder,
@@ -269,10 +269,11 @@ async function bulkWrite(docs: RawBannerDoc[]): Promise<Map<string, string>> {
 export async function listActiveForShelter(
 	shelterCode: string,
 	now: Date,
-	screenType: KioskScreenType
+	slot: { groupId: string; screenType: KioskScreenType }
 ): Promise<KioskBannerRecord[]> {
 	const all = await listBannersForShelter(shelterCode);
-	return sortBanners(all.filter((b) => matchesScreen(b, screenType) && isActiveAt(b, now))).slice(
+	const inSlot = { group_id: slot.groupId, screen_type: slot.screenType };
+	return sortBanners(all.filter((b) => matchesSlot(b, inSlot) && isActiveAt(b, now))).slice(
 		0,
 		ACTIVE_CAP
 	);
