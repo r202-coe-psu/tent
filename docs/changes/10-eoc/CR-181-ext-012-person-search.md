@@ -53,7 +53,7 @@ migration: N/A — ไม่เปลี่ยนรูป doc (ไม่ bump `
 | 7 | ขอบเขตศูนย์ | **ค้นข้ามทุกศูนย์** (เหมือน public search / EXT-011) — ไม่จำกัดตามศูนย์หรือ module ของ partner; คุมด้วย scope รายกรณี + `purpose` + access log (`location_code = ""`) (owner ยืนยัน 2026-10-21 ระหว่างรีวิว PR #744) |
 
 - **ลำดับตรวจ** (เหมือน EXT-007/011): `purpose` ว่าง → 400 `missing_purpose` → ไม่มี scope → 403 `insufficient_scope` → คำค้นไม่ผ่าน `parse_search_query` / ยาวเกิน 200 ตัวอักษร / body ไม่ใช่ JSON object หรือ `search` ไม่ใช่ string → 422 `validation_error` → query; ทุก response ของ EXT-012 (รวม error) มี `Cache-Control: no-store`
-- **Response 200:** `{ "status": 200, "message": "Found Data.", "result": [ … ] }` — แต่ละรายการคือ field ของ public search ที่ masked แล้ว (`name`, `status`, `national_id`, `gender`, `shelter_name`, `shelter_address`, `origin_address`, `checked_in_at`, `care_zone`, `zone_name`) **ไม่มี** `family_members` / เบอร์ / พาสปอร์ต; สูงสุด 10 รายการ; ไม่พบ = 200 `result: []` (ไม่ใช่ 404)
+- **Response 200:** `{ "status": 200, "message": "Found Data.", "result": [ … ] }` — แต่ละรายการคือ field ของ public search ที่ masked แล้ว (`name`, `status`, `national_id`, `gender`, `shelter_name`, `shelter_address`, `origin_address`, `checked_in_at` (ISO 8601 offset `+07:00` เหมือน EXT-008–011; `null` เมื่อยังไม่ check-in), `care_zone`, `zone_name`) **ไม่มี** `family_members` / เบอร์ / พาสปอร์ต; สูงสุด 10 รายการ; ไม่พบ = 200 `result: []` (ไม่ใช่ 404)
 - **Access log:** 1 แถวต่อ request ทุก outcome (รวมที่ถูกปฏิเสธ): `endpoint = "EXT-012"`, `client_id`, `module_name`, `purpose`, `ip`, `status` (`granted` / `denied_missing_purpose` / `denied_insufficient_scope` / `denied_validation_error`), `result_count`, `location_code = ""` (ค้นข้ามศูนย์) — **ห้ามเก็บคำค้น / CID / ชื่อ / hash ของคำค้น**
 - **Error codes:** ใช้ชุดเดิมของ plane (CR-154) — `400 missing_purpose` · `401 invalid_token` · `403 insufficient_scope` · `422 validation_error` — **ไม่เพิ่ม code ใหม่** (ไม่มี 404)
 - **Scope:** `occupant-search` เป็น sensitive scope เหมือน `occupancy-pii-read` / `residency-read` — ไม่อยู่ใน `DEFAULT_SCOPES_BY_MODULE` ใด, admin ติ๊กรายกรณี
@@ -85,3 +85,4 @@ migration: N/A — ไม่เปลี่ยนรูป doc (ไม่ bump `
 - 2026-10-21 — ผู้ implement ร่าง CR นี้ (status `proposed`)
 - 2026-10-21 — owner อนุมัติ (`approved`) ระหว่างรีวิว PR #744
 - 2026-10-21 — owner ยืนยันข้อ 7 (ค้นข้ามศูนย์); review รอบ 3: error ของ EXT-012 มี `no-store`, lone surrogate → 422
+- 2026-10-21 — owner สั่งแก้ (ก่อน deploy): `checked_in_at` ของ EXT-012 เป็น ISO 8601 offset `+07:00` (เดิมเป็น UTC ไม่มี offset) ให้ตรงกับ EXT-008–011 — แก้เฉพาะชั้น EXT-012; public search / `/external/v1/occupants` คงเดิม

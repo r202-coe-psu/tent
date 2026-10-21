@@ -2469,7 +2469,10 @@ export interface components {
 			shelter_address?: string | null;
 			/** Origin Address */
 			origin_address?: string | null;
-			/** Checked In At */
+			/**
+			 * Checked In At
+			 * @description วันเวลาเข้าพัก ISO 8601 (+07:00); null เมื่อยังไม่ check-in
+			 */
 			checked_in_at?: string | null;
 			/** Care Zone */
 			care_zone?: string | null;

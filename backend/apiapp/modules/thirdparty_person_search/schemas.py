@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from datetime import datetime
-
 from pydantic import BaseModel, Field
 
 
@@ -31,7 +29,9 @@ class PersonSearchItem(BaseModel):
     shelter_name: str
     shelter_address: str | None = None
     origin_address: str | None = None
-    checked_in_at: datetime | None = None
+    checked_in_at: str | None = Field(
+        default=None, description="วันเวลาเข้าพัก ISO 8601 (+07:00); null เมื่อยังไม่ check-in"
+    )
     care_zone: str | None = None
     zone_name: str | None = None
 

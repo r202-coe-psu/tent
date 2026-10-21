@@ -421,3 +421,28 @@ async def test_error_responses_are_not_cacheable(
     response = await _search(client, query, headers=headers, params=params)
     assert response.status_code == expected
     assert "no-store" in response.headers.get("cache-control", "")
+
+
+# checked_in_at is Bangkok time with an explicit +07:00 offset, like EXT-008–011 (CR-181).
+
+
+async def test_checked_in_at_is_bangkok_time_with_offset(
+    client: AsyncClient, shelter: PublicShelter
+) -> None:
+    person = await _person()
+    person.checked_in_at = datetime(2026, 8, 20, 7, 30, tzinfo=UTC)
+    await person.save()
+
+    response = await _search(client, CID)
+    assert response.status_code == 200
+    assert response.json()["result"][0]["checked_in_at"] == "2026-08-20T14:30:00+07:00"
+
+
+async def test_checked_in_at_stays_null_before_check_in(
+    client: AsyncClient, shelter: PublicShelter
+) -> None:
+    await _person(status="pre_registered")
+
+    response = await _search(client, CID)
+    assert response.status_code == 200
+    assert response.json()["result"][0]["checked_in_at"] is None

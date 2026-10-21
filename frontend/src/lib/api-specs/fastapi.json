@@ -4262,8 +4262,9 @@
 						"title": "Origin Address"
 					},
 					"checked_in_at": {
-						"anyOf": [{ "type": "string", "format": "date-time" }, { "type": "null" }],
-						"title": "Checked In At"
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Checked In At",
+						"description": "วันเวลาเข้าพัก ISO 8601 (+07:00); null เมื่อยังไม่ check-in"
 					},
 					"care_zone": {
 						"anyOf": [{ "type": "string" }, { "type": "null" }],
