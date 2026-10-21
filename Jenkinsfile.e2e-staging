@@ -99,12 +99,13 @@ pipeline {
                 reportName: 'Staging E2E Report'
             ])
             archiveArtifacts allowEmptyArchive: true, artifacts: 'frontend/test-results/staging/**/*,frontend/playwright-report/staging/**/*', fingerprint: false
-            // Discord notification (ci/README.md), non-SUCCESS only: the root deploy job already
-            // reports the E2E result on success. Never fails the build; if the job failed before
-            // checkout, the script is absent and the notification is skipped.
+            // Discord notification (ci/README.md), every result: the root deploy job triggers this
+            // job without waiting, so this is the only place the E2E result is reported. Never
+            // fails the build; if the job failed before checkout, the script is absent and the
+            // notification is skipped.
             script {
                 try {
-                    if (currentBuild.currentResult != 'SUCCESS' && fileExists('ci/discord-notify.sh')) {
+                    if (fileExists('ci/discord-notify.sh')) {
                         withCredentials([string(credentialsId: 'tent-discord-webhook-ci', variable: 'DISCORD_WEBHOOK_URL')]) {
                             withEnv([
                                 'NOTIFY_KIND=e2e',
@@ -116,7 +117,8 @@ pipeline {
                                 "NOTIFY_BUILD_URL=${env.BUILD_URL ?: ''}",
                                 "NOTIFY_COMMIT=${params.DEPLOY_COMMIT ?: ''}",
                                 "NOTIFY_DURATION=${currentBuild.durationString.replace(' and counting', '')}",
-                                "NOTIFY_DETAIL=${params.STAGING_URL ?: ''}"
+                                // publishHTML serves reportName 'Staging E2E Report' at Staging_20E2E_20Report/.
+                                "NOTIFY_DETAIL=Report: ${env.BUILD_URL ?: ''}Staging_20E2E_20Report/ · ${params.STAGING_URL ?: ''}"
                             ]) {
                                 def rc = sh(script: './ci/discord-notify.sh', returnStatus: true)
                                 if (rc != 0) {
