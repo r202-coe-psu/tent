@@ -89,6 +89,8 @@ export interface ScanDonationView {
 		free_text?: string;
 		qty: string;
 		unit: string;
+		/** The donor's note on the line — shown to staff as "คำชี้แจงจากผู้บริจาค". */
+		note?: string;
 		/** A line refused at review arrives already turned away (CR-174 AC-3). */
 		review_status?: 'approved' | 'pending' | 'rejected';
 		review_reason_code?: DonationRejectReasonCode | null;

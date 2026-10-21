@@ -499,8 +499,8 @@ export async function openPendingRow(page: Page, bookingRef: string) {
 export async function approvePending(page: Page, shelterCode: string, bookingRef: string) {
 	await openPendingRow(page, bookingRef);
 	await page.getByRole('textbox', { name: /Internal Review Memo/ }).fill(`e2e ${RUN_ID}`);
-	// exact — "ไม่รับรายการนี้" contains the same words.
-	const keep = page.getByRole('button', { name: 'รับรายการนี้', exact: true });
+	// Anchored — "ไม่รับรายการนี้" contains the same words, and each half carries a hint.
+	const keep = page.getByRole('button', { name: /^รับรายการนี้/ });
 	for (const button of await keep.all()) await button.click();
 	await page.getByRole('button', { name: 'บันทึกผลการประเมิน' }).click();
 	await expect(page.getByText(`บันทึกผลการประเมิน ${bookingRef} แล้ว`)).toBeVisible();

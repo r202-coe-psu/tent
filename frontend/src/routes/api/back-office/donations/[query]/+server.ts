@@ -111,6 +111,7 @@ function toScanView(d: PublicDonationDoc): ScanDonationView {
 			free_text: it.free_text,
 			qty: it.qty,
 			unit: it.unit,
+			...(it.note?.trim() ? { note: it.note.trim() } : {}),
 			review_status: it.review_status,
 			review_reason_code: (it.review_reason_code ?? null) as DonationRejectReasonCode | null
 		})),

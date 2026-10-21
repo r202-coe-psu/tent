@@ -147,7 +147,7 @@ test.describe('Donation full-stack: donor and staff', { tag: ['@critical', '@don
 			const confirm = page.getByRole('button', { name: 'ยืนยันรับเข้าคลัง' });
 			await expect(confirm).toBeDisabled();
 			await expect(page.getByRole('textbox', { name: 'จำนวนรับจริง *' })).toHaveValue('1');
-			await page.getByRole('checkbox', { name: 'ผ่านการตรวจสอบแล้ว' }).check();
+			await page.getByRole('button', { name: /^ผ่านการตรวจสอบแล้ว/ }).click();
 			// The run's own shelter has no storage points, so the line goes to the main
 			// store without a pick (CR-139 N1).
 			await expect(page.getByRole('button', { name: /^สถานที่จัดเก็บ/ })).toContainText('คลังหลัก');
@@ -257,7 +257,7 @@ test.describe('Donation full-stack: donor and staff', { tag: ['@critical', '@don
 			await expectReadyForDropoff(shelter.code, bookingRef);
 			await openInScanStation(page, bookingRef);
 
-			await page.getByRole('switch', { name: /ไม่รับรายการนี้/ }).click();
+			await page.getByRole('button', { name: /^ไม่รับรายการนี้/ }).click();
 			const confirm = page.getByRole('button', { name: 'ปฏิเสธทั้งใบ' });
 			await expect(confirm).toBeDisabled();
 			await page.getByRole('radio', { name: /^หมดอายุ$/ }).click();
@@ -328,7 +328,7 @@ test.describe('Donation full-stack: donor and staff', { tag: ['@critical', '@don
 		await fillExpiry(page.getByRole('textbox', { name: 'วันหมดอายุ' }));
 		// Boxes against pieces do not compare, so no "more/less than declared" badge.
 		await expect(page.getByText(/(มากกว่า|น้อยกว่า)ที่แจ้ง/)).toHaveCount(0);
-		await page.getByRole('checkbox', { name: 'ผ่านการตรวจสอบแล้ว' }).check();
+		await page.getByRole('button', { name: /^ผ่านการตรวจสอบแล้ว/ }).click();
 		const confirm = page.getByRole('button', { name: 'ยืนยันรับเข้าคลัง' });
 		await expect(confirm).toBeEnabled();
 
@@ -399,7 +399,7 @@ test.describe('Donation full-stack: donor and staff', { tag: ['@critical', '@don
 		await expectReadyForDropoff(shelter.code, first.bookingRef);
 		await openBackOffice(page, ws);
 		await openInScanStation(page, first.bookingRef);
-		await page.getByRole('checkbox', { name: 'ผ่านการตรวจสอบแล้ว' }).check();
+		await page.getByRole('button', { name: /^ผ่านการตรวจสอบแล้ว/ }).click();
 		// No storage points on the run's own shelter: the line goes to the main store.
 		await expect(page.getByRole('button', { name: /^สถานที่จัดเก็บ/ })).toContainText('คลังหลัก');
 		const confirm = page.getByRole('button', { name: 'ยืนยันรับเข้าคลัง' });

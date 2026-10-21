@@ -303,14 +303,6 @@
 					onSaved={refreshQueue}
 					onClose={() => (station = null)}
 				/>
-				<Button
-					variant="outline"
-					type="button"
-					class="mt-3 min-h-11"
-					onclick={() => (station = null)}
-				>
-					กลับไปที่รายการของบริจาค
-				</Button>
 			{:else if selectedPendingRequest}
 				<PendingReviewDetail
 					request={selectedPendingRequest}

@@ -1,8 +1,10 @@
 <script lang="ts">
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import ClipboardCheck from '@lucide/svelte/icons/clipboard-check';
-	import AlertTriangle from '@lucide/svelte/icons/triangle-alert';
 	import User from '@lucide/svelte/icons/user';
+	import Phone from '@lucide/svelte/icons/phone';
+	import Mail from '@lucide/svelte/icons/mail';
+	import Info from '@lucide/svelte/icons/info';
 	import FileText from '@lucide/svelte/icons/file-text';
 	import Truck from '@lucide/svelte/icons/truck';
 	import MapPin from '@lucide/svelte/icons/map-pin';
@@ -20,6 +22,7 @@
 		PUBLIC_DONATION_CATEGORIES,
 		RejectDonationDialog,
 		RejectReasonFields,
+		LineDecisionToggle,
 		hasLineReview,
 		isAutoApprovedLine,
 		lineReviewDecisionSchema,
@@ -239,55 +242,72 @@
 
 	<!-- Main Body Content -->
 	<div class="space-y-6 p-6 md:p-8">
-		<!-- Donor info, plus a notice only when a line is not something the shelter asked for -->
+		<!-- Donor first, then — only when a line was typed in — a plain note on what that
+		     means for the review. It is information, not a fault: amber read as a problem. -->
 		<div class="grid grid-cols-1 gap-4 {request.is_unsolicited ? 'md:grid-cols-2' : ''}">
+			<div class="rounded-xl border border-slate-200/80 bg-white p-5 shadow-2xs">
+				<p class="text-sm font-semibold text-slate-500">ข้อมูลผู้บริจาค / จุดประสานงาน</p>
+				<div class="mt-3 flex items-start gap-3">
+					<span
+						class="inline-flex size-11 shrink-0 items-center justify-center rounded-full border border-sky-200 bg-sky-50 text-sky-700"
+						aria-hidden="true"
+					>
+						<User class="size-5" />
+					</span>
+					<div class="min-w-0 space-y-1.5">
+						<p class="text-lg font-bold break-words text-slate-900">
+							{request.donor_name || 'ไม่ระบุชื่อ'}
+						</p>
+						<p class="flex items-center gap-2 text-base text-slate-700">
+							<Phone class="size-4 shrink-0 text-slate-400" aria-hidden="true" />
+							<span class="sr-only">เบอร์โทร</span>
+							{#if request.donor_phone}
+								<a
+									href="tel:{request.donor_phone}"
+									class="font-semibold text-sky-800 tabular-nums underline-offset-2 hover:underline"
+								>
+									{request.donor_phone}
+								</a>
+							{:else}
+								<span class="text-slate-500">ไม่ระบุเบอร์โทร</span>
+							{/if}
+						</p>
+						{#if request.donor_email}
+							<p class="flex items-center gap-2 text-sm break-all text-slate-600">
+								<Mail class="size-4 shrink-0 text-slate-400" aria-hidden="true" />
+								<span class="sr-only">อีเมล</span>
+								{request.donor_email}
+							</p>
+						{/if}
+					</div>
+				</div>
+			</div>
+
 			{#if request.is_unsolicited}
 				<!-- `is_unsolicited` = some line was typed in by the donor rather than picked
-				     from the shelter's announced needs (no catalog item_id). It used to render
-				     for every request, claiming "Unsolicited" even for announced items. -->
-				<div class="rounded-xl border border-amber-200 bg-amber-50 p-4 sm:p-5">
-					<div class="flex items-center gap-2 text-sm font-semibold text-amber-900">
-						<AlertTriangle class="h-4 w-4 shrink-0 text-amber-600" />
-						<span>มีรายการที่ไม่อยู่ในประกาศของศูนย์</span>
-					</div>
-					<p class="mt-1.5 text-sm leading-relaxed text-amber-900">
-						ผู้บริจาคพิมพ์รายการเอง ไม่ได้เลือกจากความต้องการที่ศูนย์ประกาศ —
-						พิจารณาว่ารับได้หรือไม่ และต้องจับคู่กับรายการในคลังตอนตรวจรับ
+				     from the shelter's announced needs (no catalog item_id). -->
+				<div class="rounded-xl border border-sky-200 bg-white p-5 shadow-2xs">
+					<p class="flex items-center gap-2 text-sm font-semibold text-sky-900">
+						<Info class="size-5 shrink-0 text-sky-600" aria-hidden="true" />
+						มีรายการที่ผู้บริจาคระบุเอง
+					</p>
+					<p class="mt-2 text-base leading-relaxed text-slate-700">
+						รายการเหล่านี้ไม่ได้มาจากประกาศความต้องการของศูนย์ —
+						เลือกรับหรือไม่รับทีละรายการด้านล่าง รายการที่รับจะจับคู่กับสินค้าในคลังตอนตรวจรับ
 					</p>
 				</div>
 			{/if}
-
-			<!-- Right Donor Contact Card -->
-			<div
-				class="rounded-2xl border border-sky-200/80 bg-sky-50/50 p-5 dark:border-sky-900/40 dark:bg-sky-950/20"
-			>
-				<div class="flex items-center gap-2 text-xs font-bold text-sky-700 dark:text-sky-400">
-					<User class="h-4 w-4 shrink-0 text-sky-600 dark:text-sky-400" />
-					<span>ข้อมูลผู้บริจาค / จุดประสานงาน</span>
-				</div>
-				<div class="mt-2.5 space-y-1">
-					<p class="text-xs font-bold text-slate-800 dark:text-slate-100">
-						{request.donor_name || 'ไม่ระบุชื่อ'}
-					</p>
-					<p class="text-xs text-slate-600 dark:text-slate-400">
-						โทร. {request.donor_phone || 'ไม่ระบุเบอร์โทร'}
-					</p>
-					{#if request.donor_email}
-						<p class="text-xs text-slate-500 dark:text-slate-400">{request.donor_email}</p>
-					{/if}
-				</div>
-			</div>
 		</div>
 
 		<!-- Donor Input Items Section -->
 		<div class="space-y-3">
 			<div class="flex items-baseline justify-between gap-2">
-				<h3 class="flex items-center gap-2 text-base font-semibold text-slate-800">
-					<FileText class="h-5 w-5 text-slate-400" />
+				<h3 class="flex items-center gap-2 text-xl font-bold text-slate-900">
+					<FileText class="size-6 text-slate-400" />
 					รายการสิ่งของที่ผู้บริจาคแจ้ง
 				</h3>
 				{#if declaredItems.length > 0}
-					<span class="shrink-0 text-sm whitespace-nowrap text-slate-500 tabular-nums"
+					<span class="shrink-0 text-base whitespace-nowrap text-slate-600 tabular-nums"
 						>{declaredItems.length} รายการ</span
 					>
 				{/if}
@@ -302,7 +322,7 @@
 							{@const cond = conditionLabel(item.condition)}
 							<li class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 p-4 sm:px-5">
 								<div class="min-w-0 space-y-2">
-									<p class="text-base font-bold text-slate-900">
+									<p class="text-xl font-bold break-words text-slate-900">
 										{item.free_text ?? item.item_id ?? 'สิ่งของ'}
 									</p>
 									{#if cat || cond || !item.item_id}
@@ -310,7 +330,7 @@
 											{#if cat}
 												<Badge
 													variant="outline"
-													class="border-slate-200 bg-slate-50 text-xs font-semibold text-slate-700"
+													class="border-slate-200 bg-slate-50 text-sm font-semibold text-slate-700"
 												>
 													{cat}
 												</Badge>
@@ -318,7 +338,7 @@
 											{#if cond}
 												<Badge
 													variant="outline"
-													class="border-sky-200 bg-sky-50 text-xs font-semibold text-sky-900"
+													class="border-sky-200 bg-sky-50 text-sm font-semibold text-sky-900"
 												>
 													{cond}
 												</Badge>
@@ -330,7 +350,7 @@
 												     needs to decide on. -->
 												<Badge
 													variant="outline"
-													class="border-amber-200 bg-amber-50 text-xs font-semibold text-amber-900"
+													class="border-amber-200 bg-amber-50 text-sm font-semibold text-amber-900"
 												>
 													ยังไม่จับคู่แคตตาล็อก
 												</Badge>
@@ -338,14 +358,14 @@
 										</div>
 									{/if}
 									{#if item.note?.trim()}
-										<p class="text-sm leading-relaxed text-slate-600">
+										<p class="text-base leading-relaxed text-slate-700">
 											หมายเหตุ: {item.note.trim()}
 										</p>
 									{/if}
 									{#if item.review_status === 'approved'}
 										<Badge
 											variant="outline"
-											class="border-emerald-200 bg-emerald-50 text-xs font-semibold text-emerald-900"
+											class="border-emerald-200 bg-emerald-50 text-sm font-semibold text-emerald-900"
 										>
 											{isAutoApprovedLine(item, request.campaign_id ?? null)
 												? 'อยู่ในแคมเปญ · อนุมัติอัตโนมัติ'
@@ -354,52 +374,45 @@
 									{:else if item.review_status === 'rejected'}
 										<Badge
 											variant="outline"
-											class="border-rose-200 bg-rose-50 text-xs font-semibold text-rose-900"
+											class="border-rose-200 bg-rose-50 text-sm font-semibold text-rose-900"
 										>
 											ไม่รับ{item.review_reason ? ` · ${item.review_reason}` : ''}
 										</Badge>
 									{/if}
 								</div>
 								<div class="shrink-0 text-right">
-									<span class="text-xs text-slate-500">จำนวนที่แจ้ง</span>
-									<p class="text-lg font-bold whitespace-nowrap text-slate-900 tabular-nums">
+									<span class="text-sm text-slate-500">จำนวนที่แจ้ง</span>
+									<p class="text-2xl font-bold whitespace-nowrap text-slate-900 tabular-nums">
 										{item.qty}
-										<span class="text-sm font-medium text-slate-600">
+										<span class="text-base font-medium text-slate-600">
 											{formatUnit(item.unit, units, langState.current)}
 										</span>
 									</p>
 								</div>
 								{#if item.review_status === 'pending'}
 									{@const draft = drafts[idx]}
-									<div
-										class="w-full space-y-3 rounded-xl border border-amber-200 bg-amber-50/40 p-3"
-									>
-										<div
-											class="flex flex-wrap gap-2"
-											role="group"
-											aria-label="ผลการประเมิน {item.free_text ?? item.item_id ?? 'รายการ'}"
-										>
-											<Button
-												type="button"
-												size="sm"
-												variant={draft?.decision === 'approved' ? 'default' : 'outline'}
-												aria-pressed={draft?.decision === 'approved'}
-												class="min-h-10 text-xs font-bold"
-												onclick={() => (draftAt(idx).decision = 'approved')}
-											>
-												รับรายการนี้
-											</Button>
-											<Button
-												type="button"
-												size="sm"
-												variant={draft?.decision === 'rejected' ? 'destructive' : 'outline'}
-												aria-pressed={draft?.decision === 'rejected'}
-												class="min-h-10 text-xs font-bold"
-												onclick={() => (draftAt(idx).decision = 'rejected')}
-											>
-												ไม่รับรายการนี้
-											</Button>
-										</div>
+									<div class="w-full space-y-3 border-t border-slate-100 pt-4">
+										<LineDecisionToggle
+											bind:value={
+												() =>
+													draft?.decision === 'approved'
+														? 'accept'
+														: draft?.decision === 'rejected'
+															? 'reject'
+															: null,
+												(next) =>
+													(draftAt(idx).decision =
+														next === 'accept'
+															? 'approved'
+															: next === 'reject'
+																? 'rejected'
+																: undefined)
+											}
+											acceptLabel="รับรายการนี้"
+											acceptHint="ผู้บริจาคนำมาส่งได้"
+											groupLabel="ผลการประเมิน {item.free_text ?? item.item_id ?? 'รายการ'}"
+											disabled={saving}
+										/>
 										{#if draft?.decision === 'rejected'}
 											<RejectReasonFields
 												bind:code={draft.code}
@@ -420,12 +433,12 @@
 		<!-- Logistics Info Cards Grid (3 boxes) -->
 		<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
 			<!-- Vehicle -->
-			<div class="rounded-2xl border border-border/80 bg-card p-4">
-				<div class="flex items-center gap-2 text-2xs font-bold text-muted-foreground uppercase">
-					<Truck class="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+			<div class="rounded-xl border border-slate-200/80 bg-white p-5 shadow-2xs">
+				<div class="flex items-center gap-2 text-sm font-semibold text-slate-500">
+					<Truck class="size-5 text-sky-600" aria-hidden="true" />
 					<span>ยานพาหนะจัดส่ง</span>
 				</div>
-				<p class="mt-2 text-xs font-bold text-foreground">
+				<p class="mt-2 text-lg font-bold text-slate-900">
 					{formatVehicle(request.vehicle, request.delivery_method)}
 				</p>
 			</div>
@@ -433,26 +446,26 @@
 			{#if request.pickup_address}
 				<!-- Where the shelter's vehicle goes. Only a pickup booking has one; the
 				     card used to fall back to a made-up "จุดรับบริจาคส่วนหน้า" for the rest. -->
-				<div class="rounded-2xl border border-border/80 bg-card p-4">
-					<div class="flex items-center gap-2 text-2xs font-bold text-muted-foreground uppercase">
-						<MapPin class="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+				<div class="rounded-xl border border-slate-200/80 bg-white p-5 shadow-2xs">
+					<div class="flex items-center gap-2 text-sm font-semibold text-slate-500">
+						<MapPin class="size-5 text-sky-600" aria-hidden="true" />
 						<span>ที่อยู่เข้ารับของ</span>
 					</div>
-					<p class="mt-2 text-xs font-bold text-foreground">{request.pickup_address}</p>
+					<p class="mt-2 text-lg font-bold text-slate-900">{request.pickup_address}</p>
 				</div>
 			{/if}
 
 			<!-- Appointment Date -->
 			<div
-				class="rounded-2xl border border-border/80 bg-card p-4 {request.pickup_address
+				class="rounded-xl border border-slate-200/80 bg-white p-5 shadow-2xs {request.pickup_address
 					? 'md:col-span-2'
 					: ''}"
 			>
-				<div class="flex items-center gap-2 text-2xs font-bold text-muted-foreground uppercase">
-					<Calendar class="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+				<div class="flex items-center gap-2 text-sm font-semibold text-slate-500">
+					<Calendar class="size-5 text-sky-600" aria-hidden="true" />
 					<span>นัดหมายเสนอขอบริจาค</span>
 				</div>
-				<p class="mt-2 text-xs font-bold text-foreground">
+				<p class="mt-2 text-lg font-bold text-slate-900">
 					{formatSlotDate(request.slot, request.eta, request.declared_at)}
 				</p>
 			</div>
@@ -460,7 +473,7 @@
 
 		<!-- Staff Review Memo Textarea -->
 		<div class="space-y-2">
-			<Label for="internal-review-memo" class="text-xs font-bold text-foreground">
+			<Label for="internal-review-memo" class="text-sm font-semibold text-slate-700">
 				บันทึกความเห็นของเจ้าหน้าที่ประจำศูนย์ (Internal Review Memo)
 			</Label>
 			<Textarea
@@ -468,7 +481,7 @@
 				rows={3}
 				placeholder="เขียนวิเคราะห์ความจุคลัง หรือข้อตกลงพิเศษในการรับของ เช่น โซนตู้แช่สำรองไฟ ฯลฯ"
 				bind:value={memo}
-				class="rounded-2xl p-3.5 text-xs"
+				class="rounded-xl p-3.5 text-base"
 			/>
 		</div>
 	</div>

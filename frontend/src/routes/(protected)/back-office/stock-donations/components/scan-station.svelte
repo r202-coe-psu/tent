@@ -28,8 +28,6 @@
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
 	import { DatePicker } from '$lib/components/ui/date-picker/index.js';
-	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
-	import { Switch } from '$lib/components/ui/switch/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
 	import { Textarea } from '$lib/components/ui/textarea/index.js';
 	import { toast } from 'svelte-sonner';
@@ -44,6 +42,7 @@
 		rejectDonationInputSchema,
 		RejectDonationDialog,
 		RejectReasonFields,
+		LineDecisionToggle,
 		type DonationRejectReasonCode,
 		type RejectDonationInput,
 		type ScanDonationView
@@ -72,7 +71,6 @@
 		useStoragePoints,
 		type StockFormItem
 	} from '$lib/features/operations';
-	import BoardSectionHeader from '$lib/components/board-section-header.svelte';
 
 	let {
 		initialQuery = '',
@@ -295,12 +293,13 @@
 	 * view has no note field of its own, so reading one off the doc always fell through
 	 * to sample copy.
 	 */
-	const donorNote = $derived.by(() => {
-		const notes = (donationDoc?.items ?? [])
-			.map((it) => (it as { note?: string }).note?.trim())
-			.filter((n): n is string => Boolean(n));
-		return notes.length > 0 ? notes.join('\n') : 'ผู้บริจาคไม่ได้ระบุคำชี้แจงเพิ่มเติม';
-	});
+	// Empty when the donor wrote nothing — the section is then left out, not filled in.
+	const donorNote = $derived(
+		(donationDoc?.items ?? [])
+			.map((it) => it.note?.trim())
+			.filter((n): n is string => Boolean(n))
+			.join('\n')
+	);
 
 	// QR camera. `html5-qrcode` is already a dependency and the people check-in
 	// scanner uses the same shape (`cameraAttachment`), so the two behave alike.
@@ -879,10 +878,10 @@
 						size="sm"
 						type="button"
 						onclick={handleCancel}
-						class="mb-3 h-auto gap-1.5 p-0 text-xs font-medium text-blue-200 no-underline hover:text-white hover:no-underline"
+						class="mb-3 h-auto gap-1.5 p-0 text-sm font-medium text-blue-200 no-underline hover:text-white hover:no-underline"
 					>
-						<ArrowLeft class="h-3.5 w-3.5" />
-						กลับหน้าตรวจรับบริจาค
+						<ArrowLeft class="size-4" />
+						{onClose ? 'กลับไปที่รายการของบริจาค' : 'กลับหน้าสแกนรับของ'}
 					</Button>
 					<div class="flex flex-wrap items-center gap-3">
 						<span
@@ -950,27 +949,8 @@
 									{/if}
 								</div>
 
-								<!-- Keep (default) or turn the whole line away (CR-172 FR-9) -->
-								<label
-									class="flex min-h-12 cursor-pointer items-center justify-between gap-3 border-b border-slate-100 px-4 py-2 text-sm font-semibold sm:px-5 {item.rejected
-										? 'bg-rose-50 text-rose-900'
-										: 'text-slate-700'}"
-									for="line-reject-{idx}"
-								>
-									<span class="flex flex-col">
-										<span>ไม่รับรายการนี้</span>
-										<span class="text-xs font-normal text-slate-500">
-											ไม่เข้าคลัง ไม่ออกล็อต และแจ้งเหตุผลให้ผู้บริจาค
-										</span>
-									</span>
-									<Switch
-										id="line-reject-{idx}"
-										bind:checked={item.rejected}
-										disabled={!!otherShelterCode}
-									/>
-								</label>
-
 								{#if item.rejected}
+									<!-- Turned away (CR-172 FR-9): no stock fields, only why. -->
 									<div class="p-4 sm:px-5">
 										<RejectReasonFields
 											bind:code={item.rejectCode}
@@ -1075,29 +1055,34 @@
 											/>
 										</div>
 									</div>
-
-									<!-- Confirmation sits right under the fields it confirms -->
-									<label
-										class="flex min-h-12 cursor-pointer items-center gap-3 rounded-b-xl border-t px-4 py-3 text-sm font-semibold sm:px-5 {item.verified
-											? 'border-emerald-200 bg-emerald-50 text-emerald-900'
-											: 'border-slate-100 bg-slate-50 text-slate-700 hover:bg-slate-100'}"
-									>
-										<Checkbox bind:checked={item.verified} />
-										<span class="flex flex-col">
-											<span class="select-none">ผ่านการตรวจสอบแล้ว</span>
-											<span class="text-xs font-normal text-slate-500">
-												ของจริงตรงกับรายการ จำนวน และสภาพที่กรอกไว้
-											</span>
-										</span>
-									</label>
 								{/if}
+
+								<!-- Decide the line right under what was counted: checked, or turned away. -->
+								<div class="rounded-b-xl border-t border-slate-100 bg-slate-50/60 p-4 sm:px-5">
+									<LineDecisionToggle
+										bind:value={
+											() => (item.rejected ? 'reject' : item.verified ? 'accept' : null),
+											(next) => {
+												item.verified = next === 'accept';
+												item.rejected = next === 'reject';
+											}
+										}
+										acceptLabel="ผ่านการตรวจสอบแล้ว"
+										acceptHint="ของจริงตรงกับรายการ จำนวน และสภาพ"
+										rejectHint="ไม่เข้าคลัง แจ้งเหตุผลให้ผู้บริจาค"
+										groupLabel="ผลการตรวจรับ {item.name}"
+										disabled={!!otherShelterCode}
+									/>
+								</div>
 							</div>
 						{/each}
 
-						<div class="rounded-xl border border-slate-200/80 bg-white p-4 shadow-2xs sm:px-5">
-							<h4 class="text-sm font-semibold text-slate-700">คำชี้แจงจากผู้บริจาค</h4>
-							<p class="mt-1 text-sm whitespace-pre-line text-slate-700">{donorNote}</p>
-						</div>
+						{#if donorNote}
+							<div class="rounded-xl border border-slate-200/80 bg-white p-4 shadow-2xs sm:px-5">
+								<h4 class="text-base font-semibold text-slate-800">คำชี้แจงจากผู้บริจาค</h4>
+								<p class="mt-1 text-base whitespace-pre-line text-slate-700">{donorNote}</p>
+							</div>
+						{/if}
 					</div>
 
 					<!-- Right: booking facts, memo, and the decision -->
@@ -1301,11 +1286,30 @@
 			</div>
 		{:else}
 			<!-- Idle & Scanning View -->
-			<BoardSectionHeader
-				icon={Scan}
-				title="ระบบสแกนรับของเข้าคลัง (Ref. Scan Station)"
-				description="สแกนคิวอาร์โค้ดใบจองจากมือถือผู้บริจาค เพื่อตรวจรับสินค้าและอัปเดตระบบคลังพัสดุแบบทันที (Real-time Sync)"
-			/>
+			<!-- Same navy banner and back link as the review and check-in screens. -->
+			<div class="bg-[#002D5B] p-6 text-white md:p-8 dark:bg-slate-900">
+				{#if onClose}
+					<Button
+						variant="link"
+						size="sm"
+						type="button"
+						onclick={() => onClose?.()}
+						class="mb-3 h-auto gap-1.5 p-0 text-sm font-medium text-blue-200 no-underline hover:text-white hover:no-underline"
+					>
+						<ArrowLeft class="size-4" />
+						กลับไปที่รายการของบริจาค
+					</Button>
+				{/if}
+				<div class="flex items-center gap-2.5">
+					<div class="flex h-8 w-8 items-center justify-center rounded-lg bg-white/10 text-white">
+						<Scan class="h-5 w-5" />
+					</div>
+					<h2 class="text-base font-bold text-white md:text-lg">สแกนรับเข้าคลัง</h2>
+				</div>
+				<p class="mt-1 text-sm text-blue-100/80">
+					สแกน QR Code ใบจองจากมือถือผู้บริจาค หรือค้นหาด้วยรหัสการจอง เพื่อเปิดหน้าตรวจรับ
+				</p>
+			</div>
 
 			<!-- Scan Body -->
 			<div
@@ -1495,11 +1499,11 @@
 					variant="link"
 					size="sm"
 					type="button"
-					onclick={() => (activeView = 'scan')}
-					class="mb-3 h-auto gap-1.5 p-0 text-xs font-medium text-blue-200 no-underline hover:text-white hover:no-underline"
+					onclick={() => (initialView === 'walkin' && onClose ? onClose() : (activeView = 'scan'))}
+					class="mb-3 h-auto gap-1.5 p-0 text-sm font-medium text-blue-200 no-underline hover:text-white hover:no-underline"
 				>
-					<ArrowLeft class="h-3.5 w-3.5" />
-					กลับหน้าสแกนรับของ
+					<ArrowLeft class="size-4" />
+					{initialView === 'walkin' && onClose ? 'กลับไปที่รายการของบริจาค' : 'กลับหน้าสแกนรับของ'}
 				</Button>
 
 				<div class="flex items-center gap-2.5">
