@@ -36,9 +36,8 @@ export function computeNeeds(
 	const campaignRemaining = new Map<string, Map<string, string>>();
 
 	// Same terms as the back-office board (deriveNeedAvailability): what the shelter
-	// already holds plus what is still owed to it. Deliberately not `calculateReserved` —
-	// that one attributes a donation with no campaign_id to every campaign and guesses an
-	// item_id from free text, both of which this side dropped on purpose.
+	// already holds plus what is still owed to it. Both sides count a donation only
+	// against its own campaign_id and skip lines without an item_id (#689).
 	const onHand = stockBalance(stockLedgers);
 	const keyed = keyedDonationIds(stockLedgers);
 	const recorded = recordedDonationQty(stockLedgers);
