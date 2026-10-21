@@ -66,7 +66,7 @@ class ThirdPartyPersonSearchUseCase:
     async def search(
         self,
         *,
-        search: str,
+        search: object,
         purpose: str | None,
         claims: ThirdPartyClaims,
         client_ip: str,
@@ -93,7 +93,11 @@ class ThirdPartyPersonSearchUseCase:
                 f"scope '{_REQUIRED_SCOPE}' is required",
             )
 
-        parsed = parse_search_query(search) if len(search) <= _MAX_QUERY_LENGTH else None
+        parsed = (
+            parse_search_query(search)
+            if isinstance(search, str) and len(search) <= _MAX_QUERY_LENGTH
+            else None
+        )
         if parsed is None:
             await self._log(
                 claims=claims,

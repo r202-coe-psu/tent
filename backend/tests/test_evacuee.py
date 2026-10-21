@@ -899,12 +899,12 @@ async def test_public_search_still_returns_cancelled_people_and_family_members(
     client: AsyncClient,
     db_client: AsyncMongoClient,
     settings: Settings,
-    auth_headers: dict[str, str],
+    search_endpoint: tuple[str, dict[str, str]],
 ):
     """Regression (#736 decision 3/4): EXT-012 drops `cancelled` + family at ITS layer only.
 
-    The shared use case behind /public/v1/occupants keeps reporting a cancelled stay as
-    `cancelled` (CR-099) and keeps the household members (CR-080).
+    The shared use case behind /public/v1/occupants and /external/v1/occupants keeps reporting
+    a cancelled stay as `cancelled` (CR-099) and keeps the household members (CR-080).
     """
     phone = "0833333333"
     now = datetime.now(UTC)
@@ -940,7 +940,8 @@ async def test_public_search_still_returns_cancelled_people_and_family_members(
             },
         )
 
-    response = await client.post("/public/v1/occupants", json={"q": phone}, headers=auth_headers)
+    path, headers = search_endpoint
+    response = await client.post(path, json={"q": phone}, headers=headers)
     assert response.status_code == 200
     body = response.json()
     assert body["count"] == 1

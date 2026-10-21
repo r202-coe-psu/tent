@@ -171,6 +171,57 @@ async def test_invalid_query_is_422_and_logged(client: AsyncClient, query: str) 
         assert not any(query in v for v in values)
 
 
+# 4b — a malformed body is judged by the use case (purpose → scope → validation) and logged,
+# not rejected up front by FastAPI.
+_BAD_BODIES = [
+    {"json": {"search": 123}},
+    {"json": {"search": ["0101234567890"]}},
+    {"json": ["not", "an", "object"]},
+    {"content": b"{not json", "headers": {"Content-Type": "application/json"}},
+    {},
+]
+
+
+def _post_raw(client: AsyncClient, body: dict, *, headers: dict[str, str], params):
+    extra = dict(body)
+    merged = {**headers, **extra.pop("headers", {})}
+    return client.post(URL, params=params, headers=merged, **extra)
+
+
+@pytest.mark.parametrize("body", _BAD_BODIES)
+async def test_malformed_body_without_purpose_is_400_and_logged(
+    client: AsyncClient, body: dict
+) -> None:
+    response = await _post_raw(client, body, headers=GRANTED, params=None)
+    assert response.status_code == 400
+    assert response.json()["code"] == "missing_purpose"
+    logs = await ThirdPartyAccessLog.find_all().to_list()
+    assert [log.status for log in logs] == ["denied_missing_purpose"]
+
+
+@pytest.mark.parametrize("body", _BAD_BODIES)
+async def test_malformed_body_without_scope_is_403_and_logged(
+    client: AsyncClient, body: dict
+) -> None:
+    response = await _post_raw(client, body, headers=_bearer(["location-read"]), params=PURPOSE)
+    assert response.status_code == 403
+    assert response.json()["code"] == "insufficient_scope"
+    logs = await ThirdPartyAccessLog.find_all().to_list()
+    assert [log.status for log in logs] == ["denied_insufficient_scope"]
+
+
+@pytest.mark.parametrize("body", _BAD_BODIES)
+async def test_malformed_body_is_422_validation_error_and_logged(
+    client: AsyncClient, body: dict
+) -> None:
+    response = await _post_raw(client, body, headers=GRANTED, params=PURPOSE)
+    assert response.status_code == 422
+    assert response.json()["code"] == "validation_error"
+    logs = await ThirdPartyAccessLog.find_all().to_list()
+    assert [log.status for log in logs] == ["denied_validation_error"]
+    assert logs[0].endpoint == "EXT-012"
+
+
 # 5────────────────────────────────────────────────────────────────────────────
 
 

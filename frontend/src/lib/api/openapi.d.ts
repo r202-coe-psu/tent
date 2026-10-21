@@ -2476,22 +2476,6 @@ export interface components {
 			/** Zone Name */
 			zone_name?: string | null;
 		};
-		/**
-		 * PersonSearchRequest
-		 * @description Body of `POST /external/persons/search`.
-		 *
-		 *     No length / shape constraint here: the query is validated inside the use case (after the
-		 *     purpose and scope checks) so a rejected attempt is still logged and answered with the partner
-		 *     `validation_error`, not FastAPI's generic body error.
-		 */
-		PersonSearchRequest: {
-			/**
-			 * Search
-			 * @description คำค้น: ชื่อ / เลขบัตร 13 หลัก / พาสปอร์ต / เบอร์โทร (ไม่ส่งใน URL)
-			 * @default
-			 */
-			search: string;
-		};
 		/** PetCreated */
 		PetCreated: {
 			/** Pet Id */
@@ -5454,9 +5438,16 @@ export interface operations {
 			path?: never;
 			cookie?: never;
 		};
-		requestBody?: {
+		requestBody: {
 			content: {
-				'application/json': components['schemas']['PersonSearchRequest'] | null;
+				'application/json': {
+					/**
+					 * Search
+					 * @description คำค้น: ชื่อ / เลขบัตร 13 หลัก / พาสปอร์ต / เบอร์โทร (ไม่ส่งใน URL)
+					 * @default
+					 */
+					search?: string;
+				};
 			};
 		};
 		responses: {

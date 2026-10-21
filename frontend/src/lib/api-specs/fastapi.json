@@ -1539,19 +1539,6 @@
 						"description": "วัตถุประสงค์การค้นหา (บังคับ)"
 					}
 				],
-				"requestBody": {
-					"content": {
-						"application/json": {
-							"schema": {
-								"anyOf": [
-									{ "$ref": "#/components/schemas/PersonSearchRequest" },
-									{ "type": "null" }
-								],
-								"title": "Body"
-							}
-						}
-					}
-				},
 				"responses": {
 					"200": {
 						"description": "Successful Response",
@@ -1592,6 +1579,26 @@
 							}
 						},
 						"description": "Unprocessable Content"
+					}
+				},
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"description": "Body of `POST /external/persons/search`.\n\nNo length / shape constraint here: the query is validated inside the use case (after the\npurpose and scope checks) so a rejected attempt is still logged and answered with the partner\n`validation_error`, not FastAPI's generic body error.",
+								"properties": {
+									"search": {
+										"default": "",
+										"description": "คำค้น: ชื่อ / เลขบัตร 13 หลัก / พาสปอร์ต / เบอร์โทร (ไม่ส่งใน URL)",
+										"title": "Search",
+										"type": "string"
+									}
+								},
+								"title": "PersonSearchRequest",
+								"type": "object"
+							}
+						}
 					}
 				}
 			}
@@ -4267,19 +4274,6 @@
 				"required": ["name", "status", "shelter_name"],
 				"title": "PersonSearchItem",
 				"description": "A masked match — same fields as public search minus `family_members` (#736 decision 4)."
-			},
-			"PersonSearchRequest": {
-				"properties": {
-					"search": {
-						"type": "string",
-						"title": "Search",
-						"description": "คำค้น: ชื่อ / เลขบัตร 13 หลัก / พาสปอร์ต / เบอร์โทร (ไม่ส่งใน URL)",
-						"default": ""
-					}
-				},
-				"type": "object",
-				"title": "PersonSearchRequest",
-				"description": "Body of `POST /external/persons/search`.\n\nNo length / shape constraint here: the query is validated inside the use case (after the\npurpose and scope checks) so a rejected attempt is still logged and answered with the partner\n`validation_error`, not FastAPI's generic body error."
 			},
 			"PetCreated": {
 				"properties": {
