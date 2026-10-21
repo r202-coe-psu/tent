@@ -77,6 +77,9 @@ async def test_create_donation_persists_campaign_id_and_tracking_stub(
     assert response.status_code == 201
     body = response.json()
     assert body["success"] is True
+    # No counter for c1/rice here (NOT_SEEDED) — the line holds no quota, so it waits for
+    # review and so does the booking (CR-174 FR-2, FR-15).
+    assert body["status"] == "pending_review"
     token = body["tracking_token"]
     booking_ref = body["booking_ref"]
     assert token.startswith("TX-SH001-")
@@ -93,9 +96,9 @@ async def test_create_donation_persists_campaign_id_and_tracking_stub(
     stub = await PublicDonation.find_one(PublicDonation.tracking_token_hash == sha256_hex(token))
     assert stub is not None
     assert stub.booking_ref == booking_ref
-    # CR-052 §1.4 (Task #52): no submission skips the staff review step, so the public
-    # projection opens in review rather than at `declared`.
+    # CR-174: the projection opens in the status the lines add up to, not at `declared`.
     assert stub.status == "pending_review"
+    assert stub.items_declared[0].review_status == "pending"
 
     track = await client.get(f"/public/v1/donations/{token}", headers=auth_headers)
     assert track.status_code == 200
@@ -1145,18 +1148,17 @@ async def test_editing_does_not_extend_the_ttl(
     assert after == before
 
 
-@pytest.mark.parametrize("status_value", ["verifying", "received", "cancelled"])
+@pytest.mark.parametrize("status_value", ["received", "partially_received", "cancelled"])
 async def test_a_booking_taken_over_by_staff_may_not_be_edited(
     client: AsyncClient,
     open_shelter: PublicShelter,
     auth_headers: dict[str, str],
     status_value: str,
 ) -> None:
-    """CR-080 Q1 — once staff start assessing, the count is theirs.
+    """CR-080 Q1 — once the goods arrive, the count is staff's.
 
-    ``pending_review`` is deliberately absent: CR-052 §1.4 opens every public booking
-    there, so it is the donor's own waiting room rather than staff territory. It has its
-    own test below.
+    ``pending_review`` and ``verifying`` are deliberately absent: the goods are still with
+    the donor in both (CR-174 FR-20..FR-23). They have their own tests below.
     """
     await _seed_counter("100")
     token = await _book(client, auth_headers, [{"item_id": "item:rice", "qty": "5", "unit": "kg"}])
@@ -1176,23 +1178,55 @@ async def test_a_booking_taken_over_by_staff_may_not_be_edited(
 async def test_a_booking_awaiting_review_is_still_the_donors_to_edit(
     client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
 ) -> None:
-    """CR-052 §1.4 — every booking opens at ``pending_review``.
+    """A booking with a typed line opens at ``pending_review`` (CR-174 FR-7).
 
-    Gating edits on ``declared`` alone would therefore take edit and cancel away from
-    every booking the public wizard creates, which is the opposite of what CR-080 Q1
-    protects. Mirrors ``isDonorEditable`` on the BFF.
+    Gating edits on ``declared`` alone would take edit and cancel away from every such
+    booking, which is the opposite of what CR-080 Q1 protects. Mirrors
+    ``isDonorEditable`` on the BFF.
     """
+    await _seed_counter("100")
+    token = await _book(
+        client,
+        auth_headers,
+        [
+            {"item_id": "item:rice", "qty": "5", "unit": "kg"},
+            {"free_text": "ผ้าห่ม", "qty": "2", "unit": "ผืน"},
+        ],
+    )
+    buffer = await DonationBuffer.find_one(DonationBuffer.tracking_token_hash == sha256_hex(token))
+    assert buffer is not None
+    assert buffer.status == "pending_review", "a typed line should keep it in review"
+
+    response = await _edit(
+        client,
+        auth_headers,
+        token,
+        [
+            {"item_id": "item:rice", "qty": "9", "unit": "kg"},
+            {"free_text": "ผ้าห่ม", "qty": "2", "unit": "ผืน"},
+        ],
+    )
+
+    assert response.status_code == 200
+    assert await _reserved() == Decimal("9")
+
+
+async def test_a_verifying_booking_is_still_the_donors_to_edit(
+    client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    """CR-174 FR-21 — the QR is out but the goods are not; the donor may still edit."""
     await _seed_counter("100")
     token = await _book(client, auth_headers, [{"item_id": "item:rice", "qty": "5", "unit": "kg"}])
     buffer = await DonationBuffer.find_one(DonationBuffer.tracking_token_hash == sha256_hex(token))
     assert buffer is not None
-    assert buffer.status == "pending_review", "a fresh booking should open in review"
+    assert buffer.status == "verifying"
 
     response = await _edit(
         client, auth_headers, token, [{"item_id": "item:rice", "qty": "9", "unit": "kg"}]
     )
 
     assert response.status_code == 200
+    assert response.json()["status"] == "verifying"
     assert await _reserved() == Decimal("9")
 
 
@@ -1587,3 +1621,308 @@ async def test_a_booking_without_a_hold_takes_no_place(
         DonationBuffer.booking_ref == response.json()["booking_ref"]
     )
     assert buffer is not None and buffer.slot_counter_id is None
+
+
+# --- per-line review (CR-174) ---
+
+_RICE = {"item_id": "item:rice", "free_text": "ข้าวสาร", "qty": "5", "unit": "kg"}
+_BLANKET = {"free_text": "ผ้าห่ม", "qty": "2", "unit": "ผืน"}
+
+
+async def _buffer(token: str) -> DonationBuffer:
+    buffer = await DonationBuffer.find_one(DonationBuffer.tracking_token_hash == sha256_hex(token))
+    assert buffer is not None
+    return buffer
+
+
+async def _stub(token: str) -> PublicDonation:
+    stub = await PublicDonation.find_one(PublicDonation.tracking_token_hash == sha256_hex(token))
+    assert stub is not None
+    return stub
+
+
+async def _create(client: AsyncClient, headers: dict[str, str], items: list[dict]) -> dict:
+    donation_router._rate_buckets.clear()
+    response = await client.post(
+        "/public/v1/donations",
+        headers=headers,
+        json={
+            "shelter_code": "SH001",
+            "campaign_id": "donation_campaign:c1",
+            "donor": {"name": "Donor", "phone": "0812345678"},
+            "items": items,
+        },
+    )
+    assert response.status_code == 201, response.text
+    return response.json()
+
+
+async def test_ac1_a_campaign_only_booking_opens_verifying(
+    client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    await _seed_counter("100")
+    body = await _create(client, auth_headers, [_RICE])
+
+    assert body["status"] == "verifying"
+    buffer = await _buffer(body["tracking_token"])
+    assert buffer.status == "verifying"
+    assert buffer.items_declared[0]["review_status"] == "approved"
+    stub = await _stub(body["tracking_token"])
+    assert stub.status == "verifying"
+    assert stub.items_declared[0].review_status == "approved"
+
+    tracked = await client.get(
+        f"/public/v1/donations/{body['tracking_token']}", headers=auth_headers
+    )
+    assert tracked.json()["donation"]["items"][0]["review_status"] == "approved"
+
+
+async def test_ac2_a_mixed_booking_waits_for_the_typed_line(
+    client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    await _seed_counter("100")
+    body = await _create(client, auth_headers, [_RICE, _BLANKET])
+
+    assert body["status"] == "pending_review"
+    buffer = await _buffer(body["tracking_token"])
+    assert [i["review_status"] for i in buffer.items_declared] == ["approved", "pending"]
+
+
+async def test_ac4_a_typed_only_booking_opens_pending_review(
+    client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    body = await _create(client, auth_headers, [_BLANKET])
+
+    assert body["status"] == "pending_review"
+    buffer = await _buffer(body["tracking_token"])
+    assert buffer.items_declared[0]["review_status"] == "pending"
+
+
+async def test_a_campaign_line_without_a_counter_waits(
+    client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    """FR-2 — NOT_SEEDED goes through unreserved, so it is not approved."""
+    body = await _create(client, auth_headers, [_RICE])
+
+    assert body["status"] == "pending_review"
+
+
+async def test_ac7_adding_a_typed_line_sends_a_verifying_booking_back(
+    client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    await _seed_counter("100")
+    token = (await _create(client, auth_headers, [_RICE]))["tracking_token"]
+
+    response = await _edit(client, auth_headers, token, [_RICE, _BLANKET])
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "pending_review"
+    assert [i["review_status"] for i in body["items"]] == ["approved", "pending"]
+    assert body["auto_approved_lines"] == []
+    assert (await _buffer(token)).status == "pending_review"
+    stub = await _stub(token)
+    assert stub.status == "pending_review"
+    assert [i.review_status for i in stub.items_declared] == ["approved", "pending"]
+
+
+async def test_ac22_dropping_the_typed_line_moves_to_verifying(
+    client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    await _seed_counter("100")
+    token = (await _create(client, auth_headers, [_RICE, _BLANKET]))["tracking_token"]
+
+    body = (await _edit(client, auth_headers, token, [_RICE])).json()
+
+    assert body["status"] == "verifying"
+    # Approved at creation (inbound audits it) — not a new automatic approval.
+    assert body["auto_approved_lines"] == []
+
+
+async def test_an_edited_campaign_line_is_approved_again_and_reported(
+    client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    await _seed_counter("100")
+    token = (await _create(client, auth_headers, [_RICE, _BLANKET]))["tracking_token"]
+
+    body = (await _edit(client, auth_headers, token, [_BLANKET, {**_RICE, "qty": "8"}])).json()
+
+    assert [i["review_status"] for i in body["items"]] == ["pending", "approved"]
+    assert body["auto_approved_lines"] == [1]
+
+
+async def test_ac10_the_couch_review_is_what_an_edit_starts_from(
+    client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    """Staff approved the typed line in CouchDB; the BFF sends that state along."""
+    await _seed_counter("100")
+    token = (await _create(client, auth_headers, [_RICE, _BLANKET]))["tracking_token"]
+    couch_items = [
+        {**_RICE, "reserved_qty": "5", "review_status": "approved"},
+        {**_BLANKET, "review_status": "approved"},
+    ]
+
+    untouched = await client.patch(
+        f"/public/v1/donations/{token}/items",
+        headers=auth_headers,
+        json={
+            "items": [{**_RICE, "qty": "6"}, _BLANKET],
+            "current_items": couch_items,
+            "current_status": "verifying",
+        },
+    )
+    assert untouched.status_code == 200
+    assert untouched.json()["status"] == "verifying"
+    assert [i["review_status"] for i in untouched.json()["items"]] == ["approved", "approved"]
+
+    donation_router._rate_buckets.clear()
+    edited = await client.patch(
+        f"/public/v1/donations/{token}/items",
+        headers=auth_headers,
+        json={
+            "items": [{**_RICE, "qty": "6"}, {**_BLANKET, "note": "ยังไม่แกะ"}],
+            "current_items": untouched.json()["items"],
+            "current_status": "verifying",
+        },
+    )
+    assert edited.json()["status"] == "pending_review"
+    assert [i["review_status"] for i in edited.json()["items"]] == ["approved", "pending"]
+
+
+async def test_the_couch_status_gates_the_edit(
+    client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    await _seed_counter("100")
+    token = (await _create(client, auth_headers, [_RICE]))["tracking_token"]
+
+    response = await client.patch(
+        f"/public/v1/donations/{token}/items",
+        headers=auth_headers,
+        json={"items": [{**_RICE, "qty": "9"}], "current_status": "received"},
+    )
+
+    assert response.status_code == 400
+    assert await _reserved() == Decimal("5")
+
+
+async def _legacy_booking(token: str, status_value: str, items: list[dict]) -> None:
+    """A booking from before schema_v 7 — synced, no review fields anywhere."""
+    now = datetime.now(UTC)
+    donation_id = f"donation:{new_ulid()}"
+    await DonationBuffer(
+        id=donation_id,
+        shelter_code="SH001",
+        donor=DonorBuffer(name="Legacy", phone="0812345678"),
+        items_declared=items,
+        campaign_id="donation_campaign:c1",
+        booking_ref=f"DN-{abs(hash(token)) % 900000 + 100000}",
+        tracking_token=token,
+        tracking_token_hash=sha256_hex(token),
+        status="pending_review",
+        synced_to_couch=True,
+        created_at=now,
+        expires_at=now + timedelta(hours=72),
+    ).insert()
+    await PublicDonation(
+        id=donation_id,
+        tracking_token_hash=sha256_hex(token),
+        shelter_code="SH001",
+        status=status_value,
+        booking_ref="DN-1",
+        items_declared=[],
+        updated_at=now,
+    ).insert()
+
+
+async def test_ac19_legacy_verifying_keeps_the_typed_line_approved(
+    client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    await _seed_counter("100")
+    await reserve_quota(
+        shelter_code="SH001",
+        campaign_id="donation_campaign:c1",
+        item_id="item:rice",
+        qty=Decimal("5"),
+        now=datetime.now(UTC),
+    )
+    token = "TX-SH001-LEGACYV"
+    held = [{**_RICE, "reserved_qty": "5"}, _BLANKET]
+    await _legacy_booking(token, "verifying", held)
+
+    # No current_* sent: the projection's status is what staff left it at.
+    body = (await _edit(client, auth_headers, token, [{**_RICE, "qty": "7"}, _BLANKET])).json()
+
+    assert body["status"] == "verifying"
+    assert [i["review_status"] for i in body["items"]] == ["approved", "approved"]
+    assert body["auto_approved_lines"] == [0]
+
+
+async def test_ac20_legacy_pending_review_is_judged_like_a_new_booking(
+    client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    await _seed_counter("100")
+    token = "TX-SH001-LEGACYP"
+    await _legacy_booking(token, "pending_review", [_RICE, _BLANKET])
+
+    body = (await _edit(client, auth_headers, token, [_RICE, {**_BLANKET, "qty": "3"}])).json()
+
+    assert body["status"] == "pending_review"
+    assert [i["review_status"] for i in body["items"]] == ["approved", "pending"]
+    assert body["auto_approved_lines"] == [0]
+
+
+async def test_ac21_a_declared_booking_stays_declared(
+    client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    await _seed_counter("100")
+    token = "TX-SH001-LEGACYD"
+    await _legacy_booking(token, "declared", [_RICE])
+
+    body = (await _edit(client, auth_headers, token, [{**_RICE, "qty": "4"}])).json()
+
+    assert body["status"] == "declared"
+    assert all("review_status" not in item for item in body["items"])
+    assert body["auto_approved_lines"] == []
+
+
+async def test_ac9_a_verifying_booking_can_be_cancelled(
+    client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    await _seed_counter("100")
+    token = (await _create(client, auth_headers, [_RICE]))["tracking_token"]
+    assert await _reserved() == Decimal("5")
+
+    donation_router._rate_buckets.clear()
+    response = await client.delete(f"/public/v1/donations/{token}", headers=auth_headers)
+
+    assert response.status_code == 200
+    assert await _reserved() == Decimal("0")
+
+
+async def test_ac11_a_verifying_booking_takes_a_courier_number(
+    client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    await _seed_counter("100")
+    donation_router._rate_buckets.clear()
+    response = await client.post(
+        "/public/v1/donations",
+        headers=auth_headers,
+        json={
+            "shelter_code": "SH001",
+            "campaign_id": "donation_campaign:c1",
+            "donor": {"name": "Donor", "phone": "0812345678"},
+            "items": [_RICE],
+            "logistics": {"delivery_method": "parcel"},
+        },
+    )
+    assert response.json()["status"] == "verifying"
+    token = response.json()["tracking_token"]
+
+    patched = await client.patch(
+        f"/public/v1/donations/{token}",
+        headers=auth_headers,
+        json={"courier_tracking_no": "TH123"},
+    )
+
+    assert patched.status_code == 200
+    assert ((await _buffer(token)).logistics or {})["courier_tracking_no"] == "TH123"

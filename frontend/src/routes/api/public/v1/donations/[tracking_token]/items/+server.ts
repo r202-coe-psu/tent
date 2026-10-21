@@ -13,6 +13,8 @@ import {
 import type { DonationRevision, PublicDonationDoc } from '$lib/features/donations';
 import { fetchDocs } from '$lib/server/donation-docs';
 import type { DonationCampaign, StockLedger } from '$lib/features/operations';
+import { DONATION_SCHEMA_V } from '$lib/features/operations/server';
+import { createAuditEntry } from '$lib/features/shared';
 
 function shelterDbFromToken(token: string): string | null {
 	const match = token.match(/^TX-([A-Z0-9]+)-/);
@@ -126,7 +128,14 @@ export const PATCH = async ({ params, request, getClientAddress }) => {
 			{
 				method: 'PATCH',
 				headers: fastapiServiceHeaders({ 'Content-Type': 'application/json' }),
-				body: JSON.stringify({ items: resolvedItems })
+				// CR-174 FR-18 — staff decide lines in CouchDB, which FastAPI cannot read: send
+				// the booking as it is now so a line nobody touched keeps its decision.
+				body: JSON.stringify({
+					items: resolvedItems,
+					...(latestDoc
+						? { current_items: latestDoc.items ?? [], current_status: latestDoc.status }
+						: {})
+				})
 			}
 		);
 		const apiBody = await apiRes.json().catch(() => ({}));
@@ -142,10 +151,14 @@ export const PATCH = async ({ params, request, getClientAddress }) => {
 			);
 		}
 
-		const { items, revision, revisions } = apiBody as {
-			items: NonNullable<PublicDonationDoc['items_declared']>;
+		const { items, revision, revisions, status, auto_approved_lines } = apiBody as {
+			items: NonNullable<PublicDonationDoc['items']>;
 			revision: DonationRevision;
 			revisions: number;
+			/** The booking's status after the lines were re-reviewed (FR-18b). */
+			status?: PublicDonationDoc['status'];
+			/** Lines approved by the campaign rule in this edit (FR-26). */
+			auto_approved_lines?: number[];
 		};
 
 		// Still only in the buffer — inbound will carry the new items and the log across.
@@ -155,7 +168,8 @@ export const PATCH = async ({ params, request, getClientAddress }) => {
 
 		latestDoc.items = items;
 		latestDoc.revisions = [...(latestDoc.revisions ?? []), revision];
-		latestDoc.schema_v = 4;
+		if (status) latestDoc.status = status;
+		latestDoc.schema_v = DONATION_SCHEMA_V;
 		latestDoc.updated_at = new Date().toISOString();
 
 		let writeRes: { status: number; data: unknown };
@@ -180,7 +194,30 @@ export const PATCH = async ({ params, request, getClientAddress }) => {
 			return json({ success: false, error: 'Database update failed' }, { status: 500 });
 		}
 
-		return json({ success: true, message: 'Donation items updated', revisions });
+		// FR-26 — the lines the campaign rule approved in this edit get the same audit the
+		// worker writes at booking time. After the PUT: no audit for an edit that did not land.
+		if (auto_approved_lines && auto_approved_lines.length > 0) {
+			const audit = createAuditEntry(
+				{
+					action: 'manual_adjust',
+					target_type: 'donation',
+					target_id: latestDoc._id,
+					reason: `อนุมัติรายการในแคมเปญอัตโนมัติหลังผู้บริจาคแก้รายการ (${latestDoc.booking_ref ?? latestDoc._id})`,
+					context: {
+						booking_ref: latestDoc.booking_ref ?? null,
+						approved_by: 'system',
+						rule: 'campaign_line',
+						lines: auto_approved_lines
+					}
+				},
+				{ shelterCode: latestDoc.shelter_code, createdBy: 'system' }
+			);
+			const auditRes = await adminRaw(`/${shelterDb}/_bulk_docs`, 'POST', { docs: [audit] });
+			if (auditRes.status >= 400)
+				console.error('donation auto-approve audit failed', auditRes.data);
+		}
+
+		return json({ success: true, message: 'Donation items updated', revisions, status });
 	} catch (e) {
 		console.error(e);
 		return json({ success: false, error: 'Internal Server Error' }, { status: 500 });

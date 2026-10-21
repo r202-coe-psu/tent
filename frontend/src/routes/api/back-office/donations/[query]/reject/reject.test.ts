@@ -145,6 +145,31 @@ describe('POST /api/back-office/donations/[query]/reject', () => {
 		}
 	});
 
+	// CR-174 FR-12 / AC-15 — approved campaign lines go with the booking.
+	it('rejects every line of a per-line reviewed booking, keeping earlier line reasons', async () => {
+		mockCouch({
+			...baseDonation,
+			status: 'verifying',
+			items: [
+				{ item_id: 'item:rice', qty: '10', unit: 'kg', review_status: 'approved' },
+				{
+					free_text: 'ผ้าห่ม',
+					qty: '1',
+					unit: 'ผืน',
+					review_status: 'rejected',
+					review_reason: 'หมดอายุ'
+				}
+			]
+		} as unknown as PublicDonationDoc);
+
+		await POST(postEvent({ reason_code: 'not_needed' }));
+
+		const items = putBody()?.items as { review_status: string; review_reason?: string }[];
+		expect(items.map((i) => i.review_status)).toEqual(['rejected', 'rejected']);
+		expect(items[0].review_reason).toBeUndefined();
+		expect(items[1].review_reason).toBe('หมดอายุ');
+	});
+
 	it('refuses a donation whose goods are already on the shelf', async () => {
 		mockCouch({ ...baseDonation, status: 'received' } as PublicDonationDoc);
 

@@ -9,7 +9,9 @@ import {
 } from '$lib/server/donation-intake';
 import {
 	donorRejectMessage,
+	hasLineReview,
 	rejectDonationInputSchema,
+	rejectRemainingLines,
 	type PublicDonationDoc
 } from '$lib/features/donations/server';
 import { canTransitionDonation } from '$lib/features/operations/server';
@@ -94,6 +96,10 @@ export const POST: RequestHandler = async ({ params, request }) => {
 		const nowStr = new Date().toISOString();
 		const updated: PublicDonationDoc = {
 			...donation,
+			// CR-174 FR-12 — the lines go with the booking, approved ones included.
+			...(hasLineReview(donation.items)
+				? { items: rejectRemainingLines(donation.items ?? []) }
+				: {}),
 			status: 'rejected',
 			reject_reason: reason,
 			reject_reason_code: reasonCode,

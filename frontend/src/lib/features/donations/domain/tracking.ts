@@ -23,6 +23,9 @@ export type DonationTrackItem = {
 	qty: string | number | null;
 	unit: string | null;
 	category?: string | null;
+	/** Per-line review (CR-174 FR-17) — absent on bookings before schema_v 7. */
+	review_status?: 'approved' | 'pending' | 'rejected' | null;
+	review_reason?: string | null;
 };
 
 export type DonationTrackLogistics = {
@@ -152,8 +155,9 @@ export function formatTrackSchedule(
 	return '-';
 }
 
+/** Same set as `isDonorEditable` — `verifying` too since CR-174 (FR-20, FR-21). */
 export function canCancelDonation(status: string): boolean {
-	return status === 'declared' || status === 'pending_review';
+	return status === 'declared' || status === 'pending_review' || status === 'verifying';
 }
 
 export function canEditCourierTracking(
@@ -202,7 +206,14 @@ export function toDonationTrackView(raw: Record<string, unknown>): DonationTrack
 				item_name: String(row.item_name ?? row.free_text ?? 'ของบริจาค'),
 				qty: (row.qty as string | number | null) ?? null,
 				unit: row.unit != null ? String(row.unit) : null,
-				category: row.category != null ? String(row.category) : null
+				category: row.category != null ? String(row.category) : null,
+				review_status:
+					row.review_status === 'approved' ||
+					row.review_status === 'pending' ||
+					row.review_status === 'rejected'
+						? row.review_status
+						: null,
+				review_reason: typeof row.review_reason === 'string' ? row.review_reason : null
 			};
 		}),
 		logistics:
@@ -222,15 +233,18 @@ export function toDonationTrackView(raw: Record<string, unknown>): DonationTrack
 }
 
 /**
- * The reason each declared line was turned away at the counter, by position in
- * `items` — `null` for a line that was kept (CR-172 FR-16). The counter sends one
- * counted line per declared line in order, so the two lists line up.
+ * Why each declared line was turned away, by position in `items` — `null` for a line
+ * that was not, `''` for one refused without a reason of its own (the whole booking
+ * was, and the booking reason says why). Staff refuse a line either at review
+ * (CR-174 `review_status`) or at the counter (CR-172 `received_summary.items[]`, one
+ * counted line per declared line, in order).
  */
 export function rejectedLineReasons(view: DonationTrackView): (string | null)[] {
 	const counted = view.received_summary?.items ?? [];
-	return view.items.map((_, index) => {
+	return view.items.map((item, index) => {
 		const line = counted[index];
-		if (!line?.rejected) return null;
-		return line.reject_reason?.trim() || 'ไม่ระบุเหตุผล';
+		if (line?.rejected) return line.reject_reason?.trim() ?? '';
+		if (item.review_status === 'rejected') return item.review_reason?.trim() ?? '';
+		return null;
 	});
 }

@@ -6,6 +6,7 @@ import {
 	BOARD_SYNC,
 	RunLedger,
 	approvePending,
+	expectReadyForDropoff,
 	bookAsDonor,
 	boardLineFor,
 	catalogItem,
@@ -99,7 +100,9 @@ test.describe('Donation full-stack: donor and staff', { tag: ['@critical', '@don
 	});
 
 	test.describe('staff review', () => {
-		test('approve → donor sees QR → receive into stock → donor sees received', async ({ page }) => {
+		test('campaign booking skips review → donor sees QR → receive into stock → donor sees received (CR-174 AC-1)', async ({
+			page
+		}) => {
 			const phone = '0812345678';
 			const { bookingRef, trackingToken } = await bookAsDonor(page, {
 				shelter,
@@ -109,14 +112,18 @@ test.describe('Donation full-stack: donor and staff', { tag: ['@critical', '@don
 				phone
 			});
 
-			await openBackOffice(page, ws);
-			await approvePending(page, shelter.code, bookingRef);
+			await expectReadyForDropoff(shelter.code, bookingRef);
+			const booked = await findDonation(shelter.code, bookingRef);
+			expect((booked.items as { review_status?: string }[]).map((i) => i.review_status)).toEqual([
+				'approved'
+			]);
 
-			// Approved = the donor's ticket QR goes live; nothing to cancel any more.
+			// The QR is live from the start, and the donor can still hand it back (FR-20).
 			await clearSession(page);
 			await page.goto(`/donations/track/${trackingToken}`);
 			await expect(page.getByRole('img', { name: `QR Code for ${bookingRef}` })).toBeVisible();
-			await expect(page.getByRole('button', { name: 'ยกเลิกการจองนี้' })).toHaveCount(0);
+			await expect(page.getByRole('button', { name: 'ยกเลิกการจองนี้' })).toBeVisible();
+			await expect(page.getByText('อนุมัติแล้ว / รอนำส่ง')).toBeVisible();
 
 			// ── Scan station: count it in ───────────────────────────────────────────
 			await openBackOffice(page, ws);
@@ -162,9 +169,10 @@ test.describe('Donation full-stack: donor and staff', { tag: ['@critical', '@don
 		});
 
 		test('reject from the pending queue → donor sees it rejected', async ({ page }) => {
+			// Only a typed-in line waits in the queue (CR-174).
 			const { bookingRef, trackingToken } = await bookAsDonor(page, {
 				shelter,
-				need,
+				unsolicited: { itemName: `ผ้าห่มเก่า ${RUN_ID}`, unitLabel: 'กล่อง' },
 				ledger,
 				donorName: `E2E ปฏิเสธ ${RUN_ID}`,
 				phone: '0898765432'
@@ -202,7 +210,7 @@ test.describe('Donation full-stack: donor and staff', { tag: ['@critical', '@don
 			});
 
 			await openBackOffice(page, ws);
-			await approvePending(page, shelter.code, bookingRef);
+			await expectReadyForDropoff(shelter.code, bookingRef);
 			await openInScanStation(page, bookingRef);
 
 			await rejectInDialog(page, /ชำรุดเสียหาย/, `กล่องเปียก (e2e ${RUN_ID})`);
@@ -230,7 +238,7 @@ test.describe('Donation full-stack: donor and staff', { tag: ['@critical', '@don
 			});
 
 			await openBackOffice(page, ws);
-			await approvePending(page, shelter.code, bookingRef);
+			await expectReadyForDropoff(shelter.code, bookingRef);
 			await openInScanStation(page, bookingRef);
 
 			await page.getByRole('switch', { name: /ไม่รับรายการนี้/ }).click();
@@ -372,7 +380,7 @@ test.describe('Donation full-stack: donor and staff', { tag: ['@critical', '@don
 			phone: '0867770001'
 		});
 		await openBackOffice(page, ws);
-		await approvePending(page, shelter.code, first.bookingRef);
+		await expectReadyForDropoff(shelter.code, first.bookingRef);
 		await openBackOffice(page, ws);
 		await openInScanStation(page, first.bookingRef);
 		await page.getByRole('checkbox', { name: 'ผ่านการตรวจสอบแล้ว' }).check();
@@ -433,7 +441,7 @@ test.describe('Donation full-stack: donor and staff', { tag: ['@critical', '@don
 			phone: '0867770021'
 		});
 		await openBackOffice(page, ws);
-		await approvePending(page, shelter.code, bookingRef);
+		await expectReadyForDropoff(shelter.code, bookingRef);
 
 		await openBackOffice(page, admin, 'SH001');
 		await openInScanStation(page, bookingRef);

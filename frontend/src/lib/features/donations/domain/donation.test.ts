@@ -167,9 +167,16 @@ describe('receiveDonationInputSchema', () => {
 	it('accepts received status with optional items', () => {
 		const result = receiveDonationInputSchema.safeParse({
 			status: 'received',
+			expected_rev: '3-abc',
 			items: [{ free_text: 'ข้าวสาร', qty: 1, unit: 'kg' }]
 		});
 		expect(result.success).toBe(true);
+	});
+
+	// CR-174 FR-25 — the counter must say which version of the booking it counted.
+	it('requires the _rev the screen was loaded with', () => {
+		const result = receiveDonationInputSchema.safeParse({ status: 'received' });
+		expect(result.success).toBe(false);
 	});
 
 	it('rejects non-received status values', () => {

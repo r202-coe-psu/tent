@@ -57,11 +57,15 @@ describe('canCancelDonation', () => {
 	// Gates the cancel button on the donor's track page. A booking that is still only
 	// a reservation may be handed back; once it is out of the donor's hands the count
 	// belongs to staff.
-	it.each(['declared', 'pending_review'])('lets the donor cancel a %s booking', (status) => {
-		expect(canCancelDonation(status)).toBe(true);
-	});
+	// `verifying` since CR-174 FR-20 — a booking with its QR can still be handed back.
+	it.each(['declared', 'pending_review', 'verifying'])(
+		'lets the donor cancel a %s booking',
+		(status) => {
+			expect(canCancelDonation(status)).toBe(true);
+		}
+	);
 
-	it.each(['received', 'verifying', 'cancelled', 'expired', 'rejected', 'redirected'])(
+	it.each(['received', 'cancelled', 'expired', 'rejected', 'redirected'])(
 		'hides cancel once the booking is %s',
 		(status) => {
 			expect(canCancelDonation(status)).toBe(false);
@@ -159,5 +163,25 @@ describe('reject reasons on the ticket (CR-172)', () => {
 			}
 		});
 		expect(rejectedLineReasons(view)).toEqual([null, 'ชำรุดเสียหาย']);
+	});
+
+	it('CR-174 FR-17: carries line review and its reason from the declared items', () => {
+		const view = toDonationTrackView({
+			...base,
+			status: 'verifying',
+			items: [
+				{ item_name: 'ข้าวสาร', qty: '10', unit: 'kg', review_status: 'approved' },
+				{
+					item_name: 'ผ้าห่ม',
+					qty: '1',
+					unit: 'ผืน',
+					review_status: 'rejected',
+					review_reason: 'หมดอายุ'
+				},
+				{ item_name: 'หมอน', qty: '1', unit: 'ใบ', review_status: 'rejected' }
+			]
+		});
+		expect(view.items.map((i) => i.review_status)).toEqual(['approved', 'rejected', 'rejected']);
+		expect(rejectedLineReasons(view)).toEqual([null, 'หมดอายุ', '']);
 	});
 });

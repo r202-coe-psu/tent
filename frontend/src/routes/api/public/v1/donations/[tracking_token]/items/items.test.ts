@@ -125,7 +125,63 @@ describe('PATCH /api/public/v1/donations/[token]/items', () => {
 			{ item_id: 'item:rice', qty: '8', unit: 'kg', reserved_qty: '8' }
 		]);
 		expect((written as { revisions: unknown[] }).revisions).toHaveLength(1);
-		expect((written as { schema_v: number }).schema_v).toBe(4);
+		// FR-18b — the current version, not a stale constant.
+		expect((written as { schema_v: number }).schema_v).toBe(7);
+	});
+
+	// CR-174 FR-18 / FR-18b / FR-26
+	describe('per-line review after an edit (CR-174)', () => {
+		it('sends FastAPI the booking as staff left it in CouchDB', async () => {
+			const staffLeft = [{ free_text: 'ผ้าห่ม', qty: '1', unit: 'ผืน', review_status: 'approved' }];
+			couchHas({ ...couchDoc('verifying'), items: [...staffLeft] });
+			fastapiOk();
+
+			await call();
+
+			const body = JSON.parse(String(vi.mocked(fetch).mock.calls[0]![1]!.body));
+			expect(body).toMatchObject({ current_items: staffLeft, current_status: 'verifying' });
+		});
+
+		it('AC-14: writes the status FastAPI worked out back to CouchDB', async () => {
+			couchHas(couchDoc('verifying'));
+			fastapiOk({ status: 'pending_review' });
+
+			const response = await call();
+
+			const [, , written] = vi.mocked(putAsPublicWriter).mock.calls[0]!;
+			expect(written).toMatchObject({ status: 'pending_review', schema_v: 7 });
+			expect((await response.json()).status).toBe('pending_review');
+		});
+
+		it('AC-22: audits the lines the campaign rule approved in this edit, after the write', async () => {
+			couchHas(couchDoc('pending_review'));
+			fastapiOk({ status: 'verifying', auto_approved_lines: [0] });
+
+			await call();
+
+			const auditCall = vi
+				.mocked(adminRaw)
+				.mock.calls.find((c) => String(c[0]).includes('_bulk_docs'));
+			const [audit] = (auditCall![2] as { docs: Record<string, unknown>[] }).docs;
+			expect(audit).toMatchObject({
+				type: 'audit',
+				action: 'manual_adjust',
+				target_id: 'donation:1',
+				created_by: 'system',
+				context: { approved_by: 'system', rule: 'campaign_line', lines: [0] }
+			});
+		});
+
+		it('writes no audit when nothing new was approved', async () => {
+			couchHas(couchDoc('pending_review'));
+			fastapiOk({ status: 'pending_review', auto_approved_lines: [] });
+
+			await call();
+
+			expect(vi.mocked(adminRaw).mock.calls.some((c) => String(c[0]).includes('_bulk_docs'))).toBe(
+				false
+			);
+		});
 	});
 
 	it('leaves CouchDB alone when the donation has not synced yet', async () => {
@@ -153,9 +209,8 @@ describe('PATCH /api/public/v1/donations/[token]/items', () => {
 	it('refuses before moving quota once staff have taken the booking', async () => {
 		// The buffer follows CouchDB a few seconds behind, so checking the record first
 		// means no quota is moved and rolled back for a booking that cannot be edited.
-		// `verifying`, not `pending_review`: since CR-052 every booking opens in review
-		// and stays the donor's until the goods are at the counter (decision D-1).
-		couchHas(couchDoc('verifying'));
+		// `received`: since CR-174 a `verifying` booking (QR issued) is still the donor's.
+		couchHas(couchDoc('received'));
 		fastapiOk();
 
 		const response = await call();

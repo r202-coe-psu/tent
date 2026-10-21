@@ -78,11 +78,21 @@ export interface DonationRevision {
  * intentionally included (authorized warehouse staff need it to contact donors).
  */
 export interface ScanDonationView {
+	/** `_rev` the screen was loaded with — sent back as `expected_rev` (CR-174 FR-25). */
+	rev?: string;
 	booking_ref?: string;
 	shelter_code: string;
 	status: string;
 	donor: { name: string; phone: string | null; email?: string | null };
-	items: Array<{ item_id?: string; free_text?: string; qty: string; unit: string }>;
+	items: Array<{
+		item_id?: string;
+		free_text?: string;
+		qty: string;
+		unit: string;
+		/** A line refused at review arrives already turned away (CR-174 AC-3). */
+		review_status?: 'approved' | 'pending' | 'rejected';
+		review_reason_code?: DonationRejectReasonCode | null;
+	}>;
 	logistics?: PublicDonationDoc['logistics'];
 }
 
@@ -97,6 +107,8 @@ export interface ScanDonationView {
 export const receiveDonationInputSchema = z
 	.object({
 		status: z.literal('received'),
+		/** `_rev` of the booking the screen was loaded with (CR-174 FR-25). */
+		expected_rev: z.string().min(1),
 		/** Optional note from the receiving staff — lands on `received_summary.remarks`. */
 		remarks: z.string().trim().max(500).optional(),
 		items: z
@@ -168,13 +180,20 @@ export type ReceiveDonationInput = z.infer<typeof receiveDonationInputSchema>;
  *
  * `pending_review` is in (decision D-1): since CR-052 every public booking opens
  * there rather than at `declared`, so leaving it out would take the donor's own
- * edit/cancel away from every booking the wizard creates. `verifying` is out —
- * at that point the goods are at the shelter and the count is staff's.
+ * edit/cancel away from every booking the wizard creates. `verifying` is in since
+ * CR-174 (FR-20..FR-23): a booking of campaign lines has its QR from the start, and the
+ * donor must still be able to cancel (a flood can keep them from coming), fix the
+ * basket or add the courier number. An edit that adds a line needing review sends the
+ * booking back to `pending_review`.
  *
  * Mirrored by `DONOR_EDITABLE_STATUSES` in the FastAPI donations use case; the two
  * gate the same routes and have to move together.
  */
-const DONOR_EDITABLE_STATUSES = new Set<DonationStatus>(['declared', 'pending_review']);
+const DONOR_EDITABLE_STATUSES = new Set<DonationStatus>([
+	'declared',
+	'pending_review',
+	'verifying'
+]);
 
 export function isDonorEditable(status: DonationStatus): boolean {
 	return DONOR_EDITABLE_STATUSES.has(status);

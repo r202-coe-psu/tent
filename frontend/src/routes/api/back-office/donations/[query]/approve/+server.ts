@@ -7,8 +7,14 @@ import {
 	isInCallerScope,
 	routeErrorResponse as toRouteError
 } from '$lib/server/donation-intake';
-import type { PublicDonationDoc } from '$lib/features/donations';
-import { canTransitionDonation } from '$lib/features/operations/server';
+import {
+	applyLineReview,
+	hasLineReview,
+	reviewDonationInputSchema,
+	type LineReviewResult,
+	type PublicDonationDoc
+} from '$lib/features/donations/server';
+import { canTransitionDonation, DONATION_SCHEMA_V } from '$lib/features/operations/server';
 import { createAuditEntry, type AuditEntry } from '$lib/features/shared';
 
 function routeErrorResponse(e: unknown) {
@@ -17,9 +23,15 @@ function routeErrorResponse(e: unknown) {
 }
 
 /**
- * R-16.2 — approve a `pending_review` donation into `verifying`. Moves the
- * item off the "รอการประเมิน" tab and into the drop-off verification queue;
+ * R-16.2 — review a `pending_review` donation. Moves it off the "รอการประเมิน" tab;
  * counting/lot receipt still happens in the `[query]` POST route (R-16.5).
+ *
+ * CR-174: a schema_v 7 booking is reviewed line by line — `lines` decides every line
+ * still `pending` (campaign lines were approved at booking time and cannot be decided
+ * here), and the booking's status follows from its lines (FR-10): `verifying`, or
+ * `rejected` with the lines' reasons when every one was refused. Without `lines` the
+ * whole booking is approved, which is also how a doc from before schema_v 7 is
+ * reviewed (AC-8).
  */
 export const POST: RequestHandler = async ({ params, request }) => {
 	try {
@@ -49,8 +61,54 @@ export const POST: RequestHandler = async ({ params, request }) => {
 			);
 		}
 
-		const body = await request.json().catch(() => ({}));
-		const memo = typeof body.memo === 'string' ? body.memo.trim().slice(0, 500) : undefined;
+		const parsed = reviewDonationInputSchema.safeParse(await request.json().catch(() => ({})));
+		if (!parsed.success) {
+			return json(
+				{
+					success: false,
+					error_code: 'INVALID_REVIEW',
+					error: parsed.error.issues[0]?.message ?? 'Invalid review',
+					details: parsed.error.flatten()
+				},
+				{ status: 422 }
+			);
+		}
+		const { memo, lines } = parsed.data;
+		const items = donation.items ?? [];
+		const lineReview = hasLineReview(items);
+		if (lines && !lineReview) {
+			return json(
+				{
+					success: false,
+					error_code: 'INVALID_REVIEW',
+					error: 'This booking is reviewed as a whole (no per-line review)'
+				},
+				{ status: 422 }
+			);
+		}
+
+		let outcome: LineReviewResult<(typeof items)[number]>;
+		try {
+			outcome = lineReview
+				? applyLineReview(
+						items,
+						// No `lines`: approve everything still waiting — the one-button approve.
+						lines ??
+							items.flatMap((item, index) =>
+								item.review_status === 'pending' ? [{ index, decision: 'approved' as const }] : []
+							)
+					)
+				: { items, status: 'verifying' };
+		} catch (e) {
+			return json(
+				{
+					success: false,
+					error_code: 'INVALID_REVIEW',
+					error: e instanceof Error ? e.message : 'Invalid review'
+				},
+				{ status: 422 }
+			);
+		}
 
 		const ctx = { shelterCode: donation.shelter_code, createdBy: caller.name };
 		const audit: AuditEntry = createAuditEntry(
@@ -58,11 +116,23 @@ export const POST: RequestHandler = async ({ params, request }) => {
 				action: 'manual_adjust',
 				target_type: 'donation',
 				target_id: donation._id,
-				reason: `อนุมัติคำขอบริจาคเข้าสู่การตรวจรับ (${donation.booking_ref ?? donation._id})`,
+				reason:
+					outcome.status === 'rejected'
+						? `ปฏิเสธทุกรายการที่รอประเมิน (${donation.booking_ref ?? donation._id})`
+						: `อนุมัติคำขอบริจาคเข้าสู่การตรวจรับ (${donation.booking_ref ?? donation._id})`,
 				context: {
 					booking_ref: donation.booking_ref ?? null,
 					approved_by: caller.name,
-					memo: memo ?? null
+					memo: memo ?? null,
+					...(lineReview
+						? {
+								lines: (lines ?? []).map(({ index, decision, reason_code }) => ({
+									index,
+									decision,
+									reason_code: reason_code ?? null
+								}))
+							}
+						: {})
 				}
 			},
 			ctx
@@ -74,7 +144,16 @@ export const POST: RequestHandler = async ({ params, request }) => {
 		}
 
 		const nowStr = new Date().toISOString();
-		const updated: PublicDonationDoc = { ...donation, status: 'verifying', updated_at: nowStr };
+		const updated: PublicDonationDoc = {
+			...donation,
+			items: outcome.items,
+			status: outcome.status,
+			...(outcome.reject_reason !== undefined
+				? { reject_reason: outcome.reject_reason, reject_reason_code: outcome.reject_reason_code }
+				: {}),
+			...(lineReview ? { schema_v: Math.max(donation.schema_v ?? 0, DONATION_SCHEMA_V) } : {}),
+			updated_at: nowStr
+		};
 
 		const saveRes = await adminRaw(`/${dbName}/${donation._id}`, 'PUT', updated);
 		if (saveRes.status === 409) {

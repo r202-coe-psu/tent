@@ -17,6 +17,13 @@ class DeclaredItem(BaseModel):
 	qty: Any = None
 	unit: str | None = None
 	category: str | None = None
+	# CR-174 FR-27: the per-line review (approved | pending | rejected) and, on a rejected
+	# line only, why (code not_needed | expired | damaged | other, detail ≤500). Lines from
+	# before donation schema_v 7 carry none and read back as None — the booking-level
+	# status still applies to them.
+	review_status: str | None = None
+	review_reason_code: str | None = None
+	review_reason: str | None = None
 
 
 class PublicDonation(Document):

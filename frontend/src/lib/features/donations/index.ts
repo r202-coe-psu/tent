@@ -48,6 +48,18 @@ export {
 	isTerminalDonationStatus,
 	rejectedLineReasons
 } from './domain/tracking';
+// Domain — per-line review (CR-174)
+export {
+	donationStatusFromLines,
+	hasLineReview,
+	isAutoApprovedLine,
+	lineReviewDecisionSchema
+} from './domain/item-review';
+export type {
+	ItemReviewStatus,
+	LineReviewDecision,
+	ReviewDonationInput
+} from './domain/item-review';
 // Domain — reject reasons (CR-172)
 export {
 	DONATION_REJECT_REASON_CODES,

@@ -239,7 +239,22 @@ export interface DonationItem {
 	category?: string;
 	condition?: string;
 	note?: string;
+	/**
+	 * Per-line review (CR-174 FR-1 · schema_v 7): a line the shelter asked for in its
+	 * campaign is `approved` at booking time, a typed-in one waits as `pending`. Absent on
+	 * docs before schema_v 7 — those are reviewed as a whole, by `status`.
+	 */
+	review_status?: 'approved' | 'pending' | 'rejected';
+	review_reason_code?: string | null;
+	review_reason?: string | null;
 }
+
+/**
+ * `schema_v` every donation writer stamps — the walk-in factory here, the donor edit
+ * route, and `worker/inbound/donations.py`. 7 = CR-174 `items[].review_status`
+ * (6 CR-172 `reject_reason`, 5 CR-087 `redirect_to_shelter_code`, 4 CR-080 `revisions[]`).
+ */
+export const DONATION_SCHEMA_V = 7;
 
 export interface Donor {
 	name: string;
@@ -1061,11 +1076,9 @@ export function createWalkInDonation(input: WalkInDonationInput, ctx: AuthorCont
 	).toISOString();
 	return makeDoc(
 		'donation',
-		// 6 since CR-172 added reject_reason / received_summary.items[].rejected (5 was
-		// CR-087's redirect_to_shelter_code, 4 CR-080's revisions[]). A walk-in has none
-		// yet, but the version has to say which shape a reader should expect — and the
-		// public writer (worker/inbound/donations.py) stamps the same.
-		6,
+		// A walk-in has none of the later fields yet, but the version has to say which
+		// shape a reader should expect — and the public writer stamps the same.
+		DONATION_SCHEMA_V,
 		{
 			channel: 'walk_in' as const,
 			donor: d.donor,
@@ -1106,7 +1119,9 @@ const DONATION_TRANSITIONS: Record<DonationStatus, DonationStatus[]> = {
 	//     already writes this for every outstanding status (`quota/expiry.py`,
 	//     `EXPIRABLE_STATUSES`), so leaving it out here made the two implementations
 	//     disagree about a transition that happens nightly.
-	verifying: ['received', 'redirected', 'rejected', 'expired', 'cancelled'],
+	//   · `pending_review` — the donor edits a booking that already has its QR and adds
+	//     a line that needs review (CR-174 FR-21): the QR waits until staff decide.
+	verifying: ['received', 'pending_review', 'redirected', 'rejected', 'expired', 'cancelled'],
 	received: [],
 	redirected: [],
 	rejected: [],

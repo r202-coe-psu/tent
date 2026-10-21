@@ -19,6 +19,12 @@
 		donationRefLabel,
 		PUBLIC_DONATION_CATEGORIES,
 		RejectDonationDialog,
+		RejectReasonFields,
+		hasLineReview,
+		isAutoApprovedLine,
+		lineReviewDecisionSchema,
+		type DonationRejectReasonCode,
+		type LineReviewDecision,
 		type PendingDonationRow,
 		type RejectDonationInput
 	} from '$lib/features/donations';
@@ -38,7 +44,8 @@
 		request: PendingDonationRow;
 		saving?: boolean;
 		onBack: () => void;
-		onApprove: (bookingRef: string, memo: string) => void;
+		/** `lines` decides every pending line of a per-line reviewed booking (CR-174). */
+		onApprove: (bookingRef: string, memo: string, lines?: LineReviewDecision[]) => void;
 		onReject: (bookingRef: string, input: RejectDonationInput) => void;
 		onRedirect?: (bookingRef: string, targetShelterCode: string, note: string) => void;
 	} = $props();
@@ -98,6 +105,58 @@
 	}
 
 	const declaredItems = $derived(request.items ?? []);
+
+	/**
+	 * CR-174 — a schema_v 7 booking is decided line by line: only `pending` lines take a
+	 * decision; campaign lines were approved at booking and are shown, not decided (FR-8).
+	 */
+	const lineReview = $derived(hasLineReview(declaredItems));
+	type LineDraft = {
+		decision?: 'approved' | 'rejected';
+		code?: DonationRejectReasonCode;
+		note: string;
+	};
+	let drafts = $state<Record<number, LineDraft>>({});
+	const pendingIndexes = $derived(
+		declaredItems.flatMap((item, index) => (item.review_status === 'pending' ? [index] : []))
+	);
+	/** Event handlers only — never call while rendering (it may create the draft). */
+	function draftAt(index: number): LineDraft {
+		drafts[index] ??= { note: '' };
+		return drafts[index];
+	}
+	const lineDecisions = $derived(
+		pendingIndexes.map((index) =>
+			lineReviewDecisionSchema.safeParse({
+				index,
+				decision: drafts[index]?.decision,
+				reason_code: drafts[index]?.code,
+				note: drafts[index]?.note || undefined
+			})
+		)
+	);
+	const reviewComplete = $derived(lineDecisions.every((parsed) => parsed.success));
+	const approveLabel = $derived.by(() => {
+		if (!lineReview) return 'อนุมัติรับ (Generate QR)';
+		const kept = pendingIndexes.filter((index) => drafts[index]?.decision === 'approved').length;
+		const keptAfter =
+			kept + declaredItems.filter((item) => item.review_status === 'approved').length;
+		return keptAfter === 0 && reviewComplete ? 'ปฏิเสธทั้งใบ' : 'บันทึกผลการประเมิน';
+	});
+
+	function submitReview() {
+		if (!actionRef) return;
+		if (!lineReview) {
+			onApprove(actionRef, memo.trim());
+			return;
+		}
+		const lines = lineDecisions.flatMap((parsed) => (parsed.success ? [parsed.data] : []));
+		if (lines.length !== pendingIndexes.length) {
+			toast.error('ตัดสินรายการที่รอประเมินให้ครบ และใส่เหตุผลของรายการที่ไม่รับ');
+			return;
+		}
+		onApprove(actionRef, memo.trim(), lines);
+	}
 
 	function formatVehicle(vehicle?: string | null, deliveryMethod?: string): string {
 		if (vehicle === 'pickup') return 'รถกระบะตอนเดียว';
@@ -283,6 +342,23 @@
 											หมายเหตุ: {item.note.trim()}
 										</p>
 									{/if}
+									{#if item.review_status === 'approved'}
+										<Badge
+											variant="outline"
+											class="border-emerald-200 bg-emerald-50 text-xs font-semibold text-emerald-900"
+										>
+											{isAutoApprovedLine(item, request.campaign_id ?? null)
+												? 'อยู่ในแคมเปญ · อนุมัติอัตโนมัติ'
+												: 'อนุมัติแล้ว'}
+										</Badge>
+									{:else if item.review_status === 'rejected'}
+										<Badge
+											variant="outline"
+											class="border-rose-200 bg-rose-50 text-xs font-semibold text-rose-900"
+										>
+											ไม่รับ{item.review_reason ? ` · ${item.review_reason}` : ''}
+										</Badge>
+									{/if}
 								</div>
 								<div class="shrink-0 text-right">
 									<span class="text-xs text-slate-500">จำนวนที่แจ้ง</span>
@@ -293,6 +369,47 @@
 										</span>
 									</p>
 								</div>
+								{#if item.review_status === 'pending'}
+									{@const draft = drafts[idx]}
+									<div
+										class="w-full space-y-3 rounded-xl border border-amber-200 bg-amber-50/40 p-3"
+									>
+										<div
+											class="flex flex-wrap gap-2"
+											role="group"
+											aria-label="ผลการประเมิน {item.free_text ?? item.item_id ?? 'รายการ'}"
+										>
+											<Button
+												type="button"
+												size="sm"
+												variant={draft?.decision === 'approved' ? 'default' : 'outline'}
+												aria-pressed={draft?.decision === 'approved'}
+												class="min-h-10 text-xs font-bold"
+												onclick={() => (draftAt(idx).decision = 'approved')}
+											>
+												รับรายการนี้
+											</Button>
+											<Button
+												type="button"
+												size="sm"
+												variant={draft?.decision === 'rejected' ? 'destructive' : 'outline'}
+												aria-pressed={draft?.decision === 'rejected'}
+												class="min-h-10 text-xs font-bold"
+												onclick={() => (draftAt(idx).decision = 'rejected')}
+											>
+												ไม่รับรายการนี้
+											</Button>
+										</div>
+										{#if draft?.decision === 'rejected'}
+											<RejectReasonFields
+												bind:code={draft.code}
+												bind:note={draft.note}
+												idPrefix="review-line-{idx}"
+												disabled={saving}
+											/>
+										{/if}
+									</div>
+								{/if}
 							</li>
 						{/each}
 					</ul>
@@ -364,12 +481,12 @@
 			<!-- Approve Button -->
 			<Button
 				type="button"
-				onclick={() => actionRef && onApprove(actionRef, memo.trim())}
-				disabled={saving}
+				onclick={submitReview}
+				disabled={saving || (lineReview && !reviewComplete)}
 				class="h-10 gap-1.5 rounded-xl bg-emerald-600 px-5 text-xs font-bold text-white shadow-xs hover:bg-emerald-700"
 			>
 				<Check class="h-4 w-4" />
-				{saving ? 'กำลังดำเนินการ...' : 'อนุมัติรับ (Generate QR)'}
+				{saving ? 'กำลังดำเนินการ...' : approveLabel}
 			</Button>
 
 			<!--

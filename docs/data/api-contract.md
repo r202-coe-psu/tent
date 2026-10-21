@@ -3,7 +3,7 @@ title: Smart Shelter — API Contract v1
 status: draft for review
 created: 2026-06-11
 updated: 2026-10-21
-note: CR-181 approved (2026-10-21) — EXT-012 `POST /external/persons/search` (scope `occupant-search`) + sort deterministic ของ ID search (#736); CR-176 (2026-10-20) — EXT-011 `cancelled` / `kiosk_registered` (ไม่เคย check-in) = 404 `residency_not_found` (#710); คู่กับ data-model.md v3 — ตัดสิน sync boundary: staff app คุย CouchDB ตรง, service API มีเฉพาะที่ CouchDB ทำเองไม่ได้; CR-112/CR-113 occupancy + unassigned registration; Partner Data API EXT-001–007 (#214); CR-124 staff Google step-up MFA + Google SSO login (enrolled + mint AuthSession); decision sync 2026-10-08 — เพิ่ม GET /public/v1/unassigned-registrations/{id}/status (service secret, status-only) แทนการเรียก staff detail จาก BFF registrations/status — แก้ ticket คิวกลางหายจากอุปกรณ์ (QA pre-register 2026-10-08); decision sync 2026-10-09 — `breakdown` ของ EXT-005 เพิ่ม `gender_unspecified` (null+other; `male+female+gender_unspecified = occupancy_total`) และ `POST /public/v1/unassigned-registrations` รับ `members[].gender = null`; CR-157 (2026-10-10) — เพิ่ม `GET /api/public/v1/donations/slots` (BFF-only อ่าน CouchDB ฝั่ง server) และ error code ของ slot ใน `POST /public/v1/donations` (`SLOT_REQUIRED`, `SLOT_UNAVAILABLE`, `SLOT_FULL`, `SLOTS_UNAVAILABLE`); CR-162 — §2.3 kiosk banner (`POST /api/v1/kiosk/banners`, signed image GET, back-office `/api/back-office/kiosk-banners/**` + `PUT …/order`) และ §2.2 field เครื่อง `screen_type` / `banner_enabled` (ส่วนที่ปรับ 2026-10-15..17 Team Lead อนุมัติ 2026-10-18); CR-151 §17 (2026-10-18, approved 2026-10-20) — §2.1.2 `POST /api/v1/kiosk/volunteer-card` พิมพ์ QR จิตอาสาแบบอ่านอย่างเดียว; CR-172 (2026-10-21) — response ของ `GET /public/v1/donations/{tracking_token}` เพิ่ม `reject_reason`/`reject_reason_code` + `received_summary.items[].rejected/reject_reason/reject_reason_code` (§5)
+note: CR-181 approved (2026-10-21) — EXT-012 `POST /external/persons/search` (scope `occupant-search`) + sort deterministic ของ ID search (#736); CR-176 (2026-10-20) — EXT-011 `cancelled` / `kiosk_registered` (ไม่เคย check-in) = 404 `residency_not_found` (#710); คู่กับ data-model.md v3 — ตัดสิน sync boundary: staff app คุย CouchDB ตรง, service API มีเฉพาะที่ CouchDB ทำเองไม่ได้; CR-112/CR-113 occupancy + unassigned registration; Partner Data API EXT-001–007 (#214); CR-124 staff Google step-up MFA + Google SSO login (enrolled + mint AuthSession); decision sync 2026-10-08 — เพิ่ม GET /public/v1/unassigned-registrations/{id}/status (service secret, status-only) แทนการเรียก staff detail จาก BFF registrations/status — แก้ ticket คิวกลางหายจากอุปกรณ์ (QA pre-register 2026-10-08); decision sync 2026-10-09 — `breakdown` ของ EXT-005 เพิ่ม `gender_unspecified` (null+other; `male+female+gender_unspecified = occupancy_total`) และ `POST /public/v1/unassigned-registrations` รับ `members[].gender = null`; CR-157 (2026-10-10) — เพิ่ม `GET /api/public/v1/donations/slots` (BFF-only อ่าน CouchDB ฝั่ง server) และ error code ของ slot ใน `POST /public/v1/donations` (`SLOT_REQUIRED`, `SLOT_UNAVAILABLE`, `SLOT_FULL`, `SLOTS_UNAVAILABLE`); CR-162 — §2.3 kiosk banner (`POST /api/v1/kiosk/banners`, signed image GET, back-office `/api/back-office/kiosk-banners/**` + `PUT …/order`) และ §2.2 field เครื่อง `screen_type` / `banner_enabled` (ส่วนที่ปรับ 2026-10-15..17 Team Lead อนุมัติ 2026-10-18); CR-151 §17 (2026-10-18, approved 2026-10-20) — §2.1.2 `POST /api/v1/kiosk/volunteer-card` พิมพ์ QR จิตอาสาแบบอ่านอย่างเดียว; CR-172 (2026-10-21) — response ของ `GET /public/v1/donations/{tracking_token}` เพิ่ม `reject_reason`/`reject_reason_code` + `received_summary.items[].rejected/reject_reason/reject_reason_code` (§5); CR-174 (2026-10-21) — `POST /public/v1/donations` response เพิ่ม `status`; `PATCH …/{tracking_token}/items` request เพิ่ม `current_items`/`current_status` (opt), response เพิ่ม `status` + `auto_approved_lines` และ `items[].review_*`; `DONOR_EDITABLE_STATUSES` = `{declared, pending_review, verifying}` (§5)
 ---
 
 # Smart Shelter — API Contract v1
@@ -538,6 +538,19 @@ Contract เต็มอยู่ที่ [public-tier-flow-spec.html](../featu
 > (เหมือน onsite CR-054). เส้น **ไม่ระบุศูนย์** ยังใช้ GridFS ผ่าน
 > `POST /api/public/v1/unassigned-registrations/photos` (§5.2).
 
+#### Response ของ `POST /public/v1/donations` (CR-174 FR-15)
+
+```jsonc
+// 201
+{ "success": true, "tracking_token": "TX-SH001-…", "booking_ref": "DN-306892",
+  "status": "verifying" }   // หรือ "pending_review" — สถานะที่ใบเริ่ม (req)
+```
+
+`status` คำนวณจากรายการ (schema.md §2.3 "ประเมินทีละรายการ"): รายการที่จองโควต้าในแคมเปญได้ →
+`approved`, อื่น ๆ (พิมพ์เอง / ไม่มีแคมเปญ / counter ยังไม่ seed) → `pending` · มี `pending` ≥ 1 →
+`pending_review` · ไม่งั้น `verifying` (ตั๋วแสดง QR ทันที — FR-16). BFF `/api/public/v1/donations`
+ส่ง `status` ต่อให้ client. `review_status` ของแต่ละรายการ client ส่งเองไม่ได้ (FR-3)
+
 **donor แก้การจองของตัวเอง — สองเส้นแยกกัน** (DN-6 + CR-080)
 
 | Path | Body | ทำอะไร |
@@ -549,9 +562,41 @@ Contract เต็มอยู่ที่ [public-tier-flow-spec.html](../featu
 (`router.py:106` / `router.py:124`)
 
 ```jsonc
-// PATCH /public/v1/donations/{tracking_token}/items
-{ "items": [{ "item_id": "item:rice", "free_text": "ข้าวสาร", "qty": "8", "unit": "kg" }] }
+// PATCH /public/v1/donations/{tracking_token}/items — request
+{
+  "items": [{ "item_id": "item:rice", "free_text": "ข้าวสาร", "qty": "8", "unit": "kg" }],
+  // CR-174 FR-18 (opt) — donation doc ใน CouchDB ก่อนแก้ ตามที่ BFF อ่านมา (service-to-service
+  // หลัง Bearer). ผลประเมินของเจ้าหน้าที่อยู่ใน CouchDB ซึ่ง FastAPI อ่านไม่ได้ → BFF ส่งมาให้
+  "current_items": [{ "item_id": "item:rice", "qty": "5", "unit": "kg", "reserved_qty": "5",
+                     "review_status": "approved" }] | null,
+  "current_status": "verifying" | null
+}
+
+// 200 — response
+{
+  "success": true, "message": "Donation items updated",
+  "revisions": 2,                       // จำนวนใน revisions[] หลังแก้
+  "items": [{ "item_id": "item:rice", "free_text": "ข้าวสาร", "qty": "8", "unit": "kg",
+              "reserved_qty": "8", "review_status": "approved" }],   // รายการที่เก็บจริง (+ review_*)
+  "revision": { "at": "…", "by": "donor", "items_before": [...], "items_after": [...] },
+  "status": "verifying",                // CR-174 FR-18b — สถานะใบหลังคำนวณ (req)
+  "auto_approved_lines": [0]            // CR-174 FR-26 — index ใน items ที่เพิ่งได้ approved อัตโนมัติครั้งนี้
+}
 ```
+
+BFF `items/+server.ts` เขียน `items`, `revisions`, `status` และ `schema_v` ปัจจุบันของ donation ลง
+CouchDB ใน `PUT` เดียว แล้วเขียน `audit` อนุมัติอัตโนมัติ (`approved_by: 'system'`,
+`rule: 'campaign_line'`, `lines` = `auto_approved_lines`) เมื่อ list ไม่ว่าง (FR-18b, FR-26).
+
+**การคำนวณ `review_status` ตอนแก้ (CR-174 FR-18/18a/18c)** — ฐานเดิม = `current_items`/`current_status`
+ถ้าส่งมา · ไม่ส่ง: ใบที่ยังไม่ sync ใช้ intake buffer · sync แล้วใช้ `status` + `review_*` (วางทับรายการ
+ใน buffer ตามลำดับ) จาก `public_donations`. รายการใหม่ที่ `item_id`, `category`, `free_text`, `qty`
+(เทียบเป็นตัวเลข), `unit`, `condition`, `note` ตรงกับรายการเดิมที่ยังไม่ถูกจับคู่ (ว่าง = ไม่มี field;
+รายการเดิมจับคู่ได้ครั้งเดียว) คงผลเดิมทั้ง 3 field รวม `rejected` · อื่น ๆ: จองโควต้าในแคมเปญได้ →
+`approved` (นับใน `auto_approved_lines`), ไม่ได้ → `pending`. ใบไม่มี `review_status` (ก่อน schema_v 7):
+`verifying` = ถือว่ารายการเดิม `approved` ทั้งหมด · `pending_review` = คำนวณใหม่ทุกรายการเหมือนใบใหม่ ·
+`declared` = ไม่เขียน `review_status` และคง `declared`. ผลเขียนลง intake buffer (`items_declared` +
+`status`) และ stub `public_donations` ด้วย
 
 > `items[].unit` ต้องเป็น `item_master.base_unit` (code เช่น `kg`) เมื่อส่ง `item_id` มาด้วย —
 > ป้ายภาษาไทยที่ผู้ใช้เห็นเป็นเรื่องของชั้น UI เท่านั้น (schema.md §2.1; ด่านตรวจรับตอบ
@@ -564,7 +609,7 @@ Contract เต็มอยู่ที่ [public-tier-flow-spec.html](../featu
 | สถานะ | ความหมาย |
 | --- | --- |
 | `200` | แก้สำเร็จ — บันทึก `revisions[]` เพิ่ม 1 รายการ |
-| `400` | สถานะไม่ได้อยู่ใน `{declared, pending_review}` แล้ว — เจ้าหน้าที่รับเรื่องไปแล้ว (`DONOR_EDITABLE_STATUSES`, CR-052 §1.4) |
+| `400` | สถานะไม่ได้อยู่ใน `{declared, pending_review, verifying}` แล้ว — ของถึงศูนย์/ปิดใบไปแล้ว (`DONOR_EDITABLE_STATUSES`, CR-174 FR-20..FR-23 — ชุดเดียวกันสำหรับแก้รายการ, `DELETE` ยกเลิก และ `PATCH` เลขพัสดุ). เส้นนี้เช็คกับ `current_status` ถ้า BFF ส่งมา |
 | `409 NEED_FULL` | โควตาไม่พอ — **ของเดิมไม่เปลี่ยนเลย** ทุกการจองที่ทำไปในคำขอนี้ถูกคืนกลับ |
 | `429` | rate-limit ต่อ IP (ไม่มีเพดานจำนวนครั้งต่อใบจอง) |
 
@@ -585,7 +630,10 @@ FastAPI อ่าน `public_donations` (fallback intake buffer เมื่อ 
     "booking_ref": "DN-306892",
     "shelter_code": "SH001",
     "donor": { ... },                  // เฉพาะทาง buffer / BFF overlay — ไม่มี phone_hash
-    "items": [{ "item_id": "item:rice", "item_name": "ข้าวสาร", "qty": "10", "unit": "kg", "category": null }],
+    "items": [{ "item_id": "item:rice", "item_name": "ข้าวสาร", "qty": "10", "unit": "kg", "category": null,
+                "review_status": "approved|pending|rejected" | null,           // CR-174 FR-17/FR-27
+                "review_reason_code": "not_needed|expired|damaged|other" | null,
+                "review_reason": "…" | null }],
     "logistics": { ... } | null,
     "received_summary": {              // null จนกว่าตรวจรับ — รูปเต็มดู schema.md §2.3
       "total_items": 2, "received_at": "…", "remarks": "…", "shortfalls": [ ... ],

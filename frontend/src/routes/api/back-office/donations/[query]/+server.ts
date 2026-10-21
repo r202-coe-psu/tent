@@ -12,6 +12,8 @@ import {
 import {
 	combineLineRejectReasons,
 	donorRejectMessage,
+	hasLineReview,
+	rejectRemainingLines,
 	type DonationRejectReasonCode,
 	type PublicDonationDoc,
 	type ScanDonationView,
@@ -93,6 +95,9 @@ function receiptMismatch(lineNo: number, row: StockLedger) {
 // tracking_token_hash, phone_hash, timestamps). Full phone kept for warehouse staff.
 function toScanView(d: PublicDonationDoc): ScanDonationView {
 	return {
+		// CR-174 FR-25 — the counter sends it back so a booking the donor changed while
+		// the boxes were being counted is refused instead of received as it was.
+		rev: d._rev,
 		booking_ref: d.booking_ref,
 		shelter_code: d.shelter_code,
 		status: d.status,
@@ -105,7 +110,9 @@ function toScanView(d: PublicDonationDoc): ScanDonationView {
 			item_id: it.item_id,
 			free_text: it.free_text,
 			qty: it.qty,
-			unit: it.unit
+			unit: it.unit,
+			review_status: it.review_status,
+			review_reason_code: (it.review_reason_code ?? null) as DonationRejectReasonCode | null
 		})),
 		logistics: d.logistics
 	};
@@ -166,6 +173,19 @@ export const POST: RequestHandler = async ({ params, request }) => {
 		}
 
 		const { donation, dbName } = found;
+
+		// FR-25 / FR-25a — before anything is keyed: what staff counted has to be the
+		// booking as it is now, not as it was when the screen loaded.
+		if (parsed.data.expected_rev !== donation._rev) {
+			return json(
+				{
+					success: false,
+					error_code: 'DONATION_CHANGED',
+					error: 'ใบบริจาคถูกแก้ไขหลังจากเปิดหน้าตรวจรับ — ค้นหาใบใหม่แล้วตรวจอีกครั้ง'
+				},
+				{ status: 409 }
+			);
+		}
 
 		/**
 		 * What may still be received.
@@ -391,7 +411,14 @@ export const POST: RequestHandler = async ({ params, request }) => {
 		const updated: PublicDonationDoc = {
 			...donation,
 			...(allRejected
-				? { status: 'rejected' as const, ...combineLineRejectReasons(lineRejections) }
+				? {
+						status: 'rejected' as const,
+						...combineLineRejectReasons(lineRejections),
+						// CR-174 FR-12 — the lines go with the booking.
+						...(hasLineReview(donation.items)
+							? { items: rejectRemainingLines(donation.items ?? []) }
+							: {})
+					}
 				: { status: 'received' as const, received_at: nowStr }),
 			updated_at: nowStr,
 			received_summary: {

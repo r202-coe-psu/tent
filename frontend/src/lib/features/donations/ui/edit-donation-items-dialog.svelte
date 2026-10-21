@@ -17,10 +17,13 @@
 		token,
 		shelterCode,
 		items,
+		status = '',
 		onSaved
 	}: {
 		open?: boolean;
 		token: string;
+		/** Booking status — a `verifying` booking already has its QR (CR-174 FR-24). */
+		status?: string;
 		/** Which shelter's published needs the donor may add from. */
 		shelterCode: string;
 		items: Array<{
@@ -121,6 +124,15 @@
 				{t.editDialogDesc}
 			</Dialog.Description>
 		</Dialog.Header>
+
+		{#if status === 'verifying'}
+			<p
+				class="rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 dark:bg-amber-950/30 dark:text-amber-200"
+				role="note"
+			>
+				{t.editVerifyingWarning}
+			</p>
+		{/if}
 
 		<div class="space-y-3">
 			{#each rows as row, index (index)}

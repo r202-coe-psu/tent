@@ -20,6 +20,7 @@ export {
 	receiveDonation,
 	expireDonation,
 	canTransitionDonation,
+	DONATION_SCHEMA_V,
 	stockBalance,
 	isDonationOutstanding,
 	keyedDonationIds,

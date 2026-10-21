@@ -599,7 +599,10 @@
 						storage_point_id: '',
 						diffReason: '',
 						verified: false,
-						rejected: false,
+						// Refused at review (CR-174): it arrives turned away, with the same reason.
+						rejected: it.review_status === 'rejected',
+						rejectCode:
+							it.review_status === 'rejected' ? (it.review_reason_code ?? 'not_needed') : undefined,
 						rejectNote: ''
 					};
 				});
@@ -639,6 +642,7 @@
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({
 					status: 'received',
+					expected_rev: donationDoc?.rev,
 					...(remarks.trim() ? { remarks: remarks.trim() } : {}),
 					items: scannedItems.map((it) => {
 						if (it.rejected) {
@@ -683,6 +687,11 @@
 				remarks = '';
 				onSaved?.();
 				loadAwaitingBookings();
+			} else if (data.error_code === 'DONATION_CHANGED') {
+				toast.error('ผู้บริจาคแก้ใบนี้หลังจากเปิดหน้าตรวจรับ', {
+					description: 'ค้นหาใบใหม่แล้วตรวจรายการอีกครั้ง — ยังไม่มีของเข้าคลัง',
+					duration: 12_000
+				});
 			} else if (data.error_code === 'CATALOG_MISMATCH') {
 				toast.error('หน่วยในใบจองไม่ตรงกับหน่วยมาตรฐานในคลัง — รับเข้าคลังไม่ได้', {
 					description: `${data.error} · แก้ที่ต้นทางใบจอง หรือแจ้งผู้ดูแลระบบ`,

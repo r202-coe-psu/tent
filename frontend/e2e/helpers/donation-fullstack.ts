@@ -439,8 +439,16 @@ export async function bookAsDonor(page: Page, opts: BookingOptions): Promise<Boo
 	expect(body.success, `booking POST failed: ${JSON.stringify(body)}`).toBe(true);
 	const { bookingRef, trackingToken } = body as Booking;
 
-	// Step 4 — every public booking opens as pending_review (CR-052 §1.4).
-	await expect(page.getByRole('heading', { name: 'ส่งรายการรอเจ้าหน้าที่ตรวจสอบ' })).toBeVisible();
+	// Step 4 — CR-174: a booking of campaign lines is approved at once and its ticket
+	// carries the QR (AC-1); a typed-in line waits for staff review.
+	if (opts.unsolicited) {
+		await expect(
+			page.getByRole('heading', { name: 'ส่งรายการรอเจ้าหน้าที่ตรวจสอบ' })
+		).toBeVisible();
+	} else {
+		await expect(page.getByRole('heading', { name: 'สำเร็จ! ตั๋วบริจาคของคุณ' })).toBeVisible();
+		await expect(page.getByTestId('ticket-qr')).toBeVisible();
+	}
 	await expect(page.getByText(bookingRef).first()).toBeVisible();
 	return { bookingRef, trackingToken };
 }
@@ -483,14 +491,28 @@ export async function openPendingRow(page: Page, bookingRef: string) {
 	await expect(page.getByRole('heading', { name: new RegExp(`^${bookingRef} - `) })).toBeVisible();
 }
 
-/** Approve from the pending tab and wait for CouchDB to flip to `verifying`. */
+/**
+ * Accept every line waiting for review (CR-174 — one decision per pending line) and wait
+ * for CouchDB to flip to `verifying`. Only a booking with a typed-in line is in the queue.
+ */
 export async function approvePending(page: Page, shelterCode: string, bookingRef: string) {
 	await openPendingRow(page, bookingRef);
 	await page.getByRole('textbox', { name: /Internal Review Memo/ }).fill(`e2e ${RUN_ID}`);
-	await page.getByRole('button', { name: 'อนุมัติรับ (Generate QR)' }).click();
-	await expect(page.getByText(`อนุมัติคำขอ ${bookingRef} เข้าสู่การตรวจรับแล้ว`)).toBeVisible();
+	// exact — "ไม่รับรายการนี้" contains the same words.
+	const keep = page.getByRole('button', { name: 'รับรายการนี้', exact: true });
+	for (const button of await keep.all()) await button.click();
+	await page.getByRole('button', { name: 'บันทึกผลการประเมิน' }).click();
+	await expect(page.getByText(`บันทึกผลการประเมิน ${bookingRef} แล้ว`)).toBeVisible();
+	await expectReadyForDropoff(shelterCode, bookingRef);
+}
+
+/**
+ * A booking of campaign lines skips the review queue (CR-174 AC-1): it reaches CouchDB
+ * already `verifying`, its lines approved by the campaign rule.
+ */
+export async function expectReadyForDropoff(shelterCode: string, bookingRef: string) {
 	await expect
-		.poll(async () => (await findDonation(shelterCode, bookingRef))?.status)
+		.poll(async () => (await findDonation(shelterCode, bookingRef))?.status, { timeout: 30_000 })
 		.toBe('verifying');
 }
 

@@ -129,9 +129,14 @@ function appendedDocs(): Array<StockLedger | AuditEntry> {
 }
 
 function postEvent(body: unknown, query = 'DN-999999'): PostEvent {
+	// Every receive is sent with the `_rev` the screen loaded (CR-174 FR-25); fixtures are `1-abc`.
+	const sent =
+		body && typeof body === 'object' && !('expected_rev' in body)
+			? { expected_rev: '1-abc', ...body }
+			: body;
 	return {
 		params: { query },
-		request: { headers: { get: () => 'session-cookie' }, json: () => Promise.resolve(body) }
+		request: { headers: { get: () => 'session-cookie' }, json: () => Promise.resolve(sent) }
 	} as unknown as PostEvent;
 }
 
@@ -633,6 +638,44 @@ describe('Back-office GET & POST /api/back-office/donations/[query]', () => {
 		});
 	});
 
+	describe('booking changed while it was being counted (CR-174 FR-25)', () => {
+		it('AC-13: answers 409 before keying anything when the _rev moved on', async () => {
+			mockCouch(withItems([{ item_id: 'item:rice', qty: '10', unit: 'kg' }]));
+
+			const response = await POST(
+				postEvent({
+					status: 'received',
+					expected_rev: '0-stale',
+					items: [{ item_id: 'item:rice', qty: '10', unit: 'kg' }]
+				})
+			);
+
+			expect(response.status).toBe(409);
+			expect((await response.json()).error_code).toBe('DONATION_CHANGED');
+			expect(appendedDocs()).toHaveLength(0);
+			expect(vi.mocked(adminRaw).mock.calls.some((c) => c[1] === 'PUT')).toBe(false);
+		});
+
+		it('refuses a receive that does not say which version it counted', async () => {
+			mockCouch(baseDonation);
+
+			const response = await POST(postEvent({ status: 'received', expected_rev: undefined }));
+
+			expect(response.status).toBe(422);
+		});
+
+		it('hands the _rev to the scan screen', async () => {
+			mockCouch(baseDonation);
+
+			const response = await GET({
+				params: { query: 'DN-999999' },
+				request: { headers: { get: () => 'session-cookie' } }
+			} as unknown as GetEvent);
+
+			expect((await response.json()).donation.rev).toBe('1-abc');
+		});
+	});
+
 	describe('turning lines away at the counter (CR-172)', () => {
 		const twoLines = {
 			...withItems([
@@ -725,6 +768,28 @@ describe('Back-office GET & POST /api/back-office/donations/[query]', () => {
 			});
 			expect(doc.received_at).toBeFalsy();
 			expect(doc.received_summary?.items?.every((line) => line.rejected)).toBe(true);
+		});
+
+		it('CR-174 FR-12: rejecting every line at the counter rejects every reviewed line too', async () => {
+			mockCouch({
+				...twoLines,
+				items: [
+					{ item_id: 'item:rice', qty: '10', unit: 'kg', review_status: 'approved' },
+					{ item_id: 'item:milk', qty: '2', unit: 'ลัง', review_status: 'approved' }
+				]
+			} as unknown as PublicDonationDoc);
+
+			await POST(
+				postEvent({
+					status: 'received',
+					items: [
+						{ ...rice, qty: '0', rejected: true, reject_reason_code: 'damaged' },
+						milkRejected
+					]
+				})
+			);
+
+			expect(savedDoc().items?.map((i) => i.review_status)).toEqual(['rejected', 'rejected']);
 		});
 
 		it('refuses to reject every line of a booking that cannot be rejected', async () => {

@@ -34,6 +34,10 @@ def project_donation(
             "qty": item.get("qty"),
             "unit": item.get("unit"),
             "category": item.get("category"),
+            # CR-174 FR-27: the per-line review. Lines from before schema_v 7 have none.
+            "review_status": item.get("review_status"),
+            "review_reason_code": item.get("review_reason_code"),
+            "review_reason": item.get("review_reason"),
         }
         for item in items
         if isinstance(item, dict)

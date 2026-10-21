@@ -71,3 +71,49 @@ def test_project_donation_pre_v6_doc_has_no_reason():
     assert payload["status"] == "rejected"
     assert payload["reject_reason"] is None
     assert payload["reject_reason_code"] is None
+
+
+def test_project_donation_carries_the_per_line_review():
+    """CR-174 FR-27 / AC-18 — items_declared[] mirrors each line's review."""
+    doc = _donation(
+        schema_v=7,
+        status="verifying",
+        items=[
+            {
+                "item_id": "item:rice",
+                "free_text": "ข้าวสาร",
+                "qty": "5",
+                "unit": "kg",
+                "review_status": "approved",
+            },
+            {
+                "free_text": "ผ้าห่ม",
+                "qty": "2",
+                "unit": "ผืน",
+                "review_status": "rejected",
+                "review_reason_code": "damaged",
+                "review_reason": "ขาดหลายจุด",
+            },
+        ],
+    )
+
+    _, payload = project_donation(doc, shelter_code="SH001")
+
+    assert payload is not None
+    first, second = payload["items_declared"]
+    assert first["review_status"] == "approved"
+    assert first["review_reason_code"] is None
+    assert first["review_reason"] is None
+    assert second["review_status"] == "rejected"
+    assert second["review_reason_code"] == "damaged"
+    assert second["review_reason"] == "ขาดหลายจุด"
+
+
+def test_project_donation_pre_v7_lines_have_no_review():
+    _, payload = project_donation(_donation(schema_v=6), shelter_code="SH001")
+
+    assert payload is not None
+    line = payload["items_declared"][0]
+    assert line["review_status"] is None
+    assert line["review_reason_code"] is None
+    assert line["review_reason"] is None

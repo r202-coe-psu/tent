@@ -19,7 +19,11 @@
 	import ForceCutoffDialog from './components/force-cutoff-dialog.svelte';
 	import DonationSlotsManager from './components/donation-slots-manager.svelte';
 	import { useDonationNeedsBoard, type NeedItem } from '$lib/features/operations';
-	import type { PendingDonationRow, RejectDonationInput } from '$lib/features/donations';
+	import type {
+		LineReviewDecision,
+		PendingDonationRow,
+		RejectDonationInput
+	} from '$lib/features/donations';
 
 	/**
 	 * Tabs actually offered: `scan | pending | needs`.
@@ -109,7 +113,11 @@
 		if (tab === 'pending') loadPending();
 	}
 
-	async function handleApprovePending(bookingRef: string, memo: string) {
+	async function handleApprovePending(
+		bookingRef: string,
+		memo: string,
+		lines?: LineReviewDecision[]
+	) {
 		if (!bookingRef || pendingActionSaving) return;
 		pendingActionSaving = true;
 		try {
@@ -118,12 +126,16 @@
 				{
 					method: 'POST',
 					headers: { 'Content-Type': 'application/json' },
-					body: JSON.stringify({ memo })
+					body: JSON.stringify({ memo, ...(lines ? { lines } : {}) })
 				}
 			);
 			const data = await res.json();
 			if (data.success) {
-				toast.success(`อนุมัติคำขอ ${bookingRef} เข้าสู่การตรวจรับแล้ว`);
+				toast.success(
+					data.donation?.status === 'rejected'
+						? `ปฏิเสธคำขอ ${bookingRef} แล้ว (ไม่รับทุกรายการ)`
+						: `บันทึกผลการประเมิน ${bookingRef} แล้ว — รอผู้บริจาคนำส่ง`
+				);
 				selectedPendingRequest = null;
 				await loadPending();
 			} else {

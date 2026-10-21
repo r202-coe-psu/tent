@@ -57,8 +57,11 @@ function toPendingRow(d: PublicDonationDoc): PendingDonationRow {
 			qty: it.qty,
 			unit: it.unit,
 			condition: it.condition,
-			note: it.note
+			note: it.note,
+			review_status: it.review_status,
+			review_reason: it.review_reason ?? null
 		})),
+		campaign_id: d.campaign_id ?? null,
 		declared_at: d.declared_at,
 		eta: d.logistics?.eta,
 		slot: d.logistics?.slot,

@@ -29,7 +29,12 @@ export interface PendingDonationRow {
 		category?: string;
 		condition?: string;
 		note?: string;
+		/** Per-line review (CR-174) — absent on bookings before schema_v 7. */
+		review_status?: 'approved' | 'pending' | 'rejected';
+		review_reason?: string | null;
 	}>;
+	/** Campaign the booking was made against — tells an automatic approval from a person's (FR-8). */
+	campaign_id?: string | null;
 	declared_at?: string;
 	eta?: string;
 	slot?: { date: string; from: string; to: string };

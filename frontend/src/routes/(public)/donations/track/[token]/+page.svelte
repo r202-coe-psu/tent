@@ -102,7 +102,7 @@
 				short: string;
 			}> = [];
 			for (const [index, it] of donation.items.entries()) {
-				if (lineRejections[index]) continue;
+				if (lineRejections[index] !== null) continue;
 				const key = it.item_id || it.item_name || '';
 				const counted = countedMap[key] ?? '0';
 				const declared = String(it.qty ?? '0');
@@ -517,19 +517,32 @@
 									<tbody class="divide-y divide-border/60 font-semibold text-foreground">
 										{#each donation.items as item, i (item.item_name + String(i))}
 											{@const rejectedReason = lineRejections[i]}
-											{@const sf = rejectedReason
-												? undefined
-												: (item.item_id && shortfallByItem[item.item_id]) ||
-													shortfallByItem[item.item_name]}
+											{@const sf =
+												rejectedReason !== null
+													? undefined
+													: (item.item_id && shortfallByItem[item.item_id]) ||
+														shortfallByItem[item.item_name]}
 											<tr>
 												<td class="px-4 py-3">
 													<div class="flex flex-wrap items-center gap-2">
 														<span>{item.item_name}</span>
-														{#if rejectedReason}
+														{#if rejectedReason !== null}
 															<span
 																class="inline-flex items-center rounded-md bg-rose-100 px-2 py-0.5 text-2xs font-bold text-rose-800 dark:bg-rose-950/50 dark:text-rose-300"
 															>
-																{langState.current === 'en' ? 'Not accepted' : 'ไม่รับ'}
+																{t.lineReviewRejected}
+															</span>
+														{:else if item.review_status === 'pending'}
+															<span
+																class="inline-flex items-center rounded-md bg-amber-100 px-2 py-0.5 text-2xs font-bold text-amber-800 dark:bg-amber-950/50 dark:text-amber-300"
+															>
+																{t.lineReviewPending}
+															</span>
+														{:else if item.review_status === 'approved' && (status === 'pending_review' || status === 'verifying')}
+															<span
+																class="inline-flex items-center rounded-md bg-emerald-100 px-2 py-0.5 text-2xs font-bold text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300"
+															>
+																{t.lineReviewApproved}
 															</span>
 														{:else if sf}
 															<span
@@ -636,6 +649,7 @@
 				{token}
 				shelterCode={donation.shelter_code}
 				items={donation.items}
+				{status}
 				onSaved={() => trackingQuery.refetch()}
 			/>
 		{/if}
