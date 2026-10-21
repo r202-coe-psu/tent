@@ -348,6 +348,29 @@ async def test_pre_registration_opt_out_is_409(client: AsyncClient) -> None:
     assert response.json()["code"] == "location_not_bookable"
 
 
+@pytest.mark.parametrize(
+    "raw",
+    [
+        {"feature_flags": "yes"},
+        {"feature_flags": None},
+        {"feature_flags": ["accepts_pre_registration"]},
+        {"feature_flags": [{"accepts_pre_registration": True}]},
+        {"feature_flags": {"accepts_pre_registration": "true"}},
+        {"feature_flags": {"accepts_pre_registration": 1}},
+        {"feature_flags": {"accepts_pre_registration": [True]}},
+    ],
+)
+async def test_malformed_feature_flags_are_409_not_500(
+    client: AsyncClient, raw: dict[str, Any]
+) -> None:
+    """Only an exact boolean `true` is bookable; anything else is 409, never an exception."""
+    await _shelter("SH001", raw_data=raw)
+    response = await client.post(URL, json=_payload(), headers=GRANTED)
+    assert response.status_code == 409
+    assert response.json()["code"] == "location_not_bookable"
+    assert await _log_statuses() == ["denied_location_not_bookable"]
+
+
 @pytest.mark.parametrize("shelter_status", ["full", "full_capacity"])
 async def test_full_shelter_is_bookable(client: AsyncClient, shelter_status: str) -> None:
     await _shelter("SH001", status=shelter_status)
