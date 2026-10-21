@@ -51,6 +51,47 @@ export function partitionApplicantQueue(
 	};
 }
 
+/** One applicant's pending applications for one job — one card in the queue (#716). */
+export interface ApplicantGroup {
+	/** `volunteer_id` when linked, else the applicant's phone hash. */
+	key: string;
+	/** That applicant's applications, one per shift, in date-then-time order. */
+	applications: JobApplication[];
+}
+
+function applicantKey(application: JobApplication): string {
+	return application.volunteer_id ?? `phone:${application.applicant.phone_hash}`;
+}
+
+function shiftOrder(application: JobApplication): string {
+	const { date, start_time } = application.selected_shift;
+	return `${date} ${start_time}`;
+}
+
+/**
+ * Group applications by applicant, so one person who applied for several shifts of a job is
+ * one card with every shift on it (#716).
+ *
+ * Groups keep the order of the input's first application per person — feed it
+ * `ApplicantQueue.pending` and the queue stays first come, first served. Within a group the
+ * shifts run by date, then time. The input is not mutated.
+ */
+export function groupApplicationsByApplicant(
+	applications: readonly JobApplication[]
+): ApplicantGroup[] {
+	const groups = new Map<string, JobApplication[]>();
+	for (const application of applications) {
+		const key = applicantKey(application);
+		const group = groups.get(key);
+		if (group) group.push(application);
+		else groups.set(key, [application]);
+	}
+	return [...groups].map(([key, list]) => ({
+		key,
+		applications: list.sort((a, b) => shiftOrder(a).localeCompare(shiftOrder(b)))
+	}));
+}
+
 /**
  * Thai labels + chip palette per status.
  *

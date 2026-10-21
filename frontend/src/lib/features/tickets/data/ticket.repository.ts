@@ -1,4 +1,5 @@
 import type { AuthorContext } from '$lib/db/model';
+import type { TicketLotAllocations } from '../domain/ticket-dispatch';
 import type { CreateTicketInput, RequisitionTicket, TicketItemInput } from '../domain/ticket';
 
 export interface TicketRepository {
@@ -23,19 +24,27 @@ export interface TicketRepository {
 		items: TicketItemInput[]
 	): Promise<RequisitionTicket>;
 
-	// PENDING_PICK → COMPLETED in one step (CR-143, kitchen only). Auto-allocates
-	// every line to requested_qty, checks + deducts stock same as dispatchTicket,
-	// and sets approved_by/dispatched_by/received_by together. All-or-nothing.
-	oneStepApproveTicket(ticket: RequisitionTicket, ctx: AuthorContext): Promise<RequisitionTicket>;
-
-	// PENDING_PICK → READY_FOR_DISPATCH (shelter_manager/system_admin only — VDU-enforced).
+	// PENDING_PICK → READY_FOR_DISPATCH (warehouse_staff/shelter_manager/system_admin — VDU-enforced).
 	approveTicket(ticket: RequisitionTicket, ctx: AuthorContext): Promise<RequisitionTicket>;
 
-	// READY_FOR_DISPATCH → IN_TRANSIT. Checks stock balance, then writes the
-	// ticket status update alongside stock_ledger rows in one bulkDocs
-	// call (mirrors kitchen.remote.ts's approveKitchenRequisition). Throws before
-	// any write if balance is insufficient (all-or-nothing).
-	dispatchTicket(ticket: RequisitionTicket, ctx: AuthorContext): Promise<RequisitionTicket>;
+	// Single-write approve: applies allocations (itemId → qty_str) and transitions
+	// PENDING_PICK → READY_FOR_DISPATCH in one put.
+	approveTicketWithAllocations(
+		ticket: RequisitionTicket,
+		allocations: Record<string, string>,
+		ctx: AuthorContext
+	): Promise<RequisitionTicket>;
+
+	// READY_FOR_DISPATCH → IN_TRANSIT (CR-178). `lotsByItem` maps item_id → physical lots the
+	// warehouse picked. Validates every line with allocated_qty > 0 against live lot balances
+	// (sum = allocated_qty, not expired, <= lot balance, no duplicates) and throws before any
+	// write on failure. Then writes one `requisition` stock_ledger row per (item, lot) with a
+	// deterministic _id (retry-safe), and the ticket status last.
+	dispatchTicket(
+		ticket: RequisitionTicket,
+		lotsByItem: TicketLotAllocations,
+		ctx: AuthorContext
+	): Promise<RequisitionTicket>;
 
 	// IN_TRANSIT → COMPLETED — kitchen confirms receipt.
 	receiveTicket(ticket: RequisitionTicket, ctx: AuthorContext): Promise<RequisitionTicket>;
