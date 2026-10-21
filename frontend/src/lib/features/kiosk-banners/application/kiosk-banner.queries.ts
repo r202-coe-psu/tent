@@ -154,8 +154,8 @@ export const useKioskBannerGroup = (
 	});
 
 /** Refreshes the groups, plus `alsoInvalidate` for data the call changes elsewhere. */
-function useGroupMutation<TInput>(
-	mutationFn: (input: TInput) => Promise<unknown>,
+function useGroupMutation<TInput, TResult>(
+	mutationFn: (input: TInput) => Promise<TResult>,
 	failureText: string,
 	alsoInvalidate: readonly (readonly unknown[])[] = []
 ) {

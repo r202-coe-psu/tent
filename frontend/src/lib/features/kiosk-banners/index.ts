@@ -81,6 +81,8 @@ export {
 export { default as KioskBannerForm } from './ui/kiosk-banner-form.svelte';
 export { summarizeScreen } from './ui/kiosk-banner-order';
 export type { ScreenSummary } from './ui/kiosk-banner-order';
+export { default as KioskBannerGroupCard } from './ui/kiosk-banner-group-card.svelte';
+export { default as KioskBannerGroupDevicePicker } from './ui/kiosk-banner-group-device-picker.svelte';
 export { default as KioskBannerScreenCard } from './ui/kiosk-banner-screen-card.svelte';
 export { default as KioskBannerScreenManager } from './ui/kiosk-banner-screen-manager.svelte';
 export { default as KioskBannerPreviewDialog } from './ui/kiosk-banner-preview-dialog.svelte';
