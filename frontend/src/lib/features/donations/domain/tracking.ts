@@ -65,8 +65,14 @@ export type DonationTrackView = {
 			item_name?: string;
 			qty?: string | number;
 			unit?: string;
+			/** Turned away at the counter, with the reason the donor reads (CR-172 FR-14). */
+			rejected?: boolean;
+			reject_reason?: string;
+			reject_reason_code?: string;
 		}>;
 	} | null;
+	/** Why the shelter refused the booking — absent on docs before schema_v 6 (FR-17). */
+	reject_reason: string | null;
 	updated_at: string | null;
 	expires_at: string | null;
 	/** Donor edits so far (CR-080) — the page shows the count, not the entries. */
@@ -207,8 +213,24 @@ export function toDonationTrackView(raw: Record<string, unknown>): DonationTrack
 			receivedRaw && typeof receivedRaw === 'object'
 				? (receivedRaw as DonationTrackView['received_summary'])
 				: null,
+		reject_reason:
+			typeof raw.reject_reason === 'string' && raw.reject_reason.trim() ? raw.reject_reason : null,
 		updated_at: raw.updated_at != null ? String(raw.updated_at) : null,
 		expires_at: raw.expires_at != null ? String(raw.expires_at) : null,
 		revisions: Array.isArray(raw.revisions) ? (raw.revisions as Array<Record<string, unknown>>) : []
 	};
+}
+
+/**
+ * The reason each declared line was turned away at the counter, by position in
+ * `items` — `null` for a line that was kept (CR-172 FR-16). The counter sends one
+ * counted line per declared line in order, so the two lists line up.
+ */
+export function rejectedLineReasons(view: DonationTrackView): (string | null)[] {
+	const counted = view.received_summary?.items ?? [];
+	return view.items.map((_, index) => {
+		const line = counted[index];
+		if (!line?.rejected) return null;
+		return line.reject_reason?.trim() || 'ไม่ระบุเหตุผล';
+	});
 }

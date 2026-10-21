@@ -41,11 +41,13 @@ async def _persist_donation(couch: CouchClient, donation: DonationBuffer) -> boo
         if donation.id.startswith("donation:")
         else f"donation:{donation.id}",
         "type": "donation",
-        # 5 for redirect_to_shelter_code (CR-087); 4 was revisions[] (CR-080). This line
+        # 6 for reject_reason / reject_reason_code + received_summary.items[].rejected
+        # (CR-172, all optional — nothing here writes them; they arrive at review time).
+        # 5 was redirect_to_shelter_code (CR-087); 4 was revisions[] (CR-080). This line
         # read 2 until CR-080, two versions behind: CR-038 moved items[].qty to qty_str and
         # took schema.md §2.3 to 3, but only the walk-in writer followed, so every public
         # donation was stamped a version it had already outgrown. Keep both writers in step.
-        "schema_v": 5,
+        "schema_v": 6,
         "channel": "public",
         "shelter_code": donation.shelter_code,
         "campaign_id": donation.campaign_id,

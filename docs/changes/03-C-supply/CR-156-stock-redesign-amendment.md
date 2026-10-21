@@ -3,7 +3,7 @@ id: CR-156
 title: แก้เพิ่ม CR-143 — เหตุผลรับเข้า manual, note ของ other, ล็อตเกินอายุเก็บรักษา, และขอบเขตการรวมสินค้า
 status: done
 date: 2026-10-07
-updated: 2026-10-08
+updated: 2026-10-21
 requested_by: project owner (ผล review PR #373 / #374 ของ GitHub #331)
 decided_by: project owner (approved 2026-10-07)
 layer: volatile
@@ -65,6 +65,8 @@ migration: N/A — ไม่เพิ่ม/ลบ field, ไม่เปลี�
 - **FR-I1** เมื่อยอดนับจริงน้อยกว่ายอดแจ้ง (Counted < Declared): Scan Station แสดง Badge `⚠ รับไม่ครบ` พร้อมแสดงยอดนับจริงเทียบยอดแจ้ง
 - **FR-I2** SvelteKit BFF Endpoint (`/api/public/v1/donations/[tracking_token]`) ต้อง overlay ข้อมูล CouchDB ล่าสุด เพื่อให้หน้าติดตามผู้บริจาค (`/donations/track/[token]`) แสดงผลยอดรับไม่ครบแบบ Real-time แม้ FastAPI ออฟไลน์
 - **FR-I3** หน้าติดตามผู้บริจาคต้องแสดงกล่องข้อความแจ้งเตือนส่วนต่างอย่างสุภาพ และในตารางพัสดุต้องแสดง Badge `รับไม่ครบ (ขาด X)` พร้อมแสดงยอดจริงและขีดฆ่ายอดแจ้งเดิม
+
+> **หมายเหตุ [CR-172](../04-donation/CR-172-donation-reject-reason.md) (2026-10-21):** "ไม่รับ" ≠ "ขาด". Badge `รับไม่ครบ` ของ FR-I1/FR-I3 ใช้เฉพาะบรรทัดที่รับน้อยกว่าที่แจ้ง. บรรทัดที่ `received_summary.items[].rejected: true` แสดงป้าย "ไม่รับ" พร้อมเหตุผลแยกต่างหาก (CR-172 FR-16) และไม่นับใน `shortfalls` ทั้งฝั่ง server และ client fallback (CR-172 FR-13). BFF overlay ของ FR-I2 ส่ง `reject_reason`/`reject_reason_code` ด้วย (CR-172 FR-14)
 
 ### §J — การนับและเตือนของหมดอายุตาม Shelf Life (`shelf_life_days`)
 

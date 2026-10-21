@@ -293,8 +293,18 @@ export interface Donation extends BaseDoc {
 			free_text?: string;
 			qty: string;
 			unit?: string;
+			/** Staff turned this line away at the counter — no ledger row, qty `'0'` (CR-172 FR-10). */
+			rejected?: boolean;
+			reject_reason?: string;
+			reject_reason_code?: string;
 		}>;
 	} | null;
+	/**
+	 * Why the booking was turned away, as the donor reads it on the tracking page.
+	 * Written only with `status: 'rejected'` (CR-172 FR-1, FR-2 · schema_v 6).
+	 */
+	reject_reason?: string | null;
+	reject_reason_code?: string | null;
 	/**
 	 * Destination shelter this request was handed to (CR-087). Set
 	 * only alongside `status: 'redirected'`; the ticket the destination actually
@@ -1051,10 +1061,11 @@ export function createWalkInDonation(input: WalkInDonationInput, ctx: AuthorCont
 	).toISOString();
 	return makeDoc(
 		'donation',
-		// 5 since CR-087 added redirect_to_shelter_code (4 was CR-080's revisions[]). A
-		// walk-in has neither yet, but the version has to say which shape a reader should
-		// expect — and the public writer (worker/inbound/donations.py) stamps the same.
-		5,
+		// 6 since CR-172 added reject_reason / received_summary.items[].rejected (5 was
+		// CR-087's redirect_to_shelter_code, 4 CR-080's revisions[]). A walk-in has none
+		// yet, but the version has to say which shape a reader should expect — and the
+		// public writer (worker/inbound/donations.py) stamps the same.
+		6,
 		{
 			channel: 'walk_in' as const,
 			donor: d.donor,

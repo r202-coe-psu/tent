@@ -18,6 +18,7 @@ import {
 	ledgerRowsFor,
 	openBackOffice,
 	openInScanStation,
+	rejectInDialog,
 	openPendingRow,
 	provisionShelter,
 	reloadUntilVisible,
@@ -171,11 +172,8 @@ test.describe('Donation full-stack: donor and staff', { tag: ['@critical', '@don
 
 			await openBackOffice(page, ws);
 			await openPendingRow(page, bookingRef);
-			await page.getByRole('button', { name: 'ปฏิเสธคำขอ' }).click();
-			const confirmReject = page.getByRole('button', { name: 'ยืนยันการปฏิเสธคำขอ' });
-			await expect(confirmReject).toBeDisabled();
-			await page.locator('#reject-reason-input').fill(`คลังเต็ม (e2e ${RUN_ID})`);
-			await confirmReject.click();
+			// "อื่นๆ" reads as the detail alone — the exact text the donor must see (CR-172 AC-1).
+			await rejectInDialog(page, /^อื่นๆ$/, `คลังเต็ม (e2e ${RUN_ID})`);
 			await expect(page.getByText(`ปฏิเสธคำขอ ${bookingRef} เรียบร้อยแล้ว`)).toBeVisible();
 			await expect(page.getByRole('row').filter({ hasText: bookingRef })).toHaveCount(0);
 
@@ -186,7 +184,9 @@ test.describe('Donation full-stack: donor and staff', { tag: ['@critical', '@don
 			await clearSession(page);
 			await page.goto(`/donations/track/${trackingToken}`);
 			await expect(page.getByRole('heading', { name: bookingRef })).toBeVisible();
-			await expect(page.getByText('ปฏิเสธ').first()).toBeVisible();
+			await expect(page.getByTestId('donation-reject-reason')).toContainText(
+				`คลังเต็ม (e2e ${RUN_ID})`
+			);
 			await expect(page.getByRole('button', { name: 'ยกเลิกการจองนี้' })).toHaveCount(0);
 		});
 
@@ -205,19 +205,52 @@ test.describe('Donation full-stack: donor and staff', { tag: ['@critical', '@don
 			await approvePending(page, shelter.code, bookingRef);
 			await openInScanStation(page, bookingRef);
 
-			await page.getByRole('button', { name: 'ปฏิเสธคำขอ' }).click();
-			const confirmReject = page.getByRole('button', { name: 'ยืนยันการปฏิเสธคำขอ' });
-			await expect(confirmReject).toBeDisabled();
-			await page
-				.getByPlaceholder('เช่น พื้นที่จัดเก็บไม่เพียงพอ, งดรับเสื้อผ้าชั่วคราว...')
-				.fill(`ของเสียหาย (e2e ${RUN_ID})`);
-			await confirmReject.click();
+			await rejectInDialog(page, /ชำรุดเสียหาย/, `กล่องเปียก (e2e ${RUN_ID})`);
 
 			await expect
 				.poll(async () => (await findDonation(shelter.code, bookingRef))?.status)
 				.toBe('rejected');
 			const donation = await findDonation(shelter.code, bookingRef);
+			expect(donation).toMatchObject({
+				reject_reason: `ชำรุดเสียหาย — กล่องเปียก (e2e ${RUN_ID})`,
+				reject_reason_code: 'damaged'
+			});
 			expect(await ledgerRowsFor(shelter.code, donation._id as string)).toEqual([]);
+		});
+
+		test('turning every line away at the counter rejects the booking with the line reason (CR-172 AC-3)', async ({
+			page
+		}) => {
+			const { bookingRef, trackingToken } = await bookAsDonor(page, {
+				shelter,
+				need,
+				ledger,
+				donorName: `E2E ไม่รับรายการ ${RUN_ID}`,
+				phone: '0823456790'
+			});
+
+			await openBackOffice(page, ws);
+			await approvePending(page, shelter.code, bookingRef);
+			await openInScanStation(page, bookingRef);
+
+			await page.getByRole('switch', { name: /ไม่รับรายการนี้/ }).click();
+			const confirm = page.getByRole('button', { name: 'ปฏิเสธทั้งใบ' });
+			await expect(confirm).toBeDisabled();
+			await page.getByRole('radio', { name: /^หมดอายุ$/ }).click();
+			await expect(page.getByTestId('line-0-reject-preview')).toHaveText('หมดอายุ');
+			await confirm.click();
+
+			await expect
+				.poll(async () => (await findDonation(shelter.code, bookingRef))?.status)
+				.toBe('rejected');
+			const donation = await findDonation(shelter.code, bookingRef);
+			expect(donation).toMatchObject({ reject_reason: 'หมดอายุ', reject_reason_code: 'expired' });
+			expect(await ledgerRowsFor(shelter.code, donation._id as string)).toEqual([]);
+
+			await clearSession(page);
+			await page.goto(`/donations/track/${trackingToken}`);
+			await expect(page.getByTestId('donation-reject-reason')).toContainText('หมดอายุ');
+			await expect(page.getByText('ไม่รับ', { exact: true })).toBeVisible();
 		});
 	});
 
@@ -414,11 +447,7 @@ test.describe('Donation full-stack: donor and staff', { tag: ['@critical', '@don
 		await expect(page.getByText('ใบนี้จองส่งไปศูนย์')).toHaveCount(0);
 		// Working in the booking's shelter, the actions are back — and closing the booking
 		// here keeps the run's teardown, which wants every booking finished, satisfied.
-		await page.getByRole('button', { name: 'ปฏิเสธคำขอ' }).click();
-		await page
-			.getByPlaceholder('เช่น พื้นที่จัดเก็บไม่เพียงพอ, งดรับเสื้อผ้าชั่วคราว...')
-			.fill(`ส่งผิดศูนย์ (e2e ${RUN_ID})`);
-		await page.getByRole('button', { name: 'ยืนยันการปฏิเสธคำขอ' }).click();
+		await rejectInDialog(page, /^อื่นๆ$/, `ส่งผิดศูนย์ (e2e ${RUN_ID})`);
 		await expect
 			.poll(async () => (await findDonation(shelter.code, bookingRef))?.status)
 			.toBe('rejected');

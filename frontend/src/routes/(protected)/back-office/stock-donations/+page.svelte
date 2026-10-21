@@ -19,7 +19,7 @@
 	import ForceCutoffDialog from './components/force-cutoff-dialog.svelte';
 	import DonationSlotsManager from './components/donation-slots-manager.svelte';
 	import { useDonationNeedsBoard, type NeedItem } from '$lib/features/operations';
-	import type { PendingDonationRow } from '$lib/features/donations';
+	import type { PendingDonationRow, RejectDonationInput } from '$lib/features/donations';
 
 	/**
 	 * Tabs actually offered: `scan | pending | needs`.
@@ -136,7 +136,7 @@
 		}
 	}
 
-	async function handleRejectPending(bookingRef: string, reason: string) {
+	async function handleRejectPending(bookingRef: string, input: RejectDonationInput) {
 		if (!bookingRef || pendingActionSaving) return;
 		pendingActionSaving = true;
 		try {
@@ -145,7 +145,7 @@
 				{
 					method: 'POST',
 					headers: { 'Content-Type': 'application/json' },
-					body: JSON.stringify({ reason })
+					body: JSON.stringify(input)
 				}
 			);
 			const data = await res.json();

@@ -633,6 +633,134 @@ describe('Back-office GET & POST /api/back-office/donations/[query]', () => {
 		});
 	});
 
+	describe('turning lines away at the counter (CR-172)', () => {
+		const twoLines = {
+			...withItems([
+				{ item_id: 'item:rice', qty: '10', unit: 'kg' },
+				{ item_id: 'item:milk', qty: '2', unit: 'ลัง' }
+			]),
+			status: 'verifying'
+		} as PublicDonationDoc;
+		const rice = { item_id: 'item:rice', qty: '10', unit: 'kg' };
+		const milkRejected = {
+			item_id: 'item:milk',
+			qty: '0',
+			unit: 'ลัง',
+			rejected: true,
+			reject_reason_code: 'expired',
+			reject_note: 'หมดอายุเมื่อวาน'
+		};
+
+		function savedDoc(): PublicDonationDoc {
+			const putCall = vi.mocked(adminRaw).mock.calls.find((c) => c[1] === 'PUT');
+			return putCall![2] as PublicDonationDoc;
+		}
+
+		it('AC-2: receives the kept line and records the other with its reason', async () => {
+			mockCouch(twoLines);
+
+			const response = await POST(postEvent({ status: 'received', items: [rice, milkRejected] }));
+
+			expect(response.status).toBe(200);
+			const ledgers = appendedDocs().filter((d): d is StockLedger => d.type === 'stock_ledger');
+			expect(ledgers.map((l) => l.item_id)).toEqual(['item:rice']);
+			const doc = savedDoc();
+			expect(doc.status).toBe('received');
+			expect(doc.reject_reason).toBeUndefined();
+			expect(doc.received_summary?.items?.[1]).toMatchObject({
+				item_id: 'item:milk',
+				qty: '0',
+				rejected: true,
+				reject_reason_code: 'expired',
+				reject_reason: 'หมดอายุ — หมดอายุเมื่อวาน'
+			});
+			expect(doc.received_summary?.items?.[0]).not.toHaveProperty('rejected');
+		});
+
+		it('AC-6: a rejected line is not reported as a shortfall', async () => {
+			mockCouch(twoLines);
+
+			await POST(postEvent({ status: 'received', items: [rice, milkRejected] }));
+
+			expect(savedDoc().received_summary?.shortfalls).toEqual([]);
+		});
+
+		it('keeps the line numbering, so a kept line after a rejected one keys the same row', async () => {
+			mockCouch(twoLines);
+
+			await POST(
+				postEvent({
+					status: 'received',
+					items: [{ ...milkRejected, item_id: 'item:rice', unit: 'kg' }, rice]
+				})
+			);
+
+			const ledgers = appendedDocs().filter((d): d is StockLedger => d.type === 'stock_ledger');
+			expect(ledgers.map((l) => l._id)).toEqual([
+				await deriveDonationReceiptLineId('donation:123', 'item:rice', 1)
+			]);
+		});
+
+		it('AC-3: rejecting every line rejects the booking with every reason, and keys nothing', async () => {
+			mockCouch(twoLines);
+
+			const response = await POST(
+				postEvent({
+					status: 'received',
+					items: [
+						{ ...rice, qty: '0', rejected: true, reject_reason_code: 'damaged' },
+						milkRejected
+					]
+				})
+			);
+
+			expect(response.status).toBe(200);
+			expect((await response.json()).lots).toEqual([]);
+			expect(appendedDocs().filter((d) => d.type === 'stock_ledger')).toHaveLength(0);
+			const doc = savedDoc();
+			expect(doc).toMatchObject({
+				status: 'rejected',
+				reject_reason: 'ชำรุดเสียหาย; หมดอายุ — หมดอายุเมื่อวาน',
+				reject_reason_code: 'other'
+			});
+			expect(doc.received_at).toBeFalsy();
+			expect(doc.received_summary?.items?.every((line) => line.rejected)).toBe(true);
+		});
+
+		it('refuses to reject every line of a booking that cannot be rejected', async () => {
+			mockCouch({ ...twoLines, status: 'declared' } as PublicDonationDoc);
+
+			const response = await POST(
+				postEvent({
+					status: 'received',
+					items: [
+						{ ...rice, qty: '0', rejected: true, reject_reason_code: 'damaged' },
+						milkRejected
+					]
+				})
+			);
+
+			expect(response.status).toBe(422);
+			expect(appendedDocs()).toHaveLength(0);
+		});
+
+		it.each([
+			['no reason code', { ...milkRejected, reject_reason_code: undefined }],
+			[
+				'"other" with no detail',
+				{ ...milkRejected, reject_reason_code: 'other', reject_note: ' ' }
+			],
+			['a kept line counted at 0', { ...rice, qty: '0' }]
+		])('AC-4: answers 422 for %s, writing nothing', async (_label, line) => {
+			mockCouch(twoLines);
+
+			const response = await POST(postEvent({ status: 'received', items: [rice, line] }));
+
+			expect(response.status).toBe(422);
+			expect(appendedDocs()).toHaveLength(0);
+		});
+	});
+
 	/**
 	 * #695 — the ledger is written before the donation is marked received. When that PUT
 	 * loses a 409 the rows stay (append-only) and staff press receive again: the retry

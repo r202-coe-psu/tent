@@ -495,6 +495,22 @@ export async function approvePending(page: Page, shelterCode: string, bookingRef
 }
 
 /** Open a booking in the scan station by typing its ref. */
+/**
+ * Reject the open booking through the reject dialog (CR-172): pick the preset whose
+ * label matches `reason`, add `note`, confirm. The confirm stays disabled until the
+ * reason is complete, which every caller relies on.
+ */
+export async function rejectInDialog(page: Page, reason: RegExp, note?: string) {
+	await page.getByRole('button', { name: 'ปฏิเสธคำขอ' }).click();
+	const dialog = page.getByRole('dialog', { name: 'ปฏิเสธใบบริจาค' });
+	const confirm = dialog.getByRole('button', { name: 'ยืนยันปฏิเสธ' });
+	await expect(confirm).toBeDisabled();
+	await dialog.getByRole('radio', { name: reason }).click();
+	if (note) await dialog.getByRole('textbox', { name: /รายละเอียดเพิ่มเติม/ }).fill(note);
+	await confirm.click();
+	await expect(dialog).toBeHidden();
+}
+
 export async function openInScanStation(page: Page, bookingRef: string) {
 	await page.reload();
 	// The active tab is kept in `?tab=` and survives the reload, so coming from the
@@ -730,6 +746,8 @@ export async function expectRunGone(request: APIRequestContext, run: TornDown) {
 			(await couchReq('GET', `/_users/org.couchdb.user:${encodeURIComponent(name)}`)).status
 		).toBe(404);
 	}
+	// FastAPI caps donation routes at 30/min per IP and the BFF does not forward the caller's
+	// IP yet (#458), so a busy run can see 429 here. Poll past one full 60 s window.
 	for (const b of run.bookings) {
 		await expect
 			.poll(
@@ -737,7 +755,7 @@ export async function expectRunGone(request: APIRequestContext, run: TornDown) {
 					const res = await request.get(`/api/public/v1/donations/${b.token}`);
 					return ((await res.json()) as { donation?: { status?: string } }).donation?.status;
 				},
-				{ timeout: 30_000, intervals: [2_000, 3_000] }
+				{ timeout: 75_000, intervals: [2_000, 3_000, 5_000] }
 			)
 			.toEqual(expect.stringMatching(new RegExp(`^(${RELEASED_STATUSES.join('|')})$`)));
 	}

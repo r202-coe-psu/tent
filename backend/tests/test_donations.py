@@ -178,6 +178,104 @@ async def test_get_tracking_falls_back_to_buffer(
     body = track.json()
     assert body["donation"]["booking_ref"] == "DN-999001"
     assert body["donation"]["items"][0]["item_name"] == "น้ำดื่ม"
+    # CR-172: a booking still in the buffer has never been reviewed — no reason yet.
+    assert body["donation"]["reject_reason"] is None
+    assert body["donation"]["reject_reason_code"] is None
+
+
+async def test_tracking_reports_the_reject_reason(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    """CR-172 FR-14: the donor sees why the shelter turned the donation down."""
+    token = "TX-SH001-REJECT01"
+    await PublicDonation(
+        id=f"donation:{new_ulid()}",
+        tracking_token_hash=sha256_hex(token),
+        shelter_code="SH001",
+        status="rejected",
+        booking_ref="DN-172001",
+        items_declared=[{"item_name": "นมกล่อง", "qty": "10", "unit": "กล่อง"}],
+        received_summary=None,
+        reject_reason="หมดอายุ — กล่องนมหมดอายุ 2 กล่อง",
+        reject_reason_code="expired",
+        updated_at=datetime.now(UTC),
+    ).insert()
+
+    track = await client.get(f"/public/v1/donations/{token}", headers=auth_headers)
+
+    assert track.status_code == 200
+    donation = track.json()["donation"]
+    assert donation["status"] == "rejected"
+    assert donation["reject_reason"] == "หมดอายุ — กล่องนมหมดอายุ 2 กล่อง"
+    assert donation["reject_reason_code"] == "expired"
+
+
+async def test_tracking_passes_rejected_lines_through_received_summary(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    """CR-172 FR-3/FR-14: a partly received donation keeps each line's reason."""
+    token = "TX-SH001-REJECT02"
+    summary = {
+        "total_items": 2,
+        "received_at": "2026-10-21T03:00:00.000Z",
+        "shortfalls": [],
+        "items": [
+            {"item_id": "item:rice", "qty": "5", "unit": "ถุง"},
+            {
+                "free_text": "นมกล่อง",
+                "qty": "0",
+                "unit": "กล่อง",
+                "rejected": True,
+                "reject_reason": "ชำรุด — กล่องบุบ",
+                "reject_reason_code": "damaged",
+            },
+        ],
+    }
+    await PublicDonation(
+        id=f"donation:{new_ulid()}",
+        tracking_token_hash=sha256_hex(token),
+        shelter_code="SH001",
+        status="received",
+        booking_ref="DN-172002",
+        items_declared=[],
+        received_summary=summary,
+        updated_at=datetime.now(UTC),
+    ).insert()
+
+    track = await client.get(f"/public/v1/donations/{token}", headers=auth_headers)
+
+    assert track.status_code == 200
+    donation = track.json()["donation"]
+    assert donation["received_summary"] == summary
+    assert donation["reject_reason"] is None
+    assert donation["reject_reason_code"] is None
+
+
+async def test_tracking_a_pre_v6_projection_has_no_reject_reason(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    """CR-172 FR-17 / AC-5: a row projected before schema_v 6 lacks both keys entirely."""
+    token = "TX-SH001-LEGACY01"
+    await PublicDonation.get_pymongo_collection().insert_one(
+        {
+            "_id": f"donation:{new_ulid()}",
+            "tracking_token_hash": sha256_hex(token),
+            "shelter_code": "SH001",
+            "status": "rejected",
+            "booking_ref": "DN-172003",
+            "items_declared": [],
+            "received_summary": None,
+            "updated_at": datetime.now(UTC),
+        }
+    )
+
+    track = await client.get(f"/public/v1/donations/{token}", headers=auth_headers)
+
+    assert track.status_code == 200
+    donation = track.json()["donation"]
+    assert donation["status"] == "rejected"
+    assert donation["reject_reason"] is None
+    assert donation["reject_reason_code"] is None
 
 
 async def test_track_search_resolves_dn_plus_phone(

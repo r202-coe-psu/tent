@@ -105,3 +105,4 @@ migration: field ใหม่ทั้งหมด optional — doc เดิม
 
 - 2026-10-17 — proposed (track ด้วย CR file แยก branch ตามที่เจ้าของโครงการกำหนด)
 - 2026-10-18 — approved by Soravit Sukkarn (Team Lead) — requested by Kan (รันเลข CR-172 ย้ายเข้าหมวด 04-donation)
+- 2026-10-21 — implement ใน branch `feat/donation-review-intake-flow` — donation schema_v 6 (worker inbound + walk-in), projector `public_donations` ส่ง `reject_reason`/`reject_reason_code` (PROJECTION_VERSION 5 → 6), `PublicDonation` + tracking response ของ FastAPI (OpenAPI ไม่เปลี่ยน — `donation` เป็น `dict`), อัปเดต schema.md §2.3 / couchdb-mongodb-sync.md §3.2 / api-contract.md §5 / public-tier-donation-spec.html และหมายเหตุใน CR-143 §B, CR-156 §I

@@ -58,3 +58,38 @@ async def test_persisted_donation_timestamps_carry_z_when_mongo_returns_naive():
     assert doc["declared_at"] == "2026-09-25T21:20:18.908Z"
     assert doc["expires_at"] == "2026-09-28T21:20:18.908Z"
     assert doc["updated_at"].endswith("Z")
+
+
+@pytest.mark.asyncio
+async def test_persisted_donation_is_stamped_schema_v6():
+    # CR-172: reject_reason / reject_reason_code / received_summary.items[].rejected.
+    # Must match the walk-in writer in the frontend — both channels write the same version.
+    donation = SimpleNamespace(
+        id="01TESTDONATION0000000002",
+        shelter_code="SH001",
+        campaign_id=None,
+        created_at=datetime(2026, 10, 21, 3, 0, 0, tzinfo=UTC),
+        expires_at=None,
+        booking_ref="DN-654321",
+        tracking_token_hash="hash",
+        donor=SimpleNamespace(
+            name="ทดสอบ", phone="0812345678", line_id=None, email=None
+        ),
+        items_declared=[],
+        logistics=None,
+        status="pending_review",
+        revisions=[],
+        synced_to_couch=False,
+        save=AsyncMock(),
+    )
+    couch = MagicMock()
+    couch.database_exists = AsyncMock(return_value=True)
+    couch.put_doc = AsyncMock(return_value={"ok": True})
+
+    assert await _persist_donation(couch, donation) is True  # type: ignore[arg-type]
+    doc = couch.put_doc.await_args.args[1]
+    assert doc["_id"] == "donation:01TESTDONATION0000000002"
+    assert doc["schema_v"] == 6
+    # Nothing is rejected at intake — the fields only appear once staff review it.
+    assert "reject_reason" not in doc
+    assert "reject_reason_code" not in doc

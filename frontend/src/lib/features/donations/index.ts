@@ -45,8 +45,18 @@ export {
 	formatTrackSchedule,
 	canCancelDonation,
 	canEditCourierTracking,
-	isTerminalDonationStatus
+	isTerminalDonationStatus,
+	rejectedLineReasons
 } from './domain/tracking';
+// Domain — reject reasons (CR-172)
+export {
+	DONATION_REJECT_REASON_CODES,
+	DONATION_REJECT_REASON_LABELS,
+	REJECT_NOTE_MAX,
+	donorRejectMessage,
+	rejectDonationInputSchema
+} from './domain/reject-reason';
+export type { DonationRejectReasonCode, RejectDonationInput } from './domain/reject-reason';
 
 // Domain — shared PURE computation (needs board + POST donations). Server-side
 // doc fetching lives in $lib/server/donation-docs (kept out of the client barrel).
@@ -104,4 +114,6 @@ export {
 
 // UI
 export { default as CancelDonationDialog } from './ui/cancel-donation-dialog.svelte';
+export { default as RejectDonationDialog } from './ui/reject-donation-dialog.svelte';
+export { default as RejectReasonFields } from './ui/reject-reason-fields.svelte';
 export { default as EditDonationItemsDialog } from './ui/edit-donation-items-dialog.svelte';

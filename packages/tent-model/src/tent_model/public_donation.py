@@ -29,6 +29,11 @@ class PublicDonation(Document):
 	booking_ref: str | None = None
 	items_declared: list[DeclaredItem] = Field(default_factory=list)
 	received_summary: dict[str, Any] | None = None
+	# CR-172: the donor-facing reason (code label + detail, ≤500) and its code
+	# (not_needed | expired | damaged | other). Set only on status rejected; docs
+	# projected before schema_v 6 lack both and read back as None.
+	reject_reason: str | None = None
+	reject_reason_code: str | None = None
 	updated_at: datetime
 
 	class Settings:

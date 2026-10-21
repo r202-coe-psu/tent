@@ -30,6 +30,7 @@
 	import { DatePicker } from '$lib/components/ui/date-picker/index.js';
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
+	import { Switch } from '$lib/components/ui/switch/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
 	import { Textarea } from '$lib/components/ui/textarea/index.js';
 	import { toast } from 'svelte-sonner';
@@ -42,6 +43,11 @@
 		donationRefLabel,
 		linesMissingExpiry,
 		receivedQtyDifference,
+		rejectDonationInputSchema,
+		RejectDonationDialog,
+		RejectReasonFields,
+		type DonationRejectReasonCode,
+		type RejectDonationInput,
 		type ScanDonationView,
 		type PendingDonationRow
 	} from '$lib/features/donations';
@@ -82,10 +88,10 @@
 	let searchQuery = $state('');
 
 	// Action panels for verifying view
-	let actionPanel = $state<'none' | 'redirect' | 'reject'>('none');
+	let actionPanel = $state<'none' | 'redirect'>('none');
 	let selectedTargetShelter = $state('');
 	let redirectNote = $state('');
-	let rejectReason = $state('');
+	let rejectOpen = $state(false);
 	const sheltersQuery = useShelters();
 	// Everywhere but here: the shelter already holding the goods is not a destination
 	// (the route answers `SAME_SHELTER`), so it never reaches the dropdown.
@@ -244,7 +250,19 @@
 		storage_point_id: string;
 		diffReason: string;
 		verified: boolean;
+		/**
+		 * Staff turn the whole line away (CR-172 FR-9): it needs a reason the donor will
+		 * read, and none of the stock fields above.
+		 */
+		rejected: boolean;
+		rejectCode?: DonationRejectReasonCode;
+		rejectNote: string;
 	};
+
+	function hasRejectReason(it: ScannedItem): boolean {
+		return rejectDonationInputSchema.safeParse({ reason_code: it.rejectCode, note: it.rejectNote })
+			.success;
+	}
 
 	let scannedItems = $state<ScannedItem[]>([]);
 	let remarks = $state('');
@@ -374,9 +392,12 @@
 	 * refuses these (`assertCountedAgainstCatalog`), so they have to block the button
 	 * rather than surface as a raw English error after the whole form is filled.
 	 */
+	const keptItems = $derived(scannedItems.filter((it) => !it.rejected));
+	const rejectedCount = $derived(scannedItems.length - keptItems.length);
+
 	const scannedMissingExpiry = $derived(
 		linesMissingExpiry(
-			scannedItems.map((it) => ({
+			keptItems.map((it) => ({
 				item_id: it.item_id,
 				name: it.name,
 				perishable: it.item_id ? isPerishable(it.item_id) : false,
@@ -390,12 +411,13 @@
 		!otherShelterCode &&
 			scannedItems.length > 0 &&
 			!storagePoints.isLoading &&
-			scannedItems.every(
-				(it) =>
-					it.verified &&
-					it.item_id &&
-					it.qty &&
-					isStoragePointChosen(it.storage_point_id, storagePoints.points)
+			scannedItems.every((it) =>
+				it.rejected
+					? hasRejectReason(it)
+					: it.verified &&
+						it.item_id &&
+						it.qty &&
+						isStoragePointChosen(it.storage_point_id, storagePoints.points)
 			) &&
 			scannedMissingExpiry.length === 0
 	);
@@ -404,15 +426,28 @@
 	// waits on, ticked as staff complete it (it used to be a red error box listing
 	// what was still missing, which read as a failure before anything had been done).
 	const checkMapped = $derived(
-		scannedItems.length > 0 && scannedItems.every((it) => it.item_id && it.qty)
+		scannedItems.length > 0 && keptItems.every((it) => it.item_id && it.qty)
 	);
 	const checkZoned = $derived(
 		scannedItems.length > 0 &&
-			scannedItems.every((it) => isStoragePointChosen(it.storage_point_id, storagePoints.points))
+			keptItems.every((it) => isStoragePointChosen(it.storage_point_id, storagePoints.points))
 	);
-	const verifiedCount = $derived(scannedItems.filter((it) => it.verified).length);
+	const checkRejectReasons = $derived(
+		scannedItems.filter((it) => it.rejected).every(hasRejectReason)
+	);
+	// A line turned away with its reason counts as checked too.
+	const verifiedCount = $derived(
+		scannedItems.filter((it) => (it.rejected ? hasRejectReason(it) : it.verified)).length
+	);
 	const hasPerishableLine = $derived(
-		scannedItems.some((it) => it.item_id && isPerishable(it.item_id))
+		keptItems.some((it) => it.item_id && isPerishable(it.item_id))
+	);
+	const receiveLabel = $derived(
+		rejectedCount === 0
+			? 'ยืนยันรับเข้าคลัง'
+			: keptItems.length === 0
+				? 'ปฏิเสธทั้งใบ'
+				: `รับ ${keptItems.length} รายการ · ไม่รับ ${rejectedCount} รายการ`
 	);
 
 	/**
@@ -563,7 +598,9 @@
 						expiry: '',
 						storage_point_id: '',
 						diffReason: '',
-						verified: false
+						verified: false,
+						rejected: false,
+						rejectNote: ''
 					};
 				});
 
@@ -583,7 +620,7 @@
 		actionRef = '';
 		selectedTargetShelter = '';
 		redirectNote = '';
-		rejectReason = '';
+		rejectOpen = false;
 		lastLots = [];
 		searchQuery = '';
 		donationDoc = null;
@@ -604,6 +641,16 @@
 					status: 'received',
 					...(remarks.trim() ? { remarks: remarks.trim() } : {}),
 					items: scannedItems.map((it) => {
+						if (it.rejected) {
+							return {
+								...(it.item_id ? { item_id: it.item_id } : { free_text: it.name }),
+								qty: '0',
+								unit: it.unit || it.declaredUnit,
+								rejected: true,
+								reject_reason_code: it.rejectCode,
+								...(it.rejectNote.trim() ? { reject_note: it.rejectNote.trim() } : {})
+							};
+						}
 						const location = lotLocation(it.storage_point_id);
 						return {
 							...(it.item_id ? { item_id: it.item_id } : { free_text: it.name }),
@@ -620,10 +667,15 @@
 			if (data.success) {
 				lastLots = (data.lots ?? []) as { item_id: string; lot_no: string | null }[];
 				const labels = lastLots.map((l) => l.lot_no).filter(Boolean);
+				const ref = bookingRef || actionRef;
+				// Every line turned away rejects the booking instead (CR-172 FR-12).
+				const refused = data.donation?.status === 'rejected';
 				toast.success(
-					labels.length
-						? `บันทึกรับเข้าคลังเรียบร้อยแล้ว (Ref. ${bookingRef || actionRef}) · เลขล็อต ${labels.join(', ')}`
-						: `บันทึกรับเข้าคลังเรียบร้อยแล้ว (Ref. ${bookingRef || actionRef})`
+					refused
+						? `ปฏิเสธใบบริจาค ${ref} เรียบร้อยแล้ว (ไม่รับทุกรายการ)`
+						: labels.length
+							? `บันทึกรับเข้าคลังเรียบร้อยแล้ว (Ref. ${ref}) · เลขล็อต ${labels.join(', ')}`
+							: `บันทึกรับเข้าคลังเรียบร้อยแล้ว (Ref. ${ref})`
 				);
 				scanState = 'idle';
 				searchQuery = '';
@@ -676,12 +728,8 @@
 		}
 	}
 
-	async function handleConfirmReject() {
+	async function handleConfirmReject(input: RejectDonationInput) {
 		if (!actionRef || saving || otherShelterCode) return;
-		if (!rejectReason.trim()) {
-			toast.error('กรุณาระบุเหตุผลในการปฏิเสธคำขอ');
-			return;
-		}
 		saving = true;
 		try {
 			const res = await fetch(
@@ -689,7 +737,7 @@
 				{
 					method: 'POST',
 					headers: { 'Content-Type': 'application/json' },
-					body: JSON.stringify({ reason: rejectReason.trim() })
+					body: JSON.stringify(input)
 				}
 			);
 			const data = await res.json();
@@ -899,9 +947,11 @@
 						{#each scannedItems as item, idx (item.key)}
 							{@const diff = qtyDifference(item)}
 							<div
-								class="rounded-xl border bg-white shadow-2xs {item.verified
-									? 'border-emerald-200'
-									: 'border-slate-200/80'}"
+								class="rounded-xl border bg-white shadow-2xs {item.rejected
+									? 'border-rose-200'
+									: item.verified
+										? 'border-emerald-200'
+										: 'border-slate-200/80'}"
 							>
 								<!-- Item header -->
 								<div
@@ -914,7 +964,7 @@
 										{formatUnit(item.declaredUnit, unitsOfMeasure, langState.current) ||
 											item.declaredUnit}
 									</span>
-									{#if diff}
+									{#if diff && !item.rejected}
 										<span
 											class="ml-auto inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-900"
 										>
@@ -926,117 +976,147 @@
 									{/if}
 								</div>
 
-								<!-- Fields: what it is and how much, then where it goes -->
-								<div class="grid grid-cols-1 gap-4 p-4 sm:grid-cols-2 sm:px-5">
-									<div class="space-y-1.5">
-										<Label for="map-master-{idx}" class="text-sm font-semibold text-slate-700">
-											รายการในคลัง <span class="text-red-500">*</span>
-										</Label>
-										<ItemCombobox
-											id="map-master-{idx}"
-											items={pickerItems}
-											value={item.item_id}
-											isLoading={supplyItemsQuery.isLoading || itemMastersQuery.isLoading}
-											placeholder="ค้นหารายการในคลัง…"
-											formatBalanceUnit={pickerUnitLabel}
-											onSelect={(picked) => mapScannedItem(item, picked)}
-										/>
-										{#if canCreateItem && !otherShelterCode}
-											<Button
-												type="button"
-												variant="ghost"
-												class="min-h-9 gap-1 px-2 text-sm font-semibold text-sky-800"
-												onclick={() =>
-													openCreateItem({ kind: 'scan', index: idx, name: item.name })}
-											>
-												<Plus class="size-4" aria-hidden="true" />
-												เพิ่มสินค้าใหม่
-											</Button>
-										{/if}
-									</div>
+								<!-- Keep (default) or turn the whole line away (CR-172 FR-9) -->
+								<label
+									class="flex min-h-12 cursor-pointer items-center justify-between gap-3 border-b border-slate-100 px-4 py-2 text-sm font-semibold sm:px-5 {item.rejected
+										? 'bg-rose-50 text-rose-900'
+										: 'text-slate-700'}"
+									for="line-reject-{idx}"
+								>
+									<span class="flex flex-col">
+										<span>ไม่รับรายการนี้</span>
+										<span class="text-xs font-normal text-slate-500">
+											ไม่เข้าคลัง ไม่ออกล็อต และแจ้งเหตุผลให้ผู้บริจาค
+										</span>
+									</span>
+									<Switch
+										id="line-reject-{idx}"
+										bind:checked={item.rejected}
+										disabled={!!otherShelterCode}
+									/>
+								</label>
 
-									<div class="space-y-1.5">
-										<Label for="item-qty-{idx}" class="text-sm font-semibold text-slate-700">
-											จำนวนรับจริง <span class="text-red-500">*</span>
-										</Label>
-										<div class="relative flex items-center">
-											<Input
-												id="item-qty-{idx}"
-												type="text"
-												inputmode="decimal"
-												bind:value={item.qty}
-												class="h-11 pr-16 text-base font-bold tabular-nums"
+								{#if item.rejected}
+									<div class="p-4 sm:px-5">
+										<RejectReasonFields
+											bind:code={item.rejectCode}
+											bind:note={item.rejectNote}
+											idPrefix="line-{idx}-reject"
+										/>
+									</div>
+								{:else}
+									<!-- Fields: what it is and how much, then where it goes -->
+									<div class="grid grid-cols-1 gap-4 p-4 sm:grid-cols-2 sm:px-5">
+										<div class="space-y-1.5">
+											<Label for="map-master-{idx}" class="text-sm font-semibold text-slate-700">
+												รายการในคลัง <span class="text-red-500">*</span>
+											</Label>
+											<ItemCombobox
+												id="map-master-{idx}"
+												items={pickerItems}
+												value={item.item_id}
+												isLoading={supplyItemsQuery.isLoading || itemMastersQuery.isLoading}
+												placeholder="ค้นหารายการในคลัง…"
+												formatBalanceUnit={pickerUnitLabel}
+												onSelect={(picked) => mapScannedItem(item, picked)}
 											/>
-											<span
-												class="pointer-events-none absolute right-3 text-sm font-medium text-slate-500"
-											>
-												{formatUnit(item.unit, unitsOfMeasure, langState.current)}
-											</span>
+											{#if canCreateItem && !otherShelterCode}
+												<Button
+													type="button"
+													variant="ghost"
+													class="min-h-9 gap-1 px-2 text-sm font-semibold text-sky-800"
+													onclick={() =>
+														openCreateItem({ kind: 'scan', index: idx, name: item.name })}
+												>
+													<Plus class="size-4" aria-hidden="true" />
+													เพิ่มสินค้าใหม่
+												</Button>
+											{/if}
+										</div>
+
+										<div class="space-y-1.5">
+											<Label for="item-qty-{idx}" class="text-sm font-semibold text-slate-700">
+												จำนวนรับจริง <span class="text-red-500">*</span>
+											</Label>
+											<div class="relative flex items-center">
+												<Input
+													id="item-qty-{idx}"
+													type="text"
+													inputmode="decimal"
+													bind:value={item.qty}
+													class="h-11 pr-16 text-base font-bold tabular-nums"
+												/>
+												<span
+													class="pointer-events-none absolute right-3 text-sm font-medium text-slate-500"
+												>
+													{formatUnit(item.unit, unitsOfMeasure, langState.current)}
+												</span>
+											</div>
+										</div>
+
+										<div class="space-y-1.5">
+											<Label for="storage-zone-{idx}" class="text-sm font-semibold text-slate-700">
+												สถานที่จัดเก็บ
+												{#if storagePointRequired}<span class="text-red-500">*</span>{/if}
+											</Label>
+											<StoragePointSelect
+												id="storage-zone-{idx}"
+												points={storagePoints.points}
+												bind:value={item.storage_point_id}
+											/>
+										</div>
+
+										<div class="space-y-1.5">
+											<Label for="item-expiry-{idx}" class="text-sm font-semibold text-slate-700">
+												วันหมดอายุ
+												{#if item.item_id && isPerishable(item.item_id)}
+													<span class="text-red-500">*</span>
+													<span class="text-xs font-normal text-red-700">(ของเน่าเสียง่าย)</span>
+												{:else}
+													<span class="text-xs font-normal text-slate-500">(ถ้ามี)</span>
+												{/if}
+											</Label>
+											<DatePicker
+												id="item-expiry-{idx}"
+												ariaLabel="วันหมดอายุ"
+												bind:value={item.expiry}
+												class="h-11 text-sm {item.item_id &&
+												isPerishable(item.item_id) &&
+												!item.expiry
+													? 'border-red-300'
+													: ''}"
+											/>
+										</div>
+
+										<div class="space-y-1.5 sm:col-span-2">
+											<Label for="item-remark-{idx}" class="text-sm font-semibold text-slate-700">
+												หมายเหตุ / เหตุผลที่จำนวนต่างจากที่แจ้ง
+											</Label>
+											<Input
+												id="item-remark-{idx}"
+												type="text"
+												placeholder="เช่น แตกเสียหาย 2 ขวด (ถ้ามี)"
+												bind:value={item.diffReason}
+												class="h-11 text-sm"
+											/>
 										</div>
 									</div>
 
-									<div class="space-y-1.5">
-										<Label for="storage-zone-{idx}" class="text-sm font-semibold text-slate-700">
-											สถานที่จัดเก็บ
-											{#if storagePointRequired}<span class="text-red-500">*</span>{/if}
-										</Label>
-										<StoragePointSelect
-											id="storage-zone-{idx}"
-											points={storagePoints.points}
-											bind:value={item.storage_point_id}
-										/>
-									</div>
-
-									<div class="space-y-1.5">
-										<Label for="item-expiry-{idx}" class="text-sm font-semibold text-slate-700">
-											วันหมดอายุ
-											{#if item.item_id && isPerishable(item.item_id)}
-												<span class="text-red-500">*</span>
-												<span class="text-xs font-normal text-red-700">(ของเน่าเสียง่าย)</span>
-											{:else}
-												<span class="text-xs font-normal text-slate-500">(ถ้ามี)</span>
-											{/if}
-										</Label>
-										<DatePicker
-											id="item-expiry-{idx}"
-											ariaLabel="วันหมดอายุ"
-											bind:value={item.expiry}
-											class="h-11 text-sm {item.item_id &&
-											isPerishable(item.item_id) &&
-											!item.expiry
-												? 'border-red-300'
-												: ''}"
-										/>
-									</div>
-
-									<div class="space-y-1.5 sm:col-span-2">
-										<Label for="item-remark-{idx}" class="text-sm font-semibold text-slate-700">
-											หมายเหตุ / เหตุผลที่จำนวนต่างจากที่แจ้ง
-										</Label>
-										<Input
-											id="item-remark-{idx}"
-											type="text"
-											placeholder="เช่น แตกเสียหาย 2 ขวด (ถ้ามี)"
-											bind:value={item.diffReason}
-											class="h-11 text-sm"
-										/>
-									</div>
-								</div>
-
-								<!-- Confirmation sits right under the fields it confirms -->
-								<label
-									class="flex min-h-12 cursor-pointer items-center gap-3 rounded-b-xl border-t px-4 py-3 text-sm font-semibold sm:px-5 {item.verified
-										? 'border-emerald-200 bg-emerald-50 text-emerald-900'
-										: 'border-slate-100 bg-slate-50 text-slate-700 hover:bg-slate-100'}"
-								>
-									<Checkbox bind:checked={item.verified} />
-									<span class="flex flex-col">
-										<span class="select-none">ผ่านการตรวจสอบแล้ว</span>
-										<span class="text-xs font-normal text-slate-500">
-											ของจริงตรงกับรายการ จำนวน และสภาพที่กรอกไว้
+									<!-- Confirmation sits right under the fields it confirms -->
+									<label
+										class="flex min-h-12 cursor-pointer items-center gap-3 rounded-b-xl border-t px-4 py-3 text-sm font-semibold sm:px-5 {item.verified
+											? 'border-emerald-200 bg-emerald-50 text-emerald-900'
+											: 'border-slate-100 bg-slate-50 text-slate-700 hover:bg-slate-100'}"
+									>
+										<Checkbox bind:checked={item.verified} />
+										<span class="flex flex-col">
+											<span class="select-none">ผ่านการตรวจสอบแล้ว</span>
+											<span class="text-xs font-normal text-slate-500">
+												ของจริงตรงกับรายการ จำนวน และสภาพที่กรอกไว้
+											</span>
 										</span>
-									</span>
-								</label>
+									</label>
+								{/if}
 							</div>
 						{/each}
 
@@ -1137,6 +1217,9 @@
 										'ใส่วันหมดอายุของเน่าเสียง่ายครบ'
 									)}
 								{/if}
+								{#if rejectedCount > 0}
+									{@render step(checkRejectReasons, 'ระบุเหตุผลของรายการที่ไม่รับครบ')}
+								{/if}
 								{@render step(
 									scannedItems.length > 0 && verifiedCount === scannedItems.length,
 									`ติ๊ก "ผ่านการตรวจสอบแล้ว" ครบ (${verifiedCount}/${scannedItems.length})`
@@ -1148,10 +1231,12 @@
 									type="button"
 									onclick={handleSaveScan}
 									disabled={saving || !canReceive}
-									class="h-12 w-full gap-2 bg-emerald-600 text-base font-bold text-white hover:bg-emerald-700"
+									class="h-12 w-full gap-2 text-base font-bold text-white {keptItems.length === 0
+										? 'bg-red-600 hover:bg-red-700'
+										: 'bg-emerald-600 hover:bg-emerald-700'}"
 								>
 									<Check class="h-5 w-5" />
-									{saving ? 'กำลังบันทึก…' : 'ยืนยันรับเข้าคลัง'}
+									{saving ? 'กำลังบันทึก…' : receiveLabel}
 								</Button>
 
 								<!--
@@ -1176,7 +1261,7 @@
 								<Button
 									variant="outline"
 									type="button"
-									onclick={() => (actionPanel = actionPanel === 'reject' ? 'none' : 'reject')}
+									onclick={() => (rejectOpen = true)}
 									disabled={saving || !!otherShelterCode}
 									class="h-11 w-full border-red-200 text-sm font-semibold text-red-700 hover:bg-red-50 hover:text-red-800"
 								>
@@ -1227,42 +1312,6 @@
 										</Button>
 										<Button
 											variant="ghost"
-											type="button"
-											onclick={() => (actionPanel = 'none')}
-											class="h-11"
-										>
-											ยกเลิก
-										</Button>
-									</div>
-								</div>
-							{/if}
-
-							{#if actionPanel === 'reject'}
-								<div class="space-y-3 rounded-xl border border-red-200 bg-red-50/40 p-4">
-									<div class="space-y-1.5">
-										<Label for="reject-reason-input" class="text-sm font-semibold text-slate-700">
-											เหตุผลที่ปฏิเสธ <span class="text-red-500">*</span>
-										</Label>
-										<Input
-											id="reject-reason-input"
-											type="text"
-											placeholder="เช่น พื้นที่จัดเก็บไม่เพียงพอ, งดรับเสื้อผ้าชั่วคราว..."
-											bind:value={rejectReason}
-											class="h-11 bg-white text-sm"
-										/>
-									</div>
-									<div class="flex gap-2">
-										<Button
-											variant="destructive"
-											type="button"
-											onclick={handleConfirmReject}
-											disabled={saving || !rejectReason.trim()}
-											class="h-11 flex-1 font-semibold"
-										>
-											{saving ? 'กำลังดำเนินการ...' : 'ยืนยันการปฏิเสธคำขอ'}
-										</Button>
-										<Button
-											variant="outline"
 											type="button"
 											onclick={() => (actionPanel = 'none')}
 											class="h-11"
@@ -1804,3 +1853,10 @@
 		</div>
 	</Sheet.Content>
 </Sheet.Root>
+
+<RejectDonationDialog
+	bind:open={rejectOpen}
+	bookingRef={bookingRef || actionRef}
+	pending={saving}
+	onconfirm={handleConfirmReject}
+/>

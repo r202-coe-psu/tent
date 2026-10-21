@@ -90,7 +90,9 @@ describe('POST /api/back-office/donations/[query]/reject', () => {
 	it('rejects a booking that has not arrived yet', async () => {
 		mockCouch(baseDonation);
 
-		const response = await POST(postEvent({ reason: 'พื้นที่จัดเก็บไม่พอ' }));
+		const response = await POST(
+			postEvent({ reason_code: 'not_needed', note: 'พื้นที่จัดเก็บไม่พอ' })
+		);
 
 		expect(response.status).toBe(200);
 		expect(putBody()).toMatchObject({ status: 'rejected' });
@@ -99,30 +101,44 @@ describe('POST /api/back-office/donations/[query]/reject', () => {
 	it('rejects a delivery already open on the counter, and writes no stock', async () => {
 		mockCouch({ ...baseDonation, status: 'verifying' } as PublicDonationDoc);
 
-		const response = await POST(postEvent({ reason: 'ของหมดอายุ' }));
+		const response = await POST(postEvent({ reason_code: 'expired' }));
 
 		expect(response.status).toBe(200);
 		expect(putBody()).toMatchObject({ status: 'rejected' });
 		expect(writtenDocs().filter((d) => d.type === 'stock_ledger')).toHaveLength(0);
 	});
 
-	it('keeps the reason on the audit entry, not just in the UI', async () => {
+	// CR-172 FR-8 — the donor reads it on the tracking page; the audit still says who and when.
+	it('keeps the reason on the donation and on the audit entry', async () => {
 		mockCouch({ ...baseDonation, status: 'verifying' } as PublicDonationDoc);
 
-		await POST(postEvent({ reason: 'ของหมดอายุ' }));
+		await POST(postEvent({ reason_code: 'expired', note: 'นมกล่องหมดอายุ 2 กล่อง' }));
 
+		expect(putBody()).toMatchObject({
+			status: 'rejected',
+			reject_reason: 'หมดอายุ — นมกล่องหมดอายุ 2 กล่อง',
+			reject_reason_code: 'expired'
+		});
 		const audits = writtenDocs().filter((d) => d.type === 'audit');
 		expect(audits).toHaveLength(1);
-		expect(JSON.stringify(audits[0])).toContain('ของหมดอายุ');
+		expect(audits[0]).toMatchObject({
+			reason: 'หมดอายุ — นมกล่องหมดอายุ 2 กล่อง',
+			context: { rejected_by: 'warehouse', reject_reason_code: 'expired' }
+		});
 	});
 
-	it('demands a reason — a blank one changes nothing', async () => {
-		mockCouch(baseDonation);
-
-		for (const reason of [undefined, '', '   ']) {
-			vi.mocked(adminRaw).mockClear();
+	it('demands a reason — a missing code or a blank "other" changes nothing', async () => {
+		for (const body of [
+			{},
+			{ reason: 'ข้อความแบบเดิม' },
+			{ reason_code: 'other' },
+			{ reason_code: 'other', note: '   ' },
+			{ reason_code: 'bogus' },
+			{ reason_code: 'expired', note: 'x'.repeat(401) }
+		]) {
+			vi.mocked(adminRaw).mockReset();
 			mockCouch(baseDonation);
-			const response = await POST(postEvent({ reason }));
+			const response = await POST(postEvent(body));
 			expect(response.status).toBe(422);
 			expect(writtenDocs()).toHaveLength(0);
 			expect(putBody()).toBeUndefined();
@@ -132,7 +148,7 @@ describe('POST /api/back-office/donations/[query]/reject', () => {
 	it('refuses a donation whose goods are already on the shelf', async () => {
 		mockCouch({ ...baseDonation, status: 'received' } as PublicDonationDoc);
 
-		const response = await POST(postEvent({ reason: 'เปลี่ยนใจ' }));
+		const response = await POST(postEvent({ reason_code: 'other', note: 'เปลี่ยนใจ' }));
 
 		expect(response.status).toBe(422);
 		expect((await response.json()).error_code).toBe('INVALID_TRANSITION');
@@ -142,7 +158,7 @@ describe('POST /api/back-office/donations/[query]/reject', () => {
 	it('refuses to touch another shelter donation', async () => {
 		mockCouch({ ...baseDonation, shelter_code: 'SH002' } as PublicDonationDoc);
 
-		const response = await POST(postEvent({ reason: 'ของหมดอายุ' }));
+		const response = await POST(postEvent({ reason_code: 'expired' }));
 
 		expect(response.status).toBe(403);
 		expect(writtenDocs()).toHaveLength(0);

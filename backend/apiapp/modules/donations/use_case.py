@@ -274,6 +274,8 @@ def _tracking_payload(
     items: list[DeclaredItem],
     received_summary: dict[str, Any] | None,
     updated_at: datetime,
+    reject_reason: str | None = None,
+    reject_reason_code: str | None = None,
     donor: dict[str, Any] | None = None,
     logistics: dict[str, Any] | None = None,
     expires_at: datetime | None = None,
@@ -287,6 +289,10 @@ def _tracking_payload(
         "items": [item.model_dump() for item in items],
         "logistics": logistics,
         "received_summary": received_summary,
+        # CR-172 — why the shelter turned it down. None until staff reject it, and on
+        # every doc from before schema_v 6.
+        "reject_reason": reject_reason,
+        "reject_reason_code": reject_reason_code,
         "updated_at": updated_at.isoformat(),
         "expires_at": expires_at.isoformat() if expires_at else None,
         # CR-080 — the donor's page shows how many times they have edited.
@@ -480,6 +486,8 @@ class DonationsUseCase:
                     items=list(donation.items_declared),
                     received_summary=donation.received_summary,
                     updated_at=donation.updated_at,
+                    reject_reason=donation.reject_reason,
+                    reject_reason_code=donation.reject_reason_code,
                     donor=_donor_from_buffer(buffer) if buffer else {},
                     logistics=(dict(buffer.logistics) if buffer and buffer.logistics else None),
                     expires_at=buffer.expires_at if buffer else None,

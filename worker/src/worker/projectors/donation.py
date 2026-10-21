@@ -12,7 +12,7 @@ def _parse_datetime(value: Any) -> datetime | None:
     if not isinstance(value, str):
         return None
     try:
-        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+        return datetime.fromisoformat(value)  # 3.11+ reads a trailing Z
     except ValueError:
         return None
 
@@ -39,9 +39,13 @@ def project_donation(
         if isinstance(item, dict)
     ]
 
-    updated_raw = doc.get("updated_at") or doc.get("created_at") or doc.get("declared_at")
+    updated_raw = (
+        doc.get("updated_at") or doc.get("created_at") or doc.get("declared_at")
+    )
     updated_at = (
-        _parse_datetime(updated_raw) if isinstance(updated_raw, str) else datetime.now(UTC)
+        _parse_datetime(updated_raw)
+        if isinstance(updated_raw, str)
+        else datetime.now(UTC)
     )
 
     payload = {
@@ -51,7 +55,12 @@ def project_donation(
         "status": doc.get("status") or "declared",
         "booking_ref": doc.get("booking_ref"),
         "items_declared": items_declared,
+        # Whole sub-doc, so received_summary.items[].rejected / reject_reason /
+        # reject_reason_code (CR-172) ride along without a mapping here.
         "received_summary": doc.get("received_summary"),
+        # CR-172: the donor-facing reason. Docs before schema_v 6 have neither → None.
+        "reject_reason": doc.get("reject_reason"),
+        "reject_reason_code": doc.get("reject_reason_code"),
         "updated_at": updated_at,
     }
     return ("upsert", payload)

@@ -10,11 +10,15 @@ import {
 	toCountedItems
 } from '$lib/server/donation-intake';
 import {
+	combineLineRejectReasons,
+	donorRejectMessage,
+	type DonationRejectReasonCode,
 	type PublicDonationDoc,
 	type ScanDonationView,
 	receiveDonationInputSchema
 } from '$lib/features/donations/server';
 import {
+	canTransitionDonation,
 	deriveDonationReceiptAuditId,
 	deriveDonationReceiptLineId,
 	keyDonationReceipt,
@@ -30,6 +34,22 @@ import { persistQty } from '$lib/utils/qty';
 function routeErrorResponse(e: unknown) {
 	const { message, status } = toRouteError(e);
 	return json({ success: false, error: message }, { status });
+}
+
+type LineRejection = { reject_reason: string; reject_reason_code: DonationRejectReasonCode };
+
+/** CR-172 FR-9 — the donor-facing reason of a line staff turned away, or null if kept. */
+function rejectionOf(line: object): LineRejection | null {
+	const l = line as {
+		rejected?: boolean;
+		reject_reason_code?: DonationRejectReasonCode;
+		reject_note?: string;
+	};
+	if (!l.rejected || !l.reject_reason_code) return null;
+	return {
+		reject_reason_code: l.reject_reason_code,
+		reject_reason: donorRejectMessage(l.reject_reason_code, l.reject_note)
+	};
 }
 
 type BulkDocsOutcome = { id?: string; ok?: boolean; error?: string; reason?: string };
@@ -202,10 +222,25 @@ export const POST: RequestHandler = async ({ params, request }) => {
 		// `line_no` is the line's position in what was sent, free-text lines included. The
 		// scan station sends one line per `donation.items[]` entry in order — the numbering
 		// of the batch receive page too (`initialBatchDrafts`) — so both address one row.
+		const rejections = (countedLines ?? []).map(rejectionOf);
+		// A rejected line keys no ledger row and gets no lot (CR-172 FR-10) — but keeps its
+		// number, so the lines after it still address the same rows.
 		const numbered = (countedLines ?? []).flatMap((line, lineNo) =>
-			toCountedItems([line]).map((item) => ({ lineNo, item }))
+			rejections[lineNo] ? [] : toCountedItems([line]).map((item) => ({ lineNo, item }))
 		);
 		const counted = numbered.map(({ item }) => item);
+		// FR-12 — nothing kept means the booking is refused, not received.
+		const allRejected = rejections.length > 0 && rejections.every(Boolean);
+		if (allRejected && !canTransitionDonation(donation.status, 'rejected')) {
+			return json(
+				{
+					success: false,
+					error_code: 'INVALID_TRANSITION',
+					error: `Cannot reject a donation with status "${donation.status}"`
+				},
+				{ status: 422 }
+			);
+		}
 
 		try {
 			await assertCountedAgainstCatalog(counted, dbName);
@@ -287,7 +322,9 @@ export const POST: RequestHandler = async ({ params, request }) => {
 					has_discrepancy: JSON.stringify(declaredSnapshot) !== JSON.stringify(receivedSnapshot),
 					ledger_ids: ids,
 					lot_nos: ids.map((id) => ledgerAt(id).lot?.lot_no ?? null),
-					free_text_lines_skipped: (countedLines ?? []).length - counted.length
+					rejected_lines: rejections.flatMap((r, lineNo) => (r ? [{ line_no: lineNo, ...r }] : [])),
+					free_text_lines_skipped:
+						(countedLines ?? []).length - counted.length - rejections.filter(Boolean).length
 				}
 			},
 			ctx,
@@ -333,20 +370,29 @@ export const POST: RequestHandler = async ({ params, request }) => {
 		// 3) Donation stays the record of what was DECLARED — `items` is never
 		//    overwritten (the projector mirrors it as `items_declared`). What was
 		//    actually received lands on `received_summary` (couchdb-mongodb-sync.md §3.2).
-		const declaredForShortfall = (donation.items ?? []).map((it) => ({
-			item_id: it.item_id || it.free_text,
-			qty: String(it.qty)
-		}));
-		const countedForShortfall = (countedLines ?? []).map((c) => ({
-			item_id: 'item_id' in c && c.item_id ? c.item_id : 'free_text' in c ? c.free_text : undefined,
-			qty: String(c.qty)
-		}));
+		// "ไม่รับ" is not "ขาด" (CR-172 FR-13): a rejected line leaves the comparison on both
+		// sides — the counted lines are the declared ones, in the same order.
+		const declaredForShortfall = (donation.items ?? [])
+			.filter((_, index) => !rejections[index])
+			.map((it) => ({
+				item_id: it.item_id || it.free_text,
+				qty: String(it.qty)
+			}));
+		const countedForShortfall = (countedLines ?? [])
+			.filter((_, index) => !rejections[index])
+			.map((c) => ({
+				item_id:
+					'item_id' in c && c.item_id ? c.item_id : 'free_text' in c ? c.free_text : undefined,
+				qty: String(c.qty)
+			}));
 		const shortfalls = donationShortfall(declaredForShortfall, countedForShortfall);
+		const lineRejections = rejections.filter((r): r is LineRejection => r !== null);
 
 		const updated: PublicDonationDoc = {
 			...donation,
-			status: 'received',
-			received_at: nowStr,
+			...(allRejected
+				? { status: 'rejected' as const, ...combineLineRejectReasons(lineRejections) }
+				: { status: 'received' as const, received_at: nowStr }),
 			updated_at: nowStr,
 			received_summary: {
 				total_items: (countedLines ?? []).length,
@@ -358,11 +404,12 @@ export const POST: RequestHandler = async ({ params, request }) => {
 					counted: s.counted,
 					short: s.short
 				})),
-				items: (countedLines ?? []).map((c) => ({
+				items: (countedLines ?? []).map((c, index) => ({
 					item_id: 'item_id' in c ? c.item_id : undefined,
 					free_text: 'free_text' in c ? c.free_text : undefined,
-					qty: String(c.qty),
-					unit: c.unit
+					qty: rejections[index] ? '0' : String(c.qty),
+					unit: c.unit,
+					...(rejections[index] ? { rejected: true, ...rejections[index] } : {})
 				}))
 			}
 		};

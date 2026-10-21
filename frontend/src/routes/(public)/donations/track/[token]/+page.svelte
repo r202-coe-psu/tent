@@ -27,6 +27,7 @@
 		formatTrackSchedule,
 		canEditCourierTracking,
 		canCancelDonation,
+		rejectedLineReasons,
 		CancelDonationDialog,
 		EditDonationItemsDialog
 	} from '$lib/features/donations';
@@ -77,6 +78,9 @@
 	const showQr = $derived(status === 'verifying');
 	const isReceived = $derived(status === 'received');
 
+	/** Per declared line: the reason staff turned it away, or null (CR-172 FR-16). */
+	const lineRejections = $derived(donation ? rejectedLineReasons(donation) : []);
+
 	const shortfalls = $derived.by(() => {
 		if (!isReceived || !donation?.received_summary) return [];
 		if (donation.received_summary.shortfalls && donation.received_summary.shortfalls.length > 0) {
@@ -85,6 +89,8 @@
 		if (donation.received_summary.items && donation.received_summary.items.length > 0) {
 			const countedMap: Record<string, string> = {};
 			for (const c of donation.received_summary.items) {
+				// "ไม่รับ" is not "ขาด" (CR-172 FR-13).
+				if (c.rejected) continue;
 				const key = c.item_id || c.free_text || c.item_name || '';
 				if (key) countedMap[key] = String(c.qty ?? '0');
 			}
@@ -95,7 +101,8 @@
 				counted: string;
 				short: string;
 			}> = [];
-			for (const it of donation.items) {
+			for (const [index, it] of donation.items.entries()) {
+				if (lineRejections[index]) continue;
 				const key = it.item_id || it.item_name || '';
 				const counted = countedMap[key] ?? '0';
 				const declared = String(it.qty ?? '0');
@@ -283,6 +290,21 @@
 							</div>
 						</div>
 					{/if}
+				{/if}
+
+				{#if status === 'rejected' && donation.reject_reason}
+					<div
+						class="flex items-start gap-3 rounded-2xl border border-rose-500/40 bg-rose-50/80 p-4 text-xs text-rose-900 dark:border-rose-500/30 dark:bg-rose-950/30 dark:text-rose-200"
+						data-testid="donation-reject-reason"
+					>
+						<AlertCircle class="mt-0.5 h-5 w-5 shrink-0 text-rose-600 dark:text-rose-400" />
+						<div>
+							<h5 class="font-bold">
+								{langState.current === 'en' ? 'Reason from the shelter' : 'เหตุผลจากศูนย์พักพิง'}
+							</h5>
+							<p class="mt-0.5 text-sm break-words whitespace-pre-line">{donation.reject_reason}</p>
+						</div>
+					</div>
 				{/if}
 
 				{#if showQr && qrCodeUrl}
@@ -494,14 +516,22 @@
 									</thead>
 									<tbody class="divide-y divide-border/60 font-semibold text-foreground">
 										{#each donation.items as item, i (item.item_name + String(i))}
-											{@const sf =
-												(item.item_id && shortfallByItem[item.item_id]) ||
-												shortfallByItem[item.item_name]}
+											{@const rejectedReason = lineRejections[i]}
+											{@const sf = rejectedReason
+												? undefined
+												: (item.item_id && shortfallByItem[item.item_id]) ||
+													shortfallByItem[item.item_name]}
 											<tr>
 												<td class="px-4 py-3">
 													<div class="flex flex-wrap items-center gap-2">
 														<span>{item.item_name}</span>
-														{#if sf}
+														{#if rejectedReason}
+															<span
+																class="inline-flex items-center rounded-md bg-rose-100 px-2 py-0.5 text-2xs font-bold text-rose-800 dark:bg-rose-950/50 dark:text-rose-300"
+															>
+																{langState.current === 'en' ? 'Not accepted' : 'ไม่รับ'}
+															</span>
+														{:else if sf}
 															<span
 																class="inline-flex items-center rounded-md bg-amber-100 px-2 py-0.5 text-2xs font-bold text-amber-800 dark:bg-amber-950/50 dark:text-amber-300"
 															>
@@ -511,6 +541,13 @@
 															</span>
 														{/if}
 													</div>
+													{#if rejectedReason}
+														<p
+															class="mt-1 text-2xs font-medium break-words text-rose-700 dark:text-rose-300"
+														>
+															{rejectedReason}
+														</p>
+													{/if}
 												</td>
 												<td class="px-4 py-3 text-right">
 													{#if sf}

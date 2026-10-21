@@ -577,6 +577,23 @@
                     เห็นเฉพาะของตน (declared / received / expired)
                   </td>
                 </tr>
+                <tr>
+                  <td>
+                    เหตุผลที่ศูนย์ไม่รับ (CR-172, 2026-10-21) — ทั้งใบ + รายบรรทัด
+                  </td>
+                  <td>
+                    <code>reject_reason</code> / <code>reject_reason_code</code> ·
+                    <code>received_summary.items[].rejected</code> /
+                    <code>reject_reason</code> / <code>reject_reason_code</code>
+                  </td>
+                  <td>
+                    <span class="badge badge-success badge-sm">OK</span>
+                    ข้อความที่เจ้าหน้าที่เขียนให้ผู้บริจาคอ่าน (label ภาษาไทยของ code + รายละเอียด,
+                    ≤ 500) — ช่องเดียว ไม่มีบันทึกภายในแยก; modal ปฏิเสธมี preview +
+                    คำเตือนห้ามใส่ข้อมูลส่วนตัว (CR-172 FR-7); <code>audit</code> ไม่ถูกเปิด;
+                    ใบก่อน schema_v 6 ได้ <code>null</code> → ไม่แสดงกล่องเหตุผล
+                  </td>
+                </tr>
               </tbody>
             </table>
           </div>
@@ -761,6 +778,9 @@ Error : { "error": { "code": "LOCKED" } }          // ถ้า status = receive
                   <td>
                     <code>/donate/track/{token}</code>: สถานะ declaration + ฟอร์มแก้
                     เลข tracking ขนส่ง (DN-6); ถ้า <code>received</code> แล้ว → read-only
+                    · <code>rejected</code> → กล่อง "เหตุผลจากศูนย์พักพิง" ใต้ป้ายสถานะ;
+                    <code>received</code> ที่มีบรรทัดไม่รับ → ป้าย "ไม่รับ" + เหตุผลรายบรรทัด
+                    แยกจาก "รับไม่ครบ" (CR-172 FR-15/FR-16)
                   </td>
                 </tr>
                 <tr>

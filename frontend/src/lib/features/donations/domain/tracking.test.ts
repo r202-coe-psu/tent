@@ -5,6 +5,7 @@ import {
 	donationStatusLabel,
 	formatTrackSchedule,
 	isTerminalDonationStatus,
+	rejectedLineReasons,
 	toDonationTrackView
 } from './tracking';
 
@@ -116,5 +117,47 @@ describe('isTerminalDonationStatus', () => {
 		for (const status of ['received', 'rejected', 'redirected', 'expired', 'cancelled']) {
 			expect(isTerminalDonationStatus(status)).toBe(true);
 		}
+	});
+});
+
+describe('reject reasons on the ticket (CR-172)', () => {
+	const base = {
+		status: 'received',
+		shelter_code: 'SH001',
+		items: [
+			{ item_name: 'ข้าวสาร', qty: '10', unit: 'kg' },
+			{ item_name: 'นม', qty: '2', unit: 'ลัง' }
+		]
+	};
+
+	it('carries the booking reason when the shelter refused it', () => {
+		const view = toDonationTrackView({
+			...base,
+			status: 'rejected',
+			reject_reason: 'หมดอายุ — ล็อตเก่า'
+		});
+		expect(view.reject_reason).toBe('หมดอายุ — ล็อตเก่า');
+	});
+
+	it('FR-17: a ticket written before schema_v 6 has no reason and no rejected line', () => {
+		const view = toDonationTrackView({
+			...base,
+			received_summary: { items: [{ item_name: 'ข้าวสาร', qty: '10' }] }
+		});
+		expect(view.reject_reason).toBeNull();
+		expect(rejectedLineReasons(view)).toEqual([null, null]);
+	});
+
+	it('FR-16: lines up each turned-away line with the declared line it answers', () => {
+		const view = toDonationTrackView({
+			...base,
+			received_summary: {
+				items: [
+					{ item_id: 'item:rice', qty: '10', unit: 'kg' },
+					{ qty: '0', unit: 'ลัง', rejected: true, reject_reason: 'ชำรุดเสียหาย' }
+				]
+			}
+		});
+		expect(rejectedLineReasons(view)).toEqual([null, 'ชำรุดเสียหาย']);
 	});
 });

@@ -25,3 +25,9 @@ export {
 	slotModeForDelivery
 } from './domain/compute-slots';
 export { donationPreDeclarationInputSchema } from './domain/donation';
+export {
+	combineLineRejectReasons,
+	donorRejectMessage,
+	rejectDonationInputSchema
+} from './domain/reject-reason';
+export type { DonationRejectReasonCode } from './domain/reject-reason';

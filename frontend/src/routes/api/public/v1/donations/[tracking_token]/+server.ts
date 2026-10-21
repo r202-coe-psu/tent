@@ -114,6 +114,9 @@ export const GET = async ({ params, getClientAddress }) => {
 				items: latestDoc?.items ?? donation.items ?? [],
 				logistics: latestDoc?.logistics ?? donation.logistics ?? null,
 				received_summary: latestDoc?.received_summary ?? donation.received_summary ?? null,
+				// CR-172 FR-14 — staff wrote it for the donor; the doc wins over the projection lag.
+				reject_reason: latestDoc?.reject_reason ?? donation.reject_reason ?? null,
+				reject_reason_code: latestDoc?.reject_reason_code ?? donation.reject_reason_code ?? null,
 				updated_at: latestDoc?.updated_at ?? donation.updated_at ?? null,
 				expires_at: latestDoc?.expires_at ?? donation.expires_at ?? null,
 				revisions: latestDoc?.revisions ?? donation.revisions ?? []

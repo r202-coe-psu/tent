@@ -162,6 +162,59 @@ describe('GET & PATCH & DELETE /api/public/v1/donations/[tracking_token]', () =>
 		expect(data.donation.received_summary?.shortfalls[0].short).toBe('2');
 	});
 
+	// CR-172 FR-14 — the reason staff gave reaches the donor before the projection catches up.
+	it('GET passes the reject reason through, from CouchDB over the projection', async () => {
+		vi.stubGlobal(
+			'fetch',
+			vi.fn().mockResolvedValue({
+				ok: true,
+				status: 200,
+				json: async () => ({
+					success: true,
+					donation: {
+						status: 'pending_review',
+						shelter_code: 'SH001',
+						items: [],
+						reject_reason: null,
+						updated_at: '2026-01-01T00:00:00Z'
+					}
+				})
+			})
+		);
+		vi.mocked(adminRaw).mockImplementation((path: string, method: string) => {
+			if (method === 'GET' && path.includes('/shelter_sh001/') && path.includes('_all_docs')) {
+				return Promise.resolve({
+					status: 200,
+					data: {
+						rows: [
+							{
+								doc: {
+									...mockDonation,
+									status: 'rejected',
+									reject_reason: 'หมดอายุ',
+									reject_reason_code: 'expired'
+								}
+							}
+						]
+					}
+				});
+			}
+			return Promise.resolve({ status: 404, data: {} });
+		});
+
+		const response = await GET({
+			params: { tracking_token: TOKEN },
+			getClientAddress: () => '127.0.0.1'
+		} as unknown as GetEvent);
+
+		const data = await response.json();
+		expect(data.donation).toMatchObject({
+			status: 'rejected',
+			reject_reason: 'หมดอายุ',
+			reject_reason_code: 'expired'
+		});
+	});
+
 	it('PATCH updates the courier tracking number in CouchDB', async () => {
 		vi.mocked(adminRaw).mockImplementation((path: string, method: string) => {
 			if (method === 'GET' && path.includes('/shelter_sh001/') && path.includes('_all_docs')) {

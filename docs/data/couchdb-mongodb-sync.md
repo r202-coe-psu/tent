@@ -2,8 +2,8 @@
 title: Smart Shelter — CouchDB ⇄ MongoDB Sync (Public Plane)
 status: draft for review
 created: 2026-06-11
-updated: 2026-10-20
-note: CR-176 (2026-10-20) — projector evacuee `checked_in_at` = null เมื่อ `cancelled` (PROJECTION_VERSION 4→5); คู่กับ data-model.md v3 + api-contract.md v1 + CR-017/CR-044 — public tier ทำงานบน MongoDB ผ่าน FastAPI; ตัด public_transparency (CR-017 Decision B); CR-113 unassigned_registrations; CR-166 (2026-10-13) — public_persons เพิ่ม `first_name_key`/`last_name_hash`, PROJECTION_VERSION 2→3, เลิก `$text`; decision sync 2026-10-09 — worker PROJECTION_VERSION + auto re-bootstrap on start (stored in Mongo _worker_meta); bootstrap reads update_seq before scan
+updated: 2026-10-21
+note: CR-176 (2026-10-20) — projector evacuee `checked_in_at` = null เมื่อ `cancelled` (PROJECTION_VERSION 4→5); คู่กับ data-model.md v3 + api-contract.md v1 + CR-017/CR-044 — public tier ทำงานบน MongoDB ผ่าน FastAPI; ตัด public_transparency (CR-017 Decision B); CR-113 unassigned_registrations; CR-166 (2026-10-13) — public_persons เพิ่ม `first_name_key`/`last_name_hash`, PROJECTION_VERSION 2→3, เลิก `$text`; decision sync 2026-10-09 — worker PROJECTION_VERSION + auto re-bootstrap on start (stored in Mongo _worker_meta); bootstrap reads update_seq before scan; CR-172 (2026-10-21) — `public_donations` เพิ่ม `reject_reason`/`reject_reason_code` + `received_summary.items[].rejected/reject_reason/reject_reason_code` ส่งผ่านทั้งก้อน, PROJECTION_VERSION 5→6
 ---
 
 # Smart Shelter — CouchDB ⇄ MongoDB Sync
@@ -134,8 +134,14 @@ The worker resumes `_changes` from its checkpoint, so documents that never chang
 // public_donations — สำหรับ tracking_token lookup (mirror สถานะจาก CouchDB)
 // lookup ด้วย tracking_token_hash เท่านั้น — ไม่เก็บ plaintext token
 { _id: "donation:01H...", tracking_token_hash, shelter_code, status: "declared|received|expired",
-  items_declared: [...], received_summary: {...} | null, updated_at }
+  items_declared: [...], received_summary: {...} | null,
+  reject_reason: str | null, reject_reason_code: "not_needed|expired|damaged|other" | null,
+  updated_at }
 // projector: sync สถานะ donation กลับมาให้ public ดูผ่าน GET /public/v1/donations/{token}
+// received_summary ส่งทั้งก้อนตามรูปใน schema.md §2.3 — รวม items[].rejected / reject_reason /
+//   reject_reason_code (CR-172) โดยไม่ map ทีละ field
+// reject_reason / reject_reason_code (CR-172) = ข้อความที่ผู้บริจาคเห็น + code — มีค่าเฉพาะ
+//   status rejected; doc ก่อน schema_v 6 ไม่มี field → project เป็น null (PROJECTION_VERSION 6)
 // create path เขียน stub ทันทีก่อน outbound CDC เพื่อให้ GET tracking ใช้ได้ทันที
 
 // public_volunteers — โปรไฟล์จิตอาสาสำหรับหน้า "แก้ไขโปรไฟล์" ใน Access Portal

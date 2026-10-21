@@ -18,7 +18,9 @@
 		donationActionRef,
 		donationRefLabel,
 		PUBLIC_DONATION_CATEGORIES,
-		type PendingDonationRow
+		RejectDonationDialog,
+		type PendingDonationRow,
+		type RejectDonationInput
 	} from '$lib/features/donations';
 	import { useShelters } from '$lib/features/shelters';
 	import { formatUnit, useUnitsOfMeasure } from '$lib/features/catalog';
@@ -37,7 +39,7 @@
 		saving?: boolean;
 		onBack: () => void;
 		onApprove: (bookingRef: string, memo: string) => void;
-		onReject: (bookingRef: string, reason: string) => void;
+		onReject: (bookingRef: string, input: RejectDonationInput) => void;
 		onRedirect?: (bookingRef: string, targetShelterCode: string, note: string) => void;
 	} = $props();
 
@@ -46,7 +48,8 @@
 	const actionRef = $derived(donationActionRef(request));
 
 	let memo = $state('');
-	let actionPanel = $state<'none' | 'redirect' | 'reject'>('none');
+	let actionPanel = $state<'none' | 'redirect'>('none');
+	let rejectOpen = $state(false);
 
 	const unitsQuery = useUnitsOfMeasure();
 	const units = $derived(unitsQuery.data ?? []);
@@ -67,9 +70,6 @@
 		if (picked) return `${picked.name} (${picked.code})`;
 		return sheltersQuery.isPending ? 'กำลังโหลดรายชื่อศูนย์...' : '-- เลือกศูนย์พักพิงปลายทาง --';
 	});
-
-	// Reject inline form state
-	let rejectReason = $state('');
 
 	/**
 	 * The donor sends `category`, `condition` and a per-line `note` alongside each
@@ -149,13 +149,9 @@
 		}
 	}
 
-	function handleConfirmReject() {
+	function handleConfirmReject(input: RejectDonationInput) {
 		if (!actionRef) return;
-		if (!rejectReason.trim()) {
-			toast.error('กรุณาระบุเหตุผลในการปฏิเสธคำขอ');
-			return;
-		}
-		onReject(actionRef, rejectReason.trim());
+		onReject(actionRef, input);
 	}
 </script>
 
@@ -399,7 +395,7 @@
 		<Button
 			variant="outline"
 			type="button"
-			onclick={() => (actionPanel = actionPanel === 'reject' ? 'none' : 'reject')}
+			onclick={() => (rejectOpen = true)}
 			disabled={saving}
 			class="h-10 rounded-xl border-rose-200 bg-rose-50/70 px-5 text-xs font-bold text-rose-600 hover:bg-rose-100 hover:text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/20 dark:hover:bg-rose-900/40"
 		>
@@ -467,48 +463,11 @@
 			</div>
 		</div>
 	{/if}
-
-	<!-- Expandable Reject Section (Screenshot 5) -->
-	{#if actionPanel === 'reject'}
-		<div
-			class="animate-in border-t border-border/60 bg-muted/10 p-6 fade-in slide-in-from-top-2 md:p-8"
-		>
-			<div
-				class="space-y-4 rounded-2xl border-2 border-rose-300 bg-card p-5 shadow-sm dark:border-rose-900/60"
-			>
-				<div>
-					<Label for="reject-reason-input" class="mb-1.5 text-xs font-bold text-foreground">
-						ระบุเหตุผลในการปฏิเสธคำขอ (Reject Reason) <span class="text-destructive">*</span>
-					</Label>
-					<Textarea
-						id="reject-reason-input"
-						rows={2}
-						placeholder="เช่น พื้นที่จัดเก็บไม่เพียงพอ, งดรับเสื้อผ้าชั่วคราว..."
-						bind:value={rejectReason}
-						class="rounded-xl bg-muted/10 text-xs"
-					/>
-				</div>
-
-				<div class="flex items-center justify-between gap-3 pt-2">
-					<Button
-						type="button"
-						onclick={handleConfirmReject}
-						disabled={saving || !rejectReason.trim()}
-						variant="destructive"
-						class="h-10 rounded-xl bg-destructive px-6 text-xs font-bold text-white hover:bg-destructive/90"
-					>
-						{saving ? 'กำลังดำเนินการ...' : 'ยืนยันการปฏิเสธคำขอ'}
-					</Button>
-					<Button
-						variant="ghost"
-						type="button"
-						onclick={() => (actionPanel = 'none')}
-						class="h-10 rounded-xl px-5 text-xs font-bold"
-					>
-						ยกเลิก
-					</Button>
-				</div>
-			</div>
-		</div>
-	{/if}
 </div>
+
+<RejectDonationDialog
+	bind:open={rejectOpen}
+	bookingRef={request.booking_ref || actionRef || undefined}
+	pending={saving}
+	onconfirm={handleConfirmReject}
+/>

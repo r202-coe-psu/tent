@@ -1,6 +1,12 @@
 import { z } from 'zod';
 import type { Donation, DonationStatus, Donor } from '$lib/features/operations';
-import { qtyStrCoercePositiveSchema } from '$lib/utils/qty';
+import { qtyGt, qtyStrCoerceNonNegativeSchema } from '$lib/utils/qty';
+import {
+	donationRejectReasonCodeSchema,
+	rejectNoteSchema,
+	requireNoteForOther,
+	type DonationRejectReasonCode
+} from './reject-reason';
 
 export interface PublicDonor extends Donor {
 	line_id?: string;
@@ -34,8 +40,13 @@ export interface PublicDonationDoc extends Omit<Donation, 'donor'> {
 			free_text?: string;
 			qty: string;
 			unit?: string;
+			rejected?: boolean;
+			reject_reason?: string;
+			reject_reason_code?: DonationRejectReasonCode;
 		}>;
 	};
+	reject_reason?: string | null;
+	reject_reason_code?: DonationRejectReasonCode | null;
 	items_declared?: Array<{
 		item_id?: string;
 		free_text?: string;
@@ -83,35 +94,68 @@ export interface ScanDonationView {
  * lines stay on the donation only (they are not in the catalog, so they cannot be
  * counted as stock — schema.md §2.1 requires a real `item_id` + matching `unit`).
  */
-export const receiveDonationInputSchema = z.object({
-	status: z.literal('received'),
-	/** Optional note from the receiving staff — lands on `received_summary.remarks`. */
-	remarks: z.string().trim().max(500).optional(),
-	items: z
-		.array(
-			z.object({
-				item_id: z.string().optional(),
-				free_text: z.string().optional(),
-				qty: qtyStrCoercePositiveSchema,
-				unit: z.string().min(1),
-				/**
-				 * `lot_no` is NOT accepted from the client — the server mints it at
-				 * receive time so the per-day sequence stays under one authority
-				 * (CR-088). Zod strips it if a caller sends one anyway.
-				 */
-				lot: z
-					.object({
-						expiry: z.string().optional(),
-						note: z.string().trim().optional(),
-						storage_zone: z.string().trim().max(100).optional(),
-						// → shelter sub_storage[].id (draft-shelter-storage-points); kept, not stripped
-						storage_point_id: z.string().trim().min(1).optional()
-					})
-					.optional()
-			})
-		)
-		.optional()
-});
+export const receiveDonationInputSchema = z
+	.object({
+		status: z.literal('received'),
+		/** Optional note from the receiving staff — lands on `received_summary.remarks`. */
+		remarks: z.string().trim().max(500).optional(),
+		items: z
+			.array(
+				z.object({
+					item_id: z.string().optional(),
+					free_text: z.string().optional(),
+					// > 0 unless the line is rejected — checked below with the line's flag.
+					qty: qtyStrCoerceNonNegativeSchema,
+					unit: z.string().min(1),
+					/**
+					 * Staff turned this line away (CR-172 FR-9, FR-10): it needs a reason, keys no
+					 * ledger row and gets no lot. The whole line — no partial quantity.
+					 */
+					rejected: z.boolean().optional(),
+					reject_reason_code: donationRejectReasonCodeSchema.optional(),
+					reject_note: rejectNoteSchema.optional(),
+					/**
+					 * `lot_no` is NOT accepted from the client — the server mints it at
+					 * receive time so the per-day sequence stays under one authority
+					 * (CR-088). Zod strips it if a caller sends one anyway.
+					 */
+					lot: z
+						.object({
+							expiry: z.string().optional(),
+							note: z.string().trim().optional(),
+							storage_zone: z.string().trim().max(100).optional(),
+							// → shelter sub_storage[].id (draft-shelter-storage-points); kept, not stripped
+							storage_point_id: z.string().trim().min(1).optional()
+						})
+						.optional()
+				})
+			)
+			.optional()
+	})
+	.superRefine((value, ctx) => {
+		for (const [index, line] of (value.items ?? []).entries()) {
+			if (line.rejected) {
+				if (!line.reject_reason_code) {
+					ctx.addIssue({
+						code: 'custom',
+						path: ['items', index, 'reject_reason_code'],
+						message: 'รายการที่ไม่รับต้องระบุเหตุผล'
+					});
+				}
+				requireNoteForOther({ reason_code: line.reject_reason_code, note: line.reject_note }, ctx, [
+					'items',
+					index,
+					'reject_note'
+				]);
+			} else if (!qtyGt(line.qty, 0)) {
+				ctx.addIssue({
+					code: 'custom',
+					path: ['items', index, 'qty'],
+					message: 'จำนวนที่รับต้องมากกว่า 0'
+				});
+			}
+		}
+	});
 export type ReceiveDonationInput = z.infer<typeof receiveDonationInputSchema>;
 
 /**
