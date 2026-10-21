@@ -26,8 +26,11 @@ class ThirdPartyAccessLog(Document):
     location_code: str
     purpose: str
     ip: str
-    # "granted" | "granted_bypass" (EXT-008 under booking-bypass, #751) | "denied_<code>"
-    # (incl. denied_missing_purpose, denied_insufficient_scope)
+    # "granted" | "granted_bypass" | "denied_<code>" (incl. denied_missing_purpose,
+    # denied_insufficient_scope). `granted_bypass` (#751, CR-182) = EXT-008 created a booking
+    # the normal `accepts_booking` rule would refuse, only because the client holds
+    # `booking-bypass`. An idempotent replay of such a booking (same Idempotency-Key) creates
+    # nothing new and logs plain `granted`.
     status: str
     result_count: int = 0
     created_at: datetime
