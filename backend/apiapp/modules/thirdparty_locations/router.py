@@ -24,6 +24,12 @@ async def list_locations(
     include_inactive: bool = Query(
         default=False, description="Include soft-deleted (is_active=false) locations"
     ),
+    accepts_booking: bool | None = Query(
+        default=None,
+        description=(
+            "Filter by the accepts_booking rule (EXT-008): true = bookable, false = not bookable"
+        ),
+    ),
     page: int = Query(default=1, ge=1, description="Page number"),
     limit: int = Query(default=50, ge=1, le=200, description="Items per page"),
     use_case: ThirdPartyLocationsUseCase = Depends(get_thirdparty_locations_use_case),  # noqa: B008
@@ -32,6 +38,7 @@ async def list_locations(
         status_filter=status,
         updated_since=updated_since,
         include_inactive=include_inactive,
+        accepts_booking_filter=accepts_booking,
         page=page,
         limit=limit,
     )

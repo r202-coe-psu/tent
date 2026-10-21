@@ -26,7 +26,9 @@ class ThirdPartyAccessLog(Document):
     location_code: str
     purpose: str
     ip: str
-    status: str  # "granted" | "denied_missing_purpose" | "denied_insufficient_scope" | "denied_<code>"
+    # "granted" | "granted_bypass" (EXT-008 under booking-bypass, #751) | "denied_<code>"
+    # (incl. denied_missing_purpose, denied_insufficient_scope)
+    status: str
     result_count: int = 0
     created_at: datetime
 
