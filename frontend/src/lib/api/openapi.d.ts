@@ -1954,6 +1954,8 @@ export interface components {
 			contact_name: string | null;
 			/** Operating Org */
 			operating_org: string | null;
+			/** Accepts Booking */
+			accepts_booking: boolean;
 			/** Accepts Delivery */
 			accepts_delivery: boolean;
 			/** Delivery Note */
@@ -2019,6 +2021,8 @@ export interface components {
 			contact_name: string | null;
 			/** Operating Org */
 			operating_org: string | null;
+			/** Accepts Booking */
+			accepts_booking: boolean;
 			/** Accepts Delivery */
 			accepts_delivery: boolean;
 			/** Delivery Note */
@@ -5270,6 +5274,8 @@ export interface operations {
 				updated_since?: string | null;
 				/** @description Include soft-deleted (is_active=false) locations */
 				include_inactive?: boolean;
+				/** @description Filter by the accepts_booking rule (EXT-008): true = bookable, false = not bookable. Only the lowercase strings `true` / `false` are accepted; anything else is 422. */
+				accepts_booking?: ('true' | 'false') | null;
 				/** @description Page number */
 				page?: number;
 				/** @description Items per page */

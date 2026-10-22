@@ -328,13 +328,14 @@ How the three full-stack suites obey §4:
 
 Feature tag `@distribution`, layer `@critical`; none carries `@release` yet.
 
-| Suite                                                  | What it proves                                                                                                                                                                           |
-| ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `distribution/distribution-ticket-lifecycle.test.ts`   | Back-office ↔ desk: create → allocate → approve → dispatch → receive → hand out → close (Journey A: zero returns → COMPLETED; Journey B: warehouse credits only the verified return qty) |
-| `distribution/distribution-desk-access.test.ts`        | Who may do what: page access by role (every capability × flat/compound, SA, scope-only, cross-shelter) and VDU write permissions (no UI)                                                 |
-| `distribution/distribution-desk-handover.test.ts`      | Tab 1 receive cargo, tab 2 ready meals (duplicate / menu-mismatch overrides, lot expiry, service day, history, preflight retry), tab 3 supplies and loans                                |
-| `distribution/distribution-desk-returns-close.test.ts` | Tab 4 loan returns (physical, lost/waived, bulk pool, offline, resume) and tab 5 shift close + warehouse hand-off (incl. the "card stays on the closed ticket" regression)               |
-| `distribution/distribution-desk-flow.test.ts`          | Across tabs (point filter, badges, live updates between desks, scan-first) and a compound-role DST working every tab                                                                     |
+| Suite                                                  | What it proves                                                                                                                                                                                   |
+| ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `distribution/distribution-ticket-lifecycle.test.ts`   | Back-office ↔ desk: create → allocate → approve → dispatch → receive → hand out → close (Journey A: zero returns → COMPLETED; Journey B: warehouse credits only the verified return qty)         |
+| `distribution/distribution-desk-access.test.ts`        | Who may do what: page access by role (every capability × flat/compound, SA, scope-only, cross-shelter) and VDU write permissions (no UI)                                                         |
+| `distribution/distribution-desk-handover.test.ts`      | Tab 1 receive cargo, tab 2 ready meals (duplicate / menu-mismatch overrides, lot expiry, service day, history, preflight retry), tab 3 supplies and loans                                        |
+| `distribution/distribution-desk-returns-close.test.ts` | Tab 4 loan returns (physical, lost/waived, bulk pool, offline, resume) and tab 5 shift close + warehouse hand-off (incl. the "card stays on the closed ticket" regression)                       |
+| `distribution/distribution-desk-flow.test.ts`          | Across tabs (point filter, badges, live updates between desks, scan-first) and a compound-role DST working every tab                                                                             |
+| `distribution/distribution-desk-volunteer.test.ts`     | Volunteer recipients (#650): pass-QR scan → meal logged as `volunteer:{ulid}`, repeat meal needs an override, deactivated pass selects nobody, volunteer loan issued and returned at the counter |
 
 How they obey §4:
 
@@ -365,15 +366,16 @@ staging the host nginx's `/public-api`), not through the BFF. It replaces runnin
 `@critical` (everything that creates data); none carries `@release`. Both groups are in
 `playwright.staging.config.ts`'s allowlist; budget about 3 minutes, mostly worker polling.
 
-| Group       | What it proves                                                                                                                                                                                                                                                                                                                                         |
-| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `@smoke`    | S1: every endpoint refuses a missing or garbage token with 401 `invalid_token` and `WWW-Authenticate: Bearer`. S2: `/external/token` rejects a wrong `grant_type` (400), an unknown client (401 `invalid_client`) and a form-encoded body (422). No data created; runs on any target                                                                   |
-| `@critical` | A1 creates an `E2E partner <runId>` client with all seven scopes **through the UI**; A2 mints; A3 happy path of every EXT (booking create / idempotent replay / key reuse 409 / worker write / residency 404 / cancel twice); A3b cross-client isolation; **A4 scope matrix**; A5 least privilege; A6–A8 edit scopes, revoke, delete through the UI; Z |
+| Group       | What it proves                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@smoke`    | S1: every endpoint refuses a missing or garbage token with 401 `invalid_token` and `WWW-Authenticate: Bearer`. S2: `/external/token` rejects a wrong `grant_type` (400), an unknown client (401 `invalid_client`) and a form-encoded body (422). No data created; runs on any target                                                                                                                                                                                                                                                                                                                      |
+| `@critical` | A1 creates an `E2E partner <runId>` client with all eight scopes **through the UI**; A2 mints; A3 happy path of every EXT (booking create / idempotent replay / key reuse 409 / worker write / residency 404 / cancel twice); B1/B2 `accepts_booking` on EXT-003 / EXT-002 (+ `?accepts_booking=` filter) for a bookable and a not-bookable shelter; A3b cross-client isolation; B3/B4 EXT-008 on the not-bookable shelter (409 with `booking-write` alone, 201 → BOOKED → cancelled with `booking-bypass`); **A4 scope matrix**; A5 least privilege; A6–A8 edit scopes, revoke, delete through the UI; Z |
 
 How they obey §4:
 
-- **Own data.** The run creates its own `E2E partner <runId>` shelter (`createShelterViaUi`, pre-registration on)
-  and its own clients (`E2E partner <runId>`, `E2E partner-iso <runId>`). Bookings use `fictitiousNationalId`.
+- **Own data.** The run creates its own `E2E partner <runId>` shelter (`createShelterViaUi`, pre-registration on),
+  a second `E2E partner closed <runId>` shelter (pre-registration off: not bookable by the normal rule, #751)
+  and its own clients (`E2E partner <runId>`, `E2E partner-iso <runId>`, `E2E partner-bypass <runId>`). Bookings use `fictitiousNationalId`.
 - **Ledger.** `PartnerLedger` (`node_modules/.cache/partner-api-e2e-created.json`) records clients (BFF
   row id + `client_id`), shelters and bookings the moment they exist. `teardownPartnerRun` is idempotent
   and runs at the start of the next run, in the Z test and in afterAll: cancel still-open bookings as
@@ -396,16 +398,18 @@ How they obey §4:
   suite: provisioning the run's shelter needs `_admin` anyway (`createShelterViaUi`), so no `E2E_ADMIN_*`
   user is needed beyond `COUCHDB_ADMIN_URL`; the BFF adds `EXTERNAL_API_SECRET` toward FastAPI itself.
   The preview server therefore needs `FASTAPI_INTERNAL_URL` + `EXTERNAL_API_SECRET` (`frontend/.env`).
-- **Approved exception to §4 rule 4.** Besides the UI, setup uses the BFF for the **second client** (A3b cross-client
-  isolation) and for the **scope matrix** (A4/A5: PATCH `allowed_scopes` seven times is not UI-worthy; A6 covers the
+- **Approved exception to §4 rule 4.** Besides the UI, setup uses the BFF for the **secondary clients** (A3b cross-client
+  isolation, B4 `booking-bypass`) and for the **scope matrix** (A4/A5: PATCH `allowed_scopes` eight times is not UI-worthy; A6 covers the
   edit-scopes dialog). Create / edit / revoke / delete of the main client still go through the UI.
 - **FastAPI origin guard.** `partnerApiUrl()` uses `E2E_FASTAPI_URL` only on a remote run (`E2E_BASE_URL` set); a local
   run must stay on loopback and throws if a copied `.env` points `E2E_FASTAPI_URL` elsewhere. A remote run without
   `E2E_FASTAPI_URL` throws a clear error instead of falling back to localhost.
-- **Scope matrix (A4).** For each of the seven scopes: PATCH `allowed_scopes` to _all minus that scope_ (BFF),
+- **Scope matrix (A4).** For each of the eight scopes: PATCH `allowed_scopes` to _all minus that scope_ (BFF),
   mint a new token (it must not carry the scope), assert every endpoint that needs it answers 403
   `insufficient_scope` (EXT-006 without `occupancy-read` stays 200 with `occupancy_total: null`) and that every
-  endpoint on another scope still answers. EXT-007 / EXT-011 / EXT-012 always send `purpose` (checked before the scope).
+  endpoint on another scope still answers. `booking-bypass` gates no endpoint: it is covered by a probe
+  (`SCOPE_PROBES`), EXT-008 on the not-bookable shelter answers 409 `location_not_bookable` (not 403) without it, and a scope with
+  neither an endpoint nor a probe fails the matrix. EXT-007 / EXT-011 / EXT-012 always send `purpose` (checked before the scope).
 - **Current token behaviour is asserted, not wished for (ADR 0002 §6).** `verify_thirdparty_token` trusts the JWT
   claims and never reads the DB, so a token minted before a scope removal (A6) or a revoke (A7) keeps working until
   it expires (3,600 s); only a token minted afterwards reflects the change. The edit / revoke dialogs say so too.

@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 
 from tent_model.public_shelter import PublicShelter
 
+from ...utils.shelter_booking import accepts_pre_registration
 from .schemas import ShelterDetailResponse, ShelterItem, ShelterListResponse, SiteKind
 
 # Public occupancy triple (CR-112). `occupancy` response key = Forecast.
@@ -22,11 +23,6 @@ FORECAST_OCCUPANCY_STATUSES = (
 PRESENT_OCCUPANCY_STATUSES = ("active", "room_confirmed", "temporary_leave")
 IN_ZONE_OCCUPANCY_STATUSES = ("room_confirmed",)
 OCCUPANCY_STATUSES = FORECAST_OCCUPANCY_STATUSES
-
-
-def _accepts_pre_registration(raw: dict) -> bool:
-    flags = raw.get("feature_flags") or {}
-    return flags.get("accepts_pre_registration") is True
 
 
 class ShelterUseCase:
@@ -122,7 +118,7 @@ class ShelterUseCase:
                     pet_policy=pet_status,
                     vulnerable_groups=vul_groups,
                     admin_type=admin_type,
-                    accepts_pre_registration=_accepts_pre_registration(m),
+                    accepts_pre_registration=accepts_pre_registration(m),
                     updated_at=doc.updated_at,
                 )
             )
@@ -269,7 +265,7 @@ class ShelterUseCase:
                 },
                 "zones": mapped_zones,
                 "contact": {"manager": manager_name, "phone": manager_phone},
-                "accepts_pre_registration": _accepts_pre_registration(m),
+                "accepts_pre_registration": accepts_pre_registration(m),
                 "faq": m.get("faq")
                 or [
                     {

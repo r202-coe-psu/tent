@@ -28,6 +28,8 @@ class LocationItem(BaseModel):
     contact_phone: str | None
     contact_name: str | None
     operating_org: str | None
+    # #751 - the normal booking rule (EXT-008); same value for every partner token.
+    accepts_booking: bool
     accepts_delivery: bool
     delivery_note: str | None
     opened_at: datetime | None

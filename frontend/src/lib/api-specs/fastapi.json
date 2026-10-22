@@ -1300,6 +1300,17 @@
 						"description": "Include soft-deleted (is_active=false) locations"
 					},
 					{
+						"name": "accepts_booking",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [{ "enum": ["true", "false"], "type": "string" }, { "type": "null" }],
+							"description": "Filter by the accepts_booking rule (EXT-008): true = bookable, false = not bookable. Only the lowercase strings `true` / `false` are accepted; anything else is 422.",
+							"title": "Accepts Booking"
+						},
+						"description": "Filter by the accepts_booking rule (EXT-008): true = bookable, false = not bookable. Only the lowercase strings `true` / `false` are accepted; anything else is 422."
+					},
+					{
 						"name": "page",
 						"in": "query",
 						"required": false,
@@ -3675,6 +3686,7 @@
 						"anyOf": [{ "type": "string" }, { "type": "null" }],
 						"title": "Operating Org"
 					},
+					"accepts_booking": { "type": "boolean", "title": "Accepts Booking" },
 					"accepts_delivery": { "type": "boolean", "title": "Accepts Delivery" },
 					"delivery_note": {
 						"anyOf": [{ "type": "string" }, { "type": "null" }],
@@ -3711,6 +3723,7 @@
 					"contact_phone",
 					"contact_name",
 					"operating_org",
+					"accepts_booking",
 					"accepts_delivery",
 					"delivery_note",
 					"opened_at",
@@ -3782,6 +3795,7 @@
 						"anyOf": [{ "type": "string" }, { "type": "null" }],
 						"title": "Operating Org"
 					},
+					"accepts_booking": { "type": "boolean", "title": "Accepts Booking" },
 					"accepts_delivery": { "type": "boolean", "title": "Accepts Delivery" },
 					"delivery_note": {
 						"anyOf": [{ "type": "string" }, { "type": "null" }],
@@ -3817,6 +3831,7 @@
 					"contact_phone",
 					"contact_name",
 					"operating_org",
+					"accepts_booking",
 					"accepts_delivery",
 					"delivery_note",
 					"opened_at",
