@@ -464,8 +464,8 @@ export const POST: RequestHandler = async ({ params, request }) => {
 		// keyed by the donor's own words it never met its count and read as a shortfall.
 		const declaredForShortfall = (donation.items ?? []).flatMap((it, index) => {
 			if (rejections[index]) return [];
-			const counted = countedLines?.[index];
-			const matched = counted && 'item_id' in counted ? counted.item_id : undefined;
+			const countedLine = countedLines?.[index];
+			const matched = countedLine && 'item_id' in countedLine ? countedLine.item_id : undefined;
 			return [{ item_id: it.item_id || matched || it.free_text, qty: String(it.qty) }];
 		});
 		const countedForShortfall = (countedLines ?? [])

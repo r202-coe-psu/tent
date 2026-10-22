@@ -185,6 +185,50 @@ test.describe('Donation full-stack: donor and staff', { tag: ['@critical', '@don
 			await expect(page.getByRole('button', { name: 'แก้ไขรายการที่จะบริจาค' })).toHaveCount(0);
 		});
 
+		test('counted less than declared → staff see the gap, the donor only sees it received (decision sync 2026-10-22)', async ({
+			page
+		}) => {
+			const { bookingRef, trackingToken } = await bookAsDonor(page, {
+				shelter,
+				need,
+				ledger,
+				donorName: `E2E นับได้ครึ่งเดียว ${RUN_ID}`,
+				phone: '0812345690',
+				qty: 2
+			});
+			await expectReadyForDropoff(shelter.code, bookingRef);
+
+			await openBackOffice(page, ws);
+			await openInScanStation(page, bookingRef);
+			await page.getByRole('textbox', { name: 'จำนวนรับจริง *' }).fill('1');
+			// Staff still see the gap at the counter (CR-156 FR-I1).
+			await expect(page.getByText(/น้อยกว่าที่แจ้ง\s*1/)).toBeVisible();
+			await page.getByRole('button', { name: /^ผ่านการตรวจสอบแล้ว/ }).click();
+			await fillExpiry(page.getByRole('textbox', { name: 'วันหมดอายุ' }));
+			const received = page.waitForResponse(
+				(r) =>
+					r.url().endsWith(`/api/back-office/donations/${bookingRef}`) &&
+					r.request().method() === 'POST'
+			);
+			await page.getByRole('button', { name: 'ยืนยันรับเข้าคลัง' }).click();
+			expect((await received).ok()).toBe(true);
+
+			// The shortfall is still recorded — only the donor's page stops showing it.
+			const donation = await findDonation(shelter.code, bookingRef);
+			expect(donation.status).toBe('received');
+			expect((donation.received_summary as { shortfalls?: unknown[] }).shortfalls).toEqual([
+				expect.objectContaining({ item_id: need.item_id, short: '1' })
+			]);
+
+			await clearSession(page);
+			await page.goto(`/donations/track/${trackingToken}`);
+			await reloadUntilVisible(
+				page,
+				page.getByRole('heading', { name: 'ศูนย์รับของเรียบร้อยแล้ว' })
+			);
+			await expect(page.getByText(/ไม่ครบ|ขาด \d/)).toHaveCount(0);
+		});
+
 		test('reject from the pending queue → donor sees it rejected', async ({ page }) => {
 			// Only a typed-in line waits in the queue (CR-174).
 			const { bookingRef, trackingToken } = await bookAsDonor(page, {
