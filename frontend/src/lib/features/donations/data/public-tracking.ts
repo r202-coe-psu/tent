@@ -14,6 +14,13 @@ function isGoodsInStock(body: unknown): boolean {
 	return (body as { error?: unknown } | null)?.error === 'GOODS_IN_STOCK';
 }
 
+/** The BFF could not read the shelter's record, so nothing changed (BFF 503). */
+const DONATION_UNAVAILABLE_MESSAGE = 'ตรวจสอบรายการบริจาคไม่สำเร็จ กรุณาลองใหม่อีกครั้ง';
+
+function isDonationUnavailable(body: unknown): boolean {
+	return (body as { error?: unknown } | null)?.error === 'DONATION_UNAVAILABLE';
+}
+
 function unwrapError(body: unknown, fallback: string): string {
 	if (typeof body !== 'object' || body === null) return fallback;
 	const record = body as { error?: unknown; message?: unknown };
@@ -72,6 +79,7 @@ export async function updateCourierTracking(
 	});
 	const body = await res.json().catch(() => ({}));
 	if (!res.ok) {
+		if (isDonationUnavailable(body)) throw new Error(DONATION_UNAVAILABLE_MESSAGE);
 		throw new Error(unwrapError(body, 'บันทึกเลขพัสดุไม่สำเร็จ'));
 	}
 }
@@ -84,6 +92,7 @@ export async function cancelDonation(trackingToken: string): Promise<void> {
 	if (!res.ok) {
 		if (res.status === 429) throw new Error('คุณส่งคำขอบ่อยเกินไป กรุณารอสักครู่แล้วลองใหม่');
 		if (isGoodsInStock(body)) throw new Error(GOODS_IN_STOCK_MESSAGE);
+		if (isDonationUnavailable(body)) throw new Error(DONATION_UNAVAILABLE_MESSAGE);
 		if (res.status === 409) {
 			throw new Error('รายการนี้กำลังบันทึกเข้าระบบ กรุณารีเฟรชแล้วลองใหม่อีกครั้ง');
 		}
@@ -121,9 +130,7 @@ export async function updateDonationItems(
 			);
 		}
 		if (isGoodsInStock(body)) throw new Error(GOODS_IN_STOCK_MESSAGE);
-		if ((body as { error?: string }).error === 'DONATION_UNAVAILABLE') {
-			throw new Error('ตรวจสอบรายการบริจาคไม่สำเร็จ กรุณาลองใหม่อีกครั้ง');
-		}
+		if (isDonationUnavailable(body)) throw new Error(DONATION_UNAVAILABLE_MESSAGE);
 		// Before the generic 400: the booking is still editable, this edit is not — it would
 		// keep only lines the shelter already refused. Cancelling is the way out (CR-174).
 		if ((body as { error?: string }).error === 'NO_ACCEPTED_ITEMS') {

@@ -1,11 +1,15 @@
 import { json } from '@sveltejs/kit';
 import { donationEditLimiter, donationReadLimiter } from '$lib/server/security/rate-limiter';
-import { adminRaw } from '$lib/server/couch-admin';
 import { putAsPublicWriter } from '$lib/server/couch-public-writer';
 import { sha256Hex } from '$lib/db/hash';
 import { fastapiBaseUrl, fastapiServiceHeaders } from '$lib/server/fastapi';
 import { isDonorEditable } from '$lib/features/donations/server';
-import { GOODS_IN_STOCK_ERROR, hasKeyedDonationStock } from '$lib/server/donation-docs';
+import {
+	CouchReadError,
+	findByTokenHash,
+	GOODS_IN_STOCK_ERROR,
+	hasKeyedDonationStock
+} from '$lib/server/donation-docs';
 import type { PublicDonationDoc } from '$lib/features/donations';
 
 function shelterDbFromToken(token: string): string | null {
@@ -15,17 +19,10 @@ function shelterDbFromToken(token: string): string | null {
 	return `shelter_${code.toLowerCase()}`;
 }
 
-async function findByTokenHash(shelterDb: string, hash: string): Promise<PublicDonationDoc | null> {
-	const res = await adminRaw(
-		`/${shelterDb}/_all_docs?include_docs=true&startkey="donation:"&endkey="donation:\ufff0"`,
-		'GET'
-	);
-	if (res.status >= 400) return null;
-	const rows = (res.data as { rows?: { doc: PublicDonationDoc }[] })?.rows ?? [];
-	for (const r of rows) {
-		if (r.doc && r.doc.type === 'donation' && r.doc.tracking_token_hash === hash) return r.doc;
-	}
-	return null;
+/** CouchDB could not be read, so nothing was changed anywhere — the donor may retry. */
+function donationUnavailable(e: CouchReadError) {
+	console.error(e);
+	return json({ success: false, error: 'DONATION_UNAVAILABLE' }, { status: 503 });
 }
 
 /** Pre-inbound: update courier tracking on the Mongo intake buffer via FastAPI. */
@@ -222,7 +219,8 @@ export const PATCH = async ({ params, request, getClientAddress }) => {
 		}
 
 		return json({ success: true, message: 'Courier tracking number updated' });
-	} catch {
+	} catch (e) {
+		if (e instanceof CouchReadError) return donationUnavailable(e);
 		return json({ success: false, error: 'Internal Server Error' }, { status: 500 });
 	}
 };
@@ -307,7 +305,8 @@ export const DELETE = async ({ params, getClientAddress }) => {
 		}
 
 		return json({ success: true, message: 'Donation cancelled successfully' });
-	} catch {
+	} catch (e) {
+		if (e instanceof CouchReadError) return donationUnavailable(e);
 		return json({ success: false, error: 'Internal Server Error' }, { status: 500 });
 	}
 };

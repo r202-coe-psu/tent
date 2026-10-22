@@ -14,6 +14,7 @@ import type { DonationRevision, PublicDonationDoc } from '$lib/features/donation
 import {
 	CouchReadError,
 	fetchDocs,
+	findByTokenHash,
 	GOODS_IN_STOCK_ERROR,
 	hasKeyedDonationStock
 } from '$lib/server/donation-docs';
@@ -26,22 +27,6 @@ function shelterDbFromToken(token: string): string | null {
 	if (!match) return null;
 	const code = match[1] === 'DON' ? 'SH001' : match[1];
 	return `shelter_${code.toLowerCase()}`;
-}
-
-async function findByTokenHash(shelterDb: string, hash: string): Promise<PublicDonationDoc | null> {
-	const res = await adminRaw(
-		`/${shelterDb}/_all_docs?include_docs=true&startkey="donation:"&endkey="donation:￰"`,
-		'GET'
-	);
-	// A missing shelter DB means no such booking. Any other failure must stop the edit:
-	// read as "not synced yet" it skipped every check below and moved quota at FastAPI.
-	if (res.status === 404) return null;
-	if (res.status >= 400) throw new CouchReadError(shelterDb, 'donation:', res.status);
-	const rows = (res.data as { rows?: { doc: PublicDonationDoc }[] })?.rows ?? [];
-	for (const r of rows) {
-		if (r.doc && r.doc.type === 'donation' && r.doc.tracking_token_hash === hash) return r.doc;
-	}
-	return null;
 }
 
 /**

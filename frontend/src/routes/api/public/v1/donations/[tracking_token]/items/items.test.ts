@@ -9,13 +9,17 @@ import { CouchReadError, fetchDocs, hasKeyedDonationStock } from '$lib/server/do
 type PatchEvent = Parameters<typeof PATCH>[0];
 
 vi.mock('$lib/server/couch-admin', () => ({ adminRaw: vi.fn() }));
-vi.mock('$lib/server/donation-docs', async (importOriginal) => ({
-	CouchReadError: (await importOriginal<typeof import('$lib/server/donation-docs')>())
-		.CouchReadError,
-	fetchDocs: vi.fn(async () => []),
-	hasKeyedDonationStock: vi.fn(async () => false),
-	GOODS_IN_STOCK_ERROR: { success: false, error: 'GOODS_IN_STOCK', message: 'in stock' }
-}));
+vi.mock('$lib/server/donation-docs', async (importOriginal) => {
+	const actual = await importOriginal<typeof import('$lib/server/donation-docs')>();
+	return {
+		CouchReadError: actual.CouchReadError,
+		// Real lookup over the mocked `adminRaw`, so `couchHas` drives it.
+		findByTokenHash: actual.findByTokenHash,
+		fetchDocs: vi.fn(async () => []),
+		hasKeyedDonationStock: vi.fn(async () => false),
+		GOODS_IN_STOCK_ERROR: { success: false, error: 'GOODS_IN_STOCK', message: 'in stock' }
+	};
+});
 vi.mock('$lib/server/couch-public-writer', () => ({ putAsPublicWriter: vi.fn() }));
 vi.mock('$lib/server/security/rate-limiter', () => ({
 	donationIpLimiter: { check: vi.fn(() => true) },

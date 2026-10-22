@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cancelDonation, updateDonationItems, type DonationItemEdit } from './public-tracking';
+import {
+	cancelDonation,
+	updateCourierTracking,
+	updateDonationItems,
+	type DonationItemEdit
+} from './public-tracking';
 
 function mockFetch(status: number, body: unknown = {}) {
 	const fetchMock = vi.fn().mockResolvedValue({
@@ -42,6 +47,20 @@ describe('cancelDonation', () => {
 		mockFetch(429, { success: false, error: 'RATE_LIMITED' });
 
 		await expect(cancelDonation('tok')).rejects.toThrow('บ่อยเกินไป');
+	});
+
+	it('asks the donor to retry when the shelter record cannot be read', async () => {
+		mockFetch(503, { success: false, error: 'DONATION_UNAVAILABLE' });
+
+		await expect(cancelDonation('tok')).rejects.toThrow('กรุณาลองใหม่อีกครั้ง');
+	});
+});
+
+describe('updateCourierTracking', () => {
+	it('asks the donor to retry when the shelter record cannot be read', async () => {
+		mockFetch(503, { success: false, error: 'DONATION_UNAVAILABLE' });
+
+		await expect(updateCourierTracking('tok', 'TH1')).rejects.toThrow('กรุณาลองใหม่อีกครั้ง');
 	});
 });
 

@@ -1,4 +1,5 @@
 import { adminRaw } from '$lib/server/couch-admin';
+import type { PublicDonationDoc } from '$lib/features/donations';
 
 /**
  * Fetch all docs of a given type (by `_id` prefix) from a shelter database via
@@ -26,6 +27,30 @@ export class CouchReadError extends Error {
 		this.name = 'CouchReadError';
 		this.status = status;
 	}
+}
+
+/**
+ * The donation a donor's tracking token points at, looked up by its hash. `null` when the
+ * shelter has no such booking yet — not synced from the intake buffer, or no shelter DB.
+ *
+ * Any other failure throws {@link CouchReadError}: read as "not synced yet" it sent donor
+ * edits and cancels to FastAPI, which moved quota or told the donor the booking was syncing.
+ */
+export async function findByTokenHash(
+	shelterDb: string,
+	hash: string
+): Promise<PublicDonationDoc | null> {
+	const res = await adminRaw(
+		`/${shelterDb}/_all_docs?include_docs=true&startkey="donation:"&endkey="donation:￰"`,
+		'GET'
+	);
+	if (res.status === 404) return null;
+	if (res.status >= 400) throw new CouchReadError(shelterDb, 'donation:', res.status);
+	const rows = (res.data as { rows?: { doc: PublicDonationDoc }[] })?.rows ?? [];
+	for (const r of rows) {
+		if (r.doc && r.doc.type === 'donation' && r.doc.tracking_token_hash === hash) return r.doc;
+	}
+	return null;
 }
 
 /**
