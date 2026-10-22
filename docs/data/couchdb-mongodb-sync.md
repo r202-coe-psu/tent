@@ -2,7 +2,7 @@
 title: Smart Shelter — CouchDB ⇄ MongoDB Sync (Public Plane)
 status: draft for review
 created: 2026-06-11
-updated: 2026-10-21
+updated: 2026-10-22
 note: CR-176 (2026-10-20) — projector evacuee `checked_in_at` = null เมื่อ `cancelled` (PROJECTION_VERSION 4→5); คู่กับ data-model.md v3 + api-contract.md v1 + CR-017/CR-044 — public tier ทำงานบน MongoDB ผ่าน FastAPI; ตัด public_transparency (CR-017 Decision B); CR-113 unassigned_registrations; CR-166 (2026-10-13) — public_persons เพิ่ม `first_name_key`/`last_name_hash`, PROJECTION_VERSION 2→3, เลิก `$text`; decision sync 2026-10-09 — worker PROJECTION_VERSION + auto re-bootstrap on start (stored in Mongo _worker_meta); bootstrap reads update_seq before scan; CR-172 (2026-10-21) — `public_donations` เพิ่ม `reject_reason`/`reject_reason_code` + `received_summary.items[].rejected/reject_reason/reject_reason_code` ส่งผ่านทั้งก้อน, PROJECTION_VERSION 5→6; CR-174 (2026-10-21) — `public_donations.items_declared[]` เพิ่ม `review_status`/`review_reason_code`/`review_reason` (PROJECTION_VERSION 6 ครอบทั้ง CR-172 + CR-174); inbound ปั๊ม donation schema_v 7 + เขียน audit อนุมัติอัตโนมัติ
 ---
 
@@ -149,7 +149,8 @@ The worker resumes `_changes` from its checkpoint, so documents that never chang
 //   (PROJECTION_VERSION 7 — bump เดียวกับ CR-172 เพราะ implement พร้อมกันก่อน release; 6 = CR-185)
 // create path เขียน stub ทันทีก่อน outbound CDC เพื่อให้ GET tracking ใช้ได้ทันที — stub ใช้ status
 //   และ review_status ที่ FastAPI คำนวณ (CR-174: `verifying` เมื่อทุกรายการอยู่ในแคมเปญ ไม่งั้น
-//   `pending_review`); PATCH items อัปเดต stub (items + status) ด้วยเหตุผลเดียวกัน
+//   `pending_review`); PATCH items อัปเดต stub ด้วยเหตุผลเดียวกัน — items ทุกครั้ง, status เฉพาะใบ
+//   ที่ยังไม่ sync (ใบที่ sync แล้ว status มาจาก projector หลัง BFF เขียน CouchDB สำเร็จ)
 
 // public_volunteers — โปรไฟล์จิตอาสาสำหรับหน้า "แก้ไขโปรไฟล์" ใน Access Portal
 // lookup ด้วย phone_hash เท่านั้น (คีย์เดียวกับ schedule / ticket find)

@@ -590,13 +590,17 @@ CouchDB ใน `PUT` เดียว แล้วเขียน `audit` อน�
 
 **การคำนวณ `review_status` ตอนแก้ (CR-174 FR-18/18a/18c)** — ฐานเดิม = `current_items`/`current_status`
 ถ้าส่งมา · ไม่ส่ง: ใบที่ยังไม่ sync ใช้ intake buffer · sync แล้วใช้ `status` + `review_*` (วางทับรายการ
-ใน buffer ตามลำดับ) จาก `public_donations`. รายการใหม่ที่ `item_id`, `category`, `free_text`, `qty`
+ใน buffer ตามลำดับ) จาก `public_donations`. ฟอร์มแก้ส่งมาแค่ `item_id`/`free_text`/`qty`/`unit` —
+ก่อนเทียบ FastAPI เติม `category`/`condition`/`note` ที่ request ไม่ได้ส่งจากรายการเดิมชื่อเดียวกัน
+(จับคู่ตามชื่อ รายการเดิมละครั้ง ตามลำดับ; ค่าที่ request ส่งมาชนะ) ไม่งั้นทุกรายการจะนับว่าถูกแก้และ
+field ทั้งสามหายจาก doc. รายการใหม่ที่ `item_id`, `category`, `free_text`, `qty`
 (เทียบเป็นตัวเลข), `unit`, `condition`, `note` ตรงกับรายการเดิมที่ยังไม่ถูกจับคู่ (ว่าง = ไม่มี field;
 รายการเดิมจับคู่ได้ครั้งเดียว) คงผลเดิมทั้ง 3 field รวม `rejected` · อื่น ๆ: จองโควต้าในแคมเปญได้ →
 `approved` (นับใน `auto_approved_lines`), ไม่ได้ → `pending`. ใบไม่มี `review_status` (ก่อน schema_v 7):
 `verifying` = ถือว่ารายการเดิม `approved` ทั้งหมด · `pending_review` = คำนวณใหม่ทุกรายการเหมือนใบใหม่ ·
 `declared` = ไม่เขียน `review_status` และคง `declared`. ผลเขียนลง intake buffer (`items_declared` +
-`status`) และ stub `public_donations` ด้วย
+`status`) และ stub `public_donations` (`items_declared` ทุกกรณี · `status` เฉพาะใบที่ BFF ไม่ได้ส่ง
+`current_status` — ใบที่ sync แล้วได้ `status` จาก projector หลัง BFF เขียน CouchDB สำเร็จ)
 
 > `items[].unit` ต้องเป็น `item_master.base_unit` (code เช่น `kg`) เมื่อส่ง `item_id` มาด้วย —
 > ป้ายภาษาไทยที่ผู้ใช้เห็นเป็นเรื่องของชั้น UI เท่านั้น (schema.md §2.1; ด่านตรวจรับตอบ
