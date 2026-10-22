@@ -44,33 +44,39 @@ export function createInMemoryCouch() {
 		revCounters.clear();
 	}
 
+	const putDoc = async <T extends { _id: string; _rev?: string }>(
+		_dbName: string,
+		doc: T
+	): Promise<T> => {
+		const existing = store.get(doc._id);
+		if (existing && (!doc._rev || doc._rev !== existing._rev)) {
+			throw new ConflictError(`Conflict on doc ${doc._id}`);
+		}
+		const saved = clone(doc) as T & { _rev: string };
+		saved._rev = nextRev(doc._id);
+		store.set(doc._id, saved as InMemoryDoc);
+		return saved;
+	};
+
 	const couchDbModule = {
 		ConflictError,
 		getDoc: async <T extends { _id: string }>(_dbName: string, id: string): Promise<T | null> => {
 			const doc = store.get(id);
 			return doc ? clone(doc as unknown as T) : null;
 		},
-		putDoc: async <T extends { _id: string; _rev?: string }>(
-			_dbName: string,
-			doc: T
-		): Promise<T> => {
-			const existing = store.get(doc._id);
-			if (existing && (!doc._rev || doc._rev !== existing._rev)) {
-				throw new ConflictError(`Conflict on doc ${doc._id}`);
-			}
-			const saved = clone(doc) as T & { _rev: string };
-			saved._rev = nextRev(doc._id);
-			store.set(doc._id, saved as InMemoryDoc);
-			return saved;
-		},
+		putDoc,
+		// This stand-in already throws ConflictError on a create over an existing doc.
+		putDocStrict: putDoc,
 		allDocsByType: async <T extends { _id: string; type: string }>(
 			_dbName: string,
-			type: string
+			type: string,
+			guard?: (d: unknown) => d is T
 		): Promise<T[]> => {
 			const results: T[] = [];
 			for (const [id, doc] of store.entries()) {
 				if (id.startsWith(`${type}:`) && doc.type === type) {
-					results.push(clone(doc as unknown as T));
+					const copy = clone(doc as unknown as T);
+					if (!guard || guard(copy)) results.push(copy);
 				}
 			}
 			return results;
