@@ -11,6 +11,8 @@
 	import ChevronLeft from '@lucide/svelte/icons/chevron-left';
 	import Inbox from '@lucide/svelte/icons/inbox';
 	import Info from '@lucide/svelte/icons/info';
+	import TriangleAlert from '@lucide/svelte/icons/triangle-alert';
+	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
 	import Construction from '@lucide/svelte/icons/construction';
 	import ClipboardPen from '@lucide/svelte/icons/clipboard-pen';
 
@@ -184,7 +186,10 @@
 	const urgentDonations = $derived(liveDonationCards);
 
 	// 3. Urgent Volunteers — open jobs staff flagged urgent, from the public board's BFF (#709).
-	const volunteerJobs = useVolunteerJobs();
+	const volunteerJobs = useVolunteerJobs(undefined, undefined, {
+		staleTime: 60_000,
+		refetchOnWindowFocus: false
+	});
 	/** `null` while loading or when the board cannot be read: the card shows "—", not 0. */
 	const urgentNeed = $derived(
 		volunteerJobs.data ? summarizeUrgentVolunteerNeed(volunteerJobs.data) : null
@@ -581,7 +586,28 @@
 			<!-- Divider line -->
 			<div class="my-1.5 border-b border-slate-200 sm:mt-2 sm:mb-4"></div>
 
-			{#if urgentVolunteers.length > 0}
+			{#if volunteerJobs.isPending}
+				<!-- Still loading: hold the space, so "no urgent missions" never flashes first. -->
+				<div
+					class="flex gap-3 overflow-hidden px-1 py-1 sm:gap-6 sm:px-0 sm:py-2"
+					aria-hidden="true"
+				>
+					{#each [0, 1] as placeholder (placeholder)}
+						<Skeleton
+							class="h-64 w-[86%] max-w-[340px] min-w-[270px] shrink-0 rounded-[22px] sm:h-80 sm:w-[420px] sm:max-w-none sm:rounded-[28px] md:w-[460px]"
+						/>
+					{/each}
+				</div>
+			{:else if volunteerJobs.isError}
+				<!-- The board could not be read: say so, as the "—" on the KPI card above does. -->
+				<div
+					role="alert"
+					class="flex items-start gap-3 rounded-2xl border border-slate-300 bg-white p-5 text-slate-700 shadow-2xs sm:rounded-3xl sm:p-6"
+				>
+					<TriangleAlert class="mt-0.5 h-5 w-5 shrink-0 text-amber-600" aria-hidden="true" />
+					<p class="text-sm font-medium sm:text-base">{t.volunteersLoadErrorTitle}</p>
+				</div>
+			{:else if urgentVolunteers.length > 0}
 				<!-- Cards Container -->
 				<div
 					bind:this={volunteerScrollContainer}

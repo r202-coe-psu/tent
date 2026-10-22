@@ -41,6 +41,15 @@ describe('summarizeUrgentVolunteerNeed', () => {
 		expect(summary).toMatchObject({ needed: 1, enrolled: 2 });
 	});
 
+	it('treats a missing counter from an older projection as zero, never NaN', () => {
+		const partial = job({ job_id: 'old' }) as Partial<PublicJob> & { job_id: string };
+		delete partial.slots_confirmed;
+		delete partial.quota;
+		const summary = summarizeUrgentVolunteerNeed([partial as PublicJob]);
+		expect(summary).toMatchObject({ needed: 6, enrolled: 0 });
+		expect(summary.shelters[0]).toMatchObject({ needed: 6, enrolled: 0, quota: 0 });
+	});
+
 	it('is zero with nothing urgent', () => {
 		expect(summarizeUrgentVolunteerNeed([])).toEqual({ needed: 0, enrolled: 0, shelters: [] });
 	});

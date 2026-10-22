@@ -31,7 +31,7 @@ export function summarizeUrgentVolunteerNeed(jobs: readonly PublicJob[]): Urgent
 	const urgent = jobs.filter((job) => job.is_urgent === true && job.status === 'open');
 	const byShelter = new Map<string, UrgentShelterNeed & { jobs: PublicJob[] }>();
 	for (const job of urgent) {
-		if (job.slots_remaining <= 0) continue;
+		if ((job.slots_remaining ?? 0) <= 0) continue;
 		const entry = byShelter.get(job.shelter_code) ?? {
 			shelter_code: job.shelter_code,
 			shelter_name: job.shelter_name || job.shelter_code,
@@ -42,9 +42,10 @@ export function summarizeUrgentVolunteerNeed(jobs: readonly PublicJob[]): Urgent
 			jobs: []
 		};
 		entry.jobs.push(job);
-		entry.needed += job.slots_remaining;
-		entry.enrolled += job.slots_confirmed;
-		entry.quota += job.quota;
+		// `?? 0`: an older projection row may lack a counter; one gap must not make the card NaN.
+		entry.needed += job.slots_remaining ?? 0;
+		entry.enrolled += job.slots_confirmed ?? 0;
+		entry.quota += job.quota ?? 0;
 		byShelter.set(job.shelter_code, entry);
 	}
 	const shelters = [...byShelter.values()]
@@ -56,8 +57,8 @@ export function summarizeUrgentVolunteerNeed(jobs: readonly PublicJob[]): Urgent
 		}))
 		.sort((a, b) => b.needed - a.needed);
 	return {
-		needed: urgent.reduce((sum, job) => sum + Math.max(job.slots_remaining, 0), 0),
-		enrolled: urgent.reduce((sum, job) => sum + Math.max(job.slots_confirmed, 0), 0),
+		needed: urgent.reduce((sum, job) => sum + Math.max(job.slots_remaining ?? 0, 0), 0),
+		enrolled: urgent.reduce((sum, job) => sum + Math.max(job.slots_confirmed ?? 0, 0), 0),
 		shelters
 	};
 }

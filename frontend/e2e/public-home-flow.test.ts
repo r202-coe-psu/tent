@@ -310,6 +310,13 @@ test.describe('Public landing: volunteer card (#709)', { tag: ['@public', '@smok
 
 		await expect(page.getByText('ต้องการอีก — คน')).toBeVisible();
 		await expect(page.getByText('(มีแล้ว — คน)')).toBeVisible();
+		// The mission list says the same, rather than claiming there are no urgent missions.
+		await expect(
+			page.getByRole('alert').filter({ hasText: 'โหลดงานอาสาสมัครเร่งด่วนไม่ได้ในขณะนี้' })
+		).toBeVisible();
+		await expect(page.getByText('ขณะนี้ยังไม่มีงานอาสาสมัครที่เปิดรับสมัครเร่งด่วน')).toHaveCount(
+			0
+		);
 		await expect(
 			page.getByRole('heading', { name: 'แพลตฟอร์มช่วยเหลือผู้ประสบภัย', level: 1 })
 		).toBeVisible();

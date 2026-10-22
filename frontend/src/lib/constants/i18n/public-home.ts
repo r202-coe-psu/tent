@@ -237,6 +237,7 @@ export const PUBLIC_PORTAL_HOME_I18N = {
 		needMoreSuffix: 'คน',
 		volunteerBtn: 'ร่วมเป็นจิตอาสา',
 		volunteersEmptyTitle: 'ขณะนี้ยังไม่มีงานอาสาสมัครที่เปิดรับสมัครเร่งด่วน',
+		volunteersLoadErrorTitle: 'โหลดงานอาสาสมัครเร่งด่วนไม่ได้ในขณะนี้ กรุณาลองใหม่ภายหลัง',
 		volunteersEmptyDesc:
 			'กำลังพลจิตอาสาในแต่ละจุดมีจำนวนเพียงพอสำหรับการปฏิบัติงานในปัจจุบัน ท่านสามารถลงทะเบียนความพร้อมล่วงหน้าเพื่อรับการแจ้งเตือนทันทีเมื่อมีงานอาสาสมัครใหม่',
 		preRegisterVolunteerBtn: 'ลงทะเบียนจิตอาสาล่วงหน้า',
@@ -325,6 +326,8 @@ export const PUBLIC_PORTAL_HOME_I18N = {
 		needMoreSuffix: 'volunteers',
 		volunteerBtn: 'Volunteer',
 		volunteersEmptyTitle: 'No urgent volunteer missions at this time',
+		volunteersLoadErrorTitle:
+			'Urgent volunteer missions could not be loaded. Please try again later.',
 		volunteersEmptyDesc:
 			'Volunteer teams at all points currently have sufficient personnel. You can pre-register to receive alerts when new missions open.',
 		preRegisterVolunteerBtn: 'Pre-register as Volunteer',
