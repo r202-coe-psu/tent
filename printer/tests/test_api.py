@@ -255,3 +255,31 @@ def test_unhandled_non_2xx_status_raises_server_error(status, call):
         calls[call]()
 
     assert str(status) in str(excinfo.value)
+
+
+@pytest.mark.parametrize(
+    "response",
+    [
+        httpx.Response(200, text="<html>proxy error</html>"),
+        httpx.Response(200, json={"unexpected": True}),
+        httpx.Response(200, json=[]),
+        httpx.Response(
+            200,
+            json={
+                "job": {"id": "print_job:01J9ZABC", "label_count": 1, "lease_until": "x"},
+                "labels": ["abc"],  # bad base64 padding
+            },
+        ),
+    ],
+)
+@pytest.mark.parametrize("call", ["hello", "next_job", "report_result"])
+def test_malformed_success_body_raises_server_error(response, call):
+    client = client_with(lambda request: response)
+    calls = {
+        "hello": lambda: client.hello("0.1.0", "ready"),
+        "next_job": lambda: client.next_job("ready"),
+        "report_result": lambda: client.report_result("print_job:01J9ZABC", 1, None),
+    }
+
+    with pytest.raises(ServerError, match="malformed"):
+        calls[call]()

@@ -1,4 +1,6 @@
 import base64
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from urllib.parse import quote
 
@@ -21,6 +23,15 @@ class NetworkError(Exception):
 
 class JobConflictError(Exception):
     pass
+
+
+@contextmanager
+def _parsing() -> Iterator[None]:
+    """A 2xx body we cannot read (proxy HTML page, missing key, bad base64) is a server fault."""
+    try:
+        yield
+    except (ValueError, KeyError, TypeError) as exc:  # JSONDecodeError, binascii.Error: ValueError
+        raise ServerError(f"malformed server response: {type(exc).__name__}") from None
 
 
 @dataclass(frozen=True)
@@ -65,21 +76,23 @@ class BffClient:
                 "local_ips": local_ips or [],
             },
         )
-        body = response.json()
-        return Hello(
-            device_id=body["device"]["device_id"],
-            name=body["device"]["name"],
-            shelter_code=body["device"]["shelter_code"],
-            wait_sec=body["config"]["wait_sec"],
-            lease_sec=body["config"]["lease_sec"],
-        )
+        with _parsing():
+            body = response.json()
+            return Hello(
+                device_id=body["device"]["device_id"],
+                name=body["device"]["name"],
+                shelter_code=body["device"]["shelter_code"],
+                wait_sec=body["config"]["wait_sec"],
+                lease_sec=body["config"]["lease_sec"],
+            )
 
     def report_result(self, job_id: str, printed: int, error_code: str | None) -> str:
         payload: dict = {"printed": printed}
         if error_code is not None:
             payload["error_code"] = error_code
         response = self._post(f"/api/v1/printer/jobs/{quote(job_id, safe='')}/result", payload)
-        return response.json()["status"]
+        with _parsing():
+            return response.json()["status"]
 
     def _post(self, path: str, json: dict) -> httpx.Response:
         try:
@@ -98,12 +111,14 @@ class BffClient:
         response = self._post("/api/v1/printer/jobs/next", {"queue_state": queue_state})
         if response.status_code == 204:
             return None
-        body = response.json()
-        job = body["job"]
-        return ClaimedJob(
-            id=job["id"],
-            label_count=job["label_count"],
-            lease_until=job["lease_until"],
-            labels=tuple(base64.b64decode(label) for label in body["labels"]),
-            lease_sec=job.get("lease_sec"),
-        )
+        # A claim we cannot read stays `printing` on the server until its lease expires.
+        with _parsing():
+            body = response.json()
+            job = body["job"]
+            return ClaimedJob(
+                id=job["id"],
+                label_count=job["label_count"],
+                lease_until=job["lease_until"],
+                labels=tuple(base64.b64decode(label) for label in body["labels"]),
+                lease_sec=job.get("lease_sec"),
+            )
