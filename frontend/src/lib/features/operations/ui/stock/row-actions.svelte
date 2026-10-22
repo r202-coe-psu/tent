@@ -2,6 +2,7 @@
 	import ArrowDownToLine from '@lucide/svelte/icons/arrow-down-to-line';
 	import ArrowUpFromLine from '@lucide/svelte/icons/arrow-up-from-line';
 	import { Button } from '$lib/components/ui/button/index.js';
+	import DisabledReason from './disabled-reason.svelte';
 
 	let {
 		itemName,
@@ -39,19 +40,20 @@
 		<ArrowDownToLine class="h-4 w-4" aria-hidden="true" />
 		รับเข้า
 	</Button>
-	<Button
-		type="button"
-		variant="outline"
-		disabled={disabled || distributeDisabled}
-		title={distributeDisabled ? DISTRIBUTE_FORBIDDEN_HINT : undefined}
-		aria-label="เบิก {itemName}"
-		class="min-h-11 gap-1.5 rounded-lg border-slate-300 bg-white px-3 text-sm font-semibold text-slate-800 shadow-2xs"
-		onclick={(e: MouseEvent) => {
-			e.stopPropagation();
-			ondistribute();
-		}}
-	>
-		<ArrowUpFromLine class="h-4 w-4" aria-hidden="true" />
-		เบิก
-	</Button>
+	<DisabledReason reason={distributeDisabled ? DISTRIBUTE_FORBIDDEN_HINT : undefined}>
+		<Button
+			type="button"
+			variant="outline"
+			disabled={disabled || distributeDisabled}
+			aria-label="เบิก {itemName}"
+			class="min-h-11 gap-1.5 rounded-lg border-slate-300 bg-white px-3 text-sm font-semibold text-slate-800 shadow-2xs"
+			onclick={(e: MouseEvent) => {
+				e.stopPropagation();
+				ondistribute();
+			}}
+		>
+			<ArrowUpFromLine class="h-4 w-4" aria-hidden="true" />
+			เบิก
+		</Button>
+	</DisabledReason>
 </div>

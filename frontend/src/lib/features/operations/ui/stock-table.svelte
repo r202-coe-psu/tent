@@ -40,6 +40,7 @@
 	import StockFilters from './stock/stock-filters.svelte';
 	import StockRow from './stock/stock-row.svelte';
 	import StockCard from './stock/stock-card.svelte';
+	import DisabledReason from './stock/disabled-reason.svelte';
 	import {
 		attentionCounts,
 		clampPage,
@@ -372,6 +373,9 @@
 	// Session expired (`needsReauth`): reading still works, every write button is off.
 	const offline = $derived(authStore.needsReauth);
 	const OFFLINE_HINT = 'เซสชันหมดอายุ — เข้าสู่ระบบใหม่เพื่อบันทึก';
+	const distributeDisabledReason = $derived(
+		offline ? OFFLINE_HINT : !canDistribute ? DISTRIBUTE_FORBIDDEN_HINT : undefined
+	);
 
 	function clearFilters() {
 		updateUrl({ q: '', cat: 'all', loc: 'all', status: 'all' });
@@ -398,17 +402,18 @@
 					<ArrowDownToLine class="h-4 w-4" aria-hidden="true" />
 					รับเข้า
 				</Button>
-				<Button
-					type="button"
-					variant="outline"
-					class="min-h-11 gap-2 rounded-lg border-slate-300 px-4 text-sm font-semibold text-slate-800 shadow-2xs"
-					disabled={offline || !canDistribute}
-					title={offline ? OFFLINE_HINT : !canDistribute ? DISTRIBUTE_FORBIDDEN_HINT : undefined}
-					onclick={() => openQuickAction('distribute')}
-				>
-					<ArrowUpFromLine class="h-4 w-4" aria-hidden="true" />
-					เบิกจ่าย
-				</Button>
+				<DisabledReason reason={distributeDisabledReason}>
+					<Button
+						type="button"
+						variant="outline"
+						class="min-h-11 gap-2 rounded-lg border-slate-300 px-4 text-sm font-semibold text-slate-800 shadow-2xs"
+						disabled={offline || !canDistribute}
+						onclick={() => openQuickAction('distribute')}
+					>
+						<ArrowUpFromLine class="h-4 w-4" aria-hidden="true" />
+						เบิกจ่าย
+					</Button>
+				</DisabledReason>
 				<Button
 					type="button"
 					variant="outline"
@@ -611,16 +616,17 @@
 	>
 		รับเข้า
 	</Button>
-	<Button
-		type="button"
-		variant="outline"
-		class="min-h-12 rounded-lg border-slate-300 text-sm font-semibold text-slate-800"
-		disabled={offline || !canDistribute}
-		title={offline ? OFFLINE_HINT : !canDistribute ? DISTRIBUTE_FORBIDDEN_HINT : undefined}
-		onclick={() => openQuickAction('distribute')}
-	>
-		เบิกจ่าย
-	</Button>
+	<DisabledReason reason={distributeDisabledReason}>
+		<Button
+			type="button"
+			variant="outline"
+			class="min-h-12 rounded-lg border-slate-300 text-sm font-semibold text-slate-800"
+			disabled={offline || !canDistribute}
+			onclick={() => openQuickAction('distribute')}
+		>
+			เบิกจ่าย
+		</Button>
+	</DisabledReason>
 	<Button
 		type="button"
 		variant="outline"
