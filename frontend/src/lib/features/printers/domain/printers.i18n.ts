@@ -3,6 +3,7 @@ import type { PrintJobStatus } from './print-job.schema';
 export const PRINTERS_I18N = {
 	th: {
 		printed: (count: number, printer: string) => `พิมพ์ ${count} ใบที่ ${printer}`,
+		sent: (count: number, printer: string) => `สั่งพิมพ์ ${count} ใบไปที่ ${printer} แล้ว`,
 		partiallyPrinted: (count: number) => `(พิมพ์ไปแล้ว ${count} ใบ)`,
 		notResponding: (printer: string) => `เครื่อง ${printer} ไม่ตอบ`,
 		choosePrinter: 'เลือกเครื่องพิมพ์',
@@ -147,6 +148,8 @@ export const PRINTERS_I18N = {
 	en: {
 		printed: (count: number, printer: string) =>
 			`Printed ${count} ${count === 1 ? 'label' : 'labels'} at ${printer}`,
+		sent: (count: number, printer: string) =>
+			`Sent ${count} ${count === 1 ? 'label' : 'labels'} to ${printer}`,
 		partiallyPrinted: (count: number) =>
 			`(${count} ${count === 1 ? 'label' : 'labels'} already printed)`,
 		notResponding: (printer: string) => `${printer} is not responding`,

@@ -51,16 +51,22 @@
 
 	const statusQuery = usePrintJobStatus(() => jobId);
 
-	// The send loop awaits one job at a time; this effect hands it the job's final status.
+	// The send loop awaits one job at a time; this effect hands it the job's final status, or
+	// `printing` once the Pi has claimed it when the loop only waits for the claim.
 	let settleJob: ((outcome: PrintJobOutcome) => void) | null = null;
+	let settleOnClaim = false;
 	$effect(() => {
 		const data = statusQuery.data;
-		if (data && isTerminalJobStatus(data.status)) {
+		if (
+			data &&
+			(isTerminalJobStatus(data.status) || (settleOnClaim && data.status === 'printing'))
+		) {
 			settleJob?.({ status: data.status, printed: data.printed, error_code: data.error_code });
 		}
 	});
 
-	function waitForJob(): Promise<PrintJobOutcome> {
+	function waitForJob(untilClaimed: boolean): Promise<PrintJobOutcome> {
+		settleOnClaim = untilClaimed;
 		return new Promise((resolve) => {
 			const settle = (outcome: PrintJobOutcome) => {
 				clearTimeout(timer);
@@ -136,10 +142,15 @@
 				return;
 			}
 			jobId = created.job_id;
-			const outcome = await waitForJob();
+			// Earlier chunks must finish first (the next one is only queued then, so it cannot expire
+			// waiting behind them). The last chunk counts as sent once the Pi claims it: a failure after
+			// that is checked at the printer, not on the tablet.
+			const last = pending.length === 1;
+			const outcome = await waitForJob(last);
 			jobId = undefined;
 			printedTotal += outcome.printed;
-			if (outcome.status !== 'printed') {
+			const sent = outcome.status === 'printed' || (last && outcome.status === 'printing');
+			if (!sent) {
 				unsent = pending;
 				running = false;
 				toast.error(
@@ -155,13 +166,7 @@
 		}
 		unsent = null;
 		running = false;
-		toast.success(
-			printJobOutcomeMessage(
-				{ status: 'printed', printed: printedTotal, error_code: null },
-				printer.name,
-				languageStore.current
-			)
-		);
+		toast.success(t.sent(progressTotal, printer.name));
 	}
 
 	function handleSelect(printerId: string) {

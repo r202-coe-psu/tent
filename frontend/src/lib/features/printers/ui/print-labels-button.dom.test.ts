@@ -165,7 +165,7 @@ describe('PrintLabelsButton', () => {
 		expect(mainButton().textContent).toContain('กำลังพิมพ์ 0/45…');
 	});
 
-	it('sends 45 labels as three sequential jobs and toasts the total once all are printed', async () => {
+	it('sends 45 labels as three sequential jobs and toasts the total once the last is claimed', async () => {
 		stationPrinter.set('SH001', 'p1');
 		let created = 0;
 		api.createPrintJob.mockImplementation(async () => ({
@@ -188,13 +188,63 @@ describe('PrintLabelsButton', () => {
 		mainButton().click();
 		await vi.waitFor(() => expect(toast.success).toHaveBeenCalledTimes(1));
 
-		expect(toast.success).toHaveBeenCalledWith('พิมพ์ 45 ใบที่ เครื่อง-p1');
+		expect(toast.success).toHaveBeenCalledWith('สั่งพิมพ์ 45 ใบไปที่ เครื่อง-p1 แล้ว');
 		expect(api.createPrintJob.mock.calls.map(([input]) => input.labels)).toEqual([
 			labels(45).slice(0, 20),
 			labels(45).slice(20, 40),
 			labels(45).slice(40)
 		]);
 		expect(toast.error).not.toHaveBeenCalled();
+	});
+
+	it('toasts "sent" and frees the button as soon as the printer claims the last job', async () => {
+		stationPrinter.set('SH001', 'p1');
+		api.createPrintJob.mockResolvedValue({ job_id: 'job-1', expires_at: '2026-10-22T04:00:00Z' });
+		api.getPrintJobStatus.mockResolvedValue({
+			status: 'printing',
+			printed: 0,
+			label_count: 3,
+			error_code: null
+		});
+		await render({ printers: [printer('p1')], labelCount: 3, renderLabels: async () => labels(3) });
+
+		mainButton().click();
+		await vi.waitFor(() => expect(toast.success).toHaveBeenCalledTimes(1));
+		await settle();
+
+		expect(toast.success).toHaveBeenCalledWith('สั่งพิมพ์ 3 ใบไปที่ เครื่อง-p1 แล้ว');
+		expect(toast.error).not.toHaveBeenCalled();
+		expect(mainButton().disabled).toBe(false);
+		expect(mainButton().textContent).toContain('พิมพ์ 3 ใบที่ เครื่อง-p1');
+	});
+
+	it('waits for earlier chunks to finish printing before sending the next one', async () => {
+		stationPrinter.set('SH001', 'p1');
+		let created = 0;
+		api.createPrintJob.mockImplementation(async () => ({
+			job_id: `job-${++created}`,
+			expires_at: '2026-10-22T04:00:00Z'
+		}));
+		api.getPrintJobStatus.mockResolvedValue({
+			status: 'printing',
+			printed: 0,
+			label_count: 20,
+			error_code: null
+		});
+		await render({
+			printers: [printer('p1')],
+			labelCount: 25,
+			renderLabels: async () => labels(25)
+		});
+
+		mainButton().click();
+		await settle();
+		await new Promise((resolve) => setTimeout(resolve, 50));
+		await settle();
+
+		expect(api.createPrintJob).toHaveBeenCalledTimes(1);
+		expect(toast.success).not.toHaveBeenCalled();
+		expect(mainButton().disabled).toBe(true);
 	});
 
 	it('toasts the reason for a failed job, stops sending and offers to print again', async () => {
@@ -224,12 +274,12 @@ describe('PrintLabelsButton', () => {
 		expect(mainButton().disabled).toBe(false);
 	});
 
-	it('gives up with a not-responding toast when the job never leaves the queue', async () => {
+	it('gives up with a not-responding toast when the printer never claims the job', async () => {
 		vi.useFakeTimers();
 		stationPrinter.set('SH001', 'p1');
 		api.createPrintJob.mockResolvedValue({ job_id: 'job-1', expires_at: '2026-10-22T04:00:00Z' });
 		api.getPrintJobStatus.mockResolvedValue({
-			status: 'printing',
+			status: 'pending',
 			printed: 0,
 			label_count: 1,
 			error_code: null
