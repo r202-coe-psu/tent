@@ -654,6 +654,32 @@ describe('receiveDonationBatch — partial failure and retry (CR-143 FR-B7 / FR-
 		expect(storedDonation().status).toBe('declared');
 	});
 
+	// S-R15-1 — the last try's close lands but its answer is lost: the booking on file is
+	// received, so the count is too, however many tries it took.
+	it('reports the booking received when the last try landed but its answer was lost', async () => {
+		const put = repo['repo'].put.bind(repo['repo']);
+		let tries = 0;
+		vi.spyOn(repo['repo'], 'put').mockImplementation(async (doc) => {
+			tries += 1;
+			if (tries < 3) {
+				docs.set(donation._id, {
+					...clone(storedDonation()),
+					_rev: `${tries + 1}-courier`
+				} as Doc);
+			} else {
+				await put(doc);
+			}
+			throw new ConflictError();
+		});
+
+		const result = await repo.receiveDonationBatch(donation, fullCount(), ctx);
+
+		expect(tries).toBe(3);
+		expect(result.received).toBe(true);
+		expect(result.transitionBlocked).toBeUndefined();
+		expect(storedDonation().status).toBe('received');
+	});
+
 	// S-R13-1 — `ConflictError` also carries CouchDB's other 4xx answers. With the booking
 	// unchanged on file nobody wrote it in between: the real reason shows and a retry may work.
 	it('keeps the retry open when the close is refused but nobody changed the booking', async () => {

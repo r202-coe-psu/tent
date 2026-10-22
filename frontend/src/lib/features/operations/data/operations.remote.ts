@@ -127,7 +127,7 @@ const MAX_CLOSE_ATTEMPTS = 3;
 
 /** What staff are told when the booking changed under a batch receipt (S-R4-1). */
 const DONATION_CHANGED_WHILE_KEYING =
-	'ใบนี้ถูกแก้ระหว่างบันทึกเข้าคลัง (ปฏิเสธรายการ / ผู้บริจาคแก้หรือยกเลิกใบ) — ของเข้าคลังแล้วแต่ยังไม่ปิดใบ ติดต่อผู้ดูแลเพื่อตรวจยอด';
+	'ใบนี้ถูกแก้ระหว่างบันทึกเข้าคลัง — ของเข้าคลังแล้วแต่ยังไม่ปิดใบ ติดต่อผู้ดูแลเพื่อตรวจยอด';
 
 /**
  * Whether the booking changed in a way the receipt was counted against. A courier number
@@ -546,6 +546,9 @@ export class OperationsRemoteRepository implements OperationsRepository {
 				// keeps moving is left for someone to check.
 				if (err instanceof ConflictError && closing) {
 					const current = await this.repo.get<Donation>(donation._id).catch(() => null);
+					if (current?.status === 'received' && current.received_summary) {
+						return { donation: current, lines, rowsComplete: true, received: true };
+					}
 					if (current && current._rev !== closing._rev) {
 						if (attempt < MAX_CLOSE_ATTEMPTS - 1) continue;
 						return blocked;
