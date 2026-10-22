@@ -152,11 +152,13 @@ describe('real backofficeNavbarGroups — visible leaves per role (regression gu
 	};
 	const scannerDevices = 'จัดการอุปกรณ์';
 	const bannerManagement = 'จัดการแบนเนอร์';
+	const printerManagement = 'จัดการเครื่องพิมพ์';
 	const afterUsers = everyoneSees.indexOf('จัดการผู้ใช้งานและสิทธิ์') + 1;
 	const withScanners = [
 		...everyoneSees.slice(0, afterUsers),
 		scannerDevices,
 		bannerManagement,
+		printerManagement,
 		...everyoneSees.slice(afterUsers)
 	];
 	const withScannersAndIncidents = withIncidents(withScanners);
@@ -195,7 +197,11 @@ describe('real backofficeNavbarGroups — visible leaves per role (regression gu
 
 	it('kiosk_staff-only sees the kiosk device and banner management, nothing else (AC-SBO-21, FR-KBR-22)', () => {
 		const roles = ['shelter:SH001', 'SH001:kiosk_staff'];
-		expect(visibleLeafLabels(ctx(roles, 'SH001'))).toEqual([scannerDevices, bannerManagement]);
+		expect(visibleLeafLabels(ctx(roles, 'SH001'))).toEqual([
+			scannerDevices,
+			bannerManagement,
+			printerManagement
+		]);
 		const kioskGroup = backofficeNavbarGroups
 			.flatMap((g) => g.items)
 			.find((n) => n.label === 'จัดการ Kiosk');
@@ -259,8 +265,16 @@ describe('kiosk banner management nav child (FR-KBR-22)', () => {
 
 	it('sits right after the device management and links to the banner list', () => {
 		const children = kioskChildren();
-		expect(children.map((c) => c.label)).toEqual(['จัดการอุปกรณ์', 'จัดการแบนเนอร์']);
+		expect(children.map((c) => c.label)).toEqual([
+			'จัดการอุปกรณ์',
+			'จัดการแบนเนอร์',
+			'จัดการเครื่องพิมพ์'
+		]);
 		expect(children[1].href).toBe('/back-office/kiosks/banners');
+	});
+
+	it('ends with the printer management page', () => {
+		expect(kioskChildren()[2].href).toBe('/back-office/printers');
 	});
 });
 

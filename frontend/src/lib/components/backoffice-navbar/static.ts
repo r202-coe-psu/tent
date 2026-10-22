@@ -28,6 +28,7 @@ import NotebookPen from '@lucide/svelte/icons/notebook-pen';
 import Cpu from '@lucide/svelte/icons/cpu';
 import MonitorSmartphone from '@lucide/svelte/icons/monitor-smartphone';
 import Images from '@lucide/svelte/icons/images';
+import Printer from '@lucide/svelte/icons/printer';
 
 type Leaf = {
 	label: string;
@@ -177,6 +178,12 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 						label: 'จัดการแบนเนอร์',
 						href: resolve('/back-office/kiosks/banners'),
 						icon: Images,
+						visibleTo: (roles) => hasCapabilityAnywhere(roles, SCANNER_MANAGER_CAPABILITIES)
+					},
+					{
+						label: 'จัดการเครื่องพิมพ์',
+						href: resolve('/back-office/printers'),
+						icon: Printer,
 						visibleTo: (roles) => hasCapabilityAnywhere(roles, SCANNER_MANAGER_CAPABILITIES)
 					}
 				]
