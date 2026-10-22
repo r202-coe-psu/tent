@@ -210,7 +210,13 @@ export interface PrinterJobCloser {
 	put(doc: PrintJobDoc): Promise<PrintJobPutResult>;
 }
 
-/** Fail the printer's pending/printing jobs with `errorCode`; the terminal PUT drops the labels. */
+/** Upper bound on `findJobs` pages per status, so a stuck conflict cannot spin forever. */
+const MAX_CLOSE_PAGES = 50;
+
+/**
+ * Fail the printer's pending/printing jobs with `errorCode`; the terminal PUT drops the labels.
+ * `findJobs` returns one page, so re-query until a page is empty or nothing in it could be written.
+ */
 async function failOpenJobs(
 	jobs: PrinterJobCloser,
 	printerId: string,
@@ -218,9 +224,14 @@ async function failOpenJobs(
 	now: Date
 ): Promise<void> {
 	for (const status of ['pending', 'printing'] as const) {
-		for (const job of await jobs.findJobs({ status, printerId })) {
-			// A conflict means the job just moved on (claimed/finished); the lease sweeper settles it.
-			await jobs.put(terminal(job, 'failed', now, { error_code: errorCode }));
+		for (let page = 0; page < MAX_CLOSE_PAGES; page += 1) {
+			let written = 0;
+			for (const job of await jobs.findJobs({ status, printerId })) {
+				// A conflict means the job just moved on (claimed/finished); the lease sweeper settles it.
+				const result = await jobs.put(terminal(job, 'failed', now, { error_code: errorCode }));
+				if (!('conflict' in result)) written += 1;
+			}
+			if (written === 0) break;
 		}
 	}
 }

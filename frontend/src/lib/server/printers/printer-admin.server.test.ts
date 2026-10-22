@@ -54,15 +54,15 @@ function fakeStore(seed: PrintDeviceDoc[] = []) {
 	return { store, docs, state };
 }
 
-/** In-memory print jobs: just the find/put slice the admin use cases need. */
-function fakeJobs(seed: PrintJobDoc[] = []) {
+/** In-memory print jobs: just the find/put slice the admin use cases need. `pageSize` mimics a Mango limit. */
+function fakeJobs(seed: PrintJobDoc[] = [], pageSize = Infinity) {
 	const docs = new Map(seed.map((doc) => [doc._id, doc]));
 	return {
 		docs,
 		findJobs: async ({ status, printerId: id }: { status: string; printerId?: string }) =>
-			[...docs.values()].filter(
-				(d) => d.status === status && (id === undefined || d.printer_id === id)
-			),
+			[...docs.values()]
+				.filter((d) => d.status === status && (id === undefined || d.printer_id === id))
+				.slice(0, pageSize),
 		put: async (doc: PrintJobDoc) => {
 			docs.set(doc._id, doc);
 			return { ok: true as const, rev: 'x' };
@@ -480,6 +480,23 @@ describe('deletePrinter', () => {
 		expect(failedBeforeDelete).toEqual(expect.arrayContaining(['print_job:P', 'print_job:R']));
 		expect(jobs.docs.get('print_job:D')).toMatchObject({ status: 'printed', error_code: null });
 		expect(jobs.docs.get('print_job:O')).toMatchObject({ status: 'pending' });
+	});
+
+	it('fails every open job, not just the first page of the query', async () => {
+		const { store } = fakeStore([deviceDoc({})]);
+		const open = Array.from({ length: 5 }, (_, i) =>
+			jobDoc(printerId, {
+				_id: `print_job:P${i}`,
+				status: 'pending',
+				finished_at: null,
+				error_code: null
+			})
+		);
+		const jobs = fakeJobs(open, 2);
+
+		await deletePrinter({ devices: store, jobs }, printerId, NOW);
+
+		expect([...jobs.docs.values()].map((job) => job.status)).toEqual(Array(5).fill('failed'));
 	});
 
 	it('reports an unknown printer as not found', async () => {
