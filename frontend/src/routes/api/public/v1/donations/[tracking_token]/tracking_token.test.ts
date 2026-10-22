@@ -361,6 +361,10 @@ describe('GET & PATCH & DELETE /api/public/v1/donations/[tracking_token]', () =>
 					data: { rows: [{ doc: mockDonation }] }
 				});
 			}
+			// No goods of this booking in stock yet.
+			if (method === 'POST' && path.endsWith('/_find')) {
+				return Promise.resolve({ status: 200, data: { docs: [] } });
+			}
 			return Promise.resolve({ status: 404, data: {} });
 		});
 		vi.mocked(putAsPublicWriter).mockResolvedValue({ status: 201, data: { ok: true } });
@@ -377,6 +381,27 @@ describe('GET & PATCH & DELETE /api/public/v1/donations/[tracking_token]', () =>
 		expect(putAsPublicWriter).toHaveBeenCalled();
 		const [, , savedDoc] = vi.mocked(putAsPublicWriter).mock.calls[0]!;
 		expect((savedDoc as PublicDonationDoc).status).toBe('cancelled');
+	});
+
+	it('DELETE refuses once goods of the booking are in stock (owner decision 2026-10-22)', async () => {
+		vi.mocked(adminRaw).mockImplementation((path: string, method: string) => {
+			if (method === 'GET' && path.includes('/shelter_sh001/') && path.includes('_all_docs')) {
+				return Promise.resolve({ status: 200, data: { rows: [{ doc: mockDonation }] } });
+			}
+			if (method === 'POST' && path.endsWith('/_find')) {
+				return Promise.resolve({ status: 200, data: { docs: [{ _id: 'stock_ledger:1' }] } });
+			}
+			return Promise.resolve({ status: 404, data: {} });
+		});
+
+		const response = await DELETE({
+			params: { tracking_token: TOKEN },
+			getClientAddress: () => '127.0.0.1'
+		} as unknown as DeleteEvent);
+
+		expect(response.status).toBe(409);
+		expect((await response.json()).error).toBe('GOODS_IN_STOCK');
+		expect(putAsPublicWriter).not.toHaveBeenCalled();
 	});
 
 	it('DELETE falls back to FastAPI when donation is not yet in CouchDB', async () => {

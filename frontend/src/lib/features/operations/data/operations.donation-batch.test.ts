@@ -50,6 +50,15 @@ vi.mock('$lib/db/repository', async (importOriginal) => {
 				return [...docs.values()]
 					.filter((d) => d._id.startsWith(`${type}:`) && guard(d))
 					.map(clone);
+			},
+			// Equality-only Mango selector over the in-memory docs.
+			async find(query: { selector: Record<string, unknown>; limit?: number }) {
+				const hits = [...docs.values()].filter((d) =>
+					Object.entries(query.selector).every(
+						([key, value]) => (d as unknown as Record<string, unknown>)[key] === value
+					)
+				);
+				return hits.slice(0, query.limit ?? hits.length).map(clone);
 			}
 		})
 	};
@@ -422,6 +431,34 @@ describe('receiveDonationBatch — partial failure and retry (CR-143 FR-B7 / FR-
 		expect(storedDonation().status).toBe('received');
 	});
 
+	// Another screen received the booking; this one still holds the copy from before and
+	// counted a line differently — keying it would put the goods in stock twice.
+	it('refuses a second screen keying new rows into a booking already received', async () => {
+		const opened = clone(donation);
+		await repo.receiveDonationBatch(donation, fullCount(), ctx);
+		const rowsBefore = ledgerRows().length;
+		const summaryBefore = storedDonation().received_summary;
+
+		const differently = fullCount().map((line, i) =>
+			i === 0 ? { ...line, item_id: 'item:oil', unit: 'ขวด' } : line
+		);
+		await expect(repo.receiveDonationBatch(opened, differently, ctx)).rejects.toThrow(
+			/รับเข้าคลังไปแล้วจากอีกหน้าจอ/
+		);
+		expect(ledgerRows()).toHaveLength(rowsBefore);
+		expect(storedDonation().received_summary).toEqual(summaryBefore);
+	});
+
+	it('still lets the same count through when the first answer was lost (FR-B8)', async () => {
+		const opened = clone(donation);
+		await repo.receiveDonationBatch(donation, fullCount(), ctx);
+
+		const again = await repo.receiveDonationBatch(opened, fullCount(), ctx);
+
+		expect(again.received).toBe(true);
+		expect(ledgerRows()).toHaveLength(3);
+	});
+
 	it('does not clobber a donation that was already received by an earlier attempt', async () => {
 		await repo.receiveDonationBatch(donation, fullCount(), ctx);
 		const receivedAt = storedDonation().received_at;
@@ -473,6 +510,20 @@ describe('receiveDonationBatch — partial failure and retry (CR-143 FR-B7 / FR-
 			repo.receiveDonationBatch({ ...donation, _rev: '1-opened' }, fullCount(), ctx)
 		).rejects.toThrow(/ถูกแก้หลังจากเปิดหน้าไว้/);
 		expect(ledgerRows()).toHaveLength(0);
+	});
+
+	// An interrupted first attempt keyed one line; the booking then changed. Telling staff
+	// "nothing is in stock" would invite counting that line again.
+	it('says goods are already in stock when an earlier attempt keyed some', async () => {
+		await failLine(2);
+		await repo.receiveDonationBatch(donation, fullCount(), ctx);
+		const rowsBefore = ledgerRows().length;
+		docs.set(donation._id, { ...storedDonation(), _rev: '9-changed' } as unknown as Doc);
+
+		await expect(
+			repo.receiveDonationBatch({ ...donation, _rev: '1-opened' }, fullCount(), ctx)
+		).rejects.toThrow(/มีของบางรายการของใบนี้เข้าคลังไปแล้ว/);
+		expect(ledgerRows()).toHaveLength(rowsBefore);
 	});
 
 	it('refuses a booking the donor cancelled while it was being counted', async () => {

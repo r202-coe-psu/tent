@@ -66,3 +66,21 @@ describe('updateDonationItems', () => {
 		await expect(updateDonationItems('tok', items)).rejects.toThrow('แก้ไม่ได้แล้ว');
 	});
 });
+
+// Owner decision 2026-10-22 — once goods are in stock the donor can no longer change the
+// booking; the copy says so instead of "try again".
+describe('goods already in stock', () => {
+	it('tells the donor why a cancel is refused', async () => {
+		mockFetch(409, { success: false, error: 'GOODS_IN_STOCK' });
+
+		await expect(cancelDonation('tok')).rejects.toThrow('ศูนย์เริ่มรับของของใบนี้เข้าคลังแล้ว');
+	});
+
+	it('tells the donor why an edit is refused', async () => {
+		mockFetch(409, { success: false, error: 'GOODS_IN_STOCK' });
+
+		await expect(
+			updateDonationItems('tok', [{ free_text: 'ผ้าห่ม', qty: '1', unit: 'piece' }])
+		).rejects.toThrow('ศูนย์เริ่มรับของของใบนี้เข้าคลังแล้ว');
+	});
+});

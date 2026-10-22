@@ -5,6 +5,7 @@ import { putAsPublicWriter } from '$lib/server/couch-public-writer';
 import { sha256Hex } from '$lib/db/hash';
 import { fastapiBaseUrl, fastapiServiceHeaders } from '$lib/server/fastapi';
 import { isDonorEditable } from '$lib/features/donations/server';
+import { GOODS_IN_STOCK_ERROR, hasKeyedDonationStock } from '$lib/server/donation-docs';
 import type { PublicDonationDoc } from '$lib/features/donations';
 
 function shelterDbFromToken(token: string): string | null {
@@ -276,6 +277,10 @@ export const DELETE = async ({ params, getClientAddress }) => {
 				},
 				{ status: 400 }
 			);
+		}
+		// Goods already keyed: cancelling would hand the quota back with the goods on the shelf.
+		if (await hasKeyedDonationStock(shelterDb, latestDoc._id)) {
+			return json(GOODS_IN_STOCK_ERROR, { status: 409 });
 		}
 
 		latestDoc.status = 'cancelled';

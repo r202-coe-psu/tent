@@ -11,7 +11,7 @@ import {
 	pickCampaignForItems
 } from '$lib/features/donations/server';
 import type { DonationRevision, PublicDonationDoc } from '$lib/features/donations';
-import { fetchDocs } from '$lib/server/donation-docs';
+import { fetchDocs, GOODS_IN_STOCK_ERROR, hasKeyedDonationStock } from '$lib/server/donation-docs';
 import type { DonationCampaign, StockLedger } from '$lib/features/operations';
 import { DONATION_SCHEMA_V } from '$lib/features/operations/server';
 import { createAuditEntry } from '$lib/features/shared';
@@ -83,6 +83,10 @@ export const PATCH = async ({ params, request, getClientAddress }) => {
 				{ success: false, error: `Cannot edit a donation in status "${latestDoc.status}"` },
 				{ status: 400 }
 			);
+		}
+		// Goods already keyed: moving lines would re-number them under the stock rows.
+		if (latestDoc && (await hasKeyedDonationStock(shelterDb, latestDoc._id))) {
+			return json(GOODS_IN_STOCK_ERROR, { status: 409 });
 		}
 
 		// Restore any item_id the client dropped before anything is measured or moved.

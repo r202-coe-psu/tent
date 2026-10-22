@@ -225,6 +225,16 @@ export class OperationsRemoteRepository implements OperationsRepository {
 		return { donation: savedDonation as Donation, entry: savedEntry as StockLedger };
 	}
 
+	/** Any donation ledger row pointing at this booking (CR-143 rows key `ref_id`). */
+	private async hasKeyedDonationStock(donationId: string): Promise<boolean> {
+		const rows = await this.repo.find<{ _id: string }>({
+			selector: { type: 'stock_ledger', ref_id: donationId, reason: 'donation' },
+			fields: ['_id'],
+			limit: 1
+		});
+		return rows.length > 0;
+	}
+
 	async receiveDonationBatch(
 		donation: Donation,
 		counted: readonly DonationBatchLine[],
@@ -240,17 +250,25 @@ export class OperationsRemoteRepository implements OperationsRepository {
 		// retry of a transition whose answer was lost: its rows are found by id below.
 		const onFile = (await this.repo.get<Donation>(donation._id)) ?? donation;
 		if (onFile.status !== 'received') {
-			if (!isDonationOutstanding(onFile.status)) {
+			const stale = !isDonationOutstanding(onFile.status)
+				? `ใบนี้ปิดไปแล้ว (สถานะ ${onFile.status}) — รับเข้าคลังไม่ได้`
+				: onFile._rev !== donation._rev
+					? 'ใบนี้ถูกแก้หลังจากเปิดหน้าไว้ — เลือกใบใหม่แล้วนับอีกครั้ง'
+					: null;
+			if (stale) {
+				// Say what is true about the stock: an earlier, interrupted attempt may already
+				// have keyed some lines, and "nothing in stock" would invite counting them again.
 				throw new Error(
-					`ใบนี้ปิดไปแล้ว (สถานะ ${onFile.status}) — รับเข้าคลังไม่ได้ ยังไม่มีของเข้าคลัง`
-				);
-			}
-			if (onFile._rev !== donation._rev) {
-				throw new Error(
-					'ใบนี้ถูกแก้หลังจากเปิดหน้าไว้ — เลือกใบใหม่แล้วนับอีกครั้ง ยังไม่มีของเข้าคลัง'
+					(await this.hasKeyedDonationStock(donation._id))
+						? `${stale} · มีของบางรายการของใบนี้เข้าคลังไปแล้ว อย่านับรายการนั้นซ้ำ — ติดต่อผู้ดูแลเพื่อตรวจยอด`
+						: `${stale} · ยังไม่มีของเข้าคลัง`
 				);
 			}
 		}
+		// Received already, by a screen other than this copy. A true retry (the answer to a
+		// transition that did land was lost) finds every row by id and writes nothing; a
+		// second device counting differently would key the goods a second time.
+		const receivedElsewhere = onFile.status === 'received' && donation.status !== 'received';
 		const seenLineNos = new Set<number>();
 		for (const line of counted) {
 			if (!Number.isInteger(line.line_no) || line.line_no < 0) {
@@ -327,6 +345,11 @@ export class OperationsRemoteRepository implements OperationsRepository {
 				ledger_id: id
 			});
 		});
+		if (receivedElsewhere && toWrite.length > 0) {
+			throw new Error(
+				'ใบนี้รับเข้าคลังไปแล้วจากอีกหน้าจอ — ไม่ได้บันทึกซ้ำ เลือกใบใหม่เพื่อดูผลที่บันทึกไว้'
+			);
+		}
 
 		if (toWrite.length > 0) {
 			const entries = keyDonationReceipt(
@@ -392,6 +415,10 @@ export class OperationsRemoteRepository implements OperationsRepository {
 		// failure here is retried on its own — the rows above are found by id, not rewritten.
 		try {
 			const latest = (await this.repo.get<Donation>(donation._id)) ?? donation;
+			// Already closed with its summary: the first receipt stands, nothing is rewritten.
+			if (latest.status === 'received' && latest.received_summary) {
+				return { donation: latest, lines, rowsComplete: true, received: true };
+			}
 			const nextBase = completeDonationReceipt(latest);
 			const declaredLines = latest.items ?? [];
 			const countedByLine = new Map(counted.map((c) => [c.line_no, c]));
@@ -429,9 +456,11 @@ export class OperationsRemoteRepository implements OperationsRepository {
 						};
 					}
 					const line = countedByLine.get(index);
+					// The donor's own words stay beside the item staff matched them to.
+					const words = item.free_text ? { free_text: item.free_text } : {};
 					return line
-						? { item_id: line.item_id, qty: String(line.qty), unit: line.unit }
-						: { item_id: item.item_id, qty: '0', unit: item.unit };
+						? { item_id: line.item_id, ...words, qty: String(line.qty), unit: line.unit }
+						: { item_id: item.item_id, ...words, qty: '0', unit: item.unit };
 				}),
 				...counted
 					.filter((c) => c.line_no >= declaredLines.length)

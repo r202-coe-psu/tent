@@ -4,12 +4,16 @@ import { adminRaw } from '$lib/server/couch-admin';
 import { putAsPublicWriter } from '$lib/server/couch-public-writer';
 import { donationEditLimiter } from '$lib/server/security/rate-limiter';
 import { sha256Hex } from '$lib/db/hash';
-import { fetchDocs } from '$lib/server/donation-docs';
+import { fetchDocs, hasKeyedDonationStock } from '$lib/server/donation-docs';
 
 type PatchEvent = Parameters<typeof PATCH>[0];
 
 vi.mock('$lib/server/couch-admin', () => ({ adminRaw: vi.fn() }));
-vi.mock('$lib/server/donation-docs', () => ({ fetchDocs: vi.fn(async () => []) }));
+vi.mock('$lib/server/donation-docs', () => ({
+	fetchDocs: vi.fn(async () => []),
+	hasKeyedDonationStock: vi.fn(async () => false),
+	GOODS_IN_STOCK_ERROR: { success: false, error: 'GOODS_IN_STOCK', message: 'in stock' }
+}));
 vi.mock('$lib/server/couch-public-writer', () => ({ putAsPublicWriter: vi.fn() }));
 vi.mock('$lib/server/security/rate-limiter', () => ({
 	donationIpLimiter: { check: vi.fn(() => true) },
@@ -82,6 +86,22 @@ describe('PATCH /api/public/v1/donations/[token]/items', () => {
 		vi.mocked(donationEditLimiter.check).mockReturnValue(true);
 		vi.mocked(putAsPublicWriter).mockResolvedValue({ status: 201, data: {} });
 		vi.mocked(fetchDocs).mockResolvedValue([]);
+		vi.mocked(hasKeyedDonationStock).mockResolvedValue(false);
+	});
+
+	// Owner decision 2026-10-22 — goods already keyed for this booking: the donor can no
+	// longer move its lines, which would re-number them under the stock rows.
+	it('refuses an edit once goods of the booking are in stock, moving no quota', async () => {
+		couchHas(couchDoc('verifying'));
+		fastapiOk();
+		vi.mocked(hasKeyedDonationStock).mockResolvedValue(true);
+
+		const response = await call();
+
+		expect(response.status).toBe(409);
+		expect((await response.json()).error).toBe('GOODS_IN_STOCK');
+		expect(fetch).not.toHaveBeenCalled();
+		expect(putAsPublicWriter).not.toHaveBeenCalled();
 	});
 
 	it('moves the quota before writing CouchDB', async () => {

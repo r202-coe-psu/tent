@@ -28,6 +28,7 @@
 		canEditCourierTracking,
 		canCancelDonation,
 		rejectedLineReasons,
+		donorShortfalls,
 		CancelDonationDialog,
 		EditDonationItemsDialog
 	} from '$lib/features/donations';
@@ -36,7 +37,6 @@
 	import { getTranslation } from '$lib/utils/i18n';
 	import { PUBLIC_DONATIONS_I18N } from '$lib/constants/i18n';
 	import { formatUnit, useUnitsOfMeasure } from '$lib/features/catalog';
-	import { qtyGt, subQty } from '$lib/utils/qty';
 
 	let { data }: { data: { token: string } } = $props();
 	const token = $derived(data.token);
@@ -81,45 +81,7 @@
 	/** Per declared line: the reason staff turned it away, or null (CR-172 FR-16). */
 	const lineRejections = $derived(donation ? rejectedLineReasons(donation) : []);
 
-	const shortfalls = $derived.by(() => {
-		if (!isReceived || !donation?.received_summary) return [];
-		if (donation.received_summary.shortfalls && donation.received_summary.shortfalls.length > 0) {
-			return donation.received_summary.shortfalls;
-		}
-		if (donation.received_summary.items && donation.received_summary.items.length > 0) {
-			const countedMap: Record<string, string> = {};
-			for (const c of donation.received_summary.items) {
-				// "ไม่รับ" is not "ขาด" (CR-172 FR-13).
-				if (c.rejected) continue;
-				const key = c.item_id || c.free_text || c.item_name || '';
-				if (key) countedMap[key] = String(c.qty ?? '0');
-			}
-			const list: Array<{
-				item_id?: string;
-				item_name?: string;
-				declared: string;
-				counted: string;
-				short: string;
-			}> = [];
-			for (const [index, it] of donation.items.entries()) {
-				if (lineRejections[index] !== null) continue;
-				const key = it.item_id || it.item_name || '';
-				const counted = countedMap[key] ?? '0';
-				const declared = String(it.qty ?? '0');
-				if (qtyGt(declared, counted)) {
-					list.push({
-						item_id: it.item_id ?? undefined,
-						item_name: it.item_name,
-						declared,
-						counted,
-						short: subQty(declared, counted)
-					});
-				}
-			}
-			return list;
-		}
-		return [];
-	});
+	const shortfalls = $derived(isReceived && donation ? donorShortfalls(donation) : []);
 
 	const hasShortfall = $derived(shortfalls.length > 0);
 

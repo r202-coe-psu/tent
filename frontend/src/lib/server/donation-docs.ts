@@ -44,3 +44,28 @@ export async function fetchDocsStrict<T>(dbName: string, prefix: string): Promis
 	const rows = (res.data as { rows?: { doc: T }[] })?.rows ?? [];
 	return rows.map((r) => r.doc).filter(Boolean);
 }
+
+/**
+ * True once any goods of this booking are in the shelter's stock (a `donation` ledger row
+ * points at it). From then on the donor may no longer edit or cancel it (owner decision
+ * 2026-10-22, narrowing CR-174 FR-20/21): an interrupted receipt would otherwise leave
+ * goods in stock for lines that moved or a booking that no longer exists.
+ */
+export async function hasKeyedDonationStock(dbName: string, donationId: string): Promise<boolean> {
+	const res = await adminRaw(`/${dbName}/_find`, 'POST', {
+		selector: { type: 'stock_ledger', ref_id: donationId, reason: 'donation' },
+		fields: ['_id'],
+		limit: 1
+	});
+	if (res.status >= 400) {
+		throw new CouchReadError(dbName, 'stock_ledger (ref_id)', res.status);
+	}
+	return ((res.data as { docs?: unknown[] }).docs ?? []).length > 0;
+}
+
+/** The refusal a donor gets once the shelter has started taking the goods in. */
+export const GOODS_IN_STOCK_ERROR = {
+	success: false,
+	error: 'GOODS_IN_STOCK',
+	message: 'ศูนย์เริ่มรับของของใบนี้เข้าคลังแล้ว — แก้ไขหรือยกเลิกไม่ได้ กรุณาติดต่อศูนย์'
+} as const;
