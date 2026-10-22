@@ -3,7 +3,7 @@ title: Smart Shelter — Database Schema v5
 status: draft for review
 created: 2026-06-11
 updated: 2026-10-22
-note: CR-187 approved (2026-10-22, #648) — §3.3 `master_type` เพิ่ม `allergy` (global-only, seed 5) + §1.2 `medical.allergies` = master code หรือ free text (ไม่ bump `schema_v`); CR-186 approved (2026-10-22, #649) — §3.3 `master_type` เพิ่ม `chronic_disease` (global-only, seed 12) + §1.2 `medical.conditions` = master code หรือ free text (ไม่ bump `schema_v`)
+note: CR-187 approved (2026-10-22, #648) — §3.3 `master_type` เพิ่ม `allergy` (global-only, seed 5) + §1.2 `medical.allergies` = master code หรือ free text (ไม่ bump `schema_v`); CR-186 approved (2026-10-22, #649) — §3.3 `master_type` เพิ่ม `chronic_disease` (global-only, seed 12) + §1.2 `medical.conditions` = master code หรือ free text (ไม่ bump `schema_v`); CR-185 approved (2026-10-21, #709) — §9.2 `public_jobs.is_urgent` (projection field ใหม่, `PROJECTION_VERSION` 5→6, ไม่ bump `schema_v`)
 ---
 
 # Database Schema v5 — field-level
@@ -2629,6 +2629,7 @@ Read model สำหรับฉายข้อมูลประกาศงา
 | `slots_confirmed` | int | req | ยอดรับแล้วรวม (🟢) |
 | `slots_remaining` | int | req | ยอดยังขาดรวม (⚪) |
 | `status` | enum(`open`,`full`,`paused`,`closed`) | req | สถานะเปิดรับสมัคร (projector map `almost_full` เดิม → `open`) |
+| `is_urgent` | bool | req | default `false` — คัดลอกจาก `job.is_urgent` (§2.17); หน้าแรก public นับเฉพาะงานนี้ในการ์ดจิตอาสา ([CR-185](../changes/12-public/CR-185-public-jobs-is-urgent.md), #709) |
 | `updated_at` | ts | req | เวลาที่ sync ข้อมูลล่าสุด |
 
 ### 9.3 `shelter_stocks` (MongoDB) — **ใหม่ (CR-111, EXT-004/006)**
