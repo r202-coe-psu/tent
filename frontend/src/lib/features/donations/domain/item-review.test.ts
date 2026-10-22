@@ -9,7 +9,7 @@ import {
 } from './item-review';
 
 const line = (over: Partial<DonationItem>): DonationItem => ({ qty: '1', unit: 'piece', ...over });
-const campaignLine = line({ item_id: 'item:rice', review_status: 'approved' });
+const campaignLine = line({ item_id: 'item:rice', review_status: 'approved', reserved_qty: '1' });
 const typedLine = line({ free_text: 'ผ้าห่ม', review_status: 'pending' });
 
 describe('donationStatusFromLines (CR-174 FR-4..FR-6)', () => {
@@ -55,6 +55,11 @@ describe('isAutoApprovedLine (FR-8)', () => {
 			isAutoApprovedLine({ ...typedLine, review_status: 'approved' }, 'donation_campaign:1')
 		).toBe(false);
 		expect(isAutoApprovedLine(campaignLine, null)).toBe(false);
+	});
+
+	it('labels a campaign line the counter did not hold as approved by staff', () => {
+		const unreserved = line({ item_id: 'item:rice', review_status: 'approved' });
+		expect(isAutoApprovedLine(unreserved, 'donation_campaign:1')).toBe(false);
 	});
 });
 
@@ -127,5 +132,8 @@ describe('applyLineReview (FR-9, FR-10)', () => {
 		expect(() =>
 			applyLineReview([typedLine, typedLine], [{ index: 0, decision: 'approved' }])
 		).toThrow(/not been decided/);
+		expect(() => applyLineReview([typedLine], [{ index: 0, decision: 'rejected' }])).toThrow(
+			/without a reason/
+		);
 	});
 });

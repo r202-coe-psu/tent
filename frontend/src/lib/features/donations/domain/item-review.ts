@@ -45,9 +45,11 @@ export function donationStatusFromLines(
 /**
  * FR-8 — staff see where an approval came from. A campaign line FastAPI could reserve
  * quota for was approved at booking time (FR-2); anything else approved was a person.
+ * `reserved_qty` is the reservation: a campaign line the counter did not hold (not
+ * seeded yet) waited for staff, and a person approved it.
  */
 export function isAutoApprovedLine(item: DonationItem, campaignId: string | null): boolean {
-	return item.review_status === 'approved' && !!item.item_id && !!campaignId;
+	return item.review_status === 'approved' && !!item.item_id && !!campaignId && !!item.reserved_qty;
 }
 
 /**
@@ -97,7 +99,8 @@ export type LineReviewResult<T extends DonationItem> = {
 
 /**
  * Apply staff decisions to the `pending` lines. Throws when a decision names a line
- * that is not pending, names one twice, or leaves a pending line undecided.
+ * that is not pending, names one twice, refuses one without a reason, or leaves a
+ * pending line undecided.
  */
 export function applyLineReview<T extends DonationItem>(
 	items: readonly T[],
@@ -129,6 +132,9 @@ export function applyLineReview<T extends DonationItem>(
 				review_reason: null
 			};
 		}
+		// `lineReviewDecisionSchema` requires a code on a refusal; a caller that skipped it
+		// must not compose "undefined" into the text the donor reads.
+		if (!decision.reason_code) throw new Error(`Line ${index} is refused without a reason`);
 		const code = decision.reason_code as DonationRejectReasonCode;
 		return {
 			...item,

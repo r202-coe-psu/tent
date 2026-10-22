@@ -247,6 +247,12 @@ export interface DonationItem {
 	review_status?: 'approved' | 'pending' | 'rejected';
 	review_reason_code?: string | null;
 	review_reason?: string | null;
+	/**
+	 * What the campaign counter holds for this line's item (CR-080) — stamped by FastAPI
+	 * only when the counter really took it, so it is also how an automatic approval
+	 * (FR-2) is told from a person's (FR-8).
+	 */
+	reserved_qty?: string;
 }
 
 /**
