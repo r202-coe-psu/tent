@@ -60,6 +60,8 @@
 			id="{idPrefix}-note"
 			bind:value={note}
 			{disabled}
+			required={noteRequired}
+			aria-required={noteRequired}
 			rows={2}
 			maxlength={REJECT_NOTE_MAX}
 			placeholder="เช่น นมกล่องหมดอายุ 2 กล่อง"

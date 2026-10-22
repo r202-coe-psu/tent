@@ -139,12 +139,16 @@
 		)
 	);
 	const reviewComplete = $derived(lineDecisions.every((parsed) => parsed.success));
+	const REVIEW_INCOMPLETE = 'ตัดสินรายการที่รอประเมินให้ครบ และใส่เหตุผลของรายการที่ไม่รับ';
+	/** Every line ends up refused, so saving rejects the booking (FR-6) — shown in red. */
+	const rejectsAll = $derived.by(() => {
+		if (!lineReview || !reviewComplete) return false;
+		const kept = pendingIndexes.filter((index) => drafts[index]?.decision === 'approved').length;
+		return kept + declaredItems.filter((item) => item.review_status === 'approved').length === 0;
+	});
 	const approveLabel = $derived.by(() => {
 		if (!lineReview) return 'อนุมัติรับ (Generate QR)';
-		const kept = pendingIndexes.filter((index) => drafts[index]?.decision === 'approved').length;
-		const keptAfter =
-			kept + declaredItems.filter((item) => item.review_status === 'approved').length;
-		return keptAfter === 0 && reviewComplete ? 'ปฏิเสธทั้งใบ' : 'บันทึกผลการประเมิน';
+		return rejectsAll ? 'ปฏิเสธทั้งใบ' : 'บันทึกผลการประเมิน';
 	});
 
 	function submitReview() {
@@ -155,7 +159,7 @@
 		}
 		const lines = lineDecisions.flatMap((parsed) => (parsed.success ? [parsed.data] : []));
 		if (lines.length !== pendingIndexes.length) {
-			toast.error('ตัดสินรายการที่รอประเมินให้ครบ และใส่เหตุผลของรายการที่ไม่รับ');
+			toast.error(REVIEW_INCOMPLETE);
 			return;
 		}
 		onApprove(actionRef, memo.trim(), lines);
@@ -496,11 +500,19 @@
 				type="button"
 				onclick={submitReview}
 				disabled={saving || (lineReview && !reviewComplete)}
-				class="h-10 gap-1.5 rounded-xl bg-emerald-600 px-5 text-xs font-bold text-white shadow-xs hover:bg-emerald-700"
+				aria-describedby={lineReview && !reviewComplete ? 'review-incomplete-hint' : undefined}
+				class="h-10 gap-1.5 rounded-xl px-5 text-xs font-bold text-white shadow-xs {rejectsAll
+					? 'bg-red-600 hover:bg-red-700'
+					: 'bg-emerald-600 hover:bg-emerald-700'}"
 			>
 				<Check class="h-4 w-4" />
 				{saving ? 'กำลังดำเนินการ...' : approveLabel}
 			</Button>
+			{#if lineReview && !reviewComplete}
+				<p id="review-incomplete-hint" class="text-xs text-muted-foreground">
+					{REVIEW_INCOMPLETE}
+				</p>
+			{/if}
 
 			<!--
 			Redirect ("ประสานงานส่งต่อ") is hidden for now: the centre does not hand donations

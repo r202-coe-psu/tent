@@ -557,7 +557,6 @@ export async function expectReadyForDropoff(shelterCode: string, bookingRef: str
 		.toBe('verifying');
 }
 
-/** Open a booking in the scan station by typing its ref. */
 /**
  * Reject the open booking through the reject dialog (CR-172): pick the preset whose
  * label matches `reason`, add `note`, confirm. The confirm stays disabled until the
@@ -574,6 +573,7 @@ export async function rejectInDialog(page: Page, reason: RegExp, note?: string) 
 	await expect(dialog).toBeHidden();
 }
 
+/** Open a booking in the scan station by typing its ref. */
 export async function openInScanStation(page: Page, bookingRef: string) {
 	await page.reload();
 	// The active tab is kept in `?tab=` and survives the reload, so the list is picked
