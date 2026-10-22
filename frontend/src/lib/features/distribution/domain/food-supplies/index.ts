@@ -57,6 +57,58 @@ export {
 } from './bulk-return-pool';
 
 export {
+	BULK_RETURN_POOL_V3_SCHEMA_V,
+	bulkReturnPoolV3StatusSchema,
+	bulkReturnPoolLockOpSchema,
+	bulkReturnPoolLockSchema,
+	bulkReturnPoolItemSummaryRowSchema,
+	bulkReturnPoolV3InputSchema,
+	bulkReturnPoolV3DocSchema,
+	createBulkReturnPoolV3,
+	canAppendToPool,
+	assertPoolTransition,
+	type BulkReturnPoolV3Status,
+	type BulkReturnPoolLock,
+	type BulkReturnPoolItemSummaryRow,
+	type BulkReturnPoolV3Input,
+	type BulkReturnPoolV3
+} from './bulk-return-pool-v3';
+
+export {
+	BULK_RETURN_ENTRY_SCHEMA_V,
+	bulkReturnEntryIdSchema,
+	bulkReturnEntryLoanRefSchema,
+	bulkReturnEntryReturnerIdSchema,
+	bulkReturnEntryInputSchema,
+	bulkReturnEntryDocSchema,
+	createBulkReturnEntry,
+	type BulkReturnEntryLoanRef,
+	type BulkReturnEntryInput,
+	type BulkReturnEntry
+} from './bulk-return-entry';
+
+export {
+	BULK_RETURN_ENTRY_MOVE_SCHEMA_V,
+	BULK_RETURN_ENTRY_MOVE_SEQ_WIDTH,
+	BULK_RETURN_ENTRY_MOVE_MAX_SEQ,
+	bulkReturnEntryMoveIdSchema,
+	bulkReturnEntryMoveInputSchema,
+	bulkReturnEntryMoveDocSchema,
+	deriveEntryMoveId,
+	createBulkReturnEntryMove,
+	resolveEntryPool,
+	type BulkReturnEntryMoveInput,
+	type BulkReturnEntryMove
+} from './bulk-return-entry-move';
+
+export {
+	resolveBulkReturnEntries,
+	summarizePoolItems,
+	isPoolEmpty,
+	type ResolvedBulkReturnEntry
+} from './bulk-return-pool-summary';
+
+export {
 	bulkReturnClaimStatusSchema,
 	bulkReturnClaimIdSchema,
 	bulkReturnClaimDocSchema,
