@@ -1494,6 +1494,11 @@ Authorization และ Bangkok current-day write rule ถูกบังคั�
 
 ### 3.1 `shelter` — `shelter:{ulid}`
 
+> **schema_v 8** — `common_areas.sub_storage[].type` (single enum) → `.types` (array ของ enum,
+> min 1); enum ขยายจาก 4 → 7 ค่า (เพิ่ม `baby_food`, `cooked_food`, `food_cold`) ([CR-175](../changes/00-baseline/CR-175-storage-point-multi-type.md)).
+> อ่าน doc เดิมที่มี `type` เดี่ยว → derive `types: [type]` ตอน read แบบ deterministic แล้ว
+> persist ทับตอนบันทึกครั้งถัดไป (ไม่มี batch migration script แยก) — key enum เดิมทั้ง 4 ตัวไม่เปลี่ยน
+> ความหมาย (เปลี่ยนแค่ label แสดงผลของ `medical_supplies` เป็น "ยา")
 > **schema_v 7** — `common_areas.sub_storage[].id` บังคับมีค่าเมื่อเขียน; `sub_storage` คือ master "จุดเก็บของ" ของศูนย์ที่ `stock_ledger.lot.storage_point_id` อ้างถึง ([CR-139](../changes/00-baseline/CR-139-shelter-storage-points.md)).
 > **schema_v 6** — เพิ่ม `food_distribution_points` (จุดแจกอาหาร — named spot + optional lat/lng; staff-only plane) ([CR-128](../changes/00-baseline/CR-128-shelter-food-distribution-points-and-single-page-form.md)). optional ⇒ doc เดิมไม่ต้อง backfill.
 > **schema_v 5** — เพิ่ม `site_kind` เพื่อแยกศูนย์อพยพกับบ้านพี่เลี้ยงโดยใช้ doc type `shelter` เดิม (CR-067).
@@ -1525,7 +1530,7 @@ Authorization และ Bangkok current-day write rule ถูกบังคั�
 | `area_m2` | num≥0\|null | opt | พื้นที่ปิดรวม (m²) — ใช้คำนวณ m²/คน เทียบ Sphere 3.5 m² minimum; `null` = ยังไม่ได้วัด |
 | `area_type` | enum(`indoor`,`outdoor`,`hybrid`)\|null | opt | ชนิดพื้นที่ |
 | `facilities` | {`toilets_female`:int≥0?, `toilets_male`:int≥0?, `toilets_accessible`:int≥0?, `showers`:int≥0?, `water_points`:int≥0?, `handwashing_stations`:int≥0?, `car_toilet_accessible`:bool?, `car_toilet_supported`:int≥0?} | opt | นับจริงที่ศูนย์; ถ้า `car_toilet_accessible != true` ให้ถือ `car_toilet_supported = null` |
-| `common_areas` | {`central_kitchen`:bool?, `helipad`:bool?, `parking_capacity`:int≥0?, `sub_storage`:[{`id`:str, `name`:str, `type`:enum(`general`,`food_dry`,`drinking_water`,`medical_supplies`), `area_m2`:num≥0?}], `isolation_room`:bool?, `women_child_friendly_space`:bool?, `logistics_area_m2`:num≥0?} | opt | ข้อมูลพื้นที่ส่วนกลาง · `sub_storage` = จุดเก็บของของศูนย์ (schema_v 7): `id` = ULID หรือ `legacy-<index>` (back-fill), immutable ต่อรายการ — ตัวเลือก "สถานที่จัดเก็บ" ในจัดการสต็อก |
+| `common_areas` | {`central_kitchen`:bool?, `helipad`:bool?, `parking_capacity`:int≥0?, `sub_storage`:[{`id`:str, `name`:str, `types`:[enum(`general`,`baby_food`,`food_dry`,`cooked_food`,`food_cold`,`medical_supplies`,`drinking_water`)] (min 1), `area_m2`:num≥0?}], `isolation_room`:bool?, `women_child_friendly_space`:bool?, `logistics_area_m2`:num≥0?} | opt | ข้อมูลพื้นที่ส่วนกลาง · `sub_storage` = จุดเก็บของของศูนย์ (schema_v 7 FR; `types[]` = schema_v 8, CR-175): `id` = ULID หรือ `legacy-<index>` (back-fill), immutable ต่อรายการ — ตัวเลือก "สถานที่จัดเก็บ" ในจัดการสต็อก; `types` เรียงลำดับ UI ตาม enum ที่ประกาศ ไม่ใช่ลำดับที่ผู้ใช้เลือก |
 | `utilities` | {`power_source`:enum(`city_grid`,`generator`,`solar`)\|null, `water_source`:enum(`city_water`,`water_tank`,`groundwater`)\|null, `communications`:[enum(`cellular`,`wifi`,`vhf_radio`)], `vhf_channel`:str\|null} | opt | utility profile ของศูนย์ |
 | `risk` | {`elevation_m`:num≥0?, `entrance_description`:str?, `constraints`:str?, `secondary_muster_point`:str?} | opt | ความเสี่ยงและข้อจำกัดเชิงกายภาพ |
 | `zones` | [{`code`:str, `name`:str, `capacity`:int>0, `type`:enum(`general`,`male`,`female`,`vulnerable`,`pet`,`quarantine`), `status`:enum(`active`,`closed`), `closed_at`:ts\|null, `closed_by`:str\|null, `reopened_at`:ts\|null, `reopened_by`:str\|null, `reason`:str\|null, `area_m2`:num≥0?, `specifics`:str?, `short_name`:str\|null?}] | req | โครงสร้างโซน + state; `short_name` = ชื่อย่อโซน ≤10 ตัวอักษร (trim, ว่าง → `null`) พิมพ์บน QR label แทนชื่อเต็ม — staff-only, additive ไม่ bump schema_v ([CR-151](../changes/14-kiosk/CR-151-kiosk-pre-registration-check-in.md) §16, proposed) |
