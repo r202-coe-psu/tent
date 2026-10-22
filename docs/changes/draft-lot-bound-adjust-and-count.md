@@ -1,10 +1,10 @@
 ---
-id: CR-188
+id: draft
 title: ปรับยอด / ตรวจนับ ผูกกับล็อต — ตัดยอดอ้าง lot_ref และยอดเกินเป็นล็อตใหม่
 status: proposed
 date: 2026-10-22
 requested_by: issue #569 (ฟอร์มปรับยอดและตรวจนับไม่ดู lot_ref ทำให้ยอดล็อตไม่ตรงและตรวจนับหักซ้ำ) · review PR #775 (Fishcanwalk, 2026-10-22)
-decided_by: ผู้รับ issue (@mhapong — track ด้วยไฟล์ CR, 2026-10-22) · รอ approve
+decided_by: project owner (@Fishcanwalk) — รอ approve · ผู้รับ issue (@mhapong) เลือก track ด้วยไฟล์ CR (2026-10-22)
 layer: volatile
 affects:
   - docs/data/schema.md §2.1 stock_ledger (`lot_ref`, reason `adjust`) — กฎใหม่ ไม่เปลี่ยน field
@@ -15,7 +15,7 @@ affects:
   - no schema_v bump (`lot_ref` เป็น optional ของ stock_ledger อยู่แล้ว)
 ---
 
-# CR-188 — ปรับยอด / ตรวจนับ ผูกกับล็อต
+# draft-lot-bound-adjust-and-count — ปรับยอด / ตรวจนับ ผูกกับล็อต
 
 > **สรุป (TL;DR):**
 >
