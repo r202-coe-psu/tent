@@ -11,6 +11,7 @@
 	import ChevronLeft from '@lucide/svelte/icons/chevron-left';
 	import Inbox from '@lucide/svelte/icons/inbox';
 	import Info from '@lucide/svelte/icons/info';
+	import TriangleAlert from '@lucide/svelte/icons/triangle-alert';
 	import Construction from '@lucide/svelte/icons/construction';
 	import ClipboardPen from '@lucide/svelte/icons/clipboard-pen';
 
@@ -23,11 +24,13 @@
 	import { FamilySearchModal } from '$lib/features/public-portal';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { getTranslation } from '$lib/utils/i18n';
-	import { PUBLIC_PORTAL_HOME_I18N } from '$lib/constants/i18n';
+	import { PUBLIC_HOME_I18N, PUBLIC_PORTAL_HOME_I18N } from '$lib/constants/i18n';
 
 	let { data }: { data: PageData } = $props();
 
 	const t = $derived(getTranslation(PUBLIC_PORTAL_HOME_I18N, langState.current));
+	/** `sysError` / `sysErrorDesc` — shown when the needs or shelters list failed to load (#740). */
+	const homeT = $derived(getTranslation(PUBLIC_HOME_I18N, langState.current));
 	const isEn = $derived(langState.current === 'en');
 
 	let searchQuery = $state('');
@@ -320,6 +323,19 @@
 
 	<!-- 2. Main Body Container -->
 	<main class="mx-auto max-w-7xl space-y-12 px-4 py-8 sm:space-y-14 sm:px-6 lg:px-8">
+		{#if data.listsLoadFailed}
+			<!-- The lists below fall back to empty; without this an outage would read as "no needs". -->
+			<div
+				role="alert"
+				class="flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-red-900 shadow-2xs sm:p-5"
+			>
+				<TriangleAlert class="mt-0.5 h-5 w-5 shrink-0 text-red-600" aria-hidden="true" />
+				<div class="space-y-0.5">
+					<p class="text-sm font-bold sm:text-base">{homeT.sysError}</p>
+					<p class="text-sm">{homeT.sysErrorDesc}</p>
+				</div>
+			</div>
+		{/if}
 		<!-- KPI Summary Metrics (3 Cards) -->
 		<section class="grid grid-cols-1 gap-4 sm:grid-cols-3">
 			<!-- Card 1: 6 ศูนย์ -->
