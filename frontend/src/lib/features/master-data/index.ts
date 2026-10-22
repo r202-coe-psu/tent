@@ -39,6 +39,7 @@ export {
 	isLegacyItemCode,
 	formatMasterLabel,
 	formatMasterLabelByCode,
+	resolveMasterCode,
 	labelCollisionKey,
 	type MasterDataType,
 	type MasterDataTypeMeta,

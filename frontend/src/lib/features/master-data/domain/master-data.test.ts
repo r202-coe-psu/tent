@@ -16,6 +16,7 @@ import {
 	MASTER_DATA_TYPE_META,
 	normalizeLabel,
 	normalizeMasterCode,
+	resolveMasterCode,
 	masterDataItemSchema,
 	masterDataSchema,
 	masterTypeSchema,
@@ -68,12 +69,13 @@ describe('CR-112 vulnerable_group active set', () => {
 });
 
 describe('masterTypeSchema', () => {
-	it('accepts the 4 master types', () => {
+	it('accepts the 5 master types', () => {
 		for (const t of [
 			'vulnerable_group',
 			'housing_type',
 			'shelter_type',
-			'volunteer_skills'
+			'volunteer_skills',
+			'chronic_disease'
 		] as const) {
 			expect(masterTypeSchema.parse(t)).toBe(t);
 		}
@@ -102,6 +104,35 @@ describe('MASTER_DATA_TYPE_META', () => {
 		expect(MASTER_DATA_TYPE_META.housing_type.shortTitle).toBe('ประเภทที่อยู่');
 		expect(MASTER_DATA_TYPE_META.shelter_type.shortTitle).toBe('ประเภทศูนย์');
 		expect(MASTER_DATA_TYPE_META.volunteer_skills.shortTitle).toBe('ทักษะอาสา');
+		expect(MASTER_DATA_TYPE_META.chronic_disease.shortTitle).toBe('โรคประจำตัว');
+	});
+});
+
+describe('resolveMasterCode', () => {
+	const items = [
+		makeItem({ code: 'diabetes', label_th: 'เบาหวาน', label_en: 'Diabetes' }),
+		makeItem({ code: 'asthma', label_th: 'หอบหืด', label_en: 'Asthma' })
+	];
+
+	it('keeps a value that is already a code', () => {
+		expect(resolveMasterCode('diabetes', items)).toBe('diabetes');
+	});
+
+	it('maps a Thai or English label onto its code', () => {
+		expect(resolveMasterCode(' เบาหวาน ', items)).toBe('diabetes');
+		expect(resolveMasterCode('ASTHMA', items)).toBe('asthma');
+	});
+
+	it('ignores zero-width characters when matching a label', () => {
+		expect(resolveMasterCode('หอบ\u200Bหืด', items)).toBe('asthma');
+	});
+
+	it('keeps off-list text as trimmed free text', () => {
+		expect(resolveMasterCode('  โรคเกาต์ ', items)).toBe('โรคเกาต์');
+	});
+
+	it('returns empty for blank input', () => {
+		expect(resolveMasterCode('   ', items)).toBe('');
 	});
 });
 

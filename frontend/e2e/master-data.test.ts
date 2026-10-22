@@ -31,7 +31,8 @@ const SHORT_TITLES: Record<string, string> = {
 	vulnerable_group: 'กลุ่มเปราะบาง',
 	housing_type: 'ประเภทที่อยู่',
 	shelter_type: 'ประเภทศูนย์',
-	volunteer_skills: 'ทักษะอาสา'
+	volunteer_skills: 'ทักษะอาสา',
+	chronic_disease: 'โรคประจำตัว'
 };
 
 type MockItem = {
@@ -154,13 +155,14 @@ test.describe('Master Data hub', () => {
 		await expect(page).toHaveURL(`${BASE}/portal`, { timeout: 8000 });
 	});
 
-	test('renders the hub with all 4 type sidebar entries', async ({ page }) => {
+	test('renders the hub with all 5 type sidebar entries', async ({ page }) => {
 		await injectSession(page, SA, sessions[SA.name]);
 		await mockMasterData(page, {
 			vulnerable_group: [],
 			housing_type: [],
 			shelter_type: [],
-			volunteer_skills: []
+			volunteer_skills: [],
+			chronic_disease: []
 		});
 		await page.goto(`${BASE}${HUB_PATH}`);
 

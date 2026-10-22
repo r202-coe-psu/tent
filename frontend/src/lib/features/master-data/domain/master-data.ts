@@ -20,7 +20,8 @@ export const MASTER_DATA_TYPES = [
 	'vulnerable_group',
 	'housing_type',
 	'shelter_type',
-	'volunteer_skills'
+	'volunteer_skills',
+	'chronic_disease'
 ] as const;
 export type MasterDataType = (typeof MASTER_DATA_TYPES)[number];
 
@@ -66,7 +67,8 @@ export const MASTER_DATA_TYPE_LABELS: Record<MasterDataType, string> = {
 	vulnerable_group: 'ประเภทกลุ่มเปราะบาง (Vulnerable Group)',
 	housing_type: 'ประเภทที่อยู่อาศัย (Housing Type)',
 	shelter_type: 'ประเภทศูนย์พักพิง (Shelter Type)',
-	volunteer_skills: 'ทักษะมาตรฐานจิตอาสา (Volunteer Skills)'
+	volunteer_skills: 'ทักษะมาตรฐานจิตอาสา (Volunteer Skills)',
+	chronic_disease: 'โรคประจำตัว (Chronic Disease)'
 };
 
 /** Hub copy: sidebar short title, panel title/lead, and forms that consume each type. */
@@ -105,6 +107,12 @@ export const MASTER_DATA_TYPE_META: Record<MasterDataType, MasterDataTypeMeta> =
 		title: 'ทักษะมาตรฐานจิตอาสา',
 		description: 'ทักษะที่กำหนดงานอาสาและให้ผู้สมัครเลือก',
 		affectedForms: ['ตั้งค่างานอาสา', 'สมัครอาสา (สาธารณะ)', 'โปรไฟล์/มอบหมายอาสา']
+	},
+	chronic_disease: {
+		shortTitle: 'โรคประจำตัว',
+		title: 'โรคประจำตัว',
+		description: 'รายการโรคประจำตัวที่เจ้าหน้าที่เลือกได้ตอนคัดกรองสุขภาพ (พิมพ์เพิ่มเองได้)',
+		affectedForms: ['คัดกรองสุขภาพ Station 2', 'แก้ไขข้อมูลสุขภาพในโปรไฟล์ผู้พักพิง']
 	}
 };
 
@@ -267,6 +275,24 @@ export function formatMasterLabelByCode(
 	const item = items.find((i) => i.code === code);
 	if (!item) return code.startsWith('item_') ? '' : code;
 	return formatMasterLabel(item, lang);
+}
+
+/**
+ * Map one entered value onto a master item's `code` (#649). A value that is
+ * already a code, or whose text matches an item's `label_th` / `label_en`
+ * (compared with {@link normalizeLabel}), becomes that code — so legacy
+ * free-text such as `"เบาหวาน"` lines up with the master. Anything else is kept
+ * as trimmed free text (masters like `chronic_disease` allow off-list values).
+ */
+export function resolveMasterCode(value: string, items: readonly MasterLabelFields[]): string {
+	const text = value.trim();
+	if (!text) return '';
+	if (items.some((i) => i.code === text)) return text;
+	const target = normalizeLabel(text);
+	const match = items.find(
+		(i) => normalizeLabel(i.label_th) === target || normalizeLabel(i.label_en) === target
+	);
+	return match ? match.code : text;
 }
 
 // ---------------------------------------------------------------- unique label

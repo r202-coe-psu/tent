@@ -2,7 +2,9 @@
 	import { Label } from '$lib/components/ui/label/index.js';
 	import { Textarea } from '$lib/components/ui/textarea/index.js';
 	import * as RadioGroup from '$lib/components/ui/radio-group/index.js';
+	import { resolveMasterCode, useMasterData } from '$lib/features/master-data';
 	import type { CareTrack } from '../../domain/people.js';
+	import MasterTagInput from './master-tag-input.svelte';
 
 	let {
 		care_track = $bindable<CareTrack>('normal'),
@@ -23,6 +25,23 @@
 		idPrefix?: string;
 		showGeneralSymptoms?: boolean;
 	} = $props();
+
+	// #649 — โรคประจำตัว picks from master `chronic_disease`; `conditions` stays a
+	// comma-separated string of codes / free text so parents keep their split(',').
+	const chronicDiseaseQuery = useMasterData(() => 'chronic_disease');
+	const chronicDiseaseItems = $derived(chronicDiseaseQuery.data?.items ?? []);
+
+	function getConditionTokens(): string[] {
+		const tokens = conditions
+			.split(',')
+			.map((s) => resolveMasterCode(s, chronicDiseaseItems))
+			.filter(Boolean);
+		return [...new Set(tokens)];
+	}
+
+	function setConditionTokens(tokens: string[]) {
+		conditions = tokens.join(', ');
+	}
 
 	const careTrackOptions: { value: CareTrack; label: string; desc: string }[] = [
 		{
@@ -78,13 +97,13 @@
 			<Label for="{idPrefix}-conditions" class="text-xs font-medium text-foreground">
 				โรคประจำตัว
 			</Label>
-			<Textarea
+			<MasterTagInput
 				id="{idPrefix}-conditions"
-				bind:value={conditions}
+				bind:value={getConditionTokens, setConditionTokens}
+				items={chronicDiseaseItems}
 				{disabled}
-				rows={3}
-				placeholder="เช่น เบาหวาน, โรคหัวใจ, หอบหืด"
-				class="text-xs"
+				placeholder="เลือกหรือพิมพ์ เช่น เบาหวาน, โรคหัวใจ"
+				searchPlaceholder="ค้นหาโรคประจำตัว..."
 			/>
 		</div>
 
