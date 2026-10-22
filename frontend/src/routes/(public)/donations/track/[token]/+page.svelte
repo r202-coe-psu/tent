@@ -455,7 +455,7 @@
 															>
 																{t.lineReviewRejected}
 															</span>
-														{:else if item.review_status === 'pending'}
+														{:else if item.review_status === 'pending' && status === 'pending_review'}
 															<span
 																class="inline-flex items-center rounded-md bg-amber-100 px-2 py-0.5 text-2xs font-bold text-amber-800 dark:bg-amber-950/50 dark:text-amber-300"
 															>
