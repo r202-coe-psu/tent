@@ -53,7 +53,14 @@ export async function fetchDocsStrict<T>(dbName: string, prefix: string): Promis
  */
 export async function hasKeyedDonationStock(dbName: string, donationId: string): Promise<boolean> {
 	const res = await adminRaw(`/${dbName}/_find`, 'POST', {
-		selector: { type: 'stock_ledger', ref_id: donationId, reason: 'donation' },
+		// `item_id` is in the selector only so CouchDB picks `ledger-type-refid-itemid-reason-idx`
+		// (shelter-access-design.ts): without it the query scans the whole shelter DB.
+		selector: {
+			type: 'stock_ledger',
+			ref_id: donationId,
+			item_id: { $gt: null },
+			reason: 'donation'
+		},
 		fields: ['_id'],
 		limit: 1
 	});

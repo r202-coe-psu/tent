@@ -729,6 +729,36 @@ describe('Back-office GET & POST /api/back-office/donations/[query]', () => {
 			expect(doc.received_summary?.items?.[0]).not.toHaveProperty('rejected');
 		});
 
+		// The counter matches a typed-in line to a stock item; the donor's words are not the
+		// item id, and comparing by them recorded the whole line as short (W-R5-1).
+		it('compares a typed-in line under the item it was matched to', async () => {
+			mockCouch({
+				...withItems([{ free_text: 'ข้าวหอม', qty: '10', unit: 'kg' }]),
+				status: 'verifying'
+			} as PublicDonationDoc);
+
+			await POST(
+				postEvent({ status: 'received', items: [{ item_id: 'item:rice', qty: '10', unit: 'kg' }] })
+			);
+
+			expect(savedDoc().received_summary?.shortfalls).toEqual([]);
+		});
+
+		it('still reports a matched typed-in line counted short', async () => {
+			mockCouch({
+				...withItems([{ free_text: 'ข้าวหอม', qty: '10', unit: 'kg' }]),
+				status: 'verifying'
+			} as PublicDonationDoc);
+
+			await POST(
+				postEvent({ status: 'received', items: [{ item_id: 'item:rice', qty: '7', unit: 'kg' }] })
+			);
+
+			expect(savedDoc().received_summary?.shortfalls).toEqual([
+				{ item_id: 'item:rice', declared: '10', counted: '7', short: '3' }
+			]);
+		});
+
 		it('AC-6: a rejected line is not reported as a shortfall', async () => {
 			mockCouch(twoLines);
 

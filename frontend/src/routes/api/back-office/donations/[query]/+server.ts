@@ -460,12 +460,14 @@ export const POST: RequestHandler = async ({ params, request }) => {
 		//    actually received lands on `received_summary` (couchdb-mongodb-sync.md §3.2).
 		// "ไม่รับ" is not "ขาด" (CR-172 FR-13): a rejected line leaves the comparison on both
 		// sides — the counted lines are the declared ones, in the same order.
-		const declaredForShortfall = (donation.items ?? [])
-			.filter((_, index) => !rejections[index])
-			.map((it) => ({
-				item_id: it.item_id || it.free_text,
-				qty: String(it.qty)
-			}));
+		// A typed-in line is compared under the stock item staff matched it to at the counter —
+		// keyed by the donor's own words it never met its count and read as a shortfall.
+		const declaredForShortfall = (donation.items ?? []).flatMap((it, index) => {
+			if (rejections[index]) return [];
+			const counted = countedLines?.[index];
+			const matched = counted && 'item_id' in counted ? counted.item_id : undefined;
+			return [{ item_id: it.item_id || matched || it.free_text, qty: String(it.qty) }];
+		});
 		const countedForShortfall = (countedLines ?? [])
 			.filter((_, index) => !rejections[index])
 			.map((c) => ({

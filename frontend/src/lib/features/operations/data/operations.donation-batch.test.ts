@@ -51,12 +51,16 @@ vi.mock('$lib/db/repository', async (importOriginal) => {
 					.filter((d) => d._id.startsWith(`${type}:`) && guard(d))
 					.map(clone);
 			},
-			// Equality-only Mango selector over the in-memory docs.
+			// Mango selector over the in-memory docs: equality, plus `{ $gt: null }` = present.
 			async find(query: { selector: Record<string, unknown>; limit?: number }) {
 				const hits = [...docs.values()].filter((d) =>
-					Object.entries(query.selector).every(
-						([key, value]) => (d as unknown as Record<string, unknown>)[key] === value
-					)
+					Object.entries(query.selector).every(([key, value]) => {
+						const actual = (d as unknown as Record<string, unknown>)[key];
+						if (value && typeof value === 'object' && '$gt' in value) {
+							return actual !== undefined && actual !== null;
+						}
+						return actual === value;
+					})
 				);
 				return hits.slice(0, query.limit ?? hits.length).map(clone);
 			}

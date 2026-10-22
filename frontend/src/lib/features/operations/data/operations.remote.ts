@@ -228,7 +228,14 @@ export class OperationsRemoteRepository implements OperationsRepository {
 	/** Any donation ledger row pointing at this booking (CR-143 rows key `ref_id`). */
 	private async hasKeyedDonationStock(donationId: string): Promise<boolean> {
 		const rows = await this.repo.find<{ _id: string }>({
-			selector: { type: 'stock_ledger', ref_id: donationId, reason: 'donation' },
+			// `item_id` is in the selector only so CouchDB picks `ledger-type-refid-itemid-reason-idx`
+			// (shelter-access-design.ts): without it the query scans the whole shelter DB.
+			selector: {
+				type: 'stock_ledger',
+				ref_id: donationId,
+				item_id: { $gt: null },
+				reason: 'donation'
+			},
 			fields: ['_id'],
 			limit: 1
 		});
