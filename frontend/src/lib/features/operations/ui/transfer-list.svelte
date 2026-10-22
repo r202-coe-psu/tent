@@ -15,9 +15,9 @@
 		useResumeTransfer
 	} from '../application/queries';
 	import { isTransferPending } from '../domain/transfer-pending';
-	import { transferItemLabel } from '../domain/transfer-item-label';
-	import { useStockFormItems } from '../application/use-stock-form-items.svelte';
-	import { formatUnit, useUnitsOfMeasure } from '$lib/features/catalog';
+	import { transferItemLabel, transferItemNames } from '../domain/transfer-item-label';
+	import { formatUnit, useItemMasters, useUnitsOfMeasure } from '$lib/features/catalog';
+	import { useSupplyItems } from '$lib/features/supply';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { toast } from 'svelte-sonner';
 	import {
@@ -47,13 +47,21 @@
 
 	const ownShelter = getShelterCode();
 
-	const stockItems = useStockFormItems(() => getShelterCode());
+	// Unfiltered catalog (not `useStockFormItems`): history must name deactivated/merged items too.
+	const supplyItemsQuery = useSupplyItems();
+	const itemMastersQuery = useItemMasters(() => getShelterCode());
 	const unitsQuery = useUnitsOfMeasure();
-	const namesById = $derived(new Map(stockItems.items.map((i) => [i._id, i.name])));
+	const namesById = $derived(
+		transferItemNames(supplyItemsQuery.data ?? [], itemMastersQuery.data ?? [])
+	);
 	const units = $derived(unitsQuery.data ?? []);
 
+	function unitLabel(unit: string): string {
+		return formatUnit(unit, units, langState.current);
+	}
+
 	function itemLine(item: StockTransfer['items'][number]): string {
-		return transferItemLabel(item, namesById, (u) => formatUnit(u, units, langState.current)).text;
+		return transferItemLabel(item, namesById, unitLabel).text;
 	}
 
 	// Session expired (`needsReauth`): every action button is off until the user signs in again.
@@ -448,7 +456,7 @@
 	transfer={detailTransfer}
 	{ownShelter}
 	{namesById}
-	formatUnitLabel={(u) => formatUnit(u, units, langState.current)}
+	formatUnitLabel={unitLabel}
 />
 
 <Dialog.Root bind:open={reasonOpen} onOpenChange={handleReasonOpenChange}>
