@@ -82,6 +82,7 @@ export {
 	bulkReturnEntryInputSchema,
 	bulkReturnEntryDocSchema,
 	createBulkReturnEntry,
+	isBulkReturnEligibleItem,
 	type BulkReturnEntryLoanRef,
 	type BulkReturnEntryInput,
 	type BulkReturnEntry

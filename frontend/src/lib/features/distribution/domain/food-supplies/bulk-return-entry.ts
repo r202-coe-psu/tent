@@ -78,6 +78,17 @@ function validateBulkReturnEntry(
 	}
 }
 
+/**
+ * Whether a catalog item may be dropped into a bulk return pool: only items the catalog marks
+ * `returnable: true`. `type_class` is ignored (catalog `returnable` is the single source of truth,
+ * as for `distribution_log.is_returnable`), and deactivated items stay eligible so loans of items
+ * deactivated after lending can still be returned. Not enforced here — the add-entry workflow
+ * (#659) looks the item up in the catalog and rejects before writing.
+ */
+export function isBulkReturnEligibleItem(item: { returnable?: boolean }): boolean {
+	return item.returnable === true;
+}
+
 export const bulkReturnEntryDocSchema = z
 	.object({
 		_id: bulkReturnEntryIdSchema,

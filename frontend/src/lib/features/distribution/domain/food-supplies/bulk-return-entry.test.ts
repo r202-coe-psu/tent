@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { AuthorContext } from '$lib/db/model';
-import { bulkReturnEntryDocSchema, createBulkReturnEntry } from './bulk-return-entry';
+import {
+	bulkReturnEntryDocSchema,
+	createBulkReturnEntry,
+	isBulkReturnEligibleItem
+} from './bulk-return-entry';
 
 const ctx: AuthorContext = { shelterCode: 'SH001', createdBy: 'staff:dst' };
 const OP = '01J00000000000000000000001';
@@ -132,5 +136,28 @@ describe('bulkReturnEntryDocSchema', () => {
 		expect(
 			bulkReturnEntryDocSchema.safeParse({ ...entry, _id: `bulk_return_pool:${OP}` }).success
 		).toBe(false);
+	});
+});
+
+describe('isBulkReturnEligibleItem', () => {
+	it('accepts an item the catalog marks returnable', () => {
+		expect(isBulkReturnEligibleItem({ returnable: true })).toBe(true);
+	});
+
+	it('rejects a non-returnable item or one with no returnable flag', () => {
+		expect(isBulkReturnEligibleItem({ returnable: false })).toBe(false);
+		expect(isBulkReturnEligibleItem({})).toBe(false);
+	});
+
+	it('decides on returnable alone, ignoring type_class', () => {
+		const returnableConsumable = { returnable: true, type_class: 'CONSUMABLE' };
+		const nonReturnableDurable = { returnable: false, type_class: 'DURABLE' };
+		expect(isBulkReturnEligibleItem(returnableConsumable)).toBe(true);
+		expect(isBulkReturnEligibleItem(nonReturnableDurable)).toBe(false);
+	});
+
+	it('keeps a deactivated returnable item eligible so outstanding loans can still be returned', () => {
+		const deactivated = { returnable: true, deactivated: true };
+		expect(isBulkReturnEligibleItem(deactivated)).toBe(true);
 	});
 });
