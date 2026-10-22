@@ -63,7 +63,7 @@ affects:
 ### Sync coverage ของศูนย์ปิด
 
 - **FR-7** — listener `_changes` ต้องครอบ DB ของศูนย์ที่เปิด **และ** ศูนย์ `closed` ที่ยังไม่ถึง `retention_deadline` (แทน `list_open_shelter_codes` ด้วยชุดเดียวกับ FR-8 ที่อ่านจาก registry). ศูนย์ `cancelled` ยังไม่ถูกฟังตาม draft-shelter-cancelled-status.
-- **FR-8** — `bootstrap_all` ต้อง scan DB เฉพาะศูนย์ที่อ่านจาก **registry** (`type = shelter`) และเป็นศูนย์เปิดตาม `is_shelter_open` **หรือ** `operation_status = closed` ที่ `closed_at + retention_months_after_close` ยังไม่ถึง — ศูนย์ `cancelled` ไม่ scan. ต้องอ่านจาก registry เพราะศูนย์ที่เลยระยะถูกลบจาก `public_shelters` ไปแล้วและจะไม่อยู่ใน Mongo. เป้าหมายคือให้ projection ของศูนย์ที่ยังอยู่ในระยะได้รับ shape ใหม่เมื่อ `PROJECTION_VERSION` bump โดยไม่ publish ข้อมูลของศูนย์ที่เลยระยะ (D-3).
+- **FR-8** — `bootstrap_all` ต้อง scan DB เฉพาะศูนย์ที่อ่านจาก **registry** (`type = shelter`) และเป็นศูนย์เปิดตาม `is_shelter_open` **หรือ** `operation_status = closed` ที่ `closed_at + retention_months_after_close` ยังไม่ถึง — ศูนย์ `cancelled` ไม่ scan. ต้องอ่านจาก registry เพื่อกรองด้วย `closed_at` + deadline ก่อน scan — แถว `public_shelters` ของศูนย์ที่เลยระยะยังคงอยู่ตาม FR-1 แต่ `public_persons` ของศูนย์นั้นถูกลบแล้ว จึงต้องไม่ scan กลับมา. เป้าหมายคือให้ projection ของศูนย์ที่ยังอยู่ในระยะได้รับ shape ใหม่เมื่อ `PROJECTION_VERSION` bump โดยไม่ publish ข้อมูลของศูนย์ที่เลยระยะ (D-3).
 - **FR-9** — เมื่อ `public_shelters.status` เปลี่ยนจาก `closed` → ค่าอื่น (เปิดใหม่) processor ต้อง rescan DB `shelter_{code}` (`_reproject_shelter_database`) ใน change เดียวกัน — ไม่รอ restart worker.
 - **FR-10** — evacuee ของศูนย์ปิดที่ตั้ง `privacy.search_excluded = true` หลังปิด ต้องหายจาก `public_persons` ภายในรอบ sync ตามปกติ (ผลของ FR-7).
 
@@ -109,7 +109,7 @@ affects:
 - [ ] `closed_at` + 3 เดือน ผ่านไป (test ใช้ clock ปลอม) → `public_persons` ของศูนย์นั้นถูกลบ, `_retention_audit` มีแถว `verified` ครบทุกคน, `public_shelters` ยังอยู่.
 - [ ] `pnpm migrate:shelter-closed-at` (dry-run) แสดงศูนย์ `closed` ที่ไม่มี `closed_at` ครบ และไม่เขียน; `--write --confirm` เติม `closed_at` ตาม FR-22; รันซ้ำแล้วไม่มีรายการ.
 - [ ] ศูนย์ `closed` ที่ `closed_at = null` → retention ไม่ลบ + warning.
-- [ ] Bootstrap หลัง deploy: ศูนย์ที่ยังอยู่ในระยะ retention → `public_persons` ฟื้นครบ; ศูนย์ที่เลย deadline → ไม่มีแถวใน `public_persons` / `public_shelters` หลัง bootstrap.
+- [ ] Bootstrap หลัง deploy: ศูนย์ที่ยังอยู่ในระยะ retention → `public_persons` ฟื้นครบ; ศูนย์ที่เลย deadline → ไม่มี `public_persons` ถูก publish ใหม่ และแถว `public_shelters` ยังคงอยู่ (FR-1).
 - [ ] ปิด → เปิดใหม่ (ทั้งก่อนและหลังครบ retention) → ค้นคนเดิมเจอครบภายในรอบ sync โดยไม่ restart worker (#645).
 - [ ] ศูนย์ปิด: แก้ evacuee เป็น `search_excluded = true` → หายจากผลค้นหาภายในรอบ sync.
 - [ ] ปิดศูนย์จาก staff UI → registry doc มี `closed_at`; เปิดใหม่ → `closed_at = null`.
@@ -156,4 +156,4 @@ affects:
 - **D-3 — ฟื้นข้อมูลศูนย์ที่ปิดไปแล้ว** — ✅ ตัดสิน 2026-10-22 (แก้ตามคำตอบ owner — ดู Decision log): ฟื้นเฉพาะศูนย์ที่ยังอยู่ในระยะ retention ผ่าน bootstrap (หลัง backfill FR-22); ศูนย์ที่เลยระยะไม่ฟื้น. ทางเลือกเดิม — แนะนำ: ฟื้นผ่าน bootstrap (Migration) เพื่อให้ผลค้นหาครบทันทีหลัง deploy. ทางเลือก: ฟื้นเฉพาะศูนย์ที่ registry มี `closed_at` อยู่ในระยะ retention · ไม่ฟื้น (มีผลเฉพาะศูนย์ที่ปิดหลัง deploy).
 - 2026-10-22 — D-3 ปรับตามที่ผู้ตัดสินใจยืนยันในแชต: ฟื้นเฉพาะศูนย์ที่ยังอยู่ในระยะ retention; ศูนย์ที่เลยระยะไม่ฟื้น — แก้ FR-7, FR-8, Migration และ Acceptance ให้ตรงกัน ตัวเลือก "ฟื้นทั้งหมด" ถูกยกเลิก
 - **D-4 — ฟังศูนย์ปิดในระยะ retention (FR-7/FR-8)** — ✅ ตัดสิน 2026-10-22: ฟัง — ยังต้อง review ผลต่อ CR-017 (listener scope) ก่อน approve CR. ทางเลือกเดิม — แนะนำ: ทำ — ไม่งั้น opt-out หลังปิดไม่มีผล (privacy). แตะ worker listener scope → review ก่อน approve.
-- 2026-10-22 — **approved** ยืนยันอีกครั้งโดยผู้ตัดสินใจ (ยืนยันในแชต) — การลบข้อมูลของศูนย์ที่ปิด (`public_persons`, `public_needs`, `shelter_stocks`, `shelter_occupants`, `public_shelters`) ต้องอิงกฎ CR-183 เท่านั้น (FR-3/FR-4) · D-4 listener scope ได้รับการยืนยันแล้ว · **ค้าง:** FR-8 กับ D-3 ยังขัดกันเรื่องการ bootstrap ศูนย์ที่เลยระยะ retention — ยังไม่แก้จนกว่าจะตัดสินว่าจะฟื้น (D-3) หรือไม่ฟื้น (FR-8)
+- 2026-10-22 — **approved** ยืนยันอีกครั้งโดยผู้ตัดสินใจ (ยืนยันในแชต) — การลบข้อมูลของศูนย์ที่ปิด (`public_persons`, `public_needs`, `shelter_stocks`, `shelter_occupants`; `public_shelters` ไม่ถูกลบตาม FR-1) ต้องอิงกฎ CR-183 เท่านั้น (FR-3/FR-4) · D-4 listener scope ได้รับการยืนยันแล้ว · แก้ความขัดแย้งเรื่องแถว `public_shelters` ของศูนย์ที่เลยระยะ: คงไว้ตาม FR-1 (ปรับ FR-8 และ Acceptance ให้ตรงกัน) · FR-8 ตรงกับ D-3 แล้ว (ฟื้นเฉพาะศูนย์ในระยะ retention) — รอ owner ยืนยันการแก้นี้
