@@ -1,7 +1,7 @@
 ---
-id: draft
+id: CR-186
 title: Master data chronic_disease (โรคประจำตัว) + Station 2 tag autocomplete
-status: proposed
+status: approved
 date: 2026-10-22
 requested_by: feedback หน้างาน (ข้อ 7) — issue #649 (unblocks #606)
 decided_by: kong
@@ -20,7 +20,7 @@ affects:
   - frontend/e2e/master-data.test.ts
 ---
 
-# draft-chronic-disease-master-data — master `chronic_disease` + Station 2 โรคประจำตัว
+# CR-186 — master `chronic_disease` + Station 2 โรคประจำตัว
 
 > **สรุป (TL;DR):**
 >
@@ -151,5 +151,4 @@ Deploy เดิมต้องรัน `pnpm seed:master` เพื่อส�
   - ตัด seed `other` → 12 รายการ (FR-3)
   - map ข้อความ → code เฉพาะ item `active` (FR-6)
   - คง `hiv` / `psychiatric_disorder` ใน seed; การจำกัดสิทธิ์มองเห็น medical = CR แยก
-  - เลข CR: ตาม `docs/change-management.md` — ให้เลข `CR-NNN` เมื่อ approve (ตอนนี้ล่าสุดที่เห็นคือ
-    CR-185 → คาดว่า CR-186; เช็ก `_index.md` บน `develop` อีกครั้งตอน approve)
+- 2026-10-22 — approved (kong) → CR-186 (CR-185 ถูกใช้แล้วบน branch `fix/709-home-volunteer-card`)
