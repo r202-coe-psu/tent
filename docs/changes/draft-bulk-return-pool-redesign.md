@@ -36,8 +36,8 @@ affects:
 >   ชื่อกองซ้ำ, การ encode "ไม่ระบุผู้คืน", ฝั่ง loan, ผลรวม `loan_refs` (= หรือ ≤), ผู้คืนที่ไม่มี loan ค้าง,
 >   `condition_on_return` (ดู Open questions) — CR นี้**ไม่ encode** ข้อใดข้อหนึ่งจนกว่า owner ตอบ
 > - **ยืนยันตามแบบแผนเดิม:** จำนวนเต็มเท่านั้น (ดู Amends)
-> - **งาน implement ที่ยังค้างใน #658 (ไม่ใช่คำถามออกแบบ):** จำกัด item ที่รับเข้ากองด้วย field catalog เดิม
->   `returnable` / `type_class` — โค้ดใหม่ยังไม่ได้บังคับ (ดู Amends)
+> - **item ที่รับเข้ากองได้ (ไม่ใช่คำถามออกแบบ):** เฉพาะ catalog `returnable === true` — predicate
+>   `isBulkReturnEligibleItem` เพิ่มแล้วใน #658; การปฏิเสธตอนเขียนอยู่ใน workflow เพิ่ม entry ของ #659 (ดู Amends)
 > - **อ้างอิง:** [#657](https://github.com/r202-coe-psu/tent/issues/657) (epic),
 >   [#658](https://github.com/r202-coe-psu/tent/issues/658) (domain + VDU + view/index; งานนี้)
 
@@ -145,7 +145,7 @@ feedback ระบบคลัง & เบิกของ ข้อ 4–5: ข�
 ไม่ตรวจ prefix/ไม่บังคับตาม state และไม่มี field ฝั่ง RECEIVED (หัวข้อ `return_ticket_id`), ไม่บังคับชื่อไม่ซ้ำ
 (หัวข้อชื่อกอง), ยังไม่มี discriminator ผู้คืน (หัวข้อ "ไม่ระบุผู้คืน"), `location` free text ชั่วคราว (หัวข้อ `location`),
 ยังไม่บังคับ = หรือ ≤ ของ `loan_refs` / ผู้คืนที่ไม่มี loan / `condition_on_return` (หัวข้อที่เกี่ยวข้อง),
-ยังไม่จำกัดชนิด item (งานค้าง — ดู Amends), ไม่แตะ `distribution_log` (หัวข้อฝั่ง loan), ไม่มี resolution ของ entry ที่มาช้า
+การปฏิเสธ item ที่ไม่ใช่ `returnable` ตอนเขียน (อยู่ใน workflow ของ #659 — ดู Amends), ไม่แตะ `distribution_log` (หัวข้อฝั่ง loan), ไม่มี resolution ของ entry ที่มาช้า
 (หัวข้อ entry/move ที่มาช้าหลังล็อก). transition ที่ implement มีแค่ `OPEN → SUBMITTED` และ `SUBMITTED → RECEIVED`;
 transition อื่นถูกปฏิเสธพร้อมข้อความว่ารอคำตอบเรื่อง role
 
@@ -177,11 +177,14 @@ transition อื่นถูกปฏิเสธพร้อมข้อคว
 - **จำนวน = จำนวนเต็มบวกเท่านั้น:** ใช้ `positiveWholeQtySchema` ของ `food-supplies/shared.ts` ซึ่ง ship แล้ว
   (fix "reject fractional item quantities") และใช้กับ `distribution_log`, `bulk_return_claim`, `loan_return_reservation`
 
-**งาน implement ที่ยังค้างใน #658 (planned reuse — ไม่ใช่คำถามออกแบบ):**
+**item ที่รับเข้ากองได้ (ใช้ field catalog เดิม — ไม่ใช่คำถามออกแบบ):**
 
-- **item ที่รับเข้ากองได้:** วางแผนใช้ field catalog เดิม `returnable` / `type_class` (แบบเดียวกับ
-  `distribution_log.is_returnable` และ `catalog-eligibility.ts`) — ไม่เพิ่ม field ใหม่. **ยังไม่ได้บังคับ**ใน
-  `bulk-return-entry.ts` / VDU ตอนนี้ (entry รับ `item_id` ใดก็ได้) — ต้อง implement ก่อนปิด #658
+- **กติกา:** รับเฉพาะ item ที่ catalog `returnable === true` — ไม่ดู `type_class` (catalog `returnable` เป็นแหล่งความจริง
+  เดียว แบบเดียวกับ `distribution_log.is_returnable`) และ **ไม่ปฏิเสธ item ที่ `deactivated`** (ของที่ยืมไปก่อน catalog
+  ปิดใช้งานต้องคืนได้). ไม่เพิ่ม field ใหม่
+- **#658:** predicate `isBulkReturnEligibleItem(item: { returnable?: boolean })` ใน `bulk-return-entry.ts` + unit test
+- **#659:** workflow เพิ่ม entry อ่าน item จาก catalog แล้วปฏิเสธก่อนเขียน `bulk_return_entry` ถ้า predicate ไม่ผ่าน.
+  VDU บังคับไม่ได้ (catalog อยู่คนละ DB และ VDU อ่านเอกสารอื่นไม่ได้) — เป็นการบังคับระดับ application
 
 > **หมายเหตุแยก — CR-121 §3.8 (อาจต้องแก้ ขึ้นกับคำตอบเรื่อง `return_ticket_id`):**
 > CR-121 §3.8 "กฎเหล็กของ Stock Ledger (Invariants)" ข้อ 4 "**Deterministic Bulk-Pool Receipt (P1-03):** … สร้าง `stock_ledger:{operationUlid}`
@@ -197,7 +200,7 @@ transition อื่นถูกปฏิเสธพร้อมข้อคว
 - `docs/data/schema.md` — §2.31 (v3), §2.31.1, §2.31.2 (ใหม่), §2.32 (legacy note), §7 (index/view), frontmatter
 - `frontend/src/lib/features/distribution/domain/food-supplies/` — pool v3 + entry + entry-move
   (Zod schema, factories, `canAppendToPool`, `assertPoolTransition`, `resolveEntryPool`, `summarizePoolItems`,
-  `isPoolEmpty`) + tests
+  `isPoolEmpty`, `isBulkReturnEligibleItem`) + tests
 - `frontend/src/lib/server/shelter-access-design.ts` — VDU (allowed types, v3 rules, freeze v1/v2, append-only
   entry/move), Mango index declaration (`BULK_RETURN_ENTRY_MANGO_INDEXES`) + tests
 - `frontend/src/lib/features/shelters/domain/views.ts` + `view-manifest.ts` — view `bulk_return_pool_item_totals`
@@ -386,6 +389,6 @@ unique=True, collation={"locale": "en", "strength": 2}, partialFilterExpression=
 
 ## Decision log
 
-- 2026-10-22 — proposed (draft คู่กับ #658; D1–D5 ตัดสินแล้วโดย project owner; จำนวนเต็มยืนยันตามแบบแผนเดิม; จำกัด item ด้วย `returnable`·`type_class` เป็นงาน implement ที่ค้างใน #658;
+- 2026-10-22 — proposed (draft คู่กับ #658; D1–D5 ตัดสินแล้วโดย project owner; จำนวนเต็มยืนยันตามแบบแผนเดิม; item ที่รับได้ = catalog `returnable === true` (predicate ใน #658, ปฏิเสธตอนเขียนใน #659);
   ลบกอง (`CANCELLED`) และ entry ที่มาช้า (fence ก่อนอัปเดต loan) เป็นข้อเสนอรอยืนยัน; คำถามที่เหลือใน Open questions รอ PM/Project Owner;
   รอ PM/lead กำหนดเลข CR และวิธี track)

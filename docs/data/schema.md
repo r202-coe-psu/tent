@@ -1298,7 +1298,7 @@ ledger ซ้ำ. การ void ทำได้เฉพาะ issuance ที�
 | Field | ชนิด | req | หมายเหตุ |
 | --- | --- | --- | --- |
 | `pool_id` | str | req | `bulk_return_pool:{ulid}` — pool ที่ entry **ถูกบันทึกเข้าครั้งแรก** (pool ปัจจุบัน = fold ด้วย move) |
-| `item_id` | str | req | อ้าง `item_master:{sku\|ulid}`; ยังไม่จำกัดชนิด item (งาน implement ที่ค้างใน #658 — ใช้ catalog `returnable` / `type_class`; ดู draft-bulk-return-pool-redesign Amends) |
+| `item_id` | str | req | อ้าง `item_master:{sku\|ulid}`; รับเฉพาะ item ที่ catalog `returnable === true` (ไม่ดู `type_class`, ไม่ปฏิเสธ `deactivated`) — predicate `isBulkReturnEligibleItem`; ปฏิเสธตอนเขียนใน workflow เพิ่ม entry ของ #659 (VDU ไม่บังคับ; ดู draft-bulk-return-pool-redesign Amends) |
 | `qty` | qty_str>0 | req | `positiveWholeQtySchema` เดียวกับ food-supplies — จำนวนเต็มบวกเท่านั้น (ยืนยันตามแบบแผนเดิม — draft-bulk-return-pool-redesign Amends) |
 | `returner_id` | str\|null | opt | ถ้ามีต้องขึ้นต้น `evacuee:` หรือ `volunteer:`; ไม่มี/`null` = ไม่ระบุ (encoding canonical ยังไม่สรุป — draft-bulk-return-pool-redesign หัวข้อ "ไม่ระบุผู้คืน") |
 | `loan_refs` | [{`distribution_log_id`: str, `qty`: qty_str>0}] | req (ว่างได้) | loan ที่ปิด/ลดยอดจากการคืนนี้; `distribution_log_id` = `distribution_log:{ulid}` ไม่ซ้ำใน array |
