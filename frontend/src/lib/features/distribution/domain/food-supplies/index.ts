@@ -144,6 +144,19 @@ export {
 } from './bulk-return-pool-summary';
 
 export {
+	selectOutstandingLoans,
+	allocateBulkReturnToLoans,
+	type AllocatableLoan
+} from './bulk-return-loan-allocation';
+
+export {
+	buildBulkReturnPoolOverview,
+	type BulkReturnEventSet,
+	type BulkReturnPoolOverviewRow,
+	type BulkReturnPoolOverviewOptions
+} from './bulk-return-pool-overview';
+
+export {
 	bulkReturnClaimStatusSchema,
 	bulkReturnClaimIdSchema,
 	bulkReturnClaimDocSchema,
