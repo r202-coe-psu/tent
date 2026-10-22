@@ -52,6 +52,8 @@ const {
 		moveBulkReturnEntry: vi.fn(),
 		voidBulkReturnEntry: vi.fn(),
 		cancelBulkReturnPool: vi.fn(),
+		submitBulkReturnPool: vi.fn(),
+		receiveBulkReturnPool: vi.fn(),
 		getBulkReturnPoolOverview: vi.fn(),
 		listReturnerOutstandingLoans: vi.fn()
 	};
@@ -166,6 +168,8 @@ vi.mock('./food-supplies/bulk-return-pool-v3-workflow', () => ({
 	moveBulkReturnEntry: (...args: unknown[]) => mockWorkflowCalls.moveBulkReturnEntry(...args),
 	voidBulkReturnEntry: (...args: unknown[]) => mockWorkflowCalls.voidBulkReturnEntry(...args),
 	cancelBulkReturnPool: (...args: unknown[]) => mockWorkflowCalls.cancelBulkReturnPool(...args),
+	submitBulkReturnPool: (...args: unknown[]) => mockWorkflowCalls.submitBulkReturnPool(...args),
+	receiveBulkReturnPool: (...args: unknown[]) => mockWorkflowCalls.receiveBulkReturnPool(...args),
 	getBulkReturnPoolOverview: (...args: unknown[]) =>
 		mockWorkflowCalls.getBulkReturnPoolOverview(...args),
 	listReturnerOutstandingLoans: (...args: unknown[]) =>
@@ -231,6 +235,8 @@ import {
 	useMoveBulkReturnEntry,
 	useVoidBulkReturnEntry,
 	useCancelBulkReturnPool,
+	useSubmitBulkReturnPool,
+	useReceiveBulkReturnPool,
 	useShiftReconciliation,
 	useCreateRequisitionTicket,
 	useAllocateTicketItems,
@@ -637,6 +643,7 @@ describe('Phase 5 Slice 5.0 — Distribution TanStack Query Layer', () => {
 		};
 		const v3OpenInput = { name: 'Pool A' };
 		const v3Patch = { name: 'Pool B', notes: null };
+		const v3ReceiveInput = { items: [{ item_id: 'item:cot', received_qty: '2' }] };
 		const v3AddInput = {
 			pool_id: 'bulk_return_pool:X',
 			returner: { type: 'evacuee' as const, id: 'evacuee:e1' },
@@ -878,6 +885,31 @@ describe('Phase 5 Slice 5.0 — Distribution TanStack Query Layer', () => {
 				variables: { poolId: 'bulk_return_pool:X', operationUlid: stableOpUlid },
 				args: ['bulk_return_pool:X', stableOpUlid],
 				invalidates: [distributionKeys.bulkPoolsV3All('SH001')]
+			},
+			{
+				name: 'useSubmitBulkReturnPool (v3): forwards poolId + caller operationUlid and invalidates v3 pools',
+				hook: useSubmitBulkReturnPool,
+				workflow: 'submitBulkReturnPool',
+				variables: { poolId: 'bulk_return_pool:X', operationUlid: stableOpUlid },
+				args: ['bulk_return_pool:X', stableOpUlid],
+				invalidates: [distributionKeys.bulkPoolsV3All('SH001')]
+			},
+			{
+				name: 'useReceiveBulkReturnPool (v3): forwards poolId + input + operationUlid, invalidates v3 pools and operations stock',
+				hook: useReceiveBulkReturnPool,
+				workflow: 'receiveBulkReturnPool',
+				variables: {
+					poolId: 'bulk_return_pool:X',
+					input: v3ReceiveInput,
+					operationUlid: stableOpUlid
+				},
+				args: ['bulk_return_pool:X', v3ReceiveInput, stableOpUlid],
+				invalidates: [
+					distributionKeys.bulkPoolsV3All('SH001'),
+					operationsKeys.stockLedgers(),
+					operationsKeys.ledger(),
+					operationsKeys.balance()
+				]
 			}
 		];
 

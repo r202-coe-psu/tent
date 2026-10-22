@@ -63,12 +63,16 @@ export {
 	useMoveBulkReturnEntry,
 	useVoidBulkReturnEntry,
 	useCancelBulkReturnPool,
+	useSubmitBulkReturnPool,
+	useReceiveBulkReturnPool,
 	type OpenBulkReturnPoolMutationInput,
 	type UpdateBulkReturnPoolHeaderMutationInput,
 	type AddBulkReturnEntriesMutationInput,
 	type MoveBulkReturnEntryMutationInput,
 	type VoidBulkReturnEntryMutationInput,
-	type CancelBulkReturnPoolMutationInput
+	type CancelBulkReturnPoolMutationInput,
+	type SubmitBulkReturnPoolMutationInput,
+	type ReceiveBulkReturnPoolMutationInput
 } from './query/bulk-pool-v3-mutations';
 
 // Ticket lifecycle mutations (Workflows 1–7)

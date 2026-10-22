@@ -129,6 +129,10 @@ export {
 	type BulkReturnPoolV3,
 	type BulkReturnPoolV3Status,
 	type BulkReturnPoolLock,
+	type BulkReturnPoolItemSummaryRow,
+	type BulkReturnPoolDiscrepancyReason,
+	type BulkReturnPoolReceivedItem,
+	type BulkReturnReceivedRowInput,
 	type BulkReturnEntry,
 	type BulkReturnEntryLoanRef,
 	type BulkReturnEntryReturnerType,
@@ -251,6 +255,8 @@ export {
 	useMoveBulkReturnEntry,
 	useVoidBulkReturnEntry,
 	useCancelBulkReturnPool,
+	useSubmitBulkReturnPool,
+	useReceiveBulkReturnPool,
 	useShiftReconciliation,
 	useCreateRequisitionTicket,
 	useAllocateTicketItems,
@@ -277,7 +283,9 @@ export {
 	type AddBulkReturnEntriesMutationInput,
 	type MoveBulkReturnEntryMutationInput,
 	type VoidBulkReturnEntryMutationInput,
-	type CancelBulkReturnPoolMutationInput
+	type CancelBulkReturnPoolMutationInput,
+	type SubmitBulkReturnPoolMutationInput,
+	type ReceiveBulkReturnPoolMutationInput
 } from './application/queries';
 
 /** Ticket-era Food & Supplies UI components & models (Slice 5.1). */
