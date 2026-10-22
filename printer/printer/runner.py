@@ -32,11 +32,16 @@ def _hello(
     cups: Cups,
     sleep: Callable[[float], None],
     agent_version: str,
+    local_ips: Callable[[], list[str]],
 ) -> Hello:
     backoff = _Backoff(config.error_backoff_max_sec)
     while True:
         try:
-            return api.hello(agent_version=agent_version, queue_state=cups.queue_state())
+            return api.hello(
+                agent_version=agent_version,
+                queue_state=cups.queue_state(),
+                local_ips=local_ips(),
+            )
         except (AuthError, NetworkError, ServerError) as exc:
             log.error("hello failed: %s", exc)
             sleep(backoff.next())
@@ -138,7 +143,7 @@ def run(
     agent_version: str = VERSION,
     local_ips: Callable[[], list[str]] = default_local_ips,
 ) -> None:
-    hello = _hello(config, api, cups, sleep, agent_version)
+    hello = _hello(config, api, cups, sleep, agent_version, local_ips)
     if config.boot_slip:
         _print_boot_slip(cups, hello, agent_version, local_ips)
     backoff = _Backoff(config.error_backoff_max_sec)

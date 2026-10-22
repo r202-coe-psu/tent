@@ -12,6 +12,7 @@ import {
 	PrintDeviceNotFoundError,
 	queueTestPrint,
 	rotatePrinterSecret,
+	toPrinterSummary,
 	updatePrinter,
 	PrintDeviceConflictError,
 	type PrintDeviceAdminStore,
@@ -96,6 +97,7 @@ describe('createPrinter', () => {
 			last_seen_at: null,
 			queue_state: 'unknown',
 			agent_version: null,
+			local_ips: [],
 			online: false
 		});
 
@@ -179,6 +181,18 @@ function jobDoc(printerId: string, overrides: Partial<PrintJobDoc> = {}): PrintJ
 		...overrides
 	};
 }
+
+describe('toPrinterSummary', () => {
+	it('carries the LAN IPs the agent last reported', () => {
+		const summary = toPrinterSummary(deviceDoc({ local_ips: ['192.168.1.50'] }), NOW);
+
+		expect(summary.local_ips).toEqual(['192.168.1.50']);
+	});
+
+	it('reports no IPs for a device whose agent never sent any', () => {
+		expect(toPrinterSummary(deviceDoc({}), NOW).local_ips).toEqual([]);
+	});
+});
 
 describe('listPrinters', () => {
 	it('lists printers in scope with online state and each last job, never the secret hash', async () => {

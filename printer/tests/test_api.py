@@ -138,7 +138,11 @@ def test_hello_returns_device_identity_and_server_config():
     def handler(request: httpx.Request) -> httpx.Response:
         assert request.method == "POST"
         assert request.url.path == "/api/v1/printer/hello"
-        assert json.loads(request.content) == {"agent_version": "0.1.0", "queue_state": "ready"}
+        assert json.loads(request.content) == {
+            "agent_version": "0.1.0",
+            "queue_state": "ready",
+            "local_ips": ["192.168.1.50"],
+        }
         return httpx.Response(
             200,
             json={
@@ -152,7 +156,9 @@ def test_hello_returns_device_identity_and_server_config():
             },
         )
 
-    hello = client_with(handler).hello(agent_version="0.1.0", queue_state="ready")
+    hello = client_with(handler).hello(
+        agent_version="0.1.0", queue_state="ready", local_ips=["192.168.1.50"]
+    )
 
     assert hello == Hello(
         device_id="printer-sh001-reg1",

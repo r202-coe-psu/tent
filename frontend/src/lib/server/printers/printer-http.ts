@@ -1,4 +1,5 @@
 import { json } from '@sveltejs/kit';
+import { z } from 'zod';
 import {
 	authenticatePrintDeviceDoc,
 	DEPENDENCY_UNAVAILABLE,
@@ -79,4 +80,13 @@ const QUEUE_STATES: readonly PrintDeviceDoc['queue_state'][] = [
 
 export function parseQueueState(value: unknown): PrintDeviceDoc['queue_state'] {
 	return QUEUE_STATES.find((state) => state === value) ?? 'unknown';
+}
+
+const ipSchema = z.union([z.ipv4(), z.ipv6()]);
+const MAX_LOCAL_IPS = 8;
+
+/** The agent's reported LAN IPs, keeping only real IP addresses; `undefined` if none were sent. */
+export function parseLocalIps(value: unknown): string[] | undefined {
+	if (!Array.isArray(value)) return undefined;
+	return value.filter((ip) => ipSchema.safeParse(ip).success).slice(0, MAX_LOCAL_IPS);
 }

@@ -39,6 +39,8 @@ export const printerAdminSummarySchema = z.object({
 	last_seen_at: z.string().nullable(),
 	queue_state: printerQueueStateSchema,
 	agent_version: z.string().nullable(),
+	/** LAN IPs the agent reported on its last hello; empty until it first does. */
+	local_ips: z.array(z.string()).default([]),
 	online: z.boolean()
 });
 export type PrinterAdminSummary = z.infer<typeof printerAdminSummarySchema>;

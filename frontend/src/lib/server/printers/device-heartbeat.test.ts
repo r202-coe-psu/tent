@@ -102,6 +102,39 @@ describe('recordHeartbeat', () => {
 		);
 	});
 
+	it('writes immediately when local_ips changed and stores the new addresses', async () => {
+		const repo = fakeRepo();
+		await recordHeartbeat(repo, device({ local_ips: ['192.168.1.50'] }), {
+			queue_state: 'ready',
+			local_ips: ['192.168.1.77'],
+			now: new Date('2026-10-22T03:00:01.000Z')
+		});
+		expect(repo.updateDevice).toHaveBeenCalledWith(
+			expect.objectContaining({ local_ips: ['192.168.1.77'] })
+		);
+	});
+
+	it('does not write when the same local_ips arrive within 20 s', async () => {
+		const repo = fakeRepo();
+		await recordHeartbeat(repo, device({ local_ips: ['192.168.1.50'] }), {
+			queue_state: 'ready',
+			local_ips: ['192.168.1.50'],
+			now: new Date('2026-10-22T03:00:01.000Z')
+		});
+		expect(repo.updateDevice).not.toHaveBeenCalled();
+	});
+
+	it('keeps the stored local_ips when the heartbeat carries none', async () => {
+		const repo = fakeRepo();
+		await recordHeartbeat(repo, device({ local_ips: ['192.168.1.50'] }), {
+			queue_state: 'ready',
+			now: new Date('2026-10-22T03:00:30.000Z')
+		});
+		expect(repo.updateDevice).toHaveBeenCalledWith(
+			expect.objectContaining({ local_ips: ['192.168.1.50'] })
+		);
+	});
+
 	it('writes when forced even though nothing changed', async () => {
 		const repo = fakeRepo();
 		await recordHeartbeat(repo, device(), {

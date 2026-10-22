@@ -23,6 +23,7 @@ const printer = (id: string, over: Partial<PrinterAdminItem> = {}): PrinterAdmin
 	last_seen_at: '2026-10-22T03:00:00.000Z',
 	queue_state: 'ready',
 	agent_version: '0.1.0',
+	local_ips: [],
 	online: true,
 	last_job: null,
 	...over
@@ -61,6 +62,16 @@ describe('PrinterAdminList', () => {
 		expect(body).toContain('ปิดใช้งาน');
 		expect(body).toContain('sk_print_ab12');
 		expect(body).not.toMatch(/sk_print_[a-z0-9]{13,}/);
+	});
+
+	it('shows the LAN IPs the printer reported, or that none are known yet', () => {
+		const body = html([
+			printer('reg-1', { local_ips: ['192.168.1.50', '10.0.0.7'] }),
+			printer('reg-2', { local_ips: [] })
+		]);
+
+		expect(body).toContain('IP 192.168.1.50, 10.0.0.7');
+		expect(body).toContain('ยังไม่ทราบ IP');
 	});
 
 	it('has one จัดการ button per printer', () => {

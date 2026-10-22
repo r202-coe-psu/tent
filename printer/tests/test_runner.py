@@ -134,11 +134,15 @@ def agent(fake_cups) -> Agent:
     return Agent(Server(), FakeClock())
 
 
-def test_hello_is_sent_with_agent_version_and_queue_state_before_first_poll(agent):
-    agent.run(max_iterations=1, agent_version="9.9.9")
+def test_hello_is_sent_with_agent_version_queue_state_and_ips_before_first_poll(agent):
+    agent.run(max_iterations=1, agent_version="9.9.9", local_ips=lambda: ["192.168.1.50"])
 
     assert agent.server.paths() == [HELLO, NEXT]
-    assert agent.server.requests[0][1] == {"agent_version": "9.9.9", "queue_state": "ready"}
+    assert agent.server.requests[0][1] == {
+        "agent_version": "9.9.9",
+        "queue_state": "ready",
+        "local_ips": ["192.168.1.50"],
+    }
 
 
 def test_hello_failures_back_off_and_retry_before_the_loop_starts(agent):

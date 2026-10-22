@@ -9,6 +9,7 @@ import {
 	authenticateRequest,
 	errorResponse,
 	noStoreHeaders,
+	parseLocalIps,
 	parseQueueState,
 	readJsonObject
 } from '$lib/server/printers/printer-http';
@@ -28,6 +29,7 @@ export const POST: RequestHandler = async ({ request }) => {
 		await recordHeartbeat(printDeviceRepository, device, {
 			queue_state: parseQueueState(body.queue_state),
 			agent_version: typeof body.agent_version === 'string' ? body.agent_version : undefined,
+			local_ips: parseLocalIps(body.local_ips),
 			now,
 			force: true
 		});

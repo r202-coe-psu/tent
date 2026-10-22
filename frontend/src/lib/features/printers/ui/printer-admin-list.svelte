@@ -1,6 +1,6 @@
 <script lang="ts">
 	/**
-	 * Back-office printer table: state only (online, queue, last job, secret prefix). Every action
+	 * Back-office printer table: state only (online, queue, last job, LAN IPs, secret prefix). Every action
 	 * lives in the "จัดการ" dialog.
 	 */
 	import { Button } from '$lib/components/ui/button/index.js';
@@ -72,6 +72,9 @@
 						<td class="px-6 py-4">
 							<p class="font-semibold text-slate-900">{printer.name}</p>
 							<p class="text-xs text-slate-500 tabular-nums">{printer.device_id}</p>
+							<p class="font-mono text-xs text-slate-500">
+								{printer.local_ips.length > 0 ? a.localIps(printer.local_ips) : a.noLocalIps}
+							</p>
 							<p class="font-mono text-xs text-slate-400">
 								{a.secretPrefix(printer.secret_prefix)}
 							</p>

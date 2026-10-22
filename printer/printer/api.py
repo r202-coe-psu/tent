@@ -54,10 +54,16 @@ class BffClient:
             transport=transport,
         )
 
-    def hello(self, agent_version: str, queue_state: str) -> Hello:
+    def hello(
+        self, agent_version: str, queue_state: str, local_ips: list[str] | None = None
+    ) -> Hello:
         response = self._post(
             "/api/v1/printer/hello",
-            {"agent_version": agent_version, "queue_state": queue_state},
+            {
+                "agent_version": agent_version,
+                "queue_state": queue_state,
+                "local_ips": local_ips or [],
+            },
         )
         body = response.json()
         return Hello(

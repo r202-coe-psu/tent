@@ -40,6 +40,8 @@ export const PRINTERS_I18N = {
 			noStation: 'ไม่ระบุจุดบริการ',
 			neverSeen: 'ยังไม่เคยเชื่อมต่อ',
 			secretPrefix: (prefix: string) => `Secret ${prefix}…`,
+			localIps: (ips: readonly string[]) => `IP ${ips.join(', ')}`,
+			noLocalIps: 'ยังไม่ทราบ IP',
 			queueState: {
 				ready: 'พร้อมใช้งาน',
 				disabled: 'คิวถูกปิด',
@@ -183,6 +185,8 @@ export const PRINTERS_I18N = {
 			noStation: 'No station',
 			neverSeen: 'Never connected',
 			secretPrefix: (prefix: string) => `Secret ${prefix}…`,
+			localIps: (ips: readonly string[]) => `IP ${ips.join(', ')}`,
+			noLocalIps: 'IP not known yet',
 			queueState: {
 				ready: 'Ready',
 				disabled: 'Queue disabled',

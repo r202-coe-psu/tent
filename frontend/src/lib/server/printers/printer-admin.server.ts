@@ -40,6 +40,7 @@ export interface PrinterSummary {
 	last_seen_at: string | null;
 	queue_state: PrintDeviceDoc['queue_state'];
 	agent_version: string | null;
+	local_ips: string[];
 	online: boolean;
 }
 
@@ -91,6 +92,7 @@ export function toPrinterSummary(doc: PrintDeviceDoc, now: Date): PrinterSummary
 		last_seen_at: doc.last_seen_at,
 		queue_state: doc.queue_state,
 		agent_version: doc.agent_version,
+		local_ips: doc.local_ips ?? [],
 		online: isPrinterOnline(doc, now)
 	};
 }

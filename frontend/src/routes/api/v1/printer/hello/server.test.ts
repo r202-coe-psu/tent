@@ -150,6 +150,24 @@ describe('POST /api/v1/printer/hello', () => {
 		);
 	});
 
+	it('stores the LAN IPs the agent reports, dropping anything that is not an IP address', async () => {
+		mockGetDevice.mockResolvedValue(device());
+
+		await POST(
+			request({
+				body: JSON.stringify({
+					agent_version: '0.1.0',
+					queue_state: 'ready',
+					local_ips: ['192.168.1.50', 'fe80::1', '<script>', 42, '999.1.1.1']
+				})
+			})
+		);
+
+		expect(mockUpdateDevice).toHaveBeenCalledWith(
+			expect.objectContaining({ local_ips: ['192.168.1.50', 'fe80::1'] })
+		);
+	});
+
 	it('treats a body that is not JSON as queue_state unknown', async () => {
 		mockGetDevice.mockResolvedValue({ ...device(), queue_state: 'ready' });
 

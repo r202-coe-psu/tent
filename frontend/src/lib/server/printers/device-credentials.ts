@@ -39,6 +39,8 @@ export interface PrintDeviceDoc {
 	last_seen_at: string | null;
 	queue_state: 'ready' | 'disabled' | 'missing' | 'unknown';
 	agent_version: string | null;
+	/** LAN IPv4/IPv6 addresses the agent reported on hello; absent until it first does. */
+	local_ips?: string[];
 	created_at: string;
 	updated_at: string;
 	created_by: string;
