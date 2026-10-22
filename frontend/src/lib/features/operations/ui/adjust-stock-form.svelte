@@ -13,9 +13,9 @@
 	import type { StockFormItem } from '../domain/stock-form-items';
 	import ItemCombobox from './item-combobox.svelte';
 	import { langState } from '$lib/states/i18n.svelte';
-	import { SvelteMap } from 'svelte/reactivity';
 	import { toast } from 'svelte-sonner';
-	import { addQty, subQty, qtyAbs } from '$lib/utils/qty';
+	import { subQty, qtyAbs, qtyGt, persistQty } from '$lib/utils/qty';
+	import { projectLotsByItem } from '../domain/cycle-count';
 	import { formatThaiShortDate } from '$lib/utils/date';
 	import {
 		ADJUST_NOTE_MAX_LENGTH,
@@ -27,7 +27,6 @@
 	import { ADJUST_REASON_LABELS } from './ledger/ledger-view';
 	import {
 		lotLocationFields,
-		lotStorageKey,
 		lotStorageLabel,
 		storageLotFields,
 		type StoragePointRef
@@ -75,42 +74,49 @@
 		return !Number.isNaN(ms) && ms <= Date.now();
 	}
 
-	// Calculate balance of each lot for selectedItem
-	const itemLots = $derived.by(() => {
+	// Each physical lot of the selected item at the balance the stock table shows (#569):
+	// the same projection, so a dispatch that only names its lot (`lot_ref`) or a transfer
+	// with none is counted here exactly as it is there. Lots come from inbound rows only, so a
+	// distribution destination kept in an outbound row's `lot.note` never shows as a place.
+	const projectedLots = $derived.by(() => {
 		const currentItem = selectedItem;
-		if (!currentItem || !ledgerQuery.data) return [];
+		if (!currentItem || !ledgerQuery.data) return { lots: [], broken: false };
 		const entries = (ledgerQuery.data as StockLedger[]).filter(
 			(e: StockLedger) => e.item_id === currentItem._id
 		);
-		const lotsMap = new SvelteMap<string, { location: StockLot; expiry: string; qty: string }>();
+		let broken = false;
+		const lots = projectLotsByItem(entries, () => (broken = true)).filter((lot) =>
+			qtyGt(lot.qty, 0)
+		);
+		return { lots, broken };
+	});
+	/** The item's history could not be replayed into lots — say so instead of guessing (#569). */
+	const lotsIntegrityError = $derived(projectedLots.broken);
 
-		// Grouped by location (point id, else name — draft-shelter-storage-points)
-		// and expiry; `location` is what an adjustment writes to land in this group.
-		for (const entry of entries) {
-			const expiry = entry.lot?.expiry || '';
-			const key = `${lotStorageKey(entry.lot)}||${expiry}`;
-			const current = lotsMap.get(key) || {
-				location: lotLocationFields(entry.lot),
-				expiry,
-				qty: '0'
-			};
-			lotsMap.set(key, { ...current, qty: addQty(current.qty, entry.qty) });
-		}
+	const itemLots = $derived.by(() => {
+		const currentItem = selectedItem;
+		if (!currentItem) return [];
+		const lots = projectedLots.lots;
 
 		const unitLabel = formatUnit(currentItem.unit, units, langState.current) || currentItem.unit;
 
-		return Array.from(lotsMap, ([key, l]) => {
-			const expired = isExpired(l.expiry);
-			const expiryPart = l.expiry
+		return lots.map((lot) => {
+			const expiry = lot.lot?.expiry || '';
+			const location = lotLocationFields(lot.lot);
+			const expired = isExpired(expiry);
+			const expiryPart = expiry
 				? expired
-					? `(หมดอายุแล้ว: ${formatExpiry(l.expiry)})`
-					: `(หมดอายุ: ${formatExpiry(l.expiry)})`
+					? `(หมดอายุแล้ว: ${formatExpiry(expiry)})`
+					: `(หมดอายุ: ${formatExpiry(expiry)})`
 				: '(ไม่ระบุวันหมดอายุ)';
 			return {
-				...l,
-				key,
+				key: lot.lot_ref,
+				lot_ref: lot.lot_ref,
+				location,
+				expiry,
+				qty: persistQty(lot.qty),
 				expired,
-				label: `${lotStorageLabel(l.location, storagePoints.points)} ${expiryPart} - คงเหลือ ${l.qty} ${unitLabel}`
+				label: `${lotStorageLabel(location, storagePoints.points)} ${expiryPart} · รับเข้า ${formatThaiShortDate(lot.received_at)} - คงเหลือ ${persistQty(lot.qty)} ${unitLabel}`
 			};
 		});
 	});
@@ -252,6 +258,10 @@
 			adjust_reason: adjustReason,
 			...(note.trim() ? { note: note.trim() } : {}),
 			lot,
+			// A write-off comes out of the chosen lot; added stock always becomes a new lot (#569).
+			...(currentLot && selectedLotKey !== 'new' && qtyGt('0', deltaQty)
+				? { lot_ref: currentLot.lot_ref }
+				: {}),
 			ref_id: null
 		};
 
@@ -341,6 +351,12 @@
 				</Select.Root>
 				{#if currentLot?.expired}
 					<p class="mt-1.5 text-xs font-semibold text-destructive">ล็อตนี้หมดอายุแล้ว</p>
+				{/if}
+				{#if lotsIntegrityError}
+					<p class="mt-1.5 text-xs font-semibold text-destructive" role="alert">
+						ประวัติคลังของสินค้านี้คำนวณยอดรายล็อตไม่ได้ (มีรายการจ่ายเกินยอดที่มี)
+						กรุณาแจ้งผู้ดูแลระบบ
+					</p>
 				{/if}
 			</Field.Root>
 

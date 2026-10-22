@@ -232,10 +232,13 @@
 	/**
 	 * Location filter options from ledger entries, keyed by `lotStorageKey` so a
 	 * renamed storage point stays one option (draft-shelter-storage-points).
+	 * Inbound rows only: that is where stock is put. An outbound row's `lot.note` may hold
+	 * a distribution destination ("อาคารยิมเนเซียม 1"), which is not a place in the store (#569).
 	 */
 	const uniqueLocations = $derived.by(() => {
 		const locations = new SvelteMap<string, string>();
 		for (const entry of ledger) {
+			if (!qtyGt(entry.qty, 0)) continue;
 			const key = lotStorageKey(entry.lot);
 			const name = lotStorageName(entry.lot, storagePoints.points);
 			if (key && name && !locations.has(key)) locations.set(key, name);

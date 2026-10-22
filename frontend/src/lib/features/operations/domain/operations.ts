@@ -837,9 +837,26 @@ export const adjustInputSchema = z
 		adjust_reason: manualAdjustReasonSchema,
 		note: z.string().trim().max(ADJUST_NOTE_MAX_LENGTH).optional(),
 		lot: stockLotSchema.optional(),
+		/**
+		 * The physical lot a write-off comes out of (#569). Only on a negative adjust: a
+		 * positive row always becomes a new lot of its own (see `createStockLedger`).
+		 */
+		lot_ref: z
+			.string()
+			.regex(/^stock_ledger:.+/, 'lot_ref must reference an inbound stock ledger')
+			.optional(),
 		occurred_at: z.string().optional()
 	})
-	.superRefine((d, ctx) => checkOtherNote(d.adjust_reason, d.note, ctx));
+	.superRefine((d, ctx) => {
+		checkOtherNote(d.adjust_reason, d.note, ctx);
+		if (d.lot_ref && !qtyGt('0', persistQty(d.qty))) {
+			ctx.addIssue({
+				code: 'custom',
+				path: ['lot_ref'],
+				message: 'lot_ref is only for a negative adjustment; added stock becomes a new lot'
+			});
+		}
+	});
 export type AdjustInput = z.input<typeof adjustInputSchema>;
 
 /** `id` pins the row's `_id` (see {@link createStockLedger}) — the cycle count derives it per lot. */
@@ -859,6 +876,7 @@ export function createAdjustEntry(
 			adjust_reason: d.adjust_reason,
 			note: d.note,
 			lot: d.lot,
+			...(d.lot_ref ? { lot_ref: d.lot_ref } : {}),
 			occurred_at: d.occurred_at
 		},
 		ctx,
