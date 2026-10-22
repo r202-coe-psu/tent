@@ -30,10 +30,11 @@ export const bulkReturnEntryLoanRefSchema = z.object({
 });
 export type BulkReturnEntryLoanRef = z.infer<typeof bulkReturnEntryLoanRefSchema>;
 
-/**
- * Returner is optional: when present it must be an `evacuee:` or `volunteer:` id.
- * TODO(#658 Q5): canonical encoding of an "unspecified" returner — absent and null both accepted.
- */
+/** Who dropped the item off. `unspecified` is the canonical encoding of "not recorded". */
+export const bulkReturnEntryReturnerTypeSchema = z.enum(['evacuee', 'volunteer', 'unspecified']);
+export type BulkReturnEntryReturnerType = z.infer<typeof bulkReturnEntryReturnerTypeSchema>;
+
+/** A concrete returner id is an `evacuee:` or `volunteer:` id. */
 export const bulkReturnEntryReturnerIdSchema = z
 	.string()
 	.min(1)
@@ -45,7 +46,9 @@ const bulkReturnEntryFields = {
 	pool_id: bulkReturnPoolIdSchema,
 	item_id: z.string().min(1),
 	qty: positiveWholeQtySchema,
-	returner_id: bulkReturnEntryReturnerIdSchema.nullable().optional(),
+	returner_type: bulkReturnEntryReturnerTypeSchema,
+	// Required key: null for `unspecified`, otherwise an id matching returner_type.
+	returner_id: bulkReturnEntryReturnerIdSchema.nullable(),
 	loan_refs: z.array(bulkReturnEntryLoanRefSchema),
 	notes: z.string().trim().min(1).optional()
 };
@@ -54,6 +57,32 @@ function validateBulkReturnEntry(
 	entry: z.infer<z.ZodObject<typeof bulkReturnEntryFields>>,
 	ctx: z.RefinementCtx
 ): void {
+	if (entry.returner_type === 'unspecified') {
+		if (entry.returner_id !== null) {
+			ctx.addIssue({
+				code: 'custom',
+				path: ['returner_id'],
+				message: 'unspecified returner_type requires returner_id null'
+			});
+		}
+		if (entry.loan_refs.length > 0) {
+			ctx.addIssue({
+				code: 'custom',
+				path: ['loan_refs'],
+				message: 'unspecified returner_type requires empty loan_refs'
+			});
+		}
+	} else if (
+		entry.returner_id === null ||
+		!entry.returner_id.startsWith(`${entry.returner_type}:`)
+	) {
+		ctx.addIssue({
+			code: 'custom',
+			path: ['returner_id'],
+			message: `${entry.returner_type} returner_type requires a ${entry.returner_type}: returner_id`
+		});
+	}
+
 	const ids = new Set<string>();
 	let sum = '0';
 	for (const ref of entry.loan_refs) {
@@ -68,7 +97,7 @@ function validateBulkReturnEntry(
 		ids.add(ref.distribution_log_id);
 		sum = addQty(sum, ref.qty);
 	}
-	// TODO(#658 Q5): equality vs <= — only the logically necessary <= is enforced.
+	// Loan refs may cover only part of the drop-off (a returner with no outstanding loan has none).
 	if (!qtyLte(sum, entry.qty)) {
 		ctx.addIssue({
 			code: 'custom',
@@ -104,7 +133,9 @@ export const bulkReturnEntryInputSchema = z.object({
 	pool_id: bulkReturnPoolIdSchema,
 	item_id: z.string().min(1),
 	qty: positiveWholeQtyCoerceSchema,
-	returner_id: bulkReturnEntryFields.returner_id,
+	returner_type: bulkReturnEntryReturnerTypeSchema,
+	// Optional at the input boundary: the factory writes null for `unspecified`.
+	returner_id: bulkReturnEntryFields.returner_id.optional(),
 	loan_refs: z.array(bulkReturnEntryLoanRefSchema).default([]),
 	notes: bulkReturnEntryFields.notes
 });
@@ -121,7 +152,11 @@ export function createBulkReturnEntry(
 	operationUlid: string
 ): BulkReturnEntry {
 	const parsed = bulkReturnEntryInputSchema.parse(input);
+	const body = {
+		...parsed,
+		returner_id: parsed.returner_id ?? (parsed.returner_type === 'unspecified' ? null : undefined)
+	};
 	return bulkReturnEntryDocSchema.parse(
-		makeDoc('bulk_return_entry', BULK_RETURN_ENTRY_SCHEMA_V, parsed, ctx, operationUlid)
+		makeDoc('bulk_return_entry', BULK_RETURN_ENTRY_SCHEMA_V, body, ctx, operationUlid)
 	) as BulkReturnEntry;
 }

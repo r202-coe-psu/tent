@@ -7,6 +7,7 @@ import {
 	ULID_PATTERN
 } from './shared';
 import { bulkReturnEntryIdSchema, type BulkReturnEntry } from './bulk-return-entry';
+import type { BulkReturnEntryVoid } from './bulk-return-entry-void';
 
 /**
  * #658 — `bulk_return_entry_move`: an append-only whole-entry move between pools (D3: no partial
@@ -14,7 +15,8 @@ import { bulkReturnEntryIdSchema, type BulkReturnEntry } from './bulk-return-ent
  * fixed-width 1-based seq, so `_id` order is seq order and two concurrent "move #n" attempts
  * collide (409) instead of double-counting. Mover/time are the envelope's `created_by` /
  * `created_at`. validate_doc_update cannot check `from_pool_id` against the current pool or that
- * pools are OPEN — that is the domain fold (`resolveEntryPool`, `canAppendToPool`).
+ * pools are OPEN, nor that the entry is not voided — that is the domain fold (`resolveEntryPool`,
+ * `canAppendToPool`, `assertEntryCanBeMoved`).
  */
 
 export const BULK_RETURN_ENTRY_MOVE_SCHEMA_V = 1;
@@ -113,6 +115,23 @@ export function createBulkReturnEntryMove(
 			deriveEntryMoveId(entry._id, seq)
 		)
 	) as BulkReturnEntryMove;
+}
+
+/** A voided entry cannot be moved (domain-only: validate_doc_update cannot see the void doc). */
+export function canMoveEntry(
+	entryId: string,
+	voids: readonly Pick<BulkReturnEntryVoid, 'entry_id'>[]
+): boolean {
+	return !voids.some((v) => v.entry_id === entryId);
+}
+
+export function assertEntryCanBeMoved(
+	entryId: string,
+	voids: readonly Pick<BulkReturnEntryVoid, 'entry_id'>[]
+): void {
+	if (!canMoveEntry(entryId, voids)) {
+		throw new Error(`Cannot move ${entryId}: the entry has been voided`);
+	}
 }
 
 /**

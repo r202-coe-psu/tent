@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import type { AuthorContext } from '$lib/db/model';
 import { createBulkReturnEntry } from './bulk-return-entry';
 import {
+	assertEntryCanBeMoved,
 	bulkReturnEntryMoveDocSchema,
+	canMoveEntry,
 	createBulkReturnEntryMove,
 	deriveEntryMoveId,
 	resolveEntryPool
@@ -14,7 +16,11 @@ const P1 = 'bulk_return_pool:01J00000000000000000000011';
 const P2 = 'bulk_return_pool:01J00000000000000000000012';
 const P3 = 'bulk_return_pool:01J00000000000000000000013';
 
-const entry = createBulkReturnEntry({ pool_id: P1, item_id: 'item_master:cot', qty: '5' }, ctx, OP);
+const entry = createBulkReturnEntry(
+	{ pool_id: P1, item_id: 'item_master:cot', qty: '5', returner_type: 'unspecified' },
+	ctx,
+	OP
+);
 const move = (seq: number, from: string, to: string) =>
 	createBulkReturnEntryMove({ entry, seq, from_pool_id: from, to_pool_id: to }, ctx);
 
@@ -76,6 +82,23 @@ describe('bulkReturnEntryMoveDocSchema', () => {
 	});
 });
 
+describe('canMoveEntry', () => {
+	it('is true for an entry with no void and false once it has been voided', () => {
+		expect(canMoveEntry(entry._id, [])).toBe(true);
+		expect(
+			canMoveEntry(entry._id, [{ entry_id: 'bulk_return_entry:01J00000000000000000000099' }])
+		).toBe(true);
+		expect(canMoveEntry(entry._id, [{ entry_id: entry._id }])).toBe(false);
+	});
+});
+
+describe('assertEntryCanBeMoved', () => {
+	it('throws for a voided entry and passes otherwise', () => {
+		expect(() => assertEntryCanBeMoved(entry._id, [])).not.toThrow();
+		expect(() => assertEntryCanBeMoved(entry._id, [{ entry_id: entry._id }])).toThrow(/voided/);
+	});
+});
+
 describe('resolveEntryPool', () => {
 	it('returns the original pool when there are no moves', () => {
 		expect(resolveEntryPool(entry, [])).toBe(P1);
@@ -111,7 +134,7 @@ describe('resolveEntryPool', () => {
 
 	it('throws when a move belongs to another entry', () => {
 		const other = createBulkReturnEntry(
-			{ pool_id: P1, item_id: 'item_master:cot', qty: '5' },
+			{ pool_id: P1, item_id: 'item_master:cot', qty: '5', returner_type: 'unspecified' },
 			ctx,
 			'01J00000000000000000000002'
 		);

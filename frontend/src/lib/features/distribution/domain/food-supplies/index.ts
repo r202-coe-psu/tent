@@ -32,9 +32,13 @@ export {
 	loanClearReasonSchema,
 	distributionLogInputSchema,
 	distributionLogDocSchema,
+	DISTRIBUTION_LOG_SCHEMA_V,
 	createDistributionLog,
 	assertDistributionLogIssuanceImmutable,
 	assertDistributionLogCanBeVoided,
+	applyBulkEntryToLog,
+	revertBulkEntryFromLog,
+	type BulkEntryRef,
 	isDuplicateMealDistributionLog,
 	calculateDistributedQtyForTicketItem,
 	calculateInHandQtyForTicketItem,
@@ -62,28 +66,41 @@ export {
 	bulkReturnPoolLockOpSchema,
 	bulkReturnPoolLockSchema,
 	bulkReturnPoolItemSummaryRowSchema,
+	bulkReturnPoolDiscrepancyReasonSchema,
+	bulkReturnPoolReceivedItemSchema,
 	bulkReturnPoolV3InputSchema,
 	bulkReturnPoolV3DocSchema,
 	createBulkReturnPoolV3,
 	canAppendToPool,
+	normalizePoolName,
+	isPoolNameTakenAmongOpen,
 	assertPoolTransition,
+	submitBulkReturnPoolV3,
+	cancelBulkReturnPoolV3,
+	receiveBulkReturnPoolV3,
 	type BulkReturnPoolV3Status,
 	type BulkReturnPoolLock,
 	type BulkReturnPoolItemSummaryRow,
+	type BulkReturnPoolDiscrepancyReason,
+	type BulkReturnPoolReceivedItem,
 	type BulkReturnPoolV3Input,
-	type BulkReturnPoolV3
+	type BulkReturnPoolV3,
+	type SubmitBulkReturnPoolV3Input,
+	type ReceiveBulkReturnPoolV3Input
 } from './bulk-return-pool-v3';
 
 export {
 	BULK_RETURN_ENTRY_SCHEMA_V,
 	bulkReturnEntryIdSchema,
 	bulkReturnEntryLoanRefSchema,
+	bulkReturnEntryReturnerTypeSchema,
 	bulkReturnEntryReturnerIdSchema,
 	bulkReturnEntryInputSchema,
 	bulkReturnEntryDocSchema,
 	createBulkReturnEntry,
 	isBulkReturnEligibleItem,
 	type BulkReturnEntryLoanRef,
+	type BulkReturnEntryReturnerType,
 	type BulkReturnEntryInput,
 	type BulkReturnEntry
 } from './bulk-return-entry';
@@ -98,14 +115,31 @@ export {
 	deriveEntryMoveId,
 	createBulkReturnEntryMove,
 	resolveEntryPool,
+	canMoveEntry,
+	assertEntryCanBeMoved,
 	type BulkReturnEntryMoveInput,
 	type BulkReturnEntryMove
 } from './bulk-return-entry-move';
 
 export {
+	BULK_RETURN_ENTRY_VOID_SCHEMA_V,
+	bulkReturnEntryVoidIdSchema,
+	bulkReturnEntryVoidInputSchema,
+	bulkReturnEntryVoidDocSchema,
+	deriveEntryVoidId,
+	createBulkReturnEntryVoid,
+	canVoidEntry,
+	type BulkReturnEntryVoidInput,
+	type BulkReturnEntryVoid
+} from './bulk-return-entry-void';
+
+export {
 	resolveBulkReturnEntries,
 	summarizePoolItems,
 	isPoolEmpty,
+	poolSnapshotEntryIds,
+	isLateEntry,
+	findLateEntries,
 	type ResolvedBulkReturnEntry
 } from './bulk-return-pool-summary';
 
