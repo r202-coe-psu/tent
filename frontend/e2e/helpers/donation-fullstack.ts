@@ -560,15 +560,26 @@ export async function expectReadyForDropoff(shelterCode: string, bookingRef: str
 /**
  * Reject the open booking through the reject dialog (CR-172): pick the preset whose
  * label matches `reason`, add `note`, confirm. The confirm stays disabled until the
- * reason is complete, which every caller relies on.
+ * reason is complete, which every caller relies on. `noteRequired` ("อื่นๆ") also checks
+ * that the preset alone is not enough (AC-4) and the note is marked required.
  */
-export async function rejectInDialog(page: Page, reason: RegExp, note?: string) {
+export async function rejectInDialog(
+	page: Page,
+	reason: RegExp,
+	note?: string,
+	{ noteRequired = false }: { noteRequired?: boolean } = {}
+) {
 	await page.getByRole('button', { name: 'ปฏิเสธคำขอ' }).click();
 	const dialog = page.getByRole('dialog', { name: 'ปฏิเสธใบบริจาค' });
 	const confirm = dialog.getByRole('button', { name: 'ยืนยันปฏิเสธ' });
 	await expect(confirm).toBeDisabled();
 	await dialog.getByRole('radio', { name: reason }).click();
-	if (note) await dialog.getByRole('textbox', { name: /รายละเอียดเพิ่มเติม/ }).fill(note);
+	const noteBox = dialog.getByRole('textbox', { name: /รายละเอียดเพิ่มเติม/ });
+	if (noteRequired) {
+		await expect(noteBox).toHaveAttribute('aria-required', 'true');
+		await expect(confirm).toBeDisabled();
+	}
+	if (note) await noteBox.fill(note);
 	await confirm.click();
 	await expect(dialog).toBeHidden();
 }

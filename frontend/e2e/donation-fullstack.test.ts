@@ -242,7 +242,7 @@ test.describe('Donation full-stack: donor and staff', { tag: ['@critical', '@don
 			await openBackOffice(page, ws);
 			await openPendingRow(page, bookingRef);
 			// "อื่นๆ" reads as the detail alone — the exact text the donor must see (CR-172 AC-1).
-			await rejectInDialog(page, /^อื่นๆ$/, `คลังเต็ม (e2e ${RUN_ID})`);
+			await rejectInDialog(page, /^อื่นๆ$/, `คลังเต็ม (e2e ${RUN_ID})`, { noteRequired: true });
 			await expect(page.getByText(`ปฏิเสธคำขอ ${bookingRef} เรียบร้อยแล้ว`)).toBeVisible();
 			await expect(page.getByRole('row').filter({ hasText: bookingRef })).toHaveCount(0);
 
@@ -443,6 +443,122 @@ test.describe('Donation full-stack: donor and staff', { tag: ['@critical', '@don
 		await expect(page.getByText('ไม่รับ', { exact: true })).toBeVisible();
 		await expect(page.getByText('หมดอายุ', { exact: true })).toBeVisible();
 		await expect(page.getByText(/รับไม่ครบ/)).toHaveCount(0);
+	});
+
+	test('mixed booking: review waits for a reason on every refusal, and a later donor edit keeps it (CR-172 AC-4, CR-174 FR-18a, FR-24)', async ({
+		page,
+		request
+	}) => {
+		const typed = `ผ้าปูที่นอน ${RUN_ID}`;
+		const note = `ไม่ใช่ของที่ศูนย์ต้องการ (e2e ${RUN_ID})`;
+		const { bookingRef, trackingToken } = await bookMixed(
+			request,
+			typed,
+			`E2E ใบผสมแก้ภายหลัง ${RUN_ID}`,
+			'0823456793'
+		);
+
+		await openBackOffice(page, ws);
+		await openPendingRow(page, bookingRef);
+		const save = page.getByRole('button', { name: 'บันทึกผลการประเมิน' });
+		const hint = page.getByText('ตัดสินรายการที่รอประเมินให้ครบ และใส่เหตุผลของรายการที่ไม่รับ');
+		// Undecided, refused with no reason, "อื่นๆ" with no detail: none of them saves.
+		await expect(save).toBeDisabled();
+		await expect(hint).toBeVisible();
+		await page.getByRole('button', { name: /^ไม่รับรายการนี้/ }).click();
+		await expect(save).toBeDisabled();
+		await page.getByRole('radio', { name: /^อื่นๆ$/ }).click();
+		const noteBox = page.getByRole('textbox', { name: /รายละเอียดเพิ่มเติม/ });
+		await expect(noteBox).toHaveAttribute('aria-required', 'true');
+		await expect(save).toBeDisabled();
+		await noteBox.fill(note);
+		await expect(hint).toBeHidden();
+		await save.click();
+		await expectReadyForDropoff(shelter.code, bookingRef);
+
+		// The donor raises the campaign line only. The edit form sends back no category or
+		// condition; the refused line must still match itself and keep the refusal, and the
+		// booking its QR (full-branch review B1).
+		await clearSession(page);
+		await page.goto(`/donations/track/${trackingToken}`);
+		await page.getByRole('button', { name: 'แก้ไขรายการที่จะบริจาค' }).click();
+		const dialog = page.getByRole('dialog', { name: 'แก้ไขรายการที่จะบริจาค' });
+		await expect(dialog.getByText(/^ใบนี้ได้ QR แล้ว/)).toBeVisible();
+		await dialog.getByRole('spinbutton', { name: 'จำนวน' }).first().fill('2');
+		const saved = page.waitForResponse((r) =>
+			r.url().includes(`/api/public/v1/donations/${trackingToken}/items`)
+		);
+		await dialog.getByRole('button', { name: 'บันทึกการแก้ไข' }).click();
+		const res = await saved;
+		expect(res.ok(), `edit items failed: ${await res.text()}`).toBe(true);
+		await expect(dialog).toBeHidden();
+
+		const edited = await findDonation(shelter.code, bookingRef);
+		const items = edited.items as Record<string, unknown>[];
+		expect(edited.status).toBe('verifying');
+		expect(items.map((i) => Number(i.qty))).toEqual([2, 2]);
+		expect(items.map((i) => i.review_status)).toEqual(['approved', 'rejected']);
+		expect(items[1]).toMatchObject({ category: 'other', condition: 'new', review_reason: note });
+		await expect(page.getByText('รอประเมิน', { exact: true })).toHaveCount(0);
+	});
+
+	test('donor cancels a booking still under review → no line reads as awaiting review', async ({
+		page,
+		request
+	}) => {
+		const typed = `ตะเกียง ${RUN_ID}`;
+		const { bookingRef, trackingToken } = await bookMixed(
+			request,
+			typed,
+			`E2E ยกเลิกระหว่างประเมิน ${RUN_ID}`,
+			'0823456794'
+		);
+
+		await page.goto(`/donations/track/${trackingToken}`);
+		const pendingBadge = page.getByText('รอประเมิน', { exact: true });
+		await reloadUntilVisible(page, pendingBadge);
+		await page.getByRole('button', { name: 'ยกเลิกการจองนี้' }).click();
+		await page
+			.getByRole('alertdialog', { name: 'ยกเลิกการจองบริจาคนี้?' })
+			.getByRole('button', { name: 'ยืนยันยกเลิกการจอง' })
+			.click();
+		await expect
+			.poll(async () => (await findDonation(shelter.code, bookingRef))?.status)
+			.toBe('cancelled');
+
+		// The line keeps `review_status: pending` on file; the page must not show it as live.
+		await page.reload();
+		await expect(page.getByText(typed)).toBeVisible();
+		await expect(pendingBadge).toHaveCount(0);
+	});
+
+	test('refusing every line of a typed-only booking turns the save red and rejects it (CR-174 FR-6)', async ({
+		page
+	}) => {
+		const { bookingRef, trackingToken } = await bookAsDonor(page, {
+			shelter,
+			unsolicited: { itemName: `เตารีดเก่า ${RUN_ID}`, unitLabel: 'กล่อง' },
+			ledger,
+			donorName: `E2E ไม่รับทุกรายการ ${RUN_ID}`,
+			phone: '0823456795'
+		});
+
+		await openBackOffice(page, ws);
+		await openPendingRow(page, bookingRef);
+		await page.getByRole('button', { name: /^ไม่รับรายการนี้/ }).click();
+		await page.getByRole('radio', { name: /ชำรุดเสียหาย/ }).click();
+		const rejectAll = page.getByRole('button', { name: 'ปฏิเสธทั้งใบ' });
+		await expect(rejectAll).toBeEnabled();
+		await expect(rejectAll).toHaveClass(/bg-red-600/);
+		await rejectAll.click();
+		await expect
+			.poll(async () => (await findDonation(shelter.code, bookingRef))?.status)
+			.toBe('rejected');
+
+		await clearSession(page);
+		await page.goto(`/donations/track/${trackingToken}`);
+		await expect(page.getByTestId('donation-reject-reason')).toContainText('ชำรุดเสียหาย');
+		await expect(page.getByText('รอประเมิน', { exact: true })).toHaveCount(0);
 	});
 
 	test('typed-in item in another unit maps to a stock item and is received in its own unit (#623, #636, #638)', async ({
