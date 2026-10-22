@@ -26,14 +26,20 @@ export function hasLineReview(items: readonly DonationItem[] | undefined): boole
 
 /**
  * FR-4..FR-6 — any line still `pending` keeps the booking in review; otherwise one
- * `approved` line is enough for the QR; nothing approved means it was refused.
+ * `approved` line is enough for the QR; only a booking every line of which was refused is
+ * rejected. Mirrors `booking_status` in `backend/apiapp/modules/donations/review.py`.
  */
 export function donationStatusFromLines(
 	items: readonly DonationItem[]
 ): 'pending_review' | 'verifying' | 'rejected' {
 	if (items.some((item) => item.review_status === 'pending')) return 'pending_review';
 	if (items.some((item) => item.review_status === 'approved')) return 'verifying';
-	return 'rejected';
+	if (items.length > 0 && items.every((item) => item.review_status === 'rejected')) {
+		return 'rejected';
+	}
+	// No lines, or a line without a review status (pre-schema_v 7): nothing here can be
+	// judged, so the booking waits for a person rather than being refused by accident.
+	return 'pending_review';
 }
 
 /**

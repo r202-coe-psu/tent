@@ -26,6 +26,18 @@ describe('donationStatusFromLines (CR-174 FR-4..FR-6)', () => {
 	it('refuses the booking when every line was refused', () => {
 		expect(donationStatusFromLines([{ ...typedLine, review_status: 'rejected' }])).toBe('rejected');
 	});
+
+	// S1 — same answer as `booking_status` in review.py for what FR-4..FR-6 do not cover.
+	it('keeps a booking with no lines in review', () => {
+		expect(donationStatusFromLines([])).toBe('pending_review');
+	});
+
+	it('keeps a booking with an unreviewed older line in review, not refused', () => {
+		const older = line({ free_text: 'ข้าว' });
+		expect(donationStatusFromLines([{ ...typedLine, review_status: 'rejected' }, older])).toBe(
+			'pending_review'
+		);
+	});
 });
 
 describe('hasLineReview (AC-8)', () => {
