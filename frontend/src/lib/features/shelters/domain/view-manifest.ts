@@ -35,7 +35,8 @@ export type ShelterViewManifest = {
  */
 export const SHELTER_VIEW_MANIFEST: ShelterViewManifest = {
 	// v3 (CR-170): demographics_by_age / demographics_by_country also count room_confirmed.
-	version: 3,
+	// v4 (#658): bulk_return_pool_item_totals.
+	version: 4,
 	designName: 'app',
 	views: SHELTER_DASHBOARD_VIEWS.views
 };

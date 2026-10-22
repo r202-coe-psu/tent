@@ -131,4 +131,48 @@ describe('SHELTER_DASHBOARD_VIEWS Map Functions', () => {
 			expect(emitted).toEqual([{ key: ['2026-07-01', 'checkout'], value: 1 }]);
 		});
 	});
+
+	describe('bulk_return_pool_item_totals', () => {
+		const view = SHELTER_DASHBOARD_VIEWS.views.bulk_return_pool_item_totals;
+		const mapFn = createMapFn(view.map);
+		const P1 = 'bulk_return_pool:01J00000000000000000000001';
+		const P2 = 'bulk_return_pool:01J00000000000000000000002';
+		const E1 = 'bulk_return_entry:01J00000000000000000000003';
+
+		it('uses the built-in _sum reduce', () => {
+			expect(view.reduce).toBe('_sum');
+		});
+
+		it('ignores other doc types', () => {
+			mapFn({ type: 'bulk_return_pool', _id: P1 }, mockEmit);
+			expect(emitted).toHaveLength(0);
+		});
+
+		it('emits [qty, 1] keyed by [pool, item, entry] for an entry', () => {
+			mapFn(
+				{ type: 'bulk_return_entry', _id: E1, pool_id: P1, item_id: 'item:cot', qty: '3' },
+				mockEmit
+			);
+			expect(emitted).toEqual([{ key: [P1, 'item:cot', E1], value: [3, 1] }]);
+		});
+
+		it('emits a negative row for the source pool and a positive row for the target on a move', () => {
+			mapFn(
+				{
+					type: 'bulk_return_entry_move',
+					_id: `bulk_return_entry_move:01J00000000000000000000003:0001`,
+					entry_id: E1,
+					from_pool_id: P1,
+					to_pool_id: P2,
+					item_id: 'item:cot',
+					qty: '3'
+				},
+				mockEmit
+			);
+			expect(emitted).toEqual([
+				{ key: [P1, 'item:cot', E1], value: [-3, -1] },
+				{ key: [P2, 'item:cot', E1], value: [3, 1] }
+			]);
+		});
+	});
 });
