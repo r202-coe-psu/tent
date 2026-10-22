@@ -1,7 +1,6 @@
 /** Public donation ticket view — capability-URL lookup via tracking token (DN-6). */
 
 import { formatThaiDateTime } from '$lib/utils/date';
-import { qtyGt, subQty } from '$lib/utils/qty';
 
 export type DonationTrackStatus =
 	| 'declared'
@@ -248,52 +247,5 @@ export function rejectedLineReasons(view: DonationTrackView): (string | null)[] 
 		const line = counted[index];
 		if (line?.rejected) return line.reject_reason?.trim() ?? '';
 		return null;
-	});
-}
-
-export type DonorShortfall = {
-	item_id?: string;
-	item_name?: string;
-	declared?: string;
-	counted?: string;
-	short?: string;
-};
-
-/**
- * What the shelter received less of than declared, as the donor reads it.
- *
- * The shelter works this out when it receives the goods — it knows which stock item each
- * typed-in line was matched to — so `received_summary.shortfalls`, when present, is the
- * answer, an empty list included. Only a summary written before that field existed is
- * compared here, by name; a line turned away is "ไม่รับ", never "ขาด" (CR-172 FR-13).
- */
-export function donorShortfalls(view: DonationTrackView): DonorShortfall[] {
-	const summary = view.received_summary;
-	if (!summary) return [];
-	if (Array.isArray(summary.shortfalls)) return summary.shortfalls;
-	if (!summary.items?.length) return [];
-
-	const countedByKey: Record<string, string> = {};
-	for (const line of summary.items) {
-		if (line.rejected) continue;
-		const key = line.item_id || line.free_text || line.item_name || '';
-		if (key) countedByKey[key] = String(line.qty ?? '0');
-	}
-	const refused = rejectedLineReasons(view);
-	return view.items.flatMap((item, index) => {
-		if (refused[index] !== null) return [];
-		const declared = String(item.qty ?? '0');
-		const counted = countedByKey[item.item_id || item.item_name || ''] ?? '0';
-		return qtyGt(declared, counted)
-			? [
-					{
-						item_id: item.item_id ?? undefined,
-						item_name: item.item_name,
-						declared,
-						counted,
-						short: subQty(declared, counted)
-					}
-				]
-			: [];
 	});
 }

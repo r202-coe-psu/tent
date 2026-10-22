@@ -803,7 +803,8 @@ Error : { "error": { "code": "LOCKED" } }          // ถ้า status = receive
                     เลข tracking ขนส่ง (DN-6); ถ้า <code>received</code> แล้ว → read-only
                     · <code>rejected</code> → กล่อง "เหตุผลจากศูนย์พักพิง" ใต้ป้ายสถานะ;
                     <code>received</code> ที่มีบรรทัดไม่รับ → ป้าย "ไม่รับ" + เหตุผลรายบรรทัด
-                    แยกจาก "รับไม่ครบ" (CR-172 FR-15/FR-16)
+                    (CR-172 FR-15/FR-16) · ไม่แสดงยอดขาด/"รับไม่ครบ" ให้ผู้บริจาค
+                    (decision sync 2026-10-22 — ยกเลิก CR-156 FR-I3)
                     · ยกเลิก / แก้รายการ / ใส่เลขพัสดุได้เมื่อสถานะเป็น <code>declared</code>,
                     <code>pending_review</code> หรือ <code>verifying</code> (CR-174 FR-20..FR-23); ใบ
                     <code>verifying</code> เตือนก่อนบันทึกว่าถ้ามีรายการที่ต้องประเมิน QR จะใช้ไม่ได้จนกว่า

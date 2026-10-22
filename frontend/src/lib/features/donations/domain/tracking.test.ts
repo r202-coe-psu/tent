@@ -5,7 +5,6 @@ import {
 	donationStatusLabel,
 	formatTrackSchedule,
 	isTerminalDonationStatus,
-	donorShortfalls,
 	rejectedLineReasons,
 	toDonationTrackView
 } from './tracking';
@@ -184,49 +183,5 @@ describe('reject reasons on the ticket (CR-172)', () => {
 		});
 		expect(view.items.map((i) => i.review_status)).toEqual(['approved', 'rejected', 'rejected']);
 		expect(rejectedLineReasons(view)).toEqual([null, 'หมดอายุ', '']);
-	});
-});
-
-describe('donorShortfalls', () => {
-	const received = (
-		summary: Record<string, unknown>,
-		items = [{ item_name: 'ผ้าห่มลายดอก', qty: '2', unit: 'ผืน' }]
-	) =>
-		toDonationTrackView({
-			status: 'received',
-			shelter_code: 'SH001',
-			items,
-			received_summary: summary
-		});
-
-	// A typed-in line staff matched to a stock item: the summary keys it by that item, the
-	// declaration by the donor's words. The shelter's own answer says nothing was short.
-	it('trusts the shelter when it recorded no shortfall', () => {
-		expect(
-			donorShortfalls(
-				received({ shortfalls: [], items: [{ item_id: 'item:blanket', qty: '2', unit: 'ผืน' }] })
-			)
-		).toEqual([]);
-	});
-
-	it('shows what the shelter recorded as short', () => {
-		const short = { item_name: 'ผ้าห่มลายดอก', declared: '2', counted: '1', short: '1' };
-		expect(donorShortfalls(received({ shortfalls: [short] }))).toEqual([short]);
-	});
-
-	it('still compares a summary written before shortfalls existed', () => {
-		expect(
-			donorShortfalls(received({ items: [{ free_text: 'ผ้าห่มลายดอก', qty: '1', unit: 'ผืน' }] }))
-		).toEqual([
-			{ item_id: undefined, item_name: 'ผ้าห่มลายดอก', declared: '2', counted: '1', short: '1' }
-		]);
-	});
-
-	it('never counts a line the shelter turned away as short (CR-172 FR-13)', () => {
-		expect(
-			donorShortfalls(
-				received({ items: [{ free_text: 'ผ้าห่มลายดอก', qty: '0', rejected: true }] })
-			)
-		).toEqual([]);
 	});
 });

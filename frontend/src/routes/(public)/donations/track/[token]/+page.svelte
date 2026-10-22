@@ -28,7 +28,6 @@
 		canEditCourierTracking,
 		canCancelDonation,
 		rejectedLineReasons,
-		donorShortfalls,
 		CancelDonationDialog,
 		EditDonationItemsDialog
 	} from '$lib/features/donations';
@@ -80,19 +79,6 @@
 
 	/** Per declared line: the reason staff turned it away, or null (CR-172 FR-16). */
 	const lineRejections = $derived(donation ? rejectedLineReasons(donation) : []);
-
-	const shortfalls = $derived(isReceived && donation ? donorShortfalls(donation) : []);
-
-	const hasShortfall = $derived(shortfalls.length > 0);
-
-	const shortfallByItem = $derived.by(() => {
-		const map: Record<string, { declared?: string; counted?: string; short?: string }> = {};
-		for (const s of shortfalls) {
-			if (s.item_id) map[s.item_id] = s;
-			if (s.item_name) map[s.item_name] = s;
-		}
-		return map;
-	});
 
 	let qrCodeUrl = $state('');
 
@@ -232,26 +218,6 @@
 							{t.receivedBody}
 						</p>
 					</div>
-
-					{#if hasShortfall}
-						<div
-							class="flex items-start gap-3 rounded-2xl border border-amber-500/40 bg-amber-50/80 p-4 text-xs text-amber-900 dark:border-amber-500/30 dark:bg-amber-950/30 dark:text-amber-200"
-						>
-							<AlertCircle class="mt-0.5 h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" />
-							<div>
-								<h5 class="font-bold">
-									{langState.current === 'en'
-										? `Received with shortfall (${shortfalls.length} item${shortfalls.length > 1 ? 's' : ''})`
-										: `ศูนย์ตรวจรับสิ่งของไม่ครบ (${shortfalls.length} รายการ)`}
-								</h5>
-								<p class="mt-0.5 text-2xs text-amber-800/90 dark:text-amber-300/90">
-									{langState.current === 'en'
-										? 'The unreceived quantities have been deducted and will not remain as reserved quota in the system.'
-										: 'ยอดส่วนต่างที่ยังไม่ได้รับถูกยกเลิกแล้ว ไม่มียอดค้างในระบบ และไม่ผูกกับโควตาการบริจาค'}
-								</p>
-							</div>
-						</div>
-					{/if}
 				{/if}
 
 				{#if status === 'rejected' && donation.reject_reason}
@@ -479,11 +445,6 @@
 									<tbody class="divide-y divide-border/60 font-semibold text-foreground">
 										{#each donation.items as item, i (item.item_name + String(i))}
 											{@const rejectedReason = lineRejections[i]}
-											{@const sf =
-												rejectedReason !== null
-													? undefined
-													: (item.item_id && shortfallByItem[item.item_id]) ||
-														shortfallByItem[item.item_name]}
 											<tr>
 												<td class="px-4 py-3">
 													<div class="flex flex-wrap items-center gap-2">
@@ -506,14 +467,6 @@
 															>
 																{t.lineReviewApproved}
 															</span>
-														{:else if sf}
-															<span
-																class="inline-flex items-center rounded-md bg-amber-100 px-2 py-0.5 text-2xs font-bold text-amber-800 dark:bg-amber-950/50 dark:text-amber-300"
-															>
-																{langState.current === 'en'
-																	? `Shortfall: -${sf.short}`
-																	: `รับไม่ครบ (ขาด ${sf.short})`}
-															</span>
 														{/if}
 													</div>
 													{#if rejectedReason}
@@ -525,26 +478,11 @@
 													{/if}
 												</td>
 												<td class="px-4 py-3 text-right">
-													{#if sf}
-														<div class="flex flex-col items-end">
-															<span class="text-xs font-bold text-foreground">
-																{Number(sf.counted).toLocaleString(
-																	langState.current === 'en' ? 'en-US' : 'th-TH'
-																)}
-															</span>
-															<span class="text-2xs text-muted-foreground line-through">
-																{Number(item.qty).toLocaleString(
-																	langState.current === 'en' ? 'en-US' : 'th-TH'
-																)}
-															</span>
-														</div>
-													{:else}
-														{item.qty != null
-															? Number(item.qty).toLocaleString(
-																	langState.current === 'en' ? 'en-US' : 'th-TH'
-																)
-															: t.noData}
-													{/if}
+													{item.qty != null
+														? Number(item.qty).toLocaleString(
+																langState.current === 'en' ? 'en-US' : 'th-TH'
+															)
+														: t.noData}
 												</td>
 												<td class="px-4 py-3 text-muted-foreground"
 													>{item.unit
