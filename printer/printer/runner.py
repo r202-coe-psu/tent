@@ -110,6 +110,23 @@ def _report(
             sleep(backoff.next())
 
 
+_QUEUE_HINTS = {
+    "missing": "check PRINTER_NAME / lpstat -p",
+    "disabled": "run cupsenable {queue} (needs lpadmin) or check paper/power",
+}
+
+
+def _log_queue_change(queue: str, state: str, previous: str | None) -> None:
+    """One log line per state change, so a stuck queue is visible without flooding the journal."""
+    if state == previous:
+        return
+    if state != "ready":
+        hint = _QUEUE_HINTS.get(state, "check CUPS").format(queue=queue)
+        log.warning("printer queue %s is %s - %s", queue, state, hint)
+    elif previous is not None:
+        log.info("printer queue %s is ready", queue)
+
+
 def run(
     config: Config,
     api: BffClient,
@@ -126,10 +143,13 @@ def run(
         _print_boot_slip(cups, hello, agent_version, local_ips)
     backoff = _Backoff(config.error_backoff_max_sec)
     iterations = 0
+    last_state: str | None = None
     while max_iterations is None or iterations < max_iterations:
         iterations += 1
         try:
             state = cups.ensure_enabled()
+            _log_queue_change(cups.printer_name, state, last_state)
+            last_state = state
             claimed = api.next_job(queue_state=state)
             claimed_at = monotonic()
             backoff.reset()

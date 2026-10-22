@@ -383,3 +383,15 @@ def test_failing_boot_slip_is_logged_and_the_agent_keeps_polling(agent, fake_cup
     assert any(
         r.levelno == logging.WARNING and "boot slip" in r.getMessage() for r in caplog.records
     )
+
+
+def test_queue_not_ready_is_logged_once_per_state_change_with_queue_name(agent, fake_cups, caplog):
+    caplog.set_level(logging.INFO, logger="printer")
+    fake_cups.set("lpstat_p", out="", rc=1)  # queue missing
+
+    agent.run(max_iterations=3)
+
+    queue_logs = [r for r in caplog.records if r.name == "printer" and "queue" in r.getMessage()]
+    assert [(r.levelname, r.getMessage()) for r in queue_logs] == [
+        ("WARNING", "printer queue tent_xprinter is missing - check PRINTER_NAME / lpstat -p"),
+    ]

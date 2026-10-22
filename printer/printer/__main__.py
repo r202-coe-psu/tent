@@ -17,6 +17,7 @@ def main() -> None:
         print(f"printer: invalid configuration: {exc}", file=sys.stderr)
         raise SystemExit(2) from None
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
+    logging.getLogger("httpx").setLevel(logging.WARNING)  # one line per long-poll is noise
     run(
         config,
         BffClient(config),
