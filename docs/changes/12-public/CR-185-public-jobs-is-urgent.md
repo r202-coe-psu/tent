@@ -1,10 +1,10 @@
 ---
-id: draft
+id: CR-185
 title: public_jobs.is_urgent — การ์ดจิตอาสาหน้าแรกนับเฉพาะงานเร่งด่วนจากข้อมูลจริง
-status: proposed
-date: 2026-10-21
+status: approved
+date: 2026-10-21 (approved 2026-10-22)
 requested_by: feedback หน้างาน 2026-10-20 (issue #709 — การ์ดหน้าแรกแสดง "ต้องการอีก 0 คน" เสมอ)
-decided_by: ผู้รับ issue (@mhapong — เลือก "เฉพาะงานเร่งด่วน" และ track ด้วย draft CR, 2026-10-21) · รอ project owner approve CR
+decided_by: ผู้รับ issue (@mhapong — เลือก "เฉพาะงานเร่งด่วน" และ track ด้วย CR, 2026-10-21) · approve CR โดย @mhapong 2026-10-22
 layer: volatile
 affects:
   - docs/data/schema.md §9.2 public_jobs (field ใหม่ `is_urgent`)
@@ -17,7 +17,7 @@ affects:
   - no schema_v bump (CouchDB `job.is_urgent` มีอยู่แล้วใน §2.17)
 ---
 
-# public_jobs.is_urgent — การ์ดจิตอาสาหน้าแรกนับเฉพาะงานเร่งด่วนจากข้อมูลจริง
+# CR-185 — public_jobs.is_urgent — การ์ดจิตอาสาหน้าแรกนับเฉพาะงานเร่งด่วนจากข้อมูลจริง
 
 > **สรุป (TL;DR):**
 >
@@ -83,3 +83,5 @@ affects:
 - 2026-10-20 — #709 เปิด issue (Phase 3) จาก feedback หน้างาน
 - 2026-10-21 — ผู้รับ issue เลือกนับ "เฉพาะงานเร่งด่วน" และให้ track ด้วย draft CR ใน PR; พบว่าต้องเพิ่ม field ใน projection
 - 2026-10-21 — proposed
+- 2026-10-22 — ตอบ review PR #727: หน้าแรกใช้ `staleTime` 60 วินาที + ไม่ refetch ตอนสลับแท็บ; แยก rate limiter ของการอ่าน public ไปเป็น #761
+- 2026-10-22 — approved → CR-185 (implement ใน PR #727)
