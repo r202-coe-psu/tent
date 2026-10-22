@@ -33,6 +33,8 @@ export {
 	invalidateDistributionLogs,
 	invalidateShiftReconciliation,
 	invalidateBulkPools,
+	invalidateBulkPoolsV3,
+	invalidateReturnerOutstandingLoans,
 	invalidateBulkClaims,
 	invalidateInventoryQueries
 } from './query/invalidation';
@@ -47,9 +49,27 @@ export {
 	useBulkReturnPools,
 	useBulkReturnPool,
 	useBulkReturnClaim,
+	useBulkReturnPoolOverview,
+	useReturnerOutstandingLoans,
 	useShiftReconciliation,
 	useReturnOperationState
 } from './query/read-queries';
+
+// Bulk return pool v3 mutations (issue #659)
+export {
+	useOpenBulkReturnPool,
+	useUpdateBulkReturnPoolHeader,
+	useAddBulkReturnEntries,
+	useMoveBulkReturnEntry,
+	useVoidBulkReturnEntry,
+	useCancelBulkReturnPool,
+	type OpenBulkReturnPoolMutationInput,
+	type UpdateBulkReturnPoolHeaderMutationInput,
+	type AddBulkReturnEntriesMutationInput,
+	type MoveBulkReturnEntryMutationInput,
+	type VoidBulkReturnEntryMutationInput,
+	type CancelBulkReturnPoolMutationInput
+} from './query/bulk-pool-v3-mutations';
 
 // Ticket lifecycle mutations (Workflows 1–7)
 export {

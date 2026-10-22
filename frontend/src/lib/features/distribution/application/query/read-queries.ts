@@ -20,6 +20,11 @@ import { calculateShiftReconciliation } from '../food-supplies/reconciliation-wo
 import { resolveDispatchedLotExpiry } from '../food-supplies/lot-expiry';
 import { operationsRepository } from '$lib/features/operations';
 import { getReturnOperationState } from '../food-supplies/return-workflow';
+import {
+	getBulkReturnPoolOverview,
+	listReturnerOutstandingLoans,
+	type BulkReturnPoolOverviewQuery
+} from '../food-supplies/bulk-return-pool-v3-workflow';
 import type {
 	RequisitionTicketListFilter,
 	DistributionLogListFilter,
@@ -146,6 +151,51 @@ export const useBulkReturnPool = (
 		return {
 			queryKey: distributionKeys.bulkPool(shelterCode, id),
 			queryFn: () => bulkReturnPoolRepository(shelterCode).get(id),
+			enabled: isEnabled
+		};
+	});
+
+/** Reads the v3 bulk return pool overview (pools with entries, item totals, late entries). */
+export const useBulkReturnPoolOverview = (
+	options?: MaybeGetter<BulkReturnPoolOverviewQuery | undefined>,
+	shelterCodeGetter?: MaybeGetter<string | undefined>,
+	enabled: MaybeGetter<boolean> = true
+) =>
+	createQuery(() => {
+		const shelterCode = resolveShelterCode(toValue(shelterCodeGetter));
+		const resolvedOptions = toValue(options);
+		const isEnabled = Boolean(toValue(enabled) && shelterCode);
+		return {
+			queryKey: distributionKeys.bulkPoolsV3(shelterCode, resolvedOptions),
+			queryFn: () => {
+				const ctx = resolveAuthenticatedAuthorContext(shelterCode);
+				return getBulkReturnPoolOverview(resolvedOptions ?? {}, ctx);
+			},
+			enabled: isEnabled
+		};
+	});
+
+/** Reads the outstanding returnable loans of an evacuee/volunteer returner (all items, oldest first). */
+export const useReturnerOutstandingLoans = (
+	returnerId: MaybeGetter<string | null | undefined>,
+	shelterCodeGetter?: MaybeGetter<string | undefined>,
+	enabled: MaybeGetter<boolean> = true
+) =>
+	createQuery(() => {
+		const id = toValue(returnerId);
+		const shelterCode = resolveShelterCode(toValue(shelterCodeGetter));
+		const isEnabled = Boolean(
+			toValue(enabled) &&
+			shelterCode &&
+			id &&
+			(id.startsWith('evacuee:') || id.startsWith('volunteer:'))
+		);
+		return {
+			queryKey: distributionKeys.returnerOutstandingLoans(shelterCode, id ?? ''),
+			queryFn: () => {
+				const ctx = resolveAuthenticatedAuthorContext(shelterCode);
+				return listReturnerOutstandingLoans(id!, ctx);
+			},
 			enabled: isEnabled
 		};
 	});

@@ -124,6 +124,19 @@ export {
 	type BulkReturnPool
 } from './domain/food-supplies';
 
+/** Bulk return pool v3 domain types (#659). Workflows, errors and auth helpers come via application/food-supplies. */
+export {
+	type BulkReturnPoolV3,
+	type BulkReturnPoolV3Status,
+	type BulkReturnPoolLock,
+	type BulkReturnEntry,
+	type BulkReturnEntryLoanRef,
+	type BulkReturnEntryReturnerType,
+	type BulkReturnEntryMove,
+	type BulkReturnEntryVoid,
+	type BulkReturnPoolOverviewRow
+} from './domain/food-supplies';
+
 /** Per-lot dispatch validation (#655) — shared with the kitchen ticket dispatch (CR-178). */
 export {
 	validateDispatchLotAllocations,
@@ -230,6 +243,14 @@ export {
 	useBulkReturnPools,
 	useBulkReturnPool,
 	useBulkReturnClaim,
+	useBulkReturnPoolOverview,
+	useReturnerOutstandingLoans,
+	useOpenBulkReturnPool,
+	useUpdateBulkReturnPoolHeader,
+	useAddBulkReturnEntries,
+	useMoveBulkReturnEntry,
+	useVoidBulkReturnEntry,
+	useCancelBulkReturnPool,
 	useShiftReconciliation,
 	useCreateRequisitionTicket,
 	useAllocateTicketItems,
@@ -250,7 +271,13 @@ export {
 	useReceiveWarehouseReturns,
 	useCompleteTicket,
 	startDistributionLiveQuery,
-	type ItemReconciliationSummary
+	type ItemReconciliationSummary,
+	type OpenBulkReturnPoolMutationInput,
+	type UpdateBulkReturnPoolHeaderMutationInput,
+	type AddBulkReturnEntriesMutationInput,
+	type MoveBulkReturnEntryMutationInput,
+	type VoidBulkReturnEntryMutationInput,
+	type CancelBulkReturnPoolMutationInput
 } from './application/queries';
 
 /** Ticket-era Food & Supplies UI components & models (Slice 5.1). */
