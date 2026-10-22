@@ -197,11 +197,7 @@ describe('real backofficeNavbarGroups — visible leaves per role (regression gu
 
 	it('kiosk_staff-only sees the kiosk device and banner management, nothing else (AC-SBO-21, FR-KBR-22)', () => {
 		const roles = ['shelter:SH001', 'SH001:kiosk_staff'];
-		expect(visibleLeafLabels(ctx(roles, 'SH001'))).toEqual([
-			scannerDevices,
-			bannerManagement,
-			printerManagement
-		]);
+		expect(visibleLeafLabels(ctx(roles, 'SH001'))).toEqual([scannerDevices, bannerManagement]);
 		const kioskGroup = backofficeNavbarGroups
 			.flatMap((g) => g.items)
 			.find((n) => n.label === 'จัดการ Kiosk');
@@ -210,7 +206,18 @@ describe('real backofficeNavbarGroups — visible leaves per role (regression gu
 
 	it('kiosk_staff with another capability in the shelter keeps the other menus too', () => {
 		const roles = ['shelter:SH001', 'SH001:kiosk_staff', 'SH001:registration_staff'];
-		expect(visibleLeafLabels(ctx(roles, 'SH001'))).toEqual(withScanners);
+		expect(visibleLeafLabels(ctx(roles, 'SH001'))).toEqual(
+			withScanners.filter((label) => label !== printerManagement)
+		);
+	});
+
+	it('printer management is for system_admin and shelter_manager only, not kiosk_staff (O-3)', () => {
+		const sees = (roles: string[]) =>
+			visibleLeafLabels(ctx(roles, 'SH001')).includes(printerManagement);
+		expect(sees(['system_admin'])).toBe(true);
+		expect(sees(['shelter:SH001', 'SH001:shelter_manager'])).toBe(true);
+		expect(sees(['shelter:SH001', 'SH001:kiosk_staff'])).toBe(false);
+		expect(sees(['shelter:SH001', 'SH001:registration_staff'])).toBe(false);
 	});
 });
 

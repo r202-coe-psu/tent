@@ -39,6 +39,7 @@ import {
 	requireDistributionDesk,
 	requireKioskManagement,
 	requireMedicalScreening,
+	requirePrinterManagement,
 	requireVolunteerBackoffice,
 	LANDING_ROUTE
 } from './auth';
@@ -323,5 +324,25 @@ describe('confineKioskStaffOnly (back-office layout, FR-SBO-29)', () => {
 		expect(() => confineKioskStaffOnly('/back-office/evacuee-management')).not.toThrow();
 		mocks.selectedShelterCode = 'SH001';
 		expect(() => confineKioskStaffOnly('/back-office/evacuee-management')).toThrow();
+	});
+});
+
+describe('requirePrinterManagement (/back-office/printers, O-3)', () => {
+	beforeEach(() => {
+		mocks.user = { roles: [] };
+		mocks.selectedShelterCode = null;
+	});
+
+	it('admits SA and the shelter_manager of the selected shelter', async () => {
+		expect(await passes(requirePrinterManagement, ['system_admin'], null)).toBe(true);
+		expect(await passes(requirePrinterManagement, ['shelter:SH001', 'SH001:shelter_manager'])).toBe(
+			true
+		);
+	});
+
+	it('redirects kiosk_staff and other staff roles', async () => {
+		for (const cap of ['kiosk_staff', 'registration_staff']) {
+			expect(await passes(requirePrinterManagement, ['shelter:SH001', `SH001:${cap}`])).toBe(false);
+		}
 	});
 });

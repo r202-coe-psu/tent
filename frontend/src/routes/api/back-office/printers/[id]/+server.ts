@@ -6,7 +6,7 @@ import {
 	updatePrinter
 } from '$lib/server/printers/printer-admin.server';
 import { printDeviceRepository, printJobStore } from '$lib/server/printers/printer-server';
-import { requireScannerManager } from '$lib/server/scanners/scanner-access';
+import { requirePrinterManager } from '$lib/server/printers/printer-access';
 import {
 	assertPrinterInScope,
 	noContent,
@@ -21,7 +21,7 @@ export const prerender = false;
 /** Delete a printer; its pending/printing jobs become `failed (printer_deleted)` first. */
 export const DELETE: RequestHandler = async ({ request, params }) => {
 	try {
-		const caller = await requireScannerManager(request);
+		const caller = await requirePrinterManager(request);
 		const printerId = printerDocId(params.id);
 		assertPrinterInScope(caller, await printDeviceRepository.getDevice(printerId));
 		await deletePrinter(
@@ -37,7 +37,7 @@ export const DELETE: RequestHandler = async ({ request, params }) => {
 
 export const PATCH: RequestHandler = async ({ request, params }) => {
 	try {
-		const caller = await requireScannerManager(request);
+		const caller = await requirePrinterManager(request);
 		const printerId = printerDocId(params.id);
 
 		const body: unknown = await request.json().catch(() => null);

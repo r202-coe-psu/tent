@@ -129,10 +129,12 @@ describe('PATCH /api/back-office/printers/[id]', () => {
 		expect(mockUpdate).not.toHaveBeenCalled();
 	});
 
-	it('answers 401 for anonymous and 403 for registration staff', async () => {
+	it('answers 401 for anonymous and 403 for registration and kiosk staff (O-3)', async () => {
 		mockSession.mockResolvedValueOnce(SESSIONS.anonymous);
 		expect((await patch('printer-sh001-reg1', { name: 'x' })).status).toBe(401);
 		mockSession.mockResolvedValueOnce(SESSIONS.registrationA);
+		expect((await patch('printer-sh001-reg1', { name: 'x' })).status).toBe(403);
+		mockSession.mockResolvedValueOnce(SESSIONS.kioskA);
 		expect((await patch('printer-sh001-reg1', { name: 'x' })).status).toBe(403);
 		expect(mockUpdate).not.toHaveBeenCalled();
 	});
@@ -193,10 +195,12 @@ describe('DELETE /api/back-office/printers/[id]', () => {
 		expect(mockPutJob).not.toHaveBeenCalled();
 	});
 
-	it('answers 401 for anonymous and 403 for registration staff', async () => {
+	it('answers 401 for anonymous and 403 for registration and kiosk staff (O-3)', async () => {
 		mockSession.mockResolvedValueOnce(SESSIONS.anonymous);
 		expect((await del('printer-sh001-reg1')).status).toBe(401);
 		mockSession.mockResolvedValueOnce(SESSIONS.registrationA);
+		expect((await del('printer-sh001-reg1')).status).toBe(403);
+		mockSession.mockResolvedValueOnce(SESSIONS.kioskA);
 		expect((await del('printer-sh001-reg1')).status).toBe(403);
 		expect(mockDelete).not.toHaveBeenCalled();
 	});

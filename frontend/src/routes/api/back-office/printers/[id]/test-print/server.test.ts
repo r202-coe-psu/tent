@@ -110,10 +110,12 @@ describe('POST /api/back-office/printers/[id]/test-print', () => {
 		expect(mockCreateJob).not.toHaveBeenCalled();
 	});
 
-	it('answers 401 for anonymous and 403 for registration staff', async () => {
+	it('answers 401 for anonymous and 403 for registration and kiosk staff (O-3)', async () => {
 		mockSession.mockResolvedValueOnce(SESSIONS.anonymous);
 		expect((await post('printer-sh001-reg1')).status).toBe(401);
 		mockSession.mockResolvedValueOnce(SESSIONS.registrationA);
+		expect((await post('printer-sh001-reg1')).status).toBe(403);
+		mockSession.mockResolvedValueOnce(SESSIONS.kioskA);
 		expect((await post('printer-sh001-reg1')).status).toBe(403);
 		expect(mockCreateJob).not.toHaveBeenCalled();
 	});

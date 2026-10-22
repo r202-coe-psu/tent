@@ -177,6 +177,17 @@ export function canManageScanners(roles: readonly string[], shelterCode: string)
 }
 
 /**
+ * Capabilities that manage label printers (O-3, plan §4.3): shelter_manager only — unlike
+ * scanners, kiosk_staff may not register printers or rotate their secrets.
+ */
+export const PRINTER_MANAGER_CAPABILITIES = [SHELTER_MANAGER] as const;
+
+/** True when the user may manage printers in `shelterCode` (SA, or its shelter_manager). */
+export function canManagePrinters(roles: readonly string[], shelterCode: string): boolean {
+	return canManageInShelters(roles, [shelterCode], PRINTER_MANAGER_CAPABILITIES);
+}
+
+/**
  * True when `kiosk_staff` is the user's only capability in `shelterCode` (every shelter when
  * null) — such a user sees nothing in back-office but the kiosk pages (FR-SBO-29).
  */

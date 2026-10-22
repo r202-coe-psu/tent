@@ -7,6 +7,7 @@ import {
 	isShelterManager,
 	isSystemAdmin,
 	canAccessIncidents,
+	PRINTER_MANAGER_CAPABILITIES,
 	SCANNER_MANAGER_CAPABILITIES
 } from '$lib/auth/roles';
 import Users from '@lucide/svelte/icons/users';
@@ -184,7 +185,7 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 						label: 'จัดการเครื่องพิมพ์',
 						href: resolve('/back-office/printers'),
 						icon: Printer,
-						visibleTo: (roles) => hasCapabilityAnywhere(roles, SCANNER_MANAGER_CAPABILITIES)
+						visibleTo: (roles) => hasCapabilityAnywhere(roles, PRINTER_MANAGER_CAPABILITIES)
 					}
 				]
 			},
