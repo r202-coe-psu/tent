@@ -173,6 +173,47 @@ def _carry_item_ids(
     return carried
 
 
+#: Line fields only the donate wizard sets. The edit form on the tracking page never sends
+#: them back, so an edit would drop them for good.
+_WIZARD_ONLY_FIELDS = ("category", "condition", "note")
+
+
+def _carry_line_details(
+    items: list[DonationItemInput], held: list[dict[str, Any]]
+) -> list[DonationItemInput]:
+    """Re-attach ``category``/``condition``/``note`` to an edited line that came back without them.
+
+    Same idea as ``_carry_item_ids``, for the fields the edit form has no input for. Losing
+    them is not only lost data: they are part of what makes a line "the same line" for
+    CR-174 FR-18a, so a donor who changed one quantity had every other line read as edited,
+    and staff decisions on those lines — a refusal included — were thrown away.
+
+    Lines are paired by name, each held line once and in order, so two lines of the same
+    name keep their own details. A value the request does carry wins: a client that really
+    changed a condition still has that line re-reviewed.
+    """
+    unclaimed: dict[str, list[dict[str, Any]]] = {}
+    for line in held:
+        name = str(line.get("free_text") or line.get("item_name") or "").strip()
+        if name:
+            unclaimed.setdefault(name, []).append(line)
+
+    carried = []
+    for item in items:
+        candidates = unclaimed.get((item.free_text or "").strip())
+        if not candidates:
+            carried.append(item)
+            continue
+        line = candidates.pop(0)
+        update = {
+            name: line[name]
+            for name in _WIZARD_ONLY_FIELDS
+            if not getattr(item, name) and line.get(name)
+        }
+        carried.append(item.model_copy(update=update) if update else item)
+    return carried
+
+
 def _wanted_by_item(items: list[DonationItemInput]) -> dict[str, Decimal]:
     wanted: dict[str, Decimal] = {}
     for item in items:
@@ -714,6 +755,8 @@ class DonationsUseCase:
         now = datetime.now(UTC)
         before = [dict(item) for item in buffer.items_declared]
         items = _carry_item_ids(items, before)
+        # Before the review below: it pairs lines on these fields too (CR-174 FR-18a).
+        items = _carry_line_details(items, previous_items)
 
         # Refuse before any quota moves: an edit that keeps only lines staff already refused
         # would turn the booking `rejected` with no reason of the shelter's (CR-172 FR-1),

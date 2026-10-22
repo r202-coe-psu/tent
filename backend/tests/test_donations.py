@@ -2004,3 +2004,109 @@ async def test_a_synced_edit_leaves_the_projection_status_to_the_projector(
     assert (await _buffer(token)).status == "pending_review"
     # The BFF writes CouchDB next; the projector carries that to public_donations.
     assert (await _stub(token)).status == "verifying"
+
+
+# --- the edit form sends back only item_id/free_text/qty/unit (full-branch review B1) ---
+
+#: Lines as the donate wizard writes them: category/condition/note included.
+_WIZARD_RICE = {**_RICE, "category": "อาหารแห้ง", "note": "ถุงละ 5 kg"}
+_WIZARD_BLANKET = {**_BLANKET, "category": "เครื่องนอน", "condition": "ของใหม่ 100%"}
+_WIZARD_PILLOW = {"free_text": "หมอน", "qty": "1", "unit": "ใบ", "category": "เครื่องนอน"}
+
+
+def _as_edit_form(line: dict) -> dict:
+    """What ``edit-donation-items-dialog.svelte`` sends for a line (DonationItemEdit)."""
+    return {key: line[key] for key in ("item_id", "free_text", "qty", "unit") if key in line}
+
+
+async def test_an_edit_from_the_form_keeps_staff_decisions_on_untouched_lines(
+    client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    """Changing one quantity must not re-open the lines staff already decided (FR-18a)."""
+    await _seed_counter("100")
+    token = (await _create(client, auth_headers, [_WIZARD_RICE, _WIZARD_BLANKET, _WIZARD_PILLOW]))[
+        "tracking_token"
+    ]
+    couch_items = [
+        {**_WIZARD_RICE, "reserved_qty": "5", "review_status": "approved"},
+        {
+            **_WIZARD_BLANKET,
+            "review_status": "rejected",
+            "review_reason_code": "damaged",
+            "review_reason": "ชำรุดเสียหาย",
+        },
+        {**_WIZARD_PILLOW, "review_status": "approved"},
+    ]
+
+    donation_router._rate_buckets.clear()
+    response = await client.patch(
+        f"/public/v1/donations/{token}/items",
+        headers=auth_headers,
+        json={
+            "items": [
+                _as_edit_form({**_WIZARD_RICE, "qty": "6"}),
+                _as_edit_form(_WIZARD_BLANKET),
+                _as_edit_form(_WIZARD_PILLOW),
+            ],
+            "current_items": couch_items,
+            "current_status": "verifying",
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["status"] == "verifying"
+    assert [i["review_status"] for i in body["items"]] == ["approved", "rejected", "approved"]
+    assert body["items"][1]["review_reason"] == "ชำรุดเสียหาย"
+    # Only the line the donor really changed was approved again.
+    assert body["auto_approved_lines"] == [0]
+    # And what the wizard recorded survives the edit.
+    assert body["items"][0]["category"] == "อาหารแห้ง"
+    assert body["items"][0]["note"] == "ถุงละ 5 kg"
+    assert body["items"][1]["condition"] == "ของใหม่ 100%"
+    assert body["items"][2]["category"] == "เครื่องนอน"
+
+
+async def test_a_detail_the_request_does_change_is_still_an_edit(
+    client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    """Carrying fills only what is missing — a client that sends a new condition wins."""
+    await _seed_counter("100")
+    token = (await _create(client, auth_headers, [_WIZARD_RICE, _WIZARD_BLANKET]))["tracking_token"]
+    couch_items = [
+        {**_WIZARD_RICE, "reserved_qty": "5", "review_status": "approved"},
+        {**_WIZARD_BLANKET, "review_status": "approved"},
+    ]
+
+    donation_router._rate_buckets.clear()
+    response = await client.patch(
+        f"/public/v1/donations/{token}/items",
+        headers=auth_headers,
+        json={
+            "items": [
+                _as_edit_form(_WIZARD_RICE),
+                {**_as_edit_form(_WIZARD_BLANKET), "condition": "มือสอง"},
+            ],
+            "current_items": couch_items,
+            "current_status": "verifying",
+        },
+    )
+
+    body = response.json()
+    assert [i["review_status"] for i in body["items"]] == ["approved", "pending"]
+    assert body["items"][1]["condition"] == "มือสอง"
+    assert body["status"] == "pending_review"
+
+
+async def test_two_lines_of_the_same_name_keep_their_own_details(
+    client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    new_shirt = {"free_text": "เสื้อ", "qty": "3", "unit": "ตัว", "condition": "ของใหม่"}
+    used_shirt = {"free_text": "เสื้อ", "qty": "2", "unit": "ตัว", "condition": "มือสอง"}
+    token = (await _create(client, auth_headers, [new_shirt, used_shirt]))["tracking_token"]
+
+    response = await _edit(
+        client, auth_headers, token, [_as_edit_form(new_shirt), _as_edit_form(used_shirt)]
+    )
+
+    assert [i.get("condition") for i in response.json()["items"]] == ["ของใหม่", "มือสอง"]

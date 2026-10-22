@@ -23,7 +23,9 @@ ReviewStatus = Literal["approved", "pending", "rejected"]
 REVIEW_FIELDS = ("review_status", "review_reason_code", "review_reason")
 
 #: The fields of ``DonationItemInput`` — everything the donor can change on a line. A line
-#: equal to an old one on all of these was not edited (FR-18a).
+#: equal to an old one on all of these was not edited (FR-18a). The edit form sends back
+#: only item_id/free_text/qty/unit; ``update_items`` re-attaches the rest from the held
+#: line first (``_carry_line_details``), or no line would ever match.
 MATCH_FIELDS = ("item_id", "category", "free_text", "qty", "unit", "condition", "note")
 
 #: Status a booking takes when it has no lines at all. Nothing to approve, so it waits for
@@ -58,8 +60,10 @@ def booking_status(items: Sequence[Mapping[str, Any]]) -> str:
         return "verifying"
     if all(value == "rejected" for value in statuses):
         return "rejected"
-    # A line without a review status (pre-schema_v 7) cannot be judged here; treat it as
-    # unreviewed so the booking is never waved through by accident.
+    # Only lines without a review status (pre-schema_v 7) are left, or those plus refusals:
+    # nothing here can be judged, so the booking waits for a person rather than being
+    # refused by accident. A mix with an approved line already returned `verifying` above
+    # — the frontend's ``donationStatusFromLines`` answers the same.
     return "pending_review"
 
 
