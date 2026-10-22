@@ -48,6 +48,51 @@ function isUserFacingMessage(msg: string): boolean {
 	return /[ก-๙]/.test(msg);
 }
 
+/** `validate_doc_update` verbs (`Only … can <verb> …`) in the words staff use. */
+const POLICY_VERB_TH: Record<string, string> = {
+	allocate: 'จัดสรร',
+	amend: 'แก้ไข',
+	approve: 'อนุมัติ',
+	cancel: 'ยกเลิก',
+	claim: 'รับคืน',
+	clear: 'ล้าง',
+	close: 'ปิดรอบ',
+	complete: 'ปิดงาน',
+	create: 'สร้าง',
+	dispatch: 'ปล่อยรถ',
+	edit: 'แก้ไข',
+	manage: 'จัดการ',
+	open: 'เปิด',
+	receive: 'รับ',
+	record: 'บันทึก',
+	submit: 'ส่ง',
+	update: 'แก้ไข',
+	void: 'ยกเลิก',
+	write: 'บันทึก'
+};
+
+/**
+ * `validate_doc_update` reasons are English and written for developers ("Only warehouse
+ * staff, … can approve requisition_tickets"), so staff get a Thai sentence for the kind of
+ * refusal instead of the raw reason.
+ */
+function describePolicyReason(reason: string | undefined): string {
+	const text = reason ?? '';
+	const only = /^Only .+? can (\w+)/i.exec(text);
+	if (only) {
+		const verb = POLICY_VERB_TH[only[1].toLowerCase()] ?? 'ทำ';
+		const target = /requisition_ticket/i.test(text) ? 'ใบเบิกจ่าย' : 'รายการ';
+		return `บัญชีนี้ไม่มีสิทธิ์${verb}${target}นี้ หากต้องทำรายการนี้ กรุณาติดต่อผู้จัดการศูนย์หรือผู้ดูแลระบบ`;
+	}
+	if (/must match the current actor/i.test(text)) {
+		return 'ข้อมูลผู้ทำรายการไม่ตรงกับบัญชีที่เข้าสู่ระบบ กรุณาออกจากระบบแล้วเข้าใหม่ จากนั้นลองอีกครั้ง';
+	}
+	if (/Illegal .* transition|Same-status/i.test(text)) {
+		return 'สถานะของใบเบิกจ่ายเปลี่ยนไปแล้ว กรุณาโหลดข้อมูลล่าสุดแล้วลองใหม่';
+	}
+	return 'ระบบปฏิเสธการบันทึกเอกสารตามนโยบายความปลอดภัย';
+}
+
 /**
  * Formats an unknown error into a safe, human-friendly user message.
  * Strictly prevents exposure of CouchDB internals, VDU logic, stack traces, and database identifiers,
@@ -98,10 +143,10 @@ export function formatDistributionError(
 
 	if (err instanceof CouchDocumentPolicyError) {
 		const reason = err.reason || err.message;
-		if (reason && !isUnsafeRawMessage(reason)) {
+		if (reason && isUserFacingMessage(reason) && !isUnsafeRawMessage(reason)) {
 			return `ระบบปฏิเสธเอกสาร: ${reason}`;
 		}
-		return 'ระบบปฏิเสธการบันทึกเอกสารตามนโยบายความปลอดภัย';
+		return describePolicyReason(reason);
 	}
 
 	if (err instanceof AuthError || isPouchError(err, 401) || isPouchError(err, 403)) {
