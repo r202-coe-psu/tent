@@ -3,7 +3,7 @@ id: CR-159
 title: การแจกของหน้างาน (Distribution Desk / Station 4 — `/onsite/distribution`) — ขอบเขตหน้าจอ + role, กติกาแจกอาหารปรุงสุก, จับคู่ผู้รับ↔เมนู, ปิด CR-109
 status: approved
 date: 2026-10-06
-updated: 2026-10-11
+updated: 2026-10-22
 requested_by: ทีม frontend (รับช่วง `/onsite/distribution` ต่อ)
 decided_by: Kong
 layer: volatile
@@ -224,5 +224,6 @@ affects:
 - 2026-10-10 — รวม 4 ร่าง (A–D) เป็นไฟล์เดียว `draft-onsite-distribution.md` ตามที่ Kong ขอ — ไม่แตก CR ย่อย; เลข FR คงเดิม
 - 2026-10-11 — approved โดย Kong (รันเลข CR-159)
 - 2026-10-11 — อัปเดตตามที่ Kong เคาะ: หัวข้อ A ใช้ role `distribution_staff` ตาม CR-161 (FR-DDS-02/03/04); หัวข้อ B/C/D เคาะตามตาราง 2026-10-10 (FR-MQW-01/03/05/06, FR-MRM-00/01 VEGAN+อายุ/04, FR-CRS-04 ส่งต่อ TL). ยังเปิด: FR-DDS-05, FR-DDS-07
+- 2026-10-22 — ทำหัวข้อ D แล้ว (FR-CRS-01..03): CR-109 + `_index.md` เป็น `superseded` โดย CR-121, schema.md §2.7 ชี้ไป §2.30
 - 2026-10-11 — Kong สั่งให้ทั้ง 5 ขั้นของหน้านี้ใช้ได้เฉพาะ SA, SM, DST: ตัด REG, SC, WH ออกจาก `/onsite/distribution`; ขั้น 4 PHYSICAL = SA, SM, DST (ดู FR-DDS-03; แก้ CR-161 R3/R4 ให้ DST รับคืนแบบมีของได้)
 - 2026-10-11 — การจำกัดหน้านี้เป็นระดับหน้าเท่านั้น (ตามข้อเสนอที่ยืนยันแล้ว) ไม่แก้กฎระดับระบบ WH/SC ยังทำงานคลังได้ตามเดิม

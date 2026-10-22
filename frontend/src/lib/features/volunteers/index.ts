@@ -46,6 +46,11 @@ export * from './domain/applicant-queue';
 export * from './domain/shift-roster';
 export * from './domain/volunteer-code';
 export * from './domain/hub-metrics';
+export {
+	extractScanCode,
+	parseVolunteerScanCode,
+	type VolunteerScanCode
+} from './domain/scan-code';
 
 // data — repository interfaces/filters + remote adapter factories
 export * from './data/volunteer.repository';

@@ -7,7 +7,7 @@
  */
 
 import { expect, type Locator, type Page } from '@playwright/test';
-import type { SeededRecipient, SeededTicket } from '../distribution';
+import type { SeededRecipient, SeededTicket, SeededVolunteer } from '../distribution';
 
 export type DeskTab = 'receive' | 'food' | 'supplies' | 'returns' | 'reconciliation';
 
@@ -112,6 +112,25 @@ export class DeskPage {
 			})
 			.click();
 		await expect(this.selectedRecipientCard(recipient)).toBeVisible();
+	}
+
+	/** A selected volunteer shows its `V-{NNN}` code, not its doc id (RecipientSearchPicker). */
+	selectedVolunteerCard(volunteer: SeededVolunteer): Locator {
+		return this.page
+			.getByText(`จิตอาสา · ${volunteer.volunteerCode}`, { exact: true })
+			.locator('xpath=ancestor::div[contains(@class, "rounded-lg")][1]');
+	}
+
+	async chooseVolunteerBySearch(volunteer: SeededVolunteer): Promise<void> {
+		const search = this.page.locator('#recipient-search-input');
+		const change = this.page.getByRole('button', { name: 'เปลี่ยนผู้รับ' });
+		if ((await search.count()) === 0 && (await change.count()) > 0) await change.click();
+		await expect(search).toBeVisible();
+		await search.fill(volunteer.firstName);
+		await this.page
+			.getByRole('button', { name: new RegExp(escapeRegExp(volunteer.volunteerCode)) })
+			.click();
+		await expect(this.selectedVolunteerCard(volunteer)).toBeVisible();
 	}
 
 	scannerDialog(): Locator {
