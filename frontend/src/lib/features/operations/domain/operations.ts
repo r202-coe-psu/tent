@@ -1670,6 +1670,14 @@ export const isDonationCampaign = (d: unknown): d is DonationCampaign =>
 export const isStockTransfer = (d: unknown): d is StockTransfer =>
 	!!d && typeof d === 'object' && (d as { type?: unknown }).type === 'stock_transfer';
 
+/** A shelter a transfer request may be sent to (#570) — code and name only. */
+export type TransferDestination = { code: string; name: string };
+export const isTransferDestination = (d: unknown): d is TransferDestination =>
+	!!d &&
+	typeof d === 'object' &&
+	typeof (d as { code?: unknown }).code === 'string' &&
+	typeof (d as { name?: unknown }).name === 'string';
+
 /**
  * The transfer API refused this account (HTTP 403) — the tab must say so rather than show an
  * empty list (#571). Carries no `status` on purpose: the app's query client treats an error

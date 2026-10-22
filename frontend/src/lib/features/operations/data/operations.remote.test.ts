@@ -1450,6 +1450,28 @@ describe('OperationsRemoteRepository — transfer via BFF (CR-059 Flow 1 / T-13)
 		expect((error as { status?: unknown }).status).toBeUndefined();
 	});
 
+	it('lists transfer destinations from their own route, dropping malformed rows (#570)', async () => {
+		fetchMock.mockResolvedValue({
+			ok: true,
+			status: 200,
+			json: async () => [{ code: 'SH002', name: 'ศูนย์สอง' }, { code: 42 }, null]
+		});
+
+		const list = await repo.listTransferDestinations();
+
+		expect(list).toEqual([{ code: 'SH002', name: 'ศูนย์สอง' }]);
+		expect(fetchMock).toHaveBeenCalledWith(
+			expect.stringContaining('/api/back-office/transfer/destinations?shelter_code='),
+			expect.objectContaining({ credentials: 'include' })
+		);
+	});
+
+	it('throws when the destinations route refuses, instead of answering an empty list', async () => {
+		fetchMock.mockResolvedValue({ ok: false, status: 403, statusText: 'Forbidden' });
+
+		await expect(repo.listTransferDestinations()).rejects.toThrow('Forbidden');
+	});
+
 	it('lists transfers scoped to the caller shelter', async () => {
 		fetchMock.mockResolvedValue({
 			ok: true,
