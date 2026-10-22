@@ -32,6 +32,13 @@ vi.mock('../application/queries', () => {
 	};
 });
 vi.mock('$lib/db/shelter', () => ({ getShelterCode: () => 'SH001' }));
+// Item names and units (#777) come from catalog and supply queries; none are needed here.
+vi.mock('$lib/features/catalog', async (importOriginal) => ({
+	...(await importOriginal<typeof import('$lib/features/catalog')>()),
+	useItemMasters: () => ({ data: [] }),
+	useUnitsOfMeasure: () => ({ data: [] })
+}));
+vi.mock('$lib/features/supply', () => ({ useSupplyItems: () => ({ data: [] }) }));
 vi.mock('svelte-sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
 let instance: ReturnType<typeof mount> | null = null;
