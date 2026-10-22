@@ -45,12 +45,20 @@ _Avoid_: Online check-in, public registration (ambiguous with staff Station 1 wa
 A clinical evaluation conducted by healthcare personnel to assess surveillance symptoms (EWAR), vital signs, triage urgency, and ongoing medical conditions.
 _Avoid_: Diagnosis, general checkup, registration.
 
+**Chronic Disease**:
+A specific long-term disease recorded on an Evacuee's medical record (`medical.conditions`), chosen from the central standard list or entered as free text when not listed. Records _which_ disease; it does not by itself mark the Evacuee as vulnerable.
+_Avoid_: Chronic illness (that is the Vulnerable Group flag), health condition, underlying condition.
+
+**Allergy**:
+A substance an Evacuee is allergic to, recorded on the medical record (`medical.allergies`), chosen from the central standard list (food allergens) or entered as free text when not listed (e.g. a drug).
+_Avoid_: Dietary restriction (a preference, not a medical record), intolerance.
+
 **Triage Level**:
 A 3-color clinical classification (Green, Yellow, Red) that dictates medical urgency and residential isolation or medical zone assignment.
 _Avoid_: Priority code, track, severity score.
 
 **Vulnerable Group**:
-A master-data multi-select classification on the Evacuee (`vulnerable_groups[]`) for reporting, zoning hints, and care prioritization. Canonical seed codes include bedridden, dialysis, wheelchair, psychiatric, elderly_dependent, infant, young_child, pregnant, vision_impaired, hearing_impaired, disability_other, chronic_illness (`infant` and `young_child` are distinct; `disability_other` is the non-specific disability bucket beside vision/hearing/wheelchair/bedridden).
+A master-data multi-select classification on the Evacuee (`vulnerable_groups[]`) for reporting, zoning hints, and care prioritization. Canonical seed codes include bedridden, dialysis, wheelchair, psychiatric, elderly_dependent, infant, young_child, pregnant, vision_impaired, hearing_impaired, disability_other, chronic_illness (`infant` and `young_child` are distinct; `disability_other` is the non-specific disability bucket beside vision/hearing/wheelchair/bedridden). `chronic_illness` is a care-priority flag set by staff judgement, independent of any recorded Chronic Disease.
 _Avoid_: Special Needs, handicaps, legacy codes `elderly`/`disabled` (migrate to `elderly_dependent`/`disability_other`).
 
 **Special Needs**:

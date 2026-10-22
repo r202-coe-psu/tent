@@ -141,12 +141,12 @@ The worker resumes `_changes` from its checkpoint, so documents that never chang
 // received_summary ส่งทั้งก้อนตามรูปใน schema.md §2.3 — รวม items[].rejected / reject_reason /
 //   reject_reason_code (CR-172) โดยไม่ map ทีละ field
 // reject_reason / reject_reason_code (CR-172) = ข้อความที่ผู้บริจาคเห็น + code — มีค่าเฉพาะ
-//   status rejected; doc ก่อน schema_v 6 ไม่มี field → project เป็น null (PROJECTION_VERSION 6)
+//   status rejected; doc ก่อน schema_v 6 ไม่มี field → project เป็น null (PROJECTION_VERSION 7)
 // items_declared[] = [{ item_id? (มีเฉพาะ stub ของ FastAPI), item_name, qty, unit, category,
 //   review_status: "approved|pending|rejected" | null, review_reason_code | null, review_reason | null }]
 //   review_* (CR-174 FR-27) ส่งต่อจาก donation.items[] ตรง ๆ — หน้าติดตามอ่าน items จาก CouchDB ก่อน
 //   projection เป็น fallback จึงต้องมีข้อมูลเท่ากัน; รายการก่อน schema_v 7 ไม่มี field → null
-//   (PROJECTION_VERSION 6 — bump เดียวกับ CR-172 เพราะ implement พร้อมกันก่อน release)
+//   (PROJECTION_VERSION 7 — bump เดียวกับ CR-172 เพราะ implement พร้อมกันก่อน release; 6 = CR-185)
 // create path เขียน stub ทันทีก่อน outbound CDC เพื่อให้ GET tracking ใช้ได้ทันที — stub ใช้ status
 //   และ review_status ที่ FastAPI คำนวณ (CR-174: `verifying` เมื่อทุกรายการอยู่ในแคมเปญ ไม่งั้น
 //   `pending_review`); PATCH items อัปเดต stub (items + status) ด้วยเหตุผลเดียวกัน

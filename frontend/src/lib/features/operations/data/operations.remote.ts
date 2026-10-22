@@ -20,6 +20,7 @@ import {
 	isDonation,
 	isDonationSlot,
 	isStockTransfer,
+	isTransferDestination,
 	stockBalance,
 	createReceiveEntry,
 	createWalkInDonation,
@@ -39,6 +40,7 @@ import {
 	type WalkInDonationInput,
 	type DonationSlot,
 	type StockTransfer,
+	type TransferDestination,
 	type TransferInput,
 	type TransferFilter,
 	type TransferStatus,
@@ -1167,6 +1169,19 @@ export class OperationsRemoteRepository implements OperationsRepository {
 		}
 		const list = await res.json();
 		return Array.isArray(list) ? list.filter(isStockTransfer) : [];
+	}
+
+	async listTransferDestinations(): Promise<TransferDestination[]> {
+		const qs = new URLSearchParams({ shelter_code: getShelterCode() });
+		const res = await fetch(`/api/back-office/transfer/destinations?${qs}`, {
+			credentials: 'include',
+			headers: { Accept: 'application/json' }
+		});
+		if (!res.ok) {
+			throw new Error(`Failed to list transfer destinations: ${res.statusText}`);
+		}
+		const list = await res.json();
+		return Array.isArray(list) ? list.filter(isTransferDestination) : [];
 	}
 
 	async getTransfer(id: string): Promise<StockTransfer | null> {

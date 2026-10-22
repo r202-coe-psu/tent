@@ -52,6 +52,9 @@ class PublicJobItem(BaseModel):
     slots_remaining: int
     applicants_count: int = 0
     status: str
+    #: Staff flagged the job as needing people urgently — the home page volunteer card
+    #: counts only these (#709).
+    is_urgent: bool = False
     #: True when applying will land in ``pending_review`` rather than issue a confirmed
     #: ticket, so the form can say so before the applicant commits.
     requires_review: bool = False
