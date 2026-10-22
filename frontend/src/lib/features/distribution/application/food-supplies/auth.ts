@@ -95,7 +95,7 @@ export function canReturnLoanPhysical(ctx: AuthorContext): boolean {
 }
 
 /**
- * #659 — may open / edit / cancel a bulk return pool (submit / receive follow in #660).
+ * #659 / #660 — may open / edit / cancel / submit / receive a bulk return pool.
  * Allowed: warehouse_staff, supply_coordinator, shelter_manager, system_admin (VDU
  * `canManageBulkReturnPool`).
  */

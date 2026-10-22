@@ -456,6 +456,89 @@ export function cancelBulkReturnPoolV3(
 	return next;
 }
 
+/** One counted row typed in at receive: the expected qty is taken from the pool snapshot. */
+export interface BulkReturnReceivedRowInput {
+	item_id: string;
+	received_qty: string;
+	discrepancy_reason?: BulkReturnPoolDiscrepancyReason;
+	discrepancy_note?: string;
+}
+
+/** The receive rows do not match the pool snapshot / discrepancy rules. */
+export class BulkReturnReceiveInputError extends Error {
+	constructor(message: string) {
+		super(message);
+		this.name = 'BulkReturnReceiveInputError';
+	}
+}
+
+/**
+ * Pure validation + normalization of the receive rows against the submit snapshot. Returns one
+ * `received_items` row per `items_summary` item (in snapshot order, `expected_qty` filled in).
+ * Rules: exactly one row per item (no missing / extra / duplicate); `received_qty` a whole number
+ * 0..expected; received == expected carries no reason/note; received < expected needs a reason, and
+ * `other` also needs a non-empty note. Notes are trimmed; a blank note counts as absent.
+ * Throws {@link BulkReturnReceiveInputError}.
+ */
+export function buildBulkReturnReceivedItems(
+	itemsSummary: readonly BulkReturnPoolItemSummaryRow[],
+	rows: readonly BulkReturnReceivedRowInput[]
+): BulkReturnPoolReceivedItem[] {
+	const fail = (message: string): never => {
+		throw new BulkReturnReceiveInputError(message);
+	};
+	const expectedByItem = new Map(itemsSummary.map((row) => [row.item_id, row.qty]));
+	const rowByItem = new Map<string, BulkReturnReceivedRowInput>();
+	for (const row of rows) {
+		if (!expectedByItem.has(row.item_id)) {
+			fail(`Item ${row.item_id} is not in the pool`);
+		}
+		if (rowByItem.has(row.item_id)) fail(`Item ${row.item_id} appears more than once`);
+		rowByItem.set(row.item_id, row);
+	}
+
+	return itemsSummary.map(({ item_id, qty: expected }) => {
+		const row = rowByItem.get(item_id);
+		if (!row) return fail(`Item ${item_id} is missing: every pool item needs a received row`);
+
+		const parsedQty = nonNegativeWholeQtySchema.safeParse(row.received_qty);
+		if (!parsedQty.success) {
+			return fail(`Received qty of ${item_id} must be a whole number of 0 or more`);
+		}
+		const received = parsedQty.data;
+		if (!qtyLte(received, expected)) {
+			return fail(
+				`Received qty of ${item_id} (${received}) must not exceed expected (${expected})`
+			);
+		}
+
+		const reason = row.discrepancy_reason;
+		const note = row.discrepancy_note?.trim() || undefined;
+		const base = { item_id, expected_qty: expected, received_qty: received };
+
+		if (parseQty(received).eq(expected)) {
+			if (reason !== undefined || note !== undefined) {
+				return fail(`Item ${item_id} was received in full and must not carry a discrepancy`);
+			}
+			return base;
+		}
+		if (reason === undefined) {
+			return fail(`Item ${item_id} was received short: a discrepancy reason is required`);
+		}
+		if (!bulkReturnPoolDiscrepancyReasonSchema.safeParse(reason).success) {
+			return fail(`Item ${item_id} has an unknown discrepancy reason`);
+		}
+		if (reason === 'other' && note === undefined) {
+			return fail(`Item ${item_id}: reason 'other' requires a note`);
+		}
+		return {
+			...base,
+			discrepancy_reason: reason,
+			...(note !== undefined ? { discrepancy_note: note } : {})
+		};
+	});
+}
+
 export interface ReceiveBulkReturnPoolV3Input {
 	received_items: z.input<typeof bulkReturnPoolReceivedItemSchema>[];
 	received_storage_point_id?: string;

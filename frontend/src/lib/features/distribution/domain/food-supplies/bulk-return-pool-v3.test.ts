@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import type { AuthorContext } from '$lib/db/model';
 import {
 	assertPoolTransition,
+	BulkReturnReceiveInputError,
+	buildBulkReturnReceivedItems,
 	bulkReturnPoolV3DocSchema,
 	canAppendToPool,
 	cancelBulkReturnPoolV3,
@@ -653,5 +655,110 @@ describe('receiveBulkReturnPoolV3', () => {
 				/Cannot receive/
 			);
 		}
+	});
+});
+
+describe('buildBulkReturnReceivedItems', () => {
+	const summary = [
+		{ item_id: 'item:a', qty: '3' },
+		{ item_id: 'item:b', qty: '5' }
+	];
+	const full = [
+		{ item_id: 'item:b', received_qty: '5' },
+		{ item_id: 'item:a', received_qty: '3' }
+	];
+
+	it('returns one row per summary item in summary order with expected_qty filled', () => {
+		expect(buildBulkReturnReceivedItems(summary, full)).toEqual([
+			{ item_id: 'item:a', expected_qty: '3', received_qty: '3' },
+			{ item_id: 'item:b', expected_qty: '5', received_qty: '5' }
+		]);
+	});
+
+	it('records a reason and a trimmed note on a short row and accepts 0', () => {
+		const rows = buildBulkReturnReceivedItems(summary, [
+			{
+				item_id: 'item:a',
+				received_qty: '2',
+				discrepancy_reason: 'damaged',
+				discrepancy_note: '  broken leg '
+			},
+			{
+				item_id: 'item:b',
+				received_qty: '0',
+				discrepancy_reason: 'missing',
+				discrepancy_note: '  '
+			}
+		]);
+		expect(rows[0]).toMatchObject({
+			discrepancy_reason: 'damaged',
+			discrepancy_note: 'broken leg'
+		});
+		expect(rows[1].received_qty).toBe('0');
+		expect(rows[1].discrepancy_reason).toBe('missing');
+		expect(rows[1].discrepancy_note).toBeUndefined();
+	});
+
+	it('requires a reason when short and a note for other', () => {
+		const short = (extra: object) => [
+			{ item_id: 'item:a', received_qty: '2', ...extra },
+			{ item_id: 'item:b', received_qty: '5' }
+		];
+		expect(() => buildBulkReturnReceivedItems(summary, short({}))).toThrow(
+			BulkReturnReceiveInputError
+		);
+		expect(() =>
+			buildBulkReturnReceivedItems(summary, short({ discrepancy_reason: 'other' }))
+		).toThrow(/requires a note/);
+		expect(() =>
+			buildBulkReturnReceivedItems(
+				summary,
+				short({ discrepancy_reason: 'other', discrepancy_note: '   ' })
+			)
+		).toThrow(/requires a note/);
+		expect(
+			buildBulkReturnReceivedItems(
+				summary,
+				short({ discrepancy_reason: 'other', discrepancy_note: 'lost in transit' })
+			)[0].discrepancy_note
+		).toBe('lost in transit');
+	});
+
+	it('rejects a reason or note on a full match', () => {
+		const withExtra = (extra: object) => [
+			{ item_id: 'item:a', received_qty: '3', ...extra },
+			{ item_id: 'item:b', received_qty: '5' }
+		];
+		expect(() =>
+			buildBulkReturnReceivedItems(summary, withExtra({ discrepancy_reason: 'miscount' }))
+		).toThrow(/in full/);
+		expect(() =>
+			buildBulkReturnReceivedItems(summary, withExtra({ discrepancy_note: 'x' }))
+		).toThrow(/in full/);
+		// A blank note is treated as absent.
+		expect(() =>
+			buildBulkReturnReceivedItems(summary, withExtra({ discrepancy_note: '  ' }))
+		).not.toThrow();
+	});
+
+	it('rejects received above expected and non whole numbers', () => {
+		for (const bad of ['4', '1.5', '-1', '', 'abc', '1e1']) {
+			expect(() =>
+				buildBulkReturnReceivedItems(summary, [
+					{ item_id: 'item:a', received_qty: bad },
+					{ item_id: 'item:b', received_qty: '5' }
+				])
+			).toThrow(BulkReturnReceiveInputError);
+		}
+	});
+
+	it('rejects missing, extra and duplicate rows', () => {
+		expect(() => buildBulkReturnReceivedItems(summary, [full[1]])).toThrow(/missing/);
+		expect(() =>
+			buildBulkReturnReceivedItems(summary, [...full, { item_id: 'item:z', received_qty: '1' }])
+		).toThrow(/not in the pool/);
+		expect(() => buildBulkReturnReceivedItems(summary, [...full, full[0]])).toThrow(
+			/more than once/
+		);
 	});
 });

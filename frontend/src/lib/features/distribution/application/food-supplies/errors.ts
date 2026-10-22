@@ -82,6 +82,14 @@ export class BulkReturnPoolNotEmptyError extends WorkflowError {
 	}
 }
 
+/** A pool with no live entry (net count 0) cannot be submitted to the warehouse: cancel it instead. */
+export class BulkReturnPoolEmptyError extends WorkflowError {
+	constructor(message: string) {
+		super(message);
+		this.name = 'BulkReturnPoolEmptyError';
+	}
+}
+
 export class ConcurrencyCollisionError extends WorkflowError {
 	constructor(message: string) {
 		super(message);

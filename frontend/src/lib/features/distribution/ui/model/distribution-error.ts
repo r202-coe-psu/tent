@@ -19,7 +19,8 @@ import {
 	ConcurrencyCollisionError,
 	BulkReturnPoolNameTakenError,
 	BulkReturnPoolStateError,
-	BulkReturnPoolNotEmptyError
+	BulkReturnPoolNotEmptyError,
+	BulkReturnPoolEmptyError
 } from '../../application/food-supplies/errors';
 import { ZodError } from 'zod';
 
@@ -73,6 +74,9 @@ export function formatDistributionError(
 	}
 	if (err instanceof BulkReturnPoolNotEmptyError) {
 		return 'ยกเลิกกองไม่ได้ เพราะยังมีรายการอยู่ในกอง กรุณาย้ายของออกให้หมดก่อน';
+	}
+	if (err instanceof BulkReturnPoolEmptyError) {
+		return 'กองนี้ไม่มีรายการ จึงเก็บเข้าคลังไม่ได้ กรุณายกเลิกกองแทน';
 	}
 
 	if (err instanceof WorkflowValidationError || err instanceof ReservationSemanticMismatchError) {

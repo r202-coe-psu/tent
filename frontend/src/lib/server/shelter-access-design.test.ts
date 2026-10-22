@@ -6494,6 +6494,46 @@ describe('buildValidateDocUpdate', () => {
 				expect(() => compile()(receivePool, null, WAREHOUSE)).not.toThrow();
 			});
 
+			describe('bulk return pool v3 receive row (#660)', () => {
+				const SUPPLY_COORD: UserCtx = {
+					name: 'sc',
+					roles: ['shelter:SH001', 'SH001:supply_coordinator']
+				};
+				// Shape written by receiveBulkReturnPool (bulk-return-pool-v3-workflow.ts).
+				const poolReceive = (over: Doc = {}): Doc =>
+					ledger({
+						_id: 'stock_ledger:01J00000000000000000000009',
+						schema_v: 6,
+						qty: '2',
+						reason: 'receive',
+						ref_id: 'bulk_return_pool:01J00000000000000000000001',
+						lot_ref: 'stock_ledger:01J00000000000000000000009',
+						lot: {
+							note: 'bulk_return_pool',
+							storage_point_id: 'sp-1',
+							storage_zone: 'Gate 1',
+							produced_at: '2026-10-11T00:00:00.000Z'
+						},
+						created_by: 'ws',
+						...over
+					});
+
+				it.each([
+					['warehouse_staff', WAREHOUSE],
+					['supply_coordinator', SUPPLY_COORD],
+					['shelter_manager', MANAGER]
+				])('allows %s to write the receive row with a v5 storage lot', (_role, user) => {
+					expect(() => compile()(poolReceive({ created_by: user.name }), null, user)).not.toThrow();
+				});
+
+				it('rejects distribution_staff writing the pool receive row', () => {
+					expectForbidden(
+						() => compile()(poolReceive({ created_by: 'dist' }), null, DISTRIBUTION),
+						/Only warehouse staff or managers can write stock ledger/
+					);
+				});
+			});
+
 			describe('distribution_staff loan-return receipt (CR-161 R3)', () => {
 				const DIST: UserCtx = {
 					name: 'dist',

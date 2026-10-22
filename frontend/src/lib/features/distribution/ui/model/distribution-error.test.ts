@@ -25,7 +25,8 @@ import {
 	WorkflowAuthorizationError,
 	BulkReturnPoolNameTakenError,
 	BulkReturnPoolStateError,
-	BulkReturnPoolNotEmptyError
+	BulkReturnPoolNotEmptyError,
+	BulkReturnPoolEmptyError
 } from '../../application/food-supplies/errors';
 
 describe('formatDistributionError', () => {
@@ -44,6 +45,13 @@ describe('formatDistributionError', () => {
 	it('maps BulkReturnPoolNotEmptyError to Thai copy telling to move items out', () => {
 		const err = new BulkReturnPoolNotEmptyError('Pool has live entries');
 		expect(formatDistributionError(err)).toContain('ย้ายของออกให้หมดก่อน');
+	});
+
+	it('maps BulkReturnPoolEmptyError to Thai copy telling to cancel the pool', () => {
+		const err = new BulkReturnPoolEmptyError('Pool has no entries');
+		expect(formatDistributionError(err)).toBe(
+			'กองนี้ไม่มีรายการ จึงเก็บเข้าคลังไม่ได้ กรุณายกเลิกกองแทน'
+		);
 	});
 
 	it('formats typed WorkflowValidationError preserving clean messages', () => {
