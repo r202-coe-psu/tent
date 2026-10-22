@@ -565,6 +565,7 @@ class VolunteersUseCase:
                     slots_remaining=max(quota - confirmed - dispatched, 0),
                     applicants_count=applicants_by_job.get(job.id, 0),
                     status=job.status,
+                    is_urgent=job.is_urgent,
                     requires_review=_needs_review(job, [], controlled),
                 )
             )

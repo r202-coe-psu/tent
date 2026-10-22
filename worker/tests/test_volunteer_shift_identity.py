@@ -44,6 +44,15 @@ def test_job_projection_normalises_shift_identity_and_aggregates_counters():
     assert payload["slots_remaining"] == 2
 
 
+def test_job_projection_carries_the_urgent_flag():
+    # The home page volunteer card counts urgent jobs only (#709).
+    _, urgent = project_job({**_job_doc(), "is_urgent": True}, shelter_code="SH001")
+    _, unflagged = project_job(_job_doc(), shelter_code="SH001")
+
+    assert urgent["is_urgent"] is True
+    assert unflagged["is_urgent"] is False
+
+
 def test_application_projection_preserves_shift_id_and_snapshot():
     action, payload = project_job_application(
         {

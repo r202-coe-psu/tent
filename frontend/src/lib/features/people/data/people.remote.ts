@@ -35,6 +35,7 @@ import {
 	deriveHouseholdStatus,
 	isActiveHouseholdStatus,
 	canCancelEvacueePreRegistration,
+	canCancelHouseholdPreRegistration,
 	replacePersonId,
 	migrateVulnerableGroupCode,
 	migrateVulnerableGroupCodes,
@@ -233,6 +234,15 @@ export class PeopleRemoteRepository implements PeopleRepository {
 	async listMatchingEvacueeIds(search?: string, filters?: EvacueeFilters): Promise<string[]> {
 		const matched = await this.filterEvacuees(search, filters);
 		return matched.map((e) => e._id);
+	}
+
+	async listCancellableEvacueeIds(ids: readonly string[]): Promise<string[]> {
+		if (ids.length === 0) return [];
+		const wanted = new Set(ids);
+		const all = await this.repo.allByType('evacuee', isEvacuee);
+		return all
+			.filter((e) => wanted.has(e._id) && canCancelEvacueePreRegistration(e))
+			.map((e) => e._id);
 	}
 
 	private async filterEvacuees(search?: string, filters?: EvacueeFilters): Promise<Evacuee[]> {
@@ -643,6 +653,16 @@ export class PeopleRemoteRepository implements PeopleRepository {
 	): Promise<string[]> {
 		const matched = await this.filterHouseholds(search, labels, filters);
 		return matched.map((h) => h._id);
+	}
+
+	async listCancellableHouseholdIds(ids: readonly string[]): Promise<string[]> {
+		if (ids.length === 0) return [];
+		const wanted = new Set(ids);
+		const all = await this.repo.allByType('household', isHousehold);
+		return all
+			.map(migrateHouseholdV3ToV4)
+			.filter((h) => wanted.has(h._id) && canCancelHouseholdPreRegistration(h))
+			.map((h) => h._id);
 	}
 
 	private async filterHouseholds(

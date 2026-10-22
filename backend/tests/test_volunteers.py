@@ -180,6 +180,21 @@ async def test_list_jobs_reports_non_cancelled_applicant_counts(
     assert listed["shifts"][0]["applicants_count"] == 1
 
 
+async def test_list_jobs_reports_the_urgent_flag(
+    client: AsyncClient, shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    job = await _make_job()
+    job.is_urgent = True
+    await job.save()
+    await _make_job(job_id="job:01JNOTURGENT00000000000000")
+
+    response = await client.get("/public/v1/jobs", headers=auth_headers)
+
+    assert response.status_code == 200
+    flags = {item["job_id"]: item["is_urgent"] for item in response.json()["jobs"]}
+    assert flags == {JOB_ID: True, "job:01JNOTURGENT00000000000000": False}
+
+
 async def test_list_jobs_serializes_concrete_shift_identity_and_quota(
     client: AsyncClient, shelter: PublicShelter, auth_headers: dict[str, str]
 ) -> None:
