@@ -341,6 +341,19 @@ export function buildValidateDocUpdate(code: string): string {
   function canReturnLoanPhysical() {
     return canReceivePhysicalStock() || isRole('distribution_staff');
   }
+  // #658: every bulk_return_pool write (create, edit while OPEN, lock, submit, receive, cancel)
+  // is WH, SC, SM (+ SA via isRole). Entries / moves / voids additionally allow distribution_staff.
+  // TODO(bulk-return-pool system_admin): the lead's decision lists WH/SC/SM (+ DST for entries)
+  // and says system_admin is NOT included, but isRole() grants system_admin every capability
+  // (SA override at the top of isRole). These helpers deliberately keep that override. A literal
+  // SA block would need dedicated exception logic nothing else in this VDU has — do not add it
+  // until kong confirms it was actually intended.
+  function canManageBulkReturnPool() {
+    return isRole('warehouse_staff') || isRole('supply_coordinator') || isRole('shelter_manager');
+  }
+  function canWriteBulkReturnEntry() {
+    return canManageBulkReturnPool() || isRole('distribution_staff');
+  }
   function sameObjectExcept(previousObject, nextObject, ignoredFields) {
     var keys = {};
     var previousKeys = Object.keys(previousObject || {});
@@ -388,7 +401,7 @@ export function buildValidateDocUpdate(code: string): string {
     'meal_service', 'meal_service_receipt',
     'distribution_issue', 'distribution_issue_idempotency',
     // #658: event log of a bulk return pool — never updated, never deleted.
-    'bulk_return_entry', 'bulk_return_entry_move'
+    'bulk_return_entry', 'bulk_return_entry_move', 'bulk_return_entry_void'
   ];
   var wasAppendOnly = oldDoc && appendOnly.indexOf(oldDoc.type) !== -1;
   if (newDoc._deleted) {
@@ -485,7 +498,7 @@ export function buildValidateDocUpdate(code: string): string {
     'distribution_issue', 'distribution_issue_idempotency', 'distribution_issue_capacity', 'distribution_one_time_guard', 'distribution_issue_gate',
 		'shelter_readiness_assessment',
     'requisition_ticket', 'distribution_log', 'bulk_return_pool', 'bulk_return_claim', 'loan_return_reservation',
-    'bulk_return_entry', 'bulk_return_entry_move',
+    'bulk_return_entry', 'bulk_return_entry_move', 'bulk_return_entry_void',
     'meal_service_receipt',
     'shelter_incident', 'daily_sop_role_assessment'
   ];
@@ -2109,9 +2122,31 @@ export function buildValidateDocUpdate(code: string): string {
     }
   }
   // 13. CR-121: distribution_log validation (Rules 12-14)
+  // #658: schema_v 2 adds applied_bulk_entry_ids (v3 bulk return pool entries applied to the loan).
+  // A v1 log is lazily upgraded to v2 when the bulk path first writes the field; never 2 -> 1.
+  // The legacy bulk path (bulk_pool_id, frontline DST/SM) is unchanged.
   if (newDoc.type === 'distribution_log') {
-    if (newDoc.schema_v !== 1) {
+    if (newDoc.schema_v !== 1 && newDoc.schema_v !== 2) {
       throw { forbidden: 'Unsupported distribution_log schema version' };
+    }
+    if (typeof newDoc.applied_bulk_entry_ids !== 'undefined') {
+      if (newDoc.schema_v !== 2) {
+        throw { forbidden: 'distribution_log.applied_bulk_entry_ids requires schema_v 2' };
+      }
+      if (!Array.isArray(newDoc.applied_bulk_entry_ids)) {
+        throw { forbidden: 'distribution_log.applied_bulk_entry_ids must be an array' };
+      }
+      var seenAppliedEntryIds = {};
+      for (var ae = 0; ae < newDoc.applied_bulk_entry_ids.length; ae++) {
+        var appliedEntryId = newDoc.applied_bulk_entry_ids[ae];
+        if (typeof appliedEntryId !== 'string' || !/^bulk_return_entry:[0-9A-HJKMNP-TV-Z]{26}$/.test(appliedEntryId)) {
+          throw { forbidden: 'distribution_log.applied_bulk_entry_ids must contain bulk_return_entry:{ulid} ids' };
+        }
+        if (seenAppliedEntryIds[appliedEntryId] === true) {
+          throw { forbidden: 'Duplicate id in distribution_log.applied_bulk_entry_ids: ' + appliedEntryId };
+        }
+        seenAppliedEntryIds[appliedEntryId] = true;
+      }
     }
     if (!/^distribution_log:[0-9A-HJKMNP-TV-Z]{26}$/.test(newDoc._id)) {
       throw { forbidden: 'distribution_log id must be distribution_log:{ulid}' };
@@ -2142,7 +2177,7 @@ export function buildValidateDocUpdate(code: string): string {
     }
     if (oldDoc) {
       var immutableLogFields = [
-        '_id', 'type', 'schema_v', 'shelter_code', 'ticket_id', 'item_id', 'qty',
+        '_id', 'type', 'shelter_code', 'ticket_id', 'item_id', 'qty',
         'recipient_type', 'recipient_id', 'household_id', 'is_returnable',
         'distributed_at', 'distributed_by', 'created_at', 'created_by'
       ];
@@ -2151,6 +2186,18 @@ export function buildValidateDocUpdate(code: string): string {
         if (newDoc[lfName] !== oldDoc[lfName]) {
           throw { forbidden: 'distribution_log.' + lfName + ' is immutable after issuance' };
         }
+      }
+      // schema_v may stay equal or go 1 -> 2 (lazy upgrade); never downgrade.
+      if (newDoc.schema_v !== oldDoc.schema_v && !(oldDoc.schema_v === 1 && newDoc.schema_v === 2)) {
+        throw { forbidden: 'distribution_log.schema_v can only stay the same or upgrade from 1 to 2' };
+      }
+      var oldAppliedIds = Array.isArray(oldDoc.applied_bulk_entry_ids) ? oldDoc.applied_bulk_entry_ids : [];
+      var newAppliedIds = Array.isArray(newDoc.applied_bulk_entry_ids) ? newDoc.applied_bulk_entry_ids : [];
+      var appliedIdsUnchanged = JSON.stringify(oldAppliedIds) === JSON.stringify(newAppliedIds);
+      var isBulkApplyV3 = newAppliedIds.length === oldAppliedIds.length + 1;
+      var isBulkRevertV3 = newAppliedIds.length === oldAppliedIds.length - 1;
+      if (!appliedIdsUnchanged && !isBulkApplyV3 && !isBulkRevertV3) {
+        throw { forbidden: 'distribution_log.applied_bulk_entry_ids can only gain or lose exactly one id per write' };
       }
 
       var oldStatus = oldDoc.status;
@@ -2166,7 +2213,8 @@ export function buildValidateDocUpdate(code: string): string {
           oldDoc.returned_at ||
           oldDoc.returned_by ||
           oldDoc.clear_reason ||
-          oldDoc.bulk_pool_id
+          oldDoc.bulk_pool_id ||
+          oldAppliedIds.length > 0
         ) {
           throw { forbidden: 'Cannot void a distribution_log after return or clear activity has begun' };
         }
@@ -2184,7 +2232,61 @@ export function buildValidateDocUpdate(code: string): string {
         (nextStatus === 'lost' || nextStatus === 'waived') &&
         (oldStatus === 'active' || oldStatus === 'partially_returned');
 
-      if (isVoidTransition) {
+      if (isBulkApplyV3 || isBulkRevertV3) {
+        // #658 v3 bulk return path (apply an entry / revert a voided entry): WH, SC, SM, DST.
+        // The legacy bulk path below (bulk_pool_id) stays frontline-only and never changes the ids.
+        if (!canReturnLoanPhysical()) throw { forbidden: 'Only warehouse staff, supply coordinators, distribution staff, shelter managers, or system admins can apply bulk return entries to loans' };
+        if (newDoc.schema_v !== 2) throw { forbidden: 'distribution_log bulk entry changes require schema_v 2' };
+        if (newDoc.bulk_pool_id !== oldDoc.bulk_pool_id) {
+          throw { forbidden: 'distribution_log.bulk_pool_id is immutable on the v3 bulk path' };
+        }
+        if (newDoc.clear_reason !== 'bulk_dropoff') {
+          throw { forbidden: 'v3 bulk entry changes require clear_reason bulk_dropoff' };
+        }
+        if (!newDoc.returned_at || newDoc.returned_by !== userCtx.name) {
+          throw { forbidden: 'distribution_log.returned_by must match the current actor' };
+        }
+        var bulkOldQty = oldDoc.qty_returned === undefined ? 0 : parseDecimal4(oldDoc.qty_returned);
+        var bulkNewQty = parseDecimal4(newDoc.qty_returned);
+        if (typeof newDoc.qty_returned !== 'string' || !/^\\d+$/.test(newDoc.qty_returned.trim()) || isNaN(bulkNewQty)) {
+          throw { forbidden: 'distribution_log qty_returned must be a whole number on the v3 bulk path' };
+        }
+        var bulkIssuedQty = parseDecimal4(newDoc.qty);
+        if (isBulkApplyV3) {
+          if (oldStatus !== 'active' && oldStatus !== 'partially_returned') {
+            throw { forbidden: 'Illegal distribution_log transition: ' + oldStatus + ' -> ' + nextStatus };
+          }
+          for (var oa = 0; oa < oldAppliedIds.length; oa++) {
+            if (newAppliedIds.indexOf(oldAppliedIds[oa]) === -1) {
+              throw { forbidden: 'applied_bulk_entry_ids must keep every previously applied id' };
+            }
+          }
+          if (bulkNewQty <= bulkOldQty) {
+            throw { forbidden: 'distribution_log qty_returned must increase when applying a bulk entry' };
+          }
+          if (bulkNewQty > bulkIssuedQty) {
+            throw { forbidden: 'distribution_log qty_returned must not exceed issued qty' };
+          }
+          if (nextStatus !== (bulkNewQty === bulkIssuedQty ? 'returned' : 'partially_returned')) {
+            throw { forbidden: 'distribution_log status must be returned when fully returned, otherwise partially_returned' };
+          }
+        } else {
+          if (oldStatus !== 'partially_returned' && oldStatus !== 'returned') {
+            throw { forbidden: 'Illegal distribution_log transition: ' + oldStatus + ' -> ' + nextStatus };
+          }
+          for (var na = 0; na < newAppliedIds.length; na++) {
+            if (oldAppliedIds.indexOf(newAppliedIds[na]) === -1) {
+              throw { forbidden: 'applied_bulk_entry_ids can only lose ids when reverting' };
+            }
+          }
+          if (bulkNewQty >= bulkOldQty || bulkNewQty < 0) {
+            throw { forbidden: 'distribution_log qty_returned must decrease when reverting a bulk entry' };
+          }
+          if (nextStatus !== (bulkNewQty === 0 ? 'active' : 'partially_returned')) {
+            throw { forbidden: 'distribution_log status must be active when nothing is returned, otherwise partially_returned' };
+          }
+        }
+      } else if (isVoidTransition) {
         if (!canPerformFrontlineDistribution()) throw { forbidden: 'Only frontline distribution staff can void distribution logs' };
         if (newDoc.voided_by !== userCtx.name) throw { forbidden: 'distribution_log.voided_by must match the current actor' };
       } else if (isRoutineReturn) {
@@ -2206,8 +2308,11 @@ export function buildValidateDocUpdate(code: string): string {
           throw { forbidden: 'Loan clear status requires return audit fields' };
         }
         if (newDoc.clear_reason === 'bulk_dropoff') {
-          if (typeof newDoc.bulk_pool_id !== 'string' || !/^bulk_return_pool:[0-9A-HJKMNP-TV-Z]{26}$/.test(newDoc.bulk_pool_id)) {
-            throw { forbidden: 'bulk_dropoff requires bulk_pool_id' };
+          // Either a legacy bulk_pool_id, or (schema_v 2) the applied_bulk_entry_ids array.
+          var hasLegacyBulkPool = typeof newDoc.bulk_pool_id === 'string' && /^bulk_return_pool:[0-9A-HJKMNP-TV-Z]{26}$/.test(newDoc.bulk_pool_id);
+          var hasAppliedBulkEntries = newDoc.schema_v === 2 && Array.isArray(newDoc.applied_bulk_entry_ids);
+          if (!hasLegacyBulkPool && !hasAppliedBulkEntries) {
+            throw { forbidden: 'bulk_dropoff requires bulk_pool_id or applied_bulk_entry_ids' };
           }
         }
         if (newDoc.status === 'lost') {
@@ -2242,6 +2347,9 @@ export function buildValidateDocUpdate(code: string): string {
       if (newDoc.created_by !== userCtx.name || newDoc.distributed_by !== userCtx.name) {
         throw { forbidden: 'distribution_log created_by and distributed_by must match the current actor' };
       }
+      if (Array.isArray(newDoc.applied_bulk_entry_ids) && newDoc.applied_bulk_entry_ids.length > 0) {
+        throw { forbidden: 'New distribution_log cannot carry applied_bulk_entry_ids' };
+      }
       if (!newDoc.is_returnable && newDoc.status !== 'fulfilled') {
         throw { forbidden: 'Non-returnable logs must start as fulfilled' };
       }
@@ -2250,12 +2358,13 @@ export function buildValidateDocUpdate(code: string): string {
       }
     }
   }
-  // 14. #658 (amends CR-121 / CR-134): bulk_return_pool validation (Rule 14).
+  // 14. #658 (amends CR-134; CR-121 is not affected): bulk_return_pool validation (Rule 14).
   // Legacy schema_v 1/2 pools are FROZEN: no further updates are accepted (no migration).
-  // New pools are schema_v 3: a small mutable header (OPEN -> SUBMITTED -> RECEIVED) whose contents
-  // live in append-only bulk_return_entry / bulk_return_entry_move docs (Rules 14b / 14c).
-  // TODO(#658 Q3): NO role checks for v3 pools, entries or moves yet (roles per transition,
-  // including SUBMITTED -> OPEN, are undecided). TODO(#658 Q2): deletes stay banned (see above).
+  // New pools are schema_v 3: a small mutable header (OPEN -> SUBMITTED -> RECEIVED, or
+  // OPEN -> CANCELLED) whose contents live in append-only bulk_return_entry / _move / _void docs
+  // (Rules 14b / 14c / 14d). Every pool write is WH, SC, SM (+ SA); deletes stay banned (see above).
+  // Advisory: VDU cannot count entry docs, so "cancel only when empty" is enforced by the domain
+  // fold (isPoolEmpty) + the CANCEL lock in the cancel workflow, not here.
   if (newDoc.type === 'bulk_return_pool') {
     if (oldDoc && oldDoc.schema_v !== 3) {
       throw { forbidden: 'bulk_return_pool schema_v ' + oldDoc.schema_v + ' documents are frozen and cannot be updated' };
@@ -2269,29 +2378,47 @@ export function buildValidateDocUpdate(code: string): string {
     var isNonEmptyString = function (value) {
       return typeof value === 'string' && value.trim().length > 0;
     };
-    if (!isNonEmptyString(newDoc.name)) {
-      throw { forbidden: 'bulk_return_pool name is required' };
+    var isPoolDateString = function (value) {
+      return isNonEmptyString(value) && !isNaN(Date.parse(value));
+    };
+    var isPoolStoragePair = function (pointId, zone, label) {
+      var hasPoint = typeof pointId !== 'undefined';
+      var hasZone = typeof zone !== 'undefined';
+      if (hasPoint !== hasZone) {
+        throw { forbidden: 'bulk_return_pool ' + label + ' storage point id and zone must be set together' };
+      }
+      if (hasPoint) {
+        if (!isNonEmptyString(pointId)) {
+          throw { forbidden: 'bulk_return_pool ' + label + ' storage point id must be a non-empty string' };
+        }
+        if (!isNonEmptyString(zone) || zone.trim().length > 100) {
+          throw { forbidden: 'bulk_return_pool ' + label + ' storage zone must be a non-empty string of at most 100 characters' };
+        }
+      }
+    };
+    if (!canManageBulkReturnPool()) {
+      throw { forbidden: 'Only warehouse staff, supply coordinators, shelter managers, or system admins can write bulk return pools' };
     }
-    if (typeof newDoc.location !== 'undefined' && !isNonEmptyString(newDoc.location)) {
-      throw { forbidden: 'bulk_return_pool location must be a non-empty string' };
+    if (typeof newDoc.name !== 'string' || newDoc.name.trim().length < 1 || newDoc.name.trim().length > 80) {
+      throw { forbidden: 'bulk_return_pool name must be 1 to 80 characters' };
     }
+    isPoolStoragePair(newDoc.location_storage_point_id, newDoc.location_storage_zone, 'location');
     if (typeof newDoc.notes !== 'undefined' && !isNonEmptyString(newDoc.notes)) {
       throw { forbidden: 'bulk_return_pool notes must be a non-empty string' };
     }
-    // TODO(#658 Q4): return_ticket_id target / CR-121 impact — plain optional non-empty string.
-    if (typeof newDoc.return_ticket_id !== 'undefined' && !isNonEmptyString(newDoc.return_ticket_id)) {
-      throw { forbidden: 'bulk_return_pool return_ticket_id must be a non-empty string' };
-    }
-    if (['OPEN', 'SUBMITTED', 'RECEIVED'].indexOf(newDoc.status) === -1) {
+    if (['OPEN', 'SUBMITTED', 'RECEIVED', 'CANCELLED'].indexOf(newDoc.status) === -1) {
       throw { forbidden: 'Invalid bulk_return_pool status: ' + newDoc.status };
     }
+    var poolSameJson = function (a, b) {
+      return JSON.stringify(a) === JSON.stringify(b);
+    };
     if (typeof newDoc.lock !== 'undefined' && newDoc.lock !== null) {
       var poolLock = newDoc.lock;
       if (newDoc.status !== 'OPEN') {
         throw { forbidden: 'bulk_return_pool lock is only allowed while OPEN' };
       }
-      if (typeof poolLock !== 'object' || ['SUBMIT', 'DELETE'].indexOf(poolLock.op) === -1) {
-        throw { forbidden: 'bulk_return_pool lock.op must be SUBMIT or DELETE' };
+      if (typeof poolLock !== 'object' || ['SUBMIT', 'CANCEL'].indexOf(poolLock.op) === -1) {
+        throw { forbidden: 'bulk_return_pool lock.op must be SUBMIT or CANCEL' };
       }
       if (typeof poolLock.op_id !== 'string' || !/^[0-9A-HJKMNP-TV-Z]{26}$/.test(poolLock.op_id)) {
         throw { forbidden: 'bulk_return_pool lock.op_id must be a ULID' };
@@ -2299,20 +2426,55 @@ export function buildValidateDocUpdate(code: string): string {
       if (!isNonEmptyString(poolLock.locked_at) || !isNonEmptyString(poolLock.locked_by)) {
         throw { forbidden: 'bulk_return_pool lock requires locked_at and locked_by' };
       }
-    }
-    if (newDoc.status === 'OPEN') {
-      if (typeof newDoc.items_summary !== 'undefined') {
-        throw { forbidden: 'OPEN bulk_return_pool must not have items_summary' };
+      // locked_by is checked only when the lock is newly written or changed.
+      if (!oldDoc || !poolSameJson(poolLock, oldDoc.lock)) {
+        if (poolLock.locked_by !== userCtx.name) {
+          throw { forbidden: 'bulk_return_pool lock.locked_by must match the current actor' };
+        }
       }
-      if (typeof newDoc.submitted_at !== 'undefined' || typeof newDoc.submitted_by !== 'undefined') {
-        throw { forbidden: 'OPEN bulk_return_pool must not have submitted_at or submitted_by' };
+    }
+    var poolReceiveFields = ['received_at', 'received_by', 'received_storage_point_id', 'received_storage_zone', 'received_items'];
+    var poolCancelFields = ['cancelled_at', 'cancelled_by'];
+    var poolSubmitFields = ['items_summary', 'entry_ids', 'submitted_at', 'submitted_by'];
+    var poolFieldsAbsent = function (fields, label) {
+      for (var fi = 0; fi < fields.length; fi++) {
+        if (typeof newDoc[fields[fi]] !== 'undefined') {
+          throw { forbidden: label + ' bulk_return_pool must not have ' + fields[fi] };
+        }
+      }
+    };
+    if (newDoc.status === 'OPEN') {
+      poolFieldsAbsent(poolSubmitFields, 'OPEN');
+      poolFieldsAbsent(poolCancelFields, 'OPEN');
+      poolFieldsAbsent(poolReceiveFields, 'OPEN');
+    } else if (newDoc.status === 'CANCELLED') {
+      poolFieldsAbsent(poolSubmitFields, 'CANCELLED');
+      poolFieldsAbsent(poolReceiveFields, 'CANCELLED');
+      if (!isPoolDateString(newDoc.cancelled_at) || !isNonEmptyString(newDoc.cancelled_by)) {
+        throw { forbidden: 'CANCELLED bulk_return_pool requires cancelled_at and cancelled_by' };
       }
     } else {
-      // TODO(#658 Q3): whether an empty pool may be submitted is undecided — an empty array is accepted.
-      if (!Array.isArray(newDoc.items_summary)) {
-        throw { forbidden: newDoc.status + ' bulk_return_pool requires items_summary array' };
+      poolFieldsAbsent(poolCancelFields, newDoc.status);
+      // Submit snapshot: items_summary + entry_ids are non-empty (an empty pool cannot be submitted).
+      if (!Array.isArray(newDoc.items_summary) || newDoc.items_summary.length === 0) {
+        throw { forbidden: newDoc.status + ' bulk_return_pool requires a non-empty items_summary array' };
+      }
+      if (!Array.isArray(newDoc.entry_ids) || newDoc.entry_ids.length === 0) {
+        throw { forbidden: newDoc.status + ' bulk_return_pool requires a non-empty entry_ids array' };
+      }
+      var seenPoolEntryIds = {};
+      for (var ei = 0; ei < newDoc.entry_ids.length; ei++) {
+        var poolEntryId = newDoc.entry_ids[ei];
+        if (typeof poolEntryId !== 'string' || !/^bulk_return_entry:[0-9A-HJKMNP-TV-Z]{26}$/.test(poolEntryId)) {
+          throw { forbidden: 'bulk_return_pool entry_ids must contain bulk_return_entry:{ulid} ids' };
+        }
+        if (seenPoolEntryIds[poolEntryId] === true) {
+          throw { forbidden: 'Duplicate id in bulk_return_pool entry_ids: ' + poolEntryId };
+        }
+        seenPoolEntryIds[poolEntryId] = true;
       }
       var seenSummaryItems = {};
+      var summaryQtyByItem = {};
       for (var si = 0; si < newDoc.items_summary.length; si++) {
         var summaryRow = newDoc.items_summary[si];
         if (!summaryRow || typeof summaryRow !== 'object' || !isNonEmptyString(summaryRow.item_id)) {
@@ -2325,9 +2487,67 @@ export function buildValidateDocUpdate(code: string): string {
           throw { forbidden: 'Duplicate item_id in bulk_return_pool items_summary: ' + summaryRow.item_id };
         }
         seenSummaryItems[summaryRow.item_id] = true;
+        summaryQtyByItem[summaryRow.item_id] = summaryRow.qty.trim();
       }
-      if (!isNonEmptyString(newDoc.submitted_at) || !isNonEmptyString(newDoc.submitted_by)) {
+      if (!isPoolDateString(newDoc.submitted_at) || !isNonEmptyString(newDoc.submitted_by)) {
         throw { forbidden: newDoc.status + ' bulk_return_pool requires submitted_at and submitted_by' };
+      }
+      if (newDoc.status === 'SUBMITTED') {
+        poolFieldsAbsent(poolReceiveFields, 'SUBMITTED');
+      } else {
+        // RECEIVED: receipt audit + optional storage point + one inspection row per summary item.
+        if (!isPoolDateString(newDoc.received_at) || !isNonEmptyString(newDoc.received_by)) {
+          throw { forbidden: 'RECEIVED bulk_return_pool requires received_at and received_by' };
+        }
+        isPoolStoragePair(newDoc.received_storage_point_id, newDoc.received_storage_zone, 'received');
+        if (!Array.isArray(newDoc.received_items) || newDoc.received_items.length !== newDoc.items_summary.length) {
+          throw { forbidden: 'bulk_return_pool received_items must have exactly one row per items_summary item' };
+        }
+        var seenReceivedItems = {};
+        var poolDiscrepancyReasons = ['damaged', 'missing', 'miscount', 'other'];
+        for (var ri = 0; ri < newDoc.received_items.length; ri++) {
+          var receivedRow = newDoc.received_items[ri];
+          if (!receivedRow || typeof receivedRow !== 'object' || !isNonEmptyString(receivedRow.item_id) ||
+              typeof summaryQtyByItem[receivedRow.item_id] === 'undefined') {
+            throw { forbidden: 'bulk_return_pool received_items row must reference an items_summary item_id' };
+          }
+          if (seenReceivedItems[receivedRow.item_id] === true) {
+            throw { forbidden: 'Duplicate item_id in bulk_return_pool received_items: ' + receivedRow.item_id };
+          }
+          seenReceivedItems[receivedRow.item_id] = true;
+          if (typeof receivedRow.expected_qty !== 'string' || !/^\\d+$/.test(receivedRow.expected_qty.trim()) ||
+              parseDecimal4(receivedRow.expected_qty) !== parseDecimal4(summaryQtyByItem[receivedRow.item_id])) {
+            throw { forbidden: 'bulk_return_pool received_items expected_qty must equal the items_summary qty' };
+          }
+          if (typeof receivedRow.received_qty !== 'string' || !/^\\d+$/.test(receivedRow.received_qty.trim())) {
+            throw { forbidden: 'bulk_return_pool received_items received_qty must be a non-negative whole number string' };
+          }
+          var rowExpected = parseDecimal4(receivedRow.expected_qty);
+          var rowReceived = parseDecimal4(receivedRow.received_qty);
+          if (rowReceived > rowExpected) {
+            throw { forbidden: 'bulk_return_pool received_items received_qty must not exceed expected_qty' };
+          }
+          var hasRowReason = typeof receivedRow.discrepancy_reason !== 'undefined';
+          var hasRowNote = typeof receivedRow.discrepancy_note !== 'undefined';
+          if (hasRowReason && poolDiscrepancyReasons.indexOf(receivedRow.discrepancy_reason) === -1) {
+            throw { forbidden: 'bulk_return_pool received_items discrepancy_reason is invalid' };
+          }
+          if (hasRowNote && !isNonEmptyString(receivedRow.discrepancy_note)) {
+            throw { forbidden: 'bulk_return_pool received_items discrepancy_note must be a non-empty string' };
+          }
+          if (rowReceived === rowExpected) {
+            if (hasRowReason || hasRowNote) {
+              throw { forbidden: 'bulk_return_pool received_items must not carry a discrepancy when received_qty equals expected_qty' };
+            }
+          } else {
+            if (!hasRowReason) {
+              throw { forbidden: 'bulk_return_pool received_items requires discrepancy_reason when received_qty is below expected_qty' };
+            }
+            if (receivedRow.discrepancy_reason === 'other' && !hasRowNote) {
+              throw { forbidden: 'bulk_return_pool received_items requires discrepancy_note when the reason is other' };
+            }
+          }
+        }
       }
     }
     if (oldDoc) {
@@ -2338,28 +2558,49 @@ export function buildValidateDocUpdate(code: string): string {
           throw { forbidden: 'bulk_return_pool.' + pfName + ' is immutable' };
         }
       }
-      // Only OPEN -> SUBMITTED and SUBMITTED -> RECEIVED are pinned. TODO(#658 Q3): any other
-      // transition (incl. SUBMITTED -> OPEN) waits on the role decision.
+      // Forward-only: OPEN -> SUBMITTED, SUBMITTED -> RECEIVED, OPEN -> CANCELLED. Everything else
+      // (SUBMITTED -> OPEN, SUBMITTED -> CANCELLED, RECEIVED -> *, CANCELLED -> *) is rejected.
       if (oldDoc.status !== newDoc.status) {
         var poolStepOk =
           (oldDoc.status === 'OPEN' && newDoc.status === 'SUBMITTED') ||
-          (oldDoc.status === 'SUBMITTED' && newDoc.status === 'RECEIVED');
+          (oldDoc.status === 'SUBMITTED' && newDoc.status === 'RECEIVED') ||
+          (oldDoc.status === 'OPEN' && newDoc.status === 'CANCELLED');
         if (!poolStepOk) {
-          throw { forbidden: 'Invalid bulk_return_pool status transition ' + oldDoc.status + ' -> ' + newDoc.status + ' (pending decision, #658 Q3)' };
+          throw { forbidden: 'Invalid bulk_return_pool status transition ' + oldDoc.status + ' -> ' + newDoc.status };
+        }
+        if (newDoc.status === 'SUBMITTED' && newDoc.submitted_by !== userCtx.name) {
+          throw { forbidden: 'bulk_return_pool.submitted_by must match the current actor' };
+        }
+        if (newDoc.status === 'RECEIVED' && newDoc.received_by !== userCtx.name) {
+          throw { forbidden: 'bulk_return_pool.received_by must match the current actor' };
+        }
+        if (newDoc.status === 'CANCELLED' && newDoc.cancelled_by !== userCtx.name) {
+          throw { forbidden: 'bulk_return_pool.cancelled_by must match the current actor' };
         }
       }
-      if (oldDoc.status !== 'OPEN') {
-        if (newDoc.name !== oldDoc.name || newDoc.location !== oldDoc.location) {
-          throw { forbidden: 'bulk_return_pool name and location are immutable once SUBMITTED' };
+      // name / location are editable only while OPEN and stay as they were on any transition.
+      // notes stay editable in every status.
+      if (oldDoc.status !== 'OPEN' || oldDoc.status !== newDoc.status) {
+        if (newDoc.name !== oldDoc.name ||
+            newDoc.location_storage_point_id !== oldDoc.location_storage_point_id ||
+            newDoc.location_storage_zone !== oldDoc.location_storage_zone) {
+          throw { forbidden: 'bulk_return_pool name and location are immutable once the pool has left OPEN' };
         }
-        if (JSON.stringify(newDoc.items_summary) !== JSON.stringify(oldDoc.items_summary) ||
-            newDoc.submitted_at !== oldDoc.submitted_at ||
-            newDoc.submitted_by !== oldDoc.submitted_by) {
-          throw { forbidden: 'bulk_return_pool items_summary and submit audit are immutable once written' };
+      }
+      // Everything written at or after the freeze is immutable (a transition writes only its own step).
+      if (oldDoc.status !== 'OPEN') {
+        var frozenPoolFields = poolSubmitFields.concat(poolCancelFields);
+        if (oldDoc.status === 'RECEIVED') frozenPoolFields = frozenPoolFields.concat(poolReceiveFields);
+        for (var zf = 0; zf < frozenPoolFields.length; zf++) {
+          if (!poolSameJson(newDoc[frozenPoolFields[zf]], oldDoc[frozenPoolFields[zf]])) {
+            throw { forbidden: 'bulk_return_pool.' + frozenPoolFields[zf] + ' is immutable once written' };
+          }
         }
       }
     } else if (newDoc.status !== 'OPEN') {
       throw { forbidden: 'Initial bulk_return_pool status must be OPEN' };
+    } else if (newDoc.created_by !== userCtx.name) {
+      throw { forbidden: 'bulk_return_pool.created_by must match the current actor' };
     }
   }
   // 14b. #658: bulk_return_entry (append-only; the guard above already rejects any update/delete).
@@ -2379,12 +2620,26 @@ export function buildValidateDocUpdate(code: string): string {
     if (typeof newDoc.qty !== 'string' || !/^0*[1-9]\\d*$/.test(newDoc.qty.trim())) {
       throw { forbidden: 'bulk_return_entry qty must be a positive whole number string' };
     }
-    // TODO(#658 Q5): canonical "unspecified" returner — absent and null both accepted.
-    if (typeof newDoc.returner_id !== 'undefined' && newDoc.returner_id !== null) {
-      if (typeof newDoc.returner_id !== 'string' ||
-          (newDoc.returner_id.indexOf('evacuee:') !== 0 && newDoc.returner_id.indexOf('volunteer:') !== 0)) {
-        throw { forbidden: 'bulk_return_entry returner_id must start with evacuee: or volunteer:' };
+    if (!canWriteBulkReturnEntry()) {
+      throw { forbidden: 'Only warehouse staff, supply coordinators, distribution staff, shelter managers, or system admins can record bulk return entries' };
+    }
+    if (newDoc.created_by !== userCtx.name) {
+      throw { forbidden: 'bulk_return_entry.created_by must match the current actor' };
+    }
+    // returner_type: unspecified carries an explicit returner_id null and no loan_refs.
+    if (['evacuee', 'volunteer', 'unspecified'].indexOf(newDoc.returner_type) === -1) {
+      throw { forbidden: 'bulk_return_entry returner_type must be evacuee, volunteer or unspecified' };
+    }
+    if (newDoc.returner_type === 'unspecified') {
+      if (newDoc.returner_id !== null) {
+        throw { forbidden: 'unspecified bulk_return_entry requires returner_id null' };
       }
+      if (Array.isArray(newDoc.loan_refs) && newDoc.loan_refs.length > 0) {
+        throw { forbidden: 'unspecified bulk_return_entry must not have loan_refs' };
+      }
+    } else if (typeof newDoc.returner_id !== 'string' ||
+        newDoc.returner_id.indexOf(newDoc.returner_type + ':') !== 0) {
+      throw { forbidden: 'bulk_return_entry returner_id must start with ' + newDoc.returner_type + ':' };
     }
     if (typeof newDoc.notes !== 'undefined' && (typeof newDoc.notes !== 'string' || !newDoc.notes.trim())) {
       throw { forbidden: 'bulk_return_entry notes must be a non-empty string' };
@@ -2410,7 +2665,8 @@ export function buildValidateDocUpdate(code: string): string {
       seenLoanRefs[loanRef.distribution_log_id] = true;
       loanRefTotal += parseDecimal4(loanRef.qty);
     }
-    // TODO(#658 Q5): equality vs <= — only the logically necessary <= is enforced.
+    // sum(loan_refs.qty) <= qty: the surplus may be unattributed (a returner with no outstanding
+    // loan has empty loan_refs; the UI warning lives in the application layer).
     if (loanRefTotal > parseDecimal4(newDoc.qty)) {
       throw { forbidden: 'bulk_return_entry loan_refs qty must not exceed entry qty' };
     }
@@ -2420,6 +2676,12 @@ export function buildValidateDocUpdate(code: string): string {
   if (newDoc.type === 'bulk_return_entry_move') {
     if (newDoc.schema_v !== 1) {
       throw { forbidden: 'Unsupported bulk_return_entry_move schema version' };
+    }
+    if (!canWriteBulkReturnEntry()) {
+      throw { forbidden: 'Only warehouse staff, supply coordinators, distribution staff, shelter managers, or system admins can move bulk return entries' };
+    }
+    if (newDoc.created_by !== userCtx.name) {
+      throw { forbidden: 'bulk_return_entry_move.created_by must match the current actor' };
     }
     var moveIdMatch = /^bulk_return_entry_move:([0-9A-HJKMNP-TV-Z]{26}):(\\d{4})$/.exec(newDoc._id);
     if (!moveIdMatch) {
@@ -2447,6 +2709,41 @@ export function buildValidateDocUpdate(code: string): string {
     }
     if (typeof newDoc.notes !== 'undefined' && (typeof newDoc.notes !== 'string' || !newDoc.notes.trim())) {
       throw { forbidden: 'bulk_return_entry_move notes must be a non-empty string' };
+    }
+  }
+  // 14d. #658: bulk_return_entry_void (append-only; deterministic id so an entry is voided at most
+  // once — a second void is a CouchDB 409 conflict, not a VDU rejection). Voider / time are the
+  // envelope created_by / created_at. Advisory (VDU cannot read other docs): the pool is still OPEN
+  // and unlocked, and pool_id is the entry's current pool — enforced by the domain canVoidEntry +
+  // fold consistency checks.
+  if (newDoc.type === 'bulk_return_entry_void') {
+    if (newDoc.schema_v !== 1) {
+      throw { forbidden: 'Unsupported bulk_return_entry_void schema version' };
+    }
+    if (!canWriteBulkReturnEntry()) {
+      throw { forbidden: 'Only warehouse staff, supply coordinators, distribution staff, shelter managers, or system admins can void bulk return entries' };
+    }
+    if (newDoc.created_by !== userCtx.name) {
+      throw { forbidden: 'bulk_return_entry_void.created_by must match the current actor' };
+    }
+    var voidIdMatch = /^bulk_return_entry_void:([0-9A-HJKMNP-TV-Z]{26})$/.exec(newDoc._id);
+    if (!voidIdMatch) {
+      throw { forbidden: 'bulk_return_entry_void id must be bulk_return_entry_void:{entryUlid}' };
+    }
+    if (newDoc.entry_id !== 'bulk_return_entry:' + voidIdMatch[1]) {
+      throw { forbidden: 'bulk_return_entry_void entry_id must match the entry ULID in _id' };
+    }
+    if (typeof newDoc.pool_id !== 'string' || !/^bulk_return_pool:[0-9A-HJKMNP-TV-Z]{26}$/.test(newDoc.pool_id)) {
+      throw { forbidden: 'bulk_return_entry_void requires pool_id' };
+    }
+    if (typeof newDoc.item_id !== 'string' || !newDoc.item_id) {
+      throw { forbidden: 'bulk_return_entry_void requires item_id' };
+    }
+    if (typeof newDoc.qty !== 'string' || !/^0*[1-9]\\d*$/.test(newDoc.qty.trim())) {
+      throw { forbidden: 'bulk_return_entry_void qty must be a positive whole number string' };
+    }
+    if (typeof newDoc.notes !== 'undefined' && (typeof newDoc.notes !== 'string' || !newDoc.notes.trim())) {
+      throw { forbidden: 'bulk_return_entry_void notes must be a non-empty string' };
     }
   }
   // 15. CR-134: bulk_return_claim validation (Rule 15)
