@@ -114,14 +114,14 @@ kiosk (Chromium --kiosk, /kiosk)
 
 #### Banner group — path เพิ่ม/เปลี่ยน (2026-10-21 — CR-162 §3.7)
 
-> แถว `/back-office/kiosks/banners` (card ต่อขนาดจอ) และ `/back-office/kiosks/banners/{compact|portrait}` ในตารางด้านบนถูกแทนที่ด้วยตารางนี้เมื่ออนุมัติ · `/new` / `/{id}` ยังอยู่ (เพิ่ม select กลุ่ม required) · ตารางด้านบนไม่ถูกแก้เพื่อคงฉบับที่อนุมัติไว้
+> แถว `/back-office/kiosks/banners` (card ต่อขนาดจอ) และ `/back-office/kiosks/banners/{compact|portrait}` ในตารางด้านบนถูกแทนที่ด้วยตารางนี้ (Team Lead อนุมัติ 2026-10-22) · `/new` / `/{id}` ยังอยู่ (เพิ่ม select กลุ่ม required) · ตารางด้านบนไม่ถูกแก้เพื่อคงฉบับที่อนุมัติไว้
 
-| Path                                                              | Method                              | ผู้เรียก                | Auth                                                     | สถานะ (proposed)                                              |
+| Path                                                              | Method                              | ผู้เรียก                | Auth                                                     | สถานะ                                                         |
 | :---------------------------------------------------------------- | :---------------------------------- | :---------------------- | :------------------------------------------------------- | :------------------------------------------------------------ |
 | `/back-office/kiosks/banners`                                     | page (card ต่อกลุ่ม + สร้างกลุ่ม + ยังไม่จัดกลุ่ม) | `kiosk_staff` / SM / SA | `_session` + `requireKioskManagement`                    | **แทนที่** card ต่อขนาดจอ                                      |
 | `/back-office/kiosks/banners/groups/new`                          | page (ขั้น 1 ชื่อ · ขั้น 2 เลือกเครื่อง)           | `kiosk_staff` / SM / SA | เหมือนข้างบน                                             | **ใหม่**                                                       |
 | `/back-office/kiosks/banners/groups/{group}`                      | page (header กลุ่ม + card ต่อขนาดจอ + สร้างแบนเนอร์) | `kiosk_staff` / SM / SA | เหมือนข้างบน                                             | **ใหม่**                                                       |
-| `/back-office/kiosks/banners/groups/{group}/{compact\|portrait}`  | page (2 แท็บ + ลากวางจัดลำดับต่อ slot)           | `kiosk_staff` / SM / SA | เหมือนข้างบน                                             | **ใหม่** — แทน `/back-office/kiosks/banners/{compact\|portrait}` (ลบ route เดิม) |
+| `/back-office/kiosks/banners/groups/{group}/{compact\|portrait}`  | page (2 แท็บ + ลากวางจัดลำดับต่อ slot)           | `kiosk_staff` / SM / SA | เหมือนข้างบน                                             | **ใหม่** — แทน `/back-office/kiosks/banners/{compact\|portrait}` (route เดิม redirect ไป `/back-office/kiosks/banners`) |
 | `/back-office/kiosks/banners/new?group=&screen=` · `/{id}`        | page (ฟอร์ม + select กลุ่ม required)               | `kiosk_staff` / SM / SA | เหมือนข้างบน                                             | แก้                                                            |
 | `/api/back-office/kiosk-banner-groups`                            | `GET` (list + `device_ids`) · `POST`               | back-office UI          | `_session` + scope ของ `?shelter_code=`                  | **ใหม่**                                                       |
 | `/api/back-office/kiosk-banner-groups/{id}`                       | `GET` · `PUT` · `DELETE ?rev=` (มี banner `409`)   | back-office UI          | `_session` + scope ของ `doc.shelter_code` (นอก scope `404`) | **ใหม่**                                                    |
@@ -130,7 +130,7 @@ kiosk (Chromium --kiosk, /kiosk)
 | `/api/v1/kiosk/banners`                                           | `POST` — กรองตาม `banner_group_id` ของเครื่อง · shape เดิม | ตู้                | device credential                                        | แก้ (allowlist `manager.py` ไม่เปลี่ยน)                        |
 | `/api/v1/kiosk/devices/{id}`                                      | `PATCH` ตัด `banner_enabled` · summary มี `banner_group_id` | back-office UI   | เหมือนเดิม                                               | แก้                                                            |
 
-ไฟล์เพิ่มของ group (proposed): `lib/features/kiosk-banners/domain/kiosk-banner-group.ts` · `ui/kiosk-banner-group-{card,form,device-picker}.svelte` · `lib/server/kiosk-banners/kiosk-banner-group.server.ts` · `routes/api/back-office/kiosk-banner-groups/**` · `routes/(protected)/back-office/kiosks/banners/groups/{new,[group],[group]/[screen=kioskScreen]}/+page.{ts,svelte}` · schema.md §3.13 · api-contract.md §2.3.1
+ไฟล์เพิ่มของ group: `lib/features/kiosk-banners/domain/kiosk-banner-group.ts` · `ui/kiosk-banner-group-{card,form,device-picker}.svelte` · `lib/server/kiosk-banners/kiosk-banner-group.server.ts` · `routes/api/back-office/kiosk-banner-groups/**` · `routes/(protected)/back-office/kiosks/banners/groups/{new,[group],[group]/[screen=kioskScreen]}/+page.{ts,svelte}` · schema.md §3.13 · api-contract.md §2.3.1
 
 #### ไฟล์ใหม่ (`frontend/src/` ยกเว้นระบุ)
 
