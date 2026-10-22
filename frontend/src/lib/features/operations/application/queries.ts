@@ -52,7 +52,9 @@ export const operationsKeys = {
 	balance: () => [...operationsKeys.all, 'balance', getShelterCode()] as const,
 	donationSlots: () => [...operationsKeys.all, 'donationSlots', getShelterCode()] as const,
 	transfers: () => [...operationsKeys.all, 'transfers'] as const,
-	transfer: (id: string) => [...operationsKeys.transfers(), id] as const
+	transfer: (id: string) => [...operationsKeys.transfers(), id] as const,
+	transferDestinations: () =>
+		[...operationsKeys.all, 'transferDestinations', getShelterCode()] as const
 };
 
 export const useCampaigns = () =>
@@ -355,6 +357,17 @@ export const useMergeItems = () => {
 		}
 	}));
 };
+
+/**
+ * Shelters the active shelter may send a transfer to (#570) — every shelter but its own, for
+ * the roles the transfer API accepts. Shelters change rarely, so it is kept fresh for a while.
+ */
+export const useTransferDestinations = () =>
+	createQuery(() => ({
+		queryKey: operationsKeys.transferDestinations(),
+		queryFn: () => operationsRepository().listTransferDestinations(),
+		staleTime: 5 * 60_000
+	}));
 
 /**
  * Query hook to list transfers (source or destination) for the active shelter (CR-059 Flow 1 / T-13).

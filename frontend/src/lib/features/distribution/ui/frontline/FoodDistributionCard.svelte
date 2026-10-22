@@ -25,6 +25,7 @@
 		checkMenuMatchAdvisory,
 		formatMenuTags,
 		getItemCapacitySummary,
+		isIdentifiedRecipient,
 		type FrontlineRecipientSelection
 	} from '../model/frontline-handover';
 	import { formatDistributionError } from '../model/distribution-error';
@@ -110,7 +111,7 @@
 
 	// Advisory duplicate preflight
 	const duplicatePreflight = $derived(
-		recipientSelection?.recipientType === 'evacuee'
+		isIdentifiedRecipient(recipientSelection)
 			? checkDuplicateMealAdvisory(recipientLogs, ticket.meal)
 			: { isDuplicate: false, priorLog: null }
 	);
@@ -153,7 +154,7 @@
 	// The duplicate-meal and menu-match preflights need their data before a confirm; without it
 	// they read as "no warning" and the override dialog would be skipped. A failed load blocks the
 	// confirm too (fail closed) until a retry succeeds.
-	const needsRecipientLogs = $derived(recipientSelection?.recipientType === 'evacuee');
+	const needsRecipientLogs = $derived(isIdentifiedRecipient(recipientSelection));
 	const preflightLoading = $derived(
 		itemMastersQuery.isPending || (needsRecipientLogs && recipientLogsQuery.isPending)
 	);

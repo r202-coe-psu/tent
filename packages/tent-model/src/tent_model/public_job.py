@@ -60,6 +60,9 @@ class PublicJob(Document):
     shift_template: ShiftTemplate = Field(default_factory=ShiftTemplate)
     shifts: list[JobShift] = Field(default_factory=list)
     auto_accept: bool = False
+    #: Staff flagged the job as needing people urgently (``job.is_urgent``) — the public
+    #: home page counts only these on its volunteer card (#709).
+    is_urgent: bool = False
     status: str = "open"
     updated_at: datetime
 
