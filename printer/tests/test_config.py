@@ -1,6 +1,6 @@
 import pytest
 
-from printer.config import Config, ConfigError, load_config
+from printer.config import Config, ConfigError, load_config, read_env_file
 
 
 def test_valid_env_loads_values_and_defaults():
@@ -159,3 +159,28 @@ def test_blank_boot_slip_falls_back_to_default_enabled():
 def test_boot_slip_rejects_unknown_words_naming_the_variable(bad):
     with pytest.raises(ConfigError, match="BOOT_SLIP"):
         load_config({**VALID_ENV, "BOOT_SLIP": bad})
+
+
+def test_read_env_file_parses_keys_quotes_comments_and_export(tmp_path):
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        "# comment line\n"
+        "\n"
+        "TENT_BASE_URL=http://172.20.10.2:5173\n"
+        'DEVICE_ID="printer-kiosk-1"\n'
+        "export DEVICE_SECRET='sk_print_abc'\n"
+        "# PRINT_PPI=203   commented out\n"
+        "BOOT_SLIP=0   # trailing comment\n",
+        encoding="utf-8",
+    )
+
+    assert read_env_file(env_file) == {
+        "TENT_BASE_URL": "http://172.20.10.2:5173",
+        "DEVICE_ID": "printer-kiosk-1",
+        "DEVICE_SECRET": "sk_print_abc",
+        "BOOT_SLIP": "0",
+    }
+
+
+def test_read_env_file_returns_empty_when_file_is_missing(tmp_path):
+    assert read_env_file(tmp_path / "missing.env") == {}

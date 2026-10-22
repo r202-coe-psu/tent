@@ -35,7 +35,19 @@ cp .env.example .env && chmod 600 .env   # แก้ค่าตามที่�
 uv run python -m printer
 ```
 
-ตัวแปรใน `.env`: ดู [`.env.example`](.env.example) · `TENT_BASE_URL` ต้องเป็น `https://` ยกเว้น `http://` ไปยัง localhost/LAN
+เครื่องที่ไม่มี uv (เช่นเครื่อง kiosk ที่ใช้ pip) — Python ≥ 3.11:
+
+```bash
+cd printer
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+cp .env.example .env && chmod 600 .env
+.venv/bin/python -m printer              # รันจากโฟลเดอร์ printer/ (อ่าน .env ในโฟลเดอร์นี้)
+```
+
+agent อ่าน `.env` ในโฟลเดอร์ที่รันเอง (ค่าใน environment จริงชนะค่าในไฟล์) · คอมเมนต์ใน `.env` ต้องอยู่บรรทัดของตัวเอง เพราะ systemd `EnvironmentFile` ไม่รองรับคอมเมนต์ท้ายบรรทัด
+
+ตัวแปรใน `.env`: ดู [`.env.example`](.env.example) · `TENT_BASE_URL` ต้องเป็น `https://` ยกเว้น `http://` ไปยัง localhost/LAN (เช่น `http://172.20.10.2:5173`)
 ถ้าอยาก restart อัตโนมัติ ลอง unit ใน `systemd/tent-printer.service` (path ตาม Phase 5 `/opt/tent/printer`)
 
 ### 3. สั่งพิมพ์ (จำลอง tablet) จากเครื่อง dev

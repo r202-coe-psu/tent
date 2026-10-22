@@ -1,6 +1,8 @@
 import ipaddress
+import os
 from collections.abc import Mapping
 from dataclasses import dataclass
+from pathlib import Path
 from urllib.parse import urlsplit
 
 
@@ -92,3 +94,32 @@ def load_config(environ: Mapping[str, str]) -> Config:
         error_backoff_max_sec=_positive_int(environ, "ERROR_BACKOFF_MAX_SEC", 60),
         boot_slip=_boolean(environ, "BOOT_SLIP", True),
     )
+
+
+def read_env_file(path: str | os.PathLike[str]) -> dict[str, str]:
+    """Parse a KEY=VALUE `.env` file for manual runs; systemd uses EnvironmentFile instead.
+
+    Skips blanks and `#` lines, accepts an `export ` prefix, strips one pair of matching quotes,
+    and drops an unquoted ` #` trailing comment. A missing file gives an empty mapping.
+    """
+    try:
+        text = Path(path).read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return {}
+    values: dict[str, str] = {}
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("export "):
+            line = line[len("export ") :].lstrip()
+        key, sep, value = line.partition("=")
+        if not sep:
+            continue
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in "'\"":
+            value = value[1:-1]
+        else:
+            value = value.split(" #", 1)[0].rstrip()
+        values[key.strip()] = value
+    return values

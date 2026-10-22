@@ -4,14 +4,15 @@ import sys
 import time
 
 from printer.api import BffClient
-from printer.config import ConfigError, load_config
+from printer.config import ConfigError, load_config, read_env_file
 from printer.cups import Cups
 from printer.runner import run
 
 
 def main() -> None:
     try:
-        config = load_config(os.environ)
+        # `.env` in the working directory for manual runs; real environment variables win.
+        config = load_config({**read_env_file(".env"), **os.environ})
     except ConfigError as exc:
         print(f"printer: invalid configuration: {exc}", file=sys.stderr)
         raise SystemExit(2) from None
