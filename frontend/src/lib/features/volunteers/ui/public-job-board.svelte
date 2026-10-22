@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import { SvelteSet } from 'svelte/reactivity';
 	import Filter from '@lucide/svelte/icons/filter';
 	import Search from '@lucide/svelte/icons/search';
@@ -26,11 +26,14 @@
 	let {
 		applicantProfile = null,
 		applicantCredential = null,
-		existingActivities = []
+		existingActivities = [],
+		initialShelter = null
 	}: {
 		applicantProfile?: VolunteerProfile | null;
 		applicantCredential?: PortalCredential | null;
 		existingActivities?: PortalActivity[];
+		/** Shelter code to filter by on arrival — the home page's per-shelter cards link here (#709). */
+		initialShelter?: string | null;
 	} = $props();
 
 	const t = $derived(jobsI18n[languageStore.current]);
@@ -397,7 +400,15 @@
 	let selectedJob = $state<QuickApplyJob | null>(null);
 	let searchQuery = $state('');
 	let selectedFilter = $state<'all' | 'open' | 'near_full' | 'controlled'>('all');
-	let selectedShelter = $state('all');
+	// Start on the shelter the reader arrived for (#709), so the board never renders "all" first.
+	let selectedShelter = $state(untrack(() => initialShelter) || 'all');
+	// Follows the link the reader arrived by; they can still pick another shelter here.
+	$effect(() => {
+		if (initialShelter) {
+			selectedShelter = initialShelter;
+			currentPage = 1;
+		}
+	});
 	let selectedSkill = $state('all');
 	const PAGE_SIZE = 6;
 	let currentPage = $state(1);

@@ -307,6 +307,8 @@ export {
 	useHouseholdsPaginated,
 	listMatchingEvacueeIds,
 	listMatchingHouseholdIds,
+	listCancellableEvacueeIds,
+	listCancellableHouseholdIds,
 	useCreateHousehold,
 	useUpdateHousehold,
 	usePatchHousehold,

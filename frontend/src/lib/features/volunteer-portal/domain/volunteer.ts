@@ -50,6 +50,8 @@ export type PublicJob = {
 	applicants_count?: number;
 	status: string;
 	requires_review: boolean;
+	/** Staff flagged the job as needing people urgently; absent from older projections. */
+	is_urgent?: boolean;
 };
 
 export type PublicJobShift = {

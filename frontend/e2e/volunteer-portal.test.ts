@@ -771,6 +771,51 @@ test.describe('Booking a mission from the board (CR-092 FR-VOL-02)', () => {
 		expect(await page.evaluate(() => document.documentElement.style.overflow)).toBe('');
 	});
 
+	test('opens filtered to the shelter a home-page card links to (#709)', async ({ page }) => {
+		const day = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
+		const boardJob = (code: string, name: string, title: string) => ({
+			job_id: `job:01${code}`,
+			shelter_code: code,
+			shelter_name: name,
+			title,
+			description: 'ทดสอบตัวกรองศูนย์',
+			tier: 'operational',
+			skills_required: [],
+			shifts: [
+				{
+					shift_id: `${code}-am`,
+					date: day,
+					start_time: '08:00',
+					end_time: '12:00',
+					quota: 5,
+					slots_confirmed: 0
+				}
+			],
+			quota: 5,
+			slots_confirmed: 0,
+			slots_remaining: 5,
+			status: 'open',
+			requires_review: false
+		});
+		await mockPortalApi(page);
+		await page.route('**/api/public/v1/volunteer/jobs*', (route) =>
+			route.fulfill(
+				json({
+					success: true,
+					jobs: [
+						boardJob('SH001', 'ศูนย์ทดสอบหนึ่ง', 'งานของศูนย์หนึ่ง'),
+						boardJob('SH002', 'ศูนย์ทดสอบสอง', 'งานของศูนย์สอง')
+					]
+				})
+			)
+		);
+
+		await page.goto('/volunteers/jobs?shelter=SH002');
+
+		await expect(page.getByRole('heading', { name: 'งานของศูนย์สอง' })).toBeVisible();
+		await expect(page.getByRole('heading', { name: 'งานของศูนย์หนึ่ง' })).toHaveCount(0);
+	});
+
 	test('picking another page takes the reader to its first job', async ({ page }) => {
 		const day = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
 		await mockPortalApi(page);
