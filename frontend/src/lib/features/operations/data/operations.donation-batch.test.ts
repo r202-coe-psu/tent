@@ -366,6 +366,43 @@ describe('receiveDonationBatch — partial failure and retry (CR-143 FR-B7 / FR-
 		expect(storedDonation().status).toBe('received');
 	});
 
+	// Full-branch review W1 — row ids carry the item, so a line matched to another item on
+	// the retry gets a new id. Without the ledger check the goods went in twice (4 rows for
+	// a 3-line booking) and the booking closed.
+	it('refuses a retry that matched an already keyed line to another item', async () => {
+		await failLine(2);
+		await repo.receiveDonationBatch(donation, fullCount(), ctx);
+		expect(ledgerRows()).toHaveLength(2);
+		failingBulkIds.clear();
+
+		const rematched = fullCount().map((line, i) =>
+			i === 0 ? { ...line, item_id: 'item:water', unit: 'ขวด' } : line
+		);
+		await expect(repo.receiveDonationBatch(donation, rematched, ctx)).rejects.toThrow(
+			/ไม่ตรงกับรายการที่นับรอบนี้/
+		);
+
+		expect(ledgerRows()).toHaveLength(2);
+		expect(storedDonation().status).toBe('declared');
+	});
+
+	it('refuses a second screen that keyed a line as another item first', async () => {
+		const otherScreen = fullCount().map((line, i) =>
+			i === 0 ? { ...line, item_id: 'item:oil', unit: 'ขวด' } : line
+		);
+		// The other screen's write landed, but its close did not: the booking is still open
+		// and its `_rev` unchanged, so only the ledger tells the two counts apart.
+		failingPutIds.add(donation._id);
+		await repo.receiveDonationBatch(donation, otherScreen, ctx);
+		failingPutIds.clear();
+		const rowsBefore = ledgerRows().length;
+
+		await expect(repo.receiveDonationBatch(donation, fullCount(), ctx)).rejects.toThrow(
+			/ไม่ตรงกับรายการที่นับรอบนี้/
+		);
+		expect(ledgerRows()).toHaveLength(rowsBefore);
+	});
+
 	it('retries only the failed row (FR-B7)', async () => {
 		await failLine(1);
 		await repo.receiveDonationBatch(donation, fullCount(), ctx);
@@ -725,7 +762,7 @@ describe('receiveDonationBatch — partial failure and retry (CR-143 FR-B7 / FR-
 				i === 0 ? { ...line, item_id: 'item:oil', unit: 'ขวด' } : line
 			);
 			await expect(repo.receiveDonationBatch(second, differently, ctx)).rejects.toThrow(
-				/รับเข้าคลังไปแล้วจากอีกหน้าจอ/
+				/ไม่ตรงกับรายการที่นับรอบนี้/
 			);
 			expect(ledgerRows()).toHaveLength(rowsBefore);
 		});
@@ -805,6 +842,8 @@ describe('receiveDonationBatch — lines refused at review (CR-172 FR-13, CR-174
 			reject_reason_code: 'expired'
 		});
 		expect(summary.items?.[0]).not.toHaveProperty('rejected');
+		// schema.md §2.3: every line checked, the refused one included — as the scan route.
+		expect(summary.total_items).toBe(3);
 	});
 });
 

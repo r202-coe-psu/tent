@@ -376,19 +376,27 @@ export class OperationsRemoteRepository implements OperationsRepository {
 				ledger_id: id
 			});
 		});
-		// Both copies can read `received` — a booking closed before its rows were keyed — and
-		// then neither `_rev` nor `receivedElsewhere` tells two screens apart. The ledger does:
-		// a row of this booking this count would not write means another count got there.
-		// One more than `ids` is enough to see one: at most `ids.length` of them are ours.
+		if (receivedElsewhere && toWrite.length > 0) {
+			throw new Error(
+				'ใบนี้รับเข้าคลังไปแล้วจากอีกหน้าจอ — ไม่ได้บันทึกซ้ำ เลือกใบใหม่เพื่อดูผลที่บันทึกไว้'
+			);
+		}
+		// Row ids only catch a retry that matches every line the same way. A line keyed as
+		// one item and now matched to another (after a reload, or on a second device counting
+		// at once) gets a new id, and the goods would go into stock twice — and `_rev` does
+		// not move until the booking closes, so it cannot tell either. The ledger can: a row
+		// of this booking this count would not write means an earlier or concurrent count
+		// recorded something else. Any status — a booking closed before its rows were keyed
+		// reads `received` on both screens. One more than `ids` is enough to see one: at
+		// most `ids.length` of them are ours.
 		const keyedByAnother =
-			onFile.status === 'received' &&
 			toWrite.length > 0 &&
 			(await this.keyedDonationRowIds(donation._id, ids.length + 1)).some(
 				(id) => !ids.includes(id)
 			);
-		if ((receivedElsewhere || keyedByAnother) && toWrite.length > 0) {
+		if (keyedByAnother) {
 			throw new Error(
-				'ใบนี้รับเข้าคลังไปแล้วจากอีกหน้าจอ — ไม่ได้บันทึกซ้ำ เลือกใบใหม่เพื่อดูผลที่บันทึกไว้'
+				'ใบนี้มีของบันทึกเข้าคลังไว้แล้วที่ไม่ตรงกับรายการที่นับรอบนี้ (เช่น เลือกสินค้าคนละตัวกับครั้งก่อน) — ไม่ได้บันทึกซ้ำ ตรวจรายการ "บันทึกเข้าคลังไว้ก่อนหน้านี้" แล้วเลือกสินค้าให้ตรงกับที่บันทึกไว้ หรือติดต่อผู้ดูแลเพื่อตรวจยอด'
 			);
 		}
 
@@ -525,7 +533,7 @@ export class OperationsRemoteRepository implements OperationsRepository {
 				const next: Donation = {
 					...nextBase,
 					received_summary: {
-						total_items: receivedLines.length,
+						total_items: summaryItems.length,
 						received_at: nextBase.received_at ?? new Date().toISOString(),
 						items: summaryItems,
 						shortfalls: shortfalls.map((s) => ({
