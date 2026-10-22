@@ -71,19 +71,19 @@ pipeline {
                             error("Staging server is at ${deployedCommit}, expected ${env.GIT_COMMIT}")
                         }
 
-                        // Wait, don't propagate (decision 2026-10-09): the deploy stays green when the deploy itself
-                        // succeeded; E2E results are reviewed manually in the tent-e2e-staging job before promoting.
-                        echo "Running tent-e2e-staging (wait, no propagate — manual review) for ${deployedCommit}"
-                        def e2e = build job: 'tent-e2e-staging',
+                        // Fire and forget (decision 2026-10-09: E2E never gates the deploy; results are reviewed
+                        // manually in the tent-e2e-staging job before promoting). Waiting held this build and its
+                        // mgmt executor for the whole 15–30 min run for nothing; tent-e2e-staging reports its own
+                        // result to Discord.
+                        echo "Triggering tent-e2e-staging (no wait — manual review) for ${deployedCommit}"
+                        build job: 'tent-e2e-staging',
                               parameters: [
                                   string(name: 'DEPLOY_COMMIT', value: deployedCommit),
                                   string(name: 'STAGING_URL', value: 'https://shelter.importstar.dev')
                               ],
-                              wait: true,
-                              propagate: false
+                              wait: false
                         // Surfaced in the Discord deploy notification (post { always } below).
-                        env.STAGING_E2E_RESULT = e2e.result ?: ''
-                        env.STAGING_E2E_URL = e2e.absoluteUrl ?: ''
+                        env.STAGING_E2E_RESULT = 'TRIGGERED'
                     }
                 }
             }
@@ -179,7 +179,7 @@ pipeline {
                                 "NOTIFY_COMMIT=${env.GIT_COMMIT ?: ''}",
                                 "NOTIFY_DURATION=${currentBuild.durationString.replace(' and counting', '')}",
                                 "NOTIFY_E2E_RESULT=${env.STAGING_E2E_RESULT ?: ''}",
-                                "NOTIFY_DETAIL=${env.STAGING_E2E_URL ? 'E2E report: ' + env.STAGING_E2E_URL : ''}"
+                                "NOTIFY_DETAIL=${env.STAGING_E2E_RESULT ? 'E2E runs in tent-e2e-staging and reports there' : ''}"
                             ]) {
                                 def rc = sh(script: './ci/discord-notify.sh', returnStatus: true)
                                 if (rc != 0) {

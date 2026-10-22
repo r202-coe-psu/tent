@@ -191,11 +191,27 @@ describe('createMealService', () => {
 				waste: 3,
 				external: { volunteers: 5, outside_evacuees: 2 }
 			},
+			'RCV-KITCHEN-0001',
 			ctx
 		);
 		expect(svc._id).toMatch(/^meal_service:[0-9A-Z]{26}$/);
 		expect(svc.type).toBe('meal_service');
 		expect(svc.meal_plan_id).toBe('meal_plan:01ARZ3NDEKTSV4RRFFQ69G5FAV');
+	});
+
+	it('sets receipt_no from the minted number (CR-177)', () => {
+		const svc = createMealService(
+			{
+				date: '2026-07-15',
+				meal: 'lunch',
+				served: 80,
+				waste: 5,
+				external: { volunteers: 0, outside_evacuees: 0 }
+			},
+			'RCV-KITCHEN-0007',
+			ctx
+		);
+		expect(svc.receipt_no).toBe('RCV-KITCHEN-0007');
 	});
 
 	it('two records for the same date+meal (extra batches) get different _ids', () => {
@@ -206,7 +222,9 @@ describe('createMealService', () => {
 			waste: 5,
 			external: { volunteers: 3, outside_evacuees: 0 }
 		};
-		expect(createMealService(input, ctx)._id).not.toBe(createMealService(input, ctx)._id);
+		expect(createMealService(input, 'RCV-KITCHEN-0001', ctx)._id).not.toBe(
+			createMealService(input, 'RCV-KITCHEN-0001', ctx)._id
+		);
 	});
 
 	it('carries actual_yield through when provided (CR-084)', () => {
@@ -219,6 +237,7 @@ describe('createMealService', () => {
 				waste: 3,
 				external: { volunteers: 1, outside_evacuees: 0 }
 			},
+			'RCV-KITCHEN-0001',
 			ctx
 		);
 		expect(svc.actual_yield).toBe(90);
@@ -234,6 +253,7 @@ describe('createMealService', () => {
 				waste: 0,
 				external: { volunteers: 0, outside_evacuees: 0 }
 			},
+			'RCV-KITCHEN-0001',
 			ctx
 		);
 		expect(svc.actual_yield).toBe(0);
@@ -248,6 +268,7 @@ describe('createMealService', () => {
 				waste: 5,
 				external: { volunteers: 0, outside_evacuees: 0 }
 			},
+			'RCV-KITCHEN-0001',
 			ctx
 		);
 		expect('actual_yield' in svc).toBe(false);
@@ -264,6 +285,7 @@ describe('createMealService', () => {
 					waste: 5,
 					external: { volunteers: 0, outside_evacuees: 0 }
 				},
+				'RCV-KITCHEN-0001',
 				ctx
 			)
 		).toThrow();
@@ -280,6 +302,7 @@ describe('createMealService', () => {
 					waste: 5,
 					external: { volunteers: 0, outside_evacuees: 0 }
 				},
+				'RCV-KITCHEN-0001',
 				ctx
 			)
 		).toThrow();
@@ -295,6 +318,7 @@ describe('createMealService', () => {
 				waste: 3,
 				external: { volunteers: 0, outside_evacuees: 0 }
 			},
+			'RCV-KITCHEN-0001',
 			ctx
 		);
 		expect(svc.schema_v).toBe(2);
@@ -446,6 +470,7 @@ describe('5-group progress calculation', () => {
 				waste: 2,
 				external: { volunteers: 0, outside_evacuees: 0 }
 			},
+			'RCV-KITCHEN-0001',
 			ctx
 		);
 

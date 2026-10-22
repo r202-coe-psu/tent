@@ -82,20 +82,20 @@ const createMockContext = (
 
 describe('Ticket Detail & PENDING_PICK Actions (Slice 5.2)', () => {
 	describe('Capability-Driven Action Permissions', () => {
-		it('allows warehouse_staff to allocate and cancel, but NOT approve for dispatch', () => {
+		it('allows warehouse_staff to allocate, cancel, and approve for dispatch (CR-179)', () => {
 			const ctx = createMockContext(['warehouse_staff']);
 
 			expect(canAllocateTicket(ctx)).toBe(true);
 			expect(canCancelTicket(ctx)).toBe(true);
-			expect(canApproveTicket(ctx)).toBe(false); // Only shelter_manager or system_admin
+			expect(canApproveTicket(ctx)).toBe(true);
 		});
 
-		it('allows supply_coordinator to allocate and cancel, but NOT approve for dispatch', () => {
+		it('allows supply_coordinator to allocate, cancel, and approve for dispatch (CR-179)', () => {
 			const ctx = createMockContext(['supply_coordinator']);
 
 			expect(canAllocateTicket(ctx)).toBe(true);
 			expect(canCancelTicket(ctx)).toBe(true);
-			expect(canApproveTicket(ctx)).toBe(false);
+			expect(canApproveTicket(ctx)).toBe(true);
 		});
 
 		it('allows shelter_manager to allocate, cancel, and approve', () => {
@@ -112,6 +112,16 @@ describe('Ticket Detail & PENDING_PICK Actions (Slice 5.2)', () => {
 			expect(canAllocateTicket(ctx)).toBe(true);
 			expect(canCancelTicket(ctx)).toBe(true);
 			expect(canApproveTicket(ctx)).toBe(true);
+		});
+
+		it('rejects kitchen_staff and distribution_staff from approving', () => {
+			expect(canApproveTicket(createMockContext(['kitchen_staff']))).toBe(false);
+			expect(canApproveTicket(createMockContext(['distribution_staff']))).toBe(false);
+		});
+
+		it('rejects warehouse_staff scoped to another shelter from approving', () => {
+			const ctx = createMockContext(['warehouse_staff']);
+			expect(canApproveTicket({ ...ctx, shelterCode: 'SH999' })).toBe(false);
 		});
 
 		it('rejects registration_staff from allocating, cancelling, and approving', () => {
