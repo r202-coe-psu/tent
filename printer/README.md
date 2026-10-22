@@ -9,14 +9,22 @@ Print agent ของ Raspberry Pi / เครื่อง kiosk: ดึงง�
 
 ## Quickstart
 
+ใช้ Python ≥ 3.11 + `pip` อย่างเดียว (dependency มีแค่ `httpx` ใน [`requirements.txt`](requirements.txt))
+ติดตั้งครั้งเดียวต่อเครื่อง ทั้งเครื่อง dev และ Pi/kiosk:
+
+```bash
+cd printer
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+```
+
 ### 1. บนเครื่อง dev (มี CouchDB + BFF)
 
 ```bash
-cd printer && uv sync
 export COUCHDB_ADMIN_URL=http://<user>:<pass>@<couchdb-host>:5984   # ตัวแปรเดียวกับที่ frontend ใช้
 
 # สร้าง DB `printing` (+ _security, _revs_limit, index) และ print_device ทดสอบ — รันซ้ำได้
-uv run python scripts/provision_poc.py --device-id printer-poc-1 --name "PoC printer" \
+.venv/bin/python scripts/provision_poc.py --device-id printer-poc-1 --name "PoC printer" \
     --shelter-code SH001 --host-kind standalone
 ```
 
@@ -30,41 +38,34 @@ uv run python scripts/provision_poc.py --device-id printer-poc-1 --name "PoC pri
 ต้องมี CUPS queue ที่ใช้งานได้แล้ว (`kiosk/setup_printer.sh --queue tent_xprinter`)
 
 ```bash
-cd printer && uv sync
+cd printer
 cp .env.example .env && chmod 600 .env   # แก้ค่าตามที่สคริปต์ provision พิมพ์ให้
-uv run python -m printer
+.venv/bin/python -m printer              # รันจากโฟลเดอร์ printer/ (อ่าน .env ในโฟลเดอร์นี้) · Ctrl+C เพื่อหยุด
 ```
 
-หรือใช้สคริปต์ช่วยรัน (ใช้ uv ถ้ามี ไม่งั้นสร้าง `.venv` ด้วย pip ให้เองครั้งแรก):
-
-```bash
-cd printer
-cp .env.example .env      # แก้ค่า
-./run.sh                  # Ctrl+C เพื่อหยุด · ./run.sh --setup = ติดตั้ง dependency อย่างเดียว
-```
-
-ทำเองทีละขั้นบนเครื่องที่ไม่มี uv (เช่นเครื่อง kiosk ที่ใช้ pip) — Python ≥ 3.11:
-
-```bash
-cd printer
-python3 -m venv .venv
-.venv/bin/pip install -r requirements.txt
-cp .env.example .env && chmod 600 .env
-.venv/bin/python -m printer              # รันจากโฟลเดอร์ printer/ (อ่าน .env ในโฟลเดอร์นี้)
-```
+หรือใช้ `./run.sh` แทนบรรทัดสุดท้าย (สร้าง `.venv` + `pip install -r requirements.txt` ให้เองถ้ายังไม่มี · `./run.sh --setup` = ติดตั้งอย่างเดียว)
 
 agent อ่าน `.env` ในโฟลเดอร์ที่รันเอง (ค่าใน environment จริงชนะค่าในไฟล์) · คอมเมนต์ใน `.env` ต้องอยู่บรรทัดของตัวเอง เพราะ systemd `EnvironmentFile` ไม่รองรับคอมเมนต์ท้ายบรรทัด
 
 ตัวแปรใน `.env`: ดู [`.env.example`](.env.example) · `TENT_BASE_URL` ต้องเป็น `https://` ยกเว้น `http://` ไปยัง localhost/LAN (เช่น `http://172.20.10.2:5173`)
-ถ้าอยาก restart อัตโนมัติ ลอง unit ใน `systemd/tent-printer.service` (path ตาม Phase 5 `/opt/tent/printer`)
+
+**เปิดเองหลัง boot (แบบ `kiosk/setup_autostart.sh`):** รัน `./run.sh` จากโฟลเดอร์นี้ผ่าน systemd ด้วย user ปัจจุบัน ไม่ต้องมีจอหรือ login และ restart เองถ้า agent ล้ม
+
+```bash
+./setup_autostart.sh             # ติดตั้ง + เปิดทันที (เรียก sudo เอง)
+./setup_autostart.sh --status    # สถานะ + log ล่าสุด · journalctl -u tent-printer-autostart -f
+./setup_autostart.sh --disable   # ปิด — ต้องปิดก่อนรัน ./run.sh เอง ไม่งั้นมี agent สองตัว
+```
+
+ติดตั้งจริง (user แยก, `/opt/tent/printer`) ดู Phase 5 ด้านล่าง
 
 ### 3. สั่งพิมพ์ (จำลอง tablet) จากเครื่อง dev
 
 ```bash
-uv run python scripts/enqueue.py --device-id printer-poc-1 --count 3 --wait         # 1 งาน 3 ใบ
-uv run python scripts/enqueue.py --device-id printer-poc-1 --jobs 5 --wait          # P2: 5 งานติดกัน
-uv run python scripts/enqueue.py --device-id printer-poc-1 --wait --repeat 20       # P1: median/p95
-uv run python scripts/enqueue.py --device-id printer-poc-1 --png a.png --png b.png  # ใช้ PNG จริง
+.venv/bin/python scripts/enqueue.py --device-id printer-poc-1 --count 3 --wait         # 1 งาน 3 ใบ
+.venv/bin/python scripts/enqueue.py --device-id printer-poc-1 --jobs 5 --wait          # P2: 5 งานติดกัน
+.venv/bin/python scripts/enqueue.py --device-id printer-poc-1 --wait --repeat 20       # P1: median/p95
+.venv/bin/python scripts/enqueue.py --device-id printer-poc-1 --png a.png --png b.png  # ใช้ PNG จริง
 ```
 
 `--help` ของสคริปต์อธิบายตัวเลือกทั้งหมด
@@ -135,6 +136,7 @@ sudo ./setup_printer_server.sh --status
 ## ทดสอบโค้ด agent
 
 ```bash
-uv run pytest -q
-uv run --with ruff ruff check printer tests scripts
+.venv/bin/pip install pytest ruff   # ครั้งแรก
+.venv/bin/python -m pytest -q
+.venv/bin/ruff check printer tests scripts
 ```
