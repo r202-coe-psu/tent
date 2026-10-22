@@ -170,6 +170,12 @@ export {
 } from './domain/intake-pipeline';
 
 export {
+	buildEvacueeQrLabel,
+	type EvacueeQrLabel,
+	type EvacueeQrLabelInput
+} from './domain/evacuee-qr-label';
+
+export {
 	extractScanLookupToken,
 	toCouchEvacueeId,
 	mongoUnassignedSearchQueries,
