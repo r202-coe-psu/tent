@@ -1671,6 +1671,18 @@ export const isStockTransfer = (d: unknown): d is StockTransfer =>
 	!!d && typeof d === 'object' && (d as { type?: unknown }).type === 'stock_transfer';
 
 /**
+ * The transfer API refused this account (HTTP 403) — the tab must say so rather than show an
+ * empty list (#571). Carries no `status` on purpose: the app's query client treats an error
+ * with `status` 401/403 as a session problem, and this is a permission answer, not an expiry.
+ */
+export class TransferForbiddenError extends Error {
+	constructor(message = 'Not allowed to read transfers') {
+		super(message);
+		this.name = 'TransferForbiddenError';
+	}
+}
+
+/**
  * Determines the donation cut-off status (T-22 Cut-off Rule).
  * Automatically closes when: On-hand inventory (onHand) + Reserved amount (reserved) >= Target (target)
  * Or when the campaign is manually closed.
