@@ -53,6 +53,11 @@ const ERROR_COPY: Record<string, string> = {
 	ROLE_CARD_WRITE_FAILED: 'ไม่สามารถสร้าง QR Role Card ได้ กรุณาลองใหม่อีกครั้ง'
 };
 
+/** Applicant-facing copy for one API error code, or `null` when there is none. */
+export function apiErrorCopy(code: string): string | null {
+	return ERROR_COPY[code] ?? null;
+}
+
 function apiError(body: unknown, status: number, fallback: string): Error {
 	if (body && typeof body === 'object') {
 		const { error: code, message } = body as { error?: unknown; message?: unknown };
@@ -173,13 +178,31 @@ export async function fetchJobs(filter: PublicJobFilter = {}): Promise<PublicJob
 	return (data as { jobs?: PublicJob[] }).jobs ?? [];
 }
 
+/** What became of one shift of a multi-shift application (#716). */
+export type ShiftApplyResult =
+	| { ok: true; shift_id: string | null; status: string; tracking_token: string }
+	| { ok: false; shift_id: string | null; error: string };
+
 export type ApplyResult = {
 	tracking_token: string;
 	status: string;
 	job_id: string;
 	shift_id?: string | null;
 	volunteer_token?: string;
+	/** One entry per shift sent; absent from servers older than #716. */
+	results?: ShiftApplyResult[];
 };
+
+/** No shift of the request was saved; `results` says why for each one. */
+export class ApplyFailedError extends Error {
+	constructor(
+		message: string,
+		readonly results: ShiftApplyResult[]
+	) {
+		super(message);
+		this.name = 'ApplyFailedError';
+	}
+}
 
 export type ApplyPreflightInput = Omit<VolunteerApplyInput, 'captchaToken'> & {
 	job_id: string;
@@ -234,7 +257,11 @@ export async function applyToJob(jobId: string, input: VolunteerApplyInput): Pro
 	});
 	const data = await readJson(response);
 	if (!response.ok || !data) {
-		throw apiError(data, response.status, 'ส่งใบสมัครไม่สำเร็จ');
+		const error = apiError(data, response.status, 'ส่งใบสมัครไม่สำเร็จ');
+		const results = (data as { results?: unknown } | null)?.results;
+		throw Array.isArray(results)
+			? new ApplyFailedError(error.message, results as ShiftApplyResult[])
+			: error;
 	}
 	return data as ApplyResult;
 }

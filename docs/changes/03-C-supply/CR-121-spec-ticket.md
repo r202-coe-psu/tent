@@ -3,7 +3,7 @@ id: CR-121
 title: ระบบตั๋วเบิกจ่ายพัสดุและอาหาร 4-in-1 (RequisitionTicket) พร้อมระบบแจกจ่ายหน้างานและติดตามของยืม (DistributionLog)
 status: approved
 date: 2026-09-12
-updated: 2026-09-17
+updated: 2026-10-21 # CR-179 FR-SEC-01 Step 2 เพิ่ม warehouse_staff/supply_coordinator
 requested_by: "Team Leader (ฝ่ายปฏิบัติการหน้างาน โรงครัว และคลังสินค้า)"
 decided_by: Project Owner
 layer: stable
@@ -718,7 +718,7 @@ export interface MealService extends BaseDoc {
 #### FR-SEC-01: การควบคุมสิทธิ์ตามบทบาท (Role-Based Access Control)
 - **คำสั่ง:** การเข้าถึงและปฏิบัติการในแต่ละขั้นตอนต้องถูกควบคุมด้วย 10 Canonical Roles ของระบบ:
   - Step 1 (เปิดตั๋วจัดของ): `warehouse_staff`, `supply_coordinator`, `system_admin`, `shelter_manager`, `kitchen_staff`
-  - Step 2 (ผจก. ตรวจสอบ): เฉพาะ `shelter_manager`, `system_admin`
+  - Step 2 (ผจก. ตรวจสอบ): `shelter_manager`, `system_admin` — **CR-179:** เพิ่ม `warehouse_staff`, `supply_coordinator`
   - Step 3 (ปล่อยรถขนส่ง): เฉพาะ `warehouse_staff`, `supply_coordinator`, `shelter_manager`, `system_admin`
   - Step 4–6 (จุดแจกรับเข้า, แจกจ่าย, ปิดรอบ, ส่งคืน): `registration_staff`, `supply_coordinator`, `shelter_manager` *(หมายเหตุ: อาสาสมัครปฏิบัติการหน้างานไม่มีบัญชีใน CouchDB `_users` ตาม `role-permission-matrix.md §1.3` และ CR-116 แต่ปฏิบัติงานผ่าน Digital Shift Pass Token หรือใช้งานแท็บเล็ตร่วมกับ Staff ประจำจุด)*
   - Step 7 (คลังตรวจรับคืน): เฉพาะ `warehouse_staff`, `supply_coordinator`, `shelter_manager`, `system_admin`

@@ -104,6 +104,18 @@ export interface JobsTranslations {
 	applyPhoneLimitHint: string;
 	applyEmail: string;
 	applyShiftsAvailable: string;
+	/** Multi-shift picker (#716). */
+	applyPickShiftsHint: string;
+	applyShiftConflict: string;
+	applyShiftsPicked: string;
+	errNoShiftPicked: string;
+	applyOutcomePartialTitle: string;
+	applyOutcomeNoneTitle: string;
+	applyOutcomeNoneBody: string;
+	applyOutcomeSaved: string;
+	applyOutcomeFailed: string;
+	applyOutcomeContinue: string;
+	applyOutcomePickAgain: string;
 	applyDatePrefix: string;
 	applyShiftReceived: string;
 	applyShiftNeedMore: string;
@@ -240,6 +252,17 @@ export const jobsI18n: Record<LanguageCode, JobsTranslations> = {
 		applyPhoneLimitHint: '1 เบอร์ต่อ 1 สิทธิ์การสมัครงานนี้',
 		applyEmail: 'อีเมล',
 		applyShiftsAvailable: 'กะให้เลือก',
+		applyPickShiftsHint: 'เลือกได้หลายกะ กดกะที่เลือกแล้วอีกครั้งเพื่อเอาออก',
+		applyShiftConflict: 'เวลาชน',
+		applyShiftsPicked: 'กะที่เลือก',
+		errNoShiftPicked: 'กรุณาเลือกอย่างน้อย 1 กะ',
+		applyOutcomePartialTitle: 'บางกะสมัครไม่สำเร็จ',
+		applyOutcomeNoneTitle: 'สมัครไม่สำเร็จ',
+		applyOutcomeNoneBody: 'ยังไม่มีกะไหนถูกบันทึก เลือกกะอื่นแล้วสมัครอีกครั้งได้',
+		applyOutcomeSaved: 'บันทึกแล้ว',
+		applyOutcomeFailed: 'ไม่ผ่าน',
+		applyOutcomeContinue: 'ไปต่อ',
+		applyOutcomePickAgain: 'เลือกกะใหม่',
 		applyDatePrefix: 'วันที่',
 		applyShiftReceived: 'รับแล้ว',
 		applyShiftNeedMore: 'ยังขาดอีก',
@@ -376,6 +399,17 @@ export const jobsI18n: Record<LanguageCode, JobsTranslations> = {
 		applyPhoneLimitHint: '1 application per phone number for this job',
 		applyEmail: 'Email',
 		applyShiftsAvailable: 'shifts available',
+		applyPickShiftsHint: 'You can pick several shifts. Tap a picked shift again to remove it.',
+		applyShiftConflict: 'Clashes',
+		applyShiftsPicked: 'shifts picked',
+		errNoShiftPicked: 'Pick at least one shift',
+		applyOutcomePartialTitle: 'Some shifts were not saved',
+		applyOutcomeNoneTitle: 'Application not saved',
+		applyOutcomeNoneBody: 'No shift was saved. Pick other shifts and apply again.',
+		applyOutcomeSaved: 'Saved',
+		applyOutcomeFailed: 'Not saved',
+		applyOutcomeContinue: 'Continue',
+		applyOutcomePickAgain: 'Pick other shifts',
 		applyDatePrefix: 'Date',
 		applyShiftReceived: 'Registered',
 		applyShiftNeedMore: 'Remaining needed',

@@ -11,7 +11,7 @@ import {
 	volunteerApplyPhoneLimiter
 } from '$lib/server/security/rate-limiter';
 import {
-	applyPublicVolunteerApplication,
+	applyPublicVolunteerApplicationToShifts,
 	PublicApplicationError
 } from '$lib/features/volunteers/server/public-application';
 
@@ -35,6 +35,12 @@ const noStore = { 'Cache-Control': 'no-store' };
  *
  * The quota move, ticket mint, auto-accept decision and persistence happen through
  * the public CouchDB writer. The captcha token is consumed here and never sent on.
+ *
+ * One request may carry several shifts of the job (`shifts[]`, #716) and still counts as
+ * one attempt. Every shift becomes its own application and gets its own entry in
+ * `results[]`; the shifts that passed are saved even when others did not. A request where
+ * no shift passed answers with the first shift's error, so a single-shift client sees
+ * exactly what it saw before.
  */
 export const POST: RequestHandler = async ({ params, request, getClientAddress }) => {
 	const payload = await request.json().catch(() => null);
@@ -45,7 +51,7 @@ export const POST: RequestHandler = async ({ params, request, getClientAddress }
 			{ status: 422, headers: noStore }
 		);
 	}
-	const { captchaToken, ...application } = parsed.data;
+	const { captchaToken, shifts, ...application } = parsed.data;
 
 	const ip = getClientAddress();
 	const skipDevGuards =
@@ -71,13 +77,31 @@ export const POST: RequestHandler = async ({ params, request, getClientAddress }
 	}
 
 	try {
-		const result = await applyPublicVolunteerApplication(params.id, application);
+		const { job_id, volunteer_token, results } = await applyPublicVolunteerApplicationToShifts(
+			params.id,
+			application,
+			shifts ?? [{ shift_id: application.shift_id, shift_date: application.shift_date }]
+		);
+		const firstSaved = results.find((result) => result.ok);
+		if (!firstSaved) {
+			const firstFailed = results.find((result) => !result.ok);
+			return json(
+				{ success: false, error: firstFailed?.error ?? 'APPLY_FAILED', results },
+				{ status: firstFailed?.http_status ?? 503, headers: noStore }
+			);
+		}
 		return json(
-			{ success: true, ...result },
 			{
-				status: 201,
-				headers: noStore
-			}
+				success: true,
+				// The first saved shift at the top level, for clients that read one ticket.
+				tracking_token: firstSaved.tracking_token,
+				status: firstSaved.status,
+				job_id,
+				shift_id: firstSaved.shift_id,
+				...(volunteer_token ? { volunteer_token } : {}),
+				results
+			},
+			{ status: 201, headers: noStore }
 		);
 	} catch (error) {
 		if (error instanceof PublicApplicationError) {
