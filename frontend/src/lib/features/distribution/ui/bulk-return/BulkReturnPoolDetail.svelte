@@ -40,6 +40,8 @@
 		type BulkReturnPoolRow,
 		type PoolCatalogItem
 	} from '../model/bulk-return-pool-v3';
+	import { liveSummaryRows, submittedSummaryRows } from '../model/bulk-return-lifecycle';
+	import BulkReturnPoolReceiveRecord from './BulkReturnPoolReceiveRecord.svelte';
 	import EditBulkReturnPoolHeaderDialog from './EditBulkReturnPoolHeaderDialog.svelte';
 	import MoveBulkReturnEntryDialog from './MoveBulkReturnEntryDialog.svelte';
 
@@ -57,7 +59,7 @@
 		onClose: () => void;
 		/** Renders "รับของเข้ากอง" when provided (the board wires it to the add-entry dialog). */
 		onAddEntry?: (poolId: string) => void;
-		/** #660: submit / receive actions render here. */
+		/** #660: submit / receive actions render in the header action row (board supplies a default). */
 		lifecycleActions?: Snippet<[BulkReturnPoolOverviewRow]>;
 	}
 
@@ -90,6 +92,18 @@
 	const editable = $derived(row ? isPoolEditable(row.pool) : false);
 	const lateCount = $derived(row?.late_entries.length ?? 0);
 	const cancelBlockedReason = $derived(row ? getCancelPoolBlockedReason(row) : null);
+	// Once submitted the items section shows the immutable submit snapshot; `row.items` is the live
+	// fold and would include late entries.
+	const showSnapshot = $derived(
+		row ? row.pool.status === 'SUBMITTED' || row.pool.status === 'RECEIVED' : false
+	);
+	const summaryRows = $derived(
+		row
+			? showSnapshot
+				? submittedSummaryRows(row.pool, catalog)
+				: liveSummaryRows(row, catalog)
+			: []
+	);
 
 	function dateTime(value: string): string {
 		return formatThaiDateTime(value) || value;
@@ -201,7 +215,7 @@
 							แก้ไขข้อมูลกอง
 						</Button>
 					{/if}
-					<!-- #660: submit / receive actions render here -->
+					<!-- #660: submit / receive actions (board default: BulkReturnPoolLifecycleActions) -->
 					{@render lifecycleActions?.(row)}
 				</div>
 			</div>
@@ -209,27 +223,35 @@
 			<div class="space-y-6 p-5">
 				<section aria-labelledby="pool-items-heading" class="space-y-2">
 					<h3 id="pool-items-heading" class="text-base font-semibold text-slate-800">
-						สรุปรายการสินค้าในกอง
+						{showSnapshot ? 'ยอดที่ส่งเข้าคลัง' : 'สรุปรายการสินค้าในกอง'}
 					</h3>
-					{#if row.items.length === 0}
+					{#if showSnapshot && pool.submitted_at}
+						<p class="text-xs text-slate-500">
+							ส่งเมื่อ <span class="tabular-nums">{dateTime(pool.submitted_at)}</span>
+						</p>
+					{/if}
+					{#if summaryRows.length === 0}
 						<p class="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
 							ยังไม่มีสินค้าในกองนี้
 						</p>
 					{:else}
 						<ul class="divide-y divide-slate-100 rounded-xl border border-slate-200/80 bg-white">
-							{#each row.items as summary (summary.item_id)}
-								{@const item = resolveItemDisplay(summary.item_id, catalog)}
+							{#each summaryRows as summary (summary.item_id)}
 								<li class="flex items-baseline justify-between gap-3 px-3.5 py-2.5 text-sm">
-									<span class="font-medium break-words text-slate-900">{item.name}</span>
+									<span class="font-medium break-words text-slate-900">{summary.name}</span>
 									<span class="shrink-0 font-semibold text-slate-900 tabular-nums">
 										{summary.qty}
-										{item.unit}
+										{summary.unit}
 									</span>
 								</li>
 							{/each}
 						</ul>
 					{/if}
 				</section>
+
+				{#if pool.status === 'RECEIVED'}
+					<BulkReturnPoolReceiveRecord {row} {catalog} />
+				{/if}
 
 				<section aria-labelledby="pool-entries-heading" class="space-y-2">
 					<h3 id="pool-entries-heading" class="text-base font-semibold text-slate-800">

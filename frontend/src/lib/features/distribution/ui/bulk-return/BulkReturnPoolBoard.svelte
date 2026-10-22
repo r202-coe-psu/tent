@@ -45,15 +45,17 @@
 	import { listOpenPools } from '../model/bulk-return-add-entry';
 	import AddBulkReturnEntriesDialog from './AddBulkReturnEntriesDialog.svelte';
 	import BulkReturnPoolDetail from './BulkReturnPoolDetail.svelte';
+	import BulkReturnPoolLifecycleActions from './BulkReturnPoolLifecycleActions.svelte';
 	import OpenBulkReturnPoolDialog from './OpenBulkReturnPoolDialog.svelte';
 
 	/**
-	 * Bulk return pool v3 board (#659): list, open, detail, add / move / void entries, edit header,
-	 * cancel. Shared by the back-office and the onsite desk (role gates via canManage / canWriteEntry).
+	 * Bulk return pool v3 board (#659, #660): list, open, detail, add / move / void entries, edit
+	 * header, cancel, submit to the warehouse ("เก็บเข้าคลัง") and receive ("ตรวจรับ"). Shared by the
+	 * back-office and the onsite desk (role gates via canManage / canWriteEntry).
 	 */
 	interface Props {
 		shelterCode?: string;
-		/** #660: submit / receive actions render in the pool detail header. */
+		/** Overrides the default submit / receive actions rendered in the pool detail header. */
 		lifecycleActions?: Snippet<[BulkReturnPoolOverviewRow]>;
 	}
 
@@ -329,6 +331,10 @@
 	/>
 {/if}
 
+{#snippet defaultLifecycleActions(row: BulkReturnPoolOverviewRow)}
+	<BulkReturnPoolLifecycleActions {row} {catalog} shelterCode={activeShelterCode} {canManage} />
+{/snippet}
+
 <!-- Keyed by pool id so dialog/confirm state never leaks from one pool to the next. -->
 {#key selectedPoolId}
 	<BulkReturnPoolDetail
@@ -339,7 +345,7 @@
 		{canManage}
 		{canWriteEntry}
 		onAddEntry={handleAddEntry}
-		{lifecycleActions}
+		lifecycleActions={lifecycleActions ?? defaultLifecycleActions}
 		onClose={() => (selectedPoolId = null)}
 	/>
 {/key}

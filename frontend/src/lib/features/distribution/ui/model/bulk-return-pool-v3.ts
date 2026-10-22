@@ -20,6 +20,7 @@ export const UNSPECIFIED_STORAGE_LABEL = 'ไม่ระบุ';
 export const UNSPECIFIED_RETURNER_LABEL = 'ไม่ระบุผู้คืน';
 export const NOT_EMPTY_CANCEL_REASON = 'ย้ายของออกให้หมดก่อน';
 export const LATE_ENTRY_GUIDANCE = 'ย้ายไปกองอื่นที่ยังเปิดอยู่';
+export const POOL_LOCKED_REASON = 'กองนี้กำลังถูกดำเนินการ กรุณารอสักครู่แล้วรีเฟรช';
 
 export type BulkReturnPoolRow = BulkReturnPoolOverviewRow;
 export type BulkReturnPoolEntryRow = BulkReturnPoolOverviewRow['entries'][number];
@@ -167,7 +168,7 @@ export function canCancelPool(row: BulkReturnPoolRow): boolean {
 export function getCancelPoolBlockedReason(row: BulkReturnPoolRow): string | null {
 	if (canCancelPool(row)) return null;
 	if (row.pool.status !== 'OPEN') return 'ยกเลิกได้เฉพาะกองที่ยังเปิดรับอยู่';
-	if (row.pool.lock) return 'กองนี้กำลังถูกดำเนินการ กรุณารอสักครู่แล้วรีเฟรช';
+	if (row.pool.lock) return POOL_LOCKED_REASON;
 	return NOT_EMPTY_CANCEL_REASON;
 }
 
