@@ -13,7 +13,7 @@ import {
 import type { DonationRevision, PublicDonationDoc } from '$lib/features/donations';
 import {
 	CouchReadError,
-	fetchDocs,
+	fetchDocsStrict,
 	findByTokenHash,
 	GOODS_IN_STOCK_ERROR,
 	hasKeyedDonationStock
@@ -95,15 +95,17 @@ export const PATCH = async ({ params, request, getClientAddress }) => {
 		// about the warehouse — a booking was raised to 100 against a 100-piece target the
 		// shelter already held 80 of. Skipped before the donation reaches CouchDB, a window
 		// of one inbound poll, because until then there is no record to measure against.
+		// Strict reads: an unreadable ledger is not an empty one — that read as headroom and
+		// let the edit past the target. A failed read answers 503 before any quota moves.
 		if (latestDoc?.campaign_id) {
 			const [campaigns, donations, stockLedgers] = await Promise.all([
-				fetchDocs<DonationCampaign>(shelterDb, 'donation_campaign:').then((docs) =>
+				fetchDocsStrict<DonationCampaign>(shelterDb, 'donation_campaign:').then((docs) =>
 					docs.filter((c) => c && c.type === 'donation_campaign' && c.status === 'open')
 				),
-				fetchDocs<PublicDonationDoc>(shelterDb, 'donation:').then((docs) =>
+				fetchDocsStrict<PublicDonationDoc>(shelterDb, 'donation:').then((docs) =>
 					docs.filter((d) => d && d.type === 'donation')
 				),
-				fetchDocs<StockLedger>(shelterDb, 'stock_ledger:').then((docs) =>
+				fetchDocsStrict<StockLedger>(shelterDb, 'stock_ledger:').then((docs) =>
 					docs.filter((l) => l && l.type === 'stock_ledger')
 				)
 			]);

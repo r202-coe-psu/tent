@@ -4,7 +4,7 @@ import { adminRaw } from '$lib/server/couch-admin';
 import { putAsPublicWriter } from '$lib/server/couch-public-writer';
 import { donationEditLimiter } from '$lib/server/security/rate-limiter';
 import { sha256Hex } from '$lib/db/hash';
-import { CouchReadError, fetchDocs, hasKeyedDonationStock } from '$lib/server/donation-docs';
+import { CouchReadError, fetchDocsStrict, hasKeyedDonationStock } from '$lib/server/donation-docs';
 
 type PatchEvent = Parameters<typeof PATCH>[0];
 
@@ -15,7 +15,7 @@ vi.mock('$lib/server/donation-docs', async (importOriginal) => {
 		CouchReadError: actual.CouchReadError,
 		// Real lookup over the mocked `adminRaw`, so `couchHas` drives it.
 		findByTokenHash: actual.findByTokenHash,
-		fetchDocs: vi.fn(async () => []),
+		fetchDocsStrict: vi.fn(async () => []),
 		hasKeyedDonationStock: vi.fn(async () => false),
 		GOODS_IN_STOCK_ERROR: { success: false, error: 'GOODS_IN_STOCK', message: 'in stock' }
 	};
@@ -91,7 +91,7 @@ describe('PATCH /api/public/v1/donations/[token]/items', () => {
 		vi.unstubAllGlobals();
 		vi.mocked(donationEditLimiter.check).mockReturnValue(true);
 		vi.mocked(putAsPublicWriter).mockResolvedValue({ status: 201, data: {} });
-		vi.mocked(fetchDocs).mockResolvedValue([]);
+		vi.mocked(fetchDocsStrict).mockResolvedValue([]);
 		vi.mocked(hasKeyedDonationStock).mockResolvedValue(false);
 	});
 
@@ -336,7 +336,7 @@ describe('PATCH /api/public/v1/donations/[token]/items', () => {
 		 * since T-22; editing has to answer to the same rule.
 		 */
 		function couchWorld(onHand: string, otherDonations: number) {
-			vi.mocked(fetchDocs).mockImplementation(async (_db: string, prefix: string) => {
+			vi.mocked(fetchDocsStrict).mockImplementation(async (_db: string, prefix: string) => {
 				if (prefix === 'donation_campaign:')
 					return [
 						{
@@ -393,6 +393,22 @@ describe('PATCH /api/public/v1/donations/[token]/items', () => {
 
 			expect(response.status).toBe(409);
 			expect((await response.json()).error).toBe('NEED_FULL');
+			expect(fetch).not.toHaveBeenCalled();
+		});
+
+		// Full-branch review — an unreadable ledger is not an empty one: read as [] it
+		// looked like headroom and let the edit past the target.
+		it('stops before moving quota when the stock cannot be read', async () => {
+			couchWorld('80', 0);
+			vi.mocked(fetchDocsStrict).mockRejectedValue(
+				new CouchReadError('shelter_sh001', 'stock_ledger:', 500)
+			);
+			fastapiOk();
+
+			const response = await call(blanket('100'));
+
+			expect(response.status).toBe(503);
+			expect((await response.json()).error).toBe('DONATION_UNAVAILABLE');
 			expect(fetch).not.toHaveBeenCalled();
 		});
 
