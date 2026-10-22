@@ -11,7 +11,12 @@ import type {
 	PrintJobLastReader
 } from './printer-admin.server';
 import type { PrintDeviceLister, PrintDeviceReader, PrintJobCreator } from './print-jobs.server';
-import type { PrintJobDoc, PrintJobPutResult, PrintJobStore } from './print-queue.server';
+import type {
+	PrintJobDoc,
+	PrintJobPutResult,
+	PrintJobStatus,
+	PrintJobStore
+} from './print-queue.server';
 
 /**
  * CouchDB adapters for DB `printing` (central only, admin credential — never reachable from the
@@ -29,8 +34,25 @@ const PRINTING_INDEXES: ReadonlyArray<{ name: string; fields: string[] }> = [
 	{ name: 'print-job-printer-status-created', fields: ['printer_id', 'status', 'created_at'] },
 	{ name: 'print-job-printer-created', fields: ['printer_id', 'created_at'] },
 	{ name: 'print-job-status-finished', fields: ['status', 'finished_at'] },
-	{ name: 'print-job-status-lease', fields: ['status', 'lease_until'] }
+	{ name: 'print-job-status-lease', fields: ['status', 'lease_until'] },
+	{ name: 'print-job-status-expires', fields: ['status', 'expires_at'] },
+	{ name: 'print-device-shelter', fields: ['type', 'shelter_code'] }
 ];
+
+/**
+ * Mango only picks a json index when the selector names every field of it, so each query adds a
+ * `$gt: null` match (true for any set value) on the fields it does not filter on.
+ */
+const ANY = { $gt: null };
+
+/** Field that completes a `[status, …]` index for a status-only query (sweeper / retention). */
+const STATUS_INDEX_FIELD: Record<PrintJobStatus, keyof PrintJobDoc> = {
+	pending: 'expires_at',
+	printing: 'lease_until',
+	printed: 'finished_at',
+	failed: 'finished_at',
+	expired: 'finished_at'
+};
 
 let ensured: Promise<void> | null = null;
 
@@ -85,9 +107,9 @@ export const printDeviceRepository: PrintDeviceLookup &
 		return { ok: true, rev: (data as { rev: string }).rev };
 	},
 
-	async getDeviceByDeviceId(deviceId) {
-		const docs = await find<PrintDeviceDoc>({ type: 'print_device', device_id: deviceId }, 1);
-		return docs[0] ?? null;
+	/** `_id` is deterministic (`print_device:{device_id}`), so auth is a plain GET, not a `_find`. */
+	getDeviceByDeviceId(deviceId) {
+		return printDeviceRepository.getDevice(`print_device:${deviceId}`);
 	},
 
 	async getDevice(printerId) {
@@ -116,7 +138,7 @@ export const printDeviceRepository: PrintDeviceLookup &
 
 	listDevicesInScope(scope) {
 		return find<PrintDeviceDoc>(
-			{ type: 'print_device', ...(scope === null ? {} : { shelter_code: { $in: scope } }) },
+			{ type: 'print_device', shelter_code: scope === null ? ANY : { $in: scope } },
 			1000
 		);
 	},
@@ -133,7 +155,9 @@ export const printDeviceRepository: PrintDeviceLookup &
 export const printJobStore: PrintJobStore & PrintJobCreator & PrintJobLastReader = {
 	findJobs({ status, printerId }) {
 		return find<PrintJobDoc>(
-			{ type: 'print_job', status, ...(printerId !== undefined ? { printer_id: printerId } : {}) },
+			printerId !== undefined
+				? { type: 'print_job', printer_id: printerId, status, created_at: ANY }
+				: { type: 'print_job', status, [STATUS_INDEX_FIELD[status]]: ANY },
 			100
 		);
 	},
