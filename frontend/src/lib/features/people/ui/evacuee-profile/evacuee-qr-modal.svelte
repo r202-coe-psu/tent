@@ -7,12 +7,12 @@
 	import { cn } from '$lib/utils/shadcn';
 	import type { Evacuee } from '$lib/features/people';
 	import {
+		buildEvacueeQrLabel,
 		formatPersonName,
-		intakeStationsPassed,
-		labelZoneName,
 		useScreeningsByEvacuee
 	} from '$lib/features/people';
 	import { KIOSK_LABEL_MM, renderKioskQrLabelPng } from '$lib/features/kiosk';
+	import { PrintLabelsButton } from '$lib/features/printers';
 	import { useShelter } from '$lib/features/shelters';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
@@ -43,6 +43,8 @@
 
 	let isExportingPdf = $state(false);
 
+	const shelterCode = $derived(shelterStore.selectedShelterCode ?? getShelterCode());
+
 	const fullId = $derived(evacuee._id.split(':')[1] ?? evacuee._id);
 	const name = $derived(formatPersonName(evacuee));
 	const titleId = $derived(`evacuee-qr-title-${fullId}`);
@@ -59,19 +61,20 @@
 	 * The kiosk's own 80×60 mm label (base64 PNG): the preview shows exactly what prints, and a
 	 * station label printer gets the same page as the kiosk.
 	 */
-	const labelPng = $derived(
-		show
-			? renderKioskQrLabelPng(evacuee._id, {
-					name,
-					zone: labelZoneName(evacuee.current_stay?.zone, shelterQuery.data?.zones),
-					checklist: [t.checklistCheckIn, t.checklistScreening, t.checklistLodging],
-					checkedCount: intakeStationsPassed(
-						evacuee.current_stay,
-						(screeningsQuery.data?.length ?? 0) > 0
-					)
-				})
-			: null
-	);
+	const labelPng = $derived.by(() => {
+		if (!show) return null;
+		const { qrPayload, label } = buildEvacueeQrLabel(evacuee, {
+			zones: shelterQuery.data?.zones,
+			hasScreening: (screeningsQuery.data?.length ?? 0) > 0,
+			checklist: [t.checklistCheckIn, t.checklistScreening, t.checklistLodging]
+		});
+		return renderKioskQrLabelPng(qrPayload, label);
+	});
+
+	async function renderStationLabels(): Promise<string[]> {
+		if (!labelPng) throw new Error('Label is not available');
+		return [await labelPng];
+	}
 
 	async function handlePrintPreview() {
 		if (!labelPng) return;
@@ -168,6 +171,15 @@
 			</figure>
 
 			<div class="mt-5 flex flex-col gap-2">
+				{#if labelPng}
+					<PrintLabelsButton
+						{shelterCode}
+						labelCount={1}
+						source="evacuee_qr"
+						renderLabels={renderStationLabels}
+						buttonClass="h-12 w-full gap-2 text-base"
+					/>
+				{/if}
 				<Button
 					class="h-12 w-full gap-2 text-base"
 					onclick={handlePrintPreview}

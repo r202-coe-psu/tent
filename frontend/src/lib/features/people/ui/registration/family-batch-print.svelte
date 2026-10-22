@@ -4,11 +4,21 @@
 </script>
 
 <script lang="ts">
+	import { useQueryClient } from '@tanstack/svelte-query';
 	import ArrowRight from '@lucide/svelte/icons/arrow-right';
 	import UserPlus from '@lucide/svelte/icons/user-plus';
 	import { Button } from '$lib/components/ui/button/index.js';
+	import { PrintLabelsButton } from '$lib/features/printers';
+	import { renderKioskQrLabelPng } from '$lib/features/kiosk';
 	import StationCompletionSummary from '../shared/station-completion-summary.svelte';
+	import { peopleKeys } from '../../application/queries';
+	import { peopleRepository } from '../../data/people.remote';
+	import { buildEvacueeQrLabel } from '../../domain/evacuee-qr-label';
+	import { headFirst } from '../../domain/household-label-order';
 	import { formatPersonName, type Evacuee, type Household } from '../../domain/people';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { languageStore } from '$lib/stores/language.svelte';
+	import { EVACUEE_QR_MODAL_I18N } from '../_constants/evacuee-qr-modal.i18n';
 	import EvacueeQrModal from '../evacuee-profile/evacuee-qr-modal.svelte';
 	import EvacueeHandoverSlipModal from '../evacuee-profile/evacuee-handover-slip-modal.svelte';
 	import { useShelter } from '$lib/features/shelters/index.js';
@@ -43,6 +53,38 @@
 		() => useShelter(() => shelterStore.selectedShelterCode ?? getShelterCode()),
 		{ data: undefined } as unknown as ReturnType<typeof useShelter>
 	);
+
+	const queryClient = safeQuery(() => useQueryClient(), null);
+	const qrT = $derived(getTranslation(EVACUEE_QR_MODAL_I18N, languageStore.current));
+	const shelterCode = $derived(shelterStore.selectedShelterCode ?? getShelterCode());
+
+	/**
+	 * Station-printer labels for the whole family, head first. Built when the button is clicked, so
+	 * the tick on คัดกรอง reflects the screenings that exist right now: each member's screenings are
+	 * fetched through the query client under the same key `useScreeningsByEvacuee` uses (the
+	 * member cards below already populate it; staleTime 0 here forces a fresh read at click time).
+	 */
+	async function renderFamilyLabels(): Promise<string[]> {
+		const client = queryClient;
+		if (!client) throw new Error('Query client is not available');
+		const zones = shelterQuery.data?.zones;
+		const checklist = [qrT.checklistCheckIn, qrT.checklistScreening, qrT.checklistLodging];
+		return Promise.all(
+			headFirst(members, household.head_evacuee_id).map(async (member) => {
+				const screenings = await client.fetchQuery({
+					queryKey: peopleKeys.screeningsByEvacuee(member._id),
+					queryFn: () => peopleRepository().listScreeningsByEvacuee(member._id),
+					staleTime: 0
+				});
+				const { qrPayload, label } = buildEvacueeQrLabel(member, {
+					zones,
+					hasScreening: screenings.length > 0,
+					checklist
+				});
+				return renderKioskQrLabelPng(qrPayload, label);
+			})
+		);
+	}
 
 	const showHandover = $derived(
 		shelterQuery.data?.feature_flags?.enable_medical_screening ?? false
@@ -133,6 +175,17 @@
 		class="sticky bottom-0 z-10 -mx-1 border-t border-border bg-background/95 p-3 backdrop-blur-sm"
 	>
 		<div class="flex flex-col gap-2 sm:flex-row sm:justify-end">
+			<!-- Only here (not in the shared nextActions): one instance = one print state, no double print. -->
+			{#if total > 0}
+				<PrintLabelsButton
+					{shelterCode}
+					labelCount={total}
+					source="walk_in"
+					renderLabels={renderFamilyLabels}
+					label={`พิมพ์ทั้งครอบครัว (${total} ใบ)`}
+					buttonClass="min-h-11"
+				/>
+			{/if}
 			{@render nextActions()}
 		</div>
 	</div>
