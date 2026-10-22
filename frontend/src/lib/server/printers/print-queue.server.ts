@@ -209,7 +209,10 @@ export async function sweepJobs(
 export interface PrintJobRetentionStore {
 	/** One batch of terminal jobs whose `finished_at` is before `cutoff` (ISO). */
 	findFinishedBefore(cutoff: string): Promise<PrintJobDoc[]>;
-	/** `_purge` the docs at their `_rev`: each doc leaves the DB with its whole history. */
+	/**
+	 * `_purge` the docs at their `_rev`: each doc leaves the DB with its whole history. Called with
+	 * at most `PURGE_BATCH_SIZE` docs.
+	 */
 	purge(docs: PrintJobDoc[]): Promise<void>;
 	/** Start `_compact`, dropping old revisions that still carry label images. */
 	compact(): Promise<void>;
@@ -220,21 +223,29 @@ export const PRINT_JOB_RETENTION_DAYS = 7;
 const DAY_MS = 86_400_000;
 /** Upper bound on purge rounds per run, so a huge backlog cannot pin the process. */
 const MAX_PURGE_BATCHES = 50;
+/** CouchDB rejects a `_purge` naming more docs than `[purge] max_document_id_number` (default 100). */
+export const PURGE_BATCH_SIZE = 100;
 
 /**
  * PDPA retention (plan §3.5 steps 2–3): purge terminal jobs finished more than
- * `PRINT_JOB_RETENTION_DAYS` ago, then compact — even when nothing was purged, because the
- * revisions before each terminal PUT still hold the label PNGs until compaction.
+ * `PRINT_JOB_RETENTION_DAYS` ago, then compact — even when nothing was purged or a purge failed,
+ * because the revisions before each terminal PUT still hold the label PNGs until compaction.
  */
 export async function applyRetention(store: PrintJobRetentionStore, now: Date): Promise<number> {
 	const cutoff = new Date(now.getTime() - PRINT_JOB_RETENTION_DAYS * DAY_MS).toISOString();
 	let purged = 0;
-	for (let round = 0; round < MAX_PURGE_BATCHES; round += 1) {
-		const docs = await store.findFinishedBefore(cutoff);
-		if (docs.length === 0) break;
-		await store.purge(docs);
-		purged += docs.length;
+	try {
+		for (let round = 0; round < MAX_PURGE_BATCHES; round += 1) {
+			const docs = await store.findFinishedBefore(cutoff);
+			if (docs.length === 0) break;
+			for (let i = 0; i < docs.length; i += PURGE_BATCH_SIZE) {
+				const batch = docs.slice(i, i + PURGE_BATCH_SIZE);
+				await store.purge(batch);
+				purged += batch.length;
+			}
+		}
+	} finally {
+		await store.compact();
 	}
-	await store.compact();
 	return purged;
 }

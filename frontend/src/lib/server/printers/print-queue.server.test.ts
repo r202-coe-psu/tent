@@ -579,4 +579,28 @@ describe('applyRetention', () => {
 		expect(await applyRetention(store, NOW)).toBe(0);
 		expect(calls).toEqual(['compact']);
 	});
+
+	it('purges at most 100 docs per request (CouchDB max_document_id_number)', async () => {
+		const old = Array.from({ length: 250 }, (_, i) =>
+			finished(`01JB${String(i).padStart(22, '0')}`, 'printed', '2026-10-01T00:00:00.000Z')
+		);
+		const { store, stored, calls } = fakeRetentionStore(old, 300);
+
+		expect(await applyRetention(store, NOW)).toBe(250);
+		expect(stored.size).toBe(0);
+		expect(calls).toEqual(['purge:100', 'purge:100', 'purge:50', 'compact']);
+	});
+
+	it('still compacts when a purge fails, then reports the failure', async () => {
+		const { store, calls } = fakeRetentionStore([
+			finished('01JB0000000000000000000001', 'printed', '2026-10-01T00:00:00.000Z')
+		]);
+		store.purge = async () => {
+			calls.push('purge:failed');
+			throw new Error('purge rejected');
+		};
+
+		await expect(applyRetention(store, NOW)).rejects.toThrow('purge rejected');
+		expect(calls).toEqual(['purge:failed', 'compact']);
+	});
 });
