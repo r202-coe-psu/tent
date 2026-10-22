@@ -3,7 +3,7 @@ title: Smart Shelter — Database Schema v5
 status: draft for review
 created: 2026-06-11
 updated: 2026-10-22
-note: CR-186 approved (2026-10-22, #649) — §3.3 `master_type` เพิ่ม `chronic_disease` (global-only, seed 12) + §1.2 `medical.conditions` = master code หรือ free text (ไม่ bump `schema_v`)
+note: CR-187 approved (2026-10-22, #648) — §3.3 `master_type` เพิ่ม `allergy` (global-only, seed 5) + §1.2 `medical.allergies` = master code หรือ free text (ไม่ bump `schema_v`); CR-186 approved (2026-10-22, #649) — §3.3 `master_type` เพิ่ม `chronic_disease` (global-only, seed 12) + §1.2 `medical.conditions` = master code หรือ free text (ไม่ bump `schema_v`)
 ---
 
 # Database Schema v5 — field-level
@@ -153,7 +153,7 @@ implement — ไม่กระทบ migration นี้
 | `blood_group` | enum(`A`,`B`,`AB`,`O`,`unknown`) | opt | — |
 | `conditions` | [str] | opt | โรคประจำตัว รายตัว — แต่ละค่าเป็น `code` ของ `master_data:chronic_disease` **หรือ** free text (CR-186). เขียนเป็น code เมื่อเลือกจาก master หรือข้อความตรง `label_th`/`label_en` ของ item `active` (`normalizeLabel`); นอกนั้นเก็บข้อความ (trim). display resolve code → label, free text แสดงตามที่เก็บ. ไม่ผูกกับ `vulnerable_groups: chronic_illness` |
 | `medications` | [str] | opt | — |
-| `allergies` | [str] | opt | — |
+| `allergies` | [str] | opt | ประวัติการแพ้ รายตัว — แต่ละค่าเป็น `code` ของ `master_data:allergy` **หรือ** free text (CR-187; เช่น แพ้ยา). เขียนเป็น code เมื่อเลือกจาก master หรือข้อความตรง `label_th`/`label_en` ของ item `active` (`normalizeLabel`); นอกนั้นเก็บข้อความ (trim). display resolve code → label, free text แสดงตามที่เก็บ |
 | `track` | enum(`normal`,`fast_track`) | req | default `normal` — sync กับผล screening ล่าสุด |
 | `notes` | str | opt | — |
 
@@ -1568,7 +1568,7 @@ Authorization และ Bangkok current-day write rule ถูกบังคั�
 
 > **schema_v 4** — item display names are bilingual (`label_th` + `label_en`); new items require
 > a user/seed-supplied snake_case `code` (no auto `item_{ulid}`). Legacy `item_*` codes may be
-> renamed to a slug on edit. Seed uses semantic `SeedItemDef.key` as `code` for all 5 types.
+> renamed to a slug on edit. Seed uses semantic `SeedItemDef.key` as `code` for all 6 types.
 > **schema_v 3** — เพิ่ม item field `status`; ลบ `excluded_codes` (mechanism ทิ้งทั้งหมด); item `code`
 > ที่สร้างใหม่เป็น **ULID** (`item_{ulid}`) แทน slug. [CR-049](../changes/CR-049-shelter-scope-backoffice-vs-system-management.md).
 > schema_v 2 — baseline two-tier (`shelter_code?` + `excluded_codes?` override-merge) — **แนวทางนี้ถูกยกเลิกโดย CR-049**
@@ -1587,7 +1587,7 @@ Authorization และ Bangkok current-day write rule ถูกบังคั�
 
 | Field | ชนิด | req | หมายเหตุ |
 | --- | --- | --- | --- |
-| `master_type` | enum(5 types) | req | `vulnerable_group` \| `housing_type` \| `shelter_type` \| `volunteer_skills` \| `chronic_disease` (CR-186 — global-only) (CR-137 — ตัด `health_condition`, `dietary_restrictions`, `pet_types`, `house_damage`, `municipality_zone`, `community`) |
+| `master_type` | enum(6 types) | req | `vulnerable_group` \| `housing_type` \| `shelter_type` \| `volunteer_skills` \| `chronic_disease` (CR-186 — global-only) \| `allergy` (CR-187 — global-only) (CR-137 — ตัด `health_condition`, `dietary_restrictions`, `pet_types`, `house_damage`, `municipality_zone`, `community`) |
 | `shelter_code` | str? | opt | มีเฉพาะ doc tier shelter-local — ระบุศูนย์เจ้าของ; ไม่มี field นี้ = global doc |
 | `items` | [{`code`:str, `label_th`:str, `label_en`:str, `is_default`:bool, `status`:enum(`active`,`inactive`), `parent_code`:str?, `category`?:str, `description`?:str}] | req | ≥0 items; `code` = user/seed snake_case (`^[a-z0-9_]+$`), unique per type — **required on create** (no ULID fallback); slug codes immutable on edit; legacy `item_*` codes may be renamed once; `label_th` + `label_en` both required (trim, min 1); `parent_code` optional (legacy hierarchy; ไม่มี consumer หลัง CR-137) |
 
@@ -1597,6 +1597,11 @@ Authorization และ Bangkok current-day write rule ถูกบังคั�
 **Hard migrate map (CR-112):** `elderly` → `elderly_dependent`; `disabled` → `disability_other`; `chronic_illness` คงรหัส
 
 **Pets (CR-137):** `pets[].species` เป็น domain enum `dog \| cat \| other` — **ไม่** ใช้ `master_data:pet_types` (type ถูกลบ; public `/config/pet-types` ถูกลบ)
+
+**Seed — `allergy` (CR-187):** global-only — ห้ามมี shelter-local doc `master_data:allergy:{shelter_code}`
+(writer ปฏิเสธ; back-office แสดง read-only). ไม่มี item `other` — สิ่งที่แพ้นอกรายการ (เช่น ยา) เก็บเป็น free text ใน `medical.allergies` (§1.2).
+`seafood`, `milk`, `egg`, `wheat`, `nuts`
+(labels: [`docs/master-data/README.md`](../master-data/README.md) §1.3)
 
 **Seed — `chronic_disease` (CR-186):** global-only — ห้ามมี shelter-local doc `master_data:chronic_disease:{shelter_code}`
 (writer ปฏิเสธ; back-office แสดง read-only). ไม่มี item `other` — โรคนอกรายการเก็บเป็น free text ใน `medical.conditions` (§1.2).

@@ -18,7 +18,7 @@ language: th
 
 | พื้นที่    | ข้อมูลที่ seed สร้าง                                                                                  |
 | ---------- | ----------------------------------------------------------------------------------------------------- |
-| `registry` | global `master_data` 5 เอกสาร รวมรายการ seed 48 รายการ (CR-137 + shelter_type expand + CR-186)                 |
+| `registry` | global `master_data` 6 เอกสาร รวมรายการ seed 53 รายการ (CR-137 + shelter_type expand + CR-186 + CR-187)                 |
 | `registry` | `config:app` 1 singleton พร้อมค่า default                                                             |
 | `registry` | `config:public_portal` 1 singleton พร้อมค่า default FAQ 13 รายการ (ช่องทางติดต่อเว้นว่างไว้ ไม่ seed) |
 | `catalog`  | `unit_of_measure` 30, `item_category` 10, `item_master` 34, `recipe` 6                               |
@@ -61,8 +61,8 @@ language: th
 | Item status                      | `active` สำหรับรายการที่ seed ใหม่ |
 | Author                           | `seed`                             |
 | Global scope                     | ไม่มี `shelter_code`               |
-| จำนวน master types               | 5 (CR-137, CR-186)                 |
-| จำนวนรายการใน canonical seed set | 48                                 |
+| จำนวน master types               | 6 (CR-137, CR-186, CR-187)         |
+| จำนวนรายการใน canonical seed set | 53                                 |
 
 Global seed ใช้ `enforceOneDefault()` เพื่อให้แต่ละ master type มีรายการที่เป็น default ได้ไม่เกินหนึ่งรายการ หากเอกสารเดิมมีรายการที่ไม่มีอยู่ใน canonical seed set ระบบจะเก็บรายการเดิมไว้ เว้นแต่เข้าเงื่อนไข migration ใน §1.4 ดังนั้น ตารางด้านล่างจึงเป็น **รายการที่ seed กำหนด** ไม่ใช่รายการทั้งหมดที่อาจมีอยู่ใน database แล้ว
 
@@ -77,6 +77,7 @@ Global seed ใช้ `enforceOneDefault()` เพื่อให้แต่ล
 | `shelter_type` | `d.key` (stable) — เลิก `item_<ulid>` |
 | `volunteer_skills` | `d.key` (stable) — เลิก `item_<ulid>` |
 | `chronic_disease` | `d.key` (stable) — CR-186 |
+| `allergy` | `d.key` (stable) — CR-187 |
 
 รายการเก็บชื่อแบบ bilingual: `label_th` + `label_en` (ทั้งคู่บังคับ). UI สร้างรายการใหม่ต้องกรอก `code` เอง (ไม่มี auto-ULID). รายการเก่า `item_*` แก้รหัสได้ตอนแก้ไข.
 
@@ -162,6 +163,20 @@ Seed ลง global `master_data:chronic_disease` จำนวน 12 รายก
 | `epilepsy` | ลมชัก | Epilepsy | — |
 | `hiv` | ติดเชื้อเอชไอวี (HIV) | HIV infection | — |
 | `psychiatric_disorder` | โรคทางจิตเวช | Psychiatric disorder | — |
+
+#### `allergy` — อาการแพ้ (CR-187)
+
+Seed ลง global `master_data:allergy` จำนวน 5 รายการ. **Global-only** — ไม่มี shelter-local doc
+(`master_data:allergy:{shelter_code}`); สิ่งที่แพ้นอกรายการ (เช่น แพ้ยา) เก็บเป็น free text ใน `medical.allergies`.
+ไม่มีรายการ `other` (ใช้ free text แทน).
+
+| code | label_th | label_en | default |
+| --- | --- | --- | --- |
+| `seafood` | อาหารทะเล | Seafood | — |
+| `milk` | นม | Milk | — |
+| `egg` | ไข่ | Egg | — |
+| `wheat` | แป้งสาลี | Wheat | — |
+| `nuts` | ถั่ว | Nuts | — |
 
 ### 1.4 การย้ายข้อมูลเดิมและการ seed ซ้ำ
 
