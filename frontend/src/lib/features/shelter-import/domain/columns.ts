@@ -108,11 +108,15 @@ export const COMMUNICATION_CHOICES: EnumChoice<CommunicationChannel>[] = [
 	{ value: 'vhf_radio', label: 'วิทยุสื่อสาร VHF (Analog/Local)' }
 ];
 
+// CR-175: 4 → 7 choices (keys retained; `medical_supplies` label changed "เวชภัณฑ์" → "ยา")
 export const SUB_STORAGE_TYPE_CHOICES: EnumChoice<SubStorageType>[] = [
 	{ value: 'general', label: 'ทั่วไป' },
+	{ value: 'baby_food', label: 'อาหารเด็ก' },
 	{ value: 'food_dry', label: 'อาหารแห้ง' },
-	{ value: 'drinking_water', label: 'น้ำดื่ม' },
-	{ value: 'medical_supplies', label: 'เวชภัณฑ์' }
+	{ value: 'cooked_food', label: 'อาหารปรุงสุก' },
+	{ value: 'food_cold', label: 'อาหารแช่เย็น/แข็ง' },
+	{ value: 'medical_supplies', label: 'ยา' },
+	{ value: 'drinking_water', label: 'น้ำดื่ม' }
 ];
 
 export const ZONE_TYPE_CHOICES: EnumChoice<ZoneType>[] = [
