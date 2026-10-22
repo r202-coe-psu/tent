@@ -11,7 +11,12 @@ import {
 	pickCampaignForItems
 } from '$lib/features/donations/server';
 import type { DonationRevision, PublicDonationDoc } from '$lib/features/donations';
-import { fetchDocs, GOODS_IN_STOCK_ERROR, hasKeyedDonationStock } from '$lib/server/donation-docs';
+import {
+	CouchReadError,
+	fetchDocs,
+	GOODS_IN_STOCK_ERROR,
+	hasKeyedDonationStock
+} from '$lib/server/donation-docs';
 import type { DonationCampaign, StockLedger } from '$lib/features/operations';
 import { DONATION_SCHEMA_V } from '$lib/features/operations/server';
 import { createAuditEntry } from '$lib/features/shared';
@@ -28,7 +33,10 @@ async function findByTokenHash(shelterDb: string, hash: string): Promise<PublicD
 		`/${shelterDb}/_all_docs?include_docs=true&startkey="donation:"&endkey="donation:￰"`,
 		'GET'
 	);
-	if (res.status >= 400) return null;
+	// A missing shelter DB means no such booking. Any other failure must stop the edit:
+	// read as "not synced yet" it skipped every check below and moved quota at FastAPI.
+	if (res.status === 404) return null;
+	if (res.status >= 400) throw new CouchReadError(shelterDb, 'donation:', res.status);
 	const rows = (res.data as { rows?: { doc: PublicDonationDoc }[] })?.rows ?? [];
 	for (const r of rows) {
 		if (r.doc && r.doc.type === 'donation' && r.doc.tracking_token_hash === hash) return r.doc;
@@ -223,6 +231,10 @@ export const PATCH = async ({ params, request, getClientAddress }) => {
 
 		return json({ success: true, message: 'Donation items updated', revisions, status });
 	} catch (e) {
+		if (e instanceof CouchReadError) {
+			console.error(e);
+			return json({ success: false, error: 'DONATION_UNAVAILABLE' }, { status: 503 });
+		}
 		console.error(e);
 		return json({ success: false, error: 'Internal Server Error' }, { status: 500 });
 	}

@@ -122,6 +122,20 @@ export function assertReceiveAgainstCatalog(
 	}
 }
 
+/** What staff are told when the booking changed under a batch receipt (S-R4-1). */
+const DONATION_CHANGED_WHILE_KEYING =
+	'ใบนี้ถูกแก้ระหว่างบันทึกเข้าคลัง (ปฏิเสธรายการ / ผู้บริจาคแก้หรือยกเลิกใบ) — ของเข้าคลังแล้วแต่ยังไม่ปิดใบ ติดต่อผู้ดูแลเพื่อตรวจยอด';
+
+/**
+ * Whether the booking changed in a way the receipt was counted against. A courier number
+ * or other logistics edit bumps `_rev` too, but leaves what was counted standing.
+ */
+function bookingChanged(before: Donation, after: Donation): boolean {
+	return (
+		before.status !== after.status || JSON.stringify(before.items) !== JSON.stringify(after.items)
+	);
+}
+
 export class OperationsRemoteRepository implements OperationsRepository {
 	private readonly dbName: string;
 	private readonly repo: Repository;
@@ -225,8 +239,8 @@ export class OperationsRemoteRepository implements OperationsRepository {
 		return { donation: savedDonation as Donation, entry: savedEntry as StockLedger };
 	}
 
-	/** Any donation ledger row pointing at this booking (CR-143 rows key `ref_id`). */
-	private async hasKeyedDonationStock(donationId: string): Promise<boolean> {
+	/** Ids of the donation ledger rows pointing at this booking (CR-143 rows key `ref_id`). */
+	private async keyedDonationRowIds(donationId: string, limit: number): Promise<string[]> {
 		const rows = await this.repo.find<{ _id: string }>({
 			// `item_id` is in the selector only so CouchDB picks `ledger-type-refid-itemid-reason-idx`
 			// (shelter-access-design.ts): without it the query scans the whole shelter DB.
@@ -237,9 +251,14 @@ export class OperationsRemoteRepository implements OperationsRepository {
 				reason: 'donation'
 			},
 			fields: ['_id'],
-			limit: 1
+			limit
 		});
-		return rows.length > 0;
+		return rows.map((row) => row._id);
+	}
+
+	/** Any donation ledger row pointing at this booking. */
+	private async hasKeyedDonationStock(donationId: string): Promise<boolean> {
+		return (await this.keyedDonationRowIds(donationId, 1)).length > 0;
 	}
 
 	async receiveDonationBatch(
@@ -352,7 +371,17 @@ export class OperationsRemoteRepository implements OperationsRepository {
 				ledger_id: id
 			});
 		});
-		if (receivedElsewhere && toWrite.length > 0) {
+		// Both copies can read `received` — a booking closed before its rows were keyed — and
+		// then neither `_rev` nor `receivedElsewhere` tells two screens apart. The ledger does:
+		// a row of this booking this count would not write means another count got there.
+		// One more than `ids` is enough to see one: at most `ids.length` of them are ours.
+		const keyedByAnother =
+			onFile.status === 'received' &&
+			toWrite.length > 0 &&
+			(await this.keyedDonationRowIds(donation._id, ids.length + 1)).some(
+				(id) => !ids.includes(id)
+			);
+		if ((receivedElsewhere || keyedByAnother) && toWrite.length > 0) {
 			throw new Error(
 				'ใบนี้รับเข้าคลังไปแล้วจากอีกหน้าจอ — ไม่ได้บันทึกซ้ำ เลือกใบใหม่เพื่อดูผลที่บันทึกไว้'
 			);
@@ -426,6 +455,12 @@ export class OperationsRemoteRepository implements OperationsRepository {
 			if (latest.status === 'received' && latest.received_summary) {
 				return { donation: latest, lines, rowsComplete: true, received: true };
 			}
+			// The booking moved while its rows were keyed — a line refused on another screen,
+			// the donor editing or cancelling, the TTL lapsing. Closing it from this count
+			// would write over that change, so stop and leave it to someone to check.
+			if (bookingChanged(onFile, latest)) {
+				throw new Error(DONATION_CHANGED_WHILE_KEYING);
+			}
 			const nextBase = completeDonationReceipt(latest);
 			const declaredLines = latest.items ?? [];
 			const countedByLine = new Map(counted.map((c) => [c.line_no, c]));
@@ -487,9 +522,20 @@ export class OperationsRemoteRepository implements OperationsRepository {
 					}))
 				}
 			};
-			const saved = next === latest ? latest : await this.updateDonation(next);
+			// Written against `latest._rev`, not whatever is on file by then: a change landing
+			// after the check above conflicts here instead of being overwritten.
+			const saved = next === latest ? latest : await this.repo.put(touch(next));
 			return { donation: saved, lines, rowsComplete: true, received: true };
 		} catch (err) {
+			if (err instanceof ConflictError) {
+				return {
+					donation,
+					lines,
+					rowsComplete: true,
+					received: false,
+					transitionError: DONATION_CHANGED_WHILE_KEYING
+				};
+			}
 			return {
 				donation,
 				lines,

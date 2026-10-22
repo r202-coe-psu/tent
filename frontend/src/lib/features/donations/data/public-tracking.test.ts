@@ -65,6 +65,12 @@ describe('updateDonationItems', () => {
 
 		await expect(updateDonationItems('tok', items)).rejects.toThrow('แก้ไม่ได้แล้ว');
 	});
+
+	it('asks the donor to retry when the shelter record cannot be read', async () => {
+		mockFetch(503, { success: false, error: 'DONATION_UNAVAILABLE' });
+
+		await expect(updateDonationItems('tok', items)).rejects.toThrow('กรุณาลองใหม่อีกครั้ง');
+	});
 });
 
 // Owner decision 2026-10-22 — once goods are in stock the donor can no longer change the

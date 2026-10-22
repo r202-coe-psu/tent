@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SupplyItem } from '$lib/features/supply';
+import { ConflictError } from '$lib/utils/errors';
 
 vi.mock('$lib/db/shelter', () => ({
 	SHELTER_CODE: 'SH001',
@@ -24,6 +25,10 @@ const failingBulkIds = new Set<string>();
 let loseBulkResponse = false;
 /** Doc ids whose single-doc `put` fails (the donation transition). */
 const failingPutIds = new Set<string>();
+/** Doc ids whose single-doc `put` answers 409 (someone wrote it in between). */
+const conflictingPutIds = new Set<string>();
+/** Runs once the bulk write lands — another screen or the donor acting mid-receipt. */
+let afterBulkWrite: (() => void) | null = null;
 const bulkCalls: string[][] = [];
 
 function clone<T>(value: T): T {
@@ -41,6 +46,7 @@ vi.mock('$lib/db/repository', async (importOriginal) => {
 			},
 			async put(doc: Doc) {
 				if (failingPutIds.has(doc._id)) throw new Error(`write refused for ${doc._id}`);
+				if (conflictingPutIds.has(doc._id)) throw new ConflictError();
 				const rev = `${(docs.get(doc._id)?._rev ? parseInt(docs.get(doc._id)!._rev!, 10) : 0) + 1}-t`;
 				const saved = { ...clone(doc), _rev: rev };
 				docs.set(doc._id, saved);
@@ -102,6 +108,7 @@ vi.mock('$lib/db/couch-db', async (importOriginal) => {
 				docs.set(doc._id, { ...clone(doc), _rev: '1-t' });
 				return { id: doc._id, ok: true as const, rev: '1-t' };
 			});
+			afterBulkWrite?.();
 			if (loseBulkResponse) throw new Error('network dropped after the write');
 			return outcomes;
 		}
@@ -161,6 +168,8 @@ beforeEach(() => {
 	docs.clear();
 	failingBulkIds.clear();
 	failingPutIds.clear();
+	conflictingPutIds.clear();
+	afterBulkWrite = null;
 	bulkCalls.length = 0;
 	loseBulkResponse = false;
 	mockGetItem.mockReset();
@@ -537,6 +546,88 @@ describe('receiveDonationBatch — partial failure and retry (CR-143 FR-B7 / FR-
 			/ปิดไปแล้ว/
 		);
 		expect(ledgerRows()).toHaveLength(0);
+	});
+
+	// S-R4-1 — the booking changed after it was read but before it was closed. The rows are
+	// in; closing it from this count would write over the change.
+	it('leaves the booking open when a line is refused while the rows are keyed', async () => {
+		afterBulkWrite = () => {
+			const onFile = storedDonation();
+			docs.set(donation._id, {
+				...clone(onFile),
+				_rev: '2-refused',
+				items: onFile.items!.map((item, i) =>
+					i === 1 ? { ...item, review_status: 'rejected' as const } : item
+				)
+			} as unknown as Doc);
+		};
+
+		const result = await repo.receiveDonationBatch(donation, fullCount(), ctx);
+
+		expect(result.rowsComplete).toBe(true);
+		expect(result.received).toBe(false);
+		expect(result.transitionError).toMatch(/ถูกแก้ระหว่างบันทึกเข้าคลัง/);
+		expect(storedDonation().status).toBe('declared');
+		expect(storedDonation().items![1].review_status).toBe('rejected');
+	});
+
+	it('still closes the booking when only its logistics changed meanwhile', async () => {
+		afterBulkWrite = () => {
+			docs.set(donation._id, {
+				...clone(storedDonation()),
+				_rev: '2-courier',
+				logistics: { courier_tracking_no: 'TH123' }
+			} as unknown as Doc);
+		};
+
+		const result = await repo.receiveDonationBatch(donation, fullCount(), ctx);
+
+		expect(result.received).toBe(true);
+		expect(storedDonation().status).toBe('received');
+		expect(storedDonation().logistics).toEqual({ courier_tracking_no: 'TH123' });
+	});
+
+	it('reports a write that lands between the check and the close the same way', async () => {
+		conflictingPutIds.add(donation._id);
+
+		const result = await repo.receiveDonationBatch(donation, fullCount(), ctx);
+
+		expect(result.received).toBe(false);
+		expect(result.transitionError).toMatch(/ถูกแก้ระหว่างบันทึกเข้าคลัง/);
+		expect(storedDonation().status).toBe('declared');
+	});
+
+	// S-R5-2 — a booking closed before its rows were keyed reads `received` on both screens,
+	// so neither `_rev` nor `receivedElsewhere` tells them apart; the ledger does.
+	describe('a booking received before its rows were keyed', () => {
+		beforeEach(() => {
+			docs.set(donation._id, { ...clone(donation), status: 'received' } as unknown as Doc);
+		});
+		const openedReceived = () => ({ ...clone(donation), status: 'received' as const });
+
+		it('refuses a second screen that matched a line differently', async () => {
+			const first = openedReceived();
+			const second = openedReceived();
+			await repo.receiveDonationBatch(first, fullCount(), ctx);
+			const rowsBefore = ledgerRows().length;
+
+			const differently = fullCount().map((line, i) =>
+				i === 0 ? { ...line, item_id: 'item:oil', unit: 'ขวด' } : line
+			);
+			await expect(repo.receiveDonationBatch(second, differently, ctx)).rejects.toThrow(
+				/รับเข้าคลังไปแล้วจากอีกหน้าจอ/
+			);
+			expect(ledgerRows()).toHaveLength(rowsBefore);
+		});
+
+		it('still lets the same count through again', async () => {
+			await repo.receiveDonationBatch(openedReceived(), fullCount(), ctx);
+
+			const again = await repo.receiveDonationBatch(openedReceived(), fullCount(), ctx);
+
+			expect(again.received).toBe(true);
+			expect(ledgerRows()).toHaveLength(3);
+		});
 	});
 });
 

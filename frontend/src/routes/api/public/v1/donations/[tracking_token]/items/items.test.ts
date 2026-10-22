@@ -4,12 +4,14 @@ import { adminRaw } from '$lib/server/couch-admin';
 import { putAsPublicWriter } from '$lib/server/couch-public-writer';
 import { donationEditLimiter } from '$lib/server/security/rate-limiter';
 import { sha256Hex } from '$lib/db/hash';
-import { fetchDocs, hasKeyedDonationStock } from '$lib/server/donation-docs';
+import { CouchReadError, fetchDocs, hasKeyedDonationStock } from '$lib/server/donation-docs';
 
 type PatchEvent = Parameters<typeof PATCH>[0];
 
 vi.mock('$lib/server/couch-admin', () => ({ adminRaw: vi.fn() }));
-vi.mock('$lib/server/donation-docs', () => ({
+vi.mock('$lib/server/donation-docs', async (importOriginal) => ({
+	CouchReadError: (await importOriginal<typeof import('$lib/server/donation-docs')>())
+		.CouchReadError,
 	fetchDocs: vi.fn(async () => []),
 	hasKeyedDonationStock: vi.fn(async () => false),
 	GOODS_IN_STOCK_ERROR: { success: false, error: 'GOODS_IN_STOCK', message: 'in stock' }
@@ -202,6 +204,44 @@ describe('PATCH /api/public/v1/donations/[token]/items', () => {
 				false
 			);
 		});
+	});
+
+	// S-R5-3 — a failed read used to look like "not synced yet": the edit skipped the
+	// status and stock checks and moved quota at FastAPI while CouchDB stayed as it was.
+	it('stops before moving quota when CouchDB cannot be read', async () => {
+		vi.mocked(adminRaw).mockResolvedValue({ status: 500, data: { error: 'unknown_error' } });
+		fastapiOk();
+
+		const response = await call();
+
+		expect(response.status).toBe(503);
+		expect((await response.json()).error).toBe('DONATION_UNAVAILABLE');
+		expect(fetch).not.toHaveBeenCalled();
+		expect(putAsPublicWriter).not.toHaveBeenCalled();
+	});
+
+	it('stops the same way when the stock check cannot read CouchDB', async () => {
+		couchHas(couchDoc());
+		vi.mocked(hasKeyedDonationStock).mockRejectedValue(
+			new CouchReadError('shelter_sh001', 'stock_ledger (ref_id)', 500)
+		);
+		fastapiOk();
+
+		const response = await call();
+
+		expect(response.status).toBe(503);
+		expect((await response.json()).error).toBe('DONATION_UNAVAILABLE');
+		expect(fetch).not.toHaveBeenCalled();
+	});
+
+	it('treats a shelter with no database as a booking CouchDB has not seen', async () => {
+		vi.mocked(adminRaw).mockResolvedValue({ status: 404, data: { error: 'not_found' } });
+		fastapiOk();
+
+		const response = await call();
+
+		expect(response.status).toBe(200);
+		expect(putAsPublicWriter).not.toHaveBeenCalled();
 	});
 
 	it('leaves CouchDB alone when the donation has not synced yet', async () => {
