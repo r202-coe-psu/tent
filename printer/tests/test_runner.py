@@ -54,6 +54,7 @@ tent_xprinter-42        tent-printer    15360   Sun Oct 18 21:39:19 2026
 """
 PENDING_42 = "tent_xprinter-42        tent-printer    15360   Sun Oct 18 21:39:19 2026\n"
 JOB_ID = "print_job:01J9ZABC"
+RESULT = f"/api/v1/printer/jobs/{JOB_ID}/result"
 LABEL_1 = b"\x89PNG-fake-label-1"
 LABEL_2 = b"\x89PNG-fake-label-2"
 
@@ -199,6 +200,30 @@ def test_printer_timeout_on_second_label_cancels_cups_job_and_reports_one_printe
     assert agent.server.requests[-1][1] == {"printed": 1, "error_code": "printer_timeout"}
 
 
+def test_label_wait_is_capped_by_the_lease_so_the_report_lands_before_the_sweeper(agent, fake_cups):
+    agent.config = replace(CONFIG, job_timeout_sec=30)
+    agent.cups_clock = agent.clock  # one clock, as in production
+    fake_cups.set("lp", out=LP_OK)
+    fake_cups.set("lpstat_pending", out=PENDING_42)
+    agent.server.script("next", job_response(LABEL_1, LABEL_2, lease_sec=40))
+
+    agent.run(max_iterations=1)
+
+    # 40 s lease minus the 15 s report reserve leaves 25 s to print, not the 30 s label timeout.
+    assert 25 <= agent.clock.now < 26
+    assert len(fake_cups.calls("lp")) == 1
+    assert agent.server.requests[-1] == (RESULT, {"printed": 0, "error_code": "printer_timeout"})
+
+
+def test_malformed_poll_response_backs_off_instead_of_crashing(agent):
+    agent.server.script("next", httpx.Response(200, text="<html>proxy error</html>"))
+
+    agent.run(max_iterations=2)
+
+    assert agent.server.paths() == [HELLO, NEXT, NEXT]
+    assert agent.clock.sleeps == [1]
+
+
 def test_aborted_cups_job_on_second_label_reports_queue_disabled(agent, fake_cups):
     fake_cups.set("lp", out=LP_OK)
     fake_cups.set("lpstat_completed", out=COMPLETED_42)
@@ -268,9 +293,6 @@ def test_poll_error_backoff_is_capped_at_error_backoff_max_sec(agent):
     agent.run(max_iterations=8)
 
     assert agent.clock.sleeps == [1, 2, 4, 8, 16, 32, 60, 60]
-
-
-RESULT = "/api/v1/printer/jobs/print_job:01J9ZABC/result"
 
 
 def prepare_printed_job(fake_cups, agent) -> None:

@@ -71,14 +71,36 @@ def _print_boot_slip(
         log.warning("boot slip not printed: %s", exc)
 
 
-def _print_all(cups: Cups, labels: tuple[bytes, ...], timeout_sec: float) -> tuple[int, str | None]:
-    """Print labels in order; stop at the first failure. Returns (printed, error_code)."""
+# Lease time kept back for the result report (and its retries), capped at half a short lease.
+REPORT_RESERVE_SEC = 15
+
+
+def _print_deadline(claimed_at: float, lease_sec: float) -> float:
+    return claimed_at + lease_sec - min(REPORT_RESERVE_SEC, lease_sec / 2)
+
+
+def _print_all(
+    cups: Cups,
+    labels: tuple[bytes, ...],
+    timeout_sec: float,
+    monotonic: Callable[[], float],
+    deadline: float,
+) -> tuple[int, str | None]:
+    """Print labels in order; stop at the first failure. Returns (printed, error_code).
+
+    Each label waits at most `timeout_sec`, and never past `deadline`: a job still printing when
+    its lease runs out would be failed by the server sweeper while CUPS keeps going.
+    """
     for printed, label in enumerate(labels):
+        remaining = deadline - monotonic()
+        if remaining <= 0:
+            log.error("lease spent before label %d of %d", printed + 1, len(labels))
+            return printed, "printer_timeout"
         job_id = cups.submit(label)
         if job_id is None:
             log.error("lp failed on label %d of %d", printed + 1, len(labels))
             return printed, "lp_failed"
-        outcome = cups.wait_done(job_id, timeout_sec)
+        outcome = cups.wait_done(job_id, min(timeout_sec, remaining))
         if outcome == "timeout":
             cups.cancel(job_id)
             return printed, "printer_timeout"
@@ -163,7 +185,14 @@ def run(
                     sleep(config.idle_backoff_sec)
                 continue
             log.info("job %s claimed labels=%d", claimed.id, len(claimed.labels))
-            printed, error_code = _print_all(cups, claimed.labels, config.job_timeout_sec)
+            lease_sec = claimed.lease_sec or hello.lease_sec
+            printed, error_code = _print_all(
+                cups,
+                claimed.labels,
+                config.job_timeout_sec,
+                monotonic,
+                _print_deadline(claimed_at, lease_sec),
+            )
             _report(
                 api,
                 sleep,
@@ -172,7 +201,7 @@ def run(
                 error_code,
                 config.error_backoff_max_sec,
                 monotonic,
-                deadline=claimed_at + (claimed.lease_sec or hello.lease_sec),
+                deadline=claimed_at + lease_sec,
             )
         except AuthError:
             log.error("device auth failed - check DEVICE_ID / DEVICE_SECRET")
