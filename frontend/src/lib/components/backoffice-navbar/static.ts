@@ -180,14 +180,14 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 						href: resolve('/back-office/kiosks/banners'),
 						icon: Images,
 						visibleTo: (roles) => hasCapabilityAnywhere(roles, SCANNER_MANAGER_CAPABILITIES)
-					},
-					{
-						label: 'จัดการเครื่องพิมพ์',
-						href: resolve('/back-office/printers'),
-						icon: Printer,
-						visibleTo: (roles) => hasCapabilityAnywhere(roles, PRINTER_MANAGER_CAPABILITIES)
 					}
 				]
+			},
+			{
+				label: 'จัดการเครื่องพิมพ์',
+				href: resolve('/back-office/printers'),
+				icon: Printer,
+				visibleTo: (roles) => hasCapabilityAnywhere(roles, PRINTER_MANAGER_CAPABILITIES)
 			},
 			{
 				label: 'จัดการข้อมูลหลัก',

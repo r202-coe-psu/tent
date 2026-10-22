@@ -272,16 +272,19 @@ describe('kiosk banner management nav child (FR-KBR-22)', () => {
 
 	it('sits right after the device management and links to the banner list', () => {
 		const children = kioskChildren();
-		expect(children.map((c) => c.label)).toEqual([
-			'จัดการอุปกรณ์',
-			'จัดการแบนเนอร์',
-			'จัดการเครื่องพิมพ์'
-		]);
+		expect(children.map((c) => c.label)).toEqual(['จัดการอุปกรณ์', 'จัดการแบนเนอร์']);
 		expect(children[1].href).toBe('/back-office/kiosks/banners');
 	});
+});
 
-	it('ends with the printer management page', () => {
-		expect(kioskChildren()[2].href).toBe('/back-office/printers');
+describe('printer management nav item', () => {
+	it('is its own settings item right after the kiosk group, not a kiosk child', () => {
+		const settings = backofficeNavbarGroups.find((g) => g.title === '4. ตั้งค่าระบบ');
+		const labels = settings?.items.map((n) => n.label) ?? [];
+		const printer = settings?.items.find((n) => n.label === 'จัดการเครื่องพิมพ์');
+
+		expect(labels.indexOf('จัดการเครื่องพิมพ์')).toBe(labels.indexOf('จัดการ Kiosk') + 1);
+		expect(printer && !isGroup(printer) && printer.href).toBe('/back-office/printers');
 	});
 });
 
