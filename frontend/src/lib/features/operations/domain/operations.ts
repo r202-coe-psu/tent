@@ -1688,6 +1688,14 @@ export const isDonationCampaign = (d: unknown): d is DonationCampaign =>
 export const isStockTransfer = (d: unknown): d is StockTransfer =>
 	!!d && typeof d === 'object' && (d as { type?: unknown }).type === 'stock_transfer';
 
+/** A shelter a transfer request may be sent to (#570) — code and name only. */
+export type TransferDestination = { code: string; name: string };
+export const isTransferDestination = (d: unknown): d is TransferDestination =>
+	!!d &&
+	typeof d === 'object' &&
+	typeof (d as { code?: unknown }).code === 'string' &&
+	typeof (d as { name?: unknown }).name === 'string';
+
 /**
  * Determines the donation cut-off status (T-22 Cut-off Rule).
  * Automatically closes when: On-hand inventory (onHand) + Reserved amount (reserved) >= Target (target)

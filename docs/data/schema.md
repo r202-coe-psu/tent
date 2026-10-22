@@ -3,7 +3,7 @@ title: Smart Shelter — Database Schema v5
 status: draft for review
 created: 2026-06-11
 updated: 2026-10-22
-note: CR-159 §D (2026-10-22) — §2.7 ย่อหน้า `actual_yield` vs `served` ชี้การแจกรายคนไป `distribution_log` §2.30 (ไม่เปลี่ยน field / schema_v); CR-182 approved (2026-10-21, #751) — §9.4 `status` เพิ่ม `granted_bypass`, §9.6 `allowed_scopes` เพิ่ม `booking-bypass`, §9.7 `external_bookings.bypass` (additive, ไม่ bump `schema_v`); CR-181 approved (2026-10-21) — §9.6 `third_party_clients.allowed_scopes` เพิ่ม `occupant-search` (EXT-012, #736); field-level canonical — คู่กับ data-model.md (topology/policy) และ api-contract.md (planes); CR-112/CR-113 registration foundation; CR-118 T-13 lot metadata; CR-119/CR-120/CR-121 catalog, fuel and requisition contracts; CR-124 staff Google step-up MFA on _users; CR-125 Unit of Measure (UOM) master data in catalog; decision sync 2026-09-23 — `_users.phone` เป็น optional; login ได้ทั้ง CouchDB `name` (username) และเบอร์ติดต่อ (resolve ผ่าน BFF); decision sync 2026-09-23 — `_users.organization` optional สำหรับทั้ง staff และ volunteer; CR-135/CR-136 partner OAuth2 client name/module preset + secret reveal/edit/delete; CR-137 shrink master_data (10→4) + zone/community free text; CR-138 remove purchase doc type + withdraw purchase from stock_ledger.reason; CR-139 shelter storage points; CR-140 item_category default_class editable; CR-144/CR-145 meal_service_receipt (§2.7.3); CR-147 removes CR-146 meal_distribution_push (§2.7.4) — ticket flow ends at warehouse stock-in; CR-148 pre-register validation + evacuee religion_other/disability_other_detail (v11) + household dorm_* (v6); CR-151 kiosk pre-registration check-in (report-in arriving status & KIOSK_LOOKUP_MANGO_INDEXES); CR-154 evacuee.gender nullable + registered_via api (v12), external_bookings (§9.7), partner scopes booking-write/residency-read + module M2; decision sync 2026-10-09 — `evacuee.gender = null` ("ไม่ระบุ") ใช้ได้ทุกช่องทาง (public/kiosk/Station 1/back-office/api) เป็นค่าเริ่มต้นของฟอร์ม, `'other'` คงไว้อ่านเฉพาะ doc เดิม (UI ไม่เสนอให้เลือกใหม่, แก้ไขแล้วต้อง preserve) — ยกเลิก CR-154 FR-70/FR-71(บางส่วน)/FR-72; เพิ่ม `public_shelters.occupancy_breakdown.gender_unspecified` (null+other) พร้อม invariant `male+female+gender_unspecified = occupancy_total`; evacuee ไม่ bump schema_v (v12 รองรับ null แล้ว); ต้อง re-project `public_shelters` (worker bootstrap) หลัง deploy; CR-157 donation_slot แยกคิว dropoff/pickup (§2.13, v2); CR-158 kiosk staff PIN face bypass — `scanner_device` v2 (`staff_pin_*` metadata) + DB ใหม่ `scanner_secrets` (§3.11.1, admin-only, ไม่ replicate/sync); CR-159 evacuee `preferred_zone` (v13); CR-162 kiosk banner — doc type ใหม่ `kiosk_banner` v1 ใน `registry` (§3.12, `shelter_code` เดียว + `screen_type`; ส่วนที่ปรับ 2026-10-15..17 Team Lead อนุมัติ 2026-10-18) + `scanner_device.screen_type` / `banner_enabled` optional (§3.11) · ไม่เพิ่ม role — ใช้ `{code}:kiosk_staff` ของ CR-165 แทน `banner_staff` (§6); CR-163 kiosk ThaiD check-in — shelter `feature_flags.kiosk_thaid_check_in_enabled` (additive, ไม่ bump schema_v) + `config:app.thaid_registration_enabled` ครอบคลุม mode `kiosk_check_in` (kiosk อ่านแบบ fail closed); CR-164 ให้ `shelter:{code}` เป็นกุญแจอ่าน DB กลาง `registry`/`catalog` (§6); CR-170 demographics views count room_confirmed (_design/app v3); CR-169 (2026-10-17, #592) evacuee `booking_ref` + schema_v 14 (§1.1), external_bookings group fields `person_seq`/`group_size`/`committed` + index `(booking_id, person_seq)` (§9.7); #613 `external_bookings` `reconciled_at` + `reconcile_outcome` + index `(state, reconciled_at)` (§9.7, additive), access log `result_count = N` (§9.4); #613 decision sync (review รอบ 3) `external_bookings.reconcile_stay_cancelled_at` + `reconcile_household_cancelled_at` (marker ราย doc = timestamp ที่ worker เขียนตอนยกเลิก; retry audit เฉพาะ doc ที่ `since`/`updated_at` ตรงกับ marker) แทน `reconcile_cancelled_at` ของรอบ 2; CR-151 §16 (2026-10-18, #654, proposed) shelter `zones[].short_name` optional สำหรับ QR label (additive, ไม่ bump schema_v); draft-in-shelter-headcount (2026-10-20, #593, proposed) — **In-shelter** = `active` + `room_confirmed` เป็นยอดคนในศูนย์เดียวของความจุ / คลัง / Kitchen / SOP / `daily_calc.occupancy_snapshot` (เดิม Kitchen/SOP `active` อย่างเดียว; ไม่ bump schema_v); decision sync 2026-10-21 — kitchen `requisition_ticket` (§2.29) ใช้ flow 4 สถานะ (ไม่มี one-click approve); `PENDING_PICK→READY_FOR_DISPATCH` อนุมัติได้โดย `warehouse_staff`/`shelter_manager`/`system_admin` และเขียน `allocated_qty` พร้อมอนุมัติใน update เดียวได้; `allocated_qty = '0'` ได้ (คลังไม่มีให้) ถ้ามีอย่างน้อย 1 บรรทัด > 0 และ dispatch ข้ามบรรทัด 0; `kitchen_staff` แก้ `allocated_qty` ไม่ได้; UI บล็อกอนุมัติ/ปล่อยของเมื่อสต็อกคงเหลือไม่พอ (ไม่ bump schema_v); CR-177 `meal_service.receipt_no` (§2.7, additive, ไม่ bump schema_v); CR-178 kitchen ticket dispatch ราย lot — `requisition` อ้าง `requisition_ticket` ต้องมี `lot_ref` (§2.1/§2.29, ไม่ bump schema_v); CR-180 (2026-10-20, #716) — สมัครหลายกะในคำขอเดียว ยังเป็น `job_application` 1 ใบต่อ 1 กะ (§2.18 หมายเหตุ, ไม่เปลี่ยน field / schema_v)
+note: CR-187 approved (2026-10-22, #648) — §3.3 `master_type` เพิ่ม `allergy` (global-only, seed 5) + §1.2 `medical.allergies` = master code หรือ free text (ไม่ bump `schema_v`); CR-186 approved (2026-10-22, #649) — §3.3 `master_type` เพิ่ม `chronic_disease` (global-only, seed 12) + §1.2 `medical.conditions` = master code หรือ free text (ไม่ bump `schema_v`); CR-185 approved (2026-10-21, #709) — §9.2 `public_jobs.is_urgent` (projection field ใหม่, `PROJECTION_VERSION` 5→6, ไม่ bump `schema_v`)
 ---
 
 # Database Schema v5 — field-level
@@ -151,9 +151,9 @@ implement — ไม่กระทบ migration นี้
 | --- | --- | --- | --- |
 | `evacuee_id` | str | req | unique ต่อ evacuee — บังคับใน validate (สร้างซ้ำ = forbidden) |
 | `blood_group` | enum(`A`,`B`,`AB`,`O`,`unknown`) | opt | — |
-| `conditions` | [str] | opt | โรคประจำตัว free-text รายตัว |
+| `conditions` | [str] | opt | โรคประจำตัว รายตัว — แต่ละค่าเป็น `code` ของ `master_data:chronic_disease` **หรือ** free text (CR-186). เขียนเป็น code เมื่อเลือกจาก master หรือข้อความตรง `label_th`/`label_en` ของ item `active` (`normalizeLabel`); นอกนั้นเก็บข้อความ (trim). display resolve code → label, free text แสดงตามที่เก็บ. ไม่ผูกกับ `vulnerable_groups: chronic_illness` |
 | `medications` | [str] | opt | — |
-| `allergies` | [str] | opt | — |
+| `allergies` | [str] | opt | ประวัติการแพ้ รายตัว — แต่ละค่าเป็น `code` ของ `master_data:allergy` **หรือ** free text (CR-187; เช่น แพ้ยา). เขียนเป็น code เมื่อเลือกจาก master หรือข้อความตรง `label_th`/`label_en` ของ item `active` (`normalizeLabel`); นอกนั้นเก็บข้อความ (trim). display resolve code → label, free text แสดงตามที่เก็บ |
 | `track` | enum(`normal`,`fast_track`) | req | default `normal` — sync กับผล screening ล่าสุด |
 | `notes` | str | opt | — |
 
@@ -1568,7 +1568,7 @@ Authorization และ Bangkok current-day write rule ถูกบังคั�
 
 > **schema_v 4** — item display names are bilingual (`label_th` + `label_en`); new items require
 > a user/seed-supplied snake_case `code` (no auto `item_{ulid}`). Legacy `item_*` codes may be
-> renamed to a slug on edit. Seed uses semantic `SeedItemDef.key` as `code` for all 4 types.
+> renamed to a slug on edit. Seed uses semantic `SeedItemDef.key` as `code` for all 6 types.
 > **schema_v 3** — เพิ่ม item field `status`; ลบ `excluded_codes` (mechanism ทิ้งทั้งหมด); item `code`
 > ที่สร้างใหม่เป็น **ULID** (`item_{ulid}`) แทน slug. [CR-049](../changes/CR-049-shelter-scope-backoffice-vs-system-management.md).
 > schema_v 2 — baseline two-tier (`shelter_code?` + `excluded_codes?` override-merge) — **แนวทางนี้ถูกยกเลิกโดย CR-049**
@@ -1587,7 +1587,7 @@ Authorization และ Bangkok current-day write rule ถูกบังคั�
 
 | Field | ชนิด | req | หมายเหตุ |
 | --- | --- | --- | --- |
-| `master_type` | enum(4 types) | req | `vulnerable_group` \| `housing_type` \| `shelter_type` \| `volunteer_skills` (CR-137 — ตัด `health_condition`, `dietary_restrictions`, `pet_types`, `house_damage`, `municipality_zone`, `community`) |
+| `master_type` | enum(6 types) | req | `vulnerable_group` \| `housing_type` \| `shelter_type` \| `volunteer_skills` \| `chronic_disease` (CR-186 — global-only) \| `allergy` (CR-187 — global-only) (CR-137 — ตัด `health_condition`, `dietary_restrictions`, `pet_types`, `house_damage`, `municipality_zone`, `community`) |
 | `shelter_code` | str? | opt | มีเฉพาะ doc tier shelter-local — ระบุศูนย์เจ้าของ; ไม่มี field นี้ = global doc |
 | `items` | [{`code`:str, `label_th`:str, `label_en`:str, `is_default`:bool, `status`:enum(`active`,`inactive`), `parent_code`:str?, `category`?:str, `description`?:str}] | req | ≥0 items; `code` = user/seed snake_case (`^[a-z0-9_]+$`), unique per type — **required on create** (no ULID fallback); slug codes immutable on edit; legacy `item_*` codes may be renamed once; `label_th` + `label_en` both required (trim, min 1); `parent_code` optional (legacy hierarchy; ไม่มี consumer หลัง CR-137) |
 
@@ -1597,6 +1597,16 @@ Authorization และ Bangkok current-day write rule ถูกบังคั�
 **Hard migrate map (CR-112):** `elderly` → `elderly_dependent`; `disabled` → `disability_other`; `chronic_illness` คงรหัส
 
 **Pets (CR-137):** `pets[].species` เป็น domain enum `dog \| cat \| other` — **ไม่** ใช้ `master_data:pet_types` (type ถูกลบ; public `/config/pet-types` ถูกลบ)
+
+**Seed — `allergy` (CR-187):** global-only — ห้ามมี shelter-local doc `master_data:allergy:{shelter_code}`
+(writer ปฏิเสธ; back-office แสดง read-only). ไม่มี item `other` — สิ่งที่แพ้นอกรายการ (เช่น ยา) เก็บเป็น free text ใน `medical.allergies` (§1.2).
+`seafood`, `milk`, `egg`, `wheat`, `nuts`
+(labels: [`docs/master-data/README.md`](../master-data/README.md) §1.3)
+
+**Seed — `chronic_disease` (CR-186):** global-only — ห้ามมี shelter-local doc `master_data:chronic_disease:{shelter_code}`
+(writer ปฏิเสธ; back-office แสดง read-only). ไม่มี item `other` — โรคนอกรายการเก็บเป็น free text ใน `medical.conditions` (§1.2).
+`diabetes`, `hypertension`, `heart_disease`, `kidney_disease`, `asthma`, `dyslipidemia`, `stroke`, `copd`, `cancer`, `epilepsy`, `hiv`, `psychiatric_disorder`
+(labels: [`docs/master-data/README.md`](../master-data/README.md) §1.3)
 
 **Seed — `housing_type` active (CR-112):**
 
@@ -2619,6 +2629,7 @@ Read model สำหรับฉายข้อมูลประกาศงา
 | `slots_confirmed` | int | req | ยอดรับแล้วรวม (🟢) |
 | `slots_remaining` | int | req | ยอดยังขาดรวม (⚪) |
 | `status` | enum(`open`,`full`,`paused`,`closed`) | req | สถานะเปิดรับสมัคร (projector map `almost_full` เดิม → `open`) |
+| `is_urgent` | bool | req | default `false` — คัดลอกจาก `job.is_urgent` (§2.17); หน้าแรก public นับเฉพาะงานนี้ในการ์ดจิตอาสา ([CR-185](../changes/12-public/CR-185-public-jobs-is-urgent.md), #709) |
 | `updated_at` | ts | req | เวลาที่ sync ข้อมูลล่าสุด |
 
 ### 9.3 `shelter_stocks` (MongoDB) — **ใหม่ (CR-111, EXT-004/006)**
