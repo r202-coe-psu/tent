@@ -4,7 +4,7 @@ title: "ประเมินใบบริจาคทีละรายกา
 status: approved
 date: 2026-10-17
 approved_at: 2026-10-19
-updated: 2026-10-21
+updated: 2026-10-22
 requested_by: "Kan"
 decided_by: "Soravit Sukkarn (Team Lead)"
 layer: volatile
@@ -76,10 +76,12 @@ migration: field ใหม่ optional — doc เดิมไม่ต้อง
   - `declared` → ไม่เขียน `review_status` ลงรายการใด และไม่คำนวณสถานะใบใหม่ (คง `declared`)
 
 ### สิทธิ์ผู้บริจาคหลังได้ QR (`verifying`)
-- **FR-20** — ใบ `verifying` ผู้บริจาค**ยกเลิกได้** (เหมือน `pending_review`) · ยกเลิกแล้วคืนโควต้าและ slot ทันทีตามกลไกเดิมของการยกเลิก
-- **FR-21** — ใบ `verifying` ผู้บริจาค**แก้รายการได้** ตามกฎ FR-18: รายการที่แก้หรือเพิ่มถูกคำนวณ `review_status` ใหม่ (ถ้าเป็นรายการที่พิมพ์เอง → `pending` แม้เจ้าหน้าที่เคยอนุมัติรายการนั้นแล้ว) · ถ้ามีรายการ `pending` ใบกลับไป `pending_review` และ QR ใช้ไม่ได้จนกว่าประเมินครบ
+- **FR-20** — ใบ `verifying` ผู้บริจาค**ยกเลิกได้** (เหมือน `pending_review`) · ยกเลิกแล้วคืนโควต้าและ slot ทันทีตามกลไกเดิมของการยกเลิก (ยกเว้นใบที่มีของเข้าคลังแล้ว — decision sync 2026-10-22 ด้านล่าง)
+- **FR-21** — ใบ `verifying` ผู้บริจาค**แก้รายการได้** ตามกฎ FR-18: รายการที่แก้หรือเพิ่มถูกคำนวณ `review_status` ใหม่ (ถ้าเป็นรายการที่พิมพ์เอง → `pending` แม้เจ้าหน้าที่เคยอนุมัติรายการนั้นแล้ว) · ถ้ามีรายการ `pending` ใบกลับไป `pending_review` และ QR ใช้ไม่ได้จนกว่าประเมินครบ (ยกเว้นใบที่มีของเข้าคลังแล้ว — decision sync 2026-10-22 ด้านล่าง)
 - **FR-22** — ใบ `verifying` ผู้บริจาค**ใส่/แก้เลขพัสดุได้**
 - **FR-23** — กฎสิทธิ์ (แก้ / ยกเลิก / เลขพัสดุ) ใช้ชุดสถานะเดียวกันทั้ง backend (`DONOR_EDITABLE_STATUSES`) และ frontend (`public-donation.ts`, `tracking.ts`) → `{declared, pending_review, verifying}`
+
+> **decision sync 2026-10-22:** ใบที่มีของเข้าคลังแล้วอย่างน้อย 1 รายการ (มีแถว `stock_ledger` ที่ `reason: donation` และ `ref_id` ชี้มาที่ใบนี้) ผู้บริจาค**ยกเลิกไม่ได้และแก้รายการไม่ได้** แม้สถานะยังอยู่ใน `DONOR_EDITABLE_STATUSES` — BFF ตอบ `409 GOODS_IN_STOCK` ก่อนแตะโควตาที่ FastAPI (`DELETE /public/v1/donations/{tracking_token}`, `PATCH …/items`). ใส่/แก้เลขพัสดุ (FR-22) ทำได้ตามเดิม. เหตุผล: การยกเลิกจะคืนโควตาทั้งที่ของอยู่บนชั้นแล้ว และการแก้รายการจะเลื่อนลำดับรายการใต้แถวคลังที่บันทึกตามลำดับเดิม (`deriveDonationReceiptLineId`). ไม่เปลี่ยน field / schema_v
 - **FR-24** — หน้าติดตามเตือนก่อนบันทึกการแก้ใบที่ได้ QR แล้วว่า "ถ้ามีรายการที่ต้องประเมิน QR จะใช้ไม่ได้จนกว่าเจ้าหน้าที่ประเมินเสร็จ"
 - **FR-25** — `receiveDonationInputSchema` เพิ่ม `expected_rev: str` (req) · `scan-station.svelte` ส่ง `_rev` ของใบที่โหลดมาตอนเปิดหน้าตรวจรับ · route รับของ (`[query]/+server.ts`) เทียบกับ `_rev` ของใบล่าสุด ไม่ตรง → 409 ให้โหลดใหม่
 - **FR-25a** — การเช็ค FR-25 ต้องทำก่อนเขียน `stock_ledger` / `audit` ใด ๆ → 409 จาก FR-25 ไม่มีแถวใหม่
