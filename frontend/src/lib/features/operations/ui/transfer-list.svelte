@@ -24,10 +24,11 @@
 		cancelInfoSchema,
 		disputeInfoSchema,
 		type StockTransfer,
-		type TransferStatus,
 		type DispatchInfoInput
 	} from '../domain/operations';
 	import DispatchConfirmDialog from './dispatch-confirm-dialog.svelte';
+	import TransferDetailSheet from './transfer-detail-sheet.svelte';
+	import { STATUS_LABEL, statusBadgeClass } from './transfer-status';
 	import Truck from '@lucide/svelte/icons/truck';
 	import PackageCheck from '@lucide/svelte/icons/package-check';
 	import Ban from '@lucide/svelte/icons/ban';
@@ -35,6 +36,7 @@
 	import CirclePlay from '@lucide/svelte/icons/circle-play';
 	import PackageMinus from '@lucide/svelte/icons/package-minus';
 	import PackagePlus from '@lucide/svelte/icons/package-plus';
+	import Eye from '@lucide/svelte/icons/eye';
 
 	const transfersQuery = useTransfers();
 	const dispatchMutation = useDispatchTransfer();
@@ -56,29 +58,6 @@
 
 	// Session expired (`needsReauth`): every action button is off until the user signs in again.
 	const offline = $derived(authStore.needsReauth);
-
-	const STATUS_LABEL: Record<TransferStatus, string> = {
-		requested: 'รอส่งมอบ',
-		shipped: 'ระหว่างขนส่ง',
-		received: 'ส่งมอบสำเร็จ',
-		cancelled: 'ยกเลิกแล้ว',
-		disputed: 'ระงับไว้'
-	};
-
-	function statusBadgeClass(status: TransferStatus): string {
-		switch (status) {
-			case 'requested':
-				return 'border-amber-200 bg-amber-50 text-amber-900';
-			case 'shipped':
-				return 'border-sky-200 bg-sky-50 text-sky-900';
-			case 'received':
-				return 'border-emerald-200 bg-emerald-50 text-emerald-900';
-			case 'cancelled':
-				return 'border-border bg-muted text-muted-foreground';
-			case 'disputed':
-				return 'border-rose-200 bg-rose-50 text-rose-900';
-		}
-	}
 
 	/** CR-089 FR-03/FR-04 — cancel and dispute both need a reason, so they share one prompt. */
 	type ReasonMode = 'cancel' | 'dispute';
@@ -127,6 +106,15 @@
 	);
 
 	const transfers = $derived(transfersQuery.data ?? []);
+
+	let detailId = $state<string | null>(null);
+	let detailOpen = $state(false);
+	const detailTransfer = $derived(transfers.find((t) => t._id === detailId) ?? null);
+
+	function openDetail(t: StockTransfer) {
+		detailId = t._id;
+		detailOpen = true;
+	}
 
 	const incomingPending = $derived(
 		transfers.filter((t) => t.to_shelter === ownShelter && t.status === 'shipped')
@@ -241,9 +229,9 @@
 	}
 </script>
 
-<div class="flex flex-col gap-4">
+<div class="@container flex flex-col gap-4">
 	<!-- Inbox cards -->
-	<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+	<div class="grid grid-cols-1 items-start gap-4 @xl:grid-cols-2">
 		<section class="rounded-2xl border border-border/80 bg-card p-4 shadow-md sm:p-5">
 			<div class="mb-3 flex items-center gap-2 border-b border-border/60 pb-3">
 				<PackagePlus class="h-4.5 w-4.5 text-primary" aria-hidden="true" />
@@ -306,7 +294,7 @@
 				<ul class="space-y-3">
 					{#each outgoingPending as t (t._id)}
 						<li
-							class="flex flex-col gap-3 rounded-xl border border-amber-200/80 bg-amber-50/40 p-3"
+							class="@container/card flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200/80 bg-amber-50/40 p-3"
 						>
 							<div class="min-w-0 space-y-1">
 								<p class="font-mono text-xs font-semibold">
@@ -321,13 +309,17 @@
 									{STATUS_LABEL[t.status]}
 								</span>
 							</div>
-							<div class="flex flex-wrap gap-2">
+							<!-- Narrow card: primary action full width, secondary ones split below.
+							     Wide card: all actions inline on the right. -->
+							<div
+								class="grid w-full grid-cols-2 gap-2 @md/card:ml-auto @md/card:flex @md/card:w-auto @md/card:justify-end"
+							>
 								{#if t.status === 'requested'}
 									<button
 										type="button"
 										onclick={() => openDispatch(t)}
 										disabled={outgoingBusy || offline}
-										class={buttonVariants({ size: 'sm' })}
+										class={buttonVariants({ size: 'sm', class: 'col-span-2' })}
 									>
 										<Truck class="mr-1 h-3.5 w-3.5" />ยืนยันส่ง
 									</button>
@@ -339,12 +331,20 @@
 									>
 										<CirclePause class="mr-1 h-3.5 w-3.5" />ระงับ
 									</button>
+									<button
+										type="button"
+										onclick={() => openReason(t, 'cancel')}
+										disabled={outgoingBusy || offline}
+										class={buttonVariants({ size: 'sm', variant: 'destructive' })}
+									>
+										<Ban class="mr-1 h-3.5 w-3.5" />ยกเลิก
+									</button>
 								{:else if t.status === 'disputed'}
 									<button
 										type="button"
 										onclick={() => handleResume(t)}
 										disabled={outgoingBusy || offline}
-										class={buttonVariants({ size: 'sm' })}
+										class={buttonVariants({ size: 'sm', class: 'col-span-2' })}
 									>
 										<CirclePlay class="mr-1 h-3.5 w-3.5" />กลับมาดำเนินการต่อ
 									</button>
@@ -375,18 +375,23 @@
 						<Table.Head>เส้นทาง</Table.Head>
 						<Table.Head>รายการ</Table.Head>
 						<Table.Head>สถานะ</Table.Head>
-						<Table.Head class="text-right">การดำเนินการ</Table.Head>
+						<Table.Head><span class="sr-only">รายละเอียด</span></Table.Head>
 					</Table.Row>
 				</Table.Header>
 				<Table.Body>
 					{#each transfers as t (t._id)}
-						<Table.Row class={isTransferPending(t, ownShelter) ? 'bg-muted/30' : ''}>
+						<Table.Row
+							class="cursor-pointer hover:bg-muted/50 {isTransferPending(t, ownShelter)
+								? 'bg-muted/30'
+								: ''}"
+							onclick={() => openDetail(t)}
+						>
 							<Table.Cell>
-								<span class="font-mono text-xs font-semibold"
-									>{t.from_shelter} → {t.to_shelter}</span
-								>
+								<span class="font-mono text-xs font-semibold">
+									{t.from_shelter} → {t.to_shelter}
+								</span>
 								<span
-									class="ml-2 rounded-md border border-border/60 px-1.5 py-0.5 text-[10px] font-bold text-muted-foreground"
+									class="mt-1 block w-fit rounded-md border border-border/60 px-1.5 py-0.5 text-[10px] font-bold text-muted-foreground"
 								>
 									{isOutgoing(t) ? 'ต้นทาง (เรา)' : 'ปลายทาง (เรา)'}
 								</span>
@@ -410,53 +415,18 @@
 									</div>
 								{/if}
 							</Table.Cell>
-							<Table.Cell>
-								<div class="flex flex-wrap justify-end gap-2">
-									{#if isOutgoing(t) && t.status === 'requested'}
-										<button
-											type="button"
-											onclick={() => openDispatch(t)}
-											disabled={outgoingBusy || offline}
-											class={buttonVariants({ size: 'sm' })}
-										>
-											<Truck class="mr-1 h-3.5 w-3.5" />อนุมัติส่งมอบ
-										</button>
-										<button
-											type="button"
-											onclick={() => openReason(t, 'dispute')}
-											disabled={outgoingBusy || offline}
-											class={buttonVariants({ size: 'sm', variant: 'outline' })}
-										>
-											<CirclePause class="mr-1 h-3.5 w-3.5" />คัดค้าน/ระงับ
-										</button>
-										<button
-											type="button"
-											onclick={() => openReason(t, 'cancel')}
-											disabled={outgoingBusy || offline}
-											class={buttonVariants({ size: 'sm', variant: 'outline' })}
-										>
-											<Ban class="mr-1 h-3.5 w-3.5" />ยกเลิก
-										</button>
-									{:else if isOutgoing(t) && t.status === 'disputed'}
-										<button
-											type="button"
-											onclick={() => handleResume(t)}
-											disabled={outgoingBusy || offline}
-											class={buttonVariants({ size: 'sm' })}
-										>
-											<CirclePlay class="mr-1 h-3.5 w-3.5" />กลับมาดำเนินการต่อ
-										</button>
-									{:else if !isOutgoing(t) && t.status === 'shipped'}
-										<button
-											type="button"
-											onclick={() => handleReceive(t)}
-											disabled={receiveMutation.isPending || offline}
-											class={buttonVariants({ size: 'sm' })}
-										>
-											<PackageCheck class="mr-1 h-3.5 w-3.5" />ยืนยันรับเข้า
-										</button>
-									{/if}
-								</div>
+							<Table.Cell class="text-right">
+								<button
+									type="button"
+									aria-label="ดูรายละเอียดการโอน {t.from_shelter} → {t.to_shelter}"
+									onclick={(e) => {
+										e.stopPropagation();
+										openDetail(t);
+									}}
+									class={buttonVariants({ size: 'sm', variant: 'outline' })}
+								>
+									<Eye class="mr-1 h-3.5 w-3.5" />รายละเอียด
+								</button>
 							</Table.Cell>
 						</Table.Row>
 					{/each}
@@ -471,6 +441,14 @@
 	route={dispatchRoute}
 	isPending={dispatchMutation.isPending}
 	onConfirm={handleDispatchConfirm}
+/>
+
+<TransferDetailSheet
+	bind:open={detailOpen}
+	transfer={detailTransfer}
+	{ownShelter}
+	{namesById}
+	formatUnitLabel={(u) => formatUnit(u, units, langState.current)}
 />
 
 <Dialog.Root bind:open={reasonOpen} onOpenChange={handleReasonOpenChange}>
