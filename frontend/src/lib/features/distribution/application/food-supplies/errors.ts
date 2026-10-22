@@ -58,6 +58,30 @@ export class InsufficientPoolQuotaError extends WorkflowError {
 	}
 }
 
+/** Another OPEN bulk return pool already uses this (normalized) name. Advisory, shown to the user. */
+export class BulkReturnPoolNameTakenError extends WorkflowValidationError {
+	constructor(message: string) {
+		super(message);
+		this.name = 'BulkReturnPoolNameTakenError';
+	}
+}
+
+/** A bulk return pool is missing, not OPEN, or locked, so the operation cannot proceed. */
+export class BulkReturnPoolStateError extends WorkflowError {
+	constructor(message: string) {
+		super(message);
+		this.name = 'BulkReturnPoolStateError';
+	}
+}
+
+/** A pool can only be cancelled when no live entry is in it. */
+export class BulkReturnPoolNotEmptyError extends WorkflowError {
+	constructor(message: string) {
+		super(message);
+		this.name = 'BulkReturnPoolNotEmptyError';
+	}
+}
+
 export class ConcurrencyCollisionError extends WorkflowError {
 	constructor(message: string) {
 		super(message);
