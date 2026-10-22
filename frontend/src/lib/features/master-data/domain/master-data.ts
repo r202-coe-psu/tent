@@ -21,7 +21,8 @@ export const MASTER_DATA_TYPES = [
 	'housing_type',
 	'shelter_type',
 	'volunteer_skills',
-	'chronic_disease'
+	'chronic_disease',
+	'allergy'
 ] as const;
 export type MasterDataType = (typeof MASTER_DATA_TYPES)[number];
 
@@ -81,7 +82,8 @@ export const MASTER_DATA_TYPE_LABELS: Record<MasterDataType, string> = {
 	housing_type: 'ประเภทที่อยู่อาศัย (Housing Type)',
 	shelter_type: 'ประเภทศูนย์พักพิง (Shelter Type)',
 	volunteer_skills: 'ทักษะมาตรฐานจิตอาสา (Volunteer Skills)',
-	chronic_disease: 'โรคประจำตัว (Chronic Disease)'
+	chronic_disease: 'โรคประจำตัว (Chronic Disease)',
+	allergy: 'อาการแพ้ (Allergy)'
 };
 
 /** Hub copy: sidebar short title, panel title/lead, and forms that consume each type. */
@@ -131,6 +133,12 @@ export const MASTER_DATA_TYPE_META: Record<MasterDataType, MasterDataTypeMeta> =
 			'แก้ไขข้อมูลสุขภาพในโปรไฟล์ผู้พักพิง',
 			'นำเข้าไฟล์ผู้อพยพ'
 		]
+	},
+	allergy: {
+		shortTitle: 'อาการแพ้',
+		title: 'อาการแพ้',
+		description: 'สิ่งที่แพ้ที่เจ้าหน้าที่เลือกได้ตอนคัดกรองสุขภาพ (พิมพ์เพิ่มเองได้ เช่น แพ้ยา)',
+		affectedForms: ['คัดกรองสุขภาพ Station 2', 'แก้ไขข้อมูลสุขภาพในโปรไฟล์ผู้พักพิง']
 	}
 };
 

@@ -2,7 +2,7 @@
  * Canonical master_data definitions for platform init (prod + staging).
  *
  * CR-137: only vulnerable_group, housing_type, shelter_type, volunteer_skills;
- * chronic_disease added back by #649 (Station 2 โรคประจำตัว).
+ * chronic_disease added back by #649 (Station 2 โรคประจำตัว); allergy by #648.
  * municipality_zone / community are free-text fields on household/shelter docs
  * (not master types). Pet species is a domain enum (dog|cat|other).
  *
@@ -157,6 +157,18 @@ export const MASTER_DATA_DEFS: MasterTypeDef[] = [
 			{ key: 'epilepsy', label_th: 'ลมชัก', label_en: 'Epilepsy' },
 			{ key: 'hiv', label_th: 'ติดเชื้อเอชไอวี (HIV)', label_en: 'HIV infection' },
 			{ key: 'psychiatric_disorder', label_th: 'โรคทางจิตเวช', label_en: 'Psychiatric disorder' }
+		]
+	},
+	{
+		// #648 — Station 2 ประวัติการแพ้; codes are matched against food allergens at
+		// distribution (#607). Off-list free text (e.g. drug allergies) stays allowed.
+		type: 'allergy',
+		items: [
+			{ key: 'seafood', label_th: 'อาหารทะเล', label_en: 'Seafood' },
+			{ key: 'milk', label_th: 'นม', label_en: 'Milk' },
+			{ key: 'egg', label_th: 'ไข่', label_en: 'Egg' },
+			{ key: 'wheat', label_th: 'แป้งสาลี', label_en: 'Wheat' },
+			{ key: 'nuts', label_th: 'ถั่ว', label_en: 'Nuts' }
 		]
 	}
 ];

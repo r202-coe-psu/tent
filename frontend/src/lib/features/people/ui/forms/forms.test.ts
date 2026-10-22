@@ -14,19 +14,20 @@ import {
 import { languageStore } from '$lib/stores/language.svelte';
 import MasterTagInput from './master-tag-input.svelte';
 
+const MOCK_MASTER_ITEMS: Record<string, { code: string; label_th: string; label_en: string }[]> = {
+	chronic_disease: [{ code: 'diabetes', label_th: 'เบาหวาน', label_en: 'Diabetes' }],
+	allergy: [{ code: 'egg', label_th: 'ไข่', label_en: 'Egg' }]
+};
+
 vi.mock('$lib/features/master-data', async (importOriginal) => ({
 	...(await importOriginal<typeof import('$lib/features/master-data')>()),
-	useMasterData: () => ({
+	useMasterData: (type: () => string) => ({
 		data: {
-			items: [
-				{
-					code: 'diabetes',
-					label_th: 'เบาหวาน',
-					label_en: 'Diabetes',
-					is_default: false,
-					status: 'active'
-				}
-			]
+			items: (MOCK_MASTER_ITEMS[type()] ?? []).map((i) => ({
+				...i,
+				is_default: false,
+				status: 'active'
+			}))
 		}
 	})
 }));
@@ -509,6 +510,16 @@ describe('Shared Form Sub-components for Evacuee Intake and Profile (Issue #205)
 			expect(result.body).toContain('id="med-conditions"');
 			expect(result.body).toContain('ลบ เบาหวาน');
 			expect(result.body).toContain('ลบ โรคเกาต์');
+		});
+
+		it('renders ประวัติการแพ้ as allergy master tags: legacy labels resolve, free text stays (#648)', () => {
+			const result = render(HealthMedicalFields, {
+				props: { allergies: 'ไข่, เพนิซิลลิน', idPrefix: 'med' }
+			});
+			expect(result.body).toContain('id="med-allergies"');
+			expect(result.body).toContain('ลบ ไข่');
+			expect(result.body).toContain('ลบ เพนิซิลลิน');
+			expect(result.body).not.toContain('ลบ egg');
 		});
 
 		it('hides general symptoms when showGeneralSymptoms is false', () => {
