@@ -420,6 +420,12 @@ export const listMatchingHouseholdIds = (
 	filters?: HouseholdFilters
 ) => peopleRepository().listMatchingHouseholdIds(search, labels, filters);
 
+export const listCancellableEvacueeIds = (ids: readonly string[]) =>
+	peopleRepository().listCancellableEvacueeIds(ids);
+
+export const listCancellableHouseholdIds = (ids: readonly string[]) =>
+	peopleRepository().listCancellableHouseholdIds(ids);
+
 export const useCreateHousehold = () => {
 	const queryClient = useQueryClient();
 	return createMutation(() => ({
