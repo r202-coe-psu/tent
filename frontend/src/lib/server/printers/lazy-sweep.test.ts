@@ -103,4 +103,17 @@ describe('startPrintHousekeeping', () => {
 
 		expect(calls.filter((c) => c === 'findJobs:printing')).toHaveLength(1);
 	});
+
+	it('keeps one timer when vite dev re-imports the module (HMR)', async () => {
+		vi.useFakeTimers();
+		const { store, calls } = recordingStore();
+
+		startPrintHousekeeping(store, { isProvisioned: async () => true });
+		vi.resetModules();
+		const reloaded = await import('./lazy-sweep');
+		reloaded.startPrintHousekeeping(store, { isProvisioned: async () => true });
+		await vi.advanceTimersByTimeAsync(30_000);
+
+		expect(calls.filter((c) => c === 'findJobs:printing')).toHaveLength(1);
+	});
 });

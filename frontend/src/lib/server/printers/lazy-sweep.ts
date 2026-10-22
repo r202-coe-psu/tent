@@ -17,7 +17,11 @@ const RETENTION_INTERVAL_MS = 60 * 60_000;
 
 let lastSweepAt = Number.NEGATIVE_INFINITY;
 let lastRetentionAt = Number.NEGATIVE_INFINITY;
-let timer: ReturnType<typeof setInterval> | null = null;
+
+/** On `globalThis`, not a module `let`: vite dev re-imports this module on HMR. */
+const TIMER_KEY: unique symbol = Symbol.for('tent.printHousekeepingTimer');
+type TimerHolder = { [TIMER_KEY]?: ReturnType<typeof setInterval> };
+const holder = globalThis as TimerHolder;
 
 /** Never throws: a failing sweep must not fail the poll (and is not retried before the next window). */
 export async function sweepIfDue(store: PrintJobStore, now: Date): Promise<void> {
@@ -51,8 +55,8 @@ export function startPrintHousekeeping(
 	store: PrintJobStore & PrintJobRetentionStore,
 	{ isProvisioned }: HousekeepingOptions
 ): void {
-	if (timer) return;
-	timer = setInterval(async () => {
+	if (holder[TIMER_KEY]) return;
+	const timer = setInterval(async () => {
 		try {
 			if (!(await isProvisioned())) return;
 		} catch {
@@ -62,12 +66,13 @@ export function startPrintHousekeeping(
 		await retainIfDue(store, new Date());
 	}, SWEEP_INTERVAL_MS);
 	timer.unref?.();
+	holder[TIMER_KEY] = timer;
 }
 
 /** Test seam: forget the last runs and stop the timer so each test starts with both due. */
 export function resetLazySweep(): void {
 	lastSweepAt = Number.NEGATIVE_INFINITY;
 	lastRetentionAt = Number.NEGATIVE_INFINITY;
-	if (timer) clearInterval(timer);
-	timer = null;
+	clearInterval(holder[TIMER_KEY]);
+	delete holder[TIMER_KEY];
 }
