@@ -174,5 +174,50 @@ describe('SHELTER_DASHBOARD_VIEWS Map Functions', () => {
 				{ key: [P2, 'item:cot', E1], value: [3, 1] }
 			]);
 		});
+
+		it('emits a negative row for the resolved pool on a void so the entry nets out', () => {
+			mapFn(
+				{
+					type: 'bulk_return_entry_void',
+					_id: 'bulk_return_entry_void:01J00000000000000000000003',
+					entry_id: E1,
+					pool_id: P1,
+					item_id: 'item:cot',
+					qty: '3'
+				},
+				mockEmit
+			);
+			expect(emitted).toEqual([{ key: [P1, 'item:cot', E1], value: [-3, -1] }]);
+		});
+
+		it('nets an entry and its void to zero under the same key', () => {
+			mapFn(
+				{ type: 'bulk_return_entry', _id: E1, pool_id: P1, item_id: 'item:cot', qty: '3' },
+				mockEmit
+			);
+			mapFn(
+				{
+					type: 'bulk_return_entry_void',
+					_id: 'bulk_return_entry_void:01J00000000000000000000003',
+					entry_id: E1,
+					pool_id: P1,
+					item_id: 'item:cot',
+					qty: '3'
+				},
+				mockEmit
+			);
+			const total = emitted.reduce(
+				(sum, row) => {
+					const [qty, count] = row.value as [number, number];
+					return [sum[0] + qty, sum[1] + count];
+				},
+				[0, 0]
+			);
+			expect(emitted.map((row) => row.key)).toEqual([
+				[P1, 'item:cot', E1],
+				[P1, 'item:cot', E1]
+			]);
+			expect(total).toEqual([0, 0]);
+		});
 	});
 });
