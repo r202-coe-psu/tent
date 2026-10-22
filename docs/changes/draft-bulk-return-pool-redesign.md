@@ -84,6 +84,8 @@ feedback ระบบคลัง & เบิกของ ข้อ 4–5: ข�
 2. อ่านยอดจาก view `bulk_return_pool_item_totals` (group_level 1 → จำนวน entry; 2 → ต่อ item)
 3. snapshot → เขียน `items_summary` + `entry_ids` + `status: SUBMITTED` + ล้าง `lock` ใน update เดียว (submit) /
    ตรวจ "ว่าง" แล้วเขียน `status: CANCELLED` + `cancelled_at/by` + ล้าง `lock` (cancel)
+   ลำดับ submit ใน workflow (#660): ตั้ง lock ก่อนเสมอ (lock `SUBMIT` ของ op เดียวกัน = replay, ของ op อื่น = ชน); ถ้า entry สุทธิเป็น 0 ปล่อย lock
+   แล้วปฏิเสธ (ให้ยกเลิกกองแทน); pool ที่ `SUBMITTED` แล้วคืนค่าเดิม; submit ไม่เขียน `stock_ledger`
 4. ผู้เขียน entry/move/void **ต้องเรียก `canAppendToPool(pool)`** (`status === 'OPEN'` และไม่มี `lock`)
    ก่อนเขียน แล้ว**อ่าน pool ซ้ำหลังเขียน entry ก่อนอัปเดต loan** (แบบ `fenceReturnReservation`) — เป็น advisory ไม่ใช่ guarantee (ดู Decisions ข้อ 5)
 
@@ -180,8 +182,14 @@ D1–D5 ข้างบนยังมีผลตามเดิม (ปรั�
 - ตรวจรับเขียนบน pool ตอน `SUBMITTED → RECEIVED`: `received_at/by`, `received_storage_point_id` + `received_storage_zone` (optional เป็นคู่),
   `received_items[]` หนึ่งแถวต่อ `item_id` ใน `items_summary` พอดี: `expected_qty` (ต้องเท่ายอด snapshot), `received_qty` (≤ `expected_qty`),
   `discrepancy_reason?` ∈ `damaged | missing | miscount | other`, `discrepancy_note?` (บังคับเมื่อ `other`) — ใส่เหตุผลเฉพาะแถวที่ยอดไม่ตรง
+- จุดเก็บตอนรับ: ศูนย์ที่มี storage point ต้องเลือกใน UI (แบบรับของเข้าคลัง CR-139); ไม่มี → ไม่ใส่คู่ = "คลังหลัก" — บังคับที่ UI, workflow/VDU รับกรณีไม่มีคู่
 - `stock_ledger` (`reason='receive'`, `ref_id='bulk_return_pool:{ulid}'`) เขียนด้วย**ยอดรับจริง**ไปยังจุดเก็บที่เลือกตอนรับ — ขอบเขตของ #660
-  (ไตเติลเดิม "via return ticket" ต้องเปลี่ยน); VDU ของ `stock_ledger` อนุญาตแถวนี้อยู่แล้ว ไม่แก้
+  (ไตเติลเดิม "via return ticket" ต้องเปลี่ยน); VDU ของ `stock_ledger` อนุญาตแถวนี้อยู่แล้ว (`warehouse_staff`/`supply_coordinator`/`shelter_manager`) ไม่แก้
+- **ลำดับเขียน (#660):** CAS pool เป็น `RECEIVED` ก่อน แล้ว derive แถว ledger จาก `received_items` ที่ commit แล้ว; รับซ้ำด้วยข้อมูลเดิม = replay ที่ตรวจซ้ำ
+  และสร้างแถวที่ขาด, ข้อมูลต่างจากเดิมบน pool ที่ `RECEIVED` แล้ว = ปฏิเสธ
+- **แถว ledger:** หนึ่งแถวต่อ item ที่ `received_qty > 0` (รับ 0 ไม่มีแถว); `qty` = `received_qty`, `occurred_at` = `received_at`,
+  `lot = { note: 'bulk_return_pool', storage_point_id?, storage_zone? }`, `lot_ref` = `_id` ของแถวเอง; `_id` = `stock_ledger:` + 26 ตัวอักษร Crockford base32
+  จาก SHA-256 ของ `bulk_return_receive:{poolId}:{itemId}`; put-if-absent — แถวเหมือนเดิม = replay, แถวขัดแย้ง = integrity error (fail closed)
 
 ### 8. จุดเก็บของกอง
 
@@ -262,6 +270,7 @@ VDU อ่านเอกสารอื่นไม่ได้ — กติ�
   → **กติกาใหม่:** การสร้าง `bulk_return_pool` v3 และการเพิ่ม entry **ไม่เขียน `stock_ledger`** — ของยังไม่ถือว่า
   รับเข้าคลังจนกว่า pool จะ `SUBMITTED → RECEIVED` โดยลง ledger ด้วยยอดรับจริงไปยังจุดเก็บที่เลือกตอนรับ (#660)
   ส่วนข้อห้ามไม่ให้เขียน ledger ซ้ำตอนจับคู่กับ loan ยังคงอยู่
+  (pool v3 ไม่มี `stock_ledger_id` และไม่ใช้ `stock_ledger:{operationUlid}` — `_id` ของแถว receive derive จาก pool + item; scheme เดิมใช้กับ pool v1/v2 ที่ frozen เท่านั้น)
 - §14 (Schema Versions Summary: "`bulk_return_pool`: ยกระดับเป็น `schema_v = 2`") → เป็น `schema_v = 3` (ใหม่); v1/v2 frozen
 - `bulk_return_claim` (§2.32 ของ schema.md; CR-134 §4.1, §7, §12) → **legacy: frozen ตอน deploy, ลบใน #661**
 - **ไม่เปลี่ยน:** `loan_return_reservation` (CR-134 §15) — ผลต่อ flow ปลดภาระโหมด `BULK` เป็นเรื่องของ #659
