@@ -28,8 +28,15 @@ const baseDonation = {
 	items: [{ item_id: 'item:rice', qty: '10', unit: 'kg' }]
 } as unknown as PublicDonationDoc;
 
-function mockCouch(donation: PublicDonationDoc) {
+/** `ledgerFind` answers the stock_ledger `_find` — no rows by default (nothing keyed). */
+function mockCouch(
+	donation: PublicDonationDoc,
+	ledgerFind: { status: number; data: unknown } = { status: 200, data: { docs: [] } }
+) {
 	vi.mocked(adminRaw).mockImplementation((path: string, method: string) => {
+		if (method === 'POST' && path.endsWith('/_find')) {
+			return Promise.resolve(ledgerFind);
+		}
 		if (method === 'GET' && path.includes('/registry/')) {
 			return Promise.resolve({
 				status: 200,
@@ -165,6 +172,35 @@ describe('POST /api/back-office/donations/[query]/reject', () => {
 				reject_reason: 'หมดอายุ',
 				reject_reason_code: 'expired'
 			});
+		});
+
+		// Re-review round 3 W3 — a receipt keyed rows but never closed the booking.
+		it('refuses to reject every line once goods are keyed into stock', async () => {
+			mockCouch(
+				{
+					...mixed,
+					items: [{ free_text: 'ผ้าห่ม', qty: '2', unit: 'ผืน', review_status: 'pending' }]
+				} as unknown as PublicDonationDoc,
+				{ status: 200, data: { docs: [{ _id: 'stock_ledger:row-1' }] } }
+			);
+
+			const response = await POST(
+				postEvent({ lines: [{ index: 0, decision: 'rejected', reason_code: 'expired' }] })
+			);
+
+			expect(response.status).toBe(409);
+			expect((await response.json()).error_code).toBe('GOODS_IN_STOCK');
+			expect(writtenDocs()).toHaveLength(0);
+			expect(putBody()).toBeUndefined();
+		});
+
+		it('still approves lines of a booking with goods keyed (only a rejection is refused)', async () => {
+			mockCouch(mixed, { status: 200, data: { docs: [{ _id: 'stock_ledger:row-1' }] } });
+
+			const response = await POST(postEvent({ lines: [{ index: 1, decision: 'approved' }] }));
+
+			expect(response.status).toBe(200);
+			expect(putBody()).toMatchObject({ status: 'verifying' });
 		});
 
 		// The donor may edit a booking under review (FR-21): decisions by line position

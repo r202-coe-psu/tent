@@ -8,6 +8,7 @@ import {
 	routeErrorResponse as toRouteError,
 	staleDecisionResponse
 } from '$lib/server/donation-intake';
+import { hasKeyedDonationStock } from '$lib/server/donation-docs';
 import {
 	applyLineReview,
 	hasLineReview,
@@ -114,6 +115,20 @@ export const POST: RequestHandler = async ({ params, request }) => {
 					error: e instanceof Error ? e.message : 'Invalid review'
 				},
 				{ status: 422 }
+			);
+		}
+		// Refusing every line rejects the booking — the same guard as the reject route: a
+		// `pending_review` receipt can key rows and fail to close, and rejecting it then
+		// hands the quota back with the goods on the shelf.
+		if (outcome.status === 'rejected' && (await hasKeyedDonationStock(dbName, donation._id))) {
+			return json(
+				{
+					success: false,
+					error_code: 'GOODS_IN_STOCK',
+					error:
+						'ใบนี้มีของบันทึกเข้าคลังแล้ว — ปฏิเสธทุกรายการไม่ได้ ให้รับของต่อจากหน้าตรวจรับ หรือติดต่อผู้ดูแลเพื่อตรวจยอด'
+				},
+				{ status: 409 }
 			);
 		}
 
