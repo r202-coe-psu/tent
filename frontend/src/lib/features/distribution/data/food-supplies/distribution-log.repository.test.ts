@@ -468,6 +468,26 @@ describe('DistributionLogRemoteRepository', () => {
 		);
 	});
 
+	it('does not write when the mutator returns the current doc', async () => {
+		const created = await repo.create(
+			{
+				ticket_id: dummyTicketId,
+				item_id: 'item:blanket',
+				qty: '2',
+				recipient_type: 'evacuee',
+				recipient_id: dummyEvacueeId,
+				is_returnable: true,
+				is_override: false
+			},
+			ctx
+		);
+
+		const same = await repo.mutateLogCAS(created._id, (current) => current);
+
+		expect(same._rev).toBe(created._rev);
+		expect(store.get(created._id)?._rev).toBe(created._rev);
+	});
+
 	it('rejects mutating immutable issuance fields', async () => {
 		const created = await repo.create(
 			{

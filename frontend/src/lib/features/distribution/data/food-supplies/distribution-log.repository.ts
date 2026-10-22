@@ -116,6 +116,8 @@ export class DistributionLogRemoteRepository implements DistributionLogRepositor
 			}
 
 			const computed = mutator(current);
+			// Same reference = "nothing to write" (e.g. an already-applied bulk entry); mirrors the pool repo.
+			if (computed === current) return current;
 			assertDistributionLogIssuanceImmutable(current, computed);
 
 			const next = distributionLogDocSchema.parse({
