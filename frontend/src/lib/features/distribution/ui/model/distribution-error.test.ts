@@ -22,10 +22,30 @@ import {
 	TicketStateError,
 	CapacityExceededError,
 	StockIntegrityError,
-	WorkflowAuthorizationError
+	WorkflowAuthorizationError,
+	BulkReturnPoolNameTakenError,
+	BulkReturnPoolStateError,
+	BulkReturnPoolNotEmptyError
 } from '../../application/food-supplies/errors';
 
 describe('formatDistributionError', () => {
+	it('maps BulkReturnPoolNameTakenError to Thai copy even though it is a WorkflowValidationError', () => {
+		const err = new BulkReturnPoolNameTakenError('Pool name "A" is already used');
+		expect(formatDistributionError(err)).toBe(
+			'มีกองที่เปิดรับอยู่ใช้ชื่อนี้แล้ว กรุณาตั้งชื่ออื่น'
+		);
+	});
+
+	it('maps BulkReturnPoolStateError to Thai copy', () => {
+		const err = new BulkReturnPoolStateError('Bulk return pool x must be OPEN and unlocked');
+		expect(formatDistributionError(err)).toContain('กองนี้ไม่ได้อยู่ในสถานะเปิดรับ');
+	});
+
+	it('maps BulkReturnPoolNotEmptyError to Thai copy telling to move items out', () => {
+		const err = new BulkReturnPoolNotEmptyError('Pool has live entries');
+		expect(formatDistributionError(err)).toContain('ย้ายของออกให้หมดก่อน');
+	});
+
 	it('formats typed WorkflowValidationError preserving clean messages', () => {
 		const err = new WorkflowValidationError('จำนวนที่คืนต้องมากกว่า 0');
 		expect(formatDistributionError(err)).toBe('จำนวนที่คืนต้องมากกว่า 0');

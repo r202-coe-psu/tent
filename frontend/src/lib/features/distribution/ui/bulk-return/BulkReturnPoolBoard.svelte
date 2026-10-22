@@ -1,0 +1,321 @@
+<script lang="ts">
+	import type { Snippet } from 'svelte';
+	import AlertCircle from '@lucide/svelte/icons/alert-circle';
+	import AlertTriangle from '@lucide/svelte/icons/alert-triangle';
+	import Inbox from '@lucide/svelte/icons/inbox';
+	import LogIn from '@lucide/svelte/icons/log-in';
+	import MapPin from '@lucide/svelte/icons/map-pin';
+	import Package from '@lucide/svelte/icons/package';
+	import Plus from '@lucide/svelte/icons/plus';
+	import RefreshCw from '@lucide/svelte/icons/refresh-cw';
+	import Search from '@lucide/svelte/icons/search';
+	import XCircle from '@lucide/svelte/icons/x-circle';
+	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
+	import { Button } from '$lib/components/ui/button/index.js';
+	import { Input } from '$lib/components/ui/input/index.js';
+	import { Label } from '$lib/components/ui/label/index.js';
+	import { Switch } from '$lib/components/ui/switch/index.js';
+	import { useItemMasters } from '$lib/features/catalog';
+	import { getShelterCode } from '$lib/db/shelter';
+	import { authStore } from '$lib/stores/auth.svelte';
+	import { shelterStore } from '$lib/stores/shelter.svelte';
+	import { formatThaiDateTime } from '$lib/utils/date';
+	import {
+		resolveAuthenticatedAuthorContext,
+		useBulkReturnPoolOverview
+	} from '../../application/queries';
+	import {
+		canManageBulkReturnPool,
+		canWriteBulkReturnEntry
+	} from '../../application/food-supplies/auth';
+	import type { BulkReturnPoolOverviewRow } from '../../domain/food-supplies';
+	import { mapDistributionQueryError } from '../model/distribution-error';
+	import {
+		LATE_BADGE_CLASS,
+		filterPoolRows,
+		getPoolBoardViewState,
+		getPoolStatusBadgeClass,
+		getPoolStatusLabel,
+		poolStorageLabel,
+		resolveItemDisplay,
+		type PoolCatalogItem
+	} from '../model/bulk-return-pool-v3';
+	import BulkReturnPoolDetail from './BulkReturnPoolDetail.svelte';
+	import OpenBulkReturnPoolDialog from './OpenBulkReturnPoolDialog.svelte';
+
+	/**
+	 * Bulk return pool v3 board (#659): list, open, detail, edit header, move / void entries, cancel.
+	 * Shared by the back-office and the onsite desk; the add-entry flow is injected via `onAddEntry`.
+	 */
+	interface Props {
+		shelterCode?: string;
+		/** Renders "รับของเข้ากอง" in the pool detail (canWriteEntry && pool OPEN). */
+		onAddEntry?: (poolId: string) => void;
+		/** #660: submit / receive actions render in the pool detail header. */
+		lifecycleActions?: Snippet<[BulkReturnPoolOverviewRow]>;
+	}
+
+	let { shelterCode, onAddEntry, lifecycleActions }: Props = $props();
+
+	const activeShelterCode = $derived(
+		shelterCode ?? shelterStore.selectedShelterCode ?? getShelterCode()
+	);
+
+	// CANCELLED rows are always fetched; the "show cancelled" toggle only filters the view.
+	const overviewQuery = useBulkReturnPoolOverview(
+		() => ({ includeCancelled: true }),
+		() => activeShelterCode
+	);
+	const itemMastersQuery = useItemMasters(() => activeShelterCode ?? null);
+
+	let search = $state('');
+	let showCancelled = $state(false);
+	let openDialogVisible = $state(false);
+	let selectedPoolId = $state<string | null>(null);
+
+	// Fail closed: any problem resolving the session context hides the write actions.
+	const authContext = $derived.by(() => {
+		try {
+			return resolveAuthenticatedAuthorContext(activeShelterCode);
+		} catch {
+			return null;
+		}
+	});
+	const canManage = $derived(authContext ? canManageBulkReturnPool(authContext) : false);
+	const canWriteEntry = $derived(authContext ? canWriteBulkReturnEntry(authContext) : false);
+
+	const rows = $derived(overviewQuery.data ?? []);
+	const visibleRows = $derived(filterPoolRows(rows, { search, showCancelled }));
+	// Total considered for the empty state respects the cancelled toggle.
+	const totalRowCount = $derived(
+		showCancelled ? rows.length : rows.filter((row) => row.pool.status !== 'CANCELLED').length
+	);
+	const viewState = $derived(
+		getPoolBoardViewState(
+			Boolean(overviewQuery.isLoading),
+			Boolean(overviewQuery.isError),
+			totalRowCount,
+			visibleRows.length
+		)
+	);
+	const errorPresentation = $derived(mapDistributionQueryError(overviewQuery.error));
+
+	const catalog = $derived.by((): PoolCatalogItem[] =>
+		(itemMastersQuery.data ?? []).map((item) => ({
+			_id: item._id,
+			name: item.name,
+			base_unit: item.base_unit
+		}))
+	);
+
+	// Detail follows the live overview row, so it refreshes after every mutation.
+	const selectedRow = $derived(
+		selectedPoolId ? (rows.find((row) => row.pool._id === selectedPoolId) ?? null) : null
+	);
+
+	function dateTime(value: string): string {
+		return formatThaiDateTime(value) || value;
+	}
+
+	function handleReauth() {
+		if (authStore.isAuthenticated) {
+			authStore.markNeedsReauth();
+		} else {
+			void goto(resolve('/login'));
+		}
+	}
+</script>
+
+<section class="space-y-5 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs sm:p-6">
+	<div
+		class="flex flex-col gap-3 border-b border-slate-100 pb-4 sm:flex-row sm:items-center sm:justify-between"
+	>
+		<div class="flex items-center gap-3">
+			<div
+				class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-700 shadow-2xs"
+			>
+				<Package class="h-6 w-6" aria-hidden="true" />
+			</div>
+			<div>
+				<h2 class="text-lg font-bold text-slate-900">กองรับคืน</h2>
+				<p class="text-sm text-slate-500">
+					รวมของที่รับคืนไว้เป็นกอง ๆ ก่อนส่งเข้าคลัง · ศูนย์ {activeShelterCode}
+				</p>
+			</div>
+		</div>
+		{#if canManage}
+			<Button
+				type="button"
+				onclick={() => (openDialogVisible = true)}
+				class="min-h-11 w-full gap-2 sm:w-auto"
+			>
+				<Plus class="h-4 w-4" aria-hidden="true" />
+				เปิดกองใหม่
+			</Button>
+		{/if}
+	</div>
+
+	<div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+		<div class="relative w-full sm:max-w-sm">
+			<Search
+				class="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-slate-400"
+				aria-hidden="true"
+			/>
+			<Input
+				type="search"
+				bind:value={search}
+				placeholder="ค้นหาชื่อกอง"
+				aria-label="ค้นหากองรับคืนตามชื่อกอง"
+				class="h-11 w-full pl-9 text-base sm:h-10 sm:text-sm"
+			/>
+		</div>
+		<div class="flex min-h-11 items-center gap-2">
+			<Switch id="bulk-pool-show-cancelled" bind:checked={showCancelled} />
+			<Label for="bulk-pool-show-cancelled" class="text-sm font-medium text-slate-700">
+				แสดงกองที่ยกเลิก
+			</Label>
+		</div>
+	</div>
+
+	{#if viewState === 'loading'}
+		<div role="status" class="rounded-xl border border-slate-200 bg-slate-50 p-12 text-center">
+			<RefreshCw class="mx-auto mb-2 h-6 w-6 animate-spin text-slate-400" aria-hidden="true" />
+			<p class="text-sm font-semibold text-slate-800">กำลังโหลดข้อมูลกองรับคืน...</p>
+		</div>
+	{:else if viewState === 'error'}
+		<div role="alert" class="rounded-xl border border-red-200 bg-red-50 p-8 text-center">
+			<AlertCircle class="mx-auto mb-2 h-8 w-8 text-red-500" aria-hidden="true" />
+			<h3 class="text-base font-bold text-red-900">ไม่สามารถโหลดข้อมูลกองรับคืนได้</h3>
+			<p class="mx-auto mt-1 max-w-md text-sm text-red-800">{errorPresentation.description}</p>
+			{#if errorPresentation.actionType === 'reauth'}
+				<Button
+					type="button"
+					variant="outline"
+					onclick={handleReauth}
+					class="mt-4 min-h-11 gap-2 border-red-200 bg-white text-red-800 hover:bg-red-50"
+				>
+					<LogIn class="h-4 w-4" aria-hidden="true" />
+					{errorPresentation.actionLabel}
+				</Button>
+			{:else if errorPresentation.retryable}
+				<Button
+					type="button"
+					variant="outline"
+					onclick={() => overviewQuery.refetch()}
+					class="mt-4 min-h-11 gap-2 border-red-200 bg-white text-red-800 hover:bg-red-50"
+				>
+					<RefreshCw class="h-4 w-4" aria-hidden="true" />
+					{errorPresentation.actionLabel}
+				</Button>
+			{/if}
+		</div>
+	{:else if viewState === 'empty'}
+		<div class="rounded-xl border border-slate-200 bg-slate-50 p-12 text-center">
+			<Inbox class="mx-auto mb-2 h-8 w-8 text-slate-400" aria-hidden="true" />
+			<h3 class="text-base font-semibold text-slate-900">ยังไม่มีกองรับคืน</h3>
+			<p class="mt-1 text-sm text-slate-500">
+				{canManage
+					? 'กด "เปิดกองใหม่" เพื่อเริ่มรวบรวมของที่รับคืน'
+					: 'ยังไม่มีกองที่เปิดในศูนย์นี้'}
+			</p>
+		</div>
+	{:else if viewState === 'search_empty'}
+		<div class="rounded-xl border border-slate-200 bg-slate-50 p-12 text-center">
+			<XCircle class="mx-auto mb-2 h-8 w-8 text-slate-400" aria-hidden="true" />
+			<h3 class="text-base font-semibold text-slate-900">ไม่พบกองที่ตรงกับการค้นหา</h3>
+			<p class="mt-1 text-sm text-slate-500">ลองค้นหาด้วยชื่อกองอื่น</p>
+		</div>
+	{:else}
+		<ul class="grid grid-cols-1 gap-3 lg:grid-cols-2">
+			{#each visibleRows as row (row.pool._id)}
+				{@const pool = row.pool}
+				<li>
+					<button
+						type="button"
+						onclick={() => (selectedPoolId = pool._id)}
+						class="flex min-h-11 w-full flex-col gap-3 rounded-xl border border-slate-200/80 bg-white p-4 text-left shadow-2xs transition-colors hover:border-slate-300 hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none"
+					>
+						<div class="flex flex-wrap items-start justify-between gap-2">
+							<span class="text-base font-semibold break-words text-slate-900">{pool.name}</span>
+							<span class="flex flex-wrap items-center gap-1.5">
+								{#if row.late_entries.length > 0}
+									<span
+										class="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold {LATE_BADGE_CLASS}"
+									>
+										<AlertTriangle class="h-3.5 w-3.5" aria-hidden="true" />
+										ค้าง <span class="tabular-nums">{row.late_entries.length}</span>
+									</span>
+								{/if}
+								<span
+									class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold {getPoolStatusBadgeClass(
+										pool.status
+									)}"
+								>
+									{getPoolStatusLabel(pool.status)}
+								</span>
+							</span>
+						</div>
+
+						<div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-slate-600">
+							<span class="inline-flex items-center gap-1.5">
+								<MapPin class="h-4 w-4 text-slate-400" aria-hidden="true" />
+								{poolStorageLabel(pool)}
+							</span>
+							<span>
+								<span class="font-semibold text-slate-900 tabular-nums">{row.entry_count}</span>
+								รายการ
+							</span>
+						</div>
+
+						{#if row.items.length > 0}
+							<ul class="space-y-0.5 text-sm text-slate-700">
+								{#each row.items as summary (summary.item_id)}
+									{@const item = resolveItemDisplay(summary.item_id, catalog)}
+									<li class="flex items-baseline justify-between gap-3">
+										<span class="break-words">{item.name}</span>
+										<span class="shrink-0 font-semibold tabular-nums">
+											{summary.qty}
+											{item.unit}
+										</span>
+									</li>
+								{/each}
+							</ul>
+						{:else}
+							<p class="text-sm text-slate-500">ยังไม่มีสินค้าในกอง</p>
+						{/if}
+
+						<p class="text-xs text-slate-500">
+							เปิดโดย {pool.created_by} ·
+							<span class="tabular-nums">{dateTime(pool.created_at)}</span>
+						</p>
+					</button>
+				</li>
+			{/each}
+		</ul>
+	{/if}
+</section>
+
+{#if openDialogVisible}
+	<OpenBulkReturnPoolDialog
+		shelterCode={activeShelterCode}
+		{rows}
+		onClose={() => (openDialogVisible = false)}
+		onOpened={(pool) => (selectedPoolId = pool._id)}
+	/>
+{/if}
+
+<!-- Keyed by pool id so dialog/confirm state never leaks from one pool to the next. -->
+{#key selectedPoolId}
+	<BulkReturnPoolDetail
+		row={selectedRow}
+		{rows}
+		{catalog}
+		shelterCode={activeShelterCode}
+		{canManage}
+		{canWriteEntry}
+		{onAddEntry}
+		{lifecycleActions}
+		onClose={() => (selectedPoolId = null)}
+	/>
+{/key}

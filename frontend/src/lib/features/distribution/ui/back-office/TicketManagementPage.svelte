@@ -16,13 +16,14 @@
 	import TicketTable from './TicketTable.svelte';
 	import CreateTicketDialog from './CreateTicketDialog.svelte';
 	import TicketDetailShell from './TicketDetailShell.svelte';
-	import BulkPoolManager from './BulkPoolManager.svelte';
+	import BulkReturnPoolBoard from '../bulk-return/BulkReturnPoolBoard.svelte';
 	import * as Tabs from '$lib/components/ui/tabs/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import Plus from '@lucide/svelte/icons/plus';
 	import Truck from '@lucide/svelte/icons/truck';
 	import RefreshCw from '@lucide/svelte/icons/refresh-cw';
@@ -50,7 +51,7 @@
 			// Opens the global non-dismissable login modal (no-op when already open).
 			authStore.markNeedsReauth();
 		} else {
-			goto('/login');
+			void goto(resolve('/login'));
 		}
 	}
 
@@ -70,7 +71,19 @@
 		try {
 			const url = new URL(page.url);
 			url.searchParams.set('ticketId', id);
-			goto(url, { replaceState: false, keepFocus: true, noScroll: true });
+			const search = url.searchParams.toString();
+			const query = search ? `?${search}` : '';
+			void goto(
+				resolve(
+					`/back-office/distribution${query}` as
+						'/back-office/distribution' | `/back-office/distribution?${string}`
+				),
+				{
+					replaceState: false,
+					keepFocus: true,
+					noScroll: true
+				}
+			);
 		} catch {
 			if (typeof window !== 'undefined') {
 				const url = new URL(window.location.href);
@@ -85,7 +98,19 @@
 		try {
 			const url = new URL(page.url);
 			url.searchParams.delete('ticketId');
-			goto(url, { replaceState: false, keepFocus: true, noScroll: true });
+			const search = url.searchParams.toString();
+			const query = search ? `?${search}` : '';
+			void goto(
+				resolve(
+					`/back-office/distribution${query}` as
+						'/back-office/distribution' | `/back-office/distribution?${string}`
+				),
+				{
+					replaceState: false,
+					keepFocus: true,
+					noScroll: true
+				}
+			);
 		} catch {
 			if (typeof window !== 'undefined') {
 				const url = new URL(window.location.href);
@@ -225,7 +250,7 @@
 	</div>
 
 	{#if activeView === 'bulk_pools'}
-		<BulkPoolManager {shelterCode} />
+		<BulkReturnPoolBoard {shelterCode} />
 	{:else}
 		<!-- Overview KPI Counters (Single source of truth with workflow groups) -->
 		<div class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
