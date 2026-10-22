@@ -23,7 +23,7 @@ export class PrintApiError extends Error {
 	}
 }
 
-async function request(path: string, init?: RequestInit): Promise<unknown> {
+export async function request(path: string, init?: RequestInit): Promise<unknown> {
 	const response = await fetch(path, { cache: 'no-store', ...init });
 	const payload: unknown = await response.json().catch(() => null);
 	if (!response.ok) {

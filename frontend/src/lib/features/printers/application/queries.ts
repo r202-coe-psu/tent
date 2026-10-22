@@ -1,5 +1,14 @@
-import { createMutation, createQuery } from '@tanstack/svelte-query';
+import { createMutation, createQuery, useQueryClient } from '@tanstack/svelte-query';
+import {
+	createPrinterDevice,
+	deletePrinterDevice,
+	listPrinterDevices,
+	rotatePrinterSecret,
+	testPrintPrinter,
+	updatePrinterDevice
+} from '../data/printer-admin.api';
 import { createPrintJob, getPrintJobStatus, listShelterPrinters } from '../data/printers.api';
+import type { PrinterCreateInput, PrinterPatch } from '../domain/print-device.schema';
 import type { PrintJobCreateInput } from '../domain/print-job.schema';
 import { shouldKeepPolling } from '../domain/print-job-status';
 
@@ -9,7 +18,8 @@ export const PRINT_JOB_POLL_INTERVAL_MS = 1_000;
 export const printerKeys = {
 	all: ['printers'] as const,
 	list: (shelterCode: string) => [...printerKeys.all, 'list', shelterCode] as const,
-	job: (jobId: string) => [...printerKeys.all, 'job', jobId] as const
+	job: (jobId: string) => [...printerKeys.all, 'job', jobId] as const,
+	adminList: (shelterCode?: string) => [...printerKeys.all, 'admin', shelterCode ?? 'all'] as const
 };
 
 /** Printers of a shelter with their online state; refreshed every 30 s. Idle without a code. */
@@ -59,4 +69,64 @@ export const usePrintJobStatus = (jobId: () => string | undefined) => {
 					: false
 		};
 	});
+};
+
+// ------------------------------------------------------------ back-office admin
+
+/** Back-office printer list with last job; the key carries the shelter so a switch refetches. */
+export const usePrinterAdminList = (shelterCode?: () => string | undefined) =>
+	createQuery(() => {
+		const code = shelterCode?.();
+		return {
+			queryKey: printerKeys.adminList(code),
+			queryFn: () => listPrinterDevices(code),
+			refetchInterval: PRINTER_LIST_REFETCH_MS
+		};
+	});
+
+/**
+ * Admin mutations invalidate every printer query (admin list and the tablet list). The ones that
+ * return a secret use `gcTime: 0` so the plaintext never stays in the mutation cache.
+ */
+export const useCreatePrinterDevice = () => {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: (input: PrinterCreateInput) => createPrinterDevice(input),
+		gcTime: 0,
+		onSuccess: () => queryClient.invalidateQueries({ queryKey: printerKeys.all })
+	}));
+};
+
+export const useUpdatePrinterDevice = () => {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: (input: { deviceId: string; patch: PrinterPatch }) =>
+			updatePrinterDevice(input.deviceId, input.patch),
+		onSuccess: () => queryClient.invalidateQueries({ queryKey: printerKeys.all })
+	}));
+};
+
+export const useRotatePrinterSecret = () => {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: (deviceId: string) => rotatePrinterSecret(deviceId),
+		gcTime: 0,
+		onSuccess: () => queryClient.invalidateQueries({ queryKey: printerKeys.all })
+	}));
+};
+
+export const useTestPrintPrinter = () => {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: (deviceId: string) => testPrintPrinter(deviceId),
+		onSuccess: () => queryClient.invalidateQueries({ queryKey: printerKeys.all })
+	}));
+};
+
+export const useDeletePrinterDevice = () => {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: (deviceId: string) => deletePrinterDevice(deviceId),
+		onSuccess: () => queryClient.invalidateQueries({ queryKey: printerKeys.all })
+	}));
 };
