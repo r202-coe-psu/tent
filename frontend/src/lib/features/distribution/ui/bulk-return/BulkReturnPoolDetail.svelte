@@ -55,7 +55,7 @@
 		/** canWriteBulkReturnEntry: add / move / void entries. */
 		canWriteEntry: boolean;
 		onClose: () => void;
-		/** Renders "รับของเข้ากอง" when provided (flow is added onsite in a later round). */
+		/** Renders "รับของเข้ากอง" when provided (the board wires it to the add-entry dialog). */
 		onAddEntry?: (poolId: string) => void;
 		/** #660: submit / receive actions render here. */
 		lifecycleActions?: Snippet<[BulkReturnPoolOverviewRow]>;

@@ -6,6 +6,7 @@
 	import LogIn from '@lucide/svelte/icons/log-in';
 	import MapPin from '@lucide/svelte/icons/map-pin';
 	import Package from '@lucide/svelte/icons/package';
+	import PackagePlus from '@lucide/svelte/icons/package-plus';
 	import Plus from '@lucide/svelte/icons/plus';
 	import RefreshCw from '@lucide/svelte/icons/refresh-cw';
 	import Search from '@lucide/svelte/icons/search';
@@ -41,22 +42,22 @@
 		resolveItemDisplay,
 		type PoolCatalogItem
 	} from '../model/bulk-return-pool-v3';
+	import { listOpenPools } from '../model/bulk-return-add-entry';
+	import AddBulkReturnEntriesDialog from './AddBulkReturnEntriesDialog.svelte';
 	import BulkReturnPoolDetail from './BulkReturnPoolDetail.svelte';
 	import OpenBulkReturnPoolDialog from './OpenBulkReturnPoolDialog.svelte';
 
 	/**
-	 * Bulk return pool v3 board (#659): list, open, detail, edit header, move / void entries, cancel.
-	 * Shared by the back-office and the onsite desk; the add-entry flow is injected via `onAddEntry`.
+	 * Bulk return pool v3 board (#659): list, open, detail, add / move / void entries, edit header,
+	 * cancel. Shared by the back-office and the onsite desk (role gates via canManage / canWriteEntry).
 	 */
 	interface Props {
 		shelterCode?: string;
-		/** Renders "รับของเข้ากอง" in the pool detail (canWriteEntry && pool OPEN). */
-		onAddEntry?: (poolId: string) => void;
 		/** #660: submit / receive actions render in the pool detail header. */
 		lifecycleActions?: Snippet<[BulkReturnPoolOverviewRow]>;
 	}
 
-	let { shelterCode, onAddEntry, lifecycleActions }: Props = $props();
+	let { shelterCode, lifecycleActions }: Props = $props();
 
 	const activeShelterCode = $derived(
 		shelterCode ?? shelterStore.selectedShelterCode ?? getShelterCode()
@@ -72,6 +73,8 @@
 	let search = $state('');
 	let showCancelled = $state(false);
 	let openDialogVisible = $state(false);
+	let addDialogOpen = $state(false);
+	let addPoolId = $state<string | undefined>(undefined);
 	let selectedPoolId = $state<string | null>(null);
 
 	// Fail closed: any problem resolving the session context hides the write actions.
@@ -86,6 +89,12 @@
 	const canWriteEntry = $derived(authContext ? canWriteBulkReturnEntry(authContext) : false);
 
 	const rows = $derived(overviewQuery.data ?? []);
+	const hasOpenPool = $derived(listOpenPools(rows).length > 0);
+
+	function handleAddEntry(poolId?: string) {
+		addPoolId = poolId;
+		addDialogOpen = true;
+	}
 	const visibleRows = $derived(filterPoolRows(rows, { search, showCancelled }));
 	// Total considered for the empty state respects the cancelled toggle.
 	const totalRowCount = $derived(
@@ -144,15 +153,30 @@
 				</p>
 			</div>
 		</div>
-		{#if canManage}
-			<Button
-				type="button"
-				onclick={() => (openDialogVisible = true)}
-				class="min-h-11 w-full gap-2 sm:w-auto"
-			>
-				<Plus class="h-4 w-4" aria-hidden="true" />
-				เปิดกองใหม่
-			</Button>
+		{#if canManage || (canWriteEntry && hasOpenPool)}
+			<div class="flex flex-col gap-2 sm:flex-row">
+				{#if canWriteEntry && hasOpenPool}
+					<Button
+						type="button"
+						onclick={() => handleAddEntry()}
+						class="min-h-11 w-full gap-2 sm:w-auto"
+					>
+						<PackagePlus class="h-4 w-4" aria-hidden="true" />
+						รับของเข้ากอง
+					</Button>
+				{/if}
+				{#if canManage}
+					<Button
+						type="button"
+						variant={canWriteEntry && hasOpenPool ? 'outline' : 'default'}
+						onclick={() => (openDialogVisible = true)}
+						class="min-h-11 w-full gap-2 sm:w-auto"
+					>
+						<Plus class="h-4 w-4" aria-hidden="true" />
+						เปิดกองใหม่
+					</Button>
+				{/if}
+			</div>
 		{/if}
 	</div>
 
@@ -314,8 +338,16 @@
 		shelterCode={activeShelterCode}
 		{canManage}
 		{canWriteEntry}
-		{onAddEntry}
+		onAddEntry={handleAddEntry}
 		{lifecycleActions}
 		onClose={() => (selectedPoolId = null)}
 	/>
 {/key}
+
+{#if canWriteEntry}
+	<AddBulkReturnEntriesDialog
+		bind:open={addDialogOpen}
+		shelterCode={activeShelterCode}
+		initialPoolId={addPoolId}
+	/>
+{/if}
