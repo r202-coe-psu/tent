@@ -55,9 +55,9 @@ describe('frontline-handover model helpers', () => {
 			expect(canRecipientReceiveItem(outsideRecipient, true)).toBe(false);
 		});
 
-		it('lets a volunteer receive consumables but not borrow returnable items', () => {
+		it('lets a volunteer receive consumables and borrow returnable items (FR-LON-01)', () => {
 			expect(canRecipientReceiveItem(volunteerRecipient, false)).toBe(true);
-			expect(canRecipientReceiveItem(volunteerRecipient, true)).toBe(false);
+			expect(canRecipientReceiveItem(volunteerRecipient, true)).toBe(true);
 		});
 
 		it('forbids null recipient', () => {
@@ -78,9 +78,9 @@ describe('frontline-handover model helpers', () => {
 			expect(msg).toContain('ไม่สามารถแจกให้บุคคลภายนอกได้');
 		});
 
-		it('explains why a volunteer cannot borrow a returnable item', () => {
+		it('returns null when a volunteer borrows a returnable item (FR-LON-01)', () => {
 			expect(getRecipientValidationErrorMessage(volunteerRecipient, false)).toBeNull();
-			expect(getRecipientValidationErrorMessage(volunteerRecipient, true)).toContain('จิตอาสา');
+			expect(getRecipientValidationErrorMessage(volunteerRecipient, true)).toBeNull();
 		});
 
 		it('returns error message when recipient is not selected', () => {

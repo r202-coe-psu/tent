@@ -32,7 +32,7 @@
 		disabled?: boolean;
 		/** Offer the "บุคคลภายนอก" (anonymous outside person) option. Off for loan returns. */
 		allowOutside?: boolean;
-		/** Accept volunteer QR cards and list volunteers in the name search. Off for loan returns. */
+		/** Accept volunteer QR cards and list volunteers in the name search. */
 		allowVolunteer?: boolean;
 		onselect?: (recipient: FrontlineRecipientSelection | null) => void;
 	}
@@ -69,9 +69,9 @@
 	// search being enabled; `isPending` (not `isFetching`) keeps results visible on refetch.
 
 	// Active volunteers are few per shelter: fetch once, filter client-side (as the check-in desk
-	// does). Not fetched at all where volunteers cannot be picked (loan returns).
+	// does). Not fetched at all where a caller turns volunteers off.
 	const volunteersQuery = useVolunteers({ status: 'active' }, undefined, () => allowVolunteer);
-	// The disabled volunteer query (loan returns) is `isPending` forever too — gate it the same way.
+	// A disabled volunteer query is `isPending` forever too — gate it the same way.
 	const isSearching = $derived(
 		searchEnabled && (evacueeSearchQuery.isPending || (allowVolunteer && volunteersQuery.isPending))
 	);
