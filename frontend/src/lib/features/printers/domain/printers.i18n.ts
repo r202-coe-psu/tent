@@ -135,6 +135,10 @@ export const PRINTERS_I18N = {
 				`เครื่อง ${printer} เพิ่งรีสตาร์ท งานพิมพ์ถูกยกเลิก กรุณาพิมพ์อีกครั้ง`,
 			lease_expired: (printer: string) =>
 				`เครื่อง ${printer} ไม่ส่งผลการพิมพ์กลับมา ตรวจสอบเครื่องแล้วพิมพ์อีกครั้ง`,
+			printer_inactive: (printer: string) =>
+				`เครื่อง ${printer} ถูกปิดใช้งาน งานพิมพ์ถูกยกเลิก กรุณาเลือกเครื่องอื่น`,
+			printer_deleted: (printer: string) =>
+				`เครื่อง ${printer} ถูกลบออกจากระบบ งานพิมพ์ถูกยกเลิก กรุณาเลือกเครื่องอื่น`,
 			unknown: (printer: string) => `พิมพ์ที่เครื่อง ${printer} ไม่สำเร็จ`
 		}
 	},
@@ -274,6 +278,10 @@ export const PRINTERS_I18N = {
 				`${printer} just restarted and the job was cancelled. Print again.`,
 			lease_expired: (printer: string) =>
 				`${printer} never reported back. Check the printer, then print again.`,
+			printer_inactive: (printer: string) =>
+				`${printer} was deactivated and the job was cancelled. Pick another printer.`,
+			printer_deleted: (printer: string) =>
+				`${printer} was removed and the job was cancelled. Pick another printer.`,
 			unknown: (printer: string) => `Printing at ${printer} failed.`
 		}
 	}

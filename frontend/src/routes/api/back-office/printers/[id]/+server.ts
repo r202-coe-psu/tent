@@ -51,7 +51,12 @@ export const PATCH: RequestHandler = async ({ request, params }) => {
 
 		assertPrinterInScope(caller, await printDeviceRepository.getDevice(printerId));
 		return noStoreJson(
-			await updatePrinter(printDeviceRepository, printerId, parsed.data, new Date())
+			await updatePrinter(
+				{ devices: printDeviceRepository, jobs: printJobStore },
+				printerId,
+				parsed.data,
+				new Date()
+			)
 		);
 	} catch (e) {
 		return printerAdminError(e);

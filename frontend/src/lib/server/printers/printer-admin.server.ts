@@ -202,18 +202,50 @@ async function mutateDevice(
 	throw new PrintDeviceConflictError('Printer was modified concurrently');
 }
 
+/** Job slice the admin use cases need to close a printer's open jobs. */
+export interface PrinterJobCloser {
+	findJobs(query: { status: PrintJobStatus; printerId?: string }): Promise<PrintJobDoc[]>;
+	put(doc: PrintJobDoc): Promise<PrintJobPutResult>;
+}
+
+/** Fail the printer's pending/printing jobs with `errorCode`; the terminal PUT drops the labels. */
+async function failOpenJobs(
+	jobs: PrinterJobCloser,
+	printerId: string,
+	errorCode: 'printer_deleted' | 'printer_inactive',
+	now: Date
+): Promise<void> {
+	for (const status of ['pending', 'printing'] as const) {
+		for (const job of await jobs.findJobs({ status, printerId })) {
+			// A conflict means the job just moved on (claimed/finished); the lease sweeper settles it.
+			await jobs.put(terminal(job, 'failed', now, { error_code: errorCode }));
+		}
+	}
+}
+
+export interface UpdatePrinterDeps {
+	devices: PrintDeviceAdminStore;
+	jobs: PrinterJobCloser;
+}
+
+/**
+ * Deactivating also fails the printer's open jobs (`printer_inactive`). The device is written
+ * inactive first, so no new job can be queued or claimed while they are being closed.
+ */
 export async function updatePrinter(
-	store: PrintDeviceAdminStore,
+	deps: UpdatePrinterDeps,
 	printerId: string,
 	patch: PrintDevicePatch,
 	now: Date
 ): Promise<PrinterSummary> {
-	const doc = await mutateDevice(store, printerId, now, (current) => ({
+	const doc = await mutateDevice(deps.devices, printerId, now, (current) => ({
 		...current,
 		...(patch.name !== undefined ? { name: patch.name } : {}),
 		...(patch.station !== undefined ? { station: patch.station || null } : {}),
 		...(patch.status !== undefined ? { status: patch.status } : {})
 	}));
+	if (patch.status === 'inactive')
+		await failOpenJobs(deps.jobs, printerId, 'printer_inactive', now);
 	return toPrinterSummary(doc, now);
 }
 
@@ -252,13 +284,7 @@ export function queueTestPrint(
 	);
 }
 
-export interface DeletePrinterDeps {
-	devices: PrintDeviceAdminStore;
-	jobs: {
-		findJobs(query: { status: PrintJobStatus; printerId?: string }): Promise<PrintJobDoc[]>;
-		put(doc: PrintJobDoc): Promise<PrintJobPutResult>;
-	};
-}
+export type DeletePrinterDeps = UpdatePrinterDeps;
 
 /** Fail the printer's pending/printing jobs (`printer_deleted`, labels dropped), then delete it. */
 export async function deletePrinter(
@@ -268,12 +294,7 @@ export async function deletePrinter(
 ): Promise<void> {
 	if (!(await deps.devices.getDevice(printerId))) throw new PrintDeviceNotFoundError();
 
-	for (const status of ['pending', 'printing'] as const) {
-		for (const job of await deps.jobs.findJobs({ status, printerId })) {
-			// A conflict means the job just moved on (claimed/finished); the lease sweeper settles it.
-			await deps.jobs.put(terminal(job, 'failed', now, { error_code: 'printer_deleted' }));
-		}
-	}
+	await failOpenJobs(deps.jobs, printerId, 'printer_deleted', now);
 
 	for (let attempt = 0; attempt < MAX_WRITE_ATTEMPTS; attempt += 1) {
 		const current = await deps.devices.getDevice(printerId);

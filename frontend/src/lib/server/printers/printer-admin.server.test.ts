@@ -53,6 +53,22 @@ function fakeStore(seed: PrintDeviceDoc[] = []) {
 	return { store, docs, state };
 }
 
+/** In-memory print jobs: just the find/put slice the admin use cases need. */
+function fakeJobs(seed: PrintJobDoc[] = []) {
+	const docs = new Map(seed.map((doc) => [doc._id, doc]));
+	return {
+		docs,
+		findJobs: async ({ status, printerId: id }: { status: string; printerId?: string }) =>
+			[...docs.values()].filter(
+				(d) => d.status === status && (id === undefined || d.printer_id === id)
+			),
+		put: async (doc: PrintJobDoc) => {
+			docs.set(doc._id, doc);
+			return { ok: true as const, rev: 'x' };
+		}
+	};
+}
+
 const input: PrintDeviceInput = {
 	device_id: 'printer-sh001-reg1',
 	name: 'จุดลงทะเบียน 1',
@@ -219,7 +235,7 @@ describe('updatePrinter', () => {
 		const { store, docs } = fakeStore([original]);
 
 		const summary = await updatePrinter(
-			store,
+			{ devices: store, jobs: fakeJobs() },
 			original._id,
 			{ name: 'จุดลงทะเบียน 2', station: null, status: 'inactive' },
 			NOW
@@ -244,7 +260,7 @@ describe('updatePrinter', () => {
 		const { store } = fakeStore();
 
 		await expect(
-			updatePrinter(store, 'print_device:nope', { name: 'x' }, NOW)
+			updatePrinter({ devices: store, jobs: fakeJobs() }, 'print_device:nope', { name: 'x' }, NOW)
 		).rejects.toBeInstanceOf(PrintDeviceNotFoundError);
 	});
 
@@ -258,12 +274,61 @@ describe('updatePrinter', () => {
 				last_seen_at: '2026-10-22T02:59:59.000Z'
 			});
 
-		await updatePrinter(store, original._id, { name: 'ใหม่' }, NOW);
+		await updatePrinter({ devices: store, jobs: fakeJobs() }, original._id, { name: 'ใหม่' }, NOW);
 
 		expect(docs.get(original._id)).toMatchObject({
 			name: 'ใหม่',
 			last_seen_at: '2026-10-22T02:59:59.000Z'
 		});
+	});
+	it('deactivating fails its pending and printing jobs without labels, after the device is inactive', async () => {
+		const original = deviceDoc({});
+		const { store, docs } = fakeStore([original]);
+		const open = { finished_at: null, error_code: null, _attachments: { a: 1 } };
+		const jobs = fakeJobs([
+			jobDoc(original._id, { _id: 'print_job:P', status: 'pending', ...open }),
+			jobDoc(original._id, { _id: 'print_job:R', status: 'printing', ...open }),
+			jobDoc(original._id, { _id: 'print_job:D', status: 'printed', error_code: null }),
+			jobDoc('print_device:other', { _id: 'print_job:O', status: 'pending', ...open })
+		]);
+		const deviceStatusAtJobWrite: string[] = [];
+		const put = jobs.put;
+		jobs.put = async (doc) => {
+			deviceStatusAtJobWrite.push(docs.get(original._id)?.status ?? 'missing');
+			return put(doc);
+		};
+
+		await updatePrinter({ devices: store, jobs }, original._id, { status: 'inactive' }, NOW);
+
+		for (const id of ['print_job:P', 'print_job:R']) {
+			expect(jobs.docs.get(id)).toMatchObject({
+				status: 'failed',
+				error_code: 'printer_inactive',
+				finished_at: '2026-10-22T03:00:00.000Z'
+			});
+			expect(jobs.docs.get(id)).not.toHaveProperty('_attachments');
+		}
+		expect(deviceStatusAtJobWrite).toEqual(['inactive', 'inactive']);
+		expect(jobs.docs.get('print_job:D')).toMatchObject({ status: 'printed' });
+		expect(jobs.docs.get('print_job:O')).toMatchObject({ status: 'pending' });
+	});
+
+	it('leaves open jobs alone on a rename or reactivation', async () => {
+		const original = deviceDoc({});
+		const { store } = fakeStore([original]);
+		const jobs = fakeJobs([
+			jobDoc(original._id, {
+				_id: 'print_job:P',
+				status: 'pending',
+				finished_at: null,
+				error_code: null
+			})
+		]);
+
+		await updatePrinter({ devices: store, jobs }, original._id, { name: 'ใหม่' }, NOW);
+		await updatePrinter({ devices: store, jobs }, original._id, { status: 'active' }, NOW);
+
+		expect(jobs.docs.get('print_job:P')).toMatchObject({ status: 'pending' });
 	});
 });
 
@@ -352,21 +417,6 @@ describe('queueTestPrint', () => {
 
 describe('deletePrinter', () => {
 	const printerId = 'print_device:printer-sh001-reg1';
-
-	function fakeJobs(seed: PrintJobDoc[]) {
-		const docs = new Map(seed.map((doc) => [doc._id, doc]));
-		return {
-			docs,
-			findJobs: async ({ status, printerId: id }: { status: string; printerId?: string }) =>
-				[...docs.values()].filter(
-					(d) => d.status === status && (id === undefined || d.printer_id === id)
-				),
-			put: async (doc: PrintJobDoc) => {
-				docs.set(doc._id, doc);
-				return { ok: true as const, rev: 'x' };
-			}
-		};
-	}
 
 	it('fails its pending and printing jobs without labels, then removes the device', async () => {
 		const { store, docs } = fakeStore([deviceDoc({})]);
