@@ -178,6 +178,10 @@ def _carry_item_ids(
 _WIZARD_ONLY_FIELDS = ("category", "condition", "note")
 
 
+def _wizard_details(line: dict[str, Any]) -> tuple[str | None, ...]:
+    return tuple((str(line.get(name) or "").strip() or None) for name in _WIZARD_ONLY_FIELDS)
+
+
 def _carry_line_details(
     items: list[DonationItemInput], held: list[dict[str, Any]]
 ) -> list[DonationItemInput]:
@@ -188,20 +192,30 @@ def _carry_line_details(
     CR-174 FR-18a, so a donor who changed one quantity had every other line read as edited,
     and staff decisions on those lines — a refusal included — were thrown away.
 
-    Lines are paired by name, each held line once and in order, so two lines of the same
-    name keep their own details. A value the request does carry wins: a client that really
-    changed a condition still has that line re-reviewed.
+    Lines are paired by name, each held line once. Nothing in the form says which held line
+    an edited one was, so when held lines of one name differ in these fields the pairing
+    is a guess: a donor who deleted the first of two "เสื้อ" lines had the refused one take
+    the deleted one's condition — and with it its approval. Those lines get nothing
+    carried; they read as edited and wait for review, which is the safe side. A value the
+    request does carry wins: a client that really changed a condition still has that line
+    re-reviewed.
     """
     unclaimed: dict[str, list[dict[str, Any]]] = {}
     for line in held:
         name = str(line.get("free_text") or line.get("item_name") or "").strip()
         if name:
             unclaimed.setdefault(name, []).append(line)
+    ambiguous = {
+        name
+        for name, lines in unclaimed.items()
+        if len({_wizard_details(line) for line in lines}) > 1
+    }
 
     carried = []
     for item in items:
-        candidates = unclaimed.get((item.free_text or "").strip())
-        if not candidates:
+        name = (item.free_text or "").strip()
+        candidates = unclaimed.get(name)
+        if not candidates or name in ambiguous:
             carried.append(item)
             continue
         line = candidates.pop(0)

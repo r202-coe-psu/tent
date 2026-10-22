@@ -108,6 +108,10 @@ def review_new_booking(
 
 
 def _normalised(value: Any, *, numeric: bool) -> Any:
+    # The edit form trims what it sends back; the donate wizard does not. Unstripped, a name
+    # typed with a trailing space read as edited on the first edit and lost its review.
+    if isinstance(value, str):
+        value = value.strip()
     # FR-18a: an empty value and a missing field are the same thing.
     if value is None or value == "":
         return None

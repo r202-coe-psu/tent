@@ -2098,15 +2098,89 @@ async def test_a_detail_the_request_does_change_is_still_an_edit(
     assert body["status"] == "pending_review"
 
 
-async def test_two_lines_of_the_same_name_keep_their_own_details(
+async def test_lines_of_one_name_with_different_details_are_not_guessed(
     client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
 ) -> None:
+    """Re-review round 3 W1 — deleting the first of two "เสื้อ" lines must not hand the
+    refused one the deleted one's details, and with them its approval."""
+    await _seed_counter("100")
     new_shirt = {"free_text": "เสื้อ", "qty": "3", "unit": "ตัว", "condition": "ของใหม่"}
-    used_shirt = {"free_text": "เสื้อ", "qty": "2", "unit": "ตัว", "condition": "มือสอง"}
-    token = (await _create(client, auth_headers, [new_shirt, used_shirt]))["tracking_token"]
+    used_shirt = {"free_text": "เสื้อ", "qty": "3", "unit": "ตัว", "condition": "มือสอง"}
+    token = (await _create(client, auth_headers, [new_shirt, used_shirt, _WIZARD_PILLOW]))[
+        "tracking_token"
+    ]
+    couch_items = [
+        {**new_shirt, "review_status": "approved"},
+        {
+            **used_shirt,
+            "review_status": "rejected",
+            "review_reason_code": "damaged",
+            "review_reason": "ชำรุดเสียหาย",
+        },
+        {**_WIZARD_PILLOW, "review_status": "approved"},
+    ]
 
-    response = await _edit(
-        client, auth_headers, token, [_as_edit_form(new_shirt), _as_edit_form(used_shirt)]
+    donation_router._rate_buckets.clear()
+    response = await client.patch(
+        f"/public/v1/donations/{token}/items",
+        headers=auth_headers,
+        json={
+            "items": [_as_edit_form(used_shirt), _as_edit_form(_WIZARD_PILLOW)],
+            "current_items": couch_items,
+            "current_status": "verifying",
+        },
     )
 
-    assert [i.get("condition") for i in response.json()["items"]] == ["ของใหม่", "มือสอง"]
+    body = response.json()
+    assert [i["review_status"] for i in body["items"]] == ["pending", "approved"]
+    assert body["items"][0].get("condition") is None
+    assert body["status"] == "pending_review"
+
+
+async def test_lines_of_one_name_with_the_same_details_keep_them(
+    client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    shirt = {"free_text": "เสื้อ", "qty": "3", "unit": "ตัว", "condition": "ของใหม่"}
+    token = (await _create(client, auth_headers, [shirt, {**shirt, "qty": "2"}]))["tracking_token"]
+
+    response = await _edit(
+        client, auth_headers, token, [_as_edit_form(shirt), _as_edit_form({**shirt, "qty": "2"})]
+    )
+
+    assert [i.get("condition") for i in response.json()["items"]] == ["ของใหม่", "ของใหม่"]
+
+
+async def test_a_name_saved_with_a_trailing_space_keeps_its_review(
+    client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    """Re-review round 3 W2 — the wizard keeps the space, the edit form trims it."""
+    await _seed_counter("100")
+    spaced = {**_WIZARD_BLANKET, "free_text": "ผ้าห่ม "}
+    token = (await _create(client, auth_headers, [_WIZARD_RICE, spaced]))["tracking_token"]
+    couch_items = [
+        {**_WIZARD_RICE, "reserved_qty": "5", "review_status": "approved"},
+        {
+            **spaced,
+            "review_status": "rejected",
+            "review_reason_code": "damaged",
+            "review_reason": "ชำรุดเสียหาย",
+        },
+    ]
+
+    donation_router._rate_buckets.clear()
+    response = await client.patch(
+        f"/public/v1/donations/{token}/items",
+        headers=auth_headers,
+        json={
+            "items": [
+                _as_edit_form({**_WIZARD_RICE, "qty": "6"}),
+                {**_as_edit_form(spaced), "free_text": "ผ้าห่ม"},
+            ],
+            "current_items": couch_items,
+            "current_status": "verifying",
+        },
+    )
+
+    body = response.json()
+    assert [i["review_status"] for i in body["items"]] == ["approved", "rejected"]
+    assert body["status"] == "verifying"

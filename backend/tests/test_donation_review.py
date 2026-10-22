@@ -112,6 +112,12 @@ def test_other_fields_ride_through_untouched() -> None:
 def test_empty_and_missing_are_the_same() -> None:
     assert line_key({**DIAPERS, "note": ""}) == line_key(DIAPERS)
     assert line_key({**DIAPERS, "note": None}) == line_key(DIAPERS)
+    assert line_key({**DIAPERS, "note": "  "}) == line_key(DIAPERS)
+
+
+def test_surrounding_spaces_are_not_an_edit() -> None:
+    """The wizard keeps a trailing space a phone keyboard added; the edit form trims it."""
+    assert line_key({**DIAPERS, "free_text": "ผ้าอ้อมผู้ใหญ่ "}) == line_key(DIAPERS)
 
 
 @pytest.mark.parametrize("qty", [3, "3", "3.0", 3.0, "3.00"])
