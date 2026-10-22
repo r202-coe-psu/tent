@@ -216,9 +216,7 @@ test.describe('Public landing: error contract', { tag: ['@public', '@smoke'] }, 
 		).toBeVisible();
 	});
 
-	test.fixme('GAP: landing does not surface a load-error message when public needs/shelters APIs fail (sysError i18n unused; page silently degrades to empty lists)', async ({
-		page
-	}) => {
+	test('says the system is unavailable when the needs list fails (#740)', async ({ page }) => {
 		await page.route('**/api/public/v1/needs', (route) =>
 			route.fulfill({
 				status: 500,
@@ -231,6 +229,42 @@ test.describe('Public landing: error contract', { tag: ['@public', '@smoke'] }, 
 		await expect(
 			page.getByText('ไม่สามารถเชื่อมต่อฐานข้อมูลได้ กรุณาลองใหม่ภายหลัง')
 		).toBeVisible();
+	});
+
+	test('says so in English too when the shelters list fails (#740)', async ({ page }) => {
+		await page.route('**/api/public/v1/shelters', (route) =>
+			route.fulfill({
+				status: 503,
+				contentType: 'application/json',
+				body: JSON.stringify({ error: 'UPSTREAM_DOWN' })
+			})
+		);
+		await page.goto('/');
+		await expect(page.getByRole('alert').filter({ hasText: 'ระบบขัดข้อง' })).toBeVisible();
+
+		await page.getByRole('button', { name: 'Switch to English' }).click();
+		await expect(page.getByRole('alert').filter({ hasText: 'System Error' })).toBeVisible();
+		await expect(
+			page.getByText('Cannot connect to database. Please try again later.')
+		).toBeVisible();
+	});
+
+	test('shows no error when both lists load', async ({ page }) => {
+		await page.route('**/api/public/v1/needs', (route) =>
+			route.fulfill({ status: 200, contentType: 'application/json', body: '[]' })
+		);
+		await page.route('**/api/public/v1/shelters', (route) =>
+			route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ shelters: [] })
+			})
+		);
+		await page.goto('/');
+		await expect(
+			page.getByRole('heading', { name: 'แพลตฟอร์มช่วยเหลือผู้ประสบภัย', level: 1 })
+		).toBeVisible();
+		await expect(page.getByText('ระบบขัดข้อง')).toHaveCount(0);
 	});
 });
 
