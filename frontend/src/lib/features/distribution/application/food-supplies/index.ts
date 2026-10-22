@@ -9,3 +9,4 @@ export * from './dispatch-workflow';
 export * from './distribution-workflow';
 export * from './return-workflow';
 export * from './reconciliation-workflow';
+export * from './bulk-return-pool-v3-workflow';
