@@ -15,7 +15,7 @@
 	import { langState } from '$lib/states/i18n.svelte';
 	import { toast } from 'svelte-sonner';
 	import { subQty, qtyAbs, qtyGt, persistQty } from '$lib/utils/qty';
-	import { projectLotsByItem } from '../domain/cycle-count';
+	import { projectLotsByItem } from '../domain/operations';
 	import { formatThaiShortDate } from '$lib/utils/date';
 	import {
 		ADJUST_NOTE_MAX_LENGTH,
@@ -109,6 +109,7 @@
 					? `(หมดอายุแล้ว: ${formatExpiry(expiry)})`
 					: `(หมดอายุ: ${formatExpiry(expiry)})`
 				: '(ไม่ระบุวันหมดอายุ)';
+			const received = formatThaiShortDate(lot.received_at);
 			return {
 				key: lot.lot_ref,
 				lot_ref: lot.lot_ref,
@@ -116,7 +117,11 @@
 				expiry,
 				qty: persistQty(lot.qty),
 				expired,
-				label: `${lotStorageLabel(location, storagePoints.points)} ${expiryPart} · รับเข้า ${formatThaiShortDate(lot.received_at)} - คงเหลือ ${persistQty(lot.qty)} ${unitLabel}`
+				label: [
+					`${lotStorageLabel(location, storagePoints.points)} ${expiryPart}`,
+					...(received ? [`รับเข้า ${received}`] : []),
+					`คงเหลือ ${persistQty(lot.qty)} ${unitLabel}`
+				].join(' · ')
 			};
 		});
 	});
@@ -216,6 +221,13 @@
 		}
 		if (!selectedLotKey) {
 			toast.error('กรุณาเลือกสถานที่/ล็อต');
+			return;
+		}
+		// The chosen lot ran out (or left the list) while the form was open: without this the
+		// adjust would land with no lot at all, at the main store with no expiry.
+		if (selectedLotKey !== 'new' && !currentLot) {
+			selectedLotKey = '';
+			toast.error('ล็อตที่เลือกไม่มีคงเหลือแล้ว กรุณาเลือกล็อตใหม่');
 			return;
 		}
 		if (!newQtyInput || isNaN(Number(newQtyInput)) || Number(newQtyInput) < 0) {
@@ -330,6 +342,7 @@
 				<Select.Root type="single" bind:value={selectedLotKey}>
 					<Select.Trigger
 						id="lot-select"
+						aria-describedby={lotsIntegrityError ? 'lot-integrity-error' : undefined}
 						class="min-h-11 w-full rounded-md border border-input bg-white px-3 text-sm font-medium {currentLot?.expired
 							? 'text-destructive'
 							: ''}"
@@ -353,9 +366,12 @@
 					<p class="mt-1.5 text-xs font-semibold text-destructive">ล็อตนี้หมดอายุแล้ว</p>
 				{/if}
 				{#if lotsIntegrityError}
-					<p class="mt-1.5 text-xs font-semibold text-destructive" role="alert">
-						ประวัติคลังของสินค้านี้คำนวณยอดรายล็อตไม่ได้ (มีรายการจ่ายเกินยอดที่มี)
-						กรุณาแจ้งผู้ดูแลระบบ
+					<p
+						id="lot-integrity-error"
+						class="mt-1.5 text-xs font-semibold text-destructive"
+						role="alert"
+					>
+						ประวัติคลังของสินค้านี้ไม่สอดคล้องกัน จึงคำนวณยอดรายล็อตไม่ได้ กรุณาแจ้งผู้ดูแลระบบ
 					</p>
 				{/if}
 			</Field.Root>

@@ -88,6 +88,8 @@ export {
 	projectStockLotBalances,
 	sortStockLotsByConsumptionOrder,
 	StockLotIntegrityError,
+	LotWriteOffError,
+	projectLotsByItem,
 	adjustInputSchema,
 	createAdjustEntry,
 	adjustReasonSchema,

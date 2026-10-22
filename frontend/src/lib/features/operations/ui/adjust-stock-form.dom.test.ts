@@ -3,7 +3,19 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { flushSync, mount, tick, unmount } from 'svelte';
 import AdjustStockForm from './adjust-stock-form.svelte';
 
-const ledger = vi.hoisted(() => ({ current: [] as unknown[] }));
+// The ledger sits in a SvelteMap (made in the mock factory) so a test can change it under a
+// mounted form, as a refetch would.
+const ledger = vi.hoisted(() => ({
+	store: null as null | {
+		get(k: 'rows'): unknown[] | undefined;
+		set(k: 'rows', v: unknown[]): void;
+	},
+	set current(rows: unknown[]) {
+		this.store!.set('rows', rows);
+	}
+}));
+const adjust = vi.hoisted(() => ({ mutateAsync: vi.fn() }));
+const toastMock = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn(), promise: vi.fn() }));
 
 const WATER = {
 	_id: 'item:water',
@@ -37,11 +49,19 @@ const DISPATCH = {
 	occurred_at: '2026-10-02T00:00:00.000Z'
 };
 
-vi.mock('../application/queries', () => ({
-	useLedger: () => ({ data: ledger.current }),
-	useAdjustStock: () => ({ mutateAsync: vi.fn(), isPending: false }),
-	useStockBalance: () => ({ data: new Map([['item:water', '1199']]) })
-}));
+vi.mock('../application/queries', async () => {
+	const { SvelteMap } = await import('svelte/reactivity');
+	ledger.store = new SvelteMap<'rows', unknown[]>([['rows', []]]);
+	return {
+		useLedger: () => ({
+			get data() {
+				return ledger.store!.get('rows');
+			}
+		}),
+		useAdjustStock: () => ({ mutateAsync: adjust.mutateAsync, isPending: false }),
+		useStockBalance: () => ({ data: new Map([['item:water', '1199']]) })
+	};
+});
 vi.mock('../application/use-stock-form-items.svelte', () => ({
 	useStockFormItems: () => ({ items: [WATER], isLoading: false })
 }));
@@ -60,7 +80,7 @@ vi.mock('$app/navigation', () => ({
 	onNavigate: vi.fn()
 }));
 vi.mock('$app/paths', () => ({ resolve: (path: string) => path }));
-vi.mock('svelte-sonner', () => ({ toast: { success: vi.fn(), error: vi.fn(), promise: vi.fn() } }));
+vi.mock('svelte-sonner', () => ({ toast: toastMock }));
 
 let instance: ReturnType<typeof mount> | null = null;
 
@@ -69,6 +89,13 @@ async function render() {
 		target: document.body,
 		props: { preselectedItemId: 'item:water' }
 	});
+	for (let i = 0; i < 3; i++) {
+		flushSync();
+		await tick();
+	}
+}
+
+async function settle() {
 	for (let i = 0; i < 3; i++) {
 		flushSync();
 		await tick();
@@ -88,7 +115,37 @@ async function lotOptions(): Promise<string[]> {
 	);
 }
 
+async function chooseLot(text: string) {
+	await lotOptions();
+	const option = [...document.body.querySelectorAll<HTMLElement>('[role="option"]')].find((o) =>
+		o.textContent?.includes(text)
+	);
+	option!.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, button: 0 }));
+	option!.click();
+	await settle();
+}
+
+async function fillAndSubmit(newQty: string, reasonLabel: string) {
+	const qty = document.getElementById('new-qty') as HTMLInputElement;
+	qty.value = newQty;
+	qty.dispatchEvent(new Event('input', { bubbles: true }));
+	await settle();
+	[...document.body.querySelectorAll<HTMLButtonElement>('button')]
+		.find((b) => b.textContent?.trim() === reasonLabel)!
+		.click();
+	await settle();
+	document
+		.querySelector('form')!
+		.dispatchEvent(new SubmitEvent('submit', { bubbles: true, cancelable: true }));
+	await settle();
+}
+
+const submittedInput = () =>
+	adjust.mutateAsync.mock.calls.at(-1)?.[0]?.input as Record<string, unknown> | undefined;
+
 afterEach(() => {
+	adjust.mutateAsync.mockReset();
+	toastMock.error.mockReset();
 	if (instance) unmount(instance);
 	instance = null;
 	document.body.innerHTML = '';
@@ -104,5 +161,83 @@ describe('adjust form lots (#569)', () => {
 		expect(lots).toHaveLength(1);
 		expect(lots[0]).toContain('คงเหลือ 1199');
 		expect(options.join(' ')).not.toContain('อาคารยิมเนเซียม');
+	});
+
+	it('writes a write-off off the chosen lot, naming its lot_ref', async () => {
+		ledger.current = [INBOUND, DISPATCH];
+		await render();
+		await chooseLot('คงเหลือ 1199');
+
+		await fillAndSubmit('1190', 'เสียหาย / เน่าเสีย');
+
+		expect(submittedInput()).toMatchObject({ qty: '-9', lot_ref: INBOUND._id });
+	});
+
+	it('adds stock as a new lot (no lot_ref) where the chosen lot is', async () => {
+		ledger.current = [INBOUND, DISPATCH];
+		await render();
+		await chooseLot('คงเหลือ 1199');
+
+		await fillAndSubmit('1205', 'พบของเพิ่ม');
+
+		const input = submittedInput();
+		expect(input).toMatchObject({ qty: '6', lot: { expiry: '2027-03-01' } });
+		expect(input).not.toHaveProperty('lot_ref');
+	});
+
+	it('hides a lot that is down to zero', async () => {
+		const EMPTY = {
+			...INBOUND,
+			_id: 'stock_ledger:01JINEMPTY0000000000000000',
+			lot_ref: undefined
+		};
+		const EMPTIED = {
+			...DISPATCH,
+			_id: 'stock_ledger:01JOUTEMPTY000000000000000',
+			qty: '-1200',
+			lot_ref: EMPTY._id
+		};
+		ledger.current = [INBOUND, EMPTY, EMPTIED];
+		await render();
+
+		const lots = (await lotOptions()).filter((o) => o.includes('คงเหลือ'));
+		expect(lots).toEqual([expect.stringContaining('คงเหลือ 1200')]);
+	});
+
+	it('says the history is inconsistent, tied to the lot picker', async () => {
+		ledger.current = [INBOUND, { ...DISPATCH, qty: '-5000' }];
+		await render();
+
+		const alert = document.getElementById('lot-integrity-error');
+		expect(alert?.getAttribute('role')).toBe('alert');
+		expect(alert?.textContent).toContain('ไม่สอดคล้อง');
+		expect(document.getElementById('lot-select')?.getAttribute('aria-describedby')).toBe(
+			'lot-integrity-error'
+		);
+	});
+
+	it('refuses to save when the chosen lot ran out while the form was open', async () => {
+		ledger.current = [INBOUND, DISPATCH];
+		await render();
+		await chooseLot('คงเหลือ 1199');
+		const qty = document.getElementById('new-qty') as HTMLInputElement;
+		qty.value = '1190';
+		qty.dispatchEvent(new Event('input', { bubbles: true }));
+		await settle();
+
+		// a refetch shows the lot emptied by someone else
+		ledger.current = [INBOUND, { ...DISPATCH, qty: '-1200' }];
+		await settle();
+		[...document.body.querySelectorAll<HTMLButtonElement>('button')]
+			.find((b) => b.textContent?.trim() === 'เสียหาย / เน่าเสีย')
+			?.click();
+		await settle();
+		document
+			.querySelector('form')!
+			.dispatchEvent(new SubmitEvent('submit', { bubbles: true, cancelable: true }));
+		await settle();
+
+		expect(adjust.mutateAsync).not.toHaveBeenCalled();
+		expect(toastMock.error).toHaveBeenCalledWith('ล็อตที่เลือกไม่มีคงเหลือแล้ว กรุณาเลือกล็อตใหม่');
 	});
 });

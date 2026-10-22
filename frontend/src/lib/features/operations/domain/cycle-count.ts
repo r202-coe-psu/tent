@@ -10,11 +10,10 @@ import {
 import {
 	ADJUST_NOTE_MAX_LENGTH,
 	createAdjustEntry,
-	projectStockLotBalances,
+	projectLotsByItem,
 	StockLotIntegrityError,
 	type StockLedger,
-	type StockLot,
-	type StockLotBalance
+	type StockLot
 } from './operations';
 
 /**
@@ -57,36 +56,6 @@ export interface StorageGroup {
 	storage_key: string;
 	label: string;
 	lots: CycleCountLot[];
-}
-
-/**
- * Per-lot balances of every item, from the same projection the stock table uses (#569):
- * `lot_ref` rows hit their own lot, older outbound rows are replayed in the legacy order.
- *
- * Projected one item at a time — lots never cross items, so the result is the same as one
- * whole-ledger pass, but one item with an impossible history only drops that item
- * (`onIntegrityError`) instead of the whole count.
- */
-export function projectLotsByItem(
-	ledger: readonly StockLedger[],
-	onIntegrityError?: (itemId: string, error: StockLotIntegrityError) => void
-): StockLotBalance[] {
-	const byItem = new Map<string, StockLedger[]>();
-	for (const entry of ledger) {
-		const rows = byItem.get(entry.item_id);
-		if (rows) rows.push(entry);
-		else byItem.set(entry.item_id, [entry]);
-	}
-	const lots: StockLotBalance[] = [];
-	for (const [itemId, rows] of byItem) {
-		try {
-			lots.push(...projectStockLotBalances(rows));
-		} catch (error) {
-			if (!(error instanceof StockLotIntegrityError)) throw error;
-			onIntegrityError?.(itemId, error);
-		}
-	}
-	return lots;
 }
 
 /**

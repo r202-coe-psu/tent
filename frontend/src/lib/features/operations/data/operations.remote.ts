@@ -29,6 +29,7 @@ import {
 	createDistributeEntry,
 	createAdjustEntry,
 	projectStockLotBalances,
+	assertLotWriteOffsFit,
 	type DonationCampaign,
 	type CampaignInput,
 	type StockLedger,
@@ -655,9 +656,13 @@ export class OperationsRemoteRepository implements OperationsRepository {
 		// may land on a lot recorded before the item gained a shelf life and has no expiry to carry.
 		assertReceiveAgainstCatalog(entry, item, { requireExpiry: false });
 
-		// NOTE: This balance check is aggregate (cross-lot total), not per-lot.
-		// Acceptable for single-user shelter; per-lot validation requires FIFO tracking.
-		if (qtyLte(entry.qty, 0)) {
+		if (qtyLte(entry.qty, 0) && entry.lot_ref) {
+			// A write-off out of a named lot is replayed against that lot alone, so it must fit
+			// that lot as the ledger stands now — not just the item's total (#569).
+			assertLotWriteOffsFit(await this.listLedgerByItem(entry.item_id), [entry]);
+		} else if (qtyLte(entry.qty, 0)) {
+			// No lot named (an older caller): the projection takes it from the item's lots in
+			// consumption order, so the item's total is what it has to fit.
 			const balances = await this.getBalance();
 			const currentQty = balances.get(entry.item_id) ?? '0';
 			const requestedQty = qtyAbs(entry.qty);
@@ -727,8 +732,9 @@ export class OperationsRemoteRepository implements OperationsRepository {
 			);
 
 			// Validate every row BEFORE writing any: a bad line must not leave its neighbours half
-			// recorded. Write-offs are checked against the aggregate balance (same rule as
-			// `adjustStock`), summed per item so two lots of one item cannot overdraw together.
+			// recorded. A shortfall names its lot, so it must fit that lot as the ledger stands now
+			// (#569) — the count's `system_qty` was read when the walk began. Any row without a
+			// lot is checked against the item's total, summed per item (same rules as `adjustStock`).
 			const catalog = new Map<string, CatalogItem | null>();
 			for (const entry of entries) {
 				if (!catalog.has(entry.item_id)) {
@@ -742,9 +748,12 @@ export class OperationsRemoteRepository implements OperationsRepository {
 				}
 				assertReceiveAgainstCatalog(entry, item, { requireExpiry: false });
 			}
+			if (entries.some((entry) => entry.lot_ref && qtyLte(entry.qty, 0))) {
+				assertLotWriteOffsFit(await this.listLedger(), entries);
+			}
 			const writeOffs = new Map<string, string>();
 			for (const entry of entries) {
-				if (qtyLte(entry.qty, 0)) {
+				if (qtyLte(entry.qty, 0) && !entry.lot_ref) {
 					writeOffs.set(
 						entry.item_id,
 						addQty(writeOffs.get(entry.item_id) ?? '0', qtyAbs(entry.qty))
