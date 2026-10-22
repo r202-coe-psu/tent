@@ -35,7 +35,15 @@ cp .env.example .env && chmod 600 .env   # แก้ค่าตามที่�
 uv run python -m printer
 ```
 
-เครื่องที่ไม่มี uv (เช่นเครื่อง kiosk ที่ใช้ pip) — Python ≥ 3.11:
+หรือใช้สคริปต์ช่วยรัน (ใช้ uv ถ้ามี ไม่งั้นสร้าง `.venv` ด้วย pip ให้เองครั้งแรก):
+
+```bash
+cd printer
+cp .env.example .env      # แก้ค่า
+./run.sh                  # Ctrl+C เพื่อหยุด · ./run.sh --setup = ติดตั้ง dependency อย่างเดียว
+```
+
+ทำเองทีละขั้นบนเครื่องที่ไม่มี uv (เช่นเครื่อง kiosk ที่ใช้ pip) — Python ≥ 3.11:
 
 ```bash
 cd printer
