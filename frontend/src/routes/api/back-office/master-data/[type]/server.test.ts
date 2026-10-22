@@ -328,6 +328,34 @@ describe('PUT /api/back-office/master-data/[type]', () => {
 		expect(adminRawMock).toHaveBeenCalled();
 	});
 
+	it('rejects a shelter-local write for a global-only type (CR-186)', async () => {
+		readMock.mockResolvedValue(null);
+
+		const res = await callPUT(
+			'chronic_disease',
+			{
+				shelter_code: 'SH001',
+				items: [{ code: 'gout', label_th: 'เกาต์', label_en: 'Gout', is_default: false }]
+			},
+			'?scope=shelter&shelter_code=SH001'
+		);
+
+		expect(res.status).toBe(422);
+		expect((await res.json()).error.code).toBe('VALIDATION');
+		expect(adminRawMock).not.toHaveBeenCalled();
+	});
+
+	it('allows a global write for a global-only type (CR-186)', async () => {
+		readMock.mockResolvedValue(null);
+
+		const res = await callPUT('chronic_disease', {
+			items: [{ code: 'diabetes', label_th: 'เบาหวาน', label_en: 'Diabetes', is_default: false }]
+		});
+
+		expect(res.status).toBe(200);
+		expect(adminRawMock).toHaveBeenCalled();
+	});
+
 	it('rejects a GLOBAL label that collides with an existing shelter-local item (CR-078)', async () => {
 		readMock.mockResolvedValue(null);
 		readShelterDocsMock.mockResolvedValue([

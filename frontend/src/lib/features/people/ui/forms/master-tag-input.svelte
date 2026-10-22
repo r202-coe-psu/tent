@@ -23,7 +23,8 @@
 		disabled = false,
 		placeholder = 'เลือกหรือพิมพ์เพิ่ม',
 		searchPlaceholder = 'ค้นหา...',
-		emptyText = 'ไม่พบรายการ'
+		emptyText = 'ไม่พบรายการ',
+		listLabel = 'รายการที่เลือก'
 	}: {
 		id?: string;
 		value?: string[];
@@ -32,6 +33,8 @@
 		placeholder?: string;
 		searchPlaceholder?: string;
 		emptyText?: string;
+		/** Screen-reader name of the selected-tags list, e.g. "โรคประจำตัวที่เลือก". */
+		listLabel?: string;
 	} = $props();
 
 	let open = $state(false);
@@ -62,20 +65,20 @@
 
 <div class="space-y-2">
 	{#if value.length > 0}
-		<ul class="flex flex-wrap gap-1.5" aria-label="รายการที่เลือก">
+		<ul class="flex flex-wrap gap-1.5" aria-label={listLabel}>
 			{#each value as token (token)}
 				{@const label = formatMasterLabelByCode(token, items) || token}
 				<li
-					class="inline-flex items-center gap-1 rounded-full border border-sky-200 bg-sky-50 py-0.5 pr-1 pl-2.5 text-xs font-semibold text-sky-900"
+					class="inline-flex min-h-11 items-center gap-1 rounded-full border border-slate-200 bg-slate-50 py-0.5 pr-0.5 pl-3 text-sm font-semibold text-slate-800"
 				>
 					<span>{label}</span>
 					<button
 						type="button"
 						{disabled}
 						onclick={() => remove(token)}
-						class="inline-flex size-5 items-center justify-center rounded-full hover:bg-sky-100 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:outline-none disabled:pointer-events-none"
+						class="inline-flex size-10 items-center justify-center rounded-full text-slate-500 hover:bg-slate-200 hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50"
 					>
-						<X class="size-3" />
+						<X class="size-4" />
 						<span class="sr-only">ลบ {label}</span>
 					</button>
 				</li>
@@ -94,7 +97,7 @@
 					role="combobox"
 					aria-expanded={open}
 					{disabled}
-					class="h-9 w-full justify-start gap-2 text-xs font-normal text-muted-foreground"
+					class="min-h-12 w-full justify-start gap-2 text-sm font-normal text-muted-foreground"
 				>
 					<Plus class="size-4 shrink-0" />
 					<span class="truncate">{placeholder}</span>
@@ -111,8 +114,10 @@
 				<Command.List>
 					<Command.Empty>{emptyText}</Command.Empty>
 					{#if canAddFreeText}
-						<Command.Group>
-							<Command.Item value="__add__{freeText}" keywords={[freeText]} onSelect={addFreeText}>
+						<!-- forceMount: the search may hold a comma the add option strips, so
+						     bits-ui's filter would otherwise hide it. -->
+						<Command.Group forceMount>
+							<Command.Item value="__add__{freeText}" forceMount onSelect={addFreeText}>
 								<Plus class="size-4" />
 								<span>เพิ่ม “{freeText}”</span>
 							</Command.Item>

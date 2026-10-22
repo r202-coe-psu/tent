@@ -17,6 +17,8 @@ import {
 	normalizeLabel,
 	normalizeMasterCode,
 	resolveMasterCode,
+	resolveMasterCodes,
+	isGlobalOnlyMasterType,
 	masterDataItemSchema,
 	masterDataSchema,
 	masterTypeSchema,
@@ -133,6 +135,41 @@ describe('resolveMasterCode', () => {
 
 	it('returns empty for blank input', () => {
 		expect(resolveMasterCode('   ', items)).toBe('');
+	});
+
+	it('keeps the label of an inactive item as free text (CR-186 FR-6)', () => {
+		const withInactive = [
+			...items,
+			makeItem({ code: 'gout', label_th: 'เกาต์', status: 'inactive' })
+		];
+		expect(resolveMasterCode('เกาต์', withInactive)).toBe('เกาต์');
+	});
+
+	it('still keeps an inactive item code as a code (soft-delete)', () => {
+		const withInactive = [
+			...items,
+			makeItem({ code: 'gout', label_th: 'เกาต์', status: 'inactive' })
+		];
+		expect(resolveMasterCode('gout', withInactive)).toBe('gout');
+	});
+});
+
+describe('resolveMasterCodes', () => {
+	const items = [makeItem({ code: 'diabetes', label_th: 'เบาหวาน', label_en: 'Diabetes' })];
+
+	it('maps each value, drops blanks, and dedupes after mapping', () => {
+		expect(resolveMasterCodes(['เบาหวาน', ' ', 'diabetes', 'โรคเกาต์'], items)).toEqual([
+			'diabetes',
+			'โรคเกาต์'
+		]);
+	});
+});
+
+describe('isGlobalOnlyMasterType (CR-186)', () => {
+	it('is true for chronic_disease only', () => {
+		expect(isGlobalOnlyMasterType('chronic_disease')).toBe(true);
+		expect(isGlobalOnlyMasterType('vulnerable_group')).toBe(false);
+		expect(isGlobalOnlyMasterType('housing_type')).toBe(false);
 	});
 });
 

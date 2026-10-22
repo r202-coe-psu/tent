@@ -16,6 +16,7 @@
 		type Medical,
 		type Screening
 	} from '$lib/features/people';
+	import { resolveMasterCodes, useMasterData } from '$lib/features/master-data';
 	import { defaults, superForm } from 'sveltekit-superforms';
 	import { zod4 } from 'sveltekit-superforms/adapters';
 	import {
@@ -58,6 +59,9 @@
 		onClose: () => void;
 		onSave: (data: EvacueeHealthEditData) => Promise<void>;
 	} = $props();
+
+	// CR-186 FR-7 — legacy โรคประจำตัว labels become master codes on save.
+	const chronicDiseaseQuery = useMasterData(() => 'chronic_disease');
 
 	let careTrack = $state<CareTrack>('normal');
 	let conditions = $state('');
@@ -158,7 +162,10 @@
 		try {
 			await onSave({
 				careTrack: validation.data.careTrack,
-				conditions: listFromText(validation.data.conditions),
+				conditions: resolveMasterCodes(
+					listFromText(validation.data.conditions),
+					chronicDiseaseQuery.data?.items ?? []
+				),
 				medications: listFromText(validation.data.medications),
 				allergies: listFromText(validation.data.allergies),
 				generalSymptoms: validation.data.generalSymptoms,

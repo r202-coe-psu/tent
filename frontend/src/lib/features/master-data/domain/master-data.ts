@@ -62,6 +62,19 @@ export const VOLUNTEER_MASTER_TYPES = [
 	'volunteer_skills'
 ] as const satisfies readonly MasterDataType[];
 
+/**
+ * Types with no shelter-local tier (CR-186): SA manages the global doc only and
+ * the writer rejects `master_data:{type}:{shelter_code}`. Back-office shows them
+ * read-only.
+ */
+export const GLOBAL_ONLY_MASTER_TYPES = [
+	'chronic_disease'
+] as const satisfies readonly MasterDataType[];
+
+export function isGlobalOnlyMasterType(type: MasterDataType): boolean {
+	return (GLOBAL_ONLY_MASTER_TYPES as readonly MasterDataType[]).includes(type);
+}
+
 /** Thai + English labels for the master_type enum — used in the type list cards. */
 export const MASTER_DATA_TYPE_LABELS: Record<MasterDataType, string> = {
 	vulnerable_group: 'ประเภทกลุ่มเปราะบาง (Vulnerable Group)',
@@ -111,8 +124,13 @@ export const MASTER_DATA_TYPE_META: Record<MasterDataType, MasterDataTypeMeta> =
 	chronic_disease: {
 		shortTitle: 'โรคประจำตัว',
 		title: 'โรคประจำตัว',
-		description: 'รายการโรคประจำตัวที่เจ้าหน้าที่เลือกได้ตอนคัดกรองสุขภาพ (พิมพ์เพิ่มเองได้)',
-		affectedForms: ['คัดกรองสุขภาพ Station 2', 'แก้ไขข้อมูลสุขภาพในโปรไฟล์ผู้พักพิง']
+		description:
+			'รายการโรคประจำตัวมาตรฐาน (ส่วนกลางเท่านั้น) ที่เจ้าหน้าที่เลือกได้ตอนคัดกรองสุขภาพ — โรคอื่นพิมพ์เพิ่มเองได้',
+		affectedForms: [
+			'คัดกรองสุขภาพ Station 2',
+			'แก้ไขข้อมูลสุขภาพในโปรไฟล์ผู้พักพิง',
+			'นำเข้าไฟล์ผู้อพยพ'
+		]
 	}
 };
 
@@ -278,21 +296,36 @@ export function formatMasterLabelByCode(
 }
 
 /**
- * Map one entered value onto a master item's `code` (#649). A value that is
- * already a code, or whose text matches an item's `label_th` / `label_en`
- * (compared with {@link normalizeLabel}), becomes that code — so legacy
- * free-text such as `"เบาหวาน"` lines up with the master. Anything else is kept
- * as trimmed free text (masters like `chronic_disease` allow off-list values).
+ * Map one entered value onto a master item's `code` (CR-186 FR-6). A value that
+ * is already a code stays a code — also for an `inactive` item, whose stored
+ * code must keep resolving (soft-delete, schema.md §3.3). Text matching the
+ * `label_th` / `label_en` of an **active** item (compared with
+ * {@link normalizeLabel}) becomes that code, so legacy free text such as
+ * `"เบาหวาน"` lines up with the master. Anything else — including the label of
+ * an inactive item — is kept as trimmed free text.
  */
-export function resolveMasterCode(value: string, items: readonly MasterLabelFields[]): string {
+export function resolveMasterCode(
+	value: string,
+	items: readonly (MasterLabelFields & { status?: MasterDataItem['status'] })[]
+): string {
 	const text = value.trim();
 	if (!text) return '';
 	if (items.some((i) => i.code === text)) return text;
 	const target = normalizeLabel(text);
 	const match = items.find(
-		(i) => normalizeLabel(i.label_th) === target || normalizeLabel(i.label_en) === target
+		(i) =>
+			i.status !== 'inactive' &&
+			(normalizeLabel(i.label_th) === target || normalizeLabel(i.label_en) === target)
 	);
 	return match ? match.code : text;
+}
+
+/** {@link resolveMasterCode} over a list: blanks dropped, duplicates after mapping removed. */
+export function resolveMasterCodes(
+	values: readonly string[],
+	items: readonly (MasterLabelFields & { status?: MasterDataItem['status'] })[]
+): string[] {
+	return [...new Set(values.map((v) => resolveMasterCode(v, items)).filter(Boolean))];
 }
 
 // ---------------------------------------------------------------- unique label

@@ -156,8 +156,7 @@ export const MASTER_DATA_DEFS: MasterTypeDef[] = [
 			{ key: 'cancer', label_th: 'มะเร็ง', label_en: 'Cancer' },
 			{ key: 'epilepsy', label_th: 'ลมชัก', label_en: 'Epilepsy' },
 			{ key: 'hiv', label_th: 'ติดเชื้อเอชไอวี (HIV)', label_en: 'HIV infection' },
-			{ key: 'psychiatric_disorder', label_th: 'โรคทางจิตเวช', label_en: 'Psychiatric disorder' },
-			{ key: 'other', label_th: 'อื่นๆ', label_en: 'Other' }
+			{ key: 'psychiatric_disorder', label_th: 'โรคทางจิตเวช', label_en: 'Psychiatric disorder' }
 		]
 	}
 ];
