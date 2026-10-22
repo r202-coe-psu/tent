@@ -4,6 +4,8 @@ import subprocess
 import time
 from collections.abc import Callable
 
+from printer.ipp import job_state as ipp_job_state
+
 _REQUEST_ID = re.compile(r"request id is (\S+)")
 
 
@@ -15,12 +17,14 @@ class Cups:
         sleep: Callable[[float], None] = time.sleep,
         monotonic: Callable[[], float] = time.monotonic,
         command_timeout: float = 10,
+        job_state: Callable[[str], str | None] | None = None,
     ):
         self.printer_name = printer_name
         self.ppi = ppi
         self._sleep = sleep
         self._monotonic = monotonic
         self._command_timeout = command_timeout
+        self._job_state = job_state or ipp_job_state
 
     def _run(self, args: list[str], input: bytes | None = None) -> tuple[int, str] | None:
         """Run a CUPS command; returns (exit code, stdout) or None if it could not run at all."""
@@ -78,6 +82,13 @@ class Cups:
             if self._monotonic() >= deadline:
                 return "timeout"
             self._sleep(poll_sec)
+        # job-state is authoritative; the "Alerts:" text is only a fallback when cupsd's IPP
+        # endpoint can't be read (CUPS 2.3.3 shows processing-to-stop-point on printed jobs).
+        state = self._job_state(job_id)
+        if state == "completed":
+            return "completed"
+        if state in ("aborted", "canceled"):
+            return "aborted"
         completed = self._run(["lpstat", "-l", "-W", "completed", "-o", self.printer_name])
         alerts = _alerts_for(completed[1], job_id) if completed else ""
         return "completed" if "job-completed-successfully" in alerts else "aborted"

@@ -92,6 +92,37 @@ def test_ensure_enabled_does_not_call_cupsenable_when_queue_is_missing(fake_cups
     assert fake_cups.calls("cupsenable") == []
 
 
+PI_COMPLETED_42 = """\
+tent_xprinter-42        printer          15360   Thu Oct 22 17:57:56 2026
+    Status:
+    Alerts: processing-to-stop-point
+    queued for tent_xprinter
+"""
+
+
+def test_wait_done_trusts_ipp_job_state_over_a_stale_alert(fake_cups):
+    """CUPS 2.3.3 shows processing-to-stop-point on a job that printed fine."""
+    fake_cups.set("lpstat_completed", out=PI_COMPLETED_42)
+    fake_cups.job_states["tent_xprinter-42"] = "completed"
+
+    assert cups_with(FakeClock()).wait_done("tent_xprinter-42", timeout_sec=30) == "completed"
+
+
+def test_wait_done_is_aborted_when_ipp_says_aborted_or_canceled(fake_cups):
+    fake_cups.set("lpstat_completed", out=COMPLETED)
+    fake_cups.job_states["tent_xprinter-42"] = "aborted"
+    fake_cups.job_states["tent_xprinter-43"] = "canceled"
+
+    assert cups_with(FakeClock()).wait_done("tent_xprinter-42", timeout_sec=30) == "aborted"
+    assert cups_with(FakeClock()).wait_done("tent_xprinter-43", timeout_sec=30) == "aborted"
+
+
+def test_wait_done_falls_back_to_alerts_when_ipp_is_unavailable(fake_cups):
+    fake_cups.set("lpstat_completed", out=PI_COMPLETED_42)
+
+    assert cups_with(FakeClock()).wait_done("tent_xprinter-42", timeout_sec=30) == "aborted"
+
+
 def cups_with(clock: FakeClock) -> Cups:
     return Cups("tent_xprinter", 203, sleep=clock.sleep, monotonic=clock.monotonic)
 

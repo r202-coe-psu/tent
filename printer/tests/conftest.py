@@ -70,6 +70,11 @@ class FakeCups:
 
     def __init__(self, directory: Path):
         self.dir = directory
+        # IPP job-state per CUPS job id; a missing id behaves like an unreachable cupsd (None).
+        self.job_states: dict[str, str] = {}
+
+    def job_state(self, job_id: str) -> str | None:
+        return self.job_states.get(job_id)
 
     def install(self) -> None:
         for command in self.COMMANDS:
@@ -131,6 +136,7 @@ def fake_cups(tmp_path, monkeypatch) -> FakeCups:
     bin_dir.mkdir()
     fake = FakeCups(bin_dir)
     fake.install()
+    monkeypatch.setattr("printer.cups.ipp_job_state", fake.job_state)
     monkeypatch.setenv("PATH", f"{bin_dir}:/usr/bin:/bin")
     monkeypatch.setenv("LC_ALL", "en_US.UTF-8")
     return fake
