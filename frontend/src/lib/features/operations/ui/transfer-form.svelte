@@ -8,7 +8,11 @@
 	import { z } from 'zod';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { authStore } from '$lib/stores/auth.svelte';
-	import { useCreateTransfer, useStockBalance } from '../application/queries';
+	import {
+		useCreateTransfer,
+		useStockBalance,
+		useTransferDestinations
+	} from '../application/queries';
 	import { useStockFormItems } from '../application/use-stock-form-items.svelte';
 	import type { StockFormItem } from '../domain/stock-form-items';
 	import ItemCombobox from './item-combobox.svelte';
@@ -19,7 +23,6 @@
 		defaultIssueUom,
 		qtyToBaseUnit
 	} from '$lib/features/catalog';
-	import { useShelters } from '$lib/features/shelters';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { toast } from 'svelte-sonner';
 	import Truck from '@lucide/svelte/icons/truck';
@@ -33,13 +36,20 @@
 	const createMutation = useCreateTransfer();
 	const unitsQuery = useUnitsOfMeasure();
 	const units = $derived(unitsQuery.data ?? []);
-	const sheltersQuery = useShelters();
+	// Not `useShelters()`: that list is scoped to the caller's own shelter for everyone but
+	// system_admin, so after dropping our own shelter nothing would be left (#570).
+	const destinationsQuery = useTransferDestinations();
 	const stockItems = useStockFormItems(() => getShelterCode());
 	const balanceQuery = useStockBalance();
 
 	const ownShelter = getShelterCode();
 	const destinationShelters = $derived(
-		(sheltersQuery.data ?? []).filter((s) => s.code !== ownShelter)
+		(destinationsQuery.data ?? []).filter((s) => s.code !== ownShelter)
+	);
+	/** Loaded, and there is no other shelter to send to — say so rather than leave a dead form. */
+	const noDestination = $derived(destinationsQuery.isSuccess && destinationShelters.length === 0);
+	const canPickDestination = $derived(
+		destinationsQuery.isSuccess && destinationShelters.length > 0
 	);
 	const items = $derived(stockItems.items);
 	const balanceByItemId = $derived(balanceQuery.data ?? new Map<string, string>());
@@ -163,7 +173,7 @@
 						onValueChange={(value) => {
 							if (value) $formData.to_shelter = value;
 						}}
-						disabled={sheltersQuery.isLoading || destinationShelters.length === 0}
+						disabled={!canPickDestination}
 					>
 						<Select.Trigger {...props} class="min-h-11 w-full">
 							{selectedShelterLabel}
@@ -179,6 +189,15 @@
 					</Select.Root>
 				{/snippet}
 			</Form.Control>
+			{#if destinationsQuery.isError}
+				<p class="text-xs text-destructive" role="alert">
+					โหลดรายชื่อศูนย์ปลายทางไม่สำเร็จ กรุณาลองใหม่อีกครั้ง
+				</p>
+			{:else if noDestination}
+				<p class="text-xs text-muted-foreground" role="status">
+					ยังไม่มีศูนย์อื่นในระบบให้โอนไป ต้องมีศูนย์ปลายทางอย่างน้อย 1 ศูนย์จึงจะส่งคำขอโอนได้
+				</p>
+			{/if}
 			<Form.FieldErrors />
 		</Form.Field>
 
@@ -296,7 +315,11 @@
 
 		<div class="pt-1">
 			<Form.Button
-				disabled={$submitting || offline || !selectedItem || qtyLte(currentStock, 0)}
+				disabled={$submitting ||
+					offline ||
+					!canPickDestination ||
+					!selectedItem ||
+					qtyLte(currentStock, 0)}
 				class="min-h-11 w-full font-bold"
 			>
 				{$submitting ? 'กำลังบันทึก…' : 'ส่งคำขอโอน'}

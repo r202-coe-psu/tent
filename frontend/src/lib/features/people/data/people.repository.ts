@@ -140,6 +140,13 @@ export interface PeopleRepository {
 	 * {@link listEvacueesPaginated} (no paging) — used for select-all-matching.
 	 */
 	listMatchingEvacueeIds(search?: string, filters?: EvacueeFilters): Promise<string[]>;
+	/**
+	 * The subset of `ids` whose evacuee may still be hold-cancelled (D-HOLD-CANCEL). Lets a bulk
+	 * cancel skip rows it already knows will be rejected, including rows selected on another page.
+	 */
+	listCancellableEvacueeIds(ids: readonly string[]): Promise<string[]>;
+	/** The subset of `ids` whose household may still be hold-cancelled (D-HOLD-CANCEL). */
+	listCancellableHouseholdIds(ids: readonly string[]): Promise<string[]>;
 	/** One household by `_id`, or `null` when absent. */
 	getHousehold(id: string): Promise<Household | null>;
 	/** Persist an edited household (LWW: bumps `updated_at`). */

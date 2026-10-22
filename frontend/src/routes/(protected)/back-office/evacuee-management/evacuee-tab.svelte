@@ -18,6 +18,7 @@
 		useCheckInEvacuee,
 		useCancelEvacueePreRegistration,
 		listMatchingEvacueeIds,
+		listCancellableEvacueeIds,
 		canCheckInEvacuee,
 		canCancelEvacueePreRegistration,
 		migrateVulnerableGroupCode,
@@ -120,6 +121,10 @@
 	const selectedEligibleCount = $derived(
 		items.filter((e) => selectedIds.includes(e._id) && canCancelEvacueePreRegistration(e)).length
 	);
+	// Selection survives paging, so rows picked on another page are not in `items` and their status
+	// is unknown here. Keep the button when any such row is selected and settle the real set on click.
+	const hasUnseenSelection = $derived(selectedIds.some((id) => !pageIds.includes(id)));
+	const canBulkCancel = $derived(selectedEligibleCount > 0 || hasUnseenSelection);
 
 	function clearSelection() {
 		selectedIds = [];
@@ -184,19 +189,39 @@
 
 	async function handleBulkCancel() {
 		if (!canCancel || selectedIds.length === 0) return;
-		if (
-			!window.confirm(
-				`ยืนยันยกเลิกการลงทะเบียนล่วงหน้าของ ${selectedIds.length} รายการที่เลือกหรือไม่?\n(เฉพาะสถานะลงทะเบียนล่วงหน้าจะถูกยกเลิก)`
-			)
-		) {
+
+		isBulkCancelling = true;
+		let cancellableIds: string[];
+		try {
+			cancellableIds = await listCancellableEvacueeIds(selectedIds);
+		} catch (err) {
+			isBulkCancelling = false;
+			toast.error(err instanceof Error ? err.message : 'ตรวจสอบรายการที่ยกเลิกได้ไม่สำเร็จ');
 			return;
 		}
 
-		isBulkCancelling = true;
+		if (cancellableIds.length === 0) {
+			isBulkCancelling = false;
+			toast.info('ไม่มีรายการที่ยกเลิกได้ในสิ่งที่เลือก');
+			return;
+		}
+
+		const skipped = selectedIds.length - cancellableIds.length;
+		const skippedNote =
+			skipped > 0 ? `\n(ข้าม ${skipped} รายการที่ไม่ใช่สถานะลงทะเบียนล่วงหน้า)` : '';
+		if (
+			!window.confirm(
+				`ยืนยันยกเลิกการลงทะเบียนล่วงหน้าของ ${cancellableIds.length} รายการหรือไม่?${skippedNote}`
+			)
+		) {
+			isBulkCancelling = false;
+			return;
+		}
+
 		const ctx = { shelterCode: getShelterCode(), createdBy: authStore.user?.name ?? 'staff' };
 		let ok = 0;
 		let failed = 0;
-		for (const id of selectedIds) {
+		for (const id of cancellableIds) {
 			try {
 				await cancelEvacuee.mutateAsync({ evacueeId: id, ctx });
 				ok += 1;
@@ -207,8 +232,7 @@
 		isBulkCancelling = false;
 		clearSelection();
 		if (ok > 0) toast.success(`ยกเลิกการลงทะเบียนล่วงหน้าสำเร็จ ${ok} รายการ`);
-		if (failed > 0)
-			toast.error(`ยกเลิกไม่สำเร็จ ${failed} รายการ (อาจไม่ใช่สถานะลงทะเบียนล่วงหน้า)`);
+		if (failed > 0) toast.error(`ยกเลิกไม่สำเร็จ ${failed} รายการ`);
 	}
 
 	$effect(() => {
@@ -381,7 +405,7 @@
 				<Button variant="ghost" size="sm" class="min-h-11 w-full sm:w-auto" onclick={clearSelection}
 					>ล้างการเลือก</Button
 				>
-				{#if canCancel}
+				{#if canCancel && canBulkCancel}
 					<Button
 						variant="destructive"
 						size="sm"
