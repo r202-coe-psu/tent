@@ -2,8 +2,8 @@
 title: Smart Shelter — API Contract v1
 status: draft for review
 created: 2026-06-11
-updated: 2026-10-21
-note: CR-182 approved (2026-10-21, #751) — EXT-002/003 เพิ่ม `accepts_booking` + filter `?accepts_booking=`; EXT-008 เปลี่ยนกติกา bookability (ศูนย์ที่ไม่มี `accepts_pre_registration` = จองไม่ได้ → 409 — breaking สำหรับ M2) + scope ใหม่ `booking-bypass` (EOC override; log `granted_bypass`, `external_bookings.bypass`); CR-181 approved (2026-10-21) — EXT-012 `POST /external/persons/search` (scope `occupant-search`) + sort deterministic ของ ID search (#736); CR-176 (2026-10-20) — EXT-011 `cancelled` / `kiosk_registered` (ไม่เคย check-in) = 404 `residency_not_found` (#710); คู่กับ data-model.md v3 — ตัดสิน sync boundary: staff app คุย CouchDB ตรง, service API มีเฉพาะที่ CouchDB ทำเองไม่ได้; CR-112/CR-113 occupancy + unassigned registration; Partner Data API EXT-001–007 (#214); CR-124 staff Google step-up MFA + Google SSO login (enrolled + mint AuthSession); decision sync 2026-10-08 — เพิ่ม GET /public/v1/unassigned-registrations/{id}/status (service secret, status-only) แทนการเรียก staff detail จาก BFF registrations/status — แก้ ticket คิวกลางหายจากอุปกรณ์ (QA pre-register 2026-10-08); decision sync 2026-10-09 — `breakdown` ของ EXT-005 เพิ่ม `gender_unspecified` (null+other; `male+female+gender_unspecified = occupancy_total`) และ `POST /public/v1/unassigned-registrations` รับ `members[].gender = null`; CR-157 (2026-10-10) — เพิ่ม `GET /api/public/v1/donations/slots` (BFF-only อ่าน CouchDB ฝั่ง server) และ error code ของ slot ใน `POST /public/v1/donations` (`SLOT_REQUIRED`, `SLOT_UNAVAILABLE`, `SLOT_FULL`, `SLOTS_UNAVAILABLE`); CR-162 — §2.3 kiosk banner (`POST /api/v1/kiosk/banners`, signed image GET, back-office `/api/back-office/kiosk-banners/**` + `PUT …/order`) และ §2.2 field เครื่อง `screen_type` / `banner_enabled` (ส่วนที่ปรับ 2026-10-15..17 Team Lead อนุมัติ 2026-10-18); CR-151 §17 (2026-10-18, approved 2026-10-20) — §2.1.2 `POST /api/v1/kiosk/volunteer-card` พิมพ์ QR จิตอาสาแบบอ่านอย่างเดียว; CR-162 ส่วนที่ปรับ 2026-10-21 (proposed โดยทีม kiosk · ยังไม่อนุมัติ) — kiosk banner group: §2.2 `PATCH /api/v1/kiosk/devices/[id]` ตัด `banner_enabled` + summary มี `banner_group_id`, §2.3 feed กรองตาม `banner_group_id`, banner `group_id`, order body `group_id`, §2.3.1 `/api/back-office/kiosk-banner-groups/**`
+updated: 2026-10-22
+note: CR-182 approved (2026-10-21, #751) — EXT-002/003 เพิ่ม `accepts_booking` + filter `?accepts_booking=`; EXT-008 เปลี่ยนกติกา bookability (ศูนย์ที่ไม่มี `accepts_pre_registration` = จองไม่ได้ → 409 — breaking สำหรับ M2) + scope ใหม่ `booking-bypass` (EOC override; log `granted_bypass`, `external_bookings.bypass`); CR-181 approved (2026-10-21) — EXT-012 `POST /external/persons/search` (scope `occupant-search`) + sort deterministic ของ ID search (#736); CR-176 (2026-10-20) — EXT-011 `cancelled` / `kiosk_registered` (ไม่เคย check-in) = 404 `residency_not_found` (#710); คู่กับ data-model.md v3 — ตัดสิน sync boundary: staff app คุย CouchDB ตรง, service API มีเฉพาะที่ CouchDB ทำเองไม่ได้; CR-112/CR-113 occupancy + unassigned registration; Partner Data API EXT-001–007 (#214); CR-124 staff Google step-up MFA + Google SSO login (enrolled + mint AuthSession); decision sync 2026-10-08 — เพิ่ม GET /public/v1/unassigned-registrations/{id}/status (service secret, status-only) แทนการเรียก staff detail จาก BFF registrations/status — แก้ ticket คิวกลางหายจากอุปกรณ์ (QA pre-register 2026-10-08); decision sync 2026-10-09 — `breakdown` ของ EXT-005 เพิ่ม `gender_unspecified` (null+other; `male+female+gender_unspecified = occupancy_total`) และ `POST /public/v1/unassigned-registrations` รับ `members[].gender = null`; CR-157 (2026-10-10) — เพิ่ม `GET /api/public/v1/donations/slots` (BFF-only อ่าน CouchDB ฝั่ง server) และ error code ของ slot ใน `POST /public/v1/donations` (`SLOT_REQUIRED`, `SLOT_UNAVAILABLE`, `SLOT_FULL`, `SLOTS_UNAVAILABLE`); CR-162 — §2.3 kiosk banner (`POST /api/v1/kiosk/banners`, signed image GET, back-office `/api/back-office/kiosk-banners/**` + `PUT …/order`) และ §2.2 field เครื่อง `screen_type` / `banner_enabled` (ส่วนที่ปรับ 2026-10-15..17 Team Lead อนุมัติ 2026-10-18); CR-151 §17 (2026-10-18, approved 2026-10-20) — §2.1.2 `POST /api/v1/kiosk/volunteer-card` พิมพ์ QR จิตอาสาแบบอ่านอย่างเดียว; CR-162 ส่วนที่ปรับ 2026-10-21 (Team Lead อนุมัติ 2026-10-22) — kiosk banner group: §2.2 `PATCH /api/v1/kiosk/devices/[id]` ตัด `banner_enabled` + summary มี `banner_group_id`, §2.3 feed กรองตาม `banner_group_id`, banner `group_id`, order body `group_id`, §2.3.1 `/api/back-office/kiosk-banner-groups/**`
 ---
 
 # Smart Shelter — API Contract v1
@@ -335,7 +335,7 @@ Content-Type: application/json
 ร่วมกับ field เดิม · summary ของรายการเครื่องมี `screen_type` และ `banner_enabled` เสมอ (doc ที่ไม่มี field อ่านเป็น
 `compact` / `true`).
 
-> **ปรับ 2026-10-21 — เสนอโดยทีม kiosk (proposed, ยังไม่อนุมัติ; CR-162 FR-KBG-14..15):** `banner_enabled` ถูกแทนที่ด้วย
+> **ปรับ 2026-10-21 — เสนอโดยทีม kiosk (Team Lead อนุมัติ 2026-10-22; CR-162 FR-KBG-14..15):** `banner_enabled` ถูกแทนที่ด้วย
 > `banner_group_id` — `POST /api/v1/kiosk/devices` **ไม่เขียน** `banner_enabled` อีก (เครื่องใหม่ไม่มีกลุ่ม) ·
 > `PATCH /api/v1/kiosk/devices/[id]` **ไม่รับ** `banner_enabled` (strict body → `422`; การจัดกลุ่มเครื่องทำผ่าน
 > `/api/back-office/kiosk-banner-groups/**` §2.3.1 เท่านั้น — PATCH ของเครื่องไม่รับ `banner_group_id`) · summary ของรายการ
@@ -392,7 +392,7 @@ X-Device-Secret: <secret>
 `screen_type` = `compact`) ที่ `status = active` และ `start_at ≤ now < end_at` เรียง `order` → `start_at` → `_id`
 สูงสุด 20 รายการ (กรองก่อนตัด cap) · เครื่องที่ `banner_enabled = false` ได้ `banners: []` โดย server ไม่ query banner:
 
-> **ปรับ 2026-10-21 — เสนอโดยทีม kiosk (proposed, ยังไม่อนุมัติ; CR-162 FR-KBG-30..33) — แทนที่เงื่อนไข `banner_enabled` ด้านบน:**
+> **ปรับ 2026-10-21 — เสนอโดยทีม kiosk (Team Lead อนุมัติ 2026-10-22; CR-162 FR-KBG-30..33) — แทนที่เงื่อนไข `banner_enabled` ด้านบน:**
 > เครื่องที่ไม่มี `banner_group_id` ได้ `{ banners: [], fetched_at }` โดย server ไม่ query banner · เครื่องที่มี → คืน banner ที่
 > `status = active` และ `start_at ≤ now < end_at` และ `shelter_code` + **`group_id` (= `banner_group_id` ของเครื่อง)** +
 > `screen_type` ตรงกับเครื่อง (จาก device principal เท่านั้น) เรียง `order` → `start_at` → `_id` สูงสุด 20 รายการ (กรองก่อนตัด cap) ·
@@ -417,7 +417,7 @@ X-Device-Secret: <secret>
 
 | ผล | Response |
 | --- | --- |
-| สำเร็จ (รวมกรณีไม่มี banner / ~~`banner_enabled = false`~~ → เครื่องไม่มี `banner_group_id` (proposed 2026-10-21)) | `200` · `banners: []` ได้ |
+| สำเร็จ (รวมกรณีไม่มี banner / ~~`banner_enabled = false`~~ → เครื่องไม่มี `banner_group_id` (2026-10-21)) | `200` · `banners: []` ได้ |
 | device credential ผิด / เครื่อง inactive | `401 DEVICE_AUTH_FAILED` |
 | registry ใช้ไม่ได้ | `503 DEPENDENCY_UNAVAILABLE` |
 
@@ -442,19 +442,19 @@ GET /api/v1/kiosk/banners/{id}/image?exp={unix_sec}&sig={hex}
 | Method | Path | Body / query | สำเร็จ | ข้อผิดพลาด |
 | --- | --- | --- | --- | --- |
 | `GET` | `/api/back-office/kiosk-banners` | `?shelter_code=` (req) `&view=current\|expired` (default `current`) · `current` = `end_at ≥ now` เรียง `start_at` asc · `expired` = `end_at < now` เรียง `end_at` desc | `200 KioskBannerSummary[]` (ไม่มี `_attachments` · มี `image_content_type`) | `422` · `403` |
-| `POST` | `/api/back-office/kiosk-banners` | `?shelter_code=` (req) · body = field แก้ไขได้ + `image: { content_type, data_base64 }` (req) | `201 KioskBannerSummary` (`order` ต่อท้ายของ `screen_type` นั้น · **proposed 2026-10-21:** ต่อท้ายของ (`group_id`, `screen_type`) และ body ต้องมี `group_id` — ขาด / ไม่รู้จัก / กลุ่มของศูนย์อื่น `422`) | `403` · field / รูปผิด `422` |
+| `POST` | `/api/back-office/kiosk-banners` | `?shelter_code=` (req) · body = field แก้ไขได้ + `image: { content_type, data_base64 }` (req) | `201 KioskBannerSummary` (`order` ต่อท้ายของ `screen_type` นั้น · **2026-10-21:** ต่อท้ายของ (`group_id`, `screen_type`) และ body ต้องมี `group_id` — ขาด / ไม่รู้จัก / กลุ่มของศูนย์อื่น `422`) | `403` · field / รูปผิด `422` |
 | `GET` | `/api/back-office/kiosk-banners/{id}` | — | `200 KioskBannerSummary` (มี `_rev`) | `404` |
-| `PUT` | `/api/back-office/kiosk-banners/{id}` | field แก้ไขได้ + `_rev` (req) + `image` (opt — ไม่ส่ง = คงรูปเดิม) · ห้ามมี `shelter_code` · ไม่รับ `order` | `200` · **proposed 2026-10-21:** body ต้องมี `group_id` (ขาด / ไม่รู้จัก / กลุ่มของศูนย์อื่น `422`) · ย้ายกลุ่มหรือย้ายขนาดจอ → `order` ต่อท้าย slot ใหม่ · แก้ banner v1 ต้องส่ง `group_id` แล้วเขียนเป็น v2 | `404` · มี `shelter_code` หรือ field ผิด `422` · `_rev` ชน `409 CONFLICT` |
+| `PUT` | `/api/back-office/kiosk-banners/{id}` | field แก้ไขได้ + `_rev` (req) + `image` (opt — ไม่ส่ง = คงรูปเดิม) · ห้ามมี `shelter_code` · ไม่รับ `order` | `200` · **2026-10-21:** body ต้องมี `group_id` (ขาด / ไม่รู้จัก / กลุ่มของศูนย์อื่น `422`) · ย้ายกลุ่มหรือย้ายขนาดจอ → `order` ต่อท้าย slot ใหม่ · แก้ banner v1 ต้องส่ง `group_id` แล้วเขียนเป็น v2 | `404` · มี `shelter_code` หรือ field ผิด `422` · `_rev` ชน `409 CONFLICT` |
 | `PATCH` | `/api/back-office/kiosk-banners/{id}` | `{ _rev, status }` เท่านั้น (strict) | `200` | `404` · `422` · `409` |
 | `DELETE` | `/api/back-office/kiosk-banners/{id}?rev=` | — (hard delete) | `204` | `404` · `409` |
 | `GET` | `/api/back-office/kiosk-banners/{id}/image` | — (รูปสำหรับ preview ในหน้าจัดการ) | `200` + รูป · `cache-control: private, no-store` | `404` |
-| `PUT` | `/api/back-office/kiosk-banners/order` | `?shelter_code=` (req) · `{ screen_type, items: [{ id, _rev }] }` ครบทุก banner ที่ยังไม่หมดอายุของขนาดนั้น · **proposed 2026-10-21:** `{ group_id, screen_type, items: [{ id, _rev }] }` ครบทุก banner ที่ยังไม่หมดอายุของ slot (`group_id`, `screen_type`) นั้น (ส่งได้ทีละ slot) | `200` (เขียน `order` 1..n เฉพาะรายการที่เปลี่ยน) | `403` · `id` ซ้ำ `422` · ชุด `id` ไม่ตรง / `_rev` ไม่ตรง `409` |
+| `PUT` | `/api/back-office/kiosk-banners/order` | `?shelter_code=` (req) · `{ screen_type, items: [{ id, _rev }] }` ครบทุก banner ที่ยังไม่หมดอายุของขนาดนั้น · **2026-10-21:** `{ group_id, screen_type, items: [{ id, _rev }] }` ครบทุก banner ที่ยังไม่หมดอายุของ slot (`group_id`, `screen_type`) นั้น (ส่งได้ทีละ slot) | `200` (เขียน `order` 1..n เฉพาะรายการที่เปลี่ยน) | `403` · `id` ซ้ำ `422` · ชุด `id` ไม่ตรง / `_rev` ไม่ตรง `409` |
 
 "field แก้ไขได้" = `title`, `caption`, `duration_sec`, `start_at`, `end_at`, `status`, `screen_type` · รูปผิดชนิด
 (magic bytes) / base64 ไม่ canonical / เกิน 2 MB หลัง decode / field ไม่ผ่าน Zod → `422 VALIDATION` · body upload
 จำกัดที่ Node server ด้วย `BODY_SIZE_LIMIT=4M`.
 
-#### 2.3.1 Kiosk banner group — back-office (proposed 2026-10-21 · เสนอโดยทีม kiosk · ยังไม่อนุมัติ — CR-162 FR-KBG-20..29)
+#### 2.3.1 Kiosk banner group — back-office (2026-10-21 · Team Lead อนุมัติ 2026-10-22 — CR-162 FR-KBG-20..29)
 
 กลุ่ม banner ต่อศูนย์ (schema.md §3.13) · guard เหมือน `/api/back-office/kiosk-banners` ทุกข้อ (SA ทุกศูนย์ ·
 `{code}:shelter_manager` / `{code}:kiosk_staff` เฉพาะศูนย์ตัวเอง · list / create นอก scope `403` · endpoint ที่มี `{id}` ไม่พบหรือ

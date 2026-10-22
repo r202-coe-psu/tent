@@ -32,8 +32,12 @@
 		() => 'expired'
 	);
 
-	/** Evaluation time for "active now". */
-	const now = new Date();
+	/** Evaluation time for "active now"; ticks so a page left open follows schedule changes. */
+	let now = $state(new Date());
+	$effect(() => {
+		const timer = setInterval(() => (now = new Date()), 30_000);
+		return () => clearInterval(timer);
+	});
 
 	const groups = $derived(groupsQuery.data ?? []);
 	const current = $derived(currentQuery.data ?? []);

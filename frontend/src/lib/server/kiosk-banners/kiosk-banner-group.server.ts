@@ -8,7 +8,7 @@ import {
 	type KioskBannerGroupInput
 } from '$lib/features/kiosk-banners';
 import { scannerDeviceRepository } from '$lib/server/scanners/device-repository';
-import { BannerNotFoundError, listBannersForShelter } from './kiosk-banner.server';
+import { GroupNotFoundError, listBannersForShelter } from './kiosk-banner.server';
 
 /** Group doc plus the `device_id` of every kiosk of its shelter that is fed from it. */
 export type KioskBannerGroupRecord = KioskBannerGroupDoc & { device_ids: string[] };
@@ -100,6 +100,7 @@ export async function createGroup(
 	ctx: KioskBannerGroupContext,
 	now: Date = new Date()
 ): Promise<KioskBannerGroupRecord> {
+	// Best effort: CouchDB has no unique constraint, so two concurrent creates can both pass.
 	if (isDuplicateGroupName(await findGroupDocs(ctx.shelterCode), input.name)) {
 		throw new ServiceError('CONFLICT', DUPLICATE_NAME_MESSAGE);
 	}
@@ -116,7 +117,7 @@ export async function updateGroup(
 	now: Date = new Date()
 ): Promise<KioskBannerGroupRecord> {
 	const current = await readGroupDoc(id);
-	if (!current) throw new BannerNotFoundError(id);
+	if (!current) throw new GroupNotFoundError(id);
 	if (current._rev !== rev) {
 		throw new ServiceError('CONFLICT', STALE_GROUP_MESSAGE);
 	}
@@ -168,13 +169,26 @@ export async function setGroupDevices(
 
 export async function deleteGroup(id: string, rev: string, by: string): Promise<void> {
 	const group = await readGroupDoc(id);
-	if (!group) throw new BannerNotFoundError(id);
+	if (!group) throw new GroupNotFoundError(id);
 	if (group._rev !== rev) {
 		throw new ServiceError('CONFLICT', STALE_GROUP_MESSAGE);
 	}
 	const banners = await listBannersForShelter(group.shelter_code);
 	if (banners.some((b) => groupOf(b) === id)) {
 		throw new ServiceError('CONFLICT', 'ลบกลุ่มไม่ได้ ยังมีแบนเนอร์ในกลุ่ม');
+	}
+	// Delete first (FR-KBG-06): a failed delete leaves the group and its kiosks untouched, and a
+	// kiosk left pointing at a deleted group simply gets an empty feed.
+	const res = await adminRaw(`${docPath(id)}?rev=${encodeURIComponent(rev)}`, 'DELETE');
+	if (res.status === 404) throw new GroupNotFoundError(id);
+	if (res.status === 409) {
+		throw new ServiceError('CONFLICT', STALE_GROUP_MESSAGE);
+	}
+	if (res.status >= 400) {
+		throw new ServiceError(
+			'INTERNAL',
+			`Could not delete banner group ${id} (${res.status}): ${couchDetail(res.data)}`
+		);
 	}
 	const devices = await scannerDeviceRepository.listDevices([group.shelter_code]);
 	const members = devices.filter((d) => d.banner_group_id === id);
@@ -183,17 +197,6 @@ export async function deleteGroup(id: string, rev: string, by: string): Promise<
 			members.map((d) => d._id),
 			null,
 			by
-		);
-	}
-	const res = await adminRaw(`${docPath(id)}?rev=${encodeURIComponent(rev)}`, 'DELETE');
-	if (res.status === 404) throw new BannerNotFoundError(id);
-	if (res.status === 409) {
-		throw new ServiceError('CONFLICT', STALE_GROUP_MESSAGE);
-	}
-	if (res.status >= 400) {
-		throw new ServiceError(
-			'INTERNAL',
-			`Could not delete banner group ${id} (${res.status}): ${couchDetail(res.data)}`
 		);
 	}
 }

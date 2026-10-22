@@ -15,6 +15,7 @@ import { z } from 'zod';
 import {
 	BannerNotFoundError,
 	getBanner,
+	GroupNotFoundError,
 	type DecodedBannerImage,
 	type KioskBannerRecord
 } from './kiosk-banner.server';
@@ -61,8 +62,9 @@ export async function loadGroupInScope(
 ): Promise<KioskBannerGroupRecord> {
 	const docId = makeDocId('kiosk_banner_group', idParam);
 	const group = await getGroup(docId);
-	if (!group) throw new BannerNotFoundError(docId);
-	assertBannerInScope(caller, group);
+	if (!group || !callerCanManage(caller, [group.shelter_code])) {
+		throw new GroupNotFoundError(docId);
+	}
 	return group;
 }
 
@@ -97,10 +99,12 @@ export function parseBody<S extends z.ZodType>(schema: S, body: unknown): z.outp
 	return parsed.data;
 }
 
-/** Map a thrown error to the contract envelope; a missing banner is `404 NOT_FOUND`. */
+/** Map a thrown error to the contract envelope; a missing banner or group is `404 NOT_FOUND`. */
 export function bannerErrorResponse(error: unknown): Response {
 	if (error instanceof BannerNotFoundError) {
-		return json({ error: { code: 'NOT_FOUND', message: 'Banner not found' } }, { status: 404 });
+		const message =
+			error instanceof GroupNotFoundError ? 'Banner group not found' : 'Banner not found';
+		return json({ error: { code: 'NOT_FOUND', message } }, { status: 404 });
 	}
 	return serviceError(error);
 }

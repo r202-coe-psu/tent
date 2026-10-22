@@ -46,6 +46,15 @@ export class BannerNotFoundError extends Error {
 	}
 }
 
+/** Banner group doc does not exist; still a `BannerNotFoundError`, so every route maps it to 404. */
+export class GroupNotFoundError extends BannerNotFoundError {
+	constructor(id: string) {
+		super(id);
+		this.message = `Banner group ${id} not found`;
+		this.name = 'GroupNotFoundError';
+	}
+}
+
 const docPath = (id: string): string => `/${REGISTRY_DB}/${encodeURIComponent(id)}`;
 
 function toInline(image: DecodedBannerImage): InlineAttachment {

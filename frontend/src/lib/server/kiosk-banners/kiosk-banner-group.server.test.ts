@@ -15,7 +15,7 @@ vi.mock('./kiosk-banner.server', async (importOriginal) => ({
 import { adminRaw } from '$lib/server/couch-admin';
 import { scannerDeviceRepository } from '$lib/server/scanners/device-repository';
 import type { KioskBannerGroupDoc } from '$lib/features/kiosk-banners';
-import { BannerNotFoundError, listBannersForShelter } from './kiosk-banner.server';
+import { GroupNotFoundError, listBannersForShelter } from './kiosk-banner.server';
 import {
 	createGroup,
 	deleteGroup,
@@ -291,12 +291,12 @@ describe('updateGroup', () => {
 		expect(adminRawMock.mock.calls.filter(([, method]) => method === 'PUT')).toHaveLength(0);
 	});
 
-	it('throws BannerNotFoundError for a missing group', async () => {
+	it('throws GroupNotFoundError for a missing group', async () => {
 		adminRawMock.mockResolvedValueOnce({ status: 404, data: { error: 'not_found' } });
 
 		await expect(
 			updateGroup(GROUP_A, '2-b', { name: 'ใหม่', description: null }, NOW)
-		).rejects.toBeInstanceOf(BannerNotFoundError);
+		).rejects.toBeInstanceOf(GroupNotFoundError);
 	});
 });
 
@@ -306,7 +306,7 @@ describe('deleteGroup', () => {
 		({ _id: id, group_id: groupId, end_at: endAt }) as never;
 	const deletes = () => adminRawMock.mock.calls.filter(([, method]) => method === 'DELETE');
 
-	it('frees its kiosks, then deletes the doc under the given rev', async () => {
+	it('deletes the doc under the given rev, then frees its kiosks', async () => {
 		adminRawMock
 			.mockResolvedValueOnce({ status: 200, data: current })
 			.mockResolvedValueOnce({ status: 200, data: { ok: true } });
@@ -332,9 +332,22 @@ describe('deleteGroup', () => {
 			`/registry/${encodeURIComponent(GROUP_A)}?rev=2-b`,
 			'DELETE'
 		]);
-		expect(setBannerGroupMock.mock.invocationCallOrder[0]).toBeLessThan(
-			adminRawMock.mock.invocationCallOrder[1]
+		expect(adminRawMock.mock.invocationCallOrder[1]).toBeLessThan(
+			setBannerGroupMock.mock.invocationCallOrder[0]
 		);
+	});
+
+	it('leaves every kiosk in the group when the delete is rejected as stale', async () => {
+		adminRawMock
+			.mockResolvedValueOnce({ status: 200, data: current })
+			.mockResolvedValueOnce({ status: 409, data: { error: 'conflict' } });
+		listBannersMock.mockResolvedValueOnce([]);
+		listDevicesMock.mockResolvedValueOnce([device('kiosk-1', GROUP_A)]);
+
+		await expect(deleteGroup(GROUP_A, '2-b', 'sm-a')).rejects.toMatchObject({
+			code: 'CONFLICT'
+		});
+		expect(setBannerGroupMock).not.toHaveBeenCalled();
 	});
 
 	it('refuses while any banner, even an expired one, still belongs to the group', async () => {
@@ -361,9 +374,9 @@ describe('deleteGroup', () => {
 		expect(deletes()).toHaveLength(0);
 	});
 
-	it('throws BannerNotFoundError for a missing group', async () => {
+	it('throws GroupNotFoundError for a missing group', async () => {
 		adminRawMock.mockResolvedValueOnce({ status: 404, data: { error: 'not_found' } });
 
-		await expect(deleteGroup(GROUP_A, '2-b', 'sm-a')).rejects.toBeInstanceOf(BannerNotFoundError);
+		await expect(deleteGroup(GROUP_A, '2-b', 'sm-a')).rejects.toBeInstanceOf(GroupNotFoundError);
 	});
 });

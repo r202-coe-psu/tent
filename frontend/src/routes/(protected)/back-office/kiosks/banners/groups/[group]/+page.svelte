@@ -61,8 +61,12 @@
 	const setDevices = useSetKioskBannerGroupDevices();
 	const deleteGroup = useDeleteKioskBannerGroup();
 
-	/** Evaluation time for "active now". */
-	const now = new Date();
+	/** Evaluation time for "active now"; ticks so a page left open follows schedule changes. */
+	let now = $state(new Date());
+	$effect(() => {
+		const timer = setInterval(() => (now = new Date()), 30_000);
+		return () => clearInterval(timer);
+	});
 
 	const group = $derived(groupQuery.data);
 	const groups = $derived(groupsQuery.data ?? []);

@@ -122,7 +122,11 @@ describe('/api/back-office/kiosk-banner-groups/[id]', () => {
 
 	it.each(METHODS)('%s returns 404 for a missing group', async (m) => {
 		mockGet.mockResolvedValue(null);
-		expect((await send[m]()).status).toBe(404);
+		const res = await send[m]();
+		expect(res.status).toBe(404);
+		expect(await res.json()).toEqual({
+			error: { code: 'NOT_FOUND', message: 'Banner group not found' }
+		});
 		for (const w of writes()) expect(w).not.toHaveBeenCalled();
 	});
 
