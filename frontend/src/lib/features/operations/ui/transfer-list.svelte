@@ -15,6 +15,10 @@
 		useResumeTransfer
 	} from '../application/queries';
 	import { isTransferPending } from '../domain/transfer-pending';
+	import { transferItemLabel } from '../domain/transfer-item-label';
+	import { useStockFormItems } from '../application/use-stock-form-items.svelte';
+	import { formatUnit, useUnitsOfMeasure } from '$lib/features/catalog';
+	import { langState } from '$lib/states/i18n.svelte';
 	import { toast } from 'svelte-sonner';
 	import {
 		cancelInfoSchema,
@@ -40,6 +44,15 @@
 	const resumeMutation = useResumeTransfer();
 
 	const ownShelter = getShelterCode();
+
+	const stockItems = useStockFormItems(() => getShelterCode());
+	const unitsQuery = useUnitsOfMeasure();
+	const namesById = $derived(new Map(stockItems.items.map((i) => [i._id, i.name])));
+	const units = $derived(unitsQuery.data ?? []);
+
+	function itemLine(item: StockTransfer['items'][number]): string {
+		return transferItemLabel(item, namesById, (u) => formatUnit(u, units, langState.current)).text;
+	}
 
 	// Session expired (`needsReauth`): every action button is off until the user signs in again.
 	const offline = $derived(authStore.needsReauth);
@@ -224,7 +237,7 @@
 	}
 
 	function itemsSummary(t: StockTransfer): string {
-		return t.items.map((i) => `${i.item_id} ${i.qty} ${i.unit}`).join(', ');
+		return t.items.map(itemLine).join(', ');
 	}
 </script>
 
@@ -380,7 +393,7 @@
 							</Table.Cell>
 							<Table.Cell class="text-xs">
 								{#each t.items as item (item.item_id)}
-									<div>{item.item_id} — {item.qty} {item.unit}</div>
+									<div>{itemLine(item)}</div>
 								{/each}
 							</Table.Cell>
 							<Table.Cell>
