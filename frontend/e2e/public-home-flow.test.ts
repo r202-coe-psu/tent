@@ -267,3 +267,92 @@ test.describe('Public landing: error contract', { tag: ['@public', '@smoke'] }, 
 		await expect(page.getByText('ระบบขัดข้อง')).toHaveCount(0);
 	});
 });
+
+test.describe('Public landing: volunteer card (#709)', { tag: ['@public', '@smoke'] }, () => {
+	const job = (overrides: Record<string, unknown>) => ({
+		shelter_code: 'SH901',
+		shelter_name: 'ศูนย์ทดสอบการ์ดจิตอาสา',
+		description: '',
+		tier: 'operational',
+		skills_required: [],
+		shift_template: { shift_name: '', start_time: '', end_time: '', days: [] },
+		shifts: [],
+		quota: 10,
+		status: 'open',
+		requires_review: false,
+		...overrides
+	});
+
+	test('counts only open urgent jobs and lists them by shelter', async ({ page }) => {
+		await page.route('**/api/public/v1/volunteer/jobs*', (route) =>
+			route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({
+					success: true,
+					jobs: [
+						job({
+							job_id: 'job:u1',
+							title: 'งานครัวด่วน',
+							is_urgent: true,
+							slots_remaining: 6,
+							slots_confirmed: 4
+						}),
+						job({
+							job_id: 'job:u2',
+							title: 'คัดแยกของด่วน',
+							is_urgent: true,
+							slots_remaining: 2,
+							slots_confirmed: 3
+						}),
+						job({
+							job_id: 'job:n1',
+							title: 'งานทั่วไป',
+							is_urgent: false,
+							slots_remaining: 50,
+							slots_confirmed: 9
+						})
+					]
+				})
+			})
+		);
+
+		await page.goto('/');
+
+		await expect(page.getByText('ต้องการอีก 8 คน')).toBeVisible();
+		await expect(page.getByText('(มีแล้ว 7 คน)')).toBeVisible();
+		await expect(page.getByRole('heading', { name: 'ศูนย์ทดสอบการ์ดจิตอาสา' })).toBeVisible();
+		await expect(page.getByText('งานครัวด่วน')).toBeVisible();
+		await expect(page.getByText('งานทั่วไป')).toHaveCount(0);
+		// The card's apply button opens the board filtered to that shelter.
+		await expect(page.getByRole('link', { name: 'สมัครจิตอาสา' })).toHaveAttribute(
+			'href',
+			'/volunteers/jobs?shelter=SH901'
+		);
+	});
+
+	test('shows a dash, not 0, when the job board cannot be read', async ({ page }) => {
+		await page.route('**/api/public/v1/volunteer/jobs*', (route) =>
+			route.fulfill({
+				status: 503,
+				contentType: 'application/json',
+				body: JSON.stringify({ success: false, jobs: [] })
+			})
+		);
+
+		await page.goto('/');
+
+		await expect(page.getByText('ต้องการอีก — คน')).toBeVisible();
+		await expect(page.getByText('(มีแล้ว — คน)')).toBeVisible();
+		// The mission list says the same, rather than claiming there are no urgent missions.
+		await expect(
+			page.getByRole('alert').filter({ hasText: 'โหลดงานอาสาสมัครเร่งด่วนไม่ได้ในขณะนี้' })
+		).toBeVisible();
+		await expect(page.getByText('ขณะนี้ยังไม่มีงานอาสาสมัครที่เปิดรับสมัครเร่งด่วน')).toHaveCount(
+			0
+		);
+		await expect(
+			page.getByRole('heading', { name: 'แพลตฟอร์มช่วยเหลือผู้ประสบภัย', level: 1 })
+		).toBeVisible();
+	});
+});

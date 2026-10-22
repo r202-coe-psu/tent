@@ -52,6 +52,9 @@ export type {
 	VolunteerTicket
 } from './domain/volunteer';
 
+export { summarizeUrgentVolunteerNeed } from './domain/urgent-need';
+export type { UrgentShelterNeed, UrgentVolunteerNeed } from './domain/urgent-need';
+
 export {
 	useApplyToJobMutation,
 	useUpdateProfileMutation,
