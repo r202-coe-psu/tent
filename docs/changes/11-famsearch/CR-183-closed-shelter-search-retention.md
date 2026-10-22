@@ -5,7 +5,7 @@ status: approved
 date: 2026-10-21
 requested_by: feedback หน้างาน (ค้นหาคน public ข้อ 1.1.1 / 1.1.2) — GitHub #644, #645
 decided_by: kong
-layer: volatile # rule retention/privacy · FR-7/FR-8 แตะ listener scope ของ sync worker → ต้อง review (ดู Impact)
+layer: volatile # rule retention/privacy · FR-7/FR-8 แตะ listener scope ของ sync worker (stable core ตาม CLAUDE.md) — kong ยืนยันขอบเขตนี้แล้ว (D-4, 2026-10-22); ดู Impact
 affects:
   - docs/data/data-model.md §7 Retention (+ แถว Mongo projection ของศูนย์ปิด)
   - docs/data/schema.md §3.1 shelter `closed_at` (stamp rule) · §3.2 `config:app.retention_months_after_close`
@@ -57,7 +57,7 @@ affects:
 - **FR-2** — ศูนย์ `closed` ต้องคงแถว `public_persons` ไว้จนถึง `retention_deadline = closed_at + config:app.retention_months_after_close เดือน` (default `3`).
 - **FR-3** — เมื่อ `now ≥ retention_deadline` retention ต้องลบ `public_persons` ของศูนย์นั้นทีละ doc ผ่าน `_audit_and_delete` (`trigger: "scheduled"`, `couchdb_ref = {db: "registry", doc_id: registry_id}`) — verify + idempotent ตาม FR-017-07..09.
 - **FR-4** — ตอนศูนย์เปลี่ยนเป็น `closed` ให้ลบ `public_needs`, `shelter_stocks`, `shelter_occupants` ของศูนย์นั้น (ข้อมูล operational ปัจจุบัน ไม่ใช่ข้อมูลค้นหาคน) — ทำได้ทั้งใน processor (ทันที) และ retention (safety net).
-- **FR-5** — `closed_at` ใช้จาก `public_shelters.closed_at` (projected จาก registry) เท่านั้น — ไม่มี fallback field. ศูนย์ legacy ได้ค่าจาก migration script (FR-22). ถ้ายังเป็น `null` retention ต้องไม่ลบ และ log warning.
+- **FR-5** — `closed_at` ใช้จาก `public_shelters.closed_at` (projected จาก registry) เท่านั้น — ไม่มี fallback field. ศูนย์ legacy ได้ค่าจาก migration script (FR-22). ถ้ายังเป็น `null` retention ต้องไม่ลบ และ log warning (ดู D-5).
 - **FR-6** — worker อ่าน `retention_months_after_close` จาก CouchDB `registry` `config:app` โดยตรงทุกรอบ retention (ไม่เพิ่มเข้า public allow-list `PUBLIC_APP_CONFIG_FIELDS`); อ่านไม่ได้/ค่าผิด → ใช้ `3`.
 
 ### Sync coverage ของศูนย์ปิด
@@ -72,11 +72,13 @@ affects:
 - **FR-11** — _(ถอนออก 2026-10-22: ไม่เพิ่ม field `closed_seen_at` — ศูนย์ legacy ได้ `closed_at` จาก migration script FR-22 แทน)_
 - **FR-12** — bump `PROJECTION_VERSION` 5 → 6 เพื่อให้ worker รัน `bootstrap_all` หนึ่งครั้งหลัง deploy (scan DB ศูนย์ปิดตาม FR-8 / D-3) — shape ของ projection ไม่เปลี่ยน.
 - **FR-13** — แก้ docstring/คอมเมนต์ที่ล้าสมัยใน `retention/job.py` และ `projectors/shelter.py` ให้ตรง FR-1..FR-5.
+- **FR-24** — projector ถ้า `closed_at` มีค่าแต่ parse ไม่ได้ ให้ log error พร้อม `shelter_code` และไม่ตั้ง `closed_at` เป็น `null` ใน payload ที่ upsert (คงค่าเดิมใน Mongo).
 
-### Staff UI (registry)
+### Staff UI และการนำเข้า (registry)
 
-- **FR-14** — เมื่อบันทึกศูนย์ที่เปลี่ยน `operation_status` เป็น `closed` ระบบต้อง stamp `closed_at` = เวลาปัจจุบัน (ISO UTC) ถ้ายังไม่มีค่า.
+- **FR-14** — เมื่อบันทึกศูนย์ที่เปลี่ยน `operation_status` เป็น `closed` ระบบต้อง stamp `closed_at` = เวลาปัจจุบัน (ISO UTC) ถ้ายังไม่มีค่า. ทำใน PATCH route `frontend/src/routes/api/back-office/shelter/[code]/+server.ts` โดย server เป็นผู้ตั้งค่าเอง ไม่รับจาก client และต้องเพิ่ม `closed_at` เข้า input schema ด้วย `.optional()` — **ห้าม**ใช้ `.nullish().default(null)` เพราะ `.partial()` จะ reset เป็น `null` ทุกครั้งที่แก้ศูนย์ปิด (ทดสอบแล้วด้วย zod 4).
 - **FR-15** — เมื่อเปลี่ยนจาก `closed` เป็นสถานะอื่น ให้ตั้ง `closed_at = null` (นาฬิกา retention หยุด; ปิดใหม่ = นับใหม่).
+- **FR-23** — นำเข้า CSV (`frontend/src/lib/features/shelter-import`) **ห้าม**ตั้ง `operation_status = closed` — แถวที่มีสถานะ `closed` ต้องถูกปฏิเสธพร้อม error ต่อแถว และไม่เขียน registry doc. การปิดศูนย์ทำได้จากหน้า staff เท่านั้น เพื่อให้ `closed_at` มาจาก FR-14 เส้นทางเดียว.
 
 ### FastAPI (public + external)
 
@@ -94,7 +96,7 @@ affects:
 ### Migration script (CouchDB registry)
 
 - **FR-22** — script `frontend/scripts/migrate-shelter-closed-at.ts` (`pnpm migrate:shelter-closed-at`) backfill `closed_at` ให้ registry doc `type = shelter` ที่ `operation_status` (หรือ `status` legacy) `= closed` และ `closed_at` ว่าง:
-  - ค่า `closed_at` = `updated_at` ของ doc (normalize เป็น ISO UTC); ถ้าไม่มี/parse ไม่ได้ → เวลาที่รัน script.
+  - ค่า `closed_at` = `updated_at` ของ doc (normalize เป็น ISO UTC); ถ้าไม่มี/parse ไม่ได้ → เวลาที่รัน script (ดู Decision log 2026-10-22).
   - ตั้ง `updated_at` = เวลารัน และ `updated_by` = `migration:<run_id>`; ไม่แตะ field อื่น · ไม่ bump `schema_v`.
   - default เป็น dry-run; เขียนจริงต้องใช้ `--write --confirm` · อ่าน `COUCHDB_ADMIN_URL` จาก `frontend/.env` (pattern เดียวกับ `migrate-volunteer-reapply.ts`).
   - idempotent — รันซ้ำไม่แก้ doc ที่มี `closed_at` แล้ว; ไม่แตะศูนย์ `cancelled` หรือศูนย์ที่เปิดอยู่.
@@ -109,6 +111,9 @@ affects:
 - [ ] `closed_at` + 3 เดือน ผ่านไป (test ใช้ clock ปลอม) → `public_persons` ของศูนย์นั้นถูกลบ, `_retention_audit` มีแถว `verified` ครบทุกคน, `public_shelters` ยังอยู่.
 - [ ] `pnpm migrate:shelter-closed-at` (dry-run) แสดงศูนย์ `closed` ที่ไม่มี `closed_at` ครบ และไม่เขียน; `--write --confirm` เติม `closed_at` ตาม FR-22; รันซ้ำแล้วไม่มีรายการ.
 - [ ] ศูนย์ `closed` ที่ `closed_at = null` → retention ไม่ลบ + warning.
+- [ ] ปิดจาก staff UI (PATCH) → `closed_at` ถูก stamp; แก้ชื่อศูนย์หลังจากนั้น → `closed_at` ยังเดิม (ไม่ถูก reset เป็น `null`).
+- [ ] นำเข้า CSV ที่ `operation_status = closed` → แถวนั้นถูกปฏิเสธพร้อม error และไม่มีการเขียน registry doc.
+- [ ] `closed_at` parse ไม่ได้ → มี error log พร้อม `shelter_code` และ `public_shelters.closed_at` ไม่ถูกตั้งเป็น `null`.
 - [ ] Bootstrap หลัง deploy: ศูนย์ที่ยังอยู่ในระยะ retention → `public_persons` ฟื้นครบ; ศูนย์ที่เลย deadline → ไม่มี `public_persons` ถูก publish ใหม่ และแถว `public_shelters` ยังคงอยู่ (FR-1).
 - [ ] ปิด → เปิดใหม่ (ทั้งก่อนและหลังครบ retention) → ค้นคนเดิมเจอครบภายในรอบ sync โดยไม่ restart worker (#645).
 - [ ] ศูนย์ปิด: แก้ evacuee เป็น `search_excluded = true` → หายจากผลค้นหาภายในรอบ sync.
@@ -122,7 +127,7 @@ affects:
 
 - Feedback หน้างาน (ค้นหาคน public 1.1.1): ญาติมักค้นหาหลังเหตุการณ์คลี่คลาย/ศูนย์ปิดแล้ว — ผลว่างทำให้เข้าใจว่าไม่เคยมีคนนั้นอยู่ในระบบ.
 - data-model §7 กำหนด PDPA purge "ภายใน 3 เดือนหลังปิดศูนย์" และ `config:app.retention_months_after_close = 3` มีอยู่แล้วแต่ไม่มีโค้ดใช้ — การลบภายใน 5 นาทีเข้มกว่า policy โดยไม่ได้ตั้งใจ และขัด ADR-0002 (Soft Delete ของ location).
-- การคงข้อมูลต่อหลังปิด **เพิ่ม PII exposure บน endpoint ไม่ต้อง auth** เป็นเวลาสูงสุด 3 เดือน → ต้องเป็นการตัดสินใจของ owner (D-1, D-2) และต้อง cross-ref T-43 RoPA.
+- การคงข้อมูลต่อหลังปิด **เพิ่ม PII exposure บน endpoint ไม่ต้อง auth** เป็นเวลาสูงสุด 3 เดือน → ต้องเป็นการตัดสินใจของ kong (D-1, D-2) และต้อง cross-ref T-43 RoPA.
 - FR-7/FR-10 จำเป็นเพื่อความเป็นส่วนตัว: ถ้าคงข้อมูลไว้แต่ไม่ฟัง DB ศูนย์ปิด การ opt-out หลังปิดจะไม่มีผล.
 
 ## Impact
@@ -130,11 +135,12 @@ affects:
 | ส่วน | ผลกระทบ |
 | --- | --- |
 | Privacy | `public_persons` ของศูนย์ปิดเปิดเผยต่อได้ ≤ `retention_months_after_close` — rate limit + `SearchAudit` เดิมยังครอบ |
-| Sync worker | listener/bootstrap ครอบศูนย์ปิดในระยะ retention → จำนวน listener และเวลา bootstrap เพิ่มตามจำนวนศูนย์ปิด — **แตะ CR-017 "registry ตรวจจับเปิด/ปิดศูนย์ → เริ่ม/หยุด listener" ต้อง review ก่อน approve** |
+| Sync worker | listener/bootstrap ครอบศูนย์ปิดในระยะ retention → จำนวน listener และเวลา bootstrap เพิ่มตามจำนวนศูนย์ปิด — **แตะ CR-017 "registry ตรวจจับเปิด/ปิดศูนย์ → เริ่ม/หยุด listener" ยืนยันโดย kong แล้ว (D-4) — CR-017 Decision D ต้องอัปเดตตอน implement** |
 | Public `/shelters` | ศูนย์ปิดคงอยู่ในรายการด้วย `status = closed` ถาวร (เดิมหายหลัง ≤5 นาที) — UI รองรับ `closed` อยู่แล้วตาม enum §9.1 |
 | Partner API | EXT-002/003 เห็นศูนย์ปิด (`location_status = closed`) ตาม ADR-0002; `/external/v1/occupants` ได้ field `shelter_status` เพิ่ม (additive) และ**ลบ** `care_zone` / `zone_name` (breaking — partner ที่อ่าน field นี้ต้องปรับ) |
 | draft-shelter-cancelled-status | ไม่ขัด — `cancelled` ยังลบทุก projection ทันทีและไม่ถูกฟัง |
 | CouchDB | ไม่มี purge/anonymize job ฝั่ง CouchDB ใน CR นี้ (ยังเป็นงาน T-43) |
+| `closed_at = null` (D-5) | ยอมรับความเสี่ยงตาม D-5: ศูนย์ที่ยังเป็น `null` คง PII บน public plane เกิน §7 — ลดโอกาสด้วย FR-14 (PATCH), FR-23 (import), FR-24 (projector) |
 
 ## Migration
 
@@ -150,10 +156,13 @@ affects:
 
 - 2026-10-21 — proposed (จาก #644, #645)
 - 2026-10-22 — **approved** โดย kong — รันเลข CR-183 · D-1..D-4 ตัดสินครบ · D-4 ยังต้อง review ผลต่อ CR-017 listener scope ตอน implement
-- 2026-10-22 — ถอน field `closed_seen_at` (FR-11) ออกตาม owner: ไม่เพิ่ม field ใน `public_shelters`; ศูนย์ legacy ที่ไม่มี `closed_at` ใช้ migration script backfill แทน (FR-22) — retention อ่าน `closed_at` อย่างเดียว (FR-5)
+- 2026-10-22 — ถอน field `closed_seen_at` (FR-11) ออกตาม kong: ไม่เพิ่ม field ใน `public_shelters`; ศูนย์ legacy ที่ไม่มี `closed_at` ใช้ migration script backfill แทน (FR-22) — retention อ่าน `closed_at` อย่างเดียว (FR-5)
 - **D-1 — ระยะเวลาคงข้อมูล** — ✅ ตัดสิน 2026-10-22: ใช้ `retention_months_after_close` (3 เดือน) ตาม data-model §7. ทางเลือกเดิม — แนะนำ: ใช้ `retention_months_after_close` (3 เดือน) ตาม data-model §7. ทางเลือก: ระยะสั้นกว่าสำหรับ public plane โดยเฉพาะ (เช่น 30 วัน — ต้องเพิ่ม config ใหม่ = field ใหม่ใน schema §3.2) · คงไว้ไม่มีกำหนดจนกว่า T-43 purge CouchDB (ไม่แนะนำ — ขัด §7).
 - **D-2 — field ที่เปิดเผยของคนในศูนย์ปิด** — ✅ ตัดสิน 2026-10-22: ลบ `care_zone` / `zone_name` ออกจาก response **ทุกศูนย์ ไม่ว่าเปิดหรือปิด** (FR-18, FR-19, FR-21a) — รวมใน CR นี้. field อื่นเท่าเดิม. ทางเลือกเดิม — แนะนำ: เท่ากับศูนย์เปิด ยกเว้น `care_zone` / `zone_name` = `null` (โซนไม่มีความหมายหลังปิด). ทางเลือก: เท่ากับศูนย์เปิดทุก field · ลดเหลือชื่อ (masked) + ชื่อศูนย์ + `status` + `shelter_status`.
-- **D-3 — ฟื้นข้อมูลศูนย์ที่ปิดไปแล้ว** — ✅ ตัดสิน 2026-10-22 (แก้ตามคำตอบ owner — ดู Decision log): ฟื้นเฉพาะศูนย์ที่ยังอยู่ในระยะ retention ผ่าน bootstrap (หลัง backfill FR-22); ศูนย์ที่เลยระยะไม่ฟื้น. ทางเลือกเดิม — แนะนำ: ฟื้นผ่าน bootstrap (Migration) เพื่อให้ผลค้นหาครบทันทีหลัง deploy. ทางเลือก: ฟื้นเฉพาะศูนย์ที่ registry มี `closed_at` อยู่ในระยะ retention · ไม่ฟื้น (มีผลเฉพาะศูนย์ที่ปิดหลัง deploy).
+- **D-3 — ฟื้นข้อมูลศูนย์ที่ปิดไปแล้ว** — ✅ ตัดสิน 2026-10-22 (แก้ตามคำตอบ kong — ดู Decision log): ฟื้นเฉพาะศูนย์ที่ยังอยู่ในระยะ retention ผ่าน bootstrap (หลัง backfill FR-22); ศูนย์ที่เลยระยะไม่ฟื้น. ทางเลือกเดิม — แนะนำ: ฟื้นผ่าน bootstrap (Migration) เพื่อให้ผลค้นหาครบทันทีหลัง deploy. ทางเลือก: ฟื้นเฉพาะศูนย์ที่ registry มี `closed_at` อยู่ในระยะ retention · ไม่ฟื้น (มีผลเฉพาะศูนย์ที่ปิดหลัง deploy).
 - 2026-10-22 — D-3 ปรับตามที่ผู้ตัดสินใจยืนยันในแชต: ฟื้นเฉพาะศูนย์ที่ยังอยู่ในระยะ retention; ศูนย์ที่เลยระยะไม่ฟื้น — แก้ FR-7, FR-8, Migration และ Acceptance ให้ตรงกัน ตัวเลือก "ฟื้นทั้งหมด" ถูกยกเลิก
-- **D-4 — ฟังศูนย์ปิดในระยะ retention (FR-7/FR-8)** — ✅ ตัดสิน 2026-10-22: ฟัง — ยังต้อง review ผลต่อ CR-017 (listener scope) ก่อน approve CR. ทางเลือกเดิม — แนะนำ: ทำ — ไม่งั้น opt-out หลังปิดไม่มีผล (privacy). แตะ worker listener scope → review ก่อน approve.
-- 2026-10-22 — **approved** ยืนยันอีกครั้งโดยผู้ตัดสินใจ (ยืนยันในแชต) — การลบข้อมูลของศูนย์ที่ปิด (`public_persons`, `public_needs`, `shelter_stocks`, `shelter_occupants`; `public_shelters` ไม่ถูกลบตาม FR-1) ต้องอิงกฎ CR-183 เท่านั้น (FR-3/FR-4) · D-4 listener scope ได้รับการยืนยันแล้ว · แก้ความขัดแย้งเรื่องแถว `public_shelters` ของศูนย์ที่เลยระยะ: คงไว้ตาม FR-1 (ปรับ FR-8 และ Acceptance ให้ตรงกัน) · FR-8 ตรงกับ D-3 แล้ว (ฟื้นเฉพาะศูนย์ในระยะ retention) — รอ owner ยืนยันการแก้นี้
+- **D-4 — ฟังศูนย์ปิดในระยะ retention (FR-7/FR-8)** — ✅ ตัดสิน 2026-10-22: ฟัง — ยืนยันขอบเขต listener โดย kong แล้ว (ดูรายการ 2026-10-22 ด้านล่าง); ผลต่อ CR-017 Decision D ต้องอัปเดตตอน implement. ทางเลือกเดิม — แนะนำ: ทำ — ไม่งั้น opt-out หลังปิดไม่มีผล (privacy).
+- 2026-10-22 — **approved** ยืนยันอีกครั้งโดยผู้ตัดสินใจ (ยืนยันในแชต) — การลบข้อมูลของศูนย์ที่ปิด (`public_persons`, `public_needs`, `shelter_stocks`, `shelter_occupants`; `public_shelters` ไม่ถูกลบตาม FR-1) ต้องอิงกฎ CR-183 เท่านั้น (FR-3/FR-4) · D-4 listener scope ได้รับการยืนยันแล้ว · แก้ความขัดแย้งเรื่องแถว `public_shelters` ของศูนย์ที่เลยระยะ: คงไว้ตาม FR-1 (ปรับ FR-8 และ Acceptance ให้ตรงกัน) · FR-8 ตรงกับ D-3 แล้ว (ฟื้นเฉพาะศูนย์ในระยะ retention) — **ยืนยันโดย kong** (2026-10-22) การแก้ความขัดแย้งนี้ตาม FR-1: คงแถว `public_shelters` ของศูนย์ปิดไว้
+- **D-5 — ศูนย์ `closed` ที่ `closed_at = null`** — ✅ ตัดสิน 2026-10-22 (ยืนยันโดย kong): คงกฎเดิมใน FR-5 — retention ไม่ลบ `public_persons` และ log warning. ความเสี่ยงที่ยอมรับ: ข้อมูลคนของศูนย์ที่ไม่มีเวลาปิดจะคงอยู่บน public plane เกินนโยบาย §7 จนกว่าจะแก้ข้อมูล เพื่อลดจำนวนเคสนี้ CR กำหนด FR-14 (PATCH), FR-23 (import) และ FR-24 (projector). ทางเลือกที่ไม่เลือก: ถือว่า `null` เป็นหมดระยะแล้วลบผ่าน audit.
+- 2026-10-22 — FR-23: import ห้ามตั้งสถานะ `closed` (ปฏิเสธแถว) แทนการ stamp `closed_at` เป็นเวลานำเข้า — ปิดศูนย์ได้จากหน้า staff เท่านั้น (ยืนยันโดย kong). ทางเลือกที่ไม่เลือก: stamp เวลานำเข้า (คงข้อมูลเกินจริงเมื่อนำเข้าย้อนหลัง) · เพิ่มคอลัมน์วันที่ปิด (ต้องแก้ schema §3.1).
+- 2026-10-22 — FR-22 fallback `source = now`: ใช้ตามที่เขียนไว้ — คนรันตรวจรายงาน dry-run (มี `source` ทุกรายการ) ก่อนสั่ง `--write --confirm` ไม่เพิ่มด่านกั้น (ยืนยันโดย kong). เหตุผล: `updated_at` เป็นค่าบังคับของ shelter รายการ `now` จึงน่าจะมีน้อย. ทางเลือกที่ไม่เลือก: บังคับ flag `--allow-now` · ตั้งเวลาย้อนหลังให้ถือว่าหมดระยะ.
