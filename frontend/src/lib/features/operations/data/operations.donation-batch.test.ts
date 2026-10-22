@@ -25,8 +25,10 @@ const failingBulkIds = new Set<string>();
 let loseBulkResponse = false;
 /** Doc ids whose single-doc `put` fails (the donation transition). */
 const failingPutIds = new Set<string>();
-/** Doc ids whose single-doc `put` answers 409 (someone wrote it in between). */
+/** Doc ids whose single-doc `put` throws `ConflictError` (a 409, or another 4xx). */
 const conflictingPutIds = new Set<string>();
+/** Runs just before that `ConflictError` — whatever is on file by the time it is thrown. */
+let onConflictingPut: (() => void) | null = null;
 /** Runs once the bulk write lands — another screen or the donor acting mid-receipt. */
 let afterBulkWrite: (() => void) | null = null;
 const bulkCalls: string[][] = [];
@@ -46,7 +48,10 @@ vi.mock('$lib/db/repository', async (importOriginal) => {
 			},
 			async put(doc: Doc) {
 				if (failingPutIds.has(doc._id)) throw new Error(`write refused for ${doc._id}`);
-				if (conflictingPutIds.has(doc._id)) throw new ConflictError();
+				if (conflictingPutIds.has(doc._id)) {
+					onConflictingPut?.();
+					throw new ConflictError();
+				}
 				const rev = `${(docs.get(doc._id)?._rev ? parseInt(docs.get(doc._id)!._rev!, 10) : 0) + 1}-t`;
 				const saved = { ...clone(doc), _rev: rev };
 				docs.set(doc._id, saved);
@@ -169,6 +174,7 @@ beforeEach(() => {
 	failingBulkIds.clear();
 	failingPutIds.clear();
 	conflictingPutIds.clear();
+	onConflictingPut = null;
 	afterBulkWrite = null;
 	bulkCalls.length = 0;
 	loseBulkResponse = false;
@@ -567,6 +573,7 @@ describe('receiveDonationBatch — partial failure and retry (CR-143 FR-B7 / FR-
 		expect(result.rowsComplete).toBe(true);
 		expect(result.received).toBe(false);
 		expect(result.transitionError).toMatch(/ถูกแก้ระหว่างบันทึกเข้าคลัง/);
+		expect(result.transitionBlocked).toBe(true);
 		expect(storedDonation().status).toBe('declared');
 		expect(storedDonation().items![1].review_status).toBe('rejected');
 	});
@@ -583,18 +590,95 @@ describe('receiveDonationBatch — partial failure and retry (CR-143 FR-B7 / FR-
 		const result = await repo.receiveDonationBatch(donation, fullCount(), ctx);
 
 		expect(result.received).toBe(true);
+		expect(result.transitionBlocked).toBeUndefined();
 		expect(storedDonation().status).toBe('received');
 		expect(storedDonation().logistics).toEqual({ courier_tracking_no: 'TH123' });
 	});
 
 	it('reports a write that lands between the check and the close the same way', async () => {
 		conflictingPutIds.add(donation._id);
+		onConflictingPut = () => {
+			conflictingPutIds.delete(donation._id);
+			const onFile = storedDonation();
+			docs.set(donation._id, {
+				...clone(onFile),
+				_rev: '2-refused',
+				items: onFile.items!.map((item, i) =>
+					i === 1 ? { ...item, review_status: 'rejected' as const } : item
+				)
+			} as unknown as Doc);
+		};
 
 		const result = await repo.receiveDonationBatch(donation, fullCount(), ctx);
 
 		expect(result.received).toBe(false);
 		expect(result.transitionError).toMatch(/ถูกแก้ระหว่างบันทึกเข้าคลัง/);
+		expect(result.transitionBlocked).toBe(true);
 		expect(storedDonation().status).toBe('declared');
+	});
+
+	// S-R14-1 — the same race, but only the courier number moved: nothing counted against
+	// changed, so the close is made again over the new `_rev`.
+	it('closes over a courier number written between the check and the close', async () => {
+		conflictingPutIds.add(donation._id);
+		onConflictingPut = () => {
+			conflictingPutIds.delete(donation._id);
+			docs.set(donation._id, {
+				...clone(storedDonation()),
+				_rev: '2-courier',
+				logistics: { courier_tracking_no: 'TH123' }
+			} as unknown as Doc);
+		};
+
+		const result = await repo.receiveDonationBatch(donation, fullCount(), ctx);
+
+		expect(result.received).toBe(true);
+		expect(result.transitionBlocked).toBeUndefined();
+		expect(storedDonation().status).toBe('received');
+		expect(storedDonation().logistics).toEqual({ courier_tracking_no: 'TH123' });
+	});
+
+	it('leaves a booking that keeps moving for someone to check', async () => {
+		conflictingPutIds.add(donation._id);
+		let edits = 0;
+		onConflictingPut = () => {
+			edits += 1;
+			docs.set(donation._id, { ...clone(storedDonation()), _rev: `${edits + 1}-edited` } as Doc);
+		};
+
+		const result = await repo.receiveDonationBatch(donation, fullCount(), ctx);
+
+		expect(edits).toBe(3);
+		expect(result.received).toBe(false);
+		expect(result.transitionBlocked).toBe(true);
+		expect(storedDonation().status).toBe('declared');
+	});
+
+	// S-R13-1 — `ConflictError` also carries CouchDB's other 4xx answers. With the booking
+	// unchanged on file nobody wrote it in between: the real reason shows and a retry may work.
+	it('keeps the retry open when the close is refused but nobody changed the booking', async () => {
+		conflictingPutIds.add(donation._id);
+
+		const result = await repo.receiveDonationBatch(donation, fullCount(), ctx);
+
+		expect(result.received).toBe(false);
+		expect(result.transitionBlocked).toBeUndefined();
+		expect(result.transitionError).toBe('Document conflict');
+	});
+
+	it('reports the booking received when the close landed but its answer was lost', async () => {
+		// The PUT lands; the retry inside `putDoc` then answers 409 against the new rev.
+		const put = repo['repo'].put.bind(repo['repo']);
+		vi.spyOn(repo['repo'], 'put').mockImplementationOnce(async (doc) => {
+			await put(doc);
+			throw new ConflictError();
+		});
+
+		const result = await repo.receiveDonationBatch(donation, fullCount(), ctx);
+
+		expect(result.received).toBe(true);
+		expect(result.transitionError).toBeUndefined();
+		expect(storedDonation().status).toBe('received');
 	});
 
 	// S-R5-2 — a booking closed before its rows were keyed reads `received` on both screens,
@@ -622,6 +706,21 @@ describe('receiveDonationBatch — partial failure and retry (CR-143 FR-B7 / FR-
 
 		it('still lets the same count through again', async () => {
 			await repo.receiveDonationBatch(openedReceived(), fullCount(), ctx);
+
+			const again = await repo.receiveDonationBatch(openedReceived(), fullCount(), ctx);
+
+			expect(again.received).toBe(true);
+			expect(ledgerRows()).toHaveLength(3);
+		});
+
+		// The ledger check runs here (one row is still to write) and finds only this count's
+		// rows, so the FR-B7 retry of an interrupted receipt goes through.
+		it('lets the same count finish rows an interrupted receipt left out', async () => {
+			failingBulkIds.add(await deriveDonationReceiptLineId(donation._id, 'item:oil', 2));
+			const first = await repo.receiveDonationBatch(openedReceived(), fullCount(), ctx);
+			expect(first.rowsComplete).toBe(false);
+			expect(ledgerRows()).toHaveLength(2);
+			failingBulkIds.clear();
 
 			const again = await repo.receiveDonationBatch(openedReceived(), fullCount(), ctx);
 

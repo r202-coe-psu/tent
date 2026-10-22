@@ -46,6 +46,11 @@ export interface DonationBatchResult {
 	received: boolean;
 	/** Set when every row landed but the donation could not be moved to `received` (FR-B8). */
 	transitionError?: string;
+	/**
+	 * The booking changed while its rows were keyed, so retrying the transition cannot close
+	 * it — someone has to check the stock against the booking first (S-R4-1).
+	 */
+	transitionBlocked?: boolean;
 }
 
 /**

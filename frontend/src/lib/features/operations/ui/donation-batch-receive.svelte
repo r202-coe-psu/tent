@@ -90,6 +90,8 @@
 	let storagePoint = $state<StoragePointRef | null>(null);
 	let attempted = $state(false);
 	let transitionError = $state<string | null>(null);
+	/** The booking changed under the receipt: retrying cannot close it (S-R4-1). */
+	let transitionBlocked = $state(false);
 	/** `_id`s of this donation's ledger rows that belong to one of the lines above. */
 	let lockedRowIds = $state<string[]>([]);
 
@@ -216,6 +218,7 @@
 
 	const submitLabel = $derived.by(() => {
 		if (receiveMutation.isPending) return 'กำลังบันทึก…';
+		if (transitionBlocked) return 'รอผู้ดูแลตรวจยอดก่อนปิดใบ';
 		if (transitionError) return 'ลองเปลี่ยนสถานะใบอีกครั้ง';
 		if (failedCount > 0) return 'ลองบันทึกเฉพาะรายการที่ไม่สำเร็จ';
 		return `บันทึกรับของ ${receivedCount} รายการ`;
@@ -279,11 +282,16 @@
 			}
 		}
 		transitionError = result.transitionError ?? null;
+		transitionBlocked = result.transitionBlocked ?? false;
 
 		if (result.received) {
 			const saved = result.lines.filter((line) => line.state === 'saved').length;
 			toast.success('รับของจากใบบริจาคแล้ว');
 			onsuccess?.(`${donation.donor.name} · รับเข้า ${saved} รายการ`);
+			return;
+		}
+		if (transitionBlocked) {
+			toast.error('บันทึกสินค้าครบแล้ว แต่ใบถูกแก้ระหว่างบันทึก — ติดต่อผู้ดูแลเพื่อตรวจยอด');
 			return;
 		}
 		if (result.rowsComplete) {
@@ -318,7 +326,11 @@
 					<p>รายการที่บันทึกแล้วถูกล็อกไว้ กดปุ่มด้านล่างเพื่อบันทึกเฉพาะรายการที่ไม่สำเร็จ</p>
 				{:else}
 					<p class="font-semibold">บันทึกสินค้าครบทุกรายการแล้ว แต่เปลี่ยนสถานะใบบริจาคไม่สำเร็จ</p>
-					<p>{transitionError} — กดลองใหม่ ระบบจะไม่บันทึกสินค้าซ้ำ</p>
+					{#if transitionBlocked}
+						<p>{transitionError}</p>
+					{:else}
+						<p>{transitionError} — กดลองใหม่ ระบบจะไม่บันทึกสินค้าซ้ำ</p>
+					{/if}
 				{/if}
 			</div>
 		</div>
@@ -543,7 +555,7 @@
 		<Button
 			type="button"
 			size="lg"
-			disabled={receiveMutation.isPending || offline}
+			disabled={receiveMutation.isPending || offline || transitionBlocked}
 			class="min-h-11 w-full font-bold"
 			onclick={submit}
 		>

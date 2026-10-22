@@ -122,6 +122,9 @@ export function assertReceiveAgainstCatalog(
 	}
 }
 
+/** Tries at closing a batch receipt while other writes keep moving its `_rev` (S-R14-1). */
+const MAX_CLOSE_ATTEMPTS = 3;
+
 /** What staff are told when the booking changed under a batch receipt (S-R4-1). */
 const DONATION_CHANGED_WHILE_KEYING =
 	'ใบนี้ถูกแก้ระหว่างบันทึกเข้าคลัง (ปฏิเสธรายการ / ผู้บริจาคแก้หรือยกเลิกใบ) — ของเข้าคลังแล้วแต่ยังไม่ปิดใบ ติดต่อผู้ดูแลเพื่อตรวจยอด';
@@ -447,102 +450,116 @@ export class OperationsRemoteRepository implements OperationsRepository {
 			return { donation, lines, rowsComplete: false, received: false };
 		}
 
+		const blocked: DonationBatchResult = {
+			donation,
+			lines,
+			rowsComplete: true,
+			received: false,
+			transitionError: DONATION_CHANGED_WHILE_KEYING,
+			transitionBlocked: true
+		};
 		// FR-B4b / FR-B8: the donation moves only after every row is in the ledger, and a
 		// failure here is retried on its own — the rows above are found by id, not rewritten.
-		try {
-			const latest = (await this.repo.get<Donation>(donation._id)) ?? donation;
-			// Already closed with its summary: the first receipt stands, nothing is rewritten.
-			if (latest.status === 'received' && latest.received_summary) {
-				return { donation: latest, lines, rowsComplete: true, received: true };
-			}
-			// The booking moved while its rows were keyed — a line refused on another screen,
-			// the donor editing or cancelling, the TTL lapsing. Closing it from this count
-			// would write over that change, so stop and leave it to someone to check.
-			if (bookingChanged(onFile, latest)) {
-				throw new Error(DONATION_CHANGED_WHILE_KEYING);
-			}
-			const nextBase = completeDonationReceipt(latest);
-			const declaredLines = latest.items ?? [];
-			const countedByLine = new Map(counted.map((c) => [c.line_no, c]));
-			// "ไม่รับ" is not "ขาด" (CR-172 FR-13): a line refused at review leaves the
-			// comparison. A typed-in line is compared under the item staff matched it to —
-			// keyed by its own words it never met its count and read as a shortfall.
-			const declaredForShortfall = declaredLines.flatMap((item, index) =>
-				item.review_status === 'rejected'
-					? []
-					: [
-							{
-								item_id: item.item_id || countedByLine.get(index)?.item_id || item.free_text,
-								qty: String(item.qty)
-							}
-						]
-			);
-			const countedForShortfall = counted.map((c) => ({
-				item_id: c.item_id,
-				qty: String(c.qty)
-			}));
-			const shortfalls = donationShortfall(declaredForShortfall, countedForShortfall);
-			// One entry per declared line, in order — the tracking page reads them by position —
-			// then any line counted off the ticket.
-			const summaryItems = [
-				...declaredLines.map((item, index) => {
-					if (item.review_status === 'rejected') {
-						return {
-							...(item.item_id ? { item_id: item.item_id } : {}),
-							...(item.free_text ? { free_text: item.free_text } : {}),
-							qty: '0',
-							unit: item.unit,
-							rejected: true,
-							...(item.review_reason ? { reject_reason: item.review_reason } : {}),
-							...(item.review_reason_code ? { reject_reason_code: item.review_reason_code } : {})
-						};
-					}
-					const line = countedByLine.get(index);
-					// The donor's own words stay beside the item staff matched them to.
-					const words = item.free_text ? { free_text: item.free_text } : {};
-					return line
-						? { item_id: line.item_id, ...words, qty: String(line.qty), unit: line.unit }
-						: { item_id: item.item_id, ...words, qty: '0', unit: item.unit };
-				}),
-				...counted
-					.filter((c) => c.line_no >= declaredLines.length)
-					.map((c) => ({ item_id: c.item_id, qty: String(c.qty), unit: c.unit }))
-			];
-			const next: Donation = {
-				...nextBase,
-				received_summary: {
-					total_items: receivedLines.length,
-					received_at: nextBase.received_at ?? new Date().toISOString(),
-					items: summaryItems,
-					shortfalls: shortfalls.map((s) => ({
-						item_id: s.item_id,
-						declared: s.declared,
-						counted: s.counted,
-						short: s.short
-					}))
+		let closing: Donation | undefined;
+		for (let attempt = 0; ; attempt++) {
+			try {
+				const latest = (await this.repo.get<Donation>(donation._id)) ?? donation;
+				// Already closed with its summary: the first receipt stands, nothing is rewritten.
+				if (latest.status === 'received' && latest.received_summary) {
+					return { donation: latest, lines, rowsComplete: true, received: true };
 				}
-			};
-			// Written against `latest._rev`, not whatever is on file by then: a change landing
-			// after the check above conflicts here instead of being overwritten.
-			const saved = next === latest ? latest : await this.repo.put(touch(next));
-			return { donation: saved, lines, rowsComplete: true, received: true };
-		} catch (err) {
-			if (err instanceof ConflictError) {
+				// The booking moved while its rows were keyed — a line refused on another screen,
+				// the donor editing or cancelling, the TTL lapsing. Closing it from this count
+				// would write over that change, so stop and leave it to someone to check.
+				if (bookingChanged(onFile, latest)) return blocked;
+				closing = latest;
+				const nextBase = completeDonationReceipt(latest);
+				const declaredLines = latest.items ?? [];
+				const countedByLine = new Map(counted.map((c) => [c.line_no, c]));
+				// "ไม่รับ" is not "ขาด" (CR-172 FR-13): a line refused at review leaves the
+				// comparison. A typed-in line is compared under the item staff matched it to —
+				// keyed by its own words it never met its count and read as a shortfall.
+				const declaredForShortfall = declaredLines.flatMap((item, index) =>
+					item.review_status === 'rejected'
+						? []
+						: [
+								{
+									item_id: item.item_id || countedByLine.get(index)?.item_id || item.free_text,
+									qty: String(item.qty)
+								}
+							]
+				);
+				const countedForShortfall = counted.map((c) => ({
+					item_id: c.item_id,
+					qty: String(c.qty)
+				}));
+				const shortfalls = donationShortfall(declaredForShortfall, countedForShortfall);
+				// One entry per declared line, in order — the tracking page reads them by position —
+				// then any line counted off the ticket.
+				const summaryItems = [
+					...declaredLines.map((item, index) => {
+						if (item.review_status === 'rejected') {
+							return {
+								...(item.item_id ? { item_id: item.item_id } : {}),
+								...(item.free_text ? { free_text: item.free_text } : {}),
+								qty: '0',
+								unit: item.unit,
+								rejected: true,
+								...(item.review_reason ? { reject_reason: item.review_reason } : {}),
+								...(item.review_reason_code ? { reject_reason_code: item.review_reason_code } : {})
+							};
+						}
+						const line = countedByLine.get(index);
+						// The donor's own words stay beside the item staff matched them to.
+						const words = item.free_text ? { free_text: item.free_text } : {};
+						return line
+							? { item_id: line.item_id, ...words, qty: String(line.qty), unit: line.unit }
+							: { item_id: item.item_id, ...words, qty: '0', unit: item.unit };
+					}),
+					...counted
+						.filter((c) => c.line_no >= declaredLines.length)
+						.map((c) => ({ item_id: c.item_id, qty: String(c.qty), unit: c.unit }))
+				];
+				const next: Donation = {
+					...nextBase,
+					received_summary: {
+						total_items: receivedLines.length,
+						received_at: nextBase.received_at ?? new Date().toISOString(),
+						items: summaryItems,
+						shortfalls: shortfalls.map((s) => ({
+							item_id: s.item_id,
+							declared: s.declared,
+							counted: s.counted,
+							short: s.short
+						}))
+					}
+				};
+				// Written against `latest._rev`, not whatever is on file by then: a change landing
+				// after the check above conflicts here instead of being overwritten.
+				const saved = next === latest ? latest : await this.repo.put(touch(next));
+				return { donation: saved, lines, rowsComplete: true, received: true };
+			} catch (err) {
+				// `ConflictError` is not only a 409: CouchDB's other 4xx answers arrive as one too.
+				// A new `_rev` on file means someone did write the booking, so check again from
+				// the top: a close whose answer was lost reads as received, a refused line or a
+				// donor edit blocks, and a courier number alone is closed over. A booking that
+				// keeps moving is left for someone to check.
+				if (err instanceof ConflictError && closing) {
+					const current = await this.repo.get<Donation>(donation._id).catch(() => null);
+					if (current && current._rev !== closing._rev) {
+						if (attempt < MAX_CLOSE_ATTEMPTS - 1) continue;
+						return blocked;
+					}
+				}
 				return {
 					donation,
 					lines,
 					rowsComplete: true,
 					received: false,
-					transitionError: DONATION_CHANGED_WHILE_KEYING
+					transitionError:
+						err instanceof Error ? err.message : 'Could not mark the donation received'
 				};
 			}
-			return {
-				donation,
-				lines,
-				rowsComplete: true,
-				received: false,
-				transitionError: err instanceof Error ? err.message : 'Could not mark the donation received'
-			};
 		}
 	}
 
