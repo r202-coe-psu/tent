@@ -40,6 +40,9 @@ class ExternalBooking(Document):
 	group_size: int = 1
 	# False while the API is still staging the group's rows; workers skip those (FR-32)
 	committed: bool = True
+	# True only when the row was booked under `booking-bypass` against a shelter that failed the
+	# normal rule (#751). Additive: legacy rows lack the key and read as False; no schema_v.
+	bypass: bool = False
 	client_id: str
 	module_name: str | None = None
 	shelter_code: str
