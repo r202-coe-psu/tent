@@ -14,6 +14,7 @@ import type { PrintDeviceLister, PrintDeviceReader, PrintJobCreator } from './pr
 import type {
 	PrintJobDoc,
 	PrintJobPutResult,
+	PrintJobRetentionStore,
 	PrintJobStatus,
 	PrintJobStore
 } from './print-queue.server';
@@ -86,6 +87,16 @@ export function ensurePrintingDbOnce(): Promise<void> {
 	return ensured;
 }
 
+let provisioned = false;
+
+/** True once DB `printing` exists (cached); lets the housekeeping timer skip a printer-less server. */
+export async function printingDbExists(): Promise<boolean> {
+	if (provisioned) return true;
+	const { status } = await adminRaw(DB, 'GET');
+	provisioned = status === 200;
+	return provisioned;
+}
+
 async function find<T>(selector: Record<string, unknown>, limit: number): Promise<T[]> {
 	await ensurePrintingDbOnce();
 	const { status, data } = await adminRaw(`${DB}/_find`, 'POST', { selector, limit });
@@ -152,7 +163,10 @@ export const printDeviceRepository: PrintDeviceLookup &
 	}
 };
 
-export const printJobStore: PrintJobStore & PrintJobCreator & PrintJobLastReader = {
+export const printJobStore: PrintJobStore &
+	PrintJobRetentionStore &
+	PrintJobCreator &
+	PrintJobLastReader = {
 	findJobs({ status, printerId }) {
 		return find<PrintJobDoc>(
 			printerId !== undefined
@@ -225,6 +239,33 @@ export const printJobStore: PrintJobStore & PrintJobCreator & PrintJobLastReader
 			if (signal.aborted) return;
 			throw error;
 		}
+	},
+
+	/** One batch per terminal status, served by `print-job-status-finished`. */
+	async findFinishedBefore(cutoff) {
+		const batches = await Promise.all(
+			(['printed', 'failed', 'expired'] as const).map((status) =>
+				find<PrintJobDoc>(
+					{ type: 'print_job', status, finished_at: { $gt: null, $lt: cutoff } },
+					100
+				)
+			)
+		);
+		return batches.flat();
+	},
+
+	async purge(docs) {
+		if (docs.length === 0) return;
+		await ensurePrintingDbOnce();
+		const body = Object.fromEntries(docs.map((doc) => [doc._id, [doc._rev]]));
+		const { status } = await adminRaw(`${DB}/_purge`, 'POST', body);
+		if (status !== 201 && status !== 202) throw new PrintDependencyError();
+	},
+
+	async compact() {
+		await ensurePrintingDbOnce();
+		const { status } = await adminRaw(`${DB}/_compact`, 'POST', {});
+		if (status !== 202) throw new PrintDependencyError();
 	},
 
 	async getLabels(jobId) {

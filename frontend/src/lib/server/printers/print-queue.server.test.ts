@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+	applyRetention,
 	claimNextJob,
 	failInFlight,
 	PrintJobConflictError,
@@ -8,6 +9,7 @@ import {
 	waitForNextJob,
 	type PrintJobDoc,
 	type PrintJobPutResult,
+	type PrintJobRetentionStore,
 	type PrintJobStore
 } from './print-queue.server';
 
@@ -500,5 +502,65 @@ describe('sweepJobs', () => {
 		expect(counts).toEqual({ failed: 0, expired: 1 });
 		expect(stored.get('print_job:01JB0000000000000000000001')?.status).toBe('printing');
 		expect(stored.get('print_job:01JB0000000000000000000005')?.status).toBe('expired');
+	});
+});
+
+describe('applyRetention', () => {
+	const NOW = new Date('2026-10-22T03:00:00.000Z');
+
+	function finished(ulid: string, status: PrintJobDoc['status'], finishedAt: string) {
+		return pendingJob(ulid, '2026-10-01T00:00:00.000Z', { status, finished_at: finishedAt });
+	}
+
+	/** Mimics a Mango `_find` capped at `batch` docs, so purging has to loop. */
+	function fakeRetentionStore(docs: PrintJobDoc[], batch = 2) {
+		const stored = new Map(docs.map((d) => [d._id, d]));
+		const calls: string[] = [];
+		const cutoffs: string[] = [];
+		const store: PrintJobRetentionStore = {
+			async findFinishedBefore(cutoff) {
+				cutoffs.push(cutoff);
+				return [...stored.values()]
+					.filter((d) => d.finished_at !== null && d.finished_at < cutoff)
+					.slice(0, batch);
+			},
+			async purge(batchDocs) {
+				calls.push(`purge:${batchDocs.length}`);
+				for (const d of batchDocs) stored.delete(d._id);
+			},
+			async compact() {
+				calls.push('compact');
+			}
+		};
+		return { store, stored, calls, cutoffs };
+	}
+
+	it('purges every finished job older than 7 days, then compacts', async () => {
+		const { store, stored, calls, cutoffs } = fakeRetentionStore([
+			finished('01JB0000000000000000000001', 'printed', '2026-10-14T00:00:00.000Z'),
+			finished('01JB0000000000000000000002', 'failed', '2026-10-14T12:00:00.000Z'),
+			finished('01JB0000000000000000000003', 'expired', '2026-10-15T02:59:59.999Z'),
+			finished('01JB0000000000000000000004', 'printed', '2026-10-15T03:00:00.000Z'),
+			finished('01JB0000000000000000000005', 'printed', '2026-10-21T00:00:00.000Z')
+		]);
+
+		const purged = await applyRetention(store, NOW);
+
+		expect(purged).toBe(3);
+		expect(cutoffs[0]).toBe('2026-10-15T03:00:00.000Z');
+		expect([...stored.keys()]).toEqual([
+			'print_job:01JB0000000000000000000004',
+			'print_job:01JB0000000000000000000005'
+		]);
+		expect(calls).toEqual(['purge:2', 'purge:1', 'compact']);
+	});
+
+	it('still compacts when nothing is old enough, so old revisions lose their label images', async () => {
+		const { store, calls } = fakeRetentionStore([
+			finished('01JB0000000000000000000001', 'printed', '2026-10-21T00:00:00.000Z')
+		]);
+
+		expect(await applyRetention(store, NOW)).toBe(0);
+		expect(calls).toEqual(['compact']);
 	});
 });

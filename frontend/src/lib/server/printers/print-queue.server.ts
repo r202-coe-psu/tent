@@ -196,3 +196,37 @@ export async function sweepJobs(
 	}
 	return { failed, expired };
 }
+
+/** Retention port over the `printing` DB (plan §3.5); the real adapter lives in `printer-server.ts`. */
+export interface PrintJobRetentionStore {
+	/** One batch of terminal jobs whose `finished_at` is before `cutoff` (ISO). */
+	findFinishedBefore(cutoff: string): Promise<PrintJobDoc[]>;
+	/** `_purge` the docs at their `_rev`: each doc leaves the DB with its whole history. */
+	purge(docs: PrintJobDoc[]): Promise<void>;
+	/** Start `_compact`, dropping old revisions that still carry label images. */
+	compact(): Promise<void>;
+}
+
+/** O-1 (team proposal, not final): keep finished jobs for 7 days, then purge them. */
+export const PRINT_JOB_RETENTION_DAYS = 7;
+const DAY_MS = 86_400_000;
+/** Upper bound on purge rounds per run, so a huge backlog cannot pin the process. */
+const MAX_PURGE_BATCHES = 50;
+
+/**
+ * PDPA retention (plan §3.5 steps 2–3): purge terminal jobs finished more than
+ * `PRINT_JOB_RETENTION_DAYS` ago, then compact — even when nothing was purged, because the
+ * revisions before each terminal PUT still hold the label PNGs until compaction.
+ */
+export async function applyRetention(store: PrintJobRetentionStore, now: Date): Promise<number> {
+	const cutoff = new Date(now.getTime() - PRINT_JOB_RETENTION_DAYS * DAY_MS).toISOString();
+	let purged = 0;
+	for (let round = 0; round < MAX_PURGE_BATCHES; round += 1) {
+		const docs = await store.findFinishedBefore(cutoff);
+		if (docs.length === 0) break;
+		await store.purge(docs);
+		purged += docs.length;
+	}
+	await store.compact();
+	return purged;
+}
