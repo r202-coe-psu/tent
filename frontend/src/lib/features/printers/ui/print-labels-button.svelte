@@ -10,6 +10,7 @@
 	import { stationPrinter } from '../application/station-printer.svelte';
 	import { chunkLabels } from '../domain/chunk-labels';
 	import { isTerminalJobStatus, PRINT_JOB_POLL_TIMEOUT_MS } from '../domain/print-job-status';
+	import { PRINT_JOB_PICKUP_HINT_MS } from '../domain/print-job-timing';
 	import {
 		PRINTERS_I18N,
 		printJobOutcomeMessage,
@@ -51,26 +52,27 @@
 
 	const statusQuery = usePrintJobStatus(() => jobId);
 
-	// The send loop awaits one job at a time; this effect hands it the job's final status, or
-	// `printing` once the Pi has claimed it when the loop only waits for the claim.
-	let settleJob: ((outcome: PrintJobOutcome) => void) | null = null;
-	let settleOnClaim = false;
+	// Set while the job waits longer than a healthy Pi takes to claim it; cleared when it settles.
+	let pickupLate = $state(false);
+	let sendingTo = $state('');
+	const notPickedUp = $derived(running && pickupLate && statusQuery.data?.status !== 'printing');
+
+	// The send loop awaits one job at a time; this effect hands it every status update and the
+	// wait started by `waitForJob` decides which one settles the job.
+	let onStatus: ((data: NonNullable<typeof statusQuery.data>) => void) | null = null;
 	$effect(() => {
 		const data = statusQuery.data;
-		if (
-			data &&
-			(isTerminalJobStatus(data.status) || (settleOnClaim && data.status === 'printing'))
-		) {
-			settleJob?.({ status: data.status, printed: data.printed, error_code: data.error_code });
-		}
+		if (data) onStatus?.(data);
 	});
 
+	/** Resolves on the job's final status, or on `printing` (Pi claimed it) when `untilClaimed`. */
 	function waitForJob(untilClaimed: boolean): Promise<PrintJobOutcome> {
-		settleOnClaim = untilClaimed;
 		return new Promise((resolve) => {
 			const settle = (outcome: PrintJobOutcome) => {
 				clearTimeout(timer);
-				settleJob = null;
+				clearTimeout(hintTimer);
+				onStatus = null;
+				pickupLate = false;
 				resolve(outcome);
 			};
 			// The status query stops polling after the same window; a job still pending then is lost.
@@ -78,7 +80,12 @@
 				() => settle({ status: 'timeout', printed: 0, error_code: null }),
 				PRINT_JOB_POLL_TIMEOUT_MS
 			);
-			settleJob = settle;
+			const hintTimer = setTimeout(() => (pickupLate = true), PRINT_JOB_PICKUP_HINT_MS);
+			onStatus = (data) => {
+				if (isTerminalJobStatus(data.status) || (untilClaimed && data.status === 'printing')) {
+					settle({ status: data.status, printed: data.printed, error_code: data.error_code });
+				}
+			};
 		});
 	}
 
@@ -122,6 +129,7 @@
 	}
 
 	async function sendUnsent(printer: { id: string; name: string }) {
+		sendingTo = printer.name;
 		const pending = [...(unsent ?? [])];
 		while (pending.length > 0) {
 			let created;
@@ -151,7 +159,10 @@
 			printedTotal += outcome.printed;
 			const sent = outcome.status === 'printed' || (last && outcome.status === 'printing');
 			if (!sent) {
-				unsent = pending;
+				// The labels a failed job already printed are not sent again on retry.
+				const rest = pending[0].slice(outcome.printed);
+				const remaining = rest.length > 0 ? [rest, ...pending.slice(1)] : pending.slice(1);
+				unsent = remaining.length > 0 ? remaining : null;
 				running = false;
 				toast.error(
 					printJobOutcomeMessage(
@@ -181,6 +192,9 @@
 			{#if running}<LoaderCircle class="mr-1.5 size-4 animate-spin" />{/if}
 			{buttonLabel}
 		</Button>
+		{#if notPickedUp}
+			<p class="text-sm text-muted-foreground" role="status">{t.notPickedUp(sendingTo)}</p>
+		{/if}
 		{#if disconnected}
 			<p class="text-sm text-muted-foreground">{t.disconnectedHint}</p>
 		{:else if chosen && !chosen.online}

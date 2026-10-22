@@ -5,6 +5,7 @@ import { QueryClient } from '@tanstack/svelte-query';
 import { endpointStore } from '$lib/stores/endpoint.svelte';
 import { stationPrinter } from '../application/station-printer.svelte';
 import { PRINT_JOB_POLL_TIMEOUT_MS } from '../domain/print-job-status';
+import { PRINT_JOB_PICKUP_HINT_MS } from '../domain/print-job-timing';
 import { PrintApiError } from '../data/printers.api';
 import type { PrinterSummary } from '../domain/print-device.schema';
 import Harness from './__fixtures__/print-labels-button-harness.svelte';
@@ -272,6 +273,60 @@ describe('PrintLabelsButton', () => {
 		expect(api.createPrintJob).toHaveBeenCalledTimes(1);
 		expect(mainButton().textContent).toContain('พิมพ์อีกครั้ง');
 		expect(mainButton().disabled).toBe(false);
+	});
+
+	it('resumes a part-printed chunk from the first label that did not come out', async () => {
+		stationPrinter.set('SH001', 'p1');
+		let created = 0;
+		api.createPrintJob.mockImplementation(async () => ({
+			job_id: `job-${++created}`,
+			expires_at: '2026-10-22T04:00:00Z'
+		}));
+		api.getPrintJobStatus.mockImplementation(async (jobId: string) =>
+			jobId === 'job-1'
+				? { status: 'failed', printed: 7, label_count: 20, error_code: 'printer_timeout' }
+				: { status: 'printed', printed: 0, label_count: 0, error_code: null }
+		);
+		await render({
+			printers: [printer('p1')],
+			labelCount: 25,
+			renderLabels: async () => labels(25)
+		});
+
+		mainButton().click();
+		await vi.waitFor(() => expect(toast.error).toHaveBeenCalledTimes(1));
+		await settle();
+		mainButton().click();
+		await vi.waitFor(() => expect(toast.success).toHaveBeenCalledTimes(1));
+
+		expect(api.createPrintJob.mock.calls.map(([input]) => input.labels)).toEqual([
+			labels(25).slice(0, 20),
+			labels(25).slice(7, 20),
+			labels(25).slice(20)
+		]);
+	});
+
+	it('hints that the printer has not picked up the job, without offering a retry yet', async () => {
+		vi.useFakeTimers();
+		stationPrinter.set('SH001', 'p1');
+		api.createPrintJob.mockResolvedValue({ job_id: 'job-1', expires_at: '2026-10-22T04:00:00Z' });
+		api.getPrintJobStatus.mockResolvedValue({
+			status: 'pending',
+			printed: 0,
+			label_count: 1,
+			error_code: null
+		});
+		await render({ printers: [printer('p1')] });
+		const hint = 'เครื่อง เครื่อง-p1 ยังไม่รับงาน — ตรวจสอบว่าเครื่องเปิดอยู่';
+
+		mainButton().click();
+		await vi.advanceTimersByTimeAsync(PRINT_JOB_PICKUP_HINT_MS - 1_000);
+		expect(document.body.textContent).not.toContain(hint);
+		await vi.advanceTimersByTimeAsync(2_000);
+
+		expect(document.body.textContent).toContain(hint);
+		expect(mainButton().disabled).toBe(true);
+		expect(mainButton().textContent).not.toContain('พิมพ์อีกครั้ง');
 	});
 
 	it('gives up with a not-responding toast when the printer never claims the job', async () => {

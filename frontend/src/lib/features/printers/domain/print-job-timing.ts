@@ -15,6 +15,12 @@ export function leaseSecFor(labelCount: number): number {
 	return LEASE_BASE_SEC + LEASE_PER_LABEL_SEC * labelCount;
 }
 
+/**
+ * A Pi that is up long-polls and claims a job within a second or two; still pending after this,
+ * the tablet hints staff to check the printer (it does not offer a retry: the job may still print).
+ */
+export const PRINT_JOB_PICKUP_HINT_MS = 10_000;
+
 /** Slack for the 1 s status poll and clock jitter. */
 const POLL_MARGIN_SEC = 15;
 
