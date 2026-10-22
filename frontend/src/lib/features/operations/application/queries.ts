@@ -33,6 +33,7 @@ import type { MergeItemsInput } from '../domain/item-merge';
 import type { DonationBatchLine } from '../domain/donation-batch';
 import type { CycleCountSubmission } from '../domain/cycle-count';
 import { countPendingTransfers } from '../domain/transfer-pending';
+import { retryUnlessForbidden } from './transfer-retry';
 import { distributeAcrossLots, type DistributeAcrossLotsArgs } from './distribute-across-lots';
 
 /**
@@ -375,7 +376,8 @@ export const useTransferDestinations = () =>
 export const useTransfers = (filter?: TransferFilter) =>
 	createQuery(() => ({
 		queryKey: operationsKeys.transfers(),
-		queryFn: () => operationsRepository().listTransfers(filter)
+		queryFn: () => operationsRepository().listTransfers(filter),
+		retry: retryUnlessForbidden
 	}));
 
 /**
@@ -386,6 +388,7 @@ export const usePendingTransferCount = () =>
 	createQuery(() => ({
 		queryKey: operationsKeys.transfers(),
 		queryFn: () => operationsRepository().listTransfers(),
+		retry: retryUnlessForbidden,
 		select: (transfers: StockTransfer[]) => countPendingTransfers(transfers, getShelterCode())
 	}));
 

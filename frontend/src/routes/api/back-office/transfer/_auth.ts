@@ -15,18 +15,23 @@ export function handleEndpointError(e: unknown, label?: string) {
 }
 
 /**
- * Shared helper to authorize a transfer action: system_admin, shelter_manager, or the
- * warehouse side of a shelter — `warehouse_staff` or `supply_coordinator`.
+ * Shared helper to authorize a transfer action: system_admin, or — in the caller's own shelter,
+ * the one every transfer route acts on — shelter_manager or the warehouse side of that shelter:
+ * `warehouse_staff` or `supply_coordinator` (#571).
  *
- * `isWarehouseStaff()` is the same predicate the supply page guard (`requireWarehouseAccess`)
- * uses, so a role that can open the transfer tab can also read and act on transfers (#571).
- * role-permission-matrix.md gives SC the Inventory & Supply row at shelter scope, and the
- * 2026-10-10 decision sync makes `warehouse_staff` an alias of SC. `authorizeWarehouse`
- * (donation intake and others) is unchanged.
+ * The capability is checked against `caller.shelterCode`, not "any shelter": a user who is
+ * supply_coordinator in SH002 but only registration_staff in SH001 must not act on SH001's
+ * transfers. role-permission-matrix.md gives SC the Inventory & Supply row at shelter scope, and
+ * its decision sync 2026-10-10 note makes `warehouse_staff` an alias of SC
+ * (docs/prd/role-permission-matrix.md, "พัสดุและคลัง"). `authorizeWarehouse` (donation intake and
+ * others) is unchanged; its any-shelter check is #477.
  */
 export async function authorizeTransfer(cookie: string | null): Promise<Caller> {
 	const caller = await requireShelterScopeOrSA(cookie);
-	const allowed = caller.isSA || isShelterManager(caller.roles) || isWarehouseStaff(caller.roles);
+	const code = caller.shelterCode;
+	const allowed =
+		caller.isSA ||
+		(!!code && (isShelterManager(caller.roles, code) || isWarehouseStaff(caller.roles, code)));
 	if (!allowed) {
 		throw error(
 			403,

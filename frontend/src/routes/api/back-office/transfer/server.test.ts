@@ -93,6 +93,26 @@ describe('BFF Transfer List and Create Endpoints', () => {
 			}
 		);
 
+		it.each([
+			['supply_coordinator', 'SH002:supply_coordinator'],
+			['shelter_manager', 'SH002:shelter_manager']
+		])(
+			'refuses a %s of another shelter — the capability must be in the shelter acted on',
+			async (_, capability) => {
+				vi.mocked(requireShelterScopeOrSA).mockResolvedValue({
+					name: 'two_shelter_user',
+					roles: ['shelter:SH001', 'shelter:SH002', 'SH001:registration_staff', capability],
+					isSA: false,
+					shelterCode: 'SH001'
+				});
+
+				const res = await GET(createMockEvent());
+
+				expect(res.status).toBe(403);
+				expect(mockList).not.toHaveBeenCalled();
+			}
+		);
+
 		it('lets supply_coordinator create a transfer request too (#571)', async () => {
 			vi.mocked(requireShelterScopeOrSA).mockResolvedValue({
 				name: 'sc_user',

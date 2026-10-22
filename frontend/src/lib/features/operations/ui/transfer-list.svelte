@@ -119,6 +119,11 @@
 	const transfers = $derived(transfersQuery.data ?? []);
 	/** A refused or failed list is not an empty one — say which (#571). */
 	const listForbidden = $derived(transfersQuery.error instanceof TransferForbiddenError);
+	// A background refetch that fails keeps the list it already has, so only a refusal or a list
+	// that never loaded replaces the cards with the alert.
+	const listUnavailable = $derived(
+		transfersQuery.isError && (listForbidden || transfersQuery.data === undefined)
+	);
 
 	let detailId = $state<string | null>(null);
 	let detailOpen = $state(false);
@@ -243,11 +248,13 @@
 </script>
 
 <div class="@container flex flex-col gap-4">
-	{#if transfersQuery.isError}
+	{#if listUnavailable}
 		<!-- Without this the three cards read "nothing to receive / send / no transfers". -->
 		<div
 			role="alert"
-			class="flex items-start gap-3 rounded-2xl border border-border/80 bg-card p-5 shadow-md"
+			class="flex items-start gap-3 rounded-2xl border p-5 shadow-md {listForbidden
+				? 'border-amber-200 bg-amber-50'
+				: 'border-border/80 bg-card'}"
 		>
 			{#if listForbidden}
 				<ShieldAlert class="mt-0.5 h-5 w-5 shrink-0 text-amber-600" aria-hidden="true" />
@@ -267,9 +274,10 @@
 						variant="outline"
 						size="sm"
 						class="min-h-11"
+						disabled={transfersQuery.isFetching}
 						onclick={() => transfersQuery.refetch()}
 					>
-						ลองใหม่
+						{transfersQuery.isFetching ? 'กำลังโหลด…' : 'ลองใหม่'}
 					</Button>
 				</div>
 			{/if}
