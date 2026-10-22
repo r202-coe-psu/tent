@@ -13,6 +13,7 @@
  * the run ledger and deleted by id — never by query (README §4.2).
  */
 
+import { createHash, randomBytes } from 'node:crypto';
 import { ulid } from '../../src/lib/db/ulid';
 import { deriveDeterministicLedgerId } from '../../src/lib/features/operations/domain/deterministic-ledger-id';
 import {
@@ -93,6 +94,15 @@ export interface SeededRecipient {
 	recipientId: string;
 	firstName: string;
 	lastName: string;
+}
+
+/** A volunteer recipient plus the credentials a desk can scan for them (#650). */
+export interface SeededVolunteer extends SeededRecipient {
+	volunteerCode: string;
+	/** Plaintext `TKT-VOL-…` pass token — only its hash is stored, as the app does. */
+	token: string;
+	/** What the pass QR encodes: the digital-pass URL ending in the token. */
+	passUrl: string;
 }
 
 export interface SeededTicket {
@@ -427,6 +437,51 @@ export async function seedRecipient(
 	return { recipientId, firstName, lastName };
 }
 
+/**
+ * Seed a volunteer with a role-card token, stored only as its SHA-256 the way
+ * `volunteer.remote.ts#create` mints it. `inactive` is the volunteer soft-delete.
+ */
+export async function seedVolunteer(
+	scenario: DistributionScenario,
+	firstName: string,
+	lastName: string,
+	options: { status?: 'active' | 'inactive'; phone?: string } = {}
+): Promise<SeededVolunteer> {
+	const recipientId = `volunteer:${ulid()}`;
+	const token = `TKT-VOL-${randomBytes(16).toString('hex').toUpperCase()}`;
+	// Unique within the shared run shelter; `V-{NNN}` is not unique-indexed (volunteer-code.ts F14).
+	const volunteerCode = `V-${Date.now()}${Math.floor(Math.random() * 1000)}`;
+	const now = new Date().toISOString();
+	await putDocument(shelterDb(), {
+		_id: recipientId,
+		type: 'volunteer',
+		schema_v: 4,
+		shelter_code: shelterCode(),
+		created_at: now,
+		updated_at: now,
+		created_by: scenario.user.name,
+		first_name: firstName,
+		last_name: lastName,
+		phone: options.phone ?? null,
+		skills: [],
+		tracking_token_hash: createHash('sha256').update(token).digest('hex'),
+		status: options.status ?? 'active',
+		checked_in: false,
+		volunteer_code: volunteerCode,
+		identity_verified: false,
+		source: 'staff_entry',
+		personnel_type: 'volunteer'
+	});
+	return {
+		recipientId,
+		firstName,
+		lastName,
+		volunteerCode,
+		token,
+		passUrl: `https://shelter.example/volunteer/ticket/${token}`
+	};
+}
+
 export type SeedTicketStatus =
 	'READY_FOR_DISPATCH' | 'IN_TRANSIT' | 'DISTRIBUTING' | 'SHIFT_CLOSED';
 export type MealPeriod = 'breakfast' | 'lunch' | 'dinner' | 'snack';
@@ -564,7 +619,9 @@ export async function seedDistributionLog(
 		ticket_id: options.ticket.ticketId,
 		item_id: options.item.itemId,
 		qty: options.qty ?? '1',
-		recipient_type: 'evacuee',
+		recipient_type: options.recipient.recipientId.startsWith('volunteer:')
+			? 'volunteer'
+			: 'evacuee',
 		recipient_id: options.recipient.recipientId,
 		...(options.meal ? { meal: options.meal } : {}),
 		is_returnable: returnable,
