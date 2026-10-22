@@ -378,7 +378,7 @@
 									{:else if item.review_status === 'rejected'}
 										<Badge
 											variant="outline"
-											class="border-rose-200 bg-rose-50 text-sm font-semibold text-rose-900"
+											class="border-red-200 bg-red-50 text-sm font-semibold text-red-900"
 										>
 											ไม่รับ{item.review_reason ? ` · ${item.review_reason}` : ''}
 										</Badge>

@@ -222,10 +222,10 @@
 
 				{#if status === 'rejected' && donation.reject_reason}
 					<div
-						class="flex items-start gap-3 rounded-2xl border border-rose-500/40 bg-rose-50/80 p-4 text-xs text-rose-900 dark:border-rose-500/30 dark:bg-rose-950/30 dark:text-rose-200"
+						class="flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-xs text-red-900"
 						data-testid="donation-reject-reason"
 					>
-						<AlertCircle class="mt-0.5 h-5 w-5 shrink-0 text-rose-600 dark:text-rose-400" />
+						<AlertCircle class="mt-0.5 h-5 w-5 shrink-0 text-red-600" />
 						<div>
 							<h5 class="font-bold">
 								{langState.current === 'en' ? 'Reason from the shelter' : 'เหตุผลจากศูนย์พักพิง'}
@@ -451,28 +451,26 @@
 														<span>{item.item_name}</span>
 														{#if rejectedReason !== null}
 															<span
-																class="inline-flex items-center rounded-md bg-rose-100 px-2 py-0.5 text-2xs font-bold text-rose-800 dark:bg-rose-950/50 dark:text-rose-300"
+																class="inline-flex items-center rounded-md border border-red-200 bg-red-50 px-2 py-0.5 text-2xs font-semibold text-red-900"
 															>
 																{t.lineReviewRejected}
 															</span>
 														{:else if item.review_status === 'pending' && status === 'pending_review'}
 															<span
-																class="inline-flex items-center rounded-md bg-amber-100 px-2 py-0.5 text-2xs font-bold text-amber-800 dark:bg-amber-950/50 dark:text-amber-300"
+																class="inline-flex items-center rounded-md border border-amber-200 bg-amber-50 px-2 py-0.5 text-2xs font-semibold text-amber-900"
 															>
 																{t.lineReviewPending}
 															</span>
 														{:else if item.review_status === 'approved' && (status === 'pending_review' || status === 'verifying')}
 															<span
-																class="inline-flex items-center rounded-md bg-emerald-100 px-2 py-0.5 text-2xs font-bold text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300"
+																class="inline-flex items-center rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-2xs font-semibold text-emerald-900"
 															>
 																{t.lineReviewApproved}
 															</span>
 														{/if}
 													</div>
 													{#if rejectedReason}
-														<p
-															class="mt-1 text-2xs font-medium break-words text-rose-700 dark:text-rose-300"
-														>
+														<p class="mt-1 text-2xs font-medium break-words text-red-700">
 															{rejectedReason}
 														</p>
 													{/if}
