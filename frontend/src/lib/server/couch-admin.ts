@@ -55,11 +55,13 @@ export function isProtectedBootstrapAdmin(
 export async function adminRaw(
 	path: string,
 	method: string,
-	body?: unknown
+	body?: unknown,
+	signal?: AbortSignal
 ): Promise<{ status: number; data: unknown }> {
 	const { base, authHeader } = adminConfig();
 	const res = await fetch(`${base}${path}`, {
 		method,
+		...(signal ? { signal } : {}),
 		headers: {
 			Authorization: authHeader,
 			'Content-Type': 'application/json',
