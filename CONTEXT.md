@@ -49,6 +49,10 @@ _Avoid_: Diagnosis, general checkup, registration.
 A specific long-term disease recorded on an Evacuee's medical record (`medical.conditions`), chosen from the central standard list or entered as free text when not listed. Records _which_ disease; it does not by itself mark the Evacuee as vulnerable.
 _Avoid_: Chronic illness (that is the Vulnerable Group flag), health condition, underlying condition.
 
+**Allergy**:
+A substance an Evacuee is allergic to, recorded on the medical record (`medical.allergies`), chosen from the central standard list (food allergens) or entered as free text when not listed (e.g. a drug).
+_Avoid_: Dietary restriction (a preference, not a medical record), intolerance.
+
 **Triage Level**:
 A 3-color clinical classification (Green, Yellow, Red) that dictates medical urgency and residential isolation or medical zone assignment.
 _Avoid_: Priority code, track, severity score.
