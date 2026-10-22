@@ -32,8 +32,15 @@ const baseDonation = {
 	items: [{ item_id: 'item:rice', qty: '10', unit: 'kg' }]
 } as unknown as PublicDonationDoc;
 
-function mockCouch(donation: PublicDonationDoc) {
+/** `ledgerFind` answers the stock_ledger `_find` — no rows by default (nothing keyed). */
+function mockCouch(
+	donation: PublicDonationDoc,
+	ledgerFind: { status: number; data: unknown } = { status: 200, data: { docs: [] } }
+) {
 	vi.mocked(adminRaw).mockImplementation((path: string, method: string) => {
+		if (method === 'POST' && path.endsWith('/_find')) {
+			return Promise.resolve(ledgerFind);
+		}
 		if (method === 'GET' && path.includes('/registry/')) {
 			return Promise.resolve({
 				status: 200,
@@ -202,6 +209,34 @@ describe('POST /api/back-office/donations/[query]/reject', () => {
 		expect(response.status).toBe(422);
 		expect((await response.json()).error_code).toBe('INVALID_TRANSITION');
 		expect(writtenDocs()).toHaveLength(0);
+	});
+
+	// Full-branch review W3 — a receipt keyed rows but never closed the booking.
+	it('refuses a delivery whose goods are already keyed into stock', async () => {
+		mockCouch({ ...baseDonation, status: 'verifying' } as PublicDonationDoc, {
+			status: 200,
+			data: { docs: [{ _id: 'stock_ledger:row-1' }] }
+		});
+
+		const response = await POST(postEvent({ reason_code: 'damaged' }));
+
+		expect(response.status).toBe(409);
+		expect((await response.json()).error_code).toBe('GOODS_IN_STOCK');
+		expect(writtenDocs()).toHaveLength(0);
+		expect(putBody()).toBeUndefined();
+	});
+
+	it('changes nothing when it cannot tell whether goods are in stock', async () => {
+		mockCouch({ ...baseDonation, status: 'verifying' } as PublicDonationDoc, {
+			status: 503,
+			data: {}
+		});
+
+		const response = await POST(postEvent({ reason_code: 'damaged' }));
+
+		expect(response.status).toBeGreaterThanOrEqual(500);
+		expect(writtenDocs()).toHaveLength(0);
+		expect(putBody()).toBeUndefined();
 	});
 
 	it('refuses to touch another shelter donation', async () => {

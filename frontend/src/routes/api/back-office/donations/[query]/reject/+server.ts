@@ -8,6 +8,7 @@ import {
 	routeErrorResponse as toRouteError,
 	staleDecisionResponse
 } from '$lib/server/donation-intake';
+import { hasKeyedDonationStock } from '$lib/server/donation-docs';
 import {
 	donorRejectMessage,
 	hasLineReview,
@@ -75,6 +76,20 @@ export const POST: RequestHandler = async ({ params, request }) => {
 				{ status: 422 }
 			);
 		}
+		// A `verifying` booking whose receipt keyed rows but never closed: rejecting it would
+		// hand the quota back and tell the donor "not accepted" with the goods on the shelf.
+		// The same rule the donor's cancel follows (owner decision 2026-10-22).
+		if (await hasKeyedDonationStock(dbName, donation._id)) {
+			return json(
+				{
+					success: false,
+					error_code: 'GOODS_IN_STOCK',
+					error:
+						'ใบนี้มีของบันทึกเข้าคลังแล้ว — ปฏิเสธไม่ได้ ให้รับของต่อจากหน้าตรวจรับ หรือติดต่อผู้ดูแลเพื่อตรวจยอด'
+				},
+				{ status: 409 }
+			);
+		}
 
 		const ctx = { shelterCode: donation.shelter_code, createdBy: caller.name };
 		const audit: AuditEntry = createAuditEntry(
@@ -115,6 +130,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
 			return json(
 				{
 					success: false,
+					error_code: 'DONATION_CONFLICT',
 					error: 'Donation was updated by another process. Please search again and retry.'
 				},
 				{ status: 409 }

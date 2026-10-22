@@ -167,6 +167,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
 			return json(
 				{
 					success: false,
+					error_code: 'DONATION_CONFLICT',
 					error: 'Donation was updated by another process. Please search again and retry.'
 				},
 				{ status: 409 }
