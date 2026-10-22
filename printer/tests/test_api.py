@@ -54,7 +54,29 @@ def test_next_job_returns_claimed_job_with_decoded_labels():
         label_count=2,
         lease_until="2026-10-22T10:00:30.000Z",
         labels=(b"\x89PNG-fake-label-1", b"\x89PNG-fake-label-2"),
+        lease_sec=None,
     )
+
+
+def test_next_job_carries_the_lease_the_server_sized_for_this_job():
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "job": {
+                    "id": "print_job:01J9ZABC",
+                    "label_count": 1,
+                    "lease_sec": 95,
+                    "lease_until": "2026-10-22T10:01:35.000Z",
+                },
+                "labels": [LABEL_1_B64],
+            },
+        )
+
+    job = client_with(handler).next_job("ready")
+
+    assert job is not None
+    assert job.lease_sec == 95
 
 
 def test_next_job_returns_none_when_server_has_no_work():

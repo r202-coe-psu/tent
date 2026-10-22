@@ -38,6 +38,8 @@ class ClaimedJob:
     label_count: int
     lease_until: str
     labels: tuple[bytes, ...]
+    # Server-sized lease for this job; None from an older BFF (fall back to hello's lease_sec).
+    lease_sec: int | None = None
 
 
 class BffClient:
@@ -97,4 +99,5 @@ class BffClient:
             label_count=job["label_count"],
             lease_until=job["lease_until"],
             labels=tuple(base64.b64decode(label) for label in body["labels"]),
+            lease_sec=job.get("lease_sec"),
         )

@@ -1,3 +1,6 @@
+// eslint-disable-next-line no-restricted-imports -- server-safe domain rule; feature barrel will pull client UI/query code
+import { leaseSecFor } from '$lib/features/printers/domain/print-job-timing';
+
 export type PrintJobStatus = 'pending' | 'printing' | 'printed' | 'failed' | 'expired';
 
 /** `print_job:{ulid}` doc in DB `printing` (print-server-implementation-plan §3.3). Timestamps are ISO strings. */
@@ -45,7 +48,8 @@ export interface PrintJobStore {
 }
 
 export interface ClaimedJob {
-	job: { id: string; label_count: number; lease_until: string };
+	/** `lease_sec` lets the Pi bound its report retries without trusting its own clock. */
+	job: { id: string; label_count: number; lease_sec: number; lease_until: string };
 	labels: string[];
 }
 
@@ -66,10 +70,12 @@ function isDue(ts: string, now: Date): boolean {
 	return Date.parse(ts) <= now.getTime();
 }
 
-const DEFAULT_LEASE_SEC = 90;
 const JOB_ID_PREFIX = 'print_job:';
 
-/** Claim the oldest pending job of a printer: PUT it as `printing` with a server-clock lease. */
+/**
+ * Claim the oldest pending job of a printer: PUT it as `printing` with a server-clock lease sized
+ * by its label count (`leaseSecFor`), unless `leaseSec` overrides it.
+ */
 export async function claimNextJob(
 	store: PrintJobStore,
 	printerId: string,
@@ -83,7 +89,8 @@ export async function claimNextJob(
 			await store.put(terminal(candidate, 'expired', opts.now));
 			continue;
 		}
-		const leaseUntil = new Date(opts.now.getTime() + (opts.leaseSec ?? DEFAULT_LEASE_SEC) * 1000);
+		const leaseSec = opts.leaseSec ?? leaseSecFor(candidate.label_count);
+		const leaseUntil = new Date(opts.now.getTime() + leaseSec * 1000);
 		const claimed: PrintJobDoc = {
 			...candidate,
 			status: 'printing',
@@ -97,6 +104,7 @@ export async function claimNextJob(
 			job: {
 				id: candidate._id.slice(JOB_ID_PREFIX.length),
 				label_count: candidate.label_count,
+				lease_sec: leaseSec,
 				lease_until: claimed.lease_until as string
 			},
 			labels: await store.getLabels(candidate._id)

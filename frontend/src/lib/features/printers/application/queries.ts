@@ -42,9 +42,9 @@ export const useCreatePrintJob = () =>
 	}));
 
 /**
- * Polls a job every second until it is printed/failed/expired or 60 s have passed since the job
- * id was first seen. After 60 s the query simply stops; the caller treats a still-pending status
- * as a timeout (`PRINT_JOB_POLL_TIMEOUT_MS`).
+ * Polls a job every second until it is printed/failed/expired or `PRINT_JOB_POLL_TIMEOUT_MS` has
+ * passed since the job id was first seen. Then the query simply stops; the caller treats a
+ * still-open status as a timeout.
  */
 export const usePrintJobStatus = (jobId: () => string | undefined) => {
 	let trackedJobId: string | undefined;

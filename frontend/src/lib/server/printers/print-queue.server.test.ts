@@ -115,15 +115,29 @@ describe('claimNextJob', () => {
 			job: {
 				id: '01JB0000000000000000000001',
 				label_count: 2,
-				lease_until: '2026-10-22T03:02:30.000Z'
+				lease_sec: 100,
+				lease_until: '2026-10-22T03:02:40.000Z'
 			},
 			labels: ['AAA=', 'BBB=']
 		});
 		expect(stored.get('print_job:01JB0000000000000000000001')).toMatchObject({
 			status: 'printing',
 			claimed_at: '2026-10-22T03:01:00.000Z',
-			lease_until: '2026-10-22T03:02:30.000Z'
+			lease_until: '2026-10-22T03:02:40.000Z'
 		});
+	});
+
+	it('leases a bigger job for longer, so a slow 20-label print does not lose its lease', async () => {
+		const { store } = fakeStore(
+			[pendingJob('01JB0000000000000000000001', '2026-10-22T03:00:01.000Z', { label_count: 20 })],
+			{}
+		);
+
+		const claimed = await claimNextJob(store, PRINTER, {
+			now: new Date('2026-10-22T03:01:00.000Z')
+		});
+
+		expect(claimed?.job).toMatchObject({ lease_sec: 190, lease_until: '2026-10-22T03:04:10.000Z' });
 	});
 
 	it('falls through to the next oldest pending job when the oldest was claimed by another agent', async () => {
@@ -144,7 +158,8 @@ describe('claimNextJob', () => {
 			job: {
 				id: '01JB0000000000000000000002',
 				label_count: 2,
-				lease_until: '2026-10-22T03:02:30.000Z'
+				lease_sec: 100,
+				lease_until: '2026-10-22T03:02:40.000Z'
 			},
 			labels: ['CCC=']
 		});
@@ -243,7 +258,8 @@ describe('waitForNextJob', () => {
 		expect(claimed?.job).toEqual({
 			id: '01JB0000000000000000000001',
 			label_count: 2,
-			lease_until: '2026-10-22T03:02:33.000Z'
+			lease_sec: 100,
+			lease_until: '2026-10-22T03:02:43.000Z'
 		});
 		expect(waitCalls).toEqual([{ printerId: PRINTER, since: 'seq-1', timeoutMs: 25000 }]);
 	});

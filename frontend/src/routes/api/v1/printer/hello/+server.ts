@@ -2,6 +2,8 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { recordHeartbeat } from '$lib/server/printers/device-heartbeat';
 import { failInFlight } from '$lib/server/printers/print-queue.server';
+// eslint-disable-next-line no-restricted-imports -- server-safe domain rule; feature barrel will pull client UI/query code
+import { leaseSecFor } from '$lib/features/printers/domain/print-job-timing';
 import { printDeviceRepository, printJobStore } from '$lib/server/printers/printer-server';
 import {
 	authenticateRequest,
@@ -13,7 +15,8 @@ import {
 
 export const prerender = false;
 
-const CONFIG = { wait_sec: 25, lease_sec: 90 };
+/** `lease_sec` is the 1-label lease: the agent's fallback when a claim carries no `lease_sec`. */
+const CONFIG = { wait_sec: 25, lease_sec: leaseSecFor(1) };
 
 export const POST: RequestHandler = async ({ request }) => {
 	try {

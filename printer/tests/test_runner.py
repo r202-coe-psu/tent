@@ -58,7 +58,9 @@ LABEL_1 = b"\x89PNG-fake-label-1"
 LABEL_2 = b"\x89PNG-fake-label-2"
 
 
-def job_response(*labels: bytes, job_id: str = JOB_ID) -> httpx.Response:
+def job_response(
+    *labels: bytes, job_id: str = JOB_ID, lease_sec: int | None = None
+) -> httpx.Response:
     return httpx.Response(
         200,
         json={
@@ -66,6 +68,7 @@ def job_response(*labels: bytes, job_id: str = JOB_ID) -> httpx.Response:
                 "id": job_id,
                 "label_count": len(labels),
                 "lease_until": "2026-10-22T10:00:30.000Z",
+                **({"lease_sec": lease_sec} if lease_sec is not None else {}),
             },
             "labels": [base64.b64encode(label).decode() for label in labels],
         },
@@ -301,6 +304,29 @@ def test_report_result_gives_up_once_the_lease_budget_is_spent_and_moves_on(agen
     assert agent.server.paths() == [HELLO, NEXT, RESULT, RESULT, RESULT, RESULT, RESULT, NEXT]
     assert agent.clock.sleeps == [1, 2, 4, 8]
     assert len(fake_cups.calls("lp")) == 1
+
+
+def test_report_retries_are_bounded_by_the_claimed_job_lease_not_the_hello_default(
+    agent, fake_cups
+):
+    fake_cups.set("lp", out=LP_OK)
+    fake_cups.set("lpstat_completed", out=COMPLETED_42)
+    agent.server.script("hello", hello_ok(lease_sec=1000))
+    agent.server.script("next", job_response(LABEL_1, lease_sec=10))
+    agent.server.script(
+        "result",
+        httpx.ConnectError("refused"),
+        error_503(),
+        httpx.ConnectError("refused"),
+        error_503(),
+        httpx.ConnectError("refused"),
+        httpx.ConnectError("refused"),
+    )
+
+    agent.run(max_iterations=2)
+
+    assert agent.server.paths() == [HELLO, NEXT, RESULT, RESULT, RESULT, RESULT, RESULT, NEXT]
+    assert agent.clock.sleeps == [1, 2, 4, 8]
 
 
 def test_report_result_conflict_is_dropped_immediately_and_the_loop_moves_on(agent, fake_cups):

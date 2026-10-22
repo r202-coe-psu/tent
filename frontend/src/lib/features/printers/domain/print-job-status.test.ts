@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { isTerminalJobStatus, shouldKeepPolling } from './print-job-status';
+import {
+	isTerminalJobStatus,
+	PRINT_JOB_POLL_TIMEOUT_MS,
+	shouldKeepPolling
+} from './print-job-status';
 
 describe('isTerminalJobStatus', () => {
 	it.each([
@@ -16,9 +20,13 @@ describe('isTerminalJobStatus', () => {
 describe('shouldKeepPolling', () => {
 	const startedAtMs = 1_000_000;
 
-	it('keeps polling a printing job within 60 s', () => {
+	it('keeps polling a printing job within the timeout', () => {
 		expect(
-			shouldKeepPolling({ status: 'printing', startedAtMs, nowMs: startedAtMs + 59_999 })
+			shouldKeepPolling({
+				status: 'printing',
+				startedAtMs,
+				nowMs: startedAtMs + PRINT_JOB_POLL_TIMEOUT_MS - 1
+			})
 		).toBe(true);
 	});
 
@@ -26,10 +34,14 @@ describe('shouldKeepPolling', () => {
 		expect(shouldKeepPolling({ status: undefined, startedAtMs, nowMs: startedAtMs })).toBe(true);
 	});
 
-	it('stops polling at 60 s', () => {
-		expect(shouldKeepPolling({ status: 'pending', startedAtMs, nowMs: startedAtMs + 60_000 })).toBe(
-			false
-		);
+	it('stops polling at the timeout', () => {
+		expect(
+			shouldKeepPolling({
+				status: 'pending',
+				startedAtMs,
+				nowMs: startedAtMs + PRINT_JOB_POLL_TIMEOUT_MS
+			})
+		).toBe(false);
 	});
 
 	it('stops polling once the job is terminal', () => {

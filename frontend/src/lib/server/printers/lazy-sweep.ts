@@ -1,3 +1,5 @@
+// eslint-disable-next-line no-restricted-imports -- server-safe domain rule; feature barrel will pull client UI/query code
+import { SWEEP_INTERVAL_SEC } from '$lib/features/printers/domain/print-job-timing';
 import {
 	applyRetention,
 	sweepJobs,
@@ -10,7 +12,7 @@ import {
  * process, retention (purge + compact) at most once an hour. A process-wide timer drives both, so
  * stale jobs and their label PNGs go away even when no Pi polls; Pi polls also trigger the sweep.
  */
-const SWEEP_INTERVAL_MS = 30_000;
+const SWEEP_INTERVAL_MS = SWEEP_INTERVAL_SEC * 1000;
 const RETENTION_INTERVAL_MS = 60 * 60_000;
 
 let lastSweepAt = Number.NEGATIVE_INFINITY;

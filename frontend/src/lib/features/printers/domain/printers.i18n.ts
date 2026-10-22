@@ -290,7 +290,7 @@ export const PRINTERS_I18N = {
 export type PrintersI18nLang = keyof typeof PRINTERS_I18N;
 
 export interface PrintJobOutcome {
-	/** `timeout` = the client gave up polling (60 s) before the job reached a final status. */
+	/** `timeout` = the client gave up polling (`PRINT_JOB_POLL_TIMEOUT_MS`) before a final status. */
 	status: PrintJobStatus | 'timeout';
 	printed: number;
 	error_code: string | null;

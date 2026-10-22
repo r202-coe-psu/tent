@@ -3,10 +3,10 @@ import { ulid } from '$lib/db/ulid';
 import type { PrintJobCreateInput } from '$lib/features/printers/domain/print-job.schema';
 // eslint-disable-next-line no-restricted-imports -- server-safe domain rule; feature barrel will pull client UI/query code
 import { isPrinterOnline } from '$lib/features/printers/domain/printer-status';
+// eslint-disable-next-line no-restricted-imports -- server-safe domain rule; feature barrel will pull client UI/query code
+import { JOB_TTL_SEC } from '$lib/features/printers/domain/print-job-timing';
 import type { PrintDeviceDoc } from './device-credentials';
 import type { PrintJobDoc } from './print-queue.server';
-
-export const JOB_TTL_SEC = 120;
 
 /** Write side of the `printing` DB: one PUT, the doc already carries its `_attachments`. */
 export interface PrintJobCreator {

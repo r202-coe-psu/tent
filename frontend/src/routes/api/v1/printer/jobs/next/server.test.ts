@@ -122,7 +122,8 @@ describe('POST /api/v1/printer/jobs/next', () => {
 			job: {
 				id: '01JB0000000000000000000001',
 				label_count: 2,
-				lease_until: '2026-10-22T03:02:30.000Z'
+				lease_sec: 100,
+				lease_until: '2026-10-22T03:02:40.000Z'
 			},
 			labels: ['AAA=', 'BBB=']
 		});

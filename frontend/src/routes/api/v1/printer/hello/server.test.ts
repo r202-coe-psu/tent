@@ -97,7 +97,7 @@ describe('POST /api/v1/printer/hello', () => {
 		expect(await response.json()).toEqual({
 			device: { device_id: 'printer-sh001-reg1', name: 'จุดลงทะเบียน 1', shelter_code: 'SH001' },
 			server_time: '2026-10-22T03:01:00.000Z',
-			config: { wait_sec: 25, lease_sec: 90 }
+			config: { wait_sec: 25, lease_sec: 95 }
 		});
 	});
 

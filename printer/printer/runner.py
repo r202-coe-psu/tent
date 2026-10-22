@@ -167,7 +167,7 @@ def run(
                 error_code,
                 config.error_backoff_max_sec,
                 monotonic,
-                deadline=claimed_at + hello.lease_sec,
+                deadline=claimed_at + (claimed.lease_sec or hello.lease_sec),
             )
         except AuthError:
             log.error("device auth failed - check DEVICE_ID / DEVICE_SECRET")

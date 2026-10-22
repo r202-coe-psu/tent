@@ -1,7 +1,7 @@
 import type { PrintJobStatus } from './print-job.schema';
+import { PRINT_JOB_POLL_TIMEOUT_MS } from './print-job-timing';
 
-/** Stop polling for a job after this long and tell the user the printer did not answer. */
-export const PRINT_JOB_POLL_TIMEOUT_MS = 60_000;
+export { PRINT_JOB_POLL_TIMEOUT_MS };
 
 export function isTerminalJobStatus(status: PrintJobStatus): boolean {
 	return status === 'printed' || status === 'failed' || status === 'expired';
