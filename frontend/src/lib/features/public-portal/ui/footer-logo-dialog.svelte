@@ -56,6 +56,10 @@
 			enctype="multipart/form-data"
 			class="space-y-4"
 			use:enhance={({ cancel }) => {
+				if (fileError) {
+					cancel();
+					return;
+				}
 				if (!isEdit && !file) {
 					fileError = 'กรุณาเลือกรูปโลโก้';
 					cancel();

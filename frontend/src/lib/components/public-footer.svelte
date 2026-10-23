@@ -78,6 +78,9 @@
 								class="flex h-20 min-w-32 items-center justify-center rounded-xl border border-slate-200/80 bg-white px-5 py-3 shadow-2xs transition-colors hover:border-slate-300 hover:shadow-xs focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none"
 							>
 								{@render logoImage()}
+								<span class="sr-only">
+									({langState.current === 'en' ? 'opens in new tab' : 'เปิดในหน้าต่างใหม่'})</span
+								>
 							</a>
 						{:else}
 							<div
