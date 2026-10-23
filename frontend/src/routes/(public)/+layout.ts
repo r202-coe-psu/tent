@@ -1,11 +1,12 @@
 import type { LayoutLoad } from './$types';
 import type { Announcement } from '$lib/features/announcements';
-import type { FaqItem } from '$lib/features/public-portal';
+import type { FaqItem, PublicFooterLogo } from '$lib/features/public-portal';
 
 export interface PublicLayoutConfig {
 	phone_number?: string;
 	line_oa_url?: string;
 	facebook_url?: string;
+	footer_logos?: PublicFooterLogo[];
 }
 
 type PublicLayoutConfigResponse = PublicLayoutConfig & { faqs?: FaqItem[] };
@@ -34,7 +35,8 @@ export const load = (async ({ fetch }) => {
 			configData = {
 				phone_number: cfg.phone_number || '',
 				line_oa_url: cfg.line_oa_url || '',
-				facebook_url: cfg.facebook_url || ''
+				facebook_url: cfg.facebook_url || '',
+				footer_logos: cfg.footer_logos || []
 			};
 			faqs = cfg.faqs || [];
 		}

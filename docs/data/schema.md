@@ -2,8 +2,8 @@
 title: Smart Shelter — Database Schema v5
 status: draft for review
 created: 2026-06-11
-updated: 2026-10-22
-note: CR-187 approved (2026-10-22, #648) — §3.3 `master_type` เพิ่ม `allergy` (global-only, seed 5) + §1.2 `medical.allergies` = master code หรือ free text (ไม่ bump `schema_v`); CR-186 approved (2026-10-22, #649) — §3.3 `master_type` เพิ่ม `chronic_disease` (global-only, seed 12) + §1.2 `medical.conditions` = master code หรือ free text (ไม่ bump `schema_v`); CR-185 approved (2026-10-21, #709) — §9.2 `public_jobs.is_urgent` (projection field ใหม่, `PROJECTION_VERSION` 5→6, ไม่ bump `schema_v`)
+updated: 2026-10-23
+note: CR-184 approved (2026-10-22, #631) — §3.13 `config:public_portal` + `footer_logos[]` / `_attachments.footer_logo_{id}` (≤512 KB, ≤12, ไม่ bump `schema_v`; worker ไม่ project 2 field นี้ — `PROJECTION_VERSION` 6 ร่วมกับ #727); CR-187 approved (2026-10-22, #648) — §3.3 `master_type` เพิ่ม `allergy` (global-only, seed 5) + §1.2 `medical.allergies` = master code หรือ free text (ไม่ bump `schema_v`); CR-186 approved (2026-10-22, #649) — §3.3 `master_type` เพิ่ม `chronic_disease` (global-only, seed 12) + §1.2 `medical.conditions` = master code หรือ free text (ไม่ bump `schema_v`); CR-185 approved (2026-10-21, #709) — §9.2 `public_jobs.is_urgent` (projection field ใหม่, `PROJECTION_VERSION` 5→6, ไม่ bump `schema_v`)
 ---
 
 # Database Schema v5 — field-level
@@ -1917,6 +1917,38 @@ caption). registry doc ของศูนย์เดียว (`shelter_code`) 
 
 **Index (Mango):** `kiosk-banner-by-shelter` = `(type, shelter_code)` — CouchDB ใช้ json index เฉพาะเมื่อ selector
 ระบุครบทุก field จึงตรงกับ selector ของรายการ banner พอดี · deploy โดย `pnpm db:sync` / `sync:central`
+
+---
+
+### 3.13 `config` — `config:public_portal` (singleton) · **schema_v 1** ([CR-184](../changes/12-public/CR-184-public-footer-logos.md))
+
+เนื้อหาของ public portal ที่ SA แก้จาก `/system-management/public-portal-config`. Envelope ตาม §0
+(`type: "config"`). BFF `GET /api/public/v1/config/faqs` อ่านจาก CouchDB ตรง (fallback FastAPI/Mongo `public_config`).
+Worker project ไป `public_config` ทั้งก้อน **ยกเว้น** `footer_logos` และ `_attachments` (CR-184 Q2, `PROJECTION_VERSION` 6 ร่วมกับ #727).
+
+| Field | ชนิด | req | หมายเหตุ |
+| --- | --- | --- | --- |
+| `faqs` | `{ [category]: FaqItem[] }` | req | category ที่ใช้: `public`, `registration`, `volunteer` · `FaqItem` = `{ id?, question, answer, question_en?, answer_en?, is_published (default true), order (default 0) }` |
+| `phone_number` | str | opt | `''` = ไม่แสดง |
+| `line_oa_url` / `facebook_url` | str(url) | opt | `''` = ไม่แสดง (footer column "ช่องทางออนไลน์ด่วน") |
+| `footer_logos` | `FooterLogo[]` | opt | ไม่มี field = `[]` · สูงสุด 12 รายการ · โลโก้หน่วยงานใน footer |
+| `footer_logos[].id` | str (ULID) | req | server สร้าง · แก้ไม่ได้ · ชื่อ attachment = `footer_logo_{id}` |
+| `footer_logos[].alt_th` | str | req | trim · 1–120 · `alt` ของรูป |
+| `footer_logos[].alt_en` | str | opt | trim · ≤120 · ว่าง = ใช้ `alt_th` เมื่อภาษา EN |
+| `footer_logos[].link_url` | str | opt | `https://` เท่านั้น · ว่าง = รูปไม่เป็นลิงก์ |
+| `footer_logos[].order` | int | req | ≥1 · server กำหนด (ต่อท้าย, renumber 1..n เมื่อลบ/ย้าย) |
+| `footer_logos[].is_published` | bool | req | default `true` |
+| `_attachments.footer_logo_{id}` | attachment | req ต่อ logo | `image/png` · `image/jpeg` · `image/webp` (ชนิดเดียวกับ §3.12) · ≤512 KB · `content_type` จาก magic bytes ที่ server ตรวจ · ไม่รับ SVG |
+
+**Invariant:** ทุก entry ใน `footer_logos` มี attachment คู่กัน และไม่มี attachment `footer_logo_*` กำพร้า.
+
+**การเขียน:** SA เท่านั้น ผ่าน form action ของหน้า `public-portal-config` (admin credential) · ทุก write = PUT ทั้ง doc
+ครั้งเดียวพร้อม attachment ตัวอื่นเป็น stub · การบันทึก FAQ/social ต้องคง `footer_logos` + `_attachments` จาก doc เดิม ·
+VDU ไม่ตรวจ field ของ doc นี้ (เงื่อนไขผู้เขียน `registry` เดิมคงไว้).
+
+**อ่านรูป (public):** `GET /api/public/v1/config/footer-logos/{id}/image?v={digest}` — เฉพาะ `is_published = true`
+· `cache-control: public, max-age=3600` (ซ่อนแล้วอาจยังแสดงจาก cache ≤1 ชม.) · SA ดูตัวที่ซ่อนได้ (`no-store`) ·
+ผู้อื่นที่ขอตัวที่ไม่มี/ซ่อน → `404`.
 
 ---
 

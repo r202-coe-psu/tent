@@ -11,10 +11,12 @@
 	} from '$lib/constants/i18n';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { getTranslation } from '$lib/utils/i18n';
+	import type { PublicFooterLogo } from '$lib/features/public-portal';
 
 	export interface PublicFooterConfig {
 		line_oa_url?: string;
 		facebook_url?: string;
+		footer_logos?: PublicFooterLogo[];
 	}
 
 	interface Props {
@@ -27,8 +29,13 @@
 
 	const effectiveConfig = $derived<PublicFooterConfig>({
 		line_oa_url: configData?.line_oa_url || pageConfig?.line_oa_url || '',
-		facebook_url: configData?.facebook_url || pageConfig?.facebook_url || ''
+		facebook_url: configData?.facebook_url || pageConfig?.facebook_url || '',
+		footer_logos: configData?.footer_logos ?? pageConfig?.footer_logos ?? []
 	});
+
+	const footerLogos = $derived(effectiveConfig.footer_logos ?? []);
+	const logoAlt = (logo: PublicFooterLogo) =>
+		langState.current === 'en' && logo.alt_en ? logo.alt_en : logo.alt_th;
 
 	const hasLineOa = $derived(Boolean(effectiveConfig.line_oa_url?.trim()));
 	const hasFacebook = $derived(Boolean(effectiveConfig.facebook_url?.trim()));
@@ -39,6 +46,55 @@
 	const cookieT = $derived(getTranslation(PUBLIC_COOKIE_I18N, langState.current));
 	const policyT = $derived(getTranslation(PUBLIC_POLICY_I18N, langState.current));
 </script>
+
+<!-- Partner Logos (config:public_portal.footer_logos) — light band above the footer -->
+{#if footerLogos.length > 0}
+	<section
+		aria-labelledby="footer-partners-heading"
+		class="border-t border-slate-200/80 bg-[#F8FAFC]"
+	>
+		<div class="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
+			<h2 id="footer-partners-heading" class="text-center text-sm font-semibold text-slate-500">
+				{t.partners}
+			</h2>
+			<ul class="mt-4 flex flex-wrap items-center justify-center gap-3 sm:gap-4">
+				{#each footerLogos as logo (logo.id)}
+					{@const alt = logoAlt(logo)}
+					<li>
+						{#snippet logoImage()}
+							<img
+								src={logo.image_url}
+								{alt}
+								title={alt}
+								loading="lazy"
+								class="h-12 w-auto max-w-44 object-contain"
+							/>
+						{/snippet}
+						{#if logo.link_url}
+							<a
+								href={logo.link_url}
+								target="_blank"
+								rel="noopener noreferrer"
+								class="flex h-20 min-w-32 items-center justify-center rounded-xl border border-slate-200/80 bg-white px-5 py-3 shadow-2xs transition-colors hover:border-slate-300 hover:shadow-xs focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none"
+							>
+								{@render logoImage()}
+								<span class="sr-only">
+									({langState.current === 'en' ? 'opens in new tab' : 'เปิดในหน้าต่างใหม่'})</span
+								>
+							</a>
+						{:else}
+							<div
+								class="flex h-20 min-w-32 items-center justify-center rounded-xl border border-slate-200/80 bg-white px-5 py-3 shadow-2xs"
+							>
+								{@render logoImage()}
+							</div>
+						{/if}
+					</li>
+				{/each}
+			</ul>
+		</div>
+	</section>
+{/if}
 
 <footer class="border-t border-[#0A2647] bg-[#0A2647] text-white antialiased">
 	<div class="mx-auto max-w-7xl px-4 py-10 sm:px-6 sm:py-12 lg:px-8">

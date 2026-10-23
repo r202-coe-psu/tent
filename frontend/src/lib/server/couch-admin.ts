@@ -71,6 +71,20 @@ export async function adminRaw(
 	return { status: res.status, data };
 }
 
+/** Admin GET of one attachment's raw bytes — avoids pulling every attachment via `?attachments=true`. */
+export async function adminAttachment(
+	path: string
+): Promise<{ status: number; bytes: ArrayBuffer | null; contentType: string | null }> {
+	const { base, authHeader } = adminConfig();
+	const res = await fetch(`${base}${path}`, { headers: { Authorization: authHeader } });
+	if (!res.ok) return { status: res.status, bytes: null, contentType: null };
+	return {
+		status: res.status,
+		bytes: await res.arrayBuffer(),
+		contentType: res.headers.get('content-type')
+	};
+}
+
 /** Admin request that parses JSON and throws CouchDB's reason on HTTP error. */
 export async function adminFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
 	const { base, authHeader } = adminConfig();
@@ -170,6 +184,9 @@ const STATUS_BY_CODE: Record<ServiceErrorCode, number> = {
 	CONFLICT: 409,
 	INTERNAL: 500
 };
+
+/** HTTP status for a {@link ServiceErrorCode} — for callers that answer with `fail()` instead of JSON. */
+export const serviceErrorStatus = (code: ServiceErrorCode): number => STATUS_BY_CODE[code];
 
 /** Contract-shaped error carrying its code; handlers turn it into the envelope. */
 export class ServiceError extends Error {
