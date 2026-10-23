@@ -247,11 +247,13 @@ describe('GET /api/v1/auth/oauth/thaid/callback (mode=login, CR-141)', () => {
 		vi.clearAllMocks();
 	});
 
-	function loginEvent(state: string) {
+	function loginEvent(state: string, cookieState: string | null = state) {
 		return {
 			url: new URL(`http://localhost/api/v1/auth/oauth/thaid/callback?code=c&state=${state}`),
 			cookies: {
-				get: vi.fn((name: string) => (name === 'oauth_thaid_state' ? state : undefined)),
+				get: vi.fn((name: string) =>
+					name === 'oauth_thaid_state' ? (cookieState ?? undefined) : undefined
+				),
 				set: vi.fn(),
 				delete: vi.fn()
 			} as unknown as Cookies,
@@ -297,6 +299,23 @@ describe('GET /api/v1/auth/oauth/thaid/callback (mode=login, CR-141)', () => {
 			expect(mockSetPendingLinkCookie).not.toHaveBeenCalled();
 		}
 	});
+
+	it('rejects a login callback without the state cookie with /login?error=invalid_state', async () => {
+		mockParseThaidOAuthState.mockImplementation((raw?: string) =>
+			raw === 's-login' ? { mode: 'login', name: '', nonce: 'n' } : null
+		);
+		mockExchangeThaidCode.mockResolvedValue(mockClaims);
+
+		try {
+			await GET(loginEvent('s-login', null) as Parameters<typeof GET>[0]);
+			expect.unreachable('Should have thrown redirect');
+		} catch (e: unknown) {
+			const redir = e as { status: number; location: string };
+			expect(redir.status).toBe(302);
+			expect(redir.location).toBe('/login?error=invalid_state');
+			expect(mockExchangeThaidCode).not.toHaveBeenCalled();
+		}
+	});
 });
 
 describe('GET /api/v1/auth/oauth/thaid/callback (mode=member_scan)', () => {
@@ -305,11 +324,13 @@ describe('GET /api/v1/auth/oauth/thaid/callback (mode=member_scan)', () => {
 		_resetSessionsForTest();
 	});
 
-	function memberScanEvent(state: string) {
+	function memberScanEvent(state: string, cookieState: string | null = state) {
 		return {
 			url: new URL(`http://localhost/api/v1/auth/oauth/thaid/callback?code=c&state=${state}`),
 			cookies: {
-				get: vi.fn((name: string) => (name === 'oauth_thaid_state' ? state : undefined)),
+				get: vi.fn((name: string) =>
+					name === 'oauth_thaid_state' ? (cookieState ?? undefined) : undefined
+				),
 				set: vi.fn(),
 				delete: vi.fn()
 			} as unknown as Cookies,
@@ -338,6 +359,27 @@ describe('GET /api/v1/auth/oauth/thaid/callback (mode=member_scan)', () => {
 		mockParseThaidCitizenClaims.mockReturnValue({ id: 'thaid-1100500123456', first_name: 'สมชาย' });
 
 		const redir = await redirectOf(memberScanEvent('s-member'));
+
+		expect(redir.status).toBe(302);
+		expect(redir.location).toBe('/thaid-scan-success?status=success');
+		expect(getScanSession(session.id)).toMatchObject({
+			status: 'completed',
+			profile: { first_name: 'สมชาย' }
+		});
+	});
+
+	it('completes the scan session and redirects to /thaid-scan-success?status=success even when the browser has no state cookie', async () => {
+		const session = createScanSession();
+		mockExchangeThaidCode.mockResolvedValue(mockClaims);
+		mockParseThaidCitizenClaims.mockReturnValue({ id: 'thaid-1100500123456', first_name: 'สมชาย' });
+		// Cross-device: the phone's default browser opens the callback without the state cookie.
+		mockParseThaidOAuthState.mockImplementation((raw?: string) =>
+			raw === 's-member'
+				? { mode: 'member_scan', name: '', nonce: 'n', sessionId: session.id }
+				: null
+		);
+
+		const redir = await redirectOf(memberScanEvent('s-member', null));
 
 		expect(redir.status).toBe(302);
 		expect(redir.location).toBe('/thaid-scan-success?status=success');
@@ -517,6 +559,20 @@ describe('GET /api/v1/auth/oauth/thaid/callback (mode=kiosk_check_in)', () => {
 
 		expect(redir.location).toBe('/thaid-scan-success?flow=kiosk&status=success');
 		expect(getKioskSessionForDevice(session.id, DEVICE)?.status).toBe('completed');
+	});
+
+	it('does not complete the kiosk session when the signed state fails verification and there is no cookie', async () => {
+		const session = pendingKioskSession();
+		mockParseThaidOAuthState.mockReturnValue(null);
+		mockExchangeThaidCode.mockResolvedValue(mockClaims);
+		mockParseThaidCitizenClaims.mockReturnValue({ id: 'thaid-1100500123456', first_name: 'สมชาย' });
+
+		const redir = await redirectOf(kioskEvent('code=c&state=forged', null));
+
+		// With an unverifiable state the mode is unknown, so only assert that nothing succeeded.
+		expect(redir.location).not.toContain('status=success');
+		expect(mockExchangeThaidCode).not.toHaveBeenCalled();
+		expect(getKioskSessionForDevice(session.id, DEVICE)?.status).toBe('pending');
 	});
 
 	it('still succeeds when the state cookie holds a different state', async () => {
