@@ -72,8 +72,16 @@ key = `$limit_key` (IPv4 เต็ม / IPv6 ตาม `$binary_remote_addr`; �
 | `kiosk`        | `/api/v1/kiosk/`, `/api/v1/scanner/`                                                                                       | 5r/s  | 60 nodelay  | 300/นาที  | kiosk device limiters (5–10/นาที/เครื่อง)                        |
 | `external`     | `/external/`                                                                                                               | 10r/s | 100 nodelay | 600/นาที  | FastAPI evacuee/external backstop (30/นาที)                      |
 
-- `limit_req_status 429;` และ `error_page 429` ตอบ JSON `{"success":false,"error":"RATE_LIMITED","message":"Too many requests"}`
-  ให้ UI เดิมที่ดัก `RATE_LIMITED` ทำงานต่อได้
+- `limit_req_status 429;` และ `error_page 429` ตอบ JSON ตาม shape ที่ UI เดิมอ่าน — แยกตาม zone (ตรวจโค้ด 2026-10-23):
+
+  | zone               | body 429                                                                        | header                     | UI ที่อ่าน                                                                                                           |
+  | ------------------ | ------------------------------------------------------------------------------- | -------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+  | `public_*`, `auth` | `{"success":false,"error":"RATE_LIMITED","message":"Too many requests"}`        | `Retry-After: 60`          | donations, public-register, volunteer-portal (`error` string), login link-account; ส่วนใหญ่ fallback ด้วย status 429 |
+  | `kiosk`            | `{"error":{"code":"KIOSK_RATE_LIMITED","message":"กรุณารอสักครู่แล้วลองใหม่"}}` | `Retry-After: 60` (บังคับ) | `reprint-session`, `volunteer-card-session` match `error.code`; `kiosk-thaid.api` อ่าน header `retry-after`          |
+  | `external`         | `{"errors":[{"error":{"code":"RATE_LIMITED","message":"Too many requests"}}]}`  | `Retry-After: 60`          | partner ตาม envelope FastAPI (api-contract §5)                                                                       |
+
+  ถ้า kiosk ได้ body แบบ `public_*` ข้อความ "ลองผิดหลายครั้ง" จะไม่แสดง (ตกไป generic error)
+
 - `/couch/` ไม่ใส่ `limit_req` (staff UI sync กับ CouchDB ถี่ตามปกติ)
 
 ### C. Application layer
@@ -91,7 +99,7 @@ key = `$limit_key` (IPv4 เต็ม / IPv6 ตาม `$binary_remote_addr`; �
 - **FR-2** — ลบ `frontend/src/lib/server/security/rate-limiter.ts`, `rate-limiter.test.ts` และทุก import/guard ใน `src/routes/api/**`
 - **FR-3** — ลบ env `RATE_LIMIT` และโค้ด/เอกสาร/pacer ที่อ้างถึงจาก repo; ลบ key ใน Jenkins credential `tent-staging-e2e-env`
 - **FR-4** — ลบ/ปรับ test ที่ assert 429 จากแอป; test ของ UI ที่ดัก `RATE_LIMITED` ต้องยังผ่านด้วย response จาก nginx
-- **FR-5** — nginx ตั้ง zone ตามตาราง B; ตอบ 429 เป็น JSON ตาม shape เดิม
+- **FR-5** — nginx ตั้ง zone ตามตาราง B; ตอบ 429 ด้วย body + `Retry-After` ตามตาราง body 429 แยกต่อ zone
 - **FR-6** — `limit_req_zone` อยู่ใน context `http`; ขนาด zone ≥ 10m ต่อ zone (~160k IP)
 - **FR-7** — e2e บน staging: allowlist IP ของ runner ด้วย `geo` → `map` ให้ `$limit_key` เป็นค่าว่าง (nginx ไม่นับ key ว่าง)
 - **FR-8** — `imps-deploy/templates/nginx.conf` มี realip snippet (Tunnel / proxy) และ include rate-limit snippet
@@ -153,7 +161,10 @@ N/A — ไม่มี persisted doc เปลี่ยนรูป, ไม่ 
 > [NEEDS DECISION: FR-KPC-108 (เดาเลขบัตร 4 ตัวท้าย) — ยอมรับการยกเลิก หรือคงตัวนับ verify-failure ไว้ในแอปเป็นข้อยกเว้นเดียว
 > (เก็บใน CouchDB doc ของ primary จึงแชร์ข้าม worker ได้)]
 >
-> [NEEDS DECISION: nginx `/public-api/` บน staging ยัง proxy ตรงไป FastAPI ขัด CR-063 — ปิดใน CR นี้หรือแยก]
+> [NEEDS DECISION: nginx `/public-api/` บน staging ยัง proxy ตรงไป FastAPI ขัด CR-063 — ปิดใน CR นี้หรือแยก.
+> ผู้ใช้ปัจจุบัน (ตรวจ 2026-10-23): e2e `E2E_FASTAPI_URL=https://shelter.importstar.dev/public-api` (`frontend/e2e/.env.example`,
+> `helpers/partner-api.ts`, `public-pre-register-flow.test.ts`) และ `scripts/smoke_test_partner_api.py` (`PARTNER_API_PREFIX=/public-api`)
+> → ปิดแล้ว e2e partner suite และ smoke test จะเสีย ต้องย้ายไปใช้ `/external/` หรือ allowlist IP ของ runner ก่อน]
 
 ## Decision log
 
