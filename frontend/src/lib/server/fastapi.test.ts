@@ -31,7 +31,9 @@ describe('fastapiServiceHeaders', () => {
 
 	it('omits X-Real-IP outside a request', () => {
 		vi.mocked(getRequestEvent).mockImplementation(() => {
-			throw new Error('Can only read the current request event inside functions invoked during handle');
+			throw new Error(
+				'Can only read the current request event inside functions invoked during handle'
+			);
 		});
 
 		expect(fastapiServiceHeaders()).toEqual({
