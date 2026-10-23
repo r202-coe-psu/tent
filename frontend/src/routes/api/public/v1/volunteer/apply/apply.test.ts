@@ -1,10 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { POST } from './+server';
 import {
-	volunteerApplyIpLimiter,
-	volunteerApplyPhoneLimiter
-} from '$lib/server/security/rate-limiter';
-import {
 	applyPublicVolunteerApplication,
 	PublicApplicationError
 } from '$lib/features/volunteers/server/public-application';
@@ -29,10 +25,6 @@ vi.mock('$app/environment', () => ({
 }));
 vi.mock('$env/dynamic/private', () => ({ env: mockEnv }));
 vi.mock('$lib/server/couch-admin', () => ({ adminRaw }));
-vi.mock('$lib/server/security/rate-limiter', () => ({
-	volunteerApplyIpLimiter: { check: vi.fn(() => true) },
-	volunteerApplyPhoneLimiter: { check: vi.fn(() => true) }
-}));
 vi.mock('$lib/server/security/captcha', () => ({
 	ReCaptchaProvider: class {
 		verifyToken(token: string, ip?: string, action?: string) {
@@ -57,8 +49,6 @@ describe('POST /api/public/v1/volunteer/apply compatibility adapter', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
 		vi.mocked(applyPublicVolunteerApplication).mockReset();
-		vi.mocked(volunteerApplyIpLimiter.check).mockReturnValue(true);
-		vi.mocked(volunteerApplyPhoneLimiter.check).mockReturnValue(true);
 		mockEnv.RECAPTCHA_PROJECT_ID = 'smart-shelter-508719';
 		mockEnv.SECRET_RECAPTCHA_KEY = '';
 		mockAppEnv.dev = false;
@@ -145,7 +135,6 @@ describe('POST /api/public/v1/volunteer/apply compatibility adapter', () => {
 	it('does not let missing local CAPTCHA keys lock a developer out', async () => {
 		mockAppEnv.dev = true;
 		mockEnv.RECAPTCHA_PROJECT_ID = '';
-		vi.mocked(volunteerApplyIpLimiter.check).mockReturnValue(false);
 		vi.mocked(applyPublicVolunteerApplication).mockResolvedValue({
 			tracking_token: 'TKT-VOL-test',
 			status: 'confirmed',

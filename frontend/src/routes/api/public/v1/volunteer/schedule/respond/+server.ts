@@ -4,7 +4,6 @@ import {
 	dispatchRespondSchema,
 	portalCredentialSchema
 } from '$lib/features/volunteer-portal/server';
-import { volunteerDispatchRespondLimiter } from '$lib/server/security/rate-limiter';
 import { fastapiBaseUrl, fastapiServiceHeaders } from '$lib/server/fastapi';
 
 /**
@@ -12,15 +11,11 @@ import { fastapiBaseUrl, fastapiServiceHeaders } from '$lib/server/fastapi';
  *
  * Two factors, both checked upstream against the same assignment: whichever credential
  * the portal signed in with (phone or ticket token), and the short code a manager read
- * out over the phone. A six-character code is only safe alongside that credential and
- * this limiter — it is the one volunteer surface where guessing gets you a write, and a
- * declined shift cannot be un-declined by the volunteer, so it is held far tighter than
- * the read routes.
+ * out over the phone. A six-character code is only safe alongside that credential — it is
+ * the one volunteer surface where guessing gets you a write, and a declined shift cannot be
+ * un-declined by the volunteer.
  */
-export const POST: RequestHandler = async ({ request, fetch, getClientAddress }) => {
-	if (!volunteerDispatchRespondLimiter.check(getClientAddress())) {
-		return json({ success: false, error: 'RATE_LIMITED' }, { status: 429 });
-	}
+export const POST: RequestHandler = async ({ request, fetch }) => {
 	try {
 		const payload = await request.json();
 		const parsed = dispatchRespondSchema.safeParse(payload);
