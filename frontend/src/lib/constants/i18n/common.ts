@@ -70,7 +70,7 @@ export const PUBLIC_FOOTER_I18N = {
 		onlineChannels: 'ช่องทางออนไลน์ด่วน',
 		lineOa: 'LINE OA ฉุกเฉิน',
 		facebook: 'Facebook ข่าวสาร EOC',
-		partners: 'หน่วยงานร่วมดำเนินงาน',
+		partners: 'หน่วยงานที่เกี่ยวข้อง',
 		copyright: '© 2026 SmartShelter สงวนลิขสิทธิ์'
 	},
 	en: {
@@ -82,7 +82,7 @@ export const PUBLIC_FOOTER_I18N = {
 		onlineChannels: 'Quick online channels',
 		lineOa: 'Emergency LINE OA',
 		facebook: 'EOC news on Facebook',
-		partners: 'Partner organizations',
+		partners: 'Related organizations',
 		copyright: '© 2026 SmartShelter. All rights reserved.'
 	}
 } as const;
