@@ -5,7 +5,6 @@ import {
 	readOrMintRoleCardToken,
 	PublicScheduleError
 } from '$lib/features/volunteers/server/public-schedule-action';
-import { volunteerTicketFindLimiter } from '$lib/server/security/rate-limiter';
 
 export const prerender = false;
 
@@ -13,10 +12,7 @@ export const prerender = false;
  * Return the volunteer's role-card payload from the `volunteer` document.
  * This is intentionally independent of jobs, applications, and assignments.
  */
-export const POST: RequestHandler = async ({ request, getClientAddress }) => {
-	if (!volunteerTicketFindLimiter.check(getClientAddress())) {
-		return json({ success: false, error: 'RATE_LIMITED' }, { status: 429 });
-	}
+export const POST: RequestHandler = async ({ request }) => {
 	try {
 		const parsed = portalCredentialSchema.safeParse(await request.json());
 		if (!parsed.success) {
