@@ -4,7 +4,7 @@ title: Kiosk — เปิดช่องทางรายงานตัวด
 status: approved
 date: 2026-10-10
 created: 2026-10-10
-updated: 2026-10-11
+updated: 2026-10-23
 requested_by: ทีม kiosk
 decided_by: เจ้าของโครงการ (PO, net-lynx) — approved 2026-10-11
 layer: volatile
@@ -160,3 +160,4 @@ N/A — additive flag (doc เดิมไม่มี key = `false`); session �
   - (b) เพิ่ม **KTD-AC-09**: เมื่อ `kiosk_thaid_check_in_enabled=false` หรือ `thaid_registration_enabled=false` → การ์ดซ่อน และสร้าง session คืน 403/404
   - (c) mask เลข 13 หลักให้เหลือเปิดเผยไม่เกิน 2 หลักท้าย
   - (d) implementation มาเป็น code PR ใหม่จาก `feat/pre-register_kiosk` รีวิวเทียบกับ CR นี้ — ห้าม merge branch นั้นตรง ๆ · PR นั้นต้องอัปเดต `docs/data/schema.md`, `docs/data/api-contract.md` และ FR-KPC-11/F-08 ใน CR-151/CR-152
+- 2026-10-23 — **Superseded (rate limit) by [CR-188](../01-core/CR-188-rate-limit-to-nginx.md):** KTD-AC-07 (10 ครั้ง/นาที/kiosk) ย้ายไป nginx zone `kiosk` ต่อ IP
