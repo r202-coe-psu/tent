@@ -535,6 +535,19 @@ describe('GET /api/v1/auth/oauth/thaid/callback (mode=kiosk_check_in)', () => {
 		expect(mockExchangeThaidCode).not.toHaveBeenCalled();
 	});
 
+	it('sends kiosk errors to the kiosk error page even when a stale login state cookie is present', async () => {
+		const session = pendingKioskSession();
+		mockParseThaidOAuthState.mockImplementation((raw?: string) =>
+			raw === 's-login'
+				? { mode: 'login', name: '', nonce: 'n' }
+				: { mode: 'kiosk_check_in', name: '', nonce: 'n', sessionId: session.id }
+		);
+
+		const redir = await redirectOf(kioskEvent('error=access_denied&state=s-kiosk', 's-login'));
+
+		expect(redir.location).toBe('/thaid-scan-success?flow=kiosk&error=oauth_access_denied');
+	});
+
 	it('redirects to error=missing_session when the state carries no session id', async () => {
 		mockParseThaidOAuthState.mockReturnValue({ mode: 'kiosk_check_in', name: '', nonce: 'n' });
 		mockExchangeThaidCode.mockResolvedValue(mockClaims);
