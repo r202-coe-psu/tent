@@ -110,7 +110,11 @@ export const GET: RequestHandler = async ({ url, fetch, cookies }) => {
 		const stateParam = url.searchParams.get('state');
 		clearThaidOAuthStateCookie(cookies);
 
-		if (!code || !stateParam || stateParam !== cookieState) {
+		// Cross-device scans may reopen this callback in another browser (no state cookie); the
+		// signed state + single-use server session bind the result, so only those modes skip the cookie match.
+		const isCrossDeviceMode =
+			paramState?.mode === 'kiosk_check_in' || paramState?.mode === 'member_scan';
+		if (!code || !stateParam || (!isCrossDeviceMode && stateParam !== cookieState)) {
 			dispatchErrorRedirect('invalid_state');
 		}
 

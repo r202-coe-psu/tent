@@ -388,11 +388,13 @@ describe('GET /api/v1/auth/oauth/thaid/callback (mode=kiosk_check_in)', () => {
 		_resetSessionsForTest();
 	});
 
-	function kioskEvent(query = 'code=c&state=s-kiosk', cookieState = 's-kiosk') {
+	function kioskEvent(query = 'code=c&state=s-kiosk', cookieState: string | null = 's-kiosk') {
 		return {
 			url: new URL(`http://localhost/api/v1/auth/oauth/thaid/callback?${query}`),
 			cookies: {
-				get: vi.fn((name: string) => (name === 'oauth_thaid_state' ? cookieState : undefined)),
+				get: vi.fn((name: string) =>
+					name === 'oauth_thaid_state' ? (cookieState ?? undefined) : undefined
+				),
 				set: vi.fn(),
 				delete: vi.fn()
 			} as unknown as Cookies,
@@ -500,11 +502,31 @@ describe('GET /api/v1/auth/oauth/thaid/callback (mode=kiosk_check_in)', () => {
 		expect(redir.location).toBe('/thaid-scan-success?flow=kiosk&error=missing_session');
 	});
 
-	it('redirects to the kiosk error page on a state mismatch', async () => {
-		pendingKioskSession();
+	it('completes the session and redirects to success even when the browser has no state cookie', async () => {
+		const session = pendingKioskSession();
+		mockExchangeThaidCode.mockResolvedValue(mockClaims);
+		mockParseThaidCitizenClaims.mockReturnValue({ id: 'thaid-1100500123456', first_name: 'สมชาย' });
+		// Android: ThaiD reopens the callback in the default browser, which never got the cookie.
+		mockParseThaidOAuthState.mockImplementation((raw?: string) =>
+			raw === 's-kiosk'
+				? { mode: 'kiosk_check_in', name: '', nonce: 'n', sessionId: session.id }
+				: null
+		);
+
+		const redir = await redirectOf(kioskEvent('code=c&state=s-kiosk', null));
+
+		expect(redir.location).toBe('/thaid-scan-success?flow=kiosk&status=success');
+		expect(getKioskSessionForDevice(session.id, DEVICE)?.status).toBe('completed');
+	});
+
+	it('still succeeds when the state cookie holds a different state', async () => {
+		const session = pendingKioskSession();
+		mockExchangeThaidCode.mockResolvedValue(mockClaims);
+		mockParseThaidCitizenClaims.mockReturnValue({ id: 'thaid-1100500123456', first_name: 'สมชาย' });
 
 		const redir = await redirectOf(kioskEvent('code=c&state=s-kiosk', 'other-cookie-state'));
 
-		expect(redir.location).toBe('/thaid-scan-success?flow=kiosk&error=invalid_state');
+		expect(redir.location).toBe('/thaid-scan-success?flow=kiosk&status=success');
+		expect(getKioskSessionForDevice(session.id, DEVICE)?.status).toBe('completed');
 	});
 });
