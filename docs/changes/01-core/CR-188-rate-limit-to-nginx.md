@@ -1,11 +1,11 @@
 ---
-id: draft
-title: ย้าย rate limit ออกจาก application layer ไปที่ nginx (`limit_req`) + บังคับ real client IP ทุก environment
-status: proposed
+id: CR-188
+title: ย้าย rate limit ทั้งหมดออกจาก application layer ไปที่ nginx (`limit_req`) + บังคับ real client IP ทุก environment
+status: approved
 date: 2026-10-23
 updated: 2026-10-23
 requested_by: Soravit (issue #627); ทดสอบใช้งานจริง ~10 คนติด 429; เป้าหมายผู้ใช้พร้อมกันหลักพัน
-decided_by: <เจ้าของโครงการ> — ทิศทางตาม #627
+decided_by: เจ้าของโครงการ — approved 2026-10-23 ("เอา rate limit ทุกอย่างออก ดักที่ nginx อย่างเดียว")
 layer: volatile
 affects:
   - frontend/src/lib/server/security/rate-limiter.ts (+ .test.ts) — ลบ
@@ -14,17 +14,18 @@ affects:
   - RATE_LIMIT env: .env.example, frontend/.env.example, frontend/e2e/.env.example, docker-compose.{production,staging}{,.no-nginx}.yml, frontend/playwright.config.ts, e2e pacer helpers, Jenkins credential tent-staging-e2e-env
   - host nginx: staging `shelter.importstar.dev`, production `shelter.psu.ac.th` (นอก repo) + snippet ใหม่ใน repo (FR-9)
   - ~/.claude/skills/imps-deploy/templates/nginx.conf
-  - frontend/src/lib/server/fastapi.ts (BFF ส่ง X-Real-IP ไป FastAPI — PR #785)
+  - backend/apiapp/modules/{donations,volunteers,unassigned_registrations,evacuee,external}/router.py + tests (ลบ FastAPI limiter)
+  - frontend/src/lib/server/fastapi.ts (BFF ส่ง X-Real-IP ไป FastAPI — PR #785; ใช้กับ audit `ip_hash` ของ public search)
   - supersede ตัวเลข/กติกา rate limit ใน: CR-005 §F, CR-070, CR-080 Q5, CR-092 FR-VOL-02.3, CR-096 FR-96-18, CR-136, CR-141 FR-20, CR-151 FR-KPC-59/108/126 D7, CR-160 (ทั้ง CR), CR-163 KTD-AC-07, CR-173 FR-7, CR-175 FR-9
   - docs/data/api-contract.md L237, L302, L524–525, L569
   - no schema_v bump
 ---
 
-# ย้าย rate limit ไปที่ nginx
+# CR-188 — ย้าย rate limit ไปที่ nginx
 
 > **สรุป (TL;DR):**
 >
-> - **เปลี่ยนอะไร:** ลบ `RateLimiter` และ limiter ทุกตัวออกจาก SvelteKit BFF (#627) · nginx `limit_req` จำกัดต่อ IP แทน
+> - **เปลี่ยนอะไร:** ลบ `RateLimiter` และ limiter ทุกตัวออกจาก SvelteKit BFF และ FastAPI (#627) · nginx `limit_req` จำกัดต่อ IP แทน
 >   โดย zone/ตัวเลขอยู่ในไฟล์ snippet ใน repo · ลบ env `RATE_LIMIT` (CR-160)
 > - **เงื่อนไขก่อน:** nginx ทุก environment ต้องเห็น IP ผู้ใช้จริง — staging (Cloudflare Tunnel) แก้แล้ว 2026-10-23, prod รับตรง
 > - **ทำไม:** limiter ในแอปนับแยกต่อ Node worker, ต้องมีโค้ด bypass สำหรับ e2e, และกิน resource ของ Node ทุก request
@@ -60,7 +61,7 @@ affects:
 - staging: ✅ ทำแล้ว 2026-10-23 (`/etc/nginx/snippets/cloudflare-realip.conf` + `include` ใน server block)
 - ห้ามตั้ง `ADDRESS_HEADER=CF-Connecting-IP` ที่แอปแทน realip — nginx ฟัง `0.0.0.0:80`, ผู้ยิงตรงเข้า origin ปลอม header ได้
 
-### B. nginx `limit_req` — ข้อเสนอ zone
+### B. nginx `limit_req` — zone
 
 key = `$limit_key` (IPv4 เต็ม / IPv6 ตาม `$binary_remote_addr`; ว่างสำหรับ e2e allowlist ตาม FR-7)
 
@@ -91,7 +92,7 @@ key = `$limit_key` (IPv4 เต็ม / IPv6 ตาม `$binary_remote_addr`; �
 | `rate-limiter.ts` + test                                                                                 | limiter 27 ตัว in-memory  | ลบ                                                                                  |
 | route ที่เรียก `.check()` / `.isBlocked()`                                                               | ตอบ 429 จากแอป            | ลบ guard; logic อื่นคงเดิม                                                          |
 | env `RATE_LIMIT` (CR-160)                                                                                | switch ปิด limiter บางตัว | ลบทุกที่ (compose, env templates, playwright config, e2e pacer, Jenkins credential) |
-| FastAPI limiter (evacuee/external, volunteers, unassigned_registrations; donations ปิดแล้วใน `8d3d8335`) | 30/นาที/IP in-process     | ดู Open decisions                                                                   |
+| FastAPI limiter (evacuee/external, volunteers, unassigned_registrations; donations ปิดแล้วใน `8d3d8335`) | 30/นาที/IP in-process     | ลบ (FR-11)                                                                          |
 
 ### Requirements
 
@@ -105,23 +106,27 @@ key = `$limit_key` (IPv4 เต็ม / IPv6 ตาม `$binary_remote_addr`; �
 - **FR-8** — `imps-deploy/templates/nginx.conf` มี realip snippet (Tunnel / proxy) และ include rate-limit snippet
 - **FR-9** — ไฟล์ zone + location rule เก็บใน repo ที่ `deploy/nginx/rate-limit.conf` (http context) และ
   `deploy/nginx/rate-limit-locations.conf` (server context) เป็น source of truth; host nginx `include` จาก copy ของไฟล์นี้
+- **FR-11** — ลบ limiter ใน FastAPI ทั้งหมด (`_enforce_rate_limit` / `_check_rate_limit` + ค่าคงที่ + state) ใน `donations`, `volunteers`,
+  `unassigned_registrations`, `evacuee`, `external` router และ test/fixture ที่ reset หรือ assert 429; `client_ip()` คงไว้ (audit `ip_hash`)
 - **FR-10** — เพิ่ม `decision sync` note อ้าง CR นี้ใน CR ทุกตัวในรายการ supersede ตรงจุดกติกา rate limit เดิม; ปิด CR-160 เป็น `superseded`
 
-### Requirements ที่ถูกยกเลิก (ต้องการการรับทราบจาก owner)
+### Requirements ที่ถูกยกเลิก (owner รับทราบ 2026-10-23)
 
-| เดิม                                                           | กติกา                                                         | ผลเมื่อยกเลิก                                                                          | ทดแทนด้วย                                               |
-| -------------------------------------------------------------- | ------------------------------------------------------------- | -------------------------------------------------------------------------------------- | ------------------------------------------------------- |
-| CR-151 FR-KPC-108                                              | verify เลขบัตร 4 ตัวท้ายผิด 5 ครั้ง/10 นาที ต่อ primary → 429 | เดาเลข 10 000 ค่าได้เร็วขึ้น — จำกัดแค่ zone `kiosk` 300/นาที/IP (~34 นาทีต่อ primary) | kiosk ต้อง auth ด้วย device อยู่แล้ว; ดู Open decisions |
-| CR-141 FR-20                                                   | link-account ผิด 5 ครั้ง ต่อ `pending_link` nonce             | เดารหัสผ่านในรอบ OAuth เดียวได้มากขึ้น — จำกัดแค่ zone `auth`                          | CouchDB `_session` + captcha                            |
-| CR-005 §F / CR-070 / CR-092 FR-VOL-02.3 / CR-173 FR-7          | limit ต่อเบอร์โทร                                             | ผู้ใช้เบอร์เดียวสร้างรายการได้ตาม zone `public_write`                                  | reCAPTCHA บนฟอร์มเขียน                                  |
-| CR-151 FR-KPC-59/126, CR-163 KTD-AC-07, api-contract L237/L302 | limit ต่อ kiosk device / ต่อเบอร์ข้ามเครื่อง                  | kiosk ทุกเครื่องในศูนย์เดียวกันแชร์ zone `kiosk` (IP เดียว)                            | —                                                       |
-| CR-160                                                         | `RATE_LIMIT` switch                                           | ไม่มี limiter ในแอปให้ปิด                                                              | FR-7 allowlist                                          |
+| เดิม                                                           | กติกา                                                              | ผลเมื่อยกเลิก                                                                          | ทดแทนด้วย                            |
+| -------------------------------------------------------------- | ------------------------------------------------------------------ | -------------------------------------------------------------------------------------- | ------------------------------------ |
+| CR-151 FR-KPC-108                                              | verify เลขบัตร 4 ตัวท้ายผิด 5 ครั้ง/10 นาที ต่อ primary → 429      | เดาเลข 10 000 ค่าได้เร็วขึ้น — จำกัดแค่ zone `kiosk` 300/นาที/IP (~34 นาทีต่อ primary) | kiosk ต้อง auth ด้วย device อยู่แล้ว |
+| CR-141 FR-20                                                   | link-account ผิด 5 ครั้ง ต่อ `pending_link` nonce                  | เดารหัสผ่านในรอบ OAuth เดียวได้มากขึ้น — จำกัดแค่ zone `auth`                          | CouchDB `_session` + captcha         |
+| CR-005 §F / CR-070 / CR-092 FR-VOL-02.3 / CR-173 FR-7          | limit ต่อเบอร์โทร                                                  | ผู้ใช้เบอร์เดียวสร้างรายการได้ตาม zone `public_write`                                  | reCAPTCHA บนฟอร์มเขียน               |
+| CR-151 FR-KPC-59/126, CR-163 KTD-AC-07, api-contract L237/L302 | limit ต่อ kiosk device / ต่อเบอร์ข้ามเครื่อง                       | kiosk ทุกเครื่องในศูนย์เดียวกันแชร์ zone `kiosk` (IP เดียว)                            | —                                    |
+| CR-080 Q5, CR-096 FR-96-18, CR-136, CR-175 FR-9                | limit ต่อ IP ในแอป (แก้ใบจอง, ตอบรับกะ, secret reveal, อัปโหลดรูป) | ย้ายไป zone nginx ตาราง B                                                              | —                                    |
+| CR-160                                                         | `RATE_LIMIT` switch                                                | ไม่มี limiter ในแอปให้ปิด                                                              | FR-7 allowlist                       |
 
 ## Acceptance
 
 - [x] **AC-1** — staging: access log แสดง IP ผู้ใช้จริง ไม่ใช่ `127.0.0.1` (ผ่าน 2026-10-23)
 - [x] **AC-1b** — staging: IP หนึ่งโดน `429` แล้ว IP อื่นยังผ่านในนาทีเดียวกัน (ผ่าน 2026-10-23 กับ limiter ในแอป)
-- [ ] **AC-2** — `grep -rn "rate-limiter\|RATE_LIMIT\b" frontend/src` ไม่พบผลลัพธ์; `pnpm check` + `pnpm test` ผ่าน
+- [ ] **AC-2** — `grep -rn "rate-limiter\|RATE_LIMIT\b" frontend/src` และ `grep -rn "_enforce_rate_limit\|_check_rate_limit" backend` ไม่พบผลลัพธ์;
+      `pnpm check` + `pnpm test` + backend `pytest` ผ่าน
 - [ ] **AC-3** — staging: ยิง `POST /api/public/v1/registrations` จาก IP เดียวเกิน 300 ครั้ง/นาที → `429` JSON
       `{"success":false,"error":"RATE_LIMITED",…}`; IP อื่นในนาทีเดียวกันยังผ่าน
 - [ ] **AC-4** — staging: login 30 ครั้งติดจาก IP เดียวผ่าน; ครั้งที่เกิน burst+rate ได้ `429`
@@ -144,7 +149,7 @@ N/A — ไม่มี persisted doc เปลี่ยนรูป, ไม่ 
 ลำดับ deploy (ห้ามสลับ):
 
 1. realip ทุก environment (FR-1) — staging เสร็จแล้ว, prod ไม่ต้องทำ
-2. PR #785 (BFF → FastAPI `X-Real-IP`)
+2. PR #785 (BFF → FastAPI `X-Real-IP` — ให้ audit `ip_hash` ของ public search เป็น IP ผู้ใช้)
 3. nginx `limit_req` บน staging (FR-5/7) → ทดสอบ AC-3/4/5
 4. merge โค้ดที่ลบ limiter ในแอป (FR-2/3/4) → deploy staging → AC-2/6/7
 5. nginx `limit_req` บน prod → deploy โค้ดขึ้น prod
@@ -153,18 +158,7 @@ N/A — ไม่มี persisted doc เปลี่ยนรูป, ไม่ 
 
 ## Open decisions
 
-> [NEEDS DECISION: ตัวเลข rate/burst ในตาราง B — ข้อเสนอของทีม; owner ยืนยันหรือปรับ]
->
-> [NEEDS DECISION: FastAPI limiter ที่ยังเปิด (evacuee/external, volunteers, unassigned_registrations) — ลบตาม #627 ด้วย
-> (nginx zone `external` / `public_*` คุมแทน) หรือคงไว้เป็น backstop กันยิงตรงเข้า FastAPI]
->
-> [NEEDS DECISION: FR-KPC-108 (เดาเลขบัตร 4 ตัวท้าย) — ยอมรับการยกเลิก หรือคงตัวนับ verify-failure ไว้ในแอปเป็นข้อยกเว้นเดียว
-> (เก็บใน CouchDB doc ของ primary จึงแชร์ข้าม worker ได้)]
->
-> [NEEDS DECISION: nginx `/public-api/` บน staging ยัง proxy ตรงไป FastAPI ขัด CR-063 — ปิดใน CR นี้หรือแยก.
-> ผู้ใช้ปัจจุบัน (ตรวจ 2026-10-23): e2e `E2E_FASTAPI_URL=https://shelter.importstar.dev/public-api` (`frontend/e2e/.env.example`,
-> `helpers/partner-api.ts`, `public-pre-register-flow.test.ts`) และ `scripts/smoke_test_partner_api.py` (`PARTNER_API_PREFIX=/public-api`)
-> → ปิดแล้ว e2e partner suite และ smoke test จะเสีย ต้องย้ายไปใช้ `/external/` หรือ allowlist IP ของ runner ก่อน]
+ไม่มี — ปิดครบ 2026-10-23 (ดู Decision log)
 
 ## Decision log
 
@@ -172,3 +166,9 @@ N/A — ไม่มี persisted doc เปลี่ยนรูป, ไม่ 
 - 2026-10-23 — proposed. แทน draft "draft-rate-limit-relax-public-flows" (เพิ่มตัวเลขในแอป) ซึ่งยกเลิกเพราะทิศทาง #627;
   คงส่วน real client IP จาก draft นั้นไว้เป็นเงื่อนไขก่อน (A)
 - 2026-10-23 — staging realip แก้แล้ว, AC-1/AC-1b ผ่าน; prod รับตรง ไม่ต้องแก้ nginx
+- 2026-10-23 — **approved** โดยเจ้าของโครงการ: "เอา rate limit ทุกอย่างออกให้หมด ให้ไปดักที่ nginx อย่างเดียว" →
+  (1) อนุมัติทิศทาง · (3) ลบ FastAPI limiter ด้วย (FR-11) · (4) ยอมยกเลิก FR-KPC-108 ·
+  (5) รับทราบตาราง "Requirements ที่ถูกยกเลิก" · (2) ตัวเลข zone ไม่ได้ระบุ → ใช้ค่าตามตาราง B เป็นค่าเริ่มต้น ·
+  (6) `/public-api/` ไม่ใช่ rate limit → นอกขอบเขต CR นี้ (คงเดิม)
+- 2026-10-23 — นอกขอบเขต: staff PIN turn queue (`staff-pin-throttle.ts`, `server/staff-pin-turns.mjs`) — คิวต่อเครื่อง + หน่วง
+  PIN ผิด 1 วินาที ไม่ใช่ rate limiter แบบนับครั้ง และ nginx ทำแทนไม่ได้

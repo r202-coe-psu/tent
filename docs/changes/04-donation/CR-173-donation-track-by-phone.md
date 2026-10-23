@@ -3,6 +3,7 @@ id: CR-173
 title: "ติดตามและจัดการการบริจาคด้วยเบอร์โทรอย่างเดียว (เข้าถึงเต็ม + มาตรการกันไล่สุ่มเบอร์)"
 status: approved
 date: 2026-10-17
+updated: 2026-10-23
 approved_at: 2026-10-18
 requested_by: "Kan"
 decided_by: "Soravit Sukkarn (Team Lead)"
@@ -105,3 +106,4 @@ migration: CouchDB doc ไม่เปลี่ยนรูป ไม่ bump sc
 - 2026-10-17 — proposed (track ด้วย CR file แยก branch)
 - 2026-10-18 — ตัดการค้นหาใน `public_donations` ออก คงการค้นหาเฉพาะใน `DonationBuffer` (active 72 ชม.) เพื่อให้สามารถคืน `tracking_token` ได้อย่างถูกต้องตามสถาปัตยกรรม, ปรับ FR-1 ให้รองรับ `captcha_token` และกำหนดเกณฑ์ป้องกัน enumeration ใน FR-8 ให้ชัดเจน
 - 2026-10-18 — approved โดย Soravit Sukkarn (Team Lead) ตามคำขอของ Kan (รันเลข CR-173 ย้ายเข้าหมวด 04-donation)
+- 2026-10-23 — **Superseded (rate limit) by [CR-188](../01-core/CR-188-rate-limit-to-nginx.md):** FR-7 (limiter ต่อ IP และต่อเบอร์ของ track-by-phone) ถูกยกเลิกก่อน implement — ใช้ nginx zone `public_read`
