@@ -108,7 +108,7 @@ describe('formatDistributionError', () => {
 		expect(formatDistributionError(err)).toBe('ระบบปฏิเสธการบันทึกเอกสารตามนโยบายความปลอดภัย');
 	});
 
-	it('turns an English permission reason into a Thai sentence naming the action', () => {
+	it('turns an English permission reason into a Thai sentence', () => {
 		const err = new CouchDocumentPolicyError(
 			'forbidden',
 			403,
@@ -117,12 +117,12 @@ describe('formatDistributionError', () => {
 		);
 		const msg = formatDistributionError(err);
 		expect(msg).toBe(
-			'บัญชีนี้ไม่มีสิทธิ์อนุมัติใบเบิกจ่ายนี้ หากต้องทำรายการนี้ กรุณาติดต่อผู้จัดการศูนย์หรือผู้ดูแลระบบ'
+			'บัญชีนี้ไม่มีสิทธิ์ทำรายการนี้ หากต้องทำรายการนี้ กรุณาติดต่อผู้จัดการศูนย์หรือผู้ดูแลระบบ'
 		);
 		expect(msg).not.toMatch(/[A-Za-z]/);
 	});
 
-	it('words a permission reason for another document type generically', () => {
+	it('gives the same permission sentence for any document type', () => {
 		const err = new CouchDocumentPolicyError(
 			'forbidden',
 			403,
@@ -130,7 +130,7 @@ describe('formatDistributionError', () => {
 			'Only frontline distribution staff can void distribution logs'
 		);
 		expect(formatDistributionError(err)).toBe(
-			'บัญชีนี้ไม่มีสิทธิ์ยกเลิกรายการนี้ หากต้องทำรายการนี้ กรุณาติดต่อผู้จัดการศูนย์หรือผู้ดูแลระบบ'
+			'บัญชีนี้ไม่มีสิทธิ์ทำรายการนี้ หากต้องทำรายการนี้ กรุณาติดต่อผู้จัดการศูนย์หรือผู้ดูแลระบบ'
 		);
 	});
 
