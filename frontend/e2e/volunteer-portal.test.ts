@@ -448,7 +448,7 @@ test.describe('Booking a mission from the board (CR-092 FR-VOL-02)', () => {
 		expect(pageErrors).toEqual([]);
 	});
 
-	test('the shift picker lists each date with its own times, and books the one picked', async ({
+	test('the shift picker lists each date with its own times, and books the ones picked', async ({
 		page
 	}) => {
 		const day = (offset: number) =>
@@ -512,13 +512,16 @@ test.describe('Booking a mission from the board (CR-092 FR-VOL-02)', () => {
 		for (const time of await row(2).getByRole('button').all()) await expect(time).toBeDisabled();
 		// Day 3: the full morning cannot be picked; the afternoon can.
 		await expect(row(3).getByRole('button', { name: /08:00–12:00/ })).toBeDisabled();
-		await row(3)
-			.getByRole('button', { name: /13:00–17:00/ })
-			.click();
-		await expect(row(3).getByRole('button', { name: /13:00–17:00/ })).toHaveAttribute(
-			'aria-pressed',
-			'true'
-		);
+		// The card's own shift (day 1) starts picked; more can be added, and a tap removes one.
+		const day1 = row(1).getByRole('button', { name: /08:00–12:00/ });
+		const day3pm = row(3).getByRole('button', { name: /13:00–17:00/ });
+		await expect(day1).toHaveAttribute('aria-pressed', 'true');
+		await day3pm.click();
+		await expect(day3pm).toHaveAttribute('aria-pressed', 'true');
+		await expect(day1).toHaveAttribute('aria-pressed', 'true');
+		await day1.click();
+		await expect(day1).toHaveAttribute('aria-pressed', 'false');
+		await day1.click();
 
 		await form.locator('#firstName').fill('เก่งกล้า');
 		await form.locator('#lastName').fill('งานอาสา');
@@ -528,7 +531,103 @@ test.describe('Booking a mission from the board (CR-092 FR-VOL-02)', () => {
 		await form.getByRole('button', { name: /ยืนยันการสมัคร/ }).click();
 
 		await expect.poll(() => applied).not.toBeNull();
-		expect(applied).toMatchObject({ shift_id: 'd3-pm', shift_date: day(3) });
+		// Both picked shifts in one request, in date order (#716).
+		expect(applied).toMatchObject({
+			shifts: [
+				{ shift_id: 'd1-am', shift_date: day(1), start_time: '08:00', end_time: '12:00' },
+				{ shift_id: 'd3-pm', shift_date: day(3), start_time: '13:00', end_time: '17:00' }
+			]
+		});
+	});
+
+	test('says which shifts were not saved, and why, before leaving the form (#716)', async ({
+		page
+	}) => {
+		const day = (offset: number) =>
+			new Date(Date.now() + offset * 86_400_000).toISOString().slice(0, 10);
+		await mockPortalApi(page);
+		await mockJobBoard(page, { success: true });
+		await page.route('**/api/public/v1/volunteer/jobs*', (route) =>
+			route.fulfill(
+				json({
+					success: true,
+					jobs: [
+						{
+							job_id: 'job:01PARTIAL',
+							shelter_code: 'SH001',
+							shelter_name: 'ศูนย์ทดสอบ',
+							title: 'งานสองกะ',
+							description: 'ทดสอบผลรายกะ',
+							tier: 'operational',
+							skills_required: [],
+							shifts: [
+								{
+									shift_id: 'p-am',
+									date: day(1),
+									start_time: '08:00',
+									end_time: '12:00',
+									quota: 5,
+									slots_confirmed: 0
+								},
+								{
+									shift_id: 'p-pm',
+									date: day(1),
+									start_time: '13:00',
+									end_time: '17:00',
+									quota: 5,
+									slots_confirmed: 0
+								}
+							],
+							quota: 10,
+							slots_confirmed: 0,
+							slots_remaining: 10,
+							status: 'open',
+							requires_review: false
+						}
+					]
+				})
+			)
+		);
+		await page.route('**/api/public/v1/volunteer/jobs/*/apply', (route) =>
+			route.fulfill(
+				json(
+					{
+						success: true,
+						tracking_token: 'TKT-AM',
+						status: 'confirmed',
+						job_id: 'job:01PARTIAL',
+						shift_id: 'p-am',
+						results: [
+							{ ok: true, shift_id: 'p-am', status: 'confirmed', tracking_token: 'TKT-AM' },
+							{ ok: false, shift_id: 'p-pm', error: 'SHIFT_FULL' }
+						]
+					},
+					201
+				)
+			)
+		);
+
+		await page.goto('/volunteers/jobs');
+		await page.getByRole('button', { name: 'สมัครกะนี้' }).first().click();
+		const form = page.locator('form');
+		await form
+			.locator(`[data-shift-date="${day(1)}"]`)
+			.getByRole('button', { name: /13:00–17:00/ })
+			.click();
+		await form.locator('#firstName').fill('เก่งกล้า');
+		await form.locator('#lastName').fill('งานอาสา');
+		await form.locator('#phone').fill('0891113333');
+		await form.getByRole('checkbox').check();
+		await form.getByRole('button', { name: /ยืนยันการสมัคร/ }).click();
+
+		const outcome = page.getByRole('alertdialog');
+		await expect(outcome.getByRole('heading', { name: 'บางกะสมัครไม่สำเร็จ' })).toBeVisible();
+		await expect(outcome).toContainText('บันทึกแล้ว 1 กะ');
+		await expect(outcome).toContainText('ไม่ผ่าน 1 กะ');
+		await expect(outcome).toContainText('13:00–17:00');
+		await expect(outcome).toContainText('กะนี้เต็มแล้ว');
+		await outcome.getByRole('button', { name: 'ไปต่อ' }).click();
+		await expect(page).toHaveURL(/\/volunteers\/portal/);
 	});
 
 	test('a long job shows its first week of dates and says how many more there are', async ({
@@ -670,6 +769,51 @@ test.describe('Booking a mission from the board (CR-092 FR-VOL-02)', () => {
 		await page.getByRole('button', { name: 'Close modal' }).click({ position: { x: 8, y: 8 } });
 		await expect(page.locator('#firstName')).toHaveCount(0);
 		expect(await page.evaluate(() => document.documentElement.style.overflow)).toBe('');
+	});
+
+	test('opens filtered to the shelter a home-page card links to (#709)', async ({ page }) => {
+		const day = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
+		const boardJob = (code: string, name: string, title: string) => ({
+			job_id: `job:01${code}`,
+			shelter_code: code,
+			shelter_name: name,
+			title,
+			description: 'ทดสอบตัวกรองศูนย์',
+			tier: 'operational',
+			skills_required: [],
+			shifts: [
+				{
+					shift_id: `${code}-am`,
+					date: day,
+					start_time: '08:00',
+					end_time: '12:00',
+					quota: 5,
+					slots_confirmed: 0
+				}
+			],
+			quota: 5,
+			slots_confirmed: 0,
+			slots_remaining: 5,
+			status: 'open',
+			requires_review: false
+		});
+		await mockPortalApi(page);
+		await page.route('**/api/public/v1/volunteer/jobs*', (route) =>
+			route.fulfill(
+				json({
+					success: true,
+					jobs: [
+						boardJob('SH001', 'ศูนย์ทดสอบหนึ่ง', 'งานของศูนย์หนึ่ง'),
+						boardJob('SH002', 'ศูนย์ทดสอบสอง', 'งานของศูนย์สอง')
+					]
+				})
+			)
+		);
+
+		await page.goto('/volunteers/jobs?shelter=SH002');
+
+		await expect(page.getByRole('heading', { name: 'งานของศูนย์สอง' })).toBeVisible();
+		await expect(page.getByRole('heading', { name: 'งานของศูนย์หนึ่ง' })).toHaveCount(0);
 	});
 
 	test('picking another page takes the reader to its first job', async ({ page }) => {

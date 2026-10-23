@@ -127,9 +127,9 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 						icon: ClipboardList
 					},
 					{
-						label: 'โรงครัวและเสบียงอาหาร',
+						label: 'เบิกวัตถุดิบครัว',
 						href: resolve('/back-office/tickets/kitchen'),
-						icon: UtensilsCrossed
+						icon: ClipboardCheck
 					}
 				]
 			},

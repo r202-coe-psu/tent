@@ -34,6 +34,7 @@ from tent_model.public_shelter import PublicShelter
 from tent_model.third_party_access_log import ThirdPartyAccessLog
 
 from ...utils.masking import national_id_hash, normalize_phone
+from ...utils.shelter_booking import accepts_booking
 from ...utils.thai_id import is_valid_thai_national_id
 from ...utils.ulid import new_ulid
 from ..thirdparty_auth.scopes import ThirdPartyClaims
@@ -56,6 +57,8 @@ ENDPOINT_CREATE = "EXT-008"
 ENDPOINT_CANCEL = "EXT-009"
 ENDPOINT_STATUS = "EXT-010"
 _REQUIRED_SCOPE = "booking-write"
+# #751 - EOC override: rides on `booking-write`, skips every acceptance condition (incl. closed).
+_BYPASS_SCOPE = "booking-bypass"
 _BANGKOK_TZ = ZoneInfo("Asia/Bangkok")
 _PHONE_RE = re.compile(r"^0\d{8,9}$")
 _CID_RE = re.compile(r"^[0-9]{13}$")
@@ -707,7 +710,7 @@ class ThirdPartyBookingsUseCase:
             purpose="",
             ip=client_ip,
             status=outcome,
-            result_count=result_count if outcome == "granted" else 0,
+            result_count=result_count if outcome in ("granted", "granted_bypass") else 0,
             created_at=datetime.now(UTC),
         ).insert()
 
@@ -1135,9 +1138,13 @@ class ThirdPartyBookingsUseCase:
                 location_code=location_code,
             )
 
-        # FR-15/16 — only `closed` or an explicit opt-out blocks; full shelters stay bookable.
-        feature_flags = shelter.raw_data.get("feature_flags") or {}
-        if shelter.status == "closed" or feature_flags.get("accepts_pre_registration") is False:
+        # #751 (CR-154/CR-169 rule change) — the normal rule is `accepts_booking`: not closed AND
+        # the pre-registration switch is on (a missing flag is NOT bookable). `booking-bypass`
+        # (EOC) skips it, so bypass is only "used" when the rule actually fails. The 404 above
+        # still wins: an unknown / inactive shelter is never bookable, bypass or not.
+        bookable = accepts_booking(shelter)
+        bypass = not bookable and _BYPASS_SCOPE in claims.scopes
+        if not bookable and not bypass:
             raise await self._deny(
                 endpoint=endpoint,
                 claims=claims,
@@ -1203,6 +1210,7 @@ class ThirdPartyBookingsUseCase:
                 person_seq=index,
                 group_size=len(persons),
                 committed=False,
+                bypass=bypass,
                 client_id=claims.client_id,
                 module_name=claims.module_name,
                 shelter_code=location_code,
@@ -1366,7 +1374,7 @@ class ThirdPartyBookingsUseCase:
                 endpoint=endpoint,
                 claims=claims,
                 client_ip=client_ip,
-                outcome="granted",
+                outcome="granted_bypass" if bypass else "granted",
                 location_code=location_code,
                 result_count=len(persons),
             )
