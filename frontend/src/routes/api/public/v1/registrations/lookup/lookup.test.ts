@@ -2,7 +2,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { POST } from './+server';
 import { adminRaw } from '$lib/server/couch-admin';
 import { findMasterByCode, listShelterMasters } from '$lib/server/shelters.admin';
-import { registerLookupIpLimiter } from '$lib/server/security/rate-limiter';
 
 type PostEvent = Parameters<typeof POST>[0];
 
@@ -11,10 +10,6 @@ vi.mock('$lib/server/couch-admin', () => ({ adminRaw: vi.fn() }));
 vi.mock('$lib/server/shelters.admin', () => ({
 	findMasterByCode: vi.fn(),
 	listShelterMasters: vi.fn()
-}));
-
-vi.mock('$lib/server/security/rate-limiter', () => ({
-	registerLookupIpLimiter: { check: vi.fn(() => true) }
 }));
 
 const ULID = '01JABCDEFGHJKMNPQRSTVWXYZ0';
@@ -49,7 +44,6 @@ describe('POST /api/public/v1/registrations/lookup', () => {
 		vi.mocked(adminRaw).mockReset();
 		vi.mocked(listShelterMasters).mockReset();
 		vi.mocked(findMasterByCode).mockReset();
-		vi.mocked(registerLookupIpLimiter.check).mockReturnValue(true);
 		vi.mocked(listShelterMasters).mockResolvedValue([{ code: 'SH001' }] as never);
 		vi.mocked(findMasterByCode).mockResolvedValue({
 			code: 'SH001',
@@ -60,13 +54,6 @@ describe('POST /api/public/v1/registrations/lookup', () => {
 	it('422 when a field is missing', async () => {
 		const res = await POST(event({ code: ULID }));
 		expect(res.status).toBe(422);
-		expect(adminRaw).not.toHaveBeenCalled();
-	});
-
-	it('429 when rate limited', async () => {
-		vi.mocked(registerLookupIpLimiter.check).mockReturnValue(false);
-		const res = await POST(event({ code: ULID, phone: '0812345678' }));
-		expect(res.status).toBe(429);
 		expect(adminRaw).not.toHaveBeenCalled();
 	});
 

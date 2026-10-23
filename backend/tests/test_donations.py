@@ -15,7 +15,6 @@ from tent_model.public_donation import PublicDonation
 from tent_model.public_shelter import PublicShelter
 
 from apiapp.core.config import Settings
-from apiapp.modules.donations import router as donation_router
 from apiapp.modules.donations import use_case as donation_use_case
 from apiapp.utils.masking import sha256_hex
 from apiapp.utils.ulid import new_ulid
@@ -664,10 +663,6 @@ async def test_concurrent_bookings_never_exceed_the_target(
     can vary without making the test flaky. The pre-counter read-then-write path would
     have accepted all twelve.
     """
-    # The router's sliding window is module state shared across tests in this process,
-    # and twelve requests at once would otherwise be judged against whatever earlier
-    # tests already spent. Rate limiting has its own test; this one is about the quota.
-    donation_router._rate_buckets.clear()
 
     now = datetime.now(UTC)
     await DonationNeedCounter(
@@ -839,11 +834,6 @@ async def _seed_counter(target: str, item_id: str = "item:rice") -> None:
 
 
 async def _book(client: AsyncClient, headers: dict[str, str], items: list[dict]) -> str:
-    # The router's sliding window is module state shared across every test in this
-    # process. These cases each make several calls; without clearing, the later ones are
-    # judged against what the earlier ones spent and start returning 429. Rate limiting
-    # has its own test — these are about editing.
-    donation_router._rate_buckets.clear()
     response = await client.post(
         "/public/v1/donations",
         headers=headers,
@@ -868,7 +858,6 @@ async def _reserved(item_id: str = "item:rice") -> Decimal:
 
 
 async def _edit(client: AsyncClient, headers: dict[str, str], token: str, items: list[dict]):
-    donation_router._rate_buckets.clear()
     return await client.patch(
         f"/public/v1/donations/{token}/items", headers=headers, json={"items": items}
     )
@@ -1011,7 +1000,7 @@ async def test_an_edit_is_logged_as_a_snapshot_pair(
 async def test_editing_repeatedly_appends_and_is_never_capped(
     client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
 ) -> None:
-    """CR-080 Q5 — no per-booking limit; the IP rate limit is the only brake."""
+    """CR-080 Q5 — no per-booking limit; the per-IP rate limit at nginx is the only brake."""
     await _seed_counter("100")
     token = await _book(client, auth_headers, [{"item_id": "item:rice", "qty": "1", "unit": "kg"}])
 
@@ -1273,7 +1262,6 @@ async def test_two_donors_racing_for_the_last_trip_get_one_place(
 ) -> None:
     """The race e2e's pickup case, at the service: both pass the BFF's CouchDB count,
     so only the counter stands between them and a double-booked truck."""
-    donation_router._rate_buckets.clear()
 
     responses = await asyncio.gather(
         *[
@@ -1295,7 +1283,6 @@ async def test_two_donors_racing_for_the_last_trip_get_one_place(
 async def test_many_donors_never_overfill_a_capped_window(
     client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
 ) -> None:
-    donation_router._rate_buckets.clear()
 
     responses = await asyncio.gather(
         *[
@@ -1316,7 +1303,6 @@ async def test_places_taken_before_the_counter_existed_still_count(
 ) -> None:
     """The first booking seeds the counter from the CouchDB count the BFF sends, so a
     window already full from older bookings refuses rather than starting from 0."""
-    donation_router._rate_buckets.clear()
 
     response = await client.post(
         "/public/v1/donations",
@@ -1333,7 +1319,6 @@ async def test_slot_full_hands_the_quota_back(
     client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
 ) -> None:
     """Quota is reserved before the place, so a refused place must release it."""
-    donation_router._rate_buckets.clear()
     await _seed_counter("10")
     payload = _slot_booking(0, capacity=1, booked=1)
     payload["campaign_id"] = "donation_campaign:c1"
@@ -1348,7 +1333,6 @@ async def test_slot_full_hands_the_quota_back(
 async def test_cancel_gives_the_place_back(
     client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
 ) -> None:
-    donation_router._rate_buckets.clear()
     created = await client.post("/public/v1/donations", headers=auth_headers, json=_slot_booking(0))
     assert created.status_code == 201
     assert await _slot_booked() == 1
@@ -1358,7 +1342,6 @@ async def test_cancel_gives_the_place_back(
     assert cancelled.status_code == 200, cancelled.text
     assert await _slot_booked() == 0
 
-    donation_router._rate_buckets.clear()
     again = await client.post("/public/v1/donations", headers=auth_headers, json=_slot_booking(1))
     assert again.status_code == 201
 
@@ -1387,7 +1370,6 @@ async def test_concurrent_cancels_release_the_place_once(
 ) -> None:
     """Two cancels of one booking in flight together must hand back one place, not two —
     the second release would free a place that another donor's booking still holds."""
-    donation_router._rate_buckets.clear()
     tokens = []
     for i in range(2):
         created = await client.post(
@@ -1410,12 +1392,10 @@ async def test_concurrent_cancels_release_the_place_once(
     assert await _slot_booked() == 1, "the other donor's place must still be held"
 
     # With one place free and one held, exactly one more booking fits.
-    donation_router._rate_buckets.clear()
     third = await client.post(
         "/public/v1/donations", headers=auth_headers, json=_slot_booking(2, capacity=2)
     )
     assert third.status_code == 201
-    donation_router._rate_buckets.clear()
     fourth = await client.post(
         "/public/v1/donations", headers=auth_headers, json=_slot_booking(3, capacity=2)
     )
@@ -1478,7 +1458,6 @@ async def test_a_booking_without_a_hold_takes_no_place(
     client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
 ) -> None:
     """Uncapped windows send no hold — they never get a counter."""
-    donation_router._rate_buckets.clear()
     payload = _slot_booking(0)
     del payload["slot_hold"]
 

@@ -1,13 +1,9 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { volunteerTicketLimiter } from '$lib/server/security/rate-limiter';
 import { fastapiBaseUrl, fastapiServiceHeaders } from '$lib/server/fastapi';
 
 /** "ขอยกเลิกการสมัครล่วงหน้า" on the pass (CR-092 FR-VOL-03.3). */
-export const POST: RequestHandler = async ({ params, fetch, getClientAddress }) => {
-	if (!volunteerTicketLimiter.check(getClientAddress())) {
-		return json({ success: false, error: 'RATE_LIMITED' }, { status: 429 });
-	}
+export const POST: RequestHandler = async ({ params, fetch }) => {
 	try {
 		const res = await fetch(
 			`${fastapiBaseUrl()}/public/v1/volunteer/ticket/${encodeURIComponent(params.token)}/cancel`,

@@ -1,17 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { POST } from './+server';
 import { adminRaw } from '$lib/server/couch-admin';
-import { donationIpLimiter, donationPhoneLimiter } from '$lib/server/security/rate-limiter';
 
 type PostEvent = Parameters<typeof POST>[0];
 
 vi.mock('$lib/server/couch-admin', () => ({
 	adminRaw: vi.fn()
-}));
-
-vi.mock('$lib/server/security/rate-limiter', () => ({
-	donationIpLimiter: { check: vi.fn(() => true) },
-	donationPhoneLimiter: { check: vi.fn(() => true) }
 }));
 
 vi.mock('$lib/server/security/captcha', () => ({
@@ -58,8 +52,6 @@ describe('POST /api/public/v1/donations', () => {
 		// (past dates are refused). Only Date is faked — timers/promises stay real.
 		vi.useFakeTimers({ toFake: ['Date'] });
 		vi.setSystemTime(new Date('2026-06-01T03:00:00Z'));
-		vi.mocked(donationIpLimiter.check).mockReturnValue(true);
-		vi.mocked(donationPhoneLimiter.check).mockReturnValue(true);
 	});
 
 	const validPayload = {
