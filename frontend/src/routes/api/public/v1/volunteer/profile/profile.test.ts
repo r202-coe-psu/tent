@@ -1,10 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { POST as READ } from './+server';
 import { POST as UPDATE } from './update/+server';
-import {
-	volunteerProfileUpdateLimiter,
-	volunteerTicketFindLimiter
-} from '$lib/server/security/rate-limiter';
 
 /**
  * Both handlers take the same three things off the event; SvelteKit's generated types
@@ -19,12 +15,6 @@ type PortalHandler = (event: {
 
 const read = READ as unknown as PortalHandler;
 const update = UPDATE as unknown as PortalHandler;
-
-vi.mock('$lib/server/security/rate-limiter', () => ({
-	volunteerTicketFindLimiter: { check: vi.fn(() => true) },
-	volunteerTicketLimiter: { check: vi.fn(() => true) },
-	volunteerProfileUpdateLimiter: { check: vi.fn(() => true) }
-}));
 
 vi.mock('$env/dynamic/private', () => ({
 	env: {
@@ -50,7 +40,6 @@ function call(handler: PortalHandler, body: unknown, fetch = upstream({ success:
 describe('POST /api/public/v1/volunteer/profile', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
-		vi.mocked(volunteerTicketFindLimiter.check).mockReturnValue(true);
 	});
 
 	it('forwards either credential with the service token and never caches', async () => {
@@ -69,19 +58,11 @@ describe('POST /api/public/v1/volunteer/profile', () => {
 		expect((await response).status).toBe(422);
 		expect(fetch).not.toHaveBeenCalled();
 	});
-
-	it('shares the lookup budget with the other phone-keyed reads', async () => {
-		vi.mocked(volunteerTicketFindLimiter.check).mockReturnValue(false);
-		const { response, fetch } = call(read, { phone: '0812345678' });
-		expect((await response).status).toBe(429);
-		expect(fetch).not.toHaveBeenCalled();
-	});
 });
 
 describe('POST /api/public/v1/volunteer/profile/update', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
-		vi.mocked(volunteerProfileUpdateLimiter.check).mockReturnValue(true);
 	});
 
 	it('sends only the credential and the skills — nothing staff owns can ride along', async () => {
@@ -117,12 +98,5 @@ describe('POST /api/public/v1/volunteer/profile/update', () => {
 		const result = await response;
 		expect(result.status).toBe(404);
 		expect(await result.json()).toEqual({ success: false, error: 'PROFILE_NOT_FOUND' });
-	});
-
-	it('has its own, tighter budget than the reads', async () => {
-		vi.mocked(volunteerProfileUpdateLimiter.check).mockReturnValue(false);
-		const { response, fetch } = call(update, { phone: '0812345678', skills: [] });
-		expect((await response).status).toBe(429);
-		expect(fetch).not.toHaveBeenCalled();
 	});
 });

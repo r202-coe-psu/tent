@@ -3,7 +3,6 @@ import type { RequestHandler } from './$types';
 import { env } from '$env/dynamic/private';
 import { ReCaptchaProvider } from '$lib/server/security/captcha';
 import { verifyRecaptchaOrSkip } from '$lib/server/security/recaptcha-gate';
-import { loginCaptchaIpLimiter } from '$lib/server/security/rate-limiter';
 
 export const prerender = false;
 
@@ -18,10 +17,6 @@ const captchaProvider = new ReCaptchaProvider(
  */
 export const POST: RequestHandler = async ({ request, getClientAddress }) => {
 	const ip = getClientAddress();
-	if (!loginCaptchaIpLimiter.check(ip)) {
-		return json({ ok: false, error: 'RATE_LIMITED' }, { status: 429 });
-	}
-
 	const body = (await request.json().catch(() => ({}))) as { captchaToken?: unknown };
 	const captchaToken = typeof body.captchaToken === 'string' ? body.captchaToken.trim() : '';
 

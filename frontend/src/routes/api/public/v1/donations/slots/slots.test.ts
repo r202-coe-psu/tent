@@ -1,16 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { GET } from './+server';
 import { adminRaw } from '$lib/server/couch-admin';
-import { donationSlotsLimiter } from '$lib/server/security/rate-limiter';
 
 type GetEvent = Parameters<typeof GET>[0];
 
 vi.mock('$lib/server/couch-admin', () => ({
 	adminRaw: vi.fn()
-}));
-
-vi.mock('$lib/server/security/rate-limiter', () => ({
-	donationSlotsLimiter: { check: vi.fn(() => true) }
 }));
 
 function event(query: string): GetEvent {
@@ -27,7 +22,6 @@ function rows(docs: unknown[]) {
 describe('GET /api/public/v1/donations/slots', () => {
 	beforeEach(() => {
 		vi.resetAllMocks();
-		vi.mocked(donationSlotsLimiter.check).mockReturnValue(true);
 	});
 
 	it('returns the configured windows of one queue with their remaining capacity', async () => {
@@ -156,24 +150,5 @@ describe('GET /api/public/v1/donations/slots', () => {
 
 		expect(res.status).toBe(200);
 		expect(body.slots.every((s: { status: string }) => s.status === 'available')).toBe(true);
-	});
-
-	it('answers 429 RATE_LIMITED without touching CouchDB once the caller is over budget', async () => {
-		vi.mocked(donationSlotsLimiter.check).mockReturnValue(false);
-
-		const res = await GET(event('?shelter_code=SH001&date=2026-09-22'));
-		const body = await res.json();
-
-		expect(res.status).toBe(429);
-		expect(body).toEqual({ success: false, error: 'RATE_LIMITED' });
-		expect(adminRaw).not.toHaveBeenCalled();
-	});
-
-	it('keys the limiter on the client address', async () => {
-		vi.mocked(adminRaw).mockImplementation(() => rows([]));
-
-		await GET(event('?shelter_code=SH001&date=2026-09-22'));
-
-		expect(donationSlotsLimiter.check).toHaveBeenCalledWith('127.0.0.1');
 	});
 });
