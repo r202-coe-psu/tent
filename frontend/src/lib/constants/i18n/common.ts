@@ -82,7 +82,7 @@ export const PUBLIC_FOOTER_I18N = {
 		onlineChannels: 'Quick online channels',
 		lineOa: 'Emergency LINE OA',
 		facebook: 'EOC news on Facebook',
-		partners: 'Related organizations',
+		partners: 'Related Organizations',
 		copyright: '© 2026 SmartShelter. All rights reserved.'
 	}
 } as const;
