@@ -61,10 +61,10 @@ DELETE /couch/_session          → logout
     (guards ยัง enforce force-setup ถ้าเข้าเงื่อนไข; ไม่ส่งไป `/mfa-challenge` เพราะมี `mfa_ok` แล้ว)
   - ไม่พบ link / `sub` ไม่รู้จัก → **ไม่** mint session; ตั้ง cookie `pending_link` (signed, HttpOnly, 10 นาที) → redirect `/login/link` (CR-141)
 - **Link-on-first-login path (CR-141):** `/login/link` รับ username|เบอร์โทร + password (+ reCAPTCHA ตาม flag) → `POST /api/v1/auth/link-account`
-  - ตรวจ `pending_link` → rate limit (nonce + IP) → captcha → verify password กับ central `_session` ฝั่งเซิร์ฟเวอร์
+  - ตรวจ `pending_link` → captcha → verify password กับ central `_session` ฝั่งเซิร์ฟเวอร์
   - eligibility: `must_change_password = true` **และ** ไม่มี `mfa.providers` **และ** ไม่ใช่ bootstrap `_admin`; ไม่ผ่าน → 403
   - ผูก provider (`sub` ผูกกับ user อื่น → 409) → mint `AuthSession` + `mfa_ok` → client ไป `/force-setup`
-  - รหัสผิด / ไม่พบ user → 401 ข้อความเดียวกัน; เกิน limit → 429 + ลบ cookie
+  - รหัสผิด / ไม่พบ user → 401 ข้อความเดียวกัน; rate limit ต่อ IP ที่ nginx zone `auth` (CR-188 — ยกเลิก limit ต่อ nonce)
   - บัญชีเดิมที่ยังไม่ผูก → `/admin-login` แล้วผูกที่ `/me`
   - Mint ใช้ cookie-auth secret จาก CouchDB config (`chttpd_auth` / `couch_httpd_auth`) + `_users.salt`
     และ hash ตาม `hash_algorithms` ของโหนด — อ่านได้เฉพาะฝั่งเซิร์ฟเวอร์ (ห้าม `PUBLIC_*`); **ไม่** ใช้ Proxy Auth
@@ -170,7 +170,7 @@ X-Device-Secret: …
 ปุ่มลงทะเบียนใหม่บนผล lookup.
 
 การซ่อนปุ่มเป็นเพียง UX: `POST /api/v1/scanner/kiosk/lookup` ที่ `source: "phone"` ตรวจ flag
-ซ้ำฝั่ง server ก่อน rate limit และ lookup; เมื่อปิดตอบ `403 KIOSK_METHOD_DISABLED`.
+ซ้ำฝั่ง server ก่อน lookup; เมื่อปิดตอบ `403 KIOSK_METHOD_DISABLED`.
 QR และ smart-card lookup ไม่ขึ้นกับ flag เบอร์โทร. Smart-card lookup ตรวจ
 `kiosk_walk_in_registration_enabled` เพื่อกำหนด `can_register`; flag นี้ควบคุมเฉพาะการเริ่ม
 walk-in registration และไม่ปิด lookup หรือ check-in flow เดิม.
@@ -205,8 +205,8 @@ inline attachments ก่อนเขียน evacuee. หากเขียน
 การ lookup ที่ไม่มี record อนุญาตให้เริ่มลงทะเบียนเมื่อ flag เปิด โดยส่ง `can_register: true`
 ใน not-found response. เมื่อ flag ปิดให้ส่ง `can_register: false`. Record เดิมที่ไม่อนุญาตให้
 ลงทะเบียนซ้ำตอบ `409 KIOSK_REGISTRATION_BLOCKED`; body ไม่ผ่าน schema ตอบ `400
-INVALID_KIOSK_REGISTRATION`, flag ปิดตอบ `403 KIOSK_REGISTRATION_DISABLED`, limit ต่อ device
-ตอบ `429 KIOSK_RATE_LIMITED`, auth ไม่ผ่านตอบ `401 DEVICE_AUTH_FAILED`, และ registry/database
+INVALID_KIOSK_REGISTRATION`, flag ปิดตอบ `403 KIOSK_REGISTRATION_DISABLED`, เกิน limit ของ
+nginx zone `kiosk` ตอบ `429 KIOSK_RATE_LIMITED` (CR-188), auth ไม่ผ่านตอบ `401 DEVICE_AUTH_FAILED`, และ registry/database
 อ่านหรือเขียนไม่ได้ตอบ `503` โดยไม่สร้าง record. รายละเอียดนี้ implement ตามค่าที่เสนอในแผน;
 CR ที่แผนอ้างถึงยังไม่มีใน `docs/changes/` และต้องได้รับอนุมัติก่อนเปิด PR.
 
@@ -234,7 +234,7 @@ shelter ที่ผูกกับเครื่องมี `feature_flags.ki
 - `session_id` = hex 32 ตัว; รูปแบบผิด → `400 INVALID_INPUT`
 - ทุก endpoint: auth ไม่ผ่าน → `401 DEVICE_AUTH_FAILED`; registry อ่านไม่ได้ → `503 DEPENDENCY_UNAVAILABLE`
 - `qr_url` = `{origin}/api/v1/auth/oauth/thaid/start?mode=kiosk_check_in&session_id=…` (origin = `ORIGIN` / `PUBLIC_ORIGIN` ของ deploy)
-- สร้าง session: ลำดับตรวจ auth → rate limit 10 ครั้ง/นาที/เครื่อง (`429 KIOSK_RATE_LIMITED` + `retry-after: 60`, นับต่อ worker) →
+- สร้าง session: ลำดับตรวจ auth → (rate limit ที่ nginx zone `kiosk` ต่อ IP — `429 KIOSK_RATE_LIMITED` + `retry-after: 60`; CR-188) →
   gate → สร้าง. สร้างใหม่ = ยกเลิก session `pending` / `completed` เดิมของเครื่องเดียวกัน
 - TTL: `pending` 300 วิ; เมื่อยืนยันสำเร็จเป็น `completed` และนับใหม่ 180 วิ. ตู้ต้องนับเวลาจาก `expires_in_sec` ด้วยนาฬิกา
   monotonic (ไม่ใช้ `expires_at` กับนาฬิกาตู้) และ poll `status` อีกครั้งก่อนแสดงว่าหมดอายุ
@@ -253,7 +253,7 @@ callback ในเบราว์เซอร์อื่น) — ตรวจ�
 เซ็นไม่ถูก. Mode อื่นยังเทียบ cookie (CR-163 KTD-AC-10, #757)
 
 **Lookup (`POST /api/v1/scanner/kiosk/lookup`):** body `{ "source": "thaid", "session_id" }` (strict; ไม่รับ `citizen_id`).
-ตรวจ rate limit เดิม → gate → session ต้องเป็นของเครื่องนี้, `completed`, และ `shelter_code` ตรงกับเครื่อง มิฉะนั้น
+gate → session ต้องเป็นของเครื่องนี้, `completed`, และ `shelter_code` ตรงกับเครื่อง มิฉะนั้น
 `409 KIOSK_THAID_SESSION_INVALID`. Lookup ใช้ `pid` จาก session และ**ไม่** consume session. ไม่พบ → `404
 PRE_REGISTRATION_NOT_FOUND` พร้อม `can_register: false` (walk-in ด้วย ThaiD อยู่นอก scope).
 
@@ -302,7 +302,7 @@ Content-Type: application/json
 - เงื่อนไขพิมพ์ได้: `type: "volunteer"`, `status: "active"`, เบอร์ตรงกับ `phone` (หรือ `phone_hash` ที่ `phone`
   ปัจจุบันยังตรง) **เพียง 1 คน**, และมี `tracking_token_hash` เป็น hex 64 ตัว
 - ตรวจ `kiosk_phone_check_in_enabled` ฝั่ง server (ใช้ toggle เดียวกับ reprint)
-- Rate limit: ต่อเครื่อง 10/นาที, ต่อเบอร์ (sha256) 3/10 นาที ข้ามเครื่อง — นับทุก request
+- Rate limit: nginx zone `kiosk` ต่อ IP (CR-188) — ไม่มี limit ต่อเครื่อง/ต่อเบอร์ในแอปแล้ว
 - ตอบ `cache-control: no-store`, `pragma: no-cache`
 
 | Status | Code | เมื่อ |
@@ -311,7 +311,7 @@ Content-Type: application/json
 | 401 | `DEVICE_AUTH_FAILED` | device credential ไม่ผ่าน |
 | 403 | `KIOSK_METHOD_DISABLED` | ศูนย์ปิด kiosk phone check-in |
 | 404 | `KIOSK_VOLUNTEER_CARD_NOT_FOUND` | ไม่พบ / ต่าง shelter / `inactive` / ไม่มี hash / เบอร์ซ้ำ — **body เดียวกันทุกกรณี** |
-| 429 | `KIOSK_RATE_LIMITED` | เกิน limit (`retry-after: 60`) |
+| 429 | `KIOSK_RATE_LIMITED` | เกิน limit ของ nginx zone `kiosk` (`retry-after: 60`; CR-188) |
 | 503 | `DEPENDENCY_UNAVAILABLE` | registry/CouchDB อ่านไม่ได้ |
 
 `scanner_client` แนบ device credential ให้ path `/api/v1/kiosk/volunteer-card` (same-origin POST เท่านั้น).
@@ -515,7 +515,7 @@ Contract เต็มอยู่ที่ [public-tier-flow-spec.html](../featu
 
 | Endpoint | Auth |
 | --- | --- |
-| `POST /public/v1/occupants` | — (rate-limited + audit); ค้นชื่อ: ทุกคำ ≥2 ตัวอักษร (สูงสุด 4 คำ), หลายคำ = ชื่อต้น prefix AND นามสกุลเต็ม exact, คำเดียว = ชื่อต้น prefix หรือ นามสกุลเต็ม, เรียงคงที่ทุกประเภทการค้น (ชื่อ และเลขบัตร / พาสปอร์ต / เบอร์ — `first_name_key, _id`, CR-181), max 10 ผล (CR-166) |
+| `POST /public/v1/occupants` | — (audit; rate limit ที่ nginx, CR-188); ค้นชื่อ: ทุกคำ ≥2 ตัวอักษร (สูงสุด 4 คำ), หลายคำ = ชื่อต้น prefix AND นามสกุลเต็ม exact, คำเดียว = ชื่อต้น prefix หรือ นามสกุลเต็ม, เรียงคงที่ทุกประเภทการค้น (ชื่อ และเลขบัตร / พาสปอร์ต / เบอร์ — `first_name_key, _id`, CR-181), max 10 ผล (CR-166) |
 | `GET /public/v1/needs` | — |
 | `POST /public/v1/donations` | เบอร์โทร (+OTP เมื่อ `public_otp_required` เปิด) |
 | `GET /api/public/v1/donations/slots?shelter_code&date&mode` | — (BFF-only, CR-157) — BFF อ่าน `donation_slot` จาก CouchDB ฝั่ง server (doc type นี้ไม่ถูก project ลง Mongo) คืนเฉพาะช่วงเวลา/ความจุ/ยอดจอง ไม่มี PII |
@@ -524,8 +524,8 @@ Contract เต็มอยู่ที่ [public-tier-flow-spec.html](../featu
 | `PATCH /public/v1/donations/{tracking_token}/items` | token |
 | `DELETE /public/v1/donations/{tracking_token}` | token |
 | `GET /public/v1/transparency/*` | — |
-| `POST /api/public/v1/registrations` | CAPTCHA + rate-limit (BFF-only, ไม่มีบน FastAPI) |
-| `POST /api/public/v1/registrations/photos` | rate-limit (BFF-only) — multipart → Couch `image:{ulid}` ใน DB ศูนย์ที่เลือก (face/pet; ไม่ใช่ GridFS) |
+| `POST /api/public/v1/registrations` | CAPTCHA (BFF-only, ไม่มีบน FastAPI); rate limit ที่ nginx (CR-188) |
+| `POST /api/public/v1/registrations/photos` | rate limit ที่ nginx (CR-188) — multipart → Couch `image:{ulid}` ใน DB ศูนย์ที่เลือก (face/pet; ไม่ใช่ GridFS) |
 | `POST /api/public/v1/registrations/lookup` | รหัสการจอง + เบอร์โทร (BFF-only) |
 
 > **หมายเหตุ (CR-070/T-71):** endpoints กลุ่ม `registrations/**` เป็น **BFF-only** — อยู่บน SvelteKit เท่านั้น
@@ -569,7 +569,7 @@ Contract เต็มอยู่ที่ [public-tier-flow-spec.html](../featu
 | `200` | แก้สำเร็จ — บันทึก `revisions[]` เพิ่ม 1 รายการ |
 | `400` | สถานะไม่ได้อยู่ใน `{declared, pending_review}` แล้ว — เจ้าหน้าที่รับเรื่องไปแล้ว (`DONOR_EDITABLE_STATUSES`, CR-052 §1.4) |
 | `409 NEED_FULL` | โควตาไม่พอ — **ของเดิมไม่เปลี่ยนเลย** ทุกการจองที่ทำไปในคำขอนี้ถูกคืนกลับ |
-| `429` | rate-limit ต่อ IP (ไม่มีเพดานจำนวนครั้งต่อใบจอง) |
+| `429` | rate limit ต่อ IP ที่ nginx (CR-188; ไม่มีเพดานจำนวนครั้งต่อใบจอง) |
 
 TTL **ไม่รีเซ็ต** — `expires_at` ยังนับจาก `declared_at` เดิม
 
@@ -595,7 +595,7 @@ BFF ตรวจช่วงเวลา (`logistics.slot`) ก่อนส่�
 | --- | --- | --- | --- |
 | `/external/v1/shelters/{code}` | GET | `Authorization: Bearer <key>` หรือ `X-API-Key` | รายละเอียดศูนย์ (`ShelterDetailResponse`) |
 | `/external/v1/needs` | GET | เหมือนกัน | รายการความต้องการ (`NeedsListResponse`) |
-| `/external/v1/occupants` | POST | เหมือนกัน | ค้นหาผู้ประสบภัยแบบ public search (rate limit + `SearchAudit`); กติกาค้นชื่อเหมือน `/public/v1/occupants` (CR-166 — partner เห็นพฤติกรรมเปลี่ยน); ค้นเลขบัตร / พาสปอร์ต / เบอร์เรียง `first_name_key, _id` แล้ว (CR-181) — ยังคืน `cancelled` + `family_members` |
+| `/external/v1/occupants` | POST | เหมือนกัน | ค้นหาผู้ประสบภัยแบบ public search (`SearchAudit`; rate limit ที่ nginx zone `external`, CR-188); กติกาค้นชื่อเหมือน `/public/v1/occupants` (CR-166 — partner เห็นพฤติกรรมเปลี่ยน); ค้นเลขบัตร / พาสปอร์ต / เบอร์เรียง `first_name_key, _id` แล้ว (CR-181) — ยังคืน `cancelled` + `family_members` |
 | `/external/v1/announcements` | GET | เหมือนกัน | ประกาศ (แบ่งหน้า) |
 | `/external/v1/config/faqs` | GET | เหมือนกัน | FAQ config |
 

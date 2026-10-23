@@ -163,3 +163,4 @@ N/A — additive flag (doc เดิมไม่มี key = `false`); session �
   - (c) mask เลข 13 หลักให้เหลือเปิดเผยไม่เกิน 2 หลักท้าย
   - (d) implementation มาเป็น code PR ใหม่จาก `feat/pre-register_kiosk` รีวิวเทียบกับ CR นี้ — ห้าม merge branch นั้นตรง ๆ · PR นั้นต้องอัปเดต `docs/data/schema.md`, `docs/data/api-contract.md` และ FR-KPC-11/F-08 ใน CR-151/CR-152
 - 2026-10-23 — แก้ในที่ (#757, feedback หน้างาน): ThaiD บน Android ล้มด้วย `invalid_state` เมื่อเบราว์เซอร์ที่สแกน QR (เช่น in-app browser ของแอป Google) ไม่ใช่เบราว์เซอร์ default ที่แอป ThaiD เปิด callback — cookie state ไม่ตามไป · เพิ่ม KTD-AC-10 + ข้อ Security (ข้ามการเทียบ cookie เฉพาะ `kiosk_check_in` / `member_scan`) · ข้อเสนอจากทีม kiosk — รอ PO review
+- 2026-10-23 — **Superseded (rate limit) by [CR-188](../01-core/CR-188-rate-limit-to-nginx.md):** KTD-AC-07 (10 ครั้ง/นาที/kiosk) ย้ายไป nginx zone `kiosk` ต่อ IP
