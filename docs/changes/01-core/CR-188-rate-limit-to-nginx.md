@@ -12,12 +12,13 @@ affects:
   - frontend/src/routes/api/** ที่ import limiter (public donations / registrations / unassigned-registrations / volunteer, v1 auth / kiosk / thirdparty-clients secret)
   - tests ที่ assert 429 `RATE_LIMITED` / `KIOSK_RATE_LIMITED`
   - RATE_LIMIT env: .env.example, frontend/.env.example, frontend/e2e/.env.example, docker-compose.{production,staging}{,.no-nginx}.yml, frontend/playwright.config.ts, e2e pacer helpers, Jenkins credential tent-staging-e2e-env
-  - host nginx: staging `shelter.importstar.dev`, production `shelter.psu.ac.th` (นอก repo) + snippet ใหม่ใน repo (FR-9)
+  - host nginx: staging `shelter.importstar.dev`, production `shelter.psu.ac.th` (นอก repo) + `nginx/rate-limit.conf`, `nginx/snippets/rate-limit.conf` (FR-9)
   - ~/.claude/skills/imps-deploy/templates/nginx.conf
   - backend/apiapp/modules/{donations,volunteers,unassigned_registrations,evacuee,external}/router.py + tests (ลบ FastAPI limiter)
   - frontend/src/lib/server/fastapi.ts (BFF ส่ง X-Real-IP ไป FastAPI — PR #785; ใช้กับ audit `ip_hash` ของ public search)
   - supersede ตัวเลข/กติกา rate limit ใน: CR-005 §F, CR-070, CR-080 Q5, CR-092 FR-VOL-02.3, CR-096 FR-96-18, CR-136, CR-141 FR-20, CR-151 FR-KPC-59/108/126 D7, CR-160 (ทั้ง CR), CR-163 KTD-AC-07, CR-173 FR-7, CR-175 FR-9
   - docs/data/api-contract.md L237, L302, L524–525, L569
+  - docs/features/shelter-feedback-rubric-spec.md NFR-FB-02 (ยังไม่ implement — เปลี่ยนเป็นพึ่ง nginx)
   - no schema_v bump
 ---
 
@@ -104,8 +105,9 @@ key = `$limit_key` (IPv4 เต็ม / IPv6 ตาม `$binary_remote_addr`; �
 - **FR-6** — `limit_req_zone` อยู่ใน context `http`; ขนาด zone ≥ 10m ต่อ zone (~160k IP)
 - **FR-7** — e2e บน staging: allowlist IP ของ runner ด้วย `geo` → `map` ให้ `$limit_key` เป็นค่าว่าง (nginx ไม่นับ key ว่าง)
 - **FR-8** — `imps-deploy/templates/nginx.conf` มี realip snippet (Tunnel / proxy) และ include rate-limit snippet
-- **FR-9** — ไฟล์ zone + location rule เก็บใน repo ที่ `deploy/nginx/rate-limit.conf` (http context) และ
-  `deploy/nginx/rate-limit-locations.conf` (server context) เป็น source of truth; host nginx `include` จาก copy ของไฟล์นี้
+- **FR-9** — config rate limit เก็บใน repo เป็น source of truth: `nginx/rate-limit.conf` (http context — zone + map;
+  container nginx โหลดอัตโนมัติผ่าน `conf.d`) และ `nginx/snippets/rate-limit.conf` (server context — `limit_req` + 429);
+  host nginx copy ไป `/etc/nginx/conf.d/tent-rate-limit.conf` + `/etc/nginx/snippets/tent-rate-limit.conf` แล้ว `include` snippet ใน server block
 - **FR-11** — ลบ limiter ใน FastAPI ทั้งหมด (`_enforce_rate_limit` / `_check_rate_limit` + ค่าคงที่ + state) ใน `donations`, `volunteers`,
   `unassigned_registrations`, `evacuee`, `external` router และ test/fixture ที่ reset หรือ assert 429; `client_ip()` คงไว้ (audit `ip_hash`)
 - **FR-10** — เพิ่ม `decision sync` note อ้าง CR นี้ใน CR ทุกตัวในรายการ supersede ตรงจุดกติกา rate limit เดิม; ปิด CR-160 เป็น `superseded`
