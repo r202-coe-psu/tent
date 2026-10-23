@@ -3,13 +3,11 @@
 from __future__ import annotations
 
 import threading
-import time
 from collections import defaultdict
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi import APIRouter, Depends, Request, Response, status
 
 from ...core.security import verify_external_secret
-from ...utils.request_meta import client_ip
 from .schemas import (
     DonationCancelResponse,
     DonationCourierPatchRequest,
@@ -40,17 +38,17 @@ def _enforce_rate_limit(request: Request) -> None:
     reachable FastAPI cannot bypass captcha. Prefer ``X-Real-IP`` via
     ``client_ip`` when behind nginx.
     """
-    ip = client_ip(request)
-    now = time.monotonic()
-    with _rate_lock:
-        bucket = [ts for ts in _rate_buckets[ip] if now - ts < _RATE_WINDOW_SECONDS]
-        if len(bucket) >= _RATE_MAX_REQUESTS:
-            raise HTTPException(
-                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail={"error": {"code": "RATE_LIMITED", "message": "Too many requests"}},
-            )
-        bucket.append(now)
-        _rate_buckets[ip] = bucket
+    # ip = client_ip(request)
+    # now = time.monotonic()
+    # with _rate_lock:
+    #     bucket = [ts for ts in _rate_buckets[ip] if now - ts < _RATE_WINDOW_SECONDS]
+    #     if len(bucket) >= _RATE_MAX_REQUESTS:
+    #         raise HTTPException(
+    #             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+    #             detail={"error": {"code": "RATE_LIMITED", "message": "Too many requests"}},
+    #         )
+    #     bucket.append(now)
+    #     _rate_buckets[ip] = bucket
 
 
 @router.post(
