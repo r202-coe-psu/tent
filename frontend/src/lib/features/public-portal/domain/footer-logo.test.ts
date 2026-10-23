@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+	FOOTER_LOGO_IMAGE_MAX_BYTES,
 	FOOTER_LOGO_MAX,
 	appendFooterLogo,
 	canAddFooterLogo,
@@ -10,6 +11,7 @@ import {
 	publishedFooterLogos,
 	removeFooterLogo,
 	replaceFooterLogo,
+	validateFooterLogoFile,
 	type FooterLogo
 } from './footer-logo';
 
@@ -125,5 +127,24 @@ describe('footerLogoImageUrl', () => {
 			'/api/public/v1/config/footer-logos/01J/image?v=md5-abc%3D'
 		);
 		expect(footerLogoImageUrl('01J')).toBe('/api/public/v1/config/footer-logos/01J/image');
+	});
+});
+
+describe('validateFooterLogoFile', () => {
+	it('accepts png / jpeg / webp up to 512 KB', () => {
+		expect(FOOTER_LOGO_IMAGE_MAX_BYTES).toBe(512 * 1024);
+		for (const type of ['image/png', 'image/jpeg', 'image/webp']) {
+			expect(validateFooterLogoFile({ type, size: 512 * 1024 })).toBeNull();
+		}
+	});
+
+	it('rejects files over 512 KB, empty files and other types', () => {
+		expect(validateFooterLogoFile({ type: 'image/png', size: 512 * 1024 + 1 })).toBe(
+			'รูปภาพต้องมีขนาดไม่เกิน 512 KB'
+		);
+		expect(validateFooterLogoFile({ type: 'image/png', size: 0 })).toBe('ไม่พบข้อมูลรูปภาพ');
+		expect(validateFooterLogoFile({ type: 'image/svg+xml', size: 10 })).toBe(
+			'รองรับเฉพาะรูป png / jpeg / webp'
+		);
 	});
 });

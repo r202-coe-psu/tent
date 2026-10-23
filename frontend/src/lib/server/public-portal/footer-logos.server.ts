@@ -12,21 +12,19 @@ import {
 	removeFooterLogo,
 	replaceFooterLogo,
 	sortFooterLogos,
+	FOOTER_LOGO_IMAGE_MAX_BYTES,
 	FOOTER_LOGO_MAX,
+	FOOTER_LOGO_TOO_LARGE_MESSAGE,
 	type FooterLogo,
 	type FooterLogoDirection,
 	type FooterLogoInput,
 	type FooterLogoRecord,
 	type PublicFooterLogo
 } from '$lib/features/public-portal';
-import {
-	KIOSK_BANNER_IMAGE_MAX_BYTES,
-	detectBannerImageMime,
-	type KioskBannerImageMime
-} from '$lib/features/kiosk-banners';
+import { decodeBannerImage, type KioskBannerImageMime } from '$lib/features/kiosk-banners';
 
 /**
- * Footer partner logos on the `config:public_portal` singleton (draft-public-footer-logos).
+ * Footer partner logos on the `config:public_portal` singleton (CR-184).
  *
  * Metadata lives in `footer_logos[]`, bytes in `_attachments.footer_logo_{id}`. Every write is a
  * single PUT of the whole doc carrying the other attachments as stubs, so FAQ/social fields and
@@ -97,18 +95,33 @@ export function publicFooterLogos(doc: PublicPortalConfigRaw | null): PublicFoot
 	});
 }
 
-/** Size + magic-byte check (FR-5, same rules as CR-162); never trusts the client's MIME type. */
+const DECODE_MESSAGES = {
+	empty: 'กรุณาเลือกรูปโลโก้',
+	invalid_base64: 'ข้อมูลรูปภาพไม่ถูกต้อง',
+	too_large: FOOTER_LOGO_TOO_LARGE_MESSAGE,
+	unsupported_type: 'รองรับเฉพาะรูป png / jpeg / webp'
+} as const;
+
+/**
+ * Reuses the CR-162 banner decoder with the logo's 512 KB cap (CR-184 FR-5): size + magic bytes,
+ * never the client's MIME type. The size pre-check skips encoding an oversized upload.
+ */
 export async function decodeFooterLogoFile(file: unknown): Promise<FooterLogoImage> {
 	if (!(file instanceof File) || file.size === 0) {
-		throw new ServiceError('VALIDATION', 'กรุณาเลือกรูปโลโก้');
+		throw new ServiceError('VALIDATION', DECODE_MESSAGES.empty);
 	}
-	if (file.size > KIOSK_BANNER_IMAGE_MAX_BYTES) {
-		throw new ServiceError('VALIDATION', 'รูปภาพต้องมีขนาดไม่เกิน 2 MB');
+	if (file.size > FOOTER_LOGO_IMAGE_MAX_BYTES) {
+		throw new ServiceError('VALIDATION', DECODE_MESSAGES.too_large);
 	}
-	const bytes = new Uint8Array(await file.arrayBuffer());
-	const contentType = detectBannerImageMime(bytes);
-	if (!contentType) throw new ServiceError('VALIDATION', 'รองรับเฉพาะรูป png / jpeg / webp');
-	return { bytes, contentType };
+	const decoded = decodeBannerImage(
+		{
+			content_type: file.type,
+			data_base64: Buffer.from(await file.arrayBuffer()).toString('base64')
+		},
+		FOOTER_LOGO_IMAGE_MAX_BYTES
+	);
+	if (!decoded.ok) throw new ServiceError('VALIDATION', DECODE_MESSAGES[decoded.reason]);
+	return { bytes: decoded.bytes, contentType: decoded.contentType };
 }
 
 const toInline = (image: FooterLogoImage): InlineAttachment => ({

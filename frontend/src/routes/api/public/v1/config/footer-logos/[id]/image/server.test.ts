@@ -34,7 +34,7 @@ describe('GET /api/public/v1/config/footer-logos/[id]/image', () => {
 
 		expect(res.status).toBe(200);
 		expect(res.headers.get('content-type')).toBe('image/webp');
-		expect(res.headers.get('cache-control')).toBe('public, max-age=86400');
+		expect(res.headers.get('cache-control')).toBe('public, max-age=3600');
 		expect(res.headers.get('x-content-type-options')).toBe('nosniff');
 		expect(mockAuthorize).not.toHaveBeenCalled();
 	});
@@ -49,17 +49,28 @@ describe('GET /api/public/v1/config/footer-logos/[id]/image', () => {
 		expect(mockGetImage).toHaveBeenCalledTimes(1);
 	});
 
-	it('lets staff preview a hidden logo without caching it', async () => {
+	it('lets SA preview a hidden logo without caching it', async () => {
 		mockGetImage
 			.mockResolvedValueOnce(null)
 			.mockResolvedValueOnce({ bytes: BYTES, contentType: 'image/png' });
-		mockAuthorize.mockResolvedValueOnce({} as never);
+		mockAuthorize.mockResolvedValueOnce({ isSA: true } as never);
 
 		const res = await GET(event());
 
 		expect(res.status).toBe(200);
 		expect(res.headers.get('cache-control')).toBe('no-store');
 		expect(mockGetImage).toHaveBeenLastCalledWith('logo-1', { includeUnpublished: true });
+	});
+
+	it('returns 404 to a shelter_manager for a hidden logo (SA-only preview, CR-184 Q6)', async () => {
+		mockGetImage.mockResolvedValue(null);
+		mockAuthorize.mockResolvedValueOnce({ isSA: false } as never);
+
+		const res = await GET(event());
+
+		expect(res.status).toBe(404);
+		expect(mockGetImage).toHaveBeenCalledTimes(1);
+		expect(mockGetImage).not.toHaveBeenCalledWith('logo-1', { includeUnpublished: true });
 	});
 
 	it('returns 503 when CouchDB is unavailable', async () => {

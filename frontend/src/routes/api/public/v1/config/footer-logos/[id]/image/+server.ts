@@ -10,16 +10,17 @@ const noStoreHeaders = { 'cache-control': 'no-store', pragma: 'no-cache' };
 const fail = (status: number, code: string, message: string) =>
 	json({ error: { code, message } }, { status, headers: noStoreHeaders });
 
-/** Staff who can open the config page may preview hidden logos; anyone else gets 404. */
+/** Only SA may preview hidden logos — System Management is SA-only (CR-184 FR-14a / Q6). */
 const canPreview = (cookie: string | null) =>
 	authorizeUserWrite(cookie).then(
-		() => true,
+		(caller) => caller.isSA,
 		() => false
 	);
 
 /**
- * Footer partner logo bytes (draft-public-footer-logos FR-14). Published logos are public and
- * cacheable — the URL carries `?v={digest}` so a replaced image gets a new URL.
+ * Footer partner logo bytes (CR-184 FR-14). Published logos are public and cacheable — the URL
+ * carries `?v={digest}` so a replaced image gets a new URL. Hiding a logo does not change that
+ * URL, so `max-age` bounds how long a hidden logo can still show from cache (Q9).
  */
 export const GET: RequestHandler = async ({ params, request }) => {
 	try {
@@ -29,7 +30,7 @@ export const GET: RequestHandler = async ({ params, request }) => {
 				status: 200,
 				headers: {
 					'content-type': published.contentType,
-					'cache-control': 'public, max-age=86400',
+					'cache-control': 'public, max-age=3600',
 					'x-content-type-options': 'nosniff'
 				}
 			});

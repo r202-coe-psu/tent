@@ -1,8 +1,25 @@
 import { z } from 'zod';
 
-/** Footer partner logos on `config:public_portal` (draft-public-footer-logos FR-1..5). */
+/** Footer partner logos on `config:public_portal` (CR-184 FR-1..5). */
 export const FOOTER_LOGO_MAX = 12;
 export const FOOTER_LOGO_ALT_MAX = 120;
+/** Smaller than a kiosk banner's 2 MB: a logo renders 48 px tall and rides the singleton (CR-184 Q1). */
+export const FOOTER_LOGO_IMAGE_MAX_BYTES = 512 * 1024;
+export const FOOTER_LOGO_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp'] as const;
+export const FOOTER_LOGO_TOO_LARGE_MESSAGE = 'รูปภาพต้องมีขนาดไม่เกิน 512 KB';
+
+/**
+ * Client-side UX pre-check (FR-11); the server re-checks size and magic bytes (FR-5).
+ * Returns a Thai message, or `null` when the file looks acceptable.
+ */
+export function validateFooterLogoFile(file: { type: string; size: number }): string | null {
+	if (!(FOOTER_LOGO_IMAGE_TYPES as readonly string[]).includes(file.type)) {
+		return 'รองรับเฉพาะรูป png / jpeg / webp';
+	}
+	if (file.size === 0) return 'ไม่พบข้อมูลรูปภาพ';
+	if (file.size > FOOTER_LOGO_IMAGE_MAX_BYTES) return FOOTER_LOGO_TOO_LARGE_MESSAGE;
+	return null;
+}
 
 const httpsUrl = z
 	.string()

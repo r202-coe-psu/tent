@@ -66,7 +66,10 @@ export {
 } from './domain/config';
 export { DEFAULT_PUBLIC_PORTAL_CONFIG } from './domain/config.fixture';
 export {
+	FOOTER_LOGO_IMAGE_MAX_BYTES,
 	FOOTER_LOGO_MAX,
+	FOOTER_LOGO_TOO_LARGE_MESSAGE,
+	validateFooterLogoFile,
 	appendFooterLogo,
 	canAddFooterLogo,
 	footerLogoAttachmentName,

@@ -246,11 +246,20 @@ describe('decodeFooterLogoFile', () => {
 		await expect(decodeFooterLogoFile('nope')).rejects.toMatchObject({ code: 'VALIDATION' });
 	});
 
-	it('rejects files over 2 MB', async () => {
-		const big = new Uint8Array(2 * 1024 * 1024 + 1);
+	it('rejects files over 512 KB — the logo cap, not the 2 MB banner cap (CR-184 Q1)', async () => {
+		const big = new Uint8Array(512 * 1024 + 1);
 		big.set(PNG);
 		await expect(decodeFooterLogoFile(new File([big], 'big.png'))).rejects.toMatchObject({
-			code: 'VALIDATION'
+			code: 'VALIDATION',
+			message: 'รูปภาพต้องมีขนาดไม่เกิน 512 KB'
+		});
+	});
+
+	it('accepts a PNG of exactly 512 KB', async () => {
+		const edge = new Uint8Array(512 * 1024);
+		edge.set(PNG);
+		await expect(decodeFooterLogoFile(new File([edge], 'edge.png'))).resolves.toMatchObject({
+			contentType: 'image/png'
 		});
 	});
 });

@@ -7,8 +7,7 @@
 	import { Label } from '$lib/components/ui/label';
 	import { Button } from '$lib/components/ui/button';
 	import { Switch } from '$lib/components/ui/switch';
-	import { validateBannerFile } from '$lib/features/kiosk-banners';
-	import type { FooterLogoRecord } from '../domain/footer-logo';
+	import { validateFooterLogoFile, type FooterLogoRecord } from '../domain/footer-logo';
 	import { logoActionResult } from './footer-logo-action';
 
 	let {
@@ -44,7 +43,7 @@
 
 	function onFileChange(event: Event) {
 		const picked = (event.currentTarget as HTMLInputElement).files?.[0] ?? null;
-		fileError = picked ? validateBannerFile(picked) : null;
+		fileError = picked ? validateFooterLogoFile(picked) : null;
 		file = picked && !fileError ? picked : null;
 	}
 </script>
@@ -94,7 +93,7 @@
 					aria-invalid={fileError ? true : undefined}
 				/>
 				<p class="text-xs text-slate-500">
-					รองรับ png / jpeg / webp ขนาดไม่เกิน 2 MB{isEdit ? ' · ไม่เลือกรูป = ใช้รูปเดิม' : ''}
+					รองรับ png / jpeg / webp ขนาดไม่เกิน 512 KB{isEdit ? ' · ไม่เลือกรูป = ใช้รูปเดิม' : ''}
 				</p>
 				{#if fileError}
 					<p class="text-xs font-semibold text-red-600">{fileError}</p>
