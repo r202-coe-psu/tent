@@ -34,7 +34,8 @@ export type UnassignedRegistrationQuery =
 
 /** The central queue (FastAPI / Mongo) could not answer: network, timeout, 5xx or a bad body. */
 export class KioskUnassignedUnavailableError extends Error {
-	constructor() {
+	/** HTTP status when FastAPI answered; absent on network error or timeout. */
+	constructor(readonly status?: number) {
 		super('Unassigned registration queue unavailable');
 		this.name = 'KioskUnassignedUnavailableError';
 	}
@@ -174,18 +175,19 @@ export async function revertUnassignedClaim(
 	body: RevertUnassignedClaimBody
 ): Promise<void> {
 	const response = await postClaim(claimUrl(registrationId, 'revert'), body, REVERT_TIMEOUT_MS);
-	if (!response.ok) throw new KioskUnassignedUnavailableError();
+	if (!response.ok) throw new KioskUnassignedUnavailableError(response.status);
 }
 
 /** Best effort: a failed revert leaves an orphan claim that a later prepare repairs (FR-KUC-15). */
 async function revertQuietly(registrationId: string, body: RevertUnassignedClaimBody) {
 	try {
 		await revertUnassignedClaim(registrationId, body);
-	} catch {
-		// Ids only, never names or other PII.
+	} catch (error) {
+		// Ids and the HTTP status only (no status = network error or timeout), never PII.
 		console.warn('[Kiosk Claim] Revert failed; claim may be orphaned', {
 			registration_id: registrationId,
-			member_ids: body.member_ids
+			member_ids: body.member_ids,
+			status: error instanceof KioskUnassignedUnavailableError ? (error.status ?? null) : null
 		});
 	}
 }
