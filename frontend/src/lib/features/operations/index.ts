@@ -90,6 +90,7 @@ export {
 	StockLotIntegrityError,
 	LotWriteOffError,
 	projectLotsByItem,
+	TransferForbiddenError,
 	adjustInputSchema,
 	createAdjustEntry,
 	adjustReasonSchema,

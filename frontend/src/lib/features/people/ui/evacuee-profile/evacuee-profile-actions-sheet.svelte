@@ -4,6 +4,7 @@
 	import ExternalLink from '@lucide/svelte/icons/external-link';
 	import MapPin from '@lucide/svelte/icons/map-pin';
 	import Printer from '@lucide/svelte/icons/printer';
+	import FileText from '@lucide/svelte/icons/file-text';
 	import * as Sheet from '$lib/components/ui/sheet';
 	import {
 		formatPersonName,
@@ -33,7 +34,8 @@
 		readonly,
 		onOpenZoneModal,
 		onOpenStatusModal,
-		onOpenQrModal
+		onOpenQrModal,
+		onOpenHandoverSlip
 	}: {
 		open: boolean;
 		evacuee: Evacuee;
@@ -44,6 +46,7 @@
 		onOpenZoneModal: () => void;
 		onOpenStatusModal: () => void;
 		onOpenQrModal: () => void;
+		onOpenHandoverSlip: () => void;
 	} = $props();
 
 	const shelterQuery = useShelter(() => shelterStore.selectedShelterCode ?? getShelterCode());
@@ -149,6 +152,14 @@
 					>
 						<Printer class="size-4 opacity-75" />
 						พิมพ์ QR
+					</button>
+					<button
+						type="button"
+						onclick={() => runAction(onOpenHandoverSlip)}
+						class="inline-flex min-h-10 w-full cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-slate-200/80 bg-white px-3 py-2 text-sm font-semibold text-slate-800 transition-colors hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none"
+					>
+						<FileText class="size-4 opacity-75" />
+						พิมพ์ใบส่งตัว
 					</button>
 				{:else}
 					<button
