@@ -1,13 +1,22 @@
 import { describe, expect, it } from 'vitest';
 import type { SmartCardData } from '$lib/features/kiosk-devices';
+import { mintConsentStamp, type ConsentDecision } from '$lib/features/consent/server';
 import { createWalkInSession, WALK_IN_FACE_CHECK_STRICT } from './walk-in-session.svelte';
 
 const CARD = { citizen_id: '1234567890123' } as SmartCardData;
+const DECISION: ConsentDecision = {
+	mode: 'full',
+	health: false,
+	search_visible: true,
+	guardian_for: [],
+	verbal: false,
+	...mintConsentStamp()
+};
 
 function consentedSession() {
 	const session = createWalkInSession();
 	session.begin(CARD.citizen_id);
-	session.consent();
+	session.recordConsent(DECISION);
 	return session;
 }
 
@@ -35,6 +44,7 @@ describe('walkInSession face check hand-over', () => {
 		session.clear();
 		expect(session.citizenId).toBeNull();
 		expect(session.consented).toBe(false);
+		expect(session.consentDecision).toBeNull();
 		expect(session.card).toBeNull();
 		expect(session.faceCheck).toBeNull();
 		expect(session.faceOutcome).toBeNull();
@@ -56,7 +66,7 @@ describe('walkInSession sources and phone', () => {
 		expect(session.citizenId).toBeNull();
 		expect(session.active).toBe(true);
 		expect(session.identityReady).toBe(false);
-		session.consent();
+		session.recordConsent(DECISION);
 		expect(session.identityReady).toBe(true);
 	});
 
@@ -81,13 +91,35 @@ describe('walkInSession sources and phone', () => {
 	});
 });
 
+describe('walkInSession consent', () => {
+	it('keeps the decision for the registration, and only once a walk-in is under way', () => {
+		const session = createWalkInSession();
+		session.recordConsent(DECISION);
+		expect(session.consented).toBe(false);
+
+		session.begin(CARD.citizen_id);
+		session.recordConsent(DECISION);
+		expect(session.consented).toBe(true);
+		expect(session.consentDecision).toBe(DECISION);
+	});
+
+	it('starting another walk-in drops the previous decision', () => {
+		const session = consentedSession();
+		session.begin('9876543210987');
+		expect(session.consented).toBe(false);
+		expect(session.consentDecision).toBeNull();
+	});
+});
+
 describe('walkInSession registration hand-over', () => {
 	it('clear() and begin() forget the registration the done page prints from', () => {
 		const session = consentedSession();
 		session.registration = {
 			evacuee_id: 'evacuee:01',
 			qr_payload: 'qr-payload',
-			label: { name: 'สมชาย ใจดี', phone: null }
+			label: { name: 'สมชาย ใจดี', phone: null },
+			consent_ref: DECISION.ref,
+			consent_mode: 'full'
 		};
 		session.clear();
 		expect(session.registration).toBeNull();
@@ -95,7 +127,9 @@ describe('walkInSession registration hand-over', () => {
 		session.registration = {
 			evacuee_id: 'evacuee:02',
 			qr_payload: 'qr-payload-2',
-			label: { name: 'สมหญิง ใจดี', phone: null }
+			label: { name: 'สมหญิง ใจดี', phone: null },
+			consent_ref: DECISION.ref,
+			consent_mode: 'full'
 		};
 		session.begin(CARD.citizen_id);
 		expect(session.registration).toBeNull();
