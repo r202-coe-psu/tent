@@ -11,6 +11,9 @@ import {
 } from '$lib/features/daily-sop/server';
 import { adjustReasonSchema } from '$lib/features/operations';
 import { SHELTER_CAPABILITIES } from '$lib/auth/roles';
+import { bindConsent } from '$lib/features/consent/server';
+import { createEvacuee } from '$lib/features/people/server';
+import { planPublicConsent } from '$lib/features/public-register/server';
 import {
 	buildValidateDocUpdate,
 	DAILY_SOP_ROLE_MANGO_INDEX,
@@ -1195,6 +1198,35 @@ describe('buildValidateDocUpdate', () => {
 				() => compile()(withConsent({ ref: 'CS-123456' }), null, COUCH_ADMIN),
 				/consent ref is invalid/
 			);
+		});
+
+		it('accepts a basic-mode public pre-register evacuee from the roleless public writer', () => {
+			const [plan] = planPublicConsent({
+				consent: {
+					mode: 'basic',
+					guardian_for: [],
+					verbal: false,
+					ref: 'CS-7K3QZ9MD',
+					given_at: '2026-10-25T03:00:00.000Z',
+					notice_version: '2026-10-25'
+				},
+				consent_member_keys: ['m0']
+			});
+			const doc = createEvacuee(
+				{
+					first_name: 'สมชาย',
+					last_name: 'ใจดี',
+					gender: 'male',
+					phone: null,
+					household_id: 'household:01HH',
+					status: 'pre_registered',
+					registered_via: 'web'
+				},
+				{ shelterCode: 'SH001', createdBy: 'public' },
+				bindConsent(plan, 'evacuee:01HEAD')
+			);
+			const PUBLIC_WRITER: UserCtx = { name: 'public_writer', roles: [] };
+			expect(() => compile()(doc as unknown as Doc, null, PUBLIC_WRITER)).not.toThrow();
 		});
 	});
 
