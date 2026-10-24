@@ -7,9 +7,11 @@
 	 * job — one per shift. A pending card with several shifts gets "อนุมัติทุกกะ" plus an
 	 * approve / reject pair on every shift; a single shift keeps the two large buttons.
 	 *
-	 * Purely presentational — the decision itself is taken by the parent tab
-	 * through `useReviewApplication`; this row only reports which button was
-	 * pressed, and for which applications.
+	 * The approve / reject decision is taken by the parent tab through
+	 * `useReviewApplication`; this row only reports which button was pressed, and for
+	 * which applications. Once an application is approved, its shift row also carries the
+	 * attendance action (`applicantAttendance`) so staff can check the volunteer in or out
+	 * without leaving this tab.
 	 *
 	 * The applicant's national ID is masked (`maskNationalId`) exactly as the
 	 * evacuee screens mask theirs — an approval queue is not a reason to show a
@@ -25,12 +27,20 @@
 	import UserRound from '@lucide/svelte/icons/user-round';
 	import Check from '@lucide/svelte/icons/check';
 	import CheckCheck from '@lucide/svelte/icons/check-check';
+	import LogIn from '@lucide/svelte/icons/log-in';
+	import LogOut from '@lucide/svelte/icons/log-out';
+	import Lock from '@lucide/svelte/icons/lock';
 	import X from '@lucide/svelte/icons/x';
+	import { useQueryClient } from '@tanstack/svelte-query';
+	import { toast } from 'svelte-sonner';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { maskNationalId } from '$lib/features/people';
 	import { formatThaiShortDate } from '$lib/utils/date';
 	import { SvelteMap } from 'svelte/reactivity';
+	import { useCheckIn, useCheckOut } from '../application/queries';
+	import { applicantAttendance } from '../domain/applicant-attendance';
 	import { APPLICATION_STATUS_META } from '../domain/applicant-queue';
+	import VolunteerQualificationDialog from './volunteer-qualification-dialog.svelte';
 	import { resolveSkillOption, type SkillOption } from '../domain/skill-catalog';
 	import { checkRequiredSkills } from '../domain/required-skills';
 	import {
@@ -38,6 +48,7 @@
 		outstandingReviewReasons,
 		type JobApplication
 	} from '../domain/job-application.schema';
+	import type { ShiftAssignment, ShiftAssignmentStatus } from '../domain/shift-assignment.schema';
 	import type { Volunteer } from '../domain/volunteer.schema';
 	import {
 		identityVerificationStatus,
@@ -52,6 +63,8 @@
 		shiftLabelOf,
 		skillOptions = [],
 		requiredSkills = [],
+		assignments,
+		today,
 		onreview
 	}: {
 		/** One applicant's applications for this job, in shift order; never empty. */
@@ -72,6 +85,10 @@
 		skillOptions?: readonly SkillOption[];
 		/** `job.skills_required` — to warn when a certificate skill the job asks for is missing. */
 		requiredSkills?: readonly string[];
+		/** Every shift assignment of the shelter; each approved shift row finds its own. */
+		assignments: readonly ShiftAssignment[];
+		/** `YYYY-MM-DD` in Asia/Bangkok — only a shift dated today can be checked in. */
+		today: string;
 		onreview: (applications: JobApplication[], decision: 'confirmed' | 'rejected') => void;
 	} = $props();
 
@@ -121,6 +138,43 @@
 			)
 		})
 	);
+
+	const ASSIGNMENT_STATUS_LABELS: Record<ShiftAssignmentStatus, string> = {
+		assigned: 'รับกะแล้ว',
+		standby: 'รอสแตนด์บาย',
+		checked_in: 'ปฏิบัติหน้าที่อยู่',
+		completed: 'เสร็จสิ้นงานอาสาสมัคร',
+		no_show: 'ขาดปฏิบัติงาน',
+		cancelled: 'ยกเลิก'
+	};
+
+	const identityVerified = $derived(volunteer?.identity_verified ?? false);
+
+	const queryClient = useQueryClient();
+	const checkInMutation = useCheckIn(queryClient);
+	const checkOutMutation = useCheckOut(queryClient);
+
+	async function checkInNow(assignmentId: string) {
+		try {
+			await checkInMutation.mutateAsync({ id: assignmentId });
+			toast.success(`เช็คอินเข้างาน ${fullName} แล้ว`);
+		} catch (err) {
+			toast.error(err instanceof Error ? err.message : 'เช็คอินไม่สำเร็จ');
+		}
+	}
+
+	async function checkOutNow(assignmentId: string) {
+		try {
+			await checkOutMutation.mutateAsync({ id: assignmentId });
+			toast.success(`เช็คเอาต์ออกงาน ${fullName} แล้ว`);
+		} catch (err) {
+			toast.error(err instanceof Error ? err.message : 'เช็คเอาต์ไม่สำเร็จ');
+		}
+	}
+
+	// Same gate as the roster tab. Verifying invalidates the volunteers query, so the
+	// "รอยืนยันตัวตน" button turns into "เช็คอินเข้างาน" without a reload.
+	let verifyOpen = $state(false);
 </script>
 
 <li class="space-y-2.5 rounded-xl border border-border bg-muted/40 p-3.5">
@@ -233,6 +287,7 @@
 			{@const shift = application.selected_shift}
 			{@const shiftLabel = shiftLabelOf(application)}
 			{@const shiftPending = application.status === 'pending_review'}
+			{@const attendance = applicantAttendance(application, assignments, identityVerified, today)}
 			<li
 				class={[
 					'flex flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2 text-xs',
@@ -263,6 +318,43 @@
 						<span class="inline-flex items-center gap-1 text-2xs font-bold text-amber-700">
 							<TriangleAlert class="h-3 w-3" />
 							กะนี้ถูกลบออกจากงานแล้ว
+						</span>
+					{/if}
+					{#if attendance.kind === 'check-in'}
+						<Button
+							size="sm"
+							class="h-9 gap-1 bg-emerald-600 text-white hover:bg-emerald-700"
+							disabled={checkInMutation.isPending}
+							onclick={() => checkInNow(attendance.assignment._id)}
+						>
+							<LogIn class="h-3.5 w-3.5" />
+							เช็คอินเข้างาน
+						</Button>
+					{:else if attendance.kind === 'check-out'}
+						<Button
+							size="sm"
+							class="h-9 gap-1 bg-amber-500 text-white hover:bg-amber-600"
+							disabled={checkOutMutation.isPending}
+							onclick={() => checkOutNow(attendance.assignment._id)}
+						>
+							<LogOut class="h-3.5 w-3.5" />
+							เช็คเอาต์ออกงาน
+						</Button>
+					{:else if attendance.kind === 'verify'}
+						<Button
+							size="sm"
+							variant="outline"
+							class="h-9 gap-1 border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100 hover:text-amber-800"
+							onclick={() => (verifyOpen = true)}
+						>
+							<Lock class="h-3.5 w-3.5" />
+							รอยืนยันตัวตน
+						</Button>
+					{:else if attendance.kind === 'status'}
+						<span
+							class="rounded-full bg-muted px-2.5 py-1 text-2xs font-bold text-muted-foreground ring-1 ring-border"
+						>
+							{ASSIGNMENT_STATUS_LABELS[attendance.assignment.status]}
 						</span>
 					{/if}
 					{#if several && shiftPending}
@@ -333,3 +425,7 @@
 		</div>
 	{/if}
 </li>
+
+{#if volunteer}
+	<VolunteerQualificationDialog bind:open={verifyOpen} {volunteer} shelterLine="—" />
+{/if}
