@@ -47,6 +47,8 @@ export type ApplicantHistoryEntry =
 	| (HistoryBase & { kind: 'application'; application: JobApplication })
 	| (HistoryBase & { kind: 'staff'; assignment: ShiftAssignment });
 
+export type StaffHistoryEntry = Extract<ApplicantHistoryEntry, { kind: 'staff' }>;
+
 export interface ApplicantBoard {
 	pending: ApplicantGroup[];
 	/** Newest decision first. */
