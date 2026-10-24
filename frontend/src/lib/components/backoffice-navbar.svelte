@@ -20,12 +20,21 @@
 		navLeafHrefs,
 		type BackofficeNavbarNode
 	} from './backoffice-navbar/static';
+	import {
+		readBackofficeSidebarCollapsed,
+		writeBackofficeSidebarCollapsed
+	} from './backoffice-navbar/sidebar-storage';
 
-	let collapsed = $state(false);
+	let collapsed = $state(readBackofficeSidebarCollapsed());
 	let mobileMenuOpen = $state(false);
 
 	const roles = $derived(authStore.user?.roles ?? []);
 	const navContext = $derived({ roles, shelterCode: shelterStore.selectedShelterCode });
+
+	function setCollapsed(next: boolean) {
+		collapsed = next;
+		writeBackofficeSidebarCollapsed(next);
+	}
 
 	function closeMobileMenu() {
 		mobileMenuOpen = false;
@@ -89,6 +98,11 @@
 		manualOverrides[label] = !isExpanded(label, node);
 	}
 
+	function openGroupFromRail(label: string) {
+		manualOverrides[label] = true;
+		setCollapsed(false);
+	}
+
 	// Reactive through closure on `navContext` ($derived) — only called from template blocks
 	function canSee(node: BackofficeNavbarNode): boolean {
 		return canSeeNavNode(node, navContext);
@@ -126,7 +140,7 @@
 			class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-sidebar-border bg-card text-xs text-muted-foreground shadow-sm hover:bg-muted {collapsed
 				? 'absolute top-6 -right-3 z-30'
 				: ''}"
-			onclick={() => (collapsed = !collapsed)}
+			onclick={() => setCollapsed(!collapsed)}
 			aria-label={collapsed ? 'ขยายแถบเมนู' : 'ย่อแถบเมนู'}
 		>
 			<ChevronLeft class="h-3 w-3 transition-transform {collapsed ? 'rotate-180' : ''}" />
@@ -170,7 +184,8 @@
 										class="flex w-full items-center rounded-xl px-4 py-3 transition-colors {collapsed
 											? 'justify-center'
 											: 'gap-3'} {active ? 'bg-primary-muted text-primary' : 'hover:bg-muted/60'}"
-										onclick={() => toggleExpanded(item.label)}
+										onclick={() =>
+											collapsed ? openGroupFromRail(item.label) : toggleExpanded(item.label)}
 										aria-expanded={expanded}
 										title={item.label}
 									>
