@@ -90,6 +90,12 @@ describe('updateDonationItems', () => {
 
 		await expect(updateDonationItems('tok', items)).rejects.toThrow('กรุณาลองใหม่อีกครั้ง');
 	});
+
+	it('asks the donor to reload when the shelter changed the booking mid-edit', async () => {
+		mockFetch(409, { success: false, error: 'BOOKING_CHANGED', message: 'reload' });
+
+		await expect(updateDonationItems('tok', items)).rejects.toThrow('รีเฟรช');
+	});
 });
 
 // Owner decision 2026-10-22 — once goods are in stock the donor can no longer change the

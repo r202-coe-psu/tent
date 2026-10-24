@@ -1782,6 +1782,69 @@ async def test_the_couch_status_gates_the_edit(
     assert await _reserved() == Decimal("5")
 
 
+async def test_a_receipt_settled_during_the_edit_is_not_written_back(
+    client: AsyncClient,
+    open_shelter: PublicShelter,
+    auth_headers: dict[str, str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Staff received the goods after the BFF read CouchDB but before the edit saved.
+
+    The quota settle released must stay released, and the buffer must keep ``received``,
+    or retention hands the quota back a second time when the row ages out.
+    """
+    await _seed_counter("100")
+    token = (await _create(client, auth_headers, [_RICE]))["tracking_token"]
+
+    async def settle_lands_first(**kwargs: object) -> object:
+        await DonationBuffer.get_pymongo_collection().update_one(
+            {"tracking_token_hash": sha256_hex(token)}, {"$set": {"status": "received"}}
+        )
+        return await reserve_quota(**kwargs)
+
+    monkeypatch.setattr(donation_use_case, "reserve_quota", settle_lands_first)
+
+    response = await client.patch(
+        f"/public/v1/donations/{token}/items",
+        headers=auth_headers,
+        json={
+            "items": [{**_RICE, "qty": "9"}],
+            "current_items": [{**_RICE, "reserved_qty": "5", "review_status": "approved"}],
+            "current_status": "verifying",
+        },
+    )
+
+    assert response.status_code == 409
+    assert response.json()["errors"][0]["error"] == "BOOKING_CHANGED"
+    assert (await _buffer(token)).status == "received"
+    assert await _reserved() == Decimal("5")
+
+
+async def test_a_buffer_settle_already_moved_on_is_not_edited(
+    client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    """The BFF's CouchDB read is older than the settle that already reached the buffer."""
+    await _seed_counter("100")
+    token = (await _create(client, auth_headers, [_RICE]))["tracking_token"]
+    await DonationBuffer.get_pymongo_collection().update_one(
+        {"tracking_token_hash": sha256_hex(token)}, {"$set": {"status": "received"}}
+    )
+
+    response = await client.patch(
+        f"/public/v1/donations/{token}/items",
+        headers=auth_headers,
+        json={
+            "items": [{**_RICE, "qty": "9"}],
+            "current_items": [{**_RICE, "reserved_qty": "5", "review_status": "approved"}],
+            "current_status": "verifying",
+        },
+    )
+
+    assert response.status_code == 400
+    assert (await _buffer(token)).status == "received"
+    assert await _reserved() == Decimal("5")
+
+
 async def _legacy_booking(token: str, status_value: str, items: list[dict]) -> None:
     """A booking from before schema_v 7 — synced, no review fields anywhere."""
     now = datetime.now(UTC)
