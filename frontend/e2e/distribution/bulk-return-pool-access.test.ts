@@ -176,7 +176,7 @@ test.describe('Bulk return pool v3 — roles in the browser (BRP-A)', { tag: DES
 
 test.describe('Bulk return pool v3 — database writes (BRP-V1)', { tag: DESK_TAGS }, () => {
 	// No browser: each actor writes straight to CouchDB with its own session. The v3 doc shapes come
-	// from bulk-return-pool.ts (what the app writes), not from the v2 body of the old V5.
+	// from bulk-return-pool.ts (what the app writes), not from a v2 pool body.
 
 	// Built per test: `roleSet` reads the run's shelter code, which exists only once a worker runs.
 	const managers = () => [

@@ -75,7 +75,7 @@ export interface ReceivedItemRow {
 	discrepancy_note?: string;
 }
 
-// ── Actors and the role matrix (pattern of distribution-desk-access V5) ─────────────────────
+// ── Actors and the role matrix (pattern of distribution-desk-access) ─────────────────────────
 
 export interface Actor {
 	label: string;

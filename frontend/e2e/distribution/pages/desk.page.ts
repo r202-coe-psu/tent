@@ -224,16 +224,6 @@ export class DeskPage {
 		return this.page.getByRole('dialog', { name: /ตัดจำหน่ายรายการโดยไม่มีของคืน/ });
 	}
 
-	/**
-	 * @deprecated The v2 "จับคู่รายการยืมกับกองรับคืน" dialog is no longer reachable from
-	 * `LoanReturnCard` (PR #768 replaced its button with "คืนเข้ากองรับคืน", see
-	 * `BulkReturnPoolBoard.startAddFromLoanCard`). Only the skipped T4-6/T4-7 still call it;
-	 * remove in #661.
-	 */
-	bulkDialog(): Locator {
-		return this.page.getByRole('dialog', { name: /จับคู่รายการยืมกับกองรับคืน/ });
-	}
-
 	// ── Tab 5 ────────────────────────────────────────────────────────────────
 
 	reconciliationHeading(ticket: SeededTicket): Locator {

@@ -32,8 +32,8 @@ Out of scope and risks:
 | `docs/changes/draft-bulk-return-pool-redesign.md`                                                                                   | v3 shape, state machine, ledger row      |
 | `e2e/README.md` §3, §4, §5, §8.4, §9.0                                                                                              | tags, data safety, fixtures, suite table |
 | `e2e/distribution/{fixtures,distribution,checks,distribution-desk-setup}.ts`, `pages/*.page.ts`                                     | harness to extend                        |
-| `distribution-desk-access.test.ts` (V5, `expectWrites`)                                                                             | VDU matrix pattern                       |
-| `distribution-desk-returns-close.test.ts` (T4-6/T4-7, `issueLoan`)                                                                  | loan issuing through desk UI             |
+| `distribution-desk-access.test.ts` (`expectWrites`; V5 since removed)                                                               | VDU matrix pattern                       |
+| `distribution-desk-returns-close.test.ts` (`issueLoan`; T4-6/T4-7 since removed)                                                    | loan issuing through desk UI             |
 | `src/lib/features/distribution/ui/bulk-return/`, `ui/frontline/LoanReturnCard.svelte`, `ui/back-office/TicketManagementPage.svelte` | UI under test                            |
 | `src/lib/server/shelter-access-design.ts` (search `bulk_return`)                                                                    | VDU rules                                |
 
@@ -107,8 +107,8 @@ Out of scope and risks:
   the real UI, not a seeder (used by F2 and F5; F1/F6/F-drift use `seedLoan`).
 - Also in the helper file: v3 body builders (`buildPoolBody`, `submitBody`, `cancelBody`,
   `receiveBody`, `buildEntryBody`, `buildMoveBody`, `buildVoidBody`, `buildReceiveLedgerBody`) for the
-  direct-write matrix, `seedSubmittedPool`, `expectWrites` / `actor` (copied from V5: a spec file
-  cannot be imported) and `switchUser`.
+  direct-write matrix, `seedSubmittedPool`, `expectWrites` / `actor` (copied from
+  `distribution-desk-access.test.ts`: a spec file cannot be imported) and `switchUser`.
 
 ### 3.3 Storage point fixture (`fixtures.ts`)
 
@@ -150,7 +150,7 @@ to `getByRole('dialog')`.
 - Tags: `DESK_TAGS` (`@critical @distribution`). Test ids prefix `BRP-F*`, `BRP-S*`, `BRP-A*`, `BRP-V*`.
 - Each test uses `scenarioAs('<unique label>')`. Extra roles via `addScenarioActor` plus
   `injectSession` to switch user on the same page.
-- Direct VDU writes use `couchAsUser` and the `expectWrites` / `actor` / `roleSet` pattern from V5.
+- Direct VDU writes use `couchAsUser` and the `expectWrites` / `actor` / `roleSet` pattern from `distribution-desk-access.test.ts`.
 - All created docs go through existing recording so teardown by id stays complete (pool,
   entry, move, void, ledger docs live in the E2E shelter database, which is dropped with the shelter).
 
@@ -299,7 +299,7 @@ cancel), V1c (entry / move / void) and V1d (ledger row). BRP-F-drift is `test.fi
 | Receive ledger row (`reason 'receive'`, `ref_id bulk_return_pool:*`) | WH, SC, SM            | DST          |
 
 Each row is one `expectWrites` call with unique doc ids per actor. The v3 pool shape comes from
-the helper, not from the old V5 body.
+the helper, not from the removed v2 V5 body.
 
 ### BRP-A-SA `test.fixme` (open point a)
 
@@ -335,18 +335,18 @@ containing "รอซิงก์". It lives in its own `GAP isolation` describe
 `shelterStoragePoints` value, so it gets a separate worker and shelter and can never break other
 tests.
 
-## 8. Old tests and helpers (do not delete in this change)
+## 8. Old tests and helpers (removed)
 
-| Item                    | Location                                      | Action now                                                                                                                          | Follow-up (#661)                                      |
-| ----------------------- | --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
-| T4-6/T4-7               | `distribution-desk-returns-close.test.ts:242` | `test.skip` with a pointer to BRP-F1/F2                                                                                             | REMOVE (replaced by `LoanReturnCard` path in F2/F1)   |
-| V5                      | `distribution-desk-access.test.ts:358`        | `test.skip`                                                                                                                         | UPDATE to v3 = replaced by BRP-V1; remove the old one |
-| `seedBulkReturnPool`    | `distribution.ts:637` (v2 shape)              | mark `@deprecated`                                                                                                                  | remove                                                |
-| `DeskPage.bulkDialog()` | `pages/desk.page.ts:227`                      | mark `@deprecated`                                                                                                                  | remove                                                |
-| README §8.4 rows        | `e2e/README.md:327-338`                       | add rows for the three new suites; adjust the `returns-close` row (drop "bulk pool") and the "Setup" sentence (a counted bulk pool) | final wording                                         |
+| Item                    | Location                                  | Action now                                                                                                                          | Follow-up (#661) |
+| ----------------------- | ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ---------------- |
+| T4-6/T4-7               | `distribution-desk-returns-close.test.ts` | removed (replaced by the `LoanReturnCard` path in BRP-F1/F2)                                                                        | —                |
+| V5                      | `distribution-desk-access.test.ts`        | removed (replaced by BRP-V1)                                                                                                        | —                |
+| `seedBulkReturnPool`    | `distribution.ts` (v2 shape)              | removed (no other caller in `e2e/`)                                                                                                 | —                |
+| `DeskPage.bulkDialog()` | `pages/desk.page.ts`                      | removed (no other caller in `e2e/`)                                                                                                 | —                |
+| README §8.4 rows        | `e2e/README.md:327-338`                   | add rows for the three new suites; adjust the `returns-close` row (drop "bulk pool") and the "Setup" sentence (a counted bulk pool) | final wording    |
 
 Note: the old tests cover the v2 `bulk_return_claim` / `unclaimed_quota` model, which PR #768
-removes; they must not run against v3.
+removes; they must not run against v3. The v2 UI files and the `bulk_pool_id` field cleanup stay in #661.
 
 ## 9. Open points and skipped
 

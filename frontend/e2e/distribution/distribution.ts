@@ -673,56 +673,6 @@ export async function seedDistributionLog(
 	return logId;
 }
 
-/**
- * A counted bulk drop-off (back-office only in the app) waiting to be matched to loans.
- *
- * @deprecated v2 pool shape (`unclaimed_quota` / `bulk_return_claim`): PR #768 freezes schema_v 1/2
- * pools and the app only writes v3. Only the skipped T4-6/T4-7 still use it; remove in #661.
- * v3 pools: `seedOpenPool` in `bulk-return-pool.ts`.
- */
-export async function seedBulkReturnPool(
-	scenario: DistributionScenario,
-	item: SeededItem,
-	qty: string
-): Promise<string> {
-	const poolId = `bulk_return_pool:${ulid()}`;
-	const receiptId = `stock_ledger:${ulid()}`;
-	const now = new Date().toISOString();
-	await putDocument(shelterDb(), {
-		_id: receiptId,
-		type: 'stock_ledger',
-		schema_v: 6,
-		shelter_code: shelterCode(),
-		created_at: now,
-		updated_at: now,
-		created_by: scenario.user.name,
-		item_id: item.itemId,
-		qty,
-		unit: 'piece',
-		reason: 'receive',
-		ref_id: poolId,
-		lot_ref: receiptId,
-		occurred_at: now
-	});
-	await putDocument(shelterDb(), {
-		_id: poolId,
-		type: 'bulk_return_pool',
-		schema_v: 2,
-		shelter_code: shelterCode(),
-		created_at: now,
-		updated_at: now,
-		created_by: scenario.user.name,
-		item_id: item.itemId,
-		stock_ledger_id: receiptId,
-		total_received_qty: qty,
-		claimed_qty: '0',
-		unclaimed_quota: qty,
-		claim_ids: [],
-		status: 'ACTIVE'
-	});
-	return poolId;
-}
-
 /** CouchDB request made as an application user (cookie session) — the VDU applies. */
 export async function couchAsUser(
 	session: string,
