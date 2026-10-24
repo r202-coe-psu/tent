@@ -74,7 +74,7 @@ function entry(overrides: Partial<CycleCountEntry> = {}): CycleCountEntry {
 
 describe('buildCycleCountLots', () => {
 	it('lists each physical lot on its own, with the location and expiry it came in with', () => {
-		const lots = buildCycleCountLots([
+		const { lots } = buildCycleCountLots([
 			receive('item:rice', '10', { ...POINT_A, expiry: '2027-01-01' }),
 			receive('item:rice', '5', { ...POINT_A, expiry: '2027-01-01' }),
 			receive('item:rice', '3', POINT_B)
@@ -93,7 +93,7 @@ describe('buildCycleCountLots', () => {
 
 	it('drops lots that are empty — nothing on the shelf to count', () => {
 		const rice = receive('item:rice', '10', POINT_A);
-		const lots = buildCycleCountLots([
+		const { lots } = buildCycleCountLots([
 			rice,
 			outbound(rice, '-10', { lot_ref: rice._id }),
 			receive('item:oil', '2', POINT_B)
@@ -104,7 +104,7 @@ describe('buildCycleCountLots', () => {
 	it('sums a lot to the same balance the ledger reports', () => {
 		const rice = receive('item:rice', '10', POINT_A);
 		const ledger = [rice, outbound(rice, '-3')];
-		const [lot] = buildCycleCountLots(ledger);
+		const [lot] = buildCycleCountLots(ledger).lots;
 		expect(lot.system_qty).toBe(stockBalance(ledger).get('item:rice'));
 	});
 });
@@ -114,7 +114,7 @@ describe('buildCycleCountLots — the stock table balance (#569)', () => {
 
 	it('counts a dispatch that only names its lot (lot_ref, no lot): 1199, as the stock table does', () => {
 		const ledger = [water, outbound(water, '-1', { lot_ref: water._id })];
-		const lots = buildCycleCountLots(ledger);
+		const { lots } = buildCycleCountLots(ledger);
 		expect(lots).toHaveLength(1);
 		expect(lots[0]).toMatchObject({ lot_ref: water._id, system_qty: '1199' });
 		const [table] = projectStockLotBalances(ledger);
@@ -123,7 +123,7 @@ describe('buildCycleCountLots — the stock table balance (#569)', () => {
 
 	it('counts a transfer_out with no lot_ref the same way the stock table does', () => {
 		const ledger = [water, outbound(water, '-7', { reason: 'transfer_out' })];
-		const [lot] = buildCycleCountLots(ledger);
+		const [lot] = buildCycleCountLots(ledger).lots;
 		expect(lot.system_qty).toBe('1193');
 		expect(lot.system_qty).toBe(projectStockLotBalances(ledger)[0].qty);
 	});
@@ -133,32 +133,35 @@ describe('buildCycleCountLots — the stock table balance (#569)', () => {
 			water,
 			outbound(water, '-1', { lot_ref: water._id, lot: { note: 'อาคารยิมเนเซียม 1' } })
 		];
-		const lots = buildCycleCountLots(ledger);
+		const { lots } = buildCycleCountLots(ledger);
 		expect(lots).toHaveLength(1);
 		expect(groupLotsByStorage(lots).map((g) => g.label)).toEqual(['คลังหลัก']);
 	});
 
 	it('records nothing when the shelf matches the stock table (1199)', () => {
 		const ledger = [water, outbound(water, '-1', { lot_ref: water._id })];
-		const entries = buildCycleCountLots(ledger).map((lot) => ({ ...lot, counted_qty: '1199' }));
+		const entries = buildCycleCountLots(ledger).lots.map((lot) => ({
+			...lot,
+			counted_qty: '1199'
+		}));
 		expect(planCycleCount(entries, 'count-1').lines).toEqual([]);
 	});
 
 	it('skips only the item whose history cannot be replayed, and says which', () => {
 		const broken = receive('item:salt', '1', POINT_A);
-		const failed: string[] = [];
-		const lots = buildCycleCountLots(
-			[water, broken, outbound(broken, '-5', { lot_ref: broken._id })],
-			(itemId) => failed.push(itemId)
-		);
+		const { lots, brokenItemIds } = buildCycleCountLots([
+			water,
+			broken,
+			outbound(broken, '-5', { lot_ref: broken._id })
+		]);
 		expect(lots.map((l) => l.item_id)).toEqual(['item:water']);
-		expect(failed).toEqual(['item:salt']);
+		expect(brokenItemIds).toEqual(['item:salt']);
 	});
 });
 
 describe('groupLotsByStorage', () => {
 	it('puts the main store first, then points by name, labelled with the current point name', () => {
-		const lots = buildCycleCountLots([
+		const { lots } = buildCycleCountLots([
 			receive('item:rice', '1', POINT_B),
 			receive('item:rice', '1'),
 			receive('item:rice', '1', POINT_A)

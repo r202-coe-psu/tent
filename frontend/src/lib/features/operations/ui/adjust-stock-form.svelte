@@ -84,11 +84,11 @@
 		const entries = (ledgerQuery.data as StockLedger[]).filter(
 			(e: StockLedger) => e.item_id === currentItem._id
 		);
-		let broken = false;
-		const lots = projectLotsByItem(entries, () => (broken = true)).filter((lot) =>
-			qtyGt(lot.qty, 0)
-		);
-		return { lots, broken };
+		const { lots, brokenItemIds } = projectLotsByItem(entries);
+		return {
+			lots: lots.filter((lot) => qtyGt(lot.qty, 0)),
+			broken: brokenItemIds.length > 0
+		};
 	});
 	/** The item's history could not be replayed into lots — say so instead of guessing (#569). */
 	const lotsIntegrityError = $derived(projectedLots.broken);

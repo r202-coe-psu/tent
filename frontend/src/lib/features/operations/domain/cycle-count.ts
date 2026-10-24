@@ -11,7 +11,6 @@ import {
 	ADJUST_NOTE_MAX_LENGTH,
 	createAdjustEntry,
 	projectLotsByItem,
-	StockLotIntegrityError,
 	type StockLedger,
 	type StockLot
 } from './operations';
@@ -63,11 +62,12 @@ export interface StorageGroup {
  * shows (#569). A lot at zero is not on the shelf, so there is nothing to walk past; stock
  * found where the system has none is recorded through the adjust form (`found`).
  */
-export function buildCycleCountLots(
-	ledger: readonly StockLedger[],
-	onIntegrityError?: (itemId: string, error: StockLotIntegrityError) => void
-): CycleCountLot[] {
-	return projectLotsByItem(ledger, onIntegrityError)
+export function buildCycleCountLots(ledger: readonly StockLedger[]): {
+	lots: CycleCountLot[];
+	brokenItemIds: string[];
+} {
+	const { lots: projected, brokenItemIds } = projectLotsByItem(ledger);
+	const lots = projected
 		.filter((lot) => qtyGt(lot.qty, 0))
 		.map((lot) => ({
 			lot_key: lot.lot_ref,
@@ -82,6 +82,7 @@ export function buildCycleCountLots(
 			received_at: lot.received_at,
 			system_qty: persistQty(lot.qty)
 		}));
+	return { lots, brokenItemIds };
 }
 
 /** Storage points that hold stock, in the order the counter would walk them (main store first). */

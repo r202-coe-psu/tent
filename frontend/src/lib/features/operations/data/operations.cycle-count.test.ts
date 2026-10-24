@@ -107,7 +107,7 @@ function ledgerRows(): StockLedger[] {
 
 /** The count a walker starts from the current ledger, keyed with `counted[item_id]`. */
 function keyedEntries(counted: Record<string, string>): CycleCountEntry[] {
-	return buildCycleCountLots(ledgerRows()).map((lot) => ({
+	return buildCycleCountLots(ledgerRows()).lots.map((lot) => ({
 		...lot,
 		counted_qty: counted[lot.item_id] ?? ''
 	}));
@@ -199,7 +199,9 @@ describe('applyCycleCount (#347)', () => {
 	});
 
 	it('writes each shortfall against its own lot (#569)', async () => {
-		const [riceLot] = buildCycleCountLots(ledgerRows()).filter((l) => l.item_id === 'item:rice');
+		const [riceLot] = buildCycleCountLots(ledgerRows()).lots.filter(
+			(l) => l.item_id === 'item:rice'
+		);
 		await repo.applyCycleCount(planCycleCount(keyedEntries({ 'item:rice': '8' }), 'c'), ctx);
 
 		const [row] = ledgerRows().filter((r) => r.reason === 'adjust');
@@ -209,7 +211,7 @@ describe('applyCycleCount (#347)', () => {
 
 	it('refuses a shortfall that overdraws its lot though the item total covers it (#569)', async () => {
 		seed('item:rice', '100');
-		const lots = buildCycleCountLots(ledgerRows()).filter((l) => l.item_id === 'item:rice');
+		const lots = buildCycleCountLots(ledgerRows()).lots.filter((l) => l.item_id === 'item:rice');
 		const lotA = lots.find((l) => l.system_qty === '10')!;
 		// the walker counts lot A at 5 (short 5) ...
 		const submission = planCycleCount(
@@ -252,7 +254,7 @@ describe('applyCycleCount (#347)', () => {
 		).rejects.toThrow(/Nothing to record/);
 
 		await repo.applyCycleCount(planCycleCount(keyedEntries({ 'item:rice': '8' }), 'count-1'), ctx);
-		const [rice] = buildCycleCountLots(ledgerRows()).filter((l) => l.item_id === 'item:rice');
+		const [rice] = buildCycleCountLots(ledgerRows()).lots.filter((l) => l.item_id === 'item:rice');
 		const changed = planCycleCount([{ ...rice, system_qty: '10', counted_qty: '7' }], 'count-1');
 		await expect(repo.applyCycleCount(changed, ctx)).rejects.toThrow(/cannot be changed/);
 	});

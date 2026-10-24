@@ -1027,13 +1027,13 @@ export function projectStockLotBalances(ledger: readonly StockLedger[]): StockLo
  * `lot_ref` rows hit their own lot, older outbound rows are replayed in the legacy order.
  *
  * Projected one item at a time — lots never cross items, so the result is the same as one
- * whole-ledger pass, but one item with an impossible history only drops that item
- * (`onIntegrityError`) instead of the whole page or count.
+ * whole-ledger pass, but one item with an impossible history only drops that item, named in
+ * `brokenItemIds`, instead of the whole page or count.
  */
-export function projectLotsByItem(
-	ledger: readonly StockLedger[],
-	onIntegrityError?: (itemId: string, error: StockLotIntegrityError) => void
-): StockLotBalance[] {
+export function projectLotsByItem(ledger: readonly StockLedger[]): {
+	lots: StockLotBalance[];
+	brokenItemIds: string[];
+} {
 	const byItem = new Map<string, StockLedger[]>();
 	for (const entry of ledger) {
 		const rows = byItem.get(entry.item_id);
@@ -1041,15 +1041,16 @@ export function projectLotsByItem(
 		else byItem.set(entry.item_id, [entry]);
 	}
 	const lots: StockLotBalance[] = [];
+	const brokenItemIds: string[] = [];
 	for (const [itemId, rows] of byItem) {
 		try {
 			lots.push(...projectStockLotBalances(rows));
 		} catch (error) {
 			if (!(error instanceof StockLotIntegrityError)) throw error;
-			onIntegrityError?.(itemId, error);
+			brokenItemIds.push(itemId);
 		}
 	}
-	return lots;
+	return { lots, brokenItemIds };
 }
 
 /**

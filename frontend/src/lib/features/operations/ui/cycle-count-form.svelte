@@ -43,16 +43,10 @@
 	const itemsById = $derived(new Map(stockItems.items.map((i) => [i._id, i])));
 	// Per-lot balances from the projection the stock table uses (#569). An item whose history
 	// cannot be replayed is left out of the walk and named below, never silently dropped.
-	const counted = $derived.by(() => {
-		const broken: string[] = [];
-		const lots = buildCycleCountLots((ledgerQuery.data ?? []) as StockLedger[], (itemId) =>
-			broken.push(itemId)
-		);
-		return { lots, broken };
-	});
+	const counted = $derived(buildCycleCountLots((ledgerQuery.data ?? []) as StockLedger[]));
 	const groups = $derived(groupLotsByStorage(counted.lots, storagePoints.points));
 	const brokenItemNames = $derived(
-		counted.broken.map((id) => itemsById.get(id)?.name ?? id).join(', ')
+		counted.brokenItemIds.map((id) => itemsById.get(id)?.name ?? id).join(', ')
 	);
 
 	/**
