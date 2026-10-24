@@ -126,7 +126,9 @@ describe('POST /api/v1/kiosk/reprint', () => {
 		expect(response.status).toBe(200);
 		expect(response.headers.get('cache-control')).toBe('no-store');
 		expect(await response.json()).toEqual({ shelter_code: 'SH001', members });
-		expect(mockReprint).toHaveBeenCalledWith('SH001', validBody);
+		expect(mockReprint).toHaveBeenCalledWith('SH001', validBody, {
+			verifyStaffPin: expect.any(Function)
+		});
 	});
 
 	it('answers 404 KIOSK_REPRINT_NOT_FOUND', async () => {

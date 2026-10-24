@@ -5,7 +5,10 @@ import {
 	DAILY_SOP_ROLE_QUESTIONS
 } from './daily-sop.questions';
 import {
+	DAILY_SOP_CAPACITY_QUESTION_ID,
+	DAILY_SOP_OCCUPANCY_QUESTION_IDS,
 	DAILY_SOP_ROLES,
+	DAILY_SOP_STOCK_QUESTION_ID,
 	assessableRoles,
 	applySystemMetricSuggestionsForEditedControls,
 	canAssessRole,
@@ -16,15 +19,21 @@ import {
 	dailySopBangkokDate,
 	dailySopReviewDates,
 	dailySopRoleAssessmentSchema,
+	daySummaryStatus,
 	hasRoleDraftInput,
 	isDailySopUtcTimestamp,
 	metricForQuestion,
 	metricParameterForQuestion,
+	personDisplayName,
 	questionText,
 	requiredForMetric,
 	requiredUnits,
 	questionsForRole,
 	roleAssessmentProgress,
+	roleRowAccess,
+	roleUsesOccupancy,
+	roleUsesShelterCapacity,
+	roleUsesStockCheck,
 	summarizeRoleDraft,
 	type DailySopRoleAssessment,
 	type DailySopRoleCode
@@ -33,6 +42,7 @@ import { SOP_RATIO_KEYS } from '$lib/features/sop-ratios/domain/sop-ratio';
 import { validRatios } from '$lib/features/sop-ratios/domain/sop-ratio.fixture';
 
 const timestamp = '2026-10-05T00:00:00.000Z';
+const expectedRoleCodes = ['SM', 'REG', 'TRG', 'MED', 'KS', 'SC', 'VC', 'SO', 'FAC'] as const;
 
 function validAssessment(
 	role: DailySopRoleCode,
@@ -199,6 +209,51 @@ describe('Daily SOP role question set', () => {
 		expect(assessableRoles(['SH001:shelter_manager'], 'SH001')).toHaveLength(9);
 		expect(assessableRoles(['system_admin'], 'SH001')).toHaveLength(9);
 		expect(assessableRoles(['_admin'], 'SH001')).toHaveLength(9);
+	});
+
+	it('returns all nine role rows for single-role and multi-role users', () => {
+		const singleRoleRows = roleRowAccess(
+			assessableRoles(['shelter:SH001', 'medical_staff'], 'SH001')
+		);
+		expect(singleRoleRows.map(({ role, canAssess }) => [role.code, canAssess])).toEqual(
+			expectedRoleCodes.map((code) => [code, code === 'MED'])
+		);
+
+		const multiRoleRows = roleRowAccess(
+			assessableRoles(['SH001:medical_staff', 'SH001:registration_staff'], 'SH001')
+		);
+		expect(multiRoleRows.map(({ role, canAssess }) => [role.code, canAssess])).toEqual(
+			expectedRoleCodes.map((code) => [code, code === 'REG' || code === 'MED'])
+		);
+	});
+
+	it('returns all nine rows as read-only when a user has no assessable role', () => {
+		for (const roles of [['shelter:SH001'], ['SH001:kiosk_staff']]) {
+			const rows = roleRowAccess(assessableRoles(roles, 'SH001'));
+			expect(rows.map(({ role, canAssess }) => [role.code, canAssess])).toEqual(
+				expectedRoleCodes.map((code) => [code, false])
+			);
+		}
+	});
+
+	it('lets shelter managers and system admins assess all nine roles', () => {
+		for (const roles of [['SH001:shelter_manager'], ['system_admin']]) {
+			const rows = roleRowAccess(assessableRoles(roles, 'SH001'));
+			expect(rows.map(({ role, canAssess }) => [role.code, canAssess])).toEqual(
+				expectedRoleCodes.map((code) => [code, true])
+			);
+		}
+	});
+
+	it('lets supply coordinators and warehouse staff assess the SC row', () => {
+		for (const roles of [['SH001:supply_coordinator'], ['warehouse_staff', 'shelter:SH001']]) {
+			const rows = roleRowAccess(assessableRoles(roles, 'SH001'));
+			expect(rows.map(({ role }) => role.code)).toEqual(expectedRoleCodes);
+			expect(rows.find(({ role }) => role.code === 'SC')?.canAssess).toBe(true);
+			expect(
+				rows.filter(({ role }) => role.code !== 'SC').every(({ canAssess }) => !canAssess)
+			).toBe(true);
+		}
 	});
 
 	it('calculates numeric context without choosing an evaluator status', () => {
@@ -502,5 +557,44 @@ describe('Daily SOP formulas and snapshot contract', () => {
 		expect(control.measured_values).toEqual({});
 		control.measured_values = { x: 1 };
 		expect(dailySopRoleAssessmentSchema.safeParse(assessment).success).toBe(false);
+	});
+});
+
+describe('Daily SOP page helpers', () => {
+	const codesWhere = (predicate: (code: DailySopRoleCode) => boolean) =>
+		DAILY_SOP_ROLES.map((role) => role.code).filter(predicate);
+
+	it('keeps every question id the page pre-fills in the question bank', () => {
+		const ids = new Set<string>(DAILY_SOP_ROLE_QUESTIONS.map((question) => question.id));
+		for (const id of [
+			...DAILY_SOP_OCCUPANCY_QUESTION_IDS,
+			DAILY_SOP_CAPACITY_QUESTION_ID,
+			DAILY_SOP_STOCK_QUESTION_ID
+		]) {
+			expect(ids.has(id), id).toBe(true);
+		}
+	});
+
+	it('derives which roles use live shelter data from the questions they own', () => {
+		expect(codesWhere(roleUsesOccupancy)).toEqual(['SM', 'VC', 'FAC']);
+		expect(codesWhere(roleUsesShelterCapacity)).toEqual(['SM']);
+		expect(codesWhere(roleUsesStockCheck)).toEqual(['SC']);
+	});
+
+	it('strips the trailing account name from a display name', () => {
+		expect(personDisplayName('พว. สมหญิง การุณ (Staff 02)')).toBe('พว. สมหญิง การุณ');
+		expect(personDisplayName('สมหญิง การุณ')).toBe('สมหญิง การุณ');
+		expect(personDisplayName('สมหญิง (พยาบาล) การุณ')).toBe('สมหญิง (พยาบาล) การุณ');
+		expect(personDisplayName(undefined)).toBe('');
+	});
+
+	it('summarises a day as not started, in progress or completed', () => {
+		expect(daySummaryStatus({ recordedRoles: 0, completedRoles: 0, roleCount: 9 })).toBeUndefined();
+		expect(daySummaryStatus({ recordedRoles: 3, completedRoles: 1, roleCount: 9 })).toBe(
+			'InProgress'
+		);
+		expect(daySummaryStatus({ recordedRoles: 9, completedRoles: 9, roleCount: 9 })).toBe(
+			'Completed'
+		);
 	});
 });

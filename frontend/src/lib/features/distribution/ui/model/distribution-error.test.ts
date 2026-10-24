@@ -108,6 +108,64 @@ describe('formatDistributionError', () => {
 		expect(formatDistributionError(err)).toBe('ระบบปฏิเสธการบันทึกเอกสารตามนโยบายความปลอดภัย');
 	});
 
+	it('turns an English permission reason into a Thai sentence', () => {
+		const err = new CouchDocumentPolicyError(
+			'forbidden',
+			403,
+			'forbidden',
+			'Only shelter managers or system admins can approve requisition_tickets'
+		);
+		const msg = formatDistributionError(err);
+		expect(msg).toBe(
+			'บัญชีนี้ไม่มีสิทธิ์ทำรายการนี้ หากต้องทำรายการนี้ กรุณาติดต่อผู้จัดการศูนย์หรือผู้ดูแลระบบ'
+		);
+		expect(msg).not.toMatch(/[A-Za-z]/);
+	});
+
+	it('gives the same permission sentence for any document type', () => {
+		const err = new CouchDocumentPolicyError(
+			'forbidden',
+			403,
+			'forbidden',
+			'Only frontline distribution staff can void distribution logs'
+		);
+		expect(formatDistributionError(err)).toBe(
+			'บัญชีนี้ไม่มีสิทธิ์ทำรายการนี้ หากต้องทำรายการนี้ กรุณาติดต่อผู้จัดการศูนย์หรือผู้ดูแลระบบ'
+		);
+	});
+
+	it('asks to sign in again when the actor field does not match the session', () => {
+		const err = new CouchDocumentPolicyError(
+			'forbidden',
+			403,
+			'forbidden',
+			'requisition_ticket.approved_by must match the current actor'
+		);
+		expect(formatDistributionError(err)).toMatch(/^ข้อมูลผู้ทำรายการไม่ตรงกับบัญชีที่เข้าสู่ระบบ/);
+	});
+
+	it('asks to reload when the ticket already moved to another status', () => {
+		const err = new CouchDocumentPolicyError(
+			'forbidden',
+			403,
+			'forbidden',
+			'Illegal requisition_ticket transition: IN_TRANSIT -> READY_FOR_DISPATCH'
+		);
+		expect(formatDistributionError(err)).toBe(
+			'สถานะของใบเบิกจ่ายเปลี่ยนไปแล้ว กรุณาโหลดข้อมูลล่าสุดแล้วลองใหม่'
+		);
+	});
+
+	it('never shows an unrecognised English reason', () => {
+		const err = new CouchDocumentPolicyError(
+			'forbidden',
+			403,
+			'forbidden',
+			'Closed distribution_batch cannot be modified'
+		);
+		expect(formatDistributionError(err)).toBe('ระบบปฏิเสธการบันทึกเอกสารตามนโยบายความปลอดภัย');
+	});
+
 	it('formats NetworkError into friendly offline message', () => {
 		const err = new NetworkError();
 		expect(formatDistributionError(err)).toBe(

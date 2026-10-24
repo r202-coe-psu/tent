@@ -50,8 +50,8 @@ describe('GET /api/back-office/transfer/destinations (#570)', () => {
 	});
 
 	it.each([
-		['warehouse_staff', ['SH001:warehouse_staff']],
-		['shelter_manager', ['SH001:shelter_manager']]
+		['warehouse_staff', ['SH001:warehouse_staff', 'shelter:SH001']],
+		['shelter_manager', ['SH001:shelter_manager', 'shelter:SH001']]
 	])('gives %s every other shelter, without its own or a cancelled one', async (_, roles) => {
 		caller(roles);
 
@@ -66,7 +66,7 @@ describe('GET /api/back-office/transfer/destinations (#570)', () => {
 	});
 
 	it('answers code and name only', async () => {
-		caller(['SH001:warehouse_staff']);
+		caller(['SH001:warehouse_staff', 'shelter:SH001']);
 		vi.mocked(adminRaw).mockResolvedValue({
 			status: 200,
 			data: { rows: [shelter('SH009', 'ศูนย์เก้า', { contact: { phone: '0812345678' } })] }
@@ -92,7 +92,7 @@ describe('GET /api/back-office/transfer/destinations (#570)', () => {
 	});
 
 	it('refuses a role the transfer API does not accept', async () => {
-		caller(['SH001:registration_staff']);
+		caller(['SH001:registration_staff', 'shelter:SH001']);
 
 		expect((await GET(event())).status).toBe(403);
 		expect(adminRaw).not.toHaveBeenCalled();
@@ -108,7 +108,7 @@ describe('GET /api/back-office/transfer/destinations (#570)', () => {
 	});
 
 	it('reports a registry it cannot read instead of an empty list', async () => {
-		caller(['SH001:warehouse_staff']);
+		caller(['SH001:warehouse_staff', 'shelter:SH001']);
 		vi.mocked(adminRaw).mockResolvedValue({ status: 500, data: null });
 
 		expect((await GET(event())).status).toBe(502);
