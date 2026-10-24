@@ -31,16 +31,14 @@
 	import LogOut from '@lucide/svelte/icons/log-out';
 	import Lock from '@lucide/svelte/icons/lock';
 	import X from '@lucide/svelte/icons/x';
-	import { useQueryClient } from '@tanstack/svelte-query';
-	import { toast } from 'svelte-sonner';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { maskNationalId } from '$lib/features/people';
 	import { formatThaiShortDate } from '$lib/utils/date';
 	import { SvelteMap } from 'svelte/reactivity';
-	import { useCheckOut } from '../application/queries';
 	import { applicantAttendance } from '../domain/applicant-attendance';
 	import { APPLICATION_STATUS_META } from '../domain/applicant-queue';
 	import ApplicantCheckInDialog from './applicant-check-in-dialog.svelte';
+	import ApplicantCheckOutDialog from './applicant-check-out-dialog.svelte';
 	import VolunteerQualificationDialog from './volunteer-qualification-dialog.svelte';
 	import { resolveSkillOption, type SkillOption } from '../domain/skill-catalog';
 	import { checkRequiredSkills } from '../domain/required-skills';
@@ -151,22 +149,13 @@
 
 	const identityVerified = $derived(volunteer?.identity_verified ?? false);
 
-	const queryClient = useQueryClient();
-	const checkOutMutation = useCheckOut(queryClient);
-
 	// Check-in is confirmed in a dialog (scan the QR, or a manual check-in with a reason).
 	// The target stays set after close so the dialog can finish its exit animation.
 	let checkInOpen = $state(false);
 	let checkInTarget = $state<{ assignment: ShiftAssignment; shiftLabel: string } | null>(null);
 
-	async function checkOutNow(assignmentId: string) {
-		try {
-			await checkOutMutation.mutateAsync({ id: assignmentId });
-			toast.success(`เช็คเอาต์ออกงาน ${fullName} แล้ว`);
-		} catch (err) {
-			toast.error(err instanceof Error ? err.message : 'เช็คเอาต์ไม่สำเร็จ');
-		}
-	}
+	let checkOutOpen = $state(false);
+	let checkOutTarget = $state<{ assignment: ShiftAssignment; shiftLabel: string } | null>(null);
 
 	// Same gate as the roster tab. Verifying invalidates the volunteers query, so the
 	// "รอยืนยันตัวตน" button turns into "เช็คอินเข้างาน" without a reload.
@@ -335,8 +324,13 @@
 						<Button
 							size="sm"
 							class="h-9 gap-1 bg-amber-500 text-white hover:bg-amber-600"
-							disabled={checkOutMutation.isPending}
-							onclick={() => checkOutNow(attendance.assignment._id)}
+							onclick={() => {
+								checkOutTarget = {
+									assignment: attendance.assignment,
+									shiftLabel: `${shift.date} · ${shift.start_time} - ${shift.end_time} น.`
+								};
+								checkOutOpen = true;
+							}}
 						>
 							<LogOut class="h-3.5 w-3.5" />
 							เช็คเอาต์ออกงาน
@@ -435,6 +429,16 @@
 		{volunteer}
 		personName={fullName}
 		shiftLabel={checkInTarget.shiftLabel}
+	/>
+{/if}
+
+{#if checkOutTarget}
+	<ApplicantCheckOutDialog
+		bind:open={checkOutOpen}
+		assignment={checkOutTarget.assignment}
+		{volunteer}
+		personName={fullName}
+		shiftLabel={checkOutTarget.shiftLabel}
 	/>
 {/if}
 
