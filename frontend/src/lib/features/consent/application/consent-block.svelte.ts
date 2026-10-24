@@ -15,9 +15,7 @@ export interface ConsentStaff {
 
 export interface ConsentBlockOptions {
 	channel: BlockChannel;
-	/** The logged-in staff user; C5 shows only when set and the channel allows it (FR-15). */
 	staff?: ConsentStaff | null;
-	/** FR-12: true for new people, `initialSearchVisible(targets)` for existing ones. */
 	initialSearchVisible?: boolean;
 }
 
@@ -26,11 +24,6 @@ export type ConsentGate =
 	| { kind: 'needs-basic-confirm' }
 	| { kind: 'needs-guardian-pick' };
 
-/**
- * UI state of one consent block (C1 to C5 plus the basic-mode notice). The host owns it and
- * asks it for a decision when its confirm runs. `eligibleKeys` are the C4 candidates in form
- * order: members other than the registrant that still need consent.
- */
 export class ConsentBlockState {
 	readonly channel: BlockChannel;
 	readonly caps: SurfaceCaps;
@@ -58,7 +51,6 @@ export class ConsentBlockState {
 		return this.#full;
 	}
 
-	/** FR-18: ticking C1 while the notice shows brings the main actions back. */
 	set full(value: boolean) {
 		this.#full = value;
 		if (value) this.noticeVisible = false;
@@ -84,22 +76,18 @@ export class ConsentBlockState {
 		return this.guardianFor(eligibleKeys).length > 0;
 	}
 
-	/** FR-16. */
 	discardsMedical(hasMedicalInput: boolean): boolean {
 		return hasMedicalInput && !(this.#full && this.health);
 	}
 
-	/** FR-17:「ไม่ยินยอม」. */
 	decline(): void {
 		this.noticeVisible = true;
 	}
 
-	/** FR-18:「กลับไปเลือกความยินยอม」. */
 	backToChoosing(): void {
 		this.noticeVisible = false;
 	}
 
-	/** The host's「ยืนยัน」. Without C1 (or after a decline) it opens the basic notice (FR-17). */
 	confirm(eligibleKeys: readonly string[], now?: Date): ConsentGate {
 		if (!this.canConfirm(eligibleKeys)) return { kind: 'needs-guardian-pick' };
 		if (!this.#full || this.noticeVisible) {
@@ -109,7 +97,6 @@ export class ConsentBlockState {
 		return { kind: 'decided', decision: this.#decide('full', eligibleKeys, now) };
 	}
 
-	/** 「ลงทะเบียนแบบพื้นฐาน」: C2 and C3 count as refused whatever their ticks (FR-11). */
 	confirmBasic(eligibleKeys: readonly string[], now?: Date): ConsentGate {
 		if (!this.canConfirm(eligibleKeys)) return { kind: 'needs-guardian-pick' };
 		return { kind: 'decided', decision: this.#decide('basic', eligibleKeys, now) };

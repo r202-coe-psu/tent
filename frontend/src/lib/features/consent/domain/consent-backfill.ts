@@ -25,10 +25,6 @@ export function emptyBackfillCounts(): BackfillCounts {
 	return { scanned: 0, backfilled: 0, skippedHasConsent: 0, skippedAnonymized: 0 };
 }
 
-/**
- * Backfill one evacuee, or null when it must be skipped (FR-50). Everything except `consent`,
- * `schema_v` and `updated_at` is carried over untouched, so `privacy` and `medical` stay (FR-51).
- */
 export function backfillEvacueeDoc<E extends BackfillCandidate>(
 	evacuee: E,
 	hasMedicalDoc: boolean,
@@ -44,11 +40,6 @@ export function backfillEvacueeDoc<E extends BackfillCandidate>(
 	};
 }
 
-/**
- * FR-50/52 for one shelter DB: which evacuee docs to write and the per-shelter counts.
- * `medicalEvacueeIds` holds the `evacuee_id` of every `medical` doc in the same DB.
- * Re-running over its own output plans nothing, because backfilled docs carry `consent`.
- */
 export function planConsentBackfill<E extends BackfillCandidate>(
 	evacuees: readonly E[],
 	medicalEvacueeIds: ReadonlySet<string>,

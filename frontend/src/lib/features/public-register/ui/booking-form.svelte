@@ -53,7 +53,6 @@
 
 	let t = $derived(getTranslation(PUBLIC_BOOKING_FORM_I18N, langState.current));
 
-	/** PDPA block for the public channel: guardian row shown, verbal-recording row hidden. */
 	const consentConfig: RegistrationConsentConfig = { channel: 'web', staff: null };
 
 	const createBooking = useCreateBooking();

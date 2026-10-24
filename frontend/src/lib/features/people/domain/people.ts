@@ -333,7 +333,6 @@ export interface Evacuee extends BaseDoc {
 	 */
 	booking_ref?: string | null;
 	privacy: { search_excluded: boolean };
-	/** PDPA consent of the registration that created or reported this person in (schema_v 15). */
 	consent?: EvacueeConsent;
 	registered_via: z.infer<typeof registeredViaSchema>;
 	anonymized?: boolean; // set by the purge job
@@ -963,7 +962,6 @@ interface RegistrationMedicalFields {
 	medical_note?: string | null;
 }
 
-/** FR-16: the registration form holds data that would become a `medical` doc. */
 export function hasMedicalInput(member: RegistrationMedicalFields): boolean {
 	return Boolean(
 		member.medical_conditions?.length ||

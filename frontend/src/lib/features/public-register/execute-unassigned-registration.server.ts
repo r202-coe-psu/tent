@@ -18,7 +18,6 @@ import type { PublicConsentBody } from './domain/public-consent';
 export interface ExecuteUnassignedRegistrationOptions {
 	/** SvelteKit `fetch` (or test double) used for the upstream FastAPI call. */
 	fetch: typeof globalThis.fetch;
-	/** The PDPA block's decision for every member (FR-42). */
 	consent: PublicConsentBody;
 }
 

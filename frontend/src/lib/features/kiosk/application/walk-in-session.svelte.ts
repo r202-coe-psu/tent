@@ -21,7 +21,6 @@ class WalkInSession {
 	citizenId = $state<string | null>(null);
 	/** ThaiD walk-in only: the verified session the server registers from. */
 	thaidSessionId = $state<string | null>(null);
-	/** What the PDPA block decided on the consent page; sent with the registration. */
 	consentDecision = $state.raw<ConsentDecision | null>(null);
 	/** The full card read, kept in memory only while the face check runs, then submitted. */
 	card = $state.raw<SmartCardData | null>(null);

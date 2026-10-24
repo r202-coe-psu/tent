@@ -58,10 +58,6 @@ export interface KioskCheckInBatchResult extends KioskCheckInResult {
 	retryable_evacuee_ids: string[];
 }
 
-/**
- * What the register endpoint returns: the new record, what the kiosk prints (QR + label) and the
- * consent reference and mode the done page shows (FR-20).
- */
 export interface KioskRegistrationResult {
 	evacuee_id: string;
 	qr_payload: string;

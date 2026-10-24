@@ -40,7 +40,6 @@ const kioskWalkInPhoneSchema = z
 
 const CONSENT_FRESH_MS = 10 * 60 * 1000;
 
-/** The kiosk decision (no C4/C5), given within the last 10 minutes; `consented_at` must be its `given_at`. */
 const kioskWalkInConsentFields = {
 	phone: kioskWalkInPhoneSchema,
 	consent: consentDecisionSchemaFor('kiosk').refine(
@@ -315,7 +314,6 @@ async function deleteKioskHousehold(dbName: string, householdId: string): Promis
 	if (saved?._rev) await adminFetch(`${path}?rev=${saved._rev}`, { method: 'DELETE' });
 }
 
-/** A walk-in as written: always carries the consent it was registered with. */
 export type KioskEvacuee = Evacuee & { consent: EvacueeConsent };
 
 /** The kiosk that took the registration, as written into the snapshot and `created_by`. */
