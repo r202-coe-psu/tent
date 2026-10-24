@@ -1,10 +1,11 @@
 ---
-id: draft
+id: CR-192
 title: จับเวลาให้บริการแต่ละ station (Station 1/2/3) ด้วย doc `station_log`
-status: proposed
+status: approved
 date: 2026-10-24
-requested_by: demo day เทศบาล 4 (15/10/2026) — issue #589
-decided_by: <เจ้าของโครงการ>
+requested_by: Soravit Sukkarn — จาก demo day เทศบาล 4 (15/10/2026), issue #589
+decided_by: Soravit Sukkarn (Team Lead)
+decision_date: 2026-10-25
 layer: volatile
 affects:
   - docs/data/schema.md §1 (เพิ่ม §1.x `station_log` · schema_v 1) · §7 (view `station_logs_by_station`) · §8 ข้อ 1–2 (whitelist + append-only)
@@ -144,8 +145,9 @@ N/A — doc type ใหม่ schema_v 1, additive; ไม่ backfill. evacuee 
 
 ## Decision log
 
-- 2026-10-24 — proposed (issue #589)
+- 2026-10-24 — proposed (issue #589, PR #852)
 - 2026-10-24 — owner เลือก track ด้วย Draft CR file
 - 2026-10-24 — owner เลือก doc type ใหม่ (ไม่รวมใน `movement`) แบบ 2 log ต่อ visit (`start`/`complete`) ชื่อ `station_log`
 - 2026-10-24 — owner เคาะ: flow hybrid (Station 1 kiosk หรือ staff, Station 2/3 staff เสมอ) · `start` ของ staff = เปิดหน้ากรอกข้อมูล (walk-in หรือ report-in) · dashboard อยู่ใน tab ภาพรวมของ `/back-office/evacuee-management` (ไม่เพิ่ม tab) ต่อท้าย section เดิม มีกราฟต่อ station และกราฟ staff vs kiosk
 - 2026-10-24 — owner เคาะ: ไม่เพิ่มกฎ `channel` ใน `validate_doc_update` ตอนนี้ → เปิด issue security concern แยก · role = kiosk + `registration_staff` ตามระบบเดิม (ไม่เปลี่ยน permission)
+- 2026-10-25 — approved โดย Soravit Sukkarn (Team Lead) · รันเลข CR-192
