@@ -2,8 +2,8 @@
 title: Smart Shelter — API Contract v1
 status: draft for review
 created: 2026-06-11
-updated: 2026-10-24
-note: CR-158 §9 (ข้อเสนอทีม kiosk 2026-10-24, #796 — ยังไม่ approved) — §2.2 `POST /api/v1/kiosk/reprint` รับ `staff_pin` แทน `id_last4` ได้; CR-182 approved (2026-10-21, #751) — EXT-002/003 เพิ่ม `accepts_booking` + filter `?accepts_booking=`; EXT-008 เปลี่ยนกติกา bookability (ศูนย์ที่ไม่มี `accepts_pre_registration` = จองไม่ได้ → 409 — breaking สำหรับ M2) + scope ใหม่ `booking-bypass` (EOC override; log `granted_bypass`, `external_bookings.bypass`); CR-181 approved (2026-10-21) — EXT-012 `POST /external/persons/search` (scope `occupant-search`) + sort deterministic ของ ID search (#736); CR-176 (2026-10-20) — EXT-011 `cancelled` / `kiosk_registered` (ไม่เคย check-in) = 404 `residency_not_found` (#710); คู่กับ data-model.md v3 — ตัดสิน sync boundary: staff app คุย CouchDB ตรง, service API มีเฉพาะที่ CouchDB ทำเองไม่ได้; CR-112/CR-113 occupancy + unassigned registration; Partner Data API EXT-001–007 (#214); CR-124 staff Google step-up MFA + Google SSO login (enrolled + mint AuthSession); decision sync 2026-10-08 — เพิ่ม GET /public/v1/unassigned-registrations/{id}/status (service secret, status-only) แทนการเรียก staff detail จาก BFF registrations/status — แก้ ticket คิวกลางหายจากอุปกรณ์ (QA pre-register 2026-10-08); decision sync 2026-10-09 — `breakdown` ของ EXT-005 เพิ่ม `gender_unspecified` (null+other; `male+female+gender_unspecified = occupancy_total`) และ `POST /public/v1/unassigned-registrations` รับ `members[].gender = null`; CR-157 (2026-10-10) — เพิ่ม `GET /api/public/v1/donations/slots` (BFF-only อ่าน CouchDB ฝั่ง server) และ error code ของ slot ใน `POST /public/v1/donations` (`SLOT_REQUIRED`, `SLOT_UNAVAILABLE`, `SLOT_FULL`, `SLOTS_UNAVAILABLE`); CR-162 — §2.3 kiosk banner (`POST /api/v1/kiosk/banners`, signed image GET, back-office `/api/back-office/kiosk-banners/**` + `PUT …/order`) และ §2.2 field เครื่อง `screen_type` / `banner_enabled` (ส่วนที่ปรับ 2026-10-15..17 Team Lead อนุมัติ 2026-10-18); CR-151 §17 (2026-10-18, approved 2026-10-20) — §2.1.2 `POST /api/v1/kiosk/volunteer-card` พิมพ์ QR จิตอาสาแบบอ่านอย่างเดียว; CR-162 ส่วนที่ปรับ 2026-10-21 (Team Lead อนุมัติ 2026-10-22) — kiosk banner group: §2.2 `PATCH /api/v1/kiosk/devices/[id]` ตัด `banner_enabled` + summary มี `banner_group_id`, §2.3 feed กรองตาม `banner_group_id`, banner `group_id`, order body `group_id`, §2.3.1 `/api/back-office/kiosk-banner-groups/**`
+updated: 2026-10-25
+note: CR-189 approved (2026-10-24, #838) — §2.1.3 kiosk lookup ค้นคิวกลางต่อเมื่อไม่พบใน `shelter_*` (QR รับ ULID เปล่าของตั๋วไม่ระบุศูนย์) + check-in claim ก่อน (error `KIOSK_CLAIM_*` / `KIOSK_QUEUE_UNAVAILABLE`), §2.1.1 ThaiD primary ที่ไม่ถูกเลือกใช้สมาชิกแทนได้, §5.2 FastAPI `kiosk-lookup` / `kiosk-claim/prepare` / `kiosk-claim/revert` (service secret); CR-158 §9 (ข้อเสนอทีม kiosk 2026-10-24, #796 — ยังไม่ approved) — §2.2 `POST /api/v1/kiosk/reprint` รับ `staff_pin` แทน `id_last4` ได้; CR-182 approved (2026-10-21, #751) — EXT-002/003 เพิ่ม `accepts_booking` + filter `?accepts_booking=`; EXT-008 เปลี่ยนกติกา bookability (ศูนย์ที่ไม่มี `accepts_pre_registration` = จองไม่ได้ → 409 — breaking สำหรับ M2) + scope ใหม่ `booking-bypass` (EOC override; log `granted_bypass`, `external_bookings.bypass`); CR-181 approved (2026-10-21) — EXT-012 `POST /external/persons/search` (scope `occupant-search`) + sort deterministic ของ ID search (#736); CR-176 (2026-10-20) — EXT-011 `cancelled` / `kiosk_registered` (ไม่เคย check-in) = 404 `residency_not_found` (#710); คู่กับ data-model.md v3 — ตัดสิน sync boundary: staff app คุย CouchDB ตรง, service API มีเฉพาะที่ CouchDB ทำเองไม่ได้; CR-112/CR-113 occupancy + unassigned registration; Partner Data API EXT-001–007 (#214); CR-124 staff Google step-up MFA + Google SSO login (enrolled + mint AuthSession); decision sync 2026-10-08 — เพิ่ม GET /public/v1/unassigned-registrations/{id}/status (service secret, status-only) แทนการเรียก staff detail จาก BFF registrations/status — แก้ ticket คิวกลางหายจากอุปกรณ์ (QA pre-register 2026-10-08); decision sync 2026-10-09 — `breakdown` ของ EXT-005 เพิ่ม `gender_unspecified` (null+other; `male+female+gender_unspecified = occupancy_total`) และ `POST /public/v1/unassigned-registrations` รับ `members[].gender = null`; CR-157 (2026-10-10) — เพิ่ม `GET /api/public/v1/donations/slots` (BFF-only อ่าน CouchDB ฝั่ง server) และ error code ของ slot ใน `POST /public/v1/donations` (`SLOT_REQUIRED`, `SLOT_UNAVAILABLE`, `SLOT_FULL`, `SLOTS_UNAVAILABLE`); CR-162 — §2.3 kiosk banner (`POST /api/v1/kiosk/banners`, signed image GET, back-office `/api/back-office/kiosk-banners/**` + `PUT …/order`) และ §2.2 field เครื่อง `screen_type` / `banner_enabled` (ส่วนที่ปรับ 2026-10-15..17 Team Lead อนุมัติ 2026-10-18); CR-151 §17 (2026-10-18, approved 2026-10-20) — §2.1.2 `POST /api/v1/kiosk/volunteer-card` พิมพ์ QR จิตอาสาแบบอ่านอย่างเดียว; CR-162 ส่วนที่ปรับ 2026-10-21 (Team Lead อนุมัติ 2026-10-22) — kiosk banner group: §2.2 `PATCH /api/v1/kiosk/devices/[id]` ตัด `banner_enabled` + summary มี `banner_group_id`, §2.3 feed กรองตาม `banner_group_id`, banner `group_id`, order body `group_id`, §2.3.1 `/api/back-office/kiosk-banner-groups/**`
 ---
 
 # Smart Shelter — API Contract v1
@@ -262,6 +262,8 @@ PRE_REGISTRATION_NOT_FOUND` พร้อม `can_register: false` (walk-in ด�
 - ลำดับ: gate → `shelter_code` ของ session ตรงกับเครื่อง → consume session (single-use) → เขียน check-in
 - `pid` ต้องตรงกับ `person_id.number` ของ `primary_evacuee_id`; ไม่ตรงหรือไม่พบ primary → `409 KIOSK_THAID_SESSION_INVALID`
   และ session ถูกใช้แล้ว (ไม่คืน)
+  - ยกเว้น primary อยู่ในคิวกลางและไม่ได้ถูกเลือก (CR-189 FR-KUC-07a, §2.1.3): `pid` ต้องเป็นสมาชิกที่ `matched` ในคิวกลาง
+    และตรวจกับใบลงทะเบียนผ่าน `required_person_id` ตอน `prepare` แทน
 - การเขียน throw หรือสมาชิกทุกคนได้ `failed` → คืน session เป็น `completed` ให้ลองใหม่ด้วย scan เดิม
 - session ไม่ใช่ `completed` / ใช้แล้ว / เป็นของเครื่องหรือศูนย์อื่น → `409 KIOSK_THAID_SESSION_INVALID`
 - ตู้แนบ `source: "thaid"` เฉพาะ batch แรกที่มี primary (client ส่ง primary ไว้ batch แรกเสมอ); batch ถัดไปส่งแบบไม่มี
@@ -315,6 +317,43 @@ Content-Type: application/json
 | 503 | `DEPENDENCY_UNAVAILABLE` | registry/CouchDB อ่านไม่ได้ |
 
 `scanner_client` แนบ device credential ให้ path `/api/v1/kiosk/volunteer-card` (same-origin POST เท่านั้น).
+
+### 2.1.3 Kiosk claim ผู้ลงทะเบียนแบบไม่ระบุศูนย์ ([CR-189](../changes/14-kiosk/CR-189-kiosk-claim-unassigned.md))
+
+**สรุป:** kiosk ค้นคิวกลาง Unassigned Registration (Mongo, ผ่าน FastAPI §5.2) ต่อเมื่อไม่พบใน `shelter_*` แล้ว claim
+สมาชิกที่เลือกเข้าศูนย์ของ kiosk ก่อน check-in. Body ของ lookup / check-in ไม่เปลี่ยน (client ไม่ส่ง registration id).
+BFF ทำ `authenticateScannerDevice` ก่อนเรียก FastAPI ทุกครั้ง; `shelter_code` / `device_id` ที่ส่งต่อมาจาก principal.
+
+**Lookup (`POST /api/v1/kiosk/lookup`):**
+- `source: "qr"` รับ `token` เป็น `evacuee:{ulid}` หรือ **ULID เปล่า** (registration `_id` บนตั๋วแบบไม่ระบุศูนย์). ULID เปล่า →
+  ค้นคิวกลางทันที
+- `source: "smart-card"` / `"thaid"`: ไม่พบใน `shelter_*` → ค้นคิวกลางด้วย citizen id (เฉพาะสมาชิก `open`) ก่อนตอบ not-found
+- `source: "phone"` ไม่ค้นคิวกลาง
+- พบ → response `household` เดิม แสดงทั้งครอบครัว:
+  - `open` → `pre_registered`, เลือกได้
+  - `claimed` เข้าศูนย์นี้ → สถานะจาก Couch; ไม่มี doc ใน Couch (orphan claim) → แสดงเหมือน `open`
+  - `claimed` ศูนย์อื่น / `cancelled` → ไม่แสดง; ไม่เหลือใครเลย → not-found `can_register: false`
+  - primary = สมาชิกที่ตรงกับ citizen id ที่สแกน; QR ตั๋ว = สมาชิกคนแรกที่แสดงได้ · นามสกุล mask เหมือนเดิม
+- คิวกลางไม่พร้อม (network / 5xx / body ผิดรูป / timeout 3 วิ): QR ULID → `503 KIOSK_LOOKUP_UNAVAILABLE`;
+  บัตร / ThaiD → fail open (ถือว่าไม่พบ, เสนอ walk-in ตาม flag เดิม)
+
+**Check-in (`POST /api/v1/kiosk/check-in`):**
+- สมาชิกที่เลือกแต่ไม่มี doc ใน Couch ของศูนย์ → BFF หาใบจาก `reserved_evacuee_id` → FastAPI `prepare` (timeout 6 วิ) →
+  `_bulk_docs` (household ถ้ายังไม่มี + evacuee + image) ด้วย `adminFetch`; row `conflict` = OK → check-in เดิม
+- ทุกคนที่เลือกมี doc ใน Couch แล้ว → ไม่เรียก FastAPI
+- smart-card ส่ง `citizen_id` ของ body เป็น `required_person_id`; ThaiD ใช้ `pid` ของ session (mismatch → `409 KIOSK_THAID_SESSION_INVALID`)
+- primary ไม่ถูกเลือกและไม่มีใน Couch → ใช้สมาชิกที่เลือกคนแรกที่อยู่ household เดียวกันเป็น primary แทน
+- Couch ล้ม หรือ `prepare` ล้มแบบ network / timeout / 5xx หลังส่ง request → `revert` แบบ best-effort (timeout 3 วิ) แล้วไม่ check-in ใคร
+- ThaiD: error ใด ๆ ที่ไม่ใช่ mismatch → คืน session ให้สแกนใหม่ได้
+
+| Status | Code | ข้อความ / เมื่อ |
+|---|---|---|
+| 409 | `KIOSK_CLAIM_CONFLICT` | มีสมาชิกถูกรับเข้าศูนย์อื่นแล้วหรือถูกยกเลิก กรุณาติดต่อเจ้าหน้าที่ |
+| 409 | `KIOSK_CLAIM_PERSON_MISMATCH` | บัตรนี้ไม่ตรงกับผู้ลงทะเบียน กรุณาติดต่อเจ้าหน้าที่ |
+| 503 | `KIOSK_QUEUE_UNAVAILABLE` | ระบบคิวกลางไม่พร้อม กรุณาติดต่อเจ้าหน้าที่ |
+| 503 | `KIOSK_CLAIM_FAILED` | รับเข้าศูนย์ไม่สำเร็จ กรุณาลองอีกครั้ง (Couch write ล้ม, revert แล้ว) |
+
+Out of scope: claim สัตว์เลี้ยง, ความจุศูนย์ (Station 3), edge/LAN (ไม่มี FastAPI → เข้าเคสคิวกลางไม่พร้อม).
 
 ### 2.2 Scanner staff PIN — ข้ามการตรวจใบหน้าด้วย PIN ของเครื่อง
 
@@ -658,6 +697,9 @@ BFF ตรวจช่วงเวลา (`logistics.slot`) ก่อนส่�
 | GET | `/staff/v1/unassigned-registrations/{id}/review` | `require_registration_staff` — read-only pre-claim review (CR-140 addendum); open members/pets + household address only (no `pets[]` claim-status list); writes nothing |
 | GET | `/staff/v1/unassigned-registrations/photos/{photo_id}` | `require_registration_staff` — streams GridFS bytes (CR-140 addendum); 404 unless `photo_id` is still referenced by an **open** member `photo` or pet `image_url` |
 | POST | `/staff/v1/unassigned-registrations/{id}/claim` | staff + shelter scope — body `member_ids` and/or `pet_ids`; copies nickname/religion/emergency_contact; GridFS member `photo` + pet `image_url` → Couch `image:{ulid}`; append claimed pets onto existing Couch HH |
+| POST | `/public/v1/unassigned-registrations/kiosk-lookup` | kiosk BFF + secret (`verify_external_secret`; CR-189) — body หนึ่งใน `registration_id` / `citizen_id` (13 หลัก, สมาชิก `open`) / `evacuee_id`; คืนทั้งครอบครัว `{registration_id, reserved_household_id, members[{reserved_evacuee_id, first_name, last_name, gender, age, status, claimed_shelter_code, matched}]}` — ชื่อไม่ mask (BFF mask), ไม่มีเบอร์ / person id / รูป · 404 `NOT_FOUND` |
+| POST | `/public/v1/unassigned-registrations/{id}/kiosk-claim/prepare` | kiosk BFF + secret (CR-189) — body `shelter_code`, `device_id`, `member_ids` (1–20), `required_person_id?`; mark claimed (`claimed_by = kiosk:{device_id}`) แล้วคืน `{registration_id, shelter_code, household, evacuees[], images[{doc, full_b64, thumb_b64, content_type}]}` ให้ BFF เขียน Couch · claimed เข้าศูนย์เดียวกันแล้ว → 200 idempotent · 404 `NOT_FOUND` / `MEMBER_NOT_FOUND` · 403 `PERSON_MISMATCH` · 409 `ALREADY_CLAIMED` / `MEMBER_NOT_OPEN` |
+| POST | `/public/v1/unassigned-registrations/{id}/kiosk-claim/revert` | kiosk BFF + secret (CR-189) — body `shelter_code`, `device_id`, `member_ids`; reopen เฉพาะสมาชิกที่ kiosk นี้ claim เข้าศูนย์นั้น + คำนวณ `open_*` ใหม่; idempotent → `{reverted: [...]}` · 404 `NOT_FOUND` · 409 `DUPLICATE_OPEN_IDENTITY` (มีคนลงทะเบียน identity เดิมระหว่างนั้น) |
 | DELETE | `/staff/v1/unassigned-registrations/{id}` | `system_admin` only |
 
 Claim = Mongo mark (คน+สัตว์) แล้ว birth/append Couch (option B — ดู [CR-113](../changes/00-baseline/CR-113-unassigned-registration-mongo.md) + [CR-140](../changes/00-baseline/CR-140-persistent-unassigned-family.md)); shape: `schema.md` §9.5. เมื่อไม่มี `open` เหลือ → เอกสาร `closed` (**ไม่** hard-delete); `deleted` เสมอ `false`. Public browser เรียกผ่าน SvelteKit BFF เท่านั้น (ไม่ตรง FastAPI).
