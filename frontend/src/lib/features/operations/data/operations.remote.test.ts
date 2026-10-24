@@ -137,7 +137,9 @@ import {
 	createCampaign,
 	createReceiveEntry,
 	createStockLedger,
-	projectStockLotBalances
+	LotWriteOffError,
+	projectStockLotBalances,
+	TransferForbiddenError
 } from '../domain/operations';
 import { createStockLotReservation, makeLotReservationDocId } from '$lib/features/distribution';
 import { rankLotsForIssue } from '../domain/lot-priority';
@@ -977,6 +979,95 @@ describe('OperationsRemoteRepository', () => {
 			expect(await repo.listLedger()).toHaveLength(0);
 		});
 
+		describe('write-off out of a named lot (#569)', () => {
+			const receiveLot = async (qty: number, zone: string) =>
+				repo.receiveStock(
+					{
+						item_id: 'item:rice',
+						qty,
+						unit: 'kg',
+						source: 'donation',
+						ref_id: DONATION_REF,
+						lot: { storage_zone: zone }
+					},
+					ctx
+				);
+
+			it('persists the lot_ref of the lot it writes off', async () => {
+				const lotA = await receiveLot(5, 'ชั้น A');
+
+				const entry = await repo.adjustStock(
+					{
+						item_id: 'item:rice',
+						qty: '-2',
+						unit: 'kg',
+						adjust_reason: 'damaged',
+						ref_id: null,
+						lot_ref: lotA._id
+					},
+					ctx
+				);
+
+				const stored = (await repo.listLedger()).find((e) => e._id === entry._id);
+				expect(stored?.lot_ref).toBe(lotA._id);
+			});
+
+			it('refuses to overdraw the lot even when the item total covers it', async () => {
+				const lotA = await receiveLot(5, 'ชั้น A');
+				await receiveLot(100, 'ชั้น B');
+				// someone else emptied lot A while this form was open
+				await repo.adjustStock(
+					{
+						item_id: 'item:rice',
+						qty: '-5',
+						unit: 'kg',
+						adjust_reason: 'lost',
+						ref_id: null,
+						lot_ref: lotA._id
+					},
+					ctx
+				);
+
+				await expect(
+					repo.adjustStock(
+						{
+							item_id: 'item:rice',
+							qty: '-5',
+							unit: 'kg',
+							adjust_reason: 'damaged',
+							ref_id: null,
+							lot_ref: lotA._id
+						},
+						ctx
+					)
+				).rejects.toBeInstanceOf(LotWriteOffError);
+				expect((await repo.listLedger()).filter((e) => e.reason === 'adjust')).toHaveLength(1);
+			});
+
+			it("refuses a lot_ref that is another item's lot", async () => {
+				mockGetItem.mockResolvedValue({ unit: 'kg' } as SupplyItem);
+				const salt = await repo.receiveStock(
+					{ item_id: 'item:salt', qty: 9, unit: 'kg', source: 'donation', ref_id: DONATION_REF },
+					ctx
+				);
+				await receiveLot(10, 'ชั้น A');
+
+				await expect(
+					repo.adjustStock(
+						{
+							item_id: 'item:rice',
+							qty: '-1',
+							unit: 'kg',
+							adjust_reason: 'damaged',
+							ref_id: null,
+							lot_ref: salt._id
+						},
+						ctx
+					)
+				).rejects.toThrow(/ไม่พบล็อตที่เลือก/);
+			});
+		});
+
 		it('sums a ledger that mixes schema_v 5 and 6 rows', async () => {
 			// a pre-CR-143 adjust row as an older client persisted it
 			await repo.addLedgerEntry({
@@ -1437,6 +1528,16 @@ describe('OperationsRemoteRepository — transfer via BFF (CR-059 Flow 1 / T-13)
 			expect.stringContaining('/api/back-office/transfer?'),
 			expect.objectContaining({ method: 'POST', credentials: 'include' })
 		);
+	});
+
+	it('throws TransferForbiddenError when the transfer API refuses the account (#571)', async () => {
+		fetchMock.mockResolvedValue({ ok: false, status: 403, statusText: 'Forbidden' });
+
+		const error = await repo.listTransfers().catch((e: unknown) => e);
+
+		expect(error).toBeInstanceOf(TransferForbiddenError);
+		// No `status`: the app query client would treat 401/403 + status as a session problem.
+		expect((error as { status?: unknown }).status).toBeUndefined();
 	});
 
 	it('lists transfer destinations from their own route, dropping malformed rows (#570)', async () => {
