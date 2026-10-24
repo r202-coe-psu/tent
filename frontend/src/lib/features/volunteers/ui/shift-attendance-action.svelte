@@ -11,6 +11,7 @@
 	import { useQueryClient } from '@tanstack/svelte-query';
 	import { toast } from 'svelte-sonner';
 	import { Button } from '$lib/components/ui/button/index.js';
+	import { useShelter } from '$lib/features/shelters';
 	import { useCheckIn, useCheckOut } from '../application/queries';
 	import type { ApplicantAttendance } from '../domain/applicant-attendance';
 	import type { ShiftAssignmentStatus } from '../domain/shift-assignment.schema';
@@ -63,6 +64,17 @@
 	// Same gate as the roster tab. Verifying invalidates the volunteers query, so the
 	// "รอยืนยันตัวตน" button turns into "เช็คอินเข้างาน" without a reload.
 	let verifyOpen = $state(false);
+
+	// Only a row that can open the dialog needs the shelter; the query is shared with the roster.
+	const shelterQuery = useShelter(
+		() => volunteer?.shelter_code ?? '',
+		() => attendance.kind === 'verify' && volunteer !== null
+	);
+	const shelterLine = $derived.by(() => {
+		const shelter = shelterQuery.data;
+		if (!shelter?.name) return '—';
+		return shelter.shelter_type ? `${shelter.name} (${shelter.shelter_type})` : shelter.name;
+	});
 </script>
 
 {#if attendance.kind === 'check-in'}
@@ -105,5 +117,5 @@
 {/if}
 
 {#if volunteer}
-	<VolunteerQualificationDialog bind:open={verifyOpen} {volunteer} shelterLine="—" />
+	<VolunteerQualificationDialog bind:open={verifyOpen} {volunteer} {shelterLine} />
 {/if}
