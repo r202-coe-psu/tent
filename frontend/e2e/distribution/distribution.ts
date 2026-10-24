@@ -673,7 +673,13 @@ export async function seedDistributionLog(
 	return logId;
 }
 
-/** A counted bulk drop-off (back-office only in the app) waiting to be matched to loans. */
+/**
+ * A counted bulk drop-off (back-office only in the app) waiting to be matched to loans.
+ *
+ * @deprecated v2 pool shape (`unclaimed_quota` / `bulk_return_claim`): PR #768 freezes schema_v 1/2
+ * pools and the app only writes v3. Only the skipped T4-6/T4-7 still use it; remove in #661.
+ * v3 pools: `seedOpenPool` in `bulk-return-pool.ts`.
+ */
 export async function seedBulkReturnPool(
 	scenario: DistributionScenario,
 	item: SeededItem,

@@ -239,7 +239,10 @@ test.describe('Tab 4 — loan return counter (plan §4.6)', { tag: DESK_TAGS }, 
 		});
 	}
 
-	test('T4-6/T4-7 a loan is matched to a bulk pool with enough quota only', async ({
+	// Deprecated v2 bulk pool flow (`unclaimed_quota` / "จับคู่กับกองรับคืน"), replaced by
+	// bulk-return-pool-flow.test.ts BRP-F1/BRP-F2 (see BULK_RETURN_POOL_E2E_PLAN.md §8).
+	// Remove in #661.
+	test.skip('T4-6/T4-7 a loan is matched to a bulk pool with enough quota only', async ({
 		page,
 		scenarioAs
 	}) => {

@@ -355,7 +355,11 @@ test.describe('Write permissions at the database (VDU, plan §4.2)', { tag: DESK
 		);
 	});
 
-	test('V5 bulk return pools are created by the warehouse, not DST', async ({ scenarioAs }) => {
+	// Replaced by bulk-return-pool-access.test.ts BRP-V1 (v3 pool shape); see
+	// BULK_RETURN_POOL_E2E_PLAN.md §8. Remove in #661.
+	test.skip('V5 bulk return pools are created by the warehouse, not DST', async ({
+		scenarioAs
+	}) => {
 		const scenario = await scenarioAs('vdu_pool');
 		const item = await consumable(scenario, 'vdu');
 		await expectWrites(
