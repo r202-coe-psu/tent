@@ -171,6 +171,18 @@ describe('PATCH /api/public/v1/donations/[token]/items', () => {
 			expect((await response.json()).status).toBe('pending_review');
 		});
 
+		// A doc a newer writer stamped (CR-175 donor photos takes donation to 8) keeps its
+		// version: stamping 7 over it would claim it lacks fields it has.
+		it('never lowers the schema_v of a doc a newer writer stamped', async () => {
+			couchHas({ ...couchDoc('verifying'), schema_v: 8 });
+			fastapiOk({ status: 'verifying' });
+
+			await call();
+
+			const [, , written] = vi.mocked(putAsPublicWriter).mock.calls[0]!;
+			expect(written).toMatchObject({ schema_v: 8 });
+		});
+
 		it('AC-22: audits the lines the campaign rule approved in this edit, after the write', async () => {
 			couchHas(couchDoc('pending_review'));
 			fastapiOk({ status: 'verifying', auto_approved_lines: [0] });
