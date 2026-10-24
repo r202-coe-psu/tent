@@ -19,8 +19,13 @@ describe('isDonorEditable (T-21 / CR-080 / D-1)', () => {
 		expect(isDonorEditable('pending_review')).toBe(true);
 	});
 
-	it('hands the count to staff once the goods are being checked in', () => {
-		expect(isDonorEditable('verifying')).toBe(false);
+	// CR-174 FR-20..FR-23 — a campaign booking has its QR from the start; the donor can
+	// still cancel, fix the basket or add the courier number.
+	it('still lets the donor change a booking that has its QR', () => {
+		expect(isDonorEditable('verifying')).toBe(true);
+	});
+
+	it('hands the count to staff once the goods are received', () => {
 		expect(isDonorEditable('received')).toBe(false);
 	});
 

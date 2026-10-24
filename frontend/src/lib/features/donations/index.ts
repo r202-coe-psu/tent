@@ -45,8 +45,39 @@ export {
 	formatTrackSchedule,
 	canCancelDonation,
 	canEditCourierTracking,
-	isTerminalDonationStatus
+	isTerminalDonationStatus,
+	rejectedLineReasons
 } from './domain/tracking';
+// Domain — back-office booking list (#617)
+export {
+	DONATION_QUEUE_FILTERS,
+	filterDonationQueue,
+	filterForLegacyTab,
+	parseQueueFilter,
+	queueGroupOf
+} from './domain/donation-queue';
+export type { DonationQueueFilter } from './domain/donation-queue';
+// Domain — per-line review (CR-174)
+export {
+	donationStatusFromLines,
+	hasLineReview,
+	isAutoApprovedLine,
+	lineReviewDecisionSchema
+} from './domain/item-review';
+export type {
+	ItemReviewStatus,
+	LineReviewDecision,
+	ReviewDonationInput
+} from './domain/item-review';
+// Domain — reject reasons (CR-172)
+export {
+	DONATION_REJECT_REASON_CODES,
+	DONATION_REJECT_REASON_LABELS,
+	REJECT_NOTE_MAX,
+	donorRejectMessage,
+	rejectDonationInputSchema
+} from './domain/reject-reason';
+export type { DonationRejectReasonCode, RejectDonationInput } from './domain/reject-reason';
 
 // Domain — shared PURE computation (needs board + POST donations). Server-side
 // doc fetching lives in $lib/server/donation-docs (kept out of the client barrel).
@@ -99,9 +130,14 @@ export {
 	useDonationTracking,
 	useDonationTrackSearch,
 	useUpdateCourierTracking,
-	useUpdateDonationItems
+	useUpdateDonationItems,
+	donationQueueKeys,
+	useDonationQueue
 } from './application/queries';
 
 // UI
 export { default as CancelDonationDialog } from './ui/cancel-donation-dialog.svelte';
+export { default as RejectDonationDialog } from './ui/reject-donation-dialog.svelte';
+export { default as RejectReasonFields } from './ui/reject-reason-fields.svelte';
+export { default as LineDecisionToggle } from './ui/line-decision-toggle.svelte';
 export { default as EditDonationItemsDialog } from './ui/edit-donation-items-dialog.svelte';

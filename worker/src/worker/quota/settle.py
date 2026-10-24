@@ -91,17 +91,32 @@ async def settle_donation_quota(doc: dict[str, Any], *, now: datetime) -> Decima
     if not isinstance(new_status, str) or not new_status:
         return Decimal(0)
 
-    buffer = await DonationBuffer.find_one(
-        DonationBuffer.tracking_token_hash == token_hash
-    )
-    if buffer is None:
-        # Retention already purged the row — and released the quota on its way out.
+    # The donor edits this row while settle runs. Write only the status, and only over
+    # the status read; the pre-image is what the booking held as it stopped holding.
+    # A whole-row save put the read items back over a donor's edit and released them.
+    for _ in range(3):
+        buffer = await DonationBuffer.find_one(
+            DonationBuffer.tracking_token_hash == token_hash
+        )
+        if buffer is None:
+            # Retention already purged the row — and released the quota on its way out.
+            return Decimal(0)
+        if buffer.status == new_status:
+            # Nothing moved: a replay of a change already settled.
+            return Decimal(0)
+        before = await DonationBuffer.get_pymongo_collection().find_one_and_update(
+            {"_id": buffer.id, "status": buffer.status},
+            {"$set": {"status": new_status}},
+        )
+        if before is not None:
+            break
+    else:
+        logger.warning(
+            "Status of donation buffer %s kept moving — leaving it to the next change",
+            buffer.id,
+        )
         return Decimal(0)
-    if buffer.status == new_status:
-        # Nothing moved — skip the write. Not load-bearing for correctness (the
-        # transition check below already makes a replay a no-op), just a guard against
-        # a pointless Mongo write on every donation change row.
-        return Decimal(0)
+    buffer.items_declared = before.get("items_declared") or []
 
     released = Decimal(0)
     if (
@@ -121,9 +136,6 @@ async def settle_donation_quota(doc: dict[str, Any], *, now: datetime) -> Decima
                 buffer.status,
                 new_status,
             )
-
-    buffer.status = new_status
-    await buffer.save()
     return released
 
 

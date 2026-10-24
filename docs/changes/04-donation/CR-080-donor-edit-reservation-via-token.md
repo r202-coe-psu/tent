@@ -139,6 +139,11 @@ BFF  ──1─→ FastAPI: จอง delta (atomic)  ──ไม่พอ─�
 | 4 | Log ละเอียดแค่ไหน / เก็บที่ไหน | (ก) `revisions[]` ใน donation doc เก็บ items ก่อน-หลังทั้งชุด ← **ทีมเสนอ**<br>(ข) เก็บแค่ diff<br>(ค) แยกเป็น audit doc ต่างหาก | **(ก) ฝัง `revisions[]` ใน donation doc** — เก็บ snapshot `items_before` และ `items_after` ทั้งชุด (`schema_v` 3 → 4) |
 | 5 | จำกัดจำนวนครั้งไหม | ตอนนี้ rate-limit ที่ BFF 3 ครั้ง/นาที ต่อ IP + FastAPI 30 ครั้ง/นาที ต่อ IP. ต้องมีเพดาน N ครั้งต่อการจองเพิ่มไหม? ทีมเสนอ: ไม่ต้อง | **ไม่ต้องจำกัดจำนวนครั้งต่อการจอง** — ใช้ Rate-limit ต่อ IP และตรวจสอบย้อนหลังผ่าน `revisions[]` |
 
+> **ถูกแทนด้วย [CR-174](./CR-174-donation-campaign-auto-approve.md) (2026-10-21) — มติข้อ 1:** สิทธิ์ผู้บริจาค
+> แก้รายการ / ยกเลิก / ใส่เลขพัสดุ ใช้ชุดสถานะ `DONOR_EDITABLE_STATUSES` = `{declared, pending_review, verifying}`
+> (CR-174 FR-20..FR-23 — ก่อนหน้านี้ D-1 เพิ่ม `pending_review` แล้ว). แก้ใบ `verifying` แล้วมีรายการที่ต้องประเมิน
+> → ใบกลับไป `pending_review` (FR-21). มติข้อ 2–5 คงเดิม. ไม่ลบมติเดิมด้านบนเพื่อเก็บประวัติ
+
 ## Migration
 
 `schema_v` donation 3 → 4 — เพิ่ม `revisions[]` เป็น **optional** doc เดิมที่ไม่มี field นี้
@@ -156,4 +161,5 @@ BFF  ──1─→ FastAPI: จอง delta (atomic)  ──ไม่พอ─�
   "ตอนนี้" และแก้ตัวเลข rate-limit ให้ครบทั้งสองชั้น — ข้อเสนอ/กติกาไม่เปลี่ยน
 - 2026-08-21 — approved โดยเจ้าของโครงการ เคาะมติครบทั้ง 5 ข้อ: (1) แก้ได้เฉพาะ declared (2) reject ทั้งก้อนเมื่อ NEED_FULL (3) TTL นับต่อจาก declared_at เดิม (4) เก็บ revisions[] snapshot items ก่อน-หลังทั้งชุดใน donation doc (schema_v 3 → 4) (5) ไม่จำกัดจำนวนครั้งการแก้ต่อใบจอง (ใช้ rate-limit ต่อ IP)
 - 2026-08-31 — **done** — implement + merge เข้า `develop` แล้ว (สาขา `docs/cr-080` / T-21 reservation, commit `d189e481` `65483429`); ปิด CR ตาม change-management §3
+- 2026-10-21 — มติข้อ 1 (สถานะที่แก้ได้) ถูกแทนด้วย CR-174 FR-20..FR-23: `{declared, pending_review, verifying}` — implement ใน branch `feat/donation-review-intake-flow`
 - 2026-10-23 — **Superseded (rate limit) by [CR-188](../01-core/CR-188-rate-limit-to-nginx.md):** Q5 ("ใช้ rate-limit ต่อ IP") — limit ต่อ IP ย้ายจาก BFF/FastAPI ไป nginx zone `public_write`/`public_read`; ยังไม่จำกัดจำนวนครั้งต่อใบจอง

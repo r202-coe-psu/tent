@@ -17,10 +17,13 @@
 		token,
 		shelterCode,
 		items,
+		status = '',
 		onSaved
 	}: {
 		open?: boolean;
 		token: string;
+		/** Booking status — a `verifying` booking already has its QR (CR-174 FR-24). */
+		status?: string;
 		/** Which shelter's published needs the donor may add from. */
 		shelterCode: string;
 		items: Array<{
@@ -32,7 +35,9 @@
 		onSaved?: () => void;
 	} = $props();
 
-	type Row = { item_id?: string; free_text: string; qty: string; unit: string };
+	/** `key` only names the row for `{#each}`: removing a row must not shift the others' inputs. */
+	type Row = { key: number; item_id?: string; free_text: string; qty: string; unit: string };
+	let nextKey = 0;
 
 	/**
 	 * What the donor may ADD. Typing a name by hand produced a line with no `item_id`,
@@ -58,6 +63,7 @@
 	let rows = $state<Row[]>(
 		untrack(() =>
 			items.map((item) => ({
+				key: nextKey++,
 				item_id: item.item_id ?? undefined,
 				free_text: item.item_name ?? '',
 				qty: item.qty != null ? String(item.qty) : '',
@@ -74,7 +80,7 @@
 	);
 
 	function addRow() {
-		rows = [...rows, { free_text: '', qty: '', unit: '' }];
+		rows = [...rows, { key: nextKey++, free_text: '', qty: '', unit: '' }];
 	}
 
 	/** Bind a blank row to a catalog item: name and unit come from the board, not typing. */
@@ -122,8 +128,17 @@
 			</Dialog.Description>
 		</Dialog.Header>
 
+		{#if status === 'verifying'}
+			<p
+				class="rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 dark:bg-amber-950/30 dark:text-amber-200"
+				role="note"
+			>
+				{t.editVerifyingWarning}
+			</p>
+		{/if}
+
 		<div class="space-y-3">
-			{#each rows as row, index (index)}
+			{#each rows as row, index (row.key)}
 				<div class="flex items-end gap-2 rounded-2xl border border-border bg-card p-3">
 					<div class="min-w-0 flex-1 space-y-1">
 						<label class="text-2xs font-bold text-muted-foreground uppercase" for="name-{index}">

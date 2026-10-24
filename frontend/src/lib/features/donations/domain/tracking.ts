@@ -23,6 +23,9 @@ export type DonationTrackItem = {
 	qty: string | number | null;
 	unit: string | null;
 	category?: string | null;
+	/** Per-line review (CR-174 FR-17) — absent on bookings before schema_v 7. */
+	review_status?: 'approved' | 'pending' | 'rejected' | null;
+	review_reason?: string | null;
 };
 
 export type DonationTrackLogistics = {
@@ -65,8 +68,14 @@ export type DonationTrackView = {
 			item_name?: string;
 			qty?: string | number;
 			unit?: string;
+			/** Turned away at the counter, with the reason the donor reads (CR-172 FR-14). */
+			rejected?: boolean;
+			reject_reason?: string;
+			reject_reason_code?: string;
 		}>;
 	} | null;
+	/** Why the shelter refused the booking — absent on docs before schema_v 6 (FR-17). */
+	reject_reason: string | null;
 	updated_at: string | null;
 	expires_at: string | null;
 	/** Donor edits so far (CR-080) — the page shows the count, not the entries. */
@@ -146,8 +155,9 @@ export function formatTrackSchedule(
 	return '-';
 }
 
+/** Same set as `isDonorEditable` — `verifying` too since CR-174 (FR-20, FR-21). */
 export function canCancelDonation(status: string): boolean {
-	return status === 'declared' || status === 'pending_review';
+	return status === 'declared' || status === 'pending_review' || status === 'verifying';
 }
 
 export function canEditCourierTracking(
@@ -196,7 +206,14 @@ export function toDonationTrackView(raw: Record<string, unknown>): DonationTrack
 				item_name: String(row.item_name ?? row.free_text ?? 'ของบริจาค'),
 				qty: (row.qty as string | number | null) ?? null,
 				unit: row.unit != null ? String(row.unit) : null,
-				category: row.category != null ? String(row.category) : null
+				category: row.category != null ? String(row.category) : null,
+				review_status:
+					row.review_status === 'approved' ||
+					row.review_status === 'pending' ||
+					row.review_status === 'rejected'
+						? row.review_status
+						: null,
+				review_reason: typeof row.review_reason === 'string' ? row.review_reason : null
 			};
 		}),
 		logistics:
@@ -207,8 +224,28 @@ export function toDonationTrackView(raw: Record<string, unknown>): DonationTrack
 			receivedRaw && typeof receivedRaw === 'object'
 				? (receivedRaw as DonationTrackView['received_summary'])
 				: null,
+		reject_reason:
+			typeof raw.reject_reason === 'string' && raw.reject_reason.trim() ? raw.reject_reason : null,
 		updated_at: raw.updated_at != null ? String(raw.updated_at) : null,
 		expires_at: raw.expires_at != null ? String(raw.expires_at) : null,
 		revisions: Array.isArray(raw.revisions) ? (raw.revisions as Array<Record<string, unknown>>) : []
 	};
+}
+
+/**
+ * Why each declared line was turned away, by position in `items` — `null` for a line
+ * that was not, `''` for one refused without a reason of its own (the whole booking
+ * was, and the booking reason says why). Staff refuse a line either at review
+ * (CR-174 `review_status`) or at the counter (CR-172 `received_summary.items[]`, one
+ * counted line per declared line, in order).
+ */
+export function rejectedLineReasons(view: DonationTrackView): (string | null)[] {
+	const counted = view.received_summary?.items ?? [];
+	return view.items.map((item, index) => {
+		// The review's reason first: it is what the donor was told when the line was refused.
+		if (item.review_status === 'rejected') return item.review_reason?.trim() ?? '';
+		const line = counted[index];
+		if (line?.rejected) return line.reject_reason?.trim() ?? '';
+		return null;
+	});
 }
