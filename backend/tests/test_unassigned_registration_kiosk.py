@@ -536,6 +536,38 @@ async def test_kiosk_revert_reopens_a_registration_the_claim_had_closed(
     assert reopened.json()["status"] == "open"
 
 
+async def test_kiosk_revert_keeps_out_identity_keys_of_a_member_claimed_mid_revert(
+    client: AsyncClient, auth_headers: dict[str, str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """FR-KUC-16a: a claim landing between revert's read and write must not reopen its keys."""
+    doc = await _seed_family()
+    own, racing, _ = (m.reserved_evacuee_id for m in doc.members)
+    await _prepare(client, auth_headers, doc.id, member_ids=[own])
+    real_get = UnassignedRegistration.get
+    raced = False
+
+    async def get_then_race(document_id: str, *args: object, **kwargs: object):
+        nonlocal raced
+        found = await real_get(document_id, *args, **kwargs)
+        if not raced:
+            raced = True
+            claimed = await _prepare(
+                client, auth_headers, doc.id, member_ids=[racing], device_id="kiosk-9"
+            )
+            assert claimed.status_code == 200
+        return found
+
+    monkeypatch.setattr(UnassignedRegistration, "get", get_then_race)
+
+    response = await _revert(client, auth_headers, doc.id, member_ids=[own])
+
+    assert response.json() == {"reverted": [own]}
+    stored = await real_get(doc.id)
+    assert stored is not None
+    assert stored.open_person_id_numbers == ["1234567890123"]
+    assert stored.open_phones == ["0812345678"]
+
+
 async def test_kiosk_revert_unknown_registration_is_404_not_found(
     client: AsyncClient, auth_headers: dict[str, str]
 ) -> None:
