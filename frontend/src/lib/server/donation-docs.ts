@@ -77,6 +77,15 @@ export async function fetchDocsStrict<T>(dbName: string, prefix: string): Promis
  * goods in stock for lines that moved or a booking that no longer exists.
  */
 export async function hasKeyedDonationStock(dbName: string, donationId: string): Promise<boolean> {
+	return (await keyedDonationRowIds(dbName, donationId, 1)).length > 0;
+}
+
+/** Ids of the `donation` ledger rows pointing at this booking, at most `limit` of them. */
+export async function keyedDonationRowIds(
+	dbName: string,
+	donationId: string,
+	limit: number
+): Promise<string[]> {
 	const res = await adminRaw(`/${dbName}/_find`, 'POST', {
 		// `item_id` is in the selector only so CouchDB picks `ledger-type-refid-itemid-reason-idx`
 		// (shelter-access-design.ts): without it the query scans the whole shelter DB.
@@ -87,12 +96,12 @@ export async function hasKeyedDonationStock(dbName: string, donationId: string):
 			reason: 'donation'
 		},
 		fields: ['_id'],
-		limit: 1
+		limit
 	});
 	if (res.status >= 400) {
 		throw new CouchReadError(dbName, 'stock_ledger (ref_id)', res.status);
 	}
-	return ((res.data as { docs?: unknown[] }).docs ?? []).length > 0;
+	return ((res.data as { docs?: { _id: string }[] }).docs ?? []).map((doc) => doc._id);
 }
 
 /** The refusal a donor gets once the shelter has started taking the goods in. */

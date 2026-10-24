@@ -30,6 +30,7 @@ import {
 	donationShortfall
 } from '$lib/features/operations/server';
 import { createAuditEntry, type AuditEntry } from '$lib/features/shared';
+import { keyedDonationRowIds } from '$lib/server/donation-docs';
 import { allocateLotNos } from '$lib/server/lot-number';
 import { persistQty } from '$lib/utils/qty';
 
@@ -359,6 +360,26 @@ export const POST: RequestHandler = async ({ params, request }) => {
 			const row = recorded.get(ids[index]);
 			if (!row) pending.push(index);
 			else if (!recordsSameLine(row, item)) return receiptMismatch(lineNo, row);
+		}
+		// Ids only match a count that mapped every line the same way. The batch receive page
+		// (or this screen before a reload) may have keyed a line as another item under another
+		// id, and the booking stays open, so its `_rev` cannot tell. The ledger can: any row
+		// of this booking outside `ids` means the goods are already in stock.
+		if (
+			pending.length > 0 &&
+			(await keyedDonationRowIds(dbName, donation._id, ids.length + 1)).some(
+				(id) => !ids.includes(id)
+			)
+		) {
+			return json(
+				{
+					success: false,
+					error_code: 'RECEIPT_MISMATCH',
+					error:
+						'ใบนี้มีของบันทึกเข้าคลังไว้แล้วที่ไม่ตรงกับรายการที่นับรอบนี้ (เช่น เลือกสินค้าคนละตัวกับครั้งก่อน) — ไม่ได้บันทึกซ้ำ เลือกสินค้าให้ตรงกับที่บันทึกไว้ หรือติดต่อผู้ดูแลเพื่อตรวจยอด'
+				},
+				{ status: 409 }
+			);
 		}
 
 		// Lot labels are minted here, not on the client: the per-day sequence needs
