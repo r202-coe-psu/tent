@@ -12,6 +12,7 @@
 	import { useStoragePoints } from '../application/use-storage-points.svelte';
 	import LedgerTable from './ledger-table.svelte';
 	import DisabledReason from './stock/disabled-reason.svelte';
+	import { DISTRIBUTE_FORBIDDEN_HINT, OFFLINE_HINT } from './stock/hints';
 	import { buildLotRows } from './stock/lot-view';
 	import type { StockDisplayRow } from './stock/stock-view';
 
@@ -101,9 +102,9 @@
 					{#each ACTIONS as action (action.kind)}
 						{@const isDis = offline || (action.kind === 'distribute' && !canDistribute)}
 						{@const btnTitle = offline
-							? 'เซสชันหมดอายุ — เข้าสู่ระบบใหม่เพื่อบันทึก'
+							? OFFLINE_HINT
 							: action.kind === 'distribute' && !canDistribute
-								? 'ต้องมีสิทธิ์เจ้าหน้าที่คลัง (warehouse_staff) จึงจะเบิกจ่ายได้'
+								? DISTRIBUTE_FORBIDDEN_HINT
 								: undefined}
 						<DisabledReason reason={isDis ? btnTitle : undefined}>
 							<Button

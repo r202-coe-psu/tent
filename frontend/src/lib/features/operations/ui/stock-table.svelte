@@ -41,6 +41,7 @@
 	import StockRow from './stock/stock-row.svelte';
 	import StockCard from './stock/stock-card.svelte';
 	import DisabledReason from './stock/disabled-reason.svelte';
+	import { DISTRIBUTE_FORBIDDEN_HINT, OFFLINE_HINT } from './stock/hints';
 	import {
 		attentionCounts,
 		clampPage,
@@ -103,8 +104,6 @@
 	const isSA = $derived(isSystemAdmin(roles));
 	const currentShelter = $derived(getShelterCode());
 	const canDistribute = $derived(hasCapabilityInShelter(roles, currentShelter, WAREHOUSE_STAFF));
-	const DISTRIBUTE_FORBIDDEN_HINT =
-		'ต้องมีสิทธิ์เจ้าหน้าที่คลัง (warehouse_staff) จึงจะเบิกจ่ายได้';
 	let showOverall = $state(false);
 
 	const sheltersQuery = useShelters();
@@ -372,7 +371,6 @@
 
 	// Session expired (`needsReauth`): reading still works, every write button is off.
 	const offline = $derived(authStore.needsReauth);
-	const OFFLINE_HINT = 'เซสชันหมดอายุ — เข้าสู่ระบบใหม่เพื่อบันทึก';
 	const distributeDisabledReason = $derived(
 		offline ? OFFLINE_HINT : !canDistribute ? DISTRIBUTE_FORBIDDEN_HINT : undefined
 	);
