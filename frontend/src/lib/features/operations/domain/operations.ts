@@ -1079,12 +1079,16 @@ export function assertLotWriteOffsFit(
 	if (wanted.size === 0) return;
 
 	const itemIds = new Set([...wanted.values()].map((w) => w.item_id));
-	const lots = new Map(
-		projectStockLotBalances(ledger.filter((row) => itemIds.has(row.item_id))).map((lot) => [
-			lot.lot_ref,
-			lot
-		])
-	);
+	let projected: StockLotBalance[];
+	try {
+		projected = projectStockLotBalances(ledger.filter((row) => itemIds.has(row.item_id)));
+	} catch (error) {
+		if (!(error instanceof StockLotIntegrityError)) throw error;
+		throw new LotWriteOffError(
+			'ประวัติคลังของสินค้านี้คำนวณยอดรายล็อตไม่ได้ — กรุณาแจ้งผู้ดูแลระบบ'
+		);
+	}
+	const lots = new Map(projected.map((lot) => [lot.lot_ref, lot]));
 	for (const [lotRef, want] of wanted) {
 		const lot = lots.get(lotRef);
 		if (!lot || lot.item_id !== want.item_id || lot.unit !== want.unit) {

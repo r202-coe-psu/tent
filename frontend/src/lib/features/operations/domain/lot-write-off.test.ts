@@ -63,6 +63,28 @@ describe('assertLotWriteOffsFit (#569)', () => {
 	});
 });
 
+describe('assertLotWriteOffsFit — a history that cannot be replayed (#856)', () => {
+	it('tells the user in Thai instead of leaking the projection error', () => {
+		const rice = inbound('item:rice', '5');
+		const overdrawn = createStockLedger(
+			{
+				item_id: 'item:rice',
+				qty: '-9',
+				unit: 'kg',
+				reason: 'adjust',
+				adjust_reason: 'lost',
+				ref_id: null,
+				lot_ref: rice._id
+			},
+			ctx
+		);
+		const attempt = () => assertLotWriteOffsFit([rice, overdrawn], [writeOff(rice, '-1')]);
+
+		expect(attempt).toThrow(LotWriteOffError);
+		expect(attempt).toThrow('ประวัติคลังของสินค้านี้คำนวณยอดรายล็อตไม่ได้');
+	});
+});
+
 describe('projectLotsByItem (#569)', () => {
 	it('drops only the item whose history cannot be replayed, and names it', () => {
 		const rice = inbound('item:rice', '5');
