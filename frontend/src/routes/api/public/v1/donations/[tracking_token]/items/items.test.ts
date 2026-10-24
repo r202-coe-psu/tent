@@ -2,7 +2,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { PATCH } from './+server';
 import { adminRaw } from '$lib/server/couch-admin';
 import { putAsPublicWriter } from '$lib/server/couch-public-writer';
-import { donationEditLimiter } from '$lib/server/security/rate-limiter';
 import { sha256Hex } from '$lib/db/hash';
 import { CouchReadError, fetchDocsStrict, hasKeyedDonationStock } from '$lib/server/donation-docs';
 
@@ -21,12 +20,6 @@ vi.mock('$lib/server/donation-docs', async (importOriginal) => {
 	};
 });
 vi.mock('$lib/server/couch-public-writer', () => ({ putAsPublicWriter: vi.fn() }));
-vi.mock('$lib/server/security/rate-limiter', () => ({
-	donationIpLimiter: { check: vi.fn(() => true) },
-	donationPhoneLimiter: { check: vi.fn(() => true) },
-	donationEditLimiter: { check: vi.fn(() => true) },
-	donationReadLimiter: { check: vi.fn(() => true) }
-}));
 vi.mock('$env/dynamic/private', () => ({
 	env: { FASTAPI_INTERNAL_URL: 'http://localhost:9000', EXTERNAL_API_SECRET: 'test-secret' }
 }));
@@ -89,7 +82,6 @@ describe('PATCH /api/public/v1/donations/[token]/items', () => {
 	beforeEach(() => {
 		vi.resetAllMocks();
 		vi.unstubAllGlobals();
-		vi.mocked(donationEditLimiter.check).mockReturnValue(true);
 		vi.mocked(putAsPublicWriter).mockResolvedValue({ status: 201, data: {} });
 		vi.mocked(fetchDocsStrict).mockResolvedValue([]);
 		vi.mocked(hasKeyedDonationStock).mockResolvedValue(false);
@@ -306,13 +298,6 @@ describe('PATCH /api/public/v1/donations/[token]/items', () => {
 	it('rejects a malformed tracking token before reaching CouchDB', async () => {
 		const response = await call(ITEMS, 'not-a-token');
 		expect(response.status).toBe(400);
-		expect(adminRaw).not.toHaveBeenCalled();
-	});
-
-	it('returns 429 when the IP is over the rate limit', async () => {
-		vi.mocked(donationEditLimiter.check).mockReturnValue(false);
-		const response = await call();
-		expect(response.status).toBe(429);
 		expect(adminRaw).not.toHaveBeenCalled();
 	});
 

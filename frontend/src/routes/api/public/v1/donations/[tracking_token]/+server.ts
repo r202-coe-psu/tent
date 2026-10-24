@@ -1,5 +1,4 @@
 import { json } from '@sveltejs/kit';
-import { donationEditLimiter, donationReadLimiter } from '$lib/server/security/rate-limiter';
 import { putAsPublicWriter } from '$lib/server/couch-public-writer';
 import { sha256Hex } from '$lib/db/hash';
 import { fastapiBaseUrl, fastapiServiceHeaders } from '$lib/server/fastapi';
@@ -49,16 +48,11 @@ async function cancelViaFastApi(trackingToken: string) {
 	return { status: res.status, body };
 }
 
-export const GET = async ({ params, getClientAddress }) => {
+export const GET = async ({ params }) => {
 	try {
 		const { tracking_token } = params;
 		if (!tracking_token) {
 			return json({ success: false, error: 'Tracking token is required' }, { status: 400 });
-		}
-
-		const ip = getClientAddress();
-		if (!donationReadLimiter.check(ip)) {
-			return json({ success: false, error: 'RATE_LIMITED' }, { status: 429 });
 		}
 
 		let donation: Record<string, unknown> = {};
@@ -125,7 +119,7 @@ export const GET = async ({ params, getClientAddress }) => {
 	}
 };
 
-export const PATCH = async ({ params, request, getClientAddress }) => {
+export const PATCH = async ({ params, request }) => {
 	try {
 		const { tracking_token } = params;
 		if (!tracking_token) {
@@ -135,11 +129,6 @@ export const PATCH = async ({ params, request, getClientAddress }) => {
 		const payload = await request.json();
 		if (!payload.courier_tracking_no) {
 			return json({ success: false, error: 'courier_tracking_no is required' }, { status: 400 });
-		}
-
-		const ip = getClientAddress();
-		if (!donationEditLimiter.check(ip)) {
-			return json({ success: false, error: 'RATE_LIMITED' }, { status: 429 });
 		}
 
 		const shelterDb = shelterDbFromToken(tracking_token);
@@ -225,16 +214,11 @@ export const PATCH = async ({ params, request, getClientAddress }) => {
 	}
 };
 
-export const DELETE = async ({ params, getClientAddress }) => {
+export const DELETE = async ({ params }) => {
 	try {
 		const { tracking_token } = params;
 		if (!tracking_token) {
 			return json({ success: false, error: 'Tracking token is required' }, { status: 400 });
-		}
-
-		const ip = getClientAddress();
-		if (!donationEditLimiter.check(ip)) {
-			return json({ success: false, error: 'RATE_LIMITED' }, { status: 429 });
 		}
 
 		const shelterDb = shelterDbFromToken(tracking_token);

@@ -17,13 +17,6 @@ vi.mock('$lib/server/couch-public-writer', () => ({
 	putAsPublicWriter: vi.fn()
 }));
 
-vi.mock('$lib/server/security/rate-limiter', () => ({
-	donationIpLimiter: { check: vi.fn(() => true) },
-	donationPhoneLimiter: { check: vi.fn(() => true) },
-	donationEditLimiter: { check: vi.fn(() => true) },
-	donationReadLimiter: { check: vi.fn(() => true) }
-}));
-
 vi.mock('$env/dynamic/private', () => ({
 	env: {
 		FASTAPI_INTERNAL_URL: 'http://localhost:9000',

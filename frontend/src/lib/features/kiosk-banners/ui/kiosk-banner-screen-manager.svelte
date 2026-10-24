@@ -9,7 +9,7 @@
 		screenTypeOf,
 		type KioskScreenType
 	} from '$lib/features/shared/domain/kiosk-screen';
-	import { matchesScreen, orderableBanners } from '../domain/kiosk-banner';
+	import { matchesSlot, orderableBanners } from '../domain/kiosk-banner';
 	import { kioskBannerRemoteRepository } from '../data/kiosk-banner.remote';
 	import { KioskBannerApiError, type KioskBannerSummary } from '../data/kiosk-banner.repository';
 	import { kioskBannerKeys, useReorderKioskBanners } from '../application/kiosk-banner.queries';
@@ -21,12 +21,14 @@
 	import { formatBannerWindow } from './kiosk-banner-window';
 
 	/**
-	 * Manager panel for one screen type: reorder its current banners (draft held by the parent so
-	 * its navigation guard can see it), edit/delete rows, browse expired ones. Also owns the kiosk
-	 * preview dialog (it needs the draft order); the parent opens it through `previewOpen`.
+	 * Manager panel for one (banner group, screen type) slot: reorder its current banners (draft
+	 * held by the parent so its navigation guard can see it), edit/delete rows, browse expired ones.
+	 * Also owns the kiosk preview dialog (it needs the draft order); the parent opens it through
+	 * `previewOpen`.
 	 */
 	let {
 		screen,
+		groupId,
 		current,
 		expired,
 		now,
@@ -37,9 +39,11 @@
 		previewOpen = $bindable(false)
 	}: {
 		screen: KioskScreenType;
-		/** The「current」list view, every screen type mixed. */
+		/** The banner group whose banners this panel manages. */
+		groupId: string;
+		/** The「current」list view, every group and screen type mixed. */
 		current: KioskBannerSummary[];
-		/** The「expired」list view, every screen type mixed. */
+		/** The「expired」list view, every group and screen type mixed. */
 		expired: KioskBannerSummary[];
 		now: Date;
 		shelterCode: string;
@@ -50,9 +54,10 @@
 	} = $props();
 
 	const meta = $derived(KIOSK_SCREENS[screen]);
-	const saved = $derived(orderableBanners(current, screen, now));
+	const slot = $derived({ group_id: groupId, screen_type: screen });
+	const saved = $derived(orderableBanners(current, slot, now));
 	const shown = $derived(draft ? reconcileDraft(draft, saved) : saved);
-	const expiredHere = $derived(expired.filter((banner) => matchesScreen(banner, screen)));
+	const expiredHere = $derived(expired.filter((banner) => matchesSlot(banner, slot)));
 	const reorder = useReorderKioskBanners();
 	const queryClient = useQueryClient();
 
@@ -61,6 +66,7 @@
 		try {
 			await reorder.mutateAsync({
 				shelterCode,
+				groupId,
 				screenType: screen,
 				items: shown.map((banner) => ({ id: banner._id, rev: banner._rev }))
 			});
@@ -81,7 +87,8 @@
 		buildListPreviewSlides(
 			shown.map((banner, index) => ({ ...banner, order: index + 1 })),
 			now,
-			kioskBannerRemoteRepository.imageUrl
+			kioskBannerRemoteRepository.imageUrl,
+			groupId
 		)
 	);
 </script>

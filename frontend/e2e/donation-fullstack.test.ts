@@ -36,8 +36,7 @@ import {
  * this run's own `E2E Donation donor …` shelter (README §4).
  *
  * Needs `docker compose up -d` (CouchDB, Mongo, worker, FastAPI) and a seeded catalog
- * (`pnpm seed`). Locally use the dev server — only it skips reCAPTCHA keys / the BFF's
- * per-IP rate limits (on `vite preview` also set DONATION_E2E_PACE=1):
+ * (`pnpm seed`). Locally use the dev server — only it skips reCAPTCHA keys:
  *   PLAYWRIGHT_TEST_BASE_URL=http://localhost:5173 \
  *     pnpm exec playwright test e2e/donation-fullstack.test.ts
  * On a writable remote target (`E2E_BASE_URL` + `ALLOW_REMOTE_WRITES=true`, i.e. staging)
@@ -50,8 +49,7 @@ import {
  * the quota to come back, delete shelter + staff. Last test (Z) asserts nothing is left.
  * Residue the test side cannot remove: the Mongo intake-buffer / `public_donations` rows
  * of the bookings, which retention purges on its TTL, and the closed `public_shelters` row
- * (dropped by the worker within minutes). Bookings are paced to the BFF's 3/min/IP limit
- * on remote targets, so the suite takes a few minutes there.
+ * (dropped by the worker within minutes).
  * Back-office setup (slots, walk-in) lives in donation-fullstack-admin.
  */
 

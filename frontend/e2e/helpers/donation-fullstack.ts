@@ -1,6 +1,5 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
-import process from 'node:process';
 import {
 	expect,
 	type APIRequestContext,
@@ -19,7 +18,6 @@ import {
 	type TestUser
 } from './couch';
 import { bangkokToday } from '../../src/lib/utils/date';
-import { IS_REMOTE, RATE_LIMIT_ENFORCED } from './e2e-env';
 import { injectSession, routeBrowserCouchThroughApp } from './login';
 import { publicShelter, teardownShelter, waitForProjection } from './public-cleanup';
 import { createShelterViaUi, pinActiveShelter, setRecaptcha } from './staff-ui';
@@ -65,43 +63,6 @@ export type PublicShelter = { code: string; name: string; needs: PublicNeed[] };
 export type Staff = TestUser & { session: string };
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
-// ─── Rate limits ───────────────────────────────────────────────────────────────
-
-/**
- * Sliding-window pacer for the BFF's per-IP limiters (`src/lib/server/security/rate-limiter.ts`).
- * They only exempt loopback under `vite dev`, so a remote target (staging) — or a local
- * `vite preview` with `DONATION_E2E_PACE=1` — would answer 429 RATE_LIMITED after the 3rd
- * booking in a minute. On `pnpm dev` it is a no-op, and so is it when the target runs with
- * `RATE_LIMIT=false` (CR-160): the booking limiters are bypassed there, so pacing would only
- * slow the run down.
- */
-class Pacer {
-	private hits: number[] = [];
-	constructor(
-		private readonly limit: number,
-		private readonly windowMs = 61_000
-	) {}
-
-	async acquire(n = 1): Promise<void> {
-		if (!RATE_LIMIT_ENFORCED || !(IS_REMOTE || process.env.DONATION_E2E_PACE === '1')) return;
-		for (;;) {
-			const now = Date.now();
-			this.hits = this.hits.filter((t) => now - t < this.windowMs);
-			if (this.hits.length + n <= this.limit) {
-				for (let i = 0; i < n; i++) this.hits.push(now);
-				return;
-			}
-			const expiring = this.hits[this.hits.length + n - this.limit - 1];
-			await sleep(Math.max(expiring + this.windowMs - now, 250) + 250);
-		}
-	}
-}
-
-/** `donationIpLimiter`: creating a booking — 3 per minute per IP. */
-export const bookingPacer = new Pacer(3);
-/** `donationEditLimiter`: edit / courier no. / cancel — 10 per minute per IP. */
-const editPacer = new Pacer(9);
 
 // ─── Per-run ledger ────────────────────────────────────────────────────────────
 
@@ -344,13 +305,12 @@ export type BookingResponse = Partial<Booking> & {
 /**
  * Walk the public wizard up to — not past — "ยืนยันการจองคิวบริจาค" (qty 1 unless `opts.qty`).
  * Returns `submit`, which presses it and hands back the BFF's answer unasserted, so
- * two donors can be brought to the button first and made to press it together (the
- * caller then paces both itself: `submit({ paced: false })` after `bookingPacer.acquire(2)`).
+ * two donors can be brought to the button first and made to press it together.
  */
 export async function fillBooking(
 	page: Page,
 	opts: BookingOptions
-): Promise<{ submit: (o?: { paced?: boolean }) => Promise<BookingResponse> }> {
+): Promise<{ submit: () => Promise<BookingResponse> }> {
 	const { shelter, need, unsolicited, donorName, phone } = opts;
 	const mode = opts.mode ?? { kind: 'self' };
 
@@ -408,8 +368,7 @@ export async function fillBooking(
 	await expect(button).toBeEnabled();
 
 	return {
-		submit: async ({ paced = true } = {}) => {
-			if (paced) await bookingPacer.acquire();
+		submit: async () => {
 			const posted = page.waitForResponse(
 				(r) => r.url().endsWith('/api/public/v1/donations') && r.request().method() === 'POST'
 			);
@@ -473,9 +432,8 @@ export async function bookAsDonor(page: Page, opts: BookingOptions): Promise<Boo
 	const body = await submit();
 	// Under `vite preview` (not dev) with no reCAPTCHA keys the BFF fails closed with
 	// SERVER_MISCONFIGURED — run against `pnpm dev` locally (PLAYWRIGHT_TEST_BASE_URL=
-	// http://localhost:5173). RATE_LIMITED is the BFF's 3 bookings/min/IP (paced here on a
-	// remote target) or FastAPI's 30 req/min/IP on every donation route: wait a minute
-	// between back-to-back local runs.
+	// http://localhost:5173). RATE_LIMITED is nginx's per-IP limit on the donation routes: wait
+	// a minute between back-to-back runs.
 	expect(body.success, `booking POST failed: ${JSON.stringify(body)}`).toBe(true);
 	const { bookingRef, trackingToken } = body as Booking;
 
@@ -734,11 +692,9 @@ export type TornDown = ReturnType<RunLedger['read']>;
 async function cancelOpenBookings(request: APIRequestContext, bookings: LedgerBooking[]) {
 	for (const b of bookings) {
 		for (let attempt = 0; attempt < 6; attempt++) {
-			await editPacer.acquire();
 			const res = await request.delete(`/api/public/v1/donations/${b.token}`);
-			// 409: inbound has the row but CouchDB does not show it yet. 429: a limiter.
+			// 409: inbound has the row but CouchDB does not show it yet.
 			if (res.status() === 409) await sleep(3_000);
-			else if (res.status() === 429) await sleep(61_000);
 			else break;
 		}
 	}

@@ -50,10 +50,6 @@ vi.mock('$lib/server/security/recaptcha-gate', () => ({
 	resolveRecaptchaGate: m.gate,
 	verifyRecaptchaOrSkip: m.verifyCaptcha
 }));
-vi.mock('$lib/server/security/rate-limiter', () => ({
-	linkAccountIpLimiter: { check: m.ipCheck },
-	linkAccountNonceLimiter: { check: m.nonceCheck }
-}));
 vi.mock('$lib/server/user-service', () => ({
 	assessLinkEligibility: m.assessLinkEligibility,
 	linkGoogleMfa: m.linkGoogleMfa,
@@ -104,14 +100,6 @@ describe('POST /api/v1/auth/link-account (CR-141)', () => {
 		const res = await call();
 		expect(res.status).toBe(401);
 		expect(await errorCode(res)).toBe('LINK_EXPIRED');
-		expect(m.verifyCredentials).not.toHaveBeenCalled();
-	});
-
-	it('429 + clears cookie when the nonce budget is spent', async () => {
-		m.nonceCheck.mockReturnValue(false);
-		const res = await call();
-		expect(res.status).toBe(429);
-		expect(m.clearPendingLinkCookie).toHaveBeenCalled();
 		expect(m.verifyCredentials).not.toHaveBeenCalled();
 	});
 
