@@ -57,7 +57,9 @@ async function deleteAssessment(id: string): Promise<void> {
 	);
 }
 
-test.describe('Daily SOP — Design workflow', () => {
+// Quarantined: drives the single-document CR-106 UI that CR-153 replaced (its selectors and
+// testids no longer exist). Superseded by daily-sop-role-assessment.test.ts.
+test.describe('Daily SOP — Design workflow', { tag: '@quarantine' }, () => {
 	test.describe.configure({ mode: 'serial' });
 	const user: TestUser = {
 		name: 'staff03',
