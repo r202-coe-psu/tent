@@ -12,7 +12,6 @@ from ...utils.request_meta import client_ip
 from ..announcements.router import PaginatedAnnouncements
 from ..config.schemas import ConfigResponse
 from ..config.use_case import ConfigUseCase, get_config_use_case
-from ..evacuee.router import _check_rate_limit
 from ..evacuee.schemas import ApiErrorResponse, SearchRequest, SearchResponse
 from ..evacuee.use_case import EvacueeUseCase, get_evacuee_use_case
 from ..needs.schemas import NeedsListResponse
@@ -70,7 +69,6 @@ async def search_evacuees(
     use_case: EvacueeUseCase = Depends(get_evacuee_use_case),  # noqa: B008
 ) -> SearchResponse:
     ip = client_ip(request)
-    _check_rate_limit(ip)
     response.headers["Cache-Control"] = "no-store"
     return await use_case.search(payload.search, client_ip=ip)
 

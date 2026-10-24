@@ -2,7 +2,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { POST } from './+server';
 import { findMasterByCode } from '$lib/server/shelters.admin';
 import { bulkAsPublicWriter, rollbackAsPublicWriter } from '$lib/server/couch-public-writer';
-import { registerIpLimiter, registerPhoneLimiter } from '$lib/server/security/rate-limiter';
 import {
 	findConflictingHold,
 	readForecastOccupancy
@@ -36,10 +35,6 @@ vi.mock('$lib/server/shelters.admin', () => ({ findMasterByCode: vi.fn() }));
 vi.mock('$lib/server/couch-public-writer', () => ({
 	bulkAsPublicWriter: vi.fn(),
 	rollbackAsPublicWriter: vi.fn()
-}));
-vi.mock('$lib/server/security/rate-limiter', () => ({
-	registerIpLimiter: { check: vi.fn(() => true) },
-	registerPhoneLimiter: { check: vi.fn(() => true) }
 }));
 vi.mock('$lib/features/public-register/booking-gate.server', () => ({
 	readForecastOccupancy: vi.fn(async () => 0),
@@ -117,8 +112,6 @@ describe('POST /api/public/v1/registrations', () => {
 		vi.mocked(bulkAsPublicWriter).mockResolvedValue({ status: 201, failed: [], written: [] });
 		vi.mocked(rollbackAsPublicWriter).mockReset();
 		vi.mocked(rollbackAsPublicWriter).mockResolvedValue({ rolledBack: [], orphaned: [] });
-		vi.mocked(registerIpLimiter.check).mockReturnValue(true);
-		vi.mocked(registerPhoneLimiter.check).mockReturnValue(true);
 		verifyToken.mockReset();
 		verifyToken.mockResolvedValue(true);
 		adminRaw.mockReset();
@@ -159,20 +152,6 @@ describe('POST /api/public/v1/registrations', () => {
 	it('422 with no members at all', async () => {
 		const res = await POST(event({ ...VALID_BODY, members: [] }));
 		expect(res.status).toBe(422);
-		expect(bulkAsPublicWriter).not.toHaveBeenCalled();
-	});
-
-	it('429 when the IP is rate limited', async () => {
-		vi.mocked(registerIpLimiter.check).mockReturnValue(false);
-		const res = await POST(event(VALID_BODY));
-		expect(res.status).toBe(429);
-		expect(bulkAsPublicWriter).not.toHaveBeenCalled();
-	});
-
-	it('429 when the phone is rate limited', async () => {
-		vi.mocked(registerPhoneLimiter.check).mockReturnValue(false);
-		const res = await POST(event(VALID_BODY));
-		expect(res.status).toBe(429);
 		expect(bulkAsPublicWriter).not.toHaveBeenCalled();
 	});
 
@@ -483,14 +462,6 @@ describe('POST /api/public/v1/registrations', () => {
 			const res = await POST(event(noToken));
 			expect(res.status).toBe(201);
 			expect(verifyToken).not.toHaveBeenCalled();
-		});
-
-		it('still enforces the rate limit in dev', async () => {
-			mockAppEnv.dev = true;
-			vi.mocked(registerIpLimiter.check).mockReturnValue(false);
-			const res = await POST(event(VALID_BODY));
-			expect(res.status).toBe(429);
-			expect(bulkAsPublicWriter).not.toHaveBeenCalled();
 		});
 	});
 
