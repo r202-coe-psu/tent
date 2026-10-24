@@ -911,3 +911,40 @@ async def test_public_search_still_returns_cancelled_people_and_family_members(
     members = body["results"][0]["family_members"]
     assert [m["name"] for m in members] == [f"ลูก {mask_last_name('ใจดี')}"]
     assert members[0]["status"] == "cancelled"
+
+
+async def test_basic_consent_person_leaves_occupant_search(
+    client: AsyncClient,
+    db_client: AsyncMongoClient,
+    settings: Settings,
+    auth_headers: dict[str, str],
+):
+    """PDPA FR-40 — the worker deletes a basic-mode person's projection (worker
+    `test_project_evacuee_basic_consent_deletes_projection`); search then skips them."""
+    phone = "0877777777"
+    now = datetime.now(UTC)
+    for suffix, first_name in (("visible", "เห็น"), ("basic", "พื้นฐาน")):
+        await _insert_person(
+            db_client,
+            settings,
+            {
+                "_id": f"evacuee:{suffix}",
+                "shelter_code": "SH001",
+                "first_name": first_name,
+                "last_name_masked": mask_last_name("ใจดี"),
+                "phone_hash": phone_hash(phone),
+                "search_excluded": False,
+                "status": "active",
+                "updated_at": now,
+            },
+        )
+    before = await client.post("/public/v1/occupants", json={"q": phone}, headers=auth_headers)
+    assert before.json()["count"] == 2
+
+    db_name = settings.DATABASE_URI.rsplit("/", 1)[-1]
+    await db_client[db_name]["public_persons"].delete_one({"_id": "evacuee:basic"})
+
+    after = await client.post("/public/v1/occupants", json={"q": phone}, headers=auth_headers)
+    assert after.status_code == 200
+    assert after.json()["count"] == 1
+    assert [r["name"].split()[0] for r in after.json()["results"]] == ["เห็น"]
