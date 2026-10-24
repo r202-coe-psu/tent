@@ -68,6 +68,7 @@ function setup(overrides: Partial<FakeDeps> = {}) {
 async function toVerify(session: ReprintSession) {
 	session.phone = '0812345678';
 	await session.submitPhone();
+	session.toggleAll();
 	session.continueToVerify();
 }
 
@@ -83,7 +84,7 @@ describe('ReprintSession phone step', () => {
 		expect(session.step).toBe('phone');
 	});
 
-	it('looks the phone up and preselects every selectable member', async () => {
+	it('looks the phone up with nobody ticked yet, so the visitor picks who to print', async () => {
 		const { deps, session } = setup();
 		session.phone = '0812345678';
 
@@ -92,8 +93,8 @@ describe('ReprintSession phone step', () => {
 		expect(deps.lookup).toHaveBeenCalledWith({ source: 'phone', phone: '0812345678' });
 		expect(session.step).toBe('members');
 		expect(session.members.map((m) => m.evacuee_id)).toEqual(['EV1', 'EV2', 'EV3']);
-		expect(session.selectedIds).toEqual(['EV1', 'EV2']);
-		expect(session.canContinue).toBe(true);
+		expect(session.selectedIds).toEqual([]);
+		expect(session.canContinue).toBe(false);
 		expect(session.blocked).toBe(false);
 	});
 
@@ -101,6 +102,7 @@ describe('ReprintSession phone step', () => {
 		const { session } = setup();
 		session.phone = '0812345678';
 		await session.submitPhone();
+		session.toggleAll();
 
 		session.toggleMember('EV2');
 		expect(session.selectedIds).toEqual(['EV1']);
@@ -121,9 +123,9 @@ describe('ReprintSession phone step', () => {
 		await session.submitPhone();
 
 		session.toggleAll();
-		expect(session.selectedIds).toEqual([]);
-		session.toggleAll();
 		expect(session.selectedIds).toEqual(['EV1', 'EV2']);
+		session.toggleAll();
+		expect(session.selectedIds).toEqual([]);
 	});
 
 	it('blocks when nobody has been registered yet, with a way back', async () => {
@@ -267,7 +269,7 @@ describe('ReprintSession candidates', () => {
 			primary_evacuee_id: 'EV1'
 		});
 		expect(session.step).toBe('members');
-		expect(session.selectedIds).toEqual(['EV1', 'EV2']);
+		expect(session.selectedIds).toEqual([]);
 	});
 
 	it('goes back from members to the household list, then to the phone', async () => {

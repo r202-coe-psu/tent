@@ -331,7 +331,8 @@ export class ReprintSession {
 			this.fromCandidates = fromCandidates;
 			this.primaryEvacueeId = found.primary_evacuee_id;
 			this.members = found.members;
-			this.selectedIds = selectableIds(found.members);
+			// Nobody is ticked up front: the visitor picks whose QR to print.
+			this.selectedIds = [];
 			this.step = 'members';
 		} catch (error) {
 			if (generation !== this.generation) return;
