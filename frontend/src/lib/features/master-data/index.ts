@@ -75,3 +75,4 @@ export { default as MasterDataConfigPage } from './ui/master-data-config-page.sv
 export { default as MasterDataTypeList } from './ui/master-data-type-list.svelte';
 export { default as MasterDataItemList } from './ui/master-data-item-list.svelte';
 export { default as MasterDataEditModal } from './ui/master-data-edit-modal.svelte';
+export { default as MasterTagInput } from './ui/master-tag-input.svelte';

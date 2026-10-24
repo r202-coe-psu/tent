@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { MasterDataItem } from '$lib/features/master-data';
+	import type { MasterDataItem } from '../../domain.js';
 	import MasterTagInput from '../master-tag-input.svelte';
 
 	/** Test-only parent: owns the bound `value` and echoes what would be stored. */

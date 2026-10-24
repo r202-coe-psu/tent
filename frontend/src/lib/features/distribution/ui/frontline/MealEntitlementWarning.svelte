@@ -10,13 +10,16 @@
 
 	interface Props {
 		open: boolean;
-		meal: MealPeriod;
+		meal?: MealPeriod;
 		recipientLabel: string;
 		/** Recipient already got this meal period today. */
 		isDuplicate: boolean;
 		priorDistributedAt?: string;
 		/** Groups the menu targets when the recipient is not in any of them (menu matching). */
 		menuMismatchLabel?: string | null;
+		/** Allergens in the menu that the recipient is allergic to (#607), as Thai labels. */
+		allergenConflictLabel?: string | null;
+		menuName?: string;
 		onconfirm: (reason: string) => void;
 		oncancel: () => void;
 	}
@@ -28,6 +31,8 @@
 		isDuplicate,
 		priorDistributedAt,
 		menuMismatchLabel = null,
+		allergenConflictLabel = null,
+		menuName,
 		onconfirm,
 		oncancel
 	}: Props = $props();
@@ -36,12 +41,17 @@
 	let overrideReason = $state('');
 	let error = $state<string | null>(null);
 
+	const warningCount = $derived(
+		[isDuplicate, !!menuMismatchLabel, !!allergenConflictLabel].filter(Boolean).length
+	);
 	const title = $derived(
-		isDuplicate && menuMismatchLabel
+		warningCount > 1
 			? 'แจ้งเตือน: ต้องยืนยันกรณีพิเศษ'
-			: menuMismatchLabel
-				? 'แจ้งเตือน: เมนูไม่ตรงกลุ่มผู้รับ'
-				: 'แจ้งเตือน: ได้รับอาหารมื้อนี้แล้ว'
+			: allergenConflictLabel
+				? 'แจ้งเตือน: ผู้รับแพ้อาหารในเมนูนี้'
+				: menuMismatchLabel
+					? 'แจ้งเตือน: เมนูไม่ตรงกลุ่มผู้รับ'
+					: 'แจ้งเตือน: ได้รับอาหารมื้อนี้แล้ว'
 	);
 
 	function handleConfirm() {
@@ -114,7 +124,7 @@
 
 		<!-- Warning Body -->
 		<div class="space-y-3">
-			{#if isDuplicate}
+			{#if isDuplicate && meal}
 				<div
 					class="rounded-xl border border-amber-200/80 bg-amber-50/60 p-3 text-xs text-amber-950"
 				>
@@ -127,6 +137,16 @@
 							(เวลาที่รับล่าสุด: {formatThaiTime(priorDistributedAt)} น.)
 						</p>
 					{/if}
+				</div>
+			{/if}
+
+			{#if allergenConflictLabel}
+				<div class="rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-950">
+					<p>
+						<strong>{menuName ?? 'เมนูนี้'}</strong> มี
+						<strong class="text-red-800">{allergenConflictLabel}</strong>
+						— <strong>{recipientLabel}</strong> แพ้
+					</p>
 				</div>
 			{/if}
 
