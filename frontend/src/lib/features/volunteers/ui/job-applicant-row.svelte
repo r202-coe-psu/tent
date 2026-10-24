@@ -37,9 +37,10 @@
 	import { maskNationalId } from '$lib/features/people';
 	import { formatThaiShortDate } from '$lib/utils/date';
 	import { SvelteMap } from 'svelte/reactivity';
-	import { useCheckIn, useCheckOut } from '../application/queries';
+	import { useCheckOut } from '../application/queries';
 	import { applicantAttendance } from '../domain/applicant-attendance';
 	import { APPLICATION_STATUS_META } from '../domain/applicant-queue';
+	import ApplicantCheckInDialog from './applicant-check-in-dialog.svelte';
 	import VolunteerQualificationDialog from './volunteer-qualification-dialog.svelte';
 	import { resolveSkillOption, type SkillOption } from '../domain/skill-catalog';
 	import { checkRequiredSkills } from '../domain/required-skills';
@@ -151,17 +152,12 @@
 	const identityVerified = $derived(volunteer?.identity_verified ?? false);
 
 	const queryClient = useQueryClient();
-	const checkInMutation = useCheckIn(queryClient);
 	const checkOutMutation = useCheckOut(queryClient);
 
-	async function checkInNow(assignmentId: string) {
-		try {
-			await checkInMutation.mutateAsync({ id: assignmentId });
-			toast.success(`เช็คอินเข้างาน ${fullName} แล้ว`);
-		} catch (err) {
-			toast.error(err instanceof Error ? err.message : 'เช็คอินไม่สำเร็จ');
-		}
-	}
+	// Check-in is confirmed in a dialog (scan the QR, or a manual check-in with a reason).
+	// The target stays set after close so the dialog can finish its exit animation.
+	let checkInOpen = $state(false);
+	let checkInTarget = $state<{ assignment: ShiftAssignment; shiftLabel: string } | null>(null);
 
 	async function checkOutNow(assignmentId: string) {
 		try {
@@ -324,8 +320,13 @@
 						<Button
 							size="sm"
 							class="h-9 gap-1 bg-emerald-600 text-white hover:bg-emerald-700"
-							disabled={checkInMutation.isPending}
-							onclick={() => checkInNow(attendance.assignment._id)}
+							onclick={() => {
+								checkInTarget = {
+									assignment: attendance.assignment,
+									shiftLabel: `${shift.date} · ${shift.start_time} - ${shift.end_time} น.`
+								};
+								checkInOpen = true;
+							}}
 						>
 							<LogIn class="h-3.5 w-3.5" />
 							เช็คอินเข้างาน
@@ -426,6 +427,16 @@
 		</div>
 	{/if}
 </li>
+
+{#if checkInTarget}
+	<ApplicantCheckInDialog
+		bind:open={checkInOpen}
+		assignment={checkInTarget.assignment}
+		{volunteer}
+		personName={fullName}
+		shiftLabel={checkInTarget.shiftLabel}
+	/>
+{/if}
 
 {#if volunteer}
 	<VolunteerQualificationDialog bind:open={verifyOpen} {volunteer} shelterLine="—" />
