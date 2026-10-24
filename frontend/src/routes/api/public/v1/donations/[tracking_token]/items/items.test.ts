@@ -190,6 +190,51 @@ describe('PATCH /api/public/v1/donations/[token]/items', () => {
 			});
 		});
 
+		// Review #783 M2 — the edit has landed by now: the donor must hear it did, or a retry
+		// moves the quota at FastAPI a second time. A lost audit is logged, not swallowed.
+		describe('when the audit cannot be written', () => {
+			function auditAnswers(answer: () => Promise<unknown>) {
+				const base = vi.mocked(adminRaw).getMockImplementation()!;
+				vi.mocked(adminRaw).mockImplementation((path, method, body) =>
+					String(path).includes('_bulk_docs')
+						? (answer() as ReturnType<typeof adminRaw>)
+						: base(path, method, body)
+				);
+			}
+
+			it('logs a row CouchDB refused inside a 201', async () => {
+				couchHas(couchDoc('pending_review'));
+				fastapiOk({ status: 'verifying', auto_approved_lines: [0] });
+				auditAnswers(async () => ({
+					status: 201,
+					data: [{ id: 'audit:x', error: 'forbidden', reason: 'not allowed' }]
+				}));
+				const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+				const response = await call();
+
+				expect(response.status).toBe(200);
+				expect(logged).toHaveBeenCalledWith(
+					'donation auto-approve audit failed',
+					expect.anything()
+				);
+				logged.mockRestore();
+			});
+
+			it('still reports the edit when the audit request throws', async () => {
+				couchHas(couchDoc('pending_review'));
+				fastapiOk({ status: 'verifying', auto_approved_lines: [0] });
+				auditAnswers(() => Promise.reject(new Error('socket hang up')));
+				const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+				const response = await call();
+
+				expect(response.status).toBe(200);
+				expect((await response.json()).success).toBe(true);
+				logged.mockRestore();
+			});
+		});
+
 		it('writes no audit when nothing new was approved', async () => {
 			couchHas(couchDoc('pending_review'));
 			fastapiOk({ status: 'pending_review', auto_approved_lines: [] });
