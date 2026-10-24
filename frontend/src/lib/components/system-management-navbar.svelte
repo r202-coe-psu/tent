@@ -18,9 +18,19 @@
 	} from './system-management-navbar/static';
 	import * as Tooltip from '$lib/components/ui/tooltip';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
+	import {
+		SIDEBAR_COLLAPSED_KEYS,
+		readSidebarCollapsed,
+		writeSidebarCollapsed
+	} from './sidebar-collapsed-storage';
 
-	let collapsed = $state(false);
+	let collapsed = $state(readSidebarCollapsed(SIDEBAR_COLLAPSED_KEYS.systemManagement));
 	let mobileMenuOpen = $state(false);
+
+	function setCollapsed(next: boolean) {
+		collapsed = next;
+		writeSidebarCollapsed(SIDEBAR_COLLAPSED_KEYS.systemManagement, next);
+	}
 
 	const roles = $derived(authStore.user?.roles ?? []);
 	const isSA = $derived(isSystemAdmin(roles));
@@ -108,7 +118,7 @@
 				class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-sidebar-border bg-card text-xs text-muted-foreground shadow-sm hover:bg-muted {collapsed
 					? 'absolute top-6 -right-3 z-30'
 					: ''}"
-				onclick={() => (collapsed = !collapsed)}
+				onclick={() => setCollapsed(!collapsed)}
 				aria-label={collapsed ? 'ขยายแถบเมนู' : 'ย่อแถบเมนู'}
 			>
 				<ChevronLeft class="h-3 w-3 transition-transform {collapsed ? 'rotate-180' : ''}" />

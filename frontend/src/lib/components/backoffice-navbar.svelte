@@ -21,11 +21,12 @@
 		type BackofficeNavbarNode
 	} from './backoffice-navbar/static';
 	import {
-		readBackofficeSidebarCollapsed,
-		writeBackofficeSidebarCollapsed
-	} from './backoffice-navbar/sidebar-storage';
+		SIDEBAR_COLLAPSED_KEYS,
+		readSidebarCollapsed,
+		writeSidebarCollapsed
+	} from './sidebar-collapsed-storage';
 
-	let collapsed = $state(readBackofficeSidebarCollapsed());
+	let collapsed = $state(readSidebarCollapsed(SIDEBAR_COLLAPSED_KEYS.backoffice));
 	let mobileMenuOpen = $state(false);
 
 	const roles = $derived(authStore.user?.roles ?? []);
@@ -33,7 +34,7 @@
 
 	function setCollapsed(next: boolean) {
 		collapsed = next;
-		writeBackofficeSidebarCollapsed(next);
+		writeSidebarCollapsed(SIDEBAR_COLLAPSED_KEYS.backoffice, next);
 	}
 
 	function closeMobileMenu() {
