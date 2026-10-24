@@ -20,6 +20,7 @@ import {
 	isDonation,
 	isDonationSlot,
 	isStockTransfer,
+	TransferForbiddenError,
 	isTransferDestination,
 	stockBalance,
 	createReceiveEntry,
@@ -1002,6 +1003,7 @@ export class OperationsRemoteRepository implements OperationsRepository {
 			credentials: 'include',
 			headers: { Accept: 'application/json' }
 		});
+		if (res.status === 403) throw new TransferForbiddenError();
 		if (!res.ok) {
 			throw new Error(`Failed to list transfers: ${res.statusText}`);
 		}

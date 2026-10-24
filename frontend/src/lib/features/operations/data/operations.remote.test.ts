@@ -137,7 +137,8 @@ import {
 	createCampaign,
 	createReceiveEntry,
 	createStockLedger,
-	projectStockLotBalances
+	projectStockLotBalances,
+	TransferForbiddenError
 } from '../domain/operations';
 import { createStockLotReservation, makeLotReservationDocId } from '$lib/features/distribution';
 import { rankLotsForIssue } from '../domain/lot-priority';
@@ -1437,6 +1438,16 @@ describe('OperationsRemoteRepository — transfer via BFF (CR-059 Flow 1 / T-13)
 			expect.stringContaining('/api/back-office/transfer?'),
 			expect.objectContaining({ method: 'POST', credentials: 'include' })
 		);
+	});
+
+	it('throws TransferForbiddenError when the transfer API refuses the account (#571)', async () => {
+		fetchMock.mockResolvedValue({ ok: false, status: 403, statusText: 'Forbidden' });
+
+		const error = await repo.listTransfers().catch((e: unknown) => e);
+
+		expect(error).toBeInstanceOf(TransferForbiddenError);
+		// No `status`: the app query client would treat 401/403 + status as a session problem.
+		expect((error as { status?: unknown }).status).toBeUndefined();
 	});
 
 	it('lists transfer destinations from their own route, dropping malformed rows (#570)', async () => {
