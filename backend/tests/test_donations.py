@@ -2170,6 +2170,49 @@ async def test_lines_of_one_name_with_different_details_are_not_guessed(
     assert body["status"] == "pending_review"
 
 
+async def test_a_refused_campaign_line_of_a_shared_name_is_not_auto_approved(
+    client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    """Review #783 H1 — same as above with campaign lines: the one left holds quota, so
+    FR-2 alone approved the refused shirt and gave the booking its QR back."""
+    await _seed_counter("100", "item:shirt")
+    new_shirt = {
+        "item_id": "item:shirt",
+        "free_text": "เสื้อ",
+        "qty": "3",
+        "unit": "ตัว",
+        "condition": "ของใหม่",
+    }
+    used_shirt = {**new_shirt, "condition": "มือสอง"}
+    token = (await _create(client, auth_headers, [new_shirt, used_shirt]))["tracking_token"]
+    couch_items = [
+        {**new_shirt, "reserved_qty": "6", "review_status": "approved"},
+        {
+            **used_shirt,
+            "reserved_qty": "6",
+            "review_status": "rejected",
+            "review_reason_code": "damaged",
+            "review_reason": "ชำรุดเสียหาย",
+        },
+    ]
+
+    response = await client.patch(
+        f"/public/v1/donations/{token}/items",
+        headers=auth_headers,
+        json={
+            "items": [_as_edit_form(used_shirt)],
+            "current_items": couch_items,
+            "current_status": "verifying",
+        },
+    )
+
+    body = response.json()
+    assert response.status_code == 200, body
+    assert [i["review_status"] for i in body["items"]] == ["pending"]
+    assert body["auto_approved_lines"] == []
+    assert body["status"] == "pending_review"
+
+
 async def test_lines_of_one_name_with_the_same_details_keep_them(
     client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
 ) -> None:
