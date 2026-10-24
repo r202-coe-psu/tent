@@ -349,8 +349,8 @@ export const useCreateJobApplication = (queryClient: QueryClient) =>
  * SM reviews a `pending_review` application. `confirmed` consumes one job
  * slot (`job.slots_remaining -> slots_confirmed`); either decision moves the
  * application out of `pending_review`, changing the hub metrics
- * `pendingApproval` counter. Quota-changing — invalidate applications, jobs,
- * and hub metrics.
+ * `pendingApproval` counter, and approving creates the shift assignment.
+ * Quota-changing — invalidate applications, jobs, shift assignments, and hub metrics.
  */
 export const useReviewApplication = (queryClient: QueryClient) =>
 	createMutation(() => ({
@@ -366,6 +366,7 @@ export const useReviewApplication = (queryClient: QueryClient) =>
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: volunteerKeys.jobApplicationsAll() });
 			queryClient.invalidateQueries({ queryKey: volunteerKeys.jobsAll() });
+			queryClient.invalidateQueries({ queryKey: volunteerKeys.shiftAssignmentsAll() });
 			queryClient.invalidateQueries({ queryKey: volunteerKeys.hubMetrics() });
 		}
 	}));
