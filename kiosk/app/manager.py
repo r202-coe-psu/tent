@@ -9,6 +9,7 @@ import os
 import re
 import select
 import shutil
+import socket
 import time
 import traceback
 import urllib.parse
@@ -50,6 +51,10 @@ KIOSK_PRINT_PATH = "/api/v1/kiosk/print"
 # Per-machine hardware settings for the kiosk page (QR input, camera choice). Answered locally
 # like the print path — never forwarded to the server and never given the device credential.
 KIOSK_HARDWARE_PATH = "/api/v1/kiosk/hardware"
+# This machine's hostname and LAN IPs for the info panel; its own path so a slow DNS lookup can
+# never delay /hardware, which every page waits on to choose camera or reader.
+KIOSK_HOST_INFO_PATH = "/api/v1/kiosk/host-info"
+HOST_INFO_TIMEOUT_S = 2.0
 # Face check (see app/face): the page sends camera frames here and gets only a verdict or a hint
 # back. Answered locally - the server never sees a frame or an embedding. The one image that leaves
 # is the chip photo of a check-in whose face matched: handed to the page once with the verdict, so
@@ -93,7 +98,9 @@ USBMISC_SYSFS = Path("/sys/class/usbmisc")
 USB_DEV_DIR = Path("/dev/usb")
 # Paths this client answers itself; a request that is not a same-origin POST gets a local 404
 # so it never reaches the server (and its access log).
-LOCAL_ONLY_PATHS = frozenset({KIOSK_PRINT_PATH, KIOSK_HARDWARE_PATH}) | KIOSK_FACE_PATHS
+LOCAL_ONLY_PATHS = (
+    frozenset({KIOSK_PRINT_PATH, KIOSK_HARDWARE_PATH, KIOSK_HOST_INFO_PATH}) | KIOSK_FACE_PATHS
+)
 
 
 class BootstrapError(RuntimeError):
@@ -383,6 +390,9 @@ class ScannerClientManager:
         if same_origin_post and request_url.path == KIOSK_HARDWARE_PATH:
             await self._fulfill_hardware(route)
             return
+        if same_origin_post and request_url.path == KIOSK_HOST_INFO_PATH:
+            await self._fulfill_host_info(route)
+            return
         if same_origin_post and request_url.path in KIOSK_FACE_PATHS:
             await self._fulfill_face(route, request_url.path.removeprefix(KIOSK_FACE_PATH_PREFIX))
             return
@@ -422,6 +432,52 @@ class ScannerClientManager:
                 }
             ),
         )
+
+    async def _fulfill_host_info(self, route) -> None:
+        """Tell the kiosk page this machine's hostname and LAN IPs. The lookup may block on DNS, so
+        it runs off the event loop and gives up after HOST_INFO_TIMEOUT_S with empty info."""
+        try:
+            info = await asyncio.wait_for(
+                asyncio.to_thread(self._host_info), timeout=HOST_INFO_TIMEOUT_S
+            )
+        except Exception:
+            info = {"hostname": None, "ips": []}
+        await route.fulfill(
+            status=200,
+            content_type="application/json",
+            headers={"cache-control": "no-store"},
+            body=json.dumps(info),
+        )
+
+    def _host_info(self) -> Dict[str, Any]:
+        """This machine's hostname and LAN IPv4s for the kiosk info panel. The server only sees the
+        NAT address, so the page asks the machine. Any lookup that fails is skipped, never raised."""
+        try:
+            hostname: Optional[str] = socket.gethostname()
+        except Exception:
+            hostname = None
+        ips: list[str] = []
+        try:
+            configured_url = urllib.parse.urlsplit(self.tent_base_url)
+            port = configured_url.port or (443 if configured_url.scheme == "https" else 80)
+            # A UDP connect() only picks the outbound interface; no packet is sent.
+            probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            try:
+                probe.connect((configured_url.hostname or "", port))
+                ips.append(probe.getsockname()[0])
+            finally:
+                probe.close()
+        except Exception:
+            pass
+        try:
+            for info in socket.getaddrinfo(hostname or "", None, socket.AF_INET):
+                ips.append(info[4][0])
+        except Exception:
+            pass
+        return {
+            "hostname": hostname,
+            "ips": [ip for ip in dict.fromkeys(ips) if not ip.startswith("127.")],
+        }
 
     async def _grant_camera_permission(self, context) -> None:
         """Let the kiosk page open the camera without a permission prompt. The face check and the
