@@ -220,17 +220,57 @@ export async function warmShelterIndexes(code: string): Promise<void> {
 	}
 }
 
+/** Registry master document (`type: 'shelter'`) of `code`, or `undefined` when it is gone. */
+async function findShelterMaster(code: string): Promise<CouchDocument | undefined> {
+	const byCode = await couchReq(
+		'GET',
+		`/registry/_design/app/_view/by_code?key=${encodeURIComponent(JSON.stringify(code))}&include_docs=true`
+	);
+	return (byCode.data as { rows?: { doc?: CouchDocument }[] } | null)?.rows?.[0]?.doc;
+}
+
+/** A shelter storage point (CR-139): `common_areas.sub_storage[]` on the registry master. */
+export interface StoragePointSeed {
+	id: string;
+	name: string;
+	type?: 'general' | 'food_dry' | 'drinking_water' | 'medical_supplies';
+}
+
+/**
+ * Write `common_areas.sub_storage` onto the run's own `E2E Distribution …` registry master
+ * (admin API). Refuses any other shelter, so a typo can never touch SH001–SH004.
+ */
+export async function setShelterStoragePoints(
+	code: string,
+	points: readonly StoragePointSeed[]
+): Promise<void> {
+	const master = await findShelterMaster(code);
+	if (!master) throw new Error(`registry has no shelter ${code}`);
+	if (!String(master.name ?? '').startsWith(DISTRIBUTION_SHELTER_PREFIX)) {
+		throw new Error(`Refusing to edit non-E2E shelter ${code} ("${String(master.name)}")`);
+	}
+	const commonAreas = (master.common_areas ?? {}) as Record<string, unknown>;
+	await putDocument('registry', {
+		...master,
+		common_areas: {
+			...commonAreas,
+			sub_storage: points.map((point) => ({
+				id: point.id,
+				name: point.name,
+				type: point.type ?? 'general'
+			}))
+		},
+		updated_at: new Date().toISOString()
+	});
+}
+
 /**
  * Remove the run's shelter: close it, delete its registry master and database, and
  * take `shelter:{code}` back out of the central DBs' `_security`. Refuses any
  * shelter that is not an `E2E Distribution …` one.
  */
 export async function teardownDistributionShelter(code: string): Promise<void> {
-	const byCode = await couchReq(
-		'GET',
-		`/registry/_design/app/_view/by_code?key=${encodeURIComponent(JSON.stringify(code))}&include_docs=true`
-	);
-	const master = (byCode.data as { rows?: { doc?: CouchDocument }[] } | null)?.rows?.[0]?.doc;
+	const master = await findShelterMaster(code);
 	if (master) {
 		if (!String(master.name ?? '').startsWith(DISTRIBUTION_SHELTER_PREFIX)) {
 			throw new Error(`Refusing to tear down non-E2E shelter ${code} ("${String(master.name)}")`);
