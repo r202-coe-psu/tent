@@ -170,7 +170,7 @@
 
 {#if brokenItemNames}
 	<p
-		class="mb-4 rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-xs font-semibold text-destructive"
+		class="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-semibold text-amber-900"
 		role="alert"
 	>
 		ไม่ได้รวมในการตรวจนับ เพราะประวัติคลังคำนวณยอดรายล็อตไม่ได้: {brokenItemNames} — กรุณาแจ้งผู้ดูแลระบบ
