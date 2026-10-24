@@ -39,7 +39,10 @@ import type { CellValue } from 'exceljs';
  * into the shared app bundle via the feature barrel.
  */
 
-/** Optional master-data option labels (unused after CR-137; kept for call-site compat). */
+/**
+ * Active master items for free-text columns backed by a master, keyed by column
+ * `path` — documented on the README only (CR-186 FR-10: `medical_conditions`).
+ */
 export type TemplateMasters = Record<string, EnumChoice[]>;
 
 /** Optional generator behaviour — `withSample` pre-fills a realistic example. */
@@ -268,11 +271,17 @@ export async function buildPeopleTemplateBlob(
 			// member sheet's is the column people get wrong, so it keeps its own row.
 			if (col.isRef && sheet.kind === 'household') continue;
 			const colOptions = documentedOptions(col);
+			const masterOptions = col.path ? masters[col.path] : undefined;
 			let hint = col.hint;
 			if (colOptions) {
 				hint = colOptions.length
 					? `${col.hint} — ตัวเลือก: ${colOptions.join(' / ')}`
 					: `${col.hint} — (ยังไม่มีข้อมูลตั้งต้น)`;
+			} else if (masterOptions?.length) {
+				// CR-186 FR-10: free-text column backed by a master — list the active items.
+				hint =
+					`${col.hint} — รายการ: ${masterOptions.map((o) => o.label).join(' / ')} ` +
+					`(พิมพ์ตามรายการ หรือพิมพ์ชื่อโรคอื่นได้ คั่นด้วย ${MULTI_SEPARATOR})`;
 			}
 			readme.addRow({
 				sheet: sheet.name,

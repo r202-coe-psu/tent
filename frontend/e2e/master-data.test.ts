@@ -8,7 +8,8 @@
  *
  * Coverage:
  * [Guard]     non-manager is redirected away from the page
- * [Hub]       sidebar shows all 4 types; type query selects the panel
+ * [Hub]       sidebar shows all 5 types; type query selects the panel
+ * [Scope]     global-only chronic_disease is read-only in back-office (CR-186)
  * [CRUD]      add → edit round-trips through the mocked BFF
  * [Redirect]  legacy URLs land on the hub with the correct `?type=`
  */
@@ -18,10 +19,11 @@ import {
 	createCouchUser,
 	deleteCouchUser,
 	couchLogin,
+	seedSecurityQuestion,
 	SA_ROLES,
 	STAFF_SH001_ROLES
 } from './helpers/couch';
-import { injectSession, clearSession } from './helpers/login';
+import { injectSession, clearSession, routeBrowserCouchThroughApp } from './helpers/login';
 
 const BASE = 'http://localhost:4173';
 const API_PATTERN = '**/api/back-office/master-data**';
@@ -31,7 +33,8 @@ const SHORT_TITLES: Record<string, string> = {
 	vulnerable_group: 'กลุ่มเปราะบาง',
 	housing_type: 'ประเภทที่อยู่',
 	shelter_type: 'ประเภทศูนย์',
-	volunteer_skills: 'ทักษะอาสา'
+	volunteer_skills: 'ทักษะอาสา',
+	chronic_disease: 'โรคประจำตัว'
 };
 
 type MockItem = {
@@ -133,6 +136,9 @@ const sessions: Record<string, string> = {};
 test.beforeAll(async () => {
 	await createCouchUser(SA);
 	await createCouchUser(STAFF);
+	// Skip the CR-105 first-login force-setup gate so the hub itself is under test.
+	await seedSecurityQuestion(SA.name);
+	await seedSecurityQuestion(STAFF.name);
 	sessions[SA.name] = await couchLogin(SA.name, SA.password);
 	sessions[STAFF.name] = await couchLogin(STAFF.name, STAFF.password);
 });
@@ -140,6 +146,11 @@ test.beforeAll(async () => {
 test.afterAll(async () => {
 	await deleteCouchUser(SA.name);
 	await deleteCouchUser(STAFF.name);
+});
+
+// Back-office pages read the shelter list from CouchDB; the test build calls it cross-origin.
+test.beforeEach(async ({ page }) => {
+	await routeBrowserCouchThroughApp(page);
 });
 
 test.afterEach(async ({ page }) => {
@@ -154,13 +165,14 @@ test.describe('Master Data hub', () => {
 		await expect(page).toHaveURL(`${BASE}/portal`, { timeout: 8000 });
 	});
 
-	test('renders the hub with all 4 type sidebar entries', async ({ page }) => {
+	test('renders the hub with all 5 type sidebar entries', async ({ page }) => {
 		await injectSession(page, SA, sessions[SA.name]);
 		await mockMasterData(page, {
 			vulnerable_group: [],
 			housing_type: [],
 			shelter_type: [],
-			volunteer_skills: []
+			volunteer_skills: [],
+			chronic_disease: []
 		});
 		await page.goto(`${BASE}${HUB_PATH}`);
 
@@ -195,6 +207,32 @@ test.describe('Master Data hub', () => {
 		await expect(page.getByRole('dialog')).not.toBeVisible({ timeout: 8000 });
 		await expect(page.getByText('รายการทดสอบ Edited')).toBeVisible();
 		await expect(page.getByText('รายการทดสอบ Add')).not.toBeVisible();
+	});
+
+	test('back-office shows global-only chronic_disease read-only (CR-186)', async ({ page }) => {
+		await injectSession(page, SA, sessions[SA.name]);
+		await mockMasterData(page, {
+			chronic_disease: [
+				{ code: 'diabetes', label_th: 'เบาหวาน', label_en: 'Diabetes', is_default: false }
+			]
+		});
+		await page.goto(`${BASE}${HUB_PATH}?type=chronic_disease`);
+
+		await expect(page.getByText('เบาหวาน')).toBeVisible();
+		await expect(
+			page.getByText('ดูได้อย่างเดียว — ประเภทนี้จัดการที่ส่วนกลางเท่านั้น')
+		).toBeVisible();
+		await expect(page.getByRole('button', { name: 'เพิ่มรายการ' })).toHaveCount(0);
+		await expect(page.getByRole('button', { name: 'แก้ไข เบาหวาน' })).toHaveCount(0);
+	});
+
+	test('system management can add chronic_disease items (CR-186)', async ({ page }) => {
+		await injectSession(page, SA, sessions[SA.name]);
+		await mockMasterData(page, { chronic_disease: [] });
+		await page.goto(`${BASE}/system-management/master-data?type=chronic_disease`);
+
+		await expect(page.getByRole('button', { name: 'เพิ่มรายการ' }).first()).toBeVisible();
+		await expect(page.getByText('ดูได้อย่างเดียว')).toHaveCount(0);
 	});
 
 	test('legacy registration-config redirects to hub with vulnerable_group', async ({ page }) => {
