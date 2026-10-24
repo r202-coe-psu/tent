@@ -77,7 +77,12 @@ export const REGISTRY_SHELTERS = [
 		},
 		common_areas: {
 			central_kitchen: true,
-			parking_capacity: 50
+			parking_capacity: 50,
+			// CR-139 storage points. Fixed ids so reseeding keeps lot.storage_point_id references valid.
+			sub_storage: [
+				{ id: '01JSH001STRG00000000000001', name: 'คลังทั่วไป อาคาร 1', type: 'general' },
+				{ id: '01JSH001STRG00000000000002', name: 'คลังอาหารแห้ง', type: 'food_dry' }
+			]
 		},
 		key_personnel: {
 			eoc_liaison: {
@@ -282,6 +287,18 @@ async function deployRegistryDesign(): Promise<void> {
 	console.log('  ✓ registry: _design/app (by_code view) deployed');
 }
 
+type SeedStoragePoint = { id: string };
+
+/** Keeps storage points added through the shelter form; adds seed points whose id is missing. */
+function mergeSubStorage(
+	current: unknown,
+	seeded: readonly SeedStoragePoint[]
+): readonly SeedStoragePoint[] {
+	const existing = Array.isArray(current) ? (current as SeedStoragePoint[]) : [];
+	const ids = new Set(existing.map((point) => point.id));
+	return [...existing, ...seeded.filter((point) => !ids.has(point.id))];
+}
+
 export async function seedRegistry(master: MasterLookup): Promise<void> {
 	await ensureDb('registry');
 	await setSecurity('registry', {
@@ -335,6 +352,15 @@ export async function seedRegistry(master: MasterLookup): Promise<void> {
 		}
 
 		if (existing) {
+			if ('common_areas' in shelter && 'sub_storage' in shelter.common_areas) {
+				extras.common_areas = {
+					...shelter.common_areas,
+					sub_storage: mergeSubStorage(
+						(existing.common_areas as { sub_storage?: unknown } | undefined)?.sub_storage,
+						shelter.common_areas.sub_storage
+					)
+				};
+			}
 			await putDoc('registry', {
 				...existing,
 				name: shelter.name,
