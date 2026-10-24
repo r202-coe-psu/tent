@@ -216,4 +216,31 @@ describe('applyPublicVolunteerApplicationToShifts', () => {
 		]);
 		expect(result.volunteer_token).toBeUndefined();
 	});
+
+	it('applies under the surviving profile when the phone also has a merged one', async () => {
+		seedJob([shift('d1-am', '2026-09-20', '08:00', '12:00')]);
+		const profile = {
+			type: 'volunteer',
+			phone_hash: '0812345678-hash',
+			first_name: 'สมชาย',
+			last_name: 'ใจดี',
+			skills: [],
+			identity_verified: true,
+			tracking_token_hash: 'old-hash'
+		};
+		store.docs.set('volunteer:existing', { _id: 'volunteer:existing', ...profile });
+		store.docs.set('volunteer:merged', {
+			_id: 'volunteer:merged',
+			...profile,
+			merged_into: 'volunteer:existing',
+			status: 'inactive'
+		});
+
+		const result = await applyPublicVolunteerApplicationToShifts('job:target', person, [
+			{ shift_id: 'd1-am' }
+		]);
+
+		expect(result.results).toMatchObject([{ ok: true }]);
+		expect(applications()).toMatchObject([{ volunteer_id: 'volunteer:existing' }]);
+	});
 });

@@ -155,6 +155,26 @@ describe('preflightPublicVolunteerApplication', () => {
 		});
 	});
 
+	it('ignores a profile merged into another, so the phone still matches one person', async () => {
+		volunteersFound([
+			{ ...volunteer, _id: 'volunteer:merged', merged_into: volunteer._id, status: 'inactive' },
+			volunteer
+		]);
+
+		await expect(preflightPublicVolunteerApplication('job:target', input)).resolves.toMatchObject({
+			match: 'matched_one',
+			existing_profile: { volunteer_code: 'VOL-0001' }
+		});
+	});
+
+	it('reports no_match when the only profile for the phone was merged away', async () => {
+		volunteersFound([{ ...volunteer, merged_into: 'volunteer:elsewhere', status: 'inactive' }]);
+
+		await expect(preflightPublicVolunteerApplication('job:target', input)).resolves.toMatchObject({
+			match: 'no_match'
+		});
+	});
+
 	it('never writes', async () => {
 		volunteersFound([volunteer]);
 

@@ -82,6 +82,7 @@ type CouchVolunteer = {
 	identity_verification?: { status?: string; [key: string]: unknown };
 	skill_verifications?: Record<string, { status?: string; [key: string]: unknown }>;
 	email?: string;
+	merged_into?: string;
 	[key: string]: unknown;
 };
 
@@ -139,7 +140,11 @@ async function matchingVolunteers(dbName: string, phoneHash: string): Promise<Co
 		{ type: 'volunteer', phone_hash: phoneHash },
 		{ limit: 100 }
 	);
-	return docsFrom(result.data).filter((doc): doc is CouchVolunteer => typeof doc._id === 'string');
+	// A profile merged into another (migrate-volunteer-reapply) keeps its phone_hash but is no
+	// longer a person, so it must not make the phone look ambiguous.
+	return docsFrom(result.data).filter(
+		(doc): doc is CouchVolunteer => typeof doc._id === 'string' && !doc.merged_into
+	);
 }
 
 function bookingWindowFrom(doc: Record<string, unknown>): BookingWindow | null {
