@@ -54,6 +54,9 @@ from .schemas import (
     PersonIdOut,
     PetCreated,
     PetInput,
+    UnassignedKioskLookupRequest,
+    UnassignedKioskLookupResponse,
+    UnassignedKioskMember,
     UnassignedRegistrationClaimRequest,
     UnassignedRegistrationClaimResponse,
     UnassignedRegistrationCreateRequest,
@@ -738,6 +741,58 @@ class UnassignedRegistrationsUseCase:
             members_total=len(doc.members),
             members_claimed=members_claimed,
             claimed=members_claimed > 0 and doc.status in ("closed", "claimed"),
+        )
+
+    async def kiosk_lookup(
+        self, payload: UnassignedKioskLookupRequest
+    ) -> UnassignedKioskLookupResponse:
+        """Whole family of one registration for the kiosk (BFF, service secret) — no contact PII."""
+        try:
+            if payload.registration_id is not None:
+                doc = await UnassignedRegistration.get(payload.registration_id)
+            elif payload.evacuee_id is not None:
+                doc = await UnassignedRegistration.find_one(
+                    {"members.reserved_evacuee_id": payload.evacuee_id}
+                )
+            else:
+                doc = await UnassignedRegistration.find_one(
+                    {"open_person_id_numbers": normalize_national_id(payload.citizen_id or "")}
+                )
+        except (PyMongoError, ConnectionError, TimeoutError, OSError) as exc:
+            raise _mongo_unavailable("kiosk_lookup") from exc
+        if doc is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={
+                    "error": {
+                        "code": "NOT_FOUND",
+                        "message": "Unassigned Registration not found",
+                    }
+                },
+            )
+        citizen_id = normalize_national_id(payload.citizen_id) if payload.citizen_id else None
+        return UnassignedKioskLookupResponse(
+            registration_id=doc.id,
+            reserved_household_id=doc.reserved_household_id,
+            members=[
+                UnassignedKioskMember(
+                    reserved_evacuee_id=m.reserved_evacuee_id,
+                    first_name=m.first_name,
+                    last_name=m.last_name,
+                    gender=m.gender,
+                    age=m.age,
+                    status=m.status,
+                    claimed_shelter_code=m.claimed_shelter_code,
+                    matched=m.reserved_evacuee_id == payload.evacuee_id
+                    or (
+                        citizen_id is not None
+                        and m.status == "open"
+                        and m.person_id is not None
+                        and m.person_id.number == citizen_id
+                    ),
+                )
+                for m in doc.members
+            ],
         )
 
     async def get_review(self, registration_id: str) -> UnassignedRegistrationReviewResponse:

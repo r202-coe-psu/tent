@@ -435,6 +435,40 @@ class UnassignedRegistrationStatusResponse(BaseModel):
     claimed: bool
 
 
+class UnassignedKioskLookupRequest(BaseModel):
+    """Kiosk lookup key — exactly one of registration, citizen or evacuee id."""
+
+    registration_id: str | None = None
+    citizen_id: str | None = Field(default=None, pattern=r"^\d{13}$")
+    evacuee_id: str | None = Field(default=None, pattern=r"^evacuee:\S+$")
+
+    @model_validator(mode="after")
+    def _require_exactly_one_key(self) -> UnassignedKioskLookupRequest:
+        keys = (self.registration_id, self.citizen_id, self.evacuee_id)
+        if sum(key is not None for key in keys) != 1:
+            raise ValueError("exactly one of registration_id, citizen_id, evacuee_id is required")
+        return self
+
+
+class UnassignedKioskMember(BaseModel):
+    """Kiosk family row — unmasked name (the BFF masks); no phone / person id / photo."""
+
+    reserved_evacuee_id: str
+    first_name: str
+    last_name: str
+    gender: Literal["male", "female", "other"] | None
+    age: int | None
+    status: str
+    claimed_shelter_code: str | None
+    matched: bool
+
+
+class UnassignedKioskLookupResponse(BaseModel):
+    registration_id: str
+    reserved_household_id: str
+    members: list[UnassignedKioskMember]
+
+
 class UnassignedRegistrationStatsResponse(BaseModel):
     open_registrations: int
     open_members: int

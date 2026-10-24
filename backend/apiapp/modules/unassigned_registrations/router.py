@@ -28,6 +28,8 @@ from ...core.staff_session import (
 from ...infrastructure.gridfs import load_unassigned_photo, store_unassigned_photo
 from .couch_birth import CouchBirthPort, get_couch_birth
 from .schemas import (
+    UnassignedKioskLookupRequest,
+    UnassignedKioskLookupResponse,
     UnassignedPhotoUploadResponse,
     UnassignedRegistrationClaimRequest,
     UnassignedRegistrationClaimResponse,
@@ -165,6 +167,23 @@ async def match_unassigned_residence(
     """Service-to-service Residence match — ids + landmark/housing_type only (no member PII)."""
     response.headers["Cache-Control"] = "no-store"
     return await use_case.match_by_residence(payload)
+
+
+@router.post(
+    "/kiosk-lookup",
+    response_model=UnassignedKioskLookupResponse,
+    dependencies=[Depends(verify_external_secret)],
+)
+async def kiosk_lookup_unassigned_registration(
+    response: Response,
+    payload: UnassignedKioskLookupRequest,
+    use_case: UnassignedRegistrationsUseCase = Depends(  # noqa: B008
+        get_unassigned_registrations_use_case
+    ),
+) -> UnassignedKioskLookupResponse:
+    """Service-to-service kiosk lookup — whole family of one registration, no contact PII."""
+    response.headers["Cache-Control"] = "no-store"
+    return await use_case.kiosk_lookup(payload)
 
 
 @router.get(
