@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
+from tent_model.evacuee_consent import EvacueeConsent, WebConsentGrant
 from tent_model.public_shelter import GeoPoint
 
 # CR-148 — household animal cap (count per row and total per household).
@@ -67,6 +68,9 @@ class MemberInput(BaseModel):
     emergency_contact: EmergencyContactInput | None = None
     # GridFS ref `gfs:{oid}` from POST …/photos (#255).
     photo: str | None = None
+    # PDPA consent as the BFF planned it for this member; the use case binds giver + channel.
+    consent: WebConsentGrant
+    search_excluded: bool
 
     @field_validator("first_name", "last_name", "country", mode="before")
     @classmethod
@@ -98,6 +102,13 @@ class MemberInput(BaseModel):
             return self
         if not contact.name and not contact.phone and not contact.relation:
             self.emergency_contact = None
+        return self
+
+    @model_validator(mode="after")
+    def _basic_consent_hides_from_search(self) -> MemberInput:
+        """FR-31 — the claim's Couch VDU rejects a basic-mode evacuee that is searchable."""
+        if self.consent.mode == "basic" and not self.search_excluded:
+            raise ValueError("basic consent requires search_excluded")
         return self
 
     @model_validator(mode="after")
@@ -359,6 +370,9 @@ class OpenMemberHit(BaseModel):
     photo: str | None = None
     birth_year: int | None = None
     age: int | None = None
+    # FR-41: report-in asks consent only from members queued without it.
+    consent: EvacueeConsent | None = None
+    search_excluded: bool = False
 
 
 class UnassignedRegistrationSearchHit(BaseModel):

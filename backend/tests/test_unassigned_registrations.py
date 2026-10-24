@@ -5,10 +5,11 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 import pytest
+from consent_factory import consent_fields
 from httpx import AsyncClient
 from tent_model.public_person import PublicPerson
 from tent_model.public_shelter import PublicShelter
-from tent_model.unassigned_registration import UnassignedRegistration
+from tent_model.unassigned_registration import UNASSIGNED_SCHEMA_V, UnassignedRegistration
 
 from apiapp.core.config import Settings
 from apiapp.modules.shelter.use_case import FORECAST_OCCUPANCY_STATUSES
@@ -48,6 +49,7 @@ def _create_payload(**overrides: object) -> dict:
                 "country": "THAILAND",
                 "vulnerable_groups": [],
                 "special_needs": [],
+                **consent_fields(),
             }
         ],
         "household": {
@@ -111,11 +113,11 @@ async def test_create_persists_mongo_only_with_reserved_ids(
     assert reserved_evacuee.startswith("evacuee:")
     assert body["members"][0]["status"] == "open"
     assert body["registered_via"] == "web"
-    assert body["schema_v"] == 3
+    assert body["schema_v"] == UNASSIGNED_SCHEMA_V
 
     stored = await UnassignedRegistration.get(body["id"])
     assert stored is not None
-    assert stored.schema_v == 3
+    assert stored.schema_v == UNASSIGNED_SCHEMA_V
     assert stored.reserved_household_id == body["reserved_household_id"]
     assert stored.members[0].status == "open"
     assert stored.members[0].reserved_evacuee_id == reserved_evacuee
@@ -253,10 +255,10 @@ async def test_create_allows_homeless_with_landmark(
     assert stored.household.residence_landmark == "ใต้สะพาน"
 
 
-async def test_create_persists_expanded_public_fields_schema_v3(
+async def test_create_persists_expanded_public_fields(
     client: AsyncClient, auth_headers: dict[str, str]
 ) -> None:
-    """#255 fields + schema_v 3 (pet claim lifecycle / persistent family)."""
+    """#255 fields round-trip on the current schema_v."""
     payload = _create_payload()
     payload["members"][0].update(
         {
@@ -277,7 +279,7 @@ async def test_create_persists_expanded_public_fields_schema_v3(
     )
     assert response.status_code == 201
     body = response.json()
-    assert body["schema_v"] == 3
+    assert body["schema_v"] == UNASSIGNED_SCHEMA_V
     assert body["members"][0]["nickname"] == "ชาย"
     assert body["members"][0]["religion"] == "buddhist"
     assert body["members"][0]["emergency_contact"] == {
@@ -289,7 +291,7 @@ async def test_create_persists_expanded_public_fields_schema_v3(
 
     stored = await UnassignedRegistration.get(body["id"])
     assert stored is not None
-    assert stored.schema_v == 3
+    assert stored.schema_v == UNASSIGNED_SCHEMA_V
     assert stored.members[0].nickname == "ชาย"
     assert stored.members[0].emergency_contact is not None
     assert stored.members[0].emergency_contact.phone == "0899999999"
@@ -420,6 +422,7 @@ async def test_create_rejects_duplicate_open_national_id(
                     "country": "THAILAND",
                     "vulnerable_groups": [],
                     "special_needs": [],
+                    **consent_fields(),
                 }
             ]
         ),
@@ -453,6 +456,7 @@ async def test_create_rejects_duplicate_open_phone(
                     "country": "THAILAND",
                     "vulnerable_groups": [],
                     "special_needs": [],
+                    **consent_fields(),
                 }
             ]
         ),
@@ -479,6 +483,7 @@ async def test_create_rejects_duplicate_open_passport(
                     "country": "THAILAND",
                     "vulnerable_groups": [],
                     "special_needs": [],
+                    **consent_fields(),
                 }
             ]
         ),
@@ -499,6 +504,7 @@ async def test_create_rejects_duplicate_open_passport(
                     "country": "THAILAND",
                     "vulnerable_groups": [],
                     "special_needs": [],
+                    **consent_fields(),
                 }
             ]
         ),
@@ -526,6 +532,7 @@ async def test_create_rejects_duplicate_open_anonymous_id(
                     "country": "THAILAND",
                     "vulnerable_groups": [],
                     "special_needs": [],
+                    **consent_fields(),
                 }
             ]
         ),
@@ -546,6 +553,7 @@ async def test_create_rejects_duplicate_open_anonymous_id(
                     "country": "THAILAND",
                     "vulnerable_groups": [],
                     "special_needs": [],
+                    **consent_fields(),
                 }
             ]
         ),
@@ -571,6 +579,7 @@ async def test_create_rejects_duplicate_identity_within_same_request(
                     "country": "THAILAND",
                     "vulnerable_groups": [],
                     "special_needs": [],
+                    **consent_fields(),
                 },
                 {
                     "first_name": "สมหญิง",
@@ -581,6 +590,7 @@ async def test_create_rejects_duplicate_identity_within_same_request(
                     "country": "THAILAND",
                     "vulnerable_groups": [],
                     "special_needs": [],
+                    **consent_fields(),
                 },
             ]
         ),
@@ -607,6 +617,7 @@ async def test_create_mints_anonymous_id_when_card_type_anonymous(
                     "country": "THAILAND",
                     "vulnerable_groups": ["elderly"],
                     "special_needs": [],
+                    **consent_fields(),
                 }
             ]
         ),
@@ -635,6 +646,7 @@ async def test_create_rejects_anonymous_number_that_is_not_anon_ulid(
                     "country": "THAILAND",
                     "vulnerable_groups": [],
                     "special_needs": [],
+                    **consent_fields(),
                 }
             ]
         ),
@@ -721,6 +733,7 @@ async def test_residence_match_widens_across_villages_when_query_omits_village_n
                     "country": "THAILAND",
                     "vulnerable_groups": [],
                     "special_needs": [],
+                    **consent_fields(),
                 }
             ],
             household={**same_address, "village_no": "หมู่ 2"},
@@ -740,6 +753,7 @@ async def test_residence_match_widens_across_villages_when_query_omits_village_n
                     "country": "THAILAND",
                     "vulnerable_groups": [],
                     "special_needs": [],
+                    **consent_fields(),
                 }
             ],
             household={**same_address, "village_no": "หมู่ 9"},
@@ -797,6 +811,7 @@ async def test_residence_match_caps_at_25_results(
                         "country": "THAILAND",
                         "vulnerable_groups": [],
                         "special_needs": [],
+                        **consent_fields(),
                     }
                 ],
                 household=same_address,
@@ -830,6 +845,7 @@ async def test_residence_match_by_member_phone(
                     "country": "THAILAND",
                     "vulnerable_groups": [],
                     "special_needs": [],
+                    **consent_fields(),
                 },
                 {
                     "first_name": "สมหญิง",
@@ -840,6 +856,7 @@ async def test_residence_match_by_member_phone(
                     "country": "THAILAND",
                     "vulnerable_groups": [],
                     "special_needs": [],
+                    **consent_fields(),
                 },
             ],
             household={
@@ -889,6 +906,7 @@ async def test_residence_match_leaves_out_cancelled_members(
         "country": "THAILAND",
         "vulnerable_groups": [],
         "special_needs": [],
+        **consent_fields(),
     }
     payload = _create_payload()
     payload["members"] = [payload["members"][0], second]
@@ -933,6 +951,7 @@ async def test_residence_match_by_phone_finds_closed_document(
                     "country": "THAILAND",
                     "vulnerable_groups": [],
                     "special_needs": [],
+                    **consent_fields(),
                 }
             ]
         ),
@@ -988,6 +1007,7 @@ async def test_join_appends_members_into_existing_reserved_household(
                     "country": "THAILAND",
                     "vulnerable_groups": [],
                     "special_needs": [],
+                    **consent_fields(),
                 }
             ],
             household={
@@ -1051,6 +1071,7 @@ async def test_join_rejects_national_id_already_claimed_on_same_registration(
                     "country": "THAILAND",
                     "vulnerable_groups": [],
                     "special_needs": [],
+                    **consent_fields(),
                 }
             ],
         ),
@@ -1099,6 +1120,7 @@ async def test_join_rejects_phone_already_claimed_on_same_registration(
                     "country": "THAILAND",
                     "vulnerable_groups": [],
                     "special_needs": [],
+                    **consent_fields(),
                 }
             ],
         ),
@@ -1322,3 +1344,103 @@ async def test_join_rejects_pets_pushing_household_over_10(
     assert stored is not None
     assert len(stored.household.pets) == 9
     assert len(stored.members) == 1
+
+
+def _second_member(given_by: str = "household_member") -> dict:
+    return {
+        "first_name": "สมหญิง",
+        "last_name": "ใจดี",
+        "gender": "female",
+        "phone": "0899999999",
+        "person_id": {"cardType": "national_id", "number": "9876543210987"},
+        "country": "THAILAND",
+        "vulnerable_groups": [],
+        "special_needs": [],
+        **consent_fields(given_by=given_by),
+    }
+
+
+async def test_create_binds_consent_to_the_registrant(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    """FR-42 — channel web; giver id is the request's first member except for `self`."""
+    payload = _create_payload()
+    payload["members"].append(_second_member())
+    response = await client.post(
+        "/public/v1/unassigned-registrations", headers=auth_headers, json=payload
+    )
+    assert response.status_code == 201
+
+    stored = await UnassignedRegistration.get(response.json()["id"])
+    assert stored is not None
+    head, other = stored.members
+    assert head.consent is not None and other.consent is not None
+    assert head.consent.given_by == "self"
+    assert head.consent.giver_evacuee_id is None
+    assert other.consent.given_by == "household_member"
+    assert other.consent.giver_evacuee_id == head.reserved_evacuee_id
+    assert {head.consent.channel, other.consent.channel} == {"web"}
+    assert other.consent.given_at == "2026-10-25T03:15:00.000Z"
+
+
+async def test_join_binds_consent_to_the_joining_request_first_member(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    first = await client.post(
+        "/public/v1/unassigned-registrations", headers=auth_headers, json=_create_payload()
+    )
+    assert first.status_code == 201
+    join_payload = _create_payload(join_registration_id=first.json()["id"])
+    join_payload["members"] = [
+        _second_member(given_by="self"),
+        {
+            **_second_member(),
+            "first_name": "สมปอง",
+            "phone": "0877777777",
+            "person_id": {"cardType": "national_id", "number": "1111111111111"},
+        },
+    ]
+    join = await client.post(
+        "/public/v1/unassigned-registrations", headers=auth_headers, json=join_payload
+    )
+    assert join.status_code == 201
+
+    stored = await UnassignedRegistration.get(first.json()["id"])
+    assert stored is not None
+    _, joined_head, joined_other = stored.members
+    assert joined_other.consent is not None
+    assert joined_other.consent.giver_evacuee_id == joined_head.reserved_evacuee_id
+
+
+async def test_create_rejects_member_without_consent(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    payload = _create_payload()
+    del payload["members"][0]["consent"]
+    response = await client.post(
+        "/public/v1/unassigned-registrations", headers=auth_headers, json=payload
+    )
+    assert response.status_code == 422
+
+
+async def test_create_rejects_basic_consent_that_stays_searchable(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    """FR-31 — the claim VDU would refuse this evacuee, so the queue must too."""
+    payload = _create_payload()
+    payload["members"][0].update(consent_fields(search_excluded=False, mode="basic", health=False))
+    response = await client.post(
+        "/public/v1/unassigned-registrations", headers=auth_headers, json=payload
+    )
+    assert response.status_code == 422
+
+
+async def test_create_rejects_basic_consent_with_health(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    payload = _create_payload()
+    payload["members"][0].update(consent_fields(search_excluded=True, mode="basic", health=True))
+    response = await client.post(
+        "/public/v1/unassigned-registrations", headers=auth_headers, json=payload
+    )
+    assert response.status_code == 422

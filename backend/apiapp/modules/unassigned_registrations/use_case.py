@@ -9,6 +9,7 @@ from datetime import UTC, datetime
 
 from fastapi import HTTPException, status
 from pymongo.errors import DuplicateKeyError, PyMongoError
+from tent_model.evacuee_consent import bind_web_consent
 from tent_model.unassigned_registration import (
     UNASSIGNED_SCHEMA_V,
     EmergencyContact,
@@ -259,10 +260,18 @@ def _normalize_photo_ref(photo: str | None) -> str | None:
     return raw if raw.startswith("gfs:") else f"gfs:{raw}"
 
 
-def _build_member(input_member: MemberInput) -> UnassignedMember:
+def _build_members(inputs: list[MemberInput]) -> list[UnassignedMember]:
+    """One request's members; its first member is the registrant who gave consent (FR-42)."""
+    ids = [f"evacuee:{new_ulid()}" for _ in inputs]
+    return [_build_member(m, evacuee_id, ids[0]) for m, evacuee_id in zip(inputs, ids, strict=True)]
+
+
+def _build_member(
+    input_member: MemberInput, reserved_evacuee_id: str, registrant_evacuee_id: str
+) -> UnassignedMember:
     phone = normalize_phone(input_member.phone) if input_member.phone else None
     return UnassignedMember(
-        reserved_evacuee_id=f"evacuee:{new_ulid()}",
+        reserved_evacuee_id=reserved_evacuee_id,
         status="open",
         first_name=input_member.first_name,
         last_name=input_member.last_name or "",
@@ -280,6 +289,8 @@ def _build_member(input_member: MemberInput) -> UnassignedMember:
         disability_other_detail=input_member.disability_other_detail,
         emergency_contact=_normalize_emergency_contact(input_member.emergency_contact),
         photo=_normalize_photo_ref(input_member.photo),
+        consent=bind_web_consent(input_member.consent, registrant_evacuee_id),
+        search_excluded=input_member.search_excluded,
     )
 
 
@@ -397,7 +408,7 @@ class UnassignedRegistrationsUseCase:
             return await self._join_existing(payload, join_id)
 
         now = datetime.now(UTC)
-        members = [_build_member(m) for m in payload.members]
+        members = _build_members(payload.members)
         open_person_ids, open_phones = _open_identity_keys(members)
 
         household = UnassignedHousehold(
@@ -467,7 +478,7 @@ class UnassignedRegistrationsUseCase:
         _ensure_pet_ids(doc)
 
         existing_person_ids, existing_phones = _existing_identity_keys(doc.members)
-        new_members = [_build_member(m) for m in payload.members]
+        new_members = _build_members(payload.members)
         for member in new_members:
             key = (
                 member.person_id.number.strip().upper()
@@ -1464,6 +1475,8 @@ def _open_member_hit(member: UnassignedMember) -> OpenMemberHit:
         photo=member.photo,
         birth_year=member.birth_year,
         age=member.age,
+        consent=member.consent,
+        search_excluded=member.search_excluded,
     )
 
 
