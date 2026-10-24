@@ -167,9 +167,10 @@ describe('resolveMasterCodes', () => {
 	});
 });
 
-describe('isGlobalOnlyMasterType (CR-186)', () => {
-	it('is true for chronic_disease only', () => {
+describe('isGlobalOnlyMasterType (CR-186, CR-187)', () => {
+	it('is true for chronic_disease and allergy only', () => {
 		expect(isGlobalOnlyMasterType('chronic_disease')).toBe(true);
+		expect(isGlobalOnlyMasterType('allergy')).toBe(true);
 		expect(isGlobalOnlyMasterType('vulnerable_group')).toBe(false);
 		expect(isGlobalOnlyMasterType('housing_type')).toBe(false);
 	});

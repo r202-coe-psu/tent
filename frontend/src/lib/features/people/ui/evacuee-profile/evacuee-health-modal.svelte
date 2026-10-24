@@ -60,8 +60,9 @@
 		onSave: (data: EvacueeHealthEditData) => Promise<void>;
 	} = $props();
 
-	// CR-186 FR-7 — legacy โรคประจำตัว labels become master codes on save.
+	// CR-186 FR-7 / #648 — legacy โรคประจำตัว / ประวัติการแพ้ labels become master codes on save.
 	const chronicDiseaseQuery = useMasterData(() => 'chronic_disease');
+	const allergyQuery = useMasterData(() => 'allergy');
 
 	let careTrack = $state<CareTrack>('normal');
 	let conditions = $state('');
@@ -167,7 +168,10 @@
 					chronicDiseaseQuery.data?.items ?? []
 				),
 				medications: listFromText(validation.data.medications),
-				allergies: listFromText(validation.data.allergies),
+				allergies: resolveMasterCodes(
+					listFromText(validation.data.allergies),
+					allergyQuery.data?.items ?? []
+				),
 				generalSymptoms: validation.data.generalSymptoms,
 				vulnerableGroups: validation.data.vulnerableGroups,
 				specialNeeds: validation.data.specialNeeds,

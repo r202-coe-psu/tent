@@ -345,6 +345,23 @@ describe('PUT /api/back-office/master-data/[type]', () => {
 		expect(adminRawMock).not.toHaveBeenCalled();
 	});
 
+	it('rejects a shelter-local allergy write (CR-187)', async () => {
+		readMock.mockResolvedValue(null);
+
+		const res = await callPUT(
+			'allergy',
+			{
+				shelter_code: 'SH001',
+				items: [{ code: 'soy', label_th: 'ถั่วเหลือง', label_en: 'Soy', is_default: false }]
+			},
+			'?scope=shelter&shelter_code=SH001'
+		);
+
+		expect(res.status).toBe(422);
+		expect((await res.json()).error.code).toBe('VALIDATION');
+		expect(adminRawMock).not.toHaveBeenCalled();
+	});
+
 	it('allows a global write for a global-only type (CR-186)', async () => {
 		readMock.mockResolvedValue(null);
 

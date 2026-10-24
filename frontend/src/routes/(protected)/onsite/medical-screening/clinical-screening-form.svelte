@@ -64,9 +64,10 @@
 		isError: false
 	} as ReturnType<typeof useMedicals>);
 
-	// CR-186 FR-7 — map legacy โรคประจำตัว labels to master codes on save, even
-	// when the field itself was not touched.
+	// CR-186 FR-7 / #648 — map legacy โรคประจำตัว / ประวัติการแพ้ labels to master
+	// codes on save, even when the field itself was not touched.
 	const chronicDiseaseQuery = useMasterData(() => 'chronic_disease');
+	const allergyQuery = useMasterData(() => 'allergy');
 
 	// Section 1: Health History & Care Track (+ general symptoms)
 	let conditions = $state<string>('');
@@ -150,10 +151,7 @@
 				.split(',')
 				.map((s) => s.trim())
 				.filter(Boolean);
-			const allergiesArr = allergies
-				.split(',')
-				.map((s) => s.trim())
-				.filter(Boolean);
+			const allergiesArr = resolveMasterCodes(allergies.split(','), allergyQuery.data?.items ?? []);
 
 			await recordMutation.mutateAsync({
 				input: {

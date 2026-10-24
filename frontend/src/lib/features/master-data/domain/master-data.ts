@@ -64,12 +64,13 @@ export const VOLUNTEER_MASTER_TYPES = [
 ] as const satisfies readonly MasterDataType[];
 
 /**
- * Types with no shelter-local tier (CR-186): SA manages the global doc only and
+ * Types with no shelter-local tier (CR-186, CR-187): SA manages the global doc only and
  * the writer rejects `master_data:{type}:{shelter_code}`. Back-office shows them
  * read-only.
  */
 export const GLOBAL_ONLY_MASTER_TYPES = [
-	'chronic_disease'
+	'chronic_disease',
+	'allergy'
 ] as const satisfies readonly MasterDataType[];
 
 export function isGlobalOnlyMasterType(type: MasterDataType): boolean {
@@ -137,7 +138,8 @@ export const MASTER_DATA_TYPE_META: Record<MasterDataType, MasterDataTypeMeta> =
 	allergy: {
 		shortTitle: 'อาการแพ้',
 		title: 'อาการแพ้',
-		description: 'สิ่งที่แพ้ที่เจ้าหน้าที่เลือกได้ตอนคัดกรองสุขภาพ (พิมพ์เพิ่มเองได้ เช่น แพ้ยา)',
+		description:
+			'รายการสิ่งที่แพ้มาตรฐาน (ส่วนกลางเท่านั้น) ที่เจ้าหน้าที่เลือกได้ตอนคัดกรองสุขภาพ — สิ่งอื่น เช่น แพ้ยา พิมพ์เพิ่มเองได้',
 		affectedForms: ['คัดกรองสุขภาพ Station 2', 'แก้ไขข้อมูลสุขภาพในโปรไฟล์ผู้พักพิง']
 	}
 };

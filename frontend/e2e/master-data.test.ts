@@ -8,8 +8,8 @@
  *
  * Coverage:
  * [Guard]     non-manager is redirected away from the page
- * [Hub]       sidebar shows all 5 types; type query selects the panel
- * [Scope]     global-only chronic_disease is read-only in back-office (CR-186)
+ * [Hub]       sidebar shows all 6 types; type query selects the panel
+ * [Scope]     global-only chronic_disease / allergy are read-only in back-office (CR-186, CR-187)
  * [CRUD]      add → edit round-trips through the mocked BFF
  * [Redirect]  legacy URLs land on the hub with the correct `?type=`
  */
@@ -226,6 +226,21 @@ test.describe('Master Data hub', () => {
 		).toBeVisible();
 		await expect(page.getByRole('button', { name: 'เพิ่มรายการ' })).toHaveCount(0);
 		await expect(page.getByRole('button', { name: 'แก้ไข เบาหวาน' })).toHaveCount(0);
+	});
+
+	test('back-office shows global-only allergy read-only (CR-187)', async ({ page }) => {
+		await injectSession(page, SA, sessions[SA.name]);
+		await mockMasterData(page, {
+			allergy: [{ code: 'egg', label_th: 'ไข่', label_en: 'Egg', is_default: false }]
+		});
+		await page.goto(`${BASE}${HUB_PATH}?type=allergy`);
+
+		await expect(page.getByText('ไข่', { exact: true })).toBeVisible();
+		await expect(
+			page.getByText('ดูได้อย่างเดียว — ประเภทนี้จัดการที่ส่วนกลางเท่านั้น')
+		).toBeVisible();
+		await expect(page.getByRole('button', { name: 'เพิ่มรายการ' })).toHaveCount(0);
+		await expect(page.getByRole('button', { name: 'แก้ไข ไข่' })).toHaveCount(0);
 	});
 
 	test('system management can add chronic_disease items (CR-186)', async ({ page }) => {
