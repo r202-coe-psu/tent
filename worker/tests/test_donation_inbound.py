@@ -192,13 +192,29 @@ async def test_a_rerun_does_not_record_the_approval_twice():
 
 
 @pytest.mark.asyncio
-async def test_a_failed_audit_holds_the_donation_back_for_the_next_poll():
-    couch = _couch(bulk_rows=[{"id": "audit:x", "error": "forbidden", "reason": "no"}])
+async def test_a_failed_donation_write_records_no_approval():
+    """Review #783 M5 — an audit written ahead of a PUT that fails names lines the donor
+    may still change; the next poll's copy then hits the fixed id and is dropped."""
+    couch = _couch()
+    couch.put_doc = AsyncMock(side_effect=RuntimeError("couch down"))
     row = _buffer_row(items_declared=[_RICE], status="verifying")
 
     assert await _persist_donation(couch, row) is False  # type: ignore[arg-type]
-    couch.put_doc.assert_not_awaited()
+    couch.bulk_docs.assert_not_awaited()
     assert row.synced_to_couch is False
+
+
+@pytest.mark.asyncio
+async def test_a_failed_audit_is_logged_and_the_donation_still_lands(caplog):
+    """Once the donation is in CouchDB a re-run cannot PUT it again, so holding the row
+    back would strand it; the lost audit is logged instead."""
+    couch = _couch(bulk_rows=[{"id": "audit:x", "error": "forbidden", "reason": "no"}])
+    row = _buffer_row(items_declared=[_RICE], status="verifying")
+
+    assert await _persist_donation(couch, row) is True  # type: ignore[arg-type]
+    couch.put_doc.assert_awaited_once()
+    assert row.synced_to_couch is True
+    assert "auto-approve audit" in caplog.text
 
 
 def test_the_audit_id_is_stable_and_ulid_shaped():
