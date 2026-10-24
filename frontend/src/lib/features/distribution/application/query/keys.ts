@@ -33,6 +33,20 @@ export const distributionKeys = {
 	shiftReconciliation: (shelterCode: string, ticketId: string) =>
 		[...distributionKeys.shelter(shelterCode), 'shift_reconciliation', ticketId] as const,
 
+	/** Prefix of every v3 bulk return pool overview query (invalidation / live-query). */
+	bulkPoolsV3All: (shelterCode: string) =>
+		[...distributionKeys.shelter(shelterCode), 'bulk_pools_v3'] as const,
+	bulkPoolsV3: (shelterCode: string, options?: { includeCancelled?: boolean }) =>
+		[
+			...distributionKeys.bulkPoolsV3All(shelterCode),
+			{ includeCancelled: Boolean(options?.includeCancelled) }
+		] as const,
+	/** Prefix of every returner outstanding-loans query. */
+	returnerOutstandingLoansAll: (shelterCode: string) =>
+		[...distributionKeys.shelter(shelterCode), 'returner_outstanding_loans'] as const,
+	returnerOutstandingLoans: (shelterCode: string, returnerId: string) =>
+		[...distributionKeys.returnerOutstandingLoansAll(shelterCode), returnerId] as const,
+
 	returnOperationStates: (shelterCode: string) =>
 		[...distributionKeys.shelter(shelterCode), 'return_operation_state'] as const,
 	returnOperationState: (shelterCode: string, logId: string) =>

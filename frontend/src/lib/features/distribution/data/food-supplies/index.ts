@@ -22,6 +22,16 @@ export {
 } from './bulk-return-pool.repository';
 
 export {
+	BulkReturnPoolV3RemoteRepository,
+	type BulkReturnPoolV3Repository
+} from './bulk-return-pool-v3.repository';
+
+export {
+	BulkReturnEventRemoteRepository,
+	type BulkReturnEventRepository
+} from './bulk-return-event.repository';
+
+export {
 	BulkReturnClaimRemoteRepository,
 	type BulkReturnClaimRepository
 } from './bulk-return-claim.repository';

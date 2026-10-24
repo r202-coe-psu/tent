@@ -45,7 +45,17 @@ const {
 		closeShift: vi.fn(),
 		submitReturnsToWarehouse: vi.fn(),
 		receiveWarehouseReturns: vi.fn(),
-		completeTicket: vi.fn()
+		completeTicket: vi.fn(),
+		openBulkReturnPool: vi.fn(),
+		updateBulkReturnPoolHeader: vi.fn(),
+		addBulkReturnEntries: vi.fn(),
+		moveBulkReturnEntry: vi.fn(),
+		voidBulkReturnEntry: vi.fn(),
+		cancelBulkReturnPool: vi.fn(),
+		submitBulkReturnPool: vi.fn(),
+		receiveBulkReturnPool: vi.fn(),
+		getBulkReturnPoolOverview: vi.fn(),
+		listReturnerOutstandingLoans: vi.fn()
 	};
 
 	const mockRepoInstances = {
@@ -150,6 +160,22 @@ vi.mock('./food-supplies/reconciliation-workflow', () => ({
 	completeTicket: (...args: unknown[]) => mockWorkflowCalls.completeTicket(...args)
 }));
 
+vi.mock('./food-supplies/bulk-return-pool-v3-workflow', () => ({
+	openBulkReturnPool: (...args: unknown[]) => mockWorkflowCalls.openBulkReturnPool(...args),
+	updateBulkReturnPoolHeader: (...args: unknown[]) =>
+		mockWorkflowCalls.updateBulkReturnPoolHeader(...args),
+	addBulkReturnEntries: (...args: unknown[]) => mockWorkflowCalls.addBulkReturnEntries(...args),
+	moveBulkReturnEntry: (...args: unknown[]) => mockWorkflowCalls.moveBulkReturnEntry(...args),
+	voidBulkReturnEntry: (...args: unknown[]) => mockWorkflowCalls.voidBulkReturnEntry(...args),
+	cancelBulkReturnPool: (...args: unknown[]) => mockWorkflowCalls.cancelBulkReturnPool(...args),
+	submitBulkReturnPool: (...args: unknown[]) => mockWorkflowCalls.submitBulkReturnPool(...args),
+	receiveBulkReturnPool: (...args: unknown[]) => mockWorkflowCalls.receiveBulkReturnPool(...args),
+	getBulkReturnPoolOverview: (...args: unknown[]) =>
+		mockWorkflowCalls.getBulkReturnPoolOverview(...args),
+	listReturnerOutstandingLoans: (...args: unknown[]) =>
+		mockWorkflowCalls.listReturnerOutstandingLoans(...args)
+}));
+
 // Mock repositories
 vi.mock('../data/food-supplies', () => ({
 	RequisitionTicketRemoteRepository: vi.fn(function () {
@@ -201,6 +227,16 @@ import {
 	useBulkReturnPools,
 	useBulkReturnPool,
 	useBulkReturnClaim,
+	useBulkReturnPoolOverview,
+	useReturnerOutstandingLoans,
+	useOpenBulkReturnPool,
+	useUpdateBulkReturnPoolHeader,
+	useAddBulkReturnEntries,
+	useMoveBulkReturnEntry,
+	useVoidBulkReturnEntry,
+	useCancelBulkReturnPool,
+	useSubmitBulkReturnPool,
+	useReceiveBulkReturnPool,
 	useShiftReconciliation,
 	useCreateRequisitionTicket,
 	useAllocateTicketItems,
@@ -308,6 +344,40 @@ describe('Phase 5 Slice 5.0 — Distribution TanStack Query Layer', () => {
 				'SH001',
 				'bulk_claim',
 				'claim_01'
+			]);
+		});
+
+		it('generates bulk pool v3 and returner outstanding-loan keys distinct from legacy pools', () => {
+			expect(distributionKeys.bulkPoolsV3All('SH001')).toEqual([
+				'distribution',
+				'SH001',
+				'bulk_pools_v3'
+			]);
+			expect(distributionKeys.bulkPoolsV3('SH001')).toEqual([
+				'distribution',
+				'SH001',
+				'bulk_pools_v3',
+				{ includeCancelled: false }
+			]);
+			expect(distributionKeys.bulkPoolsV3('SH001', {})).toEqual(
+				distributionKeys.bulkPoolsV3('SH001', { includeCancelled: false })
+			);
+			expect(distributionKeys.bulkPoolsV3('SH001', { includeCancelled: true })).toEqual([
+				'distribution',
+				'SH001',
+				'bulk_pools_v3',
+				{ includeCancelled: true }
+			]);
+			expect(distributionKeys.returnerOutstandingLoansAll('SH001')).toEqual([
+				'distribution',
+				'SH001',
+				'returner_outstanding_loans'
+			]);
+			expect(distributionKeys.returnerOutstandingLoans('SH001', 'evacuee:e1')).toEqual([
+				'distribution',
+				'SH001',
+				'returner_outstanding_loans',
+				'evacuee:e1'
 			]);
 		});
 
@@ -452,6 +522,49 @@ describe('Phase 5 Slice 5.0 — Distribution TanStack Query Layer', () => {
 			expect(mockRepoInstances.claimRepo.get).toHaveBeenCalledWith('claim_99');
 		});
 
+		it('useBulkReturnPoolOverview binds to the overview workflow with ctx', async () => {
+			mockWorkflowCalls.getBulkReturnPoolOverview.mockResolvedValueOnce([{ pool: 'p' }]);
+			const options = { includeCancelled: true };
+			useBulkReturnPoolOverview(() => options);
+			expect(tracker.lastCreatedQuery?.enabled).toBe(true);
+			expect(tracker.lastCreatedQuery?.queryKey).toEqual(
+				distributionKeys.bulkPoolsV3('SH001', options)
+			);
+
+			const result = await tracker.lastCreatedQuery?.queryFn();
+			expect(result).toEqual([{ pool: 'p' }]);
+			expect(mockWorkflowCalls.getBulkReturnPoolOverview).toHaveBeenCalledWith(
+				options,
+				expect.objectContaining({ createdBy: 'staff_alice', shelterCode: 'SH001' })
+			);
+
+			useBulkReturnPoolOverview(undefined, undefined, false);
+			expect(tracker.lastCreatedQuery?.enabled).toBe(false);
+		});
+
+		it('useReturnerOutstandingLoans is enabled only for an evacuee:/volunteer: id', async () => {
+			useReturnerOutstandingLoans(() => null);
+			expect(tracker.lastCreatedQuery?.enabled).toBe(false);
+			useReturnerOutstandingLoans(() => 'person:p1');
+			expect(tracker.lastCreatedQuery?.enabled).toBe(false);
+			useReturnerOutstandingLoans(() => 'volunteer:v1');
+			expect(tracker.lastCreatedQuery?.enabled).toBe(true);
+
+			mockWorkflowCalls.listReturnerOutstandingLoans.mockResolvedValueOnce([{ _id: 'log_1' }]);
+			useReturnerOutstandingLoans(() => 'evacuee:e1');
+			expect(tracker.lastCreatedQuery?.enabled).toBe(true);
+			expect(tracker.lastCreatedQuery?.queryKey).toEqual(
+				distributionKeys.returnerOutstandingLoans('SH001', 'evacuee:e1')
+			);
+
+			const result = await tracker.lastCreatedQuery?.queryFn();
+			expect(result).toEqual([{ _id: 'log_1' }]);
+			expect(mockWorkflowCalls.listReturnerOutstandingLoans).toHaveBeenCalledWith(
+				'evacuee:e1',
+				expect.objectContaining({ createdBy: 'staff_alice', shelterCode: 'SH001' })
+			);
+		});
+
 		it('useShiftReconciliation calls workflow with authenticated context and respects conditional enabled', async () => {
 			useShiftReconciliation(() => '');
 			expect(tracker.lastCreatedQuery?.enabled).toBe(false);
@@ -528,6 +641,16 @@ describe('Phase 5 Slice 5.0 — Distribution TanStack Query Layer', () => {
 			logId: 'log_claim',
 			poolId: 'pool_claim'
 		};
+		const v3OpenInput = { name: 'Pool A' };
+		const v3Patch = { name: 'Pool B', notes: null };
+		const v3ReceiveInput = { items: [{ item_id: 'item:cot', received_qty: '2' }] };
+		const v3AddInput = {
+			pool_id: 'bulk_return_pool:X',
+			returner: { type: 'evacuee' as const, id: 'evacuee:e1' },
+			items: [{ item_id: 'item_1', qty: '2', operationUlid: stableOpUlid }]
+		};
+		const v3MoveInput = { entry_id: 'bulk_return_entry:E', to_pool_id: 'bulk_return_pool:Y' };
+		const v3VoidInput = { entry_id: 'bulk_return_entry:E' };
 		const closeOptions = { returned_quantities: { item_1: '5' } };
 		const receiveOptions = { verified_returned_quantities: { item_1: '5' } };
 
@@ -706,6 +829,87 @@ describe('Phase 5 Slice 5.0 — Distribution TanStack Query Layer', () => {
 				variables: { ticketId: 'tkt_done' },
 				args: ['tkt_done'],
 				invalidates: [distributionKeys.ticket('SH001', 'tkt_done')]
+			},
+			{
+				name: 'useOpenBulkReturnPool (v3): forwards input + caller operationUlid and invalidates v3 pools',
+				hook: useOpenBulkReturnPool,
+				workflow: 'openBulkReturnPool',
+				variables: { input: v3OpenInput, operationUlid: stableOpUlid },
+				args: [v3OpenInput, stableOpUlid],
+				invalidates: [distributionKeys.bulkPoolsV3All('SH001')]
+			},
+			{
+				name: 'useUpdateBulkReturnPoolHeader (v3): forwards poolId + patch and invalidates v3 pools',
+				hook: useUpdateBulkReturnPoolHeader,
+				workflow: 'updateBulkReturnPoolHeader',
+				variables: { poolId: 'bulk_return_pool:X', patch: v3Patch },
+				args: ['bulk_return_pool:X', v3Patch],
+				invalidates: [distributionKeys.bulkPoolsV3All('SH001')]
+			},
+			{
+				name: 'useAddBulkReturnEntries (v3): invalidates v3 pools, logs and outstanding loans',
+				hook: useAddBulkReturnEntries,
+				workflow: 'addBulkReturnEntries',
+				variables: { input: v3AddInput },
+				args: [v3AddInput],
+				invalidates: [
+					distributionKeys.bulkPoolsV3All('SH001'),
+					['distribution', 'SH001', 'logs'],
+					distributionKeys.returnerOutstandingLoansAll('SH001')
+				]
+			},
+			{
+				name: 'useMoveBulkReturnEntry (v3): invalidates v3 pools',
+				hook: useMoveBulkReturnEntry,
+				workflow: 'moveBulkReturnEntry',
+				variables: { input: v3MoveInput },
+				args: [v3MoveInput],
+				invalidates: [distributionKeys.bulkPoolsV3All('SH001')]
+			},
+			{
+				name: 'useVoidBulkReturnEntry (v3): invalidates v3 pools, logs and outstanding loans',
+				hook: useVoidBulkReturnEntry,
+				workflow: 'voidBulkReturnEntry',
+				variables: { input: v3VoidInput },
+				args: [v3VoidInput],
+				invalidates: [
+					distributionKeys.bulkPoolsV3All('SH001'),
+					['distribution', 'SH001', 'logs'],
+					distributionKeys.returnerOutstandingLoansAll('SH001')
+				]
+			},
+			{
+				name: 'useCancelBulkReturnPool (v3): forwards poolId + caller operationUlid and invalidates v3 pools',
+				hook: useCancelBulkReturnPool,
+				workflow: 'cancelBulkReturnPool',
+				variables: { poolId: 'bulk_return_pool:X', operationUlid: stableOpUlid },
+				args: ['bulk_return_pool:X', stableOpUlid],
+				invalidates: [distributionKeys.bulkPoolsV3All('SH001')]
+			},
+			{
+				name: 'useSubmitBulkReturnPool (v3): forwards poolId + caller operationUlid and invalidates v3 pools',
+				hook: useSubmitBulkReturnPool,
+				workflow: 'submitBulkReturnPool',
+				variables: { poolId: 'bulk_return_pool:X', operationUlid: stableOpUlid },
+				args: ['bulk_return_pool:X', stableOpUlid],
+				invalidates: [distributionKeys.bulkPoolsV3All('SH001')]
+			},
+			{
+				name: 'useReceiveBulkReturnPool (v3): forwards poolId + input + operationUlid, invalidates v3 pools and operations stock',
+				hook: useReceiveBulkReturnPool,
+				workflow: 'receiveBulkReturnPool',
+				variables: {
+					poolId: 'bulk_return_pool:X',
+					input: v3ReceiveInput,
+					operationUlid: stableOpUlid
+				},
+				args: ['bulk_return_pool:X', v3ReceiveInput, stableOpUlid],
+				invalidates: [
+					distributionKeys.bulkPoolsV3All('SH001'),
+					operationsKeys.stockLedgers(),
+					operationsKeys.ledger(),
+					operationsKeys.balance()
+				]
 			}
 		];
 
@@ -741,13 +945,23 @@ describe('Phase 5 Slice 5.0 — Distribution TanStack Query Layer', () => {
 			expect(keysForType('distribution_log')).toEqual([
 				['distribution', 'SH001', 'logs'],
 				['distribution', 'SH001', 'log'],
-				['distribution', 'SH001', 'shift_reconciliation']
+				['distribution', 'SH001', 'shift_reconciliation'],
+				['distribution', 'SH001', 'returner_outstanding_loans']
 			]);
 
 			expect(keysForType('bulk_return_pool')).toEqual([
 				['distribution', 'SH001', 'bulk_pools'],
-				['distribution', 'SH001', 'bulk_pool']
+				['distribution', 'SH001', 'bulk_pool'],
+				['distribution', 'SH001', 'bulk_pools_v3']
 			]);
+
+			for (const type of [
+				'bulk_return_entry',
+				'bulk_return_entry_move',
+				'bulk_return_entry_void'
+			]) {
+				expect(keysForType(type)).toEqual([['distribution', 'SH001', 'bulk_pools_v3']]);
+			}
 
 			expect(keysForType('bulk_return_claim')).toEqual([
 				['distribution', 'SH001', 'bulk_claims'],

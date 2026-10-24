@@ -16,7 +16,11 @@ import {
 	CapacityExceededError,
 	StockIntegrityError,
 	InsufficientPoolQuotaError,
-	ConcurrencyCollisionError
+	ConcurrencyCollisionError,
+	BulkReturnPoolNameTakenError,
+	BulkReturnPoolStateError,
+	BulkReturnPoolNotEmptyError,
+	BulkReturnPoolEmptyError
 } from '../../application/food-supplies/errors';
 import { ZodError } from 'zod';
 
@@ -60,6 +64,21 @@ export function formatDistributionError(
 	if (!err) return fallbackMessage;
 
 	// 1. Distribution Workflow Typed Errors
+	// Bulk return pool v3 errors first: NameTaken extends WorkflowValidationError, and these
+	// workflow messages are developer-facing English, so they always map to fixed Thai copy.
+	if (err instanceof BulkReturnPoolNameTakenError) {
+		return 'มีกองที่เปิดรับอยู่ใช้ชื่อนี้แล้ว กรุณาตั้งชื่ออื่น';
+	}
+	if (err instanceof BulkReturnPoolStateError) {
+		return 'กองนี้ไม่ได้อยู่ในสถานะเปิดรับ หรือกำลังถูกดำเนินการอยู่ จึงทำรายการนี้ไม่ได้ กรุณารีเฟรชแล้วตรวจสอบสถานะล่าสุด';
+	}
+	if (err instanceof BulkReturnPoolNotEmptyError) {
+		return 'ยกเลิกกองไม่ได้ เพราะยังมีรายการอยู่ในกอง กรุณาย้ายของออกให้หมดก่อน';
+	}
+	if (err instanceof BulkReturnPoolEmptyError) {
+		return 'กองนี้ไม่มีรายการ จึงเก็บเข้าคลังไม่ได้ กรุณายกเลิกกองแทน';
+	}
+
 	if (err instanceof WorkflowValidationError || err instanceof ReservationSemanticMismatchError) {
 		if (err.message && isUserFacingMessage(err.message) && !isUnsafeRawMessage(err.message)) {
 			return err.message;

@@ -43,6 +43,7 @@
 	import DistributionHistory from '../common/DistributionHistory.svelte';
 	import SuppliesDistributionCard from './SuppliesDistributionCard.svelte';
 	import LoanReturnCard from './LoanReturnCard.svelte';
+	import BulkReturnPoolBoard from '../bulk-return/BulkReturnPoolBoard.svelte';
 	import ShiftReconciliationCard from './ShiftReconciliationCard.svelte';
 	import TicketStatusBadge from '../common/TicketStatusBadge.svelte';
 	import { formatDistributionError } from '../model/distribution-error';
@@ -714,7 +715,12 @@
 		</div>
 	{:else if activeTab === 'returns'}
 		<!-- TAB 4: Loan Return Surface (Slice 5.5A + 5.5B) -->
-		<LoanReturnCard shelterCode={currentShelterCode} />
+		<div class="space-y-6">
+			<LoanReturnCard shelterCode={currentShelterCode} />
+			<!-- Bulk return pools (#659): the desk adds / moves / voids entries; open / edit / cancel stay
+				 hidden (canManage). -->
+			<BulkReturnPoolBoard shelterCode={currentShelterCode ?? undefined} />
+		</div>
 	{:else if activeTab === 'reconciliation'}
 		<!-- TAB 5: Shift Reconciliation & Close Surface -->
 		<div class="space-y-4">
