@@ -120,10 +120,14 @@
 		}))
 	);
 
-	// Detail follows the live overview row, so it refreshes after every mutation.
-	const selectedRow = $derived(
-		selectedPoolId ? (rows.find((row) => row.pool._id === selectedPoolId) ?? null) : null
-	);
+	// Detail follows the live overview row, so it refreshes after every mutation. Read `rows` on
+	// every run (no short-circuit): a run with no selection must still track `rows`, or later
+	// refetches never reach the open sheet (BRP-F10).
+	const selectedRow = $derived.by(() => {
+		const list = rows;
+		const id = selectedPoolId;
+		return id ? (list.find((row) => row.pool._id === id) ?? null) : null;
+	});
 
 	function dateTime(value: string): string {
 		return formatThaiDateTime(value) || value;
