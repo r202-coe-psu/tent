@@ -12,9 +12,10 @@ affects:
   - schema_v ไม่เปลี่ยน (unassigned_registrations คง schema_v 3; `claimed_by` ยังเป็น str)
   - backend/apiapp/modules/unassigned_registrations/{router,use_case,schemas}.py (service endpoints ใหม่)
   - frontend/src/lib/features/kiosk/server/kiosk-check-in.server.ts (lookup fallback + claim ก่อน check-in)
-  - frontend/src/routes/api/v1/kiosk/{lookup,check-in}/+server.ts
-  - frontend/src/lib/features/kiosk/ui/{qr-identity-scan,kiosk-pre-registered-check-in}.svelte
-  - frontend/src/lib/api/{fastapi.json,openapi.d.ts}
+  - frontend/src/routes/api/v1/kiosk/check-in/+server.ts
+  - frontend/src/lib/features/kiosk/ui/qr-identity-scan.svelte
+  - frontend/src/lib/api-specs/fastapi.json + frontend/src/lib/api/openapi.d.ts
+  - ไฟล์ใหม่ (สร้างใน PR โค้ด): frontend/src/lib/features/kiosk/server/kiosk-unassigned.server.ts, frontend/src/lib/features/kiosk/domain/kiosk-qr.ts, backend/tests/test_unassigned_registration_kiosk.py
 ---
 
 # Kiosk check-in claim ผู้ลงทะเบียนแบบไม่ระบุศูนย์
@@ -143,14 +144,15 @@ Prefix `/public/v1/unassigned-registrations` · Bearer `EXTERNAL_API_SECRET` ท
 
 ## Impact
 
-- **FastAPI:** 3 endpoints ตามตารางข้างบน (`router.py`, `schemas.py`, `use_case.py`) + `backend/tests/test_unassigned_registration_kiosk.py`; claim ของเจ้าหน้าที่ใช้ helper รูปภาพร่วม (`_load_couch_image_payload`) พฤติกรรมเดิม
-- **tent-model:** index `by_member_evacuee_id`
-- **Frontend:**
-  - `kiosk/server/kiosk-unassigned.server.ts` (ใหม่): เรียก FastAPI, เขียน Couch, revert
-  - `kiosk/server/kiosk-check-in.server.ts`: lookup fallback, gate schema รับ ULID เปล่า, `checkInSelectedMembers` options `deviceId` / `claimPersonId`
+- **FastAPI** (`backend/apiapp/modules/unassigned_registrations/`): 3 endpoints ตามตารางข้างบนใน `router.py`, `schemas.py`, `use_case.py`; claim ของเจ้าหน้าที่ใช้ helper รูปภาพร่วม (`_load_couch_image_payload`) พฤติกรรมเดิม
+  - test ใหม่: `backend/tests/test_unassigned_registration_kiosk.py` (ใหม่)
+- **tent-model** (`packages/tent-model/src/tent_model/unassigned_registration.py`): index `by_member_evacuee_id`
+- **Frontend** (`frontend/src/`):
+  - `lib/features/kiosk/server/kiosk-unassigned.server.ts` (ใหม่): เรียก FastAPI, เขียน Couch, revert
+  - `lib/features/kiosk/server/kiosk-check-in.server.ts`: lookup fallback, gate schema รับ ULID เปล่า, `checkInSelectedMembers` options `deviceId` / `claimPersonId`
   - `routes/api/v1/kiosk/check-in/+server.ts`: ส่ง `deviceId` จาก principal + map error codes
-  - `kiosk/domain/kiosk-qr.ts` (ใหม่) + `qr-identity-scan.svelte`: แยก QR evacuee / ตั๋วไม่ระบุศูนย์
-  - `api-specs/fastapi.json` + `api/openapi.d.ts` regenerate
+  - `lib/features/kiosk/domain/kiosk-qr.ts` (ใหม่) + `lib/features/kiosk/ui/qr-identity-scan.svelte`: แยก QR evacuee / ตั๋วไม่ระบุศูนย์
+  - `lib/api-specs/fastapi.json` + `lib/api/openapi.d.ts` regenerate
 - **ไม่เปลี่ยน:** body ของ kiosk lookup/check-in, หน้าเลือกสมาชิก, env / secret
 - **Docs (หลัง approve):** `schema.md` §9.5 Claim rule + `claimed_by`
 
