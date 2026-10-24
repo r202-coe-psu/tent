@@ -28,6 +28,12 @@ from ...core.staff_session import (
 from ...infrastructure.gridfs import load_unassigned_photo, store_unassigned_photo
 from .couch_birth import CouchBirthPort, get_couch_birth
 from .schemas import (
+    UnassignedKioskLookupRequest,
+    UnassignedKioskLookupResponse,
+    UnassignedKioskPrepareRequest,
+    UnassignedKioskPrepareResponse,
+    UnassignedKioskRevertRequest,
+    UnassignedKioskRevertResponse,
     UnassignedPhotoUploadResponse,
     UnassignedRegistrationClaimRequest,
     UnassignedRegistrationClaimResponse,
@@ -165,6 +171,59 @@ async def match_unassigned_residence(
     """Service-to-service Residence match — ids + landmark/housing_type only (no member PII)."""
     response.headers["Cache-Control"] = "no-store"
     return await use_case.match_by_residence(payload)
+
+
+@router.post(
+    "/kiosk-lookup",
+    response_model=UnassignedKioskLookupResponse,
+    dependencies=[Depends(verify_external_secret)],
+)
+async def kiosk_lookup_unassigned_registration(
+    response: Response,
+    payload: UnassignedKioskLookupRequest,
+    use_case: UnassignedRegistrationsUseCase = Depends(  # noqa: B008
+        get_unassigned_registrations_use_case
+    ),
+) -> UnassignedKioskLookupResponse:
+    """Service-to-service kiosk lookup — whole family of one registration, no contact PII."""
+    response.headers["Cache-Control"] = "no-store"
+    return await use_case.kiosk_lookup(payload)
+
+
+@router.post(
+    "/{registration_id}/kiosk-claim/prepare",
+    response_model=UnassignedKioskPrepareResponse,
+    dependencies=[Depends(verify_external_secret)],
+)
+async def kiosk_prepare_unassigned_claim(
+    registration_id: str,
+    response: Response,
+    payload: UnassignedKioskPrepareRequest,
+    use_case: UnassignedRegistrationsUseCase = Depends(  # noqa: B008
+        get_unassigned_registrations_use_case
+    ),
+) -> UnassignedKioskPrepareResponse:
+    """Kiosk claim step 1 — mark members claimed and return Couch docs for the BFF to write."""
+    response.headers["Cache-Control"] = "no-store"
+    return await use_case.kiosk_prepare(registration_id, payload)
+
+
+@router.post(
+    "/{registration_id}/kiosk-claim/revert",
+    response_model=UnassignedKioskRevertResponse,
+    dependencies=[Depends(verify_external_secret)],
+)
+async def kiosk_revert_unassigned_claim(
+    registration_id: str,
+    response: Response,
+    payload: UnassignedKioskRevertRequest,
+    use_case: UnassignedRegistrationsUseCase = Depends(  # noqa: B008
+        get_unassigned_registrations_use_case
+    ),
+) -> UnassignedKioskRevertResponse:
+    """Kiosk claim rollback — reopen members this kiosk marked when the Couch write failed."""
+    response.headers["Cache-Control"] = "no-store"
+    return await use_case.kiosk_revert(registration_id, payload)
 
 
 @router.get(
