@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import logging
 import re
 from dataclasses import dataclass
@@ -54,9 +55,12 @@ from .schemas import (
     PersonIdOut,
     PetCreated,
     PetInput,
+    UnassignedKioskImage,
     UnassignedKioskLookupRequest,
     UnassignedKioskLookupResponse,
     UnassignedKioskMember,
+    UnassignedKioskPrepareRequest,
+    UnassignedKioskPrepareResponse,
     UnassignedRegistrationClaimRequest,
     UnassignedRegistrationClaimResponse,
     UnassignedRegistrationCreateRequest,
@@ -1115,38 +1119,17 @@ class UnassignedRegistrationsUseCase:
         image_payloads: list[CouchImagePayload] = []
 
         async def _append_gridfs_image(photo_ref: str, *, label: str) -> str | None:
-            loaded = await load_unassigned_photo(photo_ref)
-            if loaded is None:
-                logger.warning(
-                    "Unassigned claim: GridFS photo missing for %s (%s)",
-                    label,
-                    photo_ref,
-                )
-                return None
-            image_id = f"image:{new_ulid()}"
-            image_doc = build_couch_image(
-                image_id=image_id,
+            payload = await _load_couch_image_payload(
+                photo_ref,
+                label=label,
                 shelter_code=shelter_code,
                 actor=session.name,
                 now=now,
-                filename=loaded.filename,
-                content_type=loaded.content_type,
-                width=loaded.width or 0,
-                height=loaded.height or 0,
-                original_size=loaded.original_size or len(loaded.full_bytes),
-                compressed_size=loaded.compressed_size or len(loaded.full_bytes),
-                thumbnail_size=loaded.thumbnail_size
-                or len(loaded.thumb_bytes or loaded.full_bytes),
             )
-            image_payloads.append(
-                CouchImagePayload(
-                    doc=image_doc,
-                    full_bytes=loaded.full_bytes,
-                    thumb_bytes=loaded.thumb_bytes or loaded.full_bytes,
-                    content_type=loaded.content_type,
-                )
-            )
-            return image_id
+            if payload is None:
+                return None
+            image_payloads.append(payload)
+            return payload.doc["_id"]
 
         for member in claim_targets:
             if not member.photo:
@@ -1242,6 +1225,204 @@ class UnassignedRegistrationsUseCase:
             remaining_open=[_open_member_hit(m) for m in remaining_members],
             remaining_open_pets=[_open_pet_hit(p) for p in remaining_pets],
         )
+
+    async def kiosk_prepare(
+        self,
+        registration_id: str,
+        payload: UnassignedKioskPrepareRequest,
+    ) -> UnassignedKioskPrepareResponse:
+        """Kiosk claim step 1 — mark members, return Couch docs (FastAPI never writes Couch)."""
+        shelter_code = payload.shelter_code
+        actor = f"kiosk:{payload.device_id}"
+        member_ids = list(dict.fromkeys(payload.member_ids))
+        try:
+            doc = await UnassignedRegistration.get(registration_id)
+        except (PyMongoError, ConnectionError, TimeoutError, OSError) as exc:
+            raise _mongo_unavailable("kiosk_prepare") from exc
+        if doc is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={
+                    "error": {
+                        "code": "NOT_FOUND",
+                        "message": "Unassigned Registration not found",
+                    }
+                },
+            )
+
+        by_id = {m.reserved_evacuee_id: m for m in doc.members}
+        if any(mid not in by_id for mid in member_ids):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={
+                    "error": {
+                        "code": "MEMBER_NOT_FOUND",
+                        "message": "One or more member ids are not on this registration",
+                    }
+                },
+            )
+        if payload.required_person_id is not None:
+            wanted = {
+                payload.required_person_id.strip().upper(),
+                normalize_national_id(payload.required_person_id),
+            }
+            if not any(
+                m.person_id and (m.person_id.number or "").strip().upper() in wanted
+                for m in doc.members
+            ):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail={
+                        "error": {
+                            "code": "PERSON_MISMATCH",
+                            "message": "No member of this registration has that person id",
+                        }
+                    },
+                )
+        targets = [by_id[mid] for mid in member_ids]
+        elsewhere = [
+            m.reserved_evacuee_id
+            for m in targets
+            if m.status == "claimed" and m.claimed_shelter_code != shelter_code
+        ]
+        if elsewhere:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "error": {
+                        "code": "ALREADY_CLAIMED",
+                        "message": "One or more members were already claimed elsewhere",
+                        "member_ids": elsewhere,
+                    }
+                },
+            )
+        cancelled = [m.reserved_evacuee_id for m in targets if m.status == "cancelled"]
+        if cancelled:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "error": {
+                        "code": "MEMBER_NOT_OPEN",
+                        "message": "Cancelled members cannot be claimed",
+                        "member_ids": cancelled,
+                    }
+                },
+            )
+        to_mark = [m for m in targets if m.status == "open"]
+        now = datetime.now(UTC)
+
+        mark_ids = [m.reserved_evacuee_id for m in to_mark]
+        mark_id_set = set(mark_ids)
+        remaining_members = [
+            m
+            for m in doc.members
+            if m.status == "open" and m.reserved_evacuee_id not in mark_id_set
+        ]
+        remaining_pets = [p for p in (doc.household.pets or []) if p.is_open()]
+        next_open_ids, next_open_phones = _open_identity_keys(remaining_members)
+        if mark_ids and not await _atomic_mark_claimed(
+            ClaimMarkParams(
+                registration_id=doc.id,
+                member_ids=mark_ids,
+                pet_ids=[],
+                shelter_code=shelter_code,
+                actor=actor,
+                claimed_at=now,
+                open_person_id_numbers=next_open_ids,
+                open_phones=next_open_phones,
+                document_status="open" if remaining_members or remaining_pets else "closed",
+            )
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "error": {
+                        "code": "ALREADY_CLAIMED",
+                        "message": "One or more members were already claimed",
+                    }
+                },
+            )
+
+        photo_by_member: dict[str, str] = {}
+        images: list[UnassignedKioskImage] = []
+        for member in targets:
+            if not member.photo:
+                continue
+            image = await _load_couch_image_payload(
+                member.photo,
+                label=member.reserved_evacuee_id,
+                shelter_code=shelter_code,
+                actor=actor,
+                now=now,
+            )
+            if image is None:
+                continue
+            photo_by_member[member.reserved_evacuee_id] = image.doc["_id"]
+            images.append(
+                UnassignedKioskImage(
+                    doc=image.doc,
+                    full_b64=base64.b64encode(image.full_bytes).decode("ascii"),
+                    thumb_b64=base64.b64encode(image.thumb_bytes).decode("ascii"),
+                    content_type=image.content_type,
+                )
+            )
+
+        return UnassignedKioskPrepareResponse(
+            registration_id=doc.id,
+            shelter_code=shelter_code,
+            household=build_couch_household(doc, targets[0], shelter_code, actor, now),
+            evacuees=[
+                build_couch_evacuee(
+                    member,
+                    doc.reserved_household_id,
+                    shelter_code,
+                    actor,
+                    now,
+                    doc,
+                    photo=photo_by_member.get(member.reserved_evacuee_id),
+                )
+                for member in targets
+            ],
+            images=images,
+        )
+
+
+async def _load_couch_image_payload(
+    photo_ref: str,
+    *,
+    label: str,
+    shelter_code: str,
+    actor: str,
+    now: datetime,
+) -> CouchImagePayload | None:
+    """GridFS photo → Couch `image:{ulid}` doc + bytes; None when the GridFS row is gone."""
+    loaded = await load_unassigned_photo(photo_ref)
+    if loaded is None:
+        logger.warning(
+            "Unassigned claim: GridFS photo missing for %s (%s)",
+            label,
+            photo_ref,
+        )
+        return None
+    image_doc = build_couch_image(
+        image_id=f"image:{new_ulid()}",
+        shelter_code=shelter_code,
+        actor=actor,
+        now=now,
+        filename=loaded.filename,
+        content_type=loaded.content_type,
+        width=loaded.width or 0,
+        height=loaded.height or 0,
+        original_size=loaded.original_size or len(loaded.full_bytes),
+        compressed_size=loaded.compressed_size or len(loaded.full_bytes),
+        thumbnail_size=loaded.thumbnail_size or len(loaded.thumb_bytes or loaded.full_bytes),
+    )
+    return CouchImagePayload(
+        doc=image_doc,
+        full_bytes=loaded.full_bytes,
+        thumb_bytes=loaded.thumb_bytes or loaded.full_bytes,
+        content_type=loaded.content_type,
+    )
 
 
 def _resolve_claim_shelter(session: StaffSession, requested: str | None) -> str:

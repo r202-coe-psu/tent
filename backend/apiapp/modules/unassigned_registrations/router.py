@@ -30,6 +30,8 @@ from .couch_birth import CouchBirthPort, get_couch_birth
 from .schemas import (
     UnassignedKioskLookupRequest,
     UnassignedKioskLookupResponse,
+    UnassignedKioskPrepareRequest,
+    UnassignedKioskPrepareResponse,
     UnassignedPhotoUploadResponse,
     UnassignedRegistrationClaimRequest,
     UnassignedRegistrationClaimResponse,
@@ -184,6 +186,24 @@ async def kiosk_lookup_unassigned_registration(
     """Service-to-service kiosk lookup — whole family of one registration, no contact PII."""
     response.headers["Cache-Control"] = "no-store"
     return await use_case.kiosk_lookup(payload)
+
+
+@router.post(
+    "/{registration_id}/kiosk-claim/prepare",
+    response_model=UnassignedKioskPrepareResponse,
+    dependencies=[Depends(verify_external_secret)],
+)
+async def kiosk_prepare_unassigned_claim(
+    registration_id: str,
+    response: Response,
+    payload: UnassignedKioskPrepareRequest,
+    use_case: UnassignedRegistrationsUseCase = Depends(  # noqa: B008
+        get_unassigned_registrations_use_case
+    ),
+) -> UnassignedKioskPrepareResponse:
+    """Kiosk claim step 1 — mark members claimed and return Couch docs for the BFF to write."""
+    response.headers["Cache-Control"] = "no-store"
+    return await use_case.kiosk_prepare(registration_id, payload)
 
 
 @router.get(

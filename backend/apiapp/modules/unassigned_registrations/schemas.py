@@ -469,6 +469,32 @@ class UnassignedKioskLookupResponse(BaseModel):
     members: list[UnassignedKioskMember]
 
 
+class UnassignedKioskPrepareRequest(BaseModel):
+    """Kiosk claim prepare — mark members, return Couch docs for the BFF to write."""
+
+    shelter_code: str = Field(min_length=1)
+    device_id: str = Field(min_length=1)
+    member_ids: list[str] = Field(min_length=1, max_length=20)
+    required_person_id: str | None = None
+
+
+class UnassignedKioskImage(BaseModel):
+    """Couch image doc + base64 attachment bytes (the BFF writes them to Couch)."""
+
+    doc: dict
+    full_b64: str
+    thumb_b64: str
+    content_type: str
+
+
+class UnassignedKioskPrepareResponse(BaseModel):
+    registration_id: str
+    shelter_code: str
+    household: dict
+    evacuees: list[dict]
+    images: list[UnassignedKioskImage]
+
+
 class UnassignedRegistrationStatsResponse(BaseModel):
     open_registrations: int
     open_members: int

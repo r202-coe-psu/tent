@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+import base64
 from datetime import UTC, datetime
 
+import pytest
 from httpx import AsyncClient
 from tent_model.unassigned_registration import (
     PersonId,
     UnassignedHousehold,
     UnassignedMember,
+    UnassignedPet,
     UnassignedRegistration,
 )
 
@@ -173,3 +176,245 @@ async def test_kiosk_lookup_members_expose_no_contact_or_identity_fields(
     assert response.status_code == 200
     keys = {key for member in response.json()["members"] for key in member}
     assert keys.isdisjoint({"phone", "person_id", "photo"})
+
+
+_PREPARE_URL = "/public/v1/unassigned-registrations/{registration_id}/kiosk-claim/prepare"
+
+
+async def _prepare(
+    client: AsyncClient,
+    headers: dict[str, str],
+    registration_id: str,
+    **body: object,
+):
+    payload = {"shelter_code": "SH001", "device_id": "kiosk-7", **body}
+    return await client.post(
+        _PREPARE_URL.format(registration_id=registration_id), json=payload, headers=headers
+    )
+
+
+async def _lookup_members(
+    client: AsyncClient, headers: dict[str, str], registration_id: str
+) -> dict[str, tuple[str, str | None]]:
+    response = await client.post(_URL, json={"registration_id": registration_id}, headers=headers)
+    assert response.status_code == 200
+    return {
+        m["reserved_evacuee_id"]: (m["status"], m["claimed_shelter_code"])
+        for m in response.json()["members"]
+    }
+
+
+async def test_kiosk_prepare_returns_couch_docs_and_claims_only_the_selected_member(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    doc = await _seed_family()
+    selected, other_open, _ = (m.reserved_evacuee_id for m in doc.members)
+
+    response = await _prepare(client, auth_headers, doc.id, member_ids=[selected])
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["registration_id"] == doc.id
+    assert body["shelter_code"] == "SH001"
+    assert body["household"]["_id"] == doc.reserved_household_id
+    assert [e["_id"] for e in body["evacuees"]] == [selected]
+    evacuee = body["evacuees"][0]
+    assert evacuee["shelter_code"] == "SH001"
+    assert evacuee["household_id"] == doc.reserved_household_id
+    assert evacuee["current_stay"]["status"] == "pre_registered"
+    members = await _lookup_members(client, auth_headers, doc.id)
+    assert members[selected] == ("claimed", "SH001")
+    assert members[other_open] == ("open", None)
+
+
+async def test_kiosk_prepare_stamps_the_kiosk_device_as_actor(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    doc = await _seed_family()
+    selected = doc.members[0].reserved_evacuee_id
+
+    response = await _prepare(client, auth_headers, doc.id, member_ids=[selected])
+
+    assert response.status_code == 200
+    assert response.json()["evacuees"][0]["created_by"] == "kiosk:kiosk-7"
+
+
+async def test_kiosk_prepare_returns_member_photo_as_couch_image_with_bytes(
+    client: AsyncClient, auth_headers: dict[str, str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from apiapp.infrastructure.gridfs import LoadedUnassignedPhoto
+    from apiapp.modules.unassigned_registrations import use_case as use_case_module
+
+    async def fake_load(photo_id: str) -> LoadedUnassignedPhoto | None:
+        if photo_id != "gfs:507f1f77bcf86cd799439011":
+            return None
+        return LoadedUnassignedPhoto(
+            full_bytes=b"face-full",
+            thumb_bytes=b"face-thumb",
+            content_type="image/webp",
+            filename="face.webp",
+            width=640,
+            height=480,
+            original_size=2000,
+            compressed_size=900,
+            thumbnail_size=300,
+        )
+
+    monkeypatch.setattr(use_case_module, "load_unassigned_photo", fake_load)
+    doc = await _seed_family()
+    selected = doc.members[0].reserved_evacuee_id
+
+    response = await _prepare(client, auth_headers, doc.id, member_ids=[selected])
+
+    assert response.status_code == 200
+    body = response.json()
+    [image] = body["images"]
+    assert image["doc"]["_id"].startswith("image:")
+    assert image["content_type"] == "image/webp"
+    assert base64.b64decode(image["full_b64"]) == b"face-full"
+    assert base64.b64decode(image["thumb_b64"]) == b"face-thumb"
+    assert body["evacuees"][0]["photo"] == image["doc"]["_id"]
+
+
+async def test_kiosk_prepare_never_claims_pets(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    doc = await _seed_family()
+    doc.household.pets = [
+        UnassignedPet(pet_id=f"pet:{new_ulid()}", status="open", species="dog", count=1)
+    ]
+    await doc.save()
+    selected = doc.members[0].reserved_evacuee_id
+
+    response = await _prepare(client, auth_headers, doc.id, member_ids=[selected])
+
+    assert response.status_code == 200
+    assert response.json()["household"]["pets"] == []
+    reloaded = await UnassignedRegistration.get(doc.id)
+    assert reloaded is not None
+    assert [p.effective_status() for p in reloaded.household.pets or []] == ["open"]
+
+
+async def test_kiosk_prepare_rejects_member_claimed_into_another_shelter_and_marks_nothing(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    doc = await _seed_family()
+    open_member, _, claimed_in_sh001 = (m.reserved_evacuee_id for m in doc.members)
+
+    response = await _prepare(
+        client,
+        auth_headers,
+        doc.id,
+        shelter_code="SH002",
+        member_ids=[open_member, claimed_in_sh001],
+    )
+
+    assert response.status_code == 409
+    assert response.json()["errors"][0]["error"]["code"] == "ALREADY_CLAIMED"
+    members = await _lookup_members(client, auth_headers, doc.id)
+    assert members[open_member] == ("open", None)
+    assert members[claimed_in_sh001] == ("claimed", "SH001")
+
+
+async def test_kiosk_prepare_rebuilds_docs_for_member_already_claimed_into_same_shelter(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    doc = await _seed_family()
+    claimed_in_sh001 = doc.members[2].reserved_evacuee_id
+
+    response = await _prepare(client, auth_headers, doc.id, member_ids=[claimed_in_sh001])
+
+    assert response.status_code == 200
+    body = response.json()
+    assert [e["_id"] for e in body["evacuees"]] == [claimed_in_sh001]
+    assert body["evacuees"][0]["current_stay"]["status"] == "pre_registered"
+    members = await _lookup_members(client, auth_headers, doc.id)
+    assert members[claimed_in_sh001] == ("claimed", "SH001")
+
+
+async def test_kiosk_prepare_rejects_required_person_id_matching_no_member_and_marks_nothing(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    doc = await _seed_family()
+    selected = doc.members[0].reserved_evacuee_id
+
+    response = await _prepare(
+        client,
+        auth_headers,
+        doc.id,
+        member_ids=[selected],
+        required_person_id="1111111111111",
+    )
+
+    assert response.status_code == 403
+    assert response.json()["errors"][0]["error"]["code"] == "PERSON_MISMATCH"
+    members = await _lookup_members(client, auth_headers, doc.id)
+    assert members[selected] == ("open", None)
+
+
+async def test_kiosk_prepare_accepts_required_person_id_of_a_member(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    doc = await _seed_family()
+    selected = doc.members[0].reserved_evacuee_id
+
+    response = await _prepare(
+        client,
+        auth_headers,
+        doc.id,
+        member_ids=[selected],
+        required_person_id="9876543210987",
+    )
+
+    assert response.status_code == 200
+
+
+async def test_kiosk_prepare_unknown_member_is_404_member_not_found(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    doc = await _seed_family()
+    selected = doc.members[0].reserved_evacuee_id
+
+    response = await _prepare(
+        client, auth_headers, doc.id, member_ids=[selected, f"evacuee:{new_ulid()}"]
+    )
+
+    assert response.status_code == 404
+    assert response.json()["errors"][0]["error"]["code"] == "MEMBER_NOT_FOUND"
+    members = await _lookup_members(client, auth_headers, doc.id)
+    assert members[selected] == ("open", None)
+
+
+async def test_kiosk_prepare_unknown_registration_is_404_not_found(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    response = await _prepare(
+        client, auth_headers, new_ulid(), member_ids=[f"evacuee:{new_ulid()}"]
+    )
+
+    assert response.status_code == 404
+    assert response.json()["errors"][0]["error"]["code"] == "NOT_FOUND"
+
+
+async def test_kiosk_prepare_requires_service_bearer(client: AsyncClient) -> None:
+    response = await client.post(
+        _PREPARE_URL.format(registration_id=new_ulid()),
+        json={"shelter_code": "SH001", "device_id": "kiosk-7", "member_ids": ["evacuee:x"]},
+    )
+    assert response.status_code == 401
+
+
+async def test_kiosk_prepare_rejects_cancelled_member_with_member_not_open(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    doc = await _seed_family()
+    doc.members[1].status = "cancelled"
+    await doc.save()
+    open_member, cancelled, _ = (m.reserved_evacuee_id for m in doc.members)
+
+    response = await _prepare(client, auth_headers, doc.id, member_ids=[open_member, cancelled])
+
+    assert response.status_code == 409
+    assert response.json()["errors"][0]["error"]["code"] == "MEMBER_NOT_OPEN"
+    members = await _lookup_members(client, auth_headers, doc.id)
+    assert members[open_member] == ("open", None)
