@@ -184,7 +184,7 @@ def _wizard_details(line: dict[str, Any]) -> tuple[str | None, ...]:
 
 def _carry_line_details(
     items: list[DonationItemInput], held: list[dict[str, Any]]
-) -> list[DonationItemInput]:
+) -> tuple[list[DonationItemInput], set[int]]:
     """Re-attach ``category``/``condition``/``note`` to an edited line that came back without them.
 
     Same idea as ``_carry_item_ids``, for the fields the edit form has no input for. Losing
@@ -196,9 +196,10 @@ def _carry_line_details(
     an edited one was, so when held lines of one name differ in these fields the pairing
     is a guess: a donor who deleted the first of two "เสื้อ" lines had the refused one take
     the deleted one's condition — and with it its approval. Those lines get nothing
-    carried; they read as edited and wait for review, which is the safe side. A value the
-    request does carry wins: a client that really changed a condition still has that line
-    re-reviewed.
+    carried, and their indexes come back so the review holds them for staff: read as
+    edited alone, a campaign line among them was approved by FR-2 even when it was the
+    refused one (review #783 H1). A value the request does carry wins: a client that
+    really changed a condition still has that line re-reviewed.
     """
     unclaimed: dict[str, list[dict[str, Any]]] = {}
     for line in held:
@@ -212,9 +213,12 @@ def _carry_line_details(
     }
 
     carried = []
-    for item in items:
+    guessed: set[int] = set()
+    for index, item in enumerate(items):
         name = (item.free_text or "").strip()
         candidates = unclaimed.get(name)
+        if candidates and name in ambiguous:
+            guessed.add(index)
         if not candidates or name in ambiguous:
             carried.append(item)
             continue
@@ -225,7 +229,7 @@ def _carry_line_details(
             if not getattr(item, name) and line.get(name)
         }
         carried.append(item.model_copy(update=update) if update else item)
-    return carried
+    return carried, guessed
 
 
 def _wanted_by_item(items: list[DonationItemInput]) -> dict[str, Decimal]:
@@ -772,7 +776,7 @@ class DonationsUseCase:
         before = [dict(item) for item in buffer.items_declared]
         items = _carry_item_ids(items, before)
         # Before the review below: it pairs lines on these fields too (CR-174 FR-18a).
-        items = _carry_line_details(items, previous_items)
+        items, guessed = _carry_line_details(items, previous_items)
 
         # Refuse before any quota moves: an edit that keeps only lines staff already refused
         # would turn the booking `rejected` with no reason of the shelter's (CR-172 FR-1),
@@ -784,6 +788,7 @@ class DonationsUseCase:
             previous_status=previous_status,
             items=[item.model_dump(exclude_none=True) for item in items],
             reserved=[True] * len(items),
+            hold_for_review=guessed,
         )
         if preview.status == "rejected":
             raise HTTPException(
@@ -877,6 +882,7 @@ class DonationsUseCase:
                 )
                 for row in after
             ],
+            hold_for_review=guessed,
         )
         after = review.items
 

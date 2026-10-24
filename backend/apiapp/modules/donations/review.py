@@ -12,7 +12,7 @@ stays in ``use_case.py``.
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass, field
 from decimal import Decimal, InvalidOperation
 from typing import Any, Literal
@@ -139,6 +139,7 @@ def review_edited_booking(
     previous_status: str,
     items: Sequence[Mapping[str, Any]],
     reserved: Sequence[bool],
+    hold_for_review: Collection[int] = (),
 ) -> ReviewOutcome:
     """FR-18 / FR-18a / FR-18c — re-review a basket the donor just edited.
 
@@ -148,7 +149,9 @@ def review_edited_booking(
 
     A new line equal to an unused old line on every ``MATCH_FIELDS`` field keeps that old
     line's result, rejected included; each old line can be claimed once, so two identical
-    new lines do not both inherit one approval. Every other line is judged by FR-2.
+    new lines do not both inherit one approval. Every other line is judged by FR-2, except
+    the indexes in ``hold_for_review``: lines that could not be told apart from an old one,
+    which wait for staff whatever they hold.
     """
     if len(items) != len(reserved):
         raise ValueError("reserved must have one flag per line")
@@ -189,7 +192,7 @@ def review_edited_booking(
                     )
                 )
                 continue
-        row = _auto_review(item, held)
+        row = _auto_review(item, held and index not in hold_for_review)
         if row["review_status"] == "approved":
             auto_approved.append(index)
         rows.append(row)
