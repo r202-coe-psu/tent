@@ -49,6 +49,21 @@ describe('buildListPreviewSlides', () => {
 		expect(slides.portrait.map((s) => s.id)).toEqual(['kiosk_banner:p1', 'kiosk_banner:p2']);
 	});
 
+	it('with a group id, keeps only banners of that group', () => {
+		const slides = buildListPreviewSlides(
+			[
+				banner('kiosk_banner:a1', { group_id: 'kiosk_banner_group:A', order: 2 }),
+				banner('kiosk_banner:b1', { group_id: 'kiosk_banner_group:B', order: 1 }),
+				banner('kiosk_banner:v1', { order: 1 }),
+				banner('kiosk_banner:a2', { group_id: 'kiosk_banner_group:A', order: 1 })
+			],
+			now,
+			imageUrl,
+			'kiosk_banner_group:A'
+		);
+		expect(slides.compact.map((s) => s.id)).toEqual(['kiosk_banner:a2', 'kiosk_banner:a1']);
+	});
+
 	it('maps the slide shape the kiosk overlay expects', () => {
 		const [slide] = buildListPreviewSlides(
 			[banner('kiosk_banner:a', { caption: 'cap', duration_sec: 5 })],

@@ -1,5 +1,5 @@
 import type { KioskScreenType } from '$lib/features/shared/domain/kiosk-screen';
-import { isActiveAt, matchesScreen, orderableBanners } from '../domain/kiosk-banner';
+import { isActiveAt, matchesSlot, orderableBanners } from '../domain/kiosk-banner';
 import type { KioskBannerSummary } from '../data/kiosk-banner.repository';
 
 /** New array with the item at `from` moved to end at index `to`; an invalid move returns a copy. */
@@ -40,7 +40,7 @@ export function reconcileDraft<T extends { _id: string }>(
 	return [...kept, ...saved.filter((item) => !keptIds.has(item._id))];
 }
 
-/** What one screen type's summary card shows: banner counts by state plus the play-order strip. */
+/** What one (group, screen type) slot's summary card shows: counts by state plus the play strip. */
 export type ScreenSummary = {
 	active: number;
 	scheduled: number;
@@ -50,24 +50,24 @@ export type ScreenSummary = {
 };
 
 /**
- * Summary of one screen type from the two list views (all screen types mixed). `strip` is every
- * not-expired banner of the screen in kiosk play order; each strip item is exactly one of active
+ * Summary of one (group, screen type) slot from the two list views (all slots mixed). `strip` is
+ * every not-expired banner of the slot in kiosk play order; each strip item is exactly one of active
  * (live now), inactive (switched off) or scheduled (switched on, not started yet).
  */
 export function summarizeScreen(
 	current: readonly KioskBannerSummary[],
 	expired: readonly KioskBannerSummary[],
-	screen: KioskScreenType,
+	slot: { group_id: string; screen_type: KioskScreenType },
 	now: Date
 ): ScreenSummary {
-	const strip = orderableBanners(current, screen, now);
+	const strip = orderableBanners(current, slot, now);
 	const active = strip.filter((b) => isActiveAt(b, now)).length;
 	const inactive = strip.filter((b) => b.status === 'inactive').length;
 	return {
 		active,
 		scheduled: strip.length - active - inactive,
 		inactive,
-		expired: expired.filter((b) => matchesScreen(b, screen)).length,
+		expired: expired.filter((b) => matchesSlot(b, slot)).length,
 		strip
 	};
 }

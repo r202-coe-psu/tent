@@ -4,7 +4,6 @@ import {
 	portalCredentialSchema,
 	volunteerProfileUpdateSchema
 } from '$lib/features/volunteer-portal/server';
-import { volunteerProfileUpdateLimiter } from '$lib/server/security/rate-limiter';
 import { fastapiBaseUrl, fastapiServiceHeaders } from '$lib/server/fastapi';
 
 export const prerender = false;
@@ -12,16 +11,12 @@ export const prerender = false;
 /**
  * Change the parts of the profile the volunteer owns.
  *
- * A write, so it gets its own budget rather than the shared read one — and a tighter
- * one, because the credential that reaches it (a phone number, or a tracking token) is
+ * A write, and the credential that reaches it (a phone number, or a tracking token) is
  * guessable. What it can express is the whole defence beyond that: only `skills`
  * crosses to FastAPI, so nothing here can touch `identity_verified`, `status`,
  * `volunteer_code` or `personnel_type`, which are staff decisions.
  */
-export const POST: RequestHandler = async ({ request, fetch, getClientAddress }) => {
-	if (!volunteerProfileUpdateLimiter.check(getClientAddress())) {
-		return json({ success: false, error: 'RATE_LIMITED' }, { status: 429 });
-	}
+export const POST: RequestHandler = async ({ request, fetch }) => {
 	try {
 		const payload = await request.json();
 		const credential = portalCredentialSchema.safeParse(payload);

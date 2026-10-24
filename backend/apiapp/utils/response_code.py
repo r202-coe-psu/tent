@@ -8,8 +8,8 @@ Six characters in two groups of three, from an alphabet with every look-alike an
 sound-alike removed: no ``I``, ``L``, ``O``, ``U``, and no ``0`` or ``1`` (which get
 read back as O and I). That is ~729 million codes, which is not much on its own. The
 security is in needing all three: the volunteer's phone number, which the portal signs
-in with and the server checks against the assignment; the code, usable once; and a
-rate limit on the endpoint. No single one of them is enough.
+in with and the server checks against the assignment; the code, usable once; and the
+nginx rate limit on the endpoint. No single one of them is enough.
 
 Deliberately no look-alike substitution on input. Crockford's scheme folds I/L onto 1
 and O onto 0, but this alphabet has no 1 or 0 to fold onto, and mapping them onto some
