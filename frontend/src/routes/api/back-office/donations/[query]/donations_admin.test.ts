@@ -17,6 +17,8 @@ vi.mock('$lib/server/couch-admin', () => ({
 	requireShelterScopeOrSA: vi.fn()
 }));
 
+type FindBody = { selector: { ref_id?: string } };
+
 /** Catalog items the intake route validates counted lines against (schema.md §2.1). */
 const catalogRows = [
 	{
@@ -78,6 +80,8 @@ function mockCouch(
 		bulkOutcomes?: object[];
 		/** The audit entry an earlier attempt at this receipt left (#695). */
 		earlierAudit?: AuditEntry;
+		/** Ledger rows of this booking another screen keyed under ids of its own. */
+		keyedElsewhere?: string[];
 	} = {}
 ) {
 	vi.mocked(adminRaw).mockImplementation((path: string, method: string, body?: unknown) => {
@@ -112,6 +116,13 @@ function mockCouch(
 		}
 		if (method === 'GET' && path.includes('donation:')) {
 			return Promise.resolve({ status: 200, data: { rows: [{ doc: donation }] } });
+		}
+		if (method === 'POST' && path.includes('_find') && (body as FindBody).selector.ref_id) {
+			const ids = [
+				...(over.ledgerRows ?? []).map((row) => row._id),
+				...(over.keyedElsewhere ?? [])
+			];
+			return Promise.resolve({ status: 200, data: { docs: ids.map((_id) => ({ _id })) } });
 		}
 		// Lot-number allocation reads the day's existing labels (CR-088).
 		if (method === 'POST' && path.includes('_find')) {
@@ -1002,6 +1013,19 @@ describe('Back-office GET & POST /api/back-office/donations/[query]', () => {
 
 			expect(retry.status).toBe(200);
 			expect(appendedDocs().filter((d) => d.type === 'stock_ledger')).toHaveLength(0);
+		});
+
+		it('refuses to key a line the batch receive page already keyed as another item', async () => {
+			mockCouch(riceDonation, {
+				keyedElsewhere: [await deriveDonationReceiptLineId('donation:123', 'item_master:flour', 1)]
+			});
+
+			const response = await POST(postEvent(counted));
+
+			expect(response.status).toBe(409);
+			expect((await response.json()).error_code).toBe('RECEIPT_MISMATCH');
+			expect(appendedDocs()).toHaveLength(0);
+			expect(vi.mocked(adminRaw).mock.calls.some((c) => c[1] === 'PUT')).toBe(false);
 		});
 
 		it('accepts a row a concurrent receive wrote first when it records the same line', async () => {
