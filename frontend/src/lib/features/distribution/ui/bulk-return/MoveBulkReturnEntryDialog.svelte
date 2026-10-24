@@ -125,7 +125,9 @@
 								id="move-entry-target"
 								class="h-11 w-full min-w-0 bg-white text-sm font-medium sm:h-10"
 							>
-								{selectedTarget ? selectedTarget.name : 'เลือกกองปลายทาง'}
+								<span class="truncate">
+									{selectedTarget ? selectedTarget.name : 'เลือกกองปลายทาง'}
+								</span>
 							</Select.Trigger>
 							<Select.Content>
 								{#each targets as pool (pool._id)}

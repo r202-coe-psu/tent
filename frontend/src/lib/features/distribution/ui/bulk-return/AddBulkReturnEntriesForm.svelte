@@ -275,7 +275,9 @@
 								id="add-entry-pool"
 								class="h-11 w-full min-w-0 bg-white text-sm font-medium sm:h-10"
 							>
-								{selectedPool ? selectedPool.name : 'เลือกกองที่เปิดรับ'}
+								<span class="truncate">
+									{selectedPool ? selectedPool.name : 'เลือกกองที่เปิดรับ'}
+								</span>
 							</Select.Trigger>
 							<Select.Content>
 								{#each openPools as pool (pool._id)}
@@ -360,8 +362,10 @@
 						{#each lines as line, index (line.lineId)}
 							{@const lineError = showErrors ? validation.lineErrors[line.lineId] : undefined}
 							<li class="space-y-2 rounded-xl border border-slate-200/80 bg-white p-3 shadow-2xs">
-								<div class="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_7rem_auto] sm:items-end">
-									<div class="space-y-1.5">
+								<div
+									class="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_7rem_auto] sm:items-end"
+								>
+									<div class="min-w-0 space-y-1.5">
 										<Label
 											for="add-entry-item-{line.lineId}"
 											class="text-sm font-semibold text-slate-700"
@@ -374,7 +378,7 @@
 												aria-invalid={Boolean(lineError)}
 												class="h-11 w-full min-w-0 bg-white text-sm font-medium sm:h-10"
 											>
-												{itemLabel(line.item_id)}
+												<span class="truncate">{itemLabel(line.item_id)}</span>
 											</Select.Trigger>
 											<Select.Content>
 												{#each catalog as item (item._id)}
