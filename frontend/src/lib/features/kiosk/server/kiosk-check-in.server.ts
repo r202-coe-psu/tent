@@ -17,7 +17,9 @@ import { shelterDbName } from '$lib/server/shelter-access-design';
 import { maskLastName } from '$lib/utils/mask';
 import { kioskPhotoPayloadSchema, type KioskPhotoPayload } from '../domain/kiosk-photo';
 import {
+	claimUnassignedMembers,
 	findUnassignedRegistration,
+	KioskUnassignedPersonMismatchError,
 	KioskUnassignedUnavailableError,
 	type UnassignedRegistration,
 	type UnassignedRegistrationMember
@@ -594,13 +596,37 @@ export async function checkInSelectedMembers(
 	shelterCode: string,
 	primaryEvacueeId: string,
 	evacueeIds: string[],
-	options: { requiredPrimaryCitizenId?: string } = {}
+	options: {
+		requiredPrimaryCitizenId?: string;
+		/** Set by the kiosk: queue members missing from Couch are claimed into this shelter first. */
+		deviceId?: string;
+		/** Citizen the queue must contain (smart-card chip); a thaid check-in uses its own. */
+		claimPersonId?: string;
+	} = {}
 ): Promise<KioskCheckInMemberResult[]> {
 	const dbName = shelterDbName(shelterCode);
 	const normalizedPrimaryId = `evacuee:${primaryEvacueeId.slice('evacuee:'.length).toUpperCase()}`;
 	const normalizedEvacueeIds = evacueeIds.map(
 		(id) => `evacuee:${id.slice('evacuee:'.length).toUpperCase()}`
 	);
+	if (options.deviceId) {
+		try {
+			await claimUnassignedMembers(
+				shelterCode,
+				options.deviceId,
+				[normalizedPrimaryId, ...normalizedEvacueeIds],
+				{ requiredPersonId: options.claimPersonId ?? options.requiredPrimaryCitizenId }
+			);
+		} catch (error) {
+			if (
+				error instanceof KioskUnassignedPersonMismatchError &&
+				options.requiredPrimaryCitizenId !== undefined
+			) {
+				throw new KioskThaidIdentityMismatchError();
+			}
+			throw error;
+		}
+	}
 	const primary = await getById(dbName, normalizedPrimaryId);
 	if (
 		options.requiredPrimaryCitizenId !== undefined &&

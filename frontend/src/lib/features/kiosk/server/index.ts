@@ -25,6 +25,12 @@ export {
 	reprintKioskLabels,
 	type KioskReprintMember
 } from './kiosk-reprint.server';
+export {
+	KioskUnassignedClaimConflictError,
+	KioskUnassignedClaimFailedError,
+	KioskUnassignedPersonMismatchError,
+	KioskUnassignedUnavailableError
+} from './kiosk-unassigned.server';
 export { normalizeKioskPhone } from '../domain/phone';
 export { isKioskThaidCheckInAllowed } from './kiosk-thaid-gate.server';
 export {
