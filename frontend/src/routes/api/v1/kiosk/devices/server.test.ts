@@ -150,7 +150,7 @@ describe('POST /api/v1/kiosk/devices', () => {
 			last_seen_at: null,
 			staff_pin_set: false,
 			staff_pin_is_default: false,
-			banner_enabled: true,
+			banner_group_id: null,
 			screen_type: 'compact'
 		});
 		expect(data.device).not.toHaveProperty('secret_hash');
@@ -247,7 +247,7 @@ describe('GET /api/v1/kiosk/devices', () => {
 				last_seen_at: null,
 				staff_pin_set: false,
 				staff_pin_is_default: false,
-				banner_enabled: true,
+				banner_group_id: null,
 				screen_type: 'compact'
 			}
 		]);

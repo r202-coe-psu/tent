@@ -8,6 +8,7 @@ import {
 import { fromBangkokLocalInput, toBangkokLocalInput } from './kiosk-banner-datetime';
 import {
 	KIOSK_BANNER_LIMITS,
+	groupOf,
 	kioskBannerInputSchema,
 	kioskBannerStatusSchema,
 	type KioskBannerInput
@@ -23,6 +24,7 @@ const localTime = (missing: string) =>
 
 export const kioskBannerFormSchema = z
 	.object({
+		group_id: z.string().min(1, 'เลือกกลุ่มแบนเนอร์'),
 		title: z
 			.string()
 			.trim()
@@ -55,6 +57,7 @@ export type KioskBannerFormValues = z.infer<typeof kioskBannerFormSchema>;
 
 export function emptyKioskBannerForm(): KioskBannerFormValues {
 	return {
+		group_id: '',
 		title: '',
 		caption: '',
 		duration_sec: KIOSK_BANNER_LIMITS.durationDefault,
@@ -67,9 +70,13 @@ export function emptyKioskBannerForm(): KioskBannerFormValues {
 
 /** Stored banner fields -> form values (UTC instants shown as Bangkok wall-clock). */
 export function bannerToFormValues(
-	banner: Omit<KioskBannerInput, 'screen_type'> & { screen_type?: KioskScreenType | null }
+	banner: Omit<KioskBannerInput, 'screen_type' | 'group_id'> & {
+		screen_type?: KioskScreenType | null;
+		group_id?: string | null;
+	}
 ): KioskBannerFormValues {
 	return {
+		group_id: groupOf(banner) ?? '',
 		title: banner.title,
 		caption: banner.caption ?? '',
 		duration_sec: banner.duration_sec,
@@ -84,6 +91,7 @@ export function bannerToFormValues(
 export function bannerFormToInput(values: KioskBannerFormValues): KioskBannerInput {
 	const caption = values.caption.trim();
 	return kioskBannerInputSchema.parse({
+		group_id: values.group_id,
 		title: values.title,
 		caption: caption === '' ? null : caption,
 		duration_sec: values.duration_sec,

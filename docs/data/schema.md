@@ -3,7 +3,7 @@ title: Smart Shelter — Database Schema v5
 status: draft for review
 created: 2026-06-11
 updated: 2026-10-22
-note: CR-187 approved (2026-10-22, #648) — §3.3 `master_type` เพิ่ม `allergy` (global-only, seed 5) + §1.2 `medical.allergies` = master code หรือ free text (ไม่ bump `schema_v`); CR-186 approved (2026-10-22, #649) — §3.3 `master_type` เพิ่ม `chronic_disease` (global-only, seed 12) + §1.2 `medical.conditions` = master code หรือ free text (ไม่ bump `schema_v`); CR-185 approved (2026-10-21, #709) — §9.2 `public_jobs.is_urgent` (projection field ใหม่, `PROJECTION_VERSION` 5→6, ไม่ bump `schema_v`)
+note: CR-187 approved (2026-10-22, #648) — §3.3 `master_type` เพิ่ม `allergy` (global-only, seed 5) + §1.2 `medical.allergies` = master code หรือ free text (ไม่ bump `schema_v`); CR-186 approved (2026-10-22, #649) — §3.3 `master_type` เพิ่ม `chronic_disease` (global-only, seed 12) + §1.2 `medical.conditions` = master code หรือ free text (ไม่ bump `schema_v`); CR-185 approved (2026-10-21, #709) — §9.2 `public_jobs.is_urgent` (projection field ใหม่, `PROJECTION_VERSION` 5→6, ไม่ bump `schema_v`); CR-162 ส่วนที่ปรับ 2026-10-21 (Team Lead อนุมัติ 2026-10-22) — kiosk banner group: §3.11 `scanner_device.banner_group_id` (additive, ไม่ bump) + `banner_enabled` deprecated, §3.12 `kiosk_banner` schema_v 1 → 2 (+ `group_id`, order ต่อ (group_id, screen_type), VDU `REGISTRY_DESIGN_VERSION` 8), §3.13 `kiosk_banner_group` ใหม่ (schema_v 1)
 ---
 
 # Database Schema v5 — field-level
@@ -1816,7 +1816,8 @@ provisioning เท่านั้น. `value` คือเลขล่าสุ
 | `status` | enum(`active`,`inactive`) | req | สถานะเปิด/ปิดการใช้งานเครื่อง |
 | `last_seen_at` | ts\|null | sys | Timestamp ที่เครื่องยิง API ล่าสุด (Heartbeat) |
 | `screen_type` | enum(`compact`,`portrait`) | opt | ([CR-162](../changes/14-kiosk/CR-162-kiosk-banner.md)) ขนาดจอ — ตู้เล็ก `compact` 1024×600 / ตู้ใหญ่ `portrait` 1080×1920 · ไม่มี field = `compact` · ตู้ดึงเฉพาะ `kiosk_banner` ที่ `screen_type` ตรงกัน · ไม่ bump `schema_v` |
-| `banner_enabled` | bool | opt | ([CR-162](../changes/14-kiosk/CR-162-kiosk-banner.md)) แสดง kiosk banner บนเครื่องนี้หรือไม่ · ไม่มี field = `true` · เครื่องใหม่เขียน `true` · `false` = feed คืน `banners: []` โดยไม่ query · ไม่ bump `schema_v` |
+| `banner_group_id` | str\|null | opt | (2026-10-21 · Team Lead อนุมัติ 2026-10-22 — [CR-162](../changes/14-kiosk/CR-162-kiosk-banner.md) FR-KBG-10..15) `kiosk_banner_group:{ulid}` (§3.13) ที่เครื่องนี้สังกัด — เครื่อง 1 เครื่อง = 0 หรือ 1 กลุ่ม · **ไม่มี field / `null` = ไม่มีกลุ่ม = ไม่แสดง banner** (feed คืน `banners: []` โดยไม่ query) · เครื่องใหม่ไม่มีกลุ่ม · เขียนผ่าน group endpoints (§3.13) เท่านั้น · ไม่ bump `schema_v` |
+| `banner_enabled` | bool | opt | **deprecated (2026-10-21 — แทนที่โดย `banner_group_id`)** · ([CR-162](../changes/14-kiosk/CR-162-kiosk-banner.md) ฉบับ 2026-10-15) เดิม: ไม่มี field = `true` · `false` = feed คืน `banners: []` · หลังเปลี่ยน: อ่านได้บน doc เดิม (persisted schema ยัง parse) แต่**ระบบไม่อ่าน ไม่เขียน** และไม่อยู่ใน summary / PATCH / UI · ไม่ bump `schema_v` |
 | `staff_pin_set` | bool | req (v2) | มี PIN ของเครื่องใน `scanner_secrets` (§3.11.1) หรือไม่ — metadata เท่านั้น ตอนตรวจ PIN server อ่านจาก `scanner_secrets` เสมอ ไม่เชื่อ field นี้ |
 | `staff_pin_is_default` | bool | req (v2) | `true` = ยังเป็น default PIN ที่สุ่มตอนสร้างเครื่อง; มีความหมายเฉพาะเมื่อ `staff_pin_set = true` |
 | `staff_pin_updated_at` | ts\|null | req (v2) | เวลาที่ตั้ง/สุ่ม PIN ล่าสุด; `null` = ยังไม่เคยตั้ง |
@@ -1878,22 +1879,23 @@ stamp registry v2 (`updated_by: system:sync-central`); เครื่องท�
 ลบ registry ไม่สำเร็จ → ไม่แตะ PIN doc. PIN doc ที่ค้างใช้ไม่ได้ เพราะเครื่องที่ไม่มีใน registry ไม่ผ่าน device auth
 (`401 DEVICE_AUTH_FAILED` ก่อนถึงขั้นตรวจ PIN) และจะถูกเขียนทับเมื่อสร้างเครื่อง `device_id` เดิมใหม่. ไม่มี doc = `409 staff_pin_not_set` ตอนตรวจ PIN แม้ registry จะเขียน `staff_pin_set: true`.
 
-### 3.12 `kiosk_banner` — `kiosk_banner:{ulid}` · **schema_v 1** ([CR-162](../changes/14-kiosk/CR-162-kiosk-banner.md))
+### 3.12 `kiosk_banner` — `kiosk_banner:{ulid}` · **schema_v 1 → 2 (2026-10-21)** ([CR-162](../changes/14-kiosk/CR-162-kiosk-banner.md))
 
 แบนเนอร์รูปภาพที่ตู้ kiosk วนแสดงเต็มจอเมื่อหน้า `/kiosk` idle 30 วินาที (attract overlay — รูปอย่างเดียว ไม่มี
-caption). registry doc ของศูนย์เดียว (`shelter_code`) และขนาดจอเดียว (`screen_type`). ตู้อ่านผ่าน
+caption). registry doc ของศูนย์เดียว (`shelter_code`) และขนาดจอเดียว (`screen_type`) (+ กลุ่มเดียว `group_id` — 2026-10-21). ตู้อ่านผ่าน
 `POST /api/v1/kiosk/banners` (device auth) เท่านั้น — **ไม่ sync เข้า MongoDB** และไม่มี projection.
 
 | Field | ชนิด | req | หมายเหตุ |
 | --- | --- | --- | --- |
 | `_id` | str | req | `kiosk_banner:{ulid}` |
 | `type` | `"kiosk_banner"` | req | — |
-| `schema_v` | int | req | `1` |
+| `schema_v` | int | req | `1` (เดิม) · `2` (2026-10-21 — มี `group_id`) · doc ใหม่และ doc ที่แก้หลังเปลี่ยนเขียน `2` |
+| `group_id` | str | req (v2) | (2026-10-21) `kiosk_banner_group:{ulid}` (§3.13) ที่ banner นี้สังกัด · banner 1 อัน = 1 กลุ่ม (ใช้ซ้ำหลายกลุ่ม = สร้างซ้ำ) · กลุ่มต้องอยู่ศูนย์เดียวกับ `shelter_code` · v1 ไม่มี field นี้ |
 | `shelter_code` | str | req | ศูนย์ที่แสดง banner · = active shelter ของผู้สร้าง · **แก้ไม่ได้** หลังสร้าง · เทียบกับ `scanner_device.shelter_code` |
 | `screen_type` | enum(`compact`,`portrait`) | opt | ขนาดจอที่แสดง · ไม่มี field = `compact` · แก้ได้ (ย้ายขนาด → `order` ต่อท้ายขนาดใหม่) |
 | `title` | str | req | trim · 1–120 ตัวอักษร · ใช้ในหน้าจัดการ + เป็น `alt` ของรูป |
 | `caption` | str\|null | opt | trim · ≤200 ตัวอักษร · text เท่านั้น (ห้าม HTML) · เก็บและแก้ได้ใน back-office แต่ไม่แสดงบนตู้ |
-| `order` | int | req | ≥1 · server กำหนด (ต่อท้ายของขนาดจอนั้น) · เปลี่ยนได้ผ่าน `PUT /api/back-office/kiosk-banners/order` เท่านั้น |
+| `order` | int | req | ≥1 · server กำหนด (ต่อท้ายของ slot) · **นับต่อ (`group_id`, `screen_type`) (2026-10-21 — เดิมนับต่อ `screen_type`)** · ย้ายกลุ่มหรือย้ายขนาดจอ → ต่อท้าย slot ใหม่ · เปลี่ยนได้ผ่าน `PUT /api/back-office/kiosk-banners/order` เท่านั้น |
 | `duration_sec` | int | req | 3–60 default `10` · เวลาแสดงต่อสไลด์ |
 | `start_at` | ts | req | ISO UTC · เริ่มแสดง (รวม) |
 | `end_at` | ts | req | ISO UTC · สิ้นสุด (ไม่รวม) · ต้อง `> start_at` |
@@ -1903,11 +1905,23 @@ caption). registry doc ของศูนย์เดียว (`shelter_code`) 
 
 **ไม่มี** `shelter_codes` (CR-162 ฉบับ 2026-10-11 ถูกแทนแล้ว · ยังไม่เคยมี doc persist จึงไม่ต้อง migrate).
 
-**แสดงบนตู้เมื่อ:** เครื่องมี `banner_enabled ≠ false` และ banner `status = active` และ `start_at ≤ now < end_at`
+**schema_v 1 → 2 (2026-10-21 · Team Lead อนุมัติ 2026-10-22):** เพิ่ม `group_id` (req ใน v2). **ไม่ migrate** —
+doc v1 (ไม่มี `group_id`) ยังอ่านได้และอ่านเป็น "ยังไม่จัดกลุ่ม": แสดงเฉพาะใน back-office (แก้ไข / ลบ ได้) · **ไม่แสดงบนตู้** ·
+ไม่อยู่ในรายการจัดลำดับของกลุ่มใด · การแก้ banner v1 ต้องเลือกกลุ่ม แล้วเขียนกลับเป็น v2 (`order` ต่อท้าย slot ของกลุ่ม + ขนาดจอนั้น).
+
+**แสดงบนตู้เมื่อ:** ~~เครื่องมี `banner_enabled ≠ false`~~ (แทนที่โดยข้อถัดไป — 2026-10-21) และ banner `status = active` และ `start_at ≤ now < end_at`
 (เวลา server) และ `shelter_code` = ศูนย์ของเครื่อง และ `screen_type` = ขนาดจอของเครื่อง (ไม่มี field = `compact`
 ทั้งสองฝั่ง) · เรียง `order` → `start_at` → `_id` · สูงสุด 20 รายการ (กรองก่อนตัด cap).
 
-**VDU (`registry`, `REGISTRY_DESIGN_VERSION` 7):** reject เมื่อ `schema_v ≠ 1`, `shelter_code` ว่าง/ไม่ใช่ string,
+**แสดงบนตู้เมื่อ (2026-10-21 — แทนที่ข้อด้านบน):** เครื่องมี `banner_group_id` (ไม่มี = feed คืน `[]` โดยไม่ query) และ
+banner `status = active` และ `start_at ≤ now < end_at` (เวลา server) และ `shelter_code` = ศูนย์ของเครื่อง และ
+**`group_id` = `banner_group_id` ของเครื่อง** และ `screen_type` = ขนาดจอของเครื่อง · เรียง `order` → `start_at` → `_id` ·
+สูงสุด 20 รายการ (กรองก่อนตัด cap) · banner v1 (ไม่มี `group_id`) ไม่เข้าเงื่อนไข.
+
+**ลำดับข้างในกลุ่ม (2026-10-21):** แต่ละกลุ่มมีรายการจัดลำดับ 2 ชุดแยกกัน — ตู้เล็ก `compact` 1024×600 และตู้ใหญ่
+`portrait` 1080×1920 · `order` 1..n นับต่อ (`group_id`, `screen_type`) ของ banner ที่ยังไม่หมดอายุ.
+
+**VDU (`registry`, `REGISTRY_DESIGN_VERSION` 7 → 8 (2026-10-21)):** reject เมื่อ `schema_v` ไม่ใช่ 1 หรือ 2 · (2026-10-21) `schema_v = 2` ต้องมี `group_id` เป็น string ที่ขึ้นต้น `kiosk_banner_group:` · `schema_v = 1` รับได้เมื่อไม่มี `group_id` (ยังไม่จัดกลุ่ม) · reject เมื่อ `shelter_code` ว่าง/ไม่ใช่ string,
 `screen_type` นอก enum, `title` ว่างหรือ >120, `caption` >200, `order` ไม่ใช่ int ≥1, `duration_sec` ไม่ใช่ int 3–60,
 `status` นอก enum, `start_at` / `end_at` parse ไม่ได้ หรือ `end_at ≤ start_at` · ไม่ตรวจ doc ที่ `_deleted` ·
 เงื่อนไขผู้เขียนเดิมของ `registry` (`_admin` / SA) คงไว้. เขียนได้เฉพาะผ่าน BFF `/api/back-office/kiosk-banners/**`
@@ -1916,7 +1930,29 @@ caption). registry doc ของศูนย์เดียว (`shelter_code`) 
 **ลบ:** hard delete ทั้ง doc (attachment หายไปด้วย).
 
 **Index (Mango):** `kiosk-banner-by-shelter` = `(type, shelter_code)` — CouchDB ใช้ json index เฉพาะเมื่อ selector
-ระบุครบทุก field จึงตรงกับ selector ของรายการ banner พอดี · deploy โดย `pnpm db:sync` / `sync:central`
+ระบุครบทุก field จึงตรงกับ selector ของรายการ banner พอดี · deploy โดย `pnpm db:sync` / `sync:central` · (2026-10-21)
+index เดิมใช้กับ selector ของ `kiosk_banner_group` (`type`, `shelter_code`) ได้ด้วย — ไม่เพิ่ม index ใหม่
+
+### 3.13 `kiosk_banner_group` — `kiosk_banner_group:{ulid}` · **schema_v 1** (2026-10-21 · Team Lead อนุมัติ 2026-10-22 — [CR-162](../changes/14-kiosk/CR-162-kiosk-banner.md) FR-KBG-01..09)
+
+กลุ่ม banner ต่อศูนย์ — ใช้แยกเนื้อหาตามจุดติดตั้ง (เช่น ตู้หน้าประตู vs ตู้โรงอาหาร). เครื่องสังกัดกลุ่มผ่าน
+`scanner_device.banner_group_id` (§3.11) และ banner สังกัดกลุ่มผ่าน `kiosk_banner.group_id` (§3.12). DB `registry` ·
+**ไม่ sync เข้า MongoDB** และไม่มี projection. เขียนได้เฉพาะผ่าน BFF `/api/back-office/kiosk-banner-groups/**`.
+
+| Field | ชนิด | req | หมายเหตุ |
+| --- | --- | --- | --- |
+| `_id` | str | req | `kiosk_banner_group:{ulid}` |
+| `type` | `"kiosk_banner_group"` | req | — |
+| `schema_v` | int | req | `1` |
+| `shelter_code` | str | req | ศูนย์ของกลุ่ม · = active shelter ของผู้สร้าง · **แก้ไม่ได้** หลังสร้าง |
+| `name` | str | req | trim · 1–60 ตัวอักษร · **ไม่ซ้ำภายในศูนย์เดียวกัน (case-insensitive)** — ซ้ำ `409` |
+| `description` | str\|null | opt | trim · ≤200 ตัวอักษร · text เท่านั้น |
+| `created_at` / `updated_at` / `created_by` | ts / ts / str | req | ตาม envelope §0 · `created_by` = `_users` name |
+
+- **สมาชิกเครื่อง:** ไม่เก็บใน doc กลุ่ม — derive จาก `scanner_device.banner_group_id = {group _id}` (`device_ids` ใน API) · เครื่อง 1 เครื่อง = 0 หรือ 1 กลุ่ม.
+- **VDU (`registry`, `REGISTRY_DESIGN_VERSION` 8):** reject เมื่อ `schema_v ≠ 1`, `shelter_code` ว่าง/ไม่ใช่ string, `name` ว่าง (หลัง trim) หรือ >60, `description` >200 · ไม่ตรวจ doc ที่ `_deleted` · เงื่อนไขผู้เขียนเดิมของ `registry` (`_admin` / SA) คงไว้ · ความไม่ซ้ำของ `name` ตรวจที่ BFF (ไม่ใช่ VDU).
+- **ลบ:** hard delete · ลบได้เมื่อกลุ่มไม่มี banner เหลือ (ทั้งที่ยังแสดงและหมดอายุ) — มี banner `409` · ตอนลบ ล้าง `banner_group_id` ของเครื่องที่สังกัดกลุ่มนั้น (เขียน `null`).
+- **Index:** ใช้ `kiosk-banner-by-shelter` = `(type, shelter_code)` เดิม (§3.12) — ไม่เพิ่ม index.
 
 ---
 
@@ -2534,7 +2570,7 @@ CouchDB `_users` DB ไม่ใช่ operational doc ธรรมดา — �
 | DB | Mango indexes | Views (map/reduce) |
 | --- | --- | --- |
 | `shelter_*` | evacuee kiosk lookup: (type, phone), (type, person_id.number), (type, household_id), (type, card_snapshot.address_no) · movement: (evacuee_id, occurred_at) · screening: (evacuee_id, screened_at) · stock_ledger: (item_id, occurred_at) · `fuel_cylinder`: (item_master_id, cylinder_code) · `gas_ledger`: (cylinder_id, occurred_at) · `requisition_ticket`: (status, requisition_type, ticket_no) · `distribution_log`: (ticket_id, item_id, recipient_id, status), (recipient_id, status) · `bulk_return_pool`: (item_id, status) · donation: status, tracking_token_hash, booking_ref, campaign_id, (logistics.slot.date) · donation_slot: (date), (date, from) · medical: evacuee_id · shift_assignment: (job_id, shift_id), (volunteer_id, status), (status) · volunteer: (phone), (phone_hash), (tracking_token_hash), (status), (personnel_type), (checked_in) · job: (status), (tier, status) · job_application: (job_id, status), (tracking_token) · sop_override: (active) · food_sphere_standard: (target_segment, req_group_id, effective_date) · requirement_group: (name) · replenishment_policy: (scope_type, target_id) | `occupancy` (count evacuees by stay status) · `demographics_by_age` (count in-shelter evacuees — `active` + `room_confirmed`, CR-170 — by birth year; dynamic age-bucket in API) · `demographics_by_country` (count in-shelter evacuees by country) · `registrations_by_date_status` (count check-in/out movements by date) · `stock_balance` (client Decimal sum qty_str by item; CR-038) · `gas_balance` (client Decimal sum gas_ledger.qty_kg by active cylinder) · `latest_screening` · `meals_served` (sum by date+meal) · `needs_open` · `slot_availability` |
-| `registry` | shelter: status · shelter: code (unique) · location_district: (province_id) · location_subdistrict: (district_id) · kiosk_banner: (type, shelter_code) | — |
+| `registry` | shelter: status · shelter: code (unique) · location_district: (province_id) · location_subdistrict: (district_id) · kiosk_banner: (type, shelter_code) — index เดียวกันนี้ใช้กับ `kiosk_banner_group` ด้วย (selector `type` + `shelter_code` · ไม่เพิ่ม index ใหม่ — 2026-10-21) | — |
 | `catalog` | item_master: (category, distribution_type, type_class) · item_category: (system_key, is_protected) · recipe: (deactivated) · sop_profile: active · food_sphere_standard: (target_segment, req_group_id, effective_date) · requirement_group: (name) · replenishment_policy: (scope_type, target_id) | — |
 | `central_ops` | export_job: (status, requested_by) · search_audit: occurred_at | — |
 

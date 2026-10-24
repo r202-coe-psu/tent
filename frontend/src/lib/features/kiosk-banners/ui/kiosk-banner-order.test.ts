@@ -108,11 +108,15 @@ describe('reconcileDraft', () => {
 describe('summarizeScreen', () => {
 	const NOW = new Date('2026-10-15T05:00:00.000Z');
 
-	const banner = (id: string, over: Partial<KioskBannerSummary> = {}): KioskBannerSummary => ({
+	const banner = (
+		id: string,
+		over: Partial<Omit<KioskBannerSummary, 'schema_v'>> = {}
+	): KioskBannerSummary => ({
 		_id: `kiosk_banner:${id}`,
 		_rev: `1-${id}`,
 		type: 'kiosk_banner',
-		schema_v: 1,
+		schema_v: 2,
+		group_id: 'kiosk_banner_group:A',
 		shelter_code: 'SH001',
 		title: `banner ${id}`,
 		caption: null,
@@ -127,6 +131,8 @@ describe('summarizeScreen', () => {
 		image_content_type: 'image/png',
 		...over
 	});
+	const GROUP_A = 'kiosk_banner_group:A';
+	const slot = (screen_type: 'compact' | 'portrait') => ({ group_id: GROUP_A, screen_type });
 	const expiredOver = {
 		start_at: '2026-10-10T01:00:00.000Z',
 		end_at: '2026-10-12T01:00:00.000Z'
@@ -151,7 +157,7 @@ describe('summarizeScreen', () => {
 	];
 
 	it('counts the compact screen, treating a doc without screen_type as compact', () => {
-		const summary = summarizeScreen(current, expired, 'compact', NOW);
+		const summary = summarizeScreen(current, expired, slot('compact'), NOW);
 		expect({
 			active: summary.active,
 			scheduled: summary.scheduled,
@@ -167,7 +173,7 @@ describe('summarizeScreen', () => {
 	});
 
 	it('counts the portrait screen on its own', () => {
-		const summary = summarizeScreen(current, expired, 'portrait', NOW);
+		const summary = summarizeScreen(current, expired, slot('portrait'), NOW);
 		expect({
 			active: summary.active,
 			scheduled: summary.scheduled,
@@ -177,8 +183,37 @@ describe('summarizeScreen', () => {
 		expect(summary.strip.map((b) => b._id)).toEqual(['kiosk_banner:portrait']);
 	});
 
+	it('ignores banners of another group and ungrouped (v1) banners', () => {
+		const GROUP_B = 'kiosk_banner_group:B';
+		const summary = summarizeScreen(
+			[
+				...current,
+				banner('b-active', { group_id: GROUP_B, screen_type: 'compact', order: 1 }),
+				{
+					...banner('v1', { group_id: undefined, screen_type: 'compact', order: 1 }),
+					schema_v: 1 as const
+				}
+			],
+			[...expired, banner('b-old', { group_id: GROUP_B, ...expiredOver })],
+			slot('compact'),
+			NOW
+		);
+		expect({
+			active: summary.active,
+			scheduled: summary.scheduled,
+			inactive: summary.inactive,
+			expired: summary.expired
+		}).toEqual({ active: 2, scheduled: 1, inactive: 1, expired: 2 });
+		expect(summary.strip.map((b) => b._id)).toEqual([
+			'kiosk_banner:legacy',
+			'kiosk_banner:active',
+			'kiosk_banner:inactive',
+			'kiosk_banner:scheduled'
+		]);
+	});
+
 	it('is all zeros with an empty strip when there are no banners', () => {
-		expect(summarizeScreen([], [], 'compact', NOW)).toEqual({
+		expect(summarizeScreen([], [], slot('compact'), NOW)).toEqual({
 			active: 0,
 			scheduled: 0,
 			inactive: 0,
