@@ -20,28 +20,35 @@ export type ApplicantAttendance =
 const NONE: ApplicantAttendance = { kind: 'none' };
 
 /**
+ * Whether `assignment` is the one approving `application` creates
+ * (`JobApplicationRepository#assignmentFor`). Ignores status. Shift ids decide when both
+ * sides have one; a legacy row on either side falls back to the shift's calendar date.
+ */
+export function assignmentMatchesApplication(
+	application: JobApplication,
+	assignment: ShiftAssignment
+): boolean {
+	if (
+		assignment.job_id !== application.job_id ||
+		assignment.volunteer_id !== application.volunteer_id
+	) {
+		return false;
+	}
+	const shiftId = application.shift_id ?? application.selected_shift.shift_id;
+	return shiftId && assignment.shift_id
+		? assignment.shift_id === shiftId
+		: assignment.date === application.selected_shift.date;
+}
+
+/**
  * `today` is `YYYY-MM-DD` in Asia/Bangkok. Only `checked_in` ignores it: an overnight shift
  * is still open on the next calendar day and must stay checkable-out.
  */
-export function applicantAttendance(
-	application: JobApplication,
-	assignments: readonly ShiftAssignment[],
+export function assignmentAttendance(
+	assignment: ShiftAssignment,
 	identityVerified: boolean,
 	today: string
 ): ApplicantAttendance {
-	if (application.status !== 'confirmed' || !application.volunteer_id) return NONE;
-
-	const shiftId = application.shift_id ?? application.selected_shift.shift_id;
-	const matches = assignments.filter(
-		(a) =>
-			a.job_id === application.job_id &&
-			a.volunteer_id === application.volunteer_id &&
-			a.status !== 'cancelled' &&
-			(shiftId ? a.shift_id === shiftId : a.date === application.selected_shift.date)
-	);
-	if (matches.length !== 1) return NONE;
-
-	const assignment = matches[0];
 	switch (assignment.status) {
 		case 'checked_in':
 			return { kind: 'check-out', assignment };
@@ -52,4 +59,18 @@ export function applicantAttendance(
 		default:
 			return { kind: 'status', assignment };
 	}
+}
+
+export function applicantAttendance(
+	application: JobApplication,
+	assignments: readonly ShiftAssignment[],
+	identityVerified: boolean,
+	today: string
+): ApplicantAttendance {
+	if (application.status !== 'confirmed' || !application.volunteer_id) return NONE;
+
+	const live = assignments.filter(
+		(a) => assignmentMatchesApplication(application, a) && a.status !== 'cancelled'
+	);
+	return live.length === 1 ? assignmentAttendance(live[0], identityVerified, today) : NONE;
 }

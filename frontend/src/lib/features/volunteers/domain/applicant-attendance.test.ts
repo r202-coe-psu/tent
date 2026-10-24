@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { applicantAttendance } from './applicant-attendance';
+import {
+	applicantAttendance,
+	assignmentAttendance,
+	assignmentMatchesApplication
+} from './applicant-attendance';
 import type { JobApplication } from './job-application.schema';
 import type { ShiftAssignment } from './shift-assignment.schema';
 
@@ -169,5 +173,59 @@ describe('applicantAttendance', () => {
 			kind: 'status',
 			assignment: a
 		});
+	});
+});
+
+describe('assignmentMatchesApplication', () => {
+	it('matches the same job, volunteer and shift id', () => {
+		expect(assignmentMatchesApplication(application(), assignment())).toBe(true);
+		expect(
+			assignmentMatchesApplication(application(), assignment({ shift_id: 'shift:afternoon' }))
+		).toBe(false);
+	});
+
+	it('rejects another job or volunteer', () => {
+		expect(assignmentMatchesApplication(application(), assignment({ job_id: 'job:B' }))).toBe(
+			false
+		);
+		expect(
+			assignmentMatchesApplication(application(), assignment({ volunteer_id: 'volunteer:2' }))
+		).toBe(false);
+	});
+
+	it('ignores status', () => {
+		expect(assignmentMatchesApplication(application(), assignment({ status: 'cancelled' }))).toBe(
+			true
+		);
+	});
+
+	it('compares dates when the assignment predates shift ids', () => {
+		const legacy = assignment({ shift_id: undefined });
+		expect(assignmentMatchesApplication(application(), legacy)).toBe(true);
+		expect(assignmentMatchesApplication(application(), { ...legacy, date: '2026-08-11' })).toBe(
+			false
+		);
+	});
+
+	it('compares dates when the application predates shift ids', () => {
+		const legacy = application({
+			shift_id: undefined,
+			selected_shift: { date: TODAY, start_time: '08:00', end_time: '16:00' }
+		});
+		expect(assignmentMatchesApplication(legacy, assignment())).toBe(true);
+		expect(assignmentMatchesApplication(legacy, assignment({ date: '2026-08-11' }))).toBe(false);
+	});
+});
+
+describe('assignmentAttendance', () => {
+	it('only shows status for a cancelled assignment', () => {
+		const a = assignment({ status: 'cancelled' });
+		expect(assignmentAttendance(a, true, TODAY)).toEqual({ kind: 'status', assignment: a });
+	});
+
+	it('offers check-in today only to a verified volunteer', () => {
+		const a = assignment();
+		expect(assignmentAttendance(a, true, TODAY).kind).toBe('check-in');
+		expect(assignmentAttendance(a, false, TODAY).kind).toBe('verify');
 	});
 });
