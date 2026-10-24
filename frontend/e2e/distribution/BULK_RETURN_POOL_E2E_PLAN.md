@@ -1,8 +1,10 @@
 # Bulk return pool (v3) E2E plan
 
-Status: draft, 2026-10-24. Branch base `e080abfa4` of PR #768 (issues #658 / #659 / #660).
-This is a design document only; no test code is written yet. Language and conventions follow
-`e2e/README.md`.
+Status: implemented, 2026-10-24 (first run pending). Branch base `e080abfa4` of PR #768 (issues
+#658 / #659 / #660). The specs described below now exist: `bulk-return-pool-flow.test.ts`,
+`bulk-return-pool-storage.test.ts`, `bulk-return-pool-access.test.ts`, with `bulk-return-pool.ts`
+and `pages/bulk-return-pool.page.ts`. Where source differed from the first draft this document was
+corrected (see the notes marked "verified"). Language and conventions follow `e2e/README.md`.
 
 ## 1. Scope
 
@@ -61,7 +63,20 @@ Out of scope and risks:
   tab "4. รับคืนสิ่งของ" under `LoanReturnCard`. DST sees add / move / void only.
   `LoanReturnCard` has "คืนเข้ากองรับคืน" on active loans (opens the add dialog prefilled).
 - Board flags `canManage` / `canWriteEntry` come from the session, not a surface prop; SM on
-  onsite therefore also sees the manage actions.
+  onsite therefore also sees the manage actions. The UI helpers also admit `system_admin`
+  (`canManageBulkReturnPool`), like the VDU (open point a).
+- Observed against real CouchDB (GAP BRP-F10, §7): the source says opening a pool selects it, but
+  its detail sheet does NOT open by itself, and an OPEN sheet does not follow the refreshed overview
+  row (stale entries, title, status) until it is closed and reopened from the card. The page object
+  therefore never relies on either: `openPool` opens the sheet from the card, and every mutation
+  done inside the sheet ends with `reopenDetail` (close if open, wait for the card to show the new
+  count / status, click the card). Cancel closes the sheet itself (`onClose()`), so it does not
+  reopen. The board header buttons ("เปิดกองใหม่", "รับของเข้ากอง") are behind the sheet while it is
+  open.
+  Submit and cancel confirmations have no reason field (the "reason" is the explanatory text
+  `#submit-pool-reason` / `#cancel-pool-reason`); void has none either. A voided entry is folded out
+  of the sheet (it is not shown as "voided"). The board reads the pool list once on mount, so a
+  seeded pool must exist before the page loads.
 - Ledger row: id `deriveDeterministicLedgerId('bulk_return_receive', poolId, itemId)` (from
   `src/lib/features/operations/domain/deterministic-ledger-id`), `reason: 'receive'`,
   `ref_id: 'bulk_return_pool:<ULID>'`, `qty` = received qty, `lot.note: 'bulk_return_pool'`,
@@ -91,7 +106,11 @@ Out of scope and risks:
 - Readers: `readPool`, `readEntries(poolId)`, `readMoves(entryId)` (move doc `:0001`),
   `readVoids(entryId)`, `receiveLedgerRows(poolId)` (filter `reason 'receive'`, `ref_id` prefix).
 - `lendViaDesk(...)`: thin reuse of the `issueLoan` flow (tab 3) so partial-return loans come from
-  the real UI, not a seeder.
+  the real UI, not a seeder (used by F2 and F5; F1/F6/F-drift use `seedLoan`).
+- Also in the helper file: v3 body builders (`buildPoolBody`, `submitBody`, `cancelBody`,
+  `receiveBody`, `buildEntryBody`, `buildMoveBody`, `buildVoidBody`, `buildReceiveLedgerBody`) for the
+  direct-write matrix, `seedSubmittedPool`, `expectWrites` / `actor` (copied from V5: a spec file
+  cannot be imported) and `switchUser`.
 
 ### 3.3 Storage point fixture (`fixtures.ts`)
 
@@ -103,9 +122,14 @@ Out of scope and risks:
   starts a separate worker for different option values, so that spec gets its own shelter with
   points; every other spec keeps a shelter without points (the "คลังหลัก" case).
 - Teardown unchanged: the shelter is deleted when the worker ends and `assertRunLeftNothing` runs.
-- To check while implementing: whether `useShelter` caches shelter data. Points must be written
-  before any test page loads (worker setup guarantees this, but confirm no stale cache across
-  `scenarioAs`).
+- Direct-write tests (BRP-V1, F6, ...) share the worker's shelter with the UI tests, and the board
+  folds every entry / move / void of the shelter (GAP BRP-F11: one orphan throws for everyone). They
+  must leave fold-consistent data whether the write is accepted or rejected: real seeded pools and
+  entries, move / void item_id and qty copied from the entry, void pool_id = the entry's pool.
+- Verified: the app reads the registry shelter doc through TanStack Query on every page load, and
+  the fixture writes the points before the worker's first test, so no page can have cached a
+  point-less doc. The write is refused for any shelter whose name does not start with
+  `E2E Distribution`.
 
 ### 3.4 Page object `BulkReturnPoolBoard`
 
@@ -140,16 +164,21 @@ to `getByRole('dialog')`.
 
 ## 5. Scenarios: flow (`bulk-return-pool-flow.test.ts`)
 
+Implementation note: F7 is split into F7a (UI maxlength), F7b (VDU) and F7c (duplicate); F8 into
+F8a (unspecified) and F8b (no outstanding loan); V1 into V1a (create), V1b (submit / receive /
+cancel), V1c (entry / move / void) and V1d (ledger row). BRP-F-drift is `test.fixme` in this file.
+
 ### BRP-F1 Mixed-surface happy path (D1, D5, D7, D10, D11)
 
-- Setup: shelter without points; two returnable items A, B lent to evacuee E through the desk UI
-  (loan setup helper); a third item C with no loan.
+- Setup: shelter without points; two returnable items A (loan of 3), B (loan of 2) lent to evacuee
+  E with `seedLoan` (the desk lending path is covered by F2/F5); a third item C with no loan.
 - Steps:
   1. WH at back-office opens pool "Pool F1" (UI).
-  2. DST at onsite adds entries: E returns A and B (two lines); one unspecified-returner line for
-     C; one more line for A via `LoanReturnCard` "คืนเข้ากองรับคืน" (dialog prefilled).
-  3. WH at back-office submits (reason field).
-  4. WH receives with item B one short, reason `damaged`; storage point control absent.
+  2. DST at onsite adds entries: E returns A (2) and B (2) (two lines); one unspecified-returner
+     line for C; one more line for A (1) via `LoanReturnCard` "คืนเข้ากองรับคืน" (dialog prefilled).
+  3. WH at back-office submits (confirm dialog, no reason field).
+  4. WH receives with item B one short, reason `damaged`. The storage point select is still
+     rendered (verified): with no points it offers only "ไม่ระบุ (คลังหลัก)" plus a hint.
 - UI assertions: after submit the card shows SUBMITTED and the item summary; receive dialog only
   asks reason for the mismatched item; receive record shows "คลังหลัก"; pool shows RECEIVED.
 - CouchDB assertions:
@@ -171,8 +200,9 @@ to `getByRole('dialog')`.
 
 ### BRP-F3 Empty pool (D1, D4)
 
-- Steps: open pool, observe submit disabled with the empty reason; cancel (reason); pool leaves the
-  board; tick `#bulk-pool-show-cancelled` to see it.
+- Steps: open pool, observe submit disabled with the empty reason (`#submit-pool-reason`); cancel
+  (confirm dialog, no reason field); pool leaves the board; tick `#bulk-pool-show-cancelled` to
+  see it.
 - Couch: pool `CANCELLED`, doc still exists (not deleted).
 
 ### BRP-F4 Non-empty pool cannot cancel; move then cancel (D4, D5)
@@ -185,10 +215,10 @@ to `getByRole('dialog')`.
 ### BRP-F5 Void reopens loan (D6, D11)
 
 - Setup: loan of 2 returned fully through an entry in an OPEN pool (UI via `LoanReturnCard`).
-- Steps: void the entry (reason).
+- Steps: void the entry (confirm dialog, no reason field).
 - Couch: loan back to `active`, `qty_returned` 0, `applied_bulk_entry_ids` empty; void doc
-  exists; entry doc still present (append-only). UI: entry shown as voided, pool count net 0 so
-  submit is disabled again.
+  exists; entry doc still present (append-only). UI (verified): the voided entry is folded out of
+  the sheet ("ยังไม่มีรายการในกองนี้"), pool count net 0 so submit is disabled again.
 
 ### BRP-F6 Late entry after submit (D5)
 
@@ -238,8 +268,9 @@ to `getByRole('dialog')`.
 
 ### BRP-S2 Receive requires a point when the shelter has points (D7)
 
-- Receive without picking: submit button blocked with "เลือกจุดเก็บของ"; first select option is
-  "ไม่ระบุ (คลังหลัก)". After picking, receive succeeds.
+- Receive without picking: the confirm button stays enabled but pressing it shows the inline
+  alert "เลือกจุดเก็บของ" and writes nothing (verified: not a disabled button); first select option
+  is "ไม่ระบุ (คลังหลัก)" and does not count as a choice. After picking, receive succeeds.
 - Counterpart (no points, "คลังหลัก" fallback, board "ไม่ระบุ") is covered in F1.
 
 ## 7. Scenarios: access (`bulk-return-pool-access.test.ts`)
@@ -280,6 +311,28 @@ added in PR #768. Fixme asserts SA cannot open a pool; enable once kong decides.
 
 Loan changed between allocation and apply (for example cleared lost/waived): apply fails on every
 retry and no rule exists yet. Fixme documents the expected recovery once a rule is decided.
+
+### GAP: BRP-F10 the open sheet is stale (`test.fixme`, in `bulk-return-pool-gap-isolation.test.ts`)
+
+The overview query refetches after each mutation (the board card shows the new count), but the open
+detail sheet keeps the old row: stale entries after add / move / void, stale title after rename,
+"เก็บเข้าคลัง" instead of "ตรวจรับ" after submit; and a pool opened through "เปิดกอง" never opens its
+sheet, although `onOpened` sets `selectedPoolId`. `BulkReturnPoolBoard` comments "Detail follows the
+live overview row, so it refreshes after every mutation". Fixme asserts the intended behaviour: new
+pool's sheet visible with its name after create; after moving the only entry from the open sheet it
+shows "ยังไม่มีรายการในกองนี้" without reopening. Page-object workaround: `reopenDetail` (§2.2).
+Remove the fixme and the workaround once fixed.
+
+### GAP: BRP-F11 one orphan move/void breaks the whole board (`test.fixme`, in `bulk-return-pool-gap-isolation.test.ts`)
+
+The VDU cannot check that the entry a move / void refers to exists, so such a doc is accepted
+(direct write, or an event replicated before its entry, e.g. edge to central).
+`resolveBulkReturnEntries` then throws ("Void references unknown entry ...") for the whole overview
+and the board shows "ไม่สามารถโหลดข้อมูลกองรับคืนได้" to every user of the shelter. Fixme: seed an OPEN
+pool, PUT an orphan void as a DST user (expect 201), open the board, expect the pool card visible
+(one bad event should not hide every pool). It lives in its own `GAP isolation` describe with its
+own `shelterStoragePoints` value, so it gets a separate worker and shelter and enabling it can never
+break other tests.
 
 ## 8. Old tests and helpers (do not delete in this change)
 
