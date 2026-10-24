@@ -22,7 +22,7 @@ import Warehouse from '@lucide/svelte/icons/warehouse';
 import Calculator from '@lucide/svelte/icons/calculator';
 import HandHeart from '@lucide/svelte/icons/hand-heart';
 import MapPin from '@lucide/svelte/icons/map-pin';
-import UtensilsCrossed from '@lucide/svelte/icons/utensils-crossed';
+import ForkSpoon from '$lib/components/icons/fork-spoon.svelte';
 import ClipboardCheck from '@lucide/svelte/icons/clipboard-check';
 import NotebookPen from '@lucide/svelte/icons/notebook-pen';
 import Cpu from '@lucide/svelte/icons/cpu';
@@ -136,7 +136,7 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 			{
 				label: 'ครัวกลางและอาหาร',
 				href: resolve('/back-office/kitchen'),
-				icon: UtensilsCrossed
+				icon: ForkSpoon
 			}
 		]
 	},
