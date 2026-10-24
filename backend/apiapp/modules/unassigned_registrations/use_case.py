@@ -761,8 +761,12 @@ class UnassignedRegistrationsUseCase:
                     {"members.reserved_evacuee_id": payload.evacuee_id}
                 )
             else:
+                # Repeating the partial filter lets Mongo use `uniq_open_person_id_numbers`.
                 doc = await UnassignedRegistration.find_one(
-                    {"open_person_id_numbers": normalize_national_id(payload.citizen_id or "")}
+                    {
+                        "open_person_id_numbers": normalize_national_id(payload.citizen_id or ""),
+                        "open_person_id_numbers.0": {"$exists": True},
+                    }
                 )
         except (PyMongoError, ConnectionError, TimeoutError, OSError) as exc:
             raise _mongo_unavailable("kiosk_lookup") from exc
