@@ -462,29 +462,29 @@ async function householdFromRegistration(
 			?.reserved_evacuee_id;
 	if (!registration || !primaryId) return { kind: 'not_found', can_register: false };
 
-	const members: KioskEvacueeSummary[] = [];
-	for (const member of registration.members) {
-		if (!isComingToShelter(member, shelterCode)) continue;
-		const couchDoc =
-			member.status === 'claimed'
-				? await getById(dbName, member.reserved_evacuee_id).catch(asLookupUnavailable)
-				: null;
-		// Open, or claimed here but never born in Couch (orphan claim): check-in repairs it.
-		members.push(
-			couchDoc
-				? toSummary(couchDoc, primaryId)
-				: {
-						evacuee_id: member.reserved_evacuee_id,
-						first_name: member.first_name,
-						last_name: maskLastName(member.last_name),
-						gender: member.gender,
-						age: member.age,
-						status: 'pre_registered',
-						is_primary: member.reserved_evacuee_id === primaryId,
-						selectable: true
-					}
-		);
-	}
+	// Claimed members are read from Couch in parallel; queue order is kept.
+	const members = await Promise.all(
+		registration.members
+			.filter((member) => isComingToShelter(member, shelterCode))
+			.map(async (member): Promise<KioskEvacueeSummary> => {
+				const couchDoc =
+					member.status === 'claimed'
+						? await getById(dbName, member.reserved_evacuee_id).catch(asLookupUnavailable)
+						: null;
+				if (couchDoc) return toSummary(couchDoc, primaryId);
+				// Open, or claimed here but never born in Couch (orphan claim): check-in repairs it.
+				return {
+					evacuee_id: member.reserved_evacuee_id,
+					first_name: member.first_name,
+					last_name: maskLastName(member.last_name),
+					gender: member.gender,
+					age: member.age,
+					status: 'pre_registered',
+					is_primary: member.reserved_evacuee_id === primaryId,
+					selectable: true
+				};
+			})
+	);
 	return {
 		kind: 'household',
 		name_masked: true,
