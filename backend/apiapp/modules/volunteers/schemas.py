@@ -52,6 +52,9 @@ class PublicJobItem(BaseModel):
     slots_remaining: int
     applicants_count: int = 0
     status: str
+    #: Staff flagged the job as needing people urgently — the home page volunteer card
+    #: counts only these (#709).
+    is_urgent: bool = False
     #: True when applying will land in ``pending_review`` rather than issue a confirmed
     #: ticket, so the form can say so before the applicant commits.
     requires_review: bool = False
@@ -167,7 +170,7 @@ class PortalCredential(BaseModel):
     refusing one of them here would leave the QR on their pass unusable.
 
     Neither is a secret a stranger cannot reach on its own — a phone number is
-    guessable — which is why every route that takes this is rate limited and why
+    guessable — which is why every route that takes this is rate limited at nginx and why
     answering a dispatched shift still needs the separate code a manager reads out.
 
     "Exactly one" is enforced in the use case rather than by a validator here, so the

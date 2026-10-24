@@ -17,7 +17,7 @@ type TransferDestination = { code: string; name: string };
  * The create-transfer form cannot use `listShelters()` for this — that list is scoped to the
  * caller's own shelter for everyone but system_admin, so after the form drops its own shelter
  * nothing is left. This route answers only code + name, to the same roles the transfer API
- * already accepts (`authorizeTransfer` → `authorizeWarehouse`). A cancelled shelter (set up by
+ * already accepts (`authorizeTransfer`). A cancelled shelter (set up by
  * mistake, never opened) is left out: nothing should be sent there.
  */
 export const GET: RequestHandler = async ({ request, url }) => {

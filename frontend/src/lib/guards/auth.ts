@@ -160,8 +160,9 @@ export function confineKioskStaffOnly(pathname: string) {
 }
 
 /**
- * Warehouse guard — requires INVENTORY_WRITE_ROLES: system_admin, shelter_manager,
- * or warehouse_staff (role-permission-matrix.md §4). Redirects to / otherwise.
+ * Warehouse guard — system_admin, or in the active shelter shelter_manager or the warehouse
+ * side: warehouse_staff or supply_coordinator (`isWarehouseStaff`; role-permission-matrix.md
+ * §4). Redirects to / otherwise.
  */
 export async function requireWarehouseAccess(fetchFn: typeof fetch = fetch) {
 	await requireAuth(fetchFn);

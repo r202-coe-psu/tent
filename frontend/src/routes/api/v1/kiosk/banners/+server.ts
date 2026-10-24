@@ -23,14 +23,17 @@ export const POST: RequestHandler = async ({ request }) => {
 			scannerServerRepository
 		);
 		const now = new Date();
-		// FR-KBR-37: a kiosk with banners switched off gets an empty feed, no listing.
-		if (principal.banner_enabled === false) {
+		// A kiosk with no banner group gets an empty feed, no listing.
+		if (principal.banner_group_id === null) {
 			return json(
 				{ banners: [], fetched_at: now.toISOString() },
 				{ status: 200, headers: noStoreHeaders }
 			);
 		}
-		const banners = await listActiveForShelter(principal.shelter_code, now, principal.screen_type);
+		const banners = await listActiveForShelter(principal.shelter_code, now, {
+			groupId: principal.banner_group_id,
+			screenType: principal.screen_type
+		});
 		return json(
 			{
 				banners: banners.map((banner) => ({

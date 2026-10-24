@@ -87,7 +87,8 @@ export async function seedStagingOps(): Promise<void> {
 		// `adjust` (schema.md §2.1, ref_id null) — the same reason the back-office
 		// manual receive writes. `receive` now requires a meal_service / requisition /
 		// distribution_log / bulk_return_pool ref (CR-121) and would be refused.
-		// CR-143 §C: every adjust names a reason; an opening balance is `other`.
+		// CR-143 §C: every adjust names a reason; an opening balance is `found` — stock that
+		// turned up with no source document, as the manual receive books it (CR-156 FR-C7).
 		const stockEntries = [
 			createLegacyFlow2StockLedger(
 				{

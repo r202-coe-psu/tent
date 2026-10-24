@@ -21,11 +21,15 @@ vi.mock('svelte-sonner', () => ({ toast: { success: toastSuccess } }));
 
 const NOW = new Date('2026-10-15T05:00:00.000Z');
 
-const banner = (id: string, over: Partial<KioskBannerSummary> = {}): KioskBannerSummary => ({
+const banner = (
+	id: string,
+	over: Partial<Omit<KioskBannerSummary, 'schema_v'>> = {}
+): KioskBannerSummary => ({
 	_id: `kiosk_banner:${id}`,
 	_rev: `1-${id}`,
 	type: 'kiosk_banner',
-	schema_v: 1,
+	schema_v: 2,
+	group_id: 'kiosk_banner_group:A',
 	shelter_code: 'SH001',
 	title: `แบนเนอร์ ${id}`,
 	caption: null,
@@ -51,6 +55,7 @@ function render(props: {
 	loading?: boolean;
 	errorMessage?: string | null;
 	screen?: 'compact' | 'portrait';
+	groupId?: string;
 }) {
 	instance = mount(Harness, {
 		target: document.body,
@@ -98,6 +103,36 @@ describe('KioskBannerScreenManager', () => {
 		});
 
 		expect(titles()).toEqual(['แบนเนอร์ legacy', 'แบนเนอร์ small']);
+	});
+
+	it('lists only this group’s banners, not another group’s or an ungrouped one', () => {
+		const GROUP_B = 'kiosk_banner_group:B';
+		const current = [
+			banner('mine', { order: 1 }),
+			banner('theirs', { group_id: GROUP_B, order: 1 }),
+			{ ...banner('v1', { group_id: undefined, order: 2 }), schema_v: 1 as const },
+			banner('also-theirs', { group_id: GROUP_B, order: 2 })
+		];
+
+		render({ initialCurrent: current });
+		expect(titles()).toEqual(['แบนเนอร์ mine']);
+
+		unmount(instance!);
+		document.body.innerHTML = '';
+		render({ initialCurrent: current, groupId: GROUP_B });
+		expect(titles()).toEqual(['แบนเนอร์ theirs', 'แบนเนอร์ also-theirs']);
+	});
+
+	it('counts only this group’s expired banners', () => {
+		render({
+			initialCurrent: [banner('live')],
+			expired: [
+				banner('old-a', { end_at: '2026-10-10T11:00:00.000Z' }),
+				banner('old-b', { group_id: 'kiosk_banner_group:B', end_at: '2026-10-10T11:00:00.000Z' })
+			]
+		});
+
+		expect((byText('[role="tab"]', 'หมดอายุ') as HTMLElement).textContent).toContain('(1)');
 	});
 
 	it('shows this screen’s expired banners without drag handles', async () => {
@@ -170,6 +205,7 @@ describe('KioskBannerScreenManager', () => {
 
 		expect(reorder.mutateAsync).toHaveBeenCalledWith({
 			shelterCode: 'SH001',
+			groupId: 'kiosk_banner_group:A',
 			screenType: 'compact',
 			items: [
 				{ id: 'kiosk_banner:b', rev: '1-b' },

@@ -20,6 +20,7 @@
 	import RegistrationSection from './evacuee-registration.svelte';
 	import EvacueePetAssetVehicle from '../household-flows/evacuee-pet-asset-vehicle.svelte';
 	import EvacueeHandoverSlipModal from '../evacuee-profile/evacuee-handover-slip-modal.svelte';
+	import { EVACUEE_HANDOVER_SLIP_I18N } from '../_constants/evacuee-handover-slip.i18n';
 	import HouseholdAddressFields from '../forms/household-address-fields.svelte';
 	import { EVACUEE_FORM_I18N } from '../_constants/evacuee-form.i18n';
 	import {
@@ -118,6 +119,7 @@
 	);
 
 	const t = $derived(getTranslation(EVACUEE_FORM_I18N, languageStore.current));
+	const handoverT = $derived(getTranslation(EVACUEE_HANDOVER_SLIP_I18N, languageStore.current));
 
 	const sectionEFlags = $derived({
 		allow_pets: shelterQuery.data?.feature_flags?.allow_pets ?? false,
@@ -1242,6 +1244,7 @@
 		show={showHandoverSlip}
 		evacuee={handoverEvacuee}
 		symptoms={[]}
+		closeLabel={handoverT.doneNext}
 		onClose={handleHandoverDone}
 	/>
 {/if}

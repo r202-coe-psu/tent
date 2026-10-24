@@ -27,7 +27,6 @@ from tent_model.volunteer_profile_update_buffer import VolunteerProfileUpdateBuf
 from tent_model.volunteer_schedule_action_buffer import VolunteerScheduleActionBuffer
 
 from apiapp.core.config import Settings
-from apiapp.modules.volunteers import router as volunteer_router
 from apiapp.utils.masking import normalize_phone, sha256_hex
 from apiapp.utils.response_code import normalize_response_code
 
@@ -37,12 +36,6 @@ JOB_ID = "job:01JOBTEST0000000000000001"
 @pytest.fixture
 def auth_headers(settings: Settings) -> dict[str, str]:
     return {"Authorization": f"Bearer {settings.EXTERNAL_API_SECRET}"}
-
-
-@pytest.fixture(autouse=True)
-def reset_rate_limit() -> None:
-    """The router's sliding window is process-global and would leak across tests."""
-    volunteer_router._rate_buckets.clear()
 
 
 @pytest.fixture
@@ -178,6 +171,21 @@ async def test_list_jobs_reports_non_cancelled_applicant_counts(
     listed = response.json()["jobs"][0]
     assert listed["applicants_count"] == 1
     assert listed["shifts"][0]["applicants_count"] == 1
+
+
+async def test_list_jobs_reports_the_urgent_flag(
+    client: AsyncClient, shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    job = await _make_job()
+    job.is_urgent = True
+    await job.save()
+    await _make_job(job_id="job:01JNOTURGENT00000000000000")
+
+    response = await client.get("/public/v1/jobs", headers=auth_headers)
+
+    assert response.status_code == 200
+    flags = {item["job_id"]: item["is_urgent"] for item in response.json()["jobs"]}
+    assert flags == {JOB_ID: True, "job:01JNOTURGENT00000000000000": False}
 
 
 async def test_list_jobs_serializes_concrete_shift_identity_and_quota(

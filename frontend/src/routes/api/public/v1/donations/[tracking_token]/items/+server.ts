@@ -1,5 +1,4 @@
 import { json } from '@sveltejs/kit';
-import { donationEditLimiter } from '$lib/server/security/rate-limiter';
 import { adminRaw } from '$lib/server/couch-admin';
 import { putAsPublicWriter } from '$lib/server/couch-public-writer';
 import { sha256Hex } from '$lib/db/hash';
@@ -49,7 +48,7 @@ async function findByTokenHash(shelterDb: string, hash: string): Promise<PublicD
  * succeeded, the counter is briefly ahead of the document — `donation-quota
  * recalculate` recomputes from CouchDB and settles it (CR-061).
  */
-export const PATCH = async ({ params, request, getClientAddress }) => {
+export const PATCH = async ({ params, request }) => {
 	try {
 		const { tracking_token } = params;
 		if (!tracking_token) {
@@ -59,11 +58,6 @@ export const PATCH = async ({ params, request, getClientAddress }) => {
 		const payload = await request.json();
 		if (!Array.isArray(payload.items) || payload.items.length === 0) {
 			return json({ success: false, error: 'items is required' }, { status: 400 });
-		}
-
-		const ip = getClientAddress();
-		if (!donationEditLimiter.check(ip)) {
-			return json({ success: false, error: 'RATE_LIMITED' }, { status: 429 });
 		}
 
 		const shelterDb = shelterDbFromToken(tracking_token);
