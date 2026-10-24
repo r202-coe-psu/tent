@@ -162,7 +162,7 @@ export const PATCH = async ({ params, request }) => {
 		latestDoc.items = items;
 		latestDoc.revisions = [...(latestDoc.revisions ?? []), revision];
 		if (status) latestDoc.status = status;
-		latestDoc.schema_v = DONATION_SCHEMA_V;
+		latestDoc.schema_v = Math.max(latestDoc.schema_v ?? 0, DONATION_SCHEMA_V);
 		latestDoc.updated_at = new Date().toISOString();
 
 		let writeRes: { status: number; data: unknown };
