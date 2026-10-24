@@ -1,15 +1,16 @@
 ---
-id: draft
-title: เตือนสารก่อแพ้ตอนแจกอาหาร — item_master.allergens เป็น code + กติกาเทียบกับ medical.allergies
-status: proposed
+id: CR-191
+title: CR-191 — เตือนสารก่อแพ้ตอนแจกอาหาร — item_master.allergens เป็น code + กติกาเทียบกับ medical.allergies
+status: approved
 date: 2026-10-24
+updated: 2026-10-25
 requested_by: feedback หน้างาน (ข้อ 6) — issue #607 (ต่อจาก CR-187 / #648)
-decided_by: project owner
+decided_by: kong (approved 2026-10-25)
 layer: volatile
 affects:
   - docs/data/schema.md §4.2 (`item_master.allergens` = master `allergy` code หรือ free text; schema_v 5 → 6)
   - docs/data/schema.md §2.30 (`distribution_log.allergen_conflicts` — additive, ไม่ bump)
-  - docs/changes/03-C-supply/CR-159-onsite-distribution.md §C (เพิ่ม FR-MRM-06..09)
+  - docs/changes/03-C-supply/CR-159-onsite-distribution.md §C (เพิ่ม FR-MRM-06..10; FR-MRM-05 ข้อยกเว้น FR-5)
   - frontend/src/lib/features/catalog/domain (ItemMaster.allergens, ITEM_MASTER_SCHEMA_V, itemAllergens reader)
   - frontend/src/lib/features/catalog/ui (item-master-form, master-item-sheet)
   - frontend/src/lib/features/master-data (ย้าย MasterTagInput มาเป็น shared UI ของ master-data)
@@ -18,7 +19,7 @@ affects:
   - frontend/src/lib/features/distribution/ui/frontline (FoodDistributionCard, MealEntitlementWarning)
 ---
 
-# draft-allergen-warning-at-distribution — เตือนสารก่อแพ้ตอนแจกอาหาร
+# CR-191 — เตือนสารก่อแพ้ตอนแจกอาหาร
 
 > **สรุป (TL;DR):**
 >
@@ -110,15 +111,15 @@ affects:
   ตอนเทียบและตอนบันทึกฟอร์ม; ที่ไม่ตรงคงเป็น free text (แสดงผลแต่ไม่ match)
 - `distribution_log`: additive optional field → doc เดิมอ่านได้ ไม่ backfill
 
-## ขอให้ owner เคาะ
+## Decisions (เคาะ kong, 2026-10-25)
 
-1. **`allergen_conflicts` บน `distribution_log`** — เสนอ: เพิ่ม field opt **ไม่ bump** schema_v (additive,
-   VDU ไม่ต้องแก้) · ทางเลือก: ไม่เพิ่ม field ใช้ `override_reason` อย่างเดียวตาม FR-MRM-05 (แยก override
-   เพราะแพ้ไม่ได้ใน audit)
-2. **ข้อความเดิมใน `allergens` ที่ไม่ตรง master** — เสนอ: คงเป็น free text ใน array (เหมือน
-   `medical.allergies`) · ทางเลือกตาม issue: ย้ายไป `notes`
+1. **`allergen_conflicts` บน `distribution_log`** — เพิ่ม field opt **ไม่ bump** schema_v (additive,
+   VDU ไม่ต้องแก้) ตามที่เสนอ
+2. **ข้อความเดิมใน `allergens` ที่ไม่ตรง master** — คงเป็น free text ใน array (เหมือน
+   `medical.allergies`) ตามที่เสนอ
 
 ## Decision log
 
 - 2026-10-24 — proposed (#607). Owner เคาะแล้ว: พบแพ้ = **เตือน + override ได้** (ไม่ห้ามแจกเด็ดขาด);
   track ด้วย CR ไฟล์บน branch `docs/`
+- 2026-10-25 — approved โดย kong เป็น CR-191; เคาะ `allergen_conflicts` opt ไม่ bump และคงข้อความเดิมเป็น free text ใน array ตามที่เสนอ
