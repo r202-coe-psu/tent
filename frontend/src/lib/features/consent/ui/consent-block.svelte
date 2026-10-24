@@ -18,6 +18,7 @@
 		hasMedicalInput = false,
 		disabled = false,
 		confirm = 'embedded',
+		size = 'default',
 		onbasic,
 		onconfirm
 	}: {
@@ -28,6 +29,8 @@
 		disabled?: boolean;
 		/** 'embedded': the host form's submit is「ยืนยัน」(FR-19). 'standalone': the block renders it. */
 		confirm?: 'embedded' | 'standalone';
+		/** 'kiosk': touch-sized controls and text; the kiosk-portrait/kiosk-compact variants only apply here. */
+		size?: 'default' | 'kiosk';
 		/** Embedded「ลงทะเบียนแบบพื้นฐาน」: the host re-runs its submit in basic mode. */
 		onbasic?: () => void;
 		/** Standalone: called with the decision once confirmed. */
@@ -35,6 +38,34 @@
 	} = $props();
 
 	const uid = $props.id();
+
+	const sizes = {
+		default: {
+			section: 'space-y-3 p-4 sm:p-6',
+			heading: 'text-lg sm:text-xl',
+			option: 'min-h-12',
+			optionText: 'text-sm sm:text-base',
+			checkbox: 'size-5',
+			tag: 'text-xs',
+			noticeTitle: 'text-base',
+			noticeBody: 'text-sm sm:text-base',
+			button: 'min-h-12'
+		},
+		kiosk: {
+			section:
+				'space-y-3 p-4 kiosk-portrait:space-y-5 kiosk-portrait:p-8 kiosk-compact:space-y-2 kiosk-compact:p-3',
+			heading: 'text-xl kiosk-portrait:text-3xl kiosk-compact:text-lg',
+			option: 'min-h-14 kiosk-portrait:min-h-20 kiosk-compact:min-h-11',
+			optionText: 'text-base kiosk-portrait:text-2xl kiosk-compact:text-sm',
+			checkbox: 'size-6 kiosk-portrait:size-9 kiosk-compact:size-5',
+			tag: 'text-sm kiosk-portrait:text-lg kiosk-compact:text-xs',
+			noticeTitle: 'text-lg kiosk-portrait:text-2xl kiosk-compact:text-base',
+			noticeBody: 'text-base kiosk-portrait:text-xl kiosk-compact:text-sm',
+			button:
+				'h-auto min-h-14 w-full whitespace-normal py-3 text-lg sm:flex-1 kiosk-portrait:min-h-20 kiosk-portrait:text-2xl kiosk-compact:min-h-12 kiosk-compact:text-base'
+		}
+	} as const;
+	const sz = $derived(sizes[size]);
 
 	const memberKeys = $derived(members.map((m) => m.key));
 	const needsGuardianPick = $derived(!block.canConfirm(memberKeys));
@@ -67,7 +98,8 @@
 {#snippet tag(text: string, tone: 'main' | 'sensitive' | 'optional')}
 	<span
 		class={[
-			'me-2 mb-1 inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold',
+			'me-2 mb-1 inline-flex items-center rounded-full border px-2.5 py-0.5 font-semibold',
+			sz.tag,
 			tone === 'main' &&
 				'border-domain-registration-border bg-domain-registration-subtle text-domain-registration-text',
 			tone === 'sensitive' && 'border-amber-200 bg-amber-50 text-amber-900',
@@ -86,16 +118,22 @@
 )}
 	<label
 		for={id}
-		class="flex min-h-12 cursor-pointer items-start gap-3 rounded-xl border border-slate-200/80 bg-white p-3.5 transition-colors hover:border-domain-registration-border has-[[data-state=checked]]:border-domain-registration-border has-[[data-state=checked]]:bg-domain-registration-subtle/40"
+		class={[
+			'flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200/80 bg-white p-3.5 transition-colors hover:border-domain-registration-border has-[[data-state=checked]]:border-domain-registration-border has-[[data-state=checked]]:bg-domain-registration-subtle/40',
+			sz.option
+		]}
 	>
 		<Checkbox
 			{id}
 			{checked}
 			{disabled}
 			onCheckedChange={(value) => onchange(value === true)}
-			class="mt-0.5 size-5 shrink-0 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2"
+			class={[
+				'mt-0.5 shrink-0 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2',
+				sz.checkbox
+			]}
 		/>
-		<span class="text-sm leading-relaxed text-slate-700 sm:text-base">
+		<span class={['leading-relaxed text-slate-700', sz.optionText]}>
 			{@render tag(tagText, tone)}{text}
 		</span>
 	</label>
@@ -103,12 +141,9 @@
 
 <section
 	aria-labelledby="{uid}-heading"
-	class="space-y-3 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-2xs sm:p-6"
+	class={['rounded-2xl border border-slate-200/80 bg-white shadow-2xs', sz.section]}
 >
-	<h3
-		id="{uid}-heading"
-		class="flex items-center gap-2 text-lg font-bold text-slate-900 sm:text-xl"
-	>
+	<h3 id="{uid}-heading" class={['flex items-center gap-2 font-bold text-slate-900', sz.heading]}>
 		<ShieldCheck class="size-5 text-domain-registration" aria-hidden="true" />
 		{copy.heading}
 	</h3>
@@ -213,18 +248,21 @@
 
 	{#if block.noticeVisible}
 		<div role="alert" class="space-y-3 rounded-xl border border-amber-200 bg-amber-50 p-4">
-			<p class="text-base font-bold text-amber-900">{copy.basicNotice.title}</p>
-			<p class="text-sm leading-relaxed text-amber-900 sm:text-base">{copy.basicNotice.body}</p>
+			<p class={['font-bold text-amber-900', sz.noticeTitle]}>{copy.basicNotice.title}</p>
+			<p class={['leading-relaxed text-amber-900', sz.noticeBody]}>{copy.basicNotice.body}</p>
 			<div class="flex flex-col gap-2 sm:flex-row">
 				<Button
-					class="min-h-12 bg-domain-registration-strong text-white hover:bg-domain-registration-text"
+					class={[
+						'bg-domain-registration-strong text-white hover:bg-domain-registration-text',
+						sz.button
+					]}
 					{disabled}
 					onclick={confirmBasic}
 					{@attach focusOnMount}
 				>
 					{copy.basicNotice.confirmBasic}
 				</Button>
-				<Button variant="outline" class="min-h-12" {disabled} onclick={backToChoosing}>
+				<Button variant="outline" class={sz.button} {disabled} onclick={backToChoosing}>
 					{copy.basicNotice.backToEdit}
 				</Button>
 			</div>
@@ -233,14 +271,17 @@
 		<div class="flex flex-col gap-2 sm:flex-row">
 			{#if confirm === 'standalone'}
 				<Button
-					class="min-h-12 bg-domain-registration-strong text-white hover:bg-domain-registration-text"
+					class={[
+						'bg-domain-registration-strong text-white hover:bg-domain-registration-text',
+						sz.button
+					]}
 					disabled={disabled || needsGuardianPick}
 					onclick={confirmStandalone}
 				>
 					{copy.actions.confirm}
 				</Button>
 			{/if}
-			<Button variant="outline" class="min-h-12" {disabled} onclick={() => block.decline()}>
+			<Button variant="outline" class={sz.button} {disabled} onclick={() => block.decline()}>
 				{copy.actions.decline}
 			</Button>
 		</div>
