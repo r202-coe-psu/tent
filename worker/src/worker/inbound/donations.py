@@ -102,19 +102,17 @@ def build_auto_approve_audit(
 
 async def _write_auto_approve_audit(
     couch: CouchClient, database: str, audit: dict[str, Any]
-) -> bool:
-    """Create the audit once. A ``conflict`` means an earlier run already wrote it."""
+) -> None:
+    """Create the audit once, logging a failure. A ``conflict`` means it already exists."""
     try:
         rows = await couch.bulk_docs(database, [audit])
     except Exception:
         logger.exception("Failed to write auto-approve audit %s", audit["_id"])
-        return False
+        return
     for row in rows:
         error = row.get("error")
         if error and error != "conflict":
             logger.error("CouchDB refused auto-approve audit %s: %s", audit["_id"], row)
-            return False
-    return True
 
 
 async def _persist_donation(couch: CouchClient, donation: DonationBuffer) -> bool:
@@ -131,22 +129,6 @@ async def _persist_donation(couch: CouchClient, donation: DonationBuffer) -> boo
         if donation.id.startswith("donation:")
         else f"donation:{donation.id}"
     )
-
-    # CR-174 FR-26: record the lines the campaign rule approved — after any donor edits
-    # made while the booking sat in the buffer, so the audit matches the final lines.
-    # Written before the donation so a failure retries both on the next poll; the fixed
-    # id keeps a retry from recording it twice.
-    lines = auto_approved_lines(list(donation.items_declared))
-    if lines:
-        audit = build_auto_approve_audit(
-            donation_id=doc_id,
-            shelter_code=donation.shelter_code,
-            booking_ref=donation.booking_ref,
-            lines=lines,
-            now=now,
-        )
-        if not await _write_auto_approve_audit(couch, database, audit):
-            return False
 
     couch_doc = {
         "_id": doc_id,
@@ -203,6 +185,22 @@ async def _persist_donation(couch: CouchClient, donation: DonationBuffer) -> boo
             result,
         )
         return False
+
+    # CR-174 FR-26: record the lines the campaign rule approved, from the same lines just
+    # written. After the donation, not before: an audit ahead of a failed PUT named lines
+    # the donor could still change, and the next poll's copy hit the fixed id and was
+    # dropped. A failure here is logged and the row still counts as synced — the donation
+    # is in CouchDB, so a re-run could not PUT it again.
+    lines = auto_approved_lines(list(donation.items_declared))
+    if lines:
+        audit = build_auto_approve_audit(
+            donation_id=doc_id,
+            shelter_code=donation.shelter_code,
+            booking_ref=donation.booking_ref,
+            lines=lines,
+            now=now,
+        )
+        await _write_auto_approve_audit(couch, database, audit)
 
     donation.synced_to_couch = True
     await donation.save()
