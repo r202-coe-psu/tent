@@ -79,7 +79,10 @@
 			</div>
 		{/each}
 	</div>
-	<Chart.Container config={chartConfig} class="h-108 w-full">
+	<Chart.Container
+		config={chartConfig}
+		class="h-72 w-full lg:h-[clamp(14rem,calc(var(--app-shell-height)-32rem),27rem)]"
+	>
 		<BarChart
 			data={chartData}
 			x="date"
