@@ -56,10 +56,13 @@ affects:
 
 **Walk-in:** ตอนเปิดฟอร์มยังไม่มี `evacuee_id` → client ถือเวลาเปิดฟอร์มไว้ แล้วเขียน `start` (`occurred_at` = เวลาเปิดฟอร์ม) พร้อม `complete` ตอนบันทึกสำเร็จ; ฟอร์มที่ปิดทิ้งโดยไม่บันทึกไม่มี log
 
-**Visit** = คู่ `start` → `complete` ของ `(evacuee_id, station)` โดย `complete` แรกที่ `occurred_at ≥ start` และก่อน `start` ถัดไปของ key เดียวกัน
+**Stale window** = 2 ชั่วโมง: `start` ที่ไม่มี `complete` และเก่ากว่า 2 ชั่วโมง = เลิกกลางคัน (abandoned)
+
+**Visit** = คู่ `start` → `complete` ของ `(evacuee_id, station)` โดย `complete` แรกที่ `occurred_at ≥ start`, ก่อน `start` ถัดไปของ key เดียวกัน และห่างจาก `start` ไม่เกิน stale window
 
 - `duration = complete.occurred_at − start.occurred_at` (derive ตอนสรุป ไม่ persist)
-- `start` ที่ไม่มี `complete` = visit ค้าง (ไม่นับในค่าเฉลี่ย)
+- `start` ที่ไม่มี `complete` และอายุ ≤ stale window = visit ค้าง (`open_visits`, ไม่นับในค่าเฉลี่ย)
+- `start` ที่ไม่มี `complete` และอายุ > stale window = abandoned (ไม่นับทั้งค่าเฉลี่ยและ `open_visits`)
 - `complete` ที่ไม่มี `start` = นับเป็น throughput แต่ไม่นับในค่าเฉลี่ย
 
 ## Requirements
@@ -69,21 +72,22 @@ affects:
 - **FR-STL-01** — เพิ่ม doc type `station_log` ใน `shelter_{shelter_code}` · `_id = station_log:{ulid}` · append-only (`created_at = updated_at`)
 - **FR-STL-02** — Field ตามตาราง Schema ด้านล่าง; `station` นอก `1|2|3`, `action` นอก `start|complete`, `channel` นอก `kiosk|staff` = reject (Zod ฝั่ง client); `station` 2 หรือ 3 ต้องเป็น `channel = 'staff'` (Zod ฝั่ง client)
 - **FR-STL-03** — `validate_doc_update` ต้องรับ type นี้ใน whitelist (`allowed`) และปฏิเสธ update/delete (เพิ่มใน `appendOnly`)
-- **FR-STL-04** — เขียน log ล้มเหลว **ต้องไม่ block** การทำงานหลักของ station (report-in / screening / zoning สำเร็จได้โดยไม่มี log) และต้องแจ้ง staff ด้วย toast เมื่อเขียนไม่สำเร็จ
+- **FR-STL-04** — เขียน log ล้มเหลว **ต้องไม่ block** การทำงานหลักของ station (report-in / screening / zoning สำเร็จได้โดยไม่มี log) และต้องแจ้ง staff ด้วย toast แบบ warning ข้อความ "บันทึกข้อมูลสำเร็จ แต่ระบบบันทึกเวลาการให้บริการขัดข้อง" (ไม่ใช้ error toast เพื่อไม่ให้ staff กดบันทึกซ้ำ)
 
 ### Write path
 
 - **FR-STL-10** — Kiosk: BFF ฝั่ง server เขียน log ด้วย `channel = 'kiosk'`, `device_id` จาก scanner principal ที่ authenticate แล้ว, `created_by = kiosk:{device_id}`; ห้ามรับ `channel`/`device_id` จาก body ของ kiosk
 - **FR-STL-11** — Kiosk `start` เขียนเมื่อ lookup สำเร็จ; `complete` เขียนใน flow check-in หลังเขียน `current_stay` สำเร็จ (ต่อสมาชิกที่เลือกแต่ละคน)
 - **FR-STL-12** — Staff: เขียน log จาก browser ด้วย `channel = 'staff'` ผ่าน repository ของ feature `people` (เหมือน path เขียน evacuee/movement/screening ที่ใช้อยู่)
-- **FR-STL-13** — Staff `start` ของ evacuee ที่มีอยู่แล้ว (report-in, screening, zoning) ต้อง idempotent ต่อการเปิดหน้าซ้ำ/refresh: ไม่เขียน `start` ใหม่ถ้ามี `start` ของ `(evacuee_id, station)` ที่ยังไม่มี `complete`
+- **FR-STL-13** — Staff `start` ของ evacuee ที่มีอยู่แล้ว (report-in, screening, zoning) ต้อง idempotent ต่อการเปิดหน้าซ้ำ/refresh: ไม่เขียน `start` ใหม่ถ้ามี `start` ของ `(evacuee_id, station)` ที่ยังไม่มี `complete` **และอายุ ≤ stale window**; ถ้า `start` เดิมเก่ากว่า stale window ให้เขียน `start` ใหม่
 - **FR-STL-14** — ไม่เปลี่ยน payload หรือ semantics ของ `evacuee`, `movement`, `screening`, `audit` (additive เฉพาะ doc ใหม่)
 - **FR-STL-15** — `validate_doc_update` ไม่ตรวจค่า `channel` ใน CR นี้ (ตรวจแค่ whitelist + append-only ตาม FR-STL-03); `channel = 'staff'` มาจากโค้ดหน้า staff ไม่ได้ verify ฝั่ง server — staff ที่มี session เขียน `channel = 'kiosk'` ปลอมได้ (security concern: #850)
+- **FR-STL-16** — Bulk zoning (`bulkApplyZone` ในหน้า `/onsite/zoning`) เขียนเฉพาะ Station 3 `complete` ต่อคน ไม่เขียน `start` → นับเป็น throughput ไม่นับในค่าเฉลี่ย
 
 ### Summary
 
 - **FR-STL-20** — เพิ่ม view `station_logs_by_station` ใน `_design/app` (`SHELTER_DASHBOARD_VIEWS`) และ bump `SHELTER_VIEW_MANIFEST` v3 → v4
-- **FR-STL-21** — เพิ่ม BFF route `GET /api/back-office/shelter/[code]/dashboard/station-times` (pattern เดียวกับ `dashboard/registrations`: scope guard, `checkViewDeployment`, `adminRaw`) คืนต่อ `(station, channel)`: `visits`, `avg_duration_sec`, `open_visits`
+- **FR-STL-21** — เพิ่ม BFF route `GET /api/back-office/shelter/[code]/dashboard/station-times` (pattern เดียวกับ `dashboard/registrations`: scope guard, `checkViewDeployment`, `adminRaw`) คืนต่อ `(station, channel)`: `visits`, `avg_duration_sec`, `open_visits`; query view ด้วย `startkey`/`endkey` ตามช่วงวันที่ (`?from`/`?to`) และดึงเกินปลายช่วง 1 วันเพื่อจับ `complete` ที่ข้ามเที่ยงคืน; visit นับตามวันที่ของ `start`
 - **FR-STL-22** — การ pair `start`/`complete` ทำใน domain function (pure, มี unit test) เรียกจาก BFF ไม่ทำใน CouchDB map (join ข้าม doc ไม่ได้)
 - **FR-STL-23** — แสดงคิวค้าง ณ ปัจจุบันต่อ station โดย derive จาก state เดิม (`classifyScreeningQueueTab`, `classifyZoningQueueTab`, คิว Station 1 จาก status) — ไม่เพิ่ม field
 - **FR-STL-24** — ไม่เพิ่ม tab: แสดงใน tab ภาพรวม (`?tab=dashboard`) ของ `/back-office/evacuee-management` เป็น section ใหม่ต่อจาก section ล่างสุดเดิม ใช้ช่วงวันที่ของ dashboard เดิม (CR-170)
@@ -98,15 +102,15 @@ affects:
 | Field | ชนิด | req | หมายเหตุ |
 | --- | --- | --- | --- |
 | `evacuee_id` | str | req | evacuee ที่รับบริการ |
-| `station` | enum(`1`,`2`,`3`) | req | ตาม pipeline ADR-0001 (เก็บเป็น int) |
+| `station` | int (`1`,`2`,`3`) | req | ตาม pipeline ADR-0001 |
 | `action` | enum(`start`,`complete`) | req | — |
 | `channel` | enum(`kiosk`,`staff`) | req | ช่องทางที่ให้บริการ step นี้ (ไม่ใช่ `registered_via`) |
 | `device_id` | str | opt | ใส่เมื่อ `channel = 'kiosk'` (scanner device) |
 | `occurred_at` | ts | req | เวลาเหตุการณ์จริง (ไม่ใช่เวลา sync) |
 
-**Index:** `(evacuee_id, station, occurred_at)` · view `station_logs_by_station`
+**Mango index:** `(evacuee_id, station, occurred_at)` — ใช้หา `start` ค้างของ evacuee ตาม FR-STL-13 (คนละตัวกับ view)
 
-**View `station_logs_by_station`:** map emit `[station, channel, evacuee_id]` → `{action, occurred_at}`; ไม่มี reduce (pair ใน BFF)
+**View `station_logs_by_station`:** map emit `[YYYY-MM-DD(+07) ของ occurred_at, station, channel, evacuee_id]` → `{action, occurred_at}`; ไม่มี reduce (pair ใน BFF) — date-first ตาม pattern `registrations_by_date_status` เพื่อ filter ช่วงวันที่ใน CouchDB
 
 ## Impact
 
@@ -122,9 +126,11 @@ affects:
 - [ ] Kiosk check-in 1 คน → มี `station_log` Station 1 `start` + `complete` (`channel = kiosk`, `device_id` ตรง scanner) และ `duration ≥ 0`
 - [ ] Staff report-in → Station 1 log `channel = staff`; เปิดหน้าซ้ำ/refresh ไม่เพิ่ม `start` ซ้ำ
 - [ ] Screening บันทึก → Station 2 `complete`; Zoning `check_in` → Station 3 `complete`
-- [ ] เขียน log ล้ม → report-in/screening/zoning ยังสำเร็จ + มี toast
+- [ ] Bulk zoning → Station 3 `complete` ต่อคน ไม่มี `start`
+- [ ] `start` ค้างเกิน 2 ชั่วโมงแล้วเปิดหน้าใหม่ → เขียน `start` ใหม่; duration ไม่ pair กับ `start` เก่า และ `start` เก่าไม่นับใน `open_visits`
+- [ ] เขียน log ล้ม → report-in/screening/zoning ยังสำเร็จ + มี warning toast ตามข้อความใน FR-STL-04
 - [ ] `station_log` update/delete ถูก `validate_doc_update` ปฏิเสธ; type ที่ไม่อยู่ใน whitelist ยังถูก reject เหมือนเดิม
-- [ ] BFF `station-times` คืนค่าเฉลี่ยถูกต้องบน fixture (มี visit ปกติ, `start` ค้าง, `complete` ไม่มี `start`) และแยก channel ถูก
+- [ ] BFF `station-times` คืนค่าเฉลี่ยถูกต้องบน fixture (มี visit ปกติ, `start` ค้าง ≤ 2 ชม., `start` abandoned > 2 ชม., `complete` ไม่มี `start`, `complete` ข้ามเที่ยงคืน) และแยก channel ถูก
 - [ ] Domain function pair/average มี unit test; view map ทดสอบด้วย `mapFn(doc, emit)`; BFF route มี `server.test.ts`
 - [ ] หน้า summary ผ่าน `svelte-autofixer`; `pnpm check`/`pnpm test` ผ่านใน Lefthook
 
@@ -151,3 +157,4 @@ N/A — doc type ใหม่ schema_v 1, additive; ไม่ backfill. evacuee 
 - 2026-10-24 — owner เคาะ: flow hybrid (Station 1 kiosk หรือ staff, Station 2/3 staff เสมอ) · `start` ของ staff = เปิดหน้ากรอกข้อมูล (walk-in หรือ report-in) · dashboard อยู่ใน tab ภาพรวมของ `/back-office/evacuee-management` (ไม่เพิ่ม tab) ต่อท้าย section เดิม มีกราฟต่อ station และกราฟ staff vs kiosk
 - 2026-10-24 — owner เคาะ: ไม่เพิ่มกฎ `channel` ใน `validate_doc_update` ตอนนี้ → เปิด issue security concern แยก · role = kiosk + `registration_staff` ตามระบบเดิม (ไม่เปลี่ยน permission)
 - 2026-10-25 — approved โดย Soravit Sukkarn (Team Lead) · รันเลข CR-192
+- 2026-10-25 — แก้ตาม review PR #852 (approved โดย Soravit Sukkarn): stale window 2 ชม. (FR-STL-13, `open_visits`) · view key date-first + ดึงเกิน 1 วัน (FR-STL-21) · bulk zoning = `complete` อย่างเดียว (FR-STL-16) · ข้อความ warning toast (FR-STL-04) · แยกคำอธิบาย Mango index กับ view · `station` เป็น int
