@@ -114,7 +114,10 @@ describe('GET /api/back-office/shelter/[code]/dashboard/registrations', () => {
 			.mockResolvedValueOnce({
 				status: 200,
 				data: {
-					rows: [{ key: [mockDate, 'checkin'], value: 5 }]
+					rows: [
+						{ key: [mockDate, 'checkin'], value: 5 },
+						{ key: [mockDate, 'preregister'], value: 3 }
+					]
 				}
 			});
 
@@ -130,6 +133,7 @@ describe('GET /api/back-office/shelter/[code]/dashboard/registrations', () => {
 		expect(data.checkin).toBeTypeOf('object');
 		expect(data.checkin[mockDate]).toBe(5);
 		expect(data.checkout).toBeTypeOf('object');
+		expect(data.preregister[mockDate]).toBe(3);
 
 		const [path, method] = vi.mocked(adminRaw).mock.calls[1];
 		expect(path).toContain(
