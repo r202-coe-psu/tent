@@ -1,6 +1,6 @@
 /**
- * Bulk return pool v3 — app gaps that would poison the shared worker shelter if they ran there
- * (BULK_RETURN_POOL_E2E_PLAN.md, GAP BRP-F11). Kept `test.fixme` until the app is fixed.
+ * Bulk return pool v3 — regression tests for fixed app gaps that would poison the shared worker
+ * shelter if they ran there (BULK_RETURN_POOL_E2E_PLAN.md, GAP BRP-F11, fixed).
  */
 
 import { injectSession } from '../helpers/login';
@@ -29,12 +29,12 @@ test.use({
 });
 
 test.describe('Bulk return pool v3 — GAP isolation', { tag: DESK_TAGS }, () => {
-	// GAP: the VDU cannot check that the entry a move / void refers to exists, so such a doc is
-	// accepted when it is written directly or replicated before its entry (e.g. edge to central).
-	// `resolveBulkReturnEntries` then throws "Void references unknown entry" for the WHOLE overview,
-	// and the board shows 'ไม่สามารถโหลดข้อมูลกองรับคืนได้' for every user of the shelter. Desired
-	// behaviour: one bad event does not hide every pool. Fails today, hence fixme.
-	test.fixme('GAP: BRP-F11 one orphan move/void doc accepted by the VDU makes the pool board fail to load for the whole shelter', async ({
+	// Regression test for the fixed GAP BRP-F11: the VDU cannot check that the entry a move / void
+	// refers to exists, so such a doc is accepted when it is written directly or replicated before
+	// its entry (e.g. edge to central). The fold used to throw "Void references unknown entry" for
+	// the WHOLE overview and the board showed 'ไม่สามารถโหลดข้อมูลกองรับคืนได้' for every user of the
+	// shelter. Now the orphan is skipped, the board loads and the pool card shows "รอซิงก์ <n>".
+	test('GAP: BRP-F11 one orphan move/void doc accepted by the VDU makes the pool board fail to load for the whole shelter', async ({
 		page,
 		scenarioAs
 	}) => {
@@ -59,5 +59,6 @@ test.describe('Bulk return pool v3 — GAP isolation', { tag: DESK_TAGS }, () =>
 		await injectSession(page, dst.user, dst.session);
 		await board.gotoDesk();
 		await expect(board.card(name)).toBeVisible();
+		await expect(board.card(name)).toContainText('รอซิงก์');
 	});
 });

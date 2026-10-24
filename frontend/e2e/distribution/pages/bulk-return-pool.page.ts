@@ -96,16 +96,12 @@ export interface AddEntriesOptions {
 }
 
 export class BulkReturnPoolBoard {
-	/** Surface last reached through `gotoBackOffice` / `gotoDesk`, so `reloadSurface` can return. */
-	private surface: 'back-office' | 'desk' | null = null;
-
 	constructor(readonly page: Page) {}
 
 	// ── Reaching the board ───────────────────────────────────────────────────────────────────
 
 	/** Back-office: tab "กองรับคืนพัสดุ" (no URL param). */
 	async gotoBackOffice(): Promise<void> {
-		this.surface = 'back-office';
 		await this.page.goto('/back-office/distribution');
 		await expect(
 			this.page.getByRole('heading', { name: POOL_COPY.backOfficeHeading })
@@ -116,23 +112,11 @@ export class BulkReturnPoolBoard {
 
 	/** Onsite desk: tab "4. รับคืนสิ่งของ". Returns the desk page object for the caller. */
 	async gotoDesk(): Promise<DeskPage> {
-		this.surface = 'desk';
 		const desk = new DeskPage(this.page);
 		await desk.goto();
 		await desk.openTab('returns');
 		await expect(this.heading()).toBeVisible();
 		return desk;
-	}
-
-	/**
-	 * Load the current surface again (board tab included). Needed after create: the app keeps the
-	 * new pool selected while its sheet stays closed (GAP BRP-F10), so a card click alone does not
-	 * open it until the selection is reset.
-	 */
-	async reloadSurface(): Promise<void> {
-		if (this.surface === 'desk') await this.gotoDesk();
-		else if (this.surface === 'back-office') await this.gotoBackOffice();
-		else throw new Error('reloadSurface: call gotoBackOffice() or gotoDesk() first');
 	}
 
 	heading(): Locator {
@@ -186,27 +170,28 @@ export class BulkReturnPoolBoard {
 	}
 
 	/**
-	 * Workaround for GAP BRP-F10: an OPEN detail sheet does not follow the refreshed overview row
-	 * (stale entries, title and status until it is closed). So after every mutation done from inside
-	 * the sheet, close it (if open) and open it again from the board card, which reads the live row.
+	 * After a mutation done from inside the sheet: the open sheet follows the live overview row, so
+	 * just wait on it (no close / reopen). If the sheet is not open (a flow that closed it), wait for
+	 * the card to show the new state and open the sheet from it.
 	 *
-	 * Call this only when no dialog is stacked on the sheet (wait for it to be hidden first), or the
-	 * Escape would close the dialog instead of the sheet.
+	 * While the sheet is open the board cards sit behind the modal and are not in the accessibility
+	 * tree, so card locators are only used on the fallback path.
 	 *
-	 * @param poolName name to open now (the NEW name after a rename)
-	 * @param options.staleName name the still-open sheet shows (differs from `poolName` after rename)
-	 * @param options.entryCount wait for the card to show this entry count before reopening, so the
-	 *   reopen reads fresh data (best effort: the spec assertions after the reopen are the proof)
-	 * @param options.status wait for the card to show this status before reopening
+	 * @param poolName name the sheet shows now (the NEW name after a rename)
+	 * @param options.entryCount fallback path only: wait for the card to show this entry count (best
+	 *   effort; the sheet has no count, the spec assertions after are the proof)
+	 * @param options.status wait for the sheet (or the card, on the fallback path) to show this status
 	 */
-	async reopenDetail(
+	async expectDetail(
 		poolName: string,
-		options: { staleName?: string; entryCount?: number; status?: PoolStatus } = {}
+		options: { entryCount?: number; status?: PoolStatus } = {}
 	): Promise<Locator> {
-		const stale = this.detail(options.staleName ?? poolName);
-		if (await stale.isVisible()) {
-			await this.page.keyboard.press('Escape');
-			await expect(stale).toBeHidden();
+		const detail = this.detail(poolName);
+		await detail.waitFor({ state: 'visible', timeout: 3_000 }).catch(() => undefined);
+		if (await detail.isVisible()) {
+			await expect(detail).toBeVisible();
+			if (options.status) await expect(detail).toContainText(POOL_COPY.status[options.status]);
+			return detail;
 		}
 		await expect(this.card(poolName)).toBeVisible();
 		if (options.status) await this.expectCardStatus(poolName, options.status);
@@ -267,10 +252,8 @@ export class BulkReturnPoolBoard {
 	}
 
 	/**
-	 * Open a pool through the UI, then open its detail sheet from the board card. The app is meant
-	 * to open the sheet by itself after create but does not (GAP BRP-F10), and the new pool stays
-	 * selected, so a card click does nothing either; the surface is reloaded first. Returns with the
-	 * sheet open.
+	 * Open a pool through the UI. The app opens the new pool's detail sheet by itself after create,
+	 * so this waits for it. Returns with the sheet open.
 	 */
 	async openPool(options: { name: string; location?: string; notes?: string }): Promise<void> {
 		const dialog = await this.startOpenPool();
@@ -282,9 +265,7 @@ export class BulkReturnPoolBoard {
 		await dialog.getByRole('button', { name: POOL_COPY.openSubmit, exact: true }).click();
 		await expect(this.toast(`เปิดกอง "${options.name}" เรียบร้อยแล้ว`)).toBeVisible();
 		await expect(dialog).toBeHidden();
-		await expect(this.card(options.name)).toBeVisible();
-		await this.reloadSurface();
-		await this.openDetail(options.name);
+		await expect(this.detail(options.name)).toBeVisible();
 	}
 
 	editDialog(): Locator {
@@ -308,8 +289,8 @@ export class BulkReturnPoolBoard {
 		await dialog.getByRole('button', { name: POOL_COPY.editSave, exact: true }).click();
 		await expect(this.toast('บันทึกข้อมูลกองเรียบร้อยแล้ว')).toBeVisible();
 		await expect(dialog).toBeHidden();
-		// The open sheet keeps the old title (GAP BRP-F10): reopen by the new name.
-		await this.reopenDetail(changes.name ?? poolName, { staleName: poolName });
+		// The open sheet follows the live row, so its title becomes the new name.
+		await this.expectDetail(changes.name ?? poolName);
 	}
 
 	// ── Add entries ──────────────────────────────────────────────────────────────────────────
@@ -390,14 +371,14 @@ export class BulkReturnPoolBoard {
 		await this.saveAddDialog(dialog);
 	}
 
-	/** Add from the open sheet, then reopen it so the new rows show (GAP BRP-F10). */
+	/** Add from the open sheet; it follows the live row, so the new rows show without a reopen. */
 	async addFromDetail(poolName: string, options: AddEntriesOptions): Promise<void> {
 		const before = await this.cardEntryCount(poolName);
 		const dialog = await this.startAddFromDetail(poolName);
 		await this.fillAddDialog(dialog, options);
 		await this.saveAddDialog(dialog);
 		const intoThisPool = (options.pool ?? poolName) === poolName;
-		await this.reopenDetail(poolName, {
+		await this.expectDetail(poolName, {
 			entryCount: before !== undefined && intoThisPool ? before + options.lines.length : undefined
 		});
 	}
@@ -426,7 +407,7 @@ export class BulkReturnPoolBoard {
 		await dialog.getByRole('button', { name: POOL_COPY.moveConfirm, exact: true }).click();
 		await expect(this.toast(/ย้ายรายการไปกอง/)).toBeVisible();
 		await expect(dialog).toBeHidden();
-		await this.reopenDetail(poolName, {
+		await this.expectDetail(poolName, {
 			entryCount: before !== undefined ? before - 1 : undefined
 		});
 	}
@@ -446,7 +427,7 @@ export class BulkReturnPoolBoard {
 		await dialog.getByRole('button', { name: POOL_COPY.voidConfirm }).click();
 		await expect(this.toast('ยกเลิกรายการแล้ว')).toBeVisible();
 		await expect(dialog).toBeHidden();
-		await this.reopenDetail(poolName, {
+		await this.expectDetail(poolName, {
 			entryCount: before !== undefined ? before - 1 : undefined
 		});
 	}
@@ -473,7 +454,7 @@ export class BulkReturnPoolBoard {
 		return this.page.getByRole('alertdialog', { name: POOL_COPY.submitDialog });
 	}
 
-	/** "เก็บเข้าคลัง" → confirm, then reopen the sheet so it shows SUBMITTED (GAP BRP-F10). */
+	/** "เก็บเข้าคลัง" → confirm; the open sheet then shows SUBMITTED. */
 	async submitPool(poolName: string): Promise<void> {
 		await this.action(poolName, POOL_COPY.submit).click();
 		const dialog = this.submitDialog();
@@ -481,7 +462,7 @@ export class BulkReturnPoolBoard {
 		await dialog.getByRole('button', { name: POOL_COPY.submitConfirm }).click();
 		await expect(this.toast(/ส่งกองเข้าคลังแล้ว/)).toBeVisible();
 		await expect(dialog).toBeHidden();
-		await this.reopenDetail(poolName, { status: 'SUBMITTED' });
+		await this.expectDetail(poolName, { status: 'SUBMITTED' });
 	}
 
 	receiveDialog(): Locator {
@@ -520,12 +501,12 @@ export class BulkReturnPoolBoard {
 		await this.choose(this.receiveStorage(dialog), pointOption(pointName));
 	}
 
-	/** "ยืนยันตรวจรับ": success closes the dialog; then reopen the sheet to show RECEIVED. */
+	/** "ยืนยันตรวจรับ": success closes the dialog; the open sheet then shows RECEIVED. */
 	async confirmReceive(dialog: Locator, poolName: string): Promise<void> {
 		await dialog.getByRole('button', { name: POOL_COPY.receiveConfirm, exact: true }).click();
 		await expect(this.toast(/ตรวจรับเรียบร้อย/)).toBeVisible();
 		await expect(dialog).toBeHidden();
-		await this.reopenDetail(poolName, { status: 'RECEIVED' });
+		await this.expectDetail(poolName, { status: 'RECEIVED' });
 	}
 
 	// ── Select helper (bits-ui Select: a trigger button + role=option items in a portal) ─────

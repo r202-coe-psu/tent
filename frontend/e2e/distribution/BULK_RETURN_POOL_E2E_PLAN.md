@@ -65,13 +65,11 @@ Out of scope and risks:
 - Board flags `canManage` / `canWriteEntry` come from the session, not a surface prop; SM on
   onsite therefore also sees the manage actions. The UI helpers also admit `system_admin`
   (`canManageBulkReturnPool`), like the VDU (open point a).
-- Observed against real CouchDB (GAP BRP-F10, §7): the source says opening a pool selects it, but
-  its detail sheet does NOT open by itself, and an OPEN sheet does not follow the refreshed overview
-  row (stale entries, title, status) until it is closed and reopened from the card. The page object
-  therefore never relies on either: `openPool` opens the sheet from the card, and every mutation
-  done inside the sheet ends with `reopenDetail` (close if open, wait for the card to show the new
-  count / status, click the card). Cancel closes the sheet itself (`onClose()`), so it does not
-  reopen. The board header buttons ("เปิดกองใหม่", "รับของเข้ากอง") are behind the sheet while it is
+- The new pool's detail sheet opens by itself after create, and an OPEN sheet follows the live
+  overview row (entries, title after rename, status and buttons after submit / receive); fixed in
+  PR #768 (GAP BRP-F10, §7). The page object waits on the open sheet (`expectDetail`) instead of
+  closing and reopening it. Cancel closes the sheet itself (`onClose()`), so nothing is awaited
+  after it. The board header buttons ("เปิดกองใหม่", "รับของเข้ากอง") are behind the sheet while it is
   open.
   Submit and cancel confirmations have no reason field (the "reason" is the explanatory text
   `#submit-pool-reason` / `#cancel-pool-reason`); void has none either. A voided entry is folded out
@@ -123,8 +121,9 @@ Out of scope and risks:
   points; every other spec keeps a shelter without points (the "คลังหลัก" case).
 - Teardown unchanged: the shelter is deleted when the worker ends and `assertRunLeftNothing` runs.
 - Direct-write tests (BRP-V1, F6, ...) share the worker's shelter with the UI tests, and the board
-  folds every entry / move / void of the shelter (GAP BRP-F11: one orphan throws for everyone). They
-  must leave fold-consistent data whether the write is accepted or rejected: real seeded pools and
+  folds every entry / move / void of the shelter (GAP BRP-F11, fixed in PR #768: an orphan move /
+  void is now skipped and shown as "รอซิงก์", but other fold invariants still throw for everyone).
+  They must leave fold-consistent data whether the write is accepted or rejected: real seeded pools and
   entries, move / void item_id and qty copied from the entry, void pool_id = the entry's pool.
 - Verified: the app reads the registry shelter doc through TanStack Query on every page load, and
   the fixture writes the points before the worker's first test, so no page can have cached a
@@ -312,27 +311,29 @@ added in PR #768. Fixme asserts SA cannot open a pool; enable once kong decides.
 Loan changed between allocation and apply (for example cleared lost/waived): apply fails on every
 retry and no rule exists yet. Fixme documents the expected recovery once a rule is decided.
 
-### GAP: BRP-F10 the open sheet is stale (`test.fixme`, in `bulk-return-pool-gap-isolation.test.ts`)
+### GAP (fixed): BRP-F10 the open sheet was stale (regression `test`, in `bulk-return-pool-flow.test.ts`)
 
-The overview query refetches after each mutation (the board card shows the new count), but the open
-detail sheet keeps the old row: stale entries after add / move / void, stale title after rename,
-"เก็บเข้าคลัง" instead of "ตรวจรับ" after submit; and a pool opened through "เปิดกอง" never opens its
-sheet, although `onOpened` sets `selectedPoolId`. `BulkReturnPoolBoard` comments "Detail follows the
-live overview row, so it refreshes after every mutation". Fixme asserts the intended behaviour: new
-pool's sheet visible with its name after create; after moving the only entry from the open sheet it
-shows "ยังไม่มีรายการในกองนี้" without reopening. Page-object workaround: `reopenDetail` (§2.2).
-Remove the fixme and the workaround once fixed.
+The overview query refetched after each mutation (the board card showed the new count), but the
+open detail sheet kept the old row: stale entries after add / move / void, stale title after
+rename, "เก็บเข้าคลัง" instead of "ตรวจรับ" after submit; and a pool opened through "เปิดกอง" never
+opened its sheet, although `onOpened` sets `selectedPoolId`. Fixed in PR #768: the sheet now follows
+the live overview row while open and opens by itself after create. The regression test asserts the
+new pool's sheet is visible with its name after create, and that after moving the only entry from
+the open sheet it shows "ยังไม่มีรายการในกองนี้" without reopening. The page object no longer
+closes / reopens the sheet (`expectDetail`, §2.2).
 
-### GAP: BRP-F11 one orphan move/void breaks the whole board (`test.fixme`, in `bulk-return-pool-gap-isolation.test.ts`)
+### GAP (fixed): BRP-F11 one orphan move/void broke the whole board (regression `test`, in `bulk-return-pool-gap-isolation.test.ts`)
 
 The VDU cannot check that the entry a move / void refers to exists, so such a doc is accepted
 (direct write, or an event replicated before its entry, e.g. edge to central).
-`resolveBulkReturnEntries` then throws ("Void references unknown entry ...") for the whole overview
-and the board shows "ไม่สามารถโหลดข้อมูลกองรับคืนได้" to every user of the shelter. Fixme: seed an OPEN
-pool, PUT an orphan void as a DST user (expect 201), open the board, expect the pool card visible
-(one bad event should not hide every pool). It lives in its own `GAP isolation` describe with its
-own `shelterStoragePoints` value, so it gets a separate worker and shelter and enabling it can never
-break other tests.
+`resolveBulkReturnEntries` then threw ("Void references unknown entry ...") for the whole overview
+and the board showed "ไม่สามารถโหลดข้อมูลกองรับคืนได้" to every user of the shelter. Fixed in
+PR #768: the fold skips the orphan, the pool card shows an amber "รอซิงก์ <n>" badge and the detail
+sheet a `role="status"` notice "รอซิงก์ข้อมูล: ...". The regression test seeds an OPEN pool, PUTs an
+orphan void as a DST user (expect 201), opens the board, and expects the pool card visible and
+containing "รอซิงก์". It lives in its own `GAP isolation` describe with its own
+`shelterStoragePoints` value, so it gets a separate worker and shelter and can never break other
+tests.
 
 ## 8. Old tests and helpers (do not delete in this change)
 

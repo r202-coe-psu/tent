@@ -614,16 +614,12 @@ test.describe('Bulk return pool v3 — lifecycle (BRP-F)', { tag: DESK_TAGS }, (
 		expect(after).toMatchObject({ status: 'SUBMITTED', name: renamed });
 	});
 
-	// GAP found by running the suite against real CouchDB (PR #768): while the detail sheet is OPEN
-	// it does not re-render from the refreshed overview row. The overview query does refetch (the
-	// board card shows the new count / status / name), but the open sheet keeps the old row for 20s+:
-	// stale entries after move / void / add, stale title after rename, still "เก็บเข้าคลัง" instead
-	// of "ตรวจรับ" after submit. It shows the fresh row only once closed and reopened. After
-	// "เปิดกอง" succeeds the new pool's sheet never auto-opens either, although `onOpened` sets
-	// `selectedPoolId`. BulkReturnPoolBoard says "Detail follows the live overview row, so it
-	// refreshes after every mutation". The page object works around it with `reopenDetail`; this
-	// test asserts the intended behaviour without that workaround.
-	test.fixme('GAP: BRP-F10 the open detail sheet follows the live row after a mutation and opens after create', async ({
+	// Regression test for the fixed GAP BRP-F10 (found against real CouchDB in PR #768): the open
+	// detail sheet used to keep a stale row (old entries after move / void / add, old title after
+	// rename, old status after submit) and the new pool's sheet did not open after "เปิดกอง". Now the
+	// sheet follows the live overview row while open and opens by itself after create; this test
+	// asserts that without closing and reopening the sheet.
+	test('GAP: BRP-F10 the open detail sheet follows the live row after a mutation and opens after create', async ({
 		page,
 		scenarioAs
 	}) => {
