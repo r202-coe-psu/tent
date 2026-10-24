@@ -27,9 +27,12 @@
 		<Tooltip.Root>
 			<Tooltip.Trigger>
 				{#snippet child({ props })}
+					<!-- `group`, not `button`: the real button inside keeps the control's name and role. It
+						still takes a tab stop, the only way a keyboard user reaches the reason. -->
+					<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 					<span
 						{...props}
-						role="button"
+						role="group"
 						tabindex="0"
 						aria-disabled="true"
 						aria-describedby={reasonId}
