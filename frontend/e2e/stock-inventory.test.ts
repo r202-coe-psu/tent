@@ -371,6 +371,11 @@ test.describe('Stock Inventory & Warehouse Operations (/back-office/supply)', ()
 
 		const searchInput = page.getByPlaceholder('ค้นหาชื่อ / SKU / สแกนบาร์โค้ด');
 
+		// Let the list load first, so the filter below is what hides the other item.
+		await expect(page.getByRole('row').filter({ hasText: item2Name })).toBeVisible({
+			timeout: 10_000
+		});
+
 		// 1. Search for Item 1
 		await searchInput.fill(item1Name);
 		await expect(page.getByRole('row').filter({ hasText: item1Name })).toBeVisible({
