@@ -13,10 +13,10 @@ describe('listStoragePoints', () => {
 		const points = listStoragePoints({
 			common_areas: {
 				sub_storage: [
-					{ id: 'b', name: 'คลังยา', type: 'medical_supplies' },
-					{ id: '', name: 'ไม่มีรหัส', type: 'general' },
-					{ id: 'a', name: '  ', type: 'general' },
-					{ id: 'c', name: 'สนามปิงปอง', type: 'food_dry' }
+					{ id: 'b', name: 'คลังยา', types: ['medical_supplies'] },
+					{ id: '', name: 'ไม่มีรหัส', types: ['general'] },
+					{ id: 'a', name: '  ', types: ['general'] },
+					{ id: 'c', name: 'สนามปิงปอง', types: ['food_dry'] }
 				]
 			}
 		});
@@ -25,9 +25,17 @@ describe('listStoragePoints', () => {
 });
 
 describe('SUB_STORAGE_TYPE_LABELS', () => {
-	it('labels every storage type', () => {
+	it('labels every storage type (CR-175 — 7 values)', () => {
 		expect(Object.keys(SUB_STORAGE_TYPE_LABELS).sort()).toEqual(
-			['drinking_water', 'food_dry', 'general', 'medical_supplies'].sort()
+			[
+				'general',
+				'baby_food',
+				'food_dry',
+				'cooked_food',
+				'food_cold',
+				'medical_supplies',
+				'drinking_water'
+			].sort()
 		);
 	});
 });

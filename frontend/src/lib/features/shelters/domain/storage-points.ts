@@ -1,11 +1,17 @@
 import type { SubStorageItem, SubStorageType } from './schema';
 
-/** Thai labels for `common_areas.sub_storage[].type` — shared by the shelter form and stock UIs. */
+/**
+ * Thai labels for `common_areas.sub_storage[].types[]` — shared by the shelter
+ * form and stock UIs. Key order is display order (CR-175).
+ */
 export const SUB_STORAGE_TYPE_LABELS: Record<SubStorageType, string> = {
 	general: 'ทั่วไป',
+	baby_food: 'อาหารเด็ก',
 	food_dry: 'อาหารแห้ง',
-	drinking_water: 'น้ำดื่ม',
-	medical_supplies: 'เวชภัณฑ์'
+	cooked_food: 'อาหารปรุงสุก',
+	food_cold: 'อาหารแช่เย็น/แข็ง',
+	medical_supplies: 'ยา',
+	drinking_water: 'น้ำดื่ม'
 };
 
 type ShelterWithStorage = {
