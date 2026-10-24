@@ -18,6 +18,7 @@ import { maskLastName } from '$lib/utils/mask';
 import { kioskPhotoPayloadSchema, type KioskPhotoPayload } from '../domain/kiosk-photo';
 import {
 	claimUnassignedMembers,
+	findQueuePrimaryHouseholdId,
 	findUnassignedRegistration,
 	KioskUnassignedPersonMismatchError,
 	KioskUnassignedUnavailableError,
@@ -591,6 +592,19 @@ export async function lookupPreRegisteredEvacuee(
 	};
 }
 
+/** The first selected member already in Couch under the queue registration's household. */
+async function findStandInPrimary(
+	dbName: string,
+	householdId: string,
+	evacueeIds: string[]
+): Promise<EvacueeDoc | null> {
+	for (const evacueeId of evacueeIds) {
+		const member = await getById(dbName, evacueeId);
+		if (member?.household_id === householdId) return member;
+	}
+	return null;
+}
+
 /** Report in selected household members independently; only committed writes get a QR token. */
 export async function checkInSelectedMembers(
 	shelterCode: string,
@@ -611,12 +625,9 @@ export async function checkInSelectedMembers(
 	);
 	if (options.deviceId) {
 		try {
-			await claimUnassignedMembers(
-				shelterCode,
-				options.deviceId,
-				[normalizedPrimaryId, ...normalizedEvacueeIds],
-				{ requiredPersonId: options.claimPersonId ?? options.requiredPrimaryCitizenId }
-			);
+			await claimUnassignedMembers(shelterCode, options.deviceId, normalizedEvacueeIds, {
+				requiredPersonId: options.claimPersonId ?? options.requiredPrimaryCitizenId
+			});
 		} catch (error) {
 			if (
 				error instanceof KioskUnassignedPersonMismatchError &&
@@ -627,8 +638,25 @@ export async function checkInSelectedMembers(
 			throw error;
 		}
 	}
-	const primary = await getById(dbName, normalizedPrimaryId);
-	if (
+	let primary = await getById(dbName, normalizedPrimaryId);
+	// FR-KUC-07a: an unselected primary stays open in the queue; a selected member stands in.
+	const standIn =
+		!primary &&
+		options.deviceId !== undefined &&
+		!normalizedEvacueeIds.includes(normalizedPrimaryId);
+	if (standIn) {
+		const householdId = await findQueuePrimaryHouseholdId(
+			normalizedPrimaryId,
+			options.requiredPrimaryCitizenId
+		);
+		if (householdId === null && options.requiredPrimaryCitizenId !== undefined) {
+			throw new KioskThaidIdentityMismatchError();
+		}
+		primary =
+			householdId === null
+				? null
+				: await findStandInPrimary(dbName, householdId, normalizedEvacueeIds);
+	} else if (
 		options.requiredPrimaryCitizenId !== undefined &&
 		primary?.person_id?.number !== options.requiredPrimaryCitizenId
 	) {

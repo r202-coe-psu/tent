@@ -91,6 +91,22 @@ export async function findUnassignedRegistration(
 	return parsed.data;
 }
 
+/**
+ * FR-KUC-07a: household id of the queue registration that lists `primaryEvacueeId`, or `null` when
+ * none does. With `citizenId` the registration is found by that citizen, who must be the primary.
+ */
+export async function findQueuePrimaryHouseholdId(
+	primaryEvacueeId: string,
+	citizenId?: string
+): Promise<string | null> {
+	const registration = await findUnassignedRegistration(
+		citizenId ? { citizen_id: citizenId } : { evacuee_id: primaryEvacueeId }
+	);
+	const member = registration?.members.find((m) => m.reserved_evacuee_id === primaryEvacueeId);
+	if (!registration || !member || (citizenId && !member.matched)) return null;
+	return registration.reserved_household_id;
+}
+
 const couchDocSchema = z.looseObject({ _id: z.string() });
 
 const preparedClaimSchema = z.object({

@@ -1572,6 +1572,55 @@ describe('checkInSelectedMembers kiosk claim of unassigned members', () => {
 		expect(queueCalls(prepareUrl)).toMatchObject([{ required_person_id: citizenId }]);
 	});
 
+	describe('when the primary is not selected and not in Couch (FR-KUC-07a)', () => {
+		it('leaves the primary open and checks in the selected members under a stand-in', async () => {
+			stubQueue([queueMember(0), queueMember(1), queueMember(2)]);
+
+			const results = await checkInSelectedMembers(shelterCode, first, [second], { deviceId });
+
+			expect(queueCalls(prepareUrl)).toMatchObject([{ member_ids: [second] }]);
+			expect(results).toMatchObject([{ evacuee_id: second, status: 'checked_in' }]);
+		});
+
+		it('verifies the thaid citizen is that primary in the queue', async () => {
+			stubQueue([queueMember(0, { matched: true }), queueMember(1)]);
+
+			const results = await checkInSelectedMembers(shelterCode, first, [second], {
+				deviceId,
+				requiredPrimaryCitizenId: citizenId
+			});
+
+			expect(
+				queueCalls('http://fastapi.test/public/v1/unassigned-registrations/kiosk-lookup')
+			).toContainEqual({
+				citizen_id: citizenId
+			});
+			expect(results).toMatchObject([{ evacuee_id: second, status: 'checked_in' }]);
+		});
+
+		it('rejects a thaid citizen who is not that primary', async () => {
+			stubQueue([queueMember(0), queueMember(1, { matched: true })]);
+
+			await expect(
+				checkInSelectedMembers(shelterCode, first, [second], {
+					deviceId,
+					requiredPrimaryCitizenId: citizenId
+				})
+			).rejects.toBeInstanceOf(KioskThaidIdentityMismatchError);
+
+			expect(putCalls()).toHaveLength(0);
+		});
+
+		it('checks nobody in when the primary is not on the queue registration', async () => {
+			stubQueue([queueMember(1), queueMember(2)]);
+
+			const results = await checkInSelectedMembers(shelterCode, first, [second], { deviceId });
+
+			expect(results).toMatchObject([{ evacuee_id: second, status: 'not_eligible' }]);
+			expect(putCalls()).toHaveLength(0);
+		});
+	});
+
 	it('never calls the queue when every selected member is already in Couch', async () => {
 		const primary = evacuee(0);
 		const member = evacuee(1);
