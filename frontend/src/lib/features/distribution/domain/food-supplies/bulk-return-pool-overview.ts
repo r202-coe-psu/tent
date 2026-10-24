@@ -4,9 +4,11 @@ import type { BulkReturnEntryVoid } from './bulk-return-entry-void';
 import type { BulkReturnPoolItemSummaryRow, BulkReturnPoolV3 } from './bulk-return-pool-v3';
 import {
 	findLateEntries,
+	findUnresolvedBulkReturnRefs,
 	resolveBulkReturnEntries,
 	summarizePoolItems,
-	type ResolvedBulkReturnEntry
+	type ResolvedBulkReturnEntry,
+	type UnresolvedBulkReturnRef
 } from './bulk-return-pool-summary';
 
 /**
@@ -32,6 +34,8 @@ export interface BulkReturnPoolOverviewRow {
 	late_entries: ResolvedBulkReturnEntry<BulkReturnEntry>[];
 	/** True when no non-voided entry is in the pool (a pool may only be cancelled when empty). */
 	is_empty: boolean;
+	/** Move/void events naming this pool whose entry doc is not here yet (pending replication). */
+	unresolved_refs: UnresolvedBulkReturnRef[];
 }
 
 export interface BulkReturnPoolOverviewOptions {
@@ -45,7 +49,8 @@ function newestFirst(a: BulkReturnPoolV3, b: BulkReturnPoolV3): number {
 
 /**
  * One row per pool (newest first; CANCELLED excluded unless `includeCancelled`). Throws when the
- * event log is inconsistent (see `resolveBulkReturnEntries`).
+ * event log is inconsistent (see `resolveBulkReturnEntries`). Move/void events whose entry doc is
+ * missing do not throw; they are listed per pool in `unresolved_refs`.
  */
 export function buildBulkReturnPoolOverview(
 	pools: readonly BulkReturnPoolV3[],
@@ -54,6 +59,7 @@ export function buildBulkReturnPoolOverview(
 ): BulkReturnPoolOverviewRow[] {
 	const resolved = resolveBulkReturnEntries(events.entries, events.moves, events.voids);
 	const late = findLateEntries(resolved, pools);
+	const unresolved = findUnresolvedBulkReturnRefs(events.entries, events.moves, events.voids);
 	return [...pools]
 		.filter((pool) => options.includeCancelled || pool.status !== 'CANCELLED')
 		.sort(newestFirst)
@@ -68,7 +74,8 @@ export function buildBulkReturnPoolOverview(
 				items: summarizePoolItems(events.entries, events.moves, pool._id, events.voids),
 				entries,
 				late_entries: late.filter((r) => r.pool_id === pool._id),
-				is_empty: live.length === 0
+				is_empty: live.length === 0,
+				unresolved_refs: unresolved.filter((ref) => ref.pool_ids.includes(pool._id))
 			};
 		});
 }

@@ -5,6 +5,7 @@ import { createBulkReturnEntryMove } from './bulk-return-entry-move';
 import { createBulkReturnEntryVoid } from './bulk-return-entry-void';
 import {
 	findLateEntries,
+	findUnresolvedBulkReturnRefs,
 	isLateEntry,
 	isPoolEmpty,
 	poolSnapshotEntryIds,
@@ -75,10 +76,49 @@ describe('summarizePoolItems', () => {
 		expect(summarizePoolItems([], [], P1)).toEqual([]);
 	});
 
-	it('throws on a broken chain, a move for an unknown entry, or a duplicate entry', () => {
+	it('throws on a broken chain or a duplicate entry', () => {
 		expect(() => summarizePoolItems([e1], [moveOf(e1, 2, P1, P2)], P1)).toThrow(/contiguous/);
-		expect(() => summarizePoolItems([e1], [moveOf(e2, 1, P1, P2)], P1)).toThrow(/unknown entry/);
 		expect(() => summarizePoolItems([e1, e1], [], P1)).toThrow(/Duplicate/);
+	});
+
+	it('ignores a move for an unknown entry', () => {
+		expect(summarizePoolItems([e1], [moveOf(e2, 1, P1, P2)], P1)).toEqual([
+			{ item_id: 'item_master:cot', qty: '5' }
+		]);
+	});
+});
+
+describe('findUnresolvedBulkReturnRefs', () => {
+	it('lists an orphan move with its from/to pools', () => {
+		expect(findUnresolvedBulkReturnRefs([e1], [moveOf(e2, 1, P1, P2)])).toEqual([
+			{ kind: 'move', entry_id: e2._id, pool_ids: [P1, P2] }
+		]);
+	});
+
+	it('lists an orphan void with its pool', () => {
+		expect(findUnresolvedBulkReturnRefs([e1], [], [voidOf(e2, P1)])).toEqual([
+			{ kind: 'void', entry_id: e2._id, pool_ids: [P1] }
+		]);
+	});
+
+	it('orders by entry_id, then kind, then seq', () => {
+		const refs = findUnresolvedBulkReturnRefs(
+			[],
+			[moveOf(e2, 2, P2, P3), moveOf(e2, 1, P1, P2), moveOf(e1, 1, P1, P3)],
+			[voidOf(e2, P3)]
+		);
+		expect(refs.map((r) => [r.entry_id, r.kind, r.pool_ids])).toEqual([
+			[e1._id, 'move', [P1, P3]],
+			[e2._id, 'move', [P1, P2]],
+			[e2._id, 'move', [P2, P3]],
+			[e2._id, 'void', [P3]]
+		]);
+	});
+
+	it('returns [] when every move/void has its entry', () => {
+		expect(findUnresolvedBulkReturnRefs([e1], [moveOf(e1, 1, P1, P2)], [voidOf(e1, P2)])).toEqual(
+			[]
+		);
 	});
 });
 
@@ -119,8 +159,13 @@ describe('resolveBulkReturnEntries', () => {
 		]);
 	});
 
-	it('throws on a void for an unknown entry', () => {
-		expect(() => resolveBulkReturnEntries([e1], [], [voidOf(e2, P1)])).toThrow(/unknown entry/);
+	it('skips a void for an unknown entry without affecting known entries', () => {
+		const resolved = resolveBulkReturnEntries([e1], [], [voidOf(e2, P1)]);
+		expect(resolved.map((r) => [r.entry._id, r.pool_id, r.voided])).toEqual([[e1._id, P1, false]]);
+	});
+
+	it('throws on a duplicate entry', () => {
+		expect(() => resolveBulkReturnEntries([e1, e1], [])).toThrow(/Duplicate/);
 	});
 
 	it('throws on more than one void for the same entry', () => {

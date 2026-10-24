@@ -138,7 +138,8 @@ export {
 	type BulkReturnEntryReturnerType,
 	type BulkReturnEntryMove,
 	type BulkReturnEntryVoid,
-	type BulkReturnPoolOverviewRow
+	type BulkReturnPoolOverviewRow,
+	type UnresolvedBulkReturnRef
 } from './domain/food-supplies';
 
 /** Per-lot dispatch validation (#655) — shared with the kitchen ticket dispatch (CR-178). */

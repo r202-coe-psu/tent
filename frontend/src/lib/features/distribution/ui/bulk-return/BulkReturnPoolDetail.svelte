@@ -24,6 +24,7 @@
 	import {
 		LATE_BADGE_CLASS,
 		LATE_ENTRY_GUIDANCE,
+		unresolvedRefsNotice,
 		canCancelPool,
 		canMoveEntry,
 		canVoidEntry,
@@ -178,6 +179,16 @@
 						</span>
 					{/if}
 				</div>
+
+				{#if row.unresolved_refs.length > 0}
+					<div
+						role="status"
+						class="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-sm text-amber-900"
+					>
+						<AlertTriangle class="mt-0.5 h-4 w-4 shrink-0 text-amber-600" aria-hidden="true" />
+						<p>{unresolvedRefsNotice(row.unresolved_refs.length)}</p>
+					</div>
+				{/if}
 
 				<dl class="grid grid-cols-1 gap-x-4 gap-y-1.5 text-sm sm:grid-cols-[auto_1fr]">
 					<dt class="flex items-center gap-1.5 text-slate-500">

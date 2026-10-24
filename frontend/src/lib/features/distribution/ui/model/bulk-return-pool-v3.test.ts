@@ -75,6 +75,7 @@ function makeRow(
 		items: [],
 		entries,
 		late_entries: opts.late ?? [],
+		unresolved_refs: [],
 		is_empty: live.length === 0
 	};
 }

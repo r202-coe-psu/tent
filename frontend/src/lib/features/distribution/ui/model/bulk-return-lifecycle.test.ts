@@ -47,6 +47,7 @@ function makeRow(
 		items: empty ? [] : [{ item_id: 'item_master:fan', qty: '3' }],
 		entries: [],
 		late_entries: [],
+		unresolved_refs: [],
 		is_empty: empty
 	} as BulkReturnPoolOverviewRow;
 }

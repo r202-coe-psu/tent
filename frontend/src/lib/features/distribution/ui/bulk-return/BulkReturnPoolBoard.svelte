@@ -34,6 +34,7 @@
 	import { mapDistributionQueryError } from '../model/distribution-error';
 	import {
 		LATE_BADGE_CLASS,
+		UNRESOLVED_REFS_HINT,
 		filterPoolRows,
 		getPoolBoardViewState,
 		getPoolStatusBadgeClass,
@@ -275,6 +276,16 @@
 									>
 										<AlertTriangle class="h-3.5 w-3.5" aria-hidden="true" />
 										ค้าง <span class="tabular-nums">{row.late_entries.length}</span>
+									</span>
+								{/if}
+								{#if row.unresolved_refs.length > 0}
+									<span
+										class="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold {LATE_BADGE_CLASS}"
+										title={UNRESOLVED_REFS_HINT}
+									>
+										<AlertTriangle class="h-3.5 w-3.5" aria-hidden="true" />
+										รอซิงก์ <span class="tabular-nums">{row.unresolved_refs.length}</span>
+										<span class="sr-only">{UNRESOLVED_REFS_HINT}</span>
 									</span>
 								{/if}
 								<span

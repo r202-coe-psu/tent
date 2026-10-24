@@ -84,6 +84,22 @@ describe('buildBulkReturnPoolOverview', () => {
 		expect(rows[0].is_empty).toBe(false);
 	});
 
+	it('does not throw on an orphan void and lists it on the pool it names', () => {
+		const orphanVoid = createBulkReturnEntryVoid({ entry: e3, pool_id: P2 }, ctx);
+		const rows = buildBulkReturnPoolOverview([open1, open2], {
+			entries: [e1, e2],
+			moves: [],
+			voids: [orphanVoid]
+		});
+		const byId = new Map(rows.map((r) => [r.pool._id, r]));
+		expect(byId.get(P2)!.unresolved_refs).toEqual([
+			{ kind: 'void', entry_id: e3._id, pool_ids: [P2] }
+		]);
+		expect(byId.get(P1)!.unresolved_refs).toEqual([]);
+		expect(byId.get(P1)!.entry_count).toBe(2);
+		expect(byId.get(P2)!.entry_count).toBe(0);
+	});
+
 	it('throws on an inconsistent event log', () => {
 		expect(() =>
 			buildBulkReturnPoolOverview([open1], { entries: [e1, e1], moves: [], voids: [] })
