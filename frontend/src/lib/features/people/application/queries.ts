@@ -33,6 +33,7 @@ import type {
 } from '../domain/people';
 import type {
 	FamilyReportInPayload,
+	RegistrationConsent,
 	UnifiedRegistrationChannel,
 	UnifiedRegistrationInput
 } from '../domain/unified-registration';
@@ -445,13 +446,15 @@ export const useCreateFamilyRegistration = () => {
 			input,
 			ctx,
 			channel = 'onsite',
-			ids
+			ids,
+			consent = null
 		}: {
 			input: UnifiedRegistrationInput;
 			ctx: AuthorContext;
 			channel?: UnifiedRegistrationChannel;
 			ids?: UlidReservation;
-		}) => peopleRepository().createFamilyRegistration(input, ctx, channel, ids),
+			consent?: RegistrationConsent | null;
+		}) => peopleRepository().createFamilyRegistration(input, ctx, channel, ids, consent),
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: peopleKeys.evacuees() });
 			queryClient.invalidateQueries({ queryKey: peopleKeys.households() });

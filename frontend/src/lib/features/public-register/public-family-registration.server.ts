@@ -137,7 +137,7 @@ export async function executePublicFamilyRegistration(
 		}
 
 		const evacuees = plan.memberInputs.map((memberInput) =>
-			createEvacuee({ ...memberInput, household_id: effectiveTargetId }, ctx)
+			createEvacuee({ ...memberInput, household_id: effectiveTargetId }, ctx, null)
 		);
 		if (evacuees.length === 0) {
 			throw new Error('ต้องมีสมาชิกอย่างน้อย 1 คน');
@@ -195,7 +195,7 @@ export async function executePublicFamilyRegistration(
 	// 1. Mint household and evacuees in memory using pure domain factories
 	const household = createHousehold(plan.householdInput, ctx);
 	const evacuees = plan.memberInputs.map((memberInput) =>
-		createEvacuee({ ...memberInput, household_id: household._id }, ctx)
+		createEvacuee({ ...memberInput, household_id: household._id }, ctx, null)
 	);
 
 	if (evacuees.length === 0) {

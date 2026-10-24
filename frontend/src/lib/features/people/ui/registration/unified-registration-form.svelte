@@ -25,6 +25,7 @@
 		type ResidenceMatchChip
 	} from '$lib/features/public-register/data/public-register.api';
 	import { Input } from '$lib/components/ui/input/index.js';
+	import { ConsentBlock, ConsentBlockState } from '$lib/features/consent';
 	import HouseholdAddressFields from '../forms/household-address-fields.svelte';
 	import UnifiedRegistrationSection from './unified-registration-section.svelte';
 	import UnifiedRegistrationStickyNav from './unified-registration-sticky-nav.svelte';
@@ -51,9 +52,13 @@
 	} from './unified-registration-pets';
 	import {
 		blankUnifiedMember,
+		memberCardLabel,
+		memberFormKey,
 		membersMissingPhoneChoice,
 		unifiedRegistrationInputSchema,
 		type MemberPhotoUploadMode,
+		type RegistrationConsent,
+		type RegistrationConsentConfig,
 		type UnifiedMemberWithMeta,
 		type UnifiedRegistrationChannel,
 		type UnifiedRegistrationInput,
@@ -63,6 +68,7 @@
 		collectMemberRuleIssues,
 		dormFieldsFor,
 		formatPersonName,
+		hasMedicalInput,
 		type HousingType,
 		type HouseholdVehicle,
 		type PetGroup
@@ -130,6 +136,7 @@
 		joinResetKey = 0,
 		/** Shelter codes that accept public pre-registration (fallback when chip lacks the flag). */
 		bookableShelterCodes = [],
+		consent,
 		children
 	}: {
 		channel?: UnifiedRegistrationChannel;
@@ -153,12 +160,19 @@
 		initialThaidProfile?: ThaiDAutofillProfile | null;
 		onsubmit: (
 			input: UnifiedRegistrationInput,
-			meta?: { reportingInMembers: UnifiedMemberWithMeta[]; allMembers: UnifiedMemberWithMeta[] }
+			meta?: {
+				reportingInMembers: UnifiedMemberWithMeta[];
+				allMembers: UnifiedMemberWithMeta[];
+				/** Set when the consent block was shown (FR-19); null otherwise. */
+				consent: RegistrationConsent | null;
+			}
 		) => Promise<void> | void;
 		onselectshelter?: (shelterCode: string, shelterName?: string) => void;
 		onDirtyChange?: (dirty: boolean) => void;
 		joinResetKey?: number;
 		bookableShelterCodes?: string[];
+		/** Shows the PDPA consent block at the end of the form; its confirm is this form's submit. */
+		consent?: RegistrationConsentConfig;
 		children?: import('svelte').Snippet<[{ household: UnifiedRegistrationInput['household'] }]>;
 	} = $props();
 
@@ -239,6 +253,8 @@
 			return initialMembers.map((m) => ({
 				...blankUnifiedMember(),
 				...m,
+				// Deterministic for loaded people: a refetch rebuilding `members` keeps guardian picks.
+				form_key: m.form_key ?? m._id ?? blankUnifiedMember().form_key,
 				// Keep defined — Svelte 5 rejects bind:x={undefined} when $bindable has a fallback.
 				religion_other: m.religion_other ?? null,
 				disability_other_detail: m.disability_other_detail ?? null,
@@ -249,6 +265,37 @@
 	}
 
 	let members = $state<UnifiedMemberWithMeta[]>(untrack(() => buildInitialMembers()));
+
+	const consentBlock = untrack(() =>
+		consent
+			? new ConsentBlockState({
+					channel: consent.channel,
+					staff: consent.staff,
+					initialSearchVisible: consent.initialSearchVisible
+				})
+			: null
+	);
+	/** FR-41: the block is for members without consent, including ones added during report-in. */
+	const consentActive = $derived(
+		consentBlock !== null &&
+			members.some((m) => !consent?.consentedKeys?.includes(memberFormKey(m)))
+	);
+	const guardianOptions = $derived(
+		members
+			.map((m, index) => ({ m, index }))
+			.filter(({ m, index }) => index > 0 && !consent?.consentedKeys?.includes(memberFormKey(m)))
+			.map(({ m, index }) => ({
+				key: memberFormKey(m),
+				label: formatPersonName(m).trim() || memberCardLabel(index)
+			}))
+	);
+	const consentHasMedicalInput = $derived(members.some(hasMedicalInput));
+	const consentBlocksSubmit = $derived(
+		consentActive && !consentBlock!.canConfirm(guardianOptions.map((o) => o.key))
+	);
+	/** FR-17: while the basic notice shows, its own buttons replace the submit buttons. */
+	const consentHidesSubmit = $derived(consentActive && consentBlock!.noticeVisible);
+	const effectiveSubmitDisabled = $derived(submitDisabled || readOnly || consentBlocksSubmit);
 	let household = $state<UnifiedRegistrationInput['household']>(
 		untrack(() => buildInitialHousehold())
 	);
@@ -1354,8 +1401,12 @@
 		if (!focusFirstInvalid()) scrollToSection('members');
 	}
 
-	async function handleSubmit(e: Event) {
+	function handleSubmit(e: Event) {
 		e.preventDefault();
+		void submit('confirm');
+	}
+
+	async function submit(intent: 'confirm' | 'basic') {
 		if (pending || readOnly) return;
 
 		household.pets = syncPetsToHousehold(petItems);
@@ -1375,14 +1426,29 @@
 
 		submittedEntries = null;
 		firstErrorMember = null;
-		// Only now: a blank phone that passed validation is saved as "no phone".
-		for (const m of members) {
-			if (!m.phone?.trim()) m.phone = null;
-		}
 		try {
+			let registrationConsent: RegistrationConsent | null = null;
+			if (consentActive && consentBlock) {
+				const eligibleKeys = guardianOptions.map((o) => o.key);
+				const gate =
+					intent === 'basic'
+						? consentBlock.confirmBasic(eligibleKeys)
+						: consentBlock.confirm(eligibleKeys);
+				if (gate.kind !== 'decided') return;
+				registrationConsent = {
+					decision: gate.decision,
+					memberKeys: members.map(memberFormKey),
+					recordedBy: consentBlock.staff?.userId ?? null
+				};
+			}
+			// Only now: a blank phone that passed validation is saved as "no phone".
+			for (const m of members) {
+				if (!m.phone?.trim()) m.phone = null;
+			}
 			await onsubmit(parsed.data as UnifiedRegistrationInput, {
 				reportingInMembers: members.filter((m) => m.reporting_in),
-				allMembers: members
+				allMembers: members,
+				consent: registrationConsent
 			});
 			clearDirty();
 		} catch {
@@ -1533,9 +1599,10 @@
 				{showVehiclesAssets}
 				{activeSection}
 				{pending}
-				submitDisabled={submitDisabled || readOnly}
+				submitDisabled={effectiveSubmitDisabled}
 				submitLabel={effectiveSubmitLabel}
 				submittingLabel={t.submitting}
+				showSubmit={!consentHidesSubmit}
 				existingHeadName={summaryExistingHeadName}
 				existingMemberCount={summaryExistingMemberCount}
 				existingPets={selectedMatchChip?.pets ?? []}
@@ -1958,6 +2025,16 @@
 				</div>
 			{/if}
 
+			{#if consentActive && consentBlock}
+				<ConsentBlock
+					block={consentBlock}
+					members={guardianOptions}
+					hasMedicalInput={consentHasMedicalInput}
+					disabled={fieldsLocked}
+					onbasic={() => void submit('basic')}
+				/>
+			{/if}
+
 			<div class="unified-reg-bottom-chrome {isVirtualKeyboardOpen ? 'max-sm:hidden' : ''}">
 				<div class="space-y-2">
 					<button
@@ -1983,11 +2060,11 @@
 								onNavigate={(id) => scrollToSection(id as FormSectionId)}
 							/>
 						</div>
-						{#if !readOnly}
+						{#if !readOnly && !consentHidesSubmit}
 							<div class="min-w-0 flex-1">
 								<UnifiedRegistrationSubmitBar
 									{pending}
-									{submitDisabled}
+									submitDisabled={effectiveSubmitDisabled}
 									label={effectiveSubmitLabel}
 									submittingLabel={t.submitting}
 									align={submitAlign}
@@ -2017,7 +2094,7 @@
 							{showVehiclesAssets}
 							{activeSection}
 							{pending}
-							submitDisabled={submitDisabled || readOnly}
+							submitDisabled={effectiveSubmitDisabled}
 							submitLabel={effectiveSubmitLabel}
 							submittingLabel={t.submitting}
 							showSubmit={false}
