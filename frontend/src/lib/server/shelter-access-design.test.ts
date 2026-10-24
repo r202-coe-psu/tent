@@ -1125,6 +1125,79 @@ describe('buildValidateDocUpdate', () => {
 		});
 	});
 
+	describe('evacuee consent (PDPA consent block FR-34)', () => {
+		const COUCH_ADMIN: UserCtx = { name: 'kiosk', roles: ['_admin'] };
+		const consent = {
+			mode: 'full',
+			health: true,
+			ref: 'CS-7K3QZ9MD',
+			given_at: '2026-10-25T03:00:00.000Z',
+			given_by: 'household_member',
+			giver_evacuee_id: 'evacuee:01HEAD',
+			recorded_verbally_by: 'staff01',
+			channel: 'staff',
+			notice_version: '2026-10-25'
+		};
+		const withConsent = (over: Doc = {}, searchExcluded = false): Doc =>
+			evacuee({
+				privacy: { search_excluded: searchExcluded },
+				consent: { ...consent, ...over }
+			});
+
+		it('accepts an evacuee without consent', () => {
+			expect(() => compile()(evacuee(), null, COUCH_ADMIN)).not.toThrow();
+		});
+
+		it('accepts a valid consent from staff and from a couch admin', () => {
+			expect(() => compile()(withConsent(), evacuee(), REGISTRATION)).not.toThrow();
+			expect(() => compile()(withConsent(), null, COUCH_ADMIN)).not.toThrow();
+		});
+
+		it('checks consent before the couch admin bypass', () => {
+			expectForbidden(
+				() => compile()(withConsent({ mode: 'partial' }), null, COUCH_ADMIN),
+				/consent mode is invalid/
+			);
+		});
+
+		it('rejects a consent missing a required key', () => {
+			const doc = withConsent();
+			delete (doc.consent as Doc).notice_version;
+			expectForbidden(() => compile()(doc, null, COUCH_ADMIN), /consent missing notice_version/);
+		});
+
+		it('rejects basic mode with health consent', () => {
+			expectForbidden(
+				() => compile()(withConsent({ mode: 'basic', health: true }, true), null, COUCH_ADMIN),
+				/basic mode cannot have health consent/
+			);
+		});
+
+		it('requires basic mode to be excluded from search (FR-31)', () => {
+			expectForbidden(
+				() => compile()(withConsent({ mode: 'basic', health: false }), null, COUCH_ADMIN),
+				/basic mode requires privacy.search_excluded/
+			);
+			expect(() =>
+				compile()(withConsent({ mode: 'basic', health: false }, true), null, COUCH_ADMIN)
+			).not.toThrow();
+		});
+
+		it('rejects a giver id on a self consent', () => {
+			expectForbidden(
+				() => compile()(withConsent({ given_by: 'self' }), null, COUCH_ADMIN),
+				/giver_evacuee_id must be null for self/
+			);
+		});
+
+		it('rejects a malformed ref', () => {
+			expectForbidden(
+				() => compile()(withConsent({ ref: 'CS-123456' }), null, COUCH_ADMIN),
+				/consent ref is invalid/
+			);
+		});
+	});
+
 	describe('evacuee zone_change eligibility (CR-106 FR-16 / ZONE_CHANGE_ELIGIBLE_STATUSES)', () => {
 		it('allows a same-status rezone from active', () => {
 			expect(() =>
