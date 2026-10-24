@@ -230,7 +230,8 @@
 					headers: { 'Content-Type': 'application/json' },
 					body: JSON.stringify({
 						target_shelter_code: targetShelterCode,
-						...(note ? { note } : {})
+						...(note ? { note } : {}),
+						expected_rev: selectedPendingRequest?.rev
 					})
 				}
 			);
@@ -241,6 +242,8 @@
 				);
 				selectedPendingRequest = null;
 				await refreshQueue();
+			} else if (data.error_code === 'DONATION_CHANGED') {
+				staleDecision(data.error);
 			} else {
 				toast.error(data.error || 'ส่งต่อไม่สำเร็จ');
 			}

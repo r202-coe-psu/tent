@@ -701,7 +701,8 @@
 					headers: { 'Content-Type': 'application/json' },
 					body: JSON.stringify({
 						target_shelter_code: selectedTargetShelter,
-						note: redirectNote.trim()
+						note: redirectNote.trim(),
+						expected_rev: donationDoc?.rev
 					})
 				}
 			);
