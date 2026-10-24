@@ -96,6 +96,31 @@ describe('openMemberHitSchema', () => {
 		const hit = { ...baseMember };
 		expect(openMemberHitSchema.parse(hit)).toEqual(hit);
 	});
+
+	it('carries the consent the member gave on the public form (FR-41)', () => {
+		const consent = {
+			mode: 'basic',
+			health: false,
+			ref: 'CS-7K3QZ9MD',
+			given_at: '2026-10-25T03:15:00.000Z',
+			notice_version: '2026-10-25',
+			given_by: 'self',
+			giver_evacuee_id: null,
+			recorded_verbally_by: null,
+			channel: 'web'
+		};
+		const hit = { ...baseMember, consent, search_excluded: true };
+		expect(openMemberHitSchema.parse(hit)).toEqual(hit);
+	});
+
+	it('rejects a consent that breaks the contract', () => {
+		const hit = {
+			...baseMember,
+			consent: { mode: 'basic', health: true, given_by: 'self' },
+			search_excluded: true
+		};
+		expect(openMemberHitSchema.safeParse(hit).success).toBe(false);
+	});
 });
 
 describe('isOnlineRequiredError', () => {
