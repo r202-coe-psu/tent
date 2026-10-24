@@ -4,6 +4,9 @@ import { findMasterByCode } from '$lib/server/shelters.admin';
 import { KioskInputError, KioskLookupUnavailableError } from './kiosk-check-in.server';
 import {
 	KioskReprintNotFoundError,
+	KioskReprintStaffPinBusyError,
+	KioskReprintStaffPinInvalidError,
+	KioskReprintStaffPinNotSetError,
 	KioskReprintUnverifiableError,
 	KioskReprintVerifyFailedError,
 	kioskReprintInputSchema,
@@ -65,6 +68,16 @@ function input(overrides: Partial<Parameters<typeof reprintKioskLabels>[1]> = {}
 		phone,
 		primary_evacuee_id: ids[0],
 		id_last4: '0123',
+		evacuee_ids: [ids[0]],
+		...overrides
+	};
+}
+
+function pinInput(overrides: Partial<Parameters<typeof reprintKioskLabels>[1]> = {}) {
+	return {
+		phone,
+		primary_evacuee_id: ids[0],
+		staff_pin: '123456',
 		evacuee_ids: [ids[0]],
 		...overrides
 	};
@@ -140,6 +153,55 @@ describe('reprintKioskLabels', () => {
 
 		expect(verifyStaffPin).toHaveBeenCalledWith('123456');
 		expect(members.map((member) => member.evacuee_id)).toEqual([ids[0], ids[1]]);
+	});
+
+	it('refuses the reprint with a wrong staff PIN, without labels or a screening lookup', async () => {
+		docs = [evacuee(0)];
+		const verifyStaffPin = vi.fn().mockResolvedValue({ kind: 'wrong' });
+
+		await expect(
+			reprintKioskLabels(shelterCode, pinInput({ staff_pin: '000000' }), { verifyStaffPin })
+		).rejects.toBeInstanceOf(KioskReprintStaffPinInvalidError);
+		expect(verifyStaffPin).toHaveBeenCalledWith('000000');
+		expect(screeningLookups()).toEqual([]);
+	});
+
+	it('refuses the reprint when the kiosk has no staff PIN set', async () => {
+		docs = [evacuee(0)];
+		const verifyStaffPin = vi.fn().mockResolvedValue({ kind: 'not_set' });
+
+		await expect(
+			reprintKioskLabels(shelterCode, pinInput(), { verifyStaffPin })
+		).rejects.toBeInstanceOf(KioskReprintStaffPinNotSetError);
+		expect(screeningLookups()).toEqual([]);
+	});
+
+	it('refuses the reprint when the device PIN queue is full', async () => {
+		docs = [evacuee(0)];
+		const verifyStaffPin = vi.fn().mockResolvedValue({ kind: 'busy' });
+
+		await expect(
+			reprintKioskLabels(shelterCode, pinInput(), { verifyStaffPin })
+		).rejects.toBeInstanceOf(KioskReprintStaffPinBusyError);
+		expect(screeningLookups()).toEqual([]);
+	});
+
+	it('fails closed when no staff PIN verifier is available', async () => {
+		docs = [evacuee(0)];
+
+		await expect(reprintKioskLabels(shelterCode, pinInput())).rejects.toBeInstanceOf(
+			KioskReprintStaffPinInvalidError
+		);
+		expect(screeningLookups()).toEqual([]);
+	});
+
+	it('is not found for an unknown primary before the staff PIN is checked', async () => {
+		const verifyStaffPin = vi.fn().mockResolvedValue({ kind: 'ok' });
+
+		await expect(
+			reprintKioskLabels(shelterCode, pinInput(), { verifyStaffPin })
+		).rejects.toBeInstanceOf(KioskReprintNotFoundError);
+		expect(verifyStaffPin).not.toHaveBeenCalled();
 	});
 
 	it('prints the current zone name of members already given a zone', async () => {

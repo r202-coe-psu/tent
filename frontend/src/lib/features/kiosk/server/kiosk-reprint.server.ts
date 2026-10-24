@@ -68,6 +68,30 @@ export class KioskReprintVerifyFailedError extends Error {
 	}
 }
 
+/** The staff PIN was wrong, or no PIN verifier is available (fail closed). */
+export class KioskReprintStaffPinInvalidError extends Error {
+	constructor() {
+		super('Staff PIN is not accepted');
+		this.name = 'KioskReprintStaffPinInvalidError';
+	}
+}
+
+/** The kiosk has no staff PIN configured, so a PIN reprint cannot be authorised. */
+export class KioskReprintStaffPinNotSetError extends Error {
+	constructor() {
+		super('No staff PIN is set for this kiosk');
+		this.name = 'KioskReprintStaffPinNotSetError';
+	}
+}
+
+/** The device's staff PIN queue is full: the check was not even attempted, try again later. */
+export class KioskReprintStaffPinBusyError extends Error {
+	constructor() {
+		super('The staff PIN check is busy');
+		this.name = 'KioskReprintStaffPinBusyError';
+	}
+}
+
 /** What the injected staff PIN check answers; the route supplies the real verifier. */
 export type KioskStaffPinResult =
 	{ kind: 'ok' } | { kind: 'wrong' } | { kind: 'not_set' } | { kind: 'busy' };
@@ -159,7 +183,16 @@ export async function reprintKioskLabels(
 	} else {
 		// Fail closed: only an explicit ok from the injected verifier lets the reprint through.
 		const result = await deps.verifyStaffPin?.(input.staff_pin);
-		if (result?.kind !== 'ok') throw new KioskReprintVerifyFailedError();
+		switch (result?.kind) {
+			case 'ok':
+				break;
+			case 'not_set':
+				throw new KioskReprintStaffPinNotSetError();
+			case 'busy':
+				throw new KioskReprintStaffPinBusyError();
+			default:
+				throw new KioskReprintStaffPinInvalidError();
+		}
 	}
 
 	const eligible: EvacueeDoc[] = [];
