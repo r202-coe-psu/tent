@@ -34,6 +34,7 @@
 	import { mapDistributionQueryError } from '../model/distribution-error';
 	import {
 		LATE_BADGE_CLASS,
+		UNRESOLVED_REFS_HINT,
 		filterPoolRows,
 		getPoolBoardViewState,
 		getPoolStatusBadgeClass,
@@ -120,10 +121,14 @@
 		}))
 	);
 
-	// Detail follows the live overview row, so it refreshes after every mutation.
-	const selectedRow = $derived(
-		selectedPoolId ? (rows.find((row) => row.pool._id === selectedPoolId) ?? null) : null
-	);
+	// Detail follows the live overview row, so it refreshes after every mutation. Read `rows` on
+	// every run (no short-circuit): a run with no selection must still track `rows`, or later
+	// refetches never reach the open sheet (BRP-F10).
+	const selectedRow = $derived.by(() => {
+		const list = rows;
+		const id = selectedPoolId;
+		return id ? (list.find((row) => row.pool._id === id) ?? null) : null;
+	});
 
 	function dateTime(value: string): string {
 		return formatThaiDateTime(value) || value;
@@ -271,6 +276,16 @@
 									>
 										<AlertTriangle class="h-3.5 w-3.5" aria-hidden="true" />
 										ค้าง <span class="tabular-nums">{row.late_entries.length}</span>
+									</span>
+								{/if}
+								{#if row.unresolved_refs.length > 0}
+									<span
+										class="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold {LATE_BADGE_CLASS}"
+										title={UNRESOLVED_REFS_HINT}
+									>
+										<AlertTriangle class="h-3.5 w-3.5" aria-hidden="true" />
+										รอซิงก์ <span class="tabular-nums">{row.unresolved_refs.length}</span>
+										<span class="sr-only">{UNRESOLVED_REFS_HINT}</span>
 									</span>
 								{/if}
 								<span

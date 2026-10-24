@@ -143,7 +143,9 @@ export {
 	poolSnapshotEntryIds,
 	isLateEntry,
 	findLateEntries,
-	type ResolvedBulkReturnEntry
+	findUnresolvedBulkReturnRefs,
+	type ResolvedBulkReturnEntry,
+	type UnresolvedBulkReturnRef
 } from './bulk-return-pool-summary';
 
 export {

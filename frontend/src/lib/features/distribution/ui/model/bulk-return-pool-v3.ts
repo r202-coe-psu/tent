@@ -20,6 +20,11 @@ export const UNSPECIFIED_STORAGE_LABEL = 'ไม่ระบุ';
 export const UNSPECIFIED_RETURNER_LABEL = 'ไม่ระบุผู้คืน';
 export const NOT_EMPTY_CANCEL_REASON = 'ย้ายของออกให้หมดก่อน';
 export const LATE_ENTRY_GUIDANCE = 'ย้ายไปกองอื่นที่ยังเปิดอยู่';
+export const UNRESOLVED_REFS_HINT =
+	'มีการย้าย/ยกเลิกที่อ้างถึงรายการรับคืนที่ยังไม่มีในระบบ ยอดในกองอาจยังไม่ครบ';
+export function unresolvedRefsNotice(count: number): string {
+	return `รอซิงก์ข้อมูล: มีการย้าย/ยกเลิก ${count} รายการที่อ้างถึงรายการรับคืนที่ยังไม่มีในระบบ ยอดในกองอาจยังไม่ครบ ระบบจะแสดงผลเมื่อข้อมูลซิงก์ครบ`;
+}
 export const POOL_LOCKED_REASON = 'กองนี้กำลังถูกดำเนินการ กรุณารอสักครู่แล้วรีเฟรช';
 
 export type BulkReturnPoolRow = BulkReturnPoolOverviewRow;

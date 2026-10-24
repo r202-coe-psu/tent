@@ -20,9 +20,12 @@ export interface ResolvedBulkReturnEntry<E extends EntryLike = EntryLike> {
 
 /**
  * Folds the append-only event log: resolves every entry to its current pool and voided flag.
- * Throws on: a duplicate entry, a move/void for an unknown entry, a broken move chain, more than
- * one void per entry, a void whose item_id/qty differ from the entry, or a void whose pool_id
- * differs from the entry's resolved pool (which also catches a move written after the void).
+ * A move/void whose entry doc is not present (out-of-order replication) is skipped: it cannot
+ * change any known entry, and the fold self-heals once the entry arrives (see
+ * `findUnresolvedBulkReturnRefs` to surface them).
+ * Throws on: a duplicate entry, a broken move chain, more than one void per entry, a void whose
+ * item_id/qty differ from the entry, or a void whose pool_id differs from the entry's resolved
+ * pool (which also catches a move written after the void).
  */
 export function resolveBulkReturnEntries<E extends EntryLike>(
 	entries: readonly E[],
@@ -47,12 +50,6 @@ export function resolveBulkReturnEntries<E extends EntryLike>(
 		if (seen.has(entry._id)) throw new Error(`Duplicate bulk_return_entry ${entry._id}`);
 		seen.add(entry._id);
 	}
-	for (const entryId of movesByEntry.keys()) {
-		if (!seen.has(entryId)) throw new Error(`Move references unknown entry ${entryId}`);
-	}
-	for (const entryId of voidsByEntry.keys()) {
-		if (!seen.has(entryId)) throw new Error(`Void references unknown entry ${entryId}`);
-	}
 	return entries.map((entry) => {
 		const pool_id = resolveEntryPool(entry, movesByEntry.get(entry._id) ?? []);
 		const v = voidsByEntry.get(entry._id);
@@ -68,6 +65,47 @@ export function resolveBulkReturnEntries<E extends EntryLike>(
 		}
 		return { entry, pool_id, voided: v !== undefined };
 	});
+}
+
+export interface UnresolvedBulkReturnRef {
+	kind: 'move' | 'void';
+	entry_id: string;
+	/** Pools the event names: move from/to, or the void's pool_id. */
+	pool_ids: string[];
+}
+
+/**
+ * Move/void docs whose entry doc is not among `entries` (pending replication or a stray write).
+ * One item per orphan doc, ordered by entry_id, then kind, then seq.
+ */
+export function findUnresolvedBulkReturnRefs(
+	entries: readonly EntryLike[],
+	moves: readonly MoveLike[],
+	voids: readonly VoidLike[] = []
+): UnresolvedBulkReturnRef[] {
+	const known = new Set(entries.map((e) => e._id));
+	const out: { ref: UnresolvedBulkReturnRef; seq: number }[] = [];
+	for (const m of moves) {
+		if (known.has(m.entry_id)) continue;
+		out.push({
+			ref: {
+				kind: 'move',
+				entry_id: m.entry_id,
+				pool_ids: [...new Set([m.from_pool_id, m.to_pool_id])]
+			},
+			seq: m.seq
+		});
+	}
+	for (const v of voids) {
+		if (known.has(v.entry_id)) continue;
+		out.push({ ref: { kind: 'void', entry_id: v.entry_id, pool_ids: [v.pool_id] }, seq: 0 });
+	}
+	const cmp = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+	return out
+		.sort(
+			(a, b) => cmp(a.ref.entry_id, b.ref.entry_id) || cmp(a.ref.kind, b.ref.kind) || a.seq - b.seq
+		)
+		.map(({ ref }) => ref);
 }
 
 /**
