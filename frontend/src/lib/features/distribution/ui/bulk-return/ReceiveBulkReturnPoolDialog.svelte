@@ -15,8 +15,8 @@
 	import type { BulkReturnPoolDiscrepancyReason } from '../../domain/food-supplies';
 	import { formatDistributionError } from '../model/distribution-error';
 	import {
-		DISCREPANCY_REASON_LABELS,
 		DISCREPANCY_REASON_OPTIONS,
+		discrepancyReasonLabel,
 		buildReceiveInput,
 		initReceiveLines,
 		isLineMismatched,
@@ -204,7 +204,9 @@
 											aria-describedby={errors?.reason ? `${reasonId}-error` : undefined}
 											class="h-11 w-full min-w-0 rounded-md border border-input bg-white px-3 text-sm font-medium shadow-xs focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none data-[size=default]:h-11 sm:h-10 sm:data-[size=default]:h-10"
 										>
-											{line.reason ? DISCREPANCY_REASON_LABELS[line.reason] : 'เลือกเหตุผล'}
+											<span class="truncate">
+												{line.reason ? discrepancyReasonLabel(line.reason) : 'เลือกเหตุผล'}
+											</span>
 										</Select.Trigger>
 										<Select.Content>
 											{#each DISCREPANCY_REASON_OPTIONS as option (option.value)}

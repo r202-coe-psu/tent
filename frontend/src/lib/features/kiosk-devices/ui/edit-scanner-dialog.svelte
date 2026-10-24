@@ -1,7 +1,7 @@
 <script lang="ts">
 	/**
 	 * "จัดการเครื่อง" — every per-device action of the kiosk list in one dialog, so the table only
-	 * shows state. Name / service point / active / banner (FR-KBR-38) / screen size are one form saved
+	 * shows state. Name / service point / active / screen size are one form saved
 	 * as a single PATCH of the changed fields; Scanner Key, staff PIN and delete hand off to their own
 	 * dialogs.
 	 */
@@ -12,6 +12,7 @@
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import * as Form from '$lib/components/ui/form/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
+	import { resolve } from '$app/paths';
 	import { Switch } from '$lib/components/ui/switch/index.js';
 	import KioskScreenPicker from '$lib/features/shared/ui/kiosk-screen-picker.svelte';
 	import Cpu from '@lucide/svelte/icons/cpu';
@@ -32,6 +33,7 @@
 	let {
 		open = $bindable(false),
 		device,
+		groupName = null,
 		onviewsecret,
 		onviewpin,
 		onsetpin,
@@ -40,6 +42,8 @@
 		open?: boolean;
 		/** Mounted per device (keyed by the list), so the form starts from this device's values. */
 		device: ScannerDevice;
+		/** Name of the banner group the device is in; `null` = no group. Assigned from the group side. */
+		groupName?: string | null;
 		onviewsecret?: (device: ScannerDevice) => void;
 		onviewpin?: (device: ScannerDevice) => void;
 		onsetpin?: (device: ScannerDevice) => void;
@@ -175,21 +179,20 @@
 						{/snippet}
 					</Form.Control>
 				</Form.Field>
-				<Form.Field {form} name="banner_enabled" class={switchRow}>
-					<Form.Control>
-						{#snippet children({ props })}
-							<div class="space-y-0.5">
-								<Form.Label class="text-sm font-semibold text-slate-700">แสดงแบนเนอร์</Form.Label>
-								<Form.Description class="text-xs text-slate-500">
-									{$formData.banner_enabled
-										? 'ตู้แสดงแบนเนอร์ของศูนย์เมื่อไม่มีคนใช้งาน'
-										: 'ตู้นี้ไม่แสดงแบนเนอร์'}
-								</Form.Description>
-							</div>
-							<Switch {...props} bind:checked={$formData.banner_enabled} />
-						{/snippet}
-					</Form.Control>
-				</Form.Field>
+				<div class={switchRow}>
+					<div class="space-y-0.5">
+						<p class="text-sm font-semibold text-slate-700">กลุ่มแบนเนอร์</p>
+						<p class="text-xs text-slate-500">
+							{groupName ?? 'ไม่มีกลุ่ม — เครื่องนี้ไม่แสดงแบนเนอร์'}
+						</p>
+					</div>
+					<a
+						href={resolve('/back-office/kiosks/banners')}
+						class="inline-flex min-h-11 items-center text-sm font-semibold text-[#0A2647] underline underline-offset-2"
+					>
+						จัดการกลุ่มแบนเนอร์
+					</a>
+				</div>
 				<Form.Field {form} name="screen_type" class="space-y-2">
 					<Form.Control>
 						{#snippet children({ props })}

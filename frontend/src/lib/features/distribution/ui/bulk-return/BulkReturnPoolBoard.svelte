@@ -130,10 +130,6 @@
 		return id ? (list.find((row) => row.pool._id === id) ?? null) : null;
 	});
 
-	function dateTime(value: string): string {
-		return formatThaiDateTime(value) || value;
-	}
-
 	function handleReauth() {
 		if (authStore.isAuthenticated) {
 			authStore.markNeedsReauth();
@@ -328,7 +324,7 @@
 
 						<p class="text-xs text-slate-500">
 							เปิดโดย {pool.created_by} ·
-							<span class="tabular-nums">{dateTime(pool.created_at)}</span>
+							<span class="tabular-nums">{formatThaiDateTime(pool.created_at)}</span>
 						</p>
 					</button>
 				</li>

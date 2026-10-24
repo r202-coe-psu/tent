@@ -14,9 +14,7 @@
 
 	const pool = $derived(row.pool);
 	const rows = $derived(receiveRecordRows(pool, catalog));
-	const receivedAt = $derived(
-		pool.received_at ? formatThaiDateTime(pool.received_at) || pool.received_at : '—'
-	);
+	const receivedAt = $derived(pool.received_at ? formatThaiDateTime(pool.received_at) : '—');
 </script>
 
 <section aria-labelledby="pool-receive-record-heading" class="space-y-2">

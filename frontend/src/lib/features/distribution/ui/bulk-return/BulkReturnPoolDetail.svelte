@@ -106,10 +106,6 @@
 			: []
 	);
 
-	function dateTime(value: string): string {
-		return formatThaiDateTime(value) || value;
-	}
-
 	function handleSheetOpenChange(next: boolean) {
 		if (!next) onClose();
 	}
@@ -200,7 +196,7 @@
 					<dt class="text-slate-500">เปิดกองโดย</dt>
 					<dd class="text-slate-900">
 						{pool.created_by}
-						<span class="text-slate-500 tabular-nums">· {dateTime(pool.created_at)}</span>
+						<span class="text-slate-500 tabular-nums">· {formatThaiDateTime(pool.created_at)}</span>
 					</dd>
 				</dl>
 
@@ -238,7 +234,7 @@
 					</h3>
 					{#if showSnapshot && pool.submitted_at}
 						<p class="text-xs text-slate-500">
-							ส่งเมื่อ <span class="tabular-nums">{dateTime(pool.submitted_at)}</span>
+							ส่งเมื่อ <span class="tabular-nums">{formatThaiDateTime(pool.submitted_at)}</span>
 						</p>
 					{/if}
 					{#if summaryRows.length === 0}
@@ -299,7 +295,7 @@
 										<p>{loanRefsSummary(entry, item.unit)}</p>
 										<p class="text-xs text-slate-500">
 											บันทึกโดย {entry.created_by} ·
-											<span class="tabular-nums">{dateTime(entry.created_at)}</span>
+											<span class="tabular-nums">{formatThaiDateTime(entry.created_at)}</span>
 										</p>
 										{#if entry.notes}
 											<p class="text-xs break-words text-slate-500">หมายเหตุ: {entry.notes}</p>
