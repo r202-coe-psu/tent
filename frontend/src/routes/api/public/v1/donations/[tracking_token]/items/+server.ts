@@ -205,9 +205,19 @@ export const PATCH = async ({ params, request }) => {
 				},
 				{ shelterCode: latestDoc.shelter_code, createdBy: 'system' }
 			);
-			const auditRes = await adminRaw(`/${shelterDb}/_bulk_docs`, 'POST', { docs: [audit] });
-			if (auditRes.status >= 400)
-				console.error('donation auto-approve audit failed', auditRes.data);
+			// The edit has landed: a lost audit is logged, never turned into an error the
+			// donor retries — a retry would move the quota at FastAPI a second time.
+			try {
+				const auditRes = await adminRaw(`/${shelterDb}/_bulk_docs`, 'POST', { docs: [audit] });
+				// `_bulk_docs` answers 201 with a refused row inside.
+				const refused =
+					Array.isArray(auditRes.data) &&
+					auditRes.data.some((row) => typeof row === 'object' && row !== null && 'error' in row);
+				if (auditRes.status >= 400 || refused)
+					console.error('donation auto-approve audit failed', auditRes.data);
+			} catch (e) {
+				console.error('donation auto-approve audit failed', e);
+			}
 		}
 
 		return json({ success: true, message: 'Donation items updated', revisions, status });
