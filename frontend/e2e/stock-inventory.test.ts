@@ -408,6 +408,31 @@ test.describe('Stock Inventory & Warehouse Operations (/back-office/supply)', ()
 		}
 	});
 
+	test('a query typed before the shelter list resolves is kept', async ({ page }) => {
+		await routeBrowserCouchThroughApp(page);
+		await injectSession(page, WH_STAFF, sessions[WH_STAFF.name]);
+		// First visit on a device: no remembered shelter, so the shelter list picks one once it loads.
+		await page.addInitScript(() => localStorage.removeItem('tent.activeShelterCode'));
+		let releaseShelters!: () => void;
+		const sheltersHeld = new Promise<void>((resolve) => (releaseShelters = resolve));
+		await page.route(/\/couch\/registry\//, async (route) => {
+			await sheltersHeld;
+			await route.fallback();
+		});
+		await page.goto('/back-office/supply');
+
+		const searchInput = page.getByPlaceholder('ค้นหาชื่อ / SKU / สแกนบาร์โค้ด');
+		await searchInput.fill(item1Name);
+		// Resolve the shelters inside the 300ms search debounce, before the query reaches the URL.
+		releaseShelters();
+
+		await expect(page.getByRole('row').filter({ hasText: item1Name })).toBeVisible({
+			timeout: 10_000
+		});
+		await expect(page.getByRole('row').filter({ hasText: item2Name })).toHaveCount(0);
+		await expect(searchInput).toHaveValue(item1Name);
+	});
+
 	test('shelf life expiry: expired badge and attention card (CR-156 §J)', async ({ page }) => {
 		await routeBrowserCouchThroughApp(page);
 		await injectSession(page, WH_STAFF, sessions[WH_STAFF.name]);
