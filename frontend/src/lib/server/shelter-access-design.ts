@@ -78,6 +78,7 @@ const DAILY_SOP_ROLE_VDU_CONTRACT = JSON.stringify({
 		code: role.code,
 		key: role.key,
 		label: role.label,
+		capabilities: [...role.capabilities],
 		questions: DAILY_SOP_ROLE_QUESTIONS.filter((question) => question.role === role.code).map(
 			(question) => ({
 				id: question.id,
@@ -1021,9 +1022,10 @@ export function buildValidateDocUpdate(code: string): string {
     if (!isCouchAdmin && newDoc.assessment_date !== currentBangkokDate) {
       throw { forbidden: 'Daily SOP role assessments can only be saved for the current Bangkok date' };
     }
-    var allowedOwner = role.code === 'SC'
-      ? hasCapability('supply_coordinator') || hasCapability('warehouse_staff')
-      : hasCapability(role.key);
+    var allowedOwner = false;
+    for (var capabilityIndex = 0; capabilityIndex < role.capabilities.length; capabilityIndex++) {
+      if (hasCapability(role.capabilities[capabilityIndex])) allowedOwner = true;
+    }
     if (!isCouchAdmin && userCtx.roles.indexOf('system_admin') === -1 &&
         !hasCapability('shelter_manager') && !allowedOwner) {
       throw { forbidden: 'Daily SOP role assessment requires the role owner or shelter manager' };
