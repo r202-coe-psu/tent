@@ -7,6 +7,7 @@
 		readKioskDisplayQuery,
 		IdentityMethodSelector,
 		KioskBannerAttract,
+		KioskDeviceInfo,
 		KioskTestPrint
 	} from '$lib/features/kiosk';
 	let { data }: PageProps = $props();
@@ -28,4 +29,5 @@
 	thaidCheckInEnabled={data.thaidCheckInEnabled}
 />
 <KioskTestPrint />
+<KioskDeviceInfo />
 <KioskBannerAttract mode="live" />
