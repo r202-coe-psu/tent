@@ -89,7 +89,7 @@ test.describe(
 			await selectActiveShelter(page, shelterCode!);
 
 			await page.goto('/back-office/evacuee-management?tab=evacuee');
-			await expect(page.getByRole('button', { name: 'รายชื่อผู้ประสบภัย' })).toBeVisible();
+			await expect(page.getByRole('button', { name: 'รายชื่อผู้เข้าพัก' })).toBeVisible();
 			await expect(page.getByRole('heading', { name: 'ทะเบียนผู้พักพิง' })).toBeVisible({
 				timeout: 30_000
 			});

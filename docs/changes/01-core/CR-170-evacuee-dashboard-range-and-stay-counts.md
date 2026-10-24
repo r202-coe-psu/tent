@@ -16,6 +16,8 @@ affects:
   - frontend/src/lib/features/shelters/domain/{views,view-manifest}.ts
   - frontend/src/routes/(protected)/back-office/evacuee-management/dashboard-*.svelte
   - no schema_v bump (ไม่เปลี่ยน doc ที่ persist)
+  - "amend 2026-10-25: view manifest v3 → v4 (`registrations_by_date_status` + series `preregister`), registrations payload + `preregister`"
+updated: 2026-10-25
 ---
 
 # CR-170 — Evacuee dashboard: ช่วงวันที่ของกราฟ + นับสถานะ CR-106/CR-112 ให้ครบ
@@ -83,6 +85,19 @@ affects:
 - **FR-21** — bump `SHELTER_VIEW_MANIFEST.version` 2 → 3 และ redeploy `_design/app` ทุก `shelter_*` ตาม CR-056
   (`deploy:shelter-views --deploy-candidate` → `--promote`) **ก่อน** deploy app รุ่นนี้ — ไม่เช่นนั้น view-version guard ตอบ 500
 
+### Amend 2026-10-25 — แท่งจำนวนผู้ลงทะเบียนล่วงหน้า
+
+- **FR-22** — กราฟสถิติการลงทะเบียนแสดงแท่งที่สาม "จำนวนผู้ลงทะเบียนล่วงหน้า" เรียงก่อน "ลงทะเบียนเข้า" และ "ลงทะเบียนออก";
+  ใช้ช่วงวันที่และโหมดรายวัน/รายสัปดาห์เดียวกับแท่งเดิม (FR-1..FR-9)
+- **FR-23** — ค่าต่อวัน = จำนวน doc `evacuee` ที่ `registered_via` ∈ {`web`, `kiosk`, `api`} และ `current_stay.status` ≠ `cancelled`
+  โดยวันที่ = วันที่ (Asia/Bangkok) ของ `created_at`; นับเหตุการณ์การลงทะเบียน ไม่ใช่สถานะปัจจุบัน จึงยังนับอยู่หลังเช็คอิน;
+  `registered_via = staff` (ลงทะเบียนหน้างาน) ไม่นับ
+- **FR-24** — view `registrations_by_date_status` emit `[date, 'preregister']` จาก doc ตาม FR-23 เพิ่ม; series `checkin` /
+  `checkout` จาก `movement` ไม่เปลี่ยน; consumer ที่ไม่รู้จัก series ใหม่ (system-overview `movementTotals`) ข้ามไป
+- **FR-25** — payload registrations เพิ่ม `preregister` (`YYYY-MM-DD` → จำนวน) — แทนข้อความ "คงรูปเดิม" ใน FR-14;
+  `total` ยังเป็นผลรวม `checkin` อย่างเดียว
+- **FR-26** — bump `SHELTER_VIEW_MANIFEST.version` 3 → 4 และ redeploy `_design/app` ทุก `shelter_*` ก่อน deploy app (ลำดับเดียวกับ FR-21)
+
 ## Out of scope
 
 - consumer อื่นที่ใช้ `occupancy.active` เป็น headcount: `shelters/ui/shelter-occupancy-cell.svelte`,
@@ -100,6 +115,8 @@ affects:
 - [ ] เปลี่ยนช่วง → การ์ด KPI / ช่วงอายุ / ประเทศ ไม่ขึ้น skeleton
 - [ ] SH001 (dev data): ยอดรวม = 460, อยู่ในศูนย์อพยพ = 287, รายงานตัวแล้ว = 32, ช่วงอายุ/ประเทศรวม = 287
 - [ ] Unit test: default `from` (FR-3/FR-13), `from ≤ to` (FR-12), preset (FR-2), occupancy mapper (FR-15..17), demographics map (FR-20)
+- [ ] (amend) ลงทะเบียนล่วงหน้าผ่านเว็บ 1 คน → แท่ง "จำนวนผู้ลงทะเบียนล่วงหน้า" ของวันนั้น +1 และยังอยู่หลังเช็คอิน; ยกเลิกแล้วหายไป
+- [ ] (amend) Unit test: map emit `preregister` เฉพาะ `web`/`kiosk`/`api` ที่ไม่ `cancelled`, ตัดวันตาม +07:00; mapper ไม่รวม `preregister` ใน `total`
 
 ## Impact
 
@@ -124,3 +141,7 @@ client ที่ไม่ส่ง `from` จะได้ช่วงตั้�
   พบ occupancy mapper ทิ้ง `arriving`/`room_confirmed` และ demographics views นับเฉพาะ `active`
 - 2026-10-16 — owner: `arriving` นับในยอดรวมแต่ไม่นับใน "อยู่ในศูนย์อพยพ"; redeploy view ได้; ค่าเริ่มต้นของกราฟ = `ตั้งแต่เปิดศูนย์`
 - 2026-10-16 — approved
+- 2026-10-25 — amend: owner ขอแท่งจำนวนผู้ลงทะเบียนล่วงหน้าในกราฟ; ไม่มี movement ตอนลงทะเบียนล่วงหน้า จึงนับจาก doc `evacuee`
+  (`registered_via` + `created_at`); owner เลือก "จำนวนที่ลงทะเบียนล่วงหน้าในวันนั้น" (รวมตู้ kiosk) แทนยอดค้างรอเข้าพัก
+  ซึ่งย้อนหลังไม่ได้; track เป็น amend ในไฟล์ CR-170 นี้; `api` (partner booking) และการไม่นับ `cancelled` เป็นข้อตัดสินของ dev
+  ตามนิยาม — ให้ owner ทบทวน

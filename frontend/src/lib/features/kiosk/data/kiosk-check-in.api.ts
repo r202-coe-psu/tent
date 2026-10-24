@@ -110,13 +110,16 @@ export async function registerKioskThaidWalkIn(
 	});
 }
 
-/** What the reprint endpoint needs: the phone, who owns it, their id's last four, the members. */
-export interface KioskReprintInput {
+/**
+ * What the reprint endpoint needs: the phone, who owns it, the members, and one proof that the
+ * visitor may print: the last four digits of the owner's citizen id (`id_last4`) or a staff PIN of
+ * this kiosk (`staff_pin`). Exactly one of the two goes out.
+ */
+export type KioskReprintInput = {
 	phone: string;
 	primary_evacuee_id: string;
-	id_last4: string;
 	evacuee_ids: string[];
-}
+} & ({ id_last4: string } | { staff_pin: string });
 
 export interface KioskReprintMember {
 	evacuee_id: string;
@@ -135,7 +138,9 @@ export interface KioskReprintResult {
 
 /**
  * Labels of the phone owner's checked-in household after the visitor typed the last four digits
- * of the owner's citizen id. Read-only on the server; 403 `KIOSK_REPRINT_VERIFY_FAILED` on a miss.
+ * of the owner's citizen id, or staff typed this kiosk's PIN. Read-only on the server. A miss is
+ * 403 `KIOSK_REPRINT_VERIFY_FAILED` (last four) or 401 `KIOSK_REPRINT_STAFF_PIN_INVALID` (PIN);
+ * a kiosk with no PIN set answers 409 `staff_pin_not_set`.
  */
 export function reprintKioskLabels(
 	input: KioskReprintInput,

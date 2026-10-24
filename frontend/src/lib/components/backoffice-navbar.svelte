@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import House from '@lucide/svelte/icons/house';
-	import ChevronLeft from '@lucide/svelte/icons/chevron-left';
+	import SidebarCollapseToggle from '$lib/components/sidebar-collapse-toggle.svelte';
 	import ChevronDown from '@lucide/svelte/icons/chevron-down';
 	import Menu from '@lucide/svelte/icons/menu';
 	import * as Sheet from '$lib/components/ui/sheet';
@@ -20,12 +20,22 @@
 		navLeafHrefs,
 		type BackofficeNavbarNode
 	} from './backoffice-navbar/static';
+	import {
+		SIDEBAR_COLLAPSED_KEYS,
+		readSidebarCollapsed,
+		writeSidebarCollapsed
+	} from './sidebar-collapsed-storage';
 
-	let collapsed = $state(false);
+	let collapsed = $state(readSidebarCollapsed(SIDEBAR_COLLAPSED_KEYS.backoffice));
 	let mobileMenuOpen = $state(false);
 
 	const roles = $derived(authStore.user?.roles ?? []);
 	const navContext = $derived({ roles, shelterCode: shelterStore.selectedShelterCode });
+
+	function setCollapsed(next: boolean) {
+		collapsed = next;
+		writeSidebarCollapsed(SIDEBAR_COLLAPSED_KEYS.backoffice, next);
+	}
 
 	function closeMobileMenu() {
 		mobileMenuOpen = false;
@@ -89,6 +99,11 @@
 		manualOverrides[label] = !isExpanded(label, node);
 	}
 
+	function openGroupFromRail(label: string) {
+		manualOverrides[label] = true;
+		setCollapsed(false);
+	}
+
 	// Reactive through closure on `navContext` ($derived) — only called from template blocks
 	function canSee(node: BackofficeNavbarNode): boolean {
 		return canSeeNavNode(node, navContext);
@@ -102,8 +117,8 @@
 >
 	<div
 		class="sticky top-0 z-20 flex items-center bg-card {collapsed
-			? 'justify-center px-2 py-5'
-			: 'justify-between gap-2 p-5'}"
+			? 'flex-col justify-center gap-3 px-2 py-4'
+			: 'justify-between gap-2 px-5 py-4'}"
 	>
 		<a
 			href={backofficeHomePath}
@@ -121,16 +136,7 @@
 				</span>
 			{/if}
 		</a>
-		<button
-			type="button"
-			class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-sidebar-border bg-card text-xs text-muted-foreground shadow-sm hover:bg-muted {collapsed
-				? 'absolute top-6 -right-3 z-30'
-				: ''}"
-			onclick={() => (collapsed = !collapsed)}
-			aria-label={collapsed ? 'ขยายแถบเมนู' : 'ย่อแถบเมนู'}
-		>
-			<ChevronLeft class="h-3 w-3 transition-transform {collapsed ? 'rotate-180' : ''}" />
-		</button>
+		<SidebarCollapseToggle {collapsed} onToggle={() => setCollapsed(!collapsed)} />
 	</div>
 
 	<div class="no-scrollbar flex-1 overflow-y-auto">
@@ -170,7 +176,8 @@
 										class="flex w-full items-center rounded-xl px-4 py-3 transition-colors {collapsed
 											? 'justify-center'
 											: 'gap-3'} {active ? 'bg-primary-muted text-primary' : 'hover:bg-muted/60'}"
-										onclick={() => toggleExpanded(item.label)}
+										onclick={() =>
+											collapsed ? openGroupFromRail(item.label) : toggleExpanded(item.label)}
 										aria-expanded={expanded}
 										title={item.label}
 									>
