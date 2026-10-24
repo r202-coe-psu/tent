@@ -47,12 +47,15 @@ affects:
 ### Claim + check-in
 
 - **FR-KUC-07** — เมื่อยืนยัน: สมาชิกที่เลือกแต่ไม่มี doc ใน Couch ของศูนย์ → หาใบลงทะเบียนจาก `reserved_evacuee_id` → claim เฉพาะคนที่ `open` หรือ claimed เข้าศูนย์นี้ → check-in ทั้งหมดด้วย `checkInSelectedMembers` เดิม; client ไม่ต้องส่ง registration id (body ของ check-in ไม่เปลี่ยน)
+- **FR-KUC-07a** — ถ้าสมาชิกหลัก (FR-KUC-05a) ไม่ได้ถูกเลือกและไม่มี doc ใน Couch ของศูนย์ → BFF ส่ง `primaryEvacueeId` เข้า `checkInSelectedMembers` เป็นสมาชิกที่เลือกคนแรกที่มี doc ใน Couch หลัง claim (มิฉะนั้น lookup primary ใน Couch ไม่เจอ → `not_eligible` ทั้งชุด)
+  - การตรวจ citizen id ของ ThaiD / บัตร ใช้ FR-KUC-13 (`required_person_id` ตอน `prepare`) แทน `requiredPrimaryCitizenId` เพราะ primary ที่ส่งเข้าไปไม่ใช่คนที่สแกน
 - **FR-KUC-08** — `shelter_code` ของ claim = ศูนย์ของ scanner ที่ authenticate (principal) เท่านั้น ห้ามรับจาก request body ของ kiosk
 - **FR-KUC-09** — Claim ใช้ option B เดิม: mark claimed ใน Mongo ก่อน → birth Couch `household` (ถ้ายังไม่มี) + `evacuee` (+`image`) ที่ `pre_registered` → Couch ล้ม = revert Mongo
 - **FR-KUC-10** — Couch birth ทำโดย kiosk BFF ด้วย `adminFetch` (FastAPI ไม่ถือ credential Couch); FastAPI `prepare` คืน doc ที่ build แล้ว + รูป (base64)
   - `household` เขียนเฉพาะเมื่อยังไม่มีใน Couch (ไม่ overwrite)
   - `_bulk_docs` เดียว: household? + evacuee + image (inline `_attachments` full/thumb) เฉพาะรูปที่ evacuee อ้างถึง
   - row `conflict` = เกิดแล้ว (OK); error อื่น = ล้ม → revert
+  - ก่อน `_bulk_docs` ให้เช็ค evacuee id ที่มีอยู่แล้วใน Couch (`_all_docs?keys=`) แล้วตัด evacuee + image ของคนนั้นออก เพื่อไม่ให้เกิด `image:` doc ค้างตอนซ่อม orphan claim (FR-KUC-15)
 - **FR-KUC-11** — สมาชิกที่ไม่ได้เลือกคง `open` ในคิวกลาง
 - **FR-KUC-12** — สัตว์เลี้ยงไม่ถูก claim ผ่าน kiosk; คง `open` ให้เจ้าหน้าที่ claim ภายหลัง
 - **FR-KUC-13** — Smart-card / ThaiD: citizen id ต้องตรงกับ `person_id` ของสมาชิกคนใดคนหนึ่งในใบลงทะเบียน มิฉะนั้น reject ก่อน mark claimed (`PERSON_MISMATCH`)
@@ -65,9 +68,10 @@ affects:
 
 - **FR-KUC-16** — `members[].claimed_by` = `kiosk:{device_id}` เมื่อ claim ผ่าน kiosk; Couch `created_by` ใช้ค่าเดียวกัน
 - **FR-KUC-16a** — Revert ย้อนเฉพาะสมาชิกที่ `claimed_by = kiosk:{device_id}` และ `claimed_shelter_code` ตรงกับที่ส่งมา; คำนวณ `open_person_id_numbers` / `open_phones` ใหม่ และตั้งเอกสารกลับเป็น `open`; เรียกซ้ำได้ (idempotent)
+  - ต้องเป็น atomic update ครั้งเดียว (`update_one` filter ด้วย `claimed_by` + `claimed_shelter_code`, ใช้ array filters / update pipeline คำนวณ `open_*`) — ห้ามอ่าน Beanie doc ทั้งฉบับแล้ว save ทับ
 - **FR-KUC-17** — FastAPI endpoints ใหม่ป้องกันด้วย `verify_external_secret` (Bearer `EXTERNAL_API_SECRET`) — ไม่มี secret / env ใหม่ ทั้งฝั่ง FastAPI, BFF และเครื่อง kiosk
-- **FR-KUC-21** — Mongo index `by_member_evacuee_id` บน `members.reserved_evacuee_id` (check-in หาใบจาก evacuee id); query ด้วย citizen id ต้องใส่ `open_person_id_numbers.0: {$exists: true}` เพื่อใช้ partial index `uniq_open_person_id_numbers`
 - **FR-KUC-18** — BFF ต้อง `authenticateScannerDevice` ก่อนเรียก FastAPI ทุกครั้ง; `device_id` และ `shelter_code` ที่ส่งให้ FastAPI มาจาก principal
+- **FR-KUC-18a** — Mongo index `by_member_evacuee_id` บน `members.reserved_evacuee_id` (check-in หาใบจาก evacuee id); query ด้วย citizen id ต้องใส่ `open_person_id_numbers.0: {$exists: true}` เพื่อใช้ partial index `uniq_open_person_id_numbers`
 
 ### Availability
 
@@ -103,7 +107,7 @@ Prefix `/public/v1/unassigned-registrations` · Bearer `EXTERNAL_API_SECRET` ท
 | Endpoint | Body | ผล |
 | --- | --- | --- |
 | `POST /kiosk-lookup` | หนึ่งใน `registration_id` / `citizen_id` / `evacuee_id` | ทั้งครอบครัว: id, ชื่อ (ไม่ mask — BFF mask), gender, age, status, `claimed_shelter_code`, `matched` · 404 `NOT_FOUND` |
-| `POST /{id}/kiosk-claim/prepare` | `shelter_code`, `device_id`, `member_ids` (1–20), `required_person_id?` | mark + คืน `household`, `evacuees[]`, `images[]` · 404 `NOT_FOUND`/`MEMBER_NOT_FOUND` · 403 `PERSON_MISMATCH` · 409 `ALREADY_CLAIMED`/`MEMBER_NOT_OPEN` |
+| `POST /{id}/kiosk-claim/prepare` | `shelter_code`, `device_id`, `member_ids` (1–20), `required_person_id?` | mark + คืน `household`, `evacuees[]`, `images[]` · 404 `NOT_FOUND`/`MEMBER_NOT_FOUND` · 403 `PERSON_MISMATCH` · 409 `ALREADY_CLAIMED` (claimed เข้าศูนย์อื่น) / `MEMBER_NOT_OPEN` (cancelled) · claimed เข้าศูนย์เดียวกันแล้ว → 200 idempotent คืน payload เดิม (FR-KUC-15) |
 | `POST /{id}/kiosk-claim/revert` | `shelter_code`, `device_id`, `member_ids` | `{ reverted: [...] }` (FR-KUC-16a) |
 
 ## Out of scope
@@ -162,8 +166,8 @@ Prefix `/public/v1/unassigned-registrations` · Bearer `EXTERNAL_API_SECRET` ท
 - **Fail open → คนซ้ำ:** Mongo ล่มขณะเสียบบัตรของผู้ที่อยู่ในคิวกลาง → walk-in ซ้ำได้ (ยอมรับชั่วคราว; ทบทวนพร้อม edge)
 - **Response size:** รูปสมาชิก base64 ใน `prepare`
 - **Smart-card citizen id มาจาก client:** FR-KUC-13 สำหรับบัตรอ้างค่าที่ kiosk ส่งมา (ThaiD ใช้ค่าจาก server)
-- **Stale identity keys:** revert คำนวณ `open_*` จากเอกสารที่อ่านก่อน update; kiosk อื่น claim สมาชิกในครอบครัวเดียวกันในช่วงสั้นนั้นอาจทิ้ง key ค้าง (ผล: ลงทะเบียน identity นั้นซ้ำไม่ได้จนกว่าจะแก้)
-- **Prepare ซ้ำสร้าง `image:` id ใหม่:** BFF เขียนรูปเฉพาะของ evacuee ที่อ้างถึง แต่ถ้า evacuee มีอยู่แล้ว (conflict) image doc ใหม่ยังถูกเขียน → อาจมี image ค้างในกรณีซ่อม orphan
+- **Stale identity keys:** revert คำนวณ `open_*` จากเอกสารที่อ่านก่อน update; kiosk อื่น claim สมาชิกในครอบครัวเดียวกันในช่วงสั้นนั้นอาจทิ้ง key ค้าง (ผล: ลงทะเบียน identity นั้นซ้ำไม่ได้จนกว่าจะแก้). ลดด้วย atomic update ใน FR-KUC-16a
+- **Prepare ซ้ำสร้าง `image:` id ใหม่:** BFF เขียนรูปเฉพาะของ evacuee ที่อ้างถึง แต่ถ้า evacuee มีอยู่แล้ว (conflict) image doc ใหม่ยังถูกเขียน → อาจมี image ค้างในกรณีซ่อม orphan. ลดด้วยการตัด evacuee ที่มีอยู่แล้วออกก่อน `_bulk_docs` (FR-KUC-10)
 
 ## Migration
 
@@ -174,3 +178,4 @@ N/A — ไม่เปลี่ยนรูปร่าง doc; `claimed_by` �
 - 2026-10-24 — proposed (ทีม kiosk): ทั้งครอบครัว, pets คง open, ความจุ = Station 3, fail open, edge เลื่อนรอบหน้า, Couch birth ที่ BFF (ไม่เพิ่ม secret)
 - 2026-10-24 — ทีม kiosk: client ไม่ส่ง registration id ตอน check-in (server หาจาก `reserved_evacuee_id`); ไม่แสดงสมาชิกศูนย์อื่น → ไม่ต้องแก้หน้าเลือกสมาชิก
 - 2026-10-24 — ทีม kiosk: timeout เป็นค่าคงที่ในโค้ด (ไม่ใช่ env); เพิ่ม index evacuee id + ใช้ partial index ของ citizen id
+- 2026-10-24 — ทีม kiosk (ตาม review PR #838): primary ไม่ถูกเลือก → ใช้สมาชิกที่เลือกคนแรก (FR-KUC-07a); prepare ศูนย์เดิมคืน 200 ไม่ใช่ 409; ตัด evacuee ที่มีแล้วก่อน bulk write; revert แบบ atomic; FR-KUC-21 → FR-KUC-18a
