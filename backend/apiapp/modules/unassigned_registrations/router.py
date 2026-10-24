@@ -32,6 +32,8 @@ from .schemas import (
     UnassignedKioskLookupResponse,
     UnassignedKioskPrepareRequest,
     UnassignedKioskPrepareResponse,
+    UnassignedKioskRevertRequest,
+    UnassignedKioskRevertResponse,
     UnassignedPhotoUploadResponse,
     UnassignedRegistrationClaimRequest,
     UnassignedRegistrationClaimResponse,
@@ -204,6 +206,24 @@ async def kiosk_prepare_unassigned_claim(
     """Kiosk claim step 1 — mark members claimed and return Couch docs for the BFF to write."""
     response.headers["Cache-Control"] = "no-store"
     return await use_case.kiosk_prepare(registration_id, payload)
+
+
+@router.post(
+    "/{registration_id}/kiosk-claim/revert",
+    response_model=UnassignedKioskRevertResponse,
+    dependencies=[Depends(verify_external_secret)],
+)
+async def kiosk_revert_unassigned_claim(
+    registration_id: str,
+    response: Response,
+    payload: UnassignedKioskRevertRequest,
+    use_case: UnassignedRegistrationsUseCase = Depends(  # noqa: B008
+        get_unassigned_registrations_use_case
+    ),
+) -> UnassignedKioskRevertResponse:
+    """Kiosk claim rollback — reopen members this kiosk marked when the Couch write failed."""
+    response.headers["Cache-Control"] = "no-store"
+    return await use_case.kiosk_revert(registration_id, payload)
 
 
 @router.get(

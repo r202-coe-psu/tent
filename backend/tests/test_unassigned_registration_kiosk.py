@@ -418,3 +418,136 @@ async def test_kiosk_prepare_rejects_cancelled_member_with_member_not_open(
     assert response.json()["errors"][0]["error"]["code"] == "MEMBER_NOT_OPEN"
     members = await _lookup_members(client, auth_headers, doc.id)
     assert members[open_member] == ("open", None)
+
+
+_REVERT_URL = "/public/v1/unassigned-registrations/{registration_id}/kiosk-claim/revert"
+
+
+async def _revert(
+    client: AsyncClient,
+    headers: dict[str, str],
+    registration_id: str,
+    **body: object,
+):
+    payload = {"shelter_code": "SH001", "device_id": "kiosk-7", **body}
+    return await client.post(
+        _REVERT_URL.format(registration_id=registration_id), json=payload, headers=headers
+    )
+
+
+async def test_kiosk_revert_reopens_own_claim_and_makes_member_findable_by_citizen_id_again(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    doc = await _seed_family()
+    selected, other_open, _ = (m.reserved_evacuee_id for m in doc.members)
+    prepared = await _prepare(client, auth_headers, doc.id, member_ids=[selected])
+    assert prepared.status_code == 200
+
+    response = await _revert(client, auth_headers, doc.id, member_ids=[selected])
+
+    assert response.status_code == 200
+    assert response.json() == {"reverted": [selected]}
+    assert response.headers["cache-control"] == "no-store"
+    members = await _lookup_members(client, auth_headers, doc.id)
+    assert members[selected] == ("open", None)
+    assert members[other_open] == ("open", None)
+    found = await client.post(_URL, json={"citizen_id": "1234567890123"}, headers=auth_headers)
+    assert found.status_code == 200
+    assert found.json()["registration_id"] == doc.id
+
+
+async def test_kiosk_revert_twice_reverts_nothing_the_second_time(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    doc = await _seed_family()
+    selected = doc.members[0].reserved_evacuee_id
+    await _prepare(client, auth_headers, doc.id, member_ids=[selected])
+    first = await _revert(client, auth_headers, doc.id, member_ids=[selected])
+    assert first.json() == {"reverted": [selected]}
+
+    second = await _revert(client, auth_headers, doc.id, member_ids=[selected])
+
+    assert second.status_code == 200
+    assert second.json() == {"reverted": []}
+
+
+async def test_kiosk_revert_only_reverts_claims_made_by_that_kiosk_in_that_shelter(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    doc = await _seed_family()
+    own = doc.members[0].reserved_evacuee_id
+    by_other_kiosk = doc.members[2].reserved_evacuee_id  # claimed in SH001 by kiosk:kiosk-1
+    by_staff = UnassignedMember(
+        reserved_evacuee_id=f"evacuee:{new_ulid()}",
+        status="claimed",
+        first_name="ลุงสมศักดิ์",
+        last_name="ใจดี",
+        gender="male",
+        claimed_shelter_code="SH001",
+        claimed_by="staff-x",
+    )
+    other_shelter = UnassignedMember(
+        reserved_evacuee_id=f"evacuee:{new_ulid()}",
+        status="claimed",
+        first_name="ป้าสมใจ",
+        last_name="ใจดี",
+        gender="female",
+        claimed_shelter_code="SH002",
+        claimed_by="kiosk:kiosk-7",
+    )
+    doc.members += [by_staff, other_shelter]
+    await doc.save()
+    await _prepare(client, auth_headers, doc.id, member_ids=[own])
+
+    response = await _revert(
+        client,
+        auth_headers,
+        doc.id,
+        member_ids=[
+            own,
+            by_other_kiosk,
+            by_staff.reserved_evacuee_id,
+            other_shelter.reserved_evacuee_id,
+        ],
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"reverted": [own]}
+    members = await _lookup_members(client, auth_headers, doc.id)
+    assert members[own] == ("open", None)
+    assert members[by_other_kiosk] == ("claimed", "SH001")
+    assert members[by_staff.reserved_evacuee_id] == ("claimed", "SH001")
+    assert members[other_shelter.reserved_evacuee_id] == ("claimed", "SH002")
+
+
+async def test_kiosk_revert_reopens_a_registration_the_claim_had_closed(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    doc = await _seed_family()
+    first, second, _ = (m.reserved_evacuee_id for m in doc.members)
+    await _prepare(client, auth_headers, doc.id, member_ids=[first, second])
+    status_url = f"/public/v1/unassigned-registrations/{doc.id}/status"
+    closed = await client.get(status_url, headers=auth_headers)
+    assert closed.json()["status"] == "closed"
+
+    await _revert(client, auth_headers, doc.id, member_ids=[first, second])
+
+    reopened = await client.get(status_url, headers=auth_headers)
+    assert reopened.json()["status"] == "open"
+
+
+async def test_kiosk_revert_unknown_registration_is_404_not_found(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    response = await _revert(client, auth_headers, new_ulid(), member_ids=[f"evacuee:{new_ulid()}"])
+
+    assert response.status_code == 404
+    assert response.json()["errors"][0]["error"]["code"] == "NOT_FOUND"
+
+
+async def test_kiosk_revert_requires_service_bearer(client: AsyncClient) -> None:
+    response = await client.post(
+        _REVERT_URL.format(registration_id=new_ulid()),
+        json={"shelter_code": "SH001", "device_id": "kiosk-7", "member_ids": ["evacuee:x"]},
+    )
+    assert response.status_code == 401

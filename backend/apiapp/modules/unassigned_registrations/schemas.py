@@ -495,6 +495,18 @@ class UnassignedKioskPrepareResponse(BaseModel):
     images: list[UnassignedKioskImage]
 
 
+class UnassignedKioskRevertRequest(BaseModel):
+    """Kiosk claim revert — give back members this kiosk marked when the Couch write failed."""
+
+    shelter_code: str = Field(min_length=1)
+    device_id: str = Field(min_length=1)
+    member_ids: list[str] = Field(min_length=1, max_length=20)
+
+
+class UnassignedKioskRevertResponse(BaseModel):
+    reverted: list[str]
+
+
 class UnassignedRegistrationStatsResponse(BaseModel):
     open_registrations: int
     open_members: int

@@ -61,6 +61,8 @@ from .schemas import (
     UnassignedKioskMember,
     UnassignedKioskPrepareRequest,
     UnassignedKioskPrepareResponse,
+    UnassignedKioskRevertRequest,
+    UnassignedKioskRevertResponse,
     UnassignedRegistrationClaimRequest,
     UnassignedRegistrationClaimResponse,
     UnassignedRegistrationCreateRequest,
@@ -1385,6 +1387,94 @@ class UnassignedRegistrationsUseCase:
             ],
             images=images,
         )
+
+    async def kiosk_revert(
+        self,
+        registration_id: str,
+        payload: UnassignedKioskRevertRequest,
+    ) -> UnassignedKioskRevertResponse:
+        """Kiosk claim rollback — reopen the members *this kiosk* claimed into that shelter.
+
+        Idempotent: members that are not (or no longer) this kiosk's claim are skipped.
+        """
+        member_ids = list(dict.fromkeys(payload.member_ids))
+        actor = f"kiosk:{payload.device_id}"
+        try:
+            doc = await UnassignedRegistration.get(registration_id)
+            if doc is None:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail={
+                        "error": {
+                            "code": "NOT_FOUND",
+                            "message": "Unassigned Registration not found",
+                        }
+                    },
+                )
+            target_ids = [
+                m.reserved_evacuee_id
+                for m in doc.members
+                if m.reserved_evacuee_id in member_ids
+                and m.status == "claimed"
+                and m.claimed_shelter_code == payload.shelter_code
+                and m.claimed_by == actor
+            ]
+            if not target_ids:
+                return UnassignedKioskRevertResponse(reverted=[])
+            reopened = [
+                m.model_copy(update={"status": "open"})
+                if m.reserved_evacuee_id in target_ids
+                else m
+                for m in doc.members
+            ]
+            try:
+                next_open_ids, next_open_phones = _open_identity_keys(reopened)
+                owned = {
+                    "reserved_evacuee_id": {"$in": target_ids},
+                    "status": "claimed",
+                    "claimed_shelter_code": payload.shelter_code,
+                    "claimed_by": actor,
+                }
+                result = await UnassignedRegistration.get_pymongo_collection().update_one(
+                    {
+                        "_id": doc.id,
+                        "$and": [
+                            {"members": {"$elemMatch": {**owned, "reserved_evacuee_id": tid}}}
+                            for tid in target_ids
+                        ],
+                    },
+                    {
+                        "$set": {
+                            "open_person_id_numbers": next_open_ids,
+                            "open_phones": next_open_phones,
+                            # At least one member is open again, so the document is open.
+                            "status": "open",
+                            "members.$[m].status": "open",
+                            "members.$[m].claimed_shelter_code": None,
+                            "members.$[m].claimed_by": None,
+                            "members.$[m].claimed_at": None,
+                        }
+                    },
+                    array_filters=[{f"m.{key}": value for key, value in owned.items()}],
+                )
+            except (DuplicateKeyError, HTTPException) as exc:
+                # Someone re-registered the same identity while the claim was in flight.
+                logger.warning(
+                    "Kiosk revert blocked by duplicate open identity: registration_id=%s "
+                    "member_ids=%s",
+                    registration_id,
+                    target_ids,
+                )
+                if isinstance(exc, HTTPException):
+                    raise
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail={"error": "DUPLICATE_OPEN_IDENTITY"},
+                ) from exc
+        except (PyMongoError, ConnectionError, TimeoutError, OSError) as exc:
+            raise _mongo_unavailable("kiosk_revert") from exc
+        # Nothing matched: a concurrent revert already reopened them (idempotent).
+        return UnassignedKioskRevertResponse(reverted=target_ids if result.matched_count else [])
 
 
 async def _load_couch_image_payload(
