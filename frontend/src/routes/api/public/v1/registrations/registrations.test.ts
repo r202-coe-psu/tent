@@ -83,12 +83,38 @@ const VALID_BODY = {
 	captchaToken: 'tok'
 };
 
+/** A confirmed web consent block; members are keyed `m0`, `m1`, … */
+function webConsentBody(memberCount: number, decision: Record<string, unknown> = {}) {
+	const shared = {
+		guardian_for: [],
+		verbal: false,
+		ref: 'CS-7K3QZ9MD',
+		given_at: '2026-10-25T03:15:00.000Z',
+		notice_version: '2026-10-25'
+	};
+	return {
+		consent:
+			decision.mode === 'basic'
+				? { mode: 'basic', ...shared, ...decision }
+				: { mode: 'full', health: true, search_visible: true, ...shared, ...decision },
+		consent_member_keys: Array.from({ length: memberCount }, (_, i) => `m${i}`)
+	};
+}
+
+/** Every public submit carries the PDPA block; a test that sets `consent` itself keeps it. */
+function withConsent(body: unknown): unknown {
+	if (!body || typeof body !== 'object' || 'consent' in body) return body;
+	const members = (body as { members?: unknown }).members;
+	if (!Array.isArray(members)) return body;
+	return { ...webConsentBody(members.length), ...body };
+}
+
 function event(body: unknown, ip = '203.0.113.5'): PostEvent {
 	return {
 		request: new Request('http://localhost/api/public/v1/registrations', {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify(body)
+			body: JSON.stringify(withConsent(body))
 		}),
 		getClientAddress: () => ip
 	} as unknown as PostEvent;
@@ -331,6 +357,37 @@ describe('POST /api/public/v1/registrations', () => {
 				expect(e.registered_via).toBe('web');
 			}
 			expect((await res.json()).member_count).toBe(3);
+		});
+
+		it('writes the PDPA block decision onto every evacuee (FR-42)', async () => {
+			const res = await POST(
+				event({ ...FAMILY, ...webConsentBody(3, { mode: 'basic', guardian_for: ['m2'] }) })
+			);
+			expect(res.status).toBe(201);
+
+			const { evacuees } = writtenDocs();
+			expect(evacuees.map((e) => (e.consent as { given_by: string }).given_by)).toEqual([
+				'self',
+				'household_member',
+				'guardian'
+			]);
+			for (const e of evacuees) {
+				expect(e.schema_v).toBe(15);
+				expect(e.consent).toMatchObject({ mode: 'basic', health: false, channel: 'web' });
+				expect(e.privacy).toEqual({ search_excluded: true });
+			}
+		});
+
+		it('422s without the consent decision and writes nothing', async () => {
+			const res = await POST(event({ ...FAMILY, consent: undefined }));
+			expect(res.status).toBe(422);
+			expect(bulkAsPublicWriter).not.toHaveBeenCalled();
+		});
+
+		it('422s when consent member keys do not match the members', async () => {
+			const res = await POST(event({ ...FAMILY, ...webConsentBody(2) }));
+			expect(res.status).toBe(422);
+			expect(bulkAsPublicWriter).not.toHaveBeenCalled();
 		});
 
 		it('gives the phone and national id to the contact only', async () => {

@@ -7,6 +7,7 @@ import {
 	toUnassignedRegistrationPayload
 } from './unassigned-registration';
 import type { UnifiedRegistrationInput } from '$lib/features/people/server';
+import { webConsentBody } from './public-consent.fixture';
 
 function sampleUnified(over: Partial<UnifiedRegistrationInput> = {}): UnifiedRegistrationInput {
 	return {
@@ -57,6 +58,7 @@ describe('publicUnassignedRegistrationRequestSchema', () => {
 	it('accepts UnifiedRegistrationInput + captcha/disclaimer meta', () => {
 		const parsed = publicUnassignedRegistrationRequestSchema.parse({
 			...sampleUnified(),
+			...webConsentBody(1),
 			captchaToken: 'tok',
 			disclaimerAcknowledged: true
 		});
@@ -68,6 +70,7 @@ describe('publicUnassignedRegistrationRequestSchema', () => {
 		expect(
 			publicUnassignedRegistrationRequestSchema.safeParse({
 				...sampleUnified(),
+				...webConsentBody(1),
 				members: []
 			}).success
 		).toBe(false);
@@ -76,26 +79,37 @@ describe('publicUnassignedRegistrationRequestSchema', () => {
 	it('requires primary contact phone when creating (no join)', () => {
 		const input = sampleUnified();
 		input.members[0]!.phone = '';
-		expect(publicUnassignedRegistrationRequestSchema.safeParse(input).success).toBe(false);
+		expect(
+			publicUnassignedRegistrationRequestSchema.safeParse({ ...input, ...webConsentBody(1) })
+				.success
+		).toBe(false);
 	});
 
 	it('allows empty primary phone when joining via match token', () => {
 		const input = sampleUnified({ join_match_token: 'token.sig' });
 		input.members[0]!.phone = '';
-		expect(publicUnassignedRegistrationRequestSchema.safeParse(input).success).toBe(true);
+		expect(
+			publicUnassignedRegistrationRequestSchema.safeParse({ ...input, ...webConsentBody(1) })
+				.success
+		).toBe(true);
 	});
 
 	it('rejects partial primary phone even when joining', () => {
 		const input = sampleUnified({ join_match_token: 'token.sig' });
 		input.members[0]!.phone = '08123';
-		const parsed = publicUnassignedRegistrationRequestSchema.safeParse(input);
+		const parsed = publicUnassignedRegistrationRequestSchema.safeParse({
+			...input,
+			...webConsentBody(1)
+		});
 		expect(parsed.success).toBe(false);
 	});
 });
 
 describe('toUnassignedRegistrationPayload', () => {
 	it('maps unified fields including emergency_contact, nickname, religion, photo', () => {
-		const payload = toUnassignedRegistrationPayload(sampleUnified());
+		const payload = toUnassignedRegistrationPayload(sampleUnified(), {
+			consent: webConsentBody(1)
+		});
 		expect(payload.registered_via).toBe('web');
 		expect(payload.members[0]).toMatchObject({
 			first_name: 'สมชาย',
@@ -119,7 +133,7 @@ describe('toUnassignedRegistrationPayload', () => {
 	it('omits blank emergency_contact', () => {
 		const input = sampleUnified();
 		input.members[0]!.emergency_contact = { name: '', phone: '', relation: '' };
-		const payload = toUnassignedRegistrationPayload(input);
+		const payload = toUnassignedRegistrationPayload(input, { consent: webConsentBody(1) });
 		expect(payload.members[0].emergency_contact).toBeUndefined();
 	});
 
@@ -129,10 +143,73 @@ describe('toUnassignedRegistrationPayload', () => {
 			cardType: 'anonymous',
 			number: 'ANON-01HTEST000000000000000000'
 		};
-		const payload = toUnassignedRegistrationPayload(input);
+		const payload = toUnassignedRegistrationPayload(input, { consent: webConsentBody(1) });
 		expect(payload.members[0].person_id).toEqual({
 			cardType: 'anonymous',
 			number: 'ANON-01HTEST000000000000000000'
 		});
+	});
+});
+
+describe('public consent on the unassigned path (FR-42)', () => {
+	it('rejects a request without the consent decision', () => {
+		expect(publicUnassignedRegistrationRequestSchema.safeParse(sampleUnified()).success).toBe(
+			false
+		);
+	});
+
+	it('rejects member keys that do not line up with members', () => {
+		const parsed = publicUnassignedRegistrationRequestSchema.safeParse({
+			...sampleUnified(),
+			...webConsentBody(2)
+		});
+		expect(parsed.success).toBe(false);
+	});
+
+	it('rejects a verbal recording on the web channel', () => {
+		const parsed = publicUnassignedRegistrationRequestSchema.safeParse({
+			...sampleUnified(),
+			...webConsentBody(1, { verbal: true })
+		});
+		expect(parsed.success).toBe(false);
+	});
+
+	it('rejects the registrant as a guardian-for member', () => {
+		const parsed = publicUnassignedRegistrationRequestSchema.safeParse({
+			...sampleUnified(),
+			...webConsentBody(1, { guardian_for: ['m0'] })
+		});
+		expect(parsed.success).toBe(false);
+	});
+
+	it('sends an id-free grant per member and leaves channel binding to FastAPI', () => {
+		const input = sampleUnified();
+		input.members.push({ ...input.members[0]!, first_name: 'ลูก', phone: null, photo: null });
+		const payload = toUnassignedRegistrationPayload(input, {
+			consent: webConsentBody(2, { mode: 'basic', guardian_for: ['m1'] })
+		});
+		expect(payload.members.map((m) => m.consent)).toEqual([
+			{
+				mode: 'basic',
+				health: false,
+				ref: 'CS-7K3QZ9MD',
+				given_at: '2026-10-25T03:15:00.000Z',
+				notice_version: '2026-10-25',
+				given_by: 'self'
+			},
+			expect.objectContaining({ given_by: 'guardian' })
+		]);
+		expect(payload.members.map((m) => m.search_excluded)).toEqual([true, true]);
+	});
+
+	it('keeps full-mode members searchable unless search was unticked', () => {
+		const visible = toUnassignedRegistrationPayload(sampleUnified(), {
+			consent: webConsentBody(1)
+		});
+		const hidden = toUnassignedRegistrationPayload(sampleUnified(), {
+			consent: webConsentBody(1, { search_visible: false })
+		});
+		expect(visible.members[0].search_excluded).toBe(false);
+		expect(hidden.members[0].search_excluded).toBe(true);
 	});
 });

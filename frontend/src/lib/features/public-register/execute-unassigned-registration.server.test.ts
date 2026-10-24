@@ -3,6 +3,7 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { UnifiedRegistrationInput } from '$lib/features/people/server';
+import { webConsentBody } from './domain/public-consent.fixture';
 import {
 	executeUnassignedRegistration,
 	UnassignedRegistrationWriteError
@@ -83,7 +84,8 @@ describe('executeUnassignedRegistration (#255)', () => {
 		});
 
 		const result = await executeUnassignedRegistration(sampleInput(), {
-			fetch: fetchMock as unknown as typeof fetch
+			fetch: fetchMock as unknown as typeof fetch,
+			consent: webConsentBody(1)
 		});
 
 		expect(result.id).toBe('01HTEST');
@@ -98,6 +100,8 @@ describe('executeUnassignedRegistration (#255)', () => {
 		expect(body.members[0].first_name).toBe('สมชาย');
 		expect(body.members[0].emergency_contact).toBeUndefined();
 		expect(body.household.address_no).toBe('123/45');
+		expect(body.members[0].consent).toMatchObject({ mode: 'full', given_by: 'self' });
+		expect(body.members[0].search_excluded).toBe(false);
 	});
 
 	it('throws UnassignedRegistrationWriteError on upstream failure', async () => {
@@ -109,7 +113,8 @@ describe('executeUnassignedRegistration (#255)', () => {
 
 		await expect(
 			executeUnassignedRegistration(sampleInput(), {
-				fetch: fetchMock as unknown as typeof fetch
+				fetch: fetchMock as unknown as typeof fetch,
+				consent: webConsentBody(1)
 			})
 		).rejects.toBeInstanceOf(UnassignedRegistrationWriteError);
 	});
