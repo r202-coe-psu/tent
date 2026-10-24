@@ -456,6 +456,16 @@ describe('consentVduClause (FR-34)', () => {
 		expect(forbidden(evacuee(backfillConsent({}, true, new Date())))).toBeNull();
 	});
 
+	it('rejects the channel couplings the zod schema also rejects', () => {
+		expect(forbidden(evacuee({ ...goodConsent, channel: 'backfill' }))).not.toBeNull();
+		expect(
+			forbidden(evacuee({ ...goodConsent, given_by: 'backfill', channel: 'staff' }))
+		).not.toBeNull();
+		expect(
+			forbidden(evacuee({ ...goodConsent, channel: 'kiosk', recorded_verbally_by: 'staff1' }))
+		).not.toBeNull();
+	});
+
 	it('ignores other doc types and evacuees without consent', () => {
 		expect(forbidden({ type: 'household', consent: 'junk' })).toBeNull();
 		expect(forbidden({ type: 'evacuee', privacy: { search_excluded: false } })).toBeNull();

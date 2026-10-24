@@ -372,8 +372,8 @@ export function backfillConsent(
 /**
  * ES5 source for the shelter `validate_doc_update` (FR-34). Splice it BEFORE the
  * `isCouchAdmin` early return: kiosk and the backfill script write as admin.
- * Runs in an IIFE so its vars cannot collide with the host function. Checks only when `newDoc.consent` is present; immutability is deliberately not enforced
- * so withdrawal can change consent later.
+ * Runs in an IIFE so its vars cannot collide with the host function. Checks only when
+ * `newDoc.consent` is present. Immutability is not enforced so withdrawal can change it later.
  */
 export function consentVduClause(): string {
 	const list = (values: readonly string[]) => JSON.stringify(values);
@@ -400,6 +400,12 @@ export function consentVduClause(): string {
     if (typeof consent.notice_version !== 'string' || consent.notice_version === '') consentFail('notice_version is invalid');
     if (consent.recorded_verbally_by !== null && (typeof consent.recorded_verbally_by !== 'string' || consent.recorded_verbally_by === '')) {
       consentFail('recorded_verbally_by is invalid');
+    }
+    if ((consent.channel === 'backfill') !== (consent.given_by === 'backfill')) {
+      consentFail('channel backfill and given_by backfill must go together');
+    }
+    if (consent.recorded_verbally_by !== null && consent.channel !== 'staff') {
+      consentFail('verbal recording is only possible on the staff channel');
     }
     if (consent.given_by === 'self' || consent.given_by === 'backfill') {
       if (consent.giver_evacuee_id !== null) consentFail('giver_evacuee_id must be null for ' + consent.given_by);
