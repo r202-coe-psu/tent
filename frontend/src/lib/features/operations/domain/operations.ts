@@ -837,9 +837,26 @@ export const adjustInputSchema = z
 		adjust_reason: manualAdjustReasonSchema,
 		note: z.string().trim().max(ADJUST_NOTE_MAX_LENGTH).optional(),
 		lot: stockLotSchema.optional(),
+		/**
+		 * The physical lot a write-off comes out of (#569). Only on a negative adjust: a
+		 * positive row always becomes a new lot of its own (see `createStockLedger`).
+		 */
+		lot_ref: z
+			.string()
+			.regex(/^stock_ledger:.+/, 'lot_ref must reference an inbound stock ledger')
+			.optional(),
 		occurred_at: z.string().optional()
 	})
-	.superRefine((d, ctx) => checkOtherNote(d.adjust_reason, d.note, ctx));
+	.superRefine((d, ctx) => {
+		checkOtherNote(d.adjust_reason, d.note, ctx);
+		if (d.lot_ref && !qtyGt('0', persistQty(d.qty))) {
+			ctx.addIssue({
+				code: 'custom',
+				path: ['lot_ref'],
+				message: 'lot_ref is only for a negative adjustment; added stock becomes a new lot'
+			});
+		}
+	});
 export type AdjustInput = z.input<typeof adjustInputSchema>;
 
 /** `id` pins the row's `_id` (see {@link createStockLedger}) — the cycle count derives it per lot. */
@@ -859,6 +876,7 @@ export function createAdjustEntry(
 			adjust_reason: d.adjust_reason,
 			note: d.note,
 			lot: d.lot,
+			...(d.lot_ref ? { lot_ref: d.lot_ref } : {}),
 			occurred_at: d.occurred_at
 		},
 		ctx,
@@ -1002,6 +1020,92 @@ export function projectStockLotBalances(ledger: readonly StockLedger[]): StockLo
 	}
 
 	return [...balances.values()].sort((a, b) => a.lot_ref.localeCompare(b.lot_ref));
+}
+
+/**
+ * Per-lot balances of every item, from the same projection the stock table uses (#569):
+ * `lot_ref` rows hit their own lot, older outbound rows are replayed in the legacy order.
+ *
+ * Projected one item at a time — lots never cross items, so the result is the same as one
+ * whole-ledger pass, but one item with an impossible history only drops that item
+ * (`onIntegrityError`) instead of the whole page or count.
+ */
+export function projectLotsByItem(
+	ledger: readonly StockLedger[],
+	onIntegrityError?: (itemId: string, error: StockLotIntegrityError) => void
+): StockLotBalance[] {
+	const byItem = new Map<string, StockLedger[]>();
+	for (const entry of ledger) {
+		const rows = byItem.get(entry.item_id);
+		if (rows) rows.push(entry);
+		else byItem.set(entry.item_id, [entry]);
+	}
+	const lots: StockLotBalance[] = [];
+	for (const [itemId, rows] of byItem) {
+		try {
+			lots.push(...projectStockLotBalances(rows));
+		} catch (error) {
+			if (!(error instanceof StockLotIntegrityError)) throw error;
+			onIntegrityError?.(itemId, error);
+		}
+	}
+	return lots;
+}
+
+/**
+ * A write-off that names its lot must fit in that lot (#569): an adjust or a count shortfall
+ * carrying `lot_ref` is replayed against that one lot, so checking it against the item's total
+ * would let it overdraw the lot and leave the item's history impossible to replay — for good,
+ * the ledger being append-only. `entries` are the rows about to be written; rows without a
+ * `lot_ref`, or adding stock, are not checked here. Several rows on one lot are summed.
+ */
+export function assertLotWriteOffsFit(
+	ledger: readonly StockLedger[],
+	entries: readonly Pick<StockLedger, 'item_id' | 'unit' | 'qty' | 'lot_ref'>[]
+): void {
+	const wanted = new Map<string, { item_id: string; unit: string; qty: string }>();
+	for (const entry of entries) {
+		if (!entry.lot_ref || !qtyGt('0', entry.qty)) continue;
+		const prior = wanted.get(entry.lot_ref);
+		if (prior && (prior.item_id !== entry.item_id || prior.unit !== entry.unit)) {
+			throw new LotWriteOffError(`ล็อต ${entry.lot_ref} ถูกอ้างด้วยสินค้าหรือหน่วยต่างกัน`);
+		}
+		wanted.set(entry.lot_ref, {
+			item_id: entry.item_id,
+			unit: entry.unit,
+			qty: addQty(prior?.qty ?? '0', qtyAbs(entry.qty))
+		});
+	}
+	if (wanted.size === 0) return;
+
+	const itemIds = new Set([...wanted.values()].map((w) => w.item_id));
+	const lots = new Map(
+		projectStockLotBalances(ledger.filter((row) => itemIds.has(row.item_id))).map((lot) => [
+			lot.lot_ref,
+			lot
+		])
+	);
+	for (const [lotRef, want] of wanted) {
+		const lot = lots.get(lotRef);
+		if (!lot || lot.item_id !== want.item_id || lot.unit !== want.unit) {
+			throw new LotWriteOffError(
+				'ไม่พบล็อตที่เลือกในคลังของสินค้านี้แล้ว — ข้อมูลอาจเปลี่ยนไป กรุณาโหลดใหม่แล้วเลือกล็อตอีกครั้ง'
+			);
+		}
+		if (!qtyGte(lot.qty, want.qty)) {
+			throw new LotWriteOffError(
+				`ล็อตที่เลือกคงเหลือ ${persistQty(lot.qty)} ${lot.unit} ไม่พอตัด ${want.qty} ${want.unit} — ยอดอาจเปลี่ยนไปแล้ว กรุณาโหลดใหม่`
+			);
+		}
+	}
+}
+
+/** A lot-bound write-off that does not fit its lot (`assertLotWriteOffsFit`). */
+export class LotWriteOffError extends Error {
+	constructor(message: string) {
+		super(message);
+		this.name = 'LotWriteOffError';
+	}
 }
 
 // ---------------------------------------------------------------- donation
