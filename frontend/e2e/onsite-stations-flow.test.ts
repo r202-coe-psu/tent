@@ -214,7 +214,7 @@ test.describe(
 					careTrack: 'normal',
 					conditions: 'ไม่มี',
 					medications: '',
-					allergies: ''
+					allergies: 'ไข่, เพนิซิลลิน'
 				});
 				await screenEvacuee(clinic, ids[member.firstName], {
 					conditions: 'ไม่มี'

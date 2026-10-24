@@ -224,6 +224,47 @@ export interface ScreeningFill {
 	careTrack?: 'normal' | 'fast_track';
 }
 
+/**
+ * Enter tags through a `MasterTagInput` picker (CR-186/187). `raw` is comma-separated;
+ * each value goes through the picker's "เพิ่ม" option, which stores a master code when
+ * the text matches an active master label and free text otherwise.
+ */
+async function fillMasterTags(
+	page: Page,
+	inputId: string,
+	searchPlaceholder: string,
+	raw: string
+): Promise<void> {
+	const values = raw
+		.split(',')
+		.map((v) => v.trim())
+		.filter(Boolean);
+	for (const value of values) {
+		await page.locator(`#${inputId}`).click();
+		await page.getByPlaceholder(searchPlaceholder).fill(value);
+		await page.getByRole('option', { name: `เพิ่ม “${value}”` }).click();
+		await page.keyboard.press('Escape');
+	}
+}
+
+/** Enter โรคประจำตัว through the `chronic_disease` tag picker (CR-186). */
+export async function fillConditionTags(
+	page: Page,
+	conditions: string,
+	idPrefix = 'med'
+): Promise<void> {
+	await fillMasterTags(page, `${idPrefix}-conditions`, 'ค้นหาโรคประจำตัว...', conditions);
+}
+
+/** Enter อาการแพ้ through the `allergy` tag picker (CR-187). */
+export async function fillAllergyTags(
+	page: Page,
+	allergies: string,
+	idPrefix = 'med'
+): Promise<void> {
+	await fillMasterTags(page, `${idPrefix}-allergies`, 'ค้นหาสิ่งที่แพ้...', allergies);
+}
+
 export async function screenEvacuee(
 	page: Page,
 	evacueeId: string,
@@ -231,9 +272,9 @@ export async function screenEvacuee(
 ): Promise<void> {
 	await page.goto(`/onsite/medical-screening/${evacueeId}`);
 	await expect(page.getByText('Station 2', { exact: true })).toBeVisible({ timeout: 20_000 });
-	await page.locator('#med-conditions').fill(fill.conditions);
+	await fillConditionTags(page, fill.conditions);
 	if (fill.medications) await page.locator('#med-medications').fill(fill.medications);
-	if (fill.allergies) await page.locator('#med-allergies').fill(fill.allergies);
+	if (fill.allergies) await fillAllergyTags(page, fill.allergies);
 	if (fill.notes) await page.locator('#med-general-symptoms').fill(fill.notes);
 	if (fill.careTrack) await page.locator(`label[for="med-care-track-${fill.careTrack}"]`).click();
 	await page.getByRole('button', { name: 'บันทึกผลคัดกรอง' }).click();

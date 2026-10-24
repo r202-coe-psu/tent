@@ -20,6 +20,7 @@
 		type CareTrack,
 		type Screening
 	} from '$lib/features/people';
+	import { resolveMasterCodes, useMasterData } from '$lib/features/master-data';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { authStore } from '$lib/stores/auth.svelte';
 
@@ -62,6 +63,13 @@
 		isLoading: false,
 		isError: false
 	} as ReturnType<typeof useMedicals>);
+
+	// CR-186 FR-7 / #648 — map legacy โรคประจำตัว / ประวัติการแพ้ labels to master
+	// codes on save, even when the field itself was not touched.
+	const chronicDiseaseQuery = useMasterData(() => 'chronic_disease');
+	const allergyQuery = useMasterData(() => 'allergy');
+	// Hold save until the first master fetch lands, else labels are stored as free text.
+	const masterLoading = $derived(chronicDiseaseQuery.isLoading || allergyQuery.isLoading);
 
 	// Section 1: Health History & Care Track (+ general symptoms)
 	let conditions = $state<string>('');
@@ -130,6 +138,7 @@
 	});
 
 	async function handleSubmit() {
+		if (masterLoading) return;
 		isSubmitting = true;
 		try {
 			const ctx = {
@@ -137,18 +146,15 @@
 				createdBy: authStore.user?.name || 'medical_staff'
 			};
 
-			const conditionsArr = conditions
-				.split(',')
-				.map((s) => s.trim())
-				.filter(Boolean);
+			const conditionsArr = resolveMasterCodes(
+				conditions.split(','),
+				chronicDiseaseQuery.data?.items ?? []
+			);
 			const medicationsArr = medications
 				.split(',')
 				.map((s) => s.trim())
 				.filter(Boolean);
-			const allergiesArr = allergies
-				.split(',')
-				.map((s) => s.trim())
-				.filter(Boolean);
+			const allergiesArr = resolveMasterCodes(allergies.split(','), allergyQuery.data?.items ?? []);
 
 			await recordMutation.mutateAsync({
 				input: {
@@ -273,7 +279,7 @@
 		<Button
 			type="button"
 			onclick={handleSubmit}
-			disabled={isSubmitting}
+			disabled={isSubmitting || masterLoading}
 			class="h-11 w-full gap-2 rounded-xl text-sm font-semibold shadow-xs"
 		>
 			{#if isSubmitting}
