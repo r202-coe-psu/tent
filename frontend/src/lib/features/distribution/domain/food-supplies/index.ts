@@ -118,6 +118,8 @@ export {
 	type MenuMatchResult
 } from './menu-matching';
 
+export { findAllergenConflicts } from './allergen-matching';
+
 export {
 	validateDispatchLotAllocations,
 	sumDispatchAllocations,

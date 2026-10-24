@@ -1,7 +1,8 @@
 /**
  * Canonical master_data definitions for platform init (prod + staging).
  *
- * CR-137: only vulnerable_group, housing_type, shelter_type, volunteer_skills.
+ * CR-137: only vulnerable_group, housing_type, shelter_type, volunteer_skills;
+ * chronic_disease added back by #649 (Station 2 โรคประจำตัว); allergy by #648.
  * municipality_zone / community are free-text fields on household/shelter docs
  * (not master types). Pet species is a domain enum (dog|cat|other).
  *
@@ -138,6 +139,36 @@ export const MASTER_DATA_DEFS: MasterTypeDef[] = [
 				category: 'operational',
 				description: 'ขับขี่ยานพาหนะขนส่งคนและสิ่งของ'
 			}
+		]
+	},
+	{
+		// #649 — Station 2 โรคประจำตัว tag autocomplete; off-list free text stays allowed.
+		type: 'chronic_disease',
+		items: [
+			{ key: 'diabetes', label_th: 'เบาหวาน', label_en: 'Diabetes' },
+			{ key: 'hypertension', label_th: 'ความดันโลหิตสูง', label_en: 'Hypertension' },
+			{ key: 'heart_disease', label_th: 'โรคหัวใจ', label_en: 'Heart disease' },
+			{ key: 'kidney_disease', label_th: 'โรคไต', label_en: 'Kidney disease' },
+			{ key: 'asthma', label_th: 'หอบหืด', label_en: 'Asthma' },
+			{ key: 'dyslipidemia', label_th: 'ไขมันในเลือดสูง', label_en: 'Dyslipidemia' },
+			{ key: 'stroke', label_th: 'โรคหลอดเลือดสมอง', label_en: 'Stroke' },
+			{ key: 'copd', label_th: 'ถุงลมโป่งพอง / COPD', label_en: 'COPD' },
+			{ key: 'cancer', label_th: 'มะเร็ง', label_en: 'Cancer' },
+			{ key: 'epilepsy', label_th: 'ลมชัก', label_en: 'Epilepsy' },
+			{ key: 'hiv', label_th: 'ติดเชื้อเอชไอวี (HIV)', label_en: 'HIV infection' },
+			{ key: 'psychiatric_disorder', label_th: 'โรคทางจิตเวช', label_en: 'Psychiatric disorder' }
+		]
+	},
+	{
+		// #648 — Station 2 ประวัติการแพ้; codes are matched against food allergens at
+		// distribution (#607). Off-list free text (e.g. drug allergies) stays allowed.
+		type: 'allergy',
+		items: [
+			{ key: 'seafood', label_th: 'อาหารทะเล', label_en: 'Seafood' },
+			{ key: 'milk', label_th: 'นม', label_en: 'Milk' },
+			{ key: 'egg', label_th: 'ไข่', label_en: 'Egg' },
+			{ key: 'wheat', label_th: 'แป้งสาลี', label_en: 'Wheat' },
+			{ key: 'nuts', label_th: 'ถั่ว', label_en: 'Nuts' }
 		]
 	}
 ];

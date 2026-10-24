@@ -13,6 +13,7 @@ import {
 	duplicateLabelKeys,
 	enforceOneDefault,
 	findLabelCollision,
+	isGlobalOnlyMasterType,
 	masterDocId,
 	masterDataSchema,
 	masterTypeSchema,
@@ -97,6 +98,14 @@ export const PUT: RequestHandler = async ({ params, request }) => {
 			scope.mode === 'shelter'
 				? (await requireShelterManagerOrSA(request.headers.get('cookie'), scope.shelterCode!)).name
 				: (await requireSystemAdmin(request.headers.get('cookie'))).name;
+		// CR-186: global-only types have no shelter-local tier — never write
+		// `master_data:{type}:{shelter_code}` (not even disabled_global_codes).
+		if (scope.mode === 'shelter' && isGlobalOnlyMasterType(type)) {
+			throw new ServiceError(
+				'VALIDATION',
+				`${type} is global-only — manage it in System Management`
+			);
+		}
 		if (!Array.isArray(body.items)) {
 			throw new ServiceError('VALIDATION', 'items[] is required');
 		}

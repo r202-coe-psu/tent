@@ -264,8 +264,11 @@ export interface ItemCategory extends CatalogDoc {
 	override?: boolean;
 }
 
-/** Current persisted `item_master` shape (CR-143 §F adds `merged_into`). Every new writer stamps this. */
-export const ITEM_MASTER_SCHEMA_V = 5;
+/**
+ * Current persisted `item_master` shape. Every new writer stamps this.
+ * v5 (CR-143 §F) adds `merged_into`; v6 (#607) stores `allergens` as `string[]`.
+ */
+export const ITEM_MASTER_SCHEMA_V = 6;
 
 export interface ItemMaster extends CatalogDoc {
 	type: 'item_master';
@@ -291,7 +294,11 @@ export interface ItemMaster extends CatalogDoc {
 	// New fields
 	shelf_life_days?: number;
 	storage_type?: StorageType;
-	allergens?: string;
+	/**
+	 * schema_v 6 (#607): master `allergy` codes or free text. Docs up to schema_v 5 hold one
+	 * comma-separated string — read through {@link itemAllergens}, never directly.
+	 */
+	allergens?: string[] | string;
 	target_gender?: TargetGender;
 	age_group?: AgeGroup;
 	dietary: Dietary[];
@@ -643,7 +650,7 @@ const itemMasterFieldsSchema = z
 		// New fields
 		shelf_life_days: z.number().optional(),
 		storage_type: storageTypeSchema.optional(),
-		allergens: z.string().trim().optional(),
+		allergens: z.array(z.string().trim().min(1)).default([]),
 		target_gender: targetGenderSchema.optional(),
 		age_group: ageGroupSchema.optional(),
 		dietary: z.array(dietarySchema).default([]),
@@ -807,6 +814,29 @@ export function createItemCategory(
 		ctx.createdBy
 	);
 	return doc;
+}
+
+/**
+ * `item_master.allergens` as a list (#607). schema_v 6 stores an array; older docs hold one
+ * comma-separated string, split here so every reader sees the same shape.
+ */
+export function itemAllergens(item: Pick<ItemMaster, 'allergens'>): string[] {
+	const raw = item.allergens;
+	const values = typeof raw === 'string' ? raw.split(',') : (raw ?? []);
+	return [...new Set(values.map((v) => v.trim()).filter(Boolean))];
+}
+
+/**
+ * Bring an edited `item_master` up to {@link ITEM_MASTER_SCHEMA_V} before it is written back:
+ * stamps the version and turns a pre-v6 `allergens` string into the array shape (#607).
+ */
+export function upgradeItemMasterShape<T extends ItemMaster>(item: T): T {
+	const { allergens, ...rest } = item;
+	return {
+		...rest,
+		...(allergens === undefined ? {} : { allergens: itemAllergens({ allergens }) }),
+		schema_v: ITEM_MASTER_SCHEMA_V
+	} as T;
 }
 
 export function createItemMaster(

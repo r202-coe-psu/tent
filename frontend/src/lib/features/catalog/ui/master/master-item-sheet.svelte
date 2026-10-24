@@ -7,7 +7,8 @@
 	import Ban from '@lucide/svelte/icons/ban';
 	import RotateCcw from '@lucide/svelte/icons/rotate-ccw';
 	import GitMerge from '@lucide/svelte/icons/git-merge';
-	import type { ItemMaster } from '../../domain/catalog';
+	import { formatMasterLabelByCode, useMasterData } from '$lib/features/master-data';
+	import { itemAllergens, type ItemMaster } from '../../domain/catalog';
 	import ItemMasterForm from '../item-master-form.svelte';
 	import MasterBadge from './master-badge.svelte';
 	import {
@@ -52,6 +53,19 @@
 		/** The sheet closed after a create, so the panel can clear its selection. */
 		onclose: () => void;
 	} = $props();
+
+	// #607 — `allergens` hold `allergy` master codes or free text.
+	const allergyQuery = useMasterData(
+		() => 'allergy',
+		() => ({ scope: 'global' })
+	);
+	const allergenLabels = $derived(
+		item
+			? itemAllergens(item).map(
+					(a) => formatMasterLabelByCode(a, allergyQuery.data?.items ?? []) || a
+				)
+			: []
+	);
 
 	const TYPE_LABELS: Record<string, string> = {
 		CONSUMABLE: 'วัสดุสิ้นเปลือง',
@@ -120,7 +134,7 @@
 						label: 'อายุการเก็บรักษา',
 						value: item.shelf_life_days != null ? `${item.shelf_life_days} วัน` : null
 					},
-					{ label: 'สารก่อภูมิแพ้', value: item.allergens || null },
+					{ label: 'สารก่อภูมิแพ้', value: allergenLabels.join(', ') || null },
 					{
 						label: 'เพศที่ใช้ได้',
 						value: item.target_gender

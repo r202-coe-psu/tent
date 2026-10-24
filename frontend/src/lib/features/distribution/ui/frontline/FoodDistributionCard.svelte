@@ -11,7 +11,9 @@
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
-	import { useItemMasters } from '$lib/features/catalog';
+	import { itemAllergens, useItemMasters } from '$lib/features/catalog';
+	import { useMasterData } from '$lib/features/master-data';
+	import { useMedicalByEvacuee } from '$lib/features/people';
 	import {
 		resolveAuthenticatedAuthorContext,
 		useDistributionLogs,
@@ -21,8 +23,10 @@
 	import { canPerformFrontlineDistribution } from '../../application/food-supplies/auth';
 	import { lotExpiryStatus, type RequisitionTicket } from '../../domain/food-supplies';
 	import {
+		checkAllergenAdvisory,
 		checkDuplicateMealAdvisory,
 		checkMenuMatchAdvisory,
+		formatAllergyCodes,
 		formatMenuTags,
 		getItemCapacitySummary,
 		isIdentifiedRecipient,
@@ -127,6 +131,38 @@
 		menuPreflight.isMismatch ? formatMenuTags(menuPreflight.menuTags) : null
 	);
 
+	// Recipient allergy ↔ menu allergens (#607 FR-MRM-06..09): only evacuees carry a medical
+	// record. Codes come from the `allergy` master — global-only (CR-187), so the query never
+	// waits on a shelter context (a disabled query would stay pending and lock the desk).
+	const evacueeId = $derived(
+		recipientSelection?.recipientType === 'evacuee' ? recipientSelection.recipientId : ''
+	);
+	const medicalQuery = useMedicalByEvacuee(
+		() => evacueeId,
+		() => evacueeId !== ''
+	);
+	const allergyQuery = useMasterData(
+		() => 'allergy',
+		() => ({ scope: 'global' })
+	);
+	const allergyItems = $derived(allergyQuery.data?.items ?? []);
+	const allergenPreflight = $derived(
+		checkAllergenAdvisory(
+			recipientSelection,
+			medicalQuery.data?.allergies,
+			selectedMenu ? itemAllergens(selectedMenu) : [],
+			allergyItems
+		)
+	);
+	const recipientAllergyLabel = $derived(
+		formatAllergyCodes(allergenPreflight.recipientCodes, allergyItems)
+	);
+	const allergenConflictLabel = $derived(
+		allergenPreflight.conflicts.length > 0
+			? formatAllergyCodes(allergenPreflight.conflicts, allergyItems)
+			: null
+	);
+
 	// Ready-meal safety clock (FR-MQW-06 B): expiry of the lot dispatched for this item.
 	// Advisory — expired food may still go out; the workflow stamps `is_expired_warning`.
 	const lotExpiryQuery = useDispatchedLotExpiry(
@@ -154,20 +190,30 @@
 	// The duplicate-meal and menu-match preflights need their data before a confirm; without it
 	// they read as "no warning" and the override dialog would be skipped. A failed load blocks the
 	// confirm too (fail closed) until a retry succeeds.
+	// The allergy check (#607 FR-MRM-10) needs the evacuee's medical record and the allergy master.
 	const needsRecipientLogs = $derived(isIdentifiedRecipient(recipientSelection));
+	const needsAllergyCheck = $derived(evacueeId !== '');
 	const preflightLoading = $derived(
-		itemMastersQuery.isPending || (needsRecipientLogs && recipientLogsQuery.isPending)
+		itemMastersQuery.isPending ||
+			(needsRecipientLogs && recipientLogsQuery.isPending) ||
+			(needsAllergyCheck && (medicalQuery.isPending || allergyQuery.isPending))
 	);
 	const preflightError = $derived(
-		itemMastersQuery.isError || (needsRecipientLogs && recipientLogsQuery.isError)
+		itemMastersQuery.isError ||
+			(needsRecipientLogs && recipientLogsQuery.isError) ||
+			(needsAllergyCheck && (medicalQuery.isError || allergyQuery.isError))
 	);
 	const preflightRetrying = $derived(
-		itemMastersQuery.isFetching || (needsRecipientLogs && recipientLogsQuery.isFetching)
+		itemMastersQuery.isFetching ||
+			(needsRecipientLogs && recipientLogsQuery.isFetching) ||
+			(needsAllergyCheck && (medicalQuery.isFetching || allergyQuery.isFetching))
 	);
 
 	function retryPreflight() {
 		if (itemMastersQuery.isError) void itemMastersQuery.refetch();
 		if (needsRecipientLogs && recipientLogsQuery.isError) void recipientLogsQuery.refetch();
+		if (needsAllergyCheck && medicalQuery.isError) void medicalQuery.refetch();
+		if (needsAllergyCheck && allergyQuery.isError) void allergyQuery.refetch();
 	}
 
 	const isQtyValid = $derived.by(() => {
@@ -199,8 +245,12 @@
 		}
 		if (preflightLoading || preflightError) return;
 
-		// Duplicate meal or menu mismatch: open the override warning modal (reason required)
-		if (duplicatePreflight.isDuplicate || menuPreflight.isMismatch) {
+		// Duplicate meal, menu mismatch or allergen conflict: open the override modal (reason required)
+		if (
+			duplicatePreflight.isDuplicate ||
+			menuPreflight.isMismatch ||
+			allergenPreflight.conflicts.length > 0
+		) {
 			warningModalOpen = true;
 			return;
 		}
@@ -246,7 +296,14 @@
 										: null,
 								menu: selectedMenu
 							}
-						: undefined
+						: undefined,
+					allergen_check:
+						recipientSelection.recipientType === 'evacuee'
+							? {
+									recipient_allergy_codes: allergenPreflight.recipientCodes,
+									menu_allergen_codes: allergenPreflight.menuCodes
+								}
+							: undefined
 				},
 				shelterCode
 			});
@@ -386,6 +443,45 @@
 	/>
 
 	{#if recipientSelection}
+		<!-- Recipient allergies (#607 FR-MRM-09) -->
+		{#if recipientAllergyLabel || allergenPreflight.recipientFreeText.length > 0}
+			<div class="flex flex-wrap items-center gap-2 text-sm">
+				{#if recipientAllergyLabel}
+					<span
+						class="rounded-full border border-red-300 bg-red-50 px-3 py-1 font-bold text-red-800"
+					>
+						แพ้: {recipientAllergyLabel}
+					</span>
+				{/if}
+				{#if allergenPreflight.recipientFreeText.length > 0}
+					<span class="text-slate-700">
+						มีประวัติแพ้: {allergenPreflight.recipientFreeText.join(', ')}
+					</span>
+				{/if}
+			</div>
+		{/if}
+
+		<!-- Allergen conflict (#607 FR-MRM-08) -->
+		{#if allergenConflictLabel}
+			<div
+				class="flex items-start gap-2.5 rounded-xl border border-red-300 bg-red-50 p-3.5 text-sm text-red-950"
+				role="alert"
+			>
+				<AlertTriangle class="mt-0.5 size-4 shrink-0 text-red-600" aria-hidden="true" />
+				<div>
+					<p class="font-bold">
+						{selectedItem?.item_name ?? 'เมนูนี้'} มี {allergenConflictLabel} — ผู้รับแพ้
+					</p>
+					<p class="mt-0.5 text-xs text-red-800">ถ้ากดแจกต่อ ระบบจะขอเหตุผลก่อนบันทึก</p>
+				</div>
+			</div>
+		{:else if allergenPreflight.menuUnspecified}
+			<p class="flex items-center gap-2 text-sm text-slate-600">
+				<AlertCircle class="size-4 shrink-0" aria-hidden="true" />
+				<span>เมนูนี้ไม่ระบุสารก่อแพ้ — ตรวจสอบกับครัวก่อนแจก</span>
+			</p>
+		{/if}
+
 		<!-- Advisory Duplicate Meal Warning Banner -->
 		{#if duplicatePreflight.isDuplicate}
 			<div
@@ -426,7 +522,7 @@
 			>
 				<AlertCircle class="mt-0.5 size-4 shrink-0 text-red-600" aria-hidden="true" />
 				<div class="flex-1">
-					<p class="font-bold">ตรวจเมนูและประวัติการรับอาหารไม่สำเร็จ</p>
+					<p class="font-bold">ตรวจเมนู ประวัติการรับอาหาร และการแพ้ไม่สำเร็จ</p>
 					<p class="mt-0.5 text-xs">ยังบันทึกการแจกไม่ได้จนกว่าระบบจะตรวจได้ ลองใหม่อีกครั้ง</p>
 				</div>
 				<Button
@@ -508,7 +604,7 @@
 </div>
 
 <!-- Duplicate Meal / Menu Mismatch Override Warning Modal -->
-{#if ticket.meal && recipientSelection}
+{#if recipientSelection}
 	<MealEntitlementWarning
 		open={warningModalOpen}
 		meal={ticket.meal}
@@ -516,6 +612,8 @@
 		isDuplicate={duplicatePreflight.isDuplicate}
 		priorDistributedAt={duplicatePreflight.priorLog?.distributed_at}
 		{menuMismatchLabel}
+		{allergenConflictLabel}
+		menuName={selectedItem?.item_name}
 		onconfirm={handleOverrideConfirm}
 		oncancel={() => (warningModalOpen = false)}
 	/>

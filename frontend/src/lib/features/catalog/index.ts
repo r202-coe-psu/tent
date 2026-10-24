@@ -54,6 +54,8 @@ export {
 	type ItemMasterUpdateInput,
 	createItemMaster,
 	ITEM_MASTER_SCHEMA_V,
+	itemAllergens,
+	upgradeItemMasterShape,
 	isItemMaster,
 	itemMasterUnit,
 	DEFAULT_ITEM_UNIT,

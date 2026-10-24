@@ -26,7 +26,11 @@ import {
 	requiresExpiry,
 	suggestExpiry,
 	shelfLifeExpiryLabel,
-	expiryRequirementHint
+	expiryRequirementHint,
+	itemAllergens,
+	upgradeItemMasterShape,
+	ITEM_MASTER_SCHEMA_V,
+	type ItemMaster
 } from './catalog';
 import type { AuthorContext } from '$lib/db/model';
 
@@ -288,7 +292,7 @@ describe('catalog domain', () => {
 			type_class: 'CONSUMABLE' as const,
 			shelf_life_days: 7,
 			storage_type: 'CHILLED' as const,
-			allergens: 'นม'
+			allergens: ['milk']
 		};
 		const consumableParsed = itemMasterInputSchema.parse(consumableInput);
 		expect(consumableParsed.shelf_life_days).toBe(7);
@@ -296,6 +300,8 @@ describe('catalog domain', () => {
 
 		const consumableDoc = createItemMaster(consumableInput, ctx);
 		expect(consumableDoc.shelf_life_days).toBe(7);
+		expect(consumableDoc.allergens).toEqual(['milk']);
+		expect(consumableDoc.schema_v).toBe(ITEM_MASTER_SCHEMA_V);
 
 		// Durable
 		const durableInput = {
@@ -632,5 +638,31 @@ describe('mergeCatalogGenerations — requiresExpiry', () => {
 			[]
 		);
 		expect(merged.map((m) => m.requiresExpiry)).toEqual([true, false]);
+	});
+});
+
+describe('item_master allergens (#607)', () => {
+	it('reads a schema_v 6 array as-is, trimmed and deduped', () => {
+		expect(itemAllergens({ allergens: [' egg ', 'nuts', 'egg', ''] })).toEqual(['egg', 'nuts']);
+	});
+
+	it('splits a pre-v6 comma-separated string', () => {
+		expect(itemAllergens({ allergens: 'ไข่, ถั่ว ,,' })).toEqual(['ไข่', 'ถั่ว']);
+	});
+
+	it('returns an empty list when allergens are missing', () => {
+		expect(itemAllergens({})).toEqual([]);
+	});
+
+	it('upgrades an edited pre-v6 doc to the array shape and stamps schema_v 6', () => {
+		const legacy = { _id: 'item_master:x', schema_v: 5, allergens: 'นม, ไข่' } as ItemMaster;
+		const upgraded = upgradeItemMasterShape(legacy);
+		expect(upgraded.schema_v).toBe(6);
+		expect(upgraded.allergens).toEqual(['นม', 'ไข่']);
+	});
+
+	it('leaves allergens absent when the doc has none', () => {
+		const fuel = { _id: 'item_master:gas', schema_v: 5 } as ItemMaster;
+		expect('allergens' in upgradeItemMasterShape(fuel)).toBe(false);
 	});
 });
