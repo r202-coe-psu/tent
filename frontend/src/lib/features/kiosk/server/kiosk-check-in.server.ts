@@ -17,6 +17,12 @@ import { shelterDbName } from '$lib/server/shelter-access-design';
 import { maskLastName } from '$lib/utils/mask';
 import { kioskPhotoPayloadSchema, type KioskPhotoPayload } from '../domain/kiosk-photo';
 import {
+	findUnassignedRegistration,
+	KioskUnassignedUnavailableError,
+	type UnassignedRegistration,
+	type UnassignedRegistrationMember
+} from './kiosk-unassigned.server';
+import {
 	deleteKioskCardImage,
 	KioskPhotoValidationError,
 	putKioskCardImage,
@@ -25,6 +31,7 @@ import {
 
 const ULID = '[0-7][0-9A-HJKMNP-TV-Z]{25}';
 export const evacueeIdSchema = z.string().regex(new RegExp(`^evacuee:${ULID}$`, 'i'));
+const bareUlidPattern = new RegExp(`^${ULID}$`, 'i');
 
 const thaidSessionIdSchema = z.string().regex(/^[0-9a-f]{32}$/);
 
@@ -32,7 +39,8 @@ export const kioskGateInputSchema = z.discriminatedUnion('source', [
 	z.object({ source: z.literal('smart-card'), citizen_id: z.string().regex(/^\d{13}$/) }),
 	z.object({
 		source: z.literal('qr'),
-		token: evacueeIdSchema
+		// `evacuee:{ULID}` (an arrived evacuee's QR) or a bare ULID (an unassigned ticket's registration id).
+		token: z.union([evacueeIdSchema, z.string().regex(bareUlidPattern)])
 	}),
 	z.object({
 		source: z.literal('phone'),
@@ -440,6 +448,58 @@ async function lookupByPhone(
 	};
 }
 
+async function householdFromRegistration(
+	shelterCode: string,
+	registration: UnassignedRegistration | null
+): Promise<KioskLookupOutcome> {
+	const dbName = shelterDbName(shelterCode);
+	const primaryId =
+		registration?.members.find((member) => member.matched && isComingToShelter(member, shelterCode))
+			?.reserved_evacuee_id ??
+		registration?.members.find((member) => isComingToShelter(member, shelterCode))
+			?.reserved_evacuee_id;
+	if (!registration || !primaryId) return { kind: 'not_found', can_register: false };
+
+	const members: KioskEvacueeSummary[] = [];
+	for (const member of registration.members) {
+		if (!isComingToShelter(member, shelterCode)) continue;
+		const couchDoc =
+			member.status === 'claimed'
+				? await getById(dbName, member.reserved_evacuee_id).catch(asLookupUnavailable)
+				: null;
+		// Open, or claimed here but never born in Couch (orphan claim): check-in repairs it.
+		members.push(
+			couchDoc
+				? toSummary(couchDoc, primaryId)
+				: {
+						evacuee_id: member.reserved_evacuee_id,
+						first_name: member.first_name,
+						last_name: maskLastName(member.last_name),
+						gender: member.gender,
+						age: member.age,
+						status: 'pre_registered',
+						is_primary: member.reserved_evacuee_id === primaryId,
+						selectable: true
+					}
+		);
+	}
+	return {
+		kind: 'household',
+		name_masked: true,
+		shelter_code: shelterCode,
+		primary_evacuee_id: primaryId,
+		members
+	};
+}
+
+/** Open members, and members already claimed into this shelter, can still be checked in here. */
+function isComingToShelter(member: UnassignedRegistrationMember, shelterCode: string): boolean {
+	return (
+		member.status === 'open' ||
+		(member.status === 'claimed' && member.claimed_shelter_code === shelterCode)
+	);
+}
+
 /** Any CouchDB failure during lookup is a 503, whichever source or step hit it. */
 function asLookupUnavailable(error: unknown): never {
 	if (error instanceof KioskInputError || error instanceof KioskLookupUnavailableError) throw error;
@@ -459,6 +519,13 @@ export async function lookupPreRegisteredEvacuee(
 
 	const dbName = shelterDbName(shelterCode);
 	let candidates: EvacueeDoc[];
+	if (input.source === 'qr' && bareUlidPattern.test(input.token)) {
+		// An unassigned-registration ticket: its QR is the registration id, not an evacuee doc id.
+		const registration = await findUnassignedRegistration({ registration_id: input.token }).catch(
+			asLookupUnavailable
+		);
+		return householdFromRegistration(shelterCode, registration);
+	}
 	if (input.source === 'qr') {
 		const docId = `evacuee:${input.token.slice('evacuee:'.length).toUpperCase()}`;
 		const doc = await getById(dbName, docId).catch(asLookupUnavailable);
@@ -488,6 +555,18 @@ export async function lookupPreRegisteredEvacuee(
 	}
 	// Nobody with this verified citizen id (chip or ThaiD) yet: a walk-in may register them.
 	if (candidates.length === 0) {
+		if (input.source === 'smart-card' || input.source === 'thaid') {
+			// FR-KUC-01: the citizen may be waiting in the central queue before a walk-in is offered.
+			// FR-KUC-19: an unreachable queue must not block a walk-in, so fail open (no PII logged).
+			const registration = await findUnassignedRegistration({
+				citizen_id: input.citizen_id
+			}).catch((error: unknown) => {
+				if (!(error instanceof KioskUnassignedUnavailableError)) throw error;
+				console.warn('[Kiosk Lookup] Unassigned queue unavailable; treating as not found');
+				return null;
+			});
+			if (registration) return householdFromRegistration(shelterCode, registration);
+		}
 		return {
 			kind: 'not_found',
 			can_register: input.source === 'smart-card' || input.source === 'thaid'

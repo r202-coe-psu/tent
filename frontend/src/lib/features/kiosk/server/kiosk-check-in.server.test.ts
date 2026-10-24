@@ -12,8 +12,23 @@ import {
 } from './kiosk-check-in.server';
 
 vi.mock('$lib/server/couch-admin', () => ({ adminFetch: vi.fn() }));
+vi.mock('$lib/server/fastapi', () => ({
+	fastapiBaseUrl: () => 'http://fastapi.test',
+	fastapiServiceHeaders: (extra: Record<string, string> = {}) => ({
+		Authorization: 'Bearer secret',
+		...extra
+	})
+}));
 
 const mockAdminFetch = vi.mocked(adminFetch);
+const fetchMock = vi.fn();
+
+// FastAPI (the central queue) defaults to "nobody registered"; tests override per case.
+beforeEach(() => {
+	fetchMock.mockReset();
+	fetchMock.mockImplementation(async () => queueResponse(404, notFoundBody));
+	vi.stubGlobal('fetch', fetchMock);
+});
 const shelterCode = 'SH001';
 const phone = '0812345678';
 const ids = [
@@ -92,6 +107,50 @@ function setHousehold(members: FixtureEvacuee[], head = members[0]): void {
 		});
 	}
 	evacuees.push(...members);
+}
+
+const notFoundBody = { errors: [{ error: { code: 'NOT_FOUND' } }] };
+
+function queueResponse(status: number, body: unknown): Response {
+	return new Response(JSON.stringify(body), {
+		status,
+		headers: { 'content-type': 'application/json' }
+	});
+}
+
+interface QueueMember {
+	reserved_evacuee_id: string;
+	first_name: string;
+	last_name: string;
+	gender: string;
+	age: number;
+	status: 'open' | 'claimed' | 'cancelled';
+	claimed_shelter_code: string | null;
+	matched: boolean;
+}
+
+function queueMember(index: number, overrides: Partial<QueueMember> = {}): QueueMember {
+	return {
+		reserved_evacuee_id: `evacuee:${ids[index]}`,
+		first_name: `สมหญิง${index}`,
+		last_name: 'ใจดี',
+		gender: 'female',
+		age: 30 + index,
+		status: 'open',
+		claimed_shelter_code: null,
+		matched: false,
+		...overrides
+	};
+}
+
+function respondWithRegistration(members: QueueMember[]): void {
+	fetchMock.mockImplementation(async () =>
+		queueResponse(200, {
+			registration_id: '01ARZ3NDEKTSV4RRFFQ69G5REG',
+			reserved_household_id: 'household:01ARZ3NDEKTSV4RRFFQ69G5HHH',
+			members
+		})
+	);
 }
 
 function configureCheckInCouchMocks(options: { conflictOnId?: string } = {}): void {
@@ -760,6 +819,231 @@ describe('lookupPreRegisteredEvacuee thaid', () => {
 	});
 });
 
+describe('lookupPreRegisteredEvacuee unassigned registration queue', () => {
+	const registrationUlid = '01ARZ3NDEKTSV4RRFFQ69G5REG';
+
+	beforeEach(() => {
+		vi.clearAllMocks();
+		evacuees = [];
+		households = [];
+		configureCouchMocks();
+	});
+
+	it('shows the whole family of a scanned unassigned ticket with masked last names', async () => {
+		respondWithRegistration([queueMember(0), queueMember(1)]);
+
+		const outcome = await lookupPreRegisteredEvacuee(shelterCode, {
+			source: 'qr',
+			token: registrationUlid
+		});
+
+		expect(outcome).toEqual({
+			kind: 'household',
+			name_masked: true,
+			shelter_code: shelterCode,
+			primary_evacuee_id: `evacuee:${ids[0]}`,
+			members: [
+				{
+					evacuee_id: `evacuee:${ids[0]}`,
+					first_name: 'สมหญิง0',
+					last_name: 'ใ****',
+					gender: 'female',
+					age: 30,
+					status: 'pre_registered',
+					is_primary: true,
+					selectable: true
+				},
+				{
+					evacuee_id: `evacuee:${ids[1]}`,
+					first_name: 'สมหญิง1',
+					last_name: 'ใ****',
+					gender: 'female',
+					age: 31,
+					status: 'pre_registered',
+					is_primary: false,
+					selectable: true
+				}
+			]
+		});
+	});
+
+	it.each(['smart-card', 'thaid'] as const)(
+		'finds a %s citizen who is only in the queue and makes the matched member primary',
+		async (source) => {
+			respondWithRegistration([queueMember(0), queueMember(1, { matched: true })]);
+
+			const outcome = await lookupPreRegisteredEvacuee(shelterCode, {
+				source,
+				citizen_id: '1234567890123'
+			});
+
+			expect(outcome).toMatchObject({
+				kind: 'household',
+				name_masked: true,
+				shelter_code: shelterCode,
+				primary_evacuee_id: `evacuee:${ids[1]}`
+			});
+			expect(
+				outcome.kind === 'household' && outcome.members.map((m) => [m.evacuee_id, m.is_primary])
+			).toEqual([
+				[`evacuee:${ids[0]}`, false],
+				[`evacuee:${ids[1]}`, true]
+			]);
+		}
+	);
+
+	it('reads a member already claimed into this shelter from CouchDB and keeps only pre_registered selectable', async () => {
+		evacuees = [evacuee(1, { current_stay: { status: 'arriving' } })];
+		respondWithRegistration([
+			queueMember(0),
+			queueMember(1, { status: 'claimed', claimed_shelter_code: shelterCode })
+		]);
+
+		const outcome = await lookupPreRegisteredEvacuee(shelterCode, {
+			source: 'qr',
+			token: registrationUlid
+		});
+
+		expect(outcome.kind === 'household' && outcome.members).toMatchObject([
+			{ evacuee_id: `evacuee:${ids[0]}`, status: 'pre_registered', selectable: true },
+			{
+				evacuee_id: `evacuee:${ids[1]}`,
+				first_name: 'สมชาย1',
+				status: 'arriving',
+				selectable: false
+			}
+		]);
+	});
+
+	it('offers a member claimed into this shelter but missing in CouchDB so check-in can repair it', async () => {
+		respondWithRegistration([
+			queueMember(0, { status: 'claimed', claimed_shelter_code: shelterCode })
+		]);
+
+		const outcome = await lookupPreRegisteredEvacuee(shelterCode, {
+			source: 'qr',
+			token: registrationUlid
+		});
+
+		expect(outcome.kind === 'household' && outcome.members).toMatchObject([
+			{ evacuee_id: `evacuee:${ids[0]}`, status: 'pre_registered', selectable: true }
+		]);
+	});
+
+	it('omits members claimed into another shelter or cancelled', async () => {
+		respondWithRegistration([
+			queueMember(0, { status: 'claimed', claimed_shelter_code: 'SH999' }),
+			queueMember(1, { status: 'cancelled' }),
+			queueMember(2)
+		]);
+
+		const outcome = await lookupPreRegisteredEvacuee(shelterCode, {
+			source: 'qr',
+			token: registrationUlid
+		});
+
+		expect(outcome).toMatchObject({ kind: 'household', primary_evacuee_id: `evacuee:${ids[2]}` });
+		expect(outcome.kind === 'household' && outcome.members.map((m) => m.evacuee_id)).toEqual([
+			`evacuee:${ids[2]}`
+		]);
+	});
+
+	it('is not_found when no member can come into this shelter', async () => {
+		respondWithRegistration([queueMember(0, { status: 'cancelled' })]);
+
+		expect(
+			await lookupPreRegisteredEvacuee(shelterCode, { source: 'qr', token: registrationUlid })
+		).toEqual({ kind: 'not_found', can_register: false });
+	});
+
+	describe('when the central queue is unavailable', () => {
+		const failures: Array<[string, () => void]> = [
+			['a network error', () => fetchMock.mockRejectedValue(new TypeError('fetch failed'))],
+			[
+				'a timeout',
+				() => fetchMock.mockRejectedValue(new DOMException('timed out', 'TimeoutError'))
+			],
+			['a 5xx', () => fetchMock.mockResolvedValue(queueResponse(503, { errors: [] }))],
+			['an unparseable body', () => fetchMock.mockResolvedValue(queueResponse(200, { nope: 1 }))]
+		];
+
+		it.each(failures)('fails open for a smart-card lookup on %s', async (_label, fail) => {
+			fail();
+			const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+			expect(
+				await lookupPreRegisteredEvacuee(shelterCode, {
+					source: 'smart-card',
+					citizen_id: '1234567890123'
+				})
+			).toEqual({ kind: 'not_found', can_register: true });
+			expect(JSON.stringify(warn.mock.calls)).not.toContain('1234567890123');
+			warn.mockRestore();
+		});
+
+		it.each(failures)('fails open for a thaid lookup on %s', async (_label, fail) => {
+			fail();
+			vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+			expect(
+				await lookupPreRegisteredEvacuee(shelterCode, {
+					source: 'thaid',
+					citizen_id: '1234567890123'
+				})
+			).toEqual({ kind: 'not_found', can_register: true });
+		});
+
+		it.each(failures)('rejects a scanned unassigned ticket on %s', async (_label, fail) => {
+			fail();
+
+			await expect(
+				lookupPreRegisteredEvacuee(shelterCode, { source: 'qr', token: registrationUlid })
+			).rejects.toBeInstanceOf(KioskLookupUnavailableError);
+		});
+	});
+
+	it.each(['smart-card', 'thaid'] as const)(
+		'never calls the queue when a %s citizen is already in the shelter',
+		async (source) => {
+			setHousehold([evacuee(0)]);
+			respondWithRegistration([queueMember(5)]);
+
+			const outcome = await lookupPreRegisteredEvacuee(shelterCode, {
+				source,
+				citizen_id: '1234567890123'
+			});
+
+			expect(outcome).toMatchObject({ kind: 'household', primary_evacuee_id: `evacuee:${ids[0]}` });
+			expect(fetchMock).not.toHaveBeenCalled();
+		}
+	);
+
+	it('never calls the queue for an evacuee qr or the phone gate', async () => {
+		setHousehold([evacuee(0)]);
+		await lookupPreRegisteredEvacuee(shelterCode, { source: 'qr', token: `evacuee:${ids[0]}` });
+		await lookupPreRegisteredEvacuee(shelterCode, { source: 'qr', token: `evacuee:${ids[7]}` });
+		await lookupPreRegisteredEvacuee(shelterCode, { source: 'phone', phone: '0899999999' });
+
+		expect(fetchMock).not.toHaveBeenCalled();
+	});
+
+	it('is not_found without a walk-in offer for an unknown unassigned ticket', async () => {
+		expect(
+			await lookupPreRegisteredEvacuee(shelterCode, { source: 'qr', token: registrationUlid })
+		).toEqual({ kind: 'not_found', can_register: false });
+	});
+
+	it('looks the ticket up by registration id with the service secret', async () => {
+		respondWithRegistration([queueMember(0)]);
+		await lookupPreRegisteredEvacuee(shelterCode, { source: 'qr', token: registrationUlid });
+
+		const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+		expect(url).toBe('http://fastapi.test/public/v1/unassigned-registrations/kiosk-lookup');
+		expect(JSON.parse(String(init.body))).toEqual({ registration_id: registrationUlid });
+		expect(init.headers).toMatchObject({ Authorization: 'Bearer secret' });
+	});
+});
+
 describe('checkInSelectedMembers', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
@@ -1217,6 +1501,32 @@ describe('kioskGateInputSchema thaid', () => {
 				.success
 		).toBe(false);
 		expect(kioskGateInputSchema.safeParse({ source: 'thaid' }).success).toBe(false);
+	});
+});
+
+describe('kioskGateInputSchema qr', () => {
+	it('accepts an evacuee id or a bare ULID (unassigned ticket), case-insensitively', () => {
+		for (const token of [`evacuee:${ids[0]}`, ids[0], ids[0].toLowerCase()]) {
+			expect(kioskGateInputSchema.safeParse({ source: 'qr', token })).toEqual({
+				success: true,
+				data: { source: 'qr', token }
+			});
+		}
+	});
+
+	it('rejects garbage qr tokens', () => {
+		for (const token of [
+			'',
+			'hello',
+			ids[0].slice(1),
+			`${ids[0]}X`,
+			'U1ARZ3NDEKTSV4RRFFQ69G5FAV',
+			'81ARZ3NDEKTSV4RRFFQ69G5FAV',
+			`household:${ids[0]}`,
+			`evacuee:${ids[0]}x`
+		]) {
+			expect(kioskGateInputSchema.safeParse({ source: 'qr', token }).success).toBe(false);
+		}
 	});
 });
 
