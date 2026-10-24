@@ -248,6 +248,9 @@ shelter ที่ผูกกับเครื่องมี `feature_flags.ki
 session ต้องเป็น kind kiosk และ `pending` → gate ของ shelter ใน session. Callback ต้องได้ `pid` 13 หลักแล้วตั้ง session เป็น
 `completed`. ทุกผลลัพธ์ redirect ไป `/thaid-scan-success?flow=kiosk&status=success` หรือ `&error=<code>`
 (`missing_session` · `session_expired` · `thaid_disabled` · `missing_pid` · `oauth_exchange_failed` · `oauth_<idp_error>` · `invalid_state`).
+Callback ของ mode `kiosk_check_in` และ `member_scan` **ไม่**เทียบ cookie `oauth_thaid_state` กับ `state` (แอป ThaiD อาจเปิด
+callback ในเบราว์เซอร์อื่น) — ตรวจแค่ HMAC ของ `state`; `invalid_state` ใน mode นี้จึงหมายถึงไม่มี `code`/`state` หรือ `state`
+เซ็นไม่ถูก. Mode อื่นยังเทียบ cookie (CR-163 KTD-AC-10, #757)
 
 **Lookup (`POST /api/v1/scanner/kiosk/lookup`):** body `{ "source": "thaid", "session_id" }` (strict; ไม่รับ `citizen_id`).
 gate → session ต้องเป็นของเครื่องนี้, `completed`, และ `shelter_code` ตรงกับเครื่อง มิฉะนั้น
