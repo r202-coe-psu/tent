@@ -749,14 +749,16 @@ class DonationsUseCase:
         previous_items, previous_status = _previous_review_state(
             buffer, stub, current_items, current_status
         )
-        if previous_status not in DONOR_EDITABLE_STATUSES:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail={
-                    "success": False,
-                    "error": f'Cannot edit a donation in status "{previous_status}"',
-                },
-            )
+        # The buffer too: settle may have moved it on since the BFF read CouchDB.
+        for gate in (previous_status, buffer.status):
+            if gate not in DONOR_EDITABLE_STATUSES:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail={
+                        "success": False,
+                        "error": f'Cannot edit a donation in status "{gate}"',
+                    },
+                )
         if not items:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -884,10 +886,27 @@ class DonationsUseCase:
             "items_before": _revision_items(before),
             "items_after": _revision_items(after),
         }
+        # Conditional on the status read above: settle writes the same row while the quota
+        # moves, and a whole-document save put a received booking back to holding, so
+        # retention later handed its quota back a second time.
+        revisions = [*buffer.revisions, revision]
+        written = await DonationBuffer.get_pymongo_collection().update_one(
+            {"_id": buffer.id, "status": buffer.status},
+            {"$set": {"items_declared": after, "status": review.status, "revisions": revisions}},
+        )
+        if written.matched_count == 0:
+            await _undo(buffer, applied, now=now)
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "success": False,
+                    "error": "BOOKING_CHANGED",
+                    "message": "The booking changed while editing; reload and try again",
+                },
+            )
         buffer.items_declared = after
         buffer.status = review.status
-        buffer.revisions = [*buffer.revisions, revision]
-        await buffer.save()
+        buffer.revisions = revisions
 
         # Keep the tracking stub in step so the donor's page shows the edit at once,
         # rather than waiting for inbound and CDC to come round.

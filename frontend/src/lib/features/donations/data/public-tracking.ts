@@ -131,6 +131,9 @@ export async function updateDonationItems(
 		}
 		if (isGoodsInStock(body)) throw new Error(GOODS_IN_STOCK_MESSAGE);
 		if (isDonationUnavailable(body)) throw new Error(DONATION_UNAVAILABLE_MESSAGE);
+		if ((body as { error?: string }).error === 'BOOKING_CHANGED') {
+			throw new Error('ศูนย์เพิ่งอัปเดตรายการนี้ระหว่างที่คุณแก้ไข กรุณารีเฟรชแล้วลองใหม่อีกครั้ง');
+		}
 		// Before the generic 400: the booking is still editable, this edit is not — it would
 		// keep only lines the shelter already refused. Cancelling is the way out (CR-174).
 		if ((body as { error?: string }).error === 'NO_ACCEPTED_ITEMS') {
