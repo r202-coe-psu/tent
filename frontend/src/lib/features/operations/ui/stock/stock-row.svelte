@@ -1,6 +1,7 @@
 <script lang="ts">
 	import * as Table from '$lib/components/ui/table/index.js';
 	import RowActions from './row-actions.svelte';
+	import { OFFLINE_HINT } from './hints';
 	import StatusBadges from './status-badges.svelte';
 	import StockBar from './stock-bar.svelte';
 	import { formatThresholdLine } from './stock-bar';
@@ -103,6 +104,7 @@
 			itemName={row.name}
 			layout="inline"
 			disabled={readonly || offline}
+			disabledReason={offline ? OFFLINE_HINT : undefined}
 			distributeDisabled={!canDistribute}
 			onreceive={() => onreceive(row)}
 			ondistribute={() => ondistribute(row)}
