@@ -57,7 +57,7 @@ import {
 	type TestUser
 } from './helpers/couch';
 import { injectSession } from './helpers/login';
-import { decodeQrImage, fillConditionTags } from './helpers/onsite';
+import { decodeQrImage, fillAllergyTags, fillConditionTags } from './helpers/onsite';
 
 // ─── Run identity ──────────────────────────────────────────────────────────────
 
@@ -464,7 +464,7 @@ async function screenEvacuee(page: Page, evacueeId: string, fill: ScreeningFill)
 	await expect(page.getByText('Station 2', { exact: true })).toBeVisible({ timeout: 20_000 });
 	await fillConditionTags(page, fill.conditions);
 	if (fill.medications) await page.locator('#med-medications').fill(fill.medications);
-	if (fill.allergies) await page.locator('#med-allergies').fill(fill.allergies);
+	if (fill.allergies) await fillAllergyTags(page, fill.allergies);
 	if (fill.notes) await page.locator('#med-general-symptoms').fill(fill.notes);
 	if (fill.careTrack) await page.locator(`label[for="med-care-track-${fill.careTrack}"]`).click();
 	for (const symptom of fill.ewarSymptoms ?? []) {
