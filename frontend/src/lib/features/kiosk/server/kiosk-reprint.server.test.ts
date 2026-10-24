@@ -123,6 +123,25 @@ describe('reprintKioskLabels', () => {
 		expect(mockFindMasterByCode).not.toHaveBeenCalled();
 	});
 
+	it('returns the labels when a staff PIN is accepted, even if the primary has no citizen id', async () => {
+		docs = [evacuee(0, { person_id: {} }), evacuee(1, { current_stay: { status: 'active' } })];
+		const verifyStaffPin = vi.fn().mockResolvedValue({ kind: 'ok' });
+
+		const members = await reprintKioskLabels(
+			shelterCode,
+			{
+				phone,
+				primary_evacuee_id: ids[0],
+				staff_pin: '123456',
+				evacuee_ids: [ids[0], ids[1]]
+			},
+			{ verifyStaffPin }
+		);
+
+		expect(verifyStaffPin).toHaveBeenCalledWith('123456');
+		expect(members.map((member) => member.evacuee_id)).toEqual([ids[0], ids[1]]);
+	});
+
 	it('prints the current zone name of members already given a zone', async () => {
 		docs = [
 			evacuee(0, { current_stay: { status: 'room_confirmed', zone: 'z3' } }),
