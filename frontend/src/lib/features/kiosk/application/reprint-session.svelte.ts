@@ -8,6 +8,7 @@ import {
 	type KioskReprintMember,
 	type KioskReprintResult
 } from '../data/kiosk-check-in.api';
+import type { KioskStaffPinResult } from '../data/kiosk-staff-pin.api';
 import { isKioskPhoneSubmittable } from '../domain/phone';
 import { REPRINT_NOBODY_REASON, REPRINT_PRE_REGISTERED_REASON } from '../domain/check-in-status';
 import { selectableIds, isAllSelected, toggleAllSelection } from '../domain/household-selection';
@@ -17,7 +18,14 @@ export const REPRINT_LAST4_LENGTH = 4;
 export const REPRINT_PHONE_MAX_LENGTH = 10;
 
 export type ReprintStep =
-	'phone' | 'candidates' | 'members' | 'verify' | 'printing' | 'print_failed' | 'done';
+	| 'phone'
+	| 'candidates'
+	| 'members'
+	| 'verify'
+	| 'staff_pin'
+	| 'printing'
+	| 'print_failed'
+	| 'done';
 
 /** The server calls and the printer, injected so the step logic never touches `fetch` or the DOM. */
 export interface ReprintSessionDeps {
@@ -192,6 +200,66 @@ export class ReprintSession {
 		}
 	}
 
+	/** Staff chooses the kiosk PIN instead of the last four digits. */
+	openStaffPin(): void {
+		if (this.step !== 'verify' || this.busy) return;
+		this.last4Value = '';
+		this.error = '';
+		this.step = 'staff_pin';
+	}
+
+	/** The PIN panel was cancelled (or went idle): back to the last four digits. */
+	cancelStaffPin(): void {
+		if (this.step !== 'staff_pin') return;
+		this.step = 'verify';
+	}
+
+	/**
+	 * Asks the server to reprint with the staff PIN. The PIN is only passed through, never kept.
+	 * Prints nothing: the PIN panel reports `verified` first and then calls `onStaffPinVerified`.
+	 */
+	async verifyStaffPin(pin: string): Promise<KioskStaffPinResult> {
+		const generation = this.generation;
+		try {
+			const result = await this.deps.reprint({
+				phone: this.phoneValue,
+				primary_evacuee_id: this.primaryEvacueeId,
+				staff_pin: pin,
+				evacuee_ids: [...this.selectedIds]
+			});
+			if (generation !== this.generation) return { kind: 'error' };
+			this.printable = result.members;
+			return { kind: 'verified' };
+		} catch (error) {
+			if (generation !== this.generation) return { kind: 'error' };
+			if (error instanceof KioskRequestError && error.code === 'KIOSK_REPRINT_STAFF_PIN_INVALID') {
+				return { kind: 'wrong' };
+			}
+			if (error instanceof KioskRequestError && error.code === 'staff_pin_not_set') {
+				return { kind: 'not_set' };
+			}
+			if (error instanceof KioskRequestError && error.code === 'KIOSK_REPRINT_NOT_FOUND') {
+				this.error = messageFor(error);
+				this.clearHousehold();
+				this.step = 'phone';
+				return { kind: 'error' };
+			}
+			return { kind: 'error' };
+		}
+	}
+
+	/** The PIN panel accepted the PIN: print the labels the server returned. */
+	async onStaffPinVerified(): Promise<void> {
+		if (this.step !== 'staff_pin' || this.printable.length === 0) return;
+		const generation = this.generation;
+		this.busy = true;
+		try {
+			await this.printLabels(generation);
+		} finally {
+			if (generation === this.generation) this.busy = false;
+		}
+	}
+
 	/** Print the already-verified labels again after a printer failure; no new verification. */
 	async retryPrint(): Promise<void> {
 		if (this.step !== 'print_failed' || this.busy || this.printable.length === 0) return;
@@ -211,6 +279,9 @@ export class ReprintSession {
 			case 'verify':
 				this.last4Value = '';
 				this.step = 'members';
+				break;
+			case 'staff_pin':
+				this.step = 'verify';
 				break;
 			case 'members':
 				this.clearHousehold(true);
@@ -260,7 +331,8 @@ export class ReprintSession {
 			this.fromCandidates = fromCandidates;
 			this.primaryEvacueeId = found.primary_evacuee_id;
 			this.members = found.members;
-			this.selectedIds = selectableIds(found.members);
+			// Nobody is ticked up front: the visitor picks whose QR to print.
+			this.selectedIds = [];
 			this.step = 'members';
 		} catch (error) {
 			if (generation !== this.generation) return;

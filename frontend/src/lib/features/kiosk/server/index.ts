@@ -19,11 +19,16 @@ export {
 } from './kiosk-photo.server';
 export {
 	KioskReprintNotFoundError,
+	KioskReprintStaffPinBusyError,
+	KioskReprintStaffPinInvalidError,
+	KioskReprintStaffPinNotSetError,
 	KioskReprintUnverifiableError,
 	KioskReprintVerifyFailedError,
 	kioskReprintInputSchema,
 	reprintKioskLabels,
-	type KioskReprintMember
+	type KioskReprintDeps,
+	type KioskReprintMember,
+	type KioskStaffPinResult
 } from './kiosk-reprint.server';
 export { normalizeKioskPhone } from '../domain/phone';
 export { isKioskThaidCheckInAllowed } from './kiosk-thaid-gate.server';

@@ -11,6 +11,10 @@
 	const isKioskFlow = $derived(page.url.searchParams.get('flow') === 'kiosk');
 
 	const errorMessage = $derived.by(() => {
+		if (isKioskFlow && errorParam === 'invalid_state')
+			return 'ข้อมูลการยืนยันตัวตนไม่ถูกต้องหรือหมดอายุ กรุณาสแกน QR ใหม่ที่ตู้';
+		if (errorParam === 'invalid_state')
+			return 'ข้อมูลการยืนยันตัวตนไม่ถูกต้องหรือหมดอายุ กรุณาสแกน QR ใหม่จากหน้าจอลงทะเบียน';
 		if (isKioskFlow && errorParam === 'session_expired')
 			return 'QR หมดอายุ กรุณาสร้าง QR ใหม่ที่ตู้';
 		if (errorParam === 'thaid_disabled') return 'ระบบยืนยันตัวตน ThaiD ถูกปิดใช้งานชั่วคราว';
