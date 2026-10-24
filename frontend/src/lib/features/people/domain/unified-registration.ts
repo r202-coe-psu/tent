@@ -391,7 +391,6 @@ export interface FamilyReportInPayload {
 	consent?: RegistrationConsent | null;
 }
 
-/** Turns the consent block on in the unified form (spec §2). */
 export interface RegistrationConsentConfig {
 	channel: BlockChannel;
 	/** Logged-in staff for C5 (FR-15); null on anonymous channels. */
@@ -402,14 +401,12 @@ export interface RegistrationConsentConfig {
 	initialSearchVisible?: boolean;
 }
 
-/** Stable key of a form member (`form_key`, else the evacuee id). */
 export function memberFormKey(member: Pick<UnifiedMemberWithMeta, 'form_key' | '_id'>): string {
 	const key = member.form_key ?? member._id;
 	if (!key) throw new Error('registration member has no form key');
 	return key;
 }
 
-/** What a registration form hands its writer from the consent block. */
 export interface RegistrationConsent {
 	decision: ConsentDecision;
 	/** `form_key` of every member in `members` order; index 0 is the registrant. */

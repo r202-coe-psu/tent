@@ -1585,7 +1585,6 @@ export function totalPetCount(pets: readonly { count?: number | string | null }[
 	return pets.reduce((sum, p) => sum + (Number(p.count) || 0), 0);
 }
 
-/** What a registration writes about consent for one evacuee. */
 export type EvacueeConsentWrite = Pick<MemberConsentWrite, 'consent' | 'searchExcluded'>;
 
 /**
