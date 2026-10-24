@@ -93,6 +93,9 @@
 				{attendance}
 				volunteer={entry.volunteer}
 				personName={person.name ?? assignment.volunteer_id}
+				shiftLabel={shift
+					? `${assignment.date} · ${shift.start_time} - ${shift.end_time} น.`
+					: assignment.date}
 			/>
 		</span>
 	</div>

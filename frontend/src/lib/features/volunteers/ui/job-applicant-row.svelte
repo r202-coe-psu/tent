@@ -279,7 +279,12 @@
 							กะนี้ถูกลบออกจากงานแล้ว
 						</span>
 					{/if}
-					<ShiftAttendanceAction {attendance} {volunteer} personName={fullName} />
+					<ShiftAttendanceAction
+						{attendance}
+						{volunteer}
+						personName={fullName}
+						shiftLabel="{shift.date} · {shift.start_time} - {shift.end_time} น."
+					/>
 					{#if several && shiftPending}
 						<Button
 							size="sm"
