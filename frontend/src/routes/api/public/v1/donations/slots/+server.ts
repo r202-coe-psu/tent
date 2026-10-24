@@ -5,7 +5,6 @@ import type { DonationSlotMode } from '$lib/features/operations';
 import type { PublicDonationDoc } from '$lib/features/donations';
 import type { DonationSlot } from '$lib/features/operations';
 import { fetchDocsStrict } from '$lib/server/donation-docs';
-import { donationSlotsLimiter } from '$lib/server/security/rate-limiter';
 
 const SHELTER_CODE = /^[A-Z0-9_-]{2,32}$/;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -22,11 +21,7 @@ const DATE = /^\d{4}-\d{2}-\d{2}$/;
  * `POST /api/public/v1/donations`. The browser never sees those credentials, and the
  * response carries no donor data: only window, capacity and how many are booked.
  */
-export const GET: RequestHandler = async ({ url, getClientAddress }) => {
-	if (!donationSlotsLimiter.check(getClientAddress())) {
-		return json({ success: false, error: 'RATE_LIMITED' }, { status: 429 });
-	}
-
+export const GET: RequestHandler = async ({ url }) => {
 	const shelterCode = (url.searchParams.get('shelter_code') ?? '').trim().toUpperCase();
 	const date = (url.searchParams.get('date') ?? '').trim();
 	const modeParam = (url.searchParams.get('mode') ?? 'dropoff').trim();

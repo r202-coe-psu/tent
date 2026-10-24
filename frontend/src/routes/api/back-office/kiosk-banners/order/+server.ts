@@ -14,6 +14,7 @@ import { kioskScreenTypeSchema } from '$lib/features/shared';
 export const prerender = false;
 
 const reorderBodySchema = z.strictObject({
+	group_id: z.string().startsWith('kiosk_banner_group:'),
 	screen_type: kioskScreenTypeSchema,
 	items: z.array(z.strictObject({ id: z.string().min(1), _rev: z.string().min(1) }))
 });
@@ -34,10 +35,10 @@ export const PUT: RequestHandler = async ({ request, url }) => {
 		if (!parsed.success) {
 			throw new ServiceError('VALIDATION', parsed.error.issues[0]?.message ?? 'Invalid reorder');
 		}
-		const { screen_type, items } = parsed.data;
+		const { group_id, screen_type, items } = parsed.data;
 		const result = await reorderBanners(
 			shelterCode,
-			screen_type,
+			{ groupId: group_id, screenType: screen_type },
 			items.map(({ id, _rev }) => ({ id, rev: _rev }))
 		);
 		return json(result);

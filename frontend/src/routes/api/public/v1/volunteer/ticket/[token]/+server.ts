@@ -1,6 +1,5 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { volunteerTicketLimiter } from '$lib/server/security/rate-limiter';
 import { adminRaw } from '$lib/server/couch-admin';
 import { fastapiBaseUrl, fastapiServiceHeaders } from '$lib/server/fastapi';
 import { sha256Hex } from '$lib/db/hash';
@@ -82,11 +81,7 @@ function maskPhone(phone: string | null | undefined): string {
 }
 
 /** Digital Pass (CR-092 screen 2). The token is the only credential. */
-export const GET: RequestHandler = async ({ params, fetch, getClientAddress }) => {
-	if (!volunteerTicketLimiter.check(getClientAddress())) {
-		return json({ success: false, error: 'RATE_LIMITED' }, { status: 429 });
-	}
-
+export const GET: RequestHandler = async ({ params, fetch }) => {
 	const token = params.token?.trim();
 	if (!token) {
 		return json({ success: false, error: 'TICKET_NOT_FOUND' }, { status: 404 });

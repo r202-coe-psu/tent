@@ -22,7 +22,6 @@ import {
 import { isShelterBookable } from '$lib/features/shelters/server';
 import { ReCaptchaProvider } from '$lib/server/security/captcha';
 import { verifyRecaptchaOrSkip } from '$lib/server/security/recaptcha-gate';
-import { registerIpLimiter, registerPhoneLimiter } from '$lib/server/security/rate-limiter';
 import { findMasterByCode } from '$lib/server/shelters.admin';
 
 // Never prerendered — runs on the Node server at runtime.
@@ -189,14 +188,9 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
 		};
 	}
 
-	// 2. Rate limit on both axes before doing any work.
 	const ip = getClientAddress();
-	const phoneLimited = phone ? !registerPhoneLimiter.check(phone) : false;
-	if (!registerIpLimiter.check(ip) || phoneLimited) {
-		return json({ success: false, error: 'RATE_LIMITED' }, { status: 429, headers: noStore });
-	}
 
-	// 3. CAPTCHA verification (honors config:app.recaptcha_enabled).
+	// 2. CAPTCHA verification (honors config:app.recaptcha_enabled).
 	const captcha = await verifyRecaptchaOrSkip({
 		token: captchaToken ?? '',
 		ip,

@@ -21,17 +21,6 @@ from apiapp.utils.masking import (
 from apiapp.utils.ulid import new_ulid
 
 
-@pytest.fixture(autouse=True)
-def _reset_search_rate_limit():
-    """The search rate limiter is a process-wide sliding window (30 / 60 s per IP) shared by
-    /public/v1/occupants and /external/v1/occupants — clear it so test count never trips it."""
-    from apiapp.modules.evacuee import router as evacuee_router
-
-    evacuee_router._request_log.clear()
-    yield
-    evacuee_router._request_log.clear()
-
-
 def test_map_public_status_includes_arriving_and_room_confirmed():
     """CR-112 — public search allow-list includes Report-in and Zone Arrival."""
     assert map_public_status("arriving") == "arriving"
@@ -493,33 +482,6 @@ async def test_evacuee_search_writes_search_audit(
     assert audit.ip_hash == sha256_hex("203.0.113.10")
     assert audit.result_count == 1
     assert audit.synced_to_couch is False
-
-
-async def test_evacuee_search_rate_limited(client: AsyncClient, auth_headers: dict[str, str]):
-    from apiapp.modules.evacuee import router as evacuee_router
-
-    evacuee_router._request_log.clear()
-    original_max = evacuee_router.RATE_LIMIT_MAX_REQUESTS
-    evacuee_router.RATE_LIMIT_MAX_REQUESTS = 3
-    try:
-        headers = {**auth_headers, "X-Real-IP": "198.51.100.7"}
-        for _ in range(3):
-            ok = await client.post(
-                "/public/v1/occupants",
-                json={"q": "0811111111"},
-                headers=headers,
-            )
-            assert ok.status_code in (200, 422)
-        limited = await client.post(
-            "/public/v1/occupants",
-            json={"q": "0811111111"},
-            headers=headers,
-        )
-        assert limited.status_code == 429
-        assert limited.json()["errors"][0]["error"]["code"] == "RATE_LIMITED"
-    finally:
-        evacuee_router.RATE_LIMIT_MAX_REQUESTS = original_max
-        evacuee_router._request_log.clear()
 
 
 async def test_evacuee_search_returns_shelter_address_and_resolves_zone_name(

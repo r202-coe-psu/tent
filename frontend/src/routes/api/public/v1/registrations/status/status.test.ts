@@ -2,7 +2,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { POST, GET } from './+server';
 import { adminRaw } from '$lib/server/couch-admin';
 import { listShelterMasters } from '$lib/server/shelters.admin';
-import { registerLookupIpLimiter } from '$lib/server/security/rate-limiter';
 
 type PostEvent = Parameters<typeof POST>[0];
 type GetEvent = Parameters<typeof GET>[0];
@@ -11,10 +10,6 @@ vi.mock('$lib/server/couch-admin', () => ({ adminRaw: vi.fn() }));
 
 vi.mock('$lib/server/shelters.admin', () => ({
 	listShelterMasters: vi.fn()
-}));
-
-vi.mock('$lib/server/security/rate-limiter', () => ({
-	registerLookupIpLimiter: { check: vi.fn(() => true) }
 }));
 
 const ULID = '01JABCDEFGHJKMNPQRSTVWXYZ0';
@@ -46,19 +41,12 @@ describe('POST /api/public/v1/registrations/status', () => {
 	beforeEach(() => {
 		vi.mocked(adminRaw).mockReset();
 		vi.mocked(listShelterMasters).mockReset();
-		vi.mocked(registerLookupIpLimiter.check).mockReturnValue(true);
 		vi.mocked(listShelterMasters).mockResolvedValue([{ code: 'SH001' }] as never);
 	});
 
 	it('returns 422 on empty or invalid input', async () => {
 		const res = await POST(postEvent({}));
 		expect(res.status).toBe(422);
-	});
-
-	it('returns 429 when rate limited', async () => {
-		vi.mocked(registerLookupIpLimiter.check).mockReturnValue(false);
-		const res = await POST(postEvent({ code: ULID }));
-		expect(res.status).toBe(429);
 	});
 
 	it('returns verified: false when stay status is pre_registered', async () => {

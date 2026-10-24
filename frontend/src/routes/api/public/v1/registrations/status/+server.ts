@@ -5,7 +5,6 @@ import type { RequestHandler } from './$types';
 import { evacueeIdFromBookingCode } from '$lib/features/public-register/server';
 import { listShelterMasters } from '$lib/server/shelters.admin';
 import { adminRaw } from '$lib/server/couch-admin';
-import { registerLookupIpLimiter } from '$lib/server/security/rate-limiter';
 import { shelterDbName } from '$lib/server/shelter-access-design';
 import { fastapiBaseUrl, fastapiServiceHeaders } from '$lib/server/fastapi';
 
@@ -35,13 +34,6 @@ async function handleStatusCheck(code: string, clientIp: string, fetchFn: typeof
 		return json(
 			{ success: false, verified: false, error: 'INVALID_INPUT', details: parsed.error.flatten() },
 			{ status: 422, headers: noStore }
-		);
-	}
-
-	if (!registerLookupIpLimiter.check(clientIp)) {
-		return json(
-			{ success: false, verified: false, error: 'RATE_LIMITED' },
-			{ status: 429, headers: noStore }
 		);
 	}
 

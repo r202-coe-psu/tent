@@ -4,6 +4,7 @@
  * legacy/dev fallback shared with Vite's path-specific proxy target.
  */
 import { env } from '$env/dynamic/private';
+import { getRequestEvent } from '$app/server';
 import { json } from '@sveltejs/kit';
 import type { ServiceErrorCode } from './couch-admin';
 
@@ -11,11 +12,28 @@ export function fastapiBaseUrl(): string {
 	return env.FASTAPI_INTERNAL_URL || env.PUBLIC_FASTAPI_PROXY || 'http://localhost:9000';
 }
 
+/**
+ * The browser's IP for FastAPI's per-IP rate limiters (`client_ip` prefers X-Real-IP).
+ * Without it FastAPI sees this container's address and every user shares one bucket.
+ * Undefined outside a request (tests, background jobs), where there is no user to key on.
+ */
+function currentClientIp(): string | undefined {
+	try {
+		return getRequestEvent().getClientAddress();
+	} catch {
+		return undefined;
+	}
+}
+
 /** Headers for SvelteKit BFF → FastAPI (donations require EXTERNAL_API_SECRET). */
 export function fastapiServiceHeaders(extra: Record<string, string> = {}): Record<string, string> {
 	const headers: Record<string, string> = { ...extra };
 	if (env.EXTERNAL_API_SECRET) {
 		headers.Authorization = `Bearer ${env.EXTERNAL_API_SECRET}`;
+	}
+	const ip = currentClientIp();
+	if (ip) {
+		headers['X-Real-IP'] = ip;
 	}
 	return headers;
 }
