@@ -547,6 +547,20 @@ class KioskApiRouteTests(unittest.IsolatedAsyncioTestCase):
                 False,
             ),
             (
+                "same-origin kiosk device-info POST",
+                "https://tent.example.go.th/api/v1/kiosk/device-info",
+                "POST",
+                "https://tent.example.go.th",
+                True,
+            ),
+            (
+                "kiosk device-info POST from a foreign Origin header",
+                "https://tent.example.go.th/api/v1/kiosk/device-info",
+                "POST",
+                "https://attacker.example",
+                False,
+            ),
+            (
                 "kiosk banner image GET (signed URL, no device headers)",
                 "https://tent.example.go.th/api/v1/kiosk/banners/kiosk_banner:01J0000000000000000000000/image?exp=1&sig=ab",
                 "GET",
