@@ -224,10 +224,6 @@ export class DeskPage {
 		return this.page.getByRole('dialog', { name: /ตัดจำหน่ายรายการโดยไม่มีของคืน/ });
 	}
 
-	bulkDialog(): Locator {
-		return this.page.getByRole('dialog', { name: /จับคู่รายการยืมกับกองรับคืน/ });
-	}
-
 	// ── Tab 5 ────────────────────────────────────────────────────────────────
 
 	reconciliationHeading(ticket: SeededTicket): Locator {

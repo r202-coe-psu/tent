@@ -355,41 +355,6 @@ test.describe('Write permissions at the database (VDU, plan §4.2)', { tag: DESK
 		);
 	});
 
-	test('V5 bulk return pools are created by the warehouse, not DST', async ({ scenarioAs }) => {
-		const scenario = await scenarioAs('vdu_pool');
-		const item = await consumable(scenario, 'vdu');
-		await expectWrites(
-			scenario,
-			[
-				actor('wh_flat', roleSet('warehouse_staff', 'flat'), true),
-				actor('sm_compound', roleSet('shelter_manager', 'compound'), true),
-				actor('dst_compound', roleSet('distribution_staff', 'compound'), false),
-				actor('reg_flat', roleSet('registration_staff', 'flat'), false)
-			],
-			async (session, name) => {
-				const id = `bulk_return_pool:${ulid()}`;
-				const now = new Date().toISOString();
-				const res = await couchAsUser(session, 'PUT', `/${shelterDb()}/${encodeURIComponent(id)}`, {
-					_id: id,
-					type: 'bulk_return_pool',
-					schema_v: 2,
-					shelter_code: shelterCode(),
-					created_at: now,
-					updated_at: now,
-					created_by: name,
-					item_id: item.itemId,
-					stock_ledger_id: `stock_ledger:${ulid()}`,
-					total_received_qty: '3',
-					claimed_qty: '0',
-					unclaimed_quota: '3',
-					claim_ids: [],
-					status: 'ACTIVE'
-				});
-				return res.status;
-			}
-		);
-	});
-
 	test('V6 another shelter is out of reach (CR-161 R6)', async ({ scenarioAs }) => {
 		const scenario = await scenarioAs('vdu_cross_shelter');
 		const item = await consumable(scenario, 'vdu');
