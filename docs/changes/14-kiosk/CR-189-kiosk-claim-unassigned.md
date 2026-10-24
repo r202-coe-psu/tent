@@ -1,10 +1,12 @@
 ---
-id: draft
+id: CR-189
 title: Kiosk check-in claim ผู้ลงทะเบียนแบบไม่ระบุศูนย์ (Unassigned Registration) เข้าศูนย์ของ kiosk
-status: proposed
+status: approved
 date: 2026-10-24
-requested_by: ทีม kiosk (issue #795)
-decided_by: <เจ้าของโครงการ>
+created: 2026-10-24
+updated: 2026-10-24
+requested_by: ทีม kiosk SaktanuthPeak
+decided_by: Team Leader (Soravit) — approved 2026-10-24
 layer: volatile
 affects:
   - docs/data/schema.md §9.5 (Claim rule — actor staff → staff | kiosk; `claimed_by` = `kiosk:{device_id}`; Indexes + `by_member_evacuee_id`)
@@ -18,7 +20,7 @@ affects:
   - ไฟล์ใหม่ (สร้างใน PR โค้ด): frontend/src/lib/features/kiosk/server/kiosk-unassigned.server.ts, frontend/src/lib/features/kiosk/domain/kiosk-qr.ts, backend/tests/test_unassigned_registration_kiosk.py
 ---
 
-# Kiosk check-in claim ผู้ลงทะเบียนแบบไม่ระบุศูนย์
+# CR-189: Kiosk check-in claim ผู้ลงทะเบียนแบบไม่ระบุศูนย์
 
 ## สรุป (TL;DR)
 
@@ -179,3 +181,4 @@ N/A — ไม่เปลี่ยนรูปร่าง doc; `claimed_by` �
 - 2026-10-24 — ทีม kiosk: client ไม่ส่ง registration id ตอน check-in (server หาจาก `reserved_evacuee_id`); ไม่แสดงสมาชิกศูนย์อื่น → ไม่ต้องแก้หน้าเลือกสมาชิก
 - 2026-10-24 — ทีม kiosk: timeout เป็นค่าคงที่ในโค้ด (ไม่ใช่ env); เพิ่ม index evacuee id + ใช้ partial index ของ citizen id
 - 2026-10-24 — ทีม kiosk (ตาม review PR #838): primary ไม่ถูกเลือก → ใช้สมาชิกที่เลือกคนแรก (FR-KUC-07a); prepare ศูนย์เดิมคืน 200 ไม่ใช่ 409; ตัด evacuee ที่มีแล้วก่อน bulk write; revert แบบ atomic; FR-KUC-21 → FR-KUC-18a
+- 2026-10-24 — Team Leader (Soravit) approve CR-189: requested by ทีม kiosk SaktanuthPeak, รันเลข CR-189 จัดเข้าหมวด 14-kiosk
