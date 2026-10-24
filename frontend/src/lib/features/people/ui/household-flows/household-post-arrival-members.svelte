@@ -86,7 +86,7 @@
 			return;
 		}
 		if (selectedMembers.some((m) => m._id === evacuee._id)) {
-			toast.error('ผู้ประสบภัยรายนี้ถูกเพิ่มเข้าครัวเรือนเรียบร้อยแล้ว');
+			toast.error('ผู้เข้าพักรายนี้ถูกเพิ่มเข้าครัวเรือนเรียบร้อยแล้ว');
 			return;
 		}
 		selectedMembers = [...selectedMembers, evacuee];
@@ -106,7 +106,7 @@
 	<div class="space-y-2">
 		<h3 class="text-lg font-bold text-foreground">2. ค้นหาและเลือกสมาชิกในครัวเรือน</h3>
 		<p class="text-sm text-muted-foreground">
-			ค้นหาผู้ประสบภัยคนอื่นๆ ที่เข้าพักแล้ว เพื่อเพิ่มเข้ากลุ่มครอบครัวนี้
+			ค้นหาผู้เข้าพักคนอื่นๆ ที่เข้าพักแล้ว เพื่อเพิ่มเข้ากลุ่มครอบครัวนี้
 			(หัวหน้าครอบครัวจะถูกนำมารวมโดยอัตโนมัติ)
 		</p>
 	</div>

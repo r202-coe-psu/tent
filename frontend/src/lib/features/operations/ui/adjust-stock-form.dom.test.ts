@@ -143,11 +143,13 @@ async function fillAndSubmit(newQty: string, reasonLabel: string) {
 const submittedInput = () =>
 	adjust.mutateAsync.mock.calls.at(-1)?.[0]?.input as Record<string, unknown> | undefined;
 
-afterEach(() => {
+afterEach(async () => {
 	adjust.mutateAsync.mockReset();
 	toastMock.error.mockReset();
 	if (instance) unmount(instance);
 	instance = null;
+	// bits-ui releases the body scroll lock on a 24 ms timer; let it run before happy-dom tears down.
+	await new Promise((resolve) => setTimeout(resolve, 50));
 	document.body.innerHTML = '';
 });
 

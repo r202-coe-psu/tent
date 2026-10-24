@@ -126,9 +126,9 @@ describe('real backofficeNavbarGroups — visible leaves per role (regression gu
 	};
 
 	const everyoneSees = [
-		'จัดการผู้ประสบภัย',
+		'จัดการผู้เข้าพัก',
 		'จัดการอาสาสมัคร',
-		'การส่งต่อผู้ประสบภัย',
+		'การส่งต่อผู้เข้าพัก',
 		'การประเมินความพร้อมศูนย์',
 		'การประเมินประจำวัน',
 		'คลัง',
