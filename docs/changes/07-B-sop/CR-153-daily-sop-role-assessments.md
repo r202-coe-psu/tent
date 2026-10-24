@@ -4,7 +4,7 @@ title: แบบประเมิน Daily SOP ประจำวันแย�
 status: approved
 date: 2026-09-26
 created: 2026-09-26
-updated: 2026-10-20
+updated: 2026-10-24
 requested_by: Team D
 decided_by: kong — อนุมัติ 2026-10-05
 decision_date: 2026-10-05
@@ -14,9 +14,10 @@ affects:
   - daily_sop_role_assessment schema_v 1
   - frontend/src/lib/features/daily-sop
   - frontend/src/lib/server/shelter-access-design.ts
+  - docs/prd/role-permission-matrix.md
 why: แบบประเมินเดิมรวมผลของหลายฝ่ายไว้ในชุดเดียว จึงไม่สะท้อนผู้รับผิดชอบและงานประจำวันจริงของศูนย์พักพิงอุทกภัย
 migration: เพิ่มเอกสาร daily_sop_role_assessment schema_v 1; ไม่แปลงเอกสาร daily_sop_assessment เดิมตาม CR-106/schema §2.21 และรายการประเมิน Role ไม่แสดงเอกสาร Legacy
-note: แก้ไขหลังอนุมัติ 2026-10-20 — ปรับถ้อยคำของคำถาม 19 ข้อในภาคผนวก A ไม่เปลี่ยน id, จำนวน 79 ข้อ, placeholder, metric_spec และ schema_v (รายละเอียดใน Decision log)
+note: แก้ไข 2026-10-24 — UI แสดงเฉพาะ Role ที่ผู้ใช้ประเมินได้ (SM/SA เห็นครบ 9) เป็น UI-only ไม่เปลี่ยน data contract, schema, VDU, Question Bank, id และ schema_v. ก่อนหน้า 2026-10-20 — ปรับถ้อยคำของคำถาม 19 ข้อในภาคผนวก A
 ---
 
 # CR-153: แบบประเมิน Daily SOP ประจำวันแยกตามหน้าที่
@@ -63,7 +64,7 @@ Role SC, VC, SO และ FAC คงคำถามเดิมทั้งห�
 
 ## Impact
 
-CR-153 (PR #326) เปลี่ยนเฉพาะ CR ฉบับนี้; ไม่แก้ runtime หรือ schema ที่ใช้งานอยู่. เมื่อนำข้อเสนอนี้ไป implement จะกระทบ `docs/data/schema.md §2.34`, `frontend/src/lib/features/daily-sop` และ `frontend/src/lib/server/shelter-access-design.ts` รวมถึง unit/VDU tests ของส่วนดังกล่าว. D-SC-01 ใช้ `stock-status` endpoint ที่มีอยู่เพื่อแสดงยอดแบบอ่านอย่างเดียว; ไม่เพิ่ม stock API หรือเปิดคำสั่งแก้สต็อกจากแบบประเมิน. Implementation ต้องยึด field contract, authorization และ acceptance criteria ในเอกสารนี้.
+CR-153 (PR #326) เปลี่ยนเฉพาะ CR ฉบับนี้; ไม่แก้ runtime หรือ schema ที่ใช้งานอยู่. เมื่อนำข้อเสนอนี้ไป implement จะกระทบ `docs/data/schema.md §2.34`, `frontend/src/lib/features/daily-sop` และ `frontend/src/lib/server/shelter-access-design.ts` รวมถึง unit/VDU tests ของส่วนดังกล่าว; `docs/prd/role-permission-matrix.md` ต้องแสดงสิทธิ์ Daily SOP โดยแยก "UI-visibility" ออกจาก "DB-read". D-SC-01 ใช้ `stock-status` endpoint ที่มีอยู่เพื่อแสดงยอดแบบอ่านอย่างเดียว; ไม่เพิ่ม stock API หรือเปิดคำสั่งแก้สต็อกจากแบบประเมิน. Implementation ต้องยึด field contract, authorization และ acceptance criteria ในเอกสารนี้.
 
 ## Migration
 
@@ -72,7 +73,7 @@ CR-153 (PR #326) เปลี่ยนเฉพาะ CR ฉบับนี้; 
 ## ขอบเขตผลิตภัณฑ์ที่เสนอ
 
 1. เปิดหน้า Daily SOP เป็นรายการผลรายวัน เรียงวันที่ล่าสุดก่อน และเลือกดูได้เฉพาะวันที่ปัจจุบันหรือวันที่ผ่านมา
-2. แสดง Role ทั้ง 9 รายการในแต่ละวันที่เลือก. สมาชิกใน shelter อ่านผลได้ทุก Role ตาม DB security; Role ที่ไม่มีเอกสารแสดง `Not started` และค่าเริ่มต้น 0/จำนวนข้อทั้งหมด ซึ่งเป็นผลแสดงใน UI ไม่ใช่ค่าใน schema และไม่สร้างเอกสาร. Role ที่มีเอกสารแสดงจำนวนข้อที่ตอบแล้ว จำนวนข้อทั้งหมด ความคืบหน้า สถานะ และจำนวน Pass/Fail/Pending. เปิดดูได้ทุก Role แต่สร้าง/แก้ไขได้เฉพาะ capability ที่ authorization contract อนุญาต
+2. UI แสดงเฉพาะ Role ที่ผู้ใช้มีสิทธิ์ประเมินในแต่ละวันที่เลือก: ผู้ถือตำแหน่งเห็นเฉพาะ Role ของตน (SC รวม `warehouse_staff`); shelter_manager (SM) ของ shelter นั้น และ app system_admin (SA, ผู้ดูแลระบบส่วนกลาง ตาม `docs/prd/role-permission-matrix.md`) เห็นครบ 9 Role. การจำกัดนี้เป็นการแสดงผลใน UI เท่านั้น; การอ่านเอกสารใน CouchDB ยังเป็น DB-wide ตาม _security (ข้อจำกัดที่ทราบ — ดู Decision log 2026-10-24). Role ที่แสดงแต่ไม่มีเอกสารแสดง `Not started` และค่าเริ่มต้น 0/จำนวนข้อทั้งหมด ซึ่งเป็นผลแสดงใน UI ไม่ใช่ค่าใน schema และไม่สร้างเอกสาร. Role ที่มีเอกสารแสดงจำนวนข้อที่ตอบแล้ว จำนวนข้อทั้งหมด ความคืบหน้า สถานะ และจำนวน Pass/Fail/Pending. Role ที่ผู้ใช้ไม่มีสิทธิ์ประเมินไม่แสดงแถว คำถาม ผลที่บันทึก หรือสรุป; สร้าง/แก้ไขได้เฉพาะ capability ที่ authorization contract อนุญาต
 3. แสดงคำถามพร้อมสถานะ Pass / Fail / Pending; wire status ใช้ค่านี้โดยตรงและใช้ null สำหรับ unanswered. ต่างจาก legacy `daily_sop_assessment` ตาม CR-106 ที่เก็บ `Yes`/`No`; schema ใหม่นี้ไม่ map `Pass`/`Fail` กลับเป็น `Yes`/`No`
 4. ออกแบบมือถือก่อน; ตัวเลือกสถานะต้องมี label และใช้ semantic color tokens ของระบบ (success / destructive / warning) โดยไม่ใช้สีเป็นตัวสื่อความหมายเพียงอย่างเดียว และ touch target ต้องไม่น้อยกว่า 44 px
 5. แสดงผู้บันทึกล่าสุดและเวลาแยกในแต่ละ control; ไม่เก็บประวัติแก้ไขย้อนหลังในเอกสารนี้
@@ -151,7 +152,7 @@ Identity, creation metadata และ question/metric snapshots ต้องไ�
 CouchDB authorization chain:
 
 1. _security ตรวจการเข้า database ก่อน VDU. ตาม provisioner ปัจจุบัน members.roles มี shelter:{code} และ admins.roles มี system_admin. Database member อ่านเอกสารทุกชนิดใน DB และเขียนเอกสารปกติได้; database admin มีสิทธิเพิ่มในการแก้ design documents และสมาชิก/นโยบาย DB. การอยู่ใน admins.roles จึงเป็นสิทธิ์กว้างที่มีอยู่แล้ว ไม่ใช่สิทธิ์ที่ PR นี้เพิ่ม
-2. แต่ละ shelter ใช้ฐานข้อมูล shelter_{code}. การอ่านเป็น DB-wide ตาม _security; VDU เป็น write validation ไม่ใช่ row-level read authorization. ผู้ใช้ที่เป็น member ของฐาน shelter อ่านผลได้ทุก Role; notes/observations จึงต้องไม่มีข้อมูลส่วนบุคคลหรือรายละเอียดสุขภาพ/คุ้มครองรายบุคคล.
+2. แต่ละ shelter ใช้ฐานข้อมูล shelter_{code}. การอ่านเป็น DB-wide ตาม _security; VDU เป็น write validation ไม่ใช่ row-level read authorization. ผู้ใช้ที่เป็น member ของฐาน shelter อ่านเอกสารได้ทุก Role ในระดับ DB (UI แสดงเฉพาะ Role ที่ประเมินได้ ตามขอบเขตผลิตภัณฑ์ข้อ 2); notes/observations จึงต้องไม่มีข้อมูลส่วนบุคคลหรือรายละเอียดสุขภาพ/คุ้มครองรายบุคคล.
 3. สำหรับ application writes ปกติ VDU ตรวจว่า newDoc.shelter_code ตรงกับ shelter DB, ผู้เขียนเป็นเจ้าของ Role หรือ shelter_manager ของ shelter เดียวกัน หรือเป็น application system_admin. เมื่อสร้าง created_by ต้องตรงกับผู้ใช้; เมื่อเปลี่ยน control ค่า checked_by ต้องตรงกับผู้ใช้. สิทธิ์ข้าม shelter ถูกปฏิเสธสำหรับ Role users/managers.
 4. Scoped capability ใช้รูปแบบ {shelter_code}:{capability}. อนุญาต legacy bare capability เฉพาะเมื่อ user มี capability นั้น, มี role ที่ match ^shelter:[^:]+$ เพียงหนึ่งรายการพอดี และค่านั้นเท่ากับ shelter:{newDoc.shelter_code}. หากมี 0 หรือหลาย shelter scopes ให้ปฏิเสธ bare-role fallback.
 5. สมาชิก shelter อ่านได้ตามขอบเขต DB ของตน; VDU ไม่ใช้ควบคุมการอ่าน. App system_admin ผ่าน admins.roles เป็น CouchDB database admin. CouchDB reserved _admin เป็น principal คนละตัวและห้ามใช้สองชื่อนี้แทนกัน.
@@ -239,8 +240,8 @@ CouchDB มี default limit 25 และ use_index เป็น hint เว้�
 - สูตรตัวเลขที่พร้อม implement ใช้ตามภาคผนวก A รวมถึง coverage แบบ `complete = required`, ยอดครัว `produced - distributed - loss = remaining`, การปัดขึ้นสำหรับอัตราส่วนจำนวนคนต่อหน่วย และกรณีตัวตั้งเป็นศูนย์; คำนวณเมื่อ operand ครบ แต่ไม่เลือก status แทนผู้ประเมิน. Logic คำนวณต้องแยกเป็น pure functions ใน daily-sop domain และมี unit tests ครบทุกสูตร รวมกรณีศูนย์, operand ไม่ครบ, step และ `ceil`. D-SC-01 ไม่มีช่องตัวเลข; ผู้ประเมินเลือกสถานะจากการเทียบยอด `stock_ledger` กับการตรวจนับจริงทุกรายการตามเกณฑ์ในหัวข้อด้านล่าง
 - `_admin` ข้ามได้เฉพาะ current-day และ actor-equality checks; วันที่ที่ไม่มีจริง, controls ไม่ครบ/ผิด version, metric ไม่สอดคล้อง, counts ผิด และ identity ผิดต้องถูกปฏิเสธ
 - เมื่อ create ชนกันจากสอง session ต้องไม่เขียน draft เก่าทับค่าของผู้ชนะ; เมื่อ update จาก base `_rev` เก่าต้องแจ้ง conflict และรักษา draft ไว้ให้ผู้ใช้รวมกับฉบับล่าสุด
-- ผู้ใช้ต่าง Role ใน shelter เดียวกันอ่านได้ทุก Role ตาม DB security; UI และคำแนะนำต้องห้ามข้อมูลส่วนบุคคล/สุขภาพ/คุ้มครองใน notes และ observations
-- UI แสดงทั้ง 9 Role ให้สมาชิกใน shelter; อ่านได้ทุก Role แต่สร้าง/แก้ไขเฉพาะ Role ที่ capability อนุญาต และห้ามเปิดฟอร์มแก้ไขย้อนหลัง
+- ผู้ใช้ต่าง Role ใน shelter เดียวกันอ่านเอกสารได้ทุก Role ในระดับ DB ตาม DB security (UI จำกัดการแสดงตามข้อด้านล่าง); UI และคำแนะนำต้องห้ามข้อมูลส่วนบุคคล/สุขภาพ/คุ้มครองใน notes และ observations
+- UI แสดงเฉพาะ Role ที่ผู้ใช้ประเมินได้ (SM/SA ครบ 9); สร้าง/แก้ไขเฉพาะ Role ที่ capability อนุญาต และห้ามเปิดฟอร์มแก้ไขย้อนหลัง
 - Fail ที่ omit notes, "" หรือ "   " ถูกปฏิเสธ; Pending พร้อมข้อความผ่าน; Pass พร้อม notes: "" ผ่าน; omit notes ไม่ผ่าน; null ผ่านเฉพาะในฐานะ unanswered และ summary/status ต้องสอดคล้อง
 - สำหรับ unanswered control (`status: null`) ยังต้องมี `checked_by` และ `checked_at` ซึ่งชี้ถึงผู้สร้าง/ผู้บันทึก snapshot ล่าสุด; UI แสดงเป็น audit การบันทึก ไม่สื่อว่าได้ตรวจหน้างานแล้ว
 - เอกสาร `daily_sop_assessment` เดิมตาม CR-106/schema §2.21 ไม่ถูกแปลงหรือลบ และไม่ปรากฏในรายการ `daily_sop_role_assessment` ใหม่
@@ -252,7 +253,22 @@ CouchDB มี default limit 25 และ use_index เป็น hint เว้�
 - จาก D-SC-01 ผู้ประเมินทั้ง `warehouse_staff` และ `supply_coordinator` เปิด/ปิดรายการยอดแบบอ่านอย่างเดียวของ shelter เดียวกับแบบประเมินได้; UI แสดงชื่อ/รหัสสินค้า หน่วย ยอดคงเหลือ และ `last_updated` ระดับศูนย์ (เวลารายการ stock ledger ล่าสุด) จาก endpoint ที่ระบุ โดยไม่แสดง occupancy, reorder threshold, difference, status หรือคำสั่งแก้สต็อก. การเปิด/ปิดรายการไม่ล้างคำตอบที่กำลังกรอก
 - หากเรียก endpoint ยอดคงเหลือไม่ได้, `shelter_code` ใน response ไม่ตรงกับเอกสารประเมิน, หรือข้อมูลไม่พอ ผู้ประเมินเลือก Pending พร้อม note ได้; หาก stock ledger มี movement ระหว่างตรวจ ให้ refresh และตรวจรายการที่ได้รับผลอีกครั้ง หรือเลือก Pending เมื่อยืนยันยอด ณ เวลาตรวจไม่ได้
 - ฟอร์มว่างที่ยังไม่มีคำตอบ ค่าตรวจ note หรือ observation ไม่สร้างเอกสาร; create แรกต้องสร้าง snapshot ครบทุก ID ตามรุ่น
-- แต่ละวันแสดงครบ 9 Role; Role ที่ยังไม่มีเอกสารแสดง `Not started` แบบ UI-only พร้อมความคืบหน้า 0/จำนวนข้อทั้งหมด โดยไม่สร้างเอกสารเปล่า
+- แต่ละวันแสดงเฉพาะ Role ที่ผู้ใช้ประเมินได้ (ลำดับ 9 Role เดิม); Role ที่แสดงแต่ยังไม่มีเอกสารแสดง `Not started` แบบ UI-only พร้อมความคืบหน้า 0/จำนวนข้อทั้งหมด โดยไม่สร้างเอกสารเปล่า; จำนวนรวม ("/ N ตำแหน่ง") นับตามแถวที่แสดง
+- **Acceptance matrix (visibility)** — ทดสอบด้วย unit และ e2e:
+
+  | บัญชี | Role ที่แสดง | Deep link ไป Role ที่ไม่มีสิทธิ์ |
+  | --- | --- | --- |
+  | ผู้ถือตำแหน่ง REG | REG | ปฏิเสธ |
+  | REG + MED | REG, MED | ปฏิเสธสำหรับ Role อื่น |
+  | `warehouse_staff` | SC | ปฏิเสธสำหรับ Role อื่น |
+  | shelter_manager ของ shelter นี้ | ครบ 9 | อนุญาต |
+  | app system_admin | ครบ 9 | อนุญาต |
+  | ไม่มีตำแหน่ง | ไม่มี (แสดง empty state) | ปฏิเสธ |
+  | เจ้าหน้าที่ของ shelter อื่น | ไม่มี | ปฏิเสธ |
+
+- Deep link ไป Role ที่ไม่มีสิทธิ์แสดงสถานะ "ไม่มีสิทธิ์เข้าถึง" และห้ามแสดงคำถาม ผลที่บันทึก metadata หรือปุ่มควบคุมของ Role นั้น
+- **History contract** — รายการวันที่ย้อนหลังแสดงเฉพาะวันที่มีกิจกรรม (มีเอกสาร) ของ Role ที่ผู้ใช้ประเมินได้ บวกวันนี้ (เมื่อผู้ใช้มี Role ที่ประเมินได้อย่างน้อยหนึ่ง Role); ห้ามสรุปว่า "ไม่มีประวัติ" ขณะที่ยังมีหน้าถัดไป (หน้า repository มี 100 เอกสารรวมทุก Role จึงอาจกรองแล้วว่าง) ต้องคงการโหลดเพิ่ม; ไม่มี Role ที่ประเมินได้ = แสดง empty state ชัดเจน ไม่แสดงแถววันนี้
+- เมื่อ client ทราบว่าผู้ใช้เสียสิทธิ์ต่อ Role/shelter ที่เปิดอยู่ (เปลี่ยนผู้ใช้ หรือ `authStore` ได้รับ session roles ใหม่จาก revalidation/re-login) ต้องปิด dialog บันทึกสำเร็จและแผงรายการยอดสต็อก ล้าง draft/ข้อมูลเอกสารที่เลือก และแสดงสถานะ "ไม่มีสิทธิ์เข้าถึง"; ผลบันทึกที่เสร็จทีหลังอัปเดต dialog ได้เฉพาะเมื่อผู้ใช้ shelter วันที่ และ Role เดิมยังเปิดอยู่. การตรวจจับการถอนสิทธิ์จากภายนอกแบบทันทีอยู่นอกขอบเขต (feature แยก)
 
 _admin ที่ bypass time/actor checks เป็น trusted operational boundary; จำกัด credentials และการใช้งานไว้กับ CouchDB server administrators.
 PR นี้บันทึก contract เท่านั้นและไม่เปลี่ยน credentials, provisioner, VDU หรือ runtime.
@@ -453,3 +469,4 @@ schema_v 1 ไม่เก็บยอดคงเหลือและยอด
 - 2026-10-05 — ระบุทางเดิน D-SC-01 ผ่านรายการยอดอ่านอย่างเดียวจาก stock-status endpoint ที่มีอยู่ เพื่อให้ warehouse_staff และ supply_coordinator ตรวจได้โดยไม่เปิดสิทธิ์แก้สต็อกเพิ่ม; กำหนดการเทียบตามหน่วย ledger และความละเอียด qty_str ใน CR-038
 - 2026-10-05 — kong อนุมัติข้อเสนอ รันเลขเป็น CR-153 (status: approved)
 - 2026-10-20 — ปรับถ้อยคำของคำถาม 19 ข้อให้อ่านเข้าใจง่ายและตรงเจตนาของข้อ (D-SM-04, D-SM-09, D-SM-10, D-TRG-02, D-TRG-05, D-TRG-06, D-MED-03, D-MED-06, D-MED-09, D-MED-10, D-KS-04, D-KS-07, D-SC-04, D-SC-06, D-SC-07, D-VC-05, D-VC-08, D-SO-10, D-FAC-12); ไม่เปลี่ยน id, จำนวน 79 ข้อ, placeholder, `metric_spec` และ `schema_v`; ถ้อยคำ D-SM-03 คงเดิม
+- 2026-10-24 — จำกัดการแสดงผลใน UI ให้เห็นเฉพาะ Role ที่ผู้ใช้ประเมินได้ (SM/SA เห็นครบ 9; SC รวม `warehouse_staff`) แทนการเห็นครบ 9 Role ทุกคน; เพิ่ม acceptance matrix, History contract และเงื่อนไขเมื่อเสียสิทธิ์ใน Acceptance criteria. เป็น UI-only: การอ่านเอกสารใน CouchDB ยังเป็น shelter-wide; หากต้องห้ามดึงผลของ Role อื่นจริงต้องยกเป็น scope change แยก. ไม่เปลี่ยน data contract, schema, กฎเขียน VDU, Question Bank, id, `schema_v` (ไม่มี migration); ติดตามด้วย CR-153 + Decision log (ไม่เปิด CR ใหม่)
