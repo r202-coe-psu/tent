@@ -1,5 +1,6 @@
 <script lang="ts">
 	import RowActions from './row-actions.svelte';
+	import { OFFLINE_HINT } from './hints';
 	import StatusBadges from './status-badges.svelte';
 	import StockBar from './stock-bar.svelte';
 	import { formatThresholdLine } from './stock-bar';
@@ -75,6 +76,7 @@
 		itemName={row.name}
 		layout="stack"
 		disabled={readonly || offline}
+		disabledReason={offline ? OFFLINE_HINT : undefined}
 		distributeDisabled={!canDistribute}
 		onreceive={() => onreceive(row)}
 		ondistribute={() => ondistribute(row)}

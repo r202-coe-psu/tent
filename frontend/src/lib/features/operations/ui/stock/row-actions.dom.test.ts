@@ -2,8 +2,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { flushSync, mount, unmount } from 'svelte';
 import RowActions from './row-actions.svelte';
-
-const HINT = 'ต้องมีสิทธิ์เจ้าหน้าที่คลัง (warehouse_staff) จึงจะเบิกจ่ายได้';
+import { DISTRIBUTE_FORBIDDEN_HINT as HINT, OFFLINE_HINT } from './hints';
 
 let component: ReturnType<typeof mount> | undefined;
 let row: HTMLDivElement;
@@ -12,7 +11,11 @@ let row: HTMLDivElement;
  * Mounts the actions inside a clickable "row", as `stock-row.svelte` does. The row listener sits
  * on a parent of the mount target: Svelte delegates `onclick` to the target itself.
  */
-function render(props: { distributeDisabled?: boolean; disabled?: boolean }) {
+function render(props: {
+	distributeDisabled?: boolean;
+	disabled?: boolean;
+	disabledReason?: string;
+}) {
 	row = document.createElement('div');
 	document.body.appendChild(row);
 	const onRowClick = vi.fn();
@@ -46,7 +49,8 @@ describe('RowActions — distribute disabled without warehouse_staff (#572)', ()
 
 		const wrapper = button?.closest<HTMLElement>('[aria-disabled="true"]');
 		expect(wrapper).not.toBeNull();
-		expect(wrapper?.getAttribute('role')).toBe('button');
+		// `group`, not `button`: the real button inside keeps the only button role (one match by name).
+		expect(wrapper?.getAttribute('role')).toBe('group');
 		expect(wrapper?.tabIndex).toBe(0);
 
 		const describedBy = wrapper?.getAttribute('aria-describedby');
@@ -77,5 +81,35 @@ describe('RowActions — distribute disabled without warehouse_staff (#572)', ()
 
 		expect(ondistribute).toHaveBeenCalledOnce();
 		expect(onRowClick).not.toHaveBeenCalled();
+	});
+});
+
+describe('RowActions — offline row', () => {
+	it('names the offline reason on both buttons and keeps clicks off the row', () => {
+		const { onRowClick, onreceive, ondistribute } = render({
+			disabled: true,
+			disabledReason: OFFLINE_HINT
+		});
+
+		const wrappers = [...row.querySelectorAll<HTMLElement>('[aria-disabled="true"]')];
+		expect(wrappers).toHaveLength(2);
+		for (const wrapper of wrappers) {
+			const describedBy = wrapper.getAttribute('aria-describedby');
+			expect(document.getElementById(describedBy!)?.textContent).toBe(OFFLINE_HINT);
+			wrapper.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+		}
+
+		expect(onRowClick).not.toHaveBeenCalled();
+		expect(onreceive).not.toHaveBeenCalled();
+		expect(ondistribute).not.toHaveBeenCalled();
+	});
+
+	it('keeps the warehouse reason on a read-only row with no offline reason', () => {
+		render({ disabled: true, distributeDisabled: true });
+
+		const wrappers = row.querySelectorAll<HTMLElement>('[aria-disabled="true"]');
+		expect(wrappers).toHaveLength(1);
+		const describedBy = wrappers[0].getAttribute('aria-describedby');
+		expect(document.getElementById(describedBy!)?.textContent).toBe(HINT);
 	});
 });
