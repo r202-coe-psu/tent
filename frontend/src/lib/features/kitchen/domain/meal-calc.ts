@@ -332,75 +332,128 @@ export function expandTargetTags(tags: readonly string[]): TargetGroupTag[] {
 	return Array.from(tagSet);
 }
 
+/** Short labels for joining several groups into one row (full labels already contain "/"). */
+export const TARGET_GROUP_SHORT_LABELS: Record<TargetGroupTag, string> = {
+	halal: 'ฮาลาล',
+	infant: 'เด็ก',
+	soft_food: 'ผู้ป่วย',
+	regular: 'ทั่วไป',
+	volunteer: 'จนท.'
+};
+
+// Restricted diets first: their food can feed broader groups, never the reverse.
+const GROUP_FILL_ORDER: readonly TargetGroupTag[] = [
+	'infant',
+	'soft_food',
+	'halal',
+	'volunteer',
+	'regular'
+];
+
 export interface GroupProgressItem {
 	tag: TargetGroupTag;
 	label: string;
 	target: number;
-	actualYield: number;
+	/** Plates allocated to this group by priority fill — never double-counted across groups. */
+	received: number;
+	shortfall: number;
+	hasTarget: boolean;
 	isCompleted: boolean;
 }
 
 export interface SessionGroupProgress {
 	groups: Record<TargetGroupTag, GroupProgressItem>;
+	activeTags: TargetGroupTag[];
+	noTargetTags: TargetGroupTag[];
 	completedCount: number;
 	totalCount: number;
 	isAllCompleted: boolean;
+	totalTarget: number;
+	totalProduced: number;
+	surplus: number;
 	summaryText: string;
 }
 
 /**
- * Computes 5-group target completion progress for a meal session based on plan actual yields.
+ * Computes per-group plate progress for a meal session by priority fill: each menu's yield fills
+ * only its own tagged groups in GROUP_FILL_ORDER, narrowest-tagged menus first; leftover is surplus.
  */
 export function computeSessionGroupProgress(
 	session: MealSession,
 	plans: readonly MealPlan[],
 	services: readonly MealService[]
 ): SessionGroupProgress {
-	const sessionPlans = plans.filter((p) => p.meal_session_id === session._id);
-	const groupYields: Record<TargetGroupTag, number> = {
-		halal: 0,
-		infant: 0,
-		soft_food: 0,
-		regular: 0,
-		volunteer: 0
-	};
+	const remaining = {} as Record<TargetGroupTag, number>;
+	const received = {} as Record<TargetGroupTag, number>;
+	for (const tag of TARGET_GROUP_TAGS) {
+		remaining[tag] = session.target_headcount[tag] ?? 0;
+		received[tag] = 0;
+	}
 
-	for (const plan of sessionPlans) {
-		const service = services.find((s) => s.meal_plan_id === plan._id);
-		const portions = service ? (service.actual_yield ?? service.served ?? 0) : 0;
-		if (portions > 0) {
-			const expanded = expandTargetTags(plan.target_tags ?? []);
-			for (const tag of expanded) {
-				groupYields[tag] += portions;
-			}
+	const entries = plans
+		.filter((p) => p.meal_session_id === session._id)
+		.map((plan) => {
+			const service = services.find((s) => s.meal_plan_id === plan._id);
+			const portions = service ? (service.actual_yield ?? service.served ?? 0) : 0;
+			const tags = expandTargetTags(plan.target_tags ?? []);
+			return { tags: tags.length > 0 ? tags : (['regular'] as TargetGroupTag[]), portions };
+		})
+		.filter((e) => e.portions > 0)
+		.sort((a, b) => a.tags.length - b.tags.length);
+
+	let totalProduced = 0;
+	let surplus = 0;
+	for (const entry of entries) {
+		totalProduced += entry.portions;
+		let left = entry.portions;
+		for (const tag of GROUP_FILL_ORDER) {
+			if (left === 0) break;
+			if (!entry.tags.includes(tag)) continue;
+			const take = Math.min(left, remaining[tag]);
+			received[tag] += take;
+			remaining[tag] -= take;
+			left -= take;
 		}
+		surplus += left;
 	}
 
 	const groups = {} as Record<TargetGroupTag, GroupProgressItem>;
+	const activeTags: TargetGroupTag[] = [];
+	const noTargetTags: TargetGroupTag[] = [];
 	let completedCount = 0;
+	let totalTarget = 0;
 
 	for (const tag of TARGET_GROUP_TAGS) {
 		const target = session.target_headcount[tag] ?? 0;
-		const actualYield = groupYields[tag] ?? 0;
-		const isCompleted = actualYield >= target;
-		if (isCompleted) {
-			completedCount++;
-		}
+		const hasTarget = target > 0;
+		const isCompleted = hasTarget && received[tag] >= target;
+		if (hasTarget) activeTags.push(tag);
+		else noTargetTags.push(tag);
+		if (isCompleted) completedCount++;
+		totalTarget += target;
 		groups[tag] = {
 			tag,
 			label: TARGET_GROUP_LABELS[tag],
 			target,
-			actualYield,
+			received: received[tag],
+			shortfall: Math.max(0, target - received[tag]),
+			hasTarget,
 			isCompleted
 		};
 	}
 
+	const totalCount = activeTags.length;
 	return {
 		groups,
+		activeTags,
+		noTargetTags,
 		completedCount,
-		totalCount: 5,
-		isAllCompleted: completedCount === 5,
-		summaryText: `${completedCount}/5 กลุ่ม`
+		totalCount,
+		isAllCompleted: totalCount > 0 && completedCount === totalCount,
+		totalTarget,
+		totalProduced,
+		surplus,
+		summaryText: totalCount === 0 ? 'ไม่มีเป้าหมาย' : `${completedCount}/${totalCount} กลุ่มครบ`
 	};
 }
 
