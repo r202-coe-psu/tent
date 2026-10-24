@@ -345,6 +345,7 @@
 							size="sm"
 							variant="outline"
 							class="h-9 gap-1 border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100 hover:text-amber-800"
+							disabled={!volunteer}
 							onclick={() => (verifyOpen = true)}
 						>
 							<Lock class="h-3.5 w-3.5" />
