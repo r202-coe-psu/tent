@@ -997,7 +997,9 @@
 						<span class="text-xs font-semibold text-foreground"
 							>เป้าหมายจำนวนจานแยกกลุ่ม (5 กลุ่ม)</span
 						>
-						<p class="text-xs text-muted-foreground">จัดสรรตามกลุ่มผู้อพยพและกำลังพลปฏิบัติงาน</p>
+						<p class="text-xs text-muted-foreground">
+							จัดสรรตามกลุ่มผู้เข้าพักและกำลังพลปฏิบัติงาน
+						</p>
 					</div>
 					<span class="rounded-full bg-primary/10 px-3 py-1 text-xs font-bold text-primary">
 						รวม {formTotal} จาน

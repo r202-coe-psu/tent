@@ -80,14 +80,14 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 	{
 		title: '1. ทะเบียนและกำลังพล',
 		items: [
-			{ label: 'จัดการผู้ประสบภัย', href: resolve('/back-office/evacuee-management'), icon: Users },
+			{ label: 'จัดการผู้เข้าพัก', href: resolve('/back-office/evacuee-management'), icon: Users },
 			{
 				label: 'จัดการอาสาสมัคร',
 				href: resolve('/back-office/volunteers'),
 				icon: HeartHandshake
 			},
 			{
-				label: 'การส่งต่อผู้ประสบภัย',
+				label: 'การส่งต่อผู้เข้าพัก',
 				href: resolve('/back-office/referrals'),
 				icon: ClipboardList
 			}

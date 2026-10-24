@@ -254,7 +254,7 @@
 				role="status"
 			>
 				คำขอย้ายเข้าจากศูนย์ <span class="font-mono font-semibold">{sample.shelter_code}</span>
-				({incomingSent.length} คน) — ตอบรับแล้วระบบจะย้ายผู้ประสบภัยเข้าศูนย์นี้ (occupancy สองฝั่งจะอัปเดตหลังตอบรับเท่านั้น)
+				({incomingSent.length} คน) — ตอบรับแล้วระบบจะย้ายผู้เข้าพักเข้าศูนย์นี้ (occupancy สองฝั่งจะอัปเดตหลังตอบรับเท่านั้น)
 			</div>
 		{/if}
 
@@ -454,7 +454,7 @@
 				<Table.Root>
 					<Table.Header>
 						<Table.Row class="bg-muted/40 hover:bg-muted/40">
-							<Table.Head class="font-semibold text-foreground">ชื่อผู้ประสบภัย</Table.Head>
+							<Table.Head class="font-semibold text-foreground">ชื่อผู้เข้าพัก</Table.Head>
 							<Table.Head class="font-semibold text-foreground">โซน</Table.Head>
 							<Table.Head class="font-semibold text-foreground">สถานะ</Table.Head>
 							<Table.Head class="font-semibold text-foreground">สร้างเมื่อ</Table.Head>
