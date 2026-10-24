@@ -163,7 +163,7 @@ type BulkDocsMode = 'ok' | 'throw' | 'row-error' | 'conflict';
 let images: Array<Record<string, unknown>> = [];
 
 function configureCheckInCouchMocks(
-	options: { conflictOnId?: string; bulkDocs?: BulkDocsMode } = {}
+	options: { conflictOnId?: string; bulkDocs?: BulkDocsMode; bulkRowErrorIds?: string[] } = {}
 ): void {
 	mockAdminFetch.mockImplementation(async (path, init = {}) => {
 		if (path.endsWith('/_all_docs')) {
@@ -181,13 +181,15 @@ function configureCheckInCouchMocks(
 			const { docs } = JSON.parse(String(init.body ?? '{}')) as {
 				docs: Array<Record<string, unknown> & { _id: string }>;
 			};
-			for (const doc of mode === 'row-error' ? [] : docs) {
+			const failed = (doc: { _id: string }) =>
+				mode === 'row-error' || (options.bulkRowErrorIds ?? []).includes(doc._id);
+			for (const doc of docs.filter((doc) => !failed(doc))) {
 				if (doc.type === 'evacuee') evacuees.push({ ...doc, _rev: '1-bulk' } as never);
 				else if (doc.type === 'household') households.push({ ...doc, _rev: '1-bulk' } as never);
 				else images.push(doc);
 			}
 			return docs.map((doc) =>
-				mode === 'row-error'
+				failed(doc)
 					? { id: doc._id, error: 'forbidden', reason: 'validation failed' }
 					: mode === 'conflict'
 						? { id: doc._id, error: 'conflict', reason: 'Document update conflict.' }
@@ -1501,6 +1503,82 @@ describe('checkInSelectedMembers kiosk claim of unassigned members', () => {
 				{ shelter_code: shelterCode, device_id: deviceId, member_ids: [first, second] }
 			]);
 			expect(putCalls()).toHaveLength(0);
+		});
+	});
+
+	it('reverts only the members Couch did not take when the bulk write partly fails', async () => {
+		configureCheckInCouchMocks({ bulkRowErrorIds: [second] });
+		stubQueue([queueMember(0), queueMember(1)]);
+
+		await expect(
+			checkInSelectedMembers(shelterCode, first, [first, second], { deviceId })
+		).rejects.toBeInstanceOf(KioskUnassignedClaimFailedError);
+
+		expect(queueCalls(revertUrl)).toEqual([
+			{ shelter_code: shelterCode, device_id: deviceId, member_ids: [second] }
+		]);
+		expect(putCalls()).toHaveLength(0);
+	});
+
+	it('reverts nobody when every evacuee was born and only an image row failed', async () => {
+		configureCheckInCouchMocks({ bulkRowErrorIds: [photoId] });
+		stubQueue([queueMember(0), queueMember(1)], (body) =>
+			queueResponse(200, preparedClaim(body.member_ids, [preparedImage(photoId)]))
+		);
+
+		await expect(
+			checkInSelectedMembers(shelterCode, first, [first, second], { deviceId })
+		).rejects.toBeInstanceOf(KioskUnassignedClaimFailedError);
+
+		expect(queueCalls(revertUrl)).toEqual([]);
+	});
+
+	it('finds the registration from a later missing member when the first is not queued', async () => {
+		const lookupUrl = 'http://fastapi.test/public/v1/unassigned-registrations/kiosk-lookup';
+		stubQueue([queueMember(0), queueMember(1)]);
+		const queued = fetchMock.getMockImplementation()!;
+		const stray = `evacuee:${ids[5]}`;
+		fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+			if (url === lookupUrl && JSON.parse(String(init?.body)).evacuee_id === stray) {
+				return queueResponse(404, notFoundBody);
+			}
+			return queued(url, init);
+		});
+
+		await checkInSelectedMembers(shelterCode, first, [stray, first], { deviceId });
+
+		expect(queueCalls(prepareUrl)).toMatchObject([{ member_ids: [first] }]);
+	});
+
+	describe('when the primary is already in Couch', () => {
+		it('claims nobody when that primary cannot check in here', async () => {
+			const primary = evacuee(0, { shelter_code: 'SH999' });
+			setHousehold([primary], primary);
+			stubQueue([queueMember(0), queueMember(1)]);
+
+			const results = await checkInSelectedMembers(shelterCode, primary._id, [second], {
+				deviceId
+			});
+
+			expect(results).toMatchObject([{ evacuee_id: second, status: 'not_eligible' }]);
+			expect(queueCalls(prepareUrl)).toEqual([]);
+			expect(bulkWrittenDocs()).toEqual([]);
+		});
+
+		it('claims nobody when the thaid citizen is not that primary', async () => {
+			const primary = evacuee(0, { person_id: { number: '9999999999999' } });
+			setHousehold([primary], primary);
+			stubQueue([queueMember(0), queueMember(1)]);
+
+			await expect(
+				checkInSelectedMembers(shelterCode, primary._id, [second], {
+					deviceId,
+					requiredPrimaryCitizenId: citizenId
+				})
+			).rejects.toBeInstanceOf(KioskThaidIdentityMismatchError);
+
+			expect(queueCalls(prepareUrl)).toEqual([]);
+			expect(bulkWrittenDocs()).toEqual([]);
 		});
 	});
 

@@ -605,6 +605,14 @@ async function findStandInPrimary(
 	return null;
 }
 
+function isEligiblePrimary(primary: EvacueeDoc, shelterCode: string): boolean {
+	return primary.shelter_code === shelterCode && isListedHouseholdMember(primary);
+}
+
+function notEligible(evacueeIds: string[]): KioskCheckInMemberResult[] {
+	return evacueeIds.map((evacueeId) => ({ evacuee_id: evacueeId, status: 'not_eligible' }));
+}
+
 /** Report in selected household members independently; only committed writes get a QR token. */
 export async function checkInSelectedMembers(
 	shelterCode: string,
@@ -623,6 +631,19 @@ export async function checkInSelectedMembers(
 	const normalizedEvacueeIds = evacueeIds.map(
 		(id) => `evacuee:${id.slice('evacuee:'.length).toUpperCase()}`
 	);
+	const existingPrimary = await getById(dbName, normalizedPrimaryId);
+	// Check a primary already in Couch before claiming, so a rejected check-in births nobody.
+	if (existingPrimary) {
+		if (
+			options.requiredPrimaryCitizenId !== undefined &&
+			existingPrimary.person_id?.number !== options.requiredPrimaryCitizenId
+		) {
+			throw new KioskThaidIdentityMismatchError();
+		}
+		if (!isEligiblePrimary(existingPrimary, shelterCode)) {
+			return notEligible(normalizedEvacueeIds);
+		}
+	}
 	if (options.deviceId) {
 		try {
 			await claimUnassignedMembers(shelterCode, options.deviceId, normalizedEvacueeIds, {
@@ -638,7 +659,7 @@ export async function checkInSelectedMembers(
 			throw error;
 		}
 	}
-	let primary = await getById(dbName, normalizedPrimaryId);
+	let primary = existingPrimary ?? (await getById(dbName, normalizedPrimaryId));
 	// FR-KUC-07a: an unselected primary stays open in the queue; a selected member stands in.
 	const standIn =
 		!primary &&
@@ -662,11 +683,8 @@ export async function checkInSelectedMembers(
 	) {
 		throw new KioskThaidIdentityMismatchError();
 	}
-	if (!primary || primary.shelter_code !== shelterCode || !isListedHouseholdMember(primary)) {
-		return normalizedEvacueeIds.map((evacueeId) => ({
-			evacuee_id: evacueeId,
-			status: 'not_eligible'
-		}));
+	if (!primary || !isEligiblePrimary(primary, shelterCode)) {
+		return notEligible(normalizedEvacueeIds);
 	}
 
 	const uniqueIds = [...new Set(normalizedEvacueeIds)];

@@ -282,7 +282,11 @@ export async function claimUnassignedMembers(
 	const missing = await findMissingEvacueeIds(dbName, [...new Set(evacueeIds)]);
 	if (missing.length === 0) return;
 
-	const registration = await findUnassignedRegistration({ evacuee_id: missing[0] });
+	let registration: UnassignedRegistration | null = null;
+	for (const evacueeId of missing) {
+		registration = await findUnassignedRegistration({ evacuee_id: evacueeId });
+		if (registration) break;
+	}
 	if (!registration) return;
 	const toClaim = missing.filter((id) =>
 		registration.members.some(
@@ -312,7 +316,11 @@ export async function claimUnassignedMembers(
 	try {
 		await writePreparedClaim(dbName, prepared);
 	} catch {
-		await revertQuietly(registration.registration_id, revertBody);
+		// `_bulk_docs` is not atomic: keep the claim of anyone Couch did take, so Mongo matches Couch.
+		const unborn = await findMissingEvacueeIds(dbName, toClaim).catch(() => toClaim);
+		if (unborn.length > 0) {
+			await revertQuietly(registration.registration_id, { ...revertBody, member_ids: unborn });
+		}
 		throw new KioskUnassignedClaimFailedError();
 	}
 }
