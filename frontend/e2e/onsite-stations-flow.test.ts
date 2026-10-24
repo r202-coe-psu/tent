@@ -30,6 +30,7 @@ import {
 	shelterManagerRoles,
 	type TestUser
 } from './helpers/couch';
+import { acceptFullConsent } from './helpers/consent';
 import { CAN_WRITE, LOCAL_RUN_ID as RUN_ID, READ_ONLY_REASON } from './helpers/e2e-env';
 import { injectSession, routeBrowserCouchThroughApp } from './helpers/login';
 import {
@@ -191,6 +192,7 @@ test.describe(
 				await fillMemberCard(desk, 0, head);
 				await desk.getByRole('button', { name: 'เพิ่มสมาชิก' }).click();
 				await fillMemberCard(desk, 1, member);
+				await acceptFullConsent(desk);
 				await desk.getByRole('button', { name: 'บันทึกลงทะเบียนทั้งครอบครัว' }).last().click();
 
 				const confirmNew = desk.getByRole('alertdialog').getByRole('button', {
