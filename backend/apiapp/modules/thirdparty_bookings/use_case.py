@@ -271,6 +271,18 @@ def _stay_allows_cancel(stay: str | None) -> bool:
     return stay is None or stay == "pre_registered"
 
 
+def _stay_of(
+    row: ExternalBooking, person_status: dict[str, str], row_stay: str | None
+) -> str | None:
+    """The stay of a written row: its `public_persons` status, else `row_stay` — the worker's
+    copy on the booking row (PDPA D8: a search-excluded person has no projection)."""
+    if not row.evacuee_id:
+        return None
+    if row.evacuee_id in person_status:
+        return person_status[row.evacuee_id]
+    return row_stay
+
+
 def _classify_cancel(
     row: ExternalBooking, person_status: dict[str, str]
 ) -> Literal["direct", "request"] | None:
@@ -278,7 +290,7 @@ def _classify_cancel(
     if row.state == "pending":
         return "direct"
     if row.state == "written" and not row.cancel_requested:
-        stay = person_status.get(row.evacuee_id) if row.evacuee_id else None
+        stay = _stay_of(row, person_status, row.stay_status)
         if _stay_allows_cancel(stay):
             return "request"
     return None
@@ -1656,9 +1668,21 @@ class ThirdPartyBookingsUseCase:
                 else []
             )
             statuses = {person.id: person.status for person in people}
+            # `ours` was read before the flag write: re-read the worker's stay copy too, for
+            # the rows without a projection (PDPA D8).
+            unprojected = [row.id for row in ours if row.evacuee_id not in statuses]
+            row_stays = (
+                {
+                    doc["_id"]: doc.get("stay_status")
+                    for doc in await collection.find(
+                        {"_id": {"$in": unprojected}}, {"stay_status": 1}
+                    ).to_list()
+                }
+                if unprojected
+                else {}
+            )
             ok = all(
-                _stay_allows_cancel(statuses.get(row.evacuee_id) if row.evacuee_id else None)
-                for row in ours
+                _stay_allows_cancel(_stay_of(row, statuses, row_stays.get(row.id))) for row in ours
             )
         if not ok:
             # The 409 must win over a failing revert: `_revert_after_error` logs a failed revert

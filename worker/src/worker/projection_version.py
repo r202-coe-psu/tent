@@ -24,4 +24,6 @@ per deploy, so batch related projector changes into one bump per release when po
 #: (``public_donations.items_declared[].review_status`` / ``review_reason_code`` /
 #: ``review_reason``). Both shipped unreleased on one branch, so one bump covers both.
 #: 8 — #791 (``shelter_occupants`` drops ``privacy.search_excluded`` evacuees).
-PROJECTION_VERSION: int = 8
+#: 9 — PDPA D8 (decision sync 2026-10-26): ``public_shelters.occupancy_by_status`` (counts
+#: search-excluded evacuees too) and ``external_bookings.stay_status`` for booked evacuees.
+PROJECTION_VERSION: int = 9
