@@ -224,6 +224,28 @@ export interface ScreeningFill {
 	careTrack?: 'normal' | 'fast_track';
 }
 
+/**
+ * Enter โรคประจำตัว through the tag picker (CR-186). `conditions` is comma-separated;
+ * each value goes through the picker's "เพิ่ม" option, which stores a master code
+ * when the text matches an active `chronic_disease` label and free text otherwise.
+ */
+export async function fillConditionTags(
+	page: Page,
+	conditions: string,
+	idPrefix = 'med'
+): Promise<void> {
+	const values = conditions
+		.split(',')
+		.map((v) => v.trim())
+		.filter(Boolean);
+	for (const value of values) {
+		await page.locator(`#${idPrefix}-conditions`).click();
+		await page.getByPlaceholder('ค้นหาโรคประจำตัว...').fill(value);
+		await page.getByRole('option', { name: `เพิ่ม “${value}”` }).click();
+		await page.keyboard.press('Escape');
+	}
+}
+
 export async function screenEvacuee(
 	page: Page,
 	evacueeId: string,
@@ -231,7 +253,7 @@ export async function screenEvacuee(
 ): Promise<void> {
 	await page.goto(`/onsite/medical-screening/${evacueeId}`);
 	await expect(page.getByText('Station 2', { exact: true })).toBeVisible({ timeout: 20_000 });
-	await page.locator('#med-conditions').fill(fill.conditions);
+	await fillConditionTags(page, fill.conditions);
 	if (fill.medications) await page.locator('#med-medications').fill(fill.medications);
 	if (fill.allergies) await page.locator('#med-allergies').fill(fill.allergies);
 	if (fill.notes) await page.locator('#med-general-symptoms').fill(fill.notes);

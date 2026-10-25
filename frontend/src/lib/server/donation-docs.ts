@@ -1,4 +1,5 @@
 import { adminRaw } from '$lib/server/couch-admin';
+import type { PublicDonationDoc } from '$lib/features/donations';
 
 /**
  * Fetch all docs of a given type (by `_id` prefix) from a shelter database via
@@ -29,6 +30,30 @@ export class CouchReadError extends Error {
 }
 
 /**
+ * The donation a donor's tracking token points at, looked up by its hash. `null` when the
+ * shelter has no such booking yet — not synced from the intake buffer, or no shelter DB.
+ *
+ * Any other failure throws {@link CouchReadError}: read as "not synced yet" it sent donor
+ * edits and cancels to FastAPI, which moved quota or told the donor the booking was syncing.
+ */
+export async function findByTokenHash(
+	shelterDb: string,
+	hash: string
+): Promise<PublicDonationDoc | null> {
+	const res = await adminRaw(
+		`/${shelterDb}/_all_docs?include_docs=true&startkey="donation:"&endkey="donation:￰"`,
+		'GET'
+	);
+	if (res.status === 404) return null;
+	if (res.status >= 400) throw new CouchReadError(shelterDb, 'donation:', res.status);
+	const rows = (res.data as { rows?: { doc: PublicDonationDoc }[] })?.rows ?? [];
+	for (const r of rows) {
+		if (r.doc && r.doc.type === 'donation' && r.doc.tracking_token_hash === hash) return r.doc;
+	}
+	return null;
+}
+
+/**
  * Fail-closed variant of {@link fetchDocs} for reads that gate a decision (e.g. how many
  * bookings a window already holds). A missing database (404) really is "no docs yet" and
  * returns `[]`; any other error status throws {@link CouchReadError} so the caller can
@@ -44,3 +69,44 @@ export async function fetchDocsStrict<T>(dbName: string, prefix: string): Promis
 	const rows = (res.data as { rows?: { doc: T }[] })?.rows ?? [];
 	return rows.map((r) => r.doc).filter(Boolean);
 }
+
+/**
+ * True once any goods of this booking are in the shelter's stock (a `donation` ledger row
+ * points at it). From then on the donor may no longer edit or cancel it (owner decision
+ * 2026-10-22, narrowing CR-174 FR-20/21): an interrupted receipt would otherwise leave
+ * goods in stock for lines that moved or a booking that no longer exists.
+ */
+export async function hasKeyedDonationStock(dbName: string, donationId: string): Promise<boolean> {
+	return (await keyedDonationRowIds(dbName, donationId, 1)).length > 0;
+}
+
+/** Ids of the `donation` ledger rows pointing at this booking, at most `limit` of them. */
+export async function keyedDonationRowIds(
+	dbName: string,
+	donationId: string,
+	limit: number
+): Promise<string[]> {
+	const res = await adminRaw(`/${dbName}/_find`, 'POST', {
+		// `item_id` is in the selector only so CouchDB picks `ledger-type-refid-itemid-reason-idx`
+		// (shelter-access-design.ts): without it the query scans the whole shelter DB.
+		selector: {
+			type: 'stock_ledger',
+			ref_id: donationId,
+			item_id: { $gt: null },
+			reason: 'donation'
+		},
+		fields: ['_id'],
+		limit
+	});
+	if (res.status >= 400) {
+		throw new CouchReadError(dbName, 'stock_ledger (ref_id)', res.status);
+	}
+	return ((res.data as { docs?: { _id: string }[] }).docs ?? []).map((doc) => doc._id);
+}
+
+/** The refusal a donor gets once the shelter has started taking the goods in. */
+export const GOODS_IN_STOCK_ERROR = {
+	success: false,
+	error: 'GOODS_IN_STOCK',
+	message: 'ศูนย์เริ่มรับของของใบนี้เข้าคลังแล้ว — แก้ไขหรือยกเลิกไม่ได้ กรุณาติดต่อศูนย์'
+} as const;
