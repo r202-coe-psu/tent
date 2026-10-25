@@ -18,7 +18,7 @@
 		useEvacuees,
 		useHouseholds,
 		useScreenings,
-		useMedicals,
+		useMedicalByEvacuee,
 		useCheckInEvacuee,
 		useChangeEvacueeZone,
 		useConfirmRoom,
@@ -58,7 +58,9 @@
 	const shelterQuery = useShelter(() => shelterStore.selectedShelterCode ?? getShelterCode());
 	const shelterZones = $derived(shelterQuery.data?.zones ?? []);
 	const vulnerableGroupQuery = useMasterData(() => 'vulnerable_group');
-	const medicalsQuery = useMedicals();
+	// One evacuee's medical doc only (evacuee_id index) — not the whole shelter's records.
+	// Not gated on enable_medical_screening: imports and Station 1 also write conditions.
+	const medicalQuery = useMedicalByEvacuee(() => evacueeId);
 	const chronicDiseaseQuery = useMasterData(() => 'chronic_disease');
 	const checkInMutation = useCheckInEvacuee();
 	const changeZoneMutation = useChangeEvacueeZone();
@@ -81,7 +83,7 @@
 	/** โรคประจำตัว — `chronic_disease` codes shown by label, free text as stored (CR-186). */
 	const chronicDiseaseLabels = $derived.by((): string[] => {
 		if (!evacuee) return [];
-		const medical = (medicalsQuery.data ?? []).find((m) => m.evacuee_id === evacuee._id);
+		const medical = medicalQuery.data ?? null;
 		const items = chronicDiseaseQuery.data?.items ?? [];
 		// Dedupe after mapping: legacy data may hold both `diabetes` and "เบาหวาน".
 		return [

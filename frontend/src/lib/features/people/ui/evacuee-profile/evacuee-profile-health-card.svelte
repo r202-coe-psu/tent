@@ -37,11 +37,14 @@
 
 	const chronicDiseaseQuery = useMasterData(() => 'chronic_disease');
 	/** #649 — conditions hold `chronic_disease` codes or free text. */
-	const conditionLabels = $derived(
-		(medical?.conditions ?? []).map(
-			(c) => formatMasterLabelByCode(c, chronicDiseaseQuery.data?.items ?? []) || c
+	// Dedupe after mapping: legacy data may hold both `diabetes` and "เบาหวาน".
+	const conditionLabels = $derived([
+		...new Set(
+			(medical?.conditions ?? []).map(
+				(c) => formatMasterLabelByCode(c, chronicDiseaseQuery.data?.items ?? []) || c
+			)
 		)
-	);
+	]);
 
 	const vulnerableGroupQuery = useMasterData(() => 'vulnerable_group');
 	function vulnerableLabel(code: string): string {
