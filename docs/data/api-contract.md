@@ -186,7 +186,7 @@ Content-Type: application/json
 ```
 
 Request body เป็น `{ "card": <SmartCardData without photo_base64>, "photo": <KioskPhotoPayload|null>, "consented": true, "consented_at": <ISO-8601 UTC>, "consent": <ConsentDecision> }`.
-`consent` คือผลจากบล็อกความยินยอม PDPA (`docs/features/pdpa-consent-block-spec.md`, FR-43/45): `{ mode, health?, search_visible?, guardian_for, verbal, ref, given_at, notice_version }` (`mode = basic` ไม่มี `health`/`search_visible`). Kiosk ไม่แสดงช่องผู้ปกครอง/เจ้าหน้าที่ จึง `guardian_for = []` และ `verbal = false` เสมอ. Server ตรวจด้วย Zod เดียวกับ client (FR-34), ตั้ง `channel = kiosk` และ `given_by = self`, เขียน `evacuee.consent` + `privacy.search_excluded` ตามผล (FR-30/31) และไม่สร้าง `medical` เมื่อ `mode = basic` หรือ `health = false` (FR-32). `consent` ไม่มีหรือไม่ผ่าน Zod → `400` และไม่สร้าง evacuee (FR-45). `card_snapshot.consented_at` คงไว้เหมือนเดิม.
+`consent` คือผลจากบล็อกความยินยอม PDPA (`docs/features/pdpa-consent-block-spec.md`, FR-43/45): `{ mode, health?, search_visible?, guardian_for, verbal, ref, given_at, notice_version }` (`mode = basic` ไม่มี `health`/`search_visible`). Kiosk ไม่แสดงช่องผู้ปกครอง/เจ้าหน้าที่ จึง `guardian_for = []` และ `verbal = false` เสมอ. Server ตรวจด้วย Zod เดียวกับ client (FR-34), ตั้ง `channel = kiosk` และ `given_by = self`, เขียน `evacuee.consent` + `privacy.search_excluded` ตามผล (FR-30/31) และไม่สร้าง `medical` เมื่อ `mode = basic` หรือ `health = false` (FR-32). `consent` ไม่มีหรือไม่ผ่าน Zod → `400` และไม่สร้าง evacuee (FR-45). `consent` ถูกรูปแบบแต่ `given_at` ย้อนหลังเกิน 10 นาที → `400 KIOSK_CONSENT_EXPIRED` ("การยินยอมหมดเวลาแล้ว กรุณากดยินยอมอีกครั้ง") — ตู้ต้องขอความยินยอมใหม่ ไม่ retry ด้วย decision เดิม; `given_at` ล้ำอนาคตเกิน 10 นาทียังเป็น `INVALID_KIOSK_REGISTRATION` (decision sync 2026-10-25). `card_snapshot.consented_at` คงไว้เหมือนเดิม.
 เมื่อมีรูป `photo` มี `content_type`, `full_base64`, `thumb_base64?`, `width`, `height`,
 `original_size`, `compressed_size` และ `thumbnail_size`; base64 ไม่มี data URL prefix.
 Browser บันทึก `consented_at` ตอนผู้ใช้กดยินยอมไว้ใน in-memory state; ห้ามใส่ citizen ID ใน URL
@@ -206,7 +206,7 @@ inline attachments ก่อนเขียน evacuee. หากเขียน
 การ lookup ที่ไม่มี record อนุญาตให้เริ่มลงทะเบียนเมื่อ flag เปิด โดยส่ง `can_register: true`
 ใน not-found response. เมื่อ flag ปิดให้ส่ง `can_register: false`. Record เดิมที่ไม่อนุญาตให้
 ลงทะเบียนซ้ำตอบ `409 KIOSK_REGISTRATION_BLOCKED`; body ไม่ผ่าน schema ตอบ `400
-INVALID_KIOSK_REGISTRATION`, flag ปิดตอบ `403 KIOSK_REGISTRATION_DISABLED`, เกิน limit ของ
+INVALID_KIOSK_REGISTRATION` (consent หมดเวลา → `400 KIOSK_CONSENT_EXPIRED`), flag ปิดตอบ `403 KIOSK_REGISTRATION_DISABLED`, เกิน limit ของ
 nginx zone `kiosk` ตอบ `429 KIOSK_RATE_LIMITED` (CR-188), auth ไม่ผ่านตอบ `401 DEVICE_AUTH_FAILED`, และ registry/database
 อ่านหรือเขียนไม่ได้ตอบ `503` โดยไม่สร้าง record. รายละเอียดนี้ implement ตามค่าที่เสนอในแผน;
 CR ที่แผนอ้างถึงยังไม่มีใน `docs/changes/` และต้องได้รับอนุมัติก่อนเปิด PR.
