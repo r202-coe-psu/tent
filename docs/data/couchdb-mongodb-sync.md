@@ -2,8 +2,8 @@
 title: Smart Shelter — CouchDB ⇄ MongoDB Sync (Public Plane)
 status: draft for review
 created: 2026-06-11
-updated: 2026-10-25
-note: decision sync 2026-10-25 — §3.3 `unassigned_registrations.members[]` เพิ่ม `consent` + `search_excluded` (UNASSIGNED_SCHEMA_V 3→4; PDPA consent block FR-42); CR-176 (2026-10-20) — projector evacuee `checked_in_at` = null เมื่อ `cancelled` (PROJECTION_VERSION 4→5); คู่กับ data-model.md v3 + api-contract.md v1 + CR-017/CR-044 — public tier ทำงานบน MongoDB ผ่าน FastAPI; ตัด public_transparency (CR-017 Decision B); CR-113 unassigned_registrations; CR-166 (2026-10-13) — public_persons เพิ่ม `first_name_key`/`last_name_hash`, PROJECTION_VERSION 2→3, เลิก `$text`; decision sync 2026-10-09 — worker PROJECTION_VERSION + auto re-bootstrap on start (stored in Mongo _worker_meta); bootstrap reads update_seq before scan; CR-172 (2026-10-21) — `public_donations` เพิ่ม `reject_reason`/`reject_reason_code` + `received_summary.items[].rejected/reject_reason/reject_reason_code` ส่งผ่านทั้งก้อน, PROJECTION_VERSION 6→7; CR-174 (2026-10-21) — `public_donations.items_declared[]` เพิ่ม `review_status`/`review_reason_code`/`review_reason` (PROJECTION_VERSION 7 ครอบทั้ง CR-172 + CR-174 — 6 = CR-185 บน develop); inbound ปั๊ม donation schema_v 7 + เขียน audit อนุมัติอัตโนมัติ
+updated: 2026-10-26
+note: decision sync 2026-10-26 — §3.2 `public_persons` เก็บแถว hold (hash เลขบัตร + ศูนย์ + สถานะ, `search_excluded: true`) แทนการลบคน opt-out เพื่อให้ EXT-008 ตรวจซ้ำได้; reader ระดับบุคคลกรองออก (PROJECTION_VERSION 7→8); decision sync 2026-10-25 — §3.3 `unassigned_registrations.members[]` เพิ่ม `consent` + `search_excluded` (UNASSIGNED_SCHEMA_V 3→4; PDPA consent block FR-42); CR-176 (2026-10-20) — projector evacuee `checked_in_at` = null เมื่อ `cancelled` (PROJECTION_VERSION 4→5); คู่กับ data-model.md v3 + api-contract.md v1 + CR-017/CR-044 — public tier ทำงานบน MongoDB ผ่าน FastAPI; ตัด public_transparency (CR-017 Decision B); CR-113 unassigned_registrations; CR-166 (2026-10-13) — public_persons เพิ่ม `first_name_key`/`last_name_hash`, PROJECTION_VERSION 2→3, เลิก `$text`; decision sync 2026-10-09 — worker PROJECTION_VERSION + auto re-bootstrap on start (stored in Mongo _worker_meta); bootstrap reads update_seq before scan; CR-172 (2026-10-21) — `public_donations` เพิ่ม `reject_reason`/`reject_reason_code` + `received_summary.items[].rejected/reject_reason/reject_reason_code` ส่งผ่านทั้งก้อน, PROJECTION_VERSION 6→7; CR-174 (2026-10-21) — `public_donations.items_declared[]` เพิ่ม `review_status`/`review_reason_code`/`review_reason` (PROJECTION_VERSION 7 ครอบทั้ง CR-172 + CR-174 — 6 = CR-185 บน develop); inbound ปั๊ม donation schema_v 7 + เขียน audit อนุมัติอัตโนมัติ
 ---
 
 # Smart Shelter — CouchDB ⇄ MongoDB Sync
@@ -114,7 +114,9 @@ The worker resumes `_changes` from its checkpoint, so documents that never chang
   national_id_hash, national_id_masked, passport_hash, passport_id_masked,
   address_masked, gender, checked_in_at, care_zone, household_id,
   updated_at: "..." }
-// projector: ถ้า evacuee.privacy.search_excluded == true → ลบ doc นี้ออกจาก Mongo (opt-out = หายทั้ง record)
+// projector: ถ้า evacuee.privacy.search_excluded == true → เก็บเฉพาะแถว hold (decision sync 2026-10-26):
+//   _id, shelter_code, national_id_hash, status, updated_at, search_excluded: true — field อื่น ""/null
+//   ใช้ตรวจซ้ำ EXT-008 + สถานะ stay ของ EXT-009 เท่านั้น; reader ระดับบุคคล (public search, EXT-011, EXT-012) ต้องกรอง search_excluded != true
 // ไม่มี: นามสกุลเต็ม, เบอร์ดิบ, medical, national_id plaintext — ไม่ project เด็ดขาด
 
 การเปลี่ยนสูตร projector ของ `checked_in_at` ให้เป็น `null` สำหรับ `pre_registered`,
@@ -186,7 +188,7 @@ The worker resumes `_changes` from its checkpoint, so documents that never chang
 - **Member ที่คิวไว้ก่อน `schema_v 4` เกิดมาโดยไม่มี `consent`** (`null`, `search_excluded = false`) — ไม่มี migration/backfill ย้อนหลัง;
   claim แล้วได้ evacuee ที่ไม่มี `consent` และเก็บที่ report-in (FR-41/44)
 - ข้อมูลสุขภาพของคน `health = false` ไม่เข้า Mongo เลย (queue ไม่เก็บ `medical` อยู่แล้ว, #255)
-- `search_excluded = true` ไม่ซ่อนอะไรใน Mongo ก่อน claim (คิวไม่ถูก project เป็น `public_persons`); มีผลเมื่อ evacuee ถูกสร้างแล้ว projector เดิมลบ projection (§1 `privacy.search_excluded`) — ไม่ bump `PROJECTION_VERSION`
+- `search_excluded = true` ไม่ซ่อนอะไรใน Mongo ก่อน claim (คิวไม่ถูก project เป็น `public_persons`); มีผลเมื่อ evacuee ถูกสร้างแล้ว projector เก็บเฉพาะแถว hold (§3.2 `public_persons`, decision sync 2026-10-26)
 
 **หลักการ projection:** allow-list field เท่านั้น — projector มี whitelist ตายตัวต่อ type; field
 ใหม่ใน CouchDB **ไม่หลุด**ไป Mongo เองจนกว่าจะเพิ่มใน whitelist (กัน PII leak โดยอุบัติเหตุ).

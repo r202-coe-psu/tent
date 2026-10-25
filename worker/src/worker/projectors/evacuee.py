@@ -36,6 +36,28 @@ def _parse_datetime(value: Any) -> datetime | None:
         return None
 
 
+#: Fields a search-excluded person keeps: just enough for EXT-008's duplicate check
+#: (FR-17/20) and EXT-009/010's stay reads (decision sync 2026-10-26).
+_HOLD_FIELDS = frozenset(
+    {"_id", "shelter_code", "national_id_hash", "status", "updated_at"}
+)
+#: Non-nullable on `PublicPerson`; blanked to "" instead of None.
+_REQUIRED_STR_FIELDS = frozenset({"first_name", "first_name_key", "last_name_masked"})
+
+
+def _hold_only(payload: dict[str, Any]) -> dict[str, Any]:
+    """Blank every other field. `apply_document` merges key by key, so each key must be
+    sent blank, or a person who opts out would keep the PII projected before."""
+    hold = {
+        key: value
+        if key in _HOLD_FIELDS
+        else ("" if key in _REQUIRED_STR_FIELDS else None)
+        for key, value in payload.items()
+    }
+    hold["search_excluded"] = True
+    return hold
+
+
 def _project_person_id(person_id: dict[str, Any] | None) -> dict[str, str | None]:
     if not person_id:
         return {
@@ -102,10 +124,6 @@ def project_evacuee(
     if not doc_id:
         return ("delete", None)
 
-    privacy = doc.get("privacy") or {}
-    if privacy.get("search_excluded") is True:
-        return ("delete", {"_id": doc_id})
-
     current_stay = doc.get("current_stay") or {}
     status = current_stay.get("status") or "unknown"
 
@@ -146,4 +164,6 @@ def project_evacuee(
         "updated_at": updated_at,
         **id_fields,
     }
+    if (doc.get("privacy") or {}).get("search_excluded") is True:
+        return ("upsert", _hold_only(payload))
     return ("upsert", payload)

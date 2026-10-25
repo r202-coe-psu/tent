@@ -242,18 +242,38 @@ async def test_granted_call_is_logged_without_cid(
     assert CID not in log.model_dump_json()
 
 
-async def test_basic_consent_person_is_not_resident_once_projection_is_deleted(
+async def test_search_excluded_person_is_not_resident(
     client: AsyncClient, shelters: list[PublicShelter]
 ) -> None:
-    """PDPA FR-40 — residency reads only `public_persons`, which the worker deletes for a
-    basic-mode person (worker `test_project_evacuee_basic_consent_deletes_projection`)."""
+    """PDPA FR-40 — the worker keeps a hold row for a search-excluded person (decision sync
+    2026-10-26, worker `test_project_evacuee_search_excluded_keeps_a_hash_only_hold`);
+    residency must still not find them by CID."""
     person = await _person(status="room_confirmed")
     params = {"cid": CID, "purpose": "m2-check"}
     before = await client.get(URL, params=params, headers=GRANTED)
     assert before.json()["result"]["location_code"] == "SH001"
 
-    await person.delete()
+    # `checked_in_at` is kept on purpose: the flag alone must hide the person.
+    person.search_excluded = True
+    await person.save()
 
     response = await client.get(URL, params=params, headers=GRANTED)
     assert response.status_code == 404
     assert response.json()["code"] == "residency_not_found"
+
+
+async def test_search_excluded_row_does_not_shadow_a_visible_stay(
+    client: AsyncClient, shelters: list[PublicShelter]
+) -> None:
+    hidden = await _person(
+        shelter_code="SH002", status="active", updated_at=datetime.now(UTC), suffix="02"
+    )
+    hidden.search_excluded = True
+    await hidden.save()
+    await _person(
+        shelter_code="SH001", status="active", updated_at=datetime.now(UTC) - timedelta(days=1)
+    )
+
+    response = await client.get(URL, params={"cid": CID, "purpose": "m2-check"}, headers=GRANTED)
+    assert response.status_code == 200
+    assert response.json()["result"]["location_code"] == "SH001"

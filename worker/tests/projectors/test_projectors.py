@@ -1,6 +1,7 @@
 import hashlib
 from datetime import UTC, datetime
 from decimal import Decimal
+from typing import Any
 
 import pytest
 
@@ -386,33 +387,65 @@ def test_project_evacuee_other_card_hashes_national_id_field():
     assert payload["national_id_masked"] == mask_national_id("DOC-999")
 
 
-def test_project_evacuee_search_excluded_deletes():
-    doc = {
+_EXCLUDED_KEPT = {"_id", "shelter_code", "national_id_hash", "status", "updated_at"}
+
+
+def _excluded_doc(**overrides: Any) -> dict[str, Any]:
+    doc: dict[str, Any] = {
         "_id": "evacuee:01OPT",
         "type": "evacuee",
         "first_name": "ลับ",
-        "last_name": "ลับ",
-        "privacy": {"search_excluded": True},
-        "current_stay": {"status": "active"},
-        "updated_at": "2026-01-01T00:00:00.000Z",
-    }
-    action, payload = project_evacuee(doc, shelter_code="SH001")
-    assert action == "delete"
-    assert payload == {"_id": "evacuee:01OPT"}
-
-
-def test_project_evacuee_basic_consent_deletes_projection():
-    """PDPA FR-40 — a basic-mode person leaves every public read via the existing delete."""
-    doc = {
-        "_id": "evacuee:01BASIC",
-        "type": "evacuee",
-        "schema_v": 15,
-        "first_name": "พื้นฐาน",
-        "last_name": "ใจดี",
+        "last_name": "ลับมาก",
+        "phone": "0812345678",
+        "gender": "female",
         "person_id": {"cardType": "national_id", "number": "3900100244192"},
         "household_id": "household:01HH",
         "privacy": {"search_excluded": True},
-        "consent": {
+        "current_stay": {
+            "status": "active",
+            "zone": "A",
+            "since": "2026-01-01T00:00:00.000Z",
+        },
+        "updated_at": "2026-01-01T00:00:00.000Z",
+    }
+    doc.update(overrides)
+    return doc
+
+
+def test_project_evacuee_search_excluded_keeps_a_hash_only_hold():
+    """decision sync 2026-10-26 — EXT-008 must see a hidden person's hold (FR-17/20)."""
+    action, payload = project_evacuee(_excluded_doc(), shelter_code="SH001")
+    assert action == "upsert"
+    assert payload is not None
+    assert payload["search_excluded"] is True
+    assert payload["national_id_hash"] == national_id_hash("3900100244192")
+    assert payload["shelter_code"] == "SH001"
+    assert payload["status"] == "active"
+    blank = {
+        k: v
+        for k, v in payload.items()
+        if k not in _EXCLUDED_KEPT | {"search_excluded"}
+    }
+    assert all(v in ("", None) for v in blank.values()), blank
+
+
+def test_project_evacuee_search_excluded_overwrites_every_projected_field():
+    """`apply_document` merges key by key, so an excluded payload must name every key the
+    visible payload sets — otherwise a person who opts out keeps their old PII."""
+    _, visible = project_evacuee(
+        _excluded_doc(privacy={"search_excluded": False}), shelter_code="SH001"
+    )
+    _, hidden = project_evacuee(_excluded_doc(), shelter_code="SH001")
+    assert visible is not None and hidden is not None
+    assert set(hidden) == set(visible)
+
+
+def test_project_evacuee_basic_consent_keeps_no_pii():
+    """PDPA FR-40 — a basic-mode person keeps only the hold, never names or contacts."""
+    doc = _excluded_doc(
+        _id="evacuee:01BASIC",
+        schema_v=15,
+        consent={
             "mode": "basic",
             "health": False,
             "ref": "CS-7K3QZ9MD",
@@ -423,16 +456,13 @@ def test_project_evacuee_basic_consent_deletes_projection():
             "recorded_verbally_by": None,
             "channel": "web",
         },
-        "current_stay": {
-            "status": "active",
-            "zone": "A",
-            "since": "2026-10-25T03:15:00.000Z",
-        },
-        "updated_at": "2026-10-25T03:15:00.000Z",
-    }
+    )
     action, payload = project_evacuee(doc, shelter_code="SH001")
-    assert action == "delete"
-    assert payload == {"_id": "evacuee:01BASIC"}
+    assert action == "upsert"
+    assert payload is not None
+    dumped = str(payload)
+    for secret in ("ลับ", "0812345678", "3900100244192", "household:01HH", "female"):
+        assert secret not in dumped
 
 
 def test_compute_needs_aggregates_campaign_minus_donations():

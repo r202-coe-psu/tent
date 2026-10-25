@@ -526,6 +526,26 @@ async def test_duplicate_via_pending_buffer_is_409(client: AsyncClient, shelters
     assert second.json()["code"] == "duplicate_booking"
 
 
+async def test_duplicate_via_search_excluded_hold_is_409(
+    client: AsyncClient, shelters: None
+) -> None:
+    # decision sync 2026-10-26: the worker keeps a hold row with only the CID hash for a
+    # `privacy.search_excluded` person (worker `_hold_only`), so EXT-008 still sees them.
+    await PublicPerson(
+        id="evacuee:SH001-hidden",
+        shelter_code="SH001",
+        first_name="",
+        last_name_masked="",
+        national_id_hash=national_id_hash(CID),
+        search_excluded=True,
+        status="active",
+        updated_at=datetime.now(UTC),
+    ).insert()
+    response = await client.post(URL, json=_payload(), headers=GRANTED)
+    assert response.status_code == 409
+    assert response.json()["code"] == "duplicate_booking"
+
+
 async def test_same_cid_other_shelter_is_201(client: AsyncClient, shelters: None) -> None:
     await _person(shelter_code="SH001", status="active")
     first = await client.post(URL, json=_payload(location_code="SH001"), headers=GRANTED)

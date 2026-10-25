@@ -23,4 +23,6 @@ per deploy, so batch related projector changes into one bump per release when po
 #: 7 — CR-172 (``public_donations.reject_reason`` / ``reject_reason_code``) and CR-174
 #: (``public_donations.items_declared[].review_status`` / ``review_reason_code`` /
 #: ``review_reason``). Both shipped unreleased on one branch, so one bump covers both.
-PROJECTION_VERSION: int = 7
+#: 8 — decision sync 2026-10-26: a search-excluded evacuee keeps a hash-only
+#: ``public_persons`` hold row instead of being deleted (EXT-008 duplicate check).
+PROJECTION_VERSION: int = 8

@@ -120,7 +120,10 @@ class ThirdPartyResidencyUseCase:
             )
 
         people = await PublicPerson.find(
-            PublicPerson.national_id_hash == national_id_hash(cleaned)
+            PublicPerson.national_id_hash == national_id_hash(cleaned),
+            # PDPA FR-40: a search-excluded person's row is a hold only (decision sync
+            # 2026-10-26) — they must not be found by CID.
+            PublicPerson.search_excluded != True,  # noqa: E712
         ).to_list()
         # A cancelled booking is never a stay: drop it before FR-43 selection so a newer
         # cancelled row (other shelter) cannot shadow a genuine stay (#710, CR-176).
