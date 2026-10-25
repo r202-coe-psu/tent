@@ -44,13 +44,14 @@ const isFreshKioskConsent = (decision: { given_at: string }) =>
 	Math.abs(Date.now() - Date.parse(decision.given_at)) <= CONSENT_FRESH_MS;
 
 /**
- * The body carries a well-formed kiosk decision that is past the 10-minute window: the visitor has
- * to decide again, since resending the same decision can never pass.
+ * The body carries a well-formed kiosk decision given more than 10 minutes ago: the visitor has to
+ * decide again, since resending the same decision can never pass. A decision dated ahead is a
+ * kiosk clock problem that deciding again would not fix, so it stays a plain invalid body.
  */
 export function isStaleKioskConsent(body: unknown): boolean {
 	if (typeof body !== 'object' || body === null || !('consent' in body)) return false;
 	const decision = consentDecisionSchemaFor('kiosk').safeParse(body.consent);
-	return decision.success && !isFreshKioskConsent(decision.data);
+	return decision.success && Date.now() - Date.parse(decision.data.given_at) > CONSENT_FRESH_MS;
 }
 
 /** The kiosk decision (no C4/C5), given within the last 10 minutes; `consented_at` must be its `given_at`. */
