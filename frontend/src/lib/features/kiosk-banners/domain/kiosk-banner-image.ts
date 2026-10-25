@@ -33,13 +33,14 @@ export type DecodeBannerImageResult =
 	| { ok: true; bytes: Uint8Array; contentType: KioskBannerImageMime }
 	| { ok: false; reason: 'invalid_base64' | 'too_large' | 'unsupported_type' | 'empty' };
 
-export function decodeBannerImage(payload: {
-	content_type: string;
-	data_base64: string;
-}): DecodeBannerImageResult {
+/** `maxBytes` defaults to the banner cap; footer logos pass their own 512 KB (CR-184 FR-5). */
+export function decodeBannerImage(
+	payload: { content_type: string; data_base64: string },
+	maxBytes: number = KIOSK_BANNER_IMAGE_MAX_BYTES
+): DecodeBannerImageResult {
 	if (payload.data_base64.length === 0) return { ok: false, reason: 'empty' };
 	if (!isCanonicalBase64(payload.data_base64)) return { ok: false, reason: 'invalid_base64' };
-	if (decodedLength(payload.data_base64) > KIOSK_BANNER_IMAGE_MAX_BYTES) {
+	if (decodedLength(payload.data_base64) > maxBytes) {
 		return { ok: false, reason: 'too_large' };
 	}
 	const binary = atob(payload.data_base64);

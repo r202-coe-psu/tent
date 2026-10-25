@@ -41,7 +41,12 @@ export const RegistrationsPayloadSchema = z.object({
 	checkin: z.record(IsoDate, z.number().int().nonnegative()),
 	/** Map of YYYY-MM-DD → count for each day in the range that has check-outs. */
 	checkout: z.record(IsoDate, z.number().int().nonnegative()),
-	/** Sum of all check-in counts. */
+	/**
+	 * Map of YYYY-MM-DD → evacuees registered in advance (web, kiosk or api) that day,
+	 * excluding cancelled stays. Counts the registration, so it is not reduced by a later check-in.
+	 */
+	preregister: z.record(IsoDate, z.number().int().nonnegative()),
+	/** Sum of all check-in counts. Pre-registrations are not included. */
 	total: z.number().int().nonnegative()
 });
 export type RegistrationsPayload = z.infer<typeof RegistrationsPayloadSchema>;
@@ -62,6 +67,7 @@ export function rowsToRegistrationsPayload(
 ): RegistrationsPayload {
 	const checkin: Record<string, number> = {};
 	const checkout: Record<string, number> = {};
+	const preregister: Record<string, number> = {};
 	let total = 0;
 	for (const row of rows) {
 		// Note: BFF usually processes this instead of client directly for this endpoint,
@@ -83,9 +89,11 @@ export function rowsToRegistrationsPayload(
 			total += row.value;
 		} else if (series === 'checkout') {
 			checkout[dateStr] = (checkout[dateStr] ?? 0) + row.value;
+		} else if (series === 'preregister') {
+			preregister[dateStr] = (preregister[dateStr] ?? 0) + row.value;
 		}
 	}
-	return { shelter_code: shelterCode, range: { from, to }, checkin, checkout, total };
+	return { shelter_code: shelterCode, range: { from, to }, checkin, checkout, preregister, total };
 }
 
 /**

@@ -158,7 +158,7 @@
 	function handleScanResult(scannedId: string) {
 		const evac = allEvacuees.find((e) => e._id === scannedId);
 		if (!evac) {
-			toast.error('ไม่พบผู้ประสบภัยที่ตรงกับรหัส QR นี้');
+			toast.error('ไม่พบผู้เข้าพักที่ตรงกับรหัส QR นี้');
 			return;
 		}
 
@@ -183,7 +183,7 @@
 			}
 		} else {
 			if (selectedMembers.some((m) => m._id === evac._id)) {
-				toast.error('ผู้ประสบภัยรายนี้ถูกเพิ่มเข้าครัวเรือนเรียบร้อยแล้ว');
+				toast.error('ผู้เข้าพักรายนี้ถูกเพิ่มเข้าครัวเรือนเรียบร้อยแล้ว');
 				return;
 			}
 			selectedMembers = [...selectedMembers, evac];
@@ -305,7 +305,7 @@
 </script>
 
 <svelte:head>
-	<title>จัดกลุ่มผู้ประสบภัยเป็นครัวเรือน · SmartShelter</title>
+	<title>จัดกลุ่มผู้เข้าพักเป็นครัวเรือน · SmartShelter</title>
 </svelte:head>
 
 <div class="mx-auto w-full max-w-7xl px-4 py-8 md:px-6">
@@ -320,7 +320,7 @@
 			<span>กลับหน้ารายการครัวเรือนหลัก</span>
 		</button>
 		<h2 class="mt-2 text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-50">
-			จัดกลุ่มผู้ประสบภัยเป็นครัวเรือน (Household Post-arrival Grouping)
+			จัดกลุ่มผู้เข้าพักเป็นครัวเรือน (Household Post-arrival Grouping)
 		</h2>
 	</div>
 

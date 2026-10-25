@@ -12,7 +12,7 @@ affects:
   - docs/data/schema.md §2.30 (distribution_log schema_v 1 → 2), §2.31 (bulk_return_pool schema_v 3 — shape เปลี่ยนก่อนปล่อย), §2.31.1 / §2.31.2 / §2.31.3 (ใหม่), §2.32 (legacy), §7, §8
   - schema_v — distribution_log 1 → 2; bulk_return_pool 2 → 3; doc type ใหม่ bulk_return_entry v1, bulk_return_entry_move v1, bulk_return_entry_void v1 (append-only)
   - frontend/src/lib/server/shelter-access-design.ts (VDU + Mango index `BULK_RETURN_ENTRY_MANGO_INDEXES`)
-  - frontend/src/lib/features/shelters/domain/views.ts + view-manifest.ts (view `bulk_return_pool_item_totals`, `_design/app` v4)
+  - frontend/src/lib/features/shelters/domain/views.ts + view-manifest.ts (view `bulk_return_pool_item_totals`, `_design/app` v5)
   - frontend/src/lib/server/shelters.admin.ts / shelters/server/provisioner.ts / scripts/redeploy-access.ts / scripts/seed/registry-shelters.ts (deploy index)
   - frontend/src/lib/features/distribution/domain/food-supplies (bulk-return-pool / entry / entry-move / entry-void) และ distribution-log
 ---
@@ -129,7 +129,7 @@ feedback ระบบคลัง & เบิกของ ข้อ 4–5: ข�
   - `group_level=1` → ยอด/จำนวน entry ต่อ pool (count 0 = ว่าง), `2` → ต่อ item, `3` → ต่อ entry (net 1 = อยู่ใน pool, 0 = ย้ายออกหรือ void)
   - `qty` ใน map = `parseFloat` ของ qty string (ใช้เพื่อ advisory/ตรวจว่างเท่านั้น; `items_summary` ที่ snapshot
     ใช้ decimal helper ของ repo)
-  - `_design/app` ยังเป็นเวอร์ชัน 4 (เวอร์ชัน 4 เริ่มบน branch นี้และยังไม่ปล่อย)
+  - `_design/app` เวอร์ชัน 5 (v4 ถูกใช้โดย CR-170 amend บน develop ก่อน branch นี้ merge)
 
 ## Decisions
 
@@ -329,7 +329,7 @@ VDU อ่านเอกสารอื่นไม่ได้ — กติ�
 - `frontend/src/lib/server/shelter-access-design.ts` — VDU (allowed types, v3 rules, role, freeze v1/v2, append-only
   entry/move/void, `distribution_log` v2 path apply/revert), Mango index declaration (`BULK_RETURN_ENTRY_MANGO_INDEXES`) + tests
 - `frontend/src/lib/features/shelters/domain/views.ts` + `view-manifest.ts` — view `bulk_return_pool_item_totals`
-  (`_design/app` v4) + tests
+  (`_design/app` v5) + tests
 - `frontend/src/lib/server/shelters.admin.ts`, `frontend/src/lib/features/shelters/server/provisioner.ts`,
   `frontend/scripts/redeploy-access.ts`, `frontend/scripts/seed/registry-shelters.ts` — deploy index
 - ไม่แตะ `TICKET_DISTRIBUTION_MANGO_INDEXES`; ส่วน UI/workflow อยู่ #659/#660 ซึ่ง merge ใน PR เดียวกัน

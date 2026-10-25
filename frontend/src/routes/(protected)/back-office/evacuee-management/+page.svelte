@@ -27,7 +27,7 @@
 </script>
 
 <svelte:head>
-	<title>จัดการผู้ประสบภัย · SmartShelter</title>
+	<title>จัดการผู้เข้าพัก · SmartShelter</title>
 </svelte:head>
 
 <!--
@@ -63,7 +63,7 @@
 					: 'border-transparent text-muted-foreground hover:border-border hover:text-foreground'}"
 			>
 				<Users class="h-4 w-4" />
-				รายชื่อผู้ประสบภัย
+				รายชื่อผู้เข้าพัก
 			</button>
 			<button
 				type="button"
