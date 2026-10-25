@@ -438,6 +438,7 @@
 		entry={moveEntry}
 		item={resolveItemDisplay(moveEntry.item_id, catalog)}
 		fromPoolName={row.pool.name}
+		late={entries.find((live) => live.entry._id === moveEntry?._id)?.late ?? false}
 		targets={moveTargets}
 		{shelterCode}
 		onClose={() => (moveEntry = null)}

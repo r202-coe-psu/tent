@@ -408,7 +408,8 @@ function claimOnLocalLoans(
  * Order: validate everything (items eligible, pool appendable) before writing; then per item write
  * the entry (put-if-absent, replay-safe), FENCE (re-read the pool), and only then apply the loans.
  * When the fence trips (pool locked / not OPEN after the entry was written) the entry is reported
- * `late` with no loan touched, and processing STOPS: later items are not written, so `results`
+ * `late` with no loan touched (its loans are applied later, when it is moved into an OPEN pool),
+ * and processing STOPS: later items are not written, so `results`
  * holds only the items written so far. Retrying with the same operationUlids is idempotent.
  */
 export async function addBulkReturnEntries(
@@ -578,10 +579,22 @@ async function applyRefToLoan(
 	ref: BulkReturnEntryLoanRef,
 	ctx: AuthorContext
 ): Promise<BulkReturnLoanSkipped | null> {
+	return (await applyRefToLoanDetailed(logRepo, entry, ref, ctx)).skipped;
+}
+
+/** Like applyRefToLoan, but also reports whether this call newly wrote the apply. */
+async function applyRefToLoanDetailed(
+	logRepo: DistributionLogRepository,
+	entry: BulkReturnEntry,
+	ref: BulkReturnEntryLoanRef,
+	ctx: AuthorContext
+): Promise<{ skipped: BulkReturnLoanSkipped | null; written: boolean }> {
 	let skipped = null as BulkReturnLoanSkipped | null;
+	let written = false;
 	try {
 		await logRepo.mutateLogCAS(ref.distribution_log_id, (current) => {
 			skipped = null; // the mutator may run again on a CAS retry
+			written = false;
 			const assessment = assessBulkReturnRefOnLoan(current, ref, entry._id);
 			if (assessment.status === 'already_applied') return current;
 			if (assessment.status === 'skip') {
@@ -593,6 +606,7 @@ async function applyRefToLoan(
 				};
 				return current; // same reference: the repository writes nothing
 			}
+			written = true;
 			return applyBulkEntryToLog(
 				current,
 				{ entry_id: entry._id, qty: ref.qty },
@@ -602,9 +616,35 @@ async function applyRefToLoan(
 		});
 	} catch (err) {
 		if (!(err instanceof NotFoundError)) throw err;
-		return { distribution_log_id: ref.distribution_log_id, qty: ref.qty, reason: 'missing' };
+		return {
+			skipped: { distribution_log_id: ref.distribution_log_id, qty: ref.qty, reason: 'missing' },
+			written: false
+		};
 	}
-	return skipped;
+	return { skipped, written };
+}
+
+/**
+ * Applies an entry's loan refs once its pool is known to be appendable (move path). `loansApplied`
+ * holds only refs newly written by this call; already-applied refs are silent no-ops.
+ */
+async function applyEntryLoansAfterMove(
+	logRepo: DistributionLogRepository,
+	poolRepo: BulkReturnPoolV3Repository,
+	entry: BulkReturnEntry,
+	toPoolId: string,
+	ctx: AuthorContext
+): Promise<{ late: boolean; loansApplied: string[]; loansSkipped: BulkReturnLoanSkipped[] }> {
+	const fresh = await poolRepo.get(toPoolId);
+	if (!fresh || !canAppendToPool(fresh)) return { late: true, loansApplied: [], loansSkipped: [] };
+	const loansApplied: string[] = [];
+	const loansSkipped: BulkReturnLoanSkipped[] = [];
+	for (const ref of entry.loan_refs) {
+		const { skipped, written } = await applyRefToLoanDetailed(logRepo, entry, ref, ctx);
+		if (skipped) loansSkipped.push(skipped);
+		else if (written) loansApplied.push(ref.distribution_log_id);
+	}
+	return { late: false, loansApplied, loansSkipped };
 }
 
 async function revertRefOnLoan(
@@ -640,6 +680,10 @@ export interface MoveBulkReturnEntryResult {
 	/** The target pool stopped accepting entries right after the move: move the entry again. */
 	late: boolean;
 	replayed: boolean;
+	/** Loans newly applied by this call (distribution_log ids; excludes already-applied refs). */
+	loansApplied: string[];
+	/** Refs not applied (loan closed / missing / insufficient); empty when late. */
+	loansSkipped: BulkReturnLoanSkipped[];
 }
 
 /**
@@ -658,13 +702,18 @@ function assertEntryNotPendingSync(entry: BulkReturnEntry, moves: readonly BulkR
 	}
 }
 
-/** Moves a whole entry to another OPEN pool. Loans are untouched. */
+/**
+ * Moves a whole entry to another OPEN pool. After the move, the target pool is re-read (fence);
+ * only if it is still appendable are the entry's loan refs applied (same per-ref rule as add,
+ * idempotent via applied_bulk_entry_ids). This is how a late entry (whose loans add never applied)
+ * finally clears its loans. A normal, already-applied entry is a no-op on loans.
+ */
 export async function moveBulkReturnEntry(
 	input: MoveBulkReturnEntryInput,
 	ctx: AuthorContext,
 	deps?: BulkReturnPoolV3WorkflowDependencies
 ): Promise<MoveBulkReturnEntryResult> {
-	const { poolRepo, eventRepo, endpointStore: epStore } = resolveDependencies(deps, ctx);
+	const { poolRepo, eventRepo, logRepo, endpointStore: epStore } = resolveDependencies(deps, ctx);
 	assertCentralWriteAuthority(epStore);
 	assertCanWriteBulkReturnEntry(ctx);
 
@@ -692,8 +741,8 @@ export async function moveBulkReturnEntry(
 		if (!latest || latest.to_pool_id !== input.to_pool_id) {
 			throw new WorkflowValidationError(`Entry ${entry._id} is already in ${input.to_pool_id}`);
 		}
-		const fence = await poolRepo.get(input.to_pool_id);
-		return { move: latest, late: !fence || !canAppendToPool(fence), replayed: true };
+		const outcome = await applyEntryLoansAfterMove(logRepo, poolRepo, entry, input.to_pool_id, ctx);
+		return { move: latest, replayed: true, ...outcome };
 	}
 
 	const target = await requirePool(poolRepo, input.to_pool_id);
@@ -738,8 +787,8 @@ export async function moveBulkReturnEntry(
 		replayed = true;
 	}
 
-	const fresh = await poolRepo.get(input.to_pool_id);
-	return { move, late: !fresh || !canAppendToPool(fresh), replayed };
+	const outcome = await applyEntryLoansAfterMove(logRepo, poolRepo, entry, input.to_pool_id, ctx);
+	return { move, replayed, ...outcome };
 }
 
 // ---------------------------------------------------------------------------------------------

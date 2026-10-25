@@ -152,7 +152,10 @@ export const useAddBulkReturnEntries = () => {
 	}));
 };
 
-/** Moves a whole entry to another OPEN pool (loans untouched). */
+/**
+ * Moves a whole entry to another OPEN pool. A late entry's loans are applied by the move, so logs
+ * and outstanding loans are invalidated too (closed-loan-refs sit under the v3 pool prefix).
+ */
 export const useMoveBulkReturnEntry = () => {
 	const queryClient = useQueryClient();
 	return createMutation(() => ({
@@ -165,7 +168,10 @@ export const useMoveBulkReturnEntry = () => {
 		},
 		retry: false,
 		onSuccess: (_data: MoveBulkReturnEntryResult, variables: MoveBulkReturnEntryMutationInput) => {
-			invalidateBulkPoolsV3(queryClient, resolveShelterCode(variables.shelterCode));
+			const shelterCode = resolveShelterCode(variables.shelterCode);
+			invalidateBulkPoolsV3(queryClient, shelterCode);
+			invalidateDistributionLogs(queryClient, shelterCode);
+			invalidateReturnerOutstandingLoans(queryClient, shelterCode);
 		}
 	}));
 };
