@@ -10,6 +10,7 @@ import { createQuery, keepPreviousData } from '@tanstack/svelte-query';
 import { fetchOccupancy } from '../data/occupancy.api';
 import { fetchDemographics } from '../data/demographics.api';
 import { fetchRegistrations } from '../data/registration.api';
+import { fetchStationTimes } from '../data/station-times.api';
 
 const DASHBOARD_STALE_TIME = 60 * 1000; // 1 นาที
 
@@ -19,7 +20,9 @@ export const dashboardKeys = {
 	demographics: (shelterCode: string) =>
 		[...dashboardKeys.all, 'demographics', shelterCode] as const,
 	registrations: (shelterCode: string, from?: string, to?: string) =>
-		[...dashboardKeys.all, 'registrations', shelterCode, from ?? null, to ?? null] as const
+		[...dashboardKeys.all, 'registrations', shelterCode, from ?? null, to ?? null] as const,
+	stationTimes: (shelterCode: string, from?: string, to?: string) =>
+		[...dashboardKeys.all, 'stationTimes', shelterCode, from ?? null, to ?? null] as const
 };
 
 export const useDashboardOccupancy = (code: () => string, enabled: () => boolean = () => true) =>
@@ -49,5 +52,19 @@ export const useDashboardRegistrations = (
 		enabled: !!code(),
 		staleTime: DASHBOARD_STALE_TIME,
 		// Keep the current chart on screen while a new range loads (CR-170 FR-6).
+		placeholderData: keepPreviousData
+	}));
+
+export const useDashboardStationTimes = (
+	code: () => string,
+	from?: () => string | undefined,
+	to?: () => string | undefined
+) =>
+	createQuery(() => ({
+		queryKey: dashboardKeys.stationTimes(code(), from?.(), to?.()),
+		queryFn: () => fetchStationTimes(code(), from?.(), to?.()),
+		enabled: !!code(),
+		staleTime: DASHBOARD_STALE_TIME,
+		// Keep the current numbers on screen while a new range loads (CR-170 FR-6).
 		placeholderData: keepPreviousData
 	}));
