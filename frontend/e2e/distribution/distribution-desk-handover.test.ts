@@ -131,7 +131,7 @@ test.describe('Tab 1 — confirm cargo arrival (plan §4.3)', { tag: DESK_TAGS }
 		});
 
 		await desk.goto();
-		await desk.openTab('receive');
+		await desk.openTab('receive', 'supplies');
 		const card = desk.receiveCard(ticket);
 		await expect(card).toContainText(item.name);
 		await expect(card).toContainText('กำลังนำส่ง');
@@ -190,14 +190,15 @@ test.describe('Tab 1 — confirm cargo arrival (plan §4.3)', { tag: DESK_TAGS }
 			lines: [{ item, allocatedQty: '5' }]
 		});
 
-		// The badge counts every IN_TRANSIT desk ticket in the shelter.
-		const waiting = await deskTicketCount('IN_TRANSIT');
+		// The badge counts every IN_TRANSIT desk ticket of the current mode in the shelter.
+		const waiting = await deskTicketCount('IN_TRANSIT', 'supplies');
 		await desk.goto();
+		await desk.switchMode('supplies');
 		await expect.poll(() => tabBadge(desk, 'receive', /รอรับ (\d+)/)).toBe(waiting);
 		await desk.receive(first);
 		await expect.poll(() => tabBadge(desk, 'receive', /รอรับ (\d+)/)).toBe(waiting - 1);
 
-		await desk.openTab('receive');
+		await desk.openTab('receive', 'supplies');
 		await expect(page.getByText(first.ticketNo, { exact: true })).toHaveCount(0);
 		await expect(desk.receiveCard(second)).toBeVisible();
 	});
@@ -217,7 +218,7 @@ test.describe('Tab 1 — confirm cargo arrival (plan §4.3)', { tag: DESK_TAGS }
 		const otherDesk = `${scenario.namespace}_other_desk`;
 
 		await desk.goto();
-		await desk.openTab('receive');
+		await desk.openTab('receive', 'supplies');
 		const card = desk.receiveCard(ticket);
 		await expect(card).toBeVisible();
 

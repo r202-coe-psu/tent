@@ -69,7 +69,7 @@ export class BackOfficePage {
 		if (!ticket || typeof ticket.ticket_no !== 'string') {
 			throw new Error(`Created ticket ${ticketId} was not readable`);
 		}
-		return { ticketId, ticketNo: ticket.ticket_no };
+		return { ticketId, ticketNo: ticket.ticket_no, type: 'supplies' };
 	}
 
 	async allocate(ticket: SeededTicket, item: SeededItem, qty: string): Promise<void> {

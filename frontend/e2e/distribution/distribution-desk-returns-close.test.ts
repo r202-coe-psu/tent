@@ -137,7 +137,7 @@ async function closeSetup(
 	}
 	const desk = new DeskPage(page);
 	await desk.goto();
-	await desk.openTab('reconciliation');
+	await desk.openTab('reconciliation', 'supplies');
 	await desk.selectPoint(scenarioPoint(scenario));
 	await desk.selectTicket('reconciliation', ticket);
 	await expect(desk.reconciliationHeading(ticket)).toBeVisible();
