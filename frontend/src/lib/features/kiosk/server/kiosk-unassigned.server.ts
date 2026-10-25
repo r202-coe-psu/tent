@@ -208,45 +208,40 @@ async function revertQuietly(registrationId: string, body: RevertUnassignedClaim
 	}
 }
 
-function responseStatus(error: unknown): number | null {
-	if (typeof error !== 'object' || error === null || !('status' in error)) return null;
-	const status = (error as { status?: unknown }).status;
-	return typeof status === 'number' ? status : null;
-}
-
-async function findMissingEvacueeIds(dbName: string, evacueeIds: string[]): Promise<string[]> {
+async function findMissingDocIds(dbName: string, docIds: string[]): Promise<string[]> {
 	const result = await adminFetch<{
 		rows?: Array<{ key?: string; error?: string; value?: { deleted?: boolean } }>;
-	}>(`/${dbName}/_all_docs`, { method: 'POST', body: JSON.stringify({ keys: evacueeIds }) });
+	}>(`/${dbName}/_all_docs`, { method: 'POST', body: JSON.stringify({ keys: docIds }) });
 	const present = new Set(
 		(result.rows ?? [])
 			.filter((row) => !row.error && row.value && !row.value.deleted)
 			.map((row) => row.key)
 	);
-	return evacueeIds.filter((id) => !present.has(id));
+	return docIds.filter((id) => !present.has(id));
 }
 
-async function householdExists(dbName: string, householdId: string): Promise<boolean> {
-	try {
-		await adminFetch(`/${dbName}/${encodeURIComponent(householdId)}`);
-		return true;
-	} catch (error) {
-		if (responseStatus(error) === 404) return false;
-		throw error;
-	}
-}
-
-/** Birth the prepared docs in one `_bulk_docs`; a conflict means they were already born. */
+/**
+ * Birth the prepared docs in one `_bulk_docs`; a conflict means they were already born. Docs
+ * already in Couch are left out first, so a repair claim (FR-KUC-15) never writes the `image:` doc
+ * prepare minted afresh for an evacuee that already exists (FR-KUC-10).
+ */
 async function writePreparedClaim(
 	dbName: string,
 	prepared: PreparedUnassignedClaim
 ): Promise<void> {
+	const missing = new Set(
+		await findMissingDocIds(dbName, [
+			prepared.household._id,
+			...prepared.evacuees.map((doc) => doc._id)
+		])
+	);
+	const evacuees = prepared.evacuees.filter((doc) => missing.has(doc._id));
 	const photoIds = new Set(
-		prepared.evacuees.map((doc) => doc.photo).filter((id): id is string => Boolean(id))
+		evacuees.map((doc) => doc.photo).filter((id): id is string => Boolean(id))
 	);
 	const docs = [
-		...((await householdExists(dbName, prepared.household._id)) ? [] : [prepared.household]),
-		...prepared.evacuees,
+		...(missing.has(prepared.household._id) ? [prepared.household] : []),
+		...evacuees,
 		...prepared.images
 			.filter((image) => photoIds.has(image.doc._id))
 			.map((image) => ({
@@ -257,6 +252,7 @@ async function writePreparedClaim(
 				}
 			}))
 	];
+	if (docs.length === 0) return;
 	const rows = await adminFetch<Array<{ id?: string; error?: string }>>(`/${dbName}/_bulk_docs`, {
 		method: 'POST',
 		body: JSON.stringify({ docs })
@@ -279,7 +275,7 @@ export async function claimUnassignedMembers(
 	options: { requiredPersonId?: string } = {}
 ): Promise<void> {
 	const dbName = shelterDbName(shelterCode);
-	const missing = await findMissingEvacueeIds(dbName, [...new Set(evacueeIds)]);
+	const missing = await findMissingDocIds(dbName, [...new Set(evacueeIds)]);
 	if (missing.length === 0) return;
 
 	let registration: UnassignedRegistration | null = null;
@@ -317,7 +313,7 @@ export async function claimUnassignedMembers(
 		await writePreparedClaim(dbName, prepared);
 	} catch {
 		// `_bulk_docs` is not atomic: keep the claim of anyone Couch did take, so Mongo matches Couch.
-		const unborn = await findMissingEvacueeIds(dbName, toClaim).catch(() => toClaim);
+		const unborn = await findMissingDocIds(dbName, toClaim).catch(() => toClaim);
 		if (unborn.length > 0) {
 			await revertQuietly(registration.registration_id, { ...revertBody, member_ids: unborn });
 		}

@@ -1487,6 +1487,21 @@ describe('checkInSelectedMembers kiosk claim of unassigned members', () => {
 		});
 	});
 
+	it('skips an evacuee already born in Couch, and its freshly minted image, on a repair claim', async () => {
+		stubQueue([queueMember(0), queueMember(1)], (body) => {
+			// Born by an earlier claim whose response was lost: prepare mints a new image id for it.
+			evacuees.push({ ...evacuee(0), _id: first, household_id: reservedHouseholdId } as never);
+			return queueResponse(200, preparedClaim(body.member_ids, [preparedImage(photoId)]));
+		});
+
+		await checkInSelectedMembers(shelterCode, first, [first, second], { deviceId });
+
+		const written = bulkWrittenDocs().map((doc) => doc._id);
+		expect(written).toContain(second);
+		expect(written).not.toContain(first);
+		expect(written).not.toContain(photoId);
+	});
+
 	describe.each([
 		['the bulk write throws', 'throw'],
 		['a bulk row fails for a reason other than conflict', 'row-error']
