@@ -7,6 +7,13 @@ import type {
 import {
 	CLOSED_LOAN_WARNING_TEXT,
 	MISSING_LOAN_WARNING_TEXT,
+	RECEIVED_POOL_HIDE_AFTER_DAYS,
+	getPoolStatusFilterLabel,
+	hasActivePoolFilters,
+	poolItemIds,
+	poolStatusCounts,
+	poolStorageOptions,
+	receivedHideCutoff,
 	buildHeaderPatch,
 	canCancelPool,
 	closedLoanRefNotice,
@@ -156,6 +163,171 @@ describe('filterPoolRows', () => {
 		const copy = [...rows];
 		filterPoolRows(rows, { showCancelled: true });
 		expect(rows).toEqual(copy);
+	});
+});
+
+describe('pool filters (#659)', () => {
+	const now = new Date('2026-10-25T12:00:00.000Z');
+	const cutoff = receivedHideCutoff(now);
+
+	function withItems(row: BulkReturnPoolOverviewRow, ...ids: string[]): BulkReturnPoolOverviewRow {
+		return { ...row, items: ids.map((item_id) => ({ item_id, qty: '1' })) as never };
+	}
+	const late = resolved(makeEntry('late'));
+	const unresolved = [{ entry_id: 'e', kind: 'move' }] as never;
+
+	const open1 = withItems(
+		makeRow(
+			makePool('o1', { location_storage_point_id: 'sp-1', location_storage_zone: 'โกดัง 1' })
+		),
+		'item_master:fan',
+		'item_master:tent'
+	);
+	const open2 = withItems(makeRow(makePool('o2')), 'item_master:fan');
+	const sub = {
+		...withItems(
+			makeRow(
+				makePool('s1', {
+					status: 'SUBMITTED',
+					location_storage_point_id: 'sp-2',
+					location_storage_zone: 'โกดัง 2'
+				}),
+				{ late: [late] }
+			),
+			'item_master:tent'
+		)
+	};
+	const recentReceived = makeRow(
+		makePool('r1', { status: 'RECEIVED', received_at: '2026-10-20T00:00:00.000Z' })
+	);
+	const oldReceived = makeRow(
+		makePool('r2', { status: 'RECEIVED', received_at: '2026-10-01T00:00:00.000Z' })
+	);
+	const noReceivedAt = makeRow(makePool('r3', { status: 'RECEIVED' }));
+	const cancelled = makeRow(makePool('c1', { status: 'CANCELLED' }));
+	const unresolvedRow = { ...makeRow(makePool('o3')), unresolved_refs: unresolved };
+	const rows = [
+		open1,
+		open2,
+		sub,
+		recentReceived,
+		oldReceived,
+		noReceivedAt,
+		cancelled,
+		unresolvedRow
+	];
+	const ids = (list: BulkReturnPoolOverviewRow[]) =>
+		list.map((r) => r.pool._id.replace('bulk_return_pool:', ''));
+
+	it('cutoff is exactly N days before now', () => {
+		expect(RECEIVED_POOL_HIDE_AFTER_DAYS).toBe(7);
+		expect(cutoff.toISOString()).toBe('2026-10-18T12:00:00.000Z');
+	});
+
+	it('filters by status; all keeps every status', () => {
+		expect(ids(filterPoolRows(rows, { status: 'SUBMITTED' }))).toEqual(['s1']);
+		expect(ids(filterPoolRows(rows, { status: 'OPEN' }))).toEqual(['o3', 'o2', 'o1']);
+		expect(ids(filterPoolRows(rows, { status: 'all' }))).toHaveLength(7);
+	});
+
+	it('status filter never reveals CANCELLED', () => {
+		expect(ids(filterPoolRows(rows, { status: 'all' }))).not.toContain('c1');
+	});
+
+	it('filters by item id', () => {
+		expect(ids(filterPoolRows(rows, { itemId: 'item_master:tent' })).sort()).toEqual(['o1', 's1']);
+		expect(filterPoolRows(rows, { itemId: 'item_master:none' })).toEqual([]);
+	});
+
+	it('filters by storage point and unspecified', () => {
+		expect(ids(filterPoolRows(rows, { storagePointId: 'sp-2' }))).toEqual(['s1']);
+		const unspecified = ids(filterPoolRows(rows, { storagePointId: 'unspecified' }));
+		expect(unspecified).not.toContain('o1');
+		expect(unspecified).not.toContain('s1');
+		expect(unspecified).toContain('o2');
+	});
+
+	it('needsAttention keeps pools with late entries or unresolved refs', () => {
+		expect(ids(filterPoolRows(rows, { needsAttention: true })).sort()).toEqual(['o3', 's1']);
+	});
+
+	it('hides RECEIVED older than the cutoff, keeps boundary, recent and undated pools', () => {
+		const shown = ids(filterPoolRows(rows, { hideReceivedBefore: cutoff }));
+		expect(shown).not.toContain('r2');
+		expect(shown).toEqual(expect.arrayContaining(['r1', 'r3']));
+		expect(ids(filterPoolRows(rows, {}))).toContain('r2');
+
+		const boundary = makeRow(
+			makePool('b', { status: 'RECEIVED', received_at: cutoff.toISOString() })
+		);
+		expect(filterPoolRows([boundary], { hideReceivedBefore: cutoff })).toHaveLength(1);
+		const justOlder = makeRow(
+			makePool('b2', {
+				status: 'RECEIVED',
+				received_at: new Date(cutoff.getTime() - 1).toISOString()
+			})
+		);
+		expect(filterPoolRows([justOlder], { hideReceivedBefore: cutoff })).toHaveLength(0);
+	});
+
+	it('combines filters (AND)', () => {
+		expect(
+			ids(
+				filterPoolRows(rows, {
+					status: 'OPEN',
+					itemId: 'item_master:fan',
+					storagePointId: 'sp-1',
+					search: 'pool o'
+				})
+			)
+		).toEqual(['o1']);
+		expect(
+			filterPoolRows(rows, { status: 'OPEN', needsAttention: true, itemId: 'item_master:tent' })
+		).toEqual([]);
+	});
+
+	it('poolStatusCounts counts after toggles, before other filters', () => {
+		expect(poolStatusCounts(rows, { hideReceivedBefore: cutoff })).toEqual({
+			all: 6,
+			OPEN: 3,
+			SUBMITTED: 1,
+			RECEIVED: 2
+		});
+		expect(poolStatusCounts(rows, {})).toEqual({ all: 7, OPEN: 3, SUBMITTED: 1, RECEIVED: 3 });
+		expect(poolStatusCounts(rows, { showCancelled: true, hideReceivedBefore: cutoff }).all).toBe(7);
+		expect(poolStatusCounts([])).toEqual({ all: 0, OPEN: 0, SUBMITTED: 0, RECEIVED: 0 });
+	});
+
+	it('poolItemIds lists distinct item ids', () => {
+		expect(poolItemIds(rows).sort()).toEqual(['item_master:fan', 'item_master:tent']);
+	});
+
+	it('poolStorageOptions derives labelled points plus unspecified', () => {
+		expect(
+			poolStorageOptions(rows)
+				.map((o) => o.value)
+				.sort()
+		).toEqual(['sp-1', 'sp-2', 'unspecified'].sort());
+		expect(poolStorageOptions([open1])).toEqual([{ value: 'sp-1', label: 'โกดัง 1' }]);
+		expect(poolStorageOptions([open2])).toEqual([{ value: 'unspecified', label: 'ไม่ระบุ' }]);
+		const noZone = makeRow(makePool('z', { location_storage_point_id: 'sp-9' }));
+		expect(poolStorageOptions([noZone])).toEqual([{ value: 'sp-9', label: 'sp-9' }]);
+	});
+
+	it('hasActivePoolFilters ignores the toggles', () => {
+		expect(hasActivePoolFilters({})).toBe(false);
+		expect(hasActivePoolFilters({ showCancelled: true, hideReceivedBefore: cutoff })).toBe(false);
+		expect(hasActivePoolFilters({ search: '  ', status: 'all' })).toBe(false);
+		expect(hasActivePoolFilters({ search: 'x' })).toBe(true);
+		expect(hasActivePoolFilters({ status: 'OPEN' })).toBe(true);
+		expect(hasActivePoolFilters({ itemId: 'a' })).toBe(true);
+		expect(hasActivePoolFilters({ storagePointId: 'unspecified' })).toBe(true);
+		expect(hasActivePoolFilters({ needsAttention: true })).toBe(true);
+	});
+
+	it('status filter labels reuse the status labels', () => {
+		expect(getPoolStatusFilterLabel('all')).toBe('ทั้งหมด');
+		expect(getPoolStatusFilterLabel('RECEIVED')).toBe('ตรวจรับแล้ว');
 	});
 });
 

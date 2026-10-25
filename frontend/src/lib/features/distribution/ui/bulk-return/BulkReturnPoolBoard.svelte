@@ -37,16 +37,26 @@
 	import {
 		LATE_BADGE_CLASS,
 		LATE_CARD_EXCLUDED_TEXT,
+		POOL_STATUS_FILTER_VALUES,
+		RECEIVED_POOL_HIDE_AFTER_DAYS,
 		UNRESOLVED_REFS_HINT,
 		filterPoolRows,
 		getPoolBoardViewState,
 		getPoolStatusBadgeClass,
+		getPoolStatusFilterLabel,
 		getPoolStatusLabel,
+		hasActivePoolFilters,
 		lateItemQtyText,
+		poolItemIds,
+		poolStatusCounts,
 		poolStorageLabel,
+		poolStorageOptions,
+		receivedHideCutoff,
 		resolveItemDisplay,
-		type PoolCatalogItem
+		type PoolCatalogItem,
+		type PoolStatusFilter
 	} from '../model/bulk-return-pool-v3';
+	import * as Select from '$lib/components/ui/select/index.js';
 	import { listOpenPools } from '../model/bulk-return-add-entry';
 	import AddBulkReturnEntriesDialog from './AddBulkReturnEntriesDialog.svelte';
 	import BulkReturnPoolDetail from './BulkReturnPoolDetail.svelte';
@@ -83,6 +93,12 @@
 
 	let search = $state('');
 	let showCancelled = $state(false);
+	// Local view filters (no persistence). 'all' is the sentinel for the two selects.
+	let showOldReceived = $state(false);
+	let statusFilter = $state<PoolStatusFilter>('all');
+	let itemFilter = $state('all');
+	let storageFilter = $state('all');
+	let needsAttention = $state(false);
 	let openDialogVisible = $state(false);
 	let addDialogOpen = $state(false);
 	let addPoolId = $state<string | undefined>(undefined);
@@ -106,7 +122,44 @@
 		addPoolId = poolId;
 		addDialogOpen = true;
 	}
-	const visibleRows = $derived(filterPoolRows(rows, { search, showCancelled }));
+	const hideReceivedBefore = $derived(showOldReceived ? undefined : receivedHideCutoff());
+	const rowFilter = $derived({
+		search,
+		showCancelled,
+		hideReceivedBefore,
+		status: statusFilter,
+		itemId: itemFilter === 'all' ? undefined : itemFilter,
+		storagePointId: storageFilter === 'all' ? undefined : storageFilter,
+		needsAttention
+	});
+	const visibleRows = $derived(filterPoolRows(rows, rowFilter));
+	const statusCounts = $derived(poolStatusCounts(rows, { showCancelled, hideReceivedBefore }));
+	const filtersActive = $derived(hasActivePoolFilters(rowFilter));
+	const itemOptions = $derived(
+		poolItemIds(rows)
+			.map((id) => ({ id, name: resolveItemDisplay(id, catalog).name }))
+			.sort((a, b) => a.name.localeCompare(b.name, 'th'))
+	);
+	const storageOptions = $derived(poolStorageOptions(rows));
+	const itemFilterLabel = $derived(
+		itemFilter === 'all'
+			? 'ทุกชนิด'
+			: (itemOptions.find((o) => o.id === itemFilter)?.name ??
+					resolveItemDisplay(itemFilter, catalog).name)
+	);
+	const storageFilterLabel = $derived(
+		storageFilter === 'all'
+			? 'ทุกที่เก็บ'
+			: (storageOptions.find((o) => o.value === storageFilter)?.label ?? storageFilter)
+	);
+
+	function resetFilters() {
+		search = '';
+		statusFilter = 'all';
+		itemFilter = 'all';
+		storageFilter = 'all';
+		needsAttention = false;
+	}
 	// Total considered for the empty state respects the cancelled toggle.
 	const totalRowCount = $derived(
 		showCancelled ? rows.length : rows.filter((row) => row.pool.status !== 'CANCELLED').length
@@ -230,11 +283,110 @@
 				class="h-11 w-full pl-9 text-base sm:h-10 sm:text-sm"
 			/>
 		</div>
-		<div class="flex min-h-11 items-center gap-2">
-			<Switch id="bulk-pool-show-cancelled" bind:checked={showCancelled} />
-			<Label for="bulk-pool-show-cancelled" class="text-sm font-medium text-slate-700">
-				แสดงกองที่ยกเลิก
-			</Label>
+		<div class="flex flex-wrap items-center gap-x-4 gap-y-1">
+			<div class="flex min-h-11 items-center gap-2">
+				<Switch id="bulk-pool-show-cancelled" bind:checked={showCancelled} />
+				<Label for="bulk-pool-show-cancelled" class="text-sm font-medium text-slate-700">
+					แสดงกองที่ยกเลิก
+				</Label>
+			</div>
+			<div class="flex min-h-11 items-center gap-2">
+				<Switch id="bulk-pool-show-old-received" bind:checked={showOldReceived} />
+				<Label for="bulk-pool-show-old-received" class="text-sm font-medium text-slate-700">
+					แสดงกองที่ตรวจรับเกิน {RECEIVED_POOL_HIDE_AFTER_DAYS} วัน
+				</Label>
+			</div>
+		</div>
+	</div>
+
+	<div class="flex flex-col gap-3">
+		<div role="group" aria-label="กรองกองรับคืนตามสถานะ" class="flex flex-wrap gap-2">
+			{#each POOL_STATUS_FILTER_VALUES as value (value)}
+				<Button
+					type="button"
+					variant={statusFilter === value ? 'default' : 'outline'}
+					aria-pressed={statusFilter === value}
+					onclick={() => (statusFilter = value)}
+					class="min-h-11 gap-2"
+				>
+					{getPoolStatusFilterLabel(value)}
+					<span class="tabular-nums">{statusCounts[value]}</span>
+				</Button>
+			{/each}
+		</div>
+
+		<div class="flex flex-wrap items-center gap-x-4 gap-y-2">
+			{#if itemOptions.length > 0}
+				<div class="flex items-center gap-2">
+					<Label for="bulk-pool-item-filter" class="shrink-0 text-sm font-medium text-slate-700">
+						ชนิดสินค้า
+					</Label>
+					<Select.Root
+						type="single"
+						value={itemFilter}
+						onValueChange={(val) => {
+							if (val) itemFilter = val;
+						}}
+					>
+						<Select.Trigger
+							id="bulk-pool-item-filter"
+							aria-label="กรองตามชนิดสินค้า"
+							class="min-h-11 min-w-[160px]"
+						>
+							<span class="truncate">{itemFilterLabel}</span>
+						</Select.Trigger>
+						<Select.Content>
+							<Select.Item value="all" label="ทุกชนิด" />
+							{#each itemOptions as option (option.id)}
+								<Select.Item value={option.id} label={option.name} />
+							{/each}
+						</Select.Content>
+					</Select.Root>
+				</div>
+			{/if}
+
+			{#if storageOptions.length >= 2}
+				<div class="flex items-center gap-2">
+					<Label for="bulk-pool-storage-filter" class="shrink-0 text-sm font-medium text-slate-700">
+						ที่เก็บ
+					</Label>
+					<Select.Root
+						type="single"
+						value={storageFilter}
+						onValueChange={(val) => {
+							if (val) storageFilter = val;
+						}}
+					>
+						<Select.Trigger
+							id="bulk-pool-storage-filter"
+							aria-label="กรองตามที่เก็บ"
+							class="min-h-11 min-w-[160px]"
+						>
+							<span class="truncate">{storageFilterLabel}</span>
+						</Select.Trigger>
+						<Select.Content>
+							<Select.Item value="all" label="ทุกที่เก็บ" />
+							{#each storageOptions as option (option.value)}
+								<Select.Item value={option.value} label={option.label} />
+							{/each}
+						</Select.Content>
+					</Select.Root>
+				</div>
+			{/if}
+
+			<div class="flex min-h-11 items-center gap-2">
+				<Switch id="bulk-pool-needs-attention" bind:checked={needsAttention} />
+				<Label for="bulk-pool-needs-attention" class="text-sm font-medium text-slate-700">
+					ต้องจัดการ
+				</Label>
+			</div>
+
+			{#if filtersActive}
+				<Button type="button" variant="ghost" onclick={resetFilters} class="min-h-11 gap-2">
+					<XCircle class="h-4 w-4" aria-hidden="true" />
+					ล้างตัวกรอง
+				</Button>
+			{/if}
 		</div>
 	</div>
 

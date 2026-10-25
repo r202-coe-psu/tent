@@ -78,14 +78,133 @@ const STATUS_ORDER: Record<BulkReturnPoolV3Status, number> = {
 // List filtering / sorting / view state
 // ---------------------------------------------------------------------------
 
+/** RECEIVED pools older than this many days are hidden by default (board toggle shows them). */
+export const RECEIVED_POOL_HIDE_AFTER_DAYS = 7;
+
+export const POOL_STORAGE_UNSPECIFIED = 'unspecified';
+
+/** Status chips on the board; CANCELLED stays governed by the "show cancelled" toggle. */
+export type PoolStatusFilter = 'all' | 'OPEN' | 'SUBMITTED' | 'RECEIVED';
+
+export const POOL_STATUS_FILTER_VALUES: readonly PoolStatusFilter[] = [
+	'all',
+	'OPEN',
+	'SUBMITTED',
+	'RECEIVED'
+];
+
+export const POOL_STATUS_FILTER_ALL_LABEL = 'ทั้งหมด';
+
+export function getPoolStatusFilterLabel(value: PoolStatusFilter): string {
+	return value === 'all' ? POOL_STATUS_FILTER_ALL_LABEL : getPoolStatusLabel(value);
+}
+
 export interface PoolRowFilter {
 	search?: string;
 	showCancelled?: boolean;
+	status?: PoolStatusFilter;
+	/** Keep pools whose `items` contain this item id. */
+	itemId?: string;
+	/** Pool's `location_storage_point_id`; `'unspecified'` = pools without a storage point. */
+	storagePointId?: string;
+	/**
+	 * Keep pools with late entries or unresolved refs. Closed-loan-mid-flight warnings are NOT in
+	 * the overview (they need per-pool queries), so they are deliberately not part of this filter.
+	 */
+	needsAttention?: boolean;
+	/** RECEIVED pools with `received_at` strictly before this instant are hidden. */
+	hideReceivedBefore?: Date;
+}
+
+/** Cutoff for hiding old RECEIVED pools: `now` minus `RECEIVED_POOL_HIDE_AFTER_DAYS` days. */
+export function receivedHideCutoff(now: Date = new Date()): Date {
+	return new Date(now.getTime() - RECEIVED_POOL_HIDE_AFTER_DAYS * 24 * 60 * 60 * 1000);
+}
+
+/** Visibility governed by the two toggles (cancelled, old received). Pools without received_at stay. */
+function passesToggles(
+	row: BulkReturnPoolRow,
+	filter: Pick<PoolRowFilter, 'showCancelled' | 'hideReceivedBefore'>
+): boolean {
+	const { status, received_at } = row.pool;
+	if (status === 'CANCELLED' && !filter.showCancelled) return false;
+	if (status === 'RECEIVED' && filter.hideReceivedBefore && received_at) {
+		const receivedMs = Date.parse(received_at);
+		if (!Number.isNaN(receivedMs) && receivedMs < filter.hideReceivedBefore.getTime()) {
+			return false;
+		}
+	}
+	return true;
+}
+
+/** True when any non-toggle filter narrows the list (used for the "ล้างตัวกรอง" button). */
+export function hasActivePoolFilters(filter: PoolRowFilter): boolean {
+	return (
+		(filter.search ?? '').trim().length > 0 ||
+		(filter.status !== undefined && filter.status !== 'all') ||
+		Boolean(filter.itemId) ||
+		Boolean(filter.storagePointId) ||
+		Boolean(filter.needsAttention)
+	);
 }
 
 /**
- * Name search (case-insensitive, trimmed); CANCELLED hidden unless `showCancelled`. Sorted OPEN,
- * SUBMITTED, RECEIVED, CANCELLED; newest `created_at` first within a status (id as tie-break).
+ * Per-status counts for the chips. Counted AFTER the cancelled toggle and received-age hiding
+ * (so a chip never promises rows the toggles hide) but BEFORE search / item / storage / attention
+ * / status filters (so chips stay stable while the user narrows other dimensions). `all` is the
+ * total of rows passing the toggles.
+ */
+export function poolStatusCounts(
+	rows: readonly BulkReturnPoolRow[],
+	filter: Pick<PoolRowFilter, 'showCancelled' | 'hideReceivedBefore'> = {}
+): Record<PoolStatusFilter, number> {
+	const counts: Record<PoolStatusFilter, number> = { all: 0, OPEN: 0, SUBMITTED: 0, RECEIVED: 0 };
+	for (const row of rows) {
+		if (!passesToggles(row, filter)) continue;
+		counts.all += 1;
+		if (row.pool.status !== 'CANCELLED') counts[row.pool.status] += 1;
+	}
+	return counts;
+}
+
+/** Distinct item ids present across the rows (first-seen order). */
+export function poolItemIds(rows: readonly BulkReturnPoolRow[]): string[] {
+	const seen = new Set<string>();
+	for (const row of rows) for (const item of row.items) seen.add(item.item_id);
+	return [...seen];
+}
+
+export interface PoolStorageOption {
+	/** Storage point id, or `'unspecified'`. */
+	value: string;
+	label: string;
+}
+
+/**
+ * Distinct storage points across the rows (label = zone, falling back to the id), plus
+ * `unspecified` when some pool has no point. Sorted by label (Thai collation).
+ */
+export function poolStorageOptions(rows: readonly BulkReturnPoolRow[]): PoolStorageOption[] {
+	const byValue = new Map<string, string>();
+	for (const { pool } of rows) {
+		const id = pool.location_storage_point_id;
+		if (!id) {
+			byValue.set(POOL_STORAGE_UNSPECIFIED, UNSPECIFIED_STORAGE_LABEL);
+			continue;
+		}
+		const zone = pool.location_storage_zone?.trim();
+		if (zone || !byValue.has(id)) byValue.set(id, zone || id);
+	}
+	return [...byValue.entries()]
+		.map(([value, label]) => ({ value, label }))
+		.sort((a, b) => a.label.localeCompare(b.label, 'th'));
+}
+
+/**
+ * Name search (case-insensitive, trimmed), status / item / storage / needs-attention filters;
+ * CANCELLED hidden unless `showCancelled`, old RECEIVED hidden when `hideReceivedBefore` is set.
+ * Sorted OPEN, SUBMITTED, RECEIVED, CANCELLED; newest `created_at` first within a status (id as
+ * tie-break).
  */
 export function filterPoolRows(
 	rows: readonly BulkReturnPoolRow[],
@@ -94,7 +213,26 @@ export function filterPoolRows(
 	const needle = (filter.search ?? '').trim().toLocaleLowerCase();
 	return rows
 		.filter((row) => {
-			if (row.pool.status === 'CANCELLED' && !filter.showCancelled) return false;
+			if (!passesToggles(row, filter)) return false;
+			if (filter.status && filter.status !== 'all' && row.pool.status !== filter.status) {
+				return false;
+			}
+			if (filter.itemId && !row.items.some((item) => item.item_id === filter.itemId)) return false;
+			if (filter.storagePointId) {
+				const pointId = row.pool.location_storage_point_id;
+				if (filter.storagePointId === POOL_STORAGE_UNSPECIFIED) {
+					if (pointId) return false;
+				} else if (pointId !== filter.storagePointId) {
+					return false;
+				}
+			}
+			if (
+				filter.needsAttention &&
+				row.late_entries.length === 0 &&
+				row.unresolved_refs.length === 0
+			) {
+				return false;
+			}
 			if (!needle) return true;
 			return row.pool.name.toLocaleLowerCase().includes(needle);
 		})
@@ -118,6 +256,8 @@ export function getPoolBoardViewState(
 ): BulkReturnPoolBoardViewState {
 	if (isLoading) return 'loading';
 	if (isError) return 'error';
+	// `totalRowCount` is the rows before search/status/item/storage/attention filters, so any
+	// active filter that leaves nothing yields `search_empty`.
 	if (totalRowCount === 0) return 'empty';
 	if (visibleRowCount === 0) return 'search_empty';
 	return 'ready';
