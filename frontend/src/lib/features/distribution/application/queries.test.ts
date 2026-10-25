@@ -232,7 +232,6 @@ import {
 	useDistributionLog,
 	useBulkReturnPools,
 	useBulkReturnPool,
-	useBulkReturnClaim,
 	useBulkReturnPoolOverview,
 	useBulkReturnPoolClosedLoanRefs,
 	useBulkReturnPoolAppliedLoanRefs,
@@ -259,7 +258,6 @@ import {
 	useReturnLoanAtCounter,
 	useClearLoanNonPhysical,
 	useCreateBulkReturnPool,
-	useClearLoanViaBulkPool,
 	useCloseShift,
 	useSubmitReturnsToWarehouse,
 	useReceiveWarehouseReturns,
@@ -270,10 +268,12 @@ import {
 	invalidateTicketWithCollection,
 	invalidateDistributionLogs,
 	invalidateShiftReconciliation,
-	invalidateBulkPools,
 	invalidateBulkClaims,
 	invalidateInventoryQueries
 } from './queries';
+import { useBulkReturnClaim } from './query/read-queries';
+import { useClearLoanViaBulkPool } from './query/return-mutations';
+import { invalidateBulkPools } from './query/invalidation';
 
 describe('Phase 5 Slice 5.0 — Distribution TanStack Query Layer', () => {
 	beforeEach(() => {

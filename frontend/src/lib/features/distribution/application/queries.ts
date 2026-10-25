@@ -32,7 +32,6 @@ export {
 	invalidateTicketWithCollection,
 	invalidateDistributionLogs,
 	invalidateShiftReconciliation,
-	invalidateBulkPools,
 	invalidateBulkPoolsV3,
 	invalidateReturnerOutstandingLoans,
 	invalidateBulkClaims,
@@ -48,7 +47,6 @@ export {
 	useDispatchedLotExpiry,
 	useBulkReturnPools,
 	useBulkReturnPool,
-	useBulkReturnClaim,
 	useBulkReturnPoolOverview,
 	useBulkReturnPoolClosedLoanRefs,
 	useBulkReturnPoolAppliedLoanRefs,
@@ -109,12 +107,9 @@ export {
 	useReturnLoanAtCounter,
 	useClearLoanNonPhysical,
 	useCreateBulkReturnPool,
-	useClearLoanViaBulkPool,
 	useAbortAbandonedReturnReservation,
 	type ReturnLoanMutationInput,
 	type ClearLoanMutationInput,
-	type CreateBulkPoolMutationInput,
-	type ClearLoanViaBulkPoolMutationInput,
 	type AbortAbandonedReservationMutationInput
 } from './query/return-mutations';
 
