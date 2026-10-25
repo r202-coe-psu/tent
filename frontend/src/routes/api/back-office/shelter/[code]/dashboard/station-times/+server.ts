@@ -7,14 +7,15 @@
  * registrations endpoint, Asia/Bangkok).
  *
  * CouchDB view: `station_logs_by_station` (no reduce).
- * Key shape: [YYYY-MM-DD, station, channel, evacuee_id]  →  { action, occurred_at }
+ * Key shape: [YYYY-MM-DD, station, channel, evacuee_id]  →  { action, occurred_at, actor }
  * A `complete` can land after midnight, so the read window is one day wider than the range on
  * both ends; `summarizeStationTimes` pairs the events and counts a visit on the date of its
  * `start`, so only visits that started inside `from..to` are reported (FR-STL-21/22).
  *
  * Security (security-rbac-bestpractices §2 & §3):
  *  - Caller must be authenticated and scoped to this shelter or be a SA.
- *  - Response contains ONLY aggregate counts and durations — no individual PII.
+ *  - Response holds aggregate counts and durations, plus a per-actor rank (CR-192 Amendment 2)
+ *    that names staff by `_users.display_name` only — no other user fields (FR-STL-34).
  */
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
@@ -30,7 +31,13 @@ import {
 	defaultRangeFrom,
 	shiftIsoDate
 } from '$lib/features/dashboard';
-import { summarizeStationTimes, type StationLogEvent } from '$lib/features/people/server';
+import {
+	compareStationActorRank,
+	rankStationActors,
+	summarizeStationTimes,
+	type StationLogEvent
+} from '$lib/features/people/server';
+import { getDisplayNames } from '$lib/server/user-service';
 import { findMasterByCode, type ViewResult } from '$lib/server/shelters.admin';
 import { bangkokToday } from '$lib/utils/date';
 import { checkViewDeployment } from '$lib/features/shelters/server/view-version-guard';
@@ -46,7 +53,7 @@ type ViewRow = { key: unknown; value: unknown };
 function rowToEvent(row: ViewRow): StationLogEvent | null {
 	if (!Array.isArray(row.key) || row.key.length < 4) return null;
 	const [, station, channel, evacueeId] = row.key as unknown[];
-	const value = row.value as { action?: unknown; occurred_at?: unknown } | null;
+	const value = row.value as { action?: unknown; occurred_at?: unknown; actor?: unknown } | null;
 	if (station !== 1 && station !== 2 && station !== 3) return null;
 	if (channel !== 'kiosk' && channel !== 'staff') return null;
 	if (typeof evacueeId !== 'string') return null;
@@ -57,7 +64,8 @@ function rowToEvent(row: ViewRow): StationLogEvent | null {
 		station,
 		channel,
 		action: value.action,
-		occurred_at: value.occurred_at
+		occurred_at: value.occurred_at,
+		...(typeof value.actor === 'string' && value.actor ? { actor: value.actor } : {})
 	};
 }
 
@@ -114,10 +122,23 @@ export const GET: RequestHandler = async ({ params, request, url }) => {
 			query.from ??
 			defaultRangeFrom((await findMasterByCode(code))?.created_at, earliestRowDate, to);
 
+		const actorRows = rankStationActors(events, { from, to });
+		const names = await getDisplayNames(
+			actorRows.filter((r) => r.kind === 'staff').map((r) => r.actor_id)
+		);
+		const actors = actorRows
+			.map((r) => ({
+				...r,
+				display_name:
+					r.kind === 'kiosk' ? `ตู้ ${r.actor_id}` : (names.get(r.actor_id) ?? r.actor_id)
+			}))
+			.sort(compareStationActorRank);
+
 		const payload = StationTimesPayloadSchema.parse({
 			shelter_code: code,
 			range: { from, to },
-			stations: summarizeStationTimes(events, { from, to })
+			stations: summarizeStationTimes(events, { from, to }),
+			actors
 		});
 		return json(payload);
 	} catch (e) {

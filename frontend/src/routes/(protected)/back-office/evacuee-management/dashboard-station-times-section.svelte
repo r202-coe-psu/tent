@@ -14,6 +14,7 @@
 	import { stationVar } from '$lib/tokens/colors';
 	import { formatThaiShortDate } from '$lib/utils/date';
 	import DashboardServiceTimeChart from './dashboard-service-time-chart.svelte';
+	import DashboardStationActorRank from './dashboard-station-actor-rank.svelte';
 
 	let {
 		shelterCode,
@@ -90,6 +91,7 @@
 
 	const cards = $derived.by(() => {
 		const rows: readonly StationTimeRow[] = timesQuery.data?.stations ?? [];
+		const actors = timesQuery.data?.actors ?? [];
 		return STATIONS.map((meta) => {
 			const own = rows.filter((r) => r.station === meta.station);
 			return {
@@ -98,7 +100,9 @@
 				visits: own.reduce((sum, r) => sum + r.visits, 0),
 				openVisits: own.reduce((sum, r) => sum + r.open_visits, 0),
 				queue: queueOf(meta.station),
-				channels: own
+				channels: own,
+				// The BFF already ranks fastest first; filtering keeps that order.
+				actors: actors.filter((a) => a.station === meta.station)
 			};
 		});
 	});
@@ -223,6 +227,7 @@
 								ศูนย์นี้ไม่ได้เปิดใช้การคัดกรองสุขภาพ
 							</p>
 						{/if}
+						<DashboardStationActorRank actors={card.actors} rowClass={card.stat} />
 					</div>
 				{/each}
 			</div>

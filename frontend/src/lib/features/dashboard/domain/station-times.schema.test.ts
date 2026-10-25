@@ -35,9 +35,20 @@ describe('StationTimesPayloadSchema', () => {
 		const base = {
 			shelter_code: 'SH001',
 			range: { from: '2026-10-01', to: '2026-10-25' },
-			stations: [row({ visits: 2, timed_visits: 2, avg_duration_sec: 61.5 })]
+			stations: [row({ visits: 2, timed_visits: 2, avg_duration_sec: 61.5 })],
+			actors: [
+				{
+					station: 1,
+					actor_id: 'staff01',
+					kind: 'staff',
+					display_name: 'สมชาย',
+					timed_visits: 2,
+					avg_duration_sec: 61.5
+				}
+			]
 		};
 		expect(StationTimesPayloadSchema.safeParse(base).success).toBe(true);
+		expect(StationTimesPayloadSchema.safeParse({ ...base, actors: undefined }).success).toBe(false);
 		expect(
 			StationTimesPayloadSchema.safeParse({
 				...base,

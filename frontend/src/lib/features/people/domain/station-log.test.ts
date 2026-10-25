@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
 	STATION_LOG_STALE_WINDOW_MS,
+	compareStationActorRank,
 	createStationLog,
 	hasOpenStationStart,
 	resolveKioskStartedAt,
 	stationLogInputSchema,
+	rankStationActors,
 	summarizeStationTimes,
 	type StationLogEvent
 } from './station-log';
@@ -418,5 +420,84 @@ describe('hasOpenStationStart edge cases (FR-STL-13)', () => {
 				T0
 			)
 		).toBe(false);
+	});
+});
+
+describe('rankStationActors (CR-192 Amendment 2)', () => {
+	const by = (e: StationLogEvent, actor: string): StationLogEvent => ({ ...e, actor });
+	const opts = { nowMs: T0 + 60 * MIN };
+
+	it('averages the visits an actor both started and completed, per station', () => {
+		const events = [
+			by(ev('a', 2, 'start', T0), 'staff01'),
+			by(ev('a', 2, 'complete', T0 + 4 * MIN), 'staff01'),
+			by(ev('b', 2, 'start', T0), 'staff01'),
+			by(ev('b', 2, 'complete', T0 + 8 * MIN), 'staff01'),
+			by(ev('a', 3, 'start', T0 + 10 * MIN), 'staff01'),
+			by(ev('a', 3, 'complete', T0 + 12 * MIN), 'staff01')
+		];
+		expect(rankStationActors(events, opts)).toEqual(
+			expect.arrayContaining([
+				{ station: 2, actor_id: 'staff01', kind: 'staff', timed_visits: 2, avg_duration_sec: 360 },
+				{ station: 3, actor_id: 'staff01', kind: 'staff', timed_visits: 1, avg_duration_sec: 120 }
+			])
+		);
+	});
+
+	it('leaves out hand-offs, start-less completes and open visits', () => {
+		const events = [
+			by(ev('a', 2, 'start', T0), 'staff01'),
+			by(ev('a', 2, 'complete', T0 + 4 * MIN), 'staff02'),
+			by(ev('b', 3, 'complete', T0 + 5 * MIN), 'staff01'),
+			by(ev('c', 2, 'start', T0 + 30 * MIN), 'staff01')
+		];
+		expect(rankStationActors(events, opts)).toEqual([]);
+		// The hand-off still counts as a station visit.
+		expect(row(summarizeStationTimes(events, opts), 2, 'staff').timed_visits).toBe(1);
+	});
+
+	it('ranks each kiosk device as its own actor', () => {
+		const events = [
+			by(ev('a', 1, 'start', T0, 'kiosk'), 'KIOSK-01'),
+			by(ev('a', 1, 'complete', T0 + MIN, 'kiosk'), 'KIOSK-01'),
+			by(ev('b', 1, 'start', T0, 'kiosk'), 'KIOSK-02'),
+			by(ev('b', 1, 'complete', T0 + 3 * MIN, 'kiosk'), 'KIOSK-02')
+		];
+		const ids = rankStationActors(events, opts).map((r) => [r.actor_id, r.kind]);
+		expect(ids).toEqual(
+			expect.arrayContaining([
+				['KIOSK-01', 'kiosk'],
+				['KIOSK-02', 'kiosk']
+			])
+		);
+	});
+
+	it('ignores events with no actor and visits that started outside the range', () => {
+		const events = [
+			ev('a', 2, 'start', T0),
+			ev('a', 2, 'complete', T0 + MIN),
+			by(ev('b', 2, 'start', T0 - 24 * 60 * MIN), 'staff01'),
+			by(ev('b', 2, 'complete', T0 - 24 * 60 * MIN + MIN), 'staff01')
+		];
+		expect(rankStationActors(events, { ...opts, from: '2026-10-25', to: '2026-10-25' })).toEqual(
+			[]
+		);
+	});
+});
+
+describe('compareStationActorRank', () => {
+	it('orders fastest first, then more visits, then name', () => {
+		const rows = [
+			{ display_name: 'ข', avg_duration_sec: 120, timed_visits: 3 },
+			{ display_name: 'ก', avg_duration_sec: 120, timed_visits: 3 },
+			{ display_name: 'ค', avg_duration_sec: 120, timed_visits: 9 },
+			{ display_name: 'ง', avg_duration_sec: 60, timed_visits: 1 }
+		];
+		expect(rows.sort(compareStationActorRank).map((r) => r.display_name)).toEqual([
+			'ง',
+			'ค',
+			'ก',
+			'ข'
+		]);
 	});
 });

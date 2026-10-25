@@ -74,9 +74,11 @@ export const SHELTER_DASHBOARD_VIEWS = {
 				if (isNaN(dt.getTime())) return;
 				// +07:00 (Thailand) before cutting the date, same as registrations_by_date_status.
 				dt.setUTCHours(dt.getUTCHours() + 7);
+				// Amendment 2 (FR-STL-30): the actor is the kiosk device or the staff user.
+				var actor = doc.channel === 'kiosk' ? doc.device_id : doc.created_by;
 				emit(
 					[dt.toISOString().slice(0, 10), doc.station, doc.channel, doc.evacuee_id],
-					{ action: doc.action, occurred_at: doc.occurred_at }
+					{ action: doc.action, occurred_at: doc.occurred_at, actor: actor || null }
 				);
 			}`
 		}

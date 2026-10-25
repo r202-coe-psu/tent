@@ -225,14 +225,24 @@ describe('SHELTER_DASHBOARD_VIEWS Map Functions', () => {
 			expect(emitted).toHaveLength(0);
 		});
 
-		it('emits [date, station, channel, evacuee_id] with action and occurred_at', () => {
-			mapFn(log(), mockEmit);
+		it('emits [date, station, channel, evacuee_id] with action, occurred_at and actor', () => {
+			mapFn(log({ device_id: 'KIOSK-01', created_by: 'kiosk:KIOSK-01' }), mockEmit);
 			expect(emitted).toEqual([
 				{
 					key: ['2026-10-25', 1, 'kiosk', 'evacuee:01J'],
-					value: { action: 'start', occurred_at: '2026-10-25T03:00:00.000Z' }
+					value: { action: 'start', occurred_at: '2026-10-25T03:00:00.000Z', actor: 'KIOSK-01' }
 				}
 			]);
+		});
+
+		it('uses created_by as the actor of a staff event (Amendment 2)', () => {
+			mapFn(log({ channel: 'staff', created_by: 'staff01' }), mockEmit);
+			expect((emitted[0].value as { actor: unknown }).actor).toBe('staff01');
+		});
+
+		it('emits a null actor when the writer is unknown', () => {
+			mapFn(log({ channel: 'staff' }), mockEmit);
+			expect((emitted[0].value as { actor: unknown }).actor).toBeNull();
 		});
 
 		it('buckets by the Asia/Bangkok day of occurred_at', () => {

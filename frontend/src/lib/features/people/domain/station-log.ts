@@ -140,6 +140,8 @@ export interface StationLogEvent {
 	channel: StationLogChannel;
 	action: StationLogAction;
 	occurred_at: string;
+	/** Who wrote the event (FR-STL-30): `created_by` for staff, `device_id` for a kiosk. */
+	actor?: string;
 }
 
 /** The (station, channel) combinations that exist: Station 1 is hybrid, 2 and 3 staff only. */
@@ -204,12 +206,7 @@ export function summarizeStationTimes(
 	events: readonly StationLogEvent[],
 	opts: { nowMs?: number; from?: string; to?: string } = {}
 ): StationTimeRow[] {
-	const nowMs = opts.nowMs ?? Date.now();
-	const inRange = (ms: number): boolean => {
-		const date = bangkokDateOf(ms);
-		return (!opts.from || date >= opts.from) && (!opts.to || date <= opts.to);
-	};
-
+	const inRange = rangeFilter(opts);
 	const acc = new Map<string, Acc>();
 	const bucket = (station: StationNumber, channel: StationLogChannel): Acc => {
 		const k = `${station}:${channel}`;
@@ -218,44 +215,18 @@ export function summarizeStationTimes(
 		return a;
 	};
 
-	const byKey = new Map<string, { t: number; ev: StationLogEvent }[]>();
-	for (const ev of events) {
-		const t = Date.parse(ev.occurred_at);
-		if (!Number.isFinite(t)) continue;
-		const k = `${ev.evacuee_id}\u0000${ev.station}`;
-		const list = byKey.get(k);
-		if (list) list.push({ t, ev });
-		else byKey.set(k, [{ t, ev }]);
-	}
-
-	for (const list of byKey.values()) {
-		// Chronological; on a tie the `start` goes first so a zero-length visit still pairs.
-		list.sort(
-			(a, b) => a.t - b.t || (a.ev.action === b.ev.action ? 0 : a.ev.action === 'start' ? -1 : 1)
-		);
-		let pending: { t: number; ev: StationLogEvent } | null = null;
-
-		for (const item of list) {
-			if (item.ev.action === 'start') {
-				pending = item; // a previous unresolved start is superseded → abandoned
-				continue;
-			}
-			// complete
-			if (pending && item.t - pending.t <= STATION_LOG_STALE_WINDOW_MS) {
-				if (inRange(pending.t)) {
-					const a = bucket(pending.ev.station, pending.ev.channel);
-					a.visits += 1;
-					a.timed += 1;
-					a.durationMs += item.t - pending.t;
-				}
-			} else if (inRange(item.t)) {
-				bucket(item.ev.station, item.ev.channel).visits += 1; // throughput only
-			}
-			pending = null;
-		}
-
-		if (pending && nowMs - pending.t <= STATION_LOG_STALE_WINDOW_MS && inRange(pending.t)) {
-			bucket(pending.ev.station, pending.ev.channel).open += 1;
+	for (const visit of pairStationVisits(events, opts.nowMs ?? Date.now())) {
+		if (visit.kind === 'timed') {
+			if (!inRange(visit.start.t)) continue;
+			const a = bucket(visit.start.ev.station, visit.start.ev.channel);
+			a.visits += 1;
+			a.timed += 1;
+			a.durationMs += visit.complete.t - visit.start.t;
+		} else if (visit.kind === 'orphan') {
+			if (inRange(visit.complete.t))
+				bucket(visit.complete.ev.station, visit.complete.ev.channel).visits += 1;
+		} else if (inRange(visit.start.t)) {
+			bucket(visit.start.ev.station, visit.start.ev.channel).open += 1;
 		}
 	}
 
@@ -270,4 +241,126 @@ export function summarizeStationTimes(
 			open_visits: a?.open ?? 0
 		};
 	});
+}
+
+// ---------------------------------------------------------------- per-actor rank (Amendment 2)
+/** Average service time of one staff member (or one kiosk device) at one station. */
+export interface StationActorRow {
+	station: StationNumber;
+	/** `created_by` for staff, `device_id` for a kiosk (FR-STL-30). */
+	actor_id: string;
+	kind: StationLogChannel;
+	timed_visits: number;
+	avg_duration_sec: number;
+}
+
+/**
+ * Per-actor average service time per station (CR-192 Amendment 2, FR-STL-31). A visit counts
+ * for an actor only when the same actor wrote its `start` and its `complete`; hand-offs,
+ * start-less completes and open visits are left out (they still count per station).
+ * Same pairing and date-anchoring rules as {@link summarizeStationTimes}. Unsorted — order with
+ * {@link compareStationActorRank} once display names are known.
+ */
+export function rankStationActors(
+	events: readonly StationLogEvent[],
+	opts: { nowMs?: number; from?: string; to?: string } = {}
+): StationActorRow[] {
+	const inRange = rangeFilter(opts);
+	const acc = new Map<string, StationActorRow & { durationMs: number }>();
+	for (const visit of pairStationVisits(events, opts.nowMs ?? Date.now())) {
+		if (visit.kind !== 'timed' || !inRange(visit.start.t)) continue;
+		const { ev } = visit.start;
+		const actor = ev.actor;
+		if (!actor || actor !== visit.complete.ev.actor || ev.channel !== visit.complete.ev.channel) {
+			continue;
+		}
+		const k = `${ev.station}\u0000${ev.channel}\u0000${actor}`;
+		let a = acc.get(k);
+		if (!a) {
+			a = {
+				station: ev.station,
+				actor_id: actor,
+				kind: ev.channel,
+				timed_visits: 0,
+				avg_duration_sec: 0,
+				durationMs: 0
+			};
+			acc.set(k, a);
+		}
+		a.timed_visits += 1;
+		a.durationMs += visit.complete.t - visit.start.t;
+	}
+	return [...acc.values()].map(({ durationMs, ...row }) => ({
+		...row,
+		avg_duration_sec: durationMs / row.timed_visits / 1000
+	}));
+}
+
+/** Rank order (FR-STL-35): fastest first, then more visits, then display name. */
+export function compareStationActorRank(
+	a: { avg_duration_sec: number; timed_visits: number; display_name: string },
+	b: { avg_duration_sec: number; timed_visits: number; display_name: string }
+): number {
+	return (
+		a.avg_duration_sec - b.avg_duration_sec ||
+		b.timed_visits - a.timed_visits ||
+		a.display_name.localeCompare(b.display_name, 'th')
+	);
+}
+
+// ---------------------------------------------------------------- shared pairing
+type TimedEvent = { t: number; ev: StationLogEvent };
+type PairedVisit =
+	| { kind: 'timed'; start: TimedEvent; complete: TimedEvent }
+	| { kind: 'orphan'; complete: TimedEvent }
+	| { kind: 'open'; start: TimedEvent };
+
+function rangeFilter(opts: { from?: string; to?: string }): (ms: number) => boolean {
+	return (ms) => {
+		const date = bangkokDateOf(ms);
+		return (!opts.from || date >= opts.from) && (!opts.to || date <= opts.to);
+	};
+}
+
+/**
+ * The visit rules of {@link summarizeStationTimes}, applied per `(evacuee_id, station)`:
+ * yields each timed visit, each start-less `complete` (orphan) and each open `start`.
+ * Abandoned starts (superseded, or older than the stale window) yield nothing.
+ */
+function* pairStationVisits(
+	events: readonly StationLogEvent[],
+	nowMs: number
+): Generator<PairedVisit> {
+	const byKey = new Map<string, TimedEvent[]>();
+	for (const ev of events) {
+		const t = Date.parse(ev.occurred_at);
+		if (!Number.isFinite(t)) continue;
+		const k = `${ev.evacuee_id}\u0000${ev.station}`;
+		const list = byKey.get(k);
+		if (list) list.push({ t, ev });
+		else byKey.set(k, [{ t, ev }]);
+	}
+
+	for (const list of byKey.values()) {
+		// Chronological; on a tie the `start` goes first so a zero-length visit still pairs.
+		list.sort(
+			(a, b) => a.t - b.t || (a.ev.action === b.ev.action ? 0 : a.ev.action === 'start' ? -1 : 1)
+		);
+		let pending: TimedEvent | null = null;
+		for (const item of list) {
+			if (item.ev.action === 'start') {
+				pending = item; // a previous unresolved start is superseded → abandoned
+				continue;
+			}
+			if (pending && item.t - pending.t <= STATION_LOG_STALE_WINDOW_MS) {
+				yield { kind: 'timed', start: pending, complete: item };
+			} else {
+				yield { kind: 'orphan', complete: item }; // throughput only
+			}
+			pending = null;
+		}
+		if (pending && nowMs - pending.t <= STATION_LOG_STALE_WINDOW_MS) {
+			yield { kind: 'open', start: pending };
+		}
+	}
 }

@@ -3,6 +3,7 @@ import { GET } from './+server';
 import { requireShelterScopeOrSA, adminRaw, ServiceError } from '$lib/server/couch-admin';
 import { SHELTER_VIEW_MANIFEST } from '$lib/features/shelters/server';
 import { findMasterByCode } from '$lib/server/shelters.admin';
+import { getDisplayNames } from '$lib/server/user-service';
 import type { ShelterMaster } from '$lib/features/shelters';
 import type { RequestEvent } from './$types';
 
@@ -19,6 +20,8 @@ vi.mock('$lib/server/shelters.admin', async (importOriginal) => {
 	const actual = await importOriginal<typeof import('$lib/server/shelters.admin')>();
 	return { ...actual, findMasterByCode: vi.fn() };
 });
+
+vi.mock('$lib/server/user-service', () => ({ getDisplayNames: vi.fn() }));
 
 function createMockEvent(
 	code: string,
@@ -52,12 +55,13 @@ function logRow(
 	station: number,
 	channel: 'kiosk' | 'staff',
 	action: 'start' | 'complete',
-	occurredAt: string
+	occurredAt: string,
+	actor: string | null = null
 ) {
 	const date = new Date(Date.parse(occurredAt) + 7 * 3600 * 1000).toISOString().slice(0, 10);
 	return {
 		key: [date, station, channel, evacuee],
-		value: { action, occurred_at: occurredAt }
+		value: { action, occurred_at: occurredAt, actor }
 	};
 }
 
@@ -67,6 +71,7 @@ describe('GET /api/back-office/shelter/[code]/dashboard/station-times', () => {
 		// 2026-10-25 12:00 Asia/Bangkok — decides open vs abandoned starts.
 		vi.useFakeTimers({ toFake: ['Date'] });
 		vi.setSystemTime(new Date('2026-10-25T05:00:00.000Z'));
+		vi.mocked(getDisplayNames).mockResolvedValue(new Map());
 	});
 
 	afterEach(() => {
@@ -210,6 +215,66 @@ describe('GET /api/back-office/shelter/[code]/dashboard/station-times', () => {
 			avg_duration_sec: 120,
 			open_visits: 0
 		});
+	});
+
+	it('ranks actors per station by display name, fastest first (Amendment 2)', async () => {
+		vi.mocked(requireShelterScopeOrSA).mockResolvedValue(SA);
+		vi.mocked(getDisplayNames).mockResolvedValue(new Map([['staff01', 'สมชาย ประจำการ']]));
+		vi.mocked(adminRaw)
+			.mockResolvedValueOnce(viewDeployed)
+			.mockResolvedValueOnce({
+				status: 200,
+				data: {
+					rows: [
+						logRow('a', 1, 'staff', 'start', '2026-10-25T01:00:00.000Z', 'staff01'),
+						logRow('a', 1, 'staff', 'complete', '2026-10-25T01:06:00.000Z', 'staff01'),
+						logRow('b', 1, 'staff', 'start', '2026-10-25T01:00:00.000Z', 'staff02'),
+						logRow('b', 1, 'staff', 'complete', '2026-10-25T01:03:00.000Z', 'staff02'),
+						logRow('k', 1, 'kiosk', 'start', '2026-10-25T02:00:00.000Z', 'KIOSK-01'),
+						logRow('k', 1, 'kiosk', 'complete', '2026-10-25T02:01:00.000Z', 'KIOSK-01'),
+						// Hand-off at station 2: counts for the station, not for an actor.
+						logRow('h', 2, 'staff', 'start', '2026-10-25T03:00:00.000Z', 'staff01'),
+						logRow('h', 2, 'staff', 'complete', '2026-10-25T03:05:00.000Z', 'staff02')
+					]
+				}
+			});
+
+		const res = (await GET(
+			createMockEvent('SH001', { from: '2026-10-25', to: '2026-10-25' })
+		)) as Response;
+		const data = await res.json();
+
+		expect(res.status).toBe(200);
+		expect(data.actors).toEqual([
+			{
+				station: 1,
+				actor_id: 'KIOSK-01',
+				kind: 'kiosk',
+				display_name: 'ตู้ KIOSK-01',
+				timed_visits: 1,
+				avg_duration_sec: 60
+			},
+			{
+				station: 1,
+				actor_id: 'staff02',
+				kind: 'staff',
+				display_name: 'staff02',
+				timed_visits: 1,
+				avg_duration_sec: 180
+			},
+			{
+				station: 1,
+				actor_id: 'staff01',
+				kind: 'staff',
+				display_name: 'สมชาย ประจำการ',
+				timed_visits: 1,
+				avg_duration_sec: 360
+			}
+		]);
+		expect(getDisplayNames).toHaveBeenCalledWith(expect.arrayContaining(['staff01', 'staff02']));
+		expect(vi.mocked(getDisplayNames).mock.calls[0][0]).not.toContain('KIOSK-01');
+		const s2 = data.stations.find((r: { station: number }) => r.station === 2);
+		expect(s2.timed_visits).toBe(1);
 	});
 
 	it('pairs a complete that crosses midnight and counts the visit on the start date', async () => {
