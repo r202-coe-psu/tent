@@ -158,7 +158,7 @@ const shelterDb = () => `shelter_${shelterCode!.toLowerCase()}`;
 async function readIncident(id: string) {
 	const doc = await getDocument(shelterDb(), id);
 	expect(doc, `${id} should exist`).not.toBeNull();
-	return doc as Record<string, unknown> & {
+	return doc as unknown as Record<string, unknown> & {
 		assigned_to: string;
 		current_status: string;
 		respondent: { status: string; name_or_detail: string | null };
@@ -464,7 +464,7 @@ test.describe(
 						name: users.get('owner')!.display_name
 					})
 				).toHaveCount(0);
-				await page.getByPlaceholder('พิมพ์ชื่อหรือนามสกุลเพื่อค้นหา...').fill(peer.display_name);
+				await page.getByPlaceholder('พิมพ์ชื่อหรือนามสกุลเพื่อค้นหา...').fill(peer.display_name!);
 				await page.getByRole('button', { name: peer.display_name }).click();
 			});
 			// Ownership moved — the former owner may only add notes now.

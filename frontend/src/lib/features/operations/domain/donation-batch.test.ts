@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { deriveDonationReceiptLineId, donationShortfall, isReceivedLine } from './donation-batch';
+import {
+	deriveDonationReceiptAuditId,
+	deriveDonationReceiptLineId,
+	donationShortfall,
+	isReceivedLine
+} from './donation-batch';
 
 describe('donationShortfall (CR-143 FR-B5)', () => {
 	it('AC-B2: received 8 of 10 reports a shortfall of 2', () => {
@@ -71,6 +76,15 @@ describe('deriveDonationReceiptLineId (CR-143 FR-B4a)', () => {
 		expect(await deriveDonationReceiptLineId('donation:D2', 'item:rice', 0)).not.toBe(base);
 		expect(await deriveDonationReceiptLineId('donation:D1', 'item:water', 0)).not.toBe(base);
 		expect(await deriveDonationReceiptLineId('donation:D1', 'item:rice', 1)).not.toBe(base);
+	});
+});
+
+describe('deriveDonationReceiptAuditId (#695)', () => {
+	it('gives one audit id per donation, shaped like any audit id', async () => {
+		const a = await deriveDonationReceiptAuditId('donation:D1');
+		expect(a).toBe(await deriveDonationReceiptAuditId('donation:D1'));
+		expect(a).toMatch(/^audit:[0-9A-HJKMNP-TV-Z]{26}$/);
+		expect(await deriveDonationReceiptAuditId('donation:D2')).not.toBe(a);
 	});
 });
 
