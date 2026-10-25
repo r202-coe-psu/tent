@@ -155,6 +155,51 @@ export function classifyZoningQueueTab(
 	return null;
 }
 
+/** People waiting at each intake station right now (CR-192 FR-STL-23); derived, never stored. */
+export interface StationQueueCounts {
+	/** Registered ahead but not yet reported in (`pre_registered` / legacy `kiosk_registered`). */
+	station1: number;
+	/** On site and waiting for medical screening; `null` when the shelter skips Station 2. */
+	station2: number | null;
+	/** On site, cleared for zoning and not yet zoned ({@link classifyZoningQueueTab} `pending`). */
+	station3: number;
+}
+
+/**
+ * Current queue per intake station from existing state only — no new field.
+ * Station 2 counts only people already on site (`arriving`): a pre-registered person is not at
+ * the desk yet, the same rule {@link nextScreeningQueueEvacuee} uses.
+ */
+export function countStationQueues(
+	evacuees: readonly Evacuee[],
+	screenedEvacueeIds: ReadonlySet<string>,
+	opts: { enableMedicalScreening: boolean }
+): StationQueueCounts {
+	let station1 = 0;
+	let station2 = 0;
+	let station3 = 0;
+	for (const evacuee of evacuees) {
+		const status = evacuee.current_stay?.status;
+		if (status === 'pre_registered' || status === 'kiosk_registered') station1 += 1;
+		if (
+			opts.enableMedicalScreening &&
+			status === 'arriving' &&
+			classifyScreeningQueueTab(evacuee, screenedEvacueeIds as Set<string>) === 'pending'
+		) {
+			station2 += 1;
+		}
+		if (
+			classifyZoningQueueTab(evacuee, {
+				enableMedicalScreening: opts.enableMedicalScreening,
+				hasScreening: screenedEvacueeIds.has(evacuee._id)
+			}) === 'pending'
+		) {
+			station3 += 1;
+		}
+	}
+	return { station1, station2: opts.enableMedicalScreening ? station2 : null, station3 };
+}
+
 /**
  * Zone type recommendation for Station 3 (CR-106):
  * EWAR surveillance symptoms → quarantine; else Vulnerable Groups / Special Needs → vulnerable; else general.
