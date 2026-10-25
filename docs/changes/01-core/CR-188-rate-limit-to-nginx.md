@@ -64,15 +64,17 @@ affects:
 
 ### B. nginx `limit_req` — zone
 
+ทุก zone ใช้เพดานเดียวกัน 10000 ครั้ง/นาที/IP, burst 2000 (owner 2026-10-23 — ดู Decision log). ค่าเดิมของแต่ละ zone อยู่ใน git history
+
 key = `$limit_key` (IPv4 เต็ม / IPv6 ตาม `$binary_remote_addr`; ว่างสำหรับ e2e allowlist ตาม FR-7)
 
 | zone           | location                                                                                                                   | rate  | burst       | เทียบเท่า | แทนที่ limiter เดิม                                              |
 | -------------- | -------------------------------------------------------------------------------------------------------------------------- | ----- | ----------- | --------- | ---------------------------------------------------------------- |
-| `public_write` | `POST` ใต้ `/api/public/v1/` (donations, registrations, unassigned-registrations, volunteer apply/profile/respond, photos) | 5r/s  | 60 nodelay  | 300/นาที  | donation/register/volunteer IP limiters (3–10/นาที)              |
-| `public_read`  | `/api/public/v1/` อื่นทั้งหมด                                                                                              | 20r/s | 200 nodelay | 1200/นาที | donationRead/Slots, registerLookup, volunteerTicket(Find)        |
-| `auth`         | `/api/v1/auth/`, `/api/v1/thirdparty-clients/`                                                                             | 2r/s  | 30 nodelay  | 120/นาที  | loginCaptcha, loginResolve, linkAccount, secret reveal (10/นาที) |
-| `kiosk`        | `/api/v1/kiosk/`, `/api/v1/scanner/`                                                                                       | 5r/s  | 60 nodelay  | 300/นาที  | kiosk device limiters (5–10/นาที/เครื่อง)                        |
-| `external`     | `/external/`                                                                                                               | 10r/s | 100 nodelay | 600/นาที  | FastAPI evacuee/external backstop (30/นาที)                      |
+| `public_write` | `POST` ใต้ `/api/public/v1/` (donations, registrations, unassigned-registrations, volunteer apply/profile/respond, photos) | 10000r/m | 2000 nodelay | 10000/นาที (≈167/วินาที) | donation/register/volunteer IP limiters (3–10/นาที)              |
+| `public_read`  | `/api/public/v1/` อื่นทั้งหมด                                                                                              | 10000r/m | 2000 nodelay | 10000/นาที (≈167/วินาที) | donationRead/Slots, registerLookup, volunteerTicket(Find)        |
+| `auth`         | `/api/v1/auth/`, `/api/v1/thirdparty-clients/`                                                                             | 10000r/m | 2000 nodelay | 10000/นาที (≈167/วินาที) | loginCaptcha, loginResolve, linkAccount, secret reveal (10/นาที) |
+| `kiosk`        | `/api/v1/kiosk/`, `/api/v1/scanner/`                                                                                       | 10000r/m | 2000 nodelay | 10000/นาที (≈167/วินาที) | kiosk device limiters (5–10/นาที/เครื่อง)                        |
+| `external`     | `/external/`                                                                                                               | 10000r/m | 2000 nodelay | 10000/นาที (≈167/วินาที) | FastAPI evacuee/external backstop (30/นาที)                      |
 
 - `limit_req_status 429;` และ `error_page 429` ตอบ JSON ตาม shape ที่ UI เดิมอ่าน — แยกตาม zone (ตรวจโค้ด 2026-10-23):
 
@@ -129,9 +131,9 @@ key = `$limit_key` (IPv4 เต็ม / IPv6 ตาม `$binary_remote_addr`; �
 - [x] **AC-1b** — staging: IP หนึ่งโดน `429` แล้ว IP อื่นยังผ่านในนาทีเดียวกัน (ผ่าน 2026-10-23 กับ limiter ในแอป)
 - [ ] **AC-2** — `grep -rn "rate-limiter\|RATE_LIMIT\b" frontend/src` และ `grep -rn "_enforce_rate_limit\|_check_rate_limit" backend` ไม่พบผลลัพธ์;
       `pnpm check` + `pnpm test` + backend `pytest` ผ่าน
-- [ ] **AC-3** — staging: ยิง `POST /api/public/v1/registrations` จาก IP เดียวเกิน 300 ครั้ง/นาที → `429` JSON
+- [ ] **AC-3** — staging: ยิง `POST /api/public/v1/registrations` จาก IP เดียวเกิน burst 2000 + 10000/นาที → `429` JSON
       `{"success":false,"error":"RATE_LIMITED",…}`; IP อื่นในนาทีเดียวกันยังผ่าน
-- [ ] **AC-4** — staging: login 30 ครั้งติดจาก IP เดียวผ่าน; ครั้งที่เกิน burst+rate ได้ `429`
+- [ ] **AC-4** — staging: login จาก IP เดียวไม่ถูกจำกัดจนเกิน burst 2000 + 10000/นาที; เกินแล้วได้ `429`
 - [ ] **AC-5** — e2e `--critical` บน staging ผ่านโดยไม่มี `RATE_LIMIT` และไม่มี pacer
 - [ ] **AC-6** — ทดสอบซ้ำแบบเดิม (~10 ผู้ใช้จริง) ไม่มี `429`
 - [ ] **AC-7** — UI ที่แสดงข้อความ rate limit (donation, register, volunteer, kiosk) แสดงผลถูกเมื่อ nginx ตอบ 429
@@ -174,3 +176,7 @@ N/A — ไม่มี persisted doc เปลี่ยนรูป, ไม่ 
   (6) `/public-api/` ไม่ใช่ rate limit → นอกขอบเขต CR นี้ (คงเดิม)
 - 2026-10-23 — นอกขอบเขต: staff PIN turn queue (`staff-pin-throttle.ts`, `server/staff-pin-turns.mjs`) — คิวต่อเครื่อง + หน่วง
   PIN ผิด 1 วินาที ไม่ใช่ rate limiter แบบนับครั้ง และ nginx ทำแทนไม่ได้
+- 2026-10-23 — **owner ปรับตัวเลข zone (ข้อ 2):** ทุก zone = `10000r/m` ต่อ IP (≈167/วินาที), burst 2000 — "ไม่อยากให้ผู้ใช้ AIS / True /
+  dtac / ISP อื่นในไทยเข้าไม่ได้" → ใช้เพดานสูงพอสำหรับ CGNAT แทนการยกเว้น IP ไทย (ยังกันการยิงถล่มจาก IP เดียวได้).
+  เทียบค่าเดิม: public_write ×33, public_read ×8, auth ×83, kiosk ×33, external ×17. ผลข้างเคียงที่รับทราบ: zone `auth` กันเดารหัสผ่านต่อ IP
+  ได้น้อยลง — เหลือ captcha + CouchDB `_session`

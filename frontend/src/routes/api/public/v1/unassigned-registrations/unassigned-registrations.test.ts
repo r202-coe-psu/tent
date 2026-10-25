@@ -73,12 +73,36 @@ const VALID_BODY = {
 	disclaimerAcknowledged: true
 };
 
+function webConsentBody(memberCount: number, decision: Record<string, unknown> = {}) {
+	const shared = {
+		guardian_for: [],
+		verbal: false,
+		ref: 'CS-7K3QZ9MD',
+		given_at: '2026-10-25T03:15:00.000Z',
+		notice_version: '2026-10-25'
+	};
+	return {
+		consent:
+			decision.mode === 'basic'
+				? { mode: 'basic', ...shared, ...decision }
+				: { mode: 'full', health: true, search_visible: true, ...shared, ...decision },
+		consent_member_keys: Array.from({ length: memberCount }, (_, i) => `m${i}`)
+	};
+}
+
+function withConsent(body: unknown): unknown {
+	if (!body || typeof body !== 'object' || 'consent' in body) return body;
+	const members = (body as { members?: unknown }).members;
+	if (!Array.isArray(members)) return body;
+	return { ...webConsentBody(members.length), ...body };
+}
+
 function event(body: unknown, ip = '203.0.113.5'): PostEvent {
 	return {
 		request: new Request('http://localhost/api/public/v1/unassigned-registrations', {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify(body)
+			body: JSON.stringify(withConsent(body))
 		}),
 		getClientAddress: () => ip,
 		fetch: globalThis.fetch
@@ -175,6 +199,38 @@ describe('POST /api/public/v1/unassigned-registrations', () => {
 		const res = await POST(event({ ...VALID_BODY, disclaimerAcknowledged: false }));
 		expect(res.status).toBe(400);
 		expect(await res.json()).toMatchObject({ error: 'DISCLAIMER_REQUIRED' });
+	});
+
+	it('422s without the consent decision', async () => {
+		const fetchMock = vi.fn();
+		vi.stubGlobal('fetch', fetchMock);
+		const res = await POST(event({ ...VALID_BODY, consent: undefined }));
+		expect(res.status).toBe(422);
+		expect(fetchMock).not.toHaveBeenCalled();
+	});
+
+	it('forwards one id-free consent grant per member (FR-42)', async () => {
+		const fetchMock = vi.fn().mockResolvedValue({
+			ok: true,
+			status: 201,
+			json: async () => ({ id: '01HTEST000000000000000000', members: [] })
+		});
+		vi.stubGlobal('fetch', fetchMock);
+
+		const res = await POST(
+			event({ ...VALID_BODY, ...webConsentBody(1, { mode: 'full', search_visible: false }) })
+		);
+		expect(res.status).toBe(201);
+		const upstream = JSON.parse(fetchMock.mock.calls[0]![1].body as string);
+		expect(upstream.members[0].consent).toEqual({
+			mode: 'full',
+			health: true,
+			ref: 'CS-7K3QZ9MD',
+			given_at: '2026-10-25T03:15:00.000Z',
+			notice_version: '2026-10-25',
+			given_by: 'self'
+		});
+		expect(upstream.members[0].search_excluded).toBe(true);
 	});
 
 	it('rejects invalid input', async () => {

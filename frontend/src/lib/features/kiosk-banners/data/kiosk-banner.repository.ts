@@ -1,15 +1,31 @@
 import { z } from 'zod';
 import type { KioskScreenType } from '$lib/features/shared/domain/kiosk-screen';
 import { kioskBannerDocSchema, type KioskBannerInput } from '../domain/kiosk-banner';
+import {
+	kioskBannerGroupDocSchema,
+	type KioskBannerGroupInput
+} from '../domain/kiosk-banner-group';
 import type { BannerImagePayload } from './kiosk-banner-file';
 
 /** A banner as the back-office API returns it: the doc plus its current `_rev` and image type. */
-export const kioskBannerSummarySchema = kioskBannerDocSchema.safeExtend({
-	_rev: z.string().min(1),
-	image_content_type: z.string().nullable()
-});
+export const kioskBannerSummarySchema = kioskBannerDocSchema.and(
+	z.object({
+		_rev: z.string().min(1),
+		image_content_type: z.string().nullable()
+	})
+);
 
 export type KioskBannerSummary = z.infer<typeof kioskBannerSummarySchema>;
+
+/** A banner group as the back-office API returns it: the doc plus its current `_rev` and member kiosks. */
+export const kioskBannerGroupSummarySchema = kioskBannerGroupDocSchema.and(
+	z.object({
+		_rev: z.string().min(1),
+		device_ids: z.array(z.string())
+	})
+);
+
+export type KioskBannerGroupSummary = z.infer<typeof kioskBannerGroupSummarySchema>;
 
 export type KioskBannerView = 'current' | 'expired';
 export type KioskBannerStatus = KioskBannerSummary['status'];
@@ -43,12 +59,27 @@ export interface KioskBannerRepository {
 	): Promise<KioskBannerSummary>;
 	setStatus(id: string, rev: string, status: KioskBannerStatus): Promise<KioskBannerSummary>;
 	remove(id: string, rev: string): Promise<void>;
-	/** Saves a new order; `items` are all current banners of that screen type, in the new order. */
+	/** Saves a new order; `items` are all current banners of that (group, screen type) slot, in the new order. */
 	reorder(
 		shelterCode: string,
-		screenType: KioskScreenType,
+		slot: { groupId: string; screenType: KioskScreenType },
 		items: { id: string; rev: string }[]
 	): Promise<KioskBannerSummary[]>;
 	/** URL of the stored image; pass `rev` so a replaced image is not served from cache. */
 	imageUrl(id: string, rev?: string): string;
+}
+
+export interface KioskBannerGroupRepository {
+	list(shelterCode: string): Promise<KioskBannerGroupSummary[]>;
+	get(id: string): Promise<KioskBannerGroupSummary>;
+	create(
+		shelterCode: string,
+		input: KioskBannerGroupInput,
+		deviceIds: string[]
+	): Promise<KioskBannerGroupSummary>;
+	update(id: string, rev: string, input: KioskBannerGroupInput): Promise<KioskBannerGroupSummary>;
+	/** Rejected with 409 while the group still has banners. */
+	remove(id: string, rev: string): Promise<void>;
+	/** Replaces the kiosks that belong to the group. */
+	setDevices(id: string, deviceIds: string[]): Promise<KioskBannerGroupSummary>;
 }

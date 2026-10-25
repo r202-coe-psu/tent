@@ -28,22 +28,24 @@
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
 	import { DatePicker } from '$lib/components/ui/date-picker/index.js';
-	import { Badge } from '$lib/components/ui/badge/index.js';
-	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
 	import { Textarea } from '$lib/components/ui/textarea/index.js';
 	import { toast } from 'svelte-sonner';
 	import { Html5Qrcode } from 'html5-qrcode';
 	import { qtyGt } from '$lib/utils/qty';
-	import { onMount } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import { resolve } from '$app/paths';
 	import {
-		donationActionRef,
 		donationRefLabel,
 		linesMissingExpiry,
 		receivedQtyDifference,
-		type ScanDonationView,
-		type PendingDonationRow
+		rejectDonationInputSchema,
+		RejectDonationDialog,
+		RejectReasonFields,
+		LineDecisionToggle,
+		type DonationRejectReasonCode,
+		type RejectDonationInput,
+		type ScanDonationView
 	} from '$lib/features/donations';
 	import { useSupplyItems } from '$lib/features/supply';
 	import {
@@ -69,33 +71,36 @@
 		useStoragePoints,
 		type StockFormItem
 	} from '$lib/features/operations';
-	import BoardSectionHeader from '$lib/components/board-section-header.svelte';
 
 	let {
 		initialQuery = '',
+		initialView = 'scan',
 		onSaved,
 		onClose
-	}: { initialQuery?: string; onSaved?: () => void; onClose?: () => void } = $props();
+	}: {
+		initialQuery?: string;
+		/** Open straight on the walk-in form (the list's "ลงทะเบียน Walk-in" button). */
+		initialView?: 'scan' | 'walkin';
+		onSaved?: () => void;
+		onClose?: () => void;
+	} = $props();
 
-	let activeView = $state<'scan' | 'walkin'>('scan');
+	// The opening view only — staff switch between scan and walk-in from here on.
+	let activeView = $state<'scan' | 'walkin'>(untrack(() => initialView));
 	let scanState = $state<'idle' | 'scanning' | 'result'>('idle');
 	let searchQuery = $state('');
 
 	// Action panels for verifying view
-	let actionPanel = $state<'none' | 'redirect' | 'reject'>('none');
+	let actionPanel = $state<'none' | 'redirect'>('none');
 	let selectedTargetShelter = $state('');
 	let redirectNote = $state('');
-	let rejectReason = $state('');
+	let rejectOpen = $state(false);
 	const sheltersQuery = useShelters();
 	// Everywhere but here: the shelter already holding the goods is not a destination
 	// (the route answers `SAME_SHELTER`), so it never reaches the dropdown.
 	const redirectTargets = $derived(
 		(sheltersQuery.data ?? []).filter((s) => s.code !== donationDoc?.shelter_code)
 	);
-
-	// Awaiting dropoff bookings for dropdown
-	let awaitingBookings = $state<PendingDonationRow[]>([]);
-	let loadingBookings = $state(false);
 
 	// Catalog items query
 	const supplyItemsQuery = useSupplyItems();
@@ -244,7 +249,25 @@
 		storage_point_id: string;
 		diffReason: string;
 		verified: boolean;
+		/**
+		 * Staff turn the whole line away (CR-172 FR-9): it needs a reason the donor will
+		 * read, and none of the stock fields above.
+		 */
+		rejected: boolean;
+		rejectCode?: DonationRejectReasonCode;
+		rejectNote: string;
+		/**
+		 * Set when the line was refused at review (CR-174): it stays refused, with the
+		 * reason the donor was already given — shown here, not asked for again.
+		 */
+		reviewReason?: string;
 	};
+
+	function hasRejectReason(it: ScannedItem): boolean {
+		if (it.reviewReason !== undefined) return true;
+		return rejectDonationInputSchema.safeParse({ reason_code: it.rejectCode, note: it.rejectNote })
+			.success;
+	}
 
 	let scannedItems = $state<ScannedItem[]>([]);
 	let remarks = $state('');
@@ -276,12 +299,13 @@
 	 * view has no note field of its own, so reading one off the doc always fell through
 	 * to sample copy.
 	 */
-	const donorNote = $derived.by(() => {
-		const notes = (donationDoc?.items ?? [])
-			.map((it) => (it as { note?: string }).note?.trim())
-			.filter((n): n is string => Boolean(n));
-		return notes.length > 0 ? notes.join('\n') : 'ผู้บริจาคไม่ได้ระบุคำชี้แจงเพิ่มเติม';
-	});
+	// Empty when the donor wrote nothing — the section is then left out, not filled in.
+	const donorNote = $derived(
+		(donationDoc?.items ?? [])
+			.map((it) => it.note?.trim())
+			.filter((n): n is string => Boolean(n))
+			.join('\n')
+	);
 
 	// QR camera. `html5-qrcode` is already a dependency and the people check-in
 	// scanner uses the same shape (`cameraAttachment`), so the two behave alike.
@@ -374,9 +398,12 @@
 	 * refuses these (`assertCountedAgainstCatalog`), so they have to block the button
 	 * rather than surface as a raw English error after the whole form is filled.
 	 */
+	const keptItems = $derived(scannedItems.filter((it) => !it.rejected));
+	const rejectedCount = $derived(scannedItems.length - keptItems.length);
+
 	const scannedMissingExpiry = $derived(
 		linesMissingExpiry(
-			scannedItems.map((it) => ({
+			keptItems.map((it) => ({
 				item_id: it.item_id,
 				name: it.name,
 				perishable: it.item_id ? isPerishable(it.item_id) : false,
@@ -390,12 +417,13 @@
 		!otherShelterCode &&
 			scannedItems.length > 0 &&
 			!storagePoints.isLoading &&
-			scannedItems.every(
-				(it) =>
-					it.verified &&
-					it.item_id &&
-					it.qty &&
-					isStoragePointChosen(it.storage_point_id, storagePoints.points)
+			scannedItems.every((it) =>
+				it.rejected
+					? hasRejectReason(it)
+					: it.verified &&
+						it.item_id &&
+						it.qty &&
+						isStoragePointChosen(it.storage_point_id, storagePoints.points)
 			) &&
 			scannedMissingExpiry.length === 0
 	);
@@ -404,15 +432,28 @@
 	// waits on, ticked as staff complete it (it used to be a red error box listing
 	// what was still missing, which read as a failure before anything had been done).
 	const checkMapped = $derived(
-		scannedItems.length > 0 && scannedItems.every((it) => it.item_id && it.qty)
+		scannedItems.length > 0 && keptItems.every((it) => it.item_id && it.qty)
 	);
 	const checkZoned = $derived(
 		scannedItems.length > 0 &&
-			scannedItems.every((it) => isStoragePointChosen(it.storage_point_id, storagePoints.points))
+			keptItems.every((it) => isStoragePointChosen(it.storage_point_id, storagePoints.points))
 	);
-	const verifiedCount = $derived(scannedItems.filter((it) => it.verified).length);
+	const checkRejectReasons = $derived(
+		scannedItems.filter((it) => it.rejected).every(hasRejectReason)
+	);
+	// A line turned away with its reason counts as checked too.
+	const verifiedCount = $derived(
+		scannedItems.filter((it) => (it.rejected ? hasRejectReason(it) : it.verified)).length
+	);
 	const hasPerishableLine = $derived(
-		scannedItems.some((it) => it.item_id && isPerishable(it.item_id))
+		keptItems.some((it) => it.item_id && isPerishable(it.item_id))
+	);
+	const receiveLabel = $derived(
+		rejectedCount === 0
+			? 'ยืนยันรับเข้าคลัง'
+			: keptItems.length === 0
+				? 'ปฏิเสธทั้งใบ'
+				: `รับ ${keptItems.length} รายการ · ไม่รับ ${rejectedCount} รายการ`
 	);
 
 	/**
@@ -481,40 +522,11 @@
 	]);
 	let walkinSaving = $state(false);
 
-	async function loadAwaitingBookings() {
-		loadingBookings = true;
-		try {
-			// One request per status the counter can act on. A failure is reported rather
-			// than swallowed: an empty queue and a rejected request looked identical, so
-			// "ยังไม่มีใบจองในคิว" was shown for permission and network errors too.
-			const statuses = ['verifying', 'pending_review', 'declared'] as const;
-			const responses = await Promise.all(
-				statuses.map(async (status) => {
-					const res = await fetch(`/api/back-office/donations?status=${status}`);
-					const data = await res.json().catch(() => ({ success: false }));
-					if (!res.ok || !data.success) {
-						throw new Error(data.error || `โหลดคิวสถานะ ${status} ไม่สำเร็จ`);
-					}
-					return (data.donations ?? []) as PendingDonationRow[];
-				})
-			);
-
-			// Keyed on whatever addresses the donation — a walk-in has no `booking_ref`,
-			// and filtering on one dropped every counter-keyed booking from the queue.
-			const all = responses.flat();
-			awaitingBookings = all.filter((d, i) => {
-				const ref = donationActionRef(d);
-				return !!ref && all.findIndex((o) => donationActionRef(o) === ref) === i;
-			});
-		} catch (err) {
-			awaitingBookings = [];
-			toast.error(err instanceof Error ? err.message : 'โหลดคิวรอตรวจรับไม่สำเร็จ');
-		} finally {
-			loadingBookings = false;
-		}
-	}
-
-	async function performLookup(query: string, simulateScanEffect = false) {
+	/**
+	 * `fromList` — opened from a row of the booking list: a miss there sends staff back to
+	 * the list. A typed or scanned code that misses keeps the scanner open to try again.
+	 */
+	async function performLookup(query: string, simulateScanEffect = false, fromList = false) {
 		if (!query.trim()) return;
 		lastLots = [];
 		actionPanel = 'none';
@@ -530,7 +542,7 @@
 				const errorData = await res.json().catch(() => ({}));
 				toast.error(errorData.error || 'ไม่พบข้อมูลการจองบริจาคนี้');
 				scanState = 'idle';
-				onClose?.();
+				if (fromList) onClose?.();
 				return;
 			}
 			const data = await res.json();
@@ -563,7 +575,13 @@
 						expiry: '',
 						storage_point_id: '',
 						diffReason: '',
-						verified: false
+						verified: false,
+						// Refused at review (CR-174): it arrives turned away, with the same reason.
+						rejected: it.review_status === 'rejected',
+						rejectCode:
+							it.review_status === 'rejected' ? (it.review_reason_code ?? 'other') : undefined,
+						rejectNote: '',
+						...(it.review_status === 'rejected' ? { reviewReason: it.review_reason ?? '' } : {})
 					};
 				});
 
@@ -583,7 +601,7 @@
 		actionRef = '';
 		selectedTargetShelter = '';
 		redirectNote = '';
-		rejectReason = '';
+		rejectOpen = false;
 		lastLots = [];
 		searchQuery = '';
 		donationDoc = null;
@@ -602,8 +620,25 @@
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({
 					status: 'received',
+					expected_rev: donationDoc?.rev,
 					...(remarks.trim() ? { remarks: remarks.trim() } : {}),
 					items: scannedItems.map((it) => {
+						if (it.rejected) {
+							return {
+								...(it.item_id ? { item_id: it.item_id } : { free_text: it.name }),
+								qty: '0',
+								unit: it.unit || it.declaredUnit,
+								rejected: true,
+								reject_reason_code: it.rejectCode,
+								// A review refusal is re-read from the doc by the server; the note only
+								// has to satisfy the request shape here.
+								...(it.reviewReason !== undefined
+									? { reject_note: (it.reviewReason || 'ไม่รับตั้งแต่ตอนประเมิน').slice(0, 400) }
+									: it.rejectNote.trim()
+										? { reject_note: it.rejectNote.trim() }
+										: {})
+							};
+						}
 						const location = lotLocation(it.storage_point_id);
 						return {
 							...(it.item_id ? { item_id: it.item_id } : { free_text: it.name }),
@@ -620,17 +655,26 @@
 			if (data.success) {
 				lastLots = (data.lots ?? []) as { item_id: string; lot_no: string | null }[];
 				const labels = lastLots.map((l) => l.lot_no).filter(Boolean);
+				const ref = bookingRef || actionRef;
+				// Every line turned away rejects the booking instead (CR-172 FR-12).
+				const refused = data.donation?.status === 'rejected';
 				toast.success(
-					labels.length
-						? `บันทึกรับเข้าคลังเรียบร้อยแล้ว (Ref. ${bookingRef || actionRef}) · เลขล็อต ${labels.join(', ')}`
-						: `บันทึกรับเข้าคลังเรียบร้อยแล้ว (Ref. ${bookingRef || actionRef})`
+					refused
+						? `ปฏิเสธใบบริจาค ${ref} เรียบร้อยแล้ว (ไม่รับทุกรายการ)`
+						: labels.length
+							? `บันทึกรับเข้าคลังเรียบร้อยแล้ว (Ref. ${ref}) · เลขล็อต ${labels.join(', ')}`
+							: `บันทึกรับเข้าคลังเรียบร้อยแล้ว (Ref. ${ref})`
 				);
 				scanState = 'idle';
 				searchQuery = '';
 				donationDoc = null;
 				remarks = '';
 				onSaved?.();
-				loadAwaitingBookings();
+			} else if (data.error_code === 'DONATION_CHANGED') {
+				toast.error('ผู้บริจาคแก้ใบนี้หลังจากเปิดหน้าตรวจรับ', {
+					description: 'ค้นหาใบใหม่แล้วตรวจรายการอีกครั้ง — ยังไม่มีของเข้าคลัง',
+					duration: 12_000
+				});
 			} else if (data.error_code === 'CATALOG_MISMATCH') {
 				toast.error('หน่วยในใบจองไม่ตรงกับหน่วยมาตรฐานในคลัง — รับเข้าคลังไม่ได้', {
 					description: `${data.error} · แก้ที่ต้นทางใบจอง หรือแจ้งผู้ดูแลระบบ`,
@@ -657,7 +701,8 @@
 					headers: { 'Content-Type': 'application/json' },
 					body: JSON.stringify({
 						target_shelter_code: selectedTargetShelter,
-						note: redirectNote.trim()
+						note: redirectNote.trim(),
+						expected_rev: donationDoc?.rev
 					})
 				}
 			);
@@ -676,12 +721,8 @@
 		}
 	}
 
-	async function handleConfirmReject() {
+	async function handleConfirmReject(input: RejectDonationInput) {
 		if (!actionRef || saving || otherShelterCode) return;
-		if (!rejectReason.trim()) {
-			toast.error('กรุณาระบุเหตุผลในการปฏิเสธคำขอ');
-			return;
-		}
 		saving = true;
 		try {
 			const res = await fetch(
@@ -689,7 +730,7 @@
 				{
 					method: 'POST',
 					headers: { 'Content-Type': 'application/json' },
-					body: JSON.stringify({ reason: rejectReason.trim() })
+					body: JSON.stringify({ ...input, expected_rev: donationDoc?.rev })
 				}
 			);
 			const data = await res.json();
@@ -825,7 +866,6 @@
 				}
 			];
 			onSaved?.();
-			loadAwaitingBookings();
 		} catch {
 			toast.error('บันทึกไม่สำเร็จ — กรุณาลองใหม่อีกครั้ง');
 		} finally {
@@ -834,13 +874,12 @@
 	}
 
 	onMount(() => {
-		loadAwaitingBookings();
-		// The queue mounts a fresh station per row (the board is behind an `{#if}`), so
-		// the ref is looked up once here. It used to run in `onMount` AND an `$effect`,
-		// which fired the same request twice on every open.
+		// The list mounts a fresh station per row (it is behind an `{#if}`), so the ref is
+		// looked up once here. It used to run in `onMount` AND an `$effect`, which fired
+		// the same request twice on every open.
 		if (initialQuery) {
 			searchQuery = initialQuery;
-			performLookup(initialQuery);
+			performLookup(initialQuery, false, true);
 		}
 	});
 </script>
@@ -857,10 +896,10 @@
 						size="sm"
 						type="button"
 						onclick={handleCancel}
-						class="mb-3 h-auto gap-1.5 p-0 text-xs font-medium text-blue-200 no-underline hover:text-white hover:no-underline"
+						class="mb-3 h-auto gap-1.5 p-0 text-sm font-medium text-blue-200 no-underline hover:text-white hover:no-underline"
 					>
-						<ArrowLeft class="h-3.5 w-3.5" />
-						กลับหน้าตรวจรับบริจาค
+						<ArrowLeft class="size-4" />
+						{onClose ? 'กลับไปที่รายการของบริจาค' : 'กลับหน้าสแกนรับของ'}
 					</Button>
 					<div class="flex flex-wrap items-center gap-3">
 						<span
@@ -899,9 +938,11 @@
 						{#each scannedItems as item, idx (item.key)}
 							{@const diff = qtyDifference(item)}
 							<div
-								class="rounded-xl border bg-white shadow-2xs {item.verified
-									? 'border-emerald-200'
-									: 'border-slate-200/80'}"
+								class="rounded-xl border bg-white shadow-2xs {item.rejected
+									? 'border-rose-200'
+									: item.verified
+										? 'border-emerald-200'
+										: 'border-slate-200/80'}"
 							>
 								<!-- Item header -->
 								<div
@@ -914,7 +955,7 @@
 										{formatUnit(item.declaredUnit, unitsOfMeasure, langState.current) ||
 											item.declaredUnit}
 									</span>
-									{#if diff}
+									{#if diff && !item.rejected}
 										<span
 											class="ml-auto inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-900"
 										>
@@ -926,124 +967,151 @@
 									{/if}
 								</div>
 
-								<!-- Fields: what it is and how much, then where it goes -->
-								<div class="grid grid-cols-1 gap-4 p-4 sm:grid-cols-2 sm:px-5">
-									<div class="space-y-1.5">
-										<Label for="map-master-{idx}" class="text-sm font-semibold text-slate-700">
-											รายการในคลัง <span class="text-red-500">*</span>
-										</Label>
-										<ItemCombobox
-											id="map-master-{idx}"
-											items={pickerItems}
-											value={item.item_id}
-											isLoading={supplyItemsQuery.isLoading || itemMastersQuery.isLoading}
-											placeholder="ค้นหารายการในคลัง…"
-											formatBalanceUnit={pickerUnitLabel}
-											onSelect={(picked) => mapScannedItem(item, picked)}
-										/>
-										{#if canCreateItem && !otherShelterCode}
-											<Button
-												type="button"
-												variant="ghost"
-												class="min-h-9 gap-1 px-2 text-sm font-semibold text-sky-800"
-												onclick={() =>
-													openCreateItem({ kind: 'scan', index: idx, name: item.name })}
-											>
-												<Plus class="size-4" aria-hidden="true" />
-												เพิ่มสินค้าใหม่
-											</Button>
-										{/if}
-									</div>
-
-									<div class="space-y-1.5">
-										<Label for="item-qty-{idx}" class="text-sm font-semibold text-slate-700">
-											จำนวนรับจริง <span class="text-red-500">*</span>
-										</Label>
-										<div class="relative flex items-center">
-											<Input
-												id="item-qty-{idx}"
-												type="text"
-												inputmode="decimal"
-												bind:value={item.qty}
-												class="h-11 pr-16 text-base font-bold tabular-nums"
-											/>
-											<span
-												class="pointer-events-none absolute right-3 text-sm font-medium text-slate-500"
-											>
-												{formatUnit(item.unit, unitsOfMeasure, langState.current)}
-											</span>
+								{#if item.reviewReason !== undefined}
+									<!-- Refused at review: nothing to count and nothing to decide here. -->
+									<div class="p-4 sm:px-5">
+										<div class="rounded-xl border border-red-200 bg-white p-4">
+											<p class="text-sm font-semibold text-red-900">ไม่รับตั้งแต่ตอนประเมิน</p>
+											<p class="mt-1 text-base break-words text-slate-700">
+												{item.reviewReason || 'ไม่ได้ระบุเหตุผล'}
+											</p>
 										</div>
 									</div>
-
-									<div class="space-y-1.5">
-										<Label for="storage-zone-{idx}" class="text-sm font-semibold text-slate-700">
-											สถานที่จัดเก็บ
-											{#if storagePointRequired}<span class="text-red-500">*</span>{/if}
-										</Label>
-										<StoragePointSelect
-											id="storage-zone-{idx}"
-											points={storagePoints.points}
-											bind:value={item.storage_point_id}
+								{:else if item.rejected}
+									<!-- Turned away (CR-172 FR-9): no stock fields, only why. -->
+									<div class="p-4 sm:px-5">
+										<RejectReasonFields
+											bind:code={item.rejectCode}
+											bind:note={item.rejectNote}
+											idPrefix="line-{idx}-reject"
+											disabled={saving || !!otherShelterCode}
 										/>
 									</div>
-
-									<div class="space-y-1.5">
-										<Label for="item-expiry-{idx}" class="text-sm font-semibold text-slate-700">
-											วันหมดอายุ
-											{#if item.item_id && isPerishable(item.item_id)}
-												<span class="text-red-500">*</span>
-												<span class="text-xs font-normal text-red-700">(ของเน่าเสียง่าย)</span>
-											{:else}
-												<span class="text-xs font-normal text-slate-500">(ถ้ามี)</span>
+								{:else}
+									<!-- Fields: what it is and how much, then where it goes -->
+									<div class="grid grid-cols-1 gap-4 p-4 sm:grid-cols-2 sm:px-5">
+										<div class="space-y-1.5">
+											<Label for="map-master-{idx}" class="text-sm font-semibold text-slate-700">
+												รายการในคลัง <span class="text-red-500">*</span>
+											</Label>
+											<ItemCombobox
+												id="map-master-{idx}"
+												items={pickerItems}
+												value={item.item_id}
+												isLoading={supplyItemsQuery.isLoading || itemMastersQuery.isLoading}
+												placeholder="ค้นหารายการในคลัง…"
+												formatBalanceUnit={pickerUnitLabel}
+												onSelect={(picked) => mapScannedItem(item, picked)}
+											/>
+											{#if canCreateItem && !otherShelterCode}
+												<Button
+													type="button"
+													variant="ghost"
+													class="min-h-9 gap-1 px-2 text-sm font-semibold text-sky-800"
+													onclick={() =>
+														openCreateItem({ kind: 'scan', index: idx, name: item.name })}
+												>
+													<Plus class="size-4" aria-hidden="true" />
+													เพิ่มสินค้าใหม่
+												</Button>
 											{/if}
-										</Label>
-										<DatePicker
-											id="item-expiry-{idx}"
-											ariaLabel="วันหมดอายุ"
-											bind:value={item.expiry}
-											class="h-11 text-sm {item.item_id &&
-											isPerishable(item.item_id) &&
-											!item.expiry
-												? 'border-red-300'
-												: ''}"
-										/>
-									</div>
+										</div>
 
-									<div class="space-y-1.5 sm:col-span-2">
-										<Label for="item-remark-{idx}" class="text-sm font-semibold text-slate-700">
-											หมายเหตุ / เหตุผลที่จำนวนต่างจากที่แจ้ง
-										</Label>
-										<Input
-											id="item-remark-{idx}"
-											type="text"
-											placeholder="เช่น แตกเสียหาย 2 ขวด (ถ้ามี)"
-											bind:value={item.diffReason}
-											class="h-11 text-sm"
-										/>
+										<div class="space-y-1.5">
+											<Label for="item-qty-{idx}" class="text-sm font-semibold text-slate-700">
+												จำนวนรับจริง <span class="text-red-500">*</span>
+											</Label>
+											<div class="relative flex items-center">
+												<Input
+													id="item-qty-{idx}"
+													type="text"
+													inputmode="decimal"
+													bind:value={item.qty}
+													class="h-11 pr-16 text-base font-bold tabular-nums"
+												/>
+												<span
+													class="pointer-events-none absolute right-3 text-sm font-medium text-slate-500"
+												>
+													{formatUnit(item.unit, unitsOfMeasure, langState.current)}
+												</span>
+											</div>
+										</div>
+
+										<div class="space-y-1.5">
+											<Label for="storage-zone-{idx}" class="text-sm font-semibold text-slate-700">
+												สถานที่จัดเก็บ
+												{#if storagePointRequired}<span class="text-red-500">*</span>{/if}
+											</Label>
+											<StoragePointSelect
+												id="storage-zone-{idx}"
+												points={storagePoints.points}
+												bind:value={item.storage_point_id}
+											/>
+										</div>
+
+										<div class="space-y-1.5">
+											<Label for="item-expiry-{idx}" class="text-sm font-semibold text-slate-700">
+												วันหมดอายุ
+												{#if item.item_id && isPerishable(item.item_id)}
+													<span class="text-red-500">*</span>
+													<span class="text-xs font-normal text-red-700">(ของเน่าเสียง่าย)</span>
+												{:else}
+													<span class="text-xs font-normal text-slate-500">(ถ้ามี)</span>
+												{/if}
+											</Label>
+											<DatePicker
+												id="item-expiry-{idx}"
+												ariaLabel="วันหมดอายุ"
+												bind:value={item.expiry}
+												class="h-11 text-sm {item.item_id &&
+												isPerishable(item.item_id) &&
+												!item.expiry
+													? 'border-red-300'
+													: ''}"
+											/>
+										</div>
+
+										<div class="space-y-1.5 sm:col-span-2">
+											<Label for="item-remark-{idx}" class="text-sm font-semibold text-slate-700">
+												หมายเหตุ / เหตุผลที่จำนวนต่างจากที่แจ้ง
+											</Label>
+											<Input
+												id="item-remark-{idx}"
+												type="text"
+												placeholder="เช่น แตกเสียหาย 2 ขวด (ถ้ามี)"
+												bind:value={item.diffReason}
+												class="h-11 text-sm"
+											/>
+										</div>
 									</div>
+								{/if}
+
+								<!-- Decide the line right under what was counted: checked, or turned away. -->
+								<div class="rounded-b-xl border-t border-slate-100 bg-slate-50/60 p-4 sm:px-5">
+									<LineDecisionToggle
+										bind:value={
+											() => (item.rejected ? 'reject' : item.verified ? 'accept' : null),
+											(next) => {
+												item.verified = next === 'accept';
+												item.rejected = next === 'reject';
+											}
+										}
+										acceptLabel="ผ่านการตรวจสอบแล้ว"
+										acceptHint="ของจริงตรงกับรายการ จำนวน และสภาพ"
+										rejectHint="ไม่เข้าคลัง แจ้งเหตุผลให้ผู้บริจาค"
+										groupLabel="ผลการตรวจรับ {item.name}"
+										disabled={saving || !!otherShelterCode || item.reviewReason !== undefined}
+									/>
 								</div>
-
-								<!-- Confirmation sits right under the fields it confirms -->
-								<label
-									class="flex min-h-12 cursor-pointer items-center gap-3 rounded-b-xl border-t px-4 py-3 text-sm font-semibold sm:px-5 {item.verified
-										? 'border-emerald-200 bg-emerald-50 text-emerald-900'
-										: 'border-slate-100 bg-slate-50 text-slate-700 hover:bg-slate-100'}"
-								>
-									<Checkbox bind:checked={item.verified} />
-									<span class="flex flex-col">
-										<span class="select-none">ผ่านการตรวจสอบแล้ว</span>
-										<span class="text-xs font-normal text-slate-500">
-											ของจริงตรงกับรายการ จำนวน และสภาพที่กรอกไว้
-										</span>
-									</span>
-								</label>
 							</div>
 						{/each}
 
-						<div class="rounded-xl border border-slate-200/80 bg-white p-4 shadow-2xs sm:px-5">
-							<h4 class="text-sm font-semibold text-slate-700">คำชี้แจงจากผู้บริจาค</h4>
-							<p class="mt-1 text-sm whitespace-pre-line text-slate-700">{donorNote}</p>
-						</div>
+						{#if donorNote}
+							<div class="rounded-xl border border-slate-200/80 bg-white p-4 shadow-2xs sm:px-5">
+								<h4 class="text-base font-semibold text-slate-800">คำชี้แจงจากผู้บริจาค</h4>
+								<p class="mt-1 text-base whitespace-pre-line text-slate-700">{donorNote}</p>
+							</div>
+						{/if}
 					</div>
 
 					<!-- Right: booking facts, memo, and the decision -->
@@ -1137,6 +1205,9 @@
 										'ใส่วันหมดอายุของเน่าเสียง่ายครบ'
 									)}
 								{/if}
+								{#if rejectedCount > 0}
+									{@render step(checkRejectReasons, 'ระบุเหตุผลของรายการที่ไม่รับครบ')}
+								{/if}
 								{@render step(
 									scannedItems.length > 0 && verifiedCount === scannedItems.length,
 									`ติ๊ก "ผ่านการตรวจสอบแล้ว" ครบ (${verifiedCount}/${scannedItems.length})`
@@ -1148,10 +1219,12 @@
 									type="button"
 									onclick={handleSaveScan}
 									disabled={saving || !canReceive}
-									class="h-12 w-full gap-2 bg-emerald-600 text-base font-bold text-white hover:bg-emerald-700"
+									class="h-12 w-full gap-2 text-base font-bold text-white {keptItems.length === 0
+										? 'bg-red-600 hover:bg-red-700'
+										: 'bg-emerald-600 hover:bg-emerald-700'}"
 								>
 									<Check class="h-5 w-5" />
-									{saving ? 'กำลังบันทึก…' : 'ยืนยันรับเข้าคลัง'}
+									{saving ? 'กำลังบันทึก…' : receiveLabel}
 								</Button>
 
 								<!--
@@ -1176,7 +1249,7 @@
 								<Button
 									variant="outline"
 									type="button"
-									onclick={() => (actionPanel = actionPanel === 'reject' ? 'none' : 'reject')}
+									onclick={() => (rejectOpen = true)}
 									disabled={saving || !!otherShelterCode}
 									class="h-11 w-full border-red-200 text-sm font-semibold text-red-700 hover:bg-red-50 hover:text-red-800"
 								>
@@ -1236,53 +1309,36 @@
 									</div>
 								</div>
 							{/if}
-
-							{#if actionPanel === 'reject'}
-								<div class="space-y-3 rounded-xl border border-red-200 bg-red-50/40 p-4">
-									<div class="space-y-1.5">
-										<Label for="reject-reason-input" class="text-sm font-semibold text-slate-700">
-											เหตุผลที่ปฏิเสธ <span class="text-red-500">*</span>
-										</Label>
-										<Input
-											id="reject-reason-input"
-											type="text"
-											placeholder="เช่น พื้นที่จัดเก็บไม่เพียงพอ, งดรับเสื้อผ้าชั่วคราว..."
-											bind:value={rejectReason}
-											class="h-11 bg-white text-sm"
-										/>
-									</div>
-									<div class="flex gap-2">
-										<Button
-											variant="destructive"
-											type="button"
-											onclick={handleConfirmReject}
-											disabled={saving || !rejectReason.trim()}
-											class="h-11 flex-1 font-semibold"
-										>
-											{saving ? 'กำลังดำเนินการ...' : 'ยืนยันการปฏิเสธคำขอ'}
-										</Button>
-										<Button
-											variant="outline"
-											type="button"
-											onclick={() => (actionPanel = 'none')}
-											class="h-11"
-										>
-											ยกเลิก
-										</Button>
-									</div>
-								</div>
-							{/if}
 						</div>
 					</div>
 				</div>
 			</div>
 		{:else}
 			<!-- Idle & Scanning View -->
-			<BoardSectionHeader
-				icon={Scan}
-				title="ระบบสแกนรับของเข้าคลัง (Ref. Scan Station)"
-				description="สแกนคิวอาร์โค้ดใบจองจากมือถือผู้บริจาค เพื่อตรวจรับสินค้าและอัปเดตระบบคลังพัสดุแบบทันที (Real-time Sync)"
-			/>
+			<!-- Same navy banner and back link as the review and check-in screens. -->
+			<div class="bg-[#002D5B] p-6 text-white md:p-8 dark:bg-slate-900">
+				{#if onClose}
+					<Button
+						variant="link"
+						size="sm"
+						type="button"
+						onclick={() => onClose?.()}
+						class="mb-3 h-auto gap-1.5 p-0 text-sm font-medium text-blue-200 no-underline hover:text-white hover:no-underline"
+					>
+						<ArrowLeft class="size-4" />
+						กลับไปที่รายการของบริจาค
+					</Button>
+				{/if}
+				<div class="flex items-center gap-2.5">
+					<div class="flex h-8 w-8 items-center justify-center rounded-lg bg-white/10 text-white">
+						<Scan class="h-5 w-5" />
+					</div>
+					<h2 class="text-base font-bold text-white md:text-lg">สแกนรับเข้าคลัง</h2>
+				</div>
+				<p class="mt-1 text-sm text-blue-100/80">
+					สแกน QR Code ใบจองจากมือถือผู้บริจาค หรือค้นหาด้วยรหัสการจอง เพื่อเปิดหน้าตรวจรับ
+				</p>
+			</div>
 
 			<!-- Scan Body -->
 			<div
@@ -1409,50 +1465,6 @@
 							</div>
 						{/if}
 
-						<!-- The queue the counter is actually holding. The camera button used to
-						     open whatever sat at the top of this list, which looked like a scan
-						     that had happened; picking a booking is now an explicit act. -->
-						{#if awaitingBookings.length}
-							<div class="mt-5 w-full border-t border-border/60 pt-5 text-left">
-								<p
-									class="mb-3 text-xs font-extrabold tracking-wider text-muted-foreground uppercase"
-								>
-									รอตรวจรับที่ศูนย์ ({awaitingBookings.length})
-								</p>
-								<!-- Taller than it looks: each row is a tap target for someone holding a
-								     parcel, so it gets the same 48px floor as the buttons above. -->
-								<ul class="max-h-64 space-y-2 overflow-y-auto">
-									{#each awaitingBookings as booking (donationActionRef(booking))}
-										{@const ref = donationActionRef(booking)}
-										<li>
-											<Button
-												variant="outline"
-												type="button"
-												onclick={() => ref && performLookup(ref)}
-												class="h-auto min-h-12 w-full justify-between gap-3 rounded-xl border-border/70 bg-card px-4 py-3 text-left"
-											>
-												<span class="min-w-0">
-													<span class="block truncate text-sm font-bold text-foreground">
-														{donationRefLabel(booking)}
-													</span>
-													<span class="block truncate text-xs text-muted-foreground">
-														{booking.donor_name || 'ไม่ระบุชื่อ'} · {booking.item_count} รายการ
-													</span>
-												</span>
-												<Badge variant="secondary" class="shrink-0 text-xs font-bold">
-													{booking.status}
-												</Badge>
-											</Button>
-										</li>
-									{/each}
-								</ul>
-							</div>
-						{:else if loadingBookings}
-							<p class="mt-4 w-full border-t border-border/60 pt-4 text-2xs text-muted-foreground">
-								กำลังโหลดคิวรอตรวจรับ...
-							</p>
-						{/if}
-
 						{#if lastLots.length}
 							<div
 								class="mt-4 w-full rounded-xl border border-emerald-500/30 bg-emerald-50/60 p-3 text-left dark:bg-emerald-950/20"
@@ -1516,11 +1528,11 @@
 					variant="link"
 					size="sm"
 					type="button"
-					onclick={() => (activeView = 'scan')}
-					class="mb-3 h-auto gap-1.5 p-0 text-xs font-medium text-blue-200 no-underline hover:text-white hover:no-underline"
+					onclick={() => (initialView === 'walkin' && onClose ? onClose() : (activeView = 'scan'))}
+					class="mb-3 h-auto gap-1.5 p-0 text-sm font-medium text-blue-200 no-underline hover:text-white hover:no-underline"
 				>
-					<ArrowLeft class="h-3.5 w-3.5" />
-					กลับหน้าสแกนรับของ
+					<ArrowLeft class="size-4" />
+					{initialView === 'walkin' && onClose ? 'กลับไปที่รายการของบริจาค' : 'กลับหน้าสแกนรับของ'}
 				</Button>
 
 				<div class="flex items-center gap-2.5">
@@ -1804,3 +1816,10 @@
 		</div>
 	</Sheet.Content>
 </Sheet.Root>
+
+<RejectDonationDialog
+	bind:open={rejectOpen}
+	bookingRef={bookingRef || actionRef}
+	pending={saving}
+	onconfirm={handleConfirmReject}
+/>

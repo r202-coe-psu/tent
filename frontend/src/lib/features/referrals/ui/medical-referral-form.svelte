@@ -130,7 +130,7 @@
 					<Textarea
 						{...props}
 						bind:value={$formData.reason}
-						placeholder="ระบุรายละเอียดเหตุผลความจำเป็นในการส่งต่อผู้ประสบภัย"
+						placeholder="ระบุรายละเอียดเหตุผลความจำเป็นในการส่งต่อผู้เข้าพัก"
 						rows={3}
 					/>
 				{/snippet}

@@ -26,6 +26,7 @@ const mockAuthenticate = vi.mocked(authenticateScannerDevice);
 const mockList = vi.mocked(listActiveForShelter);
 
 const NOW = new Date('2026-10-15T03:00:00.000Z');
+const GROUP_ID = 'kiosk_banner_group:A';
 const deviceHeaders = { 'x-device-id': 'device-1', 'x-device-secret': 'secret' };
 
 function request(
@@ -62,7 +63,11 @@ describe('POST /api/v1/kiosk/banners', () => {
 		mockEnv.EXTERNAL_API_SECRET = 'test-banner-secret';
 		mockAuthenticate.mockImplementation(async (deviceId) => {
 			if (!deviceId) throw new ScannerAuthError();
-			return { shelter_code: 'SH001', screen_type: 'compact' } as never;
+			return {
+				shelter_code: 'SH001',
+				screen_type: 'compact',
+				banner_group_id: GROUP_ID
+			} as never;
 		});
 		mockList.mockResolvedValue([record('banner-1'), record('banner-2', { caption: undefined })]);
 	});
@@ -71,10 +76,11 @@ describe('POST /api/v1/kiosk/banners', () => {
 		vi.useRealTimers();
 	});
 
-	it('returns an empty feed without listing banners when the device has them switched off (FR-KBR-37)', async () => {
+	it('returns an empty feed without listing banners when the device has no banner group', async () => {
 		mockAuthenticate.mockResolvedValueOnce({
 			shelter_code: 'SH001',
-			banner_enabled: false
+			screen_type: 'compact',
+			banner_group_id: null
 		} as never);
 
 		const response = await POST(request({}, deviceHeaders));
@@ -83,16 +89,6 @@ describe('POST /api/v1/kiosk/banners', () => {
 		expect(response.headers.get('cache-control')).toBe('no-store');
 		expect(await response.json()).toEqual({ banners: [], fetched_at: NOW.toISOString() });
 		expect(mockList).not.toHaveBeenCalled();
-	});
-
-	it('still lists banners when banner_enabled is true', async () => {
-		mockAuthenticate.mockResolvedValueOnce({
-			shelter_code: 'SH001',
-			banner_enabled: true
-		} as never);
-		const body = await (await POST(request({}, deviceHeaders))).json();
-		expect(body.banners).toHaveLength(2);
-		expect(mockList).toHaveBeenCalledTimes(1);
 	});
 
 	it('returns the active banners with signed image urls and fetched_at', async () => {
@@ -115,7 +111,10 @@ describe('POST /api/v1/kiosk/banners', () => {
 			/^\/api\/v1\/kiosk\/banners\/banner-1\/image\?exp=\d+&sig=[0-9a-f]{64}$/
 		);
 		expect(body.banners[1].caption).toBeNull();
-		expect(mockList).toHaveBeenCalledWith('SH001', NOW, 'compact');
+		expect(mockList).toHaveBeenCalledWith('SH001', NOW, {
+			groupId: GROUP_ID,
+			screenType: 'compact'
+		});
 		expect(response.headers.get('cache-control')).toBe('no-store');
 		expect(response.headers.get('pragma')).toBe('no-cache');
 	});
@@ -124,19 +123,26 @@ describe('POST /api/v1/kiosk/banners', () => {
 		await POST(request({ shelter_code: 'SH999' }, deviceHeaders, '?shelter_code=SH998'));
 
 		expect(mockList).toHaveBeenCalledTimes(1);
-		expect(mockList).toHaveBeenCalledWith('SH001', NOW, 'compact');
+		expect(mockList).toHaveBeenCalledWith('SH001', NOW, {
+			groupId: GROUP_ID,
+			screenType: 'compact'
+		});
 	});
 
-	it('lists banners for the device screen type', async () => {
+	it('lists banners for the device group and screen type', async () => {
 		mockAuthenticate.mockResolvedValueOnce({
 			shelter_code: 'SH001',
-			screen_type: 'portrait'
+			screen_type: 'portrait',
+			banner_group_id: GROUP_ID
 		} as never);
 
 		const response = await POST(request({}, deviceHeaders));
 
 		expect(response.status).toBe(200);
-		expect(mockList).toHaveBeenCalledWith('SH001', NOW, 'portrait');
+		expect(mockList).toHaveBeenCalledWith('SH001', NOW, {
+			groupId: GROUP_ID,
+			screenType: 'portrait'
+		});
 		const body = await response.json();
 		expect(Object.keys(body.banners[0])).not.toContain('screen_type');
 	});

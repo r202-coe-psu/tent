@@ -80,8 +80,8 @@ export interface ScannerDevicePrincipal {
 	readonly name: string;
 	readonly shelter_code: string;
 	readonly station_name: string;
-	/** FR-KBR-35: `false` only when the registry doc says so; absent = banners shown. */
-	readonly banner_enabled: boolean;
+	/** Banner group the device is fed from; `null` = no group, so no banners. */
+	readonly banner_group_id: string | null;
 	/** Which kiosk screen the device drives; absent on the doc = `compact`. */
 	readonly screen_type: KioskScreenType;
 }
@@ -145,7 +145,7 @@ export async function authenticateScannerDevice(
 		name: device.name,
 		shelter_code: device.shelter_code,
 		station_name: device.station_name,
-		banner_enabled: device.banner_enabled ?? true,
+		banner_group_id: device.banner_group_id ?? null,
 		screen_type: screenTypeOf(device)
 	};
 }
