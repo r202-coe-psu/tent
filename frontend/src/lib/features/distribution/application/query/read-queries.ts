@@ -22,6 +22,7 @@ import { operationsRepository } from '$lib/features/operations';
 import { getReturnOperationState } from '../food-supplies/return-workflow';
 import {
 	getBulkReturnPoolOverview,
+	listBulkReturnPoolClosedLoanRefs,
 	listReturnerOutstandingLoans,
 	type BulkReturnPoolOverviewQuery
 } from '../food-supplies/bulk-return-pool-v3-workflow';
@@ -170,6 +171,29 @@ export const useBulkReturnPoolOverview = (
 			queryFn: () => {
 				const ctx = resolveAuthenticatedAuthorContext(shelterCode);
 				return getBulkReturnPoolOverview(resolvedOptions ?? {}, ctx);
+			},
+			enabled: isEnabled
+		};
+	});
+
+/**
+ * Reads the loan-drift warning refs of a pool: refs of its live entries whose loan was closed /
+ * has too little outstanding / is missing, so they were not applied (derived at read time).
+ */
+export const useBulkReturnPoolClosedLoanRefs = (
+	poolId: MaybeGetter<string | null | undefined>,
+	shelterCodeGetter?: MaybeGetter<string | undefined>,
+	enabled: MaybeGetter<boolean> = true
+) =>
+	createQuery(() => {
+		const id = toValue(poolId);
+		const shelterCode = resolveShelterCode(toValue(shelterCodeGetter));
+		const isEnabled = Boolean(toValue(enabled) && shelterCode && id);
+		return {
+			queryKey: distributionKeys.bulkPoolClosedLoanRefs(shelterCode, id ?? ''),
+			queryFn: () => {
+				const ctx = resolveAuthenticatedAuthorContext(shelterCode);
+				return listBulkReturnPoolClosedLoanRefs(id!, ctx);
 			},
 			enabled: isEnabled
 		};

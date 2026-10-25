@@ -2,7 +2,7 @@ import type { AuthorContext } from '$lib/db/model';
 import { now } from '$lib/db/model';
 import { isUlid } from '$lib/db/ulid';
 import { addQty, parseQty, qtyGt, subQty } from '$lib/utils/qty';
-import { ConflictError } from '$lib/utils/errors';
+import { ConflictError, NotFoundError } from '$lib/utils/errors';
 import { endpointStore } from '$lib/stores/endpoint.svelte';
 import { catalogRepository } from '$lib/features/catalog';
 import {
@@ -23,12 +23,16 @@ import type {
 	BulkReturnPoolReceivedItem,
 	BulkReturnPoolV3,
 	BulkReturnReceivedRowInput,
+	BulkReturnLoanDriftReason,
+	ClosedBulkReturnLoanRef,
 	DistributionLog
 } from '../../domain/food-supplies';
 import {
 	allocateBulkReturnToLoans,
 	applyBulkEntryToLog,
 	assertEntryCanBeMoved,
+	assessBulkReturnRefOnLoan,
+	findClosedBulkReturnLoanRefs,
 	buildBulkReturnPoolOverview,
 	buildBulkReturnReceivedItems,
 	BulkReturnReceiveInputError,
@@ -41,6 +45,7 @@ import {
 	createBulkReturnPoolV3,
 	deriveEntryMoveId,
 	deriveEntryVoidId,
+	foldEntryMoves,
 	isBulkReturnEligibleItem,
 	isLateEntry,
 	isPoolEmpty,
@@ -287,6 +292,14 @@ export interface AddBulkReturnEntriesInput {
 	notes?: string;
 }
 
+export interface BulkReturnLoanSkipped {
+	distribution_log_id: string;
+	qty: string;
+	reason: BulkReturnLoanDriftReason;
+	/** Outstanding on the loan when skipped (absent for a missing loan). */
+	outstanding?: string;
+}
+
 export interface AddBulkReturnEntryResult {
 	entry: BulkReturnEntry;
 	/** The pool stopped accepting entries before the loans were touched: move the entry out. */
@@ -294,6 +307,11 @@ export interface AddBulkReturnEntryResult {
 	replayed: boolean;
 	/** Ids of the distribution logs this entry is applied to (empty when late or voided). */
 	loansApplied: string[];
+	/**
+	 * Refs NOT applied because the loan drifted since allocation (closed / outstanding too low /
+	 * missing). The entry is kept and still counts in the pool.
+	 */
+	loansSkipped: BulkReturnLoanSkipped[];
 	/** Part of the qty not allocated to any loan (goes into the pool without a loan ref). */
 	unallocated_qty: string;
 }
@@ -520,37 +538,73 @@ export async function addBulkReturnEntries(
 		// FENCE: the pool may have been locked / submitted / cancelled after the entry landed.
 		const fresh = await poolRepo.get(input.pool_id);
 		if (!fresh || !canAppendToPool(fresh)) {
-			results.push({ entry, late: true, replayed, loansApplied: [], unallocated_qty });
+			results.push({
+				entry,
+				late: true,
+				replayed,
+				loansApplied: [],
+				loansSkipped: [],
+				unallocated_qty
+			});
 			break;
 		}
 
 		// A replayed entry may have been voided meanwhile: never re-apply its loans.
 		const voided = replayed && (await eventRepo.getVoid(deriveEntryVoidId(entry._id))) !== null;
 		const loansApplied: string[] = [];
+		const loansSkipped: BulkReturnLoanSkipped[] = [];
 		if (!voided) {
 			for (const ref of entry.loan_refs) {
-				// QUESTION: if the loan drifted since allocation (outstanding < ref.qty, or the loan was
-				// cleared as lost/waived), apply throws after the entry is already written; the spec does
-				// not say how to reconcile (shrink the ref? void the entry?).
-				await applyRefToLoan(logRepo, entry, ref, ctx);
-				loansApplied.push(ref.distribution_log_id);
+				// Loan drift rule: the ref is applied only if the loan, read fresh inside the CAS, can still
+				// take the WHOLE ref.qty. A missing / closed loan or outstanding < ref.qty is skipped (no
+				// write, no throw): the entry stays and the item still counts in the pool; the UI derives a
+				// warning at read time. Never a partial apply: void reverts ref.qty and no per-entry applied
+				// qty is persisted, so a partial apply would over-revert on a later void.
+				const skipped = await applyRefToLoan(logRepo, entry, ref, ctx);
+				if (skipped) loansSkipped.push(skipped);
+				else loansApplied.push(ref.distribution_log_id);
 			}
 		}
-		results.push({ entry, late: false, replayed, loansApplied, unallocated_qty });
+		results.push({ entry, late: false, replayed, loansApplied, loansSkipped, unallocated_qty });
 	}
 
 	return { results, returner_had_outstanding_loans, no_outstanding_loan };
 }
 
+/** Applies one ref; returns why it was skipped, or null when applied (or already applied). */
 async function applyRefToLoan(
 	logRepo: DistributionLogRepository,
 	entry: BulkReturnEntry,
 	ref: BulkReturnEntryLoanRef,
 	ctx: AuthorContext
-): Promise<void> {
-	await logRepo.mutateLogCAS(ref.distribution_log_id, (current) =>
-		applyBulkEntryToLog(current, { entry_id: entry._id, qty: ref.qty }, ctx.createdBy, now())
-	);
+): Promise<BulkReturnLoanSkipped | null> {
+	let skipped = null as BulkReturnLoanSkipped | null;
+	try {
+		await logRepo.mutateLogCAS(ref.distribution_log_id, (current) => {
+			skipped = null; // the mutator may run again on a CAS retry
+			const assessment = assessBulkReturnRefOnLoan(current, ref, entry._id);
+			if (assessment.status === 'already_applied') return current;
+			if (assessment.status === 'skip') {
+				skipped = {
+					distribution_log_id: ref.distribution_log_id,
+					qty: ref.qty,
+					reason: assessment.reason,
+					...(assessment.outstanding !== undefined ? { outstanding: assessment.outstanding } : {})
+				};
+				return current; // same reference: the repository writes nothing
+			}
+			return applyBulkEntryToLog(
+				current,
+				{ entry_id: entry._id, qty: ref.qty },
+				ctx.createdBy,
+				now()
+			);
+		});
+	} catch (err) {
+		if (!(err instanceof NotFoundError)) throw err;
+		return { distribution_log_id: ref.distribution_log_id, qty: ref.qty, reason: 'missing' };
+	}
+	return skipped;
 }
 
 async function revertRefOnLoan(
@@ -559,9 +613,16 @@ async function revertRefOnLoan(
 	ref: BulkReturnEntryLoanRef,
 	ctx: AuthorContext
 ): Promise<void> {
-	await logRepo.mutateLogCAS(ref.distribution_log_id, (current) =>
-		revertBulkEntryFromLog(current, { entry_id: entry._id, qty: ref.qty }, ctx.createdBy, now())
-	);
+	try {
+		// No-op (same reference, no write) when the entry id is not in applied_bulk_entry_ids, which
+		// is the case for a ref that was skipped by loan drift.
+		await logRepo.mutateLogCAS(ref.distribution_log_id, (current) =>
+			revertBulkEntryFromLog(current, { entry_id: entry._id, qty: ref.qty }, ctx.createdBy, now())
+		);
+	} catch (err) {
+		// A missing loan can hold no applied entry: nothing to revert (never wedge the void).
+		if (!(err instanceof NotFoundError)) throw err;
+	}
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -579,6 +640,22 @@ export interface MoveBulkReturnEntryResult {
 	/** The target pool stopped accepting entries right after the move: move the entry again. */
 	late: boolean;
 	replayed: boolean;
+}
+
+/**
+ * An entry whose move chain has a gap is omitted from the resolved fold, so its current pool is
+ * unknowable: writing a move/void now would target the wrong pool or seq. Reject until it syncs.
+ */
+function assertEntryNotPendingSync(entry: BulkReturnEntry, moves: readonly BulkReturnEntryMove[]) {
+	const fold = foldEntryMoves(
+		entry,
+		moves.filter((m) => m.entry_id === entry._id)
+	);
+	if (fold.status === 'pending') {
+		throw new WorkflowValidationError(
+			`Entry ${entry._id} is pending sync (move seq ${fold.missing_seqs.join(', ')} not replicated yet); try again later`
+		);
+	}
 }
 
 /** Moves a whole entry to another OPEN pool. Loans are untouched. */
@@ -599,6 +676,7 @@ export async function moveBulkReturnEntry(
 	} catch (err) {
 		throw new WorkflowValidationError(err instanceof Error ? err.message : String(err));
 	}
+	assertEntryNotPendingSync(entry, events.moves);
 
 	const resolved = resolveBulkReturnEntries(events.entries, events.moves, events.voids).find(
 		(r) => r.entry._id === entry._id
@@ -707,6 +785,7 @@ export async function voidBulkReturnEntry(
 	if (existingVoid) {
 		return { entryVoid: existingVoid, replayed: true, loansReverted: await revertLoans() };
 	}
+	assertEntryNotPendingSync(entry, events.moves);
 
 	const resolved = resolveBulkReturnEntries(events.entries, events.moves, events.voids).find(
 		(r) => r.entry._id === entry._id
@@ -1118,6 +1197,29 @@ export async function getBulkReturnPoolOverview(
 	const { poolRepo, eventRepo } = resolveDependencies(deps, ctx);
 	const [pools, events] = await Promise.all([poolRepo.list(), eventRepo.listAll()]);
 	return buildBulkReturnPoolOverview(pools, events, { includeCancelled: options.includeCancelled });
+}
+
+/**
+ * Loan-drift warning source: refs of the non-voided entries currently in `poolId` that are not
+ * applied to their loan and cannot be applied now (closed / insufficient / missing). Derived from
+ * the fresh loans on every read; nothing is persisted.
+ */
+export async function listBulkReturnPoolClosedLoanRefs(
+	poolId: string,
+	ctx: AuthorContext,
+	deps?: BulkReturnPoolV3WorkflowDependencies
+): Promise<ClosedBulkReturnLoanRef[]> {
+	const { eventRepo, logRepo } = resolveDependencies(deps, ctx);
+	const events = await eventRepo.listAll();
+	const live = resolveBulkReturnEntries(events.entries, events.moves, events.voids)
+		.filter(({ pool_id, voided }) => !voided && pool_id === poolId)
+		.map(({ entry }) => entry);
+	const loanIds = [
+		...new Set(live.flatMap((entry) => entry.loan_refs.map((ref) => ref.distribution_log_id)))
+	];
+	if (loanIds.length === 0) return [];
+	const loans = await Promise.all(loanIds.map((id) => logRepo.get(id)));
+	return findClosedBulkReturnLoanRefs(live, new Map(loanIds.map((id, i) => [id, loans[i]])));
 }
 
 /** Outstanding returnable loans of a returner (all items), oldest first, so the UI can show/warn. */

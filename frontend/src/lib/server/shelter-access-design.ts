@@ -343,11 +343,7 @@ export function buildValidateDocUpdate(code: string): string {
   }
   // #658: every bulk_return_pool write (create, edit while OPEN, lock, submit, receive, cancel)
   // is WH, SC, SM (+ SA via isRole). Entries / moves / voids additionally allow distribution_staff.
-  // TODO(bulk-return-pool system_admin): the lead's decision lists WH/SC/SM (+ DST for entries)
-  // and says system_admin is NOT included, but isRole() grants system_admin every capability
-  // (SA override at the top of isRole). These helpers deliberately keep that override. A literal
-  // SA block would need dedicated exception logic nothing else in this VDU has — do not add it
-  // until kong confirms it was actually intended.
+  // system_admin keeps the usual isRole() override (kong, PR #768): no SA-specific block.
   function canManageBulkReturnPool() {
     return isRole('warehouse_staff') || isRole('supply_coordinator') || isRole('shelter_manager');
   }

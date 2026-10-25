@@ -77,7 +77,9 @@ describe('summarizePoolItems', () => {
 	});
 
 	it('throws on a broken chain or a duplicate entry', () => {
-		expect(() => summarizePoolItems([e1], [moveOf(e1, 2, P1, P2)], P1)).toThrow(/contiguous/);
+		expect(() =>
+			summarizePoolItems([e1], [moveOf(e1, 1, P1, P2), moveOf(e1, 1, P1, P3)], P1)
+		).toThrow(/contiguous/);
 		expect(() => summarizePoolItems([e1, e1], [], P1)).toThrow(/Duplicate/);
 	});
 
@@ -192,6 +194,88 @@ describe('resolveBulkReturnEntries', () => {
 
 	it('defaults voids to none', () => {
 		expect(resolveBulkReturnEntries([e1], []).every((r) => !r.voided)).toBe(true);
+	});
+});
+
+describe('pending sync (move chain gap)', () => {
+	// e1 starts in P1; seq 2 (P2 -> P3) replicated but seq 1 (P1 -> P2) has not.
+	const gapMoves = () => [moveOf(e1, 2, P2, P3)];
+
+	it('omits the pending entry from resolveBulkReturnEntries', () => {
+		const resolved = resolveBulkReturnEntries([e1, e2], gapMoves());
+		expect(resolved.map((r) => r.entry._id)).toEqual([e2._id]);
+	});
+
+	it('excludes it from every pool: summary, snapshot ids and emptiness', () => {
+		for (const pool of [P1, P2, P3]) {
+			const items = summarizePoolItems([e1], gapMoves(), pool);
+			expect(items).toEqual([]);
+			expect(isPoolEmpty([e1], gapMoves(), pool)).toBe(true);
+			expect(poolSnapshotEntryIds(resolveBulkReturnEntries([e1], gapMoves()), pool)).toEqual([]);
+		}
+		expect(summarizePoolItems([e1, e2], gapMoves(), P1)).toEqual([
+			{ item_id: 'item_master:cot', qty: '2' }
+		]);
+	});
+
+	it('is never a late entry while pending', () => {
+		const pools = [{ _id: P3, status: 'SUBMITTED' as const, entry_ids: [] }];
+		expect(findLateEntries(resolveBulkReturnEntries([e1], gapMoves()), pools)).toEqual([]);
+	});
+
+	it('surfaces one move_gap ref with the original and move pools', () => {
+		expect(findUnresolvedBulkReturnRefs([e1, e2], gapMoves())).toEqual([
+			{ kind: 'move_gap', entry_id: e1._id, pool_ids: [P1, P2, P3], missing_seqs: [1] }
+		]);
+	});
+
+	it('adds a void pool_id to the move_gap ref, deduped', () => {
+		const refs = findUnresolvedBulkReturnRefs([e1], gapMoves(), [voidOf(e1, P3)]);
+		expect(refs).toEqual([
+			{ kind: 'move_gap', entry_id: e1._id, pool_ids: [P1, P2, P3], missing_seqs: [1] }
+		]);
+		const other = findUnresolvedBulkReturnRefs([e1], gapMoves(), [
+			voidOf(e1, 'bulk_return_pool:01J00000000000000000000014')
+		]);
+		expect(other[0].pool_ids).toEqual([P1, P2, P3, 'bulk_return_pool:01J00000000000000000000014']);
+	});
+
+	it('keeps orphan refs and orders move_gap by entry_id, then kind', () => {
+		const refs = findUnresolvedBulkReturnRefs(
+			[e1],
+			[moveOf(e1, 2, P2, P3), moveOf(e2, 1, P1, P2)],
+			[voidOf(e2, P2)]
+		);
+		expect(refs.map((r) => [r.entry_id, r.kind])).toEqual([
+			[e1._id, 'move_gap'],
+			[e2._id, 'move'],
+			[e2._id, 'void']
+		]);
+	});
+
+	it('self-heals once the missing move arrives', () => {
+		const moves = [...gapMoves(), moveOf(e1, 1, P1, P2)];
+		expect(findUnresolvedBulkReturnRefs([e1], moves)).toEqual([]);
+		const resolved = resolveBulkReturnEntries([e1], moves);
+		expect(resolved.map((r) => [r.entry._id, r.pool_id])).toEqual([[e1._id, P3]]);
+		expect(summarizePoolItems([e1], moves, P3)).toEqual([{ item_id: 'item_master:cot', qty: '5' }]);
+	});
+
+	it('still throws for a pending entry whose void qty mismatches', () => {
+		const v = voidOf(e1, P3);
+		expect(() => resolveBulkReturnEntries([e1], gapMoves(), [{ ...v, qty: '4' }])).toThrow(
+			/item_id\/qty/
+		);
+	});
+
+	it('skips the void pool check for a pending entry (omitted, not voided)', () => {
+		expect(resolveBulkReturnEntries([e1], gapMoves(), [voidOf(e1, P1)])).toEqual([]);
+	});
+
+	it('still throws for a move after a void when there is no gap', () => {
+		expect(() => resolveBulkReturnEntries([e1], [moveOf(e1, 1, P1, P2)], [voidOf(e1, P1)])).toThrow(
+			/resolves to/
+		);
 	});
 });
 

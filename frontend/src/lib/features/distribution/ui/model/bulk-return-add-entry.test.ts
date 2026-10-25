@@ -216,6 +216,7 @@ describe('summarizeAddResult / dropWrittenLines', () => {
 			late: opts.late ?? false,
 			replayed: opts.replayed ?? false,
 			loansApplied: [],
+			loansSkipped: [],
 			unallocated_qty: opts.unallocated ?? '0'
 		};
 	}
