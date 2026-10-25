@@ -219,6 +219,7 @@ describe('POST /api/v1/kiosk/register', () => {
 		const stale = kioskDecision(mintConsentStamp(new Date(Date.now() - 11 * 60 * 1000)));
 		const response = await POST(request({ ...validBody, ...consentFields(stale) }));
 		expect(response.status).toBe(400);
+		expect((await response.json()).error.code).toBe('KIOSK_CONSENT_EXPIRED');
 		expect(mockRegister).not.toHaveBeenCalled();
 	});
 

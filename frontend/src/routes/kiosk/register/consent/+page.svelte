@@ -3,6 +3,7 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { onMount } from 'svelte';
+	import CircleAlert from '@lucide/svelte/icons/circle-alert';
 	import type { ConsentDecision } from '$lib/features/consent';
 	import {
 		abandonWalkIn,
@@ -12,6 +13,7 @@
 		KIOSK_IDLE_TIMEOUT_MS,
 		KioskBackButton,
 		KioskCheckInWizard,
+		KioskInlineAlert,
 		KioskRegisterConsent,
 		navigateToKioskHome,
 		readKioskDisplayQuery,
@@ -46,10 +48,11 @@
 	function consent(decision: ConsentDecision) {
 		walkInSession.recordConsent(decision);
 		continuing = true;
-		// ThaiD has proved who they are already: straight on to the phone. A card is read next.
+		// ThaiD has proved who they are already, as has a card read and face-checked before the
+		// consent ran out: straight on to the phone. Otherwise a card is read next.
 		void goto(
 			resolve(
-				walkInSession.source === 'thaid'
+				walkInSession.identityReady
 					? `/kiosk/register/phone${contextQuery}`
 					: `/kiosk/register/card${contextQuery}`
 			)
@@ -66,6 +69,11 @@
 	<div class="flex justify-start">
 		<KioskBackButton href={homeUrl} onclick={() => abandonWalkIn()} />
 	</div>
+	{#if walkInSession.consentNotice}
+		<KioskInlineAlert tone="warning" icon={CircleAlert} role="alert"
+			>{walkInSession.consentNotice}</KioskInlineAlert
+		>
+	{/if}
 	<KioskRegisterConsent
 		source={walkInSession.source === 'thaid' ? 'thaid' : 'smart-card'}
 		onconsent={consent}

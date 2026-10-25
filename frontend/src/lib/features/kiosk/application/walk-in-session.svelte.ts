@@ -23,6 +23,8 @@ class WalkInSession {
 	thaidSessionId = $state<string | null>(null);
 	/** What the PDPA block decided on the consent page; sent with the registration. */
 	consentDecision = $state.raw<ConsentDecision | null>(null);
+	/** Why the consent page is asking again (the server found the decision too old); else null. */
+	consentNotice = $state<string | null>(null);
 	/** The full card read, kept in memory only while the face check runs, then submitted. */
 	card = $state.raw<SmartCardData | null>(null);
 	/** Set with `card` by the card page: the face check it found on for this machine. */
@@ -66,7 +68,19 @@ class WalkInSession {
 	}
 
 	recordConsent(decision: ConsentDecision): void {
-		if (this.active) this.consentDecision = decision;
+		if (!this.active) return;
+		this.consentDecision = decision;
+		this.consentNotice = null;
+	}
+
+	/**
+	 * The server would not take the decision any more (too old): drop it so the consent page asks
+	 * again, saying why. Who they are (card read, face check, ThaiD scan) stays.
+	 */
+	withdrawConsent(notice: string): void {
+		if (!this.active) return;
+		this.consentDecision = null;
+		this.consentNotice = notice;
 	}
 
 	/** Hold the card for the next steps, with the camera the card page found for the face check. */
@@ -84,6 +98,7 @@ class WalkInSession {
 		this.citizenId = null;
 		this.thaidSessionId = null;
 		this.consentDecision = null;
+		this.consentNotice = null;
 		this.card = null;
 		this.faceCheck = null;
 		this.faceOutcome = null;

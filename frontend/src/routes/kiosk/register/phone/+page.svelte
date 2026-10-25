@@ -37,8 +37,11 @@
 	let expired = $state(false);
 	/** The phone typed is already someone else's: shown on the numpad while another is typed. */
 	let phoneNotice = $state('');
-	/** Registered: the done page takes the walk-in from here, so leaving must not abandon it. */
-	let registered = false;
+	/**
+	 * Registered (the done page takes the walk-in from here) or sent back to decide consent again:
+	 * leaving must not abandon it.
+	 */
+	let continuing = false;
 	// Paused while saving: the write must not be cut short by going home.
 	const idleTimeout = new KioskIdleTimeout(KIOSK_IDLE_TIMEOUT_MS, returnHome);
 
@@ -50,7 +53,7 @@
 		idleTimeout.start();
 		return () => {
 			idleTimeout.stop();
-			if (!registered && walkInSession.active) abandonWalkIn();
+			if (!continuing && walkInSession.active) abandonWalkIn();
 		};
 	});
 
@@ -81,7 +84,7 @@
 		phoneNotice = '';
 		const outcome = await submitWalkIn(walkInSession);
 		if (outcome.kind === 'registered') {
-			registered = true;
+			continuing = true;
 			walkInSession.registration = outcome.registration;
 			await goto(resolve(`/kiosk/register/done${contextQuery}`));
 			return;
@@ -91,6 +94,13 @@
 			phoneNotice = outcome.message;
 			registering = false;
 			idleTimeout.setPaused(false);
+			return;
+		}
+		if (outcome.kind === 'consent_expired') {
+			// Resending the same decision can never pass: ask for consent again.
+			walkInSession.withdrawConsent(outcome.message);
+			continuing = true;
+			await goto(resolve(`/kiosk/register/consent${contextQuery}`));
 			return;
 		}
 		expired = outcome.kind === 'expired';

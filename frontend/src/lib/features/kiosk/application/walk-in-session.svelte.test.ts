@@ -109,6 +109,34 @@ describe('walkInSession consent', () => {
 		expect(session.consented).toBe(false);
 		expect(session.consentDecision).toBeNull();
 	});
+
+	it('withdrawing a stale decision asks again but keeps who they are', () => {
+		const session = consentedSession();
+		session.holdCard(CARD, null);
+		session.phone = '0812345678';
+
+		session.withdrawConsent('การยินยอมหมดเวลาแล้ว');
+		expect(session.consentDecision).toBeNull();
+		expect(session.consentNotice).toBe('การยินยอมหมดเวลาแล้ว');
+		expect(session.identityReady).toBe(false);
+		expect(session.active).toBe(true);
+		expect(session.card).toBe(CARD);
+
+		session.recordConsent(DECISION);
+		expect(session.consentNotice).toBeNull();
+		expect(session.identityReady).toBe(true);
+	});
+
+	it('withdrawing does nothing without a walk-in, and clear() forgets the notice', () => {
+		const idle = createWalkInSession();
+		idle.withdrawConsent('การยินยอมหมดเวลาแล้ว');
+		expect(idle.consentNotice).toBeNull();
+
+		const session = consentedSession();
+		session.withdrawConsent('การยินยอมหมดเวลาแล้ว');
+		session.clear();
+		expect(session.consentNotice).toBeNull();
+	});
 });
 
 describe('walkInSession registration hand-over', () => {

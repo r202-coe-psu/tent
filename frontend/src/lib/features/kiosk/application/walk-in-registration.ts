@@ -31,10 +31,16 @@ export type WalkInCardRegistrationOutcome =
 	| { kind: 'expired'; message: string }
 	/** Someone staying in the shelter already has this phone: only another phone (or none) goes on. */
 	| { kind: 'phone_duplicate'; message: string }
+	/** The consent decision is too old for the server: only deciding again goes on. */
+	| { kind: 'consent_expired'; message: string }
 	| { kind: 'error'; message: string };
 
 function isPhoneDuplicate(cause: unknown): cause is KioskRequestError {
 	return cause instanceof KioskRequestError && cause.code === 'KIOSK_PHONE_DUPLICATE';
+}
+
+function isConsentExpired(cause: unknown): cause is KioskRequestError {
+	return cause instanceof KioskRequestError && cause.code === 'KIOSK_CONSENT_EXPIRED';
 }
 
 const CARD_MISMATCH_MESSAGE = 'บัตรไม่ตรงกับบัตรที่ค้นหา กรุณาเสียบบัตรเดิมหรือติดต่อเจ้าหน้าที่';
@@ -59,6 +65,7 @@ export async function registerWalkInCardRead(
 		return { kind: 'registered', registration: await register(card, session.consentDecision) };
 	} catch (cause) {
 		if (isPhoneDuplicate(cause)) return { kind: 'phone_duplicate', message: cause.message };
+		if (isConsentExpired(cause)) return { kind: 'consent_expired', message: cause.message };
 		return {
 			kind: 'error',
 			message: cause instanceof Error ? cause.message : 'อ่านข้อมูลไม่สำเร็จ กรุณาลองอีกครั้ง'
@@ -93,6 +100,7 @@ export async function submitWalkInThaid(
 		return { kind: 'registered', registration };
 	} catch (cause) {
 		if (isPhoneDuplicate(cause)) return { kind: 'phone_duplicate', message: cause.message };
+		if (isConsentExpired(cause)) return { kind: 'consent_expired', message: cause.message };
 		const message = cause instanceof Error ? cause.message : 'ลงทะเบียนไม่สำเร็จ กรุณาลองอีกครั้ง';
 		if (cause instanceof KioskRequestError && cause.code === 'KIOSK_THAID_SESSION_INVALID') {
 			return { kind: 'expired', message };
