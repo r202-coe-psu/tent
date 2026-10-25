@@ -16,6 +16,13 @@ export const EVACUEE_SCHEMA_V = 15 as const;
 export const BACKFILL_NOTICE_VERSION = 'backfill';
 
 const CONSENT_REF_PATTERN = '^CS-[0-9A-HJKMNP-TV-Z]{8}$';
+/**
+ * ISO 8601 datetime that requires a time and a `Z`/`+HH:MM` offset. This is what
+ * `z.iso.datetime({ offset: true })` accepts; the VDU uses the same pattern because
+ * `Date.parse` alone also takes date-only and offset-less strings.
+ */
+const ISO_DATETIME_PATTERN =
+	'^(\\d{4})-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])T([01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|[+-](?:[01]\\d|2[0-3]):[0-5]\\d)$';
 const consentRefSchema = z.string().regex(new RegExp(CONSENT_REF_PATTERN));
 const isoTimestampSchema = z.iso.datetime({ offset: true });
 
@@ -371,7 +378,11 @@ export function consentVduClause(): string {
     if (typeof consent.health !== 'boolean') consentFail('health must be boolean');
     if (consent.mode === 'basic' && consent.health !== false) consentFail('basic mode cannot have health consent');
     if (typeof consent.ref !== 'string' || !/${CONSENT_REF_PATTERN}/.test(consent.ref)) consentFail('ref is invalid');
-    if (typeof consent.given_at !== 'string' || isNaN(Date.parse(consent.given_at))) consentFail('given_at is invalid');
+    var givenAt = typeof consent.given_at === 'string' ? /${ISO_DATETIME_PATTERN}/.exec(consent.given_at) : null;
+    if (!givenAt || isNaN(Date.parse(consent.given_at))) consentFail('given_at is invalid');
+    if (new Date(Date.UTC(Number(givenAt[1]), Number(givenAt[2]) - 1, Number(givenAt[3]))).getUTCDate() !== Number(givenAt[3])) {
+      consentFail('given_at is invalid');
+    }
     if (typeof consent.notice_version !== 'string' || consent.notice_version === '') consentFail('notice_version is invalid');
     if (consent.recorded_verbally_by !== null && (typeof consent.recorded_verbally_by !== 'string' || consent.recorded_verbally_by === '')) {
       consentFail('recorded_verbally_by is invalid');
