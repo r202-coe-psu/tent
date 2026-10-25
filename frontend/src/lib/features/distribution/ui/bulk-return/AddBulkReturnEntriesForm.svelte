@@ -40,6 +40,7 @@
 		listOpenPools,
 		outstandingLoanRows,
 		removeLine,
+		resolveDefaultPoolId,
 		resolveReturner,
 		summarizeAddResult,
 		validateAddEntryLines,
@@ -47,6 +48,10 @@
 		type AddEntryLine,
 		type ReturnerChoice
 	} from '../model/bulk-return-add-entry';
+	import {
+		readLastBulkReturnPool,
+		writeLastBulkReturnPool
+	} from '../model/last-bulk-return-pool-storage';
 
 	/** Mounted by AddBulkReturnEntriesDialog only while open, so every open starts clean. */
 	interface Props {
@@ -85,6 +90,10 @@
 
 	// Initial values are read once on mount (the parent remounts this form for every open).
 	let pickedPoolId = $state(untrack(() => initialPoolId ?? ''));
+	// Last-used pool on this device for this shelter; only a default, never overrides a pick.
+	const rememberedPoolId = untrack(() =>
+		shelterCode ? readLastBulkReturnPool(shelterCode) : null
+	);
 	let returnerSelection = $state<FrontlineRecipientSelection | null>(
 		untrack(() => (initialReturner?.recipientType === 'outside' ? null : initialReturner))
 	);
@@ -97,13 +106,9 @@
 	let submitError = $state<string | null>(null);
 
 	const openPools = $derived(listOpenPools(overviewQuery.data ?? []));
-	// Falls back to the only OPEN pool; '' when the picked pool is gone / no longer OPEN.
+	// Picked pool, else remembered last-used pool, else the only OPEN pool; '' when none is OPEN.
 	const poolId = $derived(
-		openPools.some((pool) => pool._id === pickedPoolId)
-			? pickedPoolId
-			: openPools.length === 1
-				? openPools[0]._id
-				: ''
+		resolveDefaultPoolId({ picked: pickedPoolId, remembered: rememberedPoolId, openPools })
 	);
 	const selectedPool = $derived(openPools.find((pool) => pool._id === poolId) ?? null);
 
@@ -197,6 +202,9 @@
 		try {
 			const result = await addMutation.mutateAsync({ input, shelterCode });
 			const summary = summarizeAddResult(result);
+			if (shelterCode && summary.savedCount + summary.replayedCount > 0) {
+				writeLastBulkReturnPool(shelterCode, selectedPool._id);
+			}
 			reportSummary(summary);
 			// A late entry stops the workflow: the lines that were not written stay for a retry.
 			lines = dropWrittenLines(lines, result);

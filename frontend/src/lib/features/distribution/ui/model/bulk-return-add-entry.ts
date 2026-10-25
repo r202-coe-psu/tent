@@ -175,6 +175,21 @@ export function listOpenPools(rows: readonly BulkReturnPoolRow[]) {
 	return listMoveTargets(rows, '');
 }
 
+/**
+ * Default pool for the add-entry form: the explicitly picked/initial pool if still open, else the
+ * remembered last-used pool if still open, else the only open pool, else ''.
+ */
+export function resolveDefaultPoolId(input: {
+	picked: string;
+	remembered: string | null;
+	openPools: readonly { _id: string }[];
+}): string {
+	const { picked, remembered, openPools } = input;
+	if (picked && openPools.some((pool) => pool._id === picked)) return picked;
+	if (remembered && openPools.some((pool) => pool._id === remembered)) return remembered;
+	return openPools.length === 1 ? openPools[0]._id : '';
+}
+
 // ---------------------------------------------------------------------------
 // Outstanding loans
 // ---------------------------------------------------------------------------

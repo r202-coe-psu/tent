@@ -10,6 +10,7 @@ import {
 	identifiedReturnerId,
 	outstandingLoanRows,
 	removeLine,
+	resolveDefaultPoolId,
 	resolveReturner,
 	summarizeAddResult,
 	validateAddEntryLines,
@@ -34,6 +35,53 @@ describe('lines', () => {
 		expect(lines[1]).toMatchObject({ item_id: 'item_master:a', qty: '2' });
 		lines = removeLine(lines, 'ULID1');
 		expect(lines.map((l) => l.operationUlid)).toEqual(['ULID2']);
+	});
+});
+
+describe('resolveDefaultPoolId', () => {
+	const two = [{ _id: 'pool:a' }, { _id: 'pool:b' }];
+
+	it('prefers the picked pool over the remembered one', () => {
+		expect(resolveDefaultPoolId({ picked: 'pool:a', remembered: 'pool:b', openPools: two })).toBe(
+			'pool:a'
+		);
+	});
+
+	it('uses the remembered pool when nothing is picked', () => {
+		expect(resolveDefaultPoolId({ picked: '', remembered: 'pool:b', openPools: two })).toBe(
+			'pool:b'
+		);
+	});
+
+	it('ignores a stale remembered id that no longer exists', () => {
+		expect(resolveDefaultPoolId({ picked: '', remembered: 'pool:gone', openPools: two })).toBe('');
+	});
+
+	it('ignores a remembered pool that is not open', () => {
+		expect(
+			resolveDefaultPoolId({
+				picked: '',
+				remembered: 'pool:closed',
+				openPools: [{ _id: 'pool:a' }]
+			})
+		).toBe('pool:a');
+	});
+
+	it('ignores a picked pool that is not open and falls back to remembered', () => {
+		expect(resolveDefaultPoolId({ picked: 'pool:x', remembered: 'pool:b', openPools: two })).toBe(
+			'pool:b'
+		);
+	});
+
+	it('falls back to the only open pool', () => {
+		expect(
+			resolveDefaultPoolId({ picked: '', remembered: null, openPools: [{ _id: 'pool:a' }] })
+		).toBe('pool:a');
+	});
+
+	it('returns empty when several pools are open and nothing applies', () => {
+		expect(resolveDefaultPoolId({ picked: '', remembered: null, openPools: two })).toBe('');
+		expect(resolveDefaultPoolId({ picked: '', remembered: null, openPools: [] })).toBe('');
 	});
 });
 
