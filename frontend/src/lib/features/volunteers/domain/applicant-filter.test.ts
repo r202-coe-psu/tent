@@ -140,8 +140,9 @@ describe('filterApplicantBoard', () => {
 	});
 
 	it('falls back to the date when a row has no shift id', () => {
-		const legacy = application(1, { shift_id: null });
-		legacy.selected_shift.shift_id = null;
+		const legacy = application(1);
+		delete legacy.shift_id;
+		delete legacy.selected_shift.shift_id;
 		const b = buildApplicantBoard({
 			jobId: JOB,
 			applications: [legacy],
