@@ -219,6 +219,15 @@ describe('POST /api/v1/kiosk/register', () => {
 		const stale = kioskDecision(mintConsentStamp(new Date(Date.now() - 11 * 60 * 1000)));
 		const response = await POST(request({ ...validBody, ...consentFields(stale) }));
 		expect(response.status).toBe(400);
+		expect((await response.json()).error.code).toBe('KIOSK_CONSENT_EXPIRED');
+		expect(mockRegister).not.toHaveBeenCalled();
+	});
+
+	it('keeps a decision dated ahead of the server a plain invalid body', async () => {
+		const ahead = kioskDecision(mintConsentStamp(new Date(Date.now() + 11 * 60 * 1000)));
+		const response = await POST(request({ ...validBody, ...consentFields(ahead) }));
+		expect(response.status).toBe(400);
+		expect((await response.json()).error.code).toBe('INVALID_KIOSK_REGISTRATION');
 		expect(mockRegister).not.toHaveBeenCalled();
 	});
 

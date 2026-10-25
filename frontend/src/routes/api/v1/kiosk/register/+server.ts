@@ -9,6 +9,7 @@ import {
 	KioskRegistrationBlockedError,
 	KioskPhotoValidationError,
 	decodeKioskPhoto,
+	isStaleKioskConsent,
 	kioskWalkInRegistrationInputSchema,
 	registerKioskThaidWalkIn,
 	registerKioskWalkIn
@@ -52,6 +53,17 @@ export const POST: RequestHandler = async ({ request }) => {
 		);
 		const body = await request.json().catch(() => null);
 		const parsed = kioskWalkInRegistrationInputSchema.safeParse(body);
+		if (!parsed.success && isStaleKioskConsent(body)) {
+			return json(
+				{
+					error: {
+						code: 'KIOSK_CONSENT_EXPIRED',
+						message: 'การยินยอมหมดเวลาแล้ว กรุณากดยินยอมอีกครั้ง'
+					}
+				},
+				{ status: 400, headers: noStoreHeaders }
+			);
+		}
 		if (!parsed.success) {
 			return json(
 				{
