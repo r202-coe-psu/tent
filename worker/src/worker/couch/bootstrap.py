@@ -32,6 +32,7 @@ from worker.mongo import (
     refresh_occupancy,
     refresh_shelter_occupants,
     refresh_shelter_stock,
+    sync_booking_stay,
 )
 from worker.mongo.on_hand import refresh_on_hand
 from worker.projection_version import PROJECTION_VERSION
@@ -114,6 +115,7 @@ async def bootstrap_database(couch: CouchClient, database: str) -> None:
                 doc, shelter_code=shelter_code, household=household
             )
             await apply_person(action, payload)
+            await sync_booking_stay(doc)
         elif doc_type == "donation":
             action, payload = project_donation(doc, shelter_code=shelter_code)
             await apply_donation(action, payload)

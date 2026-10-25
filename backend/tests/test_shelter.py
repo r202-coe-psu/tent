@@ -279,25 +279,23 @@ async def test_shelter_detail_occupancy_counts_pre_registered(
     auth_headers: dict[str, str],
 ):
     """CR-112 — public `occupancy` is Forecast; `present` / `in_zone` are additive."""
-    await _insert_shelter_doc(
-        db_client,
-        settings,
-        _shelter_doc("SH001", "open"),
-    )
-
-    for idx, status in enumerate(["active", "active", "active"]):
-        await _insert_person_doc(db_client, settings, f"evacuee:a{idx}", "SH001", status)
-    for idx, status in enumerate(["pre_registered", "pre_registered"]):
-        await _insert_person_doc(db_client, settings, f"evacuee:p{idx}", "SH001", status)
-    await _insert_person_doc(db_client, settings, "evacuee:kiosk0", "SH001", "kiosk_registered")
-    await _insert_person_doc(db_client, settings, "evacuee:arr0", "SH001", "arriving")
-    await _insert_person_doc(db_client, settings, "evacuee:rc0", "SH001", "room_confirmed")
-    await _insert_person_doc(db_client, settings, "evacuee:tl0", "SH001", "temporary_leave")
-    # Terminal statuses do not hold a Forecast seat.
-    await _insert_person_doc(db_client, settings, "evacuee:c0", "SH001", "cancelled")
-    await _insert_person_doc(db_client, settings, "evacuee:o0", "SH001", "checked_out")
-    # Another shelter's residents must not leak in.
-    await _insert_person_doc(db_client, settings, "evacuee:x0", "SH002", "active")
+    # The worker counts every evacuee's stay status from CouchDB (PDPA D8 — this includes
+    # search-excluded people, who have no `public_persons` row).
+    doc = _shelter_doc("SH001", "open")
+    doc["occupancy_by_status"] = {
+        "active": 3,
+        "pre_registered": 2,
+        "kiosk_registered": 1,
+        "arriving": 1,
+        "room_confirmed": 1,
+        "temporary_leave": 1,
+        # Terminal statuses do not hold a Forecast seat.
+        "cancelled": 1,
+        "checked_out": 1,
+    }
+    await _insert_shelter_doc(db_client, settings, doc)
+    # A searchable person row is not the source of the count.
+    await _insert_person_doc(db_client, settings, "evacuee:a0", "SH001", "active")
 
     response = await client.get("/public/v1/shelters/SH001", headers=auth_headers)
     assert response.status_code == 200

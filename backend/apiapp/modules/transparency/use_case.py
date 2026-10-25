@@ -1,10 +1,9 @@
-"""Aggregate public metrics from Mongo projections (public_shelters + public_persons)."""
+"""Aggregate public metrics from the Mongo `public_shelters` projection."""
 
 from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from tent_model.public_person import PublicPerson
 from tent_model.public_shelter import PublicShelter
 
 from .schemas import TransparencySummary, TransparencySummaryResponse
@@ -29,9 +28,14 @@ class TransparencyUseCase:
         shelters_total = len(shelters)
         shelters_open = sum(1 for s in shelters if s.status in OPEN_SHELTER_STATUSES)
 
-        occupancy_total = await PublicPerson.find(
-            {"status": {"$in": list(OCCUPANCY_STATUSES)}}
-        ).count()
+        # PDPA D8: count from the worker's per-status totals, not `public_persons` rows —
+        # search-excluded people have no person row but must still be counted.
+        occupancy_total = sum(
+            s.occupancy_by_status.get(status, 0)
+            for s in shelters
+            if s.is_active
+            for status in OCCUPANCY_STATUSES
+        )
 
         # as_of = when this aggregate was computed (OP-7 client stale check),
         # not max(shelter.updated_at) — shelter docs can sit unchanged for hours.
