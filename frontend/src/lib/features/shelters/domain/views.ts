@@ -31,6 +31,19 @@ export const SHELTER_DASHBOARD_VIEWS = {
 		},
 		registrations_by_date_status: {
 			map: `function (doc) {
+				// preregister: evacuees registered in advance (web / kiosk / api), counted on the day
+				// the registration was created. 'staff' is onsite registration, so it is not counted.
+				if (doc.type === 'evacuee') {
+					var via = doc.registered_via;
+					if (via !== 'web' && via !== 'kiosk' && via !== 'api') return;
+					if (!doc.created_at) return;
+					if (doc.current_stay && doc.current_stay.status === 'cancelled') return;
+					var created = new Date(doc.created_at);
+					created.setUTCHours(created.getUTCHours() + 7);
+					emit([created.toISOString().slice(0, 10), 'preregister'], 1);
+					return;
+				}
+
 				if (doc.type !== 'movement' || !doc.occurred_at) return;
 
 				// ปรับ Timezone +07:00 (Thailand) ก่อนตัดวันที่ เพื่อไม่ให้ movement ตอนเช้าตรู่ตกไปอยู่วันก่อนหน้า (UTC offset)

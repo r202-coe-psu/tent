@@ -16,17 +16,22 @@ import {
 	type KioskLabelIdentity
 } from './kiosk-check-in.server';
 
-/**
- * The reprint gate: the visitor typed a phone number and then the last four digits of the
- * citizen id of the person who owns it (the phone-matched primary). Reading only; a reprint
- * never writes.
- */
-export const kioskReprintInputSchema = z.object({
+const reprintBase = {
 	phone: z.string().min(1).max(20),
 	primary_evacuee_id: evacueeIdSchema,
-	id_last4: z.string().regex(/^\d{4}$/),
 	evacuee_ids: z.array(evacueeIdSchema).min(1).max(20)
-});
+};
+
+/**
+ * The reprint gate: the visitor typed a phone number and then either the last four digits of the
+ * citizen id of the person who owns it (the phone-matched primary) or a staff PIN, never both.
+ * The PIN's shape is not checked here: the verifier treats a malformed one as wrong. Reading
+ * only; a reprint never writes.
+ */
+export const kioskReprintInputSchema = z.union([
+	z.strictObject({ ...reprintBase, id_last4: z.string().regex(/^\d{4}$/) }),
+	z.strictObject({ ...reprintBase, staff_pin: z.string().max(32) })
+]);
 
 export type KioskReprintInput = z.infer<typeof kioskReprintInputSchema>;
 
@@ -62,6 +67,38 @@ export class KioskReprintVerifyFailedError extends Error {
 		this.name = 'KioskReprintVerifyFailedError';
 	}
 }
+
+/** The staff PIN was wrong, or no PIN verifier is available (fail closed). */
+export class KioskReprintStaffPinInvalidError extends Error {
+	constructor() {
+		super('Staff PIN is not accepted');
+		this.name = 'KioskReprintStaffPinInvalidError';
+	}
+}
+
+/** The kiosk has no staff PIN configured, so a PIN reprint cannot be authorised. */
+export class KioskReprintStaffPinNotSetError extends Error {
+	constructor() {
+		super('No staff PIN is set for this kiosk');
+		this.name = 'KioskReprintStaffPinNotSetError';
+	}
+}
+
+/** The device's staff PIN queue is full: the check was not even attempted, try again later. */
+export class KioskReprintStaffPinBusyError extends Error {
+	constructor() {
+		super('The staff PIN check is busy');
+		this.name = 'KioskReprintStaffPinBusyError';
+	}
+}
+
+/** What the injected staff PIN check answers; the route supplies the real verifier. */
+export type KioskStaffPinResult =
+	{ kind: 'ok' } | { kind: 'wrong' } | { kind: 'not_set' } | { kind: 'busy' };
+
+export type KioskReprintDeps = {
+	verifyStaffPin?: (pin: string) => Promise<KioskStaffPinResult>;
+};
 
 function normalizeEvacueeId(id: string): string {
 	return `evacuee:${id.slice('evacuee:'.length).toUpperCase()}`;
@@ -113,7 +150,8 @@ function citizenIdLast4(primary: EvacueeDoc): string | null {
  */
 export async function reprintKioskLabels(
 	shelterCode: string,
-	input: KioskReprintInput
+	input: KioskReprintInput,
+	deps: KioskReprintDeps = {}
 ): Promise<KioskReprintMember[]> {
 	const canonical = normalizeKioskPhone(input.phone);
 	if (!canonical) throw new KioskInputError();
@@ -138,9 +176,24 @@ export async function reprintKioskLabels(
 		throw new KioskReprintNotFoundError();
 	}
 
-	const last4 = citizenIdLast4(primary);
-	if (last4 === null) throw new KioskReprintUnverifiableError();
-	if (last4 !== input.id_last4) throw new KioskReprintVerifyFailedError();
+	if ('id_last4' in input) {
+		const last4 = citizenIdLast4(primary);
+		if (last4 === null) throw new KioskReprintUnverifiableError();
+		if (last4 !== input.id_last4) throw new KioskReprintVerifyFailedError();
+	} else {
+		// Fail closed: only an explicit ok from the injected verifier lets the reprint through.
+		const result = await deps.verifyStaffPin?.(input.staff_pin);
+		switch (result?.kind) {
+			case 'ok':
+				break;
+			case 'not_set':
+				throw new KioskReprintStaffPinNotSetError();
+			case 'busy':
+				throw new KioskReprintStaffPinBusyError();
+			default:
+				throw new KioskReprintStaffPinInvalidError();
+		}
+	}
 
 	const eligible: EvacueeDoc[] = [];
 	for (const evacueeId of new Set(input.evacuee_ids.map(normalizeEvacueeId))) {

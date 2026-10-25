@@ -1,10 +1,16 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { scannerServerRepository } from '$lib/features/kiosk-devices/server';
+import {
+	scannerServerRepository,
+	type PersistedScannerDevice
+} from '$lib/features/kiosk-devices/server';
 import {
 	KioskInputError,
 	KioskLookupUnavailableError,
 	KioskReprintNotFoundError,
+	KioskReprintStaffPinBusyError,
+	KioskReprintStaffPinInvalidError,
+	KioskReprintStaffPinNotSetError,
 	KioskReprintUnverifiableError,
 	KioskReprintVerifyFailedError,
 	kioskReprintInputSchema,
@@ -19,6 +25,8 @@ import {
 	ScannerAuthError,
 	ScannerDependencyError
 } from '$lib/server/scanners/device-credentials';
+import { StaffPinUnavailableError, verifyDeviceStaffPin } from '$lib/server/scanners/staff-pin';
+import { staffPinThrottle } from '$lib/server/scanners/staff-pin-throttle';
 import { findMasterByCode } from '$lib/server/shelters.admin';
 
 export const prerender = false;
@@ -34,16 +42,34 @@ function errorResponse(
 	return json({ error: { code, message } }, { status, headers: { ...noStoreHeaders, ...headers } });
 }
 
+/** Audit line for the PIN check: device, time, outcome. Never the PIN. */
+function auditPinCheck(deviceId: string, outcome: string): void {
+	console.info(
+		`[scanner-staff-pin] verify device=${deviceId} result=${outcome} at=${new Date().toISOString()}`
+	);
+}
+
+/** The staff PIN could not be checked (store down, turn not granted): fail closed with 503. */
+class StaffPinCheckUnavailableError extends Error {}
+
 /**
  * Reprint the QR labels of the phone owner's household after the visitor types the last four
- * digits of the owner's citizen id. Read-only; the phone lookup lists who can be reprinted.
+ * digits of the owner's citizen id, or a staff PIN for this kiosk. Read-only; the phone lookup
+ * lists who can be reprinted.
  */
 export const POST: RequestHandler = async ({ request }) => {
+	let device: PersistedScannerDevice | null = null;
 	try {
 		const principal = await authenticateScannerDevice(
 			request.headers.get('x-device-id') ?? '',
 			request.headers.get('x-device-secret') ?? '',
-			scannerServerRepository
+			{
+				// Capture the doc authentication already loaded, so the PIN check needs no 2nd read.
+				getDeviceByDeviceId: async (deviceId) => {
+					device = await scannerServerRepository.getDeviceByDeviceId(deviceId);
+					return device;
+				}
+			}
 		);
 		const parsed = kioskReprintInputSchema.safeParse(await request.json().catch(() => null));
 		if (!parsed.success || !normalizeKioskPhone(parsed.data.phone)) {
@@ -64,12 +90,55 @@ export const POST: RequestHandler = async ({ request }) => {
 			);
 		}
 
-		const members = await reprintKioskLabels(principal.shelter_code, parsed.data);
+		// The PIN checked is always the authenticated device's, never an id from the body.
+		const verifyStaffPin = async (pin: string) => {
+			const authenticated = device as PersistedScannerDevice | null;
+			if (!authenticated) throw new ScannerDependencyError('Authenticated device unavailable');
+			try {
+				const result = await staffPinThrottle.run(authenticated.device_id, async () => {
+					const checked = await verifyDeviceStaffPin(authenticated, pin);
+					auditPinCheck(authenticated.device_id, checked.kind);
+					return checked;
+				});
+				if (result.kind === 'busy') auditPinCheck(authenticated.device_id, 'busy');
+				return result;
+			} catch (error) {
+				auditPinCheck(
+					authenticated.device_id,
+					error instanceof StaffPinUnavailableError ? 'unavailable' : 'error'
+				);
+				throw new StaffPinCheckUnavailableError();
+			}
+		};
+		const members = await reprintKioskLabels(principal.shelter_code, parsed.data, {
+			verifyStaffPin
+		});
+		if ('staff_pin' in parsed.data) {
+			console.info(
+				`[kiosk-reprint] staff_pin_bypass device=${principal.device_id} shelter=${principal.shelter_code} primary=${parsed.data.primary_evacuee_id} labels=${members.length} at=${new Date().toISOString()}`
+			);
+		}
 		await scannerServerRepository.updateDeviceLastSeen(principal.registry_id).catch(() => {});
 		return json({ shelter_code: principal.shelter_code, members }, { headers: noStoreHeaders });
 	} catch (error) {
 		if (error instanceof KioskReprintVerifyFailedError) {
 			return errorResponse(403, 'KIOSK_REPRINT_VERIFY_FAILED', 'เลข 4 หลักท้ายไม่ถูกต้อง');
+		}
+		if (error instanceof KioskReprintStaffPinInvalidError) {
+			return errorResponse(401, 'KIOSK_REPRINT_STAFF_PIN_INVALID', 'PIN ไม่ถูกต้อง');
+		}
+		if (error instanceof KioskReprintStaffPinNotSetError) {
+			return errorResponse(
+				409,
+				'staff_pin_not_set',
+				'ยังข้ามขั้นตอนนี้ไม่ได้ กรุณาติดต่อผู้ดูแลระบบ'
+			);
+		}
+		if (error instanceof KioskReprintStaffPinBusyError) {
+			return errorResponse(429, 'RATE_LIMITED', 'กำลังตรวจ PIN อยู่ กรุณารอสักครู่');
+		}
+		if (error instanceof StaffPinCheckUnavailableError) {
+			return errorResponse(503, DEPENDENCY_UNAVAILABLE, 'บริการตรวจสอบ PIN ไม่พร้อมใช้งาน');
 		}
 		if (error instanceof KioskReprintUnverifiableError) {
 			return errorResponse(

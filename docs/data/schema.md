@@ -2,8 +2,8 @@
 title: Smart Shelter — Database Schema v5
 status: draft for review
 created: 2026-06-11
-updated: 2026-10-22
-note: CR-187 approved (2026-10-22, #648) — §3.3 `master_type` เพิ่ม `allergy` (global-only, seed 5) + §1.2 `medical.allergies` = master code หรือ free text (ไม่ bump `schema_v`); CR-186 approved (2026-10-22, #649) — §3.3 `master_type` เพิ่ม `chronic_disease` (global-only, seed 12) + §1.2 `medical.conditions` = master code หรือ free text (ไม่ bump `schema_v`); CR-185 approved (2026-10-21, #709) — §9.2 `public_jobs.is_urgent` (projection field ใหม่, `PROJECTION_VERSION` 5→6, ไม่ bump `schema_v`); CR-162 ส่วนที่ปรับ 2026-10-21 (Team Lead อนุมัติ 2026-10-22) — kiosk banner group: §3.11 `scanner_device.banner_group_id` (additive, ไม่ bump) + `banner_enabled` deprecated, §3.12 `kiosk_banner` schema_v 1 → 2 (+ `group_id`, order ต่อ (group_id, screen_type), VDU `REGISTRY_DESIGN_VERSION` 8), §3.13 `kiosk_banner_group` ใหม่ (schema_v 1); draft-bulk-return-pool-redesign (2026-10-22, #658, proposed) — `bulk_return_pool` schema_v 3 (§2.31: header `name`/`location_storage_point_id`+`location_storage_zone`/`status OPEN|SUBMITTED|RECEIVED|CANCELLED`/`lock? SUBMIT|CANCEL`/snapshot ตอน submit `items_summary`+`entry_ids`/`cancelled_*`/ผลตรวจรับ `received_*`; ไม่มี `return_ticket_id`; ไม่มี aggregate quota; #660 ตอน receive: CAS pool เป็น `RECEIVED` ก่อน แล้วเขียน `stock_ledger` `receive` ต่อ item ที่ `received_qty > 0` ด้วย `_id` deterministic — ไม่เปลี่ยน shape/`schema_v`); doc type ใหม่ `bulk_return_entry` v1 (§2.31.1, `returner_type`), `bulk_return_entry_move` v1 (§2.31.2) และ `bulk_return_entry_void` v1 (§2.31.3) แบบ append-only; v3 ยังไม่ปล่อย จึงแก้ shape ในที่เดิมโดยไม่ bump `schema_v` ของ pool/entry/move; `distribution_log` schema_v 1 → 2 (§2.30: `applied_bulk_entry_ids`, path apply/revert, `bulk_pool_id` legacy อ่านอย่างเดียว; v1 ยังใช้ได้ ไม่ backfill); v1/v2 ของ pool frozen ตอน deploy (ไม่ migrate, #661 ลบ), `bulk_return_claim` (§2.32) legacy frozen; Mango index `(type, pool_id)` + view `bulk_return_pool_item_totals` นับ entry/move/void (§7, `_design/app` ยังเป็น v4); การตัดสินโดย kong 2026-10-22 ดู CR draft หัวข้อ Decisions
+updated: 2026-10-25
+note: CR-170 amend (2026-10-25) — §7 `registrations_by_date_status` เพิ่ม series `preregister` (view manifest v4); CR-191 approved (2026-10-25, #607) — §4.2 `item_master.allergens` = `[str]` ของ master `allergy` code หรือ free text (`item_master` schema_v 5 → 6) + §2.30 `distribution_log.allergen_conflicts` (opt, additive, ไม่ bump); CR-190 approved (2026-10-24, #569) — §2.1 `adjust` ติดลบ (ปรับยอด / `count_mismatch`) อ้าง `lot_ref` ของล็อตที่ตัดและต้องพอในล็อตนั้น, `adjust` บวกเป็นล็อตใหม่ (ไม่เปลี่ยน field / ไม่ bump `schema_v`); CR-187 approved (2026-10-22, #648) — §3.3 `master_type` เพิ่ม `allergy` (global-only, seed 5) + §1.2 `medical.allergies` = master code หรือ free text (ไม่ bump `schema_v`); CR-186 approved (2026-10-22, #649) — §3.3 `master_type` เพิ่ม `chronic_disease` (global-only, seed 12) + §1.2 `medical.conditions` = master code หรือ free text (ไม่ bump `schema_v`); CR-185 approved (2026-10-21, #709) — §9.2 `public_jobs.is_urgent` (projection field ใหม่, `PROJECTION_VERSION` 5→6, ไม่ bump `schema_v`); CR-162 ส่วนที่ปรับ 2026-10-21 (Team Lead อนุมัติ 2026-10-22) — kiosk banner group: §3.11 `scanner_device.banner_group_id` (additive, ไม่ bump) + `banner_enabled` deprecated, §3.12 `kiosk_banner` schema_v 1 → 2 (+ `group_id`, order ต่อ (group_id, screen_type), VDU `REGISTRY_DESIGN_VERSION` 8), §3.13 `kiosk_banner_group` ใหม่ (schema_v 1); draft-bulk-return-pool-redesign (2026-10-22, #658, proposed) — `bulk_return_pool` schema_v 3 (§2.31: header `name`/`location_storage_point_id`+`location_storage_zone`/`status OPEN|SUBMITTED|RECEIVED|CANCELLED`/`lock? SUBMIT|CANCEL`/snapshot ตอน submit `items_summary`+`entry_ids`/`cancelled_*`/ผลตรวจรับ `received_*`; ไม่มี `return_ticket_id`; ไม่มี aggregate quota; #660 ตอน receive: CAS pool เป็น `RECEIVED` ก่อน แล้วเขียน `stock_ledger` `receive` ต่อ item ที่ `received_qty > 0` ด้วย `_id` deterministic — ไม่เปลี่ยน shape/`schema_v`); doc type ใหม่ `bulk_return_entry` v1 (§2.31.1, `returner_type`), `bulk_return_entry_move` v1 (§2.31.2) และ `bulk_return_entry_void` v1 (§2.31.3) แบบ append-only; v3 ยังไม่ปล่อย จึงแก้ shape ในที่เดิมโดยไม่ bump `schema_v` ของ pool/entry/move; `distribution_log` schema_v 1 → 2 (§2.30: `applied_bulk_entry_ids`, path apply/revert, `bulk_pool_id` legacy อ่านอย่างเดียว; v1 ยังใช้ได้ ไม่ backfill); v1/v2 ของ pool frozen ตอน deploy (ไม่ migrate, #661 ลบ), `bulk_return_claim` (§2.32) legacy frozen; Mango index `(type, pool_id)` + view `bulk_return_pool_item_totals` นับ entry/move/void (§7, `_design/app` ยังเป็น v4); การตัดสินโดย kong 2026-10-22 ดู CR draft หัวข้อ Decisions
 ---
 
 # Database Schema v5 — field-level
@@ -334,7 +334,7 @@ projection — เป็นข้อมูลหลังบ้านล้ว�
 | `unit` | str | req | ต้องตรงกับ `item_master.base_unit` |
 | `reason` | enum(`receive`,`distribute`,`requisition`,`adjust`,`transfer_out`,`transfer_in`,`donation`,`distribution_return`) | req | `distribution_return` = คืนของที่เหลือจาก batch กลับ physical lot เดิม |
 | `ref_id` | str\|null | ตาม `reason` | doc ต้นเหตุ — **ค่าที่ยอมรับผูกกับ `reason` ตามตาราง "`reason` → `ref_id`" ด้านล่าง** (CR-055) |
-| `lot_ref` | str | opt/ตาม `reason` | stable physical-lot identity → `stock_ledger:{id}`; บังคับสำหรับ `distribute`/`distribution_return` และ `requisition` ที่อ้าง `requisition_ticket` (CR-178); แถวรับเข้าใหม่ self-reference `_id` (เว้นแต่การรับของแจกเหลือคืนคลัง `reason='receive'` ที่แนะนำให้อ้างอิง `lot_ref` เดิมของล็อตที่เบิกจ่ายเพื่อการสืบย้อนกลับ); legacy อาจไม่มี field |
+| `lot_ref` | str | opt/ตาม `reason` | stable physical-lot identity → `stock_ledger:{id}`; บังคับสำหรับ `distribute`/`distribution_return` และ `requisition` ที่อ้าง `requisition_ticket` (CR-178); `adjust` ติดลบจากฟอร์มปรับยอด/ตรวจนับ (`count_mismatch`) อ้างล็อตที่ตัด และต้องพอในล็อตนั้นตอนบันทึก ([CR-190](../changes/03-C-supply/CR-190-lot-bound-adjust-and-count.md)); แถวรับเข้าใหม่และ `adjust` บวก self-reference `_id` (เว้นแต่การรับของแจกเหลือคืนคลัง `reason='receive'` ที่แนะนำให้อ้างอิง `lot_ref` เดิมของล็อตที่เบิกจ่ายเพื่อการสืบย้อนกลับ); legacy อาจไม่มี field |
 | `lot` | {`expiry`:ts?, `note`:str?, `lot_no`:str?, `storage_zone`:str?, `storage_point_id`:str?, `produced_at`:ts?} | opt | ของหมดอายุได้ (อาหาร/ยา) · `lot_no`/`storage_zone` = CR-088 · `storage_point_id`/`produced_at` = schema_v 5 (ดูตารางย่อยด้านล่าง) |
 | `adjust_reason` | enum(`expired`,`damaged`,`count_mismatch`,`lost`,`found`,`merge`,`other`) | req เมื่อ `reason='adjust'` · ห้ามมีเมื่อ reason อื่น | เหตุผลการปรับยอด (schema_v 6, CR-143 §C); `merge` ใช้เฉพาะ flow รวมสินค้า (CR-143 §F) — ฟอร์มปรับยอดทั่วไปไม่แสดง; `other` ต้องมี `note` (CR-156); รับเข้า manual = `found` (CR-156) |
 | `note` | str ≤500 | opt (เฉพาะ `reason='adjust'`) | รายละเอียดการปรับยอด (schema_v 6, CR-143 §C) — ไม่ใช่ `lot.note` |
@@ -365,7 +365,7 @@ projection — เป็นข้อมูลหลังบ้านล้ว�
 | `requisition` | `requisition_ticket:{ulid}` หรือ `kitchen_requisition:{ulid}` — req | ticket เบิกกลางใหม่ (CR-121) หรือ kitchen flow เดิม; อ้าง `requisition_ticket` → `qty` ลบและต้องมี `lot_ref` หนึ่งแถวต่อ lot (CR-178); อ้าง `kitchen_requisition` (legacy) ไม่บังคับ |
 | `transfer_in` | `stock_transfer:{ulid}` — req | transition ของ §2.2 (T-13 — ยังไม่ wired) |
 | `transfer_out` | `stock_transfer:{ulid}` หรือ `requisition_ticket:{ulid}` — req | โอนย้ายข้ามศูนย์ หรือ ticket โอนย้ายใหม่ (CR-121) |
-| `adjust` | **`null` เสมอ** | ปรับสต็อกมือ ไม่มีใบต้นเหตุ; เหตุผลอยู่ใน `adjust_reason` (CR-143 §C) |
+| `adjust` | **`null` เสมอ** | ปรับสต็อกมือ ไม่มีใบต้นเหตุ; เหตุผลอยู่ใน `adjust_reason` (CR-143 §C); ติดลบอ้าง `lot_ref` ของล็อตที่ตัด, บวกเป็นล็อตใหม่ ([CR-190](../changes/03-C-supply/CR-190-lot-bound-adjust-and-count.md)) |
 | `distribute` | `requisition_ticket:{ulid}` — req | จ่ายพัสดุ/อาหารออกจาก ticket เบิกกลาง; `qty` ลบและต้องมี `lot_ref` (CR-121) |
 | `distribution_return` | `distribution_batch:{request_ulid}` — req | คืนยอดคงเหลือเข้าล็อตเดิม; `qty` บวกและต้องมี `lot_ref` |
 | `receive` | `meal_service:{ulid}`, `requisition_ticket:{ulid}`, `distribution_log:{ulid}` หรือ `bulk_return_pool:{ulid}` — req | รับผลผลิตครัว, รับของแจก/ของเหลือคืนคลัง, รับของยืมคืน หรือรับของกองรวมเพื่อเปิด `bulk_return_pool` (CR-121) |
@@ -1226,6 +1226,7 @@ delta ที่อ้าง `requisition_ticket:{ulid}`.
 | `returned_at` / `returned_by` | ts / str | opt | audit การคืน |
 | `is_override` | bool | req | ใช้เมื่ออนุมัติแจกซ้ำ/ข้ามข้อจำกัด |
 | `override_reason` | str | opt | เหตุผล override |
+| `allergen_conflicts` | [str] | opt | master `allergy` code ที่ผู้รับแพ้และเมนูมี ณ เวลาแจก ([CR-191](../changes/03-C-supply/CR-191-allergen-warning-at-distribution.md)); เขียนเฉพาะเมื่อมีสารชน และต้องมี `is_override: true` + `override_reason`; additive ไม่ bump `schema_v` |
 | `is_expired_warning` | bool | opt | `true` เมื่ออาหารเกิน 4 ชั่วโมง (soft-warning audit) |
 | `distributed_at` / `distributed_by` | ts / str | req | เวลาและผู้บันทึกการแจก |
 | `voided_at` / `voided_by` | ts\|null / str\|null | opt | ยกเลิกโดยไม่ลบเอกสาร |
@@ -1418,7 +1419,7 @@ Role เขียน: `warehouse_staff`, `supply_coordinator`, `shelter_manager`
 
 **Migration & Document Compatibility:** pool/entry/move ไม่ bump `schema_v` (v3 ยังไม่ปล่อย). pool v1/v2 frozen ตอน deploy
 (อ่านอย่างเดียว) แล้วถูกลบใน #661 พร้อม `bulk_return_claim`, `bulk_pool_id` เดิมบน `distribution_log` และ claim ที่ค้าง; `distribution_log` v1 → v2
-แบบ lazy (§2.30). ต้อง redeploy `_design/access` + `_design/app` (ยังเป็นเวอร์ชัน 4) + index บน shelter ที่ provision แล้ว (`scripts/redeploy-access.ts`;
+แบบ lazy (§2.30). ต้อง redeploy `_design/access` + `_design/app` (เวอร์ชัน 5) + index บน shelter ที่ provision แล้ว (`scripts/redeploy-access.ts`;
 provisioner ครอบคลุม shelter ใหม่). flow เดิม (สร้าง pool v2 / claim) ถูก VDU ปฏิเสธหลัง redeploy — #658/#659/#660 จึงต้อง merge และ deploy พร้อมกัน
 (ดู draft-bulk-return-pool-redesign § Rollout).
 
@@ -2103,6 +2104,38 @@ index เดิมใช้กับ selector ของ `kiosk_banner_group` (`t
 
 ---
 
+### 3.13 `config` — `config:public_portal` (singleton) · **schema_v 1** ([CR-184](../changes/12-public/CR-184-public-footer-logos.md))
+
+เนื้อหาของ public portal ที่ SA แก้จาก `/system-management/public-portal-config`. Envelope ตาม §0
+(`type: "config"`). BFF `GET /api/public/v1/config/faqs` อ่านจาก CouchDB ตรง (fallback FastAPI/Mongo `public_config`).
+Worker project ไป `public_config` ทั้งก้อน **ยกเว้น** `footer_logos` และ `_attachments` (CR-184 Q2, `PROJECTION_VERSION` 6 ร่วมกับ #727).
+
+| Field | ชนิด | req | หมายเหตุ |
+| --- | --- | --- | --- |
+| `faqs` | `{ [category]: FaqItem[] }` | req | category ที่ใช้: `public`, `registration`, `volunteer` · `FaqItem` = `{ id?, question, answer, question_en?, answer_en?, is_published (default true), order (default 0) }` |
+| `phone_number` | str | opt | `''` = ไม่แสดง |
+| `line_oa_url` / `facebook_url` | str(url) | opt | `''` = ไม่แสดง (footer column "ช่องทางออนไลน์ด่วน") |
+| `footer_logos` | `FooterLogo[]` | opt | ไม่มี field = `[]` · สูงสุด 12 รายการ · โลโก้หน่วยงานใน footer |
+| `footer_logos[].id` | str (ULID) | req | server สร้าง · แก้ไม่ได้ · ชื่อ attachment = `footer_logo_{id}` |
+| `footer_logos[].alt_th` | str | req | trim · 1–120 · `alt` ของรูป |
+| `footer_logos[].alt_en` | str | opt | trim · ≤120 · ว่าง = ใช้ `alt_th` เมื่อภาษา EN |
+| `footer_logos[].link_url` | str | opt | `https://` เท่านั้น · ว่าง = รูปไม่เป็นลิงก์ |
+| `footer_logos[].order` | int | req | ≥1 · server กำหนด (ต่อท้าย, renumber 1..n เมื่อลบ/ย้าย) |
+| `footer_logos[].is_published` | bool | req | default `true` |
+| `_attachments.footer_logo_{id}` | attachment | req ต่อ logo | `image/png` · `image/jpeg` · `image/webp` (ชนิดเดียวกับ §3.12) · ≤512 KB · `content_type` จาก magic bytes ที่ server ตรวจ · ไม่รับ SVG |
+
+**Invariant:** ทุก entry ใน `footer_logos` มี attachment คู่กัน และไม่มี attachment `footer_logo_*` กำพร้า.
+
+**การเขียน:** SA เท่านั้น ผ่าน form action ของหน้า `public-portal-config` (admin credential) · ทุก write = PUT ทั้ง doc
+ครั้งเดียวพร้อม attachment ตัวอื่นเป็น stub · การบันทึก FAQ/social ต้องคง `footer_logos` + `_attachments` จาก doc เดิม ·
+VDU ไม่ตรวจ field ของ doc นี้ (เงื่อนไขผู้เขียน `registry` เดิมคงไว้).
+
+**อ่านรูป (public):** `GET /api/public/v1/config/footer-logos/{id}/image?v={digest}` — เฉพาะ `is_published = true`
+· `cache-control: public, max-age=3600` (ซ่อนแล้วอาจยังแสดงจาก cache ≤1 ชม.) · SA ดูตัวที่ซ่อนได้ (`no-store`) ·
+ผู้อื่นที่ขอตัวที่ไม่มี/ซ่อน → `404`.
+
+---
+
 ## 4. DB `catalog` (central-managed → pull ลง device; edge fallback replica)
 
 > **Current catalog versions:** `item_category` v2 (CR-119), `item_master` v4 (CR-082/084/120),
@@ -2151,8 +2184,9 @@ index เดิมใช้กับ selector ของ `kiosk_banner_group` (`t
 ค่าใหม่ยังอ่านได้โดย default `is_protected=false`. `item_master.category` เดิมที่เป็นชื่อภาษาไทย
 ต้องอ่านได้ต่อ และเมื่อมีการแก้ไข/บันทึกใหม่ให้เขียนเป็น `category_id`.
 
-### 4.2 `item_master` — `item_master:{sku}` หรือ `item_master:{ulid}` · **schema_v 5** (แทนที่ `supply_item`)
+### 4.2 `item_master` — `item_master:{sku}` หรือ `item_master:{ulid}` · **schema_v 6** (แทนที่ `supply_item`)
 
+> **schema_v 6** — `allergens` เขียนเป็น `[str]` เสมอ (master `allergy` code หรือ free text) ([CR-191](../changes/03-C-supply/CR-191-allergen-warning-at-distribution.md)). doc ≤ v5 ที่เก็บเป็น string ยังอ่านได้ ไม่ backfill.
 > **schema_v 5** — เพิ่ม `merged_into` สำหรับการรวมสินค้าซ้ำ ([CR-143](../changes/03-C-supply/CR-143-stock-redesign-rules.md) §F). additive ⇒ doc เดิมไม่ backfill; writer ใหม่ stamp `schema_v 5`.
 > **schema_v 4** — จัดแนว field/class และลบฟิลด์ UOM/target ที่ซ้ำกับ SOP ratio engine (CR-082/084).
 > `conversions[].multiplier` เป็น `qty_str` ตาม CR-038.
@@ -2178,7 +2212,7 @@ index เดิมใช้กับ selector ของ `kiosk_banner_group` (`t
 | `type_class` | enum(`CONSUMABLE`,`DURABLE`,`EQUIPMENT`) | req | ชั้นสินค้า; ใช้ `default_class` จาก category เป็นค่าเริ่มต้นแต่ override ได้ |
 | `shelf_life_days` | num | opt | อายุการจัดเก็บ |
 | `storage_type` | enum(`DRY`,`CHILLED`,`FROZEN`,`CONTROLLED_MED`) | opt | สภาพการจัดเก็บ |
-| `allergens` | [str] | conditional req | รายการสารก่อภูมิแพ้; default `[]` (บังคับสำหรับสินค้าทั่วไป, ไม่ใช้/ไม่ persist ใน FUEL_ENERGY) |
+| `allergens` | [str] | conditional req | รายการสารก่อภูมิแพ้ — แต่ละค่าเป็น `code` ของ `master_data:allergy` หรือ free text (ข้อความตรง `label_th`/`label_en` ของ item `active` → code, กติกาเดียวกับ CR-187 FR-6) ([CR-191](../changes/03-C-supply/CR-191-allergen-warning-at-distribution.md)); default `[]` (บังคับสำหรับสินค้าทั่วไป, ไม่ใช้/ไม่ persist ใน FUEL_ENERGY) |
 | `target_gender` | enum(`ALL`,`FEMALE`,`MALE`) | opt | กลุ่มเพศเป้าหมาย |
 | `age_group` | enum(`ALL`,`INFANT`,`CHILD`,`ELDERLY`) | opt | กลุ่มอายุเป้าหมาย |
 | `dietary` | [enum(`HALAL`,`VEGAN`)] | conditional req | ข้อจำกัดด้านอาหาร; default `[]` (บังคับสำหรับสินค้าทั่วไป, ไม่ใช้/ไม่ persist ใน FUEL_ENERGY) |
@@ -2199,6 +2233,8 @@ index เดิมใช้กับ selector ของ `kiosk_banner_group` (`t
 **ต้องกรอกวันหมดอายุตอนรับเข้า (CR-143 §D):** `requiresExpiry(item) = storage_type ∈ {CHILLED, FROZEN} || shelf_life_days != null` — แทนการอ้าง `item_master.perishable` (ไม่มี field นี้). มี `shelf_life_days` → UI เติม `lot.expiry` ให้อัตโนมัติ (แก้ได้, มี label ให้ตรวจสอบกับฉลาก); CHILLED/FROZEN ที่ไม่มี `shelf_life_days` → ผู้ใช้กรอกเอง.
 
 **รวมสินค้า (CR-143 §F):** ต่อทุกล็อตของต้นทางที่ qty > 0 เขียน `stock_ledger` `adjust` คู่ (−qty ต้นทาง / +qty ปลายทาง คง `lot` เดิม, `adjust_reason='merge'`, `note` = id อีกฝั่ง) ในการเขียนครั้งเดียว แล้วตั้ง `merged_into` + `deactivated: true` ที่ต้นทาง; หน่วยต้องแปลงได้; สินค้า local ของศูนย์ = SA หรือ shelter_manager/warehouse_staff ของศูนย์นั้น, สินค้าส่วนกลางห้ามเป็นต้นทางของการรวม (CR-156 FR-F4a); retry ต้องปิดต้นทางได้โดยไม่ย้ายยอดซ้ำ (FR-F6).
+
+**Migration (schema_v 5 → 6, CR-191):** ไม่ backfill — reader รับ `allergens` ทั้ง `string` (≤ v5: แยกด้วย `,`, trim, ตัดค่าว่าง) และ `[str]` (v6); writer ใหม่ (สร้าง/แก้ในฟอร์ม, รวมสินค้า) เขียน array + stamp `schema_v 6`. ข้อความเดิมที่ตรง label master ถูก map เป็น code ตอนเทียบและตอนบันทึกฟอร์ม; ที่ไม่ตรงคงเป็น free text ใน array (แสดงผลแต่ไม่ match).
 
 **Migration (schema_v 4 → 5, CR-143 §F):** additive `merged_into` (opt) — doc `schema_v 4` อ่านได้ปกติ ไม่ backfill.
 
@@ -2716,7 +2752,7 @@ CouchDB `_users` DB ไม่ใช่ operational doc ธรรมดา — �
 
 | DB | Mango indexes | Views (map/reduce) |
 | --- | --- | --- |
-| `shelter_*` | evacuee kiosk lookup: (type, phone), (type, person_id.number), (type, household_id), (type, card_snapshot.address_no) · movement: (evacuee_id, occurred_at) · screening: (evacuee_id, screened_at) · stock_ledger: (item_id, occurred_at) · `fuel_cylinder`: (item_master_id, cylinder_code) · `gas_ledger`: (cylinder_id, occurred_at) · `requisition_ticket`: (status, requisition_type, ticket_no) · `distribution_log`: (ticket_id, item_id, recipient_id, status), (recipient_id, status) · `bulk_return_pool`: (item_id, status) (legacy v1/v2 — frozen) · `bulk_return_entry`: (type, pool_id) (draft-bulk-return-pool-redesign) · donation: status, tracking_token_hash, booking_ref, campaign_id, (logistics.slot.date) · donation_slot: (date), (date, from) · medical: evacuee_id · shift_assignment: (job_id, shift_id), (volunteer_id, status), (status) · volunteer: (phone), (phone_hash), (tracking_token_hash), (status), (personnel_type), (checked_in) · job: (status), (tier, status) · job_application: (job_id, status), (tracking_token) · sop_override: (active) · food_sphere_standard: (target_segment, req_group_id, effective_date) · requirement_group: (name) · replenishment_policy: (scope_type, target_id) | `occupancy` (count evacuees by stay status) · `demographics_by_age` (count in-shelter evacuees — `active` + `room_confirmed`, CR-170 — by birth year; dynamic age-bucket in API) · `demographics_by_country` (count in-shelter evacuees by country) · `registrations_by_date_status` (count check-in/out movements by date) · `stock_balance` (client Decimal sum qty_str by item; CR-038) · `gas_balance` (client Decimal sum gas_ledger.qty_kg by active cylinder) · `latest_screening` · `meals_served` (sum by date+meal) · `needs_open` · `slot_availability` · `bulk_return_pool_item_totals` (`_sum` — [qty, count] ต่อ pool/item/entry จาก entry + move และหักยอด void; `_design/app` ยังเป็นเวอร์ชัน 4 เพราะยังไม่ปล่อย; draft-bulk-return-pool-redesign, §2.31.3) |
+| `shelter_*` | evacuee kiosk lookup: (type, phone), (type, person_id.number), (type, household_id), (type, card_snapshot.address_no) · movement: (evacuee_id, occurred_at) · screening: (evacuee_id, screened_at) · stock_ledger: (item_id, occurred_at) · `fuel_cylinder`: (item_master_id, cylinder_code) · `gas_ledger`: (cylinder_id, occurred_at) · `requisition_ticket`: (status, requisition_type, ticket_no) · `distribution_log`: (ticket_id, item_id, recipient_id, status), (recipient_id, status) · `bulk_return_pool`: (item_id, status) (legacy v1/v2 — frozen) · `bulk_return_entry`: (type, pool_id) (draft-bulk-return-pool-redesign) · donation: status, tracking_token_hash, booking_ref, campaign_id, (logistics.slot.date) · donation_slot: (date), (date, from) · medical: evacuee_id · shift_assignment: (job_id, shift_id), (volunteer_id, status), (status) · volunteer: (phone), (phone_hash), (tracking_token_hash), (status), (personnel_type), (checked_in) · job: (status), (tier, status) · job_application: (job_id, status), (tracking_token) · sop_override: (active) · food_sphere_standard: (target_segment, req_group_id, effective_date) · requirement_group: (name) · replenishment_policy: (scope_type, target_id) | `occupancy` (count evacuees by stay status) · `demographics_by_age` (count in-shelter evacuees — `active` + `room_confirmed`, CR-170 — by birth year; dynamic age-bucket in API) · `demographics_by_country` (count in-shelter evacuees by country) · `registrations_by_date_status` (count check-in/out movements by date + `preregister`: evacuees with `registered_via` ∈ web/kiosk/api, not cancelled, by `created_at` date — CR-170 amend) · `stock_balance` (client Decimal sum qty_str by item; CR-038) · `gas_balance` (client Decimal sum gas_ledger.qty_kg by active cylinder) · `latest_screening` · `meals_served` (sum by date+meal) · `needs_open` · `slot_availability` · `bulk_return_pool_item_totals` (`_sum` — [qty, count] ต่อ pool/item/entry จาก entry + move และหักยอด void; `_design/app` เวอร์ชัน 5 — v4 เป็นของ CR-170 amend; draft-bulk-return-pool-redesign, §2.31.3) |
 | `registry` | shelter: status · shelter: code (unique) · location_district: (province_id) · location_subdistrict: (district_id) · kiosk_banner: (type, shelter_code) — index เดียวกันนี้ใช้กับ `kiosk_banner_group` ด้วย (selector `type` + `shelter_code` · ไม่เพิ่ม index ใหม่ — 2026-10-21) | — |
 | `catalog` | item_master: (category, distribution_type, type_class) · item_category: (system_key, is_protected) · recipe: (deactivated) · sop_profile: active · food_sphere_standard: (target_segment, req_group_id, effective_date) · requirement_group: (name) · replenishment_policy: (scope_type, target_id) | — |
 | `central_ops` | export_job: (status, requested_by) · search_audit: occurred_at | — |
