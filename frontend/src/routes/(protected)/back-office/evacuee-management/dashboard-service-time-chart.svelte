@@ -53,7 +53,7 @@
 				{#snippet formatter({ value })}
 					<div class="flex flex-1 items-center justify-between gap-4 leading-none">
 						<span class="text-muted-foreground">{chartConfig.minutes.label}</span>
-						<span class="font-mono font-medium text-foreground tabular-nums">
+						<span class="font-medium text-foreground tabular-nums">
 							{Number(value) > 0 ? formatServiceDuration(Number(value) * 60) : 'ยังไม่มีข้อมูล'}
 						</span>
 					</div>
