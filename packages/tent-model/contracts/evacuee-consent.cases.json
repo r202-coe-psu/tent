@@ -301,6 +301,62 @@
       }
     },
     {
+      "name": "given_at is a date without a time",
+      "consent": {
+        "mode": "full",
+        "health": true,
+        "ref": "CS-7K3QZ9MD",
+        "given_at": "2026-10-25",
+        "given_by": "self",
+        "giver_evacuee_id": null,
+        "recorded_verbally_by": null,
+        "channel": "staff",
+        "notice_version": "2026-10-25"
+      }
+    },
+    {
+      "name": "given_at has no offset",
+      "consent": {
+        "mode": "full",
+        "health": true,
+        "ref": "CS-7K3QZ9MD",
+        "given_at": "2026-10-25T03:15:00",
+        "given_by": "self",
+        "giver_evacuee_id": null,
+        "recorded_verbally_by": null,
+        "channel": "staff",
+        "notice_version": "2026-10-25"
+      }
+    },
+    {
+      "name": "given_at has a compact offset",
+      "consent": {
+        "mode": "full",
+        "health": true,
+        "ref": "CS-7K3QZ9MD",
+        "given_at": "2026-10-25T03:15:00+0700",
+        "given_by": "self",
+        "giver_evacuee_id": null,
+        "recorded_verbally_by": null,
+        "channel": "staff",
+        "notice_version": "2026-10-25"
+      }
+    },
+    {
+      "name": "given_at is a day that does not exist",
+      "consent": {
+        "mode": "full",
+        "health": true,
+        "ref": "CS-7K3QZ9MD",
+        "given_at": "2026-02-30T03:15:00Z",
+        "given_by": "self",
+        "giver_evacuee_id": null,
+        "recorded_verbally_by": null,
+        "channel": "staff",
+        "notice_version": "2026-10-25"
+      }
+    },
+    {
       "name": "verbal recording outside staff channel",
       "consent": {
         "mode": "full",

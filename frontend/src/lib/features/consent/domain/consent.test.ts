@@ -411,6 +411,8 @@ describe('consentVduClause (FR-34)', () => {
 			run(doc);
 			return null;
 		} catch (e) {
+			// A crash inside the clause (TypeError etc.) must fail the test, not count as a rejection.
+			if (typeof (e as { forbidden?: unknown })?.forbidden !== 'string') throw e;
 			return (e as { forbidden: string }).forbidden;
 		}
 	}
@@ -457,13 +459,14 @@ describe('consentVduClause (FR-34)', () => {
 	});
 
 	it('rejects the channel couplings the zod schema also rejects', () => {
-		expect(forbidden(evacuee({ ...goodConsent, channel: 'backfill' }))).not.toBeNull();
-		expect(
-			forbidden(evacuee({ ...goodConsent, given_by: 'backfill', channel: 'staff' }))
-		).not.toBeNull();
+		const coupling = 'consent channel backfill and given_by backfill must go together';
+		expect(forbidden(evacuee({ ...goodConsent, channel: 'backfill' }))).toBe(coupling);
+		expect(forbidden(evacuee({ ...goodConsent, given_by: 'backfill', channel: 'staff' }))).toBe(
+			coupling
+		);
 		expect(
 			forbidden(evacuee({ ...goodConsent, channel: 'kiosk', recorded_verbally_by: 'staff1' }))
-		).not.toBeNull();
+		).toBe('consent verbal recording is only possible on the staff channel');
 	});
 
 	it('ignores other doc types and evacuees without consent', () => {
@@ -473,47 +476,71 @@ describe('consentVduClause (FR-34)', () => {
 
 	it('rejects basic mode with health or without search_excluded', () => {
 		const basicConsent = { ...goodConsent, mode: 'basic', health: false };
-		expect(
-			forbidden(evacuee({ ...basicConsent, health: true }, { search_excluded: true }))
-		).not.toBeNull();
-		expect(forbidden(evacuee(basicConsent, { search_excluded: false }))).not.toBeNull();
-		expect(forbidden(evacuee(basicConsent, undefined))).not.toBeNull();
+		expect(forbidden(evacuee({ ...basicConsent, health: true }, { search_excluded: true }))).toBe(
+			'consent basic mode cannot have health consent'
+		);
+		const needsExcluded = 'consent basic mode requires privacy.search_excluded';
+		expect(forbidden(evacuee(basicConsent, { search_excluded: false }))).toBe(needsExcluded);
+		expect(forbidden(evacuee(basicConsent, undefined))).toBe(needsExcluded);
 	});
 
 	it('rejects bad giver coupling', () => {
-		expect(forbidden(evacuee({ ...goodConsent, giver_evacuee_id: 'evacuee:01JA' }))).not.toBeNull();
-		expect(forbidden(evacuee({ ...goodConsent, given_by: 'guardian' }))).not.toBeNull();
+		expect(forbidden(evacuee({ ...goodConsent, giver_evacuee_id: 'evacuee:01JA' }))).toBe(
+			'consent giver_evacuee_id must be null for self'
+		);
+		expect(forbidden(evacuee({ ...goodConsent, given_by: 'guardian' }))).toBe(
+			'consent giver_evacuee_id must be an evacuee id for guardian'
+		);
 		expect(
 			forbidden(
 				evacuee({ ...goodConsent, given_by: 'household_member', giver_evacuee_id: 'person:1' })
 			)
-		).not.toBeNull();
+		).toBe('consent giver_evacuee_id must be an evacuee id for household_member');
 	});
 
 	it('rejects malformed values', () => {
-		const bad: Record<string, unknown>[] = [
-			{ ref: 'cs-7k3qz9md' },
-			{ ref: 'CS-7K3QZ9MI' },
-			{ mode: 'partial' },
-			{ given_by: 'parent' },
-			{ channel: 'phone' },
-			{ health: 'yes' },
-			{ given_at: 'yesterday' },
-			{ notice_version: '' },
-			{ recorded_verbally_by: '' }
+		const bad: [Record<string, unknown>, string][] = [
+			[{ ref: 'cs-7k3qz9md' }, 'consent ref is invalid'],
+			[{ ref: 'CS-7K3QZ9MI' }, 'consent ref is invalid'],
+			[{ mode: 'partial' }, 'consent mode is invalid'],
+			[{ given_by: 'parent' }, 'consent given_by is invalid'],
+			[{ channel: 'phone' }, 'consent channel is invalid'],
+			[{ health: 'yes' }, 'consent health must be boolean'],
+			[{ given_at: 'yesterday' }, 'consent given_at is invalid'],
+			[{ given_at: '2026-10-25' }, 'consent given_at is invalid'],
+			[{ given_at: '2026-10-25T03:15:00' }, 'consent given_at is invalid'],
+			[{ given_at: '2026-02-30T03:15:00Z' }, 'consent given_at is invalid'],
+			[{ notice_version: '' }, 'consent notice_version is invalid'],
+			[{ recorded_verbally_by: '' }, 'consent recorded_verbally_by is invalid']
 		];
-		for (const override of bad) {
-			expect(forbidden(evacuee({ ...goodConsent, ...override }))).not.toBeNull();
+		for (const [override, message] of bad) {
+			expect(forbidden(evacuee({ ...goodConsent, ...override }))).toBe(message);
+		}
+	});
+
+	it('accepts offset timestamps zod accepts', () => {
+		for (const given_at of ['2026-10-25T03:15Z', '2026-10-25T10:15:00+07:00']) {
+			expect(forbidden(evacuee({ ...goodConsent, given_at }))).toBeNull();
 		}
 	});
 
 	it('rejects a missing key and a non-object consent', () => {
 		const { notice_version, ...missing } = goodConsent;
 		void notice_version;
-		expect(forbidden(evacuee(missing))).not.toBeNull();
-		expect(forbidden(evacuee(null))).not.toBeNull();
-		expect(forbidden(evacuee('full'))).not.toBeNull();
-		expect(forbidden(evacuee([]))).not.toBeNull();
+		expect(forbidden(evacuee(missing))).toBe('consent missing notice_version');
+		for (const junk of [null, 'full', []]) {
+			expect(forbidden(evacuee(junk))).toBe('consent must be an object');
+		}
+	});
+
+	it('rethrows crashes instead of reading them as rejections', () => {
+		const crashing = {
+			type: 'evacuee',
+			get consent(): never {
+				throw new TypeError('boom');
+			}
+		};
+		expect(() => forbidden(crashing)).toThrow(TypeError);
 	});
 });
 
