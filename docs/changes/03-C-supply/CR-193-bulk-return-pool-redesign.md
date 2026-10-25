@@ -1,11 +1,11 @@
 ---
-id: draft # CR-TBD — เลข CR และวิธี track kong เป็นผู้กำหนดตอน approve (ยังไม่ใส่ใน _index.md). CR-185 ถูกใช้แล้วบน branch อื่น — เลขที่เลือกต้องไม่ซ้ำกับ CR-185
-title: CR-TBD — ออกแบบ bulk_return_pool ใหม่เป็น "กองรวมตอนรับของคืน" (pool header + entry/move/void event log)
-status: proposed
+id: CR-193
+title: CR-193 — ออกแบบ bulk_return_pool ใหม่เป็น "กองรวมตอนรับของคืน" (pool header + entry/move/void event log)
+status: approved
 date: 2026-10-22
 updated: 2026-10-25
 requested_by: feedback ระบบคลัง & เบิกของ ข้อ 4–5 (GitHub #657, #658)
-decided_by: project owner (kong, 2026-10-22 — https://github.com/r202-coe-psu/tent/pull/768#issuecomment-6339918664)
+decided_by: kong (decisions 2026-10-22 — https://github.com/r202-coe-psu/tent/pull/768#issuecomment-6339918664; approved 2026-10-25)
 layer: stable
 affects:
   - docs/changes/03-C-supply/CR-134-bulk-return-claim-recovery.md (amended — pool v2 / claim flow / ข้อห้าม stock_ledger ตอนสร้าง pool)
@@ -17,7 +17,7 @@ affects:
   - frontend/src/lib/features/distribution/domain/food-supplies (bulk-return-pool / entry / entry-move / entry-void) และ distribution-log
 ---
 
-# CR-TBD — ออกแบบ bulk_return_pool ใหม่เป็นกองรวมตอนรับของคืน
+# CR-193 — ออกแบบ bulk_return_pool ใหม่เป็นกองรวมตอนรับของคืน
 
 > **สรุป (TL;DR):**
 >
@@ -133,7 +133,7 @@ feedback ระบบคลัง & เบิกของ ข้อ 4–5: ข�
 
 ## Decisions
 
-ตัดสินโดย kong (project owner) เมื่อ 2026-10-22 — [คอมเมนต์ต้นทาง](https://github.com/r202-coe-psu/tent/pull/768#issuecomment-6339918664).
+ตัดสินโดย kong เมื่อ 2026-10-22 — [คอมเมนต์ต้นทาง](https://github.com/r202-coe-psu/tent/pull/768#issuecomment-6339918664).
 D1–D5 ข้างบนยังมีผลตามเดิม (ปรับข้อความให้ตรงกับผลด้านล่าง) ข้อ 1–14 ด้านล่างแทนหัวข้อ Open questions เดิมทั้งหมด
 
 ### 1. Role ต่อ transition และการย้อนสถานะ
@@ -360,7 +360,7 @@ VDU อ่านเอกสารอื่นไม่ได้ — กติ�
 
 ## Decision log
 
-- 2026-10-22 — proposed (draft คู่กับ #658; D1–D5 ตัดสินแล้วโดย project owner; จำนวนเต็มยืนยันตามแบบแผนเดิม; item ที่รับได้ = catalog `returnable === true`)
+- 2026-10-22 — proposed (draft คู่กับ #658; D1–D5 ตัดสินแล้วโดย kong; จำนวนเต็มยืนยันตามแบบแผนเดิม; item ที่รับได้ = catalog `returnable === true`)
 - 2026-10-22 — decided โดย kong ([คอมเมนต์](https://github.com/r202-coe-psu/tent/pull/768#issuecomment-6339918664)): ข้อ 1–14 ใน Decisions
   (role, deploy ใน PR เดียว, `name`/จุดเก็บแก้ได้ตอน `OPEN`, `CANCELLED`, fence + entry ค้าง, void + เปิด loan กลับ, ตรวจรับที่ pool ไม่มี `return_ticket_id`,
   storage point, ชื่อ ≤ 80 ไม่ซ้ำแบบ advisory, `returner_type`, `applied_bulk_entry_ids` + `distribution_log` v2, `loan_refs ≤ qty`,
@@ -368,3 +368,4 @@ VDU อ่านเอกสารอื่นไม่ได้ — กติ�
   รอ kong กำหนดเลข CR (หลีกเลี่ยง CR-185 ที่ถูกใช้แล้วบน branch อื่น) และวิธี track
 - 2026-10-25 — kong ตัดสินเพิ่ม: `system_admin` คงพฤติกรรม `isRole()` เดิม (แทน "ไม่รวม system_admin"); ข้อ 15 loan ถูกปิดก่อนตัดยอด → ข้าม ref + เตือน;
   ข้อ 16 move มาไม่ตามลำดับ → รอซิงก์; ข้อ 17 ยืนยันค่าเริ่มต้น 5 ข้อ
+- 2026-10-25 — approved (kong) → CR-193 (ย้ายจาก `draft-bulk-return-pool-redesign.md`, track ด้วยไฟล์ CR); เลขถัดจาก CR-192 บน `develop`; amends CR-134; หมายเหตุ `system_admin` ตัดสินแล้วข้างบน
