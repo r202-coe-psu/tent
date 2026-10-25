@@ -325,7 +325,9 @@
 									<tr class="transition-colors hover:bg-slate-50/60">
 										<td class="py-3.5 pr-3 pl-4">
 											<div class="font-bold text-slate-900">{item.itemName}</div>
-											<div class="font-mono text-2xs text-slate-400">{item.itemId}</div>
+											{#if !item.itemName}
+												<div class="font-mono text-2xs text-slate-400">{item.itemId}</div>
+											{/if}
 										</td>
 										<td class="px-3 py-3.5 text-right font-mono tabular-nums">{item.allocated}</td>
 										<td class="px-3 py-3.5 text-right font-mono text-emerald-700 tabular-nums">

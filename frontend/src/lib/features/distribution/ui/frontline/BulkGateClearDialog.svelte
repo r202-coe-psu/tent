@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { formatLoanReference, loanReferenceLine } from '../model/loan-reference';
 	import { toast } from 'svelte-sonner';
 	import Archive from '@lucide/svelte/icons/archive';
 	import Loader from '@lucide/svelte/icons/loader';
@@ -344,7 +345,7 @@
 							</InfoDetailPopover>
 						</div>
 						<Dialog.Description class="text-xs text-slate-500">
-							{itemName || log.item_id} · รหัสรายการ: <span class="font-mono">{log._id}</span>
+							{itemName || log.item_id} · {loanReferenceLine(formatLoanReference(log))}
 						</Dialog.Description>
 					</div>
 				</div>

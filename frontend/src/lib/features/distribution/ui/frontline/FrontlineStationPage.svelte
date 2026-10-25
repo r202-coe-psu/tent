@@ -840,9 +840,16 @@
 										>
 											<div class="flex w-full min-w-0 flex-col gap-0.5 text-left">
 												<span class="flex items-center justify-between gap-2">
-													<span class="truncate font-mono text-xs font-bold text-slate-900"
-														>{t.ticket_no}</span
-													>
+													<span class="flex min-w-0 items-center gap-1.5">
+														<span class="truncate font-mono text-xs font-bold text-slate-900"
+															>{t.ticket_no}</span
+														>
+														<span
+															class="shrink-0 rounded-full border border-slate-200 bg-slate-50 px-1.5 text-2xs font-bold text-slate-600"
+														>
+															{t.requisition_type === 'food' ? 'อาหาร' : 'สิ่งของ'}
+														</span>
+													</span>
 													<TicketStatusBadge status={t.status} class="shrink-0" />
 												</span>
 												<span class="truncate text-xs text-slate-500">

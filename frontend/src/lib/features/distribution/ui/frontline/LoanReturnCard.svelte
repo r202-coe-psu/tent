@@ -29,12 +29,12 @@
 		calculateLoanRemainingQty,
 		getLoanStatusBadge
 	} from '../model/loan-return';
+	import { formatLoanReference, loanReferenceLine } from '../model/loan-reference';
 	import { RETURN_ACTION_HELP } from '../model/bulk-return-copy';
 	import CounterReturnDialog from './CounterReturnDialog.svelte';
 	import NonPhysicalClearDialog from './NonPhysicalClearDialog.svelte';
 	import BulkGateClearDialog from './BulkGateClearDialog.svelte';
 	import { Button } from '$lib/components/ui/button/index.js';
-	import { formatThaiShortDate } from '$lib/utils/date';
 
 	interface Props {
 		shelterCode?: string;
@@ -96,6 +96,11 @@
 
 		// 3. Fall back to clean ID
 		return log.item_id.replace(/^item_master:|^item:/, '');
+	}
+
+	function loanReference(log: DistributionLog) {
+		const ticket = ticketsQuery.data?.find((t) => t._id === log.ticket_id);
+		return formatLoanReference(log, ticket);
 	}
 
 	function handleOpenReturn(log: DistributionLog) {
@@ -238,7 +243,7 @@
 							<div class="flex items-start justify-between gap-2">
 								<div>
 									<h5 class="text-sm font-bold text-slate-900">{itemName}</h5>
-									<p class="font-mono text-2xs text-slate-400">{loan._id}</p>
+									<p class="text-2xs text-slate-500">{loanReferenceLine(loanReference(loan))}</p>
 								</div>
 								<span
 									class="shrink-0 rounded-full border px-2 py-0.5 text-2xs font-bold {statusBadge.badgeClass}"
@@ -265,8 +270,7 @@
 
 							<!-- Metadata -->
 							<div class="flex items-center justify-between text-2xs text-slate-400">
-								<span>วันที่ยืม: {formatThaiShortDate(loan.distributed_at)}</span>
-								<span>ผู้จ่าย: {loan.distributed_by}</span>
+								<span>ผู้จ่าย: {loanReference(loan).by}</span>
 							</div>
 						</div>
 
@@ -349,7 +353,9 @@
 						>
 							<div>
 								<span class="font-bold text-slate-800">{resolveItemName(pastLoan)}</span>
-								<span class="ml-2 font-mono text-2xs text-slate-400">{pastLoan._id}</span>
+								<span class="ml-2 text-2xs text-slate-500">
+									{loanReferenceLine(loanReference(pastLoan))}
+								</span>
 								{#if isBulkCleared}
 									<p class="text-2xs text-purple-700">
 										จับคู่กับกองรับคืนแล้ว · ห้ามรับคืนเข้าคลังซ้ำ
