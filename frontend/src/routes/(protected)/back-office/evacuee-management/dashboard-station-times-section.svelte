@@ -11,6 +11,7 @@
 	} from '$lib/features/dashboard';
 	import { countStationQueues, useEvacuees, useScreenings } from '$lib/features/people';
 	import { useShelter } from '$lib/features/shelters';
+	import { stationVar } from '$lib/tokens/colors';
 	import { formatThaiShortDate } from '$lib/utils/date';
 	import DashboardServiceTimeChart from './dashboard-service-time-chart.svelte';
 
@@ -23,10 +24,36 @@
 		params: { from?: string; to?: string };
 	} = $props();
 
+	// Station colour families (`baseStation`), the same ones the onsite station pages use, so a
+	// card reads as "its" station. Class strings are literal so Tailwind keeps them.
 	const STATIONS = [
-		{ station: 1, label: 'Station 1', subtitle: 'รายงานตัว / ลงทะเบียน' },
-		{ station: 2, label: 'Station 2', subtitle: 'คัดกรองสุขภาพ' },
-		{ station: 3, label: 'Station 3', subtitle: 'จัดโซนที่พัก' }
+		{
+			station: 1,
+			label: 'Station 1',
+			subtitle: 'รายงานตัว / ลงทะเบียน',
+			color: stationVar(1),
+			card: 'border-station-1-border',
+			title: 'text-station-1-text',
+			stat: 'bg-station-1-subtle'
+		},
+		{
+			station: 2,
+			label: 'Station 2',
+			subtitle: 'คัดกรองสุขภาพ',
+			color: stationVar(2),
+			card: 'border-station-2-border',
+			title: 'text-station-2-text',
+			stat: 'bg-station-2-subtle'
+		},
+		{
+			station: 3,
+			label: 'Station 3',
+			subtitle: 'จัดโซนที่พัก',
+			color: stationVar(3),
+			card: 'border-station-3-border',
+			title: 'text-station-3-text',
+			stat: 'bg-station-3-subtle'
+		}
 	] as const;
 
 	const CHANNEL_LABELS = { staff: 'เจ้าหน้าที่', kiosk: 'ตู้ kiosk' } as const;
@@ -54,9 +81,9 @@
 			: null
 	);
 
+	/** Station 2/3 queue; Station 1 has no on-site queue status and shows its own two counts. */
 	function queueOf(station: number): number | null {
 		if (!queues) return null;
-		if (station === 1) return queues.station1;
 		if (station === 2) return queues.station2;
 		return queues.station3;
 	}
@@ -76,11 +103,14 @@
 		});
 	});
 
-	const stationBars = $derived(cards.map((card) => ({ label: card.label, seconds: card.avgSec })));
+	const stationBars = $derived(
+		cards.map((card) => ({ label: card.label, seconds: card.avgSec, color: card.color }))
+	);
 	const stationOneChannelBars = $derived(
 		(cards[0]?.channels ?? []).map((row) => ({
 			label: CHANNEL_LABELS[row.channel],
-			seconds: row.avg_duration_sec
+			seconds: row.avg_duration_sec,
+			color: stationVar(1)
 		}))
 	);
 </script>
@@ -131,26 +161,46 @@
 
 			<div class="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-3">
 				{#each cards as card (card.station)}
-					<div class="min-w-0 rounded-lg border bg-background p-4" data-testid="station-card">
+					<div
+						class={['min-w-0 rounded-xl border bg-white p-4 shadow-2xs', card.card]}
+						data-testid="station-card"
+					>
 						<div class="mb-3">
-							<p class="font-semibold">{card.label}</p>
+							<p class={['font-semibold', card.title]}>{card.label}</p>
 							<p class="text-xs text-muted-foreground">{card.subtitle}</p>
 						</div>
 						<p class="text-2xl font-bold tabular-nums">{formatServiceDuration(card.avgSec)}</p>
 						<p class="mb-3 text-xs text-muted-foreground">เวลาให้บริการเฉลี่ย</p>
-						<dl class="grid grid-cols-3 gap-2 text-center">
-							<div class="rounded-md bg-muted/50 px-2 py-1.5">
+						<dl
+							class={['grid gap-2 text-center', card.station === 1 ? 'grid-cols-2' : 'grid-cols-3']}
+						>
+							<div class={['rounded-md px-2 py-1.5', card.stat]}>
 								<dt class="text-2xs text-muted-foreground">ให้บริการแล้ว</dt>
 								<dd class="font-semibold tabular-nums">{card.visits}</dd>
 							</div>
-							<div class="rounded-md bg-muted/50 px-2 py-1.5">
+							<div class={['rounded-md px-2 py-1.5', card.stat]}>
 								<dt class="text-2xs text-muted-foreground">กำลังให้บริการ</dt>
 								<dd class="font-semibold tabular-nums">{card.openVisits}</dd>
 							</div>
-							<div class="rounded-md bg-muted/50 px-2 py-1.5">
-								<dt class="text-2xs text-muted-foreground">รอคิวตอนนี้</dt>
-								<dd class="font-semibold tabular-nums">{card.queue ?? '—'}</dd>
-							</div>
+							{#if card.station === 1}
+								<div class={['rounded-md px-2 py-1.5', card.stat]}>
+									<dt class="text-2xs text-muted-foreground">ลงทะเบียนล่วงหน้า (ยังไม่มาถึง)</dt>
+									<dd class="font-semibold tabular-nums">
+										{queues?.station1.preRegistered ?? '—'}
+									</dd>
+								</div>
+								<div class={['rounded-md px-2 py-1.5', card.stat]}>
+									<dt class="text-2xs text-muted-foreground">ลงทะเบียนที่ตู้ (รอยืนยัน)</dt>
+									<dd class="font-semibold tabular-nums">
+										{queues?.station1.kioskRegistered ?? '—'}
+									</dd>
+								</div>
+							{:else}
+								<div class={['rounded-md px-2 py-1.5', card.stat]}>
+									<dt class="text-2xs text-muted-foreground">รอคิวตอนนี้</dt>
+									<dd class="font-semibold tabular-nums">{card.queue ?? '—'}</dd>
+								</div>
+							{/if}
 						</dl>
 						{#if card.station === 1}
 							<div class="mt-4 border-t pt-3">

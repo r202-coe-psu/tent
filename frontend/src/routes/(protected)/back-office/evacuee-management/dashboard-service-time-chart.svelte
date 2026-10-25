@@ -4,8 +4,11 @@
 	import { scaleBand } from 'd3-scale';
 	import { formatServiceDuration } from '$lib/features/dashboard';
 
-	/** One bar: a station or a channel, with its mean service time (null = nothing timed yet). */
-	type ServiceTimeBar = { label: string; seconds: number | null };
+	/**
+	 * One bar: a station or a channel, with its mean service time (null = nothing timed yet) and
+	 * its fill — the station colour family, so a bar matches the station card and portal tile.
+	 */
+	type ServiceTimeBar = { label: string; seconds: number | null; color: string };
 
 	let { items, heightClass = 'h-56' }: { items: ServiceTimeBar[]; heightClass?: string } = $props();
 
@@ -15,8 +18,13 @@
 
 	// Plotted in minutes (unrounded, so the tooltip can show the exact mean).
 	const chartData = $derived(
-		items.map((item) => ({ label: item.label, minutes: (item.seconds ?? 0) / 60 }))
+		items.map((item) => ({
+			label: item.label,
+			minutes: (item.seconds ?? 0) / 60,
+			color: item.color
+		}))
 	);
+	const colors = $derived(chartData.map((d) => d.color));
 </script>
 
 <Chart.Container config={chartConfig} class="w-full {heightClass}">
@@ -24,10 +32,14 @@
 		data={chartData}
 		x="label"
 		y="minutes"
+		c="color"
+		cDomain={colors}
+		cRange={colors}
+		series={[{ key: 'minutes', value: 'minutes' }]}
 		xScale={scaleBand().paddingInner(0.3).paddingOuter(0.2)}
 		padding={{ left: 40, bottom: 28 }}
 		props={{
-			bars: { radius: 4, fill: 'var(--color-primary)' },
+			bars: { radius: 4 },
 			xAxis: { tickLabelProps: { class: 'text-xs fill-muted-foreground', dy: 10 } },
 			yAxis: {
 				format: (d: number) => `${Number.isInteger(d) ? d : d.toFixed(1)} น.`,
@@ -39,7 +51,6 @@
 		{#snippet tooltip()}
 			<Chart.Tooltip>
 				{#snippet formatter({ value })}
-					<div class="h-2.5 w-2.5 shrink-0 rounded-[2px] bg-primary"></div>
 					<div class="flex flex-1 items-center justify-between gap-4 leading-none">
 						<span class="text-muted-foreground">{chartConfig.minutes.label}</span>
 						<span class="font-mono font-medium text-foreground tabular-nums">

@@ -226,6 +226,7 @@ describe('classifyScreeningQueueTab', () => {
 describe('countStationQueues (CR-192)', () => {
 	const people = [
 		ev({ status: 'pre_registered', id: 'evacuee:pre' }),
+		ev({ status: 'kiosk_registered', id: 'evacuee:kiosk' }),
 		ev({ status: 'arriving', id: 'evacuee:wait-s2' }),
 		ev({ status: 'arriving', id: 'evacuee:screened' }),
 		ev({ status: 'active', zone: 'Z1', id: 'evacuee:active' }),
@@ -236,7 +237,7 @@ describe('countStationQueues (CR-192)', () => {
 
 	it('counts each station queue with medical screening on', () => {
 		expect(countStationQueues(people, screened, { enableMedicalScreening: true })).toEqual({
-			station1: 1,
+			station1: { preRegistered: 1, kioskRegistered: 1 },
 			station2: 1,
 			station3: 1
 		});
@@ -244,7 +245,7 @@ describe('countStationQueues (CR-192)', () => {
 
 	it('has no Station 2 queue and sends every arriving person to zoning when screening is off', () => {
 		expect(countStationQueues(people, screened, { enableMedicalScreening: false })).toEqual({
-			station1: 1,
+			station1: { preRegistered: 1, kioskRegistered: 1 },
 			station2: null,
 			station3: 2
 		});
@@ -252,7 +253,7 @@ describe('countStationQueues (CR-192)', () => {
 
 	it('is all zero for an empty shelter', () => {
 		expect(countStationQueues([], new Set(), { enableMedicalScreening: true })).toEqual({
-			station1: 0,
+			station1: { preRegistered: 0, kioskRegistered: 0 },
 			station2: 0,
 			station3: 0
 		});

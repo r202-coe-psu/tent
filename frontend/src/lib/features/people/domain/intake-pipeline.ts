@@ -157,8 +157,13 @@ export function classifyZoningQueueTab(
 
 /** People waiting at each intake station right now (CR-192 FR-STL-23); derived, never stored. */
 export interface StationQueueCounts {
-	/** Registered ahead but not yet reported in (`pre_registered` / legacy `kiosk_registered`). */
-	station1: number;
+	/** Station 1 has no on-site queue status, so it reports the two not-yet-reported-in states. */
+	station1: {
+		/** Registered ahead online and not yet arrived (`pre_registered`). */
+		preRegistered: number;
+		/** Registered at a kiosk and waiting for staff to confirm (legacy `kiosk_registered`). */
+		kioskRegistered: number;
+	};
 	/** On site and waiting for medical screening; `null` when the shelter skips Station 2. */
 	station2: number | null;
 	/** On site, cleared for zoning and not yet zoned ({@link classifyZoningQueueTab} `pending`). */
@@ -175,12 +180,13 @@ export function countStationQueues(
 	screenedEvacueeIds: ReadonlySet<string>,
 	opts: { enableMedicalScreening: boolean }
 ): StationQueueCounts {
-	let station1 = 0;
+	const station1 = { preRegistered: 0, kioskRegistered: 0 };
 	let station2 = 0;
 	let station3 = 0;
 	for (const evacuee of evacuees) {
 		const status = evacuee.current_stay?.status;
-		if (status === 'pre_registered' || status === 'kiosk_registered') station1 += 1;
+		if (status === 'pre_registered') station1.preRegistered += 1;
+		if (status === 'kiosk_registered') station1.kioskRegistered += 1;
 		if (
 			opts.enableMedicalScreening &&
 			status === 'arriving' &&
