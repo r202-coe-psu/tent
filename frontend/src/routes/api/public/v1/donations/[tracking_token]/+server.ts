@@ -1,9 +1,14 @@
 import { json } from '@sveltejs/kit';
-import { adminRaw } from '$lib/server/couch-admin';
 import { putAsPublicWriter } from '$lib/server/couch-public-writer';
 import { sha256Hex } from '$lib/db/hash';
 import { fastapiBaseUrl, fastapiServiceHeaders } from '$lib/server/fastapi';
 import { isDonorEditable } from '$lib/features/donations/server';
+import {
+	CouchReadError,
+	findByTokenHash,
+	GOODS_IN_STOCK_ERROR,
+	hasKeyedDonationStock
+} from '$lib/server/donation-docs';
 import type { PublicDonationDoc } from '$lib/features/donations';
 
 function shelterDbFromToken(token: string): string | null {
@@ -13,17 +18,10 @@ function shelterDbFromToken(token: string): string | null {
 	return `shelter_${code.toLowerCase()}`;
 }
 
-async function findByTokenHash(shelterDb: string, hash: string): Promise<PublicDonationDoc | null> {
-	const res = await adminRaw(
-		`/${shelterDb}/_all_docs?include_docs=true&startkey="donation:"&endkey="donation:\ufff0"`,
-		'GET'
-	);
-	if (res.status >= 400) return null;
-	const rows = (res.data as { rows?: { doc: PublicDonationDoc }[] })?.rows ?? [];
-	for (const r of rows) {
-		if (r.doc && r.doc.type === 'donation' && r.doc.tracking_token_hash === hash) return r.doc;
-	}
-	return null;
+/** CouchDB could not be read, so nothing was changed anywhere — the donor may retry. */
+function donationUnavailable(e: CouchReadError) {
+	console.error(e);
+	return json({ success: false, error: 'DONATION_UNAVAILABLE' }, { status: 503 });
 }
 
 /** Pre-inbound: update courier tracking on the Mongo intake buffer via FastAPI. */
@@ -108,6 +106,9 @@ export const GET = async ({ params }) => {
 				items: latestDoc?.items ?? donation.items ?? [],
 				logistics: latestDoc?.logistics ?? donation.logistics ?? null,
 				received_summary: latestDoc?.received_summary ?? donation.received_summary ?? null,
+				// CR-172 FR-14 — staff wrote it for the donor; the doc wins over the projection lag.
+				reject_reason: latestDoc?.reject_reason ?? donation.reject_reason ?? null,
+				reject_reason_code: latestDoc?.reject_reason_code ?? donation.reject_reason_code ?? null,
 				updated_at: latestDoc?.updated_at ?? donation.updated_at ?? null,
 				expires_at: latestDoc?.expires_at ?? donation.expires_at ?? null,
 				revisions: latestDoc?.revisions ?? donation.revisions ?? []
@@ -207,7 +208,8 @@ export const PATCH = async ({ params, request }) => {
 		}
 
 		return json({ success: true, message: 'Courier tracking number updated' });
-	} catch {
+	} catch (e) {
+		if (e instanceof CouchReadError) return donationUnavailable(e);
 		return json({ success: false, error: 'Internal Server Error' }, { status: 500 });
 	}
 };
@@ -258,6 +260,10 @@ export const DELETE = async ({ params }) => {
 				{ status: 400 }
 			);
 		}
+		// Goods already keyed: cancelling would hand the quota back with the goods on the shelf.
+		if (await hasKeyedDonationStock(shelterDb, latestDoc._id)) {
+			return json(GOODS_IN_STOCK_ERROR, { status: 409 });
+		}
 
 		latestDoc.status = 'cancelled';
 		latestDoc.updated_at = new Date().toISOString();
@@ -283,7 +289,8 @@ export const DELETE = async ({ params }) => {
 		}
 
 		return json({ success: true, message: 'Donation cancelled successfully' });
-	} catch {
+	} catch (e) {
+		if (e instanceof CouchReadError) return donationUnavailable(e);
 		return json({ success: false, error: 'Internal Server Error' }, { status: 500 });
 	}
 };

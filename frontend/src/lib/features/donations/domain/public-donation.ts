@@ -1,6 +1,12 @@
 import { z } from 'zod';
 import type { Donation, DonationStatus, Donor } from '$lib/features/operations';
-import { qtyStrCoercePositiveSchema } from '$lib/utils/qty';
+import { qtyGt, qtyStrCoerceNonNegativeSchema } from '$lib/utils/qty';
+import {
+	donationRejectReasonCodeSchema,
+	rejectNoteSchema,
+	requireNoteForOther,
+	type DonationRejectReasonCode
+} from './reject-reason';
 
 export interface PublicDonor extends Donor {
 	line_id?: string;
@@ -34,8 +40,13 @@ export interface PublicDonationDoc extends Omit<Donation, 'donor'> {
 			free_text?: string;
 			qty: string;
 			unit?: string;
+			rejected?: boolean;
+			reject_reason?: string;
+			reject_reason_code?: DonationRejectReasonCode;
 		}>;
 	};
+	reject_reason?: string | null;
+	reject_reason_code?: DonationRejectReasonCode | null;
 	items_declared?: Array<{
 		item_id?: string;
 		free_text?: string;
@@ -67,11 +78,25 @@ export interface DonationRevision {
  * intentionally included (authorized warehouse staff need it to contact donors).
  */
 export interface ScanDonationView {
+	/** `_rev` the screen was loaded with — sent back as `expected_rev` (CR-174 FR-25). */
+	rev?: string;
 	booking_ref?: string;
 	shelter_code: string;
 	status: string;
 	donor: { name: string; phone: string | null; email?: string | null };
-	items: Array<{ item_id?: string; free_text?: string; qty: string; unit: string }>;
+	items: Array<{
+		item_id?: string;
+		free_text?: string;
+		qty: string;
+		unit: string;
+		/** The donor's note on the line — shown to staff as "คำชี้แจงจากผู้บริจาค". */
+		note?: string;
+		/** A line refused at review arrives already turned away (CR-174 AC-3). */
+		review_status?: 'approved' | 'pending' | 'rejected';
+		review_reason_code?: DonationRejectReasonCode | null;
+		/** What the donor was told at review — kept as is through the counter. */
+		review_reason?: string | null;
+	}>;
 	logistics?: PublicDonationDoc['logistics'];
 }
 
@@ -83,35 +108,70 @@ export interface ScanDonationView {
  * lines stay on the donation only (they are not in the catalog, so they cannot be
  * counted as stock — schema.md §2.1 requires a real `item_id` + matching `unit`).
  */
-export const receiveDonationInputSchema = z.object({
-	status: z.literal('received'),
-	/** Optional note from the receiving staff — lands on `received_summary.remarks`. */
-	remarks: z.string().trim().max(500).optional(),
-	items: z
-		.array(
-			z.object({
-				item_id: z.string().optional(),
-				free_text: z.string().optional(),
-				qty: qtyStrCoercePositiveSchema,
-				unit: z.string().min(1),
-				/**
-				 * `lot_no` is NOT accepted from the client — the server mints it at
-				 * receive time so the per-day sequence stays under one authority
-				 * (CR-088). Zod strips it if a caller sends one anyway.
-				 */
-				lot: z
-					.object({
-						expiry: z.string().optional(),
-						note: z.string().trim().optional(),
-						storage_zone: z.string().trim().max(100).optional(),
-						// → shelter sub_storage[].id (draft-shelter-storage-points); kept, not stripped
-						storage_point_id: z.string().trim().min(1).optional()
-					})
-					.optional()
-			})
-		)
-		.optional()
-});
+export const receiveDonationInputSchema = z
+	.object({
+		status: z.literal('received'),
+		/** `_rev` of the booking the screen was loaded with (CR-174 FR-25). */
+		expected_rev: z.string().min(1),
+		/** Optional note from the receiving staff — lands on `received_summary.remarks`. */
+		remarks: z.string().trim().max(500).optional(),
+		items: z
+			.array(
+				z.object({
+					item_id: z.string().optional(),
+					free_text: z.string().optional(),
+					// > 0 unless the line is rejected — checked below with the line's flag.
+					qty: qtyStrCoerceNonNegativeSchema,
+					unit: z.string().min(1),
+					/**
+					 * Staff turned this line away (CR-172 FR-9, FR-10): it needs a reason, keys no
+					 * ledger row and gets no lot. The whole line — no partial quantity.
+					 */
+					rejected: z.boolean().optional(),
+					reject_reason_code: donationRejectReasonCodeSchema.optional(),
+					reject_note: rejectNoteSchema.optional(),
+					/**
+					 * `lot_no` is NOT accepted from the client — the server mints it at
+					 * receive time so the per-day sequence stays under one authority
+					 * (CR-088). Zod strips it if a caller sends one anyway.
+					 */
+					lot: z
+						.object({
+							expiry: z.string().optional(),
+							note: z.string().trim().optional(),
+							storage_zone: z.string().trim().max(100).optional(),
+							// → shelter sub_storage[].id (draft-shelter-storage-points); kept, not stripped
+							storage_point_id: z.string().trim().min(1).optional()
+						})
+						.optional()
+				})
+			)
+			.optional()
+	})
+	.superRefine((value, ctx) => {
+		for (const [index, line] of (value.items ?? []).entries()) {
+			if (line.rejected) {
+				if (!line.reject_reason_code) {
+					ctx.addIssue({
+						code: 'custom',
+						path: ['items', index, 'reject_reason_code'],
+						message: 'รายการที่ไม่รับต้องระบุเหตุผล'
+					});
+				}
+				requireNoteForOther({ reason_code: line.reject_reason_code, note: line.reject_note }, ctx, [
+					'items',
+					index,
+					'reject_note'
+				]);
+			} else if (!qtyGt(line.qty, 0)) {
+				ctx.addIssue({
+					code: 'custom',
+					path: ['items', index, 'qty'],
+					message: 'จำนวนที่รับต้องมากกว่า 0'
+				});
+			}
+		}
+	});
 export type ReceiveDonationInput = z.infer<typeof receiveDonationInputSchema>;
 
 /**
@@ -124,13 +184,20 @@ export type ReceiveDonationInput = z.infer<typeof receiveDonationInputSchema>;
  *
  * `pending_review` is in (decision D-1): since CR-052 every public booking opens
  * there rather than at `declared`, so leaving it out would take the donor's own
- * edit/cancel away from every booking the wizard creates. `verifying` is out —
- * at that point the goods are at the shelter and the count is staff's.
+ * edit/cancel away from every booking the wizard creates. `verifying` is in since
+ * CR-174 (FR-20..FR-23): a booking of campaign lines has its QR from the start, and the
+ * donor must still be able to cancel (a flood can keep them from coming), fix the
+ * basket or add the courier number. An edit that adds a line needing review sends the
+ * booking back to `pending_review`.
  *
  * Mirrored by `DONOR_EDITABLE_STATUSES` in the FastAPI donations use case; the two
  * gate the same routes and have to move together.
  */
-const DONOR_EDITABLE_STATUSES = new Set<DonationStatus>(['declared', 'pending_review']);
+const DONOR_EDITABLE_STATUSES = new Set<DonationStatus>([
+	'declared',
+	'pending_review',
+	'verifying'
+]);
 
 export function isDonorEditable(status: DonationStatus): boolean {
 	return DONOR_EDITABLE_STATUSES.has(status);

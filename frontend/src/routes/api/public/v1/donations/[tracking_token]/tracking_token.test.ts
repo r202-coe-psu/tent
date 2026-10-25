@@ -155,6 +155,59 @@ describe('GET & PATCH & DELETE /api/public/v1/donations/[tracking_token]', () =>
 		expect(data.donation.received_summary?.shortfalls[0].short).toBe('2');
 	});
 
+	// CR-172 FR-14 — the reason staff gave reaches the donor before the projection catches up.
+	it('GET passes the reject reason through, from CouchDB over the projection', async () => {
+		vi.stubGlobal(
+			'fetch',
+			vi.fn().mockResolvedValue({
+				ok: true,
+				status: 200,
+				json: async () => ({
+					success: true,
+					donation: {
+						status: 'pending_review',
+						shelter_code: 'SH001',
+						items: [],
+						reject_reason: null,
+						updated_at: '2026-01-01T00:00:00Z'
+					}
+				})
+			})
+		);
+		vi.mocked(adminRaw).mockImplementation((path: string, method: string) => {
+			if (method === 'GET' && path.includes('/shelter_sh001/') && path.includes('_all_docs')) {
+				return Promise.resolve({
+					status: 200,
+					data: {
+						rows: [
+							{
+								doc: {
+									...mockDonation,
+									status: 'rejected',
+									reject_reason: 'หมดอายุ',
+									reject_reason_code: 'expired'
+								}
+							}
+						]
+					}
+				});
+			}
+			return Promise.resolve({ status: 404, data: {} });
+		});
+
+		const response = await GET({
+			params: { tracking_token: TOKEN },
+			getClientAddress: () => '127.0.0.1'
+		} as unknown as GetEvent);
+
+		const data = await response.json();
+		expect(data.donation).toMatchObject({
+			status: 'rejected',
+			reject_reason: 'หมดอายุ',
+			reject_reason_code: 'expired'
+		});
+	});
+
 	it('PATCH updates the courier tracking number in CouchDB', async () => {
 		vi.mocked(adminRaw).mockImplementation((path: string, method: string) => {
 			if (method === 'GET' && path.includes('/shelter_sh001/') && path.includes('_all_docs')) {
@@ -301,6 +354,10 @@ describe('GET & PATCH & DELETE /api/public/v1/donations/[tracking_token]', () =>
 					data: { rows: [{ doc: mockDonation }] }
 				});
 			}
+			// No goods of this booking in stock yet.
+			if (method === 'POST' && path.endsWith('/_find')) {
+				return Promise.resolve({ status: 200, data: { docs: [] } });
+			}
 			return Promise.resolve({ status: 404, data: {} });
 		});
 		vi.mocked(putAsPublicWriter).mockResolvedValue({ status: 201, data: { ok: true } });
@@ -317,6 +374,27 @@ describe('GET & PATCH & DELETE /api/public/v1/donations/[tracking_token]', () =>
 		expect(putAsPublicWriter).toHaveBeenCalled();
 		const [, , savedDoc] = vi.mocked(putAsPublicWriter).mock.calls[0]!;
 		expect((savedDoc as PublicDonationDoc).status).toBe('cancelled');
+	});
+
+	it('DELETE refuses once goods of the booking are in stock (owner decision 2026-10-22)', async () => {
+		vi.mocked(adminRaw).mockImplementation((path: string, method: string) => {
+			if (method === 'GET' && path.includes('/shelter_sh001/') && path.includes('_all_docs')) {
+				return Promise.resolve({ status: 200, data: { rows: [{ doc: mockDonation }] } });
+			}
+			if (method === 'POST' && path.endsWith('/_find')) {
+				return Promise.resolve({ status: 200, data: { docs: [{ _id: 'stock_ledger:1' }] } });
+			}
+			return Promise.resolve({ status: 404, data: {} });
+		});
+
+		const response = await DELETE({
+			params: { tracking_token: TOKEN },
+			getClientAddress: () => '127.0.0.1'
+		} as unknown as DeleteEvent);
+
+		expect(response.status).toBe(409);
+		expect((await response.json()).error).toBe('GOODS_IN_STOCK');
+		expect(putAsPublicWriter).not.toHaveBeenCalled();
 	});
 
 	it('DELETE falls back to FastAPI when donation is not yet in CouchDB', async () => {
@@ -455,5 +533,83 @@ describe('GET & PATCH & DELETE /api/public/v1/donations/[tracking_token]', () =>
 		const data = await response.json();
 		expect(response.status).toBe(400);
 		expect(data.success).toBe(false);
+	});
+
+	// A CouchDB failure used to read as "not synced yet": courier edits and cancels went to
+	// FastAPI, which answered that the booking was syncing.
+	describe('when CouchDB cannot be read', () => {
+		const couchDown = () =>
+			vi.mocked(adminRaw).mockResolvedValue({ status: 500, data: { error: 'unknown_error' } });
+
+		it('PATCH answers 503 and leaves FastAPI alone', async () => {
+			couchDown();
+			vi.stubGlobal('fetch', vi.fn());
+
+			const response = await PATCH({
+				params: { tracking_token: TOKEN },
+				request: { json: () => Promise.resolve({ courier_tracking_no: 'TH111222' }) },
+				getClientAddress: () => '127.0.0.1'
+			} as unknown as PatchEvent);
+
+			expect(response.status).toBe(503);
+			expect((await response.json()).error).toBe('DONATION_UNAVAILABLE');
+			expect(fetch).not.toHaveBeenCalled();
+			expect(putAsPublicWriter).not.toHaveBeenCalled();
+		});
+
+		it('DELETE answers 503 and leaves FastAPI alone', async () => {
+			couchDown();
+			vi.stubGlobal('fetch', vi.fn());
+
+			const response = await DELETE({
+				params: { tracking_token: TOKEN },
+				getClientAddress: () => '127.0.0.1'
+			} as unknown as DeleteEvent);
+
+			expect(response.status).toBe(503);
+			expect((await response.json()).error).toBe('DONATION_UNAVAILABLE');
+			expect(fetch).not.toHaveBeenCalled();
+			expect(putAsPublicWriter).not.toHaveBeenCalled();
+		});
+
+		it('DELETE answers 503 when only the stock check fails', async () => {
+			vi.mocked(adminRaw).mockImplementation((path: string, method: string) => {
+				if (method === 'GET' && path.includes('_all_docs')) {
+					return Promise.resolve({ status: 200, data: { rows: [{ doc: mockDonation }] } });
+				}
+				return Promise.resolve({ status: 500, data: { error: 'unknown_error' } });
+			});
+
+			const response = await DELETE({
+				params: { tracking_token: TOKEN },
+				getClientAddress: () => '127.0.0.1'
+			} as unknown as DeleteEvent);
+
+			expect(response.status).toBe(503);
+			expect(putAsPublicWriter).not.toHaveBeenCalled();
+		});
+
+		it('GET still answers from FastAPI — the CouchDB overlay is optional', async () => {
+			couchDown();
+			vi.stubGlobal(
+				'fetch',
+				vi.fn().mockResolvedValue({
+					ok: true,
+					status: 200,
+					json: async () => ({
+						success: true,
+						donation: { status: 'declared', booking_ref: 'DN-999999', items: [] }
+					})
+				})
+			);
+
+			const response = await GET({
+				params: { tracking_token: TOKEN },
+				getClientAddress: () => '127.0.0.1'
+			} as unknown as GetEvent);
+
+			expect(response.status).toBe(200);
+			expect((await response.json()).donation.status).toBe('declared');
+		});
 	});
 });

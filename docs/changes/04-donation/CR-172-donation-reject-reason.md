@@ -3,6 +3,7 @@ id: CR-172
 title: "เหตุผลปฏิเสธบนใบบริจาค + ไม่รับรายบรรทัดตอนตรวจรับ (แสดงบนหน้าติดตาม)"
 status: approved
 date: 2026-10-17
+updated: 2026-10-22
 approved_at: 2026-10-18
 requested_by: "Kan"
 decided_by: "Soravit Sukkarn (Team Lead)"
@@ -57,7 +58,7 @@ migration: field ใหม่ทั้งหมด optional — doc เดิม
 ### หน้าติดตามสถานะ (ประชาชน)
 - **FR-14** — `public_donations` และ response ติดตามต้องส่ง `reject_reason` และ `received_summary.items[].rejected/reject_reason/reject_reason_code`
 - **FR-15** — สถานะ `rejected`: แสดงกล่อง "เหตุผลจากศูนย์พักพิง" ใต้ป้ายสถานะ
-- **FR-16** — สถานะ `received`: บรรทัดที่ไม่รับแสดงป้าย "ไม่รับ" พร้อมเหตุผล แยกจากป้าย "รับไม่ครบ"
+- **FR-16** — สถานะ `received`: บรรทัดที่ไม่รับแสดงป้าย "ไม่รับ" พร้อมเหตุผล แยกจากป้าย "รับไม่ครบ" (decision sync 2026-10-22: หน้าติดตามไม่มีป้าย "รับไม่ครบ" แล้ว — ยกเลิก [CR-156](../03-C-supply/CR-156-stock-redesign-amendment.md) FR-I3 — ป้าย "ไม่รับ" ใช้ตามเดิม)
 - **FR-17** — doc ที่ไม่มี field ใหม่ (สร้างก่อน schema_v 6) แสดงผลได้ตามเดิมโดยไม่มีกล่องเหตุผล
 
 ## Change (before → after)
@@ -105,3 +106,4 @@ migration: field ใหม่ทั้งหมด optional — doc เดิม
 
 - 2026-10-17 — proposed (track ด้วย CR file แยก branch ตามที่เจ้าของโครงการกำหนด)
 - 2026-10-18 — approved by Soravit Sukkarn (Team Lead) — requested by Kan (รันเลข CR-172 ย้ายเข้าหมวด 04-donation)
+- 2026-10-21 — implement ใน branch `feat/donation-review-intake-flow` — donation schema_v 6 (worker inbound + walk-in), projector `public_donations` ส่ง `reject_reason`/`reject_reason_code` (PROJECTION_VERSION 6 → 7 — 6 ถูกใช้โดย CR-185 ใน develop แล้ว), `PublicDonation` + tracking response ของ FastAPI (OpenAPI ไม่เปลี่ยน — `donation` เป็น `dict`), อัปเดต schema.md §2.3 / couchdb-mongodb-sync.md §3.2 / api-contract.md §5 / public-tier-donation-spec.html และหมายเหตุใน CR-143 §B, CR-156 §I

@@ -306,6 +306,12 @@ export const PUBLIC_DONATIONS_I18N = {
 		// Donation Statuses
 		statusDeclared: 'จองคิวบริจาคแล้ว',
 		statusPendingReview: 'รอตรวจสอบความเหมาะสม',
+		statusApprovedAwaitingDropoff: 'อนุมัติแล้ว · รอนำส่ง',
+		lineReviewApproved: 'อนุมัติแล้ว / รอนำส่ง',
+		lineReviewPending: 'รอประเมิน',
+		lineReviewRejected: 'ไม่รับ',
+		editVerifyingWarning:
+			'ใบนี้ได้ QR แล้ว — ถ้าแก้แล้วมีรายการที่ต้องประเมิน QR จะใช้ไม่ได้จนกว่าเจ้าหน้าที่ประเมินเสร็จ',
 		statusVerifying: 'กำลังตรวจรับที่ศูนย์',
 		statusReceived: 'รับเข้าคลังเรียบร้อย',
 		statusRedirected: 'ส่งต่อไปศูนย์อื่น',
@@ -674,6 +680,12 @@ export const PUBLIC_DONATIONS_I18N = {
 		// Donation Statuses
 		statusDeclared: 'Donation Reserved',
 		statusPendingReview: 'Pending Review',
+		statusApprovedAwaitingDropoff: 'Approved · Awaiting drop-off',
+		lineReviewApproved: 'Approved / awaiting drop-off',
+		lineReviewPending: 'Pending review',
+		lineReviewRejected: 'Not accepted',
+		editVerifyingWarning:
+			'This booking already has its QR. If your change adds an item that needs review, the QR stops working until staff finish reviewing it.',
 		statusVerifying: 'Checking in at Shelter',
 		statusReceived: 'Received into Warehouse',
 		statusRedirected: 'Redirected to Other Shelter',

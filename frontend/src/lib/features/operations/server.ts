@@ -20,6 +20,7 @@ export {
 	receiveDonation,
 	expireDonation,
 	canTransitionDonation,
+	DONATION_SCHEMA_V,
 	stockBalance,
 	isDonationOutstanding,
 	keyedDonationIds,
@@ -78,6 +79,8 @@ export {
 } from './domain/donation-slot';
 
 export {
+	deriveDonationReceiptAuditId,
+	deriveDonationReceiptLineId,
 	donationShortfall,
 	type DonationShortfall,
 	type DonationBatchLine

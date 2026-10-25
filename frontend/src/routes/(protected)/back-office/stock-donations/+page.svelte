@@ -19,34 +19,45 @@
 	import ForceCutoffDialog from './components/force-cutoff-dialog.svelte';
 	import DonationSlotsManager from './components/donation-slots-manager.svelte';
 	import { useDonationNeedsBoard, type NeedItem } from '$lib/features/operations';
-	import type { PendingDonationRow } from '$lib/features/donations';
+	import { useQueryClient } from '@tanstack/svelte-query';
+	import { Button } from '$lib/components/ui/button/index.js';
+	import User from '@lucide/svelte/icons/user';
+	import {
+		donationActionRef,
+		donationQueueKeys,
+		filterForLegacyTab,
+		parseQueueFilter,
+		queueGroupOf,
+		useDonationQueue,
+		type DonationQueueFilter,
+		type LineReviewDecision,
+		type PendingDonationRow,
+		type RejectDonationInput
+	} from '$lib/features/donations';
 
 	/**
-	 * Tabs actually offered: `scan | pending | needs`.
+	 * Tabs: `list | needs | slots`.
 	 *
-	 * Two more used to sit here and were taken off on 2026-09-01 (D-11 / D-9):
+	 * `list` — "รายการของบริจาค" (#617) — replaced the scan and review tabs, which showed
+	 * largely the same bookings: everything waiting for review or for drop-off, one list
+	 * with a status filter, the scanner and walk-in at its top right. The old `?tab=scan`
+	 * and `?tab=pending` links still land here, on the matching filter.
 	 *
-	 * · **กำลังตรวจรับ** — the drop-off queue moved INTO the scan station, which now
-	 *   lists everything awaiting arrival (`verifying`, `pending_review`, `declared`)
-	 *   and is where the counting happens anyway. The tab showed the same rows twice.
-	 *   The `verifying` STATUS stays: the approve button creates it, and it is what
-	 *   makes the donor's QR appear (CR-052 §1.4).
-	 * · **ส่งต่อเข้ามา** — read-only with nowhere to go: a `donation_redirect` ticket
-	 *   cannot yet be turned into stock at the destination (D-9 undecided), and the
-	 *   design does not carry the tab.
-	 *
-	 * Both boards still exist (`verifying-board.svelte`,
-	 * `incoming-redirects-board.svelte`) and their routes still serve data — putting a
-	 * tab back is re-adding a button and a branch, not rebuilding a feature.
+	 * Two older tabs were taken off on 2026-09-01 (D-11 / D-9) — **กำลังตรวจรับ** (the
+	 * drop-off queue, now part of this list) and **ส่งต่อเข้ามา** (read-only, with no
+	 * way yet to turn a `donation_redirect` into stock). Their boards still exist
+	 * (`verifying-board.svelte`, `incoming-redirects-board.svelte`).
 	 */
-	const TABS = ['scan', 'pending', 'needs', 'slots'] as const;
+	const TABS = ['list', 'needs', 'slots'] as const;
 	type TabKey = (typeof TABS)[number];
 
 	// The tab lives in `?tab=`, not in component state: the back-office layout remounts
 	// this page on every shelter switch (`{#key selectedShelterCode}`), which used to
-	// throw staff back to the scan tab mid-task.
-	const activeSubTab = $derived<TabKey>(
-		TABS.find((t) => t === page.url.searchParams.get('tab')) ?? 'scan'
+	// throw staff back to the first tab mid-task. The list filter rides along in `?filter=`.
+	const requestedTab = $derived(page.url.searchParams.get('tab'));
+	const activeSubTab = $derived<TabKey>(TABS.find((t) => t === requestedTab) ?? 'list');
+	const queueFilter = $derived<DonationQueueFilter>(
+		parseQueueFilter(page.url.searchParams.get('filter') ?? filterForLegacyTab(requestedTab))
 	);
 	let viewState = $state<'list' | 'create' | 'edit'>('list');
 	// One board row = one need, so the edit target is (campaign, item), never just the campaign.
@@ -77,28 +88,51 @@
 		cutOffTarget = { id, itemId, name: need?.name ?? itemId };
 	}
 
-	// R-16.1 — pending-review queue, loaded from the real intake API (no mock array).
-	let pendingRequests = $state<PendingDonationRow[]>([]);
-	let pendingLoading = $state(false);
+	// The booking list (#617) — loaded at mount, not on first click: the tab badge is the
+	// only signal that something waits for review.
+	const queryClient = useQueryClient();
+	const queue = useDonationQueue();
+	const queueRows = $derived(queue.data ?? []);
+	const pendingCount = $derived(
+		queueRows.filter((row) => queueGroupOf(row.status) === 'pending').length
+	);
+	const refreshQueue = () => queryClient.invalidateQueries({ queryKey: donationQueueKeys.all });
+
+	/** What the list tab shows: the list, a booking under review, or the counter. */
 	let selectedPendingRequest = $state<PendingDonationRow | null>(null);
+	let station = $state<{ view: 'scan' | 'walkin'; query: string } | null>(null);
 	let pendingActionSaving = $state(false);
 
-	async function loadPending() {
-		pendingLoading = true;
-		try {
-			const res = await fetch('/api/back-office/donations?status=pending_review');
-			const data = await res.json();
-			pendingRequests = data.success ? (data.donations as PendingDonationRow[]) : [];
-		} catch {
-			toast.error('โหลดรายการรอการประเมินไม่สำเร็จ');
-		} finally {
-			pendingLoading = false;
+	function openRow(row: PendingDonationRow) {
+		if (queueGroupOf(row.status) === 'pending') {
+			selectedPendingRequest = row;
+			return;
 		}
+		station = { view: 'scan', query: donationActionRef(row) ?? '' };
+	}
+
+	/** The donor edited the booking while it was open: close it and show the list again. */
+	function staleDecision(message: string) {
+		toast.error(message, { duration: 10_000 });
+		selectedPendingRequest = null;
+		void refreshQueue();
+	}
+
+	function setQueueFilter(filter: DonationQueueFilter) {
+		const params = new SvelteURLSearchParams(page.url.searchParams);
+		params.set('tab', 'list');
+		params.set('filter', filter);
+		void goto(resolve(`/back-office/stock-donations?${params}` as '/back-office/stock-donations'), {
+			replaceState: true,
+			keepFocus: true,
+			noScroll: true
+		});
 	}
 
 	function switchTab(tab: string) {
 		const params = new SvelteURLSearchParams(page.url.searchParams);
 		params.set('tab', tab);
+		params.delete('filter');
 		void goto(resolve(`/back-office/stock-donations?${params}` as '/back-office/stock-donations'), {
 			replaceState: true,
 			keepFocus: true,
@@ -106,10 +140,14 @@
 		});
 		viewState = 'list';
 		selectedPendingRequest = null;
-		if (tab === 'pending') loadPending();
+		station = null;
 	}
 
-	async function handleApprovePending(bookingRef: string, memo: string) {
+	async function handleApprovePending(
+		bookingRef: string,
+		memo: string,
+		lines?: LineReviewDecision[]
+	) {
 		if (!bookingRef || pendingActionSaving) return;
 		pendingActionSaving = true;
 		try {
@@ -118,14 +156,24 @@
 				{
 					method: 'POST',
 					headers: { 'Content-Type': 'application/json' },
-					body: JSON.stringify({ memo })
+					body: JSON.stringify({
+						memo,
+						...(lines ? { lines } : {}),
+						expected_rev: selectedPendingRequest?.rev
+					})
 				}
 			);
 			const data = await res.json();
 			if (data.success) {
-				toast.success(`อนุมัติคำขอ ${bookingRef} เข้าสู่การตรวจรับแล้ว`);
+				toast.success(
+					data.donation?.status === 'rejected'
+						? `ปฏิเสธคำขอ ${bookingRef} แล้ว (ไม่รับทุกรายการ)`
+						: `บันทึกผลการประเมิน ${bookingRef} แล้ว — รอผู้บริจาคนำส่ง`
+				);
 				selectedPendingRequest = null;
-				await loadPending();
+				await refreshQueue();
+			} else if (data.error_code === 'DONATION_CHANGED') {
+				staleDecision(data.error);
 			} else {
 				toast.error(data.error || 'อนุมัติไม่สำเร็จ');
 			}
@@ -136,7 +184,7 @@
 		}
 	}
 
-	async function handleRejectPending(bookingRef: string, reason: string) {
+	async function handleRejectPending(bookingRef: string, input: RejectDonationInput) {
 		if (!bookingRef || pendingActionSaving) return;
 		pendingActionSaving = true;
 		try {
@@ -145,14 +193,16 @@
 				{
 					method: 'POST',
 					headers: { 'Content-Type': 'application/json' },
-					body: JSON.stringify({ reason })
+					body: JSON.stringify({ ...input, expected_rev: selectedPendingRequest?.rev })
 				}
 			);
 			const data = await res.json();
 			if (data.success) {
 				toast.success(`ปฏิเสธคำขอ ${bookingRef} เรียบร้อยแล้ว`);
 				selectedPendingRequest = null;
-				await loadPending();
+				await refreshQueue();
+			} else if (data.error_code === 'DONATION_CHANGED') {
+				staleDecision(data.error);
 			} else {
 				toast.error(data.error || 'ปฏิเสธไม่สำเร็จ');
 			}
@@ -180,7 +230,8 @@
 					headers: { 'Content-Type': 'application/json' },
 					body: JSON.stringify({
 						target_shelter_code: targetShelterCode,
-						...(note ? { note } : {})
+						...(note ? { note } : {}),
+						expected_rev: selectedPendingRequest?.rev
 					})
 				}
 			);
@@ -190,7 +241,9 @@
 					`ส่งต่อคำขอ ${bookingRef} ไปยังศูนย์ ${targetShelterCode} เรียบร้อยแล้ว — ศูนย์ปลายทางจะเห็นคำขอนี้ในคิวของตัวเอง`
 				);
 				selectedPendingRequest = null;
-				await loadPending();
+				await refreshQueue();
+			} else if (data.error_code === 'DONATION_CHANGED') {
+				staleDecision(data.error);
 			} else {
 				toast.error(data.error || 'ส่งต่อไม่สำเร็จ');
 			}
@@ -200,11 +253,6 @@
 			pendingActionSaving = false;
 		}
 	}
-
-	// The queue loads at mount, not on first click: the tab badge is the only signal
-	// that something is waiting, and a badge that appears only after you open the tab
-	// tells you nothing.
-	loadPending();
 </script>
 
 <svelte:head>
@@ -228,24 +276,17 @@
 				class="inline-flex h-auto min-w-max justify-start rounded-xl border border-border/40 bg-muted/60 p-1 shadow-sm"
 			>
 				<Tabs.Trigger
-					value="scan"
-					class="flex shrink-0 items-center gap-2 rounded-lg border border-transparent px-3.5 py-2 text-xs font-semibold tracking-wide text-muted-foreground transition-all duration-300 hover:text-foreground active:scale-[0.98] data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm md:px-5 md:py-2.5"
-				>
-					<Scan class="h-4 w-4" />
-					สแกนรับของเข้าคลัง
-				</Tabs.Trigger>
-
-				<Tabs.Trigger
-					value="pending"
+					value="list"
 					class="flex shrink-0 items-center gap-2 rounded-lg border border-transparent px-3.5 py-2 text-xs font-semibold tracking-wide text-muted-foreground transition-all duration-300 hover:text-foreground active:scale-[0.98] data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm md:px-5 md:py-2.5"
 				>
 					<ClipboardList class="h-4 w-4" />
-					รอการประเมิน
-					{#if pendingRequests.length > 0}
+					รายการของบริจาค
+					{#if pendingCount > 0}
 						<Badge
 							class="h-4 min-w-4 bg-amber-500 px-1.5 text-2xs leading-none font-bold text-white"
+							aria-label="รอประเมิน {pendingCount} รายการ"
 						>
-							{pendingRequests.length}
+							{pendingCount}
 						</Badge>
 					{/if}
 				</Tabs.Trigger>
@@ -269,12 +310,15 @@
 			</Tabs.List>
 		</div>
 
-		<Tabs.Content value="scan">
-			<ScanStation />
-		</Tabs.Content>
-
-		<Tabs.Content value="pending">
-			{#if selectedPendingRequest}
+		<Tabs.Content value="list">
+			{#if station}
+				<ScanStation
+					initialQuery={station.query}
+					initialView={station.view}
+					onSaved={refreshQueue}
+					onClose={() => (station = null)}
+				/>
+			{:else if selectedPendingRequest}
 				<PendingReviewDetail
 					request={selectedPendingRequest}
 					saving={pendingActionSaving}
@@ -285,12 +329,33 @@
 				/>
 			{:else}
 				<PendingReviewBoard
-					requests={pendingRequests}
-					loading={pendingLoading}
-					onViewDetails={(req) => {
-						selectedPendingRequest = req;
-					}}
-				/>
+					requests={queueRows}
+					loading={queue.isPending}
+					error={queue.error?.message ?? null}
+					onRetry={() => queue.refetch()}
+					bind:filter={() => queueFilter, setQueueFilter}
+					onViewDetails={openRow}
+				>
+					{#snippet actions()}
+						<Button
+							type="button"
+							onclick={() => (station = { view: 'scan', query: '' })}
+							class="min-h-11 gap-2 rounded-xl bg-[#002D5B] text-sm font-bold text-white hover:bg-[#001f3f] dark:bg-blue-600 dark:hover:bg-blue-700"
+						>
+							<Scan class="h-4 w-4" />
+							สแกนรับเข้าคลัง
+						</Button>
+						<Button
+							variant="outline"
+							type="button"
+							onclick={() => (station = { view: 'walkin', query: '' })}
+							class="min-h-11 gap-2 rounded-xl text-sm font-bold"
+						>
+							<User class="h-4 w-4" />
+							ลงทะเบียน Walk-in
+						</Button>
+					{/snippet}
+				</PendingReviewBoard>
 			{/if}
 		</Tabs.Content>
 

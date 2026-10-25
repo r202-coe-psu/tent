@@ -5,6 +5,7 @@ import {
 	donationStatusLabel,
 	formatTrackSchedule,
 	isTerminalDonationStatus,
+	rejectedLineReasons,
 	toDonationTrackView
 } from './tracking';
 
@@ -56,11 +57,15 @@ describe('canCancelDonation', () => {
 	// Gates the cancel button on the donor's track page. A booking that is still only
 	// a reservation may be handed back; once it is out of the donor's hands the count
 	// belongs to staff.
-	it.each(['declared', 'pending_review'])('lets the donor cancel a %s booking', (status) => {
-		expect(canCancelDonation(status)).toBe(true);
-	});
+	// `verifying` since CR-174 FR-20 — a booking with its QR can still be handed back.
+	it.each(['declared', 'pending_review', 'verifying'])(
+		'lets the donor cancel a %s booking',
+		(status) => {
+			expect(canCancelDonation(status)).toBe(true);
+		}
+	);
 
-	it.each(['received', 'verifying', 'cancelled', 'expired', 'rejected', 'redirected'])(
+	it.each(['received', 'cancelled', 'expired', 'rejected', 'redirected'])(
 		'hides cancel once the booking is %s',
 		(status) => {
 			expect(canCancelDonation(status)).toBe(false);
@@ -116,5 +121,67 @@ describe('isTerminalDonationStatus', () => {
 		for (const status of ['received', 'rejected', 'redirected', 'expired', 'cancelled']) {
 			expect(isTerminalDonationStatus(status)).toBe(true);
 		}
+	});
+});
+
+describe('reject reasons on the ticket (CR-172)', () => {
+	const base = {
+		status: 'received',
+		shelter_code: 'SH001',
+		items: [
+			{ item_name: 'ข้าวสาร', qty: '10', unit: 'kg' },
+			{ item_name: 'นม', qty: '2', unit: 'ลัง' }
+		]
+	};
+
+	it('carries the booking reason when the shelter refused it', () => {
+		const view = toDonationTrackView({
+			...base,
+			status: 'rejected',
+			reject_reason: 'หมดอายุ — ล็อตเก่า'
+		});
+		expect(view.reject_reason).toBe('หมดอายุ — ล็อตเก่า');
+	});
+
+	it('FR-17: a ticket written before schema_v 6 has no reason and no rejected line', () => {
+		const view = toDonationTrackView({
+			...base,
+			received_summary: { items: [{ item_name: 'ข้าวสาร', qty: '10' }] }
+		});
+		expect(view.reject_reason).toBeNull();
+		expect(rejectedLineReasons(view)).toEqual([null, null]);
+	});
+
+	it('FR-16: lines up each turned-away line with the declared line it answers', () => {
+		const view = toDonationTrackView({
+			...base,
+			received_summary: {
+				items: [
+					{ item_id: 'item:rice', qty: '10', unit: 'kg' },
+					{ qty: '0', unit: 'ลัง', rejected: true, reject_reason: 'ชำรุดเสียหาย' }
+				]
+			}
+		});
+		expect(rejectedLineReasons(view)).toEqual([null, 'ชำรุดเสียหาย']);
+	});
+
+	it('CR-174 FR-17: carries line review and its reason from the declared items', () => {
+		const view = toDonationTrackView({
+			...base,
+			status: 'verifying',
+			items: [
+				{ item_name: 'ข้าวสาร', qty: '10', unit: 'kg', review_status: 'approved' },
+				{
+					item_name: 'ผ้าห่ม',
+					qty: '1',
+					unit: 'ผืน',
+					review_status: 'rejected',
+					review_reason: 'หมดอายุ'
+				},
+				{ item_name: 'หมอน', qty: '1', unit: 'ใบ', review_status: 'rejected' }
+			]
+		});
+		expect(view.items.map((i) => i.review_status)).toEqual(['approved', 'rejected', 'rejected']);
+		expect(rejectedLineReasons(view)).toEqual([null, 'หมดอายุ', '']);
 	});
 });
