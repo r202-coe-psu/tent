@@ -46,6 +46,14 @@
 		)
 	]);
 
+	const allergyQuery = useMasterData(() => 'allergy');
+	/** #648 — allergies hold `allergy` codes or free text. */
+	const allergyLabels = $derived(
+		(medical?.allergies ?? []).map(
+			(a) => formatMasterLabelByCode(a, allergyQuery.data?.items ?? []) || a
+		)
+	);
+
 	const vulnerableGroupQuery = useMasterData(() => 'vulnerable_group');
 	function vulnerableLabel(code: string): string {
 		const fromMaster = vulnerableGroupQuery.data?.items.find((i) => i.code === code);
@@ -193,7 +201,7 @@
 					<span
 						class="mt-0.5 block text-sm font-semibold break-words text-slate-800 dark:text-slate-200"
 					>
-						{medical?.allergies?.length ? medical.allergies.join(', ') : 'ไม่ระบุ'}
+						{allergyLabels.length ? allergyLabels.join(', ') : 'ไม่ระบุ'}
 					</span>
 				</div>
 			</div>

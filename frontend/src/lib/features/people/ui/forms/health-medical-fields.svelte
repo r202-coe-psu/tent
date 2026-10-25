@@ -26,11 +26,14 @@
 		showGeneralSymptoms?: boolean;
 	} = $props();
 
-	// CR-186 — โรคประจำตัว picks from master `chronic_disease`; `conditions` stays a
-	// comma-separated string of codes / free text so parents keep their split(',').
+	// CR-186 / #648 — โรคประจำตัว and ประวัติการแพ้ pick from masters `chronic_disease` /
+	// `allergy`; both stay comma-separated strings of codes / free text so parents
+	// keep their split(',').
 	// Parents still map legacy labels on save (FR-7) — this getter only shows them.
 	const chronicDiseaseQuery = useMasterData(() => 'chronic_disease');
 	const chronicDiseaseItems = $derived(chronicDiseaseQuery.data?.items ?? []);
+	const allergyQuery = useMasterData(() => 'allergy');
+	const allergyItems = $derived(allergyQuery.data?.items ?? []);
 
 	function getConditionTokens(): string[] {
 		return resolveMasterCodes(conditions.split(','), chronicDiseaseItems);
@@ -38,6 +41,14 @@
 
 	function setConditionTokens(tokens: string[]) {
 		conditions = tokens.join(', ');
+	}
+
+	function getAllergyTokens(): string[] {
+		return resolveMasterCodes(allergies.split(','), allergyItems);
+	}
+
+	function setAllergyTokens(tokens: string[]) {
+		allergies = tokens.join(', ');
 	}
 
 	const careTrackOptions: { value: CareTrack; label: string; desc: string }[] = [
@@ -105,34 +116,33 @@
 		/>
 	</div>
 
-	<div class="grid grid-cols-1 gap-3 md:grid-cols-2">
-		<div class="space-y-1.5">
-			<Label for="{idPrefix}-medications" class="text-xs font-medium text-foreground">
-				ยาที่ใช้ประจำ
-			</Label>
-			<Textarea
-				id="{idPrefix}-medications"
-				bind:value={medications}
-				{disabled}
-				rows={3}
-				placeholder="เช่น ยาลดความดัน, อินซูลิน"
-				class="text-xs"
-			/>
-		</div>
+	<div class="space-y-1.5">
+		<Label for="{idPrefix}-medications" class="text-xs font-medium text-foreground">
+			ยาที่ใช้ประจำ
+		</Label>
+		<Textarea
+			id="{idPrefix}-medications"
+			bind:value={medications}
+			{disabled}
+			rows={3}
+			placeholder="เช่น ยาลดความดัน, อินซูลิน"
+			class="text-xs"
+		/>
+	</div>
 
-		<div class="space-y-1.5">
-			<Label for="{idPrefix}-allergies" class="text-xs font-medium text-foreground">
-				ประวัติการแพ้
-			</Label>
-			<Textarea
-				id="{idPrefix}-allergies"
-				bind:value={allergies}
-				{disabled}
-				rows={3}
-				placeholder="เช่น เพนิซิลลิน, อาหารทะเล"
-				class="text-xs"
-			/>
-		</div>
+	<!-- ประวัติการแพ้ gets its own full-width row like โรคประจำตัว (#648). -->
+	<div class="space-y-1.5">
+		<Label for="{idPrefix}-allergies" class="text-xs font-medium text-foreground">
+			ประวัติการแพ้
+		</Label>
+		<MasterTagInput
+			id="{idPrefix}-allergies"
+			bind:value={getAllergyTokens, setAllergyTokens}
+			items={allergyItems}
+			{disabled}
+			placeholder="เลือกหรือพิมพ์ เช่น อาหารทะเล, เพนิซิลลิน"
+			searchPlaceholder="ค้นหาสิ่งที่แพ้..."
+		/>
 	</div>
 
 	{#if showGeneralSymptoms}
