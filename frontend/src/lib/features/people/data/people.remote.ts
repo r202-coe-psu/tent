@@ -55,6 +55,13 @@ import {
 	type UnifiedRegistrationInput
 } from '../domain/unified-registration';
 import { autoHouseholdLabel } from '../domain/registration-shell';
+import {
+	STATION_LOG_STALE_WINDOW_MS,
+	createStationLog,
+	hasOpenStationStart,
+	type StationLogInput,
+	type StationNumber
+} from '../domain/station-log';
 import type {
 	EvacueeFilters,
 	EvacueePatch,
@@ -62,7 +69,8 @@ import type {
 	HouseholdPatch,
 	HouseholdSearchLabels,
 	MedicalPatch,
-	PeopleRepository
+	PeopleRepository,
+	StationLogWriteOptions
 } from './people.repository';
 
 function matchesHouseholdSearch(
@@ -108,6 +116,76 @@ export class PeopleRemoteRepository implements PeopleRepository {
 
 	constructor(private readonly dbName: string) {
 		this.repo = createRemoteRepository(dbName);
+	}
+
+	/**
+	 * Append staff `station_log` docs (CR-192). Best-effort: a failure never reaches the caller as
+	 * a rejection — the station action it describes already succeeded (FR-STL-04) — it is only
+	 * reported through `onStationLogError` so the UI can warn.
+	 */
+	private async writeStationLogs(
+		entries: readonly Omit<StationLogInput, 'channel'>[],
+		ctx: AuthorContext,
+		opts?: StationLogWriteOptions
+	): Promise<void> {
+		if (entries.length === 0) return;
+		try {
+			await this.repo.bulkDocs(
+				entries.map((entry) => createStationLog({ ...entry, channel: 'staff' }, ctx))
+			);
+		} catch (err) {
+			if (opts?.onStationLogError) opts.onStationLogError(err);
+			else console.warn('Failed to record station_log:', err);
+		}
+	}
+
+	/**
+	 * Station 1 form logs: `start` (the form-open time, never in the future) + `complete` (now)
+	 * for each saved member. Only when the caller passed `startedAt` (CR-192 O11).
+	 */
+	private async writeStationOneLogs(
+		evacueeIds: readonly string[],
+		ctx: AuthorContext,
+		opts?: StationLogWriteOptions
+	): Promise<void> {
+		if (!opts?.startedAt) return;
+		const completedAt = now();
+		const parsed = Date.parse(opts.startedAt);
+		const startedAt =
+			Number.isFinite(parsed) && parsed < Date.parse(completedAt)
+				? new Date(parsed).toISOString()
+				: completedAt;
+		await this.writeStationLogs(
+			evacueeIds.flatMap((evacuee_id) => [
+				{ evacuee_id, station: 1 as const, action: 'start' as const, occurred_at: startedAt },
+				{ evacuee_id, station: 1 as const, action: 'complete' as const, occurred_at: completedAt }
+			]),
+			ctx,
+			opts
+		);
+	}
+
+	async recordStationStart(
+		evacueeId: string,
+		station: StationNumber,
+		ctx: AuthorContext
+	): Promise<boolean> {
+		const nowMs = Date.now();
+		// Only logs inside the stale window can make a `start` live, so the Mango range stays tiny.
+		const recent = await this.repo.find<{ action: 'start' | 'complete'; occurred_at: string }>({
+			selector: {
+				type: 'station_log',
+				evacuee_id: evacueeId,
+				station,
+				occurred_at: { $gte: new Date(nowMs - STATION_LOG_STALE_WINDOW_MS).toISOString() }
+			},
+			limit: 100
+		});
+		if (hasOpenStationStart(recent, nowMs)) return false;
+		await this.repo.put(
+			createStationLog({ evacuee_id: evacueeId, station, action: 'start', channel: 'staff' }, ctx)
+		);
+		return true;
 	}
 
 	async createEvacuee(
@@ -378,7 +456,8 @@ export class PeopleRemoteRepository implements PeopleRepository {
 		input: UnifiedRegistrationInput,
 		ctx: AuthorContext,
 		channel: UnifiedRegistrationChannel = 'onsite',
-		ids?: UlidReservation
+		ids?: UlidReservation,
+		stationLog?: StationLogWriteOptions
 	): Promise<{ household: Household; members: Evacuee[] }> {
 		const plan = planFamilyRegistration(input, channel);
 		// Same reservation + same input on a retry → same doc IDs → idempotent 409s.
@@ -502,6 +581,11 @@ export class PeopleRemoteRepository implements PeopleRepository {
 					// Derived status is recomputed on the next household write.
 				}
 
+				await this.writeStationOneLogs(
+					members.map((m) => m._id),
+					ctx,
+					stationLog
+				);
 				return { household, members };
 			} catch (err) {
 				const complete = await this.compensateFailedFamilyRegistration(createdMemberIds, null);
@@ -590,6 +674,11 @@ export class PeopleRemoteRepository implements PeopleRepository {
 				return saved ?? m;
 			});
 
+			await this.writeStationOneLogs(
+				members.map((m) => m._id),
+				ctx,
+				stationLog
+			);
 			return { household, members };
 		} catch (err) {
 			const complete = await this.compensateFailedFamilyRegistration(createdMemberIds, householdId);
@@ -796,16 +885,22 @@ export class PeopleRemoteRepository implements PeopleRepository {
 			vulnerable_groups?: string[];
 			special_needs?: string[];
 		},
-		ctx: AuthorContext
+		ctx: AuthorContext,
+		stationLog?: StationLogWriteOptions
 	): Promise<{ screening: Screening; evacuee?: Evacuee; medical?: Medical }> {
 		const screening = await this.createScreening(input.screening, ctx);
+		await this.writeStationLogs(
+			[{ evacuee_id: input.screening.evacuee_id, station: 2, action: 'complete' }],
+			ctx,
+			stationLog
+		);
 		let evacuee: Evacuee | undefined;
 		if (input.checkIn && input.zone) {
 			const targetEvacuee = await this.getEvacuee(input.screening.evacuee_id);
 			if (!targetEvacuee) {
 				throw new Error('ไม่พบข้อมูลผู้ประสบภัย');
 			}
-			evacuee = await this.checkInEvacuee(targetEvacuee, ctx, input.zone);
+			evacuee = await this.checkInEvacuee(targetEvacuee, ctx, input.zone, stationLog);
 		}
 		let medical: Medical | undefined;
 		if (input.medical) {
@@ -993,7 +1088,12 @@ export class PeopleRemoteRepository implements PeopleRepository {
 		return latest;
 	}
 
-	async checkInEvacuee(evacuee: Evacuee, ctx: AuthorContext, zone: string): Promise<Evacuee> {
+	async checkInEvacuee(
+		evacuee: Evacuee,
+		ctx: AuthorContext,
+		zone: string,
+		stationLog?: StationLogWriteOptions
+	): Promise<Evacuee> {
 		const nextZone = zone.trim();
 		if (!nextZone) {
 			throw new Error('การเช็คอินต้องระบุโซน');
@@ -1006,6 +1106,16 @@ export class PeopleRemoteRepository implements PeopleRepository {
 		);
 		await this.repo.put(movement);
 		const updated = await this.repo.put(applyMovementToStay(latest, movement));
+		// Station 3 `complete` (CR-192) — only for the zoning check-in of an `arriving` person; a
+		// return from leave / re-check-in did not pass the zoning desk. Best-effort, before the
+		// household refresh so a failing refresh cannot skip it.
+		if (latest.current_stay.status === 'arriving') {
+			await this.writeStationLogs(
+				[{ evacuee_id: latest._id, station: 3, action: 'complete' }],
+				ctx,
+				stationLog
+			);
+		}
 		await this.refreshDerivedHouseholdStatus(updated.household_id);
 		return updated;
 	}
@@ -1269,7 +1379,8 @@ export class PeopleRemoteRepository implements PeopleRepository {
 	}
 
 	async submitFamilyReportIn(
-		payload: FamilyReportInPayload
+		payload: FamilyReportInPayload,
+		stationLog?: StationLogWriteOptions
 	): Promise<{ household: Household; members: Evacuee[] }> {
 		const {
 			householdId,
@@ -1543,6 +1654,12 @@ export class PeopleRemoteRepository implements PeopleRepository {
 		await this.refreshDerivedHouseholdStatus(effectiveHouseholdId);
 
 		const finalHousehold = await this.getHousehold(effectiveHouseholdId);
+
+		await this.writeStationOneLogs(
+			finalReportedMembers.map((m) => m._id),
+			ctx,
+			stationLog
+		);
 
 		return {
 			household: finalHousehold ?? finalSavedHousehold,

@@ -145,6 +145,8 @@ export {
 	type MasterHousingItem
 } from './domain/housing-type-ui';
 
+export { startStaffStationVisit } from './application/station-log';
+
 export {
 	STATION_LOG_STALE_WINDOW_MS,
 	STATION_LOG_WRITE_WARNING,
