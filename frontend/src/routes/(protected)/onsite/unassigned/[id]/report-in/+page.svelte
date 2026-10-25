@@ -66,6 +66,8 @@
 
 	const claimMutation = useClaimUnassignedRegistration();
 	const submitReportIn = useSubmitFamilyReportIn();
+	// CR-192: when the report-in form was opened — the Station 1 `start` time (plain const: not reactive).
+	const formOpenedAt = new Date().toISOString();
 
 	const staff = $derived(
 		authStore.user
@@ -154,7 +156,8 @@
 					shelterCode: data.shelterCode ?? getShelterCode(),
 					createdBy: authStore.user?.name ?? 'unknown'
 				},
-				consent
+				consent,
+				stationStartedAt: formOpenedAt
 			});
 			isDirty = false;
 			isNavigatingAfterSave = true;

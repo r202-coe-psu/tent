@@ -416,7 +416,7 @@ describe('kiosk walk-in phone and ThaiD', () => {
 /** A shelter DB that answers `_find` from its docs, so tests do not depend on call order. */
 function fakeShelterDb(
 	seed: Record<string, unknown>[] = [],
-	options: { failPutOfType?: string } = {}
+	options: { failPutOfType?: string; failBulkDocs?: boolean } = {}
 ) {
 	const docs = new Map<string, Record<string, unknown>>();
 	seed.forEach((doc, index) => docs.set(String(doc._id ?? `seed:${index}`), doc));
@@ -442,6 +442,14 @@ function fakeShelterDb(
 			);
 			return { docs: matches } as never;
 		}
+		if (path!.endsWith('/_bulk_docs')) {
+			if (options.failBulkDocs) throw new Error('bulk write failed');
+			const { docs: written } = JSON.parse(String(init?.body)) as {
+				docs: { _id: string }[];
+			};
+			for (const doc of written) docs.set(doc._id, { ...doc, _rev: '1-x' });
+			return written.map((doc) => ({ ok: true, id: doc._id, rev: '1-x' })) as never;
+		}
 		if (init?.method === 'PUT') {
 			const doc = JSON.parse(String(init.body)) as { type?: unknown };
 			if (doc.type === options.failPutOfType) throw new Error(`${doc.type} write failed`);
@@ -461,6 +469,104 @@ function fakeShelterDb(
 	};
 }
 
+describe('kiosk walk-in station_log (CR-192)', () => {
+	beforeEach(() => vi.resetAllMocks());
+
+	type Log = {
+		_id: string;
+		evacuee_id: string;
+		station: number;
+		action: string;
+		channel: string;
+		device_id: string;
+		created_by: string;
+		occurred_at: string;
+	};
+
+	it('writes one kiosk start + complete for the created member, start = card-read time', async () => {
+		const db = fakeShelterDb();
+		const startedAt = new Date(Date.now() - 2 * 60_000).toISOString();
+
+		const result = await registerKioskWalkIn(
+			'SH001',
+			'KIOSK-01',
+			'โต๊ะ 1',
+			card,
+			null,
+			decision,
+			null,
+			startedAt
+		);
+
+		const logs = db.ofType<Log>('station_log');
+		expect(logs).toHaveLength(2);
+		const start = logs.find((l) => l.action === 'start');
+		const complete = logs.find((l) => l.action === 'complete');
+		for (const log of logs) {
+			expect(log).toMatchObject({
+				evacuee_id: result._id,
+				station: 1,
+				channel: 'kiosk',
+				device_id: 'KIOSK-01',
+				created_by: 'kiosk:KIOSK-01'
+			});
+		}
+		expect(start?.occurred_at).toBe(startedAt);
+		expect(Date.parse(complete!.occurred_at)).toBeGreaterThanOrEqual(Date.parse(startedAt));
+	});
+
+	it('writes the ThaiD walk-in pair under the same kiosk identity', async () => {
+		const db = fakeShelterDb();
+		const result = await registerKioskThaidWalkIn(
+			{ shelterCode: 'SH001', deviceId: 'KIOSK-02', stationName: 'โต๊ะ 2' },
+			{ pid: citizenId },
+			decision,
+			null
+		);
+		const logs = db.ofType<Log>('station_log');
+		expect(logs.map((l) => l.action).sort()).toEqual(['complete', 'start']);
+		expect(logs.every((l) => l.evacuee_id === result._id && l.device_id === 'KIOSK-02')).toBe(true);
+	});
+
+	it('falls back to server time for a card-read time older than 2 hours', async () => {
+		const db = fakeShelterDb();
+		const before = Date.now();
+		await registerKioskWalkIn(
+			'SH001',
+			'KIOSK-01',
+			'โต๊ะ 1',
+			card,
+			null,
+			decision,
+			null,
+			new Date(Date.now() - 3 * 3_600_000).toISOString()
+		);
+		const start = db.ofType<Log>('station_log').find((l) => l.action === 'start');
+		expect(Date.parse(start!.occurred_at)).toBeGreaterThanOrEqual(before);
+	});
+
+	it('still returns the registered record when the log write fails', async () => {
+		const db = fakeShelterDb([], { failBulkDocs: true });
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+		const result = await registerKioskWalkIn('SH001', 'KIOSK-01', 'โต๊ะ 1', card, null, decision);
+
+		expect(result.current_stay.status).toBe('arriving');
+		expect(db.ofType('evacuee')).toHaveLength(1);
+		expect(db.ofType('station_log')).toHaveLength(0);
+		expect(warn).toHaveBeenCalled();
+		warn.mockRestore();
+	});
+
+	it('writes no log when the registration itself fails', async () => {
+		const db = fakeShelterDb([], { failPutOfType: 'evacuee' });
+		await expect(
+			registerKioskWalkIn('SH001', 'KIOSK-01', 'โต๊ะ 1', card, null, decision)
+		).rejects.toThrow();
+		expect(db.ofType('station_log')).toHaveLength(0);
+	});
+});
+
 describe('kiosk walk-in phone already in use', () => {
 	beforeEach(() => vi.resetAllMocks());
 
@@ -470,7 +576,7 @@ describe('kiosk walk-in phone already in use', () => {
 		shelter_code: 'SH001',
 		person_id: { cardType: 'national_id', number: '9999999999999' },
 		phone,
-		current_stay: { status, zone: null, since: consentedAt }
+		current_stay: { status, zone: null, since: decision }
 	});
 
 	it('refuses a phone another evacuee in the shelter already has, and writes nothing', async () => {

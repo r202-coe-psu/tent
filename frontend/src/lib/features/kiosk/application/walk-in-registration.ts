@@ -14,6 +14,8 @@ export type WalkInCardSession = {
 	citizenId: string | null;
 	consentDecision: ConsentDecision | null;
 	phone?: string | null;
+	/** When the card was read / ThaiD verified (ISO) — sent as the Station 1 `start` time. */
+	startedAt?: string | null;
 };
 
 export type WalkInSubmitSession = WalkInCardSession & {
@@ -61,13 +63,20 @@ export function walkInCardMismatch(
 export async function registerWalkInCardRead(
 	card: SmartCardData | null | undefined,
 	session: WalkInCardSession,
-	register: (card: SmartCardData, consent: ConsentDecision) => Promise<KioskRegistrationResult>
+	register: (
+		card: SmartCardData,
+		consent: ConsentDecision,
+		startedAt: string | null
+	) => Promise<KioskRegistrationResult>
 ): Promise<WalkInCardRegistrationOutcome> {
 	if (!session.consentDecision || !session.citizenId || !card) return { kind: 'ignored' };
 	const mismatch = walkInCardMismatch(card, session);
 	if (mismatch) return { kind: 'mismatch', message: mismatch };
 	try {
-		return { kind: 'registered', registration: await register(card, session.consentDecision) };
+		return {
+			kind: 'registered',
+			registration: await register(card, session.consentDecision, session.startedAt ?? null)
+		};
 	} catch (cause) {
 		if (isPhoneDuplicate(cause)) return { kind: 'phone_duplicate', message: cause.message };
 		if (isConsentExpired(cause)) return { kind: 'consent_expired', message: cause.message };
@@ -83,16 +92,16 @@ export function submitWalkInCard(
 	card: SmartCardData | null | undefined,
 	session: WalkInCardSession
 ): Promise<WalkInCardRegistrationOutcome> {
-	return registerWalkInCardRead(card, session, async (fullCard, consent) => {
+	return registerWalkInCardRead(card, session, async (fullCard, consent, startedAt) => {
 		const photo = await buildKioskPhotoPayload(fullCard.photo_base64).catch(() => null);
 		const cardWithoutPhoto = { ...fullCard, photo_base64: undefined };
-		return registerKioskWalkIn(cardWithoutPhoto, photo, consent, session.phone ?? null);
+		return registerKioskWalkIn(cardWithoutPhoto, photo, consent, session.phone ?? null, startedAt);
 	});
 }
 
 /** Register a ThaiD walk-in: the server takes the citizen from the verified session (no photo). */
 export async function submitWalkInThaid(
-	session: Pick<WalkInSubmitSession, 'thaidSessionId' | 'consentDecision' | 'phone'>,
+	session: Pick<WalkInSubmitSession, 'thaidSessionId' | 'consentDecision' | 'phone' | 'startedAt'>,
 	register: typeof registerKioskThaidWalkIn = registerKioskThaidWalkIn
 ): Promise<WalkInCardRegistrationOutcome> {
 	if (!session.consentDecision || !session.thaidSessionId) return { kind: 'ignored' };
@@ -100,7 +109,8 @@ export async function submitWalkInThaid(
 		const registration = await register(
 			session.thaidSessionId,
 			session.consentDecision,
-			session.phone ?? null
+			session.phone ?? null,
+			session.startedAt ?? null
 		);
 		return { kind: 'registered', registration };
 	} catch (cause) {

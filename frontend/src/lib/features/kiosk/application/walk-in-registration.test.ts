@@ -44,7 +44,7 @@ describe('registerWalkInCardRead', () => {
 	it('hands the consent decision to the register call and registers nothing without one', async () => {
 		const register = vi.fn().mockResolvedValue(registration);
 		await registerWalkInCardRead(card, session, register);
-		expect(register).toHaveBeenCalledWith(card, decision);
+		expect(register).toHaveBeenCalledWith(card, decision, null);
 
 		const none = vi.fn();
 		await expect(
@@ -163,7 +163,14 @@ describe('submitWalkInThaid', () => {
 			kind: 'registered',
 			registration
 		});
-		expect(register).toHaveBeenCalledWith('a'.repeat(32), decision, '0812345678');
+		expect(register).toHaveBeenCalledWith('a'.repeat(32), decision, '0812345678', null);
+	});
+
+	it('carries the scan time as the Station 1 start (CR-192)', async () => {
+		const register = vi.fn().mockResolvedValue(registration);
+		const startedAt = '2026-10-25T03:00:00.000Z';
+		await submitWalkInThaid({ ...thaidSession, startedAt }, register);
+		expect(register).toHaveBeenCalledWith('a'.repeat(32), decision, '0812345678', startedAt);
 	});
 
 	it('does nothing before consent', async () => {

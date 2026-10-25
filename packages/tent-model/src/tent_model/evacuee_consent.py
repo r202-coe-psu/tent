@@ -8,6 +8,7 @@ result and binds a web grant to its giver.
 
 from __future__ import annotations
 
+import re
 from datetime import datetime
 from typing import Annotated, Literal, get_args
 
@@ -22,6 +23,10 @@ from pydantic import (
 )
 
 EVACUEE_SCHEMA_V = 15
+
+# Zod's `iso.datetime({ offset: true })` takes `Z` or `±HH:MM` only; `fromisoformat` also takes
+# the compact `±HHMM`, so the offset is checked on its own to keep both sides in step.
+_ISO_OFFSET_SUFFIX = re.compile(r"(?:Z|[+-]\d{2}:\d{2})$")
 
 ConsentMode = Literal["full", "basic"]
 ConsentGiver = Literal["self", "guardian", "household_member", "backfill"]
@@ -53,6 +58,8 @@ class _ConsentStamp(BaseModel):
 			raise ValueError("given_at must be an ISO timestamp") from exc
 		if "T" not in value or parsed.tzinfo is None:
 			raise ValueError("given_at must be an ISO timestamp with an offset")
+		if not _ISO_OFFSET_SUFFIX.search(value):
+			raise ValueError("given_at offset must be Z or ±HH:MM")
 		return value
 
 

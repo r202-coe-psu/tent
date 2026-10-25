@@ -187,3 +187,22 @@ describe('walkInSession registration hand-over', () => {
 		expect(session.registration).toBeNull();
 	});
 });
+
+describe('walkInSession station start time (CR-192)', () => {
+	it('stamps the card read / ThaiD verification as the walk-in start and forgets it on clear', () => {
+		const session = createWalkInSession();
+		expect(session.startedAt).toBeNull();
+
+		const before = Date.now();
+		session.begin('1234567890123');
+		const cardStart = Date.parse(session.startedAt ?? '');
+		expect(cardStart).toBeGreaterThanOrEqual(before);
+		expect(cardStart).toBeLessThanOrEqual(Date.now());
+
+		session.beginThaid('a'.repeat(32));
+		expect(Date.parse(session.startedAt ?? '')).toBeGreaterThanOrEqual(cardStart);
+
+		session.clear();
+		expect(session.startedAt).toBeNull();
+	});
+});

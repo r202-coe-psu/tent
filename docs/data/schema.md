@@ -3,7 +3,7 @@ title: Smart Shelter — Database Schema v5
 status: draft for review
 created: 2026-06-11
 updated: 2026-10-26
-note: decision sync 2026-10-25 — §1.1 `evacuee.consent` (opt) จากบล็อกความยินยอม PDPA, evacuee schema_v 14 → 15 ([spec](../features/pdpa-consent-block-spec.md)); CR-170 amend (2026-10-25) — §7 `registrations_by_date_status` เพิ่ม series `preregister` (view manifest v4); CR-191 approved (2026-10-25, #607) — §4.2 `item_master.allergens` = `[str]` ของ master `allergy` code หรือ free text (`item_master` schema_v 5 → 6) + §2.30 `distribution_log.allergen_conflicts` (opt, additive, ไม่ bump); CR-190 approved (2026-10-24, #569) — §2.1 `adjust` ติดลบ (ปรับยอด / `count_mismatch`) อ้าง `lot_ref` ของล็อตที่ตัดและต้องพอในล็อตนั้น, `adjust` บวกเป็นล็อตใหม่ (ไม่เปลี่ยน field / ไม่ bump `schema_v`); CR-187 approved (2026-10-22, #648) — §3.3 `master_type` เพิ่ม `allergy` (global-only, seed 5) + §1.2 `medical.allergies` = master code หรือ free text (ไม่ bump `schema_v`); CR-186 approved (2026-10-22, #649) — §3.3 `master_type` เพิ่ม `chronic_disease` (global-only, seed 12) + §1.2 `medical.conditions` = master code หรือ free text (ไม่ bump `schema_v`); CR-185 approved (2026-10-21, #709) — §9.2 `public_jobs.is_urgent` (projection field ใหม่, `PROJECTION_VERSION` 5→6, ไม่ bump `schema_v`); CR-172 (2026-10-21) — `donation` schema_v 6 (§2.3): `reject_reason`/`reject_reason_code` + รูป `received_summary` เต็ม (`items[].rejected`/`reject_reason`/`reject_reason_code`), optional ทั้งหมด ไม่ backfill; CR-174 (2026-10-21) — `donation` schema_v 7 (§2.3): `items[].review_status`/`review_reason_code`/`review_reason` + สถานะใบคำนวณจากรายการ (ตอนสร้าง/ผู้บริจาคแก้), optional ทั้งหมด ไม่ backfill; audit อนุมัติอัตโนมัติ `approved_by: system`; CR-162 ส่วนที่ปรับ 2026-10-21 (Team Lead อนุมัติ 2026-10-22) — kiosk banner group: §3.11 `scanner_device.banner_group_id` (additive, ไม่ bump) + `banner_enabled` deprecated, §3.12 `kiosk_banner` schema_v 1 → 2 (+ `group_id`, order ต่อ (group_id, screen_type), VDU `REGISTRY_DESIGN_VERSION` 8), §3.13 `kiosk_banner_group` ใหม่ (schema_v 1)
+note: CR-192 amendment 2 (2026-10-25) — §7 `station_logs_by_station` value เพิ่ม `actor` (อันดับรายบุคคล, ไม่ bump `schema_v`, manifest คง v5); CR-192 approved (2026-10-25, #589) — §1.8 `station_log` ใหม่ (schema_v 1 · append-only · เวลา `start`/`complete` ต่อ evacuee ต่อ station + `channel` kiosk/staff) + §7 view `station_logs_by_station` (view manifest v5) + Mango index `station_log` + §8 ข้อ 1–2 (whitelist + append-only) — type อื่นไม่ bump `schema_v`; decision sync 2026-10-25 — §1.1 `evacuee.consent` (opt) จากบล็อกความยินยอม PDPA, evacuee schema_v 14 → 15 ([spec](../features/pdpa-consent-block-spec.md)); CR-170 amend (2026-10-25) — §7 `registrations_by_date_status` เพิ่ม series `preregister` (view manifest v4); CR-191 approved (2026-10-25, #607) — §4.2 `item_master.allergens` = `[str]` ของ master `allergy` code หรือ free text (`item_master` schema_v 5 → 6) + §2.30 `distribution_log.allergen_conflicts` (opt, additive, ไม่ bump); CR-190 approved (2026-10-24, #569) — §2.1 `adjust` ติดลบ (ปรับยอด / `count_mismatch`) อ้าง `lot_ref` ของล็อตที่ตัดและต้องพอในล็อตนั้น, `adjust` บวกเป็นล็อตใหม่ (ไม่เปลี่ยน field / ไม่ bump `schema_v`); CR-187 approved (2026-10-22, #648) — §3.3 `master_type` เพิ่ม `allergy` (global-only, seed 5) + §1.2 `medical.allergies` = master code หรือ free text (ไม่ bump `schema_v`); CR-186 approved (2026-10-22, #649) — §3.3 `master_type` เพิ่ม `chronic_disease` (global-only, seed 12) + §1.2 `medical.conditions` = master code หรือ free text (ไม่ bump `schema_v`); CR-185 approved (2026-10-21, #709) — §9.2 `public_jobs.is_urgent` (projection field ใหม่, `PROJECTION_VERSION` 5→6, ไม่ bump `schema_v`); CR-172 (2026-10-21) — `donation` schema_v 6 (§2.3): `reject_reason`/`reject_reason_code` + รูป `received_summary` เต็ม (`items[].rejected`/`reject_reason`/`reject_reason_code`), optional ทั้งหมด ไม่ backfill; CR-174 (2026-10-21) — `donation` schema_v 7 (§2.3): `items[].review_status`/`review_reason_code`/`review_reason` + สถานะใบคำนวณจากรายการ (ตอนสร้าง/ผู้บริจาคแก้), optional ทั้งหมด ไม่ backfill; audit อนุมัติอัตโนมัติ `approved_by: system`; CR-162 ส่วนที่ปรับ 2026-10-21 (Team Lead อนุมัติ 2026-10-22) — kiosk banner group: §3.11 `scanner_device.banner_group_id` (additive, ไม่ bump) + `banner_enabled` deprecated, §3.12 `kiosk_banner` schema_v 1 → 2 (+ `group_id`, order ต่อ (group_id, screen_type), VDU `REGISTRY_DESIGN_VERSION` 8), §3.13 `kiosk_banner_group` ใหม่ (schema_v 1)
 ---
 
 # Database Schema v5 — field-level
@@ -317,6 +317,56 @@ sheet?: str, line?: int }] }`
 
 **หมายเหตุ sync:** worker ไม่รู้จัก doc type นี้ จึงถูกข้ามในการ project ลง MongoDB (ไม่มี public
 projection — เป็นข้อมูลหลังบ้านล้วน)
+
+### 1.8 `station_log` — `station_log:{ulid}` · **schema_v 1** · **append-only** (CR-192)
+
+Log เวลา `start` / `complete` ต่อ evacuee ต่อ station ของ intake pipeline (ADR-0001: Station 1
+Registration/Report-in, Station 2 Medical Screening, Station 3 Zoning) พร้อม `channel` ที่ให้บริการ
+เพื่อสรุปเวลาให้บริการเฉลี่ยต่อ station แยกช่องทาง (staff dashboard ต่อศูนย์). 1 event = 1 doc (2 doc
+ต่อ visit); `created_at = updated_at`; ไม่แก้/ลบย้อนหลัง. `duration` ไม่ persist — derive ตอนสรุปใน BFF.
+ไม่มี PII (อ้าง `evacuee_id` เท่านั้น) · operational data — worker ไม่รู้จัก type นี้ (ไม่ project ลง
+Mongo, ไม่ bump `PROJECTION_VERSION`) · retention เดียวกับ `movement`
+
+| Field | ชนิด | req | หมายเหตุ |
+| --- | --- | --- | --- |
+| `evacuee_id` | str | req | evacuee ที่รับบริการ |
+| `station` | int (`1`,`2`,`3`) | req | ตาม pipeline ADR-0001 |
+| `action` | enum(`start`,`complete`) | req | — |
+| `channel` | enum(`kiosk`,`staff`) | req | ช่องทางที่ให้บริการ step นี้ (ไม่ใช่ `registered_via`); **station 2 และ 3 ต้องเป็น `staff`** (Zod ฝั่ง client) |
+| `device_id` | str | opt | ใส่เมื่อ `channel = 'kiosk'` (scanner device จาก principal ที่ authenticate แล้ว ไม่รับจาก body) |
+| `occurred_at` | ts | req | เวลาเหตุการณ์จริง (ไม่ใช่เวลา sync) |
+
+`created_by` = `kiosk:{device_id}` เมื่อ kiosk เขียน; ชื่อผู้ใช้ staff เมื่อ staff เขียน
+
+**นิยาม start/complete**
+
+| Station | `start` = | `complete` = |
+| --- | --- | --- |
+| 1 | **staff:** เปิดฟอร์ม (walk-in เปล่า หรือหน้า report-in) — client ถือเวลาเปิดฟอร์มไว้แล้วเขียน `start` (`occurred_at` = เวลาเปิดฟอร์ม) พร้อม `complete` ตอนบันทึกสำเร็จ ต่อสมาชิกที่บันทึกทุกคน · **kiosk:** เวลา lookup สำเร็จ / อ่านบัตร walk-in (client ส่งมา, server clamp: ไม่เกินปัจจุบัน และไม่เก่ากว่า 2 ชม. มิฉะนั้นใช้เวลา server) | บันทึก evacuee เป็น `current_stay.status = arriving` สำเร็จ (kiosk: ต่อสมาชิกที่เลือกแต่ละคน) |
+| 2 | staff เปิดฟอร์ม screening ของ evacuee (idempotent) | บันทึก `screening` สำเร็จ |
+| 3 | staff เปิดหน้า zoning ของ evacuee (idempotent) | บันทึก movement `check_in` สำเร็จ (bulk zoning เขียน `complete` อย่างเดียว ไม่มี `start`) |
+
+**Stale window = 2 ชั่วโมง.** `start` ของ staff Station 2/3 เขียนซ้ำไม่ได้ถ้ามี `start` ของ
+`(evacuee_id, station)` ที่ยังไม่มี `complete` และอายุ ≤ stale window (กันเปิดหน้าซ้ำ/refresh); ถ้าเก่ากว่า
+ให้เขียน `start` ใหม่
+
+**Visit (pairing — ทำใน BFF ไม่ใช่ CouchDB map):** key `(evacuee_id, station)`; `complete` แรกที่
+`occurred_at ≥ start`, ก่อน `start` ถัดไปของ key เดียวกัน และห่างจาก `start` ไม่เกิน stale window;
+`channel` ของ visit = `channel` ของ `start`.
+
+- `start` ไม่มี `complete` และอายุ ≤ stale window (และเป็น `start` ล่าสุดของ key) = `open_visits` (ไม่นับในค่าเฉลี่ย)
+- `start` ไม่มี `complete` และอายุ > stale window หรือถูก `start` ใหม่ทับ = abandoned (ไม่นับที่ใด)
+- `complete` ไม่มี `start` = นับเป็น throughput (`visits`) แต่ไม่นับในค่าเฉลี่ย
+- visit นับตามวันที่ (Asia/Bangkok) ของ `start`
+
+**เขียน/อ่าน:** kiosk — BFF ฝั่ง server ด้วย admin credential (Station 1 เท่านั้น); staff —
+browser ผ่าน repository ของ feature `people` ตาม guard เดิมของหน้า (`registration_staff`) ·
+`channel = 'staff'` มาจากโค้ดหน้า staff **ไม่ได้ verify ฝั่ง server** (`validate_doc_update` ตรวจแค่
+whitelist + append-only — security concern แยกตาม #850). เขียน log ล้มเหลวต้องไม่ block การทำงานหลักของ
+station (staff เห็น warning toast).
+
+**Index:** Mango `(type, evacuee_id, station, occurred_at)` (หา `start` ค้างตามกฎ idempotent ด้านบน;
+คนละตัวกับ view) · view `station_logs_by_station` (§7)
 
 ---
 
@@ -2620,7 +2670,7 @@ CouchDB `_users` DB ไม่ใช่ operational doc ธรรมดา — �
 
 | DB | Mango indexes | Views (map/reduce) |
 | --- | --- | --- |
-| `shelter_*` | evacuee kiosk lookup: (type, phone), (type, person_id.number), (type, household_id), (type, card_snapshot.address_no) · movement: (evacuee_id, occurred_at) · screening: (evacuee_id, screened_at) · stock_ledger: (item_id, occurred_at) · `fuel_cylinder`: (item_master_id, cylinder_code) · `gas_ledger`: (cylinder_id, occurred_at) · `requisition_ticket`: (status, requisition_type, ticket_no) · `distribution_log`: (ticket_id, item_id, recipient_id, status), (recipient_id, status) · `bulk_return_pool`: (item_id, status) · donation: status, tracking_token_hash, booking_ref, campaign_id, (logistics.slot.date) · donation_slot: (date), (date, from) · medical: evacuee_id · shift_assignment: (job_id, shift_id), (volunteer_id, status), (status) · volunteer: (phone), (phone_hash), (tracking_token_hash), (status), (personnel_type), (checked_in) · job: (status), (tier, status) · job_application: (job_id, status), (tracking_token) · sop_override: (active) · food_sphere_standard: (target_segment, req_group_id, effective_date) · requirement_group: (name) · replenishment_policy: (scope_type, target_id) | `occupancy` (count evacuees by stay status) · `demographics_by_age` (count in-shelter evacuees — `active` + `room_confirmed`, CR-170 — by birth year; dynamic age-bucket in API) · `demographics_by_country` (count in-shelter evacuees by country) · `registrations_by_date_status` (count check-in/out movements by date + `preregister`: evacuees with `registered_via` ∈ web/kiosk/api, not cancelled, by `created_at` date — CR-170 amend) · `stock_balance` (client Decimal sum qty_str by item; CR-038) · `gas_balance` (client Decimal sum gas_ledger.qty_kg by active cylinder) · `latest_screening` · `meals_served` (sum by date+meal) · `needs_open` · `slot_availability` |
+| `shelter_*` | evacuee kiosk lookup: (type, phone), (type, person_id.number), (type, household_id), (type, card_snapshot.address_no) · movement: (evacuee_id, occurred_at) · screening: (evacuee_id, screened_at) · `station_log`: (evacuee_id, station, occurred_at) — CR-192 · stock_ledger: (item_id, occurred_at) · `fuel_cylinder`: (item_master_id, cylinder_code) · `gas_ledger`: (cylinder_id, occurred_at) · `requisition_ticket`: (status, requisition_type, ticket_no) · `distribution_log`: (ticket_id, item_id, recipient_id, status), (recipient_id, status) · `bulk_return_pool`: (item_id, status) · donation: status, tracking_token_hash, booking_ref, campaign_id, (logistics.slot.date) · donation_slot: (date), (date, from) · medical: evacuee_id · shift_assignment: (job_id, shift_id), (volunteer_id, status), (status) · volunteer: (phone), (phone_hash), (tracking_token_hash), (status), (personnel_type), (checked_in) · job: (status), (tier, status) · job_application: (job_id, status), (tracking_token) · sop_override: (active) · food_sphere_standard: (target_segment, req_group_id, effective_date) · requirement_group: (name) · replenishment_policy: (scope_type, target_id) | `occupancy` (count evacuees by stay status) · `demographics_by_age` (count in-shelter evacuees — `active` + `room_confirmed`, CR-170 — by birth year; dynamic age-bucket in API) · `demographics_by_country` (count in-shelter evacuees by country) · `registrations_by_date_status` (count check-in/out movements by date + `preregister`: evacuees with `registered_via` ∈ web/kiosk/api, not cancelled, by `created_at` date — CR-170 amend) · `station_logs_by_station` (raw `station_log` events, no reduce — key `[YYYY-MM-DD(+07) ของ occurred_at, station, channel, evacuee_id]` → `{action, occurred_at, actor}` (`actor` = `device_id` for kiosk, `created_by` for staff — CR-192 amendment 2); BFF pairs start/complete and ranks per actor — CR-192, view manifest v5) · `stock_balance` (client Decimal sum qty_str by item; CR-038) · `gas_balance` (client Decimal sum gas_ledger.qty_kg by active cylinder) · `latest_screening` · `meals_served` (sum by date+meal) · `needs_open` · `slot_availability` |
 | `registry` | shelter: status · shelter: code (unique) · location_district: (province_id) · location_subdistrict: (district_id) · kiosk_banner: (type, shelter_code) — index เดียวกันนี้ใช้กับ `kiosk_banner_group` ด้วย (selector `type` + `shelter_code` · ไม่เพิ่ม index ใหม่ — 2026-10-21) | — |
 | `catalog` | item_master: (category, distribution_type, type_class) · item_category: (system_key, is_protected) · recipe: (deactivated) · sop_profile: active · food_sphere_standard: (target_segment, req_group_id, effective_date) · requirement_group: (name) · replenishment_policy: (scope_type, target_id) | — |
 | `central_ops` | export_job: (status, requested_by) · search_audit: occurred_at | — |
@@ -2631,8 +2681,8 @@ CouchDB `_users` DB ไม่ใช่ operational doc ธรรมดา — �
 CR-059 ไม่เพิ่ม Central→Edge fallback หรือ local write queue; design doc / `validate_doc_update`
 ต้อง deploy บน remote shelter database ที่รับ write.
 
-1. `type` อยู่ใน whitelist ของ db นั้น; `_id` ขึ้นต้นด้วย `{type}:`
-2. append-only types (`movement`, `screening`, `people_import_log`, `stock_ledger`, `kitchen_requisition`, `meal_service`, `meal_service_receipt`, `audit`, `search_audit`, `distribution_issue`, `distribution_issue_idempotency`) — ปฏิเสธ update/delete ทุกกรณี. `distribution_log` เป็น log ถาวรที่ห้ามลบ แต่อนุญาตเฉพาะการเปลี่ยนแปลงสถานะคืน/void ตาม lifecycle
+1. `type` อยู่ใน whitelist ของ db นั้น (รวม `station_log` — CR-192; ไม่ตรวจค่า `channel` ฝั่ง server, #850); `_id` ขึ้นต้นด้วย `{type}:`
+2. append-only types (`movement`, `screening`, `people_import_log`, `station_log`, `stock_ledger`, `kitchen_requisition`, `meal_service`, `meal_service_receipt`, `audit`, `search_audit`, `distribution_issue`, `distribution_issue_idempotency`) — ปฏิเสธ update/delete ทุกกรณี. `distribution_log` เป็น log ถาวรที่ห้ามลบ แต่อนุญาตเฉพาะการเปลี่ยนแปลงสถานะคืน/void ตาม lifecycle
 3. state machine types (`stock_transfer`, `donation`, `referral`, `shelter_incident`, …) — ปฏิเสธ transition ถอยหลัง (ตามลำดับ enum / กราฟของ type นั้น)
 4. role→type เขียนได้ตาม role-permission-matrix (ตรวจ `userCtx.roles` แบบ Compound Scoped Roles `{shelter_code}:{role}`)
 5. `shelter_code` ใน doc ต้องตรงกับ db

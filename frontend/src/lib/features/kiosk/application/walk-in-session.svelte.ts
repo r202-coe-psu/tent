@@ -21,6 +21,8 @@ class WalkInSession {
 	citizenId = $state<string | null>(null);
 	/** ThaiD walk-in only: the verified session the server registers from. */
 	thaidSessionId = $state<string | null>(null);
+	/** When the card was read / the ThaiD scan verified (ISO): the Station 1 `start` of the walk-in. */
+	startedAt = $state<string | null>(null);
 	consentDecision = $state.raw<ConsentDecision | null>(null);
 	/** Why the consent page is asking again (the server found the decision too old); else null. */
 	consentNotice = $state<string | null>(null);
@@ -60,12 +62,14 @@ class WalkInSession {
 		this.reset();
 		this.source = 'smart-card';
 		this.citizenId = citizenId;
+		this.startedAt = new Date().toISOString();
 	}
 
 	beginThaid(sessionId: string): void {
 		this.reset();
 		this.source = 'thaid';
 		this.thaidSessionId = sessionId;
+		this.startedAt = new Date().toISOString();
 	}
 
 	recordConsent(decision: ConsentDecision): void {
@@ -112,6 +116,7 @@ class WalkInSession {
 		this.source = null;
 		this.citizenId = null;
 		this.thaidSessionId = null;
+		this.startedAt = null;
 		this.consentDecision = null;
 		this.consentNotice = null;
 		this.thaidRestartNotice = null;

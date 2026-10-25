@@ -288,6 +288,14 @@ describe('buildValidateDocUpdate', () => {
 		);
 	});
 
+	it('defines the station_log lookup index for start idempotency (CR-192)', () => {
+		expect(PEOPLE_MANGO_INDEXES).toContainEqual({
+			index: { fields: ['type', 'evacuee_id', 'station', 'occurred_at'] },
+			name: 'station-log-type-evacuee-station-idx',
+			type: 'json'
+		});
+	});
+
 	it('gives every kiosk lookup index a warm-up selector on its own leading field', () => {
 		for (const { name, index } of KIOSK_LOOKUP_MANGO_INDEXES) {
 			const selector = KIOSK_LOOKUP_WARMUP_SELECTORS[name];
@@ -1043,6 +1051,43 @@ describe('buildValidateDocUpdate', () => {
 			() => compile()({ _id: log._id, _rev: '1-a', _deleted: true }, log, REGISTRATION),
 			/Cannot delete append-only people_import_log/
 		);
+	});
+
+	const stationLog = {
+		...envelope,
+		schema_v: 1,
+		_id: 'station_log:01J',
+		type: 'station_log',
+		evacuee_id: 'evacuee:01J',
+		station: 1,
+		action: 'start',
+		channel: 'staff',
+		occurred_at: '2026-10-25T03:00:00.000Z'
+	};
+
+	it('accepts a station_log create from registration staff (CR-192)', () => {
+		expect(() => compile()(stationLog, null, REGISTRATION)).not.toThrow();
+	});
+
+	it('rejects update of an existing station_log (append-only)', () => {
+		expectForbidden(
+			() => compile()({ ...stationLog, action: 'complete' }, stationLog, REGISTRATION),
+			/Cannot update append-only station_log/
+		);
+	});
+
+	it('rejects delete of an existing station_log (append-only)', () => {
+		expectForbidden(
+			() =>
+				compile()({ _id: stationLog._id, _rev: '1-a', _deleted: true }, stationLog, REGISTRATION),
+			/Cannot delete append-only station_log/
+		);
+	});
+
+	it('does not validate the station_log channel server-side (FR-STL-15, #850)', () => {
+		expect(() =>
+			compile()({ ...stationLog, channel: 'kiosk', device_id: 'forged' }, null, REGISTRATION)
+		).not.toThrow();
 	});
 
 	it('accepts household create from registration staff', () => {
