@@ -21,8 +21,13 @@ class WalkInSession {
 	citizenId = $state<string | null>(null);
 	/** ThaiD walk-in only: the verified session the server registers from. */
 	thaidSessionId = $state<string | null>(null);
-	/** What the PDPA block decided on the consent page; sent with the registration. */
+	/** When the card was read / the ThaiD scan verified (ISO): the Station 1 `start` of the walk-in. */
+	startedAt = $state<string | null>(null);
 	consentDecision = $state.raw<ConsentDecision | null>(null);
+	/** Why the consent page is asking again (the server found the decision too old); else null. */
+	consentNotice = $state<string | null>(null);
+	/** Why the ThaiD scan page is starting over (consent and the scan both expired); else null. */
+	thaidRestartNotice = $state<string | null>(null);
 	/** The full card read, kept in memory only while the face check runs, then submitted. */
 	card = $state.raw<SmartCardData | null>(null);
 	/** Set with `card` by the card page: the face check it found on for this machine. */
@@ -57,16 +62,44 @@ class WalkInSession {
 		this.reset();
 		this.source = 'smart-card';
 		this.citizenId = citizenId;
+		this.startedAt = new Date().toISOString();
 	}
 
 	beginThaid(sessionId: string): void {
 		this.reset();
 		this.source = 'thaid';
 		this.thaidSessionId = sessionId;
+		this.startedAt = new Date().toISOString();
 	}
 
 	recordConsent(decision: ConsentDecision): void {
-		if (this.active) this.consentDecision = decision;
+		if (!this.active) return;
+		this.consentDecision = decision;
+		this.consentNotice = null;
+	}
+
+	/**
+	 * The server would not take the decision any more (too old): drop it so the consent page asks
+	 * again, saying why. A card walk-in keeps who they are (card read, face check); a ThaiD scan
+	 * has expired by then, so a ThaiD walk-in restarts with `restartThaid` instead.
+	 */
+	withdrawConsent(notice: string): void {
+		if (!this.active) return;
+		this.consentDecision = null;
+		this.consentNotice = notice;
+	}
+
+	/** Forget the ThaiD walk-in and leave the notice the scan page shows when it starts over. */
+	restartThaid(notice: string): void {
+		this.reset();
+		this.thaidRestartNotice = notice;
+	}
+
+	/** The scan page reads the restart notice once; it never reaches a later visitor. */
+	takeThaidRestartNotice(): string | null {
+		const notice = this.thaidRestartNotice;
+		this.thaidRestartNotice = null;
+		return notice;
 	}
 
 	/** Hold the card for the next steps, with the camera the card page found for the face check. */
@@ -83,7 +116,10 @@ class WalkInSession {
 		this.source = null;
 		this.citizenId = null;
 		this.thaidSessionId = null;
+		this.startedAt = null;
 		this.consentDecision = null;
+		this.consentNotice = null;
+		this.thaidRestartNotice = null;
 		this.card = null;
 		this.faceCheck = null;
 		this.faceOutcome = null;

@@ -370,7 +370,6 @@ export function planFamilyRegistration(
 }
 
 export type UnifiedMemberWithMeta = UnifiedMemberInput & {
-	/** Stable card key, see `blankUnifiedMember`. Existing evacuees use their `_id`. */
 	form_key?: string;
 	_id?: string;
 	_rev?: string;
@@ -387,17 +386,13 @@ export interface FamilyReportInPayload {
 	ctx: AuthorContext;
 	/** Reuse generated document ids when the same report-in is retried. */
 	ids?: import('$lib/db/ulid-reservation').UlidReservation;
-	/** The consent block's decision; null or absent when the block was not shown. */
 	consent?: RegistrationConsent | null;
 }
 
 export interface RegistrationConsentConfig {
 	channel: BlockChannel;
-	/** Logged-in staff for C5 (FR-15); null on anonymous channels. */
 	staff: { name: string; userId: string } | null;
-	/** Report-in: `form_key`s of members whose evacuee already has consent (FR-41). */
 	consentedKeys?: readonly string[];
-	/** FR-12 default for C3; true when omitted. */
 	initialSearchVisible?: boolean;
 }
 
@@ -411,7 +406,6 @@ export interface RegistrationConsent {
 	decision: ConsentDecision;
 	/** `form_key` of every member in `members` order; index 0 is the registrant. */
 	memberKeys: readonly string[];
-	/** Staff user id, set when the consent was recorded verbally (C5). */
 	recordedBy: string | null;
 }
 

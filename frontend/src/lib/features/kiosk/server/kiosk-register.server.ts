@@ -22,6 +22,7 @@ import { normalizeKioskPhone, phoneVariants } from '../domain/phone';
 import { walkInAddressKey, walkInRoadsCompatible } from '../domain/walk-in-address';
 import { refreshHouseholdStatus } from './kiosk-check-in.server';
 import { deleteKioskCardImage, putKioskCardImage } from './kiosk-photo.server';
+import { writeKioskStationLogs } from './kiosk-station-log.server';
 import { z } from 'zod';
 
 export { decodeKioskPhoto, KioskPhotoValidationError } from './kiosk-photo.server';
@@ -40,13 +41,27 @@ const kioskWalkInPhoneSchema = z
 
 const CONSENT_FRESH_MS = 10 * 60 * 1000;
 
-/** The kiosk decision (no C4/C5), given within the last 10 minutes; `consented_at` must be its `given_at`. */
+const isFreshKioskConsent = (decision: { given_at: string }) =>
+	Math.abs(Date.now() - Date.parse(decision.given_at)) <= CONSENT_FRESH_MS;
+
+/**
+ * The body carries a well-formed kiosk decision given more than 10 minutes ago: the visitor has to
+ * decide again, since resending the same decision can never pass. A decision dated ahead is a
+ * kiosk clock problem that deciding again would not fix, so it stays a plain invalid body.
+ */
+export function isStaleKioskConsent(body: unknown): boolean {
+	if (typeof body !== 'object' || body === null || !('consent' in body)) return false;
+	const decision = consentDecisionSchemaFor('kiosk').safeParse(body.consent);
+	return decision.success && Date.now() - Date.parse(decision.data.given_at) > CONSENT_FRESH_MS;
+}
+
 const kioskWalkInConsentFields = {
 	phone: kioskWalkInPhoneSchema,
-	consent: consentDecisionSchemaFor('kiosk').refine(
-		(decision) => Math.abs(Date.now() - Date.parse(decision.given_at)) <= CONSENT_FRESH_MS
-	),
-	consented_at: z.string().datetime({ offset: true })
+	consent: consentDecisionSchemaFor('kiosk').refine(isFreshKioskConsent),
+	consented_at: z.string().datetime({ offset: true }),
+	// CR-192: when the card was read / ThaiD verified (ISO) — only the Station 1 `start` time. The
+	// server clamps it; a malformed value is dropped rather than failing the registration.
+	started_at: z.string().max(40).optional().catch(undefined)
 };
 
 const hasMatchingConsentTime = (input: { consent: { given_at: string }; consented_at: string }) =>
@@ -315,7 +330,6 @@ async function deleteKioskHousehold(dbName: string, householdId: string): Promis
 	if (saved?._rev) await adminFetch(`${path}?rev=${saved._rev}`, { method: 'DELETE' });
 }
 
-/** A walk-in as written: always carries the consent it was registered with. */
 export type KioskEvacuee = Evacuee & { consent: EvacueeConsent };
 
 /** The kiosk that took the registration, as written into the snapshot and `created_by`. */
@@ -453,8 +467,25 @@ async function writeKioskWalkIn(
 /**
  * Create one new kiosk walk-in record after consent; existing records are never reused.
  * The snapshot comes from the chip (with its photo) or from ThaiD (never a photo).
+ *
+ * CR-192: once the record is committed (and the locks are released) the Station 1 kiosk
+ * `start` + `complete` are appended, best-effort. `startedAt` is the card-read time the kiosk
+ * sent; it is clamped server-side.
  */
 export async function registerKioskWalkInSnapshot(
+	device: KioskWalkInDevice,
+	cardSnapshot: CardSnapshot,
+	photo: KioskPhotoPayload | null,
+	decision: ConsentDecision,
+	phone: string | null,
+	startedAt?: string
+): Promise<KioskEvacuee> {
+	const evacuee = await registerKioskWalkInLocked(device, cardSnapshot, photo, decision, phone);
+	await writeKioskStationLogs(device.shelterCode, device.deviceId, [evacuee._id], startedAt);
+	return evacuee;
+}
+
+async function registerKioskWalkInLocked(
 	device: KioskWalkInDevice,
 	cardSnapshot: CardSnapshot,
 	photo: KioskPhotoPayload | null,
@@ -535,7 +566,8 @@ export function registerKioskWalkIn(
 	cardInput: KioskWalkInCardInput,
 	photo: KioskPhotoPayload | null,
 	decision: ConsentDecision,
-	phone: string | null = null
+	phone: string | null = null,
+	startedAt?: string
 ): Promise<KioskEvacuee> {
 	const device = { shelterCode, deviceId, stationName };
 	return registerKioskWalkInSnapshot(
@@ -543,7 +575,8 @@ export function registerKioskWalkIn(
 		kioskCardSnapshotFromCard(cardInput, decision.given_at, device),
 		photo,
 		decision,
-		phone
+		phone,
+		startedAt
 	);
 }
 
@@ -552,13 +585,15 @@ export function registerKioskThaidWalkIn(
 	device: KioskWalkInDevice,
 	citizen: { pid: string; profile?: ThaiDAutofillProfile },
 	decision: ConsentDecision,
-	phone: string | null
+	phone: string | null,
+	startedAt?: string
 ): Promise<KioskEvacuee> {
 	return registerKioskWalkInSnapshot(
 		device,
 		kioskCardSnapshotFromThaid(citizen.pid, citizen.profile, decision.given_at, device),
 		null,
 		decision,
-		phone
+		phone,
+		startedAt
 	);
 }

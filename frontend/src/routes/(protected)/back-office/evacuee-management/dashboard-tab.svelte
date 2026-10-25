@@ -6,12 +6,20 @@
 	import Globe from '@lucide/svelte/icons/globe';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 
-	import { useDashboardOccupancy, useDashboardDemographics } from '$lib/features/dashboard';
+	import {
+		useDashboardOccupancy,
+		useDashboardDemographics,
+		registrationRangeParams,
+		DEFAULT_REGISTRATION_RANGE_PRESET,
+		type RegistrationRangePreset
+	} from '$lib/features/dashboard';
+	import { bangkokToday } from '$lib/utils/date';
 
 	import DashboardKpiCards from './dashboard-kpi-cards.svelte';
 	import DashboardRegistrationCard from './dashboard-registration-card.svelte';
 	import DashboardAgeChart from './dashboard-age-chart.svelte';
 	import DashboardNationalityList from './dashboard-nationality-list.svelte';
+	import DashboardStationTimesSection from './dashboard-station-times-section.svelte';
 
 	let { shelterCode }: { shelterCode: string } = $props();
 
@@ -24,6 +32,13 @@
 	const isLoading = $derived(occupancyQuery.isPending || demographicsQuery.isPending);
 
 	const isError = $derived(occupancyQuery.isError || demographicsQuery.isError);
+
+	// Date range shared by the registration chart and the station-times section (CR-170 / CR-192).
+	// The page keys this tab per shelter, so it resets when the shelter changes.
+	const today = bangkokToday();
+	let rangePreset = $state<RegistrationRangePreset>(DEFAULT_REGISTRATION_RANGE_PRESET);
+	let customRange = $state<{ from: string; to: string } | undefined>();
+	const rangeParams = $derived(registrationRangeParams(rangePreset, today, customRange));
 </script>
 
 <div class="space-y-4 p-4 sm:p-6">
@@ -39,9 +54,12 @@
 		<DashboardKpiCards occupancy={occupancyQuery.data} />
 	{/if}
 
-	{#key shelterCode}
-		<DashboardRegistrationCard {shelterCode} />
-	{/key}
+	<DashboardRegistrationCard
+		{shelterCode}
+		bind:preset={rangePreset}
+		bind:customRange
+		params={rangeParams}
+	/>
 
 	{#if isLoading}
 		<div class="grid min-w-0 grid-cols-1 gap-6 md:grid-cols-2">
@@ -100,4 +118,6 @@
 			</div>
 		</div>
 	{/if}
+
+	<DashboardStationTimesSection {shelterCode} params={rangeParams} />
 </div>

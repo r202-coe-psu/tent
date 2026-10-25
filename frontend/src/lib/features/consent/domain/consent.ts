@@ -11,7 +11,6 @@ export type ConsentGiver = (typeof CONSENT_GIVERS)[number];
 export type ConsentChannel = (typeof CONSENT_CHANNELS)[number];
 export type BlockChannel = Exclude<ConsentChannel, 'backfill'>;
 
-/** Every evacuee writer stamps this version once `consent` exists (FR-35). */
 export const EVACUEE_SCHEMA_V = 15 as const;
 
 export const BACKFILL_NOTICE_VERSION = 'backfill';
@@ -49,11 +48,6 @@ const consentGiverSchema = z.discriminatedUnion('given_by', [
 	z.object({ given_by: z.literal('household_member'), giver_evacuee_id: evacueeIdSchema })
 ]);
 
-/**
- * FR-34: the one schema for the persisted `evacuee.consent` (spec §4).
- * `basic` forces `health: false` and the giver id is null exactly for self/backfill, both in
- * the type. The refinement adds the two couplings the unions cannot express.
- */
 export const evacueeConsentSchema = consentCommonSchema
 	.and(consentModeSchema)
 	.and(consentGiverSchema)
@@ -76,7 +70,6 @@ export const evacueeConsentSchema = consentCommonSchema
 export type EvacueeConsent = z.infer<typeof evacueeConsentSchema>;
 
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
-/** Consent before the registrant's evacuee id is known. */
 export type UnboundConsent = DistributiveOmit<EvacueeConsent, 'giver_evacuee_id'>;
 
 export interface SurfaceCaps {
@@ -84,7 +77,6 @@ export interface SurfaceCaps {
 	verbal: boolean;
 }
 
-/** Which optional rows each surface shows (spec §2). Also narrows the per-channel schema. */
 export const SURFACE_CAPS: Record<BlockChannel, SurfaceCaps> = {
 	staff: { guardian: true, verbal: true },
 	web: { guardian: true, verbal: false },
@@ -110,10 +102,7 @@ function decisionSchemaFor(caps: SurfaceCaps) {
 	]);
 }
 
-/**
- * What the block produces. One snake_case shape parsed on the client and on every server
- * (kiosk, public BFF). `guardian_for` holds member keys, never list indexes.
- */
+/** `guardian_for` holds member keys, never list indexes. */
 export function consentDecisionSchemaFor(channel: BlockChannel) {
 	return decisionSchemaFor(SURFACE_CAPS[channel]);
 }
@@ -125,7 +114,6 @@ export interface ConsentStamp {
 	notice_version: string;
 }
 
-/** `CS-` + last 8 chars of a fresh ULID, one per confirm click (spec §4). */
 export function mintConsentStamp(now: Date = new Date()): ConsentStamp {
 	return {
 		ref: `CS-${ulid(now.getTime()).slice(-8)}`,
@@ -135,25 +123,20 @@ export function mintConsentStamp(now: Date = new Date()): ConsentStamp {
 }
 
 export interface ConsentMember {
-	/** Stable client key of the member. The registrant is members[0]. */
 	key: string;
-	/** Report-in (FR-41): this evacuee already has consent and is left untouched. */
 	alreadyConsented: boolean;
 }
 
 export interface PlanConsentOptions {
 	channel: BlockChannel;
 	members: readonly ConsentMember[];
-	/** Staff user id, required exactly when the decision is recorded verbally. */
 	recordedBy: string | null;
 }
 
 export interface MemberConsentPlan {
 	key: string;
 	consent: UnboundConsent;
-	/** Written to `privacy.search_excluded` (FR-30/31). */
 	searchExcluded: boolean;
-	/** FR-32: false means this registration save must not create or update `medical`. */
 	medicalAllowed: boolean;
 }
 
@@ -245,7 +228,6 @@ export function bindConsent(
 	};
 }
 
-/** plan + bind, for writers that already know every evacuee id (members[0] is the registrant). */
 export function resolveRegistrationConsent(
 	decision: ConsentDecision,
 	members: readonly (ConsentMember & { evacueeId: string })[],
@@ -268,7 +250,6 @@ export interface ConsentSummaryRow {
 	key: 'mode' | 'general' | 'health' | 'search' | 'guardian' | 'verbal' | 'time' | 'ref';
 	label: string;
 	value: string;
-	/** Set on the yes/no rows so the UI can colour them. */
 	consented?: boolean;
 	mono?: boolean;
 }
@@ -279,7 +260,6 @@ export interface ConsentSummary {
 	footer: string;
 }
 
-/** `DD/MM/YYYY HH:mm น.` with the Buddhist-era year, in Bangkok time. */
 export function formatConsentTime(iso: string): string {
 	const date = new Date(iso);
 	if (Number.isNaN(date.getTime())) return iso;
@@ -299,7 +279,6 @@ export function formatConsentTime(iso: string): string {
 	return `${part('day')}/${part('month')}/${part('year')} ${part('hour')}:${part('minute')} ${CONSENT_COPY.summary.timeSuffix}`;
 }
 
-/** Spec §5. `searchExcluded` is the person's current `privacy.search_excluded`. */
 export function summarizeConsent(
 	consent: EvacueeConsent,
 	searchExcluded: boolean,
@@ -351,10 +330,6 @@ export function summarizeConsent(
 	};
 }
 
-/**
- * FR-50/51. Null when the evacuee must be skipped (already has consent, or anonymized).
- * Never touches `privacy` or `medical`; the script only supplies `hasMedicalDoc`.
- */
 export function backfillConsent(
 	evacuee: { consent?: unknown; anonymized?: boolean },
 	hasMedicalDoc: boolean,

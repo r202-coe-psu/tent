@@ -125,7 +125,8 @@ describe('POST /api/v1/kiosk/check-in', () => {
 			members: [{ evacuee_id: primaryId, status: 'checked_in', qr_payload: primaryId }]
 		});
 		expect(mockCheckIn).toHaveBeenCalledWith('SH001', primaryId, [primaryId, memberId], {
-			deviceId: 'test-kiosk-device'
+			deviceId: 'test-kiosk-device',
+			lookupAt: undefined
 		});
 		expect(mockHeartbeat).toHaveBeenCalledWith('device-record-1');
 	});
@@ -179,6 +180,35 @@ describe('POST /api/v1/kiosk/check-in', () => {
 		});
 	});
 
+	it('passes the lookup time and takes the device from the principal, never the body (CR-192)', async () => {
+		const lookupAt = new Date(Date.now() - 60_000).toISOString();
+		const response = await send({
+			primary_evacuee_id: primaryId,
+			evacuee_ids: [primaryId],
+			lookup_at: lookupAt,
+			device_id: 'forged-device',
+			channel: 'staff'
+		});
+		expect(response.status).toBe(200);
+		expect(mockCheckIn).toHaveBeenCalledWith('SH001', primaryId, [primaryId], {
+			deviceId: 'test-kiosk-device',
+			lookupAt
+		});
+	});
+
+	it('drops a malformed lookup time instead of failing the check-in', async () => {
+		const response = await send({
+			primary_evacuee_id: primaryId,
+			evacuee_ids: [primaryId],
+			lookup_at: { not: 'a string' }
+		});
+		expect(response.status).toBe(200);
+		expect(mockCheckIn).toHaveBeenCalledWith('SH001', primaryId, [primaryId], {
+			deviceId: 'test-kiosk-device',
+			lookupAt: undefined
+		});
+	});
+
 	it('rejects more than twenty IDs before writing', async () => {
 		const response = await send({
 			primary_evacuee_id: primaryId,
@@ -224,6 +254,7 @@ describe('POST /api/v1/kiosk/check-in', () => {
 		expect(response.status).toBe(200);
 		expect(mockCheckIn).toHaveBeenCalledWith('SH001', primaryId, [primaryId], {
 			deviceId: 'test-kiosk-device',
+			lookupAt: undefined,
 			claimPersonId: citizenId
 		});
 		expect(mockSavePhoto).toHaveBeenCalledWith('SH001', 'test-kiosk-device', {
@@ -275,6 +306,7 @@ describe('POST /api/v1/kiosk/check-in', () => {
 		expect((await response.json()).members[0].status).toBe('checked_in');
 		expect(mockCheckIn).toHaveBeenCalledWith('SH001', primaryId, [primaryId], {
 			deviceId: 'test-kiosk-device',
+			lookupAt: undefined,
 			claimPersonId: citizenId
 		});
 		expect(mockSavePhoto).not.toHaveBeenCalled();
@@ -434,7 +466,8 @@ describe('POST /api/v1/kiosk/check-in source thaid', () => {
 		expect(text).not.toContain(citizenId);
 		expect(mockCheckIn).toHaveBeenCalledWith('SH001', primaryId, [primaryId, memberId], {
 			requiredPrimaryCitizenId: citizenId,
-			deviceId: 'test-kiosk-device'
+			deviceId: 'test-kiosk-device',
+			lookupAt: undefined
 		});
 		expect(mockSavePhoto).not.toHaveBeenCalled();
 		expect(getKioskSessionForDevice(sessionId, principal.registry_id)?.status).toBe('consumed');

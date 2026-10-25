@@ -610,6 +610,7 @@ async function submitPublicForm(page: Page, apiPath: string): Promise<Record<str
 	const submit = page.getByRole('button', { name: 'ยืนยันการลงทะเบียน' }).last();
 	const isPost = (r: Response) =>
 		new URL(r.url()).pathname === apiPath && r.request().method() === 'POST';
+	await acceptFullConsent(page);
 	const first = page.waitForResponse(isPost);
 	await submit.click();
 	let res = await first;

@@ -11,6 +11,7 @@
 	import * as Card from '$lib/components/ui/card';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
+	import { ConsentSummary, initialSearchVisible } from '$lib/features/consent';
 	import {
 		FamilyBatchPrint,
 		RegistrationConsentResult,
@@ -20,6 +21,7 @@
 		useHousehold,
 		useSubmitFamilyReportIn,
 		buildSaveFailureReport,
+		formatPersonName,
 		type Evacuee,
 		type Household,
 		type RegistrationConsent,
@@ -64,13 +66,28 @@
 
 	const claimMutation = useClaimUnassignedRegistration();
 	const submitReportIn = useSubmitFamilyReportIn();
+	// CR-192: when the report-in form was opened — the Station 1 `start` time (plain const: not reactive).
+	const formOpenedAt = new Date().toISOString();
 
 	const staff = $derived(
 		authStore.user
 			? { name: authStore.user.display_name || authStore.user.name, userId: authStore.user.name }
 			: null
 	);
-	const consentConfig = $derived<RegistrationConsentConfig>({ channel: 'staff', staff });
+	/** FR-41: members who consented on the public form keep it and get a read-only summary. */
+	const consentedMembers = $derived(
+		openMembers.flatMap((member) => (member.consent ? [{ member, consent: member.consent }] : []))
+	);
+	const consentConfig = $derived<RegistrationConsentConfig>({
+		channel: 'staff',
+		staff,
+		consentedKeys: consentedMembers.map(({ member }) => member.reserved_evacuee_id),
+		initialSearchVisible: initialSearchVisible(
+			openMembers
+				.filter((m) => !m.consent)
+				.map((m) => ({ search_excluded: m.search_excluded ?? false }))
+		)
+	});
 
 	let completed = $state<{
 		household: Household;
@@ -139,7 +156,8 @@
 					shelterCode: data.shelterCode ?? getShelterCode(),
 					createdBy: authStore.user?.name ?? 'unknown'
 				},
-				consent
+				consent,
+				stationStartedAt: formOpenedAt
 			});
 			isDirty = false;
 			isNavigatingAfterSave = true;
@@ -308,6 +326,17 @@
 						{/each}
 					</ul>
 				</Card.Root>
+			{/if}
+			{#if consentedMembers.length > 0}
+				<div class="mb-4 grid gap-3 md:grid-cols-2">
+					{#each consentedMembers as { member, consent } (member.reserved_evacuee_id)}
+						<ConsentSummary
+							{consent}
+							searchExcluded={member.search_excluded ?? false}
+							heading={formatPersonName(member)}
+						/>
+					{/each}
+				</div>
 			{/if}
 			<UnifiedRegistrationForm
 				mode="report-in"

@@ -152,6 +152,7 @@ affects:
 ## 9. Decision sync note (ใส่ใน `docs/data/schema.md` ตอน implement — ก่อนแก้ code)
 
 > **decision sync 2026-10-25 (evacuee schema_v 14 → 15)** — เพิ่ม `consent` (opt) = `{mode, health, ref, given_at, given_by, giver_evacuee_id, recorded_verbally_by, channel, notice_version}` จากบล็อกความยินยอม PDPA (`docs/features/pdpa-consent-block-spec.md`). `mode = basic` บังคับ `privacy.search_excluded = true`; `mode = basic` หรือ `health = false` → **save ของฟอร์มลงทะเบียน** ห้ามสร้าง/แก้ `medical` (screening Station 2 ไม่ขึ้นกับกฎนี้). ค้นหาญาติยังเป็น opt-out (K-15). Kiosk register และ public unassigned registration รับ `consent` ใน payload (api-contract) และ claim คัดลอกไป evacuee. Migration: additive + backfill ครั้งเดียว (`given_by: 'backfill'`, `health` = มี `medical` doc หรือไม่).
+> **decision sync 2026-10-25 — เพิ่มเติม (ไม่ bump `schema_v`)** — kiosk register: `consent` ที่ถูกรูปแบบแต่ `given_at` ย้อนหลังเกิน 10 นาที → `400 KIOSK_CONSENT_EXPIRED` (แทน `INVALID_KIOSK_REGISTRATION`); ตู้ล้าง decision แล้วพาผู้ใช้กลับหน้ายินยอมพร้อมข้อความแจ้ง (บัตรสมาร์ทการ์ด: เก็บข้อมูลบัตร/ผลตรวจใบหน้าไว้; ThaiD: session สแกนอายุ 180 วินาทีหลังยืนยัน จึงหมดอายุแล้วเสมอ ตู้รีเซ็ตและพากลับหน้าสแกน ThaiD พร้อมข้อความแจ้ง ไม่ให้ยินยอมซ้ำก่อนต้องสแกนใหม่อยู่ดี) แทนการ retry ด้วย decision เดิม. `given_at` ล้ำอนาคตเกิน 10 นาทียังเป็น `INVALID_KIOSK_REGISTRATION`; กฎ 10 นาทีไม่เปลี่ยน (api-contract §2.1, PR #892).
 
 ## 10. Open issues (ไม่ block งานนี้)
 

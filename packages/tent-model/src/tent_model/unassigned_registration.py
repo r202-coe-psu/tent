@@ -9,6 +9,7 @@ from beanie import Document
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from pymongo import ASCENDING, IndexModel
 
+from tent_model.evacuee_consent import EvacueeConsent
 from tent_model.public_shelter import GeoPoint
 
 MemberStatus = Literal["open", "claimed", "cancelled"]
@@ -27,8 +28,9 @@ HousingType = Literal[
 ]
 PetSpecies = Literal["dog", "cat", "other"]
 
-# New writes stamp schema_v 3 (pet_id + pet claim lifecycle + closed doc status).
-UNASSIGNED_SCHEMA_V = 3
+# New writes stamp schema_v 4 (member consent + search_excluded); 3 = pet_id + pet claim
+# lifecycle + closed doc status.
+UNASSIGNED_SCHEMA_V = 4
 
 
 class PersonId(BaseModel):
@@ -69,6 +71,10 @@ class UnassignedMember(BaseModel):
 	emergency_contact: EmergencyContact | None = None
 	# GridFS ref while queued (`gfs:{oid}`); claim births Couch `image:{ulid}` (#255).
 	photo: str | None = None
+	# PDPA consent bound at create (schema_v 4); None on members queued before it (FR-44).
+	consent: EvacueeConsent | None = None
+	# Becomes the claimed evacuee's privacy.search_excluded.
+	search_excluded: bool = False
 	# Claim metadata (CR-113 algorithm — optional until claimed).
 	claimed_at: datetime | None = None
 	claimed_shelter_code: str | None = None

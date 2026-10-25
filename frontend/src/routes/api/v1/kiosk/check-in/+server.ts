@@ -87,7 +87,11 @@ export const POST: RequestHandler = async ({ request }) => {
 					principal.shelter_code,
 					parsed.data.primary_evacuee_id,
 					parsed.data.evacuee_ids,
-					{ requiredPrimaryCitizenId: citizen.pid, deviceId: principal.device_id }
+					{
+						requiredPrimaryCitizenId: citizen.pid,
+						deviceId: principal.device_id,
+						lookupAt: parsed.data.lookup_at
+					}
 				);
 			} catch (error) {
 				if (error instanceof KioskThaidIdentityMismatchError) return thaidSessionInvalid();
@@ -105,6 +109,7 @@ export const POST: RequestHandler = async ({ request }) => {
 				parsed.data.evacuee_ids,
 				{
 					deviceId: principal.device_id,
+					lookupAt: parsed.data.lookup_at,
 					...(parsed.data.source === 'smart-card' && parsed.data.citizen_id
 						? { claimPersonId: parsed.data.citizen_id }
 						: {})

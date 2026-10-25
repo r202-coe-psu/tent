@@ -145,10 +145,27 @@ export {
 	type MasterHousingItem
 } from './domain/housing-type-ui';
 
+export { startStaffStationVisit } from './application/station-log';
+
+export {
+	STATION_LOG_STALE_WINDOW_MS,
+	STATION_LOG_WRITE_WARNING,
+	STATION_NUMBERS,
+	createStationLog,
+	hasOpenStationStart,
+	stationLogInputSchema,
+	type StationLog,
+	type StationLogInput,
+	type StationLogAction,
+	type StationLogChannel,
+	type StationNumber
+} from './domain/station-log';
+
 export {
 	nextQueueLabel,
 	classifyZoningQueueTab,
 	classifyScreeningQueueTab,
+	countStationQueues,
 	nextScreeningQueueEvacuee,
 	recommendZoneKind,
 	pickRecommendedZone,
@@ -163,6 +180,7 @@ export {
 	sortByZoningQueueSince,
 	formatQueueWait,
 	type NextQueueLabel,
+	type StationQueueCounts,
 	type ZoningQueueTab,
 	type ScreeningQueueTab,
 	type ZoningRecommendKind,

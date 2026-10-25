@@ -477,3 +477,54 @@ describe('reprintKioskLabels', () => {
 		});
 	});
 });
+
+describe('checkInSelectedMembers lookup time (CR-192)', () => {
+	afterEach(() => {
+		vi.unstubAllGlobals();
+	});
+
+	const primaryId = 'evacuee:01ARZ3NDEKTSV4RRFFQ69G5FAV';
+
+	function stubFetch(bodies: Record<string, unknown>[]) {
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+				const body = JSON.parse(String(init?.body)) as Record<string, unknown> & {
+					evacuee_ids: string[];
+				};
+				bodies.push(body);
+				return new Response(
+					JSON.stringify({
+						shelter_code: 'SH001',
+						members: body.evacuee_ids.map((evacuee_id) => ({ evacuee_id, status: 'checked_in' }))
+					}),
+					{ status: 200, headers: { 'content-type': 'application/json' } }
+				);
+			})
+		);
+	}
+
+	it('sends the lookup time as lookup_at with every batch', async () => {
+		const bodies: Record<string, unknown>[] = [];
+		stubFetch(bodies);
+		const lookupAt = '2026-10-25T03:00:00.000Z';
+		const ids = [
+			primaryId,
+			...Array.from({ length: 24 }, (_, i) => `evacuee:${String(i).padStart(26, '0')}`)
+		];
+
+		await checkInSelectedMembers(primaryId, ids, { batchLimit: 20, lookupAt });
+
+		expect(bodies).toHaveLength(2);
+		for (const body of bodies) expect(body.lookup_at).toBe(lookupAt);
+	});
+
+	it('omits lookup_at when none is given', async () => {
+		const bodies: Record<string, unknown>[] = [];
+		stubFetch(bodies);
+
+		await checkInSelectedMembers(primaryId, [primaryId]);
+
+		expect(bodies[0]).not.toHaveProperty('lookup_at');
+	});
+});

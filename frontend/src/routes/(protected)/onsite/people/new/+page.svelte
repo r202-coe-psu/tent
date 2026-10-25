@@ -41,6 +41,8 @@
 
 	const t = $derived(getTranslation(EVACUEE_PAGE_I18N, languageStore.current));
 	const createFamily = useCreateFamilyRegistration();
+	// CR-192: when the walk-in form was opened — the Station 1 `start` time (plain const: not reactive).
+	const formOpenedAt = new Date().toISOString();
 	// No 'SH001' fallback here: a walk-in must never be written to a guessed shelter.
 	const shelterCode = $derived(resolveShelterCode());
 
@@ -202,7 +204,8 @@
 				ctx,
 				channel: 'onsite',
 				ids: reservationFor(input, consent),
-				consent
+				consent,
+				stationStartedAt: formOpenedAt
 			});
 			saveError = null;
 			isDirty = false;

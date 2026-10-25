@@ -11,6 +11,9 @@ import {
 } from '$lib/features/daily-sop/server';
 import { adjustReasonSchema } from '$lib/features/operations';
 import { SHELTER_CAPABILITIES } from '$lib/auth/roles';
+import { bindConsent } from '$lib/features/consent/server';
+import { createEvacuee } from '$lib/features/people/server';
+import { planPublicConsent } from '$lib/features/public-register/server';
 import {
 	buildValidateDocUpdate,
 	DAILY_SOP_ROLE_MANGO_INDEX,
@@ -283,6 +286,14 @@ describe('buildValidateDocUpdate', () => {
 		expect(KIOSK_LOOKUP_MANGO_INDEXES.every(({ name }) => referralNames.includes(name))).toBe(
 			false
 		);
+	});
+
+	it('defines the station_log lookup index for start idempotency (CR-192)', () => {
+		expect(PEOPLE_MANGO_INDEXES).toContainEqual({
+			index: { fields: ['type', 'evacuee_id', 'station', 'occurred_at'] },
+			name: 'station-log-type-evacuee-station-idx',
+			type: 'json'
+		});
 	});
 
 	it('gives every kiosk lookup index a warm-up selector on its own leading field', () => {
@@ -1042,6 +1053,43 @@ describe('buildValidateDocUpdate', () => {
 		);
 	});
 
+	const stationLog = {
+		...envelope,
+		schema_v: 1,
+		_id: 'station_log:01J',
+		type: 'station_log',
+		evacuee_id: 'evacuee:01J',
+		station: 1,
+		action: 'start',
+		channel: 'staff',
+		occurred_at: '2026-10-25T03:00:00.000Z'
+	};
+
+	it('accepts a station_log create from registration staff (CR-192)', () => {
+		expect(() => compile()(stationLog, null, REGISTRATION)).not.toThrow();
+	});
+
+	it('rejects update of an existing station_log (append-only)', () => {
+		expectForbidden(
+			() => compile()({ ...stationLog, action: 'complete' }, stationLog, REGISTRATION),
+			/Cannot update append-only station_log/
+		);
+	});
+
+	it('rejects delete of an existing station_log (append-only)', () => {
+		expectForbidden(
+			() =>
+				compile()({ _id: stationLog._id, _rev: '1-a', _deleted: true }, stationLog, REGISTRATION),
+			/Cannot delete append-only station_log/
+		);
+	});
+
+	it('does not validate the station_log channel server-side (FR-STL-15, #850)', () => {
+		expect(() =>
+			compile()({ ...stationLog, channel: 'kiosk', device_id: 'forged' }, null, REGISTRATION)
+		).not.toThrow();
+	});
+
 	it('accepts household create from registration staff', () => {
 		expect(() =>
 			compile()(
@@ -1195,6 +1243,35 @@ describe('buildValidateDocUpdate', () => {
 				() => compile()(withConsent({ ref: 'CS-123456' }), null, COUCH_ADMIN),
 				/consent ref is invalid/
 			);
+		});
+
+		it('accepts a basic-mode public pre-register evacuee from the roleless public writer', () => {
+			const [plan] = planPublicConsent({
+				consent: {
+					mode: 'basic',
+					guardian_for: [],
+					verbal: false,
+					ref: 'CS-7K3QZ9MD',
+					given_at: '2026-10-25T03:00:00.000Z',
+					notice_version: '2026-10-25'
+				},
+				consent_member_keys: ['m0']
+			});
+			const doc = createEvacuee(
+				{
+					first_name: 'สมชาย',
+					last_name: 'ใจดี',
+					gender: 'male',
+					phone: null,
+					household_id: 'household:01HH',
+					status: 'pre_registered',
+					registered_via: 'web'
+				},
+				{ shelterCode: 'SH001', createdBy: 'public' },
+				bindConsent(plan, 'evacuee:01HEAD')
+			);
+			const PUBLIC_WRITER: UserCtx = { name: 'public_writer', roles: [] };
+			expect(() => compile()(doc as unknown as Doc, null, PUBLIC_WRITER)).not.toThrow();
 		});
 	});
 

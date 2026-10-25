@@ -58,10 +58,6 @@ export interface KioskCheckInBatchResult extends KioskCheckInResult {
 	retryable_evacuee_ids: string[];
 }
 
-/**
- * What the register endpoint returns: the new record, what the kiosk prints (QR + label) and the
- * consent reference and mode the done page shows (FR-20).
- */
 export interface KioskRegistrationResult {
 	evacuee_id: string;
 	qr_payload: string;
@@ -95,18 +91,39 @@ export async function registerKioskWalkIn(
 	card: unknown,
 	photo: KioskPhotoPayload | null,
 	consent: ConsentDecision,
-	phone: string | null = null
+	phone: string | null = null,
+	/** When the card was read (ISO) — the Station 1 `start` time (CR-192). */
+	startedAt?: string | null
 ): Promise<KioskRegistrationResult> {
-	return postKioskRegistration({ source: 'smart-card', card, photo, phone }, consent);
+	return postKioskRegistration(
+		{
+			source: 'smart-card',
+			card,
+			photo,
+			phone,
+			...(startedAt ? { started_at: startedAt } : {})
+		},
+		consent
+	);
 }
 
 /** ThaiD walk-in: only the verified session id goes out; the server holds who it is. */
 export async function registerKioskThaidWalkIn(
 	sessionId: string,
 	consent: ConsentDecision,
-	phone: string | null
+	phone: string | null,
+	/** When the ThaiD scan was verified (ISO) — the Station 1 `start` time (CR-192). */
+	startedAt?: string | null
 ): Promise<KioskRegistrationResult> {
-	return postKioskRegistration({ source: 'thaid', session_id: sessionId, phone }, consent);
+	return postKioskRegistration(
+		{
+			source: 'thaid',
+			session_id: sessionId,
+			phone,
+			...(startedAt ? { started_at: startedAt } : {})
+		},
+		consent
+	);
 }
 
 /**
@@ -291,7 +308,12 @@ export type KioskCheckInPhotoOptions =
 export async function checkInSelectedMembers(
 	primaryEvacueeId: string,
 	evacueeIds: string[],
-	options: { signal?: AbortSignal; batchLimit?: number } & KioskCheckInPhotoOptions = {}
+	options: {
+		signal?: AbortSignal;
+		batchLimit?: number;
+		/** When the visitor was looked up (ISO) — the Station 1 `start` time (CR-192). */
+		lookupAt?: string;
+	} & KioskCheckInPhotoOptions = {}
 ): Promise<KioskCheckInBatchResult> {
 	const batchLimit = Math.min(20, Math.max(1, options.batchLimit ?? 20));
 	// The primary goes first, so the batch carrying the card photo / ThaiD session is sent (and
@@ -335,6 +357,7 @@ export async function checkInSelectedMembers(
 					body: JSON.stringify({
 						primary_evacuee_id: primaryEvacueeId,
 						evacuee_ids: batch,
+						...(options.lookupAt ? { lookup_at: options.lookupAt } : {}),
 						...photoFields
 					})
 				},

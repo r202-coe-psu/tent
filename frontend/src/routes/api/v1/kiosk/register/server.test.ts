@@ -131,7 +131,8 @@ describe('POST /api/v1/kiosk/register', () => {
 			expect.objectContaining({ citizen_id: validBody.card.citizen_id }),
 			null,
 			validBody.consent,
-			null
+			null,
+			undefined
 		);
 		expect(mockUpdateLastSeen).toHaveBeenCalledWith('registry:KIOSK-01');
 	});
@@ -146,8 +147,30 @@ describe('POST /api/v1/kiosk/register', () => {
 			expect.anything(),
 			null,
 			validBody.consent,
-			'0812345678'
+			'0812345678',
+			undefined
 		);
+	});
+
+	it('passes the card-read time through as the Station 1 start (CR-192)', async () => {
+		const startedAt = new Date(Date.now() - 45_000).toISOString();
+		const response = await POST(request({ ...validBody, started_at: startedAt }));
+		expect(response.status).toBe(200);
+		expect(mockRegister.mock.calls[0]?.[7]).toBe(startedAt);
+	});
+
+	it('drops a malformed card-read time instead of failing the registration', async () => {
+		const response = await POST(request({ ...validBody, started_at: { nope: true } }));
+		expect(response.status).toBe(200);
+		expect(mockRegister.mock.calls[0]?.[7]).toBeUndefined();
+	});
+
+	it('rejects a body that names the channel or device and registers nothing (CR-192 FR-STL-10)', async () => {
+		const response = await POST(
+			request({ ...validBody, channel: 'staff', device_id: 'forged-device', created_by: 'x' })
+		);
+		expect(response.status).toBe(400);
+		expect(mockRegister).not.toHaveBeenCalled();
 	});
 
 	it('rejects a phone that is not a Thai number', async () => {
@@ -219,6 +242,15 @@ describe('POST /api/v1/kiosk/register', () => {
 		const stale = kioskDecision(mintConsentStamp(new Date(Date.now() - 11 * 60 * 1000)));
 		const response = await POST(request({ ...validBody, ...consentFields(stale) }));
 		expect(response.status).toBe(400);
+		expect((await response.json()).error.code).toBe('KIOSK_CONSENT_EXPIRED');
+		expect(mockRegister).not.toHaveBeenCalled();
+	});
+
+	it('keeps a decision dated ahead of the server a plain invalid body', async () => {
+		const ahead = kioskDecision(mintConsentStamp(new Date(Date.now() + 11 * 60 * 1000)));
+		const response = await POST(request({ ...validBody, ...consentFields(ahead) }));
+		expect(response.status).toBe(400);
+		expect((await response.json()).error.code).toBe('INVALID_KIOSK_REGISTRATION');
 		expect(mockRegister).not.toHaveBeenCalled();
 	});
 
@@ -301,7 +333,8 @@ describe('POST /api/v1/kiosk/register source thaid', () => {
 			{ shelterCode: 'SH001', deviceId: 'KIOSK-01', stationName: 'โต๊ะ 1' },
 			citizen,
 			body.consent,
-			'0812345678'
+			'0812345678',
+			undefined
 		);
 		expect(mockRegister).not.toHaveBeenCalled();
 		expect(getKioskSessionForDevice(sessionId, DEVICE)?.status).toBe('consumed');
