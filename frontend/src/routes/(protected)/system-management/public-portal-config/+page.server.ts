@@ -140,26 +140,24 @@ export const actions: Actions = {
 			return fail(400, { form });
 		}
 
-		// Read existing to get _rev
-		const { status: getStatus, data: existingData } = await adminRaw(CONFIG_DOC_PATH, 'GET');
-		const existingDoc =
-			getStatus === 200
-				? (existingData as PublicPortalConfigRaw & {
-						created_at?: string;
-						created_by?: string;
-						schema_v?: number;
-					})
-				: null;
+		let existingDoc:
+			| (PublicPortalConfigRaw & { created_at?: string; created_by?: string; schema_v?: number })
+			| null;
+		try {
+			existingDoc = await readPublicPortalConfig();
+		} catch (e) {
+			console.error('Failed to read config:', e);
+			return message(form, 'เกิดข้อผิดพลาดในการบันทึกข้อมูล', { status: 500 });
+		}
 		const ts = new Date().toISOString();
-		const existingBase = existingDoc;
 
 		const docToSave = {
 			_id: 'config:public_portal',
 			type: 'config',
-			schema_v: existingBase?.schema_v ?? 1,
-			created_at: existingBase?.created_at ?? ts,
+			schema_v: existingDoc?.schema_v ?? 1,
+			created_at: existingDoc?.created_at ?? ts,
 			updated_at: ts,
-			created_by: existingBase?.created_by ?? caller.name,
+			created_by: existingDoc?.created_by ?? caller.name,
 			...form.data,
 			// Footer logos are managed by their own actions; a FAQ/social save must keep them (FR-10).
 			...preservedLogoFields(existingDoc),

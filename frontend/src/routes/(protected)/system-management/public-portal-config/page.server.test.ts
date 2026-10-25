@@ -125,4 +125,17 @@ describe('save (FAQ/social)', () => {
 			_attachments: stored._attachments
 		});
 	});
+
+	it('does not write when the stored doc cannot be read, so logos are never dropped', async () => {
+		mockAuthorize.mockResolvedValue(SA as never);
+		mockAdminRaw.mockResolvedValueOnce({ status: 500, data: { error: 'internal' } });
+		const form = new FormData();
+		form.set('__superform_json', JSON.stringify([DEFAULT_PUBLIC_PORTAL_CONFIG]));
+		form.set('__superform_id', 'publicConfigForm');
+
+		const result = await actions.save(formRequest('save', form) as never);
+
+		expect(mockAdminRaw.mock.calls.some(([, method]) => method === 'PUT')).toBe(false);
+		expect(result).toMatchObject({ status: 500 });
+	});
 });

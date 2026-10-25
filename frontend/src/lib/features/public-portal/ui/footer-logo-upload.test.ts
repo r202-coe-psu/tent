@@ -33,7 +33,11 @@ describe('prepareFooterLogoUpload', () => {
 		expect(upload.file.name).toBe('psu-logo.webp');
 		expect(upload.file.type).toBe('image/webp');
 		expect(upload.file.size).toBe(30 * KB);
-		expect(compress).toHaveBeenCalledWith(picked, { maxPx: 512, quality: 0.85 });
+		expect(compress).toHaveBeenCalledWith(picked, {
+			maxPx: 512,
+			quality: 0.85,
+			mimeType: 'image/webp'
+		});
 	});
 
 	it('names the file from the encoder output when the browser falls back to PNG', async () => {

@@ -22,7 +22,13 @@ export async function prepareFooterLogoUpload(
 
 	let blob: Blob;
 	try {
-		blob = (await compress(picked, { maxPx: LOGO_MAX_PX, quality: LOGO_QUALITY })).full;
+		blob = (
+			await compress(picked, {
+				maxPx: LOGO_MAX_PX,
+				quality: LOGO_QUALITY,
+				mimeType: 'image/webp'
+			})
+		).full;
 	} catch {
 		return { ok: false, error: 'ไม่สามารถอ่านไฟล์รูปภาพได้' };
 	}
