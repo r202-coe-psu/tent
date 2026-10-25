@@ -331,6 +331,26 @@ async def test_shelter_detail_occupancy_is_zero_when_deactivated(
     assert (shelter["occupancy"], shelter["present"], shelter["in_zone"]) == (0, 0, 0)
 
 
+async def test_shelter_detail_occupancy_falls_back_to_persons_before_reprojection(
+    client: AsyncClient,
+    db_client: AsyncMongoClient,
+    settings: Settings,
+    auth_headers: dict[str, str],
+):
+    """A row without the `occupancy_by_status` key (written before PDPA D8) counts
+    `public_persons` as before, until the worker bootstrap re-projects it."""
+    await _insert_shelter_doc(db_client, settings, _shelter_doc("SH001", "open"))
+    await _insert_person_doc(db_client, settings, "evacuee:a0", "SH001", "active")
+    await _insert_person_doc(db_client, settings, "evacuee:p0", "SH001", "pre_registered")
+    await _insert_person_doc(db_client, settings, "evacuee:r0", "SH001", "room_confirmed")
+    await _insert_person_doc(db_client, settings, "evacuee:x0", "SH002", "active")
+
+    response = await client.get("/public/v1/shelters/SH001", headers=auth_headers)
+    assert response.status_code == 200
+    shelter = response.json()["shelter"]
+    assert (shelter["occupancy"], shelter["present"], shelter["in_zone"]) == (3, 2, 1)
+
+
 # --- #751 regression: public `accepts_pre_registration` is unchanged -----------------------
 # The flag logic moves into a helper shared with the partner plane (EXT-002/003/008). The public
 # field stays "the staff switch is exactly True" — a missing flag is False, and the shelter's

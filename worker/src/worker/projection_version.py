@@ -23,6 +23,6 @@ per deploy, so batch related projector changes into one bump per release when po
 #: 7 — CR-172 (``public_donations.reject_reason`` / ``reject_reason_code``) and CR-174
 #: (``public_donations.items_declared[].review_status`` / ``review_reason_code`` /
 #: ``review_reason``). Both shipped unreleased on one branch, so one bump covers both.
-#: 8 — PDPA D8 (decision sync 2026-10-26): ``public_shelters.occupancy_by_status`` (counts
+#: 9 — PDPA D8 (decision sync 2026-10-26): ``public_shelters.occupancy_by_status`` (counts
 #: search-excluded evacuees too) and ``external_bookings.stay_status`` for booked evacuees.
-PROJECTION_VERSION: int = 8
+PROJECTION_VERSION: int = 9

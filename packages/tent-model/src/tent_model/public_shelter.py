@@ -76,7 +76,9 @@ class PublicShelter(Document):
     # `current_stay.status` -> evacuee count, over every evacuee in the shelter DB — also the
     # search-excluded ones `public_persons` drops (PDPA D8, decision sync 2026-10-26). Public
     # Forecast / present / in_zone sum this; `occupancy_total` stays EXT-005 `active` only.
-    occupancy_by_status: dict[str, int] = Field(default_factory=dict)
+    # `None` = row not re-projected since this field was added: readers fall back to
+    # counting `public_persons` (legacy, misses search-excluded people).
+    occupancy_by_status: dict[str, int] | None = None
     readiness: PublicShelterReadinessSummary | None = None
     raw_data: dict[str, Any] = Field(default_factory=dict)
     updated_at: datetime

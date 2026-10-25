@@ -27,7 +27,7 @@ async def _insert_shelter(
             "status": status,
             "is_active": is_active,
             "capacity": 100,
-            "occupancy_by_status": occupancy_by_status or {},
+            **({} if occupancy_by_status is None else {"occupancy_by_status": occupancy_by_status}),
             "updated_at": updated_at or datetime.now(UTC),
             "raw_data": {},
         }
@@ -154,6 +154,34 @@ async def test_transparency_occupancy_counts_search_excluded_people(
         status="closed",
         is_active=False,
         occupancy_by_status={"active": 5},
+    )
+
+    response = await client.get("/public/v1/transparency/summary", headers=auth_headers)
+    assert response.status_code == 200
+    assert response.json()["summary"]["occupancy_total"] == 3
+
+
+async def test_transparency_occupancy_falls_back_to_persons_before_reprojection(
+    client: AsyncClient,
+    db_client: AsyncMongoClient,
+    settings: Settings,
+    auth_headers: dict[str, str],
+):
+    """A shelter row written before `occupancy_by_status` existed (no key) is counted from
+    `public_persons` as before, until the worker bootstrap re-projects it."""
+    await _insert_shelter(
+        db_client, settings, code="SH001", status="open", occupancy_by_status={"active": 2}
+    )
+    await _insert_shelter(db_client, settings, code="SH002", status="open")
+    await _insert_person(
+        db_client, settings, person_id="evacuee:1", shelter_code="SH002", status="active"
+    )
+    await _insert_person(
+        db_client, settings, person_id="evacuee:2", shelter_code="SH002", status="cancelled"
+    )
+    # SH001 counts from `occupancy_by_status` only — its person rows are not added again.
+    await _insert_person(
+        db_client, settings, person_id="evacuee:3", shelter_code="SH001", status="active"
     )
 
     response = await client.get("/public/v1/transparency/summary", headers=auth_headers)
