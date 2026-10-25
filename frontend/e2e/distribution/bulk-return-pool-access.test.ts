@@ -3,7 +3,7 @@
  *
  * D1: open pool, edit name / location, cancel, submit, receive are `warehouse_staff`,
  * `supply_coordinator`, `shelter_manager`; add / move / void entry additionally
- * `distribution_staff`; `system_admin` is NOT meant to be included (open point a, BRP-A-SA).
+ * `distribution_staff`; `system_admin` keeps the usual `isRole()` override (decided, BRP-A-SA).
  *
  * - BRP-A1 / BRP-A2: the board in the browser, per role.
  * - BRP-V1*: the validate_doc_update boundary, no browser (`expectWrites`, pattern of V5).

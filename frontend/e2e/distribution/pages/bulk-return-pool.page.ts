@@ -47,6 +47,10 @@ export const POOL_COPY = {
 	lateNotice: 'รายการนี้เข้ามาหลังกองปิดรับแล้ว',
 	lateBadge: 'ค้าง',
 	noEntries: 'ยังไม่มีรายการในกองนี้',
+	itemsSummaryHeading: 'สรุปรายการสินค้าในกอง',
+	// loan drift: a ref skipped at apply because its loan was already closed (read-time warning)
+	closedLoanWarningTestId: 'bulk-return-entry-closed-loan-warning',
+	closedLoanWarning: 'ยอดยืมใบนี้ถูกปิดไปก่อนที่ของจะเข้ากอง',
 
 	// lifecycle
 	submit: 'เก็บเข้าคลัง',

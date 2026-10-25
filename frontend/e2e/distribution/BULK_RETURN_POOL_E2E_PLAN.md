@@ -166,7 +166,8 @@ to `getByRole('dialog')`.
 
 Implementation note: F7 is split into F7a (UI maxlength), F7b (VDU) and F7c (duplicate); F8 into
 F8a (unspecified) and F8b (no outstanding loan); V1 into V1a (create), V1b (submit / receive /
-cancel), V1c (entry / move / void) and V1d (ledger row). BRP-F-drift is `test.fixme` in this file.
+cancel), V1c (entry / move / void) and V1d (ledger row). BRP-F-drift is a real `test` in this file
+(loan drift decided: closed refs are skipped, warning shown).
 
 ### BRP-F1 Mixed-surface happy path (D1, D5, D7, D10, D11)
 
@@ -307,10 +308,12 @@ the helper, not from the removed v2 V5 body.
 kong decided system_admin keeps the usual `isRole()` override; no SA-specific block. The test
 asserts SA sees "เปิดกองใหม่" and a direct pool create as SA gets 201.
 
-### BRP-F-drift `test.fixme` (open point b)
+### BRP-F-drift (open point b, decided; `test`)
 
-Loan changed between allocation and apply (for example cleared lost/waived): apply fails on every
-retry and no rule exists yet. Fixme documents the expected recovery once a rule is decided.
+Loan changed between allocation and apply (for example cleared lost/waived): the closed ref is
+skipped at apply (no partial apply, loan untouched), the entry stays in the pool and counts in the
+item total, and the entry row shows the closed-loan warning. The retry after a failed first save
+settles instead of failing forever.
 
 ### GAP (fixed): BRP-F10 the open sheet was stale (regression `test`, in `bulk-return-pool-flow.test.ts`)
 
@@ -374,7 +377,10 @@ removes; they must not run against v3. The v2 UI files and the `bulk_pool_id` fi
 From PR #768 "Not included, open points for kong":
 
 - (a) system_admin: decided, SA keeps the usual `isRole()` override. BRP-A-SA asserts SA can open.
-- (b) Loan drift: apply fails on every retry; no rule. BRP-F-drift is `fixme`.
+- (b) Loan drift: decided and implemented. A closed (lost / waived / returned / voided), missing or
+  too-short loan ref is skipped at apply (all-or-nothing, no partial apply; the loan is untouched,
+  no throw), the entry still counts in the pool, and the entry row shows a read-time warning
+  (`data-testid="bulk-return-entry-closed-loan-warning"`). BRP-F-drift is now a real `test`.
 - (c) Defaults to confirm (tests currently encode them; flag if kong changes any):
   - oldest-first allocation;
   - items received as 0 get no ledger row;

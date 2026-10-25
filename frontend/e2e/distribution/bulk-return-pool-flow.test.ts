@@ -11,6 +11,7 @@
  * through the desk (F2, F5).
  */
 
+import type { Route } from '@playwright/test';
 import { putDocument } from '../helpers/couch';
 import { injectSession } from '../helpers/login';
 import { expect, test } from './fixtures';
@@ -656,27 +657,43 @@ test.describe('Bulk return pool v3 — lifecycle (BRP-F)', { tag: DESK_TAGS }, (
 		await expect(detail).toContainText(POOL_COPY.noEntries);
 	});
 
-	// Draft for an open point (b) of PR #768: loan drift between allocation and apply. The apply
-	// step fails on every retry because the entry (already written with loan_refs) points at a loan
-	// that is no longer active, and no rule says what should happen. The assertion below is the
-	// recovery the plan expects once kong decides (the second save goes through).
-	// Blocked on PR #768 body → Not included → Open points for kong (system_admin / loan drift).
-	test.fixme('BRP-F-drift a loan cleared between allocation and apply does not wedge the retry (open point b)', async ({
+	// Loan drift between allocation and apply (decided, was open point b of PR #768): the entry is
+	// written with loan_refs, then the loan is closed (lost) by someone else before the ref is
+	// applied. The closed ref is skipped at apply (never a partial apply, loan untouched, no throw),
+	// the entry stays in the pool and still counts, and the entry row shows a read-time warning
+	// (nothing is persisted for it). The first save is forced to fail by answering every GET/PUT on
+	// the loan with a simulated HTTP 400 after the drift; without that, the repository's CAS retry
+	// re-reads the lost loan and already absorbs the drift within one save. This is a server
+	// error, never a network abort or 5xx: those make the CouchDB client mark the endpoint
+	// disconnected, which blocks the retry write behind the offline banner. The retry with the
+	// same operation must settle instead of failing forever.
+	test('BRP-F-drift a loan cleared between allocation and apply is skipped: no wedge, entry counts, warning shown', async ({
 		page,
 		scenarioAs
 	}) => {
+		const failLoanRequest = (route: Route) =>
+			route.fulfill({
+				status: 400,
+				contentType: 'application/json',
+				body: JSON.stringify({ error: 'e2e_drift', reason: 'E2E simulated failure' })
+			});
 		const scenario = await scenarioAs('brp_fdrift');
 		const name = poolName(scenario, 'Fdrift');
-		await seedOpenPool(scenario, { name });
+		const pool = await seedOpenPool(scenario, { name });
 		const evacuee = await seedRecipient(scenario, `Brp${scenario.namespace.slice(-6)}`, 'Drift');
 		const loan = await seedLoan(scenario, evacuee, 'drift', '2');
 		const board = new BulkReturnPoolBoard(page);
 
 		// The loan is written off (lost) by someone else while the first apply is in flight.
 		let drifted = false;
+		let blockLoan = true;
 		await page.route(
 			(url) => url.pathname.includes(encodeURIComponent(loan.logId)),
 			async (route) => {
+				if (drifted && blockLoan) {
+					await failLoanRequest(route);
+					return;
+				}
 				if (!drifted && route.request().method() === 'PUT') {
 					drifted = true;
 					const current = await getShelterDocument(loan.logId);
@@ -691,7 +708,7 @@ test.describe('Bulk return pool v3 — lifecycle (BRP-F)', { tag: DESK_TAGS }, (
 							updated_at: new Date().toISOString()
 						});
 					}
-					await route.abort();
+					await failLoanRequest(route);
 					return;
 				}
 				await route.fallback();
@@ -707,10 +724,31 @@ test.describe('Bulk return pool v3 — lifecycle (BRP-F)', { tag: DESK_TAGS }, (
 		});
 		await dialog.getByRole('button', { name: POOL_COPY.saveEntries }).click();
 		await expect(dialog.getByRole('alert')).toBeVisible();
+		blockLoan = false;
 
-		// Expected recovery (to be confirmed): the retry settles instead of failing forever.
+		// The retry settles instead of failing forever (the closed ref is skipped).
 		await dialog.getByRole('button', { name: POOL_COPY.saveEntries }).click();
 		await expect(dialog).toBeHidden();
-		expect(await getShelterDocument(loan.logId)).toMatchObject({ status: 'lost' });
+
+		// The entry is kept with its allocation; the lost loan is not touched (no double apply).
+		await expect.poll(async () => (await readEntries(pool.poolId)).length).toBe(1);
+		const [entry] = await readEntries(pool.poolId);
+		expect(entry).toMatchObject({ qty: '2' });
+		expect(entry.loan_refs).toEqual([{ distribution_log_id: loan.logId, qty: '2' }]);
+		const lost = await getShelterDocument(loan.logId);
+		expect(lost).toMatchObject({ status: 'lost', clear_reason: 'lost' });
+		expect(lost?.applied_bulk_entry_ids ?? []).not.toContain(entry._id);
+
+		// The pool total still counts the item and the entry row carries the warning.
+		const detail = await board.openDetail(name);
+		const totals = detail.getByRole('region', { name: POOL_COPY.itemsSummaryHeading });
+		await expect(totals.getByRole('listitem').filter({ hasText: loan.item.name })).toContainText(
+			/(?<!\d)2(?!\d)/
+		);
+		const warning = board
+			.entryRow(name, loan.item.name)
+			.locator(`[data-testid="${POOL_COPY.closedLoanWarningTestId}"]`);
+		await expect(warning).toBeVisible();
+		await expect(warning).toContainText(POOL_COPY.closedLoanWarning);
 	});
 });
