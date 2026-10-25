@@ -33,7 +33,7 @@ describe('withStationLogWarning', () => {
 		});
 		expect(result).toBe('saved');
 		expect(toastWarning).toHaveBeenCalledTimes(1);
-		expect(toastWarning).toHaveBeenCalledWith(STATION_LOG_WRITE_WARNING);
+		expect(toastWarning).toHaveBeenCalledWith(STATION_LOG_WRITE_WARNING, expect.any(Object));
 	});
 
 	it('passes startedAt through and does not swallow a failure of the write itself', async () => {
@@ -68,7 +68,7 @@ describe('startStaffStationVisit', () => {
 	it('never throws and warns when the start cannot be written', async () => {
 		recordStationStart.mockRejectedValue(new Error('Failed to fetch'));
 		await expect(startStaffStationVisit('evacuee:1', 2, ctx)).resolves.toBeUndefined();
-		expect(toastWarning).toHaveBeenCalledWith(STATION_LOG_WRITE_WARNING);
+		expect(toastWarning).toHaveBeenCalledWith(STATION_LOG_WRITE_WARNING, expect.any(Object));
 	});
 
 	it('ignores a call without an evacuee id', async () => {

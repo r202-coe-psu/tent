@@ -11,6 +11,13 @@ import { peopleRepository } from '../data/people.remote';
 import type { StationLogWriteOptions } from '../data/people.repository';
 import { STATION_LOG_WRITE_WARNING, type StationNumber } from '../domain/station-log';
 
+/** Fixed id so a bulk action that fails per person shows one warning, not one per person. */
+const WARNING_TOAST_ID = 'station-log-write-warning';
+
+const warnStationLogFailed = (): void => {
+	toast.warning(STATION_LOG_WRITE_WARNING, { id: WARNING_TOAST_ID });
+};
+
 /**
  * Run a repository write that also appends `station_log` docs. A log failure is turned into one
  * warning toast and never changes the result (or the rejection) of the write itself.
@@ -21,7 +28,7 @@ export async function withStationLogWarning<T>(
 ): Promise<T> {
 	let logFailed = false;
 	const result = await run({ ...base, onStationLogError: () => (logFailed = true) });
-	if (logFailed) toast.warning(STATION_LOG_WRITE_WARNING);
+	if (logFailed) warnStationLogFailed();
 	return result;
 }
 
@@ -44,7 +51,7 @@ export async function startStaffStationVisit(
 		await peopleRepository().recordStationStart(evacueeId, station, ctx);
 	} catch {
 		// Tell staff the timing record is missing; the action itself is unaffected.
-		toast.warning(STATION_LOG_WRITE_WARNING);
+		warnStationLogFailed();
 	} finally {
 		startsInFlight.delete(key);
 	}
