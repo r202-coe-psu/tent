@@ -41,6 +41,14 @@ export const distributionKeys = {
 			...distributionKeys.bulkPoolsV3All(shelterCode),
 			{ includeCancelled: Boolean(options?.includeCancelled) }
 		] as const,
+	/**
+	 * Loan-drift warning refs of a pool. Nested under `bulkPoolsV3All` so every overview
+	 * invalidation (add / move / void / ...) also refreshes it.
+	 */
+	bulkPoolClosedLoanRefsAll: (shelterCode: string) =>
+		[...distributionKeys.bulkPoolsV3All(shelterCode), 'closed_loan_refs'] as const,
+	bulkPoolClosedLoanRefs: (shelterCode: string, poolId: string) =>
+		[...distributionKeys.bulkPoolClosedLoanRefsAll(shelterCode), poolId] as const,
 	/** Prefix of every returner outstanding-loans query. */
 	returnerOutstandingLoansAll: (shelterCode: string) =>
 		[...distributionKeys.shelter(shelterCode), 'returner_outstanding_loans'] as const,

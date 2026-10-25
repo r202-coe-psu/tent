@@ -3,6 +3,7 @@ import {
 	canAppendToPool,
 	isPoolNameTakenAmongOpen,
 	type BulkReturnEntry,
+	type ClosedBulkReturnLoanRef,
 	type BulkReturnPoolOverviewRow,
 	type BulkReturnPoolV3,
 	type BulkReturnPoolV3Status
@@ -25,6 +26,12 @@ export const UNRESOLVED_REFS_HINT =
 export function unresolvedRefsNotice(count: number): string {
 	return `รอซิงก์ข้อมูล: มีข้อมูลการย้าย/ยกเลิก ${count} รายการที่ยังซิงก์มาไม่ครบ ยอดในกองอาจยังไม่ครบ ระบบจะแสดงผลเมื่อข้อมูลซิงก์ครบ`;
 }
+/** Loan-drift warning (read-time): the loan was closed before the item reached the pool. */
+export const CLOSED_LOAN_WARNING_TEXT =
+	'ยอดยืมใบนี้ถูกปิดไปก่อนที่ของจะเข้ากอง — โปรดตรวจสอบว่าปิดถูกต้องหรือไม่';
+export const MISSING_LOAN_WARNING_TEXT =
+	'ไม่พบรายการยืมที่อ้างถึง จึงไม่ได้ตัดยอดยืม — โปรดตรวจสอบว่ารายการยืมถูกต้องหรือไม่';
+export const CLOSED_LOAN_WARNING_TESTID = 'bulk-return-entry-closed-loan-warning';
 export const POOL_LOCKED_REASON = 'กองนี้กำลังถูกดำเนินการ กรุณารอสักครู่แล้วรีเฟรช';
 
 export type BulkReturnPoolRow = BulkReturnPoolOverviewRow;
@@ -248,6 +255,35 @@ export function loanRefsSummary(entry: Pick<BulkReturnEntry, 'loan_refs'>, unit?
 	let total = '0';
 	for (const ref of refs) total = addQty(total, ref.qty);
 	return `ตัดยอดยืม ${refs.length} รายการ (รวม ${total}${unit ? ` ${unit}` : ''})`;
+}
+
+/**
+ * One warning line per ref that was not applied to its loan (loan drift). `closed` uses the main
+ * text; `insufficient` adds that the qty was not deducted because the outstanding was lower.
+ */
+export function closedLoanRefNotice(
+	ref: Pick<ClosedBulkReturnLoanRef, 'reason' | 'qty' | 'outstanding'>,
+	unit?: string
+): string {
+	const u = unit ? ` ${unit}` : '';
+	if (ref.reason === 'missing') return MISSING_LOAN_WARNING_TEXT;
+	if (ref.reason === 'insufficient') {
+		return `${CLOSED_LOAN_WARNING_TEXT} (จำนวน ${ref.qty}${u} ไม่ถูกหักจากยอดยืม เพราะยอดค้างคืนเหลือเพียง ${ref.outstanding ?? '0'}${u})`;
+	}
+	return CLOSED_LOAN_WARNING_TEXT;
+}
+
+/** Groups closed-loan refs by entry id (entry order within each group is kept). */
+export function groupClosedLoanRefsByEntry(
+	refs: readonly ClosedBulkReturnLoanRef[]
+): Map<string, ClosedBulkReturnLoanRef[]> {
+	const byEntry = new Map<string, ClosedBulkReturnLoanRef[]>();
+	for (const ref of refs) {
+		const list = byEntry.get(ref.entry_id) ?? [];
+		list.push(ref);
+		byEntry.set(ref.entry_id, list);
+	}
+	return byEntry;
 }
 
 export interface PoolCatalogItem {

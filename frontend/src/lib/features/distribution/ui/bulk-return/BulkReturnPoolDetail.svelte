@@ -16,18 +16,22 @@
 	import { formatThaiDateTime } from '$lib/utils/date';
 	import {
 		createStableOperationId,
+		useBulkReturnPoolClosedLoanRefs,
 		useCancelBulkReturnPool,
 		useVoidBulkReturnEntry
 	} from '../../application/queries';
 	import type { BulkReturnEntry, BulkReturnPoolOverviewRow } from '../../domain/food-supplies';
 	import { formatDistributionError } from '../model/distribution-error';
 	import {
+		CLOSED_LOAN_WARNING_TESTID,
 		LATE_BADGE_CLASS,
 		LATE_ENTRY_GUIDANCE,
 		unresolvedRefsNotice,
 		canCancelPool,
 		canMoveEntry,
 		canVoidEntry,
+		closedLoanRefNotice,
+		groupClosedLoanRefsByEntry,
 		getCancelPoolBlockedReason,
 		getPoolStatusBadgeClass,
 		getPoolStatusLabel,
@@ -87,6 +91,13 @@
 	let cancelError = $state<string | null>(null);
 	// One ULID per cancel action; reused when the confirm is retried after a failure.
 	let cancelUlid: string | null = null;
+
+	// Loan drift: refs of this pool's live entries that were not applied to a closed / short loan.
+	const closedRefsQuery = useBulkReturnPoolClosedLoanRefs(
+		() => row?.pool._id ?? null,
+		() => shelterCode
+	);
+	const closedRefsByEntry = $derived(groupClosedLoanRefsByEntry(closedRefsQuery.data ?? []));
 
 	const entries = $derived(row ? liveEntries(row) : []);
 	const moveTargets = $derived(row ? listMoveTargets(rows, row.pool._id) : []);
@@ -276,6 +287,7 @@
 							{#each entries as live (live.entry._id)}
 								{@const entry = live.entry}
 								{@const item = resolveItemDisplay(entry.item_id, catalog)}
+								{@const closedRefs = closedRefsByEntry.get(entry._id) ?? []}
 								<li
 									class="space-y-2 rounded-xl border p-3.5 shadow-2xs {live.late
 										? 'border-amber-200 bg-amber-50/40'
@@ -314,6 +326,24 @@
 												<span class="font-semibold">ค้าง</span>
 												รายการนี้เข้ามาหลังกองปิดรับแล้ว จึงไม่ถูกนับในยอดที่ส่ง กรุณา{LATE_ENTRY_GUIDANCE}
 											</p>
+										</div>
+									{/if}
+
+									{#if closedRefs.length > 0}
+										<div
+											role="status"
+											data-testid={CLOSED_LOAN_WARNING_TESTID}
+											class="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-sm text-amber-900"
+										>
+											<AlertTriangle
+												class="mt-0.5 h-4 w-4 shrink-0 text-amber-600"
+												aria-hidden="true"
+											/>
+											<div class="space-y-1">
+												{#each closedRefs as ref (ref.distribution_log_id)}
+													<p>{closedLoanRefNotice(ref, item.unit)}</p>
+												{/each}
+											</div>
 										</div>
 									{/if}
 

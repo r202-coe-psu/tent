@@ -157,6 +157,15 @@ export {
 } from './bulk-return-loan-allocation';
 
 export {
+	assessBulkReturnRefOnLoan,
+	findClosedBulkReturnLoanRefs,
+	type BulkReturnLoanDriftReason,
+	type BulkReturnRefLoan,
+	type BulkReturnRefAssessment,
+	type ClosedBulkReturnLoanRef
+} from './bulk-return-loan-drift';
+
+export {
 	buildBulkReturnPoolOverview,
 	type BulkReturnEventSet,
 	type BulkReturnPoolOverviewRow,

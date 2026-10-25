@@ -55,7 +55,8 @@ const {
 		submitBulkReturnPool: vi.fn(),
 		receiveBulkReturnPool: vi.fn(),
 		getBulkReturnPoolOverview: vi.fn(),
-		listReturnerOutstandingLoans: vi.fn()
+		listReturnerOutstandingLoans: vi.fn(),
+		listBulkReturnPoolClosedLoanRefs: vi.fn()
 	};
 
 	const mockRepoInstances = {
@@ -173,7 +174,9 @@ vi.mock('./food-supplies/bulk-return-pool-v3-workflow', () => ({
 	getBulkReturnPoolOverview: (...args: unknown[]) =>
 		mockWorkflowCalls.getBulkReturnPoolOverview(...args),
 	listReturnerOutstandingLoans: (...args: unknown[]) =>
-		mockWorkflowCalls.listReturnerOutstandingLoans(...args)
+		mockWorkflowCalls.listReturnerOutstandingLoans(...args),
+	listBulkReturnPoolClosedLoanRefs: (...args: unknown[]) =>
+		mockWorkflowCalls.listBulkReturnPoolClosedLoanRefs(...args)
 }));
 
 // Mock repositories
@@ -228,6 +231,7 @@ import {
 	useBulkReturnPool,
 	useBulkReturnClaim,
 	useBulkReturnPoolOverview,
+	useBulkReturnPoolClosedLoanRefs,
 	useReturnerOutstandingLoans,
 	useOpenBulkReturnPool,
 	useUpdateBulkReturnPoolHeader,
@@ -561,6 +565,29 @@ describe('Phase 5 Slice 5.0 — Distribution TanStack Query Layer', () => {
 			expect(result).toEqual([{ _id: 'log_1' }]);
 			expect(mockWorkflowCalls.listReturnerOutstandingLoans).toHaveBeenCalledWith(
 				'evacuee:e1',
+				expect.objectContaining({ createdBy: 'staff_alice', shelterCode: 'SH001' })
+			);
+		});
+
+		it('useBulkReturnPoolClosedLoanRefs is keyed under the v3 prefix and needs a pool id', async () => {
+			expect(distributionKeys.bulkPoolClosedLoanRefs('SH001', 'bulk_return_pool:p1')).toEqual([
+				'distribution',
+				'SH001',
+				'bulk_pools_v3',
+				'closed_loan_refs',
+				'bulk_return_pool:p1'
+			]);
+
+			useBulkReturnPoolClosedLoanRefs(() => null);
+			expect(tracker.lastCreatedQuery?.enabled).toBe(false);
+
+			mockWorkflowCalls.listBulkReturnPoolClosedLoanRefs.mockResolvedValueOnce([{ entry_id: 'e' }]);
+			useBulkReturnPoolClosedLoanRefs(() => 'bulk_return_pool:p1');
+			expect(tracker.lastCreatedQuery?.enabled).toBe(true);
+			const result = await tracker.lastCreatedQuery?.queryFn();
+			expect(result).toEqual([{ entry_id: 'e' }]);
+			expect(mockWorkflowCalls.listBulkReturnPoolClosedLoanRefs).toHaveBeenCalledWith(
+				'bulk_return_pool:p1',
 				expect.objectContaining({ createdBy: 'staff_alice', shelterCode: 'SH001' })
 			);
 		});
@@ -946,7 +973,8 @@ describe('Phase 5 Slice 5.0 — Distribution TanStack Query Layer', () => {
 				['distribution', 'SH001', 'logs'],
 				['distribution', 'SH001', 'log'],
 				['distribution', 'SH001', 'shift_reconciliation'],
-				['distribution', 'SH001', 'returner_outstanding_loans']
+				['distribution', 'SH001', 'returner_outstanding_loans'],
+				['distribution', 'SH001', 'bulk_pools_v3', 'closed_loan_refs']
 			]);
 
 			expect(keysForType('bulk_return_pool')).toEqual([

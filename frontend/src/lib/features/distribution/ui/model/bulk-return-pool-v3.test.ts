@@ -5,8 +5,12 @@ import type {
 	BulkReturnPoolV3
 } from '../../domain/food-supplies';
 import {
+	CLOSED_LOAN_WARNING_TEXT,
+	MISSING_LOAN_WARNING_TEXT,
 	buildHeaderPatch,
 	canCancelPool,
+	closedLoanRefNotice,
+	groupClosedLoanRefsByEntry,
 	canMoveEntry,
 	canVoidEntry,
 	filterPoolRows,
@@ -369,6 +373,45 @@ describe('labels', () => {
 			unit: 'เครื่อง'
 		});
 		expect(resolveItemDisplay('item_master:gone', catalog)).toEqual({ name: 'gone', unit: '' });
+	});
+});
+
+describe('closed-loan warning copy', () => {
+	it('uses the main text for a closed loan', () => {
+		expect(closedLoanRefNotice({ reason: 'closed', qty: '2', outstanding: '3' }, 'ชิ้น')).toBe(
+			CLOSED_LOAN_WARNING_TEXT
+		);
+		expect(CLOSED_LOAN_WARNING_TEXT).toBe(
+			'ยอดยืมใบนี้ถูกปิดไปก่อนที่ของจะเข้ากอง — โปรดตรวจสอบว่าปิดถูกต้องหรือไม่'
+		);
+	});
+
+	it('adds the qty and outstanding for an insufficient loan', () => {
+		const text = closedLoanRefNotice(
+			{ reason: 'insufficient', qty: '2', outstanding: '1' },
+			'ชิ้น'
+		);
+		expect(text).toContain(CLOSED_LOAN_WARNING_TEXT);
+		expect(text).toContain('จำนวน 2 ชิ้น ไม่ถูกหักจากยอดยืม');
+		expect(text).toContain('เหลือเพียง 1 ชิ้น');
+		expect(closedLoanRefNotice({ reason: 'insufficient', qty: '2' })).toContain('เหลือเพียง 0');
+	});
+
+	it('has its own text for a missing loan', () => {
+		expect(closedLoanRefNotice({ reason: 'missing', qty: '1' })).toBe(MISSING_LOAN_WARNING_TEXT);
+	});
+
+	it('groups refs by entry id keeping order', () => {
+		const ref = (entry_id: string, distribution_log_id: string) => ({
+			entry_id,
+			distribution_log_id,
+			qty: '1',
+			reason: 'closed' as const
+		});
+		const grouped = groupClosedLoanRefsByEntry([ref('e1', 'a'), ref('e2', 'b'), ref('e1', 'c')]);
+		expect(grouped.get('e1')?.map((r) => r.distribution_log_id)).toEqual(['a', 'c']);
+		expect(grouped.get('e2')).toHaveLength(1);
+		expect(grouped.get('e3')).toBeUndefined();
 	});
 });
 

@@ -50,6 +50,7 @@ export {
 	useBulkReturnPool,
 	useBulkReturnClaim,
 	useBulkReturnPoolOverview,
+	useBulkReturnPoolClosedLoanRefs,
 	useReturnerOutstandingLoans,
 	useShiftReconciliation,
 	useReturnOperationState

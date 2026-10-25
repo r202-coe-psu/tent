@@ -1,0 +1,148 @@
+import { describe, expect, it } from 'vitest';
+import {
+	assessBulkReturnRefOnLoan,
+	findClosedBulkReturnLoanRefs,
+	type BulkReturnRefLoan
+} from './bulk-return-loan-drift';
+
+const ENTRY = 'bulk_return_entry:01J00000000000000000000001';
+const OTHER_ENTRY = 'bulk_return_entry:01J00000000000000000000002';
+
+function loan(over: Partial<BulkReturnRefLoan> = {}): BulkReturnRefLoan {
+	return {
+		_id: 'distribution_log:01J00000000000000000000010',
+		is_returnable: true,
+		status: 'active',
+		qty: '3',
+		...over
+	};
+}
+
+describe('assessBulkReturnRefOnLoan', () => {
+	it('is applicable for an active loan with enough outstanding', () => {
+		expect(assessBulkReturnRefOnLoan(loan(), { qty: '3' }, ENTRY)).toEqual({
+			status: 'applicable'
+		});
+		expect(
+			assessBulkReturnRefOnLoan(
+				loan({ status: 'partially_returned', qty_returned: '1' }),
+				{ qty: '2' },
+				ENTRY
+			)
+		).toEqual({ status: 'applicable' });
+	});
+
+	it('reports a missing loan', () => {
+		expect(assessBulkReturnRefOnLoan(null, { qty: '1' }, ENTRY)).toEqual({
+			status: 'skip',
+			reason: 'missing'
+		});
+		expect(assessBulkReturnRefOnLoan(undefined, { qty: '1' }, ENTRY)).toEqual({
+			status: 'skip',
+			reason: 'missing'
+		});
+	});
+
+	it.each(['lost', 'waived', 'returned', 'voided'] as const)('reports a %s loan as closed', (s) => {
+		expect(assessBulkReturnRefOnLoan(loan({ status: s }), { qty: '1' }, ENTRY)).toMatchObject({
+			status: 'skip',
+			reason: 'closed'
+		});
+	});
+
+	it('reports a non-returnable loan as closed', () => {
+		expect(
+			assessBulkReturnRefOnLoan(loan({ is_returnable: false }), { qty: '1' }, ENTRY)
+		).toMatchObject({ status: 'skip', reason: 'closed' });
+	});
+
+	it('reports insufficient outstanding without partial apply', () => {
+		expect(
+			assessBulkReturnRefOnLoan(
+				loan({ status: 'partially_returned', qty_returned: '2' }),
+				{ qty: '2' },
+				ENTRY
+			)
+		).toEqual({ status: 'skip', reason: 'insufficient', outstanding: '1' });
+	});
+
+	it('treats an already applied entry as applied before the closed / insufficient checks', () => {
+		const applied = loan({
+			status: 'returned',
+			qty_returned: '3',
+			applied_bulk_entry_ids: [ENTRY]
+		});
+		expect(assessBulkReturnRefOnLoan(applied, { qty: '3' }, ENTRY)).toEqual({
+			status: 'already_applied'
+		});
+		expect(assessBulkReturnRefOnLoan(applied, { qty: '1' }, OTHER_ENTRY)).toMatchObject({
+			status: 'skip',
+			reason: 'closed'
+		});
+	});
+});
+
+describe('findClosedBulkReturnLoanRefs', () => {
+	const A = 'distribution_log:01J0000000000000000000000A';
+	const B = 'distribution_log:01J0000000000000000000000B';
+	const C = 'distribution_log:01J0000000000000000000000C';
+
+	it('lists only refs that are not applied and cannot be applied', () => {
+		const entries = [
+			{
+				_id: ENTRY,
+				loan_refs: [
+					{ distribution_log_id: A, qty: '2' },
+					{ distribution_log_id: B, qty: '2' },
+					{ distribution_log_id: C, qty: '1' }
+				]
+			},
+			{ _id: OTHER_ENTRY, loan_refs: [{ distribution_log_id: A, qty: '1' }] }
+		];
+		const loans = new Map<string, BulkReturnRefLoan | null>([
+			[A, loan({ _id: A, status: 'lost' })],
+			[B, loan({ _id: B, status: 'partially_returned', qty: '3', qty_returned: '2' })],
+			[C, null]
+		]);
+		expect(findClosedBulkReturnLoanRefs(entries, loans)).toEqual([
+			{ entry_id: ENTRY, distribution_log_id: A, qty: '2', reason: 'closed', outstanding: '3' },
+			{
+				entry_id: ENTRY,
+				distribution_log_id: B,
+				qty: '2',
+				reason: 'insufficient',
+				outstanding: '1'
+			},
+			{ entry_id: ENTRY, distribution_log_id: C, qty: '1', reason: 'missing' },
+			{
+				entry_id: OTHER_ENTRY,
+				distribution_log_id: A,
+				qty: '1',
+				reason: 'closed',
+				outstanding: '3'
+			}
+		]);
+	});
+
+	it('does not warn for applied refs, applicable refs or entries without refs', () => {
+		const entries = [
+			{ _id: ENTRY, loan_refs: [{ distribution_log_id: A, qty: '3' }] },
+			{ _id: OTHER_ENTRY, loan_refs: [{ distribution_log_id: B, qty: '1' }] },
+			{ _id: 'bulk_return_entry:01J00000000000000000000003', loan_refs: [] }
+		];
+		const loans = new Map<string, BulkReturnRefLoan | null>([
+			[A, loan({ _id: A, status: 'returned', qty_returned: '3', applied_bulk_entry_ids: [ENTRY] })],
+			[B, loan({ _id: B })]
+		]);
+		expect(findClosedBulkReturnLoanRefs(entries, loans)).toEqual([]);
+	});
+
+	it('treats a loan absent from the map as missing', () => {
+		expect(
+			findClosedBulkReturnLoanRefs(
+				[{ _id: ENTRY, loan_refs: [{ distribution_log_id: A, qty: '1' }] }],
+				new Map()
+			)
+		).toEqual([{ entry_id: ENTRY, distribution_log_id: A, qty: '1', reason: 'missing' }]);
+	});
+});

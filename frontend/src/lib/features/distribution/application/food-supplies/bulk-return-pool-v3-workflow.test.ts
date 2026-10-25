@@ -36,7 +36,8 @@ import {
 	BulkReturnEventRemoteRepository,
 	BulkReturnPoolV3RemoteRepository,
 	DistributionLogRemoteRepository,
-	type BulkReturnPoolV3Repository
+	type BulkReturnPoolV3Repository,
+	type DistributionLogRepository
 } from '../../data/food-supplies';
 import {
 	createStockLedger,
@@ -47,6 +48,7 @@ import {
 	addBulkReturnEntries,
 	cancelBulkReturnPool,
 	getBulkReturnPoolOverview,
+	listBulkReturnPoolClosedLoanRefs,
 	listReturnerOutstandingLoans,
 	moveBulkReturnEntry,
 	openBulkReturnPool,
@@ -555,6 +557,224 @@ describe('bulk return pool v3 workflows', () => {
 			]);
 			// Loans are not touched by a move.
 			expect((await logRepo.get(loanId(19)))?.status).toBe('active');
+		});
+	});
+
+	describe('loan drift (closed / insufficient / missing loan at apply time)', () => {
+		/** A log repo that runs `afterList` right after the returner's loans were listed (allocation). */
+		function driftingLogRepo(afterList: () => Promise<unknown>): DistributionLogRepository {
+			return {
+				create: (i, c) => logRepo.create(i, c),
+				get: (id) => logRepo.get(id),
+				list: async (f) => {
+					const loans = await logRepo.list(f);
+					await afterList();
+					return loans;
+				},
+				mutateLogCAS: (id, m) => logRepo.mutateLogCAS(id, m),
+				recordReturn: (id, i, c) => logRepo.recordReturn(id, i, c),
+				recordClear: (id, i, c) => logRepo.recordClear(id, i, c),
+				recordVoid: (id, c, n) => logRepo.recordVoid(id, c, n)
+			};
+		}
+
+		const clearAsLost = (id: string) =>
+			logRepo.recordClear(id, { clear_reason: 'lost', notes: 'lost in the flood' }, mgr);
+
+		const dropOffInput = (poolId: string, qty: string, operationUlid: string) => ({
+			pool_id: poolId,
+			returner: { type: 'evacuee' as const, id: EVACUEE },
+			items: [{ item_id: 'item:cot', qty, operationUlid }]
+		});
+
+		it('skips a loan cleared as lost between allocation and apply: no throw, entry kept, loan untouched', async () => {
+			const pool = await openPool('Gate A');
+			await seedLoan(40, { qty: '3' });
+			const drifting = { ...deps, logRepo: driftingLogRepo(() => clearAsLost(loanId(40))) };
+
+			const res = await addBulkReturnEntries(dropOffInput(pool._id, '2', nextOp()), mgr, drifting);
+
+			const [first] = res.results;
+			expect(first.late).toBe(false);
+			expect(first.entry.loan_refs).toEqual([{ distribution_log_id: loanId(40), qty: '2' }]);
+			expect(first.loansApplied).toEqual([]);
+			expect(first.loansSkipped).toEqual([
+				{ distribution_log_id: loanId(40), qty: '2', reason: 'closed', outstanding: '3' }
+			]);
+			expect(entryDocCount()).toBe(1);
+			const loan = await logRepo.get(loanId(40));
+			expect(loan?.status).toBe('lost');
+			expect(loan?.applied_bulk_entry_ids).toBeUndefined();
+		});
+
+		it('is idempotent on retry after drift: same skip, no throw, no second entry, loan unchanged', async () => {
+			const pool = await openPool('Gate A');
+			await seedLoan(41, { qty: '3' });
+			const op = nextOp();
+			const drifting = { ...deps, logRepo: driftingLogRepo(() => clearAsLost(loanId(41))) };
+			await addBulkReturnEntries(dropOffInput(pool._id, '2', op), mgr, drifting);
+			const before = await logRepo.get(loanId(41));
+
+			const retry = await addBulkReturnEntries(dropOffInput(pool._id, '2', op), mgr, deps);
+			const again = await addBulkReturnEntries(dropOffInput(pool._id, '2', op), mgr, deps);
+
+			expect(retry.results[0].replayed).toBe(true);
+			expect(retry.results[0].loansApplied).toEqual([]);
+			expect(retry.results[0].loansSkipped).toEqual([
+				{ distribution_log_id: loanId(41), qty: '2', reason: 'closed', outstanding: '3' }
+			]);
+			expect(again.results[0].loansSkipped).toEqual(retry.results[0].loansSkipped);
+			expect(entryDocCount()).toBe(1);
+			expect(await logRepo.get(loanId(41))).toEqual(before);
+		});
+
+		it('skips a ref whose outstanding dropped below ref.qty (no partial apply)', async () => {
+			const pool = await openPool('Gate A');
+			await seedLoan(42, { qty: '3' });
+			const drifting = {
+				...deps,
+				logRepo: driftingLogRepo(() =>
+					logRepo.mutateLogCAS(loanId(42), (cur) => ({
+						...cur,
+						status: 'partially_returned',
+						qty_returned: '2',
+						returned_at: '2026-01-01T00:00:00.000Z',
+						returned_by: 'user:wh1',
+						clear_reason: 'routine'
+					}))
+				)
+			};
+
+			const res = await addBulkReturnEntries(dropOffInput(pool._id, '2', nextOp()), mgr, drifting);
+
+			expect(res.results[0].loansApplied).toEqual([]);
+			expect(res.results[0].loansSkipped).toEqual([
+				{ distribution_log_id: loanId(42), qty: '2', reason: 'insufficient', outstanding: '1' }
+			]);
+			const loan = await logRepo.get(loanId(42));
+			expect(loan?.status).toBe('partially_returned');
+			expect(loan?.qty_returned).toBe('2');
+			expect(loan?.applied_bulk_entry_ids).toBeUndefined();
+		});
+
+		it('skips a ref whose loan doc is missing instead of throwing', async () => {
+			const pool = await openPool('Gate A');
+			const op = nextOp();
+			await eventRepo.createEntry(
+				createBulkReturnEntry(
+					{
+						pool_id: pool._id,
+						item_id: 'item:cot',
+						qty: '1',
+						returner_type: 'evacuee',
+						returner_id: EVACUEE,
+						loan_refs: [{ distribution_log_id: loanId(99), qty: '1' }]
+					},
+					mgr,
+					op
+				)
+			);
+
+			const res = await addBulkReturnEntries(dropOffInput(pool._id, '1', op), mgr, deps);
+
+			expect(res.results[0].loansApplied).toEqual([]);
+			expect(res.results[0].loansSkipped).toEqual([
+				{ distribution_log_id: loanId(99), qty: '1', reason: 'missing' }
+			]);
+		});
+
+		it('still reports an already applied ref as applied on replay, even when the loan is now returned', async () => {
+			const pool = await openPool('Gate A');
+			await seedLoan(43, { qty: '3' });
+			const op = nextOp();
+			const first = await addBulkReturnEntries(dropOffInput(pool._id, '3', op), mgr, deps);
+			expect((await logRepo.get(loanId(43)))?.status).toBe('returned');
+			expect(first.results[0].loansApplied).toEqual([loanId(43)]);
+
+			const replay = await addBulkReturnEntries(dropOffInput(pool._id, '3', op), mgr, deps);
+
+			expect(replay.results[0].replayed).toBe(true);
+			expect(replay.results[0].loansApplied).toEqual([loanId(43)]);
+			expect(replay.results[0].loansSkipped).toEqual([]);
+			const loan = await logRepo.get(loanId(43));
+			expect(loan?.qty_returned).toBe('3');
+			expect(loan?.applied_bulk_entry_ids).toHaveLength(1);
+		});
+
+		it('void of an entry with a skipped ref leaves the loan untouched and does not throw', async () => {
+			const pool = await openPool('Gate A');
+			await seedLoan(44, { qty: '3' });
+			const drifting = { ...deps, logRepo: driftingLogRepo(() => clearAsLost(loanId(44))) };
+			const { results } = await addBulkReturnEntries(
+				dropOffInput(pool._id, '2', nextOp()),
+				mgr,
+				drifting
+			);
+			const before = await logRepo.get(loanId(44));
+
+			const voided = await voidBulkReturnEntry({ entry_id: results[0].entry._id }, dist, deps);
+
+			expect(voided.replayed).toBe(false);
+			expect(await logRepo.get(loanId(44))).toEqual(before);
+			expect((await logRepo.get(loanId(44)))?.status).toBe('lost');
+		});
+
+		it('void of an entry whose loan doc is gone does not throw', async () => {
+			const pool = await openPool('Gate A');
+			const op = nextOp();
+			const entry = await eventRepo.createEntry(
+				createBulkReturnEntry(
+					{
+						pool_id: pool._id,
+						item_id: 'item:cot',
+						qty: '1',
+						returner_type: 'evacuee',
+						returner_id: EVACUEE,
+						loan_refs: [{ distribution_log_id: loanId(98), qty: '1' }]
+					},
+					mgr,
+					op
+				)
+			);
+			await expect(voidBulkReturnEntry({ entry_id: entry._id }, dist, deps)).resolves.toBeDefined();
+		});
+
+		it('keeps counting the entry qty in the pool total and lists the closed ref until void', async () => {
+			const pool = await openPool('Gate A');
+			await seedLoan(45, { qty: '3' });
+			// A plain entry without refs plus a drifted one on loan 45 (cleared right after allocation).
+			await add(pool._id, { type: 'unspecified' }, [{ item_id: 'item:cot', qty: '1' }]);
+			const drifting = { ...deps, logRepo: driftingLogRepo(() => clearAsLost(loanId(45))) };
+			const { results } = await addBulkReturnEntries(
+				dropOffInput(pool._id, '2', nextOp()),
+				mgr,
+				drifting
+			);
+			const driftedEntryId = results[0].entry._id;
+
+			const [row] = await getBulkReturnPoolOverview({}, mgr, deps);
+			expect(row.items).toEqual([{ item_id: 'item:cot', qty: '3' }]);
+			expect(await listBulkReturnPoolClosedLoanRefs(pool._id, mgr, deps)).toEqual([
+				{
+					entry_id: driftedEntryId,
+					distribution_log_id: loanId(45),
+					qty: results[0].entry.loan_refs[0].qty,
+					reason: 'closed',
+					outstanding: '3'
+				}
+			]);
+
+			await voidBulkReturnEntry({ entry_id: driftedEntryId }, dist, deps);
+			expect(await listBulkReturnPoolClosedLoanRefs(pool._id, mgr, deps)).toEqual([]);
+			const [after] = await getBulkReturnPoolOverview({}, mgr, deps);
+			expect(after.items).toEqual([{ item_id: 'item:cot', qty: '1' }]);
+		});
+
+		it('lists nothing for a pool whose refs were all applied', async () => {
+			const pool = await openPool('Gate A');
+			await seedLoan(47, { qty: '3' });
+			await add(pool._id, { type: 'evacuee', id: EVACUEE }, [{ item_id: 'item:cot', qty: '3' }]);
+			expect(await listBulkReturnPoolClosedLoanRefs(pool._id, mgr, deps)).toEqual([]);
 		});
 	});
 
