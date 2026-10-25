@@ -31,8 +31,10 @@ export type WalkInCardRegistrationOutcome =
 	| { kind: 'expired'; message: string }
 	/** Someone staying in the shelter already has this phone: only another phone (or none) goes on. */
 	| { kind: 'phone_duplicate'; message: string }
-	/** The consent decision is too old for the server: only deciding again goes on. */
+	/** Card only: the consent decision is too old for the server, so only deciding again goes on. */
 	| { kind: 'consent_expired'; message: string }
+	/** ThaiD only: consent and the 180 s scan session both expired, so only a new scan goes on. */
+	| { kind: 'thaid_restart'; message: string }
 	| { kind: 'error'; message: string };
 
 function isPhoneDuplicate(cause: unknown): cause is KioskRequestError {
@@ -42,6 +44,9 @@ function isPhoneDuplicate(cause: unknown): cause is KioskRequestError {
 function isConsentExpired(cause: unknown): cause is KioskRequestError {
 	return cause instanceof KioskRequestError && cause.code === 'KIOSK_CONSENT_EXPIRED';
 }
+
+export const THAID_CONSENT_EXPIRED_MESSAGE =
+	'การยินยอมและการยืนยันตัวตนด้วย ThaiD หมดเวลาแล้ว กรุณาสแกน ThaiD ใหม่อีกครั้ง';
 
 const CARD_MISMATCH_MESSAGE = 'บัตรไม่ตรงกับบัตรที่ค้นหา กรุณาเสียบบัตรเดิมหรือติดต่อเจ้าหน้าที่';
 
@@ -100,7 +105,8 @@ export async function submitWalkInThaid(
 		return { kind: 'registered', registration };
 	} catch (cause) {
 		if (isPhoneDuplicate(cause)) return { kind: 'phone_duplicate', message: cause.message };
-		if (isConsentExpired(cause)) return { kind: 'consent_expired', message: cause.message };
+		if (isConsentExpired(cause))
+			return { kind: 'thaid_restart', message: THAID_CONSENT_EXPIRED_MESSAGE };
 		const message = cause instanceof Error ? cause.message : 'ลงทะเบียนไม่สำเร็จ กรุณาลองอีกครั้ง';
 		if (cause instanceof KioskRequestError && cause.code === 'KIOSK_THAID_SESSION_INVALID') {
 			return { kind: 'expired', message };
@@ -130,4 +136,16 @@ export function abandonWalkIn(
 		void cancelThaid(session.thaidSessionId);
 	}
 	session.clear();
+}
+
+/** ThaiD walk-in whose consent expired: burn the dead scan and send them to scan again, with why. */
+export function restartThaidWalkIn(
+	notice: string,
+	session: Pick<WalkInSubmitSession, 'thaidSessionId'> & {
+		restartThaid(notice: string): void;
+	} = walkInSession,
+	cancelThaid: (sessionId: string) => Promise<void> = cancelKioskThaidSession
+): void {
+	if (session.thaidSessionId) void cancelThaid(session.thaidSessionId);
+	session.restartThaid(notice);
 }

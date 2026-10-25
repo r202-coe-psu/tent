@@ -139,6 +139,30 @@ describe('walkInSession consent', () => {
 	});
 });
 
+describe('walkInSession ThaiD restart', () => {
+	it('forgets the whole ThaiD walk-in and leaves a one-time notice for the scan page', () => {
+		const session = createWalkInSession();
+		session.beginThaid('c'.repeat(32));
+		session.recordConsent(DECISION);
+
+		session.restartThaid('หมดเวลาแล้ว');
+
+		expect(session.active).toBe(false);
+		expect(session.thaidSessionId).toBeNull();
+		expect(session.consentDecision).toBeNull();
+		expect(session.consentNotice).toBeNull();
+		expect(session.takeThaidRestartNotice()).toBe('หมดเวลาแล้ว');
+		expect(session.takeThaidRestartNotice()).toBeNull();
+	});
+
+	it('the notice never reaches the next walk-in', () => {
+		const session = createWalkInSession();
+		session.restartThaid('หมดเวลาแล้ว');
+		session.beginThaid('d'.repeat(32));
+		expect(session.thaidRestartNotice).toBeNull();
+	});
+});
+
 describe('walkInSession registration hand-over', () => {
 	it('clear() and begin() forget the registration the done page prints from', () => {
 		const session = consentedSession();

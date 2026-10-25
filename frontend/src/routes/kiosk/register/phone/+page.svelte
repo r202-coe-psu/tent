@@ -21,6 +21,7 @@
 		KioskRegisterPhone,
 		navigateToKioskHome,
 		readKioskDisplayQuery,
+		restartThaidWalkIn,
 		submitWalkIn,
 		walkInSession
 	} from '$lib/features/kiosk';
@@ -94,6 +95,13 @@
 			phoneNotice = outcome.message;
 			registering = false;
 			idleTimeout.setPaused(false);
+			return;
+		}
+		if (outcome.kind === 'thaid_restart') {
+			// The ThaiD scan lived 180 s: re-consenting would only end in a second scan.
+			continuing = true;
+			restartThaidWalkIn(outcome.message);
+			await goto(resolve(`/kiosk/thaid${contextQuery}`));
 			return;
 		}
 		if (outcome.kind === 'consent_expired') {
