@@ -122,7 +122,8 @@ Out of scope and risks:
 - Teardown unchanged: the shelter is deleted when the worker ends and `assertRunLeftNothing` runs.
 - Direct-write tests (BRP-V1, F6, ...) share the worker's shelter with the UI tests, and the board
   folds every entry / move / void of the shelter (GAP BRP-F11, fixed in PR #768: an orphan move /
-  void is now skipped and shown as "รอซิงก์", but other fold invariants still throw for everyone).
+  void is now skipped and shown as "รอซิงก์"; GAP BRP-F12: a move gap is shown the same way; but
+  other fold invariants still throw for everyone).
   They must leave fold-consistent data whether the write is accepted or rejected: real seeded pools and
   entries, move / void item_id and qty copied from the entry, void pool_id = the entry's pool.
 - Verified: the app reads the registry shelter doc through TanStack Query on every page load, and
@@ -334,6 +335,26 @@ orphan void as a DST user (expect 201), opens the board, and expects the pool ca
 containing "รอซิงก์". It lives in its own `GAP isolation` describe with its own
 `shelterStoragePoints` value, so it gets a separate worker and shelter and can never break other
 tests.
+
+### GAP (fixed): BRP-F12 a move gap broke the whole board (regression `test`, in `bulk-return-pool-gap-isolation.test.ts`)
+
+Move docs replicate independently, so move seq 2 can arrive before move seq 1 (out-of-order
+replication). `resolveEntryPool` then threw "Move seq must be contiguous from 1" for the whole
+overview and the board showed "ไม่สามารถโหลดข้อมูลกองรับคืนได้" to every user of the shelter. Now,
+while the chain has a gap, the entry counts in no pool and the pools it references (its original
+`pool_id` and the `from` / `to` of the known moves) show the amber "รอซิงก์ <n>" badge. When the
+missing move arrives the board heals itself and counts the entry in its final pool. A duplicate seq,
+a wrong first `from_pool_id` and a chain mismatch still throw, and moving or voiding a pending entry
+is rejected.
+
+The regression test seeds three OPEN pools A, B, C, a returnable item and one entry in A. As a DST
+user it PUTs only move seq 2 (B to C; expect 201), opens the board and expects cards A, B and C
+visible (no crash), each containing "รอซิงก์" and each showing "0 รายการ" (the entry counts in no
+pool). It then PUTs move seq 1 (A to B), reloads the board and expects card C to show "1 รายการ",
+cards A and B to show "0 รายการ" and none of the three cards to contain "รอซิงก์". It is a
+second describe in the same file as F11, so it shares that file's isolation worker and shelter
+(Playwright forbids a worker-forcing `test.use` inside a describe); its own scenario, pools and
+entry keep it apart from the F11 test.
 
 ## 8. Old tests and helpers (removed)
 
