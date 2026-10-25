@@ -285,7 +285,7 @@ export const PUBLIC_PORTAL_HOME_I18N = {
 		volunteersActiveSuffix: 'enrolled',
 		volunteersNeededText: (count: number) => `${count.toLocaleString()} Needed`,
 		volunteersActiveText: (count: number) => `${count.toLocaleString()} enrolled`,
-		volunteersDesc: 'Urgent mission volunteers',
+		volunteersDesc: 'Volunteers for urgent volunteer jobs',
 		volunteersNeededUnknown: '— Needed',
 		volunteersActiveUnknown: '— enrolled',
 		volunteerDeficitText: (count: number) => `Need ${count.toLocaleString()} more`,
@@ -319,11 +319,10 @@ export const PUBLIC_PORTAL_HOME_I18N = {
 		needMoreMiddle: 'more of',
 		needMoreSuffix: 'volunteers',
 		volunteerBtn: 'Volunteer',
-		volunteersEmptyTitle: 'No urgent volunteer missions at this time',
-		volunteersLoadErrorTitle:
-			'Urgent volunteer missions could not be loaded. Please try again later.',
+		volunteersEmptyTitle: 'No urgent volunteer jobs at this time',
+		volunteersLoadErrorTitle: 'Urgent volunteer jobs could not be loaded. Please try again later.',
 		volunteersEmptyDesc:
-			'Volunteer teams at all points currently have sufficient personnel. You can pre-register to receive alerts when new missions open.',
+			'Volunteer teams at all points currently have sufficient personnel. You can pre-register to receive alerts when new volunteer jobs open.',
 		preRegisterVolunteerBtn: 'Pre-register as Volunteer',
 
 		// FAQ

@@ -169,7 +169,7 @@ test.describe('Public landing: smoke extras', { tag: ['@public', '@smoke'] }, ()
 		await expect(page).toHaveURL(/\/donations\/track$/);
 	});
 
-	test('volunteer missions button opens the job board', async ({ page }) => {
+	test('all volunteer jobs button opens the job board', async ({ page }) => {
 		await page.goto('/');
 		await page.getByRole('link', { name: 'ดูงานอาสาสมัครทั้งหมด' }).first().click();
 		await expect(page).toHaveURL(/\/volunteers\/jobs$/);
