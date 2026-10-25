@@ -132,6 +132,21 @@ describe('GET /api/back-office/shelter/[code]/dashboard/station-times', () => {
 		expect((await res.json()).error.code).toBe('VALIDATION');
 	});
 
+	it('returns 422 for a malformed `from` or `to` without touching CouchDB', async () => {
+		vi.mocked(requireShelterScopeOrSA).mockResolvedValue(SA);
+
+		const malformed: Record<string, string>[] = [
+			{ from: '25/10/2026' },
+			{ to: '2026-10-25T00:00:00Z' }
+		];
+		for (const query of malformed) {
+			const res = (await GET(createMockEvent('SH001', query))) as Response;
+			expect(res.status).toBe(422);
+			expect((await res.json()).error.code).toBe('VALIDATION');
+		}
+		expect(adminRaw).not.toHaveBeenCalled();
+	});
+
 	it('summarises a fixture of normal, open, abandoned, start-less and midnight visits by channel', async () => {
 		vi.mocked(requireShelterScopeOrSA).mockResolvedValue(SA);
 		vi.mocked(adminRaw)

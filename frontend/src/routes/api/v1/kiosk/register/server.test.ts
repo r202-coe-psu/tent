@@ -146,6 +146,14 @@ describe('POST /api/v1/kiosk/register', () => {
 		expect(mockRegister.mock.calls[0]?.[7]).toBeUndefined();
 	});
 
+	it('rejects a body that names the channel or device and registers nothing (CR-192 FR-STL-10)', async () => {
+		const response = await POST(
+			request({ ...validBody, channel: 'staff', device_id: 'forged-device', created_by: 'x' })
+		);
+		expect(response.status).toBe(400);
+		expect(mockRegister).not.toHaveBeenCalled();
+	});
+
 	it('rejects a phone that is not a Thai number', async () => {
 		const response = await POST(request({ ...validBody, phone: '12345' }));
 		expect(response.status).toBe(400);

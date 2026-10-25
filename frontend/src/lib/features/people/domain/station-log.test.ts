@@ -324,3 +324,99 @@ describe('summarizeStationTimes', () => {
 		expect(row(rows, 1, 'staff').open_visits).toBe(0);
 	});
 });
+
+describe('summarizeStationTimes pairing edge cases (CR-192 FR-STL-22)', () => {
+	const STALE = STATION_LOG_STALE_WINDOW_MS;
+
+	it('pairs a complete exactly at the stale-window boundary', () => {
+		const rows = summarizeStationTimes(
+			[ev('a', 1, 'start', T0), ev('a', 1, 'complete', T0 + STALE)],
+			{
+				nowMs: T0 + STALE + MIN
+			}
+		);
+		expect(row(rows, 1, 'staff')).toMatchObject({
+			visits: 1,
+			timed_visits: 1,
+			avg_duration_sec: STALE / 1000,
+			open_visits: 0
+		});
+	});
+
+	it('does not pair a complete one millisecond past the stale window', () => {
+		const rows = summarizeStationTimes(
+			[ev('a', 1, 'start', T0), ev('a', 1, 'complete', T0 + STALE + 1)],
+			{ nowMs: T0 + 3 * STALE }
+		);
+		// The start is abandoned; the late complete is throughput only.
+		expect(row(rows, 1, 'staff')).toMatchObject({
+			visits: 1,
+			timed_visits: 0,
+			avg_duration_sec: null,
+			open_visits: 0
+		});
+	});
+
+	it('counts a second complete after one start as throughput, not a second timed visit', () => {
+		const rows = summarizeStationTimes(
+			[
+				ev('a', 2, 'start', T0),
+				ev('a', 2, 'complete', T0 + MIN),
+				ev('a', 2, 'complete', T0 + 2 * MIN)
+			],
+			{ nowMs: T0 + 10 * MIN }
+		);
+		expect(row(rows, 2, 'staff')).toMatchObject({
+			visits: 2,
+			timed_visits: 1,
+			avg_duration_sec: 60,
+			open_visits: 0
+		});
+	});
+
+	it('treats a complete before its start as throughput and leaves the later start open', () => {
+		const rows = summarizeStationTimes(
+			[ev('a', 3, 'complete', T0 - MIN), ev('a', 3, 'start', T0)],
+			{
+				nowMs: T0 + 10 * MIN
+			}
+		);
+		expect(row(rows, 3, 'staff')).toMatchObject({
+			visits: 1,
+			timed_visits: 0,
+			avg_duration_sec: null,
+			open_visits: 1
+		});
+	});
+
+	it('counts a start open exactly at the stale window and drops it one millisecond later', () => {
+		const atEdge = summarizeStationTimes([ev('a', 1, 'start', T0)], { nowMs: T0 + STALE });
+		expect(row(atEdge, 1, 'staff').open_visits).toBe(1);
+		const past = summarizeStationTimes([ev('a', 1, 'start', T0)], { nowMs: T0 + STALE + 1 });
+		expect(row(past, 1, 'staff').open_visits).toBe(0);
+	});
+
+	it('keeps only the latest unresolved start open when two starts have no complete', () => {
+		const rows = summarizeStationTimes(
+			[ev('a', 1, 'start', T0), ev('a', 1, 'start', T0 + 20 * MIN)],
+			{ nowMs: T0 + 30 * MIN }
+		);
+		// The earlier start was superseded by a later start: abandoned, not a second open visit.
+		expect(row(rows, 1, 'staff')).toMatchObject({ visits: 0, open_visits: 1 });
+	});
+});
+
+describe('hasOpenStationStart edge cases (FR-STL-13)', () => {
+	it('treats a complete at the same instant as the start as closing it', () => {
+		const at = new Date(T0).toISOString();
+		expect(
+			hasOpenStationStart(
+				[
+					{ action: 'start', occurred_at: at },
+					{ action: 'complete', occurred_at: at }
+				],
+				T0
+			)
+		).toBe(false);
+	});
+});
