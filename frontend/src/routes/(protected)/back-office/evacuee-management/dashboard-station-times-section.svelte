@@ -184,13 +184,13 @@
 							</div>
 							{#if card.station === 1}
 								<div class={['rounded-md px-2 py-1.5', card.stat]}>
-									<dt class="text-2xs text-muted-foreground">ลงทะเบียนล่วงหน้า (ยังไม่มาถึง)</dt>
+									<dt class="text-2xs text-muted-foreground">ลงทะเบียนล่วงหน้า</dt>
 									<dd class="font-semibold tabular-nums">
 										{queues?.station1.preRegistered ?? '—'}
 									</dd>
 								</div>
 								<div class={['rounded-md px-2 py-1.5', card.stat]}>
-									<dt class="text-2xs text-muted-foreground">ลงทะเบียนที่ตู้ (รอยืนยัน)</dt>
+									<dt class="text-2xs text-muted-foreground">ลงทะเบียนที่ตู้</dt>
 									<dd class="font-semibold tabular-nums">
 										{queues?.station1.kioskRegistered ?? '—'}
 									</dd>
