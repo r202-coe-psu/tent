@@ -564,7 +564,7 @@
 							href={resolve('/volunteers/jobs')}
 							class="flex cursor-pointer items-center justify-center gap-1 rounded-xl bg-domain-volunteer-strong px-3 py-2 text-center text-xs font-bold whitespace-nowrap text-white shadow-xs transition-colors hover:bg-domain-volunteer-text sm:inline-flex sm:px-5 sm:py-2.5 sm:text-sm"
 						>
-							<span>{t.allMissionsBtn}</span>
+							<span>{t.allVolunteerJobsBtn}</span>
 							<span aria-hidden="true">➔</span>
 						</a>
 					</div>
@@ -645,7 +645,7 @@
 							href={resolve('/volunteers/jobs')}
 							class="inline-flex cursor-pointer items-center gap-1.5 rounded-xl bg-domain-volunteer-strong px-4 py-2.5 text-xs font-bold text-white shadow-xs transition-colors hover:bg-domain-volunteer-text sm:text-sm"
 						>
-							<span>{t.allMissionsBtn}</span>
+							<span>{t.allVolunteerJobsBtn}</span>
 						</a>
 					</div>
 				</div>

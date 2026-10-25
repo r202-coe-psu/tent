@@ -229,7 +229,7 @@ export const PUBLIC_PORTAL_HOME_I18N = {
 		// Volunteers
 		volunteersTitle: 'จิตอาสา',
 		volunteersSubtitle: 'ร่วมเป็นกำลังสำคัญช่วยเหลือผู้ประสบภัย',
-		allMissionsBtn: 'ดูงานอาสาสมัครทั้งหมด',
+		allVolunteerJobsBtn: 'ดูงานอาสาสมัครทั้งหมด',
 		urgentRolesNeededLabel: 'งานอาสาสมัครที่เปิดรับ:',
 		enrolledLabel: 'มีอาสาแล้ว',
 		needMorePrefix: 'ต้องการอีก',
@@ -312,7 +312,7 @@ export const PUBLIC_PORTAL_HOME_I18N = {
 		// Volunteers
 		volunteersTitle: 'Volunteers',
 		volunteersSubtitle: 'Be a vital force in disaster relief.',
-		allMissionsBtn: 'All Missions',
+		allVolunteerJobsBtn: 'All Volunteer Jobs',
 		urgentRolesNeededLabel: 'Urgent volunteer roles needed:',
 		enrolledLabel: 'Enrolled',
 		needMorePrefix: 'Need',
