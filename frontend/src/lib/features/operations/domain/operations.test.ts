@@ -1648,9 +1648,12 @@ describe('donation statuses that still owe the shelter goods (CR-052)', () => {
 		// and the worker's expiry job writes exactly this transition (quota/expiry.py).
 		expect(canTransitionDonation('verifying', 'expired')).toBe(true);
 
+		// CR-174 FR-21 — the donor adds a typed-in line to a booking that has its QR; the
+		// booking goes back to review until staff decide that line.
+		expect(canTransitionDonation('verifying', 'pending_review')).toBe(true);
+
 		// No skipping the review step, and nothing comes back out of a terminal status.
 		expect(canTransitionDonation('pending_review', 'received')).toBe(false);
-		expect(canTransitionDonation('verifying', 'pending_review')).toBe(false);
 		expect(canTransitionDonation('received', 'verifying')).toBe(false);
 		expect(canTransitionDonation('rejected', 'pending_review')).toBe(false);
 	});

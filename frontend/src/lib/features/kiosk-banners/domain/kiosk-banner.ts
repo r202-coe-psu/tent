@@ -46,7 +46,9 @@ const kioskBannerFieldsSchema = z.object({
 	end_at: z.string().datetime({ message: 'รูปแบบเวลาสิ้นสุดไม่ถูกต้อง' }),
 	status: kioskBannerStatusSchema.default('active'),
 	/** Absent on a doc stored before screen types existed = compact. */
-	screen_type: kioskScreenTypeSchema.optional()
+	screen_type: kioskScreenTypeSchema.optional(),
+	/** Absent on a doc stored before banner groups existed = ungrouped, never fed to a kiosk. */
+	group_id: z.string().startsWith('kiosk_banner_group:').optional()
 });
 
 type Period = { start_at: string; end_at: string };
@@ -59,21 +61,39 @@ const endAfterStart = {
 /** `order` is not client input: the server appends on create and keeps it on update. */
 export const kioskBannerInputSchema = kioskBannerFieldsSchema
 	.omit({ order: true })
-	.extend({ screen_type: kioskScreenTypeSchema.default('compact') })
-	.refine(endAfterStart.check, endAfterStart.params);
-
-export const kioskBannerDocSchema = kioskBannerFieldsSchema
 	.extend({
-		_id: z.string().startsWith('kiosk_banner:'),
-		_rev: z.string().optional(),
-		type: z.literal('kiosk_banner'),
-		schema_v: z.literal(1),
-		shelter_code: z.string().min(1),
-		created_at: z.string().datetime(),
-		updated_at: z.string().datetime(),
-		created_by: z.string().min(1)
+		screen_type: kioskScreenTypeSchema.default('compact'),
+		group_id: z.string('เลือกกลุ่มแบนเนอร์').startsWith('kiosk_banner_group:', 'เลือกกลุ่มแบนเนอร์')
 	})
 	.refine(endAfterStart.check, endAfterStart.params);
+
+const kioskBannerEnvelope = {
+	_id: z.string().startsWith('kiosk_banner:'),
+	_rev: z.string().optional(),
+	type: z.literal('kiosk_banner'),
+	shelter_code: z.string().min(1),
+	created_at: z.string().datetime(),
+	updated_at: z.string().datetime(),
+	created_by: z.string().min(1)
+};
+
+/** v1 predates banner groups: `group_id` stays optional and a v1 banner is ungrouped. */
+const kioskBannerDocV1Schema = kioskBannerFieldsSchema
+	.extend({ ...kioskBannerEnvelope, schema_v: z.literal(1) })
+	.refine(endAfterStart.check, endAfterStart.params);
+
+const kioskBannerDocV2Schema = kioskBannerFieldsSchema
+	.extend({
+		...kioskBannerEnvelope,
+		schema_v: z.literal(2),
+		group_id: z.string().startsWith('kiosk_banner_group:')
+	})
+	.refine(endAfterStart.check, endAfterStart.params);
+
+export const kioskBannerDocSchema = z.discriminatedUnion('schema_v', [
+	kioskBannerDocV1Schema,
+	kioskBannerDocV2Schema
+]);
 
 export type KioskBannerDoc = z.infer<typeof kioskBannerDocSchema>;
 
@@ -95,8 +115,9 @@ export function createKioskBanner(
 	return {
 		_id: makeDocId('kiosk_banner'),
 		type: 'kiosk_banner',
-		schema_v: 1,
+		schema_v: 2,
 		shelter_code: ctx.shelterCode,
+		group_id: input.group_id,
 		title: input.title,
 		caption: input.caption,
 		order: ctx.order,
@@ -117,6 +138,19 @@ export function matchesScreen(
 	type: KioskScreenType
 ): boolean {
 	return screenTypeOf(banner) === type;
+}
+
+/** The banner's group id, or null for an ungrouped (v1) banner. */
+export function groupOf(banner: { group_id?: string | null }): string | null {
+	return banner.group_id ?? null;
+}
+
+/** True when the banner sits in this (group, screen type) slot; an ungrouped banner never does. */
+export function matchesSlot(
+	banner: { group_id?: string | null; screen_type?: KioskScreenType | null },
+	slot: { group_id: string; screen_type: KioskScreenType }
+): boolean {
+	return banner.group_id === slot.group_id && screenTypeOf(banner) === slot.screen_type;
 }
 
 export function isActiveAt(
@@ -157,6 +191,7 @@ export function splitByView<T extends Pick<KioskBannerDoc, 'start_at' | 'end_at'
 }
 
 type OrderSubject = Pick<KioskBannerDoc, '_id' | 'order' | 'end_at'> & {
+	group_id?: string | null;
 	screen_type?: KioskScreenType | null;
 };
 
@@ -164,28 +199,32 @@ type OrderSubject = Pick<KioskBannerDoc, '_id' | 'order' | 'end_at'> & {
 const isCurrentAt = (banner: Pick<KioskBannerDoc, 'end_at'>, t: number): boolean =>
 	Date.parse(banner.end_at) >= t;
 
-/** `max(order) + 1` among current banners of this screen type; the default order when none. */
+/** `max(order) + 1` among current banners of this (group, screen type) slot; the default when none. */
 export function nextBannerOrder(
-	banners: readonly Pick<OrderSubject, 'order' | 'end_at' | 'screen_type'>[],
-	screen_type: KioskScreenType,
+	banners: readonly Pick<OrderSubject, 'order' | 'end_at' | 'group_id' | 'screen_type'>[],
+	slot: { group_id: string; screen_type: KioskScreenType },
 	now: Date
 ): number {
 	const t = now.getTime();
 	const orders = banners
-		.filter((b) => matchesScreen(b, screen_type) && isCurrentAt(b, t))
+		.filter((b) => matchesSlot(b, slot) && isCurrentAt(b, t))
 		.map((b) => b.order);
 	return orders.length ? Math.max(...orders) + 1 : KIOSK_BANNER_LIMITS.orderDefault;
 }
 
 /**
- * Rows the reorder page shows for one screen type: current banners (inactive and not-yet-started
- * included), in display order.
+ * Rows the reorder page shows for one (group, screen type) slot: current banners (inactive and
+ * not-yet-started included), in display order.
  */
 export function orderableBanners<
-	T extends Sortable & Pick<KioskBannerDoc, 'end_at'> & { screen_type?: KioskScreenType | null }
->(banners: readonly T[], screenType: KioskScreenType, now: Date): T[] {
+	T extends Sortable &
+		Pick<KioskBannerDoc, 'end_at'> & {
+			group_id?: string | null;
+			screen_type?: KioskScreenType | null;
+		}
+>(banners: readonly T[], slot: { group_id: string; screen_type: KioskScreenType }, now: Date): T[] {
 	const t = now.getTime();
-	return sortBanners(banners.filter((b) => matchesScreen(b, screenType) && isCurrentAt(b, t)));
+	return sortBanners(banners.filter((b) => matchesSlot(b, slot) && isCurrentAt(b, t)));
 }
 
 export type ReorderPlan =

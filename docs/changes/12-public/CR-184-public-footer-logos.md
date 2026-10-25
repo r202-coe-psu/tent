@@ -71,7 +71,7 @@ affects:
 **Footer UI**
 
 - FR-16 — `(public)/+layout.ts` ส่ง `footer_logos` ใน `configData`; `public-footer.svelte` render **แถบแยก (`<section>`) วางเหนือ `<footer>`** — ไม่อยู่บนพื้นสีเข้มของ footer — เมื่อมี ≥1 รายการ; ไม่มี = ไม่ render แถบ (Q7).
-- FR-17 — แถบ: พื้น canvas `#F8FAFC` + เส้นขอบบน `border-slate-200/80` · หัวข้อ「หน่วยงานร่วมดำเนินงาน」/「Partner organizations」(`h2` ผูก `aria-labelledby`) · โลโก้เรียงกลาง ตัดบรรทัดได้.
+- FR-17 — แถบ: พื้น canvas `#F8FAFC` + เส้นขอบบน `border-slate-200/80` · หัวข้อ「สนับสนุนโดย」/"Supported by" (`h2` ผูก `aria-labelledby`) · โลโก้เรียงกลาง ตัดบรรทัดได้.
 - FR-17a — โลโก้แต่ละอันอยู่ใน **การ์ดกรอบ**: พื้นขาว · `border border-slate-200/80` · `rounded-xl` · `shadow-2xs` · สูงคงที่ 80 px · กว้าง ≥128 px · รูปสูง 48 px (กว้างตามสัดส่วน ≤176 px, `object-contain`) · ไม่ใส่ filter/เปลี่ยนสี (Q8).
 - FR-17b — มี `link_url` → การ์ดเป็น `<a target="_blank" rel="noopener noreferrer">` (hover: ขอบ `slate-300` + `shadow-xs` · focus ring `slate-900`); `alt` ตามภาษาปัจจุบัน; `loading="lazy"`.
 - FR-18 — โลโก้ Smart Shelter (`/logo.png`), email, เบอร์ฉุกเฉิน, policy links คงเป็น hardcode (out of scope).

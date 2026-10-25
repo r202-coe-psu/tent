@@ -15,10 +15,12 @@ import { z } from 'zod';
 import {
 	BannerNotFoundError,
 	getBanner,
+	GroupNotFoundError,
 	type DecodedBannerImage,
 	type KioskBannerRecord
 } from './kiosk-banner.server';
 import { makeDocId } from '$lib/db/model';
+import { getGroup, type KioskBannerGroupRecord } from './kiosk-banner-group.server';
 
 /** Resolve the caller of a banner admin route: SA, or a shelter_manager / kiosk_staff of any shelter (FR-KBR-10). */
 export function requireBannerManager(request: Request): Promise<ScopedCaller> {
@@ -50,6 +52,30 @@ export async function loadBannerInScope(
 	return banner;
 }
 
+/**
+ * Load the group for an `[id]` path param and require it in the caller's scope. The param is
+ * always namespaced to `kiosk_banner_group:`, so another doc type in `registry` reads as missing.
+ */
+export async function loadGroupInScope(
+	caller: ScopedCaller,
+	idParam: string
+): Promise<KioskBannerGroupRecord> {
+	const docId = makeDocId('kiosk_banner_group', idParam);
+	const group = await getGroup(docId);
+	if (!group || !callerCanManage(caller, [group.shelter_code])) {
+		throw new GroupNotFoundError(docId);
+	}
+	return group;
+}
+
+/** A banner's `group_id` must name a group of the banner's own shelter. */
+export async function assertGroupInShelter(groupId: string, shelterCode: string): Promise<void> {
+	const group = await getGroup(groupId);
+	if (!group || group.shelter_code !== shelterCode) {
+		throw new ServiceError('VALIDATION', 'ไม่พบกลุ่มแบนเนอร์ในศูนย์นี้');
+	}
+}
+
 /** The shelter the caller chose for list / create is 403 when outside scope (FR-KBR-11). */
 export function assertCanManageShelter(caller: ScopedCaller, shelterCode: string): void {
 	if (!callerCanManage(caller, [shelterCode])) {
@@ -57,10 +83,28 @@ export function assertCanManageShelter(caller: ScopedCaller, shelterCode: string
 	}
 }
 
-/** Map a thrown error to the contract envelope; a missing banner is `404 NOT_FOUND`. */
+/** The `shelter_code` query param of a list / create route; missing is `422` (FR-KBR-11). */
+export function requireShelterCode(url: URL): string {
+	const shelterCode = url.searchParams.get('shelter_code');
+	if (!shelterCode) throw new ServiceError('VALIDATION', 'shelter_code is required');
+	return shelterCode;
+}
+
+/** Parse a request body against a strict schema; the first issue's message is the `422` text. */
+export function parseBody<S extends z.ZodType>(schema: S, body: unknown): z.output<S> {
+	const parsed = schema.safeParse(body);
+	if (!parsed.success) {
+		throw new ServiceError('VALIDATION', parsed.error.issues[0]?.message ?? 'Invalid request body');
+	}
+	return parsed.data;
+}
+
+/** Map a thrown error to the contract envelope; a missing banner or group is `404 NOT_FOUND`. */
 export function bannerErrorResponse(error: unknown): Response {
 	if (error instanceof BannerNotFoundError) {
-		return json({ error: { code: 'NOT_FOUND', message: 'Banner not found' } }, { status: 404 });
+		const message =
+			error instanceof GroupNotFoundError ? 'Banner group not found' : 'Banner not found';
+		return json({ error: { code: 'NOT_FOUND', message } }, { status: 404 });
 	}
 	return serviceError(error);
 }

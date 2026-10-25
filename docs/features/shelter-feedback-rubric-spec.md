@@ -12,7 +12,7 @@
 | **Status**          | Approved                                                                                                                                                             |
 | **Author**          | Soravit Sukkarn                                                                                                                                                              |
 | **Created**         | 2026-09-12                                                                                                                                                                   |
-| **Updated**         | 2026-09-15                                                                                                                                                                   |
+| **Updated**         | 2026-10-23                                                                                                                                                                   |
 | **Classification**  | Volatile Feature Spec                                                                                                                                                        |
 | **Authority / SoT** | **Single Source of Truth (SoT)** สำหรับ Functional Requirements (FR), Non-Functional Requirements (NFR), Acceptance Criteria (AC), Definition of Done (DoD) และ API Contract |
 | **Related CR**      | [`docs/changes/08-E-reports/CR-122-shelter-feedback-system.md`](../changes/08-E-reports/CR-122-shelter-feedback-system.md) (สถานะ: approved)                                                             |
@@ -384,6 +384,9 @@ export interface FeedbackResponseDoc {
   - ไม่เก็บ Cookie ระบุตัวตน ไม่เก็บประวัติส่วนบุคคล เว้นแต่ผู้ใช้งานจะเลือกกรอกในช่องติดต่อกลับเอง
   - IP Address ของผู้ส่งจะถูกแฮชเป็น `submitted_ip_hash` (One-way SHA-256 hash) สำหรับระบบ Anti-spam เท่านั้น ไม่เก็บ Raw IP ในฐานข้อมูล CouchDB
 - **NFR-FB-02 [Anti-Spam & Rate Limiting]:**
+  > **2026-10-23 — superseded by [CR-188](../changes/01-core/CR-188-rate-limit-to-nginx.md):** `RateLimiter` ถูกลบออกจากแอป;
+  > endpoint `POST /api/public/v1/shelters/[id]/feedback` อยู่ใต้ nginx zone `tent_public_write` (5r/s, burst 60 ต่อ IP)
+  > โดยอัตโนมัติ — **ห้าม** เพิ่ม limiter ในแอป. ข้อความด้านล่างเก็บไว้เป็นประวัติ
   - นำ singleton `RateLimiter` ที่มีอยู่แล้วในระบบ (`frontend/src/lib/server/security/rate-limiter.ts`) มาใช้งาน:
     ```typescript
     export const feedbackIpLimiter = new RateLimiter(600000, 5); // 5 reqs / 10 min

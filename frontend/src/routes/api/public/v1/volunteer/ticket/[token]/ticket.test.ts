@@ -1,16 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { GET } from './+server';
 import { adminRaw } from '$lib/server/couch-admin';
-import { volunteerTicketLimiter } from '$lib/server/security/rate-limiter';
 
 type GetEvent = Parameters<typeof GET>[0];
 
 vi.mock('$lib/server/couch-admin', () => ({
 	adminRaw: vi.fn()
-}));
-
-vi.mock('$lib/server/security/rate-limiter', () => ({
-	volunteerTicketLimiter: { check: vi.fn(() => true) }
 }));
 
 vi.mock('$env/dynamic/private', () => ({
@@ -22,7 +17,6 @@ vi.mock('$env/dynamic/private', () => ({
 describe('GET /api/public/v1/volunteer/ticket/[token]', () => {
 	beforeEach(() => {
 		vi.resetAllMocks();
-		vi.mocked(volunteerTicketLimiter.check).mockReturnValue(true);
 	});
 
 	function makeEvent(token: string): GetEvent {

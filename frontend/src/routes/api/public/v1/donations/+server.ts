@@ -9,7 +9,6 @@ import {
 	slotModeForDelivery
 } from '$lib/features/donations/server';
 import type { PublicDonationDoc } from '$lib/features/donations';
-import { donationIpLimiter, donationPhoneLimiter } from '$lib/server/security/rate-limiter';
 import { ReCaptchaProvider } from '$lib/server/security/captcha';
 import { verifyRecaptchaOrSkip } from '$lib/server/security/recaptcha-gate';
 import { bangkokToday } from '$lib/utils/date';
@@ -41,18 +40,9 @@ export const POST = async ({ request, getClientAddress }) => {
 			);
 		}
 
-		// 2. Rate Limiting Check
 		const ip = getClientAddress();
-		const phone = parsed.data.donor.phone;
 
-		if (!donationIpLimiter.check(ip)) {
-			return json({ success: false, error: 'RATE_LIMITED' }, { status: 429 });
-		}
-		if (!donationPhoneLimiter.check(phone)) {
-			return json({ success: false, error: 'RATE_LIMITED' }, { status: 429 });
-		}
-
-		// 3. CAPTCHA Check (honors config:app.recaptcha_enabled)
+		// 2. CAPTCHA Check (honors config:app.recaptcha_enabled)
 		const captcha = await verifyRecaptchaOrSkip({
 			token: parsed.data.captchaToken ?? '',
 			ip,
@@ -210,12 +200,15 @@ export const POST = async ({ request, getClientAddress }) => {
 		const created = (await apiRes.json()) as {
 			tracking_token: string;
 			booking_ref: string;
+			status?: string;
 		};
 
 		return json({
 			success: true,
 			trackingToken: created.tracking_token,
 			bookingRef: created.booking_ref,
+			// CR-174 FR-15 — `verifying` when every line is a campaign line: the ticket shows the QR.
+			status: created.status ?? 'pending_review',
 			as_of: new Date().toISOString()
 		});
 	} catch (e) {

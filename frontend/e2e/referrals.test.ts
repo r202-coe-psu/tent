@@ -119,7 +119,7 @@ test.describe('Referrals Flow — E2E UI Tests', () => {
 		await page.getByRole('button', { name: /สร้างรายการส่งต่อ/ }).click();
 
 		// Ensure modal or page opens
-		await expect(page.getByText('สร้างรายการส่งต่อผู้ประสบภัย')).toBeVisible();
+		await expect(page.getByText('สร้างรายการส่งต่อผู้เข้าพัก')).toBeVisible();
 
 		// Select 'Capacity' referral type
 		await page.getByRole('button', { name: /ย้ายศูนย์พักพิง/ }).click();
@@ -141,7 +141,7 @@ test.describe('Referrals Flow — E2E UI Tests', () => {
 
 		// Fill required reason field
 		await page
-			.getByPlaceholder('ระบุรายละเอียดเหตุผลความจำเป็นในการส่งต่อผู้ประสบภัย')
+			.getByPlaceholder('ระบุรายละเอียดเหตุผลความจำเป็นในการส่งต่อผู้เข้าพัก')
 			.fill('ศูนย์เต็ม');
 
 		// Submit form

@@ -3,6 +3,7 @@ id: CR-136
 title: Partner OAuth2 clients — password-gated secret reveal (deterministic HMAC derivation), editable scopes, soft-delete after revoke, regenerate secret
 status: approved
 date: 2026-09-24
+updated: 2026-10-23
 requested_by: Dev Team B
 decided_by: Project Owner (Jakee)
 layer: stable
@@ -112,3 +113,7 @@ revision note (2026-09-24): เปลี่ยนกลไก FR-1 จาก **r
 
 - 2026-09-24 — proposed as `draft-partner-client-secret-reveal-edit-delete` (รวม revision เปลี่ยน Fernet → HMAC ก่อนขึ้น production)
 - 2026-09-24 — **approved** — Project Owner (Jakee); รันเลข **CR-136** (ถัดจาก CR-135 บน `develop`)
+
+## Decision log
+
+- 2026-10-23 — **Superseded (rate limit) by [CR-188](../01-core/CR-188-rate-limit-to-nginx.md):** limit การ reveal secret (10 ครั้ง/นาที) ย้ายไป nginx zone `auth`

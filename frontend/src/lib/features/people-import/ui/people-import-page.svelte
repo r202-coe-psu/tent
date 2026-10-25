@@ -159,7 +159,7 @@
 <div class="flex w-full flex-1 flex-col gap-6 p-6">
 	<div class="flex flex-wrap items-end justify-between gap-4">
 		<div>
-			<h2 class="text-2xl font-bold tracking-tight text-foreground">นำเข้าผู้ประสบภัยจาก Excel</h2>
+			<h2 class="text-2xl font-bold tracking-tight text-foreground">นำเข้าผู้เข้าพักจาก Excel</h2>
 			<p class="mt-1 text-sm text-muted-foreground">
 				ดาวน์โหลด template กรอกข้อมูล แล้วอัปโหลดเพื่อลงทะเบียนล่วงหน้าหลายครัวเรือนพร้อมกัน
 			</p>
@@ -236,8 +236,8 @@
 			{#if !duplicatesReady}
 				<p class="mb-3 text-sm text-muted-foreground">
 					{evacueesQuery.isError
-						? 'อ่านรายชื่อผู้ประสบภัยเดิมไม่สำเร็จ — ยังนำเข้าไม่ได้เพราะตรวจสอบรายชื่อซ้ำไม่ได้'
-						: 'กำลังตรวจสอบรายชื่อซ้ำกับผู้ประสบภัยที่ลงทะเบียนไว้แล้ว...'}
+						? 'อ่านรายชื่อผู้เข้าพักเดิมไม่สำเร็จ — ยังนำเข้าไม่ได้เพราะตรวจสอบรายชื่อซ้ำไม่ได้'
+						: 'กำลังตรวจสอบรายชื่อซ้ำกับผู้เข้าพักที่ลงทะเบียนไว้แล้ว...'}
 				</p>
 			{/if}
 			{#if errorCount > 0}

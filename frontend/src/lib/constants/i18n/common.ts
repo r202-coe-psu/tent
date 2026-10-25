@@ -63,22 +63,26 @@ export const PUBLIC_NAVBAR_I18N = {
 export const PUBLIC_FOOTER_I18N = {
 	th: {
 		tagline: '',
-		emergencyNumbers: 'เบอร์ติดต่อฉุกเฉิน',
+		emergencyNumbers: 'เบอร์ติดต่อฉุกเฉิน 24 ชม.',
+		call: 'โทร',
 		disasterWarning: 'ศูนย์เตือนภัย ปภ.',
 		rescueHotline: 'สายด่วนกู้ชีพ',
 		onlineChannels: 'ช่องทางออนไลน์ด่วน',
 		lineOa: 'LINE OA ฉุกเฉิน',
 		facebook: 'Facebook ข่าวสาร EOC',
-		copyright: '© 2026 SmartShelter • คุ้มครองข้อมูลตาม พ.ร.บ. PDPA'
+		partners: 'สนับสนุนโดย',
+		copyright: '© 2026 SmartShelter สงวนลิขสิทธิ์'
 	},
 	en: {
 		tagline: '',
-		emergencyNumbers: 'Emergency numbers',
+		emergencyNumbers: '24-hour emergency numbers',
+		call: 'Call',
 		disasterWarning: 'DDPM warning center',
 		rescueHotline: 'Emergency medical hotline',
 		onlineChannels: 'Quick online channels',
 		lineOa: 'Emergency LINE OA',
 		facebook: 'EOC news on Facebook',
-		copyright: '© 2026 SmartShelter • Data protected under the Thai PDPA'
+		partners: 'Supported by',
+		copyright: '© 2026 SmartShelter. All rights reserved.'
 	}
 } as const;

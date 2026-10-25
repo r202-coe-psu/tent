@@ -6,7 +6,6 @@ import {
 	kioskThaidErrorResponse,
 	kioskThaidNoStoreHeaders
 } from '$lib/features/kiosk/server';
-import { kioskThaidSessionDeviceLimiter } from '$lib/server/security/rate-limiter';
 import { createKioskCheckInSession } from '$lib/server/thaid-scan-session';
 import { resolvePublicOrigin } from '$lib/server/thaid-oauth';
 import { authenticateScannerDevice } from '$lib/server/scanners/device-credentials';
@@ -20,12 +19,6 @@ export const POST: RequestHandler = async ({ request, url }) => {
 			request.headers.get('x-device-secret') ?? '',
 			scannerServerRepository
 		);
-		if (!kioskThaidSessionDeviceLimiter.check(principal.registry_id)) {
-			return json(
-				{ error: { code: 'KIOSK_RATE_LIMITED', message: 'กรุณารอสักครู่แล้วลองใหม่' } },
-				{ status: 429, headers: { ...kioskThaidNoStoreHeaders, 'retry-after': '60' } }
-			);
-		}
 		if (!(await isKioskThaidCheckInAllowed(principal.shelter_code))) {
 			return json(
 				{
