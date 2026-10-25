@@ -317,11 +317,16 @@ describe('buildValidateDocUpdate', () => {
 		}
 	});
 
-	it('declares the (type, pool_id) Mango index for bulk_return_entry (#658)', () => {
+	it('declares the bulk return Mango indexes: entries by pool, moves by target pool (#658)', () => {
 		expect(BULK_RETURN_ENTRY_MANGO_INDEXES).toEqual([
 			{
 				index: { fields: ['type', 'pool_id'] },
 				name: 'bulk-return-entry-type-pool-idx',
+				type: 'json'
+			},
+			{
+				index: { fields: ['type', 'to_pool_id'] },
+				name: 'bulk-return-move-type-to-pool-idx',
 				type: 'json'
 			}
 		]);

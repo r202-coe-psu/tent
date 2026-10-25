@@ -374,3 +374,4 @@ VDU อ่านเอกสารอื่นไม่ได้ — กติ�
   ข้อ 16 move มาไม่ตามลำดับ → รอซิงก์; ข้อ 17 ยืนยันค่าเริ่มต้น 5 ข้อ
 - 2026-10-25 — approved (kong) → CR-193 (ย้ายจาก `draft-bulk-return-pool-redesign.md`, track ด้วยไฟล์ CR); เลขถัดจาก CR-192 บน `develop`; amends CR-134; หมายเหตุ `system_admin` ตัดสินแล้วข้างบน
 - 2026-10-25 — kong ตัดสินแก้ D3: ย้าย entry แล้วตัดยอด loan ตาม `loan_refs` เมื่อ pool ปลายทางยัง `OPEN` และไม่มี `lock` (idempotent ผ่าน `applied_bulk_entry_ids`, กติกาข้าม ref เดียวกับข้อ 15) — แทนข้อความเดิม "ย้ายไม่แตะ `distribution_log`"; แก้ review finding B1 (entry มาช้าที่ย้ายเข้า pool `OPEN` ไม่เคยตัด loan → คืนซ้ำได้)
+- 2026-10-25 — implementation (perf, ไม่เปลี่ยนกติกา): การอ่านต่อ entry/pool (move, void, submit, cancel, loan refs) อ่านเฉพาะขอบเขตแทนการ scan event log ทั้ง shelter — เพิ่ม Mango index `(type, to_pool_id)` บน `bulk_return_entry_move` (หา entry ที่ย้ายเข้า pool; ใช้ร่วมกับ `(type, pool_id)` เดิม); overview ข้าม pool ยังอ่านทั้ง log

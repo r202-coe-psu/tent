@@ -729,7 +729,8 @@ export async function moveBulkReturnEntry(
 	assertCentralWriteAuthority(epStore);
 	assertCanWriteBulkReturnEntry(ctx);
 
-	const events = await eventRepo.listAll();
+	// Only this entry's own chain matters: read it alone so another pool's bad doc cannot block it.
+	const events = await eventRepo.listForEntry(input.entry_id);
 	const entry = events.entries.find((e) => e._id === input.entry_id);
 	if (!entry) throw new WorkflowValidationError(`bulk_return_entry ${input.entry_id} not found`);
 	try {
@@ -832,7 +833,7 @@ export async function voidBulkReturnEntry(
 	assertCentralWriteAuthority(epStore);
 	assertCanWriteBulkReturnEntry(ctx);
 
-	const events = await eventRepo.listAll();
+	const events = await eventRepo.listForEntry(input.entry_id);
 	const entry = events.entries.find((e) => e._id === input.entry_id);
 	if (!entry) throw new WorkflowValidationError(`bulk_return_entry ${input.entry_id} not found`);
 
@@ -930,7 +931,7 @@ export async function cancelBulkReturnPool(
 	});
 	if (locked.status === 'CANCELLED') return locked;
 
-	const events = await eventRepo.listAll();
+	const events = await eventRepo.listForPool(poolId);
 	if (!isPoolEmpty(events.entries, events.moves, poolId, events.voids)) {
 		await poolRepo.mutateCAS(poolId, (current) =>
 			current.status === 'OPEN' && isOurLock(current, 'CANCEL', operationUlid)
@@ -1011,7 +1012,7 @@ export async function submitBulkReturnPool(
 
 	let snapshot: { items_summary: ReturnType<typeof summarizePoolItems>; entry_ids: string[] };
 	try {
-		const events = await eventRepo.listAll();
+		const events = await eventRepo.listForPool(poolId);
 		snapshot = {
 			items_summary: summarizePoolItems(events.entries, events.moves, poolId, events.voids),
 			entry_ids: poolSnapshotEntryIds(
@@ -1298,7 +1299,7 @@ async function loadLivePoolEntriesWithLoans(
 	deps?: BulkReturnPoolV3WorkflowDependencies
 ): Promise<{ live: BulkReturnEntry[]; loansById: Map<string, DistributionLog | null> }> {
 	const { eventRepo, logRepo } = resolveDependencies(deps, ctx);
-	const events = await eventRepo.listAll();
+	const events = await eventRepo.listForPool(poolId);
 	const live = resolveBulkReturnEntries(events.entries, events.moves, events.voids)
 		.filter(({ pool_id, voided }) => !voided && pool_id === poolId)
 		.map(({ entry }) => entry);

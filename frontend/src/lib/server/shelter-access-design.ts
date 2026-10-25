@@ -215,11 +215,19 @@ export const REQUISITION_TICKET_MANGO_INDEXES = [
 	}
 ];
 
-/** Mango index definitions for bulk_return_entry lookups by pool (#658). */
+/**
+ * Mango index definitions for bulk return event lookups by pool (#658): entries by creation pool,
+ * moves by target pool (pool-scoped reads find moved-in entries through `to_pool_id`).
+ */
 export const BULK_RETURN_ENTRY_MANGO_INDEXES = [
 	{
 		index: { fields: ['type', 'pool_id'] },
 		name: 'bulk-return-entry-type-pool-idx',
+		type: 'json' as const
+	},
+	{
+		index: { fields: ['type', 'to_pool_id'] },
+		name: 'bulk-return-move-type-to-pool-idx',
 		type: 'json' as const
 	}
 ];
