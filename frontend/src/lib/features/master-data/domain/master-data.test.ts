@@ -71,13 +71,14 @@ describe('CR-112 vulnerable_group active set', () => {
 });
 
 describe('masterTypeSchema', () => {
-	it('accepts the 5 master types', () => {
+	it('accepts the 6 master types', () => {
 		for (const t of [
 			'vulnerable_group',
 			'housing_type',
 			'shelter_type',
 			'volunteer_skills',
-			'chronic_disease'
+			'chronic_disease',
+			'allergy'
 		] as const) {
 			expect(masterTypeSchema.parse(t)).toBe(t);
 		}
@@ -107,6 +108,7 @@ describe('MASTER_DATA_TYPE_META', () => {
 		expect(MASTER_DATA_TYPE_META.shelter_type.shortTitle).toBe('ประเภทศูนย์');
 		expect(MASTER_DATA_TYPE_META.volunteer_skills.shortTitle).toBe('ทักษะอาสา');
 		expect(MASTER_DATA_TYPE_META.chronic_disease.shortTitle).toBe('โรคประจำตัว');
+		expect(MASTER_DATA_TYPE_META.allergy.shortTitle).toBe('อาการแพ้');
 	});
 });
 
@@ -165,9 +167,10 @@ describe('resolveMasterCodes', () => {
 	});
 });
 
-describe('isGlobalOnlyMasterType (CR-186)', () => {
-	it('is true for chronic_disease only', () => {
+describe('isGlobalOnlyMasterType (CR-186, CR-187)', () => {
+	it('is true for chronic_disease and allergy only', () => {
 		expect(isGlobalOnlyMasterType('chronic_disease')).toBe(true);
+		expect(isGlobalOnlyMasterType('allergy')).toBe(true);
 		expect(isGlobalOnlyMasterType('vulnerable_group')).toBe(false);
 		expect(isGlobalOnlyMasterType('housing_type')).toBe(false);
 	});
