@@ -11,7 +11,7 @@
 	import RotateCcw from '@lucide/svelte/icons/rotate-ccw';
 	import AlertCircle from '@lucide/svelte/icons/alert-circle';
 	import RefreshCw from '@lucide/svelte/icons/refresh-cw';
-	import { goto } from '$app/navigation';
+	import { replaceState } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
@@ -120,11 +120,8 @@
 		mode = next;
 		activeTab = stepAfterModeSwitch(activeTab, next);
 		storeDeskMode(next);
-		void goto(resolve(`/onsite/distribution?mode=${next}` as '/onsite/distribution'), {
-			replaceState: true,
-			noScroll: true,
-			keepFocus: true
-		});
+		// Shallow URL update: a goto re-runs navigation and cancels the scroll below.
+		replaceState(resolve(`/onsite/distribution?mode=${next}` as '/onsite/distribution'), {});
 		void scrollToContent();
 	}
 
