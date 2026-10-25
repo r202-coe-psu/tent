@@ -224,6 +224,7 @@ def test_build_evacuee_doc_shape():
     assert doc["_id"] == "evacuee:E1"
     assert doc["type"] == "evacuee"
     assert doc["schema_v"] == 15
+    assert doc["booking_ref"] == "BK-01TEST"
     assert "consent" not in doc
     assert doc["privacy"] == {"search_excluded": False}
     assert doc["gender"] is None
