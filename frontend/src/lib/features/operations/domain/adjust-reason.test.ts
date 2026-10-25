@@ -38,6 +38,7 @@ describe('AC-C1 — adjusting without a reason is a validation error', () => {
 	});
 
 	it('rejects createStockLedger reason=adjust without adjust_reason (FR-C2)', () => {
+		// @ts-expect-error -- the type forbids it too; the runtime guard covers untyped data
 		expect(() => createStockLedger({ ...adjust, reason: 'adjust' }, ctx)).toThrow();
 	});
 
@@ -105,6 +106,7 @@ describe('AC-C2 — adjust_reason / note belong to adjust rows only', () => {
 		expect(stockLedgerInputSchema.safeParse({ ...input, adjust_reason: 'lost' }).success).toBe(
 			false
 		);
+		// @ts-expect-error -- the type forbids it too; the runtime guard covers untyped data
 		expect(() => createStockLedger({ ...input, adjust_reason: 'lost' }, ctx)).toThrow();
 	});
 
@@ -123,6 +125,7 @@ describe('AC-C2 — adjust_reason / note belong to adjust rows only', () => {
 					reason: 'distribute',
 					ref_id: 'distribution_batch:01J',
 					lot_ref: 'stock_ledger:01J',
+					// @ts-expect-error -- the type forbids it too; the runtime guard covers untyped data
 					adjust_reason: 'lost'
 				},
 				ctx
