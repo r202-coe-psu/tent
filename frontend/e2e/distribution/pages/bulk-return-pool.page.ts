@@ -46,6 +46,9 @@ export const POOL_COPY = {
 	voidConfirm: 'ยืนยันยกเลิกรายการ',
 	lateNotice: 'รายการนี้เข้ามาหลังกองปิดรับแล้ว',
 	lateBadge: 'ค้าง',
+	voidToastNoRevert: 'ยกเลิกรายการแล้ว (รายการนี้ไม่ได้ตัดยอดยืม จึงไม่มียอดยืมต้องคืนสถานะ)',
+	voidToastReverted: 'คืนสถานะยอดยืม',
+	entryNoLoanApplied: 'ไม่ได้ตัดยอดยืม',
 	noEntries: 'ยังไม่มีรายการในกองนี้',
 	itemsSummaryHeading: 'สรุปรายการสินค้าในกอง',
 	// loan drift: a ref skipped at apply because its loan was already closed (read-time warning)

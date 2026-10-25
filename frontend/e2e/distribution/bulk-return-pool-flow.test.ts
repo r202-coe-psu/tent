@@ -751,4 +751,150 @@ test.describe('Bulk return pool v3 — lifecycle (BRP-F)', { tag: DESK_TAGS }, (
 		await expect(warning).toBeVisible();
 		await expect(warning).toContainText(POOL_COPY.closedLoanWarning);
 	});
+
+	// Regression test for the fixed GAP BRP-F13 (kong's review of PR #768, B1): a late entry written
+	// into a SUBMITTED pool never had its loan_refs applied; moving it into an OPEN pool must apply
+	// them (idempotent via applied_bulk_entry_ids), so the loan is cleared exactly once.
+	test('GAP: BRP-F13 a late entry with loan refs clears its loan when moved into an OPEN pool', async ({
+		page,
+		scenarioAs
+	}) => {
+		const scenario = await scenarioAs('brp_f13');
+		const nameA = poolName(scenario, 'F13-A');
+		const nameB = poolName(scenario, 'F13-B');
+		const poolA = await seedOpenPool(scenario, { name: nameA });
+		const poolB = await seedOpenPool(scenario, { name: nameB });
+		const evacuee = await seedRecipient(scenario, `Brp${scenario.namespace.slice(-6)}`, 'Late13');
+		const loan = await seedLoan(scenario, evacuee, 'f13', '3');
+		const board = new BulkReturnPoolBoard(page);
+
+		// 1. 2 of the 3 come back through the UI into pool A: the apply is real.
+		await board.gotoBackOffice();
+		await board.addFromBoard({
+			pool: nameA,
+			returner: evacuee,
+			lines: [{ item: loan.item, qty: '2' }]
+		});
+		await expect.poll(() => readStatus(loan.logId)).toBe('partially_returned');
+		expect(await getShelterDocument(loan.logId)).toMatchObject({ qty_returned: '2' });
+		const [first] = await readEntries(poolA.poolId);
+
+		// 2. WH submits A.
+		await switchUser(page, scenario, 'wh', 'warehouse_staff');
+		await board.gotoBackOffice();
+		await board.openDetail(nameA);
+		await board.submitPool(nameA);
+		await board.closeDetail(nameA);
+		await expect.poll(async () => (await readPool(poolA.poolId)).status).toBe('SUBMITTED');
+
+		// 3. The last piece arrives late (direct PUT: the UI never writes into a SUBMITTED pool).
+		const dst = await addScenarioActor(scenario, 'dst', roleSet('distribution_staff', 'flat'));
+		const late = buildEntryBody({
+			poolId: poolA.poolId,
+			itemId: loan.item.itemId,
+			qty: '1',
+			returner: evacuee,
+			loanRefs: [{ logId: loan.logId, qty: '1' }],
+			createdBy: dst.user.name
+		});
+		expect((await couchAsUser(dst.session, 'PUT', docPath(late._id), late)).status).toBe(CREATED);
+		const untouched = await readDoc(loan.logId);
+		expect(untouched).toMatchObject({ status: 'partially_returned', qty_returned: '2' });
+		expect(sortedStrings(untouched.applied_bulk_entry_ids)).toEqual([first._id]);
+
+		// 4. DST moves the late entry (second row: oldest first) into the OPEN pool B at the desk.
+		await injectSession(page, dst.user, dst.session);
+		await board.gotoDesk();
+		await board.openDetail(nameA);
+		await board.moveEntry(nameA, loan.item.name, nameB, 1);
+
+		await expect.poll(() => readStatus(loan.logId)).toBe('returned');
+		const cleared = await readDoc(loan.logId);
+		expect(cleared).toMatchObject({ qty_returned: '3' });
+		expect(sortedStrings(cleared.applied_bulk_entry_ids)).toEqual([first._id, late._id].sort());
+		expect(await currentPoolOf(late)).toBe(poolB.poolId);
+
+		// 5. A second return of the same item: no outstanding loan is left, so the app warns and
+		//    saves the entry without loan refs (the loan cannot be over-counted).
+		await board.gotoDesk();
+		const dialog = await board.startAddFromBoard();
+		await board.fillAddDialog(dialog, {
+			pool: nameB,
+			returner: evacuee,
+			lines: [{ item: loan.item, qty: '1' }]
+		});
+		await expect(
+			dialog.getByRole('status').filter({ hasText: POOL_COPY.noLoanWarning })
+		).toBeVisible();
+		await board.saveAddDialog(dialog);
+
+		await expect.poll(async () => (await readEntries(poolB.poolId)).length).toBe(1);
+		const [extra] = await readEntries(poolB.poolId);
+		expect(extra).toMatchObject({ qty: '1', returner_id: evacuee.recipientId, loan_refs: [] });
+		const final = await readDoc(loan.logId);
+		expect(final).toMatchObject({ status: 'returned', qty_returned: '3' });
+		expect(sortedStrings(final.applied_bulk_entry_ids)).toEqual([first._id, late._id].sort());
+
+		// The qty applied through the loan's entries never exceeds what was lent.
+		let appliedQty = 0;
+		for (const entryId of sortedStrings(final.applied_bulk_entry_ids)) {
+			const entry = await readDoc(entryId);
+			for (const ref of entry.loan_refs as Array<{ distribution_log_id: string; qty: string }>) {
+				if (ref.distribution_log_id === loan.logId) appliedQty += Number(ref.qty);
+			}
+		}
+		expect(appliedQty).toBeLessThanOrEqual(3);
+	});
+
+	// Regression test for the fixed GAP BRP-F14 (kong's review of PR #768, B2): the entry line and
+	// the void toast used to be based on the entry's loan_refs, so an entry whose refs were never
+	// applied claimed "ตัดยอดยืม" and a void claimed to restore a loan it never touched. Both now
+	// follow the refs actually applied on the loan.
+	test('GAP: BRP-F14 voiding an entry whose loan refs were never applied reverts nothing and says so', async ({
+		page,
+		scenarioAs
+	}) => {
+		const scenario = await scenarioAs('brp_f14');
+		const name = poolName(scenario, 'F14');
+		const pool = await seedOpenPool(scenario, { name });
+		const evacuee = await seedRecipient(scenario, `Brp${scenario.namespace.slice(-6)}`, 'Void14');
+		const loan = await seedLoan(scenario, evacuee, 'f14', '2');
+		const board = new BulkReturnPoolBoard(page);
+
+		// An entry whose apply never ran: written straight into the OPEN pool with a loan ref.
+		const dst = await addScenarioActor(scenario, 'dst', roleSet('distribution_staff', 'flat'));
+		const entry = buildEntryBody({
+			poolId: pool.poolId,
+			itemId: loan.item.itemId,
+			qty: '1',
+			returner: evacuee,
+			loanRefs: [{ logId: loan.logId, qty: '1' }],
+			createdBy: dst.user.name
+		});
+		expect((await couchAsUser(dst.session, 'PUT', docPath(entry._id), entry)).status).toBe(CREATED);
+		const before = await readDoc(loan.logId);
+
+		await injectSession(page, dst.user, dst.session);
+		await board.gotoDesk();
+		const detail = await board.openDetail(name);
+		const row = board.entryRow(name, loan.item.name);
+		await expect(row).toContainText(POOL_COPY.entryNoLoanApplied);
+		await expect(row).not.toContainText(/ตัดยอดยืม\s*1/);
+
+		// Void it by hand (not `voidEntry`) so the toast is read while it is still on screen.
+		await row.getByRole('button', { name: POOL_COPY.voidEntry }).click();
+		const dialog = board.voidDialog();
+		await expect(dialog).toBeVisible();
+		await dialog.getByRole('button', { name: POOL_COPY.voidConfirm }).click();
+		await expect(board.toast(POOL_COPY.voidToastNoRevert)).toBeVisible();
+		await expect(board.toast(POOL_COPY.voidToastReverted)).toHaveCount(0);
+		await expect(dialog).toBeHidden();
+		await expect(detail).toContainText(POOL_COPY.noEntries);
+
+		await expect.poll(async () => (await readVoids(entry._id)).length).toBe(1);
+		const after = await readDoc(loan.logId);
+		expect(after._rev).toBe(before._rev);
+		expect(after.status).toBe(before.status);
+		expect(after.qty_returned).toEqual(before.qty_returned);
+	});
 });

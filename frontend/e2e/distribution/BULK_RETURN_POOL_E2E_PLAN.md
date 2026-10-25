@@ -167,7 +167,8 @@ to `getByRole('dialog')`.
 Implementation note: F7 is split into F7a (UI maxlength), F7b (VDU) and F7c (duplicate); F8 into
 F8a (unspecified) and F8b (no outstanding loan); V1 into V1a (create), V1b (submit / receive /
 cancel), V1c (entry / move / void) and V1d (ledger row). BRP-F-drift is a real `test` in this file
-(loan drift decided: closed refs are skipped, warning shown).
+(loan drift decided: closed refs are skipped, warning shown). The regression tests BRP-F10, F13
+and F14 (§7) live in the same file.
 
 ### BRP-F1 Mixed-surface happy path (D1, D5, D7, D10, D11)
 
@@ -227,8 +228,9 @@ cancel), V1c (entry / move / void) and V1d (ledger row). BRP-F-drift is a real `
 - Steps: DST direct-PUT (`couchAsUser`) a `bulk_return_entry` with the SUBMITTED pool's id (VDU
   cannot check pool state). WH/DST reload the board.
 - UI: "ค้าง" badge plus notice; DST moves it to another OPEN pool via UI.
-- Couch: the entry is absent from the original `items_summary` and `entry_ids`; the loans are
-  untouched (no loan_refs applied) until moved and received.
+- Couch: the entry is absent from the original `items_summary` and `entry_ids`. The test's late
+  entry carries no `loan_refs`; a late entry that does carry refs has them applied when it is moved
+  into an OPEN pool (BRP-F13), not before.
 
 ### BRP-F7 Name rules (D9)
 
@@ -358,6 +360,36 @@ cards A and B to show "0 รายการ" and none of the three cards to cont
 second describe in the same file as F11, so it shares that file's isolation worker and shelter
 (Playwright forbids a worker-forcing `test.use` inside a describe); its own scenario, pools and
 entry keep it apart from the F11 test.
+
+### GAP (fixed): BRP-F13 a late entry never cleared its loan when moved (regression `test`, in `bulk-return-pool-flow.test.ts`)
+
+Found in kong's review of PR #768 (B1), fixed in PR #768. An entry written into a SUBMITTED pool
+(direct PUT) never had its `loan_refs` applied, and `moveBulkReturnEntry` did not apply them either,
+so the loan stayed open although the goods were back. Now a move into an OPEN pool applies the
+entry's not-yet-applied refs (idempotent through the loan's `applied_bulk_entry_ids`, same drift
+rules as add: closed, missing or too-short refs are skipped). The move toast ends with
+" · ตัดยอดยืม <n> รายการ" when n > 0.
+
+The test lends 3 (`seedLoan`) to an evacuee and has 2 returned through the UI into OPEN pool A
+(loan `partially_returned`). WH submits A, then a DST user PUTs a late entry (qty 1, `loan_refs` to
+that loan; expect 201); the loan is still at `qty_returned` 2 and does not list the late entry. DST
+moves the late entry to OPEN pool B at the desk. Couch: the loan is `returned`, `qty_returned` 3 and
+`applied_bulk_entry_ids` lists both entries once. A further return of the same item from the same
+evacuee through the UI shows the no-outstanding-loan warning and is saved with empty `loan_refs`;
+the loan is unchanged and the qty applied through its entries never exceeds 3.
+
+### GAP (fixed): BRP-F14 void claimed to revert a loan it never touched (regression `test`, in `bulk-return-pool-flow.test.ts`)
+
+Found in kong's review of PR #768 (B2), fixed in PR #768. The entry line ("ตัดยอดยืม n รายการ") and
+the void toast were based on the entry's `loan_refs`, not on what was applied on the loan. Now both
+count only refs whose loan lists the entry id in `applied_bulk_entry_ids`: the line reads
+"ไม่ได้ตัดยอดยืม" and the void toast reads "ยกเลิกรายการแล้ว (รายการนี้ไม่ได้ตัดยอดยืม จึงไม่มียอดยืมต้องคืนสถานะ)"
+instead of "คืนสถานะยอดยืม <n> รายการ".
+
+The test lends 2 (`seedLoan`) and has a DST user PUT an entry with a `loan_refs` entry straight into
+an OPEN pool (expect 201), so the ref is never applied. The detail sheet shows "ไม่ได้ตัดยอดยืม" and
+not "ตัดยอดยืม 1". After voiding, the visible toast is the no-revert text and none contains "คืนสถานะยอดยืม";
+the loan doc keeps the same `_rev`, status and `qty_returned`; one void doc exists.
 
 ## 8. Old tests and helpers (removed)
 
