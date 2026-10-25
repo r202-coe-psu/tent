@@ -52,6 +52,7 @@ export {
 	receiveDonation,
 	expireDonation,
 	canTransitionDonation,
+	DONATION_SCHEMA_V,
 	stockBalance,
 	openNeeds,
 	calculateReserved,

@@ -3,7 +3,7 @@ id: CR-143
 title: กติกาคลังชุดใหม่สำหรับ redesign หน้าคลังของศูนย์ (ลำดับล็อต, รับบริจาคหลายรายการ, เหตุผลปรับยอด, วันหมดอายุ, ปลายทางเบิก, รวมสินค้า)
 status: done
 date: 2026-10-02
-updated: 2026-10-08
+updated: 2026-10-22
 requested_by: project owner (UX review หน้าคลังของศูนย์ — GitHub #331)
 decided_by: project owner (2026-10-02 — อนุมัติทุกหัวข้อ §A–§F; §C stable-core reviewed)
 layer: stable # §C แตะ stock_ledger (append-only ledger = stable core) → ต้อง review ก่อน; §A §B §D §E §F = volatile
@@ -142,7 +142,10 @@ owner อนุมัติทุกหัวข้อเมื่อ 2026-10-02
 - **FR-B8** ถ้า row ครบแล้วแต่ transition ใบล้ม การ retry ต้องทำเฉพาะ transition ไม่เขียน row ซ้ำ
 - **FR-B9** ระหว่างที่ใบยังค้างบันทึกไม่ครบ ยอดจอง (`calculateReserved`) ต้องหักจำนวนที่บันทึกเข้า ledger แล้ว ไม่ให้นับซ้ำทั้งในยอดจองและยอดคงเหลือ
 - **FR-B5** **ไม่เพิ่มสถานะใหม่** ใน donation โดย "รับไม่ครบ" = derived (declared − counted ต่อ item > 0) ซึ่ง UI ต้องแสดงในหน้ารับเข้าและในประวัติของใบ
+  - decision sync 2026-10-22: "UI" ข้อนี้ = หน้ารับของของเจ้าหน้าที่เท่านั้น — หน้าติดตามผู้บริจาคไม่แสดงยอดขาด (ยกเลิก [CR-156](CR-156-stock-redesign-amendment.md) FR-I3)
 - **FR-B6** ยอดที่ขาดต้อง**ไม่ค้างเป็นยอดจอง** (`calculateReserved`) หลังใบเป็น `received`
+
+> **หมายเหตุ [CR-172](../04-donation/CR-172-donation-reject-reason.md) (2026-10-21):** "ไม่รับ" ≠ "ขาด". FR-B3/FR-B5/FR-B6 ยังใช้ตามเดิมกับบรรทัดที่**รับ** (ตั้ง 0 / รับน้อยกว่าที่แจ้ง = "รับไม่ครบ" ที่ derived). บรรทัดที่เจ้าหน้าที่เปิด "ไม่รับรายการนี้" (CR-172 FR-9) เป็นอีกกรณี — ลงใน `received_summary.items[]` พร้อม `rejected: true` + เหตุผล, ไม่สร้างแถว ledger และ**ไม่นับใน `shortfalls`** (CR-172 FR-13). ไม่รับทุกบรรทัด → ใบเป็น `rejected` ไม่ใช่ `received` (CR-172 FR-12) — ยังไม่เพิ่มสถานะใหม่ตาม FR-B5. รูปข้อมูลดู `schema.md` §2.3
 
 ### Acceptance (§B)
 

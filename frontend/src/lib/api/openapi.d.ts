@@ -1684,6 +1684,8 @@ export interface components {
 			tracking_token: string;
 			/** Booking Ref */
 			booking_ref: string;
+			/** Status */
+			status: string;
 		};
 		/** DonationItemInput */
 		DonationItemInput: {
@@ -1706,6 +1708,14 @@ export interface components {
 		DonationItemsPatchRequest: {
 			/** Items */
 			items: components['schemas']['DonationItemInput'][];
+			/** Current Items */
+			current_items?:
+				| {
+						[key: string]: unknown;
+				  }[]
+				| null;
+			/** Current Status */
+			current_status?: string | null;
 		};
 		/** DonationItemsPatchResponse */
 		DonationItemsPatchResponse: {
@@ -1732,6 +1742,10 @@ export interface components {
 			revision?: {
 				[key: string]: unknown;
 			};
+			/** Status */
+			status: string;
+			/** Auto Approved Lines */
+			auto_approved_lines?: number[];
 		};
 		/**
 		 * DonationTrackSearchRequest
