@@ -25,6 +25,7 @@ import type {
 	BulkReturnReceivedRowInput,
 	BulkReturnLoanDriftReason,
 	ClosedBulkReturnLoanRef,
+	AppliedBulkReturnLoanRef,
 	DistributionLog
 } from '../../domain/food-supplies';
 import {
@@ -33,6 +34,7 @@ import {
 	assertEntryCanBeMoved,
 	assessBulkReturnRefOnLoan,
 	findClosedBulkReturnLoanRefs,
+	findAppliedBulkReturnLoanRefs,
 	buildBulkReturnPoolOverview,
 	buildBulkReturnReceivedItems,
 	BulkReturnReceiveInputError,
@@ -652,17 +654,27 @@ async function revertRefOnLoan(
 	entry: BulkReturnEntry,
 	ref: BulkReturnEntryLoanRef,
 	ctx: AuthorContext
-): Promise<void> {
+): Promise<boolean> {
+	let reverted = false;
 	try {
 		// No-op (same reference, no write) when the entry id is not in applied_bulk_entry_ids, which
-		// is the case for a ref that was skipped by loan drift.
-		await logRepo.mutateLogCAS(ref.distribution_log_id, (current) =>
-			revertBulkEntryFromLog(current, { entry_id: entry._id, qty: ref.qty }, ctx.createdBy, now())
-		);
+		// is the case for a ref that was skipped by loan drift or already reverted.
+		await logRepo.mutateLogCAS(ref.distribution_log_id, (current) => {
+			// CAS may retry the mutator: decide from the loan this run saw.
+			reverted = (current.applied_bulk_entry_ids ?? []).includes(entry._id);
+			return revertBulkEntryFromLog(
+				current,
+				{ entry_id: entry._id, qty: ref.qty },
+				ctx.createdBy,
+				now()
+			);
+		});
 	} catch (err) {
 		// A missing loan can hold no applied entry: nothing to revert (never wedge the void).
 		if (!(err instanceof NotFoundError)) throw err;
+		return false;
 	}
+	return reverted;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -803,7 +815,10 @@ export interface VoidBulkReturnEntryInput {
 export interface VoidBulkReturnEntryResult {
 	entryVoid: BulkReturnEntryVoid;
 	replayed: boolean;
-	/** Ids of the distribution logs this entry is reverted on (idempotent; also on replay). */
+	/**
+	 * Ids of loans actually reverted by this call (a ref never applied, or already reverted by an
+	 * earlier call/replay, is not listed).
+	 */
 	loansReverted: string[];
 }
 
@@ -824,8 +839,9 @@ export async function voidBulkReturnEntry(
 	const revertLoans = async (): Promise<string[]> => {
 		const reverted: string[] = [];
 		for (const ref of entry.loan_refs) {
-			await revertRefOnLoan(logRepo, entry, ref, ctx);
-			reverted.push(ref.distribution_log_id);
+			if (await revertRefOnLoan(logRepo, entry, ref, ctx)) {
+				reverted.push(ref.distribution_log_id);
+			}
 		}
 		return reverted;
 	};
@@ -1258,6 +1274,29 @@ export async function listBulkReturnPoolClosedLoanRefs(
 	ctx: AuthorContext,
 	deps?: BulkReturnPoolV3WorkflowDependencies
 ): Promise<ClosedBulkReturnLoanRef[]> {
+	const { live, loansById } = await loadLivePoolEntriesWithLoans(poolId, ctx, deps);
+	return findClosedBulkReturnLoanRefs(live, loansById);
+}
+
+/**
+ * Refs of the non-voided entries currently in `poolId` that are actually applied on their loan
+ * (the entry id is in the loan's `applied_bulk_entry_ids`). Derived from fresh loans on every read.
+ */
+export async function listBulkReturnPoolAppliedLoanRefs(
+	poolId: string,
+	ctx: AuthorContext,
+	deps?: BulkReturnPoolV3WorkflowDependencies
+): Promise<AppliedBulkReturnLoanRef[]> {
+	const { live, loansById } = await loadLivePoolEntriesWithLoans(poolId, ctx, deps);
+	return findAppliedBulkReturnLoanRefs(live, loansById);
+}
+
+/** Non-voided entries currently in `poolId` plus the freshly fetched loans their refs point at. */
+async function loadLivePoolEntriesWithLoans(
+	poolId: string,
+	ctx: AuthorContext,
+	deps?: BulkReturnPoolV3WorkflowDependencies
+): Promise<{ live: BulkReturnEntry[]; loansById: Map<string, DistributionLog | null> }> {
 	const { eventRepo, logRepo } = resolveDependencies(deps, ctx);
 	const events = await eventRepo.listAll();
 	const live = resolveBulkReturnEntries(events.entries, events.moves, events.voids)
@@ -1266,9 +1305,9 @@ export async function listBulkReturnPoolClosedLoanRefs(
 	const loanIds = [
 		...new Set(live.flatMap((entry) => entry.loan_refs.map((ref) => ref.distribution_log_id)))
 	];
-	if (loanIds.length === 0) return [];
+	if (loanIds.length === 0) return { live, loansById: new Map() };
 	const loans = await Promise.all(loanIds.map((id) => logRepo.get(id)));
-	return findClosedBulkReturnLoanRefs(live, new Map(loanIds.map((id, i) => [id, loans[i]])));
+	return { live, loansById: new Map(loanIds.map((id, i) => [id, loans[i]])) };
 }
 
 /** Outstanding returnable loans of a returner (all items), oldest first, so the UI can show/warn. */

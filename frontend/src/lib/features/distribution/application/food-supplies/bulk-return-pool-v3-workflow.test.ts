@@ -48,6 +48,7 @@ import {
 	addBulkReturnEntries,
 	cancelBulkReturnPool,
 	getBulkReturnPoolOverview,
+	listBulkReturnPoolAppliedLoanRefs,
 	listBulkReturnPoolClosedLoanRefs,
 	listReturnerOutstandingLoans,
 	moveBulkReturnEntry,
@@ -728,8 +729,36 @@ describe('bulk return pool v3 workflows', () => {
 			const voided = await voidBulkReturnEntry({ entry_id: results[0].entry._id }, dist, deps);
 
 			expect(voided.replayed).toBe(false);
+			expect(voided.loansReverted).toEqual([]);
 			expect(await logRepo.get(loanId(44))).toEqual(before);
 			expect((await logRepo.get(loanId(44)))?.status).toBe('lost');
+		});
+
+		it('lists only actually applied refs (not drift-skipped, not voided entries)', async () => {
+			const pool = await openPool('Gate A');
+			// Loan 48 is fully consumed by the first entry, so the second one allocates to loan 49.
+			await seedLoan(48, { qty: '1', at: '2026-01-01T00:00:00.000Z' });
+			await seedLoan(49, { qty: '3', at: '2026-01-02T00:00:00.000Z' });
+			const applied = await add(pool._id, { type: 'evacuee', id: EVACUEE }, [
+				{ item_id: 'item:cot', qty: '1' }
+			]);
+			const appliedEntry = applied.results[0].entry;
+			expect(await listBulkReturnPoolAppliedLoanRefs(pool._id, mgr, deps)).toEqual([
+				{
+					entry_id: appliedEntry._id,
+					distribution_log_id: appliedEntry.loan_refs[0].distribution_log_id,
+					qty: appliedEntry.loan_refs[0].qty
+				}
+			]);
+
+			// A drifted entry (its loan is cleared right after allocation) is not listed as applied.
+			const drifting = { ...deps, logRepo: driftingLogRepo(() => clearAsLost(loanId(49))) };
+			await addBulkReturnEntries(dropOffInput(pool._id, '2', nextOp()), mgr, drifting);
+			const listed = await listBulkReturnPoolAppliedLoanRefs(pool._id, mgr, deps);
+			expect(listed.map((r) => r.entry_id)).toEqual([appliedEntry._id]);
+
+			await voidBulkReturnEntry({ entry_id: appliedEntry._id }, dist, deps);
+			expect(await listBulkReturnPoolAppliedLoanRefs(pool._id, mgr, deps)).toEqual([]);
 		});
 
 		it('void of an entry whose loan doc is gone does not throw', async () => {
@@ -1070,6 +1099,7 @@ describe('bulk return pool v3 workflows', () => {
 			const voided = await voidBulkReturnEntry({ entry_id: entryId, notes: 'oops' }, dist, deps);
 			expect(voided.replayed).toBe(false);
 			expect(voided.loansReverted).toEqual([loanId(30)]);
+			const loanAfterVoid = await logRepo.get(loanId(30));
 			let loan = await logRepo.get(loanId(30));
 			expect(loan?.status).toBe('active');
 			expect(loan?.qty_returned).toBe('0');
@@ -1077,6 +1107,8 @@ describe('bulk return pool v3 workflows', () => {
 
 			const again = await voidBulkReturnEntry({ entry_id: entryId }, dist, deps);
 			expect(again.replayed).toBe(true);
+			expect(again.loansReverted).toEqual([]);
+			expect((await logRepo.get(loanId(30)))?._rev).toBe(loanAfterVoid?._rev);
 			expect(again.entryVoid._id).toBe(voided.entryVoid._id);
 			loan = await logRepo.get(loanId(30));
 			expect(loan?.status).toBe('active');

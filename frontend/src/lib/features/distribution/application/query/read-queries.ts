@@ -22,6 +22,7 @@ import { operationsRepository } from '$lib/features/operations';
 import { getReturnOperationState } from '../food-supplies/return-workflow';
 import {
 	getBulkReturnPoolOverview,
+	listBulkReturnPoolAppliedLoanRefs,
 	listBulkReturnPoolClosedLoanRefs,
 	listReturnerOutstandingLoans,
 	type BulkReturnPoolOverviewQuery
@@ -194,6 +195,29 @@ export const useBulkReturnPoolClosedLoanRefs = (
 			queryFn: () => {
 				const ctx = resolveAuthenticatedAuthorContext(shelterCode);
 				return listBulkReturnPoolClosedLoanRefs(id!, ctx);
+			},
+			enabled: isEnabled
+		};
+	});
+
+/**
+ * Reads the refs of a pool's live entries that are actually applied on their loan
+ * (`applied_bulk_entry_ids`); derived at read time.
+ */
+export const useBulkReturnPoolAppliedLoanRefs = (
+	poolId: MaybeGetter<string | null | undefined>,
+	shelterCodeGetter?: MaybeGetter<string | undefined>,
+	enabled: MaybeGetter<boolean> = true
+) =>
+	createQuery(() => {
+		const id = toValue(poolId);
+		const shelterCode = resolveShelterCode(toValue(shelterCodeGetter));
+		const isEnabled = Boolean(toValue(enabled) && shelterCode && id);
+		return {
+			queryKey: distributionKeys.bulkPoolAppliedLoanRefs(shelterCode, id ?? ''),
+			queryFn: () => {
+				const ctx = resolveAuthenticatedAuthorContext(shelterCode);
+				return listBulkReturnPoolAppliedLoanRefs(id!, ctx);
 			},
 			enabled: isEnabled
 		};

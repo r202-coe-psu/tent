@@ -176,7 +176,10 @@ export const useMoveBulkReturnEntry = () => {
 	}));
 };
 
-/** Voids an entry and reopens the loans it closed. */
+/**
+ * Voids an entry and reopens the loans it actually closed (`loansReverted` lists only those; an
+ * entry whose refs were never applied reverts nothing).
+ */
 export const useVoidBulkReturnEntry = () => {
 	const queryClient = useQueryClient();
 	return createMutation(() => ({

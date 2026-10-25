@@ -250,6 +250,7 @@ export {
 	useBulkReturnClaim,
 	useBulkReturnPoolOverview,
 	useBulkReturnPoolClosedLoanRefs,
+	useBulkReturnPoolAppliedLoanRefs,
 	useReturnerOutstandingLoans,
 	useOpenBulkReturnPool,
 	useUpdateBulkReturnPoolHeader,

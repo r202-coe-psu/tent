@@ -3,6 +3,7 @@ import {
 	canAppendToPool,
 	isPoolNameTakenAmongOpen,
 	type BulkReturnEntry,
+	type AppliedBulkReturnLoanRef,
 	type ClosedBulkReturnLoanRef,
 	type BulkReturnPoolOverviewRow,
 	type BulkReturnPoolV3,
@@ -249,12 +250,25 @@ export function returnerLabel(
 	return `${kind} ${shortId(entry.returner_id)}`;
 }
 
-export function loanRefsSummary(entry: Pick<BulkReturnEntry, 'loan_refs'>, unit?: string): string {
-	const refs = entry.loan_refs;
-	if (refs.length === 0) return 'ไม่ได้ตัดยอดยืม';
+/** Summary line from the refs ACTUALLY applied on loans (not the entry's planned `loan_refs`). */
+export function loanRefsSummary(appliedRefs: readonly { qty: string }[], unit?: string): string {
+	if (appliedRefs.length === 0) return 'ไม่ได้ตัดยอดยืม';
 	let total = '0';
-	for (const ref of refs) total = addQty(total, ref.qty);
-	return `ตัดยอดยืม ${refs.length} รายการ (รวม ${total}${unit ? ` ${unit}` : ''})`;
+	for (const ref of appliedRefs) total = addQty(total, ref.qty);
+	return `ตัดยอดยืม ${appliedRefs.length} รายการ (รวม ${total}${unit ? ` ${unit}` : ''})`;
+}
+
+/** Groups applied-loan refs by entry id (ref order within each group is kept). */
+export function groupAppliedLoanRefsByEntry(
+	refs: readonly AppliedBulkReturnLoanRef[]
+): Map<string, AppliedBulkReturnLoanRef[]> {
+	const byEntry = new Map<string, AppliedBulkReturnLoanRef[]>();
+	for (const ref of refs) {
+		const list = byEntry.get(ref.entry_id) ?? [];
+		list.push(ref);
+		byEntry.set(ref.entry_id, list);
+	}
+	return byEntry;
 }
 
 /**

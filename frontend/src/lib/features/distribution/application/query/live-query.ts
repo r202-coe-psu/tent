@@ -26,7 +26,8 @@ export function startDistributionLiveQuery(queryClient: QueryClient): SubscribeD
 				[...distributionKeys.shelter(shelterCode), 'log'],
 				[...distributionKeys.shelter(shelterCode), 'shift_reconciliation'],
 				distributionKeys.returnerOutstandingLoansAll(shelterCode),
-				distributionKeys.bulkPoolClosedLoanRefsAll(shelterCode)
+				distributionKeys.bulkPoolClosedLoanRefsAll(shelterCode),
+				distributionKeys.bulkPoolAppliedLoanRefsAll(shelterCode)
 			];
 		}
 		if (type === 'bulk_return_pool') {

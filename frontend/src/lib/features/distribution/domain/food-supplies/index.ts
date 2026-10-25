@@ -159,10 +159,12 @@ export {
 export {
 	assessBulkReturnRefOnLoan,
 	findClosedBulkReturnLoanRefs,
+	findAppliedBulkReturnLoanRefs,
 	type BulkReturnLoanDriftReason,
 	type BulkReturnRefLoan,
 	type BulkReturnRefAssessment,
-	type ClosedBulkReturnLoanRef
+	type ClosedBulkReturnLoanRef,
+	type AppliedBulkReturnLoanRef
 } from './bulk-return-loan-drift';
 
 export {

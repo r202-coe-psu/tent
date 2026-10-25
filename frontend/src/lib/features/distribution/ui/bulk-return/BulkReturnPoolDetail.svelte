@@ -16,6 +16,7 @@
 	import { formatThaiDateTime } from '$lib/utils/date';
 	import {
 		createStableOperationId,
+		useBulkReturnPoolAppliedLoanRefs,
 		useBulkReturnPoolClosedLoanRefs,
 		useCancelBulkReturnPool,
 		useVoidBulkReturnEntry
@@ -31,6 +32,7 @@
 		canMoveEntry,
 		canVoidEntry,
 		closedLoanRefNotice,
+		groupAppliedLoanRefsByEntry,
 		groupClosedLoanRefsByEntry,
 		getCancelPoolBlockedReason,
 		getPoolStatusBadgeClass,
@@ -98,6 +100,12 @@
 		() => shelterCode
 	);
 	const closedRefsByEntry = $derived(groupClosedLoanRefsByEntry(closedRefsQuery.data ?? []));
+	// Refs actually applied on loans (applied_bulk_entry_ids); undefined until first loaded.
+	const appliedRefsQuery = useBulkReturnPoolAppliedLoanRefs(
+		() => row?.pool._id ?? null,
+		() => shelterCode
+	);
+	const appliedRefsByEntry = $derived(groupAppliedLoanRefsByEntry(appliedRefsQuery.data ?? []));
 
 	const entries = $derived(row ? liveEntries(row) : []);
 	const moveTargets = $derived(row ? listMoveTargets(rows, row.pool._id) : []);
@@ -125,8 +133,16 @@
 		if (!voidTarget) return;
 		voidError = null;
 		try {
-			await voidMutation.mutateAsync({ input: { entry_id: voidTarget._id }, shelterCode });
-			toast.success('ยกเลิกรายการแล้ว ยอดยืมที่เคยตัดไว้ถูกคืนสถานะเรียบร้อย');
+			const result = await voidMutation.mutateAsync({
+				input: { entry_id: voidTarget._id },
+				shelterCode
+			});
+			const reverted = result.loansReverted.length;
+			toast.success(
+				reverted > 0
+					? `ยกเลิกรายการแล้ว คืนสถานะยอดยืม ${reverted} รายการเรียบร้อย`
+					: 'ยกเลิกรายการแล้ว (รายการนี้ไม่ได้ตัดยอดยืม จึงไม่มียอดยืมต้องคืนสถานะ)'
+			);
 			voidTarget = null;
 		} catch (err) {
 			const message = formatDistributionError(err, 'ยกเลิกรายการไม่สำเร็จ กรุณาลองใหม่อีกครั้ง');
@@ -304,7 +320,9 @@
 										<p>
 											ผู้คืน: <span class="font-medium text-slate-800">{returnerLabel(entry)}</span>
 										</p>
-										<p>{loanRefsSummary(entry, item.unit)}</p>
+										{#if appliedRefsQuery.data}
+											<p>{loanRefsSummary(appliedRefsByEntry.get(entry._id) ?? [], item.unit)}</p>
+										{/if}
 										<p class="text-xs text-slate-500">
 											บันทึกโดย {entry.created_by} ·
 											<span class="tabular-nums">{formatThaiDateTime(entry.created_at)}</span>
@@ -459,7 +477,7 @@
 					{@const item = resolveItemDisplay(voidTarget.item_id, catalog)}
 					ยกเลิก {item.name}
 					{voidTarget.qty}
-					{item.unit} ออกจากกอง ยอดยืมที่เคยตัดไว้จากรายการนี้จะถูกคืนสถานะเป็นยังไม่คืน
+					{item.unit} ออกจากกอง ยอดยืมที่เคยตัดไว้จากรายการนี้ (ถ้ามี) จะถูกคืนสถานะเป็นยังไม่คืน
 				{/if}
 			</AlertDialog.Description>
 		</AlertDialog.Header>

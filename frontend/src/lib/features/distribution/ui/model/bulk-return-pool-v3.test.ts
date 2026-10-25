@@ -11,6 +11,7 @@ import {
 	canCancelPool,
 	closedLoanRefNotice,
 	groupClosedLoanRefsByEntry,
+	groupAppliedLoanRefsByEntry,
 	canMoveEntry,
 	canVoidEntry,
 	filterPoolRows,
@@ -357,13 +358,21 @@ describe('labels', () => {
 	});
 
 	it('loanRefsSummary reports none, or count and total with unit', () => {
-		expect(loanRefsSummary({ loan_refs: [] })).toBe('ไม่ได้ตัดยอดยืม');
-		const refs = [
-			{ distribution_log_id: 'distribution_log:1', qty: '2' },
-			{ distribution_log_id: 'distribution_log:2', qty: '3' }
-		] as BulkReturnEntry['loan_refs'];
-		expect(loanRefsSummary({ loan_refs: refs }, 'ชิ้น')).toBe('ตัดยอดยืม 2 รายการ (รวม 5 ชิ้น)');
-		expect(loanRefsSummary({ loan_refs: refs })).toBe('ตัดยอดยืม 2 รายการ (รวม 5)');
+		expect(loanRefsSummary([])).toBe('ไม่ได้ตัดยอดยืม');
+		const refs = [{ qty: '2' }, { qty: '3' }];
+		expect(loanRefsSummary(refs, 'ชิ้น')).toBe('ตัดยอดยืม 2 รายการ (รวม 5 ชิ้น)');
+		expect(loanRefsSummary(refs)).toBe('ตัดยอดยืม 2 รายการ (รวม 5)');
+	});
+
+	it('groupAppliedLoanRefsByEntry groups by entry id keeping ref order', () => {
+		const ref = (entry_id: string, distribution_log_id: string) => ({
+			entry_id,
+			distribution_log_id,
+			qty: '1'
+		});
+		const grouped = groupAppliedLoanRefsByEntry([ref('e1', 'a'), ref('e2', 'b'), ref('e1', 'c')]);
+		expect(grouped.get('e1')?.map((r) => r.distribution_log_id)).toEqual(['a', 'c']);
+		expect(grouped.get('e3')).toBeUndefined();
 	});
 
 	it('resolveItemDisplay uses the catalog or a cleaned id fallback', () => {
