@@ -116,7 +116,13 @@ export const POST: RequestHandler = async ({ request }) => {
 			const citizen = consumeKioskSession(input.session_id, principal.registry_id);
 			if (!citizen) return thaidSessionInvalid();
 			try {
-				evacuee = await registerKioskThaidWalkIn(device, citizen, input.consented_at, input.phone);
+				evacuee = await registerKioskThaidWalkIn(
+					device,
+					citizen,
+					input.consented_at,
+					input.phone,
+					input.started_at
+				);
 			} catch (error) {
 				// Nothing was written: give the scan back so the kiosk can retry. A record that already
 				// exists will not go away, so that session stays used.
@@ -133,7 +139,8 @@ export const POST: RequestHandler = async ({ request }) => {
 				input.card,
 				input.photo,
 				input.consented_at,
-				input.phone
+				input.phone,
+				input.started_at
 			);
 		}
 		await scannerServerRepository.updateDeviceLastSeen(principal.registry_id).catch(() => {});

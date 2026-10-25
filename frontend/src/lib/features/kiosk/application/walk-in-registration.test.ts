@@ -69,7 +69,24 @@ describe('submitWalkInThaid', () => {
 			kind: 'registered',
 			registration
 		});
-		expect(register).toHaveBeenCalledWith('a'.repeat(32), thaidSession.consentedAt, '0812345678');
+		expect(register).toHaveBeenCalledWith(
+			'a'.repeat(32),
+			thaidSession.consentedAt,
+			'0812345678',
+			null
+		);
+	});
+
+	it('carries the scan time as the Station 1 start (CR-192)', async () => {
+		const register = vi.fn().mockResolvedValue(registration);
+		const startedAt = '2026-10-25T03:00:00.000Z';
+		await submitWalkInThaid({ ...thaidSession, startedAt }, register);
+		expect(register).toHaveBeenCalledWith(
+			'a'.repeat(32),
+			thaidSession.consentedAt,
+			'0812345678',
+			startedAt
+		);
 	});
 
 	it('does nothing before consent', async () => {

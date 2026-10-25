@@ -20,6 +20,8 @@ class WalkInSession {
 	citizenId = $state<string | null>(null);
 	/** ThaiD walk-in only: the verified session the server registers from. */
 	thaidSessionId = $state<string | null>(null);
+	/** When the card was read / the ThaiD scan verified (ISO): the Station 1 `start` of the walk-in. */
+	startedAt = $state<string | null>(null);
 	consented = $state(false);
 	consentedAt = $state<string | null>(null);
 	/** The full card read, kept in memory only while the face check runs, then submitted. */
@@ -52,12 +54,14 @@ class WalkInSession {
 		this.reset();
 		this.source = 'smart-card';
 		this.citizenId = citizenId;
+		this.startedAt = new Date().toISOString();
 	}
 
 	beginThaid(sessionId: string): void {
 		this.reset();
 		this.source = 'thaid';
 		this.thaidSessionId = sessionId;
+		this.startedAt = new Date().toISOString();
 	}
 
 	consent(): void {
@@ -81,6 +85,7 @@ class WalkInSession {
 		this.source = null;
 		this.citizenId = null;
 		this.thaidSessionId = null;
+		this.startedAt = null;
 		this.consented = false;
 		this.consentedAt = null;
 		this.card = null;

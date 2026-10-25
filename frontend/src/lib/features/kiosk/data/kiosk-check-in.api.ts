@@ -85,14 +85,17 @@ export async function registerKioskWalkIn(
 	card: unknown,
 	photo: KioskPhotoPayload | null,
 	consentedAt: string,
-	phone: string | null = null
+	phone: string | null = null,
+	/** When the card was read (ISO) — the Station 1 `start` time (CR-192). */
+	startedAt?: string | null
 ): Promise<KioskRegistrationResult> {
 	return postKioskRegistration({
 		source: 'smart-card',
 		card,
 		photo,
 		phone,
-		consented_at: consentedAt
+		consented_at: consentedAt,
+		...(startedAt ? { started_at: startedAt } : {})
 	});
 }
 
@@ -100,13 +103,16 @@ export async function registerKioskWalkIn(
 export async function registerKioskThaidWalkIn(
 	sessionId: string,
 	consentedAt: string,
-	phone: string | null
+	phone: string | null,
+	/** When the ThaiD scan was verified (ISO) — the Station 1 `start` time (CR-192). */
+	startedAt?: string | null
 ): Promise<KioskRegistrationResult> {
 	return postKioskRegistration({
 		source: 'thaid',
 		session_id: sessionId,
 		phone,
-		consented_at: consentedAt
+		consented_at: consentedAt,
+		...(startedAt ? { started_at: startedAt } : {})
 	});
 }
 

@@ -15,6 +15,7 @@ import { normalizeKioskPhone, phoneVariants } from '../domain/phone';
 import { walkInAddressKey, walkInRoadsCompatible } from '../domain/walk-in-address';
 import { refreshHouseholdStatus } from './kiosk-check-in.server';
 import { deleteKioskCardImage, putKioskCardImage } from './kiosk-photo.server';
+import { writeKioskStationLogs } from './kiosk-station-log.server';
 import { z } from 'zod';
 
 export { decodeKioskPhoto, KioskPhotoValidationError } from './kiosk-photo.server';
@@ -37,7 +38,10 @@ const kioskWalkInConsentFields = {
 	consented_at: z
 		.string()
 		.datetime({ offset: true })
-		.refine((timestamp) => Math.abs(Date.now() - Date.parse(timestamp)) <= 10 * 60 * 1000)
+		.refine((timestamp) => Math.abs(Date.now() - Date.parse(timestamp)) <= 10 * 60 * 1000),
+	// CR-192: when the card was read / ThaiD verified (ISO) — only the Station 1 `start` time. The
+	// server clamps it; a malformed value is dropped rather than failing the registration.
+	started_at: z.string().max(40).optional().catch(undefined)
 };
 
 /** The card read from the chip; `source` may be left out (kiosk clients from before ThaiD walk-in). */
@@ -422,8 +426,24 @@ async function writeKioskWalkIn(
 /**
  * Create one new kiosk walk-in record after consent; existing records are never reused.
  * The snapshot comes from the chip (with its photo) or from ThaiD (never a photo).
+ *
+ * CR-192: once the record is committed (and the locks are released) the Station 1 kiosk
+ * `start` + `complete` are appended, best-effort. `startedAt` is the card-read time the kiosk
+ * sent; it is clamped server-side.
  */
 export async function registerKioskWalkInSnapshot(
+	device: KioskWalkInDevice,
+	cardSnapshot: CardSnapshot,
+	photo: KioskPhotoPayload | null,
+	phone: string | null,
+	startedAt?: string
+): Promise<Evacuee> {
+	const evacuee = await registerKioskWalkInLocked(device, cardSnapshot, photo, phone);
+	await writeKioskStationLogs(device.shelterCode, device.deviceId, [evacuee._id], startedAt);
+	return evacuee;
+}
+
+async function registerKioskWalkInLocked(
 	device: KioskWalkInDevice,
 	cardSnapshot: CardSnapshot,
 	photo: KioskPhotoPayload | null,
@@ -495,14 +515,16 @@ export function registerKioskWalkIn(
 	cardInput: KioskWalkInCardInput,
 	photo: KioskPhotoPayload | null,
 	consentedAt: string,
-	phone: string | null = null
+	phone: string | null = null,
+	startedAt?: string
 ): Promise<Evacuee> {
 	const device = { shelterCode, deviceId, stationName };
 	return registerKioskWalkInSnapshot(
 		device,
 		kioskCardSnapshotFromCard(cardInput, consentedAt, device),
 		photo,
-		phone
+		phone,
+		startedAt
 	);
 }
 
@@ -511,12 +533,14 @@ export function registerKioskThaidWalkIn(
 	device: KioskWalkInDevice,
 	citizen: { pid: string; profile?: ThaiDAutofillProfile },
 	consentedAt: string,
-	phone: string | null
+	phone: string | null,
+	startedAt?: string
 ): Promise<Evacuee> {
 	return registerKioskWalkInSnapshot(
 		device,
 		kioskCardSnapshotFromThaid(citizen.pid, citizen.profile, consentedAt, device),
 		null,
-		phone
+		phone,
+		startedAt
 	);
 }

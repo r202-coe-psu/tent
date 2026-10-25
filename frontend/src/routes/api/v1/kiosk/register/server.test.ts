@@ -112,7 +112,8 @@ describe('POST /api/v1/kiosk/register', () => {
 			expect.objectContaining({ citizen_id: validBody.card.citizen_id }),
 			null,
 			validBody.consented_at,
-			null
+			null,
+			undefined
 		);
 		expect(mockUpdateLastSeen).toHaveBeenCalledWith('registry:KIOSK-01');
 	});
@@ -127,8 +128,22 @@ describe('POST /api/v1/kiosk/register', () => {
 			expect.anything(),
 			null,
 			validBody.consented_at,
-			'0812345678'
+			'0812345678',
+			undefined
 		);
+	});
+
+	it('passes the card-read time through as the Station 1 start (CR-192)', async () => {
+		const startedAt = new Date(Date.now() - 45_000).toISOString();
+		const response = await POST(request({ ...validBody, started_at: startedAt }));
+		expect(response.status).toBe(200);
+		expect(mockRegister.mock.calls[0]?.[7]).toBe(startedAt);
+	});
+
+	it('drops a malformed card-read time instead of failing the registration', async () => {
+		const response = await POST(request({ ...validBody, started_at: { nope: true } }));
+		expect(response.status).toBe(200);
+		expect(mockRegister.mock.calls[0]?.[7]).toBeUndefined();
 	});
 
 	it('rejects a phone that is not a Thai number', async () => {
@@ -268,7 +283,8 @@ describe('POST /api/v1/kiosk/register source thaid', () => {
 			{ shelterCode: 'SH001', deviceId: 'KIOSK-01', stationName: 'โต๊ะ 1' },
 			citizen,
 			body.consented_at,
-			'0812345678'
+			'0812345678',
+			undefined
 		);
 		expect(mockRegister).not.toHaveBeenCalled();
 		expect(getKioskSessionForDevice(sessionId, DEVICE)?.status).toBe('consumed');
