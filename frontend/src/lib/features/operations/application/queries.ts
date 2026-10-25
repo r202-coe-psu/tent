@@ -1,6 +1,7 @@
 import {
 	createMutation,
 	createQuery,
+	keepPreviousData,
 	useQueryClient,
 	type QueryClient
 } from '@tanstack/svelte-query';
@@ -33,6 +34,7 @@ import type { MergeItemsInput } from '../domain/item-merge';
 import type { DonationBatchLine } from '../domain/donation-batch';
 import type { CycleCountSubmission } from '../domain/cycle-count';
 import { countPendingTransfers } from '../domain/transfer-pending';
+import { ledgerRefLabels } from '../domain/ledger-ref';
 import { retryUnlessForbidden } from './transfer-retry';
 import { distributeAcrossLots, type DistributeAcrossLotsArgs } from './distribute-across-lots';
 
@@ -50,6 +52,8 @@ export const operationsKeys = {
 	donations: () => [...operationsKeys.all, 'donations', getShelterCode()] as const,
 	ledger: () => [...operationsKeys.all, 'ledger'] as const,
 	byItem: (id: string) => [...operationsKeys.ledger(), id] as const,
+	ledgerRefs: (refIds: readonly string[]) =>
+		[...operationsKeys.all, 'ledgerRefs', getShelterCode(), ...refIds] as const,
 	balance: () => [...operationsKeys.all, 'balance', getShelterCode()] as const,
 	donationSlots: () => [...operationsKeys.all, 'donationSlots', getShelterCode()] as const,
 	transfers: () => [...operationsKeys.all, 'transfers'] as const,
@@ -159,6 +163,18 @@ export const useLedgerByItem = (itemId: () => string | undefined) =>
 		queryFn: () => operationsRepository().listLedgerByItem(itemId() ?? ''),
 		enabled: !!itemId()
 	}));
+
+/** Readable labels for ledger `ref_id`s (#811); ids without one fall back to `shortLedgerRef`. */
+export const useLedgerRefLabels = (refIds: () => readonly string[]) =>
+	createQuery(() => {
+		const ids = [...new Set(refIds())].sort();
+		return {
+			queryKey: operationsKeys.ledgerRefs(ids),
+			queryFn: async () => ledgerRefLabels(await operationsRepository().listLedgerRefDocs(ids)),
+			enabled: ids.length > 0,
+			placeholderData: keepPreviousData
+		};
+	});
 
 export const useStockBalance = () =>
 	createQuery(() => ({

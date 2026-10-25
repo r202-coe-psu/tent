@@ -1,4 +1,4 @@
-import { bulkDocs, bulkDocsDetailed, getDoc, putDocStrict } from '$lib/db/couch-db';
+import { allDocsByIds, bulkDocs, bulkDocsDetailed, getDoc, putDocStrict } from '$lib/db/couch-db';
 import { createRemoteRepository, type Repository } from '$lib/db/repository';
 import { getShelterCode, getShelterDb } from '$lib/db/shelter';
 import { now, touch, type AuthorContext } from '$lib/db/model';
@@ -69,6 +69,7 @@ import {
 	type CycleCountSubmission
 } from '../domain/cycle-count';
 import type { OperationsRepository } from './operations.repository';
+import { isLedgerRefDoc, type LedgerRefDoc } from '../domain/ledger-ref';
 import { supplyRepository, type SupplyItem } from '$lib/features/supply';
 import {
 	isItemMaster,
@@ -170,6 +171,10 @@ export class OperationsRemoteRepository implements OperationsRepository {
 	async listLedgerByItem(itemId: string): Promise<StockLedger[]> {
 		const ledger = await this.listLedger();
 		return ledger.filter((entry) => entry.item_id === itemId);
+	}
+
+	async listLedgerRefDocs(refIds: readonly string[]): Promise<LedgerRefDoc[]> {
+		return allDocsByIds(this.dbName, refIds, isLedgerRefDoc);
 	}
 
 	async getBalance(): Promise<Map<string, string>> {

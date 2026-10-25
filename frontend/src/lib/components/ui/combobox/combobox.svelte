@@ -6,6 +6,7 @@
 	import { cn } from '$lib/utils/shadcn.js';
 	import ChevronsUpDownIcon from '@lucide/svelte/icons/chevrons-up-down';
 	import CheckIcon from '@lucide/svelte/icons/check';
+	import PlusIcon from '@lucide/svelte/icons/plus';
 
 	let {
 		items = [],
@@ -19,6 +20,8 @@
 		controlProps = {},
 		children: itemSnippet,
 		onValueChange,
+		createLabel = 'สร้างรายการใหม่',
+		onCreate,
 		...restProps
 	}: {
 		items: T[];
@@ -33,6 +36,9 @@
 		controlProps?: Record<string, unknown>;
 		children?: import('svelte').Snippet<[{ item: T; selected: boolean }]>;
 		onValueChange?: (value: string) => void;
+		createLabel?: string;
+		/** Adds a create row under the list that stays visible whatever the search matches. */
+		onCreate?: () => void;
 	} = $props();
 
 	let open = $state(false);
@@ -45,6 +51,11 @@
 		open = false;
 		onValueChange?.(item.value);
 		tick().then(() => triggerRef.focus());
+	}
+
+	function create() {
+		open = false;
+		onCreate?.();
 	}
 
 	function getItemKeywords(item: T): string[] {
@@ -123,6 +134,18 @@
 						</Command.Item>
 					{/each}
 				</Command.Group>
+				{#if onCreate}
+					<Command.Separator forceMount />
+					<Command.Item
+						forceMount
+						value="__create__"
+						onSelect={create}
+						class="min-h-11 font-semibold text-sky-800"
+					>
+						<PlusIcon />
+						{createLabel}
+					</Command.Item>
+				{/if}
 			</Command.List>
 		</Command.Root>
 	</Popover.Content>
