@@ -7,8 +7,9 @@
 	import { Label } from '$lib/components/ui/label';
 	import { Button } from '$lib/components/ui/button';
 	import { Switch } from '$lib/components/ui/switch';
-	import { validateFooterLogoFile, type FooterLogoRecord } from '../domain/footer-logo';
+	import type { FooterLogoRecord } from '../domain/footer-logo';
 	import { logoActionResult } from './footer-logo-action';
+	import { prepareFooterLogoUpload } from './footer-logo-upload';
 
 	let {
 		open = $bindable(false),
@@ -30,6 +31,8 @@
 	let file = $state<File | null>(null);
 	let fileError = $state<string | null>(null);
 	let submitting = $state(false);
+	let compressing = $state(false);
+	let latestPick: File | null = null;
 
 	const isEdit = $derived(logo !== null);
 	const previewUrl = $derived(file ? URL.createObjectURL(file) : null);
@@ -41,10 +44,19 @@
 		};
 	});
 
-	function onFileChange(event: Event) {
+	async function onFileChange(event: Event) {
 		const picked = (event.currentTarget as HTMLInputElement).files?.[0] ?? null;
-		fileError = picked ? validateFooterLogoFile(picked) : null;
-		file = picked && !fileError ? picked : null;
+		latestPick = picked;
+		file = null;
+		fileError = null;
+		compressing = picked !== null;
+		if (!picked) return;
+
+		const upload = await prepareFooterLogoUpload(picked);
+		if (picked !== latestPick) return;
+		compressing = false;
+		if (upload.ok) file = upload.file;
+		else fileError = upload.error;
 	}
 </script>
 
@@ -55,8 +67,8 @@
 			action={isEdit ? '?/updateLogo' : '?/createLogo'}
 			enctype="multipart/form-data"
 			class="space-y-4"
-			use:enhance={({ cancel }) => {
-				if (fileError) {
+			use:enhance={({ cancel, formData }) => {
+				if (compressing || fileError) {
 					cancel();
 					return;
 				}
@@ -65,6 +77,7 @@
 					cancel();
 					return;
 				}
+				if (file) formData.set('image', file);
 				submitting = true;
 				return async ({ result, update }) => {
 					submitting = false;
@@ -167,8 +180,8 @@
 
 			<Dialog.Footer>
 				<Button type="button" variant="outline" onclick={() => (open = false)}>ยกเลิก</Button>
-				<Button type="submit" disabled={submitting}>
-					{submitting ? 'กำลังบันทึก...' : 'บันทึก'}
+				<Button type="submit" disabled={submitting || compressing}>
+					{compressing ? 'กำลังย่อรูป...' : submitting ? 'กำลังบันทึก...' : 'บันทึก'}
 				</Button>
 			</Dialog.Footer>
 		</form>
