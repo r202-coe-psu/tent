@@ -1641,10 +1641,11 @@ export function createEvacuee(
 export function createKioskEvacueeFromCard(
 	cardSnapshot: CardSnapshot,
 	ctx: AuthorContext,
+	consent: EvacueeConsentWrite,
 	photoId?: string,
 	phone: string | null = null,
 	id?: string
-): Evacuee {
+): Evacuee & { consent: EvacueeConsent } {
 	const firstName = cardSnapshot.first_name_th || 'ไม่ระบุชื่อ';
 	const lastName = cardSnapshot.last_name_th || '';
 	// Card chip carries no gender → ไม่ระบุ (`null`); never fabricate legacy 'other'.
@@ -1661,7 +1662,7 @@ export function createKioskEvacueeFromCard(
 
 	return makeDoc(
 		'evacuee',
-		11,
+		EVACUEE_SCHEMA_V,
 		{
 			first_name: firstName,
 			last_name: lastName,
@@ -1680,7 +1681,8 @@ export function createKioskEvacueeFromCard(
 			card_snapshot: persistedCardSnapshot,
 			photo: photoId ?? null,
 			current_stay: { status: 'arriving', zone: null, since: now() },
-			privacy: { search_excluded: false },
+			privacy: { search_excluded: consent.searchExcluded },
+			consent: consent.consent,
 			registered_via: 'kiosk'
 		},
 		ctx,
