@@ -9,7 +9,6 @@ import {
 import { publicUnassignedRegistrationRequestSchema } from '$lib/features/public-register/server';
 import { ReCaptchaProvider } from '$lib/server/security/captcha';
 import { verifyRecaptchaOrSkip } from '$lib/server/security/recaptcha-gate';
-import { registerIpLimiter, registerPhoneLimiter } from '$lib/server/security/rate-limiter';
 
 export const prerender = false;
 
@@ -45,10 +44,6 @@ export const POST: RequestHandler = async ({ request, getClientAddress, fetch })
 	}
 
 	const ip = getClientAddress();
-	const contactPhone = input.members[0]?.phone ?? '';
-	if (!registerIpLimiter.check(ip) || (contactPhone && !registerPhoneLimiter.check(contactPhone))) {
-		return json({ success: false, error: 'RATE_LIMITED' }, { status: 429, headers: noStore });
-	}
 
 	const captcha = await verifyRecaptchaOrSkip({
 		token: input.captchaToken ?? '',

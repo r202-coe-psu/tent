@@ -27,7 +27,6 @@ from tent_model.volunteer_profile_update_buffer import VolunteerProfileUpdateBuf
 from tent_model.volunteer_schedule_action_buffer import VolunteerScheduleActionBuffer
 
 from apiapp.core.config import Settings
-from apiapp.modules.volunteers import router as volunteer_router
 from apiapp.utils.masking import normalize_phone, sha256_hex
 from apiapp.utils.response_code import normalize_response_code
 
@@ -37,12 +36,6 @@ JOB_ID = "job:01JOBTEST0000000000000001"
 @pytest.fixture
 def auth_headers(settings: Settings) -> dict[str, str]:
     return {"Authorization": f"Bearer {settings.EXTERNAL_API_SECRET}"}
-
-
-@pytest.fixture(autouse=True)
-def reset_rate_limit() -> None:
-    """The router's sliding window is process-global and would leak across tests."""
-    volunteer_router._rate_buckets.clear()
 
 
 @pytest.fixture

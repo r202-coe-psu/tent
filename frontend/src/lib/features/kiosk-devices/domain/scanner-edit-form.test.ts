@@ -16,17 +16,16 @@ const device: ScannerDeviceSummary = {
 	last_seen_at: null,
 	staff_pin_set: true,
 	staff_pin_is_default: false,
-	banner_enabled: true,
+	banner_group_id: null,
 	screen_type: 'compact'
 };
 
 describe('scannerEditFormValues', () => {
 	it('copies the editable fields of a device', () => {
-		expect(scannerEditFormValues(device)).toEqual({
+		expect(scannerEditFormValues(device)).toStrictEqual({
 			name: 'ตู้ประตู 1',
 			station_name: 'จุดคัดกรองหลัก',
 			status: 'active',
-			banner_enabled: true,
 			screen_type: 'compact'
 		});
 	});
@@ -43,10 +42,9 @@ describe('scannerEditPatch', () => {
 		expect(
 			scannerEditPatch(device, {
 				...scannerEditFormValues(device),
-				station_name: ' ประตู 2 ',
-				banner_enabled: false
+				station_name: ' ประตู 2 '
 			})
-		).toEqual({ station_name: 'ประตู 2', banner_enabled: false });
+		).toEqual({ station_name: 'ประตู 2' });
 	});
 
 	it('carries a screen type change and omits it when unchanged', () => {

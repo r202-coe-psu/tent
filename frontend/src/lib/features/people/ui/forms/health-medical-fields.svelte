@@ -99,22 +99,23 @@
 		</RadioGroup.Root>
 	</div>
 
-	<div class="grid grid-cols-1 gap-3 md:grid-cols-3">
-		<div class="space-y-1.5">
-			<Label for="{idPrefix}-conditions" class="text-xs font-medium text-foreground">
-				โรคประจำตัว
-			</Label>
-			<MasterTagInput
-				id="{idPrefix}-conditions"
-				bind:value={getConditionTokens, setConditionTokens}
-				items={chronicDiseaseItems}
-				{disabled}
-				placeholder="เลือกหรือพิมพ์ เช่น เบาหวาน, โรคหัวใจ"
-				searchPlaceholder="ค้นหาโรคประจำตัว..."
-				listLabel="โรคประจำตัวที่เลือก"
-			/>
-		</div>
+	<!-- โรคประจำตัว gets a full-width row so its tags flow on one line (CR-186). -->
+	<div class="space-y-1.5">
+		<Label for="{idPrefix}-conditions" class="text-xs font-medium text-foreground">
+			โรคประจำตัว
+		</Label>
+		<MasterTagInput
+			id="{idPrefix}-conditions"
+			bind:value={getConditionTokens, setConditionTokens}
+			items={chronicDiseaseItems}
+			{disabled}
+			placeholder="เลือกหรือพิมพ์ เช่น เบาหวาน, โรคหัวใจ"
+			searchPlaceholder="ค้นหาโรคประจำตัว..."
+			listLabel="โรคประจำตัวที่เลือก"
+		/>
+	</div>
 
+	<div class="grid grid-cols-1 gap-3 md:grid-cols-2">
 		<div class="space-y-1.5">
 			<Label for="{idPrefix}-medications" class="text-xs font-medium text-foreground">
 				ยาที่ใช้ประจำ

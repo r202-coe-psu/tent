@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { POST } from './+server';
-import { registerIpLimiter, registerPhoneLimiter } from '$lib/server/security/rate-limiter';
 
 type PostEvent = Parameters<typeof POST>[0];
 
@@ -26,11 +25,6 @@ vi.mock('$app/environment', () => ({
 
 vi.mock('$lib/server/couch-admin', () => ({
 	adminRaw
-}));
-
-vi.mock('$lib/server/security/rate-limiter', () => ({
-	registerIpLimiter: { check: vi.fn(() => true) },
-	registerPhoneLimiter: { check: vi.fn(() => true) }
 }));
 
 const verifyToken = vi.fn<(token: string, ip?: string, action?: string) => Promise<boolean>>();
@@ -93,10 +87,6 @@ function event(body: unknown, ip = '203.0.113.5'): PostEvent {
 
 describe('POST /api/public/v1/unassigned-registrations', () => {
 	beforeEach(() => {
-		vi.mocked(registerIpLimiter.check).mockReset();
-		vi.mocked(registerPhoneLimiter.check).mockReset();
-		vi.mocked(registerIpLimiter.check).mockReturnValue(true);
-		vi.mocked(registerPhoneLimiter.check).mockReturnValue(true);
 		verifyToken.mockReset();
 		verifyToken.mockResolvedValue(true);
 		adminRaw.mockReset();

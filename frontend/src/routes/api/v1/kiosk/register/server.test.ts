@@ -14,7 +14,6 @@ import {
 	registerKioskWalkIn
 } from '$lib/features/kiosk/server/kiosk-register.server';
 import { isKioskThaidCheckInAllowed } from '$lib/features/kiosk/server/kiosk-thaid-gate.server';
-import { kioskRegisterDeviceLimiter } from '$lib/server/security/rate-limiter';
 import {
 	_resetSessionsForTest,
 	completeKioskSession,
@@ -76,7 +75,6 @@ describe('POST /api/v1/kiosk/register', () => {
 	beforeEach(() => {
 		vi.restoreAllMocks();
 		vi.clearAllMocks();
-		vi.spyOn(kioskRegisterDeviceLimiter, 'check').mockReturnValue(true);
 		mockAuthenticate.mockImplementation(async (deviceId) => {
 			if (!deviceId) throw new ScannerAuthError();
 			return {
@@ -191,14 +189,6 @@ describe('POST /api/v1/kiosk/register', () => {
 		expect(mockRegister).not.toHaveBeenCalled();
 	});
 
-	it('returns 429 when the authenticated device exceeds its registration limit', async () => {
-		vi.mocked(kioskRegisterDeviceLimiter.check).mockReturnValue(false);
-		const response = await POST(request(validBody));
-		expect(response.status).toBe(429);
-		expect(response.headers.get('retry-after')).toBe('60');
-		expect(mockRegister).not.toHaveBeenCalled();
-	});
-
 	it('returns conflict when the citizen has an existing record', async () => {
 		mockRegister.mockRejectedValue(new KioskRegistrationBlockedError());
 		const response = await POST(request(validBody));
@@ -232,7 +222,6 @@ describe('POST /api/v1/kiosk/register source thaid', () => {
 		vi.restoreAllMocks();
 		vi.clearAllMocks();
 		_resetSessionsForTest();
-		vi.spyOn(kioskRegisterDeviceLimiter, 'check').mockReturnValue(true);
 		mockAuthenticate.mockResolvedValue({
 			shelter_code: 'SH001',
 			device_id: 'KIOSK-01',

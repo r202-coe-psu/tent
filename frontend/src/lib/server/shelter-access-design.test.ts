@@ -2,6 +2,7 @@ import { afterEach, describe, it, expect, vi } from 'vitest';
 import { SOP_RATIO_KEYS, SOP_RATIO_KIND } from '$lib/features/sop-ratios/server';
 import {
 	DAILY_SOP_ROLES,
+	canAssessRole,
 	metricForQuestion,
 	questionText,
 	questionsForRole,
@@ -9,6 +10,7 @@ import {
 	type DailySopRoleCode
 } from '$lib/features/daily-sop/server';
 import { adjustReasonSchema } from '$lib/features/operations';
+import { SHELTER_CAPABILITIES } from '$lib/auth/roles';
 import {
 	buildValidateDocUpdate,
 	DAILY_SOP_ROLE_MANGO_INDEX,
@@ -475,6 +477,28 @@ describe('buildValidateDocUpdate', () => {
 			() => validate({ ...legacy, type: 'daily_sop_unknown' }, null, REGISTRATION),
 			/doc type not allowed yet/
 		);
+	});
+
+	it('keeps Daily SOP owner rights identical between the client and the VDU for every role and capability', () => {
+		vi.useFakeTimers();
+		vi.setSystemTime(new Date('2026-09-25T05:00:00.000Z'));
+		const validate = compile();
+		const capabilities = new Set<string>([
+			...SHELTER_CAPABILITIES,
+			...DAILY_SOP_ROLES.flatMap((role) => role.capabilities)
+		]);
+		for (const role of DAILY_SOP_ROLES) {
+			for (const capability of capabilities) {
+				const roles = [`SH001:${capability}`];
+				const doc = makeRoleAssessment(role.code, '2026-09-25', 'user');
+				const run = () => validate(doc, null, { name: 'user', roles });
+				if (canAssessRole(role.code, roles, 'SH001')) {
+					expect(run, `${capability} should assess ${role.code}`).not.toThrow();
+				} else {
+					expectForbidden(run, /role owner or shelter manager/);
+				}
+			}
+		}
 	});
 
 	it('validates Daily SOP assessments against the complete CR role and snapshot contract', () => {

@@ -10,7 +10,6 @@
 	import StationCompletionSummary from '../shared/station-completion-summary.svelte';
 	import { formatPersonName, type Evacuee, type Household } from '../../domain/people';
 	import EvacueeQrModal from '../evacuee-profile/evacuee-qr-modal.svelte';
-	import EvacueeHandoverSlipModal from '../evacuee-profile/evacuee-handover-slip-modal.svelte';
 	import { useShelter } from '$lib/features/shelters/index.js';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
@@ -44,12 +43,12 @@
 		{ data: undefined } as unknown as ReturnType<typeof useShelter>
 	);
 
-	const showHandover = $derived(
+	const medicalScreeningEnabled = $derived(
 		shelterQuery.data?.feature_flags?.enable_medical_screening ?? false
 	);
 
 	const total = $derived(members.length);
-	const nextStation = $derived<IntakeNextStation>(showHandover ? 'medical' : 'zoning');
+	const nextStation = $derived<IntakeNextStation>(medicalScreeningEnabled ? 'medical' : 'zoning');
 	const nextStationLabel = $derived(
 		nextStation === 'medical' ? 'ไปคัดกรองผู้เข้าพัก (สถานี 2)' : 'ไปจัดโซน (สถานี 3)'
 	);
@@ -91,7 +90,7 @@
 	<StationCompletionSummary
 		title="ลงทะเบียนสำเร็จ"
 		titleId="family-batch-print-heading"
-		subtitle={`พิมพ์บัตรด้านล่างทีละใบ${showHandover ? ' (Person QR และ Handover Slip ของทุกคน)' : ' (Person QR ของทุกคน)'} แล้วส่งต่อไปขั้นถัดไป`}
+		subtitle="พิมพ์บัตรด้านล่างทีละใบ (Person QR ของทุกคน) แล้วส่งต่อไปขั้นถัดไป"
 		{facts}
 		actions={nextActions}
 	>
@@ -116,16 +115,6 @@
 				dismissible={false}
 				onClose={onDone}
 			/>
-			{#if showHandover}
-				<EvacueeHandoverSlipModal
-					show={true}
-					evacuee={member}
-					symptoms={[]}
-					embedded={true}
-					dismissible={false}
-					onClose={onDone}
-				/>
-			{/if}
 		</section>
 	{/each}
 

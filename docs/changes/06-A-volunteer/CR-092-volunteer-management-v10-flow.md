@@ -3,7 +3,7 @@ id: CR-092
 title: ระบบบริหารจัดการจิตอาสาฉบับสมบูรณ์ V10 — Unified Identity, No-SMS OTP, Digital Pass QR, Time-Bound RBAC และ 6 หน้าจอหลัก
 status: superseded
 date: 2026-08-24
-updated: 2026-09-01
+updated: 2026-10-23
 requested_by: ศูนย์ปฏิบัติการฉุกเฉิน (EOC) / field study
 decided_by: เจ้าของโครงการ (superseded โดย CR-104)
 layer: volatile
@@ -552,3 +552,7 @@ sequenceDiagram
 > 1. **Option A (แนะนำ):** ติดตามผ่านไฟล์ CR Markdown ในคลังโค้ด (`docs/changes/06-A-volunteer/CR-092-volunteer-management-v10-flow.md` + อัปเดต `docs/changes/_index.md`)
 > 2. **Option B:** ติดตามผ่าน Notion Projects Tasks (สร้าง Card CR-092 ในตาราง Notion)
 > 3. **Option C:** ติดตามผ่าน Decision Sync Note
+
+## Decision log
+
+- 2026-10-23 — **Superseded (rate limit) by [CR-188](../01-core/CR-188-rate-limit-to-nginx.md):** FR-VOL-02.3 (3 ครั้ง/10 นาที ต่อ IP และต่อเบอร์) ถูกยกเลิก — เหลือ reCAPTCHA + nginx zone `public_write`

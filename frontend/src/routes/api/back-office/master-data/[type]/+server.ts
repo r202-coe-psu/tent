@@ -14,6 +14,7 @@ import {
 	enforceOneDefault,
 	findLabelCollision,
 	isGlobalOnlyMasterType,
+	MASTER_DATA_TYPE_META,
 	masterDocId,
 	masterDataSchema,
 	masterTypeSchema,
@@ -42,7 +43,12 @@ export const GET: RequestHandler = async ({ params, request }) => {
 	await requireShelterScopeOrSA(request.headers.get('cookie'), scope.shelterCode);
 	try {
 		const global = scope.mode === 'shelter' ? null : await readMasterDoc(type);
-		const local = scope.shelterCode ? await readMasterDoc(type, scope.shelterCode) : null;
+		// CR-186: a global-only type has no shelter tier — ignore any leftover
+		// `master_data:{type}:{shelter_code}` doc so it never reaches forms.
+		const local =
+			scope.shelterCode && !isGlobalOnlyMasterType(type)
+				? await readMasterDoc(type, scope.shelterCode)
+				: null;
 		const effective =
 			scope.mode === 'effective' ? mergeMasterDataItems(global, local, scope.shelterCode) : null;
 		const doc = local ?? global;
@@ -103,7 +109,7 @@ export const PUT: RequestHandler = async ({ params, request }) => {
 		if (scope.mode === 'shelter' && isGlobalOnlyMasterType(type)) {
 			throw new ServiceError(
 				'VALIDATION',
-				`${type} is global-only — manage it in System Management`
+				`${MASTER_DATA_TYPE_META[type].title} เป็นข้อมูลส่วนกลาง — เพิ่มหรือแก้ไขได้ที่ System Management เท่านั้น`
 			);
 		}
 		if (!Array.isArray(body.items)) {
@@ -130,7 +136,9 @@ export const PUT: RequestHandler = async ({ params, request }) => {
 		// global items, and a global write against every shelter's items.
 		const otherTier = scope.shelterCode
 			? ((await readMasterDoc(type))?.items ?? [])
-			: (await readShelterMasterDocs(type)).flatMap((d) => d.items);
+			: isGlobalOnlyMasterType(type)
+				? []
+				: (await readShelterMasterDocs(type)).flatMap((d) => d.items);
 		// Labels that already collided before this write are skipped — data that
 		// predates the rule must not brick every later edit of the type (a status
 		// toggle would otherwise be rejected with no way to reach the bad item).

@@ -12,6 +12,7 @@
 	import { KIOSK_SCREENS, type KioskScreenType } from '$lib/features/shared';
 	import {
 		KioskBannerScreenManager,
+		useKioskBannerGroup,
 		useKioskBanners,
 		type KioskBannerSummary
 	} from '$lib/features/kiosk-banners';
@@ -26,9 +27,15 @@
 	// The `[screen=kioskScreen]` matcher guarantees a valid screen type.
 	const screen = $derived(page.params.screen as KioskScreenType);
 	const screenMeta = $derived(KIOSK_SCREENS[screen]);
+	/** SvelteKit already decodes the segment (`kiosk_banner_group%3A01A` → `kiosk_banner_group:01A`). */
+	const groupId = $derived(page.params.group ?? '');
 
-	const listHref = resolve('/back-office/kiosks/banners');
-	const newHref = $derived(resolve(`/back-office/kiosks/banners/new?screen=${screen}`));
+	const groupQuery = useKioskBannerGroup(() => groupId);
+	const groupName = $derived(groupQuery.data?.name ?? 'กลุ่มแบนเนอร์');
+
+	const newHref = $derived(
+		resolve(`/back-office/kiosks/banners/new?group=${encodeURIComponent(groupId)}&screen=${screen}`)
+	);
 
 	const currentQuery = useKioskBanners(
 		() => activeShelter,
@@ -85,21 +92,21 @@
 </script>
 
 <svelte:head>
-	<title>แบนเนอร์{screenMeta.label} {screenMeta.size} — SmartShelter</title>
+	<title>แบนเนอร์{screenMeta.label} {screenMeta.size} · {groupName} — SmartShelter</title>
 </svelte:head>
 
-<StaffPageShell title="แบนเนอร์{screenMeta.label} {screenMeta.size}">
+<StaffPageShell title="แบนเนอร์{screenMeta.label} {screenMeta.size} · {groupName}">
 	{#snippet meta()}
 		<div class="flex flex-wrap items-center gap-x-4 gap-y-1">
 			<p class="text-sm text-slate-600">
 				ศูนย์: <span class="font-semibold text-slate-900">{activeShelter}</span>
 			</p>
 			<a
-				href={listHref}
+				href={resolve(`/back-office/kiosks/banners/groups/${encodeURIComponent(groupId)}`)}
 				class="inline-flex min-h-11 items-center gap-1 text-sm text-primary underline-offset-2 hover:underline"
 			>
 				<ArrowLeft class="h-4 w-4" />
-				กลับไปรายการแบนเนอร์
+				กลับไปกลุ่ม {groupName}
 			</a>
 		</div>
 	{/snippet}
@@ -118,6 +125,7 @@
 	<div class={cn(spatial.container.staffPageCard, 'overflow-visible')}>
 		<KioskBannerScreenManager
 			{screen}
+			{groupId}
 			current={currentQuery.data ?? []}
 			expired={expiredQuery.data ?? []}
 			{now}

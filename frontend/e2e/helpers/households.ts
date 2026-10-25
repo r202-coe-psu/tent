@@ -6,8 +6,9 @@
  * deliberate 409 fault injection in `conflictOnDocWrites`.
  */
 
-import { expect, type Page } from '@playwright/test';
+import type { Page } from '@playwright/test';
 import { COUCH_BASE, couchReq } from './couch';
+import { expectActiveShelter } from './staff-ui';
 
 /** The `pnpm preview` server playwright.config.ts starts (its `baseURL`). */
 export const APP_BASE_URL = 'http://localhost:4173';
@@ -214,7 +215,5 @@ export async function deleteDocsCreatedBy(names: string[], db = SHELTER_DB): Pro
 
 /** The shell re-renders once the session is verified and the shelter doc arrives — type only after. */
 export async function waitForAppSettled(page: Page, shelterCode = SHELTER_CODE): Promise<void> {
-	await expect(page.getByRole('button', { name: 'เลือกศูนย์อพยพ' })).toContainText(shelterCode, {
-		timeout: 20_000
-	});
+	await expectActiveShelter(page, shelterCode, { timeout: 20_000 });
 }

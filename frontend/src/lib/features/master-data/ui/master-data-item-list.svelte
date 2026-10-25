@@ -116,6 +116,8 @@
 	}
 
 	function isOwned(item: MasterDataItem): boolean {
+		// Read-only: even a leftover shelter-local item is not editable here (CR-186).
+		if (isReadOnly) return false;
 		if (!isShelterScope) return true;
 		return itemSources?.[item.code]?.scope === 'shelter';
 	}

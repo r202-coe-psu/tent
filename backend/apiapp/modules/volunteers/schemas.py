@@ -170,7 +170,7 @@ class PortalCredential(BaseModel):
     refusing one of them here would leave the QR on their pass unusable.
 
     Neither is a secret a stranger cannot reach on its own — a phone number is
-    guessable — which is why every route that takes this is rate limited and why
+    guessable — which is why every route that takes this is rate limited at nginx and why
     answering a dispatched shift still needs the separate code a manager reads out.
 
     "Exactly one" is enforced in the use case rather than by a validator here, so the

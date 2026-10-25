@@ -10,6 +10,7 @@ import type { CountedItem, Donation } from './operations';
 
 /** Namespace of the deterministic `_id` of a batch-receipt row (FR-B4a). */
 const DONATION_RECEIPT_NAMESPACE = 'donation_receipt';
+const DONATION_RECEIPT_AUDIT_NAMESPACE = 'donation_receipt_audit';
 
 /**
  * One line of the batch. `line_no` is the line's identity for the lifetime of the
@@ -45,6 +46,11 @@ export interface DonationBatchResult {
 	received: boolean;
 	/** Set when every row landed but the donation could not be moved to `received` (FR-B8). */
 	transitionError?: string;
+	/**
+	 * The booking changed while its rows were keyed, so retrying the transition cannot close
+	 * it — someone has to check the stock against the booking first (S-R4-1).
+	 */
+	transitionBlocked?: boolean;
 }
 
 /**
@@ -63,6 +69,15 @@ export function deriveDonationReceiptLineId(
 		itemId,
 		String(lineNo)
 	);
+}
+
+/**
+ * `_id` of the audit entry for receiving one donation at the scan station: one per
+ * donation, so a retried receive cannot log the same receipt twice (#695).
+ */
+export async function deriveDonationReceiptAuditId(donationId: string): Promise<string> {
+	const ledgerId = await deriveDeterministicLedgerId(DONATION_RECEIPT_AUDIT_NAMESPACE, donationId);
+	return `audit:${ledgerId.slice('stock_ledger:'.length)}`;
 }
 
 export interface DonationShortfall {

@@ -2,9 +2,9 @@
 title: "Task Breakdown — Donation"
 status: active
 created: 2026-06-05
-updated: 2026-08-31
+updated: 2026-10-21
 module: donation
-note: decision-synced 2026-06-15 — task details and DoD maintained directly in Markdown; CR-005 (§F, 2026-06-22) เพิ่ม public `/donate` wizard (T-60); CR-047 (2026-07-24) atomic quota counter; CR-052 (2026-07-27) V8 realignment (UI split, Task #52 pending review, public tracking) — ดู T-15/T-16/T-22/T-60; status sync 2026-08-31 — T-16 🔄 → ✅ (R-16.1–16.7 implement + merge เข้า develop แล้ว: `76067e64`, `ad5e8d59`, `beee62de`) — เป็นการ sync สถานะตามของจริง **ไม่แตะ scope/estimate/deadline/gate** จึงบันทึกเป็น decision sync note ไม่ใช่ CR; ถ้าเจ้าของโครงการต้องการให้เป็น CR แจ้งได้; reference fix 2026-08-31 — เลข CR ในเอกสารนี้เคยเขียน "CR-048" ทั้งที่หมายถึง CR-052 (Design V8) แก้แล้วทั้งฉบับ (CR-048 ตัวจริง = referral draft→cancel)
+note: decision-synced 2026-06-15 — task details and DoD maintained directly in Markdown; CR-005 (§F, 2026-06-22) เพิ่ม public `/donate` wizard (T-60); CR-047 (2026-07-24) atomic quota counter; CR-052 (2026-07-27) V8 realignment (UI split, Task #52 pending review, public tracking) — ดู T-15/T-16/T-22/T-60; status sync 2026-08-31 — T-16 🔄 → ✅ (R-16.1–16.7 implement + merge เข้า develop แล้ว: `76067e64`, `ad5e8d59`, `beee62de`) — เป็นการ sync สถานะตามของจริง **ไม่แตะ scope/estimate/deadline/gate** จึงบันทึกเป็น decision sync note ไม่ใช่ CR; ถ้าเจ้าของโครงการต้องการให้เป็น CR แจ้งได้; reference fix 2026-08-31 — เลข CR ในเอกสารนี้เคยเขียน "CR-048" ทั้งที่หมายถึง CR-052 (Design V8) แก้แล้วทั้งฉบับ (CR-048 ตัวจริง = referral draft→cancel); CR-174 (2026-10-21) — ประเมินใบบริจาคทีละรายการ: แทนข้อ "CR-052 (Task #52)" และตัดข้อ "CR-052 Cold-chain" (FR-14) — สองข้อนี้อยู่ใน DoD ของ T-15 (CR-174 `affects` อ้างเป็น T-16)
 ---
 
 # Donation
@@ -44,8 +44,8 @@ note: decision-synced 2026-06-15 — task details and DoD maintained directly in
 - รายการ pre-declare เป็น pending ไม่เข้า on-hand จนกว่ารับจริง (T-16/FR-28)
 - ผู้บริจาคเปิดสถานะรายการตัวเองด้วย tracking_token ได้ ไม่เห็นข้อมูลคนอื่น; เจ้าหน้าที่แจ้งแทนได้ (walk_in/phone)
 - เจ้าหน้าที่เห็นรายการ pre-declare ค้างรับในระบบ และ demo flow สแกน QR → แจ้ง → เห็นฝั่งเจ้าหน้าที่
-- **CR-052 (Task #52):** ทุกรายการ pre-declaration ต้องถูกปรับสถานะเริ่มต้นเป็น `pending_review` ในขั้นตอน "รอการประเมิน" เสมอ ยกเลิกกลไกการข้ามขั้นตอนไปออก QR Code อัตโนมัติทุกกรณี
-- **CR-052 Cold-chain:** เช็ค flag `is_cold_chain` จาก Item Master หากเป็นสินค้าต้องแช่เย็น บังคับส่งเข้า Pending Review เสมอ
+- ~~**CR-052 (Task #52):** ทุกรายการ pre-declaration ต้องถูกปรับสถานะเริ่มต้นเป็น `pending_review` ในขั้นตอน "รอการประเมิน" เสมอ ยกเลิกกลไกการข้ามขั้นตอนไปออก QR Code อัตโนมัติทุกกรณี~~ → **CR-174:** ประเมินทีละรายการ (`items[].review_status`) — รายการในแคมเปญที่จองโควต้าได้อนุมัติอัตโนมัติ, รายการที่พิมพ์เอง / นอกแคมเปญเป็น `pending`; สถานะเริ่มต้นของใบคำนวณจากรายการ (`verifying` + QR ทันทีเมื่อไม่มีรายการรอประเมิน, ไม่งั้น `pending_review`) + audit อนุมัติอัตโนมัติ `approved_by: system`
+- ~~**CR-052 Cold-chain:** เช็ค flag `is_cold_chain` จาก Item Master หากเป็นสินค้าต้องแช่เย็น บังคับส่งเข้า Pending Review เสมอ~~ — **ตัดออก (CR-174 FR-14):** ไม่มีข้อยกเว้นของสด/แช่เย็น (FR-13 — ปฏิเสธได้ที่หน้าตรวจรับ) และ `is_cold_chain` ไม่เคยมีในโค้ดหรือ schema
 - **CR-052 Pickup Address:** รองรับการกรอก `pickup_address` ใน `logistics` เมื่อเลือกจัดส่งแบบให้รถศูนย์ไปรับ (`shelter_pickup`)
 
 > **CR-005 §F:** public donor wizard `/donate` เต็มรูป (donor PII เพิ่ม line_id/email, items.category/condition/note, logistics, slot, ticket QR+booking_ref, `PATCH` courier tracking) แยกไปทำใน **T-60**; T-15 คงเป็น pre-declaration core. donation doc ที่เขียนจาก `/donate` เป็น **schema_v 2** (ดู T-02 / `schema.md §2.3`).

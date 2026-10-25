@@ -341,7 +341,9 @@ describe('PUT /api/back-office/master-data/[type]', () => {
 		);
 
 		expect(res.status).toBe(422);
-		expect((await res.json()).error.code).toBe('VALIDATION');
+		const body = await res.json();
+		expect(body.error.code).toBe('VALIDATION');
+		expect(body.error.message).toContain('System Management');
 		expect(adminRawMock).not.toHaveBeenCalled();
 	});
 
@@ -360,6 +362,28 @@ describe('PUT /api/back-office/master-data/[type]', () => {
 		expect(res.status).toBe(422);
 		expect((await res.json()).error.code).toBe('VALIDATION');
 		expect(adminRawMock).not.toHaveBeenCalled();
+	});
+
+	it('ignores a leftover shelter-local doc of a global-only type on read (CR-186)', async () => {
+		readMock.mockImplementation(async (_type, shelterCode) =>
+			shelterCode
+				? {
+						...existingDoc([
+							{ code: 'test', label_th: 'ทดสอบ', label_en: 'Test', is_default: false }
+						]),
+						_id: 'master_data:chronic_disease:SH001',
+						shelter_code: 'SH001'
+					}
+				: existingDoc([
+						{ code: 'diabetes', label_th: 'เบาหวาน', label_en: 'Diabetes', is_default: false }
+					])
+		);
+
+		const res = await callGET('chronic_disease', '?scope=effective&shelter_code=SH001');
+		const body = await res.json();
+
+		expect(body.items.map((i: { code: string }) => i.code)).toEqual(['diabetes']);
+		expect(readMock).not.toHaveBeenCalledWith('chronic_disease', 'SH001');
 	});
 
 	it('allows a global write for a global-only type (CR-186)', async () => {

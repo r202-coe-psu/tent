@@ -111,7 +111,7 @@
 	</div>
 
 	{#if registrationsQuery.isPending}
-		<Skeleton class="h-108 w-full" />
+		<Skeleton class="h-72 w-full lg:h-[clamp(14rem,calc(var(--app-shell-height)-32rem),27rem)]" />
 	{:else if registrationsQuery.isError}
 		<Alert variant="destructive">
 			<AlertCircle class="h-4 w-4" />

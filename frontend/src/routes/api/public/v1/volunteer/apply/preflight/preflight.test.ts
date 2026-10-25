@@ -1,10 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { POST } from './+server';
 import {
-	volunteerApplyIpLimiter,
-	volunteerApplyPhoneLimiter
-} from '$lib/server/security/rate-limiter';
-import {
 	preflightPublicVolunteerApplication,
 	PublicApplicationError
 } from '$lib/features/volunteers/server/public-application';
@@ -25,10 +21,6 @@ vi.mock('$app/environment', () => ({
 vi.mock('$env/dynamic/private', () => ({ env: mockEnv }));
 vi.mock('$lib/features/public-register/server', () => ({
 	isCaptchaKeyConfigured: (key: string | undefined) => Boolean(key)
-}));
-vi.mock('$lib/server/security/rate-limiter', () => ({
-	volunteerApplyIpLimiter: { check: vi.fn(() => true) },
-	volunteerApplyPhoneLimiter: { check: vi.fn(() => true) }
 }));
 vi.mock('$lib/features/volunteers/server/public-application', () => ({
 	preflightPublicVolunteerApplication: vi.fn(),
@@ -71,8 +63,6 @@ const input = {
 describe('POST /api/public/v1/volunteer/apply/preflight', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
-		vi.mocked(volunteerApplyIpLimiter.check).mockReturnValue(true);
-		vi.mocked(volunteerApplyPhoneLimiter.check).mockReturnValue(true);
 		mockEnv.SECRET_RECAPTCHA_KEY = '';
 		mockAppEnv.dev = false;
 	});
@@ -114,16 +104,6 @@ describe('POST /api/public/v1/volunteer/apply/preflight', () => {
 		const response = await POST(makeEvent('{not json'));
 
 		expect(response.status).toBe(400);
-		expect(preflightPublicVolunteerApplication).not.toHaveBeenCalled();
-	});
-
-	it('returns 429 once the phone budget is spent', async () => {
-		vi.mocked(volunteerApplyPhoneLimiter.check).mockReturnValue(false);
-
-		const response = await POST(makeEvent(input));
-
-		expect(response.status).toBe(429);
-		expect(await response.json()).toMatchObject({ error: 'RATE_LIMITED' });
 		expect(preflightPublicVolunteerApplication).not.toHaveBeenCalled();
 	});
 

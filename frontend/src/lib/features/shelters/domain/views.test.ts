@@ -109,7 +109,12 @@ describe('SHELTER_DASHBOARD_VIEWS Map Functions', () => {
 			expect(emitted).toHaveLength(0);
 		});
 
-		it('ignores non-movement docs', () => {
+		it('ignores non-movement docs that are not evacuees', () => {
+			mapFn({ type: 'other', occurred_at: '2026-07-01T12:00:00Z', action: 'check_in' }, mockEmit);
+			expect(emitted).toHaveLength(0);
+		});
+
+		it('does not read evacuee occurred_at or action as a movement', () => {
 			mapFn({ type: 'evacuee', occurred_at: '2026-07-01T12:00:00Z', action: 'check_in' }, mockEmit);
 			expect(emitted).toHaveLength(0);
 		});
@@ -129,6 +134,72 @@ describe('SHELTER_DASHBOARD_VIEWS Map Functions', () => {
 				mockEmit
 			);
 			expect(emitted).toEqual([{ key: ['2026-07-01', 'checkout'], value: 1 }]);
+		});
+
+		describe('preregister series', () => {
+			const evacuee = (overrides: Record<string, unknown>) => ({
+				type: 'evacuee',
+				registered_via: 'web',
+				created_at: '2026-07-01T05:00:00Z',
+				current_stay: { status: 'registered' },
+				...overrides
+			});
+
+			it.each(['web', 'kiosk', 'api'])('emits preregister for registered_via %s', (via) => {
+				mapFn(evacuee({ registered_via: via }), mockEmit);
+				expect(emitted).toEqual([{ key: ['2026-07-01', 'preregister'], value: 1 }]);
+			});
+
+			it('emits nothing for staff (onsite) registration', () => {
+				mapFn(evacuee({ registered_via: 'staff' }), mockEmit);
+				expect(emitted).toHaveLength(0);
+			});
+
+			it('emits nothing when registered_via is missing or unknown', () => {
+				mapFn(evacuee({ registered_via: undefined }), mockEmit);
+				mapFn(evacuee({ registered_via: 'import' }), mockEmit);
+				expect(emitted).toHaveLength(0);
+			});
+
+			it('emits nothing for a cancelled stay', () => {
+				mapFn(evacuee({ current_stay: { status: 'cancelled' } }), mockEmit);
+				expect(emitted).toHaveLength(0);
+			});
+
+			it('emits nothing without created_at', () => {
+				mapFn(evacuee({ created_at: undefined }), mockEmit);
+				expect(emitted).toHaveLength(0);
+			});
+
+			it('buckets by the Asia/Bangkok day of created_at', () => {
+				mapFn(evacuee({ created_at: '2026-10-24T20:00:00Z' }), mockEmit);
+				expect(emitted).toEqual([{ key: ['2026-10-25', 'preregister'], value: 1 }]);
+			});
+
+			it('keeps counting after the person has checked in', () => {
+				mapFn(evacuee({ current_stay: { status: 'active' } }), mockEmit);
+				expect(emitted).toEqual([{ key: ['2026-07-01', 'preregister'], value: 1 }]);
+			});
+
+			it('counts an evacuee without current_stay', () => {
+				mapFn(evacuee({ current_stay: undefined }), mockEmit);
+				expect(emitted).toEqual([{ key: ['2026-07-01', 'preregister'], value: 1 }]);
+			});
+
+			it('leaves movements emitting checkin and checkout', () => {
+				mapFn(
+					{ type: 'movement', action: 'check_in', occurred_at: '2026-07-01T12:00:00Z' },
+					mockEmit
+				);
+				mapFn(
+					{ type: 'movement', action: 'check_out', occurred_at: '2026-07-01T12:00:00Z' },
+					mockEmit
+				);
+				expect(emitted).toEqual([
+					{ key: ['2026-07-01', 'checkin'], value: 1 },
+					{ key: ['2026-07-01', 'checkout'], value: 1 }
+				]);
+			});
 		});
 	});
 });
