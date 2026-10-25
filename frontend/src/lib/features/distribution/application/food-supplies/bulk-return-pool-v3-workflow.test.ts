@@ -48,6 +48,7 @@ import {
 	addBulkReturnEntries,
 	cancelBulkReturnPool,
 	getBulkReturnPoolOverview,
+	listBulkReturnPoolAppliedLoanRefs,
 	listBulkReturnPoolClosedLoanRefs,
 	listReturnerOutstandingLoans,
 	moveBulkReturnEntry,
@@ -550,13 +551,26 @@ describe('bulk return pool v3 workflows', () => {
 			);
 			expect(moved.late).toBe(false);
 			expect(moved.move.seq).toBe(1);
+			expect(moved.loansApplied).toEqual([loanId(19)]);
+			expect(moved.loansSkipped).toEqual([]);
 			rows = await getBulkReturnPoolOverview({}, mgr, deps);
 			expect(rows.find((r) => r.pool._id === pool._id)?.late_entries).toEqual([]);
 			expect(rows.find((r) => r.pool._id === target._id)?.items).toEqual([
 				{ item_id: 'item:cot', qty: '2' }
 			]);
-			// Loans are not touched by a move.
-			expect((await logRepo.get(loanId(19)))?.status).toBe('active');
+			// A late entry moved into an OPEN pool applies its loan refs exactly once.
+			let loan = await logRepo.get(loanId(19));
+			expect(loan?.status).toBe('partially_returned');
+			expect(loan?.qty_returned).toBe('2');
+			expect(loan?.applied_bulk_entry_ids).toEqual([entry._id]);
+			// The same unit cannot be returned again afterwards.
+			const again = await add(target._id, { type: 'evacuee', id: EVACUEE }, [
+				{ item_id: 'item:cot', qty: '2' }
+			]);
+			expect(again.results[0].unallocated_qty).toBe('1');
+			loan = await logRepo.get(loanId(19));
+			expect(loan?.status).toBe('returned');
+			expect(loan?.qty_returned).toBe('3');
 		});
 	});
 
@@ -715,8 +729,36 @@ describe('bulk return pool v3 workflows', () => {
 			const voided = await voidBulkReturnEntry({ entry_id: results[0].entry._id }, dist, deps);
 
 			expect(voided.replayed).toBe(false);
+			expect(voided.loansReverted).toEqual([]);
 			expect(await logRepo.get(loanId(44))).toEqual(before);
 			expect((await logRepo.get(loanId(44)))?.status).toBe('lost');
+		});
+
+		it('lists only actually applied refs (not drift-skipped, not voided entries)', async () => {
+			const pool = await openPool('Gate A');
+			// Loan 48 is fully consumed by the first entry, so the second one allocates to loan 49.
+			await seedLoan(48, { qty: '1', at: '2026-01-01T00:00:00.000Z' });
+			await seedLoan(49, { qty: '3', at: '2026-01-02T00:00:00.000Z' });
+			const applied = await add(pool._id, { type: 'evacuee', id: EVACUEE }, [
+				{ item_id: 'item:cot', qty: '1' }
+			]);
+			const appliedEntry = applied.results[0].entry;
+			expect(await listBulkReturnPoolAppliedLoanRefs(pool._id, mgr, deps)).toEqual([
+				{
+					entry_id: appliedEntry._id,
+					distribution_log_id: appliedEntry.loan_refs[0].distribution_log_id,
+					qty: appliedEntry.loan_refs[0].qty
+				}
+			]);
+
+			// A drifted entry (its loan is cleared right after allocation) is not listed as applied.
+			const drifting = { ...deps, logRepo: driftingLogRepo(() => clearAsLost(loanId(49))) };
+			await addBulkReturnEntries(dropOffInput(pool._id, '2', nextOp()), mgr, drifting);
+			const listed = await listBulkReturnPoolAppliedLoanRefs(pool._id, mgr, deps);
+			expect(listed.map((r) => r.entry_id)).toEqual([appliedEntry._id]);
+
+			await voidBulkReturnEntry({ entry_id: appliedEntry._id }, dist, deps);
+			expect(await listBulkReturnPoolAppliedLoanRefs(pool._id, mgr, deps)).toEqual([]);
 		});
 
 		it('void of an entry whose loan doc is gone does not throw', async () => {
@@ -779,6 +821,151 @@ describe('bulk return pool v3 workflows', () => {
 	});
 
 	describe('moveBulkReturnEntry', () => {
+		/** Writes an entry (cot x2 for the loan `n`) into a pool that is SUBMITTED before the fence. */
+		async function addLateEntry(poolId: string) {
+			const racing = {
+				...deps,
+				poolRepo: racingPoolRepo(poolRepo, async (n) => {
+					if (n === 2) {
+						await poolRepo.mutateCAS(poolId, (cur) =>
+							submitBulkReturnPoolV3(
+								cur,
+								{
+									items_summary: [{ item_id: 'item:wheelchair', qty: '1' }],
+									entry_ids: [`bulk_return_entry:${U(999)}`]
+								},
+								mgr
+							)
+						);
+					}
+				})
+			};
+			const res = await add(
+				poolId,
+				{ type: 'evacuee', id: EVACUEE },
+				[{ item_id: 'item:cot', qty: '2' }],
+				mgr,
+				racing
+			);
+			expect(res.results[0].late).toBe(true);
+			return res.results[0].entry;
+		}
+
+		it('does not double-apply when moving an already-applied entry between OPEN pools', async () => {
+			const a = await openPool('Gate A');
+			const b = await openPool('Gate B');
+			await seedLoan(21, { qty: '3' });
+			const { results } = await add(a._id, { type: 'evacuee', id: EVACUEE }, [
+				{ item_id: 'item:cot', qty: '2' }
+			]);
+			const entryId = results[0].entry._id;
+			const moved = await moveBulkReturnEntry({ entry_id: entryId, to_pool_id: b._id }, mgr, deps);
+			expect(moved.loansApplied).toEqual([]);
+			expect(moved.loansSkipped).toEqual([]);
+			const loan = await logRepo.get(loanId(21));
+			expect(loan?.qty_returned).toBe('2');
+			expect(loan?.applied_bulk_entry_ids).toEqual([entryId]);
+		});
+
+		it('does not double-apply a late entry when the same move is replayed', async () => {
+			const a = await openPool('Gate A');
+			const b = await openPool('Gate B');
+			await seedLoan(22, { qty: '3' });
+			const entry = await addLateEntry(a._id);
+			const input = { entry_id: entry._id, to_pool_id: b._id };
+			const first = await moveBulkReturnEntry(input, mgr, deps);
+			expect(first.loansApplied).toEqual([loanId(22)]);
+			const retry = await moveBulkReturnEntry(input, mgr, deps);
+			expect(retry.replayed).toBe(true);
+			expect(retry.loansApplied).toEqual([]);
+			const loan = await logRepo.get(loanId(22));
+			expect(loan?.qty_returned).toBe('2');
+			expect(loan?.applied_bulk_entry_ids).toEqual([entry._id]);
+		});
+
+		it('applies nothing on a replayed move while the target is still not appendable', async () => {
+			const a = await openPool('Gate A');
+			const b = await openPool('Gate B');
+			await seedLoan(23, { qty: '3' });
+			const entry = await addLateEntry(a._id);
+			// First attempt: target locks right after the move doc is written -> nothing applied.
+			const racing = {
+				...deps,
+				poolRepo: racingPoolRepo(poolRepo, async (n) => {
+					if (n === 3) await lockPool(b._id);
+				})
+			};
+			const first = await moveBulkReturnEntry(
+				{ entry_id: entry._id, to_pool_id: b._id },
+				mgr,
+				racing
+			);
+			expect(first.late).toBe(true);
+			expect(first.loansApplied).toEqual([]);
+			expect(first.loansSkipped).toEqual([]);
+			const retry = await moveBulkReturnEntry(
+				{ entry_id: entry._id, to_pool_id: b._id },
+				mgr,
+				deps
+			);
+			expect(retry).toMatchObject({ replayed: true, late: true, loansApplied: [] });
+			const loan = await logRepo.get(loanId(23));
+			expect(loan?.status).toBe('active');
+			expect(loan?.applied_bulk_entry_ids).toBeUndefined();
+		});
+
+		it('moves a late entry whose loan was closed meanwhile without touching the loan', async () => {
+			const a = await openPool('Gate A');
+			const b = await openPool('Gate B');
+			await seedLoan(24, { qty: '3' });
+			const entry = await addLateEntry(a._id);
+			await logRepo.recordClear(
+				loanId(24),
+				{ clear_reason: 'lost', notes: 'lost in the flood' },
+				mgr
+			);
+			const moved = await moveBulkReturnEntry(
+				{ entry_id: entry._id, to_pool_id: b._id },
+				mgr,
+				deps
+			);
+			expect(moved.late).toBe(false);
+			expect(moved.loansApplied).toEqual([]);
+			expect(moved.loansSkipped).toHaveLength(1);
+			expect(moved.loansSkipped[0]).toMatchObject({
+				distribution_log_id: loanId(24),
+				reason: 'closed'
+			});
+			const loan = await logRepo.get(loanId(24));
+			expect(loan?.status).toBe('lost');
+			expect(loan?.applied_bulk_entry_ids).toBeUndefined();
+		});
+
+		it('applies no loans for a late entry when the target turns non-appendable after the move', async () => {
+			const a = await openPool('Gate A');
+			const b = await openPool('Gate B');
+			await seedLoan(25, { qty: '3' });
+			const entry = await addLateEntry(a._id);
+			const racing = {
+				...deps,
+				poolRepo: racingPoolRepo(poolRepo, async (n) => {
+					// 1: target, 2: source, 3: fence
+					if (n === 3) await lockPool(b._id);
+				})
+			};
+			const moved = await moveBulkReturnEntry(
+				{ entry_id: entry._id, to_pool_id: b._id },
+				mgr,
+				racing
+			);
+			expect(moved.late).toBe(true);
+			expect(moved.loansApplied).toEqual([]);
+			expect(moved.loansSkipped).toEqual([]);
+			const loan = await logRepo.get(loanId(25));
+			expect(loan?.status).toBe('active');
+			expect(loan?.applied_bulk_entry_ids).toBeUndefined();
+		});
+
 		it('moves an entry between OPEN pools without touching loans', async () => {
 			const a = await openPool('Gate A');
 			const b = await openPool('Gate B');
@@ -790,6 +977,7 @@ describe('bulk return pool v3 workflows', () => {
 
 			const moved = await moveBulkReturnEntry({ entry_id: entryId, to_pool_id: b._id }, mgr, deps);
 			expect(moved).toMatchObject({ late: false, replayed: false });
+			expect(moved.loansApplied).toEqual([]);
 			expect(moved.move.from_pool_id).toBe(a._id);
 			expect(moved.move.to_pool_id).toBe(b._id);
 
@@ -911,6 +1099,7 @@ describe('bulk return pool v3 workflows', () => {
 			const voided = await voidBulkReturnEntry({ entry_id: entryId, notes: 'oops' }, dist, deps);
 			expect(voided.replayed).toBe(false);
 			expect(voided.loansReverted).toEqual([loanId(30)]);
+			const loanAfterVoid = await logRepo.get(loanId(30));
 			let loan = await logRepo.get(loanId(30));
 			expect(loan?.status).toBe('active');
 			expect(loan?.qty_returned).toBe('0');
@@ -918,6 +1107,8 @@ describe('bulk return pool v3 workflows', () => {
 
 			const again = await voidBulkReturnEntry({ entry_id: entryId }, dist, deps);
 			expect(again.replayed).toBe(true);
+			expect(again.loansReverted).toEqual([]);
+			expect((await logRepo.get(loanId(30)))?._rev).toBe(loanAfterVoid?._rev);
 			expect(again.entryVoid._id).toBe(voided.entryVoid._id);
 			loan = await logRepo.get(loanId(30));
 			expect(loan?.status).toBe('active');

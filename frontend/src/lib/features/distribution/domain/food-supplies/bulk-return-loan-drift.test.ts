@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
 	assessBulkReturnRefOnLoan,
+	findAppliedBulkReturnLoanRefs,
 	findClosedBulkReturnLoanRefs,
 	type BulkReturnRefLoan
 } from './bulk-return-loan-drift';
@@ -144,5 +145,43 @@ describe('findClosedBulkReturnLoanRefs', () => {
 				new Map()
 			)
 		).toEqual([{ entry_id: ENTRY, distribution_log_id: A, qty: '1', reason: 'missing' }]);
+	});
+});
+
+describe('findAppliedBulkReturnLoanRefs', () => {
+	const A = 'distribution_log:01J0000000000000000000000A';
+	const B = 'distribution_log:01J0000000000000000000000B';
+	const C = 'distribution_log:01J0000000000000000000000C';
+
+	it('lists only refs whose entry id is in the loan applied ids, in entry then ref order', () => {
+		const entries = [
+			{
+				_id: ENTRY,
+				loan_refs: [
+					{ distribution_log_id: A, qty: '2' },
+					{ distribution_log_id: B, qty: '1' },
+					{ distribution_log_id: C, qty: '1' }
+				]
+			},
+			{ _id: OTHER_ENTRY, loan_refs: [{ distribution_log_id: A, qty: '1' }] }
+		];
+		const loans = new Map<string, BulkReturnRefLoan | null>([
+			[A, loan({ _id: A, applied_bulk_entry_ids: [ENTRY, OTHER_ENTRY] })],
+			[B, loan({ _id: B })],
+			[C, null]
+		]);
+		expect(findAppliedBulkReturnLoanRefs(entries, loans)).toEqual([
+			{ entry_id: ENTRY, distribution_log_id: A, qty: '2' },
+			{ entry_id: OTHER_ENTRY, distribution_log_id: A, qty: '1' }
+		]);
+	});
+
+	it('returns nothing for an absent loan', () => {
+		expect(
+			findAppliedBulkReturnLoanRefs(
+				[{ _id: ENTRY, loan_refs: [{ distribution_log_id: A, qty: '1' }] }],
+				new Map()
+			)
+		).toEqual([]);
 	});
 });

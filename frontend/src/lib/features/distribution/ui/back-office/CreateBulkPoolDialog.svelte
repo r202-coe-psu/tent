@@ -1,4 +1,8 @@
 <script lang="ts">
+	/**
+	 * @deprecated Legacy bulk return pool UI, no longer rendered. Superseded by the bulk return pool
+	 * v3 components in `ui/bulk-return/`; removal tracked in #661. Do not reuse.
+	 */
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';

@@ -1,4 +1,8 @@
 <script lang="ts">
+	/**
+	 * @deprecated Legacy bulk return pool UI, no longer rendered. Superseded by the bulk return pool
+	 * v3 components in `ui/bulk-return/`; removal tracked in #661. Do not reuse.
+	 */
 	import AlertCircle from '@lucide/svelte/icons/alert-circle';
 	import Archive from '@lucide/svelte/icons/archive';
 	import CheckCheck from '@lucide/svelte/icons/check-check';

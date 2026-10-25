@@ -83,3 +83,36 @@ export function findClosedBulkReturnLoanRefs(
 	}
 	return out;
 }
+
+export interface AppliedBulkReturnLoanRef {
+	entry_id: string;
+	distribution_log_id: string;
+	qty: string;
+}
+
+/**
+ * Refs of the given entries that are actually applied on their loan (the entry id is in the loan's
+ * `applied_bulk_entry_ids`). Entry order, then ref order, is kept. Derived at read time.
+ */
+export function findAppliedBulkReturnLoanRefs(
+	entries: readonly Pick<BulkReturnEntry, '_id' | 'loan_refs'>[],
+	loansById: ReadonlyMap<string, BulkReturnRefLoan | null | undefined>
+): AppliedBulkReturnLoanRef[] {
+	const out: AppliedBulkReturnLoanRef[] = [];
+	for (const entry of entries) {
+		for (const ref of entry.loan_refs) {
+			const assessment = assessBulkReturnRefOnLoan(
+				loansById.get(ref.distribution_log_id),
+				ref,
+				entry._id
+			);
+			if (assessment.status !== 'already_applied') continue;
+			out.push({
+				entry_id: entry._id,
+				distribution_log_id: ref.distribution_log_id,
+				qty: ref.qty
+			});
+		}
+	}
+	return out;
+}

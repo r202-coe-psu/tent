@@ -18,13 +18,15 @@
 		entry: BulkReturnEntry;
 		item: ItemDisplay;
 		fromPoolName: string;
+		/** Late entry: its loans were never applied and are cleared by the move. */
+		late: boolean;
 		/** OPEN, unlocked pools other than the source (see `listMoveTargets`). */
 		targets: readonly BulkReturnPoolV3[];
 		shelterCode: string;
 		onClose: () => void;
 	}
 
-	let { entry, item, fromPoolName, targets, shelterCode, onClose }: Props = $props();
+	let { entry, item, fromPoolName, late, targets, shelterCode, onClose }: Props = $props();
 
 	const moveMutation = useMoveBulkReturnEntry();
 
@@ -60,7 +62,12 @@
 					`ย้ายไปกอง "${selectedTarget.name}" แล้ว แต่กองนั้นเพิ่งปิดรับ รายการนี้จึงค้างอีกครั้ง กรุณาย้ายไปกองอื่นที่ยังเปิดอยู่`
 				);
 			} else {
-				toast.success(`ย้ายรายการไปกอง "${selectedTarget.name}" เรียบร้อยแล้ว`);
+				const appliedCount = result.loansApplied.length;
+				toast.success(
+					`ย้ายรายการไปกอง "${selectedTarget.name}" เรียบร้อยแล้ว${
+						appliedCount > 0 ? ` · ตัดยอดยืม ${appliedCount} รายการ` : ''
+					}`
+				);
 			}
 			open = false;
 			onClose();
@@ -86,7 +93,12 @@
 				</Dialog.Title>
 				<Dialog.Description class="mt-1 text-sm text-slate-600">
 					ย้าย <span class="font-semibold tabular-nums">{item.name} {entry.qty} {item.unit}</span>
-					จากกอง "{fromPoolName}" ไปยังกองที่ยังเปิดรับอยู่ (ยอดยืมของผู้คืนไม่เปลี่ยน)
+					จากกอง "{fromPoolName}" ไปยังกองที่ยังเปิดรับอยู่
+					{#if late}
+						เมื่อย้ายแล้วระบบจะตัดยอดยืมของผู้คืนสำหรับรายการนี้
+					{:else}
+						(ยอดยืมของผู้คืนไม่เปลี่ยน)
+					{/if}
 				</Dialog.Description>
 			</Dialog.Header>
 		</div>
