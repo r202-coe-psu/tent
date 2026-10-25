@@ -1,7 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
 import { mintConsentStamp, type ConsentDecision } from '$lib/features/consent/server';
 import { KioskRequestError } from '../data/kiosk-check-in.api';
-import { abandonWalkIn, registerWalkInCardRead, submitWalkInThaid } from './walk-in-registration';
+import {
+	abandonWalkIn,
+	registerWalkInCardRead,
+	restartThaidWalkIn,
+	submitWalkInThaid,
+	THAID_CONSENT_EXPIRED_MESSAGE
+} from './walk-in-registration';
 import { createWalkInSession } from './walk-in-session.svelte';
 
 const decision: ConsentDecision = {
@@ -73,6 +79,73 @@ describe('registerWalkInCardRead', () => {
 		await expect(registerWalkInCardRead(card, session, register)).resolves.toEqual({
 			kind: 'phone_duplicate',
 			message: 'เบอร์โทรศัพท์นี้ถูกใช้ลงทะเบียนแล้ว'
+		});
+	});
+});
+
+describe('stale consent', () => {
+	const stale = () =>
+		vi
+			.fn()
+			.mockRejectedValue(
+				new KioskRequestError('การยินยอมหมดเวลาแล้ว', 400, 'KIOSK_CONSENT_EXPIRED')
+			);
+
+	it('sends a card walk-in back to consent instead of a retry of the same decision', async () => {
+		await expect(registerWalkInCardRead(card, session, stale())).resolves.toEqual({
+			kind: 'consent_expired',
+			message: 'การยินยอมหมดเวลาแล้ว'
+		});
+	});
+
+	it('sends a ThaiD walk-in back to the scan: its verified session is long gone', async () => {
+		await expect(
+			submitWalkInThaid(
+				{ thaidSessionId: 'a'.repeat(32), consentDecision: decision, phone: null },
+				stale()
+			)
+		).resolves.toEqual({ kind: 'thaid_restart', message: THAID_CONSENT_EXPIRED_MESSAGE });
+	});
+
+	it('resets a ThaiD walk-in to the scan start, burning the dead session and saying why', () => {
+		const walkIn = createWalkInSession();
+		walkIn.beginThaid('b'.repeat(32));
+		walkIn.recordConsent(decision);
+		walkIn.phone = '0812345678';
+		const cancelThaid = vi.fn().mockResolvedValue(undefined);
+
+		restartThaidWalkIn(THAID_CONSENT_EXPIRED_MESSAGE, walkIn, cancelThaid);
+
+		expect(cancelThaid).toHaveBeenCalledWith('b'.repeat(32));
+		expect(walkIn.active).toBe(false);
+		expect(walkIn.source).toBeNull();
+		expect(walkIn.consentDecision).toBeNull();
+		expect(walkIn.phone).toBeNull();
+		expect(walkIn.takeThaidRestartNotice()).toBe(THAID_CONSENT_EXPIRED_MESSAGE);
+		expect(walkIn.takeThaidRestartNotice()).toBeNull();
+	});
+
+	it('leaves a card walk-in on the consent path: card and face stay held', () => {
+		const walkIn = createWalkInSession();
+		walkIn.begin('1234567890123');
+		walkIn.recordConsent(decision);
+
+		walkIn.withdrawConsent('การยินยอมหมดเวลาแล้ว');
+
+		expect(walkIn.active).toBe(true);
+		expect(walkIn.consentNotice).toBe('การยินยอมหมดเวลาแล้ว');
+		expect(walkIn.thaidRestartNotice).toBeNull();
+	});
+
+	it('keeps any other invalid registration a plain error', async () => {
+		const invalid = vi
+			.fn()
+			.mockRejectedValue(
+				new KioskRequestError('ข้อมูลไม่ถูกต้อง', 400, 'INVALID_KIOSK_REGISTRATION')
+			);
+		await expect(registerWalkInCardRead(card, session, invalid)).resolves.toEqual({
+			kind: 'error',
+			message: 'ข้อมูลไม่ถูกต้อง'
 		});
 	});
 });
