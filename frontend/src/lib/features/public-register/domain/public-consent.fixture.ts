@@ -7,7 +7,6 @@ export const WEB_CONSENT_STAMP = {
 	notice_version: '2026-10-25'
 } as const;
 
-/** A confirmed web block for `memberCount` members keyed `m0`, `m1`, …; full mode by default. */
 export function webConsentBody(
 	memberCount: number,
 	decision: Partial<ConsentDecision> = {}

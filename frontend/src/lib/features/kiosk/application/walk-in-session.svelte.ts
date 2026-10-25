@@ -21,7 +21,6 @@ class WalkInSession {
 	citizenId = $state<string | null>(null);
 	/** ThaiD walk-in only: the verified session the server registers from. */
 	thaidSessionId = $state<string | null>(null);
-	/** What the PDPA block decided on the consent page; sent with the registration. */
 	consentDecision = $state.raw<ConsentDecision | null>(null);
 	/** Why the consent page is asking again (the server found the decision too old); else null. */
 	consentNotice = $state<string | null>(null);

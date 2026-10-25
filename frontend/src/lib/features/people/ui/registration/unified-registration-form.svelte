@@ -163,7 +163,6 @@
 			meta?: {
 				reportingInMembers: UnifiedMemberWithMeta[];
 				allMembers: UnifiedMemberWithMeta[];
-				/** Set when the consent block was shown (FR-19); null otherwise. */
 				consent: RegistrationConsent | null;
 			}
 		) => Promise<void> | void;
@@ -293,7 +292,6 @@
 	const consentBlocksSubmit = $derived(
 		consentActive && !consentBlock!.canConfirm(guardianOptions.map((o) => o.key))
 	);
-	/** FR-17: while the basic notice shows, its own buttons replace the submit buttons. */
 	const consentHidesSubmit = $derived(consentActive && consentBlock!.noticeVisible);
 	const effectiveSubmitDisabled = $derived(submitDisabled || readOnly || consentBlocksSubmit);
 	let household = $state<UnifiedRegistrationInput['household']>(

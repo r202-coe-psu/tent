@@ -73,7 +73,6 @@ const VALID_BODY = {
 	disclaimerAcknowledged: true
 };
 
-/** A confirmed web consent block; members are keyed `m0`, `m1`, … */
 function webConsentBody(memberCount: number, decision: Record<string, unknown> = {}) {
 	const shared = {
 		guardian_for: [],
@@ -91,7 +90,6 @@ function webConsentBody(memberCount: number, decision: Record<string, unknown> =
 	};
 }
 
-/** Every public submit carries the PDPA block; a test that sets `consent` itself keeps it. */
 function withConsent(body: unknown): unknown {
 	if (!body || typeof body !== 'object' || 'consent' in body) return body;
 	const members = (body as { members?: unknown }).members;

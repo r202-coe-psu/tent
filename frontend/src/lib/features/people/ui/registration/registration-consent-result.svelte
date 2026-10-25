@@ -8,7 +8,6 @@
 		staff = null
 	}: {
 		members: Evacuee[];
-		/** `decision.ref` of the consent this save recorded. */
 		consentRef: string;
 		staff?: ConsentStaff | null;
 	} = $props();

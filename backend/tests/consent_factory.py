@@ -1,5 +1,3 @@
-"""PDPA consent as the public BFF sends it per member (FR-42)."""
-
 from __future__ import annotations
 
 from typing import Any
@@ -19,5 +17,4 @@ def web_consent(**overrides: Any) -> dict[str, Any]:
 
 
 def consent_fields(*, search_excluded: bool = False, **overrides: Any) -> dict[str, Any]:
-    """`consent` + `search_excluded` keys of a create-request member."""
     return {"consent": web_consent(**overrides), "search_excluded": search_excluded}

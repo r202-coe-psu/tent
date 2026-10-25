@@ -34,7 +34,6 @@ export interface ExecutePublicFamilyRegistrationOptions {
 	shelterCode: string;
 	createdBy?: string;
 	originShelterCode?: string;
-	/** The PDPA block's decision for every member (FR-42). */
 	consent: PublicConsentBody;
 }
 

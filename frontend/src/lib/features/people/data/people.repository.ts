@@ -292,7 +292,6 @@ export interface PeopleRepository {
 		channel?: UnifiedRegistrationChannel,
 		/** Reuse across retries of the same input so a resubmit cannot mint a second family. */
 		ids?: UlidReservation,
-		/** The consent block's decision; null on channels without the block. */
 		consent?: RegistrationConsent | null
 	): Promise<{
 		household: Household;

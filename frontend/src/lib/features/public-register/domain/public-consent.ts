@@ -21,7 +21,6 @@ export interface PublicConsentBody {
 	consent_member_keys: string[];
 }
 
-/** One plan per member, in `members` order; members[0] is the registrant. Throws on a bad body. */
 export function planPublicConsent(body: PublicConsentBody): readonly MemberConsentPlan[] {
 	return planRegistrationConsent(body.consent, {
 		channel: 'web',
@@ -30,7 +29,6 @@ export function planPublicConsent(body: PublicConsentBody): readonly MemberConse
 	});
 }
 
-/** Zod refinement: the keys line up with `members` and the decision plans without error. */
 export function refinePublicConsent(
 	value: PublicConsentBody & { members: readonly unknown[] },
 	ctx: z.RefinementCtx
