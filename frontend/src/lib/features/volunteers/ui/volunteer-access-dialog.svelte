@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { useQueryClient } from '@tanstack/svelte-query';
 	import { toast } from 'svelte-sonner';
+	import Eye from '@lucide/svelte/icons/eye';
+	import EyeOff from '@lucide/svelte/icons/eye-off';
 	import KeyRound from '@lucide/svelte/icons/key-round';
 	import Mail from '@lucide/svelte/icons/mail';
 	import Lock from '@lucide/svelte/icons/lock';
@@ -34,6 +36,7 @@
 	const fullName = $derived(`${volunteer.first_name} ${volunteer.last_name}`.trim());
 
 	let email = $state('');
+	let showPassword = $state(false);
 	let role = $state<StaffCapability>('registration_staff');
 	let password = $state('');
 
@@ -47,6 +50,7 @@
 		email = volunteer.user_name ?? volunteer.email ?? '';
 		role = 'registration_staff';
 		password = loginPhone ?? '';
+		showPassword = false;
 		lastOpenedId = volunteer._id;
 	});
 
@@ -177,15 +181,32 @@
 						<KeyRound class="h-3.5 w-3.5" />
 						รหัสผ่านสำหรับบัญชีใหม่ <span class="text-destructive">*</span>
 					</label>
-					<Input
-						id={`volunteer-access-password-${volunteer._id}`}
-						type="password"
-						bind:value={password}
-						disabled={pending}
-						autocomplete="new-password"
-						class="h-11"
-						placeholder="กำหนดรหัสผ่านสำหรับเข้าสู่ระบบ"
-					/>
+					<div class="relative">
+						<Input
+							id={`volunteer-access-password-${volunteer._id}`}
+							type={showPassword ? 'text' : 'password'}
+							bind:value={password}
+							disabled={pending}
+							autocomplete="new-password"
+							class="h-11 pr-10"
+							placeholder="กำหนดรหัสผ่านสำหรับเข้าสู่ระบบ"
+						/>
+						<Button
+							type="button"
+							variant="ghost"
+							size="icon"
+							class="absolute top-0 right-0 h-full px-3 hover:bg-transparent"
+							aria-label={showPassword ? 'ซ่อนรหัสผ่าน' : 'แสดงรหัสผ่าน'}
+							aria-pressed={showPassword}
+							onclick={() => (showPassword = !showPassword)}
+						>
+							{#if showPassword}
+								<EyeOff class="size-4 text-muted-foreground" />
+							{:else}
+								<Eye class="size-4 text-muted-foreground" />
+							{/if}
+						</Button>
+					</div>
 					{#if loginPhone}
 						<p class="text-[11px] text-muted-foreground">
 							ค่าเริ่มต้นคือเบอร์โทรศัพท์ของอาสาสมัคร
