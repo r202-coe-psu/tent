@@ -3,7 +3,7 @@ id: draft # CR-TBD — เลข CR และวิธี track kong เป็�
 title: CR-TBD — ออกแบบ bulk_return_pool ใหม่เป็น "กองรวมตอนรับของคืน" (pool header + entry/move/void event log)
 status: proposed
 date: 2026-10-22
-updated: 2026-10-22
+updated: 2026-10-25
 requested_by: feedback ระบบคลัง & เบิกของ ข้อ 4–5 (GitHub #657, #658)
 decided_by: project owner (kong, 2026-10-22 — https://github.com/r202-coe-psu/tent/pull/768#issuecomment-6339918664)
 layer: stable
@@ -27,7 +27,7 @@ affects:
 >   เป็น event doc แบบ append-only, สรุปยอดต่อ `item_id` (`items_summary`) และรายการ entry (`entry_ids`) ถูก snapshot ลง pool ตอน submit
 > - **เอกสารใหม่:** `bulk_return_pool` schema_v **3**, `bulk_return_entry` v1, `bulk_return_entry_move` v1, `bulk_return_entry_void` v1;
 >   `distribution_log` schema_v **1 → 2** (`applied_bulk_entry_ids`) — Mango index `(type, pool_id)` + view `bulk_return_pool_item_totals` (`_sum`)
-> - **ตัดสินครบแล้ว** โดย kong เมื่อ 2026-10-22 (ดูหัวข้อ Decisions) — ไม่มี open question เหลือ ยกเว้นหมายเหตุ Flagged เรื่อง `system_admin`
+> - **ตัดสินครบแล้ว** โดย kong เมื่อ 2026-10-22 และตัดสินเพิ่ม 2026-10-25 (ดูหัวข้อ Decisions ข้อ 1, 15–17) — ไม่มี open question เหลือ
 > - **Deploy:** #658 + #659 + #660 merge ใน PR เดียวและ redeploy ครั้งเดียว (ดู Rollout)
 > - **CR-121 ไม่ได้รับผลกระทบ** (ไม่มีตั๋วคืนแยก — ดู Decisions ข้อ 7)
 > - **อ้างอิง:** [#657](https://github.com/r202-coe-psu/tent/issues/657) (epic),
@@ -144,8 +144,8 @@ D1–D5 ข้างบนยังมีผลตามเดิม (ปรั�
 - **forward-only:** `OPEN → SUBMITTED`, `SUBMITTED → RECEIVED`, `OPEN → CANCELLED` เท่านั้น — `SUBMITTED → OPEN` ไม่อนุญาต
 - **pool ว่างเปล่า submit ไม่ได้** — ให้ยกเลิกแทน. encode: VDU ปฏิเสธ `items_summary` หรือ `entry_ids` ว่าง
 - encode: VDU บังคับ role ด้วยตัวช่วยใหม่ (กลุ่ม pool และกลุ่ม entry) และตรวจ `created_by`/`submitted_by`/`received_by`/`cancelled_by`/`lock.locked_by` = ผู้เขียน
-- **Flagged — `system_admin`:** kong ระบุ "ไม่รวม system_admin" แต่ตัวช่วย `isRole()` ใน VDU ให้ `system_admin` ทุกความสามารถอยู่แล้ว
-  การทำงานรอบนี้**ไม่เพิ่ม special case** ให้ `system_admin` — จึงยังเขียนได้ผ่าน `isRole()` จนกว่า kong ตัดสินว่าจะปิดหรือคงไว้
+- **`system_admin` (ตัดสินเพิ่ม 2026-10-25, แทนข้อความ "ไม่รวม system_admin" ในคำตัดสินรอบแรก):** คงพฤติกรรมเดิมของ `isRole()`
+  — `system_admin` ทำได้ทุก transition ข้างบน ไม่มี special case บล็อก SA
 
 ### 2. ลำดับ deploy
 
@@ -225,6 +225,33 @@ D1–D5 ข้างบนยังมีผลตามเดิม (ปรั�
 
 - ไม่เก็บ `condition_on_return` บน entry — ของเสียหายบันทึกเป็นเหตุผลส่วนต่างตอนตรวจรับ (`damaged`) ตามข้อ 7
 
+### 15. loan ถูกปิดก่อนตัดยอดผ่านกอง (ตัดสินเพิ่ม 2026-10-25)
+
+- กรณี loan ที่ entry อ้างใน `loan_refs` ถูกปิดไปก่อน (เช่น ถูกเคลียร์เป็น lost/waived) หรือยอดค้างคืนไม่พอ ในช่วงระหว่างจัดสรรกับตัดยอด
+- **ไม่ fail และไม่ retry ค้าง:** ข้าม ref นั้น — loan ไม่ถูกแก้ ส่วน entry ยังอยู่และยังนับเข้ายอดกองตามจำนวนจริง (เท่ากับส่วนที่ไม่ผูก loan ตามข้อ 12)
+- **ข้ามทั้ง ref ไม่ตัดบางส่วน:** การตัดบางส่วนต้องบันทึกจำนวนที่ตัดจริงต่อ entry เพื่อให้ void ย้อนได้ถูก ซึ่งเป็นฟิลด์ใหม่ — ไม่ทำในรอบนี้
+- **เตือนที่รายการในกอง:** UI แสดงคำเตือน "ยอดยืมใบนี้ถูกปิดไปก่อนที่ของจะเข้ากอง — โปรดตรวจสอบว่าปิดถูกต้องหรือไม่"
+  (คำนวณตอนอ่านจาก `loan_refs` เทียบ `applied_bulk_entry_ids` ของ loan ไม่มีฟิลด์ใหม่)
+- encode: application (`assessBulkReturnRefOnLoan`) — ไม่เปลี่ยน shape หรือ `schema_v`
+
+### 16. move ของ entry มาไม่ตามลำดับ (ตัดสินเพิ่ม 2026-10-25)
+
+- กรณี move ของ entry เดียวกันมีหลาย seq และ seq หลังมาถึงก่อน seq ก่อนหน้า (replication ไม่เรียงลำดับ)
+- **ถือเป็นรอซิงก์:** ระหว่างที่ seq ยังขาดช่วง entry ไม่นับเข้ากองใด (ไม่อยู่ในยอดกอง, snapshot `items_summary`/`entry_ids` ตอน submit และการเช็กกองว่าง)
+  กองที่ move อ้างถึงแสดง "รอซิงก์" — เมื่อ seq ที่ขาดมาถึง entry กลับเข้ากองที่ถูกต้องเอง
+- ย้ายหรือ void entry ที่รอซิงก์ไม่ได้ (ปฏิเสธพร้อมข้อความ) จนกว่าข้อมูลครบ
+- seq ซ้ำ หรือ move ที่ต่อกันไม่ได้ (from/to ไม่ตรง) ยังถือเป็นข้อมูลผิดตามเดิม
+- กรณีเดียวกันกับ move/void ที่มาถึงก่อน entry: ข้ามแล้วแสดงรอซิงก์ ไม่ให้บอร์ดของศูนย์โหลดไม่ขึ้น
+- encode: domain fold (`foldEntryMoves`, `resolveBulkReturnEntries`, `findUnresolvedBulkReturnRefs`)
+
+### 17. ค่าเริ่มต้นที่ยืนยัน (ตัดสินเพิ่ม 2026-10-25)
+
+- ผู้คืนมี loan ของ item เดียวกันหลายใบ → จัดสรรใบที่เก่าที่สุดก่อน
+- ตรวจรับได้ 0 ชิ้น → ไม่เขียน `stock_ledger` ของ item นั้น
+- ศูนย์ที่มีจุดเก็บของ → ตอนตรวจรับต้องเลือกจุดเก็บ (บังคับใน UI เท่านั้น VDU ไม่บังคับ)
+- void entry แล้ว loan กลับเป็น `active` แต่คง `clear_reason: bulk_dropoff` → void log นั้นภายหลังไม่ได้
+- `warehouse_staff` / `supply_coordinator` แก้ loan ผ่าน path ของกองได้ (ตามสิทธิ์เพิ่ม entry ในข้อ 1)
+
 ### สิ่งที่ encode แล้ว
 
 | หัวข้อ | encode แล้ว |
@@ -250,6 +277,8 @@ VDU อ่านเอกสารอื่นไม่ได้ — กติ�
 | ชื่อไม่ซ้ำในกลุ่ม pool `OPEN` | ไม่ได้ | `isPoolNameTakenAmongOpen` (UI) |
 | entry ที่มาช้า | ไม่ได้ | `findLateEntries` / `isLateEntry` |
 | item ต้อง `returnable === true` | ไม่ได้ (catalog อยู่คนละ DB) | `isBulkReturnEligibleItem` ใน workflow เพิ่ม entry ของ #659 |
+| move/void อ้าง entry ที่ยังไม่มี หรือ move seq ขาดช่วง → รอซิงก์ | ไม่ได้ (อ่าน doc อื่นไม่ได้) | fold ข้ามและรายงานใน `findUnresolvedBulkReturnRefs` (ข้อ 16) |
+| loan ถูกปิดก่อนตัดยอด → ข้าม ref และเตือน | ไม่ได้ | `assessBulkReturnRefOnLoan` (ข้อ 15) |
 
 ## Amends — ข้อความเดิมที่ถูกแก้
 
@@ -337,3 +366,5 @@ VDU อ่านเอกสารอื่นไม่ได้ — กติ�
   storage point, ชื่อ ≤ 80 ไม่ซ้ำแบบ advisory, `returner_type`, `applied_bulk_entry_ids` + `distribution_log` v2, `loan_refs ≤ qty`,
   ผู้คืนไม่มี loan บันทึกได้, ไม่เก็บ `condition_on_return`); CR-121 ไม่ได้รับผลกระทบ; **Flagged:** `system_admin` รอ kong ตัดสิน;
   รอ kong กำหนดเลข CR (หลีกเลี่ยง CR-185 ที่ถูกใช้แล้วบน branch อื่น) และวิธี track
+- 2026-10-25 — kong ตัดสินเพิ่ม: `system_admin` คงพฤติกรรม `isRole()` เดิม (แทน "ไม่รวม system_admin"); ข้อ 15 loan ถูกปิดก่อนตัดยอด → ข้าม ref + เตือน;
+  ข้อ 16 move มาไม่ตามลำดับ → รอซิงก์; ข้อ 17 ยืนยันค่าเริ่มต้น 5 ข้อ
