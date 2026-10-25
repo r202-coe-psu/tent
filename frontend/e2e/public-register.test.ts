@@ -383,7 +383,9 @@ test.describe(
 			await page.getByRole('button', { name: 'ยืนยันการลงทะเบียน' }).last().click();
 			await expect(page.getByAltText('QR สำหรับยืนยันตัวตนที่ประตูศูนย์')).toBeVisible();
 
-			const household = submitted?.household as { pets?: Array<Record<string, unknown>> };
+			const household = (submitted as Record<string, unknown> | null)?.household as {
+				pets?: Array<Record<string, unknown>>;
+			};
 			expect(household?.pets?.[0]).toMatchObject({
 				species: 'dog',
 				has_cage: true

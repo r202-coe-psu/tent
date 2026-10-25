@@ -28,7 +28,10 @@
 		"tests/**/*.ts",
 		"tests/**/*.svelte",
 		"scripts/**/*.js",
-		"scripts/**/*.ts"
+		"scripts/**/*.ts",
+		"e2e/**/*.js",
+		"e2e/**/*.ts",
+		"playwright.config.ts"
 	],
 	"exclude": ["node_modules", "dist", "build", "public", "static", "templates", "tests"]
 }

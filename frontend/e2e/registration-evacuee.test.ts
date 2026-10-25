@@ -58,7 +58,7 @@ import {
 } from './helpers/couch';
 import { acceptFullConsent } from './helpers/consent';
 import { injectSession } from './helpers/login';
-import { decodeQrImage } from './helpers/onsite';
+import { decodeQrImage, fillConditionTags } from './helpers/onsite';
 
 // ─── Run identity ──────────────────────────────────────────────────────────────
 
@@ -221,6 +221,29 @@ async function findDocs(selector: Record<string, unknown>): Promise<CouchDoc[]> 
 	const res = await couchReq('POST', `/${SHELTER_DB}/_find`, { selector, limit: 100_000 });
 	if (res.status >= 400) throw new Error(`_find on ${SHELTER_DB} failed (${res.status})`);
 	return (res.data as { docs?: CouchDoc[] }).docs ?? [];
+}
+
+/**
+ * The stored `medical.conditions` of one evacuee (CR-186). Station 2 writes codes for
+ * values matching an active `chronic_disease` label and keeps the rest as text.
+ */
+async function storedConditions(evacueeId: string): Promise<string[] | undefined> {
+	const res = await couchReq('POST', `/${SHELTER_DB}/_find`, {
+		selector: { type: 'medical', evacuee_id: evacueeId },
+		limit: 1
+	});
+	const [doc] = (res.data as { docs?: { conditions?: string[] }[] }).docs ?? [];
+	return doc?.conditions;
+}
+
+/** Whether platform init seeded the global `chronic_disease` master (`pnpm seed:master`). */
+async function chronicDiseaseSeeded(): Promise<boolean> {
+	const res = await couchReq(
+		'GET',
+		`/registry/${encodeURIComponent('master_data:chronic_disease')}`
+	);
+	const items = (res.data as { items?: { code: string; status?: string }[] }).items ?? [];
+	return res.status === 200 && items.some((i) => i.code === 'diabetes' && i.status !== 'inactive');
 }
 
 /**
@@ -440,7 +463,7 @@ interface ScreeningFill {
 async function screenEvacuee(page: Page, evacueeId: string, fill: ScreeningFill): Promise<void> {
 	await page.goto(`/onsite/medical-screening/${evacueeId}`);
 	await expect(page.getByText('Station 2', { exact: true })).toBeVisible({ timeout: 20_000 });
-	await page.locator('#med-conditions').fill(fill.conditions);
+	await fillConditionTags(page, fill.conditions);
 	if (fill.medications) await page.locator('#med-medications').fill(fill.medications);
 	if (fill.allergies) await page.locator('#med-allergies').fill(fill.allergies);
 	if (fill.notes) await page.locator('#med-general-symptoms').fill(fill.notes);
@@ -826,6 +849,11 @@ async function walkInFlow(browser: Browser, run: Run, s: Sessions) {
 				{ id: ids[child.firstName], fill: { conditions: 'ไม่มี' } },
 				{ id: ids[relative.firstName], fill: { conditions: 'ไม่มี' } }
 			]);
+			// CR-186: "เบาหวาน" matches the master → code; "ความดันสูง" is not a master label → text.
+			const expected = (await chronicDiseaseSeeded())
+				? ['diabetes', 'ความดันสูง']
+				: ['เบาหวาน', 'ความดันสูง'];
+			expect(await storedConditions(ids[head.firstName])).toEqual(expected);
 		}
 	);
 

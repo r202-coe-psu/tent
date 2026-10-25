@@ -20,6 +20,7 @@
 		type CareTrack,
 		type Screening
 	} from '$lib/features/people';
+	import { resolveMasterCodes, useMasterData } from '$lib/features/master-data';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { authStore } from '$lib/stores/auth.svelte';
 
@@ -62,6 +63,10 @@
 		isLoading: false,
 		isError: false
 	} as ReturnType<typeof useMedicals>);
+
+	// CR-186 FR-7 — map legacy โรคประจำตัว labels to master codes on save, even
+	// when the field itself was not touched.
+	const chronicDiseaseQuery = useMasterData(() => 'chronic_disease');
 
 	// Section 1: Health History & Care Track (+ general symptoms)
 	let conditions = $state<string>('');
@@ -137,10 +142,10 @@
 				createdBy: authStore.user?.name || 'medical_staff'
 			};
 
-			const conditionsArr = conditions
-				.split(',')
-				.map((s) => s.trim())
-				.filter(Boolean);
+			const conditionsArr = resolveMasterCodes(
+				conditions.split(','),
+				chronicDiseaseQuery.data?.items ?? []
+			);
 			const medicationsArr = medications
 				.split(',')
 				.map((s) => s.trim())
