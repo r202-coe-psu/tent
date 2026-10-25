@@ -249,7 +249,10 @@
 	}
 </script>
 
-<div class="mx-auto w-full max-w-6xl space-y-6 px-4 py-6 sm:px-6 sm:py-8">
+<!-- Phone: tall enough that the scroll anchor can reach the top while a tab is still loading -->
+<div
+	class="mx-auto w-full max-w-6xl space-y-6 px-4 py-6 max-lg:min-h-[calc(100dvh+18rem)] sm:px-6 sm:py-8"
+>
 	<!-- Back Navigation -->
 	<div>
 		<Button
@@ -296,6 +299,9 @@
 		</div>
 	</header>
 
+	<!-- Lands with the tab strip just under the sticky shelter header, detail right below it -->
+	<div bind:this={contentEl} class="-mt-6 h-0 scroll-mt-10" aria-hidden="true"></div>
+
 	<!-- Station Tabs (Operational modes) -->
 	<div
 		class="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:-mx-6 sm:px-6 lg:mx-0 lg:grid lg:grid-cols-5 lg:gap-3 lg:overflow-visible lg:px-0 lg:pb-0"
@@ -318,13 +324,15 @@
 					<Truck class="h-4 w-4" />
 				</div>
 				<div>
-					<p class="text-xs font-bold whitespace-nowrap text-slate-900">1. รับของถึงจุดแจก</p>
+					<p class="text-xs font-bold whitespace-nowrap text-slate-900 lg:whitespace-normal">
+						1. รับของถึงจุดแจก
+					</p>
 					<p class="hidden text-2xs text-slate-500 lg:block">Confirm Cargo Arrival</p>
 				</div>
 			</div>
 			{#if inTransitTickets.length > 0}
 				<span
-					class="animate-pulse rounded-full bg-blue-100 px-2 py-0.5 text-2xs font-bold text-blue-900"
+					class="shrink-0 animate-pulse rounded-full bg-blue-100 px-2 py-0.5 text-2xs font-bold whitespace-nowrap text-blue-900"
 				>
 					รอรับ {inTransitTickets.length}
 				</span>
@@ -349,12 +357,16 @@
 					<UtensilsCrossed class="h-4 w-4" />
 				</div>
 				<div>
-					<p class="text-xs font-bold whitespace-nowrap text-slate-900">2. แจกอาหารปรุงสุก</p>
+					<p class="text-xs font-bold whitespace-nowrap text-slate-900 lg:whitespace-normal">
+						2. แจกอาหารปรุงสุก
+					</p>
 					<p class="hidden text-2xs text-slate-500 lg:block">Ready Meal Handover</p>
 				</div>
 			</div>
 			{#if allDistributingFood.length > 0}
-				<span class="rounded-full bg-amber-100 px-2 py-0.5 text-2xs font-bold text-amber-900">
+				<span
+					class="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-2xs font-bold whitespace-nowrap text-amber-900"
+				>
 					เปิดแจก {allDistributingFood.length}
 				</span>
 			{/if}
@@ -378,12 +390,16 @@
 					<Package class="h-4 w-4" />
 				</div>
 				<div>
-					<p class="text-xs font-bold whitespace-nowrap text-slate-900">3. จ่ายพัสดุ & ยืม-คืน</p>
+					<p class="text-xs font-bold whitespace-nowrap text-slate-900 lg:whitespace-normal">
+						3. จ่ายพัสดุ & ยืม-คืน
+					</p>
 					<p class="hidden text-2xs text-slate-500 lg:block">Supplies & Loans</p>
 				</div>
 			</div>
 			{#if allDistributingSupplies.length > 0}
-				<span class="rounded-full bg-indigo-100 px-2 py-0.5 text-2xs font-bold text-indigo-900">
+				<span
+					class="shrink-0 rounded-full bg-indigo-100 px-2 py-0.5 text-2xs font-bold whitespace-nowrap text-indigo-900"
+				>
 					เปิดแจก {allDistributingSupplies.length}
 				</span>
 			{/if}
@@ -407,7 +423,9 @@
 					<RotateCcw class="h-4 w-4" />
 				</div>
 				<div>
-					<p class="text-xs font-bold whitespace-nowrap text-slate-900">4. รับคืนสิ่งของ</p>
+					<p class="text-xs font-bold whitespace-nowrap text-slate-900 lg:whitespace-normal">
+						4. รับคืนสิ่งของ
+					</p>
 					<p class="hidden text-2xs text-slate-500 lg:block">Loan Return Counter</p>
 				</div>
 			</div>
@@ -431,19 +449,21 @@
 					<Lock class="h-4 w-4" />
 				</div>
 				<div>
-					<p class="text-xs font-bold whitespace-nowrap text-slate-900">5. ปิดรอบ & คืนของ</p>
+					<p class="text-xs font-bold whitespace-nowrap text-slate-900 lg:whitespace-normal">
+						5. ปิดรอบ & คืนของ
+					</p>
 					<p class="hidden text-2xs text-slate-500 lg:block">Shift Close & Returns</p>
 				</div>
 			</div>
 			{#if reconciliationPendingActionCount > 0}
-				<span class="rounded-full bg-amber-100 px-2 py-0.5 text-2xs font-bold text-amber-900">
+				<span
+					class="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-2xs font-bold whitespace-nowrap text-amber-900"
+				>
 					รอดำเนินการ {reconciliationPendingActionCount}
 				</span>
 			{/if}
 		</button>
 	</div>
-
-	<div bind:this={contentEl} class="-mt-6 h-0 scroll-mt-20" aria-hidden="true"></div>
 
 	<!-- Distribution point filter (food / supplies / close-out tabs) -->
 	{#if pointOptions.length > 0 && (activeTab === 'food' || activeTab === 'supplies' || activeTab === 'reconciliation')}
@@ -771,7 +791,7 @@
 				<!-- Reconciliation Ticket Selector Bar -->
 				{#if reconciliationEligibleTickets.length > 1}
 					<div
-						class="flex items-center gap-2 rounded-xl border border-slate-200/80 bg-white p-3 shadow-2xs"
+						class="flex flex-col items-stretch gap-2 rounded-xl border border-slate-200/80 bg-white p-3 shadow-2xs sm:flex-row sm:items-center"
 					>
 						<label
 							for="reconciliation-ticket-select"
