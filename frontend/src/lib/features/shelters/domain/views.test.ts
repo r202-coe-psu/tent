@@ -202,4 +202,46 @@ describe('SHELTER_DASHBOARD_VIEWS Map Functions', () => {
 			});
 		});
 	});
+	describe('station_logs_by_station (CR-192)', () => {
+		const mapFn = createMapFn(SHELTER_DASHBOARD_VIEWS.views.station_logs_by_station.map);
+		const log = (over: Record<string, unknown> = {}) => ({
+			type: 'station_log',
+			evacuee_id: 'evacuee:01J',
+			station: 1,
+			action: 'start',
+			channel: 'kiosk',
+			occurred_at: '2026-10-25T03:00:00.000Z',
+			...over
+		});
+
+		it('ignores other doc types', () => {
+			mapFn({ type: 'movement', occurred_at: '2026-10-25T03:00:00.000Z' }, mockEmit);
+			expect(emitted).toHaveLength(0);
+		});
+
+		it('ignores a log without a valid occurred_at', () => {
+			mapFn(log({ occurred_at: undefined }), mockEmit);
+			mapFn(log({ occurred_at: 'not-a-date' }), mockEmit);
+			expect(emitted).toHaveLength(0);
+		});
+
+		it('emits [date, station, channel, evacuee_id] with action and occurred_at', () => {
+			mapFn(log(), mockEmit);
+			expect(emitted).toEqual([
+				{
+					key: ['2026-10-25', 1, 'kiosk', 'evacuee:01J'],
+					value: { action: 'start', occurred_at: '2026-10-25T03:00:00.000Z' }
+				}
+			]);
+		});
+
+		it('buckets by the Asia/Bangkok day of occurred_at', () => {
+			mapFn(log({ occurred_at: '2026-10-24T20:00:00.000Z' }), mockEmit);
+			expect((emitted[0].key as unknown[])[0]).toBe('2026-10-25');
+		});
+
+		it('has no reduce (pairing happens in the BFF)', () => {
+			expect('reduce' in SHELTER_DASHBOARD_VIEWS.views.station_logs_by_station).toBe(false);
+		});
+	});
 });
