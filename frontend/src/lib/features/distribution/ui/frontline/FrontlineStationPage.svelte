@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tick } from 'svelte';
 	import { toast } from 'svelte-sonner';
 	import Truck from '@lucide/svelte/icons/truck';
 	import UtensilsCrossed from '@lucide/svelte/icons/utensils-crossed';
@@ -77,6 +78,32 @@
 			return initialTab;
 		})()
 	);
+
+	type StationTab = typeof activeTab;
+	let contentEl = $state<HTMLElement | null>(null);
+
+	// Phone only: the tab strip and selectors sit above the detail, so bring it into view after a
+	// user action. Called from handlers (never an effect) so initial load does not scroll.
+	async function scrollToContent() {
+		if (typeof window === 'undefined' || !window.matchMedia('(max-width: 1023.98px)').matches) {
+			return;
+		}
+		await tick();
+		const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+		contentEl?.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth', block: 'start' });
+	}
+
+	function selectTab(tab: StationTab) {
+		activeTab = tab;
+		void scrollToContent();
+	}
+
+	function pickTicket(set: (id: string) => void) {
+		return (id: string) => {
+			set(id);
+			void scrollToContent();
+		};
+	}
 
 	// Fetch tickets for frontline station
 	const ticketsQuery = useRequisitionTickets(undefined, () => currentShelterCode);
@@ -208,9 +235,11 @@
 				activeTab = 'food';
 				pickedFoodDay = ticketServiceDay(ticket);
 				pickedFoodTicketId = ticket._id;
+				void scrollToContent();
 			} else if (ticket.requisition_type === 'supplies') {
 				activeTab = 'supplies';
 				pickedSuppliesTicketId = ticket._id;
+				void scrollToContent();
 			}
 		} catch (err) {
 			toast.error(formatDistributionError(err, 'ไม่สามารถตรวจรับสินค้าได้ กรุณาลองใหม่อีกครั้ง'));
@@ -268,17 +297,19 @@
 	</header>
 
 	<!-- Station Tabs (Operational modes) -->
-	<div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+	<div
+		class="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:-mx-6 sm:px-6 lg:mx-0 lg:grid lg:grid-cols-5 lg:gap-3 lg:overflow-visible lg:px-0 lg:pb-0"
+	>
 		<!-- Tab 1: Receive Cargo -->
 		<button
 			type="button"
-			onclick={() => (activeTab = 'receive')}
-			class="flex items-center justify-between rounded-xl border p-3.5 text-left transition-all {activeTab ===
+			onclick={() => selectTab('receive')}
+			class="flex shrink-0 items-center justify-between gap-2 rounded-xl border p-2.5 text-left transition-all lg:p-3.5 {activeTab ===
 			'receive'
 				? 'border-sky-500 bg-sky-50/50 shadow-xs ring-2 ring-sky-500/20'
 				: 'border-slate-200 bg-white hover:border-slate-300'}"
 		>
-			<div class="flex items-center gap-3">
+			<div class="flex items-center gap-2 lg:gap-3">
 				<div
 					class="flex h-9 w-9 items-center justify-center rounded-lg {activeTab === 'receive'
 						? 'bg-sky-600 text-white'
@@ -287,8 +318,8 @@
 					<Truck class="h-4 w-4" />
 				</div>
 				<div>
-					<p class="text-xs font-bold text-slate-900">1. รับของถึงจุดแจก</p>
-					<p class="text-2xs text-slate-500">Confirm Cargo Arrival</p>
+					<p class="text-xs font-bold whitespace-nowrap text-slate-900">1. รับของถึงจุดแจก</p>
+					<p class="hidden text-2xs text-slate-500 lg:block">Confirm Cargo Arrival</p>
 				</div>
 			</div>
 			{#if inTransitTickets.length > 0}
@@ -303,13 +334,13 @@
 		<!-- Tab 2: Food Handover -->
 		<button
 			type="button"
-			onclick={() => (activeTab = 'food')}
-			class="flex items-center justify-between rounded-xl border p-3.5 text-left transition-all {activeTab ===
+			onclick={() => selectTab('food')}
+			class="flex shrink-0 items-center justify-between gap-2 rounded-xl border p-2.5 text-left transition-all lg:p-3.5 {activeTab ===
 			'food'
 				? 'border-amber-500 bg-amber-50/50 shadow-xs ring-2 ring-amber-500/20'
 				: 'border-slate-200 bg-white hover:border-slate-300'}"
 		>
-			<div class="flex items-center gap-3">
+			<div class="flex items-center gap-2 lg:gap-3">
 				<div
 					class="flex h-9 w-9 items-center justify-center rounded-lg {activeTab === 'food'
 						? 'bg-amber-600 text-white'
@@ -318,8 +349,8 @@
 					<UtensilsCrossed class="h-4 w-4" />
 				</div>
 				<div>
-					<p class="text-xs font-bold text-slate-900">2. แจกอาหารปรุงสุก</p>
-					<p class="text-2xs text-slate-500">Ready Meal Handover</p>
+					<p class="text-xs font-bold whitespace-nowrap text-slate-900">2. แจกอาหารปรุงสุก</p>
+					<p class="hidden text-2xs text-slate-500 lg:block">Ready Meal Handover</p>
 				</div>
 			</div>
 			{#if allDistributingFood.length > 0}
@@ -332,13 +363,13 @@
 		<!-- Tab 3: Supplies & Loans -->
 		<button
 			type="button"
-			onclick={() => (activeTab = 'supplies')}
-			class="flex items-center justify-between rounded-xl border p-3.5 text-left transition-all {activeTab ===
+			onclick={() => selectTab('supplies')}
+			class="flex shrink-0 items-center justify-between gap-2 rounded-xl border p-2.5 text-left transition-all lg:p-3.5 {activeTab ===
 			'supplies'
 				? 'border-indigo-500 bg-indigo-50/50 shadow-xs ring-2 ring-indigo-500/20'
 				: 'border-slate-200 bg-white hover:border-slate-300'}"
 		>
-			<div class="flex items-center gap-3">
+			<div class="flex items-center gap-2 lg:gap-3">
 				<div
 					class="flex h-9 w-9 items-center justify-center rounded-lg {activeTab === 'supplies'
 						? 'bg-indigo-600 text-white'
@@ -347,8 +378,8 @@
 					<Package class="h-4 w-4" />
 				</div>
 				<div>
-					<p class="text-xs font-bold text-slate-900">3. จ่ายพัสดุ & ยืม-คืน</p>
-					<p class="text-2xs text-slate-500">Supplies & Loans</p>
+					<p class="text-xs font-bold whitespace-nowrap text-slate-900">3. จ่ายพัสดุ & ยืม-คืน</p>
+					<p class="hidden text-2xs text-slate-500 lg:block">Supplies & Loans</p>
 				</div>
 			</div>
 			{#if allDistributingSupplies.length > 0}
@@ -361,13 +392,13 @@
 		<!-- Tab 4: Return Loans -->
 		<button
 			type="button"
-			onclick={() => (activeTab = 'returns')}
-			class="flex items-center justify-between rounded-xl border p-3.5 text-left transition-all {activeTab ===
+			onclick={() => selectTab('returns')}
+			class="flex shrink-0 items-center justify-between gap-2 rounded-xl border p-2.5 text-left transition-all lg:p-3.5 {activeTab ===
 			'returns'
 				? 'border-emerald-500 bg-emerald-50/50 shadow-xs ring-2 ring-emerald-500/20'
 				: 'border-slate-200 bg-white hover:border-slate-300'}"
 		>
-			<div class="flex items-center gap-3">
+			<div class="flex items-center gap-2 lg:gap-3">
 				<div
 					class="flex h-9 w-9 items-center justify-center rounded-lg {activeTab === 'returns'
 						? 'bg-emerald-600 text-white'
@@ -376,8 +407,8 @@
 					<RotateCcw class="h-4 w-4" />
 				</div>
 				<div>
-					<p class="text-xs font-bold text-slate-900">4. รับคืนสิ่งของ</p>
-					<p class="text-2xs text-slate-500">Loan Return Counter</p>
+					<p class="text-xs font-bold whitespace-nowrap text-slate-900">4. รับคืนสิ่งของ</p>
+					<p class="hidden text-2xs text-slate-500 lg:block">Loan Return Counter</p>
 				</div>
 			</div>
 		</button>
@@ -385,13 +416,13 @@
 		<!-- Tab 5: Shift Close & Returns -->
 		<button
 			type="button"
-			onclick={() => (activeTab = 'reconciliation')}
-			class="flex items-center justify-between rounded-xl border p-3.5 text-left transition-all {activeTab ===
+			onclick={() => selectTab('reconciliation')}
+			class="flex shrink-0 items-center justify-between gap-2 rounded-xl border p-2.5 text-left transition-all lg:p-3.5 {activeTab ===
 			'reconciliation'
 				? 'border-teal-500 bg-teal-50/50 shadow-xs ring-2 ring-teal-500/20'
 				: 'border-slate-200 bg-white hover:border-slate-300'}"
 		>
-			<div class="flex items-center gap-3">
+			<div class="flex items-center gap-2 lg:gap-3">
 				<div
 					class="flex h-9 w-9 items-center justify-center rounded-lg {activeTab === 'reconciliation'
 						? 'bg-teal-600 text-white'
@@ -400,8 +431,8 @@
 					<Lock class="h-4 w-4" />
 				</div>
 				<div>
-					<p class="text-xs font-bold text-slate-900">5. ปิดรอบ & คืนของ</p>
-					<p class="text-2xs text-slate-500">Shift Close & Returns</p>
+					<p class="text-xs font-bold whitespace-nowrap text-slate-900">5. ปิดรอบ & คืนของ</p>
+					<p class="hidden text-2xs text-slate-500 lg:block">Shift Close & Returns</p>
 				</div>
 			</div>
 			{#if reconciliationPendingActionCount > 0}
@@ -411,6 +442,8 @@
 			{/if}
 		</button>
 	</div>
+
+	<div bind:this={contentEl} class="-mt-6 h-0 scroll-mt-20" aria-hidden="true"></div>
 
 	<!-- Distribution point filter (food / supplies / close-out tabs) -->
 	{#if pointOptions.length > 0 && (activeTab === 'food' || activeTab === 'supplies' || activeTab === 'reconciliation')}
@@ -566,7 +599,7 @@
 						<Button
 							type="button"
 							variant="outline"
-							onclick={() => (activeTab = 'receive')}
+							onclick={() => selectTab('receive')}
 							class="mt-4 h-auto rounded-xl border-sky-300 bg-sky-50 px-4 py-2 text-xs font-semibold text-sky-800 hover:bg-sky-100 hover:text-sky-800"
 						>
 							<Truck class="h-3.5 w-3.5" />
@@ -610,7 +643,9 @@
 							<div class="min-w-0 flex-1">
 								<Select.Root
 									type="single"
-									bind:value={() => selectedFoodTicketId, (v) => (pickedFoodTicketId = v)}
+									bind:value={
+										() => selectedFoodTicketId, pickTicket((v) => (pickedFoodTicketId = v))
+									}
 								>
 									<Select.Trigger
 										id="food-ticket-select"
@@ -658,7 +693,7 @@
 						<Button
 							type="button"
 							variant="outline"
-							onclick={() => (activeTab = 'receive')}
+							onclick={() => selectTab('receive')}
 							class="mt-4 h-auto rounded-xl border-sky-300 bg-sky-50 px-4 py-2 text-xs font-semibold text-sky-800 hover:bg-sky-100 hover:text-sky-800"
 						>
 							<Truck class="h-3.5 w-3.5" />
@@ -678,7 +713,9 @@
 						<div class="min-w-0 flex-1">
 							<Select.Root
 								type="single"
-								bind:value={() => selectedSuppliesTicketId, (v) => (pickedSuppliesTicketId = v)}
+								bind:value={
+									() => selectedSuppliesTicketId, pickTicket((v) => (pickedSuppliesTicketId = v))
+								}
 							>
 								<Select.Trigger
 									id="supplies-ticket-select"
@@ -746,7 +783,8 @@
 							<Select.Root
 								type="single"
 								bind:value={
-									() => selectedReconciliationTicketId, (v) => (pickedReconciliationTicketId = v)
+									() => selectedReconciliationTicketId,
+									pickTicket((v) => (pickedReconciliationTicketId = v))
 								}
 							>
 								<Select.Trigger
