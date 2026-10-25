@@ -403,7 +403,6 @@ export async function bookMixedViaApi(
 		ledger: RunLedger;
 	}
 ): Promise<Booking> {
-	await bookingPacer.acquire();
 	const res = await request.post('/api/public/v1/donations', {
 		data: {
 			shelter_code: opts.shelter.code,
