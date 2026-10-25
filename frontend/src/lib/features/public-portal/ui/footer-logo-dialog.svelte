@@ -7,6 +7,7 @@
 	import { Label } from '$lib/components/ui/label';
 	import { Button } from '$lib/components/ui/button';
 	import { Switch } from '$lib/components/ui/switch';
+	import Upload from '@lucide/svelte/icons/upload';
 	import type { FooterLogoRecord } from '../domain/footer-logo';
 	import { logoActionResult } from './footer-logo-action';
 	import { prepareFooterLogoUpload } from './footer-logo-upload';
@@ -44,8 +45,22 @@
 		};
 	});
 
-	async function onFileChange(event: Event) {
-		const picked = (event.currentTarget as HTMLInputElement).files?.[0] ?? null;
+	let dragOver = $state(false);
+
+	function onDragOver(event: DragEvent) {
+		event.preventDefault();
+		if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy';
+		dragOver = true;
+	}
+
+	function onDrop(event: DragEvent) {
+		event.preventDefault();
+		dragOver = false;
+		const dropped = event.dataTransfer?.files?.[0];
+		if (dropped) void pickFile(dropped);
+	}
+
+	async function pickFile(picked: File | null) {
 		latestPick = picked;
 		file = null;
 		fileError = null;
@@ -61,7 +76,7 @@
 </script>
 
 <Dialog.Root bind:open>
-	<Dialog.Content class="sm:max-w-[520px]">
+	<Dialog.Content class="max-h-[90vh] overflow-y-auto sm:max-w-[520px]">
 		<form
 			method="POST"
 			action={isEdit ? '?/updateLogo' : '?/createLogo'}
@@ -87,8 +102,8 @@
 			}}
 		>
 			<Dialog.Header>
-				<Dialog.Title>{isEdit ? 'แก้ไขโลโก้' : 'เพิ่มโลโก้หน่วยงาน'}</Dialog.Title>
-				<Dialog.Description>โลโก้จะแสดงที่ส่วนท้าย (footer) ของหน้าเว็บสาธารณะ</Dialog.Description>
+				<Dialog.Title>{isEdit ? 'แก้ไขโลโก้' : 'เพิ่มโลโก้หน่วยงานที่สนับสนุน'}</Dialog.Title>
+				<Dialog.Description>โลโก้จะแสดงที่ส่วนท้ายของหน้าเว็บสาธารณะ</Dialog.Description>
 			</Dialog.Header>
 
 			<input type="hidden" name="rev" value={rev} />
@@ -98,22 +113,53 @@
 			<input type="hidden" name="is_published" value={String(isPublished)} />
 
 			<div class="space-y-2">
-				<Label for="footer-logo-image" class="text-sm font-semibold text-slate-700">
+				<span class="block pb-1.5 text-sm font-semibold text-slate-700">
 					รูปโลโก้ {#if !isEdit}<span class="text-red-500">*</span>{/if}
-				</Label>
-				<Input
-					id="footer-logo-image"
-					name="image"
-					type="file"
-					accept="image/png,image/jpeg,image/webp"
-					onchange={onFileChange}
-					aria-invalid={fileError ? true : undefined}
-				/>
-				<p class="text-xs text-slate-500">
-					รองรับ png / jpeg / webp ขนาดไม่เกิน 512 KB{isEdit ? ' · ไม่เลือกรูป = ใช้รูปเดิม' : ''}
-				</p>
+				</span>
+				<label
+					for="footer-logo-image"
+					ondragover={onDragOver}
+					ondragleave={() => (dragOver = false)}
+					ondrop={onDrop}
+					class={[
+						'flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed px-6 py-5 text-center transition-colors focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 hover:bg-slate-50',
+						dragOver
+							? 'border-primary bg-primary/5'
+							: fileError
+								? 'border-red-500'
+								: 'border-slate-300 hover:border-slate-400'
+					]}
+				>
+					<Upload class="size-7 text-slate-500" />
+					<span class="text-sm font-medium text-slate-700">
+						{#if compressing}
+							กำลังย่อรูป...
+						{:else if file}
+							{file.name}
+						{:else}
+							ลากรูปมาวางที่นี่ หรือคลิกเพื่อเลือกไฟล์
+						{/if}
+					</span>
+					<span id="footer-logo-image-help" class="text-xs text-slate-500">
+						png / jpeg / webp · ระบบย่อรูปให้อัตโนมัติ{isEdit ? ' · ไม่เลือกรูป = ใช้รูปเดิม' : ''}
+					</span>
+					<!-- sr-only, not `hidden`: display:none drops the input out of the tab order. -->
+					<input
+						id="footer-logo-image"
+						type="file"
+						accept="image/png,image/jpeg,image/webp"
+						class="sr-only"
+						aria-invalid={fileError ? true : undefined}
+						aria-describedby={fileError
+							? 'footer-logo-image-help footer-logo-image-error'
+							: 'footer-logo-image-help'}
+						onchange={(event) => pickFile(event.currentTarget.files?.[0] ?? null)}
+					/>
+				</label>
 				{#if fileError}
-					<p class="text-xs font-semibold text-red-600">{fileError}</p>
+					<p id="footer-logo-image-error" class="text-xs font-semibold text-red-600">
+						{fileError}
+					</p>
 				{/if}
 				{#if previewUrl || logo?.image_url}
 					<div

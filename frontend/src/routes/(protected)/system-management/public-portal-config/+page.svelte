@@ -53,7 +53,7 @@
 		},
 		{
 			id: 'logos',
-			label: 'โลโก้หน่วยงาน',
+			label: 'โลโก้หน่วยงานที่สนับสนุน',
 			description: 'โลโก้ส่วนท้ายเว็บ',
 			onclick: () => navigateToType('logos')
 		}

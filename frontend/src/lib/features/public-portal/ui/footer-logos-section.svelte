@@ -89,7 +89,7 @@
 				<ImageIcon class="h-5 w-5" />
 			</div>
 			<div>
-				<Card.Title class="text-lg">โลโก้หน่วยงาน (Footer)</Card.Title>
+				<Card.Title class="text-lg">โลโก้หน่วยงานที่สนับสนุน</Card.Title>
 				<Card.Description class="mt-1">
 					แสดงที่ส่วนท้ายของหน้าเว็บสาธารณะตามลำดับ · สูงสุด {FOOTER_LOGO_MAX} รายการ
 				</Card.Description>
