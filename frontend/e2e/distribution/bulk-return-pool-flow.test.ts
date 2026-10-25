@@ -399,6 +399,8 @@ test.describe('Bulk return pool v3 — lifecycle (BRP-F)', { tag: DESK_TAGS }, (
 		await injectSession(page, wh.user, wh.session);
 		await board.gotoBackOffice();
 		await expect(board.card(nameS)).toContainText(POOL_COPY.lateBadge);
+		await expect(board.card(nameS)).toContainText(POOL_COPY.lateCardExcluded);
+		await expect(board.card(nameS)).toContainText(POOL_COPY.lateItemQty);
 		const whDetail = await board.openDetail(nameS);
 		await expect(whDetail).toContainText(POOL_COPY.lateNotice);
 
@@ -406,6 +408,7 @@ test.describe('Bulk return pool v3 — lifecycle (BRP-F)', { tag: DESK_TAGS }, (
 		await injectSession(page, dst.user, dst.session);
 		await board.gotoDesk();
 		await expect(board.card(nameS)).toContainText(POOL_COPY.lateBadge);
+		await expect(board.card(nameS)).toContainText(POOL_COPY.lateCardExcluded);
 		await board.openDetail(nameS);
 		await expect(board.entryRow(nameS, item.name, 0).getByRole('button')).toHaveCount(0);
 		await board.moveEntry(nameS, item.name, nameT, 1);

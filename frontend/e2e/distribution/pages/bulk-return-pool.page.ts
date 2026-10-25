@@ -46,6 +46,8 @@ export const POOL_COPY = {
 	voidConfirm: 'ยืนยันยกเลิกรายการ',
 	lateNotice: 'รายการนี้เข้ามาหลังกองปิดรับแล้ว',
 	lateBadge: 'ค้าง',
+	lateCardExcluded: 'ไม่รวมในยอดที่เก็บเข้าคลัง',
+	lateItemQty: 'รวมของค้าง',
 	voidToastNoRevert: 'ยกเลิกรายการแล้ว (รายการนี้ไม่ได้ตัดยอดยืม จึงไม่มียอดยืมต้องคืนสถานะ)',
 	voidToastReverted: 'คืนสถานะยอดยืม',
 	entryNoLoanApplied: 'ไม่ได้ตัดยอดยืม',
