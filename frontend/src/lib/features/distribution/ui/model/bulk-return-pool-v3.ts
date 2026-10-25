@@ -9,7 +9,7 @@ import {
 	type BulkReturnPoolV3,
 	type BulkReturnPoolV3Status
 } from '../../domain/food-supplies';
-import type { UpdateBulkReturnPoolHeaderPatch } from '../../application/food-supplies/bulk-return-pool-v3-workflow';
+import type { UpdateBulkReturnPoolHeaderPatch } from '../../application/food-supplies/bulk-return-pool-v3-lifecycle';
 
 /**
  * #659 — pure view-model helpers for the bulk return pool v3 board (list / detail / dialogs).

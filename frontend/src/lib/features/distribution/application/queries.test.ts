@@ -162,16 +162,28 @@ vi.mock('./food-supplies/reconciliation-workflow', () => ({
 	completeTicket: (...args: unknown[]) => mockWorkflowCalls.completeTicket(...args)
 }));
 
-vi.mock('./food-supplies/bulk-return-pool-v3-workflow', () => ({
+vi.mock('./food-supplies/bulk-return-pool-v3-lifecycle', () => ({
 	openBulkReturnPool: (...args: unknown[]) => mockWorkflowCalls.openBulkReturnPool(...args),
 	updateBulkReturnPoolHeader: (...args: unknown[]) =>
 		mockWorkflowCalls.updateBulkReturnPoolHeader(...args),
-	addBulkReturnEntries: (...args: unknown[]) => mockWorkflowCalls.addBulkReturnEntries(...args),
-	moveBulkReturnEntry: (...args: unknown[]) => mockWorkflowCalls.moveBulkReturnEntry(...args),
-	voidBulkReturnEntry: (...args: unknown[]) => mockWorkflowCalls.voidBulkReturnEntry(...args),
 	cancelBulkReturnPool: (...args: unknown[]) => mockWorkflowCalls.cancelBulkReturnPool(...args),
 	submitBulkReturnPool: (...args: unknown[]) => mockWorkflowCalls.submitBulkReturnPool(...args),
-	receiveBulkReturnPool: (...args: unknown[]) => mockWorkflowCalls.receiveBulkReturnPool(...args),
+	receiveBulkReturnPool: (...args: unknown[]) => mockWorkflowCalls.receiveBulkReturnPool(...args)
+}));
+
+vi.mock('./food-supplies/bulk-return-pool-v3-add-entry', () => ({
+	addBulkReturnEntries: (...args: unknown[]) => mockWorkflowCalls.addBulkReturnEntries(...args)
+}));
+
+vi.mock('./food-supplies/bulk-return-pool-v3-move', () => ({
+	moveBulkReturnEntry: (...args: unknown[]) => mockWorkflowCalls.moveBulkReturnEntry(...args)
+}));
+
+vi.mock('./food-supplies/bulk-return-pool-v3-void', () => ({
+	voidBulkReturnEntry: (...args: unknown[]) => mockWorkflowCalls.voidBulkReturnEntry(...args)
+}));
+
+vi.mock('./food-supplies/bulk-return-pool-v3-read', () => ({
 	getBulkReturnPoolOverview: (...args: unknown[]) =>
 		mockWorkflowCalls.getBulkReturnPoolOverview(...args),
 	listReturnerOutstandingLoans: (...args: unknown[]) =>

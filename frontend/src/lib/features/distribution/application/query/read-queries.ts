@@ -26,7 +26,7 @@ import {
 	listBulkReturnPoolClosedLoanRefs,
 	listReturnerOutstandingLoans,
 	type BulkReturnPoolOverviewQuery
-} from '../food-supplies/bulk-return-pool-v3-workflow';
+} from '../food-supplies/bulk-return-pool-v3-read';
 import type {
 	RequisitionTicketListFilter,
 	DistributionLogListFilter,

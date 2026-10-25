@@ -4,7 +4,7 @@ import type {
 	BulkReturnPoolItemSummaryRow,
 	BulkReturnPoolV3
 } from '../../domain/food-supplies';
-import type { ReceiveBulkReturnPoolInput } from '../../application/food-supplies/bulk-return-pool-v3-workflow';
+import type { ReceiveBulkReturnPoolInput } from '../../application/food-supplies/bulk-return-pool-v3-lifecycle';
 import {
 	POOL_LOCKED_REASON,
 	isPoolEditable,
