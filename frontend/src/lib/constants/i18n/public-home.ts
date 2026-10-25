@@ -257,12 +257,6 @@ export const PUBLIC_PORTAL_HOME_I18N = {
 		goalReached: 'ได้รับครบตามเป้าหมายแล้ว',
 		itemsDeficitText: (need: string) => `ขาดอีก ${need} ชิ้น`,
 
-		// Feature-under-development dialog
-		devModalTitle: 'ระบบอยู่ระหว่างการพัฒนา',
-		devModalDesc:
-			'ระบบดูงานอาสาสมัครและการประสานงานจิตอาสากำลังอยู่ระหว่างการพัฒนา ขออภัยในความไม่สะดวก และขอขอบคุณที่ให้ความสนใจ',
-		devModalClose: 'รับทราบ',
-
 		// Floating button
 		emergencyAlertsBtn: 'แจ้งเตือนภัย'
 	},
@@ -345,12 +339,6 @@ export const PUBLIC_PORTAL_HOME_I18N = {
 		deficitOnly: (need: string) => `Need ${need} more pcs`,
 		goalReached: 'Goal reached',
 		itemsDeficitText: (need: string) => `${need} pcs lacking`,
-
-		// Feature-under-development dialog
-		devModalTitle: 'Feature Under Development',
-		devModalDesc:
-			'The volunteer missions coordination system is currently under active development. Thank you for your interest and support!',
-		devModalClose: 'Close',
 
 		// Floating button
 		emergencyAlertsBtn: 'Emergency Alerts'
