@@ -25,8 +25,8 @@ export async function withStationLogWarning<T>(
 	return result;
 }
 
-/** Keys of starts already requested from this page session, so an effect re-run cannot double-write. */
-const requestedStarts = new Set<string>();
+/** Starts currently being written, so a re-run of the opening effect cannot double-write. */
+const startsInFlight = new Set<string>();
 
 /**
  * Write the staff `start` of a Station 2/3 visit when the evacuee's page is opened. Idempotent
@@ -38,13 +38,14 @@ export async function startStaffStationVisit(
 	ctx: AuthorContext
 ): Promise<void> {
 	const key = `${evacueeId}:${station}`;
-	if (!evacueeId || requestedStarts.has(key)) return;
-	requestedStarts.add(key);
+	if (!evacueeId || startsInFlight.has(key)) return;
+	startsInFlight.add(key);
 	try {
 		await peopleRepository().recordStationStart(evacueeId, station, ctx);
 	} catch {
-		// Let the next open of the page retry; tell staff the timing record is missing.
-		requestedStarts.delete(key);
+		// Tell staff the timing record is missing; the action itself is unaffected.
 		toast.warning(STATION_LOG_WRITE_WARNING);
+	} finally {
+		startsInFlight.delete(key);
 	}
 }

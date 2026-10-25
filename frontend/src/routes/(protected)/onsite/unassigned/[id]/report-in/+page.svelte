@@ -61,6 +61,8 @@
 
 	const claimMutation = useClaimUnassignedRegistration();
 	const submitReportIn = useSubmitFamilyReportIn();
+	// CR-192: when the report-in form was opened — the Station 1 `start` time (plain const: not reactive).
+	const formOpenedAt = new Date().toISOString();
 
 	let completed = $state<{ household: Household; members: Evacuee[] } | null>(null);
 	let saveError = $state<SaveFailureReport | null>(null);
@@ -119,7 +121,8 @@
 				ctx: {
 					shelterCode: data.shelterCode ?? getShelterCode(),
 					createdBy: authStore.user?.name ?? 'unknown'
-				}
+				},
+				stationStartedAt: formOpenedAt
 			});
 			isDirty = false;
 			isNavigatingAfterSave = true;

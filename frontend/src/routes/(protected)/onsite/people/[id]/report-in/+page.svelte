@@ -65,6 +65,8 @@
 	);
 
 	const submitReportIn = useSubmitFamilyReportIn();
+	// CR-192: when the report-in form was opened — the Station 1 `start` time (plain const: not reactive).
+	const formOpenedAt = new Date().toISOString();
 
 	let completed = $state<{ household: Household; members: Evacuee[] } | null>(null);
 	let saveError = $state<SaveFailureReport | null>(null);
@@ -128,7 +130,8 @@
 				household: input.household,
 				members,
 				ctx,
-				ids: reportInIds
+				ids: reportInIds,
+				stationStartedAt: formOpenedAt
 			});
 			saveError = null;
 			isDirty = false;
