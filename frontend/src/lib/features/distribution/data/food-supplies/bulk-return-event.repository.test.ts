@@ -108,7 +108,23 @@ describe('BulkReturnEventRemoteRepository', () => {
 		});
 
 		it('returns empty lists for an empty database', async () => {
-			expect(await repo.listAll()).toEqual({ entries: [], moves: [], voids: [] });
+			expect(await repo.listAll()).toEqual({ entries: [], moves: [], voids: [], skipped: [] });
+		});
+
+		it('reports invalid docs in skipped instead of throwing', async () => {
+			const e = await repo.createEntry(entry());
+			const badEntry = 'bulk_return_entry:01J00000000000000000000098';
+			const badMove = deriveEntryMoveId(e._id, 1);
+			const badVoid = 'bulk_return_entry_void:01J00000000000000000000097';
+			couch.store.set(badEntry, { _id: badEntry, type: 'bulk_return_entry' });
+			couch.store.set(badMove, { _id: badMove, type: 'bulk_return_entry_move' });
+			couch.store.set(badVoid, { _id: badVoid, type: 'bulk_return_entry_void' });
+
+			const all = await repo.listAll();
+			expect(all.entries.map((x) => x._id)).toEqual([e._id]);
+			expect(all.moves).toEqual([]);
+			expect(all.voids).toEqual([]);
+			expect(all.skipped.map((s) => s._id).sort()).toEqual([badEntry, badMove, badVoid].sort());
 		});
 	});
 

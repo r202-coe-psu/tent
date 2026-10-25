@@ -54,6 +54,12 @@ export const distributionKeys = {
 		[...distributionKeys.bulkPoolsV3All(shelterCode), 'applied_loan_refs'] as const,
 	bulkPoolAppliedLoanRefs: (shelterCode: string, poolId: string) =>
 		[...distributionKeys.bulkPoolAppliedLoanRefsAll(shelterCode), poolId] as const,
+	/**
+	 * Malformed docs the bulk return reads skipped; `returnerId` ('' = none) adds that returner's
+	 * loans. Nested under `bulkPoolsV3All` so overview invalidation refreshes it.
+	 */
+	bulkReturnSkippedDocs: (shelterCode: string, returnerId = '') =>
+		[...distributionKeys.bulkPoolsV3All(shelterCode), 'skipped_docs', returnerId] as const,
 	/** Prefix of every returner outstanding-loans query. */
 	returnerOutstandingLoansAll: (shelterCode: string) =>
 		[...distributionKeys.shelter(shelterCode), 'returner_outstanding_loans'] as const,

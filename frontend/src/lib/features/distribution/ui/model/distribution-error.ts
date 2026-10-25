@@ -20,7 +20,8 @@ import {
 	BulkReturnPoolNameTakenError,
 	BulkReturnPoolStateError,
 	BulkReturnPoolNotEmptyError,
-	BulkReturnPoolEmptyError
+	BulkReturnPoolEmptyError,
+	DistributionDataIntegrityError
 } from '../../application/food-supplies/errors';
 import { ZodError } from 'zod';
 
@@ -96,6 +97,10 @@ export function formatDistributionError(
 	}
 	if (err instanceof BulkReturnPoolEmptyError) {
 		return 'กองนี้ไม่มีรายการ จึงเก็บเข้าคลังไม่ได้ กรุณายกเลิกกองแทน';
+	}
+	if (err instanceof DistributionDataIntegrityError) {
+		const ids = err.docIds.filter(Boolean).join(', ');
+		return `พบเอกสารที่ข้อมูลไม่ถูกต้อง (${ids || `${err.docIds.length} รายการ`}) — ติดต่อผู้ดูแลระบบก่อนทำรายการต่อ`;
 	}
 
 	if (err instanceof WorkflowValidationError || err instanceof ReservationSemanticMismatchError) {

@@ -57,7 +57,8 @@ const {
 		getBulkReturnPoolOverview: vi.fn(),
 		listReturnerOutstandingLoans: vi.fn(),
 		listBulkReturnPoolClosedLoanRefs: vi.fn(),
-		listBulkReturnPoolAppliedLoanRefs: vi.fn()
+		listBulkReturnPoolAppliedLoanRefs: vi.fn(),
+		listBulkReturnSkippedDocs: vi.fn()
 	};
 
 	const mockRepoInstances = {
@@ -191,7 +192,9 @@ vi.mock('./food-supplies/bulk-return-pool-v3-read', () => ({
 	listBulkReturnPoolClosedLoanRefs: (...args: unknown[]) =>
 		mockWorkflowCalls.listBulkReturnPoolClosedLoanRefs(...args),
 	listBulkReturnPoolAppliedLoanRefs: (...args: unknown[]) =>
-		mockWorkflowCalls.listBulkReturnPoolAppliedLoanRefs(...args)
+		mockWorkflowCalls.listBulkReturnPoolAppliedLoanRefs(...args),
+	listBulkReturnSkippedDocs: (...args: unknown[]) =>
+		mockWorkflowCalls.listBulkReturnSkippedDocs(...args)
 }));
 
 // Mock repositories
@@ -248,6 +251,7 @@ import {
 	useBulkReturnPoolClosedLoanRefs,
 	useBulkReturnPoolAppliedLoanRefs,
 	useReturnerOutstandingLoans,
+	useBulkReturnSkippedDocs,
 	useOpenBulkReturnPool,
 	useUpdateBulkReturnPoolHeader,
 	useAddBulkReturnEntries,
@@ -582,6 +586,33 @@ describe('Phase 5 Slice 5.0 — Distribution TanStack Query Layer', () => {
 			expect(mockWorkflowCalls.listReturnerOutstandingLoans).toHaveBeenCalledWith(
 				'evacuee:e1',
 				expect.objectContaining({ createdBy: 'staff_alice', shelterCode: 'SH001' })
+			);
+		});
+
+		it('useBulkReturnSkippedDocs reads skipped docs, optionally for one returner', async () => {
+			expect(distributionKeys.bulkReturnSkippedDocs('SH001')).toEqual([
+				'distribution',
+				'SH001',
+				'bulk_pools_v3',
+				'skipped_docs',
+				''
+			]);
+
+			mockWorkflowCalls.listBulkReturnSkippedDocs.mockResolvedValueOnce([{ _id: 'bad:1' }]);
+			useBulkReturnSkippedDocs();
+			expect(tracker.lastCreatedQuery?.enabled).toBe(true);
+			expect(await tracker.lastCreatedQuery?.queryFn()).toEqual([{ _id: 'bad:1' }]);
+			expect(mockWorkflowCalls.listBulkReturnSkippedDocs).toHaveBeenCalledWith(
+				{ returnerId: undefined },
+				expect.objectContaining({ shelterCode: 'SH001' })
+			);
+
+			useBulkReturnSkippedDocs(() => 'person:p1');
+			expect(tracker.lastCreatedQuery?.enabled).toBe(false);
+			useBulkReturnSkippedDocs(() => 'evacuee:e1');
+			expect(tracker.lastCreatedQuery?.enabled).toBe(true);
+			expect(tracker.lastCreatedQuery?.queryKey).toEqual(
+				distributionKeys.bulkReturnSkippedDocs('SH001', 'evacuee:e1')
 			);
 		});
 

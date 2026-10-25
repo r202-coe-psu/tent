@@ -17,6 +17,7 @@ import {
 import { assertCanWriteBulkReturnEntry } from './auth';
 import { assertCentralWriteAuthority } from './central-write-authority';
 import {
+	assertNoSkippedDocs,
 	BulkReturnPoolStateError,
 	ConcurrencyCollisionError,
 	WorkflowValidationError
@@ -197,9 +198,13 @@ export async function addBulkReturnEntries(
 
 	// --- load the returner's loans once ---
 	const returnerId = returnerIdOf(input.returner);
-	const loans: LoanLike[] = returnerId
-		? await logRepo.list({ recipient_id: returnerId, is_returnable: true })
-		: [];
+	let loans: LoanLike[] = [];
+	if (returnerId) {
+		// Fail closed: a skipped malformed loan of this returner could be one the allocation must claim.
+		const found = await logRepo.listWithSkipped({ recipient_id: returnerId, is_returnable: true });
+		assertNoSkippedDocs(found.skipped, 'loan allocation');
+		loans = found.items;
+	}
 	const returner_had_outstanding_loans =
 		returnerId !== null && outstandingLoansOf(loans, returnerId).length > 0;
 	const no_outstanding_loan =

@@ -100,6 +100,10 @@ class InMemoryLogRepository implements DistributionLogRepository {
 		return Array.from(this.logs.values());
 	}
 
+	async listWithSkipped() {
+		return { items: Array.from(this.logs.values()), skipped: [] };
+	}
+
 	async mutateLogCAS(
 		logId: string,
 		mutator: (current: DistributionLog) => DistributionLog

@@ -26,7 +26,8 @@ import {
 	BulkReturnPoolNameTakenError,
 	BulkReturnPoolStateError,
 	BulkReturnPoolNotEmptyError,
-	BulkReturnPoolEmptyError
+	BulkReturnPoolEmptyError,
+	DistributionDataIntegrityError
 } from '../../application/food-supplies/errors';
 
 describe('formatDistributionError', () => {
@@ -52,6 +53,18 @@ describe('formatDistributionError', () => {
 		expect(formatDistributionError(err)).toBe(
 			'กองนี้ไม่มีรายการ จึงเก็บเข้าคลังไม่ได้ กรุณายกเลิกกองแทน'
 		);
+	});
+
+	it('maps DistributionDataIntegrityError to Thai copy naming the malformed doc ids', () => {
+		const err = new DistributionDataIntegrityError(['distribution_log:A', 'distribution_log:B']);
+		expect(formatDistributionError(err)).toBe(
+			'พบเอกสารที่ข้อมูลไม่ถูกต้อง (distribution_log:A, distribution_log:B) — ติดต่อผู้ดูแลระบบก่อนทำรายการต่อ'
+		);
+	});
+
+	it('falls back to a count when a malformed doc has no readable id', () => {
+		const err = new DistributionDataIntegrityError(['']);
+		expect(formatDistributionError(err)).toContain('(1 รายการ)');
 	});
 
 	it('formats typed WorkflowValidationError preserving clean messages', () => {

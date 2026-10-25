@@ -43,3 +43,5 @@ export {
 } from './return-reservation.repository';
 
 export { resolveShelterDbName, retryCas, isCouchConflictError, MAX_CAS_RETRIES } from './shared';
+
+export { parseDocsOrSkip, type SkippedDoc } from './parse-or-skip';

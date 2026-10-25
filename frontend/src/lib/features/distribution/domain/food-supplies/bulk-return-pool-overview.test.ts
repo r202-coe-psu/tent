@@ -32,7 +32,8 @@ describe('buildBulkReturnPoolOverview', () => {
 		const rows = buildBulkReturnPoolOverview([open1, open2], {
 			entries: [e1, e2, e3],
 			moves: [],
-			voids: []
+			voids: [],
+			skipped: []
 		});
 		expect(rows.map((r) => r.pool._id)).toEqual([P2, P1]);
 		const row1 = rows[1];
@@ -52,7 +53,8 @@ describe('buildBulkReturnPoolOverview', () => {
 			moves: [
 				createBulkReturnEntryMove({ entry: e1, seq: 1, from_pool_id: P1, to_pool_id: P2 }, ctx)
 			],
-			voids: [createBulkReturnEntryVoid({ entry: e2, pool_id: P1 }, ctx)]
+			voids: [createBulkReturnEntryVoid({ entry: e2, pool_id: P1 }, ctx)],
+			skipped: []
 		});
 		const byId = new Map(rows.map((r) => [r.pool._id, r]));
 		expect(byId.get(P1)!.is_empty).toBe(true);
@@ -62,7 +64,7 @@ describe('buildBulkReturnPoolOverview', () => {
 	});
 
 	it('hides CANCELLED pools unless includeCancelled', () => {
-		const events = { entries: [], moves: [], voids: [] };
+		const events = { entries: [], moves: [], voids: [], skipped: [] };
 		expect(buildBulkReturnPoolOverview([open1, cancelled], events).map((r) => r.pool._id)).toEqual([
 			P1
 		]);
@@ -77,7 +79,7 @@ describe('buildBulkReturnPoolOverview', () => {
 		const late = entryOf(4, P3, 'item:cot', '1');
 		const rows = buildBulkReturnPoolOverview(
 			[cancelled],
-			{ entries: [late], moves: [], voids: [] },
+			{ entries: [late], moves: [], voids: [], skipped: [] },
 			{ includeCancelled: true }
 		);
 		expect(rows[0].late_entries.map((r) => r.entry._id)).toEqual([late._id]);
@@ -89,7 +91,8 @@ describe('buildBulkReturnPoolOverview', () => {
 		const rows = buildBulkReturnPoolOverview([open1, open2], {
 			entries: [e1, e2],
 			moves: [],
-			voids: [orphanVoid]
+			voids: [orphanVoid],
+			skipped: []
 		});
 		const byId = new Map(rows.map((r) => [r.pool._id, r]));
 		expect(byId.get(P2)!.unresolved_refs).toEqual([
@@ -110,7 +113,8 @@ describe('buildBulkReturnPoolOverview', () => {
 		const rows = buildBulkReturnPoolOverview(pools, {
 			entries: [e1, e3],
 			moves: [seq2],
-			voids: []
+			voids: [],
+			skipped: []
 		});
 		const byId = new Map(rows.map((r) => [r.pool._id, r]));
 		for (const row of rows) {
@@ -140,7 +144,8 @@ describe('buildBulkReturnPoolOverview', () => {
 			buildBulkReturnPoolOverview(pools, {
 				entries: [e1, e3],
 				moves: [seq2, seq1],
-				voids: []
+				voids: [],
+				skipped: []
 			}).map((r) => [r.pool._id, r])
 		);
 		expect(healed.get(P3)!.entries.map((r) => r.entry._id)).toEqual([e1._id]);
@@ -159,7 +164,8 @@ describe('buildBulkReturnPoolOverview', () => {
 		const rows = buildBulkReturnPoolOverview([open1, other], {
 			entries: [e1],
 			moves: [seq2],
-			voids: []
+			voids: [],
+			skipped: []
 		});
 		const byId = new Map(rows.map((r) => [r.pool._id, r]));
 		expect(byId.get(other._id)!.unresolved_refs).toEqual([]);
@@ -168,7 +174,12 @@ describe('buildBulkReturnPoolOverview', () => {
 
 	it('throws on an inconsistent event log', () => {
 		expect(() =>
-			buildBulkReturnPoolOverview([open1], { entries: [e1, e1], moves: [], voids: [] })
+			buildBulkReturnPoolOverview([open1], {
+				entries: [e1, e1],
+				moves: [],
+				voids: [],
+				skipped: []
+			})
 		).toThrow(/Duplicate/);
 	});
 });

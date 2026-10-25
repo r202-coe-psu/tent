@@ -30,7 +30,7 @@ import {
 	type DistributionLogRepository
 } from '../../data/food-supplies';
 import type { CanonicalUnitCatalogRepository } from './canonical-unit';
-import { BulkReturnPoolStateError, WorkflowValidationError } from './errors';
+import { assertNoSkippedDocs, BulkReturnPoolStateError, WorkflowValidationError } from './errors';
 
 export interface BulkReturnPoolV3WorkflowDependencies {
 	poolRepo?: BulkReturnPoolV3Repository;
@@ -222,6 +222,8 @@ export async function loadLivePoolEntriesWithLoans(
 ): Promise<{ live: BulkReturnEntry[]; loansById: Map<string, DistributionLog | null> }> {
 	const { eventRepo, logRepo } = resolveDependencies(deps, ctx);
 	const events = await eventRepo.listForPool(poolId);
+	// Fail closed: a skipped void/move/entry would make an entry look live, un-voided or gappy.
+	assertNoSkippedDocs(events.skipped, `bulk return pool ${poolId}`);
 	const live = resolveBulkReturnEntries(events.entries, events.moves, events.voids)
 		.filter(({ pool_id, voided }) => !voided && pool_id === poolId)
 		.map(({ entry }) => entry);

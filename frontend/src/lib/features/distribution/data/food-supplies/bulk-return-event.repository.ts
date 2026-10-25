@@ -103,11 +103,7 @@ export class BulkReturnEventRemoteRepository implements BulkReturnEventRepositor
 				isOfType<BulkReturnEntryVoid>('bulk_return_entry_void')
 			)
 		]);
-		return {
-			entries: entries.map((d) => bulkReturnEntryDocSchema.parse(d) as BulkReturnEntry),
-			moves: moves.map((d) => bulkReturnEntryMoveDocSchema.parse(d) as BulkReturnEntryMove),
-			voids: voids.map((d) => bulkReturnEntryVoidDocSchema.parse(d) as BulkReturnEntryVoid)
-		};
+		return parseScopedSet(entries, moves, voids);
 	}
 
 	async listForEntry(entryId: string): Promise<ScopedBulkReturnEventSet> {

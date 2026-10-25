@@ -10,6 +10,7 @@ import {
 	findAppliedBulkReturnLoanRefs,
 	findClosedBulkReturnLoanRefs
 } from '../../domain/food-supplies';
+import type { SkippedDoc } from '../../data/food-supplies';
 import { WorkflowValidationError } from './errors';
 import {
 	loadLivePoolEntriesWithLoans,
@@ -76,4 +77,38 @@ export async function listReturnerOutstandingLoans(
 	const { logRepo } = resolveDependencies(deps, ctx);
 	const loans = await logRepo.list({ recipient_id: returnerId, is_returnable: true });
 	return outstandingLoansOf(loans, returnerId);
+}
+
+export interface BulkReturnSkippedDocsQuery {
+	/** Also report malformed loans of this returner (the returner outstanding-loans read). */
+	returnerId?: string;
+}
+
+/**
+ * Malformed docs the bulk return reads leave out instead of failing: pool headers, the entry /
+ * move / void events (the pool overview) and, with `returnerId`, that returner's loans. Read-only
+ * companion to the overview and outstanding-loans reads so the UI can warn about what is missing.
+ */
+export async function listBulkReturnSkippedDocs(
+	query: BulkReturnSkippedDocsQuery,
+	ctx: AuthorContext,
+	deps?: BulkReturnPoolV3WorkflowDependencies
+): Promise<SkippedDoc[]> {
+	const { returnerId } = query;
+	if (
+		returnerId !== undefined &&
+		!returnerId.startsWith('evacuee:') &&
+		!returnerId.startsWith('volunteer:')
+	) {
+		throw new WorkflowValidationError('returnerId must start with evacuee: or volunteer:');
+	}
+	const { poolRepo, eventRepo, logRepo } = resolveDependencies(deps, ctx);
+	const [pools, events, loans] = await Promise.all([
+		poolRepo.listWithSkipped(),
+		eventRepo.listAll(),
+		returnerId
+			? logRepo.listWithSkipped({ recipient_id: returnerId, is_returnable: true })
+			: Promise.resolve({ skipped: [] as SkippedDoc[] })
+	]);
+	return [...pools.skipped, ...events.skipped, ...loans.skipped];
 }

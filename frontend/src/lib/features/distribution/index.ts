@@ -251,6 +251,7 @@ export {
 	useBulkReturnPoolClosedLoanRefs,
 	useBulkReturnPoolAppliedLoanRefs,
 	useReturnerOutstandingLoans,
+	useBulkReturnSkippedDocs,
 	useOpenBulkReturnPool,
 	useUpdateBulkReturnPoolHeader,
 	useAddBulkReturnEntries,

@@ -51,6 +51,7 @@ export {
 	useBulkReturnPoolClosedLoanRefs,
 	useBulkReturnPoolAppliedLoanRefs,
 	useReturnerOutstandingLoans,
+	useBulkReturnSkippedDocs,
 	useShiftReconciliation,
 	useReturnOperationState
 } from './query/read-queries';

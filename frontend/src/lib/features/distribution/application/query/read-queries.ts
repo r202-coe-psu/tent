@@ -25,6 +25,7 @@ import {
 	listBulkReturnPoolAppliedLoanRefs,
 	listBulkReturnPoolClosedLoanRefs,
 	listReturnerOutstandingLoans,
+	listBulkReturnSkippedDocs,
 	type BulkReturnPoolOverviewQuery
 } from '../food-supplies/bulk-return-pool-v3-read';
 import type {
@@ -243,6 +244,30 @@ export const useReturnerOutstandingLoans = (
 			queryFn: () => {
 				const ctx = resolveAuthenticatedAuthorContext(shelterCode);
 				return listReturnerOutstandingLoans(id!, ctx);
+			},
+			enabled: isEnabled
+		};
+	});
+
+/**
+ * Reads the malformed docs the bulk return reads (pool overview, and with `returnerId` that
+ * returner's loans) left out, so the UI can warn that the list is incomplete.
+ */
+export const useBulkReturnSkippedDocs = (
+	returnerId?: MaybeGetter<string | null | undefined>,
+	shelterCodeGetter?: MaybeGetter<string | undefined>,
+	enabled: MaybeGetter<boolean> = true
+) =>
+	createQuery(() => {
+		const id = toValue(returnerId) || undefined;
+		const shelterCode = resolveShelterCode(toValue(shelterCodeGetter));
+		const validReturner = !id || id.startsWith('evacuee:') || id.startsWith('volunteer:');
+		const isEnabled = Boolean(toValue(enabled) && shelterCode && validReturner);
+		return {
+			queryKey: distributionKeys.bulkReturnSkippedDocs(shelterCode, id),
+			queryFn: () => {
+				const ctx = resolveAuthenticatedAuthorContext(shelterCode);
+				return listBulkReturnSkippedDocs({ returnerId: id }, ctx);
 			},
 			enabled: isEnabled
 		};

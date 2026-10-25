@@ -16,6 +16,7 @@ import type {
 import { assertCanWriteBulkReturnEntry } from './auth';
 import { assertCentralWriteAuthority } from './central-write-authority';
 import {
+	assertNoSkippedDocs,
 	BulkReturnPoolStateError,
 	ConcurrencyCollisionError,
 	WorkflowValidationError
@@ -90,6 +91,8 @@ export async function moveBulkReturnEntry(
 
 	// Only this entry's own chain matters: read it alone so another pool's bad doc cannot block it.
 	const events = await eventRepo.listForEntry(input.entry_id);
+	// Fail closed: a skipped doc of this entry's chain would look like a gap or a missing void.
+	assertNoSkippedDocs(events.skipped, `bulk return entry ${input.entry_id}`);
 	const entry = events.entries.find((e) => e._id === input.entry_id);
 	if (!entry) throw new WorkflowValidationError(`bulk_return_entry ${input.entry_id} not found`);
 	try {

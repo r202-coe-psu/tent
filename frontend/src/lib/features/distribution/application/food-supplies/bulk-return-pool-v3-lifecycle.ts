@@ -33,6 +33,7 @@ import { assertCanManageBulkReturnPool } from './auth';
 import { assertCentralWriteAuthority } from './central-write-authority';
 import { resolveCanonicalItemUnits } from './canonical-unit';
 import {
+	assertNoSkippedDocs,
 	BulkReturnPoolEmptyError,
 	BulkReturnPoolNameTakenError,
 	BulkReturnPoolNotEmptyError,
@@ -241,12 +242,19 @@ export async function cancelBulkReturnPool(
 	if (locked.status === 'CANCELLED') return locked;
 
 	const events = await eventRepo.listForPool(poolId);
-	if (!isPoolEmpty(events.entries, events.moves, poolId, events.voids)) {
-		await poolRepo.mutateCAS(poolId, (current) =>
+	const releaseCancelLock = () =>
+		poolRepo.mutateCAS(poolId, (current) =>
 			current.status === 'OPEN' && isOurLock(current, 'CANCEL', operationUlid)
 				? { ...current, lock: null }
 				: current
 		);
+	if (events.skipped.length > 0) {
+		// Fail closed: a skipped entry/void could make a non-empty pool look empty. Release our lock.
+		await releaseCancelLock();
+		assertNoSkippedDocs(events.skipped, `bulk return pool ${poolId}`);
+	}
+	if (!isPoolEmpty(events.entries, events.moves, poolId, events.voids)) {
+		await releaseCancelLock();
 		throw new BulkReturnPoolNotEmptyError(
 			`Bulk return pool ${poolId} still has entries; move or void them first`
 		);
@@ -322,6 +330,8 @@ export async function submitBulkReturnPool(
 	let snapshot: { items_summary: ReturnType<typeof summarizePoolItems>; entry_ids: string[] };
 	try {
 		const events = await eventRepo.listForPool(poolId);
+		// Fail closed: a skipped doc would drop an entry from (or add a voided one to) the snapshot.
+		assertNoSkippedDocs(events.skipped, `bulk return pool ${poolId}`);
 		snapshot = {
 			items_summary: summarizePoolItems(events.entries, events.moves, poolId, events.voids),
 			entry_ids: poolSnapshotEntryIds(

@@ -76,6 +76,7 @@ export function racingPoolRepo(
 			return real.get(id);
 		},
 		list: () => real.list(),
+		listWithSkipped: () => real.listWithSkipped(),
 		update: (p) => real.update(p),
 		mutateCAS: (id, m) => real.mutateCAS(id, m)
 	};
@@ -168,6 +169,11 @@ export function createBulkReturnPoolV3Fixture(couch: InMemoryCouch) {
 				const loans = await logRepo.list(f);
 				await afterList();
 				return loans;
+			},
+			listWithSkipped: async (f) => {
+				const found = await logRepo.listWithSkipped(f);
+				await afterList();
+				return found;
 			},
 			mutateLogCAS: (id, m) => logRepo.mutateLogCAS(id, m),
 			recordReturn: (id, i, c) => logRepo.recordReturn(id, i, c),

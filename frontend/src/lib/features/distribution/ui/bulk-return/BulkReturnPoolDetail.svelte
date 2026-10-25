@@ -18,6 +18,7 @@
 		createStableOperationId,
 		useBulkReturnPoolAppliedLoanRefs,
 		useBulkReturnPoolClosedLoanRefs,
+		useBulkReturnSkippedDocs,
 		useCancelBulkReturnPool,
 		useVoidBulkReturnEntry
 	} from '../../application/queries';
@@ -106,6 +107,16 @@
 		() => shelterCode
 	);
 	const appliedRefsByEntry = $derived(groupAppliedLoanRefsByEntry(appliedRefsQuery.data ?? []));
+
+	// Malformed docs the pool reads leave out: the entries below may be incomplete until they are fixed.
+	const skippedQuery = useBulkReturnSkippedDocs(undefined, () => shelterCode);
+	const skippedDocs = $derived(skippedQuery.data ?? []);
+	const skippedIds = $derived(
+		skippedDocs
+			.map((doc) => doc._id)
+			.filter(Boolean)
+			.join(', ')
+	);
 
 	const entries = $derived(row ? liveEntries(row) : []);
 	const moveTargets = $derived(row ? listMoveTargets(rows, row.pool._id) : []);
@@ -210,6 +221,21 @@
 					>
 						<AlertTriangle class="mt-0.5 h-4 w-4 shrink-0 text-amber-600" aria-hidden="true" />
 						<p>{unresolvedRefsNotice(row.unresolved_refs.length)}</p>
+					</div>
+				{/if}
+
+				{#if skippedDocs.length > 0}
+					<div
+						role="status"
+						data-testid="bulk-return-skipped-docs"
+						class="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-sm text-amber-900"
+					>
+						<AlertTriangle class="mt-0.5 h-4 w-4 shrink-0 text-amber-600" aria-hidden="true" />
+						<p class="break-words">
+							พบเอกสารที่ข้อมูลไม่ถูกต้อง <span class="tabular-nums">{skippedDocs.length}</span>
+							รายการ จึงไม่แสดงในรายการของกอง และการจัดการกองนี้อาจถูกระงับ — ติดต่อผู้ดูแลระบบ
+							{#if skippedIds}({skippedIds}){/if}
+						</p>
 					</div>
 				{/if}
 

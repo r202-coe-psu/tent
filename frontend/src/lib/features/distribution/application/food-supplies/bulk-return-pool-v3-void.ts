@@ -9,7 +9,7 @@ import {
 } from '../../domain/food-supplies';
 import { assertCanWriteBulkReturnEntry } from './auth';
 import { assertCentralWriteAuthority } from './central-write-authority';
-import { BulkReturnPoolStateError, WorkflowValidationError } from './errors';
+import { assertNoSkippedDocs, BulkReturnPoolStateError, WorkflowValidationError } from './errors';
 import {
 	assertEntryNotPendingSync,
 	requirePool,
@@ -48,6 +48,8 @@ export async function voidBulkReturnEntry(
 	assertCanWriteBulkReturnEntry(ctx);
 
 	const events = await eventRepo.listForEntry(input.entry_id);
+	// Fail closed: a skipped doc of this entry's chain would look like a gap or a missing void.
+	assertNoSkippedDocs(events.skipped, `bulk return entry ${input.entry_id}`);
 	const entry = events.entries.find((e) => e._id === input.entry_id);
 	if (!entry) throw new WorkflowValidationError(`bulk_return_entry ${input.entry_id} not found`);
 
