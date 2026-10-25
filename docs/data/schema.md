@@ -1575,7 +1575,7 @@ Authorization และ Bangkok current-day write rule ถูกบังคั�
 | `name` | str | req | — |
 | `operation_status` | enum(`standby`,`active`,`full_capacity`,`closed`,`cancelled`) | req | default `standby`; ใช้แทน `status` เดิม
 | `capacity` | int>0 | req | จำนวนคนสูงสุด — ควรสอดคล้องกับ `area_m2` (Sphere ≥3.5 m²/คน); ผลรวม zone capacity ≤ ค่านี้ |
-| `shelter_type` | str\|null | opt | code จาก `master_data:shelter_type` (ไม่ใช่ free text) |
+| `shelter_type` | str\|null | opt | ประเภทอาคาร (Building Type) — code จาก `master_data:shelter_type` (ไม่ใช่ free text) |
 | `project_level` | enum(`community`,`lao`,`provincial`)\|null | opt | ระดับศูนย์ |
 | `location` | {`address`:str, `lat`:num?, `lng`:num?} | opt | คงไว้เพื่อ backward compatibility |
 | `contact` | {`name`:str, `phone`:str} | opt | — |
@@ -1653,7 +1653,7 @@ Authorization และ Bangkok current-day write rule ถูกบังคั�
 
 | Field | ชนิด | req | หมายเหตุ |
 | --- | --- | --- | --- |
-| `master_type` | enum(6 types) | req | `vulnerable_group` \| `housing_type` \| `shelter_type` \| `volunteer_skills` \| `chronic_disease` (CR-186 — global-only) \| `allergy` (CR-187 — global-only) (CR-137 — ตัด `health_condition`, `dietary_restrictions`, `pet_types`, `house_damage`, `municipality_zone`, `community`) |
+| `master_type` | enum(6 types) | req | `vulnerable_group` \| `housing_type` \| `shelter_type` (ประเภทอาคาร) \| `volunteer_skills` \| `chronic_disease` (CR-186 — global-only) \| `allergy` (CR-187 — global-only) (CR-137 — ตัด `health_condition`, `dietary_restrictions`, `pet_types`, `house_damage`, `municipality_zone`, `community`) |
 | `shelter_code` | str? | opt | มีเฉพาะ doc tier shelter-local — ระบุศูนย์เจ้าของ; ไม่มี field นี้ = global doc |
 | `items` | [{`code`:str, `label_th`:str, `label_en`:str, `is_default`:bool, `status`:enum(`active`,`inactive`), `parent_code`:str?, `category`?:str, `description`?:str}] | req | ≥0 items; `code` = user/seed snake_case (`^[a-z0-9_]+$`), unique per type — **required on create** (no ULID fallback); slug codes immutable on edit; legacy `item_*` codes may be renamed once; `label_th` + `label_en` both required (trim, min 1); `parent_code` optional (legacy hierarchy; ไม่มี consumer หลัง CR-137) |
 
