@@ -247,6 +247,7 @@ describe('station_log writes (CR-192)', () => {
 				ctx,
 				'onsite',
 				undefined,
+				null,
 				{ startedAt: openedAt }
 			);
 
@@ -264,7 +265,7 @@ describe('station_log writes (CR-192)', () => {
 
 		it('never stamps a start in the future', async () => {
 			const future = new Date(Date.now() + 60 * 60 * 1000).toISOString();
-			await repo.createFamilyRegistration(familyInput, ctx, 'onsite', undefined, {
+			await repo.createFamilyRegistration(familyInput, ctx, 'onsite', undefined, null, {
 				startedAt: future
 			});
 			for (const l of await logs()) {
@@ -286,6 +287,7 @@ describe('station_log writes (CR-192)', () => {
 				ctx,
 				'onsite',
 				undefined,
+				null,
 				{ startedAt: new Date().toISOString(), onStationLogError }
 			);
 

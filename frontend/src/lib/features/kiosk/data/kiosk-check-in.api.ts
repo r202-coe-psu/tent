@@ -1,3 +1,4 @@
+import type { ConsentDecision, ConsentMode } from '$lib/features/consent';
 import type { KioskPhotoPayload } from '../domain/kiosk-photo';
 
 export type GateInput =
@@ -57,21 +58,26 @@ export interface KioskCheckInBatchResult extends KioskCheckInResult {
 	retryable_evacuee_ids: string[];
 }
 
-/** What the register endpoint returns: the new record plus what the kiosk prints (QR + label). */
 export interface KioskRegistrationResult {
 	evacuee_id: string;
 	qr_payload: string;
 	label: { name: string; phone: string | null };
+	consent_ref: string;
+	consent_mode: ConsentMode;
 }
 
-function postKioskRegistration(body: Record<string, unknown>): Promise<KioskRegistrationResult> {
+/** The decision travels with `consented_at` (= `given_at`); the server rejects a mismatch. */
+function postKioskRegistration(
+	body: Record<string, unknown>,
+	consent: ConsentDecision
+): Promise<KioskRegistrationResult> {
 	return requestWithTimeout(
 		'/api/v1/kiosk/register',
 		{
 			method: 'POST',
 			headers: { 'content-type': 'application/json' },
 			cache: 'no-store',
-			body: JSON.stringify({ ...body, consented: true })
+			body: JSON.stringify({ ...body, consent, consented_at: consent.given_at })
 		},
 		async (response) => {
 			if (!response.ok) throw await requestError(response);
@@ -84,36 +90,40 @@ function postKioskRegistration(body: Record<string, unknown>): Promise<KioskRegi
 export async function registerKioskWalkIn(
 	card: unknown,
 	photo: KioskPhotoPayload | null,
-	consentedAt: string,
+	consent: ConsentDecision,
 	phone: string | null = null,
 	/** When the card was read (ISO) — the Station 1 `start` time (CR-192). */
 	startedAt?: string | null
 ): Promise<KioskRegistrationResult> {
-	return postKioskRegistration({
-		source: 'smart-card',
-		card,
-		photo,
-		phone,
-		consented_at: consentedAt,
-		...(startedAt ? { started_at: startedAt } : {})
-	});
+	return postKioskRegistration(
+		{
+			source: 'smart-card',
+			card,
+			photo,
+			phone,
+			...(startedAt ? { started_at: startedAt } : {})
+		},
+		consent
+	);
 }
 
 /** ThaiD walk-in: only the verified session id goes out; the server holds who it is. */
 export async function registerKioskThaidWalkIn(
 	sessionId: string,
-	consentedAt: string,
+	consent: ConsentDecision,
 	phone: string | null,
 	/** When the ThaiD scan was verified (ISO) — the Station 1 `start` time (CR-192). */
 	startedAt?: string | null
 ): Promise<KioskRegistrationResult> {
-	return postKioskRegistration({
-		source: 'thaid',
-		session_id: sessionId,
-		phone,
-		consented_at: consentedAt,
-		...(startedAt ? { started_at: startedAt } : {})
-	});
+	return postKioskRegistration(
+		{
+			source: 'thaid',
+			session_id: sessionId,
+			phone,
+			...(startedAt ? { started_at: startedAt } : {})
+		},
+		consent
+	);
 }
 
 /**

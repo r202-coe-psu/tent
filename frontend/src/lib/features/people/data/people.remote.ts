@@ -46,14 +46,22 @@ import {
 	type MovementAction,
 	dormFieldsFor,
 	memberExtrasFor,
+	registrationMedicalInput,
 	withoutBookingRef
 } from '../domain/people';
 import {
 	planFamilyRegistration,
+	planMemberConsents,
 	type FamilyReportInPayload,
+	type RegistrationConsent,
 	type UnifiedRegistrationChannel,
 	type UnifiedRegistrationInput
 } from '../domain/unified-registration';
+import {
+	bindConsent,
+	EVACUEE_SCHEMA_V,
+	type MemberConsentPlan
+} from '$lib/features/consent/server';
 import { autoHouseholdLabel } from '../domain/registration-shell';
 import {
 	STATION_LOG_STALE_WINDOW_MS,
@@ -105,6 +113,15 @@ function hasEvacueeClientFilters(search?: string, filters?: EvacueeFilters): boo
 
 function hasHouseholdClientFilters(search?: string, filters?: HouseholdFilters): boolean {
 	return !!(search?.trim() || filters?.status);
+}
+
+function consentWrite(
+	plan: MemberConsentPlan | undefined,
+	registrantEvacueeId: string | undefined
+) {
+	if (!plan) return null;
+	if (!registrantEvacueeId) throw new Error('ต้องมีสมาชิกอย่างน้อย 1 คน');
+	return bindConsent(plan, registrantEvacueeId);
 }
 
 /**
@@ -234,29 +251,16 @@ export class PeopleRemoteRepository implements PeopleRepository {
 				}
 				saved = await this.repo.put(touch(next));
 			} else {
-				const evacuee = buildEvacuee(parsedInput, ctx);
+				const evacuee = buildEvacuee(parsedInput, ctx, null);
 				saved = await this.repo.put(evacuee);
 			}
 		} else {
-			const evacuee = buildEvacuee(parsedInput, ctx);
+			const evacuee = buildEvacuee(parsedInput, ctx, null);
 			saved = await this.repo.put(evacuee);
 		}
 
-		const needsMedical =
-			(input.medical_conditions && input.medical_conditions.length > 0) ||
-			(input.medical_allergies && input.medical_allergies.length > 0) ||
-			(input.medical_medications && input.medical_medications.length > 0) ||
-			(input.medical_note && input.medical_note.length > 0);
-
-		if (needsMedical) {
-			const medicalInput = {
-				evacuee_id: saved._id,
-				conditions: input.medical_conditions || [],
-				allergies: input.medical_allergies || [],
-				medications: input.medical_medications || [],
-				notes: input.medical_note || '',
-				track: input.track || ('normal' as const)
-			};
+		const medicalInput = registrationMedicalInput(input, saved._id, null, input.track || 'normal');
+		if (medicalInput) {
 			const medicalDoc = buildMedical(medicalInput, ctx);
 
 			try {
@@ -457,9 +461,15 @@ export class PeopleRemoteRepository implements PeopleRepository {
 		ctx: AuthorContext,
 		channel: UnifiedRegistrationChannel = 'onsite',
 		ids?: UlidReservation,
+		consent: RegistrationConsent | null = null,
 		stationLog?: StationLogWriteOptions
 	): Promise<{ household: Household; members: Evacuee[] }> {
 		const plan = planFamilyRegistration(input, channel);
+		const consentPlans = planMemberConsents(
+			consent,
+			channel === 'onsite' ? 'staff' : 'web',
+			plan.memberInputs.map(() => false)
+		);
 		// Same reservation + same input on a retry → same doc IDs → idempotent 409s.
 		ids?.rewind();
 		const nextUlid = () => ids?.next() ?? ulid();
@@ -482,36 +492,27 @@ export class PeopleRemoteRepository implements PeopleRepository {
 				const medicalDocs: Medical[] = [];
 				const movementDocs: Movement[] = [];
 
-				for (const memberInput of plan.memberInputs) {
+				for (const [i, memberInput] of plan.memberInputs.entries()) {
 					const memberUlid = nextUlid();
 					const memberId = makeDocId('evacuee', memberUlid);
 					createdMemberIds.push(memberId);
 
-					const evacuee = buildEvacuee({ ...memberInput, household_id: targetId }, ctx, memberUlid);
+					const write = consentWrite(consentPlans[i], createdMemberIds[0]);
+					const evacuee = buildEvacuee(
+						{ ...memberInput, household_id: targetId },
+						ctx,
+						write,
+						memberUlid
+					);
 					memberDocs.push(evacuee);
 
-					const needsMedical =
-						(memberInput.medical_conditions && memberInput.medical_conditions.length > 0) ||
-						(memberInput.medical_allergies && memberInput.medical_allergies.length > 0) ||
-						(memberInput.medical_medications && memberInput.medical_medications.length > 0) ||
-						(memberInput.medical_note && memberInput.medical_note.length > 0);
-
-					if (needsMedical) {
-						medicalDocs.push(
-							buildMedical(
-								{
-									evacuee_id: evacuee._id,
-									conditions: memberInput.medical_conditions || [],
-									allergies: memberInput.medical_allergies || [],
-									medications: memberInput.medical_medications || [],
-									notes: memberInput.medical_note || '',
-									track: memberInput.track || ('normal' as const)
-								},
-								ctx,
-								nextUlid()
-							)
-						);
-					}
+					const medicalInput = registrationMedicalInput(
+						memberInput,
+						evacuee._id,
+						write,
+						memberInput.track || 'normal'
+					);
+					if (medicalInput) medicalDocs.push(buildMedical(medicalInput, ctx, nextUlid()));
 
 					if (evacuee.current_stay.zone) {
 						movementDocs.push(
@@ -618,35 +619,22 @@ export class PeopleRemoteRepository implements PeopleRepository {
 
 			for (let i = 0; i < plan.memberInputs.length; i++) {
 				const memberInput = plan.memberInputs[i];
+				const write = consentWrite(consentPlans[i], headId);
 				const evacuee = buildEvacuee(
 					{ ...memberInput, household_id: householdId },
 					ctx,
+					write,
 					memberUlids[i]
 				);
 				memberDocs.push(evacuee);
 
-				const needsMedical =
-					(memberInput.medical_conditions && memberInput.medical_conditions.length > 0) ||
-					(memberInput.medical_allergies && memberInput.medical_allergies.length > 0) ||
-					(memberInput.medical_medications && memberInput.medical_medications.length > 0) ||
-					(memberInput.medical_note && memberInput.medical_note.length > 0);
-
-				if (needsMedical) {
-					medicalDocs.push(
-						buildMedical(
-							{
-								evacuee_id: evacuee._id,
-								conditions: memberInput.medical_conditions || [],
-								allergies: memberInput.medical_allergies || [],
-								medications: memberInput.medical_medications || [],
-								notes: memberInput.medical_note || '',
-								track: memberInput.track || ('normal' as const)
-							},
-							ctx,
-							nextUlid()
-						)
-					);
-				}
+				const medicalInput = registrationMedicalInput(
+					memberInput,
+					evacuee._id,
+					write,
+					memberInput.track || 'normal'
+				);
+				if (medicalInput) medicalDocs.push(buildMedical(medicalInput, ctx, nextUlid()));
 
 				if (evacuee.current_stay.zone) {
 					movementDocs.push(
@@ -1388,7 +1376,8 @@ export class PeopleRemoteRepository implements PeopleRepository {
 			household: householdInput,
 			members: memberInputs,
 			ctx,
-			ids
+			ids,
+			consent
 		} = payload;
 		ids?.rewind();
 		const nextUlid = () => ids?.next() ?? ulid();
@@ -1502,14 +1491,30 @@ export class PeopleRemoteRepository implements PeopleRepository {
 		const allSavedMembers: Evacuee[] = [];
 		const affectedOldHouseholdIds = new Set<string>();
 
+		const existingEvacuees: (Evacuee | null)[] = [];
+		for (const m of memberInputs) {
+			if (!m._id) {
+				existingEvacuees.push(null);
+				continue;
+			}
+			const existing = await this.repo.get<Evacuee>(m._id);
+			if (!existing || !isEvacuee(existing)) {
+				throw new Error(`ไม่พบข้อมูลผู้ประสบภัยรหัส ${m._id}`);
+			}
+			existingEvacuees.push(existing);
+		}
+		// FR-41: the stored doc, not the form, decides who already has consent.
+		const consentPlans = planMemberConsents(
+			consent,
+			'staff',
+			existingEvacuees.map((existing) => Boolean(existing?.consent))
+		);
+
 		for (const [memberIndex, m] of memberInputs.entries()) {
 			const willReportIn = Boolean(m.reporting_in);
-			if (m._id) {
-				const existingEvacuee = await this.repo.get<Evacuee>(m._id);
-				if (!existingEvacuee || !isEvacuee(existingEvacuee)) {
-					throw new Error(`ไม่พบข้อมูลผู้ประสบภัยรหัส ${m._id}`);
-				}
-
+			const write = consentWrite(consentPlans[memberIndex], plannedMemberIds[0]);
+			const existingEvacuee = existingEvacuees[memberIndex];
+			if (existingEvacuee) {
 				if (existingEvacuee.household_id && existingEvacuee.household_id !== effectiveHouseholdId) {
 					affectedOldHouseholdIds.add(existingEvacuee.household_id);
 				}
@@ -1577,7 +1582,14 @@ export class PeopleRemoteRepository implements PeopleRepository {
 					}),
 					// CR-159: a suggestion only — current_stay is untouched by it.
 					preferred_zone: m.preferred_zone ?? existingEvacuee.preferred_zone ?? null,
-					current_stay: updatedStay
+					current_stay: updatedStay,
+					...(write
+						? {
+								consent: write.consent,
+								privacy: { ...existingEvacuee.privacy, search_excluded: write.searchExcluded },
+								schema_v: EVACUEE_SCHEMA_V
+							}
+						: {})
 				});
 
 				docsToWrite.push(updatedEvacuee);
@@ -1601,34 +1613,15 @@ export class PeopleRemoteRepository implements PeopleRepository {
 						registered_via: 'staff'
 					},
 					ctx,
+					write,
 					newMemberUlid
 				);
 				docsToWrite.push(newEvacuee);
 				allSavedMembers.push(newEvacuee);
 				reportedInMembers.push(newEvacuee);
 
-				const needsMedical =
-					(m.medical_conditions && m.medical_conditions.length > 0) ||
-					(m.medical_allergies && m.medical_allergies.length > 0) ||
-					(m.medical_medications && m.medical_medications.length > 0) ||
-					(m.medical_note && m.medical_note.length > 0);
-
-				if (needsMedical) {
-					docsToWrite.push(
-						buildMedical(
-							{
-								evacuee_id: newEvacuee._id,
-								conditions: m.medical_conditions || [],
-								allergies: m.medical_allergies || [],
-								medications: m.medical_medications || [],
-								notes: m.medical_note || '',
-								track: 'normal' as const
-							},
-							ctx,
-							nextUlid()
-						)
-					);
-				}
+				const medicalInput = registrationMedicalInput(m, newEvacuee._id, write, 'normal');
+				if (medicalInput) docsToWrite.push(buildMedical(medicalInput, ctx, nextUlid()));
 			}
 		}
 

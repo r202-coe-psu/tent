@@ -56,8 +56,9 @@ import {
 	couchReq,
 	type TestUser
 } from './helpers/couch';
+import { acceptFullConsent } from './helpers/consent';
 import { injectSession } from './helpers/login';
-import { decodeQrImage, fillConditionTags } from './helpers/onsite';
+import { decodeQrImage, fillAllergyTags, fillConditionTags } from './helpers/onsite';
 
 // ─── Run identity ──────────────────────────────────────────────────────────────
 
@@ -464,7 +465,7 @@ async function screenEvacuee(page: Page, evacueeId: string, fill: ScreeningFill)
 	await expect(page.getByText('Station 2', { exact: true })).toBeVisible({ timeout: 20_000 });
 	await fillConditionTags(page, fill.conditions);
 	if (fill.medications) await page.locator('#med-medications').fill(fill.medications);
-	if (fill.allergies) await page.locator('#med-allergies').fill(fill.allergies);
+	if (fill.allergies) await fillAllergyTags(page, fill.allergies);
 	if (fill.notes) await page.locator('#med-general-symptoms').fill(fill.notes);
 	if (fill.careTrack) await page.locator(`label[for="med-care-track-${fill.careTrack}"]`).click();
 	for (const symptom of fill.ewarSymptoms ?? []) {
@@ -609,6 +610,7 @@ async function submitPublicForm(page: Page, apiPath: string): Promise<Record<str
 	const submit = page.getByRole('button', { name: 'ยืนยันการลงทะเบียน' }).last();
 	const isPost = (r: Response) =>
 		new URL(r.url()).pathname === apiPath && r.request().method() === 'POST';
+	await acceptFullConsent(page);
 	const first = page.waitForResponse(isPost);
 	await submit.click();
 	let res = await first;
@@ -774,6 +776,7 @@ async function walkInFlow(browser: Browser, run: Run, s: Sessions) {
 			await desk.locator('#family-assets').fill(valuables);
 		} else skipped('assets: บันทึกทรัพย์สิน / สัมภาระตอนลงทะเบียน is off');
 
+		await acceptFullConsent(desk);
 		await desk.getByRole('button', { name: 'บันทึกลงทะเบียนทั้งครอบครัว' }).last().click();
 	});
 
@@ -808,6 +811,7 @@ async function walkInFlow(browser: Browser, run: Run, s: Sessions) {
 		await expect(desk.getByText('จะเข้าร่วมครอบครัวที่มีอยู่แล้ว')).toBeVisible();
 
 		await fillMemberCard(desk, 0, relative);
+		await acceptFullConsent(desk);
 		await desk.getByRole('button', { name: 'บันทึกลงทะเบียนทั้งครอบครัว' }).last().click();
 		Object.assign(ids, await idsFromPrintScreen(desk, [relative]));
 		await finishPrintScreen(desk);
@@ -1046,6 +1050,7 @@ async function preRegisterFlow(browser: Browser, run: Run, s: Sessions) {
 		await expect(screenB.locator('#member-0-first-name')).not.toHaveValue('', {
 			timeout: 20_000
 		});
+		await acceptFullConsent(screenB);
 		await screenB.getByRole('button', { name: 'ยืนยันรายงานตัวและพิมพ์บัตร' }).last().click();
 		Object.assign(ids, await idsFromPrintScreen(screenB, people));
 		await finishPrintScreen(screenB);
@@ -1144,6 +1149,7 @@ async function preRegisterFlow(browser: Browser, run: Run, s: Sessions) {
 				await expect(spouseCard.getByText('ยังไม่เลือก — ไม่มาในรอบนี้')).toBeVisible();
 				await spouseCard.getByText('ยังไม่เลือก — ไม่มาในรอบนี้').click();
 				await expect(spouseCard.getByText('เลือกแล้ว — รายงานตัวรอบนี้')).toBeVisible();
+				await acceptFullConsent(screenB);
 				await screenB.getByRole('button', { name: 'ยืนยันรายงานตัวและพิมพ์บัตร' }).last().click();
 				Object.assign(ids, await idsFromPrintScreen(screenB, [familyHead, familySpouse]));
 				await finishPrintScreen(screenB);
@@ -1167,6 +1173,7 @@ async function preRegisterFlow(browser: Browser, run: Run, s: Sessions) {
 				await expect(screenB.locator('#member-0-first-name')).toHaveValue(soloTraveller.firstName, {
 					timeout: 20_000
 				});
+				await acceptFullConsent(screenB);
 				await screenB.getByRole('button', { name: 'ยืนยันรายงานตัวและพิมพ์บัตร' }).last().click();
 				Object.assign(ids, await idsFromPrintScreen(screenB, [soloTraveller]));
 				await finishPrintScreen(screenB);

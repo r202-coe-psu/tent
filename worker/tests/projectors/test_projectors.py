@@ -401,6 +401,40 @@ def test_project_evacuee_search_excluded_deletes():
     assert payload == {"_id": "evacuee:01OPT"}
 
 
+def test_project_evacuee_basic_consent_deletes_projection():
+    """PDPA FR-40 — a basic-mode person leaves every public read via the existing delete."""
+    doc = {
+        "_id": "evacuee:01BASIC",
+        "type": "evacuee",
+        "schema_v": 15,
+        "first_name": "พื้นฐาน",
+        "last_name": "ใจดี",
+        "person_id": {"cardType": "national_id", "number": "3900100244192"},
+        "household_id": "household:01HH",
+        "privacy": {"search_excluded": True},
+        "consent": {
+            "mode": "basic",
+            "health": False,
+            "ref": "CS-7K3QZ9MD",
+            "given_at": "2026-10-25T03:15:00.000Z",
+            "notice_version": "2026-10-25",
+            "given_by": "self",
+            "giver_evacuee_id": None,
+            "recorded_verbally_by": None,
+            "channel": "web",
+        },
+        "current_stay": {
+            "status": "active",
+            "zone": "A",
+            "since": "2026-10-25T03:15:00.000Z",
+        },
+        "updated_at": "2026-10-25T03:15:00.000Z",
+    }
+    action, payload = project_evacuee(doc, shelter_code="SH001")
+    assert action == "delete"
+    assert payload == {"_id": "evacuee:01BASIC"}
+
+
 def test_compute_needs_aggregates_campaign_minus_donations():
     campaigns = [
         {

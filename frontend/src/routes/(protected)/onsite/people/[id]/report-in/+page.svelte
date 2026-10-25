@@ -13,8 +13,10 @@
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { UlidReservation } from '$lib/db/ulid-reservation';
+	import { ConsentSummary, initialSearchVisible } from '$lib/features/consent';
 	import {
 		FamilyBatchPrint,
+		RegistrationConsentResult,
 		RegistrationSaveErrorAlert,
 		UnifiedRegistrationForm,
 		useEvacuee,
@@ -24,8 +26,11 @@
 		buildSaveFailureReport,
 		householdToUnifiedInput,
 		evacueeToUnifiedMember,
+		formatPersonName,
 		type Evacuee,
 		type Household,
+		type RegistrationConsent,
+		type RegistrationConsentConfig,
 		type SaveFailureReport,
 		type UnifiedRegistrationInput,
 		type UnifiedMemberWithMeta
@@ -64,11 +69,31 @@
 		familyMembers.map((m) => evacueeToUnifiedMember(m, data.evacueeId))
 	);
 
+	const staff = $derived(
+		authStore.user
+			? { name: authStore.user.display_name || authStore.user.name, userId: authStore.user.name }
+			: null
+	);
+	/** FR-41: people who already gave consent keep it and get a read-only summary instead. */
+	const consentedMembers = $derived(familyMembers.filter((m) => m.consent));
+	const consentConfig = $derived<RegistrationConsentConfig>({
+		channel: 'staff',
+		staff,
+		consentedKeys: consentedMembers.map((m) => m._id),
+		initialSearchVisible: initialSearchVisible(
+			familyMembers.filter((m) => !m.consent).map((m) => m.privacy)
+		)
+	});
+
 	const submitReportIn = useSubmitFamilyReportIn();
 	// CR-192: when the report-in form was opened — the Station 1 `start` time (plain const: not reactive).
 	const formOpenedAt = new Date().toISOString();
 
-	let completed = $state<{ household: Household; members: Evacuee[] } | null>(null);
+	let completed = $state<{
+		household: Household;
+		members: Evacuee[];
+		consentRef: string | null;
+	} | null>(null);
 	let saveError = $state<SaveFailureReport | null>(null);
 	let isDirty = $state(false);
 	let isNavigatingAfterSave = $state(false);
@@ -98,9 +123,14 @@
 
 	async function handleReportIn(
 		input: UnifiedRegistrationInput,
-		meta?: { reportingInMembers: UnifiedMemberWithMeta[]; allMembers: UnifiedMemberWithMeta[] }
+		meta?: {
+			reportingInMembers: UnifiedMemberWithMeta[];
+			allMembers: UnifiedMemberWithMeta[];
+			consent: RegistrationConsent | null;
+		}
 	) {
 		if (alreadyReportedIn) return;
+		const consent = meta?.consent ?? null;
 		const shelterCode = getShelterCode();
 		const ctx = {
 			shelterCode,
@@ -118,7 +148,8 @@
 				householdId: targetHouseholdId,
 				createHousehold,
 				household: input.household,
-				members
+				members,
+				consentRef: consent?.decision.ref ?? null
 			});
 			if (!reportInIds || reportInReservationKey !== reservationKey) {
 				reportInReservationKey = reservationKey;
@@ -131,12 +162,13 @@
 				members,
 				ctx,
 				ids: reportInIds,
+				consent,
 				stationStartedAt: formOpenedAt
 			});
 			saveError = null;
 			isDirty = false;
 			isNavigatingAfterSave = true;
-			completed = result;
+			completed = { ...result, consentRef: consent?.decision.ref ?? null };
 			await focusCompletionHeading();
 			toast.success(`รายงานตัวสำเร็จ ${result.members.length} คน`);
 		} catch (err) {
@@ -174,6 +206,7 @@
 		{initialHousehold}
 		{initialMembers}
 		{readOnly}
+		consent={readOnly ? undefined : consentConfig}
 		pending={submitReportIn.isPending}
 		onsubmit={handleReportIn}
 		onDirtyChange={(dirty) => (isDirty = dirty)}
@@ -182,6 +215,13 @@
 
 <div class="mx-auto w-full max-w-6xl px-4 py-4 md:px-6 md:py-6 xl:max-w-7xl">
 	{#if completed}
+		{#if completed.consentRef}
+			<RegistrationConsentResult
+				members={completed.members}
+				consentRef={completed.consentRef}
+				{staff}
+			/>
+		{/if}
 		<FamilyBatchPrint
 			household={completed.household}
 			members={completed.members}
@@ -253,6 +293,19 @@
 			</Card.Root>
 			{@render registrationForm(true)}
 		{:else}
+			{#if consentedMembers.length > 0}
+				<div class="mb-4 grid gap-3 md:grid-cols-2">
+					{#each consentedMembers as member (member._id)}
+						{#if member.consent}
+							<ConsentSummary
+								consent={member.consent}
+								searchExcluded={member.privacy.search_excluded}
+								heading={formatPersonName(member)}
+							/>
+						{/if}
+					{/each}
+				</div>
+			{/if}
 			{@render registrationForm(false)}
 		{/if}
 	{/if}

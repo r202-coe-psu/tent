@@ -18,6 +18,7 @@ import type {
 import type { StationNumber } from '../domain/station-log';
 import type {
 	FamilyReportInPayload,
+	RegistrationConsent,
 	UnifiedRegistrationChannel,
 	UnifiedRegistrationInput
 } from '../domain/unified-registration';
@@ -326,6 +327,7 @@ export interface PeopleRepository {
 		channel?: UnifiedRegistrationChannel,
 		/** Reuse across retries of the same input so a resubmit cannot mint a second family. */
 		ids?: UlidReservation,
+		consent?: RegistrationConsent | null,
 		/** CR-192: with `startedAt`, appends Station 1 `start` + `complete` per created member. */
 		stationLog?: StationLogWriteOptions
 	): Promise<{

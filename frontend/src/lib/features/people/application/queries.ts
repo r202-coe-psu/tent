@@ -33,6 +33,7 @@ import type {
 } from '../domain/people';
 import type {
 	FamilyReportInPayload,
+	RegistrationConsent,
 	UnifiedRegistrationChannel,
 	UnifiedRegistrationInput
 } from '../domain/unified-registration';
@@ -449,18 +450,27 @@ export const useCreateFamilyRegistration = () => {
 			ctx,
 			channel = 'onsite',
 			ids,
+			consent = null,
 			stationStartedAt
 		}: {
 			input: UnifiedRegistrationInput;
 			ctx: AuthorContext;
 			channel?: UnifiedRegistrationChannel;
 			ids?: UlidReservation;
+			consent?: RegistrationConsent | null;
 			/** Station 1 walk-in form-open time (ISO) — turns on the station_log start + complete. */
 			stationStartedAt?: string;
 		}) =>
 			withStationLogWarning(
 				(stationLog) =>
-					peopleRepository().createFamilyRegistration(input, ctx, channel, ids, stationLog),
+					peopleRepository().createFamilyRegistration(
+						input,
+						ctx,
+						channel,
+						ids,
+						consent,
+						stationLog
+					),
 				{ startedAt: stationStartedAt }
 			),
 		onSuccess: () => {

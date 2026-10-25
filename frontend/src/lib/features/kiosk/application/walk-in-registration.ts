@@ -1,3 +1,4 @@
+import type { ConsentDecision } from '$lib/features/consent';
 import type { SmartCardData } from '$lib/features/kiosk-devices';
 import {
 	KioskRequestError,
@@ -11,8 +12,7 @@ import { walkInSession, type WalkInSource } from './walk-in-session.svelte';
 
 export type WalkInCardSession = {
 	citizenId: string | null;
-	consented: boolean;
-	consentedAt: string | null;
+	consentDecision: ConsentDecision | null;
 	phone?: string | null;
 	/** When the card was read / ThaiD verified (ISO) — sent as the Station 1 `start` time. */
 	startedAt?: string | null;
@@ -33,11 +33,22 @@ export type WalkInCardRegistrationOutcome =
 	| { kind: 'expired'; message: string }
 	/** Someone staying in the shelter already has this phone: only another phone (or none) goes on. */
 	| { kind: 'phone_duplicate'; message: string }
+	/** Card only: the consent decision is too old for the server, so only deciding again goes on. */
+	| { kind: 'consent_expired'; message: string }
+	/** ThaiD only: consent and the 180 s scan session both expired, so only a new scan goes on. */
+	| { kind: 'thaid_restart'; message: string }
 	| { kind: 'error'; message: string };
 
 function isPhoneDuplicate(cause: unknown): cause is KioskRequestError {
 	return cause instanceof KioskRequestError && cause.code === 'KIOSK_PHONE_DUPLICATE';
 }
+
+function isConsentExpired(cause: unknown): cause is KioskRequestError {
+	return cause instanceof KioskRequestError && cause.code === 'KIOSK_CONSENT_EXPIRED';
+}
+
+export const THAID_CONSENT_EXPIRED_MESSAGE =
+	'การยินยอมและการยืนยันตัวตนด้วย ThaiD หมดเวลาแล้ว กรุณาสแกน ThaiD ใหม่อีกครั้ง';
 
 const CARD_MISMATCH_MESSAGE = 'บัตรไม่ตรงกับบัตรที่ค้นหา กรุณาเสียบบัตรเดิมหรือติดต่อเจ้าหน้าที่';
 
@@ -54,23 +65,21 @@ export async function registerWalkInCardRead(
 	session: WalkInCardSession,
 	register: (
 		card: SmartCardData,
-		consentedAt: string,
+		consent: ConsentDecision,
 		startedAt: string | null
 	) => Promise<KioskRegistrationResult>
 ): Promise<WalkInCardRegistrationOutcome> {
-	if (!session.consented || !session.citizenId || !card) return { kind: 'ignored' };
+	if (!session.consentDecision || !session.citizenId || !card) return { kind: 'ignored' };
 	const mismatch = walkInCardMismatch(card, session);
 	if (mismatch) return { kind: 'mismatch', message: mismatch };
-	if (!session.consentedAt) {
-		return { kind: 'error', message: 'ไม่พบเวลาการยินยอม กรุณาเริ่มใหม่' };
-	}
 	try {
 		return {
 			kind: 'registered',
-			registration: await register(card, session.consentedAt, session.startedAt ?? null)
+			registration: await register(card, session.consentDecision, session.startedAt ?? null)
 		};
 	} catch (cause) {
 		if (isPhoneDuplicate(cause)) return { kind: 'phone_duplicate', message: cause.message };
+		if (isConsentExpired(cause)) return { kind: 'consent_expired', message: cause.message };
 		return {
 			kind: 'error',
 			message: cause instanceof Error ? cause.message : 'อ่านข้อมูลไม่สำเร็จ กรุณาลองอีกครั้ง'
@@ -83,41 +92,31 @@ export function submitWalkInCard(
 	card: SmartCardData | null | undefined,
 	session: WalkInCardSession
 ): Promise<WalkInCardRegistrationOutcome> {
-	return registerWalkInCardRead(card, session, async (fullCard, consentedAt, startedAt) => {
+	return registerWalkInCardRead(card, session, async (fullCard, consent, startedAt) => {
 		const photo = await buildKioskPhotoPayload(fullCard.photo_base64).catch(() => null);
 		const cardWithoutPhoto = { ...fullCard, photo_base64: undefined };
-		return registerKioskWalkIn(
-			cardWithoutPhoto,
-			photo,
-			consentedAt,
-			session.phone ?? null,
-			startedAt
-		);
+		return registerKioskWalkIn(cardWithoutPhoto, photo, consent, session.phone ?? null, startedAt);
 	});
 }
 
 /** Register a ThaiD walk-in: the server takes the citizen from the verified session (no photo). */
 export async function submitWalkInThaid(
-	session: Pick<
-		WalkInSubmitSession,
-		'thaidSessionId' | 'consented' | 'consentedAt' | 'phone' | 'startedAt'
-	>,
+	session: Pick<WalkInSubmitSession, 'thaidSessionId' | 'consentDecision' | 'phone' | 'startedAt'>,
 	register: typeof registerKioskThaidWalkIn = registerKioskThaidWalkIn
 ): Promise<WalkInCardRegistrationOutcome> {
-	if (!session.consented || !session.thaidSessionId) return { kind: 'ignored' };
-	if (!session.consentedAt) {
-		return { kind: 'error', message: 'ไม่พบเวลาการยินยอม กรุณาเริ่มใหม่' };
-	}
+	if (!session.consentDecision || !session.thaidSessionId) return { kind: 'ignored' };
 	try {
 		const registration = await register(
 			session.thaidSessionId,
-			session.consentedAt,
+			session.consentDecision,
 			session.phone ?? null,
 			session.startedAt ?? null
 		);
 		return { kind: 'registered', registration };
 	} catch (cause) {
 		if (isPhoneDuplicate(cause)) return { kind: 'phone_duplicate', message: cause.message };
+		if (isConsentExpired(cause))
+			return { kind: 'thaid_restart', message: THAID_CONSENT_EXPIRED_MESSAGE };
 		const message = cause instanceof Error ? cause.message : 'ลงทะเบียนไม่สำเร็จ กรุณาลองอีกครั้ง';
 		if (cause instanceof KioskRequestError && cause.code === 'KIOSK_THAID_SESSION_INVALID') {
 			return { kind: 'expired', message };
@@ -147,4 +146,16 @@ export function abandonWalkIn(
 		void cancelThaid(session.thaidSessionId);
 	}
 	session.clear();
+}
+
+/** ThaiD walk-in whose consent expired: burn the dead scan and send them to scan again, with why. */
+export function restartThaidWalkIn(
+	notice: string,
+	session: Pick<WalkInSubmitSession, 'thaidSessionId'> & {
+		restartThaid(notice: string): void;
+	} = walkInSession,
+	cancelThaid: (sessionId: string) => Promise<void> = cancelKioskThaidSession
+): void {
+	if (session.thaidSessionId) void cancelThaid(session.thaidSessionId);
+	session.restartThaid(notice);
 }

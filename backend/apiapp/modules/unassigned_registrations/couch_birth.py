@@ -9,6 +9,7 @@ from typing import Protocol
 
 import httpx
 from fastapi import HTTPException, status
+from tent_model.evacuee_consent import EVACUEE_SCHEMA_V, evacuee_consent_adapter
 from tent_model.unassigned_registration import (
     UnassignedMember,
     UnassignedPet,
@@ -22,7 +23,6 @@ _COUCH_TIMEOUT_SECONDS = 15.0
 _RELIGION_ALLOWED = frozenset({"buddhist", "muslim", "christian", "other", "unknown"})
 # Couch SoR schema versions at claim birth (CR-112 / CR-148 / schema.md) — keep local to birth.
 HOUSEHOLD_SCHEMA_V = 6
-EVACUEE_SCHEMA_V = 12  # CR-154: gender nullable + registered_via api
 IMAGE_SCHEMA_V = 1
 
 
@@ -218,9 +218,11 @@ def build_couch_evacuee(
             "zone": None,
             "since": ts,
         },
-        "privacy": {"search_excluded": False},
+        "privacy": {"search_excluded": member.search_excluded},
         "registered_via": registered_via,
     }
+    if member.consent is not None:
+        body["consent"] = evacuee_consent_adapter.dump_python(member.consent)
     if person_id is not None:
         body["person_id"] = person_id
     if member.birth_year is not None:

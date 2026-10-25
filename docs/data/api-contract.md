@@ -2,8 +2,8 @@
 title: Smart Shelter — API Contract v1
 status: draft for review
 created: 2026-06-11
-updated: 2026-10-25
-note: CR-158 §9 (ข้อเสนอทีม kiosk 2026-10-24, #796 — ยังไม่ approved) — §2.2 `POST /api/v1/kiosk/reprint` รับ `staff_pin` แทน `id_last4` ได้; CR-182 approved (2026-10-21, #751) — EXT-002/003 เพิ่ม `accepts_booking` + filter `?accepts_booking=`; EXT-008 เปลี่ยนกติกา bookability (ศูนย์ที่ไม่มี `accepts_pre_registration` = จองไม่ได้ → 409 — breaking สำหรับ M2) + scope ใหม่ `booking-bypass` (EOC override; log `granted_bypass`, `external_bookings.bypass`); CR-181 approved (2026-10-21) — EXT-012 `POST /external/persons/search` (scope `occupant-search`) + sort deterministic ของ ID search (#736); CR-176 (2026-10-20) — EXT-011 `cancelled` / `kiosk_registered` (ไม่เคย check-in) = 404 `residency_not_found` (#710); คู่กับ data-model.md v3 — ตัดสิน sync boundary: staff app คุย CouchDB ตรง, service API มีเฉพาะที่ CouchDB ทำเองไม่ได้; CR-112/CR-113 occupancy + unassigned registration; Partner Data API EXT-001–007 (#214); CR-124 staff Google step-up MFA + Google SSO login (enrolled + mint AuthSession); decision sync 2026-10-08 — เพิ่ม GET /public/v1/unassigned-registrations/{id}/status (service secret, status-only) แทนการเรียก staff detail จาก BFF registrations/status — แก้ ticket คิวกลางหายจากอุปกรณ์ (QA pre-register 2026-10-08); decision sync 2026-10-09 — `breakdown` ของ EXT-005 เพิ่ม `gender_unspecified` (null+other; `male+female+gender_unspecified = occupancy_total`) และ `POST /public/v1/unassigned-registrations` รับ `members[].gender = null`; CR-157 (2026-10-10) — เพิ่ม `GET /api/public/v1/donations/slots` (BFF-only อ่าน CouchDB ฝั่ง server) และ error code ของ slot ใน `POST /public/v1/donations` (`SLOT_REQUIRED`, `SLOT_UNAVAILABLE`, `SLOT_FULL`, `SLOTS_UNAVAILABLE`); CR-162 — §2.3 kiosk banner (`POST /api/v1/kiosk/banners`, signed image GET, back-office `/api/back-office/kiosk-banners/**` + `PUT …/order`) และ §2.2 field เครื่อง `screen_type` / `banner_enabled` (ส่วนที่ปรับ 2026-10-15..17 Team Lead อนุมัติ 2026-10-18); CR-151 §17 (2026-10-18, approved 2026-10-20) — §2.1.2 `POST /api/v1/kiosk/volunteer-card` พิมพ์ QR จิตอาสาแบบอ่านอย่างเดียว; CR-172 (2026-10-21) — response ของ `GET /public/v1/donations/{tracking_token}` เพิ่ม `reject_reason`/`reject_reason_code` + `received_summary.items[].rejected/reject_reason/reject_reason_code` (§5); CR-174 (2026-10-21) — `POST /public/v1/donations` response เพิ่ม `status`; `PATCH …/{tracking_token}/items` request เพิ่ม `current_items`/`current_status` (opt), response เพิ่ม `status` + `auto_approved_lines` และ `items[].review_*`; `DONOR_EDITABLE_STATUSES` = `{declared, pending_review, verifying}` (§5); CR-162 ส่วนที่ปรับ 2026-10-21 (Team Lead อนุมัติ 2026-10-22) — kiosk banner group: §2.2 `PATCH /api/v1/kiosk/devices/[id]` ตัด `banner_enabled` + summary มี `banner_group_id`, §2.3 feed กรองตาม `banner_group_id`, banner `group_id`, order body `group_id`, §2.3.1 `/api/back-office/kiosk-banner-groups/**`
+updated: 2026-10-26
+note: decision sync 2026-10-25 — §2.1 kiosk register body เพิ่ม `consent` (PDPA consent block, FR-43/45; endpoint path แก้เป็น `/api/v1/kiosk/register`); CR-158 §9 (ข้อเสนอทีม kiosk 2026-10-24, #796 — ยังไม่ approved) — §2.2 `POST /api/v1/kiosk/reprint` รับ `staff_pin` แทน `id_last4` ได้; CR-182 approved (2026-10-21, #751) — EXT-002/003 เพิ่ม `accepts_booking` + filter `?accepts_booking=`; EXT-008 เปลี่ยนกติกา bookability (ศูนย์ที่ไม่มี `accepts_pre_registration` = จองไม่ได้ → 409 — breaking สำหรับ M2) + scope ใหม่ `booking-bypass` (EOC override; log `granted_bypass`, `external_bookings.bypass`); CR-181 approved (2026-10-21) — EXT-012 `POST /external/persons/search` (scope `occupant-search`) + sort deterministic ของ ID search (#736); CR-176 (2026-10-20) — EXT-011 `cancelled` / `kiosk_registered` (ไม่เคย check-in) = 404 `residency_not_found` (#710); คู่กับ data-model.md v3 — ตัดสิน sync boundary: staff app คุย CouchDB ตรง, service API มีเฉพาะที่ CouchDB ทำเองไม่ได้; CR-112/CR-113 occupancy + unassigned registration; Partner Data API EXT-001–007 (#214); CR-124 staff Google step-up MFA + Google SSO login (enrolled + mint AuthSession); decision sync 2026-10-08 — เพิ่ม GET /public/v1/unassigned-registrations/{id}/status (service secret, status-only) แทนการเรียก staff detail จาก BFF registrations/status — แก้ ticket คิวกลางหายจากอุปกรณ์ (QA pre-register 2026-10-08); decision sync 2026-10-09 — `breakdown` ของ EXT-005 เพิ่ม `gender_unspecified` (null+other; `male+female+gender_unspecified = occupancy_total`) และ `POST /public/v1/unassigned-registrations` รับ `members[].gender = null`; CR-157 (2026-10-10) — เพิ่ม `GET /api/public/v1/donations/slots` (BFF-only อ่าน CouchDB ฝั่ง server) และ error code ของ slot ใน `POST /public/v1/donations` (`SLOT_REQUIRED`, `SLOT_UNAVAILABLE`, `SLOT_FULL`, `SLOTS_UNAVAILABLE`); CR-162 — §2.3 kiosk banner (`POST /api/v1/kiosk/banners`, signed image GET, back-office `/api/back-office/kiosk-banners/**` + `PUT …/order`) และ §2.2 field เครื่อง `screen_type` / `banner_enabled` (ส่วนที่ปรับ 2026-10-15..17 Team Lead อนุมัติ 2026-10-18); CR-151 §17 (2026-10-18, approved 2026-10-20) — §2.1.2 `POST /api/v1/kiosk/volunteer-card` พิมพ์ QR จิตอาสาแบบอ่านอย่างเดียว; CR-172 (2026-10-21) — response ของ `GET /public/v1/donations/{tracking_token}` เพิ่ม `reject_reason`/`reject_reason_code` + `received_summary.items[].rejected/reject_reason/reject_reason_code` (§5); CR-174 (2026-10-21) — `POST /public/v1/donations` response เพิ่ม `status`; `PATCH …/{tracking_token}/items` request เพิ่ม `current_items`/`current_status` (opt), response เพิ่ม `status` + `auto_approved_lines` และ `items[].review_*`; `DONOR_EDITABLE_STATUSES` = `{declared, pending_review, verifying}` (§5); CR-162 ส่วนที่ปรับ 2026-10-21 (Team Lead อนุมัติ 2026-10-22) — kiosk banner group: §2.2 `PATCH /api/v1/kiosk/devices/[id]` ตัด `banner_enabled` + summary มี `banner_group_id`, §2.3 feed กรองตาม `banner_group_id`, banner `group_id`, order body `group_id`, §2.3.1 `/api/back-office/kiosk-banner-groups/**`
 ---
 
 # Smart Shelter — API Contract v1
@@ -175,17 +175,18 @@ QR และ smart-card lookup ไม่ขึ้นกับ flag เบอร�
 `kiosk_walk_in_registration_enabled` เพื่อกำหนด `can_register`; flag นี้ควบคุมเฉพาะการเริ่ม
 walk-in registration และไม่ปิด lookup หรือ check-in flow เดิม.
 
-`POST /api/v1/scanner/kiosk/register` สร้างผู้ประสบภัยจากการอ่าน Smart Card แบบเต็ม หลังผู้ใช้
+`POST /api/v1/kiosk/register` สร้างผู้ประสบภัยจากการอ่าน Smart Card แบบเต็ม หลังผู้ใช้
 ยินยอมที่ Kiosk:
 
 ```http
-POST /api/v1/scanner/kiosk/register
+POST /api/v1/kiosk/register
 X-Device-ID: kiosk-sh001-01
 X-Device-Secret: …
 Content-Type: application/json
 ```
 
-Request body เป็น `{ "card": <SmartCardData without photo_base64>, "photo": <KioskPhotoPayload|null>, "consented": true, "consented_at": <ISO-8601 UTC> }`.
+Request body เป็น `{ "card": <SmartCardData without photo_base64>, "photo": <KioskPhotoPayload|null>, "consented": true, "consented_at": <ISO-8601 UTC>, "consent": <ConsentDecision> }`.
+`consent` คือผลจากบล็อกความยินยอม PDPA (`docs/features/pdpa-consent-block-spec.md`, FR-43/45): `{ mode, health?, search_visible?, guardian_for, verbal, ref, given_at, notice_version }` (`mode = basic` ไม่มี `health`/`search_visible`). Kiosk ไม่แสดงช่องผู้ปกครอง/เจ้าหน้าที่ จึง `guardian_for = []` และ `verbal = false` เสมอ. Server ตรวจด้วย Zod เดียวกับ client (FR-34), ตั้ง `channel = kiosk` และ `given_by = self`, เขียน `evacuee.consent` + `privacy.search_excluded` ตามผล (FR-30/31) และไม่สร้าง `medical` เมื่อ `mode = basic` หรือ `health = false` (FR-32). `consent` ไม่มีหรือไม่ผ่าน Zod → `400` และไม่สร้าง evacuee (FR-45). `consent` ถูกรูปแบบแต่ `given_at` ย้อนหลังเกิน 10 นาที → `400 KIOSK_CONSENT_EXPIRED` ("การยินยอมหมดเวลาแล้ว กรุณากดยินยอมอีกครั้ง") — ตู้ต้องขอความยินยอมใหม่ ไม่ retry ด้วย decision เดิม (บัตรสมาร์ทการ์ดเก็บข้อมูลบัตรไว้; ThaiD เริ่มสแกนใหม่ เพราะ session สแกนหมดอายุแล้ว); `given_at` ล้ำอนาคตเกิน 10 นาทียังเป็น `INVALID_KIOSK_REGISTRATION` (decision sync 2026-10-25). `card_snapshot.consented_at` คงไว้เหมือนเดิม.
 เมื่อมีรูป `photo` มี `content_type`, `full_base64`, `thumb_base64?`, `width`, `height`,
 `original_size`, `compressed_size` และ `thumbnail_size`; base64 ไม่มี data URL prefix.
 Browser บันทึก `consented_at` ตอนผู้ใช้กดยินยอมไว้ใน in-memory state; ห้ามใส่ citizen ID ใน URL
@@ -193,19 +194,21 @@ Browser บันทึก `consented_at` ตอนผู้ใช้กดย�
 ที่อยู่. รูปจากชิปถูก compress เป็น WEBP พร้อม thumbnail ก่อนส่งใน `photo` แยก; หาก compress ไม่สำเร็จ
 จะส่ง JPEG เดิมโดยไม่มี thumbnail และหากไม่มีรูปหรือรูปเกินขนาดจะลงทะเบียนต่อโดยไม่แนบรูป. Server
 ผูก shelter จาก device registry เท่านั้น, ตรวจ flag ซ้ำ, ตรวจข้อมูลบัตร
-และค้น record เดิมใน shelter นั้นแบบ fail-closed ก่อนสร้าง `evacuee` ที่ `schema_v: 11`,
+และค้น record เดิมใน shelter นั้นแบบ fail-closed ก่อนสร้าง `evacuee` ที่ `schema_v: 15`,
 `current_stay.status: "kiosk_registered"`, `registered_via: "kiosk"`, `household_id: null`,
 `phone: null`, `card_snapshot.consented_at` และ `photo: image:{ulid}` เมื่อมีรูป. Server ตรวจ
 base64, ขนาด decoded (full ≤300 KB, thumb ≤50 KB) และ magic bytes; สร้าง image document พร้อม
 inline attachments ก่อนเขียน evacuee. หากเขียน evacuee ไม่สำเร็จจะลบ image ที่เพิ่งสร้างแบบ best-effort.
 `card_snapshot` ที่สร้างใหม่ไม่มี `photo_base64`. สำเร็จตอบ
-`{ "status": "created", "evacuee_id": "evacuee:{ulid}" }`. Endpoint ต้องตอบ
+`{ "status": "created", "evacuee_id": "evacuee:{ulid}", "qr_payload", "label", "consent_ref": "CS-XXXXXXXX", "consent_mode": "full" | "basic" }`
+โดย `consent_ref` / `consent_mode` อ่านจาก `evacuee.consent` ที่เพิ่งเขียน (FR-43) เพื่อให้หน้า `/kiosk/register/done`
+แสดงสรุปผลความยินยอมและเลขอ้างอิงที่ผู้ใช้ถือไปอ้างกับเจ้าหน้าที่. Endpoint ต้องตอบ
 `cache-control: no-store`, `pragma: no-cache`.
 
 การ lookup ที่ไม่มี record อนุญาตให้เริ่มลงทะเบียนเมื่อ flag เปิด โดยส่ง `can_register: true`
 ใน not-found response. เมื่อ flag ปิดให้ส่ง `can_register: false`. Record เดิมที่ไม่อนุญาตให้
 ลงทะเบียนซ้ำตอบ `409 KIOSK_REGISTRATION_BLOCKED`; body ไม่ผ่าน schema ตอบ `400
-INVALID_KIOSK_REGISTRATION`, flag ปิดตอบ `403 KIOSK_REGISTRATION_DISABLED`, เกิน limit ของ
+INVALID_KIOSK_REGISTRATION` (consent หมดเวลา → `400 KIOSK_CONSENT_EXPIRED`), flag ปิดตอบ `403 KIOSK_REGISTRATION_DISABLED`, เกิน limit ของ
 nginx zone `kiosk` ตอบ `429 KIOSK_RATE_LIMITED` (CR-188), auth ไม่ผ่านตอบ `401 DEVICE_AUTH_FAILED`, และ registry/database
 อ่านหรือเขียนไม่ได้ตอบ `503` โดยไม่สร้าง record. รายละเอียดนี้ implement ตามค่าที่เสนอในแผน;
 CR ที่แผนอ้างถึงยังไม่มีใน `docs/changes/` และต้องได้รับอนุมัติก่อนเปิด PR.
@@ -585,6 +588,22 @@ Contract เต็มอยู่ที่ [public-tier-flow-spec.html](../featu
 > (เหมือน onsite CR-054). เส้น **ไม่ระบุศูนย์** ยังใช้ GridFS ผ่าน
 > `POST /api/public/v1/unassigned-registrations/photos` (§5.2).
 
+**PDPA consent บน public pre-register (FR-42 · `docs/features/pdpa-consent-block-spec.md`):** ทั้งสอง path
+(`POST /api/public/v1/registrations` และ `POST /api/public/v1/unassigned-registrations`) รับ field เพิ่มสองตัว
+**ทั้งคู่ required** ใน body เดิม (ไม่ส่งหรือไม่ผ่านการตรวจ → `422 INVALID_INPUT` พร้อม `details` และไม่เขียนอะไร):
+
+| Field | Shape | กติกา |
+| --- | --- | --- |
+| `consent` | ผลจากบล็อกช่อง `web`: `{ mode: "full", health: boolean, search_visible: boolean, guardian_for: string[], verbal: false, ref, given_at, notice_version }` หรือ `{ mode: "basic", guardian_for, verbal: false, ref, given_at, notice_version }` | strict (field เกินปฏิเสธ); `ref` = `CS-` + 8 ตัวอักษร ULID; `given_at` = ISO-8601 มี offset; `verbal` เป็น `false` เสมอ (ช่อง `web` ไม่มี verbal); `guardian_for` เก็บ **member key** ไม่ใช่ลำดับ |
+| `consent_member_keys` | `string[]` (≥1) | key ของสมาชิกตามลำดับเดียวกับ `members` (ตัวแรก = ผู้ลงทะเบียน) — จำนวนต้องเท่ากับ `members` และไม่ซ้ำ; `guardian_for` ต้องเป็นสมาชิกใน list นี้และไม่ใช่ผู้ลงทะเบียน |
+
+BFF คำนวณผลต่อสมาชิกด้วย `planRegistrationConsent` ตัวเดียวกับทุก channel (FR-11, FR-30–33): ผู้ลงทะเบียน `given_by = self`,
+สมาชิกใน `guardian_for` = `guardian`, ที่เหลือ = `household_member`; `search_excluded = (mode = basic) หรือ search_visible = false`;
+`health = false` → ไม่เขียน `medical` ของสมาชิกนั้น (FR-32) และข้อมูลสุขภาพไม่ถูกส่งต่อไป Mongo. Path `registrations` (shelter booking)
+เขียน `evacuee.consent` + `privacy.search_excluded` ลง CouchDB ศูนย์ที่เลือกโดยตรงพร้อม `schema_v: 15` (`channel = web`,
+`giver_evacuee_id` = evacuee id ของผู้ลงทะเบียนเมื่อ `given_by` เป็น `guardian`/`household_member`). Path `unassigned-registrations`
+ส่งต่อเป็น `members[].consent` / `members[].search_excluded` ไป FastAPI (§5.2).
+
 #### Response ของ `POST /public/v1/donations` (CR-174 FR-15)
 
 ```jsonc
@@ -746,13 +765,30 @@ BFF ตรวจช่วงเวลา (`logistics.slot`) ก่อนส่�
 | Method | Path | Auth |
 | --- | --- | --- |
 | POST | `/public/v1/unassigned-registrations/photos` | public BFF + secret — GridFS face/pet photo (#255); returns `photo_id` (`gfs:{oid}`) |
-| POST | `/public/v1/unassigned-registrations` | public BFF + secret — body mirrors public UnifiedRegistration fields (+ member `photo` / pet `image_url` refs); `schema_v: 3`; optional `join_registration_id` appends into existing family (incl. closed → reopen) |
+| POST | `/public/v1/unassigned-registrations` | public BFF + secret — body mirrors public UnifiedRegistration fields (+ member `photo` / pet `image_url` refs); `schema_v: 4`; optional `join_registration_id` appends into existing family (incl. closed → reopen); ทุก `members[]` ต้องมี `consent` + `search_excluded` (ด้านล่าง) |
 | GET | `/public/v1/unassigned-registrations/{id}/status` | public BFF + secret (`verify_external_secret`) — status-only, **no PII**: `{id, status, members_total, members_claimed, claimed}`; `claimed = members_claimed > 0 and status in (closed, claimed)` (partial claim = `open` → still pending); 404 `NOT_FOUND` when deleted. Caller: BFF `/api/public/v1/registrations/status` (ticket sync) — upstream errors map to 502 `STATUS_UNAVAILABLE`, never `notFound` |
 | GET | `/staff/v1/unassigned-registrations/search?q=` | staff session — open members + open pets |
 | GET | `/staff/v1/unassigned-registrations/{id}/review` | `require_registration_staff` — read-only pre-claim review (CR-140 addendum); open members/pets + household address only (no `pets[]` claim-status list); writes nothing |
 | GET | `/staff/v1/unassigned-registrations/photos/{photo_id}` | `require_registration_staff` — streams GridFS bytes (CR-140 addendum); 404 unless `photo_id` is still referenced by an **open** member `photo` or pet `image_url` |
 | POST | `/staff/v1/unassigned-registrations/{id}/claim` | staff + shelter scope — body `member_ids` and/or `pet_ids`; copies nickname/religion/emergency_contact; GridFS member `photo` + pet `image_url` → Couch `image:{ulid}`; append claimed pets onto existing Couch HH |
 | DELETE | `/staff/v1/unassigned-registrations/{id}` | `system_admin` only |
+
+**Consent ต่อสมาชิก (FR-42, `schema_v` 3 → 4):** `members[]` ของ `POST /public/v1/unassigned-registrations` เพิ่มสอง field **required**
+(ขาด → `422`; ใช้กับทั้งสร้างใหม่และ join ครอบครัวเดิม):
+
+| Field | Shape | กติกา |
+| --- | --- | --- |
+| `members[].consent` | `{ mode: "full", health: boolean, ref, given_at, notice_version, given_by }` หรือ `{ mode: "basic", health: false, ref, given_at, notice_version, given_by }` | `given_by` ∈ `self` \| `guardian` \| `household_member` (ไม่รับ `backfill`); `ref` = `^CS-[0-9A-HJKMNP-TV-Z]{8}$`; `given_at` = ISO-8601 มี offset (เก็บสตริงตามที่ client ส่ง); ไม่มี `channel`, `giver_evacuee_id`, `recorded_verbally_by` ใน request (server ผูกเอง) |
+| `members[].search_excluded` | `boolean` | BFF คำนวณจากผลบล็อก (FR-30/31); `consent.mode = "basic"` แล้ว `search_excluded = false` → `422` (FR-31) |
+
+FastAPI **ไม่ตัดสิน policy** — BFF คำนวณต่อสมาชิกแล้ว; use case เพียงผูกให้ครบก่อนเก็บ: `channel = "web"`, `recorded_verbally_by = null`,
+`giver_evacuee_id = null` เมื่อ `self` และ = `reserved_evacuee_id` ของ **สมาชิกคนแรกของ request** (ผู้ลงทะเบียน) เมื่อเป็น `guardian`/`household_member`.
+ผลที่เก็บใน `unassigned_registrations.members[]` คือ `consent` (shape เดียวกับ `evacuee.consent`, `schema.md`) + `search_excluded`.
+สมาชิกที่คิวไว้ก่อน `schema_v 4` ไม่มี `consent` (`null`; FR-44) และ report-in ถามความยินยอมเฉพาะคนเหล่านี้ (FR-41).
+
+**`OpenMemberHit`** (member `open` ใน hit ของ `GET /staff/v1/unassigned-registrations/search` และ `…/{id}/review`) เพิ่ม `consent: EvacueeConsent | null`
+(`null` = ยังไม่เคยให้ความยินยอม) และ `search_excluded: boolean` (default `false`) เพื่อให้หน้า report-in แสดงสรุปแบบอ่านอย่างเดียวของคนที่มี `consent` แล้ว.
+Claim คัดลอก `consent` และ `search_excluded` ไป evacuee doc โดยไม่เปลี่ยนค่า (`sync` §3.3).
 
 Claim = Mongo mark (คน+สัตว์) แล้ว birth/append Couch (option B — ดู [CR-113](../changes/00-baseline/CR-113-unassigned-registration-mongo.md) + [CR-140](../changes/00-baseline/CR-140-persistent-unassigned-family.md)); shape: `schema.md` §9.5. เมื่อไม่มี `open` เหลือ → เอกสาร `closed` (**ไม่** hard-delete); `deleted` เสมอ `false`. Public browser เรียกผ่าน SvelteKit BFF เท่านั้น (ไม่ตรง FastAPI).
 

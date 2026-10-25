@@ -10,13 +10,27 @@ import {
 	registerKioskThaidWalkIn,
 	registerKioskWalkIn
 } from './kiosk-register.server';
+import {
+	evacueeConsentSchema,
+	EVACUEE_SCHEMA_V,
+	mintConsentStamp,
+	type ConsentDecision
+} from '$lib/features/consent/server';
 import type { ThaiDAutofillProfile } from '$lib/features/people/domain/thaid-profile';
 
 vi.mock('$lib/server/couch-admin', () => ({ adminFetch: vi.fn() }));
 
 const mockAdminFetch = vi.mocked(adminFetch);
 const citizenId = '1234567890123';
-const consentedAt = new Date().toISOString();
+const decision: ConsentDecision = {
+	mode: 'full',
+	health: false,
+	search_visible: true,
+	guardian_for: [],
+	verbal: false,
+	...mintConsentStamp()
+};
+const consentedAt = decision.given_at;
 const card = smartCardDataSchema.parse({
 	citizen_id: citizenId,
 	first_name_th: 'สมชาย',
@@ -56,14 +70,7 @@ describe('registerKioskWalkIn', () => {
 	it('stores a new arriving record with full snapshot and consent time', async () => {
 		const db = fakeShelterDb();
 
-		const result = await registerKioskWalkIn(
-			'SH001',
-			'KIOSK-01',
-			'โต๊ะ 1',
-			card,
-			photo,
-			consentedAt
-		);
+		const result = await registerKioskWalkIn('SH001', 'KIOSK-01', 'โต๊ะ 1', card, photo, decision);
 		const findSelectors = mockAdminFetch.mock.calls
 			.filter(([path]) => String(path) === '/shelter_sh001/_find')
 			.map(([, init]) => JSON.parse(String(init?.body)).selector);
@@ -96,7 +103,8 @@ describe('registerKioskWalkIn', () => {
 		expect(image?.caption).toBe('ภาพจากบัตรประชาชน');
 		expect(saved?._id).toBe(result._id);
 		expect(result.current_stay.status).toBe('arriving');
-		expect(result.schema_v).toBe(11);
+		expect(result.schema_v).toBe(EVACUEE_SCHEMA_V);
+		expect(result.consent.ref).toBe(decision.ref);
 		expect(result.registered_via).toBe('kiosk');
 		expect(result.household_id).toBe(db.ofType('household')[0]?._id);
 		expect(result.phone).toBeNull();
@@ -108,16 +116,51 @@ describe('registerKioskWalkIn', () => {
 		expect(db.ofType('kiosk_reg_lock')).toHaveLength(0);
 	});
 
+	it('records the decision as a valid kiosk consent on the saved evacuee', async () => {
+		const db = fakeShelterDb();
+		await registerKioskWalkIn('SH001', 'KIOSK-01', 'โต๊ะ 1', card, null, decision);
+		const [saved] = db.ofType<{
+			schema_v: number;
+			consent: unknown;
+			privacy: { search_excluded: boolean };
+		}>('evacuee');
+
+		expect(saved.schema_v).toBe(15);
+		expect(evacueeConsentSchema.parse(saved.consent)).toMatchObject({
+			ref: decision.ref,
+			given_at: decision.given_at,
+			notice_version: decision.notice_version,
+			mode: 'full',
+			health: false,
+			given_by: 'self',
+			giver_evacuee_id: null,
+			recorded_verbally_by: null,
+			channel: 'kiosk'
+		});
+		expect(saved.privacy.search_excluded).toBe(false);
+	});
+
+	it('excludes a basic registration from search and keeps health off', async () => {
+		const db = fakeShelterDb();
+		const basic: ConsentDecision = {
+			mode: 'basic',
+			guardian_for: [],
+			verbal: false,
+			...mintConsentStamp()
+		};
+		await registerKioskWalkIn('SH001', 'KIOSK-01', 'โต๊ะ 1', card, null, basic);
+		const [saved] = db.ofType<{
+			consent: { mode: string; health: boolean };
+			privacy: { search_excluded: boolean };
+		}>('evacuee');
+
+		expect(saved.consent).toMatchObject({ mode: 'basic', health: false });
+		expect(saved.privacy.search_excluded).toBe(true);
+	});
+
 	it('does not create an image document when the card has no photo', async () => {
 		const db = fakeShelterDb();
-		const result = await registerKioskWalkIn(
-			'SH001',
-			'KIOSK-01',
-			'โต๊ะ 1',
-			card,
-			null,
-			consentedAt
-		);
+		const result = await registerKioskWalkIn('SH001', 'KIOSK-01', 'โต๊ะ 1', card, null, decision);
 		expect(db.ofType('image')).toHaveLength(0);
 		expect(result.photo).toBeNull();
 		expect(db.ofType('evacuee')[0]?.photo).toBeNull();
@@ -127,7 +170,7 @@ describe('registerKioskWalkIn', () => {
 	it('leaves no image or household behind if creating the evacuee fails', async () => {
 		const db = fakeShelterDb([], { failPutOfType: 'evacuee' });
 		await expect(
-			registerKioskWalkIn('SH001', 'KIOSK-01', 'โต๊ะ 1', card, photo, consentedAt)
+			registerKioskWalkIn('SH001', 'KIOSK-01', 'โต๊ะ 1', card, photo, decision)
 		).rejects.toThrow('evacuee write failed');
 		expect(db.ofType('image')).toHaveLength(0);
 		expect(db.ofType('household')).toHaveLength(0);
@@ -138,7 +181,7 @@ describe('registerKioskWalkIn', () => {
 	it('leaves no image behind and writes no evacuee if creating the household fails', async () => {
 		const db = fakeShelterDb([], { failPutOfType: 'household' });
 		await expect(
-			registerKioskWalkIn('SH001', 'KIOSK-01', 'โต๊ะ 1', card, photo, consentedAt)
+			registerKioskWalkIn('SH001', 'KIOSK-01', 'โต๊ะ 1', card, photo, decision)
 		).rejects.toThrow('household write failed');
 		expect(db.ofType('image')).toHaveLength(0);
 		expect(db.ofType('evacuee')).toHaveLength(0);
@@ -161,7 +204,7 @@ describe('registerKioskWalkIn', () => {
 			.mockResolvedValueOnce({ ok: true } as never); // release lock
 
 		await expect(
-			registerKioskWalkIn('SH001', 'KIOSK-01', 'โต๊ะ 1', card, null, consentedAt)
+			registerKioskWalkIn('SH001', 'KIOSK-01', 'โต๊ะ 1', card, null, decision)
 		).rejects.toBeInstanceOf(KioskRegistrationBlockedError);
 		expect(mockAdminFetch).toHaveBeenCalledTimes(3);
 	});
@@ -172,7 +215,7 @@ describe('registerKioskWalkIn', () => {
 			.mockRejectedValueOnce(new Error('couch unavailable')) // _find
 			.mockResolvedValueOnce({ ok: true } as never); // release lock
 		await expect(
-			registerKioskWalkIn('SH001', 'KIOSK-01', 'โต๊ะ 1', card, null, consentedAt)
+			registerKioskWalkIn('SH001', 'KIOSK-01', 'โต๊ะ 1', card, null, decision)
 		).rejects.toThrow('couch unavailable');
 		expect(mockAdminFetch).toHaveBeenCalledTimes(3);
 	});
@@ -208,8 +251,8 @@ describe('registerKioskWalkIn', () => {
 		});
 
 		const outcomes = await Promise.allSettled([
-			registerKioskWalkIn('SH001', 'KIOSK-A', 'โต๊ะ 1', card, null, consentedAt),
-			registerKioskWalkIn('SH001', 'KIOSK-B', 'โต๊ะ 2', card, null, consentedAt)
+			registerKioskWalkIn('SH001', 'KIOSK-A', 'โต๊ะ 1', card, null, decision),
+			registerKioskWalkIn('SH001', 'KIOSK-B', 'โต๊ะ 2', card, null, decision)
 		]);
 
 		expect(outcomes.filter((outcome) => outcome.status === 'fulfilled')).toHaveLength(1);
@@ -240,14 +283,7 @@ describe('registerKioskWalkIn', () => {
 			return { ok: true } as never;
 		});
 
-		const result = await registerKioskWalkIn(
-			'SH001',
-			'KIOSK-01',
-			'โต๊ะ 1',
-			card,
-			null,
-			consentedAt
-		);
+		const result = await registerKioskWalkIn('SH001', 'KIOSK-01', 'โต๊ะ 1', card, null, decision);
 		expect(result.current_stay.status).toBe('arriving');
 		expect(lockPutAttempts).toBe(2);
 	});
@@ -295,7 +331,7 @@ describe('kiosk walk-in phone and ThaiD', () => {
 			'โต๊ะ 1',
 			card,
 			null,
-			consentedAt,
+			decision,
 			'0812345678'
 		);
 		expect(result.phone).toBe('0812345678');
@@ -306,7 +342,7 @@ describe('kiosk walk-in phone and ThaiD', () => {
 		const result = await registerKioskThaidWalkIn(
 			device,
 			{ pid: citizenId, profile },
-			consentedAt,
+			decision,
 			'0812345678'
 		);
 		const [saved] = db.ofType('evacuee');
@@ -328,6 +364,24 @@ describe('kiosk walk-in phone and ThaiD', () => {
 			device_id: 'KIOSK-01',
 			station_name: 'โต๊ะ 1'
 		});
+	});
+
+	it('keeps a ThaiD walk-in out of search when the person unticks C3', async () => {
+		const db = fakeShelterDb();
+		const hidden: ConsentDecision = {
+			...decision,
+			health: true,
+			search_visible: false,
+			...mintConsentStamp()
+		};
+		await registerKioskThaidWalkIn(device, { pid: citizenId, profile }, hidden, null);
+		const [saved] = db.ofType<{
+			consent: { mode: string; health: boolean };
+			privacy: { search_excluded: boolean };
+		}>('evacuee');
+
+		expect(saved.consent).toMatchObject({ mode: 'full', health: true, channel: 'kiosk' });
+		expect(saved.privacy.search_excluded).toBe(true);
 	});
 
 	it('leaves out an unknown ThaiD birth year and copes with no profile at all', () => {
@@ -354,7 +408,7 @@ describe('kiosk walk-in phone and ThaiD', () => {
 			} as never)
 			.mockResolvedValueOnce({ ok: true } as never);
 		await expect(
-			registerKioskThaidWalkIn(device, { pid: citizenId, profile }, consentedAt, null)
+			registerKioskThaidWalkIn(device, { pid: citizenId, profile }, decision, null)
 		).rejects.toBeInstanceOf(KioskRegistrationBlockedError);
 	});
 });
@@ -439,7 +493,7 @@ describe('kiosk walk-in station_log (CR-192)', () => {
 			'โต๊ะ 1',
 			card,
 			null,
-			consentedAt,
+			decision,
 			null,
 			startedAt
 		);
@@ -466,7 +520,7 @@ describe('kiosk walk-in station_log (CR-192)', () => {
 		const result = await registerKioskThaidWalkIn(
 			{ shelterCode: 'SH001', deviceId: 'KIOSK-02', stationName: 'โต๊ะ 2' },
 			{ pid: citizenId },
-			consentedAt,
+			decision,
 			null
 		);
 		const logs = db.ofType<Log>('station_log');
@@ -483,7 +537,7 @@ describe('kiosk walk-in station_log (CR-192)', () => {
 			'โต๊ะ 1',
 			card,
 			null,
-			consentedAt,
+			decision,
 			null,
 			new Date(Date.now() - 3 * 3_600_000).toISOString()
 		);
@@ -495,14 +549,7 @@ describe('kiosk walk-in station_log (CR-192)', () => {
 		const db = fakeShelterDb([], { failBulkDocs: true });
 		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
-		const result = await registerKioskWalkIn(
-			'SH001',
-			'KIOSK-01',
-			'โต๊ะ 1',
-			card,
-			null,
-			consentedAt
-		);
+		const result = await registerKioskWalkIn('SH001', 'KIOSK-01', 'โต๊ะ 1', card, null, decision);
 
 		expect(result.current_stay.status).toBe('arriving');
 		expect(db.ofType('evacuee')).toHaveLength(1);
@@ -514,7 +561,7 @@ describe('kiosk walk-in station_log (CR-192)', () => {
 	it('writes no log when the registration itself fails', async () => {
 		const db = fakeShelterDb([], { failPutOfType: 'evacuee' });
 		await expect(
-			registerKioskWalkIn('SH001', 'KIOSK-01', 'โต๊ะ 1', card, null, consentedAt)
+			registerKioskWalkIn('SH001', 'KIOSK-01', 'โต๊ะ 1', card, null, decision)
 		).rejects.toThrow();
 		expect(db.ofType('station_log')).toHaveLength(0);
 	});
@@ -529,13 +576,13 @@ describe('kiosk walk-in phone already in use', () => {
 		shelter_code: 'SH001',
 		person_id: { cardType: 'national_id', number: '9999999999999' },
 		phone,
-		current_stay: { status, zone: null, since: consentedAt }
+		current_stay: { status, zone: null, since: decision }
 	});
 
 	it('refuses a phone another evacuee in the shelter already has, and writes nothing', async () => {
 		const db = fakeShelterDb([otherEvacuee('0812345678', 'active')]);
 		await expect(
-			registerKioskWalkIn('SH001', 'KIOSK-01', 'โต๊ะ 1', card, photo, consentedAt, '0812345678')
+			registerKioskWalkIn('SH001', 'KIOSK-01', 'โต๊ะ 1', card, photo, decision, '0812345678')
 		).rejects.toBeInstanceOf(KioskPhoneDuplicateError);
 		expect(db.ofType('evacuee')).toHaveLength(1);
 		expect(db.ofType('image')).toHaveLength(0);
@@ -552,7 +599,7 @@ describe('kiosk walk-in phone already in use', () => {
 				'โต๊ะ 1',
 				card,
 				null,
-				consentedAt,
+				decision,
 				'0812345678'
 			);
 			expect(result.phone).toBe('0812345678');
@@ -563,7 +610,7 @@ describe('kiosk walk-in phone already in use', () => {
 	it('treats a phone stored the legacy +66 way as the same phone', async () => {
 		fakeShelterDb([otherEvacuee('+66812345678', 'kiosk_registered')]);
 		await expect(
-			registerKioskWalkIn('SH001', 'KIOSK-01', 'โต๊ะ 1', card, null, consentedAt, '0812345678')
+			registerKioskWalkIn('SH001', 'KIOSK-01', 'โต๊ะ 1', card, null, decision, '0812345678')
 		).rejects.toBeInstanceOf(KioskPhoneDuplicateError);
 	});
 });
@@ -579,7 +626,7 @@ describe('kiosk walk-in household from the address read', () => {
 			'โต๊ะ 1',
 			{ ...card, village_no: '4', lane: 'ซอย 5', road: 'สุขุมวิท' },
 			null,
-			consentedAt
+			decision
 		);
 		const [household] = db.ofType('household');
 
@@ -609,7 +656,7 @@ describe('kiosk walk-in household from the address read', () => {
 		const evacuee = await registerKioskThaidWalkIn(
 			{ shelterCode: 'SH001', deviceId: 'KIOSK-01', stationName: 'โต๊ะ 1' },
 			{ pid: citizenId },
-			consentedAt,
+			decision,
 			null
 		);
 		const [household] = db.ofType('household');
@@ -633,7 +680,7 @@ describe('kiosk walk-in joining the household at the same card address', () => {
 	const address = { village_no: '4', lane: 'ซอย 5', road: 'สุขุมวิท' };
 	const second = { ...card, citizen_id: '2234567890123', first_name_th: 'สมหญิง' };
 	const register = (card_: typeof card, photo_: typeof photo | null = null) =>
-		registerKioskWalkIn('SH001', 'KIOSK-01', 'โต๊ะ 1', card_, photo_, consentedAt);
+		registerKioskWalkIn('SH001', 'KIOSK-01', 'โต๊ะ 1', card_, photo_, decision);
 
 	it('puts a second walk-in at the same address (spaced differently) in the first one household', async () => {
 		const db = fakeShelterDb();
