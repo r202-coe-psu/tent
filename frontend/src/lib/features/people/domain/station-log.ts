@@ -85,6 +85,20 @@ export function createStationLog(
 	);
 }
 
+// ---------------------------------------------------------------- kiosk start time (O7/O8)
+/**
+ * Station 1 kiosk `start` time. The kiosk browser carries the time it looked the visitor up (or
+ * read the card, for a walk-in); the server trusts it only within `[now − stale window, now]`
+ * and otherwise uses its own clock — a stray or hostile value can never backdate a visit.
+ */
+export function resolveKioskStartedAt(raw: unknown, nowMs: number = Date.now()): string {
+	const parsed = typeof raw === 'string' ? Date.parse(raw) : Number.NaN;
+	if (Number.isFinite(parsed) && parsed <= nowMs && parsed >= nowMs - STATION_LOG_STALE_WINDOW_MS) {
+		return new Date(parsed).toISOString();
+	}
+	return new Date(nowMs).toISOString();
+}
+
 // ---------------------------------------------------------------- start idempotency (FR-STL-13)
 /** The slice of a `station_log` that {@link hasOpenStationStart} needs. */
 export interface StationLogEventLike {

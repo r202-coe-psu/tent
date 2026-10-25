@@ -3,6 +3,7 @@ import {
 	STATION_LOG_STALE_WINDOW_MS,
 	createStationLog,
 	hasOpenStationStart,
+	resolveKioskStartedAt,
 	stationLogInputSchema,
 	summarizeStationTimes,
 	type StationLogEvent
@@ -77,6 +78,24 @@ describe('createStationLog', () => {
 		expect(stationLogInputSchema.safeParse({ ...base, station: 1 }).success).toBe(true);
 		expect(stationLogInputSchema.safeParse({ ...base, station: 2 }).success).toBe(false);
 		expect(stationLogInputSchema.safeParse({ ...base, station: 3 }).success).toBe(false);
+	});
+});
+
+describe('resolveKioskStartedAt', () => {
+	it('keeps a lookup time inside the window', () => {
+		expect(resolveKioskStartedAt(iso(T0 - 5 * MIN), T0)).toBe(iso(T0 - 5 * MIN));
+		expect(resolveKioskStartedAt(iso(T0), T0)).toBe(iso(T0));
+		expect(resolveKioskStartedAt(iso(T0 - STATION_LOG_STALE_WINDOW_MS), T0)).toBe(
+			iso(T0 - STATION_LOG_STALE_WINDOW_MS)
+		);
+	});
+
+	it('falls back to server now for a future, too-old, missing or malformed value', () => {
+		expect(resolveKioskStartedAt(iso(T0 + MIN), T0)).toBe(iso(T0));
+		expect(resolveKioskStartedAt(iso(T0 - STATION_LOG_STALE_WINDOW_MS - MIN), T0)).toBe(iso(T0));
+		expect(resolveKioskStartedAt(undefined, T0)).toBe(iso(T0));
+		expect(resolveKioskStartedAt('not a date', T0)).toBe(iso(T0));
+		expect(resolveKioskStartedAt(12345, T0)).toBe(iso(T0));
 	});
 });
 

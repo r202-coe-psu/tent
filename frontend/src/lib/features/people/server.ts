@@ -55,6 +55,7 @@ export {
 	STATION_CHANNEL_COMBOS,
 	bangkokDateOf,
 	createStationLog,
+	resolveKioskStartedAt,
 	summarizeStationTimes,
 	type StationLog,
 	type StationLogEvent,

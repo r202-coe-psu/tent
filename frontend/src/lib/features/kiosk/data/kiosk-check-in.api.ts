@@ -292,7 +292,12 @@ export type KioskCheckInPhotoOptions =
 export async function checkInSelectedMembers(
 	primaryEvacueeId: string,
 	evacueeIds: string[],
-	options: { signal?: AbortSignal; batchLimit?: number } & KioskCheckInPhotoOptions = {}
+	options: {
+		signal?: AbortSignal;
+		batchLimit?: number;
+		/** When the visitor was looked up (ISO) — the Station 1 `start` time (CR-192). */
+		lookupAt?: string;
+	} & KioskCheckInPhotoOptions = {}
 ): Promise<KioskCheckInBatchResult> {
 	const batchLimit = Math.min(20, Math.max(1, options.batchLimit ?? 20));
 	// The primary goes first, so the batch carrying the card photo / ThaiD session is sent (and
@@ -336,6 +341,7 @@ export async function checkInSelectedMembers(
 					body: JSON.stringify({
 						primary_evacuee_id: primaryEvacueeId,
 						evacuee_ids: batch,
+						...(options.lookupAt ? { lookup_at: options.lookupAt } : {}),
 						...photoFields
 					})
 				},

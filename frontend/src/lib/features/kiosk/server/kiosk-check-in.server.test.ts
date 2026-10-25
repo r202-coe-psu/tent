@@ -94,8 +94,24 @@ function setHousehold(members: FixtureEvacuee[], head = members[0]): void {
 	evacuees.push(...members);
 }
 
+interface BulkDoc {
+	_id: string;
+	type: string;
+	[key: string]: unknown;
+}
+let bulkWrites: BulkDoc[] = [];
+let failBulk = false;
+
 function configureCheckInCouchMocks(options: { conflictOnId?: string } = {}): void {
+	bulkWrites = [];
+	failBulk = false;
 	mockAdminFetch.mockImplementation(async (path, init = {}) => {
+		if (path.endsWith('/_bulk_docs')) {
+			if (failBulk) throw Object.assign(new Error('couch down'), { status: 503 });
+			const { docs } = JSON.parse(String(init.body ?? '{}')) as { docs: BulkDoc[] };
+			bulkWrites.push(...docs);
+			return docs.map((doc) => ({ ok: true, id: doc._id, rev: '1-log' })) as never;
+		}
 		if (path.endsWith('/_find')) {
 			const body = JSON.parse(String(init.body ?? '{}')) as {
 				selector?: Record<string, unknown>;
@@ -916,6 +932,127 @@ describe('checkInSelectedMembers', () => {
 		expect(
 			mockAdminFetch.mock.calls.filter(([path]) => path.endsWith(encodeURIComponent(primary._id)))
 		).toHaveLength(4);
+	});
+});
+
+describe('checkInSelectedMembers station_log (CR-192)', () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+		evacuees = [];
+		households = [];
+		configureCheckInCouchMocks();
+	});
+
+	it('writes a kiosk Station 1 start + complete per checked-in member', async () => {
+		const primary = evacuee(0);
+		const member = evacuee(1);
+		setHousehold([primary, member], primary);
+		const lookupAt = new Date(Date.now() - 90_000).toISOString();
+
+		await checkInSelectedMembers(shelterCode, primary._id, [primary._id, member._id], {
+			deviceId: 'kiosk-dev-7',
+			lookupAt
+		});
+
+		expect(bulkWrites).toHaveLength(4);
+		for (const id of [primary._id, member._id]) {
+			const mine = bulkWrites.filter((doc) => doc.evacuee_id === id);
+			const start = mine.find((doc) => doc.action === 'start');
+			const complete = mine.find((doc) => doc.action === 'complete');
+			expect(start).toMatchObject({
+				type: 'station_log',
+				schema_v: 1,
+				shelter_code: shelterCode,
+				station: 1,
+				channel: 'kiosk',
+				device_id: 'kiosk-dev-7',
+				created_by: 'kiosk:kiosk-dev-7',
+				occurred_at: lookupAt
+			});
+			expect(complete).toMatchObject({
+				station: 1,
+				channel: 'kiosk',
+				device_id: 'kiosk-dev-7',
+				created_by: 'kiosk:kiosk-dev-7'
+			});
+			expect(Date.parse(String(complete?.occurred_at))).toBeGreaterThanOrEqual(
+				Date.parse(String(start?.occurred_at))
+			);
+		}
+		expect(bulkWrites.every((doc) => String(doc._id).startsWith('station_log:'))).toBe(true);
+	});
+
+	it('uses server time when the lookup time is in the future or older than 2 hours', async () => {
+		for (const lookupAt of [
+			new Date(Date.now() + 10 * 60_000).toISOString(),
+			new Date(Date.now() - 3 * 3_600_000).toISOString(),
+			'garbage'
+		]) {
+			evacuees = [];
+			households = [];
+			configureCheckInCouchMocks();
+			const primary = evacuee(0);
+			setHousehold([primary], primary);
+
+			const before = Date.now();
+			await checkInSelectedMembers(shelterCode, primary._id, [primary._id], {
+				deviceId: 'kiosk-dev-7',
+				lookupAt
+			});
+
+			const start = bulkWrites.find((doc) => doc.action === 'start');
+			expect(Date.parse(String(start?.occurred_at))).toBeGreaterThanOrEqual(before);
+			expect(Date.parse(String(start?.occurred_at))).toBeLessThanOrEqual(Date.now());
+		}
+	});
+
+	it('writes no log without an authenticated device', async () => {
+		const primary = evacuee(0);
+		setHousehold([primary], primary);
+		await checkInSelectedMembers(shelterCode, primary._id, [primary._id]);
+		expect(bulkWrites).toHaveLength(0);
+	});
+
+	it('only logs members this request reported in, not already-arriving ones', async () => {
+		const primary = evacuee(0);
+		const arriving = evacuee(1, { current_stay: { status: 'arriving' } });
+		setHousehold([primary, arriving], primary);
+
+		await checkInSelectedMembers(shelterCode, primary._id, [primary._id, arriving._id], {
+			deviceId: 'kiosk-dev-7'
+		});
+
+		expect([...new Set(bulkWrites.map((doc) => doc.evacuee_id))]).toEqual([primary._id]);
+	});
+
+	it('keeps the check-in result when the log write fails', async () => {
+		const primary = evacuee(0);
+		setHousehold([primary], primary);
+		failBulk = true;
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+		const results = await checkInSelectedMembers(shelterCode, primary._id, [primary._id], {
+			deviceId: 'kiosk-dev-7'
+		});
+
+		expect(results).toMatchObject([{ evacuee_id: primary._id, status: 'checked_in' }]);
+		expect(primary.current_stay.status).toBe('arriving');
+		expect(warn).toHaveBeenCalled();
+		warn.mockRestore();
+	});
+});
+
+describe('kioskCheckInInputSchema lookup_at', () => {
+	const base = {
+		primary_evacuee_id: `evacuee:${ids[0]}`,
+		evacuee_ids: [`evacuee:${ids[0]}`]
+	};
+
+	it('accepts an optional lookup_at and drops a malformed one', () => {
+		const at = new Date().toISOString();
+		expect(kioskCheckInInputSchema.parse({ ...base, lookup_at: at }).lookup_at).toBe(at);
+		expect(kioskCheckInInputSchema.parse(base).lookup_at).toBeUndefined();
+		expect(kioskCheckInInputSchema.parse({ ...base, lookup_at: 42 }).lookup_at).toBeUndefined();
 	});
 });
 
