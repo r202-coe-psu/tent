@@ -258,7 +258,9 @@ export {
 	type FamilyRegistrationPlan,
 	type FamilyRegistrationMode,
 	type FamilyReportInPayload,
-	type MemberPhotoUploadMode
+	type MemberPhotoUploadMode,
+	type RegistrationConsent,
+	type RegistrationConsentConfig
 } from './domain/unified-registration';
 
 export {
@@ -355,6 +357,7 @@ export { default as HouseholdForm } from './ui/household-form/household-form.sve
 export { default as HouseholdFormPage } from './ui/household-form/household-form-page.svelte';
 export { default as HouseholdPostArrival } from './ui/household-flows/household-post-arrival.svelte';
 export { default as EvacueeWristbandSuccess } from './ui/registration/evacuee-wristband-success.svelte';
+export { default as RegistrationConsentResult } from './ui/registration/registration-consent-result.svelte';
 export {
 	default as FamilyBatchPrint,
 	type IntakeNextStation

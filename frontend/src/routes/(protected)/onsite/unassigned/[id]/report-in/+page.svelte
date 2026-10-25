@@ -13,6 +13,7 @@
 	import { getShelterCode } from '$lib/db/shelter';
 	import {
 		FamilyBatchPrint,
+		RegistrationConsentResult,
 		RegistrationSaveErrorAlert,
 		UnifiedRegistrationForm,
 		peopleRepository,
@@ -21,6 +22,8 @@
 		buildSaveFailureReport,
 		type Evacuee,
 		type Household,
+		type RegistrationConsent,
+		type RegistrationConsentConfig,
 		type SaveFailureReport,
 		type UnifiedRegistrationInput,
 		type UnifiedMemberWithMeta
@@ -62,7 +65,18 @@
 	const claimMutation = useClaimUnassignedRegistration();
 	const submitReportIn = useSubmitFamilyReportIn();
 
-	let completed = $state<{ household: Household; members: Evacuee[] } | null>(null);
+	const staff = $derived(
+		authStore.user
+			? { name: authStore.user.display_name || authStore.user.name, userId: authStore.user.name }
+			: null
+	);
+	const consentConfig = $derived<RegistrationConsentConfig>({ channel: 'staff', staff });
+
+	let completed = $state<{
+		household: Household;
+		members: Evacuee[];
+		consentRef: string | null;
+	} | null>(null);
 	let saveError = $state<SaveFailureReport | null>(null);
 	let isDirty = $state(false);
 	let isNavigatingAfterSave = $state(false);
@@ -95,9 +109,14 @@
 
 	async function handleConfirm(
 		input: UnifiedRegistrationInput,
-		meta?: { reportingInMembers: UnifiedMemberWithMeta[]; allMembers: UnifiedMemberWithMeta[] }
+		meta?: {
+			reportingInMembers: UnifiedMemberWithMeta[];
+			allMembers: UnifiedMemberWithMeta[];
+			consent: RegistrationConsent | null;
+		}
 	) {
 		saveError = null;
+		const consent = meta?.consent ?? null;
 		try {
 			if (!claimedHouseholdId) {
 				const claimResult = await claimMutation.mutateAsync(claimPayload());
@@ -119,11 +138,12 @@
 				ctx: {
 					shelterCode: data.shelterCode ?? getShelterCode(),
 					createdBy: authStore.user?.name ?? 'unknown'
-				}
+				},
+				consent
 			});
 			isDirty = false;
 			isNavigatingAfterSave = true;
-			completed = result;
+			completed = { ...result, consentRef: consent?.decision.ref ?? null };
 			toast.success(`รับเข้าศูนย์สำเร็จ ${result.members.length} คน`);
 		} catch (err) {
 			saveError = !claimedHouseholdId
@@ -174,6 +194,13 @@
 
 <div class="mx-auto w-full max-w-6xl px-4 py-4 md:px-6 md:py-6 xl:max-w-7xl">
 	{#if completed}
+		{#if completed.consentRef}
+			<RegistrationConsentResult
+				members={completed.members}
+				consentRef={completed.consentRef}
+				{staff}
+			/>
+		{/if}
 		<FamilyBatchPrint
 			household={completed.household}
 			members={completed.members}
@@ -289,6 +316,7 @@
 				shelterCode={data.shelterCode ?? getShelterCode()}
 				{initialHousehold}
 				{initialMembers}
+				consent={consentConfig}
 				pending={claimMutation.isPending || submitReportIn.isPending}
 				onsubmit={handleConfirm}
 				onDirtyChange={(dirty) => (isDirty = dirty)}

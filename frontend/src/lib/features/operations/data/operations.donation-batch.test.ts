@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SupplyItem } from '$lib/features/supply';
+import { ConflictError } from '$lib/utils/errors';
 
 vi.mock('$lib/db/shelter', () => ({
 	SHELTER_CODE: 'SH001',
@@ -24,6 +25,12 @@ const failingBulkIds = new Set<string>();
 let loseBulkResponse = false;
 /** Doc ids whose single-doc `put` fails (the donation transition). */
 const failingPutIds = new Set<string>();
+/** Doc ids whose single-doc `put` throws `ConflictError` (a 409, or another 4xx). */
+const conflictingPutIds = new Set<string>();
+/** Runs just before that `ConflictError` — whatever is on file by the time it is thrown. */
+let onConflictingPut: (() => void) | null = null;
+/** Runs once the bulk write lands — another screen or the donor acting mid-receipt. */
+let afterBulkWrite: (() => void) | null = null;
 const bulkCalls: string[][] = [];
 
 function clone<T>(value: T): T {
@@ -41,6 +48,10 @@ vi.mock('$lib/db/repository', async (importOriginal) => {
 			},
 			async put(doc: Doc) {
 				if (failingPutIds.has(doc._id)) throw new Error(`write refused for ${doc._id}`);
+				if (conflictingPutIds.has(doc._id)) {
+					onConflictingPut?.();
+					throw new ConflictError();
+				}
 				const rev = `${(docs.get(doc._id)?._rev ? parseInt(docs.get(doc._id)!._rev!, 10) : 0) + 1}-t`;
 				const saved = { ...clone(doc), _rev: rev };
 				docs.set(doc._id, saved);
@@ -50,6 +61,19 @@ vi.mock('$lib/db/repository', async (importOriginal) => {
 				return [...docs.values()]
 					.filter((d) => d._id.startsWith(`${type}:`) && guard(d))
 					.map(clone);
+			},
+			// Mango selector over the in-memory docs: equality, plus `{ $gt: null }` = present.
+			async find(query: { selector: Record<string, unknown>; limit?: number }) {
+				const hits = [...docs.values()].filter((d) =>
+					Object.entries(query.selector).every(([key, value]) => {
+						const actual = (d as unknown as Record<string, unknown>)[key];
+						if (value && typeof value === 'object' && '$gt' in value) {
+							return actual !== undefined && actual !== null;
+						}
+						return actual === value;
+					})
+				);
+				return hits.slice(0, query.limit ?? hits.length).map(clone);
 			}
 		})
 	};
@@ -89,6 +113,7 @@ vi.mock('$lib/db/couch-db', async (importOriginal) => {
 				docs.set(doc._id, { ...clone(doc), _rev: '1-t' });
 				return { id: doc._id, ok: true as const, rev: '1-t' };
 			});
+			afterBulkWrite?.();
 			if (loseBulkResponse) throw new Error('network dropped after the write');
 			return outcomes;
 		}
@@ -148,6 +173,9 @@ beforeEach(() => {
 	docs.clear();
 	failingBulkIds.clear();
 	failingPutIds.clear();
+	conflictingPutIds.clear();
+	onConflictingPut = null;
+	afterBulkWrite = null;
 	bulkCalls.length = 0;
 	loseBulkResponse = false;
 	mockGetItem.mockReset();
@@ -178,6 +206,23 @@ describe('receiveDonationBatch — complete receipts (CR-143 FR-B4)', () => {
 		// FR-B4: one write for all rows
 		expect(bulkCalls).toHaveLength(1);
 		expect(bulkCalls[0]).toHaveLength(3);
+	});
+
+	// CR-174 AC-3 — a refusal at review is not undone at the shelf.
+	it('refuses to receive a line that was refused at review, writing nothing', async () => {
+		donation = {
+			...donation,
+			items: donation.items!.map((item, i) =>
+				i === 1 ? { ...item, review_status: 'rejected' as const } : item
+			)
+		};
+		docs.set(donation._id, clone(donation) as unknown as Doc);
+
+		await expect(repo.receiveDonationBatch(donation, fullCount(), ctx)).rejects.toThrow(
+			/ถูกปฏิเสธตอนประเมิน/
+		);
+		expect(ledgerRows()).toHaveLength(0);
+		expect(bulkCalls).toHaveLength(0);
 	});
 
 	it('writes each row under its deterministic id (FR-B4a)', async () => {
@@ -321,6 +366,43 @@ describe('receiveDonationBatch — partial failure and retry (CR-143 FR-B7 / FR-
 		expect(storedDonation().status).toBe('received');
 	});
 
+	// Full-branch review W1 — row ids carry the item, so a line matched to another item on
+	// the retry gets a new id. Without the ledger check the goods went in twice (4 rows for
+	// a 3-line booking) and the booking closed.
+	it('refuses a retry that matched an already keyed line to another item', async () => {
+		await failLine(2);
+		await repo.receiveDonationBatch(donation, fullCount(), ctx);
+		expect(ledgerRows()).toHaveLength(2);
+		failingBulkIds.clear();
+
+		const rematched = fullCount().map((line, i) =>
+			i === 0 ? { ...line, item_id: 'item:water', unit: 'ขวด' } : line
+		);
+		await expect(repo.receiveDonationBatch(donation, rematched, ctx)).rejects.toThrow(
+			/ไม่ตรงกับรายการที่นับรอบนี้/
+		);
+
+		expect(ledgerRows()).toHaveLength(2);
+		expect(storedDonation().status).toBe('declared');
+	});
+
+	it('refuses a second screen that keyed a line as another item first', async () => {
+		const otherScreen = fullCount().map((line, i) =>
+			i === 0 ? { ...line, item_id: 'item:oil', unit: 'ขวด' } : line
+		);
+		// The other screen's write landed, but its close did not: the booking is still open
+		// and its `_rev` unchanged, so only the ledger tells the two counts apart.
+		failingPutIds.add(donation._id);
+		await repo.receiveDonationBatch(donation, otherScreen, ctx);
+		failingPutIds.clear();
+		const rowsBefore = ledgerRows().length;
+
+		await expect(repo.receiveDonationBatch(donation, fullCount(), ctx)).rejects.toThrow(
+			/ไม่ตรงกับรายการที่นับรอบนี้/
+		);
+		expect(ledgerRows()).toHaveLength(rowsBefore);
+	});
+
 	it('retries only the failed row (FR-B7)', async () => {
 		await failLine(1);
 		await repo.receiveDonationBatch(donation, fullCount(), ctx);
@@ -405,6 +487,34 @@ describe('receiveDonationBatch — partial failure and retry (CR-143 FR-B7 / FR-
 		expect(storedDonation().status).toBe('received');
 	});
 
+	// Another screen received the booking; this one still holds the copy from before and
+	// counted a line differently — keying it would put the goods in stock twice.
+	it('refuses a second screen keying new rows into a booking already received', async () => {
+		const opened = clone(donation);
+		await repo.receiveDonationBatch(donation, fullCount(), ctx);
+		const rowsBefore = ledgerRows().length;
+		const summaryBefore = storedDonation().received_summary;
+
+		const differently = fullCount().map((line, i) =>
+			i === 0 ? { ...line, item_id: 'item:oil', unit: 'ขวด' } : line
+		);
+		await expect(repo.receiveDonationBatch(opened, differently, ctx)).rejects.toThrow(
+			/รับเข้าคลังไปแล้วจากอีกหน้าจอ/
+		);
+		expect(ledgerRows()).toHaveLength(rowsBefore);
+		expect(storedDonation().received_summary).toEqual(summaryBefore);
+	});
+
+	it('still lets the same count through when the first answer was lost (FR-B8)', async () => {
+		const opened = clone(donation);
+		await repo.receiveDonationBatch(donation, fullCount(), ctx);
+
+		const again = await repo.receiveDonationBatch(opened, fullCount(), ctx);
+
+		expect(again.received).toBe(true);
+		expect(ledgerRows()).toHaveLength(3);
+	});
+
 	it('does not clobber a donation that was already received by an earlier attempt', async () => {
 		await repo.receiveDonationBatch(donation, fullCount(), ctx);
 		const receivedAt = storedDonation().received_at;
@@ -428,15 +538,312 @@ describe('receiveDonationBatch — partial failure and retry (CR-143 FR-B7 / FR-
 		expect(ledgerRows()).toHaveLength(2);
 	});
 
-	it('reports a transition error when the donation has meanwhile expired', async () => {
-		// the TTL job lapsed the booking while staff were counting
+	// The TTL job lapsed the booking while staff were counting. Its quota is already back
+	// with other donors: keying the goods first and failing the transition after left them
+	// in stock against a booking that no longer held anything.
+	it('refuses a booking that expired while it was being counted, keying nothing', async () => {
 		docs.set(donation._id, { ...clone(donation), status: 'expired' } as unknown as Doc);
+
+		await expect(repo.receiveDonationBatch(donation, fullCount(), ctx)).rejects.toThrow(
+			/ปิดไปแล้ว/
+		);
+		expect(ledgerRows()).toHaveLength(0);
+		expect(bulkCalls).toHaveLength(0);
+	});
+
+	// CR-174 — staff refused a line, or the donor edited / cancelled the booking, after the
+	// form was opened: the counted copy is stale.
+	it('refuses a count made against an older copy of the booking, keying nothing', async () => {
+		docs.set(donation._id, {
+			...clone(donation),
+			_rev: '9-changed',
+			items: donation.items!.map((item, i) =>
+				i === 1 ? { ...item, review_status: 'rejected' as const } : item
+			)
+		} as unknown as Doc);
+
+		await expect(
+			repo.receiveDonationBatch({ ...donation, _rev: '1-opened' }, fullCount(), ctx)
+		).rejects.toThrow(/ถูกแก้หลังจากเปิดหน้าไว้/);
+		expect(ledgerRows()).toHaveLength(0);
+	});
+
+	// An interrupted first attempt keyed one line; the booking then changed. Telling staff
+	// "nothing is in stock" would invite counting that line again.
+	it('says goods are already in stock when an earlier attempt keyed some', async () => {
+		await failLine(2);
+		await repo.receiveDonationBatch(donation, fullCount(), ctx);
+		const rowsBefore = ledgerRows().length;
+		docs.set(donation._id, { ...storedDonation(), _rev: '9-changed' } as unknown as Doc);
+
+		await expect(
+			repo.receiveDonationBatch({ ...donation, _rev: '1-opened' }, fullCount(), ctx)
+		).rejects.toThrow(/มีของบางรายการของใบนี้เข้าคลังไปแล้ว/);
+		expect(ledgerRows()).toHaveLength(rowsBefore);
+	});
+
+	it('refuses a booking the donor cancelled while it was being counted', async () => {
+		docs.set(donation._id, { ...clone(donation), status: 'cancelled' } as unknown as Doc);
+
+		await expect(repo.receiveDonationBatch(donation, fullCount(), ctx)).rejects.toThrow(
+			/ปิดไปแล้ว/
+		);
+		expect(ledgerRows()).toHaveLength(0);
+	});
+
+	// S-R4-1 — the booking changed after it was read but before it was closed. The rows are
+	// in; closing it from this count would write over the change.
+	it('leaves the booking open when a line is refused while the rows are keyed', async () => {
+		afterBulkWrite = () => {
+			const onFile = storedDonation();
+			docs.set(donation._id, {
+				...clone(onFile),
+				_rev: '2-refused',
+				items: onFile.items!.map((item, i) =>
+					i === 1 ? { ...item, review_status: 'rejected' as const } : item
+				)
+			} as unknown as Doc);
+		};
 
 		const result = await repo.receiveDonationBatch(donation, fullCount(), ctx);
 
 		expect(result.rowsComplete).toBe(true);
 		expect(result.received).toBe(false);
-		expect(result.transitionError).toContain('Cannot receive');
+		expect(result.transitionError).toMatch(/ถูกแก้ระหว่างบันทึกเข้าคลัง/);
+		expect(result.transitionBlocked).toBe(true);
+		expect(storedDonation().status).toBe('declared');
+		expect(storedDonation().items![1].review_status).toBe('rejected');
+	});
+
+	it('still closes the booking when only its logistics changed meanwhile', async () => {
+		afterBulkWrite = () => {
+			docs.set(donation._id, {
+				...clone(storedDonation()),
+				_rev: '2-courier',
+				logistics: { courier_tracking_no: 'TH123' }
+			} as unknown as Doc);
+		};
+
+		const result = await repo.receiveDonationBatch(donation, fullCount(), ctx);
+
+		expect(result.received).toBe(true);
+		expect(result.transitionBlocked).toBeUndefined();
+		expect(storedDonation().status).toBe('received');
+		expect(storedDonation().logistics).toEqual({ courier_tracking_no: 'TH123' });
+	});
+
+	it('reports a write that lands between the check and the close the same way', async () => {
+		conflictingPutIds.add(donation._id);
+		onConflictingPut = () => {
+			conflictingPutIds.delete(donation._id);
+			const onFile = storedDonation();
+			docs.set(donation._id, {
+				...clone(onFile),
+				_rev: '2-refused',
+				items: onFile.items!.map((item, i) =>
+					i === 1 ? { ...item, review_status: 'rejected' as const } : item
+				)
+			} as unknown as Doc);
+		};
+
+		const result = await repo.receiveDonationBatch(donation, fullCount(), ctx);
+
+		expect(result.received).toBe(false);
+		expect(result.transitionError).toMatch(/ถูกแก้ระหว่างบันทึกเข้าคลัง/);
+		expect(result.transitionBlocked).toBe(true);
+		expect(storedDonation().status).toBe('declared');
+	});
+
+	// S-R14-1 — the same race, but only the courier number moved: nothing counted against
+	// changed, so the close is made again over the new `_rev`.
+	it('closes over a courier number written between the check and the close', async () => {
+		conflictingPutIds.add(donation._id);
+		onConflictingPut = () => {
+			conflictingPutIds.delete(donation._id);
+			docs.set(donation._id, {
+				...clone(storedDonation()),
+				_rev: '2-courier',
+				logistics: { courier_tracking_no: 'TH123' }
+			} as unknown as Doc);
+		};
+
+		const result = await repo.receiveDonationBatch(donation, fullCount(), ctx);
+
+		expect(result.received).toBe(true);
+		expect(result.transitionBlocked).toBeUndefined();
+		expect(storedDonation().status).toBe('received');
+		expect(storedDonation().logistics).toEqual({ courier_tracking_no: 'TH123' });
+	});
+
+	it('leaves a booking that keeps moving for someone to check', async () => {
+		conflictingPutIds.add(donation._id);
+		let edits = 0;
+		onConflictingPut = () => {
+			edits += 1;
+			docs.set(donation._id, { ...clone(storedDonation()), _rev: `${edits + 1}-edited` } as Doc);
+		};
+
+		const result = await repo.receiveDonationBatch(donation, fullCount(), ctx);
+
+		expect(edits).toBe(3);
+		expect(result.received).toBe(false);
+		expect(result.transitionBlocked).toBe(true);
+		expect(storedDonation().status).toBe('declared');
+	});
+
+	// S-R15-1 — the last try's close lands but its answer is lost: the booking on file is
+	// received, so the count is too, however many tries it took.
+	it('reports the booking received when the last try landed but its answer was lost', async () => {
+		const put = repo['repo'].put.bind(repo['repo']);
+		let tries = 0;
+		vi.spyOn(repo['repo'], 'put').mockImplementation(async (doc) => {
+			tries += 1;
+			if (tries < 3) {
+				docs.set(donation._id, {
+					...clone(storedDonation()),
+					_rev: `${tries + 1}-courier`
+				} as Doc);
+			} else {
+				await put(doc);
+			}
+			throw new ConflictError();
+		});
+
+		const result = await repo.receiveDonationBatch(donation, fullCount(), ctx);
+
+		expect(tries).toBe(3);
+		expect(result.received).toBe(true);
+		expect(result.transitionBlocked).toBeUndefined();
+		expect(storedDonation().status).toBe('received');
+	});
+
+	// S-R13-1 — `ConflictError` also carries CouchDB's other 4xx answers. With the booking
+	// unchanged on file nobody wrote it in between: the real reason shows and a retry may work.
+	it('keeps the retry open when the close is refused but nobody changed the booking', async () => {
+		conflictingPutIds.add(donation._id);
+
+		const result = await repo.receiveDonationBatch(donation, fullCount(), ctx);
+
+		expect(result.received).toBe(false);
+		expect(result.transitionBlocked).toBeUndefined();
+		expect(result.transitionError).toBe('Document conflict');
+	});
+
+	it('reports the booking received when the close landed but its answer was lost', async () => {
+		// The PUT lands; the retry inside `putDoc` then answers 409 against the new rev.
+		const put = repo['repo'].put.bind(repo['repo']);
+		vi.spyOn(repo['repo'], 'put').mockImplementationOnce(async (doc) => {
+			await put(doc);
+			throw new ConflictError();
+		});
+
+		const result = await repo.receiveDonationBatch(donation, fullCount(), ctx);
+
+		expect(result.received).toBe(true);
+		expect(result.transitionError).toBeUndefined();
+		expect(storedDonation().status).toBe('received');
+	});
+
+	// S-R5-2 — a booking closed before its rows were keyed reads `received` on both screens,
+	// so neither `_rev` nor `receivedElsewhere` tells them apart; the ledger does.
+	describe('a booking received before its rows were keyed', () => {
+		beforeEach(() => {
+			docs.set(donation._id, { ...clone(donation), status: 'received' } as unknown as Doc);
+		});
+		const openedReceived = () => ({ ...clone(donation), status: 'received' as const });
+
+		it('refuses a second screen that matched a line differently', async () => {
+			const first = openedReceived();
+			const second = openedReceived();
+			await repo.receiveDonationBatch(first, fullCount(), ctx);
+			const rowsBefore = ledgerRows().length;
+
+			const differently = fullCount().map((line, i) =>
+				i === 0 ? { ...line, item_id: 'item:oil', unit: 'ขวด' } : line
+			);
+			await expect(repo.receiveDonationBatch(second, differently, ctx)).rejects.toThrow(
+				/ไม่ตรงกับรายการที่นับรอบนี้/
+			);
+			expect(ledgerRows()).toHaveLength(rowsBefore);
+		});
+
+		it('still lets the same count through again', async () => {
+			await repo.receiveDonationBatch(openedReceived(), fullCount(), ctx);
+
+			const again = await repo.receiveDonationBatch(openedReceived(), fullCount(), ctx);
+
+			expect(again.received).toBe(true);
+			expect(ledgerRows()).toHaveLength(3);
+		});
+
+		// The ledger check runs here (one row is still to write) and finds only this count's
+		// rows, so the FR-B7 retry of an interrupted receipt goes through.
+		it('lets the same count finish rows an interrupted receipt left out', async () => {
+			failingBulkIds.add(await deriveDonationReceiptLineId(donation._id, 'item:oil', 2));
+			const first = await repo.receiveDonationBatch(openedReceived(), fullCount(), ctx);
+			expect(first.rowsComplete).toBe(false);
+			expect(ledgerRows()).toHaveLength(2);
+			failingBulkIds.clear();
+
+			const again = await repo.receiveDonationBatch(openedReceived(), fullCount(), ctx);
+
+			expect(again.received).toBe(true);
+			expect(ledgerRows()).toHaveLength(3);
+		});
+	});
+});
+
+describe('receiveDonationBatch — lines refused at review (CR-172 FR-13, CR-174 AC-3)', () => {
+	function refuseLine(index: number) {
+		donation = {
+			...donation,
+			items: donation.items!.map((item, i) =>
+				i === index
+					? {
+							...item,
+							review_status: 'rejected' as const,
+							review_reason: 'หมดอายุ',
+							review_reason_code: 'expired'
+						}
+					: item
+			)
+		};
+		docs.set(donation._id, clone(donation) as unknown as Doc);
+	}
+
+	it('compares a typed-in line under the item staff matched it to', async () => {
+		donation = {
+			...donation,
+			items: donation.items!.map((item, i) =>
+				i === 0 ? { free_text: 'ของที่ผู้บริจาคพิมพ์เอง', qty: item.qty, unit: item.unit } : item
+			)
+		};
+		docs.set(donation._id, clone(donation) as unknown as Doc);
+
+		await repo.receiveDonationBatch(donation, fullCount(), ctx);
+
+		expect(storedDonation().received_summary?.shortfalls).toEqual([]);
+	});
+
+	it('records a refused line as not accepted, not as a shortfall', async () => {
+		refuseLine(1);
+		const counted = fullCount().map((line, i) => (i === 1 ? { ...line, qty: '0' } : line));
+
+		const result = await repo.receiveDonationBatch(donation, counted, ctx);
+
+		expect(result.received).toBe(true);
+		expect(ledgerRows()).toHaveLength(2);
+		const summary = storedDonation().received_summary!;
+		expect(summary.shortfalls).toEqual([]);
+		expect(summary.items?.[1]).toMatchObject({
+			qty: '0',
+			rejected: true,
+			reject_reason: 'หมดอายุ',
+			reject_reason_code: 'expired'
+		});
+		expect(summary.items?.[0]).not.toHaveProperty('rejected');
+		// schema.md §2.3: every line checked, the refused one included — as the scan route.
+		expect(summary.total_items).toBe(3);
 	});
 });
 

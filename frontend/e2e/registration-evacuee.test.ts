@@ -56,8 +56,9 @@ import {
 	couchReq,
 	type TestUser
 } from './helpers/couch';
+import { acceptFullConsent } from './helpers/consent';
 import { injectSession } from './helpers/login';
-import { decodeQrImage } from './helpers/onsite';
+import { decodeQrImage, fillAllergyTags, fillConditionTags } from './helpers/onsite';
 
 // ─── Run identity ──────────────────────────────────────────────────────────────
 
@@ -220,6 +221,29 @@ async function findDocs(selector: Record<string, unknown>): Promise<CouchDoc[]> 
 	const res = await couchReq('POST', `/${SHELTER_DB}/_find`, { selector, limit: 100_000 });
 	if (res.status >= 400) throw new Error(`_find on ${SHELTER_DB} failed (${res.status})`);
 	return (res.data as { docs?: CouchDoc[] }).docs ?? [];
+}
+
+/**
+ * The stored `medical.conditions` of one evacuee (CR-186). Station 2 writes codes for
+ * values matching an active `chronic_disease` label and keeps the rest as text.
+ */
+async function storedConditions(evacueeId: string): Promise<string[] | undefined> {
+	const res = await couchReq('POST', `/${SHELTER_DB}/_find`, {
+		selector: { type: 'medical', evacuee_id: evacueeId },
+		limit: 1
+	});
+	const [doc] = (res.data as { docs?: { conditions?: string[] }[] }).docs ?? [];
+	return doc?.conditions;
+}
+
+/** Whether platform init seeded the global `chronic_disease` master (`pnpm seed:master`). */
+async function chronicDiseaseSeeded(): Promise<boolean> {
+	const res = await couchReq(
+		'GET',
+		`/registry/${encodeURIComponent('master_data:chronic_disease')}`
+	);
+	const items = (res.data as { items?: { code: string; status?: string }[] }).items ?? [];
+	return res.status === 200 && items.some((i) => i.code === 'diabetes' && i.status !== 'inactive');
 }
 
 /**
@@ -439,9 +463,9 @@ interface ScreeningFill {
 async function screenEvacuee(page: Page, evacueeId: string, fill: ScreeningFill): Promise<void> {
 	await page.goto(`/onsite/medical-screening/${evacueeId}`);
 	await expect(page.getByText('Station 2', { exact: true })).toBeVisible({ timeout: 20_000 });
-	await page.locator('#med-conditions').fill(fill.conditions);
+	await fillConditionTags(page, fill.conditions);
 	if (fill.medications) await page.locator('#med-medications').fill(fill.medications);
-	if (fill.allergies) await page.locator('#med-allergies').fill(fill.allergies);
+	if (fill.allergies) await fillAllergyTags(page, fill.allergies);
 	if (fill.notes) await page.locator('#med-general-symptoms').fill(fill.notes);
 	if (fill.careTrack) await page.locator(`label[for="med-care-track-${fill.careTrack}"]`).click();
 	for (const symptom of fill.ewarSymptoms ?? []) {
@@ -751,6 +775,7 @@ async function walkInFlow(browser: Browser, run: Run, s: Sessions) {
 			await desk.locator('#family-assets').fill(valuables);
 		} else skipped('assets: บันทึกทรัพย์สิน / สัมภาระตอนลงทะเบียน is off');
 
+		await acceptFullConsent(desk);
 		await desk.getByRole('button', { name: 'บันทึกลงทะเบียนทั้งครอบครัว' }).last().click();
 	});
 
@@ -785,6 +810,7 @@ async function walkInFlow(browser: Browser, run: Run, s: Sessions) {
 		await expect(desk.getByText('จะเข้าร่วมครอบครัวที่มีอยู่แล้ว')).toBeVisible();
 
 		await fillMemberCard(desk, 0, relative);
+		await acceptFullConsent(desk);
 		await desk.getByRole('button', { name: 'บันทึกลงทะเบียนทั้งครอบครัว' }).last().click();
 		Object.assign(ids, await idsFromPrintScreen(desk, [relative]));
 		await finishPrintScreen(desk);
@@ -822,6 +848,11 @@ async function walkInFlow(browser: Browser, run: Run, s: Sessions) {
 				{ id: ids[child.firstName], fill: { conditions: 'ไม่มี' } },
 				{ id: ids[relative.firstName], fill: { conditions: 'ไม่มี' } }
 			]);
+			// CR-186: "เบาหวาน" matches the master → code; "ความดันสูง" is not a master label → text.
+			const expected = (await chronicDiseaseSeeded())
+				? ['diabetes', 'ความดันสูง']
+				: ['เบาหวาน', 'ความดันสูง'];
+			expect(await storedConditions(ids[head.firstName])).toEqual(expected);
 		}
 	);
 
@@ -1018,6 +1049,7 @@ async function preRegisterFlow(browser: Browser, run: Run, s: Sessions) {
 		await expect(screenB.locator('#member-0-first-name')).not.toHaveValue('', {
 			timeout: 20_000
 		});
+		await acceptFullConsent(screenB);
 		await screenB.getByRole('button', { name: 'ยืนยันรายงานตัวและพิมพ์บัตร' }).last().click();
 		Object.assign(ids, await idsFromPrintScreen(screenB, people));
 		await finishPrintScreen(screenB);
@@ -1116,6 +1148,7 @@ async function preRegisterFlow(browser: Browser, run: Run, s: Sessions) {
 				await expect(spouseCard.getByText('ยังไม่เลือก — ไม่มาในรอบนี้')).toBeVisible();
 				await spouseCard.getByText('ยังไม่เลือก — ไม่มาในรอบนี้').click();
 				await expect(spouseCard.getByText('เลือกแล้ว — รายงานตัวรอบนี้')).toBeVisible();
+				await acceptFullConsent(screenB);
 				await screenB.getByRole('button', { name: 'ยืนยันรายงานตัวและพิมพ์บัตร' }).last().click();
 				Object.assign(ids, await idsFromPrintScreen(screenB, [familyHead, familySpouse]));
 				await finishPrintScreen(screenB);
@@ -1139,6 +1172,7 @@ async function preRegisterFlow(browser: Browser, run: Run, s: Sessions) {
 				await expect(screenB.locator('#member-0-first-name')).toHaveValue(soloTraveller.firstName, {
 					timeout: 20_000
 				});
+				await acceptFullConsent(screenB);
 				await screenB.getByRole('button', { name: 'ยืนยันรายงานตัวและพิมพ์บัตร' }).last().click();
 				Object.assign(ids, await idsFromPrintScreen(screenB, [soloTraveller]));
 				await finishPrintScreen(screenB);
