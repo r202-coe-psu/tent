@@ -1327,7 +1327,7 @@ Role ของทั้งสอง path: `warehouse_staff`, `supply_coordinator
 2. อ่าน view `bulk_return_pool_item_totals` (group_level 1 = จำนวน entry / ว่าง, 2 = ต่อ item)
 3. snapshot → submit: เขียน `items_summary` + `entry_ids` + `status='SUBMITTED'` + ล้าง `lock`; cancel: ตรวจว่างแล้วเขียน `status='CANCELLED'` + `cancelled_*` + ล้าง `lock`
 4. ผู้เขียน entry/move/void ต้องตรวจ `canAppendToPool` ก่อนเขียน และ **อ่าน pool ซ้ำหลังเขียน entry ก่อนอัปเดต loan** (แบบ `fenceReturnReservation`) —
-   ถ้าไม่ใช่ `OPEN` หรือมี `lock` ให้หยุด. entry ที่ไม่อยู่ใน `entry_ids` ของ pool ที่ปิดแล้วคือ "ค้าง" ให้ย้ายไป pool `OPEN` อื่น (move ปกติ).
+   ถ้าไม่ใช่ `OPEN` หรือมี `lock` ให้หยุด. entry ที่ไม่อยู่ใน `entry_ids` ของ pool ที่ปิดแล้วคือ "ค้าง" ให้ย้ายไป pool `OPEN` อื่น (move ปกติ — move จะตัด loan ตาม `loan_refs` ให้ถ้า pool ปลายทางยัง `OPEN`, §2.31.2).
    ช่องแข่งระดับเสี้ยววินาทียอมรับ — ตรวจพบภายหลังได้จาก snapshot `entry_ids` และส่วนต่างตอนตรวจรับ
 
 **Receive และ `stock_ledger` (#660):**
@@ -1370,7 +1370,10 @@ Role เขียน: `warehouse_staff`, `supply_coordinator`, `shelter_manager`
 
 #### 2.31.2 `bulk_return_entry_move` — `bulk_return_entry_move:{entryUlid}:{seq}` · **schema_v 1** · append-only
 
-เหตุการณ์ย้าย entry ทั้งก้อนระหว่าง pool (ย้ายบางส่วนของ qty ไม่รองรับ; ย้ายแล้ว **ไม่แตะ** `distribution_log`).
+เหตุการณ์ย้าย entry ทั้งก้อนระหว่าง pool (ย้ายบางส่วนของ qty ไม่รองรับ).
+หลังเขียน move doc workflow อ่าน pool ปลายทางซ้ำ: ถ้ายัง `OPEN` และไม่มี `lock` ให้ apply `loan_refs` ของ entry ที่ยังไม่อยู่ใน `applied_bulk_entry_ids`
+ของ loan ลง `distribution_log` (idempotent — ref ที่ apply แล้วเป็น no-op; loan ที่ปิด/ไม่พบ หรือยอดค้าง < `ref.qty` ข้าม ref นั้นตาม CR-193 ข้อ 15);
+ถ้า pool ปลายทางไม่รับต่อแล้ว ให้รายงานว่ามาช้าและไม่แตะ `distribution_log`.
 `{entryUlid}` = ULID ของ `bulk_return_entry`, `{seq}` = ลำดับการย้ายของ entry นั้น เริ่ม 1 และ zero-pad 4 หลัก (`0001`) ให้เรียงตาม `_id`.
 `_id` deterministic: คำสั่งย้ายครั้งที่ n ของ entry เดียวกันสองคำสั่งพร้อมกันเขียน `_id` เดียวกัน → **ตัวที่สองชน 409 ไม่นับซ้ำ**.
 **ไม่แก้ ไม่ลบ** (VDU).
