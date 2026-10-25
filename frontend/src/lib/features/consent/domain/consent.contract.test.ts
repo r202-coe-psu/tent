@@ -5,8 +5,22 @@ import {
 	CONSENT_GIVERS,
 	CONSENT_MODES,
 	EVACUEE_SCHEMA_V,
+	consentVduClause,
 	evacueeConsentSchema
 } from './consent';
+
+/** Runs the ES5 VDU clause; returns the `forbidden` message, or null when it accepts. */
+function vduVerdict(consent: unknown): string | null {
+	const run = new Function('newDoc', consentVduClause()) as (doc: unknown) => void;
+	try {
+		// basic mode needs privacy.search_excluded (cross-field rule), so set it for every case.
+		run({ type: 'evacuee', consent, privacy: { search_excluded: true } });
+		return null;
+	} catch (e) {
+		if (typeof (e as { forbidden?: unknown })?.forbidden !== 'string') throw e;
+		return (e as { forbidden: string }).forbidden;
+	}
+}
 
 describe('evacuee consent contract fixture', () => {
 	it('lists the same enums and schema_v as the TypeScript constants', () => {
@@ -24,6 +38,20 @@ describe('evacuee consent contract fixture', () => {
 		'rejects: %s',
 		(_name, consent) => {
 			expect(evacueeConsentSchema.safeParse(consent).success).toBe(false);
+		}
+	);
+
+	it.each(cases.valid.map((c) => [c.name, c.consent] as const))(
+		'VDU clause accepts: %s',
+		(_name, consent) => {
+			expect(vduVerdict(consent)).toBeNull();
+		}
+	);
+
+	it.each(cases.invalid.map((c) => [c.name, c.consent] as const))(
+		'VDU clause rejects: %s',
+		(_name, consent) => {
+			expect(vduVerdict(consent)).toMatch(/^consent /);
 		}
 	);
 });

@@ -1,10 +1,11 @@
 /**
  * All Thai copy for the PDPA consent block (spec §3, §5). Text follows the approved
- * prototype except C3, whose tag becomes 「เอาออกได้」 (opt-out, FR-12).
+ * prototype except C3, whose tag becomes 「เอาออกได้」 (opt-out, FR-12), and the basic-mode
+ * notice body (D16), which no longer promises data minimization the system does not do.
  * Bump CONSENT_NOTICE_VERSION whenever any consent wording changes.
  */
 
-export const CONSENT_NOTICE_VERSION = '2026-10-25';
+export const CONSENT_NOTICE_VERSION = '2026-10-26';
 
 export const CONSENT_COPY = {
 	heading: 'ความยินยอมของท่าน',
@@ -34,7 +35,7 @@ export const CONSENT_COPY = {
 	healthDiscardWarning: 'ข้อมูลสุขภาพที่กรอกไว้จะไม่ถูกบันทึก',
 	basicNotice: {
 		title: 'ท่านยังไม่ได้ให้ความยินยอมในช่องแรก',
-		body: 'ระบบจะลงทะเบียนแบบช่วยเหลือขั้นพื้นฐาน โดยเก็บเฉพาะข้อมูลที่จำเป็นต่อความปลอดภัยของชีวิต ท่านยังได้รับที่พัก อาหาร และน้ำดื่มตามปกติ แต่จะไม่มีการค้นหาญาติและการประสานเยียวยาผ่านระบบ ท่านกลับมาให้ความยินยอมภายหลังได้',
+		body: 'ระบบจะลงทะเบียนแบบช่วยเหลือขั้นพื้นฐาน ท่านยังได้รับที่พัก อาหาร และน้ำดื่มตามปกติ แต่ชื่อของท่านจะไม่แสดงในระบบค้นหาญาติ ข้อมูลจะไม่ถูกส่งต่อให้หน่วยงานภายนอก และจะไม่มีการประสานเยียวยาผ่านระบบ ท่านกลับมาให้ความยินยอมภายหลังได้',
 		confirmBasic: 'ลงทะเบียนแบบพื้นฐาน',
 		backToEdit: 'กลับไปเลือกความยินยอม'
 	},
