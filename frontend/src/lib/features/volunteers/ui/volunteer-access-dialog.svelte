@@ -12,6 +12,7 @@
 	import * as Select from '$lib/components/ui/select/index.js';
 	import { STAFF_CAPABILITIES, roleOptionLabel, type StaffCapability } from '$lib/auth/roles';
 	import { volunteerKeys } from '../application/queries';
+	import { errorMessage } from '$lib/utils/errors';
 	import { accountPhone } from '../domain/phone';
 	import { grantVolunteerAccess, volunteerAccessSchema } from '../application/volunteer-access';
 	import type { Volunteer } from '../domain/volunteer.schema';
@@ -67,7 +68,8 @@
 			password = '';
 			open = false;
 		} catch (err) {
-			toast.error(err instanceof Error ? err.message : 'สร้างบัญชีไม่สำเร็จ');
+			// errorMessage turns a ZodError (e.g. the password policy) into its first Thai reason.
+			toast.error(err instanceof Error ? errorMessage(err) : 'สร้างบัญชีไม่สำเร็จ');
 		} finally {
 			await Promise.allSettled([
 				queryClient.invalidateQueries({ queryKey: ['users'] }),
