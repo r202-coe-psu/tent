@@ -4,6 +4,8 @@ import type { RequestEvent } from './$types';
 import { readSessionUserCtx } from '$lib/server/couch-admin';
 import { createBanner, listBannersForShelter } from '$lib/server/kiosk-banners/kiosk-banner.server';
 import type { KioskBannerRecord } from '$lib/server/kiosk-banners/kiosk-banner.server';
+import { getGroup } from '$lib/server/kiosk-banners/kiosk-banner-group.server';
+import type { KioskBannerGroupRecord } from '$lib/server/kiosk-banners/kiosk-banner-group.server';
 import { SESSIONS } from '$lib/server/scanners/test-sessions';
 
 vi.mock('$lib/server/couch-admin', async () => {
@@ -19,9 +21,35 @@ vi.mock('$lib/server/kiosk-banners/kiosk-banner.server', async () => {
 	return { ...actual, listBannersForShelter: vi.fn(), createBanner: vi.fn() };
 });
 
+vi.mock('$lib/server/kiosk-banners/kiosk-banner-group.server', async () => {
+	const actual = await vi.importActual<
+		typeof import('$lib/server/kiosk-banners/kiosk-banner-group.server')
+	>('$lib/server/kiosk-banners/kiosk-banner-group.server');
+	return { ...actual, getGroup: vi.fn() };
+});
+
 const mockSession = vi.mocked(readSessionUserCtx);
 const mockList = vi.mocked(listBannersForShelter);
 const mockCreate = vi.mocked(createBanner);
+const mockGetGroup = vi.mocked(getGroup);
+
+const GROUP_MISSING = 'ไม่พบกลุ่มแบนเนอร์ในศูนย์นี้';
+
+function groupRecord(shelter: string): KioskBannerGroupRecord {
+	return {
+		_id: 'kiosk_banner_group:A',
+		_rev: '1-a',
+		type: 'kiosk_banner_group',
+		schema_v: 1,
+		shelter_code: shelter,
+		name: 'ตู้หน้าประตู',
+		description: null,
+		created_at: '2026-10-01T00:00:00.000Z',
+		updated_at: '2026-10-01T00:00:00.000Z',
+		created_by: 'sm-a',
+		device_ids: []
+	};
+}
 
 const NOW = new Date('2026-10-15T00:00:00Z');
 
@@ -131,6 +159,7 @@ describe('GET /api/back-office/kiosk-banners (FR-KBR-10/11)', () => {
 
 describe('POST /api/back-office/kiosk-banners (FR-KBR-02/04/11)', () => {
 	const input = {
+		group_id: 'kiosk_banner_group:A',
 		title: 'ประกาศ',
 		caption: null,
 		duration_sec: 10,
@@ -144,6 +173,7 @@ describe('POST /api/back-office/kiosk-banners (FR-KBR-02/04/11)', () => {
 		vi.clearAllMocks();
 		mockSession.mockResolvedValue(SESSIONS.managerA);
 		mockCreate.mockResolvedValue(record('new', input.start_at, input.end_at));
+		mockGetGroup.mockResolvedValue(groupRecord('SH001'));
 	});
 
 	function post(query: string, body: unknown): Promise<Response> {
@@ -238,6 +268,17 @@ describe('POST /api/back-office/kiosk-banners (FR-KBR-02/04/11)', () => {
 			expect(response.status).toBe(422);
 			expect((await response.json()).error.message).toMatch(/[฀-๿]/);
 		}
+		expect(mockCreate).not.toHaveBeenCalled();
+	});
+
+	it('returns 422 when the group is missing or belongs to another shelter', async () => {
+		mockGetGroup.mockResolvedValue(null);
+		const missing = await post('?shelter_code=SH001', { ...input, image });
+		expect(missing.status).toBe(422);
+		expect((await missing.json()).error.message).toBe(GROUP_MISSING);
+		mockGetGroup.mockResolvedValue(groupRecord('SH002'));
+		expect((await post('?shelter_code=SH001', { ...input, image })).status).toBe(422);
+		expect(mockGetGroup).toHaveBeenCalledWith('kiosk_banner_group:A');
 		expect(mockCreate).not.toHaveBeenCalled();
 	});
 });

@@ -19,7 +19,7 @@ export interface PendingLink {
 	email?: string | null;
 	name?: string | null;
 	pid_masked?: string | null;
-	/** Per-OAuth-round id — rate-limit key for link attempts. */
+	/** Per-OAuth-round id. */
 	nonce: string;
 }
 

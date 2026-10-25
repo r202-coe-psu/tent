@@ -291,7 +291,7 @@
 
 		<div class="w-full min-w-0 space-y-2">
 			<label for="evacuee-type-filter" class="text-xs font-semibold text-foreground"
-				>ประเภทผู้ประสบภัย</label
+				>ประเภทผู้เข้าพัก</label
 			>
 			<Select.Root
 				type="single"
@@ -302,7 +302,7 @@
 				<Select.Trigger
 					id="evacuee-type-filter"
 					class="h-11 w-full min-w-0 rounded-xl bg-background px-3 shadow-xs"
-					aria-label="ประเภทผู้ประสบภัย"
+					aria-label="ประเภทผู้เข้าพัก"
 				>
 					<span class="truncate">
 						{vulnerableTypeOptions.find((option) => option.value === selectedType)?.label ??
@@ -434,7 +434,7 @@
 			class="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-border py-20"
 		>
 			<UserX class="h-10 w-10 text-muted-foreground/30" />
-			<p class="text-sm text-muted-foreground">ไม่พบผู้ประสบภัยในระบบ</p>
+			<p class="text-sm text-muted-foreground">ไม่พบผู้เข้าพักในระบบ</p>
 		</div>
 	{:else}
 		<!-- Mobile card list (< md) -->
@@ -539,7 +539,7 @@
 							/>
 						</Table.Head>
 						<Table.Head class="font-semibold text-foreground">ชื่อ-นามสกุล</Table.Head>
-						<Table.Head class="font-semibold text-foreground">ประเภทผู้ประสบภัย</Table.Head>
+						<Table.Head class="font-semibold text-foreground">ประเภทผู้เข้าพัก</Table.Head>
 						<Table.Head class="font-semibold text-foreground">ZONE จัดสรร</Table.Head>
 						<Table.Head class="text-center font-semibold text-foreground">สถานะ</Table.Head>
 						<Table.Head class="text-center font-semibold text-foreground">จัดการ</Table.Head>

@@ -72,6 +72,70 @@ describe('BFF Transfer List and Create Endpoints', () => {
 			expect(data.error).toContain('warehouse_staff');
 		});
 
+		it.each([
+			['flat', ['supply_coordinator', 'shelter:SH002']],
+			['shelter-scoped', ['SH002:supply_coordinator', 'shelter:SH002']]
+		])(
+			'allows supply_coordinator (%s role), as the supply page guard does (#571)',
+			async (_, roles) => {
+				vi.mocked(requireShelterScopeOrSA).mockResolvedValue({
+					name: 'sc_user',
+					roles,
+					isSA: false,
+					shelterCode: 'SH002'
+				});
+				mockList.mockResolvedValue([]);
+
+				const res = await GET(createMockEvent());
+
+				expect(res.status).toBe(200);
+				expect(mockList).toHaveBeenCalled();
+			}
+		);
+
+		it.each([
+			['supply_coordinator', 'SH002:supply_coordinator'],
+			['shelter_manager', 'SH002:shelter_manager']
+		])(
+			'refuses a %s of another shelter — the capability must be in the shelter acted on',
+			async (_, capability) => {
+				vi.mocked(requireShelterScopeOrSA).mockResolvedValue({
+					name: 'two_shelter_user',
+					roles: ['shelter:SH001', 'shelter:SH002', 'SH001:registration_staff', capability],
+					isSA: false,
+					shelterCode: 'SH001'
+				});
+
+				const res = await GET(createMockEvent());
+
+				expect(res.status).toBe(403);
+				expect(mockList).not.toHaveBeenCalled();
+			}
+		);
+
+		it('lets supply_coordinator create a transfer request too (#571)', async () => {
+			vi.mocked(requireShelterScopeOrSA).mockResolvedValue({
+				name: 'sc_user',
+				roles: ['SH001:supply_coordinator', 'shelter:SH001'],
+				isSA: false,
+				shelterCode: 'SH001'
+			});
+			mockCreate.mockResolvedValue({ _id: 'stock_transfer:new', status: 'requested' });
+
+			const res = await POST(
+				createMockEvent(
+					{},
+					{
+						from_shelter: 'SH001',
+						to_shelter: 'SH002',
+						items: [{ item_id: 'item:rice', qty: 1, unit: 'kg' }]
+					}
+				)
+			);
+
+			expect(res.status).toBe(201);
+		});
+
 		it('allows warehouse_staff and lists transfers scoped to their shelter', async () => {
 			vi.mocked(requireShelterScopeOrSA).mockResolvedValue({
 				name: 'ws_user',

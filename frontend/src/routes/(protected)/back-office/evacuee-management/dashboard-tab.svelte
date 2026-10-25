@@ -26,7 +26,7 @@
 	const isError = $derived(occupancyQuery.isError || demographicsQuery.isError);
 </script>
 
-<div class="space-y-6 p-6">
+<div class="space-y-4 p-4 sm:p-6">
 	{#if isError}
 		<Alert variant="destructive">
 			<AlertCircle class="h-4 w-4" />
@@ -34,7 +34,7 @@
 			<AlertDescription>ไม่สามารถโหลดข้อมูลสถิติได้ กรุณาลองใหม่อีกครั้ง</AlertDescription>
 		</Alert>
 	{:else if isLoading}
-		<Skeleton class="h-32 w-full" />
+		<Skeleton class="h-40 w-full" />
 	{:else if occupancyQuery.data}
 		<DashboardKpiCards occupancy={occupancyQuery.data} />
 	{/if}
@@ -54,7 +54,7 @@
 			<div class="min-w-0 rounded-xl border bg-card p-4 shadow-sm sm:p-6">
 				<div class="mb-4 flex items-center gap-2">
 					<Users class="h-4 w-4 text-primary" />
-					<h3 class="leading-none font-semibold tracking-tight">ช่วงอายุผู้อพยพทั้งหมด</h3>
+					<h3 class="leading-none font-semibold tracking-tight">ช่วงอายุผู้เข้าพักทั้งหมด</h3>
 				</div>
 				{#if demographicsQuery.data}
 					<DashboardAgeChart data={demographicsQuery.data.age_groups} />
@@ -68,7 +68,7 @@
 				<div>
 					<div class="mb-4 flex items-center gap-2">
 						<Globe class="h-4 w-4 text-primary" />
-						<h3 class="leading-none font-semibold tracking-tight">ประเทศผู้อพยพ</h3>
+						<h3 class="leading-none font-semibold tracking-tight">ประเทศผู้เข้าพัก</h3>
 					</div>
 					{#if demographicsQuery.data}
 						<DashboardNationalityList data={demographicsQuery.data.countries} />

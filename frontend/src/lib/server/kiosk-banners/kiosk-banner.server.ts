@@ -1,8 +1,9 @@
 import { adminRaw, ServiceError } from '$lib/server/couch-admin';
 import {
 	createKioskBanner,
+	groupOf,
 	isActiveAt,
-	matchesScreen,
+	matchesSlot,
 	nextBannerOrder,
 	orderableBanners,
 	planReorder,
@@ -42,6 +43,15 @@ export class BannerNotFoundError extends Error {
 	constructor(readonly id: string) {
 		super(`Banner ${id} not found`);
 		this.name = 'BannerNotFoundError';
+	}
+}
+
+/** Banner group doc does not exist; still a `BannerNotFoundError`, so every route maps it to 404. */
+export class GroupNotFoundError extends BannerNotFoundError {
+	constructor(id: string) {
+		super(id);
+		this.message = `Banner group ${id} not found`;
+		this.name = 'GroupNotFoundError';
 	}
 }
 
@@ -85,7 +95,11 @@ export async function createBanner(
 	now: Date = new Date()
 ): Promise<KioskBannerRecord> {
 	const banners = await findRawBanners(ctx.shelterCode);
-	const order = nextBannerOrder(banners, input.screen_type, now);
+	const order = nextBannerOrder(
+		banners,
+		{ group_id: input.group_id, screen_type: input.screen_type },
+		now
+	);
 	const doc = createKioskBanner(input, { ...ctx, order }, now);
 	return putDoc(doc, { [IMAGE_ATTACHMENT]: toInline(image) });
 }
@@ -99,10 +113,16 @@ async function readRaw(id: string): Promise<RawBannerDoc> {
 	return res.data as RawBannerDoc;
 }
 
+/** Fields a mutation may set; `schema_v`/`group_id` are the only ones that differ across versions. */
+type BannerPatch = Partial<Omit<KioskBannerDoc, 'schema_v' | 'group_id'>> & {
+	schema_v?: 2;
+	group_id?: string;
+};
+
 async function mutate(
 	id: string,
 	rev: string,
-	change: (current: RawBannerDoc) => Partial<KioskBannerDoc> | Promise<Partial<KioskBannerDoc>>,
+	change: (current: RawBannerDoc) => BannerPatch | Promise<BannerPatch>,
 	image: DecodedBannerImage | null,
 	now: Date
 ): Promise<KioskBannerRecord> {
@@ -111,11 +131,11 @@ async function mutate(
 		throw new ServiceError('CONFLICT', 'Banner was modified by someone else');
 	}
 	const { _attachments, ...kept } = current;
-	const doc: KioskBannerDoc = {
+	const doc = {
 		...kept,
 		...(await change(current)),
 		updated_at: now.toISOString()
-	};
+	} as KioskBannerDoc;
 	return putDoc(doc, image ? { [IMAGE_ATTACHMENT]: toInline(image) } : (_attachments ?? {}));
 }
 
@@ -126,7 +146,7 @@ export function updateBanner(
 	image: DecodedBannerImage | null,
 	now: Date = new Date()
 ): Promise<KioskBannerRecord> {
-	const { title, caption, duration_sec, start_at, end_at, status, screen_type } = input;
+	const { title, caption, duration_sec, start_at, end_at, status, screen_type, group_id } = input;
 	return mutate(
 		id,
 		rev,
@@ -138,11 +158,19 @@ export function updateBanner(
 			end_at,
 			status,
 			screen_type,
-			// Order is only set by the reorder page; a banner moved to another screen goes to its end.
+			group_id,
+			// Editing a v1 (ungrouped) banner always writes it back as v2.
+			schema_v: 2,
+			// Order is only set by the reorder page; a banner moved to another group or screen goes to
+			// the end of that slot.
 			order:
-				screenTypeOf(current) === screen_type
+				groupOf(current) === group_id && screenTypeOf(current) === screen_type
 					? current.order
-					: nextBannerOrder(await findRawBanners(current.shelter_code), screen_type, now)
+					: nextBannerOrder(
+							await findRawBanners(current.shelter_code),
+							{ group_id, screen_type },
+							now
+						)
 		}),
 		image,
 		now
@@ -202,16 +230,20 @@ export async function listBannersForShelter(shelterCode: string): Promise<KioskB
 }
 
 /**
- * Renumber the current banners of one screen type to the given order (1..n); only changed
+ * Renumber the current banners of one (group, screen type) slot to the given order (1..n); only changed
  * banners are written, with their `_attachments` stubs kept so CouchDB does not drop the image.
  */
 export async function reorderBanners(
 	shelterCode: string,
-	screenType: KioskScreenType,
+	slot: { groupId: string; screenType: KioskScreenType },
 	items: { id: string; rev: string }[],
 	now: Date = new Date()
 ): Promise<KioskBannerRecord[]> {
-	const orderable = orderableBanners(await findRawBanners(shelterCode), screenType, now);
+	const orderable = orderableBanners(
+		await findRawBanners(shelterCode),
+		{ group_id: slot.groupId, screen_type: slot.screenType },
+		now
+	);
 	const plan = planReorder(
 		orderable,
 		items.map((i) => i.id)
@@ -269,10 +301,11 @@ async function bulkWrite(docs: RawBannerDoc[]): Promise<Map<string, string>> {
 export async function listActiveForShelter(
 	shelterCode: string,
 	now: Date,
-	screenType: KioskScreenType
+	slot: { groupId: string; screenType: KioskScreenType }
 ): Promise<KioskBannerRecord[]> {
 	const all = await listBannersForShelter(shelterCode);
-	return sortBanners(all.filter((b) => matchesScreen(b, screenType) && isActiveAt(b, now))).slice(
+	const inSlot = { group_id: slot.groupId, screen_type: slot.screenType };
+	return sortBanners(all.filter((b) => matchesSlot(b, inSlot) && isActiveAt(b, now))).slice(
 		0,
 		ACTIVE_CAP
 	);

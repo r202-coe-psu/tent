@@ -139,6 +139,8 @@ const scannerDevicePersistedBaseShape = {
 	last_seen_at: z.string().min(1).nullable(),
 	/** FR-KBR-35: absent = banners shown (additive flag, no `schema_v` bump). */
 	banner_enabled: z.boolean().optional(),
+	/** Banner group the kiosk is fed from; absent or null = no group, no banners. */
+	banner_group_id: z.string().min(1).nullable().optional(),
 	/** Absent = `compact` (additive field, no `schema_v` bump). */
 	screen_type: kioskScreenTypeSchema.optional()
 };
@@ -210,8 +212,8 @@ export const scannerDeviceSummarySchema = z
 		last_seen_at: z.string().min(1).nullable(),
 		staff_pin_set: z.boolean(),
 		staff_pin_is_default: z.boolean(),
-		/** Whether the kiosk shows the banner attract loop (stored absent = `true`). */
-		banner_enabled: z.boolean(),
+		/** Banner group the kiosk is fed from (stored absent = `null`: no group, no banners). */
+		banner_group_id: z.string().min(1).nullable(),
 		/** Which kiosk screen the device drives (stored absent = `compact`). */
 		screen_type: kioskScreenTypeSchema
 	})
@@ -232,7 +234,6 @@ export const scannerDevicePatchSchema = z
 		name: scannerDeviceInputSchema.shape.name.optional(),
 		station_name: z.string().trim().min(1, 'กรุณาระบุจุดบริการ').optional(),
 		status: deviceStatusSchema.optional(),
-		banner_enabled: z.boolean().optional(),
 		screen_type: kioskScreenTypeSchema.optional()
 	})
 	.strict()
@@ -245,7 +246,7 @@ export const scannerBootstrapDeviceSchema = scannerDeviceSummarySchema
 		id: true,
 		staff_pin_set: true,
 		staff_pin_is_default: true,
-		banner_enabled: true,
+		banner_group_id: true,
 		screen_type: true
 	})
 	.extend({ shelter_name: z.string().trim().min(1) });
@@ -274,7 +275,7 @@ export function toScannerDeviceSummary(doc: PersistedScannerDevice): ScannerDevi
 		last_seen_at: doc.last_seen_at,
 		staff_pin_set: pin.staff_pin_set,
 		staff_pin_is_default: pin.staff_pin_is_default,
-		banner_enabled: doc.banner_enabled ?? true,
+		banner_group_id: doc.banner_group_id ?? null,
 		screen_type: screenTypeOf(doc)
 	};
 }
@@ -311,7 +312,7 @@ export function withoutScannerPlaintext(
 		last_seen_at: device.last_seen_at,
 		staff_pin_set: device.staff_pin_set,
 		staff_pin_is_default: device.staff_pin_is_default,
-		banner_enabled: device.banner_enabled,
+		banner_group_id: device.banner_group_id,
 		screen_type: device.screen_type
 	};
 }
