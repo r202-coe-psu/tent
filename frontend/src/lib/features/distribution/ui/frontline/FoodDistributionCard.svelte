@@ -7,6 +7,7 @@
 	import CheckCircle2 from '@lucide/svelte/icons/check-circle-2';
 	import Loader from '@lucide/svelte/icons/loader';
 	import { qtyGte } from '$lib/utils/qty';
+	import { formatThaiTime } from '$lib/utils/date';
 	import { validatePositiveQuantity } from '../model/ticket-quantity';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
@@ -30,6 +31,7 @@
 		formatMenuTags,
 		getItemCapacitySummary,
 		isIdentifiedRecipient,
+		NO_MEAL_REPEAT,
 		type FrontlineRecipientSelection
 	} from '../model/frontline-handover';
 	import { formatDistributionError } from '../model/distribution-error';
@@ -117,7 +119,7 @@
 	const duplicatePreflight = $derived(
 		isIdentifiedRecipient(recipientSelection)
 			? checkDuplicateMealAdvisory(recipientLogs, ticket.meal)
-			: { isDuplicate: false, priorLog: null }
+			: NO_MEAL_REPEAT
 	);
 
 	// Advisory menu matching (CR-159 §C FR-MRM-04): menu tags come from
@@ -490,9 +492,14 @@
 			>
 				<AlertTriangle class="mt-0.5 size-4 shrink-0 text-amber-600" aria-hidden="true" />
 				<div>
-					<p class="font-bold">คนนี้รับอาหารมื้อนี้ไปแล้ววันนี้</p>
+					<p class="font-bold">
+						รับมื้อนี้ไปแล้ว {duplicatePreflight.visits} ครั้ง รวม {duplicatePreflight.boxes} กล่อง
+						{#if duplicatePreflight.lastDistributedAt}
+							· ล่าสุด {formatThaiTime(duplicatePreflight.lastDistributedAt)}
+						{/if}
+					</p>
 					<p class="mt-0.5 text-xs text-amber-800">
-						มื้อ{ticket.meal ? getMealPeriodLabel(ticket.meal) : ''} · ถ้ากดแจกต่อ ระบบจะขอเหตุผลก่อนบันทึก
+						มื้อ{ticket.meal ? getMealPeriodLabel(ticket.meal) : ''} วันนี้ · ถ้ากดแจกต่อ ระบบจะขอเหตุผลก่อนบันทึก
 					</p>
 				</div>
 			</div>
@@ -543,7 +550,8 @@
 		<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
 			<QtyStepper
 				id="food-qty-input"
-				label="จำนวนที่แจก"
+				label="จำนวนกล่อง"
+				hint="แจกหลายกล่องให้คนเดียวได้ เช่น รับแทนครอบครัว"
 				unit="ชุด"
 				bind:value={qtyInput}
 				max={capacitySummary.inHandQty}
@@ -609,8 +617,7 @@
 		open={warningModalOpen}
 		meal={ticket.meal}
 		recipientLabel={recipientSelection.label}
-		isDuplicate={duplicatePreflight.isDuplicate}
-		priorDistributedAt={duplicatePreflight.priorLog?.distributed_at}
+		repeat={duplicatePreflight}
 		{menuMismatchLabel}
 		{allergenConflictLabel}
 		menuName={selectedItem?.item_name}

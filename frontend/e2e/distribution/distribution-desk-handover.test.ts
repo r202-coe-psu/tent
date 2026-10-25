@@ -318,7 +318,7 @@ test.describe('Tab 2 — ready-meal handover (plan §4.4)', { tag: DESK_TAGS }, 
 
 		await desk.itemButton(item.name).click();
 		await desk.chooseRecipientBySearch(recipient);
-		await expect(desk.alert('คนนี้รับอาหารมื้อนี้ไปแล้ววันนี้')).toBeVisible();
+		await expect(desk.alert(/รับมื้อนี้ไปแล้ว 1 ครั้ง รวม 1 กล่อง/)).toBeVisible();
 		await desk.foodSubmit().click();
 		await expect(desk.overrideDialog()).toHaveAccessibleName('แจ้งเตือน: ได้รับอาหารมื้อนี้แล้ว');
 		await desk.confirmOverride('รับแทนผู้ป่วยติดเตียง');

@@ -188,13 +188,18 @@ describe('frontline-handover model helpers', () => {
 		it('detects duplicate meal from recipient logs', () => {
 			const res = checkDuplicateMealAdvisory([priorLog], 'lunch', '2026-09-20T06:00:00.000Z');
 			expect(res.isDuplicate).toBe(true);
-			expect(res.priorLog).toBe(priorLog);
+			expect(res.visits).toBe(1);
+			expect(res.boxes).toBe('1');
+			expect(res.lastDistributedAt).toBe(priorLog.distributed_at);
 		});
 
 		it('returns isDuplicate false when no matching meal exists', () => {
 			const res = checkDuplicateMealAdvisory([priorLog], 'dinner', '2026-09-20T06:00:00.000Z');
 			expect(res.isDuplicate).toBe(false);
-			expect(res.priorLog).toBeNull();
+			expect(res.visits).toBe(0);
+			expect(res.boxes).toBe('0');
+			expect(res.lastDistributedAt).toBeUndefined();
+			expect(res.distributedAt).toEqual([]);
 		});
 
 		it('detects a volunteer repeat meal the same way', () => {
@@ -205,6 +210,45 @@ describe('frontline-handover model helpers', () => {
 			};
 			const res = checkDuplicateMealAdvisory([volunteerLog], 'lunch', '2026-09-20T06:00:00.000Z');
 			expect(res.isDuplicate).toBe(true);
+		});
+
+		it('counts visits and sums boxes across three handovers', () => {
+			const logs = [
+				{ ...priorLog, _id: 'a', qty: '2' },
+				{ ...priorLog, _id: 'b', qty: '1' },
+				{ ...priorLog, _id: 'c', qty: '3' }
+			];
+			const res = checkDuplicateMealAdvisory(logs, 'lunch', '2026-09-20T06:00:00.000Z');
+			expect(res.visits).toBe(3);
+			expect(res.boxes).toBe('6');
+		});
+
+		it('picks the latest time and lists times oldest first for out-of-order input', () => {
+			const logs = [
+				{ ...priorLog, _id: 'a', distributed_at: '2026-09-20T05:30:00.000Z' },
+				{ ...priorLog, _id: 'b', distributed_at: '2026-09-20T03:00:00.000Z' },
+				{ ...priorLog, _id: 'c', distributed_at: '2026-09-20T04:00:00.000Z' }
+			];
+			const res = checkDuplicateMealAdvisory(logs, 'lunch', '2026-09-20T06:00:00.000Z');
+			expect(res.lastDistributedAt).toBe('2026-09-20T05:30:00.000Z');
+			expect(res.distributedAt).toEqual([
+				'2026-09-20T03:00:00.000Z',
+				'2026-09-20T04:00:00.000Z',
+				'2026-09-20T05:30:00.000Z'
+			]);
+		});
+
+		it('excludes voided, loan, other-meal and other-day logs from the summary', () => {
+			const logs = [
+				{ ...priorLog, _id: 'ok', qty: '2' },
+				{ ...priorLog, _id: 'v', status: 'voided' as const, qty: '9' },
+				{ ...priorLog, _id: 'l', is_returnable: true, qty: '9' },
+				{ ...priorLog, _id: 'm', meal: 'dinner' as const, qty: '9' },
+				{ ...priorLog, _id: 'd', distributed_at: '2026-09-19T05:00:00.000Z', qty: '9' }
+			];
+			const res = checkDuplicateMealAdvisory(logs, 'lunch', '2026-09-20T06:00:00.000Z');
+			expect(res.visits).toBe(1);
+			expect(res.boxes).toBe('2');
 		});
 
 		it('returns isDuplicate false when logs are empty or targetMeal undefined', () => {
