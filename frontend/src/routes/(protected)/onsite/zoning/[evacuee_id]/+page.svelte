@@ -19,6 +19,7 @@
 		useEvacuees,
 		useHouseholds,
 		useScreenings,
+		useMedicalByEvacuee,
 		useCheckInEvacuee,
 		useChangeEvacueeZone,
 		useConfirmRoom,
@@ -40,7 +41,11 @@
 		type Screening
 	} from '$lib/features/people';
 	import { useShelter } from '$lib/features/shelters';
-	import { useMasterData, formatMasterLabel } from '$lib/features/master-data';
+	import {
+		useMasterData,
+		formatMasterLabel,
+		formatMasterLabelByCode
+	} from '$lib/features/master-data';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { authStore } from '$lib/stores/auth.svelte';
@@ -55,6 +60,10 @@
 	const shelterQuery = useShelter(() => shelterStore.selectedShelterCode ?? getShelterCode());
 	const shelterZones = $derived(shelterQuery.data?.zones ?? []);
 	const vulnerableGroupQuery = useMasterData(() => 'vulnerable_group');
+	// One evacuee's medical doc only (evacuee_id index) — not the whole shelter's records.
+	// Not gated on enable_medical_screening: imports and Station 1 also write conditions.
+	const medicalQuery = useMedicalByEvacuee(() => evacueeId);
+	const chronicDiseaseQuery = useMasterData(() => 'chronic_disease');
 	const checkInMutation = useCheckInEvacuee();
 	const changeZoneMutation = useChangeEvacueeZone();
 	const confirmRoomMutation = useConfirmRoom();
@@ -73,6 +82,17 @@
 			.sort((a, b) => (b.screened_at ?? b.created_at).localeCompare(a.screened_at ?? a.created_at));
 		return list[0] ?? null;
 	});
+	/** โรคประจำตัว — `chronic_disease` codes shown by label, free text as stored (CR-186). */
+	const chronicDiseaseLabels = $derived.by((): string[] => {
+		if (!evacuee) return [];
+		const medical = medicalQuery.data ?? null;
+		const items = chronicDiseaseQuery.data?.items ?? [];
+		// Dedupe after mapping: legacy data may hold both `diabetes` and "เบาหวาน".
+		return [
+			...new Set((medical?.conditions ?? []).map((c) => formatMasterLabelByCode(c, items) || c))
+		];
+	});
+
 	const SPECIAL_NEED_LABELS: Record<string, string> = {
 		wheelchair: 'ใช้วีลแชร์',
 		bedridden: 'ผู้ป่วยติดเตียง',
@@ -427,6 +447,16 @@
 						{#each evacuee.vulnerable_groups as group (group)}
 							<Badge variant="outline" class="border-primary/30 bg-primary/10 text-primary">
 								{getSpecialNeedLabel(group)}
+							</Badge>
+						{/each}
+					</div>
+				{/if}
+				{#if chronicDiseaseLabels.length > 0}
+					<div class="flex flex-wrap items-center gap-1.5 pt-1">
+						<span class="text-xs font-medium text-muted-foreground">โรคประจำตัว:</span>
+						{#each chronicDiseaseLabels as label (label)}
+							<Badge variant="outline" class="border-slate-300 bg-slate-50 text-slate-800">
+								{label}
 							</Badge>
 						{/each}
 					</div>

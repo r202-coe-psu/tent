@@ -9,6 +9,7 @@
 	import {
 		CR112_VULNERABLE_GROUP_ACTIVE,
 		formatMasterLabel,
+		formatMasterLabelByCode,
 		useMasterData
 	} from '$lib/features/master-data';
 
@@ -33,6 +34,17 @@
 		}
 		return id;
 	}
+
+	const chronicDiseaseQuery = useMasterData(() => 'chronic_disease');
+	/** #649 — conditions hold `chronic_disease` codes or free text. */
+	// Dedupe after mapping: legacy data may hold both `diabetes` and "เบาหวาน".
+	const conditionLabels = $derived([
+		...new Set(
+			(medical?.conditions ?? []).map(
+				(c) => formatMasterLabelByCode(c, chronicDiseaseQuery.data?.items ?? []) || c
+			)
+		)
+	]);
 
 	const vulnerableGroupQuery = useMasterData(() => 'vulnerable_group');
 	function vulnerableLabel(code: string): string {
@@ -165,7 +177,7 @@
 					<span
 						class="mt-0.5 block text-sm font-semibold break-words text-slate-800 dark:text-slate-200"
 					>
-						{medical?.conditions?.length ? medical.conditions.join(', ') : 'ไม่มี'}
+						{conditionLabels.length ? conditionLabels.join(', ') : 'ไม่มี'}
 					</span>
 				</div>
 				<div class="min-w-0">
