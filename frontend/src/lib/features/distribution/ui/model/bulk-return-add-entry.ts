@@ -4,7 +4,7 @@ import type {
 	AddBulkReturnEntriesInput,
 	AddBulkReturnEntriesResult,
 	BulkReturnReturnerInput
-} from '../../application/food-supplies/bulk-return-pool-v3-workflow';
+} from '../../application/food-supplies/bulk-return-pool-v3-add-entry';
 import type { FrontlineRecipientSelection } from './frontline-handover';
 import { validatePositiveQuantity } from './ticket-quantity';
 import {

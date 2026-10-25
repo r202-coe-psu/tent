@@ -6,6 +6,7 @@ import {
 	BULK_RETURN_POOL_V3_SCHEMA_V,
 	type BulkReturnPoolV3
 } from '../../domain/food-supplies';
+import { parseDocsOrSkip, type SkippedDoc } from './parse-or-skip';
 import { NotFoundError, resolveShelterDbName, retryCas } from './shared';
 
 /**
@@ -19,6 +20,8 @@ export interface BulkReturnPoolV3Repository {
 	get(poolId: string): Promise<BulkReturnPoolV3 | null>;
 	/** All v3 pools (legacy v1/v2 ignored), unsorted. */
 	list(): Promise<BulkReturnPoolV3[]>;
+	/** Like `list`, plus the v3 pool docs left out because they failed validation. */
+	listWithSkipped(): Promise<{ items: BulkReturnPoolV3[]; skipped: SkippedDoc[] }>;
 	/** CAS write of `pool` (must carry the `_rev` it was read at); ConflictError when stale. */
 	update(pool: BulkReturnPoolV3): Promise<BulkReturnPoolV3>;
 	/**
@@ -58,12 +61,16 @@ export class BulkReturnPoolV3RemoteRepository implements BulkReturnPoolV3Reposit
 	}
 
 	async list(): Promise<BulkReturnPoolV3[]> {
+		return (await this.listWithSkipped()).items;
+	}
+
+	async listWithSkipped(): Promise<{ items: BulkReturnPoolV3[]; skipped: SkippedDoc[] }> {
 		const docs = await allDocsByType<BulkReturnPoolV3>(
 			this.dbName,
 			'bulk_return_pool',
 			isPoolDocV3
 		);
-		return docs.map((d) => bulkReturnPoolV3DocSchema.parse(d) as BulkReturnPoolV3);
+		return parseDocsOrSkip<BulkReturnPoolV3>(docs, bulkReturnPoolV3DocSchema);
 	}
 
 	async update(pool: BulkReturnPoolV3): Promise<BulkReturnPoolV3> {

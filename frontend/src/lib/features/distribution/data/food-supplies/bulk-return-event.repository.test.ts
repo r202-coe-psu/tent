@@ -108,7 +108,164 @@ describe('BulkReturnEventRemoteRepository', () => {
 		});
 
 		it('returns empty lists for an empty database', async () => {
-			expect(await repo.listAll()).toEqual({ entries: [], moves: [], voids: [] });
+			expect(await repo.listAll()).toEqual({ entries: [], moves: [], voids: [], skipped: [] });
+		});
+
+		it('reports invalid docs in skipped instead of throwing', async () => {
+			const e = await repo.createEntry(entry());
+			const badEntry = 'bulk_return_entry:01J00000000000000000000098';
+			const badMove = deriveEntryMoveId(e._id, 1);
+			const badVoid = 'bulk_return_entry_void:01J00000000000000000000097';
+			couch.store.set(badEntry, { _id: badEntry, type: 'bulk_return_entry' });
+			couch.store.set(badMove, { _id: badMove, type: 'bulk_return_entry_move' });
+			couch.store.set(badVoid, { _id: badVoid, type: 'bulk_return_entry_void' });
+
+			const all = await repo.listAll();
+			expect(all.entries.map((x) => x._id)).toEqual([e._id]);
+			expect(all.moves).toEqual([]);
+			expect(all.voids).toEqual([]);
+			expect(all.skipped.map((s) => s._id).sort()).toEqual([badEntry, badMove, badVoid].sort());
+		});
+	});
+
+	describe('scoped reads', () => {
+		const P3 = 'bulk_return_pool:01J00000000000000000000033';
+		const ulidOf = (n: number) => `01J${String(n).padStart(23, '0')}`;
+		const entryId = (n: number) => `bulk_return_entry:${ulidOf(n)}`;
+
+		const seedEntry = (n: number, poolId: string) =>
+			repo.createEntry(
+				createBulkReturnEntry(
+					{ pool_id: poolId, item_id: 'item:cot', qty: '3', returner_type: 'unspecified' },
+					ctx,
+					ulidOf(n)
+				)
+			);
+
+		const seedMove = async (n: number, seq: number, from: string, to: string) => {
+			const e = await repo.getEntry(entryId(n));
+			if (!e) throw new Error(`entry ${n} not seeded`);
+			return repo.createMove(
+				createBulkReturnEntryMove({ entry: e, seq, from_pool_id: from, to_pool_id: to }, ctx)
+			);
+		};
+
+		const ids = (docs: { _id: string }[]) => docs.map((d) => d._id).sort();
+
+		describe('listForEntry', () => {
+			it('returns only that entry with its move chain and void', async () => {
+				const a = await seedEntry(1, P1);
+				await seedEntry(2, P1);
+				await seedMove(1, 1, P1, P2);
+				await seedMove(1, 2, P2, P3);
+				await seedMove(2, 1, P1, P2);
+				await repo.createVoid(createBulkReturnEntryVoid({ entry: a, pool_id: P3 }, ctx));
+
+				const set = await repo.listForEntry(a._id);
+				expect(set.entries.map((e) => e._id)).toEqual([a._id]);
+				expect(ids(set.moves)).toEqual([deriveEntryMoveId(a._id, 1), deriveEntryMoveId(a._id, 2)]);
+				expect(set.voids.map((v) => v._id)).toEqual([deriveEntryVoidId(a._id)]);
+				expect(set.skipped).toEqual([]);
+			});
+
+			it('returns empty lists for an unknown or malformed entry id', async () => {
+				await seedEntry(1, P1);
+				const empty = { entries: [], moves: [], voids: [], skipped: [] };
+				expect(await repo.listForEntry(entryId(99))).toEqual(empty);
+				expect(await repo.listForEntry('nonsense')).toEqual(empty);
+			});
+
+			it('is not affected by an invalid doc of another entry', async () => {
+				const a = await seedEntry(1, P1);
+				couch.store.set(`bulk_return_entry_move:${ulidOf(2)}:0001`, {
+					_id: `bulk_return_entry_move:${ulidOf(2)}:0001`,
+					type: 'bulk_return_entry_move'
+				});
+				const set = await repo.listForEntry(a._id);
+				expect(set.entries.map((e) => e._id)).toEqual([a._id]);
+				expect(set.skipped).toEqual([]);
+			});
+
+			it('reports an invalid doc of its own chain in skipped instead of throwing', async () => {
+				const a = await seedEntry(1, P1);
+				const badId = deriveEntryMoveId(a._id, 1);
+				couch.store.set(badId, { _id: badId, type: 'bulk_return_entry_move' });
+				const set = await repo.listForEntry(a._id);
+				expect(set.moves).toEqual([]);
+				expect(set.skipped.map((s) => s._id)).toEqual([badId]);
+			});
+		});
+
+		describe('listForPool', () => {
+			it('unions entries created in the pool and entries moved into it, with whole chains', async () => {
+				await seedEntry(1, P1); // created in P1, stays
+				await seedEntry(2, P2); // created in P2, moved into P1
+				await seedMove(2, 1, P2, P1);
+				await seedEntry(3, P1); // created in P1, moved out to P2
+				await seedMove(3, 1, P1, P2);
+				await seedEntry(4, P3); // unrelated pool
+				await seedMove(4, 1, P3, P2);
+
+				const set = await repo.listForPool(P1);
+				expect(ids(set.entries)).toEqual([entryId(1), entryId(2), entryId(3)]);
+				expect(ids(set.moves)).toEqual([
+					deriveEntryMoveId(entryId(2), 1),
+					deriveEntryMoveId(entryId(3), 1)
+				]);
+				expect(set.skipped).toEqual([]);
+			});
+
+			it('includes the full chain of an entry that was moved into the pool and on again', async () => {
+				await seedEntry(1, P2);
+				await seedMove(1, 1, P2, P1);
+				await seedMove(1, 2, P1, P3);
+				const set = await repo.listForPool(P1);
+				expect(ids(set.entries)).toEqual([entryId(1)]);
+				expect(set.moves).toHaveLength(2);
+			});
+
+			it('includes voids of the scoped entries only', async () => {
+				const a = await seedEntry(1, P1);
+				const b = await seedEntry(2, P2);
+				await repo.createVoid(createBulkReturnEntryVoid({ entry: a, pool_id: P1 }, ctx));
+				await repo.createVoid(createBulkReturnEntryVoid({ entry: b, pool_id: P2 }, ctx));
+				const set = await repo.listForPool(P1);
+				expect(set.voids.map((v) => v.entry_id)).toEqual([a._id]);
+			});
+
+			it('pages past the CouchDB default limit and the page size', async () => {
+				const count = 205;
+				for (let n = 1; n <= count; n++) await seedEntry(n, P1);
+				await seedEntry(count + 1, P2);
+				const set = await repo.listForPool(P1);
+				expect(set.entries).toHaveLength(count);
+				expect(new Set(set.entries.map((e) => e._id)).size).toBe(count);
+			});
+
+			it('ignores invalid docs of other pools and reports its own in skipped', async () => {
+				await seedEntry(1, P1);
+				couch.store.set(entryId(2), {
+					_id: entryId(2),
+					type: 'bulk_return_entry',
+					pool_id: P2
+				});
+				const badOwn = entryId(3);
+				couch.store.set(badOwn, { _id: badOwn, type: 'bulk_return_entry', pool_id: P1 });
+
+				const set = await repo.listForPool(P1);
+				expect(ids(set.entries)).toEqual([entryId(1)]);
+				expect(set.skipped.map((s) => s._id)).toEqual([badOwn]);
+			});
+
+			it('returns empty lists for a pool without entries', async () => {
+				await seedEntry(1, P2);
+				expect(await repo.listForPool(P1)).toEqual({
+					entries: [],
+					moves: [],
+					voids: [],
+					skipped: []
+				});
+			});
 		});
 	});
 });

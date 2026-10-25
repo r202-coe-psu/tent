@@ -21,23 +21,29 @@ import type { BulkReturnPoolV3 } from '../../domain/food-supplies';
 import {
 	openBulkReturnPool,
 	updateBulkReturnPoolHeader,
-	addBulkReturnEntries,
-	moveBulkReturnEntry,
-	voidBulkReturnEntry,
 	cancelBulkReturnPool,
 	submitBulkReturnPool,
 	receiveBulkReturnPool,
 	type ReceiveBulkReturnPoolInput,
 	type ReceiveBulkReturnPoolResult,
 	type OpenBulkReturnPoolInput,
-	type UpdateBulkReturnPoolHeaderPatch,
+	type UpdateBulkReturnPoolHeaderPatch
+} from '../food-supplies/bulk-return-pool-v3-lifecycle';
+import {
+	addBulkReturnEntries,
 	type AddBulkReturnEntriesInput,
-	type AddBulkReturnEntriesResult,
+	type AddBulkReturnEntriesResult
+} from '../food-supplies/bulk-return-pool-v3-add-entry';
+import {
+	moveBulkReturnEntry,
 	type MoveBulkReturnEntryInput,
-	type MoveBulkReturnEntryResult,
+	type MoveBulkReturnEntryResult
+} from '../food-supplies/bulk-return-pool-v3-move';
+import {
+	voidBulkReturnEntry,
 	type VoidBulkReturnEntryInput,
 	type VoidBulkReturnEntryResult
-} from '../food-supplies/bulk-return-pool-v3-workflow';
+} from '../food-supplies/bulk-return-pool-v3-void';
 
 export interface OpenBulkReturnPoolMutationInput {
 	input: OpenBulkReturnPoolInput;

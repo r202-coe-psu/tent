@@ -85,6 +85,32 @@ describe('BulkReturnPoolV3RemoteRepository', () => {
 			const pools = await repo.list();
 			expect(pools.map((p) => p._id)).toEqual([`bulk_return_pool:${ID1}`]);
 		});
+
+		it('skips a malformed v3 pool instead of throwing and reports it in listWithSkipped', async () => {
+			await repo.create(createBulkReturnPoolV3({ name: 'Gate A' }, ctx, ID1));
+			const badId = `bulk_return_pool:${ID2}`;
+			couch.store.set(badId, {
+				_id: badId,
+				_rev: '1-x',
+				type: 'bulk_return_pool',
+				schema_v: 3
+			});
+			expect((await repo.list()).map((p) => p._id)).toEqual([`bulk_return_pool:${ID1}`]);
+			const found = await repo.listWithSkipped();
+			expect(found.items.map((p) => p._id)).toEqual([`bulk_return_pool:${ID1}`]);
+			expect(found.skipped.map((s) => s._id)).toEqual([badId]);
+		});
+
+		it('does not report a legacy pool as skipped', async () => {
+			const legacyId = `bulk_return_pool:${ID2}`;
+			couch.store.set(legacyId, {
+				_id: legacyId,
+				_rev: '1-x',
+				type: 'bulk_return_pool',
+				schema_v: 1
+			});
+			expect((await repo.listWithSkipped()).skipped).toEqual([]);
+		});
 	});
 
 	describe('update', () => {

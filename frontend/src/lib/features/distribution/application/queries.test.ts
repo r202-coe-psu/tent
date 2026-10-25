@@ -57,7 +57,8 @@ const {
 		getBulkReturnPoolOverview: vi.fn(),
 		listReturnerOutstandingLoans: vi.fn(),
 		listBulkReturnPoolClosedLoanRefs: vi.fn(),
-		listBulkReturnPoolAppliedLoanRefs: vi.fn()
+		listBulkReturnPoolAppliedLoanRefs: vi.fn(),
+		listBulkReturnSkippedDocs: vi.fn()
 	};
 
 	const mockRepoInstances = {
@@ -162,16 +163,28 @@ vi.mock('./food-supplies/reconciliation-workflow', () => ({
 	completeTicket: (...args: unknown[]) => mockWorkflowCalls.completeTicket(...args)
 }));
 
-vi.mock('./food-supplies/bulk-return-pool-v3-workflow', () => ({
+vi.mock('./food-supplies/bulk-return-pool-v3-lifecycle', () => ({
 	openBulkReturnPool: (...args: unknown[]) => mockWorkflowCalls.openBulkReturnPool(...args),
 	updateBulkReturnPoolHeader: (...args: unknown[]) =>
 		mockWorkflowCalls.updateBulkReturnPoolHeader(...args),
-	addBulkReturnEntries: (...args: unknown[]) => mockWorkflowCalls.addBulkReturnEntries(...args),
-	moveBulkReturnEntry: (...args: unknown[]) => mockWorkflowCalls.moveBulkReturnEntry(...args),
-	voidBulkReturnEntry: (...args: unknown[]) => mockWorkflowCalls.voidBulkReturnEntry(...args),
 	cancelBulkReturnPool: (...args: unknown[]) => mockWorkflowCalls.cancelBulkReturnPool(...args),
 	submitBulkReturnPool: (...args: unknown[]) => mockWorkflowCalls.submitBulkReturnPool(...args),
-	receiveBulkReturnPool: (...args: unknown[]) => mockWorkflowCalls.receiveBulkReturnPool(...args),
+	receiveBulkReturnPool: (...args: unknown[]) => mockWorkflowCalls.receiveBulkReturnPool(...args)
+}));
+
+vi.mock('./food-supplies/bulk-return-pool-v3-add-entry', () => ({
+	addBulkReturnEntries: (...args: unknown[]) => mockWorkflowCalls.addBulkReturnEntries(...args)
+}));
+
+vi.mock('./food-supplies/bulk-return-pool-v3-move', () => ({
+	moveBulkReturnEntry: (...args: unknown[]) => mockWorkflowCalls.moveBulkReturnEntry(...args)
+}));
+
+vi.mock('./food-supplies/bulk-return-pool-v3-void', () => ({
+	voidBulkReturnEntry: (...args: unknown[]) => mockWorkflowCalls.voidBulkReturnEntry(...args)
+}));
+
+vi.mock('./food-supplies/bulk-return-pool-v3-read', () => ({
 	getBulkReturnPoolOverview: (...args: unknown[]) =>
 		mockWorkflowCalls.getBulkReturnPoolOverview(...args),
 	listReturnerOutstandingLoans: (...args: unknown[]) =>
@@ -179,7 +192,9 @@ vi.mock('./food-supplies/bulk-return-pool-v3-workflow', () => ({
 	listBulkReturnPoolClosedLoanRefs: (...args: unknown[]) =>
 		mockWorkflowCalls.listBulkReturnPoolClosedLoanRefs(...args),
 	listBulkReturnPoolAppliedLoanRefs: (...args: unknown[]) =>
-		mockWorkflowCalls.listBulkReturnPoolAppliedLoanRefs(...args)
+		mockWorkflowCalls.listBulkReturnPoolAppliedLoanRefs(...args),
+	listBulkReturnSkippedDocs: (...args: unknown[]) =>
+		mockWorkflowCalls.listBulkReturnSkippedDocs(...args)
 }));
 
 // Mock repositories
@@ -232,11 +247,11 @@ import {
 	useDistributionLog,
 	useBulkReturnPools,
 	useBulkReturnPool,
-	useBulkReturnClaim,
 	useBulkReturnPoolOverview,
 	useBulkReturnPoolClosedLoanRefs,
 	useBulkReturnPoolAppliedLoanRefs,
 	useReturnerOutstandingLoans,
+	useBulkReturnSkippedDocs,
 	useOpenBulkReturnPool,
 	useUpdateBulkReturnPoolHeader,
 	useAddBulkReturnEntries,
@@ -259,7 +274,6 @@ import {
 	useReturnLoanAtCounter,
 	useClearLoanNonPhysical,
 	useCreateBulkReturnPool,
-	useClearLoanViaBulkPool,
 	useCloseShift,
 	useSubmitReturnsToWarehouse,
 	useReceiveWarehouseReturns,
@@ -270,10 +284,12 @@ import {
 	invalidateTicketWithCollection,
 	invalidateDistributionLogs,
 	invalidateShiftReconciliation,
-	invalidateBulkPools,
 	invalidateBulkClaims,
 	invalidateInventoryQueries
 } from './queries';
+import { useBulkReturnClaim } from './query/read-queries';
+import { useClearLoanViaBulkPool } from './query/return-mutations';
+import { invalidateBulkPools } from './query/invalidation';
 
 describe('Phase 5 Slice 5.0 — Distribution TanStack Query Layer', () => {
 	beforeEach(() => {
@@ -570,6 +586,33 @@ describe('Phase 5 Slice 5.0 — Distribution TanStack Query Layer', () => {
 			expect(mockWorkflowCalls.listReturnerOutstandingLoans).toHaveBeenCalledWith(
 				'evacuee:e1',
 				expect.objectContaining({ createdBy: 'staff_alice', shelterCode: 'SH001' })
+			);
+		});
+
+		it('useBulkReturnSkippedDocs reads skipped docs, optionally for one returner', async () => {
+			expect(distributionKeys.bulkReturnSkippedDocs('SH001')).toEqual([
+				'distribution',
+				'SH001',
+				'bulk_pools_v3',
+				'skipped_docs',
+				''
+			]);
+
+			mockWorkflowCalls.listBulkReturnSkippedDocs.mockResolvedValueOnce([{ _id: 'bad:1' }]);
+			useBulkReturnSkippedDocs();
+			expect(tracker.lastCreatedQuery?.enabled).toBe(true);
+			expect(await tracker.lastCreatedQuery?.queryFn()).toEqual([{ _id: 'bad:1' }]);
+			expect(mockWorkflowCalls.listBulkReturnSkippedDocs).toHaveBeenCalledWith(
+				{ returnerId: undefined },
+				expect.objectContaining({ shelterCode: 'SH001' })
+			);
+
+			useBulkReturnSkippedDocs(() => 'person:p1');
+			expect(tracker.lastCreatedQuery?.enabled).toBe(false);
+			useBulkReturnSkippedDocs(() => 'evacuee:e1');
+			expect(tracker.lastCreatedQuery?.enabled).toBe(true);
+			expect(tracker.lastCreatedQuery?.queryKey).toEqual(
+				distributionKeys.bulkReturnSkippedDocs('SH001', 'evacuee:e1')
 			);
 		});
 

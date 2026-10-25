@@ -386,6 +386,45 @@ export async function fillBooking(
 	};
 }
 
+/**
+ * A booking of two lines — the campaign `need` and one typed-in line — posted to the BFF
+ * the way the wizard does. The wizard books one line at a time, and per-line review
+ * (CR-174) and per-line refusal at the counter (CR-172) need two. Parcel, so no slot.
+ */
+export async function bookMixedViaApi(
+	request: APIRequestContext,
+	opts: {
+		shelter: Pick<PublicShelter, 'code'>;
+		need: Pick<PublicNeed, 'item_id' | 'name'>;
+		needUnit: string;
+		typedItem: string;
+		donorName: string;
+		phone: string;
+		ledger: RunLedger;
+	}
+): Promise<Booking> {
+	const res = await request.post('/api/public/v1/donations', {
+		data: {
+			shelter_code: opts.shelter.code,
+			donor: { name: opts.donorName, phone: opts.phone },
+			items: [
+				{ item_id: opts.need.item_id, free_text: opts.need.name, qty: 1, unit: opts.needUnit },
+				{ free_text: opts.typedItem, category: 'other', qty: 2, unit: 'piece', condition: 'new' }
+			],
+			logistics: { delivery_method: 'parcel' }
+		}
+	});
+	const body = (await res.json()) as BookingResponse;
+	expect(body.success, `mixed booking POST failed: ${JSON.stringify(body)}`).toBe(true);
+	const { bookingRef, trackingToken } = body as Booking;
+	opts.ledger.add('bookings', {
+		token: trackingToken,
+		ref: bookingRef,
+		shelter: opts.shelter.code
+	});
+	return { bookingRef, trackingToken };
+}
+
 /** Walk the public wizard for `need` at `shelter` (qty 1 unless `opts.qty`); asserts the ticket. */
 export async function bookAsDonor(page: Page, opts: BookingOptions): Promise<Booking> {
 	const { submit } = await fillBooking(page, opts);
@@ -397,8 +436,16 @@ export async function bookAsDonor(page: Page, opts: BookingOptions): Promise<Boo
 	expect(body.success, `booking POST failed: ${JSON.stringify(body)}`).toBe(true);
 	const { bookingRef, trackingToken } = body as Booking;
 
-	// Step 4 — every public booking opens as pending_review (CR-052 §1.4).
-	await expect(page.getByRole('heading', { name: 'ส่งรายการรอเจ้าหน้าที่ตรวจสอบ' })).toBeVisible();
+	// Step 4 — CR-174: a booking of campaign lines is approved at once and its ticket
+	// carries the QR (AC-1); a typed-in line waits for staff review.
+	if (opts.unsolicited) {
+		await expect(
+			page.getByRole('heading', { name: 'ส่งรายการรอเจ้าหน้าที่ตรวจสอบ' })
+		).toBeVisible();
+	} else {
+		await expect(page.getByRole('heading', { name: 'สำเร็จ! ตั๋วบริจาคของคุณ' })).toBeVisible();
+		await expect(page.getByTestId('ticket-qr')).toBeVisible();
+	}
 	await expect(page.getByText(bookingRef).first()).toBeVisible();
 	return { bookingRef, trackingToken };
 }
@@ -423,7 +470,7 @@ export async function openBackOffice(page: Page, staff: Staff, workingShelter?: 
 		workingShelter ?? staff.roles.find((r) => r.startsWith('shelter:'))?.slice('shelter:'.length);
 	if (shelterCode) await pinActiveShelter(page, shelterCode);
 	await page.goto('/back-office/stock-donations');
-	await expect(page.getByRole('tab', { name: /รอการประเมิน/ })).toBeVisible({ timeout: 15_000 });
+	await expect(page.getByRole('tab', { name: /รายการของบริจาค/ })).toBeVisible({ timeout: 15_000 });
 }
 
 /**
@@ -434,30 +481,73 @@ export async function openPendingRow(page: Page, bookingRef: string) {
 	const row = page.getByRole('row').filter({ hasText: bookingRef });
 	await expect(async () => {
 		await page.reload();
-		await page.getByRole('tab', { name: /รอการประเมิน/ }).click();
+		await page.getByRole('tab', { name: /รายการของบริจาค/ }).click();
+		await page.getByRole('button', { name: /^รอประเมิน/ }).click();
 		await expect(row).toBeVisible({ timeout: 3_000 });
 	}).toPass({ timeout: 30_000 });
 	await row.getByRole('button', { name: 'จัดการ' }).click();
 	await expect(page.getByRole('heading', { name: new RegExp(`^${bookingRef} - `) })).toBeVisible();
 }
 
-/** Approve from the pending tab and wait for CouchDB to flip to `verifying`. */
+/**
+ * Accept every line waiting for review (CR-174 — one decision per pending line) and wait
+ * for CouchDB to flip to `verifying`. Only a booking with a typed-in line is in the queue.
+ */
 export async function approvePending(page: Page, shelterCode: string, bookingRef: string) {
 	await openPendingRow(page, bookingRef);
 	await page.getByRole('textbox', { name: /Internal Review Memo/ }).fill(`e2e ${RUN_ID}`);
-	await page.getByRole('button', { name: 'อนุมัติรับ (Generate QR)' }).click();
-	await expect(page.getByText(`อนุมัติคำขอ ${bookingRef} เข้าสู่การตรวจรับแล้ว`)).toBeVisible();
+	// Anchored — "ไม่รับรายการนี้" contains the same words, and each half carries a hint.
+	const keep = page.getByRole('button', { name: /^รับรายการนี้/ });
+	for (const button of await keep.all()) await button.click();
+	await page.getByRole('button', { name: 'บันทึกผลการประเมิน' }).click();
+	await expect(page.getByText(`บันทึกผลการประเมิน ${bookingRef} แล้ว`)).toBeVisible();
+	await expectReadyForDropoff(shelterCode, bookingRef);
+}
+
+/**
+ * A booking of campaign lines skips the review queue (CR-174 AC-1): it reaches CouchDB
+ * already `verifying`, its lines approved by the campaign rule.
+ */
+export async function expectReadyForDropoff(shelterCode: string, bookingRef: string) {
 	await expect
-		.poll(async () => (await findDonation(shelterCode, bookingRef))?.status)
+		.poll(async () => (await findDonation(shelterCode, bookingRef))?.status, { timeout: 30_000 })
 		.toBe('verifying');
+}
+
+/**
+ * Reject the open booking through the reject dialog (CR-172): pick the preset whose
+ * label matches `reason`, add `note`, confirm. The confirm stays disabled until the
+ * reason is complete, which every caller relies on. `noteRequired` ("อื่นๆ") also checks
+ * that the preset alone is not enough (AC-4) and the note is marked required.
+ */
+export async function rejectInDialog(
+	page: Page,
+	reason: RegExp,
+	note?: string,
+	{ noteRequired = false }: { noteRequired?: boolean } = {}
+) {
+	await page.getByRole('button', { name: 'ปฏิเสธคำขอ' }).click();
+	const dialog = page.getByRole('dialog', { name: 'ปฏิเสธใบบริจาค' });
+	const confirm = dialog.getByRole('button', { name: 'ยืนยันปฏิเสธ' });
+	await expect(confirm).toBeDisabled();
+	await dialog.getByRole('radio', { name: reason }).click();
+	const noteBox = dialog.getByRole('textbox', { name: /รายละเอียดเพิ่มเติม/ });
+	if (noteRequired) {
+		await expect(noteBox).toHaveAttribute('aria-required', 'true');
+		await expect(confirm).toBeDisabled();
+	}
+	if (note) await noteBox.fill(note);
+	await confirm.click();
+	await expect(dialog).toBeHidden();
 }
 
 /** Open a booking in the scan station by typing its ref. */
 export async function openInScanStation(page: Page, bookingRef: string) {
 	await page.reload();
-	// The active tab is kept in `?tab=` and survives the reload, so coming from the
-	// pending queue the scan station has to be picked explicitly.
-	await page.getByRole('tab', { name: /สแกนรับของเข้าคลัง/ }).click();
+	// The active tab is kept in `?tab=` and survives the reload, so the list is picked
+	// explicitly; the scanner sits at its top right (#617).
+	await page.getByRole('tab', { name: /รายการของบริจาค/ }).click();
+	await page.getByRole('button', { name: 'สแกนรับเข้าคลัง' }).click();
 	await page.getByRole('textbox', { name: 'รหัสการจอง' }).fill(bookingRef);
 	await page.getByRole('button', { name: 'ค้นหา' }).click();
 	await expect(
@@ -686,6 +776,8 @@ export async function expectRunGone(request: APIRequestContext, run: TornDown) {
 			(await couchReq('GET', `/_users/org.couchdb.user:${encodeURIComponent(name)}`)).status
 		).toBe(404);
 	}
+	// FastAPI caps donation routes at 30/min per IP and the BFF does not forward the caller's
+	// IP yet (#458), so a busy run can see 429 here. Poll past one full 60 s window.
 	for (const b of run.bookings) {
 		await expect
 			.poll(
@@ -693,7 +785,7 @@ export async function expectRunGone(request: APIRequestContext, run: TornDown) {
 					const res = await request.get(`/api/public/v1/donations/${b.token}`);
 					return ((await res.json()) as { donation?: { status?: string } }).donation?.status;
 				},
-				{ timeout: 30_000, intervals: [2_000, 3_000] }
+				{ timeout: 75_000, intervals: [2_000, 3_000, 5_000] }
 			)
 			.toEqual(expect.stringMatching(new RegExp(`^(${RELEASED_STATUSES.join('|')})$`)));
 	}

@@ -11,6 +11,7 @@ import {
 	type DistributionLogStatus,
 	type ReturnCondition
 } from '../../domain/food-supplies';
+import { parseDocsOrSkip, type SkippedDoc } from './parse-or-skip';
 import { NotFoundError, resolveShelterDbName, retryCas } from './shared';
 
 export interface DistributionLogListFilter {
@@ -19,6 +20,32 @@ export interface DistributionLogListFilter {
 	item_id?: string;
 	status?: DistributionLogStatus;
 	is_returnable?: boolean;
+}
+
+/**
+ * Whether a malformed raw doc could match `filter`. A filtered field that cannot be read (wrong type
+ * or absent) counts as matching: it may be the very doc the caller is looking for.
+ */
+function rawMatchesFilter(raw: unknown, filter?: DistributionLogListFilter): boolean {
+	if (!filter) return true;
+	const doc = (typeof raw === 'object' && raw !== null ? raw : {}) as Record<string, unknown>;
+	const stringField = (key: 'ticket_id' | 'item_id' | 'status', want: string | undefined) =>
+		!want || typeof doc[key] !== 'string' || doc[key] === want;
+	if (!stringField('ticket_id', filter.ticket_id)) return false;
+	if (!stringField('item_id', filter.item_id)) return false;
+	if (!stringField('status', filter.status)) return false;
+	if (
+		filter.is_returnable !== undefined &&
+		typeof doc.is_returnable === 'boolean' &&
+		doc.is_returnable !== filter.is_returnable
+	)
+		return false;
+	if (filter.recipient_id !== undefined) {
+		const recipient = doc.recipient_id;
+		const readable = recipient === null || typeof recipient === 'string';
+		if (readable && recipient !== filter.recipient_id) return false;
+	}
+	return true;
 }
 
 export type PhysicalReturnReason = 'routine' | 'bulk_dropoff';
@@ -43,7 +70,15 @@ export interface DistributionLogRepository {
 		ctx: AuthorContext
 	): Promise<DistributionLog>;
 	get(logId: string): Promise<DistributionLog | null>;
+	/** Valid logs matching `filter`; malformed docs are skipped (see `listWithSkipped`). */
 	list(filter?: DistributionLogListFilter): Promise<DistributionLog[]>;
+	/**
+	 * Like `list`, plus the malformed docs that could match `filter` (matched on their raw fields; an
+	 * unreadable filtered field counts as matching). Write paths use it to fail closed.
+	 */
+	listWithSkipped(
+		filter?: DistributionLogListFilter
+	): Promise<{ items: DistributionLog[]; skipped: SkippedDoc[] }>;
 	mutateLogCAS(
 		logId: string,
 		mutator: (current: DistributionLog) => DistributionLog
@@ -86,23 +121,33 @@ export class DistributionLogRemoteRepository implements DistributionLogRepositor
 	}
 
 	async list(filter?: DistributionLogListFilter): Promise<DistributionLog[]> {
+		return (await this.listWithSkipped(filter)).items;
+	}
+
+	async listWithSkipped(
+		filter?: DistributionLogListFilter
+	): Promise<{ items: DistributionLog[]; skipped: SkippedDoc[] }> {
 		const docs = await allDocsByType<DistributionLog>(
 			this.dbName,
 			'distribution_log',
 			(d): d is DistributionLog =>
 				typeof d === 'object' && d !== null && (d as { type?: string }).type === 'distribution_log'
 		);
-		const parsed = docs.map((d) => distributionLogDocSchema.parse(d));
-		return parsed.filter((log) => {
-			if (filter?.ticket_id && log.ticket_id !== filter.ticket_id) return false;
-			if (filter?.item_id && log.item_id !== filter.item_id) return false;
-			if (filter?.status && log.status !== filter.status) return false;
-			if (filter?.is_returnable !== undefined && log.is_returnable !== filter.is_returnable)
-				return false;
-			if (filter?.recipient_id !== undefined && log.recipient_id !== filter.recipient_id)
-				return false;
-			return true;
-		});
+		const { items, skipped } = parseDocsOrSkip<DistributionLog>(docs, distributionLogDocSchema);
+		const rawById = new Map(docs.map((d) => [(d as { _id?: unknown })._id, d]));
+		return {
+			items: items.filter((log) => {
+				if (filter?.ticket_id && log.ticket_id !== filter.ticket_id) return false;
+				if (filter?.item_id && log.item_id !== filter.item_id) return false;
+				if (filter?.status && log.status !== filter.status) return false;
+				if (filter?.is_returnable !== undefined && log.is_returnable !== filter.is_returnable)
+					return false;
+				if (filter?.recipient_id !== undefined && log.recipient_id !== filter.recipient_id)
+					return false;
+				return true;
+			}),
+			skipped: skipped.filter((s) => rawMatchesFilter(rawById.get(s._id), filter))
+		};
 	}
 
 	async mutateLogCAS(

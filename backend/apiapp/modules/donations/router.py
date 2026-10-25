@@ -105,7 +105,12 @@ async def patch_donation_items(
     409 when the target is full.
     """
     response.headers["Cache-Control"] = "no-store"
-    return await use_case.update_items(tracking_token, payload.items)
+    return await use_case.update_items(
+        tracking_token,
+        payload.items,
+        current_items=payload.current_items,
+        current_status=payload.current_status,
+    )
 
 
 @router.delete(

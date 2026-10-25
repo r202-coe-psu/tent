@@ -91,7 +91,7 @@
 		</div>
 
 		<AlertDialog.Root open={submitOpen} onOpenChange={handleSubmitOpenChange}>
-			<AlertDialog.Content>
+			<AlertDialog.Content class="grid-cols-[minmax(0,1fr)]">
 				<AlertDialog.Header>
 					<AlertDialog.Title>ยืนยันเก็บกองเข้าคลัง</AlertDialog.Title>
 					<AlertDialog.Description>
@@ -101,15 +101,17 @@
 					</AlertDialog.Description>
 				</AlertDialog.Header>
 
-				<div class="space-y-2">
-					<p class="text-sm font-semibold text-slate-800">
+				<div class="min-w-0 space-y-2">
+					<p class="text-sm font-semibold [overflow-wrap:anywhere] text-slate-800">
 						กอง "{row.pool.name}" ·
 						<span class="tabular-nums">{row.entry_count}</span> รายการ
 					</p>
 					<ul class="divide-y divide-slate-100 rounded-xl border border-slate-200/80 bg-white">
 						{#each summaryRows as summary (summary.item_id)}
 							<li class="flex items-baseline justify-between gap-3 px-3.5 py-2.5 text-sm">
-								<span class="font-medium break-words text-slate-900">{summary.name}</span>
+								<span class="min-w-0 font-medium [overflow-wrap:anywhere] text-slate-900"
+									>{summary.name}</span
+								>
 								<span class="shrink-0 font-semibold text-slate-900 tabular-nums">
 									{summary.qty}
 									{summary.unit}
@@ -125,7 +127,7 @@
 						class="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-sm font-semibold text-red-900"
 					>
 						<AlertCircle class="mt-0.5 h-4 w-4 shrink-0 text-red-600" aria-hidden="true" />
-						<p>{submitError}</p>
+						<p class="min-w-0 [overflow-wrap:anywhere]">{submitError}</p>
 					</div>
 				{/if}
 

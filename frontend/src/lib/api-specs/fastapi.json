@@ -3306,10 +3306,11 @@
 				"properties": {
 					"success": { "type": "boolean", "title": "Success", "default": true },
 					"tracking_token": { "type": "string", "title": "Tracking Token" },
-					"booking_ref": { "type": "string", "title": "Booking Ref" }
+					"booking_ref": { "type": "string", "title": "Booking Ref" },
+					"status": { "type": "string", "title": "Status" }
 				},
 				"type": "object",
-				"required": ["tracking_token", "booking_ref"],
+				"required": ["tracking_token", "booking_ref", "status"],
 				"title": "DonationCreateResponse"
 			},
 			"DonationItemInput": {
@@ -3341,6 +3342,17 @@
 						"items": { "$ref": "#/components/schemas/DonationItemInput" },
 						"type": "array",
 						"title": "Items"
+					},
+					"current_items": {
+						"anyOf": [
+							{ "items": { "additionalProperties": true, "type": "object" }, "type": "array" },
+							{ "type": "null" }
+						],
+						"title": "Current Items"
+					},
+					"current_status": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Current Status"
 					}
 				},
 				"type": "object",
@@ -3357,9 +3369,16 @@
 						"type": "array",
 						"title": "Items"
 					},
-					"revision": { "additionalProperties": true, "type": "object", "title": "Revision" }
+					"revision": { "additionalProperties": true, "type": "object", "title": "Revision" },
+					"status": { "type": "string", "title": "Status" },
+					"auto_approved_lines": {
+						"items": { "type": "integer" },
+						"type": "array",
+						"title": "Auto Approved Lines"
+					}
 				},
 				"type": "object",
+				"required": ["status"],
 				"title": "DonationItemsPatchResponse"
 			},
 			"DonationTrackSearchRequest": {

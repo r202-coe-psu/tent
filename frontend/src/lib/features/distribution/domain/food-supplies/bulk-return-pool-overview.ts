@@ -20,6 +20,8 @@ export interface BulkReturnEventSet {
 	entries: BulkReturnEntry[];
 	moves: BulkReturnEntryMove[];
 	voids: BulkReturnEntryVoid[];
+	/** Docs the read left out because they failed validation (typed structurally: domain cannot import data). */
+	skipped: { _id: string; type: string; reason: string }[];
 }
 
 export interface BulkReturnPoolOverviewRow {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { DistributionLog } from '../../domain/food-supplies';
-import type { AddBulkReturnEntriesResult } from '../../application/food-supplies/bulk-return-pool-v3-workflow';
+import type { AddBulkReturnEntriesResult } from '../../application/food-supplies/bulk-return-pool-v3-add-entry';
 import {
 	addLine,
 	buildAddEntriesInput,
