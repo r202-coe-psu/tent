@@ -222,7 +222,7 @@ export const H = {
 	name: 'ชื่อศูนย์พักพิง',
 	site_kind: 'ชนิดสถานที่',
 	operation_status: 'สถานะ',
-	shelter_type: 'ประเภทศูนย์พักพิง',
+	shelter_type: 'ประเภทอาคาร',
 	project_level: 'ระดับโครงการ',
 	area_type: 'สถานะพื้นที่อาคาร',
 	capacity: 'ความจุสูงสุด (คน)',
@@ -347,10 +347,19 @@ export function isTextColumn(kind: ColumnKind): boolean {
  * No Thai header ends in "*", so the strip is unambiguous. Workbooks from the
  * earlier template — which carried the asterisk in its own narrow column —
  * normalize that cell to '' and it is ignored like any unknown column.
+ *
+ * Renamed headers in workbooks downloaded before the rename resolve to their
+ * current name through {@link LEGACY_HEADERS}.
  */
 export function normalizeHeader(text: string): string {
-	return text.replace(/\s*\*+\s*$/, '').trim();
+	const header = text.replace(/\s*\*+\s*$/, '').trim();
+	return Object.hasOwn(LEGACY_HEADERS, header) ? LEGACY_HEADERS[header] : header;
 }
+
+/** Retired header text → current header, so old templates keep importing. */
+const LEGACY_HEADERS: Readonly<Record<string, string>> = {
+	ประเภทศูนย์พักพิง: H.shelter_type
+};
 
 /**
  * master_data lists the importer resolves.
@@ -463,7 +472,7 @@ const SHEET_MAIN: SheetDef = {
 			required: false,
 			masterType: 'shelter_type',
 			path: 'shelter_type',
-			hint: 'เลือกจากรายการประเภทศูนย์พักพิง'
+			hint: 'เลือกจากรายการประเภทอาคาร'
 		},
 		{
 			header: H.project_level,
