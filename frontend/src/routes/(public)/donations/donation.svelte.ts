@@ -72,6 +72,8 @@ export class DonationStore {
 	errorMessage = $state('');
 	trackingToken = $state('');
 	bookingRef = $state('');
+	/** Status FastAPI gave the booking (CR-174 FR-15) — `verifying` gets the QR on the ticket. */
+	bookingStatus = $state('');
 
 	/**
 	 * Move the wizard to `step` and bring its header into view. Steps are state on this
@@ -138,6 +140,7 @@ export class DonationStore {
 		this.errorMessage = '';
 		this.trackingToken = '';
 		this.bookingRef = '';
+		this.bookingStatus = '';
 	}
 }
 

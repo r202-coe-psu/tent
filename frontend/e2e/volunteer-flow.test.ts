@@ -337,7 +337,9 @@ function toPublicJob(job: Doc) {
 
 function toPortalProfile(volunteer: Doc) {
 	const skillCodes = (volunteer.skills as string[]) ?? [];
-	const labels = skillCodes.map((code) => SKILL_ITEMS.find((s) => s.code === code)?.label ?? code);
+	const labels = skillCodes.map(
+		(code) => SKILL_ITEMS.find((s) => s.code === code)?.label_th ?? code
+	);
 	const phone = (volunteer.phone as string) ?? '';
 	return {
 		portal_id: (volunteer._id as string).split(':')[1],

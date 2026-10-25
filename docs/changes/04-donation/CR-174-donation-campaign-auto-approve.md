@@ -4,6 +4,7 @@ title: "ประเมินใบบริจาคทีละรายกา
 status: approved
 date: 2026-10-17
 approved_at: 2026-10-19
+updated: 2026-10-25
 requested_by: "Kan"
 decided_by: "Soravit Sukkarn (Team Lead)"
 layer: volatile
@@ -74,11 +75,15 @@ migration: field ใหม่ optional — doc เดิมไม่ต้อง
   - `pending_review` → ถือว่ายังไม่มีรายการใดถูกประเมิน · คำนวณทุกรายการตาม FR-2 (เงื่อนไข "จองโควต้าได้" ใช้ผลการจองของ `update_items` ครั้งนั้น) แล้วคำนวณสถานะใบตาม FR-4..FR-6 — ผลเท่ากับใบใหม่
   - `declared` → ไม่เขียน `review_status` ลงรายการใด และไม่คำนวณสถานะใบใหม่ (คง `declared`)
 
+> **decision sync 2026-10-25 (เสนอโดย Kunanon Nusaeng · รอ approve):** ข้อยกเว้นของ FR-18a/FR-2 — ตอนผู้บริจาคแก้รายการ รายการที่ `free_text` ตรงกับรายการเดิม ≥ 2 รายการที่ `category`/`condition`/`note` ต่างกัน (ฟอร์มแก้รายการไม่ส่งสาม field นี้ จึงบอกไม่ได้ว่าเป็นรายการเดิมตัวไหน) และไม่ตรงกับรายการเดิมตาม FR-18a → `pending` เสมอ **ไม่อนุมัติอัตโนมัติ** แม้จองโควต้าในแคมเปญได้. เหตุผล: review PR #783 H1 — รายการในแคมเปญที่เจ้าหน้าที่ `rejected` กลับเป็น `approved` และใบได้ QR. ชั่วคราวจนกว่า `draft-donation-line-key` (PR #859) จะ approve และจับคู่รายการด้วย `line_key` แทน. ไม่เปลี่ยน field / schema_v
+
 ### สิทธิ์ผู้บริจาคหลังได้ QR (`verifying`)
-- **FR-20** — ใบ `verifying` ผู้บริจาค**ยกเลิกได้** (เหมือน `pending_review`) · ยกเลิกแล้วคืนโควต้าและ slot ทันทีตามกลไกเดิมของการยกเลิก
-- **FR-21** — ใบ `verifying` ผู้บริจาค**แก้รายการได้** ตามกฎ FR-18: รายการที่แก้หรือเพิ่มถูกคำนวณ `review_status` ใหม่ (ถ้าเป็นรายการที่พิมพ์เอง → `pending` แม้เจ้าหน้าที่เคยอนุมัติรายการนั้นแล้ว) · ถ้ามีรายการ `pending` ใบกลับไป `pending_review` และ QR ใช้ไม่ได้จนกว่าประเมินครบ
+- **FR-20** — ใบ `verifying` ผู้บริจาค**ยกเลิกได้** (เหมือน `pending_review`) · ยกเลิกแล้วคืนโควต้าและ slot ทันทีตามกลไกเดิมของการยกเลิก (ยกเว้นใบที่มีของเข้าคลังแล้ว — decision sync 2026-10-22 ด้านล่าง)
+- **FR-21** — ใบ `verifying` ผู้บริจาค**แก้รายการได้** ตามกฎ FR-18: รายการที่แก้หรือเพิ่มถูกคำนวณ `review_status` ใหม่ (ถ้าเป็นรายการที่พิมพ์เอง → `pending` แม้เจ้าหน้าที่เคยอนุมัติรายการนั้นแล้ว) · ถ้ามีรายการ `pending` ใบกลับไป `pending_review` และ QR ใช้ไม่ได้จนกว่าประเมินครบ (ยกเว้นใบที่มีของเข้าคลังแล้ว — decision sync 2026-10-22 ด้านล่าง)
 - **FR-22** — ใบ `verifying` ผู้บริจาค**ใส่/แก้เลขพัสดุได้**
 - **FR-23** — กฎสิทธิ์ (แก้ / ยกเลิก / เลขพัสดุ) ใช้ชุดสถานะเดียวกันทั้ง backend (`DONOR_EDITABLE_STATUSES`) และ frontend (`public-donation.ts`, `tracking.ts`) → `{declared, pending_review, verifying}`
+
+> **decision sync 2026-10-22 (เสนอโดย Kunanon Nusaeng · รอ approve):** ใบที่มีของเข้าคลังแล้วอย่างน้อย 1 รายการ (มีแถว `stock_ledger` ที่ `reason: donation` และ `ref_id` ชี้มาที่ใบนี้) ผู้บริจาค**ยกเลิกไม่ได้และแก้รายการไม่ได้** แม้สถานะยังอยู่ใน `DONOR_EDITABLE_STATUSES` — BFF ตอบ `409 GOODS_IN_STOCK` ก่อนแตะโควตาที่ FastAPI (`DELETE /public/v1/donations/{tracking_token}`, `PATCH …/items`). ใส่/แก้เลขพัสดุ (FR-22) ทำได้ตามเดิม. เหตุผล: การยกเลิกจะคืนโควตาทั้งที่ของอยู่บนชั้นแล้ว และการแก้รายการจะเลื่อนลำดับรายการใต้แถวคลังที่บันทึกตามลำดับเดิม (`deriveDonationReceiptLineId`). ไม่เปลี่ยน field / schema_v
 - **FR-24** — หน้าติดตามเตือนก่อนบันทึกการแก้ใบที่ได้ QR แล้วว่า "ถ้ามีรายการที่ต้องประเมิน QR จะใช้ไม่ได้จนกว่าเจ้าหน้าที่ประเมินเสร็จ"
 - **FR-25** — `receiveDonationInputSchema` เพิ่ม `expected_rev: str` (req) · `scan-station.svelte` ส่ง `_rev` ของใบที่โหลดมาตอนเปิดหน้าตรวจรับ · route รับของ (`[query]/+server.ts`) เทียบกับ `_rev` ของใบล่าสุด ไม่ตรง → 409 ให้โหลดใหม่
 - **FR-25a** — การเช็ค FR-25 ต้องทำก่อนเขียน `stock_ledger` / `audit` ใด ๆ → 409 จาก FR-25 ไม่มีแถวใหม่
@@ -159,3 +164,5 @@ migration: field ใหม่ optional — doc เดิมไม่ต้อง
 - 2026-10-18 — เจ้าของโครงการ: รายการในแคมเปญคงอนุมัติอัตโนมัติ หน้าประเมินไม่มีปุ่มปฏิเสธรายการเหล่านี้ (ไม่รับได้ที่หน้าตรวจรับตาม FR-13)
 - 2026-10-18 — เจ้าของโครงการ: ledger ซ้ำเมื่อ `PUT` donation ชนหลังเขียน ledger เป็น bug เดิม แก้แยกจาก CR นี้ (#695)
 - 2026-10-19 — approved by Soravit Sukkarn (Team Lead) — requested by Kan (รันเลข CR-174 ย้ายเข้าหมวด 04-donation)
+- 2026-10-21 — implement ใน branch `feat/donation-review-intake-flow` (ต่อจาก CR-172) · `PROJECTION_VERSION` 7 ครอบทั้ง CR-172 + CR-174 (bump ครั้งเดียว ยังไม่ release) · `PATCH …/items` รับ `current_items` / `current_status` (opt) จาก BFF เพราะผลประเมินของเจ้าหน้าที่อยู่ใน CouchDB ที่ FastAPI อ่านไม่ได้ · response เพิ่ม `auto_approved_lines` ให้ BFF เขียน audit FR-26 · audit ของ inbound ใช้ `_id` คงที่ต่อใบ (idempotent) · ข้อ "CR-052 (Task #52)" / "CR-052 Cold-chain" ที่ `affects` อ้างเป็น T-16 จริง ๆ อยู่ใน DoD ของ T-15 — แก้ที่ T-15
+- 2026-10-25 — decision sync 2026-10-25 (รายการชื่อซ้ำที่จับคู่ไม่ได้ → `pending`, review #783 H1) และระบุผู้เสนอ decision sync 2026-10-22 — เสนอโดย Kunanon Nusaeng, รอ approve

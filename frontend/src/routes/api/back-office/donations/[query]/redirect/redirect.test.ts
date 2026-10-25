@@ -23,8 +23,18 @@ const baseDonation = {
 	items: [{ item_id: 'item:rice', qty: '10', unit: 'kg', note: 'ใหม่' }]
 } as unknown as PublicDonationDoc;
 
-function mockCouch(donation: PublicDonationDoc, over: { putStatus?: number } = {}) {
+function mockCouch(
+	donation: PublicDonationDoc,
+	over: { putStatus?: number; keyedRowIds?: string[] } = {}
+) {
 	vi.mocked(adminRaw).mockImplementation((path: string, method: string) => {
+		// Donation ledger rows pointing at the booking (`hasKeyedDonationStock`).
+		if (method === 'POST' && path.includes('_find')) {
+			return Promise.resolve({
+				status: 200,
+				data: { docs: (over.keyedRowIds ?? []).map((_id) => ({ _id })) }
+			});
+		}
 		if (method === 'GET' && path.includes('/registry/')) {
 			return Promise.resolve({
 				status: 200,
@@ -80,9 +90,14 @@ function batches(): { db: string; docs: WrittenDoc[] }[] {
 }
 
 function postEvent(body: unknown, query = 'DN-999999'): PostEvent {
+	// Sent with the `_rev` the screen loaded, like reject; fixtures are `1-abc`.
+	const sent =
+		body && typeof body === 'object' && !('expected_rev' in body)
+			? { expected_rev: '1-abc', ...body }
+			: body;
 	return {
 		params: { query },
-		request: { headers: { get: () => 'session-cookie' }, json: () => Promise.resolve(body) }
+		request: { headers: { get: () => 'session-cookie' }, json: () => Promise.resolve(sent) }
 	} as unknown as PostEvent;
 }
 
@@ -161,6 +176,42 @@ describe('POST /api/back-office/donations/[query]/redirect', () => {
 		expect(allDocs.filter((d) => d.type === 'donation_redirect')).toHaveLength(1);
 		const put = vi.mocked(adminRaw).mock.calls.find((c) => c[1] === 'PUT');
 		expect(put?.[2]).toMatchObject({ status: 'redirected', redirect_to_shelter_code: 'SH002' });
+	});
+
+	// Review #783 M1 — the same guards reject has: goods already keyed into stock stay here,
+	// or one delivery is counted by two shelters.
+	it('refuses a booking with goods already in stock, writing nothing', async () => {
+		mockCouch({ ...baseDonation, status: 'verifying' } as PublicDonationDoc, {
+			keyedRowIds: ['stock_ledger:keyed']
+		});
+
+		const response = await POST(postEvent({ target_shelter_code: 'SH002' }));
+
+		expect(response.status).toBe(409);
+		expect((await response.json()).error_code).toBe('GOODS_IN_STOCK');
+		expect(batches()).toHaveLength(0);
+		expect(vi.mocked(adminRaw).mock.calls.some((c) => c[1] === 'PUT')).toBe(false);
+	});
+
+	it('refuses a redirect decided on a version the donor has since changed', async () => {
+		mockCouch(baseDonation);
+
+		const response = await POST(postEvent({ target_shelter_code: 'SH002', expected_rev: '0-old' }));
+
+		expect(response.status).toBe(409);
+		expect((await response.json()).error_code).toBe('DONATION_CHANGED');
+		expect(batches()).toHaveLength(0);
+	});
+
+	it('refuses a redirect that does not say which version it decided on', async () => {
+		mockCouch(baseDonation);
+
+		const response = await POST(
+			postEvent({ target_shelter_code: 'SH002', expected_rev: undefined })
+		);
+
+		expect(response.status).toBe(422);
+		expect(batches()).toHaveLength(0);
 	});
 
 	it('rejects a status that cannot be redirected', async () => {
