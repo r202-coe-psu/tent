@@ -116,34 +116,33 @@
 		/>
 	</div>
 
-	<div class="grid grid-cols-1 gap-3 md:grid-cols-2">
-		<div class="space-y-1.5">
-			<Label for="{idPrefix}-medications" class="text-xs font-medium text-foreground">
-				ยาที่ใช้ประจำ
-			</Label>
-			<Textarea
-				id="{idPrefix}-medications"
-				bind:value={medications}
-				{disabled}
-				rows={3}
-				placeholder="เช่น ยาลดความดัน, อินซูลิน"
-				class="text-xs"
-			/>
-		</div>
+	<div class="space-y-1.5">
+		<Label for="{idPrefix}-medications" class="text-xs font-medium text-foreground">
+			ยาที่ใช้ประจำ
+		</Label>
+		<Textarea
+			id="{idPrefix}-medications"
+			bind:value={medications}
+			{disabled}
+			rows={3}
+			placeholder="เช่น ยาลดความดัน, อินซูลิน"
+			class="text-xs"
+		/>
+	</div>
 
-		<div class="space-y-1.5">
-			<Label for="{idPrefix}-allergies" class="text-xs font-medium text-foreground">
-				ประวัติการแพ้
-			</Label>
-			<MasterTagInput
-				id="{idPrefix}-allergies"
-				bind:value={getAllergyTokens, setAllergyTokens}
-				items={allergyItems}
-				{disabled}
-				placeholder="เลือกหรือพิมพ์ เช่น อาหารทะเล, เพนิซิลลิน"
-				searchPlaceholder="ค้นหาสิ่งที่แพ้..."
-			/>
-		</div>
+	<!-- ประวัติการแพ้ gets its own full-width row like โรคประจำตัว (#648). -->
+	<div class="space-y-1.5">
+		<Label for="{idPrefix}-allergies" class="text-xs font-medium text-foreground">
+			ประวัติการแพ้
+		</Label>
+		<MasterTagInput
+			id="{idPrefix}-allergies"
+			bind:value={getAllergyTokens, setAllergyTokens}
+			items={allergyItems}
+			{disabled}
+			placeholder="เลือกหรือพิมพ์ เช่น อาหารทะเล, เพนิซิลลิน"
+			searchPlaceholder="ค้นหาสิ่งที่แพ้..."
+		/>
 	</div>
 
 	{#if showGeneralSymptoms}
