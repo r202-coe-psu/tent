@@ -53,6 +53,11 @@
 					? 'แจ้งเตือน: เมนูไม่ตรงกลุ่มผู้รับ'
 					: 'แจ้งเตือน: ได้รับอาหารมื้อนี้แล้ว'
 	);
+	const reasonPlaceholder = $derived(
+		warningCount === 1 && allergenConflictLabel
+			? 'เช่น ผู้รับยืนยันว่าแพ้เล็กน้อยและจะแยกส่วนที่แพ้ออกเอง, ไม่มีเมนูอื่นเหลือแล้ว...'
+			: 'เช่น มาขอรับแทนสมาชิกในครอบครัวที่ป่วยติดเตียง, อาหารเดิมหกเสียหาย...'
+	);
 
 	function handleConfirm() {
 		const trimmed = overrideReason.trim();
@@ -186,7 +191,7 @@
 						id="override-reason-input"
 						bind:value={overrideReason}
 						rows={2}
-						placeholder="เช่น มาขอรับแทนสมาชิกในครอบครัวที่ป่วยติดเตียง, อาหารเดิมหกเสียหาย..."
+						placeholder={reasonPlaceholder}
 						class="w-full text-xs shadow-2xs placeholder:text-slate-400"
 					/>
 				</div>

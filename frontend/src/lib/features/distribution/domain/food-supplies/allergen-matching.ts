@@ -1,6 +1,6 @@
 /**
- * Recipient allergies ↔ ready-meal allergens at the distribution desk (#607,
- * `draft-allergen-warning-at-distribution.md` FR-MRM-07/08).
+ * Recipient allergies ↔ ready-meal allergens at the distribution desk (#607, CR-191
+ * FR-MRM-07/08).
  *
  * Both sides are lists of master `allergy` codes (CR-187) — callers resolve labels to codes
  * and drop free text first, because free text is never matched automatically. A conflict is
