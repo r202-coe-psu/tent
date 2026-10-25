@@ -92,7 +92,6 @@
 		>
 			{#if compact}
 				<Building class="size-4 shrink-0 text-muted-foreground" />
-				<span class="sr-only">{selectedShelterLabel}</span>
 			{:else}
 				<span class="truncate">{selectedShelterLabel}</span>
 			{/if}
