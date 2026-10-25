@@ -1,3 +1,4 @@
+import type { ConsentDecision, ConsentMode } from '$lib/features/consent';
 import type { KioskPhotoPayload } from '../domain/kiosk-photo';
 
 export type GateInput =
@@ -57,21 +58,30 @@ export interface KioskCheckInBatchResult extends KioskCheckInResult {
 	retryable_evacuee_ids: string[];
 }
 
-/** What the register endpoint returns: the new record plus what the kiosk prints (QR + label). */
+/**
+ * What the register endpoint returns: the new record, what the kiosk prints (QR + label) and the
+ * consent reference and mode the done page shows (FR-20).
+ */
 export interface KioskRegistrationResult {
 	evacuee_id: string;
 	qr_payload: string;
 	label: { name: string; phone: string | null };
+	consent_ref: string;
+	consent_mode: ConsentMode;
 }
 
-function postKioskRegistration(body: Record<string, unknown>): Promise<KioskRegistrationResult> {
+/** The decision travels with `consented_at` (= `given_at`); the server rejects a mismatch. */
+function postKioskRegistration(
+	body: Record<string, unknown>,
+	consent: ConsentDecision
+): Promise<KioskRegistrationResult> {
 	return requestWithTimeout(
 		'/api/v1/kiosk/register',
 		{
 			method: 'POST',
 			headers: { 'content-type': 'application/json' },
 			cache: 'no-store',
-			body: JSON.stringify({ ...body, consented: true })
+			body: JSON.stringify({ ...body, consent, consented_at: consent.given_at })
 		},
 		async (response) => {
 			if (!response.ok) throw await requestError(response);
@@ -84,30 +94,19 @@ function postKioskRegistration(body: Record<string, unknown>): Promise<KioskRegi
 export async function registerKioskWalkIn(
 	card: unknown,
 	photo: KioskPhotoPayload | null,
-	consentedAt: string,
+	consent: ConsentDecision,
 	phone: string | null = null
 ): Promise<KioskRegistrationResult> {
-	return postKioskRegistration({
-		source: 'smart-card',
-		card,
-		photo,
-		phone,
-		consented_at: consentedAt
-	});
+	return postKioskRegistration({ source: 'smart-card', card, photo, phone }, consent);
 }
 
 /** ThaiD walk-in: only the verified session id goes out; the server holds who it is. */
 export async function registerKioskThaidWalkIn(
 	sessionId: string,
-	consentedAt: string,
+	consent: ConsentDecision,
 	phone: string | null
 ): Promise<KioskRegistrationResult> {
-	return postKioskRegistration({
-		source: 'thaid',
-		session_id: sessionId,
-		phone,
-		consented_at: consentedAt
-	});
+	return postKioskRegistration({ source: 'thaid', session_id: sessionId, phone }, consent);
 }
 
 /**

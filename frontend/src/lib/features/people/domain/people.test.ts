@@ -1,5 +1,7 @@
 // @vitest-environment happy-dom
 import { describe, it, expect } from 'vitest';
+import { mintConsentStamp } from '$lib/features/consent/server';
+import type { EvacueeConsentWrite } from './people';
 import {
 	ewarSymptomLabel,
 	canScanCheckIn,
@@ -78,6 +80,19 @@ import type { AuthorContext } from '$lib/db/model';
 import type { ScreeningInput, StayStatus } from './people';
 import { isUlid } from '$lib/db/ulid';
 import { ConflictError } from '$lib/utils/errors';
+
+const kioskConsent: EvacueeConsentWrite = {
+	consent: {
+		mode: 'full',
+		health: false,
+		...mintConsentStamp(new Date('2026-10-25T03:00:00.000Z')),
+		channel: 'kiosk',
+		given_by: 'self',
+		giver_evacuee_id: null,
+		recorded_verbally_by: null
+	},
+	searchExcluded: false
+};
 
 const ctx: AuthorContext = { shelterCode: 'SH001', createdBy: 'staff1' };
 
@@ -353,7 +368,7 @@ describe('createEvacuee', () => {
 		expect(e.current_stay.status).toBe('arriving');
 	});
 
-	it('creates evacuee from card snapshot with schema_v 11, kiosk_registered, and registered_via kiosk', () => {
+	it('creates evacuee from card snapshot with schema_v 15, arriving, and registered_via kiosk', () => {
 		const card = {
 			citizen_id: '1234567890121',
 			title_th: 'นาย',
@@ -366,10 +381,11 @@ describe('createEvacuee', () => {
 			device_id: 'DEV-01',
 			station_name: 'จุดสแกน Kiosk 1'
 		};
-		const kioskEv = createDraftEvacueeFromCard(card, ctx);
+		const kioskEv = createDraftEvacueeFromCard(card, ctx, kioskConsent);
 		expect(kioskEv._id.startsWith('evacuee:')).toBe(true);
 		expect(kioskEv.type).toBe('evacuee');
-		expect(kioskEv.schema_v).toBe(11);
+		expect(kioskEv.schema_v).toBe(15);
+		expect(kioskEv.consent).toEqual(kioskConsent.consent);
 		expect(kioskEv.first_name).toBe('สมศักดิ์');
 		expect(kioskEv.last_name).toBe('รักชาติ');
 		expect(kioskEv.birth_year).toBe(2533);
@@ -387,7 +403,12 @@ describe('createEvacuee', () => {
 			first_name_th: 'สมชาย',
 			photo_base64: 'data:image/jpeg;base64,/9j/AA=='
 		} as CardSnapshot;
-		const evacuee = createKioskEvacueeFromCard(card, ctx, 'image:01ARZ3NDEKTSV4RRFFQ69G5FAV');
+		const evacuee = createKioskEvacueeFromCard(
+			card,
+			ctx,
+			kioskConsent,
+			'image:01ARZ3NDEKTSV4RRFFQ69G5FAV'
+		);
 		expect(evacuee.photo).toBe('image:01ARZ3NDEKTSV4RRFFQ69G5FAV');
 		expect(evacuee.card_snapshot).not.toHaveProperty('photo_base64');
 	});
@@ -401,7 +422,7 @@ describe('createEvacuee', () => {
 			scanned_at: '2026-08-29T10:00:00Z',
 			device_id: 'DEV-01'
 		};
-		const draft = createDraftEvacueeFromCard(card, ctx);
+		const draft = createDraftEvacueeFromCard(card, ctx, kioskConsent);
 		expect(draft.birth_year).toBe(2539);
 		expect(draft.age).toBe(new Date().getFullYear() + 543 - 2539);
 	});
@@ -1964,9 +1985,9 @@ describe('gender nullable (schema_v 12, CR-154; decision sync 2026-10-09)', () =
 			scanned_at: '2026-10-09T00:00:00.000Z',
 			device_id: 'scanner-1'
 		};
-		const e = createKioskEvacueeFromCard(card, ctx);
+		const e = createKioskEvacueeFromCard(card, ctx, kioskConsent);
 		expect(e.gender).toBeNull();
-		const female = createKioskEvacueeFromCard({ ...card, gender: 'female' }, ctx);
+		const female = createKioskEvacueeFromCard({ ...card, gender: 'female' }, ctx, kioskConsent);
 		expect(female.gender).toBe('female');
 	});
 
@@ -1976,8 +1997,10 @@ describe('gender nullable (schema_v 12, CR-154; decision sync 2026-10-09)', () =
 			scanned_at: '2026-10-09T00:00:00.000Z',
 			device_id: 'scanner-1'
 		};
-		expect(createKioskEvacueeFromCard(card, ctx).phone).toBeNull();
-		expect(createKioskEvacueeFromCard(card, ctx, undefined, '0812345678').phone).toBe('0812345678');
+		expect(createKioskEvacueeFromCard(card, ctx, kioskConsent).phone).toBeNull();
+		expect(createKioskEvacueeFromCard(card, ctx, kioskConsent, undefined, '0812345678').phone).toBe(
+			'0812345678'
+		);
 	});
 
 	it('accepts registered_via api', () => {

@@ -3,6 +3,7 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { onMount } from 'svelte';
+	import type { ConsentDecision } from '$lib/features/consent';
 	import {
 		abandonWalkIn,
 		buildKioskContextQuery,
@@ -42,8 +43,8 @@
 		abandonWalkIn();
 		navigateToKioskHome(contextQuery);
 	}
-	function consent() {
-		walkInSession.consent();
+	function consent(decision: ConsentDecision) {
+		walkInSession.recordConsent(decision);
 		continuing = true;
 		// ThaiD has proved who they are already: straight on to the phone. A card is read next.
 		void goto(

@@ -1,3 +1,4 @@
+import type { ConsentDecision } from '$lib/features/consent';
 import type { SmartCardData } from '$lib/features/kiosk-devices';
 import {
 	KioskRequestError,
@@ -11,8 +12,7 @@ import { walkInSession, type WalkInSource } from './walk-in-session.svelte';
 
 export type WalkInCardSession = {
 	citizenId: string | null;
-	consented: boolean;
-	consentedAt: string | null;
+	consentDecision: ConsentDecision | null;
 	phone?: string | null;
 };
 
@@ -50,16 +50,13 @@ export function walkInCardMismatch(
 export async function registerWalkInCardRead(
 	card: SmartCardData | null | undefined,
 	session: WalkInCardSession,
-	register: (card: SmartCardData, consentedAt: string) => Promise<KioskRegistrationResult>
+	register: (card: SmartCardData, consent: ConsentDecision) => Promise<KioskRegistrationResult>
 ): Promise<WalkInCardRegistrationOutcome> {
-	if (!session.consented || !session.citizenId || !card) return { kind: 'ignored' };
+	if (!session.consentDecision || !session.citizenId || !card) return { kind: 'ignored' };
 	const mismatch = walkInCardMismatch(card, session);
 	if (mismatch) return { kind: 'mismatch', message: mismatch };
-	if (!session.consentedAt) {
-		return { kind: 'error', message: 'ไม่พบเวลาการยินยอม กรุณาเริ่มใหม่' };
-	}
 	try {
-		return { kind: 'registered', registration: await register(card, session.consentedAt) };
+		return { kind: 'registered', registration: await register(card, session.consentDecision) };
 	} catch (cause) {
 		if (isPhoneDuplicate(cause)) return { kind: 'phone_duplicate', message: cause.message };
 		return {
@@ -74,26 +71,23 @@ export function submitWalkInCard(
 	card: SmartCardData | null | undefined,
 	session: WalkInCardSession
 ): Promise<WalkInCardRegistrationOutcome> {
-	return registerWalkInCardRead(card, session, async (fullCard, consentedAt) => {
+	return registerWalkInCardRead(card, session, async (fullCard, consent) => {
 		const photo = await buildKioskPhotoPayload(fullCard.photo_base64).catch(() => null);
 		const cardWithoutPhoto = { ...fullCard, photo_base64: undefined };
-		return registerKioskWalkIn(cardWithoutPhoto, photo, consentedAt, session.phone ?? null);
+		return registerKioskWalkIn(cardWithoutPhoto, photo, consent, session.phone ?? null);
 	});
 }
 
 /** Register a ThaiD walk-in: the server takes the citizen from the verified session (no photo). */
 export async function submitWalkInThaid(
-	session: Pick<WalkInSubmitSession, 'thaidSessionId' | 'consented' | 'consentedAt' | 'phone'>,
+	session: Pick<WalkInSubmitSession, 'thaidSessionId' | 'consentDecision' | 'phone'>,
 	register: typeof registerKioskThaidWalkIn = registerKioskThaidWalkIn
 ): Promise<WalkInCardRegistrationOutcome> {
-	if (!session.consented || !session.thaidSessionId) return { kind: 'ignored' };
-	if (!session.consentedAt) {
-		return { kind: 'error', message: 'ไม่พบเวลาการยินยอม กรุณาเริ่มใหม่' };
-	}
+	if (!session.consentDecision || !session.thaidSessionId) return { kind: 'ignored' };
 	try {
 		const registration = await register(
 			session.thaidSessionId,
-			session.consentedAt,
+			session.consentDecision,
 			session.phone ?? null
 		);
 		return { kind: 'registered', registration };

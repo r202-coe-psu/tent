@@ -1,3 +1,4 @@
+import type { ConsentDecision } from '$lib/features/consent';
 import type { SmartCardData } from '$lib/features/kiosk-devices';
 import type { KioskRegistrationResult } from '../data/kiosk-check-in.api';
 import type { FaceCheckOutcome } from '../domain/face-check';
@@ -20,8 +21,8 @@ class WalkInSession {
 	citizenId = $state<string | null>(null);
 	/** ThaiD walk-in only: the verified session the server registers from. */
 	thaidSessionId = $state<string | null>(null);
-	consented = $state(false);
-	consentedAt = $state<string | null>(null);
+	/** What the PDPA block decided on the consent page; sent with the registration. */
+	consentDecision = $state.raw<ConsentDecision | null>(null);
 	/** The full card read, kept in memory only while the face check runs, then submitted. */
 	card = $state.raw<SmartCardData | null>(null);
 	/** Set with `card` by the card page: the face check it found on for this machine. */
@@ -31,6 +32,10 @@ class WalkInSession {
 	phone = $state<string | null>(null);
 	/** What the register call returned (QR + label text): the done page prints it, then forgets it. */
 	registration = $state.raw<KioskRegistrationResult | null>(null);
+
+	get consented(): boolean {
+		return this.consentDecision !== null;
+	}
 
 	/** A walk-in is under way (card or ThaiD). */
 	get active(): boolean {
@@ -60,11 +65,8 @@ class WalkInSession {
 		this.thaidSessionId = sessionId;
 	}
 
-	consent(): void {
-		if (this.active) {
-			this.consented = true;
-			this.consentedAt = new Date().toISOString();
-		}
+	recordConsent(decision: ConsentDecision): void {
+		if (this.active) this.consentDecision = decision;
 	}
 
 	/** Hold the card for the next steps, with the camera the card page found for the face check. */
@@ -81,8 +83,7 @@ class WalkInSession {
 		this.source = null;
 		this.citizenId = null;
 		this.thaidSessionId = null;
-		this.consented = false;
-		this.consentedAt = null;
+		this.consentDecision = null;
 		this.card = null;
 		this.faceCheck = null;
 		this.faceOutcome = null;
