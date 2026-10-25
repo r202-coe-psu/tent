@@ -321,7 +321,7 @@
 		<Form.Field {form} name="shelter_type">
 			<Form.Control>
 				{#snippet children({ props })}
-					<Form.Label>ประเภทสถานที่</Form.Label>
+					<Form.Label>ประเภทอาคาร</Form.Label>
 					<Select.Root
 						type="single"
 						bind:value={
