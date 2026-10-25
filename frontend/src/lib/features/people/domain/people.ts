@@ -12,6 +12,11 @@ import {
 import { ulid } from '$lib/db/ulid';
 import { isValidThaiNationalId } from '$lib/utils/thai-id';
 import { ConflictError } from '$lib/utils/errors';
+import {
+	EVACUEE_SCHEMA_V,
+	type EvacueeConsent,
+	type MemberConsentWrite
+} from '$lib/features/consent/server';
 
 /**
  * People domain — the registration baseline (FR-4..13).
@@ -328,6 +333,8 @@ export interface Evacuee extends BaseDoc {
 	 */
 	booking_ref?: string | null;
 	privacy: { search_excluded: boolean };
+	/** PDPA consent of the registration that created or reported this person in (schema_v 15). */
+	consent?: EvacueeConsent;
 	registered_via: z.infer<typeof registeredViaSchema>;
 	anonymized?: boolean; // set by the purge job
 }
@@ -949,6 +956,46 @@ export const medicalInputSchema = z.object({
 });
 export type MedicalInput = z.input<typeof medicalInputSchema>;
 
+interface RegistrationMedicalFields {
+	medical_conditions?: readonly string[];
+	medical_allergies?: readonly string[];
+	medical_medications?: readonly string[];
+	medical_note?: string | null;
+}
+
+/** FR-16: the registration form holds data that would become a `medical` doc. */
+export function hasMedicalInput(member: RegistrationMedicalFields): boolean {
+	return Boolean(
+		member.medical_conditions?.length ||
+		member.medical_allergies?.length ||
+		member.medical_medications?.length ||
+		member.medical_note?.length
+	);
+}
+
+/**
+ * The `medical` doc a registration save may create for one member, or null. FR-32: a member
+ * whose consent forbids health data gets none; `null` consent (a channel without the block)
+ * keeps the pre-consent behaviour.
+ */
+export function registrationMedicalInput(
+	member: RegistrationMedicalFields,
+	evacueeId: string,
+	consent: Pick<MemberConsentWrite, 'medicalAllowed'> | null,
+	track: CareTrack
+): MedicalInput | null {
+	if (consent && !consent.medicalAllowed) return null;
+	if (!hasMedicalInput(member)) return null;
+	return {
+		evacuee_id: evacueeId,
+		conditions: [...(member.medical_conditions ?? [])],
+		allergies: [...(member.medical_allergies ?? [])],
+		medications: [...(member.medical_medications ?? [])],
+		notes: member.medical_note || '',
+		track
+	};
+}
+
 function hasCompleteResidenceGeo(data: {
 	subdistrict?: string | null;
 	district?: string | null;
@@ -1538,12 +1585,23 @@ export function totalPetCount(pets: readonly { count?: number | string | null }[
 	return pets.reduce((sum, p) => sum + (Number(p.count) || 0), 0);
 }
 
-export function createEvacuee(input: EvacueeInput, ctx: AuthorContext, id?: string): Evacuee {
+export type EvacueeConsentWrite = Pick<MemberConsentWrite, 'consent' | 'searchExcluded'>;
+
+/**
+ * `consent` is required so a new writer cannot forget it: pass `null` on channels without the
+ * consent block (back-office, import, paper, seed), which keep `search_excluded: false` (FR-44).
+ */
+export function createEvacuee(
+	input: EvacueeInput,
+	ctx: AuthorContext,
+	consent: EvacueeConsentWrite | null,
+	id?: string
+): Evacuee {
 	const d = evacueeInputSchema.parse(input);
 	const person_id = resolvePersonIdOnCreate(d.person_id);
 	return makeDoc(
 		'evacuee',
-		14, // schema_v 14: booking_ref (CR-169); 13: preferred_zone (CR-159); 12: gender nullable + registered_via `api` (CR-154); 11: religion_other + disability_other_detail (CR-148); 10: anonymous cardType + ANON mint (CR-112); 9: arriving (CR-106); 8: draft/card_snapshot (CR-084); 7 = registered_via `web` (CR-070); 6 = stay cancelled (CR-070); 5 = age (CR-057)
+		EVACUEE_SCHEMA_V, // 15: consent (PDPA block); 14: booking_ref (CR-169); 13: preferred_zone (CR-159); 12: gender nullable + registered_via `api` (CR-154); 11: religion_other + disability_other_detail (CR-148); 10: anonymous cardType + ANON mint (CR-112); 9: arriving (CR-106); 8: draft/card_snapshot (CR-084); 7 = registered_via `web` (CR-070); 6 = stay cancelled (CR-070); 5 = age (CR-057)
 		{
 			first_name: d.first_name,
 			last_name: d.last_name,
@@ -1566,7 +1624,8 @@ export function createEvacuee(input: EvacueeInput, ctx: AuthorContext, id?: stri
 			...(d.preferred_zone ? { preferred_zone: d.preferred_zone } : {}),
 			// Worker-owned (CR-169): only reachable via EvacueeInput; public/form schemas omit it.
 			...(d.booking_ref ? { booking_ref: d.booking_ref } : {}),
-			privacy: { search_excluded: false },
+			privacy: { search_excluded: consent?.searchExcluded ?? false },
+			...(consent ? { consent: consent.consent } : {}),
 			registered_via: d.registered_via
 		},
 		ctx,

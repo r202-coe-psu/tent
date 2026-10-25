@@ -7,6 +7,7 @@
  * shelters).
  */
 import { expect, type Page } from '@playwright/test';
+import { acceptFullConsent } from './consent';
 
 export interface ShelterForm {
 	name: string;
@@ -137,6 +138,7 @@ export async function registerHouseholdViaUi(
 		}
 	}
 
+	await acceptFullConsent(page);
 	await page.getByRole('button', { name: 'บันทึกลงทะเบียนทั้งครอบครัว' }).last().click();
 	// The possible-duplicate check may interpose a confirm dialog; the E2E people are distinct.
 	const confirmNew = page.getByRole('alertdialog').getByRole('button', {

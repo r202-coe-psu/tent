@@ -12,6 +12,7 @@ import {
 	DAILY_SOP_ROLE_QUESTION_VERSION,
 	DAILY_SOP_ROLE_QUESTIONS
 } from '$lib/features/daily-sop/server';
+import { consentVduClause } from '$lib/features/consent/server';
 
 /** Database name for a shelter's own per-shelter CouchDB. */
 export function shelterDbName(code: string): string {
@@ -277,6 +278,7 @@ export function buildValidateDocUpdate(code: string): string {
       newDoc.type !== 'daily_sop_role_assessment') {
     throw { forbidden: 'Daily SOP role assessment type cannot change' };
   }
+${consentVduClause()}
   if (isCouchAdmin && !isRoleAssessmentWrite) return;
   if (newDoc.type === 'unit_of_measure' || (oldDoc && oldDoc.type === 'unit_of_measure')) {
     throw { forbidden: 'unit_of_measure is central-only' };
