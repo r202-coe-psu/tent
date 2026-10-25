@@ -6,7 +6,7 @@ date: 2026-10-24
 requested_by: Soravit Sukkarn — จาก demo day เทศบาล 4 (15/10/2026), issue #589
 decided_by: Soravit Sukkarn (Team Lead)
 decision_date: 2026-10-25
-updated: 2026-10-25 # amendment: implementation deviations (PR #870)
+updated: 2026-10-25 # amendment 1: implementation deviations · amendment 2: per-staff rank (PR #870)
 layer: volatile
 affects:
   - docs/data/schema.md §1 (เพิ่ม §1.x `station_log` · schema_v 1) · §7 (view `station_logs_by_station`) · §8 ข้อ 1–2 (whitelist + append-only)
@@ -179,6 +179,48 @@ N/A — doc type ใหม่ schema_v 1, additive; ไม่ backfill. evacuee 
 - **Mango index:** `['type', 'evacuee_id', 'station', 'occurred_at']` (นำด้วย `type` ตาม index อื่นใน `PEOPLE_MANGO_INDEXES`)
 - **คิวค้าง (FR-STL-23)** คำนวณฝั่ง client จาก `useEvacuees` / `useScreenings` / `useShelter` ไม่ใช่ใน BFF
 
+## Amendment 2 — 2026-10-25 · อันดับเวลาให้บริการรายบุคคล · **status: approved**
+
+### สรุป (TL;DR)
+
+- **เปลี่ยน:** แสดงอันดับเวลาให้บริการเฉลี่ย **รายเจ้าหน้าที่** (และรายเครื่อง kiosk ใน Station 1) ต่อ station ในส่วนล่างของ station card
+- **ทำไม:** วัดประสิทธิภาพระดับบุคคล ไม่ใช่แค่ระดับ station
+- **Build:** view `station_logs_by_station` emit ผู้กระทำเพิ่มใน value · BFF `station-times` คืน `actors[]` ต่อ station · UI rank top 5 + ดูทั้งหมด
+- **กระทบ:** ไม่เพิ่ม field ใน `station_log` · ไม่ bump `schema_v` · view map เปลี่ยน (manifest คง v5 — ยังไม่ release) · ไม่เพิ่ม role
+
+### Requirements
+
+- **FR-STL-30** — ผู้กระทำ (actor) ของ event: `channel = 'staff'` → `created_by` (username); `channel = 'kiosk'` → `device_id`
+- **FR-STL-31** — Visit นับเข้าอันดับของ actor **เฉพาะเมื่อ actor ของ `start` และ `complete` เป็นคนเดียวกัน**; visit ที่ start/complete คนละคน, `complete` ที่ไม่มี `start` (เช่น bulk zoning) และ visit ค้าง ไม่นับในอันดับ (ยังนับในตัวเลขระดับ station ตาม FR-STL-21 เหมือนเดิม)
+- **FR-STL-32** — View `station_logs_by_station` value เพิ่ม `actor` (ตาม FR-STL-30): `{action, occurred_at, actor}`; key คงเดิม
+- **FR-STL-33** — BFF `station-times` คืน `actors` ต่อ station: `[{ actor_id, kind: 'staff' | 'kiosk', display_name, timed_visits, avg_duration_sec }]` ตามช่วงวันที่เดียวกับ FR-STL-21 (visit นับตามวันที่ของ `start`)
+- **FR-STL-34** — `display_name` ของ staff อ่านจาก `_users` (admin, ฝั่ง server เท่านั้น) fallback = username; kiosk = `ตู้ {device_id}`. BFF ส่งออกเฉพาะ `actor_id` + `display_name` — ห้ามส่ง field อื่นของ `_users` (roles, phone ฯลฯ)
+- **FR-STL-35** — เรียงจาก `avg_duration_sec` น้อยไปมาก; เท่ากัน → `timed_visits` มากกว่าก่อน → `display_name`; **ไม่มีขั้นต่ำ** จำนวน visit
+- **FR-STL-36** — UI: ส่วนล่างของแต่ละ station card แสดง "อันดับเวลาให้บริการ" 5 อันดับแรก (ชื่อ, เวลาเฉลี่ย, จำนวน visit) + ปุ่ม "ดูทั้งหมด" ขยายรายการเต็ม; Station 1 รวม kiosk เป็นรายการต่อเครื่อง
+- **FR-STL-37** — สิทธิ์เห็นอันดับ = สิทธิ์เห็น dashboard เดิม (BFF scope guard + `requireEvacueeRegistration`) — ไม่เพิ่ม role/guard
+
+### Acceptance
+
+- [ ] visit ที่ start/complete โดย `staff01` ทั้งคู่ → อยู่ในอันดับ `staff01` พร้อมเวลาเฉลี่ยถูกต้อง
+- [ ] Station 2/3 ที่ A เปิดหน้า (start) แต่ B บันทึก (complete) → ไม่อยู่ในอันดับของใคร แต่ยังนับใน visits ระดับ station
+- [ ] Bulk zoning (complete อย่างเดียว) ไม่อยู่ในอันดับ
+- [ ] Station 1 kiosk แสดงแยกต่อ `device_id`
+- [ ] BFF response ไม่มี field ของ `_users` นอกจาก `display_name`; user ที่ไม่มี `display_name` แสดง username
+- [ ] เรียงตาม FR-STL-35; แสดง 5 อันดับ + ดูทั้งหมดได้
+- [ ] Pairing ต่อ actor มี unit test; view map test ครอบ `actor`; BFF `server.test.ts` ครอบ `actors`
+
+### Impact
+
+- **Code:** `people/domain/station-log.ts` (summary ต่อ actor), `shelters/domain/views.ts` (value เพิ่ม `actor`), BFF `station-times` (+ อ่าน `_users`), `features/dashboard` schema, `dashboard-station-times-section.svelte`
+- **Deploy:** view map เปลี่ยนแต่ manifest คง **v5** เพราะ v5 ยังไม่ถูก release (PR #870 ยังไม่ merge); local dev ต้อง redeploy views
+- **Privacy:** ข้อมูลประสิทธิภาพรายบุคคลเห็นได้โดยทุกคนที่เข้า dashboard (FR-STL-37)
+- **Performance:** BFF อ่าน `_users` เพิ่ม 1 request ต่อการเรียก (เฉพาะ user ที่ปรากฏในช่วงวันที่)
+
+### Why
+
+- `station_log` มี `created_by` / `device_id` อยู่แล้ว → ไม่ต้องเพิ่ม field หรือ backfill; ข้อมูลเดิมใช้ได้ย้อนหลัง
+- นับเฉพาะ start/complete คนเดียวกัน: กันการยกเวลาของ visit ที่เปลี่ยนมือให้คนใดคนหนึ่ง
+
 ## Decision log
 
 - 2026-10-24 — proposed (issue #589, PR #852)
@@ -189,3 +231,4 @@ N/A — doc type ใหม่ schema_v 1, additive; ไม่ backfill. evacuee 
 - 2026-10-25 — approved โดย Soravit Sukkarn (Team Lead) · รันเลข CR-192
 - 2026-10-25 — แก้ตาม review PR #852 (approved โดย Soravit Sukkarn): stale window 2 ชม. (FR-STL-13, `open_visits`) · view key date-first + ดึงเกิน 1 วัน (FR-STL-21) · bulk zoning = `complete` อย่างเดียว (FR-STL-16) · ข้อความ warning toast (FR-STL-04) · แยกคำอธิบาย Mango index กับ view · `station` เป็น int
 - 2026-10-25 — amendment จาก implementation (PR #870): owner สั่งให้บันทึกส่วนที่ต่างจาก CR เป็น amendment section ในไฟล์นี้ — FR-STL-11 kiosk `start` ย้ายไปเขียนตอน check-in · manifest v4 → v5 · `timed_visits` + ดึงเกิน 1 วันทั้งสองฝั่ง · กฎ abandoned/Station 1–3 ที่ละเอียดขึ้น · clarifications ตามที่ owner เคาะ
+- 2026-10-25 — Amendment 2 approved โดย Soravit Sukkarn (อันดับเวลาให้บริการรายบุคคล): owner เคาะ track เป็น amendment ใน CR-192 · นับเฉพาะ visit ที่ start/complete คนเดียวกัน · ทุกคนที่เห็น dashboard เห็นอันดับ · เรียงเร็วสุดก่อน ไม่มีขั้นต่ำ · kiosk แสดงต่อเครื่อง · ชื่อ = `display_name` · top 5 + ดูทั้งหมด
