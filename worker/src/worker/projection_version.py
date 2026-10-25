@@ -23,4 +23,5 @@ per deploy, so batch related projector changes into one bump per release when po
 #: 7 — CR-172 (``public_donations.reject_reason`` / ``reject_reason_code``) and CR-174
 #: (``public_donations.items_declared[].review_status`` / ``review_reason_code`` /
 #: ``review_reason``). Both shipped unreleased on one branch, so one bump covers both.
-PROJECTION_VERSION: int = 7
+#: 8 — #791 (``shelter_occupants`` drops ``privacy.search_excluded`` evacuees).
+PROJECTION_VERSION: int = 8
