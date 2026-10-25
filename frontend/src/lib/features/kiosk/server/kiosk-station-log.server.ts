@@ -1,7 +1,7 @@
 import { now } from '$lib/db/model';
 import { adminFetch } from '$lib/server/couch-admin';
 import { shelterDbName } from '$lib/server/shelter-access-design';
-import { createStationLog, resolveKioskStartedAt } from '$lib/features/people/domain/station-log';
+import { createStationLog, resolveKioskStartedAt } from '$lib/features/people/server';
 
 type BulkResult = { id?: string; ok?: boolean; error?: string; reason?: string };
 
