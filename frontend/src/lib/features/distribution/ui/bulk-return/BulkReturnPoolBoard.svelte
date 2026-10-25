@@ -135,6 +135,14 @@
 	const visibleRows = $derived(filterPoolRows(rows, rowFilter));
 	const statusCounts = $derived(poolStatusCounts(rows, { showCancelled, hideReceivedBefore }));
 	const filtersActive = $derived(hasActivePoolFilters(rowFilter));
+	const catalog = $derived.by((): PoolCatalogItem[] =>
+		(itemMastersQuery.data ?? []).map((item) => ({
+			_id: item._id,
+			name: item.name,
+			base_unit: item.base_unit
+		}))
+	);
+
 	const itemOptions = $derived(
 		poolItemIds(rows)
 			.map((id) => ({ id, name: resolveItemDisplay(id, catalog).name }))
@@ -173,14 +181,6 @@
 		)
 	);
 	const errorPresentation = $derived(mapDistributionQueryError(overviewQuery.error));
-
-	const catalog = $derived.by((): PoolCatalogItem[] =>
-		(itemMastersQuery.data ?? []).map((item) => ({
-			_id: item._id,
-			name: item.name,
-			base_unit: item.base_unit
-		}))
-	);
 
 	// Detail follows the live overview row, so it refreshes after every mutation. Read `rows` on
 	// every run (no short-circuit): a run with no selection must still track `rows`, or later
