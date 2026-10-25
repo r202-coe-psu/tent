@@ -25,7 +25,8 @@
 	import { addQty } from '$lib/utils/qty';
 	import {
 		resolveAuthenticatedAuthorContext,
-		useBulkReturnPoolOverview
+		useBulkReturnPoolOverview,
+		useBulkReturnSkippedDocs
 	} from '../../application/queries';
 	import {
 		canManageBulkReturnPool,
@@ -68,6 +69,10 @@
 	const activeShelterCode = $derived(
 		shelterCode ?? shelterStore.selectedShelterCode ?? getShelterCode()
 	);
+
+	// Malformed pool/entry/move/void docs the shelter reads leave out (shown, not swallowed).
+	const skippedQuery = useBulkReturnSkippedDocs(undefined, () => activeShelterCode);
+	const skippedDocs = $derived(skippedQuery.data ?? []);
 
 	// CANCELLED rows are always fetched; the "show cancelled" toggle only filters the view.
 	const overviewQuery = useBulkReturnPoolOverview(
@@ -195,6 +200,21 @@
 			</div>
 		{/if}
 	</div>
+
+	{#if skippedDocs.length > 0}
+		<div
+			role="status"
+			data-testid="bulk-return-board-skipped-docs"
+			class="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900"
+		>
+			<AlertTriangle class="mt-0.5 h-4 w-4 shrink-0 text-amber-600" aria-hidden="true" />
+			<p class="min-w-0 [overflow-wrap:anywhere]">
+				พบเอกสารกองรับคืนที่ข้อมูลไม่ถูกต้อง <span class="tabular-nums">{skippedDocs.length}</span>
+				รายการในศูนย์นี้ ระบบข้ามไว้ไม่แสดง กองที่เกี่ยวข้องจะย้าย ยกเลิกรายการ หรือส่งเข้าคลังไม่ได้จนกว่าจะแก้ไข
+				— ติดต่อผู้ดูแลระบบ
+			</p>
+		</div>
+	{/if}
 
 	<div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
 		<div class="relative w-full sm:max-w-sm">

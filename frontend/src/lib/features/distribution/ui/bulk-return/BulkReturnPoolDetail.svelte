@@ -232,8 +232,11 @@
 					>
 						<AlertTriangle class="mt-0.5 h-4 w-4 shrink-0 text-amber-600" aria-hidden="true" />
 						<p class="break-words">
-							พบเอกสารที่ข้อมูลไม่ถูกต้อง <span class="tabular-nums">{skippedDocs.length}</span>
-							รายการ จึงไม่แสดงในรายการของกอง และการจัดการกองนี้อาจถูกระงับ — ติดต่อผู้ดูแลระบบ
+							พบเอกสารกองรับคืนที่ข้อมูลไม่ถูกต้องในศูนย์นี้ <span class="tabular-nums"
+								>{skippedDocs.length}</span
+							>
+							รายการ ระบบข้ามไว้ไม่แสดง ถ้าเป็นเอกสารของกองนี้ การย้าย ยกเลิกรายการ และส่งเข้าคลังจะถูกระงับ
+							— ติดต่อผู้ดูแลระบบ
 							{#if skippedIds}({skippedIds}){/if}
 						</p>
 					</div>
