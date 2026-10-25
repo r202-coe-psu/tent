@@ -23,7 +23,10 @@ import {
 const adminRawMock = vi.mocked(adminRaw);
 
 const NOW = new Date('2026-10-15T03:00:00.000Z');
+const GROUP_A = 'kiosk_banner_group:A';
+const GROUP_B = 'kiosk_banner_group:B';
 const input: KioskBannerInput = {
+	group_id: GROUP_A,
 	title: 'ประกาศ',
 	caption: null,
 	duration_sec: 10,
@@ -41,6 +44,7 @@ beforeEach(() => {
 
 const BYTES = { bytes: png, contentType: 'image/png' } as const;
 const CTX = { shelterCode: 'SH1', createdBy: 'alice' };
+const SLOT = { groupId: GROUP_A, screenType: 'compact' } as const;
 const FOUND_NONE = { status: 200, data: { docs: [] } };
 
 describe('createBanner', () => {
@@ -119,6 +123,35 @@ describe('createBanner', () => {
 		expect(record.order).toBe(4);
 	});
 
+	it('counts only the input group, not other groups or ungrouped banners', async () => {
+		adminRawMock
+			.mockResolvedValueOnce({
+				status: 200,
+				data: {
+					docs: [
+						existingDoc({ _id: 'kiosk_banner:a', order: 3 }),
+						existingDoc({ _id: 'kiosk_banner:b', order: 9, group_id: GROUP_B }),
+						existingDoc({ _id: 'kiosk_banner:c', order: 8, schema_v: 1, group_id: undefined })
+					]
+				}
+			})
+			.mockResolvedValueOnce({ status: 201, data: { ok: true, id: 'x', rev: '1-a' } });
+
+		const record = await createBanner(input, BYTES, CTX, NOW);
+
+		expect(record.order).toBe(4);
+	});
+
+	it('writes a v2 doc carrying the input group', async () => {
+		adminRawMock
+			.mockResolvedValueOnce(FOUND_NONE)
+			.mockResolvedValueOnce({ status: 201, data: { ok: true, id: 'x', rev: '1-a' } });
+
+		await createBanner(input, BYTES, CTX, NOW);
+
+		expect(adminRawMock.mock.calls[1][2]).toMatchObject({ schema_v: 2, group_id: GROUP_A });
+	});
+
 	it('ignores an order smuggled in the input', async () => {
 		adminRawMock
 			.mockResolvedValueOnce(FOUND_NONE)
@@ -143,7 +176,8 @@ function existingDoc(overrides: Record<string, unknown> = {}) {
 		_id: 'kiosk_banner:b1',
 		_rev: '1-a',
 		type: 'kiosk_banner',
-		schema_v: 1,
+		schema_v: 2,
+		group_id: GROUP_A,
 		shelter_code: 'SH1',
 		title: 'เดิม',
 		caption: null,
@@ -278,6 +312,67 @@ describe('updateBanner', () => {
 		expect(findBody).toMatchObject({ selector: { type: 'kiosk_banner', shelter_code: 'SH1' } });
 		expect(adminRawMock.mock.calls[2][2]).toMatchObject({ screen_type: 'portrait', order: 6 });
 		expect(record.order).toBe(6);
+	});
+
+	it('appends to the end of the new group when the group changes, keeping the screen type', async () => {
+		adminRawMock
+			.mockResolvedValueOnce({ status: 200, data: existingDoc({ order: 1 }) })
+			.mockResolvedValueOnce({
+				status: 200,
+				data: {
+					docs: [
+						existingDoc({ order: 1 }),
+						existingDoc({ _id: 'kiosk_banner:g1', order: 2, group_id: GROUP_B }),
+						existingDoc({ _id: 'kiosk_banner:g2', order: 5, group_id: GROUP_B }),
+						existingDoc({
+							_id: 'kiosk_banner:g3',
+							order: 7,
+							group_id: GROUP_B,
+							screen_type: 'portrait'
+						})
+					]
+				}
+			})
+			.mockResolvedValueOnce({
+				status: 201,
+				data: { ok: true, id: 'kiosk_banner:b1', rev: '2-b' }
+			});
+
+		const record = await updateBanner(
+			'kiosk_banner:b1',
+			'1-a',
+			{ ...input, group_id: GROUP_B },
+			null,
+			NOW
+		);
+
+		expect(adminRawMock.mock.calls[2][2]).toMatchObject({ group_id: GROUP_B, order: 6 });
+		expect(record.order).toBe(6);
+	});
+
+	it('turns an ungrouped v1 banner into v2 in the chosen group, at the end of its slot', async () => {
+		adminRawMock
+			.mockResolvedValueOnce({
+				status: 200,
+				data: existingDoc({ schema_v: 1, group_id: undefined, order: 3 })
+			})
+			.mockResolvedValueOnce({
+				status: 200,
+				data: { docs: [existingDoc({ _id: 'kiosk_banner:a1', order: 4 })] }
+			})
+			.mockResolvedValueOnce({
+				status: 201,
+				data: { ok: true, id: 'kiosk_banner:b1', rev: '2-b' }
+			});
+
+		const record = await updateBanner('kiosk_banner:b1', '1-a', input, null, NOW);
+
+		expect(adminRawMock.mock.calls[2][2]).toMatchObject({
+			schema_v: 2,
+			group_id: GROUP_A,
+			order: 5
+		});
+		expect(record.order).toBe(5);
 	});
 
 	it('inlines the new image when one is given', async () => {
@@ -417,7 +512,7 @@ describe('reorderBanners', () => {
 
 		await reorderBanners(
 			'SH1',
-			'compact',
+			SLOT,
 			[
 				{ id: 'kiosk_banner:b1', rev: '1-r1' },
 				{ id: 'kiosk_banner:b3', rev: '1-r3' },
@@ -438,12 +533,45 @@ describe('reorderBanners', () => {
 		});
 	});
 
+	it('renumbers only its own group slot, leaving other groups and ungrouped banners alone', async () => {
+		adminRawMock
+			.mockResolvedValueOnce({
+				status: 200,
+				data: {
+					docs: [
+						doc(1),
+						doc(2),
+						doc(3, { _id: 'kiosk_banner:other', group_id: GROUP_B }),
+						doc(4, { _id: 'kiosk_banner:v1', schema_v: 1, group_id: undefined })
+					]
+				}
+			})
+			.mockResolvedValueOnce({
+				status: 201,
+				data: rowsFor('kiosk_banner:b1', 'kiosk_banner:b2')
+			});
+
+		const records = await reorderBanners(
+			'SH1',
+			SLOT,
+			[
+				{ id: 'kiosk_banner:b2', rev: '1-r2' },
+				{ id: 'kiosk_banner:b1', rev: '1-r1' }
+			],
+			NOW
+		);
+
+		const body = adminRawMock.mock.calls[1][2] as { docs: { _id: string }[] };
+		expect(body.docs.map((d) => d._id)).toEqual(['kiosk_banner:b1', 'kiosk_banner:b2']);
+		expect(records.map((r) => r._id)).toEqual(['kiosk_banner:b2', 'kiosk_banner:b1']);
+	});
+
 	it('writes nothing when the order is unchanged and returns the current list', async () => {
 		adminRawMock.mockResolvedValueOnce({ status: 200, data: { docs: [doc(2), doc(1)] } });
 
 		const records = await reorderBanners(
 			'SH1',
-			'compact',
+			SLOT,
 			[
 				{ id: 'kiosk_banner:b1', rev: '1-r1' },
 				{ id: 'kiosk_banner:b2', rev: '1-r2' }
@@ -461,7 +589,7 @@ describe('reorderBanners', () => {
 		await expect(
 			reorderBanners(
 				'SH1',
-				'compact',
+				SLOT,
 				[
 					{ id: 'kiosk_banner:b2', rev: '0-old' },
 					{ id: 'kiosk_banner:b1', rev: '1-r1' }
@@ -475,7 +603,9 @@ describe('reorderBanners', () => {
 	it.each([
 		['an unknown id', [{ id: 'kiosk_banner:zz', rev: '1-zz' }]],
 		['a portrait banner', [{ id: 'kiosk_banner:p', rev: '1-p' }]],
-		['an expired banner', [{ id: 'kiosk_banner:old', rev: '1-old' }]]
+		['an expired banner', [{ id: 'kiosk_banner:old', rev: '1-old' }]],
+		['a banner of another group', [{ id: 'kiosk_banner:g', rev: '1-g' }]],
+		['an ungrouped banner', [{ id: 'kiosk_banner:v1', rev: '1-v1' }]]
 	])('rejects %s in the ordered ids with CONFLICT before any write', async (_name, extra) => {
 		adminRawMock.mockResolvedValueOnce({
 			status: 200,
@@ -497,7 +627,7 @@ describe('reorderBanners', () => {
 		await expect(
 			reorderBanners(
 				'SH1',
-				'compact',
+				SLOT,
 				[{ id: 'kiosk_banner:b2', rev: '1-r2' }, { id: 'kiosk_banner:b1', rev: '1-r1' }, ...extra],
 				NOW
 			)
@@ -511,7 +641,7 @@ describe('reorderBanners', () => {
 		await expect(
 			reorderBanners(
 				'SH1',
-				'compact',
+				SLOT,
 				[
 					{ id: 'kiosk_banner:b1', rev: '1-r1' },
 					{ id: 'kiosk_banner:b1', rev: '1-r1' }
@@ -531,7 +661,7 @@ describe('reorderBanners', () => {
 			adminRawMock
 				.mockResolvedValueOnce({ status: 200, data: { docs: [doc(1), doc(2)] } })
 				.mockResolvedValueOnce(bulk);
-			return reorderBanners('SH1', 'compact', swap, NOW);
+			return reorderBanners('SH1', SLOT, swap, NOW);
 		};
 
 		it('maps a conflicting row to CONFLICT', async () => {
@@ -572,7 +702,7 @@ describe('reorderBanners', () => {
 
 		const records = await reorderBanners(
 			'SH1',
-			'compact',
+			SLOT,
 			[
 				{ id: 'kiosk_banner:b3', rev: '1-r3' },
 				{ id: 'kiosk_banner:b2', rev: '1-r2' },
@@ -596,26 +726,32 @@ describe('reorderBanners', () => {
 describe('listActiveForShelter', () => {
 	it('keeps only banners live now, sorted, capped at 20', async () => {
 		const live = (n: number, order: number) =>
-			existingDoc({ _id: `kiosk_banner:live-${String(n).padStart(2, '0')}`, order });
+			existingDoc({
+				_id: `kiosk_banner:live-${String(n).padStart(2, '0')}`,
+				order,
+				group_id: GROUP_A
+			});
 		const docs = [
 			...Array.from({ length: 22 }, (_, i) => live(i, 22 - i)),
-			existingDoc({ _id: 'kiosk_banner:off', status: 'inactive', order: 0 }),
+			existingDoc({ _id: 'kiosk_banner:off', status: 'inactive', order: 0, group_id: GROUP_A }),
 			existingDoc({
 				_id: 'kiosk_banner:future',
 				start_at: '2026-12-01T00:00:00.000Z',
 				end_at: '2026-12-31T00:00:00.000Z',
-				order: 0
+				order: 0,
+				group_id: GROUP_A
 			}),
 			existingDoc({
 				_id: 'kiosk_banner:expired',
 				start_at: '2026-01-01T00:00:00.000Z',
 				end_at: '2026-02-01T00:00:00.000Z',
-				order: 0
+				order: 0,
+				group_id: GROUP_A
 			})
 		];
 		adminRawMock.mockResolvedValue({ status: 200, data: { docs } });
 
-		const records = await listActiveForShelter('SH1', NOW, 'compact');
+		const records = await listActiveForShelter('SH1', NOW, SLOT);
 
 		expect(records).toHaveLength(20);
 		expect(records.map((r) => r.order)).toEqual(Array.from({ length: 20 }, (_, i) => i + 1));
@@ -625,46 +761,60 @@ describe('listActiveForShelter', () => {
 	});
 });
 
-describe('listActiveForShelter by screen type', () => {
-	it('returns only the requested screen type, a legacy doc counting as compact', async () => {
+describe('listActiveForShelter by slot', () => {
+	it('returns only the requested group and screen type, never an ungrouped banner', async () => {
 		adminRawMock.mockResolvedValue({
 			status: 200,
 			data: {
 				docs: [
-					existingDoc({ _id: 'kiosk_banner:legacy' }),
-					existingDoc({ _id: 'kiosk_banner:c', screen_type: 'compact' }),
-					existingDoc({ _id: 'kiosk_banner:p', screen_type: 'portrait' })
+					existingDoc({ _id: 'kiosk_banner:ungrouped', schema_v: 1, group_id: undefined }),
+					existingDoc({ _id: 'kiosk_banner:a-c', group_id: GROUP_A, screen_type: 'compact' }),
+					existingDoc({ _id: 'kiosk_banner:a-legacy', group_id: GROUP_A }),
+					existingDoc({ _id: 'kiosk_banner:a-p', group_id: GROUP_A, screen_type: 'portrait' }),
+					existingDoc({ _id: 'kiosk_banner:b-c', group_id: GROUP_B, screen_type: 'compact' })
 				]
 			}
 		});
 
-		const compact = await listActiveForShelter('SH1', NOW, 'compact');
-		const portrait = await listActiveForShelter('SH1', NOW, 'portrait');
+		const compact = await listActiveForShelter('SH1', NOW, SLOT);
+		const portrait = await listActiveForShelter('SH1', NOW, {
+			groupId: GROUP_A,
+			screenType: 'portrait'
+		});
 
-		expect(compact.map((r) => r._id).sort()).toEqual(['kiosk_banner:c', 'kiosk_banner:legacy']);
-		expect(portrait.map((r) => r._id)).toEqual(['kiosk_banner:p']);
+		expect(compact.map((r) => r._id).sort()).toEqual(['kiosk_banner:a-c', 'kiosk_banner:a-legacy']);
+		expect(portrait.map((r) => r._id)).toEqual(['kiosk_banner:a-p']);
 	});
 
-	it('applies the cap of 20 after filtering by screen type', async () => {
+	it('applies the cap of 20 after filtering by slot', async () => {
 		const docs = [
 			...Array.from({ length: 5 }, (_, i) =>
-				existingDoc({ _id: `kiosk_banner:c-${i}`, order: 1, screen_type: 'compact' })
+				existingDoc({
+					_id: `kiosk_banner:c-${i}`,
+					order: 1,
+					group_id: GROUP_A,
+					screen_type: 'compact'
+				})
 			),
 			...Array.from({ length: 22 }, (_, i) =>
 				existingDoc({
 					_id: `kiosk_banner:p-${String(i).padStart(2, '0')}`,
 					order: 2 + i,
+					group_id: GROUP_A,
 					screen_type: 'portrait'
 				})
 			)
 		];
 		adminRawMock.mockResolvedValue({ status: 200, data: { docs } });
 
-		const portrait = await listActiveForShelter('SH1', NOW, 'portrait');
+		const portrait = await listActiveForShelter('SH1', NOW, {
+			groupId: GROUP_A,
+			screenType: 'portrait'
+		});
 
 		expect(portrait).toHaveLength(20);
 		expect(portrait.every((r) => r._id.startsWith('kiosk_banner:p-'))).toBe(true);
-		expect(await listActiveForShelter('SH1', NOW, 'compact')).toHaveLength(5);
+		expect(await listActiveForShelter('SH1', NOW, SLOT)).toHaveLength(5);
 	});
 });
 

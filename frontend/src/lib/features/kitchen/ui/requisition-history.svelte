@@ -3,6 +3,7 @@
 	import * as Table from '$lib/components/ui/table';
 	import * as Pagination from '$lib/components/ui/pagination';
 	import { Badge } from '$lib/components/ui/badge';
+	import PackageX from '@lucide/svelte/icons/package-x';
 	import PackageCheck from '@lucide/svelte/icons/package-check';
 	import {
 		useRequisitions,
@@ -12,7 +13,7 @@
 	} from '$lib/features/kitchen';
 	import { useTickets, TICKET_STATUS_LABELS } from '$lib/features/tickets';
 	import { formatThaiDateTime, formatThaiShortDate } from '$lib/utils/date';
-	import { qtyGte } from '$lib/utils/qty';
+	import { qtyGt, qtyGte } from '$lib/utils/qty';
 	import { formatUnit, useUnitsOfMeasure } from '$lib/features/catalog';
 	import { langState } from '$lib/states/i18n.svelte';
 
@@ -32,7 +33,15 @@
 		timestamp: string;
 		createdBy: string;
 		mealPlanId: string | null;
-		items: { key: string; label: string; done: string; requested: string; unit: string }[];
+		items: {
+			key: string;
+			label: string;
+			done: string;
+			requested: string;
+			unit: string;
+			/** Approved ticket line the warehouse allocated 0 to ("คลังไม่มีให้"). */
+			notSupplied?: boolean;
+		}[];
 		statusLabel: string;
 		statusClass: string;
 	}
@@ -78,7 +87,9 @@
 				label: i.item_name,
 				done: i.allocated_qty,
 				requested: i.requested_qty,
-				unit: i.unit
+				unit: i.unit,
+				notSupplied:
+					t.status !== 'PENDING_PICK' && t.status !== 'CANCELLED' && !qtyGt(i.allocated_qty, 0)
 			})),
 			statusLabel: `${t.ticket_no} · ${TICKET_STATUS_LABELS[t.status]}`,
 			statusClass: TICKET_STATUS_CLASS[t.status] ?? PARTIAL_CLASS
@@ -162,15 +173,24 @@
 										{#each row.items as item (item.key)}
 											<li>
 												<span class="font-mono">{item.label}</span>:
-												<span
-													class="font-semibold {!qtyGte(item.done, item.requested)
-														? 'text-amber-700'
-														: ''}"
-												>
-													{item.done}
-												</span>
-												/ {item.requested}
-												{formatUnit(item.unit, units, langState.current)}
+												{#if item.notSupplied}
+													<span class="inline-flex items-center gap-1 font-semibold text-amber-700">
+														<PackageX class="h-3 w-3" />
+														คลังไม่มีให้
+													</span>
+													(ขอ {item.requested}
+													{formatUnit(item.unit, units, langState.current)})
+												{:else}
+													<span
+														class="font-semibold {!qtyGte(item.done, item.requested)
+															? 'text-amber-700'
+															: ''}"
+													>
+														{item.done}
+													</span>
+													/ {item.requested}
+													{formatUnit(item.unit, units, langState.current)}
+												{/if}
 											</li>
 										{/each}
 									</ul>

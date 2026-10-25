@@ -19,4 +19,8 @@ read-side FastAPI changes). Never decrement it. Bumping costs one full bootstrap
 per deploy, so batch related projector changes into one bump per release when possible.
 """
 
-PROJECTION_VERSION: int = 5
+#: 6 — CR-185 (``public_jobs.is_urgent``, #709).
+#: 7 — CR-172 (``public_donations.reject_reason`` / ``reject_reason_code``) and CR-174
+#: (``public_donations.items_declared[].review_status`` / ``review_reason_code`` /
+#: ``review_reason``). Both shipped unreleased on one branch, so one bump covers both.
+PROJECTION_VERSION: int = 7

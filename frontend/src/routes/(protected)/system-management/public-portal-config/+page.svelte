@@ -3,7 +3,7 @@
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import { PublicPortalConfigForm } from '$lib/features/public-portal';
+	import { FooterLogosSection, PublicPortalConfigForm } from '$lib/features/public-portal';
 	import StaffPageShell from '$lib/components/staff-page-shell.svelte';
 	import StaffHub from '$lib/components/staff-hub.svelte';
 	import StaffSideNav, { type StaffSideNavItem } from '$lib/components/staff-side-nav.svelte';
@@ -20,7 +20,7 @@
 	}
 
 	function getPreviewUrl(type: string) {
-		if (type === 'public' || type === 'social') return '/';
+		if (type === 'public' || type === 'social' || type === 'logos') return '/';
 		if (type === 'registration') return '/register';
 		if (type === 'volunteer') return '/volunteers';
 		return '/';
@@ -50,6 +50,12 @@
 			label: 'ช่องทางการติดต่อ',
 			description: 'ตั้งค่าลิงก์ติดต่อ',
 			onclick: () => navigateToType('social')
+		},
+		{
+			id: 'logos',
+			label: 'โลโก้หน่วยงานที่สนับสนุน',
+			description: 'โลโก้ส่วนท้ายเว็บ',
+			onclick: () => navigateToType('logos')
 		}
 	]);
 </script>
@@ -84,7 +90,15 @@
 					ดูการแสดงผลหน้าบ้าน
 				</a>
 			</div>
-			<PublicPortalConfigForm {data} {activeType} />
+			{#if activeType === 'logos'}
+				<FooterLogosSection
+					logos={data.footerLogos}
+					rev={data.configRev}
+					canEdit={data.canEditLogos}
+				/>
+			{:else}
+				<PublicPortalConfigForm {data} {activeType} />
+			{/if}
 		</div>
 	</StaffHub>
 </StaffPageShell>

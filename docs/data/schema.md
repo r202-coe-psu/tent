@@ -2,8 +2,8 @@
 title: Smart Shelter — Database Schema v5
 status: draft for review
 created: 2026-06-11
-updated: 2026-10-25
-note: CR-153 แก้ไข 2026-10-25 — §2.34 notes: Pass/Fail ไม่บังคับ, Pending ยังบังคับ (ไม่ bump `schema_v`); field-level canonical — คู่กับ data-model.md (topology/policy) และ api-contract.md (planes); CR-112/CR-113 registration foundation; CR-118 T-13 lot metadata; CR-119/CR-120/CR-121 catalog, fuel and requisition contracts; CR-124 staff Google step-up MFA on _users; CR-125 Unit of Measure (UOM) master data in catalog; decision sync 2026-09-23 — `_users.phone` เป็น optional; login ได้ทั้ง CouchDB `name` (username) และเบอร์ติดต่อ (resolve ผ่าน BFF); decision sync 2026-09-23 — `_users.organization` optional สำหรับทั้ง staff และ volunteer; CR-135/CR-136 partner OAuth2 client name/module preset + secret reveal/edit/delete; CR-137 shrink master_data (10→4) + zone/community free text; CR-138 remove purchase doc type + withdraw purchase from stock_ledger.reason; CR-139 shelter storage points; CR-140 item_category default_class editable; CR-144/CR-145 meal_service_receipt (§2.7.3); CR-147 removes CR-146 meal_distribution_push (§2.7.4) — ticket flow ends at warehouse stock-in; CR-148 pre-register validation + evacuee religion_other/disability_other_detail (v11) + household dorm_* (v6); CR-151 kiosk pre-registration check-in (report-in arriving status & KIOSK_LOOKUP_MANGO_INDEXES); CR-154 evacuee.gender nullable + registered_via api (v12), external_bookings (§9.7), partner scopes booking-write/residency-read + module M2; decision sync 2026-10-09 — `evacuee.gender = null` ("ไม่ระบุ") ใช้ได้ทุกช่องทาง (public/kiosk/Station 1/back-office/api) เป็นค่าเริ่มต้นของฟอร์ม, `'other'` คงไว้อ่านเฉพาะ doc เดิม (UI ไม่เสนอให้เลือกใหม่, แก้ไขแล้วต้อง preserve) — ยกเลิก CR-154 FR-70/FR-71(บางส่วน)/FR-72; เพิ่ม `public_shelters.occupancy_breakdown.gender_unspecified` (null+other) พร้อม invariant `male+female+gender_unspecified = occupancy_total`; evacuee ไม่ bump schema_v (v12 รองรับ null แล้ว); ต้อง re-project `public_shelters` (worker bootstrap) หลัง deploy; CR-157 donation_slot แยกคิว dropoff/pickup (§2.13, v2); CR-158 kiosk staff PIN face bypass — `scanner_device` v2 (`staff_pin_*` metadata) + DB ใหม่ `scanner_secrets` (§3.11.1, admin-only, ไม่ replicate/sync); CR-159 evacuee `preferred_zone` (v13); CR-162 kiosk banner — doc type ใหม่ `kiosk_banner` v1 ใน `registry` (§3.12, `shelter_code` เดียว + `screen_type`; ส่วนที่ปรับ 2026-10-15..17 Team Lead อนุมัติ 2026-10-18) + `scanner_device.screen_type` / `banner_enabled` optional (§3.11) · ไม่เพิ่ม role — ใช้ `{code}:kiosk_staff` ของ CR-165 แทน `banner_staff` (§6); CR-163 kiosk ThaiD check-in — shelter `feature_flags.kiosk_thaid_check_in_enabled` (additive, ไม่ bump schema_v) + `config:app.thaid_registration_enabled` ครอบคลุม mode `kiosk_check_in` (kiosk อ่านแบบ fail closed); CR-164 ให้ `shelter:{code}` เป็นกุญแจอ่าน DB กลาง `registry`/`catalog` (§6); CR-170 demographics views count room_confirmed (_design/app v3); CR-169 (2026-10-17, #592) evacuee `booking_ref` + schema_v 14 (§1.1), external_bookings group fields `person_seq`/`group_size`/`committed` + index `(booking_id, person_seq)` (§9.7); #613 `external_bookings` `reconciled_at` + `reconcile_outcome` + index `(state, reconciled_at)` (§9.7, additive), access log `result_count = N` (§9.4); #613 decision sync (review รอบ 3) `external_bookings.reconcile_stay_cancelled_at` + `reconcile_household_cancelled_at` (marker ราย doc = timestamp ที่ worker เขียนตอนยกเลิก; retry audit เฉพาะ doc ที่ `since`/`updated_at` ตรงกับ marker) แทน `reconcile_cancelled_at` ของรอบ 2; CR-151 §16 (2026-10-18, #654, proposed) shelter `zones[].short_name` optional สำหรับ QR label (additive, ไม่ bump schema_v); draft-in-shelter-headcount (2026-10-20, #593, proposed) — **In-shelter** = `active` + `room_confirmed` เป็นยอดคนในศูนย์เดียวของความจุ / คลัง / Kitchen / SOP / `daily_calc.occupancy_snapshot` (เดิม Kitchen/SOP `active` อย่างเดียว; ไม่ bump schema_v)
+updated: 2026-10-26
+note: CR-153 แก้ไข 2026-10-25 — §2.34 notes: Pass/Fail ไม่บังคับ, Pending ยังบังคับ (ไม่ bump `schema_v`); CR-192 amendment 2 (2026-10-25) — §7 `station_logs_by_station` value เพิ่ม `actor` (อันดับรายบุคคล, ไม่ bump `schema_v`, manifest คง v5); CR-192 approved (2026-10-25, #589) — §1.8 `station_log` ใหม่ (schema_v 1 · append-only · เวลา `start`/`complete` ต่อ evacuee ต่อ station + `channel` kiosk/staff) + §7 view `station_logs_by_station` (view manifest v5) + Mango index `station_log` + §8 ข้อ 1–2 (whitelist + append-only) — type อื่นไม่ bump `schema_v`; decision sync 2026-10-25 — §1.1 `evacuee.consent` (opt) จากบล็อกความยินยอม PDPA, evacuee schema_v 14 → 15 ([spec](../features/pdpa-consent-block-spec.md)); CR-170 amend (2026-10-25) — §7 `registrations_by_date_status` เพิ่ม series `preregister` (view manifest v4); CR-191 approved (2026-10-25, #607) — §4.2 `item_master.allergens` = `[str]` ของ master `allergy` code หรือ free text (`item_master` schema_v 5 → 6) + §2.30 `distribution_log.allergen_conflicts` (opt, additive, ไม่ bump); CR-190 approved (2026-10-24, #569) — §2.1 `adjust` ติดลบ (ปรับยอด / `count_mismatch`) อ้าง `lot_ref` ของล็อตที่ตัดและต้องพอในล็อตนั้น, `adjust` บวกเป็นล็อตใหม่ (ไม่เปลี่ยน field / ไม่ bump `schema_v`); CR-187 approved (2026-10-22, #648) — §3.3 `master_type` เพิ่ม `allergy` (global-only, seed 5) + §1.2 `medical.allergies` = master code หรือ free text (ไม่ bump `schema_v`); CR-186 approved (2026-10-22, #649) — §3.3 `master_type` เพิ่ม `chronic_disease` (global-only, seed 12) + §1.2 `medical.conditions` = master code หรือ free text (ไม่ bump `schema_v`); CR-185 approved (2026-10-21, #709) — §9.2 `public_jobs.is_urgent` (projection field ใหม่, `PROJECTION_VERSION` 5→6, ไม่ bump `schema_v`); CR-172 (2026-10-21) — `donation` schema_v 6 (§2.3): `reject_reason`/`reject_reason_code` + รูป `received_summary` เต็ม (`items[].rejected`/`reject_reason`/`reject_reason_code`), optional ทั้งหมด ไม่ backfill; CR-174 (2026-10-21) — `donation` schema_v 7 (§2.3): `items[].review_status`/`review_reason_code`/`review_reason` + สถานะใบคำนวณจากรายการ (ตอนสร้าง/ผู้บริจาคแก้), optional ทั้งหมด ไม่ backfill; audit อนุมัติอัตโนมัติ `approved_by: system`; CR-162 ส่วนที่ปรับ 2026-10-21 (Team Lead อนุมัติ 2026-10-22) — kiosk banner group: §3.11 `scanner_device.banner_group_id` (additive, ไม่ bump) + `banner_enabled` deprecated, §3.12 `kiosk_banner` schema_v 1 → 2 (+ `group_id`, order ต่อ (group_id, screen_type), VDU `REGISTRY_DESIGN_VERSION` 8), §3.13 `kiosk_banner_group` ใหม่ (schema_v 1); field-level canonical — คู่กับ data-model.md (topology/policy) และ api-contract.md (planes); CR-112/CR-113 registration foundation; CR-118 T-13 lot metadata; CR-119/CR-120/CR-121 catalog, fuel and requisition contracts; CR-124 staff Google step-up MFA on _users; CR-125 Unit of Measure (UOM) master data in catalog; decision sync 2026-09-23 — `_users.phone` เป็น optional; login ได้ทั้ง CouchDB `name` (username) และเบอร์ติดต่อ (resolve ผ่าน BFF); decision sync 2026-09-23 — `_users.organization` optional สำหรับทั้ง staff และ volunteer; CR-135/CR-136 partner OAuth2 client name/module preset + secret reveal/edit/delete; CR-137 shrink master_data (10→4) + zone/community free text; CR-138 remove purchase doc type + withdraw purchase from stock_ledger.reason; CR-139 shelter storage points; CR-140 item_category default_class editable; CR-144/CR-145 meal_service_receipt (§2.7.3); CR-147 removes CR-146 meal_distribution_push (§2.7.4) — ticket flow ends at warehouse stock-in; CR-148 pre-register validation + evacuee religion_other/disability_other_detail (v11) + household dorm_* (v6); CR-151 kiosk pre-registration check-in (report-in arriving status & KIOSK_LOOKUP_MANGO_INDEXES); CR-154 evacuee.gender nullable + registered_via api (v12), external_bookings (§9.7), partner scopes booking-write/residency-read + module M2; decision sync 2026-10-09 — `evacuee.gender = null` ("ไม่ระบุ") ใช้ได้ทุกช่องทาง (public/kiosk/Station 1/back-office/api) เป็นค่าเริ่มต้นของฟอร์ม, `'other'` คงไว้อ่านเฉพาะ doc เดิม (UI ไม่เสนอให้เลือกใหม่, แก้ไขแล้วต้อง preserve) — ยกเลิก CR-154 FR-70/FR-71(บางส่วน)/FR-72; เพิ่ม `public_shelters.occupancy_breakdown.gender_unspecified` (null+other) พร้อม invariant `male+female+gender_unspecified = occupancy_total`; evacuee ไม่ bump schema_v (v12 รองรับ null แล้ว); ต้อง re-project `public_shelters` (worker bootstrap) หลัง deploy; CR-157 donation_slot แยกคิว dropoff/pickup (§2.13, v2); CR-158 kiosk staff PIN face bypass — `scanner_device` v2 (`staff_pin_*` metadata) + DB ใหม่ `scanner_secrets` (§3.11.1, admin-only, ไม่ replicate/sync); CR-159 evacuee `preferred_zone` (v13); CR-162 kiosk banner — doc type ใหม่ `kiosk_banner` v1 ใน `registry` (§3.12, `shelter_code` เดียว + `screen_type`; ส่วนที่ปรับ 2026-10-15..17 Team Lead อนุมัติ 2026-10-18) + `scanner_device.screen_type` / `banner_enabled` optional (§3.11) · ไม่เพิ่ม role — ใช้ `{code}:kiosk_staff` ของ CR-165 แทน `banner_staff` (§6); CR-163 kiosk ThaiD check-in — shelter `feature_flags.kiosk_thaid_check_in_enabled` (additive, ไม่ bump schema_v) + `config:app.thaid_registration_enabled` ครอบคลุม mode `kiosk_check_in` (kiosk อ่านแบบ fail closed); CR-164 ให้ `shelter:{code}` เป็นกุญแจอ่าน DB กลาง `registry`/`catalog` (§6); CR-170 demographics views count room_confirmed (_design/app v3); CR-169 (2026-10-17, #592) evacuee `booking_ref` + schema_v 14 (§1.1), external_bookings group fields `person_seq`/`group_size`/`committed` + index `(booking_id, person_seq)` (§9.7); #613 `external_bookings` `reconciled_at` + `reconcile_outcome` + index `(state, reconciled_at)` (§9.7, additive), access log `result_count = N` (§9.4); #613 decision sync (review รอบ 3) `external_bookings.reconcile_stay_cancelled_at` + `reconcile_household_cancelled_at` (marker ราย doc = timestamp ที่ worker เขียนตอนยกเลิก; retry audit เฉพาะ doc ที่ `since`/`updated_at` ตรงกับ marker) แทน `reconcile_cancelled_at` ของรอบ 2; CR-151 §16 (2026-10-18, #654, proposed) shelter `zones[].short_name` optional สำหรับ QR label (additive, ไม่ bump schema_v); draft-in-shelter-headcount (2026-10-20, #593, proposed) — **In-shelter** = `active` + `room_confirmed` เป็นยอดคนในศูนย์เดียวของความจุ / คลัง / Kitchen / SOP / `daily_calc.occupancy_snapshot` (เดิม Kitchen/SOP `active` อย่างเดียว; ไม่ bump schema_v)
 ---
 
 # Database Schema v5 — field-level
@@ -40,6 +40,9 @@ Decimal — do not rely on CouchDB `_sum` of floats for correctness.
 
 ### 1.1 `evacuee` — `evacuee:{ulid}`
 
+> **schema_v 15** — เพิ่ม `consent` (opt) — ผลความยินยอม PDPA ที่บันทึกตอนลงทะเบียน (`docs/features/pdpa-consent-block-spec.md`). additive; evacuee ที่ไม่มี `consent` อ่านได้ตามปกติ.
+> **decision sync 2026-10-25 (evacuee schema_v 14 → 15)** — เพิ่ม `consent` (opt) = `{mode, health, ref, given_at, given_by, giver_evacuee_id, recorded_verbally_by, channel, notice_version}` จากบล็อกความยินยอม PDPA (`docs/features/pdpa-consent-block-spec.md`). `mode = basic` บังคับ `privacy.search_excluded = true`; `mode = basic` หรือ `health = false` → **save ของฟอร์มลงทะเบียน** ห้ามสร้าง/แก้ `medical` (screening Station 2 ไม่ขึ้นกับกฎนี้). ค้นหาญาติยังเป็น opt-out (K-15). Kiosk register และ public unassigned registration รับ `consent` ใน payload (api-contract) และ claim คัดลอกไป evacuee. Migration: additive + backfill ครั้งเดียว (`given_by: 'backfill'`, `health` = มี `medical` doc หรือไม่).
+> **decision sync 2026-10-25 — เพิ่มเติม (ไม่ bump `schema_v`)** — kiosk register: `consent` ที่ถูกรูปแบบแต่ `given_at` ย้อนหลังเกิน 10 นาที → `400 KIOSK_CONSENT_EXPIRED` (แทน `INVALID_KIOSK_REGISTRATION`); ตู้ล้าง decision แล้วพาผู้ใช้กลับหน้ายินยอมพร้อมข้อความแจ้ง (บัตรสมาร์ทการ์ด: เก็บข้อมูลบัตร/ผลตรวจใบหน้าไว้; ThaiD: session สแกนอายุ 180 วินาทีหลังยืนยัน จึงหมดอายุแล้วเสมอ ตู้รีเซ็ตและพากลับหน้าสแกน ThaiD พร้อมข้อความแจ้ง ไม่ให้ยินยอมซ้ำก่อนต้องสแกนใหม่อยู่ดี) แทนการ retry ด้วย decision เดิม. `given_at` ล้ำอนาคตเกิน 10 นาทียังเป็น `INVALID_KIOSK_REGISTRATION`; กฎ 10 นาทีไม่เปลี่ยน (api-contract §2.1, PR #892).
 > **schema_v 14** — เพิ่ม `booking_ref` (opt, `BK-{ulid}`) — รหัสกลุ่มการจองของ partner EXT-008 ที่ evacuee คนนี้มาจาก (CR-169 FR-60/61). ตั้งเฉพาะ `registered_via: api` โดย worker; **ไม่ซ้อนกับ `donation.booking_ref`** (คนละ doc type และความหมาย — `donation.booking_ref` คือ `DN-…` ของตั๋วบริจาค). Migration: additive, ไม่ backfill (ดูบรรทัด Migration schema_v 13 → 14 ใต้ตารางนี้).
 > **schema_v 13** — เพิ่ม `preferred_zone` (opt) — โซนที่ Station 1 ระบุไว้แบบไม่บังคับ เป็นค่าแนะนำให้ Station 3 เท่านั้น ไม่ใช่การจัดโซน ([CR-159](../changes/02-people/CR-159-station1-preferred-zone.md)).
 > **decision sync 2026-10-09 (ไม่ bump `schema_v`)** — `gender = null` ("ไม่ระบุ") ใช้ได้ **ทุกช่องทาง** ไม่จำกัดเฉพาะ `registered_via = api`; ฟอร์มลงทะเบียนทุกช่องทาง preselect "ไม่ระบุ" และไม่บังคับเลือกเพศ. ยกเลิก CR-154 FR-70, FR-71 (เหลือเพียง "UI แสดง `null` เป็น ไม่ระบุ + แก้เพศได้ทุกช่องทาง") และ FR-72 (ย้ายไป `public_shelters.occupancy_breakdown.gender_unspecified`, §9.1).
@@ -85,6 +88,7 @@ Decimal — do not rely on CouchDB `_sum` of floats for correctness.
 | `preferred_zone` | str\|null | opt | zone `code` ของศูนย์เดียวกันที่ Station 1 ระบุไว้ (ไม่บังคับ) — **ไม่ใช่การจัดโซน**: ไม่เปลี่ยน `current_stay`, ไม่มีผลต่อ queue/occupancy; Station 3 ใช้เป็นค่าเลือกเริ่มต้นเมื่อไม่มีอาการ EWAR และโซนยังเปิด; staff-only (ไม่ส่งออก public/external) (CR-159) |
 | `booking_ref` | str\|null | opt | `BK-{ulid}` = `external_bookings.booking_id` ของกลุ่มที่จองมา (EXT-008) — ใช้บอกว่า evacuee หลายคนมาจาก booking เดียวกัน; ตั้งเฉพาะ evacuee ที่ `registered_via = api` (worker ใส่ให้ทุก booking รวมกลุ่มขนาด 1); ไม่มี → ไม่ใส่ key หรือ `null`. **ไม่ใช่ `donation.booking_ref`** (`DN-…`, คนละ doc type). Opaque ไม่ใช่ PII — ไม่ project ลง `public_*` (CR-169 FR-63); staff แก้/รวม household ต้องคงค่าเดิม (FR-62) (CR-169) |
 | `privacy` | {`search_excluded`:bool} | req | default `{search_excluded:false}` (opt-out model) |
+| `consent` | {`mode`, `health`, `ref`, `given_at`, `given_by`, `giver_evacuee_id`, `recorded_verbally_by`, `channel`, `notice_version`} | opt | ผลความยินยอม PDPA (schema_v 15); ไม่มี = ยังไม่ได้บันทึก. `mode`: enum(`full`,`basic`) — `basic` เมื่อไม่ติ๊กช่องหลัก · `health`: bool — `false` เสมอเมื่อ `mode = basic` · `ref`: str `CS-` + 8 ตัวท้ายของ ULID ใหม่ที่สร้างตอนกดยืนยัน (Crockford base32 ตัวพิมพ์ใหญ่ เช่น `CS-7K3QZ9MD`) — 1 ค่าต่อการลงทะเบียน สมาชิกทุกคนใช้ค่าเดียวกัน · `given_at`: ts (เวลากดยืนยันฝั่ง client) · `given_by`: enum(`self`,`guardian`,`household_member`,`backfill`) · `giver_evacuee_id`: str\|null — evacuee id ของผู้ลงทะเบียน; `null` เมื่อ `given_by` = `self`/`backfill` · `recorded_verbally_by`: str\|null — user id ของเจ้าหน้าที่เมื่อบันทึกตามวาจา · `channel`: enum(`staff`,`kiosk`,`web`,`backfill`) · `notice_version`: str (เริ่ม `2026-10-25`; backfill = `backfill`). ค้นหาญาติไม่มี field ใน `consent` — เขียนลง `privacy.search_excluded` (FR-30/31) |
 | `registered_via` | enum(`kiosk`,`staff`,`backoffice`,`app`,`web`,`import`,`paper`,`api`) | req | `kiosk` = Smart Card Kiosk, `staff` = Onsite desk walk-in, `web` = public portal (CR-070), `backoffice` = Admin desk, `api` = Partner booking EXT-008 ผ่าน worker inbound (CR-154) |
 | `anonymized` | bool | sys | default ไม่มี field; purge job ตั้ง `true` พร้อมล้าง PII (§retention data-model §7) |
 
@@ -135,6 +139,8 @@ implement — ไม่กระทบ migration นี้
 
 **Migration (schema_v 10 → 11, CR-148):** purely additive — `religion_other`, `disability_other_detail` default `null` ตอนอ่าน; doc เดิมไม่ต้อง backfill; validation ใหม่ใช้กับ input ใหม่/ค่าที่ถูกแก้เท่านั้น; เขียนใหม่ stamp schema_v 11
 
+**Migration (schema_v 14 → 15, decision sync 2026-10-25):** additive — `consent` เป็น field เสริม (opt); doc เดิมที่ไม่มี key นี้อ่านได้ตามปกติ; backfill ครั้งเดียวด้วย script (central CouchDB, admin) ให้ evacuee ที่ไม่มี `consent` และไม่ `anonymized` ได้ `{mode:'full', health:<มี medical doc หรือไม่>, ref:<ใหม่ต่อคน>, given_at:<เวลารัน>, given_by:'backfill', giver_evacuee_id:null, recorded_verbally_by:null, channel:'backfill', notice_version:'backfill'}` + `schema_v: 15` โดยไม่แตะ `privacy.search_excluded` และ `medical`; script รันซ้ำได้ (ข้ามคนที่มี `consent`); เขียนใหม่ stamp `schema_v: 15`
+
 **Migration (schema_v 13 → 14, CR-169):** purely additive — `booking_ref` เป็น field เสริม (opt/null) เขียนโดย worker inbound เท่านั้น (`registered_via: api`); doc เดิมไม่มี key นี้อ่านได้ตามปกติ ไม่ backfill (evacuee จาก booking ก่อน CR-169 ไม่มี `booking_ref` — ยอมรับ); reader ทุกจุดต้องไม่พังเมื่อไม่มี field นี้; staff แก้ evacuee หรือรวม household ต้องคงค่าเดิม (merge/spread doc เดิม); เขียนใหม่ stamp `schema_v: 14`. ณ 2026-10-17 `EVACUEE_SCHEMA_V` ของ worker = 14 (ค้างที่ 12 ก่อนหน้านี้)
 
 **Migration (schema_v 11 → 12, CR-154):** relaxing + additive enum — doc เดิมมี `gender` ครบทุกตัว ไม่ต้อง backfill; reader ทุกจุดต้อง handle `gender = null` (label "ไม่ระบุ", occupancy breakdown ไม่นับเข้า male/female แต่นับใน total); `registered_via: api` เขียนโดย worker inbound `external_bookings` เท่านั้น; เขียนใหม่ stamp schema_v 12
@@ -151,9 +157,9 @@ implement — ไม่กระทบ migration นี้
 | --- | --- | --- | --- |
 | `evacuee_id` | str | req | unique ต่อ evacuee — บังคับใน validate (สร้างซ้ำ = forbidden) |
 | `blood_group` | enum(`A`,`B`,`AB`,`O`,`unknown`) | opt | — |
-| `conditions` | [str] | opt | โรคประจำตัว free-text รายตัว |
+| `conditions` | [str] | opt | โรคประจำตัว รายตัว — แต่ละค่าเป็น `code` ของ `master_data:chronic_disease` **หรือ** free text (CR-186). เขียนเป็น code เมื่อเลือกจาก master หรือข้อความตรง `label_th`/`label_en` ของ item `active` (`normalizeLabel`); นอกนั้นเก็บข้อความ (trim). display resolve code → label, free text แสดงตามที่เก็บ. ไม่ผูกกับ `vulnerable_groups: chronic_illness` |
 | `medications` | [str] | opt | — |
-| `allergies` | [str] | opt | — |
+| `allergies` | [str] | opt | ประวัติการแพ้ รายตัว — แต่ละค่าเป็น `code` ของ `master_data:allergy` **หรือ** free text (CR-187; เช่น แพ้ยา). เขียนเป็น code เมื่อเลือกจาก master หรือข้อความตรง `label_th`/`label_en` ของ item `active` (`normalizeLabel`); นอกนั้นเก็บข้อความ (trim). display resolve code → label, free text แสดงตามที่เก็บ |
 | `track` | enum(`normal`,`fast_track`) | req | default `normal` — sync กับผล screening ล่าสุด |
 | `notes` | str | opt | — |
 
@@ -312,6 +318,56 @@ sheet?: str, line?: int }] }`
 **หมายเหตุ sync:** worker ไม่รู้จัก doc type นี้ จึงถูกข้ามในการ project ลง MongoDB (ไม่มี public
 projection — เป็นข้อมูลหลังบ้านล้วน)
 
+### 1.8 `station_log` — `station_log:{ulid}` · **schema_v 1** · **append-only** (CR-192)
+
+Log เวลา `start` / `complete` ต่อ evacuee ต่อ station ของ intake pipeline (ADR-0001: Station 1
+Registration/Report-in, Station 2 Medical Screening, Station 3 Zoning) พร้อม `channel` ที่ให้บริการ
+เพื่อสรุปเวลาให้บริการเฉลี่ยต่อ station แยกช่องทาง (staff dashboard ต่อศูนย์). 1 event = 1 doc (2 doc
+ต่อ visit); `created_at = updated_at`; ไม่แก้/ลบย้อนหลัง. `duration` ไม่ persist — derive ตอนสรุปใน BFF.
+ไม่มี PII (อ้าง `evacuee_id` เท่านั้น) · operational data — worker ไม่รู้จัก type นี้ (ไม่ project ลง
+Mongo, ไม่ bump `PROJECTION_VERSION`) · retention เดียวกับ `movement`
+
+| Field | ชนิด | req | หมายเหตุ |
+| --- | --- | --- | --- |
+| `evacuee_id` | str | req | evacuee ที่รับบริการ |
+| `station` | int (`1`,`2`,`3`) | req | ตาม pipeline ADR-0001 |
+| `action` | enum(`start`,`complete`) | req | — |
+| `channel` | enum(`kiosk`,`staff`) | req | ช่องทางที่ให้บริการ step นี้ (ไม่ใช่ `registered_via`); **station 2 และ 3 ต้องเป็น `staff`** (Zod ฝั่ง client) |
+| `device_id` | str | opt | ใส่เมื่อ `channel = 'kiosk'` (scanner device จาก principal ที่ authenticate แล้ว ไม่รับจาก body) |
+| `occurred_at` | ts | req | เวลาเหตุการณ์จริง (ไม่ใช่เวลา sync) |
+
+`created_by` = `kiosk:{device_id}` เมื่อ kiosk เขียน; ชื่อผู้ใช้ staff เมื่อ staff เขียน
+
+**นิยาม start/complete**
+
+| Station | `start` = | `complete` = |
+| --- | --- | --- |
+| 1 | **staff:** เปิดฟอร์ม (walk-in เปล่า หรือหน้า report-in) — client ถือเวลาเปิดฟอร์มไว้แล้วเขียน `start` (`occurred_at` = เวลาเปิดฟอร์ม) พร้อม `complete` ตอนบันทึกสำเร็จ ต่อสมาชิกที่บันทึกทุกคน · **kiosk:** เวลา lookup สำเร็จ / อ่านบัตร walk-in (client ส่งมา, server clamp: ไม่เกินปัจจุบัน และไม่เก่ากว่า 2 ชม. มิฉะนั้นใช้เวลา server) | บันทึก evacuee เป็น `current_stay.status = arriving` สำเร็จ (kiosk: ต่อสมาชิกที่เลือกแต่ละคน) |
+| 2 | staff เปิดฟอร์ม screening ของ evacuee (idempotent) | บันทึก `screening` สำเร็จ |
+| 3 | staff เปิดหน้า zoning ของ evacuee (idempotent) | บันทึก movement `check_in` สำเร็จ (bulk zoning เขียน `complete` อย่างเดียว ไม่มี `start`) |
+
+**Stale window = 2 ชั่วโมง.** `start` ของ staff Station 2/3 เขียนซ้ำไม่ได้ถ้ามี `start` ของ
+`(evacuee_id, station)` ที่ยังไม่มี `complete` และอายุ ≤ stale window (กันเปิดหน้าซ้ำ/refresh); ถ้าเก่ากว่า
+ให้เขียน `start` ใหม่
+
+**Visit (pairing — ทำใน BFF ไม่ใช่ CouchDB map):** key `(evacuee_id, station)`; `complete` แรกที่
+`occurred_at ≥ start`, ก่อน `start` ถัดไปของ key เดียวกัน และห่างจาก `start` ไม่เกิน stale window;
+`channel` ของ visit = `channel` ของ `start`.
+
+- `start` ไม่มี `complete` และอายุ ≤ stale window (และเป็น `start` ล่าสุดของ key) = `open_visits` (ไม่นับในค่าเฉลี่ย)
+- `start` ไม่มี `complete` และอายุ > stale window หรือถูก `start` ใหม่ทับ = abandoned (ไม่นับที่ใด)
+- `complete` ไม่มี `start` = นับเป็น throughput (`visits`) แต่ไม่นับในค่าเฉลี่ย
+- visit นับตามวันที่ (Asia/Bangkok) ของ `start`
+
+**เขียน/อ่าน:** kiosk — BFF ฝั่ง server ด้วย admin credential (Station 1 เท่านั้น); staff —
+browser ผ่าน repository ของ feature `people` ตาม guard เดิมของหน้า (`registration_staff`) ·
+`channel = 'staff'` มาจากโค้ดหน้า staff **ไม่ได้ verify ฝั่ง server** (`validate_doc_update` ตรวจแค่
+whitelist + append-only — security concern แยกตาม #850). เขียน log ล้มเหลวต้องไม่ block การทำงานหลักของ
+station (staff เห็น warning toast).
+
+**Index:** Mango `(type, evacuee_id, station, occurred_at)` (หา `start` ค้างตามกฎ idempotent ด้านบน;
+คนละตัวกับ view) · view `station_logs_by_station` (§7)
+
 ---
 
 ## 2. DB `shelter_{shelter_code}` — Operations
@@ -334,7 +390,7 @@ projection — เป็นข้อมูลหลังบ้านล้ว�
 | `unit` | str | req | ต้องตรงกับ `item_master.base_unit` |
 | `reason` | enum(`receive`,`distribute`,`requisition`,`adjust`,`transfer_out`,`transfer_in`,`donation`,`distribution_return`) | req | `distribution_return` = คืนของที่เหลือจาก batch กลับ physical lot เดิม |
 | `ref_id` | str\|null | ตาม `reason` | doc ต้นเหตุ — **ค่าที่ยอมรับผูกกับ `reason` ตามตาราง "`reason` → `ref_id`" ด้านล่าง** (CR-055) |
-| `lot_ref` | str | opt/ตาม `reason` | stable physical-lot identity → `stock_ledger:{id}`; บังคับสำหรับ `distribute`/`distribution_return`; แถวรับเข้าใหม่ self-reference `_id` (เว้นแต่การรับของแจกเหลือคืนคลัง `reason='receive'` ที่แนะนำให้อ้างอิง `lot_ref` เดิมของล็อตที่เบิกจ่ายเพื่อการสืบย้อนกลับ); legacy อาจไม่มี field |
+| `lot_ref` | str | opt/ตาม `reason` | stable physical-lot identity → `stock_ledger:{id}`; บังคับสำหรับ `distribute`/`distribution_return` และ `requisition` ที่อ้าง `requisition_ticket` (CR-178); `adjust` ติดลบจากฟอร์มปรับยอด/ตรวจนับ (`count_mismatch`) อ้างล็อตที่ตัด และต้องพอในล็อตนั้นตอนบันทึก ([CR-190](../changes/03-C-supply/CR-190-lot-bound-adjust-and-count.md)); แถวรับเข้าใหม่และ `adjust` บวก self-reference `_id` (เว้นแต่การรับของแจกเหลือคืนคลัง `reason='receive'` ที่แนะนำให้อ้างอิง `lot_ref` เดิมของล็อตที่เบิกจ่ายเพื่อการสืบย้อนกลับ); legacy อาจไม่มี field |
 | `lot` | {`expiry`:ts?, `note`:str?, `lot_no`:str?, `storage_zone`:str?, `storage_point_id`:str?, `produced_at`:ts?} | opt | ของหมดอายุได้ (อาหาร/ยา) · `lot_no`/`storage_zone` = CR-088 · `storage_point_id`/`produced_at` = schema_v 5 (ดูตารางย่อยด้านล่าง) |
 | `adjust_reason` | enum(`expired`,`damaged`,`count_mismatch`,`lost`,`found`,`merge`,`other`) | req เมื่อ `reason='adjust'` · ห้ามมีเมื่อ reason อื่น | เหตุผลการปรับยอด (schema_v 6, CR-143 §C); `merge` ใช้เฉพาะ flow รวมสินค้า (CR-143 §F) — ฟอร์มปรับยอดทั่วไปไม่แสดง; `other` ต้องมี `note` (CR-156); รับเข้า manual = `found` (CR-156) |
 | `note` | str ≤500 | opt (เฉพาะ `reason='adjust'`) | รายละเอียดการปรับยอด (schema_v 6, CR-143 §C) — ไม่ใช่ `lot.note` |
@@ -362,10 +418,10 @@ projection — เป็นข้อมูลหลังบ้านล้ว�
 | `reason` | `ref_id` ต้องเป็น | ที่มา (ผู้เขียน) |
 | --- | --- | --- |
 | `donation` | `donation:{ulid}` — req | `keyDonationReceipt` |
-| `requisition` | `requisition_ticket:{ulid}` หรือ `kitchen_requisition:{ulid}` — req | ticket เบิกกลางใหม่ (CR-121) หรือ kitchen flow เดิม |
+| `requisition` | `requisition_ticket:{ulid}` หรือ `kitchen_requisition:{ulid}` — req | ticket เบิกกลางใหม่ (CR-121) หรือ kitchen flow เดิม; อ้าง `requisition_ticket` → `qty` ลบและต้องมี `lot_ref` หนึ่งแถวต่อ lot (CR-178); อ้าง `kitchen_requisition` (legacy) ไม่บังคับ |
 | `transfer_in` | `stock_transfer:{ulid}` — req | transition ของ §2.2 (T-13 — ยังไม่ wired) |
 | `transfer_out` | `stock_transfer:{ulid}` หรือ `requisition_ticket:{ulid}` — req | โอนย้ายข้ามศูนย์ หรือ ticket โอนย้ายใหม่ (CR-121) |
-| `adjust` | **`null` เสมอ** | ปรับสต็อกมือ ไม่มีใบต้นเหตุ; เหตุผลอยู่ใน `adjust_reason` (CR-143 §C) |
+| `adjust` | **`null` เสมอ** | ปรับสต็อกมือ ไม่มีใบต้นเหตุ; เหตุผลอยู่ใน `adjust_reason` (CR-143 §C); ติดลบอ้าง `lot_ref` ของล็อตที่ตัด, บวกเป็นล็อตใหม่ ([CR-190](../changes/03-C-supply/CR-190-lot-bound-adjust-and-count.md)) |
 | `distribute` | `requisition_ticket:{ulid}` — req | จ่ายพัสดุ/อาหารออกจาก ticket เบิกกลาง; `qty` ลบและต้องมี `lot_ref` (CR-121) |
 | `distribution_return` | `distribution_batch:{request_ulid}` — req | คืนยอดคงเหลือเข้าล็อตเดิม; `qty` บวกและต้องมี `lot_ref` |
 | `receive` | `meal_service:{ulid}`, `requisition_ticket:{ulid}`, `distribution_log:{ulid}` หรือ `bulk_return_pool:{ulid}` — req | รับผลผลิตครัว, รับของแจก/ของเหลือคืนคลัง, รับของยืมคืน หรือรับของกองรวมเพื่อเปิด `bulk_return_pool` (CR-121) |
@@ -400,7 +456,9 @@ projection — เป็นข้อมูลหลังบ้านล้ว�
 
 ### 2.3 `donation` — `donation:{ulid}` · state machine
 
-> **schema_v 5** — เพิ่ม `redirect_to_shelter_code` ([CR-087](../changes/04-donation/CR-087-donation-redirect-target.md)) — ที่เก็บ "ส่งต่อไปศูนย์ไหน" ตอน `status: redirected` (T-16 R-16.4). optional ⇒ doc เดิมไม่ต้อง backfill. ตั๋วที่ศูนย์ปลายทางทำงานจริงคือ doc แยก `donation_redirect` (§2.19) ใน DB ของศูนย์ปลายทาง — field นี้เพียงบอกว่าใบนี้ถูกส่งไปไหน (scope isolation: ปลายทางมองไม่เห็น DB ต้นทาง)
+> **schema_v 7** — เพิ่ม `items[].review_status` / `review_reason_code` / `review_reason` (ประเมินทีละรายการ) และ `status` ตอนสร้าง/ผู้บริจาคแก้รายการคำนวณจากรายการแทนค่าตายตัว ([CR-174](../changes/04-donation/CR-174-donation-campaign-auto-approve.md)). optional ทั้งหมด ⇒ doc เดิมไม่ต้อง backfill
+> schema_v 6 — เพิ่ม `reject_reason` + `reject_reason_code` (เหตุผลที่ผู้บริจาคเห็นบนหน้าติดตาม) และระบุรูป `received_summary` ทั้งก้อนครั้งแรก พร้อม `items[].rejected` / `reject_reason` / `reject_reason_code` (ไม่รับรายบรรทัดตอนตรวจรับ) ([CR-172](../changes/04-donation/CR-172-donation-reject-reason.md)). optional ทั้งหมด ⇒ doc เดิมไม่ต้อง backfill
+> schema_v 5 — เพิ่ม `redirect_to_shelter_code` ([CR-087](../changes/04-donation/CR-087-donation-redirect-target.md)) — ที่เก็บ "ส่งต่อไปศูนย์ไหน" ตอน `status: redirected` (T-16 R-16.4). optional ⇒ doc เดิมไม่ต้อง backfill. ตั๋วที่ศูนย์ปลายทางทำงานจริงคือ doc แยก `donation_redirect` (§2.19) ใน DB ของศูนย์ปลายทาง — field นี้เพียงบอกว่าใบนี้ถูกส่งไปไหน (scope isolation: ปลายทางมองไม่เห็น DB ต้นทาง)
 > **schema_v 4** — เพิ่ม `revisions[]` (log การแก้ `items[]` โดย donor ผ่าน tracking_token). CR-080.
 > schema_v 3 — `items[].qty` เป็น `qty_str`. CR-038.
 > schema_v 2 — เพิ่ม `donor.line_id`/`donor.email` (optional), `items[].category`/`condition`/`note`, `booking_ref`, และ `logistics{}` (วิธีส่ง/ยานพาหนะ/slot/eta/courier tracking) รองรับ public donation + queue booking flow ของหน้า `/donate`. CR-005 §F (DN-2/DN-6/DN-7). ใบอนุโมทนา/ลดหย่อนภาษี (DN-3) **ระบบไม่รองรับ** — ไม่มี `tax_receipt_requested`. field-level canonical ของ [Donation & Queue Booking spec](../features/public-tier-donation-spec.html).
@@ -410,16 +468,19 @@ projection — เป็นข้อมูลหลังบ้านล้ว�
 | `channel` | enum(`public`,`walk_in`) | req | `public` = มาจาก /public/v1 (`/donate`) |
 | `donor` | {`name`:str, `phone`:str\|null, `phone_hash`:str, `line_id`:str\|null, `email`:str\|null} | req | PII ลบตาม retention — เหลือ `phone_hash`; `line_id`/`email` optional (DN-2) ลบพร้อม PII; ไม่ echo `phone`/`phone_hash` สู่ public |
 | `kind` | enum(`items`,`money`) | req | — |
-| `items` | [{`item_id`:str?, `free_text`:str?, `category`:str?, `qty`:qty_str>0, `unit`:str, `condition`:str?, `note`:str?}] | kind=items | `item_id` หรือ `free_text` อย่างใดอย่างหนึ่ง; `item_id` → `item_master:{sku\|ulid}`; `category` = ป้าย label จาก `item_category`; `condition` เช่น "ของใหม่ 100%" (public donor กรอกเอง) |
+| `items` | [{`item_id`:str?, `free_text`:str?, `category`:str?, `qty`:qty_str>0, `unit`:str, `condition`:str?, `note`:str?, `reserved_qty`:qty_str?, `review_status`:enum(`approved`,`pending`,`rejected`)?, `review_reason_code`:enum(`not_needed`,`expired`,`damaged`,`other`)?, `review_reason`:str(≤ 500)?}] | kind=items | `item_id` หรือ `free_text` อย่างใดอย่างหนึ่ง; `item_id` → `item_master:{sku\|ulid}`; `category` = ป้าย label จาก `item_category`; `condition` เช่น "ของใหม่ 100%" (public donor กรอกเอง). `reserved_qty` = จำนวนที่จองโควต้าแคมเปญได้จริง (FastAPI เขียน, CR-045). **`review_status`** (CR-174 FR-1) = ผลประเมินรายการ: FastAPI เขียนตอนสร้างและตอนผู้บริจาคแก้ — รายการที่จองโควต้าในแคมเปญของใบได้ → `approved` (อนุมัติอัตโนมัติ), อื่น ๆ (พิมพ์เอง / ไม่มีแคมเปญ / counter ยังไม่ seed) → `pending`; เจ้าหน้าที่เปลี่ยน `pending` เป็น `approved`/`rejected` ที่หน้าประเมิน; client ส่งค่านี้เองไม่ได้ (FR-3). `review_reason_code` (ค่าเดียวกับ `reject_reason_code`) + `review_reason` เขียนเฉพาะ `rejected`. ใบปฏิเสธทั้งใบ → ทุกรายการที่ยังไม่ `rejected` เป็น `rejected` ในการบันทึกเดียวกัน แต่เหตุผลอยู่ระดับใบ ไม่ copy ลงรายการ (FR-12). ไม่มี `review_status` = doc ก่อน schema_v 7 → ใช้สถานะระดับใบ |
 | `amount_thb` | num>0 | kind=money | — (เงินอยู่นอกขอบเขต CR-038; ระบบเป้าไม่เก็บเงิน — ลบเป็น CR แยกถ้าต้องการ) |
 | `campaign_id` | str\|null | opt | → `donation_campaign:{ulid}` |
 | `logistics` | {`delivery_method`:enum(`self_dropoff`,`parcel`,`shelter_pickup`), `vehicle`:enum(`motorcycle`,`car`,`pickup`,`truck`)?, `slot`:{`date`:str, `from`:str, `to`:str}?, `eta`:ts?, `courier_tracking_no`:str\|null, `pickup_address`:str?} | opt | **req เมื่อ `channel=public`**; `slot` ชี้ `donation_slot` (§2.13, deterministic ต่อ คิว+วัน+เวลา — คิวอนุมานจาก `delivery_method`, CR-157); `vehicle` เฉพาะ self_dropoff/shelter_pickup; `eta` = ต้น slot ที่จอง; `courier_tracking_no` donor เติม/แก้ภายหลังผ่าน ticket (DN-6); `pickup_address` ใช้เมื่อให้ศูนย์ไปรับ (CR-010) |
-| `status` | enum(`declared`,`pending_review`,`verifying`,`received`,`redirected`,`rejected`,`expired`,`cancelled`) | req | forward-only (CR-048); `declared` → `pending_review` (ประเมิน) → `verifying` (กำลังตรวจรับ) → `received` (ลงสต็อก), หรือ `redirected` (ส่งต่อศูนย์อื่น) / `rejected` (ปฏิเสธ) / `expired` (พ้น TTL) / `cancelled` (ยกเลิก) |
+| `status` | enum(`declared`,`pending_review`,`verifying`,`received`,`redirected`,`rejected`,`expired`,`cancelled`) | req | forward-only (CR-048) ยกเว้น `verifying → pending_review` เมื่อผู้บริจาคแก้รายการแล้วมีรายการ `pending` (CR-174 FR-21); `declared` → `pending_review` (ประเมิน) → `verifying` (ได้ QR / รอตรวจรับ) → `received` (ลงสต็อก), หรือ `redirected` (ส่งต่อศูนย์อื่น) / `rejected` (ปฏิเสธ) / `expired` (พ้น TTL) / `cancelled` (ยกเลิก). public donation เริ่มที่สถานะที่**คำนวณจากรายการ** (ดู "ประเมินทีละรายการ" ด้านล่าง) ไม่ใช่ `pending_review` ทุกใบ |
 | `booking_ref` | str | sys | รหัสอ่านออก เช่น `DN-306892` — แสดง/พิมพ์บนตั๋วเพื่อแปะลงของ; **unique** |
 | `tracking_token_hash` | str | sys | SHA-256 ของ token — **ไม่เก็บ token ตรง**; public service lookup/แก้ (PATCH) ด้วย hash |
 | `declared_at` / `received_at` | ts / ts\|null | req/sys | — |
 | `expires_at` | ts | sys | `declared_at` + `config.donation_reservation_ttl_hours` (default 72) |
 | `redirect_to_shelter_code` | str\|null | opt | **ตั้งค่าเฉพาะตอน `status → redirected`** (CR-087); สถานะอื่นไม่มี field นี้/เป็น `null`. ใครกด/เมื่อไร/เพราะอะไร ไม่เก็บซ้ำที่นี่ — อยู่ใน `audit` (§2.12, `action: manual_adjust`) เหมือน approve/reject |
+| `reject_reason` | str\|null (≤ 500) | opt | **ตั้งค่าเฉพาะตอน `status → rejected`** (CR-172 FR-1) — ข้อความที่**ผู้บริจาคเห็น**บนหน้าติดตาม (ช่องเดียว ไม่มีบันทึกภายในแยก) ประกอบฝั่ง server จาก label ภาษาไทยของ `reject_reason_code` + รายละเอียดที่เจ้าหน้าที่พิมพ์ เช่น `"หมดอายุ — กล่องนมหมดอายุ 2 กล่อง"`; code `other` ใช้รายละเอียดอย่างเดียว (บังคับกรอก). ไม่รับทุกบรรทัดตอนตรวจรับ → เหตุผลรายบรรทัด (ตัดซ้ำ) ต่อกันด้วย `"; "` แล้ว truncate ≤ 500 (FR-12). ห้ามใส่ข้อมูลส่วนตัว. `audit` (§2.12) ยังเก็บใครกด/เมื่อไร/เหตุผลเหมือนเดิม |
+| `reject_reason_code` | enum(`not_needed`,`expired`,`damaged`,`other`)\|null | opt | คู่กับ `reject_reason` (CR-172 FR-2). label: `not_needed` = "ไม่ตรงเกณฑ์การรับ / เกินความต้องการ", `expired` = "หมดอายุ", `damaged` = "ชำรุดเสียหาย", `other` = "อื่นๆ". ไม่รับทุกบรรทัด → ค่าเดียวถ้าทุกบรรทัดตรงกัน ไม่งั้น `other` |
+| `received_summary` | {`total_items`:int, `received_at`:ts, `remarks`:str?, `shortfalls`:[{`item_id`:str, `declared`:qty_str, `counted`:qty_str, `short`:qty_str}]?, `items`:[{`item_id`:str?, `free_text`:str?, `qty`:qty_str, `unit`:str, `rejected`:bool?, `reject_reason`:str?, `reject_reason_code`:enum?}]?} | sys | เขียนตอนตรวจรับ (`POST /api/back-office/donations/[query]`) — สิ่งที่**รับจริง**; `items` ของใบ (ที่ประกาศ) ไม่ถูกเขียนทับ. `total_items` = จำนวนบรรทัดที่ตรวจ (รวมบรรทัดที่ไม่รับ); `received_at` เขียนทุกครั้งที่ตรวจ แม้ผลเป็น `rejected`; `shortfalls` = ต่อ item ที่ declared − counted > 0 ("รับไม่ครบ", derived — CR-143 §B) **ไม่นับบรรทัดที่ `rejected: true`** (CR-172 FR-13: "ไม่รับ" ≠ "ขาด"). `items[]` เรียงตามบรรทัดที่ตรวจ; บรรทัดที่ไม่รับ = `rejected: true` + `qty: "0"` + `reject_reason` (ข้อความที่ผู้บริจาคเห็น ≤ 500 ประกอบแบบเดียวกับระดับ doc) + `reject_reason_code` (enum เดียวกับ `reject_reason_code`) — ไม่มีแถว `stock_ledger` ไม่มี lot (FR-10). รับ ≥ 1 บรรทัด → `status: received`; ไม่รับทุกบรรทัด → `status: rejected` + `reject_reason`/`reject_reason_code` ระดับ doc (FR-11/FR-12). project ลง `public_donations` ทั้งก้อน |
 | `revisions` | [{`at`:ts, `by`:enum(`donor`), `items_before`:[{`item_id`:str?, `free_text`:str?, `qty`:qty_str, `unit`:str}], `items_after`:[…เหมือน `items_before`]}] | opt | append-only; donor แก้ `items[]` ผ่าน `PATCH /public/v1/donations/{token}` (CR-080). เก็บ **snapshot ทั้งชุด** ก่อน-หลัง ไม่ใช่ diff — เจ้าหน้าที่ต้องอ่านออกว่าใบนี้เคยเป็นอะไรโดยไม่ต้องประกอบ diff เอง. ไม่มีเพดานจำนวนครั้ง (คุมด้วย rate-limit ต่อ IP); `by` เป็น enum เผื่อขยายไป `staff` เมื่อเจ้าหน้าที่ adjust ตอนรับของ |
 
 **Index:** `(status)` · `(tracking_token_hash)` · `(booking_ref)` · `(campaign_id)` · `(logistics.slot.date)`
@@ -427,10 +488,14 @@ projection — เป็นข้อมูลหลังบ้านล้ว�
 **Migration (schema_v 1 → 2):** field ใหม่ทั้งหมด optional/sys → doc เดิมไม่ต้อง backfill; reader ถือว่าไม่มี `logistics`/`line_id`/`email`/`booking_ref` = walk_in เดิม. public donation ใหม่ทุกใบเขียนเป็น schema_v 2 (มี `logistics` + `booking_ref`).
 **Migration (schema_v 2 → 3):** pre-prod — wipe/re-seed; `items[].qty` จาก num → qty_str
 **Migration (schema_v 3 → 4):** `revisions` optional → doc เดิมไม่ต้อง backfill; reader ถือว่าไม่มี `revisions` = ยังไม่เคยถูกแก้. donation ใหม่ทุกใบเขียนเป็น schema_v 4 ทั้งสอง channel — เส้นทาง `public` เคยปั๊ม `schema_v 2` ค้างไว้ตั้งแต่ CR-038 (payload เป็น qty_str อยู่แล้วแต่ป้ายเวอร์ชันไม่ตาม) แก้ให้ตรงในรอบเดียวกัน
+**Migration (schema_v 6 → 7):** `items[].review_status`/`review_reason_code`/`review_reason` optional ทั้งหมด → doc เดิมไม่ต้อง backfill; reader ที่เจอใบไม่มี `review_status` ใช้สถานะระดับใบตามเดิม (แสดงผลและประเมินแบบทั้งใบได้ — CR-174 AC-8). ผู้บริจาคแก้ใบเดิมตาม FR-18c (`verifying` = ถือว่าทุกรายการเดิม `approved` · `pending_review` = คำนวณใหม่ทุกรายการเหมือนใบใหม่ · `declared` = ไม่เขียน `review_status` และคง `declared`). donation ใหม่และใบที่ผู้บริจาคแก้เขียนเป็น schema_v 7 (public = worker inbound / BFF `items/+server.ts`, walk_in = frontend). `public_donations` re-project ผ่าน `PROJECTION_VERSION` 7 (bump เดียวกับ CR-172 — ยังไม่ release; 6 = CR-185 บน develop)
+**Migration (schema_v 5 → 6):** `reject_reason`, `reject_reason_code`, `received_summary.items[].rejected`/`reject_reason`/`reject_reason_code` optional ทั้งหมด → doc เดิมไม่ต้อง backfill; reader ถือว่าไม่มี `reject_reason` = ไม่มีเหตุผลให้แสดง (ใบ `rejected` เดิมเปิดหน้าติดตามได้ ไม่มีกล่องเหตุผล — CR-172 FR-17/AC-5) และไม่มี `rejected` = บรรทัดนั้นรับ. donation ใหม่ทุกใบเขียนเป็น schema_v 6 ทั้งสอง channel (public = worker inbound, walk_in = frontend). `public_donations` re-project ผ่าน `PROJECTION_VERSION` 7
 
 **รับเข้าจากใบหลายรายการ (CR-143 §B):** เลือกใบ (`kind=items`) → UI เติมบรรทัดจาก `items[]` (ค่าเริ่ม "รับจริง" = qty ในใบ; บรรทัด `free_text` ต้องจับคู่ item_master ก่อน; เพิ่ม/ลบ/ตั้ง 0 ได้) → `keyDonationReceipt` สร้างแถว `stock_ledger` (`reason='donation'`, `ref_id = donation._id`) ด้วย `_id` deterministic จาก (donation id, item id, ลำดับบรรทัด) แล้วเขียนใน `bulkDocs` ครั้งเดียว.
 `status → received` **หลังทุกแถวบันทึกสำเร็จเท่านั้น**; สำเร็จบางแถว → คงสถานะเดิม และ retry เฉพาะแถวที่ล้ม (deterministic `_id` กันแถวซ้ำ); แถวครบแต่ transition ล้ม → retry เฉพาะ transition.
 **ไม่เพิ่มสถานะใหม่** — "รับไม่ครบ" = derived (declared − counted ต่อ item > 0); หลัง `received` ยอดที่ขาดไม่ค้างเป็นยอดจอง; ระหว่างค้าง ยอดจองต้องหักส่วนที่บันทึกแล้ว (ไม่นับซ้ำ). ไม่เปลี่ยนรูป doc → ไม่ bump schema_v.
+**ไม่รับรายบรรทัด (CR-172):** บรรทัดที่เจ้าหน้าที่เปิด "ไม่รับรายการนี้" (ทั้งบรรทัด ไม่ split qty) ไม่สร้างแถว `stock_ledger` และไม่ใช่ "รับไม่ครบ" — ลงเฉพาะใน `received_summary.items[]` (`rejected: true`). ไม่รับทุกบรรทัด → `status: rejected` แทน `received` (ไม่เพิ่มสถานะใหม่)
+**ประเมินทีละรายการ (CR-174):** สถานะใบคำนวณจาก `items[].review_status` — มีรายการ `pending` ≥ 1 → `pending_review` · ไม่มี `pending` และมี `approved` ≥ 1 → `verifying` (ได้ QR) · ทุกรายการ `rejected` → `rejected` (FR-4..FR-6). คำนวณตอนสร้าง (FastAPI `create`), ตอนเจ้าหน้าที่ประเมินครบ (route `/approve`), และตอนผู้บริจาคแก้รายการ (FastAPI `update_items` → BFF เขียน `items` + `status` + `schema_v` ลง CouchDB ใน `PUT` เดียว). ตอนผู้บริจาคแก้: รายการใหม่ที่ `item_id`, `category`, `free_text`, `qty` (เทียบเป็นตัวเลข), `unit`, `condition`, `note` ตรงกับรายการเดิมที่ยังไม่ถูกจับคู่ทุก field (ค่าว่าง = ไม่มี field) คงผลเดิมทั้ง 3 field รวม `rejected`; รายการเดิมจับคู่ได้ครั้งเดียว; รายการอื่นคำนวณใหม่ตามกฎจองโควต้า (FR-18/FR-18a) ยกเว้นรายการที่ `free_text` ตรงกับรายการเดิม ≥ 2 รายการที่ `category`/`condition`/`note` ต่างกัน → `pending` เสมอ (CR-174 decision sync 2026-10-25, รอ approve). การอนุมัติอัตโนมัติบันทึก `audit` (§2.12) `action: manual_adjust`, `target_type: donation`, `created_by: system`, `context: {approved_by: 'system', rule: 'campaign_line', lines: [index…]}` — worker inbound เขียนตอนเขียนใบลง CouchDB ครั้งแรก (`_id` คงที่ต่อใบ = `audit:` + Crockford 26 ตัวจาก SHA-256 ของ `"{donation _id}:campaign_auto_approve"` → ประมวลผลซ้ำไม่เกิด audit ซ้ำ) · ผู้บริจาคแก้หลังใบอยู่ใน CouchDB แล้ว → BFF เขียนเฉพาะรายการที่เพิ่งได้ `approved` อัตโนมัติ (`auto_approved_lines` จาก FastAPI) (FR-26). ผู้บริจาคยกเลิก / แก้รายการ / ใส่เลขพัสดุได้ใน `declared`, `pending_review`, `verifying` (FR-20..FR-23)
 
 ### 2.4 `donation_campaign` — `donation_campaign:{ulid}`
 
@@ -510,6 +575,9 @@ filter จาก `listMealPlans()` แทนการ `get` ตรงด้ว�
 
 ### 2.7 `meal_service` — `meal_service:{ulid}` · **append-only** · **schema_v 2** (CR-045/CR-121)
 
+> **CR-177** — เพิ่ม `receipt_no` (เลขรันอ้างอิง `RCV-KITCHEN-NNNN`) ออกตอนบันทึกผลผลิต — optional,
+> **ไม่ bump schema_v**; doc เดิมไม่ backfill (append-only) — UI แสดง `RCV-{_id 6 ตัวท้าย}` แทน
+>
 > **CR-121** — เพิ่ม `yield_items[]` สำหรับบันทึกผลผลิตหลายเมนูใน 1 มื้อ และสร้าง `stock_ledger`
 > รับเข้าแยกตามรายการใน transaction เดียวกัน — optional, **ไม่ bump schema_v**; `actual_yield` รวม
 > คำนวณจากผลรวมของ `yield_items[].actual_yield` เมื่อมีรายการ
@@ -524,6 +592,7 @@ filter จาก `listMealPlans()` แทนการ `get` ตรงด้ว�
 | Field | ชนิด | req | หมายเหตุ |
 | --- | --- | --- | --- |
 | `date` / `meal` | str / enum | req | คู่กับ meal_plan |
+| `receipt_no` | str | opt | เลขรันต่อศูนย์ `RCV-KITCHEN-0001` สำหรับอ้างอิงรายการรับอาหารปรุงเสร็จเข้าคลัง — ออกตอนสร้าง (max+1 แบบ `ticket_no` §2.29, ไม่ atomic, ป้ายแสดงผลเท่านั้น); บันทึกใหม่หลังถูกตีกลับได้เลขใหม่ (CR-177) |
 | `meal_plan_id` | str\|null | opt | แผนที่บันทึกนี้รายงานผล — UI เช็ค "บันทึกแล้วหรือยัง" ด้วย field นี้ (เทียบ `plan._id`) ไม่ใช่ date+meal (CR-045) |
 | `cooking_completed_at` | ts | opt | เวลาที่ครัวประกอบอาหารเสร็จสิ้นจริงในรอบมื้อ; ใช้คำนวณ `lot.expiry` (+4 ชม.) สำหรับอาหารปรุงสำเร็จ (CR-121) |
 | `yield_items` | [{`item_id`:str, `menu_name`:str, `category`:`item_category:ready_meal`\|str, `type_class`:`CONSUMABLE`, `actual_yield`:qty_str>0, `unit`:str, `cooking_completed_at`:ts?, `storage_zone`:str?}] | opt | ผลผลิตรายเมนู; `item_id` → `item_master`, `category` ต้องเป็น `item_category:ready_meal` สำหรับรายการใหม่ (CR-121) |
@@ -547,8 +616,8 @@ filter จาก `listMealPlans()` แทนการ `get` ตรงด้ว�
 
 **`actual_yield` vs `served` (CR-084):** `actual_yield` คือจำนวนที่ครัว**ปรุงได้จริง** (ผลผลิต),
 `served` คือจำนวนที่**แจกออกไปจริง** — สองค่านี้ต่างกันได้ (ปรุงได้ 90 แต่แจกได้ 85) เพดาน
-`served ≤ actual_yield` **ยังไม่บังคับตอนเขียนรอบนี้** (แค่ soft warning ฝั่ง UI) — การบังคับเพดานจริง
-เป็นงานของ flow แจกจ่าย/สแกนหน้างานที่ยังไม่มีในระบบ. `MealVariance.variance`/`variance_pct`/`status`
+`served ≤ actual_yield` **ยังไม่บังคับตอนเขียนรอบนี้** (แค่ soft warning ฝั่ง UI) — การแจกรายคนบันทึกใน
+`distribution_log` (§2.30, CR-121); กติกาเพดานยอดแจกดู §2.30. `MealVariance.variance`/`variance_pct`/`status`
 ยังคงหมายถึง served-vs-planned เหมือนเดิม ไม่เปลี่ยนความหมายเพราะ `actual_yield`
 
 **Migration (schema_v 1 → 2, CR-045):** `meal_plan_id` optional, default `null` — เอกสารเก่าที่สร้าง
@@ -937,6 +1006,8 @@ closed, cancelled = terminal (แก้อะไรไม่ได้อีก �
 
 **Migration (schema_v 2 → 3):** เอกสารใหม่เขียน `shift_id` และ `selected_shift.shift_id`; เอกสารเก่ายังอ่านได้โดยไม่มี batch migration ในรอบนี้.
 
+**สมัครหลายกะในครั้งเดียว ([CR-180](../changes/06-A-volunteer/CR-180-volunteer-multi-shift-apply.md), #716):** หนึ่งคำขอสมัครที่เลือกหลายกะยังสร้างใบสมัคร **1 ใบต่อ 1 กะ** — ไม่กลับไปใช้ `shift_ids[]` และไม่เปลี่ยน field.
+
 **Additive review migration:** เติม `review_reasons` จาก `job.tier`, `job.auto_accept` และทักษะควบคุมเท่าที่อนุมานได้; ถ้าอนุมานไม่ได้ให้ `legacy_review` เฉพาะใบสมัครที่ `pending_review`.
 
 ### 2.19 `donation_redirect` — `donation_redirect:{ulid}` · **schema_v 1**
@@ -1173,11 +1244,24 @@ delta ที่อ้าง `requisition_ticket:{ulid}`.
   ใน `bulkDocs` เดียวกันตอน dispatch (`READY_FOR_DISPATCH→IN_TRANSIT`) เท่านั้น — เหมือน
   `kitchen_requisition.gas_drawdown` เดิม (§2.6)
 - **`allocated_qty` ที่จุดสร้าง:** เอกสารใหม่ทุกบรรทัดเริ่มที่ `'0'` (ขัดกับ `qty_str>0` ทั่วไปด้านบน
-  เฉพาะตอนสร้างเท่านั้น) — ต้องมากกว่า 0 ทุกบรรทัดก่อน transition ไป `READY_FOR_DISPATCH` เท่านั้น
-- **Role ต่อ edge:** สร้างตั๋ว (`kitchen_staff`) → จัดของระหว่าง `PENDING_PICK` (`warehouse_staff`) →
-  `PENDING_PICK→READY_FOR_DISPATCH` อนุมัติ (`shelter_manager`/`system_admin` เท่านั้น) →
+  เฉพาะตอนสร้างเท่านั้น) — ตอน transition ไป `READY_FOR_DISPATCH` ทุกบรรทัดต้อง ≥ 0 และต้องมี
+  อย่างน้อย 1 บรรทัด > 0; บรรทัดที่เป็น `'0'` หลังอนุมัติหมายถึง "คลังไม่มีให้" และ dispatch ข้าม
+  (ไม่ตรวจสต็อก ไม่สร้าง `stock_ledger`) — decision sync 2026-10-21
+- **`allocated_qty` เป็นของคลัง:** ระหว่าง `PENDING_PICK` `kitchen_staff` แก้ได้เฉพาะ
+  `requested_qty`/เพิ่มบรรทัดใหม่ (`allocated_qty:'0'`) — ห้ามเปลี่ยน `allocated_qty` ของบรรทัดเดิม
+- **Role ต่อ edge** (`supply_coordinator` นับเป็น `warehouse_staff` ทุกขั้น — alias ตาม role matrix §1.1): สร้างตั๋ว (`kitchen_staff`) → จัดของระหว่าง `PENDING_PICK` (`warehouse_staff`) →
+  `PENDING_PICK→READY_FOR_DISPATCH` อนุมัติ (`warehouse_staff`/`shelter_manager`/`system_admin`;
+  update เดียวกันเขียน `allocated_qty` ได้ — decision sync 2026-10-21) →
   `READY_FOR_DISPATCH→IN_TRANSIT` ปล่อยของ (`warehouse_staff`) →
   `IN_TRANSIT→COMPLETED` ครัวยืนยันรับของ (`kitchen_staff`)
+- **ยกเลิก (`CANCELLED`):** จาก `PENDING_PICK` — `kitchen_staff`/`warehouse_staff`/`shelter_manager`;
+  จาก `READY_FOR_DISPATCH` — `warehouse_staff`/`shelter_manager` (`system_admin` ได้ทุกจุด)
+- **สต็อก:** UI ต้องไม่ให้อนุมัติหรือปล่อยของเมื่อ `allocated_qty` ของบรรทัดใดเกินยอดคงเหลือ
+  (`stockBalance` ของ `stock_ledger`); dispatch ตรวจซ้ำก่อนเขียนเสมอ
+- **ปล่อยของราย lot (CR-178):** ตอน `READY_FOR_DISPATCH→IN_TRANSIT` คลังเลือก lot ต่อบรรทัดที่
+  `allocated_qty > 0` (ค่าเริ่มต้นจัดสรรอัตโนมัติตามลำดับ CR-143 §A, ห้าม lot หมดอายุ, ผลรวม lot =
+  `allocated_qty`); เขียน `stock_ledger` `reason='requisition'` หนึ่งแถวต่อ lot พร้อม `lot_ref` และ
+  `_id` deterministic จาก (ticket, item, lot_ref). lot ไม่เก็บบนตั๋ว — ไม่ bump `schema_v`
 - **`kitchen_requisition` เดิม:** หยุดสร้างใหม่หลัง cutover — เอกสารเก่ายังอ่านได้ (deprecated,
   read-only; ดู §2.6) และแสดงรวม (union) กับ `requisition_ticket` ใหม่ในหน้าประวัติ
 
@@ -1206,6 +1290,7 @@ delta ที่อ้าง `requisition_ticket:{ulid}`.
 | `returned_at` / `returned_by` | ts / str | opt | audit การคืน |
 | `is_override` | bool | req | ใช้เมื่ออนุมัติแจกซ้ำ/ข้ามข้อจำกัด |
 | `override_reason` | str | opt | เหตุผล override |
+| `allergen_conflicts` | [str] | opt | master `allergy` code ที่ผู้รับแพ้และเมนูมี ณ เวลาแจก ([CR-191](../changes/03-C-supply/CR-191-allergen-warning-at-distribution.md)); เขียนเฉพาะเมื่อมีสารชน และต้องมี `is_override: true` + `override_reason`; additive ไม่ bump `schema_v` |
 | `is_expired_warning` | bool | opt | `true` เมื่ออาหารเกิน 4 ชั่วโมง (soft-warning audit) |
 | `distributed_at` / `distributed_by` | ts / str | req | เวลาและผู้บันทึกการแจก |
 | `voided_at` / `voided_by` | ts\|null / str\|null | opt | ยกเลิกโดยไม่ลบเอกสาร |
@@ -1549,7 +1634,7 @@ Authorization และ Bangkok current-day write rule ถูกบังคั�
 
 > **schema_v 4** — item display names are bilingual (`label_th` + `label_en`); new items require
 > a user/seed-supplied snake_case `code` (no auto `item_{ulid}`). Legacy `item_*` codes may be
-> renamed to a slug on edit. Seed uses semantic `SeedItemDef.key` as `code` for all 4 types.
+> renamed to a slug on edit. Seed uses semantic `SeedItemDef.key` as `code` for all 6 types.
 > **schema_v 3** — เพิ่ม item field `status`; ลบ `excluded_codes` (mechanism ทิ้งทั้งหมด); item `code`
 > ที่สร้างใหม่เป็น **ULID** (`item_{ulid}`) แทน slug. [CR-049](../changes/CR-049-shelter-scope-backoffice-vs-system-management.md).
 > schema_v 2 — baseline two-tier (`shelter_code?` + `excluded_codes?` override-merge) — **แนวทางนี้ถูกยกเลิกโดย CR-049**
@@ -1568,7 +1653,7 @@ Authorization และ Bangkok current-day write rule ถูกบังคั�
 
 | Field | ชนิด | req | หมายเหตุ |
 | --- | --- | --- | --- |
-| `master_type` | enum(4 types) | req | `vulnerable_group` \| `housing_type` \| `shelter_type` \| `volunteer_skills` (CR-137 — ตัด `health_condition`, `dietary_restrictions`, `pet_types`, `house_damage`, `municipality_zone`, `community`) |
+| `master_type` | enum(6 types) | req | `vulnerable_group` \| `housing_type` \| `shelter_type` \| `volunteer_skills` \| `chronic_disease` (CR-186 — global-only) \| `allergy` (CR-187 — global-only) (CR-137 — ตัด `health_condition`, `dietary_restrictions`, `pet_types`, `house_damage`, `municipality_zone`, `community`) |
 | `shelter_code` | str? | opt | มีเฉพาะ doc tier shelter-local — ระบุศูนย์เจ้าของ; ไม่มี field นี้ = global doc |
 | `items` | [{`code`:str, `label_th`:str, `label_en`:str, `is_default`:bool, `status`:enum(`active`,`inactive`), `parent_code`:str?, `category`?:str, `description`?:str}] | req | ≥0 items; `code` = user/seed snake_case (`^[a-z0-9_]+$`), unique per type — **required on create** (no ULID fallback); slug codes immutable on edit; legacy `item_*` codes may be renamed once; `label_th` + `label_en` both required (trim, min 1); `parent_code` optional (legacy hierarchy; ไม่มี consumer หลัง CR-137) |
 
@@ -1578,6 +1663,16 @@ Authorization และ Bangkok current-day write rule ถูกบังคั�
 **Hard migrate map (CR-112):** `elderly` → `elderly_dependent`; `disabled` → `disability_other`; `chronic_illness` คงรหัส
 
 **Pets (CR-137):** `pets[].species` เป็น domain enum `dog \| cat \| other` — **ไม่** ใช้ `master_data:pet_types` (type ถูกลบ; public `/config/pet-types` ถูกลบ)
+
+**Seed — `allergy` (CR-187):** global-only — ห้ามมี shelter-local doc `master_data:allergy:{shelter_code}`
+(writer ปฏิเสธ; back-office แสดง read-only). ไม่มี item `other` — สิ่งที่แพ้นอกรายการ (เช่น ยา) เก็บเป็น free text ใน `medical.allergies` (§1.2).
+`seafood`, `milk`, `egg`, `wheat`, `nuts`
+(labels: [`docs/master-data/README.md`](../master-data/README.md) §1.3)
+
+**Seed — `chronic_disease` (CR-186):** global-only — ห้ามมี shelter-local doc `master_data:chronic_disease:{shelter_code}`
+(writer ปฏิเสธ; back-office แสดง read-only). ไม่มี item `other` — โรคนอกรายการเก็บเป็น free text ใน `medical.conditions` (§1.2).
+`diabetes`, `hypertension`, `heart_disease`, `kidney_disease`, `asthma`, `dyslipidemia`, `stroke`, `copd`, `cancer`, `epilepsy`, `hiv`, `psychiatric_disorder`
+(labels: [`docs/master-data/README.md`](../master-data/README.md) §1.3)
 
 **Seed — `housing_type` active (CR-112):**
 
@@ -1787,7 +1882,8 @@ provisioning เท่านั้น. `value` คือเลขล่าสุ
 | `status` | enum(`active`,`inactive`) | req | สถานะเปิด/ปิดการใช้งานเครื่อง |
 | `last_seen_at` | ts\|null | sys | Timestamp ที่เครื่องยิง API ล่าสุด (Heartbeat) |
 | `screen_type` | enum(`compact`,`portrait`) | opt | ([CR-162](../changes/14-kiosk/CR-162-kiosk-banner.md)) ขนาดจอ — ตู้เล็ก `compact` 1024×600 / ตู้ใหญ่ `portrait` 1080×1920 · ไม่มี field = `compact` · ตู้ดึงเฉพาะ `kiosk_banner` ที่ `screen_type` ตรงกัน · ไม่ bump `schema_v` |
-| `banner_enabled` | bool | opt | ([CR-162](../changes/14-kiosk/CR-162-kiosk-banner.md)) แสดง kiosk banner บนเครื่องนี้หรือไม่ · ไม่มี field = `true` · เครื่องใหม่เขียน `true` · `false` = feed คืน `banners: []` โดยไม่ query · ไม่ bump `schema_v` |
+| `banner_group_id` | str\|null | opt | (2026-10-21 · Team Lead อนุมัติ 2026-10-22 — [CR-162](../changes/14-kiosk/CR-162-kiosk-banner.md) FR-KBG-10..15) `kiosk_banner_group:{ulid}` (§3.13) ที่เครื่องนี้สังกัด — เครื่อง 1 เครื่อง = 0 หรือ 1 กลุ่ม · **ไม่มี field / `null` = ไม่มีกลุ่ม = ไม่แสดง banner** (feed คืน `banners: []` โดยไม่ query) · เครื่องใหม่ไม่มีกลุ่ม · เขียนผ่าน group endpoints (§3.13) เท่านั้น · ไม่ bump `schema_v` |
+| `banner_enabled` | bool | opt | **deprecated (2026-10-21 — แทนที่โดย `banner_group_id`)** · ([CR-162](../changes/14-kiosk/CR-162-kiosk-banner.md) ฉบับ 2026-10-15) เดิม: ไม่มี field = `true` · `false` = feed คืน `banners: []` · หลังเปลี่ยน: อ่านได้บน doc เดิม (persisted schema ยัง parse) แต่**ระบบไม่อ่าน ไม่เขียน** และไม่อยู่ใน summary / PATCH / UI · ไม่ bump `schema_v` |
 | `staff_pin_set` | bool | req (v2) | มี PIN ของเครื่องใน `scanner_secrets` (§3.11.1) หรือไม่ — metadata เท่านั้น ตอนตรวจ PIN server อ่านจาก `scanner_secrets` เสมอ ไม่เชื่อ field นี้ |
 | `staff_pin_is_default` | bool | req (v2) | `true` = ยังเป็น default PIN ที่สุ่มตอนสร้างเครื่อง; มีความหมายเฉพาะเมื่อ `staff_pin_set = true` |
 | `staff_pin_updated_at` | ts\|null | req (v2) | เวลาที่ตั้ง/สุ่ม PIN ล่าสุด; `null` = ยังไม่เคยตั้ง |
@@ -1849,22 +1945,23 @@ stamp registry v2 (`updated_by: system:sync-central`); เครื่องท�
 ลบ registry ไม่สำเร็จ → ไม่แตะ PIN doc. PIN doc ที่ค้างใช้ไม่ได้ เพราะเครื่องที่ไม่มีใน registry ไม่ผ่าน device auth
 (`401 DEVICE_AUTH_FAILED` ก่อนถึงขั้นตรวจ PIN) และจะถูกเขียนทับเมื่อสร้างเครื่อง `device_id` เดิมใหม่. ไม่มี doc = `409 staff_pin_not_set` ตอนตรวจ PIN แม้ registry จะเขียน `staff_pin_set: true`.
 
-### 3.12 `kiosk_banner` — `kiosk_banner:{ulid}` · **schema_v 1** ([CR-162](../changes/14-kiosk/CR-162-kiosk-banner.md))
+### 3.12 `kiosk_banner` — `kiosk_banner:{ulid}` · **schema_v 1 → 2 (2026-10-21)** ([CR-162](../changes/14-kiosk/CR-162-kiosk-banner.md))
 
 แบนเนอร์รูปภาพที่ตู้ kiosk วนแสดงเต็มจอเมื่อหน้า `/kiosk` idle 30 วินาที (attract overlay — รูปอย่างเดียว ไม่มี
-caption). registry doc ของศูนย์เดียว (`shelter_code`) และขนาดจอเดียว (`screen_type`). ตู้อ่านผ่าน
+caption). registry doc ของศูนย์เดียว (`shelter_code`) และขนาดจอเดียว (`screen_type`) (+ กลุ่มเดียว `group_id` — 2026-10-21). ตู้อ่านผ่าน
 `POST /api/v1/kiosk/banners` (device auth) เท่านั้น — **ไม่ sync เข้า MongoDB** และไม่มี projection.
 
 | Field | ชนิด | req | หมายเหตุ |
 | --- | --- | --- | --- |
 | `_id` | str | req | `kiosk_banner:{ulid}` |
 | `type` | `"kiosk_banner"` | req | — |
-| `schema_v` | int | req | `1` |
+| `schema_v` | int | req | `1` (เดิม) · `2` (2026-10-21 — มี `group_id`) · doc ใหม่และ doc ที่แก้หลังเปลี่ยนเขียน `2` |
+| `group_id` | str | req (v2) | (2026-10-21) `kiosk_banner_group:{ulid}` (§3.13) ที่ banner นี้สังกัด · banner 1 อัน = 1 กลุ่ม (ใช้ซ้ำหลายกลุ่ม = สร้างซ้ำ) · กลุ่มต้องอยู่ศูนย์เดียวกับ `shelter_code` · v1 ไม่มี field นี้ |
 | `shelter_code` | str | req | ศูนย์ที่แสดง banner · = active shelter ของผู้สร้าง · **แก้ไม่ได้** หลังสร้าง · เทียบกับ `scanner_device.shelter_code` |
 | `screen_type` | enum(`compact`,`portrait`) | opt | ขนาดจอที่แสดง · ไม่มี field = `compact` · แก้ได้ (ย้ายขนาด → `order` ต่อท้ายขนาดใหม่) |
 | `title` | str | req | trim · 1–120 ตัวอักษร · ใช้ในหน้าจัดการ + เป็น `alt` ของรูป |
 | `caption` | str\|null | opt | trim · ≤200 ตัวอักษร · text เท่านั้น (ห้าม HTML) · เก็บและแก้ได้ใน back-office แต่ไม่แสดงบนตู้ |
-| `order` | int | req | ≥1 · server กำหนด (ต่อท้ายของขนาดจอนั้น) · เปลี่ยนได้ผ่าน `PUT /api/back-office/kiosk-banners/order` เท่านั้น |
+| `order` | int | req | ≥1 · server กำหนด (ต่อท้ายของ slot) · **นับต่อ (`group_id`, `screen_type`) (2026-10-21 — เดิมนับต่อ `screen_type`)** · ย้ายกลุ่มหรือย้ายขนาดจอ → ต่อท้าย slot ใหม่ · เปลี่ยนได้ผ่าน `PUT /api/back-office/kiosk-banners/order` เท่านั้น |
 | `duration_sec` | int | req | 3–60 default `10` · เวลาแสดงต่อสไลด์ |
 | `start_at` | ts | req | ISO UTC · เริ่มแสดง (รวม) |
 | `end_at` | ts | req | ISO UTC · สิ้นสุด (ไม่รวม) · ต้อง `> start_at` |
@@ -1874,11 +1971,23 @@ caption). registry doc ของศูนย์เดียว (`shelter_code`) 
 
 **ไม่มี** `shelter_codes` (CR-162 ฉบับ 2026-10-11 ถูกแทนแล้ว · ยังไม่เคยมี doc persist จึงไม่ต้อง migrate).
 
-**แสดงบนตู้เมื่อ:** เครื่องมี `banner_enabled ≠ false` และ banner `status = active` และ `start_at ≤ now < end_at`
+**schema_v 1 → 2 (2026-10-21 · Team Lead อนุมัติ 2026-10-22):** เพิ่ม `group_id` (req ใน v2). **ไม่ migrate** —
+doc v1 (ไม่มี `group_id`) ยังอ่านได้และอ่านเป็น "ยังไม่จัดกลุ่ม": แสดงเฉพาะใน back-office (แก้ไข / ลบ ได้) · **ไม่แสดงบนตู้** ·
+ไม่อยู่ในรายการจัดลำดับของกลุ่มใด · การแก้ banner v1 ต้องเลือกกลุ่ม แล้วเขียนกลับเป็น v2 (`order` ต่อท้าย slot ของกลุ่ม + ขนาดจอนั้น).
+
+**แสดงบนตู้เมื่อ:** ~~เครื่องมี `banner_enabled ≠ false`~~ (แทนที่โดยข้อถัดไป — 2026-10-21) และ banner `status = active` และ `start_at ≤ now < end_at`
 (เวลา server) และ `shelter_code` = ศูนย์ของเครื่อง และ `screen_type` = ขนาดจอของเครื่อง (ไม่มี field = `compact`
 ทั้งสองฝั่ง) · เรียง `order` → `start_at` → `_id` · สูงสุด 20 รายการ (กรองก่อนตัด cap).
 
-**VDU (`registry`, `REGISTRY_DESIGN_VERSION` 7):** reject เมื่อ `schema_v ≠ 1`, `shelter_code` ว่าง/ไม่ใช่ string,
+**แสดงบนตู้เมื่อ (2026-10-21 — แทนที่ข้อด้านบน):** เครื่องมี `banner_group_id` (ไม่มี = feed คืน `[]` โดยไม่ query) และ
+banner `status = active` และ `start_at ≤ now < end_at` (เวลา server) และ `shelter_code` = ศูนย์ของเครื่อง และ
+**`group_id` = `banner_group_id` ของเครื่อง** และ `screen_type` = ขนาดจอของเครื่อง · เรียง `order` → `start_at` → `_id` ·
+สูงสุด 20 รายการ (กรองก่อนตัด cap) · banner v1 (ไม่มี `group_id`) ไม่เข้าเงื่อนไข.
+
+**ลำดับข้างในกลุ่ม (2026-10-21):** แต่ละกลุ่มมีรายการจัดลำดับ 2 ชุดแยกกัน — ตู้เล็ก `compact` 1024×600 และตู้ใหญ่
+`portrait` 1080×1920 · `order` 1..n นับต่อ (`group_id`, `screen_type`) ของ banner ที่ยังไม่หมดอายุ.
+
+**VDU (`registry`, `REGISTRY_DESIGN_VERSION` 7 → 8 (2026-10-21)):** reject เมื่อ `schema_v` ไม่ใช่ 1 หรือ 2 · (2026-10-21) `schema_v = 2` ต้องมี `group_id` เป็น string ที่ขึ้นต้น `kiosk_banner_group:` · `schema_v = 1` รับได้เมื่อไม่มี `group_id` (ยังไม่จัดกลุ่ม) · reject เมื่อ `shelter_code` ว่าง/ไม่ใช่ string,
 `screen_type` นอก enum, `title` ว่างหรือ >120, `caption` >200, `order` ไม่ใช่ int ≥1, `duration_sec` ไม่ใช่ int 3–60,
 `status` นอก enum, `start_at` / `end_at` parse ไม่ได้ หรือ `end_at ≤ start_at` · ไม่ตรวจ doc ที่ `_deleted` ·
 เงื่อนไขผู้เขียนเดิมของ `registry` (`_admin` / SA) คงไว้. เขียนได้เฉพาะผ่าน BFF `/api/back-office/kiosk-banners/**`
@@ -1887,7 +1996,61 @@ caption). registry doc ของศูนย์เดียว (`shelter_code`) 
 **ลบ:** hard delete ทั้ง doc (attachment หายไปด้วย).
 
 **Index (Mango):** `kiosk-banner-by-shelter` = `(type, shelter_code)` — CouchDB ใช้ json index เฉพาะเมื่อ selector
-ระบุครบทุก field จึงตรงกับ selector ของรายการ banner พอดี · deploy โดย `pnpm db:sync` / `sync:central`
+ระบุครบทุก field จึงตรงกับ selector ของรายการ banner พอดี · deploy โดย `pnpm db:sync` / `sync:central` · (2026-10-21)
+index เดิมใช้กับ selector ของ `kiosk_banner_group` (`type`, `shelter_code`) ได้ด้วย — ไม่เพิ่ม index ใหม่
+
+### 3.13 `kiosk_banner_group` — `kiosk_banner_group:{ulid}` · **schema_v 1** (2026-10-21 · Team Lead อนุมัติ 2026-10-22 — [CR-162](../changes/14-kiosk/CR-162-kiosk-banner.md) FR-KBG-01..09)
+
+กลุ่ม banner ต่อศูนย์ — ใช้แยกเนื้อหาตามจุดติดตั้ง (เช่น ตู้หน้าประตู vs ตู้โรงอาหาร). เครื่องสังกัดกลุ่มผ่าน
+`scanner_device.banner_group_id` (§3.11) และ banner สังกัดกลุ่มผ่าน `kiosk_banner.group_id` (§3.12). DB `registry` ·
+**ไม่ sync เข้า MongoDB** และไม่มี projection. เขียนได้เฉพาะผ่าน BFF `/api/back-office/kiosk-banner-groups/**`.
+
+| Field | ชนิด | req | หมายเหตุ |
+| --- | --- | --- | --- |
+| `_id` | str | req | `kiosk_banner_group:{ulid}` |
+| `type` | `"kiosk_banner_group"` | req | — |
+| `schema_v` | int | req | `1` |
+| `shelter_code` | str | req | ศูนย์ของกลุ่ม · = active shelter ของผู้สร้าง · **แก้ไม่ได้** หลังสร้าง |
+| `name` | str | req | trim · 1–60 ตัวอักษร · **ไม่ซ้ำภายในศูนย์เดียวกัน (case-insensitive)** — ซ้ำ `409` |
+| `description` | str\|null | opt | trim · ≤200 ตัวอักษร · text เท่านั้น |
+| `created_at` / `updated_at` / `created_by` | ts / ts / str | req | ตาม envelope §0 · `created_by` = `_users` name |
+
+- **สมาชิกเครื่อง:** ไม่เก็บใน doc กลุ่ม — derive จาก `scanner_device.banner_group_id = {group _id}` (`device_ids` ใน API) · เครื่อง 1 เครื่อง = 0 หรือ 1 กลุ่ม.
+- **VDU (`registry`, `REGISTRY_DESIGN_VERSION` 8):** reject เมื่อ `schema_v ≠ 1`, `shelter_code` ว่าง/ไม่ใช่ string, `name` ว่าง (หลัง trim) หรือ >60, `description` >200 · ไม่ตรวจ doc ที่ `_deleted` · เงื่อนไขผู้เขียนเดิมของ `registry` (`_admin` / SA) คงไว้ · ความไม่ซ้ำของ `name` ตรวจที่ BFF (ไม่ใช่ VDU).
+- **ลบ:** hard delete · ลบได้เมื่อกลุ่มไม่มี banner เหลือ (ทั้งที่ยังแสดงและหมดอายุ) — มี banner `409` · ตอนลบ ล้าง `banner_group_id` ของเครื่องที่สังกัดกลุ่มนั้น (เขียน `null`).
+- **Index:** ใช้ `kiosk-banner-by-shelter` = `(type, shelter_code)` เดิม (§3.12) — ไม่เพิ่ม index.
+
+---
+
+### 3.13 `config` — `config:public_portal` (singleton) · **schema_v 1** ([CR-184](../changes/12-public/CR-184-public-footer-logos.md))
+
+เนื้อหาของ public portal ที่ SA แก้จาก `/system-management/public-portal-config`. Envelope ตาม §0
+(`type: "config"`). BFF `GET /api/public/v1/config/faqs` อ่านจาก CouchDB ตรง (fallback FastAPI/Mongo `public_config`).
+Worker project ไป `public_config` ทั้งก้อน **ยกเว้น** `footer_logos` และ `_attachments` (CR-184 Q2, `PROJECTION_VERSION` 6 ร่วมกับ #727).
+
+| Field | ชนิด | req | หมายเหตุ |
+| --- | --- | --- | --- |
+| `faqs` | `{ [category]: FaqItem[] }` | req | category ที่ใช้: `public`, `registration`, `volunteer` · `FaqItem` = `{ id?, question, answer, question_en?, answer_en?, is_published (default true), order (default 0) }` |
+| `phone_number` | str | opt | `''` = ไม่แสดง |
+| `line_oa_url` / `facebook_url` | str(url) | opt | `''` = ไม่แสดง (footer column "ช่องทางออนไลน์ด่วน") |
+| `footer_logos` | `FooterLogo[]` | opt | ไม่มี field = `[]` · สูงสุด 12 รายการ · โลโก้หน่วยงานใน footer |
+| `footer_logos[].id` | str (ULID) | req | server สร้าง · แก้ไม่ได้ · ชื่อ attachment = `footer_logo_{id}` |
+| `footer_logos[].alt_th` | str | req | trim · 1–120 · `alt` ของรูป |
+| `footer_logos[].alt_en` | str | opt | trim · ≤120 · ว่าง = ใช้ `alt_th` เมื่อภาษา EN |
+| `footer_logos[].link_url` | str | opt | `https://` เท่านั้น · ว่าง = รูปไม่เป็นลิงก์ |
+| `footer_logos[].order` | int | req | ≥1 · server กำหนด (ต่อท้าย, renumber 1..n เมื่อลบ/ย้าย) |
+| `footer_logos[].is_published` | bool | req | default `true` |
+| `_attachments.footer_logo_{id}` | attachment | req ต่อ logo | `image/png` · `image/jpeg` · `image/webp` (ชนิดเดียวกับ §3.12) · ≤512 KB · `content_type` จาก magic bytes ที่ server ตรวจ · ไม่รับ SVG |
+
+**Invariant:** ทุก entry ใน `footer_logos` มี attachment คู่กัน และไม่มี attachment `footer_logo_*` กำพร้า.
+
+**การเขียน:** SA เท่านั้น ผ่าน form action ของหน้า `public-portal-config` (admin credential) · ทุก write = PUT ทั้ง doc
+ครั้งเดียวพร้อม attachment ตัวอื่นเป็น stub · การบันทึก FAQ/social ต้องคง `footer_logos` + `_attachments` จาก doc เดิม ·
+VDU ไม่ตรวจ field ของ doc นี้ (เงื่อนไขผู้เขียน `registry` เดิมคงไว้).
+
+**อ่านรูป (public):** `GET /api/public/v1/config/footer-logos/{id}/image?v={digest}` — เฉพาะ `is_published = true`
+· `cache-control: public, max-age=3600` (ซ่อนแล้วอาจยังแสดงจาก cache ≤1 ชม.) · SA ดูตัวที่ซ่อนได้ (`no-store`) ·
+ผู้อื่นที่ขอตัวที่ไม่มี/ซ่อน → `404`.
 
 ---
 
@@ -1939,8 +2102,9 @@ caption). registry doc ของศูนย์เดียว (`shelter_code`) 
 ค่าใหม่ยังอ่านได้โดย default `is_protected=false`. `item_master.category` เดิมที่เป็นชื่อภาษาไทย
 ต้องอ่านได้ต่อ และเมื่อมีการแก้ไข/บันทึกใหม่ให้เขียนเป็น `category_id`.
 
-### 4.2 `item_master` — `item_master:{sku}` หรือ `item_master:{ulid}` · **schema_v 5** (แทนที่ `supply_item`)
+### 4.2 `item_master` — `item_master:{sku}` หรือ `item_master:{ulid}` · **schema_v 6** (แทนที่ `supply_item`)
 
+> **schema_v 6** — `allergens` เขียนเป็น `[str]` เสมอ (master `allergy` code หรือ free text) ([CR-191](../changes/03-C-supply/CR-191-allergen-warning-at-distribution.md)). doc ≤ v5 ที่เก็บเป็น string ยังอ่านได้ ไม่ backfill.
 > **schema_v 5** — เพิ่ม `merged_into` สำหรับการรวมสินค้าซ้ำ ([CR-143](../changes/03-C-supply/CR-143-stock-redesign-rules.md) §F). additive ⇒ doc เดิมไม่ backfill; writer ใหม่ stamp `schema_v 5`.
 > **schema_v 4** — จัดแนว field/class และลบฟิลด์ UOM/target ที่ซ้ำกับ SOP ratio engine (CR-082/084).
 > `conversions[].multiplier` เป็น `qty_str` ตาม CR-038.
@@ -1966,7 +2130,7 @@ caption). registry doc ของศูนย์เดียว (`shelter_code`) 
 | `type_class` | enum(`CONSUMABLE`,`DURABLE`,`EQUIPMENT`) | req | ชั้นสินค้า; ใช้ `default_class` จาก category เป็นค่าเริ่มต้นแต่ override ได้ |
 | `shelf_life_days` | num | opt | อายุการจัดเก็บ |
 | `storage_type` | enum(`DRY`,`CHILLED`,`FROZEN`,`CONTROLLED_MED`) | opt | สภาพการจัดเก็บ |
-| `allergens` | [str] | conditional req | รายการสารก่อภูมิแพ้; default `[]` (บังคับสำหรับสินค้าทั่วไป, ไม่ใช้/ไม่ persist ใน FUEL_ENERGY) |
+| `allergens` | [str] | conditional req | รายการสารก่อภูมิแพ้ — แต่ละค่าเป็น `code` ของ `master_data:allergy` หรือ free text (ข้อความตรง `label_th`/`label_en` ของ item `active` → code, กติกาเดียวกับ CR-187 FR-6) ([CR-191](../changes/03-C-supply/CR-191-allergen-warning-at-distribution.md)); default `[]` (บังคับสำหรับสินค้าทั่วไป, ไม่ใช้/ไม่ persist ใน FUEL_ENERGY) |
 | `target_gender` | enum(`ALL`,`FEMALE`,`MALE`) | opt | กลุ่มเพศเป้าหมาย |
 | `age_group` | enum(`ALL`,`INFANT`,`CHILD`,`ELDERLY`) | opt | กลุ่มอายุเป้าหมาย |
 | `dietary` | [enum(`HALAL`,`VEGAN`)] | conditional req | ข้อจำกัดด้านอาหาร; default `[]` (บังคับสำหรับสินค้าทั่วไป, ไม่ใช้/ไม่ persist ใน FUEL_ENERGY) |
@@ -1987,6 +2151,8 @@ caption). registry doc ของศูนย์เดียว (`shelter_code`) 
 **ต้องกรอกวันหมดอายุตอนรับเข้า (CR-143 §D):** `requiresExpiry(item) = storage_type ∈ {CHILLED, FROZEN} || shelf_life_days != null` — แทนการอ้าง `item_master.perishable` (ไม่มี field นี้). มี `shelf_life_days` → UI เติม `lot.expiry` ให้อัตโนมัติ (แก้ได้, มี label ให้ตรวจสอบกับฉลาก); CHILLED/FROZEN ที่ไม่มี `shelf_life_days` → ผู้ใช้กรอกเอง.
 
 **รวมสินค้า (CR-143 §F):** ต่อทุกล็อตของต้นทางที่ qty > 0 เขียน `stock_ledger` `adjust` คู่ (−qty ต้นทาง / +qty ปลายทาง คง `lot` เดิม, `adjust_reason='merge'`, `note` = id อีกฝั่ง) ในการเขียนครั้งเดียว แล้วตั้ง `merged_into` + `deactivated: true` ที่ต้นทาง; หน่วยต้องแปลงได้; สินค้า local ของศูนย์ = SA หรือ shelter_manager/warehouse_staff ของศูนย์นั้น, สินค้าส่วนกลางห้ามเป็นต้นทางของการรวม (CR-156 FR-F4a); retry ต้องปิดต้นทางได้โดยไม่ย้ายยอดซ้ำ (FR-F6).
+
+**Migration (schema_v 5 → 6, CR-191):** ไม่ backfill — reader รับ `allergens` ทั้ง `string` (≤ v5: แยกด้วย `,`, trim, ตัดค่าว่าง) และ `[str]` (v6); writer ใหม่ (สร้าง/แก้ในฟอร์ม, รวมสินค้า) เขียน array + stamp `schema_v 6`. ข้อความเดิมที่ตรง label master ถูก map เป็น code ตอนเทียบและตอนบันทึกฟอร์ม; ที่ไม่ตรงคงเป็น free text ใน array (แสดงผลแต่ไม่ match).
 
 **Migration (schema_v 4 → 5, CR-143 §F):** additive `merged_into` (opt) — doc `schema_v 4` อ่านได้ปกติ ไม่ backfill.
 
@@ -2504,8 +2670,8 @@ CouchDB `_users` DB ไม่ใช่ operational doc ธรรมดา — �
 
 | DB | Mango indexes | Views (map/reduce) |
 | --- | --- | --- |
-| `shelter_*` | evacuee kiosk lookup: (type, phone), (type, person_id.number), (type, household_id), (type, card_snapshot.address_no) · movement: (evacuee_id, occurred_at) · screening: (evacuee_id, screened_at) · stock_ledger: (item_id, occurred_at) · `fuel_cylinder`: (item_master_id, cylinder_code) · `gas_ledger`: (cylinder_id, occurred_at) · `requisition_ticket`: (status, requisition_type, ticket_no) · `distribution_log`: (ticket_id, item_id, recipient_id, status), (recipient_id, status) · `bulk_return_pool`: (item_id, status) · donation: status, tracking_token_hash, booking_ref, campaign_id, (logistics.slot.date) · donation_slot: (date), (date, from) · medical: evacuee_id · shift_assignment: (job_id, shift_id), (volunteer_id, status), (status) · volunteer: (phone), (phone_hash), (tracking_token_hash), (status), (personnel_type), (checked_in) · job: (status), (tier, status) · job_application: (job_id, status), (tracking_token) · sop_override: (active) · food_sphere_standard: (target_segment, req_group_id, effective_date) · requirement_group: (name) · replenishment_policy: (scope_type, target_id) | `occupancy` (count evacuees by stay status) · `demographics_by_age` (count in-shelter evacuees — `active` + `room_confirmed`, CR-170 — by birth year; dynamic age-bucket in API) · `demographics_by_country` (count in-shelter evacuees by country) · `registrations_by_date_status` (count check-in/out movements by date) · `stock_balance` (client Decimal sum qty_str by item; CR-038) · `gas_balance` (client Decimal sum gas_ledger.qty_kg by active cylinder) · `latest_screening` · `meals_served` (sum by date+meal) · `needs_open` · `slot_availability` |
-| `registry` | shelter: status · shelter: code (unique) · location_district: (province_id) · location_subdistrict: (district_id) · kiosk_banner: (type, shelter_code) | — |
+| `shelter_*` | evacuee kiosk lookup: (type, phone), (type, person_id.number), (type, household_id), (type, card_snapshot.address_no) · movement: (evacuee_id, occurred_at) · screening: (evacuee_id, screened_at) · `station_log`: (evacuee_id, station, occurred_at) — CR-192 · stock_ledger: (item_id, occurred_at) · `fuel_cylinder`: (item_master_id, cylinder_code) · `gas_ledger`: (cylinder_id, occurred_at) · `requisition_ticket`: (status, requisition_type, ticket_no) · `distribution_log`: (ticket_id, item_id, recipient_id, status), (recipient_id, status) · `bulk_return_pool`: (item_id, status) · donation: status, tracking_token_hash, booking_ref, campaign_id, (logistics.slot.date) · donation_slot: (date), (date, from) · medical: evacuee_id · shift_assignment: (job_id, shift_id), (volunteer_id, status), (status) · volunteer: (phone), (phone_hash), (tracking_token_hash), (status), (personnel_type), (checked_in) · job: (status), (tier, status) · job_application: (job_id, status), (tracking_token) · sop_override: (active) · food_sphere_standard: (target_segment, req_group_id, effective_date) · requirement_group: (name) · replenishment_policy: (scope_type, target_id) | `occupancy` (count evacuees by stay status) · `demographics_by_age` (count in-shelter evacuees — `active` + `room_confirmed`, CR-170 — by birth year; dynamic age-bucket in API) · `demographics_by_country` (count in-shelter evacuees by country) · `registrations_by_date_status` (count check-in/out movements by date + `preregister`: evacuees with `registered_via` ∈ web/kiosk/api, not cancelled, by `created_at` date — CR-170 amend) · `station_logs_by_station` (raw `station_log` events, no reduce — key `[YYYY-MM-DD(+07) ของ occurred_at, station, channel, evacuee_id]` → `{action, occurred_at, actor}` (`actor` = `device_id` for kiosk, `created_by` for staff — CR-192 amendment 2); BFF pairs start/complete and ranks per actor — CR-192, view manifest v5) · `stock_balance` (client Decimal sum qty_str by item; CR-038) · `gas_balance` (client Decimal sum gas_ledger.qty_kg by active cylinder) · `latest_screening` · `meals_served` (sum by date+meal) · `needs_open` · `slot_availability` |
+| `registry` | shelter: status · shelter: code (unique) · location_district: (province_id) · location_subdistrict: (district_id) · kiosk_banner: (type, shelter_code) — index เดียวกันนี้ใช้กับ `kiosk_banner_group` ด้วย (selector `type` + `shelter_code` · ไม่เพิ่ม index ใหม่ — 2026-10-21) | — |
 | `catalog` | item_master: (category, distribution_type, type_class) · item_category: (system_key, is_protected) · recipe: (deactivated) · sop_profile: active · food_sphere_standard: (target_segment, req_group_id, effective_date) · requirement_group: (name) · replenishment_policy: (scope_type, target_id) | — |
 | `central_ops` | export_job: (status, requested_by) · search_audit: occurred_at | — |
 
@@ -2515,8 +2681,8 @@ CouchDB `_users` DB ไม่ใช่ operational doc ธรรมดา — �
 CR-059 ไม่เพิ่ม Central→Edge fallback หรือ local write queue; design doc / `validate_doc_update`
 ต้อง deploy บน remote shelter database ที่รับ write.
 
-1. `type` อยู่ใน whitelist ของ db นั้น; `_id` ขึ้นต้นด้วย `{type}:`
-2. append-only types (`movement`, `screening`, `people_import_log`, `stock_ledger`, `kitchen_requisition`, `meal_service`, `meal_service_receipt`, `audit`, `search_audit`, `distribution_issue`, `distribution_issue_idempotency`) — ปฏิเสธ update/delete ทุกกรณี. `distribution_log` เป็น log ถาวรที่ห้ามลบ แต่อนุญาตเฉพาะการเปลี่ยนแปลงสถานะคืน/void ตาม lifecycle
+1. `type` อยู่ใน whitelist ของ db นั้น (รวม `station_log` — CR-192; ไม่ตรวจค่า `channel` ฝั่ง server, #850); `_id` ขึ้นต้นด้วย `{type}:`
+2. append-only types (`movement`, `screening`, `people_import_log`, `station_log`, `stock_ledger`, `kitchen_requisition`, `meal_service`, `meal_service_receipt`, `audit`, `search_audit`, `distribution_issue`, `distribution_issue_idempotency`) — ปฏิเสธ update/delete ทุกกรณี. `distribution_log` เป็น log ถาวรที่ห้ามลบ แต่อนุญาตเฉพาะการเปลี่ยนแปลงสถานะคืน/void ตาม lifecycle
 3. state machine types (`stock_transfer`, `donation`, `referral`, `shelter_incident`, …) — ปฏิเสธ transition ถอยหลัง (ตามลำดับ enum / กราฟของ type นั้น)
 4. role→type เขียนได้ตาม role-permission-matrix (ตรวจ `userCtx.roles` แบบ Compound Scoped Roles `{shelter_code}:{role}`)
 5. `shelter_code` ใน doc ต้องตรงกับ db
@@ -2600,6 +2766,7 @@ Read model สำหรับฉายข้อมูลประกาศงา
 | `slots_confirmed` | int | req | ยอดรับแล้วรวม (🟢) |
 | `slots_remaining` | int | req | ยอดยังขาดรวม (⚪) |
 | `status` | enum(`open`,`full`,`paused`,`closed`) | req | สถานะเปิดรับสมัคร (projector map `almost_full` เดิม → `open`) |
+| `is_urgent` | bool | req | default `false` — คัดลอกจาก `job.is_urgent` (§2.17); หน้าแรก public นับเฉพาะงานนี้ในการ์ดจิตอาสา ([CR-185](../changes/12-public/CR-185-public-jobs-is-urgent.md), #709) |
 | `updated_at` | ts | req | เวลาที่ sync ข้อมูลล่าสุด |
 
 ### 9.3 `shelter_stocks` (MongoDB) — **ใหม่ (CR-111, EXT-004/006)**
@@ -2643,11 +2810,11 @@ partner ODT "นโยบายควบคุมการเข้าถึง�
 | `location_code` | str | req | จาก path param / body — ไม่ตรวจว่ามีจริงก่อน log (log ทุก attempt ตาม ODT); EXT-009/010 = ศูนย์ของ booking; EXT-011 = ศูนย์ที่พบ หรือ `""` เมื่อไม่พบ — **ห้ามเก็บ CID/phone** (CR-154) |
 | `purpose` | str | req | จาก query param; `""` เมื่อผู้เรียกไม่ส่งมา (denied_missing_purpose ก็ยัง log); EXT-008–010 ไม่มี purpose → `""` เสมอ |
 | `ip` | str | req | `client_ip()` เดียวกับที่ใช้ทั้งระบบ (`apiapp/utils/request_meta.py`) |
-| `status` | enum(`denied_missing_purpose`,`denied_insufficient_scope`,`granted_location_not_found`,`granted_no_data_source`) | req | ผลลัพธ์ของ attempt นั้น — ไม่มีค่า "granted" จริงในสไลซ์นี้ (ไม่มี client ไหนถือ `occupancy-pii-read`) |
-| `result_count` | int | req | default `0` — จำนวนรายการที่คืนกลับจริง (ODT ขอให้เก็บ). EXT-007 เป็น `0` เสมอ (scaffold). EXT-008 = **N = `persons_count`** เมื่อ `granted` (CR-169 C6/FR-50 — 1 แถว/request ไม่ว่ากี่คน), `0` เมื่อ `denied`; EXT-009/010 = `1` เมื่อ `granted`, `0` เมื่อ `denied` |
+| `status` | enum(`granted`,`denied_missing_purpose`,`denied_insufficient_scope`,`denied_validation_error`,`granted_location_not_found`,`granted_no_data_source`, `denied_<error code>` อื่นตาม CR-154) | req | ผลลัพธ์ของ attempt นั้น — `granted` = สำเร็จ (EXT-007 ข้อมูลจริง, EXT-008–012); `denied_validation_error` ใช้กับ EXT-008–012 (EXT-012 รวม body ผิดชนิด — CR-181) |
+| `result_count` | int | req | default `0` — จำนวนรายการที่คืนกลับจริง (ODT ขอให้เก็บ). EXT-007 = จำนวน occupant ในหน้าที่คืนเมื่อ `granted` (ข้อมูลจริงแล้ว), `0` เมื่อ `denied`; EXT-012 = จำนวนรายการใน `result` (0–10) เมื่อ `granted`, `0` เมื่อ `denied` (CR-181). EXT-008 = **N = `persons_count`** เมื่อ `granted` (CR-169 C6/FR-50 — 1 แถว/request ไม่ว่ากี่คน), `0` เมื่อ `denied`; EXT-009/010 = `1` เมื่อ `granted`, `0` เมื่อ `denied` |
 | `created_at` | ts | req | เวลาที่เรียก |
 
-> **CR-154:** `status` ของ EXT-008–011 = `granted` (สำเร็จ) หรือ `denied_<error code>` (เช่น `denied_insufficient_scope`, `denied_missing_purpose`, `denied_validation_error`, `denied_location_not_found`, `denied_location_not_bookable`, `denied_duplicate_booking`, `denied_booking_not_found`, `denied_booking_not_cancellable`, `denied_residency_not_found`); `result_count` = 1 เมื่อ granted (EXT-008: `persons_count` — ดูแถว `result_count` ข้างบน)
+> **CR-154:** `status` ของ EXT-008–011 = `granted` (สำเร็จ) หรือ `denied_<error code>` (เช่น `denied_insufficient_scope`, `denied_missing_purpose`, `denied_validation_error`, `denied_location_not_found`, `denied_location_not_bookable`, `denied_duplicate_booking`, `denied_booking_not_found`, `denied_booking_not_cancellable`, `denied_residency_not_found`); **#751:** EXT-008 ที่ใช้ `booking-bypass` กับศูนย์ที่ไม่ผ่านกติกา `accepts_booking` = `granted_bypass` (นับ `result_count = persons_count` เหมือน `granted`; replay ด้วย `Idempotency-Key` log `granted`); `result_count` = 1 เมื่อ granted (EXT-008: `persons_count` — ดูแถว `result_count` ข้างบน)
 
 **Index:** `(client_id, created_at)` · `(location_code)` · `(created_at)` TTL `expireAfterSeconds` 1 ปี
 
@@ -2709,7 +2876,7 @@ document, เพิ่ม field แบบ additive)
 | `name` | str\|null | req (สร้างใหม่) | ชื่อที่ admin ตั้งเอง, trim, 1–100 ตัวอักษร, **unique แบบไม่สนตัวพิมพ์เฉพาะกับแถวที่ยังไม่ถูกลบ** (`deleted_at = null`) — ซ้ำ → `409`; client ที่ถูก soft-delete แล้วไม่นับกันชื่อ (ใช้ชื่อเดิมสร้างใหม่ได้) · `null` ได้เฉพาะ doc เดิมก่อน field นี้ (UI แสดง `client_id` แทน) |
 | `description` | str\|null | opt | คำอธิบายเพิ่มเติมของคีย์, trim, ≤500 ตัวอักษร; ว่าง → `null` |
 | `module_name` | enum(`M2`,`M6`,`M7`)\|null | opt | **CR-154:** เพิ่ม `M2` (ระบบประเมินความพร้อมและจัดการกลุ่มเปราะบาง); **ไม่บังคับ (FR-62)** — module เป็นแค่ preset ของ scope ในฟอร์ม, ไม่เลือก → `null` (JWT claim / `TokenResponse.module_name` / access log เป็น `null` ด้วย, UI แสดง "ไม่ระบุ") — โมดูลพันธมิตร (UI: "Module" radio) — ฝังใน JWT claim `module_name` + `TokenResponse.module_name` + `third_party_access_logs.module_name` (semantics เดิม) |
-| `allowed_scopes` | [enum(`location-read`,`location-stock-read`,`occupancy-read`,`occupancy-pii-read`,`booking-write`,`residency-read`)] | req | **CR-154:** `booking-write` (EXT-008–010) และ `residency-read` (EXT-011) เป็น sensitive scope เหมือน `occupancy-pii-read` — ไม่ preset, admin ติ๊กเองรายกรณี; `M2` preset = `location-read` · ≥1 ค่า · **preset ตาม module** เมื่อเลือกในฟอร์ม: `M6` → `location-read`, `location-stock-read` · `M7` → `location-read`, `location-stock-read`, `occupancy-read` · `occupancy-pii-read` ไม่อยู่ใน preset ใด ๆ · **แก้ไขได้ซ้ำๆ ภายหลัง** ผ่าน `PATCH` แต่**เฉพาะตอน `is_active = true`** เท่านั้น (revoke แล้วแก้ไม่ได้ — `409`) |
+| `allowed_scopes` | [enum(`location-read`,`location-stock-read`,`occupancy-read`,`occupancy-pii-read`,`booking-write`,`booking-bypass`,`residency-read`,`occupant-search`)] | req | **#751:** `booking-bypass` (EOC override ของ EXT-008 — ข้ามกติกา `accepts_booking` รวม `closed`; ต้องมี `booking-write` คู่กันจึงใช้ได้) เป็น sensitive scope — ไม่ preset ใด ๆ (รวม M7), admin ติ๊กรายกรณี; **CR-154:** `booking-write` (EXT-008–010) และ `residency-read` (EXT-011) เป็น sensitive scope เหมือน `occupancy-pii-read` — ไม่ preset; **#736 (CR-181):** `occupant-search` (EXT-012 ค้นคนด้วยชื่อ/เลขบัตร/พาสปอร์ต/เบอร์) เป็น sensitive scope เช่นกัน — ไม่ preset, admin ติ๊กเองรายกรณี; `M2` preset = `location-read` · ≥1 ค่า · **preset ตาม module** เมื่อเลือกในฟอร์ม: `M6` → `location-read`, `location-stock-read` · `M7` → `location-read`, `location-stock-read`, `occupancy-read` · `occupancy-pii-read` ไม่อยู่ใน preset ใด ๆ · **แก้ไขได้ซ้ำๆ ภายหลัง** ผ่าน `PATCH` แต่**เฉพาะตอน `is_active = true`** เท่านั้น (revoke แล้วแก้ไม่ได้ — `409`) |
 | `is_active` | bool | req | default `true`; revoke → `false` (ไม่ลบ doc) |
 | `deleted_at` | ts\|null | sys | **ใหม่** — soft-delete timestamp; ตั้งได้เฉพาะตอน `is_active = false` (ต้อง revoke ก่อนถึงลบได้ — `409` ถ้ายัง active) · list ไม่คืนแถวที่ `deleted_at != null` (ซ่อนจาก UI แต่ไม่ hard-delete จาก Mongo — เก็บไว้เพื่อ audit) |
 | `created_at` / `updated_at` | ts | sys | — |
@@ -2740,6 +2907,7 @@ Buffer ของ partner booking (M2) — FastAPI insert ตอนรับค�
 | `person_seq` | int | req | ลำดับคนใน `persons[]` เริ่ม 0 · default `0` (แถวเดิม) |
 | `group_size` | int | req | จำนวนคนทั้งกลุ่ม · default `1` (แถวเดิม) |
 | `committed` | bool | req | `false` ระหว่างที่ API ยัง insert แถวของกลุ่มไม่ครบ (staged insert, FR-31); worker ข้ามแถว `committed = false` (FR-32); default `true` (แถวเดิม) |
+| `bypass` | bool | req | **ใหม่ (#751)** — `true` เฉพาะแถวที่จองด้วย `booking-bypass` กับศูนย์ที่ไม่ผ่านกติกา `accepts_booking`; default `false` (แถวเดิมไม่มี key = `false`) · additive ไม่ bump `schema_v` · worker ไม่อ่าน |
 | `client_id` | str | req | จาก JWT claims (`sub`) — ใช้ตรวจเจ้าของตอน cancel/get |
 | `module_name` | str | req | จาก claims |
 | `shelter_code` | str | req | จาก `location_code` ใน request |
@@ -2766,6 +2934,8 @@ Buffer ของ partner booking (M2) — FastAPI insert ตอนรับค�
 **Group (CR-169 C4):** 1 แถวต่อคน · ไม่ใช้ Mongo transaction (standalone, ไม่มี replica set) — API insert ทุกแถวด้วย `committed = false` → ครบแล้ว `update_many({booking_id}, {$set: {committed: true}})` แล้วตอบ 201; `BulkWriteError` (writeErrors code 11000) กลางทาง → `delete_many({booking_id, committed: false})` แล้วตอบ 409 · worker sweeper ลบแถว `committed = false` ที่ค้างเกิน 60 วินาที พร้อมแถว `state = pending` ของกลุ่มเดียวกัน (FR-33) · แถว `written` / `cancelled` / `rejected` ไม่ถูกแตะ
 
 **Cancel กลุ่ม (CR-169 #612, decision sync 2026-10-17):** flag `cancel_requested` ทั้งกลุ่มด้วย `update_many` (guard `state: written`, `cancel_requested: false`) ก่อน แล้วค่อยยกเลิกแถว `pending` ด้วย `update_many` · **ความเสี่ยงที่ยอมรับ (owner decision):** หลังยกเลิกแถว `pending` แบบ bulk แล้ว ถ้าแถวที่ worker เพิ่งเขียนกลางทางยกเลิกไม่ได้ จะยังตอบ 409 ทั้งที่แถว `pending` อื่นถูกยกเลิกไปแล้ว (ย้อนไม่ได้เพราะล้าง PII) · partner retry ได้ผลถูก · **ปิดจริงได้เฉพาะด้วย #616** (atomic group commit) · **token (review รอบ 2 ของ PR #635):** worker ไม่แตะ flag ที่ยังมี `cancel_flag_token` (กัน worker ยกเลิก stay ระหว่างที่ request ยังอาจย้อน flag) · ย้อน flag ล้ม → flag + token ค้าง → request อื่นที่ยกเลิกกลุ่มเดียวกันได้ 409 หลังรอ 1 วินาทีจนกว่า worker ย้อน flag ที่อายุเกิน 2 นาที แล้ว retry ได้ · ระหว่างนั้น EXT-010 ยังรายงานแถวนั้นเป็น `CANCELLED` (FR-42 นับ `cancel_requested` โดยไม่ดู token) แล้วกลับเป็น `BOOKED` หลัง worker ย้อน
+
+**Bookability (#751):** EXT-008 จองได้เมื่อ `public_shelters.location_status != closed` และ `raw_data.feature_flags.accepts_pre_registration == true` (ไม่มี flag = จองไม่ได้; ไม่ต้อง bump `PROJECTION_VERSION` — อ่านจาก `raw_data`) — `booking-bypass` ข้ามกติกานี้ (404 ยังตรวจก่อน) · **Rollout:** ศูนย์ที่ไม่เคยเปิด switch จะตอบ 409 หลัง deploy — แจ้ง M2 + ให้ staff เปิด switch ก่อน
 
 **Migration (CR-169):** ไม่ bump `schema_v` (Beanie doc) — field ใหม่ทั้งหมดมี default (`person_seq = 0`, `group_size = 1`, `committed = true`) → แถวเดิมคือกลุ่มขนาด 1 ไม่ต้อง backfill; index ใหม่สร้างตอน Beanie init
 

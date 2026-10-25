@@ -35,6 +35,7 @@ import {
 	deriveHouseholdStatus,
 	isActiveHouseholdStatus,
 	canCancelEvacueePreRegistration,
+	canCancelHouseholdPreRegistration,
 	replacePersonId,
 	migrateVulnerableGroupCode,
 	migrateVulnerableGroupCodes,
@@ -45,15 +46,30 @@ import {
 	type MovementAction,
 	dormFieldsFor,
 	memberExtrasFor,
+	registrationMedicalInput,
 	withoutBookingRef
 } from '../domain/people';
 import {
 	planFamilyRegistration,
+	planMemberConsents,
 	type FamilyReportInPayload,
+	type RegistrationConsent,
 	type UnifiedRegistrationChannel,
 	type UnifiedRegistrationInput
 } from '../domain/unified-registration';
+import {
+	bindConsent,
+	EVACUEE_SCHEMA_V,
+	type MemberConsentPlan
+} from '$lib/features/consent/server';
 import { autoHouseholdLabel } from '../domain/registration-shell';
+import {
+	STATION_LOG_STALE_WINDOW_MS,
+	createStationLog,
+	hasOpenStationStart,
+	type StationLogInput,
+	type StationNumber
+} from '../domain/station-log';
 import type {
 	EvacueeFilters,
 	EvacueePatch,
@@ -61,7 +77,8 @@ import type {
 	HouseholdPatch,
 	HouseholdSearchLabels,
 	MedicalPatch,
-	PeopleRepository
+	PeopleRepository,
+	StationLogWriteOptions
 } from './people.repository';
 
 function matchesHouseholdSearch(
@@ -98,6 +115,15 @@ function hasHouseholdClientFilters(search?: string, filters?: HouseholdFilters):
 	return !!(search?.trim() || filters?.status);
 }
 
+function consentWrite(
+	plan: MemberConsentPlan | undefined,
+	registrantEvacueeId: string | undefined
+) {
+	if (!plan) return null;
+	if (!registrantEvacueeId) throw new Error('ต้องมีสมาชิกอย่างน้อย 1 คน');
+	return bindConsent(plan, registrantEvacueeId);
+}
+
 /**
  * Remote CouchDB repository for the people feature. Writes go to the active
  * central endpoint via cookie-authenticated HTTP PUT.
@@ -107,6 +133,76 @@ export class PeopleRemoteRepository implements PeopleRepository {
 
 	constructor(private readonly dbName: string) {
 		this.repo = createRemoteRepository(dbName);
+	}
+
+	/**
+	 * Append staff `station_log` docs (CR-192). Best-effort: a failure never reaches the caller as
+	 * a rejection — the station action it describes already succeeded (FR-STL-04) — it is only
+	 * reported through `onStationLogError` so the UI can warn.
+	 */
+	private async writeStationLogs(
+		entries: readonly Omit<StationLogInput, 'channel'>[],
+		ctx: AuthorContext,
+		opts?: StationLogWriteOptions
+	): Promise<void> {
+		if (entries.length === 0) return;
+		try {
+			await this.repo.bulkDocs(
+				entries.map((entry) => createStationLog({ ...entry, channel: 'staff' }, ctx))
+			);
+		} catch (err) {
+			if (opts?.onStationLogError) opts.onStationLogError(err);
+			else console.warn('Failed to record station_log:', err);
+		}
+	}
+
+	/**
+	 * Station 1 form logs: `start` (the form-open time, never in the future) + `complete` (now)
+	 * for each saved member. Only when the caller passed `startedAt` (CR-192 O11).
+	 */
+	private async writeStationOneLogs(
+		evacueeIds: readonly string[],
+		ctx: AuthorContext,
+		opts?: StationLogWriteOptions
+	): Promise<void> {
+		if (!opts?.startedAt) return;
+		const completedAt = now();
+		const parsed = Date.parse(opts.startedAt);
+		const startedAt =
+			Number.isFinite(parsed) && parsed < Date.parse(completedAt)
+				? new Date(parsed).toISOString()
+				: completedAt;
+		await this.writeStationLogs(
+			evacueeIds.flatMap((evacuee_id) => [
+				{ evacuee_id, station: 1 as const, action: 'start' as const, occurred_at: startedAt },
+				{ evacuee_id, station: 1 as const, action: 'complete' as const, occurred_at: completedAt }
+			]),
+			ctx,
+			opts
+		);
+	}
+
+	async recordStationStart(
+		evacueeId: string,
+		station: StationNumber,
+		ctx: AuthorContext
+	): Promise<boolean> {
+		const nowMs = Date.now();
+		// Only logs inside the stale window can make a `start` live, so the Mango range stays tiny.
+		const recent = await this.repo.find<{ action: 'start' | 'complete'; occurred_at: string }>({
+			selector: {
+				type: 'station_log',
+				evacuee_id: evacueeId,
+				station,
+				occurred_at: { $gte: new Date(nowMs - STATION_LOG_STALE_WINDOW_MS).toISOString() }
+			},
+			limit: 100
+		});
+		if (hasOpenStationStart(recent, nowMs)) return false;
+		await this.repo.put(
+			createStationLog({ evacuee_id: evacueeId, station, action: 'start', channel: 'staff' }, ctx)
+		);
+		return true;
 	}
 
 	async createEvacuee(
@@ -155,29 +251,16 @@ export class PeopleRemoteRepository implements PeopleRepository {
 				}
 				saved = await this.repo.put(touch(next));
 			} else {
-				const evacuee = buildEvacuee(parsedInput, ctx);
+				const evacuee = buildEvacuee(parsedInput, ctx, null);
 				saved = await this.repo.put(evacuee);
 			}
 		} else {
-			const evacuee = buildEvacuee(parsedInput, ctx);
+			const evacuee = buildEvacuee(parsedInput, ctx, null);
 			saved = await this.repo.put(evacuee);
 		}
 
-		const needsMedical =
-			(input.medical_conditions && input.medical_conditions.length > 0) ||
-			(input.medical_allergies && input.medical_allergies.length > 0) ||
-			(input.medical_medications && input.medical_medications.length > 0) ||
-			(input.medical_note && input.medical_note.length > 0);
-
-		if (needsMedical) {
-			const medicalInput = {
-				evacuee_id: saved._id,
-				conditions: input.medical_conditions || [],
-				allergies: input.medical_allergies || [],
-				medications: input.medical_medications || [],
-				notes: input.medical_note || '',
-				track: input.track || ('normal' as const)
-			};
+		const medicalInput = registrationMedicalInput(input, saved._id, null, input.track || 'normal');
+		if (medicalInput) {
 			const medicalDoc = buildMedical(medicalInput, ctx);
 
 			try {
@@ -233,6 +316,15 @@ export class PeopleRemoteRepository implements PeopleRepository {
 	async listMatchingEvacueeIds(search?: string, filters?: EvacueeFilters): Promise<string[]> {
 		const matched = await this.filterEvacuees(search, filters);
 		return matched.map((e) => e._id);
+	}
+
+	async listCancellableEvacueeIds(ids: readonly string[]): Promise<string[]> {
+		if (ids.length === 0) return [];
+		const wanted = new Set(ids);
+		const all = await this.repo.allByType('evacuee', isEvacuee);
+		return all
+			.filter((e) => wanted.has(e._id) && canCancelEvacueePreRegistration(e))
+			.map((e) => e._id);
 	}
 
 	private async filterEvacuees(search?: string, filters?: EvacueeFilters): Promise<Evacuee[]> {
@@ -368,9 +460,16 @@ export class PeopleRemoteRepository implements PeopleRepository {
 		input: UnifiedRegistrationInput,
 		ctx: AuthorContext,
 		channel: UnifiedRegistrationChannel = 'onsite',
-		ids?: UlidReservation
+		ids?: UlidReservation,
+		consent: RegistrationConsent | null = null,
+		stationLog?: StationLogWriteOptions
 	): Promise<{ household: Household; members: Evacuee[] }> {
 		const plan = planFamilyRegistration(input, channel);
+		const consentPlans = planMemberConsents(
+			consent,
+			channel === 'onsite' ? 'staff' : 'web',
+			plan.memberInputs.map(() => false)
+		);
 		// Same reservation + same input on a retry → same doc IDs → idempotent 409s.
 		ids?.rewind();
 		const nextUlid = () => ids?.next() ?? ulid();
@@ -393,36 +492,27 @@ export class PeopleRemoteRepository implements PeopleRepository {
 				const medicalDocs: Medical[] = [];
 				const movementDocs: Movement[] = [];
 
-				for (const memberInput of plan.memberInputs) {
+				for (const [i, memberInput] of plan.memberInputs.entries()) {
 					const memberUlid = nextUlid();
 					const memberId = makeDocId('evacuee', memberUlid);
 					createdMemberIds.push(memberId);
 
-					const evacuee = buildEvacuee({ ...memberInput, household_id: targetId }, ctx, memberUlid);
+					const write = consentWrite(consentPlans[i], createdMemberIds[0]);
+					const evacuee = buildEvacuee(
+						{ ...memberInput, household_id: targetId },
+						ctx,
+						write,
+						memberUlid
+					);
 					memberDocs.push(evacuee);
 
-					const needsMedical =
-						(memberInput.medical_conditions && memberInput.medical_conditions.length > 0) ||
-						(memberInput.medical_allergies && memberInput.medical_allergies.length > 0) ||
-						(memberInput.medical_medications && memberInput.medical_medications.length > 0) ||
-						(memberInput.medical_note && memberInput.medical_note.length > 0);
-
-					if (needsMedical) {
-						medicalDocs.push(
-							buildMedical(
-								{
-									evacuee_id: evacuee._id,
-									conditions: memberInput.medical_conditions || [],
-									allergies: memberInput.medical_allergies || [],
-									medications: memberInput.medical_medications || [],
-									notes: memberInput.medical_note || '',
-									track: memberInput.track || ('normal' as const)
-								},
-								ctx,
-								nextUlid()
-							)
-						);
-					}
+					const medicalInput = registrationMedicalInput(
+						memberInput,
+						evacuee._id,
+						write,
+						memberInput.track || 'normal'
+					);
+					if (medicalInput) medicalDocs.push(buildMedical(medicalInput, ctx, nextUlid()));
 
 					if (evacuee.current_stay.zone) {
 						movementDocs.push(
@@ -492,6 +582,11 @@ export class PeopleRemoteRepository implements PeopleRepository {
 					// Derived status is recomputed on the next household write.
 				}
 
+				await this.writeStationOneLogs(
+					members.map((m) => m._id),
+					ctx,
+					stationLog
+				);
 				return { household, members };
 			} catch (err) {
 				const complete = await this.compensateFailedFamilyRegistration(createdMemberIds, null);
@@ -524,35 +619,22 @@ export class PeopleRemoteRepository implements PeopleRepository {
 
 			for (let i = 0; i < plan.memberInputs.length; i++) {
 				const memberInput = plan.memberInputs[i];
+				const write = consentWrite(consentPlans[i], headId);
 				const evacuee = buildEvacuee(
 					{ ...memberInput, household_id: householdId },
 					ctx,
+					write,
 					memberUlids[i]
 				);
 				memberDocs.push(evacuee);
 
-				const needsMedical =
-					(memberInput.medical_conditions && memberInput.medical_conditions.length > 0) ||
-					(memberInput.medical_allergies && memberInput.medical_allergies.length > 0) ||
-					(memberInput.medical_medications && memberInput.medical_medications.length > 0) ||
-					(memberInput.medical_note && memberInput.medical_note.length > 0);
-
-				if (needsMedical) {
-					medicalDocs.push(
-						buildMedical(
-							{
-								evacuee_id: evacuee._id,
-								conditions: memberInput.medical_conditions || [],
-								allergies: memberInput.medical_allergies || [],
-								medications: memberInput.medical_medications || [],
-								notes: memberInput.medical_note || '',
-								track: memberInput.track || ('normal' as const)
-							},
-							ctx,
-							nextUlid()
-						)
-					);
-				}
+				const medicalInput = registrationMedicalInput(
+					memberInput,
+					evacuee._id,
+					write,
+					memberInput.track || 'normal'
+				);
+				if (medicalInput) medicalDocs.push(buildMedical(medicalInput, ctx, nextUlid()));
 
 				if (evacuee.current_stay.zone) {
 					movementDocs.push(
@@ -580,6 +662,11 @@ export class PeopleRemoteRepository implements PeopleRepository {
 				return saved ?? m;
 			});
 
+			await this.writeStationOneLogs(
+				members.map((m) => m._id),
+				ctx,
+				stationLog
+			);
 			return { household, members };
 		} catch (err) {
 			const complete = await this.compensateFailedFamilyRegistration(createdMemberIds, householdId);
@@ -643,6 +730,16 @@ export class PeopleRemoteRepository implements PeopleRepository {
 	): Promise<string[]> {
 		const matched = await this.filterHouseholds(search, labels, filters);
 		return matched.map((h) => h._id);
+	}
+
+	async listCancellableHouseholdIds(ids: readonly string[]): Promise<string[]> {
+		if (ids.length === 0) return [];
+		const wanted = new Set(ids);
+		const all = await this.repo.allByType('household', isHousehold);
+		return all
+			.map(migrateHouseholdV3ToV4)
+			.filter((h) => wanted.has(h._id) && canCancelHouseholdPreRegistration(h))
+			.map((h) => h._id);
 	}
 
 	private async filterHouseholds(
@@ -776,16 +873,22 @@ export class PeopleRemoteRepository implements PeopleRepository {
 			vulnerable_groups?: string[];
 			special_needs?: string[];
 		},
-		ctx: AuthorContext
+		ctx: AuthorContext,
+		stationLog?: StationLogWriteOptions
 	): Promise<{ screening: Screening; evacuee?: Evacuee; medical?: Medical }> {
 		const screening = await this.createScreening(input.screening, ctx);
+		await this.writeStationLogs(
+			[{ evacuee_id: input.screening.evacuee_id, station: 2, action: 'complete' }],
+			ctx,
+			stationLog
+		);
 		let evacuee: Evacuee | undefined;
 		if (input.checkIn && input.zone) {
 			const targetEvacuee = await this.getEvacuee(input.screening.evacuee_id);
 			if (!targetEvacuee) {
 				throw new Error('ไม่พบข้อมูลผู้ประสบภัย');
 			}
-			evacuee = await this.checkInEvacuee(targetEvacuee, ctx, input.zone);
+			evacuee = await this.checkInEvacuee(targetEvacuee, ctx, input.zone, stationLog);
 		}
 		let medical: Medical | undefined;
 		if (input.medical) {
@@ -973,7 +1076,12 @@ export class PeopleRemoteRepository implements PeopleRepository {
 		return latest;
 	}
 
-	async checkInEvacuee(evacuee: Evacuee, ctx: AuthorContext, zone: string): Promise<Evacuee> {
+	async checkInEvacuee(
+		evacuee: Evacuee,
+		ctx: AuthorContext,
+		zone: string,
+		stationLog?: StationLogWriteOptions
+	): Promise<Evacuee> {
 		const nextZone = zone.trim();
 		if (!nextZone) {
 			throw new Error('การเช็คอินต้องระบุโซน');
@@ -986,6 +1094,16 @@ export class PeopleRemoteRepository implements PeopleRepository {
 		);
 		await this.repo.put(movement);
 		const updated = await this.repo.put(applyMovementToStay(latest, movement));
+		// Station 3 `complete` (CR-192) — only for the zoning check-in of an `arriving` person; a
+		// return from leave / re-check-in did not pass the zoning desk. Best-effort, before the
+		// household refresh so a failing refresh cannot skip it.
+		if (latest.current_stay.status === 'arriving') {
+			await this.writeStationLogs(
+				[{ evacuee_id: latest._id, station: 3, action: 'complete' }],
+				ctx,
+				stationLog
+			);
+		}
 		await this.refreshDerivedHouseholdStatus(updated.household_id);
 		return updated;
 	}
@@ -1249,7 +1367,8 @@ export class PeopleRemoteRepository implements PeopleRepository {
 	}
 
 	async submitFamilyReportIn(
-		payload: FamilyReportInPayload
+		payload: FamilyReportInPayload,
+		stationLog?: StationLogWriteOptions
 	): Promise<{ household: Household; members: Evacuee[] }> {
 		const {
 			householdId,
@@ -1257,7 +1376,8 @@ export class PeopleRemoteRepository implements PeopleRepository {
 			household: householdInput,
 			members: memberInputs,
 			ctx,
-			ids
+			ids,
+			consent
 		} = payload;
 		ids?.rewind();
 		const nextUlid = () => ids?.next() ?? ulid();
@@ -1371,14 +1491,30 @@ export class PeopleRemoteRepository implements PeopleRepository {
 		const allSavedMembers: Evacuee[] = [];
 		const affectedOldHouseholdIds = new Set<string>();
 
+		const existingEvacuees: (Evacuee | null)[] = [];
+		for (const m of memberInputs) {
+			if (!m._id) {
+				existingEvacuees.push(null);
+				continue;
+			}
+			const existing = await this.repo.get<Evacuee>(m._id);
+			if (!existing || !isEvacuee(existing)) {
+				throw new Error(`ไม่พบข้อมูลผู้ประสบภัยรหัส ${m._id}`);
+			}
+			existingEvacuees.push(existing);
+		}
+		// FR-41: the stored doc, not the form, decides who already has consent.
+		const consentPlans = planMemberConsents(
+			consent,
+			'staff',
+			existingEvacuees.map((existing) => Boolean(existing?.consent))
+		);
+
 		for (const [memberIndex, m] of memberInputs.entries()) {
 			const willReportIn = Boolean(m.reporting_in);
-			if (m._id) {
-				const existingEvacuee = await this.repo.get<Evacuee>(m._id);
-				if (!existingEvacuee || !isEvacuee(existingEvacuee)) {
-					throw new Error(`ไม่พบข้อมูลผู้ประสบภัยรหัส ${m._id}`);
-				}
-
+			const write = consentWrite(consentPlans[memberIndex], plannedMemberIds[0]);
+			const existingEvacuee = existingEvacuees[memberIndex];
+			if (existingEvacuee) {
 				if (existingEvacuee.household_id && existingEvacuee.household_id !== effectiveHouseholdId) {
 					affectedOldHouseholdIds.add(existingEvacuee.household_id);
 				}
@@ -1446,7 +1582,14 @@ export class PeopleRemoteRepository implements PeopleRepository {
 					}),
 					// CR-159: a suggestion only — current_stay is untouched by it.
 					preferred_zone: m.preferred_zone ?? existingEvacuee.preferred_zone ?? null,
-					current_stay: updatedStay
+					current_stay: updatedStay,
+					...(write
+						? {
+								consent: write.consent,
+								privacy: { ...existingEvacuee.privacy, search_excluded: write.searchExcluded },
+								schema_v: EVACUEE_SCHEMA_V
+							}
+						: {})
 				});
 
 				docsToWrite.push(updatedEvacuee);
@@ -1470,34 +1613,15 @@ export class PeopleRemoteRepository implements PeopleRepository {
 						registered_via: 'staff'
 					},
 					ctx,
+					write,
 					newMemberUlid
 				);
 				docsToWrite.push(newEvacuee);
 				allSavedMembers.push(newEvacuee);
 				reportedInMembers.push(newEvacuee);
 
-				const needsMedical =
-					(m.medical_conditions && m.medical_conditions.length > 0) ||
-					(m.medical_allergies && m.medical_allergies.length > 0) ||
-					(m.medical_medications && m.medical_medications.length > 0) ||
-					(m.medical_note && m.medical_note.length > 0);
-
-				if (needsMedical) {
-					docsToWrite.push(
-						buildMedical(
-							{
-								evacuee_id: newEvacuee._id,
-								conditions: m.medical_conditions || [],
-								allergies: m.medical_allergies || [],
-								medications: m.medical_medications || [],
-								notes: m.medical_note || '',
-								track: 'normal' as const
-							},
-							ctx,
-							nextUlid()
-						)
-					);
-				}
+				const medicalInput = registrationMedicalInput(m, newEvacuee._id, write, 'normal');
+				if (medicalInput) docsToWrite.push(buildMedical(medicalInput, ctx, nextUlid()));
 			}
 		}
 
@@ -1523,6 +1647,12 @@ export class PeopleRemoteRepository implements PeopleRepository {
 		await this.refreshDerivedHouseholdStatus(effectiveHouseholdId);
 
 		const finalHousehold = await this.getHousehold(effectiveHouseholdId);
+
+		await this.writeStationOneLogs(
+			finalReportedMembers.map((m) => m._id),
+			ctx,
+			stationLog
+		);
 
 		return {
 			household: finalHousehold ?? finalSavedHousehold,

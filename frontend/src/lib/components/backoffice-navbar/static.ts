@@ -22,7 +22,7 @@ import Warehouse from '@lucide/svelte/icons/warehouse';
 import Calculator from '@lucide/svelte/icons/calculator';
 import HandHeart from '@lucide/svelte/icons/hand-heart';
 import MapPin from '@lucide/svelte/icons/map-pin';
-import UtensilsCrossed from '@lucide/svelte/icons/utensils-crossed';
+import ForkSpoon from '$lib/components/icons/fork-spoon.svelte';
 import ClipboardCheck from '@lucide/svelte/icons/clipboard-check';
 import NotebookPen from '@lucide/svelte/icons/notebook-pen';
 import Cpu from '@lucide/svelte/icons/cpu';
@@ -80,14 +80,14 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 	{
 		title: '1. ทะเบียนและกำลังพล',
 		items: [
-			{ label: 'จัดการผู้ประสบภัย', href: resolve('/back-office/evacuee-management'), icon: Users },
+			{ label: 'จัดการผู้เข้าพัก', href: resolve('/back-office/evacuee-management'), icon: Users },
 			{
 				label: 'จัดการอาสาสมัคร',
 				href: resolve('/back-office/volunteers'),
 				icon: HeartHandshake
 			},
 			{
-				label: 'การส่งต่อผู้ประสบภัย',
+				label: 'การส่งต่อผู้เข้าพัก',
 				href: resolve('/back-office/referrals'),
 				icon: ClipboardList
 			}
@@ -127,16 +127,16 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 						icon: ClipboardList
 					},
 					{
-						label: 'โรงครัวและเสบียงอาหาร',
+						label: 'เบิกวัตถุดิบครัว',
 						href: resolve('/back-office/tickets/kitchen'),
-						icon: UtensilsCrossed
+						icon: ClipboardCheck
 					}
 				]
 			},
 			{
 				label: 'ครัวกลางและอาหาร',
 				href: resolve('/back-office/kitchen'),
-				icon: UtensilsCrossed
+				icon: ForkSpoon
 			}
 		]
 	},

@@ -8,6 +8,8 @@ import { qtyStrCoercePositiveSchema } from '$lib/utils/qty';
  * agree on shape without the UI reaching into a route module.
  */
 export interface PendingDonationRow {
+	/** `_rev` the row was read at — sent back with a review decision (CR-174). */
+	rev?: string;
 	booking_ref?: string;
 	/**
 	 * CouchDB doc id. Not decoration: a walk-in has no `booking_ref` (FastAPI mints
@@ -29,7 +31,13 @@ export interface PendingDonationRow {
 		category?: string;
 		condition?: string;
 		note?: string;
+		/** Per-line review (CR-174) — absent on bookings before schema_v 7. */
+		review_status?: 'approved' | 'pending' | 'rejected';
+		review_reason?: string | null;
+		reserved_qty?: string;
 	}>;
+	/** Campaign the booking was made against — tells an automatic approval from a person's (FR-8). */
+	campaign_id?: string | null;
 	declared_at?: string;
 	eta?: string;
 	slot?: { date: string; from: string; to: string };

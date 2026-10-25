@@ -12,6 +12,7 @@ import {
 	DAILY_SOP_ROLE_QUESTION_VERSION,
 	DAILY_SOP_ROLE_QUESTIONS
 } from '$lib/features/daily-sop/server';
+import { consentVduClause } from '$lib/features/consent/server';
 
 /** Database name for a shelter's own per-shelter CouchDB. */
 export function shelterDbName(code: string): string {
@@ -178,6 +179,13 @@ export const PEOPLE_MANGO_INDEXES = [
 		index: { fields: ['type', 'evacuee_id'] },
 		name: 'people-type-evacuee-idx',
 		type: 'json' as const
+	},
+	{
+		// CR-192 FR-STL-13: finds the live `start` of an (evacuee_id, station) pair so a staff
+		// page reopen / refresh does not write a duplicate station_log `start`.
+		index: { fields: ['type', 'evacuee_id', 'station', 'occurred_at'] },
+		name: 'station-log-type-evacuee-station-idx',
+		type: 'json' as const
 	}
 ];
 
@@ -250,8 +258,8 @@ export const TICKET_DISTRIBUTION_MANGO_INDEXES = [
  * integrity rules of T-16:
  *
  *  - **append-only** `stock_ledger` / `audit` / `movement` / `screening` /
- *    `people_import_log` — reject any update or delete of an existing doc
- *    (schema.md §1.4–1.5, §1.7, §6.2). A wrong ledger entry is corrected by writing
+ *    `people_import_log` / `station_log` — reject any update or delete of an existing doc
+ *    (schema.md §1.4–1.5, §1.7–1.8, §6.2). A wrong ledger entry is corrected by writing
  *    a new offsetting entry, never by editing history.
  *  - **forward-only** `donation.status` — `received` may not fall back to `declared`
  *    (schema.md §2.3 state machine).
@@ -277,6 +285,7 @@ export function buildValidateDocUpdate(code: string): string {
       newDoc.type !== 'daily_sop_role_assessment') {
     throw { forbidden: 'Daily SOP role assessment type cannot change' };
   }
+${consentVduClause()}
   if (isCouchAdmin && !isRoleAssessmentWrite) return;
   if (newDoc.type === 'unit_of_measure' || (oldDoc && oldDoc.type === 'unit_of_measure')) {
     throw { forbidden: 'unit_of_measure is central-only' };
@@ -315,8 +324,9 @@ export function buildValidateDocUpdate(code: string): string {
   function canCreateTicket() {
     return isRole('warehouse_staff') || isRole('supply_coordinator') || isRole('shelter_manager');
   }
+  // CR-179: Step 2 approve (PENDING_PICK -> READY_FOR_DISPATCH) is WH, SC, SM, SA.
   function canApproveTicket() {
-    return isRole('shelter_manager');
+    return isRole('warehouse_staff') || isRole('supply_coordinator') || isRole('shelter_manager');
   }
   function canDispatchTicket() {
     return isRole('warehouse_staff') || isRole('supply_coordinator') || isRole('shelter_manager');
@@ -373,9 +383,10 @@ export function buildValidateDocUpdate(code: string): string {
   }
 
   // schema.md §1.4 movement, §1.5 screening, §1.7 people_import_log, §2.6 kitchen_requisition,
-  // §2.7 meal_service, §6.2 stock_ledger / audit, CR-059 Phase 3B distribution_issue
+  // §2.7 meal_service, §6.2 stock_ledger / audit, CR-059 Phase 3B distribution_issue,
+  // §1.8 station_log (CR-192)
   var appendOnly = [
-    'stock_ledger', 'audit', 'movement', 'screening', 'people_import_log',
+    'stock_ledger', 'audit', 'movement', 'screening', 'people_import_log', 'station_log',
     'meal_service', 'meal_service_receipt',
     'distribution_issue', 'distribution_issue_idempotency'
   ];
@@ -462,7 +473,7 @@ export function buildValidateDocUpdate(code: string): string {
   // directly to any shelter's jobs via the Job Board instead.
   var allowed = [
     'evacuee', 'household', 'medical', 'screening', 'movement', 'image',
-    'people_import_log',
+    'people_import_log', 'station_log',
     'donation', 'donation_campaign', 'stock_ledger', 'donation_slot', 'donation_redirect',
     'audit', 'daily_calc', 'simulation', 'referral',
     'meal_session', 'kitchen_counter',
@@ -1208,6 +1219,15 @@ export function buildValidateDocUpdate(code: string): string {
       if (typeof newDoc.ref_id !== 'string' || (!/^requisition_ticket:.+/.test(newDoc.ref_id) && !/^kitchen_requisition:.+/.test(newDoc.ref_id))) {
         throw { forbidden: 'Requisition stock ledger requires requisition_ticket or kitchen_requisition ref_id' };
       }
+      // CR-178: ticket-era requisition dispatch is per lot; legacy kitchen_requisition rows stay unrestricted.
+      if (/^requisition_ticket:.+/.test(newDoc.ref_id)) {
+        if (typeof newDoc.lot_ref !== 'string' || !/^stock_ledger:.+/.test(newDoc.lot_ref)) {
+          throw { forbidden: 'Requisition stock ledger for a requisition_ticket requires physical stock_ledger lot_ref' };
+        }
+        if (typeof newDoc.qty !== 'string' || !/^-\\d+(\\.\\d{1,4})?$/.test(newDoc.qty)) {
+          throw { forbidden: 'Requisition stock ledger qty must be a negative decimal string' };
+        }
+      }
     }
     if (newDoc.reason === 'receive') {
       if (newDoc.ref_id !== null && typeof newDoc.ref_id !== 'undefined') {
@@ -1740,7 +1760,7 @@ export function buildValidateDocUpdate(code: string): string {
       var ticketFrom = oldDoc.status;
       var ticketTo = newDoc.status;
       var ticketTransitions = {
-        PENDING_PICK: ['PENDING_PICK', 'READY_FOR_DISPATCH', 'COMPLETED', 'CANCELLED'],
+        PENDING_PICK: ['PENDING_PICK', 'READY_FOR_DISPATCH', 'CANCELLED'],
         READY_FOR_DISPATCH: ['IN_TRANSIT', 'CANCELLED'],
         IN_TRANSIT: ['COMPLETED'],
         COMPLETED: [],
@@ -1757,50 +1777,67 @@ export function buildValidateDocUpdate(code: string): string {
         ticketFrom === 'PENDING_PICK' &&
         ticketTo === 'PENDING_PICK' &&
         !isRole('warehouse_staff') &&
+        !isRole('supply_coordinator') &&
         !isRole('kitchen_staff')
       ) {
         // warehouse_staff allocates (allocated_qty); kitchen_staff edits its own
         // request while nothing's been picked yet (CR-142, requested_qty only).
-        throw { forbidden: 'Only warehouse staff, kitchen staff, or system admin can update requisition_ticket items while PENDING_PICK' };
+        throw { forbidden: 'Only warehouse staff, supply coordinator, kitchen staff, or system admin can update requisition_ticket items while PENDING_PICK' };
+      }
+      if (
+        ticketFrom === 'PENDING_PICK' &&
+        ticketTo === 'PENDING_PICK' &&
+        isRole('kitchen_staff') &&
+        !isRole('warehouse_staff') &&
+        !isRole('supply_coordinator')
+      ) {
+        // Kitchen-only editors must not touch allocated_qty (warehouse's field):
+        // existing lines keep their old value, new lines start at '0'.
+        var kitchenOldItems = oldDoc.items || [];
+        var kitchenNewItems = newDoc.items || [];
+        for (var kitchenIdx = 0; kitchenIdx < kitchenNewItems.length; kitchenIdx++) {
+          var kitchenLine = kitchenNewItems[kitchenIdx];
+          var kitchenPrev = null;
+          for (var kitchenOldIdx = 0; kitchenOldIdx < kitchenOldItems.length; kitchenOldIdx++) {
+            if (kitchenOldItems[kitchenOldIdx].item_id === kitchenLine.item_id) {
+              kitchenPrev = kitchenOldItems[kitchenOldIdx];
+              break;
+            }
+          }
+          if (kitchenPrev) {
+            if (kitchenLine.allocated_qty !== kitchenPrev.allocated_qty) {
+              throw { forbidden: 'Kitchen staff cannot change allocated_qty on requisition_ticket items' };
+            }
+          } else if (kitchenLine.allocated_qty !== '0') {
+            throw { forbidden: 'Kitchen staff must add new requisition_ticket items with allocated_qty "0"' };
+          }
+        }
       }
       if (ticketTo === 'READY_FOR_DISPATCH') {
-        if (!isRole('shelter_manager')) {
-          throw { forbidden: 'Only shelter manager or system admin can approve a requisition_ticket' };
+        if (!isRole('warehouse_staff') && !isRole('supply_coordinator') && !isRole('shelter_manager')) {
+          throw { forbidden: 'Only warehouse staff, supply coordinator, shelter manager or system admin can approve a requisition_ticket' };
         }
+        var approveAnyPositive = false;
         for (var approveIndex = 0; approveIndex < newDoc.items.length; approveIndex++) {
-          if (!(parseFloat(newDoc.items[approveIndex].allocated_qty) > 0)) {
-            throw { forbidden: 'Every requisition_ticket item needs allocated_qty > 0 before approval' };
+          var approveAlloc = parseDecimal4(newDoc.items[approveIndex].allocated_qty);
+          if (isNaN(approveAlloc) || approveAlloc < 0) {
+            throw { forbidden: 'Every requisition_ticket item needs a valid allocated_qty >= 0 before approval' };
           }
+          if (approveAlloc > 0) approveAnyPositive = true;
+        }
+        if (!approveAnyPositive) {
+          throw { forbidden: 'At least one requisition_ticket item needs allocated_qty > 0 before approval' };
         }
         if (newDoc.approved_by !== userCtx.name) {
           throw { forbidden: 'approved_by must match the authenticated user' };
         }
       }
       if (ticketTo === 'IN_TRANSIT') {
-        if (!isRole('warehouse_staff')) {
-          throw { forbidden: 'Only warehouse staff or system admin can dispatch a requisition_ticket' };
+        if (!isRole('warehouse_staff') && !isRole('supply_coordinator')) {
+          throw { forbidden: 'Only warehouse staff, supply coordinator or system admin can dispatch a requisition_ticket' };
         }
         if (newDoc.dispatched_by !== userCtx.name) {
           throw { forbidden: 'dispatched_by must match the authenticated user' };
-        }
-      }
-      if (ticketTo === 'COMPLETED' && ticketFrom === 'PENDING_PICK') {
-        // One-click approve (CR-143, requisition_type 'kitchen' only): shelter_manager/
-        // system_admin does approve+dispatch+receive in one write, all 3 by-fields same actor.
-        if (!isRole('shelter_manager')) {
-          throw { forbidden: 'Only shelter manager or system admin can one-click approve a requisition_ticket' };
-        }
-        for (var oneStepIndex = 0; oneStepIndex < newDoc.items.length; oneStepIndex++) {
-          if (!(parseFloat(newDoc.items[oneStepIndex].allocated_qty) > 0)) {
-            throw { forbidden: 'Every requisition_ticket item needs allocated_qty > 0 before approval' };
-          }
-        }
-        if (
-          newDoc.approved_by !== userCtx.name ||
-          newDoc.dispatched_by !== userCtx.name ||
-          newDoc.received_by !== userCtx.name
-        ) {
-          throw { forbidden: 'approved_by/dispatched_by/received_by must match the authenticated user' };
         }
       }
       if (ticketTo === 'COMPLETED' && ticketFrom === 'IN_TRANSIT') {
@@ -1813,8 +1850,8 @@ export function buildValidateDocUpdate(code: string): string {
       }
       if (ticketTo === 'CANCELLED') {
         var canCancelTicket = ticketFrom === 'PENDING_PICK'
-          ? (isRole('kitchen_staff') || isRole('warehouse_staff') || isRole('shelter_manager'))
-          : (isRole('warehouse_staff') || isRole('shelter_manager'));
+          ? (isRole('kitchen_staff') || isRole('warehouse_staff') || isRole('supply_coordinator') || isRole('shelter_manager'))
+          : (isRole('warehouse_staff') || isRole('supply_coordinator') || isRole('shelter_manager'));
         if (!canCancelTicket) {
           throw { forbidden: 'Not authorized to cancel this requisition_ticket' };
         }
@@ -2026,7 +2063,7 @@ export function buildValidateDocUpdate(code: string): string {
           throw { forbidden: 'Illegal requisition_ticket transition: ' + oldDoc.status + ' -> ' + newDoc.status };
         }
         if (oldDoc.status === 'PENDING_PICK' && newDoc.status === 'READY_FOR_DISPATCH') {
-          if (!canApproveTicket()) throw { forbidden: 'Only shelter managers or system admins can approve requisition_tickets' };
+          if (!canApproveTicket()) throw { forbidden: 'Only warehouse staff, supply coordinators, shelter managers, or system admins can approve requisition_tickets' };
           if (newDoc.approved_by !== userCtx.name) throw { forbidden: 'requisition_ticket.approved_by must match the current actor' };
         } else if (oldDoc.status === 'PENDING_PICK' && newDoc.status === 'CANCELLED') {
           if (!canCreateTicket()) throw { forbidden: 'Only warehouse staff, supply coordinators, shelter managers, or system admins can cancel requisition_tickets' };

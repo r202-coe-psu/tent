@@ -16,11 +16,14 @@
 		type CreatedScannerDevice,
 		type ScannerDevice
 	} from '$lib/features/kiosk-devices';
+	import { useKioskBannerGroups } from '$lib/features/kiosk-banners';
 
 	/** Every role (SA included) works on the shelter picked in the back-office shelter switcher. */
 	const activeShelter = $derived(shelterStore.selectedShelterCode ?? getShelterCode());
 
 	const devicesQuery = useScannerDevices(() => activeShelter);
+	const groupsQuery = useKioskBannerGroups(() => activeShelter);
+	const groupNames = $derived(new Map((groupsQuery.data ?? []).map((g) => [g._id, g.name])));
 
 	let createOpen = $state(false);
 	let revealOpen = $state(false);
@@ -94,6 +97,7 @@
 		{:else}
 			<ScannerList
 				{devices}
+				{groupNames}
 				onviewsecret={handleViewSecret}
 				onviewpin={handleViewPin}
 				onsetpin={handleSetPin}

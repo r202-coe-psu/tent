@@ -6,6 +6,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 from httpx import AsyncClient
+from shelter_factory import flag_raw, insert_shelter
 from tent_model.public_shelter import GeoPoint, PublicShelter
 
 from apiapp.modules.thirdparty_auth.scopes import mint_access_token
@@ -45,6 +46,8 @@ async def open_hatyai_shelter() -> PublicShelter:
         accepts_delivery=True,
         opened_at=datetime(2026, 8, 9, 6, 0, 0, tzinfo=UTC),
         raw_data={
+            # #751: staff switched pre-registration on, so partners may book this shelter.
+            "feature_flags": {"accepts_pre_registration": True},
             "facilities": {"toilets_female": 6, "toilets_male": 6, "showers": 4},
             "common_areas": {"central_kitchen": True, "isolation_room": True},
             "utilities": {"power_source": "generator"},
@@ -194,6 +197,7 @@ async def test_get_location_returns_full_fields_and_dopa_codes(
     assert result["contact_name"] == "หัวหน้าศูนย์พักพิง"
     assert result["contact_phone"] == "074-000000"
     assert result["accepts_delivery"] is True
+    assert result["accepts_booking"] is True
     assert result["is_active"] is True
     assert result["occupancy_total"] == 0
     assert "ห้องน้ำ 12 ห้อง" in result["facilities"]
@@ -353,3 +357,203 @@ async def test_list_locations_pagination(
     assert len(p2["result"]) == 1
     assert p2["pagination"]["page"] == 2
     assert p2["result"][0]["location_code"] != p1["result"][0]["location_code"]
+
+
+# --- #751 accepts_booking ------------------------------------------------------------
+# accepts_booking = location_status != "closed" AND raw_data.feature_flags.accepts_pre_registration
+# is True (a missing flag is NOT bookable). Same value for every partner, whatever its scopes.
+
+ACCEPTS_BOOKING_CASES = [
+    ("open", True, True),
+    ("full", True, True),
+    ("standby", True, True),
+    ("open", None, False),
+    ("full", None, False),
+    ("standby", None, False),
+    ("open", False, False),
+    ("full", False, False),
+    ("standby", False, False),
+    ("closed", True, False),
+    ("closed", None, False),
+    ("closed", False, False),
+]
+
+
+@pytest.mark.parametrize(("status", "flag", "expected"), ACCEPTS_BOOKING_CASES)
+async def test_accepts_booking_truth_table_on_detail_and_list(
+    client: AsyncClient,
+    location_read_headers: dict[str, str],
+    status: str,
+    flag: bool | None,
+    expected: bool,
+) -> None:
+    await insert_shelter("SH900", status=status, raw_data=flag_raw(flag))
+
+    detail = await client.get("/external/locations/SH900", headers=location_read_headers)
+    assert detail.status_code == 200
+    assert detail.json()["result"]["accepts_booking"] is expected
+
+    listing = await client.get("/external/locations", headers=location_read_headers)
+    assert listing.status_code == 200
+    (item,) = [i for i in listing.json()["result"] if i["location_code"] == "SH900"]
+    assert item["accepts_booking"] is expected
+
+
+async def test_accepts_booking_does_not_depend_on_the_token(client: AsyncClient) -> None:
+    await insert_shelter("SH900", raw_data=flag_raw(True))
+    for scopes in (["location-read"], ["location-read", "booking-write", "booking-bypass"]):
+        detail = await client.get("/external/locations/SH900", headers=_bearer(scopes))
+        assert detail.status_code == 200
+        assert detail.json()["result"]["accepts_booking"] is True
+
+
+@pytest.fixture
+async def mixed_shelters() -> None:
+    """Three bookable (SH101-103, one full), three not (flag missing / False / closed)."""
+    await insert_shelter("SH101", raw_data=flag_raw(True))
+    await insert_shelter("SH102", status="full", raw_data=flag_raw(True))
+    await insert_shelter("SH103", status="standby", raw_data=flag_raw(True))
+    await insert_shelter("SH201", raw_data=flag_raw(None))
+    await insert_shelter("SH202", raw_data=flag_raw(False))
+    await insert_shelter("SH203", status="closed", raw_data=flag_raw(True))
+
+
+async def _codes(client: AsyncClient, headers: dict[str, str], **params: object) -> set[str]:
+    response = await client.get("/external/locations", headers=headers, params=params)
+    assert response.status_code == 200
+    return {item["location_code"] for item in response.json()["result"]}
+
+
+async def test_list_locations_filters_accepts_booking_true(
+    client: AsyncClient, location_read_headers: dict[str, str], mixed_shelters: None
+) -> None:
+    codes = await _codes(client, location_read_headers, accepts_booking="true")
+    assert codes == {"SH101", "SH102", "SH103"}
+
+
+async def test_list_locations_filters_accepts_booking_false(
+    client: AsyncClient, location_read_headers: dict[str, str], mixed_shelters: None
+) -> None:
+    codes = await _codes(client, location_read_headers, accepts_booking="false")
+    assert codes == {"SH201", "SH202", "SH203"}
+
+
+async def test_list_locations_without_the_filter_returns_both(
+    client: AsyncClient, location_read_headers: dict[str, str], mixed_shelters: None
+) -> None:
+    codes = await _codes(client, location_read_headers)
+    assert codes == {"SH101", "SH102", "SH103", "SH201", "SH202", "SH203"}
+
+
+async def test_list_locations_accepts_booking_combines_with_status(
+    client: AsyncClient, location_read_headers: dict[str, str], mixed_shelters: None
+) -> None:
+    assert await _codes(client, location_read_headers, accepts_booking="true", status="full") == {
+        "SH102"
+    }
+    assert await _codes(client, location_read_headers, accepts_booking="false", status="open") == {
+        "SH201",
+        "SH202",
+    }
+    # closed never accepts bookings, whatever its flag says
+    assert await _codes(client, location_read_headers, accepts_booking="true", status="closed") == (
+        set()
+    )
+    assert await _codes(
+        client, location_read_headers, accepts_booking="false", status="closed"
+    ) == {"SH203"}
+
+
+async def test_list_locations_accepts_booking_pagination_total(
+    client: AsyncClient, location_read_headers: dict[str, str], mixed_shelters: None
+) -> None:
+    yes = await client.get(
+        "/external/locations",
+        headers=location_read_headers,
+        params={"accepts_booking": "true", "limit": 2, "page": 1},
+    )
+    assert yes.status_code == 200
+    body = yes.json()
+    assert len(body["result"]) == 2
+    assert body["pagination"]["total"] == 3
+    assert body["pagination"]["total_pages"] == 2
+    assert all(item["accepts_booking"] is True for item in body["result"])
+
+    page2 = await client.get(
+        "/external/locations",
+        headers=location_read_headers,
+        params={"accepts_booking": "true", "limit": 2, "page": 2},
+    )
+    assert len(page2.json()["result"]) == 1
+    assert page2.json()["pagination"]["total"] == 3
+
+    no = await client.get(
+        "/external/locations",
+        headers=location_read_headers,
+        params={"accepts_booking": "false", "limit": 2},
+    )
+    assert no.json()["pagination"]["total"] == 3
+    assert no.json()["pagination"]["total_pages"] == 2
+    assert all(item["accepts_booking"] is False for item in no.json()["result"])
+
+
+@pytest.mark.parametrize("value", ["abc", "maybe", "2"])
+async def test_list_locations_rejects_a_non_boolean_accepts_booking(
+    client: AsyncClient, location_read_headers: dict[str, str], value: str
+) -> None:
+    response = await client.get(
+        "/external/locations",
+        headers=location_read_headers,
+        params={"accepts_booking": value},
+    )
+    assert response.status_code == 422
+    assert response.json()["code"] == "validation_error"
+
+
+@pytest.mark.parametrize(
+    "value",
+    ["yes", "no", "on", "off", "1", "0", "t", "f", "y", "n", "abc", "", " ", "True", "FALSE"],
+)
+async def test_list_locations_accepts_booking_takes_only_lowercase_true_or_false(
+    client: AsyncClient, location_read_headers: dict[str, str], value: str
+) -> None:
+    """Only lowercase `true` / `false` are valid (no bool coercion, no case folding)."""
+    response = await client.get(
+        "/external/locations",
+        headers=location_read_headers,
+        params={"accepts_booking": value},
+    )
+    assert response.status_code == 422
+    assert response.json()["code"] == "validation_error"
+
+
+MALFORMED_FLAG_RAW = [
+    {"feature_flags": "yes"},
+    {"feature_flags": None},
+    {"feature_flags": ["accepts_pre_registration"]},
+    {"feature_flags": [{"accepts_pre_registration": True}]},
+    {"feature_flags": {"accepts_pre_registration": "true"}},
+    {"feature_flags": {"accepts_pre_registration": 1}},
+    {"feature_flags": {"accepts_pre_registration": [True]}},
+]
+
+
+@pytest.mark.parametrize("raw", MALFORMED_FLAG_RAW)
+async def test_malformed_feature_flags_are_not_bookable_and_never_500(
+    client: AsyncClient, location_read_headers: dict[str, str], raw: dict[str, object]
+) -> None:
+    """EXT-003 / EXT-002 answer 200 with `accepts_booking: false`; the filter agrees (#751 F1)."""
+    await insert_shelter("SH900", raw_data=raw)
+    await insert_shelter("SH901", raw_data=flag_raw(True))
+
+    detail = await client.get("/external/locations/SH900", headers=location_read_headers)
+    assert detail.status_code == 200
+    assert detail.json()["result"]["accepts_booking"] is False
+
+    listing = await client.get("/external/locations", headers=location_read_headers)
+    assert listing.status_code == 200
+    by_code = {i["location_code"]: i["accepts_booking"] for i in listing.json()["result"]}
+    assert by_code == {"SH900": False, "SH901": True}
+
+    assert await _codes(client, location_read_headers, accepts_booking="true") == {"SH901"}
+    assert await _codes(client, location_read_headers, accepts_booking="false") == {"SH900"}

@@ -238,7 +238,13 @@ async function mockVolunteerCouch(
 
 	await page.route('**/*', async (route) => {
 		const requestUrl = new URL(route.request().url());
-		const segments = requestUrl.pathname.split('/').filter(Boolean);
+		// The app reaches CouchDB through the same-origin proxy (PUBLIC_COUCH_PROXY=/couch,
+		// the default in .env) or directly — strip the proxy prefix so both match. Without it
+		// every request fell through to the real dev CouchDB and the board showed its jobs.
+		const segments = requestUrl.pathname
+			.replace(/^\/couch(?=\/)/, '')
+			.split('/')
+			.filter(Boolean);
 		const dbName = segments[0];
 		if (dbName !== 'registry' && !dbName?.startsWith('shelter_')) {
 			await route.fallback();

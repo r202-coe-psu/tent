@@ -2,7 +2,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { POST } from './+server';
 import { findMasterByCode } from '$lib/server/shelters.admin';
 import { bulkAsPublicWriter, rollbackAsPublicWriter } from '$lib/server/couch-public-writer';
-import { registerIpLimiter, registerPhoneLimiter } from '$lib/server/security/rate-limiter';
 import {
 	findConflictingHold,
 	readForecastOccupancy
@@ -36,10 +35,6 @@ vi.mock('$lib/server/shelters.admin', () => ({ findMasterByCode: vi.fn() }));
 vi.mock('$lib/server/couch-public-writer', () => ({
 	bulkAsPublicWriter: vi.fn(),
 	rollbackAsPublicWriter: vi.fn()
-}));
-vi.mock('$lib/server/security/rate-limiter', () => ({
-	registerIpLimiter: { check: vi.fn(() => true) },
-	registerPhoneLimiter: { check: vi.fn(() => true) }
 }));
 vi.mock('$lib/features/public-register/booking-gate.server', () => ({
 	readForecastOccupancy: vi.fn(async () => 0),
@@ -88,12 +83,36 @@ const VALID_BODY = {
 	captchaToken: 'tok'
 };
 
+function webConsentBody(memberCount: number, decision: Record<string, unknown> = {}) {
+	const shared = {
+		guardian_for: [],
+		verbal: false,
+		ref: 'CS-7K3QZ9MD',
+		given_at: '2026-10-25T03:15:00.000Z',
+		notice_version: '2026-10-25'
+	};
+	return {
+		consent:
+			decision.mode === 'basic'
+				? { mode: 'basic', ...shared, ...decision }
+				: { mode: 'full', health: true, search_visible: true, ...shared, ...decision },
+		consent_member_keys: Array.from({ length: memberCount }, (_, i) => `m${i}`)
+	};
+}
+
+function withConsent(body: unknown): unknown {
+	if (!body || typeof body !== 'object' || 'consent' in body) return body;
+	const members = (body as { members?: unknown }).members;
+	if (!Array.isArray(members)) return body;
+	return { ...webConsentBody(members.length), ...body };
+}
+
 function event(body: unknown, ip = '203.0.113.5'): PostEvent {
 	return {
 		request: new Request('http://localhost/api/public/v1/registrations', {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify(body)
+			body: JSON.stringify(withConsent(body))
 		}),
 		getClientAddress: () => ip
 	} as unknown as PostEvent;
@@ -117,8 +136,6 @@ describe('POST /api/public/v1/registrations', () => {
 		vi.mocked(bulkAsPublicWriter).mockResolvedValue({ status: 201, failed: [], written: [] });
 		vi.mocked(rollbackAsPublicWriter).mockReset();
 		vi.mocked(rollbackAsPublicWriter).mockResolvedValue({ rolledBack: [], orphaned: [] });
-		vi.mocked(registerIpLimiter.check).mockReturnValue(true);
-		vi.mocked(registerPhoneLimiter.check).mockReturnValue(true);
 		verifyToken.mockReset();
 		verifyToken.mockResolvedValue(true);
 		adminRaw.mockReset();
@@ -159,20 +176,6 @@ describe('POST /api/public/v1/registrations', () => {
 	it('422 with no members at all', async () => {
 		const res = await POST(event({ ...VALID_BODY, members: [] }));
 		expect(res.status).toBe(422);
-		expect(bulkAsPublicWriter).not.toHaveBeenCalled();
-	});
-
-	it('429 when the IP is rate limited', async () => {
-		vi.mocked(registerIpLimiter.check).mockReturnValue(false);
-		const res = await POST(event(VALID_BODY));
-		expect(res.status).toBe(429);
-		expect(bulkAsPublicWriter).not.toHaveBeenCalled();
-	});
-
-	it('429 when the phone is rate limited', async () => {
-		vi.mocked(registerPhoneLimiter.check).mockReturnValue(false);
-		const res = await POST(event(VALID_BODY));
-		expect(res.status).toBe(429);
 		expect(bulkAsPublicWriter).not.toHaveBeenCalled();
 	});
 
@@ -270,7 +273,7 @@ describe('POST /api/public/v1/registrations', () => {
 			const e = evacuees[0];
 
 			expect(e._id).toMatch(/^evacuee:[0-9A-HJKMNP-TV-Z]{26}$/);
-			expect(e.schema_v).toBe(14);
+			expect(e.schema_v).toBe(15);
 			expect(e.shelter_code).toBe('SH001');
 
 			expect(e.created_by).toBe('public');
@@ -352,6 +355,37 @@ describe('POST /api/public/v1/registrations', () => {
 				expect(e.registered_via).toBe('web');
 			}
 			expect((await res.json()).member_count).toBe(3);
+		});
+
+		it('writes the PDPA block decision onto every evacuee (FR-42)', async () => {
+			const res = await POST(
+				event({ ...FAMILY, ...webConsentBody(3, { mode: 'basic', guardian_for: ['m2'] }) })
+			);
+			expect(res.status).toBe(201);
+
+			const { evacuees } = writtenDocs();
+			expect(evacuees.map((e) => (e.consent as { given_by: string }).given_by)).toEqual([
+				'self',
+				'household_member',
+				'guardian'
+			]);
+			for (const e of evacuees) {
+				expect(e.schema_v).toBe(15);
+				expect(e.consent).toMatchObject({ mode: 'basic', health: false, channel: 'web' });
+				expect(e.privacy).toEqual({ search_excluded: true });
+			}
+		});
+
+		it('422s without the consent decision and writes nothing', async () => {
+			const res = await POST(event({ ...FAMILY, consent: undefined }));
+			expect(res.status).toBe(422);
+			expect(bulkAsPublicWriter).not.toHaveBeenCalled();
+		});
+
+		it('422s when consent member keys do not match the members', async () => {
+			const res = await POST(event({ ...FAMILY, ...webConsentBody(2) }));
+			expect(res.status).toBe(422);
+			expect(bulkAsPublicWriter).not.toHaveBeenCalled();
 		});
 
 		it('gives the phone and national id to the contact only', async () => {
@@ -483,14 +517,6 @@ describe('POST /api/public/v1/registrations', () => {
 			const res = await POST(event(noToken));
 			expect(res.status).toBe(201);
 			expect(verifyToken).not.toHaveBeenCalled();
-		});
-
-		it('still enforces the rate limit in dev', async () => {
-			mockAppEnv.dev = true;
-			vi.mocked(registerIpLimiter.check).mockReturnValue(false);
-			const res = await POST(event(VALID_BODY));
-			expect(res.status).toBe(429);
-			expect(bulkAsPublicWriter).not.toHaveBeenCalled();
 		});
 	});
 

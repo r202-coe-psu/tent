@@ -60,6 +60,11 @@ def test_parse_rejects_a_nul_byte():
     assert parse_search_query("สม\x00หมาย") is None
 
 
+def test_lone_surrogate_is_rejected() -> None:
+    # Valid in a JSON string but not encodable to BSON: the query would 500 (#744 review).
+    assert parse_search_query("\ud800x ab") is None
+
+
 def test_parse_rejects_more_than_four_words():
     assert parse_search_query("สม ชาย มา โชค") is not None
     assert parse_search_query("สม ชาย มา โชค ใจ") is None

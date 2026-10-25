@@ -3,7 +3,6 @@ import { env } from '$env/dynamic/private';
 import type { RequestHandler } from './$types';
 
 import { fastapiBaseUrl, fastapiServiceHeaders, unwrapFastapiError } from '$lib/server/fastapi';
-import { registerIpLimiter } from '$lib/server/security/rate-limiter';
 
 export const prerender = false;
 
@@ -15,12 +14,7 @@ const MAX_BYTES = 5 * 1024 * 1024;
  *
  * Browser → BFF → FastAPI GridFS. Returns `{ photo_id: "gfs:…" }` for member.photo (#255).
  */
-export const POST: RequestHandler = async ({ request, getClientAddress, fetch }) => {
-	const ip = getClientAddress();
-	if (!registerIpLimiter.check(ip)) {
-		return json({ success: false, error: 'RATE_LIMITED' }, { status: 429, headers: noStore });
-	}
-
+export const POST: RequestHandler = async ({ request, fetch }) => {
 	if (!env.EXTERNAL_API_SECRET) {
 		return json(
 			{ success: false, error: 'SERVER_MISCONFIGURED' },

@@ -233,6 +233,7 @@
 			} else {
 				donationStore.trackingToken = data.trackingToken;
 				donationStore.bookingRef = data.bookingRef;
+				donationStore.bookingStatus = data.status ?? 'pending_review';
 				donationStore.slotDate = slotDateStr;
 				donationStore.goToStep('ticket');
 				if (donationStore.reachedStep < 4) donationStore.reachedStep = 4;

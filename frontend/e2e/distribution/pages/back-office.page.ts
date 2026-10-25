@@ -108,11 +108,14 @@ export class BackOfficePage {
 	async dispatch(ticket: SeededTicket, item: SeededItem): Promise<void> {
 		await this.page.getByRole('button', { name: /เลือก Physical Lot และปล่อยรถ/ }).click();
 		const dialog = this.page.getByRole('dialog', { name: /เลือก Physical Lot และปล่อยรถ/ });
-		await dialog
-			.getByRole('radiogroup', { name: `เลือก Physical Lot สินค้าสำหรับ ${item.name}` })
-			.getByRole('radio')
-			.click();
-		await dialog.getByRole('button', { name: /ยืนยันปล่อยรถ/ }).click();
+		// Wait for the lot list (lots loaded), then let the picker fill qty per lot.
+		await expect(
+			dialog.getByRole('list', { name: `กำหนดจำนวนจาก Physical Lot สินค้าสำหรับ ${item.name}` })
+		).toBeVisible();
+		await dialog.getByRole('button', { name: 'จัดสรรอัตโนมัติ' }).click();
+		const confirm = dialog.getByRole('button', { name: /ยืนยันปล่อยรถ/ });
+		await expect(confirm).toBeEnabled();
+		await confirm.click();
 		await expectTicketStatus(ticket, 'IN_TRANSIT', 'Dispatch checkpoint');
 	}
 

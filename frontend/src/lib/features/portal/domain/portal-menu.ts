@@ -283,6 +283,16 @@ export const PORTAL_DEPARTMENTS: readonly PortalDepartment[] = [
 				roles: [SC]
 			},
 			{
+				// Same queue the kitchen opens tickets into — warehouse approves and dispatches here.
+				id: 'supply-kitchen-requisition',
+				label: 'เบิกวัตถุดิบครัว',
+				desc: 'ใบเบิกวัตถุดิบและเสบียงอาหาร',
+				icon: 'clipboard-check',
+				href: '/back-office/tickets/kitchen',
+				scope: 'shelter',
+				roles: [SC]
+			},
+			{
 				id: 'frontline-distribution',
 				label: 'จุดแจกจ่ายพัสดุและอาหาร',
 				desc: 'แจกของรายครัวเรือนหน้างาน',

@@ -50,7 +50,7 @@
 		if (referral?.evacuee_summary) {
 			return `${referral.evacuee_summary.first_name} ${referral.evacuee_summary.last_name}`;
 		}
-		return 'ไม่พบชื่อผู้ประสบภัย';
+		return 'ไม่พบชื่อผู้เข้าพัก';
 	}
 
 	// Local state for filtering and pagination
@@ -120,7 +120,7 @@
 		<input
 			type="text"
 			bind:value={searchQuery}
-			placeholder="ค้นหาชื่อผู้ประสบภัย หรือหน่วยงาน/ศูนย์พักพิงปลายทาง..."
+			placeholder="ค้นหาชื่อผู้เข้าพัก หรือหน่วยงาน/ศูนย์พักพิงปลายทาง..."
 			class="flex h-9 w-full min-w-0 rounded-md border border-input bg-background px-3 py-1 pl-9 text-base shadow-xs ring-offset-background transition-[color,box-shadow] outline-none selection:bg-primary selection:text-primary-foreground placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 md:text-sm dark:bg-input/30 dark:aria-invalid:ring-destructive/40"
 		/>
 	</div>

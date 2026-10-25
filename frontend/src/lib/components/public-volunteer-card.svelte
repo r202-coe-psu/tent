@@ -4,6 +4,8 @@
 	import { langState } from '$lib/states/i18n.svelte';
 
 	export type PublicVolunteerCardData = {
+		/** When set, the apply button opens the job board filtered to this shelter (#709). */
+		shelterCode?: string;
 		name: string;
 		status: string;
 		location: string;
@@ -21,6 +23,10 @@
 	} = $props();
 
 	const isEn = $derived(langState.current === 'en');
+	/** `?shelter=` filters the job board to this card's shelter (#709). */
+	const shelterQuery = $derived(
+		item.shelterCode ? `?shelter=${encodeURIComponent(item.shelterCode)}` : ''
+	);
 	const displayStatus = $derived(
 		isEn ? (item.status === 'วิกฤติ' ? 'Critical' : item.status) : item.status
 	);
@@ -97,7 +103,7 @@
 		</div>
 
 		<a
-			href={resolve('/volunteers/jobs')}
+			href={`${resolve('/volunteers/jobs')}${shelterQuery}`}
 			class="flex w-full cursor-pointer items-center justify-center rounded-xl bg-domain-volunteer-strong py-2.5 text-xs font-bold text-white shadow-xs transition-colors hover:bg-domain-volunteer-text sm:rounded-2xl sm:py-4 sm:text-base"
 		>
 			{isEn ? 'Volunteer' : 'สมัครจิตอาสา'}

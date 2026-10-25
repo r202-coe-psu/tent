@@ -9,24 +9,50 @@
 	import * as Pagination from '$lib/components/ui/pagination/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
 	import * as Table from '$lib/components/ui/table/index.js';
+	import type { Snippet } from 'svelte';
 	import {
+		DONATION_QUEUE_FILTERS,
 		donationActionRef,
 		donationRefLabel,
+		donationStatusLabel,
+		filterDonationQueue,
+		queueGroupOf,
+		type DonationQueueFilter,
 		type PendingDonationRow
 	} from '$lib/features/donations';
 	import { formatUnit, useUnitsOfMeasure } from '$lib/features/catalog';
 	import { langState } from '$lib/states/i18n.svelte';
 	import BoardSectionHeader from '$lib/components/board-section-header.svelte';
 
+	/**
+	 * "รายการของบริจาค" (#617) — every booking still in the shelter's hands: waiting for
+	 * review and waiting to be dropped off, in one list with a status filter. Review and
+	 * scan used to be two tabs showing largely the same rows.
+	 */
 	let {
 		requests = [],
 		loading = false,
+		filter = $bindable('all'),
+		error = null,
+		onRetry,
+		actions,
 		onViewDetails
 	}: {
 		requests: PendingDonationRow[];
 		loading?: boolean;
+		/** The list could not be loaded — said as such, never as an empty queue. */
+		error?: string | null;
+		onRetry?: () => void;
+		filter?: DonationQueueFilter;
+		/** Top-right of the list — the scan and walk-in entry points. */
+		actions?: Snippet;
 		onViewDetails: (request: PendingDonationRow) => void;
 	} = $props();
+
+	const STATUS_BADGE: Record<'pending' | 'awaiting', string> = {
+		pending: 'border-amber-200 bg-amber-50 text-amber-900',
+		awaiting: 'border-sky-200 bg-sky-50 text-sky-900'
+	};
 	const unitsQuery = useUnitsOfMeasure();
 	const units = $derived(unitsQuery.data ?? []);
 
@@ -84,6 +110,9 @@
 	 * return the same sentence, labelling every request as unsolicited.
 	 */
 	function getTriggerReason(req: PendingDonationRow): string {
+		if (queueGroupOf(req.status) === 'awaiting') {
+			return 'อนุมัติแล้ว — รอผู้บริจาคนำของมาส่ง (เปิดเพื่อตรวจรับ)';
+		}
 		if (req.is_unsolicited) {
 			return 'สิ่งของนอกเหนือรายการแจ้งความต้องการ (Unsolicited Donation)';
 		}
@@ -91,7 +120,7 @@
 	}
 
 	const filteredRequests = $derived.by(() => {
-		let list = [...requests];
+		let list = filterDonationQueue(requests, filter);
 
 		if (searchQuery.trim()) {
 			const q = searchQuery.toLowerCase().trim();
@@ -131,12 +160,51 @@
 	);
 </script>
 
+{#snippet loadError()}
+	<div
+		class="flex flex-col items-center gap-3 rounded-xl border border-red-200 bg-white p-6 text-center"
+		role="alert"
+	>
+		<p class="text-base font-semibold text-red-900">โหลดรายการของบริจาคไม่สำเร็จ</p>
+		<p class="text-sm text-slate-600">{error}</p>
+		{#if onRetry}
+			<Button type="button" variant="outline" class="min-h-11" onclick={onRetry}>ลองใหม่</Button>
+		{/if}
+	</div>
+{/snippet}
+
 <div class="overflow-hidden rounded-2xl border border-border bg-card shadow-xs">
 	<BoardSectionHeader
 		icon={ClipboardCheck}
-		title="รายการรอตรวจสอบความเหมาะสม (Pending Review Board)"
-		description="ระบบกรองอนุมัติคำขอขอบริจาคพิเศษที่มีน้ำหนักหรือคุณสมบัติจำเป็นต้องให้ส่วนกลางประเมินพื้นที่คลังและการกระจายพัสดุก่อนรับเข้าจริง"
+		title="รายการของบริจาค"
+		description="ใบจองที่รอประเมินและรอมาส่ง — เปิดใบรอประเมินเพื่ออนุมัติหรือปฏิเสธ เปิดใบรอมาส่งเพื่อตรวจรับเข้าคลัง"
+		{actions}
 	/>
+
+	<!-- Status filter (#617) -->
+	<div
+		class="flex flex-wrap gap-2 border-b border-border/60 bg-card px-4 pt-4 pb-3"
+		role="group"
+		aria-label="กรองตามสถานะ"
+	>
+		{#each DONATION_QUEUE_FILTERS as option (option.value)}
+			{@const count =
+				option.value === 'all'
+					? requests.length
+					: requests.filter((r) => queueGroupOf(r.status) === option.value).length}
+			<Button
+				type="button"
+				size="sm"
+				variant={filter === option.value ? 'default' : 'outline'}
+				aria-pressed={filter === option.value}
+				class="min-h-10 rounded-full px-4 text-xs font-bold"
+				onclick={() => (filter = option.value)}
+			>
+				{option.label}
+				<span class="tabular-nums opacity-80">({count})</span>
+			</Button>
+		{/each}
+	</div>
 
 	<!-- Filter Bar -->
 	<div class="border-b border-border/60 bg-card p-4">
@@ -195,11 +263,13 @@
 			>
 				กำลังโหลดข้อมูล...
 			</div>
+		{:else if error}
+			{@render loadError()}
 		{:else if filteredRequests.length === 0}
 			<div
 				class="rounded-xl border border-slate-200/80 bg-white p-8 text-center text-sm text-slate-500 shadow-2xs"
 			>
-				ไม่มีรายการที่อยู่ระหว่างการรอการประเมิน
+				ไม่มีรายการของบริจาคในสถานะนี้
 			</div>
 		{:else}
 			{#each pagedRequests as req (donationActionRef(req) ?? req.declared_at)}
@@ -211,9 +281,9 @@
 						<div class="mt-1.5 flex flex-wrap items-center gap-2 text-xs">
 							<Badge
 								variant="outline"
-								class="border-amber-200 bg-amber-50 text-xs font-bold text-amber-900"
+								class="text-xs font-bold {STATUS_BADGE[queueGroupOf(req.status)]}"
 							>
-								รอพิจารณาอนุมัติ
+								{donationStatusLabel(req.status)}
 							</Badge>
 							<span class="font-semibold text-slate-500">{donationRefLabel(req)}</span>
 							<span class="text-slate-400">·</span>
@@ -275,10 +345,14 @@
 							กำลังโหลดข้อมูล...
 						</Table.Cell>
 					</Table.Row>
+				{:else if error}
+					<Table.Row>
+						<Table.Cell colspan={4} class="px-6 py-8">{@render loadError()}</Table.Cell>
+					</Table.Row>
 				{:else if filteredRequests.length === 0}
 					<Table.Row>
 						<Table.Cell colspan={4} class="px-6 py-12 text-center text-muted-foreground">
-							ไม่มีรายการที่อยู่ระหว่างการรอการประเมิน
+							ไม่มีรายการของบริจาคในสถานะนี้
 						</Table.Cell>
 					</Table.Row>
 				{:else}
@@ -292,9 +366,9 @@
 								<div class="mt-1.5 flex flex-wrap items-center gap-2 text-2xs">
 									<Badge
 										variant="outline"
-										class="border-amber-300/80 bg-amber-50 text-2xs font-bold text-amber-700 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-400"
+										class="text-2xs font-bold {STATUS_BADGE[queueGroupOf(req.status)]}"
 									>
-										รอพิจารณาอนุมัติ
+										{donationStatusLabel(req.status)}
 									</Badge>
 									<span class="font-semibold text-muted-foreground">
 										{donationRefLabel(req)}

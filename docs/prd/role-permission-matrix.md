@@ -2,7 +2,7 @@
 title: "Full-System Role Permission Matrix (R2-R4 & V10)"
 status: approved
 created: 2026-06-04
-updated: 2026-10-25 # CR-153 แยก Daily SOP UI visibility กับ CouchDB read; 2026-10-20 CR-153 Daily SOP rows; CR-155 amend incident log เฉพาะ SA/SM/SO; 2026-10-18 CR-165 kiosk_staff แทน banner_staff (11th role) + CR-162 path `/back-office/kiosks/banners`; 2026-10-11 CR-162 banner_staff; เดิม: CR-093 (Compound Roles) & CR-104 (Volunteer Backoffice, 10-Role Taxonomy, Health Policy); decision sync 2026-10-10; CR-155 shelter_incident แทน shelter_report
+updated: 2026-10-26 # CR-153 แยก Daily SOP UI visibility กับ CouchDB read; 2026-10-20 CR-153 Daily SOP rows; CR-155 amend incident log เฉพาะ SA/SM/SO; 2026-10-18 CR-165 kiosk_staff แทน banner_staff (11th role) + CR-162 path `/back-office/kiosks/banners`; 2026-10-11 CR-162 banner_staff; เดิม: CR-093 (Compound Roles) & CR-104 (Volunteer Backoffice, 10-Role Taxonomy, Health Policy); decision sync 2026-10-10; CR-155 shelter_incident แทน shelter_report
 note: decision sync 2026-10-10 — VC may access /back-office/volunteers (job board/shifts), REG may access Station 2 medical screening; portal groups menus by department (ฝ่าย): ทะเบียน(REG; TRG/MED เห็นเฉพาะ Station 2), ครัว(KS), พัสดุและคลัง(SC, warehouse_staff alias), อาสาสมัคร(VC), รักษาความปลอดภัย(SO), อาคารสถานที่(FAC), บริหารศูนย์(SM), ส่วนกลาง(SA)
 closes: K-12 (A1 RBAC phase-blocker)
 affects:

@@ -607,6 +607,23 @@ export interface paths {
 		patch?: never;
 		trace?: never;
 	};
+	'/external/persons/search': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/** Search Persons */
+		post: operations['search_persons_external_persons_search_post'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
 	'/external/persons/shelter-residency': {
 		parameters: {
 			query?: never;
@@ -1237,6 +1254,63 @@ export interface components {
 			success: boolean;
 			key: components['schemas']['ApiKeyPublic'];
 		};
+		/** BasicEvacueeConsent */
+		BasicEvacueeConsent: {
+			/**
+			 * @description discriminator enum property added by openapi-typescript
+			 * @enum {string}
+			 */
+			mode: 'basic';
+			/**
+			 * Health
+			 * @constant
+			 */
+			health: false;
+			/** Ref */
+			ref: string;
+			/** Given At */
+			given_at: string;
+			/** Notice Version */
+			notice_version: string;
+			/**
+			 * Given By
+			 * @enum {string}
+			 */
+			given_by: 'self' | 'guardian' | 'household_member' | 'backfill';
+			/** Giver Evacuee Id */
+			giver_evacuee_id: string | null;
+			/** Recorded Verbally By */
+			recorded_verbally_by: string | null;
+			/**
+			 * Channel
+			 * @enum {string}
+			 */
+			channel: 'staff' | 'kiosk' | 'web' | 'backfill';
+		};
+		/** BasicWebConsentGrant */
+		BasicWebConsentGrant: {
+			/**
+			 * @description discriminator enum property added by openapi-typescript
+			 * @enum {string}
+			 */
+			mode: 'basic';
+			/**
+			 * Health
+			 * @constant
+			 */
+			health: false;
+			/** Ref */
+			ref: string;
+			/** Given At */
+			given_at: string;
+			/** Notice Version */
+			notice_version: string;
+			/**
+			 * Given By
+			 * @enum {string}
+			 */
+			given_by: 'self' | 'guardian' | 'household_member';
+		};
 		/** Body_upload_unassigned_photo_public_v1_unassigned_registrations_photos_post */
 		Body_upload_unassigned_photo_public_v1_unassigned_registrations_photos_post: {
 			/** Full */
@@ -1610,6 +1684,8 @@ export interface components {
 			tracking_token: string;
 			/** Booking Ref */
 			booking_ref: string;
+			/** Status */
+			status: string;
 		};
 		/** DonationItemInput */
 		DonationItemInput: {
@@ -1632,6 +1708,14 @@ export interface components {
 		DonationItemsPatchRequest: {
 			/** Items */
 			items: components['schemas']['DonationItemInput'][];
+			/** Current Items */
+			current_items?:
+				| {
+						[key: string]: unknown;
+				  }[]
+				| null;
+			/** Current Status */
+			current_status?: string | null;
 		};
 		/** DonationItemsPatchResponse */
 		DonationItemsPatchResponse: {
@@ -1658,6 +1742,10 @@ export interface components {
 			revision?: {
 				[key: string]: unknown;
 			};
+			/** Status */
+			status: string;
+			/** Auto Approved Lines */
+			auto_approved_lines?: number[];
 		};
 		/**
 		 * DonationTrackSearchRequest
@@ -1762,6 +1850,57 @@ export interface components {
 			 * @default 0
 			 */
 			order: number;
+		};
+		/** FullEvacueeConsent */
+		FullEvacueeConsent: {
+			/**
+			 * @description discriminator enum property added by openapi-typescript
+			 * @enum {string}
+			 */
+			mode: 'full';
+			/** Health */
+			health: boolean;
+			/** Ref */
+			ref: string;
+			/** Given At */
+			given_at: string;
+			/** Notice Version */
+			notice_version: string;
+			/**
+			 * Given By
+			 * @enum {string}
+			 */
+			given_by: 'self' | 'guardian' | 'household_member' | 'backfill';
+			/** Giver Evacuee Id */
+			giver_evacuee_id: string | null;
+			/** Recorded Verbally By */
+			recorded_verbally_by: string | null;
+			/**
+			 * Channel
+			 * @enum {string}
+			 */
+			channel: 'staff' | 'kiosk' | 'web' | 'backfill';
+		};
+		/** FullWebConsentGrant */
+		FullWebConsentGrant: {
+			/**
+			 * @description discriminator enum property added by openapi-typescript
+			 * @enum {string}
+			 */
+			mode: 'full';
+			/** Health */
+			health: boolean;
+			/** Ref */
+			ref: string;
+			/** Given At */
+			given_at: string;
+			/** Notice Version */
+			notice_version: string;
+			/**
+			 * Given By
+			 * @enum {string}
+			 */
+			given_by: 'self' | 'guardian' | 'household_member';
 		};
 		/** GeoJsonPoint */
 		GeoJsonPoint: {
@@ -1923,6 +2062,8 @@ export interface components {
 			contact_name: string | null;
 			/** Operating Org */
 			operating_org: string | null;
+			/** Accepts Booking */
+			accepts_booking: boolean;
 			/** Accepts Delivery */
 			accepts_delivery: boolean;
 			/** Delivery Note */
@@ -1988,6 +2129,8 @@ export interface components {
 			contact_name: string | null;
 			/** Operating Org */
 			operating_org: string | null;
+			/** Accepts Booking */
+			accepts_booking: boolean;
 			/** Accepts Delivery */
 			accepts_delivery: boolean;
 			/** Delivery Note */
@@ -2157,6 +2300,12 @@ export interface components {
 			emergency_contact?: components['schemas']['EmergencyContactInput'] | null;
 			/** Photo */
 			photo?: string | null;
+			/** Consent */
+			consent:
+				| components['schemas']['FullWebConsentGrant']
+				| components['schemas']['BasicWebConsentGrant'];
+			/** Search Excluded */
+			search_excluded: boolean;
 		};
 		/** NeedItemResponse */
 		NeedItemResponse: {
@@ -2322,6 +2471,18 @@ export interface components {
 			birth_year?: number | null;
 			/** Age */
 			age?: number | null;
+			/** Consent */
+			consent?:
+				| (
+						| components['schemas']['FullEvacueeConsent']
+						| components['schemas']['BasicEvacueeConsent']
+				  )
+				| null;
+			/**
+			 * Search Excluded
+			 * @default false
+			 */
+			search_excluded: boolean;
 		};
 		/**
 		 * OpenPetHit
@@ -2403,6 +2564,64 @@ export interface components {
 			cardType: 'national_id' | 'passport' | 'pink_card' | 'other' | 'anonymous';
 			/** Number */
 			number?: string | null;
+		};
+		/** PersonSearchEnvelope */
+		PersonSearchEnvelope: {
+			/**
+			 * Status
+			 * @default 200
+			 */
+			status: number;
+			/**
+			 * Message
+			 * @default Found Data.
+			 */
+			message: string;
+			/**
+			 * Result
+			 * @description สูงสุด 10 รายการ; ว่างเมื่อไม่พบ
+			 */
+			result: components['schemas']['PersonSearchItem'][];
+		};
+		/** PersonSearchErrorResponse */
+		PersonSearchErrorResponse: {
+			/** Status */
+			status: number;
+			/** Message */
+			message: string;
+			/** Code */
+			code?: string | null;
+			/** Detail */
+			detail?: string | null;
+		};
+		/**
+		 * PersonSearchItem
+		 * @description A masked match — same fields as public search minus `family_members` (#736 decision 4).
+		 */
+		PersonSearchItem: {
+			/** Name */
+			name: string;
+			/** Status */
+			status: string;
+			/** National Id */
+			national_id?: string | null;
+			/** Gender */
+			gender?: string | null;
+			/** Shelter Name */
+			shelter_name: string;
+			/** Shelter Address */
+			shelter_address?: string | null;
+			/** Origin Address */
+			origin_address?: string | null;
+			/**
+			 * Checked In At
+			 * @description วันเวลาเข้าพัก ISO 8601 (+07:00); null เมื่อยังไม่ check-in
+			 */
+			checked_in_at?: string | null;
+			/** Care Zone */
+			care_zone?: string | null;
+			/** Zone Name */
+			zone_name?: string | null;
 		};
 		/** PetCreated */
 		PetCreated: {
@@ -2535,6 +2754,11 @@ export interface components {
 			applicants_count: number;
 			/** Status */
 			status: string;
+			/**
+			 * Is Urgent
+			 * @default false
+			 */
+			is_urgent: boolean;
 			/**
 			 * Requires Review
 			 * @default false
@@ -5181,6 +5405,8 @@ export interface operations {
 				updated_since?: string | null;
 				/** @description Include soft-deleted (is_active=false) locations */
 				include_inactive?: boolean;
+				/** @description Filter by the accepts_booking rule (EXT-008): true = bookable, false = not bookable. Only the lowercase strings `true` / `false` are accepted; anything else is 422. */
+				accepts_booking?: ('true' | 'false') | null;
 				/** @description Page number */
 				page?: number;
 				/** @description Items per page */
@@ -5352,6 +5578,77 @@ export interface operations {
 				};
 				content: {
 					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	search_persons_external_persons_search_post: {
+		parameters: {
+			query?: {
+				/** @description วัตถุประสงค์การค้นหา (บังคับ) */
+				purpose?: string | null;
+			};
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/** @description A missing or malformed body is answered with 422 `validation_error`. */
+		requestBody?: {
+			content: {
+				'application/json': {
+					/**
+					 * Search
+					 * @description คำค้น: ชื่อ / เลขบัตร 13 หลัก / พาสปอร์ต / เบอร์โทร (ไม่ส่งใน URL)
+					 * @default
+					 */
+					search?: string;
+				};
+			};
+		};
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['PersonSearchEnvelope'];
+				};
+			};
+			/** @description Bad Request */
+			400: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['PersonSearchErrorResponse'];
+				};
+			};
+			/** @description Unauthorized */
+			401: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['PersonSearchErrorResponse'];
+				};
+			};
+			/** @description Forbidden */
+			403: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['PersonSearchErrorResponse'];
+				};
+			};
+			/** @description Unprocessable Content */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['PersonSearchErrorResponse'];
 				};
 			};
 		};
