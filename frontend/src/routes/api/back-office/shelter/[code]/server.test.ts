@@ -68,4 +68,14 @@ describe('PATCH /api/back-office/shelter/[code]', () => {
 		await callPATCH('SH999', {});
 		expect(updateMock).not.toHaveBeenCalled();
 	});
+
+	it('leaves closed_at to updateMaster, even when the client sends one', async () => {
+		await callPATCH('SH001', { operation_status: 'closed' });
+		const mutator = updateMock.mock.calls[0][1] as (c: unknown) => {
+			patch: Record<string, unknown>;
+		};
+		const { patch } = mutator({ operation_status: 'active' });
+		expect(patch.operation_status).toBe('closed');
+		expect(patch).not.toHaveProperty('closed_at');
+	});
 });

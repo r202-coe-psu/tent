@@ -79,13 +79,8 @@ export const PATCH: RequestHandler = async ({ request, params }) => {
 		const input = updateShelterSchema.parse(body);
 
 		// updateMaster re-reads the doc + retries 409s internally
-		// (skill: couchdb-pouchdb-bestpractices §3).
-		await updateMaster(code, () => ({
-			patch: {
-				...input,
-				updated_at: nowIso()
-			}
-		}));
+		// (skill: couchdb-pouchdb-bestpractices §3) and owns `closed_at`.
+		await updateMaster(code, () => ({ patch: { ...input, updated_at: nowIso() } }));
 
 		return json({ ok: true, code });
 	} catch (e) {

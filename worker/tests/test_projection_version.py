@@ -11,6 +11,7 @@ import pytest
 from worker.couch import bootstrap as bs
 from worker.couch import checkpoint as cp
 from worker.projection_version import PROJECTION_VERSION
+from worker.projectors.shelter import RetentionPhase
 
 
 class FakeStore:
@@ -58,9 +59,9 @@ def scan():
         patch.object(bs, "bootstrap_database", new_callable=AsyncMock) as db,
         patch.object(
             bs,
-            "list_open_shelter_codes",
+            "list_listened_shelters",
             new_callable=AsyncMock,
-            return_value=["SH001"],
+            return_value={"SH001": RetentionPhase.OPEN},
         ),
     ):
         yield db

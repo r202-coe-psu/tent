@@ -51,7 +51,7 @@ REGISTRY_DB = "registry"
 async def _all_shelter_codes(couch: CouchClient) -> list[str]:
     """Every shelter in the registry — including closed ones.
 
-    Not ``bootstrap.list_open_shelter_codes``: a closed shelter can still own counters
+    Not ``bootstrap.list_listened_shelters``: any closed shelter can still own counters
     with reserved quota, and skipping it would leave them permanently unreconciled.
     """
     codes: set[str] = set()

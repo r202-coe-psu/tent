@@ -1,6 +1,5 @@
 <script lang="ts">
 	import Search from '@lucide/svelte/icons/search';
-	import User from '@lucide/svelte/icons/user';
 	import Users from '@lucide/svelte/icons/users';
 	import MapPin from '@lucide/svelte/icons/map-pin';
 	import Clock from '@lucide/svelte/icons/clock';
@@ -15,6 +14,7 @@
 		searchResultKey,
 		validateFamilySearchQuery,
 		PublicPageShell,
+		ShelterClosedBadge,
 		StayStatusChip,
 		type FamilySearchResult
 	} from '$lib/features/public-portal';
@@ -218,21 +218,15 @@
 									<MapPin class="mt-0.5 h-5 w-5 text-muted-foreground/80" />
 									<div>
 										<div class="text-xs text-muted-foreground">{t.stayingAt}</div>
-										<div class="font-medium text-foreground">{person.shelter_name || '-'}</div>
+										<div class="flex flex-wrap items-center gap-2">
+											<span class="font-medium text-foreground">{person.shelter_name || '-'}</span>
+											<ShelterClosedBadge shelterStatus={person.shelter_status} />
+										</div>
 										{#if person.shelter_address}
 											<div class="mt-0.5 text-xs text-muted-foreground">
 												{person.shelter_address}
 											</div>
 										{/if}
-									</div>
-								</div>
-								<div class="flex gap-3">
-									<User class="mt-0.5 h-5 w-5 text-muted-foreground/80" />
-									<div>
-										<div class="text-xs text-muted-foreground">{t.careZone}</div>
-										<div class="font-medium text-foreground">
-											{person.zone_name || person.care_zone || '-'}
-										</div>
 									</div>
 								</div>
 								<div class="flex gap-3">
@@ -278,11 +272,14 @@
 														{member.name || '-'}
 													</div>
 												</div>
-												<StayStatusChip
-													status={member.status}
-													detail={member.shelter_name || null}
-													size="sm"
-												/>
+												<div class="flex flex-wrap items-center gap-2">
+													<StayStatusChip
+														status={member.status}
+														detail={member.shelter_name || null}
+														size="sm"
+													/>
+													<ShelterClosedBadge shelterStatus={member.shelter_status} />
+												</div>
 											</div>
 										{/each}
 									</div>
