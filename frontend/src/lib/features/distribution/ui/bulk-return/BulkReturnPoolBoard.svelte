@@ -22,6 +22,7 @@
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { formatThaiDateTime } from '$lib/utils/date';
+	import { addQty } from '$lib/utils/qty';
 	import {
 		resolveAuthenticatedAuthorContext,
 		useBulkReturnPoolOverview
@@ -34,11 +35,13 @@
 	import { mapDistributionQueryError } from '../model/distribution-error';
 	import {
 		LATE_BADGE_CLASS,
+		LATE_CARD_EXCLUDED_TEXT,
 		UNRESOLVED_REFS_HINT,
 		filterPoolRows,
 		getPoolBoardViewState,
 		getPoolStatusBadgeClass,
 		getPoolStatusLabel,
+		lateItemQtyText,
 		poolStorageLabel,
 		resolveItemDisplay,
 		type PoolCatalogItem
@@ -129,6 +132,16 @@
 		const id = selectedPoolId;
 		return id ? (list.find((row) => row.pool._id === id) ?? null) : null;
 	});
+
+	/** Sum of late-entry qty per item_id (late entries are already non-voided). */
+	function lateQtyByItem(row: BulkReturnPoolOverviewRow): Record<string, string> {
+		const totals: Record<string, string> = {};
+		for (const late of row.late_entries) {
+			const id = late.entry.item_id;
+			totals[id] = addQty(totals[id] ?? '0', late.entry.qty);
+		}
+		return totals;
+	}
 
 	function handleReauth() {
 		if (authStore.isAuthenticated) {
@@ -303,17 +316,34 @@
 								<span class="font-semibold text-slate-900 tabular-nums">{row.entry_count}</span>
 								รายการ
 							</span>
+							{#if row.late_entries.length > 0}
+								<span
+									class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold {LATE_BADGE_CLASS}"
+								>
+									ค้าง <span class="tabular-nums">{row.late_entries.length}</span>
+									· {LATE_CARD_EXCLUDED_TEXT}
+								</span>
+							{/if}
 						</div>
 
 						{#if row.items.length > 0}
+							{@const lateByItem = lateQtyByItem(row)}
 							<ul class="space-y-0.5 text-sm text-slate-700">
 								{#each row.items as summary (summary.item_id)}
 									{@const item = resolveItemDisplay(summary.item_id, catalog)}
+									{@const lateQty = lateByItem[summary.item_id]}
 									<li class="flex items-baseline justify-between gap-3">
 										<span class="break-words">{item.name}</span>
-										<span class="shrink-0 font-semibold tabular-nums">
-											{summary.qty}
-											{item.unit}
+										<span class="flex shrink-0 flex-col items-end">
+											<span class="font-semibold tabular-nums">
+												{summary.qty}
+												{item.unit}
+											</span>
+											{#if lateQty}
+												<span class="text-xs font-medium text-amber-700 tabular-nums">
+													{lateItemQtyText(lateQty, item.unit)}
+												</span>
+											{/if}
 										</span>
 									</li>
 								{/each}

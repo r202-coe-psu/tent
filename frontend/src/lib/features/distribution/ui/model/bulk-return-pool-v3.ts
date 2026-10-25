@@ -364,3 +364,11 @@ export function buildHeaderPatch(
 export function isPatchEmpty(patch: UpdateBulkReturnPoolHeaderPatch): boolean {
 	return Object.keys(patch).length === 0;
 }
+
+/** Label on the pool card clarifying that late entries are not part of the stored total. */
+export const LATE_CARD_EXCLUDED_TEXT = 'ไม่รวมในยอดที่เก็บเข้าคลัง';
+
+/** Per-item note on the pool card for the late quantity included in the live total. */
+export function lateItemQtyText(qty: string, unit: string): string {
+	return `รวมของค้าง ${qty} ${unit}`.trim();
+}
