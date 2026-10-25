@@ -50,6 +50,18 @@ export {
 	PRIMARY_CONTACT_LABEL
 } from './domain/unified-registration';
 
+export {
+	STATION_LOG_STALE_WINDOW_MS,
+	STATION_CHANNEL_COMBOS,
+	bangkokDateOf,
+	createStationLog,
+	summarizeStationTimes,
+	type StationLog,
+	type StationLogEvent,
+	type StationNumber,
+	type StationTimeRow
+} from './domain/station-log';
+
 export { registeredViaSchema } from '$lib/db/model';
 
 export type { Evacuee, EvacueeInput, Household, HouseholdInput, StayStatus } from './domain/people';
