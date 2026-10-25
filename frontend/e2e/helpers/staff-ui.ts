@@ -61,7 +61,25 @@ export async function selectActiveShelter(page: Page, code: string): Promise<voi
 	await page.goto('/back-office/stock-donations');
 	await page.getByRole('button', { name: 'เลือกศูนย์อพยพ' }).click();
 	await page.getByRole('option', { name: new RegExp(`^${code} — `) }).click();
-	await expect(page.getByRole('button', { name: 'เลือกศูนย์อพยพ' })).toContainText(code);
+	await expectActiveShelter(page, code);
+}
+
+/**
+ * The sidebar shelter trigger names the active shelter: as text when the sidebar is expanded,
+ * only as its `title` tooltip when collapsed (icon-only, the default since #858).
+ */
+export async function expectActiveShelter(
+	page: Page,
+	code: string,
+	options?: { timeout?: number }
+): Promise<void> {
+	const trigger = page.getByRole('button', { name: 'เลือกศูนย์อพยพ' });
+	await expect
+		.poll(
+			async () => (await trigger.getAttribute('title')) ?? (await trigger.textContent()) ?? '',
+			options
+		)
+		.toContain(code);
 }
 
 export interface MemberForm {
