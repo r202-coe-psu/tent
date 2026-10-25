@@ -12,6 +12,7 @@
 	import * as Select from '$lib/components/ui/select/index.js';
 	import { STAFF_CAPABILITIES, roleOptionLabel, type StaffCapability } from '$lib/auth/roles';
 	import { volunteerKeys } from '../application/queries';
+	import { accountPhone } from '../domain/phone';
 	import { grantVolunteerAccess, volunteerAccessSchema } from '../application/volunteer-access';
 	import type { Volunteer } from '../domain/volunteer.schema';
 
@@ -28,6 +29,7 @@
 	const queryClient = useQueryClient();
 	let pending = $state(false);
 
+	const loginPhone = $derived(accountPhone(volunteer.phone));
 	const fullName = $derived(`${volunteer.first_name} ${volunteer.last_name}`.trim());
 
 	let email = $state('');
@@ -43,7 +45,7 @@
 		if (lastOpenedId === volunteer._id) return;
 		email = volunteer.user_name ?? volunteer.email ?? '';
 		role = 'registration_staff';
-		password = volunteer.phone ?? '';
+		password = loginPhone ?? '';
 		lastOpenedId = volunteer._id;
 	});
 
@@ -182,11 +184,19 @@
 						class="h-11"
 						placeholder="กำหนดรหัสผ่านสำหรับเข้าสู่ระบบ"
 					/>
-					<p class="text-[11px] text-muted-foreground">
-						ค่าเริ่มต้นคือเบอร์โทรศัพท์ของอาสาสมัคร
-						และจะบังคับเปลี่ยนรหัสผ่านในการเข้าสู่ระบบครั้งแรก หากเปลี่ยนเป็นรหัสอื่น
-						ต้องมีอย่างน้อย 10 ตัวอักษร พร้อมตัวพิมพ์ใหญ่ ตัวพิมพ์เล็ก ตัวเลข และอักขระพิเศษ
-					</p>
+					{#if loginPhone}
+						<p class="text-[11px] text-muted-foreground">
+							ค่าเริ่มต้นคือเบอร์โทรศัพท์ของอาสาสมัคร
+							และจะบังคับเปลี่ยนรหัสผ่านในการเข้าสู่ระบบครั้งแรก หากเปลี่ยนเป็นรหัสอื่น
+							ต้องมีอย่างน้อย 10 ตัวอักษร พร้อมตัวพิมพ์ใหญ่ ตัวพิมพ์เล็ก ตัวเลข และอักขระพิเศษ
+						</p>
+					{:else}
+						<p class="text-[11px] text-muted-foreground">
+							เบอร์โทรศัพท์ของอาสาสมัครไม่ใช่มือถือ 10 หลัก จึงใช้เป็นรหัสผ่านเริ่มต้นไม่ได้
+							กรุณาตั้งรหัสผ่านเอง (อย่างน้อย 10 ตัวอักษร พร้อมตัวพิมพ์ใหญ่ ตัวพิมพ์เล็ก ตัวเลข
+							และอักขระพิเศษ) บัญชีนี้ใช้อีเมลเข้าสู่ระบบเท่านั้น
+						</p>
+					{/if}
 					<p class="text-[11px] text-muted-foreground">
 						หากสร้างบัญชีแล้วแต่บันทึกโปรไฟล์ไม่สำเร็จ ให้ลองอีกครั้งด้วยอีเมลและบทบาทเดิม
 						ระบบจะผูกบัญชีที่สร้างไว้โดยไม่เปลี่ยนรหัสผ่านเดิม

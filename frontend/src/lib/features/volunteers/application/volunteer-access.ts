@@ -3,6 +3,7 @@ import { passwordSchema } from '$lib/auth/password-schema';
 import { STAFF_CAPABILITIES, shelterScopeRole } from '$lib/auth/roles';
 import { createUser, listUsers } from '$lib/features/users';
 import { volunteerRepositoryFor } from '../data/volunteer.remote';
+import { accountPhone } from '../domain/phone';
 import type { Volunteer } from '../domain/volunteer.schema';
 
 export const volunteerAccessSchema = z.object({
@@ -17,8 +18,8 @@ export async function grantVolunteerAccess(
 	input: z.infer<typeof volunteerAccessSchema>
 ): Promise<{ created: boolean }> {
 	const { email, password, role } = volunteerAccessSchema.parse(input);
-	const isPhoneBootstrapPassword =
-		password === (volunteer.phone?.trim() ?? '') && /^0\d{9}$/.test(password);
+	const loginPhone = accountPhone(volunteer.phone);
+	const isPhoneBootstrapPassword = loginPhone !== null && password === loginPhone;
 	if (!isPhoneBootstrapPassword) passwordSchema.parse(password);
 	const repository = volunteerRepositoryFor(volunteer.shelter_code);
 	const profile = await repository.get(volunteer._id);
@@ -55,6 +56,7 @@ export async function grantVolunteerAccess(
 	}
 	const created = !existing;
 	if (created) {
+		// Non-mobile phones (e.g. 9-digit landline) can't be an account phone: create it phone-less.
 		await createUser({
 			name: email,
 			password,
@@ -62,7 +64,7 @@ export async function grantVolunteerAccess(
 			roles: [scope, role],
 			personnel_type: 'volunteer',
 			organization: profile.organization ?? null,
-			phone: profile.phone,
+			phone: accountPhone(profile.phone),
 			email,
 			volunteer_id: volunteer._id,
 			must_change_password: isPhoneBootstrapPassword

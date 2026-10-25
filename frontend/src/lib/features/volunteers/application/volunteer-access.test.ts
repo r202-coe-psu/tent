@@ -117,6 +117,37 @@ describe('grantVolunteerAccess', () => {
 	});
 
 	it.each([
+		['9-digit landline', '022222222', null],
+		['dashed landline', '02-222-2222', null],
+		['empty', '', null],
+		['dashed mobile', '088-788 7878', '0887887878']
+	])('sends the account phone for a %s profile phone', async (_label, phone, expected) => {
+		mocks.get.mockImplementation(async () => ({ ...volunteer, phone }));
+		await grantVolunteerAccess({ ...volunteer, phone }, input);
+		expect(mocks.createUser).toHaveBeenCalledWith(
+			expect.objectContaining({ phone: expected, must_change_password: false })
+		);
+		expect(mocks.update).toHaveBeenCalledWith(expect.objectContaining({ phone }));
+	});
+
+	it('does not treat a 9-digit phone as a bootstrap password', async () => {
+		const landline = { ...volunteer, phone: '022222222' };
+		mocks.get.mockImplementation(async () => ({ ...landline }));
+		await expect(
+			grantVolunteerAccess(landline, { ...input, password: '022222222' })
+		).rejects.toThrow();
+		expect(mocks.createUser).not.toHaveBeenCalled();
+	});
+
+	it('retries linking an existing phone-less account', async () => {
+		const landline = { ...volunteer, phone: '022222222' };
+		mocks.get.mockImplementation(async () => ({ ...landline }));
+		mocks.listUsers.mockResolvedValue([account]);
+		await expect(grantVolunteerAccess(landline, input)).resolves.toEqual({ created: false });
+		expect(mocks.createUser).not.toHaveBeenCalled();
+	});
+
+	it.each([
 		{ ...input, email: 'bad' },
 		{ ...input, password: '0000000000' },
 		{ ...input, role: 'system_admin' }
