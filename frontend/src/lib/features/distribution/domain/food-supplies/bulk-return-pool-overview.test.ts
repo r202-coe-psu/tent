@@ -100,6 +100,72 @@ describe('buildBulkReturnPoolOverview', () => {
 		expect(byId.get(P2)!.entry_count).toBe(0);
 	});
 
+	it('does not throw on a move chain gap; the entry counts in no pool and is flagged on its pools', () => {
+		const pools = [open1, open2, poolOf(P3, 'C')];
+		// e1 starts in P1; seq 2 (P2 -> P3) replicated, seq 1 (P1 -> P2) not yet.
+		const seq2 = createBulkReturnEntryMove(
+			{ entry: e1, seq: 2, from_pool_id: P2, to_pool_id: P3 },
+			ctx
+		);
+		const rows = buildBulkReturnPoolOverview(pools, {
+			entries: [e1, e3],
+			moves: [seq2],
+			voids: []
+		});
+		const byId = new Map(rows.map((r) => [r.pool._id, r]));
+		for (const row of rows) {
+			expect(row.entries.map((r) => r.entry._id)).not.toContain(e1._id);
+		}
+		expect(byId.get(P1)!.entry_count).toBe(0);
+		expect(byId.get(P1)!.items).toEqual([]);
+		expect(byId.get(P1)!.is_empty).toBe(true);
+		expect(byId.get(P3)!.entry_count).toBe(0);
+		expect(byId.get(P2)!.items).toEqual([{ item_id: 'item:cot', qty: '1' }]);
+		const gapRef = {
+			kind: 'move_gap',
+			entry_id: e1._id,
+			pool_ids: [P1, P2, P3],
+			missing_seqs: [1]
+		};
+		for (const id of [P1, P2, P3]) {
+			expect(byId.get(id)!.unresolved_refs).toEqual([gapRef]);
+		}
+
+		// self-heal: seq 1 arrives
+		const seq1 = createBulkReturnEntryMove(
+			{ entry: e1, seq: 1, from_pool_id: P1, to_pool_id: P2 },
+			ctx
+		);
+		const healed = new Map(
+			buildBulkReturnPoolOverview(pools, {
+				entries: [e1, e3],
+				moves: [seq2, seq1],
+				voids: []
+			}).map((r) => [r.pool._id, r])
+		);
+		expect(healed.get(P3)!.entries.map((r) => r.entry._id)).toEqual([e1._id]);
+		expect(healed.get(P3)!.entry_count).toBe(1);
+		for (const id of [P1, P2, P3]) {
+			expect(healed.get(id)!.unresolved_refs).toEqual([]);
+		}
+	});
+
+	it('does not list a gap ref on a pool the entry never touched', () => {
+		const other = poolOf('bulk_return_pool:01J00000000000000000000014', 'D');
+		const seq2 = createBulkReturnEntryMove(
+			{ entry: e1, seq: 2, from_pool_id: P2, to_pool_id: P3 },
+			ctx
+		);
+		const rows = buildBulkReturnPoolOverview([open1, other], {
+			entries: [e1],
+			moves: [seq2],
+			voids: []
+		});
+		const byId = new Map(rows.map((r) => [r.pool._id, r]));
+		expect(byId.get(other._id)!.unresolved_refs).toEqual([]);
+		expect(byId.get(P1)!.unresolved_refs).toHaveLength(1);
+	});
+
 	it('throws on an inconsistent event log', () => {
 		expect(() =>
 			buildBulkReturnPoolOverview([open1], { entries: [e1, e1], moves: [], voids: [] })

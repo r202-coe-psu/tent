@@ -41,6 +41,7 @@ import {
 	createBulkReturnPoolV3,
 	deriveEntryMoveId,
 	deriveEntryVoidId,
+	foldEntryMoves,
 	isBulkReturnEligibleItem,
 	isLateEntry,
 	isPoolEmpty,
@@ -581,6 +582,22 @@ export interface MoveBulkReturnEntryResult {
 	replayed: boolean;
 }
 
+/**
+ * An entry whose move chain has a gap is omitted from the resolved fold, so its current pool is
+ * unknowable: writing a move/void now would target the wrong pool or seq. Reject until it syncs.
+ */
+function assertEntryNotPendingSync(entry: BulkReturnEntry, moves: readonly BulkReturnEntryMove[]) {
+	const fold = foldEntryMoves(
+		entry,
+		moves.filter((m) => m.entry_id === entry._id)
+	);
+	if (fold.status === 'pending') {
+		throw new WorkflowValidationError(
+			`Entry ${entry._id} is pending sync (move seq ${fold.missing_seqs.join(', ')} not replicated yet); try again later`
+		);
+	}
+}
+
 /** Moves a whole entry to another OPEN pool. Loans are untouched. */
 export async function moveBulkReturnEntry(
 	input: MoveBulkReturnEntryInput,
@@ -599,6 +616,7 @@ export async function moveBulkReturnEntry(
 	} catch (err) {
 		throw new WorkflowValidationError(err instanceof Error ? err.message : String(err));
 	}
+	assertEntryNotPendingSync(entry, events.moves);
 
 	const resolved = resolveBulkReturnEntries(events.entries, events.moves, events.voids).find(
 		(r) => r.entry._id === entry._id
@@ -707,6 +725,7 @@ export async function voidBulkReturnEntry(
 	if (existingVoid) {
 		return { entryVoid: existingVoid, replayed: true, loansReverted: await revertLoans() };
 	}
+	assertEntryNotPendingSync(entry, events.moves);
 
 	const resolved = resolveBulkReturnEntries(events.entries, events.moves, events.voids).find(
 		(r) => r.entry._id === entry._id

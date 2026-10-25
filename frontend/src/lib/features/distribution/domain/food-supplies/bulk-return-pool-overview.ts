@@ -34,7 +34,10 @@ export interface BulkReturnPoolOverviewRow {
 	late_entries: ResolvedBulkReturnEntry<BulkReturnEntry>[];
 	/** True when no non-voided entry is in the pool (a pool may only be cancelled when empty). */
 	is_empty: boolean;
-	/** Move/void events naming this pool whose entry doc is not here yet (pending replication). */
+	/**
+	 * Move/void events naming this pool whose entry doc is not here yet, or entries whose move
+	 * chain has a gap (pending replication); such entries count in no pool until they resolve.
+	 */
 	unresolved_refs: UnresolvedBulkReturnRef[];
 }
 
@@ -50,7 +53,8 @@ function newestFirst(a: BulkReturnPoolV3, b: BulkReturnPoolV3): number {
 /**
  * One row per pool (newest first; CANCELLED excluded unless `includeCancelled`). Throws when the
  * event log is inconsistent (see `resolveBulkReturnEntries`). Move/void events whose entry doc is
- * missing do not throw; they are listed per pool in `unresolved_refs`.
+ * missing, and entries whose move chain has a gap, do not throw; they are listed per pool in
+ * `unresolved_refs` (a gappy entry is omitted from every row's entries/items/counts).
  */
 export function buildBulkReturnPoolOverview(
 	pools: readonly BulkReturnPoolV3[],

@@ -118,6 +118,8 @@ export {
 	deriveEntryMoveId,
 	createBulkReturnEntryMove,
 	resolveEntryPool,
+	foldEntryMoves,
+	type EntryMoveFold,
 	canMoveEntry,
 	assertEntryCanBeMoved,
 	type BulkReturnEntryMoveInput,

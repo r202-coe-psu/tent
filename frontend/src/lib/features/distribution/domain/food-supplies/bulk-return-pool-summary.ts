@@ -1,6 +1,6 @@
 import { addQty } from '$lib/utils/qty';
 import type { BulkReturnEntry } from './bulk-return-entry';
-import { resolveEntryPool, type BulkReturnEntryMove } from './bulk-return-entry-move';
+import { foldEntryMoves, type BulkReturnEntryMove } from './bulk-return-entry-move';
 import type { BulkReturnEntryVoid } from './bulk-return-entry-void';
 import type { BulkReturnPoolItemSummaryRow, BulkReturnPoolV3 } from './bulk-return-pool-v3';
 
@@ -23,9 +23,12 @@ export interface ResolvedBulkReturnEntry<E extends EntryLike = EntryLike> {
  * A move/void whose entry doc is not present (out-of-order replication) is skipped: it cannot
  * change any known entry, and the fold self-heals once the entry arrives (see
  * `findUnresolvedBulkReturnRefs` to surface them).
- * Throws on: a duplicate entry, a broken move chain, more than one void per entry, a void whose
- * item_id/qty differ from the entry, or a void whose pool_id differs from the entry's resolved
- * pool (which also catches a move written after the void).
+ * An entry whose move chain has a gap (an earlier seq not replicated yet) is "pending sync": it
+ * is OMITTED from the result (it counts in no pool) and self-heals once the missing move arrives.
+ * Throws on: a duplicate entry, an invalid move chain (see `foldEntryMoves`), more than one void
+ * per entry, a void whose item_id/qty differ from the entry, or (for a non-pending entry) a void
+ * whose pool_id differs from the entry's resolved pool (which also catches a move written after
+ * the void). A pending entry's void pool_id is not checkable and is skipped.
  */
 export function resolveBulkReturnEntries<E extends EntryLike>(
 	entries: readonly E[],
@@ -50,33 +53,41 @@ export function resolveBulkReturnEntries<E extends EntryLike>(
 		if (seen.has(entry._id)) throw new Error(`Duplicate bulk_return_entry ${entry._id}`);
 		seen.add(entry._id);
 	}
-	return entries.map((entry) => {
-		const pool_id = resolveEntryPool(entry, movesByEntry.get(entry._id) ?? []);
+	const out: ResolvedBulkReturnEntry<E>[] = [];
+	for (const entry of entries) {
+		const fold = foldEntryMoves(entry, movesByEntry.get(entry._id) ?? []);
 		const v = voidsByEntry.get(entry._id);
-		if (v) {
-			if (v.item_id !== entry.item_id || v.qty !== entry.qty) {
-				throw new Error(`Void of ${entry._id} does not match entry item_id/qty`);
-			}
-			if (v.pool_id !== pool_id) {
-				throw new Error(
-					`Void of ${entry._id} is for ${v.pool_id} but the entry resolves to ${pool_id}`
-				);
-			}
+		if (v && (v.item_id !== entry.item_id || v.qty !== entry.qty)) {
+			throw new Error(`Void of ${entry._id} does not match entry item_id/qty`);
 		}
-		return { entry, pool_id, voided: v !== undefined };
-	});
+		if (fold.status === 'pending') continue;
+		const pool_id = fold.pool_id;
+		if (v && v.pool_id !== pool_id) {
+			throw new Error(
+				`Void of ${entry._id} is for ${v.pool_id} but the entry resolves to ${pool_id}`
+			);
+		}
+		out.push({ entry, pool_id, voided: v !== undefined });
+	}
+	return out;
 }
 
 export interface UnresolvedBulkReturnRef {
-	kind: 'move' | 'void';
+	kind: 'move' | 'void' | 'move_gap';
 	entry_id: string;
-	/** Pools the event names: move from/to, or the void's pool_id. */
+	/**
+	 * Pools the event names: move from/to, or the void's pool_id. For `move_gap`: the entry's
+	 * original pool, every known move's from/to, and the void's pool_id if any.
+	 */
 	pool_ids: string[];
+	/** `move_gap` only: the move seqs not replicated yet, ascending. */
+	missing_seqs?: number[];
 }
 
 /**
- * Move/void docs whose entry doc is not among `entries` (pending replication or a stray write).
- * One item per orphan doc, ordered by entry_id, then kind, then seq.
+ * Move/void docs whose entry doc is not among `entries` (pending replication or a stray write),
+ * plus one `move_gap` item per known entry whose move chain has a gap (pending sync).
+ * Ordered by entry_id, then kind, then seq (a `move_gap` uses its first missing seq).
  */
 export function findUnresolvedBulkReturnRefs(
 	entries: readonly EntryLike[],
@@ -85,6 +96,28 @@ export function findUnresolvedBulkReturnRefs(
 ): UnresolvedBulkReturnRef[] {
 	const known = new Set(entries.map((e) => e._id));
 	const out: { ref: UnresolvedBulkReturnRef; seq: number }[] = [];
+	const movesByEntry = new Map<string, MoveLike[]>();
+	for (const m of moves) {
+		if (!known.has(m.entry_id)) continue;
+		const list = movesByEntry.get(m.entry_id) ?? [];
+		list.push(m);
+		movesByEntry.set(m.entry_id, list);
+	}
+	const voidByEntry = new Map(voids.map((v) => [v.entry_id, v]));
+	for (const entry of entries) {
+		const fold = foldEntryMoves(entry, movesByEntry.get(entry._id) ?? []);
+		if (fold.status !== 'pending') continue;
+		const voidPool = voidByEntry.get(entry._id)?.pool_id;
+		out.push({
+			ref: {
+				kind: 'move_gap',
+				entry_id: entry._id,
+				pool_ids: [...new Set([...fold.pool_ids, ...(voidPool ? [voidPool] : [])])],
+				missing_seqs: fold.missing_seqs
+			},
+			seq: fold.missing_seqs[0]
+		});
+	}
 	for (const m of moves) {
 		if (known.has(m.entry_id)) continue;
 		out.push({

@@ -27,6 +27,7 @@ vi.mock('$lib/features/catalog', () => ({
 
 import {
 	createBulkReturnEntry,
+	createBulkReturnEntryMove,
 	createDistributionLog,
 	submitBulkReturnPoolV3,
 	type BulkReturnPoolV3
@@ -736,6 +737,51 @@ describe('bulk return pool v3 workflows', () => {
 			expect(
 				[...couch.store.keys()].filter((k) => k.startsWith('bulk_return_entry_void:'))
 			).toHaveLength(0);
+		});
+	});
+
+	describe('entry pending sync (move chain gap)', () => {
+		// Only move seq 2 (b -> c) has replicated; seq 1 (a -> b) has not.
+		async function seedGap() {
+			const a = await openPool('Gate A');
+			const b = await openPool('Gate B');
+			const c = await openPool('Gate C');
+			const { results } = await add(a._id, { type: 'unspecified' }, [
+				{ item_id: 'item:cot', qty: '1' }
+			]);
+			const entry = results[0].entry;
+			await eventRepo.createMove(
+				createBulkReturnEntryMove({ entry, seq: 2, from_pool_id: b._id, to_pool_id: c._id }, mgr)
+			);
+			return { a, b, c, entry };
+		}
+		const keysWith = (prefix: string) =>
+			[...couch.store.keys()].filter((k) => k.startsWith(prefix));
+
+		it('rejects a move and writes nothing', async () => {
+			const { a, entry } = await seedGap();
+			await expect(
+				moveBulkReturnEntry({ entry_id: entry._id, to_pool_id: a._id }, mgr, deps)
+			).rejects.toBeInstanceOf(WorkflowValidationError);
+			expect(keysWith('bulk_return_entry_move:')).toHaveLength(1);
+		});
+
+		it('rejects a void and writes nothing', async () => {
+			const { entry } = await seedGap();
+			await expect(voidBulkReturnEntry({ entry_id: entry._id }, mgr, deps)).rejects.toBeInstanceOf(
+				WorkflowValidationError
+			);
+			expect(keysWith('bulk_return_entry_void:')).toHaveLength(0);
+		});
+
+		it('does not crash the overview and surfaces the gap on its pools', async () => {
+			const { a, b, c } = await seedGap();
+			const rows = await getBulkReturnPoolOverview({}, mgr, deps);
+			for (const row of rows) {
+				expect(row.entry_count).toBe(0);
+				expect(row.unresolved_refs.map((r) => r.kind)).toEqual(['move_gap']);
+			}
+			expect(rows.map((r) => r.pool._id).sort()).toEqual([a._id, b._id, c._id].sort());
 		});
 	});
 

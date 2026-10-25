@@ -15,7 +15,7 @@ import type { BulkReturnEntryVoid } from './bulk-return-entry-void';
  * fixed-width 1-based seq, so `_id` order is seq order and two concurrent "move #n" attempts
  * collide (409) instead of double-counting. Mover/time are the envelope's `created_by` /
  * `created_at`. validate_doc_update cannot check `from_pool_id` against the current pool or that
- * pools are OPEN, nor that the entry is not voided — that is the domain fold (`resolveEntryPool`,
+ * pools are OPEN, nor that the entry is not voided — that is the domain fold (`foldEntryMoves` / `resolveEntryPool`,
  * `canAppendToPool`, `assertEntryCanBeMoved`).
  */
 
@@ -134,38 +134,88 @@ export function assertEntryCanBeMoved(
 	}
 }
 
+type FoldEntry = Pick<BulkReturnEntry, '_id' | 'pool_id' | 'item_id' | 'qty'>;
+type FoldMove = Pick<
+	BulkReturnEntryMove,
+	'entry_id' | 'seq' | 'from_pool_id' | 'to_pool_id' | 'item_id' | 'qty'
+>;
+
 /**
- * Folds an entry's moves into its current pool id. `moves` are this entry's moves in any order.
- * Throws on a broken chain: wrong entry_id, item_id/qty differing from the entry, seq not
- * contiguous from 1 (gap or duplicate), first move not leaving `entry.pool_id`, or a move whose
- * from_pool_id is not the previous move's to_pool_id.
+ * Result of folding an entry's moves. `pending` = the move chain has a gap (an earlier seq has
+ * not replicated yet): the entry's current pool is unknowable, so it counts in no pool until the
+ * missing move(s) arrive. `pool_ids` = the entry's original pool plus every from/to pool of the
+ * known moves (unique, in encounter order).
  */
-export function resolveEntryPool(
-	entry: Pick<BulkReturnEntry, '_id' | 'pool_id' | 'item_id' | 'qty'>,
-	moves: readonly Pick<
-		BulkReturnEntryMove,
-		'entry_id' | 'seq' | 'from_pool_id' | 'to_pool_id' | 'item_id' | 'qty'
-	>[]
-): string {
+export type EntryMoveFold =
+	| { status: 'resolved'; pool_id: string }
+	| { status: 'pending'; missing_seqs: number[]; pool_ids: string[] };
+
+/**
+ * Non-throwing-on-gap fold of an entry's moves (any order). A gap (seqs not exactly 1..max)
+ * yields `pending`; everything checkable is still validated. Throws on: wrong entry_id, a
+ * duplicate seq, item_id/qty differing from the entry, seq 1 not leaving `entry.pool_id`, or a
+ * move whose from_pool_id is not the previous (consecutive) move's to_pool_id.
+ */
+export function foldEntryMoves(entry: FoldEntry, moves: readonly FoldMove[]): EntryMoveFold {
 	const sorted = [...moves].sort((a, b) => a.seq - b.seq);
-	let current = entry.pool_id;
 	for (let i = 0; i < sorted.length; i++) {
 		const move = sorted[i];
 		if (move.entry_id !== entry._id) {
 			throw new Error(`Move ${move.seq} belongs to ${move.entry_id}, not ${entry._id}`);
 		}
-		if (move.seq !== i + 1) {
-			throw new Error(`Move seq must be contiguous from 1 for ${entry._id}; expected ${i + 1}`);
+		if (i > 0 && sorted[i - 1].seq === move.seq) {
+			throw new Error(
+				`Move seq must be contiguous from 1 for ${entry._id}; duplicate seq ${move.seq}`
+			);
 		}
 		if (move.item_id !== entry.item_id || move.qty !== entry.qty) {
 			throw new Error(`Move ${move.seq} of ${entry._id} does not match entry item_id/qty`);
 		}
-		if (move.from_pool_id !== current) {
+	}
+	for (let i = 0; i < sorted.length; i++) {
+		const move = sorted[i];
+		const prev = i > 0 ? sorted[i - 1] : undefined;
+		if (move.seq === 1) {
+			if (move.from_pool_id !== entry.pool_id) {
+				throw new Error(
+					`Move 1 of ${entry._id} leaves ${move.from_pool_id} but the entry is in ${entry.pool_id}`
+				);
+			}
+		} else if (prev && prev.seq === move.seq - 1 && move.from_pool_id !== prev.to_pool_id) {
 			throw new Error(
-				`Move ${move.seq} of ${entry._id} leaves ${move.from_pool_id} but the entry is in ${current}`
+				`Move ${move.seq} of ${entry._id} leaves ${move.from_pool_id} but the entry is in ${prev.to_pool_id}`
 			);
 		}
-		current = move.to_pool_id;
 	}
-	return current;
+	const missing_seqs: number[] = [];
+	const present = new Set(sorted.map((m) => m.seq));
+	const max = sorted.length ? sorted[sorted.length - 1].seq : 0;
+	for (let s = 1; s <= max; s++) if (!present.has(s)) missing_seqs.push(s);
+	if (missing_seqs.length > 0) {
+		const pool_ids = new Set<string>([entry.pool_id]);
+		for (const m of sorted) {
+			pool_ids.add(m.from_pool_id);
+			pool_ids.add(m.to_pool_id);
+		}
+		return { status: 'pending', missing_seqs, pool_ids: [...pool_ids] };
+	}
+	return {
+		status: 'resolved',
+		pool_id: sorted.length ? sorted[sorted.length - 1].to_pool_id : entry.pool_id
+	};
+}
+
+/**
+ * Folds an entry's moves into its current pool id. `moves` are this entry's moves in any order.
+ * Throws on any broken chain (see `foldEntryMoves`) and also when the chain is pending (a gap:
+ * an earlier move has not replicated yet) — callers that must tolerate a gap use `foldEntryMoves`.
+ */
+export function resolveEntryPool(entry: FoldEntry, moves: readonly FoldMove[]): string {
+	const fold = foldEntryMoves(entry, moves);
+	if (fold.status === 'pending') {
+		throw new Error(
+			`Entry ${entry._id} is pending sync: move seq ${fold.missing_seqs.join(', ')} missing`
+		);
+	}
+	return fold.pool_id;
 }
