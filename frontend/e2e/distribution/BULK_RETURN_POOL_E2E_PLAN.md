@@ -301,10 +301,10 @@ cancel), V1c (entry / move / void) and V1d (ledger row). BRP-F-drift is `test.fi
 Each row is one `expectWrites` call with unique doc ids per actor. The v3 pool shape comes from
 the helper, not from the removed v2 V5 body.
 
-### BRP-A-SA `test.fixme` (open point a)
+### BRP-A-SA (open point a, decided)
 
-system_admin should be excluded by D1, but `isRole()` lets SA through everywhere and no block was
-added in PR #768. Fixme asserts SA cannot open a pool; enable once kong decides.
+kong decided system_admin keeps the usual `isRole()` override; no SA-specific block. The test
+asserts SA sees "เปิดกองใหม่" and a direct pool create as SA gets 201.
 
 ### BRP-F-drift `test.fixme` (open point b)
 
@@ -352,8 +352,7 @@ removes; they must not run against v3. The v2 UI files and the `bulk_pool_id` fi
 
 From PR #768 "Not included, open points for kong":
 
-- (a) system_admin: decision excludes SA but `isRole()` lets SA through; no block added. BRP-A-SA is
-  `fixme`.
+- (a) system_admin: decided, SA keeps the usual `isRole()` override. BRP-A-SA asserts SA can open.
 - (b) Loan drift: apply fails on every retry; no rule. BRP-F-drift is `fixme`.
 - (c) Defaults to confirm (tests currently encode them; flag if kong changes any):
   - oldest-first allocation;

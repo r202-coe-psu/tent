@@ -18,6 +18,7 @@ import { roleSet, SA_ROLES, shelterCode } from './distribution';
 import { expect, test } from './fixtures';
 import {
 	actor,
+	CREATED,
 	buildEntryBody,
 	buildMoveBody,
 	buildPoolBody,
@@ -28,7 +29,6 @@ import {
 	currentPoolOf,
 	docPath,
 	expectWrites,
-	FORBIDDEN,
 	newEntryId,
 	poolName,
 	readEntries,
@@ -150,11 +150,9 @@ test.describe('Bulk return pool v3 — roles in the browser (BRP-A)', { tag: DES
 		});
 	}
 
-	// Open point (a) of PR #768: D1 says system_admin is NOT included, but `isRole()` grants
-	// system_admin every capability, the UI helpers do the same, and PR #768 added no block. This
-	// asserts the DECIDED behaviour; enable once kong confirms the decision.
-	// Blocked on PR #768 body → Not included → Open points for kong (system_admin / loan drift).
-	test.fixme('BRP-A-SA system_admin cannot open a pool (open point a)', async ({
+	// Open point (a) of PR #768, decided by kong: system_admin keeps the usual `isRole()` override
+	// (no SA-specific block), so SA can open a pool in the shelter it picked.
+	test('BRP-A-SA system_admin can open a pool (usual SA override)', async ({
 		page,
 		scenarioAs
 	}) => {
@@ -166,11 +164,11 @@ test.describe('Bulk return pool v3 — roles in the browser (BRP-A)', { tag: DES
 		);
 		const board = new BulkReturnPoolBoard(page);
 		await board.gotoBackOffice();
-		await expect(board.headerAction(POOL_COPY.openNew)).toHaveCount(0);
+		await expect(board.headerAction(POOL_COPY.openNew)).toBeVisible();
 
 		const body = buildPoolBody({ name: poolName(scenario, 'SA'), createdBy: scenario.user.name });
 		const res = await couchAsUser(scenario.session, 'PUT', docPath(body._id), body);
-		expect(res.status).toBe(FORBIDDEN);
+		expect(res.status).toBe(CREATED);
 	});
 });
 
