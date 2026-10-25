@@ -313,6 +313,24 @@ async def test_shelter_detail_occupancy_counts_pre_registered(
     assert shelter["occupancy_rate"] == 9
 
 
+async def test_shelter_detail_occupancy_is_zero_when_deactivated(
+    client: AsyncClient,
+    db_client: AsyncMongoClient,
+    settings: Settings,
+    auth_headers: dict[str, str],
+):
+    """A deactivated shelter keeps its last `occupancy_by_status`; it must not be shown."""
+    doc = _shelter_doc("SH001", "closed")
+    doc["is_active"] = False
+    doc["occupancy_by_status"] = {"active": 4}
+    await _insert_shelter_doc(db_client, settings, doc)
+
+    response = await client.get("/public/v1/shelters/SH001", headers=auth_headers)
+    assert response.status_code == 200
+    shelter = response.json()["shelter"]
+    assert (shelter["occupancy"], shelter["present"], shelter["in_zone"]) == (0, 0, 0)
+
+
 # --- #751 regression: public `accepts_pre_registration` is unchanged -----------------------
 # The flag logic moves into a helper shared with the partner plane (EXT-002/003/008). The public
 # field stays "the staff switch is exactly True" — a missing flag is False, and the shelter's

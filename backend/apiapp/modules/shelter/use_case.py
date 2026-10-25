@@ -146,8 +146,8 @@ class ShelterUseCase:
         mapped_status = status_ui.get(doc.status, "CLOSED")
 
         # PDPA D8: the worker's per-status totals include search-excluded people, who have
-        # no `public_persons` row.
-        by_status = doc.occupancy_by_status
+        # no `public_persons` row. A deactivated shelter's last counts are not current.
+        by_status = doc.occupancy_by_status if doc.is_active else {}
         occupancy = sum(by_status.get(s, 0) for s in FORECAST_OCCUPANCY_STATUSES)
         present = sum(by_status.get(s, 0) for s in PRESENT_OCCUPANCY_STATUSES)
         in_zone = sum(by_status.get(s, 0) for s in IN_ZONE_OCCUPANCY_STATUSES)
