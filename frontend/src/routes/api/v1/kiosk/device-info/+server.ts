@@ -6,7 +6,7 @@ import {
 } from '$lib/features/kiosk-devices/server';
 // eslint-disable-next-line no-restricted-imports -- server-safe domain module; feature barrel pulls client UI/query code
 import { screenTypeOf } from '$lib/features/shared/domain/kiosk-screen';
-import { getGroup } from '$lib/server/kiosk-banners/kiosk-banner-group.server';
+import { readGroupDoc } from '$lib/server/kiosk-banners/kiosk-banner-group.server';
 import {
 	authenticateScannerDevice,
 	DEVICE_AUTH_FAILED,
@@ -36,13 +36,29 @@ const UNAVAILABLE = {
 	error: { code: DEPENDENCY_UNAVAILABLE, message: 'บริการตรวจสอบ PIN ไม่พร้อมใช้งาน' }
 };
 
-/** The device's banner group as `{id, name}`; null when it has none or the group was deleted. */
+/** The shelter's display name; its code when the shelter has no name or the lookup fails. */
+async function shelterNameOf(code: string): Promise<string> {
+	try {
+		return (await findMasterByCode(code))?.name?.trim() || code;
+	} catch {
+		return code;
+	}
+}
+
+/**
+ * The device's banner group as `{id, name}`; null when it has none, the group was deleted, or
+ * reading it fails (the group is a nicety, not worth a 503). Reads only the group doc.
+ */
 async function bannerGroupOf(
 	device: PersistedScannerDevice
 ): Promise<{ id: string; name: string } | null> {
 	if (!device.banner_group_id) return null;
-	const group = await getGroup(device.banner_group_id);
-	return group ? { id: group._id, name: group.name } : null;
+	try {
+		const group = await readGroupDoc(device.banner_group_id);
+		return group ? { id: group._id, name: group.name } : null;
+	} catch {
+		return null;
+	}
 }
 
 /**
@@ -110,7 +126,7 @@ export const POST: RequestHandler = async ({ request }) => {
 				);
 			case 'ok': {
 				const pinState = staffPinStateOf(authenticated);
-				const shelter = await findMasterByCode(authenticated.shelter_code);
+				const shelterName = await shelterNameOf(authenticated.shelter_code);
 				return staffPinJson(
 					{
 						device: {
@@ -121,7 +137,7 @@ export const POST: RequestHandler = async ({ request }) => {
 						},
 						shelter: {
 							code: authenticated.shelter_code,
-							name: shelter?.name?.trim() || authenticated.shelter_code
+							name: shelterName
 						},
 						staff_pin: {
 							set: pinState.staff_pin_set,

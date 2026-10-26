@@ -14,13 +14,13 @@ vi.mock('$lib/server/scanners/staff-pin-store', async () => {
 	return { ...actual, staffPinSecretStore: { get: vi.fn() } };
 });
 vi.mock('$lib/server/shelters.admin', () => ({ findMasterByCode: vi.fn() }));
-vi.mock('$lib/server/kiosk-banners/kiosk-banner-group.server', () => ({ getGroup: vi.fn() }));
+vi.mock('$lib/server/kiosk-banners/kiosk-banner-group.server', () => ({ readGroupDoc: vi.fn() }));
 
 import { POST } from './+server';
 import type { RequestEvent } from './$types';
 import { scannerServerRepository } from '$lib/features/kiosk-devices/server';
 import { hashScannerSecret } from '$lib/server/scanners/device-credentials';
-import { getGroup } from '$lib/server/kiosk-banners/kiosk-banner-group.server';
+import { readGroupDoc } from '$lib/server/kiosk-banners/kiosk-banner-group.server';
 import { findMasterByCode } from '$lib/server/shelters.admin';
 import { staffPinSecretStore, type StaffPinSecret } from '$lib/server/scanners/staff-pin-store';
 import { STAFF_PIN_WRONG_DELAY_MS } from '$lib/server/scanners/staff-pin-throttle';
@@ -92,7 +92,7 @@ describe('POST /api/v1/kiosk/device-info', () => {
 	const mockLookup = vi.mocked(scannerServerRepository.getDeviceByDeviceId);
 	const mockSecret = vi.mocked(staffPinSecretStore.get);
 	const mockShelter = vi.mocked(findMasterByCode);
-	const mockGroup = vi.mocked(getGroup);
+	const mockGroup = vi.mocked(readGroupDoc);
 	let info: ReturnType<typeof vi.spyOn>;
 
 	beforeEach(() => {
@@ -105,8 +105,7 @@ describe('POST /api/v1/kiosk/device-info', () => {
 		mockShelter.mockResolvedValue({ code: 'SH001', name: '  ศูนย์พักพิงหาดใหญ่  ' } as never);
 		mockGroup.mockResolvedValue({
 			_id: 'kiosk_banner_group:g1',
-			name: 'กลุ่มหน้าประตู',
-			device_ids: ['kiosk-01', 'kiosk-02']
+			name: 'กลุ่มหน้าประตู'
 		} as never);
 	});
 
@@ -187,10 +186,32 @@ describe('POST /api/v1/kiosk/device-info', () => {
 		expect((await response.json()).banner_group).toBeNull();
 	});
 
+	it('still answers 200 with banner_group null when reading the banner group fails', async () => {
+		mockGroup.mockRejectedValueOnce(new Error('couchdb timeout'));
+		const response = await POST(request({ pin: '482913' }));
+
+		expect(response.status).toBe(200);
+		expect((await response.json()).banner_group).toBeNull();
+		const logged = info.mock.calls.flat().join(' ');
+		expect(logged).toContain('result=ok');
+		expect(logged).not.toContain('result=error');
+	});
+
 	it('falls back to the shelter code when the shelter is not found', async () => {
 		mockShelter.mockResolvedValueOnce(null);
 		const response = await POST(request({ pin: '482913' }));
 
 		expect((await response.json()).shelter).toEqual({ code: 'SH001', name: 'SH001' });
+	});
+
+	it('still answers 200 with the shelter code as name when the shelter lookup fails', async () => {
+		mockShelter.mockRejectedValueOnce(new Error('couchdb timeout'));
+		const response = await POST(request({ pin: '482913' }));
+
+		expect(response.status).toBe(200);
+		expect((await response.json()).shelter).toEqual({ code: 'SH001', name: 'SH001' });
+		const logged = info.mock.calls.flat().join(' ');
+		expect(logged).toContain('result=ok');
+		expect(logged).not.toContain('result=error');
 	});
 });
