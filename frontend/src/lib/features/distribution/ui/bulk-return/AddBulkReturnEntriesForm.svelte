@@ -14,6 +14,10 @@
 	import { Label } from '$lib/components/ui/label/index.js';
 	import { Switch } from '$lib/components/ui/switch/index.js';
 	import { Textarea } from '$lib/components/ui/textarea/index.js';
+	import ListChecks from '@lucide/svelte/icons/list-checks';
+	import QrCode from '@lucide/svelte/icons/qr-code';
+	import { Html5QrcodeSupportedFormats } from 'html5-qrcode';
+	import CameraCodeScannerDialog from '$lib/components/camera-code-scanner-dialog.svelte';
 	import { useItemMasters } from '$lib/features/catalog';
 	import { formatThaiShortDate } from '$lib/utils/date';
 	import {
@@ -37,6 +41,7 @@
 		filterEligibleItems,
 		hasNoOutstandingLoanWarning,
 		identifiedReturnerId,
+		linesFromOutstandingLoans,
 		listOpenPools,
 		outstandingLoanRows,
 		removeLine,
@@ -48,6 +53,7 @@
 		type AddEntryLine,
 		type ReturnerChoice
 	} from '../model/bulk-return-add-entry';
+	import { parsePoolScanCode } from '../model/bulk-return-pool-qr';
 	import {
 		readLastBulkReturnPool,
 		writeLastBulkReturnPool
@@ -71,6 +77,8 @@
 		initialItemId,
 		onsuccess
 	}: Props = $props();
+
+	const POOL_SCAN_FORMATS = [Html5QrcodeSupportedFormats.QR_CODE];
 
 	const addMutation = useAddBulkReturnEntries();
 	const overviewQuery = useBulkReturnPoolOverview(
@@ -107,8 +115,27 @@
 
 	const openPools = $derived(listOpenPools(overviewQuery.data ?? []));
 	// Picked pool, else remembered last-used pool, else the only OPEN pool; '' when none is OPEN.
+	// A scanned pool QR wins over the Select pick until the user picks again.
+	let poolScannerOpen = $state(false);
+	let scannedPoolId = $state<string | null>(null);
+	let poolScanInvalid = $state(false);
+	const effectivePicked = $derived(scannedPoolId ?? pickedPoolId);
 	const poolId = $derived(
-		resolveDefaultPoolId({ picked: pickedPoolId, remembered: rememberedPoolId, openPools })
+		resolveDefaultPoolId({ picked: effectivePicked, remembered: rememberedPoolId, openPools })
+	);
+	const poolScanStatus = $derived.by<'checking' | 'not_found' | 'invalid' | null>(() => {
+		if (poolScanInvalid) return 'invalid';
+		if (scannedPoolId === null) return null;
+		if (overviewQuery.isPending) return 'checking';
+		return openPools.some((pool) => pool._id === scannedPoolId) ? null : 'not_found';
+	});
+	const poolScanProcessing = $derived(poolScanStatus === 'checking');
+	const poolScanError = $derived(
+		poolScanStatus === 'invalid'
+			? 'QR นี้ไม่ใช่ QR ของกองรับคืน'
+			: poolScanStatus === 'not_found'
+				? 'ไม่พบกองนี้ หรือกองไม่ได้เปิดรับแล้ว'
+				: null
 	);
 	const selectedPool = $derived(openPools.find((pool) => pool._id === poolId) ?? null);
 
@@ -147,6 +174,36 @@
 		if (!itemId) return 'เลือกสินค้า';
 		const item = resolveItemDisplay(itemId, catalog);
 		return item.unit ? `${item.name} (${item.unit})` : item.name;
+	}
+
+	function handlePoolScan(code: string) {
+		const parsed = parsePoolScanCode(code);
+		poolScanInvalid = parsed === null;
+		scannedPoolId = parsed;
+	}
+
+	function handlePoolSelect(value: string) {
+		pickedPoolId = value;
+		scannedPoolId = null;
+		poolScanInvalid = false;
+	}
+
+	// "คืนทั้งหมด": replaces the lines with one line per outstanding item (qty stays editable).
+	let returnAllSkippedNote = $state<string | null>(null);
+
+	function handleReturnAll() {
+		const result = linesFromOutstandingLoans(
+			loanRows,
+			new Set(catalog.map((item) => item._id)),
+			(preset) => addLine([], createStableOperationId, preset)[0]
+		);
+		if (result.lines.length > 0) lines = result.lines;
+		returnAllSkippedNote =
+			result.skippedItemIds.length > 0
+				? `ข้าม ${result.skippedItemIds.length} รายการที่เลือกในแคตตาล็อกไม่ได้: ${result.skippedItemIds
+						.map((id) => resolveItemDisplay(id, catalog).name)
+						.join(', ')}`
+				: null;
 	}
 
 	function handleOpenChange(next: boolean) {
@@ -278,21 +335,44 @@
 							<span>ยังไม่มีกองที่เปิดรับอยู่ กรุณาให้หัวหน้าเปิดกองใหม่ก่อน</span>
 						</p>
 					{:else}
-						<Select.Root type="single" bind:value={() => poolId, (v) => (pickedPoolId = v)}>
-							<Select.Trigger
-								id="add-entry-pool"
-								class="h-11 w-full min-w-0 bg-white text-sm font-medium sm:h-10"
+						<div class="flex flex-col gap-2 sm:flex-row sm:items-center">
+							<Select.Root type="single" bind:value={() => poolId, handlePoolSelect}>
+								<Select.Trigger
+									id="add-entry-pool"
+									class="h-11 w-full min-w-0 bg-white text-sm font-medium sm:h-10 sm:flex-1"
+								>
+									<span class="truncate">
+										{selectedPool ? selectedPool.name : 'เลือกกองที่เปิดรับ'}
+									</span>
+								</Select.Trigger>
+								<Select.Content>
+									{#each openPools as pool (pool._id)}
+										<Select.Item value={pool._id} label={pool.name} />
+									{/each}
+								</Select.Content>
+							</Select.Root>
+							<Button
+								type="button"
+								variant="outline"
+								disabled={poolScanProcessing || addMutation.isPending}
+								onclick={() => (poolScannerOpen = true)}
+								class="min-h-11 w-full gap-2 sm:w-auto"
 							>
-								<span class="truncate">
-									{selectedPool ? selectedPool.name : 'เลือกกองที่เปิดรับ'}
-								</span>
-							</Select.Trigger>
-							<Select.Content>
-								{#each openPools as pool (pool._id)}
-									<Select.Item value={pool._id} label={pool.name} />
-								{/each}
-							</Select.Content>
-						</Select.Root>
+								{#if poolScanProcessing}
+									<Loader2 class="h-4 w-4 animate-spin" aria-hidden="true" />
+									กำลังตรวจสอบ QR...
+								{:else}
+									<QrCode class="h-4 w-4" aria-hidden="true" />
+									สแกน QR กอง
+								{/if}
+							</Button>
+						</div>
+						{#if poolScanProcessing}
+							<p class="text-sm text-slate-500" role="status">กำลังตรวจสอบ QR กอง...</p>
+						{/if}
+						{#if poolScanError}
+							<p role="alert" class="text-xs font-medium text-red-700">{poolScanError}</p>
+						{/if}
 					{/if}
 				</div>
 
@@ -351,6 +431,23 @@
 										</li>
 									{/each}
 								</ul>
+								<div class="flex flex-col gap-2 pt-2 sm:flex-row sm:items-center sm:gap-3">
+									<Button
+										type="button"
+										variant="outline"
+										disabled={addMutation.isPending}
+										onclick={handleReturnAll}
+										class="min-h-11 w-full gap-2 sm:w-auto"
+									>
+										<ListChecks class="h-4 w-4" aria-hidden="true" />
+										คืนทั้งหมด
+									</Button>
+									{#if returnAllSkippedNote}
+										<p role="status" class="text-xs font-medium text-amber-800">
+											{returnAllSkippedNote}
+										</p>
+									{/if}
+								</div>
 							</div>
 						{/if}
 					{/if}
@@ -484,3 +581,12 @@
 		</form>
 	</Dialog.Content>
 </Dialog.Root>
+
+<CameraCodeScannerDialog
+	bind:open={poolScannerOpen}
+	title="สแกน QR กอง"
+	hint="เล็งกล้องไปที่ QR บนป้ายกองรับคืน หรือพิมพ์ / ยิงรหัสด้วยเครื่องสแกน"
+	formats={POOL_SCAN_FORMATS}
+	manualInputMode="text"
+	onScan={handlePoolScan}
+/>

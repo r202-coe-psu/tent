@@ -8,7 +8,9 @@ import {
 	filterEligibleItems,
 	hasNoOutstandingLoanWarning,
 	identifiedReturnerId,
+	linesFromOutstandingLoans,
 	outstandingLoanRows,
+	type OutstandingLoanRow,
 	removeLine,
 	resolveDefaultPoolId,
 	resolveReturner,
@@ -25,6 +27,52 @@ function counter() {
 function line(id: string, item_id: string, qty: string): AddEntryLine {
 	return { lineId: id, item_id, qty, operationUlid: id };
 }
+
+describe('linesFromOutstandingLoans', () => {
+	function loanRow(logId: string, item_id: string, outstanding: string): OutstandingLoanRow {
+		return { logId, item_id, itemName: item_id, unit: '', outstanding, distributed_at: '' };
+	}
+	const makeFrom = () => {
+		const next = counter();
+		return (preset: { item_id: string; qty: string }) =>
+			addLine([], next, preset)[0] as AddEntryLine;
+	};
+
+	it('sums outstanding of several loans of the same item into one line', () => {
+		const result = linesFromOutstandingLoans(
+			[
+				loanRow('l1', 'item_master:a', '2'),
+				loanRow('l2', 'item_master:b', '1'),
+				loanRow('l3', 'item_master:a', '3')
+			],
+			new Set(['item_master:a', 'item_master:b']),
+			makeFrom()
+		);
+		expect(result.lines.map((l) => [l.item_id, l.qty])).toEqual([
+			['item_master:a', '5'],
+			['item_master:b', '1']
+		]);
+		expect(result.skippedItemIds).toEqual([]);
+		expect(new Set(result.lines.map((l) => l.operationUlid)).size).toBe(2);
+	});
+
+	it('skips and reports items outside the eligible set', () => {
+		const result = linesFromOutstandingLoans(
+			[loanRow('l1', 'item_master:a', '2'), loanRow('l2', 'item_master:x', '4')],
+			new Set(['item_master:a']),
+			makeFrom()
+		);
+		expect(result.lines.map((l) => l.item_id)).toEqual(['item_master:a']);
+		expect(result.skippedItemIds).toEqual(['item_master:x']);
+	});
+
+	it('returns nothing for no rows', () => {
+		expect(linesFromOutstandingLoans([], new Set(['item_master:a']), makeFrom())).toEqual({
+			lines: [],
+			skippedItemIds: []
+		});
+	});
+});
 
 describe('lines', () => {
 	it('creates one id per line and keeps it when other lines change', () => {

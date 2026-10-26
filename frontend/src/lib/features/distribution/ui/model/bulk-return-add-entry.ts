@@ -224,6 +224,34 @@ export function outstandingLoanRows(
 	return rows;
 }
 
+export interface LinesFromLoans {
+	lines: AddEntryLine[];
+	/** item_ids with an outstanding loan that the add-entry catalog cannot select. */
+	skippedItemIds: string[];
+}
+
+/**
+ * "Return all": one line per item (outstanding summed across loans), in first-seen order, limited
+ * to items the form can select. `makeLine` builds each line (supplies lineId / operationUlid).
+ */
+export function linesFromOutstandingLoans(
+	rows: readonly OutstandingLoanRow[],
+	eligibleItemIds: ReadonlySet<string>,
+	makeLine: (preset: { item_id: string; qty: string }) => AddEntryLine
+): LinesFromLoans {
+	const totals = new Map<string, string>();
+	for (const row of rows) {
+		totals.set(row.item_id, addQty(totals.get(row.item_id) ?? '0', row.outstanding));
+	}
+	const lines: AddEntryLine[] = [];
+	const skippedItemIds: string[] = [];
+	for (const [item_id, qty] of totals) {
+		if (eligibleItemIds.has(item_id)) lines.push(makeLine({ item_id, qty }));
+		else skippedItemIds.push(item_id);
+	}
+	return { lines, skippedItemIds };
+}
+
 /**
  * True when an identified returner is selected, the loans query has settled, and none is
  * outstanding. `isLoading` should be true while the query is pending or failed (no false alarm).
