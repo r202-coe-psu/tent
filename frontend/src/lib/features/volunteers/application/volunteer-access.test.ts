@@ -9,15 +9,22 @@ const mocks = vi.hoisted(() => ({
 	update: vi.fn(),
 	repositoryFor: vi.fn()
 }));
-vi.mock('$lib/features/users', () => ({
-	createUser: mocks.createUser,
-	listUsers: mocks.listUsers
-}));
+vi.mock('$lib/features/users', async () => {
+	const { phoneSchema, contactPhoneSchema } = await vi.importActual<Record<string, unknown>>(
+		'$lib/features/users/domain/schema'
+	);
+	return {
+		createUser: mocks.createUser,
+		listUsers: mocks.listUsers,
+		phoneSchema,
+		contactPhoneSchema
+	};
+});
 vi.mock('../data/volunteer.remote', () => ({
 	volunteerRepositoryFor: mocks.repositoryFor
 }));
 
-import { grantVolunteerAccess } from './volunteer-access';
+import { accountPhones, grantVolunteerAccess, volunteerPasswordError } from './volunteer-access';
 
 const volunteer: Volunteer = {
 	_id: 'volunteer:one',
@@ -61,6 +68,35 @@ beforeEach(() => {
 	mocks.listUsers.mockResolvedValue([]);
 	mocks.createUser.mockResolvedValue({ ok: true });
 	mocks.update.mockImplementation(async (profile) => profile);
+});
+
+describe('accountPhones', () => {
+	it.each([
+		['0887887878', '0887887878', '0887887878'],
+		['088-788 7878', '0887887878', '0887887878'],
+		['+66887887878', '0887887878', '0887887878'],
+		['022222222', '022222222', null],
+		['02-222-2222', '022222222', null],
+		['02222222', null, null],
+		['ไม่มี', null, null],
+		['', null, null],
+		[null, null, null],
+		[undefined, null, null]
+	])('maps %s to contact %s and login %s', (input, contact, login) => {
+		expect(accountPhones(input)).toEqual({ contact, login });
+	});
+});
+
+describe('volunteerPasswordError', () => {
+	it('accepts the mobile login phone as a bootstrap password', () => {
+		expect(volunteerPasswordError('0812345678', '0812345678')).toBeNull();
+	});
+
+	it('holds every other password to the user form policy', () => {
+		expect(volunteerPasswordError('Valid-Pass123', null)).toBeNull();
+		expect(volunteerPasswordError('0812345678', null)).toMatch(/ตัวพิมพ์ใหญ่/);
+		expect(volunteerPasswordError('Short1!', '0812345678')).toMatch(/อย่างน้อย 10/);
+	});
 });
 
 describe('grantVolunteerAccess', () => {
@@ -117,8 +153,8 @@ describe('grantVolunteerAccess', () => {
 	});
 
 	it.each([
-		['9-digit landline', '022222222', null],
-		['dashed landline', '02-222-2222', null],
+		['9-digit landline', '022222222', '022222222'],
+		['dashed landline', '02-222-2222', '022222222'],
 		['empty', '', null],
 		['dashed mobile', '088-788 7878', '0887887878']
 	])('sends the account phone for a %s profile phone', async (_label, phone, expected) => {
@@ -139,7 +175,7 @@ describe('grantVolunteerAccess', () => {
 		expect(mocks.createUser).not.toHaveBeenCalled();
 	});
 
-	it('retries linking an existing phone-less account', async () => {
+	it('retries linking an existing account of a landline volunteer', async () => {
 		const landline = { ...volunteer, phone: '022222222' };
 		mocks.get.mockImplementation(async () => ({ ...landline }));
 		mocks.listUsers.mockResolvedValue([account]);

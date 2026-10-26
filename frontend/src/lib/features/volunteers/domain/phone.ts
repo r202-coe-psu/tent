@@ -5,12 +5,3 @@ export function normalizePhone(value: string): string {
 	if (digits.startsWith('66') && digits.length >= 11) return `0${digits.slice(2)}`;
 	return digits;
 }
-
-/**
- * Phone a staff account may carry: a 10-digit mobile (`0XXXXXXXXX`) after normalizing, else `null`.
- * Mirrors the account rule (`users/domain/schema.ts` `phoneSchema`), which doubles as a login name.
- */
-export function accountPhone(value: string | null | undefined): string | null {
-	const normalized = normalizePhone(value ?? '');
-	return /^0\d{9}$/.test(normalized) ? normalized : null;
-}
