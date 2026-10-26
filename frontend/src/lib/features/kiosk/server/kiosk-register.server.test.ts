@@ -101,6 +101,9 @@ describe('registerKioskWalkIn', () => {
 		});
 		expect(image?.created_by).toBe('scanner:KIOSK-01');
 		expect(image?.caption).toBe('ภาพจากบัตรประชาชน');
+		// CR-175 AC-11 — schema_v 2 and no `purpose`, so the donation orphan sweep skips it.
+		expect(image).toMatchObject({ schema_v: 2 });
+		expect(image).not.toHaveProperty('purpose');
 		expect(saved?._id).toBe(result._id);
 		expect(result.current_stay.status).toBe('arriving');
 		expect(result.schema_v).toBe(EVACUEE_SCHEMA_V);
