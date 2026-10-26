@@ -22,7 +22,7 @@ from tent_model.public_shelter import PublicShelter
 
 from ...utils.masking import normalize_phone, sha256_hex
 from ...utils.ulid import new_ulid
-from .review import REVIEW_FIELDS, review_edited_booking, review_new_booking
+from .review import REVIEW_FIELDS, item_edit_gate, review_edited_booking, review_new_booking
 from .schemas import (
     DonationCancelResponse,
     DonationCourierPatchResponse,
@@ -47,17 +47,17 @@ _DONATION_OPEN_STATUSES = frozenset({"open", "full", "active"})
 #: unchanged for anyone who has not written one.
 DEFAULT_RESERVATION_TTL_HOURS = 72
 
-#: Statuses in which a donor may still change their own booking through the public token
-#: routes — edit, cancel and courier number alike. Only a reservation awaiting drop-off
-#: qualifies: once goods arrive the count belongs to staff, and cancelled/expired have
-#: already released their quota.
+#: Statuses in which a donor may still cancel their own booking or add a courier number
+#: through the public token routes. Only a reservation awaiting drop-off qualifies: once
+#: goods arrive the count belongs to staff, and cancelled/expired have already released
+#: their quota.
 #:
 #: ``pending_review`` is in (decision D-1): a public booking with any line awaiting review
-#: opens there. ``verifying`` is in since CR-174 (FR-20..FR-23): a booking whose every line
+#: opens there. ``verifying`` is in since CR-174 (FR-20, FR-22): a booking whose every line
 #: is in the campaign opens there with its QR, and the goods are still with the donor — so
-#: they may cancel (quota and place go back at once), edit (a line that then needs review
-#: sends the booking back to ``pending_review``) or add a courier number. Mirrors
-#: ``isDonorEditable`` on the BFF; the two gate the same routes.
+#: they may cancel (quota and place go back at once) or add a courier number. Editing the
+#: lines is narrower — see ``item_edit_gate`` (CR-196). Mirrors ``isDonorEditable`` on the
+#: BFF; the two gate the same routes.
 DONOR_EDITABLE_STATUSES = frozenset({"declared", "pending_review", "verifying"})
 
 
@@ -150,9 +150,10 @@ def _carry_item_ids(
     arbitrary words, the name is only matched against the handful of lines this donation
     already has, and an unmatched line stays untracked exactly as before.
 
-    Matching is by name because that is the only thing the form round-trips. A held line
-    that carries no name at all cannot be matched and keeps the old behaviour; bookings
-    made through the donate wizard always carry one.
+    A line carrying a ``line_key`` is left to ``_pair_held_lines``, which knows exactly
+    which held line it is. The name is the fallback for a line without one — new, or from
+    a booking made before line keys (CR-196 FR-LK-7). A held line that carries no name
+    cannot be matched; bookings made through the donate wizard always carry one.
     """
     by_name = {
         str(item.get("free_text") or item.get("item_name") or "").strip(): item.get("item_id")
@@ -161,7 +162,7 @@ def _carry_item_ids(
     }
     carried = []
     for item in items:
-        if item.item_id or not item.free_text:
+        if item.item_id or item.line_key or not item.free_text:
             carried.append(item)
             continue
         known = by_name.get(item.free_text.strip())
@@ -178,58 +179,44 @@ def _carry_item_ids(
 _WIZARD_ONLY_FIELDS = ("category", "condition", "note")
 
 
-def _wizard_details(line: dict[str, Any]) -> tuple[str | None, ...]:
-    return tuple((str(line.get(name) or "").strip() or None) for name in _WIZARD_ONLY_FIELDS)
+def _line_key_error(code: str, line_key: str) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail={"success": False, "error": code, "line_key": line_key},
+    )
 
 
-def _carry_line_details(
+def _pair_held_lines(
     items: list[DonationItemInput], held: list[dict[str, Any]]
-) -> tuple[list[DonationItemInput], set[int]]:
-    """Re-attach ``category``/``condition``/``note`` to an edited line that came back without them.
+) -> list[DonationItemInput]:
+    """CR-196 FR-LK-5..FR-LK-7 — give each edited line the identity of the held line it names.
 
-    Same idea as ``_carry_item_ids``, for the fields the edit form has no input for. Losing
-    them is not only lost data: they are part of what makes a line "the same line" for
-    CR-174 FR-18a, so a donor who changed one quantity had every other line read as edited,
-    and staff decisions on those lines — a refusal included — were thrown away.
-
-    Lines are paired by name, each held line once. Nothing in the form says which held line
-    an edited one was, so when held lines of one name differ in these fields the pairing
-    is a guess: a donor who deleted the first of two "เสื้อ" lines had the refused one take
-    the deleted one's condition — and with it its approval. Those lines get nothing
-    carried, and their indexes come back so the review holds them for staff: read as
-    edited alone, a campaign line among them was approved by FR-2 even when it was the
-    refused one (review #783 H1). A value the request does carry wins: a client that
-    really changed a condition still has that line re-reviewed.
+    A line sent with a ``line_key`` is that held line: it keeps the key and takes back the
+    ``item_id`` and wizard-only fields the edit form cannot send, unless the request
+    carries its own. A line sent without one is new and gets a new key — so does every
+    line of a booking from before line keys, whose held lines have none to name. A key
+    the booking does not hold, or one named twice, refuses the edit before quota moves.
     """
-    unclaimed: dict[str, list[dict[str, Any]]] = {}
-    for line in held:
-        name = str(line.get("free_text") or line.get("item_name") or "").strip()
-        if name:
-            unclaimed.setdefault(name, []).append(line)
-    ambiguous = {
-        name
-        for name, lines in unclaimed.items()
-        if len({_wizard_details(line) for line in lines}) > 1
-    }
-
-    carried = []
-    guessed: set[int] = set()
-    for index, item in enumerate(items):
-        name = (item.free_text or "").strip()
-        candidates = unclaimed.get(name)
-        if candidates and name in ambiguous:
-            guessed.add(index)
-        if not candidates or name in ambiguous:
-            carried.append(item)
+    by_key = {str(line["line_key"]): line for line in held if line.get("line_key")}
+    named: set[str] = set()
+    paired = []
+    for item in items:
+        if item.line_key is None:
+            paired.append(item.model_copy(update={"line_key": new_ulid()}))
             continue
-        line = candidates.pop(0)
+        if item.line_key in named:
+            raise _line_key_error("DUPLICATE_LINE_KEY", item.line_key)
+        named.add(item.line_key)
+        line = by_key.get(item.line_key)
+        if line is None:
+            raise _line_key_error("UNKNOWN_LINE_KEY", item.line_key)
         update = {
             name: line[name]
-            for name in _WIZARD_ONLY_FIELDS
+            for name in ("item_id", *_WIZARD_ONLY_FIELDS)
             if not getattr(item, name) and line.get(name)
         }
-        carried.append(item.model_copy(update=update) if update else item)
-    return carried, guessed
+        paired.append(item.model_copy(update=update) if update else item)
+    return paired
 
 
 def _wanted_by_item(items: list[DonationItemInput]) -> dict[str, Decimal]:
@@ -303,6 +290,7 @@ def _declared_items(raw_items: list[dict[str, Any]]) -> list[DeclaredItem]:
             qty=item.get("qty"),
             unit=item.get("unit"),
             category=item.get("category"),
+            line_key=item.get("line_key"),
             # CR-174 FR-27 — the per-line review, so the donor's page shows it at once.
             review_status=item.get("review_status"),
             review_reason_code=item.get("review_reason_code"),
@@ -400,12 +388,6 @@ def _tracking_payload(
     return payload
 
 
-# Thai copy for the donor; one line is easier to grep than a split string.
-_NO_ACCEPTED_ITEMS_MESSAGE = (
-    "ต้องเหลืออย่างน้อย 1 รายการที่ศูนย์ไม่ได้ปฏิเสธ — ถ้าไม่ต้องการบริจาคแล้ว ให้ยกเลิกการจองแทน"  # noqa: E501
-)
-
-
 class DonationsUseCase:
     async def create(self, payload: DonationCreateRequest) -> DonationCreateResponse:
         # Look the shelter up first, then judge its status: "no such shelter" (404) and
@@ -439,7 +421,10 @@ class DonationsUseCase:
         expires_at = reservation_expiry(now, await configured_ttl_hours())
         token_hash = sha256_hex(tracking_token)
 
-        items_declared = [item.model_dump(exclude_none=True) for item in payload.items]
+        # CR-196 FR-LK-1 — a key per line, whatever the client sent.
+        items_declared = [
+            {**item.model_dump(exclude_none=True), "line_key": new_ulid()} for item in payload.items
+        ]
 
         # Atomic quota reservation (CR-045/T-21) — only items with both campaign_id +
         # item_id are quota-tracked; free-text/no-campaign items bypass unchanged.
@@ -737,10 +722,11 @@ class DonationsUseCase:
         ``expires_at`` is untouched (CR-080 Q3): the TTL runs from the original
         ``declared_at``, or a donor could hold a reservation open forever by editing it.
 
-        Every line is then re-reviewed (CR-174 FR-18): an untouched line keeps its result,
-        an edited or new one is approved only if it holds quota in the campaign, and the
-        booking status is read off the lines again. ``current_items``/``current_status``
-        are the CouchDB document as the BFF read it — see ``_previous_review_state``.
+        Only a booking nothing was decided on may be edited (CR-196 FR-LK-4), so every line
+        is then judged afresh (CR-174 FR-18): approved only if it holds quota in the
+        campaign, and the booking status is read off the lines again. Lines are told apart
+        by ``line_key`` (``_pair_held_lines``). ``current_items``/``current_status`` are the
+        CouchDB document as the BFF read it — see ``_previous_review_state``.
         """
         token_hash = sha256_hex(tracking_token)
         buffer = await DonationBuffer.find_one(DonationBuffer.tracking_token_hash == token_hash)
@@ -754,13 +740,22 @@ class DonationsUseCase:
             buffer, stub, current_items, current_status
         )
         # The buffer too: settle may have moved it on since the BFF read CouchDB.
-        for gate in (previous_status, buffer.status):
-            if gate not in DONOR_EDITABLE_STATUSES:
+        for gate_status, gate_items in (
+            (previous_status, previous_items),
+            (buffer.status, buffer.items_declared),
+        ):
+            gate = item_edit_gate(gate_status, gate_items)
+            if gate == "already_reviewed":
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail={"success": False, "error": "ALREADY_REVIEWED"},
+                )
+            if gate == "closed":
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail={
                         "success": False,
-                        "error": f'Cannot edit a donation in status "{gate}"',
+                        "error": f'Cannot edit a donation in status "{gate_status}"',
                     },
                 )
         if not items:
@@ -774,31 +769,7 @@ class DonationsUseCase:
 
         now = datetime.now(UTC)
         before = [dict(item) for item in buffer.items_declared]
-        items = _carry_item_ids(items, before)
-        # Before the review below: it pairs lines on these fields too (CR-174 FR-18a).
-        items, guessed = _carry_line_details(items, previous_items)
-
-        # Refuse before any quota moves: an edit that keeps only lines staff already refused
-        # would turn the booking `rejected` with no reason of the shelter's (CR-172 FR-1),
-        # though it was the donor who dropped the rest. Cancelling is how they withdraw.
-        # Every other line is approved or pending whatever the counter says, so assuming
-        # all reserved here only matters for the lines carried over as rejected.
-        preview = review_edited_booking(
-            previous_items=previous_items,
-            previous_status=previous_status,
-            items=[item.model_dump(exclude_none=True) for item in items],
-            reserved=[True] * len(items),
-            hold_for_review=guessed,
-        )
-        if preview.status == "rejected":
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail={
-                    "success": False,
-                    "error": "NO_ACCEPTED_ITEMS",
-                    "message": _NO_ACCEPTED_ITEMS_MESSAGE,
-                },
-            )
+        items = _pair_held_lines(_carry_item_ids(items, before), previous_items)
 
         held = _held_by_item(before)
         wanted = _wanted_by_item(items)
@@ -871,7 +842,6 @@ class DonationsUseCase:
                 row["reserved_qty"] = str(wanted[item_id])
 
         review = review_edited_booking(
-            previous_items=previous_items,
             previous_status=previous_status,
             items=after,
             reserved=[
@@ -882,7 +852,6 @@ class DonationsUseCase:
                 )
                 for row in after
             ],
-            hold_for_review=guessed,
         )
         after = review.items
 

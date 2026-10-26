@@ -3508,7 +3508,8 @@
 						"anyOf": [{ "type": "string" }, { "type": "null" }],
 						"title": "Condition"
 					},
-					"note": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Note" }
+					"note": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Note" },
+					"line_key": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Line Key" }
 				},
 				"type": "object",
 				"required": ["qty"],

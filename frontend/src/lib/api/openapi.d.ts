@@ -1763,6 +1763,8 @@ export interface components {
 			condition?: string | null;
 			/** Note */
 			note?: string | null;
+			/** Line Key */
+			line_key?: string | null;
 		};
 		/** DonationItemsPatchRequest */
 		DonationItemsPatchRequest: {
