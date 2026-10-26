@@ -98,6 +98,8 @@ export interface ScanDonationView {
 		review_reason?: string | null;
 	}>;
 	logistics?: PublicDonationDoc['logistics'];
+	/** Donor photos, `image:{ulid}` in `shelter_code`'s DB (CR-175 donor photos FR-12). */
+	photos?: string[];
 }
 
 /**
