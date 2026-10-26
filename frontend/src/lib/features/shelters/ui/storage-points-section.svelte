@@ -6,6 +6,7 @@
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import * as Form from '$lib/components/ui/form/index.js';
+	import * as ToggleGroup from '$lib/components/ui/toggle-group/index.js';
 	import { toast } from 'svelte-sonner';
 	import { ulid } from '$lib/db/ulid';
 	import Plus from '@lucide/svelte/icons/plus';
@@ -44,22 +45,18 @@
 	}
 
 	// CR-175: `types` is multi-select (min 1) and kept in enum order whatever the
-	// click order. The last remaining type cannot be toggled off — say why instead
-	// of silently ignoring the click. Goes through setPoints (not a direct mutation
-	// on the looped `point`) so the change reaches the $formData store.
-	function toggleType(index: number, value: SubStorageType) {
-		const points = $formData.common_areas.sub_storage ?? [];
-		const point = points[index];
-		if (!point) return;
-		const current = point.types ?? [];
-		if (current.includes(value) && current.length <= 1) {
+	// click order. Clearing the last type is refused with a toast; since the group
+	// reads `types` back through the getter, the chip simply stays on. Goes through
+	// setPoints (not a direct mutation on the looped `point`) so the change reaches
+	// the $formData store.
+	function setTypes(index: number, next: string[]) {
+		if (next.length === 0) {
 			toast.info('ต้องเลือกอย่างน้อย 1 ประเภท');
 			return;
 		}
-		const nextTypes = current.includes(value)
-			? current.filter((t) => t !== value)
-			: sortSubStorageTypes([...current, value]);
-		setPoints(points.map((p, i) => (i === index ? { ...p, types: nextTypes } : p)));
+		const types = sortSubStorageTypes(next as SubStorageType[]);
+		const points = $formData.common_areas.sub_storage ?? [];
+		setPoints(points.map((p, i) => (i === index ? { ...p, types } : p)));
 	}
 </script>
 
@@ -69,7 +66,7 @@
 >
 	<div class="flex items-center gap-3 border-b border-slate-100 pb-4">
 		<div
-			class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-teal-50 text-teal-700"
+			class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-domain-facility-subtle text-domain-facility-strong"
 		>
 			<Warehouse class="h-5 w-5" />
 		</div>
@@ -94,7 +91,7 @@
 			size="sm"
 			onclick={addPoint}
 			{disabled}
-			class="shrink-0 rounded-full border-teal-200 bg-teal-50 text-teal-700 shadow-sm hover:bg-teal-100 hover:text-teal-800"
+			class="shrink-0 rounded-full border-domain-facility-border bg-domain-facility-subtle text-domain-facility-strong shadow-2xs hover:bg-domain-facility-border/40 hover:text-domain-facility-text"
 		>
 			<Plus class="mr-1 h-4 w-4" /> เพิ่มจุดเก็บของ
 		</Button>
@@ -160,22 +157,22 @@
 
 				<Form.Fieldset {form} name={`common_areas.sub_storage[${i}].types`}>
 					<Form.Legend>ประเภทของที่เก็บได้ (เลือกได้หลายประเภท)</Form.Legend>
-					<div class="flex flex-wrap gap-2">
+					<ToggleGroup.Root
+						type="multiple"
+						bind:value={() => point.types ?? [], (next) => setTypes(i, next)}
+						spacing={2}
+						{disabled}
+						class="w-full flex-wrap"
+					>
 						{#each typeOptions as [value, label] (value)}
-							{@const isSelected = (point.types ?? []).includes(value)}
-							<button
-								type="button"
-								onclick={() => toggleType(i, value)}
-								{disabled}
-								aria-pressed={isSelected}
-								class="min-h-11 rounded-full border px-3 py-1.5 text-sm font-semibold transition-colors {isSelected
-									? 'border-teal-600 bg-teal-600 text-white'
-									: 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'}"
+							<ToggleGroup.Item
+								{value}
+								class="h-auto min-h-11 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 aria-pressed:border-domain-facility-strong aria-pressed:bg-domain-facility-strong aria-pressed:text-white aria-pressed:hover:bg-domain-facility-text data-[state=on]:border-domain-facility-strong data-[state=on]:bg-domain-facility-strong data-[state=on]:text-white data-[state=on]:hover:bg-domain-facility-text"
 							>
 								{label}
-							</button>
+							</ToggleGroup.Item>
 						{/each}
-					</div>
+					</ToggleGroup.Root>
 					<Form.FieldErrors />
 				</Form.Fieldset>
 			</div>
