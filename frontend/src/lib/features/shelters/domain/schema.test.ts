@@ -281,14 +281,14 @@ describe('commonAreasSchema', () => {
 		).toThrow();
 	});
 
-	it('accepts sub_storage items (CR-175 types[])', () => {
+	it('accepts sub_storage items (draft-storage-point-multi-type types[])', () => {
 		const c = commonAreasSchema.parse({
 			sub_storage: [{ id: 's1', name: 'อาหารแห้ง', types: ['food_dry', 'drinking_water'] }]
 		});
 		expect(c.sub_storage?.[0]?.types).toEqual(['food_dry', 'drinking_water']);
 	});
 
-	it('accepts legacy single `type` and migrates it to `types` (CR-175 read-time fallback)', () => {
+	it('accepts legacy single `type` and migrates it to `types` (draft-storage-point-multi-type read-time fallback)', () => {
 		const c = commonAreasSchema.parse({
 			sub_storage: [{ id: 's1', name: 'อาหารแห้ง', type: 'food_dry' }]
 		});
@@ -312,11 +312,11 @@ describe('subStorageItemSchema', () => {
 		);
 	});
 
-	it('requires at least one type (CR-175)', () => {
+	it('requires at least one type (draft-storage-point-multi-type)', () => {
 		expect(() => subStorageItemSchema.parse({ id: 's1', name: 'คลังยา', types: [] })).toThrow();
 	});
 
-	it('accepts multiple types per storage point (CR-175)', () => {
+	it('accepts multiple types per storage point (draft-storage-point-multi-type)', () => {
 		const parsed = subStorageItemSchema.parse({
 			id: 's1',
 			name: 'ห้องเก็บของกลาง',
@@ -1169,7 +1169,7 @@ describe('draft-shelter-storage-points — migrate v6 → v7 sub_storage id back
 	});
 });
 
-describe('CR-175 — migrate v7 → v8 sub_storage type → types[]', () => {
+describe('draft-storage-point-multi-type — migrate v7 → v8 sub_storage type → types[]', () => {
 	const v7doc = {
 		_id: 'shelter:x',
 		type: 'shelter' as const,

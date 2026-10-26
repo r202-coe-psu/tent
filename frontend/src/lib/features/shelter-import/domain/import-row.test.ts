@@ -282,7 +282,7 @@ describe('validateRow — sub storage list', () => {
 		expect(new Set(ids).size).toBe(2);
 	});
 
-	it('still accepts the pre-CR-175 label "เวชภัณฑ์" for medical supplies', () => {
+	it('still accepts the retired label "เวชภัณฑ์" for medical supplies (draft-storage-point-multi-type)', () => {
 		const r = validateRow(baseRow({ [H.sub_storage]: 'คลังยา:เวชภัณฑ์' }), 1, emptyLookups());
 		expect(r.ok).toBe(true);
 		expect(r.shelter?.common_areas.sub_storage?.[0].types).toEqual(['medical_supplies']);
