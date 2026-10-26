@@ -70,6 +70,7 @@ affects:
 
 ### Requirements
 - **FR-DDS-01** — รับรอง `/onsite/distribution` เป็นหน้าเดียว 5 ขั้น ครอบหน้าจอ 13, 14, 15, 16 และ 17 ของ CR-121 §5; แก้ตาราง §5 ให้ชี้ route เดียว และตัด `/onsite/distribution/scan`, `/onsite/distribution/reconcile`, `/onsite/loans`, `/onsite/returns` ออก. หน้าจอ 18 (`/onsite/scan-check-in-out`) คงเดิม
+  > แก้โดย [CR-200](CR-200-distribution-food-supplies-mode.md) (2026-10-27): ยังเป็นหน้าเดียว แต่มีสวิตช์โหมด "อาหาร | สิ่งของ" — โหมดอาหาร 3 ขั้น, โหมดสิ่งของ 4 ขั้น; แต่ละโหมดเห็นเฉพาะตั๋ว `requisition_type` ของตัวเอง
 - **FR-DDS-02** — role ขั้น 1–3 และ 5 = **SA, SM, `distribution_staff` (DST)** (เฉพาะศูนย์ที่เลือก) ตาม CR-161 R3 — ตัด REG และ SC ออกจากขั้นนี้ตามคำสั่ง Kong (2026-10-11). แก้ RM:85 และ RM:87 ให้ตรง
 - **FR-DDS-03** — role ขั้น 4:
   - รับคืนแบบ PHYSICAL (มีของ → `receive`) = **SA, SM, DST** ในหน้านี้ — บังคับเป็นระดับหน้า (route guard และปุ่มขั้น 4 / `LoanReturnCard`) ไม่แก้ `canReceivePhysicalStock` ระดับระบบ (WH, SC, SM, SA ยังรับคืนที่คลังและสร้าง bulk pool ได้). ต้องปรับ §2.33 (VDU Rule 16) และ VDU `distribution_log` ให้มี DST โดยไม่ลบ WH/SC
