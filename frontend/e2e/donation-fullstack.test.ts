@@ -486,7 +486,8 @@ test.describe('Donation full-stack: donor and staff', { tag: ['@critical', '@don
 		await page.goto(`/donations/track/${trackingToken}`);
 		const edit = page.getByRole('button', { name: 'แก้ไขรายการที่จะบริจาค' });
 		await expect(edit).toHaveAttribute('aria-disabled', 'true');
-		await edit.click();
+		// Playwright counts aria-disabled as not clickable; a donor's tap still lands and gets the toast.
+		await edit.click({ force: true });
 		await expect(
 			page.locator('[data-sonner-toast]').filter({ hasText: 'ไม่สามารถแก้ไขรายการได้' })
 		).toBeVisible();
