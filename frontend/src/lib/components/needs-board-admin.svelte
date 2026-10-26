@@ -10,7 +10,7 @@
 	import * as Select from '$lib/components/ui/select/index.js';
 	import * as Table from '$lib/components/ui/table/index.js';
 	import { parseCampaignNotes, publicItemAggregate, type NeedItem } from '$lib/features/operations';
-	import { addQty, parseQty, qtyIsZero, roundQty } from '$lib/utils/qty';
+	import { addQty, formatQty, parseQty, qtyIsZero } from '$lib/utils/qty';
 	import { DEFAULT_ITEM_UNIT, formatUnit, useUnitsOfMeasure } from '$lib/features/catalog';
 	import { langState } from '$lib/states/i18n.svelte';
 	import BoardSectionHeader from '$lib/components/board-section-header.svelte';
@@ -277,7 +277,7 @@
 									class="mt-1 h-auto border border-sky-200 bg-sky-50 py-0.5 text-xs font-bold whitespace-normal text-sky-900"
 									title="หน้าบริจาคสาธารณะรวมทุกประกาศที่ขอสิ่งของเดียวกันเป็นการ์ดใบเดียว"
 								>
-									รวมกับอีก {row.sharedCampaigns - 1} ประกาศบนหน้า public · รวม {roundQty(
+									รวมกับอีก {row.sharedCampaigns - 1} ประกาศบนหน้า public · รวม {formatQty(
 										row.publicTotal
 									)}
 									{formatUnit(row.unit, units, langState.current)}
@@ -290,7 +290,7 @@
 								<div class="rounded-lg border border-slate-200/80 bg-slate-50/80 p-2.5 text-center">
 									<p class="text-xs font-semibold text-slate-500">{stat.label}</p>
 									<p class="mt-1 text-sm font-bold text-slate-900 tabular-nums">
-										{roundQty(stat.value || '0')}
+										{formatQty(stat.value || '0')}
 										<span class="text-xs font-medium text-slate-500"
 											>{formatUnit(row.unit, units, langState.current)}</span
 										>
@@ -446,7 +446,7 @@
 											class="mt-1.5 h-auto bg-blue-50 py-0.5 text-2xs font-bold whitespace-normal text-blue-700 dark:bg-blue-950/40 dark:text-blue-300"
 											title="หน้าบริจาคสาธารณะรวมทุกประกาศที่ขอสิ่งของเดียวกันเป็นการ์ดใบเดียว"
 										>
-											รวมกับอีก {row.sharedCampaigns - 1} ประกาศบนหน้า public · รวม {roundQty(
+											รวมกับอีก {row.sharedCampaigns - 1} ประกาศบนหน้า public · รวม {formatQty(
 												row.publicTotal
 											)}
 											{formatUnit(row.unit, units, langState.current)}
@@ -457,7 +457,7 @@
 								<!-- Reserved Pledged -->
 								<Table.Cell class="px-3 py-4 text-center font-bold text-foreground">
 									<Badge variant="secondary" class="px-2.5 text-xs">
-										{roundQty(row.reserved || '0')}
+										{formatQty(row.reserved || '0')}
 										{formatUnit(row.unit, units, langState.current)}
 									</Badge>
 								</Table.Cell>
@@ -465,14 +465,14 @@
 								<!-- On-hand -->
 								<Table.Cell class="px-3 py-4 text-center font-bold text-foreground">
 									<Badge variant="secondary" class="px-2.5 text-xs">
-										{roundQty(row.onHand || '0')}
+										{formatQty(row.onHand || '0')}
 										{formatUnit(row.unit, units, langState.current)}
 									</Badge>
 								</Table.Cell>
 
 								<!-- Target -->
 								<Table.Cell class="px-3 py-4 text-center font-bold text-foreground">
-									{roundQty(row.target || '0')}
+									{formatQty(row.target || '0')}
 									<span class="ml-1 text-2xs font-medium text-muted-foreground"
 										>{formatUnit(row.unit, units, langState.current)}</span
 									>
@@ -480,7 +480,7 @@
 
 								<!-- Remaining: what donors can still book -->
 								<Table.Cell class="px-3 py-4 text-center font-bold text-foreground">
-									{roundQty(row.remaining || '0')}
+									{formatQty(row.remaining || '0')}
 									<span class="ml-1 text-2xs font-medium text-muted-foreground"
 										>{formatUnit(row.unit, units, langState.current)}</span
 									>
