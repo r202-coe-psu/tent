@@ -102,20 +102,27 @@ _RICE = {
     "unit": "kg",
     "reserved_qty": "5",
     "review_status": "approved",
+    "line_key": "01K8TESTRICE00000000000000",
 }
-_BLANKET = {"free_text": "ผ้าห่ม", "qty": "2", "unit": "ผืน", "review_status": "pending"}
+_BLANKET = {
+    "free_text": "ผ้าห่ม",
+    "qty": "2",
+    "unit": "ผืน",
+    "review_status": "pending",
+    "line_key": "01K8TESTBLANKET00000000000",
+}
 
 
 @pytest.mark.asyncio
-async def test_persisted_donation_is_stamped_schema_v7():
-    # CR-174: items[].review_status / review_reason_code / review_reason (6 was CR-172).
+async def test_persisted_donation_is_stamped_schema_v8():
+    # CR-196: items[].line_key (7 was CR-174's per-line review).
     # Must match the walk-in writer in the frontend — both channels write the same version.
     couch = _couch()
 
     assert await _persist_donation(couch, _buffer_row()) is True  # type: ignore[arg-type]
     doc = couch.put_doc.await_args.args[1]
     assert doc["_id"] == "donation:01TESTDONATION0000000002"
-    assert doc["schema_v"] == 7
+    assert doc["schema_v"] == 8
     # Nothing is rejected at intake — the fields only appear once staff review it.
     assert "reject_reason" not in doc
     assert "reject_reason_code" not in doc
@@ -130,6 +137,11 @@ async def test_persisted_donation_carries_the_line_review_and_status():
     doc = couch.put_doc.await_args.args[1]
     assert doc["status"] == "pending_review"
     assert [i["review_status"] for i in doc["items"]] == ["approved", "pending"]
+    # CR-196: the keys the donor's edit form names lines by.
+    assert [i["line_key"] for i in doc["items"]] == [
+        _RICE["line_key"],
+        _BLANKET["line_key"],
+    ]
 
 
 @pytest.mark.asyncio

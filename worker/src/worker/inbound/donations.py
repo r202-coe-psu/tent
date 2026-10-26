@@ -30,7 +30,7 @@ POLL_INTERVAL_SECONDS = 3
 
 #: ``donation`` schema_v this writer stamps. Keep in step with the walk-in writer in the
 #: frontend — both channels write the same shape (schema.md §2.3).
-DONATION_SCHEMA_V = 7
+DONATION_SCHEMA_V = 8
 
 _AUDIT_SCHEMA_V = 1
 _CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
@@ -133,9 +133,9 @@ async def _persist_donation(couch: CouchClient, donation: DonationBuffer) -> boo
     couch_doc = {
         "_id": doc_id,
         "type": "donation",
-        # 7 for items[].review_status / review_reason_code / review_reason (CR-174) —
-        # FastAPI sets review_status on every line, and the lines are copied whole below.
-        # 6 was reject_reason / reject_reason_code + received_summary.items[].rejected
+        # 8 for items[].line_key (CR-196); 7 was items[].review_status / review_reason_code /
+        # review_reason (CR-174). FastAPI sets both on every line, and the lines are copied
+        # whole below. 6 was reject_reason / reject_reason_code + received_summary.items[].rejected
         # (CR-172); 5 was redirect_to_shelter_code (CR-087); 4 was revisions[] (CR-080).
         # This line read 2 until CR-080, two versions behind: CR-038 moved items[].qty to
         # qty_str and took schema.md §2.3 to 3, but only the walk-in writer followed, so
