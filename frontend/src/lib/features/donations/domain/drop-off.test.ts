@@ -15,7 +15,7 @@ const SHELTER: DropOffShelterSource = {
 
 describe('resolveDropOffPoint', () => {
 	it('resolves the shelter itself as the main point', () => {
-		expect(resolveDropOffPoint(SHELTER, null)).toEqual({
+		expect(resolveDropOffPoint(SHELTER)).toEqual({
 			shelterCode: 'SH001',
 			shelterName: 'ศูนย์พักพิงหาดใหญ่',
 			pointId: null,
@@ -28,12 +28,6 @@ describe('resolveDropOffPoint', () => {
 
 	it('prefers code over id for the shelter code', () => {
 		expect(resolveDropOffPoint({ ...SHELTER, code: 'SH-X' }).shelterCode).toBe('SH-X');
-	});
-
-	it('falls back to the main point for an unknown point id', () => {
-		const point = resolveDropOffPoint(SHELTER, 'no-such-point');
-		expect(point.pointId).toBeNull();
-		expect(point.name).toBe(SHELTER.name);
 	});
 
 	it('keeps geo null when the shelter has no coordinates', () => {

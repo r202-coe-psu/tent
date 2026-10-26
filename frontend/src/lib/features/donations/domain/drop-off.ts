@@ -41,16 +41,8 @@ function cleanGeo(geo: DropOffGeo | null | undefined): DropOffGeo | null {
 		: null;
 }
 
-/**
- * Shelters have no drop-off points yet, so every `pointId` resolves to the main point.
- * An unknown id must keep doing that: a donor holding an old booking still needs to
- * be told where to go.
- */
-export function resolveDropOffPoint(
-	shelter: DropOffShelterSource,
-	// eslint-disable-next-line @typescript-eslint/no-unused-vars -- reserved for per-point lookup
-	_pointId: string | null = null
-): DropOffPoint {
+/** Shelters have no drop-off points yet (#812), so every booking goes to the main point. */
+export function resolveDropOffPoint(shelter: DropOffShelterSource): DropOffPoint {
 	return {
 		shelterCode: shelter.code ?? shelter.id ?? '',
 		shelterName: shelter.name,
