@@ -363,9 +363,6 @@
 				<h1 class="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
 					จุดแจกจ่ายพัสดุและอาหาร
 				</h1>
-				<p class="text-xs font-semibold tracking-wider text-slate-500 uppercase sm:text-sm">
-					Distribution Desk (Station 4)
-				</p>
 			</div>
 		</div>
 
