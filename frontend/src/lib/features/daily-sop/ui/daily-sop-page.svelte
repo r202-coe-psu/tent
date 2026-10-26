@@ -203,7 +203,6 @@
 			selectedRole &&
 			isCurrentDate &&
 			!revisionConflict &&
-			hasRoleDraftInput(effectiveDraft, selectedRole.code) &&
 			questions.every((question) => {
 				const answer = effectiveDraft[question.id];
 				const parameterMissing =
@@ -1247,11 +1246,11 @@
 												<p>กำลังโหลดค่ากำหนดของศูนย์</p>
 											</div>
 										{/if}
-										{#if savedControl || isDirty}
+										{#if savedControl?.status || isDirty}
 											<div
 												class="mt-2 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs leading-relaxed text-muted-foreground sm:text-sm"
 											>
-												{#if savedControl}
+												{#if savedControl?.status}
 													<span
 														>บันทึกล่าสุดโดย {savedControl.checked_by_name ||
 															savedControl.checked_by}</span
@@ -1486,7 +1485,7 @@
 
 				{#if canEditSelectedRole}
 					<div
-						class="sticky bottom-[var(--testing-banner-height)] z-20 -mx-4 -mb-[calc(9rem+env(safe-area-inset-bottom))] border-t bg-background/95 px-3 py-2 backdrop-blur sm:-mx-6 sm:-mb-28 sm:px-4 sm:py-3"
+						class="fixed inset-x-0 bottom-[var(--testing-banner-height)] z-20 border-t bg-background/95 px-3 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom,0px))] backdrop-blur sm:px-4 sm:pt-3 sm:pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] lg:sticky lg:inset-x-auto lg:-mx-6 lg:-mb-28"
 					>
 						<div
 							class="mx-auto grid max-w-6xl grid-cols-1 items-center gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:gap-3"
@@ -1518,7 +1517,7 @@
 							{/if}
 							<div class="grid gap-2 sm:flex sm:justify-end">
 								<Button
-									class="min-h-12 w-full gap-2 px-3 py-2 text-sm sm:min-h-11 sm:w-auto sm:px-4"
+									class="min-h-12 w-full gap-2 px-3 py-2 text-sm sm:w-auto sm:px-4"
 									disabled={!canSave || isSaving}
 									onclick={save}
 								>
