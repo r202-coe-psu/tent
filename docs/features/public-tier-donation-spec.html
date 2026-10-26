@@ -340,6 +340,17 @@
           </ul>
           <ul>
             <li>ปุ่ม <strong>"+ เพิ่มรายการสิ่งของ"</strong> — เพิ่มแถว item; ลบแถวได้ (เหลืออย่างน้อย 1)</li>
+            <li>
+              <strong>รูปของที่จะบริจาค</strong> (ไม่บังคับ · ทั้งใบ ไม่ผูกรายการ ·
+              <a href="../changes/04-donation/CR-175-donation-donor-photos.md">CR-175 donor photos</a>) —
+              มีเฉพาะโหมด "บริจาคของอื่น ๆ" (พิมพ์เอง) ไม่มีในโหมดเลือกจากความต้องการ ·
+              ปุ่ม "เลือกรูป" (หลายรูป) และ "ถ่ายรูป" (<code>capture="environment"</code>) ·
+              ต้นฉบับ ≤ 20MB ต่อรูป · ย่อในเครื่องเป็น WEBP ด้านยาว 1600px คุณภาพ 0.8 + thumb 200px
+              (browser ที่ encode WEBP ไม่ได้ใช้ JPEG) แล้วอัปทันทีผ่าน
+              <code>POST /api/public/v1/donations/photos</code> · แถบ "ใช้ไปแล้ว X / 10 MB" และ "N / 30 รูป" ·
+              ครบ 30 รูปหรือเต็ม 10MB เลือกเพิ่มไม่ได้ · ข้อความเตือนว่ารูปอาจติดหน้าคน ทะเบียนรถ บ้านเลขที่ ·
+              กดจองระหว่างรูปยังอัปไม่เสร็จ → แจ้งให้รอ · แนบได้ตอนจองเท่านั้น หน้าแก้ใบไม่มีช่องรูป
+            </li>
             <li>ปุ่ม <strong>"ถัดไป: เลือกจุดส่งมอบ →"</strong> — validate (ชื่อ/เบอร์/≥1 item) แล้วไปขั้น 3</li>
           </ul>
         </div>
@@ -553,6 +564,15 @@
                   </td>
                 </tr>
                 <tr>
+                  <td>donor: รูปของบริจาค (CR-175 donor photos)</td>
+                  <td><code>photos</code> → <code>image:{ulid}</code> ใน shelter DB</td>
+                  <td>
+                    <span class="badge badge-warning badge-sm">STAFF ONLY</span>
+                    อาจติดข้อมูลส่วนตัว — เจ้าหน้าที่ดูผ่าน session เท่านั้น · หน้าติดตามไม่แสดงรูป
+                    และไม่มี public read path (FR-14) · ไม่ project ลง Mongo
+                  </td>
+                </tr>
+                <tr>
                   <td>donor: ใบอนุโมทนา / ลดหย่อนภาษี</td>
                   <td>—</td>
                   <td>
@@ -662,6 +682,16 @@
                     error banner; <code>NEED_FULL</code> → ขอเลือกรายการอื่น;
                     <code>SLOT_FULL</code> → ขอเลือก slot ใหม่;
                     <code>RATE_LIMITED</code> → ลองใหม่ภายหลัง
+                  </td>
+                </tr>
+                <tr>
+                  <td><code>POST /api/public/v1/donations/photos</code> (BFF-only)</td>
+                  <td>เลือก/ถ่ายรูปในฟอร์มโหมดพิมพ์เอง (ขั้น 2) — ทีละรูป</td>
+                  <td>ไม่ต้อง login (rate limit nginx <code>public_write</code>)</td>
+                  <td>
+                    toast ต่อรูปแล้วตัดรูปนั้นออก; <code>PHOTO_NOT_IMAGE</code> / <code>PHOTO_TOO_LARGE</code> /
+                    <code>SHELTER_CLOSED</code> · booking ที่ส่ง <code>photos</code> ตอบ 422
+                    <code>PHOTO_*</code> ตาม api-contract §5
                   </td>
                 </tr>
                 <tr>
