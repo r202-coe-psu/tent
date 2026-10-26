@@ -2,7 +2,7 @@
 title: "Full-System Role Permission Matrix (R2-R4 & V10)"
 status: approved
 created: 2026-06-04
-updated: 2026-10-26 # CR-153 แยก Daily SOP UI visibility กับ CouchDB read; 2026-10-20 CR-153 Daily SOP rows; CR-155 amend incident log เฉพาะ SA/SM/SO; 2026-10-18 CR-165 kiosk_staff แทน banner_staff (11th role) + CR-162 path `/back-office/kiosks/banners`; 2026-10-11 CR-162 banner_staff; เดิม: CR-093 (Compound Roles) & CR-104 (Volunteer Backoffice, 10-Role Taxonomy, Health Policy); decision sync 2026-10-10; CR-155 shelter_incident แทน shelter_report
+updated: 2026-10-26 # CR-153 แยก Daily SOP UI visibility กับ CouchDB read; 2026-10-24 CR-153 amendment Daily SOP Read = UI-visibility; 2026-10-20 CR-153 Daily SOP rows; CR-155 amend incident log เฉพาะ SA/SM/SO; 2026-10-18 CR-165 kiosk_staff แทน banner_staff (11th role) + CR-162 path `/back-office/kiosks/banners`; 2026-10-11 CR-162 banner_staff; เดิม: CR-093 (Compound Roles) & CR-104 (Volunteer Backoffice, 10-Role Taxonomy, Health Policy); decision sync 2026-10-10; CR-155 shelter_incident แทน shelter_report
 note: decision sync 2026-10-10 — VC may access /back-office/volunteers (job board/shifts), REG may access Station 2 medical screening; portal groups menus by department (ฝ่าย): ทะเบียน(REG; TRG/MED เห็นเฉพาะ Station 2), ครัว(KS), พัสดุและคลัง(SC, warehouse_staff alias), อาสาสมัคร(VC), รักษาความปลอดภัย(SO), อาคารสถานที่(FAC), บริหารศูนย์(SM), ส่วนกลาง(SA)
 closes: K-12 (A1 RBAC phase-blocker)
 affects:
@@ -113,6 +113,8 @@ affects:
 > **CR-153 (2026-10-24)** — แยกสิทธิ์อ่าน Daily SOP เป็น UI visibility (`own`; SM/SA เห็นครบ 9 Role) กับ CouchDB read (shelter-wide ตาม `_security`); การจำกัดเป็นการแสดงผลใน UI เท่านั้น ไม่ใช่ access control.
 >
 > **CR-153 (2026-10-20)** — เพิ่มแถว Daily SOP จดสิทธิ์ที่ CR-153 กำหนดไว้แล้ว ไม่เพิ่มสิทธิ์ใหม่. `own` = เฉพาะ Role ของตนในศูนย์ตน (SC รวม `warehouse_staff`); `scope` ในแถว Write = ทุก Role ในศูนย์ตน (SM); SA ทุกศูนย์; เขียนได้เฉพาะวันนี้ตามเวลา Asia/Bangkok
+>
+> **CR-153 amendment (2026-10-24)** — แถว Read เปลี่ยนเป็น UI-visibility: `own` = UI แสดงเฉพาะ Role ของตน (SC รวม `warehouse_staff`); SM `scope` และ SA เห็นครบ 9 Role. การอ่านเอกสารระดับ DB (CouchDB `_security`) ยังเป็นทั้งศูนย์สำหรับสมาชิก shelter — ไม่ใช่ access control; notes/observations จึงยังห้ามมีข้อมูลส่วนบุคคล
 
 ---
 

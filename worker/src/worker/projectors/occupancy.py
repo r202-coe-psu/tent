@@ -89,3 +89,19 @@ def aggregate_occupancy(
             breakdown["disabled"] += 1
 
     return total, breakdown
+
+
+def count_stay_statuses(evacuee_docs: list[dict[str, Any]]) -> dict[str, int]:
+    """``current_stay.status`` -> count for one shelter's evacuees (PDPA D8).
+
+    Ignores ``privacy`` on purpose: search-excluded evacuees have no ``public_persons``
+    row but still count in public occupancy aggregates.
+    """
+    counts: dict[str, int] = {}
+    for doc in evacuee_docs:
+        if doc.get("type") != "evacuee":
+            continue
+        status = (doc.get("current_stay") or {}).get("status")
+        if isinstance(status, str) and status:
+            counts[status] = counts.get(status, 0) + 1
+    return counts
