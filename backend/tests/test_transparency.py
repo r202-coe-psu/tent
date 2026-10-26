@@ -15,6 +15,8 @@ async def _insert_shelter(
     code: str,
     status: str,
     updated_at: datetime | None = None,
+    occupancy_by_status: dict[str, int] | None = None,
+    is_active: bool = True,
 ) -> None:
     db_name = settings.DATABASE_URI.rsplit("/", 1)[-1]
     await db_client[db_name]["public_shelters"].insert_one(
@@ -23,7 +25,9 @@ async def _insert_shelter(
             "shelter_code": code,
             "name": f"ศูนย์ {code}",
             "status": status,
+            "is_active": is_active,
             "capacity": 100,
+            **({} if occupancy_by_status is None else {"occupancy_by_status": occupancy_by_status}),
             "updated_at": updated_at or datetime.now(UTC),
             "raw_data": {},
         }
@@ -63,36 +67,24 @@ async def test_transparency_summary_aggregates_mongo(
     settings: Settings,
     auth_headers: dict[str, str],
 ):
-    await _insert_shelter(db_client, settings, code="SH001", status="standby")
-    await _insert_shelter(db_client, settings, code="SH002", status="open")
+    # Occupancy = Forecast (CR-112) summed from each shelter's `occupancy_by_status`, which the
+    # worker counts from CouchDB — including standby shelters (people still present).
+    await _insert_shelter(
+        db_client,
+        settings,
+        code="SH001",
+        status="standby",
+        occupancy_by_status={"active": 1, "pre_registered": 1, "kiosk_registered": 1},
+    )
+    await _insert_shelter(
+        db_client,
+        settings,
+        code="SH002",
+        status="open",
+        occupancy_by_status={"active": 1, "cancelled": 1, "checked_out": 3},
+    )
     await _insert_shelter(db_client, settings, code="SH003", status="full")
     await _insert_shelter(db_client, settings, code="SH004", status="open")
-
-    # Occupancy counts active + pre_registered + kiosk_registered across all projected shelters,
-    # including standby (people still present).
-    await _insert_person(
-        db_client, settings, person_id="evacuee:1", shelter_code="SH001", status="active"
-    )
-    await _insert_person(
-        db_client,
-        settings,
-        person_id="evacuee:2",
-        shelter_code="SH001",
-        status="pre_registered",
-    )
-    await _insert_person(
-        db_client,
-        settings,
-        person_id="evacuee:walkin",
-        shelter_code="SH001",
-        status="kiosk_registered",
-    )
-    await _insert_person(
-        db_client, settings, person_id="evacuee:3", shelter_code="SH002", status="active"
-    )
-    await _insert_person(
-        db_client, settings, person_id="evacuee:4", shelter_code="SH002", status="cancelled"
-    )
 
     response = await client.get("/public/v1/transparency/summary", headers=auth_headers)
     assert response.status_code == 200
@@ -124,11 +116,9 @@ async def test_shelter_detail_counts_occupancy_on_standby(
             "status": "standby",
             "capacity": 100,
             "updated_at": now,
+            "occupancy_by_status": {"active": 1},
             "raw_data": {"operation_status": "standby", "capacity": 100},
         }
-    )
-    await _insert_person(
-        db_client, settings, person_id="evacuee:s1", shelter_code="SH001", status="active"
     )
 
     response = await client.get("/public/v1/shelters/SH001", headers=auth_headers)
@@ -136,3 +126,64 @@ async def test_shelter_detail_counts_occupancy_on_standby(
     shelter = response.json()["shelter"]
     assert shelter["status"] == "PREPARE"
     assert shelter["capacity"]["available"] == 99
+
+
+async def test_transparency_occupancy_counts_search_excluded_people(
+    client: AsyncClient,
+    db_client: AsyncMongoClient,
+    settings: Settings,
+    auth_headers: dict[str, str],
+):
+    """PDPA D8 — opted-out / basic-consent people have no `public_persons` row but still count."""
+    await _insert_shelter(
+        db_client,
+        settings,
+        code="SH001",
+        status="open",
+        occupancy_by_status={"active": 2, "room_confirmed": 1},
+    )
+    # Only one of the three is searchable; the other two are search-excluded.
+    await _insert_person(
+        db_client, settings, person_id="evacuee:1", shelter_code="SH001", status="active"
+    )
+    # A deactivated shelter's leftover counts do not leak in.
+    await _insert_shelter(
+        db_client,
+        settings,
+        code="SH002",
+        status="closed",
+        is_active=False,
+        occupancy_by_status={"active": 5},
+    )
+
+    response = await client.get("/public/v1/transparency/summary", headers=auth_headers)
+    assert response.status_code == 200
+    assert response.json()["summary"]["occupancy_total"] == 3
+
+
+async def test_transparency_occupancy_falls_back_to_persons_before_reprojection(
+    client: AsyncClient,
+    db_client: AsyncMongoClient,
+    settings: Settings,
+    auth_headers: dict[str, str],
+):
+    """A shelter row written before `occupancy_by_status` existed (no key) is counted from
+    `public_persons` as before, until the worker bootstrap re-projects it."""
+    await _insert_shelter(
+        db_client, settings, code="SH001", status="open", occupancy_by_status={"active": 2}
+    )
+    await _insert_shelter(db_client, settings, code="SH002", status="open")
+    await _insert_person(
+        db_client, settings, person_id="evacuee:1", shelter_code="SH002", status="active"
+    )
+    await _insert_person(
+        db_client, settings, person_id="evacuee:2", shelter_code="SH002", status="cancelled"
+    )
+    # SH001 counts from `occupancy_by_status` only — its person rows are not added again.
+    await _insert_person(
+        db_client, settings, person_id="evacuee:3", shelter_code="SH001", status="active"
+    )
+
+    response = await client.get("/public/v1/transparency/summary", headers=auth_headers)
+    assert response.status_code == 200
+    assert response.json()["summary"]["occupancy_total"] == 3
