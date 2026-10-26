@@ -135,7 +135,7 @@
 						<Select.Root type="single" bind:value={toPoolId}>
 							<Select.Trigger
 								id="move-entry-target"
-								class="h-11 w-full min-w-0 bg-white text-sm font-medium sm:h-10"
+								class="h-11 w-full min-w-0 bg-white text-sm font-medium data-[size=default]:h-11 sm:h-10 sm:data-[size=default]:h-10"
 							>
 								<span class="truncate">
 									{selectedTarget ? selectedTarget.name : 'เลือกกองปลายทาง'}

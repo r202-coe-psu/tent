@@ -20,7 +20,8 @@ export const BULK_RETURN_POOL_NAME_MAX_LENGTH = 80;
 
 export const UNSPECIFIED_STORAGE_LABEL = 'ไม่ระบุ';
 export const UNSPECIFIED_RETURNER_LABEL = 'ไม่ระบุผู้คืน';
-export const NOT_EMPTY_CANCEL_REASON = 'ย้ายของออกให้หมดก่อน';
+export const NOT_EMPTY_CANCEL_REASON =
+	'ยกเลิกไม่ได้เนื่องจากยังมีรายการค้างอยู่ในกอง — ย้ายหรือยกเลิกรายการให้หมดก่อน';
 export const LATE_ENTRY_GUIDANCE = 'ย้ายไปกองอื่นที่ยังเปิดอยู่';
 export const UNRESOLVED_REFS_HINT =
 	'มีข้อมูลการย้าย/ยกเลิกที่ยังซิงก์มาไม่ครบ ยอดในกองอาจยังไม่ครบ';
@@ -44,7 +45,7 @@ export type BulkReturnPoolEntryRow = BulkReturnPoolOverviewRow['entries'][number
 
 export const BULK_RETURN_POOL_V3_STATUS_LABELS: Record<BulkReturnPoolV3Status, string> = {
 	OPEN: 'เปิดรับ',
-	SUBMITTED: 'ส่งแล้ว',
+	SUBMITTED: 'รอตรวจสอบ',
 	RECEIVED: 'ตรวจรับแล้ว',
 	CANCELLED: 'ยกเลิก'
 };
@@ -384,8 +385,9 @@ export function poolStorageLabel(pool: Pick<BulkReturnPoolV3, 'location_storage_
 }
 
 function shortId(id: string): string {
-	const tail = id.includes(':') ? id.slice(id.indexOf(':') + 1) : id;
-	return tail.length > 8 ? `…${tail.slice(-6)}` : tail;
+	const rest = id.replace(/^(evacuee|volunteer):/, '');
+	if (/^[0-9A-HJKMNP-TV-Z]{26}$/i.test(rest)) return `…${rest.slice(-6)}`;
+	return rest.length > 12 ? `…${rest.slice(-12)}` : rest;
 }
 
 export function returnerLabel(

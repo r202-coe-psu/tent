@@ -339,7 +339,7 @@
 							<Select.Root type="single" bind:value={() => poolId, handlePoolSelect}>
 								<Select.Trigger
 									id="add-entry-pool"
-									class="h-11 w-full min-w-0 bg-white text-sm font-medium sm:h-10 sm:flex-1"
+									class="h-11 w-full min-w-0 bg-white text-sm font-medium data-[size=default]:h-11 sm:h-10 sm:flex-1 sm:data-[size=default]:h-10"
 								>
 									<span class="truncate">
 										{selectedPool ? selectedPool.name : 'เลือกกองที่เปิดรับ'}
@@ -481,7 +481,7 @@
 											<Select.Trigger
 												id="add-entry-item-{line.lineId}"
 												aria-invalid={Boolean(lineError)}
-												class="h-11 w-full min-w-0 bg-white text-sm font-medium sm:h-10"
+												class="h-11 w-full min-w-0 bg-white text-sm font-medium data-[size=default]:h-11 sm:h-10 sm:data-[size=default]:h-10"
 											>
 												<span class="truncate">{itemLabel(line.item_id)}</span>
 											</Select.Trigger>
@@ -527,16 +527,18 @@
 							</li>
 						{/each}
 					</ul>
-					<Button
-						type="button"
-						variant="outline"
-						disabled={addMutation.isPending}
-						onclick={() => (lines = addLine(lines, createStableOperationId))}
-						class="min-h-11 w-full gap-2 sm:w-auto"
-					>
-						<Plus class="h-4 w-4" aria-hidden="true" />
-						เพิ่มรายการสินค้า
-					</Button>
+					<div class="flex justify-end">
+						<Button
+							type="button"
+							variant="outline"
+							disabled={addMutation.isPending}
+							onclick={() => (lines = addLine(lines, createStableOperationId))}
+							class="min-h-11 w-full gap-2 sm:w-auto"
+						>
+							<Plus class="h-4 w-4" aria-hidden="true" />
+							เพิ่มรายการสินค้า
+						</Button>
+					</div>
 				</div>
 
 				<div class="space-y-1.5">

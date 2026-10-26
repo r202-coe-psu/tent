@@ -365,7 +365,7 @@
 		/>
 	{:else}
 		<!-- Overview KPI Counters (Single source of truth with workflow groups) -->
-		<div class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+		<div class="flex flex-wrap justify-center gap-3 *:min-w-40 *:grow *:basis-44 lg:*:basis-52">
 			<!-- 1. All -->
 			<div class="rounded-xl border border-slate-200/80 bg-white p-4 shadow-2xs">
 				<div class="flex items-center justify-between">
@@ -415,9 +415,7 @@
 			</div>
 
 			<!-- 5. Completed -->
-			<div
-				class="col-span-2 rounded-xl border border-slate-200/80 bg-white p-4 shadow-2xs sm:col-span-1"
-			>
+			<div class="rounded-xl border border-slate-200/80 bg-white p-4 shadow-2xs">
 				<div class="flex items-center justify-between">
 					<span class="text-xs font-semibold text-slate-700">เสร็จสมบูรณ์</span>
 					<CheckCircle2 class="h-4 w-4 text-emerald-600" />

@@ -359,24 +359,24 @@
 	</div>
 
 	<div class="flex flex-col gap-3">
-		<div role="group" aria-label="กรองกองรับคืนตามสถานะ" class="flex flex-wrap gap-2">
-			{#each POOL_STATUS_FILTER_VALUES as value (value)}
-				<Button
-					type="button"
-					variant={statusFilter === value ? 'default' : 'outline'}
-					aria-pressed={statusFilter === value}
-					onclick={() => (statusFilter = value)}
-					class="min-h-11 gap-2"
-				>
-					{getPoolStatusFilterLabel(value)}
-					<span class="tabular-nums">{statusCounts[value]}</span>
-				</Button>
-			{/each}
-		</div>
+		<div class="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
+			<div role="group" aria-label="กรองกองรับคืนตามสถานะ" class="flex flex-wrap gap-2">
+				{#each POOL_STATUS_FILTER_VALUES as value (value)}
+					<Button
+						type="button"
+						variant={statusFilter === value ? 'default' : 'outline'}
+						aria-pressed={statusFilter === value}
+						onclick={() => (statusFilter = value)}
+						class="min-h-11 gap-2"
+					>
+						{getPoolStatusFilterLabel(value)}
+						<span class="tabular-nums">{statusCounts[value]}</span>
+					</Button>
+				{/each}
+			</div>
 
-		<div class="flex flex-wrap items-center gap-x-4 gap-y-2">
 			{#if itemOptions.length > 0}
-				<div class="flex items-center gap-2">
+				<div class="flex items-center gap-2 sm:ml-auto">
 					<Label for="bulk-pool-item-filter" class="shrink-0 text-sm font-medium text-slate-700">
 						ชนิดสินค้า
 					</Label>
@@ -403,7 +403,9 @@
 					</Select.Root>
 				</div>
 			{/if}
+		</div>
 
+		<div class="flex flex-wrap items-center gap-x-4 gap-y-2">
 			{#if storageOptions.length >= 2}
 				<div class="flex items-center gap-2">
 					<Label for="bulk-pool-storage-filter" class="shrink-0 text-sm font-medium text-slate-700">

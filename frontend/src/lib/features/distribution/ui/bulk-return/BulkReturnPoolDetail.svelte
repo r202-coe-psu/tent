@@ -491,12 +491,6 @@
 						<p class="text-sm text-slate-600">
 							ยกเลิกได้เมื่อไม่มีรายการเหลืออยู่ในกอง กองที่ยกเลิกแล้วจะเปิดรับของอีกไม่ได้
 						</p>
-						{#if cancelBlockedReason}
-							<p class="flex items-start gap-2 text-sm font-medium text-slate-800">
-								<AlertCircle class="mt-0.5 h-4 w-4 shrink-0 text-slate-500" aria-hidden="true" />
-								<span id="cancel-pool-reason">{cancelBlockedReason}</span>
-							</p>
-						{/if}
 						<Button
 							type="button"
 							variant="destructive"
@@ -511,6 +505,12 @@
 							<Ban class="h-4 w-4" aria-hidden="true" />
 							ยกเลิกกอง
 						</Button>
+						{#if cancelBlockedReason}
+							<p class="flex items-start gap-2 text-sm font-medium text-slate-800">
+								<AlertCircle class="mt-0.5 h-4 w-4 shrink-0 text-slate-500" aria-hidden="true" />
+								<span id="cancel-pool-reason">{cancelBlockedReason}</span>
+							</p>
+						{/if}
 					</section>
 				{/if}
 			</div>

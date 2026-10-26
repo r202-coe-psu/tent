@@ -72,9 +72,9 @@
 	}
 </script>
 
-<div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+<div class="space-y-3">
 	<!-- Search input -->
-	<div class="relative max-w-md min-w-[240px] flex-1">
+	<div class="relative w-full">
 		<Search class="absolute top-2.5 left-3 h-4 w-4 text-slate-400" aria-hidden="true" />
 		<Input
 			type="text"
@@ -178,8 +178,10 @@
 				</DropdownMenu.Content>
 			</DropdownMenu.Root>
 		{/if}
+	</div>
 
-		<!-- Created date range -->
+	<!-- Date range + follow-up toggle + reset -->
+	<div class="flex flex-wrap items-center gap-2">
 		{#if onCreatedFromChange}
 			<div class="flex items-center gap-1.5">
 				<label for="created-from-filter" class="shrink-0 text-xs font-semibold text-slate-600">
@@ -220,7 +222,12 @@
 
 		<!-- Reset Filters Button -->
 		{#if hasActiveFilters && onResetFilters}
-			<Button type="button" variant="outline" onclick={onResetFilters} class="text-xs font-medium">
+			<Button
+				type="button"
+				variant="outline"
+				onclick={onResetFilters}
+				class="text-xs font-medium sm:ml-auto"
+			>
 				<RotateCcw class="h-3.5 w-3.5 text-slate-400" />
 				ล้างตัวกรอง
 			</Button>

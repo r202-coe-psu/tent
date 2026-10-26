@@ -104,7 +104,7 @@ const resolved = (entry: BulkReturnEntry, voided = false): EntryRow => ({
 describe('status helpers', () => {
 	it('labels each status in Thai', () => {
 		expect(getPoolStatusLabel('OPEN')).toBe('เปิดรับ');
-		expect(getPoolStatusLabel('SUBMITTED')).toBe('ส่งแล้ว');
+		expect(getPoolStatusLabel('SUBMITTED')).toBe('รอตรวจสอบ');
 		expect(getPoolStatusLabel('RECEIVED')).toBe('ตรวจรับแล้ว');
 		expect(getPoolStatusLabel('CANCELLED')).toBe('ยกเลิก');
 	});
@@ -478,7 +478,7 @@ describe('pool capabilities', () => {
 		expect(getCancelPoolBlockedReason(makeRow(makePool('a')))).toBeNull();
 		expect(
 			getCancelPoolBlockedReason(makeRow(makePool('a'), { entries: [resolved(makeEntry('1'))] }))
-		).toBe('ย้ายของออกให้หมดก่อน');
+		).toBe('ยกเลิกไม่ได้เนื่องจากยังมีรายการค้างอยู่ในกอง — ย้ายหรือยกเลิกรายการให้หมดก่อน');
 		expect(getCancelPoolBlockedReason(makeRow(makePool('a', { status: 'RECEIVED' })))).toContain(
 			'เปิดรับ'
 		);
@@ -582,8 +582,23 @@ describe('labels', () => {
 			'ผู้พักพิง abc'
 		);
 		expect(
-			returnerLabel({ returner_type: 'volunteer', returner_id: 'volunteer:01HZXY1234567890ABCD' })
-		).toBe('อาสาสมัคร …90ABCD');
+			returnerLabel({
+				returner_type: 'volunteer',
+				returner_id: 'volunteer:01HZXY1234567890ABCDEFGHJK'
+			})
+		).toBe('อาสาสมัคร …EFGHJK');
+	});
+
+	it('returnerLabel truncates a non-ULID id from the front', () => {
+		expect(
+			returnerLabel({ returner_type: 'evacuee', returner_id: 'evacuee:seed-st:sh001:0000' })
+		).toBe('ผู้พักพิง …t:sh001:0000');
+		expect(returnerLabel({ returner_type: 'volunteer', returner_id: 'volunteer:seed-vol:7' })).toBe(
+			'อาสาสมัคร seed-vol:7'
+		);
+		expect(returnerLabel({ returner_type: 'evacuee', returner_id: 'plain-id-12345678901' })).toBe(
+			'ผู้พักพิง …-12345678901'
+		);
 	});
 
 	it('returnerDisplayName resolves a name, else falls back to returnerLabel', () => {
