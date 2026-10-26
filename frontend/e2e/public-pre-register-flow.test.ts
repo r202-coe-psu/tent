@@ -112,6 +112,7 @@ import {
 	type Locator,
 	type Page
 } from '@playwright/test';
+import { acceptFullConsent } from './helpers/consent';
 import { bootstrapAdminSession, couchReq } from './helpers/couch';
 import {
 	CAN_WRITE as TARGET_CAN_WRITE,
@@ -710,6 +711,7 @@ async function fillBase(
 		...o.member
 	});
 	if (o.consent !== false) await acceptDisclaimer(page);
+	await acceptFullConsent(page);
 }
 
 /** The error sits in a `p.text-destructive` inside one of the field's own wrappers. */
@@ -1801,6 +1803,7 @@ function recordStatusCalls(page: Page): StatusCall[] {
 
 /** Click the confirm button and return the registration POST's response. */
 async function submitAndWait(page: Page, endpoint: 'unassigned-registrations' | 'registrations') {
+	await acceptFullConsent(page);
 	const [response] = await Promise.all([
 		page.waitForResponse(
 			(r) =>

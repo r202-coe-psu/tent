@@ -3,7 +3,7 @@ id: CR-193
 title: CR-193 — ออกแบบ bulk_return_pool ใหม่เป็น "กองรวมตอนรับของคืน" (pool header + entry/move/void event log)
 status: approved
 date: 2026-10-22
-updated: 2026-10-25
+updated: 2026-10-26
 requested_by: feedback ระบบคลัง & เบิกของ ข้อ 4–5 (GitHub #657, #658)
 decided_by: kong (decisions 2026-10-22 — https://github.com/r202-coe-psu/tent/pull/768#issuecomment-6339918664; approved 2026-10-25)
 layer: stable
@@ -12,7 +12,7 @@ affects:
   - docs/data/schema.md §2.30 (distribution_log schema_v 1 → 2), §2.31 (bulk_return_pool schema_v 3 — shape เปลี่ยนก่อนปล่อย), §2.31.1 / §2.31.2 / §2.31.3 (ใหม่), §2.32 (legacy), §7, §8
   - schema_v — distribution_log 1 → 2; bulk_return_pool 2 → 3; doc type ใหม่ bulk_return_entry v1, bulk_return_entry_move v1, bulk_return_entry_void v1 (append-only)
   - frontend/src/lib/server/shelter-access-design.ts (VDU + Mango index `BULK_RETURN_ENTRY_MANGO_INDEXES`)
-  - frontend/src/lib/features/shelters/domain/views.ts + view-manifest.ts (view `bulk_return_pool_item_totals`, `_design/app` v5)
+  - frontend/src/lib/features/shelters/domain/views.ts + view-manifest.ts (view `bulk_return_pool_item_totals`, `_design/app` v6)
   - frontend/src/lib/server/shelters.admin.ts / shelters/server/provisioner.ts / scripts/redeploy-access.ts / scripts/seed/registry-shelters.ts (deploy index)
   - frontend/src/lib/features/distribution/domain/food-supplies (bulk-return-pool / entry / entry-move / entry-void) และ distribution-log
 ---
@@ -133,7 +133,7 @@ feedback ระบบคลัง & เบิกของ ข้อ 4–5: ข�
   - `group_level=1` → ยอด/จำนวน entry ต่อ pool (count 0 = ว่าง), `2` → ต่อ item, `3` → ต่อ entry (net 1 = อยู่ใน pool, 0 = ย้ายออกหรือ void)
   - `qty` ใน map = `parseFloat` ของ qty string (ใช้เพื่อ advisory/ตรวจว่างเท่านั้น; `items_summary` ที่ snapshot
     ใช้ decimal helper ของ repo)
-  - `_design/app` เวอร์ชัน 5 (v4 ถูกใช้โดย CR-170 amend บน develop ก่อน branch นี้ merge)
+  - `_design/app` เวอร์ชัน 6 (v4 ถูกใช้โดย CR-170 amend และ v5 โดย CR-192 บน develop ก่อน branch นี้ merge)
 
 ## Decisions
 
@@ -333,7 +333,7 @@ VDU อ่านเอกสารอื่นไม่ได้ — กติ�
 - `frontend/src/lib/server/shelter-access-design.ts` — VDU (allowed types, v3 rules, role, freeze v1/v2, append-only
   entry/move/void, `distribution_log` v2 path apply/revert), Mango index declaration (`BULK_RETURN_ENTRY_MANGO_INDEXES`) + tests
 - `frontend/src/lib/features/shelters/domain/views.ts` + `view-manifest.ts` — view `bulk_return_pool_item_totals`
-  (`_design/app` v5) + tests
+  (`_design/app` v6) + tests
 - `frontend/src/lib/server/shelters.admin.ts`, `frontend/src/lib/features/shelters/server/provisioner.ts`,
   `frontend/scripts/redeploy-access.ts`, `frontend/scripts/seed/registry-shelters.ts` — deploy index
 - ไม่แตะ `TICKET_DISTRIBUTION_MANGO_INDEXES`; ส่วน UI/workflow อยู่ #659/#660 ซึ่ง merge ใน PR เดียวกัน
@@ -375,3 +375,4 @@ VDU อ่านเอกสารอื่นไม่ได้ — กติ�
 - 2026-10-25 — approved (kong) → CR-193 (ย้ายจาก `draft-bulk-return-pool-redesign.md`, track ด้วยไฟล์ CR); เลขถัดจาก CR-192 บน `develop`; amends CR-134; หมายเหตุ `system_admin` ตัดสินแล้วข้างบน
 - 2026-10-25 — kong ตัดสินแก้ D3: ย้าย entry แล้วตัดยอด loan ตาม `loan_refs` เมื่อ pool ปลายทางยัง `OPEN` และไม่มี `lock` (idempotent ผ่าน `applied_bulk_entry_ids`, กติกาข้าม ref เดียวกับข้อ 15) — แทนข้อความเดิม "ย้ายไม่แตะ `distribution_log`"; แก้ review finding B1 (entry มาช้าที่ย้ายเข้า pool `OPEN` ไม่เคยตัด loan → คืนซ้ำได้)
 - 2026-10-25 — implementation (perf, ไม่เปลี่ยนกติกา): การอ่านต่อ entry/pool (move, void, submit, cancel, loan refs) อ่านเฉพาะขอบเขตแทนการ scan event log ทั้ง shelter — เพิ่ม Mango index `(type, to_pool_id)` บน `bulk_return_entry_move` (หา entry ที่ย้ายเข้า pool; ใช้ร่วมกับ `(type, pool_id)` เดิม); overview ข้าม pool ยังอ่านทั้ง log
+- 2026-10-26 — `_design/app` เลื่อนเป็นเวอร์ชัน 6 เพราะ develop ใช้ v5 กับ CR-192 (`station_logs_by_station`) แล้ว — ไม่เปลี่ยนกฎหรือ view ของ CR นี้

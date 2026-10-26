@@ -22,6 +22,7 @@ import {
 	putKioskCardImage,
 	type KioskCardImageRef
 } from './kiosk-photo.server';
+import { writeKioskStationLogs } from './kiosk-station-log.server';
 
 const ULID = '[0-7][0-9A-HJKMNP-TV-Z]{25}';
 export const evacueeIdSchema = z.string().regex(new RegExp(`^evacuee:${ULID}$`, 'i'));
@@ -59,6 +60,9 @@ export const kioskCheckInInputSchema = z
 			.optional(),
 		// FR-KTD-26: the verified ThaiD scan session; the server resolves the citizen id from it.
 		thaid_session_id: thaidSessionIdSchema.optional(),
+		// CR-192: when the visitor was looked up (ISO). Only the Station 1 `start` time; the server
+		// clamps it, and a malformed value is dropped rather than failing the check-in.
+		lookup_at: z.string().max(40).optional().catch(undefined),
 		// Chip photo from a face `match`; only a smart-card gate has a card to take it from.
 		// A malformed photo is dropped (→ null), never a reason to fail the check-in (Phase 6).
 		photo: kioskPhotoPayloadSchema.nullable().catch(null).default(null)
@@ -515,7 +519,13 @@ export async function checkInSelectedMembers(
 	shelterCode: string,
 	primaryEvacueeId: string,
 	evacueeIds: string[],
-	options: { requiredPrimaryCitizenId?: string } = {}
+	options: {
+		requiredPrimaryCitizenId?: string;
+		/** Authenticated scanner device (never from a request body): turns on the station_log write. */
+		deviceId?: string;
+		/** The visitor's lookup time from the kiosk — the Station 1 `start` (clamped server-side). */
+		lookupAt?: string;
+	} = {}
 ): Promise<KioskCheckInMemberResult[]> {
 	const dbName = shelterDbName(shelterCode);
 	const normalizedPrimaryId = `evacuee:${primaryEvacueeId.slice('evacuee:'.length).toUpperCase()}`;
@@ -611,6 +621,15 @@ export async function checkInSelectedMembers(
 	}
 	if (primary.household_id && results.some((result) => result.status === 'checked_in')) {
 		await refreshHouseholdStatus(dbName, primary.household_id, shelterCode);
+	}
+	// CR-192: Station 1 start + complete for the members this request actually reported in.
+	if (options.deviceId) {
+		await writeKioskStationLogs(
+			shelterCode,
+			options.deviceId,
+			results.filter((result) => result.status === 'checked_in').map((result) => result.evacuee_id),
+			options.lookupAt
+		);
 	}
 	return results;
 }

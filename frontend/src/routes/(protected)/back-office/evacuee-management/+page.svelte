@@ -83,7 +83,9 @@
 	<div class="[scrollbar-gutter:stable]">
 		{#if activeTab === 'dashboard'}
 			{#if shelterStore.selectedShelterCode}
-				<DashboardTab shelterCode={shelterStore.selectedShelterCode} />
+				{#key shelterStore.selectedShelterCode}
+					<DashboardTab shelterCode={shelterStore.selectedShelterCode} />
+				{/key}
 			{:else}
 				<div class="flex items-center justify-center py-24 text-muted-foreground">
 					กำลังโหลดข้อมูลศูนย์พักพิง...
