@@ -19,6 +19,7 @@
 	import { useShelters } from '$lib/features/shelters';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { isSystemAdmin } from '$lib/auth/roles';
+	import { resolveShelterCode } from '$lib/db/shelter';
 	import { Button } from '$lib/components/ui/button';
 
 	let { children }: LayoutProps = $props();
@@ -29,6 +30,13 @@
 
 	const roles = $derived(authStore.user?.roles ?? []);
 	const isSA = $derived(isSystemAdmin(roles));
+	// Key on the shelter the page actually works in (`resolveShelterCode`, the same order
+	// `getShelterCode` uses), not on the raw selection: staff already work in their shelter before
+	// the list resolves the selection, and remounting then drops what they typed (#854). `||`:
+	// the shelter select's bound value turns an unset selection into ''.
+	const scopeKey = $derived(
+		isSA ? shelterStore.selectedShelterCode || undefined : resolveShelterCode()
+	);
 
 	const navHrefs = navLeafHrefs(backofficeNavbarGroups);
 
@@ -176,7 +184,7 @@
 			{:else}
 				<!-- Reset scoped pages when the navbar changes shelter so every query/form
 				     is recreated with the newly selected shelter context. -->
-				{#key shelterStore.selectedShelterCode}
+				{#key scopeKey}
 					{@render children()}
 				{/key}
 			{/if}

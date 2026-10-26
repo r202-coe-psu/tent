@@ -27,9 +27,6 @@
 	import UserRound from '@lucide/svelte/icons/user-round';
 	import Check from '@lucide/svelte/icons/check';
 	import CheckCheck from '@lucide/svelte/icons/check-check';
-	import LogIn from '@lucide/svelte/icons/log-in';
-	import LogOut from '@lucide/svelte/icons/log-out';
-	import Lock from '@lucide/svelte/icons/lock';
 	import X from '@lucide/svelte/icons/x';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { maskNationalId } from '$lib/features/people';
@@ -37,9 +34,7 @@
 	import { SvelteMap } from 'svelte/reactivity';
 	import { applicantAttendance } from '../domain/applicant-attendance';
 	import { APPLICATION_STATUS_META } from '../domain/applicant-queue';
-	import ApplicantCheckInDialog from './applicant-check-in-dialog.svelte';
-	import ApplicantCheckOutDialog from './applicant-check-out-dialog.svelte';
-	import VolunteerQualificationDialog from './volunteer-qualification-dialog.svelte';
+	import ShiftAttendanceAction from './shift-attendance-action.svelte';
 	import { resolveSkillOption, type SkillOption } from '../domain/skill-catalog';
 	import { checkRequiredSkills } from '../domain/required-skills';
 	import {
@@ -47,7 +42,7 @@
 		outstandingReviewReasons,
 		type JobApplication
 	} from '../domain/job-application.schema';
-	import type { ShiftAssignment, ShiftAssignmentStatus } from '../domain/shift-assignment.schema';
+	import type { ShiftAssignment } from '../domain/shift-assignment.schema';
 	import type { Volunteer } from '../domain/volunteer.schema';
 	import {
 		identityVerificationStatus,
@@ -138,28 +133,7 @@
 		})
 	);
 
-	const ASSIGNMENT_STATUS_LABELS: Record<ShiftAssignmentStatus, string> = {
-		assigned: 'รับกะแล้ว',
-		standby: 'รอสแตนด์บาย',
-		checked_in: 'ปฏิบัติหน้าที่อยู่',
-		completed: 'เสร็จสิ้นงานอาสาสมัคร',
-		no_show: 'ขาดปฏิบัติงาน',
-		cancelled: 'ยกเลิก'
-	};
-
 	const identityVerified = $derived(volunteer?.identity_verified ?? false);
-
-	// Check-in is confirmed in a dialog (scan the QR, or a manual check-in with a reason).
-	// The target stays set after close so the dialog can finish its exit animation.
-	let checkInOpen = $state(false);
-	let checkInTarget = $state<{ assignment: ShiftAssignment; shiftLabel: string } | null>(null);
-
-	let checkOutOpen = $state(false);
-	let checkOutTarget = $state<{ assignment: ShiftAssignment; shiftLabel: string } | null>(null);
-
-	// Same gate as the roster tab. Verifying invalidates the volunteers query, so the
-	// "รอยืนยันตัวตน" button turns into "เช็คอินเข้างาน" without a reload.
-	let verifyOpen = $state(false);
 </script>
 
 <li class="space-y-2.5 rounded-xl border border-border bg-muted/40 p-3.5">
@@ -305,54 +279,12 @@
 							กะนี้ถูกลบออกจากงานแล้ว
 						</span>
 					{/if}
-					{#if attendance.kind === 'check-in'}
-						<Button
-							size="sm"
-							class="h-9 gap-1 bg-emerald-600 text-white hover:bg-emerald-700"
-							onclick={() => {
-								checkInTarget = {
-									assignment: attendance.assignment,
-									shiftLabel: `${shift.date} · ${shift.start_time} - ${shift.end_time} น.`
-								};
-								checkInOpen = true;
-							}}
-						>
-							<LogIn class="h-3.5 w-3.5" />
-							เช็คอินเข้างาน
-						</Button>
-					{:else if attendance.kind === 'check-out'}
-						<Button
-							size="sm"
-							class="h-9 gap-1 bg-amber-500 text-white hover:bg-amber-600"
-							onclick={() => {
-								checkOutTarget = {
-									assignment: attendance.assignment,
-									shiftLabel: `${shift.date} · ${shift.start_time} - ${shift.end_time} น.`
-								};
-								checkOutOpen = true;
-							}}
-						>
-							<LogOut class="h-3.5 w-3.5" />
-							เช็คเอาต์ออกงาน
-						</Button>
-					{:else if attendance.kind === 'verify'}
-						<Button
-							size="sm"
-							variant="outline"
-							class="h-9 gap-1 border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100 hover:text-amber-800"
-							disabled={!volunteer}
-							onclick={() => (verifyOpen = true)}
-						>
-							<Lock class="h-3.5 w-3.5" />
-							รอยืนยันตัวตน
-						</Button>
-					{:else if attendance.kind === 'status'}
-						<span
-							class="rounded-full bg-muted px-2.5 py-1 text-2xs font-bold text-muted-foreground ring-1 ring-border"
-						>
-							{ASSIGNMENT_STATUS_LABELS[attendance.assignment.status]}
-						</span>
-					{/if}
+					<ShiftAttendanceAction
+						{attendance}
+						{volunteer}
+						personName={fullName}
+						shiftLabel="{shift.date} · {shift.start_time} - {shift.end_time} น."
+					/>
 					{#if several && shiftPending}
 						<Button
 							size="sm"
@@ -421,27 +353,3 @@
 		</div>
 	{/if}
 </li>
-
-{#if checkInTarget}
-	<ApplicantCheckInDialog
-		bind:open={checkInOpen}
-		assignment={checkInTarget.assignment}
-		{volunteer}
-		personName={fullName}
-		shiftLabel={checkInTarget.shiftLabel}
-	/>
-{/if}
-
-{#if checkOutTarget}
-	<ApplicantCheckOutDialog
-		bind:open={checkOutOpen}
-		assignment={checkOutTarget.assignment}
-		{volunteer}
-		personName={fullName}
-		shiftLabel={checkOutTarget.shiftLabel}
-	/>
-{/if}
-
-{#if volunteer}
-	<VolunteerQualificationDialog bind:open={verifyOpen} {volunteer} shelterLine="—" />
-{/if}

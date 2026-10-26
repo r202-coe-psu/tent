@@ -232,9 +232,8 @@
 	 * named below, instead of every item's lots vanishing (#569).
 	 */
 	const projected = $derived.by(() => {
-		const broken: string[] = [];
-		const lots = projectLotsByItem(ledger, (itemId) => broken.push(itemId));
-		return { byItem: groupLotsByItem(lots), broken };
+		const { lots, brokenItemIds } = projectLotsByItem(ledger);
+		return { byItem: groupLotsByItem(lots), brokenItemIds };
 	});
 	const lotsByItem = $derived(projected.byItem);
 
@@ -313,7 +312,7 @@
 	});
 
 	const brokenItemNames = $derived(
-		projected.broken.map((id) => items.find((item) => item._id === id)?.name ?? id)
+		projected.brokenItemIds.map((id) => items.find((item) => item._id === id)?.name ?? id)
 	);
 
 	/** "Ever stocked" = at least one ledger row at this shelter; the rest are catalog-only. */
