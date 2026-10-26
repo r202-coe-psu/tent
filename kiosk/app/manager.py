@@ -435,7 +435,9 @@ class ScannerClientManager:
 
     async def _fulfill_host_info(self, route) -> None:
         """Tell the kiosk page this machine's hostname and LAN IPs. The lookup may block on DNS, so
-        it runs off the event loop and gives up after HOST_INFO_TIMEOUT_S with empty info."""
+        it runs off the event loop and gives up after HOST_INFO_TIMEOUT_S with empty info.
+        wait_for cannot cancel the thread: a lookup stuck on DNS keeps its worker until the OS
+        resolver gives up. The page asks only when staff submit the info PIN, so few can pile up."""
         try:
             info = await asyncio.wait_for(
                 asyncio.to_thread(self._host_info), timeout=HOST_INFO_TIMEOUT_S
