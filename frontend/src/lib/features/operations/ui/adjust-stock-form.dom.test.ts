@@ -187,6 +187,24 @@ describe('adjust form lots (#569)', () => {
 		expect(input).not.toHaveProperty('lot_ref');
 	});
 
+	it('says added stock becomes a new lot, but not for a write-off', async () => {
+		ledger.current = [INBOUND, DISPATCH];
+		await render();
+		await chooseLot('คงเหลือ 1199');
+		const qty = document.getElementById('new-qty') as HTMLInputElement;
+		const hint = () => document.body.querySelector('[role="note"]')?.textContent ?? '';
+
+		qty.value = '1205';
+		qty.dispatchEvent(new Event('input', { bubbles: true }));
+		await settle();
+		expect(hint()).toContain('ล็อตใหม่');
+
+		qty.value = '1190';
+		qty.dispatchEvent(new Event('input', { bubbles: true }));
+		await settle();
+		expect(hint()).toBe('');
+	});
+
 	it('hides a lot that is down to zero', async () => {
 		const EMPTY = {
 			...INBOUND,
