@@ -204,30 +204,33 @@
 			</div>
 		{/if}
 
-		<!-- Needs follow-up toggle (role-based) -->
-		{#if followUpAvailable && onFollowUpChange}
-			<Button
-				type="button"
-				variant={followUp ? 'default' : 'outline'}
-				aria-pressed={followUp}
-				onclick={() => onFollowUpChange(!followUp)}
-				class="h-9 rounded-lg px-2.5 text-sm shadow-2xs"
-			>
-				ต้องติดตาม
-			</Button>
-		{/if}
+		<!-- Follow-up toggle + reset stay together on one line -->
+		<div class="flex items-center gap-2">
+			<!-- Needs follow-up toggle (role-based) -->
+			{#if followUpAvailable && onFollowUpChange}
+				<Button
+					type="button"
+					variant={followUp ? 'default' : 'outline'}
+					aria-pressed={followUp}
+					onclick={() => onFollowUpChange(!followUp)}
+					class="h-9 rounded-lg px-2.5 text-sm shadow-2xs"
+				>
+					ต้องติดตาม
+				</Button>
+			{/if}
 
-		<!-- Reset Filters Button -->
-		{#if hasActiveFilters && onResetFilters}
-			<Button
-				type="button"
-				variant="outline"
-				onclick={onResetFilters}
-				class="h-9 px-2.5 text-xs font-medium sm:ml-auto"
-			>
-				<RotateCcw class="h-3.5 w-3.5 text-slate-400" />
-				ล้างตัวกรอง
-			</Button>
-		{/if}
+			<!-- Reset Filters Button -->
+			{#if hasActiveFilters && onResetFilters}
+				<Button
+					type="button"
+					variant="outline"
+					onclick={onResetFilters}
+					class="h-9 px-2.5 text-xs font-medium"
+				>
+					<RotateCcw class="h-3.5 w-3.5 text-slate-400" />
+					ล้างตัวกรอง
+				</Button>
+			{/if}
+		</div>
 	</div>
 </div>
