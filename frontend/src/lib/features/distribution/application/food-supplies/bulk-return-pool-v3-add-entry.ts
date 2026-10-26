@@ -29,6 +29,7 @@ import {
 	outstandingLoansOf,
 	requirePool,
 	resolveDependencies,
+	settlePoolFence,
 	type BulkReturnLoanSkipped,
 	type BulkReturnPoolV3WorkflowDependencies,
 	type LoanLike
@@ -135,10 +136,12 @@ function claimOnLocalLoans(
  *
  * Order: validate everything (items eligible, pool appendable) before writing; then per item write
  * the entry (put-if-absent, replay-safe), FENCE (re-read the pool), and only then apply the loans.
- * When the fence trips (pool locked / not OPEN after the entry was written) the entry is reported
- * `late` with no loan touched (its loans are applied later, when it is moved into an OPEN pool),
- * and processing STOPS: later items are not written, so `results`
- * holds only the items written so far. Retrying with the same operationUlids is idempotent.
+ * The fence (`settlePoolFence`) waits out a submit / cancel lock and decides from the final pool
+ * state: OPEN → apply the loans; closed with the entry in the submit snapshot → apply the loans
+ * (not late) and STOP; closed without it → report `late` with no loan touched (applied later, when
+ * it is moved into an OPEN pool) and STOP. After a stop later items are not written, so `results`
+ * holds only the items written so far. A lock that never clears throws
+ * `BulkReturnPoolLockTimeoutError`. Retrying with the same operationUlids is idempotent.
  */
 export async function addBulkReturnEntries(
 	input: AddBulkReturnEntriesInput,
@@ -150,7 +153,8 @@ export async function addBulkReturnEntries(
 		eventRepo,
 		logRepo,
 		catalogRepo,
-		endpointStore: epStore
+		endpointStore: epStore,
+		fenceClock
 	} = resolveDependencies(deps, ctx);
 	assertCentralWriteAuthority(epStore);
 	assertCanWriteBulkReturnEntry(ctx);
@@ -192,7 +196,8 @@ export async function addBulkReturnEntries(
 	const pool = await requirePool(poolRepo, input.pool_id);
 	if (!canAppendToPool(pool) && existingEntries.some((entry) => entry === null)) {
 		throw new BulkReturnPoolStateError(
-			`Bulk return pool ${pool._id} is not accepting entries (status ${pool.status}${pool.lock ? `, locked for ${pool.lock.op}` : ''})`
+			`Bulk return pool ${pool._id} is not accepting entries (status ${pool.status}${pool.lock ? `, locked for ${pool.lock.op}` : ''})`,
+			pool.status === 'OPEN' ? 'locked' : 'closed'
 		);
 	}
 
@@ -268,9 +273,10 @@ export async function addBulkReturnEntries(
 
 		const unallocated_qty = subQty(entry.qty, sumRefs(entry.loan_refs));
 
-		// FENCE: the pool may have been locked / submitted / cancelled after the entry landed.
-		const fresh = await poolRepo.get(input.pool_id);
-		if (!fresh || !canAppendToPool(fresh)) {
+		// FENCE: the pool may have been locked / submitted / cancelled after the entry landed. A lock
+		// is waited out: the submit may already have counted this entry in its snapshot.
+		const fence = await settlePoolFence(poolRepo, input.pool_id, entry._id, fenceClock);
+		if (fence === 'late') {
 			results.push({
 				entry,
 				late: true,
@@ -299,6 +305,8 @@ export async function addBulkReturnEntries(
 			}
 		}
 		results.push({ entry, late: false, replayed, loansApplied, loansSkipped, unallocated_qty });
+		// Counted by a submit that closed the pool: the next items would only land late, so stop.
+		if (fence === 'in_snapshot') break;
 	}
 
 	return { results, returner_had_outstanding_loans, no_outstanding_loan };

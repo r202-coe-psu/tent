@@ -66,11 +66,32 @@ export class BulkReturnPoolNameTakenError extends WorkflowValidationError {
 	}
 }
 
+/**
+ * Why a pool refused an operation: `closed` = the pool is no longer OPEN (submitted / received /
+ * cancelled), `locked` = OPEN but a submit / cancel is in progress, `not_found` = no such pool.
+ * Absent on older throw sites that do not distinguish.
+ */
+export type BulkReturnPoolStateReason = 'closed' | 'locked' | 'not_found';
+
 /** A bulk return pool is missing, not OPEN, or locked, so the operation cannot proceed. */
 export class BulkReturnPoolStateError extends WorkflowError {
-	constructor(message: string) {
+	readonly reason?: BulkReturnPoolStateReason;
+	constructor(message: string, reason?: BulkReturnPoolStateReason) {
 		super(message);
 		this.name = 'BulkReturnPoolStateError';
+		this.reason = reason;
+	}
+}
+
+/**
+ * The fence waited `POOL_FENCE_SETTLE_TIMEOUT_MS` for a pool's submit / cancel lock to clear and it
+ * did not (the other operation is slow or crashed). Nothing about the loans was decided: retrying
+ * with the same operationUlid is safe and settles the entry once the lock is gone.
+ */
+export class BulkReturnPoolLockTimeoutError extends WorkflowError {
+	constructor(message: string) {
+		super(message);
+		this.name = 'BulkReturnPoolLockTimeoutError';
 	}
 }
 

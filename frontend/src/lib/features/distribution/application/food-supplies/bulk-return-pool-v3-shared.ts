@@ -30,7 +30,12 @@ import {
 	type DistributionLogRepository
 } from '../../data/food-supplies';
 import type { CanonicalUnitCatalogRepository } from './canonical-unit';
-import { assertNoSkippedDocs, BulkReturnPoolStateError, WorkflowValidationError } from './errors';
+import {
+	assertNoSkippedDocs,
+	BulkReturnPoolLockTimeoutError,
+	BulkReturnPoolStateError,
+	WorkflowValidationError
+} from './errors';
 
 export interface BulkReturnPoolV3WorkflowDependencies {
 	poolRepo?: BulkReturnPoolV3Repository;
@@ -40,6 +45,8 @@ export interface BulkReturnPoolV3WorkflowDependencies {
 	/** Receive only: ledger writer (default: the shelter's operations repository). */
 	operationsRepo?: OperationsRepository;
 	endpointStore?: { active: string; isWritable: boolean };
+	/** Fence wait clock (tests inject a virtual one); default: real time + setTimeout. */
+	fenceClock?: FenceClock;
 }
 
 interface ResolvedDependencies {
@@ -48,6 +55,7 @@ interface ResolvedDependencies {
 	logRepo: DistributionLogRepository;
 	catalogRepo: CanonicalUnitCatalogRepository;
 	endpointStore: { active: string; isWritable: boolean };
+	fenceClock: FenceClock;
 }
 
 export function resolveDependencies(
@@ -63,7 +71,8 @@ export function resolveDependencies(
 			deps?.endpointStore ??
 			(typeof endpointStore !== 'undefined'
 				? { active: endpointStore.active, isWritable: endpointStore.status === 'connected' }
-				: { active: 'central', isWritable: true })
+				: { active: 'central', isWritable: true }),
+		fenceClock: deps?.fenceClock ?? realFenceClock
 	};
 }
 
@@ -85,8 +94,68 @@ export function assertOperationUlid(operationUlid: string): void {
 
 export async function requirePool(poolRepo: BulkReturnPoolV3Repository, poolId: string) {
 	const pool = await poolRepo.get(poolId);
-	if (!pool) throw new BulkReturnPoolStateError(`Bulk return pool ${poolId} was not found`);
+	if (!pool) {
+		throw new BulkReturnPoolStateError(`Bulk return pool ${poolId} was not found`, 'not_found');
+	}
 	return pool;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Fence: decide an entry's fate from the pool's FINAL state, not a transient lock
+// ---------------------------------------------------------------------------------------------
+
+/** Total time the fence waits for a submit / cancel lock to clear before giving up. */
+export const POOL_FENCE_SETTLE_TIMEOUT_MS = 8_000;
+/** Re-read delays while the pool is locked (the last one repeats until the timeout). */
+export const POOL_FENCE_BACKOFF_MS: readonly number[] = [50, 100, 200, 400, 800, 1_000];
+
+export interface FenceClock {
+	now(): number;
+	sleep(ms: number): Promise<void>;
+}
+
+const realFenceClock: FenceClock = {
+	now: () => Date.now(),
+	sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+};
+
+/**
+ * - `open`: the pool is OPEN and unlocked — apply the entry's loans.
+ * - `in_snapshot`: the pool closed (submitted) and its snapshot counted this entry — apply the
+ *   loans too (the entry is not late), but write nothing more into this pool.
+ * - `late`: the pool closed without counting this entry (or is gone) — leave the loans; the entry
+ *   is applied when it is moved into an OPEN pool.
+ */
+export type PoolFenceOutcome = 'open' | 'in_snapshot' | 'late';
+
+/**
+ * Re-reads the pool after an entry landed in it (add or move). A lock means a submit / cancel is
+ * mid-flight and may or may not count the entry in its snapshot, so the fence waits (bounded
+ * backoff) for the lock to clear and decides from the final state. Throws
+ * `BulkReturnPoolLockTimeoutError` when the lock outlives `POOL_FENCE_SETTLE_TIMEOUT_MS`.
+ */
+export async function settlePoolFence(
+	poolRepo: BulkReturnPoolV3Repository,
+	poolId: string,
+	entryId: string,
+	clock: FenceClock = realFenceClock
+): Promise<PoolFenceOutcome> {
+	const deadline = clock.now() + POOL_FENCE_SETTLE_TIMEOUT_MS;
+	for (let attempt = 0; ; attempt++) {
+		const pool = await poolRepo.get(poolId);
+		if (!pool) return 'late';
+		if (!pool.lock) {
+			if (pool.status === 'OPEN') return 'open';
+			return (pool.entry_ids ?? []).includes(entryId) ? 'in_snapshot' : 'late';
+		}
+		if (clock.now() >= deadline) {
+			throw new BulkReturnPoolLockTimeoutError(
+				`Bulk return pool ${poolId} is still locked for ${pool.lock.op} after ${POOL_FENCE_SETTLE_TIMEOUT_MS}ms; retry with the same operationUlid`
+			);
+		}
+		const delay = POOL_FENCE_BACKOFF_MS[Math.min(attempt, POOL_FENCE_BACKOFF_MS.length - 1)];
+		await clock.sleep(Math.min(delay, Math.max(0, deadline - clock.now())));
+	}
 }
 
 export function isOurLock(

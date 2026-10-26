@@ -26,8 +26,10 @@ import {
 	assertEntryNotPendingSync,
 	requirePool,
 	resolveDependencies,
+	settlePoolFence,
 	type BulkReturnLoanSkipped,
-	type BulkReturnPoolV3WorkflowDependencies
+	type BulkReturnPoolV3WorkflowDependencies,
+	type FenceClock
 } from './bulk-return-pool-v3-shared';
 
 // ---------------------------------------------------------------------------------------------
@@ -60,10 +62,12 @@ async function applyEntryLoansAfterMove(
 	poolRepo: BulkReturnPoolV3Repository,
 	entry: BulkReturnEntry,
 	toPoolId: string,
-	ctx: AuthorContext
+	ctx: AuthorContext,
+	fenceClock: FenceClock
 ): Promise<{ late: boolean; loansApplied: string[]; loansSkipped: BulkReturnLoanSkipped[] }> {
-	const fresh = await poolRepo.get(toPoolId);
-	if (!fresh || !canAppendToPool(fresh)) return { late: true, loansApplied: [], loansSkipped: [] };
+	// Same fence as add: wait out a submit lock; an entry the snapshot counted is not late.
+	const fence = await settlePoolFence(poolRepo, toPoolId, entry._id, fenceClock);
+	if (fence === 'late') return { late: true, loansApplied: [], loansSkipped: [] };
 	const loansApplied: string[] = [];
 	const loansSkipped: BulkReturnLoanSkipped[] = [];
 	for (const ref of entry.loan_refs) {
@@ -85,7 +89,13 @@ export async function moveBulkReturnEntry(
 	ctx: AuthorContext,
 	deps?: BulkReturnPoolV3WorkflowDependencies
 ): Promise<MoveBulkReturnEntryResult> {
-	const { poolRepo, eventRepo, logRepo, endpointStore: epStore } = resolveDependencies(deps, ctx);
+	const {
+		poolRepo,
+		eventRepo,
+		logRepo,
+		endpointStore: epStore,
+		fenceClock
+	} = resolveDependencies(deps, ctx);
 	assertCentralWriteAuthority(epStore);
 	assertCanWriteBulkReturnEntry(ctx);
 
@@ -116,14 +126,22 @@ export async function moveBulkReturnEntry(
 		if (!latest || latest.to_pool_id !== input.to_pool_id) {
 			throw new WorkflowValidationError(`Entry ${entry._id} is already in ${input.to_pool_id}`);
 		}
-		const outcome = await applyEntryLoansAfterMove(logRepo, poolRepo, entry, input.to_pool_id, ctx);
+		const outcome = await applyEntryLoansAfterMove(
+			logRepo,
+			poolRepo,
+			entry,
+			input.to_pool_id,
+			ctx,
+			fenceClock
+		);
 		return { move: latest, replayed: true, ...outcome };
 	}
 
 	const target = await requirePool(poolRepo, input.to_pool_id);
 	if (!canAppendToPool(target)) {
 		throw new BulkReturnPoolStateError(
-			`Target bulk return pool ${target._id} is not OPEN and unlocked`
+			`Target bulk return pool ${target._id} is not OPEN and unlocked`,
+			target.status === 'OPEN' ? 'locked' : 'closed'
 		);
 	}
 	const source = await requirePool(poolRepo, currentPoolId);
@@ -162,6 +180,13 @@ export async function moveBulkReturnEntry(
 		replayed = true;
 	}
 
-	const outcome = await applyEntryLoansAfterMove(logRepo, poolRepo, entry, input.to_pool_id, ctx);
+	const outcome = await applyEntryLoansAfterMove(
+		logRepo,
+		poolRepo,
+		entry,
+		input.to_pool_id,
+		ctx,
+		fenceClock
+	);
 	return { move, replayed, ...outcome };
 }

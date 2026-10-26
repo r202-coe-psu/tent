@@ -55,6 +55,30 @@ describe('bulk return pool v3 workflows', () => {
 	});
 
 	describe('moveBulkReturnEntry', () => {
+		/**
+		 * Fence clock for a target that is locked by a submit: the first sleep lets the submit finish
+		 * with a snapshot that does NOT contain the moved entry, so the entry is late.
+		 */
+		function submitWithoutEntryClock(poolId: string) {
+			let t = 0;
+			return {
+				now: () => t,
+				sleep: async (ms: number) => {
+					t += ms;
+					await poolRepo.mutateCAS(poolId, (cur) =>
+						submitBulkReturnPoolV3(
+							cur,
+							{
+								items_summary: [{ item_id: 'item:wheelchair', qty: '1' }],
+								entry_ids: [`bulk_return_entry:${U(999)}`]
+							},
+							mgr
+						)
+					);
+				}
+			};
+		}
+
 		/** Writes an entry (cot x2 for the loan `n`) into a pool that is SUBMITTED before the fence. */
 		async function addLateEntry(poolId: string) {
 			const racing = {
@@ -127,7 +151,8 @@ describe('bulk return pool v3 workflows', () => {
 				...deps,
 				poolRepo: racingPoolRepo(poolRepo, async (n) => {
 					if (n === 3) await lockPool(b._id);
-				})
+				}),
+				fenceClock: submitWithoutEntryClock(b._id)
 			};
 			const first = await moveBulkReturnEntry(
 				{ entry_id: entry._id, to_pool_id: b._id },
@@ -185,7 +210,8 @@ describe('bulk return pool v3 workflows', () => {
 				poolRepo: racingPoolRepo(poolRepo, async (n) => {
 					// 1: target, 2: source, 3: fence
 					if (n === 3) await lockPool(b._id);
-				})
+				}),
+				fenceClock: submitWithoutEntryClock(b._id)
 			};
 			const moved = await moveBulkReturnEntry(
 				{ entry_id: entry._id, to_pool_id: b._id },
@@ -309,7 +335,8 @@ describe('bulk return pool v3 workflows', () => {
 				poolRepo: racingPoolRepo(poolRepo, async (n) => {
 					// 1: target, 2: source, 3: fence
 					if (n === 3) await lockPool(b._id);
-				})
+				}),
+				fenceClock: submitWithoutEntryClock(b._id)
 			};
 			const moved = await moveBulkReturnEntry(
 				{ entry_id: results[0].entry._id, to_pool_id: b._id },
