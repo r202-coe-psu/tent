@@ -3,7 +3,7 @@ id: CR-159
 title: การแจกของหน้างาน (Distribution Desk / Station 4 — `/onsite/distribution`) — ขอบเขตหน้าจอ + role, กติกาแจกอาหารปรุงสุก, จับคู่ผู้รับ↔เมนู, ปิด CR-109
 status: approved
 date: 2026-10-06
-updated: 2026-10-25
+updated: 2026-10-26
 requested_by: ทีม frontend (รับช่วง `/onsite/distribution` ต่อ)
 decided_by: Kong
 layer: volatile
@@ -137,7 +137,7 @@ affects:
 
   | แท็ก | เงื่อนไข (เสนอ) |
   | --- | --- |
-  | `HALAL` | `religion = 'muslim'` (ตรงกับ CR-022) |
+  | `HALAL` | `religion = 'muslim'` (ตรงกับ CR-022) — แท็ก `HALAL` บน**เมนู**ไม่นับแล้ว (2026-10-26, #801): เมนูฮาลาลทุกคนรับได้โดยไม่ต้อง override เหมือน VEGAN |
   | `INFANT` | `vulnerable_groups` มี `infant` **หรือ** `special_needs` มี `'infant'` (CR-022) **หรือ** `age < 1` |
   | `CHILD` | `vulnerable_groups` มี `young_child` **หรือ** `1 ≤ age < 12` |
   | `ELDERLY` | `vulnerable_groups` มี `elderly_dependent` **หรือ** `special_needs` มี `'elderly'` (CR-022) **หรือ** `age ≥ 60` |
@@ -145,7 +145,7 @@ affects:
 
   > เส้นแบ่งอายุตาม CR-130 (`ageBucketForBirthYear`): INFANT `< 1` ปี, CHILD `1–11` ปี (กลุ่ม 1–5 และ 6–11), ELDERLY `≥ 60` ปี (เคาะ 2026-10-10)
 - **FR-MRM-02** — ผู้รับประเภท `volunteer` และ `outside` ไม่มีแท็ก → รับได้เฉพาะเมนูที่ไม่มีแท็ก (เมนูทั่วไป) โดยไม่ต้อง override
-- **FR-MRM-03** — เมนูที่ไม่มีแท็ก (`dietary = []` และ `age_group ∈ {ALL, ไม่ระบุ}`) = เมนูทั่วไป แจกได้ทุกคน. เมนูที่มีแท็ก: ผู้รับต้องมีแท็กร่วมอย่างน้อย 1 แท็ก จึงถือว่า "ตรง"
+- **FR-MRM-03** — เมนูที่ไม่มีแท็ก (`age_group ∈ {ALL, ไม่ระบุ}`; `dietary` ไม่นับ ทั้ง VEGAN และ HALAL — #801) = เมนูทั่วไป แจกได้ทุกคน. เมนูที่มีแท็ก: ผู้รับต้องมีแท็กร่วมอย่างน้อย 1 แท็ก จึงถือว่า "ตรง"
 - **FR-MRM-04** — เมื่อไม่ตรง: **เตือน + บังคับ override พร้อมเหตุผล** บันทึก `is_override: true` + `override_reason` — ใช้กลไกเดียวกับรับซ้ำ (FR-DST-02 / FR-MQW-05) (เคาะ A, 2026-10-10)
 - **FR-MRM-05** — กติกานี้ไม่เขียน field ใหม่ลง `distribution_log`; ใช้ `is_override` / `override_reason` (§2.30) เดิมเท่านั้น — ยกเว้นการ override เพราะแพ้ที่บันทึก `allergen_conflicts` เพิ่ม ([CR-191](CR-191-allergen-warning-at-distribution.md) FR-5)
 - **FR-MRM-06** — ([CR-191](CR-191-allergen-warning-at-distribution.md)) ผู้รับ `evacuee`: ดึง `medical.allergies` ของผู้รับตอนเลือกผู้รับ; ผู้รับ `volunteer` / `outside` ไม่มีข้อมูลสุขภาพ → **ข้ามการเช็ค**
@@ -234,3 +234,4 @@ affects:
 - 2026-10-11 — Kong สั่งให้ทั้ง 5 ขั้นของหน้านี้ใช้ได้เฉพาะ SA, SM, DST: ตัด REG, SC, WH ออกจาก `/onsite/distribution`; ขั้น 4 PHYSICAL = SA, SM, DST (ดู FR-DDS-03; แก้ CR-161 R3/R4 ให้ DST รับคืนแบบมีของได้)
 - 2026-10-11 — การจำกัดหน้านี้เป็นระดับหน้าเท่านั้น (ตามข้อเสนอที่ยืนยันแล้ว) ไม่แก้กฎระดับระบบ WH/SC ยังทำงานคลังได้ตามเดิม
 - 2026-10-25 — CR-191 (approved โดย kong) เพิ่ม FR-MRM-06..10 (เตือนสารก่อแพ้ตอนแจกอาหาร) และข้อยกเว้น `allergen_conflicts` ใน FR-MRM-05
+- 2026-10-26 — #801: เมนู `HALAL` ไม่ต้อง override — แท็ก HALAL บนเมนูไม่นับเหมือน VEGAN (FR-MRM-01/03) เพราะคนทั่วไปกินอาหารฮาลาลได้และการเตือนถี่ทำให้คำเตือนเรื่องอายุถูกมองข้าม; คำเตือนเมนูตามอายุ (INFANT/CHILD/ELDERLY) คงเดิม. owner ยืนยัน (แจ้งผ่าน Pikcolo)
