@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url';
 import { test, expect, type APIRequestContext, type Page } from '@playwright/test';
 import { CAN_WRITE, READ_ONLY_REASON } from './helpers/e2e-env';
 import { clearSession } from './helpers/login';
@@ -17,6 +18,7 @@ import {
 	expectRunGone,
 	fillExpiry,
 	findDonation,
+	findImage,
 	ledgerRowsFor,
 	openBackOffice,
 	openInScanStation,
@@ -57,6 +59,11 @@ import {
 const NEED_ITEM = 'ยาสีฟัน';
 // No `shelf_life_days`, so the scan station receives it without an expiry.
 const SHELVED_ITEM = 'แปรงสีฟัน';
+
+// Two small JPEGs the donor attaches (CR-175 donor photos).
+const DONOR_PHOTOS = ['donation-photo-1.jpg', 'donation-photo-2.jpg'].map((name) =>
+	fileURLToPath(new URL(`./fixtures/${name}`, import.meta.url))
+);
 
 const ledger = new RunLedger('donation-fullstack');
 let shelter: PublicShelter;
@@ -560,6 +567,63 @@ test.describe('Donation full-stack: donor and staff', { tag: ['@critical', '@don
 		await page.goto(`/donations/track/${trackingToken}`);
 		await expect(page.getByTestId('donation-reject-reason')).toContainText('ชำรุดเสียหาย');
 		await expect(page.getByText('รอประเมิน', { exact: true })).toHaveCount(0);
+	});
+
+	test('typed-in booking with two photos → staff see both at review and at the counter, the donor never does (CR-175 AC-1, AC-6)', async ({
+		page
+	}) => {
+		const { bookingRef, trackingToken } = await bookAsDonor(page, {
+			shelter,
+			unsolicited: { itemName: `โต๊ะไม้มีรูป ${RUN_ID}`, unitLabel: 'กล่อง' },
+			photos: DONOR_PHOTOS,
+			ledger,
+			donorName: `E2E แนบรูป ${RUN_ID}`,
+			phone: '0823456796'
+		});
+
+		// The worker copies the ids onto the booking and binds each photo to it (FR-11a).
+		let donation: Record<string, unknown> | undefined;
+		await expect
+			.poll(
+				async () => {
+					donation = await findDonation(shelter.code, bookingRef);
+					return (donation?.photos as string[] | undefined)?.length ?? 0;
+				},
+				{ timeout: 30_000 }
+			)
+			.toBe(2);
+		for (const photoId of donation!.photos as string[]) {
+			await expect
+				.poll(async () => (await findImage(shelter.code, photoId))?.donation_id)
+				.toBe(donation!._id);
+		}
+
+		const expectStripOpens = async () => {
+			await expect(page.getByTestId('donation-photo-thumb')).toHaveCount(2);
+			await page.getByTestId('donation-photo-thumb').first().click();
+			await expect(page.getByTestId('donation-photo-full')).toBeVisible();
+			await page.keyboard.press('Escape');
+			await expect(page.getByTestId('donation-photo-full')).toHaveCount(0);
+		};
+
+		await openBackOffice(page, ws);
+		await openPendingRow(page, bookingRef);
+		await expectStripOpens();
+
+		await approvePending(page, shelter.code, bookingRef);
+		await openInScanStation(page, bookingRef);
+		await expectStripOpens();
+
+		// AC-6 / FR-14 — no photo on the donor's page and none in what it reads.
+		await clearSession(page);
+		const tracked = page.waitForResponse(
+			(r) => r.url().includes(`/api/public/v1/donations/${trackingToken}`) && r.ok()
+		);
+		await page.goto(`/donations/track/${trackingToken}`);
+		expect(JSON.stringify(await (await tracked).json())).not.toContain('image:');
+		await expect(page.getByText(bookingRef).first()).toBeVisible();
+		await expect(page.getByTestId('donation-photo-strip')).toHaveCount(0);
+		await expect(page.locator('img[src^="blob:"]')).toHaveCount(0);
 	});
 
 	test('typed-in item in another unit maps to a stock item and is received in its own unit (#623, #636, #638)', async ({
