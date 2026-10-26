@@ -30,7 +30,7 @@ import {
 	SA_ROLES,
 	SM_SH001_ROLES
 } from './helpers/couch';
-import { injectSession, clearSession } from './helpers/login';
+import { injectSession, clearSession, routeBrowserCouchThroughApp } from './helpers/login';
 
 const RUN_ID = Date.now().toString(36) + Math.random().toString(36).substring(2, 6);
 const SA = {
@@ -60,6 +60,13 @@ test.beforeAll(async () => {
 test.afterAll(async () => {
 	await deleteCouchUser(SA.name);
 	await deleteCouchUser(SM.name);
+});
+
+// The test build calls CouchDB cross-origin, so the back-office "Offline" banner shows in the
+// sticky header and intercepts clicks on buttons scrolled beneath it (e.g. "บันทึกข้อมูล").
+// Registered first so each test's own registry/BFF mocks still take precedence.
+test.beforeEach(async ({ page }) => {
+	await routeBrowserCouchThroughApp(page);
 });
 
 test.afterEach(async ({ page }) => {
@@ -217,6 +224,7 @@ test.describe('Shelter Form — Create', () => {
 		await page.getByRole('button', { name: /เพิ่มจุดแจกอาหาร/ }).click();
 		await page.getByLabel('ชื่อจุดแจกอาหาร').fill('จุดแจกหน้าโรงครัว');
 
+		await expect(page.getByText(/Offline — ไม่สามารถเชื่อมต่อ/)).toBeHidden();
 		await page.getByRole('button', { name: 'บันทึกข้อมูล' }).click();
 
 		await page.waitForURL(
