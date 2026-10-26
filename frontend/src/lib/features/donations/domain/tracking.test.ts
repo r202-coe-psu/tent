@@ -103,6 +103,25 @@ describe('item_id survives the round trip', () => {
 	});
 });
 
+// CR-196 FR-LK-3 — the edit dialog names each held line by its key.
+describe('line_key survives the round trip', () => {
+	it('carries line_key from the payload', () => {
+		const view = toDonationTrackView({
+			status: 'pending_review',
+			items: [{ free_text: 'ผ้าห่ม', qty: '2', unit: 'ผืน', line_key: '01K8LINEKEY' }]
+		});
+		expect(view.items[0]?.line_key).toBe('01K8LINEKEY');
+	});
+
+	it('reports null for a line from before schema_v 8', () => {
+		const view = toDonationTrackView({
+			status: 'pending_review',
+			items: [{ free_text: 'ผ้าห่ม', qty: '2', unit: 'ผืน' }]
+		});
+		expect(view.items[0]?.line_key).toBeNull();
+	});
+});
+
 /**
  * "Is this booking finished with?" — one predicate for the whole tracking surface, so a
  * new terminal status cannot be forgotten by a screen that lists them by hand.

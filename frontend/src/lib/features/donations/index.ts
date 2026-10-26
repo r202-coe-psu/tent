@@ -10,11 +10,16 @@ export {
 	receiveDonationInputSchema,
 	publicDonationErrorMessage,
 	isDonorEditable,
+	donationItemEditGate,
 	donationPayloadUnit,
 	donorUnitOptions,
 	linesMissingExpiry
 } from './domain/public-donation';
-export type { DonationUnitSource, ExpiryCheckLine } from './domain/public-donation';
+export type {
+	DonationItemEditGate,
+	DonationUnitSource,
+	ExpiryCheckLine
+} from './domain/public-donation';
 export type { ReceiveDonationInput } from './domain/public-donation';
 export type { PendingDonationRow, WalkInIntakeInput } from './domain/back-office';
 export { walkInIntakeInputSchema, donationActionRef, donationRefLabel } from './domain/back-office';

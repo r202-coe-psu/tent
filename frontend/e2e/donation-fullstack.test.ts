@@ -443,7 +443,7 @@ test.describe('Donation full-stack: donor and staff', { tag: ['@critical', '@don
 		await expect(page.getByText(/รับไม่ครบ/)).toHaveCount(0);
 	});
 
-	test('mixed booking: review waits for a reason on every refusal, and a later donor edit keeps it (CR-172 AC-4, CR-174 FR-18a, FR-24)', async ({
+	test('mixed booking: review waits for a reason on every refusal, and the donor can no longer edit it (CR-172 AC-4, CR-196 AC-2)', async ({
 		page,
 		request
 	}) => {
@@ -474,30 +474,32 @@ test.describe('Donation full-stack: donor and staff', { tag: ['@critical', '@don
 		await save.click();
 		await expectReadyForDropoff(shelter.code, bookingRef);
 
-		// The donor raises the campaign line only. The edit form sends back no category or
-		// condition; the refused line must still match itself and keep the refusal, and the
-		// booking its QR (full-branch review B1).
+		// Reviewed: the edit button stays where it was but only explains why (CR-196 FR-LK-4).
 		await clearSession(page);
+		const before = await findDonation(shelter.code, bookingRef);
+		let patched = false;
+		page.on('request', (r) => {
+			if (r.method() === 'PATCH' && r.url().includes(`/donations/${trackingToken}/items`)) {
+				patched = true;
+			}
+		});
 		await page.goto(`/donations/track/${trackingToken}`);
-		await page.getByRole('button', { name: 'แก้ไขรายการที่จะบริจาค' }).click();
-		const dialog = page.getByRole('dialog', { name: 'แก้ไขรายการที่จะบริจาค' });
-		await expect(dialog.getByText(/^ใบนี้ได้ QR แล้ว/)).toBeVisible();
-		await dialog.getByRole('spinbutton', { name: 'จำนวน' }).first().fill('2');
-		const saved = page.waitForResponse((r) =>
-			r.url().includes(`/api/public/v1/donations/${trackingToken}/items`)
-		);
-		await dialog.getByRole('button', { name: 'บันทึกการแก้ไข' }).click();
-		const res = await saved;
-		expect(res.ok(), `edit items failed: ${await res.text()}`).toBe(true);
-		await expect(dialog).toBeHidden();
+		const edit = page.getByRole('button', { name: 'แก้ไขรายการที่จะบริจาค' });
+		await expect(edit).toHaveAttribute('aria-disabled', 'true');
+		await edit.click();
+		await expect(
+			page.locator('[data-sonner-toast]').filter({ hasText: 'ไม่สามารถแก้ไขรายการได้' })
+		).toBeVisible();
+		await expect(page.getByRole('dialog', { name: 'แก้ไขรายการที่จะบริจาค' })).toHaveCount(0);
 
-		const edited = await findDonation(shelter.code, bookingRef);
-		const items = edited.items as Record<string, unknown>[];
-		expect(edited.status).toBe('verifying');
-		expect(items.map((i) => Number(i.qty))).toEqual([2, 2]);
-		expect(items.map((i) => i.review_status)).toEqual(['approved', 'rejected']);
-		expect(items[1]).toMatchObject({ category: 'other', condition: 'new', review_reason: note });
-		await expect(page.getByText('รอประเมิน', { exact: true })).toHaveCount(0);
+		const after = await findDonation(shelter.code, bookingRef);
+		expect(patched).toBe(false);
+		expect(after.status).toBe('verifying');
+		expect(after.items).toEqual(before.items);
+		expect((after.items as Record<string, unknown>[]).map((i) => i.review_status)).toEqual([
+			'approved',
+			'rejected'
+		]);
 	});
 
 	test('donor cancels a booking still under review → no line reads as awaiting review', async ({
@@ -777,14 +779,24 @@ test.describe('Donation full-stack: donor and staff', { tag: ['@critical', '@don
 			await expect(page).toHaveURL(/\/donations\/track\/?(\?.*)?$/);
 		});
 
+		// A typed-in item waits for review, so nothing is decided and the booking is still the
+		// donor's to edit (CR-196 FR-LK-4). The line keeps its key across the edit (FR-LK-2).
 		test('donor edits the quantity → the change is recorded as a revision', async ({ page }) => {
 			const { bookingRef, trackingToken } = await bookAsDonor(page, {
 				shelter,
-				need,
+				unsolicited: { itemName: `ผ้าขนหนู ${RUN_ID}`, unitLabel: 'กล่อง' },
 				ledger,
 				donorName: `E2E แก้จำนวน ${RUN_ID}`,
 				phone: '0845678901'
 			});
+			await expect
+				.poll(async () => (await findDonation(shelter.code, bookingRef))?.status, {
+					timeout: 30_000
+				})
+				.toBe('pending_review');
+			const booked = await findDonation(shelter.code, bookingRef);
+			const [lineKey] = (booked.items as { line_key?: string }[]).map((i) => i.line_key);
+			expect(lineKey).toMatch(/^[0-9A-HJKMNP-TV-Z]{26}$/);
 
 			await page.goto(`/donations/track/${trackingToken}`);
 			await page.getByRole('button', { name: 'แก้ไขรายการที่จะบริจาค' }).click();
@@ -811,6 +823,7 @@ test.describe('Donation full-stack: donor and staff', { tag: ['@critical', '@don
 				.toEqual([2]);
 			const d = await findDonation(shelter.code, bookingRef);
 			expect(d.revisions as unknown[]).toHaveLength(1);
+			expect((d.items as { line_key?: string }[])[0]?.line_key).toBe(lineKey);
 		});
 
 		test('donor cancels → quota released and the booking leaves the staff queue', async ({

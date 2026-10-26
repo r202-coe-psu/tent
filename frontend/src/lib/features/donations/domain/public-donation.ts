@@ -175,8 +175,9 @@ export const receiveDonationInputSchema = z
 export type ReceiveDonationInput = z.infer<typeof receiveDonationInputSchema>;
 
 /**
- * Statuses in which a donor may still change their own booking through the public
- * token routes (T-21 DoD — "Donor แก้/ยกเลิกการจองของตนผ่าน token ได้").
+ * Statuses in which a donor may still cancel their own booking or add a courier number
+ * through the public token routes (T-21 DoD — "Donor แก้/ยกเลิกการจองของตนผ่าน token ได้").
+ * Editing the lines is narrower — `donationItemEditGate` (CR-196).
  *
  * Only a reservation still awaiting drop-off qualifies. Once goods arrive the count
  * belongs to staff and the stock ledger, and `cancelled`/`expired` have already
@@ -201,6 +202,40 @@ const DONOR_EDITABLE_STATUSES = new Set<DonationStatus>([
 
 export function isDonorEditable(status: DonationStatus): boolean {
 	return DONOR_EDITABLE_STATUSES.has(status);
+}
+
+/**
+ * What a donor's item edit meets (CR-196 FR-LK-4): `editable`, `already_reviewed` (the QR
+ * is out, the booking was refused, or a line was decided — by the campaign rule or by
+ * staff), or `closed` (the booking is past drop-off). Mirrors `item_edit_gate` in the
+ * FastAPI donations review module.
+ */
+export type DonationItemEditGate = 'editable' | 'already_reviewed' | 'closed';
+
+const ITEM_EDIT_BY_STATUS: Partial<Record<string, DonationItemEditGate>> = {
+	declared: 'editable',
+	pending_review: 'editable',
+	verifying: 'already_reviewed',
+	rejected: 'already_reviewed'
+};
+
+/**
+ * Once anything on a booking was decided its lines are fixed: an edit could otherwise
+ * re-pair a refused line with an approved one and come out approved (review #783 H1).
+ * The donor cancels and books again, or tells staff at drop-off.
+ */
+export function donationItemEditGate(
+	status: string,
+	items: readonly { review_status?: string | null }[]
+): DonationItemEditGate {
+	const gate = ITEM_EDIT_BY_STATUS[status] ?? 'closed';
+	if (
+		gate === 'editable' &&
+		items.some((item) => item.review_status === 'approved' || item.review_status === 'rejected')
+	) {
+		return 'already_reviewed';
+	}
+	return gate;
 }
 
 const PUBLIC_DONATION_ERROR_MESSAGES: Record<string, string> = {

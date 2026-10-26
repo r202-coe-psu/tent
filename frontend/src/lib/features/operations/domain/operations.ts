@@ -248,6 +248,12 @@ export interface DonationItem {
 	review_reason_code?: string | null;
 	review_reason?: string | null;
 	/**
+	 * Which line this is (CR-196 · schema_v 8): a ULID FastAPI gives every public line at
+	 * booking, and the donor's edit form sends back to name the line it changes. Absent on
+	 * walk-in lines and on docs before schema_v 8.
+	 */
+	line_key?: string;
+	/**
 	 * What the campaign counter holds for this line's item (CR-080) — stamped by FastAPI
 	 * only when the counter really took it, so it is also how an automatic approval
 	 * (FR-2) is told from a person's (FR-8).
@@ -257,10 +263,11 @@ export interface DonationItem {
 
 /**
  * `schema_v` every donation writer stamps — the walk-in factory here, the donor edit
- * route, and `worker/inbound/donations.py`. 7 = CR-174 `items[].review_status`
- * (6 CR-172 `reject_reason`, 5 CR-087 `redirect_to_shelter_code`, 4 CR-080 `revisions[]`).
+ * route, and `worker/inbound/donations.py`. 8 = CR-196 `items[].line_key` (7 CR-174
+ * `items[].review_status`, 6 CR-172 `reject_reason`, 5 CR-087 `redirect_to_shelter_code`,
+ * 4 CR-080 `revisions[]`).
  */
-export const DONATION_SCHEMA_V = 7;
+export const DONATION_SCHEMA_V = 8;
 
 export interface Donor {
 	name: string;
