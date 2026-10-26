@@ -6,14 +6,15 @@ date: 2026-10-25
 requested_by: Dev Team B feedback — roleplay 23/10/69 (GitHub #824)
 decided_by: 
 layer: volatile
-amends: CR-143 (§A FR-A4), CR-156 (§A FR-A4a)
+amends: CR-143 (§A FR-A4)
 affects:
   - docs/changes/03-C-supply/CR-143-stock-redesign-rules.md §A FR-A4 (นิยาม "หมดอายุ" ของ `lot.expiry`)
-  - docs/changes/03-C-supply/CR-156-stock-redesign-amendment.md §A FR-A4a (ล็อตที่หมดอายุตาม `shelf_life_days` — ดู D3)
+  - docs/changes/03-C-supply/CR-156-stock-redesign-amendment.md §A FR-A4a — อ้างอิง ไม่แก้ (D3-a คงนิยามล็อตที่หมดอายุตาม `shelf_life_days`)
   - docs/data/schema.md §2.1 stock_ledger `lot.expiry` (รูปแบบค่า + ความหมาย) และย่อหน้าลำดับล็อต (~บรรทัด 385–386) — ไม่เปลี่ยนรูป doc, ไม่ bump schema_v
   - frontend/src/lib/features/operations/domain/lot-priority.ts (parseMs, isLotExpired, scoreLot)
   - frontend/src/lib/features/operations/domain/lot-age.ts (timeUntilExpiryMs, nearest expiry)
   - frontend/src/lib/features/operations/domain/stock-summary.ts (earliest expiry, การ์ด "หมดอายุ")
+  - frontend/src/lib/features/operations/ui/stock/stock-view.ts (byEarliestExpiry — เรียงด้วย expiryInstant)
   - frontend/src/lib/features/operations/ui/adjust-stock-form.svelte (isExpired)
   - frontend/src/lib/features/operations/ui/cycle-count-form.svelte (formatExpiry)
   - frontend/src/lib/features/distribution/domain/food-supplies/food-safety.ts (lotExpiryStatus, isLotExpired)
@@ -55,10 +56,10 @@ migration: N/A — ไม่เพิ่ม/ลบ field, ไม่เปลี�
   - ISO datetime ที่มี offset หรือ `Z` → instant นั้นตรง ๆ
   - ISO datetime ที่ไม่มี offset (ค่า legacy) → ตีความเป็นเวลา Asia/Bangkok
 - **FR-X3** แทนที่ CR-143 FR-A4: ล็อตที่ `isExpiryPassed(lot.expiry, now)` ต้องไม่ถูกเลือกอัตโนมัติ และ UI ต้องแจ้งให้ปรับยอดออก (พฤติกรรมอื่นของ FR-A4 คงเดิม)
-- **FR-X4** ทุกจุดใน `affects` ที่ตัดสินว่า "หมดอายุหรือยัง" ต้องเรียก FR-X1 — ห้าม `Date.parse(lot.expiry)` / `new Date(lot.expiry)` เพื่อเทียบกับ `now` เอง ได้แก่ `isLotExpired` (operations + distribution), `isLotDateExpired`, `isExpired` ใน adjust-stock-form, `lotExpiryStatus`
-- **FR-X5** ตาม D1: `daysLeft`, `isUrgent`, ลำดับล็อต (FR-A1/A3), นาฬิกา "เหลือหมดอายุ" (`timeUntilExpiryMs`), earliest expiry ใน stock-summary และ `lotExpiryMs` ใน dispatch-workflow ต้องคำนวณจาก `expiryInstant` เดียวกัน
+- **FR-X4** ทุกจุดใน `affects` ที่ตัดสินว่า "หมดอายุหรือยัง" ต้องเรียก FR-X1 — ห้าม `Date.parse(lot.expiry)` / `new Date(lot.expiry)` เพื่อเทียบกับ `now` เอง ได้แก่ `isLotExpired` (operations + distribution), `isLotDateExpired`, `isExpired` ใน adjust-stock-form, `formatExpiry` ใน cycle-count-form, `lotExpiryStatus`
+- **FR-X5** ตาม D1: `daysLeft`, `isUrgent`, ลำดับล็อต (FR-A1/A3), นาฬิกา "เหลือหมดอายุ" (`timeUntilExpiryMs`), earliest expiry ใน stock-summary, การเรียง `byEarliestExpiry` ใน stock-view และ `lotExpiryMs` ใน dispatch-workflow ต้องคำนวณ/เทียบ/เรียงจาก `expiryInstant` เดียวกัน — ห้าม `Date.parse` สตริง expiry เพื่อเรียงเอง (`earliestExpiry` ใน stock-summary มีทั้งวันที่ล้วนและ ISO instant ของล็อต `shelf_life_days` ปนกัน)
 - **FR-X6** `walkInIntakeInputSchema.items[].lot.expiry` ต้องรับเฉพาะ `YYYY-MM-DD` ที่เป็นวันที่จริง (เช่น `2026-02-30` = reject) หรือว่าง; ค่าไม่ถูกรูปแบบ → validation error ภาษาไทยที่ช่องนั้น
-- **FR-X7** การแสดงวันหมดอายุแบบวันที่ล้วนต้องแสดงวันตามที่บันทึก (`23 ต.ค.`) ไม่เลื่อนวันตาม timezone
+- **FR-X7** การแสดงวันหมดอายุแบบวันที่ล้วนต้องแสดงวันตามที่บันทึก (`23 ต.ค.`) ไม่เลื่อนวันตาม timezone — ค่าที่ส่งไปแสดงผล (รวม `earliestExpiry`) ต้องเป็นสตริง `lot.expiry` เดิม ห้ามแปลง `expiryInstant` กลับเป็นสตริงเพื่อแสดง (`'2026-10-23'` → `2026-10-23T17:00Z` จะแสดงเป็น `24 ต.ค.`)
 
 ## Acceptance
 
@@ -72,32 +73,22 @@ migration: N/A — ไม่เพิ่ม/ลบ field, ไม่เปลี�
 - **AC-X6** `lot.expiry = '2026-10-23T14:30:00+07:00'` → 14:29 ยังไม่หมด, 14:30 หมดอายุ (นาฬิกา 4 ชม. ของ CR-159 FR-MQW-06 ทำงานเหมือนเดิม)
 - **AC-X7** `lot.expiry` ว่าง / `'abc'` → `isExpiryPassed = false`, `expiryInstant = NaN`
 - **AC-X8** walk-in ส่ง `lot.expiry = '23/10/2026'` หรือ `'2026-02-30'` → validation error; `'2026-10-23'` หรือว่าง → ผ่าน
-- **AC-X9** regression: test ของ `operations/**` และ `distribution/**` (รวม CR-178 FR-3 ห้ามเลือก lot หมดอายุ) ผ่าน หลังปรับ expectation ที่เปลี่ยนตามนิยามใหม่
+- **AC-X9** หน้าคลัง: สินค้า A มีล็อต `lot.expiry = '2026-10-23'`, สินค้า B มีล็อต `shelf_life_days` ที่หมดอายุ 2026-10-23T12:00:00+07:00, now = 2026-10-23 08:00, ระดับ urgency เท่ากัน → B เรียงก่อน A (`byEarliestExpiry`); A แสดงวันหมดอายุ `23 ต.ค.` (ไม่ใช่ `24 ต.ค.`)
+- **AC-X10** regression: test ของ `operations/**` และ `distribution/**` (รวม CR-178 FR-3 ห้ามเลือก lot หมดอายุ) ผ่าน หลังปรับ expectation ที่เปลี่ยนตามนิยามใหม่
 
-## Open decisions — ต้องเคาะก่อน approve
+## Decisions (เคาะแล้ว 2026-10-26)
 
-> [NEEDS DECISION D1] นอกจาก "หมดอายุหรือยัง" ให้ `daysLeft` / ลำดับล็อต / กลุ่มเร่งด่วน / ข้อความ "หมดอายุอีก N วัน" ใช้ instant สิ้นวันเดียวกันด้วยหรือไม่
->
-> - **D1-a (แนะนำ):** ใช้ด้วย (FR-X5) — ทุกตัวเลขมาจากฟังก์ชันเดียว ไม่เกิดกรณี "หมดอายุอีก −0.3 วัน" แต่ยังเบิกได้
-> - **D1-b:** แก้เฉพาะ "หมดอายุหรือยัง" — diff เล็กกว่า แต่ลำดับ/ป้ายยังคลาดจากนิยามหมดอายุ ~17 ชม.
-
-> [NEEDS DECISION D2] ขอบเขตการตรวจรูปแบบ `lot.expiry`
->
-> - **D2-a (แนะนำ):** walk-in เท่านั้นตาม #824 (FR-X6); input อื่น (`operations.ts` lot schema, `public-donation.ts`) แยก CR ภายหลัง — `meal_service` เขียน datetime จึงต้องรับทั้งสองรูปแบบที่ระดับ ledger
-> - **D2-b:** ใช้ schema กลาง (`YYYY-MM-DD` หรือ ISO datetime มี offset) กับทุก input ที่รับ `lot.expiry` ในรอบนี้
-
-> [NEEDS DECISION D3] ล็อตที่ไม่มี `lot.expiry` และหมดอายุตาม `shelf_life_days` (CR-156 FR-A4a) — ปัจจุบันคิดแบบเวลาแน่นอน `(produced_at ?? received_at) + shelf_life_days × 24h`
->
-> - **D3-a (แนะนำ):** คงเดิม — ไม่อยู่ใน #824 และค่า `lot.expiry` ที่ UI เติมให้ตอนรับเข้า (`suggestExpiry`) เป็นวันที่ล้วนอยู่แล้ว จึงได้นิยามใหม่ผ่าน FR-X2
-> - **D3-b:** ปัดเป็นสิ้นวัน Asia/Bangkok ของวันที่คำนวณได้ ให้ตรงกับวันที่ที่การ์ด/ตารางแสดง
+- **D1 = D1-a** — `daysLeft` / ลำดับล็อต / กลุ่มเร่งด่วน / ข้อความ "หมดอายุอีก N วัน" ใช้ instant สิ้นวันเดียวกับ "หมดอายุหรือยัง" (FR-X5)
+- **D2 = D2-a** — ตรวจรูปแบบ `lot.expiry` เฉพาะ walk-in ตาม #824 (FR-X6); input อื่น (`operations.ts` lot schema, `public-donation.ts`) แยก CR ภายหลัง — `meal_service` เขียน datetime จึงต้องรับทั้งสองรูปแบบที่ระดับ ledger
+- **D3 = D3-a** — ล็อตที่ไม่มี `lot.expiry` และหมดอายุตาม `shelf_life_days` (CR-156 FR-A4a) คงนิยามเดิม: instant แน่นอน `(produced_at ?? received_at) + shelf_life_days × 24h` (ไม่ปัดเป็นสิ้นวัน). ค่า `lot.expiry` ที่ UI เติมตอนรับเข้า (`suggestExpiry`) เป็นวันที่ล้วนอยู่แล้วจึงได้นิยามใหม่ผ่าน FR-X2
 
 ## Impact
 
 - **docs (ตอน approve — ไม่แก้ใน draft นี้):**
   - `docs/data/schema.md` §2.1 — คำอธิบาย `lot.expiry`: ชนิด `date (YYYY-MM-DD) | ts`; วันที่ล้วน = ใช้ได้ถึงสิ้นวัน Asia/Bangkok; ts = หมดอายุ ณ เวลานั้น; อัปเดต `updated:`
-  - CR-143 FR-A4 / CR-156 FR-A4a — เพิ่มหมายเหตุ "นิยามหมดอายุ: ดู CR-NNN FR-X2" (owner เป็นผู้ตัดสินว่าจะแก้ไฟล์ CR เดิมหรืออ้างอิงจาก CR นี้อย่างเดียว)
+  - CR-143 FR-A4 — เพิ่มหมายเหตุ "นิยามหมดอายุ: ดู CR-NNN FR-X2" (owner เป็นผู้ตัดสินว่าจะแก้ไฟล์ CR เดิมหรืออ้างอิงจาก CR นี้อย่างเดียว); CR-156 FR-A4a ไม่เปลี่ยน (D3-a)
 - **code:** ตาม `affects`; ไม่มี worker/backend ที่เทียบ `lot.expiry` กับเวลา (ตรวจแล้ว `worker/src`, `backend/apiapp`) และ `validate_doc_update` ไม่ตรวจ `lot.expiry`
-- **test:** unit test ฟังก์ชันกลางตาม AC-X1–X7 (fake `now` ที่ระบุ offset +07:00 ชัดเจน ไม่พึ่ง TZ ของเครื่องที่รัน), AC-X8 ใน test ของ `back-office.ts`, regression AC-X9
+- **test:** unit test ฟังก์ชันกลางตาม AC-X1–X7 (fake `now` ที่ระบุ offset +07:00 ชัดเจน ไม่พึ่ง TZ ของเครื่องที่รัน), AC-X8 ใน test ของ `back-office.ts`, AC-X9 ใน test ของ `stock-view.ts` + `stock-summary.ts`, regression AC-X10
 
 ## Migration
 
@@ -113,3 +104,4 @@ N/A — ไม่เปลี่ยนรูป doc ไม่ bump `schema_v` �
 ## Decision log
 
 - 2026-10-25 — proposed (draft จาก GitHub #824) · รอ owner เคาะวิธี track, D1–D3 และการ approve
+- 2026-10-26 — เคาะ D1-a, D2-a, D3-a ตามที่เสนอ · รอ approve
