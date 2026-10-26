@@ -276,7 +276,8 @@
 			// Line operationUlids are kept, so pressing save again is an idempotent retry.
 			const message = formatDistributionError(
 				err,
-				'บันทึกของเข้ากองไม่สำเร็จ กรุณาลองใหม่อีกครั้ง'
+				'บันทึกของเข้ากองไม่สำเร็จ กรุณาลองใหม่อีกครั้ง',
+				{ poolContext: 'intake' }
 			);
 			submitError = message;
 			toast.error(message);

@@ -72,7 +72,9 @@
 			open = false;
 			onClose();
 		} catch (err) {
-			const message = formatDistributionError(err, 'ย้ายรายการไม่สำเร็จ กรุณาลองใหม่อีกครั้ง');
+			const message = formatDistributionError(err, 'ย้ายรายการไม่สำเร็จ กรุณาลองใหม่อีกครั้ง', {
+				poolContext: 'intake'
+			});
 			submitError = message;
 			toast.error(message);
 		}

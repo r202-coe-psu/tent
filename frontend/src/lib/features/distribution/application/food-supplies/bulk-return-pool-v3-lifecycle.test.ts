@@ -161,7 +161,14 @@ describe('bulk return pool v3 workflows', () => {
 			await lockPool(a._id);
 			await expect(
 				updateBulkReturnPoolHeader(a._id, { name: 'X' }, mgr, deps)
-			).rejects.toBeInstanceOf(BulkReturnPoolStateError);
+			).rejects.toMatchObject({ reason: 'locked' });
+		});
+
+		it('rejects a submitted pool with reason closed', async () => {
+			const pool = await submittedPool('Gate B');
+			await expect(
+				updateBulkReturnPoolHeader(pool._id, { name: 'X' }, mgr, deps)
+			).rejects.toMatchObject({ reason: 'closed' });
 		});
 	});
 
@@ -230,6 +237,13 @@ describe('bulk return pool v3 workflows', () => {
 			await expect(
 				cancelBulkReturnPool(`bulk_return_pool:${U(78)}`, nextOp(), mgr, deps)
 			).rejects.toBeInstanceOf(BulkReturnPoolStateError);
+		});
+
+		it('rejects a SUBMITTED pool with reason closed', async () => {
+			const pool = await submittedPool('Gate A');
+			await expect(cancelBulkReturnPool(pool._id, nextOp(), mgr, deps)).rejects.toMatchObject({
+				reason: 'closed'
+			});
 		});
 	});
 
@@ -377,16 +391,16 @@ describe('bulk return pool v3 workflows', () => {
 
 			const cancelled = await openPool('Gate A');
 			await cancelBulkReturnPool(cancelled._id, nextOp(), mgr, deps);
-			await expect(submitBulkReturnPool(cancelled._id, nextOp(), mgr, deps)).rejects.toBeInstanceOf(
-				BulkReturnPoolStateError
-			);
+			await expect(submitBulkReturnPool(cancelled._id, nextOp(), mgr, deps)).rejects.toMatchObject({
+				reason: 'closed'
+			});
 
 			const pool = await submittedPool('Gate B');
 			await receive(pool._id, fullInput(pool));
 			// RECEIVED is past SUBMITTED: not an idempotent replay.
-			await expect(submitBulkReturnPool(pool._id, nextOp(), mgr, deps)).rejects.toBeInstanceOf(
-				BulkReturnPoolStateError
-			);
+			await expect(submitBulkReturnPool(pool._id, nextOp(), mgr, deps)).rejects.toMatchObject({
+				reason: 'closed'
+			});
 		});
 	});
 

@@ -44,9 +44,33 @@ describe('formatDistributionError', () => {
 		expect(formatDistributionError(err)).toContain('กองนี้ไม่ได้อยู่ในสถานะเปิดรับ');
 	});
 
-	it('tells staff to pick another pool when the target pool is closed', () => {
+	it('tells staff to pick another pool when the target pool is closed (intake)', () => {
 		const err = new BulkReturnPoolStateError('Pool x is not OPEN', 'closed');
-		expect(formatDistributionError(err)).toBe('กองนี้ปิดรับของแล้ว กรุณาเลือกกองอื่น');
+		expect(formatDistributionError(err, undefined, { poolContext: 'intake' })).toBe(
+			'กองนี้ปิดรับของแล้ว กรุณาเลือกกองอื่น'
+		);
+	});
+
+	it('does not tell staff to pick another pool for a closed pool in manage context', () => {
+		const manage =
+			'กองนี้ไม่ได้เปิดรับแล้ว (ส่งเข้าคลัง ตรวจรับ หรือยกเลิกไปแล้ว) จึงทำรายการนี้ไม่ได้ กรุณารีเฟรชเพื่อดูสถานะล่าสุด';
+		const err = new BulkReturnPoolStateError('Pool x is not OPEN', 'closed');
+		expect(formatDistributionError(err, undefined, { poolContext: 'manage' })).toBe(manage);
+		expect(formatDistributionError(err)).toBe(manage);
+	});
+
+	it('explains a receive on a pool that is not yet submitted', () => {
+		const err = new BulkReturnPoolStateError('Only a SUBMITTED pool', 'not_submitted');
+		expect(formatDistributionError(err)).toBe(
+			'กองนี้ยังไม่ได้ส่งเข้าคลัง จึงยังตรวจรับไม่ได้ กรุณารีเฟรชเพื่อดูสถานะล่าสุด'
+		);
+	});
+
+	it('explains a receive that conflicts with an earlier received record', () => {
+		const err = new BulkReturnPoolStateError('different record', 'conflict');
+		expect(formatDistributionError(err)).toBe(
+			'กองนี้ถูกตรวจรับไปแล้วด้วยยอดที่ต่างจากที่ส่งมา กรุณารีเฟรชแล้วลองใหม่อีกครั้ง'
+		);
 	});
 
 	it('keeps the generic pool state copy for locked and reason-less state errors', () => {
