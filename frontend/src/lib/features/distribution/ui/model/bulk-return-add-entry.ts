@@ -246,12 +246,19 @@ export interface LinesFromLoans {
 
 /**
  * "Return all": one line per item (outstanding summed across loans), in first-seen order, limited
- * to items the form can select. `makeLine` builds each line (supplies lineId / operationUlid).
+ * to items the form can select. `makeLine` builds each NEW line (supplies lineId / operationUlid).
+ *
+ * `currentLines` keeps the write idempotent across a re-fill: an operationUlid identifies one
+ * intended write, so an item that already has a (not relocated) line in the form reuses that line
+ * (lineId + operationUlid kept, only qty set to the outstanding total). Otherwise a retry after a
+ * failed save would write a second entry for the same goods. Current lines of other items are
+ * dropped, except relocated (done) lines, which are kept at the end as they are.
  */
 export function linesFromOutstandingLoans(
 	rows: readonly OutstandingLoanRow[],
 	eligibleItemIds: ReadonlySet<string>,
-	makeLine: (preset: { item_id: string; qty: string }) => AddEntryLine
+	makeLine: (preset: { item_id: string; qty: string }) => AddEntryLine,
+	currentLines: readonly AddEntryLine[] = []
 ): LinesFromLoans {
 	const totals = new Map<string, string>();
 	for (const row of rows) {
@@ -260,9 +267,14 @@ export function linesFromOutstandingLoans(
 	const lines: AddEntryLine[] = [];
 	const skippedItemIds: string[] = [];
 	for (const [item_id, qty] of totals) {
-		if (eligibleItemIds.has(item_id)) lines.push(makeLine({ item_id, qty }));
-		else skippedItemIds.push(item_id);
+		if (!eligibleItemIds.has(item_id)) {
+			skippedItemIds.push(item_id);
+			continue;
+		}
+		const existing = currentLines.find((line) => !line.relocated && line.item_id === item_id);
+		lines.push(existing ? { ...existing, qty } : makeLine({ item_id, qty }));
 	}
+	for (const line of currentLines) if (line.relocated) lines.push(line);
 	return { lines, skippedItemIds };
 }
 
