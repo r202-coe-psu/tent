@@ -59,6 +59,14 @@ describe('formatDistributionError', () => {
 		expect(formatDistributionError(err)).toBe(manage);
 	});
 
+	it('blames the source pool, not the target, for source_closed in any context', () => {
+		const copy =
+			'ย้ายรายการนี้ไม่ได้ เพราะกองที่รายการอยู่ถูกส่งเข้าคลังแล้ว และรายการนี้นับรวมในยอดที่ส่งแล้ว กรุณารีเฟรชเพื่อดูสถานะล่าสุด';
+		const err = new BulkReturnPoolStateError('Source pool x is not OPEN', 'source_closed');
+		expect(formatDistributionError(err, undefined, { poolContext: 'intake' })).toBe(copy);
+		expect(formatDistributionError(err, undefined, { poolContext: 'manage' })).toBe(copy);
+	});
+
 	it('explains a receive on a pool that is not yet submitted', () => {
 		const err = new BulkReturnPoolStateError('Only a SUBMITTED pool', 'not_submitted');
 		expect(formatDistributionError(err)).toBe(

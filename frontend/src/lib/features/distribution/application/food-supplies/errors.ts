@@ -70,11 +70,12 @@ export class BulkReturnPoolNameTakenError extends WorkflowValidationError {
  * Why a pool refused an operation: `closed` = the pool is no longer OPEN (submitted / received /
  * cancelled), `locked` = OPEN but a submit / cancel is in progress, `not_found` = no such pool,
  * `not_submitted` = a receive needs a SUBMITTED pool but it is OPEN / CANCELLED, `conflict` = the
- * pool was already RECEIVED with a different record. Absent on older throw sites that do not
- * distinguish.
+ * pool was already RECEIVED with a different record, `source_closed` = the entry's current pool is
+ * no longer OPEN and the entry is not a late entry, so it cannot leave that pool. Absent on older
+ * throw sites that do not distinguish.
  */
 export type BulkReturnPoolStateReason =
-	'closed' | 'locked' | 'not_found' | 'not_submitted' | 'conflict';
+	'closed' | 'locked' | 'not_found' | 'not_submitted' | 'conflict' | 'source_closed';
 
 /** A bulk return pool is missing, not OPEN, or locked, so the operation cannot proceed. */
 export class BulkReturnPoolStateError extends WorkflowError {
