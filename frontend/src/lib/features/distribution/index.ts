@@ -249,6 +249,7 @@ export {
 	useBulkReturnPool,
 	useBulkReturnPoolOverview,
 	useBulkReturnPoolClosedLoanRefs,
+	useBulkReturnPoolTimeline,
 	useBulkReturnPoolAppliedLoanRefs,
 	useReturnerOutstandingLoans,
 	useBulkReturnSkippedDocs,

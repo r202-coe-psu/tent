@@ -3,10 +3,12 @@ import type {
 	AppliedBulkReturnLoanRef,
 	BulkReturnPoolOverviewRow,
 	ClosedBulkReturnLoanRef,
-	DistributionLog
+	DistributionLog,
+	PoolTimelineEvent
 } from '../../domain/food-supplies';
 import {
 	buildBulkReturnPoolOverview,
+	buildPoolTimeline,
 	findAppliedBulkReturnLoanRefs,
 	findClosedBulkReturnLoanRefs
 } from '../../domain/food-supplies';
@@ -15,6 +17,7 @@ import { WorkflowValidationError } from './errors';
 import {
 	loadLivePoolEntriesWithLoans,
 	outstandingLoansOf,
+	requirePool,
 	resolveDependencies,
 	type BulkReturnPoolV3WorkflowDependencies
 } from './bulk-return-pool-v3-shared';
@@ -88,6 +91,29 @@ export async function listBulkReturnPoolAppliedLoanRefs(
 ): Promise<AppliedBulkReturnLoanRef[]> {
 	const { live, loansById } = await loadLivePoolEntriesWithLoans(poolId, ctx, deps);
 	return findAppliedBulkReturnLoanRefs(live, loansById);
+}
+
+export interface BulkReturnPoolTimeline {
+	events: PoolTimelineEvent[];
+	/** Malformed docs of this pool's events the read left out (the timeline may be incomplete). */
+	skipped: SkippedDoc[];
+}
+
+/**
+ * Chronological history of one pool (opened, entries added / moved in / moved out / voided,
+ * submitted, received, cancelled). Read path: skipped docs are reported, never thrown.
+ */
+export async function getBulkReturnPoolTimeline(
+	poolId: string,
+	ctx: AuthorContext,
+	deps?: BulkReturnPoolV3WorkflowDependencies
+): Promise<BulkReturnPoolTimeline> {
+	const { poolRepo, eventRepo } = resolveDependencies(deps, ctx);
+	const [pool, events] = await Promise.all([
+		requirePool(poolRepo, poolId),
+		eventRepo.listForPool(poolId)
+	]);
+	return { events: buildPoolTimeline(pool, events), skipped: events.skipped };
 }
 
 /** Outstanding returnable loans of a returner (all items), oldest first, so the UI can show/warn. */

@@ -175,6 +175,13 @@ export {
 } from './bulk-return-pool-overview';
 
 export {
+	buildPoolTimeline,
+	type PoolTimelineEvent,
+	type PoolTimelineEventKind,
+	type PoolTimelineEventSet
+} from './bulk-return-pool-timeline';
+
+export {
 	bulkReturnClaimStatusSchema,
 	bulkReturnClaimIdSchema,
 	bulkReturnClaimDocSchema,

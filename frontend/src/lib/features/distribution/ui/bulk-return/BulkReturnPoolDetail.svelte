@@ -18,6 +18,7 @@
 		createStableOperationId,
 		useBulkReturnPoolAppliedLoanRefs,
 		useBulkReturnPoolClosedLoanRefs,
+		useBulkReturnPoolTimeline,
 		useBulkReturnSkippedDocs,
 		useCancelBulkReturnPool,
 		useVoidBulkReturnEntry
@@ -50,6 +51,7 @@
 	} from '../model/bulk-return-pool-v3';
 	import { liveSummaryRows, submittedSummaryRows } from '../model/bulk-return-lifecycle';
 	import BulkReturnPoolReceiveRecord from './BulkReturnPoolReceiveRecord.svelte';
+	import BulkReturnPoolTimeline from './BulkReturnPoolTimeline.svelte';
 	import EditBulkReturnPoolHeaderDialog from './EditBulkReturnPoolHeaderDialog.svelte';
 	import MoveBulkReturnEntryDialog from './MoveBulkReturnEntryDialog.svelte';
 
@@ -120,6 +122,13 @@
 			.filter(Boolean)
 			.join(', ')
 	);
+
+	// Chronological history of this pool (nested under the overview key, so writes refresh it).
+	const timelineQuery = useBulkReturnPoolTimeline(
+		() => row?.pool._id ?? null,
+		() => shelterCode
+	);
+	const poolNameById = $derived(new Map(rows.map((r) => [r.pool._id, r.pool.name])));
 
 	const entries = $derived(row ? liveEntries(row) : []);
 	const moveTargets = $derived(row ? listMoveTargets(rows, row.pool._id) : []);
@@ -437,6 +446,15 @@
 						</ul>
 					{/if}
 				</section>
+
+				<BulkReturnPoolTimeline
+					events={timelineQuery.data?.events}
+					{catalog}
+					{returnerNames}
+					{poolNameById}
+					isLoading={timelineQuery.isPending && timelineQuery.fetchStatus !== 'idle'}
+					isError={timelineQuery.isError}
+				/>
 
 				{#if canManage && pool.status === 'OPEN'}
 					<section

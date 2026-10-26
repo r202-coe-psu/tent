@@ -22,6 +22,7 @@ import { operationsRepository } from '$lib/features/operations';
 import { getReturnOperationState } from '../food-supplies/return-workflow';
 import {
 	getBulkReturnPoolOverview,
+	getBulkReturnPoolTimeline,
 	listBulkReturnPoolAppliedLoanRefs,
 	listBulkReturnPoolClosedLoanRefs,
 	listReturnerOutstandingLoans,
@@ -219,6 +220,26 @@ export const useBulkReturnPoolAppliedLoanRefs = (
 			queryFn: () => {
 				const ctx = resolveAuthenticatedAuthorContext(shelterCode);
 				return listBulkReturnPoolAppliedLoanRefs(id!, ctx);
+			},
+			enabled: isEnabled
+		};
+	});
+
+/** Reads the chronological timeline of one bulk return pool (events + skipped docs). */
+export const useBulkReturnPoolTimeline = (
+	poolId: MaybeGetter<string | null | undefined>,
+	shelterCodeGetter?: MaybeGetter<string | undefined>,
+	enabled: MaybeGetter<boolean> = true
+) =>
+	createQuery(() => {
+		const id = toValue(poolId);
+		const shelterCode = resolveShelterCode(toValue(shelterCodeGetter));
+		const isEnabled = Boolean(toValue(enabled) && shelterCode && id);
+		return {
+			queryKey: distributionKeys.bulkPoolTimeline(shelterCode, id ?? ''),
+			queryFn: () => {
+				const ctx = resolveAuthenticatedAuthorContext(shelterCode);
+				return getBulkReturnPoolTimeline(id!, ctx);
 			},
 			enabled: isEnabled
 		};
