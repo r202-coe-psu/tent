@@ -3,6 +3,7 @@ id: CR-070
 title: จองเข้าศูนย์ผ่านเว็บ + ยืนยันตัวตนที่ประตู (reuse QR scan)
 status: approved
 date: 2026-08-13
+updated: 2026-10-23
 requested_by: เจ้าของโครงการ
 decided_by: เจ้าของโครงการ (IMPS, approved 2026-08-13)
 layer: volatile
@@ -163,3 +164,4 @@ Slice: **public booking + self-lookup** (`/register`, `/register/track`) — ป
   household + D-PRE-REG-AGE.
 - 2026-08-14 — **implement (partial):** stay `cancelled` + schema_v 6 + cancel cascade + list
   status filters + bulk cancel (SA/SM/RS). Public booking / `web` / D-PRE-REG-AGE ยังไม่ทำในรอบนี้.
+- 2026-10-23 — **Superseded (rate limit) by [CR-188](../01-core/CR-188-rate-limit-to-nginx.md):** anti-abuse rate limiter ของ public booking (`registerIpLimiter`/`registerPhoneLimiter`/`registerLookupIpLimiter`) ถูกลบ — เหลือ reCAPTCHA + nginx zone `public_write`/`public_read`

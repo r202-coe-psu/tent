@@ -337,7 +337,9 @@ function toPublicJob(job: Doc) {
 
 function toPortalProfile(volunteer: Doc) {
 	const skillCodes = (volunteer.skills as string[]) ?? [];
-	const labels = skillCodes.map((code) => SKILL_ITEMS.find((s) => s.code === code)?.label ?? code);
+	const labels = skillCodes.map(
+		(code) => SKILL_ITEMS.find((s) => s.code === code)?.label_th ?? code
+	);
 	const phone = (volunteer.phone as string) ?? '';
 	return {
 		portal_id: (volunteer._id as string).split(':')[1],
@@ -1039,5 +1041,85 @@ test.describe('Volunteer end-to-end operational flow', () => {
 			await expect(page.getByText(/^กะที่ \d+$/)).toHaveCount(5);
 			await expect(page.getByText(/5 กะ · รวมจำนวนรับ/)).toBeVisible();
 		});
+	});
+
+	test('one applicant with several pending shifts is one card, approved together (#716)', async ({
+		page
+	}) => {
+		const shifts = [
+			{ id: 'multi-am', start_time: '09:00', end_time: '12:00' },
+			{ id: 'multi-pm', start_time: '13:00', end_time: '16:00' },
+			{ id: 'multi-eve', start_time: '17:00', end_time: '20:00' }
+		].map((shift) => ({ ...shift, date: TOMORROW, end_date: TOMORROW, quota: 5 }));
+		const job = {
+			...SECOND_JOB,
+			_id: `job:e2eflow${RUN_ID}multi`,
+			title: `งานอาสา E2E หลายกะ ${RUN_ID}`,
+			quota: 15,
+			slots_remaining: 15,
+			shifts
+		};
+		const phoneHash = await sha256Hex(APPLICANT_PHONE);
+		const applications = shifts.map((shift, index) => ({
+			_id: `job_application:e2eflow${RUN_ID}multi${index}`,
+			type: 'job_application',
+			schema_v: 3,
+			shelter_code: 'SH001',
+			created_at: '2026-09-02T00:00:00.000Z',
+			updated_at: '2026-09-02T00:00:00.000Z',
+			created_by: 'public',
+			job_id: job._id,
+			shift_id: shift.id,
+			volunteer_id: null,
+			applicant: {
+				first_name: 'เก่งกล้า',
+				last_name: 'อาสา',
+				phone: APPLICANT_PHONE,
+				phone_hash: phoneHash,
+				email: null,
+				skills: []
+			},
+			selected_shift: {
+				shift_id: shift.id,
+				date: shift.date,
+				start_time: shift.start_time,
+				end_time: shift.end_time
+			},
+			tracking_token: mintToken(),
+			status: 'pending_review',
+			review_notes: null,
+			reviewed_at: null,
+			reviewed_by: null,
+			review_reasons: ['job_fit']
+		}));
+		const world = new World([job, ...applications]);
+		await mockCouch(page, world);
+		await mockPublicApi(page, world);
+		await injectSession(page, ADMIN, adminSession);
+
+		await page.goto(`${BASE}/back-office/volunteers/jobs/${encodeURIComponent(job._id)}`);
+		await page.getByRole('tab', { name: /ผู้สมัคร/ }).click();
+
+		// One card for the person, all three shifts on it.
+		await expect(page.getByText(FULL_NAME)).toHaveCount(1);
+		await expect(page.getByText('รอพิจารณา (1 คน · 3 กะ)')).toBeVisible();
+		await expect(page.getByRole('list', { name: 'กะที่สมัคร' }).getByRole('listitem')).toHaveCount(
+			3
+		);
+
+		await page.getByRole('button', { name: 'อนุมัติทุกกะ (3 กะ)' }).click();
+		const dialog = page.getByRole('dialog');
+		await expect(dialog.getByText('กะที่จะอนุมัติ (3 กะ)')).toBeVisible();
+		await dialog.getByRole('button', { name: 'ยืนยันอนุมัติ 3 กะ' }).click();
+		await expect(dialog).toHaveCount(0);
+
+		await expect
+			.poll(() =>
+				world
+					.all('job_application')
+					.filter((a) => a.job_id === job._id)
+					.map((a) => a.status)
+			)
+			.toEqual(['confirmed', 'confirmed', 'confirmed']);
 	});
 });

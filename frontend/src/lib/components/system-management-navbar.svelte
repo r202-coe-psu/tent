@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import House from '@lucide/svelte/icons/house';
-	import ChevronLeft from '@lucide/svelte/icons/chevron-left';
+	import SidebarCollapseToggle from '$lib/components/sidebar-collapse-toggle.svelte';
 	import ChevronDown from '@lucide/svelte/icons/chevron-down';
 	import Menu from '@lucide/svelte/icons/menu';
 	import * as Sheet from '$lib/components/ui/sheet';
@@ -18,9 +18,19 @@
 	} from './system-management-navbar/static';
 	import * as Tooltip from '$lib/components/ui/tooltip';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
+	import {
+		SIDEBAR_COLLAPSED_KEYS,
+		readSidebarCollapsed,
+		writeSidebarCollapsed
+	} from './sidebar-collapsed-storage';
 
-	let collapsed = $state(false);
+	let collapsed = $state(readSidebarCollapsed(SIDEBAR_COLLAPSED_KEYS.systemManagement));
 	let mobileMenuOpen = $state(false);
+
+	function setCollapsed(next: boolean) {
+		collapsed = next;
+		writeSidebarCollapsed(SIDEBAR_COLLAPSED_KEYS.systemManagement, next);
+	}
 
 	const roles = $derived(authStore.user?.roles ?? []);
 	const isSA = $derived(isSystemAdmin(roles));
@@ -84,8 +94,8 @@
 	<Tooltip.Provider delayDuration={150}>
 		<div
 			class="sticky top-0 z-20 flex items-center bg-card {collapsed
-				? 'justify-center px-2 py-5'
-				: 'justify-between gap-2 p-5'}"
+				? 'flex-col justify-center gap-3 px-2 py-4'
+				: 'justify-between gap-2 px-5 py-4'}"
 		>
 			<a
 				href={systemManagementHomePath}
@@ -103,16 +113,7 @@
 					</span>
 				{/if}
 			</a>
-			<button
-				type="button"
-				class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-sidebar-border bg-card text-xs text-muted-foreground shadow-sm hover:bg-muted {collapsed
-					? 'absolute top-6 -right-3 z-30'
-					: ''}"
-				onclick={() => (collapsed = !collapsed)}
-				aria-label={collapsed ? 'ขยายแถบเมนู' : 'ย่อแถบเมนู'}
-			>
-				<ChevronLeft class="h-3 w-3 transition-transform {collapsed ? 'rotate-180' : ''}" />
-			</button>
+			<SidebarCollapseToggle {collapsed} onToggle={() => setCollapsed(!collapsed)} />
 		</div>
 
 		<div class="no-scrollbar flex-1 overflow-y-auto">

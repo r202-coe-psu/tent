@@ -7,7 +7,9 @@ export const GRANTABLE_SCOPES = [
 	'occupancy-read',
 	'occupancy-pii-read',
 	'booking-write',
-	'residency-read'
+	'booking-bypass',
+	'residency-read',
+	'occupant-search'
 ] as const;
 export type GrantableScope = (typeof GRANTABLE_SCOPES)[number];
 
@@ -17,14 +19,20 @@ export const SCOPE_LABEL: Record<GrantableScope, string> = {
 	'occupancy-read': 'occupancy-read — Occupancy breakdown (EXT-005/006)',
 	'occupancy-pii-read': 'occupancy-pii-read — Individual occupant records (EXT-007)',
 	'booking-write': 'booking-write — Book / cancel shelter on behalf of citizens (EXT-008–010)',
-	'residency-read': 'residency-read — Per-person shelter residency by national ID (EXT-011)'
+	'booking-bypass':
+		'booking-bypass — Book a shelter that is closed to bookings, EOC override (EXT-008)',
+	'residency-read': 'residency-read — Per-person shelter residency by national ID (EXT-011)',
+	'occupant-search':
+		'occupant-search — Search persons by name / national ID / passport / phone (EXT-012)'
 };
 
 /** Scopes that expose individual-level PII/sensitive data under PDPA — flagged in the UI. */
 export const SENSITIVE_SCOPES: readonly GrantableScope[] = [
 	'occupancy-pii-read',
 	'booking-write',
-	'residency-read'
+	'booking-bypass',
+	'residency-read',
+	'occupant-search'
 ];
 
 /** Per-scope PDPA warning shown beside each sensitive scope in the create/edit dialogs. */
@@ -33,8 +41,12 @@ export const SENSITIVE_SCOPE_WARNING: Partial<Record<GrantableScope, string>> = 
 		'Grants access to individual occupant records (PDPA-sensitive). Grant only with written approval on file for this module.',
 	'booking-write':
 		"Lets this partner create and cancel bookings with citizens' national ID, name and phone (PDPA-sensitive). Grant only with written approval on file for this module.",
+	'booking-bypass':
+		"Lets this partner book a shelter that is closed or has not switched pre-registration on, skipping the acceptance rule (EOC override; always used together with booking-write). Bookings carry citizens' national ID, name and phone (PDPA-sensitive). Grant only per case, with written approval on file for this module.",
 	'residency-read':
-		'Reveals whether a given national ID is staying at a shelter, and where (PDPA-sensitive). Grant only with written approval on file for this module.'
+		'Reveals whether a given national ID is staying at a shelter, and where (PDPA-sensitive). Grant only with written approval on file for this module.',
+	'occupant-search':
+		'Lets this partner search for people by name, national ID, passport or phone number and see their status and shelter (PDPA-sensitive). Grant only with written approval on file for this module.'
 };
 
 /** Partner systems on the OAuth plane (ADR 0002; M2 added by CR-154) — a closed set. */

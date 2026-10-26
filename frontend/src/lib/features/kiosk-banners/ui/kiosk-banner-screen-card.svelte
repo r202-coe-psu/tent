@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { resolve } from '$app/paths';
 	import ChevronRight from '@lucide/svelte/icons/chevron-right';
 	import { KIOSK_SCREENS, type KioskScreenType } from '$lib/features/shared/domain/kiosk-screen';
 	import { kioskBannerRemoteRepository } from '../data/kiosk-banner.remote';
@@ -7,9 +6,11 @@
 
 	/**
 	 * One summary card per screen type: banner counts by state plus the first banners of the play
-	 * order. The whole card links to that screen's manage page.
+	 * order. The whole card links to that screen's manage page (`href`, already resolved by the
+	 * caller).
 	 */
-	let { screen, summary }: { screen: KioskScreenType; summary: ScreenSummary } = $props();
+	let { screen, summary, href }: { screen: KioskScreenType; summary: ScreenSummary; href: string } =
+		$props();
 
 	const STRIP_LIMIT = 6;
 
@@ -19,7 +20,7 @@
 </script>
 
 <a
-	href={resolve(`/back-office/kiosks/banners/${screen}`)}
+	{href}
 	class="flex min-h-11 w-full flex-col gap-3 rounded-xl border border-slate-200/80 bg-white p-4 text-left shadow-2xs transition-colors hover:border-slate-300 hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none sm:p-5"
 	aria-label="จัดการแบนเนอร์{meta.label} {meta.size}"
 >

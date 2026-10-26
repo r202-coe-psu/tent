@@ -2,14 +2,12 @@
  * Station 1 / 2 / 3 + scan helpers for the live onsite `@release` suite.
  * Locators mirror `registration-evacuee.test.ts` (UI-driven, no DB seeds).
  */
-import { createRequire } from 'node:module';
 import { expect, type Browser, type Locator, type Page } from '@playwright/test';
+import jsQR from 'jsqr';
 import QRCode from 'qrcode';
 import { type TestUser } from './couch';
 import { injectSession, routeBrowserCouchThroughApp } from './login';
 import { pinActiveShelter } from './staff-ui';
-
-const nodeRequire = createRequire(import.meta.url);
 
 export const INTAKE_SEARCH_LABEL = 'เลขบัตรประชาชน / หนังสือเดินทาง / ชื่อ-นามสกุล / เบอร์โทร';
 
@@ -102,49 +100,43 @@ export async function fillWalkInAddress(
 const PERSON_QR_MARGIN = 1;
 
 /**
- * Read a Person QR `<img>` (evacuee id payload). Decodes with the app's html5-qrcode first; its
- * ZXing build cannot be given PURE_BARCODE/TRY_HARDER and misses ~8% of these synthetic
- * images outright (random ULIDs — measured 34/400), so a miss falls back to an exact check: the
- * enclosing card's `qr-identity-card-<ulid>` id names the candidate, and the image must match
- * the `qrcode` matrix for `evacuee:<ulid>` module for module.
+ * Read a QR `<img>` and return what it encodes.
+ *
+ * The page only paints the image on a canvas and hands back its pixels; the decoding (jsQR)
+ * happens here in Node. Nothing is injected into the page, so the app's Content-Security-Policy
+ * (`script-src 'self'` + nonce, #704) stays in force — injecting html5-qrcode as an inline
+ * script tag is what it blocked (#733). A white border is added and a 2× copy is tried
+ * too, so a QR rendered with a thin quiet zone still decodes.
+ *
+ * Person QRs keep a last-resort exact check: the enclosing card's `qr-identity-card-<ulid>` id
+ * names the candidate, and the image must match the `qrcode` matrix for `evacuee:<ulid>` module
+ * for module.
  */
 export async function decodeQrImage(page: Page, img: Locator): Promise<string> {
 	const src = await img.getAttribute('src');
 	if (!src?.startsWith('data:image')) throw new Error('QR <img> has no data-URL source');
-	if (!(await page.evaluate(() => 'Html5Qrcode' in window))) {
-		await page.addScriptTag({ path: nodeRequire.resolve('html5-qrcode/html5-qrcode.min.js') });
-	}
-	const decoded = await page.evaluate(async (dataUrl) => {
-		type QrScanner = { scanFile(file: File, showImage: boolean): Promise<string> };
-		const { Html5Qrcode } = window as unknown as { Html5Qrcode: new (id: string) => QrScanner };
-		const source = await (await fetch(dataUrl)).blob();
-		// a rescaled copy rescues most images the decoder misses at their native size
-		for (const scale of [1, 0.5, 0.75]) {
-			let blob = source;
-			if (scale !== 1) {
-				const bitmap = await createImageBitmap(source);
+	let decoded: string | null = null;
+	for (const scale of [1, 2]) {
+		const pixels = await page.evaluate(
+			async ({ dataUrl, scale }) => {
+				const bitmap = await createImageBitmap(await (await fetch(dataUrl)).blob());
+				const pad = 16 * scale;
 				const canvas = document.createElement('canvas');
-				canvas.width = Math.round(bitmap.width * scale);
-				canvas.height = Math.round(bitmap.height * scale);
-				canvas.getContext('2d')!.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-				blob = await new Promise<Blob>((resolve, reject) =>
-					canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('toBlob failed'))), 'image/png')
-				);
-			}
-			const holder = document.createElement('div');
-			holder.id = 'e2e-qr-decode';
-			holder.style.display = 'none';
-			document.body.appendChild(holder);
-			try {
-				return await new Html5Qrcode(holder.id).scanFile(new File([blob], 'qr.png'), false);
-			} catch {
-				// try the next scale
-			} finally {
-				holder.remove();
-			}
-		}
-		return null;
-	}, src);
+				canvas.width = bitmap.width * scale + pad * 2;
+				canvas.height = bitmap.height * scale + pad * 2;
+				const ctx = canvas.getContext('2d')!;
+				ctx.imageSmoothingEnabled = false;
+				ctx.fillStyle = '#ffffff';
+				ctx.fillRect(0, 0, canvas.width, canvas.height);
+				ctx.drawImage(bitmap, pad, pad, bitmap.width * scale, bitmap.height * scale);
+				const { data, width, height } = ctx.getImageData(0, 0, canvas.width, canvas.height);
+				return { data: Array.from(data), width, height };
+			},
+			{ dataUrl: src, scale }
+		);
+		decoded = jsQR(Uint8ClampedArray.from(pixels.data), pixels.width, pixels.height)?.data ?? null;
+		if (decoded) break;
+	}
 	if (decoded) return decoded;
 
 	const cardId = await img
@@ -232,6 +224,47 @@ export interface ScreeningFill {
 	careTrack?: 'normal' | 'fast_track';
 }
 
+/**
+ * Enter tags through a `MasterTagInput` picker (CR-186/187). `raw` is comma-separated;
+ * each value goes through the picker's "เพิ่ม" option, which stores a master code when
+ * the text matches an active master label and free text otherwise.
+ */
+async function fillMasterTags(
+	page: Page,
+	inputId: string,
+	searchPlaceholder: string,
+	raw: string
+): Promise<void> {
+	const values = raw
+		.split(',')
+		.map((v) => v.trim())
+		.filter(Boolean);
+	for (const value of values) {
+		await page.locator(`#${inputId}`).click();
+		await page.getByPlaceholder(searchPlaceholder).fill(value);
+		await page.getByRole('option', { name: `เพิ่ม “${value}”` }).click();
+		await page.keyboard.press('Escape');
+	}
+}
+
+/** Enter โรคประจำตัว through the `chronic_disease` tag picker (CR-186). */
+export async function fillConditionTags(
+	page: Page,
+	conditions: string,
+	idPrefix = 'med'
+): Promise<void> {
+	await fillMasterTags(page, `${idPrefix}-conditions`, 'ค้นหาโรคประจำตัว...', conditions);
+}
+
+/** Enter อาการแพ้ through the `allergy` tag picker (CR-187). */
+export async function fillAllergyTags(
+	page: Page,
+	allergies: string,
+	idPrefix = 'med'
+): Promise<void> {
+	await fillMasterTags(page, `${idPrefix}-allergies`, 'ค้นหาสิ่งที่แพ้...', allergies);
+}
+
 export async function screenEvacuee(
 	page: Page,
 	evacueeId: string,
@@ -239,9 +272,9 @@ export async function screenEvacuee(
 ): Promise<void> {
 	await page.goto(`/onsite/medical-screening/${evacueeId}`);
 	await expect(page.getByText('Station 2', { exact: true })).toBeVisible({ timeout: 20_000 });
-	await page.locator('#med-conditions').fill(fill.conditions);
+	await fillConditionTags(page, fill.conditions);
 	if (fill.medications) await page.locator('#med-medications').fill(fill.medications);
-	if (fill.allergies) await page.locator('#med-allergies').fill(fill.allergies);
+	if (fill.allergies) await fillAllergyTags(page, fill.allergies);
 	if (fill.notes) await page.locator('#med-general-symptoms').fill(fill.notes);
 	if (fill.careTrack) await page.locator(`label[for="med-care-track-${fill.careTrack}"]`).click();
 	await page.getByRole('button', { name: 'บันทึกผลคัดกรอง' }).click();

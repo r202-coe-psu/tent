@@ -1,9 +1,10 @@
 ---
 id: CR-160
 title: Temporary RATE_LIMIT env switch — bypass donation & pre-register BFF rate limiters on local e2e and staging
-status: approved
+status: superseded
+superseded_by: CR-188
 date: 2026-10-11
-updated: 2026-10-18
+updated: 2026-10-23
 requested_by: team A (donation) — e2e @critical failures
 decided_by: เจ้าของโครงการ (PO, net-lynx) — approved 2026-10-11
 layer: volatile
@@ -159,3 +160,4 @@ N/A — ไม่เปลี่ยน shape ที่ persist
 - 2026-10-11 — **approved with conditions** (PO, net-lynx) — spec only, ยังไม่ implement:
   - (a) เลข CR-160 ใช้เลขถัดไปจาก `_index.md` บน develop (CR-158 ใช้แล้ว, CR-159 จองโดย #426); ไฟล์อยู่ที่ `docs/changes/04-donation/`
   - (b) implementation ต้องมาเป็น **code PR ใหม่** ที่มีเฉพาะ commit สวิตช์ `87ad8dea` ปรับตามขอบเขตที่ approve (`bypassable: true` เฉพาะ limiter ของ donation + pre-register) แยกจาก `team-A-donation` และ CR-157; **ห้าม merge `team-A-donation` ตรง ๆ**
+- 2026-10-23 — **superseded by [CR-188](../01-core/CR-188-rate-limit-to-nginx.md):** limiter ในแอปถูกลบทั้งหมด จึงไม่มีอะไรให้ `RATE_LIMIT` ปิด; e2e บน staging ใช้ nginx allowlist IP ของ runner แทน (CR-188 FR-7)

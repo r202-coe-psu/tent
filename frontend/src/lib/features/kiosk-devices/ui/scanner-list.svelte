@@ -16,17 +16,20 @@
 	import ScannerPinBadge from './scanner-pin-badge.svelte';
 
 	/**
-	 * Kiosk device table: state only (status, PIN, banner, last seen). Every per-device action —
-	 * edit, active / banner switches (FR-KBR-38), Scanner Key, staff PIN, delete — is in the
+	 * Kiosk device table: state only (status, PIN, banner group, last seen). Every per-device action —
+	 * edit, active switch, Scanner Key, staff PIN, delete — is in the
 	 * "จัดการ" dialog.
 	 */
 	let {
 		devices = [],
+		groupNames,
 		onviewsecret,
 		onviewpin,
 		onsetpin
 	}: {
 		devices: ScannerDevice[];
+		/** Banner group `_id` → name; a device whose group is missing here reads as having none. */
+		groupNames?: ReadonlyMap<string, string>;
 		onviewsecret?: (device: ScannerDevice) => void;
 		/** Open the reveal-PIN dialog (PIN is fetched only when the user clicks show/copy there). */
 		onviewpin?: (device: ScannerDevice) => void;
@@ -68,6 +71,10 @@
 		});
 	}
 
+	function groupNameOf(device: ScannerDevice): string | null {
+		return (device.banner_group_id && groupNames?.get(device.banner_group_id)) || null;
+	}
+
 	function formatLastSeen(lastSeen: string | null): string {
 		if (!lastSeen) return 'ยังไม่เคยเชื่อมต่อ';
 		const diff = Math.floor((Date.now() - new Date(lastSeen).getTime()) / 1000);
@@ -100,6 +107,7 @@
 				</tr>
 			{:else}
 				{#each devices as device (device.id)}
+					{@const groupName = groupNameOf(device)}
 					<tr class="transition-colors hover:bg-slate-50/70">
 						<td class="px-6 py-4">
 							<div class="flex items-center gap-3">
@@ -146,15 +154,15 @@
 								{#if !device.staff_pin_is_default}
 									<ScannerPinBadge {device} />
 								{/if}
-								{#if device.banner_enabled}
+								{#if groupName}
 									<span class="badge-accent">
 										<ImageIcon class="h-3.5 w-3.5" />
-										แสดงแบนเนอร์
+										{groupName}
 									</span>
 								{:else}
 									<span class="badge-muted">
 										<ImageOff class="h-3.5 w-3.5" />
-										ไม่แสดงแบนเนอร์
+										ไม่มีกลุ่มแบนเนอร์
 									</span>
 								{/if}
 							</div>
@@ -184,6 +192,7 @@
 		<EditScannerDialog
 			bind:open={editOpen}
 			device={editDevice}
+			groupName={groupNameOf(editDevice)}
 			{onviewsecret}
 			{onviewpin}
 			{onsetpin}

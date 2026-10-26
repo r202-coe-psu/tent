@@ -9,6 +9,7 @@ from typing import Any
 from fastapi import HTTPException, status
 from tent_model.public_shelter import PublicShelter
 
+from ...utils.shelter_booking import accepts_booking, accepts_booking_query
 from .dopa_codes import lookup_dopa_codes
 from .schemas import (
     LocationDetailEnvelope,
@@ -81,6 +82,7 @@ def _to_item(doc: PublicShelter) -> LocationItem:
         contact_phone=doc.contact_phone,
         contact_name=doc.contact_name,
         operating_org=doc.operating_org,
+        accepts_booking=accepts_booking(doc),
         accepts_delivery=doc.accepts_delivery,
         delivery_note=doc.delivery_note,
         opened_at=doc.opened_at,
@@ -106,6 +108,7 @@ class ThirdPartyLocationsUseCase:
         include_inactive: bool,
         page: int = 1,
         limit: int = 50,
+        accepts_booking_filter: bool | None = None,
     ) -> LocationListEnvelope:
         query: dict[str, Any] = {}
         if status_filter:
@@ -114,6 +117,10 @@ class ThirdPartyLocationsUseCase:
             query["is_active"] = True
         if updated_since:
             query["updated_at"] = {"$gte": updated_since}
+        if accepts_booking_filter is not None:
+            # `$and` keeps this clear of the `location_status` key written above, so
+            # status=closed + accepts_booking=true is empty rather than one overwriting the other.
+            query = {"$and": [query, accepts_booking_query(accepts_booking_filter)]}
 
         cursor = PublicShelter.find(query)
         total = await cursor.count()

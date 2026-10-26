@@ -84,6 +84,21 @@ describe('decodeBannerImage', () => {
 		).toMatchObject({ ok: true, contentType: 'image/png' });
 	});
 
+	it('applies a caller-supplied cap instead of the banner default (CR-184 footer logos)', () => {
+		const withSize = (size: number) => {
+			const bytes = new Uint8Array(size);
+			bytes.set(PNG);
+			return toBase64(bytes);
+		};
+		const cap = 512 * 1024;
+		expect(
+			decodeBannerImage({ content_type: 'image/png', data_base64: withSize(cap + 1) }, cap)
+		).toEqual({ ok: false, reason: 'too_large' });
+		expect(
+			decodeBannerImage({ content_type: 'image/png', data_base64: withSize(cap) }, cap)
+		).toMatchObject({ ok: true, contentType: 'image/png' });
+	});
+
 	it('rejects text bytes labelled png and gif as unsupported_type', () => {
 		const text = toBase64(new TextEncoder().encode('this is not an image'));
 		const gif = toBase64(new TextEncoder().encode('GIF89a\x01\x00\x01\x00'));

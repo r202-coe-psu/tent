@@ -2,7 +2,9 @@
 	import { Label } from '$lib/components/ui/label/index.js';
 	import { Textarea } from '$lib/components/ui/textarea/index.js';
 	import * as RadioGroup from '$lib/components/ui/radio-group/index.js';
+	import { resolveMasterCodes, useMasterData } from '$lib/features/master-data';
 	import type { CareTrack } from '../../domain/people.js';
+	import MasterTagInput from './master-tag-input.svelte';
 
 	let {
 		care_track = $bindable<CareTrack>('normal'),
@@ -23,6 +25,31 @@
 		idPrefix?: string;
 		showGeneralSymptoms?: boolean;
 	} = $props();
+
+	// CR-186 / #648 — โรคประจำตัว and ประวัติการแพ้ pick from masters `chronic_disease` /
+	// `allergy`; both stay comma-separated strings of codes / free text so parents
+	// keep their split(',').
+	// Parents still map legacy labels on save (FR-7) — this getter only shows them.
+	const chronicDiseaseQuery = useMasterData(() => 'chronic_disease');
+	const chronicDiseaseItems = $derived(chronicDiseaseQuery.data?.items ?? []);
+	const allergyQuery = useMasterData(() => 'allergy');
+	const allergyItems = $derived(allergyQuery.data?.items ?? []);
+
+	function getConditionTokens(): string[] {
+		return resolveMasterCodes(conditions.split(','), chronicDiseaseItems);
+	}
+
+	function setConditionTokens(tokens: string[]) {
+		conditions = tokens.join(', ');
+	}
+
+	function getAllergyTokens(): string[] {
+		return resolveMasterCodes(allergies.split(','), allergyItems);
+	}
+
+	function setAllergyTokens(tokens: string[]) {
+		allergies = tokens.join(', ');
+	}
 
 	const careTrackOptions: { value: CareTrack; label: string; desc: string }[] = [
 		{
@@ -73,48 +100,49 @@
 		</RadioGroup.Root>
 	</div>
 
-	<div class="grid grid-cols-1 gap-3 md:grid-cols-3">
-		<div class="space-y-1.5">
-			<Label for="{idPrefix}-conditions" class="text-xs font-medium text-foreground">
-				โรคประจำตัว
-			</Label>
-			<Textarea
-				id="{idPrefix}-conditions"
-				bind:value={conditions}
-				{disabled}
-				rows={3}
-				placeholder="เช่น เบาหวาน, โรคหัวใจ, หอบหืด"
-				class="text-xs"
-			/>
-		</div>
+	<!-- โรคประจำตัว gets a full-width row so its tags flow on one line (CR-186). -->
+	<div class="space-y-1.5">
+		<Label for="{idPrefix}-conditions" class="text-xs font-medium text-foreground">
+			โรคประจำตัว
+		</Label>
+		<MasterTagInput
+			id="{idPrefix}-conditions"
+			bind:value={getConditionTokens, setConditionTokens}
+			items={chronicDiseaseItems}
+			{disabled}
+			placeholder="เลือกหรือพิมพ์ เช่น เบาหวาน, โรคหัวใจ"
+			searchPlaceholder="ค้นหาโรคประจำตัว..."
+			listLabel="โรคประจำตัวที่เลือก"
+		/>
+	</div>
 
-		<div class="space-y-1.5">
-			<Label for="{idPrefix}-medications" class="text-xs font-medium text-foreground">
-				ยาที่ใช้ประจำ
-			</Label>
-			<Textarea
-				id="{idPrefix}-medications"
-				bind:value={medications}
-				{disabled}
-				rows={3}
-				placeholder="เช่น ยาลดความดัน, อินซูลิน"
-				class="text-xs"
-			/>
-		</div>
+	<div class="space-y-1.5">
+		<Label for="{idPrefix}-medications" class="text-xs font-medium text-foreground">
+			ยาที่ใช้ประจำ
+		</Label>
+		<Textarea
+			id="{idPrefix}-medications"
+			bind:value={medications}
+			{disabled}
+			rows={3}
+			placeholder="เช่น ยาลดความดัน, อินซูลิน"
+			class="text-xs"
+		/>
+	</div>
 
-		<div class="space-y-1.5">
-			<Label for="{idPrefix}-allergies" class="text-xs font-medium text-foreground">
-				ประวัติการแพ้
-			</Label>
-			<Textarea
-				id="{idPrefix}-allergies"
-				bind:value={allergies}
-				{disabled}
-				rows={3}
-				placeholder="เช่น เพนิซิลลิน, อาหารทะเล"
-				class="text-xs"
-			/>
-		</div>
+	<!-- ประวัติการแพ้ gets its own full-width row like โรคประจำตัว (#648). -->
+	<div class="space-y-1.5">
+		<Label for="{idPrefix}-allergies" class="text-xs font-medium text-foreground">
+			ประวัติการแพ้
+		</Label>
+		<MasterTagInput
+			id="{idPrefix}-allergies"
+			bind:value={getAllergyTokens, setAllergyTokens}
+			items={allergyItems}
+			{disabled}
+			placeholder="เลือกหรือพิมพ์ เช่น อาหารทะเล, เพนิซิลลิน"
+			searchPlaceholder="ค้นหาสิ่งที่แพ้..."
+		/>
 	</div>
 
 	{#if showGeneralSymptoms}

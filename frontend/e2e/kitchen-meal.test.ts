@@ -1,12 +1,15 @@
 /**
- * Kitchen journey (ครัวกลางและอาหาร ↔ โรงครัวและเสบียงอาหาร) against the real local CouchDB.
+ * Kitchen journey (ครัวกลางและอาหาร ↔ เบิกวัตถุดิบครัว) against the real local CouchDB.
  *
  * 1. Shelter manager adds an E2E recipe (BOM) from "ฐานสูตร BOM" — kitchen staff can only read
  *    recipes (recipe-tab gates editing to shelter manager / warehouse staff).
  * 2. Kitchen staff creates a meal session ("สร้างมื้อใหม่") for two target groups.
  * 3. Kitchen staff adds two production batches (ชุดการผลิต) to that one session — one per group —
  *    deleting every ingredient flagged "ขาดสต็อก" and opening one requisition ticket per batch.
- * 4. Shelter manager approves both tickets in "โรงครัวและเสบียงอาหาร" (one-click approve + stock-out).
+ * 4. Warehouse staff works both tickets in "เบิกวัตถุดิบครัว": check the allocation and the
+ *    on-hand stock, "อนุมัติ" (PENDING_PICK → READY_FOR_DISPATCH), then "ปล่อยของและตัดสต็อก"
+ *    (→ IN_TRANSIT, writes the stock_ledger rows). Kitchen staff then confirms receipt
+ *    ("ยืนยันรับวัตถุดิบ", → COMPLETED) from the production board.
  * 5. Batch A is cooked, recorded and confirmed into stock first; the session must stay
  *    "กำลังดำเนินการ" with only its group complete. Then batch B goes through the same steps and
  *    the session becomes "เสร็จสิ้นแล้ว".
@@ -15,10 +18,11 @@
  * without stock, and a ready-meal item — plus one stock lot for the stocked ingredient. Every
  * session, plan, ticket, service, receipt and ledger row is written by the browser.
  *
- * Roles follow the CouchDB guard: only `kitchen_staff` may open a kitchen ticket and only
- * `shelter_manager` may one-click approve it or receive stock.
+ * Roles follow the CouchDB guard (shelter-access-design.ts): only `kitchen_staff` may open or
+ * receive a kitchen ticket, `warehouse_staff` approves and dispatches it (dispatch is warehouse
+ * only), and `shelter_manager` confirms cooked food into stock.
  *
- * Teardown deletes only documents this run created (fixture ids + `created_by` of the two
+ * Teardown deletes only documents this run created (fixture ids + `created_by` of the three
  * throw-away users) and ends with a zero-leak check.
  */
 
@@ -63,6 +67,13 @@ const MANAGER: TestUser = {
 	display_name: 'E2E Kitchen Manager'
 };
 
+const WAREHOUSE: TestUser = {
+	name: `e2e_kitchen_wh_${RUN}`,
+	password: 'Password1!',
+	roles: ['shelter:SH001', 'warehouse_staff'],
+	display_name: 'E2E Kitchen Warehouse'
+};
+
 const RICE = `E2E ข้าวสาร ${RUN}`;
 const CHICKEN = `E2E เนื้อไก่ ${RUN}`;
 const READY_MEAL = `E2E ข้าวต้มไก่กล่อง ${RUN}`;
@@ -74,6 +85,7 @@ const HALAL_MENU = `E2E ข้าวต้มฮาลาล ${RUN}`;
 const REGULAR_LABEL = 'ทั่วไป';
 const HALAL_LABEL = 'ฮาลาล (มุสลิม)';
 const REGULAR_HEADCOUNT = 10;
+const RICE_STOCK = 50;
 const HALAL_HEADCOUNT = 5;
 
 interface Batch {
@@ -111,7 +123,7 @@ const BATCH_B: Batch = {
 };
 
 const ownedIds = new Set<string>();
-const owners = [KITCHEN.name, MANAGER.name];
+const owners = [KITCHEN.name, MANAGER.name, WAREHOUSE.name];
 const sessions: Record<string, string> = {};
 const contexts: BrowserContext[] = [];
 
@@ -181,7 +193,7 @@ async function cleanupOwnedDocuments(): Promise<void> {
 			}
 		}
 	}
-	for (const user of [KITCHEN, MANAGER]) {
+	for (const user of [KITCHEN, MANAGER, WAREHOUSE]) {
 		try {
 			await deleteCouchUser(user.name);
 		} catch (error) {
@@ -320,7 +332,8 @@ async function planBatch(kitchen: Page, batch: Batch): Promise<void> {
 	await expect(rows.filter({ hasText: RICE })).toContainText('พร้อม', { timeout: 15_000 });
 	await expect(rows.filter({ hasText: CHICKEN })).toContainText('ขาดสต็อก');
 
-	// Delete every ingredient the warehouse cannot cover (one-click approve refuses them).
+	// Delete every ingredient the warehouse cannot cover, so the ticket only asks for what's in
+	// stock (the warehouse could also allocate 0 for it, but this journey keeps every line filled).
 	const deleteButtons = rows.filter({ hasText: 'ขาดสต็อก' });
 	while ((await deleteButtons.count()) > 0) {
 		await deleteButtons.first().getByRole('button', { name: 'ลบวัตถุดิบนี้' }).click();
@@ -345,27 +358,78 @@ async function planBatch(kitchen: Page, batch: Batch): Promise<void> {
 	await expect(kitchen.getByRole('heading', { name: 'รอคลังจัดของ' })).toBeVisible();
 }
 
-/** Manager: one-click approve a batch's ticket from โรงครัวและเสบียงอาหาร. */
-async function approveBatch(manager: Page, batch: Batch): Promise<void> {
-	await openSidebar(manager, 'โรงครัวและเสบียงอาหาร', 'จัดการคำร้องเบิกจ่าย');
-	await refresh(manager);
-	const row = await findTicketRow(manager, batch.ticketNo);
+/** Warehouse: check allocation + stock, approve, then release the goods (stock-out). */
+async function approveBatch(warehouse: Page, batch: Batch, onHand: number): Promise<void> {
+	// Straight to the queue: the warehouse role is not guaranteed the kitchen sidebar group.
+	await warehouse.goto('/back-office/tickets/kitchen');
+	const row = await findTicketRow(warehouse, batch.ticketNo);
 	await expect(row).toContainText(`ใบเบิกวัตถุดิบ: ${batch.label}`);
 	await expect(row).toContainText('รอจัดของ');
 	await row.getByRole('button', { name: /จัดการ/ }).click();
 
-	await expect(manager.getByText(batch.ticketNo).first()).toBeVisible({ timeout: 15_000 });
-	const items = manager.locator('[data-slot="card"]').filter({
-		hasText: 'รายการวัตถุดิบและการตัดสต็อก'
-	});
-	await expect(items.getByRole('row').filter({ hasText: RICE })).toBeVisible();
-	await expect(items.getByRole('row').filter({ hasText: CHICKEN })).toHaveCount(0);
+	await expect(warehouse.getByText(batch.ticketNo).first()).toBeVisible({ timeout: 15_000 });
+	const items = warehouse.getByRole('listitem');
+	const riceLine = items.filter({ hasText: RICE });
+	await expect(riceLine).toBeVisible();
+	await expect(items.filter({ hasText: CHICKEN })).toHaveCount(0);
+	// The on-hand column shows what's left of the seeded rice lot (earlier batches already
+	// dispatched) and the allocation defaults to what the kitchen asked for (recipe: 1 kg per
+	// 10 dishes), so nothing is short and approve is enabled.
+	await expect(riceLine).toContainText(String(onHand));
+	await expect(riceLine).not.toContainText('สต็อกไม่พอ');
+	await expect(warehouse.getByLabel(`จำนวนที่คลังจัดให้ ${RICE}`)).toHaveValue(
+		String(batch.target / REGULAR_HEADCOUNT)
+	);
 
-	await manager.getByRole('button', { name: 'อนุมัติและตัดสต็อกแล้ว' }).click();
-	await expect(toast(manager, 'จ่ายวัตถุดิบและตัดสต็อกเรียบร้อยแล้ว')).toBeVisible({
+	const approve = warehouse.getByRole('button', { name: 'อนุมัติ', exact: true });
+	await expect(approve).toBeEnabled({ timeout: 15_000 });
+	await approve.click();
+	await expect(toast(warehouse, 'อนุมัติแล้ว รอคลังปล่อยของ')).toBeVisible({ timeout: 15_000 });
+
+	// CR-178: dispatch is per lot. The items-table row shows the rice line pre-filled with the auto
+	// plan (the whole line from the seeded lot) as "ครบ", so the button is enabled without any clicks.
+	const lotRow = warehouse
+		.getByRole('listitem')
+		.filter({ hasText: RICE })
+		.filter({
+			has: warehouse.getByRole('button', { name: 'จัดการ lot' })
+		});
+	await expect(lotRow).toContainText('พร้อมปล่อย', { timeout: 15_000 });
+	// The modal shows the same prefill; open, check, close without saving.
+	await warehouse.getByRole('button', { name: 'จัดการ lot' }).click();
+	await expect(warehouse.getByLabel('จำนวนที่ใช้จาก Lot นี้')).toHaveValue(
+		String(batch.target / REGULAR_HEADCOUNT),
+		{ timeout: 15_000 }
+	);
+	// Scope to the dialog — the action bar also has "ยกเลิกตั๋ว".
+	await warehouse.getByRole('dialog').getByRole('button', { name: 'ยกเลิก', exact: true }).click();
+	await expect(warehouse.getByRole('dialog')).toBeHidden();
+	const dispatch = warehouse.getByRole('button', { name: 'ปล่อยของและตัดสต็อก' });
+	await expect(dispatch).toBeEnabled({ timeout: 15_000 });
+	await dispatch.click();
+	await expect(toast(warehouse, 'ปล่อยของแล้ว ตัดสต็อกเรียบร้อย')).toBeVisible({
 		timeout: 15_000
 	});
-	await expect(manager.getByText('จ่ายวัตถุดิบและตัดสต็อกแล้ว').first()).toBeVisible();
+	await expect(warehouse.getByText('รอครัวยืนยันรับวัตถุดิบ')).toBeVisible();
+}
+
+/** Kitchen: confirm the dispatched ingredients arrived (IN_TRANSIT → COMPLETED). */
+async function receiveIngredients(kitchen: Page, batch: Batch): Promise<void> {
+	await openSidebar(kitchen, 'ครัวกลางและอาหาร');
+	await refresh(kitchen);
+	const plan = planRow(await findSessionCard(kitchen), batch);
+	await expect(plan).toContainText('กำลังจัดส่ง', { timeout: 15_000 });
+	await plan.getByRole('link', { name: 'จัดการ / สูตร' }).click();
+
+	// An in-transit ticket opens on stage B (stage C stays locked until it's received); clicking
+	// the tab is a no-op then, but keeps the step independent of which stage the link picks.
+	await kitchen.getByRole('tab', { name: /รอคลังอนุมัติ/ }).click();
+	await expect(kitchen.getByText('คลังปล่อยของแล้ว พร้อมยืนยันรับวัตถุดิบ')).toBeVisible({
+		timeout: 15_000
+	});
+	await kitchen.getByRole('button', { name: 'ยืนยันรับวัตถุดิบ', exact: true }).click();
+	await expect(toast(kitchen, /ยืนยันรับวัตถุดิบแล้ว/)).toBeVisible({ timeout: 15_000 });
+	await expect(kitchen.getByText('วัตถุดิบพร้อมประกอบอาหารเรียบร้อยแล้ว')).toBeVisible();
 }
 
 /** Kitchen: open the batch from the session card, start cooking and record the yield. */
@@ -398,10 +462,10 @@ async function cookBatch(kitchen: Page, batch: Batch): Promise<void> {
 	);
 }
 
-/** Manager: confirm one batch's cooked food into stock from โรงครัวและเสบียงอาหาร. */
+/** Manager: confirm one batch's cooked food into stock from เบิกวัตถุดิบครัว. */
 async function receiveBatch(manager: Page, batch: Batch): Promise<void> {
 	const mission = `รับอาหารปรุงเสร็จ: ${batch.label}`;
-	await openSidebar(manager, 'โรงครัวและเสบียงอาหาร', 'จัดการคำร้องเบิกจ่าย');
+	await openSidebar(manager, 'เบิกวัตถุดิบครัว', 'จัดการคำร้องเบิกจ่าย');
 	await refresh(manager);
 	const row = await findTicketRow(manager, mission);
 	await expect(row).toContainText('รอตรวจรับเข้าคลัง');
@@ -422,7 +486,7 @@ async function receiveBatch(manager: Page, batch: Batch): Promise<void> {
 	await expect(toast(manager, 'ยืนยันตรวจรับเข้าสต็อกแล้ว')).toBeVisible({ timeout: 15_000 });
 	await expect(manager.getByText('ตรวจรับเข้าคลังเรียบร้อยแล้ว')).toBeVisible();
 
-	await openSidebar(manager, 'โรงครัวและเสบียงอาหาร', 'จัดการคำร้องเบิกจ่าย');
+	await openSidebar(manager, 'เบิกวัตถุดิบครัว', 'จัดการคำร้องเบิกจ่าย');
 	await expect(await findTicketRow(manager, mission)).toContainText('รับเข้าคลังแล้ว');
 }
 
@@ -434,7 +498,7 @@ test.describe(
 		test.setTimeout(180_000);
 
 		test.beforeAll(async () => {
-			for (const user of [KITCHEN, MANAGER]) {
+			for (const user of [KITCHEN, MANAGER, WAREHOUSE]) {
 				await createCouchUser(user);
 				await seedSecurityQuestion(user.name);
 				sessions[user.name] = await couchLogin(user.name, user.password);
@@ -442,7 +506,7 @@ test.describe(
 			const riceId = await seedItemMaster(RICE, 'kg', 'item_category:food');
 			await seedItemMaster(CHICKEN, 'kg', 'item_category:food');
 			await seedItemMaster(READY_MEAL, 'box', 'item_category:ready_meal');
-			await seedStockLot(riceId, '50', 'kg');
+			await seedStockLot(riceId, String(RICE_STOCK), 'kg');
 		});
 
 		// Close both browsers before teardown so no page is still reading the docs being deleted.
@@ -468,6 +532,7 @@ test.describe(
 		test('one meal with two production batches, from recipe to stock', async ({ browser }) => {
 			const kitchen = await openAs(browser, KITCHEN);
 			const manager = await openAs(browser, MANAGER);
+			const warehouse = await openAs(browser, WAREHOUSE);
 
 			await test.step('manager adds a recipe from ฐานสูตร BOM (kitchen_staff may only read recipes)', async () => {
 				await manager.goto('/back-office/kitchen');
@@ -552,10 +617,15 @@ test.describe(
 				}
 			});
 
-			await test.step('manager approves both tickets', async () => {
-				await manager.goto('/back-office/kitchen');
-				await approveBatch(manager, BATCH_A);
-				await approveBatch(manager, BATCH_B);
+			await test.step('warehouse approves and dispatches both tickets', async () => {
+				// Seeded 50 kg of rice; batch A's dispatch takes its share before B is approved.
+				await approveBatch(warehouse, BATCH_A, RICE_STOCK);
+				await approveBatch(warehouse, BATCH_B, RICE_STOCK - BATCH_A.target / REGULAR_HEADCOUNT);
+			});
+
+			await test.step('kitchen confirms receipt of both dispatches', async () => {
+				await receiveIngredients(kitchen, BATCH_A);
+				await receiveIngredients(kitchen, BATCH_B);
 			});
 
 			await test.step('batch A: cook, record, confirm into stock', async () => {

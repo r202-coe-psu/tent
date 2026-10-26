@@ -6,7 +6,7 @@ superseded_by: CR-104
 superseded_date: 2026-09-01
 note: รวมเนื้อหาและยกเลิกระบบ Direct Dispatch/Voice 2FA เข้าสู่ CR-104-volunteer-backoffice-and-user-management-v10.md ฉบับสมบูรณ์แล้ว
 date: 2026-08-29
-updated: 2026-09-01
+updated: 2026-10-23
 requested_by: เจ้าของโครงการ (ปิดช่องว่างที่พบระหว่าง implement CR-092)
 decided_by: เจ้าของโครงการ (superseded โดย CR-104)
 layer: volatile
@@ -147,6 +147,7 @@ Additive ล้วน ไม่ต้อง backfill:
 - 2026-08-29 — proposed · เจ้าของโครงการเลือกกลไก **D-DISPATCH-AUTH** (สองปัจจัย) และ **D-DISPATCH-CHANNEL** (ผู้จัดการศูนย์โทรบอกรหัส) จากทางเลือก view token / tracking token / token ต่อ assignment
 - 2026-08-29 — เจ้าของโครงการเลือก **D-READ-ONLY-LOOKUP** จากทางเลือก เบอร์อย่างเดียว / เบอร์+รหัสตั๋ว / อ่านได้ด้วยเบอร์แต่เขียนต้องมี token
 - 2026-08-29 — เจ้าของโครงการกำหนดให้รวมงานทั้งชุดไว้ใน CR เดียว และ track ด้วยไฟล์ CR + `_index.md`
+- 2026-10-23 — **Superseded (rate limit) by [CR-188](../01-core/CR-188-rate-limit-to-nginx.md):** FR-96-18 (10 ครั้ง/นาที/IP) ย้ายไป nginx zone `public_write`
 
 ## รอเจ้าของเคาะ
 

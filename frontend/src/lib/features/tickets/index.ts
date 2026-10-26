@@ -20,14 +20,15 @@ export {
 	isRequisitionTicket,
 	allocateTicketItem,
 	updateTicketRequestedItems,
-	oneStepApproveTicket,
 	approveTicket,
+	approveTicketWithAllocations,
 	markTicketDispatched,
 	receiveTicket,
 	cancelTicket,
 	resolveTicketItemUnit
 } from './domain/ticket';
 export { nextTicketNo } from './domain/ticket-no';
+export { describeLotFailure, type TicketLotAllocations } from './domain/ticket-dispatch';
 
 // Data — repository and remote CouchDB binding
 export type { TicketRepository } from './data/ticket.repository';
@@ -42,8 +43,8 @@ export {
 	useCreateTicket,
 	useAllocateTicketItem,
 	useUpdateTicketItems,
-	useOneStepApproveTicket,
 	useApproveTicket,
+	useApproveTicketWithAllocations,
 	useDispatchTicket,
 	useReceiveTicket,
 	useCancelTicket,

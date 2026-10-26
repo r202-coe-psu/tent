@@ -27,7 +27,8 @@
 		type CustomIngredientInput
 	} from '$lib/features/kitchen';
 	import { useActiveSopProfile } from '$lib/features/sop-ratios';
-	import { useRecipes, useItemMasters } from '$lib/features/catalog';
+	import { useRecipes, useItemMasters, formatUnit, useUnitsOfMeasure } from '$lib/features/catalog';
+	import { langState } from '$lib/states/i18n.svelte';
 	import { useSupplyItems } from '$lib/features/supply';
 	import { useStockBalance } from '$lib/features/operations';
 
@@ -64,6 +65,9 @@
 	const updateCalc = useUpdateMealPlanCalc();
 	const recipes = useRecipes(() => getShelterCode());
 	const itemMasters = useItemMasters(() => getShelterCode());
+	const unitsQuery = useUnitsOfMeasure();
+	const units = $derived(unitsQuery.data ?? []);
+	const unitLabel = (code: string) => formatUnit(code, units, langState.current);
 	const supplyItems = useSupplyItems();
 	const stockBalance = useStockBalance();
 	// Filter supply items in "food" category.
@@ -371,7 +375,7 @@
 											</option>
 										{/if}
 										{#each foodSupplyItems as item (item._id)}
-											<option value={item._id}>{item.name} ({item.unit})</option>
+											<option value={item._id}>{item.name} ({unitLabel(item.unit)})</option>
 										{/each}
 									</select>
 									<div class="flex items-center gap-2">
@@ -401,7 +405,7 @@
 										ยอดคลังสแตนบาย ณ ศูนย์: <span class="font-medium text-foreground"
 											>{onHand(row.itemId)}</span
 										>
-										{row.unit}
+										{unitLabel(row.unit)}
 									</p>
 								{/if}
 							{/each}
@@ -558,13 +562,13 @@
 						<p class="text-sm font-semibold">
 							{meta.label}
 							{recipe.planned_qty.toLocaleString()}
-							{meta.unit}
+							{unitLabel(meta.unit)}
 						</p>
 						{#if shortfall > 0}
 							<p class="text-xs text-amber-600">
 								⚠ ต้องการมากกว่ายอดคลัง — มี {onHand(recipe.recipe_id)}
-								{meta.unit} (ขาด {shortfall.toLocaleString()}
-								{meta.unit}) — ยังสร้างแผนได้ แต่ตอนเบิกจริงจะได้แค่บางส่วน
+								{unitLabel(meta.unit)} (ขาด {shortfall.toLocaleString()}
+								{unitLabel(meta.unit)}) — ยังสร้างแผนได้ แต่ตอนเบิกจริงจะได้แค่บางส่วน
 							</p>
 						{/if}
 					{/each}

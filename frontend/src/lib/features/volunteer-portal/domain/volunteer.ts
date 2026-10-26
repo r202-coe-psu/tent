@@ -50,6 +50,8 @@ export type PublicJob = {
 	applicants_count?: number;
 	status: string;
 	requires_review: boolean;
+	/** Staff flagged the job as needing people urgently; absent from older projections. */
+	is_urgent?: boolean;
 };
 
 export type PublicJobShift = {
@@ -160,6 +162,23 @@ const nationalIdField = z
 // Shared with registration (CR-148) — re-exported for existing volunteer-portal callers.
 export { isValidThaiNationalId };
 
+/** How many shifts one application request may carry — a month of daily shifts (#716). */
+export const MAX_SHIFTS_PER_APPLICATION = 31;
+
+/** One shift picked on the apply form, identified the same way a single-shift request is. */
+export const applyShiftSchema = z.object({
+	shift_id: z.string().trim().min(1).optional(),
+	shift_date: z
+		.string()
+		.trim()
+		.regex(/^\d{4}-\d{2}-\d{2}$/, 'รูปแบบวันที่ไม่ถูกต้อง (YYYY-MM-DD)')
+		.optional(),
+	start_time: z.string().trim().optional(),
+	end_time: z.string().trim().optional()
+});
+
+export type ApplyShift = z.infer<typeof applyShiftSchema>;
+
 export const volunteerApplySchema = z.object({
 	/** Used by the direct CouchDB writer to select the job's shelter database. */
 	shelter_code: z.string().trim().min(1).optional(),
@@ -171,6 +190,16 @@ export const volunteerApplySchema = z.object({
 	skills: z.array(z.string().trim().min(1)).default([]),
 	shift_id: z.string().trim().min(1, 'กรุณาเลือกกะ').optional(),
 	shift_date: z.string().trim().optional(),
+	/**
+	 * Several shifts of the same job in one request (#716). Each one becomes its own
+	 * `job_application`, exactly as if it had been sent alone; `shift_id` / `shift_date`
+	 * above stay for clients that still send a single shift.
+	 */
+	shifts: z
+		.array(applyShiftSchema)
+		.min(1, 'กรุณาเลือกกะ')
+		.max(MAX_SHIFTS_PER_APPLICATION, `เลือกได้ไม่เกิน ${MAX_SHIFTS_PER_APPLICATION} กะต่อครั้ง`)
+		.optional(),
 	station: z.string().trim().optional(),
 	/**
 	 * reCAPTCHA v3 token (FR-VOL-13.4). Optional in the schema because the BFF decides

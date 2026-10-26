@@ -1,10 +1,6 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { portalCredentialSchema, isMintedTicketToken } from '$lib/features/volunteer-portal/server';
-import {
-	volunteerTicketFindLimiter,
-	volunteerTicketLimiter
-} from '$lib/server/security/rate-limiter';
+import { portalCredentialSchema } from '$lib/features/volunteer-portal/server';
 import { fastapiBaseUrl, fastapiServiceHeaders } from '$lib/server/fastapi';
 
 export const prerender = false;
@@ -12,30 +8,12 @@ export const prerender = false;
 /**
  * The signed-in volunteer's own profile (Access Portal edit screen).
  *
- * Shares the lookup budget with the ticket finder and the schedule: all three answer
- * "is this person known" from a guessable key, so they have to share one budget or an
- * attacker just alternates between them.
- *
  * Never cached — staff edit the same profile from the back office, and a cached copy
  * would show a name or a verification badge the shelter has already changed.
  */
-export const POST: RequestHandler = async ({ request, fetch, getClientAddress }) => {
-	// A minted `TKT-VOL-` token is 128 random bits and cannot be guessed, so it gets the
-	// looser token budget; a phone (or any other code) keeps the strict lookup budget that
-	// guards enumeration. Sharing the strict one throttled the second volunteer to sign in
-	// from a shelter's single NAT address (#625, CR-127 note).
-	// The budget follows the PARSED credential — the one the lookup will actually use. A
-	// body carrying both a phone and a token parses as the phone (the token is stripped),
-	// so judging the raw body would let a phone lookup ride the looser token budget.
+export const POST: RequestHandler = async ({ request, fetch }) => {
 	const body: unknown = await request.json().catch(() => null);
 	const parsed = portalCredentialSchema.safeParse(body);
-	const limiter =
-		parsed.success && isMintedTicketToken(parsed.data)
-			? volunteerTicketLimiter
-			: volunteerTicketFindLimiter;
-	if (!limiter.check(getClientAddress())) {
-		return json({ success: false, error: 'RATE_LIMITED' }, { status: 429 });
-	}
 	try {
 		if (!parsed.success) {
 			return json({ success: false, error: 'INVALID_INPUT' }, { status: 422 });

@@ -65,6 +65,7 @@
 	import EvacueeZoneModal from './evacuee-zone-modal.svelte';
 	import EvacueeStatusModal from './evacuee-status-modal.svelte';
 	import EvacueeQrModal from './evacuee-qr-modal.svelte';
+	import EvacueeHandoverSlipModal from './evacuee-handover-slip-modal.svelte';
 	import EvacueeAddressModal from './evacuee-address-modal.svelte';
 	import EvacueeAssetsModal from './evacuee-assets-modal.svelte';
 	import EvacueePersonalModal, {
@@ -345,6 +346,7 @@
 	let showZoneModal = $state(false);
 	let showStatusModal = $state(false);
 	let showQrModal = $state(false);
+	let showHandoverSlip = $state(false);
 	let showAddressModal = $state(false);
 	let showAssetModal = $state(false);
 	let showPersonalModal = $state(false);
@@ -776,6 +778,7 @@
 				onOpenZoneModal={() => (showZoneModal = true)}
 				onOpenStatusModal={() => (showStatusModal = true)}
 				onOpenQrModal={() => (showQrModal = true)}
+				onOpenHandoverSlip={() => (showHandoverSlip = true)}
 				onOpenPersonalEdit={() => (showPersonalModal = true)}
 				onOpenEmergencyEdit={() => (showEmergencyModal = true)}
 			/>
@@ -794,6 +797,7 @@
 					onOpenZoneModal={() => (showZoneModal = true)}
 					onOpenStatusModal={() => (showStatusModal = true)}
 					onOpenQrModal={() => (showQrModal = true)}
+					onOpenHandoverSlip={() => (showHandoverSlip = true)}
 					onOpenPersonalEdit={() => (showPersonalModal = true)}
 					onOpenEmergencyEdit={() => (showEmergencyModal = true)}
 				/>
@@ -913,6 +917,7 @@
 		onOpenZoneModal={() => (showZoneModal = true)}
 		onOpenStatusModal={() => (showStatusModal = true)}
 		onOpenQrModal={() => (showQrModal = true)}
+		onOpenHandoverSlip={() => (showHandoverSlip = true)}
 	/>
 
 	<!-- Modals (edit mode only) -->
@@ -939,6 +944,15 @@
 		{/if}
 
 		<EvacueeQrModal show={showQrModal} {evacuee} onClose={() => (showQrModal = false)} />
+
+		{#if showHandoverSlip}
+			<EvacueeHandoverSlipModal
+				show={showHandoverSlip}
+				{evacuee}
+				symptoms={screening?.symptoms ?? []}
+				onClose={() => (showHandoverSlip = false)}
+			/>
+		{/if}
 
 		{#if showAddressModal && household}
 			<EvacueeAddressModal

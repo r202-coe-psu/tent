@@ -348,6 +348,47 @@ describe('distribution-workflow', () => {
 		expect(overrideLog.is_override).toBe(true);
 	});
 
+	it('logs a volunteer recipient by id and blocks their repeat meal (#650)', async () => {
+		const ticket = await ticketRepo.create(
+			{
+				ticket_no: 'TKT-FOOD-0650',
+				requisition_type: 'food',
+				meal: 'lunch',
+				source_location: 'warehouse:main',
+				destination_location: 'point:a',
+				items: [
+					{
+						item_id: 'item:curry',
+						item_name: 'Curry',
+						type_class: 'CONSUMABLE',
+						returnable: false,
+						requested_qty: '10',
+						allocated_qty: '10'
+					}
+				]
+			},
+			POS_CTX
+		);
+		const volunteerInput = {
+			item_id: 'item:curry',
+			qty: '1',
+			recipient_type: 'volunteer' as const,
+			recipient_id: 'volunteer:01JVOLUNTEER000000000000001',
+			menu_check: { recipient_tags: null, menu: { dietary: [], age_group: 'ALL' } }
+		};
+
+		const log = await recordFoodDistribution(ticket._id, volunteerInput, POS_CTX, {
+			ticketRepo,
+			logRepo
+		});
+		expect(log.recipient_type).toBe('volunteer');
+		expect(log.recipient_id).toBe('volunteer:01JVOLUNTEER000000000000001');
+
+		await expect(
+			recordFoodDistribution(ticket._id, volunteerInput, POS_CTX, { ticketRepo, logRepo })
+		).rejects.toThrow(/already received a meal/);
+	});
+
 	it('scopes food entitlement to the Thailand calendar day and ignores voided logs', async () => {
 		const ticket = await ticketRepo.create(
 			{
