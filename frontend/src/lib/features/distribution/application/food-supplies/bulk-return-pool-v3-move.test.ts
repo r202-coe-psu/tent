@@ -24,7 +24,14 @@ vi.mock('$lib/features/catalog', () => ({
 	canonicalizeUnitCode: (value: unknown) => value
 }));
 
-import { createBulkReturnEntryMove, submitBulkReturnPoolV3 } from '../../domain/food-supplies';
+import {
+	createBulkReturnEntryMove,
+	poolSnapshotEntryIds,
+	resolveBulkReturnEntries,
+	submitBulkReturnPoolV3,
+	summarizePoolItems
+} from '../../domain/food-supplies';
+import { submitBulkReturnPool } from './bulk-return-pool-v3-lifecycle';
 import { moveBulkReturnEntry } from './bulk-return-pool-v3-move';
 import { voidBulkReturnEntry } from './bulk-return-pool-v3-void';
 import { getBulkReturnPoolOverview } from './bulk-return-pool-v3-read';
@@ -32,6 +39,7 @@ import { BulkReturnPoolStateError, WorkflowValidationError } from './errors';
 import {
 	createBulkReturnPoolV3Fixture,
 	EVACUEE,
+	fullInput,
 	loanId,
 	mgr,
 	racingPoolRepo,
@@ -44,13 +52,15 @@ describe('bulk return pool v3 workflows', () => {
 	let eventRepo: Fx['eventRepo'];
 	let logRepo: Fx['logRepo'];
 	let deps: Fx['deps'];
+	let nextOp: Fx['nextOp'];
 	let openPool: Fx['openPool'];
 	let seedLoan: Fx['seedLoan'];
 	let add: Fx['add'];
 	let lockPool: Fx['lockPool'];
+	let receive: Fx['receive'];
 
 	beforeEach(() => {
-		({ poolRepo, eventRepo, logRepo, deps, openPool, seedLoan, add, lockPool } =
+		({ poolRepo, eventRepo, logRepo, deps, nextOp, openPool, seedLoan, add, lockPool, receive } =
 			createBulkReturnPoolV3Fixture(couch));
 	});
 
@@ -348,6 +358,105 @@ describe('bulk return pool v3 workflows', () => {
 				racing
 			);
 			expect(moved.late).toBe(true);
+		});
+	});
+
+	describe('moving an entry out of a closed pool (no race)', () => {
+		const moveKeys = () =>
+			[...couch.store.keys()].filter((k) => k.startsWith('bulk_return_entry_move:'));
+
+		async function closedPoolEntry(loanNo: number) {
+			const pool = await openPool('Gate A');
+			const target = await openPool('Gate B');
+			await seedLoan(loanNo, { qty: '3' });
+			const { results } = await add(pool._id, { type: 'evacuee', id: EVACUEE }, [
+				{ item_id: 'item:cot', qty: '2' }
+			]);
+			const submitted = await submitBulkReturnPool(pool._id, nextOp(), mgr, deps);
+			return { pool, submitted, target, entryId: results[0].entry._id };
+		}
+
+		async function expectRejected(entryId: string, targetId: string, loanNo: number) {
+			const loanBefore = await logRepo.get(loanId(loanNo));
+			const err = await moveBulkReturnEntry(
+				{ entry_id: entryId, to_pool_id: targetId },
+				mgr,
+				deps
+			).catch((e: unknown) => e);
+			expect(err).toBeInstanceOf(BulkReturnPoolStateError);
+			expect((err as BulkReturnPoolStateError).name).toBe('BulkReturnPoolStateError');
+			expect(['closed', 'source_closed']).toContain((err as BulkReturnPoolStateError).reason);
+			expect(moveKeys()).toHaveLength(0);
+			const { moves } = await eventRepo.listAll();
+			expect(moves).toHaveLength(0);
+			const targetRow = (await getBulkReturnPoolOverview({}, mgr, deps)).find(
+				(r) => r.pool._id === targetId
+			);
+			expect(targetRow?.entry_count).toBe(0);
+			expect(targetRow?.items).toEqual([]);
+			const loan = await logRepo.get(loanId(loanNo));
+			expect(loan?._rev).toBe(loanBefore?._rev);
+			expect(loan?.applied_bulk_entry_ids).toEqual([entryId]);
+		}
+
+		it('rejects moving an entry counted in a SUBMITTED pool to an OPEN pool', async () => {
+			const { target, entryId } = await closedPoolEntry(50);
+			await expectRejected(entryId, target._id, 50);
+		});
+
+		it('rejects moving an entry counted in a RECEIVED pool to an OPEN pool', async () => {
+			const { pool, submitted, target, entryId } = await closedPoolEntry(51);
+			await receive(pool._id, fullInput(submitted));
+			expect((await poolRepo.get(pool._id))?.status).toBe('RECEIVED');
+			await expectRejected(entryId, target._id, 51);
+		});
+	});
+
+	describe('P1 -> P2 -> P3 chain with P2 snapshotted between the moves', () => {
+		it('keeps the entry in P2 (snapshot pin), flags a move conflict and keeps it out of P3', async () => {
+			const p1 = await openPool('Gate A');
+			const p2 = await openPool('Gate B');
+			const p3 = await openPool('Gate C');
+			const { results } = await add(p1._id, { type: 'unspecified' }, [
+				{ item_id: 'item:cot', qty: '2' }
+			]);
+			const entry = results[0].entry;
+			const first = await moveBulkReturnEntry(
+				{ entry_id: entry._id, to_pool_id: p2._id },
+				mgr,
+				deps
+			);
+			expect(first.move.seq).toBe(1);
+
+			// P2 submits with the entry in its snapshot, then the seq 2 move (P2 -> P3) lands.
+			const events = await eventRepo.listAll();
+			await poolRepo.mutateCAS(p2._id, (cur) =>
+				submitBulkReturnPoolV3(
+					cur,
+					{
+						items_summary: summarizePoolItems(events.entries, events.moves, p2._id, events.voids),
+						entry_ids: poolSnapshotEntryIds(
+							resolveBulkReturnEntries(events.entries, events.moves, events.voids),
+							p2._id
+						)
+					},
+					mgr
+				)
+			);
+			expect((await poolRepo.get(p2._id))?.entry_ids).toEqual([entry._id]);
+			await eventRepo.createMove(
+				createBulkReturnEntryMove({ entry, seq: 2, from_pool_id: p2._id, to_pool_id: p3._id }, mgr)
+			);
+
+			const rows = await getBulkReturnPoolOverview({}, mgr, deps);
+			const row2 = rows.find((r) => r.pool._id === p2._id)!;
+			const row3 = rows.find((r) => r.pool._id === p3._id)!;
+			expect(row2.items).toEqual([{ item_id: 'item:cot', qty: '2' }]);
+			expect(row2.entry_count).toBe(1);
+			expect(row2.snapshot_conflicts).toEqual([{ entry_id: entry._id, kind: 'move' }]);
+			expect(row3.items).toEqual([]);
+			expect(row3.entry_count).toBe(0);
+			expect(row3.snapshot_conflicts).toEqual([]);
 		});
 	});
 

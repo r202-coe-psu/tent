@@ -24,6 +24,7 @@ vi.mock('$lib/features/catalog', () => ({
 	canonicalizeUnitCode: (value: unknown) => value
 }));
 
+import { ConflictError } from '$lib/utils/errors';
 import {
 	poolSnapshotEntryIds,
 	resolveBulkReturnEntries,
@@ -190,6 +191,30 @@ describe('bulk return pool v3 — missed loan refs (fence timeout repair)', () =
 
 		expect(again).toEqual({ loansApplied: [], loansSkipped: [] });
 		expect((await logRepo.get(loanId(75)))?.applied_bulk_entry_ids).toEqual([entry._id]);
+	});
+
+	it('concurrent repair presses never double-apply the loan', async () => {
+		const { pool, entry } = await submittedPoolWithMissedEntry(79);
+		const input = { entry_id: entry._id, pool_id: pool._id };
+
+		const settled = await Promise.allSettled([
+			applyMissedBulkReturnLoanRefs(input, dist, deps),
+			applyMissedBulkReturnLoanRefs(input, dist, deps),
+			applyMissedBulkReturnLoanRefs(input, mgr, deps)
+		]);
+
+		for (const s of settled) {
+			if (s.status === 'rejected') expect(s.reason).toBeInstanceOf(ConflictError);
+		}
+		const applied = settled.flatMap((s) => (s.status === 'fulfilled' ? [s.value] : []));
+		expect(applied.reduce((n, r) => n + r.loansApplied.length, 0)).toBe(1);
+		expect(applied.filter((r) => r.loansApplied.length === 1)).toHaveLength(1);
+		for (const r of applied) expect(r.loansApplied.length).toBeLessThanOrEqual(1);
+
+		const loan = await logRepo.get(loanId(79));
+		expect(loan?.qty_returned).toBe('2');
+		expect(loan?.applied_bulk_entry_ids).toEqual([entry._id]);
+		expect(loan?.status).toBe('partially_returned');
 	});
 
 	it('apply skips a drifted loan instead of partially applying it', async () => {

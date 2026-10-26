@@ -423,3 +423,44 @@ describe('pinned resolveBulkReturnEntries', () => {
 		expect(resolveBulkReturnEntries([e1], [moveOf(e1, 2, P2, P3)], [], pins)).toEqual([]);
 	});
 });
+
+describe('P1 -> P2 -> P3 move chain with P2 snapshotted in between', () => {
+	const moves = [moveOf(e1, 1, P1, P2), moveOf(e1, 2, P2, P3)];
+
+	it('pins the entry to P2 (its submitted snapshot) and flags the later move', () => {
+		const pins = buildSnapshotPins([
+			{ _id: P1, status: 'OPEN' },
+			{ _id: P2, status: 'SUBMITTED', entry_ids: [e1._id] },
+			{ _id: P3, status: 'OPEN' }
+		]);
+		const resolved = resolveBulkReturnEntries([e1], moves, [], pins);
+		expect(resolved).toHaveLength(1);
+		expect(resolved[0]).toMatchObject({ pool_id: P2, voided: false, snapshot_conflict: 'move' });
+		expect(findSnapshotConflicts(resolved)).toEqual([
+			{ entry_id: e1._id, pool_id: P2, kind: 'move' }
+		]);
+		expect(summarizePoolItems([e1], moves, P2, [], pins)).toEqual([
+			{ item_id: 'item_master:cot', qty: '5' }
+		]);
+		expect(summarizePoolItems([e1], moves, P3, [], pins)).toEqual([]);
+		expect(summarizePoolItems([e1], moves, P1, [], pins)).toEqual([]);
+		expect(isPoolEmpty([e1], moves, P3, [], pins)).toBe(true);
+		expect(isPoolEmpty([e1], moves, P2, [], pins)).toBe(false);
+	});
+
+	it('resolves to P3 as today when no pool pins the entry', () => {
+		const pins = buildSnapshotPins([
+			{ _id: P1, status: 'OPEN' },
+			{ _id: P2, status: 'OPEN' },
+			{ _id: P3, status: 'OPEN' }
+		]);
+		expect(pins.size).toBe(0);
+		const resolved = resolveBulkReturnEntries([e1], moves, [], pins);
+		expect(resolved[0].pool_id).toBe(P3);
+		expect(resolved[0].snapshot_conflict).toBeUndefined();
+		expect(summarizePoolItems([e1], moves, P3, [], pins)).toEqual([
+			{ item_id: 'item_master:cot', qty: '5' }
+		]);
+		expect(summarizePoolItems([e1], moves, P2, [], pins)).toEqual([]);
+	});
+});
