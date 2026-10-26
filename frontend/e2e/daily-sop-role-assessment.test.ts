@@ -4,13 +4,16 @@
  * One suite, own `E2E` shelter per run (never SH001). Setup goes through the staff UI (shelter)
  * and CouchDB `_users` (one single-capability account per position + an SA and a no-position
  * account). Covers, for all nine positions:
- *   - owner positive: a partial save is `InProgress`, completing it is `Completed` (success dialog)
- *   - cross-role negative: another position's page is read-only in the UI **and** a live PUT straight
- *     to CouchDB is refused by the VDU (403, "role owner or shelter manager")
- *   - every account sees all nine rows (#668, `test.fixme` until the fix lands); SM and SA may assess every position
- *   - a past date is read-only everywhere, and the VDU refuses to create a past-day document
- *   - Fail/Pending without a note cannot be saved (UI and VDU)
- *   - metric questions: either SOP ratio parameters are shown or only "Pending" is selectable
+ *   - visibility: an account lists only the positions it may assess (SM and SA see all nine; SC
+ *     includes `warehouse_staff`; no position → an empty-state message)
+ *   - owner positive: a partial save is `InProgress`, completing it is `Completed` (success dialog);
+ *     the "last saved by" line shows only on answered questions
+ *   - cross-role negative: a deep link to another position is denied in the UI **and** a live PUT
+ *     straight to CouchDB is refused by the VDU (403, "role owner or shelter manager")
+ *   - the page hides question codes; the wording matches the canonical question bank
+ *   - a past date is read-only, and the VDU refuses to create a past-day document
+ *   - notes: Fail saves without a note; Pending without a note is refused (UI and VDU)
+ *   - metric questions: with SOP parameters only Pass/Fail are offered, without them only "Pending"
  *
  * Data safety: role assessment documents cannot be deleted (the VDU forbids DELETE for everyone,
  * `_admin` included), so they live and die with the shelter database. `teardownShelter` drops that
@@ -95,6 +98,9 @@ const puts: string[] = [];
 /** Requests the tab made to any shelter database other than this run's (blocked, never sent). */
 let strayShelterRequests = 0;
 
+/** Question codes (`D-XX-NN`) are internal; the page must not show them. */
+const QUESTION_CODE = /D-[A-Z]{2,3}-\d{2}/;
+
 const roleByCode = (code: DailySopRoleCode) => DAILY_SOP_ROLES.find((role) => role.code === code)!;
 const labelOf = (code: DailySopRoleCode) => roleDisplayLabel(roleByCode(code).key);
 const dbName = () => `shelter_${shelterCode!.toLowerCase()}`;
@@ -103,6 +109,9 @@ const docId = (role: DailySopRoleCode, date = TODAY) =>
 const readDoc = (role: DailySopRoleCode, date = TODAY) => getDocument(dbName(), docId(role, date));
 const ownerOf = (role: DailySopRoleCode) => accounts.find((a) => a.key === `own-${role}`)!;
 const accountByKey = (key: string) => accounts.find((a) => a.key === key)!;
+const mayAssess = (account: Account, code: DailySopRoleCode) =>
+	account.assessesAll || code === account.ownRole;
+const assessableCodes = (account: Account) => ROLE_CODES.filter((code) => mayAssess(account, code));
 
 async function provisionAccounts(code: string): Promise<void> {
 	const specs: Array<{
@@ -300,12 +309,29 @@ async function expectQuestionsMatch(page: Page, role: DailySopRoleCode): Promise
 	await expect(sections, `${role} question count`).toHaveCount(questions.length);
 	for (const [index, question] of questions.entries()) {
 		const section = sections.nth(index);
-		await expect(section.locator('p').first(), `${role} #${index + 1} id`).toHaveText(question.id);
 		// A ratio placeholder is filled in by the page: compare the wording before it.
 		const wording = question.text.split('{')[0].trim();
 		await expect(section.locator('h3').first(), `${question.id} wording`).toContainText(wording);
 	}
+	await expect(page.getByText(QUESTION_CODE), `${role} shows no question codes`).toHaveCount(0);
 }
+
+/** A deep link to a position this account may not assess is denied, with no form behind it. */
+async function openDenied(page: Page, role: DailySopRoleCode, date = TODAY): Promise<void> {
+	await gotoInOurShelter(
+		page,
+		`/back-office/dailysop?view=roles&role=${role}&date=${date}`,
+		async () => {
+			await expect(page.getByTestId('daily-sop-role-no-access')).toBeVisible({ timeout: 30_000 });
+		}
+	);
+	await expect(page.locator('section[id^="role-question-"]')).toHaveCount(0);
+	await expect(saveButton(page)).toHaveCount(0);
+}
+
+/** The "last saved by" audit line of one question. */
+const auditLine = (page: Page, questionId: string) =>
+	page.locator(`section[id="role-question-${questionId}"]`).getByText(/^บันทึกล่าสุดโดย /);
 
 async function saveAndConfirm(page: Page): Promise<void> {
 	await expect(saveButton(page)).toBeEnabled();
@@ -400,44 +426,48 @@ test.describe(
 			expect(accounts).toHaveLength(DAILY_SOP_ROLES.length + 3);
 		});
 
-		// #668: stays `fixme` until the fix (every user sees all nine rows) is on the branch under
-		// test; then drop `.fixme` — it passes against the #668 branch.
-		test.fixme('GAP: #668 — every account sees all nine positions; only the own one says "ประเมิน"', async ({
-			browser
-		}) => {
+		test('each account lists only the positions it may assess', async ({ browser }) => {
 			test.setTimeout(300_000);
 			for (const account of accounts) {
 				const page = await pageFor(browser, account);
+				const codes = assessableCodes(account);
 				const actions = page.getByRole('button', { name: /^(ประเมิน|ดูผลประเมิน): / });
+				if (codes.length === 0) {
+					await gotoInOurShelter(page, `/back-office/dailysop?view=roles&date=${TODAY}`, () =>
+						expect(page.getByTestId('daily-sop-no-roles')).toBeVisible({ timeout: 30_000 })
+					);
+					await expect(actions).toHaveCount(0);
+					continue;
+				}
 				await gotoInOurShelter(page, `/back-office/dailysop?view=roles&date=${TODAY}`, () =>
-					expect(actions, `${account.key} rows`).toHaveCount(DAILY_SOP_ROLES.length, {
-						timeout: 30_000
-					})
+					expect(actions, `${account.key} rows`).toHaveCount(codes.length, { timeout: 30_000 })
 				);
-				for (const role of DAILY_SOP_ROLES) {
-					const mayAssess = account.assessesAll || role.code === account.ownRole;
+				for (const code of codes) {
 					await expect(
-						page.getByRole('button', {
-							name: `${mayAssess ? 'ประเมิน' : 'ดูผลประเมิน'}: ${labelOf(role.code)}`
-						}),
-						`${account.key} → ${role.code}`
+						page.getByRole('button', { name: `ประเมิน: ${labelOf(code)}` }),
+						`${account.key} → ${code}`
 					).toHaveCount(1);
 				}
-				await expect(page.getByText(`/ ${DAILY_SOP_ROLES.length} ตำแหน่ง`)).toBeVisible();
 			}
 		});
 
 		test('the day list opens and lists today', async ({ browser }) => {
-			const page = await pageFor(browser, accountByKey('none'));
+			const page = await pageFor(browser, ownerOf('REG'));
 			await gotoInOurShelter(page, '/back-office/dailysop', async () => {
 				await expect(page.getByTestId('daily-sop-days-view')).toBeVisible({ timeout: 30_000 });
 				await expect(page.getByTestId('daily-sop-day-list')).toBeVisible();
 			});
+			// No position: nothing to assess, so no day list either.
+			const none = await pageFor(browser, accountByKey('none'));
+			await gotoInOurShelter(none, '/back-office/dailysop', () =>
+				expect(none.getByTestId('daily-sop-no-roles')).toBeVisible({ timeout: 30_000 })
+			);
+			await expect(none.getByTestId('daily-sop-day-list')).toHaveCount(0);
 		});
 
 		// ── One walkthrough per account: sign in, every position top to bottom, sign out ──
 		// Own position: a partial save is InProgress, the full mixed answer is Completed. Another
-		// position: the questions are listed but read-only, and a live PUT is refused by the VDU.
+		// position: the deep link is denied, and a live PUT is refused by the VDU.
 		// SM goes first: it may assess every position, so it creates the documents the others read.
 		const WALK = ['own-SM', ...RING.map((code) => `own-${code}`), 'warehouse', 'none', 'sa'];
 		for (const key of WALK) {
@@ -446,16 +476,15 @@ test.describe(
 				const account = accountByKey(key);
 				const page = await pageFor(browser, account);
 				for (const code of ROLE_CODES) {
-					await openRole(page, code);
-					await expectQuestionsMatch(page, code);
-					const mayAssess = account.assessesAll || code === account.ownRole;
-					if (!mayAssess) {
-						await expectReadOnly(page);
+					if (!mayAssess(account, code)) {
+						await openDenied(page, code);
 						const denied = await touchAs(account, code);
 						expect(denied.status, `${key} must not write ${code}`).toBe(403);
 						expect(denied.reason).toMatch(/role owner or shelter manager/);
 						continue;
 					}
+					await openRole(page, code);
+					await expectQuestionsMatch(page, code);
 					await expectEditable(page);
 					const total = questionsForRole(code).length;
 					const existing = await readDoc(code);
@@ -475,6 +504,10 @@ test.describe(
 						});
 						expect(partial!.unanswered_count).toBe(total - 2);
 						await openRole(page, code);
+						// The audit line belongs to answered questions only.
+						const [firstQuestion, , unanswered] = questionsForRole(code);
+						await expect(auditLine(page, firstQuestion.id)).toBeVisible();
+						if (unanswered) await expect(auditLine(page, unanswered.id)).toHaveCount(0);
 					}
 					const chosen = await answerMixed(page, code, offset, key);
 					await saveAndConfirm(page);
@@ -513,8 +546,12 @@ test.describe(
 		test('a past date is read-only for every account', async ({ browser }) => {
 			test.setTimeout(240_000);
 			for (const account of accounts) {
-				const role = account.ownRole ?? 'SM';
 				const page = await pageFor(browser, account);
+				const [role] = assessableCodes(account);
+				if (!role) {
+					await openDenied(page, 'SM', YESTERDAY);
+					continue;
+				}
 				await openRole(page, role, YESTERDAY);
 				await expectReadOnly(page);
 			}
@@ -538,8 +575,10 @@ test.describe(
 			}
 		});
 
-		// ── Validation: Fail/Pending need a note ────────────────────────────────
-		test('Fail or Pending without a note cannot be saved (UI and VDU)', async ({ browser }) => {
+		// ── Notes: optional for Fail, required for Pending ────────────────────
+		test('Fail saves without a note; Pending without a note is refused (VDU)', async ({
+			browser
+		}) => {
 			test.setTimeout(120_000);
 			const owner = ownerOf('REG');
 			const page = await pageFor(browser, owner);
@@ -550,37 +589,32 @@ test.describe(
 			).findIndex((c) => c.status === 'Pass');
 			expect(passIndex, 'REG has a Pass answer to flip').toBeGreaterThanOrEqual(0);
 			const questionId = questions[passIndex].id;
-			const before = await readDoc('REG');
 
 			await choose(page, questionId, 'Fail');
-			// A Pass kept its old note: clear it, so this Fail has none.
+			// A Pass may carry an old note: clear it, so this Fail has none.
 			await note(page, questionId, '');
-			await expect(saveButton(page)).toBeDisabled();
-			await note(page, questionId, `${MARKER} now with a note`);
-			await expect(saveButton(page)).toBeEnabled();
-			expect((await readDoc('REG'))!._rev, 'nothing was written while blocked').toBe(before!._rev);
+			await saveAndConfirm(page);
+			await expect
+				.poll(
+					async () =>
+						((await readDoc('REG'))!.controls as Array<Record<string, unknown>>).find(
+							(c) => c.id === questionId
+						),
+					{ timeout: 20_000 }
+				)
+				.toMatchObject({ status: 'Fail', notes: '' });
 
-			// "Pending" (รอข้อมูล) needs a note just the same.
-			await note(page, questionId, '');
-			await choose(page, questionId, 'Pending');
-			await expect(saveButton(page)).toBeDisabled();
-			await note(page, questionId, `${MARKER} pending with a note`);
-			await expect(saveButton(page)).toBeEnabled();
-
-			// The VDU refuses both when they are sent without the UI.
+			// The VDU refuses a Pending without a note when it is sent without the UI.
 			const read = await couchAs(owner.session, 'GET', docId('REG'));
-			for (const status of ['Fail', 'Pending']) {
-				const controls = (read.data.controls as Array<Record<string, unknown>>).map((c) =>
-					c.id === questionId ? { ...c, status, notes: '' } : c
-				);
-				const res = await couchAs(owner.session, 'PUT', docId('REG'), { ...read.data, controls });
-				expect(res.status, `${status} without a note`).toBe(403);
-				expect(res.reason).toMatch(/snapshot contract/);
-			}
+			const controls = (read.data.controls as Array<Record<string, unknown>>).map((c) =>
+				c.id === questionId ? { ...c, status: 'Pending', notes: '' } : c
+			);
+			const res = await couchAs(owner.session, 'PUT', docId('REG'), { ...read.data, controls });
+			expect(res.status, 'Pending without a note').toBe(403);
 		});
 
 		// ── Metric questions ────────────────────────────────────────────────────
-		test('metric questions show SOP parameters, or only "Pending" is selectable', async ({
+		test('metric questions offer Pass/Fail with SOP parameters, else only "Pending" with a note', async ({
 			browser
 		}) => {
 			test.setTimeout(120_000);
@@ -589,11 +623,19 @@ test.describe(
 			const parameterQuestion = questionsForRole('FAC')[0].id; // D-FAC-01 uses m2_per_person_living
 			const passEnabled = await radio(page, parameterQuestion, 'Pass').isEnabled();
 			if (passEnabled) {
-				await expect(page.getByTestId('metric-threshold').first()).toBeAttached();
-			} else {
-				await expect(radio(page, parameterQuestion, 'Fail')).toBeDisabled();
-				await expect(radio(page, parameterQuestion, 'Pending')).toBeEnabled();
+				await expect(radio(page, parameterQuestion, 'Fail')).toBeEnabled();
+				await expect(radio(page, parameterQuestion, 'Pending')).toHaveCount(0);
+				return;
 			}
+			await expect(radio(page, parameterQuestion, 'Fail')).toBeDisabled();
+			await expect(radio(page, parameterQuestion, 'Pending')).toBeEnabled();
+			// Pending needs a note: Save stays clickable, but nothing is written and the note gets focus.
+			const before = await readDoc('FAC');
+			await choose(page, parameterQuestion, 'Pending');
+			await note(page, parameterQuestion, '');
+			await saveButton(page).click();
+			await expect(page.locator(`#daily-sop-${parameterQuestion}-notes`)).toBeFocused();
+			expect((await readDoc('FAC'))!._rev, 'nothing was written while blocked').toBe(before!._rev);
 		});
 
 		// ── Zero-leak ───────────────────────────────────────────────────────────
