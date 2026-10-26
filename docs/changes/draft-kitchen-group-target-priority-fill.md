@@ -3,6 +3,7 @@ id: draft # draft (ตอน proposed) -> เปลี่ยนเป็น CR-N
 title: จัดสรรจานตามกลุ่มเป้าหมายแบบ priority-fill แทนการนับซ้ำข้ามแท็ก
 status: proposed # proposed | approved | done | rejected | superseded
 date: 2026-10-23
+updated: 2026-10-26
 requested_by: Fishcanwalk (issue #770)
 decided_by: <เจ้าของโครงการ — ยังไม่ตัดสิน>
 layer: volatile
@@ -145,3 +146,6 @@ logic ฝั่ง frontend เท่านั้น
   decision sync) (2) approve R1–R7 หรือปรับ (3) ตอบ Q1–Q2 (4) ยืนยันหรือแก้ D1–D4
 - 2026-10-23 — แก้ร่าง: เขียน Q1 ใหม่ (ตัวเลือกเดิมซ้ำกับ R2), ขยายความ R4, เพิ่ม Q2 (กลุ่มซ้อนกัน)
   และ D1–D4, R5 รวมแถวเป้า 0 เป็นแถวเดียวตาม issue, แก้ affects ให้ test อยู่ใน `kitchen.test.ts`
+- 2026-10-26 — วิธี track: ร่าง CR ไฟล์นี้ส่งไปพร้อมโค้ดใน draft PR ให้ PM ตรวจ (ยังไม่ approve);
+  โค้ดใน PR ทำตามข้อเสนอของร่าง — R1–R7, Q1 = (ก), Q2 = (ก), D1–D4 — ถ้า PM ตัดสินต่างออกไป
+  จะแก้โค้ดตามก่อน merge
