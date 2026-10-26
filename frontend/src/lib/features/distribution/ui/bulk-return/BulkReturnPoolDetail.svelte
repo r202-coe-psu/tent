@@ -44,7 +44,7 @@
 		loanRefsSummary,
 		poolStorageLabel,
 		resolveItemDisplay,
-		returnerLabel,
+		returnerDisplayName,
 		type BulkReturnPoolRow,
 		type PoolCatalogItem
 	} from '../model/bulk-return-pool-v3';
@@ -59,6 +59,8 @@
 		/** All overview rows (move targets, duplicate-name advisory). */
 		rows: readonly BulkReturnPoolRow[];
 		catalog: readonly PoolCatalogItem[];
+		/** Returner id -> display name (the board loads the rosters); falls back to a short id. */
+		returnerNames?: ReadonlyMap<string, string>;
 		shelterCode: string;
 		/** canManageBulkReturnPool: edit header / cancel pool. */
 		canManage: boolean;
@@ -75,6 +77,7 @@
 		row,
 		rows,
 		catalog,
+		returnerNames,
 		shelterCode,
 		canManage,
 		canWriteEntry,
@@ -347,7 +350,9 @@
 									</div>
 									<div class="space-y-0.5 text-sm text-slate-600">
 										<p>
-											ผู้คืน: <span class="font-medium text-slate-800">{returnerLabel(entry)}</span>
+											ผู้คืน: <span class="font-medium text-slate-800"
+												>{returnerDisplayName(entry, returnerNames)}</span
+											>
 										</p>
 										{#if appliedRefsQuery.data}
 											<p>{loanRefsSummary(appliedRefsByEntry.get(entry._id) ?? [], item.unit)}</p>

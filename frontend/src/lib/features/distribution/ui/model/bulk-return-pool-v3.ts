@@ -107,11 +107,13 @@ export interface PoolRowFilter {
 	itemId?: string;
 	/** Pool's `location_storage_point_id`; `'unspecified'` = pools without a storage point. */
 	storagePointId?: string;
-	/**
-	 * Keep pools with late entries or unresolved refs. Closed-loan-mid-flight warnings are NOT in
-	 * the overview (they need per-pool queries), so they are deliberately not part of this filter.
-	 */
+	/** Keep pools with late entries, unresolved refs or closed-loan-mid-flight refs. */
 	needsAttention?: boolean;
+	/**
+	 * Returner id -> display name. When given, `search` also matches the returner name of any
+	 * non-voided entry of the pool.
+	 */
+	returnerNames?: ReadonlyMap<string, string>;
 	/** RECEIVED pools with `received_at` strictly before this instant are hidden. */
 	hideReceivedBefore?: Date;
 }
@@ -229,12 +231,18 @@ export function filterPoolRows(
 			if (
 				filter.needsAttention &&
 				row.late_entries.length === 0 &&
-				row.unresolved_refs.length === 0
+				row.unresolved_refs.length === 0 &&
+				row.closed_loan_refs.length === 0
 			) {
 				return false;
 			}
 			if (!needle) return true;
-			return row.pool.name.toLocaleLowerCase().includes(needle);
+			if (row.pool.name.toLocaleLowerCase().includes(needle)) return true;
+			return row.entries.some(
+				(r) =>
+					!r.voided &&
+					returnerDisplayName(r.entry, filter.returnerNames).toLocaleLowerCase().includes(needle)
+			);
 		})
 		.sort((a, b) => {
 			const byStatus = STATUS_ORDER[a.pool.status] - STATUS_ORDER[b.pool.status];
@@ -390,6 +398,21 @@ export function returnerLabel(
 	return `${kind} ${shortId(entry.returner_id)}`;
 }
 
+/**
+ * Returner name for an entry: the resolved name from `namesById` (keyed by returner id), else the
+ * `returnerLabel` fallback (short id; "ไม่ระบุผู้คืน" when unspecified).
+ */
+export function returnerDisplayName(
+	entry: Pick<BulkReturnEntry, 'returner_type' | 'returner_id'>,
+	namesById?: ReadonlyMap<string, string>
+): string {
+	if (entry.returner_type !== 'unspecified' && entry.returner_id) {
+		const name = namesById?.get(entry.returner_id)?.trim();
+		if (name) return name;
+	}
+	return returnerLabel(entry);
+}
+
 /** Summary line from the refs ACTUALLY applied on loans (not the entry's planned `loan_refs`). */
 export function loanRefsSummary(appliedRefs: readonly { qty: string }[], unit?: string): string {
 	if (appliedRefs.length === 0) return 'ไม่ได้ตัดยอดยืม';
@@ -511,4 +534,27 @@ export const LATE_CARD_EXCLUDED_TEXT = 'ไม่รวมในยอดที�
 /** Per-item note on the pool card for the late quantity included in the live total. */
 export function lateItemQtyText(qty: string, unit: string): string {
 	return `รวมของค้าง ${qty} ${unit}`.trim();
+}
+
+type RosterPerson = {
+	_id: string;
+	first_name: string;
+	last_name: string;
+	nickname?: string | null;
+};
+
+/** Returner id → display name from the shelter rosters (same wording as RecipientName). */
+export function buildReturnerNames(
+	evacuees: readonly RosterPerson[],
+	volunteers: readonly RosterPerson[]
+): ReadonlyMap<string, string> {
+	const names = new Map<string, string>();
+	for (const evacuee of evacuees) {
+		const nickname = evacuee.nickname ? ` (${evacuee.nickname})` : '';
+		names.set(evacuee._id, `${evacuee.first_name} ${evacuee.last_name}${nickname}`);
+	}
+	for (const volunteer of volunteers) {
+		names.set(volunteer._id, `จิตอาสา ${volunteer.first_name} ${volunteer.last_name}`);
+	}
+	return names;
 }

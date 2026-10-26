@@ -35,6 +35,8 @@ import {
 	loanRefsSummary,
 	poolStorageLabel,
 	resolveItemDisplay,
+	returnerDisplayName,
+	buildReturnerNames,
 	returnerLabel,
 	validatePoolName
 } from './bulk-return-pool-v3';
@@ -88,6 +90,7 @@ function makeRow(
 		entries,
 		late_entries: opts.late ?? [],
 		unresolved_refs: [],
+		closed_loan_refs: [],
 		is_empty: live.length === 0
 	};
 }
@@ -157,6 +160,46 @@ describe('filterPoolRows', () => {
 
 	it('whitespace-only search shows everything visible', () => {
 		expect(filterPoolRows(rows, { search: '   ' })).toHaveLength(4);
+	});
+
+	describe('search by returner name', () => {
+		const somchai = makeEntry('e1', {
+			pool_id: 'bulk_return_pool:p1',
+			returner_type: 'evacuee',
+			returner_id: 'evacuee:01J0000000000000000000AAAA'
+		});
+		const voidedReturner = makeEntry('e2', {
+			pool_id: 'bulk_return_pool:p2',
+			returner_type: 'volunteer',
+			returner_id: 'volunteer:01J0000000000000000000BBBB'
+		});
+		const returnerRows = [
+			makeRow(makePool('p1', { name: 'Alpha' }), { entries: [resolved(somchai)] }),
+			makeRow(makePool('p2', { name: 'Beta' }), { entries: [resolved(voidedReturner, true)] })
+		];
+		const returnerNames = new Map([
+			[somchai.returner_id!, 'สมชาย ใจดี (ชาย)'],
+			[voidedReturner.returner_id!, 'จิตอาสา Mali Rak']
+		]);
+		const poolNames = (search: string) =>
+			filterPoolRows(returnerRows, { search, returnerNames }).map((r) => r.pool.name);
+
+		it('matches a live entry returner name case-insensitively and trimmed', () => {
+			expect(poolNames('  สมชาย ')).toEqual(['Alpha']);
+			expect(poolNames('ชาย)')).toEqual(['Alpha']);
+		});
+
+		it('does not match the returner of a voided entry', () => {
+			expect(poolNames('mali')).toEqual([]);
+		});
+
+		it('still matches the pool name', () => {
+			expect(poolNames('beta')).toEqual(['Beta']);
+		});
+
+		it('without names it falls back to the label and finds nothing for a real name', () => {
+			expect(filterPoolRows(returnerRows, { search: 'สมชาย' })).toEqual([]);
+		});
 	});
 
 	it('does not mutate the input array', () => {
@@ -249,6 +292,20 @@ describe('pool filters (#659)', () => {
 
 	it('needsAttention keeps pools with late entries or unresolved refs', () => {
 		expect(ids(filterPoolRows(rows, { needsAttention: true })).sort()).toEqual(['o3', 's1']);
+	});
+
+	it('needsAttention also keeps pools with closed-loan refs', () => {
+		const closedRow = {
+			...makeRow(makePool('o4')),
+			closed_loan_refs: [
+				{ entry_id: 'bulk_return_entry:x', distribution_log_id: 'distribution_log:y', qty: '1' }
+			]
+		} as unknown as BulkReturnPoolOverviewRow;
+		expect(ids(filterPoolRows([...rows, closedRow], { needsAttention: true })).sort()).toEqual([
+			'o3',
+			'o4',
+			's1'
+		]);
 	});
 
 	it('hides RECEIVED older than the cutoff, keeps boundary, recent and undated pools', () => {
@@ -529,6 +586,24 @@ describe('labels', () => {
 		).toBe('อาสาสมัคร …90ABCD');
 	});
 
+	it('returnerDisplayName resolves a name, else falls back to returnerLabel', () => {
+		const names = new Map([['evacuee:abc', 'สมชาย ใจดี']]);
+		expect(
+			returnerDisplayName({ returner_type: 'evacuee', returner_id: 'evacuee:abc' }, names)
+		).toBe('สมชาย ใจดี');
+		// unresolved id -> short-id label
+		expect(
+			returnerDisplayName({ returner_type: 'evacuee', returner_id: 'evacuee:zzz' }, names)
+		).toBe('ผู้พักพิง zzz');
+		expect(returnerDisplayName({ returner_type: 'evacuee', returner_id: 'evacuee:abc' })).toBe(
+			'ผู้พักพิง abc'
+		);
+		// unspecified stays the unspecified label even if a name were mapped
+		expect(returnerDisplayName({ returner_type: 'unspecified', returner_id: null }, names)).toBe(
+			'ไม่ระบุผู้คืน'
+		);
+	});
+
 	it('loanRefsSummary reports none, or count and total with unit', () => {
 		expect(loanRefsSummary([])).toBe('ไม่ได้ตัดยอดยืม');
 		const refs = [{ qty: '2' }, { qty: '3' }];
@@ -647,5 +722,21 @@ describe('buildHeaderPatch', () => {
 		expect(isPatchEmpty(buildHeaderPatch(pool, { ...same, storagePointId: 'zzz' }, resolve))).toBe(
 			true
 		);
+	});
+});
+
+describe('buildReturnerNames', () => {
+	it('maps evacuees (with nickname) and volunteers to display names', () => {
+		const names = buildReturnerNames(
+			[
+				{ _id: 'evacuee:a', first_name: 'สมชาย', last_name: 'ใจดี', nickname: 'ชาย' },
+				{ _id: 'evacuee:b', first_name: 'สมหญิง', last_name: 'รักดี' }
+			],
+			[{ _id: 'volunteer:c', first_name: 'มานี', last_name: 'มีนา' }]
+		);
+		expect(names.get('evacuee:a')).toBe('สมชาย ใจดี (ชาย)');
+		expect(names.get('evacuee:b')).toBe('สมหญิง รักดี');
+		expect(names.get('volunteer:c')).toBe('จิตอาสา มานี มีนา');
+		expect(names.get('evacuee:z')).toBeUndefined();
 	});
 });

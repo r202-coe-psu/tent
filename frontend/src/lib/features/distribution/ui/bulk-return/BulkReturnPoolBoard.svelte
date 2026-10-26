@@ -18,6 +18,8 @@
 	import { Label } from '$lib/components/ui/label/index.js';
 	import { Switch } from '$lib/components/ui/switch/index.js';
 	import { useItemMasters } from '$lib/features/catalog';
+	import { useEvacuees } from '$lib/features/people';
+	import { useVolunteers } from '$lib/features/volunteers';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
@@ -40,6 +42,7 @@
 		POOL_STATUS_FILTER_VALUES,
 		RECEIVED_POOL_HIDE_AFTER_DAYS,
 		UNRESOLVED_REFS_HINT,
+		buildReturnerNames,
 		filterPoolRows,
 		getPoolBoardViewState,
 		getPoolStatusBadgeClass,
@@ -91,6 +94,13 @@
 	);
 	const itemMastersQuery = useItemMasters(() => activeShelterCode ?? null);
 
+	// Full rosters (loaded client-side) so the search and the detail can show returner names.
+	const evacueesQuery = useEvacuees();
+	const volunteersQuery = useVolunteers(undefined, () => activeShelterCode);
+	const returnerNames = $derived(
+		buildReturnerNames(evacueesQuery.data ?? [], volunteersQuery.data ?? [])
+	);
+
 	let search = $state('');
 	let showCancelled = $state(false);
 	// Local view filters (no persistence). 'all' is the sentinel for the two selects.
@@ -130,7 +140,8 @@
 		status: statusFilter,
 		itemId: itemFilter === 'all' ? undefined : itemFilter,
 		storagePointId: storageFilter === 'all' ? undefined : storageFilter,
-		needsAttention
+		needsAttention,
+		returnerNames
 	});
 	const visibleRows = $derived(filterPoolRows(rows, rowFilter));
 	const statusCounts = $derived(poolStatusCounts(rows, { showCancelled, hideReceivedBefore }));
@@ -278,8 +289,8 @@
 			<Input
 				type="search"
 				bind:value={search}
-				placeholder="ค้นหาชื่อกอง"
-				aria-label="ค้นหากองรับคืนตามชื่อกอง"
+				placeholder="ค้นหาชื่อกองหรือชื่อผู้คืน"
+				aria-label="ค้นหากองรับคืนตามชื่อกองหรือชื่อผู้คืน"
 				class="h-11 w-full pl-9 text-base sm:h-10 sm:text-sm"
 			/>
 		</div>
@@ -436,7 +447,7 @@
 		<div class="rounded-xl border border-slate-200 bg-slate-50 p-12 text-center">
 			<XCircle class="mx-auto mb-2 h-8 w-8 text-slate-400" aria-hidden="true" />
 			<h3 class="text-base font-semibold text-slate-900">ไม่พบกองที่ตรงกับการค้นหา</h3>
-			<p class="mt-1 text-sm text-slate-500">ลองค้นหาด้วยชื่อกองอื่น</p>
+			<p class="mt-1 text-sm text-slate-500">ลองค้นหาด้วยชื่อกองหรือชื่อผู้คืนอื่น</p>
 		</div>
 	{:else}
 		<ul class="grid grid-cols-1 gap-3 lg:grid-cols-2">
@@ -457,6 +468,15 @@
 									>
 										<AlertTriangle class="h-3.5 w-3.5" aria-hidden="true" />
 										ค้าง <span class="tabular-nums">{row.late_entries.length}</span>
+									</span>
+								{/if}
+								{#if row.closed_loan_refs.length > 0}
+									<span
+										class="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold {LATE_BADGE_CLASS}"
+										data-testid="bulk-return-card-closed-loan-hint"
+									>
+										<AlertTriangle class="h-3.5 w-3.5" aria-hidden="true" />
+										ยอดยืมถูกปิด <span class="tabular-nums">{row.closed_loan_refs.length}</span>
 									</span>
 								{/if}
 								{#if row.unresolved_refs.length > 0}
@@ -554,6 +574,7 @@
 		row={selectedRow}
 		{rows}
 		{catalog}
+		{returnerNames}
 		shelterCode={activeShelterCode}
 		{canManage}
 		{canWriteEntry}
