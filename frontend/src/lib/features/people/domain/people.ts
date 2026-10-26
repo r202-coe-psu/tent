@@ -2344,6 +2344,39 @@ export interface EwarSymptomGroup {
 
 export const EWAR_SYMPTOM_GROUPS: EwarSymptomGroup[] = [
 	{
+		title: 'อาการเฝ้าระวังทั่วไปและเหตุฉุกเฉินอื่นๆ',
+		symptoms: [
+			{
+				id: 'high_fever',
+				emoji: '🔥',
+				label: 'ไข้สูงเกิน 38.5 °C'
+			},
+			{
+				id: 'trauma',
+				emoji: '💥',
+				label: 'ได้รับบาดเจ็บ',
+				sublabel: 'Trauma'
+			},
+			{
+				id: 'chemical_poisoning',
+				emoji: '☠️',
+				label: 'ได้รับสารเคมี / สารพิษ',
+				sublabel: 'Chemical poisoning'
+			}
+		]
+	},
+	{
+		title: 'กลุ่มอาการทางเดินหายใจ',
+		symptoms: [
+			{
+				id: 'acute_respiratory',
+				emoji: '😷',
+				label: 'ติดเชื้อทางเดินหายใจเฉียบพลัน (ไอ เจ็บคอ หายใจลำบาก)',
+				sublabel: 'Acute respiratory infection'
+			}
+		]
+	},
+	{
 		title: 'กลุ่มอาการทางเดินอาหาร',
 		symptoms: [
 			{
@@ -2367,30 +2400,19 @@ export const EWAR_SYMPTOM_GROUPS: EwarSymptomGroup[] = [
 		]
 	},
 	{
-		title: 'กลุ่มอาการทางเดินหายใจ',
-		symptoms: [
-			{
-				id: 'acute_respiratory',
-				emoji: '😷',
-				label: 'ติดเชื้อทางเดินหายใจเฉียบพลัน (ไอ เจ็บคอ หายใจลำบาก)',
-				sublabel: 'Acute respiratory infection'
-			}
-		]
-	},
-	{
 		title: 'กลุ่มโรคที่มีพาหะนำโรค',
 		symptoms: [
-			{
-				id: 'malaria',
-				emoji: '🤒',
-				label: 'ไข้มาลาเรีย',
-				sublabel: 'Malaria'
-			},
 			{
 				id: 'dengue',
 				emoji: '🦟',
 				label: 'ไข้เลือดออก',
 				sublabel: 'Dengue'
+			},
+			{
+				id: 'malaria',
+				emoji: '🤒',
+				label: 'ไข้มาลาเรีย',
+				sublabel: 'Malaria'
 			}
 		]
 	},
@@ -2404,6 +2426,12 @@ export const EWAR_SYMPTOM_GROUPS: EwarSymptomGroup[] = [
 				sublabel: 'Measles'
 			},
 			{
+				id: 'pertussis',
+				emoji: '😮‍💨',
+				label: 'ไอกรน (ไอเป็นชุด ๆ)',
+				sublabel: 'Pertussis'
+			},
+			{
 				id: 'meningitis',
 				emoji: '🧠',
 				label: 'เยื่อหุ้มสมองอักเสบ (ไข้ ปวดหัว คอแข็ง)',
@@ -2414,12 +2442,6 @@ export const EWAR_SYMPTOM_GROUPS: EwarSymptomGroup[] = [
 				emoji: '🗣️',
 				label: 'คอตีบ',
 				sublabel: 'Diphtheria'
-			},
-			{
-				id: 'pertussis',
-				emoji: '😮‍💨',
-				label: 'ไอกรน (ไอเป็นชุด ๆ)',
-				sublabel: 'Pertussis'
 			}
 		]
 	},
@@ -2444,10 +2466,10 @@ export const EWAR_SYMPTOM_GROUPS: EwarSymptomGroup[] = [
 		title: 'กลุ่มอาการทางระบบประสาทและอื่นๆ',
 		symptoms: [
 			{
-				id: 'acute_flaccid_paralysis',
-				emoji: '🦿',
-				label: 'แขนขาอ่อนแรงเฉียบพลัน (สงสัยโปลิโอ)',
-				sublabel: 'กล้ามเนื้ออ่อนปวกเปียกเฉียบพลัน · Acute flaccid paralysis / Polio'
+				id: 'acute_haemorrhagic_fever_syndrome',
+				emoji: '🩸',
+				label: 'ไข้ร่วมกับเลือดออกผิดปกติ',
+				sublabel: 'กลุ่มอาการไข้เลือดออกรุนแรง · Acute haemorrhagic fever syndrome'
 			},
 			{
 				id: 'tetanus',
@@ -2456,32 +2478,10 @@ export const EWAR_SYMPTOM_GROUPS: EwarSymptomGroup[] = [
 				sublabel: 'Tetanus'
 			},
 			{
-				id: 'acute_haemorrhagic_fever_syndrome',
-				emoji: '🩸',
-				label: 'ไข้ร่วมกับเลือดออกผิดปกติ',
-				sublabel: 'กลุ่มอาการไข้เลือดออกรุนแรง · Acute haemorrhagic fever syndrome'
-			}
-		]
-	},
-	{
-		title: 'อาการเฝ้าระวังทั่วไปและเหตุฉุกเฉินอื่นๆ',
-		symptoms: [
-			{
-				id: 'high_fever',
-				emoji: '🔥',
-				label: 'ไข้สูงเกิน 38.5 °C'
-			},
-			{
-				id: 'trauma',
-				emoji: '💥',
-				label: 'ได้รับบาดเจ็บ',
-				sublabel: 'Trauma'
-			},
-			{
-				id: 'chemical_poisoning',
-				emoji: '☠️',
-				label: 'ได้รับสารเคมี / สารพิษ',
-				sublabel: 'Chemical poisoning'
+				id: 'acute_flaccid_paralysis',
+				emoji: '🦿',
+				label: 'แขนขาอ่อนแรงเฉียบพลัน (สงสัยโปลิโอ)',
+				sublabel: 'กล้ามเนื้ออ่อนปวกเปียกเฉียบพลัน · Acute flaccid paralysis / Polio'
 			}
 		]
 	}
