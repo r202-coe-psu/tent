@@ -1,6 +1,148 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 
 const TAGS = { tag: ['@regression', '@donation'] };
+
+const SH001_NAME = 'ศูนย์พักพิง เทศบาลนครหาดใหญ่ (โรงเรียนเทศบาล 2)';
+
+const NEEDS_BODY = [
+	{
+		code: 'SH001',
+		name: SH001_NAME,
+		needs: [
+			{
+				item_id: 'item:rice',
+				name: 'ข้าวสาร',
+				category: 'food',
+				qty_needed: 50,
+				unit: 'kg',
+				urgency: 'critical',
+				status: 'open'
+			}
+		]
+	}
+];
+
+/** `GET /api/public/v1/shelters` — what the step-3 map needs to place SH001. */
+async function mockShelters(page: Page, status = 200) {
+	await page.route('**/api/public/v1/shelters*', async (route) => {
+		await route.fulfill({
+			status,
+			contentType: 'application/json',
+			body:
+				status === 200
+					? JSON.stringify({
+							shelters: [
+								{
+									code: 'SH001',
+									name: SH001_NAME,
+									site_kind: 'evacuation_center',
+									status: 'open',
+									capacity: 120,
+									geo: { lat: 7.0086, lng: 100.4747 },
+									province: 'สงขลา',
+									district: 'หาดใหญ่',
+									subdistrict: 'หาดใหญ่',
+									accepts_pre_registration: true,
+									updated_at: '2026-10-26T00:00:00Z'
+								}
+							],
+							count: 1,
+							as_of: '2026-10-26T00:00:00Z'
+						})
+					: JSON.stringify({ success: false })
+		});
+	});
+}
+
+/** Needs board → pick the rice need (locks SH001) → donor form → step 3. */
+async function openShelterStep(page: Page, sheltersStatus = 200) {
+	await page.route('**/api/public/v1/needs', (route) =>
+		route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify(NEEDS_BODY)
+		})
+	);
+	await mockShelters(page, sheltersStatus);
+	await page.route('**/api/public/v1/donations/slots*', (route) =>
+		route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify({ slots: [] })
+		})
+	);
+	await page.goto('/donations');
+	await page.getByRole('button', { name: 'ดูรายละเอียดและบริจาค' }).first().click();
+	await page.getByRole('button', { name: 'บริจาครายการนี้' }).first().click();
+	await page.locator('#donor-name').fill('ผู้บริจาคใจบุญ');
+	await page.locator('#donor-phone').fill('0899999999');
+	await page.getByRole('button', { name: 'ถัดไป: เลือกจุดส่งมอบ' }).click();
+	await expect(
+		page.getByRole('heading', { name: 'ส่วนที่ 3: ข้อมูลการจัดส่ง โลจิสติกส์' })
+	).toBeVisible();
+}
+
+/**
+ * Step 3 shows the destination on a map with the shelter list under it. A need card
+ * locks the destination, which is the only way into step 3 today, so the open
+ * (unlocked) picker is covered by `donation-shelter-picker.dom.test.ts` instead.
+ */
+test.describe('Donation form shelter map (#814)', TAGS, () => {
+	test('shows the locked shelter on the map, with its card and the list under it', async ({
+		page
+	}) => {
+		await openShelterStep(page);
+
+		await expect(page.locator('.maplibregl-canvas').first()).toBeVisible({ timeout: 15_000 });
+		await expect(page.getByTestId('shelter-marker-SH001')).toBeVisible({ timeout: 15_000 });
+
+		const card = page.getByTestId('donation-shelter-card');
+		await expect(card).toContainText(SH001_NAME);
+		await expect(card).toContainText('ข้าวสาร');
+		await expect(card).toContainText('เลือกศูนย์นี้แล้ว');
+
+		const radios = page.getByRole('radio');
+		await expect(radios).toHaveCount(1);
+		await expect(radios.first()).toBeChecked();
+		await expect(radios.first()).toBeDisabled();
+	});
+
+	test('a tap on the pin keeps the locked shelter', async ({ page }) => {
+		await openShelterStep(page);
+		await page.getByTestId('shelter-marker-SH001').click({ timeout: 15_000 });
+		await expect(page.getByTestId('donation-shelter-card')).toContainText('เลือกศูนย์นี้แล้ว');
+		await expect(page.getByRole('radio').first()).toBeChecked();
+	});
+
+	test('without the shelters list there is no map, but the list and the booking still work', async ({
+		page
+	}) => {
+		await openShelterStep(page, 503);
+
+		await expect(page.getByText('แผนที่ใช้งานไม่ได้ในตอนนี้')).toBeVisible({ timeout: 15_000 });
+		await expect(page.getByTestId('donation-shelter-map')).toHaveCount(0);
+		await expect(page.getByRole('radio').first()).toBeChecked();
+		await expect(page.getByText(SH001_NAME).first()).toBeVisible();
+	});
+
+	test('on a 390px phone the map fits the screen and the card sits under it', async ({ page }) => {
+		await page.setViewportSize({ width: 390, height: 844 });
+		await openShelterStep(page);
+
+		const map = page.getByTestId('donation-shelter-map');
+		await expect(map).toBeVisible({ timeout: 15_000 });
+		await expect(page.getByTestId('donation-shelter-card')).toBeVisible();
+
+		const mapBox = await map.boundingBox();
+		const cardBox = await page.getByTestId('donation-shelter-card').boundingBox();
+		expect(mapBox && mapBox.x >= 0 && mapBox.x + mapBox.width <= 390).toBe(true);
+		expect(mapBox && cardBox && cardBox.y >= mapBox.y + mapBox.height).toBe(true);
+		const overflow = await page.evaluate(
+			() => document.documentElement.scrollWidth - document.documentElement.clientWidth
+		);
+		expect(overflow).toBeLessThanOrEqual(0);
+	});
+});
 
 test.describe('Public Donation & Queue Booking Wizard (T-60)', TAGS, () => {
 	test('successfully performs the entire 4-step wizard donation flow', async ({ page }) => {
@@ -38,6 +180,9 @@ test.describe('Public Donation & Queue Booking Wizard (T-60)', TAGS, () => {
 				])
 			});
 		});
+
+		// The step-3 shelter map reads the public shelters list for coordinates
+		await mockShelters(page);
 
 		// 2. Go to /donations
 		await page.goto('/donations');
