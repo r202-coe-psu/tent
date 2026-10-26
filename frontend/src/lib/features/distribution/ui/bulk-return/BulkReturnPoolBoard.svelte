@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { createSubscriber } from 'svelte/reactivity';
 	import type { Snippet } from 'svelte';
 	import AlertCircle from '@lucide/svelte/icons/alert-circle';
 	import AlertTriangle from '@lucide/svelte/icons/alert-triangle';
@@ -59,7 +60,9 @@
 		type PoolCatalogItem,
 		type PoolStatusFilter
 	} from '../model/bulk-return-pool-v3';
+	import { workQueuesFor } from '../model/bulk-return-work-queue';
 	import * as Select from '$lib/components/ui/select/index.js';
+	import BulkReturnPoolWorkQueue from './BulkReturnPoolWorkQueue.svelte';
 	import { listOpenPools } from '../model/bulk-return-add-entry';
 	import AddBulkReturnEntriesDialog from './AddBulkReturnEntriesDialog.svelte';
 	import BulkReturnPoolDetail from './BulkReturnPoolDetail.svelte';
@@ -124,6 +127,19 @@
 	});
 	const canManage = $derived(authContext ? canManageBulkReturnPool(authContext) : false);
 	const canWriteEntry = $derived(authContext ? canWriteBulkReturnEntry(authContext) : false);
+
+	const queues = $derived(authContext ? workQueuesFor(authContext) : []);
+
+	// Ticks every minute so the "waiting since" ages stay fresh.
+	// Ticks every minute (only while something reads it) so waiting ages stay current.
+	const subscribeMinute = createSubscriber((update) => {
+		const timer = setInterval(update, 60_000);
+		return () => clearInterval(timer);
+	});
+	const now = $derived.by(() => {
+		subscribeMinute();
+		return new Date();
+	});
 
 	const rows = $derived(overviewQuery.data ?? []);
 	const hasOpenPool = $derived(listOpenPools(rows).length > 0);
@@ -279,6 +295,13 @@
 			</p>
 		</div>
 	{/if}
+
+	<BulkReturnPoolWorkQueue
+		{rows}
+		{queues}
+		{now}
+		onOpenPool={(poolId) => (selectedPoolId = poolId)}
+	/>
 
 	<div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
 		<div class="relative w-full sm:max-w-sm">
