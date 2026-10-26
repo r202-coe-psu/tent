@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { KioskDeviceInfoResult } from '../data/kiosk-device-info.api';
 import type { KioskDeviceInfo, KioskHostInfo } from '../domain/device-info';
 import { DEVICE_INFO_IDLE_MS, DeviceInfoSession } from './device-info.svelte';
+import { KIOSK_BANNER_IDLE_MS } from '../ui/kiosk-banner-attract.svelte.js';
 import { StaffPinEntry } from './staff-pin-entry.svelte';
 
 afterEach(() => {
@@ -12,7 +13,7 @@ const INFO: KioskDeviceInfo = {
 	deviceId: 'kiosk-01',
 	name: 'Kiosk หน้าประตู',
 	stationName: 'จุดลงทะเบียน 1',
-	screenType: 'registration',
+	screenType: 'compact',
 	shelterCode: 'SH-001',
 	shelterName: 'ศูนย์พักพิงทดสอบ',
 	staffPin: { set: true, isDefault: false, updatedAt: '2026-10-01T00:00:00Z', updatedBy: 'staff' },
@@ -102,6 +103,41 @@ describe('DeviceInfoSession', () => {
 		expect(session.host).toBeNull();
 	});
 
+	it('keeps the PIN staff typed while the panel is shown, and forgets it on close', async () => {
+		const { session, entry } = setup();
+		session.open();
+		expect(session.pin).toBeNull();
+
+		entry.pin = '123456';
+		await entry.confirm();
+		expect(session.pin).toBe('123456');
+
+		session.close();
+		expect(session.pin).toBeNull();
+	});
+
+	it('never keeps a wrong PIN', async () => {
+		const { session, entry } = setup({ kind: 'wrong' });
+		session.open();
+
+		entry.pin = '000000';
+		await entry.confirm();
+
+		expect(session.pin).toBeNull();
+	});
+
+	it('forgets the PIN when the idle time runs out', async () => {
+		vi.useFakeTimers();
+		const { session, entry } = setup();
+		session.open();
+		entry.pin = '123456';
+		await entry.confirm();
+
+		vi.advanceTimersByTime(DEVICE_INFO_IDLE_MS);
+
+		expect(session.pin).toBeNull();
+	});
+
 	it('cancelling the PIN goes back to idle without fetching anything', () => {
 		const { session, entry, fetchDeviceInfo, fetchHostInfo } = setup();
 		session.open();
@@ -114,7 +150,7 @@ describe('DeviceInfoSession', () => {
 		expect(fetchHostInfo).not.toHaveBeenCalled();
 	});
 
-	it('closes by itself after a minute of being shown', async () => {
+	it('closes by itself after being left untouched', async () => {
 		vi.useFakeTimers();
 		const { session, entry } = setup();
 		session.open();
@@ -128,7 +164,19 @@ describe('DeviceInfoSession', () => {
 		expect(session.info).toBeNull();
 	});
 
-	it('a tap in the panel restarts the minute', async () => {
+	it('closes before the banner attract would cover it, so no one finds it open behind a banner', async () => {
+		vi.useFakeTimers();
+		const { session, entry } = setup();
+		session.open();
+		entry.pin = '123456';
+		await entry.confirm();
+
+		vi.advanceTimersByTime(KIOSK_BANNER_IDLE_MS - 1);
+		expect(session.shown).toBe(false);
+		expect(session.pin).toBeNull();
+	});
+
+	it('a tap in the panel restarts the idle clock', async () => {
 		vi.useFakeTimers();
 		const { session, entry } = setup();
 		session.open();

@@ -12,7 +12,7 @@ const wireInfo = {
 		device_id: 'dev-01',
 		name: 'Kiosk 1',
 		station_name: 'Front desk',
-		screen_type: 'touch_portrait'
+		screen_type: 'portrait'
 	},
 	shelter: { code: 'SH-001', name: 'Hat Yai Hall' },
 	staff_pin: {
@@ -34,7 +34,7 @@ describe('fetchKioskDeviceInfo', () => {
 				deviceId: 'dev-01',
 				name: 'Kiosk 1',
 				stationName: 'Front desk',
-				screenType: 'touch_portrait',
+				screenType: 'portrait',
 				shelterCode: 'SH-001',
 				shelterName: 'Hat Yai Hall',
 				staffPin: {
@@ -92,6 +92,16 @@ describe('fetchKioskDeviceInfo', () => {
 		const missingShelter: Partial<typeof wireInfo> = { ...wireInfo };
 		delete missingShelter.shelter;
 		const fetchFn = vi.fn<typeof fetch>().mockResolvedValue(json(missingShelter));
+
+		await expect(fetchKioskDeviceInfo('123456', fetchFn)).resolves.toEqual({ kind: 'error' });
+	});
+
+	it('turns a 200 whose screen_type is neither compact nor portrait into an error', async () => {
+		const fetchFn = vi
+			.fn<typeof fetch>()
+			.mockResolvedValue(
+				json({ ...wireInfo, device: { ...wireInfo.device, screen_type: 'tablet' } })
+			);
 
 		await expect(fetchKioskDeviceInfo('123456', fetchFn)).resolves.toEqual({ kind: 'error' });
 	});

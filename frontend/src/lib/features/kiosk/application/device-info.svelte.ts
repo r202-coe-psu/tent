@@ -2,8 +2,12 @@ import type { KioskDeviceInfoResult } from '../data/kiosk-device-info.api';
 import type { KioskStaffPinResult } from '../data/kiosk-staff-pin.api';
 import type { KioskDeviceInfo, KioskHostInfo } from '../domain/device-info';
 
-/** Nobody touched the panel for this long: close it, so the info is not left on an open kiosk. */
-export const DEVICE_INFO_IDLE_MS = 60_000;
+/**
+ * Nobody touched the panel for this long: close it, so the info is not left on an open kiosk.
+ * Shorter than the banner attract's idle time, so the panel is gone before a banner covers it —
+ * a passer-by dismissing the banner must never find the PIN underneath.
+ */
+export const DEVICE_INFO_IDLE_MS = 20_000;
 
 export type DeviceInfoPhase = 'idle' | 'pin' | 'shown';
 
@@ -23,9 +27,14 @@ export class DeviceInfoSession {
 	phase = $state<DeviceInfoPhase>('idle');
 	info = $state.raw<KioskDeviceInfo | null>(null);
 	host = $state.raw<KioskHostInfo | null>(null);
+	/**
+	 * The staff PIN that opened the panel. The server only answers when it matches this kiosk's PIN,
+	 * so what staff typed is the device PIN; forgotten on close.
+	 */
+	pin = $state<string | null>(null);
 
 	#idleTimer: ReturnType<typeof setTimeout> | null = null;
-	#pending: { info: KioskDeviceInfo; host: KioskHostInfo } | null = null;
+	#pending: { info: KioskDeviceInfo; host: KioskHostInfo; pin: string } | null = null;
 
 	constructor(private readonly deps: DeviceInfoDeps) {}
 
@@ -49,7 +58,7 @@ export class DeviceInfoSession {
 			this.deps.fetchHostInfo()
 		]);
 		if (result.kind !== 'ok') return result;
-		this.#pending = { info: result.info, host };
+		this.#pending = { info: result.info, host, pin };
 		return { kind: 'verified' };
 	}
 
@@ -58,6 +67,7 @@ export class DeviceInfoSession {
 		if (this.phase !== 'pin' || !this.#pending) return;
 		this.info = this.#pending.info;
 		this.host = this.#pending.host;
+		this.pin = this.#pending.pin;
 		this.#pending = null;
 		this.phase = 'shown';
 		this.touch();
@@ -72,6 +82,7 @@ export class DeviceInfoSession {
 		this.#clearIdleTimer();
 		this.info = null;
 		this.host = null;
+		this.pin = null;
 		this.#pending = null;
 		this.phase = 'idle';
 	}
