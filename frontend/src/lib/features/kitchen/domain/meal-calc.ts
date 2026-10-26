@@ -374,21 +374,86 @@ export interface SessionGroupProgress {
 	summaryText: string;
 }
 
+interface PlateBatch {
+	tags: readonly TargetGroupTag[];
+	portions: number;
+}
+
 /**
- * Computes per-group plate progress for a meal session by priority fill: each menu's yield fills
- * only its own tagged groups in GROUP_FILL_ORDER, narrowest-tagged menus first; leftover is surplus.
+ * Allocates plates group by group in GROUP_FILL_ORDER (CR-201 R3). Each unit of need is served by
+ * an augmenting path: a menu with spare plates, or a menu moved over from a group that another
+ * menu can refill. Filled groups never lose plates, and the result ignores menu input order.
+ */
+function allocateGroupPlates(
+	batches: readonly PlateBatch[],
+	target: Record<TargetGroupTag, number>
+): { received: Record<TargetGroupTag, number>; surplus: number } {
+	const flow = batches.map(() => ({}) as Partial<Record<TargetGroupTag, number>>);
+	const spare = batches.map((b) => b.portions);
+	const received = {} as Record<TargetGroupTag, number>;
+	for (const tag of TARGET_GROUP_TAGS) received[tag] = 0;
+
+	for (const goal of GROUP_FILL_ORDER) {
+		while (received[goal] < target[goal]) {
+			// BFS over groups; moved[h] = menu that can shift its plates from h to `from`
+			const moved = new Map<TargetGroupTag, { from: TargetGroupTag; menu: number }>();
+			const visited = new Set<TargetGroupTag>([goal]);
+			const queue: TargetGroupTag[] = [goal];
+			let end: { group: TargetGroupTag; menu: number } | null = null;
+
+			for (let q = 0; q < queue.length && !end; q++) {
+				const group = queue[q];
+				const menus = batches.flatMap((b, m) => (b.tags.includes(group) ? [m] : []));
+				const source = menus.find((m) => spare[m] > 0);
+				if (source !== undefined) {
+					end = { group, menu: source };
+					break;
+				}
+				for (const m of menus) {
+					for (const h of GROUP_FILL_ORDER) {
+						if (visited.has(h) || (flow[m][h] ?? 0) <= 0) continue;
+						visited.add(h);
+						moved.set(h, { from: group, menu: m });
+						queue.push(h);
+					}
+				}
+			}
+			if (!end) break;
+
+			let amount = Math.min(spare[end.menu], target[goal] - received[goal]);
+			for (let cur = end.group; cur !== goal;) {
+				const step = moved.get(cur)!;
+				amount = Math.min(amount, flow[step.menu][cur] ?? 0);
+				cur = step.from;
+			}
+
+			spare[end.menu] -= amount;
+			flow[end.menu][end.group] = (flow[end.menu][end.group] ?? 0) + amount;
+			for (let cur = end.group; cur !== goal;) {
+				const step = moved.get(cur)!;
+				flow[step.menu][cur] = (flow[step.menu][cur] ?? 0) - amount;
+				flow[step.menu][step.from] = (flow[step.menu][step.from] ?? 0) + amount;
+				cur = step.from;
+			}
+			received[goal] += amount;
+		}
+	}
+
+	return { received, surplus: spare.reduce((sum, n) => sum + n, 0) };
+}
+
+/**
+ * Computes per-group plate progress for a meal session by priority fill: groups are filled in
+ * GROUP_FILL_ORDER, each only from menus tagged for it, re-routing plates between menus so that
+ * partially overlapping tags still fill as many groups as possible; leftover is surplus.
  */
 export function computeSessionGroupProgress(
 	session: MealSession,
 	plans: readonly MealPlan[],
 	services: readonly MealService[]
 ): SessionGroupProgress {
-	const remaining = {} as Record<TargetGroupTag, number>;
-	const received = {} as Record<TargetGroupTag, number>;
-	for (const tag of TARGET_GROUP_TAGS) {
-		remaining[tag] = session.target_headcount[tag] ?? 0;
-		received[tag] = 0;
-	}
+	const target = {} as Record<TargetGroupTag, number>;
+	for (const tag of TARGET_GROUP_TAGS) target[tag] = session.target_headcount[tag] ?? 0;
 
 	const entries = plans
 		.filter((p) => p.meal_session_id === session._id)
@@ -398,24 +463,10 @@ export function computeSessionGroupProgress(
 			const tags = expandTargetTags(plan.target_tags ?? []);
 			return { tags: tags.length > 0 ? tags : (['regular'] as TargetGroupTag[]), portions };
 		})
-		.filter((e) => e.portions > 0)
-		.sort((a, b) => a.tags.length - b.tags.length);
+		.filter((e) => e.portions > 0);
 
-	let totalProduced = 0;
-	let surplus = 0;
-	for (const entry of entries) {
-		totalProduced += entry.portions;
-		let left = entry.portions;
-		for (const tag of GROUP_FILL_ORDER) {
-			if (left === 0) break;
-			if (!entry.tags.includes(tag)) continue;
-			const take = Math.min(left, remaining[tag]);
-			received[tag] += take;
-			remaining[tag] -= take;
-			left -= take;
-		}
-		surplus += left;
-	}
+	const totalProduced = entries.reduce((sum, e) => sum + e.portions, 0);
+	const { received, surplus } = allocateGroupPlates(entries, target);
 
 	const groups = {} as Record<TargetGroupTag, GroupProgressItem>;
 	const activeTags: TargetGroupTag[] = [];

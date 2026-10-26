@@ -618,6 +618,48 @@ describe('computeSessionGroupProgress — priority fill', () => {
 		expect(progress.summaryText).toBe('2/2 กลุ่มครบ');
 	});
 
+	it('re-routes overlapping menus so both restricted groups are filled', () => {
+		const progress = progressFor({ soft_food: 10, halal: 10 }, [
+			{ tags: ['soft_food', 'halal'], yield: 10 },
+			{ tags: ['soft_food', 'regular'], yield: 10 }
+		]);
+		expect(progress.groups.soft_food.received).toBe(10);
+		expect(progress.groups.halal.received).toBe(10);
+		expect(progress.surplus).toBe(0);
+		expect(progress.summaryText).toBe('2/2 กลุ่มครบ');
+	});
+
+	it('re-routes a shared menu when a broader menu covers the other group', () => {
+		const progress = progressFor({ infant: 10, halal: 10 }, [
+			{ tags: ['infant', 'halal'], yield: 10 },
+			{ tags: ['infant', 'regular', 'volunteer'], yield: 10 }
+		]);
+		expect(progress.groups.infant.received).toBe(10);
+		expect(progress.groups.halal.received).toBe(10);
+		expect(progress.surplus).toBe(0);
+	});
+
+	it('gives the same allocation regardless of menu input order', () => {
+		const batches: Batch[] = [
+			{ tags: ['soft_food', 'halal'], yield: 10 },
+			{ tags: ['soft_food', 'regular'], yield: 10 }
+		];
+		const forward = progressFor({ soft_food: 10, halal: 10 }, batches);
+		const reversed = progressFor({ soft_food: 10, halal: 10 }, [...batches].reverse());
+		for (const tag of ['infant', 'soft_food', 'halal', 'volunteer', 'regular'] as const) {
+			expect(reversed.groups[tag].received).toBe(forward.groups[tag].received);
+		}
+		expect(reversed.surplus).toBe(forward.surplus);
+	});
+
+	it('lets the higher-priority group win when one shared menu cannot cover both', () => {
+		const progress = progressFor({ infant: 10, halal: 10 }, [
+			{ tags: ['infant', 'halal'], yield: 10 }
+		]);
+		expect(progress.groups.infant).toMatchObject({ received: 10, isCompleted: true });
+		expect(progress.groups.halal).toMatchObject({ received: 0, shortfall: 10 });
+	});
+
 	it('adds up menus that share the same tags without double counting', () => {
 		const progress = progressFor({ halal: 30, regular: 30 }, [
 			{ tags: ['halal', 'regular'], yield: 20 },
