@@ -12,9 +12,11 @@ import { assertCentralWriteAuthority } from './central-write-authority';
 import { assertNoSkippedDocs, BulkReturnPoolStateError, WorkflowValidationError } from './errors';
 import {
 	assertEntryNotPendingSync,
+	loadSnapshotPins,
 	requirePool,
 	resolveDependencies,
 	revertRefOnLoan,
+	settlePoolFence,
 	type BulkReturnPoolV3WorkflowDependencies
 } from './bulk-return-pool-v3-shared';
 
@@ -35,6 +37,12 @@ export interface VoidBulkReturnEntryResult {
 	 * earlier call/replay, is not listed).
 	 */
 	loansReverted: string[];
+	/**
+	 * The void was written after the pool's submit snapshot counted the entry (a submit raced the
+	 * void). It has no effect: the entry stays counted in the submitted pool and no loan is
+	 * reverted; staff must reconcile it (the pool overview lists it as a snapshot conflict).
+	 */
+	snapshot_conflict: boolean;
 }
 
 /** Voids an entry (only while its pool is OPEN and unlocked) and reopens the loans it closed. */
@@ -43,7 +51,13 @@ export async function voidBulkReturnEntry(
 	ctx: AuthorContext,
 	deps?: BulkReturnPoolV3WorkflowDependencies
 ): Promise<VoidBulkReturnEntryResult> {
-	const { poolRepo, eventRepo, logRepo, endpointStore: epStore } = resolveDependencies(deps, ctx);
+	const {
+		poolRepo,
+		eventRepo,
+		logRepo,
+		endpointStore: epStore,
+		fenceClock
+	} = resolveDependencies(deps, ctx);
 	assertCentralWriteAuthority(epStore);
 	assertCanWriteBulkReturnEntry(ctx);
 
@@ -63,20 +77,30 @@ export async function voidBulkReturnEntry(
 		return reverted;
 	};
 
+	// Decide from the void's pool FINAL state (waits out a submit lock): a snapshot that counted
+	// the entry makes this void a conflict with no loan effect, otherwise reopen the loans.
+	const finish = async (entryVoid: BulkReturnEntryVoid, replayed: boolean, voidPoolId: string) => {
+		const fence = await settlePoolFence(poolRepo, voidPoolId, entry._id, fenceClock);
+		if (fence === 'in_snapshot') {
+			return { entryVoid, replayed, loansReverted: [], snapshot_conflict: true };
+		}
+		return { entryVoid, replayed, loansReverted: await revertLoans(), snapshot_conflict: false };
+	};
+
 	const existingVoid = await eventRepo.getVoid(deriveEntryVoidId(entry._id));
-	if (existingVoid) {
-		return { entryVoid: existingVoid, replayed: true, loansReverted: await revertLoans() };
-	}
+	if (existingVoid) return finish(existingVoid, true, existingVoid.pool_id);
 	assertEntryNotPendingSync(entry, events.moves);
 
-	const resolved = resolveBulkReturnEntries(events.entries, events.moves, events.voids).find(
+	const pins = await loadSnapshotPins(poolRepo, events);
+	const resolved = resolveBulkReturnEntries(events.entries, events.moves, events.voids, pins).find(
 		(r) => r.entry._id === entry._id
 	);
 	const poolId = resolved?.pool_id ?? entry.pool_id;
 	const pool = await requirePool(poolRepo, poolId);
 	if (!canVoidEntry(pool)) {
 		throw new BulkReturnPoolStateError(
-			`Entry ${entry._id} cannot be voided: pool ${pool._id} is not OPEN and unlocked`
+			`Entry ${entry._id} cannot be voided: pool ${pool._id} is not OPEN and unlocked`,
+			pool.status === 'OPEN' ? 'locked' : 'closed'
 		);
 	}
 
@@ -96,5 +120,5 @@ export async function voidBulkReturnEntry(
 		replayed = true;
 	}
 
-	return { entryVoid, replayed, loansReverted: await revertLoans() };
+	return finish(entryVoid, replayed, poolId);
 }

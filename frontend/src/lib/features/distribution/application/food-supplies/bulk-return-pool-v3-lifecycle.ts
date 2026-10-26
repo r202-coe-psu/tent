@@ -46,6 +46,7 @@ import { assertLedgerReplayBase } from './ledger-replay';
 import {
 	assertOperationUlid,
 	isOurLock,
+	loadSnapshotPins,
 	requirePool,
 	resolveDependencies,
 	type BulkReturnPoolV3WorkflowDependencies
@@ -256,7 +257,9 @@ export async function cancelBulkReturnPool(
 		await releaseCancelLock();
 		assertNoSkippedDocs(events.skipped, `bulk return pool ${poolId}`);
 	}
-	if (!isPoolEmpty(events.entries, events.moves, poolId, events.voids)) {
+	// An entry pinned to another closed pool's snapshot is not this pool's (our pool is OPEN: no pin).
+	const pins = await loadSnapshotPins(poolRepo, events, poolId);
+	if (!isPoolEmpty(events.entries, events.moves, poolId, events.voids, pins)) {
 		await releaseCancelLock();
 		throw new BulkReturnPoolNotEmptyError(
 			`Bulk return pool ${poolId} still has entries; move or void them first`
@@ -337,10 +340,12 @@ export async function submitBulkReturnPool(
 		const events = await eventRepo.listForPool(poolId);
 		// Fail closed: a skipped doc would drop an entry from (or add a voided one to) the snapshot.
 		assertNoSkippedDocs(events.skipped, `bulk return pool ${poolId}`);
+		// Entries pinned to another closed pool's snapshot are never re-counted here.
+		const pins = await loadSnapshotPins(poolRepo, events, poolId);
 		snapshot = {
-			items_summary: summarizePoolItems(events.entries, events.moves, poolId, events.voids),
+			items_summary: summarizePoolItems(events.entries, events.moves, poolId, events.voids, pins),
 			entry_ids: poolSnapshotEntryIds(
-				resolveBulkReturnEntries(events.entries, events.moves, events.voids),
+				resolveBulkReturnEntries(events.entries, events.moves, events.voids, pins),
 				poolId
 			)
 		};

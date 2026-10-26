@@ -147,10 +147,12 @@ describe('bulk return pool v3 workflows', () => {
 			await seedLoan(23, { qty: '3' });
 			const entry = await addLateEntry(a._id);
 			// First attempt: target locks right after the move doc is written -> nothing applied.
+			let bGets = 0;
 			const racing = {
 				...deps,
-				poolRepo: racingPoolRepo(poolRepo, async (n) => {
-					if (n === 3) await lockPool(b._id);
+				// b's reads: 1 = target check, 2 = fence after the move.
+				poolRepo: racingPoolRepo(poolRepo, async (_n, id) => {
+					if (id === b._id && ++bGets === 2) await lockPool(b._id);
 				}),
 				fenceClock: submitWithoutEntryClock(b._id)
 			};
@@ -205,11 +207,12 @@ describe('bulk return pool v3 workflows', () => {
 			const b = await openPool('Gate B');
 			await seedLoan(25, { qty: '3' });
 			const entry = await addLateEntry(a._id);
+			let bGets = 0;
 			const racing = {
 				...deps,
-				poolRepo: racingPoolRepo(poolRepo, async (n) => {
-					// 1: target, 2: source, 3: fence
-					if (n === 3) await lockPool(b._id);
+				poolRepo: racingPoolRepo(poolRepo, async (_n, id) => {
+					// b's reads: 1 = target check, 2 = fence after the move
+					if (id === b._id && ++bGets === 2) await lockPool(b._id);
 				}),
 				fenceClock: submitWithoutEntryClock(b._id)
 			};
@@ -330,11 +333,12 @@ describe('bulk return pool v3 workflows', () => {
 			const { results } = await add(a._id, { type: 'unspecified' }, [
 				{ item_id: 'item:cot', qty: '1' }
 			]);
+			let bGets = 0;
 			const racing = {
 				...deps,
-				poolRepo: racingPoolRepo(poolRepo, async (n) => {
-					// 1: target, 2: source, 3: fence
-					if (n === 3) await lockPool(b._id);
+				poolRepo: racingPoolRepo(poolRepo, async (_n, id) => {
+					// b's reads: 1 = target check, 2 = fence after the move
+					if (id === b._id && ++bGets === 2) await lockPool(b._id);
 				}),
 				fenceClock: submitWithoutEntryClock(b._id)
 			};

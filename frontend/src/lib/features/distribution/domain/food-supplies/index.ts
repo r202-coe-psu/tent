@@ -146,6 +146,10 @@ export {
 	isLateEntry,
 	findLateEntries,
 	findUnresolvedBulkReturnRefs,
+	buildSnapshotPins,
+	findSnapshotConflicts,
+	type SnapshotConflictKind,
+	type SnapshotPins,
 	type ResolvedBulkReturnEntry,
 	type UnresolvedBulkReturnRef
 } from './bulk-return-pool-summary';

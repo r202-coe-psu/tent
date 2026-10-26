@@ -16,6 +16,7 @@ import type {
 import {
 	applyBulkEntryToLog,
 	assessBulkReturnRefOnLoan,
+	buildSnapshotPins,
 	foldEntryMoves,
 	resolveBulkReturnEntries,
 	revertBulkEntryFromLog,
@@ -283,17 +284,43 @@ export function assertEntryNotPendingSync(
 	}
 }
 
+/**
+ * Snapshot pins (entry id -> closed pool that counted it) for the pools the events reference:
+ * entry.pool_id, move from/to and void pool_id. `ownPoolId` is left out when the caller already
+ * knows it is OPEN (an OPEN pool pins nothing); omit it to include that pool too.
+ */
+export async function loadSnapshotPins(
+	poolRepo: BulkReturnPoolV3Repository,
+	events: {
+		entries: readonly Pick<BulkReturnEntry, 'pool_id'>[];
+		moves: readonly Pick<BulkReturnEntryMove, 'from_pool_id' | 'to_pool_id'>[];
+		voids: readonly { pool_id: string }[];
+	},
+	ownPoolId?: string
+): Promise<Map<string, string>> {
+	const poolIds = new Set<string>([
+		...events.entries.map((e) => e.pool_id),
+		...events.moves.flatMap((m) => [m.from_pool_id, m.to_pool_id]),
+		...events.voids.map((v) => v.pool_id)
+	]);
+	if (ownPoolId !== undefined) poolIds.delete(ownPoolId);
+	// Scoped reads (CR-193 §18): only the pools the events name, never a whole-shelter list.
+	const pools = await Promise.all([...poolIds].map((id) => poolRepo.get(id)));
+	return buildSnapshotPins(pools.filter((p): p is BulkReturnPoolV3 => p !== null));
+}
+
 /** Non-voided entries currently in `poolId` plus the freshly fetched loans their refs point at. */
 export async function loadLivePoolEntriesWithLoans(
 	poolId: string,
 	ctx: AuthorContext,
 	deps?: BulkReturnPoolV3WorkflowDependencies
 ): Promise<{ live: BulkReturnEntry[]; loansById: Map<string, DistributionLog | null> }> {
-	const { eventRepo, logRepo } = resolveDependencies(deps, ctx);
+	const { poolRepo, eventRepo, logRepo } = resolveDependencies(deps, ctx);
 	const events = await eventRepo.listForPool(poolId);
 	// Fail closed: a skipped void/move/entry would make an entry look live, un-voided or gappy.
 	assertNoSkippedDocs(events.skipped, `bulk return pool ${poolId}`);
-	const live = resolveBulkReturnEntries(events.entries, events.moves, events.voids)
+	const pins = await loadSnapshotPins(poolRepo, events);
+	const live = resolveBulkReturnEntries(events.entries, events.moves, events.voids, pins)
 		.filter(({ pool_id, voided }) => !voided && pool_id === poolId)
 		.map(({ entry }) => entry);
 	const loanIds = [

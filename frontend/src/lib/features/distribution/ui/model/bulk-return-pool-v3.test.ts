@@ -91,6 +91,7 @@ function makeRow(
 		late_entries: opts.late ?? [],
 		unresolved_refs: [],
 		closed_loan_refs: [],
+		snapshot_conflicts: [],
 		is_empty: live.length === 0
 	};
 }

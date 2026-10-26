@@ -62,17 +62,20 @@ export const catalogOf = (masters: unknown[]) =>
 
 export const loanId = (n: number) => `distribution_log:${U(n)}`;
 
-/** Pool repo fake: runs `onGet(n)` before the n-th `get`, to race a write between two reads. */
+/**
+ * Pool repo fake: runs `onGet(n, id)` before the n-th `get` (all pools; `id` is the pool asked
+ * for), to race a write between two reads. Prefer counting per `id` over the global `n`.
+ */
 export function racingPoolRepo(
 	real: BulkReturnPoolV3Repository,
-	onGet: (n: number) => Promise<void>
+	onGet: (n: number, id: string) => Promise<void>
 ): BulkReturnPoolV3Repository {
 	let n = 0;
 	return {
 		create: (p) => real.create(p),
 		get: async (id) => {
 			n++;
-			await onGet(n);
+			await onGet(n, id);
 			return real.get(id);
 		},
 		list: () => real.list(),

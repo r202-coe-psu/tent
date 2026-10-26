@@ -24,6 +24,7 @@ import {
 import {
 	applyRefToLoanDetailed,
 	assertEntryNotPendingSync,
+	loadSnapshotPins,
 	requirePool,
 	resolveDependencies,
 	settlePoolFence,
@@ -51,6 +52,12 @@ export interface MoveBulkReturnEntryResult {
 	loansApplied: string[];
 	/** Refs not applied (loan closed / missing / insufficient); empty when late. */
 	loansSkipped: BulkReturnLoanSkipped[];
+	/**
+	 * The source pool's submit snapshot counted the entry before this move was written (a submit
+	 * raced the move). The move has no effect: the entry stays counted in the source pool, the
+	 * target does not hold it and no loan is touched; staff must reconcile it.
+	 */
+	snapshot_conflict: boolean;
 }
 
 /**
@@ -112,29 +119,56 @@ export async function moveBulkReturnEntry(
 	}
 	assertEntryNotPendingSync(entry, events.moves);
 
-	const resolved = resolveBulkReturnEntries(events.entries, events.moves, events.voids).find(
+	const pins = await loadSnapshotPins(poolRepo, events);
+	const resolved = resolveBulkReturnEntries(events.entries, events.moves, events.voids, pins).find(
 		(r) => r.entry._id === entry._id
 	);
 	const currentPoolId = resolved?.pool_id ?? entry.pool_id;
-	// Replay rule: moves carry no operationUlid, so a retry is recognised when the entry already
-	// sits in the target pool AND its latest move (highest seq) went there. An entry created in
-	// the target pool (no such move) is "already in target pool" and still rejected.
-	if (input.to_pool_id === currentPoolId) {
-		const latest = events.moves
-			.filter((m) => m.entry_id === entry._id)
-			.reduce<BulkReturnEntryMove | undefined>((a, m) => (!a || m.seq > a.seq ? m : a), undefined);
-		if (!latest || latest.to_pool_id !== input.to_pool_id) {
-			throw new WorkflowValidationError(`Entry ${entry._id} is already in ${input.to_pool_id}`);
+
+	/** Source fence + target fence/loans for a move that is written; a snapshot hit stops there. */
+	const afterMove = async (
+		move: BulkReturnEntryMove,
+		replayed: boolean,
+		sourcePoolId: string
+	): Promise<MoveBulkReturnEntryResult> => {
+		// The source may have snapshotted between our check and the write: that snapshot counted the
+		// entry, so it stays there (no loan effect, no target fence).
+		const sourceFence = await settlePoolFence(poolRepo, sourcePoolId, entry._id, fenceClock);
+		if (sourceFence === 'in_snapshot') {
+			return {
+				move,
+				replayed,
+				late: false,
+				loansApplied: [],
+				loansSkipped: [],
+				snapshot_conflict: true
+			};
 		}
 		const outcome = await applyEntryLoansAfterMove(
 			logRepo,
 			poolRepo,
 			entry,
-			input.to_pool_id,
+			move.to_pool_id,
 			ctx,
 			fenceClock
 		);
-		return { move: latest, replayed: true, ...outcome };
+		return { move, replayed, ...outcome, snapshot_conflict: false };
+	};
+	// Replay rule: moves carry no operationUlid, so a retry is recognised when the entry already
+	// sits in the target pool AND its latest move (highest seq) went there. An entry created in
+	// the target pool (no such move) is "already in target pool" and still rejected.
+	const latest = events.moves
+		.filter((m) => m.entry_id === entry._id)
+		.reduce<BulkReturnEntryMove | undefined>((a, m) => (!a || m.seq > a.seq ? m : a), undefined);
+	// A move the snapshot pin neutralised leaves the entry in its snapshot pool, so its retry is
+	// recognised by the latest move instead.
+	const replayOfConflict =
+		resolved?.snapshot_conflict === 'move' && latest?.to_pool_id === input.to_pool_id;
+	if (input.to_pool_id === currentPoolId || replayOfConflict) {
+		if (!latest || latest.to_pool_id !== input.to_pool_id) {
+			throw new WorkflowValidationError(`Entry ${entry._id} is already in ${input.to_pool_id}`);
+		}
+		return afterMove(latest, true, latest.from_pool_id);
 	}
 
 	const target = await requirePool(poolRepo, input.to_pool_id);
@@ -147,7 +181,8 @@ export async function moveBulkReturnEntry(
 	const source = await requirePool(poolRepo, currentPoolId);
 	if (!canAppendToPool(source) && !isLateEntry(entry._id, source)) {
 		throw new BulkReturnPoolStateError(
-			`Entry ${entry._id} cannot leave ${source._id}: the pool is not OPEN and the entry is not late`
+			`Entry ${entry._id} cannot leave ${source._id}: the pool is not OPEN and the entry is not late`,
+			source.status === 'OPEN' ? 'locked' : 'closed'
 		);
 	}
 
@@ -180,13 +215,5 @@ export async function moveBulkReturnEntry(
 		replayed = true;
 	}
 
-	const outcome = await applyEntryLoansAfterMove(
-		logRepo,
-		poolRepo,
-		entry,
-		input.to_pool_id,
-		ctx,
-		fenceClock
-	);
-	return { move, replayed, ...outcome };
+	return afterMove(move, replayed, currentPoolId);
 }

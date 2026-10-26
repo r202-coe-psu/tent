@@ -4,6 +4,8 @@ import { createBulkReturnEntry } from './bulk-return-entry';
 import { createBulkReturnEntryMove } from './bulk-return-entry-move';
 import { createBulkReturnEntryVoid } from './bulk-return-entry-void';
 import {
+	buildSnapshotPins,
+	findSnapshotConflicts,
 	findLateEntries,
 	findUnresolvedBulkReturnRefs,
 	isLateEntry,
@@ -336,5 +338,88 @@ describe('findLateEntries', () => {
 	it('skips entries whose pool is unknown', () => {
 		const resolved = resolveBulkReturnEntries([e1, e2], [], []);
 		expect(findLateEntries(resolved, [])).toEqual([]);
+	});
+});
+
+describe('buildSnapshotPins', () => {
+	it('pins the entry_ids of non-OPEN pools only', () => {
+		const pins = buildSnapshotPins([
+			{ _id: P1, status: 'SUBMITTED', entry_ids: [e1._id, e2._id] },
+			{ _id: P2, status: 'OPEN', entry_ids: [e3._id] },
+			{ _id: P3, status: 'CANCELLED' }
+		]);
+		expect([...pins]).toEqual([
+			[e1._id, P1],
+			[e2._id, P1]
+		]);
+	});
+
+	it('keeps the earliest submitted_at when an id is in two pools', () => {
+		const pins = buildSnapshotPins([
+			{
+				_id: P2,
+				status: 'SUBMITTED',
+				entry_ids: [e1._id],
+				submitted_at: '2026-01-02T00:00:00.000Z'
+			},
+			{
+				_id: P1,
+				status: 'RECEIVED',
+				entry_ids: [e1._id],
+				submitted_at: '2026-01-01T00:00:00.000Z'
+			}
+		]);
+		expect(pins.get(e1._id)).toBe(P1);
+	});
+});
+
+describe('pinned resolveBulkReturnEntries', () => {
+	const pins = new Map([[e1._id, P1]]);
+
+	it('ignores a post-snapshot void: stays in the pinned pool, not voided, flagged', () => {
+		const resolved = resolveBulkReturnEntries([e1, e2], [], [voidOf(e1, P1)], pins);
+		expect(resolved.map((r) => [r.entry._id, r.pool_id, r.voided, r.snapshot_conflict])).toEqual([
+			[e1._id, P1, false, 'void'],
+			[e2._id, P1, false, undefined]
+		]);
+		expect(summarizePoolItems([e1, e2], [], P1, [voidOf(e1, P1)], pins)).toEqual([
+			{ item_id: 'item_master:cot', qty: '7' }
+		]);
+		expect(isPoolEmpty([e1], [], P1, [voidOf(e1, P1)], pins)).toBe(false);
+	});
+
+	it('ignores a post-snapshot move out: counted only in the pinned pool, flagged', () => {
+		const moves = [moveOf(e1, 1, P1, P2)];
+		const resolved = resolveBulkReturnEntries([e1, e4], moves, [], pins);
+		expect(resolved[0]).toMatchObject({ pool_id: P1, voided: false, snapshot_conflict: 'move' });
+		expect(summarizePoolItems([e1, e4], moves, P2, [], pins)).toEqual([
+			{ item_id: 'item_master:cot', qty: '1' }
+		]);
+		expect(poolSnapshotEntryIds(resolved, P2)).toEqual([e4._id]);
+		expect(isPoolEmpty([e1], moves, P2, [], pins)).toBe(true);
+	});
+
+	it('reports void when both a move and a void exist, and still validates the void pool', () => {
+		const moves = [moveOf(e1, 1, P1, P2)];
+		const resolved = resolveBulkReturnEntries([e1], moves, [voidOf(e1, P2)], pins);
+		expect(resolved[0].snapshot_conflict).toBe('void');
+		expect(() => resolveBulkReturnEntries([e1], moves, [voidOf(e1, P3)], pins)).toThrow(/is for/);
+	});
+
+	it('has no conflict for a pinned entry that was never moved or voided', () => {
+		const resolved = resolveBulkReturnEntries([e1], [], [], pins);
+		expect(resolved[0]).toEqual({ entry: e1, pool_id: P1, voided: false });
+		expect(findSnapshotConflicts(resolved)).toEqual([]);
+	});
+
+	it('lists conflicts with the pinned pool and kind', () => {
+		const resolved = resolveBulkReturnEntries([e1], [moveOf(e1, 1, P1, P2)], [], pins);
+		expect(findSnapshotConflicts(resolved)).toEqual([
+			{ entry_id: e1._id, pool_id: P1, kind: 'move' }
+		]);
+	});
+
+	it('leaves a pending (gap) entry out as before', () => {
+		expect(resolveBulkReturnEntries([e1], [moveOf(e1, 2, P2, P3)], [], pins)).toEqual([]);
 	});
 });
