@@ -10,12 +10,7 @@ export const kioskDeviceInfoSchema = z.object({
 		screen_type: kioskScreenTypeSchema
 	}),
 	shelter: z.object({ code: z.string(), name: z.string() }),
-	staff_pin: z.object({
-		set: z.boolean(),
-		is_default: z.boolean(),
-		updated_at: z.string().nullable(),
-		updated_by: z.string().nullable()
-	}),
+	staff_pin: z.object({ is_default: z.boolean(), updated_at: z.string().nullable() }),
 	banner_group: z.object({ id: z.string(), name: z.string() }).nullable()
 });
 
@@ -27,12 +22,8 @@ export type KioskDeviceInfo = {
 	screenType: KioskScreenType;
 	shelterCode: string;
 	shelterName: string;
-	staffPin: {
-		set: boolean;
-		isDefault: boolean;
-		updatedAt: string | null;
-		updatedBy: string | null;
-	};
+	/** Always set: the panel only opens after the PIN matched. */
+	staffPin: { isDefault: boolean; updatedAt: string | null };
 	bannerGroup: { id: string; name: string } | null;
 };
 
@@ -47,12 +38,7 @@ export function toKioskDeviceInfo(wire: z.infer<typeof kioskDeviceInfoSchema>): 
 		screenType: wire.device.screen_type,
 		shelterCode: wire.shelter.code,
 		shelterName: wire.shelter.name,
-		staffPin: {
-			set: wire.staff_pin.set,
-			isDefault: wire.staff_pin.is_default,
-			updatedAt: wire.staff_pin.updated_at,
-			updatedBy: wire.staff_pin.updated_by
-		},
+		staffPin: { isDefault: wire.staff_pin.is_default, updatedAt: wire.staff_pin.updated_at },
 		bannerGroup: wire.banner_group
 	};
 }

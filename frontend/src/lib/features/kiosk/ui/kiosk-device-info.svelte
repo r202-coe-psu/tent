@@ -71,13 +71,7 @@
 	);
 
 	const pinLabel = $derived(
-		!info
-			? ''
-			: !info.staffPin.set
-				? 'ยังไม่ตั้ง'
-				: info.staffPin.isDefault
-					? 'ยังเป็นค่าเริ่มต้น'
-					: 'ตั้งแล้ว'
+		!info ? '' : info.staffPin.isDefault ? 'ยังเป็นค่าเริ่มต้น' : 'ตั้งแล้ว'
 	);
 
 	const pinUpdated = $derived.by(() => {

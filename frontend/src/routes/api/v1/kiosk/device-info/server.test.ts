@@ -113,7 +113,7 @@ describe('POST /api/v1/kiosk/device-info', () => {
 		vi.useRealTimers();
 	});
 
-	it('returns the device info for the right PIN, without the PIN, no-store', async () => {
+	it('returns the device info for the right PIN, without the PIN or who set it, no-store', async () => {
 		const response = await POST(request({ pin: '482913' }));
 
 		expect(response.status).toBe(200);
@@ -127,15 +127,11 @@ describe('POST /api/v1/kiosk/device-info', () => {
 				screen_type: 'portrait'
 			},
 			shelter: { code: 'SH001', name: 'ศูนย์พักพิงหาดใหญ่' },
-			staff_pin: {
-				set: true,
-				is_default: false,
-				updated_at: '2026-10-09T08:30:00Z',
-				updated_by: 'admin-1'
-			},
+			staff_pin: { is_default: false, updated_at: '2026-10-09T08:30:00Z' },
 			banner_group: { id: 'kiosk_banner_group:g1', name: 'กลุ่มหน้าประตู' }
 		});
 		expect(JSON.stringify(body)).not.toContain('482913');
+		expect(JSON.stringify(body)).not.toContain('admin-1');
 		const logged = info.mock.calls.flat().join(' ');
 		expect(logged).toContain('device=kiosk-01');
 		expect(logged).toContain('result=ok');

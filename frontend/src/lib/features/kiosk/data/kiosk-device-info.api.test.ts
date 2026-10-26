@@ -15,12 +15,7 @@ const wireInfo = {
 		screen_type: 'portrait'
 	},
 	shelter: { code: 'SH-001', name: 'Hat Yai Hall' },
-	staff_pin: {
-		set: true,
-		is_default: false,
-		updated_at: '2026-10-20T08:30:00Z',
-		updated_by: 'staff-7'
-	},
+	staff_pin: { is_default: false, updated_at: '2026-10-20T08:30:00Z' },
 	banner_group: { id: 'bg-1', name: 'Lobby banners' }
 };
 
@@ -37,12 +32,7 @@ describe('fetchKioskDeviceInfo', () => {
 				screenType: 'portrait',
 				shelterCode: 'SH-001',
 				shelterName: 'Hat Yai Hall',
-				staffPin: {
-					set: true,
-					isDefault: false,
-					updatedAt: '2026-10-20T08:30:00Z',
-					updatedBy: 'staff-7'
-				},
+				staffPin: { isDefault: false, updatedAt: '2026-10-20T08:30:00Z' },
 				bannerGroup: { id: 'bg-1', name: 'Lobby banners' }
 			}
 		});
@@ -110,7 +100,7 @@ describe('fetchKioskDeviceInfo', () => {
 		const fetchFn = vi.fn<typeof fetch>().mockResolvedValue(
 			json({
 				...wireInfo,
-				staff_pin: { set: true, is_default: true, updated_at: null, updated_by: null },
+				staff_pin: { is_default: true, updated_at: null },
 				banner_group: null
 			})
 		);
@@ -120,7 +110,7 @@ describe('fetchKioskDeviceInfo', () => {
 		expect(result).toMatchObject({
 			kind: 'ok',
 			info: {
-				staffPin: { set: true, isDefault: true, updatedAt: null, updatedBy: null },
+				staffPin: { isDefault: true, updatedAt: null },
 				bannerGroup: null
 			}
 		});

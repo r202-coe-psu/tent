@@ -20,7 +20,7 @@ const DEVICE_INFO_BODY = {
 		screen_type: 'portrait'
 	},
 	shelter: { code: 'SH-1', name: 'ศูนย์พักพิง A' },
-	staff_pin: { set: true, is_default: false, updated_at: null, updated_by: null },
+	staff_pin: { is_default: false, updated_at: null },
 	banner_group: null
 };
 
