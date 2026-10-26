@@ -116,6 +116,7 @@
 	}
 
 	async function handleScan(code: string) {
+		if (isLookingUp) return;
 		isLookingUp = true;
 		scanError = null;
 		try {
@@ -400,5 +401,6 @@
 		: 'เล็งกล้องไปที่ QR บนบัตรผู้ประสบภัย หรือพิมพ์ / ยิงรหัสด้วยเครื่องสแกน'}
 	formats={SCAN_FORMATS}
 	manualInputMode="text"
+	busy={isLookingUp}
 	onScan={handleScan}
 />
