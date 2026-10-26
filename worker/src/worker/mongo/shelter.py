@@ -10,7 +10,7 @@ from tent_model import OccupancyBreakdown, PublicShelter
 from worker.couch.client import CouchClient
 from worker.masking import shelter_db_name
 from worker.mongo.upsert import apply_document
-from worker.projectors.occupancy import aggregate_occupancy
+from worker.projectors.occupancy import aggregate_occupancy, count_stay_statuses
 
 
 async def apply_shelter(action: str, payload: dict[str, Any] | None) -> None:
@@ -36,7 +36,8 @@ async def is_shelter_projected(shelter_code: str) -> bool:
 
 async def refresh_occupancy(couch: CouchClient, shelter_code: str) -> bool:
     """Recompute `occupancy_total` / `occupancy_breakdown` from this shelter's active
-    evacuees (EXT-005, ADR 0002 §2). No-op when the shelter has no `public_shelters`
+    evacuees (EXT-005, ADR 0002 §2) and `occupancy_by_status` from all of them (PDPA D8).
+    No-op when the shelter has no `public_shelters`
     row yet — the `shelter` doc projection (`project_shelter`) owns creating it."""
     existing = await PublicShelter.get(shelter_code)
     if existing is None:
@@ -56,6 +57,7 @@ async def refresh_occupancy(couch: CouchClient, shelter_code: str) -> bool:
 
     existing.occupancy_total = total
     existing.occupancy_breakdown = OccupancyBreakdown(**breakdown)
+    existing.occupancy_by_status = count_stay_statuses(evacuees)
     existing.updated_at = datetime.now(UTC)
     await existing.save()
     return True

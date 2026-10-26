@@ -25,12 +25,27 @@ import {
 	isRegistrationCompensationIncomplete
 } from './people.remote';
 import { UlidReservation } from '$lib/db/ulid-reservation';
+import { mintConsentStamp } from '$lib/features/consent/server';
 import type { EvacueeInput, Medical } from '../domain/people';
 import {
 	createKioskEvacueeFromCard,
 	createKioskWalkInHousehold,
-	type CardSnapshot
+	type CardSnapshot,
+	type EvacueeConsentWrite
 } from '../domain/people';
+
+const kioskConsent: EvacueeConsentWrite = {
+	consent: {
+		mode: 'full',
+		health: false,
+		...mintConsentStamp(new Date('2026-10-25T03:00:00.000Z')),
+		channel: 'kiosk',
+		given_by: 'self',
+		giver_evacuee_id: null,
+		recorded_verbally_by: null
+	},
+	searchExcluded: false
+};
 
 const ctx = { shelterCode: 'SH001', createdBy: 'tester' };
 
@@ -1614,7 +1629,8 @@ describe('check-in / check-out', () => {
 					citizen_id: '1234567890123',
 					photo_base64: 'data:image/jpeg;base64,AA=='
 				} as CardSnapshot,
-				ctx
+				ctx,
+				kioskConsent
 			);
 			const evacuee = {
 				...generated,
@@ -2576,7 +2592,7 @@ describe('kiosk walk-in household at Station 1', () => {
 			scanned_at: new Date().toISOString(),
 			device_id: 'KIOSK-01'
 		};
-		const created = createKioskEvacueeFromCard(snapshot, kioskCtx);
+		const created = createKioskEvacueeFromCard(snapshot, kioskCtx, kioskConsent);
 		const unlinked = {
 			...created,
 			current_stay: { ...created.current_stay, status: 'kiosk_registered' as const }

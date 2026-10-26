@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+from tent_model.public_person import PublicPerson
 from tent_model.public_shelter import PublicShelter
 
 from ...utils.shelter_booking import accepts_pre_registration
@@ -23,6 +24,12 @@ FORECAST_OCCUPANCY_STATUSES = (
 PRESENT_OCCUPANCY_STATUSES = ("active", "room_confirmed", "temporary_leave")
 IN_ZONE_OCCUPANCY_STATUSES = ("room_confirmed",)
 OCCUPANCY_STATUSES = FORECAST_OCCUPANCY_STATUSES
+
+
+async def _count_persons(code: str, statuses: tuple[str, ...]) -> int:
+    return await PublicPerson.find(
+        {"shelter_code": code, "status": {"$in": list(statuses)}}
+    ).count()
 
 
 class ShelterUseCase:
@@ -130,8 +137,6 @@ class ShelterUseCase:
         )
 
     async def get_shelter(self, code: str) -> ShelterDetailResponse | None:
-        from tent_model.public_person import PublicPerson
-
         doc = await PublicShelter.find_one({"shelter_code": code})
         if not doc:
             return None
@@ -147,15 +152,18 @@ class ShelterUseCase:
         # Prefer projected status (Mongo SoR for public) over re-deriving from raw_data.
         mapped_status = status_ui.get(doc.status, "CLOSED")
 
-        occupancy = await PublicPerson.find(
-            {"shelter_code": code, "status": {"$in": list(FORECAST_OCCUPANCY_STATUSES)}}
-        ).count()
-        present = await PublicPerson.find(
-            {"shelter_code": code, "status": {"$in": list(PRESENT_OCCUPANCY_STATUSES)}}
-        ).count()
-        in_zone = await PublicPerson.find(
-            {"shelter_code": code, "status": {"$in": list(IN_ZONE_OCCUPANCY_STATUSES)}}
-        ).count()
+        # PDPA D8: the worker's per-status totals include search-excluded people, who have
+        # no `public_persons` row. A deactivated shelter's last counts are not current.
+        if doc.occupancy_by_status is not None:
+            by_status = doc.occupancy_by_status if doc.is_active else {}
+            occupancy = sum(by_status.get(s, 0) for s in FORECAST_OCCUPANCY_STATUSES)
+            present = sum(by_status.get(s, 0) for s in PRESENT_OCCUPANCY_STATUSES)
+            in_zone = sum(by_status.get(s, 0) for s in IN_ZONE_OCCUPANCY_STATUSES)
+        else:
+            # Row not re-projected yet: count its person rows (legacy).
+            occupancy = await _count_persons(code, FORECAST_OCCUPANCY_STATUSES)
+            present = await _count_persons(code, PRESENT_OCCUPANCY_STATUSES)
+            in_zone = await _count_persons(code, IN_ZONE_OCCUPANCY_STATUSES)
 
         capacity_total = m.get("capacity") or doc.capacity or 0
         capacity_available = max(0, capacity_total - occupancy)

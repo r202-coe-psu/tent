@@ -84,11 +84,11 @@
 		const entries = (ledgerQuery.data as StockLedger[]).filter(
 			(e: StockLedger) => e.item_id === currentItem._id
 		);
-		let broken = false;
-		const lots = projectLotsByItem(entries, () => (broken = true)).filter((lot) =>
-			qtyGt(lot.qty, 0)
-		);
-		return { lots, broken };
+		const { lots, brokenItemIds } = projectLotsByItem(entries);
+		return {
+			lots: lots.filter((lot) => qtyGt(lot.qty, 0)),
+			broken: brokenItemIds.length > 0
+		};
 	});
 	/** The item's history could not be replayed into lots — say so instead of guessing (#569). */
 	const lotsIntegrityError = $derived(projectedLots.broken);
@@ -463,6 +463,18 @@
 						</span>
 					</div>
 				</div>
+
+				<!-- CR-190: added stock never merges into the chosen lot, so the picker gains a lot. -->
+				{#if deltaSign === 'add' && currentLot}
+					<p
+						class="col-span-1 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-900 sm:col-span-2"
+						role="note"
+					>
+						ยอดที่เพิ่ม {deltaAbs}
+						{unitLabel} จะบันทึกเป็น<strong>ล็อตใหม่</strong> (ใช้ที่เก็บและวันหมดอายุเดียวกับล็อตที่เลือก)
+						ไม่รวมเข้าล็อตเดิม รายการล็อตจึงมีเพิ่มขึ้นหนึ่งรายการ
+					</p>
+				{/if}
 
 				<div class="col-span-1 space-y-2 sm:col-span-2">
 					<span id="adjust-reason-label" class="text-sm leading-snug font-medium">

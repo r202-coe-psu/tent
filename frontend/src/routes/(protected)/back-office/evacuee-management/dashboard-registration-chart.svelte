@@ -15,6 +15,7 @@
 	let { data }: { data: RegistrationsPayload } = $props();
 
 	const chartConfig = {
+		preregister: { label: 'จำนวนผู้ลงทะเบียนล่วงหน้า', color: '#0D9488' },
 		checkin: { label: 'จำนวนคนลงทะเบียนเข้า', color: '#003B71' },
 		checkout: { label: 'จำนวนคนลงทะเบียนออก', color: '#93C5FD' }
 	} satisfies Chart.ChartConfig;
@@ -22,16 +23,24 @@
 	const dayCount = $derived(daysBetween(data.range.from, data.range.to));
 	const mode = $derived(dayCount > 60 ? 'weekly' : 'daily');
 
-	function aggregateWeekly(dailyData: { date: string; checkin: number; checkout: number }[]) {
-		const weeks = new SvelteMap<string, { checkin: number; checkout: number; endDate: string }>();
+	type DailyRow = { date: string; preregister: number; checkin: number; checkout: number };
+
+	function aggregateWeekly(dailyData: DailyRow[]) {
+		const weeks = new SvelteMap<string, Omit<DailyRow, 'date'> & { endDate: string }>();
 		for (const row of dailyData) {
 			const mon = getISOWeekMonday(row.date);
 			if (!weeks.has(mon)) {
 				const d = new SvelteDate(mon);
 				d.setUTCDate(d.getUTCDate() + 6);
-				weeks.set(mon, { checkin: 0, checkout: 0, endDate: d.toISOString().slice(0, 10) });
+				weeks.set(mon, {
+					preregister: 0,
+					checkin: 0,
+					checkout: 0,
+					endDate: d.toISOString().slice(0, 10)
+				});
 			}
 			const w = weeks.get(mon)!;
+			w.preregister += row.preregister;
 			w.checkin += row.checkin;
 			w.checkout += row.checkout;
 		}
@@ -39,6 +48,7 @@
 			.sort((a, b) => a[0].localeCompare(b[0]))
 			.map(([mon, w]) => ({
 				date: formatThaiWeekRange(mon, w.endDate),
+				preregister: w.preregister,
 				checkin: w.checkin,
 				checkout: w.checkout
 			}));
@@ -46,8 +56,9 @@
 
 	const chartData = $derived.by(() => {
 		const days = buildDateRange(data.range.from, data.range.to);
-		const daily = days.map((date) => ({
+		const daily: DailyRow[] = days.map((date) => ({
 			date,
+			preregister: data.preregister[date] ?? 0,
 			checkin: data.checkin[date] ?? 0,
 			checkout: data.checkout[date] ?? 0
 		}));
@@ -62,7 +73,7 @@
 	});
 
 	// For LayerChart grouping
-	const seriesKeys = ['checkin', 'checkout'];
+	const seriesKeys = ['preregister', 'checkin', 'checkout'];
 
 	// The x-axis is a category (band) scale, so LayerChart renders one tick per
 	// bar with no automatic thinning — over a long daily range that's 30-60+
@@ -79,12 +90,16 @@
 			</div>
 		{/each}
 	</div>
-	<Chart.Container config={chartConfig} class="h-108 w-full">
+	<Chart.Container
+		config={chartConfig}
+		class="h-72 w-full lg:h-[clamp(14rem,calc(var(--app-shell-height)-32rem),27rem)]"
+	>
 		<BarChart
 			data={chartData}
 			x="date"
 			y={seriesKeys}
 			series={[
+				{ key: 'preregister', value: 'preregister', color: chartConfig.preregister.color },
 				{ key: 'checkin', value: 'checkin', color: chartConfig.checkin.color },
 				{ key: 'checkout', value: 'checkout', color: chartConfig.checkout.color }
 			]}

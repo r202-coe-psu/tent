@@ -143,11 +143,13 @@ async function fillAndSubmit(newQty: string, reasonLabel: string) {
 const submittedInput = () =>
 	adjust.mutateAsync.mock.calls.at(-1)?.[0]?.input as Record<string, unknown> | undefined;
 
-afterEach(() => {
+afterEach(async () => {
 	adjust.mutateAsync.mockReset();
 	toastMock.error.mockReset();
 	if (instance) unmount(instance);
 	instance = null;
+	// bits-ui releases the body scroll lock on a 24 ms timer; let it run before happy-dom tears down.
+	await new Promise((resolve) => setTimeout(resolve, 50));
 	document.body.innerHTML = '';
 });
 
@@ -183,6 +185,24 @@ describe('adjust form lots (#569)', () => {
 		const input = submittedInput();
 		expect(input).toMatchObject({ qty: '6', lot: { expiry: '2027-03-01' } });
 		expect(input).not.toHaveProperty('lot_ref');
+	});
+
+	it('says added stock becomes a new lot, but not for a write-off', async () => {
+		ledger.current = [INBOUND, DISPATCH];
+		await render();
+		await chooseLot('คงเหลือ 1199');
+		const qty = document.getElementById('new-qty') as HTMLInputElement;
+		const hint = () => document.body.querySelector('[role="note"]')?.textContent ?? '';
+
+		qty.value = '1205';
+		qty.dispatchEvent(new Event('input', { bubbles: true }));
+		await settle();
+		expect(hint()).toContain('ล็อตใหม่');
+
+		qty.value = '1190';
+		qty.dispatchEvent(new Event('input', { bubbles: true }));
+		await settle();
+		expect(hint()).toBe('');
 	});
 
 	it('hides a lot that is down to zero', async () => {

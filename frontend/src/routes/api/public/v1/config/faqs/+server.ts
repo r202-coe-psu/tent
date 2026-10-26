@@ -3,6 +3,10 @@ import { adminRaw } from '$lib/server/couch-admin';
 import { fastapiBaseUrl, fastapiServiceHeaders } from '$lib/server/fastapi';
 import type { RequestHandler } from './$types';
 import type { FaqItem } from '$lib/features/public-portal';
+import {
+	publicFooterLogos,
+	type PublicPortalConfigRaw
+} from '$lib/server/public-portal/footer-logos.server';
 
 const CONFIG_DOC_PATH = '/registry/config:public_portal';
 
@@ -36,7 +40,8 @@ export const GET: RequestHandler = async ({ url, fetch }) => {
 					faqs,
 					line_oa_url: config.line_oa_url || '',
 					facebook_url: config.facebook_url || '',
-					phone_number: config.phone_number || ''
+					phone_number: config.phone_number || '',
+					footer_logos: publicFooterLogos(data as PublicPortalConfigRaw)
 				},
 				{
 					headers: {
