@@ -35,6 +35,10 @@
 	import { ensureRecaptchaLoaded } from '$lib/api/recaptcha-script';
 
 	const donationStore = getDonationStore();
+	// CR-175 FR-1 — photos ride only an unsolicited booking.
+	const donorPhotos = $derived(
+		donationStore.flowMode === 'unsolicited' ? donationStore.photos.photoIds : []
+	);
 	const unitsQuery = useUnitsOfMeasure();
 	const units = $derived(unitsQuery.data ?? []);
 	const siteKey = env.PUBLIC_RECAPTCHA_SITE_KEY || '';
@@ -144,6 +148,10 @@
 
 	async function submitDonation() {
 		donationStore.errorMessage = '';
+		if (donationStore.flowMode === 'unsolicited' && donationStore.photos.busy) {
+			toast.error(t.photoWaitUpload);
+			return;
+		}
 		donationStore.isSubmitting = true;
 		// E2E may inject a token; otherwise require real reCAPTCHA when enabled.
 		let token = window.__captchaToken || '';
@@ -223,6 +231,7 @@
 								}))
 							: [{ free_text: t.generalItemsFallback, qty: 1, unit: t.defaultItemUnit }],
 					logistics: logistics,
+					...(donorPhotos.length > 0 ? { photos: donorPhotos } : {}),
 					...(token ? { captchaToken: token } : {})
 				})
 			});

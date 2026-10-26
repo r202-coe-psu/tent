@@ -292,6 +292,7 @@
 	function donateSingleNeed(shelter: ShelterNeeds, need: Need) {
 		if (need.status === 'closed') return;
 		donationStore.flowMode = 'solicited';
+		donationStore.photos.clear();
 		donationStore.selectedShelter = shelter.code;
 		donationStore.selectedShelterName = shelter.name;
 		donationStore.shelterCode = shelter.code;
@@ -310,8 +311,7 @@
 				unit: formatUnit(need.unit),
 				unit_code: need.unit,
 				condition: 'new',
-				remark: '',
-				image: need.image || ''
+				remark: ''
 			}
 		];
 		donationStore.goToStep('form');
@@ -320,6 +320,8 @@
 
 	function donateOtherItems(shelter: ShelterNeeds) {
 		donationStore.flowMode = 'unsolicited';
+		// Photos live in the shelter's DB they were uploaded to — a new booking starts empty.
+		donationStore.photos.clear();
 		donationStore.selectedShelter = shelter.code;
 		donationStore.selectedShelterName = shelter.name;
 		donationStore.shelterCode = shelter.code;
@@ -332,8 +334,7 @@
 				amount: 1,
 				unit: t.defaultItemUnit,
 				condition: 'new',
-				remark: '',
-				image: ''
+				remark: ''
 			}
 		];
 		donationStore.goToStep('form');

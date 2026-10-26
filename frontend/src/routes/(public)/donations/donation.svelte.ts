@@ -1,6 +1,7 @@
 import { setContext, getContext, tick } from 'svelte';
 import { ulid } from '$lib/db/ulid';
 import { scrollAppToTop } from '$lib/utils/scroll-app-to-top';
+import { DonorPhotos } from '$lib/features/donations';
 
 export interface DonationItem {
 	id: string;
@@ -23,7 +24,6 @@ export interface DonationItem {
 	unit_code?: string;
 	condition?: string;
 	remark?: string;
-	image?: string;
 }
 
 export type TabStep = 'needs' | 'shelter-details' | 'form' | 'time' | 'ticket';
@@ -48,6 +48,12 @@ export class DonationStore {
 	eta = $state('');
 	pickupAddress = $state('');
 
+	/**
+	 * Booking-level donor photos (CR-175 FR-1, FR-2) — unsolicited mode only, and bound to
+	 * `shelterCode`: an uploaded photo lives in that shelter's DB.
+	 */
+	photos = new DonorPhotos();
+
 	items = $state<DonationItem[]>([
 		{
 			id: ulid(),
@@ -56,8 +62,7 @@ export class DonationStore {
 			amount: 1,
 			unit: 'piece',
 			condition: 'new',
-			remark: '',
-			image: ''
+			remark: ''
 		}
 	]);
 
@@ -93,8 +98,7 @@ export class DonationStore {
 			amount: 1,
 			unit: 'piece',
 			condition: 'new',
-			remark: '',
-			image: ''
+			remark: ''
 		});
 	}
 
@@ -131,8 +135,7 @@ export class DonationStore {
 				amount: 1,
 				unit: 'piece',
 				condition: 'new',
-				remark: '',
-				image: ''
+				remark: ''
 			}
 		];
 		this.captchaToken = '';
@@ -141,6 +144,7 @@ export class DonationStore {
 		this.trackingToken = '';
 		this.bookingRef = '';
 		this.bookingStatus = '';
+		this.photos.clear();
 	}
 }
 

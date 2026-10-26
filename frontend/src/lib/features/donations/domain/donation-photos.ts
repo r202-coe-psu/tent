@@ -110,3 +110,37 @@ export function rejectDonationPhotoDocs(
 export function shelterAcceptsDonations(operationStatus: string | null): boolean {
 	return operationStatus !== null && !['closed', 'standby', 'cancelled'].includes(operationStatus);
 }
+
+/**
+ * One photo in the donor form. `bytes` is `full` + `thumb` after compression, the unit
+ * FR-7 counts; it is known before the upload starts, so a photo still uploading already
+ * takes its share of the 10 MB.
+ */
+export type DonorPhoto =
+	| { key: string; state: 'uploading'; previewUrl: string; bytes: number }
+	| { key: string; state: 'ready'; previewUrl: string; bytes: number; photoId: string };
+
+export interface DonorPhotoBudget {
+	count: number;
+	bytes: number;
+	/** No more photos may be picked: 30 already, or the 10 MB is used up (FR-3, FR-7). */
+	full: boolean;
+}
+
+export function donorPhotoBudget(photos: readonly DonorPhoto[]): DonorPhotoBudget {
+	const bytes = photos.reduce((sum, p) => sum + p.bytes, 0);
+	return {
+		count: photos.length,
+		bytes,
+		full: photos.length >= DONATION_PHOTO_MAX_COUNT || bytes >= DONATION_PHOTOS_MAX_TOTAL_BYTES
+	};
+}
+
+/** Would one more compressed photo of `bytes` still fit on the booking? */
+export function donorPhotoFits(photos: readonly DonorPhoto[], bytes: number): boolean {
+	const budget = donorPhotoBudget(photos);
+	return (
+		budget.count < DONATION_PHOTO_MAX_COUNT &&
+		budget.bytes + bytes <= DONATION_PHOTOS_MAX_TOTAL_BYTES
+	);
+}
