@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Locator, type Page } from '@playwright/test';
 import {
 	createCouchUser,
 	deleteCouchUser,
@@ -28,6 +28,19 @@ const SHELTER_DB = 'shelter_sh001';
 const CATALOG_DB = 'catalog';
 
 const DISTRIBUTE_FORBIDDEN_HINT = 'ต้องมีสิทธิ์เจ้าหน้าที่คลัง (warehouse_staff) จึงจะเบิกจ่ายได้';
+
+/**
+ * A disabled button has `pointer-events: none`, so its reason lives on the wrapper around it
+ * (#572): described for screen readers, and shown as a tooltip when the wrapper is hovered.
+ */
+async function expectDisabledReason(page: Page, button: Locator, reason: string) {
+	const wrapper = button.locator('xpath=ancestor::*[@aria-disabled="true"][1]');
+	await expect(wrapper).toHaveAccessibleDescription(reason);
+	await wrapper.hover();
+	// bits-ui tooltip content carries no `tooltip` role; shadcn marks it with data-slot.
+	await expect(page.locator('[data-slot="tooltip-content"]')).toContainText(reason);
+	await page.mouse.move(0, 0);
+}
 
 const WH_STAFF: TestUser = {
 	name: `wh_staff_${RUN_ID}`,
@@ -293,7 +306,7 @@ test.describe('Stock Inventory & Warehouse Operations (/back-office/supply)', ()
 		const headerDistribute = page.getByRole('button', { name: 'เบิกจ่าย', exact: true });
 		await expect(headerDistribute).toBeVisible();
 		await expect(headerDistribute).toBeDisabled();
-		await expect(headerDistribute).toHaveAttribute('title', DISTRIBUTE_FORBIDDEN_HINT);
+		await expectDisabledReason(page, headerDistribute, DISTRIBUTE_FORBIDDEN_HINT);
 
 		// 2. Filter to Item 1
 		const searchInput = page.getByPlaceholder('ค้นหาชื่อ / SKU / สแกนบาร์โค้ด');
@@ -306,7 +319,7 @@ test.describe('Stock Inventory & Warehouse Operations (/back-office/supply)', ()
 		const rowDistribute = row.getByRole('button', { name: `เบิก ${item1Name}` });
 		await expect(rowDistribute).toBeVisible();
 		await expect(rowDistribute).toBeDisabled();
-		await expect(rowDistribute).toHaveAttribute('title', DISTRIBUTE_FORBIDDEN_HINT);
+		await expectDisabledReason(page, rowDistribute, DISTRIBUTE_FORBIDDEN_HINT);
 
 		// 4. Open Item Detail Sheet and verify distribute button inside sheet is also disabled
 		await row.getByRole('button', { name: item1Name, exact: true }).click();
@@ -316,7 +329,7 @@ test.describe('Stock Inventory & Warehouse Operations (/back-office/supply)', ()
 		const sheetDistribute = sheet.getByRole('button', { name: `เบิกจ่าย ${item1Name}` });
 		await expect(sheetDistribute).toBeVisible();
 		await expect(sheetDistribute).toBeDisabled();
-		await expect(sheetDistribute).toHaveAttribute('title', DISTRIBUTE_FORBIDDEN_HINT);
+		await expectDisabledReason(page, sheetDistribute, DISTRIBUTE_FORBIDDEN_HINT);
 
 		// Close sheet
 		await page.keyboard.press('Escape');
