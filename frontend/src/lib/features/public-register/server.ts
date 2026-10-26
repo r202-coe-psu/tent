@@ -58,6 +58,15 @@ export type {
 } from './domain/unassigned-registration';
 
 export {
+	planPublicConsent,
+	publicConsentBodySchema,
+	publicConsentShape,
+	refinePublicConsent
+} from './domain/public-consent';
+
+export type { PublicConsentBody } from './domain/public-consent';
+
+export {
 	executePublicFamilyRegistration,
 	PublicRegistrationWriteError
 } from './public-family-registration.server';

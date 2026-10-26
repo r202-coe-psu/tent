@@ -77,6 +77,7 @@ migration: ไม่มี backfill — flag ใหม่ใน `feature_flags` 
 | KTD-AC-07 | Rate limit ตาม D-5 — สร้าง session เกิน 10 ครั้ง/นาที/kiosk → 429 `KIOSK_RATE_LIMITED`                                                               |
 | KTD-AC-08 | Regression — flow `member_scan` เดิมบนหน้า pre-register (สร้าง session → สแกน → อ่าน profile ผ่าน public GET/SSE) ทำงานเหมือนเดิม                    |
 | KTD-AC-09 | Toggle fail closed — เมื่อ `kiosk_thaid_check_in_enabled=false` หรือ `thaid_registration_enabled=false` → การ์ด ThaiD ซ่อน และ `POST /api/v1/scanner/kiosk/thaid/session` คืน 403/404 (เพิ่มตามเงื่อนไข PO approve 2026-10-11) |
+| KTD-AC-10 | Callback ข้ามเบราว์เซอร์ — mode `kiosk_check_in` และ `member_scan` ไม่บังคับให้ cookie `oauth_thaid_state` ตรงกับ `state` (มือถือสแกน QR ด้วยเบราว์เซอร์หนึ่ง แต่แอป ThaiD เปิด callback ในเบราว์เซอร์ default อีกตัว) แต่ยังต้องผ่าน HMAC ของ `state` และ session ต้อง `pending` · mode `login` / `link` / `stepup` / `register` ยังต้องตรง cookie → ไม่ตรง = `invalid_state` · error ของสอง mode นี้ redirect ตาม mode ใน `state` ที่เซ็น (ไม่ใช่ cookie ที่ค้างจาก flow อื่น) · หน้า `/thaid-scan-success` แสดงข้อความ `invalid_state` ให้สแกน QR ใหม่ (kiosk: "ข้อมูลการยืนยันตัวตนไม่ถูกต้องหรือหมดอายุ กรุณาสแกน QR ใหม่ที่ตู้" · member_scan: "…กรุณาสแกน QR ใหม่จากหน้าจอลงทะเบียน") (เพิ่ม 2026-10-23, #757) |
 
 ## Security
 
@@ -84,6 +85,7 @@ migration: ไม่มี backfill — flag ใหม่ใน `feature_flags` 
 - **ลบทิ้งทันที** เมื่อ check-in สำเร็จ, cancel, หรือหมดเวลาตาม D-4 — ไม่เก็บไว้รอ GC
 - **ไม่ log เลข 13 หลักและชื่อ** — log / error / telemetry ห้ามมี pid หรือชื่อเต็ม; ถ้าจำเป็นต้องอ้างถึงให้ mask (เช่น `x-xxxx-xxxxx-12-3`)
 - **Reject session ที่ถูกใช้ซ้ำ** — `session_id` ที่ consume แล้ว หรือถูกลบแล้ว ใช้ซ้ำไม่ได้ทุก endpoint (KTD-AC-01)
+- **ไม่ผูก callback กับเบราว์เซอร์ใน mode ข้ามอุปกรณ์** — `kiosk_check_in` / `member_scan` ข้ามการเทียบ state cookie เพราะผลลัพธ์ลงที่ scan session ฝั่ง server (single-use, `pending` เท่านั้น) ไม่ใช่เบราว์เซอร์ที่เปิด callback; `state` ยังต้องผ่าน HMAC. Mode ที่ผลลงเบราว์เซอร์ (`login` / `link` / `stepup` / `register`) ยังเทียบ cookie เพื่อกัน login CSRF (KTD-AC-10)
 
 ## D-7 — ข้อความ (PO approve 2026-10-11 ตามที่เขียน)
 
@@ -160,4 +162,5 @@ N/A — additive flag (doc เดิมไม่มี key = `false`); session �
   - (b) เพิ่ม **KTD-AC-09**: เมื่อ `kiosk_thaid_check_in_enabled=false` หรือ `thaid_registration_enabled=false` → การ์ดซ่อน และสร้าง session คืน 403/404
   - (c) mask เลข 13 หลักให้เหลือเปิดเผยไม่เกิน 2 หลักท้าย
   - (d) implementation มาเป็น code PR ใหม่จาก `feat/pre-register_kiosk` รีวิวเทียบกับ CR นี้ — ห้าม merge branch นั้นตรง ๆ · PR นั้นต้องอัปเดต `docs/data/schema.md`, `docs/data/api-contract.md` และ FR-KPC-11/F-08 ใน CR-151/CR-152
+- 2026-10-23 — แก้ในที่ (#757, feedback หน้างาน): ThaiD บน Android ล้มด้วย `invalid_state` เมื่อเบราว์เซอร์ที่สแกน QR (เช่น in-app browser ของแอป Google) ไม่ใช่เบราว์เซอร์ default ที่แอป ThaiD เปิด callback — cookie state ไม่ตามไป · เพิ่ม KTD-AC-10 + ข้อ Security (ข้ามการเทียบ cookie เฉพาะ `kiosk_check_in` / `member_scan`) · ข้อเสนอจากทีม kiosk — รอ PO review
 - 2026-10-23 — **Superseded (rate limit) by [CR-188](../01-core/CR-188-rate-limit-to-nginx.md):** KTD-AC-07 (10 ครั้ง/นาที/kiosk) ย้ายไป nginx zone `kiosk` ต่อ IP

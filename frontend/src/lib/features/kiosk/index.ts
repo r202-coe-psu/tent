@@ -52,6 +52,7 @@ export { isKioskPhoneCheckInEnabled } from './domain/kiosk-config';
 export { walkInSession } from './application/walk-in-session.svelte';
 export {
 	abandonWalkIn,
+	restartThaidWalkIn,
 	submitWalkIn,
 	walkInCardMismatch
 } from './application/walk-in-registration';
