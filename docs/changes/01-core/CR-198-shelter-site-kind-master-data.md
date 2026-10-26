@@ -1,10 +1,12 @@
 ---
-id: draft
+id: CR-198
 title: ประเภทศูนย์ (site_kind) มาจาก master data global-only
-status: proposed
+status: approved
 date: 2026-10-26
-requested_by: feedback roleplay 23/10/69 — issue #836
-decided_by: <รอเจ้าของโครงการ>
+created: 2026-10-26
+updated: 2026-10-26
+requested_by: Suthinan Den (feedback roleplay 23/10/69 — issue #836)
+decided_by: Soravit Sukkarn (Team Lead) — approved 2026-10-26
 layer: volatile
 affects:
   - docs/data/schema.md §3.1 (`site_kind` enum → master code; migration note)
@@ -28,7 +30,7 @@ affects:
   - tests: shelters/domain/schema.test.ts, master-data.test.ts, shelter-import tests, public-portal mappers.test.ts, backend/tests/test_shelter.py, worker/tests/projectors/test_projectors.py, e2e master-data / shelters / shelter-import / public-shelters-filter / system-admin-shelter
 ---
 
-# ประเภทศูนย์ (`site_kind`) มาจาก master data global-only
+# CR-198 — ประเภทศูนย์ (`site_kind`) มาจาก master data global-only
 
 > **สรุป (TL;DR):**
 >
@@ -147,19 +149,14 @@ item ใน seed → doc เดิมทุกตัวยัง valid. Deploy �
 (ไม่มี doc `master_data:site_kind` → dropdown ว่างและบันทึกไม่ได้ตาม FR-7). worker ต้อง re-project
 หลัง bump `PROJECTION_VERSION` (ค่าใน Mongo เดิมไม่เปลี่ยนเพราะมีแค่ 2 code เดิม).
 
-## Open decisions
+## Decisions (เคาะแล้ว 2026-10-26 — Soravit Sukkarn (Team Lead))
 
-> [NEEDS DECISION D-1: bump `schema_v` ของ shelter หรือไม่] — เสนอ **ไม่ bump**: รูป doc ไม่เปลี่ยน
-> (string เดิม, code เดิม). เลี่ยงชนลำดับกับ PR #756 (#647) และ #812 ที่จะใช้ 7 → 8 → 9.
-
-> [NEEDS DECISION D-2: ที่มาของ label หน้า public] — เสนอ **BFF `config/site-kinds` (FR-15)** ตาม precedent
-> `config/shelter-types`: แก้ label ที่ System Management แล้วหน้า public เห็นภายใน cache 5 นาที โดยไม่ต้อง
-> re-project. ทางเลือก: worker project `site_kind_label_th/en` ลง `public_shelters` — ต้อง re-project ทุกครั้งที่แก้ label.
-
-> [NEEDS DECISION D-3: ตัวนับหน้า `/shelters`] — เสนอ **นับแยกทุก code** (`counts_by_site_kind: {code: n}`)
-> แล้วแสดงตาม label. ทางเลือก: คง `evac_centers` / `host_houses` 2 ตัว และ code ใหม่ไม่ถูกนับ.
+- **D-1 (bump `schema_v` ของ shelter หรือไม่):** **ไม่ bump** — รูป doc ไม่เปลี่ยน (string เดิม, code เดิม). เลี่ยงชนลำดับกับ PR #756 (#647) และ #812 ที่จะใช้ 7 → 8 → 9.
+- **D-2 (ที่มาของ label หน้า public):** **BFF `config/site-kinds` (FR-15)** ตาม precedent `config/shelter-types`: แก้ label ที่ System Management แล้วหน้า public เห็นภายใน cache 5 นาที โดยไม่ต้อง re-project.
+- **D-3 (ตัวนับหน้า `/shelters`):** **นับแยกทุก code** (`counts_by_site_kind: {code: n}`) แล้วแสดงตาม label จาก master data.
 
 ## Decision log
 
-- 2026-10-26 — proposed (#836). เคาะแล้วใน issue: แทน `site_kind` (ไม่เพิ่ม field), global-only แบบ CR-186,
+- 2026-10-26 — proposed (#836 โดย Suthinan Den). เคาะแล้วใน issue: แทน `site_kind` (ไม่เพิ่ม field), global-only แบบ CR-186,
   เลือกได้ค่าเดียว (req), แสดง label ในหน้า public. track ด้วย CR ไฟล์ (เจ้าของสั่ง 2026-10-26)
+- 2026-10-26 — approved (#836) โดย Soravit Sukkarn (Team Lead). เคาะ D-1..D-3 ตามข้อเสนอของผู้เสนอ CR.
