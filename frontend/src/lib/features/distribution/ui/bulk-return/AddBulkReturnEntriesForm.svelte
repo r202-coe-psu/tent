@@ -238,6 +238,10 @@
 			submitError = 'กรุณาเลือกกองที่เปิดรับ';
 			return;
 		}
+		if (poolScanStatus === 'not_found') {
+			submitError = 'กองที่สแกนไม่ได้เปิดรับแล้ว กรุณาสแกนกองอื่นหรือเลือกกองจากรายการ';
+			return;
+		}
 		if (!returnerResolution.returner) {
 			submitError = returnerResolution.error ?? 'กรุณาระบุผู้คืน';
 			return;
@@ -343,7 +347,9 @@
 									class="h-11 w-full min-w-0 bg-white text-sm font-medium data-[size=default]:h-11 sm:h-10 sm:flex-1 sm:data-[size=default]:h-10"
 								>
 									<span class="truncate">
-										{selectedPool ? selectedPool.name : 'เลือกกองที่เปิดรับ'}
+										{selectedPool && poolScanStatus !== 'not_found'
+											? selectedPool.name
+											: 'เลือกกองที่เปิดรับ'}
 									</span>
 								</Select.Trigger>
 								<Select.Content>
@@ -569,7 +575,10 @@
 				</Button>
 				<Button
 					type="submit"
-					disabled={addMutation.isPending || !canWrite || openPools.length === 0}
+					disabled={addMutation.isPending ||
+						!canWrite ||
+						openPools.length === 0 ||
+						poolScanStatus === 'not_found'}
 					class="min-h-11 w-full gap-2 sm:w-auto"
 				>
 					{#if addMutation.isPending}
