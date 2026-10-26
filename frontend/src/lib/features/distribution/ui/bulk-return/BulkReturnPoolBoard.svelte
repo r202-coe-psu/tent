@@ -206,7 +206,7 @@
 	);
 	const storageFilterLabel = $derived(
 		storageFilter === 'all'
-			? 'ทุกที่เก็บ'
+			? 'ทุกโซนจัดเก็บ'
 			: (storageOptions.find((o) => o.value === storageFilter)?.label ?? storageFilter)
 	);
 
@@ -426,7 +426,7 @@
 							<span class="truncate">{storageFilterLabel}</span>
 						</Select.Trigger>
 						<Select.Content>
-							<Select.Item value="all" label="ทุกที่เก็บ" />
+							<Select.Item value="all" label="ทุกโซนจัดเก็บ" />
 							{#each storageOptions as option (option.value)}
 								<Select.Item value={option.value} label={option.label} />
 							{/each}

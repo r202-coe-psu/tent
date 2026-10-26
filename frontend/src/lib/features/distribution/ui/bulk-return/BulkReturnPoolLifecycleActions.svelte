@@ -88,7 +88,7 @@
 
 {#if canManage}
 	{#if status === 'OPEN'}
-		<div class="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-3">
+		<div class="flex flex-col gap-1 sm:contents">
 			<Button
 				type="button"
 				variant="outline"
@@ -104,7 +104,7 @@
 				เก็บเข้าคลัง
 			</Button>
 			{#if blockedReason}
-				<p id="submit-pool-reason" class="text-xs text-slate-600">{blockedReason}</p>
+				<p id="submit-pool-reason" class="text-xs text-slate-600 sm:basis-full">{blockedReason}</p>
 			{/if}
 		</div>
 

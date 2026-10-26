@@ -87,7 +87,7 @@
 		/>
 	</div>
 
-	<!-- Dropdown filters -->
+	<!-- Dropdown filters + date range + follow-up toggle + reset (one row) -->
 	<div class="flex flex-wrap items-center gap-2">
 		<!-- Requisition Type Filter -->
 		<div class="flex items-center gap-1.5">
@@ -104,7 +104,7 @@
 				<Select.Trigger
 					id="requisition-type-filter"
 					aria-label="กรองตามประเภท"
-					class="h-10 min-w-[130px] rounded-lg text-sm shadow-2xs"
+					class="h-9 min-w-[108px] rounded-lg px-2.5 text-sm shadow-2xs data-[size=default]:h-9"
 				>
 					<span class="truncate">
 						{requisitionType === 'all' ? 'ทุกประเภท' : getRequisitionTypeLabel(requisitionType)}
@@ -133,7 +133,7 @@
 				<Select.Trigger
 					id="destination-filter"
 					aria-label="กรองตามจุดหมาย"
-					class="h-10 min-w-[140px] rounded-lg text-sm shadow-2xs"
+					class="h-9 min-w-[116px] rounded-lg px-2.5 text-sm shadow-2xs data-[size=default]:h-9"
 				>
 					<span class="truncate">
 						{destination === 'all' ? 'ทุกจุดหมาย' : destination}
@@ -158,7 +158,7 @@
 							type="button"
 							variant="outline"
 							aria-label="กรองตามสถานะ"
-							class="h-10 gap-1.5 rounded-lg text-sm font-normal shadow-2xs"
+							class="h-9 gap-1 rounded-lg px-2.5 text-sm font-normal shadow-2xs"
 						>
 							<span>สถานะ{statuses.length > 0 ? ` (${statuses.length})` : ''}</span>
 							<ChevronDown class="h-4 w-4 text-slate-400" aria-hidden="true" />
@@ -178,10 +178,7 @@
 				</DropdownMenu.Content>
 			</DropdownMenu.Root>
 		{/if}
-	</div>
 
-	<!-- Date range + follow-up toggle + reset -->
-	<div class="flex flex-wrap items-center gap-2">
 		{#if onCreatedFromChange}
 			<div class="flex items-center gap-1.5">
 				<label for="created-from-filter" class="shrink-0 text-xs font-semibold text-slate-600">
@@ -189,7 +186,7 @@
 				</label>
 				<DatePicker
 					id="created-from-filter"
-					class="!h-10 w-[150px]"
+					class="!h-9 w-[132px]"
 					bind:value={() => createdFrom, (v) => onCreatedFromChange?.(v)}
 				/>
 			</div>
@@ -201,7 +198,7 @@
 				</label>
 				<DatePicker
 					id="created-to-filter"
-					class="!h-10 w-[150px]"
+					class="!h-9 w-[132px]"
 					bind:value={() => createdTo, (v) => onCreatedToChange?.(v)}
 				/>
 			</div>
@@ -214,7 +211,7 @@
 				variant={followUp ? 'default' : 'outline'}
 				aria-pressed={followUp}
 				onclick={() => onFollowUpChange(!followUp)}
-				class="h-10 rounded-lg text-sm shadow-2xs"
+				class="h-9 rounded-lg px-2.5 text-sm shadow-2xs"
 			>
 				ต้องติดตาม
 			</Button>
@@ -226,7 +223,7 @@
 				type="button"
 				variant="outline"
 				onclick={onResetFilters}
-				class="text-xs font-medium sm:ml-auto"
+				class="h-9 px-2.5 text-xs font-medium sm:ml-auto"
 			>
 				<RotateCcw class="h-3.5 w-3.5 text-slate-400" />
 				ล้างตัวกรอง

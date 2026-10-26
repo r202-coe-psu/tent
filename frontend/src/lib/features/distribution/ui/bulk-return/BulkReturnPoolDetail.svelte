@@ -211,7 +211,7 @@
 </script>
 
 <Sheet.Root open={row !== null} onOpenChange={handleSheetOpenChange}>
-	<Sheet.Content side="right" class="w-full gap-0 overflow-y-auto p-0 sm:max-w-xl">
+	<Sheet.Content side="right" class="w-full gap-0 overflow-y-auto p-0 sm:max-w-2xl">
 		{#if row}
 			{@const pool = row.pool}
 			<div class="space-y-3 border-b border-slate-100 bg-slate-50 px-5 pt-6 pr-14 pb-4">
@@ -436,7 +436,7 @@
 										{@const showMove = canMoveEntry(row, entry._id)}
 										{@const showVoid = canVoidEntry(row)}
 										{#if showMove || showVoid}
-											<div class="flex flex-col gap-2 pt-1 sm:flex-row">
+											<div class="flex flex-col gap-2 pt-1 sm:flex-row sm:justify-end">
 												{#if showMove}
 													<Button
 														type="button"
@@ -485,28 +485,32 @@
 						aria-labelledby="pool-cancel-heading"
 						class="space-y-2 rounded-xl border border-slate-200/80 bg-slate-50 p-4"
 					>
-						<h3 id="pool-cancel-heading" class="text-base font-semibold text-slate-800">
-							ยกเลิกกอง
-						</h3>
-						<p class="text-sm text-slate-600">
-							ยกเลิกได้เมื่อไม่มีรายการเหลืออยู่ในกอง กองที่ยกเลิกแล้วจะเปิดรับของอีกไม่ได้
-						</p>
-						<Button
-							type="button"
-							variant="destructive"
-							disabled={!canCancelPool(row)}
-							aria-describedby={cancelBlockedReason ? 'cancel-pool-reason' : undefined}
-							onclick={() => {
-								cancelError = null;
-								cancelOpen = true;
-							}}
-							class="min-h-11 w-full gap-2 sm:w-auto"
-						>
-							<Ban class="h-4 w-4" aria-hidden="true" />
-							ยกเลิกกอง
-						</Button>
+						<div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+							<div class="space-y-1">
+								<h3 id="pool-cancel-heading" class="text-base font-semibold text-slate-800">
+									ยกเลิกกอง
+								</h3>
+								<p class="text-sm text-slate-600">
+									ยกเลิกได้เมื่อไม่มีรายการเหลืออยู่ในกอง กองที่ยกเลิกแล้วจะเปิดรับของอีกไม่ได้
+								</p>
+							</div>
+							<Button
+								type="button"
+								variant="destructive"
+								disabled={!canCancelPool(row)}
+								aria-describedby={cancelBlockedReason ? 'cancel-pool-reason' : undefined}
+								onclick={() => {
+									cancelError = null;
+									cancelOpen = true;
+								}}
+								class="min-h-11 w-full shrink-0 gap-2 sm:w-auto"
+							>
+								<Ban class="h-4 w-4" aria-hidden="true" />
+								ยกเลิกกอง
+							</Button>
+						</div>
 						{#if cancelBlockedReason}
-							<p class="flex items-start gap-2 text-sm font-medium text-slate-800">
+							<p class="flex items-start gap-2 text-sm font-medium text-slate-800 sm:justify-end">
 								<AlertCircle class="mt-0.5 h-4 w-4 shrink-0 text-slate-500" aria-hidden="true" />
 								<span id="cancel-pool-reason">{cancelBlockedReason}</span>
 							</p>

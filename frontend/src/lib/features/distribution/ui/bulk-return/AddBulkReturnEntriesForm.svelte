@@ -431,7 +431,7 @@
 										</li>
 									{/each}
 								</ul>
-								<div class="flex flex-col gap-2 pt-2 sm:flex-row sm:items-center sm:gap-3">
+								<div class="flex flex-col gap-2 pt-2 sm:flex-row-reverse sm:items-center sm:gap-3">
 									<Button
 										type="button"
 										variant="outline"
