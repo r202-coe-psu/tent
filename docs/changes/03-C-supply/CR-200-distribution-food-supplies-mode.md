@@ -8,8 +8,8 @@ requested_by: feedback tester (roleplay ที่จุดแจก) — หน�
 decided_by: kong (approved 2026-10-27)
 layer: volatile
 affects:
-  - docs/changes/03-C-supply/CR-159-onsite-distribution.md §A (FR-DDS-01 แก้ → หน้าเดียว 2 โหมด; FR-DDS-02/03/07 ต้องเคาะว่าคงเดิม)
-  - docs/changes/03-C-supply/CR-121-spec-ticket.md §5 (ตาราง Screen/Role หน้าจอ 13–17 — ยังชี้ route เดียว ไม่ต้องแก้ ถ้า OPEN-2 = ไม่มี route ใหม่)
+  - docs/changes/03-C-supply/CR-159-onsite-distribution.md §A (FR-DDS-01 แก้ → หน้าเดียว 2 โหมด; FR-DDS-02/03/07 คงเดิม)
+  - docs/changes/03-C-supply/CR-121-spec-ticket.md §5 (ตาราง Screen/Role หน้าจอ 13–17 — ยังชี้ route เดียว ไม่ต้องแก้ เพราะไม่มี route ใหม่)
   - docs/data/schema.md §2.29 `requisition_ticket.requisition_type` (อ้างอิงเท่านั้น — ไม่แก้)
   - schema_v — ไม่เปลี่ยน (ไม่มี field/doc ใหม่; แยกโหมดด้วย `requisition_type` ที่มีอยู่)
   - frontend/src/lib/features/distribution/ui/frontline/FrontlineStationPage.svelte (mode switch + ชุดขั้นต่อโหมด; อ่าน/เขียน `?mode=` — route ไม่เปลี่ยน)
