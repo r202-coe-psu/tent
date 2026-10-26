@@ -1,10 +1,12 @@
 ---
-id: draft
+id: CR-197
 title: Kiosk device info — แผงข้อมูลเครื่องหลัง PIN เจ้าหน้าที่ รวมปุ่มทดสอบการพิมพ์
-status: proposed
+status: approved
 date: 2026-10-26
+created: 2026-10-26
+updated: 2026-10-26
 requested_by: ทีม kiosk
-decided_by: Project Owner (รอเคาะ)
+decided_by: Soravit Sukkarn (Team Lead) — approved 2026-10-26
 layer: volatile
 affects:
   - docs/data/api-contract.md §2.2.1 (ใหม่) `POST /api/v1/kiosk/device-info` + `POST /api/v1/kiosk/host-info` (ตอบที่ตัวตู้)
@@ -17,7 +19,7 @@ affects:
   - kiosk/app/manager.py (`/api/v1/kiosk/host-info` ตอบในเครื่อง + แนบ device credential ให้ `/api/v1/kiosk/device-info`)
 ---
 
-# draft-kiosk-device-info — แผงข้อมูลเครื่องของตู้ kiosk
+# CR-197 — แผงข้อมูลเครื่องของตู้ kiosk
 
 > **สรุป (TL;DR)**
 >
@@ -91,4 +93,5 @@ N/A — ไม่มี doc ที่ persist เปลี่ยนรูป. �
 
 ## Decision log
 
+- 2026-10-26 — approved (Soravit Sukkarn, Team Lead) · กำหนดเลขเป็น CR-197
 - 2026-10-26 — proposed (ทีม kiosk) · implement ก่อน CR บน `feat-kiosk-info-button` · ปรับจาก review: idle 60→20 วินาที, fail-soft ชื่อศูนย์/banner group, focus management, ตัด "โดย <ผู้แก้>" ออกจากแถว PIN
