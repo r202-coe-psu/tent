@@ -20,7 +20,7 @@ from worker.masking import (
 from worker.projectors.compute_needs import compute_needs
 from worker.projectors.donation_need_counter import plan_need_counters
 from worker.projectors.evacuee import project_evacuee
-from worker.projectors.occupancy import aggregate_occupancy
+from worker.projectors.occupancy import aggregate_occupancy, count_stay_statuses
 from worker.projectors.shelter import (
     is_shelter_open,
     map_public_shelter_status,
@@ -669,6 +669,35 @@ def test_compute_needs_without_ledgers_behaves_as_before():
         [_don("donation:1", "c1", "declared", "item:rice", "50")],
     )
     assert remaining["item:rice"] == "450.0"
+
+
+# --- PDPA D8: count_stay_statuses (pure) ---
+
+
+def test_count_stay_statuses_counts_search_excluded_evacuees():
+    """Opted-out / basic-consent evacuees have no `public_persons` row but still count."""
+    counts = count_stay_statuses(
+        [
+            {"_id": "e1", "type": "evacuee", "current_stay": {"status": "active"}},
+            {
+                "_id": "e2",
+                "type": "evacuee",
+                "privacy": {"search_excluded": True},
+                "current_stay": {"status": "active"},
+            },
+            {
+                "_id": "e3",
+                "type": "evacuee",
+                "privacy": {"search_excluded": True},
+                "current_stay": {"status": "pre_registered"},
+            },
+            {"_id": "e4", "type": "evacuee", "current_stay": {"status": "checked_out"}},
+            # No stay status and non-evacuee docs are not counted.
+            {"_id": "e5", "type": "evacuee"},
+            {"_id": "h1", "type": "household", "current_stay": {"status": "active"}},
+        ]
+    )
+    assert counts == {"active": 2, "pre_registered": 1, "checked_out": 1}
 
 
 # --- EXT-005: aggregate_occupancy (pure) ---

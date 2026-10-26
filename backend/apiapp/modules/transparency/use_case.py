@@ -29,9 +29,24 @@ class TransparencyUseCase:
         shelters_total = len(shelters)
         shelters_open = sum(1 for s in shelters if s.status in OPEN_SHELTER_STATUSES)
 
-        occupancy_total = await PublicPerson.find(
-            {"status": {"$in": list(OCCUPANCY_STATUSES)}}
-        ).count()
+        # PDPA D8: count from the worker's per-status totals, not `public_persons` rows —
+        # search-excluded people have no person row but must still be counted.
+        active = [s for s in shelters if s.is_active]
+        occupancy_total = sum(
+            s.occupancy_by_status.get(status, 0)
+            for s in active
+            if s.occupancy_by_status is not None
+            for status in OCCUPANCY_STATUSES
+        )
+        # Rows not re-projected yet have no per-status totals: count their person rows.
+        legacy_codes = [s.shelter_code for s in active if s.occupancy_by_status is None]
+        if legacy_codes:
+            occupancy_total += await PublicPerson.find(
+                {
+                    "shelter_code": {"$in": legacy_codes},
+                    "status": {"$in": list(OCCUPANCY_STATUSES)},
+                }
+            ).count()
 
         # as_of = when this aggregate was computed (OP-7 client stale check),
         # not max(shelter.updated_at) — shelter docs can sit unchanged for hours.
