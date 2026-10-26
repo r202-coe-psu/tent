@@ -985,7 +985,7 @@ ${consentVduClause()}
           Array.isArray(control.measured_values) ||
           !nonEmpty(control.checked_by) || !validTimestamp(control.checked_at) ||
           (typeof control.checked_by_name !== 'undefined' && !nonEmpty(control.checked_by_name))) return false;
-      if ((control.status === 'Fail' || control.status === 'Pending') && !control.notes.trim()) return false;
+      if (control.status === 'Pending' && !control.notes.trim()) return false;
       if (question.metric === null) {
         return control.question === question.text && control.metric_spec === null &&
           exactKeys(control.measured_values, []);

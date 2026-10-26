@@ -851,18 +851,34 @@ describe('buildValidateDocUpdate', () => {
 			/schema, date, identity/
 		);
 
-		for (const notes of [undefined, '', '   ']) {
-			const failWithoutNotes = updateRoleControl(registration, 'D-REG-01', {
-				status: 'Fail',
+		// CR-153 (2026-10-25): only Pending requires notes; omitting the field is invalid for every status.
+		const notesCases: {
+			status: 'Fail' | 'Pending';
+			notes: string | undefined;
+			accepted: boolean;
+		}[] = [
+			{ status: 'Fail', notes: '', accepted: true },
+			{ status: 'Fail', notes: '   ', accepted: true },
+			{ status: 'Fail', notes: undefined, accepted: false },
+			{ status: 'Pending', notes: '', accepted: false },
+			{ status: 'Pending', notes: '   ', accepted: false },
+			{ status: 'Pending', notes: undefined, accepted: false },
+			{ status: 'Pending', notes: 'รอผลตรวจนับ', accepted: true }
+		];
+		for (const { status, notes, accepted } of notesCases) {
+			const answered = updateRoleControl(registration, 'D-REG-01', {
+				status,
 				checked_by: 'reg',
 				checked_at: '2026-09-25T10:00:00.000Z'
 			});
-			failWithoutNotes.fail_count = 1;
-			failWithoutNotes.pass_count = 4;
-			const control = controlsOf(failWithoutNotes)[0];
+			if (status === 'Fail') answered.fail_count = 1;
+			else answered.pending_count = 1;
+			answered.pass_count = 4;
+			const control = controlsOf(answered)[0];
 			if (notes === undefined) delete control.notes;
 			else control.notes = notes;
-			expectForbidden(() => validate(failWithoutNotes, registration, REGISTRATION), /./);
+			if (accepted) expect(() => validate(answered, registration, REGISTRATION)).not.toThrow();
+			else expectForbidden(() => validate(answered, registration, REGISTRATION), /./);
 		}
 
 		expectForbidden(
