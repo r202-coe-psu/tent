@@ -9,6 +9,7 @@ import {
 	MASTER_COLUMNS,
 	PATH_TO_HEADER,
 	SUB_STORAGE_TYPE_CHOICES,
+	SUB_STORAGE_TYPE_LEGACY_LABELS,
 	ZONE_PATH_TO_HEADER,
 	AREA_TYPE_CHOICES,
 	COMMUNICATION_COLUMNS,
@@ -328,7 +329,11 @@ function resolveSubStorage(raw: RawRow, sink: ErrorSink) {
 			sink.push(H.sub_storage, `รายการ "${item}" ไม่มีชื่อคลัง`);
 			continue;
 		}
-		const type = rawType === '' ? 'general' : matchChoice(rawType, SUB_STORAGE_TYPE_CHOICES)?.value;
+		const type =
+			rawType === ''
+				? 'general'
+				: (matchChoice(rawType, SUB_STORAGE_TYPE_CHOICES)?.value ??
+					SUB_STORAGE_TYPE_LEGACY_LABELS.get(rawType));
 		if (!type) {
 			sink.push(
 				H.sub_storage,

@@ -1,6 +1,7 @@
 import { qtyGt } from '$lib/utils/qty';
 import { formatThaiShortDate } from '$lib/utils/date';
 import { formatTimeUntilExpiry } from '../../domain/lot-age';
+import { DEFAULT_STORAGE_LABEL, type StoragePointRef } from '../../domain/lot-storage';
 import {
 	stockUrgencyRank,
 	type StockExpiryState,
@@ -42,6 +43,37 @@ export interface StockDisplayRow extends StockRowBase {
 	lotCount: number;
 	/** First storage point plus a "+N" count, or null when unspecified. */
 	locationLabel: string | null;
+}
+
+/**
+ * `loc` filter value for lots with no recorded location. Their storage key is ''
+ * (`lotStorageKey`), which cannot round-trip through the URL, so it gets a token.
+ */
+export const MAIN_STORE_LOCATION = 'main';
+
+export interface LocationOption {
+	value: string;
+	label: string;
+}
+
+/**
+ * "ที่เก็บ" filter options: the shelter's configured storage points first (so a
+ * point that has never received stock is still offered), then names only found
+ * on ledger lots (deleted points, legacy free text), then the main store.
+ */
+export function locationOptions(
+	points: readonly StoragePointRef[],
+	ledgerLocations: Iterable<{ key: string; name: string | null }>
+): LocationOption[] {
+	const options = new Map<string, string>();
+	for (const p of points) options.set(`id:${p.id}`, p.name);
+	for (const { key, name } of ledgerLocations) {
+		if (key && name && !options.has(key)) options.set(key, name);
+	}
+	return [
+		...Array.from(options, ([value, label]) => ({ value, label })),
+		{ value: MAIN_STORE_LOCATION, label: DEFAULT_STORAGE_LABEL }
+	];
 }
 
 export interface StockFilterState {
@@ -108,7 +140,10 @@ export function filterRows<T extends StockRowBase>(
 		)
 			return false;
 		if (filter.cat !== 'all' && r.category !== filter.cat) return false;
-		if (filter.loc !== 'all' && !r.storageKeys.includes(filter.loc)) return false;
+		if (filter.loc !== 'all') {
+			const key = filter.loc === MAIN_STORE_LOCATION ? '' : filter.loc;
+			if (!r.storageKeys.includes(key)) return false;
+		}
 		if (filter.status !== 'all' && !matchesStatus(r, filter.status)) return false;
 		return true;
 	});

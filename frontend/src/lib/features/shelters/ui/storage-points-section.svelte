@@ -2,7 +2,7 @@
 	import type { SuperForm } from 'sveltekit-superforms';
 	import type { SuperFormData } from 'sveltekit-superforms/client';
 	import type { Shelter, SubStorageItem, SubStorageType } from '../domain/schema';
-	import { SUB_STORAGE_TYPE_LABELS } from '../domain/storage-points';
+	import { SUB_STORAGE_TYPE_LABELS, sortSubStorageTypes } from '../domain/storage-points';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import * as Form from '$lib/components/ui/form/index.js';
@@ -43,19 +43,22 @@
 		toast.success('ลบจุดเก็บของสำเร็จ');
 	}
 
-	// CR-175: `types` is multi-select (min 1) — toggling the last remaining type off
-	// is a no-op so a storage point can never end up with zero types client-side.
-	// Goes through setPoints (not a direct mutation on the looped `point`) so the
-	// change actually reaches the $formData store and the UI re-renders.
+	// CR-175: `types` is multi-select (min 1) and kept in enum order whatever the
+	// click order. The last remaining type cannot be toggled off — say why instead
+	// of silently ignoring the click. Goes through setPoints (not a direct mutation
+	// on the looped `point`) so the change reaches the $formData store.
 	function toggleType(index: number, value: SubStorageType) {
 		const points = $formData.common_areas.sub_storage ?? [];
 		const point = points[index];
 		if (!point) return;
 		const current = point.types ?? [];
-		if (current.includes(value) && current.length <= 1) return;
+		if (current.includes(value) && current.length <= 1) {
+			toast.info('ต้องเลือกอย่างน้อย 1 ประเภท');
+			return;
+		}
 		const nextTypes = current.includes(value)
 			? current.filter((t) => t !== value)
-			: [...current, value];
+			: sortSubStorageTypes([...current, value]);
 		setPoints(points.map((p, i) => (i === index ? { ...p, types: nextTypes } : p)));
 	}
 </script>
@@ -155,30 +158,26 @@
 					</div>
 				</div>
 
-				<Form.Field {form} name={`common_areas.sub_storage[${i}].types`}>
-					<Form.Control>
-						{#snippet children({ props })}
-							<Form.Label>ประเภทของที่เก็บได้ (เลือกได้หลายประเภท)</Form.Label>
-							<div {...props} class="flex flex-wrap gap-2">
-								{#each typeOptions as [value, label] (value)}
-									{@const isSelected = (point.types ?? []).includes(value)}
-									<button
-										type="button"
-										onclick={() => toggleType(i, value)}
-										{disabled}
-										aria-pressed={isSelected}
-										class="min-h-11 rounded-full border px-3 py-1.5 text-sm font-semibold transition-colors {isSelected
-											? 'border-teal-600 bg-teal-600 text-white'
-											: 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'}"
-									>
-										{label}
-									</button>
-								{/each}
-							</div>
-						{/snippet}
-					</Form.Control>
+				<Form.Fieldset {form} name={`common_areas.sub_storage[${i}].types`}>
+					<Form.Legend>ประเภทของที่เก็บได้ (เลือกได้หลายประเภท)</Form.Legend>
+					<div class="flex flex-wrap gap-2">
+						{#each typeOptions as [value, label] (value)}
+							{@const isSelected = (point.types ?? []).includes(value)}
+							<button
+								type="button"
+								onclick={() => toggleType(i, value)}
+								{disabled}
+								aria-pressed={isSelected}
+								class="min-h-11 rounded-full border px-3 py-1.5 text-sm font-semibold transition-colors {isSelected
+									? 'border-teal-600 bg-teal-600 text-white'
+									: 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'}"
+							>
+								{label}
+							</button>
+						{/each}
+					</div>
 					<Form.FieldErrors />
-				</Form.Field>
+				</Form.Fieldset>
 			</div>
 		{:else}
 			<p class="py-4 text-center text-sm text-muted-foreground">

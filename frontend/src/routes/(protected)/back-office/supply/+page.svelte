@@ -10,7 +10,6 @@
 		useStockBalance
 	} from '$lib/features/operations';
 	import { ProductsPanel, type ItemMaster } from '$lib/features/catalog';
-	import { StoragePointsTable } from '$lib/features/shelters';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { endpointStore } from '$lib/stores/endpoint.svelte';
 	import AlertTriangle from '@lucide/svelte/icons/alert-triangle';
@@ -59,9 +58,7 @@
 	const SECONDARY_TABS = [
 		{ key: 'catalog', label: 'สินค้า (Master)' },
 		{ key: 'sphere', label: 'วิเคราะห์ความต้องการ' },
-		{ key: 'food-sphere', label: 'วิเคราะห์เสบียงอาหาร' },
-		// CR-175 (#647) — read-only storage point list; edited from the shelter form.
-		{ key: 'storage-points', label: 'จุดเก็บของ' }
+		{ key: 'food-sphere', label: 'วิเคราะห์เสบียงอาหาร' }
 	] as const;
 	type SecondaryTabKey = (typeof SECONDARY_TABS)[number]['key'];
 	type TabKey = PrimaryTabKey | SecondaryTabKey;
@@ -210,10 +207,6 @@
 	{:else if activeTab === 'food-sphere'}
 		<div class="animate-in duration-300 fade-in slide-in-from-bottom-2">
 			<FoodSphereStockTab {occupancy} {shelterCode} />
-		</div>
-	{:else if activeTab === 'storage-points'}
-		<div class="animate-in duration-300 fade-in slide-in-from-bottom-2">
-			<StoragePointsTable shelterCode={() => shelterCode} />
 		</div>
 	{:else if activeTab === 'transfer'}
 		<div class="animate-in duration-300 fade-in slide-in-from-bottom-2">

@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { listStoragePoints, SUB_STORAGE_TYPE_LABELS } from './storage-points';
+import {
+	listStoragePoints,
+	sortSubStorageTypes,
+	SUB_STORAGE_TYPE_LABELS,
+	subStorageTypeLabels
+} from './storage-points';
 
 describe('listStoragePoints', () => {
 	it('returns [] for a missing shelter or missing common_areas', () => {
@@ -37,5 +42,25 @@ describe('SUB_STORAGE_TYPE_LABELS', () => {
 				'drinking_water'
 			].sort()
 		);
+	});
+});
+
+describe('sortSubStorageTypes', () => {
+	it('returns enum order regardless of click order, without duplicates', () => {
+		expect(sortSubStorageTypes(['drinking_water', 'general', 'baby_food', 'general'])).toEqual([
+			'general',
+			'baby_food',
+			'drinking_water'
+		]);
+	});
+});
+
+describe('subStorageTypeLabels', () => {
+	it('labels types in enum order', () => {
+		expect(subStorageTypeLabels(['food_cold', 'drinking_water', 'baby_food'])).toEqual([
+			'อาหารเด็ก',
+			'อาหารแช่เย็น/แข็ง',
+			'น้ำดื่ม'
+		]);
 	});
 });

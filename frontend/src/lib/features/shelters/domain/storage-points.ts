@@ -1,4 +1,4 @@
-import type { SubStorageItem, SubStorageType } from './schema';
+import { subStorageTypeSchema, type SubStorageItem, type SubStorageType } from './schema';
 
 /**
  * Thai labels for `common_areas.sub_storage[].types[]` — shared by the shelter
@@ -13,6 +13,19 @@ export const SUB_STORAGE_TYPE_LABELS: Record<SubStorageType, string> = {
 	medical_supplies: 'ยา',
 	drinking_water: 'น้ำดื่ม'
 };
+
+/**
+ * `types` in enum order (the order of the #647 table), de-duplicated — what the
+ * form writes and the UIs show, whatever order the user clicked in.
+ */
+export function sortSubStorageTypes(types: readonly SubStorageType[]): SubStorageType[] {
+	return subStorageTypeSchema.options.filter((t) => types.includes(t));
+}
+
+/** Thai labels of `types`, in enum order. */
+export function subStorageTypeLabels(types: readonly SubStorageType[]): string[] {
+	return sortSubStorageTypes(types).map((t) => SUB_STORAGE_TYPE_LABELS[t]);
+}
 
 type ShelterWithStorage = {
 	common_areas?: { sub_storage?: readonly SubStorageItem[] | null } | null;

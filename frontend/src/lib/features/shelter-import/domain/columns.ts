@@ -119,6 +119,11 @@ export const SUB_STORAGE_TYPE_CHOICES: EnumChoice<SubStorageType>[] = [
 	{ value: 'drinking_water', label: 'น้ำดื่ม' }
 ];
 
+/** Retired labels still accepted on import, so workbooks filled before CR-175 keep loading. */
+export const SUB_STORAGE_TYPE_LEGACY_LABELS: ReadonlyMap<string, SubStorageType> = new Map([
+	['เวชภัณฑ์', 'medical_supplies']
+]);
+
 export const ZONE_TYPE_CHOICES: EnumChoice<ZoneType>[] = [
 	{ value: 'general', label: 'ทั่วไป' },
 	{ value: 'male', label: 'ชายล้วน' },
@@ -717,7 +722,7 @@ const SHEET_FACILITIES: SheetDef = {
 			header: H.sub_storage,
 			kind: 'string',
 			required: false,
-			hint: `รายการคลังย่อย รูปแบบ ชื่อ${FIELD_SEPARATOR}ประเภท${FIELD_SEPARATOR}พื้นที่ คั่นแต่ละรายการด้วย "${MULTI_SEPARATOR}" เช่น คลังหน้าอาคาร${FIELD_SEPARATOR}อาหารแห้ง${FIELD_SEPARATOR}20 ${MULTI_SEPARATOR} คลังยา${FIELD_SEPARATOR}เวชภัณฑ์${FIELD_SEPARATOR}8`
+			hint: `รายการคลังย่อย รูปแบบ ชื่อ${FIELD_SEPARATOR}ประเภท${FIELD_SEPARATOR}พื้นที่ คั่นแต่ละรายการด้วย "${MULTI_SEPARATOR}" เช่น คลังหน้าอาคาร${FIELD_SEPARATOR}อาหารแห้ง${FIELD_SEPARATOR}20 ${MULTI_SEPARATOR} คลังยา${FIELD_SEPARATOR}ยา${FIELD_SEPARATOR}8`
 		}
 	]
 };

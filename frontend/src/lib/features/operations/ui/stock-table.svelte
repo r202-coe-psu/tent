@@ -45,6 +45,7 @@
 		clampPage,
 		filterRows,
 		hiddenCatalogCount,
+		locationOptions,
 		pageSlice,
 		sortRows,
 		visibleRows,
@@ -229,19 +230,16 @@
 		isSA && showOverall ? (crossLedgerQuery.data ?? []) : (ledgerQuery.data ?? [])
 	);
 
-	/**
-	 * Location filter options from ledger entries, keyed by `lotStorageKey` so a
-	 * renamed storage point stays one option (draft-shelter-storage-points).
-	 */
-	const uniqueLocations = $derived.by(() => {
-		const locations = new SvelteMap<string, string>();
-		for (const entry of ledger) {
-			const key = lotStorageKey(entry.lot);
-			const name = lotStorageName(entry.lot, storagePoints.points);
-			if (key && name && !locations.has(key)) locations.set(key, name);
-		}
-		return Array.from(locations, ([value, label]) => ({ value, label }));
-	});
+	/** Location filter options, keyed by `lotStorageKey` (draft-shelter-storage-points). */
+	const uniqueLocations = $derived(
+		locationOptions(
+			storagePoints.points,
+			ledger.map((entry) => ({
+				key: lotStorageKey(entry.lot),
+				name: lotStorageName(entry.lot, storagePoints.points)
+			}))
+		)
+	);
 
 	/** Remaining lots per item — every lot, so an old lot near expiry is never hidden. */
 	const lotsByItem = $derived.by(() => {
