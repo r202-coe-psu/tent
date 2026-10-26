@@ -138,6 +138,30 @@ describe('findClosedBulkReturnLoanRefs', () => {
 		expect(findClosedBulkReturnLoanRefs(entries, loans)).toEqual([]);
 	});
 
+	it('carries the loan ticket_id when the loan exists, none when missing', () => {
+		const loans = new Map<string, BulkReturnRefLoan | null>([
+			[A, loan({ _id: A, status: 'lost', ticket_id: 'ticket:T1' })],
+			[B, loan({ _id: B, status: 'lost' })],
+			[C, null]
+		]);
+		const out = findClosedBulkReturnLoanRefs(
+			[
+				{
+					_id: ENTRY,
+					loan_refs: [
+						{ distribution_log_id: A, qty: '1' },
+						{ distribution_log_id: B, qty: '1' },
+						{ distribution_log_id: C, qty: '1' }
+					]
+				}
+			],
+			loans
+		);
+		expect(out[0].ticket_id).toBe('ticket:T1');
+		expect(out[1]).not.toHaveProperty('ticket_id');
+		expect(out[2]).not.toHaveProperty('ticket_id');
+	});
+
 	it('treats a loan absent from the map as missing', () => {
 		expect(
 			findClosedBulkReturnLoanRefs(

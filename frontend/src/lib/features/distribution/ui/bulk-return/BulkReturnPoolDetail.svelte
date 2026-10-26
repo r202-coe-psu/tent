@@ -13,6 +13,9 @@
 	import * as AlertDialog from '$lib/components/ui/alert-dialog/index.js';
 	import * as Sheet from '$lib/components/ui/sheet/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
+	import { resolve } from '$app/paths';
+	import { isShelterManager, isSystemAdmin, isWarehouseStaff } from '$lib/auth/roles';
+	import { authStore } from '$lib/stores/auth.svelte';
 	import { formatThaiDateTime } from '$lib/utils/date';
 	import {
 		createStableOperationId,
@@ -49,6 +52,7 @@
 		type BulkReturnPoolRow,
 		type PoolCatalogItem
 	} from '../model/bulk-return-pool-v3';
+	import { ticketHref } from '../model/pool-url-state';
 	import { liveSummaryRows, submittedSummaryRows } from '../model/bulk-return-lifecycle';
 	import BulkReturnPoolReceiveRecord from './BulkReturnPoolReceiveRecord.svelte';
 	import BulkReturnPoolTimeline from './BulkReturnPoolTimeline.svelte';
@@ -105,6 +109,16 @@
 		() => row?.pool._id ?? null,
 		() => shelterCode
 	);
+	// Same predicate as requireWarehouseAccess (guards/auth.ts) on /back-office/distribution:
+	// system_admin, shelter_manager or isWarehouseStaff (distribution_staff is excluded).
+	const canOpenTicketPage = $derived.by(() => {
+		const roles = authStore.user?.roles ?? [];
+		return (
+			isSystemAdmin(roles) ||
+			isShelterManager(roles, shelterCode) ||
+			isWarehouseStaff(roles, shelterCode)
+		);
+	});
 	const closedRefsByEntry = $derived(groupClosedLoanRefsByEntry(closedRefsQuery.data ?? []));
 	// Refs actually applied on loans (applied_bulk_entry_ids); undefined until first loaded.
 	const appliedRefsQuery = useBulkReturnPoolAppliedLoanRefs(
@@ -402,7 +416,17 @@
 											/>
 											<div class="space-y-1">
 												{#each closedRefs as ref (ref.distribution_log_id)}
-													<p>{closedLoanRefNotice(ref, item.unit)}</p>
+													<p>
+														{closedLoanRefNotice(ref, item.unit)}
+														{#if ref.ticket_id && canOpenTicketPage}
+															<a
+																href={resolve(ticketHref(ref.ticket_id) as '/')}
+																class="font-medium underline underline-offset-2"
+															>
+																ดูใบเบิกของรายการยืมนี้
+															</a>
+														{/if}
+													</p>
 												{/each}
 											</div>
 										</div>

@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { bulkReturnPoolHref, mergePoolParams, parsePoolParams } from './pool-url-state';
+import { bulkReturnPoolHref, mergePoolParams, parsePoolParams, ticketHref } from './pool-url-state';
+
+describe('ticketHref', () => {
+	it('builds the ticket deep link and encodes the id', () => {
+		expect(ticketHref('01ABC')).toBe('/back-office/distribution?ticketId=01ABC');
+		expect(ticketHref('a b&c')).toBe('/back-office/distribution?ticketId=a%20b%26c');
+	});
+});
 
 describe('parsePoolParams', () => {
 	it('defaults to the tickets view', () => {

@@ -30,6 +30,11 @@ export function mergePoolParams(base: URLSearchParams, state: PoolUrlState): URL
 	return out;
 }
 
+/** Deep link to one ticket on the distribution back-office page. */
+export function ticketHref(ticketId: string): string {
+	return `${DISTRIBUTION_BACK_OFFICE_PATH}?ticketId=${encodeURIComponent(ticketId)}`;
+}
+
 /** Deep link to one bulk return pool on the distribution back-office page. */
 export function bulkReturnPoolHref(poolId: string): string {
 	return `${DISTRIBUTION_BACK_OFFICE_PATH}?view=bulk_pools&pool=${encodeURIComponent(poolId)}`;
