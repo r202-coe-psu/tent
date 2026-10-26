@@ -88,7 +88,7 @@
 
 	<!-- TAB 1: Job Board -->
 	{#if activeTab === 'jobs'}
-		<JobBoard />
+		<JobBoard initialShelter={page.url.searchParams.get('shelter')} />
 	{/if}
 
 	<!-- TAB 2: Ticket Search -->

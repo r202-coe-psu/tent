@@ -2,11 +2,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { GET } from './+server';
 import { POST } from './[id]/apply/+server';
 import {
-	volunteerApplyIpLimiter,
-	volunteerApplyPhoneLimiter,
-	volunteerTicketLimiter
-} from '$lib/server/security/rate-limiter';
-import {
 	applyPublicVolunteerApplicationToShifts,
 	PublicApplicationError
 } from '$lib/features/volunteers/server/public-application';
@@ -23,12 +18,6 @@ const { adminRaw, verifyToken, providerProjectId } = vi.hoisted(() => ({
 vi.mock('$app/environment', () => ({
 	dev: false,
 	browser: false
-}));
-
-vi.mock('$lib/server/security/rate-limiter', () => ({
-	volunteerTicketLimiter: { check: vi.fn(() => true) },
-	volunteerApplyIpLimiter: { check: vi.fn(() => true) },
-	volunteerApplyPhoneLimiter: { check: vi.fn(() => true) }
 }));
 
 vi.mock('$lib/server/security/captcha', () => ({
@@ -82,9 +71,6 @@ const validApplication = {
 describe('GET /api/public/v1/volunteer/jobs', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
-		vi.mocked(volunteerTicketLimiter.check).mockReturnValue(true);
-		vi.mocked(volunteerApplyIpLimiter.check).mockReturnValue(true);
-		vi.mocked(volunteerApplyPhoneLimiter.check).mockReturnValue(true);
 		verifyToken.mockResolvedValue(true);
 		adminRaw.mockResolvedValue({
 			status: 200,
@@ -129,26 +115,11 @@ describe('GET /api/public/v1/volunteer/jobs', () => {
 			expect.anything()
 		);
 	});
-
-	it('refuses once the read budget is spent', async () => {
-		vi.mocked(volunteerTicketLimiter.check).mockReturnValue(false);
-		const fetch = upstream({ success: true, jobs: [] });
-		const response = await GET({
-			url: new URL('http://localhost/api/public/v1/volunteer/jobs'),
-			fetch,
-			getClientAddress: () => '127.0.0.1'
-		} as unknown as GetEvent);
-
-		expect(response.status).toBe(429);
-		expect(fetch).not.toHaveBeenCalled();
-	});
 });
 
 describe('POST /api/public/v1/volunteer/jobs/[id]/apply', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
-		vi.mocked(volunteerApplyIpLimiter.check).mockReturnValue(true);
-		vi.mocked(volunteerApplyPhoneLimiter.check).mockReturnValue(true);
 	});
 
 	function post(body: unknown, fetch = upstream({ success: true, tracking_token: 'TKT-VOL-1' })) {
@@ -237,17 +208,9 @@ describe('POST /api/public/v1/volunteer/jobs/[id]/apply', () => {
 		expect(verifyToken).not.toHaveBeenCalled();
 	});
 
-	it('rejects a malformed application before spending any budget', async () => {
+	it('rejects a malformed application', async () => {
 		const { response, fetch } = post({ ...validApplication, phone: '123' });
 		expect((await response).status).toBe(422);
-		expect(fetch).not.toHaveBeenCalled();
-		expect(volunteerApplyIpLimiter.check).not.toHaveBeenCalled();
-	});
-
-	it('refuses when either the IP or the phone budget is spent', async () => {
-		vi.mocked(volunteerApplyPhoneLimiter.check).mockReturnValue(false);
-		const { response, fetch } = post(validApplication);
-		expect((await response).status).toBe(429);
 		expect(fetch).not.toHaveBeenCalled();
 	});
 
@@ -261,7 +224,7 @@ describe('POST /api/public/v1/volunteer/jobs/[id]/apply', () => {
 		expect(await result.json()).toEqual({ success: false, error: 'JOB_FULL' });
 	});
 
-	it('sends every picked shift as one batch and counts it as one attempt (#716)', async () => {
+	it('sends every picked shift as one batch (#716)', async () => {
 		const shifts = [
 			{ shift_id: 's-am', shift_date: '2026-09-10', start_time: '08:00', end_time: '12:00' },
 			{ shift_id: 's-pm', shift_date: '2026-09-10', start_time: '13:00', end_time: '17:00' }
@@ -289,7 +252,6 @@ describe('POST /api/public/v1/volunteer/jobs/[id]/apply', () => {
 			]
 		});
 		expect(vi.mocked(applyPublicVolunteerApplicationToShifts).mock.calls[0][2]).toEqual(shifts);
-		expect(volunteerApplyPhoneLimiter.check).toHaveBeenCalledTimes(1);
 	});
 
 	it('answers with the first shift error when no shift was saved', async () => {

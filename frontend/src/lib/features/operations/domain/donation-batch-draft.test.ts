@@ -31,6 +31,22 @@ describe('initialBatchDrafts (CR-143 FR-B1 / FR-B2)', () => {
 		expect(freeText.free_text).toBe('ปลากระป๋อง');
 		expect(freeText.item_id).toBe('');
 	});
+	// CR-174 AC-3 — a line refused at review is not received at the shelf either.
+	it('opens a line refused at review as not received, with the reason the donor was given', () => {
+		const reviewed: Donation = {
+			...donation,
+			items: [
+				{ ...donation.items![0], review_status: 'approved' },
+				{ ...donation.items![1], review_status: 'rejected', review_reason: 'หมดอายุ' }
+			]
+		};
+		const [kept, refused] = initialBatchDrafts(reviewed);
+		expect(kept.qty).toBe('10');
+		expect(kept.refused).toBeUndefined();
+		expect(refused).toMatchObject({ qty: '0', refused: 'หมดอายุ' });
+		expect(isReceivedDraft(refused)).toBe(false);
+		expect(draftProblem(refused, false)).toBeNull();
+	});
 });
 
 describe('draftProblem', () => {

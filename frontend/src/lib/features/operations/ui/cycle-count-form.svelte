@@ -41,11 +41,18 @@
 	const applyMutation = useApplyCycleCount();
 
 	const itemsById = $derived(new Map(stockItems.items.map((i) => [i._id, i])));
-	const groups = $derived(
-		groupLotsByStorage(
-			buildCycleCountLots((ledgerQuery.data ?? []) as StockLedger[]),
-			storagePoints.points
-		)
+	// Per-lot balances from the projection the stock table uses (#569). An item whose history
+	// cannot be replayed is left out of the walk and named below, never silently dropped.
+	const counted = $derived.by(() => {
+		const broken: string[] = [];
+		const lots = buildCycleCountLots((ledgerQuery.data ?? []) as StockLedger[], (itemId) =>
+			broken.push(itemId)
+		);
+		return { lots, broken };
+	});
+	const groups = $derived(groupLotsByStorage(counted.lots, storagePoints.points));
+	const brokenItemNames = $derived(
+		counted.broken.map((id) => itemsById.get(id)?.name ?? id).join(', ')
 	);
 
 	/**
@@ -160,6 +167,15 @@
 		}
 	}
 </script>
+
+{#if brokenItemNames}
+	<p
+		class="mb-4 rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-xs font-semibold text-destructive"
+		role="alert"
+	>
+		ไม่ได้รวมในการตรวจนับ เพราะประวัติคลังคำนวณยอดรายล็อตไม่ได้: {brokenItemNames} — กรุณาแจ้งผู้ดูแลระบบ
+	</p>
+{/if}
 
 {#if activeGroupLabel === null}
 	<div class="flex flex-col gap-3">

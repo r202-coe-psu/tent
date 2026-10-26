@@ -3,7 +3,7 @@ id: CR-159
 title: การแจกของหน้างาน (Distribution Desk / Station 4 — `/onsite/distribution`) — ขอบเขตหน้าจอ + role, กติกาแจกอาหารปรุงสุก, จับคู่ผู้รับ↔เมนู, ปิด CR-109
 status: approved
 date: 2026-10-06
-updated: 2026-10-11
+updated: 2026-10-25
 requested_by: ทีม frontend (รับช่วง `/onsite/distribution` ต่อ)
 decided_by: Kong
 layer: volatile
@@ -44,7 +44,7 @@ affects:
 | --- | --- | --- |
 | [A. ขอบเขตหน้าจอ + role](#a-ขอบเขตหน้าจอ--role) | FR-DDS-01..07 | FR-DDS-05, 07 |
 | [B. กติกาแจกอาหารปรุงสุก](#b-กติกาแจกอาหารปรุงสุก) | FR-MQW-01..06 | — (เคาะแล้ว 2026-10-10) |
-| [C. จับคู่ผู้รับ↔เมนู](#c-จับคู่ผู้รับเมนู) | FR-MRM-00..05 | — (เคาะแล้ว 2026-10-10) |
+| [C. จับคู่ผู้รับ↔เมนู](#c-จับคู่ผู้รับเมนู) | FR-MRM-00..10 | — (เคาะแล้ว 2026-10-10; FR-MRM-06..10 เพิ่มโดย CR-191, 2026-10-25) |
 | [D. ปิด CR-109](#d-ปิด-cr-109-เป็น-superseded-โดย-cr-121) | FR-CRS-01..04 | — (FR-CRS-04 ส่งต่อ TL) |
 
 ---
@@ -147,7 +147,12 @@ affects:
 - **FR-MRM-02** — ผู้รับประเภท `volunteer` และ `outside` ไม่มีแท็ก → รับได้เฉพาะเมนูที่ไม่มีแท็ก (เมนูทั่วไป) โดยไม่ต้อง override
 - **FR-MRM-03** — เมนูที่ไม่มีแท็ก (`dietary = []` และ `age_group ∈ {ALL, ไม่ระบุ}`) = เมนูทั่วไป แจกได้ทุกคน. เมนูที่มีแท็ก: ผู้รับต้องมีแท็กร่วมอย่างน้อย 1 แท็ก จึงถือว่า "ตรง"
 - **FR-MRM-04** — เมื่อไม่ตรง: **เตือน + บังคับ override พร้อมเหตุผล** บันทึก `is_override: true` + `override_reason` — ใช้กลไกเดียวกับรับซ้ำ (FR-DST-02 / FR-MQW-05) (เคาะ A, 2026-10-10)
-- **FR-MRM-05** — กติกานี้ไม่เขียน field ใหม่ลง `distribution_log`; ใช้ `is_override` / `override_reason` (§2.30) เดิมเท่านั้น
+- **FR-MRM-05** — กติกานี้ไม่เขียน field ใหม่ลง `distribution_log`; ใช้ `is_override` / `override_reason` (§2.30) เดิมเท่านั้น — ยกเว้นการ override เพราะแพ้ที่บันทึก `allergen_conflicts` เพิ่ม ([CR-191](CR-191-allergen-warning-at-distribution.md) FR-5)
+- **FR-MRM-06** — ([CR-191](CR-191-allergen-warning-at-distribution.md)) ผู้รับ `evacuee`: ดึง `medical.allergies` ของผู้รับตอนเลือกผู้รับ; ผู้รับ `volunteer` / `outside` ไม่มีข้อมูลสุขภาพ → **ข้ามการเช็ค**
+- **FR-MRM-07** — ([CR-191](CR-191-allergen-warning-at-distribution.md)) สารที่ชน = `resolve(medical.allergies) ∩ resolve(item.allergens)` โดย `resolve` map ข้อความเป็น code ของ master `allergy` (item `active`) แล้วเทียบเฉพาะ **code**; free text ไม่ match อัตโนมัติ
+- **FR-MRM-08** — ([CR-191](CR-191-allergen-warning-at-distribution.md)) ชนกัน → แสดงคำเตือน "‹เมนู› มี ‹สาร› — ผู้รับแพ้" และ **ต้อง override + เหตุผล** จึงแจกได้ (เตือน + override ได้ — ไม่ห้ามแจกเด็ดขาด); ใช้ modal override เดียวกับ FR-MRM-04 / รับซ้ำ; workflow ปฏิเสธถ้าชนแต่ไม่ override
+- **FR-MRM-09** — ([CR-191](CR-191-allergen-warning-at-distribution.md)) การแสดงผลบนการ์ดผู้รับ: อาการแพ้ที่เป็น code → badge แดง "แพ้: ‹label›"; อาการแพ้เป็น free text → "มีประวัติแพ้: ‹ข้อความ›" (ไม่ match); ผู้รับมีอาการแพ้แต่เมนูไม่ระบุสารก่อแพ้ → "เมนูนี้ไม่ระบุสารก่อแพ้" (แจ้งเฉยๆ ไม่ต้อง override)
+- **FR-MRM-10** — ([CR-191](CR-191-allergen-warning-at-distribution.md)) ข้อมูลสุขภาพของผู้รับหรือ master `allergy` ยังโหลดไม่เสร็จ/โหลดไม่สำเร็จ → ปุ่มยืนยันแจกถูกล็อก (fail closed) เหมือน preflight ของ FR-MRM-04
 
 ### Acceptance
 - ผู้รับ `religion='muslim'` เลือกเมนู `dietary:['HALAL']` → ไม่ต้อง override
@@ -155,6 +160,7 @@ affects:
 - เมนู VEGAN → ทุกผู้รับแจกได้โดยไม่ต้อง override
 - เมนูทั่วไป → ทุก `recipient_type` แจกได้โดยไม่เตือน
 - unit test ครอบทุกแถวของตาราง FR-MRM-01
+- FR-MRM-06..10: ดู Acceptance ของ [CR-191](CR-191-allergen-warning-at-distribution.md)
 
 ---
 
@@ -224,5 +230,7 @@ affects:
 - 2026-10-10 — รวม 4 ร่าง (A–D) เป็นไฟล์เดียว `draft-onsite-distribution.md` ตามที่ Kong ขอ — ไม่แตก CR ย่อย; เลข FR คงเดิม
 - 2026-10-11 — approved โดย Kong (รันเลข CR-159)
 - 2026-10-11 — อัปเดตตามที่ Kong เคาะ: หัวข้อ A ใช้ role `distribution_staff` ตาม CR-161 (FR-DDS-02/03/04); หัวข้อ B/C/D เคาะตามตาราง 2026-10-10 (FR-MQW-01/03/05/06, FR-MRM-00/01 VEGAN+อายุ/04, FR-CRS-04 ส่งต่อ TL). ยังเปิด: FR-DDS-05, FR-DDS-07
+- 2026-10-22 — ทำหัวข้อ D แล้ว (FR-CRS-01..03): CR-109 + `_index.md` เป็น `superseded` โดย CR-121, schema.md §2.7 ชี้ไป §2.30
 - 2026-10-11 — Kong สั่งให้ทั้ง 5 ขั้นของหน้านี้ใช้ได้เฉพาะ SA, SM, DST: ตัด REG, SC, WH ออกจาก `/onsite/distribution`; ขั้น 4 PHYSICAL = SA, SM, DST (ดู FR-DDS-03; แก้ CR-161 R3/R4 ให้ DST รับคืนแบบมีของได้)
 - 2026-10-11 — การจำกัดหน้านี้เป็นระดับหน้าเท่านั้น (ตามข้อเสนอที่ยืนยันแล้ว) ไม่แก้กฎระดับระบบ WH/SC ยังทำงานคลังได้ตามเดิม
+- 2026-10-25 — CR-191 (approved โดย kong) เพิ่ม FR-MRM-06..10 (เตือนสารก่อแพ้ตอนแจกอาหาร) และข้อยกเว้น `allergen_conflicts` ใน FR-MRM-05

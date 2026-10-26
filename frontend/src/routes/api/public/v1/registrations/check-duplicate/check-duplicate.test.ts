@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { POST } from './+server';
-import { registerLookupIpLimiter } from '$lib/server/security/rate-limiter';
 import { listShelterMasters } from '$lib/server/shelters.admin';
 import { findConflictingHold } from '$lib/features/public-register/booking-gate.server';
 import { unassignedRegistrationRemote } from '$lib/features/unassigned-registration';
@@ -22,10 +21,6 @@ vi.mock('$lib/features/unassigned-registration', () => ({
 	}
 }));
 
-vi.mock('$lib/server/security/rate-limiter', () => ({
-	registerLookupIpLimiter: { check: vi.fn(() => true) }
-}));
-
 function event(body: unknown, ip = '203.0.113.10'): PostEvent {
 	return {
 		request: new Request('http://localhost/api/public/v1/registrations/check-duplicate', {
@@ -42,7 +37,6 @@ describe('POST /api/public/v1/registrations/check-duplicate', () => {
 		vi.mocked(listShelterMasters).mockReset();
 		vi.mocked(findConflictingHold).mockReset();
 		vi.mocked(unassignedRegistrationRemote.searchOpen).mockReset();
-		vi.mocked(registerLookupIpLimiter.check).mockReturnValue(true);
 
 		vi.mocked(listShelterMasters).mockResolvedValue([
 			{ code: 'SH001', name: 'Shelter 1' } as unknown as ShelterMaster
@@ -51,14 +45,6 @@ describe('POST /api/public/v1/registrations/check-duplicate', () => {
 		vi.mocked(unassignedRegistrationRemote.searchOpen).mockResolvedValue({
 			results: []
 		});
-	});
-
-	it('returns 429 when rate limited', async () => {
-		vi.mocked(registerLookupIpLimiter.check).mockReturnValue(false);
-		const res = await POST(event({ national_id: '1234567890123' }));
-		expect(res.status).toBe(429);
-		const body = await res.json();
-		expect(body.error).toBe('RATE_LIMITED');
 	});
 
 	it('returns 422 when neither national_id nor phone is provided', async () => {

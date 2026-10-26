@@ -14,7 +14,8 @@
 	 * once at setup, so a `{ jobId }` filter would freeze to whichever job was
 	 * rendered first (SvelteKit reuses this component across `[id]`
 	 * navigations) — and sharing the unfiltered cache entry with the tab badge
-	 * means the badge and this list can never disagree.
+	 * means the badge and this list can never disagree. Shift assignments (for the
+	 * per-shift check-in action) are read the same unfiltered way.
 	 */
 	import Users from '@lucide/svelte/icons/users';
 	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
@@ -23,12 +24,19 @@
 	import { groupApplicationsByApplicant, partitionApplicantQueue } from '../domain/applicant-queue';
 	import type { Job } from '../domain/job.schema';
 	import type { JobApplication } from '../domain/job-application.schema';
-	import { useJobApplications, useSkillOptions, useVolunteers } from '../application/queries';
+	import {
+		todayDateString,
+		useJobApplications,
+		useShiftAssignments,
+		useSkillOptions,
+		useVolunteers
+	} from '../application/queries';
 
 	let { job }: { job: Job } = $props();
 
 	const applicationsQuery = useJobApplications();
 	const volunteersQuery = useVolunteers();
+	const assignmentsQuery = useShiftAssignments();
 	const skillCatalog = useSkillOptions();
 
 	const loading = $derived(applicationsQuery.isPending);
@@ -40,6 +48,8 @@
 	const codeByVolunteerId = $derived(
 		new Map((volunteersQuery.data ?? []).map((v) => [v._id, v.volunteer_code]))
 	);
+	const assignments = $derived(assignmentsQuery.data ?? []);
+	const today = $derived(todayDateString());
 	const volunteerById = $derived(new Map((volunteersQuery.data ?? []).map((v) => [v._id, v])));
 
 	// People are counted once however many shifts they applied for; the other tiles count
@@ -163,6 +173,8 @@
 							shiftLabelOf={shiftLabelFor}
 							requiredSkills={job.skills_required ?? []}
 							skillOptions={skillCatalog.options}
+							{assignments}
+							{today}
 							onreview={openReview}
 						/>
 					{/each}
@@ -190,6 +202,8 @@
 								shiftLabelOf={shiftLabelFor}
 								requiredSkills={job.skills_required ?? []}
 								skillOptions={skillCatalog.options}
+								{assignments}
+								{today}
 								onreview={openReview}
 							/>
 						{/each}

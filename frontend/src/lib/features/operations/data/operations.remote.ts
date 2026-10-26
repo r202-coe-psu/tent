@@ -20,14 +20,18 @@ import {
 	isDonation,
 	isDonationSlot,
 	isStockTransfer,
+	TransferForbiddenError,
+	isTransferDestination,
 	stockBalance,
 	createReceiveEntry,
 	createWalkInDonation,
 	keyDonationReceipt,
 	completeDonationReceipt,
+	isDonationOutstanding,
 	createDistributeEntry,
 	createAdjustEntry,
 	projectStockLotBalances,
+	assertLotWriteOffsFit,
 	type DonationCampaign,
 	type CampaignInput,
 	type StockLedger,
@@ -38,6 +42,7 @@ import {
 	type WalkInDonationInput,
 	type DonationSlot,
 	type StockTransfer,
+	type TransferDestination,
 	type TransferInput,
 	type TransferFilter,
 	type TransferStatus,
@@ -119,6 +124,23 @@ export function assertReceiveAgainstCatalog(
 	if ((opts.requireExpiry ?? true) && rules.requiresExpiry && !entry.lot?.expiry) {
 		throw new Error(`Perishable item ${entry.item_id} requires lot.expiry to be set`);
 	}
+}
+
+/** Tries at closing a batch receipt while other writes keep moving its `_rev` (S-R14-1). */
+const MAX_CLOSE_ATTEMPTS = 3;
+
+/** What staff are told when the booking changed under a batch receipt (S-R4-1). */
+const DONATION_CHANGED_WHILE_KEYING =
+	'ใบนี้ถูกแก้ระหว่างบันทึกเข้าคลัง — ของเข้าคลังแล้วแต่ยังไม่ปิดใบ ติดต่อผู้ดูแลเพื่อตรวจยอด';
+
+/**
+ * Whether the booking changed in a way the receipt was counted against. A courier number
+ * or other logistics edit bumps `_rev` too, but leaves what was counted standing.
+ */
+function bookingChanged(before: Donation, after: Donation): boolean {
+	return (
+		before.status !== after.status || JSON.stringify(before.items) !== JSON.stringify(after.items)
+	);
 }
 
 export class OperationsRemoteRepository implements OperationsRepository {
@@ -224,6 +246,28 @@ export class OperationsRemoteRepository implements OperationsRepository {
 		return { donation: savedDonation as Donation, entry: savedEntry as StockLedger };
 	}
 
+	/** Ids of the donation ledger rows pointing at this booking (CR-143 rows key `ref_id`). */
+	private async keyedDonationRowIds(donationId: string, limit: number): Promise<string[]> {
+		const rows = await this.repo.find<{ _id: string }>({
+			// `item_id` is in the selector only so CouchDB picks `ledger-type-refid-itemid-reason-idx`
+			// (shelter-access-design.ts): without it the query scans the whole shelter DB.
+			selector: {
+				type: 'stock_ledger',
+				ref_id: donationId,
+				item_id: { $gt: null },
+				reason: 'donation'
+			},
+			fields: ['_id'],
+			limit
+		});
+		return rows.map((row) => row._id);
+	}
+
+	/** Any donation ledger row pointing at this booking. */
+	private async hasKeyedDonationStock(donationId: string): Promise<boolean> {
+		return (await this.keyedDonationRowIds(donationId, 1)).length > 0;
+	}
+
 	async receiveDonationBatch(
 		donation: Donation,
 		counted: readonly DonationBatchLine[],
@@ -232,6 +276,32 @@ export class OperationsRemoteRepository implements OperationsRepository {
 		if (donation.kind !== 'items') {
 			throw new Error('Only a goods donation can be received into stock');
 		}
+		// The booking as it is now, before anything is keyed — the form holds the copy it was
+		// opened with. Staff may have refused a line, and since CR-174 the donor may edit or
+		// cancel a booking that has its QR (FR-20/21); counting against an older copy keyed
+		// goods the booking no longer asks for. A booking already `received` is the FR-B8
+		// retry of a transition whose answer was lost: its rows are found by id below.
+		const onFile = (await this.repo.get<Donation>(donation._id)) ?? donation;
+		if (onFile.status !== 'received') {
+			const stale = !isDonationOutstanding(onFile.status)
+				? `ใบนี้ปิดไปแล้ว (สถานะ ${onFile.status}) — รับเข้าคลังไม่ได้`
+				: onFile._rev !== donation._rev
+					? 'ใบนี้ถูกแก้หลังจากเปิดหน้าไว้ — เลือกใบใหม่แล้วนับอีกครั้ง'
+					: null;
+			if (stale) {
+				// Say what is true about the stock: an earlier, interrupted attempt may already
+				// have keyed some lines, and "nothing in stock" would invite counting them again.
+				throw new Error(
+					(await this.hasKeyedDonationStock(donation._id))
+						? `${stale} · มีของบางรายการของใบนี้เข้าคลังไปแล้ว อย่านับรายการนั้นซ้ำ — ติดต่อผู้ดูแลเพื่อตรวจยอด`
+						: `${stale} · ยังไม่มีของเข้าคลัง`
+				);
+			}
+		}
+		// Received already, by a screen other than this copy. A true retry (the answer to a
+		// transition that did land was lost) finds every row by id and writes nothing; a
+		// second device counting differently would key the goods a second time.
+		const receivedElsewhere = onFile.status === 'received' && donation.status !== 'received';
 		const seenLineNos = new Set<number>();
 		for (const line of counted) {
 			if (!Number.isInteger(line.line_no) || line.line_no < 0) {
@@ -246,6 +316,12 @@ export class OperationsRemoteRepository implements OperationsRepository {
 			}
 			if (!qtyGte(line.qty, 0)) {
 				throw new Error(`Line ${line.line_no} has a negative quantity`);
+			}
+			// CR-174 AC-3 — a line refused at review is not received at the shelf either.
+			if (onFile.items?.[line.line_no]?.review_status === 'rejected' && isReceivedLine(line)) {
+				throw new Error(
+					`รายการที่ ${line.line_no + 1} ถูกปฏิเสธตอนประเมินแล้ว — รับเข้าคลังไม่ได้`
+				);
 			}
 		}
 		// Zero lines write nothing (FR-B3). A receipt with nothing received at all must not
@@ -302,6 +378,29 @@ export class OperationsRemoteRepository implements OperationsRepository {
 				ledger_id: id
 			});
 		});
+		if (receivedElsewhere && toWrite.length > 0) {
+			throw new Error(
+				'ใบนี้รับเข้าคลังไปแล้วจากอีกหน้าจอ — ไม่ได้บันทึกซ้ำ เลือกใบใหม่เพื่อดูผลที่บันทึกไว้'
+			);
+		}
+		// Row ids only catch a retry that matches every line the same way. A line keyed as
+		// one item and now matched to another (after a reload, or on a second device counting
+		// at once) gets a new id, and the goods would go into stock twice — and `_rev` does
+		// not move until the booking closes, so it cannot tell either. The ledger can: a row
+		// of this booking this count would not write means an earlier or concurrent count
+		// recorded something else. Any status — a booking closed before its rows were keyed
+		// reads `received` on both screens. One more than `ids` is enough to see one: at
+		// most `ids.length` of them are ours.
+		const keyedByAnother =
+			toWrite.length > 0 &&
+			(await this.keyedDonationRowIds(donation._id, ids.length + 1)).some(
+				(id) => !ids.includes(id)
+			);
+		if (keyedByAnother) {
+			throw new Error(
+				'ใบนี้มีของบันทึกเข้าคลังไว้แล้วที่ไม่ตรงกับรายการที่นับรอบนี้ (เช่น เลือกสินค้าคนละตัวกับครั้งก่อน) — ไม่ได้บันทึกซ้ำ ตรวจรายการ "บันทึกเข้าคลังไว้ก่อนหน้านี้" แล้วเลือกสินค้าให้ตรงกับที่บันทึกไว้ หรือติดต่อผู้ดูแลเพื่อตรวจยอด'
+			);
+		}
 
 		if (toWrite.length > 0) {
 			const entries = keyDonationReceipt(
@@ -363,44 +462,119 @@ export class OperationsRemoteRepository implements OperationsRepository {
 			return { donation, lines, rowsComplete: false, received: false };
 		}
 
+		const blocked: DonationBatchResult = {
+			donation,
+			lines,
+			rowsComplete: true,
+			received: false,
+			transitionError: DONATION_CHANGED_WHILE_KEYING,
+			transitionBlocked: true
+		};
 		// FR-B4b / FR-B8: the donation moves only after every row is in the ledger, and a
 		// failure here is retried on its own — the rows above are found by id, not rewritten.
-		try {
-			const latest = (await this.repo.get<Donation>(donation._id)) ?? donation;
-			const nextBase = completeDonationReceipt(latest);
-			const declaredForShortfall = (latest.items ?? []).map((i) => ({
-				item_id: i.item_id || i.free_text,
-				qty: String(i.qty)
-			}));
-			const countedForShortfall = counted.map((c) => ({
-				item_id: c.item_id,
-				qty: String(c.qty)
-			}));
-			const shortfalls = donationShortfall(declaredForShortfall, countedForShortfall);
-			const next: Donation = {
-				...nextBase,
-				received_summary: {
-					total_items: receivedLines.length,
-					received_at: nextBase.received_at ?? new Date().toISOString(),
-					items: counted.map((c) => ({ item_id: c.item_id, qty: String(c.qty), unit: c.unit })),
-					shortfalls: shortfalls.map((s) => ({
-						item_id: s.item_id,
-						declared: s.declared,
-						counted: s.counted,
-						short: s.short
-					}))
+		let closing: Donation | undefined;
+		for (let attempt = 0; ; attempt++) {
+			try {
+				const latest = (await this.repo.get<Donation>(donation._id)) ?? donation;
+				// Already closed with its summary: the first receipt stands, nothing is rewritten.
+				if (latest.status === 'received' && latest.received_summary) {
+					return { donation: latest, lines, rowsComplete: true, received: true };
 				}
-			};
-			const saved = next === latest ? latest : await this.updateDonation(next);
-			return { donation: saved, lines, rowsComplete: true, received: true };
-		} catch (err) {
-			return {
-				donation,
-				lines,
-				rowsComplete: true,
-				received: false,
-				transitionError: err instanceof Error ? err.message : 'Could not mark the donation received'
-			};
+				// The booking moved while its rows were keyed — a line refused on another screen,
+				// the donor editing or cancelling, the TTL lapsing. Closing it from this count
+				// would write over that change, so stop and leave it to someone to check.
+				if (bookingChanged(onFile, latest)) return blocked;
+				closing = latest;
+				const nextBase = completeDonationReceipt(latest);
+				const declaredLines = latest.items ?? [];
+				const countedByLine = new Map(counted.map((c) => [c.line_no, c]));
+				// "ไม่รับ" is not "ขาด" (CR-172 FR-13): a line refused at review leaves the
+				// comparison. A typed-in line is compared under the item staff matched it to —
+				// keyed by its own words it never met its count and read as a shortfall.
+				const declaredForShortfall = declaredLines.flatMap((item, index) =>
+					item.review_status === 'rejected'
+						? []
+						: [
+								{
+									item_id: item.item_id || countedByLine.get(index)?.item_id || item.free_text,
+									qty: String(item.qty)
+								}
+							]
+				);
+				const countedForShortfall = counted.map((c) => ({
+					item_id: c.item_id,
+					qty: String(c.qty)
+				}));
+				const shortfalls = donationShortfall(declaredForShortfall, countedForShortfall);
+				// One entry per declared line, in order — the tracking page reads them by position —
+				// then any line counted off the ticket.
+				const summaryItems = [
+					...declaredLines.map((item, index) => {
+						if (item.review_status === 'rejected') {
+							return {
+								...(item.item_id ? { item_id: item.item_id } : {}),
+								...(item.free_text ? { free_text: item.free_text } : {}),
+								qty: '0',
+								unit: item.unit,
+								rejected: true,
+								...(item.review_reason ? { reject_reason: item.review_reason } : {}),
+								...(item.review_reason_code ? { reject_reason_code: item.review_reason_code } : {})
+							};
+						}
+						const line = countedByLine.get(index);
+						// The donor's own words stay beside the item staff matched them to.
+						const words = item.free_text ? { free_text: item.free_text } : {};
+						return line
+							? { item_id: line.item_id, ...words, qty: String(line.qty), unit: line.unit }
+							: { item_id: item.item_id, ...words, qty: '0', unit: item.unit };
+					}),
+					...counted
+						.filter((c) => c.line_no >= declaredLines.length)
+						.map((c) => ({ item_id: c.item_id, qty: String(c.qty), unit: c.unit }))
+				];
+				const next: Donation = {
+					...nextBase,
+					received_summary: {
+						total_items: summaryItems.length,
+						received_at: nextBase.received_at ?? new Date().toISOString(),
+						items: summaryItems,
+						shortfalls: shortfalls.map((s) => ({
+							item_id: s.item_id,
+							declared: s.declared,
+							counted: s.counted,
+							short: s.short
+						}))
+					}
+				};
+				// Written against `latest._rev`, not whatever is on file by then: a change landing
+				// after the check above conflicts here instead of being overwritten.
+				const saved = next === latest ? latest : await this.repo.put(touch(next));
+				return { donation: saved, lines, rowsComplete: true, received: true };
+			} catch (err) {
+				// `ConflictError` is not only a 409: CouchDB's other 4xx answers arrive as one too.
+				// A new `_rev` on file means someone did write the booking, so check again from
+				// the top: a close whose answer was lost reads as received, a refused line or a
+				// donor edit blocks, and a courier number alone is closed over. A booking that
+				// keeps moving is left for someone to check.
+				if (err instanceof ConflictError && closing) {
+					const current = await this.repo.get<Donation>(donation._id).catch(() => null);
+					if (current?.status === 'received' && current.received_summary) {
+						return { donation: current, lines, rowsComplete: true, received: true };
+					}
+					if (current && current._rev !== closing._rev) {
+						if (attempt < MAX_CLOSE_ATTEMPTS - 1) continue;
+						return blocked;
+					}
+				}
+				return {
+					donation,
+					lines,
+					rowsComplete: true,
+					received: false,
+					transitionError:
+						err instanceof Error ? err.message : 'Could not mark the donation received'
+				};
+			}
 		}
 	}
 
@@ -653,9 +827,13 @@ export class OperationsRemoteRepository implements OperationsRepository {
 		// may land on a lot recorded before the item gained a shelf life and has no expiry to carry.
 		assertReceiveAgainstCatalog(entry, item, { requireExpiry: false });
 
-		// NOTE: This balance check is aggregate (cross-lot total), not per-lot.
-		// Acceptable for single-user shelter; per-lot validation requires FIFO tracking.
-		if (qtyLte(entry.qty, 0)) {
+		if (qtyLte(entry.qty, 0) && entry.lot_ref) {
+			// A write-off out of a named lot is replayed against that lot alone, so it must fit
+			// that lot as the ledger stands now — not just the item's total (#569).
+			assertLotWriteOffsFit(await this.listLedgerByItem(entry.item_id), [entry]);
+		} else if (qtyLte(entry.qty, 0)) {
+			// No lot named (an older caller): the projection takes it from the item's lots in
+			// consumption order, so the item's total is what it has to fit.
 			const balances = await this.getBalance();
 			const currentQty = balances.get(entry.item_id) ?? '0';
 			const requestedQty = qtyAbs(entry.qty);
@@ -725,8 +903,9 @@ export class OperationsRemoteRepository implements OperationsRepository {
 			);
 
 			// Validate every row BEFORE writing any: a bad line must not leave its neighbours half
-			// recorded. Write-offs are checked against the aggregate balance (same rule as
-			// `adjustStock`), summed per item so two lots of one item cannot overdraw together.
+			// recorded. A shortfall names its lot, so it must fit that lot as the ledger stands now
+			// (#569) — the count's `system_qty` was read when the walk began. Any row without a
+			// lot is checked against the item's total, summed per item (same rules as `adjustStock`).
 			const catalog = new Map<string, CatalogItem | null>();
 			for (const entry of entries) {
 				if (!catalog.has(entry.item_id)) {
@@ -740,9 +919,12 @@ export class OperationsRemoteRepository implements OperationsRepository {
 				}
 				assertReceiveAgainstCatalog(entry, item, { requireExpiry: false });
 			}
+			if (entries.some((entry) => entry.lot_ref && qtyLte(entry.qty, 0))) {
+				assertLotWriteOffsFit(await this.listLedger(), entries);
+			}
 			const writeOffs = new Map<string, string>();
 			for (const entry of entries) {
-				if (qtyLte(entry.qty, 0)) {
+				if (qtyLte(entry.qty, 0) && !entry.lot_ref) {
 					writeOffs.set(
 						entry.item_id,
 						addQty(writeOffs.get(entry.item_id) ?? '0', qtyAbs(entry.qty))
@@ -1000,11 +1182,25 @@ export class OperationsRemoteRepository implements OperationsRepository {
 			credentials: 'include',
 			headers: { Accept: 'application/json' }
 		});
+		if (res.status === 403) throw new TransferForbiddenError();
 		if (!res.ok) {
 			throw new Error(`Failed to list transfers: ${res.statusText}`);
 		}
 		const list = await res.json();
 		return Array.isArray(list) ? list.filter(isStockTransfer) : [];
+	}
+
+	async listTransferDestinations(): Promise<TransferDestination[]> {
+		const qs = new URLSearchParams({ shelter_code: getShelterCode() });
+		const res = await fetch(`/api/back-office/transfer/destinations?${qs}`, {
+			credentials: 'include',
+			headers: { Accept: 'application/json' }
+		});
+		if (!res.ok) {
+			throw new Error(`Failed to list transfer destinations: ${res.statusText}`);
+		}
+		const list = await res.json();
+		return Array.isArray(list) ? list.filter(isTransferDestination) : [];
 	}
 
 	async getTransfer(id: string): Promise<StockTransfer | null> {

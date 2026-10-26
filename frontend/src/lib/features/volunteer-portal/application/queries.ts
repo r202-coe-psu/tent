@@ -134,13 +134,21 @@ export function useScheduleActionMutation(credential: () => PortalCredential | n
  */
 export function useVolunteerJobs(
 	filter: () => PublicJobFilter = () => ({}),
-	enabled: () => boolean = () => true
+	enabled: () => boolean = () => true,
+	/**
+	 * The board refetches on every visit (`staleTime: 0`) so an applicant never books a seat
+	 * that is gone. A page that only shows totals — the public home card (#709) — can ask for
+	 * less: the BFF shares a 30-a-minute-per-IP budget, and many people behind one shelter
+	 * Wi-Fi would spend it on refocus refetches alone.
+	 */
+	options: { staleTime?: number; refetchOnWindowFocus?: boolean } = {}
 ) {
 	return createQuery(() => ({
 		queryKey: volunteerPortalKeys.jobsList(filter()),
 		queryFn: () => fetchJobs(filter()),
 		enabled: enabled(),
-		staleTime: 0
+		staleTime: options.staleTime ?? 0,
+		refetchOnWindowFocus: options.refetchOnWindowFocus ?? true
 	}));
 }
 

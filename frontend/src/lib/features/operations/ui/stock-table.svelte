@@ -57,11 +57,7 @@
 		STOCK_PAGE_SIZE,
 		type StockUrlState
 	} from './stock/stock-url-state';
-	import {
-		projectStockLotBalances,
-		StockLotIntegrityError,
-		type StockLotBalance
-	} from '../domain/operations';
+	import { projectLotsByItem } from '../domain/operations';
 	import {
 		dailyConsumption,
 		daysOfCover,
@@ -230,26 +226,36 @@
 		isSA && showOverall ? (crossLedgerQuery.data ?? []) : (ledgerQuery.data ?? [])
 	);
 
-	/** Location filter options, keyed by `lotStorageKey` (draft-shelter-storage-points). */
+	/**
+	 * Remaining lots per item — every lot, so an old lot near expiry is never hidden. Projected
+	 * one item at a time: an item whose history cannot be replayed loses its lots alone and is
+	 * named below, instead of every item's lots vanishing (#569).
+	 */
+	const projected = $derived.by(() => {
+		const broken: string[] = [];
+		const lots = projectLotsByItem(ledger, (itemId) => broken.push(itemId));
+		return { byItem: groupLotsByItem(lots), broken };
+	});
+	const lotsByItem = $derived(projected.byItem);
+
+	/**
+	 * Location filter options, keyed by `lotStorageKey` so a renamed storage point stays one option
+	 * (draft-shelter-storage-points). Configured points plus lots still on the shelf, not raw rows:
+	 * an empty lot is not a place to filter by, and an outbound or return row's `lot.note` may hold
+	 * a distribution destination ("อาคารยิมเนเซียม 1"), which is no place in the store (#569).
+	 */
 	const uniqueLocations = $derived(
 		locationOptions(
 			storagePoints.points,
-			ledger.map((entry) => ({
-				key: lotStorageKey(entry.lot),
-				name: lotStorageName(entry.lot, storagePoints.points)
-			}))
+			Array.from(lotsByItem.values())
+				.flat()
+				.filter((lot) => qtyGt(lot.qty, 0))
+				.map((lot) => ({
+					key: lotStorageKey(lot.lot),
+					name: lotStorageName(lot.lot, storagePoints.points)
+				}))
 		)
 	);
-
-	/** Remaining lots per item — every lot, so an old lot near expiry is never hidden. */
-	const lotsByItem = $derived.by(() => {
-		try {
-			return groupLotsByItem(projectStockLotBalances(ledger));
-		} catch (error) {
-			if (!(error instanceof StockLotIntegrityError)) throw error;
-			return new SvelteMap<string, StockLotBalance[]>();
-		}
-	});
 
 	/** Shelf life / storage type per item, for the lot order shown in the detail panel. */
 	const lotPriorityItems = $derived(toLotPriorityItems(itemMastersQuery.data ?? []));
@@ -305,6 +311,10 @@
 			}))
 			.sort((a, b) => a.label.localeCompare(b.label, 'th'));
 	});
+
+	const brokenItemNames = $derived(
+		projected.broken.map((id) => items.find((item) => item._id === id)?.name ?? id)
+	);
 
 	/** "Ever stocked" = at least one ledger row at this shelter; the rest are catalog-only. */
 	const everStocked = $derived(everStockedItemIds(ledger));
@@ -439,6 +449,15 @@
 			</a>
 		</div>
 	</div>
+
+	{#if brokenItemNames.length > 0}
+		<p
+			role="alert"
+			class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900"
+		>
+			ประวัติคลังของ {brokenItemNames.join(', ')} ไม่สอดคล้องกัน จึงแสดงยอดรายล็อตไม่ได้ — กรุณาแจ้งผู้ดูแลระบบ
+		</p>
+	{/if}
 
 	<AttentionCards
 		{counts}

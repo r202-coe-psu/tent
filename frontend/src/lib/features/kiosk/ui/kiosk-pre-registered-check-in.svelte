@@ -94,6 +94,8 @@
 	}: Props = $props();
 
 	let lookup = $state<Extract<KioskLookupResponse, { kind: 'household' }> | null>(null);
+	/** When the current `lookup` succeeded (ISO) — sent with the check-in as the Station 1 start (CR-192). */
+	let lookupAt = '';
 	let candidates = $state<KioskHouseholdCandidate[]>([]);
 	let candidateShelterCode = $state('');
 	let lookupError = $state('');
@@ -230,6 +232,7 @@
 				return;
 			}
 			lookup = found;
+			lookupAt = new Date().toISOString();
 			const selectableMembers = found.members.filter((member) => member.selectable);
 			if (selectableMembers.length === 0) {
 				results = toExistingReportResults(found.members);
@@ -301,6 +304,7 @@
 		try {
 			const response = await checkInSelectedMembers(lookup.primary_evacuee_id, ids, {
 				batchLimit: 20,
+				lookupAt,
 				...(isThaidGate ? thaidOptions() : await cardPhotoOptions())
 			});
 			thaidSessionSpent = true;

@@ -126,9 +126,10 @@ describe('religion / disability other (FR-12 – FR-14)', () => {
 	it('createEvacuee stamps schema_v 11 with the extras', () => {
 		const e = createEvacuee(
 			{ ...member({ religion: 'other', religion_other: 'ซิกข์' }), status: 'arriving' },
-			{ shelterCode: 'SH001', createdBy: 'test' }
+			{ shelterCode: 'SH001', createdBy: 'test' },
+			null
 		);
-		expect(e.schema_v).toBe(14);
+		expect(e.schema_v).toBe(15);
 		expect(e.religion_other).toBe('ซิกข์');
 		expect(e.disability_other_detail).toBeNull();
 	});
