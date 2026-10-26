@@ -29,6 +29,7 @@ import {
 	listBulkReturnSkippedDocs,
 	type BulkReturnPoolOverviewQuery
 } from '../food-supplies/bulk-return-pool-v3-read';
+import { listBulkReturnPoolMissedLoanRefs } from '../food-supplies/bulk-return-pool-v3-missed-loans';
 import type {
 	RequisitionTicketListFilter,
 	DistributionLogListFilter,
@@ -197,6 +198,29 @@ export const useBulkReturnPoolClosedLoanRefs = (
 			queryFn: () => {
 				const ctx = resolveAuthenticatedAuthorContext(shelterCode);
 				return listBulkReturnPoolClosedLoanRefs(id!, ctx);
+			},
+			enabled: isEnabled
+		};
+	});
+
+/**
+ * Reads the refs of a SUBMITTED / RECEIVED pool's snapshot entries that were planned but never
+ * applied to a loan that can still take them (fence timeout); empty for an OPEN pool.
+ */
+export const useBulkReturnPoolMissedLoanRefs = (
+	poolId: MaybeGetter<string | null | undefined>,
+	shelterCodeGetter?: MaybeGetter<string | undefined>,
+	enabled: MaybeGetter<boolean> = true
+) =>
+	createQuery(() => {
+		const id = toValue(poolId);
+		const shelterCode = resolveShelterCode(toValue(shelterCodeGetter));
+		const isEnabled = Boolean(toValue(enabled) && shelterCode && id);
+		return {
+			queryKey: distributionKeys.bulkPoolMissedLoanRefs(shelterCode, id ?? ''),
+			queryFn: () => {
+				const ctx = resolveAuthenticatedAuthorContext(shelterCode);
+				return listBulkReturnPoolMissedLoanRefs(id!, ctx);
 			},
 			enabled: isEnabled
 		};

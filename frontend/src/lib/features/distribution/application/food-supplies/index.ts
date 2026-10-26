@@ -18,3 +18,4 @@ export * from './bulk-return-pool-v3-add-entry';
 export * from './bulk-return-pool-v3-move';
 export * from './bulk-return-pool-v3-void';
 export * from './bulk-return-pool-v3-read';
+export * from './bulk-return-pool-v3-missed-loans';

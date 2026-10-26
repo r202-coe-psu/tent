@@ -44,6 +44,11 @@ import {
 	type VoidBulkReturnEntryInput,
 	type VoidBulkReturnEntryResult
 } from '../food-supplies/bulk-return-pool-v3-void';
+import {
+	applyMissedBulkReturnLoanRefs,
+	type ApplyMissedBulkReturnLoanRefsInput,
+	type ApplyMissedBulkReturnLoanRefsResult
+} from '../food-supplies/bulk-return-pool-v3-missed-loans';
 
 export interface OpenBulkReturnPoolMutationInput {
 	input: OpenBulkReturnPoolInput;
@@ -66,6 +71,11 @@ export interface AddBulkReturnEntriesMutationInput {
 
 export interface MoveBulkReturnEntryMutationInput {
 	input: MoveBulkReturnEntryInput;
+	shelterCode?: string;
+}
+
+export interface ApplyMissedBulkReturnLoanRefsMutationInput {
+	input: ApplyMissedBulkReturnLoanRefsInput;
 	shelterCode?: string;
 }
 
@@ -174,6 +184,33 @@ export const useMoveBulkReturnEntry = () => {
 		},
 		retry: false,
 		onSuccess: (_data: MoveBulkReturnEntryResult, variables: MoveBulkReturnEntryMutationInput) => {
+			const shelterCode = resolveShelterCode(variables.shelterCode);
+			invalidateBulkPoolsV3(queryClient, shelterCode);
+			invalidateDistributionLogs(queryClient, shelterCode);
+			invalidateReturnerOutstandingLoans(queryClient, shelterCode);
+		}
+	}));
+};
+
+/**
+ * Repairs an entry of a SUBMITTED / RECEIVED pool whose loans were never cut (fence timeout):
+ * applies only that entry's planned refs.
+ */
+export const useApplyMissedBulkReturnLoanRefs = () => {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: async ({
+			input,
+			shelterCode
+		}: ApplyMissedBulkReturnLoanRefsMutationInput): Promise<ApplyMissedBulkReturnLoanRefsResult> => {
+			const ctx = resolveAuthenticatedAuthorContext(shelterCode);
+			return applyMissedBulkReturnLoanRefs(input, ctx);
+		},
+		retry: false,
+		onSuccess: (
+			_data: ApplyMissedBulkReturnLoanRefsResult,
+			variables: ApplyMissedBulkReturnLoanRefsMutationInput
+		) => {
 			const shelterCode = resolveShelterCode(variables.shelterCode);
 			invalidateBulkPoolsV3(queryClient, shelterCode);
 			invalidateDistributionLogs(queryClient, shelterCode);

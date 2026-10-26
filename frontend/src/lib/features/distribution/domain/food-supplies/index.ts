@@ -164,6 +164,8 @@ export {
 	assessBulkReturnRefOnLoan,
 	findClosedBulkReturnLoanRefs,
 	findAppliedBulkReturnLoanRefs,
+	findMissedLoanRefs,
+	type MissedBulkReturnLoanRef,
 	type BulkReturnLoanDriftReason,
 	type BulkReturnRefLoan,
 	type BulkReturnRefAssessment,
