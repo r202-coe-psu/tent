@@ -104,6 +104,9 @@ export interface AddEntriesOptions {
 	lines: AddEntryLine[];
 }
 
+/** Excludes the board's role work-queue rows, which also name pools (Phase 2). */
+const NOT_IN_WORK_QUEUE = ':not([data-testid="bulk-return-work-queues"] *)';
+
 export class BulkReturnPoolBoard {
 	constructor(readonly page: Page) {}
 
@@ -144,8 +147,11 @@ export class BulkReturnPoolBoard {
 
 	// ── List ─────────────────────────────────────────────────────────────────────────────────
 
+	/** A pool card on the board (not the same pool's row in the role work queues above it). */
 	card(poolName: string): Locator {
-		return this.page.getByRole('button', { name: new RegExp(escapeRegExp(poolName)) });
+		return this.page
+			.getByRole('button', { name: new RegExp(escapeRegExp(poolName)) })
+			.and(this.page.locator(NOT_IN_WORK_QUEUE));
 	}
 
 	async expectCardStatus(poolName: string, status: PoolStatus): Promise<void> {
@@ -217,7 +223,10 @@ export class BulkReturnPoolBoard {
 	 * card from the accessibility tree. `undefined` when it cannot be read.
 	 */
 	private async cardEntryCount(poolName: string): Promise<number | undefined> {
-		const card = this.page.locator('ul > li > button').filter({ hasText: poolName }).first();
+		const card = this.page
+			.locator(`ul > li > button${NOT_IN_WORK_QUEUE}`)
+			.filter({ hasText: poolName })
+			.first();
 		const text = (await card.textContent({ timeout: 2_000 }).catch(() => null)) ?? '';
 		const match = /(\d+)\s*รายการ/.exec(text);
 		return match ? Number(match[1]) : undefined;
