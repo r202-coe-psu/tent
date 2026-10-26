@@ -1,6 +1,7 @@
 import type { BulkReturnEntry } from './bulk-return-entry';
 import type { BulkReturnEntryMove } from './bulk-return-entry-move';
 import type { BulkReturnEntryVoid } from './bulk-return-entry-void';
+import type { ClosedBulkReturnLoanRef } from './bulk-return-loan-drift';
 import type { BulkReturnPoolItemSummaryRow, BulkReturnPoolV3 } from './bulk-return-pool-v3';
 import {
 	findLateEntries,
@@ -41,6 +42,12 @@ export interface BulkReturnPoolOverviewRow {
 	 * chain has a gap (pending replication); such entries count in no pool until they resolve.
 	 */
 	unresolved_refs: UnresolvedBulkReturnRef[];
+	/**
+	 * Loan refs of the live entries that were not applied and cannot be applied now (loan closed /
+	 * short / missing). The pure builder leaves this empty: it needs the current loans, so the
+	 * overview read enriches it (one batched loan read).
+	 */
+	closed_loan_refs: ClosedBulkReturnLoanRef[];
 }
 
 export interface BulkReturnPoolOverviewOptions {
@@ -81,7 +88,8 @@ export function buildBulkReturnPoolOverview(
 				entries,
 				late_entries: late.filter((r) => r.pool_id === pool._id),
 				is_empty: live.length === 0,
-				unresolved_refs: unresolved.filter((ref) => ref.pool_ids.includes(pool._id))
+				unresolved_refs: unresolved.filter((ref) => ref.pool_ids.includes(pool._id)),
+				closed_loan_refs: []
 			};
 		});
 }

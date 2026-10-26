@@ -33,9 +33,34 @@ export async function getBulkReturnPoolOverview(
 	ctx: AuthorContext,
 	deps?: BulkReturnPoolV3WorkflowDependencies
 ): Promise<BulkReturnPoolOverviewRow[]> {
-	const { poolRepo, eventRepo } = resolveDependencies(deps, ctx);
+	const { poolRepo, eventRepo, logRepo } = resolveDependencies(deps, ctx);
 	const [pools, events] = await Promise.all([poolRepo.list(), eventRepo.listAll()]);
-	return buildBulkReturnPoolOverview(pools, events, { includeCancelled: options.includeCancelled });
+	const rows = buildBulkReturnPoolOverview(pools, events, {
+		includeCancelled: options.includeCancelled
+	});
+
+	// Closed-loan-mid-flight: ONE batched loan read for every live entry of every non-cancelled pool.
+	const liveByRow = rows.map((row) =>
+		row.pool.status === 'CANCELLED' ? [] : row.entries.filter((r) => !r.voided).map((r) => r.entry)
+	);
+	const loanIds = [
+		...new Set(
+			liveByRow.flatMap((live) =>
+				live.flatMap((entry) => entry.loan_refs.map((ref) => ref.distribution_log_id))
+			)
+		)
+	];
+	if (loanIds.length === 0) return rows;
+	// Skipped (malformed) loan docs are left out here, so they count as missing; never throw on read.
+	const { items } = await logRepo.getMany(loanIds);
+	const found = new Map(items.map((loan) => [loan._id, loan]));
+	const loansById = new Map<string, DistributionLog | null>(
+		loanIds.map((id) => [id, found.get(id) ?? null])
+	);
+	return rows.map((row, i) => ({
+		...row,
+		closed_loan_refs: findClosedBulkReturnLoanRefs(liveByRow[i], loansById)
+	}));
 }
 
 /**

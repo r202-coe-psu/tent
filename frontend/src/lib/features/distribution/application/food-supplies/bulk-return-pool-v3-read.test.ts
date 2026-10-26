@@ -25,9 +25,11 @@ vi.mock('$lib/features/catalog', () => ({
 }));
 
 import { cancelBulkReturnPool, submitBulkReturnPool } from './bulk-return-pool-v3-lifecycle';
+import { addBulkReturnEntries } from './bulk-return-pool-v3-add-entry';
 import { moveBulkReturnEntry } from './bulk-return-pool-v3-move';
 import { voidBulkReturnEntry } from './bulk-return-pool-v3-void';
 import {
+	getBulkReturnPoolOverview,
 	listBulkReturnPoolAppliedLoanRefs,
 	listBulkReturnPoolClosedLoanRefs,
 	listReturnerOutstandingLoans
@@ -49,9 +51,86 @@ describe('bulk return pool v3 workflows', () => {
 	let openPool: Fx['openPool'];
 	let seedLoan: Fx['seedLoan'];
 	let add: Fx['add'];
+	let logRepo: Fx['logRepo'];
+	let driftingLogRepo: Fx['driftingLogRepo'];
 
 	beforeEach(() => {
-		({ deps, nextOp, openPool, seedLoan, add } = createBulkReturnPoolV3Fixture(couch));
+		({ deps, nextOp, openPool, seedLoan, add, logRepo, driftingLogRepo } =
+			createBulkReturnPoolV3Fixture(couch));
+	});
+
+	describe('getBulkReturnPoolOverview closed_loan_refs', () => {
+		const cotInput = (poolId: string, qty: string) => ({
+			pool_id: poolId,
+			returner: { type: 'evacuee' as const, id: EVACUEE },
+			items: [{ item_id: 'item:cot', qty, operationUlid: nextOp() }]
+		});
+
+		it('flags a ref whose loan was closed before it was applied; applied refs are clean', async () => {
+			const closedPool = await openPool('Closed');
+			const cleanPool = await openPool('Clean');
+			await seedLoan(50, { qty: '3' });
+			await seedLoan(51, { qty: '3', recipient: OTHER_EVACUEE });
+			const drifting = {
+				...deps,
+				logRepo: driftingLogRepo(() =>
+					logRepo.recordClear(loanId(50), { clear_reason: 'lost', notes: 'x' }, mgr)
+				)
+			};
+			await addBulkReturnEntries(cotInput(closedPool._id, '2'), mgr, drifting);
+			await add(cleanPool._id, { type: 'evacuee', id: OTHER_EVACUEE }, [
+				{ item_id: 'item:cot', qty: '2' }
+			]);
+
+			const rows = await getBulkReturnPoolOverview({}, mgr, deps);
+			const closedRow = rows.find((r) => r.pool._id === closedPool._id)!;
+			const cleanRow = rows.find((r) => r.pool._id === cleanPool._id)!;
+			expect(closedRow.closed_loan_refs).toEqual([
+				{
+					entry_id: closedRow.entries[0].entry._id,
+					distribution_log_id: loanId(50),
+					qty: '2',
+					reason: 'closed',
+					outstanding: '3'
+				}
+			]);
+			expect(cleanRow.closed_loan_refs).toEqual([]);
+		});
+
+		it('treats a loan doc that is gone as missing', async () => {
+			const pool = await openPool('Gate A');
+			await seedLoan(52, { qty: '3' });
+			await add(pool._id, { type: 'evacuee', id: EVACUEE }, [{ item_id: 'item:cot', qty: '2' }]);
+			couch.store.delete(loanId(52));
+
+			const [row] = await getBulkReturnPoolOverview({}, mgr, deps);
+			expect(row.closed_loan_refs.map((r) => r.reason)).toEqual(['missing']);
+		});
+
+		it('reads the loans in one getMany call regardless of the pool count', async () => {
+			await seedLoan(53, { qty: '3' });
+			await seedLoan(54, { qty: '3', recipient: OTHER_EVACUEE });
+			const a = await openPool('Gate A');
+			const b = await openPool('Gate B');
+			await openPool('Gate C');
+			await add(a._id, { type: 'evacuee', id: EVACUEE }, [{ item_id: 'item:cot', qty: '1' }]);
+			await add(b._id, { type: 'evacuee', id: OTHER_EVACUEE }, [{ item_id: 'item:cot', qty: '1' }]);
+
+			const getMany = vi.spyOn(logRepo, 'getMany');
+			const rows = await getBulkReturnPoolOverview({}, mgr, deps);
+			expect(rows).toHaveLength(3);
+			expect(getMany).toHaveBeenCalledTimes(1);
+			expect(getMany.mock.calls[0][0].slice().sort()).toEqual([loanId(53), loanId(54)]);
+		});
+
+		it('does not read loans when no entry carries a loan ref', async () => {
+			const pool = await openPool('Gate A');
+			await add(pool._id, { type: 'unspecified' }, [{ item_id: 'item:cot', qty: '1' }]);
+			const getMany = vi.spyOn(logRepo, 'getMany');
+			const [row] = await getBulkReturnPoolOverview({}, mgr, deps);
+			expect(row.closed_loan_refs).toEqual([]);
+			expect(getMany).not.toHaveBeenCalled();
+		});
 	});
 
 	describe('pool- and entry-scoped event reads', () => {

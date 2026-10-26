@@ -27,7 +27,9 @@ export function startDistributionLiveQuery(queryClient: QueryClient): SubscribeD
 				[...distributionKeys.shelter(shelterCode), 'shift_reconciliation'],
 				distributionKeys.returnerOutstandingLoansAll(shelterCode),
 				distributionKeys.bulkPoolClosedLoanRefsAll(shelterCode),
-				distributionKeys.bulkPoolAppliedLoanRefsAll(shelterCode)
+				distributionKeys.bulkPoolAppliedLoanRefsAll(shelterCode),
+				// The pool overview derives closed-loan warnings from the loans.
+				distributionKeys.bulkPoolsV3All(shelterCode)
 			];
 		}
 		if (type === 'bulk_return_pool') {

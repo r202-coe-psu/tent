@@ -48,6 +48,7 @@ function makeRow(
 		entries: [],
 		late_entries: [],
 		unresolved_refs: [],
+		closed_loan_refs: [],
 		is_empty: empty
 	} as BulkReturnPoolOverviewRow;
 }

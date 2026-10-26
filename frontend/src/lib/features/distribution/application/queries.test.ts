@@ -1047,7 +1047,8 @@ describe('Phase 5 Slice 5.0 — Distribution TanStack Query Layer', () => {
 				['distribution', 'SH001', 'shift_reconciliation'],
 				['distribution', 'SH001', 'returner_outstanding_loans'],
 				['distribution', 'SH001', 'bulk_pools_v3', 'closed_loan_refs'],
-				['distribution', 'SH001', 'bulk_pools_v3', 'applied_loan_refs']
+				['distribution', 'SH001', 'bulk_pools_v3', 'applied_loan_refs'],
+				['distribution', 'SH001', 'bulk_pools_v3']
 			]);
 
 			expect(keysForType('bulk_return_pool')).toEqual([

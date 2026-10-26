@@ -165,6 +165,7 @@ export function createBulkReturnPoolV3Fixture(couch: InMemoryCouch) {
 		return {
 			create: (i, c) => logRepo.create(i, c),
 			get: (id) => logRepo.get(id),
+			getMany: (ids) => logRepo.getMany(ids),
 			list: async (f) => {
 				const loans = await logRepo.list(f);
 				await afterList();

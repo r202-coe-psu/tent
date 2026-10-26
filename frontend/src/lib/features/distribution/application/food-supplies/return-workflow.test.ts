@@ -96,6 +96,11 @@ class InMemoryLogRepository implements DistributionLogRepository {
 		return this.logs.get(logId) ?? null;
 	}
 
+	async getMany(ids: readonly string[]) {
+		const items = ids.flatMap((id) => this.logs.get(id) ?? []);
+		return { items, skipped: [] };
+	}
+
 	async list(): Promise<DistributionLog[]> {
 		return Array.from(this.logs.values());
 	}
