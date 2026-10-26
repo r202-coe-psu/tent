@@ -78,7 +78,7 @@ migration: N/A — ไม่เพิ่ม/ลบ field, ไม่เปลี�
 - **AC-X9** หน้าคลัง: สินค้า A มีล็อต `lot.expiry = '2026-10-23'`, สินค้า B มีล็อต `shelf_life_days` ที่หมดอายุ 2026-10-23T12:00:00+07:00, now = 2026-10-23 08:00, ระดับ urgency เท่ากัน → B เรียงก่อน A (`byEarliestExpiry`); A แสดงวันหมดอายุ `23 ต.ค.` (ไม่ใช่ `24 ต.ค.`)
 - **AC-X10** regression: test ของ `operations/**` และ `distribution/**` (รวม CR-178 FR-3 ห้ามเลือก lot หมดอายุ) ผ่าน หลังปรับ expectation ที่เปลี่ยนตามนิยามใหม่
 
-## Decisions (เคาะแล้ว 2026-10-26 — kong)
+## Decisions (เคาะแล้ว 2026-10-26 — ตามที่ผู้เสนอ PR #868 (Hopewalk) เสนอ)
 
 - **D1 = D1-a** — `daysLeft` / ลำดับล็อต / กลุ่มเร่งด่วน / ข้อความ "หมดอายุอีก N วัน" ใช้ instant สิ้นวันเดียวกับ "หมดอายุหรือยัง" (FR-X5)
 - **D2 = D2-a** — ตรวจรูปแบบ `lot.expiry` เฉพาะ walk-in ตาม #824 (FR-X6); input อื่น (`operations.ts` lot schema, `public-donation.ts`) แยก CR ภายหลัง — `meal_service` เขียน datetime จึงต้องรับทั้งสองรูปแบบที่ระดับ ledger
@@ -106,5 +106,5 @@ N/A — ไม่เปลี่ยนรูป doc ไม่ bump `schema_v` �
 ## Decision log
 
 - 2026-10-25 — proposed (draft จาก GitHub #824) · รอ owner เคาะวิธี track, D1–D3 และการ approve
-- 2026-10-26 — kong เคาะ D1-a, D2-a, D3-a ตามที่เสนอ · รอ approve
+- 2026-10-26 — เคาะ D1-a, D2-a, D3-a ตามที่ผู้เสนอ PR #868 (Hopewalk) เสนอ · รอ approve
 - 2026-10-26 — **approved** โดย kong → รันเลข CR-195 (หมวด 03-C-supply). แก้ CR-143 FR-A4 + `schema.md` §2.1 ใน PR implement ตามหลัง (#824)
