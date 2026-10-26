@@ -78,9 +78,13 @@
 		shelterCode?: string;
 		/** Overrides the default submit / receive actions rendered in the pool detail header. */
 		lifecycleActions?: Snippet<[BulkReturnPoolOverviewRow]>;
+		/** Pool whose detail opens once its row is loaded (deep link, `?pool=`). */
+		initialPoolId?: string | null;
+		/** Fired whenever the open pool changes (`null` = closed), so the host can sync the URL. */
+		onSelectedPoolChange?: (poolId: string | null) => void;
 	}
 
-	let { shelterCode, lifecycleActions }: Props = $props();
+	let { shelterCode, lifecycleActions, initialPoolId, onSelectedPoolChange }: Props = $props();
 
 	const activeShelterCode = $derived(
 		shelterCode ?? shelterStore.selectedShelterCode ?? getShelterCode()
@@ -115,7 +119,13 @@
 	let openDialogVisible = $state(false);
 	let addDialogOpen = $state(false);
 	let addPoolId = $state<string | undefined>(undefined);
-	let selectedPoolId = $state<string | null>(null);
+	// Writable derived: follows `initialPoolId` (deep link / URL), local selections override it.
+	let selectedPoolId = $derived<string | null>(initialPoolId ?? null);
+
+	function selectPool(poolId: string | null) {
+		selectedPoolId = poolId;
+		onSelectedPoolChange?.(poolId);
+	}
 
 	// Fail closed: any problem resolving the session context hides the write actions.
 	const authContext = $derived.by(() => {
@@ -296,12 +306,7 @@
 		</div>
 	{/if}
 
-	<BulkReturnPoolWorkQueue
-		{rows}
-		{queues}
-		{now}
-		onOpenPool={(poolId) => (selectedPoolId = poolId)}
-	/>
+	<BulkReturnPoolWorkQueue {rows} {queues} {now} onOpenPool={(poolId) => selectPool(poolId)} />
 
 	<div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
 		<div class="relative w-full sm:max-w-sm">
@@ -479,7 +484,7 @@
 				<li>
 					<button
 						type="button"
-						onclick={() => (selectedPoolId = pool._id)}
+						onclick={() => selectPool(pool._id)}
 						class="flex min-h-11 w-full flex-col gap-3 rounded-xl border border-slate-200/80 bg-white p-4 text-left shadow-2xs transition-colors hover:border-slate-300 hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none"
 					>
 						<div class="flex flex-wrap items-start justify-between gap-2">
@@ -583,7 +588,7 @@
 		shelterCode={activeShelterCode}
 		{rows}
 		onClose={() => (openDialogVisible = false)}
-		onOpened={(pool) => (selectedPoolId = pool._id)}
+		onOpened={(pool) => selectPool(pool._id)}
 	/>
 {/if}
 
@@ -603,7 +608,7 @@
 		{canWriteEntry}
 		onAddEntry={handleAddEntry}
 		lifecycleActions={lifecycleActions ?? defaultLifecycleActions}
-		onClose={() => (selectedPoolId = null)}
+		onClose={() => selectPool(null)}
 	/>
 {/key}
 

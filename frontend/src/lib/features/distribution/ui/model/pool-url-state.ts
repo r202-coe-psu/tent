@@ -1,0 +1,36 @@
+/** Query keys owned by the distribution back-office view switch / pool deep link. */
+export const POOL_PARAM_KEYS = ['view', 'pool'] as const;
+
+export type DistributionView = 'tickets' | 'bulk_pools';
+
+export interface PoolUrlState {
+	view: DistributionView;
+	/** Open pool id, `null` when none (only meaningful in the `bulk_pools` view). */
+	pool: string | null;
+}
+
+export const DISTRIBUTION_BACK_OFFICE_PATH = '/back-office/distribution';
+
+/** Read `view` / `pool`. A `pool` param implies the pools view; unknown `view` falls back to tickets. */
+export function parsePoolParams(params: URLSearchParams): PoolUrlState {
+	const pool = params.get('pool')?.trim() || null;
+	const view: DistributionView =
+		params.get('view') === 'bulk_pools' || pool ? 'bulk_pools' : 'tickets';
+	return { view, pool: view === 'bulk_pools' ? pool : null };
+}
+
+/** `base` with `view` / `pool` replaced by `state`'s; every other key is kept as-is. */
+export function mergePoolParams(base: URLSearchParams, state: PoolUrlState): URLSearchParams {
+	const out = new URLSearchParams(base);
+	for (const key of POOL_PARAM_KEYS) out.delete(key);
+	if (state.view === 'bulk_pools') {
+		out.set('view', 'bulk_pools');
+		if (state.pool) out.set('pool', state.pool);
+	}
+	return out;
+}
+
+/** Deep link to one bulk return pool on the distribution back-office page. */
+export function bulkReturnPoolHref(poolId: string): string {
+	return `${DISTRIBUTION_BACK_OFFICE_PATH}?view=bulk_pools&pool=${encodeURIComponent(poolId)}`;
+}

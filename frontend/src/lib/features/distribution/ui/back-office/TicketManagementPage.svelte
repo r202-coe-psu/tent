@@ -24,6 +24,12 @@
 		serializeTicketParams,
 		type TicketUrlState
 	} from '../model/ticket-url-state';
+	import {
+		mergePoolParams,
+		parsePoolParams,
+		type DistributionView,
+		type PoolUrlState
+	} from '../model/pool-url-state';
 	import { untrack } from 'svelte';
 	import TicketGroupTabs from './TicketGroupTabs.svelte';
 	import TicketFilters from './TicketFilters.svelte';
@@ -173,7 +179,38 @@
 
 	// Create dialog open state
 	let isCreateOpen = $state(false);
-	let activeView = $state<'tickets' | 'bulk_pools'>('tickets');
+	// View tab + open pool live in the URL (`?view=bulk_pools&pool=<id>`); foreign keys are preserved.
+	const poolUrl = $derived.by(() => {
+		try {
+			return parsePoolParams(page.url.searchParams);
+		} catch {
+			return { view: 'tickets', pool: null } satisfies PoolUrlState;
+		}
+	});
+	// Writable derived: the local value shows the tab at once, then re-syncs with the URL.
+	let activeView = $derived<DistributionView>(poolUrl.view);
+
+	function updatePoolParams(next: PoolUrlState) {
+		try {
+			const qs = mergePoolParams(page.url.searchParams, next).toString();
+			if (qs === page.url.searchParams.toString()) return;
+			void goto(
+				resolve(
+					`/back-office/distribution${qs ? `?${qs}` : ''}` as
+						'/back-office/distribution' | `/back-office/distribution?${string}`
+				),
+				{ replaceState: true, keepFocus: true, noScroll: true }
+			);
+		} catch {
+			// page.url unavailable — nothing to persist
+		}
+	}
+
+	function handleViewChange(value: string) {
+		const view: DistributionView = value === 'bulk_pools' ? 'bulk_pools' : 'tickets';
+		activeView = view;
+		updatePoolParams({ view, pool: null });
+	}
 
 	// RBAC: Check create capability from authoritative session context
 	const authorContext = $derived.by(() => {
@@ -298,7 +335,7 @@
 				</Button>
 			{/if}
 
-			<Tabs.Root bind:value={activeView}>
+			<Tabs.Root value={activeView} onValueChange={handleViewChange}>
 				<Tabs.List
 					class="h-auto w-fit rounded-xl border border-slate-200 bg-white p-1 shadow-2xs"
 					aria-label="มุมมองงานกระจายของ"
@@ -321,7 +358,11 @@
 	</div>
 
 	{#if activeView === 'bulk_pools'}
-		<BulkReturnPoolBoard {shelterCode} />
+		<BulkReturnPoolBoard
+			{shelterCode}
+			initialPoolId={poolUrl.pool}
+			onSelectedPoolChange={(pool) => updatePoolParams({ view: 'bulk_pools', pool })}
+		/>
 	{:else}
 		<!-- Overview KPI Counters (Single source of truth with workflow groups) -->
 		<div class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
