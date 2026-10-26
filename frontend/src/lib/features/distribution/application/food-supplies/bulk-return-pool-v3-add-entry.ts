@@ -11,7 +11,9 @@ import {
 	canAppendToPool,
 	createBulkReturnEntry,
 	deriveEntryVoidId,
+	foldEntryMoves,
 	isBulkReturnEligibleItem,
+	resolveBulkReturnEntries,
 	selectOutstandingLoans
 } from '../../domain/food-supplies';
 import { assertCanWriteBulkReturnEntry } from './auth';
@@ -26,6 +28,7 @@ import { assertPositiveIntegerQty } from './validation';
 import {
 	applyRefToLoan,
 	assertOperationUlid,
+	loadSnapshotPinsForWrite,
 	outstandingLoansOf,
 	requirePool,
 	resolveDependencies,
@@ -63,6 +66,14 @@ export interface AddBulkReturnEntryResult {
 	loansSkipped: BulkReturnLoanSkipped[];
 	/** Part of the qty not allocated to any loan (goes into the pool without a loan ref). */
 	unallocated_qty: string;
+	/**
+	 * Replay only: the entry is no longer in `input.pool_id`. `moved` = it was moved to
+	 * `relocated_pool_id` (nothing done here; the move applies its loans); `pending_sync` = its move
+	 * chain has a gap so its pool is unknown yet. No loan was touched either way.
+	 */
+	relocated?: 'moved' | 'pending_sync';
+	/** The entry's current pool when `relocated` is 'moved'. */
+	relocated_pool_id?: string;
 }
 
 export interface AddBulkReturnEntriesResult {
@@ -142,6 +153,10 @@ function claimOnLocalLoans(
  * it is moved into an OPEN pool) and STOP. After a stop later items are not written, so `results`
  * holds only the items written so far. A lock that never clears throws
  * `BulkReturnPoolLockTimeoutError`. Retrying with the same operationUlids is idempotent.
+ *
+ * A replayed entry that was moved out of `input.pool_id` meanwhile (or whose move chain is pending
+ * sync) is reported with `relocated`: no fence, no loan touched (the move path owns its loans) and
+ * the remaining items are still processed normally.
  */
 export async function addBulkReturnEntries(
 	input: AddBulkReturnEntriesInput,
@@ -272,6 +287,50 @@ export async function addBulkReturnEntries(
 		}
 
 		const unallocated_qty = subQty(entry.qty, sumRefs(entry.loan_refs));
+
+		// A replayed entry may have been moved since it was created (e.g. the first call timed out on
+		// the fence, staff moved it): its input pool is then no longer where it counts, so fencing that
+		// pool / cutting loans here could cut a loan no snapshot counts. The move path owns that.
+		if (replayed) {
+			const events = await eventRepo.listForEntry(entry._id);
+			assertNoSkippedDocs(events.skipped, `bulk return entry ${entry._id}`);
+			const fold = foldEntryMoves(
+				entry,
+				events.moves.filter((m) => m.entry_id === entry._id)
+			);
+			const pins = await loadSnapshotPinsForWrite(poolRepo, events);
+			const current =
+				fold.status === 'resolved'
+					? resolveBulkReturnEntries(events.entries, events.moves, events.voids, pins).find(
+							(r) => r.entry._id === entry._id
+						)
+					: undefined;
+			if (fold.status === 'pending' || !current) {
+				results.push({
+					entry,
+					late: false,
+					replayed,
+					loansApplied: [],
+					loansSkipped: [],
+					unallocated_qty,
+					relocated: 'pending_sync'
+				});
+				continue;
+			}
+			if (current.pool_id !== input.pool_id) {
+				results.push({
+					entry,
+					late: false,
+					replayed,
+					loansApplied: [],
+					loansSkipped: [],
+					unallocated_qty,
+					relocated: 'moved',
+					relocated_pool_id: current.pool_id
+				});
+				continue;
+			}
+		}
 
 		// FENCE: the pool may have been locked / submitted / cancelled after the entry landed. A lock
 		// is waited out: the submit may already have counted this entry in its snapshot.

@@ -35,6 +35,7 @@
 	import {
 		LATE_RESULT_WARNING,
 		NO_OUTSTANDING_LOAN_WARNING,
+		activeLines,
 		addLine,
 		buildAddEntriesInput,
 		dropWrittenLines,
@@ -219,6 +220,7 @@
 		}
 		if (summary.noOutstandingLoan) toast.warning(NO_OUTSTANDING_LOAN_WARNING);
 		if (summary.lateEntries.length > 0) toast.warning(LATE_RESULT_WARNING);
+		if (summary.relocated.length > 0) toast.info('บางรายการถูกย้ายไปกองอื่นแล้ว ไม่ได้บันทึกซ้ำ');
 		if (summary.unallocated.length > 0) {
 			const detail = summary.unallocated
 				.map((u) => `${resolveItemDisplay(u.item_id, catalog).name} ${u.qty}`)
@@ -269,10 +271,11 @@
 			reportSummary(summary);
 			// A late entry stops the workflow: the lines that were not written stay for a retry.
 			lines = dropWrittenLines(lines, result);
+			// Relocated lines stay (flagged) so the dialog only closes when every line was written.
 			if (lines.length === 0) {
 				open = false;
 				onsuccess?.(summary);
-			} else {
+			} else if (activeLines(lines).length > 0) {
 				submitError =
 					'บางรายการยังไม่ได้บันทึก เพราะกองนี้ไม่รับของแล้ว กรุณาเลือกกองอื่นที่เปิดรับ แล้วกดบันทึกอีกครั้ง';
 			}
@@ -484,7 +487,11 @@
 										>
 											สินค้า
 										</Label>
-										<Select.Root type="single" bind:value={line.item_id}>
+										<Select.Root
+											type="single"
+											bind:value={line.item_id}
+											disabled={Boolean(line.relocated)}
+										>
 											<Select.Trigger
 												id="add-entry-item-{line.lineId}"
 												aria-invalid={Boolean(lineError)}
@@ -512,6 +519,7 @@
 											inputmode="numeric"
 											autocomplete="off"
 											bind:value={line.qty}
+											disabled={Boolean(line.relocated)}
 											aria-invalid={Boolean(lineError)}
 											placeholder="0"
 											class="h-11 text-base tabular-nums sm:h-10 sm:text-sm"
@@ -520,7 +528,7 @@
 									<Button
 										type="button"
 										variant="outline"
-										disabled={lines.length === 1 || addMutation.isPending}
+										disabled={(lines.length === 1 && !line.relocated) || addMutation.isPending}
 										onclick={() => (lines = removeLine(lines, line.lineId))}
 										class="min-h-11 w-full gap-2 sm:w-auto"
 									>
@@ -530,6 +538,22 @@
 								</div>
 								{#if lineError}
 									<p role="alert" class="text-xs font-medium text-red-700">{lineError}</p>
+								{/if}
+								{#if line.relocated}
+									<p
+										role="status"
+										class="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-xs font-medium text-amber-900"
+									>
+										<AlertTriangle
+											class="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600"
+											aria-hidden="true"
+										/>
+										<span>
+											{line.relocated === 'moved'
+												? 'ย้ายไปกองอื่นแล้ว ไม่ต้องทำอะไรเพิ่ม'
+												: 'รายการนี้กำลังรอซิงก์ข้อมูล ลองใหม่ภายหลัง'}
+										</span>
+									</p>
 								{/if}
 							</li>
 						{/each}

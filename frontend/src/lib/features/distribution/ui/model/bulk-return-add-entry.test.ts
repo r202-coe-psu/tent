@@ -300,6 +300,7 @@ describe('summarizeAddResult / dropWrittenLines', () => {
 			refs?: string[];
 			unallocated?: string;
 			returner?: string | null;
+			relocated?: 'moved' | 'pending_sync';
 		} = {}
 	) {
 		return {
@@ -313,7 +314,8 @@ describe('summarizeAddResult / dropWrittenLines', () => {
 			replayed: opts.replayed ?? false,
 			loansApplied: [],
 			loansSkipped: [],
-			unallocated_qty: opts.unallocated ?? '0'
+			unallocated_qty: opts.unallocated ?? '0',
+			...(opts.relocated ? { relocated: opts.relocated } : {})
 		};
 	}
 	const wrap = (
@@ -355,5 +357,42 @@ describe('summarizeAddResult / dropWrittenLines', () => {
 		const remaining = dropWrittenLines(lines, wrap([res('A', { late: true })]));
 		expect(remaining.map((l) => l.lineId)).toEqual(['B']);
 		expect(dropWrittenLines(lines, wrap([res('A'), res('B')]))).toEqual([]);
+	});
+
+	it('counts relocated lines separately, not as saved or late', () => {
+		const summary = summarizeAddResult(
+			wrap([
+				res('A', { refs: ['2'] }),
+				res('B', { relocated: 'moved' }),
+				res('C', { relocated: 'pending_sync' })
+			])
+		);
+		expect(summary.savedCount).toBe(1);
+		expect(summary.replayedCount).toBe(0);
+		expect(summary.lateEntries).toHaveLength(0);
+		expect(summary.loanAppliedQty).toBe('2');
+		expect(summary.relocated).toEqual([
+			{ item_id: 'item_master:B', kind: 'moved' },
+			{ item_id: 'item_master:C', kind: 'pending_sync' }
+		]);
+	});
+
+	it('keeps a relocated line flagged done and never resubmits it', () => {
+		const lines = [line('A', 'item_master:A', '1'), line('B', 'item_master:B', '2')];
+		const remaining = dropWrittenLines(lines, wrap([res('A', { relocated: 'moved' }), res('B')]));
+		expect(remaining).toEqual([{ ...lines[0], relocated: 'moved' }]);
+
+		const input = buildAddEntriesInput({
+			poolId: 'p',
+			returner: { type: 'unspecified' },
+			lines: [...remaining, line('C', 'item_master:C', '3')]
+		});
+		expect(input?.items.map((i) => i.operationUlid)).toEqual(['C']);
+		// A later call does not touch the flag; relocated lines are not validated.
+		expect(dropWrittenLines(remaining, wrap([])).map((l) => l.relocated)).toEqual(['moved']);
+		expect(validateAddEntryLines(remaining).isValid).toBe(false);
+		expect(validateAddEntryLines([...remaining, line('D', 'item_master:A', '1')]).isValid).toBe(
+			true
+		);
 	});
 });
