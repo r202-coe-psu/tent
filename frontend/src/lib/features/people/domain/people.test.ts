@@ -3,6 +3,7 @@ import { describe, it, expect } from 'vitest';
 import { mintConsentStamp } from '$lib/features/consent/server';
 import type { EvacueeConsentWrite } from './people';
 import {
+	EWAR_SYMPTOM_GROUPS,
 	ewarSymptomLabel,
 	canScanCheckIn,
 	needsIntakeBeforeStay,
@@ -1905,6 +1906,79 @@ describe('ewarSymptomLabel', () => {
 
 	it('returns unknown ids unchanged', () => {
 		expect(ewarSymptomLabel('legacy_code')).toBe('legacy_code');
+	});
+});
+
+describe('EWAR_SYMPTOM_GROUPS curated order (#605)', () => {
+	const groupTitles = EWAR_SYMPTOM_GROUPS.map((g) => g.title);
+	const idsOf = (title: string) =>
+		EWAR_SYMPTOM_GROUPS.find((g) => g.title === title)?.symptoms.map((s) => s.id);
+	const allIds = EWAR_SYMPTOM_GROUPS.flatMap((g) => g.symptoms.map((s) => s.id));
+
+	it('puts the groups staff meet most often first', () => {
+		expect(groupTitles).toEqual([
+			'อาการเฝ้าระวังทั่วไปและเหตุฉุกเฉินอื่นๆ',
+			'กลุ่มอาการทางเดินหายใจ',
+			'กลุ่มอาการทางเดินอาหาร',
+			'กลุ่มโรคที่มีพาหะนำโรค',
+			'กลุ่มโรคติดต่อรุนแรงและไข้ออกผื่น',
+			'กลุ่มอาการตับอักเสบ',
+			'กลุ่มอาการทางระบบประสาทและอื่นๆ'
+		]);
+	});
+
+	it('orders the symptoms inside every group as the medical draft asks', () => {
+		expect(idsOf('อาการเฝ้าระวังทั่วไปและเหตุฉุกเฉินอื่นๆ')).toEqual([
+			'high_fever',
+			'trauma',
+			'chemical_poisoning'
+		]);
+		expect(idsOf('กลุ่มอาการทางเดินหายใจ')).toEqual(['acute_respiratory']);
+		expect(idsOf('กลุ่มอาการทางเดินอาหาร')).toEqual([
+			'acute_watery_diarrhea',
+			'acute_bloody_diarrhea',
+			'typhoid'
+		]);
+		expect(idsOf('กลุ่มโรคที่มีพาหะนำโรค')).toEqual(['dengue', 'malaria']);
+		expect(idsOf('กลุ่มโรคติดต่อรุนแรงและไข้ออกผื่น')).toEqual([
+			'measles',
+			'pertussis',
+			'meningitis',
+			'diphtheria'
+		]);
+		expect(idsOf('กลุ่มอาการตับอักเสบ')).toEqual(['acute_jaundice_syndrome', 'Hepatitis A or E']);
+		expect(idsOf('กลุ่มอาการทางระบบประสาทและอื่นๆ')).toEqual([
+			'acute_haemorrhagic_fever_syndrome',
+			'tetanus',
+			'acute_flaccid_paralysis'
+		]);
+	});
+
+	it('keeps every persisted symptom id, listed exactly once', () => {
+		expect([...allIds].sort()).toEqual(
+			[
+				'Hepatitis A or E',
+				'acute_bloody_diarrhea',
+				'acute_flaccid_paralysis',
+				'acute_haemorrhagic_fever_syndrome',
+				'acute_jaundice_syndrome',
+				'acute_respiratory',
+				'acute_watery_diarrhea',
+				'chemical_poisoning',
+				'dengue',
+				'diphtheria',
+				'high_fever',
+				'malaria',
+				'measles',
+				'meningitis',
+				'pertussis',
+				'tetanus',
+				'trauma',
+				'typhoid'
+			].sort()
+		);
+		expect(new Set(allIds).size).toBe(allIds.length);
+		expect(new Set(groupTitles).size).toBe(groupTitles.length);
 	});
 });
 
