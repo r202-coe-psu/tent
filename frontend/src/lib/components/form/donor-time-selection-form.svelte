@@ -13,7 +13,6 @@
 	import { Label } from '$lib/components/ui/label';
 	import { Input } from '$lib/components/ui/input';
 	import { Button } from '$lib/components/ui/button';
-	import * as Select from '$lib/components/ui/select';
 	import { Calendar } from '$lib/components/ui/calendar';
 	import { Popover, PopoverContent, PopoverTrigger } from '$lib/components/ui/popover';
 	import { today, type DateValue } from '@internationalized/date';
@@ -26,6 +25,7 @@
 		useDonationSlots
 	} from '$lib/features/donations';
 	import { formatUnit, useUnitsOfMeasure } from '$lib/features/catalog';
+	import { DonationShelterPicker, type DonationNeedsEntry } from '$lib/features/public-portal';
 	import { getDonationStore } from '../../../routes/(public)/donations/donation.svelte';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { getTranslation } from '$lib/utils/i18n';
@@ -43,7 +43,8 @@
 	// "Today" is the shelter's calendar day (Asia/Bangkok), not the donor device's: the BFF
 	// refuses `date < bangkokToday()`, so a device clock behind Bangkok must not send yesterday.
 	let selectedDate = $state<DateValue>(today(DISPLAY_TIME_ZONE));
-	let shelters = $state<Array<{ code: string; name: string }>>([]);
+	let needsEntries = $state<DonationNeedsEntry[]>([]);
+	let needsLoading = $state(true);
 	let isItemsModalOpen = $state(false);
 
 	const selectedDateStr = $derived(selectedDate ? selectedDate.toString() : '');
@@ -84,17 +85,20 @@
 			const res = await fetch('/api/public/v1/needs');
 			if (res.ok) {
 				const data = await res.json();
-				if (Array.isArray(data)) {
-					shelters = data.map((s: { code: string; name: string }) => ({
-						code: s.code,
-						name: s.name
-					}));
-				}
+				if (Array.isArray(data)) needsEntries = data as DonationNeedsEntry[];
 			}
 		} catch {
 			toast.error(t.errorLoadingShelters);
+		} finally {
+			needsLoading = false;
 		}
 	});
+
+	function pickShelter(code: string, name: string) {
+		donationStore.shelterCode = code;
+		donationStore.selectedShelter = code;
+		donationStore.selectedShelterName = name;
+	}
 
 	function handleConfirmBookingRequest() {
 		donationStore.errorMessage = '';
@@ -427,9 +431,9 @@
 		<!-- 2. เลือกศูนย์ -->
 		<div class="space-y-6 rounded-2xl border border-slate-200 bg-slate-50 p-5">
 			<div>
-				<label
+				<span
+					id="shelter-picker-label"
 					class="mb-3 block flex items-center gap-2 text-sm font-bold text-slate-800"
-					for="shelter-select"
 				>
 					<MapPin class="h-4 w-4 text-slate-500" />
 					{t.selectShelterLabel}
@@ -442,27 +446,17 @@
 							{t.shelterLockedBadge}
 						</span>
 					{/if}
-				</label>
+				</span>
 
-				<Select.Root
-					type="single"
-					value={donationStore.shelterCode}
-					onValueChange={(v) => (donationStore.shelterCode = v)}
-					disabled={donationStore.shelterLocked}
-				>
-					<Select.Trigger
-						id="shelter-select"
-						class="w-full rounded-xl border-2 border-slate-200 p-4 text-base font-bold text-slate-800 shadow-2xs focus-visible:border-domain-donation disabled:bg-slate-100 disabled:text-slate-500 disabled:opacity-100 data-placeholder:text-base data-[size=default]:h-auto"
-					>
-						{shelters.find((s) => s.code === donationStore.shelterCode)?.name ??
-							t.selectShelterPlaceholder}
-					</Select.Trigger>
-					<Select.Content>
-						{#each shelters as shelter (shelter.code)}
-							<Select.Item value={shelter.code} label={shelter.name} />
-						{/each}
-					</Select.Content>
-				</Select.Root>
+				<DonationShelterPicker
+					needs={needsEntries}
+					selectedCode={donationStore.shelterCode}
+					lockedCode={donationStore.shelterLocked ? donationStore.shelterCode : null}
+					loading={needsLoading}
+					labelledBy="shelter-picker-label"
+					unitLabel={(unit) => formatUnit(unit, units, langState.current)}
+					onSelect={pickShelter}
+				/>
 			</div>
 
 			<!-- 3. เลือกเวลา -->
