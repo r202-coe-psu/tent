@@ -54,6 +54,8 @@ export const MAIN_STORE_LOCATION = 'main';
 export interface LocationOption {
 	value: string;
 	label: string;
+	/** What a configured point can hold, e.g. "อาหารแห้ง, น้ำดื่ม" (#647 AC3). */
+	hint?: string;
 }
 
 /**
@@ -65,15 +67,16 @@ export function locationOptions(
 	points: readonly StoragePointRef[],
 	ledgerLocations: Iterable<{ key: string; name: string | null }>
 ): LocationOption[] {
-	const options = new Map<string, string>();
-	for (const p of points) options.set(`id:${p.id}`, p.name);
-	for (const { key, name } of ledgerLocations) {
-		if (key && name && !options.has(key)) options.set(key, name);
+	const options = new Map<string, LocationOption>();
+	for (const p of points) {
+		const value = `id:${p.id}`;
+		const hint = p.typeLabels?.join(', ');
+		options.set(value, hint ? { value, label: p.name, hint } : { value, label: p.name });
 	}
-	return [
-		...Array.from(options, ([value, label]) => ({ value, label })),
-		{ value: MAIN_STORE_LOCATION, label: DEFAULT_STORAGE_LABEL }
-	];
+	for (const { key, name } of ledgerLocations) {
+		if (key && name && !options.has(key)) options.set(key, { value: key, label: name });
+	}
+	return [...options.values(), { value: MAIN_STORE_LOCATION, label: DEFAULT_STORAGE_LABEL }];
 }
 
 export interface StockFilterState {

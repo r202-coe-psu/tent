@@ -1,6 +1,6 @@
 ---
 id: draft
-title: "จุดเก็บของในศูนย์ — ประเภทอาหาร/ของที่เก็บได้เป็น multiple select + แสดงในตัวเลือกสถานที่จัดเก็บ"
+title: "จุดเก็บของในศูนย์ — ประเภทอาหาร/ของที่เก็บได้เป็น multiple select + แสดงในตัวเลือกสถานที่จัดเก็บและหน้าคลัง"
 status: proposed
 date: 2026-10-19
 updated: 2026-10-26
@@ -15,7 +15,8 @@ affects:
   - frontend/src/lib/features/operations/domain/lot-storage.ts (`StoragePointRef.typeLabels`)
   - frontend/src/lib/features/operations/application/use-storage-points.svelte.ts
   - frontend/src/lib/features/operations/ui/storage-point-select.svelte
-  - frontend/src/lib/features/operations/ui/stock-table.svelte + ui/stock/stock-view.ts (filter "ที่เก็บ")
+  - frontend/src/lib/features/operations/ui/stock-table.svelte + ui/stock/stock-view.ts + ui/stock/stock-filters.svelte (filter "ที่เก็บ")
+  - frontend/src/lib/features/operations/ui/item-detail-sheet.svelte + ui/stock/lot-view.ts (ประเภทใต้ล็อต)
   - frontend/src/lib/features/shelter-import/domain/{columns,import-row}.ts
 why: >
   field feedback หน้างาน (ที่เก็บศูนย์อาหาร ข้อ 4.1): จุดเก็บของหนึ่งจุดเก็บของได้มากกว่าหนึ่งประเภท
@@ -31,11 +32,12 @@ migration: >
   remap ข้อมูลเก่า
 ---
 
-# จุดเก็บของในศูนย์ — ประเภทอาหาร/ของที่เก็บได้เป็น multiple select + แสดงในตัวเลือกสถานที่จัดเก็บ
+# จุดเก็บของในศูนย์ — ประเภทอาหาร/ของที่เก็บได้เป็น multiple select + แสดงในตัวเลือกสถานที่จัดเก็บและหน้าคลัง
 
 > **สรุป:** `shelter.common_areas.sub_storage[].type` (เลือกได้ 1) → `.types[]` (เลือกได้หลายค่า,
 > min 1, enum 4 → 7) · ฟอร์มศูนย์เลือกประเภทแบบ multi-select เรียงตาม enum · ตัวเลือก "สถานที่จัดเก็บ"
-> ในฟอร์มสต็อกแสดงประเภทของแต่ละจุด · shelter schema_v 7 → 8 (read-time fallback, ไม่มี batch
+> ในฟอร์มสต็อกแสดงประเภทของแต่ละจุด · หน้าคลังแสดงประเภทใน filter "ที่เก็บ" และใต้ล็อตในรายละเอียด
+> สินค้า (ไม่มีแท็บแยก) · shelter schema_v 7 → 8 (read-time fallback, ไม่มี batch
 > migration) · ไม่กระทบ worker / public plane
 
 ## Why
@@ -94,6 +96,13 @@ migration: >
   ledger (จุดที่ถูกลบ / ข้อมูลเก่า) ไม่ซ้ำ → "คลังหลัก"
 - FR-8 — ตัวเลือก "คลังหลัก" (URL `?loc=main`) กรองเฉพาะรายการที่มีล็อตไม่ได้ระบุที่เก็บ
 
+**หน้าคลัง — แสดงประเภทที่เก็บได้** (AC3 ของ #647; ไม่มีแท็บแยก — ดู Decision 2)
+
+- FR-11 — ตัวเลือกของ filter "ที่เก็บ" ที่เป็นจุดเก็บที่ตั้งค่าไว้ แสดงบรรทัดรองเป็น label ของประเภทที่เก็บได้
+  เรียงตามลำดับ enum (แบบเดียวกับ FR-5); ชื่อที่พบเฉพาะใน ledger และ "คลังหลัก" ไม่มีบรรทัดรอง
+- FR-12 — ในรายละเอียดสินค้า (item detail) ล็อตที่อยู่ในจุดเก็บที่ตั้งค่าไว้ แสดงบรรทัด
+  "เก็บได้: <label, …>" ของจุดนั้น; ล็อตที่ไม่ระบุที่เก็บ หรือจุดถูกลบไปแล้ว ไม่แสดงบรรทัดนี้
+
 **import ข้อมูลศูนย์** (`shelter-import`)
 
 - FR-9 — template รับประเภทใหม่ทั้ง 7 ค่า (ยังเป็นหนึ่งประเภทต่อจุดในหนึ่งเซลล์ — import เป็น
@@ -110,6 +119,8 @@ migration: >
   doc เป็น `types: ['food_dry']` และ schema_v 8
 - ตัวเลือกสถานที่จัดเก็บแสดงบรรทัดประเภทใต้ชื่อจุด
 - ศูนย์ที่ตั้งค่าจุดเก็บแต่ยังไม่เคยรับของ → filter "ที่เก็บ" มีจุดนั้น + "คลังหลัก"
+- หน้าคลัง → เปิด filter "ที่เก็บ" → จุดเก็บที่ตั้งค่าไว้มีบรรทัดประเภทใต้ชื่อ
+- หน้าคลัง → เปิดรายละเอียดสินค้าที่มีล็อตในจุดเก็บ → ใต้ล็อตมี "เก็บได้: อาหารแห้ง, น้ำดื่ม" (ตามประเภทของจุด)
 - import แถวที่ประเภทเป็น "เวชภัณฑ์" → ได้ `types: ['medical_supplies']` ไม่ error
 
 ## Impact
@@ -121,10 +132,12 @@ migration: >
   `medical_supplies`), `sortSubStorageTypes`, `subStorageTypeLabels`
 - `shelters/ui/storage-points-section.svelte` — multi-select UI (FR-1 – FR-4)
 - `operations` — `StoragePointRef.typeLabels`, `useStoragePoints`, `storage-point-select.svelte`
-  (FR-5), `locationOptions` + `MAIN_STORE_LOCATION` ใน `stock-view.ts` (FR-7, FR-8)
+  (FR-5), `locationOptions` + `MAIN_STORE_LOCATION` ใน `stock-view.ts` (FR-7, FR-8, FR-11),
+  `stock-filters.svelte` (FR-11), `buildLotRows` ใน `lot-view.ts` + `item-detail-sheet.svelte` (FR-12)
 - `shelter-import` — choice ใหม่ + alias "เวชภัณฑ์" (FR-9, FR-10)
 - `src/lib/components/ui/toggle`, `toggle-group` — vendored shadcn-svelte (ใหม่)
-- หน้าคลัง `back-office/supply/+page.svelte` — **ไม่เปลี่ยน** (ดู Decision 2)
+- หน้าคลัง `back-office/supply/+page.svelte` — **ไม่เปลี่ยน** (ไม่มีแท็บใหม่; ประเภทแสดงในแท็บสต็อกเดิม —
+  ดู Decision 2)
 - ไม่กระทบ worker/public plane — ยืนยันแล้วว่าไม่มี projector project `common_areas`
 
 ## Migration
@@ -148,8 +161,10 @@ schema_v shelter 7 → 8, additive-ish แต่เปลี่ยน shape ข�
    "จุดเก็บของ" ในหน้าคลัง เป็นตารางชื่อ / พื้นที่ / ประเภท (badge/chip) — **ตัดออก** ตามรีวิว PR #756
    (ตารางดูอย่างเดียว ซ้ำกับฟอร์มศูนย์ และไม่ได้ใช้ตอนทำงานจริง) แสดงประเภทในตัวเลือก
    "สถานที่จัดเก็บ" แทน (FR-5) ซึ่งเป็นจุดที่ผู้ใช้ต้องตัดสินใจว่าจะเก็บของไว้ที่ไหน
-   > [NEEDS DECISION: เจ้าของโครงการยืนยันการเปลี่ยน Decision 2 และ AC3 ของ #647 ("หน้าคลังแสดง
-   > ประเภทที่เก็บได้") ให้ตอบด้วย FR-5 แทน]
+   และ (2026-10-26) ตอบ AC3 ของ #647 ("หน้าคลังแสดงประเภทที่เก็บได้") ภายในแท็บสต็อกเดิม: filter
+   "ที่เก็บ" (FR-11) และใต้ล็อตในรายละเอียดสินค้า (FR-12) — ไม่มีตารางหรือแท็บแยก
+   > [NEEDS DECISION: เจ้าของโครงการยืนยันว่า FR-5 + FR-11 + FR-12 (ไม่มีแท็บแยก) ตอบ AC3 ของ #647
+   > แทนตารางในหน้าคลังของ Decision 2 เดิม]
 3. **worker projector** (resolved 2026-10-19): ตรวจแล้ว ไม่มีผลกระทบ (ไม่มี projector export `common_areas`)
 4. **ค่าเริ่มต้นของจุดเก็บใหม่** (proposed 2026-10-26): `types: []` แทน `['general']` (FR-4) — QA พบว่า
    ต้องกดเอา "ทั่วไป" ออกเกือบทุกครั้ง; validation min 1 จับตอนบันทึก
@@ -165,3 +180,5 @@ schema_v shelter 7 → 8, additive-ish แต่เปลี่ยน shape ข�
 - 2026-10-26 — ปรับ draft ให้ตรงกับ implementation หลังรีวิว (FR-1 – FR-10, Decision 2 revised,
   Decision 4 ใหม่); ถอดแถว `CR-175` ออกจาก `_index.md` และให้ `schema.md` + code อ้างด้วย slug
   `draft-storage-point-multi-type` จนกว่าจะ approve และได้เลข CR
+- 2026-10-26 — ทำ AC3 ของ #647 ในแท็บสต็อกเดิม: เพิ่ม FR-11 (ประเภทในตัวเลือก filter "ที่เก็บ") และ
+  FR-12 (ประเภทใต้ล็อตในรายละเอียดสินค้า); ปรับ Decision 2 และ `[NEEDS DECISION]` ให้ครอบคลุม FR-11/12

@@ -142,6 +142,18 @@ describe('locationOptions', () => {
 		]);
 		expect(options[0].label).toBe('ห้อง 3');
 	});
+
+	it("adds what a configured point can hold as the option's hint (#647 AC3)", () => {
+		const options = locationOptions(
+			[{ id: '1', name: 'ห้อง 3', typeLabels: ['อาหารแห้ง', 'น้ำดื่ม'] }],
+			[{ key: 'name:โกดัง', name: 'โกดัง' }]
+		);
+		expect(options).toEqual([
+			{ value: 'id:1', label: 'ห้อง 3', hint: 'อาหารแห้ง, น้ำดื่ม' },
+			{ value: 'name:โกดัง', label: 'โกดัง' },
+			{ value: MAIN_STORE_LOCATION, label: 'คลังหลัก' }
+		]);
+	});
 });
 
 describe('sortRows', () => {
