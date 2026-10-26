@@ -1,11 +1,11 @@
 ---
-id: draft # draft (ตอน proposed) -> เปลี่ยนเป็น CR-NNN เมื่อเจ้าของโครงการ approve
+id: CR-201
 title: จัดสรรจานตามกลุ่มเป้าหมายแบบ priority-fill แทนการนับซ้ำข้ามแท็ก
-status: proposed # proposed | approved | done | rejected | superseded
+status: approved # proposed | approved | done | rejected | superseded
 date: 2026-10-23
-updated: 2026-10-26
+updated: 2026-10-27
 requested_by: Fishcanwalk (issue #770)
-decided_by: <เจ้าของโครงการ — ยังไม่ตัดสิน>
+decided_by: kong
 layer: volatile
 affects:
   - frontend/src/lib/features/kitchen/domain/meal-calc.ts (computeSessionGroupProgress)
@@ -149,3 +149,6 @@ logic ฝั่ง frontend เท่านั้น
 - 2026-10-26 — วิธี track: ร่าง CR ไฟล์นี้ส่งไปพร้อมโค้ดใน draft PR ให้ PM ตรวจ (ยังไม่ approve);
   โค้ดใน PR ทำตามข้อเสนอของร่าง — R1–R7, Q1 = (ก), Q2 = (ก), D1–D4 — ถ้า PM ตัดสินต่างออกไป
   จะแก้โค้ดตามก่อน merge
+- 2026-10-27 — **approved** เป็น CR-201 (ย้ายจาก `draft-kitchen-group-target-priority-fill.md`) —
+  approve โดย kong ตามพฤติกรรมที่ PR #909 (Pu2f) implement แล้ว: R1–R7, Q1 = (ก) ส่วนเกินนอกแท็กนับเป็น "เกิน",
+  Q2 = (ก) ใช้เป้าแต่ละกลุ่มตามที่เก็บ เป้ารวม = Σ เป้าทุกกลุ่ม, D1–D4 ตามข้อเสนอ
