@@ -66,6 +66,63 @@ describe('linesFromOutstandingLoans', () => {
 		expect(result.skippedItemIds).toEqual(['item_master:x']);
 	});
 
+	it('re-fill keeps lineId and operationUlid of a line with the same item (qty updated)', () => {
+		const current: AddEntryLine[] = [
+			{ lineId: 'L1', item_id: 'item_master:a', qty: '1', operationUlid: 'OP1' }
+		];
+		const result = linesFromOutstandingLoans(
+			[loanRow('l1', 'item_master:a', '2'), loanRow('l2', 'item_master:a', '3')],
+			new Set(['item_master:a']),
+			makeFrom(),
+			current
+		);
+		expect(result.lines).toEqual([
+			{ lineId: 'L1', item_id: 'item_master:a', qty: '5', operationUlid: 'OP1' }
+		]);
+	});
+
+	it('gives a new item a fresh ulid and drops lines of items no longer outstanding', () => {
+		const current: AddEntryLine[] = [
+			{ lineId: 'L1', item_id: 'item_master:a', qty: '1', operationUlid: 'OP1' },
+			{ lineId: 'L2', item_id: 'item_master:gone', qty: '1', operationUlid: 'OP2' }
+		];
+		const result = linesFromOutstandingLoans(
+			[loanRow('l1', 'item_master:a', '2'), loanRow('l2', 'item_master:b', '1')],
+			new Set(['item_master:a', 'item_master:b']),
+			makeFrom(),
+			current
+		);
+		expect(result.lines.map((l) => [l.item_id, l.operationUlid])).toEqual([
+			['item_master:a', 'OP1'],
+			['item_master:b', 'ULID1']
+		]);
+	});
+
+	it('preserves relocated lines and does not reuse them for the same item', () => {
+		const current: AddEntryLine[] = [
+			{ lineId: 'L1', item_id: 'item_master:a', qty: '2', operationUlid: 'OP1', relocated: 'moved' }
+		];
+		const result = linesFromOutstandingLoans(
+			[loanRow('l1', 'item_master:a', '2')],
+			new Set(['item_master:a']),
+			makeFrom(),
+			current
+		);
+		expect(result.lines).toHaveLength(2);
+		expect(result.lines[0]).toMatchObject({ item_id: 'item_master:a', operationUlid: 'ULID1' });
+		expect(result.lines[0].relocated).toBeUndefined();
+		expect(result.lines[1]).toEqual(current[0]);
+	});
+
+	it('is stable when called twice in a row', () => {
+		const rows = [loanRow('l1', 'item_master:a', '2'), loanRow('l2', 'item_master:b', '1')];
+		const eligible = new Set(['item_master:a', 'item_master:b']);
+		const make = makeFrom();
+		const first = linesFromOutstandingLoans(rows, eligible, make, []);
+		const second = linesFromOutstandingLoans(rows, eligible, make, first.lines);
+		expect(second.lines).toEqual(first.lines);
+	});
+
 	it('returns nothing for no rows', () => {
 		expect(linesFromOutstandingLoans([], new Set(['item_master:a']), makeFrom())).toEqual({
 			lines: [],

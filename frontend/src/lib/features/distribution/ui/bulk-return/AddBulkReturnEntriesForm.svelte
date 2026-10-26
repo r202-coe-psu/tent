@@ -190,13 +190,16 @@
 	}
 
 	// "คืนทั้งหมด": replaces the lines with one line per outstanding item (qty stays editable).
+	// Existing lines of the same item keep their operationUlid (a retry after a failed save must not
+	// write a second entry).
 	let returnAllSkippedNote = $state<string | null>(null);
 
 	function handleReturnAll() {
 		const result = linesFromOutstandingLoans(
 			loanRows,
 			new Set(catalog.map((item) => item._id)),
-			(preset) => addLine([], createStableOperationId, preset)[0]
+			(preset) => addLine([], createStableOperationId, preset)[0],
+			lines
 		);
 		if (result.lines.length > 0) lines = result.lines;
 		returnAllSkippedNote =
