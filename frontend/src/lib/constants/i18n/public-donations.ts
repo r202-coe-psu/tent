@@ -367,7 +367,31 @@ export const PUBLIC_DONATIONS_I18N = {
 		editSaveBtn: 'บันทึกการแก้ไข',
 		editSaving: 'กำลังบันทึก…',
 		editSuccessToast: 'แก้ไขรายการบริจาคแล้ว',
-		editFailToast: 'แก้ไขรายการไม่สำเร็จ'
+		editFailToast: 'แก้ไขรายการไม่สำเร็จ',
+
+		// Box label (#591)
+		boxLabelOpenBtn: 'พิมพ์ใบปะหน้ากล่อง',
+		boxLabelOpenHint: 'ติดใบปะหน้าไว้ข้างกล่อง ให้เห็นว่าในกล่องมีอะไรและต้องส่งที่ไหน',
+		boxLabelPageTitle: 'ใบปะหน้ากล่องบริจาค — Smart Shelter',
+		boxLabelHeading: 'ใบปะหน้ากล่องบริจาค',
+		boxLabelBackToTrack: 'กลับหน้าติดตามสถานะ',
+		boxLabelPrintBtn: 'พิมพ์ใบปะหน้า',
+		boxLabelPrintTip:
+			'พิมพ์ขนาด A6 (105 × 148 มม.) · ไม่มีเครื่องพิมพ์ให้เลือก "บันทึกเป็น PDF" · ส่งหลายกล่องให้พิมพ์หลายสำเนา',
+		boxLabelNotReadyTitle: 'ใบนี้ยังพิมพ์ใบปะหน้าไม่ได้',
+		boxLabelNotReadyBody:
+			'พิมพ์ได้หลังเจ้าหน้าที่อนุมัติรับของและระบบออก QR รับของแล้ว ดูสถานะล่าสุดได้ที่หน้าติดตาม',
+		boxLabelNoLines: 'ไม่มีรายการของที่ต้องส่ง',
+		boxLabelDeliverTo: 'ส่งที่',
+		boxLabelRefTitle: 'เลขที่บริจาค',
+		boxLabelItemsTitle: 'ของในกล่อง',
+		boxLabelMoreItems: 'และอีก {count} รายการ',
+		boxLabelSheetOf: 'ใบที่ {index}/{total}',
+		boxLabelScanHint: 'สแกน QR ตอนตรวจรับ',
+		boxLabelCoordinates: 'พิกัด',
+		boxLabelMethodTitle: 'วิธีส่ง',
+		boxLabelScheduleTitle: 'นัดส่ง',
+		boxLabelQrAlt: 'QR เลขที่บริจาค {ref}'
 	},
 	en: {
 		// Header & Stepper
@@ -741,6 +765,31 @@ export const PUBLIC_DONATIONS_I18N = {
 		editSaveBtn: 'Save Changes',
 		editSaving: 'Saving…',
 		editSuccessToast: 'Donation items updated',
-		editFailToast: 'Failed to update items'
+		editFailToast: 'Failed to update items',
+
+		// Box label (#591)
+		boxLabelOpenBtn: 'Print box label',
+		boxLabelOpenHint:
+			'Stick the label on the box so staff can see what is inside and where it goes.',
+		boxLabelPageTitle: 'Donation Box Label — Smart Shelter',
+		boxLabelHeading: 'Donation box label',
+		boxLabelBackToTrack: 'Back to tracking',
+		boxLabelPrintBtn: 'Print label',
+		boxLabelPrintTip:
+			'Prints at A6 (105 × 148 mm) · No printer? Choose "Save as PDF" · Sending several boxes? Print one copy per box.',
+		boxLabelNotReadyTitle: 'This booking cannot print a label yet',
+		boxLabelNotReadyBody:
+			'You can print it once staff approve the goods and the check-in QR is issued. Check the latest status on the tracking page.',
+		boxLabelNoLines: 'No items to send',
+		boxLabelDeliverTo: 'Deliver to',
+		boxLabelRefTitle: 'Donation ref',
+		boxLabelItemsTitle: 'Inside the box',
+		boxLabelMoreItems: 'and {count} more',
+		boxLabelSheetOf: 'Label {index}/{total}',
+		boxLabelScanHint: 'Scan the QR at check-in',
+		boxLabelCoordinates: 'Coordinates',
+		boxLabelMethodTitle: 'Delivery',
+		boxLabelScheduleTitle: 'Appointment',
+		boxLabelQrAlt: 'QR for donation ref {ref}'
 	}
 } as const;
