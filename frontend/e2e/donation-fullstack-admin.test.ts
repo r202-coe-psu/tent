@@ -39,8 +39,7 @@ import {
  * `E2E Donation admin …` shelter (README §4), driven through the back-office screens.
  *
  * Needs `docker compose up -d` (CouchDB, Mongo, worker, FastAPI) and a seeded catalog
- * (`pnpm seed`). Locally use the dev server — only it skips reCAPTCHA keys / the BFF's
- * per-IP rate limits (on `vite preview` also set DONATION_E2E_PACE=1):
+ * (`pnpm seed`). Locally use the dev server — only it skips reCAPTCHA keys:
  *   PLAYWRIGHT_TEST_BASE_URL=http://localhost:5173 \
  *     pnpm exec playwright test e2e/donation-fullstack-admin.test.ts
  * On a writable remote target (`E2E_BASE_URL` + `ALLOW_REMOTE_WRITES=true`, i.e. staging)

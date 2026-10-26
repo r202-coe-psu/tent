@@ -14,7 +14,6 @@ import {
 	verifyOwnPassword
 } from '$lib/server/couch-admin';
 import { fastapiBaseUrl, fastapiServiceHeaders, proxyFastapiJson } from '$lib/server/fastapi';
-import { thirdPartyClientSecretRevealLimiter } from '$lib/server/security/rate-limiter';
 
 export const prerender = false;
 
@@ -22,16 +21,11 @@ interface RevealBody {
 	password?: unknown;
 }
 
-export const POST: RequestHandler = async ({ request, params, getClientAddress }) => {
+export const POST: RequestHandler = async ({ request, params }) => {
 	try {
 		const caller = await authorizeUserWrite(request.headers.get('cookie'));
 		if (!caller.isSA) {
 			throw new ServiceError('FORBIDDEN', 'Only system admins can manage third-party clients');
-		}
-
-		const ip = getClientAddress();
-		if (!thirdPartyClientSecretRevealLimiter.check(ip)) {
-			throw new ServiceError('VALIDATION', 'Too many attempts — try again in a minute');
 		}
 
 		const id = typeof params.id === 'string' ? params.id.trim() : '';

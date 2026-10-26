@@ -34,6 +34,7 @@ from tent_model.public_shelter import PublicShelter
 from tent_model.third_party_access_log import ThirdPartyAccessLog
 
 from ...utils.masking import national_id_hash, normalize_phone
+from ...utils.shelter_booking import accepts_booking
 from ...utils.thai_id import is_valid_thai_national_id
 from ...utils.ulid import new_ulid
 from ..thirdparty_auth.scopes import ThirdPartyClaims
@@ -56,6 +57,8 @@ ENDPOINT_CREATE = "EXT-008"
 ENDPOINT_CANCEL = "EXT-009"
 ENDPOINT_STATUS = "EXT-010"
 _REQUIRED_SCOPE = "booking-write"
+# #751 - EOC override: rides on `booking-write`, skips every acceptance condition (incl. closed).
+_BYPASS_SCOPE = "booking-bypass"
 _BANGKOK_TZ = ZoneInfo("Asia/Bangkok")
 _PHONE_RE = re.compile(r"^0\d{8,9}$")
 _CID_RE = re.compile(r"^[0-9]{13}$")
@@ -268,6 +271,18 @@ def _stay_allows_cancel(stay: str | None) -> bool:
     return stay is None or stay == "pre_registered"
 
 
+def _stay_of(
+    row: ExternalBooking, person_status: dict[str, str], row_stay: str | None
+) -> str | None:
+    """The stay of a written row: its `public_persons` status, else `row_stay` — the worker's
+    copy on the booking row (PDPA D8: a search-excluded person has no projection)."""
+    if not row.evacuee_id:
+        return None
+    if row.evacuee_id in person_status:
+        return person_status[row.evacuee_id]
+    return row_stay
+
+
 def _classify_cancel(
     row: ExternalBooking, person_status: dict[str, str]
 ) -> Literal["direct", "request"] | None:
@@ -275,7 +290,7 @@ def _classify_cancel(
     if row.state == "pending":
         return "direct"
     if row.state == "written" and not row.cancel_requested:
-        stay = person_status.get(row.evacuee_id) if row.evacuee_id else None
+        stay = _stay_of(row, person_status, row.stay_status)
         if _stay_allows_cancel(stay):
             return "request"
     return None
@@ -707,7 +722,7 @@ class ThirdPartyBookingsUseCase:
             purpose="",
             ip=client_ip,
             status=outcome,
-            result_count=result_count if outcome == "granted" else 0,
+            result_count=result_count if outcome in ("granted", "granted_bypass") else 0,
             created_at=datetime.now(UTC),
         ).insert()
 
@@ -1135,9 +1150,13 @@ class ThirdPartyBookingsUseCase:
                 location_code=location_code,
             )
 
-        # FR-15/16 — only `closed` or an explicit opt-out blocks; full shelters stay bookable.
-        feature_flags = shelter.raw_data.get("feature_flags") or {}
-        if shelter.status == "closed" or feature_flags.get("accepts_pre_registration") is False:
+        # #751 (CR-154/CR-169 rule change) — the normal rule is `accepts_booking`: not closed AND
+        # the pre-registration switch is on (a missing flag is NOT bookable). `booking-bypass`
+        # (EOC) skips it, so bypass is only "used" when the rule actually fails. The 404 above
+        # still wins: an unknown / inactive shelter is never bookable, bypass or not.
+        bookable = accepts_booking(shelter)
+        bypass = not bookable and _BYPASS_SCOPE in claims.scopes
+        if not bookable and not bypass:
             raise await self._deny(
                 endpoint=endpoint,
                 claims=claims,
@@ -1203,6 +1222,7 @@ class ThirdPartyBookingsUseCase:
                 person_seq=index,
                 group_size=len(persons),
                 committed=False,
+                bypass=bypass,
                 client_id=claims.client_id,
                 module_name=claims.module_name,
                 shelter_code=location_code,
@@ -1366,7 +1386,7 @@ class ThirdPartyBookingsUseCase:
                 endpoint=endpoint,
                 claims=claims,
                 client_ip=client_ip,
-                outcome="granted",
+                outcome="granted_bypass" if bypass else "granted",
                 location_code=location_code,
                 result_count=len(persons),
             )
@@ -1648,9 +1668,21 @@ class ThirdPartyBookingsUseCase:
                 else []
             )
             statuses = {person.id: person.status for person in people}
+            # `ours` was read before the flag write: re-read the worker's stay copy too, for
+            # the rows without a projection (PDPA D8).
+            unprojected = [row.id for row in ours if row.evacuee_id not in statuses]
+            row_stays = (
+                {
+                    doc["_id"]: doc.get("stay_status")
+                    for doc in await collection.find(
+                        {"_id": {"$in": unprojected}}, {"stay_status": 1}
+                    ).to_list()
+                }
+                if unprojected
+                else {}
+            )
             ok = all(
-                _stay_allows_cancel(statuses.get(row.evacuee_id) if row.evacuee_id else None)
-                for row in ours
+                _stay_allows_cancel(_stay_of(row, statuses, row_stays.get(row.id))) for row in ours
             )
         if not ok:
             # The 409 must win over a failing revert: `_revert_after_error` logs a failed revert

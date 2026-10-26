@@ -109,7 +109,12 @@ describe('SHELTER_DASHBOARD_VIEWS Map Functions', () => {
 			expect(emitted).toHaveLength(0);
 		});
 
-		it('ignores non-movement docs', () => {
+		it('ignores non-movement docs that are not evacuees', () => {
+			mapFn({ type: 'other', occurred_at: '2026-07-01T12:00:00Z', action: 'check_in' }, mockEmit);
+			expect(emitted).toHaveLength(0);
+		});
+
+		it('does not read evacuee occurred_at or action as a movement', () => {
 			mapFn({ type: 'evacuee', occurred_at: '2026-07-01T12:00:00Z', action: 'check_in' }, mockEmit);
 			expect(emitted).toHaveLength(0);
 		});
@@ -129,6 +134,124 @@ describe('SHELTER_DASHBOARD_VIEWS Map Functions', () => {
 				mockEmit
 			);
 			expect(emitted).toEqual([{ key: ['2026-07-01', 'checkout'], value: 1 }]);
+		});
+
+		describe('preregister series', () => {
+			const evacuee = (overrides: Record<string, unknown>) => ({
+				type: 'evacuee',
+				registered_via: 'web',
+				created_at: '2026-07-01T05:00:00Z',
+				current_stay: { status: 'registered' },
+				...overrides
+			});
+
+			it.each(['web', 'kiosk', 'api'])('emits preregister for registered_via %s', (via) => {
+				mapFn(evacuee({ registered_via: via }), mockEmit);
+				expect(emitted).toEqual([{ key: ['2026-07-01', 'preregister'], value: 1 }]);
+			});
+
+			it('emits nothing for staff (onsite) registration', () => {
+				mapFn(evacuee({ registered_via: 'staff' }), mockEmit);
+				expect(emitted).toHaveLength(0);
+			});
+
+			it('emits nothing when registered_via is missing or unknown', () => {
+				mapFn(evacuee({ registered_via: undefined }), mockEmit);
+				mapFn(evacuee({ registered_via: 'import' }), mockEmit);
+				expect(emitted).toHaveLength(0);
+			});
+
+			it('emits nothing for a cancelled stay', () => {
+				mapFn(evacuee({ current_stay: { status: 'cancelled' } }), mockEmit);
+				expect(emitted).toHaveLength(0);
+			});
+
+			it('emits nothing without created_at', () => {
+				mapFn(evacuee({ created_at: undefined }), mockEmit);
+				expect(emitted).toHaveLength(0);
+			});
+
+			it('buckets by the Asia/Bangkok day of created_at', () => {
+				mapFn(evacuee({ created_at: '2026-10-24T20:00:00Z' }), mockEmit);
+				expect(emitted).toEqual([{ key: ['2026-10-25', 'preregister'], value: 1 }]);
+			});
+
+			it('keeps counting after the person has checked in', () => {
+				mapFn(evacuee({ current_stay: { status: 'active' } }), mockEmit);
+				expect(emitted).toEqual([{ key: ['2026-07-01', 'preregister'], value: 1 }]);
+			});
+
+			it('counts an evacuee without current_stay', () => {
+				mapFn(evacuee({ current_stay: undefined }), mockEmit);
+				expect(emitted).toEqual([{ key: ['2026-07-01', 'preregister'], value: 1 }]);
+			});
+
+			it('leaves movements emitting checkin and checkout', () => {
+				mapFn(
+					{ type: 'movement', action: 'check_in', occurred_at: '2026-07-01T12:00:00Z' },
+					mockEmit
+				);
+				mapFn(
+					{ type: 'movement', action: 'check_out', occurred_at: '2026-07-01T12:00:00Z' },
+					mockEmit
+				);
+				expect(emitted).toEqual([
+					{ key: ['2026-07-01', 'checkin'], value: 1 },
+					{ key: ['2026-07-01', 'checkout'], value: 1 }
+				]);
+			});
+		});
+	});
+	describe('station_logs_by_station (CR-192)', () => {
+		const mapFn = createMapFn(SHELTER_DASHBOARD_VIEWS.views.station_logs_by_station.map);
+		const log = (over: Record<string, unknown> = {}) => ({
+			type: 'station_log',
+			evacuee_id: 'evacuee:01J',
+			station: 1,
+			action: 'start',
+			channel: 'kiosk',
+			occurred_at: '2026-10-25T03:00:00.000Z',
+			...over
+		});
+
+		it('ignores other doc types', () => {
+			mapFn({ type: 'movement', occurred_at: '2026-10-25T03:00:00.000Z' }, mockEmit);
+			expect(emitted).toHaveLength(0);
+		});
+
+		it('ignores a log without a valid occurred_at', () => {
+			mapFn(log({ occurred_at: undefined }), mockEmit);
+			mapFn(log({ occurred_at: 'not-a-date' }), mockEmit);
+			expect(emitted).toHaveLength(0);
+		});
+
+		it('emits [date, station, channel, evacuee_id] with action, occurred_at and actor', () => {
+			mapFn(log({ device_id: 'KIOSK-01', created_by: 'kiosk:KIOSK-01' }), mockEmit);
+			expect(emitted).toEqual([
+				{
+					key: ['2026-10-25', 1, 'kiosk', 'evacuee:01J'],
+					value: { action: 'start', occurred_at: '2026-10-25T03:00:00.000Z', actor: 'KIOSK-01' }
+				}
+			]);
+		});
+
+		it('uses created_by as the actor of a staff event (Amendment 2)', () => {
+			mapFn(log({ channel: 'staff', created_by: 'staff01' }), mockEmit);
+			expect((emitted[0].value as { actor: unknown }).actor).toBe('staff01');
+		});
+
+		it('emits a null actor when the writer is unknown', () => {
+			mapFn(log({ channel: 'staff' }), mockEmit);
+			expect((emitted[0].value as { actor: unknown }).actor).toBeNull();
+		});
+
+		it('buckets by the Asia/Bangkok day of occurred_at', () => {
+			mapFn(log({ occurred_at: '2026-10-24T20:00:00.000Z' }), mockEmit);
+			expect((emitted[0].key as unknown[])[0]).toBe('2026-10-25');
+		});
+
+		it('has no reduce (pairing happens in the BFF)', () => {
+			expect('reduce' in SHELTER_DASHBOARD_VIEWS.views.station_logs_by_station).toBe(false);
 		});
 	});
 });

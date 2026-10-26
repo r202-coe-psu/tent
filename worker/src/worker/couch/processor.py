@@ -29,6 +29,7 @@ from worker.mongo import (
     refresh_shelter_occupants,
     refresh_shelter_stock,
     resolve_shelter_code_for_registry_delete,
+    sync_booking_stay,
 )
 from worker.mongo.announcement import apply_announcement
 from worker.mongo.on_hand import refresh_on_hand
@@ -205,6 +206,7 @@ async def process_change(couch: Any, database: str, change: dict[str, Any]) -> N
                     doc, shelter_code=shelter_code, household=household
                 )
                 await apply_person(action, payload)
+                await sync_booking_stay(doc)
                 # EXT-005/007: check-in/out, zone move, or any other evacuee field change
                 # can shift the headcount/demographic breakdown and occupant list.
                 await refresh_occupancy(couch, shelter_code)

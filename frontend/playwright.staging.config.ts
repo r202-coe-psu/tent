@@ -43,13 +43,14 @@ if (!/^https:\/\/[^\s/]+\/?$/.test(stagingURL)) {
  * The donation suites (`donation-fullstack*.test.ts`, `stock-donations.test.ts`; tag
  * `@donation`) follow the same rule: own `E2E Donation …` shelter, ledger teardown, a
  * zero-leak Z test. They flip the global reCAPTCHA switch off for their run and restore
- * it in afterAll, and pace their bookings to the BFF's 3/min/IP limiter, so the three
+ * it in afterAll, so the three
  * full-stack files add an estimated 10-15 minutes to a writable run (see e2e/README.md §9.C).
  */
 export default defineConfig({
 	testDir: './e2e',
 	testMatch: [
 		'back-office-evacuee-management.test.ts',
+		'daily-sop-role-assessment.test.ts',
 		'donation-fullstack-admin.test.ts',
 		'donation-fullstack-race.test.ts',
 		'donation-fullstack.test.ts',

@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { useEvacuee } from '$lib/features/people';
+	import { useVolunteer } from '$lib/features/volunteers';
 
 	interface Props {
 		recipientType: string;
@@ -13,12 +14,18 @@
 		() => recipientType === 'evacuee' && Boolean(recipientId)
 	);
 	const evacuee = $derived(evacueeQuery.data);
+
+	const volunteerQuery = useVolunteer(
+		() => recipientId ?? '',
+		() => recipientType === 'volunteer' && Boolean(recipientId)
+	);
+	const volunteer = $derived(volunteerQuery.data);
 </script>
 
 {#if recipientType === 'outside'}
 	บุคคลภายนอก
 {:else if recipientType === 'volunteer'}
-	จิตอาสา
+	{volunteer ? `จิตอาสา ${volunteer.first_name} ${volunteer.last_name}` : 'จิตอาสา'}
 {:else if evacuee}
 	{evacuee.first_name}
 	{evacuee.last_name}

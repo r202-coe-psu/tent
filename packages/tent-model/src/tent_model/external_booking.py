@@ -40,6 +40,9 @@ class ExternalBooking(Document):
 	group_size: int = 1
 	# False while the API is still staging the group's rows; workers skip those (FR-32)
 	committed: bool = True
+	# True only when the row was booked under `booking-bypass` against a shelter that failed the
+	# normal rule (#751). Additive: legacy rows lack the key and read as False; no schema_v.
+	bypass: bool = False
 	client_id: str
 	module_name: str | None = None
 	shelter_code: str
@@ -65,6 +68,10 @@ class ExternalBooking(Document):
 	# Reserved before the first CouchDB write so worker retries stay idempotent.
 	evacuee_id: str | None = None
 	household_id: str | None = None
+	# Last `current_stay.status` the worker saw for `evacuee_id` (PDPA D8, decision sync
+	# 2026-10-26). EXT-009 falls back to it when the person has no `public_persons` row
+	# (search-excluded). Unset = not seen yet; the worker never moves `updated_at` for it.
+	stay_status: str | None = None
 	# Set once the worker's reconcile pass has finished a terminal (`cancelled` / `rejected`)
 	# row against its reserved CouchDB docs (#613). Unset (missing or null) = not yet; a
 	# transient CouchDB error leaves it unset so the next pass retries.

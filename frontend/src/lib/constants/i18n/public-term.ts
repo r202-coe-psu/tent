@@ -24,7 +24,7 @@ export const PUBLIC_TERM_I18N = {
 			{
 				id: 'disclosure',
 				title: 'การเปิดเผยข้อมูลแก่หน่วยงานที่เกี่ยวข้อง',
-				body: 'มหาวิทยาลัยฯ อาจเปิดเผยข้อมูลเท่าที่จำเป็นแก่หน่วยงานภาครัฐ หน่วยงานบรรเทาสาธารณภัย หรือศูนย์พักพิงที่เกี่ยวข้อง เพื่อการช่วยเหลือผู้ประสบภัยและการเตรียมความพร้อมตามวัตถุประสงค์ข้างต้นเท่านั้น และจะไม่นำข้อมูลไปใช้เพื่อการค้าหรือเปิดเผยแก่บุคคลภายนอกโดยไม่มีฐานทางกฎหมาย'
+				body: 'มหาวิทยาลัยฯ เปิดเผยข้อมูลเท่าที่จำเป็นให้แก่หน่วยงานบรรเทาสาธารณภัย ได้แก่ ปภ. อปท. และจังหวัด รวมถึงสถานพยาบาลและหน่วยแพทย์ และหน่วยงานที่ให้การเยียวยาตามกฎหมาย เพื่อการช่วยเหลือผู้ประสบภัยและการเตรียมความพร้อมตามวัตถุประสงค์ข้างต้นเท่านั้น และจะไม่นำข้อมูลไปใช้เพื่อการค้าหรือเปิดเผยแก่บุคคลภายนอกโดยไม่มีฐานทางกฎหมาย'
 			},
 			{
 				id: 'user-duties',
@@ -34,7 +34,7 @@ export const PUBLIC_TERM_I18N = {
 			{
 				id: 'rights',
 				title: 'สิทธิของเจ้าของข้อมูลส่วนบุคคล',
-				body: 'ผู้ใช้บริการมีสิทธิตามพระราชบัญญัติคุ้มครองข้อมูลส่วนบุคคล พ.ศ. 2562 รวมถึงสิทธิขอเข้าถึง แก้ไข หรือลบข้อมูล และสิทธิถอนความยินยอมเมื่อใดก็ได้ การถอนความยินยอมไม่กระทบต่อการประมวลผลที่ได้ดำเนินการไปแล้วก่อนหน้า แต่อาจทำให้มหาวิทยาลัยฯ ไม่สามารถให้บริการบางส่วนแก่ผู้ใช้บริการได้'
+				body: 'ผู้ใช้บริการมีสิทธิตามพระราชบัญญัติคุ้มครองข้อมูลส่วนบุคคล พ.ศ. 2562 ได้แก่ สิทธิขอดู ขอแก้ไข ขอลบ ขอให้ระงับการใช้ คัดค้านการใช้ และถอนความยินยอมได้ทุกเมื่อ โดยไม่มีค่าใช้จ่ายและไม่ต้องระบุเหตุผล ใช้สิทธิได้ที่จุดลงทะเบียนของศูนย์พักพิง หรือทางอีเมล Thanathip.l@psu.ac.th การถอนความยินยอมไม่กระทบการใช้ข้อมูลที่ทำไปแล้วโดยชอบด้วยกฎหมาย และไม่มีผลต่อสิทธิในการเข้าพักในศูนย์และการได้รับความช่วยเหลือขั้นพื้นฐาน ได้แก่ ที่พัก อาหาร และน้ำดื่ม'
 			},
 			{
 				id: 'disclaimer',
@@ -48,7 +48,7 @@ export const PUBLIC_TERM_I18N = {
 			}
 		],
 		closing:
-			'หากมีข้อสงสัยเกี่ยวกับข้อตกลงฉบับนี้ หรือประสงค์จะใช้สิทธิเกี่ยวกับข้อมูลส่วนบุคคล สามารถติดต่อมหาวิทยาลัยสงขลานครินทร์ผ่านช่องทางที่ระบุไว้ในนโยบายความเป็นส่วนตัว',
+			'หากมีข้อสงสัยเกี่ยวกับข้อตกลงฉบับนี้ หรือประสงค์จะใช้สิทธิเกี่ยวกับข้อมูลส่วนบุคคล ติดต่อมหาวิทยาลัยสงขลานครินทร์ได้ทางอีเมล Thanathip.l@psu.ac.th หรือติดต่อด้วยตนเองที่จุดลงทะเบียนของศูนย์พักพิง',
 		footerLink: 'ข้อตกลงการใช้งาน'
 	},
 	en: {
@@ -76,7 +76,7 @@ export const PUBLIC_TERM_I18N = {
 			{
 				id: 'disclosure',
 				title: 'Disclosure to Relevant Agencies',
-				body: 'The University may disclose data, only as necessary, to government agencies, disaster-relief organisations, or relevant shelters for relief and preparedness purposes described above. Data will not be used commercially or disclosed to third parties without a lawful basis.'
+				body: 'The University shares data only as needed with disaster-relief authorities, namely the Department of Disaster Prevention and Mitigation (DDPM), local administrative organisations, and the province, as well as hospitals and medical units, and agencies that provide compensation under the law, solely for the relief and preparedness purposes described above. Data will not be used commercially or disclosed to third parties without a lawful basis.'
 			},
 			{
 				id: 'user-duties',
@@ -86,7 +86,7 @@ export const PUBLIC_TERM_I18N = {
 			{
 				id: 'rights',
 				title: 'Rights of Data Subjects',
-				body: 'You have the rights granted under the Personal Data Protection Act B.E. 2562 (2019), including the right to access, correct, or delete your data and to withdraw consent at any time. Withdrawal does not affect processing already carried out, but may prevent the University from providing some services to you.'
+				body: 'You have the rights granted under the Personal Data Protection Act B.E. 2562 (2019): to see, correct, or delete your data, to ask the University to restrict or stop using it, and to withdraw consent, at any time, free of charge and without giving a reason. You can use these rights at the shelter registration desk or by email at Thanathip.l@psu.ac.th. Withdrawing consent does not affect use of your data that was lawfully carried out before, and does not affect your right to stay at the shelter or to receive basic assistance such as shelter, food, and drinking water.'
 			},
 			{
 				id: 'disclaimer',
@@ -100,7 +100,7 @@ export const PUBLIC_TERM_I18N = {
 			}
 		],
 		closing:
-			'If you have questions about these Terms or wish to exercise your personal data rights, please contact Prince of Songkla University through the channels listed in the Privacy Policy.',
+			'If you have questions about these Terms or wish to exercise your personal data rights, contact Prince of Songkla University by email at Thanathip.l@psu.ac.th or in person at the shelter registration desk.',
 		footerLink: 'Terms of Use'
 	}
 } as const;

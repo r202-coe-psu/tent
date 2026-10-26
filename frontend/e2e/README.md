@@ -33,17 +33,10 @@ Known problems:
   `npx playwright test` right after it reused the orphan and exited fine. Reinstalling
   `@playwright/test` never fixed it. The hung run's printed results are final — `Ctrl+C` is safe.
 - ~~`[15/37]` in a full local `@critical` run (pre-register **W5**) sat idle for ~1 minute.~~
-  **Fixed** — the ticket-status BFF allows 10 requests/min/IP and W5 used to sleep a fixed 61s
-  after W2 to stay under it. Half of that budget was an app bug: opening the "ใบลงทะเบียนของฉัน" tab
-  synced every stored ticket **twice** (the tab's `onclick` and `TicketHistory`'s own `onMount`),
-  which also burns a real citizen's budget. With the duplicate removed, W2–W5 spend ~8 of 10, and
-  `waitForStatusBudget(needed)` now counts real hits and only waits when the budget is short. The
-  limiters live in the preview server's memory, so re-running the pre-register suite back-to-back
-  against a **reused** server with `RATE_LIMIT=true` can still get `429 Too Many Requests` on W4/W5 —
-  wait a minute or restart the server (not an issue with the default `RATE_LIMIT=false`, see §7.1).
-  Since develop's `registrations/check-duplicate` (instant duplicate check on the public form)
-  shares that same `registerLookupIpLimiter` budget, W4 and W5 fill the form again and usually
-  wait out one window, so the pre-register `@critical` group takes ~1 min longer than before.
+  **Fixed** — W5 used to sleep a fixed 61s to stay under the ticket-status request limit. Half of
+  that load was an app bug: opening the "ใบลงทะเบียนของฉัน" tab synced every stored ticket **twice**
+  (the tab's `onclick` and `TicketHistory`'s own `onMount`). The duplicate is removed and the sleep
+  is gone; request rate limiting now lives in nginx only.
 - ~~`onsite-stations-flow` Station 1 failed at random on the Person QR.~~ **Fixed** — error was
   `No MultiFormat Readers were able to detect the code`: html5-qrcode's bundled ZXing misses ~8% of the app's Person QR
   images (random ULID payloads; measured 34/400). `decodeQrImage` (`helpers/onsite.ts`) now
@@ -205,25 +198,11 @@ pnpm test:e2e:regression                      # mocked suites only
 
 Live suites also need platform init (`pnpm seed:master`, `pnpm db:sync`); see each file's header.
 
-### 7.1 Rate limits — the `RATE_LIMIT` switch (CR-160)
+### 7.1 Rate limits
 
-BFF limiters exempt loopback only under `vite dev`; Playwright runs `vite preview` (a production
-build) and every suite shares the runner's IP, so the 3/min booking limit would throttle e2e.
-CR-160 adds a **server env `RATE_LIMIT`**:
-
-- `false` / `0` (trimmed, case-insensitive) turns off **only** limiters constructed with
-  `{ bypassable: true }`: `donationIp/Phone/Edit/Read` and `registerIp/Phone/LookupIp`. No hit is
-  recorded while off. Everything else — staff login, secret reveal, link-account, volunteer — and
-  any limiter added later enforces regardless (the default is `bypassable: false`).
-- Unset or any other value enforces everything. FastAPI's own per-IP limiter is not affected.
-- `playwright.config.ts` defaults it to `false` for the local preview server (override with
-  `RATE_LIMIT=true`). On staging the server needs `RATE_LIMIT=false` in its root `.env` and the
-  runner env (Jenkins credential `tent-staging-e2e-env`) must carry the same value. The compose
-  files pass `RATE_LIMIT: ${RATE_LIMIT:-true}` to the frontend, so production stays enforced and
-  must never set `false`.
-- The e2e side reads the same variable (`RATE_LIMIT_ENFORCED` in `helpers/e2e-env.ts`):
-  `waitForStatusBudget` in the pre-register suite only waits when limits are enforced (unset counts
-  as enforced).
+The frontend BFF no longer rate limits (#627); nginx `limit_req` owns it. The local preview server
+(`vite preview`) therefore never answers `429 RATE_LIMITED`, and e2e has no pacing or switch. A
+remote target sits behind nginx, so a burst against it can still get a 429: wait a minute and rerun.
 
 ## 8. Release gate — six journeys that must pass before prod
 
@@ -316,11 +295,9 @@ How the three full-stack suites obey §4:
   `public_shelters` row (the worker's retention job drops it within minutes). A received donation
   is not reversible either — its `stock_ledger` row lives in the deleted shelter database, so it
   goes with it.
-- **Rate limits.** The BFF allows 3 bookings and 10 edit/cancel calls per minute per IP, and
-  FastAPI 30 requests per minute per IP on every donation route. The limiters exempt loopback
-  only under `vite dev`, so on a remote target (and on `vite preview` with
-  `DONATION_E2E_PACE=1`) `bookingPacer` / the cancel pacer spread the calls out; the three suites
-  take an estimated 10–15 minutes together there (paced; not yet measured on staging). Locally run them against `pnpm dev`:
+- **Rate limits.** nginx rate limits the donation routes per IP, and FastAPI allows 30 requests per
+  minute per IP on every donation route. The three suites take an estimated 10–15 minutes together
+  on a remote target (not yet measured on staging). Locally run them against `pnpm dev`:
   `PLAYWRIGHT_TEST_BASE_URL=http://localhost:5173 pnpm exec playwright test e2e/donation-fullstack.test.ts`
   (wait about a minute between two back-to-back runs: FastAPI's limiter is not loopback-exempt).
 
@@ -328,13 +305,14 @@ How the three full-stack suites obey §4:
 
 Feature tag `@distribution`, layer `@critical`; none carries `@release` yet.
 
-| Suite                                                  | What it proves                                                                                                                                                                           |
-| ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `distribution/distribution-ticket-lifecycle.test.ts`   | Back-office ↔ desk: create → allocate → approve → dispatch → receive → hand out → close (Journey A: zero returns → COMPLETED; Journey B: warehouse credits only the verified return qty) |
-| `distribution/distribution-desk-access.test.ts`        | Who may do what: page access by role (every capability × flat/compound, SA, scope-only, cross-shelter) and VDU write permissions (no UI)                                                 |
-| `distribution/distribution-desk-handover.test.ts`      | Tab 1 receive cargo, tab 2 ready meals (duplicate / menu-mismatch overrides, lot expiry, service day, history, preflight retry), tab 3 supplies and loans                                |
-| `distribution/distribution-desk-returns-close.test.ts` | Tab 4 loan returns (physical, lost/waived, bulk pool, offline, resume) and tab 5 shift close + warehouse hand-off (incl. the "card stays on the closed ticket" regression)               |
-| `distribution/distribution-desk-flow.test.ts`          | Across tabs (point filter, badges, live updates between desks, scan-first) and a compound-role DST working every tab                                                                     |
+| Suite                                                  | What it proves                                                                                                                                                                                   |
+| ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `distribution/distribution-ticket-lifecycle.test.ts`   | Back-office ↔ desk: create → allocate → approve → dispatch → receive → hand out → close (Journey A: zero returns → COMPLETED; Journey B: warehouse credits only the verified return qty)         |
+| `distribution/distribution-desk-access.test.ts`        | Who may do what: page access by role (every capability × flat/compound, SA, scope-only, cross-shelter) and VDU write permissions (no UI)                                                         |
+| `distribution/distribution-desk-handover.test.ts`      | Tab 1 receive cargo, tab 2 ready meals (duplicate / menu-mismatch overrides, lot expiry, service day, history, preflight retry), tab 3 supplies and loans                                        |
+| `distribution/distribution-desk-returns-close.test.ts` | Tab 4 loan returns (physical, lost/waived, bulk pool, offline, resume) and tab 5 shift close + warehouse hand-off (incl. the "card stays on the closed ticket" regression)                       |
+| `distribution/distribution-desk-flow.test.ts`          | Across tabs (point filter, badges, live updates between desks, scan-first) and a compound-role DST working every tab                                                                             |
+| `distribution/distribution-desk-volunteer.test.ts`     | Volunteer recipients (#650): pass-QR scan → meal logged as `volunteer:{ulid}`, repeat meal needs an override, deactivated pass selects nobody, volunteer loan issued and returned at the counter |
 
 How they obey §4:
 
@@ -365,15 +343,16 @@ staging the host nginx's `/public-api`), not through the BFF. It replaces runnin
 `@critical` (everything that creates data); none carries `@release`. Both groups are in
 `playwright.staging.config.ts`'s allowlist; budget about 3 minutes, mostly worker polling.
 
-| Group       | What it proves                                                                                                                                                                                                                                                                                                                                         |
-| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `@smoke`    | S1: every endpoint refuses a missing or garbage token with 401 `invalid_token` and `WWW-Authenticate: Bearer`. S2: `/external/token` rejects a wrong `grant_type` (400), an unknown client (401 `invalid_client`) and a form-encoded body (422). No data created; runs on any target                                                                   |
-| `@critical` | A1 creates an `E2E partner <runId>` client with all seven scopes **through the UI**; A2 mints; A3 happy path of every EXT (booking create / idempotent replay / key reuse 409 / worker write / residency 404 / cancel twice); A3b cross-client isolation; **A4 scope matrix**; A5 least privilege; A6–A8 edit scopes, revoke, delete through the UI; Z |
+| Group       | What it proves                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@smoke`    | S1: every endpoint refuses a missing or garbage token with 401 `invalid_token` and `WWW-Authenticate: Bearer`. S2: `/external/token` rejects a wrong `grant_type` (400), an unknown client (401 `invalid_client`) and a form-encoded body (422). No data created; runs on any target                                                                                                                                                                                                                                                                                                                      |
+| `@critical` | A1 creates an `E2E partner <runId>` client with all eight scopes **through the UI**; A2 mints; A3 happy path of every EXT (booking create / idempotent replay / key reuse 409 / worker write / residency 404 / cancel twice); B1/B2 `accepts_booking` on EXT-003 / EXT-002 (+ `?accepts_booking=` filter) for a bookable and a not-bookable shelter; A3b cross-client isolation; B3/B4 EXT-008 on the not-bookable shelter (409 with `booking-write` alone, 201 → BOOKED → cancelled with `booking-bypass`); **A4 scope matrix**; A5 least privilege; A6–A8 edit scopes, revoke, delete through the UI; Z |
 
 How they obey §4:
 
-- **Own data.** The run creates its own `E2E partner <runId>` shelter (`createShelterViaUi`, pre-registration on)
-  and its own clients (`E2E partner <runId>`, `E2E partner-iso <runId>`). Bookings use `fictitiousNationalId`.
+- **Own data.** The run creates its own `E2E partner <runId>` shelter (`createShelterViaUi`, pre-registration on),
+  a second `E2E partner closed <runId>` shelter (pre-registration off: not bookable by the normal rule, #751)
+  and its own clients (`E2E partner <runId>`, `E2E partner-iso <runId>`, `E2E partner-bypass <runId>`). Bookings use `fictitiousNationalId`.
 - **Ledger.** `PartnerLedger` (`node_modules/.cache/partner-api-e2e-created.json`) records clients (BFF
   row id + `client_id`), shelters and bookings the moment they exist. `teardownPartnerRun` is idempotent
   and runs at the start of the next run, in the Z test and in afterAll: cancel still-open bookings as
@@ -396,16 +375,18 @@ How they obey §4:
   suite: provisioning the run's shelter needs `_admin` anyway (`createShelterViaUi`), so no `E2E_ADMIN_*`
   user is needed beyond `COUCHDB_ADMIN_URL`; the BFF adds `EXTERNAL_API_SECRET` toward FastAPI itself.
   The preview server therefore needs `FASTAPI_INTERNAL_URL` + `EXTERNAL_API_SECRET` (`frontend/.env`).
-- **Approved exception to §4 rule 4.** Besides the UI, setup uses the BFF for the **second client** (A3b cross-client
-  isolation) and for the **scope matrix** (A4/A5: PATCH `allowed_scopes` seven times is not UI-worthy; A6 covers the
+- **Approved exception to §4 rule 4.** Besides the UI, setup uses the BFF for the **secondary clients** (A3b cross-client
+  isolation, B4 `booking-bypass`) and for the **scope matrix** (A4/A5: PATCH `allowed_scopes` eight times is not UI-worthy; A6 covers the
   edit-scopes dialog). Create / edit / revoke / delete of the main client still go through the UI.
 - **FastAPI origin guard.** `partnerApiUrl()` uses `E2E_FASTAPI_URL` only on a remote run (`E2E_BASE_URL` set); a local
   run must stay on loopback and throws if a copied `.env` points `E2E_FASTAPI_URL` elsewhere. A remote run without
   `E2E_FASTAPI_URL` throws a clear error instead of falling back to localhost.
-- **Scope matrix (A4).** For each of the seven scopes: PATCH `allowed_scopes` to _all minus that scope_ (BFF),
+- **Scope matrix (A4).** For each of the eight scopes: PATCH `allowed_scopes` to _all minus that scope_ (BFF),
   mint a new token (it must not carry the scope), assert every endpoint that needs it answers 403
   `insufficient_scope` (EXT-006 without `occupancy-read` stays 200 with `occupancy_total: null`) and that every
-  endpoint on another scope still answers. EXT-007 / EXT-011 / EXT-012 always send `purpose` (checked before the scope).
+  endpoint on another scope still answers. `booking-bypass` gates no endpoint: it is covered by a probe
+  (`SCOPE_PROBES`), EXT-008 on the not-bookable shelter answers 409 `location_not_bookable` (not 403) without it, and a scope with
+  neither an endpoint nor a probe fails the matrix. EXT-007 / EXT-011 / EXT-012 always send `purpose` (checked before the scope).
 - **Current token behaviour is asserted, not wished for (ADR 0002 §6).** `verify_thirdparty_token` trusts the JWT
   claims and never reads the DB, so a token minted before a scope removal (A6) or a revoke (A7) keeps working until
   it expires (3,600 s); only a token minted afterwards reflects the change. The edit / revoke dialogs say so too.

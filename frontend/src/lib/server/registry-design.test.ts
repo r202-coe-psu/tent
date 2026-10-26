@@ -12,7 +12,7 @@ describe('registry shelter lookup design', () => {
 		const design = buildRegistryDesignDoc();
 
 		expect(design.version).toBe(REGISTRY_DESIGN_VERSION);
-		expect(REGISTRY_DESIGN_VERSION).toBe(7);
+		expect(REGISTRY_DESIGN_VERSION).toBe(8);
 		expect(design.views.by_normalized_name.map).toContain("doc.type === 'shelter'");
 		expect(design.views.by_normalized_name.map).toContain("replace(/\\s+/g, ' ')");
 	});
@@ -68,10 +68,34 @@ describe('registry kiosk_banner validate_doc_update', () => {
 		expect(() => runVdu(validBanner(), { roles: ['staff'] })).toThrow();
 	});
 
-	it('rejects schema_v other than 1', () => {
-		expect(() => runVdu(validBanner({ schema_v: 2 }))).toThrow(
+	it('accepts legacy schema_v 1 banners without a group_id', () => {
+		expect(() => runVdu(validBanner({ schema_v: 1 }))).not.toThrow();
+	});
+
+	it('accepts schema_v 2 banners with a kiosk_banner_group group_id', () => {
+		expect(() =>
+			runVdu(validBanner({ schema_v: 2, group_id: 'kiosk_banner_group:01H' }))
+		).not.toThrow();
+	});
+
+	it.each([
+		['schema_v 3', { schema_v: 3 }],
+		['schema_v 0', { schema_v: 0 }],
+		['missing schema_v', { schema_v: undefined }],
+		['schema_v 2 without group_id', { schema_v: 2 }],
+		['schema_v 2 with null group_id', { schema_v: 2, group_id: null }],
+		['schema_v 2 with non-string group_id', { schema_v: 2, group_id: 5 }],
+		['schema_v 2 with wrong-prefix group_id', { schema_v: 2, group_id: 'shelter:01H' }]
+	])('rejects %s', (_label, overrides) => {
+		expect(() => runVdu(validBanner(overrides))).toThrow(
 			expect.objectContaining({ forbidden: expect.any(String) })
 		);
+	});
+
+	it('still applies the other banner checks to schema_v 2', () => {
+		expect(() =>
+			runVdu(validBanner({ schema_v: 2, group_id: 'kiosk_banner_group:01H', title: '  ' }))
+		).toThrow(expect.objectContaining({ forbidden: expect.any(String) }));
 	});
 
 	it.each([
@@ -150,6 +174,66 @@ describe('registry kiosk_banner validate_doc_update', () => {
 	it('does not apply banner rules to other doc types', () => {
 		expect(() =>
 			runVdu({ _id: 'shelter:01H', type: 'shelter', code: 'SH001', name: 'A' })
+		).not.toThrow();
+	});
+});
+
+function validGroup(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+	return {
+		_id: 'kiosk_banner_group:01H',
+		type: 'kiosk_banner_group',
+		schema_v: 1,
+		shelter_code: 'SH001',
+		name: 'Lobby',
+		created_at: '2026-10-01T00:00:00.000Z',
+		updated_at: '2026-10-01T00:00:00.000Z',
+		created_by: 'staff1',
+		...overrides
+	};
+}
+
+describe('registry kiosk_banner_group validate_doc_update', () => {
+	it('accepts a valid group, with or without description', () => {
+		expect(() => runVdu(validGroup())).not.toThrow();
+		expect(() => runVdu(validGroup({ description: 'front desk' }))).not.toThrow();
+		expect(() => runVdu(validGroup({ description: null }))).not.toThrow();
+	});
+
+	it('accepts boundary name and description lengths', () => {
+		expect(() =>
+			runVdu(validGroup({ name: 'x'.repeat(60), description: 'y'.repeat(200) }))
+		).not.toThrow();
+		expect(() => runVdu(validGroup({ name: ' a ' }))).not.toThrow();
+	});
+
+	it('still rejects non-admin writers', () => {
+		expect(() => runVdu(validGroup(), { roles: ['staff'] })).toThrow();
+	});
+
+	it.each([
+		['schema_v 2', { schema_v: 2 }],
+		['missing schema_v', { schema_v: undefined }],
+		['wrong _id prefix', { _id: 'kiosk_banner:01H' }],
+		['missing shelter_code', { shelter_code: undefined }],
+		['empty shelter_code', { shelter_code: '' }],
+		['non-string shelter_code', { shelter_code: 5 }],
+		['non-string name', { name: 5 }],
+		['blank name', { name: '   ' }],
+		['name over 60 chars', { name: 'x'.repeat(61) }],
+		['non-string description', { description: 5 }],
+		['description over 200 chars', { description: 'x'.repeat(201) }],
+		['missing created_at', { created_at: undefined }],
+		['empty updated_at', { updated_at: '' }],
+		['non-string created_by', { created_by: 5 }]
+	])('rejects %s', (_label, overrides) => {
+		expect(() => runVdu(validGroup(overrides))).toThrow(
+			expect.objectContaining({ forbidden: expect.any(String) })
+		);
+	});
+
+	it('lets a _deleted group through even when fields are missing', () => {
+		expect(() =>
+			runVdu({ _id: 'kiosk_banner_group:01H', type: 'kiosk_banner_group', _deleted: true })
 		).not.toThrow();
 	});
 });

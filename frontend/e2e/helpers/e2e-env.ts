@@ -60,18 +60,6 @@ export const IS_REMOTE = Boolean(process.env.E2E_BASE_URL);
 export const ALLOW_REMOTE_WRITES = process.env.ALLOW_REMOTE_WRITES?.trim() === 'true';
 
 /**
- * Whether the target's bypassable BFF rate limiters (donation + pre-register, CR-160) are
- * enforced — mirrors the server's `RATE_LIMIT` env (`src/lib/server/security/rate-limiter.ts`):
- * only `false` / `0` turns them off. Unset means enforced, the safe assumption for a remote
- * target whose setting the runner cannot see. `playwright.config.ts` defaults it to `false`
- * for the local preview server it starts; staging gets it from its server `.env` / the
- * `tent-staging-e2e-env` credential, so e2e runs there skip the pacing/wait workarounds.
- */
-export const RATE_LIMIT_ENFORCED = !['false', '0'].includes(
-	(process.env.RATE_LIMIT ?? '').trim().toLowerCase()
-);
-
-/**
  * True when this run may write: always true locally, true on a remote target only
  * when it explicitly opted in. `@critical` suites gate on `!CAN_WRITE` instead of
  * `IS_REMOTE` so the same suite runs its real writes locally AND on a writable

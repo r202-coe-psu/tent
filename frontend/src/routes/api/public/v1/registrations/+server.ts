@@ -8,6 +8,7 @@ import {
 	isForecastCapacityExceeded,
 	publicBookingInputSchema,
 	executePublicFamilyRegistration,
+	publicConsentBodySchema,
 	PublicRegistrationWriteError
 } from '$lib/features/public-register/server';
 import {
@@ -22,7 +23,6 @@ import {
 import { isShelterBookable } from '$lib/features/shelters/server';
 import { ReCaptchaProvider } from '$lib/server/security/captcha';
 import { verifyRecaptchaOrSkip } from '$lib/server/security/recaptcha-gate';
-import { registerIpLimiter, registerPhoneLimiter } from '$lib/server/security/rate-limiter';
 import { findMasterByCode } from '$lib/server/shelters.admin';
 
 // Never prerendered — runs on the Node server at runtime.
@@ -50,6 +50,16 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
 			{ status: 422, headers: noStore }
 		);
 	}
+
+	// FR-42: both payload shapes carry the PDPA block's decision.
+	const consentParsed = publicConsentBodySchema.safeParse(payload);
+	if (!consentParsed.success) {
+		return json(
+			{ success: false, error: 'INVALID_INPUT', details: consentParsed.error.flatten() },
+			{ status: 422, headers: noStore }
+		);
+	}
+	const { consent, consent_member_keys } = consentParsed.data;
 
 	let shelterCode: string;
 	let phone: string;
@@ -189,14 +199,9 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
 		};
 	}
 
-	// 2. Rate limit on both axes before doing any work.
 	const ip = getClientAddress();
-	const phoneLimited = phone ? !registerPhoneLimiter.check(phone) : false;
-	if (!registerIpLimiter.check(ip) || phoneLimited) {
-		return json({ success: false, error: 'RATE_LIMITED' }, { status: 429, headers: noStore });
-	}
 
-	// 3. CAPTCHA verification (honors config:app.recaptcha_enabled).
+	// 2. CAPTCHA verification (honors config:app.recaptcha_enabled).
 	const captcha = await verifyRecaptchaOrSkip({
 		token: captchaToken ?? '',
 		ip,
@@ -268,7 +273,8 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
 		writeResult = await executePublicFamilyRegistration(resolvedInput, {
 			shelterCode,
 			createdBy: 'public',
-			originShelterCode
+			originShelterCode,
+			consent: { consent, consent_member_keys }
 		});
 	} catch (err) {
 		if (err instanceof PublicRegistrationWriteError && err.message === 'JOIN_TARGET_NOT_FOUND') {

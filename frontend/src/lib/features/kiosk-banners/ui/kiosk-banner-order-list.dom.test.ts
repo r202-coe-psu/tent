@@ -6,11 +6,15 @@ import Harness from './__fixtures__/order-list-harness.svelte';
 
 const NOW = new Date('2026-10-15T05:00:00.000Z');
 
-const banner = (id: string, over: Partial<KioskBannerSummary> = {}): KioskBannerSummary => ({
+const banner = (
+	id: string,
+	over: Partial<Omit<KioskBannerSummary, 'schema_v'>> = {}
+): KioskBannerSummary => ({
 	_id: `kiosk_banner:${id}`,
 	_rev: `1-${id}`,
 	type: 'kiosk_banner',
-	schema_v: 1,
+	schema_v: 2,
+	group_id: 'kiosk_banner_group:A',
 	shelter_code: 'SH001',
 	title: `แบนเนอร์ ${id}`,
 	caption: null,

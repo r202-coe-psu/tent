@@ -9,6 +9,7 @@
 	 */
 	let {
 		screen = 'compact',
+		groupId = 'kiosk_banner_group:A',
 		initialCurrent,
 		refreshed = initialCurrent,
 		expired = [],
@@ -18,6 +19,7 @@
 		now
 	}: {
 		screen?: KioskScreenType;
+		groupId?: string;
 		initialCurrent: KioskBannerSummary[];
 		refreshed?: KioskBannerSummary[];
 		expired?: KioskBannerSummary[];
@@ -36,6 +38,7 @@
 
 <KioskBannerScreenManager
 	{screen}
+	{groupId}
 	{current}
 	{expired}
 	{now}
