@@ -33,7 +33,7 @@
 	function addPoint() {
 		setPoints([
 			...($formData.common_areas.sub_storage ?? []),
-			{ id: ulid(), name: '', types: ['general'], area_m2: null }
+			{ id: ulid(), name: '', types: [], area_m2: null }
 		]);
 	}
 
