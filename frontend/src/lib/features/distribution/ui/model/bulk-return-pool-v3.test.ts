@@ -19,6 +19,8 @@ import {
 	closedLoanRefNotice,
 	groupClosedLoanRefsByEntry,
 	groupAppliedLoanRefsByEntry,
+	groupMissedLoanRefsByEntry,
+	snapshotConflictEntryIds,
 	canMoveEntry,
 	canVoidEntry,
 	filterPoolRows,
@@ -89,9 +91,9 @@ function makeRow(
 		items: [],
 		entries,
 		late_entries: opts.late ?? [],
+		snapshot_conflicts: [],
 		unresolved_refs: [],
 		closed_loan_refs: [],
-		snapshot_conflicts: [],
 		is_empty: live.length === 0
 	};
 }
@@ -293,6 +295,18 @@ describe('pool filters (#659)', () => {
 
 	it('needsAttention keeps pools with late entries or unresolved refs', () => {
 		expect(ids(filterPoolRows(rows, { needsAttention: true })).sort()).toEqual(['o3', 's1']);
+	});
+
+	it('needsAttention also keeps pools with snapshot conflicts', () => {
+		const conflictRow = {
+			...makeRow(makePool('o5')),
+			snapshot_conflicts: [{ entry_id: 'bulk_return_entry:x', kind: 'void' }]
+		} as unknown as BulkReturnPoolOverviewRow;
+		expect(ids(filterPoolRows([...rows, conflictRow], { needsAttention: true })).sort()).toEqual([
+			'o3',
+			'o5',
+			's1'
+		]);
 	});
 
 	it('needsAttention also keeps pools with closed-loan refs', () => {
@@ -636,6 +650,29 @@ describe('labels', () => {
 		const grouped = groupAppliedLoanRefsByEntry([ref('e1', 'a'), ref('e2', 'b'), ref('e1', 'c')]);
 		expect(grouped.get('e1')?.map((r) => r.distribution_log_id)).toEqual(['a', 'c']);
 		expect(grouped.get('e3')).toBeUndefined();
+	});
+
+	it('groupMissedLoanRefsByEntry groups by entry id keeping ref order', () => {
+		const ref = (entry_id: string, distribution_log_id: string) => ({
+			entry_id,
+			distribution_log_id,
+			qty: '1'
+		});
+		const grouped = groupMissedLoanRefsByEntry([ref('e1', 'a'), ref('e2', 'b'), ref('e1', 'c')]);
+		expect(grouped.get('e1')?.map((r) => r.distribution_log_id)).toEqual(['a', 'c']);
+		expect(grouped.get('e3')).toBeUndefined();
+		expect(groupMissedLoanRefsByEntry([]).size).toBe(0);
+	});
+
+	it('snapshotConflictEntryIds collects entry ids and tolerates no row', () => {
+		const ids = snapshotConflictEntryIds({
+			snapshot_conflicts: [
+				{ entry_id: 'e1', kind: 'void' },
+				{ entry_id: 'e2', kind: 'move' }
+			]
+		});
+		expect([...ids]).toEqual(['e1', 'e2']);
+		expect(snapshotConflictEntryIds(null).size).toBe(0);
 	});
 
 	it('resolveItemDisplay uses the catalog or a cleaned id fallback', () => {

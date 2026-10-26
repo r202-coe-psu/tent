@@ -21,6 +21,8 @@
 		createStableOperationId,
 		useBulkReturnPoolAppliedLoanRefs,
 		useBulkReturnPoolClosedLoanRefs,
+		useBulkReturnPoolMissedLoanRefs,
+		useApplyMissedBulkReturnLoanRefs,
 		useBulkReturnPoolTimeline,
 		useBulkReturnSkippedDocs,
 		useCancelBulkReturnPool,
@@ -30,6 +32,14 @@
 	import { formatDistributionError } from '../model/distribution-error';
 	import {
 		CLOSED_LOAN_WARNING_TESTID,
+		MISSED_LOAN_ACTION,
+		MISSED_LOAN_WARNING,
+		MISSED_LOAN_WARNING_TESTID,
+		SNAPSHOT_CONFLICT_WARNING,
+		SNAPSHOT_CONFLICT_WARNING_TESTID,
+		VOID_SNAPSHOT_CONFLICT_TOAST,
+		groupMissedLoanRefsByEntry,
+		snapshotConflictEntryIds,
 		LATE_BADGE_CLASS,
 		LATE_ENTRY_GUIDANCE,
 		unresolvedRefsNotice,
@@ -126,6 +136,16 @@
 		() => shelterCode
 	);
 	const appliedRefsByEntry = $derived(groupAppliedLoanRefsByEntry(appliedRefsQuery.data ?? []));
+	// Snapshot entries of a submitted / received pool whose loans were never cut (CR-193 §34).
+	const missedRefsQuery = useBulkReturnPoolMissedLoanRefs(
+		() => row?.pool._id ?? null,
+		() => shelterCode,
+		() => row?.pool.status === 'SUBMITTED' || row?.pool.status === 'RECEIVED'
+	);
+	const missedRefsByEntry = $derived(groupMissedLoanRefsByEntry(missedRefsQuery.data ?? []));
+	const applyMissedMutation = useApplyMissedBulkReturnLoanRefs();
+	// Entries whose void / move was written after the submit snapshot (no effect; CR-193 §33).
+	const conflictEntryIds = $derived(snapshotConflictEntryIds(row));
 
 	// Malformed docs the pool reads leave out: the entries below may be incomplete until they are fixed.
 	const skippedQuery = useBulkReturnSkippedDocs(undefined, () => shelterCode);
@@ -175,16 +195,38 @@
 				shelterCode
 			});
 			const reverted = result.loansReverted.length;
-			toast.success(
-				reverted > 0
-					? `ยกเลิกรายการแล้ว คืนสถานะยอดยืม ${reverted} รายการเรียบร้อย`
-					: 'ยกเลิกรายการแล้ว (รายการนี้ไม่ได้ตัดยอดยืม จึงไม่มียอดยืมต้องคืนสถานะ)'
-			);
+			if (result.snapshot_conflict) {
+				toast.warning(VOID_SNAPSHOT_CONFLICT_TOAST);
+			} else {
+				toast.success(
+					reverted > 0
+						? `ยกเลิกรายการแล้ว คืนสถานะยอดยืม ${reverted} รายการเรียบร้อย`
+						: 'ยกเลิกรายการแล้ว (รายการนี้ไม่ได้ตัดยอดยืม จึงไม่มียอดยืมต้องคืนสถานะ)'
+				);
+			}
 			voidTarget = null;
 		} catch (err) {
 			const message = formatDistributionError(err, 'ยกเลิกรายการไม่สำเร็จ กรุณาลองใหม่อีกครั้ง');
 			voidError = message;
 			toast.error(message);
+		}
+	}
+
+	async function applyMissedLoans(entryId: string) {
+		if (!row) return;
+		try {
+			const result = await applyMissedMutation.mutateAsync({
+				input: { entry_id: entryId, pool_id: row.pool._id },
+				shelterCode
+			});
+			const applied = result.loansApplied.length;
+			if (applied === 0 && result.loansSkipped.length > 0) {
+				toast.warning('ยอดยืมถูกปิดไปแล้ว ตัดเพิ่มไม่ได้');
+			} else {
+				toast.success(`ตัดยอดยืมแล้ว ${applied} รายการ`);
+			}
+		} catch (err) {
+			toast.error(formatDistributionError(err, 'ตัดยอดยืมไม่สำเร็จ กรุณาลองใหม่อีกครั้ง'));
 		}
 	}
 
@@ -359,6 +401,7 @@
 								{@const entry = live.entry}
 								{@const item = resolveItemDisplay(entry.item_id, catalog)}
 								{@const closedRefs = closedRefsByEntry.get(entry._id) ?? []}
+								{@const missedRefs = missedRefsByEntry.get(entry._id) ?? []}
 								<li
 									class="space-y-2 rounded-xl border p-3.5 shadow-2xs {live.late
 										? 'border-amber-200 bg-amber-50/40'
@@ -429,6 +472,50 @@
 													</p>
 												{/each}
 											</div>
+										</div>
+									{/if}
+
+									{#if conflictEntryIds.has(entry._id)}
+										<div
+											role="status"
+											data-testid={SNAPSHOT_CONFLICT_WARNING_TESTID}
+											class="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-sm text-amber-900"
+										>
+											<AlertTriangle
+												class="mt-0.5 h-4 w-4 shrink-0 text-amber-600"
+												aria-hidden="true"
+											/>
+											<p>{SNAPSHOT_CONFLICT_WARNING}</p>
+										</div>
+									{/if}
+
+									{#if missedRefs.length > 0}
+										<div
+											role="status"
+											data-testid={MISSED_LOAN_WARNING_TESTID}
+											class="space-y-2 rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-sm text-amber-900"
+										>
+											<div class="flex items-start gap-2">
+												<AlertTriangle
+													class="mt-0.5 h-4 w-4 shrink-0 text-amber-600"
+													aria-hidden="true"
+												/>
+												<p>{MISSED_LOAN_WARNING}</p>
+											</div>
+											{#if canWriteEntry}
+												<Button
+													type="button"
+													variant="outline"
+													disabled={applyMissedMutation.isPending}
+													onclick={() => applyMissedLoans(entry._id)}
+													class="min-h-11 w-full gap-2 sm:w-auto"
+												>
+													{#if applyMissedMutation.isPending}
+														<Loader2 class="h-4 w-4 animate-spin" aria-hidden="true" />
+													{/if}
+													{MISSED_LOAN_ACTION}
+												</Button>
+											{/if}
 										</div>
 									{/if}
 

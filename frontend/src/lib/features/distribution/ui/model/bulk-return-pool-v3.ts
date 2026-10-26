@@ -5,6 +5,7 @@ import {
 	type BulkReturnEntry,
 	type AppliedBulkReturnLoanRef,
 	type ClosedBulkReturnLoanRef,
+	type MissedBulkReturnLoanRef,
 	type BulkReturnPoolOverviewRow,
 	type BulkReturnPoolV3,
 	type BulkReturnPoolV3Status
@@ -34,6 +35,18 @@ export const CLOSED_LOAN_WARNING_TEXT =
 export const MISSING_LOAN_WARNING_TEXT =
 	'ไม่พบรายการยืมที่อ้างถึง จึงไม่ได้ตัดยอดยืม — โปรดตรวจสอบว่ารายการยืมถูกต้องหรือไม่';
 export const CLOSED_LOAN_WARNING_TESTID = 'bulk-return-entry-closed-loan-warning';
+/** CR-193 §33: a void / move written after the submit snapshot had no effect. */
+export const SNAPSHOT_CONFLICT_WARNING =
+	'ยกเลิก/ย้ายรายการนี้หลังกองถูกส่งเข้าคลังแล้ว จึงไม่มีผล — โปรดตรวจสอบของจริงกับคลัง';
+export const SNAPSHOT_CONFLICT_WARNING_TESTID = 'bulk-return-snapshot-conflict-warning';
+export const VOID_SNAPSHOT_CONFLICT_TOAST =
+	'กองถูกส่งเข้าคลังก่อนการยกเลิกจะมีผล รายการนี้ยังนับในกอง — โปรดตรวจสอบกับคลัง';
+export const MOVE_SNAPSHOT_CONFLICT_TOAST =
+	'กองต้นทางถูกส่งเข้าคลังก่อนการย้ายจะมีผล รายการนี้ยังอยู่ในกองเดิม — โปรดตรวจสอบกับคลัง';
+/** CR-193 §34: a submitted pool's entry whose loans were never cut. */
+export const MISSED_LOAN_WARNING = 'ยอดยืมของรายการนี้ยังไม่ถูกตัด';
+export const MISSED_LOAN_WARNING_TESTID = 'bulk-return-missed-loan-warning';
+export const MISSED_LOAN_ACTION = 'ตัดยอดยืมที่ค้าง';
 export const POOL_LOCKED_REASON = 'กองนี้กำลังถูกดำเนินการ กรุณารอสักครู่แล้วรีเฟรช';
 
 export type BulkReturnPoolRow = BulkReturnPoolOverviewRow;
@@ -233,7 +246,8 @@ export function filterPoolRows(
 				filter.needsAttention &&
 				row.late_entries.length === 0 &&
 				row.unresolved_refs.length === 0 &&
-				row.closed_loan_refs.length === 0
+				row.closed_loan_refs.length === 0 &&
+				row.snapshot_conflicts.length === 0
 			) {
 				return false;
 			}
@@ -438,6 +452,26 @@ export function groupAppliedLoanRefsByEntry(
 		byEntry.set(ref.entry_id, list);
 	}
 	return byEntry;
+}
+
+/** Groups missed loan refs by entry id, keeping ref order. */
+export function groupMissedLoanRefsByEntry(
+	refs: readonly MissedBulkReturnLoanRef[]
+): Map<string, MissedBulkReturnLoanRef[]> {
+	const byEntry = new Map<string, MissedBulkReturnLoanRef[]>();
+	for (const ref of refs) {
+		const list = byEntry.get(ref.entry_id) ?? [];
+		list.push(ref);
+		byEntry.set(ref.entry_id, list);
+	}
+	return byEntry;
+}
+
+/** Entry ids of a row whose void / move had no effect (written after the submit snapshot). */
+export function snapshotConflictEntryIds(
+	row: Pick<BulkReturnPoolOverviewRow, 'snapshot_conflicts'> | null
+): Set<string> {
+	return new Set((row?.snapshot_conflicts ?? []).map((c) => c.entry_id));
 }
 
 /**

@@ -5,6 +5,7 @@ import {
 	flaggedPools,
 	formatWaitingAge,
 	openPoolsAtPoint,
+	rowNeedsAttention,
 	waitingForReceive,
 	workQueuesFor
 } from './bulk-return-work-queue';
@@ -21,6 +22,7 @@ function row(
 		late?: number;
 		unresolved?: number;
 		closed?: number;
+		conflicts?: number;
 	} = {}
 ): BulkReturnPoolOverviewRow {
 	return {
@@ -37,7 +39,11 @@ function row(
 		late_entries: Array.from({ length: opts.late ?? 0 }),
 		is_empty: true,
 		unresolved_refs: Array.from({ length: opts.unresolved ?? 0 }),
-		closed_loan_refs: Array.from({ length: opts.closed ?? 0 })
+		closed_loan_refs: Array.from({ length: opts.closed ?? 0 }),
+		snapshot_conflicts: Array.from({ length: opts.conflicts ?? 0 }, (_, i) => ({
+			entry_id: `e${i}`,
+			kind: 'void'
+		}))
 	} as unknown as BulkReturnPoolOverviewRow;
 }
 
@@ -78,6 +84,13 @@ describe('flaggedPools', () => {
 			{ reason: 'late', count: 2 },
 			{ reason: 'closed_loan', count: 1 }
 		]);
+	});
+
+	it('flags a pool with snapshot conflicts', () => {
+		expect(rowNeedsAttention(row('c', 'SUBMITTED', { conflicts: 1 }))).toBe(true);
+		expect(rowNeedsAttention(row('ok', 'SUBMITTED'))).toBe(false);
+		const out = flaggedPools([row('c', 'SUBMITTED', { conflicts: 2 })]);
+		expect(out[0].reasons).toEqual([{ reason: 'snapshot_conflict', count: 2 }]);
 	});
 
 	it('sorts by most reasons, then oldest created_at', () => {

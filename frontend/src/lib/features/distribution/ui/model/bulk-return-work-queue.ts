@@ -11,7 +11,7 @@ import { MY_POOL_POINT_UNSPECIFIED } from './my-pool-point-storage';
 /** Work queues shown above the bulk return pool board (#660). */
 
 export type WorkQueueKind = 'waiting_receive' | 'flagged' | 'my_point';
-export type FlagReason = 'late' | 'pending_sync' | 'closed_loan';
+export type FlagReason = 'late' | 'pending_sync' | 'closed_loan' | 'snapshot_conflict';
 
 export const WORK_QUEUE_COPY = {
 	waitingTitle: 'รอคลังตรวจรับ',
@@ -21,7 +21,8 @@ export const WORK_QUEUE_COPY = {
 	reasonLabels: {
 		late: 'มีรายการค้าง',
 		pending_sync: 'รอซิงก์',
-		closed_loan: 'ยอดยืมถูกปิด'
+		closed_loan: 'ยอดยืมถูกปิด',
+		snapshot_conflict: 'ต้องตรวจสอบ'
 	} satisfies Record<FlagReason, string>,
 	waitingEmpty: 'ไม่มีกองที่รอตรวจรับ',
 	flaggedEmpty: 'ไม่มีกองที่ต้องจัดการ',
@@ -70,7 +71,10 @@ export function waitingForReceive(
 /** Same predicate as the board's "needs attention" filter. */
 export function rowNeedsAttention(row: BulkReturnPoolOverviewRow): boolean {
 	return (
-		row.late_entries.length > 0 || row.unresolved_refs.length > 0 || row.closed_loan_refs.length > 0
+		row.late_entries.length > 0 ||
+		row.unresolved_refs.length > 0 ||
+		row.closed_loan_refs.length > 0 ||
+		row.snapshot_conflicts.length > 0
 	);
 }
 
@@ -87,6 +91,9 @@ export function flaggedPools(rows: readonly BulkReturnPoolOverviewRow[]): Flagge
 			}
 			if (row.closed_loan_refs.length > 0) {
 				reasons.push({ reason: 'closed_loan', count: row.closed_loan_refs.length });
+			}
+			if (row.snapshot_conflicts.length > 0) {
+				reasons.push({ reason: 'snapshot_conflict', count: row.snapshot_conflicts.length });
 			}
 			return { row, reasons };
 		})

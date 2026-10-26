@@ -11,7 +11,7 @@
 	import { useMoveBulkReturnEntry } from '../../application/queries';
 	import type { BulkReturnEntry, BulkReturnPoolV3 } from '../../domain/food-supplies';
 	import { formatDistributionError } from '../model/distribution-error';
-	import type { ItemDisplay } from '../model/bulk-return-pool-v3';
+	import { MOVE_SNAPSHOT_CONFLICT_TOAST, type ItemDisplay } from '../model/bulk-return-pool-v3';
 
 	/** Mounted by the parent only while visible (`{#if}`) so each open starts clean. */
 	interface Props {
@@ -57,7 +57,9 @@
 				},
 				shelterCode
 			});
-			if (result.late) {
+			if (result.snapshot_conflict) {
+				toast.warning(MOVE_SNAPSHOT_CONFLICT_TOAST);
+			} else if (result.late) {
 				toast.warning(
 					`ย้ายไปกอง "${selectedTarget.name}" แล้ว แต่กองนั้นเพิ่งปิดรับ รายการนี้จึงค้างอีกครั้ง กรุณาย้ายไปกองอื่นที่ยังเปิดอยู่`
 				);

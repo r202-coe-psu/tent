@@ -529,6 +529,15 @@
 										ยอดยืมถูกปิด <span class="tabular-nums">{row.closed_loan_refs.length}</span>
 									</span>
 								{/if}
+								{#if row.snapshot_conflicts.length > 0}
+									<span
+										class="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold {LATE_BADGE_CLASS}"
+										data-testid="bulk-return-card-snapshot-conflict-hint"
+									>
+										<AlertTriangle class="h-3.5 w-3.5" aria-hidden="true" />
+										ต้องตรวจสอบ <span class="tabular-nums">{row.snapshot_conflicts.length}</span>
+									</span>
+								{/if}
 								{#if row.unresolved_refs.length > 0}
 									<span
 										class="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold {LATE_BADGE_CLASS}"
