@@ -263,11 +263,11 @@ export interface DonationItem {
 
 /**
  * `schema_v` every donation writer stamps — the walk-in factory here, the donor edit
- * route, and `worker/inbound/donations.py`. 8 = CR-196 `items[].line_key` (7 CR-174
- * `items[].review_status`, 6 CR-172 `reject_reason`, 5 CR-087 `redirect_to_shelter_code`,
- * 4 CR-080 `revisions[]`).
+ * route, and `worker/inbound/donations.py`. 9 = CR-175 donor `photos` (8 CR-196
+ * `items[].line_key`, 7 CR-174 `items[].review_status`, 6 CR-172 `reject_reason`,
+ * 5 CR-087 `redirect_to_shelter_code`, 4 CR-080 `revisions[]`).
  */
-export const DONATION_SCHEMA_V = 8;
+export const DONATION_SCHEMA_V = 9;
 
 export interface Donor {
 	name: string;
@@ -340,6 +340,11 @@ export interface Donation extends BaseDoc {
 	 * scope isolation means a field here is invisible to them.
 	 */
 	redirect_to_shelter_code?: string | null;
+	/**
+	 * Donor photos of an unsolicited public booking, `image:{ulid}` ids in this shelter's
+	 * DB (CR-175 donor photos · schema_v 9). Attached at booking only; an edit keeps them.
+	 */
+	photos?: string[];
 }
 
 /**
