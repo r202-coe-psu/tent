@@ -3,7 +3,7 @@ id: CR-159
 title: การแจกของหน้างาน (Distribution Desk / Station 4 — `/onsite/distribution`) — ขอบเขตหน้าจอ + role, กติกาแจกอาหารปรุงสุก, จับคู่ผู้รับ↔เมนู, ปิด CR-109
 status: approved
 date: 2026-10-06
-updated: 2026-10-26
+updated: 2026-10-27
 requested_by: ทีม frontend (รับช่วง `/onsite/distribution` ต่อ)
 decided_by: Kong
 layer: volatile
@@ -156,7 +156,8 @@ affects:
 
 ### Acceptance
 - ผู้รับ `religion='muslim'` เลือกเมนู `dietary:['HALAL']` → ไม่ต้อง override
-- ผู้รับไม่มีแท็กเลือกเมนู HALAL → แสดงคำเตือนตาม FR-MRM-04
+- ผู้รับไม่มีแท็ก (รวม `volunteer` / `outside`) เลือกเมนู `dietary:['HALAL']` ที่ `age_group ∈ {ALL, ไม่ระบุ}` → ไม่เตือน / ไม่ต้อง override (#801)
+- เมนูที่มีแท็กอายุ (`INFANT` / `CHILD` / `ELDERLY`) รวมเมนู HALAL ที่มีแท็กอายุ → ยังเตือนตาม FR-MRM-04 เมื่อผู้รับไม่มีแท็กอายุตรง (#801)
 - เมนู VEGAN → ทุกผู้รับแจกได้โดยไม่ต้อง override
 - เมนูทั่วไป → ทุก `recipient_type` แจกได้โดยไม่เตือน
 - unit test ครอบทุกแถวของตาราง FR-MRM-01
@@ -234,4 +235,4 @@ affects:
 - 2026-10-11 — Kong สั่งให้ทั้ง 5 ขั้นของหน้านี้ใช้ได้เฉพาะ SA, SM, DST: ตัด REG, SC, WH ออกจาก `/onsite/distribution`; ขั้น 4 PHYSICAL = SA, SM, DST (ดู FR-DDS-03; แก้ CR-161 R3/R4 ให้ DST รับคืนแบบมีของได้)
 - 2026-10-11 — การจำกัดหน้านี้เป็นระดับหน้าเท่านั้น (ตามข้อเสนอที่ยืนยันแล้ว) ไม่แก้กฎระดับระบบ WH/SC ยังทำงานคลังได้ตามเดิม
 - 2026-10-25 — CR-191 (approved โดย kong) เพิ่ม FR-MRM-06..10 (เตือนสารก่อแพ้ตอนแจกอาหาร) และข้อยกเว้น `allergen_conflicts` ใน FR-MRM-05
-- 2026-10-26 — #801: เมนู `HALAL` ไม่ต้อง override — แท็ก HALAL บนเมนูไม่นับเหมือน VEGAN (FR-MRM-01/03) เพราะคนทั่วไปกินอาหารฮาลาลได้และการเตือนถี่ทำให้คำเตือนเรื่องอายุถูกมองข้าม; คำเตือนเมนูตามอายุ (INFANT/CHILD/ELDERLY) คงเดิม. owner ยืนยัน (แจ้งผ่าน Pikcolo)
+- 2026-10-26 — #801: เมนู `HALAL` ไม่ต้อง override — แท็ก HALAL บนเมนูไม่นับเหมือน VEGAN (FR-MRM-01/03) เพราะคนทั่วไปกินอาหารฮาลาลได้และการเตือนถี่ทำให้คำเตือนเรื่องอายุถูกมองข้าม; คำเตือนเมนูตามอายุ (INFANT/CHILD/ELDERLY) คงเดิม. เคาะโดย Kong (แจ้งผ่าน Pikcolo)
