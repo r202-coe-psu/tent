@@ -8,8 +8,13 @@
 		flaggedPools,
 		formatWaitingAge,
 		waitingForReceive,
+		openPoolsAtPoint,
 		type WorkQueueKind
 	} from '../model/bulk-return-work-queue';
+	import { MY_POOL_POINT_UNSPECIFIED } from '../model/my-pool-point-storage';
+	import MapPin from '@lucide/svelte/icons/map-pin';
+	import { Label } from '$lib/components/ui/label/index.js';
+	import * as Select from '$lib/components/ui/select/index.js';
 
 	/** Compact work queues above the bulk return pool board (#660). */
 	interface Props {
@@ -17,12 +22,35 @@
 		queues: readonly WorkQueueKind[];
 		now: Date;
 		onOpenPool: (poolId: string) => void;
+		/** Shelter storage points for the "my point" picker. */
+		points?: readonly { id: string; name: string }[];
+		/** Selected point id, `'unspecified'`, or `null` when no preference is stored. */
+		myPoint?: string | null;
+		onMyPointChange?: (value: string) => void;
 	}
 
-	let { rows, queues, now, onOpenPool }: Props = $props();
+	let {
+		rows,
+		queues,
+		now,
+		onOpenPool,
+		points = [],
+		myPoint = null,
+		onMyPointChange
+	}: Props = $props();
 
 	const waiting = $derived(queues.includes('waiting_receive') ? waitingForReceive(rows, now) : []);
 	const flagged = $derived(queues.includes('flagged') ? flaggedPools(rows) : []);
+	const atMyPoint = $derived(
+		queues.includes('my_point') && myPoint ? openPoolsAtPoint(rows, myPoint) : []
+	);
+	const myPointLabel = $derived(
+		!myPoint
+			? ''
+			: myPoint === MY_POOL_POINT_UNSPECIFIED
+				? WORK_QUEUE_COPY.myPointUnspecified
+				: (points.find((p) => p.id === myPoint)?.name ?? myPoint)
+	);
 
 	const rowClass =
 		'flex min-h-11 w-full flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-lg border px-3 py-2 text-left text-sm transition-colors focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none';
@@ -101,6 +129,79 @@
 												<span class="ml-1 tabular-nums">{r.count}</span>
 											</span>
 										{/each}
+									</span>
+								</button>
+							</li>
+						{/each}
+					</ul>
+				{/if}
+			</section>
+		{/if}
+
+		{#if queues.includes('my_point')}
+			<section
+				class="space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-3"
+				aria-labelledby="bulk-queue-my-point"
+				data-testid="bulk-return-queue-my-point"
+			>
+				<h3
+					id="bulk-queue-my-point"
+					class="flex items-center gap-2 text-sm font-bold text-slate-900"
+				>
+					<MapPin class="h-4 w-4 text-slate-500" aria-hidden="true" />
+					{WORK_QUEUE_COPY.myPointTitle}
+					{#if myPoint}
+						<span class="tabular-nums">{atMyPoint.length}</span>
+					{/if}
+				</h3>
+				<div class="flex items-center gap-2">
+					<Label
+						for="bulk-queue-my-point-select"
+						class="shrink-0 text-sm font-medium text-slate-700"
+					>
+						{WORK_QUEUE_COPY.myPointLabel}
+					</Label>
+					<Select.Root
+						type="single"
+						value={myPoint ?? ''}
+						onValueChange={(val) => {
+							if (val) onMyPointChange?.(val);
+						}}
+					>
+						<Select.Trigger
+							id="bulk-queue-my-point-select"
+							aria-label={WORK_QUEUE_COPY.myPointLabel}
+							class="min-h-11 min-w-[160px] bg-white"
+						>
+							<span class="truncate">{myPointLabel || WORK_QUEUE_COPY.myPointPlaceholder}</span>
+						</Select.Trigger>
+						<Select.Content>
+							{#each points as point (point.id)}
+								<Select.Item value={point.id} label={point.name} />
+							{/each}
+							<Select.Item
+								value={MY_POOL_POINT_UNSPECIFIED}
+								label={WORK_QUEUE_COPY.myPointUnspecified}
+							/>
+						</Select.Content>
+					</Select.Root>
+				</div>
+				{#if !myPoint}
+					<p class="text-sm text-slate-500">{WORK_QUEUE_COPY.myPointHint}</p>
+				{:else if atMyPoint.length === 0}
+					<p class="text-sm text-slate-500">{WORK_QUEUE_COPY.myPointEmpty}</p>
+				{:else}
+					<ul class="space-y-1.5">
+						{#each atMyPoint as item (item.pool._id)}
+							<li>
+								<button
+									type="button"
+									onclick={() => onOpenPool(item.pool._id)}
+									class="{rowClass} border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
+								>
+									<span class="font-semibold break-words text-slate-900">{item.pool.name}</span>
+									<span class="text-xs text-slate-600">
+										<span class="font-semibold tabular-nums">{item.entry_count}</span> รายการ
 									</span>
 								</button>
 							</li>

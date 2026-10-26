@@ -1,9 +1,16 @@
-import { isShelterManager, isSystemAdmin, isWarehouseStaff } from '$lib/auth/roles';
+import {
+	DISTRIBUTION_STAFF,
+	hasCapabilityInShelter,
+	isShelterManager,
+	isSystemAdmin,
+	isWarehouseStaff
+} from '$lib/auth/roles';
 import type { BulkReturnPoolOverviewRow } from '../../domain/food-supplies';
+import { MY_POOL_POINT_UNSPECIFIED } from './my-pool-point-storage';
 
 /** Work queues shown above the bulk return pool board (#660). */
 
-export type WorkQueueKind = 'waiting_receive' | 'flagged';
+export type WorkQueueKind = 'waiting_receive' | 'flagged' | 'my_point';
 export type FlagReason = 'late' | 'pending_sync' | 'closed_loan';
 
 export const WORK_QUEUE_COPY = {
@@ -17,7 +24,13 @@ export const WORK_QUEUE_COPY = {
 		closed_loan: 'ยอดยืมถูกปิด'
 	} satisfies Record<FlagReason, string>,
 	waitingEmpty: 'ไม่มีกองที่รอตรวจรับ',
-	flaggedEmpty: 'ไม่มีกองที่ต้องจัดการ'
+	flaggedEmpty: 'ไม่มีกองที่ต้องจัดการ',
+	myPointTitle: 'กองที่จุดของฉัน',
+	myPointEmpty: 'ไม่มีกองที่เปิดรับที่จุดนี้',
+	myPointLabel: 'จุดของฉัน',
+	myPointPlaceholder: 'เลือกจุดของฉัน',
+	myPointUnspecified: 'ไม่ระบุจุดที่ตั้ง',
+	myPointHint: 'เลือกจุดของคุณเพื่อดูกองที่เปิดรับที่จุดนั้น (จำไว้ในเครื่องนี้)'
 } as const;
 
 const HOUR_MS = 60 * 60 * 1000;
@@ -94,9 +107,28 @@ export function formatWaitingAge(ms: number): string {
 }
 
 /**
- * Which queues the viewer sees. The distribution_staff queue is intentionally not implemented:
- * pending a product decision on distribution points.
+ * OPEN pools stored at the given point, newest first. `'unspecified'` matches pools without a
+ * storage point.
  */
+export function openPoolsAtPoint(
+	rows: readonly BulkReturnPoolOverviewRow[],
+	pointId: string
+): BulkReturnPoolOverviewRow[] {
+	return rows
+		.filter((row) => {
+			if (row.pool.status !== 'OPEN') return false;
+			const poolPoint = row.pool.location_storage_point_id;
+			return pointId === MY_POOL_POINT_UNSPECIFIED ? !poolPoint : poolPoint === pointId;
+		})
+		.sort((a, b) => {
+			const ac = a.pool.created_at;
+			const bc = b.pool.created_at;
+			if (ac !== bc) return ac > bc ? -1 : 1;
+			return a.pool._id < b.pool._id ? -1 : a.pool._id > b.pool._id ? 1 : 0;
+		});
+}
+
+/** Which queues the viewer sees. Distribution staff get the per-device "my point" queue. */
 export function workQueuesFor(ctx: {
 	roles?: readonly string[];
 	shelterCode?: string | null;
@@ -105,6 +137,8 @@ export function workQueuesFor(ctx: {
 	if (isSystemAdmin(roles) || isShelterManager(roles, ctx.shelterCode)) {
 		return ['waiting_receive', 'flagged'];
 	}
-	if (isWarehouseStaff(roles, ctx.shelterCode)) return ['waiting_receive'];
-	return [];
+	const queues: WorkQueueKind[] = [];
+	if (isWarehouseStaff(roles, ctx.shelterCode)) queues.push('waiting_receive');
+	if (hasCapabilityInShelter(roles, ctx.shelterCode, DISTRIBUTION_STAFF)) queues.push('my_point');
+	return queues;
 }

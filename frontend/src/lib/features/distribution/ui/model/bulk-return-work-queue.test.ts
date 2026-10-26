@@ -4,6 +4,7 @@ import type { BulkReturnPoolOverviewRow } from '../../domain/food-supplies';
 import {
 	flaggedPools,
 	formatWaitingAge,
+	openPoolsAtPoint,
 	waitingForReceive,
 	workQueuesFor
 } from './bulk-return-work-queue';
@@ -136,7 +137,34 @@ describe('workQueuesFor', () => {
 				roles: [`shelter:${code}`, compoundCapabilityRole(code, 'distribution_staff')],
 				shelterCode: code
 			})
-		).toEqual([]);
+		).toEqual(['my_point']);
 		expect(workQueuesFor({ roles: [], shelterCode: code })).toEqual([]);
+	});
+});
+
+describe('openPoolsAtPoint', () => {
+	function at(id: string, status: string, point: string | undefined, created: string) {
+		const r = row(id, status, { created_at: created });
+		(r.pool as { location_storage_point_id?: string }).location_storage_point_id = point;
+		return r;
+	}
+	const rows = [
+		at('a-old', 'OPEN', 'p1', '2026-01-01T00:00:00.000Z'),
+		at('a-new', 'OPEN', 'p1', '2026-01-05T00:00:00.000Z'),
+		at('a-sub', 'SUBMITTED', 'p1', '2026-01-06T00:00:00.000Z'),
+		at('b', 'OPEN', 'p2', '2026-01-03T00:00:00.000Z'),
+		at('none', 'OPEN', undefined, '2026-01-02T00:00:00.000Z')
+	];
+
+	it('keeps OPEN pools at the point, newest first', () => {
+		expect(openPoolsAtPoint(rows, 'p1').map((r) => r.pool._id)).toEqual(['a-new', 'a-old']);
+	});
+
+	it('unspecified matches pools without a point', () => {
+		expect(openPoolsAtPoint(rows, 'unspecified').map((r) => r.pool._id)).toEqual(['none']);
+	});
+
+	it('returns empty for an unknown point', () => {
+		expect(openPoolsAtPoint(rows, 'zzz')).toEqual([]);
 	});
 });

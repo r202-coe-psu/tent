@@ -61,6 +61,8 @@
 		type PoolStatusFilter
 	} from '../model/bulk-return-pool-v3';
 	import { workQueuesFor } from '../model/bulk-return-work-queue';
+	import { readMyPoolPoint, writeMyPoolPoint } from '../model/my-pool-point-storage';
+	import { useStoragePoints } from '$lib/features/operations';
 	import * as Select from '$lib/components/ui/select/index.js';
 	import BulkReturnPoolWorkQueue from './BulkReturnPoolWorkQueue.svelte';
 	import { listOpenPools } from '../model/bulk-return-add-entry';
@@ -139,6 +141,16 @@
 	const canWriteEntry = $derived(authContext ? canWriteBulkReturnEntry(authContext) : false);
 
 	const queues = $derived(authContext ? workQueuesFor(authContext) : []);
+
+	// Per-device "my point" for the distribution staff queue; re-read when the shelter changes.
+	// The hook has no enable switch, so it always loads (the shelter doc is shared and cached).
+	const storagePoints = useStoragePoints(() => activeShelterCode ?? '');
+	let myPoint = $derived<string | null>(readMyPoolPoint(activeShelterCode));
+
+	function handleMyPointChange(value: string) {
+		myPoint = value;
+		writeMyPoolPoint(activeShelterCode, value);
+	}
 
 	// Ticks every minute so the "waiting since" ages stay fresh.
 	// Ticks every minute (only while something reads it) so waiting ages stay current.
@@ -306,7 +318,15 @@
 		</div>
 	{/if}
 
-	<BulkReturnPoolWorkQueue {rows} {queues} {now} onOpenPool={(poolId) => selectPool(poolId)} />
+	<BulkReturnPoolWorkQueue
+		{rows}
+		{queues}
+		{now}
+		onOpenPool={(poolId) => selectPool(poolId)}
+		points={storagePoints.points}
+		{myPoint}
+		onMyPointChange={handleMyPointChange}
+	/>
 
 	<div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
 		<div class="relative w-full sm:max-w-sm">
