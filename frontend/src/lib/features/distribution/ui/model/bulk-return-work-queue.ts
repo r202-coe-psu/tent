@@ -98,12 +98,13 @@ export function formatWaitingAge(ms: number): string {
  * pending a product decision on distribution points.
  */
 export function workQueuesFor(ctx: {
-	roles: readonly string[];
+	roles?: readonly string[];
 	shelterCode?: string | null;
 }): WorkQueueKind[] {
-	if (isSystemAdmin(ctx.roles) || isShelterManager(ctx.roles, ctx.shelterCode)) {
+	const roles = ctx.roles ?? [];
+	if (isSystemAdmin(roles) || isShelterManager(roles, ctx.shelterCode)) {
 		return ['waiting_receive', 'flagged'];
 	}
-	if (isWarehouseStaff(ctx.roles, ctx.shelterCode)) return ['waiting_receive'];
+	if (isWarehouseStaff(roles, ctx.shelterCode)) return ['waiting_receive'];
 	return [];
 }
