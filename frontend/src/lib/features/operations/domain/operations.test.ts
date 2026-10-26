@@ -203,7 +203,10 @@ describe('stockBalance', () => {
 
 	it('rejects a zero-quantity ledger entry', () => {
 		expect(() =>
-			createStockLedger({ item_id: 'item:rice', qty: 0, unit: 'kg', reason: 'adjust' }, ctx)
+			createStockLedger(
+				{ item_id: 'item:rice', qty: 0, unit: 'kg', reason: 'adjust', adjust_reason: 'found' },
+				ctx
+			)
 		).toThrow();
 	});
 });
@@ -321,20 +324,19 @@ describe('stock_ledger schema_v + reason enum (CR-032 / draft-lot-produced-at)',
 // new reason that is not listed here fails to compile.
 describe('stock_ledger reason ↔ ref_id invariant (CR-055)', () => {
 	const base = { item_id: 'item:rice', qty: 5, unit: 'kg' } as const;
-	const write = (reason: LedgerReason, ref_id: string | null) =>
-		createStockLedger(
-			{
-				...base,
-				qty: reason === 'distribute' ? -5 : base.qty,
-				reason,
-				ref_id,
-				...(reason === 'adjust' ? { adjust_reason: 'found' as const } : {}),
-				...(reason === 'distribute' || reason === 'distribution_return'
-					? { lot_ref: 'stock_ledger:PHYSICALLOT' }
-					: {})
-			},
-			ctx
-		);
+	const write = (reason: LedgerReason, ref_id: string | null) => {
+		const common = {
+			...base,
+			qty: reason === 'distribute' ? -5 : base.qty,
+			ref_id,
+			...(reason === 'distribute' || reason === 'distribution_return'
+				? { lot_ref: 'stock_ledger:PHYSICALLOT' }
+				: {})
+		};
+		return reason === 'adjust'
+			? createStockLedger({ ...common, reason, adjust_reason: 'found' }, ctx)
+			: createStockLedger({ ...common, reason }, ctx);
+	};
 
 	const cases: Record<LedgerReason, { valid: string | null; invalid: string | null }> = {
 		donation: { valid: 'donation:01J', invalid: 'stock_transfer:01J' },
@@ -586,7 +588,7 @@ describe('keyableDonations + keyedDonationIds (CR-055 R4)', () => {
 				item_id: 'item:rice',
 				qty: '10',
 				unit: 'kg',
-				reason: 'receive' as LedgerReason,
+				reason: 'receive',
 				ref_id: 'distribution_log:fixture'
 			},
 			ctx

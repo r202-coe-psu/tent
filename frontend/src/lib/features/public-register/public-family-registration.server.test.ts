@@ -6,6 +6,7 @@ import {
 import { bulkAsPublicWriter, rollbackAsPublicWriter } from '$lib/server/couch-public-writer';
 import { adminRaw } from '$lib/server/couch-admin';
 import type { UnifiedRegistrationInput } from '$lib/features/people/server';
+import { webConsentBody } from './domain/public-consent.fixture';
 
 vi.mock('$lib/server/couch-public-writer', () => ({
 	bulkAsPublicWriter: vi.fn(),
@@ -111,7 +112,10 @@ describe('executePublicFamilyRegistration (#254)', () => {
 				]
 			}
 		});
-		const result = await executePublicFamilyRegistration(input, { shelterCode: 'SH001' });
+		const result = await executePublicFamilyRegistration(input, {
+			shelterCode: 'SH001',
+			consent: webConsentBody(2)
+		});
 
 		expect(result.household).toBeDefined();
 		expect(result.evacuees).toHaveLength(2);
@@ -170,7 +174,7 @@ describe('executePublicFamilyRegistration (#254)', () => {
 
 		const result = await executePublicFamilyRegistration(
 			sampleInput({ join_household_id: 'household:existing' }),
-			{ shelterCode: 'SH001' }
+			{ shelterCode: 'SH001', consent: webConsentBody(2) }
 		);
 
 		expect(result.household._id).toBe('household:existing');
@@ -200,13 +204,48 @@ describe('executePublicFamilyRegistration (#254)', () => {
 		});
 
 		const input = sampleInput();
-		await expect(executePublicFamilyRegistration(input, { shelterCode: 'SH001' })).rejects.toThrow(
-			PublicRegistrationWriteError
-		);
+		await expect(
+			executePublicFamilyRegistration(input, { shelterCode: 'SH001', consent: webConsentBody(2) })
+		).rejects.toThrow(PublicRegistrationWriteError);
 
 		expect(rollbackAsPublicWriter).toHaveBeenCalledWith('shelter_sh001', [
 			{ id: 'household:H1', rev: '1-a' },
 			{ id: 'evacuee:E1', rev: '1-b' }
 		]);
+	});
+
+	it('writes each member’s consent bound to the registrant (FR-42)', async () => {
+		const result = await executePublicFamilyRegistration(sampleInput(), {
+			shelterCode: 'SH001',
+			consent: webConsentBody(2, { guardian_for: ['m1'] })
+		});
+
+		const [head, child] = result.evacuees;
+		expect(head.schema_v).toBe(15);
+		expect(head.consent).toEqual({
+			mode: 'full',
+			health: true,
+			ref: 'CS-7K3QZ9MD',
+			given_at: '2026-10-25T03:15:00.000Z',
+			notice_version: '2026-10-25',
+			channel: 'web',
+			recorded_verbally_by: null,
+			given_by: 'self',
+			giver_evacuee_id: null
+		});
+		expect(child.consent).toMatchObject({ given_by: 'guardian', giver_evacuee_id: head._id });
+		expect(head.privacy.search_excluded).toBe(false);
+	});
+
+	it('hides basic-mode members from search (FR-31)', async () => {
+		const result = await executePublicFamilyRegistration(sampleInput(), {
+			shelterCode: 'SH001',
+			consent: webConsentBody(2, { mode: 'basic' })
+		});
+
+		for (const evacuee of result.evacuees) {
+			expect(evacuee.consent).toMatchObject({ mode: 'basic', health: false, channel: 'web' });
+			expect(evacuee.privacy.search_excluded).toBe(true);
+		}
 	});
 });

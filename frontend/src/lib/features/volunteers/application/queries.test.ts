@@ -357,13 +357,14 @@ describe('mutation invalidation map', () => {
 			]
 		},
 		{
-			name: 'useReviewApplication invalidates applications + jobs + hubMetrics (quota-changing)',
+			name: 'useReviewApplication invalidates applications + jobs + shiftAssignments + hubMetrics (quota-changing)',
 			seed: () => jobApplicationRepo.review.mockResolvedValue({}),
 			run: (qc) =>
 				useReviewApplication(qc).mutate({ id: 'job_application:1', decision: 'confirmed' }),
 			keys: () => [
 				volunteerKeys.jobApplicationsAll(),
 				volunteerKeys.jobsAll(),
+				volunteerKeys.shiftAssignmentsAll(),
 				volunteerKeys.hubMetrics()
 			]
 		},

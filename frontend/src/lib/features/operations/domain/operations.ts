@@ -591,7 +591,27 @@ function stockLedgerInputSchemaWith(
 }
 
 export const stockLedgerInputSchema = stockLedgerInputSchemaWith(checkRefId);
-export type StockLedgerInput = z.input<typeof stockLedgerInputSchema>;
+type StockLedgerInputBase = Omit<
+	z.input<typeof stockLedgerInputBaseSchema>,
+	'reason' | 'adjust_reason' | 'note'
+>;
+
+/**
+ * Compile-time mirror of CR-143 FR-C1/C2, discriminated on `reason`: an adjust row must
+ * carry `adjust_reason` (`note` optional), every other row must carry neither. The Zod
+ * `superRefine` above stays as the runtime guard for data that never passed through TypeScript.
+ */
+export type StockLedgerInput =
+	| (StockLedgerInputBase & {
+			reason: 'adjust';
+			adjust_reason: AdjustReason;
+			note?: string;
+	  })
+	| (StockLedgerInputBase & {
+			reason: Exclude<LedgerReason, 'adjust'>;
+			adjust_reason?: never;
+			note?: never;
+	  });
 
 const legacyFlow2StockLedgerInputSchema = stockLedgerInputSchemaWith(checkLegacyFlow2RefId);
 
@@ -765,24 +785,21 @@ export function createReceiveEntry(
 	id?: string
 ): StockLedger {
 	const d = receiveInputSchema.parse(input);
-	return createStockLedger(
-		{
-			item_id: d.item_id,
-			qty: d.qty,
-			unit: d.unit,
-			reason: REASON_BY_RECEIVE_SOURCE[d.source],
-			ref_id: d.ref_id,
-			// A hand-keyed receipt is booked as an adjust (CR-143 §C needs a reason on those):
-			// stock that turned up, so `found` (CR-156 FR-C7); the form offers no picker (FR-C8).
-			...(REASON_BY_RECEIVE_SOURCE[d.source] === 'adjust'
-				? { adjust_reason: 'found' as const }
-				: {}),
-			lot: d.lot,
-			occurred_at: d.occurred_at
-		},
-		ctx,
-		id
-	);
+	const common = {
+		item_id: d.item_id,
+		qty: d.qty,
+		unit: d.unit,
+		ref_id: d.ref_id,
+		lot: d.lot,
+		occurred_at: d.occurred_at
+	};
+	const reason = REASON_BY_RECEIVE_SOURCE[d.source];
+	// A hand-keyed receipt is booked as an adjust (CR-143 §C needs a reason on those):
+	// stock that turned up, so `found` (CR-156 FR-C7); the form offers no picker (FR-C8).
+	if (reason === 'adjust') {
+		return createStockLedger({ ...common, reason, adjust_reason: 'found' }, ctx, id);
+	}
+	return createStockLedger({ ...common, reason }, ctx, id);
 }
 
 export const distributeInputSchema = z.object({

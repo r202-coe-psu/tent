@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
+	import { untrack } from 'svelte';
 	import { toast } from 'svelte-sonner';
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import Loader2 from '@lucide/svelte/icons/loader-2';
@@ -28,6 +29,7 @@
 		maskNationalId,
 		formatPersonName,
 		classifyZoningQueueTab,
+		startStaffStationVisit,
 		countPresentOccupantsByZone,
 		recommendZoneKind,
 		canChangeEvacueeZone,
@@ -110,6 +112,29 @@
 		if (masterItem) return formatMasterLabel(masterItem, 'th');
 		return SPECIAL_NEED_LABELS[need] ?? need;
 	}
+
+	// CR-192: Station 3 `start` when staff open someone who is still waiting to be zoned. The
+	// boolean flips only when that state changes, so the check-in itself never re-opens a visit;
+	// the repository skips a reopen / refresh while a start is still live.
+	const awaitingZoning = $derived(
+		!!evacuee &&
+			!screeningsQuery.isPending &&
+			!shelterQuery.isPending &&
+			classifyZoningQueueTab(evacuee, {
+				enableMedicalScreening: enableMedical,
+				hasScreening: screenedIds.has(evacuee._id)
+			}) === 'pending'
+	);
+	$effect(() => {
+		const id = evacueeId;
+		if (!awaitingZoning) return;
+		untrack(() => {
+			void startStaffStationVisit(id, 3, {
+				shelterCode: getShelterCode(),
+				createdBy: authStore.user?.name ?? 'unknown'
+			});
+		});
+	});
 
 	const isAwaitingConfirm = $derived(!!evacuee && isPendingZoneArrivalConfirmation(evacuee));
 	// Already checked in (active / room_confirmed): the zone action is a zone_change, never a check-in

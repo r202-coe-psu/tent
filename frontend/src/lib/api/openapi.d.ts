@@ -1254,6 +1254,63 @@ export interface components {
 			success: boolean;
 			key: components['schemas']['ApiKeyPublic'];
 		};
+		/** BasicEvacueeConsent */
+		BasicEvacueeConsent: {
+			/**
+			 * @description discriminator enum property added by openapi-typescript
+			 * @enum {string}
+			 */
+			mode: 'basic';
+			/**
+			 * Health
+			 * @constant
+			 */
+			health: false;
+			/** Ref */
+			ref: string;
+			/** Given At */
+			given_at: string;
+			/** Notice Version */
+			notice_version: string;
+			/**
+			 * Given By
+			 * @enum {string}
+			 */
+			given_by: 'self' | 'guardian' | 'household_member' | 'backfill';
+			/** Giver Evacuee Id */
+			giver_evacuee_id: string | null;
+			/** Recorded Verbally By */
+			recorded_verbally_by: string | null;
+			/**
+			 * Channel
+			 * @enum {string}
+			 */
+			channel: 'staff' | 'kiosk' | 'web' | 'backfill';
+		};
+		/** BasicWebConsentGrant */
+		BasicWebConsentGrant: {
+			/**
+			 * @description discriminator enum property added by openapi-typescript
+			 * @enum {string}
+			 */
+			mode: 'basic';
+			/**
+			 * Health
+			 * @constant
+			 */
+			health: false;
+			/** Ref */
+			ref: string;
+			/** Given At */
+			given_at: string;
+			/** Notice Version */
+			notice_version: string;
+			/**
+			 * Given By
+			 * @enum {string}
+			 */
+			given_by: 'self' | 'guardian' | 'household_member';
+		};
 		/** Body_upload_unassigned_photo_public_v1_unassigned_registrations_photos_post */
 		Body_upload_unassigned_photo_public_v1_unassigned_registrations_photos_post: {
 			/** Full */
@@ -1794,6 +1851,57 @@ export interface components {
 			 */
 			order: number;
 		};
+		/** FullEvacueeConsent */
+		FullEvacueeConsent: {
+			/**
+			 * @description discriminator enum property added by openapi-typescript
+			 * @enum {string}
+			 */
+			mode: 'full';
+			/** Health */
+			health: boolean;
+			/** Ref */
+			ref: string;
+			/** Given At */
+			given_at: string;
+			/** Notice Version */
+			notice_version: string;
+			/**
+			 * Given By
+			 * @enum {string}
+			 */
+			given_by: 'self' | 'guardian' | 'household_member' | 'backfill';
+			/** Giver Evacuee Id */
+			giver_evacuee_id: string | null;
+			/** Recorded Verbally By */
+			recorded_verbally_by: string | null;
+			/**
+			 * Channel
+			 * @enum {string}
+			 */
+			channel: 'staff' | 'kiosk' | 'web' | 'backfill';
+		};
+		/** FullWebConsentGrant */
+		FullWebConsentGrant: {
+			/**
+			 * @description discriminator enum property added by openapi-typescript
+			 * @enum {string}
+			 */
+			mode: 'full';
+			/** Health */
+			health: boolean;
+			/** Ref */
+			ref: string;
+			/** Given At */
+			given_at: string;
+			/** Notice Version */
+			notice_version: string;
+			/**
+			 * Given By
+			 * @enum {string}
+			 */
+			given_by: 'self' | 'guardian' | 'household_member';
+		};
 		/** GeoJsonPoint */
 		GeoJsonPoint: {
 			/**
@@ -2192,6 +2300,12 @@ export interface components {
 			emergency_contact?: components['schemas']['EmergencyContactInput'] | null;
 			/** Photo */
 			photo?: string | null;
+			/** Consent */
+			consent:
+				| components['schemas']['FullWebConsentGrant']
+				| components['schemas']['BasicWebConsentGrant'];
+			/** Search Excluded */
+			search_excluded: boolean;
 		};
 		/** NeedItemResponse */
 		NeedItemResponse: {
@@ -2357,6 +2471,18 @@ export interface components {
 			birth_year?: number | null;
 			/** Age */
 			age?: number | null;
+			/** Consent */
+			consent?:
+				| (
+						| components['schemas']['FullEvacueeConsent']
+						| components['schemas']['BasicEvacueeConsent']
+				  )
+				| null;
+			/**
+			 * Search Excluded
+			 * @default false
+			 */
+			search_excluded: boolean;
 		};
 		/**
 		 * OpenPetHit
