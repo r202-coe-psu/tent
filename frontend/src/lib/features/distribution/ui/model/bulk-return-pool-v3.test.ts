@@ -592,7 +592,7 @@ describe('labels', () => {
 	it('returnerLabel truncates a non-ULID id from the front', () => {
 		expect(
 			returnerLabel({ returner_type: 'evacuee', returner_id: 'evacuee:seed-st:sh001:0000' })
-		).toBe('ผู้พักพิง …t:sh001:0000');
+		).toBe('ผู้พักพิง …sh001:0000');
 		expect(returnerLabel({ returner_type: 'volunteer', returner_id: 'volunteer:seed-vol:7' })).toBe(
 			'อาสาสมัคร seed-vol:7'
 		);

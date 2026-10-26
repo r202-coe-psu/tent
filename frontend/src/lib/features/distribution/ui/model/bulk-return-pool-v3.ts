@@ -387,7 +387,11 @@ export function poolStorageLabel(pool: Pick<BulkReturnPoolV3, 'location_storage_
 function shortId(id: string): string {
 	const rest = id.replace(/^(evacuee|volunteer):/, '');
 	if (/^[0-9A-HJKMNP-TV-Z]{26}$/i.test(rest)) return `…${rest.slice(-6)}`;
-	return rest.length > 12 ? `…${rest.slice(-12)}` : rest;
+	if (rest.length <= 12) return rest;
+	// Cut at a ':' boundary when one falls inside the last 12 chars (…sh001:0000, not …t:sh001:0000).
+	const tail = rest.slice(-12);
+	const boundary = tail.indexOf(':');
+	return `…${boundary > 0 ? tail.slice(boundary + 1) : tail}`;
 }
 
 export function returnerLabel(

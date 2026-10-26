@@ -365,7 +365,9 @@
 		/>
 	{:else}
 		<!-- Overview KPI Counters (Single source of truth with workflow groups) -->
-		<div class="flex flex-wrap justify-center gap-3 *:min-w-40 *:grow *:basis-44 lg:*:basis-52">
+		<div
+			class="flex flex-wrap justify-center gap-3 *:basis-[calc(50%-0.375rem)] sm:*:basis-[calc(33.333%-0.5rem)] lg:flex-nowrap lg:*:min-w-0 lg:*:flex-1 lg:*:basis-0"
+		>
 			<!-- 1. All -->
 			<div class="rounded-xl border border-slate-200/80 bg-white p-4 shadow-2xs">
 				<div class="flex items-center justify-between">
