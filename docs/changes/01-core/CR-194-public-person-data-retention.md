@@ -1,10 +1,12 @@
 ---
-id: draft # draft-public-person-data-retention — ยังไม่รันเลข CR-NNN (change-management §3)
+id: CR-194 # renumbered from draft-public-person-data-retention
 title: แยกนาฬิกา retention สองตัว — public search 3 เดือนหลังปิดศูนย์ (CR-183) · ข้อมูลส่วนบุคคลใน CouchDB 2 ปี
-status: proposed
+status: approved
 date: 2026-10-25
 requested_by: Dev Team B (2026-10-25) 「ทั้งเก็บ 3 เดือนและ retention 2 year」
-decided_by:
+decided_by: kong
+decision_date: 2026-10-26
+updated: 2026-10-26 # approved (kong)
 layer: volatile # rule retention/PDPA; ไม่แตะ envelope/auth/sync priority/layer boundary
 affects:
   - docs/data/data-model.md ตารางสรุปต้นไฟล์ (แถว Retention) · §7 Retention (แถว `medical`, `evacuee`/`household`, donor PII, edge server)
@@ -22,16 +24,16 @@ affects:
   - code: i18n หน้า policy/terms (P-8) ก่อน 31 ธ.ค. 2569 (FR-17) · CouchDB purge/anonymize job เป็นงาน T-43 · worker/src/worker/projectors/evacuee.py ข้าม `anonymized` (FR-5a, พร้อม T-43)
 ---
 
-# draft-public-person-data-retention — ระยะเก็บข้อมูลส่วนบุคคล 2 ปี แยกจาก public search 3 เดือน
+# CR-194 — ระยะเก็บข้อมูลส่วนบุคคล 2 ปี แยกจาก public search 3 เดือน
 
 > **สรุป (TL;DR):**
 >
-> - **เปลี่ยนอะไร:** แยก retention เป็นสองนาฬิกา — (1) **public plane:** คนของศูนย์ปิดค้นเจอได้ `closed_at` + `retention_months_after_close` (default 3 เดือน) ตาม [CR-183](11-famsearch/CR-183-closed-shelter-search-retention.md) **ไม่เปลี่ยน** · (2) **system of record (CouchDB):** ข้อมูลส่วนบุคคล (`evacuee`, `household`, `medical`) เก็บ **2 ปีหลัง `shelter.closed_at`** (D-1) แล้วจึง purge/anonymize (tombstone ที่คงหลักฐาน consent ไร้ PII, D-6) — ค่าอ่านจาก `config:app.personal_data_retention_months` (default `24`, D-2); `medical` 2 ปีเท่ากันแต่ purge ก่อน (D-3); donor PII ใน `donation` คง 3 เดือนหลังปิดศูนย์ (D-4)
+> - **เปลี่ยนอะไร:** แยก retention เป็นสองนาฬิกา — (1) **public plane:** คนของศูนย์ปิดค้นเจอได้ `closed_at` + `retention_months_after_close` (default 3 เดือน) ตาม [CR-183](../11-famsearch/CR-183-closed-shelter-search-retention.md) **ไม่เปลี่ยน** · (2) **system of record (CouchDB):** ข้อมูลส่วนบุคคล (`evacuee`, `household`, `medical`) เก็บ **2 ปีหลัง `shelter.closed_at`** (D-1) แล้วจึง purge/anonymize (tombstone ที่คงหลักฐาน consent ไร้ PII, D-6) — ค่าอ่านจาก `config:app.personal_data_retention_months` (default `24`, D-2); `medical` 2 ปีเท่ากันแต่ purge ก่อน (D-3); donor PII ใน `donation` คง 3 เดือนหลังปิดศูนย์ (D-4)
 > - **ทำไม:** data-model §7 บอก tombstone/purge CouchDB "ภายใน 3 เดือนหลังปิดศูนย์" ขัดกับข้อความ notice PDPA「[๒ ปี]」 — pdpa-consent-block-spec §10 บังคับให้ตรงกันก่อนเปิดแท็บ notice. หน้า privacy policy / terms ที่ใช้งานจริงระบุค่าที่สาม "จนถึง 31 ธ.ค. 2569" (P-8)
 > - **ข้อควรระวัง:** 2 ปีเกินอายุโครงการ 12 เดือน → job purge CouchDB อาจไม่ถูกเรียกใช้จริงภายในโครงการ — PSU คงเป็น data controller จนครบนาฬิกาของศูนย์สุดท้าย, job + runbook อยู่ใน handover (T-44) (D-7; ต้องให้ DPO รับรอง)
 > - **build:** ไม่มี code ใน CR นี้นอกจากข้อความ i18n หน้า policy/terms (P-8) → "2 ปีหลังปิดศูนย์พักพิง" ซึ่งต้องลง**ก่อน 31 ธ.ค. 2569** ไม่รอ approve (FR-17); job purge CouchDB ยังเป็น T-43 แต่ T-43 ต้องใช้นาฬิกา 2 ปีแทน 3 เดือน
 > - **กระทบ:** data-model (ตารางสรุป + §7) · schema.md §3.2 (คำอธิบาย + field ใหม่ D-2) + evacuee `anonymized` (D-6) · couchdb-mongodb-sync · api-contract / sitemap / master-data README (คำอธิบาย) · public-tier-flow-spec · T-43 · pdpa spec และ CR-017 ไม่แก้
-> - **สถานะ:** `proposed` — **ยังไม่แก้เอกสารใด**; P-1..P-4, P-6, P-7, P-10..P-12 แก้ตอน approve; P-8 แก้ก่อน 31 ธ.ค. 2569 ไม่รอ approve แต่ต้องผ่าน owner (FR-17) · D-1..D-7 ตัดสินแล้ว (ตามที่เสนอ, Dev Team B 2026-10-25) — ค้าง: DPO รับรอง D-6 (`ref`) และ D-7 · owner/DPO ยืนยันจุดเริ่มนับในข้อความ notice (FR-12a) · DPO ตัดสินระยะของข้อมูลที่เก็บก่อน deploy FR-17 · T-43 รอ CR-183 merge (FR-4)
+> - **สถานะ:** `approved` (kong, 2026-10-26) — **ยังไม่แก้เอกสารใด**; P-1..P-4, P-6, P-7, P-10..P-12 แก้ใน PR ตามหลัง approve; P-8 แก้ก่อน 31 ธ.ค. 2569 ไม่รอ approve แต่ต้องผ่าน owner (FR-17) · D-1..D-7 ตัดสินแล้ว (ตามที่เสนอ, Dev Team B 2026-10-25) — ค้าง: DPO รับรอง D-6 (`ref`) และ D-7 · owner/DPO ยืนยันจุดเริ่มนับในข้อความ notice (FR-12a) · DPO ตัดสินระยะของข้อมูลที่เก็บก่อน deploy FR-17 · T-43 รอ CR-183 merge (FR-4)
 
 ---
 
@@ -114,7 +116,7 @@ affects:
 
 ## Decisions
 
-> ทุกข้อ ✅ ตัดสินตามที่เสนอ (2026-10-25 — ดู Decision log). ทางเลือกที่ไม่เลือกคงไว้เป็นบันทึก.
+> ทุกข้อ ✅ ตัดสินตามที่เสนอ (เสนอโดย Dev Team B 2026-10-25 · approve โดย kong 2026-10-26 — ดู Decision log). ทางเลือกที่ไม่เลือกคงไว้เป็นบันทึก.
 
 - **D-1 — จุดเริ่มนาฬิกา 2 ปี** — ✅ `shelter.closed_at`.
   - **เลือก:** `shelter.closed_at` — นาฬิกาเดียวกับ CR-183 (stamp rule + backfill มากับงาน implement CR-183 — ยังไม่อยู่บน `develop` @ `826f787b3`: schema.md:1548 ยังเป็น `—`, ไม่มี script `migrate:shelter-closed-at`), job คำนวณต่อศูนย์ได้ทั้ง DB, สอดคล้อง §7 เดิมที่นับหลังปิดศูนย์. ข้อเสีย: ศูนย์ที่เปิดนานทำให้ข้อมูลคนที่ออกไปแล้วถูกเก็บนานกว่า 2 ปีนับจากวันที่ออก; ศูนย์ `closed_at = null` ไม่มีนาฬิกา (เหมือน CR-183 D-5).
@@ -170,3 +172,4 @@ affects:
 - 2026-10-25 — แก้ตาม review PR #866: สถานะเอกสารเป็น "ยังไม่แก้" ทุกจุด · `status: proposed` · as-is อ้าง `develop` @ `826f787b3` · เพิ่ม P-10..P-12 + บรรทัด P-8 · FR-4 ขึ้นกับ D-1 · Migration ขึ้นกับ D-6 · FR-12 ระบุผลของ P-8 ต่อ `notice_version` · เพิ่ม D-7 (ผู้รับผิดชอบหลังจบโครงการ). ยังไม่มี open decision ใดถูกตัดสิน.
 - 2026-10-25 — Dev Team B (แชต):「Open Decision เอาตามที่เสนอ」(ตอบ comment PR #866) → D-1..D-7 ✅ ตามที่เสนอ; field ชื่อ `personal_data_retention_months`, ไม่อยู่ใน public allow-list. FR-4..FR-7, FR-10, FR-14, Acceptance, Migration อัปเดตตาม. D-6 ไม่ bump `schema_v` (ไม่มี field ใหม่). ค้าง DPO: `ref` ใน tombstone (D-6) และการรับรอง D-7. สถานะยัง `proposed` (ยังไม่ approve).
 - 2026-10-25 — Dev Team B (แชต):「แก้ warning ปรับเป็น 2 ปี」(ตอบ review รอบ 3 PR #866) → เพิ่ม FR-17: หน้า policy / terms (P-8) เปลี่ยนเป็น "2 ปีหลังปิดศูนย์พักพิง" ก่อน 31 ธ.ค. 2569 ใน PR แยก ไม่รอ approve.
+- 2026-10-26 — **approved** โดย kong → รันเลข CR-194 (หมวด 01-core เพราะผูกกับ T-43). D-1..D-7 มีผลตามที่เสนอ. ยังค้าง: DPO รับรอง D-6 (`ref`) และ D-7 · owner/DPO ยืนยันจุดเริ่มนับใน notice (FR-12a). เอกสาร P-1..P-4, P-6, P-7, P-10..P-12 แก้ใน PR ตามหลัง; P-8 ตาม FR-17.
