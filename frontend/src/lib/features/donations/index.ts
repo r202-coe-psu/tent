@@ -55,6 +55,21 @@ export {
 	needsDropOffDestination,
 	resolveDropOffPoint
 } from './domain/drop-off';
+// Domain — box label (#591)
+export type {
+	BoxLabel,
+	BoxLabelLine,
+	BoxLabelSource,
+	BoxLabelSourceItem
+} from './domain/box-label';
+export {
+	BOX_LABEL_MAX_LINES,
+	BOX_LABEL_MM,
+	boxLabelPageCss,
+	buildBoxLabels,
+	canPrintBoxLabel,
+	clipLabelLines
+} from './domain/box-label';
 // Domain — back-office booking list (#617)
 export {
 	DONATION_QUEUE_FILTERS,
