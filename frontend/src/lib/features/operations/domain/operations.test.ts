@@ -36,7 +36,6 @@ import {
 	projectStockLotBalances,
 	sortStockLotsByConsumptionOrder,
 	StockLotIntegrityError,
-	mapNeedItemHeuristic,
 	createTransfer,
 	dispatchTransfer,
 	receiveTransfer,
@@ -902,6 +901,24 @@ describe('deriveNeedAvailability', () => {
 		expect(rice.is_cut_off).toBe(true);
 		expect(rice.qty_remaining).toBe('0');
 	});
+
+	it('offers nothing on any need once the whole campaign is closed', () => {
+		const campaign = {
+			...createCampaign(
+				{
+					title: 'ของยังชีพ',
+					needs: [{ item_id: 'item:rice', qty_target: 50, unit: 'kg' }]
+				},
+				ctx
+			),
+			status: 'closed' as const
+		};
+
+		const [rice] = deriveNeedAvailability(campaign, [], []);
+
+		expect(rice.is_cut_off).toBe(true);
+		expect(rice.qty_remaining).toBe('0');
+	});
 });
 
 describe('createReceiveEntry', () => {
@@ -1538,22 +1555,6 @@ describe('Inter-shelter Transfers', () => {
 
 	it('rejects resuming a transfer that is not disputed (FR-07)', () => {
 		expect(() => resumeTransfer(requestedTransfer())).toThrow();
-	});
-});
-
-describe('mapNeedItemHeuristic', () => {
-	it('maps known items correctly', () => {
-		expect(mapNeedItemHeuristic('ข้าวสารหอมมะลิ')).toBe('item:rice');
-		expect(mapNeedItemHeuristic('น้ำดื่มสะอาด')).toBe('item:water');
-		expect(mapNeedItemHeuristic('ยาพาราเซตามอล')).toBe('item:paracetamol');
-		expect(mapNeedItemHeuristic('สบู่ถูตัว')).toBe('item:soap');
-		expect(mapNeedItemHeuristic('ผ้าห่มกันหนาว')).toBe('item:blanket');
-		expect(mapNeedItemHeuristic('ไข่ไก่สด')).toBe('item:egg');
-	});
-
-	it('slugs unknown items correctly', () => {
-		expect(mapNeedItemHeuristic('ปลากระป๋องรสเผ็ด')).toBe('item:ปลากระป๋องรสเผ็ด');
-		expect(mapNeedItemHeuristic('  Spoons & Forks  ')).toBe('item:spoons-forks');
 	});
 });
 
