@@ -48,6 +48,13 @@ export {
 	isTerminalDonationStatus,
 	rejectedLineReasons
 } from './domain/tracking';
+// Domain — drop-off destination (#590)
+export type { DropOffGeo, DropOffPoint, DropOffShelterSource } from './domain/drop-off';
+export {
+	dropOffDirectionsUrl,
+	needsDropOffDestination,
+	resolveDropOffPoint
+} from './domain/drop-off';
 // Domain — back-office booking list (#617)
 export {
 	DONATION_QUEUE_FILTERS,
