@@ -5,7 +5,6 @@ import {
 	createStockLedger,
 	LotWriteOffError,
 	projectLotsByItem,
-	StockLotIntegrityError,
 	type StockLedger
 } from './operations';
 
@@ -63,6 +62,28 @@ describe('assertLotWriteOffsFit (#569)', () => {
 	});
 });
 
+describe('assertLotWriteOffsFit — a history that cannot be replayed (#856)', () => {
+	it('tells the user in Thai instead of leaking the projection error', () => {
+		const rice = inbound('item:rice', '5');
+		const overdrawn = createStockLedger(
+			{
+				item_id: 'item:rice',
+				qty: '-9',
+				unit: 'kg',
+				reason: 'adjust',
+				adjust_reason: 'lost',
+				ref_id: null,
+				lot_ref: rice._id
+			},
+			ctx
+		);
+		const attempt = () => assertLotWriteOffsFit([rice, overdrawn], [writeOff(rice, '-1')]);
+
+		expect(attempt).toThrow(LotWriteOffError);
+		expect(attempt).toThrow('ประวัติคลังของสินค้านี้คำนวณยอดรายล็อตไม่ได้');
+	});
+});
+
 describe('projectLotsByItem (#569)', () => {
 	it('drops only the item whose history cannot be replayed, and names it', () => {
 		const rice = inbound('item:rice', '5');
@@ -79,14 +100,10 @@ describe('projectLotsByItem (#569)', () => {
 			ctx
 		);
 		const salt = inbound('item:salt', '4');
-		const broken: string[] = [];
 
-		const lots = projectLotsByItem([rice, overdrawn, salt], (itemId, error) => {
-			expect(error).toBeInstanceOf(StockLotIntegrityError);
-			broken.push(itemId);
-		});
+		const { lots, brokenItemIds } = projectLotsByItem([rice, overdrawn, salt]);
 
-		expect(broken).toEqual(['item:rice']);
+		expect(brokenItemIds).toEqual(['item:rice']);
 		expect(lots.map((lot) => lot.item_id)).toEqual(['item:salt']);
 	});
 
@@ -94,6 +111,6 @@ describe('projectLotsByItem (#569)', () => {
 		// rows with no `occurred_at` cannot even be ordered — a bug, not a broken history
 		const bad = (qty: string) =>
 			({ ...inbound('item:rice', qty), occurred_at: undefined }) as unknown as StockLedger;
-		expect(() => projectLotsByItem([bad('5'), bad('1')], () => {})).toThrow(TypeError);
+		expect(() => projectLotsByItem([bad('5'), bad('1')])).toThrow(TypeError);
 	});
 });
