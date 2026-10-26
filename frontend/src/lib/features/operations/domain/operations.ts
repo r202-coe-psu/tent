@@ -239,7 +239,28 @@ export interface DonationItem {
 	category?: string;
 	condition?: string;
 	note?: string;
+	/**
+	 * Per-line review (CR-174 FR-1 · schema_v 7): a line the shelter asked for in its
+	 * campaign is `approved` at booking time, a typed-in one waits as `pending`. Absent on
+	 * docs before schema_v 7 — those are reviewed as a whole, by `status`.
+	 */
+	review_status?: 'approved' | 'pending' | 'rejected';
+	review_reason_code?: string | null;
+	review_reason?: string | null;
+	/**
+	 * What the campaign counter holds for this line's item (CR-080) — stamped by FastAPI
+	 * only when the counter really took it, so it is also how an automatic approval
+	 * (FR-2) is told from a person's (FR-8).
+	 */
+	reserved_qty?: string;
 }
+
+/**
+ * `schema_v` every donation writer stamps — the walk-in factory here, the donor edit
+ * route, and `worker/inbound/donations.py`. 7 = CR-174 `items[].review_status`
+ * (6 CR-172 `reject_reason`, 5 CR-087 `redirect_to_shelter_code`, 4 CR-080 `revisions[]`).
+ */
+export const DONATION_SCHEMA_V = 7;
 
 export interface Donor {
 	name: string;
@@ -293,8 +314,18 @@ export interface Donation extends BaseDoc {
 			free_text?: string;
 			qty: string;
 			unit?: string;
+			/** Staff turned this line away at the counter — no ledger row, qty `'0'` (CR-172 FR-10). */
+			rejected?: boolean;
+			reject_reason?: string;
+			reject_reason_code?: string;
 		}>;
 	} | null;
+	/**
+	 * Why the booking was turned away, as the donor reads it on the tracking page.
+	 * Written only with `status: 'rejected'` (CR-172 FR-1, FR-2 · schema_v 6).
+	 */
+	reject_reason?: string | null;
+	reject_reason_code?: string | null;
 	/**
 	 * Destination shelter this request was handed to (CR-087). Set
 	 * only alongside `status: 'redirected'`; the ticket the destination actually
@@ -1155,10 +1186,9 @@ export function createWalkInDonation(input: WalkInDonationInput, ctx: AuthorCont
 	).toISOString();
 	return makeDoc(
 		'donation',
-		// 5 since CR-087 added redirect_to_shelter_code (4 was CR-080's revisions[]). A
-		// walk-in has neither yet, but the version has to say which shape a reader should
-		// expect — and the public writer (worker/inbound/donations.py) stamps the same.
-		5,
+		// A walk-in has none of the later fields yet, but the version has to say which
+		// shape a reader should expect — and the public writer stamps the same.
+		DONATION_SCHEMA_V,
 		{
 			channel: 'walk_in' as const,
 			donor: d.donor,
@@ -1199,7 +1229,9 @@ const DONATION_TRANSITIONS: Record<DonationStatus, DonationStatus[]> = {
 	//     already writes this for every outstanding status (`quota/expiry.py`,
 	//     `EXPIRABLE_STATUSES`), so leaving it out here made the two implementations
 	//     disagree about a transition that happens nightly.
-	verifying: ['received', 'redirected', 'rejected', 'expired', 'cancelled'],
+	//   · `pending_review` — the donor edits a booking that already has its QR and adds
+	//     a line that needs review (CR-174 FR-21): the QR waits until staff decide.
+	verifying: ['received', 'pending_review', 'redirected', 'rejected', 'expired', 'cancelled'],
 	received: [],
 	redirected: [],
 	rejected: [],

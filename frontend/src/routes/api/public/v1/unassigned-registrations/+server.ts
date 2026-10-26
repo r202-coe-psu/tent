@@ -65,7 +65,10 @@ export const POST: RequestHandler = async ({ request, getClientAddress, fetch })
 				household: input.household,
 				...(input.join_match_token ? { join_match_token: input.join_match_token } : {})
 			},
-			{ fetch }
+			{
+				fetch,
+				consent: { consent: input.consent, consent_member_keys: input.consent_member_keys }
+			}
 		);
 		return json({ ...created, success: true }, { status: 201, headers: noStore });
 	} catch (err) {

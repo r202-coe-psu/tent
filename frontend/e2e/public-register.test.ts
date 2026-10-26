@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { acceptFullConsent } from './helpers/consent';
 
 const SHELTERS = {
 	shelters: [
@@ -57,6 +58,13 @@ const LOCATIONS = {
 };
 
 async function mockReferenceData(page: Page) {
+	await page.route('**/api/public/v1/registrations/check-duplicate', (route) =>
+		route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify({ success: true, duplicate: false, field: null })
+		})
+	);
 	await page.route('**/api/public/v1/shelters**', (route) =>
 		route.fulfill({
 			status: 200,
@@ -233,6 +241,7 @@ test.describe(
 			// Public head must enter phone — no「ไม่มีเบอร์」checkbox.
 			await expect(page.locator('#member-0-no-phone')).toHaveCount(0);
 
+			await acceptFullConsent(page);
 			await page.getByRole('button', { name: 'ยืนยันการลงทะเบียน' }).last().click();
 
 			await expect(page.getByText('สมชาย ใจดี')).toBeVisible();
@@ -293,6 +302,7 @@ test.describe(
 			await member2.getByRole('button', { name: 'กลุ่มเปราะบาง' }).click();
 			await member2.locator('#vg-1-elderly_dependent').click();
 
+			await acceptFullConsent(page);
 			await page.getByRole('button', { name: 'ยืนยันการลงทะเบียน' }).last().click();
 			await expect(page.getByAltText('QR สำหรับยืนยันตัวตนที่ประตูศูนย์')).toBeVisible();
 
@@ -369,10 +379,13 @@ test.describe(
 				.getByLabel(/ข้าพเจ้ารับทราบและยินยอมปฏิบัติตามเงื่อนไขและมาตรการด้านความปลอดภัย/)
 				.check();
 
+			await acceptFullConsent(page);
 			await page.getByRole('button', { name: 'ยืนยันการลงทะเบียน' }).last().click();
 			await expect(page.getByAltText('QR สำหรับยืนยันตัวตนที่ประตูศูนย์')).toBeVisible();
 
-			const household = submitted?.household as { pets?: Array<Record<string, unknown>> };
+			const household = (submitted as Record<string, unknown> | null)?.household as {
+				pets?: Array<Record<string, unknown>>;
+			};
 			expect(household?.pets?.[0]).toMatchObject({
 				species: 'dog',
 				has_cage: true
@@ -399,6 +412,7 @@ test.describe(
 				lastName: 'ใจดี',
 				phone: '0812345678'
 			});
+			await acceptFullConsent(page);
 			await page.getByRole('button', { name: 'ยืนยันการลงทะเบียน' }).last().click();
 
 			// Server errors surface as toast (booking-form catch); form alert is for client validation.
@@ -513,6 +527,7 @@ test.describe(
 			await expect(page.locator('#member-0-no-phone')).toHaveCount(0);
 
 			await page.getByLabel(/ข้าพเจ้ารับทราบข้อตกลงการใช้งาน/).check();
+			await acceptFullConsent(page);
 			await page.getByRole('button', { name: 'ยืนยันการลงทะเบียน' }).last().click();
 
 			await expect(page.getByText('ลงทะเบียนล่วงหน้าสำเร็จ')).toBeVisible();
@@ -577,6 +592,7 @@ test.describe(
 					phone: '0812345678'
 				});
 				await page.getByLabel(/ข้าพเจ้ารับทราบข้อตกลงการใช้งาน/).check();
+				await acceptFullConsent(page);
 				await page.getByRole('button', { name: 'ยืนยันการลงทะเบียน' }).last().click();
 				await expect(page.getByText('ลงทะเบียนล่วงหน้าสำเร็จ')).toBeVisible();
 				await expect.poll(() => storedCodes(page)).toContain(REG_ID);
