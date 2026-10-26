@@ -22,7 +22,7 @@ export interface ApplicantQueue {
  * before CR-094, and `cancelled` applications are never reviewed at all — so
  * the sort falls back to `updated_at`, which every document has.
  */
-function decidedAt(application: JobApplication): string {
+export function decidedAt(application: JobApplication): string {
 	return application.reviewed_at ?? application.updated_at;
 }
 
@@ -59,7 +59,7 @@ export interface ApplicantGroup {
 	applications: JobApplication[];
 }
 
-function applicantKey(application: JobApplication): string {
+export function applicantKey(application: JobApplication): string {
 	return application.volunteer_id ?? `phone:${application.applicant.phone_hash}`;
 }
 
