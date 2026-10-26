@@ -23,7 +23,7 @@
 		disabled?: boolean;
 	} = $props();
 
-	// draft-storage-point-multi-type: display order = enum declaration order (matches the
+	// CR-199: display order = enum declaration order (matches the
 	// table in #647).
 	const typeOptions = Object.entries(SUB_STORAGE_TYPE_LABELS) as [SubStorageType, string][];
 
@@ -45,7 +45,7 @@
 		toast.success('ลบจุดเก็บของสำเร็จ');
 	}
 
-	// draft-storage-point-multi-type: `types` is multi-select (min 1) and kept in enum
+	// CR-199: `types` is multi-select (min 1) and kept in enum
 	// order whatever the click order. Clearing the last type is refused with a toast;
 	// since the group reads `types` back through the getter, the chip simply stays on.
 	// Goes through setPoints (not a direct mutation on the looped `point`) so the

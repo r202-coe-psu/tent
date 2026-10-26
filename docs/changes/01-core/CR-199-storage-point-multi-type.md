@@ -1,11 +1,11 @@
 ---
-id: draft
+id: CR-199
 title: "จุดเก็บของในศูนย์ — ประเภทอาหาร/ของที่เก็บได้เป็น multiple select + แสดงในตัวเลือกสถานที่จัดเก็บและหน้าคลัง"
-status: proposed
+status: approved
 date: 2026-10-19
 updated: 2026-10-26
 requested_by: "feedback หน้างาน (ที่เก็บศูนย์อาหาร ข้อ 4.1) — issue #647"
-decided_by: "TBD — รอเจ้าของโครงการเคาะ"
+decided_by: kong — approved 2026-10-26
 layer: volatile
 affects:
   - docs/data/schema.md §3.1 (`shelter.common_areas.sub_storage[]`, schema_v 7 → 8)
@@ -163,12 +163,11 @@ schema_v shelter 7 → 8, additive-ish แต่เปลี่ยน shape ข�
    "สถานที่จัดเก็บ" แทน (FR-5) ซึ่งเป็นจุดที่ผู้ใช้ต้องตัดสินใจว่าจะเก็บของไว้ที่ไหน
    และ (2026-10-26) ตอบ AC3 ของ #647 ("หน้าคลังแสดงประเภทที่เก็บได้") ภายในแท็บสต็อกเดิม: filter
    "ที่เก็บ" (FR-11) และใต้ล็อตในรายละเอียดสินค้า (FR-12) — ไม่มีตารางหรือแท็บแยก
-   > [NEEDS DECISION: เจ้าของโครงการยืนยันว่า FR-5 + FR-11 + FR-12 (ไม่มีแท็บแยก) ตอบ AC3 ของ #647
-   > แทนตารางในหน้าคลังของ Decision 2 เดิม]
+   — เคาะ (kong, 2026-10-26): FR-5 + FR-11 + FR-12 (ไม่มีแท็บแยก) ถือว่าตอบ AC3 ของ #647 แทนตาราง
+   ในหน้าคลังของ Decision 2 เดิม
 3. **worker projector** (resolved 2026-10-19): ตรวจแล้ว ไม่มีผลกระทบ (ไม่มี projector export `common_areas`)
-4. **ค่าเริ่มต้นของจุดเก็บใหม่** (proposed 2026-10-26): `types: []` แทน `['general']` (FR-4) — QA พบว่า
-   ต้องกดเอา "ทั่วไป" ออกเกือบทุกครั้ง; validation min 1 จับตอนบันทึก
-   > [NEEDS DECISION: เจ้าของโครงการยืนยัน FR-4]
+4. **ค่าเริ่มต้นของจุดเก็บใหม่** (resolved 2026-10-26): `types: []` แทน `['general']` (FR-4) — QA พบว่า
+   ต้องกดเอา "ทั่วไป" ออกเกือบทุกครั้ง; validation min 1 จับตอนบันทึก — เคาะ (kong, 2026-10-26)
 
 ## Decision log
 
@@ -182,3 +181,5 @@ schema_v shelter 7 → 8, additive-ish แต่เปลี่ยน shape ข�
   `draft-storage-point-multi-type` จนกว่าจะ approve และได้เลข CR
 - 2026-10-26 — ทำ AC3 ของ #647 ในแท็บสต็อกเดิม: เพิ่ม FR-11 (ประเภทในตัวเลือก filter "ที่เก็บ") และ
   FR-12 (ประเภทใต้ล็อตในรายละเอียดสินค้า); ปรับ Decision 2 และ `[NEEDS DECISION]` ให้ครอบคลุม FR-11/12
+- 2026-10-26 — approved โดย kong: รันเลข CR-199 (ย้ายเป็น `01-core/CR-199-storage-point-multi-type.md`),
+  เคาะ Decision 2 (ไม่มีแท็บแยก ตอบ AC3) และ Decision 4 (FR-4 ค่าเริ่มต้น `types: []`); `schema.md` + code อ้าง CR-199

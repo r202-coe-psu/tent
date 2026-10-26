@@ -318,7 +318,7 @@ function resolveInt(raw: RawRow, header: string, sink: ErrorSink): number | null
 
 /** `ชื่อ:ประเภท:ตร.ม.` items separated by `|` → sub_storage entries. */
 function resolveSubStorage(raw: RawRow, sink: ErrorSink) {
-	// draft-storage-point-multi-type: schema takes `types[]` — import format stays
+	// CR-199: schema takes `types[]` — import format stays
 	// single-type-per-cell (no requirement yet to express multiple types per row in the
 	// workbook).
 	const out: { id: string; name: string; types: SubStorageType[]; area_m2: number | null }[] = [];

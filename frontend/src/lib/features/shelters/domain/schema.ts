@@ -98,7 +98,7 @@ export type WaterSource = z.infer<typeof waterSourceSchema>;
 export const communicationChannelSchema = z.enum(['cellular', 'wifi', 'vhf_radio']);
 export type CommunicationChannel = z.infer<typeof communicationChannelSchema>;
 
-// draft-storage-point-multi-type: 4 → 7 values (baby_food/cooked_food/food_cold added); keys
+// CR-199: 4 → 7 values (baby_food/cooked_food/food_cold added); keys
 // retained for the original 4 so pre-schema_v-8 data needs no key remap — only
 // `medical_supplies`'s label changed ("ยา").
 export const subStorageTypeSchema = z.enum([
@@ -172,7 +172,7 @@ export type Facilities = z.infer<typeof facilitiesSchema>;
  * or `legacy-<index>` back-filled on read for rows written before schema_v 7;
  * either way it is immutable once persisted.
  *
- * draft-storage-point-multi-type (schema_v 8): `type` (single) → `types` (array, min 1).
+ * CR-199 (schema_v 8): `type` (single) → `types` (array, min 1).
  * Rows written before schema_v 8 carry `type` instead — the preprocess step below derives
  * `types: [type]` on read; the next save persists `types` and drops `type`.
  */
@@ -750,7 +750,7 @@ function hasLegacySubStorageType(master: ShelterMaster): boolean {
 }
 
 /**
- * Convert `sub_storage[].type` → `.types` (draft-storage-point-multi-type). Deterministic: a lone
+ * Convert `sub_storage[].type` → `.types` (CR-199). Deterministic: a lone
  * `type` becomes `types: [type]`, matching the Zod preprocess read path in
  * `subStorageItemSchema` so the migration runner and the normal read path agree.
  */
@@ -770,7 +770,7 @@ function migrateSubStorageTypes(master: ShelterMaster): ShelterMaster {
 }
 
 /**
- * v7 → v8 (draft-storage-point-multi-type). Storage points move from single `type` to
+ * v7 → v8 (CR-199). Storage points move from single `type` to
  * `types[]`.
  */
 function migrateV7ToV8(v7: ShelterMaster): ShelterMaster {

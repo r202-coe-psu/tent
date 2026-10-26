@@ -108,7 +108,7 @@ export const COMMUNICATION_CHOICES: EnumChoice<CommunicationChannel>[] = [
 	{ value: 'vhf_radio', label: 'วิทยุสื่อสาร VHF (Analog/Local)' }
 ];
 
-// draft-storage-point-multi-type: 4 → 7 choices (keys retained; `medical_supplies` label
+// CR-199: 4 → 7 choices (keys retained; `medical_supplies` label
 // changed "เวชภัณฑ์" → "ยา")
 export const SUB_STORAGE_TYPE_CHOICES: EnumChoice<SubStorageType>[] = [
 	{ value: 'general', label: 'ทั่วไป' },
@@ -122,7 +122,7 @@ export const SUB_STORAGE_TYPE_CHOICES: EnumChoice<SubStorageType>[] = [
 
 /**
  * Retired labels still accepted on import, so workbooks filled before the label change
- * (draft-storage-point-multi-type) keep loading.
+ * (CR-199) keep loading.
  */
 export const SUB_STORAGE_TYPE_LEGACY_LABELS: ReadonlyMap<string, SubStorageType> = new Map([
 	['เวชภัณฑ์', 'medical_supplies']

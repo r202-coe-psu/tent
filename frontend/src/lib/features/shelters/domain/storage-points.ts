@@ -2,7 +2,7 @@ import { subStorageTypeSchema, type SubStorageItem, type SubStorageType } from '
 
 /**
  * Thai labels for `common_areas.sub_storage[].types[]` — shared by the shelter
- * form and stock UIs. Key order is display order (draft-storage-point-multi-type).
+ * form and stock UIs. Key order is display order (CR-199).
  */
 export const SUB_STORAGE_TYPE_LABELS: Record<SubStorageType, string> = {
 	general: 'ทั่วไป',

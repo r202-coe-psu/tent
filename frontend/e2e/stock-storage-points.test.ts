@@ -15,7 +15,7 @@ import { injectSession, clearSession, routeBrowserCouchThroughApp } from './help
 import { ulid } from '../src/lib/db/ulid';
 
 /**
- * E2E: shelter storage points in the stock UIs (#647, draft-storage-point-multi-type).
+ * E2E: shelter storage points in the stock UIs (#647, CR-199).
  *
  * The shelter's `common_areas.sub_storage` is patched into the real `registry` read
  * (SH001 is shared — its master doc is never written); ledger lots are real docs in

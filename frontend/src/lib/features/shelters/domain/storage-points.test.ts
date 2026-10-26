@@ -30,7 +30,7 @@ describe('listStoragePoints', () => {
 });
 
 describe('SUB_STORAGE_TYPE_LABELS', () => {
-	it('labels every storage type (draft-storage-point-multi-type — 7 values)', () => {
+	it('labels every storage type (CR-199 — 7 values)', () => {
 		expect(Object.keys(SUB_STORAGE_TYPE_LABELS).sort()).toEqual(
 			[
 				'general',

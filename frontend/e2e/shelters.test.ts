@@ -17,7 +17,7 @@
  * [Edit]   optional zone short name pre-fills, edits (≤10 chars) and PATCHes
  * [Storage] storage point types: multi-select saved in enum order (mouse + keyboard), the last
  *          type cannot be cleared, a legacy single `type` reads back as one chip, a new point
- *          starts with none and blocks save (#647, draft-storage-point-multi-type)
+ *          starts with none and blocks save (#647, CR-199)
  * [Nav]    all sections visible; sidebar click scrolls to section
  */
 
