@@ -70,12 +70,13 @@ export const POOL_COPY = {
 	cancelPool: 'ยกเลิกกอง',
 	cancelDialog: 'ยืนยันการยกเลิกกอง',
 	cancelConfirm: 'ยืนยันยกเลิกกอง',
-	cancelNotEmptyReason: 'ย้ายของออกให้หมดก่อน',
+	cancelNotEmptyReason:
+		'ยกเลิกไม่ได้เนื่องจากยังมีรายการค้างอยู่ในกอง — ย้ายหรือยกเลิกรายการให้หมดก่อน',
 
 	// labels
 	status: {
 		OPEN: 'เปิดรับ',
-		SUBMITTED: 'ส่งแล้ว',
+		SUBMITTED: 'รอตรวจสอบ',
 		RECEIVED: 'ตรวจรับแล้ว',
 		CANCELLED: 'ยกเลิก'
 	},
