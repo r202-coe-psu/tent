@@ -35,6 +35,7 @@ import {
 	assertNoSkippedDocs,
 	BulkReturnPoolLockTimeoutError,
 	BulkReturnPoolStateError,
+	DistributionDataIntegrityError,
 	WorkflowValidationError
 } from './errors';
 
@@ -306,6 +307,35 @@ export async function loadSnapshotPins(
 	if (ownPoolId !== undefined) poolIds.delete(ownPoolId);
 	// Scoped reads (CR-193 §18): only the pools the events name, never a whole-shelter list.
 	const pools = await Promise.all([...poolIds].map((id) => poolRepo.get(id)));
+	return buildSnapshotPins(pools.filter((p): p is BulkReturnPoolV3 => p !== null));
+}
+
+/**
+ * Write-path variant of `loadSnapshotPins`: fails closed (CR-193 §19) when a referenced pool is
+ * unreadable (no doc, or not a v3 pool such as a legacy v1/v2 doc). Its pin would be lost and the
+ * write would proceed as if the entry were unpinned.
+ */
+export async function loadSnapshotPinsForWrite(
+	poolRepo: BulkReturnPoolV3Repository,
+	events: {
+		entries: readonly Pick<BulkReturnEntry, 'pool_id'>[];
+		moves: readonly Pick<BulkReturnEntryMove, 'from_pool_id' | 'to_pool_id'>[];
+		voids: readonly { pool_id: string }[];
+	},
+	ownPoolId?: string
+): Promise<Map<string, string>> {
+	const poolIds = new Set<string>([
+		...events.entries.map((e) => e.pool_id),
+		...events.moves.flatMap((m) => [m.from_pool_id, m.to_pool_id]),
+		...events.voids.map((v) => v.pool_id)
+	]);
+	if (ownPoolId !== undefined) poolIds.delete(ownPoolId);
+	const ids = [...poolIds];
+	const pools = await Promise.all(ids.map((id) => poolRepo.get(id)));
+	const unreadable = ids.filter((_, i) => pools[i] === null);
+	if (unreadable.length > 0) {
+		throw new DistributionDataIntegrityError(unreadable, 'referenced bulk return pool unreadable');
+	}
 	return buildSnapshotPins(pools.filter((p): p is BulkReturnPoolV3 => p !== null));
 }
 

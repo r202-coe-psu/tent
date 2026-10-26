@@ -12,7 +12,7 @@ import { assertCentralWriteAuthority } from './central-write-authority';
 import { assertNoSkippedDocs, BulkReturnPoolStateError, WorkflowValidationError } from './errors';
 import {
 	assertEntryNotPendingSync,
-	loadSnapshotPins,
+	loadSnapshotPinsForWrite,
 	requirePool,
 	resolveDependencies,
 	revertRefOnLoan,
@@ -91,7 +91,7 @@ export async function voidBulkReturnEntry(
 	if (existingVoid) return finish(existingVoid, true, existingVoid.pool_id);
 	assertEntryNotPendingSync(entry, events.moves);
 
-	const pins = await loadSnapshotPins(poolRepo, events);
+	const pins = await loadSnapshotPinsForWrite(poolRepo, events);
 	const resolved = resolveBulkReturnEntries(events.entries, events.moves, events.voids, pins).find(
 		(r) => r.entry._id === entry._id
 	);

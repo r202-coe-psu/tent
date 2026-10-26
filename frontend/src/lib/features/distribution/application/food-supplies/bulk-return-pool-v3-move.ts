@@ -24,7 +24,7 @@ import {
 import {
 	applyRefToLoanDetailed,
 	assertEntryNotPendingSync,
-	loadSnapshotPins,
+	loadSnapshotPinsForWrite,
 	requirePool,
 	resolveDependencies,
 	settlePoolFence,
@@ -119,7 +119,7 @@ export async function moveBulkReturnEntry(
 	}
 	assertEntryNotPendingSync(entry, events.moves);
 
-	const pins = await loadSnapshotPins(poolRepo, events);
+	const pins = await loadSnapshotPinsForWrite(poolRepo, events);
 	const resolved = resolveBulkReturnEntries(events.entries, events.moves, events.voids, pins).find(
 		(r) => r.entry._id === entry._id
 	);
@@ -182,7 +182,7 @@ export async function moveBulkReturnEntry(
 	if (!canAppendToPool(source) && !isLateEntry(entry._id, source)) {
 		throw new BulkReturnPoolStateError(
 			`Entry ${entry._id} cannot leave ${source._id}: the pool is not OPEN and the entry is not late`,
-			source.status === 'OPEN' ? 'locked' : 'closed'
+			source.status === 'OPEN' ? 'locked' : 'source_closed'
 		);
 	}
 
