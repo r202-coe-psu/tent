@@ -4,7 +4,7 @@ import type {
 	DistributionLog,
 	MissedBulkReturnLoanRef
 } from '../../domain/food-supplies';
-import { findMissedLoanRefs } from '../../domain/food-supplies';
+import { deriveLoanReopenId, findMissedLoanRefs } from '../../domain/food-supplies';
 import { assertCanWriteBulkReturnEntry } from './auth';
 import { assertCentralWriteAuthority } from './central-write-authority';
 import { BulkReturnPoolStateError, WorkflowValidationError } from './errors';
@@ -37,7 +37,12 @@ export async function listBulkReturnPoolMissedLoanRefs(
 
 	// getEntry validates the doc and throws on a malformed one: the read fails closed.
 	const found = await Promise.all((pool.entry_ids ?? []).map((id) => eventRepo.getEntry(id)));
-	const entries = found.filter((e): e is BulkReturnEntry => e !== null);
+	const present = found.filter((e): e is BulkReturnEntry => e !== null);
+	// CR-193 §35: an entry whose loans were reopened on purpose must never be offered for a re-cut.
+	const reopened = await Promise.all(
+		present.map((e) => eventRepo.getLoanReopen(deriveLoanReopenId(e._id)))
+	);
+	const entries = present.filter((_, i) => reopened[i] === null);
 	const loanIds = [
 		...new Set(entries.flatMap((e) => e.loan_refs.map((ref) => ref.distribution_log_id)))
 	];
@@ -92,6 +97,11 @@ export async function applyMissedBulkReturnLoanRefs(
 	}
 	const entry = await eventRepo.getEntry(input.entry_id);
 	if (!entry) throw new WorkflowValidationError(`bulk_return_entry ${input.entry_id} not found`);
+	if (await eventRepo.getLoanReopen(deriveLoanReopenId(entry._id))) {
+		throw new WorkflowValidationError(
+			`Entry ${entry._id} had its loans reopened on purpose: they are not re-applied`
+		);
+	}
 
 	const loansApplied: string[] = [];
 	const loansSkipped: BulkReturnLoanSkipped[] = [];

@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { AuthorContext } from '$lib/db/model';
 import {
+	assertCanReopenBulkReturnLoan,
+	canReopenBulkReturnLoan,
 	assertCanManageBulkReturnPool,
 	assertCanWriteBulkReturnEntry,
 	canCreateTicket,
@@ -150,6 +152,32 @@ describe('canWriteBulkReturnEntry (#659)', () => {
 
 	it('rejects a context without roles', () => {
 		expect(canWriteBulkReturnEntry({ shelterCode: 'SH001', createdBy: 'x' })).toBe(false);
+	});
+});
+
+describe('canReopenBulkReturnLoan (CR-193 §35)', () => {
+	it.each([
+		['shelter_manager', scoped('shelter_manager')],
+		['system_admin', ['system_admin']]
+	])('allows %s', (_label, roles) => {
+		expect(canReopenBulkReturnLoan(ctx(roles))).toBe(true);
+		expect(() => assertCanReopenBulkReturnLoan(ctx(roles))).not.toThrow();
+	});
+
+	it.each([
+		['warehouse_staff', scoped('warehouse_staff')],
+		['supply_coordinator', scoped('supply_coordinator')],
+		['distribution_staff', scoped('distribution_staff')],
+		['registration_staff', scoped('registration_staff')],
+		['shelter_manager of another shelter', scoped('shelter_manager', 'SH002')],
+		['no roles', [] as string[]]
+	])('rejects %s', (_label, roles) => {
+		expect(canReopenBulkReturnLoan(ctx(roles))).toBe(false);
+		expect(() => assertCanReopenBulkReturnLoan(ctx(roles))).toThrow(WorkflowAuthorizationError);
+	});
+
+	it('rejects a context without roles', () => {
+		expect(canReopenBulkReturnLoan({ shelterCode: 'SH001', createdBy: 'x' })).toBe(false);
 	});
 });
 

@@ -45,6 +45,11 @@ import {
 	type VoidBulkReturnEntryResult
 } from '../food-supplies/bulk-return-pool-v3-void';
 import {
+	reopenBulkReturnEntryLoans,
+	type ReopenBulkReturnEntryLoansInput,
+	type ReopenBulkReturnEntryLoansResult
+} from '../food-supplies/bulk-return-pool-v3-loan-reopen';
+import {
 	applyMissedBulkReturnLoanRefs,
 	type ApplyMissedBulkReturnLoanRefsInput,
 	type ApplyMissedBulkReturnLoanRefsResult
@@ -81,6 +86,11 @@ export interface ApplyMissedBulkReturnLoanRefsMutationInput {
 
 export interface VoidBulkReturnEntryMutationInput {
 	input: VoidBulkReturnEntryInput;
+	shelterCode?: string;
+}
+
+export interface ReopenBulkReturnEntryLoansMutationInput {
+	input: ReopenBulkReturnEntryLoansInput;
 	shelterCode?: string;
 }
 
@@ -235,6 +245,33 @@ export const useVoidBulkReturnEntry = () => {
 		},
 		retry: false,
 		onSuccess: (_data: VoidBulkReturnEntryResult, variables: VoidBulkReturnEntryMutationInput) => {
+			const shelterCode = resolveShelterCode(variables.shelterCode);
+			invalidateBulkPoolsV3(queryClient, shelterCode);
+			invalidateDistributionLogs(queryClient, shelterCode);
+			invalidateReturnerOutstandingLoans(queryClient, shelterCode);
+		}
+	}));
+};
+
+/**
+ * Reopens the loans one entry of a SUBMITTED / RECEIVED pool closed (shelter_manager / system_admin);
+ * the pool, entry and stock are untouched.
+ */
+export const useReopenBulkReturnEntryLoans = () => {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: async ({
+			input,
+			shelterCode
+		}: ReopenBulkReturnEntryLoansMutationInput): Promise<ReopenBulkReturnEntryLoansResult> => {
+			const ctx = resolveAuthenticatedAuthorContext(shelterCode);
+			return reopenBulkReturnEntryLoans(input, ctx);
+		},
+		retry: false,
+		onSuccess: (
+			_data: ReopenBulkReturnEntryLoansResult,
+			variables: ReopenBulkReturnEntryLoansMutationInput
+		) => {
 			const shelterCode = resolveShelterCode(variables.shelterCode);
 			invalidateBulkPoolsV3(queryClient, shelterCode);
 			invalidateDistributionLogs(queryClient, shelterCode);

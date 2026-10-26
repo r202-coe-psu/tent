@@ -1,6 +1,7 @@
 import type { BulkReturnEntry } from './bulk-return-entry';
 import type { BulkReturnEntryMove } from './bulk-return-entry-move';
 import type { BulkReturnEntryVoid } from './bulk-return-entry-void';
+import type { BulkReturnLoanReopen } from './bulk-return-loan-reopen';
 import type { ClosedBulkReturnLoanRef } from './bulk-return-loan-drift';
 import type { BulkReturnPoolItemSummaryRow, BulkReturnPoolV3 } from './bulk-return-pool-v3';
 import {
@@ -24,6 +25,8 @@ export interface BulkReturnEventSet {
 	entries: BulkReturnEntry[];
 	moves: BulkReturnEntryMove[];
 	voids: BulkReturnEntryVoid[];
+	/** CR-193 §35 loan reopens of the entries read (optional: older callers / fixtures omit it). */
+	loanReopens?: BulkReturnLoanReopen[];
 	/** Docs the read left out because they failed validation (typed structurally: domain cannot import data). */
 	skipped: { _id: string; type: string; reason: string }[];
 }

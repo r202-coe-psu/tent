@@ -6,8 +6,10 @@ import {
 	createBulkReturnEntry,
 	createBulkReturnEntryMove,
 	createBulkReturnEntryVoid,
+	createBulkReturnLoanReopen,
 	deriveEntryMoveId,
-	deriveEntryVoidId
+	deriveEntryVoidId,
+	deriveLoanReopenId
 } from '../../domain/food-supplies';
 import {
 	BulkReturnEventRemoteRepository,
@@ -36,6 +38,7 @@ describe('BulkReturnEventRemoteRepository', () => {
 	const P1 = 'bulk_return_pool:01J00000000000000000000031';
 	const P2 = 'bulk_return_pool:01J00000000000000000000032';
 	const ENTRY_ULID = '01J00000000000000000000041';
+	const LOAN = 'distribution_log:01J00000000000000000000051';
 
 	const entry = () =>
 		createBulkReturnEntry(
@@ -94,6 +97,22 @@ describe('BulkReturnEventRemoteRepository', () => {
 		});
 	});
 
+	describe('createLoanReopen / getLoanReopen', () => {
+		it('creates the deterministic reopen once and reads it back', async () => {
+			const e = await repo.createEntry(entry());
+			const r = createBulkReturnLoanReopen(
+				{ entry: e, pool_id: P1, reason: 'wrong returner', loan_ids: [LOAN] },
+				ctx
+			);
+			await repo.createLoanReopen(r);
+			await expect(repo.createLoanReopen(r)).rejects.toBeInstanceOf(ConflictError);
+			expect((await repo.getLoanReopen(deriveLoanReopenId(e._id)))?.reason).toBe('wrong returner');
+			expect(await repo.getLoanReopen('bulk_return_loan_reopen:01J00000000000000000000099')).toBe(
+				null
+			);
+		});
+	});
+
 	describe('listAll', () => {
 		it('returns entries, moves and voids separately (prefixes do not bleed)', async () => {
 			const e = await repo.createEntry(entry());
@@ -108,7 +127,13 @@ describe('BulkReturnEventRemoteRepository', () => {
 		});
 
 		it('returns empty lists for an empty database', async () => {
-			expect(await repo.listAll()).toEqual({ entries: [], moves: [], voids: [], skipped: [] });
+			expect(await repo.listAll()).toEqual({
+				entries: [],
+				moves: [],
+				voids: [],
+				loanReopens: [],
+				skipped: []
+			});
 		});
 
 		it('reports invalid docs in skipped instead of throwing', async () => {
@@ -170,7 +195,7 @@ describe('BulkReturnEventRemoteRepository', () => {
 
 			it('returns empty lists for an unknown or malformed entry id', async () => {
 				await seedEntry(1, P1);
-				const empty = { entries: [], moves: [], voids: [], skipped: [] };
+				const empty = { entries: [], moves: [], voids: [], loanReopens: [], skipped: [] };
 				expect(await repo.listForEntry(entryId(99))).toEqual(empty);
 				expect(await repo.listForEntry('nonsense')).toEqual(empty);
 			});
@@ -263,8 +288,27 @@ describe('BulkReturnEventRemoteRepository', () => {
 					entries: [],
 					moves: [],
 					voids: [],
+					loanReopens: [],
 					skipped: []
 				});
+			});
+
+			it('includes loan reopens of the scoped entries only (listForEntry and listForPool)', async () => {
+				const a = await seedEntry(1, P1);
+				const b = await seedEntry(2, P2);
+				const reopen = (e: typeof a, pool: string) =>
+					createBulkReturnLoanReopen(
+						{ entry: e, pool_id: pool, reason: 'wrong', loan_ids: [LOAN] },
+						ctx
+					);
+				await repo.createLoanReopen(reopen(a, P1));
+				await repo.createLoanReopen(reopen(b, P2));
+
+				expect((await repo.listForPool(P1)).loanReopens?.map((r) => r.entry_id)).toEqual([a._id]);
+				expect((await repo.listForEntry(a._id)).loanReopens?.map((r) => r.entry_id)).toEqual([
+					a._id
+				]);
+				expect((await repo.listForEntry(entryId(9))).loanReopens).toEqual([]);
 			});
 		});
 	});
