@@ -200,12 +200,15 @@ export const POST = async ({ request, getClientAddress }) => {
 		const created = (await apiRes.json()) as {
 			tracking_token: string;
 			booking_ref: string;
+			status?: string;
 		};
 
 		return json({
 			success: true,
 			trackingToken: created.tracking_token,
 			bookingRef: created.booking_ref,
+			// CR-174 FR-15 — `verifying` when every line is a campaign line: the ticket shows the QR.
+			status: created.status ?? 'pending_review',
 			as_of: new Date().toISOString()
 		});
 	} catch (e) {

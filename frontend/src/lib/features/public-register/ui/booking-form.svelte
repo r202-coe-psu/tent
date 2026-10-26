@@ -28,7 +28,12 @@
 	import { PUBLIC_BOOKING_FORM_I18N } from '$lib/constants/i18n';
 	import { buildDisclaimerGroups } from '$lib/features/people/domain/disclaimer';
 	import { UNASSIGNED_SHELTER_CODE } from '../domain/booking';
-	import { UnifiedRegistrationForm, type UnifiedRegistrationInput } from '$lib/features/people';
+	import {
+		UnifiedRegistrationForm,
+		type RegistrationConsent,
+		type RegistrationConsentConfig,
+		type UnifiedRegistrationInput
+	} from '$lib/features/people';
 	import { fetchRecaptchaEnabled } from '$lib/api/recaptcha-status';
 	import { ensureRecaptchaLoaded } from '$lib/api/recaptcha-script';
 	import {
@@ -47,6 +52,8 @@
 	let { shelters, lockedShelterCode = '', initialShelterCode = '', onbooked }: Props = $props();
 
 	let t = $derived(getTranslation(PUBLIC_BOOKING_FORM_I18N, langState.current));
+
+	const consentConfig: RegistrationConsentConfig = { channel: 'web', staff: null };
 
 	const createBooking = useCreateBooking();
 	const createUnassignedRegistration = useCreateUnassignedRegistration();
@@ -181,7 +188,16 @@
 		return t.bookingErrorFallback;
 	}
 
-	async function handleUnifiedSubmit(unifiedInput: UnifiedRegistrationInput) {
+	async function handleUnifiedSubmit(
+		unifiedInput: UnifiedRegistrationInput,
+		meta?: { consent: RegistrationConsent | null }
+	) {
+		const registrationConsent = meta?.consent;
+		if (!registrationConsent) throw new Error('consent block was not confirmed');
+		const consentBody = {
+			consent: registrationConsent.decision,
+			consent_member_keys: [...registrationConsent.memberKeys]
+		};
 		if (!isUnassigned && !selectedIsBookable) {
 			const err = t.shelterNotBookable;
 			toast.error(err);
@@ -223,6 +239,7 @@
 				// Single path: pass UnifiedRegistrationInput through BFF → Mongo executor (#255).
 				const res = await createUnassignedRegistration.mutateAsync({
 					...unifiedInput,
+					...consentBody,
 					disclaimerAcknowledged: true,
 					...(token ? { captchaToken: token } : {})
 				});
@@ -253,6 +270,7 @@
 
 			const res = await createBooking.mutateAsync({
 				...unifiedInput,
+				...consentBody,
 				shelter_code: selectedShelterCode,
 				...(token ? { captchaToken: token } : {}),
 				disclaimerAcknowledged
@@ -452,6 +470,7 @@
 			shelterName={selected?.name ?? (isUnassigned ? t.unassignedShelterName : selectedShelterCode)}
 			bookableShelterCodes={bookable.map((s) => s.code)}
 			{joinResetKey}
+			consent={consentConfig}
 			onsubmit={handleUnifiedSubmit}
 			onselectshelter={(code, name) => {
 				if (code && selectedShelterCode !== code) {
