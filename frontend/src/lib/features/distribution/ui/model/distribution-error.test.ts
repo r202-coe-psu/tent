@@ -25,6 +25,7 @@ import {
 	WorkflowAuthorizationError,
 	BulkReturnPoolNameTakenError,
 	BulkReturnPoolStateError,
+	BulkReturnPoolLockTimeoutError,
 	BulkReturnPoolNotEmptyError,
 	BulkReturnPoolEmptyError,
 	DistributionDataIntegrityError
@@ -41,6 +42,25 @@ describe('formatDistributionError', () => {
 	it('maps BulkReturnPoolStateError to Thai copy', () => {
 		const err = new BulkReturnPoolStateError('Bulk return pool x must be OPEN and unlocked');
 		expect(formatDistributionError(err)).toContain('กองนี้ไม่ได้อยู่ในสถานะเปิดรับ');
+	});
+
+	it('tells staff to pick another pool when the target pool is closed', () => {
+		const err = new BulkReturnPoolStateError('Pool x is not OPEN', 'closed');
+		expect(formatDistributionError(err)).toBe('กองนี้ปิดรับของแล้ว กรุณาเลือกกองอื่น');
+	});
+
+	it('keeps the generic pool state copy for locked and reason-less state errors', () => {
+		const generic =
+			'กองนี้ไม่ได้อยู่ในสถานะเปิดรับ หรือกำลังถูกดำเนินการอยู่ จึงทำรายการนี้ไม่ได้ กรุณารีเฟรชแล้วตรวจสอบสถานะล่าสุด';
+		expect(formatDistributionError(new BulkReturnPoolStateError('locked', 'locked'))).toBe(generic);
+		expect(formatDistributionError(new BulkReturnPoolStateError('no reason'))).toBe(generic);
+	});
+
+	it('asks staff to retry the save when the pool lock wait timed out', () => {
+		const err = new BulkReturnPoolLockTimeoutError('Timed out waiting for pool lock');
+		expect(formatDistributionError(err)).toBe(
+			'กองนี้กำลังถูกส่งเข้าคลังอยู่ ระบบยังยืนยันรายการไม่ได้ กรุณารอสักครู่แล้วกดบันทึกอีกครั้ง'
+		);
 	});
 
 	it('maps BulkReturnPoolNotEmptyError to Thai copy telling to move items out', () => {

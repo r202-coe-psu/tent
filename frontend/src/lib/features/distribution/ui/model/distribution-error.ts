@@ -19,6 +19,7 @@ import {
 	ConcurrencyCollisionError,
 	BulkReturnPoolNameTakenError,
 	BulkReturnPoolStateError,
+	BulkReturnPoolLockTimeoutError,
 	BulkReturnPoolNotEmptyError,
 	BulkReturnPoolEmptyError,
 	DistributionDataIntegrityError
@@ -90,7 +91,13 @@ export function formatDistributionError(
 		return 'มีกองที่เปิดรับอยู่ใช้ชื่อนี้แล้ว กรุณาตั้งชื่ออื่น';
 	}
 	if (err instanceof BulkReturnPoolStateError) {
+		if (err.reason === 'closed') {
+			return 'กองนี้ปิดรับของแล้ว กรุณาเลือกกองอื่น';
+		}
 		return 'กองนี้ไม่ได้อยู่ในสถานะเปิดรับ หรือกำลังถูกดำเนินการอยู่ จึงทำรายการนี้ไม่ได้ กรุณารีเฟรชแล้วตรวจสอบสถานะล่าสุด';
+	}
+	if (err instanceof BulkReturnPoolLockTimeoutError) {
+		return 'กองนี้กำลังถูกส่งเข้าคลังอยู่ ระบบยังยืนยันรายการไม่ได้ กรุณารอสักครู่แล้วกดบันทึกอีกครั้ง';
 	}
 	if (err instanceof BulkReturnPoolNotEmptyError) {
 		return 'ยกเลิกกองไม่ได้ เพราะยังมีรายการอยู่ในกอง กรุณาย้ายของออกให้หมดก่อน';
