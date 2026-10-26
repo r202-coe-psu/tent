@@ -28,10 +28,13 @@
 		canEditCourierTracking,
 		canCancelDonation,
 		rejectedLineReasons,
+		needsDropOffDestination,
+		resolveDropOffPoint,
 		CancelDonationDialog,
+		DropOffCard,
 		EditDonationItemsDialog
 	} from '$lib/features/donations';
-	import { PublicPageShell } from '$lib/features/public-portal';
+	import { PublicPageShell, usePublicShelter } from '$lib/features/public-portal';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { getTranslation } from '$lib/utils/i18n';
 	import { PUBLIC_DONATIONS_I18N } from '$lib/constants/i18n';
@@ -58,6 +61,14 @@
 	);
 
 	const status = $derived(donation?.status ?? '');
+
+	// Only a booking the donor or a courier brings to the shelter needs a destination;
+	// a failed lookup leaves the raw shelter code in place rather than breaking the page.
+	const wantsDestination = $derived(needsDropOffDestination(donation?.logistics?.delivery_method));
+	const shelterQuery = usePublicShelter(() =>
+		wantsDestination ? (donation?.shelter_code ?? null) : null
+	);
+	const dropOffPoint = $derived(shelterQuery.data ? resolveDropOffPoint(shelterQuery.data) : null);
 
 	/**
 	 * CR-052 §1.4 (Task #52) — "ยกเลิกกลไกการข้ามขั้นตอนไปออกรหัสตอบรับ (QR Code)
@@ -372,7 +383,11 @@
 									<span class="text-2xs font-bold text-muted-foreground uppercase"
 										>{t.destinationShelterLabel}</span
 									>
-									<p class="mt-0.5 font-semibold text-foreground">{donation.shelter_code}</p>
+									{#if dropOffPoint}
+										<DropOffCard point={dropOffPoint} />
+									{:else}
+										<p class="mt-0.5 font-semibold text-foreground">{donation.shelter_code}</p>
+									{/if}
 									<p class="mt-0.5 text-2xs text-muted-foreground">
 										{deliveryMethodLabel(donation.logistics?.delivery_method, langState.current)}
 										{#if donation.logistics?.vehicle}
