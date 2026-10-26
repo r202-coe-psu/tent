@@ -173,6 +173,8 @@ class UnassignedRegistration(Document):
 			),
 			IndexModel([("created_at", ASCENDING)], name="by_created_at"),
 			IndexModel([("members.status", ASCENDING)], name="by_member_status"),
+			# Kiosk check-in resolves a registration from a member's reserved evacuee id.
+			IndexModel([("members.reserved_evacuee_id", ASCENDING)], name="by_member_evacuee_id"),
 			IndexModel([("household.pets.status", ASCENDING)], name="by_pet_status"),
 			IndexModel([("status", ASCENDING)], name="by_document_status"),
 		]
