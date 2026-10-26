@@ -12,7 +12,6 @@ from tent_model.public_shelter import PublicShelter
 from tent_model.unassigned_registration import UNASSIGNED_SCHEMA_V, UnassignedRegistration
 
 from apiapp.core.config import Settings
-from apiapp.modules.shelter.use_case import FORECAST_OCCUPANCY_STATUSES
 from apiapp.utils.ulid import new_ulid
 
 
@@ -68,7 +67,7 @@ def _create_payload(**overrides: object) -> dict:
 
 
 async def _forecast_occupancy(client: AsyncClient, auth_headers: dict[str, str]) -> int:
-    """CR-112 Forecast = public shelter `occupancy` (PublicPerson stay allow-list)."""
+    """CR-112 Forecast = public shelter `occupancy` (stay allow-list over `occupancy_by_status`)."""
     response = await client.get("/public/v1/shelters/SH001", headers=auth_headers)
     assert response.status_code == 200
     return int(response.json()["shelter"]["occupancy"])
@@ -84,16 +83,10 @@ async def test_create_persists_mongo_only_with_reserved_ids(
     auth_headers: dict[str, str],
     open_shelter: PublicShelter,
 ) -> None:
-    # Seed a Forecast occupant so occupancy is derived from PublicPerson (CR-112),
-    # not the legacy denormalized occupancy_total field.
-    await PublicPerson(
-        id="evacuee:seed-forecast",
-        shelter_code="SH001",
-        first_name="มีอยู่แล้ว",
-        last_name_masked="ม.",
-        status="pre_registered",
-        updated_at=datetime.now(UTC),
-    ).insert()
+    # Seed a Forecast occupant so occupancy is derived from the worker's per-status counts
+    # (CR-112, PDPA D8), not the legacy denormalized occupancy_total field.
+    open_shelter.occupancy_by_status = {"pre_registered": 1}
+    await open_shelter.save()
     forecast_before = await _forecast_occupancy(client, auth_headers)
     assert forecast_before == 1
     assert open_shelter.occupancy_total == 7  # denormalized field is not Forecast
@@ -131,16 +124,10 @@ async def test_create_persists_mongo_only_with_reserved_ids(
     # FastAPI create never writes Couch; reserved ids must not appear as projections.
     assert await PublicPerson.get(reserved_evacuee) is None
     assert await PublicPerson.get(body["reserved_household_id"]) is None
-    assert await PublicPerson.count() == 1  # only the seeded Forecast person
+    assert await PublicPerson.count() == 0
 
     # FR-UR-06: Forecast Occupancy (CR-112 `occupancy`) unchanged for every shelter.
     assert await _forecast_occupancy(client, auth_headers) == forecast_before
-    assert (
-        await PublicPerson.find(
-            {"shelter_code": "SH001", "status": {"$in": list(FORECAST_OCCUPANCY_STATUSES)}}
-        ).count()
-        == forecast_before
-    )
 
 
 def _member(**overrides: object) -> dict:
