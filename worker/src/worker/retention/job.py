@@ -23,6 +23,7 @@ from tent_model import (
 from worker.couch.client import CouchClient
 from worker.donation_status import is_donation_outstanding
 from worker.quota.expiry import expire_declared_donations
+from worker.retention.donation_photos import sweep_orphan_donation_photos
 
 logger = logging.getLogger(__name__)
 
@@ -220,6 +221,7 @@ async def run_retention_once(couch: CouchClient | None = None) -> None:
         # second means a crash in between leaves the doc "declared", and the next cycle
         # retries the release harmlessly thanks to the underflow guard.
         await expire_declared_donations(couch, now=datetime.now(UTC))
+        await sweep_orphan_donation_photos(couch, now=datetime.now(UTC))
     logger.info("Retention job %s complete", job_run_id)
 
 
