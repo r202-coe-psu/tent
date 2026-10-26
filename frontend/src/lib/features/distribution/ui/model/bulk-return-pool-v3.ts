@@ -1,6 +1,7 @@
 import { addQty } from '$lib/utils/qty';
 import {
 	canAppendToPool,
+	canReopenEntryLoans,
 	isPoolNameTakenAmongOpen,
 	type BulkReturnEntry,
 	type AppliedBulkReturnLoanRef,
@@ -47,6 +48,19 @@ export const MOVE_SNAPSHOT_CONFLICT_TOAST =
 export const MISSED_LOAN_WARNING = 'ยอดยืมของรายการนี้ยังไม่ถูกตัด';
 export const MISSED_LOAN_WARNING_TESTID = 'bulk-return-missed-loan-warning';
 export const MISSED_LOAN_ACTION = 'ตัดยอดยืมที่ค้าง';
+/** CR-193 §35: reopen the loans of one entry of a closed pool. */
+export const REOPEN_LOAN_ACTION = 'เปิดยอดยืมกลับ';
+export const REOPEN_LOAN_DESCRIPTION =
+	'ใช้เมื่อพบภายหลังว่าของรายการนี้ไม่ได้คืนจริง ระบบจะเปิดยอดยืมของผู้คืนกลับเป็นค้าง โดยไม่แก้ยอดกองหรือยอดคลัง (ถ้าต้องแก้ยอดคลัง ให้ทำแถวปรับยอดที่หน้าคลัง)';
+export const REOPEN_LOAN_REASON_LABEL = 'เหตุผล';
+export const REOPEN_LOAN_CONFIRM = 'ยืนยันเปิดยอดยืมกลับ';
+export const REOPEN_LOAN_ERROR = 'เปิดยอดยืมกลับไม่สำเร็จ กรุณาลองใหม่อีกครั้ง';
+export const REOPEN_LOAN_REPLAYED_TOAST = 'รายการนี้ถูกเปิดยอดยืมกลับไปแล้ว';
+export const REOPEN_LOAN_SKIPPED_TOAST = 'บางรายการยืมถูกปิดไปแล้ว จึงเปิดกลับไม่ได้';
+export const REOPEN_LOAN_DONE_NOTE = 'เปิดยอดยืมกลับแล้ว';
+export function reopenLoanSuccessToast(count: number): string {
+	return `เปิดยอดยืมกลับแล้ว ${count} รายการ`;
+}
 export const POOL_LOCKED_REASON = 'กองนี้กำลังถูกดำเนินการ กรุณารอสักครู่แล้วรีเฟรช';
 
 export type BulkReturnPoolRow = BulkReturnPoolOverviewRow;
@@ -382,6 +396,32 @@ export function canMoveEntry(row: BulkReturnPoolRow, entryId: string): boolean {
 /** Void is only possible while the pool is OPEN and unlocked. */
 export function canVoidEntry(row: BulkReturnPoolRow): boolean {
 	return isPoolEditable(row.pool);
+}
+
+/**
+ * CR-193 §35: "reopen loans" is offered on an entry of a closed pool (SUBMITTED / RECEIVED, entry in
+ * the snapshot) that still has applied loan refs, to a role allowed to do it.
+ */
+export function canShowReopenLoan(args: {
+	pool: Pick<BulkReturnPoolV3, 'status' | 'entry_ids'>;
+	entryId: string;
+	appliedRefCount: number;
+	canReopen: boolean;
+}): boolean {
+	return (
+		args.canReopen && args.appliedRefCount >= 1 && canReopenEntryLoans(args.pool, args.entryId)
+	);
+}
+
+/** Entry ids that have a `loan_reopened` timeline event. */
+export function reopenedEntryIds(
+	events: readonly { kind: string; entry_id?: string }[] | undefined
+): Set<string> {
+	const ids = new Set<string>();
+	for (const event of events ?? []) {
+		if (event.kind === 'loan_reopened' && event.entry_id) ids.add(event.entry_id);
+	}
+	return ids;
 }
 
 /** True when at least one live entry in the row offers an action (move or void). */

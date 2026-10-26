@@ -19,6 +19,7 @@
 	import { formatThaiDateTime } from '$lib/utils/date';
 	import {
 		createStableOperationId,
+		resolveAuthenticatedAuthorContext,
 		useBulkReturnPoolAppliedLoanRefs,
 		useBulkReturnPoolClosedLoanRefs,
 		useBulkReturnPoolMissedLoanRefs,
@@ -29,8 +30,13 @@
 		useVoidBulkReturnEntry
 	} from '../../application/queries';
 	import type { BulkReturnEntry, BulkReturnPoolOverviewRow } from '../../domain/food-supplies';
+	import { canReopenBulkReturnLoan } from '../../application/food-supplies/auth';
 	import { formatDistributionError } from '../model/distribution-error';
 	import {
+		REOPEN_LOAN_ACTION,
+		REOPEN_LOAN_DONE_NOTE,
+		canShowReopenLoan,
+		reopenedEntryIds,
 		CLOSED_LOAN_WARNING_TESTID,
 		MISSED_LOAN_ACTION,
 		MISSED_LOAN_WARNING,
@@ -68,6 +74,7 @@
 	import BulkReturnPoolTimeline from './BulkReturnPoolTimeline.svelte';
 	import EditBulkReturnPoolHeaderDialog from './EditBulkReturnPoolHeaderDialog.svelte';
 	import MoveBulkReturnEntryDialog from './MoveBulkReturnEntryDialog.svelte';
+	import ReopenBulkReturnLoanDialog from './ReopenBulkReturnLoanDialog.svelte';
 
 	interface Props {
 		/** Live overview row of the selected pool (null = nothing selected, sheet closed). */
@@ -107,6 +114,7 @@
 
 	let editOpen = $state(false);
 	let moveEntry = $state<BulkReturnEntry | null>(null);
+	let reopenEntry = $state<BulkReturnEntry | null>(null);
 	let voidTarget = $state<BulkReturnEntry | null>(null);
 	let voidError = $state<string | null>(null);
 	let cancelOpen = $state(false);
@@ -162,6 +170,15 @@
 		() => row?.pool._id ?? null,
 		() => shelterCode
 	);
+	// Fail closed: any problem resolving the session context hides the reopen action.
+	const canReopen = $derived.by(() => {
+		try {
+			return canReopenBulkReturnLoan(resolveAuthenticatedAuthorContext(shelterCode));
+		} catch {
+			return false;
+		}
+	});
+	const reopenedIds = $derived(reopenedEntryIds(timelineQuery.data?.events));
 	const poolNameById = $derived(new Map(rows.map((r) => [r.pool._id, r.pool.name])));
 
 	const entries = $derived(row ? liveEntries(row) : []);
@@ -430,6 +447,9 @@
 										{#if entry.notes}
 											<p class="text-xs break-words text-slate-500">หมายเหตุ: {entry.notes}</p>
 										{/if}
+										{#if reopenedIds.has(entry._id)}
+											<p class="text-xs font-medium text-red-800">{REOPEN_LOAN_DONE_NOTE}</p>
+										{/if}
 									</div>
 
 									{#if live.late}
@@ -516,6 +536,20 @@
 													{MISSED_LOAN_ACTION}
 												</Button>
 											{/if}
+										</div>
+									{/if}
+
+									{#if canShowReopenLoan( { pool, entryId: entry._id, appliedRefCount: appliedRefsByEntry.get(entry._id)?.length ?? 0, canReopen } )}
+										<div class="flex flex-col gap-2 pt-1 sm:flex-row sm:justify-end">
+											<Button
+												type="button"
+												variant="outline"
+												onclick={() => (reopenEntry = entry)}
+												class="min-h-11 w-full gap-2 border-red-200 text-red-800 hover:bg-red-50 sm:w-auto"
+											>
+												<Undo2 class="h-4 w-4" aria-hidden="true" />
+												{REOPEN_LOAN_ACTION}
+											</Button>
 										</div>
 									{/if}
 
@@ -627,6 +661,16 @@
 		targets={moveTargets}
 		{shelterCode}
 		onClose={() => (moveEntry = null)}
+	/>
+{/if}
+
+{#if row && reopenEntry}
+	<ReopenBulkReturnLoanDialog
+		entry={reopenEntry}
+		item={resolveItemDisplay(reopenEntry.item_id, catalog)}
+		returnerName={returnerDisplayName(reopenEntry, returnerNames)}
+		{shelterCode}
+		onClose={() => (reopenEntry = null)}
 	/>
 {/if}
 

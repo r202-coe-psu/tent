@@ -22,6 +22,8 @@ import {
 	groupMissedLoanRefsByEntry,
 	snapshotConflictEntryIds,
 	canMoveEntry,
+	canShowReopenLoan,
+	reopenedEntryIds,
 	canVoidEntry,
 	filterPoolRows,
 	findDuplicateOpenPoolName,
@@ -791,5 +793,80 @@ describe('buildReturnerNames', () => {
 		expect(names.get('evacuee:b')).toBe('สมหญิง รักดี');
 		expect(names.get('volunteer:c')).toBe('จิตอาสา มานี มีนา');
 		expect(names.get('evacuee:z')).toBeUndefined();
+	});
+});
+
+describe('canShowReopenLoan', () => {
+	const entryId = 'bulk_return_entry:01HZX0000000000000000000A1';
+	const closed = (status: 'SUBMITTED' | 'RECEIVED') =>
+		makePool('r', { status, entry_ids: [entryId] });
+
+	it('shows for a SUBMITTED / RECEIVED pool holding the entry, with applied refs, when permitted', () => {
+		for (const status of ['SUBMITTED', 'RECEIVED'] as const) {
+			expect(
+				canShowReopenLoan({
+					pool: closed(status),
+					entryId,
+					appliedRefCount: 1,
+					canReopen: true
+				})
+			).toBe(true);
+		}
+	});
+
+	it('hides without permission', () => {
+		expect(
+			canShowReopenLoan({
+				pool: closed('SUBMITTED'),
+				entryId,
+				appliedRefCount: 2,
+				canReopen: false
+			})
+		).toBe(false);
+	});
+
+	it('hides when no loan ref is applied', () => {
+		expect(
+			canShowReopenLoan({ pool: closed('SUBMITTED'), entryId, appliedRefCount: 0, canReopen: true })
+		).toBe(false);
+	});
+
+	it('hides for OPEN / CANCELLED pools', () => {
+		for (const status of ['OPEN', 'CANCELLED'] as const) {
+			expect(
+				canShowReopenLoan({
+					pool: makePool('r', { status, entry_ids: [entryId] }),
+					entryId,
+					appliedRefCount: 1,
+					canReopen: true
+				})
+			).toBe(false);
+		}
+	});
+
+	it('hides when the entry is not in the pool snapshot', () => {
+		expect(
+			canShowReopenLoan({
+				pool: closed('RECEIVED'),
+				entryId: 'bulk_return_entry:01HZX0000000000000000000B2',
+				appliedRefCount: 1,
+				canReopen: true
+			})
+		).toBe(false);
+	});
+});
+
+describe('reopenedEntryIds', () => {
+	it('collects entry ids of loan_reopened events only', () => {
+		const ids = reopenedEntryIds([
+			{ kind: 'loan_reopened', entry_id: 'e1' },
+			{ kind: 'voided', entry_id: 'e2' },
+			{ kind: 'loan_reopened' }
+		]);
+		expect([...ids]).toEqual(['e1']);
+	});
+
+	it('is empty for undefined', () => {
+		expect(reopenedEntryIds(undefined).size).toBe(0);
 	});
 });
