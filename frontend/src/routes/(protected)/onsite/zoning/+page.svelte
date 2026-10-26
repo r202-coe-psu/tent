@@ -581,7 +581,7 @@
 
 	const emptyPendingMessage = $derived(
 		enableMedical
-			? 'ยังไม่มีผู้พร้อมจัดโซน — ผู้ที่ลงทะเบียนแล้วต้องผ่านคัดกรองแพทย์ก่อน'
+			? 'ยังไม่มีผู้พร้อมจัดโซน — ผู้ที่ลงทะเบียนแล้วต้องผ่านคัดกรองผู้เข้าพักก่อน'
 			: 'ยังไม่มีผู้พร้อมจัดโซน — เมื่อลงทะเบียนเสร็จจะปรากฏที่นี่'
 	);
 </script>
@@ -657,11 +657,11 @@
 			</a>
 			<div class="min-w-0">
 				<div class="flex flex-wrap items-center gap-x-2 gap-y-1">
-					<MapPin class="size-6 shrink-0 text-[#0A2647]" />
+					<MapPin class="size-6 shrink-0 text-station-3" />
 					<h1 class="text-2xl font-bold tracking-tight text-slate-900 md:text-3xl">จัดสรรที่พัก</h1>
 					<Badge
 						variant="outline"
-						class="border-amber-200 bg-amber-50 font-semibold text-amber-900"
+						class="border-station-3-border bg-station-3-subtle font-semibold text-station-3-text"
 					>
 						Station 3
 					</Badge>
@@ -675,8 +675,8 @@
 	</header>
 
 	<Card.Root class="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-xs">
-		<div class="flex flex-col gap-3 md:flex-row md:items-center">
-			<div class="relative flex-1">
+		<div class="flex flex-col gap-3 lg:flex-row lg:items-center">
+			<div class="relative min-w-0 flex-1 lg:basis-80">
 				<Search
 					class="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-slate-400"
 				/>
@@ -698,8 +698,8 @@
 				{/if}
 			</div>
 
-			<div class="flex flex-wrap items-center gap-2">
-				<div class="relative w-full min-w-0 sm:w-auto sm:min-w-[220px] sm:flex-1">
+			<div class="flex flex-wrap items-center gap-2 lg:shrink-0">
+				<div class="relative w-full min-w-0 sm:w-auto sm:min-w-[200px] sm:flex-1">
 					<Scan
 						class="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-slate-400"
 					/>
@@ -729,7 +729,7 @@
 					variant="default"
 					size="default"
 					onclick={() => (showCameraModal = true)}
-					class="h-12 shrink-0 gap-1.5 rounded-xl bg-amber-600 font-semibold text-white hover:bg-amber-700"
+					class="h-12 shrink-0 gap-1.5 rounded-xl bg-station-3-strong font-semibold text-white hover:bg-station-3-text"
 				>
 					<Camera class="size-4" />
 					<span>สแกนกล้อง</span>
@@ -742,20 +742,20 @@
 		<button
 			type="button"
 			onclick={() => setActiveTab('pending')}
-			class="group flex flex-col justify-between rounded-xl border p-4 text-left transition-all hover:-translate-y-0.5 hover:shadow-sm {activeTab ===
+			class="group flex flex-row items-center justify-between gap-3 rounded-xl border p-3 text-left transition-all hover:-translate-y-0.5 hover:shadow-sm sm:flex-col sm:items-stretch sm:p-4 {activeTab ===
 			'pending'
 				? 'border-amber-300 bg-amber-50/50 shadow-2xs ring-2 ring-amber-500/20'
 				: 'border-slate-200/80 bg-white shadow-2xs'}"
 		>
-			<div class="flex items-center justify-between">
-				<span class="text-xs font-semibold text-amber-900">พร้อมจัดโซน</span>
+			<div class="flex min-w-0 items-center gap-2 sm:justify-between">
+				<span class="truncate text-xs font-semibold text-amber-900">พร้อมจัดโซน</span>
 				<div
-					class="flex size-7 items-center justify-center rounded-lg bg-amber-100 text-amber-700 transition-colors group-hover:bg-amber-200"
+					class="flex size-7 shrink-0 items-center justify-center rounded-lg bg-amber-100 text-amber-700 transition-colors group-hover:bg-amber-200"
 				>
 					<Clock class="size-4" />
 				</div>
 			</div>
-			<div class="mt-2">
+			<div class="shrink-0 text-right sm:mt-2 sm:text-left">
 				<p class="text-2xl font-bold tracking-tight text-slate-900 tabular-nums">
 					{pendingEvacuees.length}
 					<span class="text-xs font-normal text-slate-500">คน</span>
@@ -767,20 +767,20 @@
 		<button
 			type="button"
 			onclick={() => setActiveTab('awaiting_confirm')}
-			class="group flex flex-col justify-between rounded-xl border p-4 text-left transition-all hover:-translate-y-0.5 hover:shadow-sm {activeTab ===
+			class="group flex flex-row items-center justify-between gap-3 rounded-xl border p-3 text-left transition-all hover:-translate-y-0.5 hover:shadow-sm sm:flex-col sm:items-stretch sm:p-4 {activeTab ===
 			'awaiting_confirm'
 				? 'border-emerald-300 bg-emerald-50/50 shadow-2xs ring-2 ring-emerald-500/20'
 				: 'border-slate-200/80 bg-white shadow-2xs'}"
 		>
-			<div class="flex items-center justify-between">
-				<span class="text-xs font-semibold text-emerald-900">รอยืนยันถึงโซน</span>
+			<div class="flex min-w-0 items-center gap-2 sm:justify-between">
+				<span class="truncate text-xs font-semibold text-emerald-900">รอยืนยันถึงโซน</span>
 				<div
-					class="flex size-7 items-center justify-center rounded-lg bg-emerald-100 text-emerald-700 transition-colors group-hover:bg-emerald-200"
+					class="flex size-7 shrink-0 items-center justify-center rounded-lg bg-emerald-100 text-emerald-700 transition-colors group-hover:bg-emerald-200"
 				>
 					<Clock class="size-4" />
 				</div>
 			</div>
-			<div class="mt-2">
+			<div class="shrink-0 text-right sm:mt-2 sm:text-left">
 				<p class="text-2xl font-bold tracking-tight text-slate-900 tabular-nums">
 					{awaitingConfirmEvacuees.length}
 					<span class="text-xs font-normal text-slate-500">คน</span>
@@ -792,20 +792,20 @@
 		<button
 			type="button"
 			onclick={() => setActiveTab('assigned')}
-			class="group flex flex-col justify-between rounded-xl border p-4 text-left transition-all hover:-translate-y-0.5 hover:shadow-sm {activeTab ===
+			class="group flex flex-row items-center justify-between gap-3 rounded-xl border p-3 text-left transition-all hover:-translate-y-0.5 hover:shadow-sm sm:flex-col sm:items-stretch sm:p-4 {activeTab ===
 			'assigned'
 				? 'border-sky-300 bg-sky-50/50 shadow-2xs ring-2 ring-sky-500/20'
 				: 'border-slate-200/80 bg-white shadow-2xs'}"
 		>
-			<div class="flex items-center justify-between">
-				<span class="text-xs font-semibold text-sky-900">ยืนยันแล้ว</span>
+			<div class="flex min-w-0 items-center gap-2 sm:justify-between">
+				<span class="truncate text-xs font-semibold text-sky-900">ยืนยันแล้ว</span>
 				<div
-					class="flex size-7 items-center justify-center rounded-lg bg-sky-100 text-sky-700 transition-colors group-hover:bg-sky-200"
+					class="flex size-7 shrink-0 items-center justify-center rounded-lg bg-sky-100 text-sky-700 transition-colors group-hover:bg-sky-200"
 				>
 					<Check class="size-4" />
 				</div>
 			</div>
-			<div class="mt-2">
+			<div class="shrink-0 text-right sm:mt-2 sm:text-left">
 				<p class="text-2xl font-bold tracking-tight text-slate-900 tabular-nums">
 					{assignedEvacuees.length}
 					<span class="text-xs font-normal text-slate-500">คน</span>
@@ -817,7 +817,10 @@
 
 	<section class="flex flex-col gap-4">
 		<div class="border-b border-border">
-			<nav class="flex gap-1 overflow-x-auto" aria-label="แท็บคิวจัดสรรที่พัก">
+			<nav
+				class="flex [scrollbar-width:none] gap-1 overflow-x-auto [&::-webkit-scrollbar]:hidden"
+				aria-label="แท็บคิวจัดสรรที่พัก"
+			>
 				<button
 					type="button"
 					onclick={() => setActiveTab('pending')}
@@ -867,7 +870,7 @@
 			<div
 				class="flex flex-wrap items-center gap-2 border-b border-slate-200/80 bg-white px-5 py-3.5"
 			>
-				<Users class="size-4 text-amber-600" />
+				<Users class="size-4 text-station-3" />
 				<span class="text-base font-semibold text-slate-900">
 					{#if activeTab === 'pending'}
 						Cleared for Zoning — คิวพร้อมจัดสรรที่พัก
@@ -979,7 +982,8 @@
 								<Table.Head class="h-11 px-3 text-xs font-semibold text-slate-600">
 									{activeTab === 'pending' ? 'รอมาแล้ว' : 'โซน'}
 								</Table.Head>
-								<Table.Head class="h-11 pr-5 text-right text-xs font-semibold text-slate-600"
+								<Table.Head
+									class="sticky right-0 z-20 h-11 bg-slate-50 pr-5 text-right text-xs font-semibold text-slate-600 shadow-[-8px_0_8px_-8px_rgba(15,23,42,0.12)]"
 									>ดำเนินการ</Table.Head
 								>
 							</Table.Row>
@@ -1052,25 +1056,27 @@
 												<span>{zoneLabel(row.current_stay.zone, shelterZones)}</span>
 												{#if quarantineZoneCodes.has(row.current_stay.zone ?? '')}
 													<span
-														class="rounded-full bg-red-600 px-1.5 py-0.5 text-2xs font-semibold text-white dark:bg-red-500"
+														class="rounded-full bg-red-600 px-1.5 py-0.5 text-xs font-semibold text-white dark:bg-red-500"
 														>กักโรค</span
 													>
 												{/if}
 												{#if row.current_stay.status === 'room_confirmed'}
 													<span
-														class="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-1.5 py-0.5 text-2xs font-medium text-emerald-800 dark:text-emerald-200"
+														class="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-1.5 py-0.5 text-xs font-medium text-emerald-800 dark:text-emerald-200"
 														>ยืนยันแล้ว</span
 													>
 												{:else if isPendingZoneArrivalConfirmation(row)}
 													<span
-														class="rounded-full border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-2xs font-medium text-amber-800 dark:text-amber-200"
+														class="rounded-full border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-xs font-medium text-amber-800 dark:text-amber-200"
 														>รอยืนยัน</span
 													>
 												{/if}
 											</span>
 										{/if}
 									</Table.Cell>
-									<Table.Cell class="py-3 pr-5 text-right">
+									<Table.Cell
+										class="sticky right-0 z-10 bg-white py-3 pr-5 text-right shadow-[-8px_0_8px_-8px_rgba(15,23,42,0.12)]"
+									>
 										<div class="flex justify-end gap-1.5">
 											{#if activeTab === 'awaiting_confirm'}
 												<Button

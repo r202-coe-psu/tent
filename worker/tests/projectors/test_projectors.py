@@ -1,4 +1,5 @@
 import hashlib
+from datetime import UTC, datetime
 from decimal import Decimal
 
 import pytest
@@ -19,7 +20,7 @@ from worker.masking import (
 from worker.projectors.compute_needs import compute_needs
 from worker.projectors.donation_need_counter import plan_need_counters
 from worker.projectors.evacuee import project_evacuee
-from worker.projectors.occupancy import aggregate_occupancy
+from worker.projectors.occupancy import aggregate_occupancy, count_stay_statuses
 from worker.projectors.shelter import (
     is_shelter_open,
     map_public_shelter_status,
@@ -146,6 +147,23 @@ def test_project_shelter_closed_soft_retains():
     assert payload["status"] == "closed"
     assert payload["location_status"] == "closed"
     assert payload["is_active"] is True
+
+
+def test_project_shelter_cancelled_deletes_by_code():
+    """draft-shelter-cancelled-status.md — a cancelled shelter leaves the public plane
+    entirely; the `_id` lets the caller purge its shelter-scoped projections too."""
+    doc = {
+        "_id": "shelter:01CANCEL",
+        "type": "shelter",
+        "code": "SH009",
+        "name": "ศูนย์ที่สร้างผิด",
+        "operation_status": "cancelled",
+    }
+    assert project_shelter(doc) == ("delete", {"_id": "SH009"})
+
+
+def test_is_shelter_open_false_for_cancelled():
+    assert is_shelter_open({"operation_status": "cancelled"}) is False
 
 
 def test_project_shelter_malformed_doc_deletes():
@@ -298,7 +316,7 @@ def test_project_evacuee_passport():
     assert payload["passport_id_masked"] == mask_passport("AB1234567")
 
 
-@pytest.mark.parametrize("status", ["pre_registered", "kiosk_registered"])
+@pytest.mark.parametrize("status", ["pre_registered", "kiosk_registered", "cancelled"])
 def test_project_evacuee_pending_registration_has_no_checkin_time(status):
     doc = {
         "_id": "evacuee:pending",
@@ -314,6 +332,24 @@ def test_project_evacuee_pending_registration_has_no_checkin_time(status):
     assert action == "upsert"
     assert payload is not None
     assert payload["checked_in_at"] is None
+
+
+@pytest.mark.parametrize(
+    "status",
+    ["active", "room_confirmed", "temporary_leave", "checked_out", "transferred"],
+)
+def test_project_evacuee_checked_in_statuses_keep_checkin_time(status):
+    doc = {
+        "_id": "evacuee:stayed",
+        "type": "evacuee",
+        "current_stay": {"status": status, "since": "2026-01-01T00:00:00.000Z"},
+    }
+
+    action, payload = project_evacuee(doc, shelter_code="SH001")
+
+    assert action == "upsert"
+    assert payload is not None
+    assert payload["checked_in_at"] == datetime(2026, 1, 1, tzinfo=UTC)
 
 
 def test_project_evacuee_pink_card_hashes_national_id_field():
@@ -363,6 +399,40 @@ def test_project_evacuee_search_excluded_deletes():
     action, payload = project_evacuee(doc, shelter_code="SH001")
     assert action == "delete"
     assert payload == {"_id": "evacuee:01OPT"}
+
+
+def test_project_evacuee_basic_consent_deletes_projection():
+    """PDPA FR-40 — a basic-mode person leaves every public read via the existing delete."""
+    doc = {
+        "_id": "evacuee:01BASIC",
+        "type": "evacuee",
+        "schema_v": 15,
+        "first_name": "พื้นฐาน",
+        "last_name": "ใจดี",
+        "person_id": {"cardType": "national_id", "number": "3900100244192"},
+        "household_id": "household:01HH",
+        "privacy": {"search_excluded": True},
+        "consent": {
+            "mode": "basic",
+            "health": False,
+            "ref": "CS-7K3QZ9MD",
+            "given_at": "2026-10-25T03:15:00.000Z",
+            "notice_version": "2026-10-25",
+            "given_by": "self",
+            "giver_evacuee_id": None,
+            "recorded_verbally_by": None,
+            "channel": "web",
+        },
+        "current_stay": {
+            "status": "active",
+            "zone": "A",
+            "since": "2026-10-25T03:15:00.000Z",
+        },
+        "updated_at": "2026-10-25T03:15:00.000Z",
+    }
+    action, payload = project_evacuee(doc, shelter_code="SH001")
+    assert action == "delete"
+    assert payload == {"_id": "evacuee:01BASIC"}
 
 
 def test_compute_needs_aggregates_campaign_minus_donations():
@@ -599,6 +669,35 @@ def test_compute_needs_without_ledgers_behaves_as_before():
         [_don("donation:1", "c1", "declared", "item:rice", "50")],
     )
     assert remaining["item:rice"] == "450.0"
+
+
+# --- PDPA D8: count_stay_statuses (pure) ---
+
+
+def test_count_stay_statuses_counts_search_excluded_evacuees():
+    """Opted-out / basic-consent evacuees have no `public_persons` row but still count."""
+    counts = count_stay_statuses(
+        [
+            {"_id": "e1", "type": "evacuee", "current_stay": {"status": "active"}},
+            {
+                "_id": "e2",
+                "type": "evacuee",
+                "privacy": {"search_excluded": True},
+                "current_stay": {"status": "active"},
+            },
+            {
+                "_id": "e3",
+                "type": "evacuee",
+                "privacy": {"search_excluded": True},
+                "current_stay": {"status": "pre_registered"},
+            },
+            {"_id": "e4", "type": "evacuee", "current_stay": {"status": "checked_out"}},
+            # No stay status and non-evacuee docs are not counted.
+            {"_id": "e5", "type": "evacuee"},
+            {"_id": "h1", "type": "household", "current_stay": {"status": "active"}},
+        ]
+    )
+    assert counts == {"active": 2, "pre_registered": 1, "checked_out": 1}
 
 
 # --- EXT-005: aggregate_occupancy (pure) ---

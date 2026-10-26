@@ -97,11 +97,11 @@ export const baseDomain = {
 	},
 	volunteer: {
 		name: 'จิตอาสา',
-		base: '#059669',
-		strong: '#047857',
-		subtle: '#ECFDF5',
-		border: '#A7F3D0',
-		text: '#065F46'
+		base: '#295F8E',
+		strong: '#1E4A71',
+		subtle: '#F0F5FA',
+		border: '#C2D5E5',
+		text: '#11304A'
 	},
 	kitchen: {
 		name: 'ครัว',
@@ -148,6 +148,60 @@ export function domainVar(
 	step: 'base' | 'strong' | 'subtle' | 'border' | 'text' = 'base'
 ) {
 	return step === 'base' ? `var(--domain-${id})` : `var(--domain-${id}-${step})`;
+}
+
+/**
+ * Onsite station colour families (CR: per-station background, demo day เทศบาล 4).
+ *
+ * The three registration stations share the `registration` department, so the portal tiles still
+ * inherit the department colour. These tokens are for the station PAGES only: staff and evacuees
+ * have to tell สถานี 1/2/3 apart across a crowded hall, which an icon and a number cannot do at
+ * that distance. Each station gets a dark header band (`strong`) over a very light canvas tint
+ * (`subtle`); card surfaces stay `#FFFFFF`.
+ *
+ * Same 5 steps as `baseDomain`, and the same rule: never a reserved status colour (red `#DC2626`,
+ * amber `#F59E0B`, green `#16A34A`, purple `#9333EA`) — pair the colour with the station label.
+ *
+ * CSS twin: `--station-<n>[-strong|-subtle|-border|-text]` in app.css (a unit test keeps them equal).
+ */
+export const baseStation = {
+	1: {
+		name: 'ลงทะเบียน',
+		base: '#124481',
+		strong: '#124481',
+		subtle: '#E4F0FF',
+		border: '#BFD4F2',
+		text: '#0B2647'
+	},
+	2: {
+		name: 'คัดกรองผู้เข้าพัก',
+		base: '#0D9488',
+		strong: '#0F766E',
+		subtle: '#F0FDFA',
+		border: '#99F6E4',
+		text: '#134E4A'
+	},
+	3: {
+		name: 'จัดสรรที่พัก',
+		base: '#7C3AED',
+		strong: '#6D28D9',
+		subtle: '#F5F3FF',
+		border: '#DDD6FE',
+		text: '#5B21B6'
+	}
+} as const;
+
+export type StationId = keyof typeof baseStation;
+
+/** Station ids in walk-through order. */
+export const STATION_IDS = [1, 2, 3] as const satisfies readonly StationId[];
+
+/** The CSS custom-property name (`var(--station-…)`) for a station step; `base` has no suffix. */
+export function stationVar(
+	id: StationId,
+	step: 'base' | 'strong' | 'subtle' | 'border' | 'text' = 'base'
+) {
+	return step === 'base' ? `var(--station-${id})` : `var(--station-${id}-${step})`;
 }
 
 // DEPRECATED(domain-color-tokens): use colors.domain.<id> / --domain-<id> — remove after usages migrate
@@ -311,6 +365,31 @@ export const colors = {
 			...baseStatus.eoc,
 			badge: 'border border-purple-200 bg-purple-50 text-purple-900 font-semibold',
 			card: 'border border-purple-200 bg-white shadow-2xs hover:border-purple-300 transition-all'
+		}
+	},
+
+	// 4a0. Onsite station colour families (station pages only) — see `baseStation`
+	station: {
+		1: {
+			id: 1,
+			...baseStation[1],
+			band: 'bg-station-1-strong text-white',
+			canvas: 'bg-station-1-subtle',
+			badge: 'border border-station-1-border bg-station-1-subtle text-station-1-text font-semibold'
+		},
+		2: {
+			id: 2,
+			...baseStation[2],
+			band: 'bg-station-2-strong text-white',
+			canvas: 'bg-station-2-subtle',
+			badge: 'border border-station-2-border bg-station-2-subtle text-station-2-text font-semibold'
+		},
+		3: {
+			id: 3,
+			...baseStation[3],
+			band: 'bg-station-3-strong text-white',
+			canvas: 'bg-station-3-subtle',
+			badge: 'border border-station-3-border bg-station-3-subtle text-station-3-text font-semibold'
 		}
 	},
 

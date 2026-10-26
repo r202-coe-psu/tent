@@ -201,9 +201,9 @@ async function signInWithToken(page: Page, value: string) {
 	await page.getByRole('button', { name: 'เข้าสู่ระบบ', exact: true }).click();
 }
 
-/** The signed-in marker — the sign-out control is icon-only, so it goes by title. */
+/** The signed-in marker — the icon-only sign-out control, found by its aria-label. */
 function signOutButton(page: Page) {
-	return page.getByTitle('สลับบัญชี / ออกจากระบบ');
+	return page.getByRole('button', { name: 'ออกจากระบบ / ลืมเครื่องนี้' });
 }
 
 test.describe('Volunteer Access Portal (CR-092 หน้าจอ 6)', () => {
@@ -237,7 +237,7 @@ test.describe('Volunteer Access Portal (CR-092 หน้าจอ 6)', () => {
 		await openPortalTab(page);
 		await signIn(page, '081-9992211');
 
-		await expect(page.getByText('ไม่พบเบอร์โทรศัพท์นี้ในระบบอาสาสมัคร')).toBeVisible();
+		await expect(page.getByText('ไม่พบเบอร์โทรศัพท์นี้ในระบบอาสาสมัคร').first()).toBeVisible();
 		await expect(signOutButton(page)).toHaveCount(0);
 		await expect(page.getByText('Heavy Lifting')).toHaveCount(0);
 		await expect(page.getByText('นายเก่งกล้า')).toHaveCount(0);
@@ -447,6 +447,431 @@ test.describe('Booking a mission from the board (CR-092 FR-VOL-02)', () => {
 		await expect(form.getByRole('button', { name: 'ขับขี่ยานพาหนะ / ขนส่ง' })).toBeVisible();
 		expect(pageErrors).toEqual([]);
 	});
+
+	test('the shift picker lists each date with its own times, and books the ones picked', async ({
+		page
+	}) => {
+		const day = (offset: number) =>
+			new Date(Date.now() + offset * 86_400_000).toISOString().slice(0, 10);
+		const shift = (id: string, date: string, start: string, end: string, confirmed: number) => ({
+			shift_id: id,
+			date,
+			start_time: start,
+			end_time: end,
+			quota: 5,
+			slots_confirmed: confirmed
+		});
+		await mockPortalApi(page);
+		await mockJobBoard(page, { success: true });
+		// Registered after mockJobBoard, so these answers win.
+		await page.route('**/api/public/v1/volunteer/jobs*', (route) =>
+			route.fulfill(
+				json({
+					success: true,
+					jobs: [
+						{
+							job_id: 'job:01PICKER',
+							shelter_code: 'SH001',
+							shelter_name: 'ศูนย์ทดสอบ',
+							title: 'งานหลายกะ',
+							description: 'ทดสอบตัวเลือกกะ',
+							tier: 'operational',
+							skills_required: [],
+							shifts: [
+								shift('d1-am', day(1), '08:00', '12:00', 1),
+								shift('d2-am', day(2), '08:00', '12:00', 5),
+								shift('d2-pm', day(2), '13:00', '17:00', 5),
+								shift('d3-am', day(3), '08:00', '12:00', 5),
+								shift('d3-pm', day(3), '13:00', '17:00', 2)
+							],
+							quota: 25,
+							slots_confirmed: 18,
+							slots_remaining: 7,
+							status: 'open',
+							requires_review: false
+						}
+					]
+				})
+			)
+		);
+		let applied: Record<string, unknown> | null = null;
+		await page.route('**/api/public/v1/volunteer/jobs/*/apply', async (route) => {
+			applied = route.request().postDataJSON();
+			await route.fulfill(json({ success: true }));
+		});
+
+		await page.goto('/volunteers/jobs');
+		await page.getByRole('button', { name: 'สมัครกะนี้' }).first().click();
+
+		const form = page.locator('form');
+		const row = (offset: number) => form.locator(`[data-shift-date="${day(offset)}"]`);
+		// One row per date, each with its own times — no date hidden off-screen.
+		await expect(form.locator('[data-shift-date]')).toHaveCount(3);
+		// Day 2 is full on every shift: both times are shown, neither can be picked.
+		await expect(row(2).getByRole('button')).toHaveCount(2);
+		for (const time of await row(2).getByRole('button').all()) await expect(time).toBeDisabled();
+		// Day 3: the full morning cannot be picked; the afternoon can.
+		await expect(row(3).getByRole('button', { name: /08:00–12:00/ })).toBeDisabled();
+		// The card's own shift (day 1) starts picked; more can be added, and a tap removes one.
+		const day1 = row(1).getByRole('button', { name: /08:00–12:00/ });
+		const day3pm = row(3).getByRole('button', { name: /13:00–17:00/ });
+		await expect(day1).toHaveAttribute('aria-pressed', 'true');
+		await day3pm.click();
+		await expect(day3pm).toHaveAttribute('aria-pressed', 'true');
+		await expect(day1).toHaveAttribute('aria-pressed', 'true');
+		await day1.click();
+		await expect(day1).toHaveAttribute('aria-pressed', 'false');
+		await day1.click();
+
+		await form.locator('#firstName').fill('เก่งกล้า');
+		await form.locator('#lastName').fill('งานอาสา');
+		await form.locator('#phone').fill('0891112222');
+		await form.getByRole('button', { name: 'ประกอบอาหาร / ครัวสนาม' }).click();
+		await form.getByRole('checkbox').check();
+		await form.getByRole('button', { name: /ยืนยันการสมัคร/ }).click();
+
+		await expect.poll(() => applied).not.toBeNull();
+		// Both picked shifts in one request, in date order (#716).
+		expect(applied).toMatchObject({
+			shifts: [
+				{ shift_id: 'd1-am', shift_date: day(1), start_time: '08:00', end_time: '12:00' },
+				{ shift_id: 'd3-pm', shift_date: day(3), start_time: '13:00', end_time: '17:00' }
+			]
+		});
+	});
+
+	test('says which shifts were not saved, and why, before leaving the form (#716)', async ({
+		page
+	}) => {
+		const day = (offset: number) =>
+			new Date(Date.now() + offset * 86_400_000).toISOString().slice(0, 10);
+		await mockPortalApi(page);
+		await mockJobBoard(page, { success: true });
+		await page.route('**/api/public/v1/volunteer/jobs*', (route) =>
+			route.fulfill(
+				json({
+					success: true,
+					jobs: [
+						{
+							job_id: 'job:01PARTIAL',
+							shelter_code: 'SH001',
+							shelter_name: 'ศูนย์ทดสอบ',
+							title: 'งานสองกะ',
+							description: 'ทดสอบผลรายกะ',
+							tier: 'operational',
+							skills_required: [],
+							shifts: [
+								{
+									shift_id: 'p-am',
+									date: day(1),
+									start_time: '08:00',
+									end_time: '12:00',
+									quota: 5,
+									slots_confirmed: 0
+								},
+								{
+									shift_id: 'p-pm',
+									date: day(1),
+									start_time: '13:00',
+									end_time: '17:00',
+									quota: 5,
+									slots_confirmed: 0
+								}
+							],
+							quota: 10,
+							slots_confirmed: 0,
+							slots_remaining: 10,
+							status: 'open',
+							requires_review: false
+						}
+					]
+				})
+			)
+		);
+		await page.route('**/api/public/v1/volunteer/jobs/*/apply', (route) =>
+			route.fulfill(
+				json(
+					{
+						success: true,
+						tracking_token: 'TKT-AM',
+						status: 'confirmed',
+						job_id: 'job:01PARTIAL',
+						shift_id: 'p-am',
+						results: [
+							{ ok: true, shift_id: 'p-am', status: 'confirmed', tracking_token: 'TKT-AM' },
+							{ ok: false, shift_id: 'p-pm', error: 'SHIFT_FULL' }
+						]
+					},
+					201
+				)
+			)
+		);
+
+		await page.goto('/volunteers/jobs');
+		await page.getByRole('button', { name: 'สมัครกะนี้' }).first().click();
+		const form = page.locator('form');
+		await form
+			.locator(`[data-shift-date="${day(1)}"]`)
+			.getByRole('button', { name: /13:00–17:00/ })
+			.click();
+		await form.locator('#firstName').fill('เก่งกล้า');
+		await form.locator('#lastName').fill('งานอาสา');
+		await form.locator('#phone').fill('0891113333');
+		await form.getByRole('checkbox').check();
+		await form.getByRole('button', { name: /ยืนยันการสมัคร/ }).click();
+
+		const outcome = page.getByRole('alertdialog');
+		await expect(outcome.getByRole('heading', { name: 'บางกะสมัครไม่สำเร็จ' })).toBeVisible();
+		await expect(outcome).toContainText('บันทึกแล้ว 1 กะ');
+		await expect(outcome).toContainText('ไม่ผ่าน 1 กะ');
+		await expect(outcome).toContainText('13:00–17:00');
+		await expect(outcome).toContainText('กะนี้เต็มแล้ว');
+		await outcome.getByRole('button', { name: 'ไปต่อ' }).click();
+		await expect(page).toHaveURL(/\/volunteers\/portal/);
+	});
+
+	test('a long job shows its first week of dates and says how many more there are', async ({
+		page
+	}) => {
+		const day = (offset: number) =>
+			new Date(Date.now() + offset * 86_400_000).toISOString().slice(0, 10);
+		await mockPortalApi(page);
+		await mockJobBoard(page, { success: true });
+		await page.route('**/api/public/v1/volunteer/jobs*', (route) =>
+			route.fulfill(
+				json({
+					success: true,
+					jobs: [
+						{
+							job_id: 'job:01LONG',
+							shelter_code: 'SH001',
+							shelter_name: 'ศูนย์ทดสอบ',
+							title: 'งานยาวสิบวัน',
+							description: 'ทดสอบรายการวัน',
+							tier: 'operational',
+							skills_required: [],
+							shifts: Array.from({ length: 10 }, (_, i) => ({
+								shift_id: `s${i}`,
+								date: day(i + 1),
+								start_time: '08:00',
+								end_time: '12:00',
+								quota: 5,
+								slots_confirmed: 0
+							})),
+							quota: 50,
+							slots_confirmed: 0,
+							slots_remaining: 50,
+							status: 'open',
+							requires_review: false
+						}
+					]
+				})
+			)
+		);
+
+		await page.goto('/volunteers/jobs');
+		await page.getByRole('button', { name: 'สมัครกะนี้' }).first().click();
+
+		const form = page.locator('form');
+		await expect(form.locator('[data-shift-date]')).toHaveCount(7);
+		await form.getByRole('button', { name: 'แสดงวันที่เหลืออีก 3 วัน' }).click();
+		await expect(form.locator('[data-shift-date]')).toHaveCount(10);
+		await expect(form.getByRole('button', { name: /แสดงวันที่เหลืออีก/ })).toHaveCount(0);
+	});
+
+	test('a job card with many shifts shows a few, summarises the rest, and expands', async ({
+		page
+	}) => {
+		const day = (offset: number) =>
+			new Date(Date.now() + offset * 86_400_000).toISOString().slice(0, 10);
+		await mockPortalApi(page);
+		await mockJobBoard(page, { success: true });
+		await page.route('**/api/public/v1/volunteer/jobs*', (route) =>
+			route.fulfill(
+				json({
+					success: true,
+					jobs: [
+						{
+							job_id: 'job:01MANYSHIFTS',
+							shelter_code: 'SH001',
+							shelter_name: 'ศูนย์ทดสอบ',
+							title: 'งานสองสัปดาห์',
+							description: 'ทดสอบการพับรายการกะ',
+							tier: 'operational',
+							skills_required: [],
+							// 7 days × morning/afternoon; day 5 is full on both.
+							shifts: Array.from({ length: 7 }, (_, d) =>
+								['08:00', '13:00'].map((start, i) => ({
+									shift_id: `s${d}${i}`,
+									date: day(d + 1),
+									start_time: start,
+									end_time: i === 0 ? '12:00' : '17:00',
+									quota: 5,
+									slots_confirmed: d === 4 ? 5 : 1
+								}))
+							).flat(),
+							quota: 70,
+							slots_confirmed: 20,
+							slots_remaining: 50,
+							status: 'open',
+							requires_review: false
+						}
+					]
+				})
+			)
+		);
+		const applyButtons = page.getByRole('button', { name: 'สมัครกะนี้' });
+		const toggle = page.getByRole('button', { name: /ดูกะทั้งหมด \(14 กะ\)/ });
+
+		// Phone: three shifts in full, the other eleven summarised by date and time.
+		await page.setViewportSize({ width: 375, height: 812 });
+		await page.goto('/volunteers/jobs');
+		await expect(applyButtons).toHaveCount(3);
+		await expect(page.getByText('ยังมีอีก 11 กะ ใน 6 วัน')).toBeVisible();
+		await expect(page.getByText('08:00–12:00').first()).toBeVisible();
+		await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+
+		await toggle.click();
+		await expect(applyButtons).toHaveCount(12); // day 5's two full shifts cannot be applied for
+		await expect(page.getByText(/ยังมีอีก \d+ กะ/)).toHaveCount(0);
+		await page.getByRole('button', { name: 'ย่อรายการกะ' }).click();
+		await expect(applyButtons).toHaveCount(3);
+
+		// Wider screens show two full rows (4 shifts) before summarising.
+		await page.setViewportSize({ width: 1280, height: 900 });
+		await expect(applyButtons).toHaveCount(4);
+		await expect(page.getByText('ยังมีอีก 10 กะ ใน 5 วัน')).toBeVisible();
+	});
+
+	test('scrolling inside the apply modal never moves the page behind it', async ({ page }) => {
+		await mockPortalApi(page);
+		await mockJobBoard(page, { success: true });
+		await page.setViewportSize({ width: 375, height: 667 });
+		await page.goto('/volunteers/jobs');
+		const apply = page.getByRole('button', { name: 'สมัครกะนี้' }).first();
+		await expect(apply).toBeVisible();
+		await page.mouse.move(187, 400);
+		await page.mouse.wheel(0, 300);
+		await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
+
+		await apply.click();
+		await expect(page.locator('#firstName')).toBeVisible();
+		// Measured once the modal is open — clicking scrolls the button into view first.
+		const before = await page.evaluate(() => window.scrollY);
+		expect(await page.evaluate(() => document.documentElement.style.overflow)).toBe('hidden');
+		// Past the end of the modal's own scroll, then over the backdrop.
+		await page.mouse.move(187, 400);
+		for (let i = 0; i < 6; i++) await page.mouse.wheel(0, 800);
+		await page.mouse.move(187, 8);
+		await page.mouse.wheel(0, 800);
+		expect(await page.evaluate(() => window.scrollY)).toBe(before);
+
+		await page.getByRole('button', { name: 'Close modal' }).click({ position: { x: 8, y: 8 } });
+		await expect(page.locator('#firstName')).toHaveCount(0);
+		expect(await page.evaluate(() => document.documentElement.style.overflow)).toBe('');
+	});
+
+	test('opens filtered to the shelter a home-page card links to (#709)', async ({ page }) => {
+		const day = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
+		const boardJob = (code: string, name: string, title: string) => ({
+			job_id: `job:01${code}`,
+			shelter_code: code,
+			shelter_name: name,
+			title,
+			description: 'ทดสอบตัวกรองศูนย์',
+			tier: 'operational',
+			skills_required: [],
+			shifts: [
+				{
+					shift_id: `${code}-am`,
+					date: day,
+					start_time: '08:00',
+					end_time: '12:00',
+					quota: 5,
+					slots_confirmed: 0
+				}
+			],
+			quota: 5,
+			slots_confirmed: 0,
+			slots_remaining: 5,
+			status: 'open',
+			requires_review: false
+		});
+		await mockPortalApi(page);
+		await page.route('**/api/public/v1/volunteer/jobs*', (route) =>
+			route.fulfill(
+				json({
+					success: true,
+					jobs: [
+						boardJob('SH001', 'ศูนย์ทดสอบหนึ่ง', 'งานของศูนย์หนึ่ง'),
+						boardJob('SH002', 'ศูนย์ทดสอบสอง', 'งานของศูนย์สอง')
+					]
+				})
+			)
+		);
+
+		await page.goto('/volunteers/jobs?shelter=SH002');
+
+		await expect(page.getByRole('heading', { name: 'งานของศูนย์สอง' })).toBeVisible();
+		await expect(page.getByRole('heading', { name: 'งานของศูนย์หนึ่ง' })).toHaveCount(0);
+	});
+
+	test('picking another page takes the reader to its first job', async ({ page }) => {
+		const day = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
+		await mockPortalApi(page);
+		await mockJobBoard(page, { success: true });
+		// Eight jobs: page 1 holds six, page 2 the last two.
+		await page.route('**/api/public/v1/volunteer/jobs*', (route) =>
+			route.fulfill(
+				json({
+					success: true,
+					jobs: Array.from({ length: 8 }, (_, i) => ({
+						job_id: `job:01PAGE${i}`,
+						shelter_code: 'SH001',
+						shelter_name: 'ศูนย์ทดสอบ',
+						title: `งานหน้า ${i + 1}`,
+						description: 'ทดสอบการเปลี่ยนหน้า',
+						tier: 'operational',
+						skills_required: [],
+						shifts: [
+							{
+								shift_id: `s${i}`,
+								date: day,
+								start_time: '08:00',
+								end_time: '12:00',
+								quota: 5,
+								slots_confirmed: 0
+							}
+						],
+						quota: 5,
+						slots_confirmed: 0,
+						slots_remaining: 5,
+						status: 'open',
+						requires_review: false
+					}))
+				})
+			)
+		);
+		await page.emulateMedia({ reducedMotion: 'reduce' });
+		await page.setViewportSize({ width: 375, height: 812 });
+		await page.goto('/volunteers/jobs');
+		const pageTwo = page.locator('[data-slot="pagination-link"]', { hasText: '2' });
+		await pageTwo.scrollIntoViewIfNeeded();
+
+		await pageTwo.click();
+
+		const firstOfPageTwo = page.getByRole('heading', { name: 'งานหน้า 7' });
+		await expect(firstOfPageTwo).toBeInViewport();
+		// Not hidden under the fixed navbar.
+		const navbar = await page.locator('header').first().boundingBox();
+		expect((await firstOfPageTwo.boundingBox())!.y).toBeGreaterThanOrEqual(
+			navbar!.y + navbar!.height
+		);
+		// Keyboard and screen-reader users land on the new page's jobs too.
+		await expect(
+			page.locator('[tabindex="-1"][aria-label="งานอาสาสมัครในศูนย์พักพิง"]')
+		).toBeFocused();
+	});
 });
 
 test.describe('Editing your own profile', () => {
@@ -577,8 +1002,13 @@ test.describe('Portal BFF routes load server-side', () => {
 			data: { phone: 'nope' }
 		});
 
-		expect(response.status()).toBe(422);
-		expect(await response.json()).toMatchObject({ error: 'INVALID_INPUT' });
+		// The strict lookup budget is charged before validation (CR-127 R-9), and the
+		// requests above share this IP's budget: a malformed phone is turned away either as
+		// INVALID_INPUT or, once the budget is spent, RATE_LIMITED. Reaching upstream would
+		// be a 503 (FastAPI is not running here) — that must never happen.
+		const body = await response.json();
+		expect([422, 429], JSON.stringify(body)).toContain(response.status());
+		expect(['INVALID_INPUT', 'RATE_LIMITED']).toContain(body.error);
 	});
 });
 
@@ -597,8 +1027,8 @@ test.describe('Answering an offered shift (CR-092 FR-VOL-06)', () => {
 		await openPortalTab(page);
 		await signIn(page, PHONE);
 
-		await page.getByLabel('รหัสยืนยันภารกิจ').fill(CODE);
-		await page.getByRole('button', { name: /ยอมรับภารกิจ/ }).click();
+		await page.getByLabel('รหัสยืนยันงานอาสาสมัคร').fill(CODE);
+		await page.getByRole('button', { name: /ยอมรับงานอาสาสมัคร/ }).click();
 
 		await expect.poll(() => sent).not.toBeNull();
 		expect(sent).toMatchObject({
@@ -622,8 +1052,8 @@ test.describe('Answering an offered shift (CR-092 FR-VOL-06)', () => {
 		await openPortalTab(page);
 		await signIn(page, PHONE);
 
-		await page.getByLabel('รหัสยืนยันภารกิจ').fill(CODE);
-		await page.getByRole('button', { name: /ปฏิเสธภารกิจ/ }).click();
+		await page.getByLabel('รหัสยืนยันงานอาสาสมัคร').fill(CODE);
+		await page.getByRole('button', { name: /ปฏิเสธงานอาสาสมัคร/ }).click();
 
 		await expect.poll(() => sent).not.toBeNull();
 		expect(sent).toMatchObject({ action: 'declined' });
@@ -640,8 +1070,8 @@ test.describe('Answering an offered shift (CR-092 FR-VOL-06)', () => {
 		await signIn(page, PHONE);
 
 		// `O` is not in the spoken alphabet — it is what someone hears instead of a zero.
-		await page.getByLabel('รหัสยืนยันภารกิจ').fill('SEED-O9');
-		await page.getByRole('button', { name: /ยอมรับภารกิจ/ }).click();
+		await page.getByLabel('รหัสยืนยันงานอาสาสมัคร').fill('SEED-O9');
+		await page.getByRole('button', { name: /ยอมรับงานอาสาสมัคร/ }).click();
 
 		await expect(page.getByText('รหัสไม่ถูกต้อง')).toBeVisible();
 		expect(called, 'a malformed code must not reach the server').toBe(false);
@@ -655,11 +1085,11 @@ test.describe('Answering an offered shift (CR-092 FR-VOL-06)', () => {
 		await openPortalTab(page);
 		await signIn(page, PHONE);
 
-		await page.getByLabel('รหัสยืนยันภารกิจ').fill(CODE);
-		await page.getByRole('button', { name: /ยอมรับภารกิจ/ }).click();
+		await page.getByLabel('รหัสยืนยันงานอาสาสมัคร').fill(CODE);
+		await page.getByRole('button', { name: /ยอมรับงานอาสาสมัคร/ }).click();
 
 		// Scoped to the card's own message — the same copy also goes out as a toast.
-		await expect(page.getByRole('alert')).toContainText('ไม่พบภารกิจนี้ หรือรหัสไม่ถูกต้อง');
+		await expect(page.getByRole('alert')).toContainText('ไม่พบงานอาสาสมัครนี้ หรือรหัสไม่ถูกต้อง');
 	});
 
 	test('only the offered shift asks for a code', async ({ page }) => {
@@ -668,7 +1098,7 @@ test.describe('Answering an offered shift (CR-092 FR-VOL-06)', () => {
 		await signIn(page, PHONE);
 
 		// Three shifts on screen; only the `dispatched` one is awaiting an answer.
-		await expect(page.getByLabel('รหัสยืนยันภารกิจ')).toHaveCount(1);
-		await expect(page.getByText(/ศูนย์เสนอมอบหมายภารกิจนี้ให้คุณ/)).toHaveCount(1);
+		await expect(page.getByLabel('รหัสยืนยันงานอาสาสมัคร')).toHaveCount(1);
+		await expect(page.getByText(/ศูนย์เสนอมอบหมายงานอาสาสมัครนี้ให้คุณ/)).toHaveCount(1);
 	});
 });

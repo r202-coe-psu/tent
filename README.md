@@ -219,6 +219,13 @@ location /public-api/ {
 ตัวอย่างเต็มสำหรับ compose-nginx อยู่ที่ [`nginx/nginx.conf`](nginx/nginx.conf)
 (`docker-compose.staging.yml` / `docker-compose.production.yml` — proxy ไป `http://fastapi:9000`)
 
+### Discord notifications (CI/CD)
+
+Jenkins (`Jenkinsfile`, `Jenkinsfile.e2e-staging`, `Jenkinsfile.e2e-janitor`) ส่งผล build/deploy เข้า Discord
+ผ่าน webhook (Secret text credential `tent-discord-webhook-ci`) และ PR/issue ใหม่บน GitHub ส่งผ่าน GitHub
+repo webhook ไปที่ `<discord webhook url>/github` (ไม่มี code/workflow ใน repo) —
+วิธีตั้งค่า, env contract และ security notes ดู [`ci/README.md`](ci/README.md)
+
 ## แหล่งอ้างอิง
 
 - ข้อเสนอโครงการฉบับสมบูรณ์: [docs/source/psu-smart-shelter-f-20260522.txt](docs/source/psu-smart-shelter-f-20260522.txt)

@@ -4,7 +4,8 @@
 # ------------------------------------------------------------------------------
 # ติดตั้ง driver ทางการของ Xprinter + ตั้งค่า CUPS ให้ปุ่ม "พิมพ์ QR Code" ของ kiosk
 # พิมพ์ label ได้ทันที (Chromium --kiosk-printing → CUPS default queue → XP-365B)
-# รันซ้ำได้ (idempotent) — ต้องรันใหม่ทุกครั้งที่ติดตั้ง/อัปเกรด .deb, เปลี่ยนเครื่อง หรือเปลี่ยนขนาดม้วน
+# รันซ้ำได้ (idempotent) — ต้องรันใหม่ทุกครั้งที่ติดตั้ง/อัปเกรด .deb, เปลี่ยนรุ่นเครื่อง หรือเปลี่ยนขนาดม้วน
+# (XP-365B ตัวอื่นรุ่นเดียวกันเสียบแทนได้เลย — queue ไม่ผูก serial)
 #
 # Usage: ./setup_printer.sh [printer-driver-xprinter_*.deb] [options]
 #   --label WxH      ขนาด label เป็น mm (default: KIOSK_LABEL_MM ใน frontend print-label.ts)
@@ -106,8 +107,10 @@ find_app_dir() {
     return 1
 }
 
+# Drop "?serial=…": the CUPS usb backend then accepts any printer of this make/model, so swapping in
+# another XP-365B prints right away instead of the queue waiting for the old unit.
 find_printer_uri() {
-    lpinfo -v 2>/dev/null | awk '$2 ~ /^usb:\/\// && tolower($2) ~ /xprinter|xp-365/ {print $2; exit}'
+    lpinfo -v 2>/dev/null | awk '$2 ~ /^usb:\/\// && tolower($2) ~ /xprinter|xp-365/ {sub(/\?serial=.*/, "", $2); print $2; exit}'
 }
 
 # Every queue (ours included) whose device URI is the XP-365B.
@@ -127,7 +130,7 @@ queue_option() { # queue_option <OptionName> → current default choice
 
 # --- --status ----------------------------------------------------------------
 show_status() {
-    local page_size shared queues crontab_out
+    local page_size shared queues crontab_out uri
     echo -e "${BLUE}=== Label printer status (queue: $QUEUE, label: ${LABEL} mm) ===${NC}"
 
     if lsusb 2>/dev/null | grep -qi "$USB_ID"; then ok "XP-365B ต่อ USB อยู่ ($USB_ID)"; else bad "ไม่พบ XP-365B บน USB ($USB_ID)"; fi
@@ -152,6 +155,12 @@ show_status() {
     if lpstat -p "$QUEUE" >/dev/null 2>&1; then
         ok "มี queue $QUEUE"
         lpstat -p "$QUEUE" | sed 's/^/    /'
+        uri="$(lpstat -v "$QUEUE" 2>/dev/null | awk '{print $NF; exit}')"
+        if [[ "$uri" == *serial=* ]]; then
+            bad "queue ผูกกับเครื่องตัวเดียว ($uri) — เปลี่ยนเครื่องแล้วจะพิมพ์ไม่ออก รัน setup ซ้ำเพื่อตัด serial"
+        else
+            ok "device URI = $uri (ใช้ XP-365B ตัวไหนก็ได้)"
+        fi
         page_size="$(queue_page_size || true)"
         if [ -z "$page_size" ]; then
             warn "อ่าน PageSize จาก /etc/cups/ppd/$QUEUE.ppd ไม่ได้ (ต้องใช้ sudo)"
@@ -210,10 +219,18 @@ echo -e "${BLUE}=== SmartShelter label printer setup: queue $QUEUE, label ${LABE
 info "[1/7] ติดตั้ง CUPS + qrencode"
 sudo apt-get install -y cups cups-client cups-filters qrencode
 sudo systemctl enable --now cups
-sudo cupsctl --no-remote-admin --no-remote-any --no-share-printers # FR-P16
-# CUPS keeps a copy of every print job's document (the label PNG — name + QR) under
+# FR-P16. CUPS keeps a copy of every print job's document (the label PNG — name + QR) under
 # /var/spool/cups by default; PreserveJobFiles=No deletes it once the job completes.
-sudo cupsctl PreserveJobFiles=No
+# One call = one cupsd restart. On some Pis (kiosk2) cupsd exits instead of reloading and systemd
+# brings it back, so cupsctl reports "Host is down" — warn (--status shows what is missing) and
+# wait for the scheduler rather than stopping before the queue is set up.
+sudo cupsctl --no-remote-admin --no-remote-any --no-share-printers PreserveJobFiles=No ||
+    warn "cupsctl ไม่สำเร็จ — ทำขั้นต่อไปก่อน (ดูสาเหตุ: sudo tail -40 /var/log/cups/error_log)"
+for _ in $(seq 1 15); do
+    LC_ALL=C lpstat -r 2>/dev/null | grep -q 'scheduler is running' && break
+    sleep 1
+done
+LC_ALL=C lpstat -r 2>/dev/null | grep -q 'scheduler is running' || die "cupsd ไม่กลับมาทำงาน — sudo systemctl restart cups แล้วรันใหม่"
 
 # 2) Official Xprinter driver
 info "[2/7] Driver Xprinter"
@@ -272,6 +289,14 @@ ok "URI: $URI"
 
 # 6) One queue for the label printer, set as default (FR-P6, FR-P16, FR-P18, FR-P21)
 info "[6/7] ตั้ง queue $QUEUE"
+# A job left waiting on the old printer would print as soon as the queue points at the new one —
+# a stale label with someone's name. The kiosk can reprint from the same result page.
+for q in "$QUEUE" $(xprinter_queues); do
+    if [ -n "$(lpstat -o "$q" 2>/dev/null)" ]; then
+        info "ยกเลิก job ค้างใน $q (label เก่า — กดพิมพ์ซ้ำจากหน้า kiosk ได้)"
+        sudo cancel -a "$q"
+    fi
+done
 sudo lpadmin -p "$QUEUE" -E -v "$URI" -m "$PPD" \
     -D "Xprinter XP-365B (kiosk label)" \
     -o PageSize="Custom.${LABEL}mm" \

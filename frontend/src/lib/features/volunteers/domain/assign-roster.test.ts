@@ -186,7 +186,7 @@ describe('buildAssignRoster — row state', () => {
 				})
 			]
 		});
-		expect(row.state).toMatchObject({ kind: 'collision', jobTitle: 'ภารกิจอื่น' });
+		expect(row.state).toMatchObject({ kind: 'collision', jobTitle: 'งานอาสาสมัครอื่น' });
 	});
 
 	it('ignores cancelled and no-show rows entirely', () => {

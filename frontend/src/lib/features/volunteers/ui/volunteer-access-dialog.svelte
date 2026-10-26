@@ -80,7 +80,7 @@
 	<Dialog.Content class="max-h-[92vh] gap-0 overflow-hidden p-0 sm:max-w-2xl">
 		<div class="flex items-center gap-2 border-b border-border px-6 py-4 pr-12">
 			<div
-				class="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-emerald-100 text-emerald-700"
+				class="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-domain-volunteer-subtle text-domain-volunteer-strong"
 			>
 				<KeyRound class="h-4.5 w-4.5" />
 			</div>
@@ -91,23 +91,27 @@
 		</div>
 
 		<div class="max-h-[70vh] space-y-5 overflow-y-auto px-6 py-5">
-			<div class="space-y-3 rounded-xl border border-emerald-200 bg-emerald-50/60 p-3">
-				<p class="text-xs font-bold text-emerald-900">ข้อมูลผู้ใช้งานใหม่ (Auto-filled)</p>
+			<div
+				class="space-y-3 rounded-xl border border-domain-volunteer-border bg-domain-volunteer-subtle p-3"
+			>
+				<p class="text-xs font-bold text-domain-volunteer-text">
+					ข้อมูลผู้ใช้งานใหม่ (Auto-filled)
+				</p>
 				<div class="grid grid-cols-1 gap-3 text-xs sm:grid-cols-2">
 					<div>
-						<p class="text-emerald-800">ชนิดคน:</p>
+						<p class="text-domain-volunteer-text">ชนิดคน:</p>
 						<p class="font-semibold text-foreground">🎫 อาสาสมัคร</p>
 					</div>
 					<div>
-						<p class="text-emerald-800">ชื่อ-นามสกุล:</p>
+						<p class="text-domain-volunteer-text">ชื่อ-นามสกุล:</p>
 						<p class="font-semibold text-foreground">{fullName}</p>
 					</div>
 					<div>
-						<p class="text-emerald-800">เบอร์โทรศัพท์:</p>
+						<p class="text-domain-volunteer-text">เบอร์โทรศัพท์:</p>
 						<p class="font-semibold text-foreground">{volunteer.phone ?? '—'}</p>
 					</div>
 					<div>
-						<p class="text-emerald-800">สังกัดศูนย์พักพิง:</p>
+						<p class="text-domain-volunteer-text">สังกัดศูนย์พักพิง:</p>
 						<p class="font-semibold text-foreground">{shelterLine}</p>
 					</div>
 				</div>
@@ -197,7 +201,7 @@
 			>
 			<Button
 				type="button"
-				class="gap-1.5 bg-emerald-600 text-white hover:bg-emerald-700"
+				class="gap-1.5 bg-domain-volunteer-strong text-white hover:bg-domain-volunteer-text"
 				disabled={pending}
 				onclick={submit}
 			>

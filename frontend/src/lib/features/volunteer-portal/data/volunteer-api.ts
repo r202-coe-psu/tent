@@ -18,26 +18,28 @@ import type {
 } from '../domain/volunteer';
 
 const ERROR_COPY: Record<string, string> = {
-	JOB_NOT_FOUND: 'ไม่พบภารกิจนี้ อาจถูกปิดรับสมัครไปแล้ว',
-	JOB_NOT_OPEN: 'ภารกิจนี้ปิดรับสมัครแล้ว',
-	JOB_FULL: 'ภารกิจนี้เต็มแล้ว กรุณาเลือกกะหรือภารกิจอื่น',
-	SHIFT_FULL: 'กะนี้เต็มแล้ว กรุณาเลือกกะหรือภารกิจอื่น',
+	JOB_NOT_FOUND: 'ไม่พบงานอาสาสมัครนี้ อาจถูกปิดรับสมัครไปแล้ว',
+	JOB_NOT_OPEN: 'งานอาสาสมัครนี้ปิดรับสมัครแล้ว',
+	JOB_FULL: 'งานอาสาสมัครนี้เต็มแล้ว กรุณาเลือกกะหรืองานอาสาสมัครอื่น',
+	SHIFT_FULL: 'กะนี้เต็มแล้ว กรุณาเลือกกะหรืองานอาสาสมัครอื่น',
 	SHIFT_NOT_FOUND: 'ไม่พบกะงานนี้ หรือกะนี้ไม่ใช่ของคุณ',
 	SHIFT_ID_REQUIRED: 'กรุณาเลือกกะที่ต้องการสมัคร',
 	SHIFT_DATE_AMBIGUOUS: 'ไม่สามารถระบุกะงานที่ต้องการได้ กรุณาเลือกกะใหม่อีกครั้ง',
-	JOB_NOT_READY: 'ภารกิจนี้กำลังเตรียมระบบรับสมัคร กรุณาลองใหม่อีกครั้งภายหลัง',
-	ALREADY_APPLIED: 'เบอร์นี้สมัครภารกิจนี้ไว้แล้ว — เปิดดูตั๋วเดิมได้จาก "ค้นหาตั๋วของฉัน"',
-	DUPLICATE_APPLICATION: 'คุณได้สมัครภารกิจนี้ไว้แล้ว',
+	JOB_NOT_READY: 'งานอาสาสมัครนี้กำลังเตรียมระบบรับสมัคร กรุณาลองใหม่อีกครั้งภายหลัง',
+	WRITER_UNAVAILABLE: 'ระบบรับสมัครขัดข้องชั่วคราว กรุณาลองใหม่ภายหลังหรือแจ้งเจ้าหน้าที่',
+	ALREADY_APPLIED: 'เบอร์นี้สมัครงานอาสาสมัครนี้ไว้แล้ว — เปิดดูตั๋วเดิมได้จาก "ค้นหาตั๋วของฉัน"',
+	DUPLICATE_APPLICATION: 'คุณได้สมัครงานอาสาสมัครนี้ไว้แล้ว',
 	AMBIGUOUS_VOLUNTEER: 'พบข้อมูล volunteer มากกว่าหนึ่ง profile กรุณาติดต่อเจ้าหน้าที่',
 	TIME_CONFLICT: 'คุณมีกะงานอื่นที่เวลาทับซ้อนกัน',
 	WRITE_FAILED: 'ไม่สามารถบันทึกข้อมูลได้ กรุณาลองใหม่อีกครั้ง',
 	APPLY_FAILED: 'ไม่สามารถบันทึกใบสมัครได้ กรุณาลองใหม่อีกครั้ง',
-	PROFILE_NOT_FOUND: 'ไม่พบโปรไฟล์ของคุณในระบบ — ลองจองภารกิจสักงานก่อน',
+	PREFLIGHT_FAILED: 'ตรวจสอบข้อมูลก่อนสมัครไม่สำเร็จ กรุณาลองใหม่อีกครั้ง',
+	PROFILE_NOT_FOUND: 'ไม่พบโปรไฟล์ของคุณในระบบ — ลองจองงานอาสาสมัครสักงานก่อน',
 	PROFILE_UPDATE_FAILED: 'บันทึกโปรไฟล์ไม่สำเร็จ กรุณาลองใหม่อีกครั้ง',
 	CAPTCHA_REQUIRED: 'ไม่สามารถยืนยันว่าไม่ใช่บอทได้ กรุณารีเฟรชหน้าแล้วลองใหม่',
 	CAPTCHA_FAILED: 'ไม่ผ่านการตรวจสอบ reCAPTCHA กรุณาลองใหม่อีกครั้ง',
-	OFFER_NOT_FOUND: 'ไม่พบภารกิจนี้ หรือรหัสไม่ถูกต้อง กรุณาตรวจสอบกับเจ้าหน้าที่',
-	OFFER_ALREADY_ANSWERED: 'ภารกิจนี้ถูกตอบไปแล้ว',
+	OFFER_NOT_FOUND: 'ไม่พบงานอาสาสมัครนี้ หรือรหัสไม่ถูกต้อง กรุณาตรวจสอบกับเจ้าหน้าที่',
+	OFFER_ALREADY_ANSWERED: 'งานอาสาสมัครนี้ถูกตอบไปแล้ว',
 	SHIFT_NOT_READY_FOR_CHECK_IN: 'กะนี้ยังไม่อยู่ในสถานะที่เช็คอินได้',
 	SHIFT_NOT_CHECKED_IN: 'กะนี้ยังไม่ได้เช็คอิน หรือเช็คเอาต์ไปแล้ว',
 	SHIFT_NOT_WITHDRAWABLE: 'กะนี้ถอนหรือขอลาไม่ได้แล้ว',
@@ -51,10 +53,18 @@ const ERROR_COPY: Record<string, string> = {
 	ROLE_CARD_WRITE_FAILED: 'ไม่สามารถสร้าง QR Role Card ได้ กรุณาลองใหม่อีกครั้ง'
 };
 
+/** Applicant-facing copy for one API error code, or `null` when there is none. */
+export function apiErrorCopy(code: string): string | null {
+	return ERROR_COPY[code] ?? null;
+}
+
 function apiError(body: unknown, status: number, fallback: string): Error {
 	if (body && typeof body === 'object') {
-		const code = (body as { error?: unknown }).error;
-		if (typeof code === 'string') return new Error(ERROR_COPY[code] ?? code);
+		const { error: code, message } = body as { error?: unknown; message?: unknown };
+		if (typeof code === 'string') {
+			// A code with no copy here (a validation failure, say) may carry its own message.
+			return new Error(ERROR_COPY[code] ?? (typeof message === 'string' ? message : code));
+		}
 	}
 	return new Error(fallback || `คำขอไม่สำเร็จ (${status})`);
 }
@@ -134,7 +144,7 @@ export async function respondToDispatch(
 		body: JSON.stringify(vars)
 	});
 	if (!response.ok) {
-		throw apiError(await readJson(response), response.status, 'ตอบรับภารกิจไม่สำเร็จ');
+		throw apiError(await readJson(response), response.status, 'ตอบรับงานอาสาสมัครไม่สำเร็จ');
 	}
 }
 
@@ -168,13 +178,69 @@ export async function fetchJobs(filter: PublicJobFilter = {}): Promise<PublicJob
 	return (data as { jobs?: PublicJob[] }).jobs ?? [];
 }
 
+/** What became of one shift of a multi-shift application (#716). */
+export type ShiftApplyResult =
+	| { ok: true; shift_id: string | null; status: string; tracking_token: string }
+	| { ok: false; shift_id: string | null; error: string };
+
 export type ApplyResult = {
 	tracking_token: string;
 	status: string;
 	job_id: string;
 	shift_id?: string | null;
 	volunteer_token?: string;
+	/** One entry per shift sent; absent from servers older than #716. */
+	results?: ShiftApplyResult[];
 };
+
+/** No shift of the request was saved; `results` says why for each one. */
+export class ApplyFailedError extends Error {
+	constructor(
+		message: string,
+		readonly results: ShiftApplyResult[]
+	) {
+		super(message);
+		this.name = 'ApplyFailedError';
+	}
+}
+
+export type ApplyPreflightInput = Omit<VolunteerApplyInput, 'captchaToken'> & {
+	job_id: string;
+	start_time?: string;
+	end_time?: string;
+};
+
+export type ApplyPreflightResult = {
+	match: 'no_match' | 'matched_one' | 'ambiguous_match';
+	existing_profile?: {
+		volunteer_code: string;
+		display_name: string;
+		identity_status: string;
+		existing_skills: string[];
+		new_skills: string[];
+		new_controlled_skills: string[];
+	};
+	message: string;
+};
+
+/**
+ * Check an application before it is sent: whether the phone already has a volunteer
+ * profile, and whether the job and shift can still take it. Writes nothing.
+ */
+export async function preflightApplication(
+	input: ApplyPreflightInput
+): Promise<ApplyPreflightResult> {
+	const response = await fetch('/api/public/v1/volunteer/apply/preflight', {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify(input)
+	});
+	const data = await readJson(response);
+	if (!response.ok || !data || !(data as { success?: unknown }).success) {
+		throw apiError(data, response.status, ERROR_COPY.PREFLIGHT_FAILED);
+	}
+	return data as ApplyPreflightResult;
+}
 
 /**
  * Apply to one job (FR-VOL-02 / AC-VOL-02) — no account, no SMS OTP.
@@ -191,7 +257,11 @@ export async function applyToJob(jobId: string, input: VolunteerApplyInput): Pro
 	});
 	const data = await readJson(response);
 	if (!response.ok || !data) {
-		throw apiError(data, response.status, 'ส่งใบสมัครไม่สำเร็จ');
+		const error = apiError(data, response.status, 'ส่งใบสมัครไม่สำเร็จ');
+		const results = (data as { results?: unknown } | null)?.results;
+		throw Array.isArray(results)
+			? new ApplyFailedError(error.message, results as ShiftApplyResult[])
+			: error;
 	}
 	return data as ApplyResult;
 }

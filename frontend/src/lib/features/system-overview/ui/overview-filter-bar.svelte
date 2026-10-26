@@ -36,6 +36,7 @@
 		if (operationStatusValue === 'active') return 'เปิดรับ';
 		if (operationStatusValue === 'full_capacity') return 'เต็มความจุ';
 		if (operationStatusValue === 'closed') return 'ปิดศูนย์';
+		if (operationStatusValue === 'cancelled') return 'ยกเลิกศูนย์';
 		return 'ทั้งหมด';
 	});
 
@@ -115,6 +116,7 @@
 				<Select.Item value="active" label="เปิดรับ" />
 				<Select.Item value="full_capacity" label="เต็มความจุ" />
 				<Select.Item value="closed" label="ปิดศูนย์" />
+				<Select.Item value="cancelled" label="ยกเลิกศูนย์" />
 			</Select.Content>
 		</Select.Root>
 	</div>

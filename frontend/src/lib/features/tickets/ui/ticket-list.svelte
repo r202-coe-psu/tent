@@ -28,6 +28,7 @@
 		mealServiceReceiptOutcome,
 		MEAL_PERIOD_LABELS,
 		toMealPlanMap,
+		mealServiceRef,
 		type MealPlan,
 		type MealService
 	} from '$lib/features/kitchen';
@@ -83,8 +84,34 @@
 		category: RowCategory;
 		statusLabel: string;
 		statusClass: string;
-		manageHref: string;
+		manage: ManageTarget;
 	};
+
+	// Where "จัดการ" goes — kept as data so every goto() below resolves a literal route.
+	type ManageTarget =
+		| { kind: 'ticket'; ticketId: string }
+		| { kind: 'board'; sessionId: string; planId: string }
+		| { kind: 'receive'; sessionId: string; planId: string }
+		| { kind: 'kitchen' };
+
+	function openManage(target: ManageTarget) {
+		switch (target.kind) {
+			case 'ticket':
+				return goto(resolve(`/back-office/tickets/${encodeURIComponent(target.ticketId)}`));
+			case 'board':
+				return goto(
+					resolve(
+						`/back-office/kitchen/production-board/${target.sessionId}?plan_id=${target.planId}&stage=C`
+					)
+				);
+			case 'receive':
+				return goto(
+					resolve(`/back-office/kitchen/receive-stock/${target.sessionId}?plan_id=${target.planId}`)
+				);
+			case 'kitchen':
+				return goto(resolve('/back-office/kitchen'));
+		}
+	}
 
 	const outStatusMeta: Record<TicketStatus, { className: string }> = {
 		PENDING_PICK: { className: 'border-amber-200 bg-amber-50 text-amber-900' },
@@ -151,12 +178,14 @@
 					statusClass: isCookingPhase
 						? 'border-orange-200 bg-orange-50 text-orange-900'
 						: meta.className,
-					manageHref:
-						isCookingPhase && plan
-							? resolve(
-									`/back-office/kitchen/production-board/${plan.meal_session_id}?plan_id=${ticket.meal_plan_id}&stage=C`
-								)
-							: resolve(`/back-office/tickets/${encodeURIComponent(ticket._id)}`)
+					manage:
+						isCookingPhase && plan?.meal_session_id
+							? {
+									kind: 'board' as const,
+									sessionId: plan.meal_session_id,
+									planId: ticket.meal_plan_id
+								}
+							: { kind: 'ticket' as const, ticketId: ticket._id }
 				};
 			});
 
@@ -184,9 +213,9 @@
 				category: 'COOKING' as const,
 				statusLabel: 'ครัวกำลังปรุง',
 				statusClass: 'border-orange-200 bg-orange-50 text-orange-900',
-				manageHref: resolve(
-					`/back-office/kitchen/production-board/${plan.meal_session_id}?plan_id=${plan._id}&stage=C`
-				)
+				manage: plan.meal_session_id
+					? { kind: 'board' as const, sessionId: plan.meal_session_id, planId: plan._id }
+					: { kind: 'kitchen' as const }
 			}));
 
 		// Only the latest meal_service per plan matters — a rejected one (CR-145)
@@ -223,7 +252,7 @@
 						: 'border-sky-200 bg-sky-50 text-sky-900';
 			return {
 				key: `service:${service._id}`,
-				code: `RCV-${service._id.slice(-6).toUpperCase()}`,
+				code: mealServiceRef(service),
 				direction: 'in' as const,
 				fromLabel: 'โรงครัวกลาง',
 				toLabel: 'คลังเสบียงกลาง',
@@ -235,11 +264,14 @@
 				category,
 				statusLabel,
 				statusClass,
-				manageHref: plan
-					? resolve(
-							`/back-office/kitchen/receive-stock/${plan.meal_session_id}?plan_id=${service.meal_plan_id}`
-						)
-					: resolve('/back-office/kitchen')
+				manage:
+					plan?.meal_session_id && service.meal_plan_id
+						? {
+								kind: 'receive' as const,
+								sessionId: plan.meal_session_id,
+								planId: service.meal_plan_id
+							}
+						: { kind: 'kitchen' as const }
 			};
 		});
 
@@ -524,7 +556,7 @@
 							{#each rows as row (row.key)}
 								<Table.Row
 									class="cursor-pointer transition-colors hover:bg-orange-50/50"
-									onclick={() => goto(row.manageHref)}
+									onclick={() => openManage(row.manage)}
 									><Table.Cell class="px-5"
 										><p class="inline-flex items-center gap-1 text-sm font-bold text-[#0A2647]">
 											{row.code}<ExternalLink class="h-3.5 w-3.5 text-slate-400" />
@@ -584,7 +616,7 @@
 											class="min-h-11 gap-2"
 											onclick={(event) => {
 												event.stopPropagation();
-												goto(row.manageHref);
+												openManage(row.manage);
 											}}
 											><Settings2 class="h-4 w-4" />จัดการ<span class="sr-only">{row.code}</span
 											></Button

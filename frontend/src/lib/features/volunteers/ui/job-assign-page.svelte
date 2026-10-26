@@ -344,14 +344,22 @@
 	// `flex-1` at every breakpoint (not just mobile) so each segmented row
 	// stretches to fill its grid column instead of shrinking to content width
 	// and leaving dead space beside it (owner feedback 2026-08-31).
-	const SEGMENT_BASE = 'h-9 flex-1 rounded-lg px-2 text-xs font-medium transition-colors sm:px-3';
+	// Segments sized to their label and never broken mid-word (Thai breaks anywhere, so
+	// equal-width segments split "พร้อมปฏิบัติงาน" over three lines on a phone). When a
+	// row runs out of room the last segment wraps and stretches to fill its own row.
+	const SEGMENT_BASE =
+		'min-h-11 flex-auto rounded-lg px-3 text-xs font-medium whitespace-nowrap transition-colors sm:min-h-9';
 </script>
 
 <div class="space-y-4">
 	<div class="flex flex-wrap items-center justify-between gap-3">
-		<Button variant="outline" class="gap-1.5 rounded-xl text-xs sm:text-sm" onclick={backToDetail}>
-			<ArrowLeft class="h-4 w-4" />
-			ย้อนกลับไปหน้ารายละเอียดภารกิจ
+		<Button
+			variant="outline"
+			class="h-auto min-h-11 max-w-full gap-1.5 rounded-xl py-2 text-left text-xs whitespace-normal sm:min-h-9 sm:text-sm"
+			onclick={backToDetail}
+		>
+			<ArrowLeft class="h-4 w-4 shrink-0" />
+			ย้อนกลับไปหน้ารายละเอียดงานอาสาสมัคร
 		</Button>
 		<h1 class="inline-flex items-center gap-2 text-base font-bold sm:text-lg">
 			<UserPlus class="h-5 w-5 text-primary" />
@@ -365,7 +373,7 @@
 		<Skeleton class="h-72 w-full rounded-2xl" />
 	{:else if !job}
 		<p class="rounded-2xl border border-border bg-card py-16 text-center text-sm text-destructive">
-			ไม่พบภารกิจนี้ (อาจถูกลบไปแล้ว)
+			ไม่พบงานอาสาสมัครนี้ (อาจถูกลบไปแล้ว)
 		</p>
 	{:else}
 		<!-- Shift picker + multi-state quota breakdown -->
@@ -410,7 +418,7 @@
 						</div>
 						<div class="rounded-xl bg-emerald-500/15 px-3 py-2 ring-1 ring-emerald-400/30">
 							<p class="inline-flex items-center gap-1.5 text-[11px] text-emerald-200">
-								<CircleCheck class="h-3.5 w-3.5" />
+								<CircleCheck class="h-3.5 w-3.5 shrink-0" />
 								อยู่ในกะแล้ว
 							</p>
 							<p class="text-lg font-bold text-emerald-300 tabular-nums">
@@ -455,7 +463,7 @@
 						<Target class="h-3.5 w-3.5" />
 						ตัวกรองความตรงของทักษะ:
 					</p>
-					<div class="flex gap-1 rounded-xl bg-muted p-1">
+					<div class="flex flex-wrap gap-1 rounded-xl bg-muted p-1">
 						<Button
 							variant={skillFilter === 'all' ? 'default' : 'ghost'}
 							class={SEGMENT_BASE}
@@ -468,8 +476,8 @@
 							class={SEGMENT_BASE}
 							onclick={() => (skillFilter = 'match')}
 						>
-							<Target class="h-3.5 w-3.5" />
-							ตรงกับภารกิจนี้
+							<Target class="h-3.5 w-3.5 shrink-0" />
+							ตรงกับงานอาสาสมัครนี้
 						</Button>
 					</div>
 				</div>
@@ -479,7 +487,7 @@
 						<Timer class="h-3.5 w-3.5" />
 						ตัวกรองความพร้อมในกะ:
 					</p>
-					<div class="flex gap-1 rounded-xl bg-muted p-1">
+					<div class="flex flex-wrap gap-1 rounded-xl bg-muted p-1">
 						<Button
 							variant={availabilityFilter === 'all' ? 'default' : 'ghost'}
 							class={SEGMENT_BASE}
@@ -492,7 +500,7 @@
 							class={SEGMENT_BASE}
 							onclick={() => (availabilityFilter = 'ready')}
 						>
-							<CircleCheck class="h-3.5 w-3.5" />
+							<CircleCheck class="h-3.5 w-3.5 shrink-0" />
 							พร้อมปฏิบัติงาน
 						</Button>
 						<Button
@@ -500,7 +508,7 @@
 							class={SEGMENT_BASE}
 							onclick={() => (availabilityFilter = 'no_collision')}
 						>
-							<Timer class="h-3.5 w-3.5" />
+							<Timer class="h-3.5 w-3.5 shrink-0" />
 							เวลาไม่ชนกะ
 						</Button>
 					</div>
@@ -511,7 +519,7 @@
 						<ShieldCheck class="h-3.5 w-3.5" />
 						ตัวกรองสิทธิ์/การยืนยันตัวตน:
 					</p>
-					<div class="flex gap-1 rounded-xl bg-muted p-1">
+					<div class="flex flex-wrap gap-1 rounded-xl bg-muted p-1">
 						<Button
 							variant={eligibilityFilter === 'all' ? 'default' : 'ghost'}
 							class={SEGMENT_BASE}
@@ -630,7 +638,7 @@
 
 		<!-- Sticky action bar: the roster can be long, the action must stay reachable. -->
 		<div
-			class="sticky bottom-0 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-card/95 px-4 py-3 shadow-lg backdrop-blur"
+			class="sticky bottom-0 flex flex-col gap-2 rounded-2xl border border-border bg-card/95 px-4 py-3 shadow-lg backdrop-blur sm:flex-row sm:items-center sm:justify-between sm:gap-3"
 		>
 			<p class="text-xs text-muted-foreground">
 				เลือกไว้ <span class="font-bold text-foreground tabular-nums">{selectedCount}</span> คน ·
@@ -640,19 +648,23 @@
 					<span class="ml-1 font-medium text-destructive">— เลือกเกินโควตาที่เหลือ</span>
 				{/if}
 			</p>
-			<div class="flex items-center gap-2">
-				<Button type="button" variant="ghost" onclick={backToDetail}>ยกเลิก</Button>
+			<div class="flex flex-col-reverse gap-2 sm:flex-row sm:items-center">
+				<Button type="button" variant="ghost" class="min-h-11" onclick={backToDetail}>ยกเลิก</Button
+				>
 				<Button
 					type="button"
-					class="!h-11 min-w-[220px] gap-1.5"
+					class="h-auto min-h-11 w-full gap-1.5 py-2 whitespace-normal sm:w-auto sm:min-w-[220px]"
+					aria-label={sending ? undefined : `มอบหมายอาสา ${selectedCount} คนเข้ากะนี้`}
 					disabled={selectedCount === 0 || overCapacity || sending}
 					onclick={assignSelected}
 				>
 					{#if sending}
 						กำลังมอบหมาย...
 					{:else}
-						<Send class="size-4" />
-						มอบหมายอาสา {selectedCount} คนเข้ากะนี้
+						<Send class="size-4 shrink-0" />
+						<!-- A short label on the narrowest phones, where the full one breaks mid-word. -->
+						<span class="min-[400px]:hidden">มอบหมาย {selectedCount} คน</span>
+						<span class="hidden min-[400px]:inline">มอบหมายอาสา {selectedCount} คนเข้ากะนี้</span>
 					{/if}
 				</Button>
 			</div>

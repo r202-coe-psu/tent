@@ -34,7 +34,8 @@
 		symptoms = [],
 		onClose,
 		embedded = false,
-		dismissible = true
+		dismissible = true,
+		closeLabel
 	}: {
 		show?: boolean;
 		evacuee: Evacuee;
@@ -42,9 +43,11 @@
 		onClose: () => void;
 		embedded?: boolean;
 		dismissible?: boolean;
+		closeLabel?: string;
 	} = $props();
 
 	const t = $derived(getTranslation(EVACUEE_HANDOVER_SLIP_I18N, languageStore.current));
+	const effectiveCloseLabel = $derived(closeLabel ?? t.close);
 
 	let qrUrl = $state<string | null>(null);
 	let cardEl = $state<HTMLDivElement | null>(null);
@@ -256,7 +259,7 @@
 						{#if qrUrl}
 							<img
 								src={qrUrl}
-								alt="Medical Screening QR Code"
+								alt="Occupant Screening QR Code"
 								class="size-48 rounded-lg bg-white p-2 shadow-xs"
 							/>
 						{:else}
@@ -300,7 +303,7 @@
 						class="gap-2 bg-primary text-sm font-bold text-primary-foreground hover:bg-primary/90"
 					>
 						<Check class="size-4" />
-						{t.doneNext}
+						{effectiveCloseLabel}
 					</Button>
 				{/if}
 			</div>

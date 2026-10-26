@@ -263,6 +263,12 @@
 					classes: 'border border-amber-200 bg-amber-50 text-amber-900',
 					dot: 'bg-amber-500'
 				};
+			case 'cancelled':
+				return {
+					label: 'ยกเลิกศูนย์ (Cancelled)',
+					classes: 'border border-red-200 bg-red-50 text-red-900',
+					dot: 'bg-red-500'
+				};
 			case 'closed':
 				return {
 					label: 'ปิดศูนย์ (Closed)',

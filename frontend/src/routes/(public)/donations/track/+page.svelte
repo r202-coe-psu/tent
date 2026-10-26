@@ -51,7 +51,7 @@
 	<title>{t.trackPageTitle}</title>
 </svelte:head>
 
-<PublicPageShell maxWidth="max-w-5xl">
+<PublicPageShell maxWidth="max-w-7xl" class="lg:px-8">
 	<a
 		href={resolve('/donations')}
 		class="mb-6 inline-flex items-center gap-2 text-xs font-bold text-muted-foreground transition-colors hover:text-foreground"

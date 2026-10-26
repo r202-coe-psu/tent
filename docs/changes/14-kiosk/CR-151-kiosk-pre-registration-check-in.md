@@ -4,7 +4,7 @@ title: Kiosk — เปลี่ยนจาก "เสียบบัตรเ�
 status: approved
 date: 2026-09-24
 created: 2026-09-24
-updated: 2026-10-18 # ทีม kiosk เสนอ §16 (#654): แถว Zone + checklist บน QR label, `zones[].short_name`, reprint คืน `label.zone`/`stations_passed` — รอ PO เคาะ · 2026-10-17 decision sync (#604): ฐาน local ขาด kiosk index → redeploy แล้ว + redeploy/seed deploy index ครบชุด · 2026-10-15 ทีม kiosk ขอเลิกกรอง registered_via ใน §15 (FR-KPC-101/104) · 2026-10-13 ข้อเสนอแก้ไข §15 approved โดย Dev/Team Lead Soravit Sukkarn (รับ requirement จากหัวหน้าโครงการเมื่อวาน 2026-10-12) · 2026-10-04 approved และ merge โดย Soravit Sukkar (Team Lead) + รันเลข CR-151 และลงทะเบียนใน _index.md
+updated: 2026-10-23 # 2026-10-23 rate limit superseded by CR-188 · ข้อเสนอแก้ไข §17 approved โดย Team Lead Soravit Sukkarn (2026-10-20) — พิมพ์ QR จิตอาสา (#609) · 2026-10-18 ทีม kiosk เสนอ §16 (#654): แถว Zone + checklist บน QR label, `zones[].short_name`, reprint คืน `label.zone`/`stations_passed` — รอ PO เคาะ · 2026-10-17 decision sync (#604): ฐาน local ขาด kiosk index → redeploy แล้ว + redeploy/seed deploy index ครบชุด · 2026-10-15 ทีม kiosk ขอเลิกกรอง registered_via ใน §15 (FR-KPC-101/104) · 2026-10-13 ข้อเสนอแก้ไข §15 approved โดย Dev/Team Lead Soravit Sukkarn (รับ requirement จากหัวหน้าโครงการเมื่อวาน 2026-10-12) · 2026-10-04 approved และ merge โดย Soravit Sukkar (Team Lead) + รันเลข CR-151 และลงทะเบียนใน _index.md
 requested_by: ทีม kiosk (branch feat/pre-register_kiosk)
 decided_by: Soravit Sukkar (Team Lead)
 decision_date: 2026-10-04
@@ -30,6 +30,8 @@ affects:
   - (§16 proposed) frontend/src/lib/features/kiosk/{domain/print-label.ts,application/kiosk-label-image.ts,application/kiosk-label-print.ts,ui/kiosk-label-sheet.svelte,server/kiosk-reprint.server.ts,data/kiosk-check-in.api.ts} · frontend/src/lib/components/qr-id-card.svelte
   - (§16 proposed) frontend/src/lib/features/people/domain/{people.ts,intake-pipeline.ts} · people/ui/evacuee-profile/evacuee-qr-modal.svelte · frontend/src/routes/kiosk/register/done/+page.svelte
   - (§15 proposed) frontend/src/routes/api/v1/kiosk/reprint/+server.ts · frontend/src/routes/kiosk/{reprint,phone}/** · frontend/src/lib/server/security/rate-limiter.ts · kiosk/app/manager.py (allowlist)
+  - (§17 approved 2026-10-20) docs/data/api-contract.md §2.1.2 · frontend/src/routes/api/v1/kiosk/volunteer-card/+server.ts · frontend/src/lib/features/kiosk/server/kiosk-volunteer-card.server.ts · frontend/src/lib/server/security/rate-limiter.ts
+  - (§17 approved 2026-10-20) frontend/src/lib/features/kiosk/** (label จิตอาสา, session, UI) · frontend/src/routes/kiosk/{print-qr,volunteer}/** · kiosk/app/manager.py (allowlist)
 why: >
   Kiosk แบบเดิม (CR-097) สร้าง evacuee จากบัตรโดยไม่มีครัวเรือนและไม่มีเบอร์ เจ้าหน้าที่ต้องกรอกซ้ำที่ Station 1
   และเกิด record ซ้อนกับผู้จองออนไลน์ kiosk รอบนี้จึงทำหน้าที่เดียว คือรับรายงานตัว (Report-in) ผู้ที่ลงทะเบียนล่วงหน้าทางเว็บแล้ว
@@ -41,6 +43,8 @@ migration: ไม่มี — ไม่มี field ใหม่ ไม่ bump
 > **ข้อเสนอแก้ไข 2026-10-13 (proposed, ยังไม่ approve):** §15 ท้ายเอกสาร — หัวข้อหน้าแรก「ลงทะเบียน」· รับ walk-in `registered_via:'kiosk'` · ช่องทางเบอร์ → เมนู「พิมพ์ QR」ยืนยันเลขบัตร 4 ตัวท้าย · ระหว่างรอ PO ข้อความ §1–§14 ยังมีผล
 
 > **ข้อเสนอแก้ไข 2026-10-18 (#654, proposed, รอ PO เคาะ):** §16 ท้ายเอกสาร — QR label มีแถว Zone + checklist ติ๊กตาม station ที่ผ่าน · ตัดเบอร์โทร · shelter `zones[].short_name` · reprint คืน `label.zone` / `label.stations_passed`
+
+> **ข้อเสนอแก้ไข 2026-10-18 (#609, approved 2026-10-20):** §17 ท้ายเอกสาร — เมนู「พิมพ์ QR」เพิ่มทางเลือก「จิตอาสา」พิมพ์ role-card QR ที่มีอยู่แล้วด้วยเบอร์โทร (`POST /api/v1/kiosk/volunteer-card`, อ่านอย่างเดียว) — approved โดย Soravit Sukkarn (Team Lead)
 
 > **สรุป (TL;DR)**
 >
@@ -457,6 +461,8 @@ migration: ไม่มี — ไม่มี field ใหม่ ไม่ bump
 - 2026-10-15 — ทีม kiosk ขอเลิกกรอง `registered_via` (เดิม {`web`, `kiosk`}): lookup บัตร/QR/ThaiD/เบอร์, `/kiosk/check-in` และ `/kiosk/reprint` ค้นทั้งศูนย์ของเครื่อง · กฎสถานะคงเดิม (check-in = `pre_registered` · พิมพ์ซ้ำทางเบอร์ = `arriving`/`active`/`room_confirmed`) · สมาชิกที่เจ้าหน้าที่เพิ่มที่ Station 1 เลือกได้ตามสถานะ (แก้ FR-KPC-29, E-11, E-23) · Mango selector เบอร์ไม่มี `registered_via` แล้ว ยังใช้ `evacuee-type-phone-idx`
 - 2026-10-17 — **decision sync** (#604; ไม่เปิด CR ใหม่ ตามที่เจ้าของโครงการเลือก): (1) ผลตรวจ local 2026-09-25 (§4) ล้าสมัย — `shelter_sh001`–`sh004` ไม่มี index ใน `KIOSK_LOOKUP_MANGO_INDEXES` (รวม people / transfer-ledger / Daily SOP) เพราะไม่ได้รัน redeploy/seed หลัง merge #457 (2026-10-11); รัน `scripts/redeploy-access.ts --write --confirm` บน local แล้ว (ok 4/4) และ `_explain` ของ selector เลขบัตรเลือก `evacuee-type-person-id-idx` ทุกฐาน · (2) FR-KPC-64 เพิ่มเติม: provisioning ทุกจุดต้อง deploy ชุด index ของ shelter DB **เท่ากัน** — เดิม `redeploy-access.ts` ขาด people + transfer-ledger และ seed ขาด requisition + people + transfer-ledger; warm-up selector ใช้ map กลาง `KIOSK_LOOKUP_WARMUP_SELECTORS` (ครบทุก index รวม `evacuee-type-card-address-no-idx`) และมี test กันนิยาม index ชื่อซ้ำไม่ตรงกัน (branch `fix/604-shelter-mango-index`, commit `748ebe2d6`) · (3) staging/production: Jenkins รัน `pnpm db:sync` (รวม `redeploy:access --write --confirm`) ทุกครั้งที่ deploy branch `staging` / `main` อยู่แล้ว — ไม่ต้องรันเอง แต่ยังไม่ได้ตรวจ `_index` / `_explain` บน staging/production หลัง deploy · (4) FR-KPC-63 แก้เป็น 4 ตัวให้ตรงกับ CR-149 / #525 (เพิ่ม `evacuee-type-card-address-no-idx` บน `card_snapshot.address_no`; เดิมนับ 3 ตัว)
 - 2026-10-18 — ทีม kiosk เสนอ §16 (#654): แถว Zone + checklist บน QR label, ตัดเบอร์โทร, `zones[].short_name`, reprint คืน `label.zone`/`stations_passed` · รวม draft `draft-zone-short-name` เข้า CR นี้แทนการเปิด draft ใหม่ · proposed โดยทีม รอ PO เคาะ
+- 2026-10-18 — ทีม kiosk เสนอ §17 (#609): จิตอาสาพิมพ์ role-card QR ที่ตู้ด้วยเบอร์โทร · ตกลง D1–D8 ในทีม (§17.4) · track ใน CR นี้แทนการเปิด CR ใหม่ (ต่อยอดเมนู「พิมพ์ QR」ของ §15) · รอ PO อนุมัติ
+- 2026-10-20 — รวมกับ §16 (#654) จาก develop: ข้อเสนอจิตอาสาเป็น §17 · FR-KPC-120–129 · AC-KPC-120–123 (เลข 110–119 เป็นของ §16)
 
 ## 15. ข้อเสนอแก้ไข 2026-10-13 (approved โดย Team Lead)
 
@@ -567,3 +573,80 @@ migration: ไม่มี — ไม่มี field ใหม่ ไม่ bump
 - ติ๊ก checklist คำนวณจากข้อมูล ณ ตอนพิมพ์ — label ที่พิมพ์ไปแล้วไม่อัปเดตเอง ต้องพิมพ์ซ้ำ
 - ช่อง「ชื่อย่อ」ที่กรอกแต่เว้นวรรคล้วน อาจถูกเก็บเป็น `""` แทน `null` (Zod trim หลัง form แปลงค่าว่างเป็น `null`) — label ถือว่าไม่มีชื่อย่อ จึงไม่กระทบการพิมพ์
 - reprint อ่าน registry + `_find` screening เพิ่ม (ทั้งคู่ fail-soft)
+
+---
+
+## 17. ข้อเสนอแก้ไข 2026-10-18 — พิมพ์ QR จิตอาสา (approved)
+
+> **สถานะ:** ข้อเสนอทีม kiosk (issue #609) — D1–D8 ตกลงในทีม 2026-10-18 · **approved โดย Soravit Sukkarn (Team Lead) 2026-10-20** · implement แล้วบน branch `feat-volunteer-qr-printer`
+
+> **สรุป (TL;DR)**
+>
+> - **เปลี่ยนอะไร:** เพิ่ม `POST /api/v1/kiosk/volunteer-card` ให้ตู้หาจิตอาสาด้วยเบอร์โทรใน shelter ของเครื่องเท่านั้น แล้วคืน role-card QR (`TKT-VOL-HASH-…`) **ที่มีอยู่แล้ว** แบบอ่านอย่างเดียว · label จิตอาสาแยกจาก label ผู้พักพิง · ปุ่ม「พิมพ์ QR」(FR-KPC-102) ไปหน้าเลือก「ผู้พักพิง / จิตอาสา」
+> - **เพื่อใคร/ทำไม:** จิตอาสาที่ไม่มีมือถือหรือแบตหมดได้บัตร QR กระดาษไว้ให้เจ้าหน้าที่สแกน โดยไม่ต้องให้เจ้าหน้าที่ช่วยออกบัตร
+> - **Dev ต้อง build:** endpoint volunteer-card + rate limiter · label จิตอาสา · หน้า `/kiosk/print-qr` และ `/kiosk/volunteer` · allowlist scanner client
+> - **กระทบ schema:** ไม่มี field ใหม่ · ไม่ bump `schema_v` · ไม่เปลี่ยนวิธีออก/หมุน token (CR-127 คงเดิม) · สัญญา API: [api-contract.md §2.1.2](../../data/api-contract.md)
+
+**แก้ข้อเดิม:** FR-KPC-102 (ปุ่ม「พิมพ์ QR」→ `/kiosk/print-qr` แทน `/kiosk/reprint` ตรง ๆ)
+
+### 17.1 ค้นหาแบบอ่านอย่างเดียว
+
+| ID         | Requirement                                                                                                                                                                                                 |
+| :--------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| FR-KPC-120 | Server หา `type: "volunteer"` ใน `shelter_{device.shelter_code}` เท่านั้น (D3) ด้วย `phone` (รวมรูปแบบ `+66`) หรือ `phone_hash = sha256(เบอร์ canonical)`                                                     |
+| FR-KPC-121 | กรองซ้ำในโค้ด: เบอร์ใน `phone` ปัจจุบันต้องตรงกับเบอร์ที่กรอก — กัน `phone_hash` ค้างจาก #693                                                                                                                 |
+| FR-KPC-122 | ต้อง `status: "active"` และเหลือ **1 คนพอดี** (D4) และมี `tracking_token_hash` เป็น hex 64 ตัว (D2)                                                                                                            |
+| FR-KPC-123 | คืน `qr_payload = "TKT-VOL-HASH-" + tracking_token_hash.toUpperCase()` — **ห้าม mint/rotate/backfill** และห้ามเรียก `readOrMintRoleCardToken` · ไม่เขียน CouchDB (ยกเว้น device last-seen)                   |
+| FR-KPC-124 | ทุกกรณีที่พิมพ์ไม่ได้ (ไม่พบ / ต่าง shelter / `inactive` / ไม่มี hash / เบอร์ซ้ำ) ตอบ `404 KIOSK_VOLUNTEER_CARD_NOT_FOUND` body เดียวกัน — ไม่ leak ว่าเบอร์มีในระบบ                                           |
+
+### 17.2 Gate และ rate limit
+
+| ID         | Requirement                                                                                                          |
+| :--------- | :------------------------------------------------------------------------------------------------------------------- |
+| FR-KPC-125 | ผูกกับ flag `kiosk_phone_check_in_enabled` (CR-152 §9) เหมือน reprint (D5) — ปิดตอบ `403 KIOSK_METHOD_DISABLED`      |
+| FR-KPC-126 | ต่อเครื่อง 10 ครั้ง/นาที · ต่อเบอร์ 3 ครั้ง/10 นาที ข้ามเครื่อง · นับ**ทุก** request (D7) · key เบอร์เป็น sha256 → 429 `KIOSK_RATE_LIMITED` |
+
+### 17.3 Label และ UI
+
+| ID         | Requirement                                                                                                                                                                       |
+| :--------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| FR-KPC-127 | Label 80×60 mm: ชื่อ `first_name` + `maskLastName(last_name)` (+ ชื่อเล่น) · badge `จิตอาสา · V-NNN` · QR ชิดขวา · link ล่างซ้าย · **ไม่พิมพ์เบอร์** (D6; ตรงกับ label ผู้พักพิงตาม FR-KPC-110) |
+| FR-KPC-128 | ปุ่ม「พิมพ์ QR」หน้าแรก → `/kiosk/print-qr` เลือก「ผู้พักพิง」(`/kiosk/reprint` เดิม) หรือ「จิตอาสา」(`/kiosk/volunteer`) (D8) · flag ปิด → ไม่มีปุ่ม (FR-KPT-30)                      |
+| FR-KPC-129 | Scanner client แนบ device credential ให้ `/api/v1/kiosk/volunteer-card` (same-origin POST เท่านั้น)                                                                                |
+
+### 17.4 Decisions (ข้อเสนอทีม 2026-10-18)
+
+| #   | ประเด็น                    | ข้อเสนอ                                                                                                         |
+| :-- | :------------------------- | :-------------------------------------------------------------------------------------------------------------- |
+| D1  | วิธี track                  | §17 ของ CR-151 (ไม่เปิด CR ใหม่)                                                       |
+| D2  | ไม่มี `tracking_token_hash` | ปฏิเสธ (error เดียวกับไม่พบ) — เกิดเฉพาะข้อมูลเก่า/นำเข้าเอง; แก้หน้างานโดยเปิด role card ใน portal ครั้งหนึ่ง |
+| D3  | "shelter เดียวกัน"          | doc อยู่ใน `shelter_{device.shelter_code}`                                                                       |
+| D4  | เบอร์ซ้ำหลายคน              | ปฏิเสธ (error เดียวกับไม่พบ)                                                                                     |
+| D5  | flag                       | ใช้ `kiosk_phone_check_in_enabled`                                                                              |
+| D6  | mask ชื่อ                   | first + masked last (+ ชื่อเล่น) · ไม่พิมพ์เบอร์                                                                 |
+| D7  | rate limit                 | เครื่อง 10/นาที · เบอร์ 3/10 นาที · นับทุก request                                                               |
+| D8  | ทางเข้า UI                  | หน้าเลือก 2 กล่อง                                                                                               |
+
+### 17.5 Acceptance
+
+- **AC-KPC-120** จิตอาสา `active` เบอร์ไม่ซ้ำ มี `tracking_token_hash` → พิมพ์ label ได้ · QR = `TKT-VOL-HASH-…` ตรงกับ role card ใน portal
+- **AC-KPC-121** ไม่พบ / ต่าง shelter / `inactive` / ไม่มี hash / เบอร์ซ้ำ → 404 body เดียวกันทุกกรณี
+- **AC-KPC-122** flag ปิด → 403 และไม่มีปุ่ม「พิมพ์ QR」· เกิน limit → 429
+- **AC-KPC-123** volunteer-card ทุกกรณีไม่มี PUT / DELETE ไปที่ volunteer doc · `tracking_token_hash` ไม่เปลี่ยน
+
+### 17.6 Security trade-off (accepted risk — PO ยืนยันและอนุมัติแล้ว 2026-10-20)
+
+- **รู้เบอร์ = พิมพ์ credential ถาวรของจิตอาสาคนนั้นได้** ที่ตู้ในศูนย์เดียวกัน
+- ลดความเสี่ยงด้วย: shelter scope · rate limit ต่อเครื่อง/ต่อเบอร์ · error เดียว · mask ชื่อ · ไม่พิมพ์เบอร์
+- ปิดจริงต้องมี factor ที่ 2 — hardening ภายหลัง (CR-158 staff PIN หรือเลขท้าย 4 หลัก)
+- Rate limiter เป็น in-memory ต่อ process (reset เมื่อ restart) · เมื่อย้าย limit ไป Nginx (#627) ต้องย้าย limiter นี้ด้วย
+
+### 17.7 Out of scope
+
+- วิธีออก/หมุน token (CR-127) · parse QR จิตอาสาฝั่ง scan (#650) · แก้ `phone_hash` ไม่อัปเดต (#693) · กันเบอร์ซ้ำ (#694)
+
+---
+
+## Decision log
+
+- 2026-10-23 — **Superseded (rate limit) by [CR-188](../01-core/CR-188-rate-limit-to-nginx.md):** FR-KPC-59 / FR-KPC-108 (verify ผิด 5 ครั้ง/10 นาที ต่อ primary) / FR-KPC-126 / D7 ถูกยกเลิก — kiosk ใช้ nginx zone `kiosk` ต่อ IP (body 429 `KIOSK_RATE_LIMITED` + `Retry-After: 60` คงเดิม)

@@ -290,7 +290,7 @@
 <!-- 3. Domain Color Tokens (one work domain = one family; steps: base / strong / subtle / border / text) -->
 <div class="border border-domain-registration-border bg-domain-registration-subtle text-domain-registration-text">Registration #124481</div>
 <div class="border border-domain-donation-border bg-domain-donation-subtle text-domain-donation-text">Donation / Supply #FF5C00 (strong #C2410C)</div>
-<div class="border border-domain-volunteer-border bg-domain-volunteer-subtle text-domain-volunteer-text">Volunteer #059669 (strong #047857)</div>
+<div class="border border-domain-volunteer-border bg-domain-volunteer-subtle text-domain-volunteer-text">Volunteer #295F8E (strong #1E4A71)</div>
 <div class="border border-domain-kitchen-border bg-domain-kitchen-subtle text-domain-kitchen-text">Kitchen #DB2777</div>
 <div class="border border-domain-facility-border bg-domain-facility-subtle text-domain-facility-text">Facility #0D9488</div>
 <div class="border border-domain-security-border bg-domain-security-subtle text-domain-security-text">Security #7C3AED</div>
@@ -2243,7 +2243,7 @@
 									<span
 										class="rounded-full border border-domain-volunteer-border bg-domain-volunteer-subtle px-2.5 py-0.5 font-mono text-xs font-bold text-domain-volunteer-text"
 									>
-										#047857
+										#1E4A71
 									</span>
 								</div>
 								<div>
@@ -2526,7 +2526,7 @@
 								</tr>
 								<tr class="hover:bg-slate-50/60">
 									<td class="flex items-center gap-2 px-4 py-2.5 font-bold text-slate-900">
-										<span class="h-3 w-3 rounded-full bg-domain-donation"></span>
+										<span class="h-3 w-3 rounded-full bg-domain-donation-strong"></span>
 										บริจาค (Card 3)
 									</td>
 									<td class="px-4 py-2.5 font-mono text-slate-500">#FF5C00 / #C2410C</td>
@@ -2545,15 +2545,15 @@
 										<span class="h-3 w-3 rounded-full bg-domain-volunteer"></span>
 										อาสาสมัคร (Card 4)
 									</td>
-									<td class="px-4 py-2.5 font-mono text-slate-500">#059669 / #047857</td>
+									<td class="px-4 py-2.5 font-mono text-slate-500">#295F8E / #1E4A71</td>
 									<td class="px-4 py-2.5 font-mono font-semibold text-domain-volunteer-text"
 										>portalServices.volunteer (domain-volunteer)</td
 									>
 									<td class="px-4 py-2.5 font-semibold text-emerald-700"
-										>5.5:1 (WCAG AA, ขาวบน strong)</td
+										>9.2:1 (WCAG AA, ขาวบน strong)</td
 									>
 									<td class="px-4 py-2.5"
-										>ไอคอน/ตัวตนใช้ base #059669 ส่วนปุ่มที่มีข้อความใช้ strong #047857</td
+										>ไอคอน/ตัวตนใช้ base #295F8E ส่วนปุ่มที่มีข้อความใช้ strong #1E4A71</td
 									>
 								</tr>
 								<tr class="hover:bg-slate-50/60">

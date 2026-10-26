@@ -40,6 +40,8 @@
 	import StockFilters from './stock/stock-filters.svelte';
 	import StockRow from './stock/stock-row.svelte';
 	import StockCard from './stock/stock-card.svelte';
+	import DisabledReason from './stock/disabled-reason.svelte';
+	import { DISTRIBUTE_FORBIDDEN_HINT, OFFLINE_HINT } from './stock/hints';
 	import {
 		attentionCounts,
 		clampPage,
@@ -56,11 +58,7 @@
 		STOCK_PAGE_SIZE,
 		type StockUrlState
 	} from './stock/stock-url-state';
-	import {
-		projectStockLotBalances,
-		StockLotIntegrityError,
-		type StockLotBalance
-	} from '../domain/operations';
+	import { projectLotsByItem } from '../domain/operations';
 	import {
 		dailyConsumption,
 		daysOfCover,
@@ -102,8 +100,6 @@
 	const isSA = $derived(isSystemAdmin(roles));
 	const currentShelter = $derived(getShelterCode());
 	const canDistribute = $derived(hasCapabilityInShelter(roles, currentShelter, WAREHOUSE_STAFF));
-	const DISTRIBUTE_FORBIDDEN_HINT =
-		'ต้องมีสิทธิ์เจ้าหน้าที่คลัง (warehouse_staff) จึงจะเบิกจ่ายได้';
 	let showOverall = $state(false);
 
 	const sheltersQuery = useShelters();
@@ -230,27 +226,33 @@
 	);
 
 	/**
-	 * Location filter options from ledger entries, keyed by `lotStorageKey` so a
-	 * renamed storage point stays one option (draft-shelter-storage-points).
+	 * Remaining lots per item — every lot, so an old lot near expiry is never hidden. Projected
+	 * one item at a time: an item whose history cannot be replayed loses its lots alone and is
+	 * named below, instead of every item's lots vanishing (#569).
+	 */
+	const projected = $derived.by(() => {
+		const { lots, brokenItemIds } = projectLotsByItem(ledger);
+		return { byItem: groupLotsByItem(lots), brokenItemIds };
+	});
+	const lotsByItem = $derived(projected.byItem);
+
+	/**
+	 * Location filter options from the lots still on the shelf, keyed by `lotStorageKey` so a
+	 * renamed storage point stays one option (draft-shelter-storage-points). Lots, not raw rows:
+	 * an empty lot is not a place to filter by, and an outbound or return row's `lot.note` may
+	 * hold a distribution destination ("อาคารยิมเนเซียม 1"), which is no place in the store (#569).
 	 */
 	const uniqueLocations = $derived.by(() => {
 		const locations = new SvelteMap<string, string>();
-		for (const entry of ledger) {
-			const key = lotStorageKey(entry.lot);
-			const name = lotStorageName(entry.lot, storagePoints.points);
-			if (key && name && !locations.has(key)) locations.set(key, name);
+		for (const lots of lotsByItem.values()) {
+			for (const lot of lots) {
+				if (!qtyGt(lot.qty, 0)) continue;
+				const key = lotStorageKey(lot.lot);
+				const name = lotStorageName(lot.lot, storagePoints.points);
+				if (key && name && !locations.has(key)) locations.set(key, name);
+			}
 		}
 		return Array.from(locations, ([value, label]) => ({ value, label }));
-	});
-
-	/** Remaining lots per item — every lot, so an old lot near expiry is never hidden. */
-	const lotsByItem = $derived.by(() => {
-		try {
-			return groupLotsByItem(projectStockLotBalances(ledger));
-		} catch (error) {
-			if (!(error instanceof StockLotIntegrityError)) throw error;
-			return new SvelteMap<string, StockLotBalance[]>();
-		}
 	});
 
 	/** Shelf life / storage type per item, for the lot order shown in the detail panel. */
@@ -307,6 +309,10 @@
 			}))
 			.sort((a, b) => a.label.localeCompare(b.label, 'th'));
 	});
+
+	const brokenItemNames = $derived(
+		projected.brokenItemIds.map((id) => items.find((item) => item._id === id)?.name ?? id)
+	);
 
 	/** "Ever stocked" = at least one ledger row at this shelter; the rest are catalog-only. */
 	const everStocked = $derived(everStockedItemIds(ledger));
@@ -371,7 +377,9 @@
 
 	// Session expired (`needsReauth`): reading still works, every write button is off.
 	const offline = $derived(authStore.needsReauth);
-	const OFFLINE_HINT = 'เซสชันหมดอายุ — เข้าสู่ระบบใหม่เพื่อบันทึก';
+	const distributeDisabledReason = $derived(
+		offline ? OFFLINE_HINT : !canDistribute ? DISTRIBUTE_FORBIDDEN_HINT : undefined
+	);
 
 	function clearFilters() {
 		updateUrl({ q: '', cat: 'all', loc: 'all', status: 'all' });
@@ -398,17 +406,18 @@
 					<ArrowDownToLine class="h-4 w-4" aria-hidden="true" />
 					รับเข้า
 				</Button>
-				<Button
-					type="button"
-					variant="outline"
-					class="min-h-11 gap-2 rounded-lg border-slate-300 px-4 text-sm font-semibold text-slate-800 shadow-2xs"
-					disabled={offline || !canDistribute}
-					title={offline ? OFFLINE_HINT : !canDistribute ? DISTRIBUTE_FORBIDDEN_HINT : undefined}
-					onclick={() => openQuickAction('distribute')}
-				>
-					<ArrowUpFromLine class="h-4 w-4" aria-hidden="true" />
-					เบิกจ่าย
-				</Button>
+				<DisabledReason reason={distributeDisabledReason}>
+					<Button
+						type="button"
+						variant="outline"
+						class="min-h-11 gap-2 rounded-lg border-slate-300 px-4 text-sm font-semibold text-slate-800 shadow-2xs"
+						disabled={offline || !canDistribute}
+						onclick={() => openQuickAction('distribute')}
+					>
+						<ArrowUpFromLine class="h-4 w-4" aria-hidden="true" />
+						เบิกจ่าย
+					</Button>
+				</DisabledReason>
 				<Button
 					type="button"
 					variant="outline"
@@ -441,6 +450,15 @@
 			</a>
 		</div>
 	</div>
+
+	{#if brokenItemNames.length > 0}
+		<p
+			role="alert"
+			class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900"
+		>
+			ประวัติคลังของ {brokenItemNames.join(', ')} ไม่สอดคล้องกัน จึงแสดงยอดรายล็อตไม่ได้ — กรุณาแจ้งผู้ดูแลระบบ
+		</p>
+	{/if}
 
 	<AttentionCards
 		{counts}
@@ -611,16 +629,17 @@
 	>
 		รับเข้า
 	</Button>
-	<Button
-		type="button"
-		variant="outline"
-		class="min-h-12 rounded-lg border-slate-300 text-sm font-semibold text-slate-800"
-		disabled={offline || !canDistribute}
-		title={offline ? OFFLINE_HINT : !canDistribute ? DISTRIBUTE_FORBIDDEN_HINT : undefined}
-		onclick={() => openQuickAction('distribute')}
-	>
-		เบิกจ่าย
-	</Button>
+	<DisabledReason reason={distributeDisabledReason}>
+		<Button
+			type="button"
+			variant="outline"
+			class="min-h-12 rounded-lg border-slate-300 text-sm font-semibold text-slate-800"
+			disabled={offline || !canDistribute}
+			onclick={() => openQuickAction('distribute')}
+		>
+			เบิกจ่าย
+		</Button>
+	</DisabledReason>
 	<Button
 		type="button"
 		variant="outline"

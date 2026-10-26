@@ -21,7 +21,7 @@
 		class="sticky top-0 z-50 border-b border-domain-volunteer-text bg-domain-volunteer-strong text-white shadow-sm"
 	>
 		<div
-			class="mx-auto flex min-h-[76px] w-full max-w-[1440px] items-center justify-between gap-4 px-4 py-3 sm:px-8"
+			class="mx-auto flex min-h-[76px] w-full max-w-7xl items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8"
 		>
 			<a
 				href={resolve('/')}
@@ -59,7 +59,7 @@
 	</header>
 
 	<main class="flex-1">
-		<div class="mx-auto w-full max-w-[1440px] px-4 py-8 sm:px-6 lg:px-8">
+		<div class="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
 			{@render children()}
 		</div>
 	</main>

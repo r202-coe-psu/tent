@@ -18,6 +18,7 @@
 		useConfirmMealServiceYield,
 		useRejectMealServiceReceipt,
 		mealServiceReceiptOutcome,
+		mealServiceRef,
 		toYieldReceiptInput,
 		yieldReceiptInputSchema,
 		yieldTotal,
@@ -205,9 +206,15 @@
 	{:else}
 		<Card.Root class="border shadow-sm">
 			<Card.Header class="border-b bg-muted/20">
-				<Card.Title class="flex items-center gap-2 text-base font-bold">
+				<Card.Title class="flex flex-wrap items-center gap-2 text-base font-bold">
 					<ClipboardList class="h-4 w-4 text-sky-600" />
 					รับของเข้าคลัง: {activePlan.label}
+					<span
+						class="rounded-lg border border-slate-200 bg-white px-2 py-0.5 text-xs font-semibold text-slate-700 tabular-nums"
+						title="เลขอ้างอิงรายการรับเข้า"
+					>
+						{mealServiceRef(activeService)}
+					</span>
 				</Card.Title>
 				<Card.Description class="text-xs">
 					เป้าหมาย {activePlan.allocated_target ?? activeService.actual_yield ?? 0} จาน

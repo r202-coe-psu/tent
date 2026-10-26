@@ -213,7 +213,12 @@ async function mockCouch(page: Page, world: World): Promise<{ writes: Record<str
 
 	await page.route('**/*', async (route: Route) => {
 		const url = new URL(route.request().url());
-		const segments = url.pathname.split('/').filter(Boolean);
+		// The app reaches CouchDB through the same-origin proxy (PUBLIC_COUCH_PROXY=/couch,
+		// the default in .env) or directly — strip the proxy prefix so both match.
+		const segments = url.pathname
+			.replace(/^\/couch(?=\/)/, '')
+			.split('/')
+			.filter(Boolean);
 		const dbName = segments[0];
 		if (dbName !== 'registry' && !dbName?.startsWith('shelter_')) {
 			await route.fallback();
@@ -332,7 +337,9 @@ function toPublicJob(job: Doc) {
 
 function toPortalProfile(volunteer: Doc) {
 	const skillCodes = (volunteer.skills as string[]) ?? [];
-	const labels = skillCodes.map((code) => SKILL_ITEMS.find((s) => s.code === code)?.label ?? code);
+	const labels = skillCodes.map(
+		(code) => SKILL_ITEMS.find((s) => s.code === code)?.label_th ?? code
+	);
 	const phone = (volunteer.phone as string) ?? '';
 	return {
 		portal_id: (volunteer._id as string).split(':')[1],
@@ -660,37 +667,62 @@ test.describe('Volunteer end-to-end operational flow', () => {
 		await test.step('1. Admin creates a job with one shift', async () => {
 			await injectSession(page, ADMIN, adminSession);
 			await page.goto(`${BASE}/back-office/volunteers`);
-			await expect(page.getByText('Smart Volunteer Control Hub')).toBeVisible();
+			await expect(page.getByRole('heading', { name: 'จัดการอาสาสมัคร', level: 2 })).toBeVisible();
 
-			await page.getByRole('button', { name: 'ประกาศภารกิจงานอาสาใหม่', exact: true }).click();
-			const dialog = page.getByRole('dialog');
-			await expect(dialog.getByLabel(/หัวข้อภารกิจอาสา/)).toBeVisible();
+			await page.getByRole('button', { name: 'ประกาศงานอาสาสมัครใหม่', exact: true }).click();
+			// Create is its own page, not a modal (#639).
+			await expect(page).toHaveURL(/\/back-office\/volunteers\/jobs\/new$/);
+			await expect(page.getByLabel(/หัวข้องานอาสาสมัคร/)).toBeVisible();
 
-			await dialog.getByLabel(/หัวข้อภารกิจอาสา/).fill(JOB_TITLE);
-			await dialog
-				.getByLabel(/รายละเอียดงาน/)
-				.fill('แจกจ่ายอาหารกลางวันให้ผู้พักพิงที่จุดครัวกลาง');
-			await dialog.getByRole('button', { name: 'เปิดรับ' }).click();
-			await dialog
-				.locator('label', { hasText: SKILL_ITEMS[0].label })
+			await page.getByLabel(/หัวข้องานอาสาสมัคร/).fill(JOB_TITLE);
+			await page.getByLabel(/รายละเอียดงาน/).fill('แจกจ่ายอาหารกลางวันให้ผู้พักพิงที่จุดครัวกลาง');
+			await page.getByRole('button', { name: 'เปิดรับ' }).click();
+			await page
+				.locator('label', { hasText: SKILL_ITEMS[0].label_th })
 				.getByRole('checkbox')
 				.click();
 
-			await dialog.locator('label', { hasText: 'วันที่ทำงาน' }).getByRole('button').click();
+			// Each shift is an editable card (#624): add one, then pick its date in place.
+			await page.getByRole('button', { name: 'เพิ่มกะ', exact: true }).click();
+			// An undated card blocks the save, and both the toast and the card say why.
+			await page.getByRole('button', { name: /บันทึกและเผยแพร่/ }).click();
+			await expect(
+				page.getByText('บันทึกไม่ได้ — กะที่ 1: กรุณาเลือกวันที่ปฏิบัติงาน')
+			).toBeVisible();
+			await expect(
+				page.getByRole('alert').filter({ hasText: 'กรุณาเลือกวันที่ปฏิบัติงาน' })
+			).toBeVisible();
+			await page.getByLabel('วันที่ทำงาน').click();
 			await page.locator('[data-today]').first().click();
-			await dialog.getByRole('button', { name: 'เพิ่มกะ' }).click();
-			await expect(dialog.getByText(/รับ 5 คน/)).toBeVisible();
+			await expect(page.getByText(/1 กะ · รวมจำนวนรับ/)).toBeVisible();
 
-			await dialog.getByRole('button', { name: /บันทึกและเผยแพร่/ }).click();
-			// The dialog only closes once the create mutation resolves — a more
-			// reliable success signal than the toast, which can dismiss before a
-			// slow/loaded CI runner's next `expect` poll catches it.
-			await expect(dialog).toHaveCount(0);
+			await page.getByRole('button', { name: /บันทึกและเผยแพร่/ }).click();
+			// Saving lands on the new job's detail page only once the create mutation
+			// resolves — a more reliable success signal than the toast, which can
+			// dismiss before a slow/loaded CI runner's next `expect` poll catches it.
+			await expect(page).toHaveURL(/\/back-office\/volunteers\/jobs\/(?!new$)[^/]+$/);
 
 			const created = writes.find((w) => w.type === 'job' && w.title === JOB_TITLE);
 			expect(created, 'job PUT was captured').toBeTruthy();
 			jobId = created!._id as string;
 			expect((created!.shifts as unknown[]).length).toBe(1);
+			// The card list still writes the CR-102 / CR-107 `job.shifts[]` shape — no more, no less.
+			const [savedShift] = created!.shifts as Record<string, unknown>[];
+			expect(Object.keys(savedShift).sort()).toEqual([
+				'date',
+				'end_date',
+				'end_time',
+				'id',
+				'quota',
+				'start_time'
+			]);
+			expect(savedShift).toMatchObject({
+				date: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+				end_date: savedShift.date,
+				start_time: '08:00',
+				end_time: '16:00',
+				quota: 5
+			});
 
 			// The form's shift defaults to a fixed 08:00–16:00 window, which step 7's
 			// check-in would only fall inside during part of the day. Widen it in
@@ -711,6 +743,57 @@ test.describe('Volunteer end-to-end operational flow', () => {
 			await clearSession(page);
 		});
 
+		await test.step('1b. Admin edits the job on its own page, with a leave warning', async () => {
+			// Edit is its own page, deep-linkable, and asks before throwing input away (#639).
+			await injectSession(page, ADMIN, adminSession);
+			await page.goto(`${BASE}/back-office/volunteers/jobs/${encodeURIComponent(jobId)}`);
+			await page.getByRole('button', { name: 'แก้ไขงานนี้' }).click();
+			await expect(page).toHaveURL(/\/back-office\/volunteers\/jobs\/[^/]+\/edit$/);
+
+			await page.reload();
+			await expect(page).toHaveURL(/\/edit$/);
+			await expect(page.getByLabel(/หัวข้องานอาสาสมัคร/)).toHaveValue(JOB_TITLE);
+
+			// Batch Generator flags weekdays the picked range does not contain, before Generate.
+			await page.getByRole('button', { name: 'สร้างกะเป็นช่วงวัน', exact: true }).click();
+			for (const field of ['วันที่เริ่มสร้างกะ', 'วันที่สิ้นสุด']) {
+				await page.locator('label', { hasText: field }).getByRole('button').click();
+				await page.locator('[data-today]').first().click();
+			}
+			await expect(
+				page.getByText(/ช่วงวันที่ที่เลือกไม่มีวัน.*จะสร้างเฉพาะวันที่อยู่ในช่วง/)
+			).toBeVisible();
+			const todayIsWeekend = await page.evaluate(() => [0, 6].includes(new Date().getDay()));
+			await page
+				.getByRole('button', { name: todayIsWeekend ? 'จันทร์ - ศุกร์' : 'เสาร์ - อาทิตย์' })
+				.click();
+			await expect(
+				page.getByRole('alert').filter({ hasText: 'ช่วงวันที่ที่เลือกไม่มีวัน' })
+			).toBeVisible();
+			await expect(page.getByRole('button', { name: 'สร้างกะตามช่วงวัน' })).toBeDisabled();
+			await page.getByRole('button', { name: 'ปิดตัวสร้างกะเป็นช่วงวัน' }).click();
+
+			const description = 'แจกจ่ายอาหารกลางวันและอาหารเย็นให้ผู้พักพิงที่จุดครัวกลาง';
+			await page.getByLabel(/รายละเอียดงาน/).fill(description);
+
+			const leaveWarning = page.waitForEvent('dialog').then(async (dialog) => {
+				const message = dialog.message();
+				await dialog.dismiss();
+				return message;
+			});
+			await page.getByRole('button', { name: 'ย้อนกลับ', exact: true }).click();
+			expect(await leaveWarning).toContain('ยังไม่ได้บันทึก');
+			await expect(page).toHaveURL(/\/edit$/);
+
+			await page.getByRole('button', { name: 'บันทึกการแก้ไข' }).click();
+			await expect(page).toHaveURL(/\/back-office\/volunteers\/jobs\/(?!new$)[^/]+$/);
+			const updated = [...writes].reverse().find((w) => w._id === jobId);
+			expect(updated?.description).toBe(description);
+			expect(updated?.title).toBe(JOB_TITLE);
+
+			await clearSession(page);
+		});
+
 		await test.step('2. Public applies to the shift from the job board', async () => {
 			await page.goto(`${BASE}/volunteers/jobs`);
 			await expect(page.getByText(JOB_TITLE)).toBeVisible();
@@ -720,7 +803,7 @@ test.describe('Volunteer end-to-end operational flow', () => {
 			await form.locator('#firstName').fill('เก่งกล้า');
 			await form.locator('#lastName').fill('อาสา');
 			await form.locator('#phone').fill(APPLICANT_PHONE);
-			await form.getByRole('button', { name: SKILL_ITEMS[0].label }).click();
+			await form.getByRole('button', { name: SKILL_ITEMS[0].label_th }).click();
 			await form.locator('label', { hasText: 'PDPA' }).getByRole('checkbox').check();
 			await form.getByRole('button', { name: /ยืนยันการสมัครและรับตั๋วดิจิทัล/ }).click();
 
@@ -746,7 +829,7 @@ test.describe('Volunteer end-to-end operational flow', () => {
 			// check-in actually checks (`blockedByIdentity`), not the application review.
 			await injectSession(page, ADMIN, adminSession);
 			await page.goto(`${BASE}/back-office/volunteers?tab=people`);
-			await expect(page.getByRole('heading', { name: 'จัดการอาสาสมัคร' })).toBeVisible();
+			await expect(page.getByRole('heading', { name: 'จัดการอาสาสมัคร', level: 2 })).toBeVisible();
 
 			const row = page.locator('tr', { hasText: FULL_NAME });
 			await expect(row).toBeVisible();
@@ -811,7 +894,7 @@ test.describe('Volunteer end-to-end operational flow', () => {
 			await page.locator('#volunteer-phone-input').fill(APPLICANT_PHONE);
 			await page.getByRole('button', { name: 'เข้าสู่ระบบทันที' }).click();
 
-			await expect(page.getByTitle('สลับบัญชี / ออกจากระบบ')).toBeVisible();
+			await expect(page.getByRole('button', { name: 'ออกจากระบบ / ลืมเครื่องนี้' })).toBeVisible();
 			// The shift assigned in step 5 already shows up on the volunteer's own schedule.
 			await expect(page.getByText(JOB_TITLE).first()).toBeVisible();
 
@@ -872,5 +955,171 @@ test.describe('Volunteer end-to-end operational flow', () => {
 			expect(assignment?.check_in_method).toBe('qr');
 			expect(assignment?.check_out_method).toBe('qr');
 		});
+	});
+
+	test('job form pages and shift cards: cancel, edit link, detail generator, batch', async ({
+		page
+	}) => {
+		const world = new World([SECOND_JOB]);
+		const { writes } = await mockCouch(page, world);
+		await mockPublicApi(page, world);
+		await injectSession(page, ADMIN, adminSession);
+		const leaveWarnings: string[] = [];
+		page.on('dialog', async (dialog) => {
+			leaveWarnings.push(dialog.message());
+			await dialog.dismiss();
+		});
+		const board = /\/back-office\/volunteers(\?.*)?$/;
+		const thisMonth = TODAY.slice(0, 7);
+
+		await test.step('cancel with nothing typed goes back without a warning (#639)', async () => {
+			await page.goto(`${BASE}/back-office/volunteers`);
+			await page.getByRole('button', { name: 'ประกาศงานอาสาสมัครใหม่', exact: true }).click();
+			await expect(page).toHaveURL(/\/jobs\/new$/);
+			await page.getByRole('button', { name: 'ยกเลิก', exact: true }).click();
+			await expect(page).toHaveURL(board);
+
+			// Opened directly, there is no previous page — cancel lands on the board.
+			await page.goto(`${BASE}/back-office/volunteers/jobs/new`);
+			await expect(page.getByLabel(/หัวข้องานอาสาสมัคร/)).toBeVisible();
+			await page.getByRole('button', { name: 'ยกเลิก', exact: true }).click();
+			await expect(page).toHaveURL(board);
+			expect(leaveWarnings).toEqual([]);
+		});
+
+		await test.step("a job card's edit button opens the edit page (#639)", async () => {
+			await page.getByRole('button', { name: `แก้ไขงาน ${SECOND_JOB.title}` }).click();
+			await expect(page).toHaveURL(
+				`${BASE}/back-office/volunteers/jobs/${encodeURIComponent(SECOND_JOB._id)}/edit`
+			);
+			await expect(page.getByLabel(/หัวข้องานอาสาสมัคร/)).toHaveValue(SECOND_JOB.title);
+		});
+
+		await test.step('detail page generator: add, flag a duplicate, remove, save (#624)', async () => {
+			await page.goto(`${BASE}/back-office/volunteers/jobs/${encodeURIComponent(SECOND_JOB._id)}`);
+			await page.getByRole('tab', { name: /กะและตารางกะ/ }).click();
+
+			for (const index of [0, 1]) {
+				await page.getByRole('button', { name: 'เพิ่มกะ', exact: true }).click();
+				await page.getByLabel('วันที่ทำงาน').nth(index).click();
+				await page.locator('[data-today]').first().click();
+			}
+			// Card 2 copied card 1's times and got the same date: both cards say so.
+			await expect(
+				page.getByRole('alert').filter({ hasText: 'มีกะวันและเวลานี้อยู่แล้ว' })
+			).toHaveCount(2);
+
+			await page.getByRole('button', { name: 'ลบกะที่ 2' }).click();
+			await expect(
+				page.getByRole('alert').filter({ hasText: 'มีกะวันและเวลานี้อยู่แล้ว' })
+			).toHaveCount(0);
+			await page.getByRole('button', { name: 'บันทึก 1 กะเข้างานนี้' }).click();
+			await expect(page.getByText(/รายการกะย่อยทั้งหมด \(2 กะ/)).toBeVisible();
+
+			const saved = [...writes].reverse().find((w) => w._id === SECOND_JOB._id);
+			const shifts = saved?.shifts as Record<string, unknown>[];
+			expect(shifts).toHaveLength(2);
+			expect(shifts[1]).toMatchObject({ date: TODAY, start_time: '08:00', end_time: '16:00' });
+			expect(saved?.quota).toBe(10);
+		});
+
+		await test.step('batch generator turns a week of weekdays into five cards (#624)', async () => {
+			await page.goto(`${BASE}/back-office/volunteers/jobs/new`);
+			await page.getByRole('button', { name: 'สร้างกะเป็นช่วงวัน', exact: true }).click();
+			// Any seven consecutive days hold each weekday once — so Mon–Fri is five shifts.
+			for (const [field, day] of [
+				['วันที่เริ่มสร้างกะ', '01'],
+				['วันที่สิ้นสุด', '07']
+			] as const) {
+				await page.locator('label', { hasText: field }).getByRole('button').click();
+				await page.locator(`[data-value="${thisMonth}-${day}"]`).first().click();
+			}
+			await page.getByRole('button', { name: 'จันทร์ - ศุกร์' }).click();
+			await expect(page.getByText(/จะสร้าง 5 กะ/)).toBeVisible();
+			await page.getByRole('button', { name: 'สร้างกะตามช่วงวัน' }).click();
+
+			await expect(page.getByText(/^กะที่ \d+$/)).toHaveCount(5);
+			await expect(page.getByText(/5 กะ · รวมจำนวนรับ/)).toBeVisible();
+		});
+	});
+
+	test('one applicant with several pending shifts is one card, approved together (#716)', async ({
+		page
+	}) => {
+		const shifts = [
+			{ id: 'multi-am', start_time: '09:00', end_time: '12:00' },
+			{ id: 'multi-pm', start_time: '13:00', end_time: '16:00' },
+			{ id: 'multi-eve', start_time: '17:00', end_time: '20:00' }
+		].map((shift) => ({ ...shift, date: TOMORROW, end_date: TOMORROW, quota: 5 }));
+		const job = {
+			...SECOND_JOB,
+			_id: `job:e2eflow${RUN_ID}multi`,
+			title: `งานอาสา E2E หลายกะ ${RUN_ID}`,
+			quota: 15,
+			slots_remaining: 15,
+			shifts
+		};
+		const phoneHash = await sha256Hex(APPLICANT_PHONE);
+		const applications = shifts.map((shift, index) => ({
+			_id: `job_application:e2eflow${RUN_ID}multi${index}`,
+			type: 'job_application',
+			schema_v: 3,
+			shelter_code: 'SH001',
+			created_at: '2026-09-02T00:00:00.000Z',
+			updated_at: '2026-09-02T00:00:00.000Z',
+			created_by: 'public',
+			job_id: job._id,
+			shift_id: shift.id,
+			volunteer_id: null,
+			applicant: {
+				first_name: 'เก่งกล้า',
+				last_name: 'อาสา',
+				phone: APPLICANT_PHONE,
+				phone_hash: phoneHash,
+				email: null,
+				skills: []
+			},
+			selected_shift: {
+				shift_id: shift.id,
+				date: shift.date,
+				start_time: shift.start_time,
+				end_time: shift.end_time
+			},
+			tracking_token: mintToken(),
+			status: 'pending_review',
+			review_notes: null,
+			reviewed_at: null,
+			reviewed_by: null,
+			review_reasons: ['job_fit']
+		}));
+		const world = new World([job, ...applications]);
+		await mockCouch(page, world);
+		await mockPublicApi(page, world);
+		await injectSession(page, ADMIN, adminSession);
+
+		await page.goto(`${BASE}/back-office/volunteers/jobs/${encodeURIComponent(job._id)}`);
+		await page.getByRole('tab', { name: /ผู้สมัคร/ }).click();
+
+		// One card for the person, all three shifts on it.
+		await expect(page.getByText(FULL_NAME)).toHaveCount(1);
+		await expect(page.getByText('รอพิจารณา (1 คน · 3 กะ)')).toBeVisible();
+		await expect(page.getByRole('list', { name: 'กะที่สมัคร' }).getByRole('listitem')).toHaveCount(
+			3
+		);
+
+		await page.getByRole('button', { name: 'อนุมัติทุกกะ (3 กะ)' }).click();
+		const dialog = page.getByRole('dialog');
+		await expect(dialog.getByText('กะที่จะอนุมัติ (3 กะ)')).toBeVisible();
+		await dialog.getByRole('button', { name: 'ยืนยันอนุมัติ 3 กะ' }).click();
+		await expect(dialog).toHaveCount(0);
+
+		await expect
+			.poll(() =>
+				world
+					.all('job_application')
+					.filter((a) => a.job_id === job._id)
+					.map((a) => a.status)
+			)
+			.toEqual(['confirmed', 'confirmed', 'confirmed']);
 	});
 });

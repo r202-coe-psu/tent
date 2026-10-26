@@ -6,12 +6,12 @@ from fastapi import Request
 
 
 def client_ip(request: Request) -> str:
-    """Best-effort client IP for rate limiting.
+    """Best-effort client IP for audit records (e.g. search ``ip_hash``).
 
-    Prefer ``X-Real-IP`` (set by our nginx / Vite edge) over the first
-    ``X-Forwarded-For`` hop, which is spoofable when FastAPI is reached
-    without a trusted proxy. Limits remain **in-process** (not shared across
-    replicas) — edge / Redis limiting is an ops follow-up for multi-instance.
+    Prefer ``X-Real-IP`` (set by our nginx, or by the SvelteKit BFF for the
+    calls it proxies) over the first ``X-Forwarded-For`` hop, which is
+    spoofable when FastAPI is reached without a trusted proxy. Rate limiting
+    is enforced by nginx, not here (CR-188).
     """
     real_ip = request.headers.get("x-real-ip")
     if real_ip:

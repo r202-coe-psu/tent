@@ -32,11 +32,35 @@ export const jobApplicationReviewReasonSchema = z.enum([
 export type JobApplicationReviewReason = z.infer<typeof jobApplicationReviewReasonSchema>;
 
 export const JOB_APPLICATION_REVIEW_REASON_LABEL: Record<JobApplicationReviewReason, string> = {
-	identity: 'ยืนยันตัวตน',
-	skill_certification: 'รับรองทักษะควบคุม',
-	job_fit: 'พิจารณาความเหมาะสมของงาน',
-	legacy_review: 'รายการเก่าที่ต้องตรวจ'
+	identity: 'ยังไม่ได้ยืนยันตัวตน',
+	skill_certification: 'ยังไม่ได้ตรวจใบรับรองทักษะ',
+	// The job is not set to accept applicants automatically (tier / auto_accept).
+	job_fit: 'งานนี้ต้องอนุมัติทุกใบ',
+	legacy_review: 'ใบสมัครเก่าที่ยังไม่ได้ตรวจ'
 };
+
+/**
+ * What staff still need to check on an application — display only, the stored
+ * `review_reasons` are left as they were.
+ *
+ * Identity and certificates are read from the volunteer as they are NOW, not from the
+ * reasons stamped when they applied: a person verified since then must not still be
+ * listed, and one who was never stamped (older or seeded applications) must not be
+ * reported as "ไม่มีสิ่งที่ต้องตรวจเพิ่ม" while their identity is unchecked.
+ * `job_fit` is never shown — it means the job does not auto-accept, and the job form
+ * cannot turn auto-accept on (owner decision 2026-08-27), so it sits on every
+ * application and says nothing about this applicant.
+ */
+export function outstandingReviewReasons(
+	reasons: readonly JobApplicationReviewReason[],
+	now: { identityVerified: boolean; uncertifiedSkill: boolean }
+): JobApplicationReviewReason[] {
+	const open: JobApplicationReviewReason[] = [];
+	if (!now.identityVerified) open.push('identity');
+	if (now.uncertifiedSkill) open.push('skill_certification');
+	if (reasons.includes('legacy_review')) open.push('legacy_review');
+	return open;
+}
 
 /**
  * State machine transitions for JobApplication (CR-041 D-APP=A / CR-094 §3.4 / UX-DR6).

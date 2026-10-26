@@ -62,11 +62,17 @@ export type EvacueeSummary = z.infer<typeof evacueeSummarySchema>;
 // Discriminated union schemas for Referral Documents
 // ---------------------------------------------------------------------------
 
+/**
+ * Read-side schema_v range (CR-167 FR-C4, FR-C7). The reader accepts v1 and v2 docs.
+ * Writers still stamp v1 until the v2 write path ships (#560); do not narrow this back to a literal.
+ */
+export const referralSchemaVSchema = z.union([z.literal(1), z.literal(2)]);
+
 const referralBaseSchema = z.object({
 	_id: z.string().startsWith('referral:'),
 	_rev: z.string().optional(),
 	type: z.literal('referral'),
-	schema_v: z.literal(1),
+	schema_v: referralSchemaVSchema,
 	shelter_code: z.string().min(1),
 	created_at: z.string().datetime(),
 	updated_at: z.string().datetime(),
@@ -81,6 +87,7 @@ const referralBaseSchema = z.object({
 		.string()
 		.max(2000, 'Response reason must not exceed 2000 characters')
 		.optional(),
+	close_reason: z.string().max(2000, 'Close reason must not exceed 2000 characters').optional(),
 	urgency: referralUrgencySchema,
 	status: referralStatusSchema,
 	timeline: referralTimelineSchema,

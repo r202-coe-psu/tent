@@ -211,7 +211,8 @@
 			<CheckCircle2 class="mb-2 h-10 w-10 text-emerald-500" />
 			<p class="text-sm font-bold text-slate-800">ไม่มีรายการสิ่งของยืม-คืนที่ค้างส่ง</p>
 			<p class="mt-0.5 text-xs text-slate-500">
-				ผู้ประสบภัย <strong class="text-slate-700">{recipientSelection.label}</strong>
+				{recipientSelection.recipientType === 'volunteer' ? 'จิตอาสา' : 'ผู้ประสบภัย'}
+				<strong class="text-slate-700">{recipientSelection.label}</strong>
 				ไม่มีรายการพัสดุที่ต้องส่งคืนในขณะนี้
 			</p>
 		</div>

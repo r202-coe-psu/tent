@@ -69,6 +69,12 @@ describe('skillLabel', () => {
 		expect(skillLabel('kitchen', OPTIONS)).toBe('ประกอบอาหาร / ครัวสนาม');
 	});
 
+	it('labels in the reader language when asked, falling back when one is missing', () => {
+		expect(skillLabel('medical', OPTIONS, 'en')).toBe('Medical / First aid');
+		expect(skillLabel('medical', OPTIONS, 'th')).toBe('การแพทย์ / ปฐมพยาบาล');
+		expect(skillLabel('kitchen', OPTIONS, 'en')).toBe('ประกอบอาหาร / ครัวสนาม');
+	});
+
 	it('labels a real Master Data code even though the code itself looks technical', () => {
 		const masterOptions: VolunteerSkillOption[] = [
 			{
@@ -99,6 +105,11 @@ describe('skillLabels', () => {
 	it('keeps the job order and omits values missing from Master Data', () => {
 		expect(skillLabels(['kitchen', 'ทักษะลับ'], OPTIONS)).toEqual([
 			{ value: 'kitchen', label: 'ประกอบอาหาร / ครัวสนาม' }
+		]);
+	});
+	it('labels in the reader language when asked', () => {
+		expect(skillLabels(['medical'], OPTIONS, 'en')).toEqual([
+			{ value: 'medical', label: 'Medical / First aid' }
 		]);
 	});
 });

@@ -137,3 +137,8 @@ async def apply_volunteer(
     action: Literal["upsert", "delete", "ignore"], payload: dict[str, Any]
 ) -> None:
     await apply_document(PublicVolunteer, action, payload)
+
+
+async def delete_jobs_for_shelter(shelter_code: str) -> None:
+    """Drop a shelter's postings from the volunteer board (cancelled shelter)."""
+    await PublicJob.find(PublicJob.shelter_code == shelter_code).delete()

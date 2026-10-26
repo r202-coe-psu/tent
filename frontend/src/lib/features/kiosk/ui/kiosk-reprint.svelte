@@ -29,6 +29,7 @@
 	import KioskNoticePanel from './kiosk-notice-panel.svelte';
 	import KioskNumpadPanel from './kiosk-numpad-panel.svelte';
 	import KioskPrintStatus from './kiosk-print-status.svelte';
+	import KioskStaffPinEntry from './kiosk-staff-pin-entry.svelte';
 	import PhoneHouseholdPicker from './phone-household-picker.svelte';
 	import ReprintMemberList from './reprint-member-list.svelte';
 
@@ -90,7 +91,7 @@
 	);
 	const idleTimeout = new KioskIdleTimeout(KIOSK_IDLE_TIMEOUT_MS, returnHome);
 
-	const homeUrl = $derived(resolve(`/kiosk${contextQuery}`));
+	const printQrUrl = $derived(resolve(`/kiosk/print-qr${contextQuery}`));
 	const reprintUrl = $derived(resolve(`/kiosk/reprint${contextQuery}`));
 	const displayPhone = $derived(formatPhoneForDisplay(session.phone));
 	const entryHint = $derived(phoneEntryHint(session.phone));
@@ -194,7 +195,7 @@
 					onclick={() => session.back()}
 				/>
 			{:else}
-				<KioskBackButton href={homeUrl} />
+				<KioskBackButton href={printQrUrl} />
 			{/if}
 		</div>
 
@@ -323,6 +324,17 @@
 					</Button>
 				</div>
 			{/if}
+		{:else if session.step === 'staff_pin'}
+			<div
+				class="flex min-h-0 flex-1 flex-col gap-3 kiosk-portrait:mt-4 kiosk-portrait:justify-start"
+			>
+				<KioskStaffPinEntry
+					description="ตรวจบัตรประชาชนกับตัวบุคคลแล้ว กรอก PIN 6 หลักเพื่อพิมพ์ QR"
+					verify={(pin) => session.verifyStaffPin(pin)}
+					onverified={() => void session.onStaffPinVerified()}
+					oncancel={() => session.cancelStaffPin()}
+				/>
+			</div>
 		{:else}
 			<!-- verify, and printing (the keys stay on screen behind the print status) -->
 			<div class="flex min-h-0 flex-1 flex-col gap-3 kiosk-portrait:justify-start">
@@ -379,6 +391,15 @@
 							{:else}
 								<KeyRound class="h-5 w-5" aria-hidden="true" />ยืนยันและพิมพ์
 							{/if}
+						</Button>
+						<Button
+							type="button"
+							variant="outline"
+							disabled={session.busy}
+							onclick={() => session.openStaffPin()}
+							class="min-h-12 w-full text-base font-bold focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 kiosk-portrait:min-h-16 kiosk-portrait:text-xl"
+						>
+							ให้เจ้าหน้าที่ยืนยันด้วย PIN
 						</Button>
 					{/snippet}
 

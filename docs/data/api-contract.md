@@ -2,8 +2,8 @@
 title: Smart Shelter — API Contract v1
 status: draft for review
 created: 2026-06-11
-updated: 2026-10-18
-note: คู่กับ data-model.md v3 — ตัดสิน sync boundary: staff app คุย CouchDB ตรง, service API มีเฉพาะที่ CouchDB ทำเองไม่ได้; CR-112/CR-113 occupancy + unassigned registration; Partner Data API EXT-001–007 (#214); CR-124 staff Google step-up MFA + Google SSO login (enrolled + mint AuthSession); decision sync 2026-10-08 — เพิ่ม GET /public/v1/unassigned-registrations/{id}/status (service secret, status-only) แทนการเรียก staff detail จาก BFF registrations/status — แก้ ticket คิวกลางหายจากอุปกรณ์ (QA pre-register 2026-10-08); decision sync 2026-10-09 — `breakdown` ของ EXT-005 เพิ่ม `gender_unspecified` (null+other; `male+female+gender_unspecified = occupancy_total`) และ `POST /public/v1/unassigned-registrations` รับ `members[].gender = null`; CR-157 (2026-10-10) — เพิ่ม `GET /api/public/v1/donations/slots` (BFF-only อ่าน CouchDB ฝั่ง server) และ error code ของ slot ใน `POST /public/v1/donations` (`SLOT_REQUIRED`, `SLOT_UNAVAILABLE`, `SLOT_FULL`, `SLOTS_UNAVAILABLE`); CR-162 — §2.3 kiosk banner (`POST /api/v1/kiosk/banners`, signed image GET, back-office `/api/back-office/kiosk-banners/**` + `PUT …/order`) และ §2.2 field เครื่อง `screen_type` / `banner_enabled` (ส่วนที่ปรับ 2026-10-15..17 Team Lead อนุมัติ 2026-10-18)
+updated: 2026-10-26
+note: decision sync 2026-10-26 — EXT-007 คืนรายชื่อ masked จริง (แก้คำอธิบาย scaffold เดิม) และไม่รวมคนที่ `privacy.search_excluded = true` (#791); decision sync 2026-10-25 — §2.1 kiosk register body เพิ่ม `consent` (PDPA consent block, FR-43/45; endpoint path แก้เป็น `/api/v1/kiosk/register`); CR-158 §9 (ข้อเสนอทีม kiosk 2026-10-24, #796 — ยังไม่ approved) — §2.2 `POST /api/v1/kiosk/reprint` รับ `staff_pin` แทน `id_last4` ได้; CR-182 approved (2026-10-21, #751) — EXT-002/003 เพิ่ม `accepts_booking` + filter `?accepts_booking=`; EXT-008 เปลี่ยนกติกา bookability (ศูนย์ที่ไม่มี `accepts_pre_registration` = จองไม่ได้ → 409 — breaking สำหรับ M2) + scope ใหม่ `booking-bypass` (EOC override; log `granted_bypass`, `external_bookings.bypass`); CR-181 approved (2026-10-21) — EXT-012 `POST /external/persons/search` (scope `occupant-search`) + sort deterministic ของ ID search (#736); CR-176 (2026-10-20) — EXT-011 `cancelled` / `kiosk_registered` (ไม่เคย check-in) = 404 `residency_not_found` (#710); คู่กับ data-model.md v3 — ตัดสิน sync boundary: staff app คุย CouchDB ตรง, service API มีเฉพาะที่ CouchDB ทำเองไม่ได้; CR-112/CR-113 occupancy + unassigned registration; Partner Data API EXT-001–007 (#214); CR-124 staff Google step-up MFA + Google SSO login (enrolled + mint AuthSession); decision sync 2026-10-08 — เพิ่ม GET /public/v1/unassigned-registrations/{id}/status (service secret, status-only) แทนการเรียก staff detail จาก BFF registrations/status — แก้ ticket คิวกลางหายจากอุปกรณ์ (QA pre-register 2026-10-08); decision sync 2026-10-09 — `breakdown` ของ EXT-005 เพิ่ม `gender_unspecified` (null+other; `male+female+gender_unspecified = occupancy_total`) และ `POST /public/v1/unassigned-registrations` รับ `members[].gender = null`; CR-157 (2026-10-10) — เพิ่ม `GET /api/public/v1/donations/slots` (BFF-only อ่าน CouchDB ฝั่ง server) และ error code ของ slot ใน `POST /public/v1/donations` (`SLOT_REQUIRED`, `SLOT_UNAVAILABLE`, `SLOT_FULL`, `SLOTS_UNAVAILABLE`); CR-162 — §2.3 kiosk banner (`POST /api/v1/kiosk/banners`, signed image GET, back-office `/api/back-office/kiosk-banners/**` + `PUT …/order`) และ §2.2 field เครื่อง `screen_type` / `banner_enabled` (ส่วนที่ปรับ 2026-10-15..17 Team Lead อนุมัติ 2026-10-18); CR-151 §17 (2026-10-18, approved 2026-10-20) — §2.1.2 `POST /api/v1/kiosk/volunteer-card` พิมพ์ QR จิตอาสาแบบอ่านอย่างเดียว; CR-172 (2026-10-21) — response ของ `GET /public/v1/donations/{tracking_token}` เพิ่ม `reject_reason`/`reject_reason_code` + `received_summary.items[].rejected/reject_reason/reject_reason_code` (§5); CR-174 (2026-10-21) — `POST /public/v1/donations` response เพิ่ม `status`; `PATCH …/{tracking_token}/items` request เพิ่ม `current_items`/`current_status` (opt), response เพิ่ม `status` + `auto_approved_lines` และ `items[].review_*`; `DONOR_EDITABLE_STATUSES` = `{declared, pending_review, verifying}` (§5); CR-162 ส่วนที่ปรับ 2026-10-21 (Team Lead อนุมัติ 2026-10-22) — kiosk banner group: §2.2 `PATCH /api/v1/kiosk/devices/[id]` ตัด `banner_enabled` + summary มี `banner_group_id`, §2.3 feed กรองตาม `banner_group_id`, banner `group_id`, order body `group_id`, §2.3.1 `/api/back-office/kiosk-banner-groups/**`
 ---
 
 # Smart Shelter — API Contract v1
@@ -61,10 +61,10 @@ DELETE /couch/_session          → logout
     (guards ยัง enforce force-setup ถ้าเข้าเงื่อนไข; ไม่ส่งไป `/mfa-challenge` เพราะมี `mfa_ok` แล้ว)
   - ไม่พบ link / `sub` ไม่รู้จัก → **ไม่** mint session; ตั้ง cookie `pending_link` (signed, HttpOnly, 10 นาที) → redirect `/login/link` (CR-141)
 - **Link-on-first-login path (CR-141):** `/login/link` รับ username|เบอร์โทร + password (+ reCAPTCHA ตาม flag) → `POST /api/v1/auth/link-account`
-  - ตรวจ `pending_link` → rate limit (nonce + IP) → captcha → verify password กับ central `_session` ฝั่งเซิร์ฟเวอร์
+  - ตรวจ `pending_link` → captcha → verify password กับ central `_session` ฝั่งเซิร์ฟเวอร์
   - eligibility: `must_change_password = true` **และ** ไม่มี `mfa.providers` **และ** ไม่ใช่ bootstrap `_admin`; ไม่ผ่าน → 403
   - ผูก provider (`sub` ผูกกับ user อื่น → 409) → mint `AuthSession` + `mfa_ok` → client ไป `/force-setup`
-  - รหัสผิด / ไม่พบ user → 401 ข้อความเดียวกัน; เกิน limit → 429 + ลบ cookie
+  - รหัสผิด / ไม่พบ user → 401 ข้อความเดียวกัน; rate limit ต่อ IP ที่ nginx zone `auth` (CR-188 — ยกเลิก limit ต่อ nonce)
   - บัญชีเดิมที่ยังไม่ผูก → `/admin-login` แล้วผูกที่ `/me`
   - Mint ใช้ cookie-auth secret จาก CouchDB config (`chttpd_auth` / `couch_httpd_auth`) + `_users.salt`
     และ hash ตาม `hash_algorithms` ของโหนด — อ่านได้เฉพาะฝั่งเซิร์ฟเวอร์ (ห้าม `PUBLIC_*`); **ไม่** ใช้ Proxy Auth
@@ -170,22 +170,23 @@ X-Device-Secret: …
 ปุ่มลงทะเบียนใหม่บนผล lookup.
 
 การซ่อนปุ่มเป็นเพียง UX: `POST /api/v1/scanner/kiosk/lookup` ที่ `source: "phone"` ตรวจ flag
-ซ้ำฝั่ง server ก่อน rate limit และ lookup; เมื่อปิดตอบ `403 KIOSK_METHOD_DISABLED`.
+ซ้ำฝั่ง server ก่อน lookup; เมื่อปิดตอบ `403 KIOSK_METHOD_DISABLED`.
 QR และ smart-card lookup ไม่ขึ้นกับ flag เบอร์โทร. Smart-card lookup ตรวจ
 `kiosk_walk_in_registration_enabled` เพื่อกำหนด `can_register`; flag นี้ควบคุมเฉพาะการเริ่ม
 walk-in registration และไม่ปิด lookup หรือ check-in flow เดิม.
 
-`POST /api/v1/scanner/kiosk/register` สร้างผู้ประสบภัยจากการอ่าน Smart Card แบบเต็ม หลังผู้ใช้
+`POST /api/v1/kiosk/register` สร้างผู้ประสบภัยจากการอ่าน Smart Card แบบเต็ม หลังผู้ใช้
 ยินยอมที่ Kiosk:
 
 ```http
-POST /api/v1/scanner/kiosk/register
+POST /api/v1/kiosk/register
 X-Device-ID: kiosk-sh001-01
 X-Device-Secret: …
 Content-Type: application/json
 ```
 
-Request body เป็น `{ "card": <SmartCardData without photo_base64>, "photo": <KioskPhotoPayload|null>, "consented": true, "consented_at": <ISO-8601 UTC> }`.
+Request body เป็น `{ "card": <SmartCardData without photo_base64>, "photo": <KioskPhotoPayload|null>, "consented": true, "consented_at": <ISO-8601 UTC>, "consent": <ConsentDecision> }`.
+`consent` คือผลจากบล็อกความยินยอม PDPA (`docs/features/pdpa-consent-block-spec.md`, FR-43/45): `{ mode, health?, search_visible?, guardian_for, verbal, ref, given_at, notice_version }` (`mode = basic` ไม่มี `health`/`search_visible`). Kiosk ไม่แสดงช่องผู้ปกครอง/เจ้าหน้าที่ จึง `guardian_for = []` และ `verbal = false` เสมอ. Server ตรวจด้วย Zod เดียวกับ client (FR-34), ตั้ง `channel = kiosk` และ `given_by = self`, เขียน `evacuee.consent` + `privacy.search_excluded` ตามผล (FR-30/31) และไม่สร้าง `medical` เมื่อ `mode = basic` หรือ `health = false` (FR-32). `consent` ไม่มีหรือไม่ผ่าน Zod → `400` และไม่สร้าง evacuee (FR-45). `consent` ถูกรูปแบบแต่ `given_at` ย้อนหลังเกิน 10 นาที → `400 KIOSK_CONSENT_EXPIRED` ("การยินยอมหมดเวลาแล้ว กรุณากดยินยอมอีกครั้ง") — ตู้ต้องขอความยินยอมใหม่ ไม่ retry ด้วย decision เดิม (บัตรสมาร์ทการ์ดเก็บข้อมูลบัตรไว้; ThaiD เริ่มสแกนใหม่ เพราะ session สแกนหมดอายุแล้ว); `given_at` ล้ำอนาคตเกิน 10 นาทียังเป็น `INVALID_KIOSK_REGISTRATION` (decision sync 2026-10-25). `card_snapshot.consented_at` คงไว้เหมือนเดิม.
 เมื่อมีรูป `photo` มี `content_type`, `full_base64`, `thumb_base64?`, `width`, `height`,
 `original_size`, `compressed_size` และ `thumbnail_size`; base64 ไม่มี data URL prefix.
 Browser บันทึก `consented_at` ตอนผู้ใช้กดยินยอมไว้ใน in-memory state; ห้ามใส่ citizen ID ใน URL
@@ -193,20 +194,22 @@ Browser บันทึก `consented_at` ตอนผู้ใช้กดย�
 ที่อยู่. รูปจากชิปถูก compress เป็น WEBP พร้อม thumbnail ก่อนส่งใน `photo` แยก; หาก compress ไม่สำเร็จ
 จะส่ง JPEG เดิมโดยไม่มี thumbnail และหากไม่มีรูปหรือรูปเกินขนาดจะลงทะเบียนต่อโดยไม่แนบรูป. Server
 ผูก shelter จาก device registry เท่านั้น, ตรวจ flag ซ้ำ, ตรวจข้อมูลบัตร
-และค้น record เดิมใน shelter นั้นแบบ fail-closed ก่อนสร้าง `evacuee` ที่ `schema_v: 11`,
+และค้น record เดิมใน shelter นั้นแบบ fail-closed ก่อนสร้าง `evacuee` ที่ `schema_v: 15`,
 `current_stay.status: "kiosk_registered"`, `registered_via: "kiosk"`, `household_id: null`,
 `phone: null`, `card_snapshot.consented_at` และ `photo: image:{ulid}` เมื่อมีรูป. Server ตรวจ
 base64, ขนาด decoded (full ≤300 KB, thumb ≤50 KB) และ magic bytes; สร้าง image document พร้อม
 inline attachments ก่อนเขียน evacuee. หากเขียน evacuee ไม่สำเร็จจะลบ image ที่เพิ่งสร้างแบบ best-effort.
 `card_snapshot` ที่สร้างใหม่ไม่มี `photo_base64`. สำเร็จตอบ
-`{ "status": "created", "evacuee_id": "evacuee:{ulid}" }`. Endpoint ต้องตอบ
+`{ "status": "created", "evacuee_id": "evacuee:{ulid}", "qr_payload", "label", "consent_ref": "CS-XXXXXXXX", "consent_mode": "full" | "basic" }`
+โดย `consent_ref` / `consent_mode` อ่านจาก `evacuee.consent` ที่เพิ่งเขียน (FR-43) เพื่อให้หน้า `/kiosk/register/done`
+แสดงสรุปผลความยินยอมและเลขอ้างอิงที่ผู้ใช้ถือไปอ้างกับเจ้าหน้าที่. Endpoint ต้องตอบ
 `cache-control: no-store`, `pragma: no-cache`.
 
 การ lookup ที่ไม่มี record อนุญาตให้เริ่มลงทะเบียนเมื่อ flag เปิด โดยส่ง `can_register: true`
 ใน not-found response. เมื่อ flag ปิดให้ส่ง `can_register: false`. Record เดิมที่ไม่อนุญาตให้
 ลงทะเบียนซ้ำตอบ `409 KIOSK_REGISTRATION_BLOCKED`; body ไม่ผ่าน schema ตอบ `400
-INVALID_KIOSK_REGISTRATION`, flag ปิดตอบ `403 KIOSK_REGISTRATION_DISABLED`, limit ต่อ device
-ตอบ `429 KIOSK_RATE_LIMITED`, auth ไม่ผ่านตอบ `401 DEVICE_AUTH_FAILED`, และ registry/database
+INVALID_KIOSK_REGISTRATION` (consent หมดเวลา → `400 KIOSK_CONSENT_EXPIRED`), flag ปิดตอบ `403 KIOSK_REGISTRATION_DISABLED`, เกิน limit ของ
+nginx zone `kiosk` ตอบ `429 KIOSK_RATE_LIMITED` (CR-188), auth ไม่ผ่านตอบ `401 DEVICE_AUTH_FAILED`, และ registry/database
 อ่านหรือเขียนไม่ได้ตอบ `503` โดยไม่สร้าง record. รายละเอียดนี้ implement ตามค่าที่เสนอในแผน;
 CR ที่แผนอ้างถึงยังไม่มีใน `docs/changes/` และต้องได้รับอนุมัติก่อนเปิด PR.
 
@@ -234,7 +237,7 @@ shelter ที่ผูกกับเครื่องมี `feature_flags.ki
 - `session_id` = hex 32 ตัว; รูปแบบผิด → `400 INVALID_INPUT`
 - ทุก endpoint: auth ไม่ผ่าน → `401 DEVICE_AUTH_FAILED`; registry อ่านไม่ได้ → `503 DEPENDENCY_UNAVAILABLE`
 - `qr_url` = `{origin}/api/v1/auth/oauth/thaid/start?mode=kiosk_check_in&session_id=…` (origin = `ORIGIN` / `PUBLIC_ORIGIN` ของ deploy)
-- สร้าง session: ลำดับตรวจ auth → rate limit 10 ครั้ง/นาที/เครื่อง (`429 KIOSK_RATE_LIMITED` + `retry-after: 60`, นับต่อ worker) →
+- สร้าง session: ลำดับตรวจ auth → (rate limit ที่ nginx zone `kiosk` ต่อ IP — `429 KIOSK_RATE_LIMITED` + `retry-after: 60`; CR-188) →
   gate → สร้าง. สร้างใหม่ = ยกเลิก session `pending` / `completed` เดิมของเครื่องเดียวกัน
 - TTL: `pending` 300 วิ; เมื่อยืนยันสำเร็จเป็น `completed` และนับใหม่ 180 วิ. ตู้ต้องนับเวลาจาก `expires_in_sec` ด้วยนาฬิกา
   monotonic (ไม่ใช้ `expires_at` กับนาฬิกาตู้) และ poll `status` อีกครั้งก่อนแสดงว่าหมดอายุ
@@ -248,9 +251,12 @@ shelter ที่ผูกกับเครื่องมี `feature_flags.ki
 session ต้องเป็น kind kiosk และ `pending` → gate ของ shelter ใน session. Callback ต้องได้ `pid` 13 หลักแล้วตั้ง session เป็น
 `completed`. ทุกผลลัพธ์ redirect ไป `/thaid-scan-success?flow=kiosk&status=success` หรือ `&error=<code>`
 (`missing_session` · `session_expired` · `thaid_disabled` · `missing_pid` · `oauth_exchange_failed` · `oauth_<idp_error>` · `invalid_state`).
+Callback ของ mode `kiosk_check_in` และ `member_scan` **ไม่**เทียบ cookie `oauth_thaid_state` กับ `state` (แอป ThaiD อาจเปิด
+callback ในเบราว์เซอร์อื่น) — ตรวจแค่ HMAC ของ `state`; `invalid_state` ใน mode นี้จึงหมายถึงไม่มี `code`/`state` หรือ `state`
+เซ็นไม่ถูก. Mode อื่นยังเทียบ cookie (CR-163 KTD-AC-10, #757)
 
 **Lookup (`POST /api/v1/scanner/kiosk/lookup`):** body `{ "source": "thaid", "session_id" }` (strict; ไม่รับ `citizen_id`).
-ตรวจ rate limit เดิม → gate → session ต้องเป็นของเครื่องนี้, `completed`, และ `shelter_code` ตรงกับเครื่อง มิฉะนั้น
+gate → session ต้องเป็นของเครื่องนี้, `completed`, และ `shelter_code` ตรงกับเครื่อง มิฉะนั้น
 `409 KIOSK_THAID_SESSION_INVALID`. Lookup ใช้ `pid` จาก session และ**ไม่** consume session. ไม่พบ → `404
 PRE_REGISTRATION_NOT_FOUND` พร้อม `can_register: false` (walk-in ด้วย ThaiD อยู่นอก scope).
 
@@ -266,6 +272,52 @@ PRE_REGISTRATION_NOT_FOUND` พร้อม `can_register: false` (walk-in ด�
 - ช่องทาง ThaiD ไม่ใช้ face check / staff PIN
 
 `scanner_client` แนบ device credential ให้ 3 path `thaid/session{,/status,/cancel}` เพิ่มจาก allowlist เดิม.
+
+### 2.1.2 Kiosk พิมพ์ QR จิตอาสา ([CR-151 §17](../changes/14-kiosk/CR-151-kiosk-pre-registration-check-in.md), #609)
+
+> ข้อเสนอทีม kiosk — approved โดย Soravit Sukkarn (Team Lead) 2026-10-20 (CR-151 §17)
+
+จิตอาสากรอกเบอร์โทรที่ตู้ → server หา volunteer ใน `shelter_{code}` ของเครื่องเท่านั้น แล้วคืน
+role-card payload **ที่มีอยู่แล้ว** (`TKT-VOL-HASH-` + `tracking_token_hash` ตัวพิมพ์ใหญ่). Endpoint
+**อ่านอย่างเดียว** — ไม่ mint, rotate หรือ backfill token และไม่เขียน CouchDB (ยกเว้น device last-seen).
+
+```http
+POST /api/v1/kiosk/volunteer-card
+X-Device-ID: kiosk-sh001-01
+X-Device-Secret: …
+Content-Type: application/json
+
+{ "phone": "0812345678" }
+```
+
+```json
+{
+  "shelter_code": "SH001",
+  "volunteer": {
+    "display_name": "สมชาย ใจ****ดี",
+    "volunteer_code": "V-012",
+    "qr_payload": "TKT-VOL-HASH-…"
+  }
+}
+```
+
+- `display_name` = `first_name` + `maskLastName(last_name)` (+ ` (ชื่อเล่น)` ถ้ามี); ไม่คืนเบอร์หรือชื่อเต็ม
+- เงื่อนไขพิมพ์ได้: `type: "volunteer"`, `status: "active"`, เบอร์ตรงกับ `phone` (หรือ `phone_hash` ที่ `phone`
+  ปัจจุบันยังตรง) **เพียง 1 คน**, และมี `tracking_token_hash` เป็น hex 64 ตัว
+- ตรวจ `kiosk_phone_check_in_enabled` ฝั่ง server (ใช้ toggle เดียวกับ reprint)
+- Rate limit: nginx zone `kiosk` ต่อ IP (CR-188) — ไม่มี limit ต่อเครื่อง/ต่อเบอร์ในแอปแล้ว
+- ตอบ `cache-control: no-store`, `pragma: no-cache`
+
+| Status | Code | เมื่อ |
+|---|---|---|
+| 400 | `INVALID_VOLUNTEER_CARD_INPUT` | body ผิด / เบอร์ normalize ไม่ได้ |
+| 401 | `DEVICE_AUTH_FAILED` | device credential ไม่ผ่าน |
+| 403 | `KIOSK_METHOD_DISABLED` | ศูนย์ปิด kiosk phone check-in |
+| 404 | `KIOSK_VOLUNTEER_CARD_NOT_FOUND` | ไม่พบ / ต่าง shelter / `inactive` / ไม่มี hash / เบอร์ซ้ำ — **body เดียวกันทุกกรณี** |
+| 429 | `KIOSK_RATE_LIMITED` | เกิน limit ของ nginx zone `kiosk` (`retry-after: 60`; CR-188) |
+| 503 | `DEPENDENCY_UNAVAILABLE` | registry/CouchDB อ่านไม่ได้ |
+
+`scanner_client` แนบ device credential ให้ path `/api/v1/kiosk/volunteer-card` (same-origin POST เท่านั้น).
 
 ### 2.2 Scanner staff PIN — ข้ามการตรวจใบหน้าด้วย PIN ของเครื่อง
 
@@ -288,6 +340,12 @@ PRE_REGISTRATION_NOT_FOUND` พร้อม `can_register: false` (walk-in ด�
 และเขียน `banner_enabled: true` · `PATCH /api/v1/kiosk/devices/[id]` รับ `screen_type` และ `banner_enabled` (boolean)
 ร่วมกับ field เดิม · summary ของรายการเครื่องมี `screen_type` และ `banner_enabled` เสมอ (doc ที่ไม่มี field อ่านเป็น
 `compact` / `true`).
+
+> **ปรับ 2026-10-21 — เสนอโดยทีม kiosk (Team Lead อนุมัติ 2026-10-22; CR-162 FR-KBG-14..15):** `banner_enabled` ถูกแทนที่ด้วย
+> `banner_group_id` — `POST /api/v1/kiosk/devices` **ไม่เขียน** `banner_enabled` อีก (เครื่องใหม่ไม่มีกลุ่ม) ·
+> `PATCH /api/v1/kiosk/devices/[id]` **ไม่รับ** `banner_enabled` (strict body → `422`; การจัดกลุ่มเครื่องทำผ่าน
+> `/api/back-office/kiosk-banner-groups/**` §2.3.1 เท่านั้น — PATCH ของเครื่องไม่รับ `banner_group_id`) · summary ของรายการ
+> เครื่องและของ `PATCH` มี `banner_group_id: string | null` (ไม่มีกลุ่ม = `null`) **แทน** `banner_enabled` · `screen_type` ไม่เปลี่ยน.
 
 `[id]` ใน path = `device_id` (เช่น `kiosk-01`) **ไม่ใช่** `_id` ของ doc (`scanner_device:kiosk-01`); ค่าที่ไม่ใช่
 `device_id` ที่ถูกต้อง = `404 NOT_FOUND`.
@@ -326,6 +384,18 @@ Content-Type: application/json
 และ log ระดับ `warn` ทุกครั้งที่ PIN ผิดติดกันครบ 5 ครั้งต่อเครื่อง (ตัวนับอยู่ใน memory, reset เมื่อ PIN ถูกหรือ
 server restart). `scanner_client` แนบ device credential ให้เฉพาะ request `POST` same-origin จากหน้า kiosk.
 
+**Reprint ด้วย PIN (ข้อเสนอ [CR-158 §9](../changes/14-kiosk/CR-158-kiosk-staff-pin-face-bypass.md), #796 — ยังไม่ approved):**
+`POST /api/v1/kiosk/reprint` รับ `id_last4` **หรือ** `staff_pin` อย่างใดอย่างหนึ่ง (ทั้งคู่ / ไม่มีเลย = `400 INVALID_REPRINT_INPUT`):
+
+```json
+{ "phone": "0812345678", "primary_evacuee_id": "evacuee:…", "staff_pin": "482913", "evacuee_ids": ["evacuee:…"] }
+```
+
+ตรวจ phone / shelter scope ของ primary ก่อน (`404 KIOSK_REPRINT_NOT_FOUND`) แล้วตรวจ PIN ของเครื่องที่ยืนยันตัวตนแล้วด้วยกติกาเดียวกับ
+verify ข้างบน (คิวต่อเครื่องเดียวกัน) โดยไม่ดูเลขบัตรของ primary · สำเร็จตอบ body เดียวกับ reprint ด้วย `id_last4` ·
+PIN ผิด `401 KIOSK_REPRINT_STAFF_PIN_INVALID` (หน่วง ~1 วินาที) · ไม่มี PIN `409 staff_pin_not_set` · คิวเต็ม `429 RATE_LIMITED` ·
+`scanner_secrets` ใช้ไม่ได้ `503 DEPENDENCY_UNAVAILABLE` · log `[kiosk-reprint] staff_pin_bypass` เมื่อพิมพ์ด้วย PIN (ไม่มี PIN / เบอร์ / ชื่อ).
+
 ### 2.3 Kiosk banner — feed ของตู้ + back-office ([CR-162](../changes/14-kiosk/CR-162-kiosk-banner.md))
 
 **ฝั่งตู้ (device credential, `cache-control: no-store` + `pragma: no-cache`)**
@@ -339,6 +409,12 @@ X-Device-Secret: <secret>
 คืน banner ของ `shelter_code` และ `screen_type` ของเครื่อง (จาก device principal เท่านั้น — เครื่องที่ไม่มี
 `screen_type` = `compact`) ที่ `status = active` และ `start_at ≤ now < end_at` เรียง `order` → `start_at` → `_id`
 สูงสุด 20 รายการ (กรองก่อนตัด cap) · เครื่องที่ `banner_enabled = false` ได้ `banners: []` โดย server ไม่ query banner:
+
+> **ปรับ 2026-10-21 — เสนอโดยทีม kiosk (Team Lead อนุมัติ 2026-10-22; CR-162 FR-KBG-30..33) — แทนที่เงื่อนไข `banner_enabled` ด้านบน:**
+> เครื่องที่ไม่มี `banner_group_id` ได้ `{ banners: [], fetched_at }` โดย server ไม่ query banner · เครื่องที่มี → คืน banner ที่
+> `status = active` และ `start_at ≤ now < end_at` และ `shelter_code` + **`group_id` (= `banner_group_id` ของเครื่อง)** +
+> `screen_type` ตรงกับเครื่อง (จาก device principal เท่านั้น) เรียง `order` → `start_at` → `_id` สูงสุด 20 รายการ (กรองก่อนตัด cap) ·
+> banner v1 (ไม่มี `group_id`) ไม่ถูกคืน · **shape ของ response ไม่เปลี่ยน** (ด้านล่าง) · allowlist ของ `kiosk/app/manager.py` ไม่เปลี่ยน
 
 ```json
 {
@@ -359,7 +435,7 @@ X-Device-Secret: <secret>
 
 | ผล | Response |
 | --- | --- |
-| สำเร็จ (รวมกรณีไม่มี banner / `banner_enabled = false`) | `200` · `banners: []` ได้ |
+| สำเร็จ (รวมกรณีไม่มี banner / ~~`banner_enabled = false`~~ → เครื่องไม่มี `banner_group_id` (2026-10-21)) | `200` · `banners: []` ได้ |
 | device credential ผิด / เครื่อง inactive | `401 DEVICE_AUTH_FAILED` |
 | registry ใช้ไม่ได้ | `503 DEPENDENCY_UNAVAILABLE` |
 
@@ -384,17 +460,37 @@ GET /api/v1/kiosk/banners/{id}/image?exp={unix_sec}&sig={hex}
 | Method | Path | Body / query | สำเร็จ | ข้อผิดพลาด |
 | --- | --- | --- | --- | --- |
 | `GET` | `/api/back-office/kiosk-banners` | `?shelter_code=` (req) `&view=current\|expired` (default `current`) · `current` = `end_at ≥ now` เรียง `start_at` asc · `expired` = `end_at < now` เรียง `end_at` desc | `200 KioskBannerSummary[]` (ไม่มี `_attachments` · มี `image_content_type`) | `422` · `403` |
-| `POST` | `/api/back-office/kiosk-banners` | `?shelter_code=` (req) · body = field แก้ไขได้ + `image: { content_type, data_base64 }` (req) | `201 KioskBannerSummary` (`order` ต่อท้ายของ `screen_type` นั้น) | `403` · field / รูปผิด `422` |
+| `POST` | `/api/back-office/kiosk-banners` | `?shelter_code=` (req) · body = field แก้ไขได้ + `image: { content_type, data_base64 }` (req) | `201 KioskBannerSummary` (`order` ต่อท้ายของ `screen_type` นั้น · **2026-10-21:** ต่อท้ายของ (`group_id`, `screen_type`) และ body ต้องมี `group_id` — ขาด / ไม่รู้จัก / กลุ่มของศูนย์อื่น `422`) | `403` · field / รูปผิด `422` |
 | `GET` | `/api/back-office/kiosk-banners/{id}` | — | `200 KioskBannerSummary` (มี `_rev`) | `404` |
-| `PUT` | `/api/back-office/kiosk-banners/{id}` | field แก้ไขได้ + `_rev` (req) + `image` (opt — ไม่ส่ง = คงรูปเดิม) · ห้ามมี `shelter_code` · ไม่รับ `order` | `200` | `404` · มี `shelter_code` หรือ field ผิด `422` · `_rev` ชน `409 CONFLICT` |
+| `PUT` | `/api/back-office/kiosk-banners/{id}` | field แก้ไขได้ + `_rev` (req) + `image` (opt — ไม่ส่ง = คงรูปเดิม) · ห้ามมี `shelter_code` · ไม่รับ `order` | `200` · **2026-10-21:** body ต้องมี `group_id` (ขาด / ไม่รู้จัก / กลุ่มของศูนย์อื่น `422`) · ย้ายกลุ่มหรือย้ายขนาดจอ → `order` ต่อท้าย slot ใหม่ · แก้ banner v1 ต้องส่ง `group_id` แล้วเขียนเป็น v2 | `404` · มี `shelter_code` หรือ field ผิด `422` · `_rev` ชน `409 CONFLICT` |
 | `PATCH` | `/api/back-office/kiosk-banners/{id}` | `{ _rev, status }` เท่านั้น (strict) | `200` | `404` · `422` · `409` |
 | `DELETE` | `/api/back-office/kiosk-banners/{id}?rev=` | — (hard delete) | `204` | `404` · `409` |
 | `GET` | `/api/back-office/kiosk-banners/{id}/image` | — (รูปสำหรับ preview ในหน้าจัดการ) | `200` + รูป · `cache-control: private, no-store` | `404` |
-| `PUT` | `/api/back-office/kiosk-banners/order` | `?shelter_code=` (req) · `{ screen_type, items: [{ id, _rev }] }` ครบทุก banner ที่ยังไม่หมดอายุของขนาดนั้น | `200` (เขียน `order` 1..n เฉพาะรายการที่เปลี่ยน) | `403` · `id` ซ้ำ `422` · ชุด `id` ไม่ตรง / `_rev` ไม่ตรง `409` |
+| `PUT` | `/api/back-office/kiosk-banners/order` | `?shelter_code=` (req) · `{ screen_type, items: [{ id, _rev }] }` ครบทุก banner ที่ยังไม่หมดอายุของขนาดนั้น · **2026-10-21:** `{ group_id, screen_type, items: [{ id, _rev }] }` ครบทุก banner ที่ยังไม่หมดอายุของ slot (`group_id`, `screen_type`) นั้น (ส่งได้ทีละ slot) | `200` (เขียน `order` 1..n เฉพาะรายการที่เปลี่ยน) | `403` · `id` ซ้ำ `422` · ชุด `id` ไม่ตรง / `_rev` ไม่ตรง `409` |
 
 "field แก้ไขได้" = `title`, `caption`, `duration_sec`, `start_at`, `end_at`, `status`, `screen_type` · รูปผิดชนิด
 (magic bytes) / base64 ไม่ canonical / เกิน 2 MB หลัง decode / field ไม่ผ่าน Zod → `422 VALIDATION` · body upload
 จำกัดที่ Node server ด้วย `BODY_SIZE_LIMIT=4M`.
+
+#### 2.3.1 Kiosk banner group — back-office (2026-10-21 · Team Lead อนุมัติ 2026-10-22 — CR-162 FR-KBG-20..29)
+
+กลุ่ม banner ต่อศูนย์ (schema.md §3.13) · guard เหมือน `/api/back-office/kiosk-banners` ทุกข้อ (SA ทุกศูนย์ ·
+`{code}:shelter_manager` / `{code}:kiosk_staff` เฉพาะศูนย์ตัวเอง · list / create นอก scope `403` · endpoint ที่มี `{id}` ไม่พบหรือ
+นอก scope `404` · ไม่มี session `401` · ไม่มี capability ที่ศูนย์ใด `403`). `KioskBannerGroupSummary` = field ของ doc (§3.13) + `_rev` +
+`device_ids: string[]` (= `device_id` ของ `scanner_device` ที่ `banner_group_id` = กลุ่มนั้น).
+
+| Method | Path | Body / query | สำเร็จ | ข้อผิดพลาด |
+| --- | --- | --- | --- | --- |
+| `GET` | `/api/back-office/kiosk-banner-groups` | `?shelter_code=` (req) | `200 KioskBannerGroupSummary[]` | ไม่ส่ง `shelter_code` `422` · นอก scope `403` |
+| `POST` | `/api/back-office/kiosk-banner-groups` | `?shelter_code=` (req) · `{ name, description?, device_ids?: string[] }` — server สร้างกลุ่มก่อน แล้วกำหนดเครื่องใน `device_ids` (flow: เลือกเครื่องก่อนสร้าง banner) | `201 KioskBannerGroupSummary` | นอก scope `403` · field ผิด / เครื่องของศูนย์อื่น `422` · `name` ซ้ำในศูนย์ (case-insensitive) `409` |
+| `GET` | `/api/back-office/kiosk-banner-groups/{id}` | — | `200 KioskBannerGroupSummary` | ไม่พบ / นอก scope `404` |
+| `PUT` | `/api/back-office/kiosk-banner-groups/{id}` | `{ _rev, name, description? }` | `200 KioskBannerGroupSummary` | `404` · field ผิด `422` · `name` ซ้ำ `409` · `_rev` ชน `409 CONFLICT` |
+| `DELETE` | `/api/back-office/kiosk-banner-groups/{id}?rev=` | — (hard delete · ล้าง `banner_group_id` ของเครื่องในกลุ่มเป็น `null`) | `204` | `404` · กลุ่มยังมี banner (ทั้งที่ยังแสดงและหมดอายุ) `409` · `_rev` ชน `409 CONFLICT` |
+| `PUT` | `/api/back-office/kiosk-banner-groups/{id}/devices` | `{ device_ids: string[] }` — **แทนที่สมาชิกทั้งชุด:** เครื่องที่ระบุได้กลุ่มนี้ (ย้ายออกจากกลุ่มเดิม) · เครื่องที่เคยอยู่แต่ไม่ระบุ → `banner_group_id = null` | `200 KioskBannerGroupSummary` | `404` · เครื่องของศูนย์อื่น `422` |
+
+- `name` trim 1–60 · `description` trim ≤200 · `shelter_code` = `?shelter_code=` ตอนสร้าง แก้ไม่ได้
+- error ใช้ envelope `{ "error": { "code", "message" } }` เหมือน endpoint อื่นในหัวข้อ §2.3
+- `KioskBannerSummary` (§2.3) มี `group_id: string | null` (banner v1 = `null` = "ยังไม่จัดกลุ่ม")
 
 ### 2.4 Referral — bulk transition และ job ปิดศูนย์ ([CR-167](../changes/09-F-referral/CR-167-referral-withdraw-close-reason-bulk.md), [CR-168](../changes/09-F-referral/CR-168-referral-shelter-closure-worker.md))
 
@@ -466,7 +562,7 @@ Contract เต็มอยู่ที่ [public-tier-flow-spec.html](../featu
 
 | Endpoint | Auth |
 | --- | --- |
-| `POST /public/v1/occupants` | — (rate-limited + audit); ค้นชื่อ: ทุกคำ ≥2 ตัวอักษร (สูงสุด 4 คำ), หลายคำ = ชื่อต้น prefix AND นามสกุลเต็ม exact, คำเดียว = ชื่อต้น prefix หรือ นามสกุลเต็ม, เรียงคงที่, max 10 ผล (CR-166) |
+| `POST /public/v1/occupants` | — (audit; rate limit ที่ nginx, CR-188); ค้นชื่อ: ทุกคำ ≥2 ตัวอักษร (สูงสุด 4 คำ), หลายคำ = ชื่อต้น prefix AND นามสกุลเต็ม exact, คำเดียว = ชื่อต้น prefix หรือ นามสกุลเต็ม, เรียงคงที่ทุกประเภทการค้น (ชื่อ และเลขบัตร / พาสปอร์ต / เบอร์ — `first_name_key, _id`, CR-181), max 10 ผล (CR-166) |
 | `GET /public/v1/needs` | — |
 | `POST /public/v1/donations` | เบอร์โทร (+OTP เมื่อ `public_otp_required` เปิด) |
 | `GET /api/public/v1/donations/slots?shelter_code&date&mode` | — (BFF-only, CR-157) — BFF อ่าน `donation_slot` จาก CouchDB ฝั่ง server (doc type นี้ไม่ถูก project ลง Mongo) คืนเฉพาะช่วงเวลา/ความจุ/ยอดจอง ไม่มี PII |
@@ -475,8 +571,8 @@ Contract เต็มอยู่ที่ [public-tier-flow-spec.html](../featu
 | `PATCH /public/v1/donations/{tracking_token}/items` | token |
 | `DELETE /public/v1/donations/{tracking_token}` | token |
 | `GET /public/v1/transparency/*` | — |
-| `POST /api/public/v1/registrations` | CAPTCHA + rate-limit (BFF-only, ไม่มีบน FastAPI) |
-| `POST /api/public/v1/registrations/photos` | rate-limit (BFF-only) — multipart → Couch `image:{ulid}` ใน DB ศูนย์ที่เลือก (face/pet; ไม่ใช่ GridFS) |
+| `POST /api/public/v1/registrations` | CAPTCHA (BFF-only, ไม่มีบน FastAPI); rate limit ที่ nginx (CR-188) |
+| `POST /api/public/v1/registrations/photos` | rate limit ที่ nginx (CR-188) — multipart → Couch `image:{ulid}` ใน DB ศูนย์ที่เลือก (face/pet; ไม่ใช่ GridFS) |
 | `POST /api/public/v1/registrations/lookup` | รหัสการจอง + เบอร์โทร (BFF-only) |
 
 > **หมายเหตุ (CR-070/T-71):** endpoints กลุ่ม `registrations/**` เป็น **BFF-only** — อยู่บน SvelteKit เท่านั้น
@@ -492,6 +588,35 @@ Contract เต็มอยู่ที่ [public-tier-flow-spec.html](../featu
 > (เหมือน onsite CR-054). เส้น **ไม่ระบุศูนย์** ยังใช้ GridFS ผ่าน
 > `POST /api/public/v1/unassigned-registrations/photos` (§5.2).
 
+**PDPA consent บน public pre-register (FR-42 · `docs/features/pdpa-consent-block-spec.md`):** ทั้งสอง path
+(`POST /api/public/v1/registrations` และ `POST /api/public/v1/unassigned-registrations`) รับ field เพิ่มสองตัว
+**ทั้งคู่ required** ใน body เดิม (ไม่ส่งหรือไม่ผ่านการตรวจ → `422 INVALID_INPUT` พร้อม `details` และไม่เขียนอะไร):
+
+| Field | Shape | กติกา |
+| --- | --- | --- |
+| `consent` | ผลจากบล็อกช่อง `web`: `{ mode: "full", health: boolean, search_visible: boolean, guardian_for: string[], verbal: false, ref, given_at, notice_version }` หรือ `{ mode: "basic", guardian_for, verbal: false, ref, given_at, notice_version }` | strict (field เกินปฏิเสธ); `ref` = `CS-` + 8 ตัวอักษร ULID; `given_at` = ISO-8601 มี offset; `verbal` เป็น `false` เสมอ (ช่อง `web` ไม่มี verbal); `guardian_for` เก็บ **member key** ไม่ใช่ลำดับ |
+| `consent_member_keys` | `string[]` (≥1) | key ของสมาชิกตามลำดับเดียวกับ `members` (ตัวแรก = ผู้ลงทะเบียน) — จำนวนต้องเท่ากับ `members` และไม่ซ้ำ; `guardian_for` ต้องเป็นสมาชิกใน list นี้และไม่ใช่ผู้ลงทะเบียน |
+
+BFF คำนวณผลต่อสมาชิกด้วย `planRegistrationConsent` ตัวเดียวกับทุก channel (FR-11, FR-30–33): ผู้ลงทะเบียน `given_by = self`,
+สมาชิกใน `guardian_for` = `guardian`, ที่เหลือ = `household_member`; `search_excluded = (mode = basic) หรือ search_visible = false`;
+`health = false` → ไม่เขียน `medical` ของสมาชิกนั้น (FR-32) และข้อมูลสุขภาพไม่ถูกส่งต่อไป Mongo. Path `registrations` (shelter booking)
+เขียน `evacuee.consent` + `privacy.search_excluded` ลง CouchDB ศูนย์ที่เลือกโดยตรงพร้อม `schema_v: 15` (`channel = web`,
+`giver_evacuee_id` = evacuee id ของผู้ลงทะเบียนเมื่อ `given_by` เป็น `guardian`/`household_member`). Path `unassigned-registrations`
+ส่งต่อเป็น `members[].consent` / `members[].search_excluded` ไป FastAPI (§5.2).
+
+#### Response ของ `POST /public/v1/donations` (CR-174 FR-15)
+
+```jsonc
+// 201
+{ "success": true, "tracking_token": "TX-SH001-…", "booking_ref": "DN-306892",
+  "status": "verifying" }   // หรือ "pending_review" — สถานะที่ใบเริ่ม (req)
+```
+
+`status` คำนวณจากรายการ (schema.md §2.3 "ประเมินทีละรายการ"): รายการที่จองโควต้าในแคมเปญได้ →
+`approved`, อื่น ๆ (พิมพ์เอง / ไม่มีแคมเปญ / counter ยังไม่ seed) → `pending` · มี `pending` ≥ 1 →
+`pending_review` · ไม่งั้น `verifying` (ตั๋วแสดง QR ทันที — FR-16). BFF `/api/public/v1/donations`
+ส่ง `status` ต่อให้ client. `review_status` ของแต่ละรายการ client ส่งเองไม่ได้ (FR-3)
+
 **donor แก้การจองของตัวเอง — สองเส้นแยกกัน** (DN-6 + CR-080)
 
 | Path | Body | ทำอะไร |
@@ -503,9 +628,46 @@ Contract เต็มอยู่ที่ [public-tier-flow-spec.html](../featu
 (`router.py:106` / `router.py:124`)
 
 ```jsonc
-// PATCH /public/v1/donations/{tracking_token}/items
-{ "items": [{ "item_id": "item:rice", "free_text": "ข้าวสาร", "qty": "8", "unit": "kg" }] }
+// PATCH /public/v1/donations/{tracking_token}/items — request
+{
+  "items": [{ "item_id": "item:rice", "free_text": "ข้าวสาร", "qty": "8", "unit": "kg" }],
+  // CR-174 FR-18 (opt) — donation doc ใน CouchDB ก่อนแก้ ตามที่ BFF อ่านมา (service-to-service
+  // หลัง Bearer). ผลประเมินของเจ้าหน้าที่อยู่ใน CouchDB ซึ่ง FastAPI อ่านไม่ได้ → BFF ส่งมาให้
+  "current_items": [{ "item_id": "item:rice", "qty": "5", "unit": "kg", "reserved_qty": "5",
+                     "review_status": "approved" }] | null,
+  "current_status": "verifying" | null
+}
+
+// 200 — response
+{
+  "success": true, "message": "Donation items updated",
+  "revisions": 2,                       // จำนวนใน revisions[] หลังแก้
+  "items": [{ "item_id": "item:rice", "free_text": "ข้าวสาร", "qty": "8", "unit": "kg",
+              "reserved_qty": "8", "review_status": "approved" }],   // รายการที่เก็บจริง (+ review_*)
+  "revision": { "at": "…", "by": "donor", "items_before": [...], "items_after": [...] },
+  "status": "verifying",                // CR-174 FR-18b — สถานะใบหลังคำนวณ (req)
+  "auto_approved_lines": [0]            // CR-174 FR-26 — index ใน items ที่เพิ่งได้ approved อัตโนมัติครั้งนี้
+}
 ```
+
+BFF `items/+server.ts` เขียน `items`, `revisions`, `status` และ `schema_v` ปัจจุบันของ donation ลง
+CouchDB ใน `PUT` เดียว แล้วเขียน `audit` อนุมัติอัตโนมัติ (`approved_by: 'system'`,
+`rule: 'campaign_line'`, `lines` = `auto_approved_lines`) เมื่อ list ไม่ว่าง (FR-18b, FR-26).
+
+**การคำนวณ `review_status` ตอนแก้ (CR-174 FR-18/18a/18c)** — ฐานเดิม = `current_items`/`current_status`
+ถ้าส่งมา · ไม่ส่ง: ใบที่ยังไม่ sync ใช้ intake buffer · sync แล้วใช้ `status` + `review_*` (วางทับรายการ
+ใน buffer ตามลำดับ) จาก `public_donations`. ฟอร์มแก้ส่งมาแค่ `item_id`/`free_text`/`qty`/`unit` —
+ก่อนเทียบ FastAPI เติม `category`/`condition`/`note` ที่ request ไม่ได้ส่งจากรายการเดิมชื่อเดียวกัน
+(จับคู่ตามชื่อ รายการเดิมละครั้ง; ค่าที่ request ส่งมาชนะ; ถ้ารายการเดิมชื่อเดียวกันมี field ทั้งสามต่างกัน
+ไม่เติม — เดาไม่ได้ว่าเป็นบรรทัดไหน รายการนั้นจึงนับว่าถูกแก้และรอประเมิน) ไม่งั้นทุกรายการจะนับว่าถูกแก้และ
+field ทั้งสามหายจาก doc. ค่าข้อความเทียบหลังตัดช่องว่างหัวท้าย. รายการใหม่ที่ `item_id`, `category`, `free_text`, `qty`
+(เทียบเป็นตัวเลข), `unit`, `condition`, `note` ตรงกับรายการเดิมที่ยังไม่ถูกจับคู่ (ว่าง = ไม่มี field;
+รายการเดิมจับคู่ได้ครั้งเดียว) คงผลเดิมทั้ง 3 field รวม `rejected` · อื่น ๆ: จองโควต้าในแคมเปญได้ →
+`approved` (นับใน `auto_approved_lines`), ไม่ได้ → `pending`. ใบไม่มี `review_status` (ก่อน schema_v 7):
+`verifying` = ถือว่ารายการเดิม `approved` ทั้งหมด · `pending_review` = คำนวณใหม่ทุกรายการเหมือนใบใหม่ ·
+`declared` = ไม่เขียน `review_status` และคง `declared`. ผลเขียนลง intake buffer (`items_declared` +
+`status`) และ stub `public_donations` (`items_declared` ทุกกรณี · `status` เฉพาะใบที่ BFF ไม่ได้ส่ง
+`current_status` — ใบที่ sync แล้วได้ `status` จาก projector หลัง BFF เขียน CouchDB สำเร็จ)
 
 > `items[].unit` ต้องเป็น `item_master.base_unit` (code เช่น `kg`) เมื่อส่ง `item_id` มาด้วย —
 > ป้ายภาษาไทยที่ผู้ใช้เห็นเป็นเรื่องของชั้น UI เท่านั้น (schema.md §2.1; ด่านตรวจรับตอบ
@@ -518,11 +680,55 @@ Contract เต็มอยู่ที่ [public-tier-flow-spec.html](../featu
 | สถานะ | ความหมาย |
 | --- | --- |
 | `200` | แก้สำเร็จ — บันทึก `revisions[]` เพิ่ม 1 รายการ |
-| `400` | สถานะไม่ได้อยู่ใน `{declared, pending_review}` แล้ว — เจ้าหน้าที่รับเรื่องไปแล้ว (`DONOR_EDITABLE_STATUSES`, CR-052 §1.4) |
+| `400` | สถานะไม่ได้อยู่ใน `{declared, pending_review, verifying}` แล้ว — ของถึงศูนย์/ปิดใบไปแล้ว (`DONOR_EDITABLE_STATUSES`, CR-174 FR-20..FR-23 — ชุดเดียวกันสำหรับแก้รายการ, `DELETE` ยกเลิก และ `PATCH` เลขพัสดุ). เส้นนี้เช็คกับ `current_status` ถ้า BFF ส่งมา และเช็คกับ `status` ของ intake buffer ด้วยเสมอ (settle อาจเลื่อนไปก่อนแล้ว) |
 | `409 NEED_FULL` | โควตาไม่พอ — **ของเดิมไม่เปลี่ยนเลย** ทุกการจองที่ทำไปในคำขอนี้ถูกคืนกลับ |
-| `429` | rate-limit ต่อ IP (ไม่มีเพดานจำนวนครั้งต่อใบจอง) |
+| `409 BOOKING_CHANGED` | `status` ของ intake buffer เปลี่ยนระหว่างที่คำขอนี้ขยับโควตา (เช่น ศูนย์รับของแล้ว settle ปรับเป็น `received`) — **ของเดิมไม่เปลี่ยนเลย** โควตาที่ขยับไปในคำขอนี้ถูกคืนกลับ ผู้บริจาคโหลดใหม่แล้วลองอีกครั้ง |
+| `409 GOODS_IN_STOCK` | ศูนย์เริ่มรับของของใบนี้เข้าคลังแล้ว (มีแถว `stock_ledger` `reason: donation` ที่ `ref_id` ชี้ใบนี้) — BFF ปฏิเสธก่อนแตะโควตา · `DELETE /public/v1/donations/{tracking_token}` ตอบแบบเดียวกัน · body `{ success: false, error: "GOODS_IN_STOCK", message }` (decision sync 2026-10-22, CR-174 FR-20/21) |
+| `429` | rate limit ต่อ IP ที่ nginx (CR-188; ไม่มีเพดานจำนวนครั้งต่อใบจอง) |
+| `503 DONATION_UNAVAILABLE` | BFF อ่านใบใน CouchDB ไม่ได้ (error อื่นนอกจาก 404 ของ DB ศูนย์ — 404 = ใบยังไม่ sync ไปทาง FastAPI ตามเดิม) — **ไม่เปลี่ยนอะไรเลย** ทั้งโควตาที่ FastAPI และ CouchDB ผู้บริจาคลองใหม่ได้ · `PATCH /public/v1/donations/{tracking_token}` (เลขพัสดุ) และ `DELETE /public/v1/donations/{tracking_token}` ตอบแบบเดียวกัน · body `{ success: false, error: "DONATION_UNAVAILABLE" }` · `GET` ไม่ได้รับผล (overlay CouchDB เป็น optional ตอบจาก FastAPI ต่อ) (decision sync 2026-10-22) |
 
 TTL **ไม่รีเซ็ต** — `expires_at` ยังนับจาก `declared_at` เดิม
+
+#### Response ของ `GET /public/v1/donations/{tracking_token}` (CR-172)
+
+FastAPI อ่าน `public_donations` (fallback intake buffer เมื่อ projection ยังไม่มา); BFF
+`/api/public/v1/donations/{tracking_token}` overlay ด้วย donation doc ใน CouchDB ทีละ key
+(doc ชนะ projection lag) แล้วคืนรูปเดียวกัน. `donation` เป็น `dict` (OpenAPI = object
+`additionalProperties`) — เพิ่ม key ใหม่ไม่เปลี่ยน OpenAPI
+
+```jsonc
+{
+  "success": true,
+  "donation": {
+    "status": "received",              // enum ตาม schema.md §2.3
+    "booking_ref": "DN-306892",
+    "shelter_code": "SH001",
+    "donor": { ... },                  // เฉพาะทาง buffer / BFF overlay — ไม่มี phone_hash
+    "items": [{ "item_id": "item:rice", "item_name": "ข้าวสาร", "qty": "10", "unit": "kg", "category": null,
+                "review_status": "approved|pending|rejected" | null,           // CR-174 FR-17/FR-27
+                "review_reason_code": "not_needed|expired|damaged|other" | null,
+                "review_reason": "…" | null }],
+    "logistics": { ... } | null,
+    "received_summary": {              // null จนกว่าตรวจรับ — รูปเต็มดู schema.md §2.3
+      "total_items": 2, "received_at": "…", "remarks": "…", "shortfalls": [ ... ],
+      "items": [
+        { "item_id": "item:rice", "qty": "10", "unit": "kg" },
+        { "free_text": "นมกล่อง", "qty": "0", "unit": "กล่อง",
+          "rejected": true, "reject_reason": "หมดอายุ — กล่องนมหมดอายุ 2 กล่อง", "reject_reason_code": "expired" }
+      ]
+    } | null,
+    "reject_reason": "ไม่ตรงเกณฑ์การรับ / เกินความต้องการ" | null,          // CR-172 FR-1
+    "reject_reason_code": "not_needed|expired|damaged|other" | null,     // CR-172 FR-2
+    "updated_at": "…", "expires_at": "…" | null,
+    "revisions": [ ... ]               // CR-080
+  }
+}
+```
+
+- `reject_reason` = ข้อความที่ผู้บริจาคเห็น (label ภาษาไทยของ code + รายละเอียด, ≤ 500) — มีค่าเฉพาะ
+  `status: rejected`; ใบที่ยังอยู่ใน buffer และ doc ก่อน schema_v 6 ได้ `null` ทั้งคู่ (FR-17)
+- บรรทัดใน `received_summary.items[]` ที่ `rejected: true` = "ไม่รับ" ≠ "ขาด" — ไม่อยู่ใน
+  `shortfalls` (FR-13); UI แสดงป้าย "ไม่รับ" พร้อมเหตุผลรายบรรทัด (FR-16)
 
 #### Slot error codes ของ `POST /public/v1/donations` (CR-157)
 
@@ -546,7 +752,7 @@ BFF ตรวจช่วงเวลา (`logistics.slot`) ก่อนส่�
 | --- | --- | --- | --- |
 | `/external/v1/shelters/{code}` | GET | `Authorization: Bearer <key>` หรือ `X-API-Key` | รายละเอียดศูนย์ (`ShelterDetailResponse`) |
 | `/external/v1/needs` | GET | เหมือนกัน | รายการความต้องการ (`NeedsListResponse`) |
-| `/external/v1/occupants` | POST | เหมือนกัน | ค้นหาผู้ประสบภัยแบบ public search (rate limit + `SearchAudit`); กติกาค้นชื่อเหมือน `/public/v1/occupants` (CR-166 — partner เห็นพฤติกรรมเปลี่ยน) |
+| `/external/v1/occupants` | POST | เหมือนกัน | ค้นหาผู้ประสบภัยแบบ public search (`SearchAudit`; rate limit ที่ nginx zone `external`, CR-188); กติกาค้นชื่อเหมือน `/public/v1/occupants` (CR-166 — partner เห็นพฤติกรรมเปลี่ยน); ค้นเลขบัตร / พาสปอร์ต / เบอร์เรียง `first_name_key, _id` แล้ว (CR-181) — ยังคืน `cancelled` + `family_members` |
 | `/external/v1/announcements` | GET | เหมือนกัน | ประกาศ (แบ่งหน้า) |
 | `/external/v1/config/faqs` | GET | เหมือนกัน | FAQ config |
 
@@ -559,7 +765,7 @@ BFF ตรวจช่วงเวลา (`logistics.slot`) ก่อนส่�
 | Method | Path | Auth |
 | --- | --- | --- |
 | POST | `/public/v1/unassigned-registrations/photos` | public BFF + secret — GridFS face/pet photo (#255); returns `photo_id` (`gfs:{oid}`) |
-| POST | `/public/v1/unassigned-registrations` | public BFF + secret — body mirrors public UnifiedRegistration fields (+ member `photo` / pet `image_url` refs); `schema_v: 3`; optional `join_registration_id` appends into existing family (incl. closed → reopen) |
+| POST | `/public/v1/unassigned-registrations` | public BFF + secret — body mirrors public UnifiedRegistration fields (+ member `photo` / pet `image_url` refs); `schema_v: 4`; optional `join_registration_id` appends into existing family (incl. closed → reopen); ทุก `members[]` ต้องมี `consent` + `search_excluded` (ด้านล่าง) |
 | GET | `/public/v1/unassigned-registrations/{id}/status` | public BFF + secret (`verify_external_secret`) — status-only, **no PII**: `{id, status, members_total, members_claimed, claimed}`; `claimed = members_claimed > 0 and status in (closed, claimed)` (partial claim = `open` → still pending); 404 `NOT_FOUND` when deleted. Caller: BFF `/api/public/v1/registrations/status` (ticket sync) — upstream errors map to 502 `STATUS_UNAVAILABLE`, never `notFound` |
 | GET | `/staff/v1/unassigned-registrations/search?q=` | staff session — open members + open pets |
 | GET | `/staff/v1/unassigned-registrations/{id}/review` | `require_registration_staff` — read-only pre-claim review (CR-140 addendum); open members/pets + household address only (no `pets[]` claim-status list); writes nothing |
@@ -567,27 +773,45 @@ BFF ตรวจช่วงเวลา (`logistics.slot`) ก่อนส่�
 | POST | `/staff/v1/unassigned-registrations/{id}/claim` | staff + shelter scope — body `member_ids` and/or `pet_ids`; copies nickname/religion/emergency_contact; GridFS member `photo` + pet `image_url` → Couch `image:{ulid}`; append claimed pets onto existing Couch HH |
 | DELETE | `/staff/v1/unassigned-registrations/{id}` | `system_admin` only |
 
+**Consent ต่อสมาชิก (FR-42, `schema_v` 3 → 4):** `members[]` ของ `POST /public/v1/unassigned-registrations` เพิ่มสอง field **required**
+(ขาด → `422`; ใช้กับทั้งสร้างใหม่และ join ครอบครัวเดิม):
+
+| Field | Shape | กติกา |
+| --- | --- | --- |
+| `members[].consent` | `{ mode: "full", health: boolean, ref, given_at, notice_version, given_by }` หรือ `{ mode: "basic", health: false, ref, given_at, notice_version, given_by }` | `given_by` ∈ `self` \| `guardian` \| `household_member` (ไม่รับ `backfill`); `ref` = `^CS-[0-9A-HJKMNP-TV-Z]{8}$`; `given_at` = ISO-8601 มี offset (เก็บสตริงตามที่ client ส่ง); ไม่มี `channel`, `giver_evacuee_id`, `recorded_verbally_by` ใน request (server ผูกเอง) |
+| `members[].search_excluded` | `boolean` | BFF คำนวณจากผลบล็อก (FR-30/31); `consent.mode = "basic"` แล้ว `search_excluded = false` → `422` (FR-31) |
+
+FastAPI **ไม่ตัดสิน policy** — BFF คำนวณต่อสมาชิกแล้ว; use case เพียงผูกให้ครบก่อนเก็บ: `channel = "web"`, `recorded_verbally_by = null`,
+`giver_evacuee_id = null` เมื่อ `self` และ = `reserved_evacuee_id` ของ **สมาชิกคนแรกของ request** (ผู้ลงทะเบียน) เมื่อเป็น `guardian`/`household_member`.
+ผลที่เก็บใน `unassigned_registrations.members[]` คือ `consent` (shape เดียวกับ `evacuee.consent`, `schema.md`) + `search_excluded`.
+สมาชิกที่คิวไว้ก่อน `schema_v 4` ไม่มี `consent` (`null`; FR-44) และ report-in ถามความยินยอมเฉพาะคนเหล่านี้ (FR-41).
+
+**`OpenMemberHit`** (member `open` ใน hit ของ `GET /staff/v1/unassigned-registrations/search` และ `…/{id}/review`) เพิ่ม `consent: EvacueeConsent | null`
+(`null` = ยังไม่เคยให้ความยินยอม) และ `search_excluded: boolean` (default `false`) เพื่อให้หน้า report-in แสดงสรุปแบบอ่านอย่างเดียวของคนที่มี `consent` แล้ว.
+Claim คัดลอก `consent` และ `search_excluded` ไป evacuee doc โดยไม่เปลี่ยนค่า (`sync` §3.3).
+
 Claim = Mongo mark (คน+สัตว์) แล้ว birth/append Couch (option B — ดู [CR-113](../changes/00-baseline/CR-113-unassigned-registration-mongo.md) + [CR-140](../changes/00-baseline/CR-140-persistent-unassigned-family.md)); shape: `schema.md` §9.5. เมื่อไม่มี `open` เหลือ → เอกสาร `closed` (**ไม่** hard-delete); `deleted` เสมอ `false`. Public browser เรียกผ่าน SvelteKit BFF เท่านั้น (ไม่ตรง FastAPI).
 
 **CR-140 addendum:** Staff claim UI ไม่เรียก `POST .../claim` ทันทีที่ติ๊กเลือก — ไปหน้า review (`GET .../{id}/review`, อ่านอย่างเดียว) ก่อนเสมอ; `POST .../claim` ถูกเรียกเมื่อ staff กดยืนยันในหน้านั้นเท่านั้น (ดู [CR-140](../changes/00-baseline/CR-140-persistent-unassigned-family.md) addendum ท้ายไฟล์).
 
-### 5.3 Partner Data API — OAuth2 `/external` (EXT-001–011, #214, CR-154)
+### 5.3 Partner Data API — OAuth2 `/external` (EXT-001–012, #214, CR-154)
 
 Machine-to-machine สำหรับ **M6 Resource Logistics / M7 Command Center / M2 กลุ่มเปราะบาง (CR-154)** — อ่าน MongoDB projection; ข้อยกเว้นเดียวที่เขียน = EXT-008/009 booking ผ่าน Mongo buffer `external_bookings` → worker inbound → CouchDB (FastAPI ไม่แตะ CouchDB SoR ตรง) — สถาปัตยกรรมใน [ADR 0002](../adr/0002-partner-integration-architecture.md); **as-built ส่งมอบพันธมิตร:** รายงาน as-built ส่งมอบพันธมิตรถูกลบออกจาก repo แล้ว (commit `4374bcc20`) — **§5.3 นี้คือแหล่งอ้างอิงหลัก** (ODT ใน `docs/source/` เป็น immutable archive; [stub](./partner-api.md) คงไว้เพื่อลิงก์เดิม).
 
 | Endpoint | Method | Auth / scope | หมายเหตุสั้น |
 | --- | --- | --- | --- |
 | `/external/token` | POST | body: `grant_type=client_credentials`, `client_id`, `client_secret` | JWT ~3600s + `scopes[]` (EXT-001) |
-| `/external/locations` | GET | Bearer · `location-read` | Location Master list (EXT-002) |
-| `/external/locations/{code}` | GET | Bearer · `location-read` | detail + `facilities` (EXT-003) |
+| `/external/locations` | GET | Bearer · `location-read` | Location Master list (EXT-002) — แต่ละรายการมี `accepts_booking: bool` (กติกาเดียวกับ EXT-008: `location_status != closed` **และ** `feature_flags.accepts_pre_registration == true`; ไม่มี flag หรือ `raw_data` / `feature_flags` ผิดรูป (ไม่ใช่ object) หรือค่าไม่ใช่ boolean `true` เป๊ะ = `false` (ไม่ error); ค่าเดียวกันทุก partner ไม่ขึ้นกับ scope) · filter `?accepts_booking=true\|false` กรองใน Mongo (`total`/pagination ถูกต้อง; ใช้ร่วมกับ `status` ได้ — เช่น `status=closed&accepts_booking=true` = ว่าง) · รับเฉพาะ `true` / `false` ตัวพิมพ์เล็ก; ค่าอื่น (`yes`, `1`, `True`, ค่าว่าง ฯลฯ) → **422** `validation_error` (#751) |
+| `/external/locations/{code}` | GET | Bearer · `location-read` | detail + `facilities` + `accepts_booking` (กติกาเดียวกับ EXT-002, #751) (EXT-003) |
 | `/external/locations/{code}/stock` | GET | Bearer · `location-stock-read` | stock; `updated_at` ระดับ location (EXT-004) |
 | `/external/locations/{code}/occupancy` | GET | Bearer · `occupancy-read` | breakdown (`male`, `female`, `gender_unspecified`, `child_under_5`, `elderly_over_60`, `pregnant`, `bedridden`, `disabled`) + `updated_by_role` คงที่ (EXT-005); `gender_unspecified` = `gender` เป็น `null`/`'other'`, invariant `male+female+gender_unspecified = occupancy_total` (decision sync 2026-10-09) |
 | `/external/summary` | GET | Bearer · `location-read` (+ `occupancy-read` สำหรับ top-level `occupancy_total`) | `critical_items` เฉพาะ `low`/`critical` (EXT-006) |
-| `/external/locations/{code}/occupants` | GET | Bearer · `occupancy-pii-read` + `?purpose=` | **denied by default**; ได้ scope แล้วยังคืน `result: []` จนกว่ามี data source (EXT-007 scaffold) |
-| `/external/bookings` | POST | Bearer · `booking-write` | จองศูนย์แทนประชาชน (M2) — body **`{location_code, persons: [{cid, first_name, last_name, phone}, …]}`** 1–100 คนต่อ request (CR-169 FR-1/FR-6) หรือ body เดิม `{location_code, cid, first_name, last_name, phone}` (= `persons` ยาว 1, D1; ส่งสองรูปแบบพร้อมกัน → 422) → **201** `result: {booking_id: "BK-{ulid}", location_code, booking_status: "BOOKED", persons_count: N}`; `booking_id` เดียวต่อกลุ่ม (ใช้กับ EXT-009/010) · **all-or-nothing** — ผิดกี่คนก็ตอบ 422 ครั้งเดียวพร้อมดัชนีทุกคนที่ผิด · ซ้ำกับศูนย์เดียวกัน → **409** `duplicate_booking` `detail: "persons[i]"` (0-based, คนแรกที่ซ้ำ; body เดี่ยว = `persons[0]`) และไม่สร้างอะไรเลย · worker เขียน `household` + `evacuee` (`pre_registered`, `registered_via: api`) **ต่อคน** ภายใน ~10s (1 คน = 1 household, `booking_ref` = `booking_id`) · ศูนย์ `full` จองได้ (EXT-008) · **header `Idempotency-Key`** (ไม่บังคับ; 1–255 ตัวอักษร, ผิดรูปแบบ → 422 `validation_error`; ไม่ส่ง = พฤติกรรมเดิม) — key + body เดิม → **201** body เดิม (`booking_id` เดิม ไม่สร้างกลุ่มใหม่); key เดิม body ต่าง → **409** `idempotency_key_reused`; request แรกยังไม่จบ → **409** `idempotency_in_progress`; key ใช้ได้ 24 ชม. ต่อ client (#614) |
+| `/external/locations/{code}/occupants` | GET | Bearer · `occupancy-pii-read` + `?purpose=` | **denied by default**; ได้ scope แล้วคืนรายชื่อผู้พักที่ `current_stay.status = active` แบบ masked (`occupant_ref`, `name_masked`, `age_range`, `gender`, `care_flags`, `checked_in_at`) แบ่งหน้า — ไม่รวมคนที่ `privacy.search_excluded = true` (EXT-007; decision sync 2026-10-26, #791) |
+| `/external/bookings` | POST | Bearer · `booking-write` | จองศูนย์แทนประชาชน (M2) — body **`{location_code, persons: [{cid, first_name, last_name, phone}, …]}`** 1–100 คนต่อ request (CR-169 FR-1/FR-6) หรือ body เดิม `{location_code, cid, first_name, last_name, phone}` (= `persons` ยาว 1, D1; ส่งสองรูปแบบพร้อมกัน → 422) → **201** `result: {booking_id: "BK-{ulid}", location_code, booking_status: "BOOKED", persons_count: N}`; `booking_id` เดียวต่อกลุ่ม (ใช้กับ EXT-009/010) · **all-or-nothing** — ผิดกี่คนก็ตอบ 422 ครั้งเดียวพร้อมดัชนีทุกคนที่ผิด · ซ้ำกับศูนย์เดียวกัน → **409** `duplicate_booking` `detail: "persons[i]"` (0-based, คนแรกที่ซ้ำ; body เดี่ยว = `persons[0]`) และไม่สร้างอะไรเลย · worker เขียน `household` + `evacuee` (`pre_registered`, `registered_via: api`) **ต่อคน** ภายใน ~10s (1 คน = 1 household, `booking_ref` = `booking_id`) · **กติการับจอง (#751):** จองได้เมื่อ `accepts_booking` = true คือ `location_status != closed` **และ** `raw_data.feature_flags.accepts_pre_registration == true` — ศูนย์ที่ไม่เคยเปิด switch (ไม่มี flag) หรือปิด หรือ `closed` → **409** `location_not_bookable` (เดิมบล็อกเฉพาะ `closed`/flag `false`; CR-154 FR-15/16, CR-169); ศูนย์ `full` ยังจองได้ถ้า switch เปิด; ศูนย์ไม่มี/`is_active=false` → 404 `location_not_found` เสมอ (ตรวจก่อน) · **`booking-bypass` (#751; ใช้คู่ `booking-write`, EOC override):** token ที่มีทั้งสอง scope จองศูนย์ที่ไม่ผ่านกติกาข้างต้น (รวม `closed`) ได้ → **201** ตามปกติ; ไม่ต้องส่ง field เพิ่ม, ใช้อัตโนมัติเมื่อศูนย์ไม่ผ่านกติกาเท่านั้น; `booking-bypass` อย่างเดียวไม่มี `booking-write` → 403 `insufficient_scope`; ใช้กับศูนย์ที่จองได้ปกติ = จองปกติ (ไม่นับเป็น bypass) · เมื่อ bypass ถูกใช้จริง: access log `status = "granted_bypass"` และ `external_bookings.bypass = true` ทุกแถวของกลุ่ม · **header `Idempotency-Key`** (ไม่บังคับ; 1–255 ตัวอักษร, ผิดรูปแบบ → 422 `validation_error`; ไม่ส่ง = พฤติกรรมเดิม) — key + body เดิม → **201** body เดิม (`booking_id` เดิม ไม่สร้างกลุ่มใหม่); key เดิม body ต่าง → **409** `idempotency_key_reused`; request แรกยังไม่จบ → **409** `idempotency_in_progress`; key ใช้ได้ 24 ชม. ต่อ client (#614) |
 | `/external/bookings/{booking_id}/cancel` | POST | Bearer · `booking-write` | body `{reason?}` (≤200) → **200** `result: {booking_id, booking_status: "CANCELLED"}` — ยกเลิก**ทั้งกลุ่ม**ด้วย call เดียว; เฉพาะ booking ของ client เดียวกัน (อื่น → 404); มีคนที่ยกเลิกไม่ได้ (เช่น check-in แล้ว) → **409** `booking_not_cancellable` และโดยหลักไม่เปลี่ยนแถวใดเลย (EXT-009) · ลำดับ (#612): ตั้ง `cancel_requested` + `cancel_flag_token` ของแถว `written` ด้วย `update_many` ก่อน → อ่าน stay ใหม่ (มีคน check-in → ย้อน flag ของตัวเองแล้ว 409) → ค่อยยกเลิกแถว `pending`; แถวที่มี token ของ request อื่น → รอ ≤ 1 วิ แล้วอ่านใหม่ (หมดเวลา → 409) — รายละเอียดดู "EXT-009/010 — กฎการยกเลิกกลุ่ม" ด้านล่าง · ยังไม่ atomic: ยอมรับ residual (CR-169 decision sync 2026-10-17, PR #635 รอบ 1–3) — เช่น 409 หลังแถว `pending` บางคนถูกยกเลิกไปแล้ว; partner retry ได้ผลถูก; ปิดจริงด้วย [#616](https://github.com/r202-coe-psu/tent/issues/616) เท่านั้น · ยกเลิกเฉพาะคนที่ยังเปิดอยู่ (`pending` หรือ `written` ที่ยังไม่ขอยกเลิก) ข้ามคนที่จบแล้ว (`cancelled`, `rejected`, `written` ที่ขอยกเลิกแล้ว) โดยไม่เขียนทับ `cancel_reason` เดิม; ไม่เหลือคนเปิดอยู่และมี `cancelled`/`cancel_requested` ≥ 1 → **200** idempotent; ทุกคน `rejected` → **409** `booking_not_cancellable` (CR-169 FR-40) |
 | `/external/bookings/{booking_id}` | GET | Bearer · `booking-write` | **200** `result: {booking_id, location_code, booking_status, reject_reason, persons: [{index, booking_status, reject_reason}], created_at, updated_at}` — `booking_status` = aggregate ของกลุ่ม; `persons[]` รายคน `index` = ลำดับใน request (0-based) — **ไม่มี CID/ชื่อ/เบอร์**; `reject_reason` ระดับบน = ของคน `REJECTED` คนแรก; ใช้ poll ผลหลัง 201 (EXT-010). aggregate ตามลำดับ: ไม่มีคนที่ยังเปิดอยู่และมี `cancelled`/`cancel_requested` ≥ 1 → `CANCELLED` (แม้มี `REJECTED` ปน) → มี `REJECTED` → `REJECTED` → อื่น → `BOOKED` (CR-169 FR-42) |
-| `/external/persons/shelter-residency` | GET | Bearer · `residency-read` + `?cid=&purpose=` | M2 get-person-shelter-residency — `result: {location_code, name_th, checkin_datetime (+07:00), residency_status: CHECKED_IN\|CHECKED_OUT, stay_status, in_zone}`; ค้นด้วย `national_id_hash`; หลาย record → เลือก Present ก่อน แล้ว `updated_at` ล่าสุด; `pre_registered` = 404; log ทุก call ลง `third_party_access_logs` (ไม่เก็บ CID) (EXT-011) |
+| `/external/persons/shelter-residency` | GET | Bearer · `residency-read` + `?cid=&purpose=` | M2 get-person-shelter-residency — `result: {location_code, name_th, checkin_datetime (+07:00), residency_status: CHECKED_IN\|CHECKED_OUT, stay_status, in_zone}`; ค้นด้วย `national_id_hash`; หลาย record → เลือก Present ก่อน แล้ว `updated_at` ล่าสุด; `pre_registered` / `kiosk_registered` / `cancelled` (ไม่เคย check-in) = 404 `residency_not_found`; row `cancelled` ถูกกรองออกก่อนเลือก record (CR-176, #710); log ทุก call ลง `third_party_access_logs` (ไม่เก็บ CID) (EXT-011) |
+| `/external/persons/search` | POST | Bearer · `occupant-search` + `?purpose=` · body `{search}` | ค้นคนด้วยชื่อ / เลขบัตร 13 หลัก / พาสปอร์ต / เบอร์โทร — กติกาค้นหาและ masking เดียวกับ public search (`parse_search_query`, CR-166, CR-099); คำค้นอยู่ใน body ไม่อยู่ใน URL; ลำดับตรวจ `purpose` → scope → validation (สั้น/ผิดรูปแบบ/เกิน 200 ตัวอักษร → 422 `validation_error`) → query; `result: [{name, status, national_id (masked), gender, shelter_name, shelter_address, origin_address, checked_in_at (ISO 8601 `+07:00` \| null), care_zone, zone_name}]` สูงสุด 10 รายการ เรียง `first_name_key ASC, _id ASC`; **ไม่คืน `family_members`/เบอร์/พาสปอร์ต**; ตัด `cancelled` และคน opt-out (`search_excluded`) ใน Mongo query ก่อน limit, สถานะอื่นคืนจริง; ไม่พบ = **200** `result: []`; ตอบ `Cache-Control: no-store`; log ทุก call ลง `third_party_access_logs` (`endpoint="EXT-012"`, `location_code=""`, `result_count`; **ไม่เก็บคำค้น/CID**) และ**ไม่เขียน** `search_audits`; ไม่มี rate limit ใน FastAPI (owner คุมที่ nginx) (EXT-012, #736) |
 
 ```
 Success : { "status": 200, "message": "Found Data.", "result": … }
@@ -595,7 +819,7 @@ Error   : { "status": <http>, "message": "…", "code"?: "…", "detail"?: "…"
          → partner ควร key off `code` เป็นหลัก (ไม่เทียบ message string)
 ```
 
-**Error codes (CR-154 — ใช้ทั้ง plane):** `400 missing_purpose` · `401 invalid_token` · `403 insufficient_scope` · `404 location_not_found` / `booking_not_found` / `residency_not_found` · `409 location_not_bookable` / `duplicate_booking` / `booking_not_cancellable` / `idempotency_key_reused` / `idempotency_in_progress` (#614) · `422 validation_error` · `500 internal_error`.
+**Error codes (CR-154 — ใช้ทั้ง plane):** `400 missing_purpose` · `401 invalid_token` · `403 insufficient_scope` · `404 location_not_found` / `booking_not_found` / `residency_not_found` · `409 location_not_bookable` (EXT-008: ศูนย์ `closed` หรือไม่ได้เปิด `accepts_pre_registration` — ไม่มี flag นับว่าปิด, #751; ข้ามได้ด้วย `booking-bypass`) / `duplicate_booking` / `booking_not_cancellable` / `idempotency_key_reused` / `idempotency_in_progress` (#614) · `422 validation_error` · `500 internal_error`. EXT-012 ใช้ `400` / `401` / `403` / `422` เท่านั้น (ไม่พบ = `200` + `result: []`, ไม่ใช่ 404).
 
 #### EXT-008–010 — ตัวอย่างและกฎกลุ่ม (CR-169, เทียบ `fastapi.json` ที่ regenerate แล้ว)
 
@@ -604,11 +828,11 @@ Error   : { "status": <http>, "message": "…", "code"?: "…", "detail"?: "…"
 - **422 รวมทุกคนที่ผิด:** message ระบุทุกดัชนีที่ผิดในครั้งเดียว เช่น `persons[1].phone`, `persons[3].cid` · **ไม่มีค่า CID / ชื่อ / เบอร์ใน message** · body เดี่ยวเดิมใช้ message เดิม
 - **409 `duplicate_booking`:** `detail` = `"persons[i]"` (0-based, คนแรกที่ซ้ำ; body เดี่ยวเดิมได้ `persons[0]`) · ไม่มี CID/ชื่อ · ทั้งกลุ่มไม่ถูกสร้าง ไม่มีแถวค้างใน buffer
 - **booking_id** = `BK-{ulid}` เดียวทุกคนในกลุ่ม (รหัสกลุ่ม) · แต่ละคนมี `_id` เป็น `BP-{ulid}` ของตัวเอง (อย่าคาดว่า `_id == booking_id`)
-- **Access log (EXT-008–010):** 1 แถวต่อ request ใน `third_party_access_logs` (§9.4) · `result_count = persons_count` เมื่อ `granted` (EXT-008) และ `0` เมื่อ `denied` · ไม่เก็บ CID/ชื่อ/เบอร์
+- **Access log (EXT-008–010):** 1 แถวต่อ request ใน `third_party_access_logs` (§9.4) · `result_count = persons_count` เมื่อ `granted` หรือ `granted_bypass` (EXT-008; #751) และ `0` เมื่อ `denied` · ไม่เก็บ CID/ชื่อ/เบอร์
 - **Idempotency-Key (EXT-008, #614; decision sync CR-169 2026-10-17):**
   - header ไม่บังคับ 1–255 ตัวอักษร · ไม่ส่ง = พฤติกรรมเดิมทุกประการ · ค่าว่างหรือยาวเกิน → 422 `validation_error` (ตรวจหลัง scope)
   - key เก็บต่อ `client_id` (unique) อายุ 24 ชม. จาก `created_at` (TTL) — รายละเอียดแถวใน [schema.md §9.8](./schema.md)
-  - **key + body เดิม** (หลัง normalize; `persons[]` และรูปแบบเดิมที่คนเดียวนับเป็นรูปแบบเดียวกัน) → **201** body เดิม: `booking_id`, `location_code`, `booking_status: "BOOKED"`, `persons_count` เดิม — ไม่สร้างแถวใหม่ และไม่ตรวจ `duplicate_booking` ซ้ำ; นับ access log เป็น `granted` (`result_count = persons_count`)
+  - **key + body เดิม** (หลัง normalize; `persons[]` และรูปแบบเดิมที่คนเดียวนับเป็นรูปแบบเดียวกัน) → **201** body เดิม: `booking_id`, `location_code`, `booking_status: "BOOKED"`, `persons_count` เดิม — ไม่สร้างแถวใหม่ และไม่ตรวจ `duplicate_booking` ซ้ำ; นับ access log เป็น `granted` (`result_count = persons_count`; ไม่ตรวจ bookability ซ้ำ — แม้ booking เดิมเป็น bypass ก็ log `granted` ไม่ใช่ `granted_bypass`)
   - **key เดิม body ต่าง** → **409** `idempotency_key_reused` (ไม่มีข้อมูลของ booking เดิมในคำตอบ)
   - **key เดิม body เดียวกัน แต่รอบแรกยังไม่จบ (`in_progress` อายุ ≤ 60 วินาที)** → **409** `idempotency_in_progress` — partner ลองใหม่ได้ภายหลัง
   - **key เดิม body เดียวกัน และ `in_progress` อายุเกิน 60 วินาที** (รอบแรกอาจค้างหลัง process ถูก kill) → ตัดสินจากแถวจริงของ `booking_id` ที่ key เก็บไว้:
@@ -716,5 +940,5 @@ POST /external/bookings
   **Photos:** `POST /api/public/v1/registrations/photos` สร้าง `image` doc (+attachments)
   ในศูนย์ที่เลือกเท่านั้น (ไม่ใช่ read/list/delete surface).
 - ไม่มี JWT/refresh-token layer สำหรับ **staff sync plane** — template เดิม (`auth-interceptor`, `mock-api.js`) ไม่ใช้ (Partner plane §5.3 ใช้ JWT client_credentials แยกต่างหาก ไม่มี refresh)
-- EOC dashboard / Open API tier เต็มรูปแบบยัง deferred เป็น service แยก — **แต่** Partner Data API EXT-001–011 (§5.3) เปิดให้อ่าน aggregate ให้ M6/M7 และ booking/residency ให้ M2 แล้ว (CR-154)
-- ไม่มี endpoint อ่านข้อมูลรายบุคคลใน public plane; EXT-007 เป็น scaffold เท่านั้น (ไม่มี PII payload จริง); EXT-011 คืนเฉพาะสถานะการเข้าพักของ CID ที่ partner ระบุ (scope `residency-read` ออกรายกรณี + `purpose` + access log — CR-154)
+- EOC dashboard / Open API tier เต็มรูปแบบยัง deferred เป็น service แยก — **แต่** Partner Data API EXT-001–012 (§5.3) เปิดให้อ่าน aggregate ให้ M6/M7 และ booking/residency ให้ M2 แล้ว (CR-154)
+- ไม่มี endpoint อ่านข้อมูลรายบุคคลใน public plane; EXT-007 คืนรายชื่อผู้พักแบบ masked เฉพาะ scope `occupancy-pii-read` (ออกรายกรณี + `purpose` + access log) และไม่รวมคนที่ `privacy.search_excluded = true` (#791); EXT-011 คืนเฉพาะสถานะการเข้าพักของ CID ที่ partner ระบุ (scope `residency-read` ออกรายกรณี + `purpose` + access log — CR-154); EXT-012 ค้นคนแบบ masked ได้สูงสุด 10 รายการ (scope `occupant-search` ออกรายกรณี + `purpose` + access log, ไม่คืน `family_members` — #736)

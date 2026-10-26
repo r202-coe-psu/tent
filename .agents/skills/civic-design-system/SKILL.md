@@ -70,7 +70,7 @@ One work domain uses **one** color family, identically on the public site and th
 | :----------------------------------------- | :--------------------- | :-------- | :-------- | :-------- | :-------- | :-------- | :-------------------------------------------------------------------------------------------------------- |
 | `registration`                             | ทะเบียนและศูนย์พักพิง   | `#124481` | `#124481` | `#E4F0FF` | `#BFD4F2` | `#0B2647` | Public: pre-register, shelter search, people/family search. Staff: ฝ่ายทะเบียน (stations 1–3 + tools)     |
 | `donation`                                 | บริจาค พัสดุและคลัง     | `#FF5C00` | `#C2410C` | `#FFF3EB` | `#FED7AA` | `#9A3412` | Public: donations + tracking. Staff: ฝ่ายพัสดุและคลัง                                                    |
-| `volunteer`                                | จิตอาสา                | `#059669` | `#047857` | `#ECFDF5` | `#A7F3D0` | `#065F46` | Public: volunteers / job board. Staff: ฝ่ายอาสาสมัคร                                                     |
+| `volunteer`                                | จิตอาสา                | `#295F8E` | `#1E4A71` | `#F0F5FA` | `#C2D5E5` | `#11304A` | Public: volunteers / job board. Staff: ฝ่ายอาสาสมัคร                                                     |
 | `kitchen`                                  | ครัว                   | `#DB2777` | `#BE185D` | `#FDF2F8` | `#FBCFE8` | `#9D174D` | Staff: ฝ่ายครัว (kitchen pages) — pink, not yellow/orange                                                 |
 | `facility`                                 | อาคารสถานที่            | `#0D9488` | `#0F766E` | `#F0FDFA` | `#99F6E4` | `#134E4A` | Staff: ฝ่ายอาคารสถานที่                                                                                  |
 | `security`                                 | ความปลอดภัย            | `#7C3AED` | `#6D28D9` | `#F5F3FF` | `#DDD6FE` | `#5B21B6` | Staff: ฝ่ายรักษาความปลอดภัย                                                                              |
@@ -80,7 +80,7 @@ One work domain uses **one** color family, identically on the public site and th
 
 - TypeScript: `colors.domain.<id>` (`name`, hexes, ready class strings `badge` / `card` / `solid` / `subtleBtn` / `iconBox`), `type DomainId`, `DOMAIN_IDS`, `domainVar(id, step)`.
 - Tailwind: `bg-domain-<id>-strong`, `bg-domain-<id>-subtle`, `text-domain-<id>-text`, `border-domain-<id>-border`, `text-domain-<id>` (base). Utilities `.badge-domain-<id>` and `.card-domain-<id>`.
-- Solid text-bearing button: `bg-domain-<id>-strong text-white hover:bg-domain-<id>-text` (white on `#FF5C00` is only 3.1:1 and on `#059669` 3.8:1 — always use `strong` for buttons with text; `base` is for icons and large text).
+- Solid text-bearing button: `bg-domain-<id>-strong text-white hover:bg-domain-<id>-text` (white on `#FF5C00` is only 3.1:1 — always use `strong` for buttons with text; `base` is for icons and large text).
 - Staff portal: every menu item inside a department uses the **department's** domain color (items are told apart by icon and station number, never by their own color). `PortalDepartment.domain: DomainId`; tiles read `--c`, `--c-strong`, `--c-subtle`, `--c-border`, `--c-text` set by the section.
 
 **Rules**
@@ -103,7 +103,7 @@ One work domain uses **one** color family, identically on the public site and th
 - **1. ค้นหาที่พักพิง (Shelters)**: `registration` `#124481` (`portalServices.shelter`: `border-domain-registration-border`, `bg-domain-registration-subtle` icon container, primary `bg-domain-registration-strong`) — not red
 - **2. ผู้พักพิง (Family Tracing)**: `registration` `#124481` (`portalServices.tracing`, same family as Shelters)
 - **3. บริจาค (Donations)**: `donation` `#FF5C00` (`portalServices.donation`: `border-domain-donation-border`, `bg-domain-donation-subtle` icon container, text button `bg-domain-donation-strong` `#C2410C`)
-- **4. อาสาสมัคร (Volunteers)**: `volunteer` `#059669` (`portalServices.volunteer`: `border-domain-volunteer-border`, `bg-domain-volunteer-subtle` icon container, text button `bg-domain-volunteer-strong` `#047857`)
+- **4. อาสาสมัคร (Volunteers)**: `volunteer` `#295F8E` (`portalServices.volunteer`: `border-domain-volunteer-border`, `bg-domain-volunteer-subtle` icon container, text button `bg-domain-volunteer-strong` `#1E4A71`)
 - **Emergency FAQ**: Active border `border-sky-300`, active badge `bg-[#0A2647] text-white`
 - **Floating Emergency Controls**: 1669 Hotline pill (`bg-red-600` Destructive), Alert bell pill (`bg-[#0284C7]` Secondary Cerulean)
 

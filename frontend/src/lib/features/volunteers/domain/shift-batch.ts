@@ -104,6 +104,57 @@ export function expandDateRange(
 	return dates;
 }
 
+/** Thai weekday name without the English suffix — "เสาร์" for 6. */
+export function weekdayName(day: Weekday): string {
+	return WEEKDAYS[day].label.split(' ')[0];
+}
+
+export interface BatchRangeCheck {
+	/** The range itself is unusable (bad / reversed / too long / too many shifts), or `null`. */
+	rangeError: string | null;
+	/** Weekdays that occur in the range — `null` until both dates are picked and valid. */
+	available: ReadonlySet<Weekday> | null;
+	/** Selected weekdays the range does not contain. */
+	missing: Weekday[];
+	/** Shifts a Generate press would produce. */
+	count: number;
+}
+
+/**
+ * Check a batch selection before Generate is pressed, so the form can say up
+ * front that, say, a Mon–Tue range has no Saturday — instead of producing
+ * nothing. Never throws; an incomplete selection is simply "nothing to say yet".
+ */
+export function checkBatchRange(
+	startDate: string,
+	endDate: string,
+	weekdays: readonly Weekday[]
+): BatchRangeCheck {
+	const idle: BatchRangeCheck = { rangeError: null, available: null, missing: [], count: 0 };
+	if (!startDate || !endDate) return idle;
+	try {
+		const startMs = anchor(startDate, 'วันที่เริ่มสร้างกะ');
+		const endMs = anchor(endDate, 'วันที่สิ้นสุดกะ');
+		if (endMs < startMs) {
+			throw new ShiftBatchError('วันที่สิ้นสุดกะต้องไม่อยู่ก่อนวันที่เริ่มสร้างกะ');
+		}
+		const totalDays = Math.round((endMs - startMs) / MS_PER_DAY) + 1;
+		if (totalDays > 366) {
+			throw new ShiftBatchError('ช่วงวันที่ยาวเกิน 1 ปี — กรุณาย่อยเป็นหลายชุด');
+		}
+		const available = new Set<Weekday>();
+		for (let i = 0; i < Math.min(totalDays, 7); i++) {
+			available.add(new Date(startMs + i * MS_PER_DAY).getUTCDay() as Weekday);
+		}
+		const missing = weekdays.filter((d) => !available.has(d));
+		const count = weekdays.length > 0 ? expandDateRange(startDate, endDate, weekdays).length : 0;
+		return { rangeError: null, available, missing, count };
+	} catch (err) {
+		const message = err instanceof ShiftBatchError ? err.message : 'ช่วงวันที่ไม่ถูกต้อง';
+		return { ...idle, rangeError: message };
+	}
+}
+
 /**
  * Expand a batch request into shift rows. `makeId` mints the stable row id
  * (injected so this stays pure and deterministic in tests).

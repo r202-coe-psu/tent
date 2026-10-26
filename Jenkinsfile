@@ -71,16 +71,19 @@ pipeline {
                             error("Staging server is at ${deployedCommit}, expected ${env.GIT_COMMIT}")
                         }
 
-                        // Wait, don't propagate (decision 2026-10-09): the deploy stays green when the deploy itself
-                        // succeeded; E2E results are reviewed manually in the tent-e2e-staging job before promoting.
-                        echo "Running tent-e2e-staging (wait, no propagate — manual review) for ${deployedCommit}"
+                        // Fire and forget (decision 2026-10-09: E2E never gates the deploy; results are reviewed
+                        // manually in the tent-e2e-staging job before promoting). Waiting held this build and its
+                        // mgmt executor for the whole 15–30 min run for nothing; tent-e2e-staging reports its own
+                        // result to Discord.
+                        echo "Triggering tent-e2e-staging (no wait — manual review) for ${deployedCommit}"
                         build job: 'tent-e2e-staging',
                               parameters: [
                                   string(name: 'DEPLOY_COMMIT', value: deployedCommit),
                                   string(name: 'STAGING_URL', value: 'https://shelter.importstar.dev')
                               ],
-                              wait: true,
-                              propagate: false
+                              wait: false
+                        // Surfaced in the Discord deploy notification (post { always } below).
+                        env.STAGING_E2E_RESULT = 'TRIGGERED'
                     }
                 }
             }
@@ -142,7 +145,7 @@ pipeline {
                         'E2E_BASE_URL=https://shelter.psu.ac.th'
                     ]) {
                         // Read-only @prod (< 2 min). Failure fails the prod deploy job
-                        // (Jenkins email/Slack on failure is the alert channel).
+                        // (the Discord notification in post { always } below is the alert channel).
                         sh 'chmod +x scripts/run-prod-e2e.sh && scripts/run-prod-e2e.sh'
                     }
                 }
@@ -158,6 +161,39 @@ pipeline {
 
     post {
         always {
+            // Discord notification (ci/README.md). Never fails the build: a missing credential,
+            // a missing script or a Discord outage only logs a warning.
+            script {
+                try {
+                    if (fileExists('ci/discord-notify.sh')) {
+                        withCredentials([string(credentialsId: 'tent-discord-webhook-ci', variable: 'DISCORD_WEBHOOK_URL')]) {
+                            withEnv([
+                                'NOTIFY_KIND=deploy',
+                                'NOTIFY_USERNAME=Tent Deploy',
+                                "NOTIFY_TARGET=${env.BRANCH_NAME == 'main' ? 'prod' : 'staging'}",
+                                "NOTIFY_RESULT=${currentBuild.currentResult}",
+                                "NOTIFY_JOB=${env.JOB_NAME ?: ''}",
+                                "NOTIFY_BRANCH=${env.BRANCH_NAME ?: ''}",
+                                "NOTIFY_BUILD_NUMBER=${env.BUILD_NUMBER ?: ''}",
+                                "NOTIFY_BUILD_URL=${env.BUILD_URL ?: ''}",
+                                "NOTIFY_COMMIT=${env.GIT_COMMIT ?: ''}",
+                                "NOTIFY_DURATION=${currentBuild.durationString.replace(' and counting', '')}",
+                                "NOTIFY_E2E_RESULT=${env.STAGING_E2E_RESULT ?: ''}",
+                                "NOTIFY_DETAIL=${env.STAGING_E2E_RESULT ? 'E2E runs in tent-e2e-staging and reports there' : ''}"
+                            ]) {
+                                def rc = sh(script: './ci/discord-notify.sh', returnStatus: true)
+                                if (rc != 0) {
+                                    echo "WARNING: Discord notification failed (exit ${rc}); ignoring."
+                                }
+                            }
+                        }
+                    } else {
+                        echo 'WARNING: ci/discord-notify.sh not found in workspace; skipping Discord notification.'
+                    }
+                } catch (err) {
+                    echo "WARNING: Discord notification skipped: ${err.message}"
+                }
+            }
             cleanWs(cleanWhenNotBuilt: false,
                     deleteDirs: true,
                     disableDeferredWipeout: true,

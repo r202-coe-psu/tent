@@ -291,3 +291,66 @@ describe('validateWorkbook', () => {
 		expect(orphanMemberRows(wb).map((m) => m.line)).toEqual([3]);
 	});
 });
+
+describe('validateRow — โรคประจำตัว maps onto master chronic_disease (CR-186 FR-9)', () => {
+	const lookups = {
+		medical_conditions: [
+			{ code: 'diabetes', label_th: 'เบาหวาน', label_en: 'Diabetes' },
+			{ code: 'asthma', label_th: 'หอบหืด', label_en: 'Asthma' }
+		]
+	};
+
+	it('stores matching labels and codes as codes, deduped, and keeps the rest as text', () => {
+		const result = validateRow(
+			minimalHead({ [H.medical_conditions]: 'เบาหวาน|diabetes|โรคเกาต์' }),
+			1,
+			lookups
+		);
+
+		expect(result.ok).toBe(true);
+		expect(result.payload?.head.medical_conditions).toEqual(['diabetes', 'โรคเกาต์']);
+	});
+
+	it('warns about free-text values without blocking the row', () => {
+		const result = validateRow(
+			minimalHead({ [H.medical_conditions]: 'เบาหวาน|โรคเกาต์' }),
+			1,
+			lookups
+		);
+
+		expect(result.ok).toBe(true);
+		expect(result.errors).toEqual([]);
+		expect(result.warnings).toHaveLength(1);
+		expect(result.warnings[0]).toMatchObject({ column: H.medical_conditions });
+		expect(result.warnings[0].message).toContain('โรคเกาต์');
+		expect(result.warnings[0].message).not.toContain('เบาหวาน');
+	});
+
+	it('points a member warning at the member sheet and its row', () => {
+		const result = validateRow(minimalHead(), 1, lookups, [
+			memberRow(
+				{
+					[H.first_name]: 'สมหญิง',
+					[H.last_name]: 'ใจดี',
+					[H.gender]: 'หญิง',
+					[H.medical_conditions]: 'ASTHMA|ไมเกรน'
+				},
+				3
+			)
+		]);
+
+		expect(result.payload?.members[0].evacuee.medical_conditions).toEqual(['asthma', 'ไมเกรน']);
+		expect(result.warnings[0]).toMatchObject({ sheet: 'สมาชิก', line: 3 });
+	});
+
+	it('keeps values as typed and raises no warning when no master list is loaded', () => {
+		const result = validateRow(
+			minimalHead({ [H.medical_conditions]: 'เบาหวาน|โรคเกาต์' }),
+			1,
+			emptyLookups()
+		);
+
+		expect(result.payload?.head.medical_conditions).toEqual(['เบาหวาน', 'โรคเกาต์']);
+		expect(result.warnings).toEqual([]);
+	});
+});

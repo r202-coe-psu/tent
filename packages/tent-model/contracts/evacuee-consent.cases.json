@@ -1,0 +1,416 @@
+{
+  "enums": {
+    "modes": ["full", "basic"],
+    "givers": ["self", "guardian", "household_member", "backfill"],
+    "channels": ["staff", "kiosk", "web", "backfill"]
+  },
+  "schema_v": 15,
+  "valid": [
+    {
+      "name": "full, health, self, staff",
+      "consent": {
+        "mode": "full",
+        "health": true,
+        "ref": "CS-7K3QZ9MD",
+        "given_at": "2026-10-25T03:15:00.000Z",
+        "given_by": "self",
+        "giver_evacuee_id": null,
+        "recorded_verbally_by": null,
+        "channel": "staff",
+        "notice_version": "2026-10-25"
+      }
+    },
+    {
+      "name": "full, no health, self, web",
+      "consent": {
+        "mode": "full",
+        "health": false,
+        "ref": "CS-7K3QZ9MD",
+        "given_at": "2026-10-25T03:15:00.000Z",
+        "given_by": "self",
+        "giver_evacuee_id": null,
+        "recorded_verbally_by": null,
+        "channel": "web",
+        "notice_version": "2026-10-25"
+      }
+    },
+    {
+      "name": "basic, self, kiosk",
+      "consent": {
+        "mode": "basic",
+        "health": false,
+        "ref": "CS-7K3QZ9MD",
+        "given_at": "2026-10-25T03:15:00.000Z",
+        "given_by": "self",
+        "giver_evacuee_id": null,
+        "recorded_verbally_by": null,
+        "channel": "kiosk",
+        "notice_version": "2026-10-25"
+      }
+    },
+    {
+      "name": "guardian, staff, verbal",
+      "consent": {
+        "mode": "full",
+        "health": true,
+        "ref": "CS-7K3QZ9MD",
+        "given_at": "2026-10-25T03:15:00.000Z",
+        "given_by": "guardian",
+        "giver_evacuee_id": "evacuee:01JAAAAAAAAAAAAAAAAAAAAAAA",
+        "recorded_verbally_by": "USR-0427",
+        "channel": "staff",
+        "notice_version": "2026-10-25"
+      }
+    },
+    {
+      "name": "household_member, web",
+      "consent": {
+        "mode": "full",
+        "health": true,
+        "ref": "CS-7K3QZ9MD",
+        "given_at": "2026-10-25T03:15:00.000Z",
+        "given_by": "household_member",
+        "giver_evacuee_id": "evacuee:01JAAAAAAAAAAAAAAAAAAAAAAA",
+        "recorded_verbally_by": null,
+        "channel": "web",
+        "notice_version": "2026-10-25"
+      }
+    },
+    {
+      "name": "backfill",
+      "consent": {
+        "mode": "full",
+        "health": true,
+        "ref": "CS-7K3QZ9MD",
+        "given_at": "2026-10-25T03:15:00.000Z",
+        "given_by": "backfill",
+        "giver_evacuee_id": null,
+        "recorded_verbally_by": null,
+        "channel": "backfill",
+        "notice_version": "backfill"
+      }
+    }
+  ],
+  "invalid": [
+    {
+      "name": "basic with health true",
+      "consent": {
+        "mode": "basic",
+        "health": true,
+        "ref": "CS-7K3QZ9MD",
+        "given_at": "2026-10-25T03:15:00.000Z",
+        "given_by": "self",
+        "giver_evacuee_id": null,
+        "recorded_verbally_by": null,
+        "channel": "staff",
+        "notice_version": "2026-10-25"
+      }
+    },
+    {
+      "name": "self with non-null giver",
+      "consent": {
+        "mode": "full",
+        "health": true,
+        "ref": "CS-7K3QZ9MD",
+        "given_at": "2026-10-25T03:15:00.000Z",
+        "given_by": "self",
+        "giver_evacuee_id": "evacuee:01JAAAAAAAAAAAAAAAAAAAAAAA",
+        "recorded_verbally_by": null,
+        "channel": "staff",
+        "notice_version": "2026-10-25"
+      }
+    },
+    {
+      "name": "guardian with null giver",
+      "consent": {
+        "mode": "full",
+        "health": true,
+        "ref": "CS-7K3QZ9MD",
+        "given_at": "2026-10-25T03:15:00.000Z",
+        "given_by": "guardian",
+        "giver_evacuee_id": null,
+        "recorded_verbally_by": null,
+        "channel": "staff",
+        "notice_version": "2026-10-25"
+      }
+    },
+    {
+      "name": "household_member with giver that is not an evacuee id",
+      "consent": {
+        "mode": "full",
+        "health": true,
+        "ref": "CS-7K3QZ9MD",
+        "given_at": "2026-10-25T03:15:00.000Z",
+        "given_by": "household_member",
+        "giver_evacuee_id": "person:1",
+        "recorded_verbally_by": null,
+        "channel": "staff",
+        "notice_version": "2026-10-25"
+      }
+    },
+    {
+      "name": "ref lowercase",
+      "consent": {
+        "mode": "full",
+        "health": true,
+        "ref": "CS-7k3qz9md",
+        "given_at": "2026-10-25T03:15:00.000Z",
+        "given_by": "self",
+        "giver_evacuee_id": null,
+        "recorded_verbally_by": null,
+        "channel": "staff",
+        "notice_version": "2026-10-25"
+      }
+    },
+    {
+      "name": "ref wrong length",
+      "consent": {
+        "mode": "full",
+        "health": true,
+        "ref": "CS-7K3QZ9",
+        "given_at": "2026-10-25T03:15:00.000Z",
+        "given_by": "self",
+        "giver_evacuee_id": null,
+        "recorded_verbally_by": null,
+        "channel": "staff",
+        "notice_version": "2026-10-25"
+      }
+    },
+    {
+      "name": "ref with excluded letter I",
+      "consent": {
+        "mode": "full",
+        "health": true,
+        "ref": "CS-7K3QZ9MI",
+        "given_at": "2026-10-25T03:15:00.000Z",
+        "given_by": "self",
+        "giver_evacuee_id": null,
+        "recorded_verbally_by": null,
+        "channel": "staff",
+        "notice_version": "2026-10-25"
+      }
+    },
+    {
+      "name": "ref without prefix",
+      "consent": {
+        "mode": "full",
+        "health": true,
+        "ref": "7K3QZ9MD",
+        "given_at": "2026-10-25T03:15:00.000Z",
+        "given_by": "self",
+        "giver_evacuee_id": null,
+        "recorded_verbally_by": null,
+        "channel": "staff",
+        "notice_version": "2026-10-25"
+      }
+    },
+    {
+      "name": "unknown mode",
+      "consent": {
+        "mode": "partial",
+        "health": true,
+        "ref": "CS-7K3QZ9MD",
+        "given_at": "2026-10-25T03:15:00.000Z",
+        "given_by": "self",
+        "giver_evacuee_id": null,
+        "recorded_verbally_by": null,
+        "channel": "staff",
+        "notice_version": "2026-10-25"
+      }
+    },
+    {
+      "name": "unknown given_by",
+      "consent": {
+        "mode": "full",
+        "health": true,
+        "ref": "CS-7K3QZ9MD",
+        "given_at": "2026-10-25T03:15:00.000Z",
+        "given_by": "parent",
+        "giver_evacuee_id": null,
+        "recorded_verbally_by": null,
+        "channel": "staff",
+        "notice_version": "2026-10-25"
+      }
+    },
+    {
+      "name": "unknown channel",
+      "consent": {
+        "mode": "full",
+        "health": true,
+        "ref": "CS-7K3QZ9MD",
+        "given_at": "2026-10-25T03:15:00.000Z",
+        "given_by": "self",
+        "giver_evacuee_id": null,
+        "recorded_verbally_by": null,
+        "channel": "phone",
+        "notice_version": "2026-10-25"
+      }
+    },
+    {
+      "name": "missing notice_version",
+      "consent": {
+        "mode": "full",
+        "health": true,
+        "ref": "CS-7K3QZ9MD",
+        "given_at": "2026-10-25T03:15:00.000Z",
+        "given_by": "self",
+        "giver_evacuee_id": null,
+        "recorded_verbally_by": null,
+        "channel": "staff"
+      }
+    },
+    {
+      "name": "missing health",
+      "consent": {
+        "mode": "full",
+        "ref": "CS-7K3QZ9MD",
+        "given_at": "2026-10-25T03:15:00.000Z",
+        "given_by": "self",
+        "giver_evacuee_id": null,
+        "recorded_verbally_by": null,
+        "channel": "staff",
+        "notice_version": "2026-10-25"
+      }
+    },
+    {
+      "name": "empty notice_version",
+      "consent": {
+        "mode": "full",
+        "health": true,
+        "ref": "CS-7K3QZ9MD",
+        "given_at": "2026-10-25T03:15:00.000Z",
+        "given_by": "self",
+        "giver_evacuee_id": null,
+        "recorded_verbally_by": null,
+        "channel": "staff",
+        "notice_version": ""
+      }
+    },
+    {
+      "name": "given_at is not a timestamp",
+      "consent": {
+        "mode": "full",
+        "health": true,
+        "ref": "CS-7K3QZ9MD",
+        "given_at": "yesterday",
+        "given_by": "self",
+        "giver_evacuee_id": null,
+        "recorded_verbally_by": null,
+        "channel": "staff",
+        "notice_version": "2026-10-25"
+      }
+    },
+    {
+      "name": "given_at is a date without a time",
+      "consent": {
+        "mode": "full",
+        "health": true,
+        "ref": "CS-7K3QZ9MD",
+        "given_at": "2026-10-25",
+        "given_by": "self",
+        "giver_evacuee_id": null,
+        "recorded_verbally_by": null,
+        "channel": "staff",
+        "notice_version": "2026-10-25"
+      }
+    },
+    {
+      "name": "given_at has no offset",
+      "consent": {
+        "mode": "full",
+        "health": true,
+        "ref": "CS-7K3QZ9MD",
+        "given_at": "2026-10-25T03:15:00",
+        "given_by": "self",
+        "giver_evacuee_id": null,
+        "recorded_verbally_by": null,
+        "channel": "staff",
+        "notice_version": "2026-10-25"
+      }
+    },
+    {
+      "name": "given_at has a compact offset",
+      "consent": {
+        "mode": "full",
+        "health": true,
+        "ref": "CS-7K3QZ9MD",
+        "given_at": "2026-10-25T03:15:00+0700",
+        "given_by": "self",
+        "giver_evacuee_id": null,
+        "recorded_verbally_by": null,
+        "channel": "staff",
+        "notice_version": "2026-10-25"
+      }
+    },
+    {
+      "name": "given_at is a day that does not exist",
+      "consent": {
+        "mode": "full",
+        "health": true,
+        "ref": "CS-7K3QZ9MD",
+        "given_at": "2026-02-30T03:15:00Z",
+        "given_by": "self",
+        "giver_evacuee_id": null,
+        "recorded_verbally_by": null,
+        "channel": "staff",
+        "notice_version": "2026-10-25"
+      }
+    },
+    {
+      "name": "verbal recording outside staff channel",
+      "consent": {
+        "mode": "full",
+        "health": true,
+        "ref": "CS-7K3QZ9MD",
+        "given_at": "2026-10-25T03:15:00.000Z",
+        "given_by": "self",
+        "giver_evacuee_id": null,
+        "recorded_verbally_by": "USR-0427",
+        "channel": "kiosk",
+        "notice_version": "2026-10-25"
+      }
+    },
+    {
+      "name": "backfill giver on a non-backfill channel",
+      "consent": {
+        "mode": "full",
+        "health": true,
+        "ref": "CS-7K3QZ9MD",
+        "given_at": "2026-10-25T03:15:00.000Z",
+        "given_by": "backfill",
+        "giver_evacuee_id": null,
+        "recorded_verbally_by": null,
+        "channel": "staff",
+        "notice_version": "2026-10-25"
+      }
+    },
+    {
+      "name": "backfill channel without backfill giver",
+      "consent": {
+        "mode": "full",
+        "health": true,
+        "ref": "CS-7K3QZ9MD",
+        "given_at": "2026-10-25T03:15:00.000Z",
+        "given_by": "self",
+        "giver_evacuee_id": null,
+        "recorded_verbally_by": null,
+        "channel": "backfill",
+        "notice_version": "2026-10-25"
+      }
+    },
+    {
+      "name": "health not a boolean",
+      "consent": {
+        "mode": "full",
+        "health": "yes",
+        "ref": "CS-7K3QZ9MD",
+        "given_at": "2026-10-25T03:15:00.000Z",
+        "given_by": "self",
+        "giver_evacuee_id": null,
+        "recorded_verbally_by": null,
+        "channel": "staff",
+        "notice_version": "2026-10-25"
+      }
+    }
+  ]
+}

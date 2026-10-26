@@ -1,10 +1,11 @@
 <script lang="ts">
 	/**
 	 * Tab 1 — "จัดการงานอาสา / Job Board & Capacity" (01-tab-job-board.md §01.3/01.4).
-	 * Composes the KPI summary, filter chips, and the job card grid; owns the
-	 * create/edit dialog. Later steps (dispatch, roster, walk-in) are out of
-	 * scope here — the card's "ดูรายละเอียด" affordance stays disabled.
+	 * Composes the KPI summary, filter chips, and the job card grid. Create and
+	 * edit open their own pages (`/jobs/new`, `/jobs/[id]/edit` — #639).
 	 */
+	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import Plus from '@lucide/svelte/icons/plus';
 	import Inbox from '@lucide/svelte/icons/inbox';
 	import { SvelteMap } from 'svelte/reactivity';
@@ -13,7 +14,6 @@
 	import JobCapacitySummary from './job-capacity-summary.svelte';
 	import JobFilterChips, { type JobBoardStatusFilter } from './job-filter-chips.svelte';
 	import JobCard from './job-card.svelte';
-	import JobFormDialog from './job-form-dialog.svelte';
 	import { useJobs, useJobApplications, useShiftAssignments } from '../application/queries';
 	import type { FillBucket } from '../domain/capacity';
 	import { shiftFillRate, bucketFillRate, jobShiftCapacities } from '../domain/capacity';
@@ -69,16 +69,12 @@
 		return list;
 	});
 
-	let dialogOpen = $state(false);
-	let editingJob = $state<Job | null>(null);
-
 	function openCreate() {
-		editingJob = null;
-		dialogOpen = true;
+		void goto(resolve('/back-office/volunteers/jobs/new'));
 	}
 	function openEdit(job: Job) {
-		editingJob = job;
-		dialogOpen = true;
+		// `resolve()` here only prefixes `base`, so the id is interpolated by hand.
+		void goto(resolve(`/back-office/volunteers/jobs/${encodeURIComponent(job._id)}/edit`));
 	}
 
 	const kpiSkeletonKeys = [0, 1, 2, 3];
@@ -105,7 +101,7 @@
 		<JobFilterChips bind:status={statusFilter} bind:excludeClosed bind:urgentOnly />
 		<Button onclick={openCreate} class="gap-1.5">
 			<Plus class="h-4 w-4" />
-			ประกาศภารกิจงานอาสาใหม่
+			ประกาศงานอาสาสมัครใหม่
 		</Button>
 	</div>
 
@@ -133,7 +129,7 @@
 			</p>
 			{#if jobs.length === 0}
 				<Button variant="outline" size="sm" onclick={openCreate} class="mt-1">
-					ประกาศภารกิจงานอาสาแรก
+					ประกาศงานอาสาสมัครแรก
 				</Button>
 			{/if}
 		</div>
@@ -151,5 +147,3 @@
 		</div>
 	{/if}
 </div>
-
-<JobFormDialog bind:open={dialogOpen} job={editingJob} />

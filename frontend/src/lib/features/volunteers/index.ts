@@ -46,6 +46,11 @@ export * from './domain/applicant-queue';
 export * from './domain/shift-roster';
 export * from './domain/volunteer-code';
 export * from './domain/hub-metrics';
+export {
+	extractScanCode,
+	parseVolunteerScanCode,
+	type VolunteerScanCode
+} from './domain/scan-code';
 
 // data — repository interfaces/filters + remote adapter factories
 export * from './data/volunteer.repository';
@@ -84,7 +89,9 @@ export { default as JobFilterChips } from './ui/job-filter-chips.svelte';
 export type { JobBoardStatusFilter } from './ui/job-filter-chips.svelte';
 export { default as JobCard } from './ui/job-card.svelte';
 export { default as JobQuotaBar } from './ui/job-quota-bar.svelte';
-export { default as JobFormDialog } from './ui/job-form-dialog.svelte';
+export { default as JobForm } from './ui/job-form.svelte';
+// ui — full-page job create / edit (#639)
+export { default as JobFormPage } from './ui/job-form-page.svelte';
 
 // ui — Job detail + shift schedule (01-tab-job-board.md §01.5)
 export { default as JobDetailPage } from './ui/job-detail-page.svelte';

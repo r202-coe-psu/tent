@@ -99,6 +99,38 @@ pipeline {
                 reportName: 'Staging E2E Report'
             ])
             archiveArtifacts allowEmptyArchive: true, artifacts: 'frontend/test-results/staging/**/*,frontend/playwright-report/staging/**/*', fingerprint: false
+            // Discord notification (ci/README.md), every result: the root deploy job triggers this
+            // job without waiting, so this is the only place the E2E result is reported. Never
+            // fails the build; if the job failed before checkout, the script is absent and the
+            // notification is skipped.
+            script {
+                try {
+                    if (fileExists('ci/discord-notify.sh')) {
+                        withCredentials([string(credentialsId: 'tent-discord-webhook-ci', variable: 'DISCORD_WEBHOOK_URL')]) {
+                            withEnv([
+                                'NOTIFY_KIND=e2e',
+                                'NOTIFY_USERNAME=Tent E2E',
+                                "NOTIFY_RESULT=${currentBuild.currentResult}",
+                                "NOTIFY_JOB=${env.JOB_NAME ?: ''}",
+                                "NOTIFY_BRANCH=${env.BRANCH_NAME ?: ''}",
+                                "NOTIFY_BUILD_NUMBER=${env.BUILD_NUMBER ?: ''}",
+                                "NOTIFY_BUILD_URL=${env.BUILD_URL ?: ''}",
+                                "NOTIFY_COMMIT=${params.DEPLOY_COMMIT ?: ''}",
+                                "NOTIFY_DURATION=${currentBuild.durationString.replace(' and counting', '')}",
+                                // publishHTML serves reportName 'Staging E2E Report' at Staging_20E2E_20Report/.
+                                "NOTIFY_DETAIL=Report: ${env.BUILD_URL ?: ''}Staging_20E2E_20Report/ · ${params.STAGING_URL ?: ''}"
+                            ]) {
+                                def rc = sh(script: './ci/discord-notify.sh', returnStatus: true)
+                                if (rc != 0) {
+                                    echo "WARNING: Discord notification failed (exit ${rc}); ignoring."
+                                }
+                            }
+                        }
+                    }
+                } catch (err) {
+                    echo "WARNING: Discord notification skipped: ${err.message}"
+                }
+            }
             cleanWs(cleanWhenNotBuilt: false,
                     deleteDirs: true,
                     disableDeferredWipeout: true,

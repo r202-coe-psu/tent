@@ -10,6 +10,7 @@ import type {
 	WalkInDonationInput,
 	DonationSlot,
 	StockTransfer,
+	TransferDestination,
 	TransferInput,
 	TransferFilter,
 	DispatchInfoInput,
@@ -147,6 +148,11 @@ export interface OperationsRepository {
 	// path every method above uses. See `data/transfer.server-repository.ts` for the write path.
 
 	listTransfers(filter?: TransferFilter): Promise<StockTransfer[]>;
+	/**
+	 * Shelters this shelter may send a transfer to (#570). Not `listShelters()`, which is scoped
+	 * to the caller's own shelter for everyone but system_admin.
+	 */
+	listTransferDestinations(): Promise<TransferDestination[]>;
 	getTransfer(id: string): Promise<StockTransfer | null>;
 	createTransfer(input: TransferInput, ctx: AuthorContext): Promise<StockTransfer>;
 	/** CR-089 FR-01 — the driver and plate travel with the transition; the domain rejects a

@@ -194,6 +194,29 @@ async function fetchAllUserDocs(): Promise<CouchUserDoc[]> {
 	return rows.filter((r) => r.id.startsWith(USER_PREFIX) && r.doc).map((r) => r.doc);
 }
 
+/**
+ * `display_name` per user name for the given names (CR-192 Amendment 2 rank). Names with no
+ * user doc or no display name are left out — callers fall back to the name itself. Returns
+ * nothing else from the user doc.
+ */
+export async function getDisplayNames(names: readonly string[]): Promise<Map<string, string>> {
+	const out = new Map<string, string>();
+	const unique = [...new Set(names)].filter(Boolean);
+	if (unique.length === 0) return out;
+	const res = await adminRaw('/_users/_all_docs?include_docs=true', 'POST', {
+		keys: unique.map((n) => `${USER_PREFIX}${n}`)
+	});
+	if (res.status >= 400) throw serviceErrorFromCouch('read display names', res.status, res.data);
+	const rows = (res.data as { rows?: { doc?: CouchUserDoc | null }[] })?.rows ?? [];
+	for (const row of rows) {
+		const doc = row.doc;
+		if (doc?.name && typeof doc.display_name === 'string' && doc.display_name.trim()) {
+			out.set(doc.name, doc.display_name.trim());
+		}
+	}
+	return out;
+}
+
 async function countAppSystemAdmins(): Promise<number> {
 	const docs = await fetchAllUserDocs();
 	return docs.filter((d) => isAppSystemAdmin(d.roles ?? [])).length;
@@ -398,6 +421,35 @@ export async function listUsers(caller: Caller): Promise<UserSummary[]> {
 	const managed = managerShelterCodes(caller.roles);
 	const codes = managed.length > 0 ? managed : caller.shelterCode ? [caller.shelterCode] : [];
 	return all.filter((u) => codes.some((code) => hasShelterScope(u.roles, code)));
+}
+
+/** Minimal colleague entry — enough to pick a handover target, no contact/PII fields. */
+export interface StaffDirectoryEntry {
+	name: string;
+	display_name: string | null;
+}
+
+/**
+ * Active staff of a shelter (incident handover picker, IL-P5): holds at least one shelter
+ * capability for `code` and is not a volunteer account (`personnel_type = volunteer`).
+ * Optional `capabilities` narrows to staff holding at least one of them in `code`.
+ * Callers are gated by `requireShelterScopeOrSA` — colleagues' names only, no contact/PII.
+ */
+export async function listShelterStaffDirectory(
+	code: string,
+	opts?: { capabilities?: readonly string[] }
+): Promise<StaffDirectoryEntry[]> {
+	const wanted = opts?.capabilities;
+	const bootstrap = bootstrapAdminName();
+	return (await fetchAllUserDocs())
+		.filter((d) => !isProtectedBootstrapAdmin(d, bootstrap))
+		.filter((d) => (d.active ?? true) && d.personnel_type !== 'volunteer')
+		.filter((d) => {
+			const caps = capabilitiesForShelter(d.roles ?? [], code);
+			return wanted ? caps.some((c) => wanted.includes(c)) : caps.length > 0;
+		})
+		.map((d) => ({ name: d.name, display_name: toSummary(d).display_name ?? null }))
+		.sort((a, b) => (a.display_name ?? a.name).localeCompare(b.display_name ?? b.name, 'th'));
 }
 
 function managerMayMutateTarget(caller: Caller, targetRoles: readonly string[]): string {

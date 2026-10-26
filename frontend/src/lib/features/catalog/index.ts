@@ -178,6 +178,7 @@ export { default as ProductsPanel } from './ui/products-panel.svelte';
 export { default as ItemCategoryForm } from './ui/item-category-form.svelte';
 export { default as ItemMasterForm } from './ui/item-master-form.svelte';
 export { default as QuickCreateItemDialog } from './ui/quick-create-item-dialog.svelte';
+export { default as QuickCreateItem } from './ui/quick-create-item.svelte';
 export { default as RecipeForm } from './ui/recipe-form.svelte';
 export { default as MasterBadge } from './ui/master/master-badge.svelte';
 export { default as MasterFilterBar } from './ui/master/master-filter-bar.svelte';

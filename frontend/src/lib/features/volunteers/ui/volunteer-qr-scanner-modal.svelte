@@ -3,6 +3,8 @@
 	import X from '@lucide/svelte/icons/x';
 	import Camera from '@lucide/svelte/icons/camera';
 	import CameraOff from '@lucide/svelte/icons/camera-off';
+	import ImageUp from '@lucide/svelte/icons/image-up';
+	import { Button } from '$lib/components/ui/button/index.js';
 	import { languageStore } from '$lib/stores/language.svelte';
 	import { jobsI18n } from '$lib/features/volunteers/i18n/jobs.i18n';
 
@@ -33,6 +35,53 @@
 		const withoutQuery = trimmed.split(/[?#]/)[0];
 		const lastSegment = withoutQuery.split('/').filter(Boolean).pop() ?? '';
 		return lastSegment || trimmed;
+	}
+
+	/**
+	 * QR from an image file — for a ticket saved as a screenshot, or a camera that will
+	 * not start. Decoded entirely in this browser by html5-qrcode (`scanFile`): the image
+	 * is never uploaded, so the token inside it never leaves the device and the server
+	 * gains no file-handling surface. The decoded text is still untrusted — it goes
+	 * through `onScan` exactly like a camera scan, where the caller accepts only a
+	 * `TKT-VOL-` token and never opens it as a link.
+	 */
+	const MAX_QR_IMAGE_BYTES = 10 * 1024 * 1024;
+	const uid = $props.id();
+	const fileReaderId = `volunteer-qr-file-reader-${uid}`;
+	let fileInput = $state<HTMLInputElement>();
+	let fileError = $state('');
+	let readingFile = $state(false);
+
+	async function scanImageFile(event: Event & { currentTarget: HTMLInputElement }) {
+		const file = event.currentTarget.files?.[0];
+		// Reset so choosing the same file again still fires `change`.
+		event.currentTarget.value = '';
+		if (!file || disabled || readingFile) return;
+		fileError = '';
+		if (!file.type.startsWith('image/')) {
+			fileError = t.qrUploadNotImage;
+			return;
+		}
+		if (file.size > MAX_QR_IMAGE_BYTES) {
+			fileError = t.qrUploadTooLarge;
+			return;
+		}
+		readingFile = true;
+		const reader = new Html5Qrcode(fileReaderId);
+		try {
+			const token = tokenFromScan(await reader.scanFile(file, false));
+			if (!token) {
+				fileError = t.qrUploadNotFound;
+				return;
+			}
+			if (!inline) isOpen = false;
+			onScan(token);
+		} catch {
+			fileError = t.qrUploadNotFound;
+		} finally {
+			reader.clear();
+			readingFile = false;
+		}
 	}
 
 	function cameraAttachment(node: HTMLDivElement) {
@@ -134,11 +183,42 @@
 	</div>
 {/snippet}
 
+{#snippet imagePicker()}
+	<div class="mb-3 space-y-2">
+		<input
+			bind:this={fileInput}
+			type="file"
+			accept="image/*"
+			class="sr-only"
+			tabindex="-1"
+			aria-hidden="true"
+			onchange={scanImageFile}
+		/>
+		<Button
+			type="button"
+			variant="outline"
+			class="min-h-11 w-full gap-2"
+			disabled={disabled || readingFile}
+			onclick={() => fileInput?.click()}
+		>
+			<ImageUp class="size-4" />
+			{readingFile ? t.qrUploadReading : t.qrUploadButton}
+		</Button>
+		<p class="text-center text-xs text-muted-foreground">{t.qrUploadHint}</p>
+		{#if fileError}
+			<p role="alert" class="text-center text-sm font-medium text-destructive">{fileError}</p>
+		{/if}
+		<!-- html5-qrcode needs an element to decode a file into; it stays hidden. -->
+		<div id={fileReaderId} class="hidden"></div>
+	</div>
+{/snippet}
+
 {#if inline}
 	{@render cameraViewport()}
 	{#if !cameraError}
 		<p class="mb-3 text-center text-2xs text-muted-foreground">{t.cameraScanHint}</p>
 	{/if}
+	{@render imagePicker()}
 {:else if isOpen}
 	<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-xs">
 		<div
@@ -165,6 +245,8 @@
 					{t.cameraScanHint}
 				</p>
 			{/if}
+
+			{@render imagePicker()}
 
 			<button
 				type="button"

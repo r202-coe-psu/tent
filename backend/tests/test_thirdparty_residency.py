@@ -130,7 +130,14 @@ async def test_checked_out_maps_to_checked_out(
 
 @pytest.mark.parametrize(
     ("status", "checked_in_at"),
-    [("pre_registered", datetime(2026, 8, 20, tzinfo=UTC)), ("active", None)],
+    [
+        ("pre_registered", datetime(2026, 8, 20, tzinfo=UTC)),
+        ("kiosk_registered", datetime(2026, 8, 20, tzinfo=UTC)),
+        # #710 — a stale projection row (checked_in_at = cancel time) must still be 404.
+        ("cancelled", datetime(2026, 8, 20, tzinfo=UTC)),
+        ("cancelled", None),
+        ("active", None),
+    ],
 )
 async def test_not_resident_is_404(
     client: AsyncClient,
@@ -173,6 +180,48 @@ async def test_latest_record_wins_when_none_present(
     assert response.json()["result"]["location_code"] == "SH002"
 
 
+async def test_newer_cancelled_row_does_not_shadow_checked_out_stay(
+    client: AsyncClient, shelters: list[PublicShelter]
+) -> None:
+    """#710 — a newer cancelled row (other shelter) must not hide a genuine stay."""
+    now = datetime.now(UTC)
+    await _person(shelter_code="SH001", status="checked_out", updated_at=now - timedelta(days=2))
+    await _person(shelter_code="SH002", status="cancelled", updated_at=now, suffix="02")
+    response = await client.get(URL, params={"cid": CID, "purpose": "m2-check"}, headers=GRANTED)
+    assert response.status_code == 200
+    result = response.json()["result"]
+    assert result["location_code"] == "SH001"
+    assert result["residency_status"] == "CHECKED_OUT"
+
+
+@pytest.mark.parametrize("newer_status", ["pre_registered", "kiosk_registered"])
+async def test_newer_pending_row_still_wins_selection_and_is_404(
+    client: AsyncClient, shelters: list[PublicShelter], newer_status: str
+) -> None:
+    """Unchanged by CR-176 — a newer pre_registered / kiosk_registered row is picked → 404."""
+    now = datetime.now(UTC)
+    await _person(shelter_code="SH001", status="checked_out", updated_at=now - timedelta(days=2))
+    await _person(
+        shelter_code="SH002", status=newer_status, checked_in_at=None, updated_at=now, suffix="02"
+    )
+    response = await client.get(URL, params={"cid": CID, "purpose": "m2-check"}, headers=GRANTED)
+    assert response.status_code == 404
+    assert response.json()["code"] == "residency_not_found"
+
+
+@pytest.mark.parametrize("status", ["pre_registered", "cancelled"])
+async def test_denied_not_found_log_keeps_location_code(
+    client: AsyncClient, shelters: list[PublicShelter], status: str
+) -> None:
+    await _person(shelter_code="SH002", status=status, checked_in_at=None)
+    response = await client.get(URL, params={"cid": CID, "purpose": "m2-check"}, headers=GRANTED)
+    assert response.status_code == 404
+    logs = await ThirdPartyAccessLog.find_all().to_list()
+    assert [(log.status, log.location_code) for log in logs] == [
+        ("denied_residency_not_found", "SH002")
+    ]
+
+
 async def test_granted_call_is_logged_without_cid(
     client: AsyncClient, shelters: list[PublicShelter]
 ) -> None:
@@ -191,3 +240,20 @@ async def test_granted_call_is_logged_without_cid(
     assert log.result_count == 1
     assert log.module_name is None
     assert CID not in log.model_dump_json()
+
+
+async def test_basic_consent_person_is_not_resident_once_projection_is_deleted(
+    client: AsyncClient, shelters: list[PublicShelter]
+) -> None:
+    """PDPA FR-40 — residency reads only `public_persons`, which the worker deletes for a
+    basic-mode person (worker `test_project_evacuee_basic_consent_deletes_projection`)."""
+    person = await _person(status="room_confirmed")
+    params = {"cid": CID, "purpose": "m2-check"}
+    before = await client.get(URL, params=params, headers=GRANTED)
+    assert before.json()["result"]["location_code"] == "SH001"
+
+    await person.delete()
+
+    response = await client.get(URL, params=params, headers=GRANTED)
+    assert response.status_code == 404
+    assert response.json()["code"] == "residency_not_found"

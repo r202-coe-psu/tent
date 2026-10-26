@@ -22,7 +22,8 @@ import {
 	findUserByGoogleSubject,
 	updateOwnProfile,
 	resolveLoginName,
-	findUserNameByPhone
+	findUserNameByPhone,
+	listShelterStaffDirectory
 } from './user-service';
 import type { CouchUserDoc } from './user-service';
 import { hashSecurityAnswer } from './security-questions';
@@ -598,6 +599,51 @@ describe('user-service', () => {
 			expect(found?.name).toBe('0820000009');
 			expect(await findUserByThaidSubject('not-exist')).toBeNull();
 			expect(await findUserByThaidSubject('')).toBeNull();
+		});
+	});
+
+	describe('listShelterStaffDirectory (incident handover, IL-P5)', () => {
+		const put = (name: string, extra: Partial<FakeUserDoc>) => {
+			fakeUsersDb[`org.couchdb.user:${name}`] = {
+				_id: `org.couchdb.user:${name}`,
+				_rev: '1-a',
+				name,
+				type: 'user',
+				roles: [],
+				...extra
+			} as FakeUserDoc;
+		};
+
+		it('returns active staff with a capability in the shelter, excluding volunteers', async () => {
+			put('staff_a', { roles: ['shelter:SH001', 'SH001:kitchen_staff'], display_name: 'ก' });
+			put('legacy_b', { roles: ['shelter:SH001', 'registration_staff'] });
+			put('vol_c', {
+				roles: ['shelter:SH001', 'SH001:registration_staff'],
+				personnel_type: 'volunteer'
+			});
+			put('scope_only', { roles: ['shelter:SH001'] });
+			put('inactive', { roles: ['shelter:SH001', 'SH001:medical_staff'], active: false });
+			put('other', { roles: ['shelter:SH002', 'SH002:kitchen_staff'] });
+
+			const names = (await listShelterStaffDirectory('SH001')).map((s) => s.name).sort();
+			expect(names).toEqual(['legacy_b', 'staff_a']);
+		});
+
+		it('filters by capabilities when given, default stays unfiltered', async () => {
+			put('sec', { roles: ['shelter:SH001', 'SH001:security_officer'] });
+			put('mgr', { roles: ['shelter:SH001', 'SH001:shelter_manager'] });
+			put('kit', { roles: ['shelter:SH001', 'SH001:kitchen_staff'] });
+			put('sec_other', { roles: ['shelter:SH002', 'SH002:security_officer'] });
+
+			const names = (
+				await listShelterStaffDirectory('SH001', {
+					capabilities: ['security_officer', 'shelter_manager']
+				})
+			)
+				.map((s) => s.name)
+				.sort();
+			expect(names).toEqual(['mgr', 'sec']);
+			expect(await listShelterStaffDirectory('SH001')).toHaveLength(3);
 		});
 	});
 

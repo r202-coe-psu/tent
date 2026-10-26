@@ -3,7 +3,15 @@ import { migrateVulnerableGroupCodes } from '$lib/features/people/server';
 
 // ===== Enums (CR-008) =====
 
-export const operationStatusSchema = z.enum(['standby', 'active', 'full_capacity', 'closed']);
+// `cancelled` (draft-shelter-cancelled-status.md): set up by mistake / never opened — hidden
+// from the whole public plane, unlike `closed`. Reversible: any other status re-lists it.
+export const operationStatusSchema = z.enum([
+	'standby',
+	'active',
+	'full_capacity',
+	'closed',
+	'cancelled'
+]);
 export type OperationStatus = z.infer<typeof operationStatusSchema>;
 
 // CR-067: one registry document represents either an evacuation center or a host house.
@@ -31,9 +39,20 @@ export function resolveOperationStatus(doc: unknown): string | null {
 }
 
 /**
+ * Is this shelter hidden from the public plane? (draft-shelter-cancelled-status.md)
+ *
+ * Mirrors `is_shelter_cancelled()` in `worker/src/worker/projectors/shelter.py` — the
+ * worker purges a cancelled shelter's projections, and BFF routes that read the
+ * registry directly must drop it the same way.
+ */
+export function isShelterCancelled(doc: unknown): boolean {
+	return resolveOperationStatus(doc) === 'cancelled';
+}
+
+/**
  * Can the public book a place here? (CR-070 FR-72 / T-71 validation.)
  *
- * Hard blocks: missing status, `closed`, or `feature_flags.accepts_pre_registration`
+ * Hard blocks: missing status, `closed`, `cancelled`, or `feature_flags.accepts_pre_registration`
  * not explicitly true (missing/undefined fails closed — default off).
  * `full_capacity` and a dark-red occupancy health stay bookable and surface a
  * warning instead — matching the warning-only occupancy guardrail of T-51.
@@ -41,7 +60,7 @@ export function resolveOperationStatus(doc: unknown): string | null {
 export function isShelterBookable(doc: unknown): boolean {
 	const status = resolveOperationStatus(doc);
 	if (status === null) return false;
-	if (status === 'closed') return false;
+	if (status === 'closed' || status === 'cancelled') return false;
 	if (!doc || typeof doc !== 'object') return false;
 	const flags = (doc as { feature_flags?: { accepts_pre_registration?: unknown } }).feature_flags;
 	return flags?.accepts_pre_registration === true;

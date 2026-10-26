@@ -3,14 +3,27 @@ import { now } from '$lib/db/model';
 import { isUlid } from '$lib/db/ulid';
 import { addQty, parseQty, qtyGt, qtyNeg } from '$lib/utils/qty';
 import { ConflictError } from '$lib/utils/errors';
+import { catalogRepository } from '$lib/features/catalog';
 import {
 	createStockLedger,
 	deriveDeterministicLedgerId,
+	isLotExpired,
+	projectStockLotBalances,
+	toLotPriorityItems,
+	type LotPriorityItem,
 	type OperationsRepository,
 	type StockLedger,
+	type StockLotBalance,
 	operationsRepository
 } from '$lib/features/operations';
-import type { RequisitionTicket, TicketAmendment } from '../../domain/food-supplies';
+import {
+	validateDispatchLotAllocations,
+	type DispatchLotAllocation,
+	type DispatchLotCandidate,
+	type DispatchLotFailureReason,
+	type RequisitionTicket,
+	type TicketAmendment
+} from '../../domain/food-supplies';
 import {
 	RequisitionTicketRemoteRepository,
 	type RequisitionTicketRepository
@@ -30,7 +43,8 @@ export interface DispatchWorkflowDependencies {
 export interface DispatchTicketOptions {
 	driver_name?: string;
 	license_plate?: string;
-	item_lots?: Record<string, string>;
+	/** item_id -> physical lots (and qty from each) the item is dispatched from (#655). */
+	item_lots?: Record<string, DispatchLotAllocation[]>;
 }
 
 export interface InFlightAmendmentInput {
@@ -110,6 +124,97 @@ function resolveDependencies(
 	};
 }
 
+interface PlannedDispatchRow {
+	ledgerId: string;
+	lot_ref: string;
+	qty: string;
+}
+
+const LOT_FAILURE_MESSAGES: Record<DispatchLotFailureReason, string> = {
+	no_lots: 'no physical lot was selected',
+	invalid_lot_ref: 'lot reference is invalid',
+	duplicate_lot: 'lot is selected more than once',
+	non_positive_qty: 'lot quantity must be greater than 0',
+	unknown_lot: 'lot has no stock for this item',
+	expired_lot: 'lot is expired',
+	exceeds_lot_balance: 'quantity exceeds the lot remaining balance',
+	sum_mismatch: 'lot quantities must add up to the allocated quantity'
+};
+
+function lotExpiryMs(lot: StockLotBalance | undefined): number {
+	const ms = lot?.lot?.expiry ? Date.parse(lot.lot.expiry) : NaN;
+	return Number.isNaN(ms) ? Number.POSITIVE_INFINITY : ms;
+}
+
+/**
+ * Validates one item's lot split against the live lot balances and returns the ledger rows to
+ * write, in deterministic order (earliest lot expiry first, lots without expiry last, then
+ * lot_ref). The FIRST row keeps the legacy id `('dispatch', ticketId, itemId)` so
+ * `resolveDispatchedLotExpiry` keeps reading the earliest (most conservative) expiry for the
+ * food-safety clock; later rows are keyed by lot_ref. This ticket's own rows are excluded from
+ * the balances so an idempotent retry after a partial write still validates.
+ */
+async function planItemDispatchRows(
+	ticketId: string,
+	itemId: string,
+	itemName: string,
+	allocatedQty: string,
+	allocations: readonly DispatchLotAllocation[],
+	operationsRepo: OperationsRepository,
+	priorityItem: LotPriorityItem | undefined,
+	nowMs: number
+): Promise<PlannedDispatchRow[]> {
+	const legacyId = await deriveDeterministicLedgerId('dispatch', ticketId, itemId);
+	const ownIds = new Set<string>([legacyId]);
+	for (const allocation of allocations) {
+		if (typeof allocation.lot_ref !== 'string') continue;
+		ownIds.add(await deriveDeterministicLedgerId('dispatch', ticketId, itemId, allocation.lot_ref));
+	}
+
+	const ledger = (await operationsRepo.listLedgerByItem(itemId)).filter(
+		(entry) => !ownIds.has(entry._id)
+	);
+	const balances = projectStockLotBalances(ledger).filter(
+		(lot) => lot.item_id === itemId && qtyGt(lot.qty, 0)
+	);
+	const balanceByRef = new Map(balances.map((lot) => [lot.lot_ref, lot]));
+	const candidates: DispatchLotCandidate[] = balances.map((lot) => ({
+		lot_ref: lot.lot_ref,
+		qty: lot.qty,
+		expired: isLotExpired(lot, nowMs, priorityItem)
+	}));
+
+	const result = validateDispatchLotAllocations(allocatedQty, allocations, candidates);
+	if (!result.ok) {
+		const lotPart = result.lot_ref ? ` (${result.lot_ref})` : '';
+		const totalPart =
+			result.reason === 'sum_mismatch'
+				? ` (selected ${result.total}, allocated ${allocatedQty})`
+				: '';
+		throw new WorkflowValidationError(
+			`Item ${itemName} (${itemId}): ${LOT_FAILURE_MESSAGES[result.reason]}${lotPart}${totalPart}`
+		);
+	}
+
+	const sorted = [...allocations].sort(
+		(a, b) =>
+			lotExpiryMs(balanceByRef.get(a.lot_ref)) - lotExpiryMs(balanceByRef.get(b.lot_ref)) ||
+			a.lot_ref.localeCompare(b.lot_ref)
+	);
+	const rows: PlannedDispatchRow[] = [];
+	for (const [index, allocation] of sorted.entries()) {
+		rows.push({
+			ledgerId:
+				index === 0
+					? legacyId
+					: await deriveDeterministicLedgerId('dispatch', ticketId, itemId, allocation.lot_ref),
+			lot_ref: allocation.lot_ref,
+			qty: allocation.qty
+		});
+	}
+	return rows;
+}
+
 /**
  * Dispatches a ticket, creating outbound stock ledger deductions and transitioning to IN_TRANSIT (Step 3).
  */
@@ -145,50 +250,68 @@ export async function dispatchTicket(
 		deps?.catalogRepo
 	);
 
-	let createdCount = 0;
+	// Phase 1: validate every item's lot split before writing anything (#655).
+	const catalog = deps?.catalogRepo ?? catalogRepository();
+	const priorityItems = toLotPriorityItems(await catalog.listItemMasters(ctx.shelterCode));
+	const nowMs = Date.now();
+	const plans: {
+		item: (typeof current.items)[number];
+		unit: string;
+		rows: PlannedDispatchRow[];
+	}[] = [];
 	for (const item of current.items) {
-		const ledgerId = await deriveDeterministicLedgerId('dispatch', current._id, item.item_id);
-
-		const lotRef =
-			options?.item_lots?.[item.item_id] &&
-			options.item_lots[item.item_id].startsWith('stock_ledger:')
-				? options.item_lots[item.item_id]
-				: ledgerId;
-
 		const unit = itemUnits.get(item.item_id);
 		if (!unit) {
 			throw new StockIntegrityError(`Missing canonical unit for dispatched item ${item.item_id}`);
 		}
-
-		const ledgerEntry = createStockLedger(
-			{
-				item_id: item.item_id,
-				qty: qtyNeg(item.allocated_qty),
-				unit,
-				reason: 'distribute',
-				ref_id: current._id,
-				lot_ref: lotRef,
-				occurred_at: now()
-			},
-			ctx,
-			ledgerId
+		const allocations = options?.item_lots?.[item.item_id] ?? [];
+		const rows = await planItemDispatchRows(
+			current._id,
+			item.item_id,
+			item.item_name,
+			item.allocated_qty,
+			allocations,
+			operationsRepo,
+			priorityItems.get(item.item_id),
+			nowMs
 		);
+		plans.push({ item, unit, rows });
+	}
 
-		try {
-			const persistedLedger = await operationsRepo.addLedgerEntry(ledgerEntry);
-			assertDispatchLedgerReplay(persistedLedger, ledgerEntry, ctx);
-			createdCount++;
-		} catch (error) {
-			if (!(error instanceof ConflictError)) {
-				throw error;
+	// Phase 2: one `distribute` row per lot.
+	let createdCount = 0;
+	for (const { item, unit, rows } of plans) {
+		for (const row of rows) {
+			const ledgerEntry = createStockLedger(
+				{
+					item_id: item.item_id,
+					qty: qtyNeg(row.qty),
+					unit,
+					reason: 'distribute',
+					ref_id: current._id,
+					lot_ref: row.lot_ref,
+					occurred_at: now()
+				},
+				ctx,
+				row.ledgerId
+			);
+
+			try {
+				const persistedLedger = await operationsRepo.addLedgerEntry(ledgerEntry);
+				assertDispatchLedgerReplay(persistedLedger, ledgerEntry, ctx);
+				createdCount++;
+			} catch (error) {
+				if (!(error instanceof ConflictError)) {
+					throw error;
+				}
+				const recoveredLedger = await operationsRepo.getLedgerEntry(row.ledgerId);
+				if (!recoveredLedger) {
+					throw new StockIntegrityError(
+						`ConflictError on ${row.ledgerId} but existing dispatch ledger could not be fetched`
+					);
+				}
+				assertDispatchLedgerReplay(recoveredLedger, ledgerEntry, ctx);
 			}
-			const recoveredLedger = await operationsRepo.getLedgerEntry(ledgerId);
-			if (!recoveredLedger) {
-				throw new StockIntegrityError(
-					`ConflictError on ${ledgerId} but existing dispatch ledger could not be fetched`
-				);
-			}
-			assertDispatchLedgerReplay(recoveredLedger, ledgerEntry, ctx);
 		}
 	}
 

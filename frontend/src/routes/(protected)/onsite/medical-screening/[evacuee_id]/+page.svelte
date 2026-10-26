@@ -4,6 +4,7 @@
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import Stethoscope from '@lucide/svelte/icons/stethoscope';
 	import AlertTriangle from '@lucide/svelte/icons/alert-triangle';
+	import { untrack } from 'svelte';
 
 	import { Button } from '$lib/components/ui/button';
 	import { Badge } from '$lib/components/ui/badge';
@@ -16,6 +17,8 @@
 		genderLabelTh,
 		evacueeAgeYears,
 		nextScreeningQueueEvacuee,
+		classifyScreeningQueueTab,
+		startStaffStationVisit,
 		recommendZoneKind,
 		ZONE_KIND_LABELS,
 		formatPersonName,
@@ -24,6 +27,7 @@
 	} from '$lib/features/people';
 	import { useShelter } from '$lib/features/shelters';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
+	import { authStore } from '$lib/stores/auth.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
 	import ClinicalScreeningForm from '../clinical-screening-form.svelte';
 	import { shouldConfirmLeave } from '../medical-screening.utils';
@@ -99,6 +103,22 @@
 	const screenedIds = $derived(
 		new Set(((screeningsQuery.data ?? []) as Screening[]).map((s) => s.evacuee_id))
 	);
+	// CR-192: Station 2 `start` when staff open someone who is still waiting for screening. The
+	// boolean flips only when that state changes, so saving (which adds the screening) never
+	// re-opens a visit; the repository skips a reopen / refresh while a start is still live.
+	const awaitingScreening = $derived(
+		!isLoading && evacuee !== null && classifyScreeningQueueTab(evacuee, screenedIds) === 'pending'
+	);
+	$effect(() => {
+		const id = evacueeId;
+		if (!awaitingScreening) return;
+		untrack(() => {
+			void startStaffStationVisit(id, 2, {
+				shelterCode: getShelterCode(),
+				createdBy: authStore.user?.name ?? 'unknown'
+			});
+		});
+	});
 	const nextInQueue = $derived(
 		nextScreeningQueueEvacuee(evacueesQuery.data ?? [], screenedIds, savedEvacueeId)
 	);
@@ -142,7 +162,7 @@
 
 <svelte:head>
 	<title>
-		{evacuee ? `คัดกรอง · ${evacuee.first_name} ${evacuee.last_name}` : 'คัดกรองการแพทย์'} | SmartShelter
+		{evacuee ? `คัดกรอง · ${evacuee.first_name} ${evacuee.last_name}` : 'คัดกรองผู้เข้าพัก'} | SmartShelter
 	</title>
 </svelte:head>
 
@@ -168,7 +188,7 @@
 						{evacuee.first_name}
 						{evacuee.last_name}
 					{:else}
-						ฟอร์มคัดกรองทางการแพทย์
+						ฟอร์มคัดกรองผู้เข้าพัก
 					{/if}
 				</h1>
 				<Badge
@@ -203,9 +223,9 @@
 				>
 					<Stethoscope class="size-6" />
 				</div>
-				<h2 class="text-base font-bold text-foreground">จุดคัดกรองการแพทย์ถูกปิดใช้งาน</h2>
+				<h2 class="text-base font-bold text-foreground">จุดคัดกรองผู้เข้าพักถูกปิดใช้งาน</h2>
 				<p class="mt-1.5 text-xs leading-relaxed text-muted-foreground">
-					ศูนย์พักพิงนี้ไม่ได้เปิดใช้งานจุดคัดกรองทางการแพทย์ (Station 2) ตามการตั้งค่าศูนย์พักพิง
+					ศูนย์พักพิงนี้ไม่ได้เปิดใช้งานจุดคัดกรองผู้เข้าพัก (Station 2) ตามการตั้งค่าศูนย์พักพิง
 				</p>
 				<div class="mt-5 flex flex-col gap-2">
 					<Button variant="default" class="w-full" onclick={() => goto(resolve('/portal'))}>

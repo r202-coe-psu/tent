@@ -357,6 +357,7 @@ class ScannerClientManager:
             "/api/v1/kiosk/lookup",
             "/api/v1/kiosk/check-in",
             "/api/v1/kiosk/reprint",
+            "/api/v1/kiosk/volunteer-card",
             "/api/v1/kiosk/config",
             "/api/v1/kiosk/register",
             "/api/v1/kiosk/staff-pin/verify",

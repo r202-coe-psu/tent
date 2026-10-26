@@ -265,7 +265,7 @@ describe('ticket-workflow', () => {
 		expect(updated.items[0].allocated_qty).toBe('95');
 	});
 
-	it('approves ticket by manager transitioning to READY_FOR_DISPATCH', async () => {
+	it('approves ticket by warehouse staff transitioning to READY_FOR_DISPATCH (CR-179)', async () => {
 		const ticket = await createRequisitionTicket(
 			{
 				ticket_no: 'TKT-SUPPLIES-0001',
@@ -294,14 +294,38 @@ describe('ticket-workflow', () => {
 			repo
 		);
 
-		// Warehouse staff cannot approve (AC-TKT-03.1)
-		await expect(approveTicketForDispatch(ticket._id, WH_CTX, repo)).rejects.toThrow(
-			/Unauthorized/
+		// Warehouse staff can approve (CR-179)
+		const approved = await approveTicketForDispatch(ticket._id, WH_CTX, repo);
+		expect(approved.status).toBe('READY_FOR_DISPATCH');
+		expect(approved.approved_by).toBe(WH_CTX.createdBy);
+	});
+
+	it('rejects approval from distribution_staff and allows shelter_manager (CR-179)', async () => {
+		const ticket = await createRequisitionTicket(
+			{
+				ticket_no: 'TKT-SUPPLIES-0002',
+				requisition_type: 'supplies',
+				source_location: 'warehouse:main',
+				destination_location: 'point:b',
+				items: [
+					{
+						item_id: 'item:mat',
+						item_name: 'Sleeping Mat',
+						type_class: 'CONSUMABLE',
+						returnable: false,
+						requested_qty: '50',
+						allocated_qty: '50'
+					}
+				]
+			},
+			WH_CTX,
+			repo
 		);
 
-		// Manager can approve
+		await expect(approveTicketForDispatch(ticket._id, POS_CTX, repo)).rejects.toThrow(
+			/Unauthorized/
+		);
 		const approved = await approveTicketForDispatch(ticket._id, MGR_CTX, repo);
-		expect(approved.status).toBe('READY_FOR_DISPATCH');
 		expect(approved.approved_by).toBe(MGR_CTX.createdBy);
 	});
 

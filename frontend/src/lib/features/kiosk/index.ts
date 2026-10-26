@@ -20,6 +20,8 @@ export {
 export { default as KioskCardInsertScene } from './ui/kiosk-card-insert-scene.svelte';
 export { default as KioskReaderPointer } from './ui/kiosk-reader-pointer.svelte';
 export { default as KioskReprint } from './ui/kiosk-reprint.svelte';
+export { default as KioskVolunteerCard } from './ui/kiosk-volunteer-card.svelte';
+export { default as KioskPrintQrChooser } from './ui/kiosk-print-qr-chooser.svelte';
 export { default as KioskThaidIdentityScan } from './ui/thaid-identity-scan.svelte';
 export { default as KioskBannerAttract } from './ui/kiosk-banner-attract.svelte';
 export { KioskIdleTimeout, KIOSK_IDLE_TIMEOUT_MS } from './ui/kiosk-idle-timeout.svelte.js';
@@ -49,6 +51,7 @@ export { isKioskPhoneCheckInEnabled } from './domain/kiosk-config';
 export { walkInSession } from './application/walk-in-session.svelte';
 export {
 	abandonWalkIn,
+	restartThaidWalkIn,
 	submitWalkIn,
 	walkInCardMismatch
 } from './application/walk-in-registration';

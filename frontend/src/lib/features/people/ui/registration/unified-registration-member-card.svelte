@@ -460,6 +460,7 @@
 		member = {
 			...member,
 			...converted,
+			form_key: member.form_key,
 			reporting_in: true
 		};
 		birthYear = converted.birth_year as string | number | undefined;

@@ -30,7 +30,8 @@
 		standby: 'เตรียมการ',
 		active: 'เปิดรับ',
 		full_capacity: 'เต็มความจุ',
-		closed: 'ปิดศูนย์'
+		closed: 'ปิดศูนย์',
+		cancelled: 'ยกเลิกศูนย์'
 	};
 
 	function formatPct(value: number | null): string {

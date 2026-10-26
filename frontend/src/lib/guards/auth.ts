@@ -11,6 +11,7 @@ import {
 	isSystemAdmin,
 	canAccessDistributionDesk,
 	canAccessMedicalScreening,
+	canAccessIncidents,
 	canAccessVolunteerBackoffice,
 	canAccessZoning,
 	canManageScanners,
@@ -159,8 +160,9 @@ export function confineKioskStaffOnly(pathname: string) {
 }
 
 /**
- * Warehouse guard — requires INVENTORY_WRITE_ROLES: system_admin, shelter_manager,
- * or warehouse_staff (role-permission-matrix.md §4). Redirects to / otherwise.
+ * Warehouse guard — system_admin, or in the active shelter shelter_manager or the warehouse
+ * side: warehouse_staff or supply_coordinator (`isWarehouseStaff`; role-permission-matrix.md
+ * §4). Redirects to / otherwise.
  */
 export async function requireWarehouseAccess(fetchFn: typeof fetch = fetch) {
 	await requireAuth(fetchFn);
@@ -302,6 +304,15 @@ export async function requireZoning(fetchFn?: typeof fetch) {
 	await requireAuth(fetchFn);
 	const roles = authStore.user?.roles ?? [];
 	if (!canAccessZoning(roles, activeShelterCode(roles))) {
+		throw redirect(302, resolve(LANDING_ROUTE));
+	}
+}
+
+/** Shelter Incident Log — any staff with the active shelter scope (or SA). */
+export async function requireIncidents(fetchFn?: typeof fetch) {
+	await requireAuth(fetchFn);
+	const roles = authStore.user?.roles ?? [];
+	if (!canAccessIncidents(roles, activeShelterCode(roles))) {
 		throw redirect(302, resolve(LANDING_ROUTE));
 	}
 }

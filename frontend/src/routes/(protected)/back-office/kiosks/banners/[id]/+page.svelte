@@ -10,6 +10,7 @@
 		KioskBannerApiError,
 		KioskBannerForm,
 		useKioskBanner,
+		useKioskBannerGroups,
 		useUpdateKioskBanner,
 		type KioskBannerSavePayload
 	} from '$lib/features/kiosk-banners';
@@ -17,10 +18,11 @@
 
 	const bannerQuery = useKioskBanner(() => page.params.id);
 	const update = useUpdateKioskBanner();
-	/** Back to the manage page of the banner's screen type once it has loaded. */
+	const groupsQuery = useKioskBannerGroups(() => bannerQuery.data?.shelter_code);
+	/** Back to the banner's group/screen page once it has loaded (a v1 banner has no group: the list). */
 	const listPath = $derived(
-		bannerQuery.data
-			? (`/back-office/kiosks/banners/${screenTypeOf(bannerQuery.data)}` as const)
+		bannerQuery.data?.group_id
+			? (`/back-office/kiosks/banners/groups/${encodeURIComponent(bannerQuery.data.group_id)}/${screenTypeOf(bannerQuery.data)}` as const)
 			: ('/back-office/kiosks/banners' as const)
 	);
 
@@ -43,7 +45,11 @@
 			return;
 		}
 		toast.success('บันทึกแบนเนอร์แล้ว');
-		await goto(resolve(`/back-office/kiosks/banners/${payload.input.screen_type}`));
+		await goto(
+			resolve(
+				`/back-office/kiosks/banners/groups/${encodeURIComponent(payload.input.group_id)}/${payload.input.screen_type}`
+			)
+		);
 	}
 </script>
 
@@ -63,7 +69,7 @@
 	{/snippet}
 
 	<div class="{spatial.container.staffPageCard} p-4 sm:p-6">
-		{#if bannerQuery.isLoading}
+		{#if bannerQuery.isLoading || (bannerQuery.data && groupsQuery.isLoading)}
 			<p class="py-16 text-center text-muted-foreground">กำลังโหลดแบนเนอร์...</p>
 		{:else if notFound}
 			<div class="space-y-3 py-12 text-center">
@@ -77,11 +83,14 @@
 			<p class="py-16 text-center text-sm text-destructive">
 				{bannerQuery.error instanceof Error ? bannerQuery.error.message : 'โหลดแบนเนอร์ไม่สำเร็จ'}
 			</p>
+		{:else if groupsQuery.isError}
+			<p class="py-16 text-center text-sm text-destructive">โหลดกลุ่มแบนเนอร์ไม่สำเร็จ</p>
 		{:else if bannerQuery.data}
 			{#key bannerQuery.data._id}
 				<KioskBannerForm
 					shelterCode={bannerQuery.data.shelter_code}
 					banner={bannerQuery.data}
+					groups={groupsQuery.data ?? []}
 					onsave={handleSave}
 				/>
 			{/key}

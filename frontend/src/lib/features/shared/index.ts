@@ -37,6 +37,14 @@ export {
 	type KioskScreenType
 } from './domain/kiosk-screen';
 
+export {
+	IN_SHELTER_STATUSES,
+	countInShelter,
+	inShelterFromStatusCounts,
+	isInShelterStayStatus,
+	type InShelterStatus
+} from './domain/in-shelter';
+
 export { fetchAppConfig, updateAppConfig, type AppConfigResponse } from './data/app-config.api';
 export { fetchSystemBanner } from './data/system-banner.api';
 export { systemBannerKeys, useSystemBanner } from './application/system-banner-queries';

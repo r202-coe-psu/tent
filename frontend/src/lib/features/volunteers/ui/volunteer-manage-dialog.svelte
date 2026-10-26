@@ -90,7 +90,7 @@
 	let verificationNotes = $state('');
 
 	// Rehydrate from the volunteer prop each time the dialog opens on a
-	// (possibly different) row — mirrors `job-form-dialog.svelte`'s `lastOpenedKey`.
+	// (possibly different) row — the same per-row rehydrate guard dialogs in this feature use.
 	let lastOpenedId = $state<string | null>(null);
 	$effect(() => {
 		if (!open) {
