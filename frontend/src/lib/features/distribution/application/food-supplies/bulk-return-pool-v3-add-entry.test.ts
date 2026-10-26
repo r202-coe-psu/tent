@@ -584,7 +584,8 @@ describe('bulk return pool v3 workflows', () => {
 					distribution_log_id: loanId(45),
 					qty: results[0].entry.loan_refs[0].qty,
 					reason: 'closed',
-					outstanding: '3'
+					outstanding: '3',
+					ticket_id: 'requisition_ticket:01J00000000000000000000001'
 				}
 			]);
 

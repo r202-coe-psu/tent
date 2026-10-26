@@ -91,7 +91,8 @@ describe('bulk return pool v3 workflows', () => {
 					distribution_log_id: loanId(50),
 					qty: '2',
 					reason: 'closed',
-					outstanding: '3'
+					outstanding: '3',
+					ticket_id: 'requisition_ticket:01J00000000000000000000001'
 				}
 			]);
 			expect(cleanRow.closed_loan_refs).toEqual([]);
