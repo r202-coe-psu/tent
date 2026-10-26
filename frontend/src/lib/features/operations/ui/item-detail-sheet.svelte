@@ -11,6 +11,8 @@
 	import type { StockLotBalance } from '../domain/operations';
 	import { useStoragePoints } from '../application/use-storage-points.svelte';
 	import LedgerTable from './ledger-table.svelte';
+	import DisabledReason from './stock/disabled-reason.svelte';
+	import { DISTRIBUTE_FORBIDDEN_HINT, OFFLINE_HINT } from './stock/hints';
 	import { buildLotRows } from './stock/lot-view';
 	import type { StockDisplayRow } from './stock/stock-view';
 
@@ -100,25 +102,26 @@
 					{#each ACTIONS as action (action.kind)}
 						{@const isDis = offline || (action.kind === 'distribute' && !canDistribute)}
 						{@const btnTitle = offline
-							? 'เซสชันหมดอายุ — เข้าสู่ระบบใหม่เพื่อบันทึก'
+							? OFFLINE_HINT
 							: action.kind === 'distribute' && !canDistribute
-								? 'ต้องมีสิทธิ์เจ้าหน้าที่คลัง (warehouse_staff) จึงจะเบิกจ่ายได้'
+								? DISTRIBUTE_FORBIDDEN_HINT
 								: undefined}
-						<Button
-							type="button"
-							variant={action.kind === 'receive' ? 'default' : 'outline'}
-							aria-label="{action.label} {row.name}"
-							class="min-h-11 gap-1.5 rounded-lg px-2 text-sm font-semibold {action.kind ===
-							'receive'
-								? 'bg-[#0A2647] text-white hover:bg-[#051930]'
-								: 'border-slate-300 bg-white text-slate-800 shadow-2xs'}"
-							disabled={isDis}
-							title={btnTitle}
-							onclick={() => onaction(action.kind)}
-						>
-							<action.icon class="h-4 w-4" aria-hidden="true" />
-							{action.label}
-						</Button>
+						<DisabledReason reason={isDis ? btnTitle : undefined}>
+							<Button
+								type="button"
+								variant={action.kind === 'receive' ? 'default' : 'outline'}
+								aria-label="{action.label} {row.name}"
+								class="min-h-11 gap-1.5 rounded-lg px-2 text-sm font-semibold {action.kind ===
+								'receive'
+									? 'bg-[#0A2647] text-white hover:bg-[#051930]'
+									: 'border-slate-300 bg-white text-slate-800 shadow-2xs'}"
+								disabled={isDis}
+								onclick={() => onaction(action.kind)}
+							>
+								<action.icon class="h-4 w-4" aria-hidden="true" />
+								{action.label}
+							</Button>
+						</DisabledReason>
 					{/each}
 				</div>
 			</Sheet.Header>
