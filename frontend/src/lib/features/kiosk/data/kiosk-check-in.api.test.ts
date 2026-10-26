@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { mintConsentStamp, type ConsentDecision } from '$lib/features/consent/server';
 import {
 	checkInSelectedMembers,
 	KioskPartialCheckInError,
@@ -310,7 +311,17 @@ describe('lookupPreRegisteredEvacuee ThaiD gate', () => {
 const registered = {
 	evacuee_id: 'evacuee:01ARZ3NDEKTSV4RRFFQ69G5FAV',
 	qr_payload: 'evacuee:01ARZ3NDEKTSV4RRFFQ69G5FAV',
-	label: { name: 'สมชาย ใจดี', phone: '0812345678' }
+	label: { name: 'สมชาย ใจดี', phone: '0812345678' },
+	consent_ref: 'CS-0123456Z',
+	consent_mode: 'full'
+};
+const decision: ConsentDecision = {
+	mode: 'full',
+	health: false,
+	search_visible: true,
+	guardian_for: [],
+	verbal: false,
+	...mintConsentStamp()
 };
 
 describe('registerKioskWalkIn', () => {
@@ -341,7 +352,7 @@ describe('registerKioskWalkIn', () => {
 		vi.stubGlobal('fetch', fetchMock);
 
 		await expect(
-			registerKioskWalkIn({ citizen_id: '1234567890123' }, photo, new Date().toISOString())
+			registerKioskWalkIn({ citizen_id: '1234567890123' }, photo, decision)
 		).resolves.toEqual(registered);
 		expect(fetchMock).toHaveBeenCalledOnce();
 	});
@@ -349,19 +360,21 @@ describe('registerKioskWalkIn', () => {
 	it('sends the phone with a card registration', async () => {
 		const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
 			const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
-			expect(body).toMatchObject({ source: 'smart-card', phone: '0812345678', consented: true });
+			expect(body).toEqual({
+				source: 'smart-card',
+				card: { citizen_id: '1234567890123' },
+				photo: null,
+				phone: '0812345678',
+				consent: decision,
+				consented_at: decision.given_at
+			});
 			return new Response(JSON.stringify(registered), {
 				status: 200
 			});
 		});
 		vi.stubGlobal('fetch', fetchMock);
 
-		await registerKioskWalkIn(
-			{ citizen_id: '1234567890123' },
-			null,
-			new Date().toISOString(),
-			'0812345678'
-		);
+		await registerKioskWalkIn({ citizen_id: '1234567890123' }, null, decision, '0812345678');
 		expect(fetchMock).toHaveBeenCalledOnce();
 	});
 });
@@ -370,14 +383,13 @@ describe('registerKioskThaidWalkIn', () => {
 	afterEach(() => vi.unstubAllGlobals());
 
 	it('sends only the session id, consent and phone', async () => {
-		const consentedAt = new Date().toISOString();
 		const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
 			expect(JSON.parse(String(init?.body))).toEqual({
 				source: 'thaid',
 				session_id: 'a'.repeat(32),
 				phone: null,
-				consented: true,
-				consented_at: consentedAt
+				consent: decision,
+				consented_at: decision.given_at
 			});
 			return new Response(JSON.stringify(registered), {
 				status: 200
@@ -385,7 +397,7 @@ describe('registerKioskThaidWalkIn', () => {
 		});
 		vi.stubGlobal('fetch', fetchMock);
 
-		await expect(registerKioskThaidWalkIn('a'.repeat(32), consentedAt, null)).resolves.toEqual(
+		await expect(registerKioskThaidWalkIn('a'.repeat(32), decision, null)).resolves.toEqual(
 			registered
 		);
 	});
@@ -404,9 +416,10 @@ describe('registerKioskThaidWalkIn', () => {
 			)
 		);
 
-		await expect(
-			registerKioskThaidWalkIn('a'.repeat(32), new Date().toISOString(), null)
-		).rejects.toMatchObject({ status: 409, code: 'KIOSK_THAID_SESSION_INVALID' });
+		await expect(registerKioskThaidWalkIn('a'.repeat(32), decision, null)).rejects.toMatchObject({
+			status: 409,
+			code: 'KIOSK_THAID_SESSION_INVALID'
+		});
 	});
 });
 
@@ -462,5 +475,56 @@ describe('reprintKioskLabels', () => {
 			code: 'KIOSK_REPRINT_VERIFY_FAILED',
 			message: 'เลข 4 หลักท้ายไม่ถูกต้อง'
 		});
+	});
+});
+
+describe('checkInSelectedMembers lookup time (CR-192)', () => {
+	afterEach(() => {
+		vi.unstubAllGlobals();
+	});
+
+	const primaryId = 'evacuee:01ARZ3NDEKTSV4RRFFQ69G5FAV';
+
+	function stubFetch(bodies: Record<string, unknown>[]) {
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+				const body = JSON.parse(String(init?.body)) as Record<string, unknown> & {
+					evacuee_ids: string[];
+				};
+				bodies.push(body);
+				return new Response(
+					JSON.stringify({
+						shelter_code: 'SH001',
+						members: body.evacuee_ids.map((evacuee_id) => ({ evacuee_id, status: 'checked_in' }))
+					}),
+					{ status: 200, headers: { 'content-type': 'application/json' } }
+				);
+			})
+		);
+	}
+
+	it('sends the lookup time as lookup_at with every batch', async () => {
+		const bodies: Record<string, unknown>[] = [];
+		stubFetch(bodies);
+		const lookupAt = '2026-10-25T03:00:00.000Z';
+		const ids = [
+			primaryId,
+			...Array.from({ length: 24 }, (_, i) => `evacuee:${String(i).padStart(26, '0')}`)
+		];
+
+		await checkInSelectedMembers(primaryId, ids, { batchLimit: 20, lookupAt });
+
+		expect(bodies).toHaveLength(2);
+		for (const body of bodies) expect(body.lookup_at).toBe(lookupAt);
+	});
+
+	it('omits lookup_at when none is given', async () => {
+		const bodies: Record<string, unknown>[] = [];
+		stubFetch(bodies);
+
+		await checkInSelectedMembers(primaryId, [primaryId]);
+
+		expect(bodies[0]).not.toHaveProperty('lookup_at');
 	});
 });

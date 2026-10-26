@@ -16,6 +16,7 @@
 		type Medical,
 		type Screening
 	} from '$lib/features/people';
+	import { resolveMasterCodes, useMasterData } from '$lib/features/master-data';
 	import { defaults, superForm } from 'sveltekit-superforms';
 	import { zod4 } from 'sveltekit-superforms/adapters';
 	import {
@@ -58,6 +59,12 @@
 		onClose: () => void;
 		onSave: (data: EvacueeHealthEditData) => Promise<void>;
 	} = $props();
+
+	// CR-186 FR-7 / #648 — legacy โรคประจำตัว / ประวัติการแพ้ labels become master codes on save.
+	const chronicDiseaseQuery = useMasterData(() => 'chronic_disease');
+	const allergyQuery = useMasterData(() => 'allergy');
+	// Hold save until the first master fetch lands, else labels are stored as free text.
+	const masterLoading = $derived(chronicDiseaseQuery.isLoading || allergyQuery.isLoading);
 
 	let careTrack = $state<CareTrack>('normal');
 	let conditions = $state('');
@@ -149,7 +156,7 @@
 			referral: false
 		};
 		const validation = await validateForm({ update: true, focusOnError: true });
-		if (saving || !validation.valid) {
+		if (saving || masterLoading || !validation.valid) {
 			if (!validation.valid) validationError = 'กรุณากรอกข้อมูลให้ถูกต้องและครบถ้วน';
 			return;
 		}
@@ -158,9 +165,15 @@
 		try {
 			await onSave({
 				careTrack: validation.data.careTrack,
-				conditions: listFromText(validation.data.conditions),
+				conditions: resolveMasterCodes(
+					listFromText(validation.data.conditions),
+					chronicDiseaseQuery.data?.items ?? []
+				),
 				medications: listFromText(validation.data.medications),
-				allergies: listFromText(validation.data.allergies),
+				allergies: resolveMasterCodes(
+					listFromText(validation.data.allergies),
+					allergyQuery.data?.items ?? []
+				),
 				generalSymptoms: validation.data.generalSymptoms,
 				vulnerableGroups: validation.data.vulnerableGroups,
 				specialNeeds: validation.data.specialNeeds,
@@ -326,7 +339,7 @@
 				>
 					<Button type="button" variant="outline" onclick={onClose} disabled={saving}>ยกเลิก</Button
 					>
-					<Button type="submit" disabled={saving} class="min-w-28">
+					<Button type="submit" disabled={saving || masterLoading} class="min-w-28">
 						{#if saving}
 							<LoaderCircle class="size-4 animate-spin" aria-hidden="true" />
 							กำลังบันทึก

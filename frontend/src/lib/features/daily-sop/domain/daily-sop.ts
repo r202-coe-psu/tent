@@ -439,6 +439,46 @@ export const canAssessRole = (
 	);
 };
 
+export const roleRowAccess = (availableRoles: readonly { code: DailySopRoleCode }[]) =>
+	DAILY_SOP_ROLES.map((role) => ({
+		role,
+		canAssess: availableRoles.some((availableRole) => availableRole.code === role.code)
+	}));
+
+/** Questions whose numbers the page can pre-fill from live shelter data. */
+export const DAILY_SOP_OCCUPANCY_QUESTION_IDS: readonly string[] = [
+	'D-SM-02',
+	'D-VC-02',
+	'D-FAC-01'
+];
+export const DAILY_SOP_CAPACITY_QUESTION_ID = 'D-SM-02';
+export const DAILY_SOP_STOCK_QUESTION_ID = 'D-SC-01';
+
+const roleHasQuestion = (role: DailySopRoleCode, questionIds: readonly string[]) =>
+	questionsForRole(role).some((question) => questionIds.includes(question.id));
+
+export const roleUsesOccupancy = (role: DailySopRoleCode) =>
+	roleHasQuestion(role, DAILY_SOP_OCCUPANCY_QUESTION_IDS);
+export const roleUsesShelterCapacity = (role: DailySopRoleCode) =>
+	roleHasQuestion(role, [DAILY_SOP_CAPACITY_QUESTION_ID]);
+export const roleUsesStockCheck = (role: DailySopRoleCode) =>
+	roleHasQuestion(role, [DAILY_SOP_STOCK_QUESTION_ID]);
+
+/** Drops the trailing account name, e.g. "พว. สมหญิง (Staff 02)" → "พว. สมหญิง". */
+export const personDisplayName = (name: string | undefined): string =>
+	(name ?? '').replace(/\s*\([^)]*\)\s*$/, '');
+
+export const daySummaryStatus = (day: {
+	recordedRoles: number;
+	completedRoles: number;
+	roleCount: number;
+}): 'Completed' | 'InProgress' | undefined =>
+	day.recordedRoles === 0
+		? undefined
+		: day.completedRoles === day.roleCount
+			? 'Completed'
+			: 'InProgress';
+
 export const assessableRoles = (roles: readonly string[], shelterCode: string) =>
 	DAILY_SOP_ROLES.filter((role) => canAssessRole(role.code, roles, shelterCode));
 

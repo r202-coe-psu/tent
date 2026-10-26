@@ -2,15 +2,20 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
+	import { onMount } from 'svelte';
 	import { SvelteURLSearchParams } from 'svelte/reactivity';
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import CheckCircle2 from '@lucide/svelte/icons/circle-check';
+	import CircleDashed from '@lucide/svelte/icons/circle-dashed';
 	import ClipboardCheck from '@lucide/svelte/icons/clipboard-check';
+	import Clock from '@lucide/svelte/icons/clock';
+	import Eye from '@lucide/svelte/icons/eye';
 	import Package from '@lucide/svelte/icons/package';
 	import Save from '@lucide/svelte/icons/save';
 	import { toast } from 'svelte-sonner';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import { Button } from '$lib/components/ui/button/index.js';
+	import StaffPageShell from '$lib/components/staff-page-shell.svelte';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import * as RadioGroup from '$lib/components/ui/radio-group/index.js';
 	import { Textarea } from '$lib/components/ui/textarea/index.js';
@@ -22,10 +27,11 @@
 	import { useShelter } from '$lib/features/shelters';
 	import { useActiveSopRatio } from '$lib/features/sop-ratios';
 	import { buildDailySopRoleId } from '../data/daily-sop.remote';
-	import DailySopAuditPanel from './daily-sop-audit-panel.svelte';
 	import DailySopStockPanel from './daily-sop-stock-panel.svelte';
 	import {
-		DAILY_SOP_ROLES,
+		DAILY_SOP_CAPACITY_QUESTION_ID,
+		DAILY_SOP_OCCUPANCY_QUESTION_IDS,
+		DAILY_SOP_STOCK_QUESTION_ID,
 		applySystemMetricSuggestionsForEditedControls,
 		assessableRoles,
 		canCompleteRoleDraft,
@@ -39,8 +45,14 @@
 		requiredForMetric,
 		questionsForRole,
 		roleAssessmentProgress,
+		daySummaryStatus,
+		personDisplayName,
 		roleDraftFromAssessment,
 		roleForCode,
+		roleRowAccess,
+		roleUsesOccupancy,
+		roleUsesShelterCapacity,
+		roleUsesStockCheck,
 		summarizeRoleDraft,
 		type DailySopRoleAssessment,
 		type DailySopRoleControlDraft,
@@ -66,6 +78,13 @@
 	const date = $derived(page.url.searchParams.get('date') ?? today);
 	const isCurrentDate = $derived(date === today);
 	const isHistoricalDate = $derived(date < today);
+	const viewHint = $derived(
+		isHistoricalDate
+			? 'วันย้อนหลังดูได้อย่างเดียว'
+			: isCurrentDate
+				? 'ดูสถานะทุกตำแหน่งได้ · ประเมินได้เฉพาะตำแหน่งที่ได้รับมอบหมาย'
+				: 'ดูผลประเมินได้ถึงวันที่ปัจจุบันเท่านั้น'
+	);
 	const landingView = $derived(page.url.searchParams.get('view') === 'roles' ? 'roles' : 'days');
 	const roleParam = $derived(page.url.searchParams.get('role'));
 	const selectedRole = $derived(roleParam ? roleForCode(roleParam) : null);
@@ -111,11 +130,11 @@
 	);
 	const occupancyQuery = useDashboardOccupancy(
 		() => shelterCode,
-		() => canEditSelectedRole && ['SM', 'VC', 'FAC'].includes(selectedRole?.code ?? '')
+		() => canEditSelectedRole && Boolean(selectedRole && roleUsesOccupancy(selectedRole.code))
 	);
 	const shelterQuery = useShelter(
 		() => shelterCode,
-		() => canEditSelectedRole && selectedRole?.code === 'SM'
+		() => canEditSelectedRole && Boolean(selectedRole && roleUsesShelterCapacity(selectedRole.code))
 	);
 	const selectedId = $derived(
 		selectedRole && canOpenSelectedRole
@@ -147,7 +166,7 @@
 	const stockShelterCode = $derived(activeAssessment?.shelter_code ?? shelterCode);
 	const stockQuery = useDailySopStockStatus(
 		() => stockShelterCode,
-		() => selectedRole?.code === 'SC' && stockPanelOpen
+		() => Boolean(selectedRole && roleUsesStockCheck(selectedRole.code)) && stockPanelOpen
 	);
 	const isLoadingAssessment = $derived(Boolean(selectedId && selectedQuery.isLoading));
 	const effectiveDraft = $derived(draft);
@@ -240,7 +259,7 @@
 		)
 	);
 
-	$effect(() => {
+	onMount(() => {
 		const timer = setInterval(() => (today = dailySopBangkokDate()), 60_000);
 		return () => clearInterval(timer);
 	});
@@ -293,8 +312,7 @@
 	}
 
 	function rowsForDate(assessmentDate: string) {
-		const rolesToShow = availableRoles.length > 0 ? availableRoles : DAILY_SOP_ROLES;
-		return rolesToShow.map((role) => {
+		return roleRowAccess(availableRoles).map(({ role, canAssess }) => {
 			const assessment = assessmentByDateRole.get(`${assessmentDate}:${role.code}`);
 			const questionCount = assessment?.controls.length || questionsForRole(role.code).length;
 			const answeredCount = assessment
@@ -306,7 +324,7 @@
 				questionCount,
 				answeredCount,
 				percent: questionCount ? Math.floor((answeredCount / questionCount) * 100) : 0,
-				canAssess: availableRoles.some((item) => item.code === role.code)
+				canAssess
 			};
 		});
 	}
@@ -359,12 +377,12 @@
 	function systemMetricValuesForQuestion(questionId: string): Record<string, number> {
 		if (!canEditSelectedRole) return {};
 		const occupants =
-			['D-SM-02', 'D-VC-02', 'D-FAC-01'].includes(questionId) &&
+			DAILY_SOP_OCCUPANCY_QUESTION_IDS.includes(questionId) &&
 			occupancyQuery.data?.shelter_code === shelterCode
 				? occupancyQuery.data.active
 				: undefined;
 		const capacity =
-			questionId === 'D-SM-02' && shelterQuery.data?.code === shelterCode
+			questionId === DAILY_SOP_CAPACITY_QUESTION_ID && shelterQuery.data?.code === shelterCode
 				? shelterQuery.data.capacity
 				: undefined;
 		const suggestions = {
@@ -574,10 +592,11 @@
 	}
 
 	function roleStatusClass(status: DailySopRoleAssessment['status'] | undefined): string {
-		const base = 'inline-flex whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-medium';
-		if (status === 'Completed') return base + ' bg-emerald-50 text-emerald-800';
-		if (status === 'InProgress') return base + ' bg-amber-50 text-amber-900';
-		return base + ' bg-muted text-muted-foreground';
+		const base =
+			'inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-1 text-xs font-semibold';
+		if (status === 'Completed') return base + ' border-emerald-200 bg-emerald-50 text-emerald-900';
+		if (status === 'InProgress') return base + ' border-amber-200 bg-amber-50 text-amber-900';
+		return base + ' border-slate-200 bg-muted text-muted-foreground';
 	}
 
 	function formatAssessmentDate(value: string): string {
@@ -598,6 +617,16 @@
 		}).format(new Date(value));
 	}
 
+	function formatUpdatedAt(value: string): string {
+		return dailySopBangkokDate(new Date(value)) === date
+			? `${formatAssessmentTime(value)} น.`
+			: formatAuditDateTime(value);
+	}
+
+	function assessorDisplayName(assessment: DailySopRoleAssessment): string {
+		return personDisplayName(assessment.assessor_name || user?.display_name?.trim() || user?.name);
+	}
+
 	function ratioValuesForQuestion(questionId: string) {
 		const storedControl = activeAssessment?.controls.find((control) => control.id === questionId);
 		const storedParameter = storedControl?.metric_spec?.parameter;
@@ -613,6 +642,16 @@
 	}
 </script>
 
+{#snippet statusIcon(status: DailySopRoleAssessment['status'] | undefined)}
+	{#if status === 'Completed'}
+		<CheckCircle2 class="size-3.5" aria-hidden="true" />
+	{:else if status === 'InProgress'}
+		<Clock class="size-3.5" aria-hidden="true" />
+	{:else}
+		<CircleDashed class="size-3.5" aria-hidden="true" />
+	{/if}
+{/snippet}
+
 <svelte:head>
 	<title>
 		{selectedRole
@@ -623,71 +662,48 @@
 	</title>
 </svelte:head>
 
-<main
-	class="flex w-full flex-1 flex-col gap-4 px-4 pt-4 pb-[calc(9rem+env(safe-area-inset-bottom))] sm:gap-6 sm:px-6 sm:pt-6 sm:pb-28"
->
-	{#if (!selectedRole && landingView === 'roles') || (selectedRole && !canOpenSelectedRole)}
-		<section class="space-y-5">
-			<div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-				<div class="min-w-0 border-b pb-4">
-					<div class="flex items-center gap-2">
-						<Button
-							variant="outline"
-							class="min-h-11 gap-2 px-3"
-							onclick={() => updateUrl(null, date, 'days')}
-						>
-							<ArrowLeft class="size-4" aria-hidden="true" /> ย้อนกลับ
-						</Button>
-					</div>
-					<h1 class="mt-3 text-xl font-semibold tracking-tight sm:text-2xl">
-						ความคืบหน้าวันที่ {formatAssessmentDate(date)}
-					</h1>
-					<p class="mt-1 text-sm text-muted-foreground">
-						{#if isHistoricalDate}
-							วันย้อนหลังเปิดดูผลประเมินได้ทุกตำแหน่ง โดยไม่มีสิทธิ์แก้ไข
-						{:else if isCurrentDate}
-							ดูสถานะได้ทุกตำแหน่ง · เปิดแบบประเมินเพื่อบันทึกได้ตามสิทธิ์ของแต่ละตำแหน่ง
-						{:else}
-							ดูผลประเมินได้ถึงวันที่ปัจจุบันเท่านั้น
-						{/if}
-					</p>
-				</div>
-			</div>
-
+{#if (!selectedRole && landingView === 'roles') || (selectedRole && !canOpenSelectedRole)}
+	<StaffPageShell title="ความคืบหน้าวันที่ {formatAssessmentDate(date)}" description={viewHint}>
+		{#snippet meta()}
+			<Button
+				variant="outline"
+				class="min-h-11 gap-2 px-3"
+				onclick={() => updateUrl(null, date, 'days')}
+			>
+				<ArrowLeft class="size-4" aria-hidden="true" /> ย้อนกลับ
+			</Button>
+		{/snippet}
+		<div class="space-y-5">
 			<section
-				class="grid grid-cols-2 gap-2 sm:gap-3 xl:grid-cols-3"
+				class="overflow-hidden rounded-xl border bg-card shadow-2xs"
 				aria-label="สรุปผลประเมินวันที่ {formatAssessmentDate(date)}"
 			>
+				<dl class="grid grid-cols-3 divide-x">
+					<div class="px-2 py-2 text-center sm:px-4">
+						<dt class="text-xs text-muted-foreground sm:text-sm">บันทึกแล้ว</dt>
+						<dd class="text-sm font-semibold tabular-nums sm:text-lg">
+							{dailySummary.recordedRoles}&nbsp;<span class="font-normal text-muted-foreground"
+								>/ {dailySummary.roleCount} ตำแหน่ง</span
+							>
+						</dd>
+					</div>
+					<div class="px-2 py-2 text-center sm:px-4">
+						<dt class="text-xs text-muted-foreground sm:text-sm">ตอบแล้ว</dt>
+						<dd class="text-sm font-semibold tabular-nums sm:text-lg">
+							{dailySummary.answered}&nbsp;<span class="font-normal text-muted-foreground"
+								>/ {dailySummary.total} ข้อ</span
+							>
+						</dd>
+					</div>
+					<div class="px-2 py-2 text-center sm:px-4">
+						<dt class="text-xs text-muted-foreground sm:text-sm">ไม่ผ่าน</dt>
+						<dd class="text-sm font-semibold text-rose-800 tabular-nums sm:text-lg">
+							{dailySummary.fail}&nbsp;<span class="font-normal text-muted-foreground">ข้อ</span>
+						</dd>
+					</div>
+				</dl>
 				<div
-					class="flex min-h-32 flex-col items-center justify-center rounded-xl border bg-card p-3 text-center sm:p-4"
-				>
-					<p class="text-xs text-muted-foreground sm:text-sm">บันทึกแล้ว</p>
-					<p class="mt-1 text-lg font-semibold tabular-nums sm:text-xl">
-						{dailySummary.recordedRoles}&nbsp;<span class="font-normal text-muted-foreground"
-							>/ {dailySummary.roleCount} ตำแหน่ง</span
-						>
-					</p>
-				</div>
-				<div
-					class="flex min-h-32 flex-col items-center justify-center rounded-xl border bg-card p-3 text-center sm:p-4"
-				>
-					<p class="text-xs text-muted-foreground sm:text-sm">ตอบแล้ว</p>
-					<p class="mt-1 text-lg font-semibold tabular-nums sm:text-xl">
-						{dailySummary.answered}&nbsp;<span class="font-normal text-muted-foreground"
-							>/ {dailySummary.total} ข้อ</span
-						>
-					</p>
-				</div>
-				<div
-					class="flex min-h-32 flex-col items-center justify-center rounded-xl border bg-card p-3 text-center sm:p-4"
-				>
-					<p class="text-xs text-muted-foreground sm:text-sm">ไม่ผ่าน</p>
-					<p class="mt-1 text-lg font-semibold text-rose-800 tabular-nums sm:text-xl">
-						{dailySummary.fail}&nbsp;<span class="font-normal text-muted-foreground">ข้อ</span>
-					</p>
-				</div>
-				<div
-					class="col-span-full h-1.5 overflow-hidden rounded-full bg-muted"
+					class="h-1 bg-muted"
 					role="progressbar"
 					aria-label="ความคืบหน้าการตอบรวม"
 					aria-valuemin="0"
@@ -695,7 +711,7 @@
 					aria-valuenow={dailySummary.answered}
 				>
 					<div
-						class="h-full rounded-full bg-primary transition-[width]"
+						class="h-full bg-primary transition-[width]"
 						style:width="{dailySummary.total
 							? (dailySummary.answered / dailySummary.total) * 100
 							: 0}%"
@@ -707,15 +723,6 @@
 				<div class="mb-3 flex flex-wrap items-end justify-between gap-2">
 					<div>
 						<h2 id="today-role-list-heading" class="font-semibold">ผลประเมินแยกตามตำแหน่ง</h2>
-						<p class="mt-1 text-sm text-muted-foreground">
-							{#if isHistoricalDate}
-								วันย้อนหลังเปิดดูผลประเมินได้ทุกตำแหน่ง โดยไม่มีสิทธิ์แก้ไข
-							{:else if availableRoles.length === DAILY_SOP_ROLES.length}
-								ดูสถานะและเปิดประเมินได้ทุกตำแหน่ง
-							{:else}
-								ดูสถานะได้ทุกตำแหน่ง · เปิดประเมินได้ตามหน้าที่ที่ได้รับมอบหมาย
-							{/if}
-						</p>
 					</div>
 				</div>
 
@@ -748,11 +755,12 @@
 						</div>
 						<div class="role-progress-rows" role="rowgroup">
 							{#each roleRows as row (row.role.code)}
-								{@const actionLabel = isCurrentDate && row.canAssess ? 'ประเมิน' : 'ดูผลประเมิน'}
+								{@const canAssessNow = isCurrentDate && row.canAssess}
+								{@const actionLabel = canAssessNow ? 'ประเมิน' : 'ดูผลประเมิน'}
 								<div class="role-progress-row" role="row">
 									<div class="role-progress-identity" role="cell">
 										<p class="text-xs font-semibold tracking-wide text-muted-foreground">
-											{roleDisplayLabel(row.role.key)} · {row.questionCount} ข้อ
+											{row.questionCount} ข้อ
 										</p>
 										<h3 class="mt-1 font-semibold break-words">{roleDisplayLabel(row.role.key)}</h3>
 									</div>
@@ -776,6 +784,7 @@
 									</div>
 									<div class="role-progress-status" role="cell">
 										<span class={roleStatusClass(row.assessment?.status)}>
+											{@render statusIcon(row.assessment?.status)}
 											{roleStatusLabel(row.assessment?.status)}
 										</span>
 									</div>
@@ -789,8 +798,12 @@
 									</div>
 									<div class="role-progress-action" role="cell">
 										<Button
-											variant="outline"
-											class="min-h-12 w-full shrink-0 border-primary/25 bg-primary/5 px-3 text-primary hover:bg-primary/10 xl:min-h-11 xl:w-auto"
+											variant={canAssessNow ? 'default' : 'outline'}
+											class={`min-h-12 w-full shrink-0 px-3 xl:min-h-11 ${
+												canAssessNow
+													? ''
+													: 'border-primary/25 bg-primary/5 text-primary hover:bg-primary/10'
+											}`}
 											aria-label="{actionLabel}: {roleDisplayLabel(row.role.key)}"
 											onclick={() => updateUrl(row.role.code)}
 										>
@@ -814,18 +827,14 @@
 					{/if}
 				{/if}
 			</section>
-		</section>
-	{:else if !selectedRole}
-		<section class="space-y-4" data-testid="daily-sop-days-view">
-			<header class="flex flex-col gap-3 border-b pb-4 sm:flex-row sm:items-end sm:justify-between">
-				<div class="min-w-0">
-					<h1 class="text-xl font-semibold tracking-tight sm:text-2xl">ประเมินมาตรฐานประจำวัน</h1>
-					<p class="mt-1 text-sm text-muted-foreground">
-						เลือกวันที่จากรายการด้านล่าง เพื่อดูความคืบหน้าแยกตามหน้าที่
-					</p>
-				</div>
-			</header>
-
+		</div>
+	</StaffPageShell>
+{:else if !selectedRole}
+	<StaffPageShell
+		title="ประเมินมาตรฐานประจำวัน"
+		description="เลือกวันที่จากรายการด้านล่าง เพื่อดูความคืบหน้าแยกตามหน้าที่"
+	>
+		<div class="space-y-4" data-testid="daily-sop-days-view">
 			{#if historyQuery.isLoading}
 				<div class="rounded-xl border bg-card p-4 text-sm text-muted-foreground" role="status">
 					กำลังโหลดความคืบหน้ารายวัน...
@@ -849,6 +858,7 @@
 					{#each dayRows as day (day.date)}
 						{@const isToday = day.date === today}
 						{@const percent = day.total ? Math.floor((day.answered / day.total) * 100) : 0}
+						{@const dayStatus = daySummaryStatus(day)}
 						<article
 							class="grid min-w-0 gap-3 border-b p-3.5 last:border-b-0 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-5 sm:px-5 sm:py-4"
 						>
@@ -859,15 +869,8 @@
 											class="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary"
 											>วันนี้</span
 										>{/if}
-									<span
-										class={roleStatusClass(
-											day.recordedRoles === 0
-												? undefined
-												: day.completedRoles === day.roleCount
-													? 'Completed'
-													: 'InProgress'
-										)}
-									>
+									<span class={roleStatusClass(dayStatus)}>
+										{@render statusIcon(dayStatus)}
 										{day.recordedRoles === 0
 											? 'ยังไม่เริ่มประเมิน'
 											: day.completedRoles === day.roleCount
@@ -934,193 +937,189 @@
 					>
 				{/if}
 			{/if}
-		</section>
-	{:else}
-		<section class="space-y-4">
-			<div class="flex flex-col gap-3 border-b pb-4 sm:flex-row sm:items-center sm:justify-between">
-				<button
-					class="inline-flex min-h-11 w-fit items-center gap-2 rounded-lg border bg-card px-3 text-sm font-medium hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-					type="button"
-					onclick={() => updateUrl(null, date, 'roles')}
-				>
-					<ArrowLeft class="size-4" aria-hidden="true" /> กลับภาพรวม
-				</button>
-				<p class="text-sm font-medium text-muted-foreground">
-					วันที่ประเมิน · {formatAssessmentDate(date)}
-				</p>
-			</div>
-
-			<div class="rounded-xl border bg-card p-4 sm:p-5">
-				<div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-					<div class="min-w-0">
-						<p class="text-sm font-medium text-muted-foreground">
-							{roleDisplayLabel(selectedRole.key)} <span aria-hidden="true">·</span>
-							{questions.length} คำถาม
-						</p>
-						<h1 class="mt-1 text-xl font-semibold tracking-tight sm:text-2xl">
-							{roleDisplayLabel(selectedRole.key)}
-						</h1>
-						{#if isHistoricalDate || !canEditSelectedRole}
-							<p class="mt-1 text-sm text-muted-foreground">
-								{isHistoricalDate
-									? 'วันย้อนหลังเปิดดูได้อย่างเดียว · แก้ไขหรือบันทึกทับไม่ได้'
-									: 'เปิดดูผลประเมินตำแหน่งนี้ได้ · การแก้ไขจำกัดตามหน้าที่ที่ได้รับมอบหมาย'}
-							</p>
-						{/if}
-					</div>
-					<div
-						class="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-sm sm:grid sm:justify-items-end"
+		</div>
+	</StaffPageShell>
+{:else}
+	<StaffPageShell
+		title={roleDisplayLabel(selectedRole.key)}
+		maxWidth="7xl"
+		class="pb-[calc(9rem+env(safe-area-inset-bottom))] sm:pb-28"
+	>
+		{#snippet meta()}
+			<div class="space-y-2">
+				<div class="flex flex-wrap items-center gap-x-3 gap-y-2">
+					<button
+						class="inline-flex min-h-11 w-fit items-center gap-2 rounded-lg border bg-card px-3 text-sm font-medium hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+						type="button"
+						onclick={() => updateUrl(null, date, 'roles')}
 					>
-						{#if activeAssessment}
-							<span class={roleStatusClass(activeAssessment.status)}>
-								{roleStatusLabel(activeAssessment.status)}
-							</span>
-							<p class="text-muted-foreground sm:hidden">
-								อัปเดต <time datetime={activeAssessment.updated_at}
-									>{formatAuditDateTime(activeAssessment.updated_at)}</time
-								>
-							</p>
-							<DailySopAuditPanel
-								assessment={activeAssessment}
-								formatDateTime={formatAuditDateTime}
-							/>
-							<p class="hidden text-muted-foreground sm:block sm:text-right">
-								เริ่มประเมินโดย {activeAssessment.assessor_name ||
-									user?.display_name?.trim() ||
-									user?.name}
-								· เริ่มเมื่อ
-								<time datetime={activeAssessment.assessed_at}>
-									{formatAuditDateTime(activeAssessment.assessed_at)}
-								</time>
-								· อัปเดต
-								<time datetime={activeAssessment.updated_at}>
-									{formatAuditDateTime(activeAssessment.updated_at)}
-								</time>
-							</p>
-						{:else}
-							<p class="text-muted-foreground">
-								ผู้ประเมิน: {user?.display_name?.trim() || user?.name}
-							</p>
-						{/if}
-					</div>
+						<ArrowLeft class="size-4" aria-hidden="true" /> กลับภาพรวม
+					</button>
+					<p class="text-sm font-medium text-muted-foreground">
+						วันที่ประเมิน · {formatAssessmentDate(date)}
+					</p>
 				</div>
-
-				{#if revisionConflict}
-					<section
-						class="space-y-3 rounded-xl border border-amber-300 bg-amber-50 p-4"
-						aria-label="จัดการข้อมูลชนกัน"
-					>
-						<div role="alert">
-							<h2 class="font-semibold text-amber-950">
-								ข้อมูลบน server เปลี่ยนระหว่างที่คุณกำลังแก้
-							</h2>
-							<p class="mt-1 text-sm text-amber-900">
-								เก็บ draft ของคุณไว้แล้ว ระบบหยุดการบันทึกเพื่อไม่ให้เขียนทับข้อมูลใหม่
-							</p>
-						</div>
-						<Button
-							variant="outline"
-							class="min-h-12 border-amber-800/30 bg-background px-3 hover:bg-amber-100"
-							onclick={loadLatestAfterConflict}
+				<div class="flex flex-wrap items-center gap-2">
+					{#if activeAssessment}
+						<span class={roleStatusClass(activeAssessment.status)}>
+							{@render statusIcon(activeAssessment.status)}
+							{roleStatusLabel(activeAssessment.status)}
+						</span>
+					{/if}
+					{#if isHistoricalDate || !canEditSelectedRole}
+						<span
+							class="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-muted px-2.5 py-1 text-xs font-semibold whitespace-nowrap text-muted-foreground"
 						>
-							โหลดข้อมูลล่าสุด
-						</Button>
-						{#if latestConflictAssessment === null}
-							<p class="text-sm text-amber-950" role="status">
-								ยังไม่พบเอกสารล่าสุด; draft ยังอยู่
-								กรุณารีเฟรชหน้าหรือให้ผู้ดูแลยืนยันรายการก่อนเริ่มบันทึกใหม่
-							</p>
-						{:else if latestConflictAssessment}
-							{#if conflictingQuestions.length}
-								<p class="text-sm text-amber-950">
-									เลือกคำตอบที่จะเก็บสำหรับแต่ละข้อที่ทั้งสองฝ่ายแก้ แล้วกดรวมข้อมูล
-								</p>
-								{#each conflictingQuestions as conflict (conflict.id)}
-									<fieldset class="rounded-lg border border-amber-300 bg-background p-3">
-										<legend class="px-1 text-sm font-semibold"
-											>{conflict.id} · {conflict.text}</legend
-										>
-										<RadioGroup.Root
-											value={mergeChoices[conflict.id] ?? ''}
-											onValueChange={(value) => {
-												if (value === 'local' || value === 'server') {
-													mergeChoices = { ...mergeChoices, [conflict.id]: value };
-												}
-											}}
-											class="gap-2 sm:grid-cols-2"
-										>
-											{#each [{ value: 'local', label: 'ใช้ draft ของฉัน' }, { value: 'server', label: 'ใช้ข้อมูลล่าสุดจาก server' }] as choice (choice.value)}
-												{@const selected = mergeChoices[conflict.id] === choice.value}
-												<div
-													class={`relative flex min-h-12 items-center rounded-md border px-3 text-sm ${selected ? 'border-amber-700 bg-amber-50 text-amber-950' : 'border-slate-300 bg-background text-slate-800'}`}
-												>
-													<RadioGroup.Item
-														id={`merge-${choice.value}-${conflict.id}`}
-														value={choice.value}
-														aria-label={choice.label}
-														class="absolute inset-0 z-10 size-full rounded-md border-0 bg-transparent text-transparent shadow-none data-[state=checked]:border-0 data-[state=checked]:bg-transparent"
-													/>
-													<span class="pointer-events-none relative">{choice.label}</span>
-												</div>
-											{/each}
-										</RadioGroup.Root>
-									</fieldset>
-								{/each}
-							{:else}
-								<p class="text-sm text-amber-950">
-									ไม่พบข้อที่ทั้งสองฝ่ายแก้ต่างกัน; รวมคำตอบของคุณเข้ากับข้อมูลล่าสุดได้
-								</p>
-							{/if}
-							<Button
-								class="min-h-12 bg-amber-900 px-4 text-white hover:bg-amber-950"
-								disabled={!canApplyConflictMerge}
-								onclick={applyConflictMerge}
-							>
-								รวม draft กับข้อมูลล่าสุด
-							</Button>
-						{/if}
-					</section>
+							<Eye class="size-3.5" aria-hidden="true" />
+							ดูอย่างเดียว
+						</span>
+					{/if}
+				</div>
+				{#if isCurrentDate && !canEditSelectedRole}
+					<p class="text-sm text-muted-foreground">
+						ดูสถานะทุกตำแหน่งได้ · ประเมินได้เฉพาะตำแหน่งที่ได้รับมอบหมาย
+					</p>
 				{/if}
-
-				{#if progress && counts}
-					<div class="mt-4 space-y-3 border-t pt-3">
-						<div class={canEditSelectedRole ? 'hidden sm:block' : 'block'}>
-							<div class="flex items-center justify-between gap-3 text-sm">
-								<span class="font-semibold">ความคืบหน้า</span>
-								<span class="shrink-0 font-medium text-muted-foreground tabular-nums">
-									{progress.total - progress.unanswered} / {progress.total} ข้อ · {progress.percent}%
-								</span>
-							</div>
-							<div
-								class="mt-2 h-2 overflow-hidden rounded-full bg-muted"
-								role="progressbar"
-								aria-label="ความคืบหน้าของ {roleDisplayLabel(selectedRole.key)}"
-								aria-valuemin="0"
-								aria-valuemax="100"
-								aria-valuenow={progress.percent}
-								aria-valuetext="{progress.total -
-									progress.unanswered} จาก {progress.total} ข้อ, {progress.percent}%"
-							>
-								<div class="h-full rounded-full bg-primary" style:width="{progress.percent}%"></div>
-							</div>
-						</div>
-						<div class="grid grid-cols-3 gap-1.5 text-center sm:gap-2">
-							<div class="min-w-0 rounded-lg border bg-muted/20 px-1 py-2">
-								<strong class="block text-sm text-emerald-800 tabular-nums">{counts.pass}</strong>
-								<span class="block text-xs text-muted-foreground">ผ่าน</span>
-							</div>
-							<div class="min-w-0 rounded-lg border bg-muted/20 px-1 py-2">
-								<strong class="block text-sm text-rose-800 tabular-nums">{counts.fail}</strong>
-								<span class="block text-xs text-muted-foreground">ไม่ผ่าน</span>
-							</div>
-							<div class="min-w-0 rounded-lg border bg-muted/20 px-1 py-2">
-								<strong class="block text-sm tabular-nums">{counts.unanswered}</strong>
-								<span class="block text-xs text-muted-foreground">ยังไม่ตอบ</span>
-							</div>
-						</div>
-					</div>
+				{#if activeAssessment}
+					<p class="text-sm text-muted-foreground">
+						เริ่มโดย {assessorDisplayName(activeAssessment)} <span aria-hidden="true">·</span>
+						อัปเดตล่าสุด
+						<time datetime={activeAssessment.updated_at}>
+							{formatUpdatedAt(activeAssessment.updated_at)}
+						</time>
+					</p>
+				{:else if canEditSelectedRole}
+					<p class="text-sm text-muted-foreground">
+						ผู้ประเมิน: {personDisplayName(user?.display_name?.trim() || user?.name)}
+					</p>
+				{:else}
+					<p class="text-sm text-muted-foreground">ยังไม่มีผลประเมินที่บันทึกไว้</p>
 				{/if}
 			</div>
+		{/snippet}
+		<div class="space-y-4">
+			{#if revisionConflict || (progress && counts)}
+				<div class="space-y-4 rounded-xl border bg-card p-4 sm:p-5">
+					{#if revisionConflict}
+						<section
+							class="space-y-3 rounded-xl border border-amber-300 bg-amber-50 p-4"
+							aria-label="จัดการข้อมูลชนกัน"
+						>
+							<div role="alert">
+								<h2 class="font-semibold text-amber-950">
+									ข้อมูลบน server เปลี่ยนระหว่างที่คุณกำลังแก้
+								</h2>
+								<p class="mt-1 text-sm text-amber-900">
+									เก็บ draft ของคุณไว้แล้ว ระบบหยุดการบันทึกเพื่อไม่ให้เขียนทับข้อมูลใหม่
+								</p>
+							</div>
+							<Button
+								variant="outline"
+								class="min-h-12 border-amber-800/30 bg-background px-3 hover:bg-amber-100"
+								onclick={loadLatestAfterConflict}
+							>
+								โหลดข้อมูลล่าสุด
+							</Button>
+							{#if latestConflictAssessment === null}
+								<p class="text-sm text-amber-950" role="status">
+									ยังไม่พบเอกสารล่าสุด; draft ยังอยู่
+									กรุณารีเฟรชหน้าหรือให้ผู้ดูแลยืนยันรายการก่อนเริ่มบันทึกใหม่
+								</p>
+							{:else if latestConflictAssessment}
+								{#if conflictingQuestions.length}
+									<p class="text-sm text-amber-950">
+										เลือกคำตอบที่จะเก็บสำหรับแต่ละข้อที่ทั้งสองฝ่ายแก้ แล้วกดรวมข้อมูล
+									</p>
+									{#each conflictingQuestions as conflict (conflict.id)}
+										<fieldset class="rounded-lg border border-amber-300 bg-background p-3">
+											<legend class="px-1 text-sm font-semibold"
+												>{conflict.id} · {conflict.text}</legend
+											>
+											<RadioGroup.Root
+												value={mergeChoices[conflict.id] ?? ''}
+												onValueChange={(value) => {
+													if (value === 'local' || value === 'server') {
+														mergeChoices = { ...mergeChoices, [conflict.id]: value };
+													}
+												}}
+												class="gap-2 sm:grid-cols-2"
+											>
+												{#each [{ value: 'local', label: 'ใช้ draft ของฉัน' }, { value: 'server', label: 'ใช้ข้อมูลล่าสุดจาก server' }] as choice (choice.value)}
+													{@const selected = mergeChoices[conflict.id] === choice.value}
+													<div
+														class={`relative flex min-h-12 items-center rounded-md border px-3 text-sm ${selected ? 'border-amber-700 bg-amber-50 text-amber-950' : 'border-slate-300 bg-background text-slate-800'}`}
+													>
+														<RadioGroup.Item
+															id={`merge-${choice.value}-${conflict.id}`}
+															value={choice.value}
+															aria-label={choice.label}
+															class="absolute inset-0 z-10 size-full rounded-md border-0 bg-transparent text-transparent shadow-none data-[state=checked]:border-0 data-[state=checked]:bg-transparent"
+														/>
+														<span class="pointer-events-none relative">{choice.label}</span>
+													</div>
+												{/each}
+											</RadioGroup.Root>
+										</fieldset>
+									{/each}
+								{:else}
+									<p class="text-sm text-amber-950">
+										ไม่พบข้อที่ทั้งสองฝ่ายแก้ต่างกัน; รวมคำตอบของคุณเข้ากับข้อมูลล่าสุดได้
+									</p>
+								{/if}
+								<Button
+									class="min-h-12 bg-amber-900 px-4 text-white hover:bg-amber-950"
+									disabled={!canApplyConflictMerge}
+									onclick={applyConflictMerge}
+								>
+									รวม draft กับข้อมูลล่าสุด
+								</Button>
+							{/if}
+						</section>
+					{/if}
+
+					{#if progress && counts}
+						<div class="space-y-3">
+							<div class={canEditSelectedRole ? 'hidden sm:block' : 'block'}>
+								<div class="flex items-center justify-between gap-3 text-sm">
+									<span class="font-semibold">ความคืบหน้า</span>
+									<span class="shrink-0 font-medium text-muted-foreground tabular-nums">
+										{progress.total - progress.unanswered} / {progress.total} ข้อ · {progress.percent}%
+									</span>
+								</div>
+								<div
+									class="mt-2 h-2 overflow-hidden rounded-full bg-muted"
+									role="progressbar"
+									aria-label="ความคืบหน้าของ {roleDisplayLabel(selectedRole.key)}"
+									aria-valuemin="0"
+									aria-valuemax="100"
+									aria-valuenow={progress.percent}
+									aria-valuetext="{progress.total -
+										progress.unanswered} จาก {progress.total} ข้อ, {progress.percent}%"
+								>
+									<div
+										class="h-full rounded-full bg-primary"
+										style:width="{progress.percent}%"
+									></div>
+								</div>
+							</div>
+							<div class="grid grid-cols-3 gap-1.5 text-center sm:gap-2">
+								<div class="min-w-0 rounded-lg border bg-muted/20 px-1 py-2">
+									<strong class="block text-sm text-emerald-800 tabular-nums">{counts.pass}</strong>
+									<span class="block text-xs text-muted-foreground">ผ่าน</span>
+								</div>
+								<div class="min-w-0 rounded-lg border bg-muted/20 px-1 py-2">
+									<strong class="block text-sm text-rose-800 tabular-nums">{counts.fail}</strong>
+									<span class="block text-xs text-muted-foreground">ไม่ผ่าน</span>
+								</div>
+								<div class="min-w-0 rounded-lg border bg-muted/20 px-1 py-2">
+									<strong class="block text-sm tabular-nums">{counts.unanswered}</strong>
+									<span class="block text-xs text-muted-foreground">ยังไม่ตอบ</span>
+								</div>
+							</div>
+						</div>
+					{/if}
+				</div>
+			{/if}
 
 			{#if isLoadingAssessment}
 				<div class="rounded-xl border p-6 text-sm text-muted-foreground">
@@ -1292,8 +1291,8 @@
 									open={detailsOpen[question.id] ??
 										(answer?.status === 'Fail' ||
 											answer?.status === 'Pending' ||
-											(question.id === 'D-SM-02' && calculated !== null) ||
-											question.id === 'D-SC-01')}
+											(question.id === DAILY_SOP_CAPACITY_QUESTION_ID && calculated !== null) ||
+											question.id === DAILY_SOP_STOCK_QUESTION_ID)}
 									ontoggle={(event) => (detailsOpen[question.id] = event.currentTarget.open)}
 								>
 									<summary class="min-h-11 cursor-pointer py-3 text-xs font-medium sm:text-sm">
@@ -1306,7 +1305,7 @@
 										{/if}
 									</summary>
 									<div class="mt-3 grid gap-3 md:grid-cols-2">
-										{#if question.id === 'D-SC-01'}
+										{#if question.id === DAILY_SOP_STOCK_QUESTION_ID}
 											<div
 												class="flex flex-col items-start gap-2 rounded-lg border border-slate-200/80 bg-white p-3 sm:flex-row sm:items-center sm:gap-x-4 md:col-span-2"
 											>
@@ -1495,11 +1494,11 @@
 					</div>
 				{/if}
 			{/if}
-		</section>
-	{/if}
-</main>
+		</div>
+	</StaffPageShell>
+{/if}
 
-{#if selectedRole?.code === 'SC'}
+{#if selectedRole && roleUsesStockCheck(selectedRole.code)}
 	<DailySopStockPanel
 		bind:open={stockPanelOpen}
 		shelterCode={stockShelterCode}
@@ -1652,8 +1651,9 @@
 	.role-progress-summary {
 		grid-area: summary;
 		min-width: 0;
-		font-size: 0.75rem;
+		font-size: 0.875rem;
 		line-height: 1.5;
+		font-variant-numeric: tabular-nums;
 		color: var(--muted-foreground);
 	}
 
@@ -1664,7 +1664,7 @@
 
 	@media (min-width: 80rem) {
 		.role-progress-table {
-			--role-progress-columns: minmax(0, 1.3fr) 12rem minmax(7rem, 0.7fr) minmax(0, 1.5fr) auto;
+			--role-progress-columns: minmax(0, 1.3fr) 12rem minmax(7rem, 0.7fr) minmax(0, 1fr) 8rem;
 			overflow: hidden;
 			border: 1px solid var(--border);
 			border-radius: 0.75rem;
@@ -1708,7 +1708,7 @@
 			grid-template-columns: var(--role-progress-columns);
 			gap: 0.85rem;
 			border: 0;
-			border-top: 1px solid var(--border);
+			border-top: 1px solid color-mix(in srgb, var(--border) 65%, var(--card));
 			border-radius: 0;
 			background: transparent;
 			padding: 0.9rem 1rem;
@@ -1722,8 +1722,12 @@
 			grid-area: auto;
 		}
 
+		.role-progress-status {
+			justify-self: start;
+		}
+
 		.role-progress-action {
-			justify-self: end;
+			justify-self: stretch;
 		}
 
 		.role-progress-label span {

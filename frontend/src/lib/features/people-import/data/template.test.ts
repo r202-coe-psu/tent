@@ -126,3 +126,36 @@ describe('csv template shape', () => {
 		expect(header).toContain(H.municipality_zone);
 	});
 });
+
+describe('README lists master-backed free-text options (CR-186 FR-10)', () => {
+	async function readmeHint(masters: TemplateMasters): Promise<string> {
+		const ExcelJS = (await import('exceljs')).default;
+		const wb = new ExcelJS.Workbook();
+		const blob = await buildPeopleTemplateBlob(masters);
+		await wb.xlsx.load(await blob.arrayBuffer());
+		const readme = wb.getWorksheet('คำแนะนำ');
+		let hint = '';
+		readme?.eachRow((row) => {
+			if (!hint && row.getCell(2).text === H.medical_conditions) hint = row.getCell(4).text;
+		});
+		return hint;
+	}
+
+	it('lists the active chronic diseases next to the โรคประจำตัว column', async () => {
+		const hint = await readmeHint({
+			medical_conditions: [
+				{ value: 'diabetes', label: 'เบาหวาน' },
+				{ value: 'asthma', label: 'หอบหืด' }
+			]
+		});
+
+		expect(hint).toContain('เบาหวาน / หอบหืด');
+		expect(hint).toContain('พิมพ์ชื่อโรคอื่นได้');
+	});
+
+	it('keeps the plain hint when no master list is passed', async () => {
+		const hint = await readmeHint(EMPTY_MASTERS);
+
+		expect(hint).not.toContain('รายการ:');
+	});
+});

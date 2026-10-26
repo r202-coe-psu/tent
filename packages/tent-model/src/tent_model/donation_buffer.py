@@ -25,6 +25,11 @@ class DonationBuffer(Document):
 	# DonationNeedCounter.reserved_qty for that item (CR-045) — only present for
 	# items with both campaign_id + item_id; absent for free-text/no-campaign items,
 	# which bypass the counter entirely. cancel()/expire() release exactly this amount.
+	# CR-174: each item also carries "review_status" (approved | pending | rejected),
+	# computed by FastAPI at create/edit — approved iff the line holds a reservation in the
+	# campaign — plus "review_reason_code"/"review_reason" on a rejected line. Inbound
+	# copies the list to CouchDB whole, so the fields arrive there unchanged. ``status``
+	# below is read off these lines (pending_review | verifying | rejected).
 	items_declared: list[dict[str, Any]] = Field(default_factory=list)
 	logistics: dict[str, Any] | None = None
 	# ``DonationSlotCounter`` id this booking holds a place in — set only when the window
