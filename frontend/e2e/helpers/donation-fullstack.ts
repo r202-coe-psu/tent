@@ -445,6 +445,10 @@ export async function bookAsDonor(page: Page, opts: BookingOptions): Promise<Boo
 	} else {
 		await expect(page.getByRole('heading', { name: 'สำเร็จ! ตั๋วบริจาคของคุณ' })).toBeVisible();
 		await expect(page.getByTestId('ticket-qr')).toBeVisible();
+		await expect(page.getByTestId('ticket-box-label-link')).toHaveAttribute(
+			'href',
+			`/donations/track/${trackingToken}/label`
+		);
 	}
 	await expect(page.getByText(bookingRef).first()).toBeVisible();
 	return { bookingRef, trackingToken };

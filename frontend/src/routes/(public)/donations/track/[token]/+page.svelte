@@ -15,6 +15,7 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import Download from '@lucide/svelte/icons/download';
+	import Printer from '@lucide/svelte/icons/printer';
 	import { generateQrDataUrl } from '$lib/utils/qrcode';
 	import { toast } from 'svelte-sonner';
 	import {
@@ -265,6 +266,18 @@
 						<p class="max-w-xs text-2xs text-muted-foreground">
 							{t.qrHint}
 						</p>
+						<div class="mt-1 flex w-full flex-col items-center gap-2 border-t border-border pt-4">
+							<Button
+								href={resolve(`/donations/track/${encodeURIComponent(token)}/label`)}
+								variant="outline"
+								size="sm"
+								data-testid="box-label-link"
+							>
+								<Printer class="h-3.5 w-3.5" />
+								{t.boxLabelOpenBtn}
+							</Button>
+							<p class="max-w-xs text-2xs text-muted-foreground">{t.boxLabelOpenHint}</p>
+						</div>
 					</div>
 				{/if}
 
