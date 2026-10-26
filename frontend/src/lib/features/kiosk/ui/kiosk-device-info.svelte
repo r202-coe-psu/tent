@@ -22,7 +22,8 @@
 		() =>
 			new DeviceInfoSession({
 				fetchDeviceInfo: (pin) => fetchKioskDeviceInfo(pin),
-				fetchHostInfo: () => fetchKioskHostInfo()
+				fetchHostInfo: () => fetchKioskHostInfo(),
+				isBusy: () => testPrint.busy
 			})
 	);
 

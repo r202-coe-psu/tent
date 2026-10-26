@@ -16,6 +16,8 @@ export type DeviceInfoDeps = {
 	fetchDeviceInfo: (pin: string) => Promise<KioskDeviceInfoResult>;
 	/** Asks the kiosk machine for its hostname and LAN IPs. Never throws. */
 	fetchHostInfo: () => Promise<KioskHostInfo>;
+	/** Something in the panel is still running (a test print): the idle clock must not close it. */
+	isBusy?: () => boolean;
 };
 
 /**
@@ -58,6 +60,8 @@ export class DeviceInfoSession {
 			this.deps.fetchHostInfo()
 		]);
 		if (result.kind !== 'ok') return result;
+		// Staff cancelled while the server was answering: drop it, so a later open cannot show it.
+		if (this.phase !== 'pin') return { kind: 'verified' };
 		this.#pending = { info: result.info, host, pin };
 		return { kind: 'verified' };
 	}
@@ -74,6 +78,7 @@ export class DeviceInfoSession {
 	}
 
 	pinCancelled(): void {
+		this.#pending = null;
 		if (this.phase === 'pin') this.phase = 'idle';
 	}
 
@@ -87,11 +92,14 @@ export class DeviceInfoSession {
 		this.phase = 'idle';
 	}
 
-	/** Any tap in the panel: the idle clock starts again. */
+	/** Any tap in the panel: the idle clock starts again. While busy, time running out waits. */
 	touch(): void {
 		if (this.phase !== 'shown') return;
 		this.#clearIdleTimer();
-		this.#idleTimer = setTimeout(() => this.close(), DEVICE_INFO_IDLE_MS);
+		this.#idleTimer = setTimeout(
+			() => (this.deps.isBusy?.() ? this.touch() : this.close()),
+			DEVICE_INFO_IDLE_MS
+		);
 	}
 
 	destroy(): void {

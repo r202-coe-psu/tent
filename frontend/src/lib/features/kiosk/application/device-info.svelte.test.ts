@@ -16,17 +16,20 @@ const INFO: KioskDeviceInfo = {
 	screenType: 'compact',
 	shelterCode: 'SH-001',
 	shelterName: 'ศูนย์พักพิงทดสอบ',
-	staffPin: { set: true, isDefault: false, updatedAt: '2026-10-01T00:00:00Z', updatedBy: 'staff' },
+	staffPin: { isDefault: false, updatedAt: '2026-10-01T00:00:00Z' },
 	bannerGroup: { id: 'bg-1', name: 'กลุ่มแบนเนอร์ A' }
 };
 const HOST: KioskHostInfo = { hostname: 'kiosk3', ips: ['192.168.1.50'] };
 
-function setup(deviceInfo: KioskDeviceInfoResult = { kind: 'ok', info: INFO }) {
+function setup(
+	deviceInfo: KioskDeviceInfoResult = { kind: 'ok', info: INFO },
+	isBusy: () => boolean = () => false
+) {
 	const fetchDeviceInfo = vi.fn<(pin: string) => Promise<KioskDeviceInfoResult>>(
 		async () => deviceInfo
 	);
 	const fetchHostInfo = vi.fn<() => Promise<KioskHostInfo>>(async () => HOST);
-	const session = new DeviceInfoSession({ fetchDeviceInfo, fetchHostInfo });
+	const session = new DeviceInfoSession({ fetchDeviceInfo, fetchHostInfo, isBusy });
 	const entry = new StaffPinEntry({
 		verify: (pin) => session.verify(pin),
 		onverified: () => session.pinVerified(),
@@ -148,6 +151,39 @@ describe('DeviceInfoSession', () => {
 		expect(session.pinOpen).toBe(false);
 		expect(fetchDeviceInfo).not.toHaveBeenCalled();
 		expect(fetchHostInfo).not.toHaveBeenCalled();
+	});
+
+	it('drops an answer that arrives after staff cancelled the PIN, so a later open cannot show it', async () => {
+		const { session, fetchDeviceInfo } = setup();
+		let release: (r: KioskDeviceInfoResult) => void = () => {};
+		fetchDeviceInfo.mockImplementationOnce(() => new Promise((resolve) => (release = resolve)));
+		session.open();
+
+		const pending = session.verify('123456');
+		session.pinCancelled();
+		release({ kind: 'ok', info: INFO });
+		await pending;
+
+		session.open();
+		session.pinVerified();
+		expect(session.shown).toBe(false);
+		expect(session.pin).toBeNull();
+	});
+
+	it('stays open while a test print is running, and closes once the print is done and time runs out', async () => {
+		vi.useFakeTimers();
+		let printing = true;
+		const { session, entry } = setup(undefined, () => printing);
+		session.open();
+		entry.pin = '123456';
+		await entry.confirm();
+
+		vi.advanceTimersByTime(DEVICE_INFO_IDLE_MS * 2);
+		expect(session.shown).toBe(true);
+
+		printing = false;
+		vi.advanceTimersByTime(DEVICE_INFO_IDLE_MS);
+		expect(session.shown).toBe(false);
 	});
 
 	it('closes by itself after being left untouched', async () => {
