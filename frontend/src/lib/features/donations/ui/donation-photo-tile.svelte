@@ -44,11 +44,11 @@
 		</button>
 	{:else}
 		<div
-			class="flex aspect-square size-full flex-col items-center justify-center gap-1 rounded-xl border border-slate-200/80 bg-slate-50 p-2 text-center text-sm font-semibold text-slate-500"
+			class="flex aspect-square size-full flex-col items-center justify-center gap-1 rounded-xl border border-slate-200/80 bg-slate-50 p-1 text-center text-xs font-semibold text-slate-500"
 			data-testid="donation-photo-missing"
 		>
 			<ImageOff class="size-5 text-slate-400" aria-hidden="true" />
-			รูปไม่พร้อมใช้
+			<span>รูป<wbr />ไม่พร้อมใช้</span>
 		</div>
 	{/if}
 {/await}

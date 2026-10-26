@@ -80,7 +80,7 @@
 					<button
 						type="button"
 						onclick={() => photos.remove(photo.key)}
-						class="absolute top-1 right-1 inline-flex size-11 items-center justify-center rounded-full text-white focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none"
+						class="absolute top-0 right-0 inline-flex size-11 items-start justify-end rounded-xl p-1 text-white focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none"
 					>
 						<span
 							class="inline-flex size-7 items-center justify-center rounded-full bg-slate-900/70"
@@ -95,7 +95,9 @@
 	{/if}
 
 	<div class="space-y-1.5">
-		<div class="flex items-center justify-between text-sm text-slate-600 tabular-nums">
+		<div
+			class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-sm text-slate-600 tabular-nums"
+		>
 			<span>{t.photoUsage.replace('{used}', formatBytes(photos.budget.bytes))}</span>
 			<span>{t.photoCount.replace('{count}', String(photos.budget.count))}</span>
 		</div>
