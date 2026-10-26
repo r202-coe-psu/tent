@@ -4,6 +4,7 @@
 	import { formatThaiDateTime } from '$lib/utils/date';
 	import type { PoolTimelineEvent, PoolTimelineEventKind } from '../../domain/food-supplies';
 	import {
+		getPoolStatusBadgeClass,
 		resolveItemDisplay,
 		returnerDisplayName,
 		type PoolCatalogItem
@@ -40,6 +41,27 @@
 		submitted: 'ส่งเข้าคลัง',
 		received: 'ตรวจรับเข้าคลัง',
 		cancelled: 'ยกเลิกกอง'
+	};
+
+	// สีของแต่ละเหตุการณ์ — เหตุการณ์สถานะกองใช้สีเดียวกับป้ายสถานะ, เหตุการณ์รายการใช้สีของตัวเอง
+	const KIND_TONES: Record<PoolTimelineEventKind, { badge: string; dot: string }> = {
+		opened: { badge: getPoolStatusBadgeClass('OPEN'), dot: 'bg-emerald-500' },
+		entry_added: { badge: 'border border-teal-200 bg-teal-50 text-teal-900', dot: 'bg-teal-500' },
+		moved_in: {
+			badge: 'border border-violet-200 bg-violet-50 text-violet-900',
+			dot: 'bg-violet-500'
+		},
+		moved_out: {
+			badge: 'border border-violet-200 bg-violet-50 text-violet-900',
+			dot: 'bg-violet-500'
+		},
+		voided: { badge: 'border border-red-200 bg-red-50 text-red-800', dot: 'bg-red-500' },
+		submitted: { badge: getPoolStatusBadgeClass('SUBMITTED'), dot: 'bg-sky-500' },
+		received: { badge: getPoolStatusBadgeClass('RECEIVED'), dot: 'bg-slate-700' },
+		cancelled: {
+			badge: getPoolStatusBadgeClass('CANCELLED'),
+			dot: 'bg-white ring-2 ring-slate-400 ring-inset'
+		}
 	};
 
 	function labelOf(event: PoolTimelineEvent): string {
@@ -95,10 +117,20 @@
 						{@const returner = returnerOf(event)}
 						<li class="relative space-y-0.5 pb-4 text-sm last:pb-0">
 							<span
-								class="absolute top-1.5 -left-[1.4rem] h-2.5 w-2.5 rounded-full bg-slate-400"
+								class="absolute top-1.5 -left-[1.4rem] h-2.5 w-2.5 rounded-full {KIND_TONES[
+									event.kind
+								].dot}"
 								aria-hidden="true"
 							></span>
-							<p class="font-medium break-words text-slate-900">{labelOf(event)}</p>
+							<p>
+								<span
+									class="inline-flex max-w-full items-center rounded-full px-2.5 py-0.5 text-xs font-semibold break-words {KIND_TONES[
+										event.kind
+									].badge}"
+								>
+									{labelOf(event)}
+								</span>
+							</p>
 							{#if item}
 								<p class="break-words text-slate-700">
 									{item.name}
