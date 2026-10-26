@@ -44,6 +44,11 @@ export interface PoolTimelineEvent {
 	returner_type?: BulkReturnEntryReturnerType;
 	returner_id?: string | null;
 	notes?: string;
+	/**
+	 * Only on `voided` / `moved_out` / `moved_in`: the event was written after the entry's snapshot
+	 * pool was submitted (CR-193 §33 snapshot pin), so it changed nothing. Shown, not hidden.
+	 */
+	no_effect?: true;
 }
 
 export interface PoolTimelineEventSet {
@@ -58,11 +63,32 @@ function compare(a: PoolTimelineEvent, b: PoolTimelineEvent): number {
 	return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
 }
 
+/**
+ * `pins` (entry id -> snapshot pool, see `buildSnapshotPins`) marks events with `no_effect`.
+ * Rule for an entry pinned to pool P: its void is no-effect; a move of it is no-effect iff its seq
+ * is greater than the seq of the move that brought it into P (0 when the entry was created in P),
+ * i.e. every move after the entry entered P. The move that brought it into P stays effective.
+ * Unpinned entries are unchanged.
+ */
 export function buildPoolTimeline(
 	pool: BulkReturnPoolV3,
-	events: PoolTimelineEventSet
+	events: PoolTimelineEventSet,
+	pins?: ReadonlyMap<string, string>
 ): PoolTimelineEvent[] {
 	const poolId = pool._id;
+	const entryPoolById = new Map(events.entries.map((entry) => [entry._id, entry.pool_id]));
+	const noEffectMove = (move: BulkReturnEntryMove): boolean => {
+		const pinned = pins?.get(move.entry_id);
+		if (pinned === undefined) return false;
+		let arrival = entryPoolById.get(move.entry_id) === pinned ? 0 : Infinity;
+		for (const other of events.moves) {
+			if (other.entry_id === move.entry_id && other.to_pool_id === pinned && other.seq < arrival) {
+				arrival = other.seq;
+			}
+		}
+		if (arrival === Infinity) arrival = 0;
+		return move.seq > arrival;
+	};
 	const entryById = new Map(events.entries.map((entry) => [entry._id, entry]));
 	const returnerOf = (entryId: string) => {
 		const entry = entryById.get(entryId);
@@ -96,7 +122,8 @@ export function buildPoolTimeline(
 			qty: move.qty,
 			entry_id: move.entry_id,
 			...returnerOf(move.entry_id),
-			...(move.notes ? { notes: move.notes } : {})
+			...(move.notes ? { notes: move.notes } : {}),
+			...(noEffectMove(move) ? { no_effect: true as const } : {})
 		};
 		if (move.to_pool_id === poolId) {
 			out.push({ ...base, id: move._id, kind: 'moved_in', other_pool_id: move.from_pool_id });
@@ -117,7 +144,8 @@ export function buildPoolTimeline(
 			qty: entryVoid.qty,
 			entry_id: entryVoid.entry_id,
 			...returnerOf(entryVoid.entry_id),
-			...(entryVoid.notes ? { notes: entryVoid.notes } : {})
+			...(entryVoid.notes ? { notes: entryVoid.notes } : {}),
+			...(pins?.has(entryVoid.entry_id) ? { no_effect: true as const } : {})
 		});
 	}
 

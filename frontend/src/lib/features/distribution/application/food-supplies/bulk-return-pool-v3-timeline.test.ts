@@ -28,6 +28,7 @@ import { submitBulkReturnPool } from './bulk-return-pool-v3-lifecycle';
 import { moveBulkReturnEntry } from './bulk-return-pool-v3-move';
 import { voidBulkReturnEntry } from './bulk-return-pool-v3-void';
 import { getBulkReturnPoolTimeline } from './bulk-return-pool-v3-read';
+import { createBulkReturnEntryVoid } from '../../domain/food-supplies';
 import { BulkReturnPoolStateError } from './errors';
 import {
 	createBulkReturnPoolV3Fixture,
@@ -77,6 +78,19 @@ describe('getBulkReturnPoolTimeline', () => {
 		const timelineB = await getBulkReturnPoolTimeline(b._id, mgr, deps);
 		expect(timelineB.events.map((e) => e.kind)).toEqual(['opened', 'moved_in']);
 		expect(timelineB.events[1]).toMatchObject({ entry_id: movedId, other_pool_id: a._id });
+	});
+
+	it('flags a void written after the pool was submitted as no_effect', async () => {
+		const a = await openPool('Gate A');
+		const added = await add(a._id, { type: 'unspecified' }, [{ item_id: 'item:cot', qty: '2' }]);
+		const entry = added.results[0].entry;
+		await submitBulkReturnPool(a._id, nextOp(), mgr, deps);
+		await deps.eventRepo!.createVoid(createBulkReturnEntryVoid({ entry, pool_id: a._id }, mgr));
+
+		const { events } = await getBulkReturnPoolTimeline(a._id, mgr, deps);
+		const voided = events.find((e) => e.kind === 'voided');
+		expect(voided).toMatchObject({ entry_id: entry._id, no_effect: true });
+		expect(events.find((e) => e.kind === 'entry_added')?.no_effect).toBeUndefined();
 	});
 
 	it('rejects an unknown pool', async () => {

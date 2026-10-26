@@ -16,6 +16,7 @@ import type { SkippedDoc } from '../../data/food-supplies';
 import { WorkflowValidationError } from './errors';
 import {
 	loadLivePoolEntriesWithLoans,
+	loadSnapshotPins,
 	outstandingLoansOf,
 	requirePool,
 	resolveDependencies,
@@ -113,7 +114,9 @@ export async function getBulkReturnPoolTimeline(
 		requirePool(poolRepo, poolId),
 		eventRepo.listForPool(poolId)
 	]);
-	return { events: buildPoolTimeline(pool, events), skipped: events.skipped };
+	// Lenient read-path pins: events written after a pool's snapshot are flagged `no_effect`.
+	const pins = await loadSnapshotPins(poolRepo, events);
+	return { events: buildPoolTimeline(pool, events, pins), skipped: events.skipped };
 }
 
 /** Outstanding returnable loans of a returner (all items), oldest first, so the UI can show/warn. */

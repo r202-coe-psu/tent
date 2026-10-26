@@ -113,4 +113,51 @@ describe('buildPoolTimeline', () => {
 		});
 		expect(timeline.map((e) => e.kind)).toEqual(['opened', 'entry_added', 'moved_out', 'moved_in']);
 	});
+
+	describe('snapshot pins', () => {
+		it('flags a void after the snapshot as no_effect', () => {
+			const timeline = buildPoolTimeline(
+				pool(POOL_A),
+				{ entries: [entry(E2, POOL_A, 1)], moves: [], voids: [voidOf(E2, POOL_A, 4)] },
+				new Map([[E2, POOL_A]])
+			);
+			expect(timeline.find((e) => e.kind === 'voided')?.no_effect).toBe(true);
+			expect(timeline.find((e) => e.kind === 'entry_added')?.no_effect).toBeUndefined();
+		});
+
+		it('flags a move out after the snapshot as no_effect, on both pools', () => {
+			const set = {
+				entries: [entry(E1, POOL_A, 1)],
+				moves: [move(E1, 1, POOL_A, POOL_B, 4)],
+				voids: []
+			};
+			const pins = new Map([[E1, POOL_A]]);
+			expect(
+				buildPoolTimeline(pool(POOL_A), set, pins).find((e) => e.kind === 'moved_out')?.no_effect
+			).toBe(true);
+			expect(
+				buildPoolTimeline(pool(POOL_B), set, pins).find((e) => e.kind === 'moved_in')?.no_effect
+			).toBe(true);
+		});
+
+		it('keeps the move that brought a late entry into the pinned pool effective', () => {
+			const set = {
+				entries: [entry(E1, POOL_B, 1)],
+				moves: [move(E1, 1, POOL_B, POOL_A, 2), move(E1, 2, POOL_A, POOL_B, 6)],
+				voids: []
+			};
+			const timeline = buildPoolTimeline(pool(POOL_A), set, new Map([[E1, POOL_A]]));
+			expect(timeline.find((e) => e.kind === 'moved_in')?.no_effect).toBeUndefined();
+			expect(timeline.find((e) => e.kind === 'moved_out')?.no_effect).toBe(true);
+		});
+
+		it('leaves unpinned entries unchanged', () => {
+			const timeline = buildPoolTimeline(
+				pool(POOL_A),
+				events,
+				new Map([['bulk_return_entry:other', POOL_B]])
+			);
+			expect(timeline.some((e) => e.no_effect)).toBe(false);
+		});
+	});
 });

@@ -9,6 +9,10 @@
 		returnerDisplayName,
 		type PoolCatalogItem
 	} from '../model/bulk-return-pool-v3';
+	import {
+		TIMELINE_NO_EFFECT_BADGE_CLASS,
+		TIMELINE_NO_EFFECT_LABEL
+	} from '../model/bulk-return-timeline-copy';
 
 	interface Props {
 		/** Timeline events, oldest first (undefined while loading). */
@@ -130,6 +134,13 @@
 								>
 									{labelOf(event)}
 								</span>
+								{#if event.no_effect}
+									<span
+										class="ml-1 inline-flex max-w-full items-center rounded-full px-2.5 py-0.5 text-xs font-semibold break-words {TIMELINE_NO_EFFECT_BADGE_CLASS}"
+									>
+										{TIMELINE_NO_EFFECT_LABEL}
+									</span>
+								{/if}
 							</p>
 							{#if item}
 								<p class="break-words text-slate-700">
