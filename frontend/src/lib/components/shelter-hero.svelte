@@ -12,6 +12,7 @@
 	} from '$lib/features/public-portal';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { getTranslation } from '$lib/utils/i18n';
+	import { directionsUrl } from '$lib/utils/maps';
 	import { PUBLIC_SHELTER_DETAILS_I18N } from '$lib/constants/i18n';
 
 	let { shelter }: { shelter: NonNullable<PublicShelterDetail> } = $props();
@@ -117,12 +118,9 @@
 					</a>
 				{/if}
 				{#if shelter.geo?.lat && shelter.geo?.lng}
+					{@const geo = shelter.geo}
 					<Button
-						onclick={() =>
-							window.open(
-								`https://www.google.com/maps/dir/?api=1&destination=${shelter.geo?.lat},${shelter.geo?.lng}`,
-								'_blank'
-							)}
+						onclick={() => window.open(directionsUrl(geo), '_blank')}
 						target="_blank"
 						class="flex w-fit items-center gap-2 rounded-xl bg-warning px-6 py-3.5 text-sm font-bold text-warning-foreground shadow-lg transition-colors hover:bg-warning-subtle"
 					>
