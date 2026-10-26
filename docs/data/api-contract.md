@@ -464,14 +464,14 @@ Content-Type: application/json
 {
   "device": { "device_id": "kiosk-sh001-01", "name": "Kiosk หน้าประตู", "station_name": "จุดลงทะเบียน", "screen_type": "compact" },
   "shelter": { "code": "SH-001", "name": "ศูนย์พักพิงโรงเรียนบ้านนา" },
-  "staff_pin": { "set": true, "is_default": false, "updated_at": "2026-10-20T03:00:00.000Z", "updated_by": "admin@tent" },
+  "staff_pin": { "is_default": false, "updated_at": "2026-10-20T03:00:00.000Z" },
   "banner_group": { "id": "kiosk_banner_group:…", "name": "กลุ่มหน้าประตู" }
 }
 ```
 
 - `screen_type` = `compact` | `portrait` (doc ที่ไม่มี field = `compact`) · `banner_group` = `null` เมื่อเครื่องไม่มีกลุ่ม,
   กลุ่มถูกลบ หรืออ่านกลุ่มไม่สำเร็จ · `shelter.name` = รหัสศูนย์เมื่อศูนย์ไม่มีชื่อหรืออ่านไม่สำเร็จ (ไม่ตอบ `503` เพราะสองค่านี้).
-- response **ไม่มีค่า PIN** และไม่มีรายชื่อเครื่องในกลุ่ม · ทุก response `cache-control: no-store`, `pragma: no-cache`.
+- response **ไม่มีค่า PIN** ไม่มีผู้แก้ PIN ล่าสุด และไม่มีรายชื่อเครื่องในกลุ่ม · ไม่มี `staff_pin.set` เพราะ `200` ตอบเฉพาะเมื่อ PIN ตรง (ตั้งแล้วเสมอ) · ทุก response `cache-control: no-store`, `pragma: no-cache`.
 - Error: credential ผิด `401 DEVICE_AUTH_FAILED` · PIN ผิด/ไม่ใช่ 6 หลัก `401 staff_pin_invalid` (หน่วง ~1 วินาที) · ไม่มี PIN
   `409 staff_pin_not_set` · คิวเต็ม `429 RATE_LIMITED` · registry / `scanner_secrets` ใช้ไม่ได้ `503 DEPENDENCY_UNAVAILABLE`.
 - log `[scanner-device-info] device=… result=… at=…` — ห้าม log PIN. `scanner_client` แนบ device credential ให้ path นี้
