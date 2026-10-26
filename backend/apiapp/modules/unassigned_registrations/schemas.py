@@ -449,6 +449,78 @@ class UnassignedRegistrationStatusResponse(BaseModel):
     claimed: bool
 
 
+class UnassignedKioskLookupRequest(BaseModel):
+    """Kiosk lookup key — exactly one of registration, citizen or evacuee id."""
+
+    registration_id: str | None = None
+    citizen_id: str | None = Field(default=None, pattern=r"^\d{13}$")
+    evacuee_id: str | None = Field(default=None, pattern=r"^evacuee:\S+$")
+
+    @model_validator(mode="after")
+    def _require_exactly_one_key(self) -> UnassignedKioskLookupRequest:
+        keys = (self.registration_id, self.citizen_id, self.evacuee_id)
+        if sum(key is not None for key in keys) != 1:
+            raise ValueError("exactly one of registration_id, citizen_id, evacuee_id is required")
+        return self
+
+
+class UnassignedKioskMember(BaseModel):
+    """Kiosk family row — unmasked name (the BFF masks); no phone / person id / photo."""
+
+    reserved_evacuee_id: str
+    first_name: str
+    last_name: str
+    gender: Literal["male", "female", "other"] | None
+    age: int | None
+    status: str
+    claimed_shelter_code: str | None
+    matched: bool
+
+
+class UnassignedKioskLookupResponse(BaseModel):
+    registration_id: str
+    reserved_household_id: str
+    members: list[UnassignedKioskMember]
+
+
+class UnassignedKioskPrepareRequest(BaseModel):
+    """Kiosk claim prepare — mark members, return Couch docs for the BFF to write."""
+
+    shelter_code: str = Field(min_length=1)
+    device_id: str = Field(min_length=1)
+    member_ids: list[str] = Field(min_length=1, max_length=20)
+    required_person_id: str | None = None
+
+
+class UnassignedKioskImage(BaseModel):
+    """Couch image doc + base64 attachment bytes (the BFF writes them to Couch)."""
+
+    doc: dict
+    full_b64: str
+    thumb_b64: str
+    content_type: str
+
+
+class UnassignedKioskPrepareResponse(BaseModel):
+    registration_id: str
+    shelter_code: str
+    household: dict
+    evacuees: list[dict]
+    images: list[UnassignedKioskImage]
+
+
+class UnassignedKioskRevertRequest(BaseModel):
+    """Kiosk claim revert — give back members this kiosk marked when the Couch write failed."""
+
+    shelter_code: str = Field(min_length=1)
+    device_id: str = Field(min_length=1)
+    member_ids: list[str] = Field(min_length=1, max_length=20)
+
+
+class UnassignedKioskRevertResponse(BaseModel):
+    reverted: list[str]
+
+
 class UnassignedRegistrationStatsResponse(BaseModel):
     open_registrations: int
     open_members: int
