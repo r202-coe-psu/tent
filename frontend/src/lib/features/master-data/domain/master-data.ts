@@ -20,7 +20,9 @@ export const MASTER_DATA_TYPES = [
 	'vulnerable_group',
 	'housing_type',
 	'shelter_type',
-	'volunteer_skills'
+	'volunteer_skills',
+	'chronic_disease',
+	'allergy'
 ] as const;
 export type MasterDataType = (typeof MASTER_DATA_TYPES)[number];
 
@@ -61,12 +63,28 @@ export const VOLUNTEER_MASTER_TYPES = [
 	'volunteer_skills'
 ] as const satisfies readonly MasterDataType[];
 
+/**
+ * Types with no shelter-local tier (CR-186, CR-187): SA manages the global doc only and
+ * the writer rejects `master_data:{type}:{shelter_code}`. Back-office shows them
+ * read-only.
+ */
+export const GLOBAL_ONLY_MASTER_TYPES = [
+	'chronic_disease',
+	'allergy'
+] as const satisfies readonly MasterDataType[];
+
+export function isGlobalOnlyMasterType(type: MasterDataType): boolean {
+	return (GLOBAL_ONLY_MASTER_TYPES as readonly MasterDataType[]).includes(type);
+}
+
 /** Thai + English labels for the master_type enum — used in the type list cards. */
 export const MASTER_DATA_TYPE_LABELS: Record<MasterDataType, string> = {
 	vulnerable_group: 'ประเภทกลุ่มเปราะบาง (Vulnerable Group)',
 	housing_type: 'ประเภทที่อยู่อาศัย (Housing Type)',
-	shelter_type: 'ประเภทศูนย์พักพิง (Shelter Type)',
-	volunteer_skills: 'ทักษะมาตรฐานจิตอาสา (Volunteer Skills)'
+	shelter_type: 'ประเภทอาคาร (Building Type)',
+	volunteer_skills: 'ทักษะมาตรฐานจิตอาสา (Volunteer Skills)',
+	chronic_disease: 'โรคประจำตัว (Chronic Disease)',
+	allergy: 'อาการแพ้ (Allergy)'
 };
 
 /** Hub copy: sidebar short title, panel title/lead, and forms that consume each type. */
@@ -95,8 +113,8 @@ export const MASTER_DATA_TYPE_META: Record<MasterDataType, MasterDataTypeMeta> =
 		]
 	},
 	shelter_type: {
-		shortTitle: 'ประเภทศูนย์',
-		title: 'ประเภทศูนย์พักพิง',
+		shortTitle: 'ประเภทอาคาร',
+		title: 'ประเภทอาคาร',
 		description: 'ประเภทอาคาร/สถานที่ของศูนย์ ที่ใช้ตอนตั้งค่าและแสดงผลศูนย์',
 		affectedForms: ['ฟอร์มข้อมูลศูนย์', 'นำเข้าศูนย์', 'รายการ/โปรไฟล์ศูนย์']
 	},
@@ -105,6 +123,24 @@ export const MASTER_DATA_TYPE_META: Record<MasterDataType, MasterDataTypeMeta> =
 		title: 'ทักษะมาตรฐานจิตอาสา',
 		description: 'ทักษะที่กำหนดงานอาสาและให้ผู้สมัครเลือก',
 		affectedForms: ['ตั้งค่างานอาสา', 'สมัครอาสา (สาธารณะ)', 'โปรไฟล์/มอบหมายอาสา']
+	},
+	chronic_disease: {
+		shortTitle: 'โรคประจำตัว',
+		title: 'โรคประจำตัว',
+		description:
+			'รายการโรคประจำตัวมาตรฐาน (ส่วนกลางเท่านั้น) ที่เจ้าหน้าที่เลือกได้ตอนคัดกรองสุขภาพ — โรคอื่นพิมพ์เพิ่มเองได้',
+		affectedForms: [
+			'คัดกรองสุขภาพ Station 2',
+			'แก้ไขข้อมูลสุขภาพในโปรไฟล์ผู้พักพิง',
+			'นำเข้าไฟล์ผู้อพยพ'
+		]
+	},
+	allergy: {
+		shortTitle: 'อาการแพ้',
+		title: 'อาการแพ้',
+		description:
+			'รายการสิ่งที่แพ้มาตรฐาน (ส่วนกลางเท่านั้น) ที่เจ้าหน้าที่เลือกได้ตอนคัดกรองสุขภาพ — สิ่งอื่น เช่น แพ้ยา พิมพ์เพิ่มเองได้',
+		affectedForms: ['คัดกรองสุขภาพ Station 2', 'แก้ไขข้อมูลสุขภาพในโปรไฟล์ผู้พักพิง']
 	}
 };
 
@@ -267,6 +303,39 @@ export function formatMasterLabelByCode(
 	const item = items.find((i) => i.code === code);
 	if (!item) return code.startsWith('item_') ? '' : code;
 	return formatMasterLabel(item, lang);
+}
+
+/**
+ * Map one entered value onto a master item's `code` (CR-186 FR-6). A value that
+ * is already a code stays a code — also for an `inactive` item, whose stored
+ * code must keep resolving (soft-delete, schema.md §3.3). Text matching the
+ * `label_th` / `label_en` of an **active** item (compared with
+ * {@link normalizeLabel}) becomes that code, so legacy free text such as
+ * `"เบาหวาน"` lines up with the master. Anything else — including the label of
+ * an inactive item — is kept as trimmed free text.
+ */
+export function resolveMasterCode(
+	value: string,
+	items: readonly (MasterLabelFields & { status?: MasterDataItem['status'] })[]
+): string {
+	const text = value.trim();
+	if (!text) return '';
+	if (items.some((i) => i.code === text)) return text;
+	const target = normalizeLabel(text);
+	const match = items.find(
+		(i) =>
+			i.status !== 'inactive' &&
+			(normalizeLabel(i.label_th) === target || normalizeLabel(i.label_en) === target)
+	);
+	return match ? match.code : text;
+}
+
+/** {@link resolveMasterCode} over a list: blanks dropped, duplicates after mapping removed. */
+export function resolveMasterCodes(
+	values: readonly string[],
+	items: readonly (MasterLabelFields & { status?: MasterDataItem['status'] })[]
+): string[] {
+	return [...new Set(values.map((v) => resolveMasterCode(v, items)).filter(Boolean))];
 }
 
 // ---------------------------------------------------------------- unique label

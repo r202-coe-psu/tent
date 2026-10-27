@@ -62,6 +62,9 @@ def scan():
             new_callable=AsyncMock,
             return_value=["SH001"],
         ),
+        patch.object(
+            bs, "list_all_shelter_codes", new_callable=AsyncMock, return_value=["SH001"]
+        ),
     ):
         yield db
 
@@ -259,3 +262,28 @@ async def test_bootstrap_checkpoint_uses_seq_read_before_the_scan():
 
     assert order[0] == "seq"
     save.assert_awaited_once_with(bs.REGISTRY_DB, "7-x")
+
+
+async def test_bootstrap_refreshes_closed_shelter_projections(make_store, scan):
+    """#791: closed shelters get no `_changes` listener, so the deploy bootstrap is the
+    only thing that re-applies projector changes to their EXT-005/007 rows."""
+    make_store(version=PROJECTION_VERSION - 1)
+    couch = AsyncMock()
+
+    with (
+        patch.object(
+            bs,
+            "list_all_shelter_codes",
+            new_callable=AsyncMock,
+            return_value=["SH001", "SH002"],
+        ),
+        patch.object(bs, "refresh_occupancy", new_callable=AsyncMock) as occupancy,
+        patch.object(
+            bs, "refresh_shelter_occupants", new_callable=AsyncMock
+        ) as occupants,
+    ):
+        assert await bs.maybe_bootstrap(couch, force=False) is True
+
+    assert scan.await_count == 2  # registry + open SH001 only
+    occupancy.assert_awaited_once_with(couch, "SH002")
+    occupants.assert_awaited_once_with(couch, "SH002")

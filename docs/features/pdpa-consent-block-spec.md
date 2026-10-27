@@ -2,7 +2,7 @@
 title: บล็อกความยินยอม PDPA ในการลงทะเบียน (PDPA Consent Block Spec)
 status: active
 created: 2026-10-25
-updated: 2026-10-25
+updated: 2026-10-26
 tracking: decision sync note (owner เลือก 2026-10-25 — ไม่ใช้ CR ไฟล์)
 source: Shelter Consent Prototype.html (การ์ด「ความยินยอมของท่าน」เท่านั้น)
 affects:
@@ -52,7 +52,7 @@ affects:
 
 ## 3. ช่องในบล็อกและพฤติกรรม UI
 
-ข้อความทุกช่องใช้ตาม prototype (owner ยืนยัน 2026-10-25 ว่าผ่านการอนุมัติแล้ว) ยกเว้นช่องค้นหาญาติที่ปรับตาม FR-12. เก็บข้อความทั้งหมดไว้ในไฟล์ i18n ไฟล์เดียว
+ข้อความทุกช่องใช้ตาม prototype (owner ยืนยัน 2026-10-25 ว่าผ่านการอนุมัติแล้ว) ยกเว้นช่องค้นหาญาติที่ปรับตาม FR-12 และข้อความ notice โหมดพื้นฐานที่ปรับตาม D16. เก็บข้อความทั้งหมดไว้ในไฟล์ i18n ไฟล์เดียว
 
 | # | ช่อง | tag | ค่าเริ่มต้น | เงื่อนไขแสดง |
 | --- | --- | --- | --- | --- |
@@ -69,7 +69,7 @@ affects:
 - **FR-14** — ถ้าติ๊ก C4 แต่ไม่ได้เลือกสมาชิกเลย ให้ปิดปุ่มยืนยันและแสดงข้อความให้เลือกอย่างน้อย 1 คน
 - **FR-15** — เมื่อติ๊ก C5 ให้แสดงชื่อและรหัสผู้ใช้ของเจ้าหน้าที่ที่ login อยู่ (จาก `authStore`) แบบอ่านอย่างเดียว ห้ามพิมพ์แก้
 - **FR-16** — ถ้ามีข้อมูลที่จะไปลง `medical` (โรคประจำตัว/แพ้/ยา/หมายเหตุสุขภาพ) กรอกค้างในฟอร์ม แต่ C2 ไม่ติ๊กหรือ C1 ไม่ติ๊ก บล็อกต้องแสดงคำเตือน「ข้อมูลสุขภาพที่กรอกไว้จะไม่ถูกบันทึก」 ก่อนกดยืนยัน
-- **FR-17** — กด「ยืนยัน」ขณะ C1 ไม่ติ๊ก หรือกด「ไม่ยินยอม」 → ซ่อนปุ่มหลัก แล้วแสดง notice โหมดพื้นฐาน (ข้อความตาม prototype) พร้อมปุ่ม「ลงทะเบียนแบบพื้นฐาน」และ「กลับไปเลือกความยินยอม」. focus ไปที่ปุ่ม「ลงทะเบียนแบบพื้นฐาน」
+- **FR-17** — กด「ยืนยัน」ขณะ C1 ไม่ติ๊ก หรือกด「ไม่ยินยอม」 → ซ่อนปุ่มหลัก แล้วแสดง notice โหมดพื้นฐาน (ข้อความตาม D16) พร้อมปุ่ม「ลงทะเบียนแบบพื้นฐาน」และ「กลับไปเลือกความยินยอม」. focus ไปที่ปุ่ม「ลงทะเบียนแบบพื้นฐาน」
 - **FR-18** — ติ๊ก C1 ขณะ notice แสดงอยู่ หรือกด「กลับไปเลือกความยินยอม」 → ซ่อน notice แสดงปุ่มหลักกลับมา (กดปุ่มกลับแล้วให้ focus ไปที่ C1)
 - **FR-19** — ปุ่มยืนยันของบล็อกคือปุ่ม submit ของฟอร์มลงทะเบียนนั้น ไม่มีขั้นยืนยันแยก. การบันทึก consent กับการบันทึกการลงทะเบียนต้องสำเร็จหรือล้มเหลวไปด้วยกัน
 - **FR-20** — หลังบันทึกสำเร็จ หน้าผลลัพธ์/หน้าสำเร็จของแต่ละช่องทางต้องแสดงสรุปตามตาราง §5. kiosk แสดงเฉพาะเลขอ้างอิงและโหมด
@@ -116,11 +116,11 @@ affects:
 
 | สถานะ | ผล |
 | --- | --- |
-| `mode = basic` | บันทึกฟิลด์ลงทะเบียนตามปกติ; `search_excluded = true`; ไม่มี `medical`; หายจาก public family search และ partner person search (EXT-012); ยังนับในยอด aggregate/occupancy |
+| `mode = basic` | บันทึกฟิลด์ลงทะเบียนตามปกติ; `search_excluded = true`; ไม่มี `medical`; หายจาก public family search, partner person search (EXT-012) และ partner occupant list (EXT-007); ยังนับในยอด aggregate/occupancy |
 | `mode = full`, `health = false` | ไม่มี `medical` จากการลงทะเบียนนี้; ส่วนอื่นปกติ |
 | C3 ไม่ติ๊ก | `search_excluded = true` (พฤติกรรม opt-out เดิมของ T-40/T-41) |
 
-- **FR-40** — การซ่อนจากการค้นหาทำผ่าน `privacy.search_excluded` และ projector เดิม (`worker/src/worker/projectors/evacuee.py` ลบ projection เมื่อ `true`). ไม่ต้องเพิ่ม filter ใหม่ และไม่ bump `PROJECTION_VERSION`. ต้องมี test ยืนยันว่า evacuee `mode = basic` ไม่ปรากฏใน `POST /public/v1/occupants`, partner person search (`thirdparty_person_search`, ผ่าน `EvacueeUseCase`) และ partner residency (`thirdparty_residency`, อ่าน `PublicPerson`). `thirdparty_occupants` เป็นยอด aggregate จาก `PublicShelter` จึงยังนับรวม
+- **FR-40** — การซ่อนจากการค้นหาทำผ่าน `privacy.search_excluded`: `worker/src/worker/projectors/evacuee.py` ลบ projection ใน `public_persons` และ `worker/src/worker/projectors/occupant.py` ไม่ project ลง `shelter_occupants` (EXT-007) เมื่อ `true` (EXT-007 เพิ่มตาม decision sync 2026-10-26, #791 — bump `PROJECTION_VERSION` 7 → 8; ส่วน `evacuee.py` ไม่ต้องแก้). ต้องมี test ยืนยันว่า evacuee `mode = basic` ไม่ปรากฏใน `POST /public/v1/occupants`, partner person search (`thirdparty_person_search`, ผ่าน `EvacueeUseCase`), partner residency (`thirdparty_residency`, อ่าน `PublicPerson`) และ partner occupant list (`thirdparty_occupants`, EXT-007, อ่าน `ShelterOccupant`). ยอด aggregate EXT-005 (`thirdparty_occupancy`, อ่าน `PublicShelter` ที่ worker นับจาก CouchDB) ยังนับรวม
 - **FR-41** — หน้า report-in แสดงบล็อกเฉพาะเมื่อมีสมาชิกที่ยังไม่มี `consent`. บล็อกบันทึกลงเฉพาะสมาชิกที่ยังไม่มี `consent`; สมาชิกที่มีแล้ว (รวม `backfill`, kiosk, public) แสดงสรุปตาม §5 แบบอ่านอย่างเดียว และค่าไม่เปลี่ยน
 - **FR-44** — evacuee ที่ถูกสร้างหลัง backfill จากช่องทางที่ไม่มีบล็อก (back-office pre-register, partner EXT-008 `worker/src/worker/inbound/external_bookings.py`, `import`, `paper`) ไม่มี `consent` ตอนสร้าง และเก็บ consent ที่ report-in ตาม FR-41
 - **FR-42** — Public pre-register: ส่ง consent ไปกับ payload ของ unassigned registration แล้วเก็บใน Mongo. ตอน claim (`unassigned-registration/domain/claim.ts`) ต้องคัดลอก `consent` ไปยัง evacuee doc ทุกคนโดยไม่เปลี่ยนค่า และใช้ FR-31/FR-32 ตอนสร้าง doc. ก่อน claim ห้ามนำข้อมูลสุขภาพของคน `health = false` เข้า Mongo
@@ -152,6 +152,9 @@ affects:
 ## 9. Decision sync note (ใส่ใน `docs/data/schema.md` ตอน implement — ก่อนแก้ code)
 
 > **decision sync 2026-10-25 (evacuee schema_v 14 → 15)** — เพิ่ม `consent` (opt) = `{mode, health, ref, given_at, given_by, giver_evacuee_id, recorded_verbally_by, channel, notice_version}` จากบล็อกความยินยอม PDPA (`docs/features/pdpa-consent-block-spec.md`). `mode = basic` บังคับ `privacy.search_excluded = true`; `mode = basic` หรือ `health = false` → **save ของฟอร์มลงทะเบียน** ห้ามสร้าง/แก้ `medical` (screening Station 2 ไม่ขึ้นกับกฎนี้). ค้นหาญาติยังเป็น opt-out (K-15). Kiosk register และ public unassigned registration รับ `consent` ใน payload (api-contract) และ claim คัดลอกไป evacuee. Migration: additive + backfill ครั้งเดียว (`given_by: 'backfill'`, `health` = มี `medical` doc หรือไม่).
+> **decision sync 2026-10-25 — เพิ่มเติม (ไม่ bump `schema_v`)** — kiosk register: `consent` ที่ถูกรูปแบบแต่ `given_at` ย้อนหลังเกิน 10 นาที → `400 KIOSK_CONSENT_EXPIRED` (แทน `INVALID_KIOSK_REGISTRATION`); ตู้ล้าง decision แล้วพาผู้ใช้กลับหน้ายินยอมพร้อมข้อความแจ้ง (บัตรสมาร์ทการ์ด: เก็บข้อมูลบัตร/ผลตรวจใบหน้าไว้; ThaiD: session สแกนอายุ 180 วินาทีหลังยืนยัน จึงหมดอายุแล้วเสมอ ตู้รีเซ็ตและพากลับหน้าสแกน ThaiD พร้อมข้อความแจ้ง ไม่ให้ยินยอมซ้ำก่อนต้องสแกนใหม่อยู่ดี) แทนการ retry ด้วย decision เดิม. `given_at` ล้ำอนาคตเกิน 10 นาทียังเป็น `INVALID_KIOSK_REGISTRATION`; กฎ 10 นาทีไม่เปลี่ยน (api-contract §2.1, PR #892).
+> **decision sync 2026-10-26 — เพิ่มเติม (ไม่ bump `schema_v`; bump `PROJECTION_VERSION` 7 → 8)** — EXT-007 (`shelter_occupants`, `/external/locations/{code}/occupants`) ไม่ project evacuee ที่ `privacy.search_excluded = true` (ทั้ง `mode = basic` และไม่ติ๊ก C3) และลบ row เดิมเมื่อค่าเปลี่ยนจาก `false` เป็น `true` เหมือน `evacuee.py`; ยอด aggregate/occupancy (EXT-005) ยังนับรวม. Owner อนุมัติ 2026-10-26 (#791).
+> **decision sync 2026-10-26 (PDPA D8 — aggregate นับคนที่ `search_excluded`, ไม่ bump `schema_v`)** — worker ลบ `public_persons` ของ evacuee ที่ `privacy.search_excluded = true` (โหมดพื้นฐาน หรือไม่ติ๊ก C3) จึงห้ามนับยอด aggregate จาก `public_persons`. เพิ่ม `public_shelters.occupancy_by_status` (`{stay status: count}`, worker `refresh_occupancy` นับจาก evacuee **ทุกคน** ใน `shelter_{code}` ไม่สนใจ `privacy`) — public transparency `occupancy_total` (รวมเฉพาะศูนย์ `is_active`) และ shelter detail `occupancy`/`present`/`in_zone` รวมจาก field นี้ตามชุดสถานะเดิม (CR-112). `occupancy_total`/`occupancy_breakdown` ของ EXT-005 คงเดิม (`active` only). เพิ่ม `external_bookings.stay_status` (worker คัดลอก `current_stay.status` ของ evacuee ที่มี `booking_ref` ลงแถวของมัน โดยไม่แตะ `updated_at`) — EXT-009 cancel ใช้ค่านี้เมื่อคนนั้นไม่มีแถว `public_persons` → คนที่ check-in แล้วได้ `409 booking_not_cancellable` ไม่ใช่ 200. Migration: additive; bump `PROJECTION_VERSION` (→ 9) เพื่อให้ bootstrap เติมค่าให้ทุกศูนย์/ทุก booking; แถว `public_shelters` ที่ยังไม่มี key (`null`) → backend นับจาก `public_persons` แบบเดิมจนกว่าจะ re-project. EXT-008 ตรวจซ้ำยังอ่าน `public_persons` — คนที่ search-excluded ได้ 201 แล้ว worker ปฏิเสธ `duplicate` ทีหลัง (owner ยอมรับ, ปิด #903).
 
 ## 10. Open issues (ไม่ block งานนี้)
 
@@ -177,5 +180,6 @@ affects:
 | D13 | Track ด้วย decision sync note | CR ไฟล์ / Notion |
 | D14 | C4 ไม่ติ๊กผู้เยาว์ไว้ก่อน | ติ๊กอายุ < 20 ไว้ก่อน — ผู้ลงทะเบียนอาจไม่ใช่ผู้ปกครองของเด็กทุกคน |
 | D15 | Kiosk payload ไม่มี `consent` → 400 | รับแบบไม่มี consent ช่วง deploy — client/server deploy พร้อมกัน |
+| D16 | ข้อความ notice โหมดพื้นฐานเปลี่ยนเป็น「…แต่ชื่อของท่านจะไม่แสดงในระบบค้นหาญาติ ข้อมูลจะไม่ถูกส่งต่อให้หน่วยงานภายนอก และจะไม่มีการประสานเยียวยาผ่านระบบ…」 (`notice_version` 2026-10-26) | ข้อความ prototype「เก็บเฉพาะข้อมูลที่จำเป็นต่อความปลอดภัยของชีวิต」 — ขัดกับ D8 ที่บันทึกฟิลด์ลงทะเบียนตามปกติ (owner อนุมัติ 2026-10-26) |
 
 Owner อนุมัติ spec 2026-10-25.

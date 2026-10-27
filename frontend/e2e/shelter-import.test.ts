@@ -8,7 +8,13 @@
 
 import { test, expect, type Page } from '@playwright/test';
 import ExcelJS from 'exceljs';
-import { createCouchUser, deleteCouchUser, couchLogin, SA_ROLES } from './helpers/couch';
+import {
+	createCouchUser,
+	deleteCouchUser,
+	couchLogin,
+	seedSecurityQuestion,
+	SA_ROLES
+} from './helpers/couch';
 import { injectSession, clearSession } from './helpers/login';
 
 const BASE = 'http://localhost:4173';
@@ -46,6 +52,7 @@ let session = '';
 
 test.beforeAll(async () => {
 	await createCouchUser(SA);
+	await seedSecurityQuestion(SA.name);
 	session = await couchLogin(SA.name, SA.password);
 });
 
@@ -302,6 +309,46 @@ test('imports valid spreadsheet rows, skips invalid rows, and records the outcom
 	await expect(progressDialog.getByText('SH91')).toBeVisible();
 	await expect(progressDialog.getByText('ข้อมูลไม่ผ่านการตรวจสอบ')).toBeVisible();
 });
+
+for (const typeHeader of ['ประเภทอาคาร', 'ประเภทศูนย์พักพิง']) {
+	test(`reads the shelter type from the "${typeHeader}" column`, async ({ page }) => {
+		await mockMasterData(page);
+		const registry = await mockRegistry(page);
+		const created = await mockShelterImportJob(page, registry);
+		await injectSession(page, SA, session);
+		await page.goto(`${BASE}${IMPORT_PATH}`);
+
+		const row = (name: string, shelterType: string) => {
+			const cells = Array(HEADERS.length + 1).fill('');
+			cells[0] = name;
+			cells[16] = '80';
+			cells[HEADERS.length] = shelterType;
+			return cells;
+		};
+		await page.locator('input[type="file"]').setInputFiles({
+			name: 'shelter-type.xlsx',
+			mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+			buffer: await workbook(
+				[
+					row('ศูนย์ E2E ประเภทถูกต้อง', 'วัด (ศาสนสถาน)'),
+					row('ศูนย์ E2E ประเภทผิด', 'ไม่มีในรายการ')
+				],
+				[...HEADERS, typeHeader]
+			)
+		});
+
+		await expect(page.getByText('ไม่พบ "ไม่มีในรายการ" ในรายการประเภทอาคาร')).toBeVisible();
+		await page.getByRole('button', { name: 'นำเข้า 1 ศูนย์' }).click();
+		await expect(page.getByRole('dialog')).toBeVisible();
+		expect(created.bodies[0].rows).toEqual([
+			expect.objectContaining({
+				row: 1,
+				shelter: expect.objectContaining({ shelter_type: 'temple' })
+			}),
+			expect.objectContaining({ row: 2 })
+		]);
+	});
+}
 
 test('records a server error and continues importing later valid rows', async ({ page }) => {
 	await mockMasterData(page);

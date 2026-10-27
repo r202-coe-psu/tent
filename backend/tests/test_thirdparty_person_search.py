@@ -365,6 +365,23 @@ async def test_only_search_excluded_person_gives_empty_result(
     assert response.json()["result"] == []
 
 
+async def test_basic_consent_person_is_absent_once_projection_is_deleted(
+    client: AsyncClient, shelter: PublicShelter
+) -> None:
+    """PDPA FR-40 — the worker deletes a basic-mode person's projection (worker
+    `test_project_evacuee_basic_consent_deletes_projection`); partner search then skips them."""
+    basic = await _person("basic")
+    await _person("visible", status="checked_out")
+    before = await _search(client, CID)
+    assert len(before.json()["result"]) == 2
+
+    await basic.delete()
+
+    response = await _search(client, CID)
+    assert response.status_code == 200
+    assert [item["status"] for item in response.json()["result"]] == ["checked_out"]
+
+
 # 8 ────────────────────────────────────────────────────────────────────────────
 
 

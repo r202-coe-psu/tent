@@ -2,7 +2,7 @@
 title: Smart Shelter — Master Data Seed SSoT
 status: draft
 created: 2026-09-17
-updated: 2026-10-22
+updated: 2026-10-26
 language: th
 ---
 
@@ -112,7 +112,7 @@ Global seed ใช้ `enforceOneDefault()` เพื่อให้แต่ล
 | `apartment_dorm` | อะพาร์ตเมนต์/หอพัก                | Apartment / dormitory | —       |
 | `homeless`       | ไร้ที่อยู่อาศัย / ไม่มีบ้านเลขที่ | Homeless / no house number | —       |
 
-#### `shelter_type` — ประเภทศูนย์พักพิง
+#### `shelter_type` — ประเภทอาคาร
 
 | code                  | label_th    | label_en | default |
 | --------------------- | ----------- | -------- | ------- |
