@@ -36,7 +36,12 @@
 	import UnifiedRegistrationSummaryCard from './unified-registration-summary-card.svelte';
 	import UnifiedRegistrationStepper from './unified-registration-stepper.svelte';
 	import ThaidActionButton from './thaid-action-button.svelte';
+	import ThaidMemberScanDialog from './thaid-member-scan-dialog.svelte';
 	import type { ThaiDAutofillProfile } from '../../domain/thaid-profile';
+	import {
+		applyThaidAddressToHousehold,
+		applyThaidProfileToMember
+	} from '../../domain/thaid-autofill';
 	import { fetchThaidRegistrationStatus } from '$lib/api/thaid-status';
 	import { readRegistrationStickyTopPx } from './registration-sticky-offset';
 	import { firstInvalidField, focusTargetFor } from './registration-focus';
@@ -378,8 +383,10 @@
 	let residenceSuggestCheckedEmpty = $state(false);
 	/** Public lookup request failed — not the same as "no family matched". */
 	let residenceSuggestFailed = $state(false);
-	/** Stay false until GET /api/public/v1/thaid/status confirms ON (public channel only). */
+	/** Stay false until GET /api/public/v1/thaid/status confirms ON. */
 	let thaidEnabled = $state(false);
+	/** Onsite head: cross-device QR scan, so the half-filled form never leaves the page (#588). */
+	let headScanOpen = $state(false);
 
 	const enableResidenceJoin = $derived(mode === 'create' || allowHouseholdJoin);
 	let householdDecision = $state<'join' | 'create' | null>(null);
@@ -831,11 +838,13 @@
 			});
 		}
 
-		if (channel === 'public' && typeof window !== 'undefined') {
+		if (typeof window !== 'undefined') {
 			void fetchThaidRegistrationStatus().then((s) => {
 				thaidEnabled = s.enabled;
 			});
+		}
 
+		if (channel === 'public' && typeof window !== 'undefined') {
 			const params = new URLSearchParams(window.location.search);
 			const errorParam = params.get('error');
 			if (errorParam) {
@@ -1151,35 +1160,15 @@
 		);
 	}
 
-	/** ThaiD mock/real autofill: populate head member + address from profile. */
+	/** ThaiD autofill: head member (index 0) + residence; joining a family keeps its residence. */
 	function handleThaiDAutofill(profile: ThaiDAutofillProfile) {
-		// Fill head member (index 0) personal info
-		const head = members[0];
-		if (head) {
-			head.first_name = profile.first_name;
-			head.last_name = profile.last_name;
-			head.nickname = profile.nickname;
-			head.gender = profile.gender;
-			head.birth_year = profile.birth_year > 0 ? profile.birth_year : undefined;
-			head.age = profile.age > 0 ? profile.age : undefined;
-			if (profile.phone) head.phone = profile.phone;
-			head.person_id = { cardType: 'national_id', number: profile.person_id };
-			head.vulnerable_groups = profile.vulnerable_groups;
-			head.special_needs = profile.special_needs;
-			head.medical_conditions = profile.medical_conditions;
+		if (members[0]) {
+			members[0] = applyThaidProfileToMember(members[0], profile);
 			members = [...members]; // trigger reactivity
 		}
 
-		// Fill address from ThaiD — reassign object to trigger reactive cascading selects
-		household = {
-			...household,
-			address_no: profile.address.address_no || household.address_no,
-			village_no: profile.address.village_no || household.village_no,
-			province: profile.address.province || household.province,
-			district: profile.address.district || household.district,
-			subdistrict: profile.address.subdistrict || household.subdistrict,
-			postal_code: profile.address.postal_code || household.postal_code
-		};
+		// Reassign the object to trigger the reactive cascading selects
+		if (!hasJoinSelection) household = applyThaidAddressToHousehold(household, profile.address);
 
 		markDirty();
 		toast.success(t.thaidHeadFetchedToast(`${profile.first_name} ${profile.last_name}`));
@@ -1627,12 +1616,20 @@
 				description={t.sectionAddressDesc}
 				icon={Home}
 			>
-				<!-- ThaiD Action Button: Public Pre-Register -->
-				{#if channel === 'public' && thaidEnabled}
+				<!-- ThaiD: public redirects to ThaiD; onsite scans a QR without leaving the page -->
+				{#if thaidEnabled}
 					<ThaidActionButton
 						shelterCode={shelterCode || (enableUnassignedPhoto ? 'unassigned' : '')}
 						disabled={fieldsLocked}
+						onConnect={channel === 'public' ? undefined : () => (headScanOpen = true)}
 					/>
+					{#if channel !== 'public'}
+						<ThaidMemberScanDialog
+							bind:open={headScanOpen}
+							memberLabel={t.thaidScanMemberN(1)}
+							onscanned={handleThaiDAutofill}
+						/>
+					{/if}
 				{/if}
 
 				<!-- Quick Search & Merge Tool Bar (both Public and Onsite) -->
@@ -1975,7 +1972,7 @@
 				existingMembers={joinedFamilyMembers}
 				existingMemberCount={summaryExistingMemberCount}
 				primaryContactPhone={members[0]?.phone ?? null}
-				thaidEnabled={channel === 'public' && thaidEnabled}
+				{thaidEnabled}
 				onDirty={markDirty}
 			/>
 
