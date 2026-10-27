@@ -208,7 +208,6 @@
 	const targetValid = $derived(isCount(allocatedTarget, 1));
 	const TARGET_ERROR = 'จำนวนจานต้องมากกว่า 0';
 	const QTY_ERROR = 'จำนวนต้องมากกว่า 0';
-	// Portions fed to the recipe scaler: never negative, never NaN.
 	const scalingTarget = $derived(targetValid ? allocatedTarget : 0);
 	let targetTags = $state<TargetGroupTag[]>(['regular']);
 	let isEveryone = $state(false);
@@ -699,7 +698,7 @@
 	async function handleRecordService() {
 		if (!session || !activePlanId) return;
 		if (!serviceFormValid) {
-			toast.error('กรุณาตรวจสอบจำนวนผลผลิตและการแจกจ่าย — ต้องเป็นตัวเลขตั้งแต่ 0 ขึ้นไป');
+			toast.error('กรุณาระบุจำนวนผลผลิตและการแจกจ่ายเป็นตัวเลขตั้งแต่ 0 ขึ้นไป');
 			return;
 		}
 
