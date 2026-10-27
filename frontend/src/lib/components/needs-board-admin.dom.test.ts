@@ -47,6 +47,7 @@ function campaign(
 			reserved: '0',
 			onHand: n.closeState === 'reached' ? '100' : '10',
 			target: '100',
+			remaining: n.closeState === 'open' ? '90' : '0',
 			unit: 'kg',
 			closeState: n.closeState,
 			isManualClosed: !!n.manual
