@@ -1762,6 +1762,8 @@ export interface NeedAvailability {
 	qty_reserved: string;
 	qty_remaining: string;
 	is_cut_off: boolean;
+	/** `is_cut_off` split by cause — `is_cut_off === (close_state !== 'open')`. */
+	close_state: NeedCloseState;
 	status: 'open' | 'closed';
 	unit: string;
 }
@@ -1780,7 +1782,7 @@ export function deriveNeedAvailability(
 		const covered = addQty(currentOnHand, currentReserved);
 		const rem = subQty(need.qty_target, covered);
 		const remaining = qtyGte(rem, 0) ? rem : '0';
-		const isCutOff = isNeedCutOff(
+		const closeState = needCloseState(
 			need.qty_target,
 			currentOnHand,
 			currentReserved,
@@ -1795,8 +1797,9 @@ export function deriveNeedAvailability(
 			qty_reserved: currentReserved,
 			// What the board offers a donor: nothing once the need is cut off (met, or
 			// closed by hand), the same zero `computeNeeds` folds a closed need into.
-			qty_remaining: isCutOff ? '0' : remaining,
-			is_cut_off: isCutOff,
+			qty_remaining: closeState !== 'open' ? '0' : remaining,
+			is_cut_off: closeState !== 'open',
+			close_state: closeState,
 			status: need.status ?? 'open',
 			unit: need.unit
 		};
@@ -1871,8 +1874,30 @@ export function isNeedCutOff(
 	needStatus?: 'open' | 'closed',
 	campaignStatus?: 'open' | 'closed'
 ): boolean {
-	if (campaignStatus === 'closed' || needStatus === 'closed') return true;
-	return qtyGte(addQty(onHandStock, reservedQty), qtyTarget);
+	return needCloseState(qtyTarget, onHandStock, reservedQty, needStatus, campaignStatus) !== 'open';
+}
+
+/** Why a need takes no more donations — or `open` when it still does (#816/#817). */
+export type NeedCloseState = 'open' | 'reached' | 'closed';
+
+/**
+ * The one answer the needs board reads a row's badge, bar, buttons and filter from.
+ *
+ * A stored `closed` (need or campaign) always wins: the docs carry no close reason, so a
+ * closed need whose stock later passes the target is still `closed`, not `reached`.
+ * Otherwise `reached` is derived live from on-hand + reserved ≥ target — the same T-22
+ * formula the public projection uses to drop the need — so it falls back to `open` as
+ * soon as stock is distributed or a reservation is released.
+ */
+export function needCloseState(
+	qtyTarget: string | number,
+	onHandStock: string | number,
+	reservedQty: string | number,
+	needStatus?: 'open' | 'closed',
+	campaignStatus?: 'open' | 'closed'
+): NeedCloseState {
+	if (campaignStatus === 'closed' || needStatus === 'closed') return 'closed';
+	return qtyGte(addQty(onHandStock, reservedQty), qtyTarget) ? 'reached' : 'open';
 }
 
 /**
