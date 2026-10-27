@@ -7,6 +7,12 @@ import {
 	KioskThaidIdentityMismatchError,
 	saveKioskCheckInCardPhoto
 } from '$lib/features/kiosk/server/kiosk-check-in.server';
+import {
+	KioskUnassignedClaimConflictError,
+	KioskUnassignedClaimFailedError,
+	KioskUnassignedPersonMismatchError,
+	KioskUnassignedUnavailableError
+} from '$lib/features/kiosk/server/kiosk-unassigned.server';
 import { isKioskThaidCheckInAllowed } from '$lib/features/kiosk/server/kiosk-thaid-gate.server';
 import {
 	_resetSessionsForTest,
@@ -118,8 +124,89 @@ describe('POST /api/v1/kiosk/check-in', () => {
 			shelter_code: 'SH001',
 			members: [{ evacuee_id: primaryId, status: 'checked_in', qr_payload: primaryId }]
 		});
-		expect(mockCheckIn).toHaveBeenCalledWith('SH001', primaryId, [primaryId, memberId]);
+		expect(mockCheckIn).toHaveBeenCalledWith('SH001', primaryId, [primaryId, memberId], {
+			deviceId: 'test-kiosk-device',
+			lookupAt: undefined
+		});
 		expect(mockHeartbeat).toHaveBeenCalledWith('device-record-1');
+	});
+
+	it('answers 409 when a queue member was claimed elsewhere or cancelled', async () => {
+		mockCheckIn.mockRejectedValueOnce(new KioskUnassignedClaimConflictError());
+		const response = await send({ primary_evacuee_id: primaryId, evacuee_ids: [primaryId] });
+		expect(response.status).toBe(409);
+		expect(response.headers.get('cache-control')).toBe('no-store');
+		expect(await response.json()).toEqual({
+			error: {
+				code: 'KIOSK_CLAIM_CONFLICT',
+				message: 'มีสมาชิกถูกรับเข้าศูนย์อื่นแล้วหรือถูกยกเลิก กรุณาติดต่อเจ้าหน้าที่'
+			}
+		});
+	});
+
+	it('answers 409 when the smart-card citizen is not in the registration', async () => {
+		mockCheckIn.mockRejectedValueOnce(new KioskUnassignedPersonMismatchError());
+		const response = await send({ primary_evacuee_id: primaryId, evacuee_ids: [primaryId] });
+		expect(response.status).toBe(409);
+		expect(response.headers.get('cache-control')).toBe('no-store');
+		expect(await response.json()).toEqual({
+			error: {
+				code: 'KIOSK_CLAIM_PERSON_MISMATCH',
+				message: 'บัตรนี้ไม่ตรงกับผู้ลงทะเบียน กรุณาติดต่อเจ้าหน้าที่'
+			}
+		});
+	});
+
+	it('answers 503 when the central queue is unreachable', async () => {
+		mockCheckIn.mockRejectedValueOnce(new KioskUnassignedUnavailableError());
+		const response = await send({ primary_evacuee_id: primaryId, evacuee_ids: [primaryId] });
+		expect(response.status).toBe(503);
+		expect(response.headers.get('cache-control')).toBe('no-store');
+		expect(await response.json()).toEqual({
+			error: {
+				code: 'KIOSK_QUEUE_UNAVAILABLE',
+				message: 'ระบบคิวกลางไม่พร้อม กรุณาติดต่อเจ้าหน้าที่'
+			}
+		});
+	});
+
+	it('answers 503 when the queue claim could not be completed', async () => {
+		mockCheckIn.mockRejectedValueOnce(new KioskUnassignedClaimFailedError());
+		const response = await send({ primary_evacuee_id: primaryId, evacuee_ids: [primaryId] });
+		expect(response.status).toBe(503);
+		expect(response.headers.get('cache-control')).toBe('no-store');
+		expect(await response.json()).toEqual({
+			error: { code: 'KIOSK_CLAIM_FAILED', message: 'รับเข้าศูนย์ไม่สำเร็จ กรุณาลองอีกครั้ง' }
+		});
+	});
+
+	it('passes the lookup time and takes the device from the principal, never the body (CR-192)', async () => {
+		const lookupAt = new Date(Date.now() - 60_000).toISOString();
+		const response = await send({
+			primary_evacuee_id: primaryId,
+			evacuee_ids: [primaryId],
+			lookup_at: lookupAt,
+			device_id: 'forged-device',
+			channel: 'staff'
+		});
+		expect(response.status).toBe(200);
+		expect(mockCheckIn).toHaveBeenCalledWith('SH001', primaryId, [primaryId], {
+			deviceId: 'test-kiosk-device',
+			lookupAt
+		});
+	});
+
+	it('drops a malformed lookup time instead of failing the check-in', async () => {
+		const response = await send({
+			primary_evacuee_id: primaryId,
+			evacuee_ids: [primaryId],
+			lookup_at: { not: 'a string' }
+		});
+		expect(response.status).toBe(200);
+		expect(mockCheckIn).toHaveBeenCalledWith('SH001', primaryId, [primaryId], {
+			deviceId: 'test-kiosk-device',
+			lookupAt: undefined
+		});
 	});
 
 	it('rejects more than twenty IDs before writing', async () => {
@@ -165,7 +252,11 @@ describe('POST /api/v1/kiosk/check-in', () => {
 			photo
 		});
 		expect(response.status).toBe(200);
-		expect(mockCheckIn).toHaveBeenCalledWith('SH001', primaryId, [primaryId]);
+		expect(mockCheckIn).toHaveBeenCalledWith('SH001', primaryId, [primaryId], {
+			deviceId: 'test-kiosk-device',
+			lookupAt: undefined,
+			claimPersonId: citizenId
+		});
 		expect(mockSavePhoto).toHaveBeenCalledWith('SH001', 'test-kiosk-device', {
 			primaryEvacueeId: primaryId,
 			citizenId,
@@ -213,7 +304,11 @@ describe('POST /api/v1/kiosk/check-in', () => {
 		});
 		expect(response.status).toBe(200);
 		expect((await response.json()).members[0].status).toBe('checked_in');
-		expect(mockCheckIn).toHaveBeenCalledWith('SH001', primaryId, [primaryId]);
+		expect(mockCheckIn).toHaveBeenCalledWith('SH001', primaryId, [primaryId], {
+			deviceId: 'test-kiosk-device',
+			lookupAt: undefined,
+			claimPersonId: citizenId
+		});
 		expect(mockSavePhoto).not.toHaveBeenCalled();
 	});
 
@@ -370,7 +465,9 @@ describe('POST /api/v1/kiosk/check-in source thaid', () => {
 		});
 		expect(text).not.toContain(citizenId);
 		expect(mockCheckIn).toHaveBeenCalledWith('SH001', primaryId, [primaryId, memberId], {
-			requiredPrimaryCitizenId: citizenId
+			requiredPrimaryCitizenId: citizenId,
+			deviceId: 'test-kiosk-device',
+			lookupAt: undefined
 		});
 		expect(mockSavePhoto).not.toHaveBeenCalled();
 		expect(getKioskSessionForDevice(sessionId, principal.registry_id)?.status).toBe('consumed');
@@ -429,6 +526,24 @@ describe('POST /api/v1/kiosk/check-in source thaid', () => {
 		expect(mockCheckIn).toHaveBeenCalledTimes(2);
 		expect(getKioskSessionForDevice(sessionId, principal.registry_id)?.status).toBe('consumed');
 	});
+
+	it.each([
+		['claim conflict', new KioskUnassignedClaimConflictError(), 409, 'KIOSK_CLAIM_CONFLICT'],
+		['queue unavailable', new KioskUnassignedUnavailableError(), 503, 'KIOSK_QUEUE_UNAVAILABLE'],
+		['claim failed', new KioskUnassignedClaimFailedError(), 503, 'KIOSK_CLAIM_FAILED']
+	])(
+		'releases the session and maps the status when the queue claim hits %s',
+		async (_label, error, status, code) => {
+			mockCheckIn.mockRejectedValueOnce(error);
+			const sessionId = completedSession();
+
+			const response = await send(body(sessionId));
+
+			expect(response.status).toBe(status);
+			expect((await response.json()).error.code).toBe(code);
+			expect(getKioskSessionForDevice(sessionId, principal.registry_id)?.status).toBe('completed');
+		}
+	);
 
 	it('releases the session when every member write failed', async () => {
 		mockCheckIn.mockResolvedValueOnce([

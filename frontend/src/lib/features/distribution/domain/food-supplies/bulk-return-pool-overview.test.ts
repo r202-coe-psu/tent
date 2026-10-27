@@ -84,6 +84,8 @@ describe('buildBulkReturnPoolOverview', () => {
 		);
 		expect(rows[0].late_entries.map((r) => r.entry._id)).toEqual([late._id]);
 		expect(rows[0].is_empty).toBe(false);
+		// The pure builder never reads loans; the overview read fills this in.
+		expect(rows.every((r) => r.closed_loan_refs.length === 0)).toBe(true);
 	});
 
 	it('does not throw on an orphan void and lists it on the pool it names', () => {

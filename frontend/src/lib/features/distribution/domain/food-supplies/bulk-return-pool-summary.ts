@@ -16,6 +16,53 @@ export interface ResolvedBulkReturnEntry<E extends EntryLike = EntryLike> {
 	entry: E;
 	pool_id: string;
 	voided: boolean;
+	/**
+	 * Set only for an entry pinned to a closed pool's snapshot (see `buildSnapshotPins`) that has a
+	 * post-snapshot move out (`move`) or void (`void`; wins when both). The event has no effect: the
+	 * entry stays counted in its snapshot pool, not voided. Staff must reconcile it.
+	 */
+	snapshot_conflict?: 'void' | 'move';
+}
+
+export type SnapshotConflictKind = 'void' | 'move';
+
+/** Entry id -> id of the closed pool whose `entry_ids` snapshot counted it. */
+export type SnapshotPins = ReadonlyMap<string, string>;
+
+/**
+ * Snapshot pin rule: an entry id listed in a non-OPEN pool's `entry_ids` belongs to that pool
+ * permanently. Voids are only allowed on OPEN unlocked pools and a legitimate move out of a closed
+ * pool only happens for LATE entries (not in `entry_ids`), so any void/move of a pinned entry was
+ * written after the snapshot. When an id is in two pools, the earliest `submitted_at` wins.
+ */
+export function buildSnapshotPins(
+	pools: readonly (Pick<PoolLike, '_id' | 'status' | 'entry_ids'> & { submitted_at?: string })[]
+): Map<string, string> {
+	const pins = new Map<string, string>();
+	const at = new Map<string, string>();
+	for (const pool of pools) {
+		if (pool.status === 'OPEN' || !pool.entry_ids) continue;
+		const submittedAt = pool.submitted_at ?? '';
+		for (const id of pool.entry_ids) {
+			const prev = at.get(id);
+			if (prev === undefined || submittedAt < prev) {
+				pins.set(id, pool._id);
+				at.set(id, submittedAt);
+			}
+		}
+	}
+	return pins;
+}
+
+/** Entries whose move/void was written after their snapshot pool closed (no effect applied). */
+export function findSnapshotConflicts(
+	resolved: readonly ResolvedBulkReturnEntry[]
+): { entry_id: string; pool_id: string; kind: SnapshotConflictKind }[] {
+	return resolved.flatMap((r) =>
+		r.snapshot_conflict
+			? [{ entry_id: r.entry._id, pool_id: r.pool_id, kind: r.snapshot_conflict }]
+			: []
+	);
 }
 
 /**
@@ -29,11 +76,15 @@ export interface ResolvedBulkReturnEntry<E extends EntryLike = EntryLike> {
  * per entry, a void whose item_id/qty differ from the entry, or (for a non-pending entry) a void
  * whose pool_id differs from the entry's resolved pool (which also catches a move written after
  * the void). A pending entry's void pool_id is not checkable and is skipped.
+ * `pins` (see `buildSnapshotPins`): a pinned entry resolves to its snapshot pool, never voided; a
+ * differing fold pool or a void is flagged via `snapshot_conflict` (the void is still validated
+ * against the fold pool, so it never throws for a doc that was valid when written).
  */
 export function resolveBulkReturnEntries<E extends EntryLike>(
 	entries: readonly E[],
 	moves: readonly MoveLike[],
-	voids: readonly VoidLike[] = []
+	voids: readonly VoidLike[] = [],
+	pins?: SnapshotPins
 ): ResolvedBulkReturnEntry<E>[] {
 	const movesByEntry = new Map<string, MoveLike[]>();
 	for (const move of moves) {
@@ -66,6 +117,17 @@ export function resolveBulkReturnEntries<E extends EntryLike>(
 			throw new Error(
 				`Void of ${entry._id} is for ${v.pool_id} but the entry resolves to ${pool_id}`
 			);
+		}
+		const pinned = pins?.get(entry._id);
+		if (pinned !== undefined) {
+			const snapshot_conflict = v ? 'void' : pool_id !== pinned ? 'move' : undefined;
+			out.push({
+				entry,
+				pool_id: pinned,
+				voided: false,
+				...(snapshot_conflict ? { snapshot_conflict } : {})
+			});
+			continue;
 		}
 		out.push({ entry, pool_id, voided: v !== undefined });
 	}
@@ -149,10 +211,11 @@ export function summarizePoolItems(
 	entries: readonly EntryLike[],
 	moves: readonly MoveLike[],
 	poolId: string,
-	voids: readonly VoidLike[] = []
+	voids: readonly VoidLike[] = [],
+	pins?: SnapshotPins
 ): BulkReturnPoolItemSummaryRow[] {
 	const totals = new Map<string, string>();
-	for (const { entry, pool_id, voided } of resolveBulkReturnEntries(entries, moves, voids)) {
+	for (const { entry, pool_id, voided } of resolveBulkReturnEntries(entries, moves, voids, pins)) {
 		if (voided || pool_id !== poolId) continue;
 		totals.set(entry.item_id, addQty(totals.get(entry.item_id) ?? '0', entry.qty));
 	}
@@ -170,9 +233,10 @@ export function isPoolEmpty(
 	entries: readonly EntryLike[],
 	moves: readonly MoveLike[],
 	poolId: string,
-	voids: readonly VoidLike[] = []
+	voids: readonly VoidLike[] = [],
+	pins?: SnapshotPins
 ): boolean {
-	return resolveBulkReturnEntries(entries, moves, voids).every(
+	return resolveBulkReturnEntries(entries, moves, voids, pins).every(
 		({ pool_id, voided }) => voided || pool_id !== poolId
 	);
 }

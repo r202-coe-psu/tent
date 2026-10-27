@@ -16,6 +16,7 @@ import type {
 import {
 	applyBulkEntryToLog,
 	assessBulkReturnRefOnLoan,
+	buildSnapshotPins,
 	foldEntryMoves,
 	resolveBulkReturnEntries,
 	revertBulkEntryFromLog,
@@ -30,7 +31,13 @@ import {
 	type DistributionLogRepository
 } from '../../data/food-supplies';
 import type { CanonicalUnitCatalogRepository } from './canonical-unit';
-import { assertNoSkippedDocs, BulkReturnPoolStateError, WorkflowValidationError } from './errors';
+import {
+	assertNoSkippedDocs,
+	BulkReturnPoolLockTimeoutError,
+	BulkReturnPoolStateError,
+	DistributionDataIntegrityError,
+	WorkflowValidationError
+} from './errors';
 
 export interface BulkReturnPoolV3WorkflowDependencies {
 	poolRepo?: BulkReturnPoolV3Repository;
@@ -40,6 +47,8 @@ export interface BulkReturnPoolV3WorkflowDependencies {
 	/** Receive only: ledger writer (default: the shelter's operations repository). */
 	operationsRepo?: OperationsRepository;
 	endpointStore?: { active: string; isWritable: boolean };
+	/** Fence wait clock (tests inject a virtual one); default: real time + setTimeout. */
+	fenceClock?: FenceClock;
 }
 
 interface ResolvedDependencies {
@@ -48,6 +57,7 @@ interface ResolvedDependencies {
 	logRepo: DistributionLogRepository;
 	catalogRepo: CanonicalUnitCatalogRepository;
 	endpointStore: { active: string; isWritable: boolean };
+	fenceClock: FenceClock;
 }
 
 export function resolveDependencies(
@@ -63,7 +73,8 @@ export function resolveDependencies(
 			deps?.endpointStore ??
 			(typeof endpointStore !== 'undefined'
 				? { active: endpointStore.active, isWritable: endpointStore.status === 'connected' }
-				: { active: 'central', isWritable: true })
+				: { active: 'central', isWritable: true }),
+		fenceClock: deps?.fenceClock ?? realFenceClock
 	};
 }
 
@@ -85,8 +96,68 @@ export function assertOperationUlid(operationUlid: string): void {
 
 export async function requirePool(poolRepo: BulkReturnPoolV3Repository, poolId: string) {
 	const pool = await poolRepo.get(poolId);
-	if (!pool) throw new BulkReturnPoolStateError(`Bulk return pool ${poolId} was not found`);
+	if (!pool) {
+		throw new BulkReturnPoolStateError(`Bulk return pool ${poolId} was not found`, 'not_found');
+	}
 	return pool;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Fence: decide an entry's fate from the pool's FINAL state, not a transient lock
+// ---------------------------------------------------------------------------------------------
+
+/** Total time the fence waits for a submit / cancel lock to clear before giving up. */
+export const POOL_FENCE_SETTLE_TIMEOUT_MS = 8_000;
+/** Re-read delays while the pool is locked (the last one repeats until the timeout). */
+export const POOL_FENCE_BACKOFF_MS: readonly number[] = [50, 100, 200, 400, 800, 1_000];
+
+export interface FenceClock {
+	now(): number;
+	sleep(ms: number): Promise<void>;
+}
+
+const realFenceClock: FenceClock = {
+	now: () => Date.now(),
+	sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+};
+
+/**
+ * - `open`: the pool is OPEN and unlocked — apply the entry's loans.
+ * - `in_snapshot`: the pool closed (submitted) and its snapshot counted this entry — apply the
+ *   loans too (the entry is not late), but write nothing more into this pool.
+ * - `late`: the pool closed without counting this entry (or is gone) — leave the loans; the entry
+ *   is applied when it is moved into an OPEN pool.
+ */
+export type PoolFenceOutcome = 'open' | 'in_snapshot' | 'late';
+
+/**
+ * Re-reads the pool after an entry landed in it (add or move). A lock means a submit / cancel is
+ * mid-flight and may or may not count the entry in its snapshot, so the fence waits (bounded
+ * backoff) for the lock to clear and decides from the final state. Throws
+ * `BulkReturnPoolLockTimeoutError` when the lock outlives `POOL_FENCE_SETTLE_TIMEOUT_MS`.
+ */
+export async function settlePoolFence(
+	poolRepo: BulkReturnPoolV3Repository,
+	poolId: string,
+	entryId: string,
+	clock: FenceClock = realFenceClock
+): Promise<PoolFenceOutcome> {
+	const deadline = clock.now() + POOL_FENCE_SETTLE_TIMEOUT_MS;
+	for (let attempt = 0; ; attempt++) {
+		const pool = await poolRepo.get(poolId);
+		if (!pool) return 'late';
+		if (!pool.lock) {
+			if (pool.status === 'OPEN') return 'open';
+			return (pool.entry_ids ?? []).includes(entryId) ? 'in_snapshot' : 'late';
+		}
+		if (clock.now() >= deadline) {
+			throw new BulkReturnPoolLockTimeoutError(
+				`Bulk return pool ${poolId} is still locked for ${pool.lock.op} after ${POOL_FENCE_SETTLE_TIMEOUT_MS}ms; retry with the same operationUlid`
+			);
+		}
+		const delay = POOL_FENCE_BACKOFF_MS[Math.min(attempt, POOL_FENCE_BACKOFF_MS.length - 1)];
+		await clock.sleep(Math.min(delay, Math.max(0, deadline - clock.now())));
+	}
 }
 
 export function isOurLock(
@@ -214,17 +285,72 @@ export function assertEntryNotPendingSync(
 	}
 }
 
+/**
+ * Snapshot pins (entry id -> closed pool that counted it) for the pools the events reference:
+ * entry.pool_id, move from/to and void pool_id. `ownPoolId` is left out when the caller already
+ * knows it is OPEN (an OPEN pool pins nothing); omit it to include that pool too.
+ */
+export async function loadSnapshotPins(
+	poolRepo: BulkReturnPoolV3Repository,
+	events: {
+		entries: readonly Pick<BulkReturnEntry, 'pool_id'>[];
+		moves: readonly Pick<BulkReturnEntryMove, 'from_pool_id' | 'to_pool_id'>[];
+		voids: readonly { pool_id: string }[];
+	},
+	ownPoolId?: string
+): Promise<Map<string, string>> {
+	const poolIds = new Set<string>([
+		...events.entries.map((e) => e.pool_id),
+		...events.moves.flatMap((m) => [m.from_pool_id, m.to_pool_id]),
+		...events.voids.map((v) => v.pool_id)
+	]);
+	if (ownPoolId !== undefined) poolIds.delete(ownPoolId);
+	// Scoped reads (CR-193 §18): only the pools the events name, never a whole-shelter list.
+	const pools = await Promise.all([...poolIds].map((id) => poolRepo.get(id)));
+	return buildSnapshotPins(pools.filter((p): p is BulkReturnPoolV3 => p !== null));
+}
+
+/**
+ * Write-path variant of `loadSnapshotPins`: fails closed (CR-193 §19) when a referenced pool is
+ * unreadable (no doc, or not a v3 pool such as a legacy v1/v2 doc). Its pin would be lost and the
+ * write would proceed as if the entry were unpinned.
+ */
+export async function loadSnapshotPinsForWrite(
+	poolRepo: BulkReturnPoolV3Repository,
+	events: {
+		entries: readonly Pick<BulkReturnEntry, 'pool_id'>[];
+		moves: readonly Pick<BulkReturnEntryMove, 'from_pool_id' | 'to_pool_id'>[];
+		voids: readonly { pool_id: string }[];
+	},
+	ownPoolId?: string
+): Promise<Map<string, string>> {
+	const poolIds = new Set<string>([
+		...events.entries.map((e) => e.pool_id),
+		...events.moves.flatMap((m) => [m.from_pool_id, m.to_pool_id]),
+		...events.voids.map((v) => v.pool_id)
+	]);
+	if (ownPoolId !== undefined) poolIds.delete(ownPoolId);
+	const ids = [...poolIds];
+	const pools = await Promise.all(ids.map((id) => poolRepo.get(id)));
+	const unreadable = ids.filter((_, i) => pools[i] === null);
+	if (unreadable.length > 0) {
+		throw new DistributionDataIntegrityError(unreadable, 'referenced bulk return pool unreadable');
+	}
+	return buildSnapshotPins(pools.filter((p): p is BulkReturnPoolV3 => p !== null));
+}
+
 /** Non-voided entries currently in `poolId` plus the freshly fetched loans their refs point at. */
 export async function loadLivePoolEntriesWithLoans(
 	poolId: string,
 	ctx: AuthorContext,
 	deps?: BulkReturnPoolV3WorkflowDependencies
 ): Promise<{ live: BulkReturnEntry[]; loansById: Map<string, DistributionLog | null> }> {
-	const { eventRepo, logRepo } = resolveDependencies(deps, ctx);
+	const { poolRepo, eventRepo, logRepo } = resolveDependencies(deps, ctx);
 	const events = await eventRepo.listForPool(poolId);
 	// Fail closed: a skipped void/move/entry would make an entry look live, un-voided or gappy.
 	assertNoSkippedDocs(events.skipped, `bulk return pool ${poolId}`);
-	const live = resolveBulkReturnEntries(events.entries, events.moves, events.voids)
+	const pins = await loadSnapshotPins(poolRepo, events);
+	const live = resolveBulkReturnEntries(events.entries, events.moves, events.voids, pins)
 		.filter(({ pool_id, voided }) => !voided && pool_id === poolId)
 		.map(({ entry }) => entry);
 	const loanIds = [

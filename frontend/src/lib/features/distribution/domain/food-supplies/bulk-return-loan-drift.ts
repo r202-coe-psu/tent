@@ -17,7 +17,8 @@ export type BulkReturnLoanDriftReason = 'closed' | 'insufficient' | 'missing';
 export type BulkReturnRefLoan = Pick<
 	DistributionLog,
 	'_id' | 'is_returnable' | 'status' | 'qty' | 'qty_returned' | 'applied_bulk_entry_ids'
->;
+> &
+	Partial<Pick<DistributionLog, 'ticket_id'>>;
 
 export type BulkReturnRefAssessment =
 	| { status: 'already_applied' }
@@ -52,6 +53,8 @@ export interface ClosedBulkReturnLoanRef {
 	reason: BulkReturnLoanDriftReason;
 	/** Outstanding on the loan now (absent for a missing loan). */
 	outstanding?: string;
+	/** Ticket the loan belongs to (absent for a missing loan); lets the UI link to the ticket. */
+	ticket_id?: string;
 }
 
 /**
@@ -66,19 +69,48 @@ export function findClosedBulkReturnLoanRefs(
 	const out: ClosedBulkReturnLoanRef[] = [];
 	for (const entry of entries) {
 		for (const ref of entry.loan_refs) {
-			const assessment = assessBulkReturnRefOnLoan(
-				loansById.get(ref.distribution_log_id),
-				ref,
-				entry._id
-			);
+			const loan = loansById.get(ref.distribution_log_id);
+			const assessment = assessBulkReturnRefOnLoan(loan, ref, entry._id);
 			if (assessment.status !== 'skip') continue;
 			out.push({
 				entry_id: entry._id,
 				distribution_log_id: ref.distribution_log_id,
 				qty: ref.qty,
 				reason: assessment.reason,
-				...(assessment.outstanding !== undefined ? { outstanding: assessment.outstanding } : {})
+				...(assessment.outstanding !== undefined ? { outstanding: assessment.outstanding } : {}),
+				...(loan?.ticket_id ? { ticket_id: loan.ticket_id } : {})
 			});
+		}
+	}
+	return out;
+}
+
+export interface MissedBulkReturnLoanRef {
+	entry_id: string;
+	distribution_log_id: string;
+	qty: string;
+}
+
+/**
+ * Refs of the given entries that were planned but never applied although the loan can still take
+ * the whole ref (`applicable`: not listing the entry in `applied_bulk_entry_ids`). Typically an add
+ * whose fence timed out before the loans were cut. Refs that cannot be applied anymore are the
+ * closed refs (`findClosedBulkReturnLoanRefs`), not these. Entry order, then ref order, is kept.
+ */
+export function findMissedLoanRefs(
+	entries: readonly Pick<BulkReturnEntry, '_id' | 'loan_refs'>[],
+	loansById: ReadonlyMap<string, BulkReturnRefLoan | null | undefined>
+): MissedBulkReturnLoanRef[] {
+	const out: MissedBulkReturnLoanRef[] = [];
+	for (const entry of entries) {
+		for (const ref of entry.loan_refs) {
+			const assessment = assessBulkReturnRefOnLoan(
+				loansById.get(ref.distribution_log_id),
+				ref,
+				entry._id
+			);
+			if (assessment.status !== 'applicable') continue;
+			out.push({ entry_id: entry._id, distribution_log_id: ref.distribution_log_id, qty: ref.qty });
 		}
 	}
 	return out;

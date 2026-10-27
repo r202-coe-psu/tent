@@ -212,6 +212,58 @@ describe('DistributionLogRemoteRepository', () => {
 		});
 	});
 
+	describe('getMany', () => {
+		const makeLog = () =>
+			repo.create(
+				{
+					ticket_id: dummyTicketId,
+					item_id: 'item:a',
+					qty: '1',
+					recipient_type: 'evacuee',
+					recipient_id: dummyEvacueeId,
+					is_returnable: true,
+					is_override: false
+				},
+				ctx
+			);
+		const missingId = (n: number) => `distribution_log:01J${String(n).padStart(23, '0')}`;
+
+		it('returns found logs and omits ids with no doc', async () => {
+			const a = await makeLog();
+			const b = await makeLog();
+			const found = await repo.getMany([a._id, missingId(1), b._id]);
+			expect(found.items.map((l) => l._id).sort()).toEqual([a._id, b._id].sort());
+			expect(found.skipped).toEqual([]);
+		});
+
+		it('returns nothing for an empty id list', async () => {
+			expect(await repo.getMany([])).toEqual({ items: [], skipped: [] });
+		});
+
+		it('reports a malformed doc as skipped instead of throwing', async () => {
+			const good = await makeLog();
+			const badId = 'distribution_log:01J00000000000000000000098';
+			store.set(badId, { _id: badId, type: 'distribution_log', item_id: 'item:a' });
+			const found = await repo.getMany([good._id, badId]);
+			expect(found.items.map((l) => l._id)).toEqual([good._id]);
+			expect(found.skipped.map((s) => s._id)).toEqual([badId]);
+		});
+
+		it('chunks the ids into requests of at most 100 and de-duplicates them', async () => {
+			const good = await makeLog();
+			const ids = [good._id, good._id, ...Array.from({ length: 249 }, (_, i) => missingId(i + 10))];
+			const spy = vi.spyOn(couch.couchDbModule, 'allDocsByIds');
+			try {
+				const found = await repo.getMany(ids);
+				expect(found.items.map((l) => l._id)).toEqual([good._id]);
+				expect(spy).toHaveBeenCalledTimes(3);
+				for (const call of spy.mock.calls) expect(call[1].length).toBeLessThanOrEqual(100);
+			} finally {
+				spy.mockRestore();
+			}
+		});
+	});
+
 	it('records full return on returnable log', async () => {
 		const created = await repo.create(
 			{

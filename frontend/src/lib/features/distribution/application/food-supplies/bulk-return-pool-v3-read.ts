@@ -3,10 +3,12 @@ import type {
 	AppliedBulkReturnLoanRef,
 	BulkReturnPoolOverviewRow,
 	ClosedBulkReturnLoanRef,
-	DistributionLog
+	DistributionLog,
+	PoolTimelineEvent
 } from '../../domain/food-supplies';
 import {
 	buildBulkReturnPoolOverview,
+	buildPoolTimeline,
 	findAppliedBulkReturnLoanRefs,
 	findClosedBulkReturnLoanRefs
 } from '../../domain/food-supplies';
@@ -14,7 +16,9 @@ import type { SkippedDoc } from '../../data/food-supplies';
 import { WorkflowValidationError } from './errors';
 import {
 	loadLivePoolEntriesWithLoans,
+	loadSnapshotPins,
 	outstandingLoansOf,
+	requirePool,
 	resolveDependencies,
 	type BulkReturnPoolV3WorkflowDependencies
 } from './bulk-return-pool-v3-shared';
@@ -33,9 +37,34 @@ export async function getBulkReturnPoolOverview(
 	ctx: AuthorContext,
 	deps?: BulkReturnPoolV3WorkflowDependencies
 ): Promise<BulkReturnPoolOverviewRow[]> {
-	const { poolRepo, eventRepo } = resolveDependencies(deps, ctx);
+	const { poolRepo, eventRepo, logRepo } = resolveDependencies(deps, ctx);
 	const [pools, events] = await Promise.all([poolRepo.list(), eventRepo.listAll()]);
-	return buildBulkReturnPoolOverview(pools, events, { includeCancelled: options.includeCancelled });
+	const rows = buildBulkReturnPoolOverview(pools, events, {
+		includeCancelled: options.includeCancelled
+	});
+
+	// Closed-loan-mid-flight: ONE batched loan read for every live entry of every non-cancelled pool.
+	const liveByRow = rows.map((row) =>
+		row.pool.status === 'CANCELLED' ? [] : row.entries.filter((r) => !r.voided).map((r) => r.entry)
+	);
+	const loanIds = [
+		...new Set(
+			liveByRow.flatMap((live) =>
+				live.flatMap((entry) => entry.loan_refs.map((ref) => ref.distribution_log_id))
+			)
+		)
+	];
+	if (loanIds.length === 0) return rows;
+	// Skipped (malformed) loan docs are left out here, so they count as missing; never throw on read.
+	const { items } = await logRepo.getMany(loanIds);
+	const found = new Map(items.map((loan) => [loan._id, loan]));
+	const loansById = new Map<string, DistributionLog | null>(
+		loanIds.map((id) => [id, found.get(id) ?? null])
+	);
+	return rows.map((row, i) => ({
+		...row,
+		closed_loan_refs: findClosedBulkReturnLoanRefs(liveByRow[i], loansById)
+	}));
 }
 
 /**
@@ -63,6 +92,31 @@ export async function listBulkReturnPoolAppliedLoanRefs(
 ): Promise<AppliedBulkReturnLoanRef[]> {
 	const { live, loansById } = await loadLivePoolEntriesWithLoans(poolId, ctx, deps);
 	return findAppliedBulkReturnLoanRefs(live, loansById);
+}
+
+export interface BulkReturnPoolTimeline {
+	events: PoolTimelineEvent[];
+	/** Malformed docs of this pool's events the read left out (the timeline may be incomplete). */
+	skipped: SkippedDoc[];
+}
+
+/**
+ * Chronological history of one pool (opened, entries added / moved in / moved out / voided,
+ * submitted, received, cancelled). Read path: skipped docs are reported, never thrown.
+ */
+export async function getBulkReturnPoolTimeline(
+	poolId: string,
+	ctx: AuthorContext,
+	deps?: BulkReturnPoolV3WorkflowDependencies
+): Promise<BulkReturnPoolTimeline> {
+	const { poolRepo, eventRepo } = resolveDependencies(deps, ctx);
+	const [pool, events] = await Promise.all([
+		requirePool(poolRepo, poolId),
+		eventRepo.listForPool(poolId)
+	]);
+	// Lenient read-path pins: events written after a pool's snapshot are flagged `no_effect`.
+	const pins = await loadSnapshotPins(poolRepo, events);
+	return { events: buildPoolTimeline(pool, events, pins), skipped: events.skipped };
 }
 
 /** Outstanding returnable loans of a returner (all items), oldest first, so the UI can show/warn. */

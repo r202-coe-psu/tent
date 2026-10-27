@@ -1,13 +1,17 @@
 import type { BulkReturnEntry } from './bulk-return-entry';
 import type { BulkReturnEntryMove } from './bulk-return-entry-move';
 import type { BulkReturnEntryVoid } from './bulk-return-entry-void';
+import type { ClosedBulkReturnLoanRef } from './bulk-return-loan-drift';
 import type { BulkReturnPoolItemSummaryRow, BulkReturnPoolV3 } from './bulk-return-pool-v3';
 import {
+	buildSnapshotPins,
 	findLateEntries,
+	findSnapshotConflicts,
 	findUnresolvedBulkReturnRefs,
 	resolveBulkReturnEntries,
 	summarizePoolItems,
 	type ResolvedBulkReturnEntry,
+	type SnapshotConflictKind,
 	type UnresolvedBulkReturnRef
 } from './bulk-return-pool-summary';
 
@@ -34,6 +38,11 @@ export interface BulkReturnPoolOverviewRow {
 	entries: ResolvedBulkReturnEntry<BulkReturnEntry>[];
 	/** Non-voided entries stuck in this (non-OPEN) pool after its fence: move them out. */
 	late_entries: ResolvedBulkReturnEntry<BulkReturnEntry>[];
+	/**
+	 * Entries of this closed pool whose void/move was written after its snapshot: the event has no
+	 * effect (the entry stays counted here), staff must reconcile it.
+	 */
+	snapshot_conflicts: { entry_id: string; kind: SnapshotConflictKind }[];
 	/** True when no non-voided entry is in the pool (a pool may only be cancelled when empty). */
 	is_empty: boolean;
 	/**
@@ -41,6 +50,12 @@ export interface BulkReturnPoolOverviewRow {
 	 * chain has a gap (pending replication); such entries count in no pool until they resolve.
 	 */
 	unresolved_refs: UnresolvedBulkReturnRef[];
+	/**
+	 * Loan refs of the live entries that were not applied and cannot be applied now (loan closed /
+	 * short / missing). The pure builder leaves this empty: it needs the current loans, so the
+	 * overview read enriches it (one batched loan read).
+	 */
+	closed_loan_refs: ClosedBulkReturnLoanRef[];
 }
 
 export interface BulkReturnPoolOverviewOptions {
@@ -63,7 +78,8 @@ export function buildBulkReturnPoolOverview(
 	events: BulkReturnEventSet,
 	options: BulkReturnPoolOverviewOptions = {}
 ): BulkReturnPoolOverviewRow[] {
-	const resolved = resolveBulkReturnEntries(events.entries, events.moves, events.voids);
+	const pins = buildSnapshotPins(pools);
+	const resolved = resolveBulkReturnEntries(events.entries, events.moves, events.voids, pins);
 	const late = findLateEntries(resolved, pools);
 	const unresolved = findUnresolvedBulkReturnRefs(events.entries, events.moves, events.voids);
 	return [...pools]
@@ -77,11 +93,16 @@ export function buildBulkReturnPoolOverview(
 			return {
 				pool,
 				entry_count: live.length,
-				items: summarizePoolItems(events.entries, events.moves, pool._id, events.voids),
+				items: summarizePoolItems(events.entries, events.moves, pool._id, events.voids, pins),
 				entries,
+				snapshot_conflicts: findSnapshotConflicts(entries).map(({ entry_id, kind }) => ({
+					entry_id,
+					kind
+				})),
 				late_entries: late.filter((r) => r.pool_id === pool._id),
 				is_empty: live.length === 0,
-				unresolved_refs: unresolved.filter((ref) => ref.pool_ids.includes(pool._id))
+				unresolved_refs: unresolved.filter((ref) => ref.pool_ids.includes(pool._id)),
+				closed_loan_refs: []
 			};
 		});
 }

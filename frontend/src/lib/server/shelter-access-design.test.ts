@@ -11,6 +11,9 @@ import {
 } from '$lib/features/daily-sop/server';
 import { adjustReasonSchema } from '$lib/features/operations';
 import { SHELTER_CAPABILITIES } from '$lib/auth/roles';
+import { bindConsent } from '$lib/features/consent/server';
+import { createEvacuee } from '$lib/features/people/server';
+import { planPublicConsent } from '$lib/features/public-register/server';
 import {
 	buildValidateDocUpdate,
 	DAILY_SOP_ROLE_MANGO_INDEX,
@@ -284,6 +287,14 @@ describe('buildValidateDocUpdate', () => {
 		expect(KIOSK_LOOKUP_MANGO_INDEXES.every(({ name }) => referralNames.includes(name))).toBe(
 			false
 		);
+	});
+
+	it('defines the station_log lookup index for start idempotency (CR-192)', () => {
+		expect(PEOPLE_MANGO_INDEXES).toContainEqual({
+			index: { fields: ['type', 'evacuee_id', 'station', 'occurred_at'] },
+			name: 'station-log-type-evacuee-station-idx',
+			type: 'json'
+		});
 	});
 
 	it('gives every kiosk lookup index a warm-up selector on its own leading field', () => {
@@ -840,18 +851,34 @@ describe('buildValidateDocUpdate', () => {
 			/schema, date, identity/
 		);
 
-		for (const notes of [undefined, '', '   ']) {
-			const failWithoutNotes = updateRoleControl(registration, 'D-REG-01', {
-				status: 'Fail',
+		// CR-153 (2026-10-25): only Pending requires notes; omitting the field is invalid for every status.
+		const notesCases: {
+			status: 'Fail' | 'Pending';
+			notes: string | undefined;
+			accepted: boolean;
+		}[] = [
+			{ status: 'Fail', notes: '', accepted: true },
+			{ status: 'Fail', notes: '   ', accepted: true },
+			{ status: 'Fail', notes: undefined, accepted: false },
+			{ status: 'Pending', notes: '', accepted: false },
+			{ status: 'Pending', notes: '   ', accepted: false },
+			{ status: 'Pending', notes: undefined, accepted: false },
+			{ status: 'Pending', notes: 'รอผลตรวจนับ', accepted: true }
+		];
+		for (const { status, notes, accepted } of notesCases) {
+			const answered = updateRoleControl(registration, 'D-REG-01', {
+				status,
 				checked_by: 'reg',
 				checked_at: '2026-09-25T10:00:00.000Z'
 			});
-			failWithoutNotes.fail_count = 1;
-			failWithoutNotes.pass_count = 4;
-			const control = controlsOf(failWithoutNotes)[0];
+			if (status === 'Fail') answered.fail_count = 1;
+			else answered.pending_count = 1;
+			answered.pass_count = 4;
+			const control = controlsOf(answered)[0];
 			if (notes === undefined) delete control.notes;
 			else control.notes = notes;
-			expectForbidden(() => validate(failWithoutNotes, registration, REGISTRATION), /./);
+			if (accepted) expect(() => validate(answered, registration, REGISTRATION)).not.toThrow();
+			else expectForbidden(() => validate(answered, registration, REGISTRATION), /./);
 		}
 
 		expectForbidden(
@@ -1066,6 +1093,43 @@ describe('buildValidateDocUpdate', () => {
 		);
 	});
 
+	const stationLog = {
+		...envelope,
+		schema_v: 1,
+		_id: 'station_log:01J',
+		type: 'station_log',
+		evacuee_id: 'evacuee:01J',
+		station: 1,
+		action: 'start',
+		channel: 'staff',
+		occurred_at: '2026-10-25T03:00:00.000Z'
+	};
+
+	it('accepts a station_log create from registration staff (CR-192)', () => {
+		expect(() => compile()(stationLog, null, REGISTRATION)).not.toThrow();
+	});
+
+	it('rejects update of an existing station_log (append-only)', () => {
+		expectForbidden(
+			() => compile()({ ...stationLog, action: 'complete' }, stationLog, REGISTRATION),
+			/Cannot update append-only station_log/
+		);
+	});
+
+	it('rejects delete of an existing station_log (append-only)', () => {
+		expectForbidden(
+			() =>
+				compile()({ _id: stationLog._id, _rev: '1-a', _deleted: true }, stationLog, REGISTRATION),
+			/Cannot delete append-only station_log/
+		);
+	});
+
+	it('does not validate the station_log channel server-side (FR-STL-15, #850)', () => {
+		expect(() =>
+			compile()({ ...stationLog, channel: 'kiosk', device_id: 'forged' }, null, REGISTRATION)
+		).not.toThrow();
+	});
+
 	it('accepts household create from registration staff', () => {
 		expect(() =>
 			compile()(
@@ -1146,6 +1210,110 @@ describe('buildValidateDocUpdate', () => {
 					compile()(donation({ status: 'declared' }), donation({ status: 'received' }), WAREHOUSE),
 				/Cannot revert donation status back to declared/
 			);
+		});
+	});
+
+	describe('evacuee consent (PDPA consent block FR-34)', () => {
+		const COUCH_ADMIN: UserCtx = { name: 'kiosk', roles: ['_admin'] };
+		const consent = {
+			mode: 'full',
+			health: true,
+			ref: 'CS-7K3QZ9MD',
+			given_at: '2026-10-25T03:00:00.000Z',
+			given_by: 'household_member',
+			giver_evacuee_id: 'evacuee:01HEAD',
+			recorded_verbally_by: 'staff01',
+			channel: 'staff',
+			notice_version: '2026-10-25'
+		};
+		const withConsent = (over: Doc = {}, searchExcluded = false): Doc =>
+			evacuee({
+				privacy: { search_excluded: searchExcluded },
+				consent: { ...consent, ...over }
+			});
+
+		it('accepts an evacuee without consent', () => {
+			expect(() => compile()(evacuee(), null, COUCH_ADMIN)).not.toThrow();
+		});
+
+		it('accepts a valid consent from staff and from a couch admin', () => {
+			expect(() => compile()(withConsent(), evacuee(), REGISTRATION)).not.toThrow();
+			expect(() => compile()(withConsent(), null, COUCH_ADMIN)).not.toThrow();
+		});
+
+		it('checks consent before the couch admin bypass', () => {
+			expectForbidden(
+				() => compile()(withConsent({ mode: 'partial' }), null, COUCH_ADMIN),
+				/consent mode is invalid/
+			);
+		});
+
+		it('rejects a consent missing a required key', () => {
+			const doc = withConsent();
+			delete (doc.consent as Doc).notice_version;
+			expectForbidden(() => compile()(doc, null, COUCH_ADMIN), /consent missing notice_version/);
+		});
+
+		it('rejects basic mode with health consent', () => {
+			expectForbidden(
+				() => compile()(withConsent({ mode: 'basic', health: true }, true), null, COUCH_ADMIN),
+				/basic mode cannot have health consent/
+			);
+		});
+
+		it('requires basic mode to be excluded from search (FR-31)', () => {
+			expectForbidden(
+				() => compile()(withConsent({ mode: 'basic', health: false }), null, COUCH_ADMIN),
+				/basic mode requires privacy.search_excluded/
+			);
+			expect(() =>
+				compile()(withConsent({ mode: 'basic', health: false }, true), null, COUCH_ADMIN)
+			).not.toThrow();
+		});
+
+		it('rejects a giver id on a self consent', () => {
+			expectForbidden(
+				() => compile()(withConsent({ given_by: 'self' }), null, COUCH_ADMIN),
+				/giver_evacuee_id must be null for self/
+			);
+		});
+
+		it('rejects a malformed ref', () => {
+			expectForbidden(
+				() => compile()(withConsent({ ref: 'CS-123456' }), null, COUCH_ADMIN),
+				/consent ref is invalid/
+			);
+		});
+
+		it('accepts a full-mode public pre-register evacuee from the roleless public writer', () => {
+			const [plan] = planPublicConsent({
+				consent: {
+					mode: 'full',
+					health: true,
+					search_visible: true,
+					guardian_for: [],
+					verbal: false,
+					ref: 'CS-7K3QZ9MD',
+					given_at: '2026-10-25T03:00:00.000Z',
+					notice_version: '2026-10-25'
+				},
+				consent_member_keys: ['m0']
+			});
+			const doc = createEvacuee(
+				{
+					first_name: 'สมชาย',
+					last_name: 'ใจดี',
+					gender: 'male',
+					phone: null,
+					household_id: 'household:01HH',
+					status: 'pre_registered',
+					registered_via: 'web'
+				},
+				{ shelterCode: 'SH001', createdBy: 'public' },
+				bindConsent(plan, 'evacuee:01HEAD')
+			);
+			const PUBLIC_WRITER: UserCtx = { name: 'public_writer', roles: [] };
+			expect(() => compile()(doc as unknown as Doc, null, PUBLIC_WRITER)).not.toThrow();
 		});
 	});
 

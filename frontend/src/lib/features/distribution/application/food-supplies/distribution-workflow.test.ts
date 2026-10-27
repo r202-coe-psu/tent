@@ -120,6 +120,11 @@ class InMemoryLogRepository implements DistributionLogRepository {
 		return this.logs.get(logId) ?? null;
 	}
 
+	async getMany(ids: readonly string[]) {
+		const items = ids.flatMap((id) => this.logs.get(id) ?? []);
+		return { items, skipped: [] };
+	}
+
 	/** Malformed docs `listWithSkipped` reports as matching the filter (the repo does the matching). */
 	skipped: { _id: string; type: string; reason: string }[] = [];
 

@@ -20,7 +20,7 @@
 	onValueChange={(value) => onSelectGroup(value as TicketWorkflowGroupId)}
 >
 	<Tabs.List
-		class="h-auto w-full justify-start gap-1.5 overflow-x-auto rounded-none border-b border-slate-200/80 bg-transparent p-0 pb-px"
+		class="h-auto w-full justify-start gap-1.5 overflow-x-auto rounded-none border-b border-slate-200/80 bg-transparent p-0 pb-px *:first:ml-auto *:last:mr-auto"
 	>
 		{#each WORKFLOW_GROUPS as group (group.id)}
 			{@const isActive = activeGroup === group.id}

@@ -3,18 +3,20 @@ id: CR-193
 title: CR-193 — ออกแบบ bulk_return_pool ใหม่เป็น "กองรวมตอนรับของคืน" (pool header + entry/move/void event log)
 status: approved
 date: 2026-10-22
-updated: 2026-10-25
+updated: 2026-10-27
 requested_by: feedback ระบบคลัง & เบิกของ ข้อ 4–5 (GitHub #657, #658)
 decided_by: kong (decisions 2026-10-22 — https://github.com/r202-coe-psu/tent/pull/768#issuecomment-6339918664; approved 2026-10-25)
 layer: stable
 affects:
+  - frontend/src/lib/features/operations/ui/ledger/* (ลิงก์แถว receive ไปกอง — ข้อ 29) · localStorage `tent.distribution.lastBulkReturnPool:*` / `myPoolPoint:*` (ข้อ 25, 27)
   - docs/changes/03-C-supply/CR-134-bulk-return-claim-recovery.md (amended — pool v2 / claim flow / ข้อห้าม stock_ledger ตอนสร้าง pool)
   - docs/data/schema.md §2.30 (distribution_log schema_v 1 → 2), §2.31 (bulk_return_pool schema_v 3 — shape เปลี่ยนก่อนปล่อย), §2.31.1 / §2.31.2 / §2.31.3 (ใหม่), §2.32 (legacy), §7, §8
   - schema_v — distribution_log 1 → 2; bulk_return_pool 2 → 3; doc type ใหม่ bulk_return_entry v1, bulk_return_entry_move v1, bulk_return_entry_void v1 (append-only)
   - frontend/src/lib/server/shelter-access-design.ts (VDU + Mango index `BULK_RETURN_ENTRY_MANGO_INDEXES`)
-  - frontend/src/lib/features/shelters/domain/views.ts + view-manifest.ts (view `bulk_return_pool_item_totals`, `_design/app` v5)
+  - frontend/src/lib/features/shelters/domain/views.ts + view-manifest.ts (view `bulk_return_pool_item_totals`, `_design/app` v6)
   - frontend/src/lib/server/shelters.admin.ts / shelters/server/provisioner.ts / scripts/redeploy-access.ts / scripts/seed/registry-shelters.ts (deploy index)
   - frontend/src/lib/features/distribution/domain/food-supplies (bulk-return-pool / entry / entry-move / entry-void) และ distribution-log
+  - (ข้อ 32–34 — kong approve 2026-10-27) docs/data/schema.md §2.31 invariants ข้อ 2–3 — แก้ให้ตรงแล้ว · application `bulk-return-pool-v3-{shared,void,move,lifecycle,add-entry,read,missed-loans}.ts` · domain `bulk-return-pool-{summary,overview,timeline}.ts` · UI หน้ากอง / คิวงาน / ฟอร์มรับของ / timeline · ข้อ 35 เป็นคำถามนอกขอบเขต PR นี้ ไม่มีโค้ด
 ---
 
 # CR-193 — ออกแบบ bulk_return_pool ใหม่เป็นกองรวมตอนรับของคืน
@@ -27,7 +29,11 @@ affects:
 >   เป็น event doc แบบ append-only, สรุปยอดต่อ `item_id` (`items_summary`) และรายการ entry (`entry_ids`) ถูก snapshot ลง pool ตอน submit
 > - **เอกสารใหม่:** `bulk_return_pool` schema_v **3**, `bulk_return_entry` v1, `bulk_return_entry_move` v1, `bulk_return_entry_void` v1;
 >   `distribution_log` schema_v **1 → 2** (`applied_bulk_entry_ids`) — Mango index `(type, pool_id)` + view `bulk_return_pool_item_totals` (`_sum`)
-> - **ตัดสินครบแล้ว** โดย kong เมื่อ 2026-10-22 และตัดสินเพิ่ม 2026-10-25 (ดูหัวข้อ Decisions ข้อ 1, 15–17) — ไม่มี open question เหลือ
+> - **ตัดสินครบแล้ว** โดย kong เมื่อ 2026-10-22 และตัดสินเพิ่ม 2026-10-25 (ดูหัวข้อ Decisions ข้อ 1, 15–17) — ข้อ 18–31 เป็นการตัดสินระหว่าง implement ระยะ 0–2 — คำถามเดิมของข้อ 19, 21, 22, 24, 27 ตัดสินโดยผู้เสนอ PR (Nekokun2004, 2026-10-27) ตามที่ implement
+> - **เสนอเพิ่ม 2026-10-26 — kong approve 2026-10-27:** ข้อ 32–34 แก้ race ตอนเก็บเข้าคลัง — fence ตัดสินจากสถานะสุดท้ายของกอง (ข้อ 32),
+>   entry ที่อยู่ใน `entry_ids` ของกองที่ปิดแล้วถูกตรึงไว้กับกองนั้น void/ย้ายที่ลงหลัง snapshot ไม่มีผลและเตือนให้ staff ตรวจ (ข้อ 33),
+>   และทางซ่อมยอดยืมที่ไม่ถูกตัด (ข้อ 34) — แก้ข้อความข้อ 5, 6, D1 และ D3
+> - **คำถามแยกให้ kong (ข้อ 35):** การเปิด loan กลับเมื่อพบภายหลังว่าของในกองที่ปิดแล้วไม่ได้คืนจริง — ยังไม่มีทางทำ อยู่นอกขอบเขต PR นี้ รอ CR/issue แยก (ยังไม่ตัดสิน)
 > - **Deploy:** #658 + #659 + #660 merge ใน PR เดียวและ redeploy ครั้งเดียว (ดู Rollout)
 > - **CR-121 ไม่ได้รับผลกระทบ** (ไม่มีตั๋วคืนแยก — ดู Decisions ข้อ 7)
 > - **อ้างอิง:** [#657](https://github.com/r202-coe-psu/tent/issues/657) (epic),
@@ -81,13 +87,17 @@ feedback ระบบคลัง & เบิกของ ข้อ 4–5: ข�
 **Advisory lock protocol** (VDU อ่านเอกสารอื่นไม่ได้ จึงเป็น advisory ที่ฝั่ง application):
 
 1. ผู้จะ submit/cancel ตั้ง `lock` ผ่าน CAS บน pool (`_rev`) — แพ้ CAS = มีคนอื่นถือ lock
-2. อ่านยอดจาก view `bulk_return_pool_item_totals` (group_level 1 → จำนวน entry; 2 → ต่อ item)
+2. ~~อ่านยอดจาก view `bulk_return_pool_item_totals` (group_level 1 → จำนวน entry; 2 → ต่อ item)~~
+   **(แก้ 2026-10-26)** submit / cancel **ไม่ได้อ่าน view** — อ่าน event ของกองนั้น (`listForPool`: entry ที่สร้างในกอง ∪ entry ที่เคยย้ายเข้า
+   พร้อม move chain และ void เต็มของแต่ละ entry) แล้ว fold ด้วย `summarizePoolItems` / `poolSnapshotEntryIds` / `isPoolEmpty` (ใช้กติกาข้อ 33)
+   · view `bulk_return_pool_item_totals` ยังนิยามอยู่ใน `_design/app` แต่ไม่มีโค้ดส่วนใดเรียกใช้ และไม่รู้จักกติกาข้อ 33
 3. snapshot → เขียน `items_summary` + `entry_ids` + `status: SUBMITTED` + ล้าง `lock` ใน update เดียว (submit) /
    ตรวจ "ว่าง" แล้วเขียน `status: CANCELLED` + `cancelled_at/by` + ล้าง `lock` (cancel)
    ลำดับ submit ใน workflow (#660): ตั้ง lock ก่อนเสมอ (lock `SUBMIT` ของ op เดียวกัน = replay, ของ op อื่น = ชน); ถ้า entry สุทธิเป็น 0 ปล่อย lock
    แล้วปฏิเสธ (ให้ยกเลิกกองแทน); pool ที่ `SUBMITTED` แล้วคืนค่าเดิม; submit ไม่เขียน `stock_ledger`
 4. ผู้เขียน entry/move/void **ต้องเรียก `canAppendToPool(pool)`** (`status === 'OPEN'` และไม่มี `lock`)
    ก่อนเขียน แล้ว**อ่าน pool ซ้ำหลังเขียน entry ก่อนอัปเดต loan** (แบบ `fenceReturnReservation`) — เป็น advisory ไม่ใช่ guarantee (ดู Decisions ข้อ 5)
+   · **(kong approve 2026-10-27)** การอ่านซ้ำรอ `lock` หายแล้วตัดสินจากสถานะสุดท้าย (ข้อ 32) และ void / ย้ายออกอ่านกองต้นทางซ้ำหลังเขียนด้วย (ข้อ 33)
 
 ### D2 — `loan_refs[]` และลำดับการเขียน
 
@@ -105,6 +115,8 @@ feedback ระบบคลัง & เบิกของ ข้อ 4–5: ข�
   (idempotent: ref ที่ apply แล้วเป็น no-op); loan ที่ปิด/ไม่พบ หรือยอดค้าง < `ref.qty` ข้าม ref นั้นตามข้อ 15.
   ถ้า pool ปลายทางไม่รับต่อแล้ว (ไม่ใช่ `OPEN` หรือมี `lock`) ให้รายงานว่า "มาช้า" และ **ไม่แตะ loan ใด ๆ**.
   นี่คือทางที่ entry มาช้าตัด loan ได้ในที่สุด (ไม่งั้น loan ค้างและคืนซ้ำได้)
+- **(kong approve 2026-10-27)** ก่อน fence ฝั่งปลายทาง ต้องอ่านกอง**ต้นทาง**ซ้ำ (ข้อ 32) — ถ้ากองต้นทางปิดแล้วและ snapshot นับ entry นี้ไว้
+  การย้ายนั้นไม่มีผล ไม่แตะ loan และเตือนให้ staff ตรวจ (ข้อ 33)
 - **id scheme:** `bulk_return_entry_move:{entryULID}:{seq}` โดย `seq` = เลขลำดับการย้ายของ entry นั้น
   (1-based, zero-pad 4 หลักให้เรียงตาม `_id` ได้) → การย้ายครั้งที่ n ของ entry เดียวกันสองคำสั่งพร้อมกัน
   จะเขียน `_id` เดียวกัน → **ตัวที่สองชน HTTP 409 แทนที่จะนับซ้ำ**; ผู้แพ้ต้องอ่านสถานะใหม่ (fold) แล้วตัดสินใจเอง
@@ -133,7 +145,7 @@ feedback ระบบคลัง & เบิกของ ข้อ 4–5: ข�
   - `group_level=1` → ยอด/จำนวน entry ต่อ pool (count 0 = ว่าง), `2` → ต่อ item, `3` → ต่อ entry (net 1 = อยู่ใน pool, 0 = ย้ายออกหรือ void)
   - `qty` ใน map = `parseFloat` ของ qty string (ใช้เพื่อ advisory/ตรวจว่างเท่านั้น; `items_summary` ที่ snapshot
     ใช้ decimal helper ของ repo)
-  - `_design/app` เวอร์ชัน 5 (v4 ถูกใช้โดย CR-170 amend บน develop ก่อน branch นี้ merge)
+  - `_design/app` เวอร์ชัน 6 (v4 ถูกใช้โดย CR-170 amend และ v5 โดย CR-192 บน develop ก่อน branch นี้ merge)
 
 ## Decisions
 
@@ -168,9 +180,11 @@ D1–D5 ข้างบนยังมีผลตามเดิม (ปรั�
 
 ### 5. entry/move ที่มาช้าหลังล็อก — fence แบบ `fenceReturnReservation`
 
-- snapshot `entry_ids` ตอน submit; ผู้เขียน entry อ่าน pool ซ้ำหลังเขียน entry และก่อนอัปเดต loan — ถ้าไม่ใช่ `OPEN` หรือมี `lock` ให้หยุด
+- snapshot `entry_ids` ตอน submit; ผู้เขียน entry อ่าน pool ซ้ำหลังเขียน entry และก่อนอัปเดต loan
+  ~~— ถ้าไม่ใช่ `OPEN` หรือมี `lock` ให้หยุด~~ **(แก้ 2026-10-26 — kong approve 2026-10-27)** ถ้ามี `lock` ให้รอจนหายแล้วตัดสินจากสถานะสุดท้ายตามข้อ 32
 - entry ที่มาช้า (ไม่อยู่ใน `entry_ids` ของ pool ที่ไม่ใช่ `OPEN`) แสดงใน UI เป็น "ค้าง" ให้ย้ายไป pool `OPEN` อื่น — domain: `findLateEntries` / `isLateEntry`
-- ช่องแข่งระดับเสี้ยววินาทีที่เหลือยอมรับ — ตรวจพบภายหลังได้จาก snapshot `entry_ids` และส่วนต่างตอนตรวจรับ
+- ~~ช่องแข่งระดับเสี้ยววินาทีที่เหลือยอมรับ — ตรวจพบภายหลังได้จาก snapshot `entry_ids` และส่วนต่างตอนตรวจรับ~~
+  **(แก้ 2026-10-26 — kong approve 2026-10-27)** แทนด้วยข้อ 32–34: การอ่านซ้ำไม่หยุดทันทีที่เจอ `lock` แต่รอจนตัดสินได้
 
 ### 6. void entry
 
@@ -179,6 +193,8 @@ D1–D5 ข้างบนยังมีผลตามเดิม (ปรั�
 - void **เปิด loan กลับ:** ลด `qty_returned` และถอด entry ออกจาก `applied_bulk_entry_ids` — VDU ของ `distribution_log` ต้องอนุญาตย้อนจาก
   `returned`/`partially_returned` กลับเป็น `partially_returned`/`active` สำหรับ path นี้ (ดูข้อ 11)
 - view `bulk_return_pool_item_totals` หักยอด void ออก (`emit(..., [-qty, -1])`)
+- **(kong approve 2026-10-27)** ข้อยกเว้น: void ที่ลงหลังจาก entry ถูกนับใน `entry_ids` ของกองที่ส่งแล้ว**ไม่มีผล** — ไม่เปิด loan กลับ
+  และ entry ยังนับในกองนั้น (ข้อ 33)
 
 ### 7. ไม่มีตั๋วคืนแยก — ตรวจรับที่ pool
 
@@ -256,6 +272,204 @@ D1–D5 ข้างบนยังมีผลตามเดิม (ปรั�
 - void entry แล้ว loan กลับเป็น `active` แต่คง `clear_reason: bulk_dropoff` → void log นั้นภายหลังไม่ได้
 - `warehouse_staff` / `supply_coordinator` แก้ loan ผ่าน path ของกองได้ (ตามสิทธิ์เพิ่ม entry ในข้อ 1)
 
+### หมายเหตุสำหรับข้อ 18–31
+
+ข้อ 18–31 เป็นสิ่งที่ตัดสินระหว่าง implement หลัง CR นี้ approve (2026-10-25 → 2026-10-26) อยู่ใน PR #768 เดียวกัน
+เป็นงาน UI/การอ่านข้อมูลเกือบทั้งหมด **ไม่เพิ่ม field ไม่เปลี่ยน shape ไม่ bump `schema_v`** และไม่เปลี่ยนกฎ VDU
+ยกเว้น Mango index ใหม่ (ข้อ 18) — คำถามที่เคยเปิดไว้ตัดสินแล้วโดยผู้เสนอ PR (Nekokun2004, 2026-10-27) · ข้อเสนอ "แถวปรับยอดอ้างกอง" แยกเป็น CR draft ของตัวเอง ไม่อยู่ในนี้
+
+#### ระยะ 0 — หนี้เทคนิค
+
+### 18. อ่านข้อมูลเฉพาะกองหรือ entry ที่เกี่ยว (เพิ่ม 2026-10-25)
+
+- **ตัดสิน:** move/void อ่านเฉพาะ entry นั้น (entry + move chain ตาม prefix ของ id + void) · ยกเลิกกอง / ส่งกอง / อ่าน loan refs อ่านเฉพาะกองนั้น
+  (Mango `(type, pool_id)` ∪ `(type, to_pool_id)` แล้วดึง move chain/void ของ entry ที่เจอ) · overview ของบอร์ดยังอ่านทั้งศูนย์
+- **เหตุผล:** เดิมอ่าน event ทั้งศูนย์ทุกครั้ง ช้าลงตามจำนวนกอง และเอกสารผิดตัวเดียวทำให้ทุกกองใช้งานไม่ได้
+  overview ต้องรู้รายการค้าง/รอซิงก์/ข้อมูลผิดซึ่ง view `bulk_return_pool_item_totals` ให้ไม่ได้ จึงยังไม่ใช้ view
+- **encode:** Mango index ใหม่ `bulk-return-move-type-to-pool-idx` `['type','to_pool_id']` — ศูนย์ที่มีอยู่ต้อง `pnpm redeploy:access` หลัง merge
+  (ก่อน redeploy ผลถูกแต่ช้า)
+
+### 19. เอกสารที่ parse ไม่ผ่าน (เพิ่ม 2026-10-25)
+
+- **ตัดสิน:** การอ่านแบบรายการข้ามเอกสารที่ผิดรูปแทนการ throw ทั้งชุด (`distribution_log`, กอง, entry/move/void) และแสดงให้ผู้ใช้เห็น (ป้ายบนบอร์ดและหน้ากอง)
+  · **ทางที่เขียนหรือคำนวณยอด** (เช็กแจกซ้ำ, เช็กจำนวนในมือ, ปิดกะ, จัดสรรยอดยืม, ย้าย/void/ส่ง/ยกเลิกกอง) **หยุดพร้อมข้อความระบุ id**
+  เมื่อเอกสารผิดรูปนั้นเกี่ยวกับคำขอ — เอกสารผิดรูปที่ไม่เกี่ยวไม่บล็อก
+- **เหตุผล:** ข้ามเงียบ ๆ ในทางเขียนอาจทำให้ผลที่บันทึกผิด (แจกซ้ำ, ยอดปิดกะผิด)
+- **ผลข้างเคียง:** หน้าสรุปปิดกะแสดง error แทนตัวเลขเมื่อมี `distribution_log` ผิดรูปของตั๋วนั้น
+- **ตัดสิน (ผู้เสนอ PR — Nekokun2004, 2026-10-27):** ใช้ตามที่ implement — ทางอ่านข้ามเอกสารผิดรูปและแสดงป้าย ส่วนทางเขียน/คำนวณยอดหยุดพร้อมระบุ id
+
+### 20. แยกยอดรายการค้างบนการ์ดกอง (เพิ่ม 2026-10-25)
+
+- **ตัดสิน:** การ์ดยังแสดงยอดรวมสด (รวมรายการค้าง) เป็นตัวเลขหลัก แต่มีป้าย "ค้าง k · ไม่รวมในยอดที่เก็บเข้าคลัง" และบอกยอดค้างต่อชนิด
+- **เหตุผล:** ไม่เปลี่ยนแหล่งข้อมูล แต่ไม่ให้ตัวเลขรวมทำให้เข้าใจผิด
+
+#### ระยะ 1 — ค้นหาและกรอง
+
+### 21. ตัวกรองบนบอร์ดกอง (เพิ่ม 2026-10-26)
+
+- **ตัดสิน:** ปุ่มกรองสถานะพร้อมจำนวน (เปิดรับ/ส่งแล้ว/ตรวจรับแล้ว), เลือกชนิดของ, เลือกจุดเก็บ (แสดงเมื่อมี ≥ 2 ตัวเลือก),
+  สวิตช์ "ต้องจัดการ" (ข้อ 23), และ**ซ่อนกองที่ตรวจรับเกิน 7 วันเป็นค่าเริ่มต้น** (`RECEIVED_POOL_HIDE_AFTER_DAYS`) แบบเดียวกับกองที่ยกเลิก
+- **เหตุผล:** ข้อมูลอยู่ใน overview แล้ว ไม่ต้อง query เพิ่ม · ใน repo ไม่มีค่าคงที่แบบนี้ เลือก 7 ให้ตรง `EXPIRING_SOON_DAYS = 7`
+- **ตัดสิน (ผู้เสนอ PR — Nekokun2004, 2026-10-27):** ใช้ตามที่ implement — ซ่อนกองที่ตรวจรับเกิน 7 วันเป็นค่าเริ่มต้น (`RECEIVED_POOL_HIDE_AFTER_DAYS`, ตรง `EXPIRING_SOON_DAYS = 7`)
+
+### 22. ตัวกรองหน้าใบเบิก (เพิ่ม 2026-10-26)
+
+- **ตัดสิน:** ช่วงวันที่**สร้าง** · เลือกหลายสถานะ (จำกัดในแท็บกลุ่มที่เลือก) · ปุ่ม "ต้องติดตาม" ตามบทบาท
+  (คลัง: รอจัด, พร้อมส่ง, รอตรวจรับคืน, ตรวจรับคืนแล้ว · หน้างาน: กำลังนำส่ง) · เก็บตัวกรองทั้งหมดใน URL · เปลี่ยนตัวกรองแล้วกลับหน้า 1
+- **เหตุผล:** ใบเบิกไม่มี timestamp ตอนปล่อยของ (มีแค่ `dispatched_by`/`updated_at`) จึงกรองวันที่ปล่อยไม่ได้ ·
+  สถานะที่ "ต้องติดตาม" อ้างตามปุ่มที่ `TicketActionPanel` แสดงให้แต่ละบทบาท
+- **ตัดสิน (ผู้เสนอ PR — Nekokun2004, 2026-10-27):** ไม่ทำตัวกรองวันที่ปล่อยของใน PR นี้ (ต้องเพิ่ม field ใหม่ = CR แยก) — คงตัวกรองตามวันที่สร้างตามที่ implement
+
+### 23. "ต้องจัดการ" ใน overview รวมยอดยืมที่ถูกปิดกลางทาง (เพิ่ม 2026-10-26)
+
+- **ตัดสิน:** overview ดึง loan ที่ทุกกองอ้างด้วยการอ่าน**ครั้งเดียว** (`DistributionLogRepository.getMany`, `allDocsByIds` ชุดละ 100)
+  แล้วคำนวณ `closed_loan_refs` ต่อกองด้วยกฎเดียวกับข้อ 15 · "ต้องจัดการ" = มีรายการค้าง หรือรอซิงก์ หรือยอดยืมถูกปิดกลางทาง
+  · การเปลี่ยนแปลงของ `distribution_log` รีเฟรช overview
+- **เหตุผล:** ไม่ยิง query ทีละกอง · `closed_loan_refs` เป็นค่าที่คำนวณตอนอ่าน ไม่ใช่ field ที่บันทึก
+- **หมายเหตุ:** loan ที่ผิดรูปนับเป็น "หาไม่เจอ" จึงขึ้นป้ายเตือน (ระมัดระวังไว้ก่อน ไม่ throw)
+
+### 24. ค้นหาจากชื่อผู้คืน (เพิ่ม 2026-10-26)
+
+- **ตัดสิน:** บอร์ดโหลดรายชื่อผู้พักพิงและอาสาของทั้งศูนย์ฝั่ง client (`useEvacuees` / `useVolunteers`) แล้วจับคู่ `returner_id` กับชื่อ
+  · ช่องค้นหาค้นได้ทั้งชื่อกองและชื่อผู้คืน (ไม่นับรายการที่ถูกยกเลิก) · หน้ากองแสดงชื่อ · หาชื่อไม่เจอแสดง id แบบย่อเหมือนเดิม
+- **เหตุผล:** เลือกวิธีที่ง่ายและถูกต้องที่สุด ยอมรับต้นทุนการโหลดรายชื่อทั้งศูนย์แทนการสร้าง lookup ใหม่
+- **ตัดสิน (ผู้เสนอ PR — Nekokun2004, 2026-10-27):** ใช้ตามที่ implement — โหลดรายชื่อผู้พักพิงและอาสาทั้งศูนย์ฝั่ง client แล้วจับคู่ชื่อ ยอมรับต้นทุนการโหลด
+
+### 25. จำกองล่าสุดที่ใช้ (เพิ่ม 2026-10-26)
+
+- **ตัดสิน:** ฟอร์มรับของเข้ากองเลือกกองล่าสุดที่ใช้บนเครื่องนี้ของศูนย์นี้ให้ (ถ้ายังเปิดรับ) · เก็บใน localStorage
+  `tent.distribution.lastBulkReturnPool:{shelter}` · ไม่มี field ใหม่
+- **เหตุผล:** เส้นทางรับของเข้ากองไม่มี id ของเคาน์เตอร์ จึงจำต่อเครื่องและศูนย์
+
+#### ระยะ 2 — คิวงาน, ไทม์ไลน์, QR
+
+### 26. คิวงานตามบทบาท (เพิ่ม 2026-10-26)
+
+- **ตัดสิน:** บนบอร์ด (หลังบ้านและหน้างาน) จากข้อมูล overview เดิม ไม่ query เพิ่ม
+  - คลัง / supply coordinator: "รอคลังตรวจรับ" — กองที่ส่งแล้ว เรียงเก่าสุดก่อน พร้อม "รอมาแล้ว n ชม./n วัน"
+  - shelter manager / system admin: รายการข้างบน + "ต้องจัดการ" (ข้อ 23)
+  - distribution staff: "กองที่จุดของฉัน" (ข้อ 27)
+  - ข้อความทั้งหมดอยู่ใน `WORK_QUEUE_COPY` (ยืนยันแล้ว)
+
+### 27. "จุดของฉัน" สำหรับ distribution staff (เพิ่ม 2026-10-26)
+
+- **ตัดสิน:** เจ้าหน้าที่เลือกจุดของตัวเองจาก**จุดเก็บของของศูนย์** (หรือ "ไม่ระบุจุดที่ตั้ง") จำใน localStorage ต่อเครื่องและศูนย์
+  (`tent.distribution.myPoolPoint:{shelter}`) แล้วคิวแสดงกองที่เปิดรับที่จุดนั้น (`location_storage_point_id`) · ไม่มี field ใหม่ ไม่มี CR
+- **เหตุผล:** session ของเจ้าหน้าที่ไม่มีจุดแจก, กองมีแค่จุดเก็บของ, และไม่มีการจับคู่จุดเก็บกับจุดแจก (จุดแจกเป็นแค่ `destination_location` ของใบเบิก)
+- **ตัดสิน (ผู้เสนอ PR — Nekokun2004, 2026-10-27):** ใช้ตามที่ implement — ใช้จุดเก็บของของศูนย์เป็น "จุดของฉัน" จำใน localStorage ไม่มี field ใหม่
+
+### 28. ไทม์ไลน์ของกอง (เพิ่ม 2026-10-26)
+
+- **ตัดสิน:** รายการ "ประวัติของกอง (n)" แบบพับไว้ในหน้ากอง: เปิดกอง, รับของเข้ากอง, ย้ายเข้า/ออก, ยกเลิกรายการ, ส่งเข้าคลัง, ตรวจรับ, ยกเลิกกอง
+  เรียงตามเวลา ไม่จัดกลุ่ม (ยืนยันแล้ว) · อ่านด้วย `listForPool`
+- **ข้อจำกัด:** การแก้ชื่อ/จุดที่ตั้ง/หมายเหตุของกองไม่แสดง เพราะไม่ได้บันทึกประวัติ (มีแค่ `updated_at`) — ถ้าต้องการต้องเพิ่ม field = CR
+
+### 29. ลิงก์ (เพิ่ม 2026-10-26)
+
+- **ตัดสิน:**
+  - deep link ไปกอง: `/back-office/distribution?view=bulk_pools&pool=<id>`
+  - แถว `stock_ledger` `receive` ที่ `ref_id` เป็นกอง ลิงก์ไปกอง (ข้อความลิงก์ยังเป็น id ดิบ — ปรับพร้อม #811)
+  - คำเตือนยอดยืมถูกปิดกลางทาง ลิงก์ไปหน้าใบเบิกของ loan (`?ticketId=`) แสดงเฉพาะผู้ที่ผ่าน guard ของหน้านั้น
+    (system admin, shelter manager, warehouse staff, supply coordinator) · ไม่สร้างหน้า loan ใหม่ (ยืนยันแล้ว)
+- **ไม่อยู่ใน CR นี้:** ลิงก์แถว `adjust` ไปกอง — ปัจจุบัน `adjust` ต้อง `ref_id = null` (CR-055 R2) จึงแยกเป็น CR draft ของตัวเอง
+
+### 30. QR ต่อกอง (เพิ่ม 2026-10-26)
+
+- **ตัดสิน:** พิมพ์ QR ของกองได้ (payload = `_id` ของกอง `bulk_return_pool:<ULID>` ไม่มี field ใหม่) · ฟอร์มรับของเข้ากองสแกน QR กองแทนการเลือกจาก dropdown
+  · ตัวสแกนผู้คืนปฏิเสธ QR กองพร้อมข้อความ แทนการค้นหาผู้พักพิงด้วยค่านั้น · หลังสแกนแสดงสถานะกำลังตรวจสอบทันที (สอดคล้อง #800)
+- **เหตุผล:** ตัวสแกนแยกรูปแบบด้วย prefix อยู่แล้ว
+- **หมายเหตุ:** QR ประจำตัวเจ้าหน้าที่ (#893) จะเป็นอีกรูปแบบที่ต้องแยกให้ได้เมื่อมีคนทำ
+
+### 31. "คืนทั้งหมด" (เพิ่ม 2026-10-26)
+
+- **ตัดสิน:** หลังเลือกผู้คืน ปุ่ม "คืนทั้งหมด" เติมหนึ่งบรรทัดต่อชนิดของด้วยยอดค้างรวมของผู้คืน (แก้ได้ภายหลัง) · **แทนที่**บรรทัดเดิม (ยืนยันแล้ว)
+  · ข้ามของที่เลือกในฟอร์มไม่ได้พร้อมหมายเหตุ · ฝั่ง server ยังจัดสรรใบเก่าสุดก่อนตามข้อ 17
+
+#### หลัง review — race ตอนเก็บเข้าคลัง (เสนอ 2026-10-26 — kong approve 2026-10-27)
+
+ข้อ 32–34 **เปลี่ยนกติกา** (ต่างจากข้อ 18–31) แต่ไม่เพิ่ม field ไม่เปลี่ยน shape ไม่ bump `schema_v` และไม่แก้ VDU —
+ทั้งหมดเป็น advisory ฝั่ง domain/application ที่คำนวณจากเอกสารเดิม · ที่มา: [PR review](https://github.com/r202-coe-psu/tent/pull/768#pullrequestreview-5648345638)
+(race เก็บเข้าคลังกับรับของ) และการตรวจซ้ำที่พบ race แบบเดียวกันของ void และการย้ายออก
+
+### 32. fence ตัดสินจากสถานะสุดท้ายของกอง (เสนอ 2026-10-26 — kong approve 2026-10-27)
+
+- **ตัดสิน:** หลังเขียน entry / move ระบบต้องอ่านกองซ้ำ (`settlePoolFence`) — ถ้ากองมี `lock` ให้อ่านซ้ำแบบ backoff
+  (50 → 100 → 200 → 400 → 800 → 1000 ms แล้วซ้ำ 1000 ms) **รวมไม่เกิน 8 วินาที** จน `lock` หาย แล้วตัดสิน:
+  - FR-32.1 กอง `OPEN` และไม่มี `lock` → ตัดยอด loan ตามปกติ
+  - FR-32.2 กองปิดแล้ว (`SUBMITTED`/`RECEIVED`) และ `entry_ids` มี entry นี้ → **ไม่ใช่รายการค้าง** ตัดยอด loan ตามปกติ และไม่เขียนรายการถัดไปลงกองนั้น
+  - FR-32.3 กองปิดแล้วและ `entry_ids` ไม่มี entry นี้ (หรือกองไม่พบ / ยกเลิก) → รายการค้าง ไม่แตะ loan (เหมือนเดิม)
+  - FR-32.4 `lock` ไม่หายภายใน 8 วินาที → ปฏิเสธด้วย error ที่ให้ลองใหม่ (`BulkReturnPoolLockTimeoutError`) ไม่ค้างคำขอ;
+    ลองซ้ำด้วย operation ULID เดิมได้ — ตอนลองซ้ำระบบต้องหา**กองปัจจุบัน**ของ entry ที่บันทึกไว้แล้ว (fold move chain + กติกาข้อ 33) ก่อน fence:
+    - กองปัจจุบัน = กองที่บันทึก → ทำต่อตาม FR-32.1–32.3
+    - entry ถูกย้ายไปกองอื่นแล้ว → **ไม่ตัด loan** (การตัด loan เป็นหน้าที่ของการย้าย ตาม D3) และแสดงที่บรรทัดนั้นว่า "ย้ายไปกองอื่นแล้ว ไม่ต้องทำอะไรเพิ่ม"
+    - move chain ยังขาดช่วง (รอซิงก์ ข้อ 16) → ไม่ตัด loan และแสดง "รายการนี้กำลังรอซิงก์ข้อมูล ลองใหม่ภายหลัง"
+    - บรรทัดอื่นในชุดเดียวกันบันทึกต่อตามปกติ ฟอร์มไม่ปิดเพราะบรรทัดที่ถูกย้าย และไม่ส่งบรรทัดนั้นซ้ำ
+- **Acceptance:** test ลำดับ "submit ตั้ง lock → เขียน entry → snapshot นับ entry → ปล่อย lock" ได้ loan ถูกตัดและ entry ไม่ค้าง ·
+  race submit กับรับของ 30 รอบไม่มีกรณีที่นับในกองแต่ไม่ตัด loan
+- **เหตุผล:** เดิม fence เจอ `lock` แล้วตอบ "ค้าง" ทันที ทั้งที่ submit อาจนับ entry ไปแล้ว → stock เพิ่มตอนตรวจรับแต่ loan ไม่ถูกตัด และย้ายออกไม่ได้
+- **encode:** application (`settlePoolFence` ใน `bulk-return-pool-v3-shared.ts`, ใช้ร่วมใน add, move และ void) — commit `cdb48e92b`;
+  การลองซ้ำหลังย้าย (FR-32.4) — `bulk-return-pool-v3-add-entry.ts` + ฟอร์มรับของ
+
+### 33. entry ถูกตรึงกับกองที่ snapshot นับไว้ (เสนอ 2026-10-26 — kong approve 2026-10-27)
+
+- **ขอบเขต:** กติกานี้ใช้กับ void / move doc **ทุกตัว** ของ entry ที่อยู่ใน `entry_ids` ของกองที่ไม่ใช่ `OPEN` **ไม่ว่าเกิดจากอะไร** —
+  ทั้ง race ระหว่างการเก็บเข้าคลัง และ doc ที่เขียนตรงเข้า CouchDB โดยไม่ผ่านแอป (VDU ไม่บังคับ "void ได้เฉพาะกอง `OPEN`" — ดูตาราง advisory)
+- **ไม่มี action ปกติใดเสียผล:** การยกเลิก / ย้ายออกของ entry ที่นับในกองที่ปิดแล้วถูกปฏิเสธก่อนเขียนอยู่แล้วตามข้อ 6 และข้อ 5
+  (void ต้องกอง `OPEN`; ย้ายออกจากกองที่ส่งแล้วได้เฉพาะรายการค้าง ซึ่งไม่อยู่ใน `entry_ids`) และ UI ไม่แสดงปุ่ม — doc แบบนี้จึงมีได้เฉพาะจาก
+  race หรือ writer นอกแอป และกติกานี้ทำให้ doc เหล่านั้นไม่มีผล
+- **ตัดสิน:**
+  - FR-33.1 entry ที่อยู่ใน `entry_ids` ของกองที่ไม่ใช่ `OPEN` ถือว่าอยู่ในกองนั้นถาวร: fold (`resolveBulkReturnEntries`) คืน `pool_id` = กองนั้น และไม่ถือว่าถูก void
+    แม้มี move / void doc ภายหลัง (doc เป็น append-only ลบไม่ได้ จึงเป็นกติกาตอนอ่าน)
+  - FR-33.2 ถ้า entry อยู่ใน `entry_ids` ของสองกอง ให้ยึดกองที่ `submitted_at` เก่าสุด
+  - FR-33.3 void: หลังเขียน void doc ให้อ่านกองของ entry ซ้ำด้วย fence ข้อ 32 — ถ้าผลคือ "snapshot นับไว้แล้ว" **ไม่เปิด loan กลับ**
+    และตอบผล `snapshot_conflict: true`; ไม่เช่นนั้นเปิด loan กลับตามข้อ 6
+  - FR-33.4 ย้าย: หลังเขียน move doc ให้อ่านกอง**ต้นทาง**ซ้ำด้วย fence ข้อ 32 ก่อน — ถ้าผลคือ "snapshot นับไว้แล้ว" **ไม่แตะกองปลายทางและ loan**
+    และตอบผล `snapshot_conflict: true`; ไม่เช่นนั้นทำต่อตาม D3
+  - FR-33.5 การอ่านยอดทุกจุด (ภาพรวมบอร์ด, รายการในกอง, ยอดตอน submit, เช็กกองว่างตอนยกเลิก, รายการ loan ref) ใช้กติกา FR-33.1
+    → กองปลายทางของการย้ายที่ไม่มีผลไม่นับ entry นั้น และ snapshot ของกองปลายทางไม่นับซ้ำ ·
+    **ยกเว้นประวัติของกอง (timeline):** แสดง void / move ที่ไม่มีผลตามจริง (ไม่ซ่อน) พร้อมป้าย "ไม่มีผล (หลังส่งเข้าคลัง)"
+  - FR-33.7 ทางเขียน (void, ย้าย, ยกเลิกกอง, ส่งกอง) ต้องอ่านทุกกองที่ event ของ entry อ้างถึงได้ — กองที่อ่านไม่ได้ (ไม่มี doc หรือไม่ใช่กอง v3
+    รวมถึงกอง v1/v2 แบบเดิม) ต้องหยุดด้วย `DistributionDataIntegrityError` ตามข้อ 19 · ทางอ่าน (ภาพรวม, timeline) คงข้ามและเตือนแบบเดิม
+  - FR-33.6 แสดงคำเตือนที่กองที่ entry ถูกตรึง: "ยกเลิก/ย้ายรายการนี้หลังกองถูกส่งเข้าคลังแล้ว จึงไม่มีผล — โปรดตรวจสอบของจริงกับคลัง"
+    และนับเป็น "ต้องจัดการ" บนบอร์ดและคิวงาน
+- **Acceptance:** test void ระหว่างกองกำลังเก็บเข้าคลัง → กอง `SUBMITTED` นับ entry และ loan ไม่ถูกเปิดกลับ + มีคำเตือน ·
+  test ย้ายออกระหว่างกองต้นทางกำลังเก็บเข้าคลัง → กองต้นทางนับ entry, กองปลายทางไม่นับ, loan ไม่เปลี่ยน + มีคำเตือน ·
+  void / ย้ายปกติบนกอง `OPEN` ทำงานเหมือนเดิม
+- **ทางที่ตัดทิ้ง:** ย้ายกลับกองต้นทางอัตโนมัติ (compensating move) — ต้องเขียนเข้ากองที่ไม่ใช่ `OPEN` ซึ่งขัดกติกา advisory เอง และกองปลายทางยังเห็น entry ชั่วคราว
+- **ซ่อมด้วยมือ (ฝั่งคลังเท่านั้น):** ถ้าของจริงไม่ได้คืน ให้แก้ยอดคลังหลังตรวจรับด้วยแถวปรับยอด (`adjust`) — **loan ของผู้คืนยังถูกตัดอยู่**
+  และยังไม่มีทางเปิดกลับ (ช่องว่างนี้มีมาก่อนข้อ 33 — ยกเป็นคำถามแยกในข้อ 35)
+- **encode:** domain fold (`buildSnapshotPins`, `findSnapshotConflicts`, `resolveBulkReturnEntries(…, pins)`) + application (void / move fence ต้นทาง,
+  `loadSnapshotPinsForWrite`) + timeline (`buildPoolTimeline(…, pins)` → `no_effect`)
+
+### 34. ซ่อมยอดยืมที่ไม่ถูกตัดของกองที่ส่งแล้ว (เสนอ 2026-10-26 — kong approve 2026-10-27)
+
+- **กรณี:** fence ข้อ 32 หมดเวลา (FR-32.4) หลังเขียน entry แล้ว และกองถูกส่งโดยนับ entry ไว้ → entry นับเข้าคลังแต่ `loan_refs` ไม่เคยถูกตัด
+  และกด "บันทึกอีกครั้ง" ไม่ได้เพราะเลือกกองที่ปิดแล้วในฟอร์มไม่ได้
+- **ตัดสิน:**
+  - FR-34.1 query `listBulkReturnPoolMissedLoanRefs(poolId)`: สำหรับกอง `SUBMITTED`/`RECEIVED` คืน ref ของ entry ใน `entry_ids`
+    ที่ loan ยังรับได้ทั้ง ref (`assessBulkReturnRefOnLoan` = applicable) แต่ `applied_bulk_entry_ids` ยังไม่มี entry นั้น; กอง `OPEN` คืนว่าง
+  - FR-34.2 แสดงคำเตือนที่ entry แบบเดียวกับข้อ 15: "ยอดยืมของรายการนี้ยังไม่ถูกตัด" พร้อมปุ่ม "ตัดยอดยืมที่ค้าง"
+  - FR-34.3 action `applyMissedBulkReturnLoanRefs({ entry_id, pool_id })` ทำเฉพาะ `loan_refs` ที่วางไว้ของ entry นั้น (ไม่จัดสรรใหม่) ตามกติกาข้อ 15,
+    idempotent ผ่าน `applied_bulk_entry_ids`; ทำได้เฉพาะกอง `SUBMITTED`/`RECEIVED` ที่ `entry_ids` มี entry นั้น; role เดียวกับการเพิ่ม entry (ข้อ 1)
+  - FR-34.4 ไม่ผ่อนกติกาการเลือกกองในฟอร์มรับของ
+- **Acceptance:** หลัง timeout + submit นับ entry → query พบ ref → กดตัดแล้ว loan ถูกตัดครั้งเดียว และ query คืนว่าง · กดซ้ำไม่ตัดซ้ำ ·
+  กอง `OPEN` และ entry ปกติไม่ขึ้นเตือน · loan ที่ถูกปิดไปแล้วขึ้นเป็นข้อ 15 ไม่ใช่ข้อนี้
+- **encode:** domain (`findMissedLoanRefs`) + application (`bulk-return-pool-v3-missed-loans.ts`) + UI หน้ากอง
+
+### 35. คำถามให้ kong ตัดสินแยก — เปิด loan กลับเมื่อของในกองที่ปิดแล้วไม่ได้คืนจริง (เปิด 2026-10-26)
+
+> **สถานะ: คำถาม ยังไม่ตัดสิน — อยู่นอกขอบเขต PR นี้ เลื่อนไปทำเป็น CR/issue แยก** (ไม่บล็อก PR นี้; ข้อ 32–34 approve แล้วโดยไม่ต้องตอบข้อนี้)
+
+- **กรณี:** กองส่งเข้าคลัง (หรือตรวจรับ) แล้ว และพบภายหลังว่ารายการหนึ่งในกองไม่ได้คืนจริง หรือบันทึกผิด (จำนวน / คน / ชนิดของ)
+- **ทำได้ตอนนี้:** แก้ยอดคลังด้วยแถวปรับยอด (`adjust`) หลังตรวจรับ หรือบันทึกส่วนต่างตอนตรวจรับ (`received_items[].discrepancy_reason`)
+- **ทำไม่ได้ตอนนี้:** เปิด loan กลับ — void ทำไม่ได้เพราะกองปิดแล้ว (ข้อ 6) และ void ที่หลุดเข้ามาไม่มีผล (ข้อ 33); entry แก้ไม่ได้ (append-only)
+  → loan ถูกบันทึกว่าคืนแล้วถาวร ผู้ยืมจะไม่ถูกตามคืน
+- **ข้อเสนอ (ยังไม่ทำ):** action สำหรับผู้ดูแลเท่านั้น "เปิด loan กลับ" ต่อ ref ของ entry ในกองที่ปิดแล้ว — ย้อน `applied_bulk_entry_ids` + `qty_returned`
+  ตาม path revert เดิม (ข้อ 11), ต้องมีเหตุผล, บันทึกใน timeline, ไม่แตะยอดคลัง (แก้แยกด้วย `adjust`)
+- **คำถาม:** (1) ต้องมี action นี้ไหม หรือยอมรับว่าแก้ได้แค่ยอดคลัง; (2) ถ้ามี — role ใด (ผู้ดูแลระบบ / ผู้จัดการศูนย์ / คลัง); (3) ทำได้ถึงเมื่อไหร่ (ก่อน/หลังตรวจรับ, มีกำหนดวันไหม);
+  (4) ต้องผูกกับแถวปรับยอดคลังไหม
+- **ผลกระทบถ้าทำ:** เปลี่ยนกติกา role และ VDU ของ `distribution_log` (revert ตอนนี้อนุญาตเฉพาะ path void) — ต้องเป็น CR / ข้อใหม่ของตัวเอง
+
 ### สิ่งที่ encode แล้ว
 
 | หัวข้อ | encode แล้ว |
@@ -283,6 +497,10 @@ VDU อ่านเอกสารอื่นไม่ได้ — กติ�
 | item ต้อง `returnable === true` | ไม่ได้ (catalog อยู่คนละ DB) | `isBulkReturnEligibleItem` ใน workflow เพิ่ม entry ของ #659 |
 | move/void อ้าง entry ที่ยังไม่มี หรือ move seq ขาดช่วง → รอซิงก์ | ไม่ได้ (อ่าน doc อื่นไม่ได้) | fold ข้ามและรายงานใน `findUnresolvedBulkReturnRefs` (ข้อ 16) |
 | loan ถูกปิดก่อนตัดยอด → ข้าม ref และเตือน | ไม่ได้ | `assessBulkReturnRefOnLoan` (ข้อ 15) |
+| fence รอ `lock` แล้วตัดสินจากสถานะสุดท้าย | ไม่ได้ | `settlePoolFence` (ข้อ 32) |
+| void / ย้ายของ entry ที่ snapshot นับไว้ไม่มีผล ไม่ว่าเกิดจาก race หรือ writer นอกแอป | ไม่ได้ (อ่าน pool ไม่ได้) | fold `pins` + fence ต้นทาง (ข้อ 33) |
+| ทางเขียนอ่านกองที่ event อ้างถึงไม่ได้ → หยุด | ไม่ได้ | `loadSnapshotPinsForWrite` (FR-33.7) |
+| ยอดยืมที่ไม่ถูกตัดของกองที่ส่งแล้ว | ไม่ได้ | `findMissedLoanRefs` + action ซ่อม (ข้อ 34) |
 
 ## Amends — ข้อความเดิมที่ถูกแก้
 
@@ -333,7 +551,7 @@ VDU อ่านเอกสารอื่นไม่ได้ — กติ�
 - `frontend/src/lib/server/shelter-access-design.ts` — VDU (allowed types, v3 rules, role, freeze v1/v2, append-only
   entry/move/void, `distribution_log` v2 path apply/revert), Mango index declaration (`BULK_RETURN_ENTRY_MANGO_INDEXES`) + tests
 - `frontend/src/lib/features/shelters/domain/views.ts` + `view-manifest.ts` — view `bulk_return_pool_item_totals`
-  (`_design/app` v5) + tests
+  (`_design/app` v6) + tests
 - `frontend/src/lib/server/shelters.admin.ts`, `frontend/src/lib/features/shelters/server/provisioner.ts`,
   `frontend/scripts/redeploy-access.ts`, `frontend/scripts/seed/registry-shelters.ts` — deploy index
 - ไม่แตะ `TICKET_DISTRIBUTION_MANGO_INDEXES`; ส่วน UI/workflow อยู่ #659/#660 ซึ่ง merge ใน PR เดียวกัน
@@ -375,3 +593,13 @@ VDU อ่านเอกสารอื่นไม่ได้ — กติ�
 - 2026-10-25 — approved (kong) → CR-193 (ย้ายจาก `draft-bulk-return-pool-redesign.md`, track ด้วยไฟล์ CR); เลขถัดจาก CR-192 บน `develop`; amends CR-134; หมายเหตุ `system_admin` ตัดสินแล้วข้างบน
 - 2026-10-25 — kong ตัดสินแก้ D3: ย้าย entry แล้วตัดยอด loan ตาม `loan_refs` เมื่อ pool ปลายทางยัง `OPEN` และไม่มี `lock` (idempotent ผ่าน `applied_bulk_entry_ids`, กติกาข้าม ref เดียวกับข้อ 15) — แทนข้อความเดิม "ย้ายไม่แตะ `distribution_log`"; แก้ review finding B1 (entry มาช้าที่ย้ายเข้า pool `OPEN` ไม่เคยตัด loan → คืนซ้ำได้)
 - 2026-10-25 — implementation (perf, ไม่เปลี่ยนกติกา): การอ่านต่อ entry/pool (move, void, submit, cancel, loan refs) อ่านเฉพาะขอบเขตแทนการ scan event log ทั้ง shelter — เพิ่ม Mango index `(type, to_pool_id)` บน `bulk_return_entry_move` (หา entry ที่ย้ายเข้า pool; ใช้ร่วมกับ `(type, pool_id)` เดิม); overview ข้าม pool ยังอ่านทั้ง log
+- 2026-10-26 — `_design/app` เลื่อนเป็นเวอร์ชัน 6 เพราะ develop ใช้ v5 กับ CR-192 (`station_logs_by_station`) แล้ว — ไม่เปลี่ยนกฎหรือ view ของ CR นี้
+- 2026-10-26 — เพิ่มข้อ 18–31: การตัดสินระหว่าง implement ระยะ 0–2 (อ่านตามกอง + index ใหม่, เอกสารผิดรูป, ป้ายรายการค้าง, ตัวกรองบอร์ด/ใบเบิก, ยอดยืมถูกปิดใน overview, ค้นหาจากชื่อ, จำกองล่าสุด, คิวงานตามบทบาท, จุดของฉัน, ไทม์ไลน์, ลิงก์, QR กอง, คืนทั้งหมด) — ไม่เปลี่ยน shape/`schema_v`; ข้อที่มีคำถามเปิดไว้ (19, 21, 22, 24, 27) ตัดสินแล้ว 2026-10-27
+- 2026-10-26 — **เสนอ** ข้อ 32–34 (kong approve 2026-10-27) จาก [PR review](https://github.com/r202-coe-psu/tent/pull/768#pullrequestreview-5648345638) และการตรวจซ้ำ:
+  fence ตัดสินจากสถานะสุดท้าย (implement แล้วใน `cdb48e92b` — แก้ข้อความข้อ 5 ที่ล้าสมัย), entry ถูกตรึงกับกองที่ snapshot นับไว้ (void / ย้ายหลัง snapshot ไม่มีผล + เตือน),
+  ทางซ่อมยอดยืมที่ไม่ถูกตัด — แก้ข้อ 5, 6, D3 · ไม่เปลี่ยน shape/`schema_v`/VDU · ต้องแก้ `docs/data/schema.md` §2.31 invariants ข้อ 2–3 และตาราง advisory ให้ตรง
+- 2026-10-26 — แก้ร่างข้อ 32–34 ให้ตรงโค้ดสุดท้าย (หลังตรวจซ้ำ): ข้อ 5 ข้อแรกอ้างข้อ 32 · FR-32.4 ลองซ้ำหลังรายการถูกย้ายไม่ตัด loan (แก้แล้ว) ·
+  ข้อ 33 ใช้กับ void / ย้ายทุกตัวของ entry ที่ snapshot นับไว้ ไม่ว่าเกิดจากอะไร และไม่มี action ปกติใดเสียผล · FR-33.5 timeline แสดงพร้อมป้าย "ไม่มีผล" ·
+  FR-33.7 ทางเขียน fail closed เมื่ออ่านกองที่อ้างถึงไม่ได้ · D1 ขั้น 2 แก้ (ไม่ได้อ่าน view) · **เปิดข้อ 35** คำถามเปิด loan กลับ ให้ kong ตัดสินแยก
+- 2026-10-27 — kong approve ข้อ 32–34
+- 2026-10-27 — คำถามข้อ 19, 21, 22, 24, 27 ตัดสินโดยผู้เสนอ PR (Nekokun2004) ตามที่ implement; ข้อ 35 แยกออกนอก PR นี้ (ยังไม่ตัดสิน)

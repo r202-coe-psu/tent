@@ -3,6 +3,7 @@ import {
 	assessBulkReturnRefOnLoan,
 	findAppliedBulkReturnLoanRefs,
 	findClosedBulkReturnLoanRefs,
+	findMissedLoanRefs,
 	type BulkReturnRefLoan
 } from './bulk-return-loan-drift';
 
@@ -138,6 +139,30 @@ describe('findClosedBulkReturnLoanRefs', () => {
 		expect(findClosedBulkReturnLoanRefs(entries, loans)).toEqual([]);
 	});
 
+	it('carries the loan ticket_id when the loan exists, none when missing', () => {
+		const loans = new Map<string, BulkReturnRefLoan | null>([
+			[A, loan({ _id: A, status: 'lost', ticket_id: 'ticket:T1' })],
+			[B, loan({ _id: B, status: 'lost' })],
+			[C, null]
+		]);
+		const out = findClosedBulkReturnLoanRefs(
+			[
+				{
+					_id: ENTRY,
+					loan_refs: [
+						{ distribution_log_id: A, qty: '1' },
+						{ distribution_log_id: B, qty: '1' },
+						{ distribution_log_id: C, qty: '1' }
+					]
+				}
+			],
+			loans
+		);
+		expect(out[0].ticket_id).toBe('ticket:T1');
+		expect(out[1]).not.toHaveProperty('ticket_id');
+		expect(out[2]).not.toHaveProperty('ticket_id');
+	});
+
 	it('treats a loan absent from the map as missing', () => {
 		expect(
 			findClosedBulkReturnLoanRefs(
@@ -145,6 +170,59 @@ describe('findClosedBulkReturnLoanRefs', () => {
 				new Map()
 			)
 		).toEqual([{ entry_id: ENTRY, distribution_log_id: A, qty: '1', reason: 'missing' }]);
+	});
+});
+
+describe('findMissedLoanRefs', () => {
+	const A = 'distribution_log:01J0000000000000000000000A';
+	const B = 'distribution_log:01J0000000000000000000000B';
+	const C = 'distribution_log:01J0000000000000000000000C';
+	const D = 'distribution_log:01J0000000000000000000000D';
+
+	it('lists only applicable refs the loan does not yet list, in entry then ref order', () => {
+		const entries = [
+			{
+				_id: ENTRY,
+				loan_refs: [
+					{ distribution_log_id: A, qty: '2' },
+					{ distribution_log_id: B, qty: '1' },
+					{ distribution_log_id: C, qty: '1' },
+					{ distribution_log_id: D, qty: '1' }
+				]
+			},
+			{ _id: OTHER_ENTRY, loan_refs: [{ distribution_log_id: A, qty: '1' }] }
+		];
+		const loans = new Map<string, BulkReturnRefLoan | null>([
+			[A, loan({ _id: A })], // applicable
+			[B, loan({ _id: B, applied_bulk_entry_ids: [ENTRY] })], // already applied
+			[C, loan({ _id: C, status: 'lost' })], // closed ref, not missed
+			[D, null] // missing loan, not missed
+		]);
+		expect(findMissedLoanRefs(entries, loans)).toEqual([
+			{ entry_id: ENTRY, distribution_log_id: A, qty: '2' },
+			{ entry_id: OTHER_ENTRY, distribution_log_id: A, qty: '1' }
+		]);
+	});
+
+	it('does not list a ref the loan cannot take whole (insufficient)', () => {
+		const loans = new Map<string, BulkReturnRefLoan | null>([
+			[A, loan({ _id: A, status: 'partially_returned', qty_returned: '2' })]
+		]);
+		expect(
+			findMissedLoanRefs([{ _id: ENTRY, loan_refs: [{ distribution_log_id: A, qty: '2' }] }], loans)
+		).toEqual([]);
+	});
+
+	it('returns nothing for entries without refs or an absent loan', () => {
+		expect(
+			findMissedLoanRefs(
+				[
+					{ _id: ENTRY, loan_refs: [] },
+					{ _id: OTHER_ENTRY, loan_refs: [{ distribution_log_id: A, qty: '1' }] }
+				],
+				new Map()
+			)
+		).toEqual([]);
 	});
 });
 

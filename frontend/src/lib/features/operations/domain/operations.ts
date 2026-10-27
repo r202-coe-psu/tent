@@ -591,7 +591,27 @@ function stockLedgerInputSchemaWith(
 }
 
 export const stockLedgerInputSchema = stockLedgerInputSchemaWith(checkRefId);
-export type StockLedgerInput = z.input<typeof stockLedgerInputSchema>;
+type StockLedgerInputBase = Omit<
+	z.input<typeof stockLedgerInputBaseSchema>,
+	'reason' | 'adjust_reason' | 'note'
+>;
+
+/**
+ * Compile-time mirror of CR-143 FR-C1/C2, discriminated on `reason`: an adjust row must
+ * carry `adjust_reason` (`note` optional), every other row must carry neither. The Zod
+ * `superRefine` above stays as the runtime guard for data that never passed through TypeScript.
+ */
+export type StockLedgerInput =
+	| (StockLedgerInputBase & {
+			reason: 'adjust';
+			adjust_reason: AdjustReason;
+			note?: string;
+	  })
+	| (StockLedgerInputBase & {
+			reason: Exclude<LedgerReason, 'adjust'>;
+			adjust_reason?: never;
+			note?: never;
+	  });
 
 const legacyFlow2StockLedgerInputSchema = stockLedgerInputSchemaWith(checkLegacyFlow2RefId);
 
@@ -765,24 +785,21 @@ export function createReceiveEntry(
 	id?: string
 ): StockLedger {
 	const d = receiveInputSchema.parse(input);
-	return createStockLedger(
-		{
-			item_id: d.item_id,
-			qty: d.qty,
-			unit: d.unit,
-			reason: REASON_BY_RECEIVE_SOURCE[d.source],
-			ref_id: d.ref_id,
-			// A hand-keyed receipt is booked as an adjust (CR-143 §C needs a reason on those):
-			// stock that turned up, so `found` (CR-156 FR-C7); the form offers no picker (FR-C8).
-			...(REASON_BY_RECEIVE_SOURCE[d.source] === 'adjust'
-				? { adjust_reason: 'found' as const }
-				: {}),
-			lot: d.lot,
-			occurred_at: d.occurred_at
-		},
-		ctx,
-		id
-	);
+	const common = {
+		item_id: d.item_id,
+		qty: d.qty,
+		unit: d.unit,
+		ref_id: d.ref_id,
+		lot: d.lot,
+		occurred_at: d.occurred_at
+	};
+	const reason = REASON_BY_RECEIVE_SOURCE[d.source];
+	// A hand-keyed receipt is booked as an adjust (CR-143 §C needs a reason on those):
+	// stock that turned up, so `found` (CR-156 FR-C7); the form offers no picker (FR-C8).
+	if (reason === 'adjust') {
+		return createStockLedger({ ...common, reason, adjust_reason: 'found' }, ctx, id);
+	}
+	return createStockLedger({ ...common, reason }, ctx, id);
 }
 
 export const distributeInputSchema = z.object({
@@ -1058,13 +1075,13 @@ export function projectStockLotBalances(ledger: readonly StockLedger[]): StockLo
  * `lot_ref` rows hit their own lot, older outbound rows are replayed in the legacy order.
  *
  * Projected one item at a time — lots never cross items, so the result is the same as one
- * whole-ledger pass, but one item with an impossible history only drops that item
- * (`onIntegrityError`) instead of the whole page or count.
+ * whole-ledger pass, but one item with an impossible history only drops that item, named in
+ * `brokenItemIds`, instead of the whole page or count.
  */
-export function projectLotsByItem(
-	ledger: readonly StockLedger[],
-	onIntegrityError?: (itemId: string, error: StockLotIntegrityError) => void
-): StockLotBalance[] {
+export function projectLotsByItem(ledger: readonly StockLedger[]): {
+	lots: StockLotBalance[];
+	brokenItemIds: string[];
+} {
 	const byItem = new Map<string, StockLedger[]>();
 	for (const entry of ledger) {
 		const rows = byItem.get(entry.item_id);
@@ -1072,15 +1089,16 @@ export function projectLotsByItem(
 		else byItem.set(entry.item_id, [entry]);
 	}
 	const lots: StockLotBalance[] = [];
+	const brokenItemIds: string[] = [];
 	for (const [itemId, rows] of byItem) {
 		try {
 			lots.push(...projectStockLotBalances(rows));
 		} catch (error) {
 			if (!(error instanceof StockLotIntegrityError)) throw error;
-			onIntegrityError?.(itemId, error);
+			brokenItemIds.push(itemId);
 		}
 	}
-	return lots;
+	return { lots, brokenItemIds };
 }
 
 /**
@@ -1110,12 +1128,16 @@ export function assertLotWriteOffsFit(
 	if (wanted.size === 0) return;
 
 	const itemIds = new Set([...wanted.values()].map((w) => w.item_id));
-	const lots = new Map(
-		projectStockLotBalances(ledger.filter((row) => itemIds.has(row.item_id))).map((lot) => [
-			lot.lot_ref,
-			lot
-		])
-	);
+	let projected: StockLotBalance[];
+	try {
+		projected = projectStockLotBalances(ledger.filter((row) => itemIds.has(row.item_id)));
+	} catch (error) {
+		if (!(error instanceof StockLotIntegrityError)) throw error;
+		throw new LotWriteOffError(
+			'ประวัติคลังของสินค้านี้คำนวณยอดรายล็อตไม่ได้ — กรุณาแจ้งผู้ดูแลระบบ'
+		);
+	}
+	const lots = new Map(projected.map((lot) => [lot.lot_ref, lot]));
 	for (const [lotRef, want] of wanted) {
 		const lot = lots.get(lotRef);
 		if (!lot || lot.item_id !== want.item_id || lot.unit !== want.unit) {

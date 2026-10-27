@@ -1,4 +1,4 @@
-import { allDocsByType, getDoc, putDoc } from '$lib/db/couch-db';
+import { allDocsByIds, allDocsByType, getDoc, putDoc } from '$lib/db/couch-db';
 import { now, type AuthorContext } from '$lib/db/model';
 import { parseQty, qtyLte } from '$lib/utils/qty';
 import {
@@ -13,6 +13,9 @@ import {
 } from '../../domain/food-supplies';
 import { parseDocsOrSkip, type SkippedDoc } from './parse-or-skip';
 import { NotFoundError, resolveShelterDbName, retryCas } from './shared';
+
+/** Ids per `_all_docs` keys request in `getMany`. */
+const GET_MANY_CHUNK_SIZE = 100;
 
 export interface DistributionLogListFilter {
 	ticket_id?: string;
@@ -79,6 +82,11 @@ export interface DistributionLogRepository {
 	listWithSkipped(
 		filter?: DistributionLogListFilter
 	): Promise<{ items: DistributionLog[]; skipped: SkippedDoc[] }>;
+	/**
+	 * Batch get by id (`_all_docs` keys, chunked). Ids with no doc are simply absent from `items`;
+	 * malformed docs are reported in `skipped` instead of failing the read.
+	 */
+	getMany(ids: readonly string[]): Promise<{ items: DistributionLog[]; skipped: SkippedDoc[] }>;
 	mutateLogCAS(
 		logId: string,
 		mutator: (current: DistributionLog) => DistributionLog
@@ -118,6 +126,23 @@ export class DistributionLogRemoteRepository implements DistributionLogRepositor
 		const raw = await getDoc<DistributionLog>(this.dbName, logId);
 		if (!raw) return null;
 		return distributionLogDocSchema.parse(raw);
+	}
+
+	async getMany(
+		ids: readonly string[]
+	): Promise<{ items: DistributionLog[]; skipped: SkippedDoc[] }> {
+		const unique = [...new Set(ids)];
+		const raws: unknown[] = [];
+		for (let i = 0; i < unique.length; i += GET_MANY_CHUNK_SIZE) {
+			raws.push(
+				...(await allDocsByIds<DistributionLog>(
+					this.dbName,
+					unique.slice(i, i + GET_MANY_CHUNK_SIZE),
+					(d): d is DistributionLog => typeof d === 'object' && d !== null
+				))
+			);
+		}
+		return parseDocsOrSkip<DistributionLog>(raws, distributionLogDocSchema);
 	}
 
 	async list(filter?: DistributionLogListFilter): Promise<DistributionLog[]> {

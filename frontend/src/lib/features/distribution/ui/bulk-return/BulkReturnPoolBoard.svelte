@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { createSubscriber } from 'svelte/reactivity';
 	import type { Snippet } from 'svelte';
 	import AlertCircle from '@lucide/svelte/icons/alert-circle';
 	import AlertTriangle from '@lucide/svelte/icons/alert-triangle';
@@ -18,6 +19,8 @@
 	import { Label } from '$lib/components/ui/label/index.js';
 	import { Switch } from '$lib/components/ui/switch/index.js';
 	import { useItemMasters } from '$lib/features/catalog';
+	import { useEvacuees } from '$lib/features/people';
+	import { useVolunteers } from '$lib/features/volunteers';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
@@ -37,16 +40,31 @@
 	import {
 		LATE_BADGE_CLASS,
 		LATE_CARD_EXCLUDED_TEXT,
+		POOL_STATUS_FILTER_VALUES,
+		RECEIVED_POOL_HIDE_AFTER_DAYS,
 		UNRESOLVED_REFS_HINT,
+		buildReturnerNames,
 		filterPoolRows,
 		getPoolBoardViewState,
 		getPoolStatusBadgeClass,
+		getPoolStatusFilterLabel,
 		getPoolStatusLabel,
+		hasActivePoolFilters,
 		lateItemQtyText,
+		poolItemIds,
+		poolStatusCounts,
 		poolStorageLabel,
+		poolStorageOptions,
+		receivedHideCutoff,
 		resolveItemDisplay,
-		type PoolCatalogItem
+		type PoolCatalogItem,
+		type PoolStatusFilter
 	} from '../model/bulk-return-pool-v3';
+	import { workQueuesFor } from '../model/bulk-return-work-queue';
+	import { readMyPoolPoint, writeMyPoolPoint } from '../model/my-pool-point-storage';
+	import { useStoragePoints } from '$lib/features/operations';
+	import * as Select from '$lib/components/ui/select/index.js';
+	import BulkReturnPoolWorkQueue from './BulkReturnPoolWorkQueue.svelte';
 	import { listOpenPools } from '../model/bulk-return-add-entry';
 	import AddBulkReturnEntriesDialog from './AddBulkReturnEntriesDialog.svelte';
 	import BulkReturnPoolDetail from './BulkReturnPoolDetail.svelte';
@@ -62,9 +80,13 @@
 		shelterCode?: string;
 		/** Overrides the default submit / receive actions rendered in the pool detail header. */
 		lifecycleActions?: Snippet<[BulkReturnPoolOverviewRow]>;
+		/** Pool whose detail opens once its row is loaded (deep link, `?pool=`). */
+		initialPoolId?: string | null;
+		/** Fired whenever the open pool changes (`null` = closed), so the host can sync the URL. */
+		onSelectedPoolChange?: (poolId: string | null) => void;
 	}
 
-	let { shelterCode, lifecycleActions }: Props = $props();
+	let { shelterCode, lifecycleActions, initialPoolId, onSelectedPoolChange }: Props = $props();
 
 	const activeShelterCode = $derived(
 		shelterCode ?? shelterStore.selectedShelterCode ?? getShelterCode()
@@ -81,12 +103,31 @@
 	);
 	const itemMastersQuery = useItemMasters(() => activeShelterCode ?? null);
 
+	// Full rosters (loaded client-side) so the search and the detail can show returner names.
+	const evacueesQuery = useEvacuees();
+	const volunteersQuery = useVolunteers(undefined, () => activeShelterCode);
+	const returnerNames = $derived(
+		buildReturnerNames(evacueesQuery.data ?? [], volunteersQuery.data ?? [])
+	);
+
 	let search = $state('');
 	let showCancelled = $state(false);
+	// Local view filters (no persistence). 'all' is the sentinel for the two selects.
+	let showOldReceived = $state(false);
+	let statusFilter = $state<PoolStatusFilter>('all');
+	let itemFilter = $state('all');
+	let storageFilter = $state('all');
+	let needsAttention = $state(false);
 	let openDialogVisible = $state(false);
 	let addDialogOpen = $state(false);
 	let addPoolId = $state<string | undefined>(undefined);
-	let selectedPoolId = $state<string | null>(null);
+	// Writable derived: follows `initialPoolId` (deep link / URL), local selections override it.
+	let selectedPoolId = $derived<string | null>(initialPoolId ?? null);
+
+	function selectPool(poolId: string | null) {
+		selectedPoolId = poolId;
+		onSelectedPoolChange?.(poolId);
+	}
 
 	// Fail closed: any problem resolving the session context hides the write actions.
 	const authContext = $derived.by(() => {
@@ -99,6 +140,29 @@
 	const canManage = $derived(authContext ? canManageBulkReturnPool(authContext) : false);
 	const canWriteEntry = $derived(authContext ? canWriteBulkReturnEntry(authContext) : false);
 
+	const queues = $derived(authContext ? workQueuesFor(authContext) : []);
+
+	// Per-device "my point" for the distribution staff queue; re-read when the shelter changes.
+	// The hook has no enable switch, so it always loads (the shelter doc is shared and cached).
+	const storagePoints = useStoragePoints(() => activeShelterCode ?? '');
+	let myPoint = $derived<string | null>(readMyPoolPoint(activeShelterCode));
+
+	function handleMyPointChange(value: string) {
+		myPoint = value;
+		writeMyPoolPoint(activeShelterCode, value);
+	}
+
+	// Ticks every minute so the "waiting since" ages stay fresh.
+	// Ticks every minute (only while something reads it) so waiting ages stay current.
+	const subscribeMinute = createSubscriber((update) => {
+		const timer = setInterval(update, 60_000);
+		return () => clearInterval(timer);
+	});
+	const now = $derived.by(() => {
+		subscribeMinute();
+		return new Date();
+	});
+
 	const rows = $derived(overviewQuery.data ?? []);
 	const hasOpenPool = $derived(listOpenPools(rows).length > 0);
 
@@ -106,7 +170,53 @@
 		addPoolId = poolId;
 		addDialogOpen = true;
 	}
-	const visibleRows = $derived(filterPoolRows(rows, { search, showCancelled }));
+	const hideReceivedBefore = $derived(showOldReceived ? undefined : receivedHideCutoff());
+	const rowFilter = $derived({
+		search,
+		showCancelled,
+		hideReceivedBefore,
+		status: statusFilter,
+		itemId: itemFilter === 'all' ? undefined : itemFilter,
+		storagePointId: storageFilter === 'all' ? undefined : storageFilter,
+		needsAttention,
+		returnerNames
+	});
+	const visibleRows = $derived(filterPoolRows(rows, rowFilter));
+	const statusCounts = $derived(poolStatusCounts(rows, { showCancelled, hideReceivedBefore }));
+	const filtersActive = $derived(hasActivePoolFilters(rowFilter));
+	const catalog = $derived.by((): PoolCatalogItem[] =>
+		(itemMastersQuery.data ?? []).map((item) => ({
+			_id: item._id,
+			name: item.name,
+			base_unit: item.base_unit
+		}))
+	);
+
+	const itemOptions = $derived(
+		poolItemIds(rows)
+			.map((id) => ({ id, name: resolveItemDisplay(id, catalog).name }))
+			.sort((a, b) => a.name.localeCompare(b.name, 'th'))
+	);
+	const storageOptions = $derived(poolStorageOptions(rows));
+	const itemFilterLabel = $derived(
+		itemFilter === 'all'
+			? 'ทุกชนิด'
+			: (itemOptions.find((o) => o.id === itemFilter)?.name ??
+					resolveItemDisplay(itemFilter, catalog).name)
+	);
+	const storageFilterLabel = $derived(
+		storageFilter === 'all'
+			? 'ทุกโซนจัดเก็บ'
+			: (storageOptions.find((o) => o.value === storageFilter)?.label ?? storageFilter)
+	);
+
+	function resetFilters() {
+		search = '';
+		statusFilter = 'all';
+		itemFilter = 'all';
+		storageFilter = 'all';
+		needsAttention = false;
+	}
 	// Total considered for the empty state respects the cancelled toggle.
 	const totalRowCount = $derived(
 		showCancelled ? rows.length : rows.filter((row) => row.pool.status !== 'CANCELLED').length
@@ -120,14 +230,6 @@
 		)
 	);
 	const errorPresentation = $derived(mapDistributionQueryError(overviewQuery.error));
-
-	const catalog = $derived.by((): PoolCatalogItem[] =>
-		(itemMastersQuery.data ?? []).map((item) => ({
-			_id: item._id,
-			name: item.name,
-			base_unit: item.base_unit
-		}))
-	);
 
 	// Detail follows the live overview row, so it refreshes after every mutation. Read `rows` on
 	// every run (no short-circuit): a run with no selection must still track `rows`, or later
@@ -216,6 +318,16 @@
 		</div>
 	{/if}
 
+	<BulkReturnPoolWorkQueue
+		{rows}
+		{queues}
+		{now}
+		onOpenPool={(poolId) => selectPool(poolId)}
+		points={storagePoints.points}
+		{myPoint}
+		onMyPointChange={handleMyPointChange}
+	/>
+
 	<div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
 		<div class="relative w-full sm:max-w-sm">
 			<Search
@@ -225,16 +337,117 @@
 			<Input
 				type="search"
 				bind:value={search}
-				placeholder="ค้นหาชื่อกอง"
-				aria-label="ค้นหากองรับคืนตามชื่อกอง"
+				placeholder="ค้นหาชื่อกองหรือชื่อผู้คืน"
+				aria-label="ค้นหากองรับคืนตามชื่อกองหรือชื่อผู้คืน"
 				class="h-11 w-full pl-9 text-base sm:h-10 sm:text-sm"
 			/>
 		</div>
-		<div class="flex min-h-11 items-center gap-2">
-			<Switch id="bulk-pool-show-cancelled" bind:checked={showCancelled} />
-			<Label for="bulk-pool-show-cancelled" class="text-sm font-medium text-slate-700">
-				แสดงกองที่ยกเลิก
-			</Label>
+		<div class="flex flex-wrap items-center gap-x-4 gap-y-1">
+			<div class="flex min-h-11 items-center gap-2">
+				<Switch id="bulk-pool-show-cancelled" bind:checked={showCancelled} />
+				<Label for="bulk-pool-show-cancelled" class="text-sm font-medium text-slate-700">
+					แสดงกองที่ยกเลิก
+				</Label>
+			</div>
+			<div class="flex min-h-11 items-center gap-2">
+				<Switch id="bulk-pool-show-old-received" bind:checked={showOldReceived} />
+				<Label for="bulk-pool-show-old-received" class="text-sm font-medium text-slate-700">
+					แสดงกองที่ตรวจรับเกิน {RECEIVED_POOL_HIDE_AFTER_DAYS} วัน
+				</Label>
+			</div>
+		</div>
+	</div>
+
+	<div class="flex flex-col gap-3">
+		<div class="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
+			<div role="group" aria-label="กรองกองรับคืนตามสถานะ" class="flex flex-wrap gap-2">
+				{#each POOL_STATUS_FILTER_VALUES as value (value)}
+					<Button
+						type="button"
+						variant={statusFilter === value ? 'default' : 'outline'}
+						aria-pressed={statusFilter === value}
+						onclick={() => (statusFilter = value)}
+						class="min-h-11 gap-2"
+					>
+						{getPoolStatusFilterLabel(value)}
+						<span class="tabular-nums">{statusCounts[value]}</span>
+					</Button>
+				{/each}
+			</div>
+
+			{#if itemOptions.length > 0}
+				<div class="flex items-center gap-2 sm:ml-auto">
+					<Label for="bulk-pool-item-filter" class="shrink-0 text-sm font-medium text-slate-700">
+						ชนิดสินค้า
+					</Label>
+					<Select.Root
+						type="single"
+						value={itemFilter}
+						onValueChange={(val) => {
+							if (val) itemFilter = val;
+						}}
+					>
+						<Select.Trigger
+							id="bulk-pool-item-filter"
+							aria-label="กรองตามชนิดสินค้า"
+							class="min-h-11 min-w-[160px]"
+						>
+							<span class="truncate">{itemFilterLabel}</span>
+						</Select.Trigger>
+						<Select.Content>
+							<Select.Item value="all" label="ทุกชนิด" />
+							{#each itemOptions as option (option.id)}
+								<Select.Item value={option.id} label={option.name} />
+							{/each}
+						</Select.Content>
+					</Select.Root>
+				</div>
+			{/if}
+		</div>
+
+		<div class="flex flex-wrap items-center gap-x-4 gap-y-2">
+			{#if storageOptions.length >= 2}
+				<div class="flex items-center gap-2">
+					<Label for="bulk-pool-storage-filter" class="shrink-0 text-sm font-medium text-slate-700">
+						ที่เก็บ
+					</Label>
+					<Select.Root
+						type="single"
+						value={storageFilter}
+						onValueChange={(val) => {
+							if (val) storageFilter = val;
+						}}
+					>
+						<Select.Trigger
+							id="bulk-pool-storage-filter"
+							aria-label="กรองตามที่เก็บ"
+							class="min-h-11 min-w-[160px]"
+						>
+							<span class="truncate">{storageFilterLabel}</span>
+						</Select.Trigger>
+						<Select.Content>
+							<Select.Item value="all" label="ทุกโซนจัดเก็บ" />
+							{#each storageOptions as option (option.value)}
+								<Select.Item value={option.value} label={option.label} />
+							{/each}
+						</Select.Content>
+					</Select.Root>
+				</div>
+			{/if}
+
+			<div class="flex min-h-11 items-center gap-2">
+				<Switch id="bulk-pool-needs-attention" bind:checked={needsAttention} />
+				<Label for="bulk-pool-needs-attention" class="text-sm font-medium text-slate-700">
+					ต้องจัดการ
+				</Label>
+			</div>
+
+			{#if filtersActive}
+				<Button type="button" variant="ghost" onclick={resetFilters} class="min-h-11 gap-2">
+					<XCircle class="h-4 w-4" aria-hidden="true" />
+					ล้างตัวกรอง
+				</Button>
+			{/if}
 		</div>
 	</div>
 
@@ -284,7 +497,7 @@
 		<div class="rounded-xl border border-slate-200 bg-slate-50 p-12 text-center">
 			<XCircle class="mx-auto mb-2 h-8 w-8 text-slate-400" aria-hidden="true" />
 			<h3 class="text-base font-semibold text-slate-900">ไม่พบกองที่ตรงกับการค้นหา</h3>
-			<p class="mt-1 text-sm text-slate-500">ลองค้นหาด้วยชื่อกองอื่น</p>
+			<p class="mt-1 text-sm text-slate-500">ลองค้นหาด้วยชื่อกองหรือชื่อผู้คืนอื่น</p>
 		</div>
 	{:else}
 		<ul class="grid grid-cols-1 gap-3 lg:grid-cols-2">
@@ -293,7 +506,7 @@
 				<li>
 					<button
 						type="button"
-						onclick={() => (selectedPoolId = pool._id)}
+						onclick={() => selectPool(pool._id)}
 						class="flex min-h-11 w-full flex-col gap-3 rounded-xl border border-slate-200/80 bg-white p-4 text-left shadow-2xs transition-colors hover:border-slate-300 hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none"
 					>
 						<div class="flex flex-wrap items-start justify-between gap-2">
@@ -305,6 +518,24 @@
 									>
 										<AlertTriangle class="h-3.5 w-3.5" aria-hidden="true" />
 										ค้าง <span class="tabular-nums">{row.late_entries.length}</span>
+									</span>
+								{/if}
+								{#if row.closed_loan_refs.length > 0}
+									<span
+										class="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold {LATE_BADGE_CLASS}"
+										data-testid="bulk-return-card-closed-loan-hint"
+									>
+										<AlertTriangle class="h-3.5 w-3.5" aria-hidden="true" />
+										ยอดยืมถูกปิด <span class="tabular-nums">{row.closed_loan_refs.length}</span>
+									</span>
+								{/if}
+								{#if row.snapshot_conflicts.length > 0}
+									<span
+										class="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold {LATE_BADGE_CLASS}"
+										data-testid="bulk-return-card-snapshot-conflict-hint"
+									>
+										<AlertTriangle class="h-3.5 w-3.5" aria-hidden="true" />
+										ต้องตรวจสอบ <span class="tabular-nums">{row.snapshot_conflicts.length}</span>
 									</span>
 								{/if}
 								{#if row.unresolved_refs.length > 0}
@@ -388,7 +619,7 @@
 		shelterCode={activeShelterCode}
 		{rows}
 		onClose={() => (openDialogVisible = false)}
-		onOpened={(pool) => (selectedPoolId = pool._id)}
+		onOpened={(pool) => selectPool(pool._id)}
 	/>
 {/if}
 
@@ -402,12 +633,13 @@
 		row={selectedRow}
 		{rows}
 		{catalog}
+		{returnerNames}
 		shelterCode={activeShelterCode}
 		{canManage}
 		{canWriteEntry}
 		onAddEntry={handleAddEntry}
 		lifecycleActions={lifecycleActions ?? defaultLifecycleActions}
-		onClose={() => (selectedPoolId = null)}
+		onClose={() => selectPool(null)}
 	/>
 {/key}
 

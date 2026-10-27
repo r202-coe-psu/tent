@@ -11,7 +11,7 @@
 	import { useMoveBulkReturnEntry } from '../../application/queries';
 	import type { BulkReturnEntry, BulkReturnPoolV3 } from '../../domain/food-supplies';
 	import { formatDistributionError } from '../model/distribution-error';
-	import type { ItemDisplay } from '../model/bulk-return-pool-v3';
+	import { MOVE_SNAPSHOT_CONFLICT_TOAST, type ItemDisplay } from '../model/bulk-return-pool-v3';
 
 	/** Mounted by the parent only while visible (`{#if}`) so each open starts clean. */
 	interface Props {
@@ -57,7 +57,9 @@
 				},
 				shelterCode
 			});
-			if (result.late) {
+			if (result.snapshot_conflict) {
+				toast.warning(MOVE_SNAPSHOT_CONFLICT_TOAST);
+			} else if (result.late) {
 				toast.warning(
 					`ย้ายไปกอง "${selectedTarget.name}" แล้ว แต่กองนั้นเพิ่งปิดรับ รายการนี้จึงค้างอีกครั้ง กรุณาย้ายไปกองอื่นที่ยังเปิดอยู่`
 				);
@@ -72,7 +74,9 @@
 			open = false;
 			onClose();
 		} catch (err) {
-			const message = formatDistributionError(err, 'ย้ายรายการไม่สำเร็จ กรุณาลองใหม่อีกครั้ง');
+			const message = formatDistributionError(err, 'ย้ายรายการไม่สำเร็จ กรุณาลองใหม่อีกครั้ง', {
+				poolContext: 'intake'
+			});
 			submitError = message;
 			toast.error(message);
 		}
@@ -135,7 +139,7 @@
 						<Select.Root type="single" bind:value={toPoolId}>
 							<Select.Trigger
 								id="move-entry-target"
-								class="h-11 w-full min-w-0 bg-white text-sm font-medium sm:h-10"
+								class="h-11 w-full min-w-0 bg-white text-sm font-medium data-[size=default]:h-11 sm:h-10 sm:data-[size=default]:h-10"
 							>
 								<span class="truncate">
 									{selectedTarget ? selectedTarget.name : 'เลือกกองปลายทาง'}

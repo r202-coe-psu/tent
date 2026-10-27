@@ -46,6 +46,7 @@ import { assertLedgerReplayBase } from './ledger-replay';
 import {
 	assertOperationUlid,
 	isOurLock,
+	loadSnapshotPinsForWrite,
 	requirePool,
 	resolveDependencies,
 	type BulkReturnPoolV3WorkflowDependencies
@@ -147,7 +148,8 @@ export interface UpdateBulkReturnPoolHeaderPatch {
 function assertPoolEditable(pool: BulkReturnPoolV3): void {
 	if (!canAppendToPool(pool)) {
 		throw new BulkReturnPoolStateError(
-			`Bulk return pool ${pool._id} must be OPEN and unlocked (status ${pool.status}${pool.lock ? `, locked for ${pool.lock.op}` : ''})`
+			`Bulk return pool ${pool._id} must be OPEN and unlocked (status ${pool.status}${pool.lock ? `, locked for ${pool.lock.op}` : ''})`,
+			pool.status === 'OPEN' ? 'locked' : 'closed'
 		);
 	}
 }
@@ -217,7 +219,8 @@ export async function cancelBulkReturnPool(
 	if (pool.status === 'CANCELLED') return pool;
 	if (pool.status !== 'OPEN') {
 		throw new BulkReturnPoolStateError(
-			`Only an OPEN pool can be cancelled (status ${pool.status})`
+			`Only an OPEN pool can be cancelled (status ${pool.status})`,
+			'closed'
 		);
 	}
 
@@ -225,7 +228,8 @@ export async function cancelBulkReturnPool(
 		if (current.status === 'CANCELLED') return current;
 		if (current.status !== 'OPEN') {
 			throw new BulkReturnPoolStateError(
-				`Only an OPEN pool can be cancelled (status ${current.status})`
+				`Only an OPEN pool can be cancelled (status ${current.status})`,
+				'closed'
 			);
 		}
 		if (current.lock) {
@@ -253,7 +257,15 @@ export async function cancelBulkReturnPool(
 		await releaseCancelLock();
 		assertNoSkippedDocs(events.skipped, `bulk return pool ${poolId}`);
 	}
-	if (!isPoolEmpty(events.entries, events.moves, poolId, events.voids)) {
+	// An entry pinned to another closed pool's snapshot is not this pool's (our pool is OPEN: no pin).
+	let pins: Map<string, string>;
+	try {
+		pins = await loadSnapshotPinsForWrite(poolRepo, events, poolId);
+	} catch (err) {
+		await releaseCancelLock();
+		throw err;
+	}
+	if (!isPoolEmpty(events.entries, events.moves, poolId, events.voids, pins)) {
 		await releaseCancelLock();
 		throw new BulkReturnPoolNotEmptyError(
 			`Bulk return pool ${poolId} still has entries; move or void them first`
@@ -296,7 +308,8 @@ export async function submitBulkReturnPool(
 	if (pool.status === 'SUBMITTED') return pool;
 	if (pool.status !== 'OPEN') {
 		throw new BulkReturnPoolStateError(
-			`Only an OPEN pool can be submitted (status ${pool.status})`
+			`Only an OPEN pool can be submitted (status ${pool.status})`,
+			'closed'
 		);
 	}
 
@@ -304,7 +317,8 @@ export async function submitBulkReturnPool(
 		if (current.status === 'SUBMITTED') return current;
 		if (current.status !== 'OPEN') {
 			throw new BulkReturnPoolStateError(
-				`Only an OPEN pool can be submitted (status ${current.status})`
+				`Only an OPEN pool can be submitted (status ${current.status})`,
+				'closed'
 			);
 		}
 		if (current.lock) {
@@ -332,10 +346,12 @@ export async function submitBulkReturnPool(
 		const events = await eventRepo.listForPool(poolId);
 		// Fail closed: a skipped doc would drop an entry from (or add a voided one to) the snapshot.
 		assertNoSkippedDocs(events.skipped, `bulk return pool ${poolId}`);
+		// Entries pinned to another closed pool's snapshot are never re-counted here.
+		const pins = await loadSnapshotPinsForWrite(poolRepo, events, poolId);
 		snapshot = {
-			items_summary: summarizePoolItems(events.entries, events.moves, poolId, events.voids),
+			items_summary: summarizePoolItems(events.entries, events.moves, poolId, events.voids, pins),
 			entry_ids: poolSnapshotEntryIds(
-				resolveBulkReturnEntries(events.entries, events.moves, events.voids),
+				resolveBulkReturnEntries(events.entries, events.moves, events.voids, pins),
 				poolId
 			)
 		};
@@ -467,7 +483,8 @@ export async function receiveBulkReturnPool(
 	const pool = await requirePool(poolRepo, poolId);
 	if (pool.status !== 'SUBMITTED' && pool.status !== 'RECEIVED') {
 		throw new BulkReturnPoolStateError(
-			`Only a SUBMITTED pool can be received (status ${pool.status})`
+			`Only a SUBMITTED pool can be received (status ${pool.status})`,
+			pool.status === 'CANCELLED' ? 'closed' : 'not_submitted'
 		);
 	}
 
@@ -503,7 +520,8 @@ export async function receiveBulkReturnPool(
 			if (current.status === 'RECEIVED') return current;
 			if (current.status !== 'SUBMITTED') {
 				throw new BulkReturnPoolStateError(
-					`Only a SUBMITTED pool can be received (status ${current.status})`
+					`Only a SUBMITTED pool can be received (status ${current.status})`,
+					current.status === 'CANCELLED' ? 'closed' : 'not_submitted'
 				);
 			}
 			wrote = true;
@@ -524,7 +542,8 @@ export async function receiveBulkReturnPool(
 	// --- b) a RECEIVED pool must carry the record that was asked for ---
 	if (replayed && !sameReceivedRecord(committed, received, point?.id)) {
 		throw new BulkReturnPoolStateError(
-			`Bulk return pool ${poolId} was already received with a different record`
+			`Bulk return pool ${poolId} was already received with a different record`,
+			'conflict'
 		);
 	}
 

@@ -34,6 +34,16 @@ export interface AddEntryLine {
 	qty: string;
 	/** Created once per line and kept across retries (idempotency key of the entry write). */
 	operationUlid: string;
+	/**
+	 * Set when a retry found this line's entry already moved to another pool (or its move pending
+	 * sync). The line is done: it stays visible with a note and is never submitted again.
+	 */
+	relocated?: 'moved' | 'pending_sync';
+}
+
+/** Lines still to submit (relocated lines are done). */
+export function activeLines(lines: readonly AddEntryLine[]): AddEntryLine[] {
+	return lines.filter((line) => !line.relocated);
 }
 
 /** Appends an empty line; `createId` supplies the line's operationUlid (and its lineId). */
@@ -61,14 +71,18 @@ export interface AddEntryLinesValidation {
 	formError?: string;
 }
 
-/** ≥1 line; each line needs an item and a positive whole qty; an item may appear once per submit. */
+/**
+ * ≥1 line; each line needs an item and a positive whole qty; an item may appear once per submit.
+ * Relocated lines are done and not validated.
+ */
 export function validateAddEntryLines(lines: readonly AddEntryLine[]): AddEntryLinesValidation {
 	const lineErrors: Record<string, string> = {};
-	if (lines.length === 0) {
+	const active = activeLines(lines);
+	if (active.length === 0) {
 		return { isValid: false, lineErrors, formError: 'กรุณาเพิ่มอย่างน้อย 1 รายการ' };
 	}
 	const seen = new Set<string>();
-	for (const line of lines) {
+	for (const line of active) {
 		if (!line.item_id) {
 			lineErrors[line.lineId] = 'กรุณาเลือกสินค้า';
 			continue;
@@ -124,7 +138,7 @@ export function buildAddEntriesInput(args: {
 	notes?: string;
 }): AddBulkReturnEntriesInput | null {
 	const items: AddBulkReturnEntriesInput['items'] = [];
-	for (const line of args.lines) {
+	for (const line of activeLines(args.lines)) {
 		const qty = validatePositiveQuantity(line.qty);
 		if (!qty.isValid || !qty.value || !line.item_id) return null;
 		items.push({ item_id: line.item_id, qty: qty.value, operationUlid: line.operationUlid });
@@ -175,6 +189,21 @@ export function listOpenPools(rows: readonly BulkReturnPoolRow[]) {
 	return listMoveTargets(rows, '');
 }
 
+/**
+ * Default pool for the add-entry form: the explicitly picked/initial pool if still open, else the
+ * remembered last-used pool if still open, else the only open pool, else ''.
+ */
+export function resolveDefaultPoolId(input: {
+	picked: string;
+	remembered: string | null;
+	openPools: readonly { _id: string }[];
+}): string {
+	const { picked, remembered, openPools } = input;
+	if (picked && openPools.some((pool) => pool._id === picked)) return picked;
+	if (remembered && openPools.some((pool) => pool._id === remembered)) return remembered;
+	return openPools.length === 1 ? openPools[0]._id : '';
+}
+
 // ---------------------------------------------------------------------------
 // Outstanding loans
 // ---------------------------------------------------------------------------
@@ -209,6 +238,46 @@ export function outstandingLoanRows(
 	return rows;
 }
 
+export interface LinesFromLoans {
+	lines: AddEntryLine[];
+	/** item_ids with an outstanding loan that the add-entry catalog cannot select. */
+	skippedItemIds: string[];
+}
+
+/**
+ * "Return all": one line per item (outstanding summed across loans), in first-seen order, limited
+ * to items the form can select. `makeLine` builds each NEW line (supplies lineId / operationUlid).
+ *
+ * `currentLines` keeps the write idempotent across a re-fill: an operationUlid identifies one
+ * intended write, so an item that already has a (not relocated) line in the form reuses that line
+ * (lineId + operationUlid kept, only qty set to the outstanding total). Otherwise a retry after a
+ * failed save would write a second entry for the same goods. Current lines of other items are
+ * dropped, except relocated (done) lines, which are kept at the end as they are.
+ */
+export function linesFromOutstandingLoans(
+	rows: readonly OutstandingLoanRow[],
+	eligibleItemIds: ReadonlySet<string>,
+	makeLine: (preset: { item_id: string; qty: string }) => AddEntryLine,
+	currentLines: readonly AddEntryLine[] = []
+): LinesFromLoans {
+	const totals = new Map<string, string>();
+	for (const row of rows) {
+		totals.set(row.item_id, addQty(totals.get(row.item_id) ?? '0', row.outstanding));
+	}
+	const lines: AddEntryLine[] = [];
+	const skippedItemIds: string[] = [];
+	for (const [item_id, qty] of totals) {
+		if (!eligibleItemIds.has(item_id)) {
+			skippedItemIds.push(item_id);
+			continue;
+		}
+		const existing = currentLines.find((line) => !line.relocated && line.item_id === item_id);
+		lines.push(existing ? { ...existing, qty } : makeLine({ item_id, qty }));
+	}
+	for (const line of currentLines) if (line.relocated) lines.push(line);
+	return { lines, skippedItemIds };
+}
+
 /**
  * True when an identified returner is selected, the loans query has settled, and none is
  * outstanding. `isLoading` should be true while the query is pending or failed (no false alarm).
@@ -234,6 +303,8 @@ export interface AddEntriesSummary {
 	replayedCount: number;
 	/** Written but the pool stopped accepting first: must be moved to an OPEN pool. */
 	lateEntries: AddBulkReturnEntriesResult['results'];
+	/** Replayed lines whose entry was moved to another pool meanwhile (or is pending sync): not saved here. */
+	relocated: { item_id: string; kind: 'moved' | 'pending_sync' }[];
 	noOutstandingLoan: boolean;
 	/** Total qty applied to loans (sum of loan refs of on-time entries); undefined when none. */
 	loanAppliedQty?: string;
@@ -242,7 +313,8 @@ export interface AddEntriesSummary {
 }
 
 export function summarizeAddResult(result: AddBulkReturnEntriesResult): AddEntriesSummary {
-	const onTime = result.results.filter((r) => !r.late);
+	const relocated = result.results.filter((r) => r.relocated);
+	const onTime = result.results.filter((r) => !r.late && !r.relocated);
 	const lateEntries = result.results.filter((r) => r.late);
 	let applied = '0';
 	for (const r of onTime) {
@@ -252,6 +324,10 @@ export function summarizeAddResult(result: AddBulkReturnEntriesResult): AddEntri
 		savedCount: onTime.filter((r) => !r.replayed).length,
 		replayedCount: onTime.filter((r) => r.replayed).length,
 		lateEntries,
+		relocated: relocated.map((r) => ({
+			item_id: r.entry.item_id,
+			kind: r.relocated as 'moved' | 'pending_sync'
+		})),
 		noOutstandingLoan: result.no_outstanding_loan,
 		...(qtyGt(applied, 0) ? { loanAppliedQty: applied } : {}),
 		unallocated: onTime
@@ -263,12 +339,21 @@ export function summarizeAddResult(result: AddBulkReturnEntriesResult): AddEntri
 /**
  * Lines still to submit after a call. A late result stops the workflow, so only the items written
  * so far are in `results`; written lines (late included: the entry exists) are dropped and the
- * rest stay for another pool / retry.
+ * rest stay for another pool / retry. A relocated line (entry moved elsewhere) is NOT dropped: it
+ * stays, flagged done, so the user sees it; it is never resubmitted (see `activeLines`).
  */
 export function dropWrittenLines(
 	lines: readonly AddEntryLine[],
 	result: AddBulkReturnEntriesResult
 ): AddEntryLine[] {
 	const written = new Set(result.results.map((r) => r.entry._id));
-	return lines.filter((line) => !written.has(`bulk_return_entry:${line.operationUlid}`));
+	const relocated = new Map(
+		result.results.flatMap((r) => (r.relocated ? [[r.entry._id, r.relocated] as const] : []))
+	);
+	return lines.flatMap((line) => {
+		const id = `bulk_return_entry:${line.operationUlid}`;
+		const kind = relocated.get(id);
+		if (kind) return [{ ...line, relocated: kind }];
+		return written.has(id) ? [] : [line];
+	});
 }

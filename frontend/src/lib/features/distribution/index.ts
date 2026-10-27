@@ -249,6 +249,8 @@ export {
 	useBulkReturnPool,
 	useBulkReturnPoolOverview,
 	useBulkReturnPoolClosedLoanRefs,
+	useBulkReturnPoolMissedLoanRefs,
+	useBulkReturnPoolTimeline,
 	useBulkReturnPoolAppliedLoanRefs,
 	useReturnerOutstandingLoans,
 	useBulkReturnSkippedDocs,
@@ -256,6 +258,7 @@ export {
 	useUpdateBulkReturnPoolHeader,
 	useAddBulkReturnEntries,
 	useMoveBulkReturnEntry,
+	useApplyMissedBulkReturnLoanRefs,
 	useVoidBulkReturnEntry,
 	useCancelBulkReturnPool,
 	useSubmitBulkReturnPool,
@@ -284,6 +287,7 @@ export {
 	type UpdateBulkReturnPoolHeaderMutationInput,
 	type AddBulkReturnEntriesMutationInput,
 	type MoveBulkReturnEntryMutationInput,
+	type ApplyMissedBulkReturnLoanRefsMutationInput,
 	type VoidBulkReturnEntryMutationInput,
 	type CancelBulkReturnPoolMutationInput,
 	type SubmitBulkReturnPoolMutationInput,
@@ -410,6 +414,9 @@ export {
 	type VerifiedQtyValidationResult,
 	type WarehouseReturnFormValidationResult
 } from './ui/model/warehouse-return';
+
+/** Deep link to one bulk return pool (back-office pools tab, detail open). */
+export { bulkReturnPoolHref } from './ui/model/pool-url-state';
 
 export {
 	formatDistributionError,

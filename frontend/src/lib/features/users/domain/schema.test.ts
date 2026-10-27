@@ -5,6 +5,7 @@ import {
 	editUserSchema,
 	usernameSchema,
 	phoneSchema,
+	contactPhoneSchema,
 	securityQuestionSetupSchema,
 	forgotPasswordVerifySchema
 } from './schema';
@@ -21,6 +22,13 @@ describe('phoneSchema and usernameSchema', () => {
 	it('rejects invalid phone numbers', () => {
 		expect(phoneSchema.safeParse('12345').success).toBe(false);
 		expect(phoneSchema.safeParse('081234567A').success).toBe(false);
+	});
+
+	it('accepts a 9-digit landline as a contact phone but not as a login phone', () => {
+		expect(contactPhoneSchema.safeParse('022222222').success).toBe(true);
+		expect(contactPhoneSchema.safeParse('0812345678').success).toBe(true);
+		expect(contactPhoneSchema.safeParse('02222222').success).toBe(false);
+		expect(phoneSchema.safeParse('022222222').success).toBe(false);
 	});
 
 	it('accepts alphanumeric username (for SA) and phone numbers for username', () => {

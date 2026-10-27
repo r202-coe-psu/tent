@@ -8,8 +8,11 @@ import {
 	filterEligibleItems,
 	hasNoOutstandingLoanWarning,
 	identifiedReturnerId,
+	linesFromOutstandingLoans,
 	outstandingLoanRows,
+	type OutstandingLoanRow,
 	removeLine,
+	resolveDefaultPoolId,
 	resolveReturner,
 	summarizeAddResult,
 	validateAddEntryLines,
@@ -25,6 +28,109 @@ function line(id: string, item_id: string, qty: string): AddEntryLine {
 	return { lineId: id, item_id, qty, operationUlid: id };
 }
 
+describe('linesFromOutstandingLoans', () => {
+	function loanRow(logId: string, item_id: string, outstanding: string): OutstandingLoanRow {
+		return { logId, item_id, itemName: item_id, unit: '', outstanding, distributed_at: '' };
+	}
+	const makeFrom = () => {
+		const next = counter();
+		return (preset: { item_id: string; qty: string }) =>
+			addLine([], next, preset)[0] as AddEntryLine;
+	};
+
+	it('sums outstanding of several loans of the same item into one line', () => {
+		const result = linesFromOutstandingLoans(
+			[
+				loanRow('l1', 'item_master:a', '2'),
+				loanRow('l2', 'item_master:b', '1'),
+				loanRow('l3', 'item_master:a', '3')
+			],
+			new Set(['item_master:a', 'item_master:b']),
+			makeFrom()
+		);
+		expect(result.lines.map((l) => [l.item_id, l.qty])).toEqual([
+			['item_master:a', '5'],
+			['item_master:b', '1']
+		]);
+		expect(result.skippedItemIds).toEqual([]);
+		expect(new Set(result.lines.map((l) => l.operationUlid)).size).toBe(2);
+	});
+
+	it('skips and reports items outside the eligible set', () => {
+		const result = linesFromOutstandingLoans(
+			[loanRow('l1', 'item_master:a', '2'), loanRow('l2', 'item_master:x', '4')],
+			new Set(['item_master:a']),
+			makeFrom()
+		);
+		expect(result.lines.map((l) => l.item_id)).toEqual(['item_master:a']);
+		expect(result.skippedItemIds).toEqual(['item_master:x']);
+	});
+
+	it('re-fill keeps lineId and operationUlid of a line with the same item (qty updated)', () => {
+		const current: AddEntryLine[] = [
+			{ lineId: 'L1', item_id: 'item_master:a', qty: '1', operationUlid: 'OP1' }
+		];
+		const result = linesFromOutstandingLoans(
+			[loanRow('l1', 'item_master:a', '2'), loanRow('l2', 'item_master:a', '3')],
+			new Set(['item_master:a']),
+			makeFrom(),
+			current
+		);
+		expect(result.lines).toEqual([
+			{ lineId: 'L1', item_id: 'item_master:a', qty: '5', operationUlid: 'OP1' }
+		]);
+	});
+
+	it('gives a new item a fresh ulid and drops lines of items no longer outstanding', () => {
+		const current: AddEntryLine[] = [
+			{ lineId: 'L1', item_id: 'item_master:a', qty: '1', operationUlid: 'OP1' },
+			{ lineId: 'L2', item_id: 'item_master:gone', qty: '1', operationUlid: 'OP2' }
+		];
+		const result = linesFromOutstandingLoans(
+			[loanRow('l1', 'item_master:a', '2'), loanRow('l2', 'item_master:b', '1')],
+			new Set(['item_master:a', 'item_master:b']),
+			makeFrom(),
+			current
+		);
+		expect(result.lines.map((l) => [l.item_id, l.operationUlid])).toEqual([
+			['item_master:a', 'OP1'],
+			['item_master:b', 'ULID1']
+		]);
+	});
+
+	it('preserves relocated lines and does not reuse them for the same item', () => {
+		const current: AddEntryLine[] = [
+			{ lineId: 'L1', item_id: 'item_master:a', qty: '2', operationUlid: 'OP1', relocated: 'moved' }
+		];
+		const result = linesFromOutstandingLoans(
+			[loanRow('l1', 'item_master:a', '2')],
+			new Set(['item_master:a']),
+			makeFrom(),
+			current
+		);
+		expect(result.lines).toHaveLength(2);
+		expect(result.lines[0]).toMatchObject({ item_id: 'item_master:a', operationUlid: 'ULID1' });
+		expect(result.lines[0].relocated).toBeUndefined();
+		expect(result.lines[1]).toEqual(current[0]);
+	});
+
+	it('is stable when called twice in a row', () => {
+		const rows = [loanRow('l1', 'item_master:a', '2'), loanRow('l2', 'item_master:b', '1')];
+		const eligible = new Set(['item_master:a', 'item_master:b']);
+		const make = makeFrom();
+		const first = linesFromOutstandingLoans(rows, eligible, make, []);
+		const second = linesFromOutstandingLoans(rows, eligible, make, first.lines);
+		expect(second.lines).toEqual(first.lines);
+	});
+
+	it('returns nothing for no rows', () => {
+		expect(linesFromOutstandingLoans([], new Set(['item_master:a']), makeFrom())).toEqual({
+			lines: [],
+			skippedItemIds: []
+		});
+	});
+});
+
 describe('lines', () => {
 	it('creates one id per line and keeps it when other lines change', () => {
 		const next = counter();
@@ -34,6 +140,53 @@ describe('lines', () => {
 		expect(lines[1]).toMatchObject({ item_id: 'item_master:a', qty: '2' });
 		lines = removeLine(lines, 'ULID1');
 		expect(lines.map((l) => l.operationUlid)).toEqual(['ULID2']);
+	});
+});
+
+describe('resolveDefaultPoolId', () => {
+	const two = [{ _id: 'pool:a' }, { _id: 'pool:b' }];
+
+	it('prefers the picked pool over the remembered one', () => {
+		expect(resolveDefaultPoolId({ picked: 'pool:a', remembered: 'pool:b', openPools: two })).toBe(
+			'pool:a'
+		);
+	});
+
+	it('uses the remembered pool when nothing is picked', () => {
+		expect(resolveDefaultPoolId({ picked: '', remembered: 'pool:b', openPools: two })).toBe(
+			'pool:b'
+		);
+	});
+
+	it('ignores a stale remembered id that no longer exists', () => {
+		expect(resolveDefaultPoolId({ picked: '', remembered: 'pool:gone', openPools: two })).toBe('');
+	});
+
+	it('ignores a remembered pool that is not open', () => {
+		expect(
+			resolveDefaultPoolId({
+				picked: '',
+				remembered: 'pool:closed',
+				openPools: [{ _id: 'pool:a' }]
+			})
+		).toBe('pool:a');
+	});
+
+	it('ignores a picked pool that is not open and falls back to remembered', () => {
+		expect(resolveDefaultPoolId({ picked: 'pool:x', remembered: 'pool:b', openPools: two })).toBe(
+			'pool:b'
+		);
+	});
+
+	it('falls back to the only open pool', () => {
+		expect(
+			resolveDefaultPoolId({ picked: '', remembered: null, openPools: [{ _id: 'pool:a' }] })
+		).toBe('pool:a');
+	});
+
+	it('returns empty when several pools are open and nothing applies', () => {
+		expect(resolveDefaultPoolId({ picked: '', remembered: null, openPools: two })).toBe('');
+		expect(resolveDefaultPoolId({ picked: '', remembered: null, openPools: [] })).toBe('');
 	});
 });
 
@@ -204,6 +357,7 @@ describe('summarizeAddResult / dropWrittenLines', () => {
 			refs?: string[];
 			unallocated?: string;
 			returner?: string | null;
+			relocated?: 'moved' | 'pending_sync';
 		} = {}
 	) {
 		return {
@@ -217,7 +371,8 @@ describe('summarizeAddResult / dropWrittenLines', () => {
 			replayed: opts.replayed ?? false,
 			loansApplied: [],
 			loansSkipped: [],
-			unallocated_qty: opts.unallocated ?? '0'
+			unallocated_qty: opts.unallocated ?? '0',
+			...(opts.relocated ? { relocated: opts.relocated } : {})
 		};
 	}
 	const wrap = (
@@ -259,5 +414,42 @@ describe('summarizeAddResult / dropWrittenLines', () => {
 		const remaining = dropWrittenLines(lines, wrap([res('A', { late: true })]));
 		expect(remaining.map((l) => l.lineId)).toEqual(['B']);
 		expect(dropWrittenLines(lines, wrap([res('A'), res('B')]))).toEqual([]);
+	});
+
+	it('counts relocated lines separately, not as saved or late', () => {
+		const summary = summarizeAddResult(
+			wrap([
+				res('A', { refs: ['2'] }),
+				res('B', { relocated: 'moved' }),
+				res('C', { relocated: 'pending_sync' })
+			])
+		);
+		expect(summary.savedCount).toBe(1);
+		expect(summary.replayedCount).toBe(0);
+		expect(summary.lateEntries).toHaveLength(0);
+		expect(summary.loanAppliedQty).toBe('2');
+		expect(summary.relocated).toEqual([
+			{ item_id: 'item_master:B', kind: 'moved' },
+			{ item_id: 'item_master:C', kind: 'pending_sync' }
+		]);
+	});
+
+	it('keeps a relocated line flagged done and never resubmits it', () => {
+		const lines = [line('A', 'item_master:A', '1'), line('B', 'item_master:B', '2')];
+		const remaining = dropWrittenLines(lines, wrap([res('A', { relocated: 'moved' }), res('B')]));
+		expect(remaining).toEqual([{ ...lines[0], relocated: 'moved' }]);
+
+		const input = buildAddEntriesInput({
+			poolId: 'p',
+			returner: { type: 'unspecified' },
+			lines: [...remaining, line('C', 'item_master:C', '3')]
+		});
+		expect(input?.items.map((i) => i.operationUlid)).toEqual(['C']);
+		// A later call does not touch the flag; relocated lines are not validated.
+		expect(dropWrittenLines(remaining, wrap([])).map((l) => l.relocated)).toEqual(['moved']);
+		expect(validateAddEntryLines(remaining).isValid).toBe(false);
+		expect(validateAddEntryLines([...remaining, line('D', 'item_master:A', '1')]).isValid).toBe(
+			true
+		);
 	});
 });

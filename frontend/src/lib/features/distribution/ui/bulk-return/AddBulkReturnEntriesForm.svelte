@@ -14,6 +14,10 @@
 	import { Label } from '$lib/components/ui/label/index.js';
 	import { Switch } from '$lib/components/ui/switch/index.js';
 	import { Textarea } from '$lib/components/ui/textarea/index.js';
+	import ListChecks from '@lucide/svelte/icons/list-checks';
+	import QrCode from '@lucide/svelte/icons/qr-code';
+	import { Html5QrcodeSupportedFormats } from 'html5-qrcode';
+	import CameraCodeScannerDialog from '$lib/components/camera-code-scanner-dialog.svelte';
 	import { useItemMasters } from '$lib/features/catalog';
 	import { formatThaiShortDate } from '$lib/utils/date';
 	import {
@@ -31,15 +35,18 @@
 	import {
 		LATE_RESULT_WARNING,
 		NO_OUTSTANDING_LOAN_WARNING,
+		activeLines,
 		addLine,
 		buildAddEntriesInput,
 		dropWrittenLines,
 		filterEligibleItems,
 		hasNoOutstandingLoanWarning,
 		identifiedReturnerId,
+		linesFromOutstandingLoans,
 		listOpenPools,
 		outstandingLoanRows,
 		removeLine,
+		resolveDefaultPoolId,
 		resolveReturner,
 		summarizeAddResult,
 		validateAddEntryLines,
@@ -47,6 +54,11 @@
 		type AddEntryLine,
 		type ReturnerChoice
 	} from '../model/bulk-return-add-entry';
+	import { parsePoolScanCode } from '../model/bulk-return-pool-qr';
+	import {
+		readLastBulkReturnPool,
+		writeLastBulkReturnPool
+	} from '../model/last-bulk-return-pool-storage';
 
 	/** Mounted by AddBulkReturnEntriesDialog only while open, so every open starts clean. */
 	interface Props {
@@ -67,6 +79,8 @@
 		onsuccess
 	}: Props = $props();
 
+	const POOL_SCAN_FORMATS = [Html5QrcodeSupportedFormats.QR_CODE];
+
 	const addMutation = useAddBulkReturnEntries();
 	const overviewQuery = useBulkReturnPoolOverview(
 		() => ({ includeCancelled: true }),
@@ -85,6 +99,10 @@
 
 	// Initial values are read once on mount (the parent remounts this form for every open).
 	let pickedPoolId = $state(untrack(() => initialPoolId ?? ''));
+	// Last-used pool on this device for this shelter; only a default, never overrides a pick.
+	const rememberedPoolId = untrack(() =>
+		shelterCode ? readLastBulkReturnPool(shelterCode) : null
+	);
 	let returnerSelection = $state<FrontlineRecipientSelection | null>(
 		untrack(() => (initialReturner?.recipientType === 'outside' ? null : initialReturner))
 	);
@@ -97,13 +115,28 @@
 	let submitError = $state<string | null>(null);
 
 	const openPools = $derived(listOpenPools(overviewQuery.data ?? []));
-	// Falls back to the only OPEN pool; '' when the picked pool is gone / no longer OPEN.
+	// Picked pool, else remembered last-used pool, else the only OPEN pool; '' when none is OPEN.
+	// A scanned pool QR wins over the Select pick until the user picks again.
+	let poolScannerOpen = $state(false);
+	let scannedPoolId = $state<string | null>(null);
+	let poolScanInvalid = $state(false);
+	const effectivePicked = $derived(scannedPoolId ?? pickedPoolId);
 	const poolId = $derived(
-		openPools.some((pool) => pool._id === pickedPoolId)
-			? pickedPoolId
-			: openPools.length === 1
-				? openPools[0]._id
-				: ''
+		resolveDefaultPoolId({ picked: effectivePicked, remembered: rememberedPoolId, openPools })
+	);
+	const poolScanStatus = $derived.by<'checking' | 'not_found' | 'invalid' | null>(() => {
+		if (poolScanInvalid) return 'invalid';
+		if (scannedPoolId === null) return null;
+		if (overviewQuery.isPending) return 'checking';
+		return openPools.some((pool) => pool._id === scannedPoolId) ? null : 'not_found';
+	});
+	const poolScanProcessing = $derived(poolScanStatus === 'checking');
+	const poolScanError = $derived(
+		poolScanStatus === 'invalid'
+			? 'QR นี้ไม่ใช่ QR ของกองรับคืน'
+			: poolScanStatus === 'not_found'
+				? 'ไม่พบกองนี้ หรือกองไม่ได้เปิดรับแล้ว'
+				: null
 	);
 	const selectedPool = $derived(openPools.find((pool) => pool._id === poolId) ?? null);
 
@@ -144,6 +177,39 @@
 		return item.unit ? `${item.name} (${item.unit})` : item.name;
 	}
 
+	function handlePoolScan(code: string) {
+		const parsed = parsePoolScanCode(code);
+		poolScanInvalid = parsed === null;
+		scannedPoolId = parsed;
+	}
+
+	function handlePoolSelect(value: string) {
+		pickedPoolId = value;
+		scannedPoolId = null;
+		poolScanInvalid = false;
+	}
+
+	// "คืนทั้งหมด": replaces the lines with one line per outstanding item (qty stays editable).
+	// Existing lines of the same item keep their operationUlid (a retry after a failed save must not
+	// write a second entry).
+	let returnAllSkippedNote = $state<string | null>(null);
+
+	function handleReturnAll() {
+		const result = linesFromOutstandingLoans(
+			loanRows,
+			new Set(catalog.map((item) => item._id)),
+			(preset) => addLine([], createStableOperationId, preset)[0],
+			lines
+		);
+		if (result.lines.length > 0) lines = result.lines;
+		returnAllSkippedNote =
+			result.skippedItemIds.length > 0
+				? `ข้าม ${result.skippedItemIds.length} รายการที่เลือกในแคตตาล็อกไม่ได้: ${result.skippedItemIds
+						.map((id) => resolveItemDisplay(id, catalog).name)
+						.join(', ')}`
+				: null;
+	}
+
 	function handleOpenChange(next: boolean) {
 		if (!next && !addMutation.isPending) open = false;
 	}
@@ -157,6 +223,7 @@
 		}
 		if (summary.noOutstandingLoan) toast.warning(NO_OUTSTANDING_LOAN_WARNING);
 		if (summary.lateEntries.length > 0) toast.warning(LATE_RESULT_WARNING);
+		if (summary.relocated.length > 0) toast.info('บางรายการถูกย้ายไปกองอื่นแล้ว ไม่ได้บันทึกซ้ำ');
 		if (summary.unallocated.length > 0) {
 			const detail = summary.unallocated
 				.map((u) => `${resolveItemDisplay(u.item_id, catalog).name} ${u.qty}`)
@@ -174,6 +241,10 @@
 		}
 		if (!selectedPool) {
 			submitError = 'กรุณาเลือกกองที่เปิดรับ';
+			return;
+		}
+		if (poolScanStatus === 'not_found') {
+			submitError = 'กองที่สแกนไม่ได้เปิดรับแล้ว กรุณาสแกนกองอื่นหรือเลือกกองจากรายการ';
 			return;
 		}
 		if (!returnerResolution.returner) {
@@ -197,13 +268,17 @@
 		try {
 			const result = await addMutation.mutateAsync({ input, shelterCode });
 			const summary = summarizeAddResult(result);
+			if (shelterCode && summary.savedCount + summary.replayedCount > 0) {
+				writeLastBulkReturnPool(shelterCode, selectedPool._id);
+			}
 			reportSummary(summary);
 			// A late entry stops the workflow: the lines that were not written stay for a retry.
 			lines = dropWrittenLines(lines, result);
+			// Relocated lines stay (flagged) so the dialog only closes when every line was written.
 			if (lines.length === 0) {
 				open = false;
 				onsuccess?.(summary);
-			} else {
+			} else if (activeLines(lines).length > 0) {
 				submitError =
 					'บางรายการยังไม่ได้บันทึก เพราะกองนี้ไม่รับของแล้ว กรุณาเลือกกองอื่นที่เปิดรับ แล้วกดบันทึกอีกครั้ง';
 			}
@@ -211,7 +286,8 @@
 			// Line operationUlids are kept, so pressing save again is an idempotent retry.
 			const message = formatDistributionError(
 				err,
-				'บันทึกของเข้ากองไม่สำเร็จ กรุณาลองใหม่อีกครั้ง'
+				'บันทึกของเข้ากองไม่สำเร็จ กรุณาลองใหม่อีกครั้ง',
+				{ poolContext: 'intake' }
 			);
 			submitError = message;
 			toast.error(message);
@@ -270,21 +346,46 @@
 							<span>ยังไม่มีกองที่เปิดรับอยู่ กรุณาให้หัวหน้าเปิดกองใหม่ก่อน</span>
 						</p>
 					{:else}
-						<Select.Root type="single" bind:value={() => poolId, (v) => (pickedPoolId = v)}>
-							<Select.Trigger
-								id="add-entry-pool"
-								class="h-11 w-full min-w-0 bg-white text-sm font-medium sm:h-10"
+						<div class="flex flex-col gap-2 sm:flex-row sm:items-center">
+							<Select.Root type="single" bind:value={() => poolId, handlePoolSelect}>
+								<Select.Trigger
+									id="add-entry-pool"
+									class="h-11 w-full min-w-0 bg-white text-sm font-medium data-[size=default]:h-11 sm:h-10 sm:flex-1 sm:data-[size=default]:h-10"
+								>
+									<span class="truncate">
+										{selectedPool && poolScanStatus !== 'not_found'
+											? selectedPool.name
+											: 'เลือกกองที่เปิดรับ'}
+									</span>
+								</Select.Trigger>
+								<Select.Content>
+									{#each openPools as pool (pool._id)}
+										<Select.Item value={pool._id} label={pool.name} />
+									{/each}
+								</Select.Content>
+							</Select.Root>
+							<Button
+								type="button"
+								variant="outline"
+								disabled={poolScanProcessing || addMutation.isPending}
+								onclick={() => (poolScannerOpen = true)}
+								class="min-h-11 w-full gap-2 sm:w-auto"
 							>
-								<span class="truncate">
-									{selectedPool ? selectedPool.name : 'เลือกกองที่เปิดรับ'}
-								</span>
-							</Select.Trigger>
-							<Select.Content>
-								{#each openPools as pool (pool._id)}
-									<Select.Item value={pool._id} label={pool.name} />
-								{/each}
-							</Select.Content>
-						</Select.Root>
+								{#if poolScanProcessing}
+									<Loader2 class="h-4 w-4 animate-spin" aria-hidden="true" />
+									กำลังตรวจสอบ QR...
+								{:else}
+									<QrCode class="h-4 w-4" aria-hidden="true" />
+									สแกน QR กอง
+								{/if}
+							</Button>
+						</div>
+						{#if poolScanProcessing}
+							<p class="text-sm text-slate-500" role="status">กำลังตรวจสอบ QR กอง...</p>
+						{/if}
+						{#if poolScanError}
+							<p role="alert" class="text-xs font-medium text-red-700">{poolScanError}</p>
+						{/if}
 					{/if}
 				</div>
 
@@ -343,6 +444,23 @@
 										</li>
 									{/each}
 								</ul>
+								<div class="flex flex-col gap-2 pt-2 sm:flex-row-reverse sm:items-center sm:gap-3">
+									<Button
+										type="button"
+										variant="outline"
+										disabled={addMutation.isPending}
+										onclick={handleReturnAll}
+										class="min-h-11 w-full gap-2 sm:w-auto"
+									>
+										<ListChecks class="h-4 w-4" aria-hidden="true" />
+										คืนทั้งหมด
+									</Button>
+									{#if returnAllSkippedNote}
+										<p role="status" class="text-xs font-medium text-amber-800">
+											{returnAllSkippedNote}
+										</p>
+									{/if}
+								</div>
 							</div>
 						{/if}
 					{/if}
@@ -372,11 +490,15 @@
 										>
 											สินค้า
 										</Label>
-										<Select.Root type="single" bind:value={line.item_id}>
+										<Select.Root
+											type="single"
+											bind:value={line.item_id}
+											disabled={Boolean(line.relocated)}
+										>
 											<Select.Trigger
 												id="add-entry-item-{line.lineId}"
 												aria-invalid={Boolean(lineError)}
-												class="h-11 w-full min-w-0 bg-white text-sm font-medium sm:h-10"
+												class="h-11 w-full min-w-0 bg-white text-sm font-medium data-[size=default]:h-11 sm:h-10 sm:data-[size=default]:h-10"
 											>
 												<span class="truncate">{itemLabel(line.item_id)}</span>
 											</Select.Trigger>
@@ -400,6 +522,7 @@
 											inputmode="numeric"
 											autocomplete="off"
 											bind:value={line.qty}
+											disabled={Boolean(line.relocated)}
 											aria-invalid={Boolean(lineError)}
 											placeholder="0"
 											class="h-11 text-base tabular-nums sm:h-10 sm:text-sm"
@@ -408,7 +531,7 @@
 									<Button
 										type="button"
 										variant="outline"
-										disabled={lines.length === 1 || addMutation.isPending}
+										disabled={(lines.length === 1 && !line.relocated) || addMutation.isPending}
 										onclick={() => (lines = removeLine(lines, line.lineId))}
 										class="min-h-11 w-full gap-2 sm:w-auto"
 									>
@@ -419,19 +542,37 @@
 								{#if lineError}
 									<p role="alert" class="text-xs font-medium text-red-700">{lineError}</p>
 								{/if}
+								{#if line.relocated}
+									<p
+										role="status"
+										class="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-xs font-medium text-amber-900"
+									>
+										<AlertTriangle
+											class="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600"
+											aria-hidden="true"
+										/>
+										<span>
+											{line.relocated === 'moved'
+												? 'ย้ายไปกองอื่นแล้ว ไม่ต้องทำอะไรเพิ่ม'
+												: 'รายการนี้กำลังรอซิงก์ข้อมูล ลองใหม่ภายหลัง'}
+										</span>
+									</p>
+								{/if}
 							</li>
 						{/each}
 					</ul>
-					<Button
-						type="button"
-						variant="outline"
-						disabled={addMutation.isPending}
-						onclick={() => (lines = addLine(lines, createStableOperationId))}
-						class="min-h-11 w-full gap-2 sm:w-auto"
-					>
-						<Plus class="h-4 w-4" aria-hidden="true" />
-						เพิ่มรายการสินค้า
-					</Button>
+					<div class="flex justify-end">
+						<Button
+							type="button"
+							variant="outline"
+							disabled={addMutation.isPending}
+							onclick={() => (lines = addLine(lines, createStableOperationId))}
+							class="min-h-11 w-full gap-2 sm:w-auto"
+						>
+							<Plus class="h-4 w-4" aria-hidden="true" />
+							เพิ่มรายการสินค้า
+						</Button>
+					</div>
 				</div>
 
 				<div class="space-y-1.5">
@@ -461,7 +602,10 @@
 				</Button>
 				<Button
 					type="submit"
-					disabled={addMutation.isPending || !canWrite || openPools.length === 0}
+					disabled={addMutation.isPending ||
+						!canWrite ||
+						openPools.length === 0 ||
+						poolScanStatus === 'not_found'}
 					class="min-h-11 w-full gap-2 sm:w-auto"
 				>
 					{#if addMutation.isPending}
@@ -476,3 +620,12 @@
 		</form>
 	</Dialog.Content>
 </Dialog.Root>
+
+<CameraCodeScannerDialog
+	bind:open={poolScannerOpen}
+	title="สแกน QR กอง"
+	hint="เล็งกล้องไปที่ QR บนป้ายกองรับคืน หรือพิมพ์ / ยิงรหัสด้วยเครื่องสแกน"
+	formats={POOL_SCAN_FORMATS}
+	manualInputMode="text"
+	onScan={handlePoolScan}
+/>

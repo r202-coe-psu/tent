@@ -281,11 +281,29 @@ describe('bulk return pool v3 workflows', () => {
 		it('marks the entry late and leaves loans untouched when the pool is locked after the write', async () => {
 			const pool = await openPool('Gate A');
 			await seedLoan(18, { qty: '3' });
+			// The submit holds the lock at the fence, then finishes with a snapshot that lacks the entry.
+			let t = 0;
 			const racing = {
 				...deps,
 				poolRepo: racingPoolRepo(poolRepo, async (n) => {
 					if (n === 2) await lockPool(pool._id);
-				})
+				}),
+				fenceClock: {
+					now: () => t,
+					sleep: async (ms: number) => {
+						t += ms;
+						await poolRepo.mutateCAS(pool._id, (cur) =>
+							submitBulkReturnPoolV3(
+								cur,
+								{
+									items_summary: [{ item_id: 'item:wheelchair', qty: '1' }],
+									entry_ids: [`bulk_return_entry:${U(999)}`]
+								},
+								mgr
+							)
+						);
+					}
+				}
 			};
 			const res = await add(
 				pool._id,
@@ -584,7 +602,8 @@ describe('bulk return pool v3 workflows', () => {
 					distribution_log_id: loanId(45),
 					qty: results[0].entry.loan_refs[0].qty,
 					reason: 'closed',
-					outstanding: '3'
+					outstanding: '3',
+					ticket_id: 'requisition_ticket:01J00000000000000000000001'
 				}
 			]);
 

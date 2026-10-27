@@ -146,6 +146,10 @@ export {
 	isLateEntry,
 	findLateEntries,
 	findUnresolvedBulkReturnRefs,
+	buildSnapshotPins,
+	findSnapshotConflicts,
+	type SnapshotConflictKind,
+	type SnapshotPins,
 	type ResolvedBulkReturnEntry,
 	type UnresolvedBulkReturnRef
 } from './bulk-return-pool-summary';
@@ -160,6 +164,8 @@ export {
 	assessBulkReturnRefOnLoan,
 	findClosedBulkReturnLoanRefs,
 	findAppliedBulkReturnLoanRefs,
+	findMissedLoanRefs,
+	type MissedBulkReturnLoanRef,
 	type BulkReturnLoanDriftReason,
 	type BulkReturnRefLoan,
 	type BulkReturnRefAssessment,
@@ -173,6 +179,13 @@ export {
 	type BulkReturnPoolOverviewRow,
 	type BulkReturnPoolOverviewOptions
 } from './bulk-return-pool-overview';
+
+export {
+	buildPoolTimeline,
+	type PoolTimelineEvent,
+	type PoolTimelineEventKind,
+	type PoolTimelineEventSet
+} from './bulk-return-pool-timeline';
 
 export {
 	bulkReturnClaimStatusSchema,

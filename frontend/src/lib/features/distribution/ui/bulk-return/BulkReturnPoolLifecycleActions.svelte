@@ -3,6 +3,7 @@
 	import AlertCircle from '@lucide/svelte/icons/alert-circle';
 	import Loader2 from '@lucide/svelte/icons/loader-2';
 	import PackageCheck from '@lucide/svelte/icons/package-check';
+	import QrCode from '@lucide/svelte/icons/qr-code';
 	import Warehouse from '@lucide/svelte/icons/warehouse';
 	import * as AlertDialog from '$lib/components/ui/alert-dialog/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
@@ -14,6 +15,7 @@
 		liveSummaryRows
 	} from '../model/bulk-return-lifecycle';
 	import type { BulkReturnPoolRow, PoolCatalogItem } from '../model/bulk-return-pool-v3';
+	import BulkReturnPoolQrPrintDialog from './BulkReturnPoolQrPrintDialog.svelte';
 	import ReceiveBulkReturnPoolDialog from './ReceiveBulkReturnPoolDialog.svelte';
 
 	/**
@@ -35,6 +37,7 @@
 	let submitOpen = $state(false);
 	let submitError = $state<string | null>(null);
 	let receiveOpen = $state(false);
+	let qrOpen = $state(false);
 	// One ULID per submit action; reused when the confirm is retried after a failure.
 	let submitUlid: string | null = null;
 
@@ -68,9 +71,24 @@
 	}
 </script>
 
+{#if status === 'OPEN'}
+	<Button
+		type="button"
+		variant="outline"
+		onclick={() => (qrOpen = true)}
+		class="min-h-11 w-full gap-2 sm:w-auto"
+	>
+		<QrCode class="h-4 w-4" aria-hidden="true" />
+		พิมพ์ QR กอง
+	</Button>
+	{#if qrOpen}
+		<BulkReturnPoolQrPrintDialog bind:open={qrOpen} pool={row.pool} />
+	{/if}
+{/if}
+
 {#if canManage}
 	{#if status === 'OPEN'}
-		<div class="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-3">
+		<div class="flex flex-col gap-1 sm:contents">
 			<Button
 				type="button"
 				variant="outline"
@@ -86,7 +104,7 @@
 				เก็บเข้าคลัง
 			</Button>
 			{#if blockedReason}
-				<p id="submit-pool-reason" class="text-xs text-slate-600">{blockedReason}</p>
+				<p id="submit-pool-reason" class="text-xs text-slate-600 sm:basis-full">{blockedReason}</p>
 			{/if}
 		</div>
 

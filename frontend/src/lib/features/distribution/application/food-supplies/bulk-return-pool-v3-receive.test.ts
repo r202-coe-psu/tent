@@ -282,10 +282,10 @@ describe('bulk return pool v3 workflows', () => {
 						{ item_id: 'item:wheelchair', received_qty: '2' }
 					]
 				})
-			).rejects.toBeInstanceOf(BulkReturnPoolStateError);
+			).rejects.toMatchObject({ reason: 'conflict' });
 			await expect(
 				receive(pool._id, { ...fullInput(pool), storagePoint: { id: 'sp-1', name: 'Zone 1' } })
-			).rejects.toBeInstanceOf(BulkReturnPoolStateError);
+			).rejects.toMatchObject({ reason: 'conflict' });
 			expect(ledgerKeys()).toHaveLength(2);
 			expect(await balanceOf()).toEqual({ 'item:cot': '3', 'item:wheelchair': '2' });
 		});
@@ -377,13 +377,13 @@ describe('bulk return pool v3 workflows', () => {
 			const open = await openPool('Gate A');
 			await expect(
 				receive(open._id, { items: [{ item_id: 'item:cot', received_qty: '1' }] })
-			).rejects.toBeInstanceOf(BulkReturnPoolStateError);
+			).rejects.toMatchObject({ reason: 'not_submitted' });
 
 			const cancelled = await openPool('Gate B');
 			await cancelBulkReturnPool(cancelled._id, nextOp(), mgr, deps);
 			await expect(
 				receive(cancelled._id, { items: [{ item_id: 'item:cot', received_qty: '1' }] })
-			).rejects.toBeInstanceOf(BulkReturnPoolStateError);
+			).rejects.toMatchObject({ reason: 'closed' });
 
 			await expect(receive(`bulk_return_pool:${U(82)}`, { items: [] })).rejects.toBeInstanceOf(
 				BulkReturnPoolStateError
