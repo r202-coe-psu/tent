@@ -236,6 +236,19 @@ async def test_many_numbers_from_one_source_raise_an_alert(
     assert f"phones={len(phones)}" in alert.getMessage()
 
 
+async def test_a_source_that_keeps_searching_raises_one_alert_per_window(
+    client: AsyncClient, auth_headers: dict[str, str], caplog: pytest.LogCaptureFixture
+) -> None:
+    headers = {**auth_headers, "X-Real-IP": "203.0.113.10"}
+    phones = [f"08200000{n:02d}" for n in range(donation_use_case._LOOKUP_ALERT_MAX_PHONES + 4)]
+
+    with caplog.at_level(logging.INFO, logger=donation_use_case.logger.name):
+        for phone in phones:
+            await client.post(LOOKUP, headers=headers, json={"phone": phone})
+
+    assert len([r for r in caplog.records if r.levelno == logging.WARNING]) == 1
+
+
 def test_watch_counts_lookups_and_distinct_numbers_per_source() -> None:
     watch = donation_use_case._PhoneLookupWatch()
     assert watch.record("a", "h1") == (1, 1)
@@ -254,3 +267,18 @@ def test_watch_forgets_sources_that_went_quiet(monkeypatch: pytest.MonkeyPatch) 
     watch.record("busy", "h1")
 
     assert list(watch._seen) == ["busy"]
+
+
+def test_watch_alerts_a_source_again_once_the_window_has_passed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    clock = [1000.0]
+    monkeypatch.setattr(donation_use_case.time, "monotonic", lambda: clock[0])
+    watch = donation_use_case._PhoneLookupWatch()
+
+    assert watch.claim_alert("a") is True
+    assert watch.claim_alert("a") is False
+    assert watch.claim_alert("b") is True
+
+    clock[0] += donation_use_case._LOOKUP_ALERT_WINDOW_SECONDS
+    assert watch.claim_alert("a") is True

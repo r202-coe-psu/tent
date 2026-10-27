@@ -87,6 +87,7 @@ class _PhoneLookupWatch:
 
     def __init__(self) -> None:
         self._seen: dict[str, list[tuple[float, str]]] = {}
+        self._alerted_at: dict[str, float] = {}
         self._swept_at = time.monotonic()
         self._lock = threading.Lock()
 
@@ -104,6 +105,16 @@ class _PhoneLookupWatch:
             self._seen[source] = recent
             return len(recent), len({h for _, h in recent})
 
+    def claim_alert(self, source: str) -> bool:
+        """True once per window per source, so a flood raises one alert, not one per lookup."""
+        now = time.monotonic()
+        with self._lock:
+            last = self._alerted_at.get(source)
+            if last is not None and now - last < _LOOKUP_ALERT_WINDOW_SECONDS:
+                return False
+            self._alerted_at[source] = now
+            return True
+
     def _sweep(self, now: float) -> None:
         """Forget sources that went quiet, so the table does not grow with every IP ever seen."""
         if now - self._swept_at < _LOOKUP_ALERT_WINDOW_SECONDS:
@@ -114,10 +125,16 @@ class _PhoneLookupWatch:
             for source, hits in self._seen.items()
             if hits and now - hits[-1][0] < _LOOKUP_ALERT_WINDOW_SECONDS
         }
+        self._alerted_at = {
+            source: at
+            for source, at in self._alerted_at.items()
+            if now - at < _LOOKUP_ALERT_WINDOW_SECONDS
+        }
 
     def clear(self) -> None:
         with self._lock:
             self._seen.clear()
+            self._alerted_at.clear()
 
 
 phone_lookup_watch = _PhoneLookupWatch()
@@ -807,7 +824,9 @@ class DonationsUseCase:
             hashed,
             len(items),
         )
-        if lookups > _LOOKUP_ALERT_MAX_LOOKUPS or phones > _LOOKUP_ALERT_MAX_PHONES:
+        if (
+            lookups > _LOOKUP_ALERT_MAX_LOOKUPS or phones > _LOOKUP_ALERT_MAX_PHONES
+        ) and phone_lookup_watch.claim_alert(source):
             logger.warning(
                 "donation phone lookup volume high source=%s lookups=%d phones=%d window=%ds",
                 source,
