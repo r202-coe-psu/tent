@@ -85,6 +85,15 @@ describe('POST /api/public/v1/donations/photos', () => {
 		expect(vi.mocked(savePublicBookingImage).mock.calls[0][0].contentType).toBe('image/jpeg');
 	});
 
+	it('cuts a long file name to 200 characters', async () => {
+		const form = photoForm();
+		form.append('filename', `${'ก'.repeat(500)}.webp`);
+		const res = await POST(event(form));
+
+		expect(res.status).toBe(201);
+		expect(vi.mocked(savePublicBookingImage).mock.calls[0][0].filename).toBe('ก'.repeat(200));
+	});
+
 	it('refuses a renamed non-image file without writing anything (AC-5)', async () => {
 		const full = new File(['%PDF-1.7 not a photo'], 'box.jpg', { type: 'image/jpeg' });
 		const res = await POST(event(photoForm({ full })));

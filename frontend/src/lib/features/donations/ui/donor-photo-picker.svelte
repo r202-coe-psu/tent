@@ -64,7 +64,7 @@
 
 	{#if photos.items.length > 0}
 		<ul class="grid grid-cols-3 gap-3 sm:grid-cols-5">
-			{#each photos.items as photo (photo.key)}
+			{#each photos.items as photo, i (photo.key)}
 				<li class="relative aspect-square overflow-hidden rounded-xl border border-slate-200">
 					<img src={photo.previewUrl} alt="" class="size-full object-cover" />
 					{#if photo.state === 'uploading'}
@@ -86,7 +86,7 @@
 						>
 							<X class="size-4" aria-hidden="true" />
 						</span>
-						<span class="sr-only">{t.photoRemoveAria}</span>
+						<span class="sr-only">{t.photoRemoveAria.replace('{n}', String(i + 1))}</span>
 					</button>
 				</li>
 			{/each}

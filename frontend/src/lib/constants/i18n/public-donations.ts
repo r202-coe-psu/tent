@@ -385,7 +385,7 @@ export const PUBLIC_DONATIONS_I18N = {
 		photoRefusedNoRoom: 'แนบ {name} ไม่ได้ เพราะครบ 30 รูปหรือเกิน 10 MB แล้ว',
 		photoRefusedUnreadable: 'เปิดไฟล์ {name} ไม่ได้ กรุณาเลือกไฟล์รูป',
 		photoRefusedUpload: 'อัปโหลด {name} ไม่สำเร็จ กรุณาลองใหม่',
-		photoRemoveAria: 'ลบรูป',
+		photoRemoveAria: 'ลบรูปที่ {n}',
 		photoUploading: 'กำลังอัปโหลด',
 		photoWaitUpload: 'รอให้รูปอัปโหลดเสร็จก่อนจองคิว'
 	},
@@ -777,7 +777,7 @@ export const PUBLIC_DONATIONS_I18N = {
 		photoRefusedNoRoom: 'Could not add {name}: 30 photos or 10 MB already used',
 		photoRefusedUnreadable: 'Could not open {name}. Please choose an image file',
 		photoRefusedUpload: 'Uploading {name} failed. Please try again',
-		photoRemoveAria: 'Remove photo',
+		photoRemoveAria: 'Remove photo {n}',
 		photoUploading: 'Uploading',
 		photoWaitUpload: 'Wait for the photos to finish uploading before booking'
 	}

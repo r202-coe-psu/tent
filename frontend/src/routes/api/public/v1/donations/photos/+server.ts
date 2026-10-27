@@ -16,6 +16,8 @@ import { findMasterByCode } from '$lib/server/shelters.admin';
 export const prerender = false;
 
 const noStore = { 'Cache-Control': 'no-store' };
+/** The donor's file name is display-only; a longer one is cut, not refused. */
+const MAX_FILENAME_LENGTH = 200;
 
 function formNumber(form: FormData, key: string): number {
 	const raw = form.get(key);
@@ -79,10 +81,11 @@ export const POST: RequestHandler = async ({ request }) => {
 			full: fullFile,
 			// Stored under the type its bytes are, whatever the browser labelled it.
 			thumb: new Blob([thumbFile], { type: thumbCheck.mime }),
-			filename:
+			filename: (
 				(typeof form.get('filename') === 'string' && String(form.get('filename')).trim()) ||
 				fullFile.name ||
-				'photo.webp',
+				'photo.webp'
+			).slice(0, MAX_FILENAME_LENGTH),
 			contentType: fullCheck.mime,
 			width: formNumber(form, 'width'),
 			height: formNumber(form, 'height'),
