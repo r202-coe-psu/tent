@@ -62,6 +62,7 @@
 		type BulkReturnPoolRow,
 		type PoolCatalogItem
 	} from '../model/bulk-return-pool-v3';
+	import { formatSkippedDocIds } from '../model/bulk-return-timeline-copy';
 	import { ticketHref } from '../model/pool-url-state';
 	import { liveSummaryRows, submittedSummaryRows } from '../model/bulk-return-lifecycle';
 	import BulkReturnPoolReceiveRecord from './BulkReturnPoolReceiveRecord.svelte';
@@ -150,12 +151,7 @@
 	// Malformed docs the pool reads leave out: the entries below may be incomplete until they are fixed.
 	const skippedQuery = useBulkReturnSkippedDocs(undefined, () => shelterCode);
 	const skippedDocs = $derived(skippedQuery.data ?? []);
-	const skippedIds = $derived(
-		skippedDocs
-			.map((doc) => doc._id)
-			.filter(Boolean)
-			.join(', ')
-	);
+	const skippedIds = $derived(formatSkippedDocIds(skippedDocs));
 
 	// Chronological history of this pool (nested under the overview key, so writes refresh it).
 	const timelineQuery = useBulkReturnPoolTimeline(
@@ -565,6 +561,7 @@
 					{poolNameById}
 					isLoading={timelineQuery.isPending && timelineQuery.fetchStatus !== 'idle'}
 					isError={timelineQuery.isError}
+					skipped={timelineQuery.data?.skipped}
 				/>
 
 				{#if canManage && pool.status === 'OPEN'}
