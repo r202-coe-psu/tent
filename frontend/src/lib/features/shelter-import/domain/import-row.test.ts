@@ -123,6 +123,24 @@ describe('validateRow — happy path', () => {
 		expect(empty.shelter?.site_kind).toBe('evacuation_center');
 	});
 
+	it('resolves a label shared with an inactive item to the active one, in either order', () => {
+		const active = { code: 'field_hospital', label: 'โรงพยาบาลสนาม', label_en: 'Field Hospital' };
+		const retired = {
+			code: 'old_field_hospital',
+			label: 'โรงพยาบาลสนาม',
+			label_en: 'Field Hospital',
+			status: 'inactive' as const
+		};
+		for (const items of [
+			[active, retired],
+			[retired, active]
+		]) {
+			const lookup = buildMasterLookup(items);
+			expect(lookup.byLabel.get('โรงพยาบาลสนาม')).toBe('field_hospital');
+			expect(lookup.byLabel.get('Field Hospital')).toBe('field_hospital');
+		}
+	});
+
 	it('leaves the app-only fields unset — they are not in the workbook', () => {
 		const r = validateRow(baseRow(), 1, lookups());
 		expect(r.ok).toBe(true);

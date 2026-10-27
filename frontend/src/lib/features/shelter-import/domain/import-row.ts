@@ -169,11 +169,20 @@ export function buildMasterLookup(
 	const inactiveCodes = new Set<string>();
 	let defaultCode: string | null = null;
 	for (const it of items) {
-		byLabel.set(it.label.trim(), it.code);
-		if (it.label_en?.trim()) byLabel.set(it.label_en.trim(), it.code);
 		codes.add(it.code);
 		if (it.status === 'inactive') inactiveCodes.add(it.code);
 		else if (it.is_default) defaultCode = it.code;
+	}
+	for (const it of items) {
+		const inactive = inactiveCodes.has(it.code);
+		for (const label of [it.label, it.label_en]) {
+			const key = label?.trim();
+			if (!key) continue;
+			// An active item keeps a label it shares with an inactive one, whatever the list order.
+			const holder = byLabel.get(key);
+			if (inactive && holder !== undefined && !inactiveCodes.has(holder)) continue;
+			byLabel.set(key, it.code);
+		}
 	}
 	return { byLabel, codes, inactiveCodes, defaultCode };
 }
