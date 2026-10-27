@@ -45,6 +45,23 @@ describe('Food & Supplies DistributionLog contract', () => {
 		);
 	});
 
+	it('keeps allergen conflicts only on an overridden log (#607)', () => {
+		const overridden = createDistributionLog(
+			{
+				...foodLogInput,
+				is_override: true,
+				override_reason: 'รับไปให้ลูกที่ไม่แพ้',
+				allergen_conflicts: ['egg']
+			},
+			ctx,
+			ULID
+		);
+		expect(overridden.allergen_conflicts).toEqual(['egg']);
+		expect(
+			distributionLogInputSchema.safeParse({ ...foodLogInput, allergen_conflicts: ['egg'] }).success
+		).toBe(false);
+	});
+
 	it('rejects numeric quantities in persisted DistributionLog documents', () => {
 		const log = createDistributionLog(foodLogInput, ctx, ULID);
 		expect(distributionLogDocSchema.safeParse({ ...log, qty: 1 }).success).toBe(false);

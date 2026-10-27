@@ -13,8 +13,8 @@ import {
 const item = (over: Partial<ItemMaster> & { _id: string; name: string }): ItemMaster =>
 	({ base_unit: 'bottle', conversions: [], ...over }) as ItemMaster;
 
-describe('item_master schema_v 5 (CR-143 §F)', () => {
-	it('stamps schema_v 5 on a newly created item', () => {
+describe('item_master schema_v (CR-143 §F v5, #607 v6)', () => {
+	it('stamps the current schema_v on a newly created item', () => {
 		const doc = createItemMaster(
 			{
 				name: 'น้ำ',
@@ -25,8 +25,8 @@ describe('item_master schema_v 5 (CR-143 §F)', () => {
 			{ shelterCode: 'SH001', createdBy: 'staff' },
 			'SH001'
 		);
-		expect(ITEM_MASTER_SCHEMA_V).toBe(5);
-		expect(doc.schema_v).toBe(5);
+		expect(ITEM_MASTER_SCHEMA_V).toBe(6);
+		expect(doc.schema_v).toBe(6);
 		expect(doc.merged_into).toBeUndefined();
 	});
 });
