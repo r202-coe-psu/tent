@@ -28,6 +28,7 @@
 		formatTrackSchedule,
 		canEditCourierTracking,
 		canCancelDonation,
+		isTerminalDonationStatus,
 		rejectedLineReasons,
 		needsDropOffDestination,
 		resolveDropOffPoint,
@@ -70,6 +71,8 @@
 		wantsDestination ? (donation?.shelter_code ?? null) : null
 	);
 	const dropOffPoint = $derived(shelterQuery.data ? resolveDropOffPoint(shelterQuery.data) : null);
+	// A finished or cancelled booking still names its shelter, but no longer sends anyone there.
+	const showDirections = $derived(!isTerminalDonationStatus(status));
 
 	/**
 	 * CR-052 §1.4 (Task #52) — "ยกเลิกกลไกการข้ามขั้นตอนไปออกรหัสตอบรับ (QR Code)
@@ -397,7 +400,7 @@
 										>{t.destinationShelterLabel}</span
 									>
 									{#if dropOffPoint}
-										<DropOffCard point={dropOffPoint} />
+										<DropOffCard point={dropOffPoint} directions={showDirections} />
 									{:else}
 										<p class="mt-0.5 font-semibold text-foreground">{donation.shelter_code}</p>
 									{/if}

@@ -31,14 +31,14 @@
 	const units = $derived(unitsQuery.data ?? []);
 	const t = $derived(getTranslation(PUBLIC_DONATIONS_I18N, langState.current));
 
-	// A failed lookup falls back to the name/code the donor picked, and hides the map link.
-	const shelterQuery = usePublicShelter(() => donationStore.shelterCode);
-	const dropOffPoint = $derived(shelterQuery.data ? resolveDropOffPoint(shelterQuery.data) : null);
-	const directionsHref = $derived(
-		needsDropOffDestination(donationStore.deliveryMethod) && dropOffPoint
-			? dropOffDirectionsUrl(dropOffPoint)
-			: null
+	// Same gate as the track page: `shelter_pickup` has no destination to look up. Skipping or
+	// failing the lookup falls back to the name/code the donor picked, with no map link.
+	const wantsDestination = $derived(needsDropOffDestination(donationStore.deliveryMethod));
+	const shelterQuery = usePublicShelter(() =>
+		wantsDestination ? donationStore.shelterCode : null
 	);
+	const dropOffPoint = $derived(shelterQuery.data ? resolveDropOffPoint(shelterQuery.data) : null);
+	const directionsHref = $derived(dropOffPoint ? dropOffDirectionsUrl(dropOffPoint) : null);
 
 	let courierTracking = $state('');
 	let savingCourier = $state(false);
