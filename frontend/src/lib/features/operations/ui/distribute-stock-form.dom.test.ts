@@ -171,6 +171,30 @@ describe('distribute form: one batch, many lines (#837)', () => {
 		expect(button('บันทึกแล้วเบิกรายการถัดไป')!.disabled).toBe(false);
 	});
 
+	it('the summary under "เพิ่มรายการ" lists every ready line with its lot, expiry and balance', async () => {
+		await render({ preselectedItemId: RICE._id });
+		const summary = () => document.querySelector('[aria-labelledby="distribute-summary-title"]');
+
+		expect(summary()?.textContent).toContain('เลือกสินค้าและใส่จำนวนให้ครบ');
+
+		await type(qtyInputs()[0], '4');
+		button('เพิ่มรายการ')!.click();
+		await settle();
+		const water = (await openItemPicker(1)).find((o) => o.textContent?.includes('น้ำดื่ม'))!;
+		water.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, button: 0 }));
+		water.click();
+		await settle();
+		await type(qtyInputs()[1], '30');
+
+		const text = summary()?.textContent?.replace(/\s+/g, ' ') ?? '';
+		expect(text).toContain('2 รายการ · 2 แถวในบัญชีสต็อก');
+		expect(text).toContain('ข้าวสาร −4 ถุง');
+		expect(text).toContain('น้ำดื่ม −30 ขวด');
+		expect(text).toContain('คลังหลัก −4 ถุง');
+		expect(text).toContain('คงเหลือ 10 → 6 ถุง');
+		expect(text).toContain('ไม่ระบุวันหมดอายุ');
+	});
+
 	it('saving without a destination writes nothing and names the problem', async () => {
 		await render({ preselectedItemId: RICE._id });
 		await type(qtyInputs()[0], '4');

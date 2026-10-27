@@ -33,6 +33,7 @@
 		hasLandedRows,
 		parseDistributeNote,
 		planBatchWrites,
+		summarizeBatch,
 		rankLotsByItem,
 		withLineItem,
 		type DistributeLineDraft,
@@ -45,6 +46,7 @@
 	import { useDestinationOptions } from '../application/use-destination-options.svelte';
 	import { describeBatchResult } from './distribute-result';
 	import DistributeLineCard from './distribute-line-card.svelte';
+	import DistributeSummary from './distribute-summary.svelte';
 
 	/**
 	 * Direct issue of one or more items under one requisition ticket and one destination (#837).
@@ -160,6 +162,7 @@
 		})
 	);
 
+	const summary = $derived(summarizeBatch(lines, check));
 	const takenItemIds = $derived(new Set(lines.map((l) => l.item_id).filter((id) => id !== '')));
 	const hasLanded = $derived(lines.some(hasLandedRows));
 	const submitting = $derived(batchMutation.isPending);
@@ -403,6 +406,14 @@
 			<Plus class="h-4 w-4" aria-hidden="true" />
 			เพิ่มรายการ
 		</Button>
+
+		<DistributeSummary
+			{summary}
+			{labels}
+			{unitLabel}
+			storagePoints={storagePoints.points}
+			{priorityItems}
+		/>
 
 		<div class="space-y-2">
 			<Label class="text-sm font-semibold text-slate-700">

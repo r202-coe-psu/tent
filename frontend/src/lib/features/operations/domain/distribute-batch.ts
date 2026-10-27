@@ -286,6 +286,62 @@ export function planBatchWrites(
 	return plans;
 }
 
+/** One line of the batch summary shown before saving. Quantities in `allocations`/`landed` are base-unit. */
+export type BatchSummaryEntry =
+	| {
+			kind: 'ready';
+			key: string;
+			item_id: string;
+			/** As typed, in `unit`. */
+			qty: string;
+			unit: string;
+			baseQty: string;
+			/** Already in the ledger from an earlier partial run (`0` when none). */
+			landed: string;
+			allocations: readonly LotAllocation[];
+	  }
+	| { kind: 'done'; key: string; item_id: string; landed: string };
+
+export interface BatchSummary {
+	/** Display order; lines that are not ready yet (incomplete, short, duplicate) are left out. */
+	entries: BatchSummaryEntry[];
+	/** Lines the next save writes. */
+	readyCount: number;
+	/** Ledger rows the next save writes, one per lot cut. */
+	rowCount: number;
+}
+
+/** What the batch takes and from which lots, across every line, for the summary under the lines. */
+export function summarizeBatch(
+	lines: readonly DistributeLineDraft[],
+	check: DistributeBatchCheck
+): BatchSummary {
+	const entries: BatchSummaryEntry[] = [];
+	lines.forEach((line, index) => {
+		const verdict = check.verdicts[index];
+		if (verdict?.kind === 'done') {
+			entries.push({ kind: 'done', key: line.key, item_id: line.item_id, landed: landedQty(line) });
+		} else if (verdict?.kind === 'ok') {
+			entries.push({
+				kind: 'ready',
+				key: line.key,
+				item_id: line.item_id,
+				qty: line.qty,
+				unit: line.unit,
+				baseQty: verdict.baseQty,
+				landed: landedQty(line),
+				allocations: verdict.plan.allocations
+			});
+		}
+	});
+	const ready = entries.filter((entry) => entry.kind === 'ready');
+	return {
+		entries,
+		readyCount: ready.length,
+		rowCount: ready.reduce((sum, entry) => sum + entry.allocations.length, 0)
+	};
+}
+
 /** What one run did to one line. Quantities are base-unit. */
 export type DistributeLineOutcome =
 	| { kind: 'done'; key: string; distributedQty: string }

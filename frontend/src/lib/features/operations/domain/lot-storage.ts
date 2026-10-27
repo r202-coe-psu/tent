@@ -54,6 +54,12 @@ export function lotStorageLabel(lot: LotLike, points: readonly StoragePointRef[]
 	return lotStorageName(lot, points) ?? DEFAULT_STORAGE_LABEL;
 }
 
+/** "ที่เก็บ · เลขล็อต" for display; just the place when the lot has no number. */
+export function lotDisplayName(lot: LotLike, points: readonly StoragePointRef[] = []): string {
+	const place = lotStorageLabel(lot, points);
+	return lot?.lot_no ? `${place} · ${lot.lot_no}` : place;
+}
+
 /**
  * Grouping key for "same location": the point id when there is one (survives a
  * rename), otherwise the resolved name. Unspecified lots share the empty key.

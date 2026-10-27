@@ -7,6 +7,7 @@ import {
 	hasLandedRows,
 	parseDistributeNote,
 	planBatchWrites,
+	summarizeBatch,
 	withLineItem,
 	type DistributeCheckContext,
 	type DistributeLineDraft,
@@ -263,6 +264,63 @@ describe('planBatchWrites', () => {
 		const plans = planBatchWrites(lines, checkDistributeBatch(lines, ctx()));
 		expect(plans.map((p) => [p.key, p.item_id])).toEqual([['b', WATER]]);
 		expect(plans[0].allocations.map((a) => a.qty)).toEqual(['3']);
+	});
+});
+
+describe('summarizeBatch', () => {
+	it('lists every ready line with its lots, the done ones, and skips lines not ready yet', () => {
+		const lines = [
+			line({ key: 'a', item_id: RICE, qty: '10', unit: 'ชิ้น' }),
+			line({ key: 'b', item_id: WATER, qty: '2', unit: 'แพ็ค' }),
+			line({ key: 'c', item_id: 'item:salt', qty: '', unit: 'ถุง' }),
+			line({
+				key: 'd',
+				item_id: 'item:soap',
+				qty: '4',
+				unit: 'ก้อน',
+				status: { kind: 'done', distributedQty: '4' }
+			})
+		];
+		const summary = summarizeBatch(lines, checkDistributeBatch(lines, ctx()));
+
+		expect(summary.entries.map((e) => [e.key, e.kind])).toEqual([
+			['a', 'ready'],
+			['b', 'ready'],
+			['d', 'done']
+		]);
+		const [rice, water, soap] = summary.entries;
+		if (rice.kind !== 'ready' || water.kind !== 'ready') throw new Error('expected ready entries');
+		expect(rice.allocations.map((a) => [a.lot_ref, a.qty])).toEqual([
+			['stock_ledger:R1', '6'],
+			['stock_ledger:R2', '4']
+		]);
+		expect([water.qty, water.unit, water.baseQty]).toEqual(['2', 'แพ็ค', '24']);
+		expect(soap).toMatchObject({ kind: 'done', landed: '4' });
+		expect(summary.readyCount).toBe(2);
+		expect(summary.rowCount).toBe(3);
+	});
+
+	it('keeps what a partial run already landed on a ready line', () => {
+		const lines = [
+			line({
+				key: 'a',
+				item_id: RICE,
+				qty: '4',
+				unit: 'ชิ้น',
+				status: { kind: 'failed', message: 'x', distributedQty: '6' }
+			})
+		];
+		const [entry] = summarizeBatch(lines, checkDistributeBatch(lines, ctx())).entries;
+		expect(entry).toMatchObject({ kind: 'ready', baseQty: '4', landed: '6' });
+	});
+
+	it('is empty while no line is ready', () => {
+		const lines = [line({ key: 'a', item_id: RICE, qty: '99', unit: 'ชิ้น' })];
+		expect(summarizeBatch(lines, checkDistributeBatch(lines, ctx()))).toEqual({
+			entries: [],
+			readyCount: 0,
+			rowCount: 0
+		});
 	});
 });
 

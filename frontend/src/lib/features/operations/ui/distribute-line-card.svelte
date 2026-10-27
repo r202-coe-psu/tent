@@ -19,7 +19,7 @@
 	} from '../domain/distribute-batch';
 	import { isLotExpired, lotPriorityReason, type LotPriorityItem } from '../domain/lot-priority';
 	import { formatLotClockLine } from '../domain/lot-age';
-	import { lotStorageLabel, type StoragePointRef } from '../domain/lot-storage';
+	import { lotDisplayName, type StoragePointRef } from '../domain/lot-storage';
 	import type { StockLotBalance } from '../domain/operations';
 	import type { StockFormItem } from '../domain/stock-form-items';
 	import { describeLineStatus, type BatchReportLabels } from './distribute-result';
@@ -109,8 +109,7 @@
 	}
 
 	function lotName(lot: StockLotBalance): string {
-		const place = lotStorageLabel(lot.lot, storagePoints);
-		return lot.lot?.lot_no ? `${place} · ${lot.lot.lot_no}` : place;
+		return lotDisplayName(lot.lot, storagePoints);
 	}
 
 	function lotLabel(lot: StockLotBalance): string {
@@ -241,7 +240,7 @@
 				</Label>
 				<div class="flex flex-wrap items-stretch gap-2">
 					<div
-						class="flex min-w-0 flex-1 items-stretch overflow-hidden rounded-lg border border-input"
+						class="flex min-w-40 flex-1 items-stretch overflow-hidden rounded-lg border border-input"
 					>
 						<Button
 							type="button"
