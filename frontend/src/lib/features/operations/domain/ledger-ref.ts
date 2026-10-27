@@ -35,6 +35,10 @@ export function shortLedgerRef(refId: string): string {
 
 const text = z.string().trim().min(1);
 
+/**
+ * Kinds missing here keep `shortLedgerRef`. `kitchen_requisition` is left out on purpose: the
+ * legacy doc (schema §2.6, CR-141) has no ticket number, only `issued_at` and `items`.
+ */
 const DOC_LABELS: Record<string, (doc: unknown) => string | null> = {
 	donation: (doc) => {
 		const parsed = z
@@ -49,8 +53,12 @@ const DOC_LABELS: Record<string, (doc: unknown) => string | null> = {
 		return parsed.success ? `ตั๋วเบิก ${parsed.data.ticket_no}` : null;
 	},
 	meal_service: (doc) => {
-		const parsed = z.object({ receipt_no: text }).safeParse(doc);
-		return parsed.success ? `ใบรับจากครัว ${parsed.data.receipt_no}` : null;
+		// Docs from before CR-177 have no `receipt_no`: schema §2.7 shows `RCV-{last 6 of _id}`,
+		// as kitchen's `mealServiceRef` does (not imported: the kitchen barrel brings in UI).
+		const parsed = z.object({ _id: text, receipt_no: z.string().optional() }).safeParse(doc);
+		if (!parsed.success) return null;
+		const { _id, receipt_no } = parsed.data;
+		return `ใบรับจากครัว ${receipt_no?.trim() || `RCV-${_id.slice(-6).toUpperCase()}`}`;
 	},
 	stock_transfer: (doc) => {
 		const parsed = z.object({ from_shelter: text, to_shelter: text }).safeParse(doc);
@@ -59,6 +67,19 @@ const DOC_LABELS: Record<string, (doc: unknown) => string | null> = {
 			: null;
 	}
 };
+
+/**
+ * The `ref_id`s worth reading, unique and sorted: only kinds in `DOC_LABELS` can name a doc
+ * better than `shortLedgerRef`, so reading the rest (`distribution_log`, …) is wasted work.
+ */
+export function labelledLedgerRefIds(refIds: Iterable<string>): string[] {
+	const ids = new Set<string>();
+	for (const refId of refIds) {
+		const sep = refId.indexOf(':');
+		if (sep > 0 && Object.hasOwn(DOC_LABELS, refId.slice(0, sep))) ids.add(refId);
+	}
+	return [...ids].sort();
+}
 
 /** A doc a `ref_id` points at, as `_all_docs` returns it. */
 export interface LedgerRefDoc {

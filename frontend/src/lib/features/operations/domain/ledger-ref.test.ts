@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { isLedgerRefDoc, ledgerRefLabels, shortLedgerRef } from './ledger-ref';
+import {
+	isLedgerRefDoc,
+	labelledLedgerRefIds,
+	ledgerRefLabels,
+	shortLedgerRef,
+	type LedgerRefDoc
+} from './ledger-ref';
 
 describe('shortLedgerRef', () => {
 	it.each([
@@ -53,6 +59,14 @@ describe('ledgerRefLabels', () => {
 		);
 	});
 
+	it('names a kitchen yield from before CR-177 by its id, as schema §2.7 does', () => {
+		const legacy = { _id: 'meal_service:01m5kx8tq4q503z0p2h1abcdef', type: 'meal_service' };
+		const label = (doc: LedgerRefDoc) => ledgerRefLabels([doc]).get(doc._id);
+
+		expect(label(legacy)).toBe('ใบรับจากครัว RCV-ABCDEF');
+		expect(label({ ...legacy, receipt_no: '  ' } as LedgerRefDoc)).toBe('ใบรับจากครัว RCV-ABCDEF');
+	});
+
 	it('names a transfer by its shelters', () => {
 		expect(labelOf({ type: 'stock_transfer', from_shelter: 'SH001', to_shelter: 'SH002' })).toBe(
 			'โอนย้าย SH001 → SH002'
@@ -61,8 +75,27 @@ describe('ledgerRefLabels', () => {
 
 	it('leaves out docs with nothing better than their id', () => {
 		expect(labelOf({ type: 'donation', donor: { name: '  ' } })).toBeUndefined();
-		expect(labelOf({ type: 'meal_service' })).toBeUndefined();
 		expect(labelOf({ type: 'kitchen_requisition', items: [] })).toBeUndefined();
+	});
+});
+
+describe('labelledLedgerRefIds', () => {
+	it('keeps only kinds that can be labelled, once each and sorted', () => {
+		expect(
+			labelledLedgerRefIds([
+				'stock_transfer:2',
+				'distribution_log:1',
+				'donation:1',
+				'stock_transfer:2',
+				'kitchen_requisition:1',
+				'meal_service:1',
+				'requisition_ticket:1'
+			])
+		).toEqual(['donation:1', 'meal_service:1', 'requisition_ticket:1', 'stock_transfer:2']);
+	});
+
+	it('skips ids without a prefix and prototype keys', () => {
+		expect(labelledLedgerRefIds(['donation', ':1', 'constructor:1', 'toString:1'])).toEqual([]);
 	});
 });
 

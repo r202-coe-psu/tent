@@ -74,7 +74,7 @@
 		itemName: (id) => itemNames[id] ?? 'ไม่ระบุชื่อสิ่งของ',
 		unitLabel: (unit) => formatUnit(unit, unitsQuery.data ?? [], langState.current),
 		points: storagePoints.points,
-		refLabel: (refId) => refLabelsQuery.data?.get(refId)
+		refLabel: (refId) => refLabelsQuery.data?.get(refId) ?? undefined
 	});
 
 	const allRows = $derived(buildLedgerRows(ledgerQuery.data ?? [], lookup));

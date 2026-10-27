@@ -24,7 +24,7 @@
 	<Table.Cell class="max-w-64 px-4 py-3 [overflow-wrap:anywhere] whitespace-normal text-slate-800">
 		{row.detail || '—'}
 	</Table.Cell>
-	<Table.Cell class="px-4 py-3 text-slate-600">
+	<Table.Cell class="max-w-64 px-4 py-3 [overflow-wrap:anywhere] whitespace-normal text-slate-600">
 		{[row.lotNo, row.storage].filter(Boolean).join(' · ') || '—'}
 	</Table.Cell>
 	<Table.Cell class="px-4 py-3 text-slate-600">{row.createdBy}</Table.Cell>

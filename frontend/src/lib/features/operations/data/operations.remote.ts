@@ -192,7 +192,20 @@ export class OperationsRemoteRepository implements OperationsRepository {
 	}
 
 	async listLedgerRefDocs(refIds: readonly string[]): Promise<LedgerRefDoc[]> {
-		return allDocsByIds(this.dbName, refIds, isLedgerRefDoc);
+		// `stock_transfer` lives in `central_ops`, not this shelter's DB (see the transfer methods
+		// below), so those ids come from the transfer BFF. An account it refuses keeps the short ref.
+		const transferIds = new Set(refIds.filter((id) => id.startsWith('stock_transfer:')));
+		const shelterIds = refIds.filter((id) => !transferIds.has(id));
+		const [shelterDocs, transfers] = await Promise.all([
+			allDocsByIds(this.dbName, shelterIds, isLedgerRefDoc),
+			transferIds.size === 0
+				? []
+				: this.listTransfers().catch((e: unknown) => {
+						if (e instanceof TransferForbiddenError) return [];
+						throw e;
+					})
+		]);
+		return [...shelterDocs, ...transfers.filter((t) => transferIds.has(t._id))];
 	}
 
 	async getBalance(): Promise<Map<string, string>> {

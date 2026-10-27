@@ -1577,6 +1577,35 @@ describe('OperationsRemoteRepository — transfer via BFF (CR-059 Flow 1 / T-13)
 		);
 	});
 
+	it('reads ledger transfer refs from the transfer API, not the shelter DB (#811)', async () => {
+		const otherTransfer = { ...requestedTransfer, _id: 'stock_transfer:01OTHER' };
+		fetchMock.mockResolvedValue({
+			ok: true,
+			status: 200,
+			json: async () => [requestedTransfer, otherTransfer]
+		});
+
+		const docs = await repo.listLedgerRefDocs([requestedTransfer._id, 'stock_transfer:01GONE']);
+
+		expect(docs.map((d) => d._id)).toEqual([requestedTransfer._id]);
+		expect(fetchMock).toHaveBeenCalledTimes(1);
+		expect(fetchMock).toHaveBeenCalledWith(
+			expect.stringContaining('/api/back-office/transfer?shelter_code=SH001'),
+			expect.objectContaining({ credentials: 'include' })
+		);
+	});
+
+	it('leaves transfer refs unread when the transfer API refuses the account (#811)', async () => {
+		fetchMock.mockResolvedValue({ ok: false, status: 403, statusText: 'Forbidden' });
+
+		expect(await repo.listLedgerRefDocs([requestedTransfer._id])).toEqual([]);
+	});
+
+	it('does not call the transfer API when no ref is a transfer', async () => {
+		expect(await repo.listLedgerRefDocs([])).toEqual([]);
+		expect(fetchMock).not.toHaveBeenCalled();
+	});
+
 	it('returns null for a 404 getTransfer', async () => {
 		fetchMock.mockResolvedValue({ ok: false, status: 404, json: async () => null });
 		expect(await repo.getTransfer('stock_transfer:missing')).toBeNull();
