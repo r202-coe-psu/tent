@@ -78,7 +78,7 @@
 	let attendanceFilter = $state<ApplicantAttendanceFilter>('all');
 
 	const STATUS_OPTIONS: { value: ApplicantStatusFilter; label: string }[] = [
-		{ value: 'all', label: 'ทุกสถานะ' },
+		{ value: 'all', label: 'ทุกสถานะการพิจารณา' },
 		{ value: 'pending', label: 'รอพิจารณา' },
 		{ value: 'confirmed', label: 'อนุมัติแล้ว' },
 		{ value: 'declined', label: 'ปฏิเสธ/ไม่สะดวก' },
@@ -260,6 +260,9 @@
 			</div>
 		{:else}
 			<div class="mt-3 space-y-2">
+				<span id="applicant-filter-search" class="block text-xs font-medium text-muted-foreground"
+					>ค้นหาผู้สมัคร</span
+				>
 				<div class="relative">
 					<Search
 						class="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground"
@@ -267,48 +270,71 @@
 					<Input
 						type="search"
 						placeholder="ค้นหาชื่อ นามสกุล เบอร์โทร, รหัส V-xxx"
-						aria-label="ค้นหาผู้สมัคร"
+						aria-labelledby="applicant-filter-search"
 						bind:value={search}
 						class="h-10 rounded-xl bg-background pl-9 shadow-xs"
 					/>
 				</div>
 				<div class="grid grid-cols-1 gap-2 sm:grid-cols-3">
-					<Select.Root type="single" bind:value={statusFilter}>
-						<Select.Trigger class={selectTriggerClass} aria-label="สถานะ">
-							<span class="truncate">
-								{STATUS_OPTIONS.find((o) => o.value === statusFilter)?.label}
-							</span>
-						</Select.Trigger>
-						<Select.Content>
-							{#each STATUS_OPTIONS as opt (opt.value)}
-								<Select.Item value={opt.value} label={opt.label} />
-							{/each}
-						</Select.Content>
-					</Select.Root>
-					<Select.Root type="single" bind:value={shiftChoice}>
-						<Select.Trigger class={selectTriggerClass} aria-label="กะ / วันที่">
-							<span class="truncate">
-								{(shiftOptions.find((o) => o.value === shiftChoice) ?? shiftOptions[0]).label}
-							</span>
-						</Select.Trigger>
-						<Select.Content>
-							{#each shiftOptions as opt (opt.value)}
-								<Select.Item value={opt.value} label={opt.label} />
-							{/each}
-						</Select.Content>
-					</Select.Root>
-					<Select.Root type="single" bind:value={attendanceFilter}>
-						<Select.Trigger class={selectTriggerClass} aria-label="สถานะการเข้างาน">
-							<span class="truncate">
-								{ATTENDANCE_OPTIONS.find((o) => o.value === attendanceFilter)?.label}
-							</span>
-						</Select.Trigger>
-						<Select.Content>
-							{#each ATTENDANCE_OPTIONS as opt (opt.value)}
-								<Select.Item value={opt.value} label={opt.label} />
-							{/each}
-						</Select.Content>
-					</Select.Root>
+					<div class="min-w-0 space-y-1">
+						<span
+							id="applicant-filter-status"
+							class="block text-xs font-medium text-muted-foreground"
+							>สถานะการพิจารณา (เจ้าหน้าที่)</span
+						>
+						<Select.Root type="single" bind:value={statusFilter}>
+							<Select.Trigger class={selectTriggerClass} aria-labelledby="applicant-filter-status">
+								<span class="truncate">
+									{STATUS_OPTIONS.find((o) => o.value === statusFilter)?.label}
+								</span>
+							</Select.Trigger>
+							<Select.Content>
+								{#each STATUS_OPTIONS as opt (opt.value)}
+									<Select.Item value={opt.value} label={opt.label} />
+								{/each}
+							</Select.Content>
+						</Select.Root>
+					</div>
+					<div class="min-w-0 space-y-1">
+						<span
+							id="applicant-filter-shift"
+							class="block text-xs font-medium text-muted-foreground">กะ / วันที่</span
+						>
+						<Select.Root type="single" bind:value={shiftChoice}>
+							<Select.Trigger class={selectTriggerClass} aria-labelledby="applicant-filter-shift">
+								<span class="truncate">
+									{(shiftOptions.find((o) => o.value === shiftChoice) ?? shiftOptions[0]).label}
+								</span>
+							</Select.Trigger>
+							<Select.Content>
+								{#each shiftOptions as opt (opt.value)}
+									<Select.Item value={opt.value} label={opt.label} />
+								{/each}
+							</Select.Content>
+						</Select.Root>
+					</div>
+					<div class="min-w-0 space-y-1">
+						<span
+							id="applicant-filter-attendance"
+							class="block text-xs font-medium text-muted-foreground"
+							>สถานะการเข้างาน (เช็คอิน)</span
+						>
+						<Select.Root type="single" bind:value={attendanceFilter}>
+							<Select.Trigger
+								class={selectTriggerClass}
+								aria-labelledby="applicant-filter-attendance"
+							>
+								<span class="truncate">
+									{ATTENDANCE_OPTIONS.find((o) => o.value === attendanceFilter)?.label}
+								</span>
+							</Select.Trigger>
+							<Select.Content>
+								{#each ATTENDANCE_OPTIONS as opt (opt.value)}
+									<Select.Item value={opt.value} label={opt.label} />
+								{/each}
+							</Select.Content>
+						</Select.Root>
+					</div>
 				</div>
 				{#if filtersActive}
 					<Button type="button" variant="outline" size="sm" onclick={clearFilters}>
