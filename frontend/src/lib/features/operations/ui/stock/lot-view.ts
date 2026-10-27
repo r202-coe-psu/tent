@@ -11,6 +11,8 @@ export interface LotRow {
 	qty: string;
 	unit: string;
 	storageName: string | null;
+	/** What the lot's storage point can hold, e.g. "อาหารแห้ง, น้ำดื่ม" (#647 AC3). */
+	storageTypes: string | null;
 	/** Buddhist-era short date, or null when the lot has no expiry. */
 	expiry: string | null;
 	isExpired: boolean;
@@ -20,6 +22,16 @@ export interface LotRow {
 	reason: string;
 	/** The lot a direct distribute would draw from first. */
 	isNext: boolean;
+}
+
+/** Type labels of the configured point a lot sits in; null for a deleted point or no point. */
+function storagePointTypes(
+	pointId: string | null | undefined,
+	points: readonly StoragePointRef[]
+): string | null {
+	if (!pointId) return null;
+	const labels = points.find((p) => p.id === pointId)?.typeLabels;
+	return labels?.length ? labels.join(', ') : null;
 }
 
 /**
@@ -49,6 +61,7 @@ export function buildLotRows(
 			qty: lot.qty,
 			unit: lot.unit,
 			storageName: lotStorageName(lot.lot, points),
+			storageTypes: storagePointTypes(lot.lot?.storage_point_id, points),
 			expiry: expiry ? formatThaiShortDate(expiry) : null,
 			isExpired,
 			clockLine: formatLotClockLine(lot, now),

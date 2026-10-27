@@ -108,12 +108,25 @@ export const COMMUNICATION_CHOICES: EnumChoice<CommunicationChannel>[] = [
 	{ value: 'vhf_radio', label: 'วิทยุสื่อสาร VHF (Analog/Local)' }
 ];
 
+// CR-199: 4 → 7 choices (keys retained; `medical_supplies` label
+// changed "เวชภัณฑ์" → "ยา")
 export const SUB_STORAGE_TYPE_CHOICES: EnumChoice<SubStorageType>[] = [
 	{ value: 'general', label: 'ทั่วไป' },
+	{ value: 'baby_food', label: 'อาหารเด็ก' },
 	{ value: 'food_dry', label: 'อาหารแห้ง' },
-	{ value: 'drinking_water', label: 'น้ำดื่ม' },
-	{ value: 'medical_supplies', label: 'เวชภัณฑ์' }
+	{ value: 'cooked_food', label: 'อาหารปรุงสุก' },
+	{ value: 'food_cold', label: 'อาหารแช่เย็น/แข็ง' },
+	{ value: 'medical_supplies', label: 'ยา' },
+	{ value: 'drinking_water', label: 'น้ำดื่ม' }
 ];
+
+/**
+ * Retired labels still accepted on import, so workbooks filled before the label change
+ * (CR-199) keep loading.
+ */
+export const SUB_STORAGE_TYPE_LEGACY_LABELS: ReadonlyMap<string, SubStorageType> = new Map([
+	['เวชภัณฑ์', 'medical_supplies']
+]);
 
 export const ZONE_TYPE_CHOICES: EnumChoice<ZoneType>[] = [
 	{ value: 'general', label: 'ทั่วไป' },
@@ -722,7 +735,7 @@ const SHEET_FACILITIES: SheetDef = {
 			header: H.sub_storage,
 			kind: 'string',
 			required: false,
-			hint: `รายการคลังย่อย รูปแบบ ชื่อ${FIELD_SEPARATOR}ประเภท${FIELD_SEPARATOR}พื้นที่ คั่นแต่ละรายการด้วย "${MULTI_SEPARATOR}" เช่น คลังหน้าอาคาร${FIELD_SEPARATOR}อาหารแห้ง${FIELD_SEPARATOR}20 ${MULTI_SEPARATOR} คลังยา${FIELD_SEPARATOR}เวชภัณฑ์${FIELD_SEPARATOR}8`
+			hint: `รายการคลังย่อย รูปแบบ ชื่อ${FIELD_SEPARATOR}ประเภท${FIELD_SEPARATOR}พื้นที่ คั่นแต่ละรายการด้วย "${MULTI_SEPARATOR}" เช่น คลังหน้าอาคาร${FIELD_SEPARATOR}อาหารแห้ง${FIELD_SEPARATOR}20 ${MULTI_SEPARATOR} คลังยา${FIELD_SEPARATOR}ยา${FIELD_SEPARATOR}8`
 		}
 	]
 };
