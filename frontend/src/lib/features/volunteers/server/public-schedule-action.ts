@@ -294,7 +294,11 @@ async function updateVolunteerAttendance(
 	throw new PublicScheduleError('WRITE_FAILED', 409);
 }
 
-async function releaseJobQuota(dbName: string, assignment: CouchDoc, now: string): Promise<void> {
+export async function releaseJobQuota(
+	dbName: string,
+	assignment: CouchDoc,
+	now: string
+): Promise<void> {
 	if (typeof assignment.job_id !== 'string') throw new PublicScheduleError('WRITE_FAILED', 502);
 	for (let attempt = 0; attempt < MAX_WRITE_RETRIES; attempt++) {
 		const jobResult = await getAsPublicWriter(dbName, assignment.job_id);
