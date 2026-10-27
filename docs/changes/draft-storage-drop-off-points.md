@@ -3,7 +3,6 @@ id: draft
 title: ใช้จุดเก็บของเป็นจุดรับบริจาค พร้อมพิกัดบนแผนที่ และส่งออก public
 status: proposed
 date: 2026-10-27
-created: 2026-10-27
 updated: 2026-10-27
 requested_by: "feedback จาก demo 2026-10-23 (epic #825) — issue #812"
 decided_by: ""
@@ -12,13 +11,13 @@ affects:
   - docs/data/schema.md §3.1 `shelter.common_areas.sub_storage[]` — field ใหม่ `accepts_donations`, `lat`, `lng`, `location_note` · shelter schema_v 8 → 9
   - docs/data/schema.md §9.1 `public_shelters.donation_points` (projection field ใหม่)
   - docs/data/couchdb-mongodb-sync.md §3.2 `public_shelters` · PROJECTION_VERSION 9 → 10 (หรือเลขถัดไปตอน merge)
-  - docs/data/api-contract.md §5 — response ของ `GET /public/v1/shelters` และ `GET /public/v1/shelters/{code}` มี `donation_points`
+  - docs/data/api-contract.md §5 — response ของ `GET /public/v1/shelters/{code}` มี `donation_points` (list `GET /public/v1/shelters` ไม่เปลี่ยน)
   - frontend/src/lib/features/shelters (domain/schema.ts `subStorageItemSchema` + migrate v8 → v9, domain/storage-points.ts, ui/storage-points-section.svelte, ui/shelter-form-validation.ts)
   - frontend/src/lib/features/shelter-import/domain/import-row.ts
-  - frontend/src/lib/features/public-portal (domain/drop-off.ts)
+  - frontend/src/lib/features/donations (domain/drop-off.ts — ต่อยอด `resolveDropOffPoint` / `DropOffPoint` จาก #926)
   - packages/tent-model/src/tent_model/public_shelter.py (`DonationPoint`, `PublicShelter.donation_points`)
   - worker/src/worker/projectors/shelter.py · worker/src/worker/projection_version.py
-  - backend/apiapp/modules/shelter (schemas.py `ShelterItem` / `ShelterDetail`, use_case.py) · backend/tests/test_shelter.py
+  - backend/apiapp/modules/shelter (schemas.py `ShelterDetail`, use_case.py) · backend/tests/test_shelter.py
   - frontend/src/lib/api (fastapi.json, openapi.d.ts)
 why: >
   ผู้บริจาคเห็นแค่ที่อยู่ของศูนย์ ไม่รู้ว่าต้องนำของไปส่งตรงไหนในศูนย์ ทั้งที่ศูนย์ใหญ่มีจุดเก็บของหลายจุด
@@ -53,7 +52,7 @@ migration: >
 
 - **FR-DP-1** — `sub_storage[]` แต่ละรายการมี 4 field ใหม่ตามตาราง §Change · doc ที่ไม่มี key อ่านได้ค่าเริ่มต้นในตาราง
 - **FR-DP-2** — `accepts_donations = true` ต้องมีทั้ง `lat` และ `lng` · ไม่ครบ → บันทึกไม่ผ่าน และ error แสดงที่แถวของจุดนั้น
-- **FR-DP-3** — `lat` อยู่ในช่วง −90..90, `lng` อยู่ในช่วง −180..180 (ช่วงเดียวกับ `food_distribution_points`)
+- **FR-DP-3** — `lat` อยู่ในช่วง −90..90, `lng` อยู่ในช่วง −180..180 (ช่วงเดียวกับ `food_distribution_points`) · `lat = 0` และ `lng = 0` พร้อมกัน → บันทึกไม่ผ่าน (เป็นค่าที่ได้เมื่อยังไม่ได้ปักหมุด ไม่ใช่ตำแหน่งจริง · `drop-off.ts` ของ #926 ก็ถือ (0,0) เป็น "ไม่มีพิกัด")
 - **FR-DP-4** — `location_note` ตัดช่องว่างหัวท้าย · ว่าง → `null` · ยาวไม่เกิน 200 ตัวอักษร
 - **FR-DP-5** — เอาติ๊ก `accepts_donations` ออก → คง `lat`/`lng`/`location_note` ไว้ (ติ๊กกลับไม่ต้องปักหมุดใหม่)
 
@@ -70,10 +69,10 @@ migration: >
 
 **public plane**
 
-- **FR-DP-11** — worker เขียน `public_shelters.donation_points` = รายการจุดที่ `accepts_donations = true` **และ** มีทั้ง `lat`/`lng` เท่านั้น · จุดอื่นไม่อยู่ใน field นี้
+- **FR-DP-11** — worker เขียน `public_shelters.donation_points` = รายการจุดที่ `accepts_donations = true` **และ** มีทั้ง `lat`/`lng` ที่ไม่ใช่ (0,0) เท่านั้น · จุดอื่นไม่อยู่ใน field นี้
 - **FR-DP-12** — แต่ละรายการใน `donation_points` มีเฉพาะ `id`, `name`, `types`, `geo`, `location_note` · ห้ามส่ง `area_m2`
 - **FR-DP-13** — worker รองรับจุดเก็บทั้งรูปเดิม (`type` เดี่ยว, ก่อน schema_v 8) และรูปใหม่ (`types[]`) แปลงเป็น `types[]` เสมอ
-- **FR-DP-14** — FastAPI `GET /public/v1/shelters` (`ShelterItem`) และ `GET /public/v1/shelters/{code}` (`ShelterDetail`) คืน `donation_points` (ไม่มีจุด = `[]`)
+- **FR-DP-14** — FastAPI `GET /public/v1/shelters/{code}` (`ShelterDetail`) คืน `donation_points` (ไม่มีจุด = `[]`) · list `GET /public/v1/shelters` (`ShelterItem`) **ไม่**มี field นี้ — ทุกหน้าที่ต้องใช้จุด (ฟอร์มบริจาคหลังเลือกศูนย์ #813, หน้าติดตาม #590, ใบปะหน้า #591) รู้ศูนย์แล้วจึงอ่านจาก detail · แผนที่เลือกศูนย์ (#814) ใช้ list แต่ปักหมุดระดับศูนย์ ไม่ใช่ระดับจุด จึงไม่ต้องให้ทุกศูนย์ใน list แบก `donation_points`
 - **FR-DP-15** — FastAPI อ่าน `donation_points` จาก field ที่ worker project ไว้เท่านั้น · ห้ามอ่าน `raw_data.common_areas.sub_storage` (raw_data มีจุดที่ไม่ได้ติ๊กด้วย)
 - **FR-DP-16** — ฝั่ง public frontend: ศูนย์ที่ `donation_points` ว่าง → ใช้ "จุดหลัก" 1 จุด ชื่อ = ชื่อศูนย์ พิกัด = `geo` ของศูนย์ · ไม่บันทึกจุดหลักลง CouchDB หรือ Mongo
 - **FR-DP-17** — ศูนย์ที่มีจุดติ๊กอย่างน้อย 1 จุด → ผู้บริจาคเลือกได้เฉพาะจุดที่ติ๊ก ตำแหน่งศูนย์ไม่ใช่ตัวเลือก (ดู D-3)
@@ -98,10 +97,19 @@ migration: >
 donation_points: [{ id: str, name: str, types: [str], geo: { lat: num, lng: num }, location_note: str | null }]
 ```
 
-- `id` = `sub_storage[].id` (ULID หรือ `legacy-<index>`) — ใช้อ้างจุดจากใบบริจาคใน #813
+- `id` = `sub_storage[].id` (ULID หรือ `legacy-<index>`) — ใช้อ้างจุดจากใบบริจาคใน #813 · จุดที่ส่งออกได้ต้องถูกติ๊กและบันทึกที่ schema_v 9 แล้ว `id` จึงถูก persist ใน doc เสมอ ไม่ใช่ค่าที่เติมตอนอ่าน
 - `types` ส่งเป็น key ของ enum (CR-199) · frontend แปลงเป็น label เอง
 
-**FastAPI** — `ShelterItem.donation_points: list[DonationPoint] = []` และ `ShelterDetail.donation_points: list[DonationPoint] = []`
+**จุดที่เปลี่ยนหลังมีใบจองอ้างถึง** (ใบจองอ้างด้วย `id` เท่านั้น ไม่เก็บสำเนาชื่อหรือพิกัด)
+
+| เหตุการณ์ | `donation_points` | ใบจองที่อ้างจุดนั้น |
+| --- | --- | --- |
+| ย้ายหมุด / แก้ชื่อ / แก้ `location_note` | แสดงค่าใหม่ | แสดงค่าใหม่ — ผู้บริจาคควรไปตำแหน่งปัจจุบัน |
+| เอาติ๊กออก หรือลบจุด | จุดหายจาก field | กติกาอยู่ใน CR ของ #813 (`draft-donation-multi-drop-off` FR-MP-16, FR-MP-19): แสดงจุดหลักของศูนย์แทน ไม่ error และเจ้าหน้าที่จุดไหนก็รับรายการนั้นได้ |
+
+CR นี้ไม่เพิ่มกติกาฝั่งใบจอง — แค่รับประกันว่า `id` ไม่เปลี่ยนเมื่อแก้จุด
+
+**FastAPI** — `ShelterDetail.donation_points: list[DonationPoint] = []` (`ShelterItem` ไม่เปลี่ยน)
 
 | เรื่อง | ก่อน | หลัง |
 | --- | --- | --- |
@@ -120,20 +128,26 @@ donation_points: [{ id: str, name: str, types: [str], geo: { lat: num, lng: num 
 - **AC-6** — ศูนย์ไม่มีจุดติ๊ก → `donation_points: []` และหน้าบริจาคแสดงจุดหลักที่ตำแหน่งศูนย์
 - **AC-7** — import ศูนย์ที่มีจุดเก็บ → ทุกจุด `accepts_donations = false`
 - **AC-8** — หลัง deploy worker ใหม่ → `public_shelters` ทุกแถวมี `donation_points` (re-project จาก PROJECTION_VERSION)
+- **AC-9** — ติ๊กแล้วกรอก lat = 0, lng = 0 ในช่องตัวเลข → บันทึกไม่ผ่าน และ error อยู่ที่แถวนั้น
+- **AC-10** — doc ศูนย์ schema_v 7 ที่จุดเก็บยังมี `type` เดี่ยว → อ่านแล้วได้ schema_v 9, `types[]` และค่าเริ่มต้นของ 4 field ใหม่ครบ
+- **AC-11** — `GET /public/v1/shelters` (list) ไม่มี `donation_points` · `GET /public/v1/shelters/{code}` มี
 
 ## Impact
 
 - **frontend `shelters`**
   - `domain/schema.ts`: เพิ่ม 4 field ใน `z.object` ข้างใน `subStorageItemSchema` (ตัวนอกเป็น `z.preprocess` จึงใช้ `.extend()` ไม่ได้) + `superRefine` ตาม FR-DP-2 (error path `.lat`)
-  - `SHELTER_MASTER_SCHEMA_V` 8 → 9 + `migrateV8ToV9` ต่อท้าย chain ของ `migrateShelterV2ToCurrent`
+  - `SHELTER_MASTER_SCHEMA_V` 8 → 9 + `migrateV8ToV9` ต่อท้าย chain ของ `migrateShelterV2ToCurrent` (ดู §Migration เรื่องเลขที่แต่ละขั้น stamp)
   - `domain/storage-points.ts`: `listDonationPoints(shelter)` คัดเฉพาะจุดที่ติ๊ก
   - `ui/storage-points-section.svelte`: FR-DP-6 – FR-DP-8 (dialog แบบเดียวกับ `food-distribution-section.svelte`)
   - `ui/shelter-form-validation.ts`: map error ของ FR-DP-2 ไปที่แถว
 - **frontend `shelter-import`**: `import-row.ts` `resolveSubStorage` ใส่ค่าตาม FR-DP-10
-- **frontend `public-portal`**: `domain/drop-off.ts` เพิ่ม `listDropOffPoints(shelter)` (FR-DP-16, FR-DP-17)
+- **frontend `donations`**: ต่อยอด `domain/drop-off.ts` ของ #926 (ห้ามสร้าง logic จุดส่งของชุดใหม่ใน feature อื่น)
+  - เพิ่ม `listDropOffPoints(shelter)` คืน `DropOffPoint[]` (FR-DP-16, FR-DP-17): map `id` → `pointId`, `location_note` → `note`, `geo` ผ่าน `cleanGeo` ตัวเดิม · `donation_points` ว่าง → `[resolveDropOffPoint(shelter)]` (จุดหลัก `pointId = null`)
+  - `DropOffShelterSource` เพิ่ม `donation_points?`
+  - ถ้า #926 ยังไม่ merge ตอน implement ให้ต่อจาก branch ของ #926
 - **tent-model**: `DonationPoint` + `PublicShelter.donation_points: list[DonationPoint] = []`
 - **worker**: `project_shelter()` สร้าง `donation_points` ตาม FR-DP-11 – FR-DP-13 · bump `PROJECTION_VERSION`
-- **backend**: `ShelterItem`, `ShelterDetail` เพิ่ม `donation_points` · `use_case.py` อ่านตาม FR-DP-15
+- **backend**: `ShelterDetail` เพิ่ม `donation_points` (`ShelterItem` ไม่เปลี่ยน) · `use_case.py` อ่านตาม FR-DP-15
 - **OpenAPI**: regenerate `fastapi.json` + `openapi.d.ts`
 - **legacy external** `GET /external/v1/shelters/{code}` ใช้ `ShelterDetailResponse` ตัวเดียวกัน → ได้ `donation_points` ด้วย (ข้อมูลเดียวกับที่ public เห็นอยู่แล้ว ดู D-4) · Partner API EXT-002/003 (`/external/locations`) ใช้ schema แยก ไม่เปลี่ยน
 - **ไม่กระทบ**: `stock_ledger` (มี `lot.storage_point_id` อยู่แล้ว), `donation`, `donation_slot`, `food_distribution_points`
@@ -142,21 +156,36 @@ donation_points: [{ id: str, name: str, types: [str], geo: { lat: num, lng: num 
 ## Migration
 
 - **shelter schema_v 8 → 9 (additive):** reader เติมค่าเริ่มต้นตามตาราง §Change ให้จุดที่ไม่มี key · เขียนครั้งถัดไป persist ค่าเหล่านั้นและ stamp schema_v 9 · ไม่มี batch script
-- doc schema_v 7 ที่ยังมี `type` เดี่ยว → ผ่าน `migrateV7ToV8` (CR-199) แล้วต่อ `migrateV8ToV9`
+- **แต่ละขั้นของ chain stamp เลขของตัวเอง:** บน develop `migrateV7ToV8` stamp `schema_v: SHELTER_MASTER_SCHEMA_V` ถ้า bump ค่าคงที่เป็น 9 โดยไม่แก้ doc v7 จะถูก stamp 9 ก่อนเข้า `migrateV8ToV9` จึงต้อง:
+  - เปลี่ยน `migrateV7ToV8` ให้ stamp `8` ตรงๆ และให้ `migrateV8ToV9` stamp `SHELTER_MASTER_SCHEMA_V`
+  - ทุก branch ใน `migrateShelterV2ToCurrent` (v2–v7) ต่อ `migrateV8ToV9` ท้ายสุด และเพิ่มกรณี `schema_v === 8`
+  - `migrateV8ToV9` เติมค่าเริ่มต้นโดยดูจาก key ที่ขาด ไม่ดูจาก `schema_v` · `normalizeCurrent` เติมค่าเดียวกันด้วย doc ที่ stamp 9 แต่ขาด key ก็ยังอ่านได้ถูก
+  - test: doc v6, v7, v8 ผ่าน `migrateShelterV2ToCurrent` แล้วได้ schema_v 9 พร้อมค่าเริ่มต้นครบ
 - **PROJECTION_VERSION:** bump ให้ worker bootstrap re-project `public_shelters` ทุกแถว · แถวที่ยังไม่ re-project ไม่มี key → FastAPI คืน `[]` (= จุดหลัก)
 - **rollout:** หลัง deploy ไม่มีศูนย์ไหนมีจุดรับบริจาคจนกว่าเจ้าหน้าที่จะติ๊ก → ผู้บริจาคเห็นจุดหลักเหมือนเดิม
 
-## ต้องตัดสิน
+## ข้อตกลง
+
+Soravit Sukkarn (Team Lead) ตัดสิน D-1..D-4 ใน review ของ PR #944 วันที่ 2026-10-27 · CR ยัง `proposed` จนกว่าผู้อนุมัติจะเปลี่ยนสถานะและใส่ `decided_by`
 
 - **D-1 — slot เวลารับของ** (คำถามค้างใน #812): ผูกกับศูนย์ต่อไป **หรือ** ผูกกับจุด
-  - ข้อเสนอ: **ผูกกับศูนย์ต่อไป** — ถ้าผูกกับจุด ต้องเปลี่ยน `_id` ของ `donation_slot` (§2.13), `donation_slot_counters` และสูตรที่ว่างของ CR-157 ทั้งหมด ซึ่งใหญ่กว่างานนี้มาก
+  - **ผล: ผูกกับศูนย์ไปก่อน** — ถ้าผูกกับจุด ต้องเปลี่ยน `_id` ของ `donation_slot` (§2.13), `donation_slot_counters` และสูตรที่ว่างของ CR-157 ทั้งหมด ซึ่งใหญ่กว่างานนี้มาก
 - **D-2 — เวลาเปิดรับแยกต่อจุด** (คำถามค้างใน #812)
-  - ข้อเสนอ: **ไม่มี** — จุดที่เปิดรับไม่ตรงกับศูนย์ ให้เขียนใน `location_note`
+  - **ผล: ไม่มี** — จุดที่เปิดรับไม่ตรงกับศูนย์ ให้เขียนใน `location_note`
 - **D-3 — ศูนย์ที่มีจุดติ๊กแล้ว ตำแหน่งศูนย์ยังเป็นตัวเลือกไหม**
-  - ข้อเสนอ: **ไม่เป็น** (FR-DP-17) — ถ้าศูนย์อยากให้ส่งที่หน้าศูนย์ได้ด้วย ให้สร้างจุดเก็บ "หน้าศูนย์" แล้วติ๊ก
+  - **ผล: ไม่เป็น** (FR-DP-17) — ถ้าศูนย์อยากให้ส่งที่หน้าศูนย์ได้ด้วย ให้สร้างจุดเก็บ "หน้าศูนย์" แล้วติ๊ก
 - **D-4 — legacy `/external/v1/shelters/{code}` ได้ `donation_points` ด้วย**
-  - ข้อเสนอ: **ยอมรับ** — ข้อมูลชุดเดียวกับที่ public เห็น และแยก response model ออกจากกันเป็นงานที่ไม่จำเป็น
+  - **ผล: ได้** — ข้อมูลชุดเดียวกับที่ public เห็น และแยก response model ออกจากกันเป็นงานที่ไม่จำเป็น
 
 ## Decision log
 
 - 2026-10-27 — proposed (draft) จาก issue #812 และแผน epic #825
+- 2026-10-27 — Team Lead (Soravit Sukkarn) ตัดสิน D-1..D-4 ตามข้อเสนอใน review ของ PR #944
+- 2026-10-27 — แก้ตาม review PR #944:
+  - Impact ชี้ไปต่อยอด `donations/domain/drop-off.ts` ของ #926 แทนการสร้างใหม่ใน `public-portal`
+  - `donation_points` อยู่ใน detail อย่างเดียว ไม่ใส่ใน list (FR-DP-14)
+  - Migration ระบุว่าแต่ละขั้น stamp เลขของตัวเอง
+  - ปฏิเสธพิกัด (0,0) (FR-DP-3, FR-DP-11)
+  - ระบุผลต่อใบจองเมื่อจุดถูกแก้ ลบ หรือเลิกติ๊ก (อ้าง CR ของ #813)
+  - ตัด `created` ออกจาก frontmatter ตาม `_template.md`
+  - ไม่จำกัดพิกัดให้อยู่ใกล้ศูนย์ เพราะศูนย์บางแห่งยังไม่มี `geo` และไม่มีระยะที่ตกลงกันไว้
