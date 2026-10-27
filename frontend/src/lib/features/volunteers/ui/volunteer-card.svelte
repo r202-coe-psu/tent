@@ -25,7 +25,12 @@
 	import Lock from '@lucide/svelte/icons/lock';
 	import { toast } from 'svelte-sonner';
 	import { useQueryClient } from '@tanstack/svelte-query';
-	import { isShelterManager, isSystemAdmin } from '$lib/auth/roles';
+	import {
+		VOLUNTEER_COORDINATOR,
+		hasStaffCapability,
+		isShelterManager,
+		isSystemAdmin
+	} from '$lib/auth/roles';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { Button } from '$lib/components/ui/button/index.js';
@@ -111,11 +116,16 @@
 	let qualificationDialogOpen = $state(false);
 	let qualificationFocusSkillCode = $state<string | null>(null);
 	let accessDialogOpen = $state(false);
-	// Granting system access creates a user account — SM/SA only (the BFF enforces it too); a
-	// volunteer_coordinator manages jobs/shifts but must not see a button that always 403s.
+	// SM/SA grant any role; a volunteer_coordinator of this shelter grants a limited, timed one
+	// (#955). The BFF enforces both, so no other role sees a button that would 403.
 	const canGrantAccess = $derived.by(() => {
 		const roles = authStore.user?.roles ?? [];
-		return isSystemAdmin(roles) || isShelterManager(roles, shelterStore.selectedShelterCode);
+		const code = shelterStore.selectedShelterCode;
+		return (
+			isSystemAdmin(roles) ||
+			isShelterManager(roles, code) ||
+			hasStaffCapability(roles, VOLUNTEER_COORDINATOR, code)
+		);
 	});
 	let deleteDialogOpen = $state(false);
 

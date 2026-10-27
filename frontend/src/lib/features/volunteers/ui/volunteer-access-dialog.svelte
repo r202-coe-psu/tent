@@ -13,16 +13,32 @@
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
-	import { STAFF_CAPABILITIES, roleOptionLabel, type StaffCapability } from '$lib/auth/roles';
+	import {
+		STAFF_CAPABILITIES,
+		isShelterManager,
+		isSystemAdmin,
+		roleOptionLabel,
+		type StaffCapability
+	} from '$lib/auth/roles';
+	import {
+		COORDINATOR_GRANTABLE_ROLES,
+		MAX_GRANT_DAYS,
+		grantExpiryRange
+	} from '$lib/auth/role-grants';
+	import { authStore } from '$lib/stores/auth.svelte';
+	import { formatThaiShortDate } from '$lib/utils/date';
 	import { generateTemporaryPassphrase } from '$lib/auth/passphrase-generator';
 	import { volunteerKeys } from '../application/queries';
 	import { errorMessage } from '$lib/utils/errors';
 	import {
 		accountPhones,
+		coordinatorAccessSchema,
 		grantVolunteerAccess,
+		grantVolunteerAccessAsCoordinator,
 		volunteerAccessSchema,
 		volunteerPasswordError
 	} from '../application/volunteer-access';
+	import { identityVerificationStatus } from '../domain/verification';
 	import type { Volunteer } from '../domain/volunteer.schema';
 
 	let {
@@ -42,6 +58,27 @@
 	const loginPhone = $derived(phones.login);
 	const fullName = $derived(`${volunteer.first_name} ${volunteer.last_name}`.trim());
 
+	// A coordinator (not SM/SA) grants a limited role with a required expiry (#955); the BFF
+	// enforces the same limits, this only shapes the form.
+	const limited = $derived.by(() => {
+		const roles = authStore.user?.roles ?? [];
+		return !(isSystemAdmin(roles) || isShelterManager(roles, volunteer.shelter_code));
+	});
+	const roleChoices = $derived<readonly StaffCapability[]>(
+		limited ? COORDINATOR_GRANTABLE_ROLES : STAFF_CAPABILITIES
+	);
+	const expiryRange = $derived(grantExpiryRange());
+	// Identity verified in another shelter (same phone) is only known to the server, so a
+	// volunteer with a phone may still be granted; one without a phone cannot be.
+	const unverifiedHere = $derived(identityVerificationStatus(volunteer) !== 'verified');
+	const blockedReason = $derived(
+		limited && unverifiedHere && !accountPhones(volunteer.phone).contact
+			? 'อาสาสมัครยังไม่ยืนยันตัวตนในศูนย์นี้ และไม่มีเบอร์โทรให้ตรวจผลยืนยันจากศูนย์อื่น จึงออกสิทธิ์ไม่ได้'
+			: null
+	);
+	let expiresOn = $state('');
+	let submitError = $state<string | null>(null);
+
 	let email = $state('');
 	let showPassword = $state(false);
 	let role = $state<StaffCapability>('registration_staff');
@@ -58,6 +95,8 @@
 		email = volunteer.user_name ?? volunteer.email ?? '';
 		role = 'registration_staff';
 		password = loginPhone ?? '';
+		expiresOn = '';
+		submitError = null;
 		passwordError = null;
 		showPassword = false;
 		lastOpenedId = volunteer._id;
@@ -65,6 +104,11 @@
 
 	async function submit() {
 		if (pending) return;
+		submitError = null;
+		if (limited) {
+			await submitLimited();
+			return;
+		}
 		const parsed = volunteerAccessSchema.safeParse({ email, password, role });
 		if (!parsed.success) {
 			toast.error(parsed.error.issues[0]?.message ?? 'กรุณาตรวจสอบข้อมูล');
@@ -85,12 +129,49 @@
 		} catch (err) {
 			toast.error(errorMessage(err));
 		} finally {
-			await Promise.allSettled([
-				queryClient.invalidateQueries({ queryKey: ['users'] }),
-				queryClient.invalidateQueries({ queryKey: volunteerKeys.all })
-			]);
-			pending = false;
+			await refresh();
 		}
+	}
+
+	async function submitLimited() {
+		const parsed = coordinatorAccessSchema.safeParse({
+			email,
+			password,
+			role,
+			expires_on: expiresOn
+		});
+		if (!parsed.success) {
+			submitError = parsed.error.issues[0]?.message ?? 'กรุณาตรวจสอบข้อมูล';
+			return;
+		}
+		passwordError = volunteerPasswordError(parsed.data.password, loginPhone);
+		if (passwordError) return;
+		pending = true;
+		try {
+			const result = await grantVolunteerAccessAsCoordinator(volunteer, parsed.data);
+			const until = formatThaiShortDate(parsed.data.expires_on);
+			toast.success(
+				result.unchanged
+					? `บัญชี (${parsed.data.email}) มีสิทธิ์นี้อยู่แล้ว ไม่เปลี่ยนแปลง`
+					: result.created
+						? `สร้างบัญชี (${parsed.data.email}) และออกสิทธิ์ถึงสิ้นวันที่ ${until} แล้ว`
+						: `ออกสิทธิ์ให้บัญชี (${parsed.data.email}) ถึงสิ้นวันที่ ${until} แล้ว รหัสผ่านเดิมไม่เปลี่ยนแปลง`
+			);
+			password = '';
+			open = false;
+		} catch (err) {
+			submitError = errorMessage(err);
+		} finally {
+			await refresh();
+		}
+	}
+
+	async function refresh() {
+		await Promise.allSettled([
+			queryClient.invalidateQueries({ queryKey: ['users'] }),
+			queryClient.invalidateQueries({ queryKey: volunteerKeys.all })
+		]);
+		pending = false;
 	}
 </script>
 
@@ -142,15 +223,56 @@
 						<span class="truncate">{roleOptionLabel(role)}</span>
 					</Select.Trigger>
 					<Select.Content>
-						{#each STAFF_CAPABILITIES as capability (capability)}
+						{#each roleChoices as capability (capability)}
 							<Select.Item value={capability} label={roleOptionLabel(capability)} />
 						{/each}
 					</Select.Content>
 				</Select.Root>
 				<p class="text-[11px] text-muted-foreground">
-					* บัญชีใช้สิทธิ์ที่เลือกในศูนย์พักพิงนี้ จัดการสิทธิ์เพิ่มเติมได้ผ่านหน้าผู้ใช้งาน
+					{#if limited}
+						* ผู้ประสานงานออกสิทธิ์ได้เฉพาะ 4 บทบาทนี้ ในศูนย์พักพิงนี้ และถอนสิทธิ์เองไม่ได้
+						(สิทธิ์หมดอายุเอง หรือให้ผู้จัดการศูนย์ถอน)
+					{:else}
+						* บัญชีใช้สิทธิ์ที่เลือกในศูนย์พักพิงนี้ จัดการสิทธิ์เพิ่มเติมได้ผ่านหน้าผู้ใช้งาน
+					{/if}
 				</p>
 			</div>
+
+			{#if limited}
+				<div class="space-y-1.5">
+					<label
+						for={`volunteer-access-expiry-${volunteer._id}`}
+						class="text-xs font-bold text-foreground"
+					>
+						วันหมดอายุของสิทธิ์ <span class="text-destructive">*</span>
+					</label>
+					<Input
+						id={`volunteer-access-expiry-${volunteer._id}`}
+						type="date"
+						bind:value={expiresOn}
+						min={expiryRange.min}
+						max={expiryRange.max}
+						required
+						disabled={pending}
+						class="h-11 sm:max-w-xs"
+					/>
+					<p class="text-[11px] text-muted-foreground">
+						เลือกได้ตั้งแต่วันนี้ถึง {MAX_GRANT_DAYS} วันข้างหน้า สิทธิ์หมดอายุตอนสิ้นวันที่เลือก ต่ออายุได้ด้วยการออกสิทธิ์ซ้ำ
+					</p>
+				</div>
+
+				{#if blockedReason}
+					<p role="alert" class="text-sm font-medium text-destructive">{blockedReason}</p>
+				{:else if unverifiedHere}
+					<p class="rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-800">
+						อาสาสมัครยังไม่ยืนยันตัวตนในศูนย์นี้ ระบบจะตรวจผลยืนยันจากศูนย์อื่นที่เบอร์โทรตรงกัน
+						หากไม่พบ จะออกสิทธิ์ไม่ได้
+					</p>
+				{/if}
+				{#if submitError}
+					<p role="alert" class="text-sm font-medium text-destructive">{submitError}</p>
+				{/if}
+			{/if}
 
 			<div class="space-y-3 rounded-xl border border-border p-4">
 				<p class="flex items-center gap-1.5 text-xs font-bold text-foreground">
@@ -276,7 +398,7 @@
 			<Button
 				type="button"
 				class="gap-1.5 bg-domain-volunteer-strong text-white hover:bg-domain-volunteer-text"
-				disabled={pending}
+				disabled={pending || blockedReason !== null}
 				onclick={submit}
 			>
 				{#if pending}

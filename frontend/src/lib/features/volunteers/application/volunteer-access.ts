@@ -1,5 +1,7 @@
 import { z } from 'zod';
+import { serviceFetch } from '$lib/api/service';
 import { passwordSchema } from '$lib/auth/password-schema';
+import { COORDINATOR_GRANTABLE_ROLES, grantExpiryError } from '$lib/auth/role-grants';
 import {
 	STAFF_CAPABILITIES,
 	hasCapabilityInShelter,
@@ -8,6 +10,7 @@ import {
 } from '$lib/auth/roles';
 import { contactPhoneSchema, createUser, listUsers, phoneSchema } from '$lib/features/users';
 import { volunteerRepositoryFor } from '../data/volunteer.remote';
+import type { VolunteerRepository } from '../data/volunteer.repository';
 import { normalizePhone } from '../domain/phone';
 import type { Volunteer } from '../domain/volunteer.schema';
 
@@ -100,6 +103,18 @@ export async function grantVolunteerAccess(
 			must_change_password: isPhoneBootstrapPassword
 		});
 	}
+	await linkVolunteerProfile(repository, volunteer, profile, email, created);
+	return { created };
+}
+
+/** Point the volunteer profile at the account. Retryable: the account is already provisioned. */
+async function linkVolunteerProfile(
+	repository: VolunteerRepository,
+	volunteer: Volunteer,
+	profile: Volunteer,
+	email: string,
+	created: boolean
+): Promise<void> {
 	try {
 		const latest = await repository.get(volunteer._id);
 		if (!latest) throw new Error('ไม่พบข้อมูลอาสาสมัคร');
@@ -114,5 +129,47 @@ export async function grantVolunteerAccess(
 			{ cause: error }
 		);
 	}
-	return { created };
+}
+
+/**
+ * A `volunteer_coordinator` grants limited, time-boxed access (#955). The BFF enforces every
+ * rule (own shelter, 4 roles, verified identity incl. other shelters, 7-day expiry) and
+ * creates or extends the account; this then links the profile like {@link grantVolunteerAccess}.
+ */
+export const coordinatorAccessSchema = z.object({
+	email: volunteerAccessSchema.shape.email,
+	password: volunteerAccessSchema.shape.password,
+	role: z.enum(COORDINATOR_GRANTABLE_ROLES),
+	/** `YYYY-MM-DD` (Asia/Bangkok), required, no default. */
+	expires_on: z.string().min(1, 'กรุณาเลือกวันหมดอายุ')
+});
+
+export async function grantVolunteerAccessAsCoordinator(
+	volunteer: Volunteer,
+	input: z.infer<typeof coordinatorAccessSchema>
+): Promise<{ created: boolean; unchanged: boolean }> {
+	const { email, password, role, expires_on } = coordinatorAccessSchema.parse(input);
+	const expiryError = grantExpiryError(expires_on);
+	if (expiryError) throw new Error(expiryError);
+	const passwordError = volunteerPasswordError(password, accountPhones(volunteer.phone).login);
+	if (passwordError) throw new Error(passwordError);
+	const repository = volunteerRepositoryFor(volunteer.shelter_code);
+	const profile = await repository.get(volunteer._id);
+	if (!profile) throw new Error('ไม่พบข้อมูลอาสาสมัคร กรุณาโหลดข้อมูลใหม่');
+	const result = await serviceFetch<{ ok: true; created: boolean; unchanged: boolean }>(
+		'/api/v1/volunteer-access',
+		{
+			method: 'POST',
+			body: JSON.stringify({
+				shelter_code: volunteer.shelter_code,
+				volunteer_id: volunteer._id,
+				email,
+				password,
+				role,
+				expires_on
+			})
+		}
+	);
+	await linkVolunteerProfile(repository, volunteer, profile, email, result.created);
+	return { created: result.created, unchanged: result.unchanged };
 }
