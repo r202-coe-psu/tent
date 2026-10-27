@@ -1,5 +1,10 @@
-import { createMutation, createQuery, useQueryClient } from '@tanstack/svelte-query';
-import { fetchDonationQueue } from '../data/back-office-queue';
+import {
+	createInfiniteQuery,
+	createMutation,
+	createQuery,
+	useQueryClient
+} from '@tanstack/svelte-query';
+import { fetchDonationQueue, fetchReceivedDonationsPage } from '../data/back-office-queue';
 import {
 	cancelDonation,
 	fetchDonationTracking,
@@ -115,5 +120,19 @@ export function useDonationQueue() {
 	return createQuery(() => ({
 		queryKey: donationQueueKeys.all,
 		queryFn: fetchDonationQueue
+	}));
+}
+
+/**
+ * The "รับแล้ว" list (#821) — one shelter, paged by CouchDB bookmark. Only runs while that
+ * filter is open; `useDonationQueue` above never reads `received`.
+ */
+export function useReceivedDonations(shelterCode: () => string, enabled: () => boolean) {
+	return createInfiniteQuery(() => ({
+		queryKey: [...donationQueueKeys.all, 'received', shelterCode()] as const,
+		queryFn: ({ pageParam }) => fetchReceivedDonationsPage(shelterCode(), pageParam),
+		initialPageParam: null as string | null,
+		getNextPageParam: (last) => (last.hasMore ? (last.bookmark ?? undefined) : undefined),
+		enabled: enabled()
 	}));
 }
