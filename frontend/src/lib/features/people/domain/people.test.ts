@@ -1,6 +1,9 @@
 // @vitest-environment happy-dom
 import { describe, it, expect } from 'vitest';
+import { mintConsentStamp } from '$lib/features/consent/server';
+import type { EvacueeConsentWrite } from './people';
 import {
+	EWAR_SYMPTOM_GROUPS,
 	ewarSymptomLabel,
 	canScanCheckIn,
 	needsIntakeBeforeStay,
@@ -29,6 +32,8 @@ import {
 	matchesEvacueePhoneSearch,
 	matchesEvacueeSearch,
 	zoneLabel,
+	stayZoneName,
+	labelZoneName,
 	isEvacuee,
 	createHousehold,
 	isHousehold,
@@ -41,6 +46,7 @@ import {
 	MANUAL_HOUSEHOLD_STATUS_TRANSITIONS,
 	evacueeInputSchema,
 	station1EvacueeInputSchema,
+	withoutBookingRef,
 	triageLevelSchema,
 	screeningInputSchema,
 	householdPreRegisterEvacueeSchema,
@@ -75,6 +81,19 @@ import type { AuthorContext } from '$lib/db/model';
 import type { ScreeningInput, StayStatus } from './people';
 import { isUlid } from '$lib/db/ulid';
 import { ConflictError } from '$lib/utils/errors';
+
+const kioskConsent: EvacueeConsentWrite = {
+	consent: {
+		mode: 'full',
+		health: false,
+		...mintConsentStamp(new Date('2026-10-25T03:00:00.000Z')),
+		channel: 'kiosk',
+		given_by: 'self',
+		giver_evacuee_id: null,
+		recorded_verbally_by: null
+	},
+	searchExcluded: false
+};
 
 const ctx: AuthorContext = { shelterCode: 'SH001', createdBy: 'staff1' };
 
@@ -168,15 +187,17 @@ describe('vulnerable_groups vs special_needs', () => {
 				special_needs: ['ใช้ออกซิเจน'],
 				vulnerable_groups: ['wheelchair', 'pregnant']
 			},
-			ctx
+			ctx,
+			null
 		);
 		expect(e.vulnerable_groups).toEqual(['wheelchair', 'pregnant']);
 		expect(e.special_needs).toEqual(['ใช้ออกซิเจน']);
-		expect(e.schema_v).toBe(13);
+		expect(e.schema_v).toBe(15);
 
 		const bare = createEvacuee(
 			{ first_name: 'A', last_name: 'B', gender: 'other', phone: null },
-			ctx
+			ctx,
+			null
 		);
 		expect(bare.vulnerable_groups).toEqual([]);
 		expect(bare.special_needs).toEqual([]);
@@ -233,7 +254,8 @@ describe('Anonymous ID', () => {
 				phone: null,
 				person_id: { cardType: 'anonymous' }
 			},
-			ctx
+			ctx,
+			null
 		);
 		const b = createEvacuee(
 			{
@@ -243,9 +265,10 @@ describe('Anonymous ID', () => {
 				phone: null,
 				person_id: { cardType: 'anonymous', number: '' }
 			},
-			ctx
+			ctx,
+			null
 		);
-		expect(a.schema_v).toBe(13);
+		expect(a.schema_v).toBe(15);
 		expect(a.person_id?.cardType).toBe('anonymous');
 		expect(isAnonymousId(a.person_id?.number ?? '')).toBe(true);
 		expect(b.person_id?.number).not.toBe(a.person_id?.number);
@@ -261,7 +284,8 @@ describe('Anonymous ID', () => {
 				phone: null,
 				person_id: { cardType: 'anonymous' }
 			},
-			ctx
+			ctx,
+			null
 		);
 		const anon = e.person_id!.number!;
 		expect(matchesEvacueeSearch(e, anon)).toBe(true);
@@ -279,7 +303,8 @@ describe('Anonymous ID', () => {
 				phone: '0811111111',
 				person_id: { cardType: 'anonymous' }
 			},
-			ctx
+			ctx,
+			null
 		);
 		const replaced = replacePersonId(e, {
 			cardType: 'national_id',
@@ -310,11 +335,12 @@ describe('createEvacuee', () => {
 	it('stamps the envelope and applies spec defaults', () => {
 		const e = createEvacuee(
 			{ first_name: '  สมชาย ', last_name: 'ใจดี', gender: 'male', phone: '0812345678' },
-			ctx
+			ctx,
+			null
 		);
 		expect(e._id.startsWith('evacuee:')).toBe(true);
 		expect(e.type).toBe('evacuee');
-		expect(e.schema_v).toBe(13);
+		expect(e.schema_v).toBe(15);
 		expect(e.shelter_code).toBe('SH001');
 		expect(e.created_by).toBe('staff1');
 		expect(e.created_at).toBe(e.updated_at);
@@ -336,13 +362,14 @@ describe('createEvacuee', () => {
 				phone: '0899999999',
 				status: 'arriving'
 			},
-			ctx
+			ctx,
+			null
 		);
-		expect(e.schema_v).toBe(13);
+		expect(e.schema_v).toBe(15);
 		expect(e.current_stay.status).toBe('arriving');
 	});
 
-	it('creates evacuee from card snapshot with schema_v 11, kiosk_registered, and registered_via kiosk', () => {
+	it('creates evacuee from card snapshot with schema_v 15, arriving, and registered_via kiosk', () => {
 		const card = {
 			citizen_id: '1234567890121',
 			title_th: 'นาย',
@@ -355,10 +382,11 @@ describe('createEvacuee', () => {
 			device_id: 'DEV-01',
 			station_name: 'จุดสแกน Kiosk 1'
 		};
-		const kioskEv = createDraftEvacueeFromCard(card, ctx);
+		const kioskEv = createDraftEvacueeFromCard(card, ctx, kioskConsent);
 		expect(kioskEv._id.startsWith('evacuee:')).toBe(true);
 		expect(kioskEv.type).toBe('evacuee');
-		expect(kioskEv.schema_v).toBe(11);
+		expect(kioskEv.schema_v).toBe(15);
+		expect(kioskEv.consent).toEqual(kioskConsent.consent);
 		expect(kioskEv.first_name).toBe('สมศักดิ์');
 		expect(kioskEv.last_name).toBe('รักชาติ');
 		expect(kioskEv.birth_year).toBe(2533);
@@ -376,7 +404,12 @@ describe('createEvacuee', () => {
 			first_name_th: 'สมชาย',
 			photo_base64: 'data:image/jpeg;base64,/9j/AA=='
 		} as CardSnapshot;
-		const evacuee = createKioskEvacueeFromCard(card, ctx, 'image:01ARZ3NDEKTSV4RRFFQ69G5FAV');
+		const evacuee = createKioskEvacueeFromCard(
+			card,
+			ctx,
+			kioskConsent,
+			'image:01ARZ3NDEKTSV4RRFFQ69G5FAV'
+		);
 		expect(evacuee.photo).toBe('image:01ARZ3NDEKTSV4RRFFQ69G5FAV');
 		expect(evacuee.card_snapshot).not.toHaveProperty('photo_base64');
 	});
@@ -390,13 +423,17 @@ describe('createEvacuee', () => {
 			scanned_at: '2026-08-29T10:00:00Z',
 			device_id: 'DEV-01'
 		};
-		const draft = createDraftEvacueeFromCard(card, ctx);
+		const draft = createDraftEvacueeFromCard(card, ctx, kioskConsent);
 		expect(draft.birth_year).toBe(2539);
 		expect(draft.age).toBe(new Date().getFullYear() + 543 - 2539);
 	});
 
 	it('accepts "no phone" as null', () => {
-		const e = createEvacuee({ first_name: 'ก', last_name: 'ข', gender: 'other', phone: null }, ctx);
+		const e = createEvacuee(
+			{ first_name: 'ก', last_name: 'ข', gender: 'other', phone: null },
+			ctx,
+			null
+		);
 		expect(e.phone).toBeNull();
 	});
 
@@ -411,7 +448,8 @@ describe('createEvacuee', () => {
 				phone: '0812345678',
 				registered_via: 'web'
 			},
-			ctx
+			ctx,
+			null
 		);
 		expect(e.registered_via).toBe('web');
 		expect(e.current_stay.status).toBe('pre_registered');
@@ -428,21 +466,23 @@ describe('createEvacuee', () => {
 					// `api` became valid with CR-154; anything outside the enum is still rejected.
 					registered_via: 'fax' as never
 				},
-				ctx
+				ctx,
+				null
 			)
 		).toThrow();
 	});
 
 	it('rejects an empty first name', () => {
 		expect(() =>
-			createEvacuee({ first_name: '  ', last_name: 'ข', gender: 'male', phone: null }, ctx)
+			createEvacuee({ first_name: '  ', last_name: 'ข', gender: 'male', phone: null }, ctx, null)
 		).toThrow();
 	});
 
 	it('allows an empty last name for mononyms (CR-106 FR-18)', () => {
 		const e = createEvacuee(
 			{ first_name: 'Aung San', last_name: '  ', gender: 'male', phone: null, country: 'MYANMAR' },
-			ctx
+			ctx,
+			null
 		);
 		expect(e.first_name).toBe('Aung San');
 		expect(e.last_name).toBe('');
@@ -451,13 +491,15 @@ describe('createEvacuee', () => {
 	it('defaults photo to absent, and carries it through when set (CR-054)', () => {
 		const withoutPhoto = createEvacuee(
 			{ first_name: 'ก', last_name: 'ข', gender: 'other', phone: null },
-			ctx
+			ctx,
+			null
 		);
 		expect(withoutPhoto.photo).toBeUndefined();
 
 		const withPhoto = createEvacuee(
 			{ first_name: 'ก', last_name: 'ข', gender: 'other', phone: null, photo: 'image:01H...' },
-			ctx
+			ctx,
+			null
 		);
 		expect(withPhoto.photo).toBe('image:01H...');
 	});
@@ -744,7 +786,11 @@ describe('evacueeHealthEditFormSchema temperature', () => {
 
 describe('movement → current_stay', () => {
 	it('check_in moves the snapshot to active at the event time', () => {
-		const e = createEvacuee({ first_name: 'ก', last_name: 'ข', gender: 'male', phone: null }, ctx);
+		const e = createEvacuee(
+			{ first_name: 'ก', last_name: 'ข', gender: 'male', phone: null },
+			ctx,
+			null
+		);
 		const m = createMovement(
 			{
 				evacuee_id: e._id,
@@ -761,7 +807,11 @@ describe('movement → current_stay', () => {
 	});
 
 	it('allows check_in transition from arriving to active via applyMovementToStay', () => {
-		const e = createEvacuee({ first_name: 'ก', last_name: 'ข', gender: 'male', phone: null }, ctx);
+		const e = createEvacuee(
+			{ first_name: 'ก', last_name: 'ข', gender: 'male', phone: null },
+			ctx,
+			null
+		);
 		const arriving = {
 			...e,
 			current_stay: { status: 'arriving' as const, zone: null, since: e.current_stay.since }
@@ -797,7 +847,8 @@ describe('movement → current_stay', () => {
 
 		const base = createEvacuee(
 			{ first_name: 'ก', last_name: 'ข', gender: 'male', phone: null },
-			ctx
+			ctx,
+			null
 		);
 
 		const allowed = statuses.filter((status) =>
@@ -823,7 +874,11 @@ describe('movement → current_stay', () => {
 	});
 
 	it('rejects check_in from deceased (terminal status)', () => {
-		const e = createEvacuee({ first_name: 'ก', last_name: 'ข', gender: 'male', phone: null }, ctx);
+		const e = createEvacuee(
+			{ first_name: 'ก', last_name: 'ข', gender: 'male', phone: null },
+			ctx,
+			null
+		);
 		const deceased = {
 			...e,
 			current_stay: { status: 'deceased' as const, zone: null, since: e.current_stay.since }
@@ -837,7 +892,11 @@ describe('movement → current_stay', () => {
 	});
 
 	it('rejects movement from cancelled stay (terminal status)', () => {
-		const e = createEvacuee({ first_name: 'ก', last_name: 'ข', gender: 'male', phone: null }, ctx);
+		const e = createEvacuee(
+			{ first_name: 'ก', last_name: 'ข', gender: 'male', phone: null },
+			ctx,
+			null
+		);
 		const cancelled = {
 			...e,
 			current_stay: { status: 'cancelled' as const, zone: null, since: e.current_stay.since }
@@ -848,7 +907,11 @@ describe('movement → current_stay', () => {
 	});
 
 	it('canCancel* helpers allow pending registration stays', () => {
-		const e = createEvacuee({ first_name: 'ก', last_name: 'ข', gender: 'male', phone: null }, ctx);
+		const e = createEvacuee(
+			{ first_name: 'ก', last_name: 'ข', gender: 'male', phone: null },
+			ctx,
+			null
+		);
 		expect(canCancelEvacueePreRegistration(e)).toBe(true);
 		expect(
 			canCancelEvacueePreRegistration({
@@ -873,7 +936,11 @@ describe('movement → current_stay', () => {
 	});
 
 	it('rejects check_out unless status is active or room_confirmed, and requires reason', () => {
-		const e = createEvacuee({ first_name: 'ก', last_name: 'ข', gender: 'male', phone: null }, ctx);
+		const e = createEvacuee(
+			{ first_name: 'ก', last_name: 'ข', gender: 'male', phone: null },
+			ctx,
+			null
+		);
 		expect(canCheckOutEvacuee(e)).toBe(false);
 		expect(() => assertMovementAllowed(e, 'check_out', { reason: 'กลับบ้าน' })).toThrow(
 			/เช็คเอาท์/
@@ -897,7 +964,11 @@ describe('movement → current_stay', () => {
 	});
 
 	it('confirm_room moves active → room_confirmed and lists pending confirmations', () => {
-		const e = createEvacuee({ first_name: 'ก', last_name: 'ข', gender: 'male', phone: null }, ctx);
+		const e = createEvacuee(
+			{ first_name: 'ก', last_name: 'ข', gender: 'male', phone: null },
+			ctx,
+			null
+		);
 		const active = {
 			...e,
 			current_stay: { status: 'active' as const, zone: 'Z1', since: e.current_stay.since }
@@ -925,7 +996,11 @@ describe('movement → current_stay', () => {
 	});
 
 	it('zone_change keeps status and updates zone from active or room_confirmed', () => {
-		const e = createEvacuee({ first_name: 'ก', last_name: 'ข', gender: 'male', phone: null }, ctx);
+		const e = createEvacuee(
+			{ first_name: 'ก', last_name: 'ข', gender: 'male', phone: null },
+			ctx,
+			null
+		);
 		const active = {
 			...e,
 			current_stay: { status: 'active' as const, zone: 'Z1', since: e.current_stay.since }
@@ -956,7 +1031,11 @@ describe('movement → current_stay', () => {
 	});
 
 	it('rejects zone_change without destination or from non-active', () => {
-		const e = createEvacuee({ first_name: 'ก', last_name: 'ข', gender: 'male', phone: null }, ctx);
+		const e = createEvacuee(
+			{ first_name: 'ก', last_name: 'ข', gender: 'male', phone: null },
+			ctx,
+			null
+		);
 		expect(canChangeEvacueeZone(e)).toBe(false);
 		const active = {
 			...e,
@@ -969,7 +1048,8 @@ describe('movement → current_stay', () => {
 	it('bulk rezone candidate filter (canChangeEvacueeZone) excludes discharged household members', () => {
 		const base = createEvacuee(
 			{ first_name: 'ก', last_name: 'ข', gender: 'male', phone: null },
-			ctx
+			ctx,
+			null
 		);
 		const withStatus = (status: StayStatus) => ({
 			...base,
@@ -989,7 +1069,7 @@ describe('movement → current_stay', () => {
 
 	it('never drops or nulls household_id across check_in, confirm_room, zone_change, and check_out (FR-14)', () => {
 		const e = {
-			...createEvacuee({ first_name: 'ก', last_name: 'ข', gender: 'male', phone: null }, ctx),
+			...createEvacuee({ first_name: 'ก', last_name: 'ข', gender: 'male', phone: null }, ctx, null),
 			household_id: 'household:shared'
 		};
 
@@ -1022,7 +1102,11 @@ describe('movement → current_stay', () => {
 	});
 
 	it('allows check_in from eligible stay statuses only', () => {
-		const e = createEvacuee({ first_name: 'ก', last_name: 'ข', gender: 'male', phone: null }, ctx);
+		const e = createEvacuee(
+			{ first_name: 'ก', last_name: 'ข', gender: 'male', phone: null },
+			ctx,
+			null
+		);
 		expect(canCheckInEvacuee(e)).toBe(true); // pre_registered
 		expect(CHECK_IN_ELIGIBLE_STATUSES).toContain('pre_registered');
 		expect(CHECK_IN_ELIGIBLE_STATUSES).not.toContain('kiosk_registered');
@@ -1037,7 +1121,11 @@ describe('movement → current_stay', () => {
 	});
 
 	it('rejects transfer_out / leave_temporary unless status is active or room_confirmed', () => {
-		const e = createEvacuee({ first_name: 'ก', last_name: 'ข', gender: 'male', phone: null }, ctx);
+		const e = createEvacuee(
+			{ first_name: 'ก', last_name: 'ข', gender: 'male', phone: null },
+			ctx,
+			null
+		);
 		expect(() => assertMovementAllowed(e, 'transfer_out')).toThrow(/ย้ายออก/);
 		expect(() => assertMovementAllowed(e, 'leave_temporary')).toThrow(/ลาชั่วคราว/);
 
@@ -1067,13 +1155,21 @@ describe('movement → current_stay', () => {
 	});
 
 	it('rejects check_in without a zone', () => {
-		const e = createEvacuee({ first_name: 'ก', last_name: 'ข', gender: 'male', phone: null }, ctx);
+		const e = createEvacuee(
+			{ first_name: 'ก', last_name: 'ข', gender: 'male', phone: null },
+			ctx,
+			null
+		);
 		const m = createMovement({ evacuee_id: e._id, action: 'check_in', zone: null }, ctx);
 		expect(() => applyMovementToStay(e, m)).toThrow(/โซน/);
 	});
 
 	it('rejects return_from_leave — leave return is Check-in → active only (CR-112 A1)', () => {
-		const e = createEvacuee({ first_name: 'ก', last_name: 'ข', gender: 'male', phone: null }, ctx);
+		const e = createEvacuee(
+			{ first_name: 'ก', last_name: 'ข', gender: 'male', phone: null },
+			ctx,
+			null
+		);
 		const onLeave = {
 			...e,
 			current_stay: {
@@ -1129,7 +1225,11 @@ describe('resolveStatusChangeAction', () => {
 		expect(resolveStatusChangeAction('temporary_leave', 'active')).toBe('check_in');
 		expect(CHECK_IN_ELIGIBLE_STATUSES).toContain('temporary_leave');
 
-		const e = createEvacuee({ first_name: 'ก', last_name: 'ข', gender: 'male', phone: null }, ctx);
+		const e = createEvacuee(
+			{ first_name: 'ก', last_name: 'ข', gender: 'male', phone: null },
+			ctx,
+			null
+		);
 		const onLeave = {
 			...e,
 			current_stay: {
@@ -1534,7 +1634,11 @@ describe('createHousehold', () => {
 
 describe('household membership invariant', () => {
 	const makeEvacuee = (id: string, householdId: string | null) => ({
-		...createEvacuee({ first_name: id, last_name: 'ทดสอบ', gender: 'other', phone: null }, ctx),
+		...createEvacuee(
+			{ first_name: id, last_name: 'ทดสอบ', gender: 'other', phone: null },
+			ctx,
+			null
+		),
 		_id: id,
 		household_id: householdId
 	});
@@ -1672,7 +1776,8 @@ describe('assertCheckoutDestination', () => {
 describe('matchesEvacueeSearch', () => {
 	const evacuee = createEvacuee(
 		{ first_name: 'สมชาย', last_name: 'ใจดี', gender: 'male', phone: '0812345678' },
-		ctx
+		ctx,
+		null
 	);
 
 	it('returns true for an empty/blank query', () => {
@@ -1723,6 +1828,53 @@ describe('matchesEvacueeSearch', () => {
 	});
 });
 
+describe('stayZoneName', () => {
+	const zones = [{ code: 'z1', name: 'โซนชาย' }];
+
+	it('returns null when no zone is assigned', () => {
+		expect(stayZoneName(null, zones)).toBeNull();
+		expect(stayZoneName(undefined, zones)).toBeNull();
+		expect(stayZoneName('  ', zones)).toBeNull();
+	});
+
+	it('resolves the zone name by code, case-insensitively', () => {
+		expect(stayZoneName('Z1', zones)).toBe('โซนชาย');
+	});
+
+	it('falls back to the code when the name is unknown', () => {
+		expect(stayZoneName('z9', zones)).toBe('z9');
+		expect(stayZoneName('z1')).toBe('z1');
+		expect(stayZoneName('z1', [{ code: 'z1', name: '  ' }])).toBe('z1');
+	});
+});
+
+describe('labelZoneName', () => {
+	const zones = [
+		{ code: 'z1', name: 'โซนผู้สูงอายุ อาคาร 2', short_name: 'A3' },
+		{ code: 'z2', name: 'โซนหญิง', short_name: null },
+		{ code: 'z3', name: 'โซนชาย', short_name: '  ' }
+	];
+
+	it('returns null when no zone is assigned', () => {
+		expect(labelZoneName(null, zones)).toBeNull();
+		expect(labelZoneName(' ', zones)).toBeNull();
+	});
+
+	it('prints the short name when the zone has one', () => {
+		expect(labelZoneName('Z1', zones)).toBe('A3');
+	});
+
+	it('falls back to the full zone name without a short name', () => {
+		expect(labelZoneName('z2', zones)).toBe('โซนหญิง');
+		expect(labelZoneName('z3', zones)).toBe('โซนชาย');
+	});
+
+	it('falls back to the code for an unknown zone', () => {
+		expect(labelZoneName('z9', zones)).toBe('z9');
+		expect(labelZoneName('z1')).toBe('z1');
+	});
+});
+
 describe('zoneLabel', () => {
 	it('returns em dash when zone is missing', () => {
 		expect(zoneLabel(null)).toBe('—');
@@ -1754,6 +1906,79 @@ describe('ewarSymptomLabel', () => {
 
 	it('returns unknown ids unchanged', () => {
 		expect(ewarSymptomLabel('legacy_code')).toBe('legacy_code');
+	});
+});
+
+describe('EWAR_SYMPTOM_GROUPS curated order (#605)', () => {
+	const groupTitles = EWAR_SYMPTOM_GROUPS.map((g) => g.title);
+	const idsOf = (title: string) =>
+		EWAR_SYMPTOM_GROUPS.find((g) => g.title === title)?.symptoms.map((s) => s.id);
+	const allIds = EWAR_SYMPTOM_GROUPS.flatMap((g) => g.symptoms.map((s) => s.id));
+
+	it('puts the groups staff meet most often first', () => {
+		expect(groupTitles).toEqual([
+			'อาการเฝ้าระวังทั่วไปและเหตุฉุกเฉินอื่นๆ',
+			'กลุ่มอาการทางเดินหายใจ',
+			'กลุ่มอาการทางเดินอาหาร',
+			'กลุ่มโรคที่มีพาหะนำโรค',
+			'กลุ่มโรคติดต่อรุนแรงและไข้ออกผื่น',
+			'กลุ่มอาการตับอักเสบ',
+			'กลุ่มอาการทางระบบประสาทและอื่นๆ'
+		]);
+	});
+
+	it('orders the symptoms inside every group as the medical draft asks', () => {
+		expect(idsOf('อาการเฝ้าระวังทั่วไปและเหตุฉุกเฉินอื่นๆ')).toEqual([
+			'high_fever',
+			'trauma',
+			'chemical_poisoning'
+		]);
+		expect(idsOf('กลุ่มอาการทางเดินหายใจ')).toEqual(['acute_respiratory']);
+		expect(idsOf('กลุ่มอาการทางเดินอาหาร')).toEqual([
+			'acute_watery_diarrhea',
+			'acute_bloody_diarrhea',
+			'typhoid'
+		]);
+		expect(idsOf('กลุ่มโรคที่มีพาหะนำโรค')).toEqual(['dengue', 'malaria']);
+		expect(idsOf('กลุ่มโรคติดต่อรุนแรงและไข้ออกผื่น')).toEqual([
+			'measles',
+			'pertussis',
+			'meningitis',
+			'diphtheria'
+		]);
+		expect(idsOf('กลุ่มอาการตับอักเสบ')).toEqual(['acute_jaundice_syndrome', 'Hepatitis A or E']);
+		expect(idsOf('กลุ่มอาการทางระบบประสาทและอื่นๆ')).toEqual([
+			'acute_haemorrhagic_fever_syndrome',
+			'tetanus',
+			'acute_flaccid_paralysis'
+		]);
+	});
+
+	it('keeps every persisted symptom id, listed exactly once', () => {
+		expect([...allIds].sort()).toEqual(
+			[
+				'Hepatitis A or E',
+				'acute_bloody_diarrhea',
+				'acute_flaccid_paralysis',
+				'acute_haemorrhagic_fever_syndrome',
+				'acute_jaundice_syndrome',
+				'acute_respiratory',
+				'acute_watery_diarrhea',
+				'chemical_poisoning',
+				'dengue',
+				'diphtheria',
+				'high_fever',
+				'malaria',
+				'measles',
+				'meningitis',
+				'pertussis',
+				'tetanus',
+				'trauma',
+				'typhoid'
+			].sort()
+		);
+		expect(new Set(allIds).size).toBe(allIds.length);
+		expect(new Set(groupTitles).size).toBe(groupTitles.length);
 	});
 });
 
@@ -1792,7 +2017,11 @@ describe('gender nullable (schema_v 12, CR-154; decision sync 2026-10-09)', () =
 	});
 
 	it('createEvacuee persists gender null', () => {
-		const e = createEvacuee({ first_name: 'A', last_name: 'B', gender: null, phone: null }, ctx);
+		const e = createEvacuee(
+			{ first_name: 'A', last_name: 'B', gender: null, phone: null },
+			ctx,
+			null
+		);
 		expect(e.gender).toBeNull();
 	});
 
@@ -1830,9 +2059,9 @@ describe('gender nullable (schema_v 12, CR-154; decision sync 2026-10-09)', () =
 			scanned_at: '2026-10-09T00:00:00.000Z',
 			device_id: 'scanner-1'
 		};
-		const e = createKioskEvacueeFromCard(card, ctx);
+		const e = createKioskEvacueeFromCard(card, ctx, kioskConsent);
 		expect(e.gender).toBeNull();
-		const female = createKioskEvacueeFromCard({ ...card, gender: 'female' }, ctx);
+		const female = createKioskEvacueeFromCard({ ...card, gender: 'female' }, ctx, kioskConsent);
 		expect(female.gender).toBe('female');
 	});
 
@@ -1842,8 +2071,10 @@ describe('gender nullable (schema_v 12, CR-154; decision sync 2026-10-09)', () =
 			scanned_at: '2026-10-09T00:00:00.000Z',
 			device_id: 'scanner-1'
 		};
-		expect(createKioskEvacueeFromCard(card, ctx).phone).toBeNull();
-		expect(createKioskEvacueeFromCard(card, ctx, undefined, '0812345678').phone).toBe('0812345678');
+		expect(createKioskEvacueeFromCard(card, ctx, kioskConsent).phone).toBeNull();
+		expect(createKioskEvacueeFromCard(card, ctx, kioskConsent, undefined, '0812345678').phone).toBe(
+			'0812345678'
+		);
 	});
 
 	it('accepts registered_via api', () => {
@@ -1863,15 +2094,64 @@ describe('preferred_zone (schema_v 13, CR-159)', () => {
 	const ctx = { shelterCode: 'SH001', createdBy: 'staff' };
 
 	it("stores Station 1's suggestion without zoning the person", () => {
-		const e = createEvacuee({ ...base, status: 'arriving', preferred_zone: 'Z5' }, ctx);
+		const e = createEvacuee({ ...base, status: 'arriving', preferred_zone: 'Z5' }, ctx, null);
 		expect(e.preferred_zone).toBe('Z5');
 		expect(e.current_stay).toMatchObject({ status: 'arriving', zone: null });
 	});
 
 	it('leaves the field out when no zone was suggested', () => {
-		expect(createEvacuee({ ...base, preferred_zone: '' }, ctx)).not.toHaveProperty(
+		expect(createEvacuee({ ...base, preferred_zone: '' }, ctx, null)).not.toHaveProperty(
 			'preferred_zone'
 		);
-		expect(createEvacuee(base, ctx)).not.toHaveProperty('preferred_zone');
+		expect(createEvacuee(base, ctx, null)).not.toHaveProperty('preferred_zone');
+	});
+});
+
+describe('evacuee booking_ref (CR-169, schema_v 14)', () => {
+	const base = { first_name: 'A', last_name: 'B', gender: 'other' as const, phone: null };
+
+	it('keeps booking_ref when given', () => {
+		const e = createEvacuee({ ...base, booking_ref: 'BK-01TEST' }, ctx, null);
+		expect(e.booking_ref).toBe('BK-01TEST');
+		expect(e.schema_v).toBe(15);
+	});
+
+	it('omits the booking_ref key when not given, null, or empty', () => {
+		expect(createEvacuee(base, ctx, null)).not.toHaveProperty('booking_ref');
+		expect(createEvacuee({ ...base, booking_ref: null }, ctx, null)).not.toHaveProperty(
+			'booking_ref'
+		);
+		expect(createEvacuee({ ...base, booking_ref: '' }, ctx, null)).not.toHaveProperty(
+			'booking_ref'
+		);
+	});
+
+	it('omits the booking_ref key when it is whitespace only', () => {
+		expect(createEvacuee({ ...base, booking_ref: '   ' }, ctx, null)).not.toHaveProperty(
+			'booking_ref'
+		);
+	});
+
+	it('strips booking_ref from the form-facing schemas (FR-61)', () => {
+		expect(station1EvacueeInputSchema.parse({ ...base, booking_ref: 'BK-X' })).not.toHaveProperty(
+			'booking_ref'
+		);
+		expect(
+			householdPreRegisterEvacueeSchema.parse({
+				...base,
+				person_id: { cardType: 'national_id', number: '1234567890121' },
+				emergency_contact: { name: 'ก', phone: '0899999999', relation: 'ญาติ' },
+				booking_ref: 'BK-X'
+			})
+		).not.toHaveProperty('booking_ref');
+	});
+
+	it('withoutBookingRef drops only booking_ref and does not mutate the input', () => {
+		const input = { ...base, booking_ref: 'BK-X' };
+		const out = withoutBookingRef(input);
+		expect(out).not.toHaveProperty('booking_ref');
+		expect(out).toEqual(base);
+		expect(input.booking_ref).toBe('BK-X');
+		expect(withoutBookingRef(base)).toEqual(base);
 	});
 });

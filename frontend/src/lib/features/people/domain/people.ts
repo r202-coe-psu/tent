@@ -12,6 +12,11 @@ import {
 import { ulid } from '$lib/db/ulid';
 import { isValidThaiNationalId } from '$lib/utils/thai-id';
 import { ConflictError } from '$lib/utils/errors';
+import {
+	EVACUEE_SCHEMA_V,
+	type EvacueeConsent,
+	type MemberConsentWrite
+} from '$lib/features/consent/server';
 
 /**
  * People domain — the registration baseline (FR-4..13).
@@ -318,7 +323,17 @@ export interface Evacuee extends BaseDoc {
 	 * never zones — Station 3 only uses it as the default pick when there are no EWAR symptoms.
 	 */
 	preferred_zone?: string | null;
+	/**
+	 * Partner booking group id `BK-{ulid}` = `external_bookings.booking_id` (schema_v 14, CR-169).
+	 * Written only by the sync worker for partner bookings (`registered_via: 'api'`). Input paths
+	 * never set it (FR-61): the public BFF and kiosk strip it via `unifiedMemberInputSchema` /
+	 * `station1EvacueeInputSchema`, and the staff forms omit it by schema and `withoutBookingRef`.
+	 * Staff edit and merge paths preserve an existing value by spreading the stored doc (FR-62).
+	 * Opaque, not PII, never projected to `public_*`. Unrelated to `donation.booking_ref`.
+	 */
+	booking_ref?: string | null;
 	privacy: { search_excluded: boolean };
+	consent?: EvacueeConsent;
 	registered_via: z.infer<typeof registeredViaSchema>;
 	anonymized?: boolean; // set by the purge job
 }
@@ -876,41 +891,59 @@ export const evacueeInputSchema = z.object({
 		.optional()
 		.default(null)
 		.transform((v) => v || null),
+	/**
+	 * CR-169: partner booking group id (schema_v 14). Worker-owned: kept on the base schema so
+	 * `createEvacuee` can persist it, but the derived public / kiosk / staff-form schemas omit it
+	 * (FR-61); form payloads are also passed through `withoutBookingRef`.
+	 */
+	booking_ref: z.string().trim().nullable().optional(),
 	registered_via: registeredViaSchema.default('staff')
 });
 export type EvacueeInput = z.input<typeof evacueeInputSchema>;
 
+/**
+ * Drop `booking_ref` (CR-169 FR-61) from a form / request payload. The key is worker-owned, so
+ * no staff, kiosk or public form payload may forward it, even when seeded from a stored doc.
+ */
+export function withoutBookingRef<T extends object>(input: T): Omit<T, 'booking_ref'> {
+	const rest = { ...input } as T & { booking_ref?: unknown };
+	delete rest.booking_ref;
+	return rest as Omit<T, 'booking_ref'>;
+}
+
 /** Station 1 walk-in + Report-in: same as base — emergency contact optional. */
-export const station1EvacueeInputSchema = evacueeInputSchema;
+export const station1EvacueeInputSchema = evacueeInputSchema.omit({ booking_ref: true });
 export type Station1EvacueeInput = z.input<typeof station1EvacueeInputSchema>;
 
 /** Required identity/contact fields used by the household pre-registration wizard. */
-export const householdPreRegisterEvacueeSchema = evacueeInputSchema.extend({
-	person_id: z
-		.object({
-			cardType: cardTypeSchema.default('national_id'),
-			number: z.string().trim().optional().default('')
-		})
-		.superRefine((data, ctx) => {
-			if (data.cardType === 'anonymous') return;
-			if (!data.number?.trim()) {
-				ctx.addIssue({
-					code: 'custom',
-					path: ['number'],
-					message: 'กรุณากรอกเลขประจำตัวหรือเลขที่เอกสาร'
-				});
-				return;
-			}
-			refineCardNumberMax(data.cardType, data.number, ctx, ['number']);
-		})
-		.default({ cardType: 'national_id', number: '' }),
-	religion: z
-		.enum(['buddhist', 'muslim', 'christian', 'other', 'unknown'], {
-			error: 'กรุณาเลือกศาสนา'
-		})
-		.default('buddhist'),
-	emergency_contact: emergencyContactRequiredSchema
-});
+export const householdPreRegisterEvacueeSchema = evacueeInputSchema
+	.omit({ booking_ref: true })
+	.extend({
+		person_id: z
+			.object({
+				cardType: cardTypeSchema.default('national_id'),
+				number: z.string().trim().optional().default('')
+			})
+			.superRefine((data, ctx) => {
+				if (data.cardType === 'anonymous') return;
+				if (!data.number?.trim()) {
+					ctx.addIssue({
+						code: 'custom',
+						path: ['number'],
+						message: 'กรุณากรอกเลขประจำตัวหรือเลขที่เอกสาร'
+					});
+					return;
+				}
+				refineCardNumberMax(data.cardType, data.number, ctx, ['number']);
+			})
+			.default({ cardType: 'national_id', number: '' }),
+		religion: z
+			.enum(['buddhist', 'muslim', 'christian', 'other', 'unknown'], {
+				error: 'กรุณาเลือกศาสนา'
+			})
+			.default('buddhist'),
+		emergency_contact: emergencyContactRequiredSchema
+	});
 
 export const medicalInputSchema = z.object({
 	evacuee_id: z.string().min(1),
@@ -921,6 +954,45 @@ export const medicalInputSchema = z.object({
 	notes: z.string().trim().optional()
 });
 export type MedicalInput = z.input<typeof medicalInputSchema>;
+
+interface RegistrationMedicalFields {
+	medical_conditions?: readonly string[];
+	medical_allergies?: readonly string[];
+	medical_medications?: readonly string[];
+	medical_note?: string | null;
+}
+
+export function hasMedicalInput(member: RegistrationMedicalFields): boolean {
+	return Boolean(
+		member.medical_conditions?.length ||
+		member.medical_allergies?.length ||
+		member.medical_medications?.length ||
+		member.medical_note?.length
+	);
+}
+
+/**
+ * The `medical` doc a registration save may create for one member, or null. FR-32: a member
+ * whose consent forbids health data gets none; `null` consent (a channel without the block)
+ * keeps the pre-consent behaviour.
+ */
+export function registrationMedicalInput(
+	member: RegistrationMedicalFields,
+	evacueeId: string,
+	consent: Pick<MemberConsentWrite, 'medicalAllowed'> | null,
+	track: CareTrack
+): MedicalInput | null {
+	if (consent && !consent.medicalAllowed) return null;
+	if (!hasMedicalInput(member)) return null;
+	return {
+		evacuee_id: evacueeId,
+		conditions: [...(member.medical_conditions ?? [])],
+		allergies: [...(member.medical_allergies ?? [])],
+		medications: [...(member.medical_medications ?? [])],
+		notes: member.medical_note || '',
+		track
+	};
+}
 
 function hasCompleteResidenceGeo(data: {
 	subdistrict?: string | null;
@@ -1511,12 +1583,23 @@ export function totalPetCount(pets: readonly { count?: number | string | null }[
 	return pets.reduce((sum, p) => sum + (Number(p.count) || 0), 0);
 }
 
-export function createEvacuee(input: EvacueeInput, ctx: AuthorContext, id?: string): Evacuee {
+export type EvacueeConsentWrite = Pick<MemberConsentWrite, 'consent' | 'searchExcluded'>;
+
+/**
+ * `consent` is required so a new writer cannot forget it: pass `null` on channels without the
+ * consent block (back-office, import, paper, seed), which keep `search_excluded: false` (FR-44).
+ */
+export function createEvacuee(
+	input: EvacueeInput,
+	ctx: AuthorContext,
+	consent: EvacueeConsentWrite | null,
+	id?: string
+): Evacuee {
 	const d = evacueeInputSchema.parse(input);
 	const person_id = resolvePersonIdOnCreate(d.person_id);
 	return makeDoc(
 		'evacuee',
-		13, // schema_v 13: preferred_zone (CR-159); 12: gender nullable + registered_via `api` (CR-154); 11: religion_other + disability_other_detail (CR-148); 10: anonymous cardType + ANON mint (CR-112); 9: arriving (CR-106); 8: draft/card_snapshot (CR-084); 7 = registered_via `web` (CR-070); 6 = stay cancelled (CR-070); 5 = age (CR-057)
+		EVACUEE_SCHEMA_V, // 15: consent (PDPA block); 14: booking_ref (CR-169); 13: preferred_zone (CR-159); 12: gender nullable + registered_via `api` (CR-154); 11: religion_other + disability_other_detail (CR-148); 10: anonymous cardType + ANON mint (CR-112); 9: arriving (CR-106); 8: draft/card_snapshot (CR-084); 7 = registered_via `web` (CR-070); 6 = stay cancelled (CR-070); 5 = age (CR-057)
 		{
 			first_name: d.first_name,
 			last_name: d.last_name,
@@ -1537,7 +1620,10 @@ export function createEvacuee(input: EvacueeInput, ctx: AuthorContext, id?: stri
 			household_id: d.household_id,
 			current_stay: { status: d.zone ? 'active' : d.status, zone: d.zone ?? null, since: now() },
 			...(d.preferred_zone ? { preferred_zone: d.preferred_zone } : {}),
-			privacy: { search_excluded: false },
+			// Worker-owned (CR-169): only reachable via EvacueeInput; public/form schemas omit it.
+			...(d.booking_ref ? { booking_ref: d.booking_ref } : {}),
+			privacy: { search_excluded: consent?.searchExcluded ?? false },
+			...(consent ? { consent: consent.consent } : {}),
 			registered_via: d.registered_via
 		},
 		ctx,
@@ -1553,10 +1639,11 @@ export function createEvacuee(input: EvacueeInput, ctx: AuthorContext, id?: stri
 export function createKioskEvacueeFromCard(
 	cardSnapshot: CardSnapshot,
 	ctx: AuthorContext,
+	consent: EvacueeConsentWrite,
 	photoId?: string,
 	phone: string | null = null,
 	id?: string
-): Evacuee {
+): Evacuee & { consent: EvacueeConsent } {
 	const firstName = cardSnapshot.first_name_th || 'ไม่ระบุชื่อ';
 	const lastName = cardSnapshot.last_name_th || '';
 	// Card chip carries no gender → ไม่ระบุ (`null`); never fabricate legacy 'other'.
@@ -1573,7 +1660,7 @@ export function createKioskEvacueeFromCard(
 
 	return makeDoc(
 		'evacuee',
-		11,
+		EVACUEE_SCHEMA_V,
 		{
 			first_name: firstName,
 			last_name: lastName,
@@ -1592,7 +1679,8 @@ export function createKioskEvacueeFromCard(
 			card_snapshot: persistedCardSnapshot,
 			photo: photoId ?? null,
 			current_stay: { status: 'arriving', zone: null, since: now() },
-			privacy: { search_excluded: false },
+			privacy: { search_excluded: consent.searchExcluded },
+			consent: consent.consent,
 			registered_via: 'kiosk'
 		},
 		ctx,
@@ -2175,7 +2263,44 @@ export function evacueeAgeYears(doc: {
 export type ZoneLabelSource = {
 	code: string;
 	name?: string | null;
+	/** Abbreviation printed on the QR label (shelter `zones[].short_name`). */
+	short_name?: string | null;
 };
+
+function findZone(
+	code: string,
+	zones: readonly ZoneLabelSource[] | null | undefined
+): ZoneLabelSource | undefined {
+	const lower = code.toLowerCase();
+	return zones?.find((z) => z.code.toLowerCase() === lower);
+}
+
+/**
+ * Name of a stay-zone code, or null when no zone is assigned. Prefers the shelter zone `name`
+ * (matched case-insensitively) and falls back to the raw code only when no name is available.
+ */
+export function stayZoneName(
+	zone: string | null | undefined,
+	zones?: readonly ZoneLabelSource[] | null
+): string | null {
+	const code = zone?.trim();
+	if (!code) return null;
+	return findZone(code, zones)?.name?.trim() || code;
+}
+
+/**
+ * Zone text for the printed QR label: the zone's short name, else its full name (the label cuts
+ * one too long for the row with an ellipsis), else the raw code; null when no zone is assigned.
+ */
+export function labelZoneName(
+	zone: string | null | undefined,
+	zones?: readonly ZoneLabelSource[] | null
+): string | null {
+	const code = zone?.trim();
+	if (!code) return null;
+	const match = findZone(code, zones);
+	return match?.short_name?.trim() || match?.name?.trim() || code;
+}
 
 /**
  * Display label for a stay-zone code. Prefer the shelter zone `name` when a
@@ -2186,14 +2311,7 @@ export function zoneLabel(
 	zone: string | null | undefined,
 	zones?: readonly ZoneLabelSource[] | null
 ): string {
-	if (!zone) return '—';
-	if (zones?.length) {
-		const lower = zone.toLowerCase();
-		const match = zones.find((z) => z.code.toLowerCase() === lower);
-		const name = match?.name?.trim();
-		if (name) return name;
-	}
-	return zone;
+	return stayZoneName(zone, zones) ?? '—';
 }
 
 // ---------------------------------------------------------------- type guards
@@ -2226,6 +2344,39 @@ export interface EwarSymptomGroup {
 
 export const EWAR_SYMPTOM_GROUPS: EwarSymptomGroup[] = [
 	{
+		title: 'อาการเฝ้าระวังทั่วไปและเหตุฉุกเฉินอื่นๆ',
+		symptoms: [
+			{
+				id: 'high_fever',
+				emoji: '🔥',
+				label: 'ไข้สูงเกิน 38.5 °C'
+			},
+			{
+				id: 'trauma',
+				emoji: '💥',
+				label: 'ได้รับบาดเจ็บ',
+				sublabel: 'Trauma'
+			},
+			{
+				id: 'chemical_poisoning',
+				emoji: '☠️',
+				label: 'ได้รับสารเคมี / สารพิษ',
+				sublabel: 'Chemical poisoning'
+			}
+		]
+	},
+	{
+		title: 'กลุ่มอาการทางเดินหายใจ',
+		symptoms: [
+			{
+				id: 'acute_respiratory',
+				emoji: '😷',
+				label: 'ติดเชื้อทางเดินหายใจเฉียบพลัน (ไอ เจ็บคอ หายใจลำบาก)',
+				sublabel: 'Acute respiratory infection'
+			}
+		]
+	},
+	{
 		title: 'กลุ่มอาการทางเดินอาหาร',
 		symptoms: [
 			{
@@ -2249,30 +2400,19 @@ export const EWAR_SYMPTOM_GROUPS: EwarSymptomGroup[] = [
 		]
 	},
 	{
-		title: 'กลุ่มอาการทางเดินหายใจ',
-		symptoms: [
-			{
-				id: 'acute_respiratory',
-				emoji: '😷',
-				label: 'ติดเชื้อทางเดินหายใจเฉียบพลัน (ไอ เจ็บคอ หายใจลำบาก)',
-				sublabel: 'Acute respiratory infection'
-			}
-		]
-	},
-	{
 		title: 'กลุ่มโรคที่มีพาหะนำโรค',
 		symptoms: [
-			{
-				id: 'malaria',
-				emoji: '🤒',
-				label: 'ไข้มาลาเรีย',
-				sublabel: 'Malaria'
-			},
 			{
 				id: 'dengue',
 				emoji: '🦟',
 				label: 'ไข้เลือดออก',
 				sublabel: 'Dengue'
+			},
+			{
+				id: 'malaria',
+				emoji: '🤒',
+				label: 'ไข้มาลาเรีย',
+				sublabel: 'Malaria'
 			}
 		]
 	},
@@ -2286,6 +2426,12 @@ export const EWAR_SYMPTOM_GROUPS: EwarSymptomGroup[] = [
 				sublabel: 'Measles'
 			},
 			{
+				id: 'pertussis',
+				emoji: '😮‍💨',
+				label: 'ไอกรน (ไอเป็นชุด ๆ)',
+				sublabel: 'Pertussis'
+			},
+			{
 				id: 'meningitis',
 				emoji: '🧠',
 				label: 'เยื่อหุ้มสมองอักเสบ (ไข้ ปวดหัว คอแข็ง)',
@@ -2296,12 +2442,6 @@ export const EWAR_SYMPTOM_GROUPS: EwarSymptomGroup[] = [
 				emoji: '🗣️',
 				label: 'คอตีบ',
 				sublabel: 'Diphtheria'
-			},
-			{
-				id: 'pertussis',
-				emoji: '😮‍💨',
-				label: 'ไอกรน (ไอเป็นชุด ๆ)',
-				sublabel: 'Pertussis'
 			}
 		]
 	},
@@ -2326,10 +2466,10 @@ export const EWAR_SYMPTOM_GROUPS: EwarSymptomGroup[] = [
 		title: 'กลุ่มอาการทางระบบประสาทและอื่นๆ',
 		symptoms: [
 			{
-				id: 'acute_flaccid_paralysis',
-				emoji: '🦿',
-				label: 'แขนขาอ่อนแรงเฉียบพลัน (สงสัยโปลิโอ)',
-				sublabel: 'กล้ามเนื้ออ่อนปวกเปียกเฉียบพลัน · Acute flaccid paralysis / Polio'
+				id: 'acute_haemorrhagic_fever_syndrome',
+				emoji: '🩸',
+				label: 'ไข้ร่วมกับเลือดออกผิดปกติ',
+				sublabel: 'กลุ่มอาการไข้เลือดออกรุนแรง · Acute haemorrhagic fever syndrome'
 			},
 			{
 				id: 'tetanus',
@@ -2338,32 +2478,10 @@ export const EWAR_SYMPTOM_GROUPS: EwarSymptomGroup[] = [
 				sublabel: 'Tetanus'
 			},
 			{
-				id: 'acute_haemorrhagic_fever_syndrome',
-				emoji: '🩸',
-				label: 'ไข้ร่วมกับเลือดออกผิดปกติ',
-				sublabel: 'กลุ่มอาการไข้เลือดออกรุนแรง · Acute haemorrhagic fever syndrome'
-			}
-		]
-	},
-	{
-		title: 'อาการเฝ้าระวังทั่วไปและเหตุฉุกเฉินอื่นๆ',
-		symptoms: [
-			{
-				id: 'high_fever',
-				emoji: '🔥',
-				label: 'ไข้สูงเกิน 38.5 °C'
-			},
-			{
-				id: 'trauma',
-				emoji: '💥',
-				label: 'ได้รับบาดเจ็บ',
-				sublabel: 'Trauma'
-			},
-			{
-				id: 'chemical_poisoning',
-				emoji: '☠️',
-				label: 'ได้รับสารเคมี / สารพิษ',
-				sublabel: 'Chemical poisoning'
+				id: 'acute_flaccid_paralysis',
+				emoji: '🦿',
+				label: 'แขนขาอ่อนแรงเฉียบพลัน (สงสัยโปลิโอ)',
+				sublabel: 'กล้ามเนื้ออ่อนปวกเปียกเฉียบพลัน · Acute flaccid paralysis / Polio'
 			}
 		]
 	}

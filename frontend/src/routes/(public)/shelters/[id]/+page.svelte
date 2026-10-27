@@ -36,7 +36,7 @@
 <div class="pb-20">
 	<!-- Top Navigation Bar -->
 	<div class="border-b border-border bg-card">
-		<div class="mx-auto flex max-w-380 items-center justify-between px-4 py-3 sm:px-6">
+		<div class="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 sm:px-6 lg:px-8">
 			<a
 				href={resolve('/shelters')}
 				class="flex items-center gap-2 rounded-lg border border-border bg-muted px-3 py-1.5 text-sm font-bold text-foreground/90 transition-colors hover:text-primary"
@@ -63,7 +63,7 @@
 	</div>
 
 	{#if shelter}
-		<PublicPageShell class="space-y-8">
+		<PublicPageShell maxWidth="max-w-7xl" class="space-y-8 lg:px-8">
 			<ShelterHero {shelter} />
 
 			<!-- Main Content Grid -->

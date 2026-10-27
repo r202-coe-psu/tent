@@ -133,10 +133,10 @@
 	<Card.Root class="border border-border/80 shadow-md">
 		<Card.Header class="rounded-t-xl bg-muted/40 pb-4">
 			<Card.Title class="text-xl font-bold"
-				>สร้างรายการส่งต่อผู้ประสบภัย (New Referral Request)</Card.Title
+				>สร้างรายการส่งต่อผู้เข้าพัก (New Referral Request)</Card.Title
 			>
 			<Card.Description
-				>เลือกผู้ประสบภัยได้หลายคน — ระบบจะสร้าง 1 ใบต่อคนด้วยข้อมูลปลายทางชุดเดียวกัน</Card.Description
+				>เลือกผู้เข้าพักได้หลายคน — ระบบจะสร้าง 1 ใบต่อคนด้วยข้อมูลปลายทางชุดเดียวกัน</Card.Description
 			>
 		</Card.Header>
 		<Card.Content class="space-y-6 p-4 md:p-6">
@@ -178,7 +178,7 @@
 								<span class="text-xs font-semibold uppercase opacity-60">Capacity</span>
 							</div>
 							<p class="mt-1 text-xs text-muted-foreground">
-								โอนย้ายผู้ประสบภัยไปยังศูนย์พักพิงอื่นเนื่องจากศูนย์เดิมเต็ม
+								โอนย้ายผู้เข้าพักไปยังศูนย์พักพิงอื่นเนื่องจากศูนย์เดิมเต็ม
 							</p>
 						</div>
 					</button>

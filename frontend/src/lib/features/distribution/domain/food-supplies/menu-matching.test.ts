@@ -70,14 +70,15 @@ describe('menuTargetTags', () => {
 
 	it('ignores VEGAN so anyone may take a VEGAN menu (FR-MRM-01 VEGAN B)', () => {
 		expect(menuTargetTags({ dietary: ['VEGAN'] })).toEqual([]);
-		expect(menuTargetTags({ dietary: ['VEGAN', 'HALAL'] })).toEqual(['HALAL']);
 	});
 
-	it('combines dietary and age group tags', () => {
-		expect(menuTargetTags({ dietary: ['HALAL'], age_group: 'ELDERLY' })).toEqual([
-			'HALAL',
-			'ELDERLY'
-		]);
+	it('ignores HALAL so anyone may take a HALAL menu (#801)', () => {
+		expect(menuTargetTags({ dietary: ['HALAL'] })).toEqual([]);
+		expect(menuTargetTags({ dietary: ['VEGAN', 'HALAL'] })).toEqual([]);
+	});
+
+	it('keeps the age group tag of a dietary menu', () => {
+		expect(menuTargetTags({ dietary: ['HALAL'], age_group: 'ELDERLY' })).toEqual(['ELDERLY']);
 	});
 });
 
@@ -87,19 +88,26 @@ describe('matchRecipientToMenu (FR-MRM-02/03)', () => {
 		expect(matchRecipientToMenu(null, { dietary: [], age_group: 'ALL' }).matches).toBe(true);
 	});
 
-	it('matches a tagged menu when the recipient shares a tag', () => {
+	it('lets anyone, muslim or not, take a HALAL menu without a warning (#801)', () => {
 		expect(matchRecipientToMenu(['HALAL'], { dietary: ['HALAL'] })).toEqual({
 			matches: true,
-			menuTags: ['HALAL']
+			menuTags: []
 		});
+		expect(matchRecipientToMenu([], { dietary: ['HALAL'] }).matches).toBe(true);
+		expect(matchRecipientToMenu(null, { dietary: ['HALAL'] }).matches).toBe(true);
+	});
+
+	it('matches a tagged menu when the recipient shares a tag', () => {
 		expect(
 			matchRecipientToMenu(['ELDERLY'], { dietary: ['HALAL'], age_group: 'ELDERLY' }).matches
 		).toBe(true);
 	});
 
 	it('flags a tagged menu for recipients without a shared tag', () => {
-		expect(matchRecipientToMenu([], { dietary: ['HALAL'] }).matches).toBe(false);
 		expect(matchRecipientToMenu(['CHILD'], { age_group: 'INFANT' }).matches).toBe(false);
-		expect(matchRecipientToMenu(null, { dietary: ['HALAL'] }).matches).toBe(false);
+		expect(
+			matchRecipientToMenu(['HALAL'], { dietary: ['HALAL'], age_group: 'ELDERLY' }).matches
+		).toBe(false);
+		expect(matchRecipientToMenu(null, { age_group: 'ELDERLY' }).matches).toBe(false);
 	});
 });

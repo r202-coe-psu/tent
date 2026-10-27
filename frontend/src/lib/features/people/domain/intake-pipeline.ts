@@ -3,6 +3,7 @@
  * No I/O — unit-tested.
  */
 import type { Evacuee, TriageLevel } from './people';
+import { isInShelterStayStatus } from '$lib/features/shared';
 
 export type NextQueueLabel = 'รอแพทย์' | 'รอโซน' | 'รอยืนยันถึงโซน' | 'พักแล้ว' | '—';
 
@@ -49,13 +50,36 @@ export function nextQueueLabel(
 	return '—';
 }
 
+const NOT_REPORTED_IN = new Set(['pre_registered', 'kiosk_registered', 'cancelled']);
+
+/**
+ * How many intake stations a person has passed, in order: เช็คอิน (1, reported in) → คัดกรอง
+ * (2, medically screened) → ที่พัก (3, given a zone). The printed QR label ticks this many of its
+ * checklist boxes. Arriving wins over a stale zone, as in {@link nextQueueLabel}; a zone counts as
+ * all three even where the shelter skips medical screening.
+ */
+export function intakeStationsPassed(
+	stay: { status?: string; zone?: string | null } | undefined,
+	hasScreening: boolean
+): 0 | 1 | 2 | 3 {
+	const status = stay?.status;
+	if (!status || NOT_REPORTED_IN.has(status)) return 0;
+	const hasZone = stay.zone != null && stay.zone !== '';
+	if (
+		status !== 'arriving' &&
+		(hasZone || status === 'room_confirmed' || status === 'temporary_leave')
+	) {
+		return 3;
+	}
+	return hasScreening ? 2 : 1;
+}
+
 /**
  * 「พักในศูนย์แล้ว」 on the Station 1 desk: checked in (active) or zone arrival confirmed.
  * Never includes arriving / pre_registered — those are still in the intake pipeline.
  */
 export function isInShelterStatus(evacuee: Evacuee): boolean {
-	const status = evacuee.current_stay?.status;
-	return status === 'active' || status === 'room_confirmed';
+	return isInShelterStayStatus(evacuee.current_stay?.status);
 }
 
 /**
@@ -129,6 +153,57 @@ export function classifyZoningQueueTab(
 	}
 
 	return null;
+}
+
+/** People waiting at each intake station right now (CR-192 FR-STL-23); derived, never stored. */
+export interface StationQueueCounts {
+	/** Station 1 has no on-site queue status, so it reports the two not-yet-reported-in states. */
+	station1: {
+		/** Registered ahead online and not yet arrived (`pre_registered`). */
+		preRegistered: number;
+		/** Registered at a kiosk and waiting for staff to confirm (legacy `kiosk_registered`). */
+		kioskRegistered: number;
+	};
+	/** On site and waiting for medical screening; `null` when the shelter skips Station 2. */
+	station2: number | null;
+	/** On site, cleared for zoning and not yet zoned ({@link classifyZoningQueueTab} `pending`). */
+	station3: number;
+}
+
+/**
+ * Current queue per intake station from existing state only — no new field.
+ * Station 2 counts only people already on site (`arriving`): a pre-registered person is not at
+ * the desk yet, the same rule {@link nextScreeningQueueEvacuee} uses.
+ */
+export function countStationQueues(
+	evacuees: readonly Evacuee[],
+	screenedEvacueeIds: ReadonlySet<string>,
+	opts: { enableMedicalScreening: boolean }
+): StationQueueCounts {
+	const station1 = { preRegistered: 0, kioskRegistered: 0 };
+	let station2 = 0;
+	let station3 = 0;
+	for (const evacuee of evacuees) {
+		const status = evacuee.current_stay?.status;
+		if (status === 'pre_registered') station1.preRegistered += 1;
+		if (status === 'kiosk_registered') station1.kioskRegistered += 1;
+		if (
+			opts.enableMedicalScreening &&
+			status === 'arriving' &&
+			classifyScreeningQueueTab(evacuee, screenedEvacueeIds as Set<string>) === 'pending'
+		) {
+			station2 += 1;
+		}
+		if (
+			classifyZoningQueueTab(evacuee, {
+				enableMedicalScreening: opts.enableMedicalScreening,
+				hasScreening: screenedEvacueeIds.has(evacuee._id)
+			}) === 'pending'
+		) {
+			station3 += 1;
+		}
+	}
+	return { station1, station2: opts.enableMedicalScreening ? station2 : null, station3 };
 }
 
 /**

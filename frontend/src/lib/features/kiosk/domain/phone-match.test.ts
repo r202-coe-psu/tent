@@ -82,9 +82,6 @@ describe('groupPhoneMatches', () => {
 			isPhoneMatchEligible(evacuee({ _id: 'evacuee:other', shelter_code: 'SH002' }), 'SH001')
 		).toBe(false);
 		expect(
-			isPhoneMatchEligible(evacuee({ _id: 'evacuee:staff', registered_via: 'staff' }), 'SH001')
-		).toBe(false);
-		expect(
 			isPhoneMatchEligible(
 				evacuee({ _id: 'evacuee:hidden', privacy: { search_excluded: true } }),
 				'SH001'
@@ -92,11 +89,14 @@ describe('groupPhoneMatches', () => {
 		).toBe(false);
 	});
 
-	it('accepts a kiosk walk-in like a web pre-registration', () => {
-		expect(
-			isPhoneMatchEligible(evacuee({ _id: 'evacuee:walk-in', registered_via: 'kiosk' }), 'SH001')
-		).toBe(true);
-	});
+	it.each(['kiosk', 'staff', 'api'])(
+		'accepts a registration from the %s channel like a web one',
+		(channel) => {
+			expect(
+				isPhoneMatchEligible(evacuee({ _id: 'evacuee:any', registered_via: channel }), 'SH001')
+			).toBe(true);
+		}
+	);
 
 	it('drops groups when every hit is ineligible', () => {
 		const docs = [

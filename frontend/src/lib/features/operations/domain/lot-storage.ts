@@ -24,6 +24,8 @@ const LOT_NOTE_SYSTEM_VALUES: ReadonlySet<string> = new Set([
 export interface StoragePointRef {
 	id: string;
 	name: string;
+	/** Thai labels of what the point can hold, in enum order — shown in the picker. */
+	typeLabels?: readonly string[];
 }
 
 type LotLike = StockLot | null | undefined;
@@ -73,6 +75,17 @@ export function storageLotFields(
 ): Pick<StockLot, 'storage_zone' | 'storage_point_id'> {
 	if (!point) return {};
 	return { storage_point_id: point.id, storage_zone: point.name.trim() };
+}
+
+/**
+ * Whether a receive line has its storage point settled (CR-139 N1): a shelter with at
+ * least one storage point must name one; a shelter with none receives into the main
+ * store. An id that no longer matches a point (renamed list, shelter switched) does
+ * not count as chosen.
+ */
+export function isStoragePointChosen(pointId: string, points: readonly StoragePointRef[]): boolean {
+	if (points.length === 0) return true;
+	return points.some((point) => point.id === pointId);
 }
 
 /**

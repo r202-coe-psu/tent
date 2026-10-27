@@ -207,7 +207,9 @@
 >
 	<Dialog.Content class="max-h-[92vh] w-full gap-0 overflow-hidden p-0 sm:max-w-2xl lg:max-w-3xl">
 		<div class="flex items-center gap-2 border-b border-border px-6 py-4 pr-12">
-			<div class="grid h-9 w-9 place-items-center rounded-xl bg-emerald-100 text-emerald-700">
+			<div
+				class="grid h-9 w-9 place-items-center rounded-xl bg-domain-volunteer-subtle text-domain-volunteer-strong"
+			>
 				<Zap class="h-4.5 w-4.5" />
 			</div>
 			<div>
@@ -427,7 +429,7 @@
 			<Button type="button" variant="ghost" onclick={() => (open = false)}>ยกเลิก</Button>
 			<Button
 				type="submit"
-				class="gap-1.5 bg-emerald-600 text-white hover:bg-emerald-700"
+				class="gap-1.5 bg-domain-volunteer-strong text-white hover:bg-domain-volunteer-text"
 				disabled={isPending}
 				onclick={() => form.submit()}
 			>

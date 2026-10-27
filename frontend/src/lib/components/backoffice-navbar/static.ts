@@ -6,6 +6,7 @@ import {
 	isKioskStaffOnly,
 	isShelterManager,
 	isSystemAdmin,
+	canAccessIncidents,
 	SCANNER_MANAGER_CAPABILITIES
 } from '$lib/auth/roles';
 import Users from '@lucide/svelte/icons/users';
@@ -21,10 +22,12 @@ import Warehouse from '@lucide/svelte/icons/warehouse';
 import Calculator from '@lucide/svelte/icons/calculator';
 import HandHeart from '@lucide/svelte/icons/hand-heart';
 import MapPin from '@lucide/svelte/icons/map-pin';
-import UtensilsCrossed from '@lucide/svelte/icons/utensils-crossed';
+import ForkSpoon from '$lib/components/icons/fork-spoon.svelte';
 import ClipboardCheck from '@lucide/svelte/icons/clipboard-check';
+import NotebookPen from '@lucide/svelte/icons/notebook-pen';
 import Cpu from '@lucide/svelte/icons/cpu';
 import MonitorSmartphone from '@lucide/svelte/icons/monitor-smartphone';
+import Images from '@lucide/svelte/icons/images';
 
 type Leaf = {
 	label: string;
@@ -77,14 +80,14 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 	{
 		title: '1. ทะเบียนและกำลังพล',
 		items: [
-			{ label: 'จัดการผู้ประสบภัย', href: resolve('/back-office/evacuee-management'), icon: Users },
+			{ label: 'จัดการผู้เข้าพัก', href: resolve('/back-office/evacuee-management'), icon: Users },
 			{
 				label: 'จัดการอาสาสมัคร',
 				href: resolve('/back-office/volunteers'),
 				icon: HeartHandshake
 			},
 			{
-				label: 'การส่งต่อผู้ประสบภัย',
+				label: 'การส่งต่อผู้เข้าพัก',
 				href: resolve('/back-office/referrals'),
 				icon: ClipboardList
 			}
@@ -124,22 +127,28 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 						icon: ClipboardList
 					},
 					{
-						label: 'โรงครัวและเสบียงอาหาร',
+						label: 'เบิกวัตถุดิบครัว',
 						href: resolve('/back-office/tickets/kitchen'),
-						icon: UtensilsCrossed
+						icon: ClipboardCheck
 					}
 				]
 			},
 			{
 				label: 'ครัวกลางและอาหาร',
 				href: resolve('/back-office/kitchen'),
-				icon: UtensilsCrossed
+				icon: ForkSpoon
 			}
 		]
 	},
 	{
 		title: '3. รายงานและการตรวจสอบ',
 		items: [
+			{
+				label: 'บันทึกเหตุการณ์ประจำวัน',
+				href: resolve('/back-office/incidents'),
+				icon: NotebookPen,
+				visibleTo: (roles) => canAccessIncidents(roles)
+			},
 			{ label: 'รายงานความโปร่งใส', href: null, icon: FileCheck },
 			{ label: 'รายงานสรุปหลังเหตุการณ์', href: null, icon: FileText }
 		]
@@ -163,6 +172,12 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 						href: resolve('/back-office/kiosks'),
 						icon: Cpu,
 						visibleTo: (roles) => hasCapabilityAnywhere(roles, SCANNER_MANAGER_CAPABILITIES)
+					},
+					{
+						label: 'จัดการแบนเนอร์',
+						href: resolve('/back-office/kiosks/banners'),
+						icon: Images,
+						visibleTo: (roles) => hasCapabilityAnywhere(roles, SCANNER_MANAGER_CAPABILITIES)
 					}
 				]
 			},
@@ -182,11 +197,11 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 						icon: Warehouse
 					},
 					{
-						label: '5. พารามิเตอร์',
+						label: 'พารามิเตอร์',
 						href: resolve('/back-office/sop-parameters'),
 						icon: Calculator
 					},
-					{ label: '7. โลจิสติกส์ & GIS', href: null, icon: MapPin }
+					{ label: 'โลจิสติกส์ & GIS', href: null, icon: MapPin }
 				]
 			}
 		]
@@ -194,5 +209,42 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 ];
 
 export const backofficeHomePath: ResolvedPathname = resolve('/portal');
+
+const stripTrailingSlash = (path: string): string => path.replace(/\/$/, '');
+
+/** Every non-null nav href in the tree (groups included), depth-first. */
+export function navLeafHrefs(
+	items: readonly BackofficeNavbarNode[] | readonly BackofficeNavbarGroup[]
+): string[] {
+	const result: string[] = [];
+	const walk = (nodes: readonly (BackofficeNavbarNode | BackofficeNavbarGroup)[]): void => {
+		for (const node of nodes) {
+			if ('items' in node) {
+				walk(node.items);
+				continue;
+			}
+			if (node.href) result.push(String(node.href));
+			if (isGroup(node)) walk(node.children);
+		}
+	};
+	walk(items);
+	return result;
+}
+
+/**
+ * The single nav href that owns `path`: the LONGEST href equal to the path or a path-segment
+ * prefix of it (`href + '/'`). Lets a nested page (`/kiosks/banners`) win over its parent
+ * (`/kiosks`) — FR-KBR-24, draft CR kiosk-banner-design-revision. Null when no href matches.
+ */
+export function activeNavHref(path: string, hrefs: readonly string[]): string | null {
+	const current = stripTrailingSlash(path);
+	let best: string | null = null;
+	for (const href of hrefs) {
+		const target = stripTrailingSlash(href);
+		if (current !== target && !current.startsWith(target + '/')) continue;
+		if (best === null || target.length > stripTrailingSlash(best).length) best = href;
+	}
+	return best;
+}
 
 export { isGroup };

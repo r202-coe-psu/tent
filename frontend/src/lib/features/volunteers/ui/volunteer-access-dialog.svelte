@@ -1,9 +1,12 @@
 <script lang="ts">
 	import { useQueryClient } from '@tanstack/svelte-query';
 	import { toast } from 'svelte-sonner';
+	import Eye from '@lucide/svelte/icons/eye';
+	import EyeOff from '@lucide/svelte/icons/eye-off';
 	import KeyRound from '@lucide/svelte/icons/key-round';
 	import Mail from '@lucide/svelte/icons/mail';
 	import Lock from '@lucide/svelte/icons/lock';
+	import RefreshCw from '@lucide/svelte/icons/refresh-cw';
 	import Save from '@lucide/svelte/icons/save';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
@@ -11,8 +14,15 @@
 	import { Input } from '$lib/components/ui/input/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
 	import { STAFF_CAPABILITIES, roleOptionLabel, type StaffCapability } from '$lib/auth/roles';
+	import { generateTemporaryPassphrase } from '$lib/auth/passphrase-generator';
 	import { volunteerKeys } from '../application/queries';
-	import { grantVolunteerAccess, volunteerAccessSchema } from '../application/volunteer-access';
+	import { errorMessage } from '$lib/utils/errors';
+	import {
+		accountPhones,
+		grantVolunteerAccess,
+		volunteerAccessSchema,
+		volunteerPasswordError
+	} from '../application/volunteer-access';
 	import type { Volunteer } from '../domain/volunteer.schema';
 
 	let {
@@ -28,11 +38,15 @@
 	const queryClient = useQueryClient();
 	let pending = $state(false);
 
+	const phones = $derived(accountPhones(volunteer.phone));
+	const loginPhone = $derived(phones.login);
 	const fullName = $derived(`${volunteer.first_name} ${volunteer.last_name}`.trim());
 
 	let email = $state('');
+	let showPassword = $state(false);
 	let role = $state<StaffCapability>('registration_staff');
 	let password = $state('');
+	let passwordError = $state<string | null>(null);
 
 	let lastOpenedId = $state<string | null>(null);
 	$effect(() => {
@@ -43,7 +57,9 @@
 		if (lastOpenedId === volunteer._id) return;
 		email = volunteer.user_name ?? volunteer.email ?? '';
 		role = 'registration_staff';
-		password = volunteer.phone ?? '';
+		password = loginPhone ?? '';
+		passwordError = null;
+		showPassword = false;
 		lastOpenedId = volunteer._id;
 	});
 
@@ -54,6 +70,8 @@
 			toast.error(parsed.error.issues[0]?.message ?? 'กรุณาตรวจสอบข้อมูล');
 			return;
 		}
+		passwordError = volunteerPasswordError(parsed.data.password, loginPhone);
+		if (passwordError) return;
 		pending = true;
 		try {
 			const result = await grantVolunteerAccess(volunteer, parsed.data);
@@ -65,7 +83,7 @@
 			password = '';
 			open = false;
 		} catch (err) {
-			toast.error(err instanceof Error ? err.message : 'สร้างบัญชีไม่สำเร็จ');
+			toast.error(errorMessage(err));
 		} finally {
 			await Promise.allSettled([
 				queryClient.invalidateQueries({ queryKey: ['users'] }),
@@ -80,7 +98,7 @@
 	<Dialog.Content class="max-h-[92vh] gap-0 overflow-hidden p-0 sm:max-w-2xl">
 		<div class="flex items-center gap-2 border-b border-border px-6 py-4 pr-12">
 			<div
-				class="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-emerald-100 text-emerald-700"
+				class="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-domain-volunteer-subtle text-domain-volunteer-strong"
 			>
 				<KeyRound class="h-4.5 w-4.5" />
 			</div>
@@ -91,23 +109,27 @@
 		</div>
 
 		<div class="max-h-[70vh] space-y-5 overflow-y-auto px-6 py-5">
-			<div class="space-y-3 rounded-xl border border-emerald-200 bg-emerald-50/60 p-3">
-				<p class="text-xs font-bold text-emerald-900">ข้อมูลผู้ใช้งานใหม่ (Auto-filled)</p>
+			<div
+				class="space-y-3 rounded-xl border border-domain-volunteer-border bg-domain-volunteer-subtle p-3"
+			>
+				<p class="text-xs font-bold text-domain-volunteer-text">
+					ข้อมูลผู้ใช้งานใหม่ (Auto-filled)
+				</p>
 				<div class="grid grid-cols-1 gap-3 text-xs sm:grid-cols-2">
 					<div>
-						<p class="text-emerald-800">ชนิดคน:</p>
+						<p class="text-domain-volunteer-text">ชนิดคน:</p>
 						<p class="font-semibold text-foreground">🎫 อาสาสมัคร</p>
 					</div>
 					<div>
-						<p class="text-emerald-800">ชื่อ-นามสกุล:</p>
+						<p class="text-domain-volunteer-text">ชื่อ-นามสกุล:</p>
 						<p class="font-semibold text-foreground">{fullName}</p>
 					</div>
 					<div>
-						<p class="text-emerald-800">เบอร์โทรศัพท์:</p>
+						<p class="text-domain-volunteer-text">เบอร์โทรศัพท์:</p>
 						<p class="font-semibold text-foreground">{volunteer.phone ?? '—'}</p>
 					</div>
 					<div>
-						<p class="text-emerald-800">สังกัดศูนย์พักพิง:</p>
+						<p class="text-domain-volunteer-text">สังกัดศูนย์พักพิง:</p>
 						<p class="font-semibold text-foreground">{shelterLine}</p>
 					</div>
 				</div>
@@ -169,20 +191,76 @@
 						<KeyRound class="h-3.5 w-3.5" />
 						รหัสผ่านสำหรับบัญชีใหม่ <span class="text-destructive">*</span>
 					</label>
-					<Input
-						id={`volunteer-access-password-${volunteer._id}`}
-						type="password"
-						bind:value={password}
-						disabled={pending}
-						autocomplete="new-password"
-						class="h-11"
-						placeholder="กำหนดรหัสผ่านสำหรับเข้าสู่ระบบ"
-					/>
-					<p class="text-[11px] text-muted-foreground">
-						ค่าเริ่มต้นคือเบอร์โทรศัพท์ของอาสาสมัคร
-						และจะบังคับเปลี่ยนรหัสผ่านในการเข้าสู่ระบบครั้งแรก หากเปลี่ยนเป็นรหัสอื่น
-						ต้องมีอย่างน้อย 10 ตัวอักษร พร้อมตัวพิมพ์ใหญ่ ตัวพิมพ์เล็ก ตัวเลข และอักขระพิเศษ
-					</p>
+					<div class="flex flex-col gap-2 sm:flex-row sm:items-stretch">
+						<div class="relative min-w-0 flex-1">
+							<Input
+								id={`volunteer-access-password-${volunteer._id}`}
+								type={showPassword ? 'text' : 'password'}
+								bind:value={password}
+								oninput={() => (passwordError = null)}
+								disabled={pending}
+								autocomplete="new-password"
+								aria-invalid={passwordError ? true : undefined}
+								aria-describedby={passwordError
+									? `volunteer-access-password-error-${volunteer._id}`
+									: undefined}
+								class="h-11 pr-10"
+								placeholder="กำหนดรหัสผ่านสำหรับเข้าสู่ระบบ"
+							/>
+							<Button
+								type="button"
+								variant="ghost"
+								size="icon"
+								class="absolute top-0 right-0 h-full px-3 hover:bg-transparent"
+								aria-label={showPassword ? 'ซ่อนรหัสผ่าน' : 'แสดงรหัสผ่าน'}
+								aria-pressed={showPassword}
+								onclick={() => (showPassword = !showPassword)}
+							>
+								{#if showPassword}
+									<EyeOff class="size-4 text-muted-foreground" />
+								{:else}
+									<Eye class="size-4 text-muted-foreground" />
+								{/if}
+							</Button>
+						</div>
+						<Button
+							type="button"
+							variant="outline"
+							class="h-11 shrink-0 gap-1.5 sm:px-3"
+							disabled={pending}
+							onclick={() => {
+								password = generateTemporaryPassphrase();
+								passwordError = null;
+								showPassword = true;
+							}}
+						>
+							<RefreshCw class="size-4" />
+							สร้างรหัส
+						</Button>
+					</div>
+					{#if passwordError}
+						<p
+							id={`volunteer-access-password-error-${volunteer._id}`}
+							class="text-sm font-medium text-destructive"
+						>
+							{passwordError}
+						</p>
+					{/if}
+					{#if loginPhone}
+						<p class="text-[11px] text-muted-foreground">
+							ค่าเริ่มต้นคือเบอร์โทรศัพท์ของอาสาสมัคร
+							และจะบังคับเปลี่ยนรหัสผ่านในการเข้าสู่ระบบครั้งแรก หากเปลี่ยนเป็นรหัสอื่น
+							ต้องมีอย่างน้อย 10 ตัวอักษร พร้อมตัวพิมพ์ใหญ่ ตัวพิมพ์เล็ก ตัวเลข และอักขระพิเศษ
+						</p>
+					{:else}
+						<p class="text-[11px] text-muted-foreground">
+							{phones.contact
+								? 'เบอร์โทรศัพท์ของอาสาสมัครไม่ใช่มือถือ 10 หลัก จะบันทึกลงบัญชีเป็นเบอร์ติดต่อ แต่ใช้เข้าสู่ระบบหรือเป็นรหัสผ่านเริ่มต้นไม่ได้'
+								: 'อาสาสมัครไม่มีเบอร์มือถือ 10 หลัก จึงใช้เบอร์เป็นรหัสผ่านเริ่มต้นไม่ได้'}
+							กรุณาตั้งรหัสผ่านเองหรือกด "สร้างรหัส" (อย่างน้อย 10 ตัวอักษร พร้อมตัวพิมพ์ใหญ่ ตัวพิมพ์เล็ก
+							ตัวเลข และอักขระพิเศษ) บัญชีนี้ใช้อีเมลเข้าสู่ระบบเท่านั้น และเมื่อเข้าสู่ระบบครั้งแรกจะต้องตั้งรหัสผ่านใหม่และคำถามความปลอดภัยเหมือนบัญชีอื่น
+						</p>
+					{/if}
 					<p class="text-[11px] text-muted-foreground">
 						หากสร้างบัญชีแล้วแต่บันทึกโปรไฟล์ไม่สำเร็จ ให้ลองอีกครั้งด้วยอีเมลและบทบาทเดิม
 						ระบบจะผูกบัญชีที่สร้างไว้โดยไม่เปลี่ยนรหัสผ่านเดิม
@@ -197,7 +275,7 @@
 			>
 			<Button
 				type="button"
-				class="gap-1.5 bg-emerald-600 text-white hover:bg-emerald-700"
+				class="gap-1.5 bg-domain-volunteer-strong text-white hover:bg-domain-volunteer-text"
 				disabled={pending}
 				onclick={submit}
 			>

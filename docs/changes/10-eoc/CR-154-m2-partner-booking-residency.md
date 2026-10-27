@@ -3,7 +3,7 @@ id: CR-154
 title: M2 integration ย้ายเข้า Partner OAuth plane — booking (EXT-008/009/010) + residency (EXT-011), scope ใหม่, evacuee.gender nullable (schema_v 11→12)
 status: approved
 date: 2026-10-06
-updated: 2026-10-09
+updated: 2026-10-17 # #592 FR-33 supersede บางส่วนโดย CR-169 FR-40
 requested_by: เจ้าของโครงการ (สเปก M2 A_M2_API_SERVICES_SHELTER_V1.0)
 decided_by: เจ้าของโครงการ
 layer: volatile
@@ -81,7 +81,7 @@ affects:
 | 404 | `residency_not_found` | EXT-011 | ไม่พบการเข้าพัก (รวมกรณี `pre_registered`) |
 | 409 | `location_not_bookable` | EXT-008 | ศูนย์ `closed` หรือ `feature_flags.accepts_pre_registration = false` |
 | 409 | `duplicate_booking` | EXT-008 | CID นี้มี hold อยู่แล้วใน **ศูนย์เดียวกัน** |
-| 409 | `booking_not_cancellable` | EXT-009 | booking ถูกยกเลิกไปแล้ว, ถูก reject ไปแล้ว หรือ stay ผ่าน `pre_registered` ไปแล้ว |
+| 409 | `booking_not_cancellable` | EXT-009 | ค่าตอนเขียน CR-154 — booking ถูกยกเลิกไปแล้ว, ถูก reject ไปแล้ว หรือ stay ผ่าน `pre_registered` ไปแล้ว. **Partially superseded by CR-169 FR-40 (2026-10-17, #592), มีผลเมื่อ deploy:** ยกเลิกซ้ำ (`cancelled`) → 200 idempotent; 409 เหลือเฉพาะ (ก) ทุกคนในกลุ่ม `rejected` และ (ข) มีคนที่ยังเปิดอยู่แต่ stay ผ่าน `pre_registered` ไปแล้ว (check-in) — ไม่เปลี่ยนแถวใด |
 | 422 | `validation_error` | ทุกตัว | ข้อมูลไม่ผ่าน validation |
 | 500 | `internal_error` | ทุกตัว | ข้อผิดพลาดภายในระบบ |
 
@@ -121,15 +121,17 @@ affects:
 - **FR-30** ยกเลิกได้เฉพาะ booking ที่ `client_id` ตรงกับ token มิฉะนั้นตอบ 404 `booking_not_found`
 - **FR-31** `state = pending` → ตั้ง `state = cancelled` ทันที worker จะไม่เขียน CouchDB
 - **FR-32** `state = written` และ `public_persons.status = pre_registered` → ตั้ง `cancel_requested = true` แล้วตอบ 200 จากนั้น worker เปลี่ยน `evacuee.current_stay.status` เป็น `cancelled`
-- **FR-33** `state ∈ {cancelled, rejected}` หรือ stay ผ่าน `pre_registered` ไปแล้ว → ตอบ 409 `booking_not_cancellable`
+- ~~**FR-33** `state ∈ {cancelled, rejected}` หรือ stay ผ่าน `pre_registered` ไปแล้ว → ตอบ 409 `booking_not_cancellable`~~
+  **Partially superseded by CR-169 FR-40 (2026-10-17, #592):** booking ที่ `cancelled` แล้ว ยกเลิกซ้ำตอบ **200** (idempotent) แทน 409; booking ที่ `rejected` (ทุกแถว) ยังตอบ 409 `booking_not_cancellable`; stay ที่ผ่าน `pre_registered` แล้ว (check-in) ยังตอบ 409 เหมือนเดิม
 - **FR-34** log `endpoint = "EXT-009"` ตาม FR-20
 
-**EXT-010** `GET /external/bookings/{booking_id}` → 200 `result: {booking_id, location_code, booking_status, created_at, updated_at}`
+**EXT-010** `GET /external/bookings/{booking_id}` → 200 `result: {booking_id, location_code, booking_status, created_at, updated_at}` (+ `persons[]` และ `reject_reason` ระดับบน ตาม CR-169 C5 — additive)
 
 - **FR-35** `booking_status` map จาก state ดังนี้:
   - `pending` / `written` → `BOOKED`
   - `cancelled` หรือมี `cancel_requested` → `CANCELLED`
   - `rejected` → `REJECTED` พร้อม `reject_reason`
+  - **Aggregate ของกลุ่ม** (CR-169): ตอนเขียน CR-154 ประเมินจากแถวเดียว · **Superseded by CR-169 FR-42 (2026-10-17, #592), มีผลเมื่อ deploy:** ไม่มีคนที่ยังเปิดอยู่และมี `CANCELLED` ≥ 1 → `CANCELLED` (แม้มี `REJECTED` ปน) → มี `REJECTED` → `REJECTED` → อื่น → `BOOKED`. การแมปรายคนข้างบนยังใช้ได้
 - **FR-36** ใช้กติกาเจ้าของ booking เดียวกับ FR-30
 
 ### C5 — EXT-011 residency
@@ -231,6 +233,7 @@ affects:
 - [ ] หลังเขียน Couch, cancel หรือ reject แล้ว ใน `external_bookings` ไม่มี `cid`, `phone`, `first_name` หรือ `last_name` plaintext เหลืออยู่
 - [ ] EXT-011 ที่ไม่ส่ง `purpose` ได้ 400 ทุก call มีแถวใน `third_party_access_logs` ที่ไม่มี CID และเมื่อมีหลาย record จะเลือก record ที่ Present ก่อน
 - [ ] `/external/v1/shelters` และ `/external/v1/persons/shelter-residency` ตอบ 404 ส่วน endpoint `/external/v1` อื่นทำงานเหมือนเดิม
+- [ ] (CR-169 / #592) cancel ซ้ำ → 200 idempotent; กลุ่มที่ทุกคน `rejected` → 409; EXT-010 aggregate ตาม FR-42 — **เกณฑ์ฉบับเต็มอยู่ใน CR-169 Acceptance** (รายการข้างบนที่เกี่ยวกับ cancel ซ้ำ/aggregate ใช้ค่าตาม FR-33/FR-35 ก่อน #592)
 - [ ] `pnpm lint`, `pnpm check`, `pnpm test`, backend `pytest` และ worker tests ผ่าน
 
 ---
@@ -295,3 +298,4 @@ affects:
 - 2026-10-06 — implementation note: เพิ่ม FR-61 (`module_name` += `M2`) — จำเป็นต่อ D2/D4 เพราะ `PARTNER_MODULES` เดิมรับแค่ `M6`/`M7` จึงออก client ให้ M2 ไม่ได้
 - 2026-10-06 — owner เพิ่ม FR-62: `module_name` ไม่บังคับ (module = preset ของ scope เท่านั้น) เก็บ `null` เมื่อไม่เลือก; บันทึกใน CR-154 (ไม่แยก CR) และ supersede CR-135 FR-4
 - 2026-10-09 — **decision sync** (ไม่เปิด CR ใหม่ ตามที่เจ้าของโครงการเลือก; บันทึกเต็มที่ `docs/data/schema.md` frontmatter `note:`): ยกเลิก FR-70, ลด FR-71, รวม FR-72 เข้า `occupancy_breakdown.gender_unspecified` — `gender = null` ใช้ได้ทุกช่องทาง, preselect "ไม่ระบุ" ในทุกฟอร์ม, `'other'` คงไว้อ่าน/preserve เท่านั้น; D7 ข้างบนยังใช้ได้ (partner booking ยังส่ง `null`)
+- 2026-10-17 — เจ้าของโครงการ (#592, track ใน CR-169 FR-40/42): **FR-33 partially superseded** — ยกเลิกซ้ำ booking ที่ `cancelled` แล้วตอบ 200 (เดิม 409); `rejected` ยัง 409; รายละเอียดดู CR-169 Decision log 2026-10-17

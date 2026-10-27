@@ -161,6 +161,57 @@ describe('VolunteerRemoteRepository', () => {
 		);
 	});
 
+	describe('update() phone_hash', () => {
+		it('finds the volunteer by the new phone and no longer by the old phone after the phone is edited', async () => {
+			const repo = createVolunteerRepositoryForTest('shelter_sh001');
+			const created = await repo.create(baseInput, ctx);
+
+			const updated = await repo.update({ ...created, phone: '0898765432' });
+
+			expect(updated.phone_hash).toBe(await sha256Hex('0898765432'));
+			expect((await repo.getByPhoneHash(await sha256Hex('0898765432')))?._id).toBe(created._id);
+			expect(await repo.getByPhoneHash(await sha256Hex('0812345678'))).toBeNull();
+		});
+
+		it('clears phone_hash when the phone is removed', async () => {
+			const repo = createVolunteerRepositoryForTest('shelter_sh001');
+			const created = await repo.create(baseInput, ctx);
+
+			const updated = await repo.update({ ...created, phone: null });
+
+			expect(updated.phone_hash).toBeNull();
+			expect(await repo.getByPhoneHash(await sha256Hex('0812345678'))).toBeNull();
+		});
+
+		it('clears phone_hash when the phone is only whitespace', async () => {
+			const repo = createVolunteerRepositoryForTest('shelter_sh001');
+			const created = await repo.create(baseInput, ctx);
+
+			const updated = await repo.update({ ...created, phone: '   ' });
+
+			expect(updated.phone_hash).toBeNull();
+		});
+
+		it('hashes an edited +66 phone the same as its 0-prefixed form', async () => {
+			const repo = createVolunteerRepositoryForTest('shelter_sh001');
+			const created = await repo.create(baseInput, ctx);
+
+			await repo.update({ ...created, phone: '+66 89-876-5432' });
+
+			expect((await repo.getByPhoneHash(await sha256Hex('0898765432')))?._id).toBe(created._id);
+		});
+
+		it('keeps phone_hash when another field changes and the phone stays the same', async () => {
+			const repo = createVolunteerRepositoryForTest('shelter_sh001');
+			const created = await repo.create(baseInput, ctx);
+
+			const updated = await repo.update({ ...created, first_name: 'สมศักดิ์' });
+
+			expect(updated.phone_hash).toBe(await sha256Hex('0812345678'));
+			expect((await repo.getByPhoneHash(await sha256Hex('0812345678')))?._id).toBe(created._id);
+		});
+	});
+
 	it('deactivate() marks a volunteer inactive and preserves the profile', async () => {
 		const repo = createVolunteerRepositoryForTest('shelter_sh001');
 		const created = await repo.create(baseInput, ctx);

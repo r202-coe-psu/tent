@@ -8,6 +8,7 @@ buffer froze at ``declared`` while CouchDB moved on.
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
+import pytest
 from tent_model import (
     DonationBuffer,
     DonationNeedCounter,
@@ -238,6 +239,69 @@ async def test_missing_status_leaves_the_buffer_alone(db: None) -> None:
     assert await _current_status() == "declared"
 
 
+async def test_a_donor_edit_landing_mid_settle_is_kept_and_released(
+    db: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Staff reject while the donor raises 6 kg to 9 kg between settle's read and write.
+
+    The release must follow what the booking holds when it stops holding (9), and the
+    edit must survive: releasing the 6 settle read left 3 kg reserved for good.
+    """
+    await _seed()
+    await reserve_quota(
+        shelter_code=SHELTER,
+        campaign_id=CAMPAIGN,
+        item_id="item:rice",
+        qty=Decimal(6),
+        now=datetime.now(UTC),
+    )
+    await _buffer("verifying")
+    read = DonationBuffer.find_one
+    edited = False
+
+    async def stale_then_edit(*args: object, **kwargs: object) -> object:
+        stale = await read(*args, **kwargs)
+        await reserve_quota(
+            shelter_code=SHELTER,
+            campaign_id=CAMPAIGN,
+            item_id="item:rice",
+            qty=Decimal(3),
+            now=datetime.now(UTC),
+        )
+        await DonationBuffer.get_pymongo_collection().update_one(
+            {"_id": DONATION_ID},
+            {
+                "$set": {
+                    "items_declared": [
+                        {"item_id": "item:rice", "qty": "9", "reserved_qty": "9"}
+                    ]
+                }
+            },
+        )
+        return stale
+
+    # Only settle's own read: Beanie's save() goes through find_one too.
+    def donor_edits_after_the_read(*args: object, **kwargs: object) -> object:
+        nonlocal edited
+        if edited:
+            return read(*args, **kwargs)
+        edited = True
+        return stale_then_edit(*args, **kwargs)
+
+    monkeypatch.setattr(
+        DonationBuffer, "find_one", staticmethod(donor_edits_after_the_read)
+    )
+
+    released = await settle_donation_quota(_doc("rejected"), now=datetime.now(UTC))
+
+    assert released == Decimal(9)
+    assert await _reserved() == Decimal(0)
+    buffer = await DonationBuffer.get(DONATION_ID)
+    assert buffer is not None
+    assert buffer.status == "rejected"
+    assert buffer.items_declared[0]["qty"] == "9"
+
+
 # --- walk-in donations must hold quota too ---
 
 
@@ -369,3 +433,41 @@ async def test_receiving_keeps_the_place(db: None) -> None:
     await settle_donation_quota(_doc("received"), now=datetime.now(UTC))
 
     assert await _booked() == 1
+
+
+# --- settle_shelved_quota: goods reaching the ledger ---
+
+
+async def _shelved_reconcile_calls(*reports) -> int:
+    """Run settle_shelved_quota with reconcile answering ``reports`` in turn."""
+    from unittest.mock import AsyncMock, patch
+
+    from worker.quota.settle import settle_shelved_quota
+
+    with patch(
+        "worker.quota.settle.reconcile_shelter",
+        new_callable=AsyncMock,
+        side_effect=list(reports),
+    ) as reconcile:
+        await settle_shelved_quota(AsyncMock(), SHELTER, now=datetime.now(UTC))
+    return reconcile.await_count
+
+
+def _report(conflicted: int = 0):
+    from worker.quota.reconcile import ShelterReconcileReport
+
+    return ShelterReconcileReport(shelter_code=SHELTER, counters_conflicted=conflicted)
+
+
+async def test_shelved_settle_runs_once_when_nothing_raced() -> None:
+    assert await _shelved_reconcile_calls(_report()) == 1
+
+
+async def test_shelved_settle_retries_once_after_a_conflict() -> None:
+    """A conflicted counter keeps the doubled-up value; one more pass picks it up."""
+    assert await _shelved_reconcile_calls(_report(conflicted=1), _report()) == 2
+
+
+async def test_shelved_settle_gives_up_after_the_second_conflict() -> None:
+    calls = await _shelved_reconcile_calls(_report(conflicted=1), _report(conflicted=1))
+    assert calls == 2

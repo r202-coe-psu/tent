@@ -109,7 +109,9 @@ const summary = {
 	status: 'active',
 	last_seen_at: null,
 	staff_pin_set: true,
-	staff_pin_is_default: false
+	staff_pin_is_default: false,
+	banner_group_id: null,
+	screen_type: 'compact'
 };
 
 describe('listScannerDevices', () => {
@@ -159,6 +161,12 @@ describe('updateScannerDevice', () => {
 		expect(init.method).toBe('PATCH');
 		expect(new Headers(init.headers).get('content-type')).toBe('application/json');
 		expect(JSON.parse(init.body as string)).toEqual({ status: 'inactive' });
+	});
+
+	it('returns the banner group id from the summary', async () => {
+		const updated = { ...summary, banner_group_id: 'kiosk_banner_group:lobby' };
+		fetchMock.mockResolvedValueOnce(respond(200, updated));
+		expect(await updateScannerDevice('kiosk-01', { status: 'active' })).toEqual(updated);
 	});
 
 	it('throws the server message on an error envelope', async () => {

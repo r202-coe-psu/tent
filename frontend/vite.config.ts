@@ -35,6 +35,8 @@ function couchInit(user: string, password: string, couchUrl: string) {
 // globals / switches environment (those go to `isolated` automatically). Every other test file
 // stays in `isolated`, so each file runs in exactly one project.
 const TEST_INCLUDE = ['src/**/*.{test,spec}.{ts,js}'];
+// Component tests that `mount()` into happy-dom (need the browser build of Svelte).
+const DOM_TEST_INCLUDE = ['src/**/*.dom.test.ts'];
 const PURE_GLOBS = [
 	'src/lib/**/domain/**/*.test.ts',
 	'src/lib/db/**/*.test.ts',
@@ -101,8 +103,14 @@ export default defineConfig(({ mode }) => {
 					test: {
 						name: 'isolated',
 						include: TEST_INCLUDE,
-						exclude: [...configDefaults.exclude, ...pureTestFiles]
+						exclude: [...configDefaults.exclude, ...pureTestFiles, ...DOM_TEST_INCLUDE]
 					}
+				},
+				{
+					// Client-side Svelte `mount()` tests: `svelte` must resolve to its browser build.
+					extends: true,
+					resolve: { conditions: ['browser'] },
+					test: { name: 'dom', include: DOM_TEST_INCLUDE, environment: 'happy-dom' }
 				}
 			]
 		}

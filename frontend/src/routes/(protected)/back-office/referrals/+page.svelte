@@ -36,11 +36,11 @@
 >
 	<div class="min-w-0 flex-1 space-y-1">
 		<h1 class="text-2xl leading-snug font-bold tracking-tight text-slate-900 md:text-3xl">
-			ระบบส่งต่อผู้ประสบภัย
+			ระบบส่งต่อผู้เข้าพัก
 		</h1>
 		<p class="text-sm text-muted-foreground">
 			สร้างคำขอส่งต่อที่ศูนย์ต้นทาง — คำขอย้ายศูนย์ (capacity) จะปรากฏที่ศูนย์ปลายทางหลังกดส่ง
-			และย้ายผู้ประสบภัยเมื่อปลายทางตอบรับเท่านั้น
+			และย้ายผู้เข้าพักเมื่อปลายทางตอบรับเท่านั้น
 		</p>
 	</div>
 

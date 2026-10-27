@@ -4,6 +4,8 @@
 	import {
 		backofficeNavbarGroups,
 		isGroup,
+		activeNavHref,
+		navLeafHrefs,
 		type BackofficeNavbarNode,
 		type BackofficeNavbarLeaf
 	} from '$lib/components/backoffice-navbar/static';
@@ -17,6 +19,7 @@
 	import { useShelters } from '$lib/features/shelters';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { isSystemAdmin } from '$lib/auth/roles';
+	import { resolveShelterCode } from '$lib/db/shelter';
 	import { Button } from '$lib/components/ui/button';
 
 	let { children }: LayoutProps = $props();
@@ -27,22 +30,25 @@
 
 	const roles = $derived(authStore.user?.roles ?? []);
 	const isSA = $derived(isSystemAdmin(roles));
+	// Key on the shelter the page actually works in (`resolveShelterCode`, the same order
+	// `getShelterCode` uses), not on the raw selection: staff already work in their shelter before
+	// the list resolves the selection, and remounting then drops what they typed (#854). `||`:
+	// the shelter select's bound value turns an unset selection into ''.
+	const scopeKey = $derived(
+		isSA ? shelterStore.selectedShelterCode || undefined : resolveShelterCode()
+	);
 
-	function findMatchingLeaf(
-		node: BackofficeNavbarNode,
-		currentPath: string
-	): BackofficeNavbarLeaf | null {
+	const navHrefs = navLeafHrefs(backofficeNavbarGroups);
+
+	function findLeafByHref(node: BackofficeNavbarNode, href: string): BackofficeNavbarLeaf | null {
 		if (isGroup(node)) {
 			for (const child of node.children) {
-				const match = findMatchingLeaf(child, currentPath);
+				const match = findLeafByHref(child, href);
 				if (match) return match;
 			}
 			return null;
 		}
-		if (node.href && currentPath.startsWith(node.href)) {
-			return node;
-		}
-		return null;
+		return node.href && String(node.href) === href ? node : null;
 	}
 	// Find the current page info (label, icon) dynamically
 	const currentPageNode = $derived.by(() => {
@@ -64,9 +70,12 @@
 		) {
 			currentPath = '/back-office/tickets/kitchen';
 		}
+		// Longest-match so a nested page (e.g. /kiosks/banners) keeps its own header label.
+		const href = activeNavHref(currentPath, navHrefs);
+		if (!href) return null;
 		for (const group of backofficeNavbarGroups) {
 			for (const item of group.items) {
-				const match = findMatchingLeaf(item, currentPath);
+				const match = findLeafByHref(item, href);
 				if (match) return match;
 			}
 		}
@@ -175,7 +184,7 @@
 			{:else}
 				<!-- Reset scoped pages when the navbar changes shelter so every query/form
 				     is recreated with the newly selected shelter context. -->
-				{#key shelterStore.selectedShelterCode}
+				{#key scopeKey}
 					{@render children()}
 				{/key}
 			{/if}

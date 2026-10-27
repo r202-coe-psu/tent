@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import type { CouchReq } from './ensure-public-writer';
-import { buildRegistryDesignDoc } from './registry-design';
+import { buildRegistryDesignDoc, REGISTRY_MANGO_INDEXES } from './registry-design';
 import { deployRegistryDesign, listShelterMasters, redeployRegistry } from './registry-redeploy';
 
 const DESIGN_PATH = '/registry/_design/app';
@@ -18,6 +18,9 @@ function registryDouble(options: { design?: Record<string, unknown>; shelters?: 
 		}
 		if (method === 'PUT' && path === DESIGN_PATH) {
 			return { status: 201, data: { ok: true } };
+		}
+		if (method === 'POST' && path === '/registry/_index') {
+			return { status: 200, data: { result: 'exists' } };
 		}
 		if (method === 'GET' && path === '/registry/_all_docs?include_docs=true') {
 			const rows = (options.shelters ?? []).map((code) => ({
@@ -83,6 +86,37 @@ describe('deployRegistryDesign', () => {
 
 		await expect(deployRegistryDesign(couchReq, false)).resolves.toBe('deployed');
 		expect(calls.find((c) => c.method === 'PUT')?.body).toMatchObject({ _rev: '1-old' });
+	});
+
+	it('creates the registry Mango indexes even when the design is already current', async () => {
+		const current = { ...buildRegistryDesignDoc(), _rev: '1-abc' };
+		const { couchReq, calls } = registryDouble({ design: current });
+
+		await deployRegistryDesign(couchReq, false);
+
+		const posted = calls.filter((c) => c.method === 'POST' && c.path === '/registry/_index');
+		expect(posted.map((c) => c.body)).toEqual(REGISTRY_MANGO_INDEXES);
+	});
+
+	it('does not create indexes in dry-run', async () => {
+		const { couchReq, calls } = registryDouble();
+
+		await deployRegistryDesign(couchReq, true);
+
+		expect(calls.some((c) => c.method === 'POST')).toBe(false);
+	});
+
+	it('throws a readable error when an index cannot be created', async () => {
+		const current = { ...buildRegistryDesignDoc(), _rev: '1-abc' };
+		const couchReq: CouchReq = vi.fn(async (method) =>
+			method === 'GET'
+				? { status: 200, data: current }
+				: { status: 400, data: { error: 'invalid_index', reason: 'bad fields' } }
+		);
+
+		await expect(deployRegistryDesign(couchReq, false)).rejects.toThrow(
+			'registry Mango index kiosk-banner-by-shelter failed (400): bad fields'
+		);
 	});
 
 	it('throws a readable error when the registry database is missing in write mode', async () => {

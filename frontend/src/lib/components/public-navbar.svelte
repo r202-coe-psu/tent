@@ -347,7 +347,7 @@
 					class="inline-flex cursor-pointer items-center justify-center rounded-full border border-slate-300 bg-white px-3 py-1 text-xs font-bold text-[#0A2647] shadow-2xs transition-all hover:border-slate-400 hover:bg-slate-50 active:scale-95 2xl:px-3.5"
 					aria-label={t.switchLanguageAria}
 				>
-					{langState.current === 'th' ? 'EN' : 'TH'}
+					{langState.current === 'th' ? 'TH' : 'EN'}
 				</button>
 			</div>
 		</nav>
@@ -512,7 +512,7 @@
 						<span
 							class="inline-flex items-center justify-center rounded-full border border-slate-300 bg-white px-3 py-1 text-xs font-bold text-[#0A2647] shadow-2xs"
 						>
-							{langState.current === 'th' ? 'EN' : 'TH'}
+							{langState.current === 'th' ? 'TH' : 'EN'}
 						</span>
 					</button>
 				</div>

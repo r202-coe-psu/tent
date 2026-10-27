@@ -14,6 +14,7 @@
 		searchPlaceholder = 'Search...',
 		emptyText = 'No results found.',
 		class: className,
+		contentClass,
 		disabled = false,
 		controlProps = {},
 		children: itemSnippet,
@@ -26,6 +27,8 @@
 		searchPlaceholder?: string;
 		emptyText?: string;
 		class?: string;
+		/** Extra classes for the dropdown; it is as wide as the trigger unless this widens it. */
+		contentClass?: string;
 		disabled?: boolean;
 		controlProps?: Record<string, unknown>;
 		children?: import('svelte').Snippet<[{ item: T; selected: boolean }]>;
@@ -88,7 +91,10 @@
 	</Popover.Trigger>
 	<Popover.Content
 		align="start"
-		class="w-(--bits-floating-anchor-width) min-w-(--bits-floating-anchor-width) p-0"
+		class={cn(
+			'w-(--bits-floating-anchor-width) min-w-(--bits-floating-anchor-width) p-0',
+			contentClass
+		)}
 	>
 		<Command.Root>
 			<Command.Input placeholder={searchPlaceholder} />

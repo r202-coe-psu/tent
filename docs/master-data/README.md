@@ -2,7 +2,7 @@
 title: Smart Shelter — Master Data Seed SSoT
 status: draft
 created: 2026-09-17
-updated: 2026-09-26
+updated: 2026-10-26
 language: th
 ---
 
@@ -18,7 +18,7 @@ language: th
 
 | พื้นที่    | ข้อมูลที่ seed สร้าง                                                                                  |
 | ---------- | ----------------------------------------------------------------------------------------------------- |
-| `registry` | global `master_data` 4 เอกสาร รวมรายการ seed 36 รายการ (CR-137 + shelter_type expand)                 |
+| `registry` | global `master_data` 6 เอกสาร รวมรายการ seed 53 รายการ (CR-137 + shelter_type expand + CR-186 + CR-187)                 |
 | `registry` | `config:app` 1 singleton พร้อมค่า default                                                             |
 | `registry` | `config:public_portal` 1 singleton พร้อมค่า default FAQ 13 รายการ (ช่องทางติดต่อเว้นว่างไว้ ไม่ seed) |
 | `catalog`  | `unit_of_measure` 30, `item_category` 10, `item_master` 34, `recipe` 6                               |
@@ -61,8 +61,8 @@ language: th
 | Item status                      | `active` สำหรับรายการที่ seed ใหม่ |
 | Author                           | `seed`                             |
 | Global scope                     | ไม่มี `shelter_code`               |
-| จำนวน master types               | 4 (CR-137)                         |
-| จำนวนรายการใน canonical seed set | 36                                 |
+| จำนวน master types               | 6 (CR-137, CR-186, CR-187)         |
+| จำนวนรายการใน canonical seed set | 53                                 |
 
 Global seed ใช้ `enforceOneDefault()` เพื่อให้แต่ละ master type มีรายการที่เป็น default ได้ไม่เกินหนึ่งรายการ หากเอกสารเดิมมีรายการที่ไม่มีอยู่ใน canonical seed set ระบบจะเก็บรายการเดิมไว้ เว้นแต่เข้าเงื่อนไข migration ใน §1.4 ดังนั้น ตารางด้านล่างจึงเป็น **รายการที่ seed กำหนด** ไม่ใช่รายการทั้งหมดที่อาจมีอยู่ใน database แล้ว
 
@@ -76,6 +76,8 @@ Global seed ใช้ `enforceOneDefault()` เพื่อให้แต่ล
 | `housing_type` | `d.key` (stable) |
 | `shelter_type` | `d.key` (stable) — เลิก `item_<ulid>` |
 | `volunteer_skills` | `d.key` (stable) — เลิก `item_<ulid>` |
+| `chronic_disease` | `d.key` (stable) — CR-186 |
+| `allergy` | `d.key` (stable) — CR-187 |
 
 รายการเก็บชื่อแบบ bilingual: `label_th` + `label_en` (ทั้งคู่บังคับ). UI สร้างรายการใหม่ต้องกรอก `code` เอง (ไม่มี auto-ULID). รายการเก่า `item_*` แก้รหัสได้ตอนแก้ไข.
 
@@ -110,7 +112,7 @@ Global seed ใช้ `enforceOneDefault()` เพื่อให้แต่ล
 | `apartment_dorm` | อะพาร์ตเมนต์/หอพัก                | Apartment / dormitory | —       |
 | `homeless`       | ไร้ที่อยู่อาศัย / ไม่มีบ้านเลขที่ | Homeless / no house number | —       |
 
-#### `shelter_type` — ประเภทศูนย์พักพิง
+#### `shelter_type` — ประเภทอาคาร
 
 | code                  | label_th    | label_en | default |
 | --------------------- | ----------- | -------- | ------- |
@@ -140,6 +142,41 @@ Seed ลง global `master_data:volunteer_skills` จำนวน 9 รายก
 | `sanitation` | ทำความสะอาด / สุขอนามัย | Cleaning / sanitation | `operational` | ทำความสะอาดพื้นที่ส่วนกลาง ดูแลสุขอนามัยในศูนย์ | — |
 | `childcare` | สันทนาการ / ดูแลเด็ก | Recreation / childcare | `operational` | กิจกรรมสันทนาการ ดูแลเด็กและผู้สูงอายุ | — |
 | `transport` | ขับขี่ยานพาหนะ / ขนส่ง | Driving / transport | `operational` | ขับขี่ยานพาหนะขนส่งคนและสิ่งของ | — |
+
+#### `chronic_disease` — โรคประจำตัว (CR-186)
+
+Seed ลง global `master_data:chronic_disease` จำนวน 12 รายการ. **Global-only** — ไม่มี shelter-local doc
+(`master_data:chronic_disease:{shelter_code}`); โรคที่ไม่อยู่ในรายการเก็บเป็น free text ใน `medical.conditions`.
+ไม่มีรายการ `other` (ใช้ free text แทน).
+
+| code | label_th | label_en | default |
+| --- | --- | --- | --- |
+| `diabetes` | เบาหวาน | Diabetes | — |
+| `hypertension` | ความดันโลหิตสูง | Hypertension | — |
+| `heart_disease` | โรคหัวใจ | Heart disease | — |
+| `kidney_disease` | โรคไต | Kidney disease | — |
+| `asthma` | หอบหืด | Asthma | — |
+| `dyslipidemia` | ไขมันในเลือดสูง | Dyslipidemia | — |
+| `stroke` | โรคหลอดเลือดสมอง | Stroke | — |
+| `copd` | ถุงลมโป่งพอง / COPD | COPD | — |
+| `cancer` | มะเร็ง | Cancer | — |
+| `epilepsy` | ลมชัก | Epilepsy | — |
+| `hiv` | ติดเชื้อเอชไอวี (HIV) | HIV infection | — |
+| `psychiatric_disorder` | โรคทางจิตเวช | Psychiatric disorder | — |
+
+#### `allergy` — อาการแพ้ (CR-187)
+
+Seed ลง global `master_data:allergy` จำนวน 5 รายการ. **Global-only** — ไม่มี shelter-local doc
+(`master_data:allergy:{shelter_code}`); สิ่งที่แพ้นอกรายการ (เช่น แพ้ยา) เก็บเป็น free text ใน `medical.allergies`.
+ไม่มีรายการ `other` (ใช้ free text แทน).
+
+| code | label_th | label_en | default |
+| --- | --- | --- | --- |
+| `seafood` | อาหารทะเล | Seafood | — |
+| `milk` | นม | Milk | — |
+| `egg` | ไข่ | Egg | — |
+| `wheat` | แป้งสาลี | Wheat | — |
+| `nuts` | ถั่ว | Nuts | — |
 
 ### 1.4 การย้ายข้อมูลเดิมและการ seed ซ้ำ
 

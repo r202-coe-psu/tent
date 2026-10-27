@@ -36,7 +36,6 @@ import {
 	projectStockLotBalances,
 	sortStockLotsByConsumptionOrder,
 	StockLotIntegrityError,
-	mapNeedItemHeuristic,
 	createTransfer,
 	dispatchTransfer,
 	receiveTransfer,
@@ -203,7 +202,10 @@ describe('stockBalance', () => {
 
 	it('rejects a zero-quantity ledger entry', () => {
 		expect(() =>
-			createStockLedger({ item_id: 'item:rice', qty: 0, unit: 'kg', reason: 'adjust' }, ctx)
+			createStockLedger(
+				{ item_id: 'item:rice', qty: 0, unit: 'kg', reason: 'adjust', adjust_reason: 'found' },
+				ctx
+			)
 		).toThrow();
 	});
 });
@@ -321,20 +323,19 @@ describe('stock_ledger schema_v + reason enum (CR-032 / draft-lot-produced-at)',
 // new reason that is not listed here fails to compile.
 describe('stock_ledger reason ↔ ref_id invariant (CR-055)', () => {
 	const base = { item_id: 'item:rice', qty: 5, unit: 'kg' } as const;
-	const write = (reason: LedgerReason, ref_id: string | null) =>
-		createStockLedger(
-			{
-				...base,
-				qty: reason === 'distribute' ? -5 : base.qty,
-				reason,
-				ref_id,
-				...(reason === 'adjust' ? { adjust_reason: 'found' as const } : {}),
-				...(reason === 'distribute' || reason === 'distribution_return'
-					? { lot_ref: 'stock_ledger:PHYSICALLOT' }
-					: {})
-			},
-			ctx
-		);
+	const write = (reason: LedgerReason, ref_id: string | null) => {
+		const common = {
+			...base,
+			qty: reason === 'distribute' ? -5 : base.qty,
+			ref_id,
+			...(reason === 'distribute' || reason === 'distribution_return'
+				? { lot_ref: 'stock_ledger:PHYSICALLOT' }
+				: {})
+		};
+		return reason === 'adjust'
+			? createStockLedger({ ...common, reason, adjust_reason: 'found' }, ctx)
+			: createStockLedger({ ...common, reason }, ctx);
+	};
 
 	const cases: Record<LedgerReason, { valid: string | null; invalid: string | null }> = {
 		donation: { valid: 'donation:01J', invalid: 'stock_transfer:01J' },
@@ -586,7 +587,7 @@ describe('keyableDonations + keyedDonationIds (CR-055 R4)', () => {
 				item_id: 'item:rice',
 				qty: '10',
 				unit: 'kg',
-				reason: 'receive' as LedgerReason,
+				reason: 'receive',
 				ref_id: 'distribution_log:fixture'
 			},
 			ctx
@@ -730,27 +731,51 @@ describe('calculateReserved', () => {
 		expect(reservedAll.get('item:water')).toBe('180');
 	});
 
-	it('correctly maps and sums public donations without campaign_id and using free_text', () => {
+	// #689: the back-office board counted these under every campaign asking for the item
+	// (and guessed the item from the text) while the public board and the quota counter
+	// counted them nowhere, so "จองแล้ว" ran ahead of what donors had booked.
+	it('leaves a donation with no campaign out of every campaign', () => {
 		const donations: Donation[] = [
 			{
 				...declaredItemsDonation(),
 				_id: 'don:public-1',
 				campaign_id: null,
 				status: 'declared',
-				items: [{ free_text: 'ข้าวสาร', qty: '15', unit: 'kg' }] // Maps to item:rice
-			},
-			{
-				...declaredItemsDonation(),
-				_id: 'don:public-2',
-				campaign_id: null,
-				status: 'declared',
-				items: [{ free_text: 'น้ำดื่ม', qty: '25', unit: 'bottle' }] // Maps to item:water
+				items: [{ item_id: 'item:rice', qty: '15', unit: 'kg' }]
 			}
 		];
 
-		const reserved = calculateReserved(donations, [], 'camp-any');
-		expect(reserved.get('item:rice')).toBe('15');
-		expect(reserved.get('item:water')).toBe('25');
+		expect(calculateReserved(donations, [], 'camp-any').get('item:rice')).toBeUndefined();
+	});
+
+	it('does not guess an item from free text', () => {
+		const donations: Donation[] = [
+			{
+				...declaredItemsDonation(),
+				_id: 'don:public-2',
+				campaign_id: 'camp-a',
+				status: 'declared',
+				items: [{ free_text: 'น้ำดื่ม', qty: '25', unit: 'bottle' }]
+			}
+		];
+
+		const reserved = calculateReserved(donations, [], 'camp-a');
+		expect(reserved.get('item:water')).toBeUndefined();
+		expect(reserved.size).toBe(0);
+	});
+
+	it('still totals every campaign when no campaign is given', () => {
+		const donations: Donation[] = [
+			{
+				...declaredItemsDonation(),
+				_id: 'don:no-campaign',
+				campaign_id: null,
+				status: 'declared',
+				items: [{ item_id: 'item:rice', qty: '15', unit: 'kg' }]
+			}
+		];
+
+		expect(calculateReserved(donations, []).get('item:rice')).toBe('15');
 	});
 
 	it('returns the reserved quota once a donation is expired past its TTL (T-21)', () => {
@@ -860,6 +885,39 @@ describe('deriveNeedAvailability', () => {
 		expect(riceAvail?.qty_reserved).toBe('0');
 		expect(riceAvail?.qty_remaining).toBe('50');
 		expect(riceAvail?.is_cut_off).toBe(false);
+	});
+
+	it('offers nothing more on a need staff closed by hand', () => {
+		const campaign = createCampaign(
+			{
+				title: 'ของยังชีพ',
+				needs: [{ item_id: 'item:rice', qty_target: 50, unit: 'kg', status: 'closed' }]
+			},
+			ctx
+		);
+
+		const [rice] = deriveNeedAvailability(campaign, [], []);
+
+		expect(rice.is_cut_off).toBe(true);
+		expect(rice.qty_remaining).toBe('0');
+	});
+
+	it('offers nothing on any need once the whole campaign is closed', () => {
+		const campaign = {
+			...createCampaign(
+				{
+					title: 'ของยังชีพ',
+					needs: [{ item_id: 'item:rice', qty_target: 50, unit: 'kg' }]
+				},
+				ctx
+			),
+			status: 'closed' as const
+		};
+
+		const [rice] = deriveNeedAvailability(campaign, [], []);
+
+		expect(rice.is_cut_off).toBe(true);
+		expect(rice.qty_remaining).toBe('0');
 	});
 });
 
@@ -1500,22 +1558,6 @@ describe('Inter-shelter Transfers', () => {
 	});
 });
 
-describe('mapNeedItemHeuristic', () => {
-	it('maps known items correctly', () => {
-		expect(mapNeedItemHeuristic('ข้าวสารหอมมะลิ')).toBe('item:rice');
-		expect(mapNeedItemHeuristic('น้ำดื่มสะอาด')).toBe('item:water');
-		expect(mapNeedItemHeuristic('ยาพาราเซตามอล')).toBe('item:paracetamol');
-		expect(mapNeedItemHeuristic('สบู่ถูตัว')).toBe('item:soap');
-		expect(mapNeedItemHeuristic('ผ้าห่มกันหนาว')).toBe('item:blanket');
-		expect(mapNeedItemHeuristic('ไข่ไก่สด')).toBe('item:egg');
-	});
-
-	it('slugs unknown items correctly', () => {
-		expect(mapNeedItemHeuristic('ปลากระป๋องรสเผ็ด')).toBe('item:ปลากระป๋องรสเผ็ด');
-		expect(mapNeedItemHeuristic('  Spoons & Forks  ')).toBe('item:spoons-forks');
-	});
-});
-
 // CR-052 §1.6 — a manual cut-off stops donors mid-flow while the target is still
 // short, so the reason is what the audit trail and the transparency report are built
 // from. Enforced in the domain, not the dialog, so no caller can skip it.
@@ -1648,9 +1690,12 @@ describe('donation statuses that still owe the shelter goods (CR-052)', () => {
 		// and the worker's expiry job writes exactly this transition (quota/expiry.py).
 		expect(canTransitionDonation('verifying', 'expired')).toBe(true);
 
+		// CR-174 FR-21 — the donor adds a typed-in line to a booking that has its QR; the
+		// booking goes back to review until staff decide that line.
+		expect(canTransitionDonation('verifying', 'pending_review')).toBe(true);
+
 		// No skipping the review step, and nothing comes back out of a terminal status.
 		expect(canTransitionDonation('pending_review', 'received')).toBe(false);
-		expect(canTransitionDonation('verifying', 'pending_review')).toBe(false);
 		expect(canTransitionDonation('received', 'verifying')).toBe(false);
 		expect(canTransitionDonation('rejected', 'pending_review')).toBe(false);
 	});

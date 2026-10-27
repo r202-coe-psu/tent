@@ -23,7 +23,45 @@ const html2canvasMock = vi.fn(async () => ({
 }));
 vi.mock('html2canvas-pro', () => ({ default: html2canvasMock }));
 
-const { previewElementAsPdf, downloadElementAsPng } = await import('./pdf');
+const { previewElementAsPdf, previewImageAsPdf, downloadElementAsPng } = await import('./pdf');
+
+describe('previewImageAsPdf', () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+	});
+
+	it('puts the image on one page of exactly the given size', () => {
+		const previewWindow = { closed: false, location: { href: '' } } as unknown as Window;
+
+		previewImageAsPdf('data:image/png;base64,label', 'evacuee-id-01ABC', {
+			widthMm: 80,
+			heightMm: 60,
+			previewWindow
+		});
+
+		expect(jsPDFCtorMock).toHaveBeenCalledWith({
+			orientation: 'landscape',
+			unit: 'mm',
+			format: [80, 60]
+		});
+		expect(setPropertiesMock).toHaveBeenCalledWith({ title: 'evacuee-id-01ABC' });
+		expect(addImageMock).toHaveBeenCalledWith('data:image/png;base64,label', 'PNG', 0, 0, 80, 60);
+		expect(previewWindow.location.href).toBe('blob:mock-url');
+		expect(html2canvasMock).not.toHaveBeenCalled();
+	});
+
+	it('fails when the preview tab was closed meanwhile', () => {
+		const previewWindow = { closed: true, location: { href: '' } } as unknown as Window;
+
+		expect(() =>
+			previewImageAsPdf('data:image/png;base64,label', 't', {
+				widthMm: 80,
+				heightMm: 60,
+				previewWindow
+			})
+		).toThrow();
+	});
+});
 
 describe('previewElementAsPdf', () => {
 	beforeEach(() => {

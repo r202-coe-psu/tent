@@ -1,3 +1,4 @@
+import { isInShelterStayStatus } from '$lib/features/shared';
 import type { MealPlanHeadcount, MealSessionHeadcount } from './kitchen';
 
 /** Minimal representation of an occupant required for kitchen headcount calculations. */
@@ -11,13 +12,14 @@ export interface OccupantView {
 export const SOFT_FOOD_NEEDS: readonly string[] = ['bedridden', 'chronic_illness', 'elderly'];
 
 /**
- * Derives meal plan headcount metrics from active occupants.
+ * Derives meal plan headcount metrics from occupants in the shelter (`active` +
+ * `room_confirmed` — draft-in-shelter-headcount, which supersedes CR-022's `checked_in`).
  * Sub-counts (halal, soft_food, infant) are orthogonal dimensions.
  */
 export function deriveHeadcountFromOccupancy(
 	occupants: readonly OccupantView[]
 ): MealPlanHeadcount {
-	const present = occupants.filter((o) => o.current_stay?.status === 'active');
+	const present = occupants.filter((o) => isInShelterStayStatus(o.current_stay?.status));
 	const hasNeed = (o: OccupantView, needs: readonly string[]) =>
 		(o.special_needs ?? []).some((n) => needs.includes(n));
 	return {
@@ -28,11 +30,11 @@ export function deriveHeadcountFromOccupancy(
 	};
 }
 
-/** Derives meal session 5-group headcount from active occupants. */
+/** Derives meal session 5-group headcount from occupants in the shelter. */
 export function deriveSessionHeadcountFromOccupancy(
 	occupants: readonly OccupantView[]
 ): MealSessionHeadcount {
-	const present = occupants.filter((o) => o.current_stay?.status === 'active');
+	const present = occupants.filter((o) => isInShelterStayStatus(o.current_stay?.status));
 	const hasNeed = (o: OccupantView, needs: readonly string[]) =>
 		(o.special_needs ?? []).some((n) => needs.includes(n));
 	const halal = present.filter((o) => o.religion === 'muslim').length;

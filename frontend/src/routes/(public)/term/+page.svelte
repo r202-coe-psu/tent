@@ -11,9 +11,9 @@
 	<title>{t.pageTitle}</title>
 </svelte:head>
 
-<PublicPageShell maxWidth="max-w-3xl" class="py-10 sm:py-12">
+<PublicPageShell maxWidth="max-w-7xl" class="lg:px-8">
 	<article
-		class="rounded-2xl border border-slate-200/80 bg-white px-6 py-8 text-[#0A2647] sm:px-8 sm:py-10"
+		class="mx-auto max-w-3xl rounded-2xl border border-slate-200/80 bg-white px-6 py-8 text-[#0A2647] sm:px-8 sm:py-10"
 	>
 		<header class="mb-8 space-y-3 border-b border-slate-200/80 pb-6">
 			<p class="text-xs font-medium tracking-wide text-slate-500 uppercase">

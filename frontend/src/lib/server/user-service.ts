@@ -194,6 +194,29 @@ async function fetchAllUserDocs(): Promise<CouchUserDoc[]> {
 	return rows.filter((r) => r.id.startsWith(USER_PREFIX) && r.doc).map((r) => r.doc);
 }
 
+/**
+ * `display_name` per user name for the given names (CR-192 Amendment 2 rank). Names with no
+ * user doc or no display name are left out — callers fall back to the name itself. Returns
+ * nothing else from the user doc.
+ */
+export async function getDisplayNames(names: readonly string[]): Promise<Map<string, string>> {
+	const out = new Map<string, string>();
+	const unique = [...new Set(names)].filter(Boolean);
+	if (unique.length === 0) return out;
+	const res = await adminRaw('/_users/_all_docs?include_docs=true', 'POST', {
+		keys: unique.map((n) => `${USER_PREFIX}${n}`)
+	});
+	if (res.status >= 400) throw serviceErrorFromCouch('read display names', res.status, res.data);
+	const rows = (res.data as { rows?: { doc?: CouchUserDoc | null }[] })?.rows ?? [];
+	for (const row of rows) {
+		const doc = row.doc;
+		if (doc?.name && typeof doc.display_name === 'string' && doc.display_name.trim()) {
+			out.set(doc.name, doc.display_name.trim());
+		}
+	}
+	return out;
+}
+
 async function countAppSystemAdmins(): Promise<number> {
 	const docs = await fetchAllUserDocs();
 	return docs.filter((d) => isAppSystemAdmin(d.roles ?? [])).length;
@@ -220,6 +243,8 @@ async function readUserDoc(name: string, action: string): Promise<CouchUserDoc> 
 }
 
 const PHONE_LOGIN_RE = /^0\d{9}$/;
+/** A mobile (10 digits) or a landline (9 digits) — users `contactPhoneSchema`. */
+const CONTACT_PHONE_RE = /^0\d{8,9}$/;
 
 function normalizePhone(value: string | null | undefined): string | null {
 	if (value == null) return null;
@@ -228,8 +253,9 @@ function normalizePhone(value: string | null | undefined): string | null {
 }
 
 /**
- * When phone is set it must be unique across `_users.phone` and must not collide
- * with another account's CouchDB `name` (so alternate login stays unambiguous).
+ * A set phone must be a mobile or a landline. A mobile signs in (`resolveLoginName`), so it must
+ * be unique across `_users.phone` and must not collide with another account's CouchDB `name`.
+ * A landline is contact-only and may be shared (one household number for several volunteers).
  */
 async function assertPhoneAvailable(
 	phone: string | null,
@@ -237,9 +263,10 @@ async function assertPhoneAvailable(
 ): Promise<string | null> {
 	const normalized = normalizePhone(phone);
 	if (!normalized) return null;
-	if (!PHONE_LOGIN_RE.test(normalized)) {
-		throw new ServiceError('VALIDATION', 'เบอร์โทรศัพท์ต้องเป็นตัวเลข 10 หลักขึ้นต้นด้วย 0');
+	if (!CONTACT_PHONE_RE.test(normalized)) {
+		throw new ServiceError('VALIDATION', 'เบอร์โทรศัพท์ต้องเป็นตัวเลข 9–10 หลักขึ้นต้นด้วย 0');
 	}
+	if (!PHONE_LOGIN_RE.test(normalized)) return normalized;
 
 	const docs = await fetchAllUserDocs();
 	for (const doc of docs) {
@@ -380,17 +407,7 @@ export async function createOrMergeUser(
 		await updateUser(
 			input.name,
 			{
-				display_name: input.display_name,
-				roles: input.roles,
-				personnel_type: input.personnel_type,
-				organization: input.organization,
-				position: input.position,
-				phone: input.phone,
-				email: input.email,
-				notes: input.notes,
-				volunteer_id: input.volunteer_id,
-				duty_window: input.duty_window,
-				affiliation_tags: input.affiliation_tags
+				roles: input.roles
 			},
 			caller
 		);
@@ -408,6 +425,35 @@ export async function listUsers(caller: Caller): Promise<UserSummary[]> {
 	const managed = managerShelterCodes(caller.roles);
 	const codes = managed.length > 0 ? managed : caller.shelterCode ? [caller.shelterCode] : [];
 	return all.filter((u) => codes.some((code) => hasShelterScope(u.roles, code)));
+}
+
+/** Minimal colleague entry — enough to pick a handover target, no contact/PII fields. */
+export interface StaffDirectoryEntry {
+	name: string;
+	display_name: string | null;
+}
+
+/**
+ * Active staff of a shelter (incident handover picker, IL-P5): holds at least one shelter
+ * capability for `code` and is not a volunteer account (`personnel_type = volunteer`).
+ * Optional `capabilities` narrows to staff holding at least one of them in `code`.
+ * Callers are gated by `requireShelterScopeOrSA` — colleagues' names only, no contact/PII.
+ */
+export async function listShelterStaffDirectory(
+	code: string,
+	opts?: { capabilities?: readonly string[] }
+): Promise<StaffDirectoryEntry[]> {
+	const wanted = opts?.capabilities;
+	const bootstrap = bootstrapAdminName();
+	return (await fetchAllUserDocs())
+		.filter((d) => !isProtectedBootstrapAdmin(d, bootstrap))
+		.filter((d) => (d.active ?? true) && d.personnel_type !== 'volunteer')
+		.filter((d) => {
+			const caps = capabilitiesForShelter(d.roles ?? [], code);
+			return wanted ? caps.some((c) => wanted.includes(c)) : caps.length > 0;
+		})
+		.map((d) => ({ name: d.name, display_name: toSummary(d).display_name ?? null }))
+		.sort((a, b) => (a.display_name ?? a.name).localeCompare(b.display_name ?? b.name, 'th'));
 }
 
 function managerMayMutateTarget(caller: Caller, targetRoles: readonly string[]): string {
@@ -497,6 +543,18 @@ export async function updateUser(
 
 	if (!caller.isSA) {
 		const code = managerMayMutateTarget(caller, doc.roles ?? []);
+		if (!hasShelterScope(doc.roles ?? [], code)) {
+			// Add-from-outside: a target not yet in this shelter may only be pulled in via `roles`.
+			// Allow-list (not deny-list) so any other/new field is rejected by default; a mixed
+			// request (roles + any other field) is rejected whole, never partially applied.
+			const extra = Object.entries(input).filter(([k, v]) => k !== 'roles' && v !== undefined);
+			if (!input.roles || extra.length > 0) {
+				throw new ServiceError(
+					'FORBIDDEN',
+					'A manager may only edit users in their own shelter (outside users: roles only)'
+				);
+			}
+		}
 		if (input.roles) {
 			const { assertCanGrant } = await import('./couch-admin');
 			assertCanGrant(caller, input.roles);

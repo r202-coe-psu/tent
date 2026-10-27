@@ -2,6 +2,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { GET } from './+server';
 import { requireShelterScopeOrSA, adminRaw, ServiceError } from '$lib/server/couch-admin';
 import { SHELTER_VIEW_MANIFEST } from '$lib/features/shelters/server';
+import { findMasterByCode } from '$lib/server/shelters.admin';
+import type { ShelterMaster } from '$lib/features/shelters';
 import type { RequestEvent } from './$types';
 
 // Mock dependencies
@@ -12,6 +14,11 @@ vi.mock('$lib/server/couch-admin', async (importOriginal) => {
 		requireShelterScopeOrSA: vi.fn(),
 		adminRaw: vi.fn()
 	};
+});
+
+vi.mock('$lib/server/shelters.admin', async (importOriginal) => {
+	const actual = await importOriginal<typeof import('$lib/server/shelters.admin')>();
+	return { ...actual, findMasterByCode: vi.fn() };
 });
 
 function createMockEvent(
@@ -107,7 +114,10 @@ describe('GET /api/back-office/shelter/[code]/dashboard/registrations', () => {
 			.mockResolvedValueOnce({
 				status: 200,
 				data: {
-					rows: [{ key: [mockDate, 'checkin'], value: 5 }]
+					rows: [
+						{ key: [mockDate, 'checkin'], value: 5 },
+						{ key: [mockDate, 'preregister'], value: 3 }
+					]
 				}
 			});
 
@@ -123,6 +133,7 @@ describe('GET /api/back-office/shelter/[code]/dashboard/registrations', () => {
 		expect(data.checkin).toBeTypeOf('object');
 		expect(data.checkin[mockDate]).toBe(5);
 		expect(data.checkout).toBeTypeOf('object');
+		expect(data.preregister[mockDate]).toBe(3);
 
 		const [path, method] = vi.mocked(adminRaw).mock.calls[1];
 		expect(path).toContain(
@@ -150,5 +161,110 @@ describe('GET /api/back-office/shelter/[code]/dashboard/registrations', () => {
 		const data = await res.json();
 		expect(data.error.code).toBe('INTERNAL');
 		expect(data.error.message).toContain('older version');
+	});
+
+	describe('without `from`', () => {
+		const viewDeployed = {
+			status: 200,
+			data: { tent_view: { version: SHELTER_VIEW_MANIFEST.version } }
+		};
+
+		beforeEach(() => {
+			vi.mocked(requireShelterScopeOrSA).mockResolvedValue({
+				name: 'tester',
+				roles: [],
+				isSA: true,
+				shelterCode: null
+			});
+		});
+
+		it('starts the range on the day the shelter was created', async () => {
+			vi.mocked(findMasterByCode).mockResolvedValue({
+				created_at: '2026-03-10T05:00:00.000Z'
+			} as ShelterMaster);
+			vi.mocked(adminRaw)
+				.mockResolvedValueOnce(viewDeployed)
+				.mockResolvedValueOnce({
+					status: 200,
+					data: {
+						rows: [
+							{ key: ['2026-03-12', 'checkin'], value: 4 },
+							{ key: ['2026-05-01', 'checkout'], value: 1 }
+						]
+					}
+				});
+
+			const res = (await GET(createMockEvent('SH001', { to: '2026-10-16' }))) as Response;
+
+			expect(res.status).toBe(200);
+			const data = await res.json();
+			expect(data.range).toEqual({ from: '2026-03-10', to: '2026-10-16' });
+			expect(data.checkin['2026-03-12']).toBe(4);
+			expect(data.checkout['2026-05-01']).toBe(1);
+			expect(findMasterByCode).toHaveBeenCalledWith('SH001');
+
+			// The whole view up to `to` is read — no startkey cuts off older movements.
+			const [path] = vi.mocked(adminRaw).mock.calls[1];
+			expect(path).not.toContain('startkey');
+		});
+
+		it('keeps a movement dated before the shelter was created', async () => {
+			vi.mocked(findMasterByCode).mockResolvedValue({
+				created_at: '2026-03-10T05:00:00.000Z'
+			} as ShelterMaster);
+			vi.mocked(adminRaw)
+				.mockResolvedValueOnce(viewDeployed)
+				.mockResolvedValueOnce({
+					status: 200,
+					data: { rows: [{ key: ['2026-03-01', 'checkin'], value: 2 }] }
+				});
+
+			const res = (await GET(createMockEvent('SH001', { to: '2026-10-16' }))) as Response;
+			const data = await res.json();
+
+			expect(data.range.from).toBe('2026-03-01');
+			expect(data.total).toBe(2);
+		});
+	});
+
+	it('does not look the shelter up when `from` is given', async () => {
+		vi.mocked(requireShelterScopeOrSA).mockResolvedValue({
+			name: 'tester',
+			roles: [],
+			isSA: true,
+			shelterCode: null
+		});
+		vi.mocked(adminRaw)
+			.mockResolvedValueOnce({
+				status: 200,
+				data: { tent_view: { version: SHELTER_VIEW_MANIFEST.version } }
+			})
+			.mockResolvedValueOnce({ status: 200, data: { rows: [] } });
+
+		const res = (await GET(
+			createMockEvent('SH001', { from: '2026-10-01', to: '2026-10-16' })
+		)) as Response;
+		const data = await res.json();
+
+		expect(data.range).toEqual({ from: '2026-10-01', to: '2026-10-16' });
+		expect(findMasterByCode).not.toHaveBeenCalled();
+	});
+
+	it('returns 422 when `from` is after `to`', async () => {
+		vi.mocked(requireShelterScopeOrSA).mockResolvedValue({
+			name: 'tester',
+			roles: [],
+			isSA: true,
+			shelterCode: null
+		});
+
+		const res = (await GET(
+			createMockEvent('SH001', { from: '2026-10-16', to: '2026-10-01' })
+		)) as Response;
+
+		expect(res.status).toBe(422);
+		const data = await res.json();
+		expect(data.error.code).toBe('VALIDATION');
+		expect(adminRaw).not.toHaveBeenCalled();
 	});
 });

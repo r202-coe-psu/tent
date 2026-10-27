@@ -23,6 +23,7 @@ export {
 	getActiveTagsFromSession,
 	TARGET_GROUP_TAGS,
 	TARGET_GROUP_LABELS,
+	TARGET_GROUP_SHORT_LABELS,
 	RICE_RECIPE_ID,
 	RECIPE_TO_STOCK_ITEM,
 	RECIPE_LABELS,
@@ -126,6 +127,9 @@ export {
 	mealServiceReceiptOutcome,
 	MEAL_PERIOD_LABELS
 } from './domain/kitchen';
+
+// Domain — meal_service receipt_no (CR-177)
+export { nextReceiptNo, mealServiceRef } from './domain/receipt-no';
 
 // Data — repository and remote CouchDB binding
 export type {

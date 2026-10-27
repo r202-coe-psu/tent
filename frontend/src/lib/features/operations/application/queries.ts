@@ -33,6 +33,7 @@ import type { MergeItemsInput } from '../domain/item-merge';
 import type { DonationBatchLine } from '../domain/donation-batch';
 import type { CycleCountSubmission } from '../domain/cycle-count';
 import { countPendingTransfers } from '../domain/transfer-pending';
+import { retryUnlessForbidden } from './transfer-retry';
 import { distributeAcrossLots, type DistributeAcrossLotsArgs } from './distribute-across-lots';
 
 /**
@@ -52,7 +53,9 @@ export const operationsKeys = {
 	balance: () => [...operationsKeys.all, 'balance', getShelterCode()] as const,
 	donationSlots: () => [...operationsKeys.all, 'donationSlots', getShelterCode()] as const,
 	transfers: () => [...operationsKeys.all, 'transfers'] as const,
-	transfer: (id: string) => [...operationsKeys.transfers(), id] as const
+	transfer: (id: string) => [...operationsKeys.transfers(), id] as const,
+	transferDestinations: () =>
+		[...operationsKeys.all, 'transferDestinations', getShelterCode()] as const
 };
 
 export const useCampaigns = () =>
@@ -357,12 +360,24 @@ export const useMergeItems = () => {
 };
 
 /**
+ * Shelters the active shelter may send a transfer to (#570) — every shelter but its own, for
+ * the roles the transfer API accepts. Shelters change rarely, so it is kept fresh for a while.
+ */
+export const useTransferDestinations = () =>
+	createQuery(() => ({
+		queryKey: operationsKeys.transferDestinations(),
+		queryFn: () => operationsRepository().listTransferDestinations(),
+		staleTime: 5 * 60_000
+	}));
+
+/**
  * Query hook to list transfers (source or destination) for the active shelter (CR-059 Flow 1 / T-13).
  */
 export const useTransfers = (filter?: TransferFilter) =>
 	createQuery(() => ({
 		queryKey: operationsKeys.transfers(),
-		queryFn: () => operationsRepository().listTransfers(filter)
+		queryFn: () => operationsRepository().listTransfers(filter),
+		retry: retryUnlessForbidden
 	}));
 
 /**
@@ -373,6 +388,7 @@ export const usePendingTransferCount = () =>
 	createQuery(() => ({
 		queryKey: operationsKeys.transfers(),
 		queryFn: () => operationsRepository().listTransfers(),
+		retry: retryUnlessForbidden,
 		select: (transfers: StockTransfer[]) => countPendingTransfers(transfers, getShelterCode())
 	}));
 

@@ -2,8 +2,8 @@
 title: Smart Shelter — Sitemap & Endpoint Map
 status: draft for review
 created: 2026-06-11
-updated: 2026-08-21
-note: แตกจาก api-contract.md v1 + role-permission-matrix — map หน้าจอ (SPA route) ↔ endpoint/doc action แบ่งตามระบบ Intake / Backoffice / Public; CR-040 route `/reports`
+updated: 2026-10-20 # CR-155 amend — incident route เฉพาะ SO/SM/SA + portal tile; เดิม 2026-10-08 shelter_incident replaces shelter_report
+note: แตกจาก api-contract.md v1 + role-permission-matrix — map หน้าจอ (SPA route) ↔ endpoint/doc action แบ่งตามระบบ Intake / Backoffice / Public; CR-155 route `/back-office/incidents` (แทน `/reports` ของ CR-040)
 ---
 
 # Smart Shelter — Sitemap & Endpoint Map
@@ -110,10 +110,10 @@ Role ย่อ (ดู [role-permission-matrix](prd/role-permission-matrix.md)):
 
 ### 2.6 Volunteer — SM, VC
 
-| Route                              | หน้าที่                                                                                                       | FR    | Endpoint / Data action                                            |
-| ---------------------------------- | ------------------------------------------------------------------------------------------------------------- | ----- | ----------------------------------------------------------------- |
-| `/back-office/volunteers`          | แดชบอร์ดจัดการจิตอาสาหลังบ้าน: ประกาศงานภารกิจ, กะย่อยรายวัน, ทะเบียนอาสา (แท็บ: กระดานงาน / กะงาน / ทะเบียน)  | FR-43 | `put job:{ulid}` · Mango `job_application` · `volunteer:{ulid}`   |
-| `/back-office/volunteers/checkin`  | จุดรับรายงานตัวแท็บเล็ตหน้าศูนย์ (POS Layout 40/60 + กล้องสแกน QR + Walk-in ด่วน 30 วินาที + Kiosk Mode)     | FR-42 | `put shift_assignment` (check_in_at) · `put volunteer` (checked_in) |
+| Route                             | หน้าที่                                                                                                       | FR    | Endpoint / Data action                                              |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------- | ----- | ------------------------------------------------------------------- |
+| `/back-office/volunteers`         | แดชบอร์ดจัดการจิตอาสาหลังบ้าน: ประกาศงานภารกิจ, กะย่อยรายวัน, ทะเบียนอาสา (แท็บ: กระดานงาน / กะงาน / ทะเบียน) | FR-43 | `put job:{ulid}` · Mango `job_application` · `volunteer:{ulid}`     |
+| `/back-office/volunteers/checkin` | จุดรับรายงานตัวแท็บเล็ตหน้าศูนย์ (POS Layout 40/60 + กล้องสแกน QR + Walk-in ด่วน 30 วินาที + Kiosk Mode)      | FR-42 | `put shift_assignment` (check_in_at) · `put volunteer` (checked_in) |
 
 ### 2.7 SOP & Resource Calculation — SM ดู / SA config
 
@@ -121,24 +121,24 @@ Role ย่อ (ดู [role-permission-matrix](prd/role-permission-matrix.md)):
 | ------------ | ----------------------------------------------------------------------- | --------- | ---------------------------------------------------- |
 | `/resources` | daily resource calculation (น้ำ/อาหาร/ของใช้ ต่อ occupancy) + dashboard | FR-45..46 | views + `sop_profile` (catalog, read-only บน device) |
 
-### 2.8 Shelter Reports & Referral — SM เท่านั้น
+### 2.8 Shelter Incident Log & Referral
 
-| Route        | หน้าที่                                                                             | FR    | Endpoint / Data action                                             |
-| ------------ | ----------------------------------------------------------------------------------- | ----- | ------------------------------------------------------------------ |
-| `/reports`   | เปิด/ติดตามรายงานในศูนย์ (`shelter_report` · kind grievance\|incident)              | FR-47 | `put`/`update shelter_report:{ulid}` (state machine, forward-only) |
-| `/referrals` | ส่งต่อหน่วยงานภายนอก — SM เห็น flag medical-emergency แต่ **medical detail = null** | FR-48 | `put referral` (state `draft→sent→accepted                         | rejected→closed`) |
+| Route                                      | หน้าที่                                                                                                                                           | FR    | Endpoint / Data action                                                                                                      |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- | ----- | --------------------------------------------------------------------------------------------------------------------------- |
+| `/back-office/incidents` (`/new`, `/{id}`) | บันทึกเหตุการณ์ประจำวัน — เฉพาะ SO / SM ของศูนย์ / SA (CR-155 amend 2026-10-20) · เข้าจาก portal tile `security-incidents` (ฝ่ายรักษาความปลอดภัย) | FR-47 | `put`/`update shelter_incident:{ulid}` (state machine, append timeline) · `GET /api/v1/shelters/{code}/staff?capabilities=` |
+| `/referrals`                               | ส่งต่อหน่วยงานภายนอก (SM เท่านั้น) — SM เห็น flag medical-emergency แต่ **medical detail = null**                                                 | FR-48 | `put referral` (state `draft→sent→accepted                                                                                  | rejected→closed`) |
 
 ### 2.9 Administration — SA, SM (ตาม scope ศูนย์)
 
-| Route                    | หน้าที่                                                                                                                                                                                                                                                                                                             | FR           | Endpoint / Data action                                                                   |
-| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ | ---------------------------------------------------------------------------------------- |
-| `/admin/shelters`        | เปิดศูนย์: สร้าง central db + `_security` + design docs + edge fallback replica/credentials/replication                                                                                                                                                                                                             | FR-2..3      | `POST /api/v1/shelters`                                                                  |
-| `/admin/shelters/[code]` | แก้ config ศูนย์ + **ปิดศูนย์** (เริ่มนาฬิกา retention 3 เดือน)                                                                                                                                                                                                                                                     | FR-2         | `POST /api/v1/shelters/{code}/close`                                                     |
-| `/back-office/users`     | จัดการบัญชีผู้ใช้: กำหนด 10 บทบาทแบบ Compound Scoped Roles (`{code}:{role}`) ป้องกันสิทธิ์ข้ามศูนย์, ออกสิทธิ์ให้อาสาช่วยงานระบบ (Staff-Capable), และเปลี่ยนรหัสผ่าน. พื้นผิว SPA: `/back-office/users` (ล็อกตามศูนย์), `/portal/system-management/users` (SA เลือกศูนย์ได้)                                              | FR-1, FR-34  | `POST /api/v1/users` (ห่อ `_users`)                                                      |
-| `/admin/catalog`         | master ข้ามศูนย์: supply item catalog, recipe, SOP ratio profile                                                                                                                                                                                                                                                    | FR-27, FR-44 | เขียน `catalog` db ที่ central (device pull จาก central ปกติ; edge ได้ fallback replica) |
-| `/admin/api-keys`        | issue/rotate/revoke EOC API key + scope (FD-14)                                                                                                                                                                                                                                                                     | FR-50        | central service (R4 deferred)                                                            |
-| `/admin/audit`           | ดู audit trail (override, retroactive edit, export, ลบ)                                                                                                                                                                                                                                                             | FR-16, 33    | Mango query `audit` ที่ central                                                          |
-| `/admin/consent`         | search consent / opt-out (SM ทำใน scope ศูนย์ตนได้)                                                                                                                                                                                                                                                                 | FR-52        | update `evacuee.privacy.search_excluded`                                                 |
+| Route                    | หน้าที่                                                                                                                                                                                                                                                                      | FR           | Endpoint / Data action                                                                   |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ | ---------------------------------------------------------------------------------------- |
+| `/admin/shelters`        | เปิดศูนย์: สร้าง central db + `_security` + design docs + edge fallback replica/credentials/replication                                                                                                                                                                      | FR-2..3      | `POST /api/v1/shelters`                                                                  |
+| `/admin/shelters/[code]` | แก้ config ศูนย์ + **ปิดศูนย์** (เริ่มนาฬิกา retention 3 เดือน)                                                                                                                                                                                                              | FR-2         | `POST /api/v1/shelters/{code}/close`                                                     |
+| `/back-office/users`     | จัดการบัญชีผู้ใช้: กำหนด 10 บทบาทแบบ Compound Scoped Roles (`{code}:{role}`) ป้องกันสิทธิ์ข้ามศูนย์, ออกสิทธิ์ให้อาสาช่วยงานระบบ (Staff-Capable), และเปลี่ยนรหัสผ่าน. พื้นผิว SPA: `/back-office/users` (ล็อกตามศูนย์), `/portal/system-management/users` (SA เลือกศูนย์ได้) | FR-1, FR-34  | `POST /api/v1/users` (ห่อ `_users`)                                                      |
+| `/admin/catalog`         | master ข้ามศูนย์: supply item catalog, recipe, SOP ratio profile                                                                                                                                                                                                             | FR-27, FR-44 | เขียน `catalog` db ที่ central (device pull จาก central ปกติ; edge ได้ fallback replica) |
+| `/admin/api-keys`        | issue/rotate/revoke EOC API key + scope (FD-14)                                                                                                                                                                                                                              | FR-50        | central service (R4 deferred)                                                            |
+| `/admin/audit`           | ดู audit trail (override, retroactive edit, export, ลบ)                                                                                                                                                                                                                      | FR-16, 33    | Mango query `audit` ที่ central                                                          |
+| `/admin/consent`         | search consent / opt-out (SM ทำใน scope ศูนย์ตนได้)                                                                                                                                                                                                                          | FR-52        | update `evacuee.privacy.search_excluded`                                                 |
 
 > **Dev เท่านั้น:** route `src/routes/api/admin/*` ใน frontend ปัจจุบัน (users/shelter/demo) เป็น
 > dev-server stand-in ของ Plane B — ไม่อยู่ใน static prod build และไม่ใช่ endpoint ของระบบจริง
@@ -152,6 +152,7 @@ Role ย่อ (ดู [role-permission-matrix](prd/role-permission-matrix.md)):
 [public-tier-flow-spec](features/public-tier-flow-spec.html)
 
 **Public Routes (SPA):**
+
 - `/` — Public Landing (Hero metrics, Quick-service cards)
 - `/shelters` — Public Shelter Dashboard
 - `/search` — Family Search
@@ -160,19 +161,19 @@ Role ย่อ (ดู [role-permission-matrix](prd/role-permission-matrix.md)):
 - `/volunteer/ticket/[token]` — Digital Volunteer Ticket QR Pass & Self Check-in Button (CR-104)
 - `/volunteer/portal` — Self-Service Schedule Lookup by Phone (CR-104)
 
-| Endpoint                                         | หน้าที่                                                                                                               | FR        | Auth                                              |
-| ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------- | --------- | ------------------------------------------------- |
-| `POST /public/v1/occupants`                      | ค้นญาติ — คืน masked directory (`first_name`, `last_name`, `nickname`, `shelter_status` เท่านั้น); เคารพ opt-out 100% | FR-53     | — (audit ทุกครั้ง)                                |
-| `GET /public/v1/needs`                           | shortage รายศูนย์ (counts only, no-PII) เพื่อ direct การบริจาค                                                        | FR-32     | —                                                 |
-| `POST /public/v1/donations`                      | donor pre-declaration + reservation                                                                                   | FR-32, 35 | reCAPTCHA v3 + Rate Limit                         |
-| `GET /public/v1/donations/{tracking_token}`      | ติดตามสถานะการบริจาคของตน                                                                                             | FR-35, 37 | `tracking_token`                                  |
-| `GET /public/v1/transparency/*`                  | รายงานความโปร่งใส (aggregate) 🔒                                                                                      | FR-38     | —                                                 |
-| `GET /public/v1/jobs`                            | รายการ Job Board เปิดรับสมัครของศูนย์ต่าง ๆ พร้อมยอดโควตากะย่อยรายวัน 2 สี `[ 🟢 รับแล้ว \| ⚪ ยังขาด ]`              | FR-43     | —                                                 |
-| `POST /public/v1/jobs/{id}/apply`                | ยื่นใบสมัครงานอาสาสมัครด่วน 30s (No-Auth, No-SMS OTP) → ออก `tracking_token` + Digital Ticket QR                      | FR-42     | reCAPTCHA v3 + Rate Limit                         |
-| `GET /public/v1/volunteer/ticket/{token}`        | ตรวจสอบสถานะการสมัคร / ตารางกะงาน / Digital Ticket QR Code / ปุ่ม Self Check-in                                       | FR-42     | `tracking_token`                                  |
-| `POST /public/v1/volunteer/ticket/{token}/cancel`| กดยกเลิกการสมัครล่วงหน้าด้วยตนเอง                                                                                     | FR-42     | `tracking_token`                                  |
-| `POST /public/v1/volunteer/ticket/{token}/checkin`| Self Check-in สแกนป้ายคิวอาร์โค้ดประจำศูนย์เพื่อยืนยันการมาถึงศูนย์หน้างาน                                            | FR-42     | `tracking_token`                                  |
-| `POST /public/v1/volunteer/portal/lookup`        | ค้นหาตารางงานทั้งหมดที่เคยลงทะเบียนไว้ด้วยเบอร์โทรศัพท์ (อ่านอย่างเดียว)                                              | FR-42     | rate-limit + reCAPTCHA                            |
+| Endpoint                                           | หน้าที่                                                                                                               | FR        | Auth                      |
+| -------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- | --------- | ------------------------- |
+| `POST /public/v1/occupants`                        | ค้นญาติ — คืน masked directory (`first_name`, `last_name`, `nickname`, `shelter_status` เท่านั้น); เคารพ opt-out 100% | FR-53     | — (audit ทุกครั้ง)        |
+| `GET /public/v1/needs`                             | shortage รายศูนย์ (counts only, no-PII) เพื่อ direct การบริจาค                                                        | FR-32     | —                         |
+| `POST /public/v1/donations`                        | donor pre-declaration + reservation                                                                                   | FR-32, 35 | reCAPTCHA v3 + Rate Limit |
+| `GET /public/v1/donations/{tracking_token}`        | ติดตามสถานะการบริจาคของตน                                                                                             | FR-35, 37 | `tracking_token`          |
+| `GET /public/v1/transparency/*`                    | รายงานความโปร่งใส (aggregate) 🔒                                                                                      | FR-38     | —                         |
+| `GET /public/v1/jobs`                              | รายการ Job Board เปิดรับสมัครของศูนย์ต่าง ๆ พร้อมยอดโควตากะย่อยรายวัน 2 สี `[ 🟢 รับแล้ว \| ⚪ ยังขาด ]`              | FR-43     | —                         |
+| `POST /public/v1/jobs/{id}/apply`                  | ยื่นใบสมัครงานอาสาสมัครด่วน 30s (No-Auth, No-SMS OTP) → ออก `tracking_token` + Digital Ticket QR                      | FR-42     | reCAPTCHA v3 + Rate Limit |
+| `GET /public/v1/volunteer/ticket/{token}`          | ตรวจสอบสถานะการสมัคร / ตารางกะงาน / Digital Ticket QR Code / ปุ่ม Self Check-in                                       | FR-42     | `tracking_token`          |
+| `POST /public/v1/volunteer/ticket/{token}/cancel`  | กดยกเลิกการสมัครล่วงหน้าด้วยตนเอง                                                                                     | FR-42     | `tracking_token`          |
+| `POST /public/v1/volunteer/ticket/{token}/checkin` | Self Check-in สแกนป้ายคิวอาร์โค้ดประจำศูนย์เพื่อยืนยันการมาถึงศูนย์หน้างาน                                            | FR-42     | `tracking_token`          |
+| `POST /public/v1/volunteer/portal/lookup`          | ค้นหาตารางงานทั้งหมดที่เคยลงทะเบียนไว้ด้วยเบอร์โทรศัพท์ (อ่านอย่างเดียว)                                              | FR-42     | rate-limit + reCAPTCHA    |
 
 **EOC / Open API (R4 deferred — service แยก):** `GET` aggregate API + API key per consumer
 (FR-49, 51) — ไม่มี endpoint รายบุคคล, no-PII, audited; spec จะนิยามใน P-03

@@ -5,6 +5,8 @@ import {
 	type PersistedScannerDevice,
 	type ScannerBootstrapDevice
 } from '$lib/features/kiosk-devices/domain/scanner.schema';
+// eslint-disable-next-line no-restricted-imports -- server-safe domain module; feature barrel pulls client UI/query code
+import { screenTypeOf, type KioskScreenType } from '$lib/features/shared/domain/kiosk-screen';
 
 export const DEVICE_AUTH_FAILED = 'DEVICE_AUTH_FAILED' as const;
 export const DEPENDENCY_UNAVAILABLE = 'DEPENDENCY_UNAVAILABLE' as const;
@@ -78,6 +80,10 @@ export interface ScannerDevicePrincipal {
 	readonly name: string;
 	readonly shelter_code: string;
 	readonly station_name: string;
+	/** Banner group the device is fed from; `null` = no group, so no banners. */
+	readonly banner_group_id: string | null;
+	/** Which kiosk screen the device drives; absent on the doc = `compact`. */
+	readonly screen_type: KioskScreenType;
 }
 
 export interface ScannerDeviceLookup {
@@ -138,7 +144,9 @@ export async function authenticateScannerDevice(
 		device_id: device.device_id,
 		name: device.name,
 		shelter_code: device.shelter_code,
-		station_name: device.station_name
+		station_name: device.station_name,
+		banner_group_id: device.banner_group_id ?? null,
+		screen_type: screenTypeOf(device)
 	};
 }
 

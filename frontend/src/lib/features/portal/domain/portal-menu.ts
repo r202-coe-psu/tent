@@ -112,8 +112,10 @@ export type PortalDepartment = {
 	label: string;
 	desc: string;
 	/**
-	 * Work-domain colour family for the whole department; every item inherits it (items are told
-	 * apart by icon and station number, never by their own colour).
+	 * Work-domain colour family for the whole department; every portal tile inherits it (tiles are
+	 * told apart by icon and station number, never by their own colour). Station PAGES are the one
+	 * exception — they carry `baseStation` colours so staff can tell สถานี 1/2/3 apart across a
+	 * hall; the tiles here stay on the department colour.
 	 */
 	domain: DomainId;
 	/** Which step of the family is the department accent; defaults to `base`. */
@@ -165,7 +167,7 @@ export const PORTAL_DEPARTMENTS: readonly PortalDepartment[] = [
 			},
 			{
 				id: 'station-2',
-				label: 'คัดกรองการแพทย์',
+				label: 'คัดกรองผู้เข้าพัก',
 				desc: 'คัดกรองอาการและกลุ่มเปราะบางก่อนจัดโซน',
 				icon: 'heart-pulse',
 				href: '/onsite/medical-screening',
@@ -281,6 +283,16 @@ export const PORTAL_DEPARTMENTS: readonly PortalDepartment[] = [
 				roles: [SC]
 			},
 			{
+				// Same queue the kitchen opens tickets into — warehouse approves and dispatches here.
+				id: 'supply-kitchen-requisition',
+				label: 'เบิกวัตถุดิบครัว',
+				desc: 'ใบเบิกวัตถุดิบและเสบียงอาหาร',
+				icon: 'clipboard-check',
+				href: '/back-office/tickets/kitchen',
+				scope: 'shelter',
+				roles: [SC]
+			},
+			{
 				id: 'frontline-distribution',
 				label: 'จุดแจกจ่ายพัสดุและอาหาร',
 				desc: 'แจกของรายครัวเรือนหน้างาน',
@@ -331,9 +343,9 @@ export const PORTAL_DEPARTMENTS: readonly PortalDepartment[] = [
 				label: 'ความปลอดภัยและเหตุการณ์',
 				desc: 'บันทึกเหตุไม่ปลอดภัย',
 				icon: 'shield-alert',
-				href: null,
+				href: '/back-office/incidents',
 				scope: 'shelter',
-				roles: [SO]
+				roles: [SO] // SM sees every shelter-scoped item
 			}
 		]
 	},

@@ -7,6 +7,10 @@ from typing import Literal
 # Present Occupancy — maps to CHECKED_IN.
 PRESENT_RESIDENCY_STATUSES = frozenset({"active", "room_confirmed", "temporary_leave"})
 
+# Stays that never reached Station 1 check-in — never reported as a residency (EXT-011 404).
+# Mirrors `_NOT_CHECKED_IN_STATUSES` in worker projectors/evacuee.py — keep in sync (CR-176).
+NOT_RESIDENT_STAY_STATUSES = frozenset({"pre_registered", "kiosk_registered", "cancelled"})
+
 ResidencyBinary = Literal["CHECKED_IN", "CHECKED_OUT"]
 
 

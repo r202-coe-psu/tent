@@ -13,9 +13,9 @@
 	import type { StockFormItem } from '../domain/stock-form-items';
 	import ItemCombobox from './item-combobox.svelte';
 	import { langState } from '$lib/states/i18n.svelte';
-	import { SvelteMap } from 'svelte/reactivity';
 	import { toast } from 'svelte-sonner';
-	import { addQty, subQty, qtyAbs } from '$lib/utils/qty';
+	import { subQty, qtyAbs, qtyGt, persistQty } from '$lib/utils/qty';
+	import { projectLotsByItem } from '../domain/operations';
 	import { formatThaiShortDate } from '$lib/utils/date';
 	import {
 		ADJUST_NOTE_MAX_LENGTH,
@@ -27,7 +27,6 @@
 	import { ADJUST_REASON_LABELS } from './ledger/ledger-view';
 	import {
 		lotLocationFields,
-		lotStorageKey,
 		lotStorageLabel,
 		storageLotFields,
 		type StoragePointRef
@@ -75,42 +74,54 @@
 		return !Number.isNaN(ms) && ms <= Date.now();
 	}
 
-	// Calculate balance of each lot for selectedItem
-	const itemLots = $derived.by(() => {
+	// Each physical lot of the selected item at the balance the stock table shows (#569):
+	// the same projection, so a dispatch that only names its lot (`lot_ref`) or a transfer
+	// with none is counted here exactly as it is there. Lots come from inbound rows only, so a
+	// distribution destination kept in an outbound row's `lot.note` never shows as a place.
+	const projectedLots = $derived.by(() => {
 		const currentItem = selectedItem;
-		if (!currentItem || !ledgerQuery.data) return [];
+		if (!currentItem || !ledgerQuery.data) return { lots: [], broken: false };
 		const entries = (ledgerQuery.data as StockLedger[]).filter(
 			(e: StockLedger) => e.item_id === currentItem._id
 		);
-		const lotsMap = new SvelteMap<string, { location: StockLot; expiry: string; qty: string }>();
+		const { lots, brokenItemIds } = projectLotsByItem(entries);
+		return {
+			lots: lots.filter((lot) => qtyGt(lot.qty, 0)),
+			broken: brokenItemIds.length > 0
+		};
+	});
+	/** The item's history could not be replayed into lots — say so instead of guessing (#569). */
+	const lotsIntegrityError = $derived(projectedLots.broken);
 
-		// Grouped by location (point id, else name — draft-shelter-storage-points)
-		// and expiry; `location` is what an adjustment writes to land in this group.
-		for (const entry of entries) {
-			const expiry = entry.lot?.expiry || '';
-			const key = `${lotStorageKey(entry.lot)}||${expiry}`;
-			const current = lotsMap.get(key) || {
-				location: lotLocationFields(entry.lot),
-				expiry,
-				qty: '0'
-			};
-			lotsMap.set(key, { ...current, qty: addQty(current.qty, entry.qty) });
-		}
+	const itemLots = $derived.by(() => {
+		const currentItem = selectedItem;
+		if (!currentItem) return [];
+		const lots = projectedLots.lots;
 
 		const unitLabel = formatUnit(currentItem.unit, units, langState.current) || currentItem.unit;
 
-		return Array.from(lotsMap, ([key, l]) => {
-			const expired = isExpired(l.expiry);
-			const expiryPart = l.expiry
+		return lots.map((lot) => {
+			const expiry = lot.lot?.expiry || '';
+			const location = lotLocationFields(lot.lot);
+			const expired = isExpired(expiry);
+			const expiryPart = expiry
 				? expired
-					? `(หมดอายุแล้ว: ${formatExpiry(l.expiry)})`
-					: `(หมดอายุ: ${formatExpiry(l.expiry)})`
+					? `(หมดอายุแล้ว: ${formatExpiry(expiry)})`
+					: `(หมดอายุ: ${formatExpiry(expiry)})`
 				: '(ไม่ระบุวันหมดอายุ)';
+			const received = formatThaiShortDate(lot.received_at);
 			return {
-				...l,
-				key,
+				key: lot.lot_ref,
+				lot_ref: lot.lot_ref,
+				location,
+				expiry,
+				qty: persistQty(lot.qty),
 				expired,
-				label: `${lotStorageLabel(l.location, storagePoints.points)} ${expiryPart} - คงเหลือ ${l.qty} ${unitLabel}`
+				label: [
+					`${lotStorageLabel(location, storagePoints.points)} ${expiryPart}`,
+					...(received ? [`รับเข้า ${received}`] : []),
+					`คงเหลือ ${persistQty(lot.qty)} ${unitLabel}`
+				].join(' · ')
 			};
 		});
 	});
@@ -212,6 +223,13 @@
 			toast.error('กรุณาเลือกสถานที่/ล็อต');
 			return;
 		}
+		// The chosen lot ran out (or left the list) while the form was open: without this the
+		// adjust would land with no lot at all, at the main store with no expiry.
+		if (selectedLotKey !== 'new' && !currentLot) {
+			selectedLotKey = '';
+			toast.error('ล็อตที่เลือกไม่มีคงเหลือแล้ว กรุณาเลือกล็อตใหม่');
+			return;
+		}
 		if (!newQtyInput || isNaN(Number(newQtyInput)) || Number(newQtyInput) < 0) {
 			toast.error('กรุณาระบุจำนวนใหม่ที่ถูกต้อง (ต้องไม่ติดลบ)');
 			return;
@@ -252,6 +270,10 @@
 			adjust_reason: adjustReason,
 			...(note.trim() ? { note: note.trim() } : {}),
 			lot,
+			// A write-off comes out of the chosen lot; added stock always becomes a new lot (#569).
+			...(currentLot && selectedLotKey !== 'new' && qtyGt('0', deltaQty)
+				? { lot_ref: currentLot.lot_ref }
+				: {}),
 			ref_id: null
 		};
 
@@ -320,6 +342,7 @@
 				<Select.Root type="single" bind:value={selectedLotKey}>
 					<Select.Trigger
 						id="lot-select"
+						aria-describedby={lotsIntegrityError ? 'lot-integrity-error' : undefined}
 						class="min-h-11 w-full rounded-md border border-input bg-white px-3 text-sm font-medium {currentLot?.expired
 							? 'text-destructive'
 							: ''}"
@@ -341,6 +364,15 @@
 				</Select.Root>
 				{#if currentLot?.expired}
 					<p class="mt-1.5 text-xs font-semibold text-destructive">ล็อตนี้หมดอายุแล้ว</p>
+				{/if}
+				{#if lotsIntegrityError}
+					<p
+						id="lot-integrity-error"
+						class="mt-1.5 text-xs font-semibold text-destructive"
+						role="alert"
+					>
+						ประวัติคลังของสินค้านี้ไม่สอดคล้องกัน จึงคำนวณยอดรายล็อตไม่ได้ กรุณาแจ้งผู้ดูแลระบบ
+					</p>
 				{/if}
 			</Field.Root>
 
@@ -431,6 +463,18 @@
 						</span>
 					</div>
 				</div>
+
+				<!-- CR-190: added stock never merges into the chosen lot, so the picker gains a lot. -->
+				{#if deltaSign === 'add' && currentLot}
+					<p
+						class="col-span-1 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-900 sm:col-span-2"
+						role="note"
+					>
+						ยอดที่เพิ่ม {deltaAbs}
+						{unitLabel} จะบันทึกเป็น<strong>ล็อตใหม่</strong> (ใช้ที่เก็บและวันหมดอายุเดียวกับล็อตที่เลือก)
+						ไม่รวมเข้าล็อตเดิม รายการล็อตจึงมีเพิ่มขึ้นหนึ่งรายการ
+					</p>
+				{/if}
 
 				<div class="col-span-1 space-y-2 sm:col-span-2">
 					<span id="adjust-reason-label" class="text-sm leading-snug font-medium">

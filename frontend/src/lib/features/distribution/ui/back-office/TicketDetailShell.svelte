@@ -237,7 +237,6 @@
 									<tr class="hover:bg-slate-50/50">
 										<td class="py-3 pr-2 pl-4">
 											<div class="font-bold text-slate-900">{item.item_name}</div>
-											<div class="font-mono text-2xs text-slate-400">ID: {item.item_id}</div>
 										</td>
 										<td class="px-2 py-3 text-center">
 											<span

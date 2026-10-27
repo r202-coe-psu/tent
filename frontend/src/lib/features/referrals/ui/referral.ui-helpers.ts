@@ -147,7 +147,7 @@ export function getDirectionBadgeVariant(direction: 'outgoing' | 'incoming' | 'i
 }
 
 /** Shown when neither the evacuee roster nor the referral's name summary has a name. */
-export const EVACUEE_NAME_FALLBACK = 'ไม่พบชื่อผู้ประสบภัย';
+export const EVACUEE_NAME_FALLBACK = 'ไม่พบชื่อผู้เข้าพัก';
 
 /**
  * Display name for an evacuee. The first source with a name wins (e.g. roster row, then the
@@ -190,7 +190,7 @@ export function formatReferralNameSummary(
  * Returns undefined when at least one evacuee is selected.
  */
 export function getEvacueeSelectionError(selectedIds: readonly string[]): string | undefined {
-	return selectedIds.length === 0 ? 'กรุณาเลือกผู้ประสบภัยอย่างน้อย 1 คน' : undefined;
+	return selectedIds.length === 0 ? 'กรุณาเลือกผู้เข้าพักอย่างน้อย 1 คน' : undefined;
 }
 
 /**

@@ -3,7 +3,15 @@ import { migrateVulnerableGroupCodes } from '$lib/features/people/server';
 
 // ===== Enums (CR-008) =====
 
-export const operationStatusSchema = z.enum(['standby', 'active', 'full_capacity', 'closed']);
+// `cancelled` (draft-shelter-cancelled-status.md): set up by mistake / never opened — hidden
+// from the whole public plane, unlike `closed`. Reversible: any other status re-lists it.
+export const operationStatusSchema = z.enum([
+	'standby',
+	'active',
+	'full_capacity',
+	'closed',
+	'cancelled'
+]);
 export type OperationStatus = z.infer<typeof operationStatusSchema>;
 
 // CR-067: one registry document represents either an evacuation center or a host house.
@@ -31,9 +39,20 @@ export function resolveOperationStatus(doc: unknown): string | null {
 }
 
 /**
+ * Is this shelter hidden from the public plane? (draft-shelter-cancelled-status.md)
+ *
+ * Mirrors `is_shelter_cancelled()` in `worker/src/worker/projectors/shelter.py` — the
+ * worker purges a cancelled shelter's projections, and BFF routes that read the
+ * registry directly must drop it the same way.
+ */
+export function isShelterCancelled(doc: unknown): boolean {
+	return resolveOperationStatus(doc) === 'cancelled';
+}
+
+/**
  * Can the public book a place here? (CR-070 FR-72 / T-71 validation.)
  *
- * Hard blocks: missing status, `closed`, or `feature_flags.accepts_pre_registration`
+ * Hard blocks: missing status, `closed`, `cancelled`, or `feature_flags.accepts_pre_registration`
  * not explicitly true (missing/undefined fails closed — default off).
  * `full_capacity` and a dark-red occupancy health stay bookable and surface a
  * warning instead — matching the warning-only occupancy guardrail of T-51.
@@ -41,7 +60,7 @@ export function resolveOperationStatus(doc: unknown): string | null {
 export function isShelterBookable(doc: unknown): boolean {
 	const status = resolveOperationStatus(doc);
 	if (status === null) return false;
-	if (status === 'closed') return false;
+	if (status === 'closed' || status === 'cancelled') return false;
 	if (!doc || typeof doc !== 'object') return false;
 	const flags = (doc as { feature_flags?: { accepts_pre_registration?: unknown } }).feature_flags;
 	return flags?.accepts_pre_registration === true;
@@ -79,11 +98,17 @@ export type WaterSource = z.infer<typeof waterSourceSchema>;
 export const communicationChannelSchema = z.enum(['cellular', 'wifi', 'vhf_radio']);
 export type CommunicationChannel = z.infer<typeof communicationChannelSchema>;
 
+// CR-199: 4 → 7 values (baby_food/cooked_food/food_cold added); keys
+// retained for the original 4 so pre-schema_v-8 data needs no key remap — only
+// `medical_supplies`'s label changed ("ยา").
 export const subStorageTypeSchema = z.enum([
 	'general',
+	'baby_food',
 	'food_dry',
-	'drinking_water',
-	'medical_supplies'
+	'cooked_food',
+	'food_cold',
+	'medical_supplies',
+	'drinking_water'
 ]);
 export type SubStorageType = z.infer<typeof subStorageTypeSchema>;
 
@@ -143,17 +168,36 @@ export type Facilities = z.infer<typeof facilitiesSchema>;
 
 /**
  * A shelter storage point ("จุดเก็บของ") — the master that stock ledger lots
- * point at via `lot.storage_point_id` (draft-shelter-storage-points). `id` is a
- * client-minted ULID, or `legacy-<index>` back-filled on read for rows written
- * before schema_v 7; either way it is immutable once persisted.
+ * point at via `lot.storage_point_id` (CR-139). `id` is a client-minted ULID,
+ * or `legacy-<index>` back-filled on read for rows written before schema_v 7;
+ * either way it is immutable once persisted.
+ *
+ * CR-199 (schema_v 8): `type` (single) → `types` (array, min 1).
+ * Rows written before schema_v 8 carry `type` instead — the preprocess step below derives
+ * `types: [type]` on read; the next save persists `types` and drops `type`.
  */
-export const subStorageItemSchema = z.object({
-	id: z.string().trim().min(1),
-	name: z.string().trim().min(1, 'ชื่อสถานที่จัดเก็บต้องไม่ว่าง'),
-	type: subStorageTypeSchema,
-	// CR-023 FR-23-11
-	area_m2: z.coerce.number().min(0).nullish()
-});
+export const subStorageItemSchema = z.preprocess(
+	(val) => {
+		if (
+			val &&
+			typeof val === 'object' &&
+			!Array.isArray(val) &&
+			'type' in val &&
+			!('types' in val)
+		) {
+			const { type, ...rest } = val as { type: unknown };
+			return { ...rest, types: type == null ? [] : [type] };
+		}
+		return val;
+	},
+	z.object({
+		id: z.string().trim().min(1),
+		name: z.string().trim().min(1, 'ชื่อสถานที่จัดเก็บต้องไม่ว่าง'),
+		types: z.array(subStorageTypeSchema).min(1, 'เลือกอย่างน้อย 1 ประเภท'),
+		// CR-023 FR-23-11
+		area_m2: z.coerce.number().min(0).nullish()
+	})
+);
 export type SubStorageItem = z.infer<typeof subStorageItemSchema>;
 
 export const commonAreasSchema = z.object({
@@ -212,7 +256,9 @@ export const zoneSchema = z.object({
 	reason: z.string().nullish().default(null),
 	// CR-023 FR-23-4/5
 	area_m2: z.coerce.number().min(0).nullish(),
-	specifics: z.string().trim().nullish()
+	specifics: z.string().trim().nullish(),
+	// draft-zone-short-name — optional abbreviation printed on the station QR label
+	short_name: z.string().trim().max(10, 'ชื่อย่อโซนต้องไม่เกิน 10 ตัวอักษร').nullish()
 });
 export type Zone = z.infer<typeof zoneSchema>;
 
@@ -639,7 +685,7 @@ function migrateV3ToV4(v3: ShelterMaster): ShelterMaster {
  * `migrateVxToVy` step so migration runners (`scripts/migrate-shelter.ts`) stop
  * skipping docs that are behind by less than a whole major shape change.
  */
-export const SHELTER_MASTER_SCHEMA_V = 7;
+export const SHELTER_MASTER_SCHEMA_V = 8;
 
 /** v4 → v5 default-fill (CR-067). Old registry docs are evacuation centers. */
 function migrateV4ToV5(v4: ShelterMaster): ShelterMaster {
@@ -684,9 +730,51 @@ function fillSubStorageIds(master: ShelterMaster): ShelterMaster {
 	};
 }
 
-/** v6 → v7 (draft-shelter-storage-points). Storage points get a stable `id`. */
+/** v6 → v7 (CR-139). Storage points get a stable `id`. */
 function migrateV6ToV7(v6: ShelterMaster): ShelterMaster {
-	return { ...fillSubStorageIds(v6), schema_v: SHELTER_MASTER_SCHEMA_V };
+	return { ...fillSubStorageIds(v6), schema_v: 7 as const };
+}
+
+type LegacySubStorageItemPreV8 = {
+	id?: string | null;
+	name: string;
+	type?: SubStorageType;
+	types?: SubStorageType[];
+	area_m2?: number | null;
+};
+
+/** True when any storage point still carries the pre-schema_v-8 single `type`. */
+function hasLegacySubStorageType(master: ShelterMaster): boolean {
+	const items = (master.common_areas?.sub_storage ?? []) as unknown as LegacySubStorageItemPreV8[];
+	return items.some((item) => !Array.isArray(item.types) && item.type != null);
+}
+
+/**
+ * Convert `sub_storage[].type` → `.types` (CR-199). Deterministic: a lone
+ * `type` becomes `types: [type]`, matching the Zod preprocess read path in
+ * `subStorageItemSchema` so the migration runner and the normal read path agree.
+ */
+function migrateSubStorageTypes(master: ShelterMaster): ShelterMaster {
+	if (!master.common_areas) return master;
+	const items = (master.common_areas.sub_storage ?? []) as unknown as LegacySubStorageItemPreV8[];
+	return {
+		...master,
+		common_areas: {
+			...master.common_areas,
+			sub_storage: items.map(({ type, types, ...rest }) => ({
+				...rest,
+				types: types ?? (type ? [type] : [])
+			})) as SubStorageItem[]
+		}
+	};
+}
+
+/**
+ * v7 → v8 (CR-199). Storage points move from single `type` to
+ * `types[]`.
+ */
+function migrateV7ToV8(v7: ShelterMaster): ShelterMaster {
+	return { ...migrateSubStorageTypes(v7), schema_v: SHELTER_MASTER_SCHEMA_V };
 }
 
 /**
@@ -700,10 +788,17 @@ function migrateV6ToV7(v6: ShelterMaster): ShelterMaster {
 function normalizeCurrent(master: ShelterMaster): ShelterMaster {
 	const hasSiteKind = 'site_kind' in master && !!master.site_kind;
 	const missingSubStorageId = hasSubStorageWithoutId(master);
-	if (hasSiteKind && Array.isArray(master.food_distribution_points) && !missingSubStorageId) {
+	const legacySubStorageType = hasLegacySubStorageType(master);
+	if (
+		hasSiteKind &&
+		Array.isArray(master.food_distribution_points) &&
+		!missingSubStorageId &&
+		!legacySubStorageType
+	) {
 		return master;
 	}
-	const filled = missingSubStorageId ? fillSubStorageIds(master) : master;
+	let filled = missingSubStorageId ? fillSubStorageIds(master) : master;
+	filled = legacySubStorageType ? migrateSubStorageTypes(filled) : filled;
 	return {
 		...filled,
 		site_kind: filled.site_kind ?? 'evacuation_center',
@@ -716,14 +811,18 @@ export function migrateShelterV2ToCurrent(master: ShelterMasterV2 | ShelterMaste
 	if (master.schema_v >= SHELTER_MASTER_SCHEMA_V) {
 		return normalizeCurrent(master as ShelterMaster);
 	}
-	if (master.schema_v === 6) return migrateV6ToV7(master as unknown as ShelterMaster);
+	if (master.schema_v === 7) return migrateV7ToV8(master as unknown as ShelterMaster);
+	if (master.schema_v === 6)
+		return migrateV7ToV8(migrateV6ToV7(master as unknown as ShelterMaster));
 	if (master.schema_v === 5)
-		return migrateV6ToV7(migrateV5ToV6(master as unknown as ShelterMaster));
+		return migrateV7ToV8(migrateV6ToV7(migrateV5ToV6(master as unknown as ShelterMaster)));
 	if (master.schema_v === 4)
-		return migrateV6ToV7(migrateV5ToV6(migrateV4ToV5(master as unknown as ShelterMaster)));
+		return migrateV7ToV8(
+			migrateV6ToV7(migrateV5ToV6(migrateV4ToV5(master as unknown as ShelterMaster)))
+		);
 	if (master.schema_v === 3)
-		return migrateV6ToV7(
-			migrateV5ToV6(migrateV4ToV5(migrateV3ToV4(master as unknown as ShelterMaster)))
+		return migrateV7ToV8(
+			migrateV6ToV7(migrateV5ToV6(migrateV4ToV5(migrateV3ToV4(master as unknown as ShelterMaster))))
 		);
 	const v2 = master as ShelterMasterV2;
 	// Backfill shelter capacity: v2 stored capacity at the top level but v3 zones
@@ -786,6 +885,8 @@ export function migrateShelterV2ToCurrent(master: ShelterMasterV2 | ShelterMaste
 	delete (v3 as Record<string, unknown>).items;
 	delete (v3 as Record<string, unknown>).rules;
 	delete (v3 as Record<string, unknown>).sops;
-	// Chain v2→v3→…→v7 so a v2 doc lands on the current shape in one call.
-	return migrateV6ToV7(migrateV5ToV6(migrateV4ToV5(migrateV3ToV4(v3 as unknown as ShelterMaster))));
+	// Chain v2→v3→…→v8 so a v2 doc lands on the current shape in one call.
+	return migrateV7ToV8(
+		migrateV6ToV7(migrateV5ToV6(migrateV4ToV5(migrateV3ToV4(v3 as unknown as ShelterMaster))))
+	);
 }

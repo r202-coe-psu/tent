@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { RequisitionTicket } from '../../domain/food-supplies';
+	import type { DispatchLotAllocation, RequisitionTicket } from '../../domain/food-supplies';
 	import { useDispatchTicket } from '../../application/queries';
 	import { formatDistributionError } from '../model/distribution-error';
 	import PhysicalLotPicker from './PhysicalLotPicker.svelte';
@@ -27,31 +27,27 @@
 	// Local form state
 	let driverName = $state('');
 	let licensePlate = $state('');
-	let selectedLots = $state<Record<string, string>>({});
+	let selectedLots = $state<Record<string, DispatchLotAllocation[]>>({});
+	// Per item: whether the picker's current split passes the dispatch lot rules
+	let lotValidity = $state<Record<string, boolean>>({});
 
 	function resetForm() {
 		driverName = '';
 		licensePlate = '';
 		selectedLots = {};
+		lotValidity = {};
 	}
 
-	$effect(() => {
-		if (open) {
-			resetForm();
-		}
-	});
-
-	// Check if every item on the ticket has an assigned physical lot
+	// Every item's lot split must be valid: lots sum exactly to the allocated qty (#655)
 	const areAllLotsSelected = $derived.by(() => {
 		if (!ticket.items || ticket.items.length === 0) return false;
-		for (const item of ticket.items) {
-			const lotRef = selectedLots[item.item_id];
-			if (!lotRef || !lotRef.startsWith('stock_ledger:')) {
-				return false;
-			}
-		}
-		return true;
+		return ticket.items.every(
+			(item) => lotValidity[item.item_id] === true && (selectedLots[item.item_id]?.length ?? 0) > 0
+		);
 	});
+	const validItemCount = $derived(
+		ticket.items.filter((item) => lotValidity[item.item_id] === true).length
+	);
 
 	const isSubmitting = $derived(dispatchMutation.isPending);
 	const canSubmit = $derived(
@@ -78,6 +74,7 @@
 			toast.success(
 				`ปล่อยรถใบเบิกจ่าย ${ticket.ticket_no} ออกจากคลังสินค้าเรียบร้อยแล้ว (สถานะ: กำลังนำส่ง)`
 			);
+			resetForm();
 			open = false;
 			onSuccess?.();
 		} catch (err) {
@@ -139,7 +136,7 @@
 						รายการสินค้าและ Lot ที่ต้องปล่อย ({ticket.items.length} รายการ)
 					</h4>
 					<span class="text-2xs font-semibold text-slate-500">
-						เลือกแล้ว {Object.keys(selectedLots).length} จาก {ticket.items.length} รายการ
+						เลือกแล้ว {validItemCount} จาก {ticket.items.length} รายการ
 					</span>
 				</div>
 
@@ -150,12 +147,10 @@
 								itemId={item.item_id}
 								itemName={item.item_name}
 								allocatedQty={item.allocated_qty}
-								selectedLotRef={selectedLots[item.item_id] ?? ''}
-								onSelect={(lotRef) => {
-									selectedLots = {
-										...selectedLots,
-										[item.item_id]: lotRef
-									};
+								allocations={selectedLots[item.item_id] ?? []}
+								onChange={(allocations, valid) => {
+									selectedLots = { ...selectedLots, [item.item_id]: allocations };
+									lotValidity = { ...lotValidity, [item.item_id]: valid };
 								}}
 								disabled={isSubmitting}
 							/>

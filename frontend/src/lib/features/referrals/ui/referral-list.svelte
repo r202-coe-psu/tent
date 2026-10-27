@@ -186,7 +186,7 @@
 			bind:value={searchInput}
 			oninput={() => onSearchChange?.(searchInput)}
 			aria-label="ค้นหารายการส่งต่อ"
-			placeholder="ค้นหาชื่อผู้ประสบภัย หรือหน่วยงาน/ศูนย์พักพิงปลายทาง..."
+			placeholder="ค้นหาชื่อผู้เข้าพัก หรือหน่วยงาน/ศูนย์พักพิงปลายทาง..."
 			class="h-11 bg-background pl-9 placeholder:text-base md:placeholder:text-sm"
 		/>
 	</div>

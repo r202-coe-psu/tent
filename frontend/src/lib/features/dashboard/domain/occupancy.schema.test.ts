@@ -14,7 +14,9 @@ describe('rowsToOccupancyPayload', () => {
 		const rows = [
 			{ key: 'pre_registered', value: 5 },
 			{ key: 'kiosk_registered', value: 4 },
+			{ key: 'arriving', value: 6 },
 			{ key: 'active', value: 10 },
+			{ key: 'room_confirmed', value: 7 },
 			{ key: 'temporary_leave', value: 1 },
 			{ key: 'transferred', value: 2 },
 			{ key: 'checked_out', value: 3 },
@@ -24,12 +26,33 @@ describe('rowsToOccupancyPayload', () => {
 		expect(result.shelter_code).toBe('SH001');
 		expect(result.pre_registered).toBe(5);
 		expect(result.kiosk_registered).toBe(4);
+		expect(result.arriving).toBe(6);
 		expect(result.active).toBe(10);
+		expect(result.room_confirmed).toBe(7);
 		expect(result.temporary_leave).toBe(1);
 		expect(result.transferred).toBe(2);
 		expect(result.checked_out).toBe(3);
 		expect(result.deceased).toBe(1);
-		expect(result.total).toBe(26);
+		expect(result.total).toBe(39);
+	});
+
+	it('counts room_confirmed as in the shelter but not arriving or temporary_leave (CR-170)', () => {
+		const result = rowsToOccupancyPayload('SH001', [
+			{ key: 'arriving', value: 32 },
+			{ key: 'active', value: 236 },
+			{ key: 'room_confirmed', value: 51 },
+			{ key: 'temporary_leave', value: 35 }
+		]);
+		expect(result.in_shelter).toBe(287);
+		expect(result.total).toBe(354);
+	});
+
+	it('leaves cancelled out of the total', () => {
+		const result = rowsToOccupancyPayload('SH001', [
+			{ key: 'active', value: 3 },
+			{ key: 'cancelled', value: 4 }
+		]);
+		expect(result.total).toBe(3);
 	});
 
 	it('returns all zeros for empty rows', () => {
@@ -38,6 +61,7 @@ describe('rowsToOccupancyPayload', () => {
 		expect(result.pre_registered).toBe(0);
 		expect(result.kiosk_registered).toBe(0);
 		expect(result.active).toBe(0);
+		expect(result.in_shelter).toBe(0);
 	});
 
 	it('ignores unknown status keys and excludes them from total', () => {
@@ -57,7 +81,10 @@ describe('OccupancyPayloadSchema', () => {
 			shelter_code: 'SH001',
 			pre_registered: 5,
 			kiosk_registered: 0,
+			arriving: 0,
 			active: 10,
+			room_confirmed: 0,
+			in_shelter: 10,
 			temporary_leave: 1,
 			transferred: 2,
 			checked_out: 3,
@@ -72,7 +99,10 @@ describe('OccupancyPayloadSchema', () => {
 			shelter_code: 'SH001',
 			pre_registered: -1,
 			kiosk_registered: 0,
+			arriving: 0,
 			active: 0,
+			room_confirmed: 0,
+			in_shelter: 0,
 			temporary_leave: 0,
 			transferred: 0,
 			checked_out: 0,
@@ -89,7 +119,10 @@ describe('OccupancyPayloadSchema', () => {
 			shelter_code: 'SH001',
 			pre_registered: 1,
 			kiosk_registered: 0,
+			arriving: 0,
 			active: 0,
+			room_confirmed: 0,
+			in_shelter: 0,
 			temporary_leave: 0,
 			transferred: 0,
 			checked_out: 0,

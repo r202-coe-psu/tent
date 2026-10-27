@@ -81,7 +81,7 @@
 	<div class="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
 		<div class="space-y-1">
 			<span class="text-sm font-semibold text-foreground"
-				>2. เลือกผู้ประสบภัยที่ต้องการส่งต่อ <span class="text-red-600">*</span></span
+				>2. เลือกผู้เข้าพักที่ต้องการส่งต่อ <span class="text-red-600">*</span></span
 			>
 			<p class="text-xs text-muted-foreground">แสดงเฉพาะผู้ที่พักพิงอยู่ในศูนย์ (active stay)</p>
 		</div>
@@ -96,7 +96,7 @@
 			placeholder="ค้นหาชื่อ หรือเบอร์โทร..."
 			bind:value={searchTerm}
 			class="h-11 pl-9 md:h-9 {errorMessage ? 'border-destructive' : ''}"
-			aria-label="ค้นหาผู้ประสบภัย"
+			aria-label="ค้นหาผู้เข้าพัก"
 		/>
 		<div class="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-muted-foreground">
 			<Search class="h-4 w-4" />
@@ -111,7 +111,7 @@
 		{#if evacueesQuery.isLoading}
 			<div class="flex flex-col items-center justify-center gap-2 py-12 text-muted-foreground">
 				<Loader2 class="h-6 w-6 animate-spin text-primary" />
-				<span class="text-sm">กำลังโหลดรายชื่อผู้ประสบภัย...</span>
+				<span class="text-sm">กำลังโหลดรายชื่อผู้เข้าพัก...</span>
 			</div>
 		{:else if evacueesQuery.isError}
 			<div
@@ -119,7 +119,7 @@
 				class="flex flex-col items-center justify-center gap-3 px-4 py-10 text-center"
 			>
 				<TriangleAlert class="h-6 w-6 text-red-600" />
-				<p class="text-sm font-medium text-foreground">โหลดรายชื่อผู้ประสบภัยไม่สำเร็จ</p>
+				<p class="text-sm font-medium text-foreground">โหลดรายชื่อผู้เข้าพักไม่สำเร็จ</p>
 				<Button
 					variant="outline"
 					size="sm"
@@ -133,7 +133,7 @@
 		{:else if filteredEvacuees.length === 0}
 			<div class="px-4 py-10 text-center text-sm text-muted-foreground">
 				{#if activeEvacuees.length === 0}
-					ไม่พบผู้ประสบภัยที่พักพิงอยู่ในศูนย์
+					ไม่พบผู้เข้าพักที่พักพิงอยู่ในศูนย์
 				{:else}
 					ไม่พบรายชื่อที่ตรงกับคำค้น «{searchTerm.trim()}»
 				{/if}

@@ -456,6 +456,20 @@ class KioskApiRouteTests(unittest.IsolatedAsyncioTestCase):
                 True,
             ),
             (
+                "same-origin kiosk volunteer-card POST",
+                "https://tent.example.go.th/api/v1/kiosk/volunteer-card",
+                "POST",
+                "https://tent.example.go.th",
+                True,
+            ),
+            (
+                "kiosk volunteer-card POST from a foreign Origin header",
+                "https://tent.example.go.th/api/v1/kiosk/volunteer-card",
+                "POST",
+                "https://attacker.example",
+                False,
+            ),
+            (
                 "kiosk reprint GET",
                 "https://tent.example.go.th/api/v1/kiosk/reprint",
                 "GET",
@@ -514,6 +528,27 @@ class KioskApiRouteTests(unittest.IsolatedAsyncioTestCase):
             (
                 "kiosk config GET",
                 "https://tent.example.go.th/api/v1/kiosk/config",
+                "GET",
+                "https://tent.example.go.th",
+                False,
+            ),
+            (
+                "same-origin kiosk banners POST",
+                "https://tent.example.go.th/api/v1/kiosk/banners",
+                "POST",
+                "https://tent.example.go.th",
+                True,
+            ),
+            (
+                "kiosk banners POST from a foreign Origin header",
+                "https://tent.example.go.th/api/v1/kiosk/banners",
+                "POST",
+                "https://attacker.example",
+                False,
+            ),
+            (
+                "kiosk banner image GET (signed URL, no device headers)",
+                "https://tent.example.go.th/api/v1/kiosk/banners/kiosk_banner:01J0000000000000000000000/image?exp=1&sig=ab",
                 "GET",
                 "https://tent.example.go.th",
                 False,

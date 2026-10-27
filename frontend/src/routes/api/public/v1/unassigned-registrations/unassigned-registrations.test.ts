@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { POST } from './+server';
-import { registerIpLimiter, registerPhoneLimiter } from '$lib/server/security/rate-limiter';
 
 type PostEvent = Parameters<typeof POST>[0];
 
@@ -26,11 +25,6 @@ vi.mock('$app/environment', () => ({
 
 vi.mock('$lib/server/couch-admin', () => ({
 	adminRaw
-}));
-
-vi.mock('$lib/server/security/rate-limiter', () => ({
-	registerIpLimiter: { check: vi.fn(() => true) },
-	registerPhoneLimiter: { check: vi.fn(() => true) }
 }));
 
 const verifyToken = vi.fn<(token: string, ip?: string, action?: string) => Promise<boolean>>();
@@ -79,12 +73,36 @@ const VALID_BODY = {
 	disclaimerAcknowledged: true
 };
 
+function webConsentBody(memberCount: number, decision: Record<string, unknown> = {}) {
+	const shared = {
+		guardian_for: [],
+		verbal: false,
+		ref: 'CS-7K3QZ9MD',
+		given_at: '2026-10-25T03:15:00.000Z',
+		notice_version: '2026-10-25'
+	};
+	return {
+		consent:
+			decision.mode === 'basic'
+				? { mode: 'basic', ...shared, ...decision }
+				: { mode: 'full', health: true, search_visible: true, ...shared, ...decision },
+		consent_member_keys: Array.from({ length: memberCount }, (_, i) => `m${i}`)
+	};
+}
+
+function withConsent(body: unknown): unknown {
+	if (!body || typeof body !== 'object' || 'consent' in body) return body;
+	const members = (body as { members?: unknown }).members;
+	if (!Array.isArray(members)) return body;
+	return { ...webConsentBody(members.length), ...body };
+}
+
 function event(body: unknown, ip = '203.0.113.5'): PostEvent {
 	return {
 		request: new Request('http://localhost/api/public/v1/unassigned-registrations', {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify(body)
+			body: JSON.stringify(withConsent(body))
 		}),
 		getClientAddress: () => ip,
 		fetch: globalThis.fetch
@@ -93,10 +111,6 @@ function event(body: unknown, ip = '203.0.113.5'): PostEvent {
 
 describe('POST /api/public/v1/unassigned-registrations', () => {
 	beforeEach(() => {
-		vi.mocked(registerIpLimiter.check).mockReset();
-		vi.mocked(registerPhoneLimiter.check).mockReset();
-		vi.mocked(registerIpLimiter.check).mockReturnValue(true);
-		vi.mocked(registerPhoneLimiter.check).mockReturnValue(true);
 		verifyToken.mockReset();
 		verifyToken.mockResolvedValue(true);
 		adminRaw.mockReset();
@@ -150,10 +164,84 @@ describe('POST /api/public/v1/unassigned-registrations', () => {
 		expect(upstream.members[0].nickname).toBe('ชาย');
 	});
 
+	it('strips a client-supplied member booking_ref before forwarding (CR-169 FR-61)', async () => {
+		const fetchMock = vi.fn().mockResolvedValue({
+			ok: true,
+			status: 201,
+			json: async () => ({
+				success: true,
+				id: '01HTEST000000000000000000',
+				schema_v: 2,
+				reserved_household_id: 'household:01HTEST000000000000000001',
+				members: [],
+				registered_via: 'web',
+				status: 'open',
+				created_at: '2026-09-09T00:00:00Z'
+			})
+		});
+		vi.stubGlobal('fetch', fetchMock);
+
+		const res = await POST(
+			event({
+				...VALID_BODY,
+				members: VALID_BODY.members.map((m) => ({ ...m, booking_ref: 'BK-SPOOF01' }))
+			})
+		);
+		expect(res.status).toBe(201);
+
+		const [, init] = fetchMock.mock.calls[0]!;
+		const upstream = JSON.parse(init.body as string);
+		expect(upstream.members.length).toBeGreaterThan(0);
+		for (const m of upstream.members) expect(m).not.toHaveProperty('booking_ref');
+	});
+
 	it('requires disclaimer acknowledgment', async () => {
 		const res = await POST(event({ ...VALID_BODY, disclaimerAcknowledged: false }));
 		expect(res.status).toBe(400);
 		expect(await res.json()).toMatchObject({ error: 'DISCLAIMER_REQUIRED' });
+	});
+
+	it('422s without the consent decision', async () => {
+		const fetchMock = vi.fn();
+		vi.stubGlobal('fetch', fetchMock);
+		const res = await POST(event({ ...VALID_BODY, consent: undefined }));
+		expect(res.status).toBe(422);
+		expect(fetchMock).not.toHaveBeenCalled();
+	});
+
+	it('forwards one id-free consent grant per member (FR-42)', async () => {
+		const fetchMock = vi.fn().mockResolvedValue({
+			ok: true,
+			status: 201,
+			json: async () => ({ id: '01HTEST000000000000000000', members: [] })
+		});
+		vi.stubGlobal('fetch', fetchMock);
+
+		const res = await POST(
+			event({ ...VALID_BODY, ...webConsentBody(1, { mode: 'full', search_visible: false }) })
+		);
+		expect(res.status).toBe(201);
+		const upstream = JSON.parse(fetchMock.mock.calls[0]![1].body as string);
+		expect(upstream.members[0].consent).toEqual({
+			mode: 'full',
+			health: true,
+			ref: 'CS-7K3QZ9MD',
+			given_at: '2026-10-25T03:15:00.000Z',
+			notice_version: '2026-10-25',
+			given_by: 'self'
+		});
+		expect(upstream.members[0].search_excluded).toBe(true);
+	});
+
+	it.each([
+		['a basic-mode decision', { mode: 'basic' }],
+		['a guardian-for decision', { guardian_for: ['m0'] }]
+	])('422s %s without forwarding it', async (_name, decision) => {
+		const fetchMock = vi.fn();
+		vi.stubGlobal('fetch', fetchMock);
+		const res = await POST(event({ ...VALID_BODY, ...webConsentBody(1, decision) }));
+		expect(res.status).toBe(422);
+		expect(fetchMock).not.toHaveBeenCalled();
 	});
 
 	it('rejects invalid input', async () => {

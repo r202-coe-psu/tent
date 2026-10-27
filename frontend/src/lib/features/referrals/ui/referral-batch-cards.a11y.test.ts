@@ -98,7 +98,7 @@ describe('referral-batch-cards names come from evacuee_summary (F-04, F-06)', ()
 		expect(body).toContain('สมชาย ใจดี');
 		expect(body).toContain('มะลิ');
 		expect(body).not.toMatch(/มะลิ +[^\s<]/);
-		expect(body).toContain('ไม่พบชื่อผู้ประสบภัย');
+		expect(body).toContain('ไม่พบชื่อผู้เข้าพัก');
 	});
 });
 
@@ -115,7 +115,7 @@ describe('referral-batch-cards selection (#563)', () => {
 		// select-all + draft + accepted; the closed member has none
 		const boxes = checkboxes(body);
 		expect(boxes).toHaveLength(3);
-		expect(boxes.join('')).toContain('aria-label="เลือก ไม่พบชื่อผู้ประสบภัย"');
+		expect(boxes.join('')).toContain('aria-label="เลือก ไม่พบชื่อผู้เข้าพัก"');
 		expect(body).toContain('เลือกทั้งหมด');
 		expect(body).toContain('(1 · ฉบับร่าง)');
 	});

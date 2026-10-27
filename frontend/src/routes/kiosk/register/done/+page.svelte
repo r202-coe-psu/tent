@@ -5,6 +5,7 @@
 	import CircleAlert from '@lucide/svelte/icons/circle-alert';
 	import Printer from '@lucide/svelte/icons/printer';
 	import { Button } from '$lib/components/ui/button/index.js';
+	import { CONSENT_COPY } from '$lib/features/consent';
 	import {
 		buildKioskContextQuery,
 		getKioskDisplayContext,
@@ -12,6 +13,7 @@
 		KIOSK_IDLE_TIMEOUT_MS,
 		KIOSK_NOTICE_PRIMARY_ACTION,
 		KIOSK_NOTICE_SECONDARY_ACTION,
+		KIOSK_CHECK_IN_TICKS,
 		KioskCheckInWizard,
 		KioskInlineAlert,
 		KioskLabelSheet,
@@ -49,7 +51,7 @@
 						qrSrc: qrImage?.src,
 						qrSizeMm: qrImage?.sizeMm,
 						name: registration.label.name,
-						phone: registration.label.phone
+						checkedCount: KIOSK_CHECK_IN_TICKS
 					}
 				]
 			: []
@@ -85,7 +87,13 @@
 			qrImage ??= await prepareKioskQrImage(registration.qr_payload);
 			// No scanner client (dev browser / browser print mode): print the CSS label instead.
 			const result = await printKioskQrLabels(
-				[{ qrSrc: qrImage.src, name: registration.label.name, phone: registration.label.phone }],
+				[
+					{
+						qrSrc: qrImage.src,
+						name: registration.label.name,
+						checkedCount: KIOSK_CHECK_IN_TICKS
+					}
+				],
 				async () => {
 					await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 					window.print();
@@ -125,6 +133,10 @@
 				{viaThaid
 					? 'รับ QR Code แล้วไปที่จุดคัดกรอง'
 					: 'กรุณานำบัตรออกจากเครื่อง รับ QR Code แล้วไปที่จุดคัดกรอง'}
+			</p>
+			<p class="text-base kiosk-portrait:text-xl">
+				{CONSENT_COPY.summary.ref}:
+				<span class="font-mono tracking-wide">{registration.consent_ref}</span>
 			</p>
 			{#if printError}
 				<KioskInlineAlert tone="warning" icon={CircleAlert} role="alert"

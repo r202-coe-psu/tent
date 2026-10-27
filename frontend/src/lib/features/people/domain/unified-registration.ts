@@ -11,6 +11,13 @@ import {
 	type ResidenceFields
 } from './registration-shell';
 import type { AuthorContext } from '$lib/db/model';
+import { ulid } from '$lib/db/ulid';
+import {
+	planRegistrationConsent,
+	type BlockChannel,
+	type ConsentDecision,
+	type MemberConsentPlan
+} from '$lib/features/consent/server';
 import {
 	PETS_MAX_COUNT,
 	dormFieldsFor,
@@ -151,7 +158,10 @@ export const unifiedMemberInputSchema = evacueeInputSchema
 		status: true,
 		registered_via: true,
 		card_snapshot: true,
-		track: true
+		track: true,
+		// CR-169 FR-61: partner booking group id is worker-owned — a public/kiosk/staff member
+		// payload must never set it (Zod strips the unknown key).
+		booking_ref: true
 	})
 	.extend({
 		/**
@@ -205,8 +215,13 @@ export function memberCardLabel(index: number): string {
 	return index === 0 ? PRIMARY_CONTACT_LABEL : `สมาชิก ${index + 1}`;
 }
 
-export function blankUnifiedMember(): UnifiedMemberInput {
+/**
+ * A fresh member card. `form_key` identifies the card while it is edited (consent guardian
+ * picks follow it across removal and reordering); Zod strips it, so it is never persisted.
+ */
+export function blankUnifiedMember(): UnifiedMemberInput & { form_key: string } {
 	return {
+		form_key: ulid(),
 		first_name: '',
 		last_name: '',
 		// Default: ไม่ระบุเพศ (persisted as null).
@@ -355,6 +370,7 @@ export function planFamilyRegistration(
 }
 
 export type UnifiedMemberWithMeta = UnifiedMemberInput & {
+	form_key?: string;
 	_id?: string;
 	_rev?: string;
 	stay_status?: StayStatus;
@@ -370,6 +386,49 @@ export interface FamilyReportInPayload {
 	ctx: AuthorContext;
 	/** Reuse generated document ids when the same report-in is retried. */
 	ids?: import('$lib/db/ulid-reservation').UlidReservation;
+	consent?: RegistrationConsent | null;
+}
+
+export interface RegistrationConsentConfig {
+	channel: BlockChannel;
+	staff: { name: string; userId: string } | null;
+	consentedKeys?: readonly string[];
+	initialSearchVisible?: boolean;
+}
+
+export function memberFormKey(member: Pick<UnifiedMemberWithMeta, 'form_key' | '_id'>): string {
+	const key = member.form_key ?? member._id;
+	if (!key) throw new Error('registration member has no form key');
+	return key;
+}
+
+export interface RegistrationConsent {
+	decision: ConsentDecision;
+	/** `form_key` of every member in `members` order; index 0 is the registrant. */
+	memberKeys: readonly string[];
+	recordedBy: string | null;
+}
+
+/**
+ * Consent plan per member, in `members` order. `undefined` means no consent write: the
+ * registration had no block, or the member already had consent (FR-41).
+ */
+export function planMemberConsents(
+	consent: RegistrationConsent | null | undefined,
+	channel: BlockChannel,
+	alreadyConsented: readonly boolean[]
+): (MemberConsentPlan | undefined)[] {
+	if (!consent) return alreadyConsented.map(() => undefined);
+	if (consent.memberKeys.length !== alreadyConsented.length) {
+		throw new Error('consent member keys do not match the registration members');
+	}
+	const plans = planRegistrationConsent(consent.decision, {
+		channel,
+		recordedBy: consent.recordedBy,
+		members: consent.memberKeys.map((key, i) => ({ key, alreadyConsented: alreadyConsented[i] }))
+	});
+	const byKey = new Map(plans.map((plan) => [plan.key, plan]));
+	return consent.memberKeys.map((key) => byKey.get(key));
 }
 
 function cleanAreaPrefix(name?: string | null): string {
@@ -434,6 +493,7 @@ export function evacueeToUnifiedMember(
 		evacuee.current_stay.status === 'pre_registered' ||
 		evacuee.current_stay.status === 'kiosk_registered';
 	return {
+		form_key: evacuee._id,
 		_id: evacuee._id,
 		_rev: evacuee._rev,
 		first_name: evacuee.first_name,

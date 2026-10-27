@@ -162,7 +162,7 @@
 
 <main class="container mx-auto space-y-4 px-4 py-6">
 	<ConsoleBanner
-		title="5. พารามิเตอร์มาตรฐานและกฎเกณฑ์ (SOP Parameters & Rules)"
+		title="พารามิเตอร์มาตรฐานและกฎเกณฑ์ (SOP Parameters & Rules)"
 		description="กำหนดพารามิเตอร์ SOP มาตรฐาน (Sphere Standard) สำหรับการคำนวณทรัพยากร และค่าปรับแต่งเฉพาะศูนย์พักพิง"
 	/>
 

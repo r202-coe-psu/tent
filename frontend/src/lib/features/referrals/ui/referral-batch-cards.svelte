@@ -302,7 +302,7 @@
 				role="status"
 			>
 				คำขอย้ายเข้าจากศูนย์ <span class="font-semibold tabular-nums">{sample.shelter_code}</span>
-				({incomingSent.length} คน) — ตอบรับแล้วระบบจะย้ายผู้ประสบภัยเข้าศูนย์นี้ (occupancy สองฝั่งจะอัปเดตหลังตอบรับเท่านั้น)
+				({incomingSent.length} คน) — ตอบรับแล้วระบบจะย้ายผู้เข้าพักเข้าศูนย์นี้ (occupancy สองฝั่งจะอัปเดตหลังตอบรับเท่านั้น)
 			</div>
 		{/if}
 
@@ -523,7 +523,7 @@
 							{#if selectionEnabled}
 								<Table.Head class="w-12"><span class="sr-only">เลือก</span></Table.Head>
 							{/if}
-							<Table.Head class="font-semibold text-foreground">ชื่อผู้ประสบภัย</Table.Head>
+							<Table.Head class="font-semibold text-foreground">ชื่อผู้เข้าพัก</Table.Head>
 							<Table.Head class="font-semibold text-foreground">สถานะ</Table.Head>
 							<Table.Head class="font-semibold text-foreground">สร้างเมื่อ</Table.Head>
 							<Table.Head class="font-semibold text-foreground">ID</Table.Head>

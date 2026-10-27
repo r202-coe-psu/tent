@@ -5,11 +5,12 @@
  * `HouseholdAddressFields`, …) — see the render contract in the suite header.
  */
 import { expect, type Locator, type Page } from '@playwright/test';
+import { acceptFullConsent } from './consent';
 
 export const PRE_REGISTER_PATH = '/pre-register?shelter=unassigned';
 export const SUBMIT_LABEL = 'ยืนยันการลงทะเบียน';
 export const UNASSIGNED_OPTION = /ไม่ระบุศูนย์พักพิง/;
-export const DISCLAIMER_LABEL = /ข้าพเจ้ารับทราบข้อตกลงการใช้งาน/;
+export const DISCLAIMER_LABEL = /เข้าใจว่าข้อมูลจะรอในคิว/;
 export const SUMMARY_TITLE = 'ตรวจสอบข้อมูลก่อนบันทึก';
 export const JUMP_BUTTON = 'ไปยังช่องที่ต้องแก้';
 
@@ -128,8 +129,10 @@ export function submitButton(page: Page): Locator {
 	return page.getByRole('button', { name: SUBMIT_LABEL }).last();
 }
 
+/** Ticks group A and the main consent (C1): both are required before submit is enabled. */
 export async function acceptDisclaimer(page: Page): Promise<void> {
 	await page.getByRole('checkbox', { name: DISCLAIMER_LABEL }).check();
+	await acceptFullConsent(page);
 }
 
 // ------------------------------------------------------------------ form steps

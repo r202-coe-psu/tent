@@ -57,9 +57,16 @@
 	});
 </script>
 
+<!--
+	Laid out by the row's own width (container query), not the viewport: the roster sits
+	inside the assign page's content column, so viewport breakpoints split name and
+	actions side by side while the row is still narrow — the name squeezed to a word per
+	line under the buttons. Narrow: name, badges and skills stack, then the state, then
+	full-width actions. Wide: details on the left, state and actions on the right.
+-->
 <li
 	class={[
-		'rounded-2xl border p-3 transition-colors sm:p-3.5',
+		'@container rounded-2xl border p-3 transition-colors sm:p-4',
 		candidate.assignable
 			? 'border-border bg-card hover:border-primary/40'
 			: 'border-border/60 bg-muted/40'
@@ -72,103 +79,108 @@
 			disabled={!candidate.assignable || !capacityAvailable}
 			aria-label={`เลือก ${fullName}`}
 			onCheckedChange={(next) => onToggle(v._id, next === true)}
-			class="mt-1 shrink-0"
+			class="mt-1 size-5 shrink-0"
 		/>
 
-		<div class="flex min-w-0 flex-1 flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-			<div class="min-w-0 space-y-1.5">
-				<div class="flex flex-wrap items-center gap-2">
-					<label
-						for={rowId}
-						class="cursor-pointer text-sm font-bold break-words text-foreground sm:text-base"
-					>
-						{fullName}
-					</label>
+		<div
+			class="flex min-w-0 flex-1 flex-col gap-3 @2xl:flex-row @2xl:items-center @2xl:justify-between @2xl:gap-6"
+		>
+			<div class="min-w-0 space-y-2">
+				<label
+					for={rowId}
+					class="block cursor-pointer text-base font-bold break-words text-foreground"
+				>
+					{fullName}
+				</label>
+
+				<div class="flex flex-wrap items-center gap-1.5">
 					{#if v.identity_verified}
 						<span
-							class="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700 ring-1 ring-emerald-200"
+							class="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium whitespace-nowrap text-emerald-700 ring-1 ring-emerald-200"
 						>
-							<BadgeCheck class="h-3 w-3" />
+							<BadgeCheck class="size-3.5 shrink-0" />
 							ยืนยันตัวตนแล้ว
 						</span>
 					{:else}
 						<span
-							class="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700 ring-1 ring-amber-200"
+							class="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium whitespace-nowrap text-amber-800 ring-1 ring-amber-200"
 						>
-							<Clock class="h-3 w-3" />
+							<Clock class="size-3.5 shrink-0" />
 							รอยืนยันตัวตน
 						</span>
 					{/if}
 					<span
-						class="inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-[11px] font-medium text-muted-foreground"
+						class="inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-xs font-medium whitespace-nowrap text-muted-foreground"
 					>
-						<UserRound class="h-3 w-3" />
+						<UserRound class="size-3.5 shrink-0" />
 						{v.personnel_type === 'staff' ? 'เจ้าหน้าที่' : 'อาสาสมัคร'}
 					</span>
 				</div>
 
 				{#if skills.length > 0}
 					<div class="flex min-w-0 flex-wrap items-center gap-1.5">
-						<Tag class="h-3.5 w-3.5 shrink-0 text-primary" />
+						<Tag class="size-3.5 shrink-0 text-primary" aria-hidden="true" />
+						<span class="sr-only">ทักษะ:</span>
 						{#each skills.slice(0, 2) as skill (skill.code)}
-							<span
-								class="rounded-md bg-muted px-1.5 py-0.5 text-[11px] font-medium text-foreground"
-							>
+							<span class="rounded-md bg-muted px-2 py-0.5 text-xs font-medium text-foreground">
 								{skill.label}
 							</span>
 						{/each}
 						{#if skills.length > 2}
-							<span class="text-[11px] font-medium text-muted-foreground">+{skills.length - 2}</span
-							>
+							<span class="text-xs font-medium text-muted-foreground">
+								+{skills.length - 2}
+							</span>
 						{/if}
 					</div>
 				{/if}
 			</div>
 
-			<div
-				class="flex shrink-0 flex-col items-stretch gap-2 sm:flex-row sm:items-center lg:flex-col lg:items-end lg:pl-4"
-			>
+			<div class="flex flex-col gap-2 @2xl:shrink-0 @2xl:items-end">
 				{#if candidate.state.kind === 'collision'}
 					{@const clash = candidate.state}
 					<span
-						class="inline-flex items-center gap-1.5 rounded-full bg-rose-50 px-3 py-1.5 text-[11px] font-bold text-rose-700 ring-1 ring-rose-200"
+						class="inline-flex items-start gap-1.5 self-start rounded-xl bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-700 ring-1 ring-rose-200 @2xl:max-w-xs @2xl:self-end"
 					>
-						<TriangleAlert class="h-3.5 w-3.5 shrink-0" />
-						เวลาชนกะอื่น · {clash.startTime}-{clash.endTime} น.
+						<TriangleAlert class="mt-0.5 size-3.5 shrink-0" />
+						<span>
+							เวลาชนกับ “{clash.jobTitle}” ·
+							<span class="whitespace-nowrap tabular-nums"
+								>{clash.startTime}–{clash.endTime} น.</span
+							>
+						</span>
 					</span>
 				{:else if candidate.state.kind === 'accepted'}
 					<span
-						class="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1.5 text-[11px] font-bold text-emerald-700 ring-1 ring-emerald-200"
+						class="inline-flex items-center gap-1.5 self-start rounded-xl bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-200 @2xl:self-end"
 					>
-						<CircleCheck class="h-3.5 w-3.5 shrink-0" />
-						ยืนยันเข้าร่วมกะนี้แล้ว (Approved)
+						<CircleCheck class="size-3.5 shrink-0" />
+						ยืนยันเข้าร่วมกะนี้แล้ว
 					</span>
 				{:else}
 					<span
-						class="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1.5 text-[11px] font-bold text-emerald-700 ring-1 ring-emerald-200"
+						class="inline-flex items-center gap-1.5 self-start rounded-xl bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-200 @2xl:self-end"
 					>
-						<span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
+						<span class="size-1.5 shrink-0 rounded-full bg-emerald-500"></span>
 						ว่างในกะนี้ (พร้อมปฏิบัติงาน)
 					</span>
 				{/if}
-				<div class="flex items-center gap-2 sm:justify-end">
+
+				<div class="flex flex-wrap gap-2">
 					<Button
 						variant="outline"
-						size="sm"
-						class="h-8 gap-1.5 text-xs"
+						class="min-h-11 flex-auto gap-1.5 text-sm sm:min-h-9 @md:flex-none"
 						onclick={() => onDetails(candidate)}
 					>
-						<Eye class="h-3.5 w-3.5" />
+						<Eye class="size-4" />
 						ดูรายละเอียด
 					</Button>
 					{#if candidate.assignable}
 						<Button
-							size="sm"
-							class="h-8 gap-1.5 text-xs"
+							class="min-h-11 flex-auto gap-1.5 text-sm sm:min-h-9 @md:flex-none"
 							disabled={!capacityAvailable}
 							onclick={() => onAssign(candidate)}
 						>
-							<UserPlus class="h-3.5 w-3.5" />
+							<UserPlus class="size-4" />
 							{capacityAvailable ? 'มอบหมาย' : 'กะเต็มแล้ว'}
 						</Button>
 					{/if}

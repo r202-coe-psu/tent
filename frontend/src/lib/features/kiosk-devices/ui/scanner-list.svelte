@@ -1,28 +1,35 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button/index.js';
-	import Trash2 from '@lucide/svelte/icons/trash-2';
 	import Cpu from '@lucide/svelte/icons/cpu';
 	import Building from '@lucide/svelte/icons/building';
 	import Activity from '@lucide/svelte/icons/activity';
-	import Key from '@lucide/svelte/icons/key';
-	import Eye from '@lucide/svelte/icons/eye';
-	import KeyRound from '@lucide/svelte/icons/key-round';
-	import TriangleAlert from '@lucide/svelte/icons/triangle-alert';
-	import CircleCheck from '@lucide/svelte/icons/circle-check';
-	import CircleDashed from '@lucide/svelte/icons/circle-dashed';
+	import Settings2 from '@lucide/svelte/icons/settings-2';
+	import ImageIcon from '@lucide/svelte/icons/image';
+	import ImageOff from '@lucide/svelte/icons/image-off';
 	import type { ScannerDevice } from '../domain/scanner.schema';
-	import { useDeleteScannerDevice, useUpdateScannerDevice } from '../application/queries';
+	import { useDeleteScannerDevice } from '../application/queries';
 	import { toast } from 'svelte-sonner';
 	import { formatThaiShortDate } from '$lib/utils/date';
 	import DeleteScannerDialog from './delete-scanner-dialog.svelte';
+	import EditScannerDialog from './edit-scanner-dialog.svelte';
+	import { KIOSK_SCREENS, screenTypeOf } from '$lib/features/shared/domain/kiosk-screen';
+	import ScannerPinBadge from './scanner-pin-badge.svelte';
 
+	/**
+	 * Kiosk device table: state only (status, PIN, banner group, last seen). Every per-device action —
+	 * edit, active switch, Scanner Key, staff PIN, delete — is in the
+	 * "จัดการ" dialog.
+	 */
 	let {
 		devices = [],
+		groupNames,
 		onviewsecret,
 		onviewpin,
 		onsetpin
 	}: {
 		devices: ScannerDevice[];
+		/** Banner group `_id` → name; a device whose group is missing here reads as having none. */
+		groupNames?: ReadonlyMap<string, string>;
 		onviewsecret?: (device: ScannerDevice) => void;
 		/** Open the reveal-PIN dialog (PIN is fetched only when the user clicks show/copy there). */
 		onviewpin?: (device: ScannerDevice) => void;
@@ -31,10 +38,23 @@
 	} = $props();
 
 	const deleteMutation = useDeleteScannerDevice();
-	const updateMutation = useUpdateScannerDevice();
 
 	let deleteDialogOpen = $state(false);
 	let deleteTarget = $state<ScannerDevice | null>(null);
+
+	let editOpen = $state(false);
+	let editDeviceId = $state<string | null>(null);
+	/** Read from the live list, so the dialog shows fresh PIN state after a refetch. */
+	const editDevice = $derived(devices.find((d) => d.device_id === editDeviceId) ?? null);
+
+	/** Bumped on every open: the dialog remounts, so a cancelled edit never comes back. */
+	let editSession = $state(0);
+
+	function handleEdit(device: ScannerDevice) {
+		editDeviceId = device.device_id;
+		editSession += 1;
+		editOpen = true;
+	}
 
 	function handleDelete(device: ScannerDevice) {
 		deleteTarget = device;
@@ -51,15 +71,8 @@
 		});
 	}
 
-	function handleToggleStatus(device: ScannerDevice) {
-		const nextStatus = device.status === 'active' ? 'inactive' : 'active';
-		updateMutation.mutate(
-			{ deviceId: device.device_id, patch: { status: nextStatus } },
-			{
-				onSuccess: () => toast.success(`เปลี่ยนสถานะเป็น ${nextStatus} เรียบร้อย`),
-				onError: (err) => toast.error(err instanceof Error ? err.message : 'เกิดข้อผิดพลาด')
-			}
-		);
+	function groupNameOf(device: ScannerDevice): string | null {
+		return (device.banner_group_id && groupNames?.get(device.banner_group_id)) || null;
 	}
 
 	function formatLastSeen(lastSeen: string | null): string {
@@ -74,159 +87,98 @@
 
 <div class="overflow-x-auto">
 	<table class="w-full text-left text-sm">
-		<thead
-			class="border-b border-border bg-muted/40 text-xs font-semibold text-muted-foreground uppercase"
-		>
+		<thead class="border-b border-slate-200/80 bg-slate-50 text-xs font-semibold text-slate-500">
 			<tr>
-				<th class="px-6 py-4">เครื่องสแกน / รหัสอุปกรณ์</th>
-				<th class="px-6 py-4">ศูนย์พักพิง & จุดบริการ</th>
-				<th class="px-6 py-4">Scanner Key</th>
-				<th class="px-6 py-4">PIN เจ้าหน้าที่</th>
-				<th class="px-6 py-4">สถานะ</th>
-				<th class="px-6 py-4">การเชื่อมต่อล่าสุด</th>
-				<th class="px-6 py-4 text-right">จัดการ</th>
+				<th class="px-6 py-3.5">เครื่องสแกน</th>
+				<th class="px-6 py-3.5">ศูนย์พักพิง & จุดบริการ</th>
+				<th class="px-6 py-3.5">สถานะ</th>
+				<th class="px-6 py-3.5">เชื่อมต่อล่าสุด</th>
+				<th class="px-6 py-3.5 text-right"><span class="sr-only">จัดการ</span></th>
 			</tr>
 		</thead>
-		<tbody class="divide-y divide-border/60">
+		<tbody class="divide-y divide-slate-200/70">
 			{#if devices.length === 0}
 				<tr>
-					<td colspan="7" class="px-6 py-12 text-center text-muted-foreground">
-						<Cpu class="mx-auto mb-2 h-8 w-8 text-muted-foreground/50" />
+					<td colspan="5" class="px-6 py-12 text-center text-slate-500">
+						<Cpu class="mx-auto mb-2 h-8 w-8 text-slate-300" />
 						<p>ยังไม่มีเครื่องสแกนบัตรในระบบ</p>
-						<p class="text-xs">กดปุ่ม "ลงทะเบียนเครื่องสแกน" ด้านบนเพื่อเพิ่มอุปกรณ์</p>
+						<p class="text-xs">กดปุ่ม "ลงทะเบียนเครื่องสแกนใหม่" ด้านบนเพื่อเพิ่มอุปกรณ์</p>
 					</td>
 				</tr>
 			{:else}
 				{#each devices as device (device.id)}
-					<tr class="transition-colors hover:bg-muted/20">
+					{@const groupName = groupNameOf(device)}
+					<tr class="transition-colors hover:bg-slate-50/70">
 						<td class="px-6 py-4">
 							<div class="flex items-center gap-3">
 								<div
-									class="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary"
+									class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#0A2647]/5 text-[#0A2647]"
 								>
 									<Cpu class="h-5 w-5" />
 								</div>
-								<div>
-									<p class="font-semibold text-foreground">{device.name}</p>
-									<p class="font-mono text-xs text-muted-foreground">{device.device_id}</p>
+								<div class="min-w-0">
+									<p class="font-semibold text-slate-900">{device.name}</p>
+									<p class="text-xs text-slate-500 tabular-nums">{device.device_id}</p>
+									<span class="badge-muted mt-1">
+										{KIOSK_SCREENS[screenTypeOf(device)].label}
+										<span class="tabular-nums">{KIOSK_SCREENS[screenTypeOf(device)].size}</span>
+									</span>
 								</div>
 							</div>
 						</td>
 						<td class="px-6 py-4">
 							<div class="flex items-center gap-2">
-								<Building class="h-4 w-4 text-muted-foreground" />
+								<Building class="h-4 w-4 shrink-0 text-slate-400" />
 								<div>
-									<span class="font-semibold text-foreground">{device.shelter_code}</span>
-									<span class="block text-xs text-muted-foreground">{device.station_name}</span>
+									<span class="font-semibold text-slate-900">{device.shelter_code}</span>
+									<span class="block text-xs text-slate-500">{device.station_name}</span>
 								</div>
 							</div>
 						</td>
 						<td class="px-6 py-4">
-							<button
-								type="button"
-								onclick={() => onviewsecret?.(device)}
-								class="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 font-mono text-xs text-slate-700 transition-colors hover:border-sky-300 hover:bg-sky-50 hover:text-sky-900 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none"
-								title="ดูข้อมูลการติดตั้ง Scanner Key"
-							>
-								<Key class="h-3.5 w-3.5 text-muted-foreground" />
-								<span>ดูข้อมูลการติดตั้ง</span>
-								<Eye class="ml-1 h-3 w-3 text-muted-foreground" />
-							</button>
-						</td>
-						<td class="px-6 py-4">
-							<div class="flex flex-col items-start gap-2">
-								{#if !device.staff_pin_set}
-									<span class="badge-muted">
-										<CircleDashed class="h-3.5 w-3.5" />
-										ยังไม่ตั้ง PIN
-									</span>
-								{:else if device.staff_pin_is_default}
-									<span class="badge-warning-advisory">
-										<TriangleAlert class="h-3.5 w-3.5" />
-										PIN เริ่มต้น
-									</span>
-								{:else}
+							<div class="flex max-w-[22rem] flex-wrap gap-1.5">
+								{#if device.status === 'active'}
 									<span
 										class="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-900"
 									>
-										<CircleCheck class="h-3.5 w-3.5" />
-										ตั้ง PIN แล้ว
+										<span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
+										Active
+									</span>
+								{:else}
+									<span class="badge-muted">
+										<span class="h-1.5 w-1.5 rounded-full bg-slate-400"></span>
+										Inactive
 									</span>
 								{/if}
-								<div class="flex flex-wrap gap-1">
-									{#if device.staff_pin_set}
-										<Button
-											variant="ghost"
-											size="sm"
-											class="min-h-11 gap-1 text-xs text-primary hover:bg-primary/10"
-											onclick={() => onviewpin?.(device)}
-										>
-											<Eye class="h-3.5 w-3.5" />
-											ดู PIN
-											<span class="sr-only">ของ {device.name}</span>
-										</Button>
-									{/if}
-									<Button
-										variant="ghost"
-										size="sm"
-										class="min-h-11 gap-1 text-xs text-primary hover:bg-primary/10"
-										onclick={() => onsetpin?.(device)}
-									>
-										<KeyRound class="h-3.5 w-3.5" />
-										ตั้ง PIN
-										<span class="sr-only">ของ {device.name}</span>
-									</Button>
-								</div>
+								<!-- A default PIN is flagged only in the จัดการ dialog, to keep the table quiet. -->
+								{#if !device.staff_pin_is_default}
+									<ScannerPinBadge {device} />
+								{/if}
+								{#if groupName}
+									<span class="badge-accent">
+										<ImageIcon class="h-3.5 w-3.5" />
+										{groupName}
+									</span>
+								{:else}
+									<span class="badge-muted">
+										<ImageOff class="h-3.5 w-3.5" />
+										ไม่มีกลุ่มแบนเนอร์
+									</span>
+								{/if}
 							</div>
 						</td>
-						<td class="px-6 py-4">
-							{#if device.status === 'active'}
-								<button
-									onclick={() => handleToggleStatus(device)}
-									class="inline-flex min-h-11 items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-900 hover:bg-emerald-100 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none"
-								>
-									<span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
-									Active
-								</button>
-							{:else}
-								<button
-									onclick={() => handleToggleStatus(device)}
-									class="inline-flex min-h-11 items-center gap-1.5 rounded-full border border-slate-300 bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-700 hover:bg-slate-200 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none"
-								>
-									<span class="h-1.5 w-1.5 rounded-full bg-zinc-400"></span>
-									Inactive
-								</button>
-							{/if}
-						</td>
-						<td class="px-6 py-4 text-xs text-muted-foreground">
+						<td class="px-6 py-4 text-xs whitespace-nowrap text-slate-500">
 							<div class="flex items-center gap-1.5">
-								<Activity class="h-3.5 w-3.5 text-muted-foreground" />
+								<Activity class="h-3.5 w-3.5 text-slate-400" />
 								<span>{formatLastSeen(device.last_seen_at)}</span>
 							</div>
 						</td>
 						<td class="px-6 py-4 text-right">
-							<div class="flex items-center justify-end gap-1">
-								<Button
-									variant="ghost"
-									size="sm"
-									class="h-8 gap-1 text-xs text-primary hover:bg-primary/10"
-									onclick={() => onviewsecret?.(device)}
-									title="ดูข้อมูลการติดตั้ง Scanner Key"
-								>
-									<Key class="h-3.5 w-3.5" />
-									<span class="hidden sm:inline">ดูข้อมูลติดตั้ง</span>
-								</Button>
-								<Button
-									variant="ghost"
-									size="sm"
-									class="min-h-11 min-w-11 p-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
-									onclick={() => handleDelete(device)}
-									title="ลบเครื่องสแกน"
-								>
-									<Trash2 class="h-4 w-4" />
-									<span class="sr-only">ลบเครื่องสแกน {device.name}</span>
-								</Button>
-							</div>
+							<Button variant="outline" class="min-h-11 gap-1.5" onclick={() => handleEdit(device)}>
+								<Settings2 class="h-4 w-4" />
+								จัดการ
+								<span class="sr-only">เครื่อง {device.name}</span>
+							</Button>
 						</td>
 					</tr>
 				{/each}
@@ -234,6 +186,20 @@
 		</tbody>
 	</table>
 </div>
+
+{#if editDevice}
+	{#key editSession}
+		<EditScannerDialog
+			bind:open={editOpen}
+			device={editDevice}
+			groupName={groupNameOf(editDevice)}
+			{onviewsecret}
+			{onviewpin}
+			{onsetpin}
+			ondelete={handleDelete}
+		/>
+	{/key}
+{/if}
 
 <DeleteScannerDialog
 	bind:open={deleteDialogOpen}

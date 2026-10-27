@@ -85,13 +85,20 @@ describe('POST /api/v1/kiosk/devices', () => {
 		mockSession.mockResolvedValue(SESSIONS.managerA);
 		const response = await post(input);
 		expect(response.status).toBe(201);
-		expect(mockCreate).toHaveBeenCalledWith(input, 'sm-a');
+		expect(mockCreate).toHaveBeenCalledWith({ ...input, screen_type: 'compact' }, 'sm-a');
+	});
+
+	it('passes a chosen screen_type through to the repository', async () => {
+		mockSession.mockResolvedValue(SESSIONS.managerA);
+		const response = await post({ ...input, screen_type: 'portrait' });
+		expect(response.status).toBe(201);
+		expect(mockCreate).toHaveBeenCalledWith({ ...input, screen_type: 'portrait' }, 'sm-a');
 	});
 
 	it('lets kiosk_staff create in their own shelter only (AC-SBO-19/20)', async () => {
 		mockSession.mockResolvedValue(SESSIONS.kioskA);
 		expect((await post(input)).status).toBe(201);
-		expect(mockCreate).toHaveBeenCalledWith(input, 'kiosk-a');
+		expect(mockCreate).toHaveBeenCalledWith({ ...input, screen_type: 'compact' }, 'kiosk-a');
 		expect((await post({ ...input, shelter_code: 'SH002' })).status).toBe(403);
 		expect(mockCreate).toHaveBeenCalledTimes(1);
 	});
@@ -142,7 +149,9 @@ describe('POST /api/v1/kiosk/devices', () => {
 			status: 'active',
 			last_seen_at: null,
 			staff_pin_set: false,
-			staff_pin_is_default: false
+			staff_pin_is_default: false,
+			banner_group_id: null,
+			screen_type: 'compact'
 		});
 		expect(data.device).not.toHaveProperty('secret_hash');
 		expect(data.device).not.toHaveProperty('_rev');
@@ -237,7 +246,9 @@ describe('GET /api/v1/kiosk/devices', () => {
 				status: 'active',
 				last_seen_at: null,
 				staff_pin_set: false,
-				staff_pin_is_default: false
+				staff_pin_is_default: false,
+				banner_group_id: null,
+				screen_type: 'compact'
 			}
 		]);
 	});

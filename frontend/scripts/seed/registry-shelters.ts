@@ -6,10 +6,15 @@ import { shelterCodeSchema, now } from '$lib/db/model';
 import { ulid } from '$lib/db/ulid';
 import { deployShelterViewsFn } from '$lib/features/shelters/server/deploy';
 import {
+	BULK_RETURN_ENTRY_MANGO_INDEXES,
 	buildValidateDocUpdate,
+	DAILY_SOP_ROLE_MANGO_INDEX,
+	PEOPLE_MANGO_INDEXES,
 	REFERRAL_MANGO_INDEXES,
 	KIOSK_LOOKUP_MANGO_INDEXES,
-	shelterDbName
+	REQUISITION_TICKET_MANGO_INDEXES,
+	shelterDbName,
+	TRANSFER_LEDGER_MANGO_INDEXES
 } from '$lib/server/shelter-access-design';
 import { buildRegistryDesignDoc, REGISTRY_DESIGN_ID } from '$lib/server/registry-design';
 import { shelterScopeRole } from '$lib/auth/roles';
@@ -73,7 +78,12 @@ export const REGISTRY_SHELTERS = [
 		},
 		common_areas: {
 			central_kitchen: true,
-			parking_capacity: 50
+			parking_capacity: 50,
+			// CR-139 storage points, CR-199 `types[]` shape. Fixed ids keep lot.storage_point_id valid on reseed.
+			sub_storage: [
+				{ id: '01JSH001STRG00000000000001', name: 'คลังทั่วไป อาคาร 1', types: ['general'] },
+				{ id: '01JSH001STRG00000000000002', name: 'คลังอาหารแห้ง', types: ['food_dry'] }
+			]
 		},
 		key_personnel: {
 			eoc_liaison: {
@@ -278,6 +288,21 @@ async function deployRegistryDesign(): Promise<void> {
 	console.log('  ✓ registry: _design/app (by_code view) deployed');
 }
 
+type SeedStoragePoint = { id: string };
+
+/**
+ * Keeps storage points added through the shelter form; adds seed points whose id is missing.
+ * A seed point deleted in the form comes back on the next reseed (fixed ids).
+ */
+function mergeSubStorage(
+	current: unknown,
+	seeded: readonly SeedStoragePoint[]
+): readonly SeedStoragePoint[] {
+	const existing = Array.isArray(current) ? (current as SeedStoragePoint[]) : [];
+	const ids = new Set(existing.map((point) => point.id));
+	return [...existing, ...seeded.filter((point) => !ids.has(point.id))];
+}
+
 export async function seedRegistry(master: MasterLookup): Promise<void> {
 	await ensureDb('registry');
 	await setSecurity('registry', {
@@ -331,6 +356,15 @@ export async function seedRegistry(master: MasterLookup): Promise<void> {
 		}
 
 		if (existing) {
+			if ('common_areas' in shelter && 'sub_storage' in shelter.common_areas) {
+				extras.common_areas = {
+					...shelter.common_areas,
+					sub_storage: mergeSubStorage(
+						(existing.common_areas as { sub_storage?: unknown } | undefined)?.sub_storage,
+						shelter.common_areas.sub_storage
+					)
+				};
+			}
 			await putDoc('registry', {
 				...existing,
 				name: shelter.name,
@@ -416,7 +450,15 @@ async function deployShelterAccessDesign(db: string, shelterCode: string): Promi
 }
 
 async function deployMangoIndexes(db: string): Promise<void> {
-	for (const def of REFERRAL_MANGO_INDEXES) {
+	const defs = [
+		...REFERRAL_MANGO_INDEXES,
+		...TRANSFER_LEDGER_MANGO_INDEXES,
+		...PEOPLE_MANGO_INDEXES,
+		...REQUISITION_TICKET_MANGO_INDEXES,
+		...BULK_RETURN_ENTRY_MANGO_INDEXES,
+		DAILY_SOP_ROLE_MANGO_INDEX
+	];
+	for (const def of defs) {
 		const { status, data } = await couchReq('POST', `/${db}/_index`, def);
 		if (status >= 400) {
 			const detail = (data as { reason?: string; error?: string } | null) ?? {};
@@ -425,7 +467,9 @@ async function deployMangoIndexes(db: string): Promise<void> {
 			);
 		}
 	}
-	console.log(`  ✓ ${db}: referral Mango indexes deployed`);
+	console.log(
+		`  ✓ ${db}: referral, ledger, people, requisition and Daily SOP role Mango indexes deployed`
+	);
 }
 
 async function deployKioskLookupMangoIndexes(db: string): Promise<void> {

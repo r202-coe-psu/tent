@@ -60,18 +60,6 @@ export const IS_REMOTE = Boolean(process.env.E2E_BASE_URL);
 export const ALLOW_REMOTE_WRITES = process.env.ALLOW_REMOTE_WRITES?.trim() === 'true';
 
 /**
- * Whether the target's bypassable BFF rate limiters (donation + pre-register, CR-160) are
- * enforced — mirrors the server's `RATE_LIMIT` env (`src/lib/server/security/rate-limiter.ts`):
- * only `false` / `0` turns them off. Unset means enforced, the safe assumption for a remote
- * target whose setting the runner cannot see. `playwright.config.ts` defaults it to `false`
- * for the local preview server it starts; staging gets it from its server `.env` / the
- * `tent-staging-e2e-env` credential, so e2e runs there skip the pacing/wait workarounds.
- */
-export const RATE_LIMIT_ENFORCED = !['false', '0'].includes(
-	(process.env.RATE_LIMIT ?? '').trim().toLowerCase()
-);
-
-/**
  * True when this run may write: always true locally, true on a remote target only
  * when it explicitly opted in. `@critical` suites gate on `!CAN_WRITE` instead of
  * `IS_REMOTE` so the same suite runs its real writes locally AND on a writable
@@ -100,14 +88,29 @@ export const READ_ONLY_REASON =
  */
 export const USES_PROVISIONED_FIXTURE = IS_REMOTE && !CAN_WRITE;
 
-function requireEnv(name: string): string {
+/**
+ * Reads one provisioned-fixture value without throwing, so a suite file can build its fixture
+ * at module scope: Playwright evaluates that scope while collecting tests, before any tag
+ * filter applies, and a throw there would fail every test in the file — including the
+ * fixture-free `@prod` smoke. A missing name is recorded instead and reported by
+ * `assertFixtureProvisioned` from the `beforeAll` of the suite that actually reads the fixture.
+ */
+function fixtureEnv(name: string, missing: string[]): string {
 	const value = process.env[name]?.trim();
-	if (!value) {
+	if (!value) missing.push(name);
+	return value ?? '';
+}
+
+/**
+ * Fails the calling hook when a read-only remote run lacks fixture env. Call it from the
+ * `beforeAll` of the describe that reads the fixture, never at module scope.
+ */
+export function assertFixtureProvisioned(fixture: { missingEnv: readonly string[] }): void {
+	if (fixture.missingEnv.length > 0) {
 		throw new Error(
-			`${name} is required on a read-only remote target (see e2e/helpers/e2e-env.ts)`
+			`${fixture.missingEnv.join(', ')} required on a read-only remote target (see e2e/helpers/e2e-env.ts)`
 		);
 	}
-	return value;
 }
 
 /** Unique per run so leftovers from other runs never match. */
@@ -117,6 +120,8 @@ export const FIXTURE_LAST_NAME = 'ทดสอบระบบ';
 export const FIXTURE_LAST_NAME_MASKED = 'ทด****บบ';
 
 export interface SearchFixture {
+	/** Fixture env names that were unset on a read-only remote run (always empty otherwise). */
+	missingEnv: readonly string[];
 	shelterName: string;
 	prefix: string;
 	phone: string;
@@ -131,19 +136,22 @@ export interface SearchFixture {
 }
 
 export function searchFixture(): SearchFixture {
-	const prefix = USES_PROVISIONED_FIXTURE ? requireEnv('E2E_SEARCH_PREFIX') : `ทดสอบ${RUN_ID}`;
+	const missingEnv: string[] = [];
+	const prefix = USES_PROVISIONED_FIXTURE
+		? fixtureEnv('E2E_SEARCH_PREFIX', missingEnv)
+		: `ทดสอบ${RUN_ID}`;
 	const phone = USES_PROVISIONED_FIXTURE
-		? requireEnv('E2E_SEARCH_PHONE')
+		? fixtureEnv('E2E_SEARCH_PHONE', missingEnv)
 		: `08${String(Date.now()).slice(-8)}`;
 	// Writable runs: fictitious and unique per run — see the ID rule in the file comment.
 	const nationalId = USES_PROVISIONED_FIXTURE
-		? requireEnv('E2E_SEARCH_NATIONAL_ID')
+		? fixtureEnv('E2E_SEARCH_NATIONAL_ID', missingEnv)
 		: fictitiousNationalId(Date.now());
 	const passport = USES_PROVISIONED_FIXTURE
-		? requireEnv('E2E_SEARCH_PASSPORT')
+		? fixtureEnv('E2E_SEARCH_PASSPORT', missingEnv)
 		: `ZZ${String(Date.now()).slice(-7)}`;
 	const shelterName = USES_PROVISIONED_FIXTURE
-		? requireEnv('E2E_SEARCH_SHELTER_NAME')
+		? fixtureEnv('E2E_SEARCH_SHELTER_NAME', missingEnv)
 		: `E2E ศูนย์ทดสอบค้นหา ${RUN_ID}`;
 	const person = (
 		firstName: string,
@@ -173,6 +181,7 @@ export function searchFixture(): SearchFixture {
 		}
 	];
 	return {
+		missingEnv,
 		shelterName,
 		prefix,
 		phone,
@@ -188,14 +197,20 @@ export function searchFixture(): SearchFixture {
 }
 
 export interface SheltersFixture {
+	/** Fixture env names that were unset on a read-only remote run (always empty otherwise). */
+	missingEnv: readonly string[];
 	marker: string;
 	hostNear: ShelterForm;
 	evacFar: ShelterForm;
 }
 
 export function sheltersFixture(): SheltersFixture {
-	const marker = USES_PROVISIONED_FIXTURE ? requireEnv('E2E_SHELTERS_MARKER') : `E2Eกรอง${RUN_ID}`;
+	const missingEnv: string[] = [];
+	const marker = USES_PROVISIONED_FIXTURE
+		? fixtureEnv('E2E_SHELTERS_MARKER', missingEnv)
+		: `E2Eกรอง${RUN_ID}`;
 	return {
+		missingEnv,
 		marker,
 		hostNear: {
 			name: `${marker} บ้านพี่เลี้ยงคอหงส์`,

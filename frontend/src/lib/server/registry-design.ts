@@ -18,7 +18,7 @@ export const REGISTRY_DESIGN_ID = '_design/app';
  * Bump when a view or the registry write policy changes so deployers can tell a
  * stale design doc from a current one without diffing every function body.
  */
-export const REGISTRY_DESIGN_VERSION = 5;
+export const REGISTRY_DESIGN_VERSION = 8;
 
 export interface RegistryDesignDoc {
 	_id: string;
@@ -35,10 +35,94 @@ export interface RegistryDesignDoc {
  */
 export function buildRegistryValidateDocUpdate(): string {
 	return `function (newDoc, oldDoc, userCtx) {
-  if (userCtx.roles.indexOf('_admin') !== -1 || userCtx.roles.indexOf('system_admin') !== -1) {
-    return;
+  var isAdmin =
+    userCtx.roles.indexOf('_admin') !== -1 || userCtx.roles.indexOf('system_admin') !== -1;
+  if (!isAdmin) {
+    throw({ forbidden: 'Only system administrators can write registry documents' });
   }
-  throw({ forbidden: 'Only system administrators can write registry documents' });
+  if (newDoc.type === 'kiosk_banner' && !newDoc._deleted) {
+    if (newDoc.schema_v !== 1 && newDoc.schema_v !== 2) {
+      throw({ forbidden: 'kiosk_banner schema_v must be 1 or 2' });
+    }
+    if (
+      newDoc.schema_v === 2 &&
+      (typeof newDoc.group_id !== 'string' || newDoc.group_id.indexOf('kiosk_banner_group:') !== 0)
+    ) {
+      throw({ forbidden: 'kiosk_banner group_id must be a kiosk_banner_group id' });
+    }
+    if (typeof newDoc.shelter_code !== 'string' || newDoc.shelter_code.length === 0) {
+      throw({ forbidden: 'kiosk_banner shelter_code must be a non-empty string' });
+    }
+    if (
+      typeof newDoc.title !== 'string' ||
+      newDoc.title.trim().length === 0 ||
+      newDoc.title.length > 120
+    ) {
+      throw({ forbidden: 'kiosk_banner title must be 1-120 characters' });
+    }
+    if (newDoc.caption !== undefined && newDoc.caption !== null) {
+      if (typeof newDoc.caption !== 'string' || newDoc.caption.length > 200) {
+        throw({ forbidden: 'kiosk_banner caption must be a string up to 200 characters' });
+      }
+    }
+    var isInt = function (n) {
+      return typeof n === 'number' && isFinite(n) && Math.floor(n) === n;
+    };
+    if (!isInt(newDoc.order) || newDoc.order < 1) {
+      throw({ forbidden: 'kiosk_banner order must be an integer >= 1' });
+    }
+    if (!isInt(newDoc.duration_sec) || newDoc.duration_sec < 3 || newDoc.duration_sec > 60) {
+      throw({ forbidden: 'kiosk_banner duration_sec must be an integer from 3 to 60' });
+    }
+    if (newDoc.status !== 'active' && newDoc.status !== 'inactive') {
+      throw({ forbidden: 'kiosk_banner status must be active or inactive' });
+    }
+    if (
+      newDoc.screen_type !== undefined &&
+      newDoc.screen_type !== 'compact' &&
+      newDoc.screen_type !== 'portrait'
+    ) {
+      throw({ forbidden: 'kiosk_banner screen_type must be compact or portrait' });
+    }
+    var startMs = typeof newDoc.start_at === 'string' ? Date.parse(newDoc.start_at) : NaN;
+    var endMs = typeof newDoc.end_at === 'string' ? Date.parse(newDoc.end_at) : NaN;
+    if (isNaN(startMs) || isNaN(endMs)) {
+      throw({ forbidden: 'kiosk_banner start_at and end_at must be parseable dates' });
+    }
+    if (endMs <= startMs) {
+      throw({ forbidden: 'kiosk_banner end_at must be after start_at' });
+    }
+  }
+  if (newDoc.type === 'kiosk_banner_group' && !newDoc._deleted) {
+    if (newDoc.schema_v !== 1) {
+      throw({ forbidden: 'kiosk_banner_group schema_v must be 1' });
+    }
+    if (typeof newDoc._id !== 'string' || newDoc._id.indexOf('kiosk_banner_group:') !== 0) {
+      throw({ forbidden: 'kiosk_banner_group _id must start with kiosk_banner_group:' });
+    }
+    if (typeof newDoc.shelter_code !== 'string' || newDoc.shelter_code.length === 0) {
+      throw({ forbidden: 'kiosk_banner_group shelter_code must be a non-empty string' });
+    }
+    if (
+      typeof newDoc.name !== 'string' ||
+      newDoc.name.trim().length === 0 ||
+      newDoc.name.trim().length > 60
+    ) {
+      throw({ forbidden: 'kiosk_banner_group name must be 1-60 characters' });
+    }
+    if (newDoc.description !== undefined && newDoc.description !== null) {
+      if (typeof newDoc.description !== 'string' || newDoc.description.length > 200) {
+        throw({ forbidden: 'kiosk_banner_group description must be a string up to 200 characters' });
+      }
+    }
+    var requiredStrings = ['created_at', 'updated_at', 'created_by'];
+    for (var i = 0; i < requiredStrings.length; i++) {
+      var value = newDoc[requiredStrings[i]];
+      if (typeof value !== 'string' || value.length === 0) {
+        throw({ forbidden: 'kiosk_banner_group ' + requiredStrings[i] + ' must be a non-empty string' });
+      }
+    }
+  }
 }`;
 }
 
@@ -89,6 +173,20 @@ export function buildRegistryDesignDoc(): RegistryDesignDoc {
 		validate_doc_update: buildRegistryValidateDocUpdate()
 	};
 }
+
+/**
+ * Mango index for the shelter banner list (`findRawBanners`). CouchDB only uses a json index
+ * when the selector names every indexed field, so this mirrors `{ type, shelter_code }` exactly.
+ * The same index also serves `{ type: 'kiosk_banner_group', shelter_code }` group lists.
+ */
+export const KIOSK_BANNER_MANGO_INDEX = {
+	index: { fields: ['type', 'shelter_code'] },
+	name: 'kiosk-banner-by-shelter',
+	type: 'json'
+} as const;
+
+/** Mango indexes deployed with `_design/app`; `POST /_index` is idempotent. */
+export const REGISTRY_MANGO_INDEXES = [KIOSK_BANNER_MANGO_INDEX] as const;
 
 /** Path for a single-shelter lookup by code (already URL-encoded). */
 export function registryByCodePath(code: string): string {

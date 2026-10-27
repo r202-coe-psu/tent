@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
 from typing import Any
 
 import httpx
@@ -59,6 +59,38 @@ class CouchClient:
         retry.raise_for_status()
         return retry.json()
 
+    async def update_doc(
+        self,
+        database: str,
+        doc_id: str,
+        mutate: Callable[[dict[str, Any]], Awaitable[dict[str, Any] | None]],
+        *,
+        attempts: int = 3,
+    ) -> dict[str, Any] | None:
+        """Read-modify-write one document, re-reading it on every ``409``.
+
+        Unlike ``put_doc`` (which replays its own, possibly stale, body with the latest
+        ``_rev``) the change is re-derived from the *fresh* document on each attempt:
+        ``mutate`` gets the current doc and returns the full new doc, or ``None`` when its
+        precondition no longer holds (nothing is written). Returns the written doc
+        (with its new ``_rev``), or ``None`` when the doc is missing or ``mutate``
+        declined. Raises ``httpx.HTTPStatusError`` if the write fails, or still conflicts
+        after ``attempts`` tries.
+        """
+        for attempt in range(attempts):
+            current = await self.get_doc(database, doc_id)
+            if current is None:
+                return None
+            changed = await mutate(current)
+            if changed is None:
+                return None
+            response = await self._client.put(f"/{database}/{doc_id}", json=changed)
+            if response.status_code == 409 and attempt + 1 < attempts:
+                continue
+            response.raise_for_status()
+            return {**changed, "_rev": response.json().get("rev")}
+        return None  # unreachable: the last attempt returns or raises
+
     async def find(
         self,
         database: str,
@@ -92,6 +124,15 @@ class CouchClient:
     async def database_exists(self, database: str) -> bool:
         response = await self._client.get(f"/{database}")
         return response.status_code == 200
+
+    async def database_missing(self, database: str) -> bool:
+        """True only when CouchDB answers 404; auth failures and 5xx are NOT "missing".
+
+        Read-only. Callers that delete data on the strength of "the database is gone"
+        must use this rather than ``not database_exists`` (which also reads 401/500 as gone).
+        """
+        response = await self._client.get(f"/{database}")
+        return response.status_code == 404
 
     async def ensure_database(self, database: str) -> None:
         """Create DB if missing. CouchDB returns 201 (created) or 412 (already exists)."""

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
+	import { untrack } from 'svelte';
 	import { toast } from 'svelte-sonner';
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import Loader2 from '@lucide/svelte/icons/loader-2';
@@ -18,6 +19,7 @@
 		useEvacuees,
 		useHouseholds,
 		useScreenings,
+		useMedicalByEvacuee,
 		useCheckInEvacuee,
 		useChangeEvacueeZone,
 		useConfirmRoom,
@@ -27,6 +29,7 @@
 		maskNationalId,
 		formatPersonName,
 		classifyZoningQueueTab,
+		startStaffStationVisit,
 		countPresentOccupantsByZone,
 		recommendZoneKind,
 		canChangeEvacueeZone,
@@ -38,7 +41,11 @@
 		type Screening
 	} from '$lib/features/people';
 	import { useShelter } from '$lib/features/shelters';
-	import { useMasterData, formatMasterLabel } from '$lib/features/master-data';
+	import {
+		useMasterData,
+		formatMasterLabel,
+		formatMasterLabelByCode
+	} from '$lib/features/master-data';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { authStore } from '$lib/stores/auth.svelte';
@@ -53,6 +60,10 @@
 	const shelterQuery = useShelter(() => shelterStore.selectedShelterCode ?? getShelterCode());
 	const shelterZones = $derived(shelterQuery.data?.zones ?? []);
 	const vulnerableGroupQuery = useMasterData(() => 'vulnerable_group');
+	// One evacuee's medical doc only (evacuee_id index) — not the whole shelter's records.
+	// Not gated on enable_medical_screening: imports and Station 1 also write conditions.
+	const medicalQuery = useMedicalByEvacuee(() => evacueeId);
+	const chronicDiseaseQuery = useMasterData(() => 'chronic_disease');
 	const checkInMutation = useCheckInEvacuee();
 	const changeZoneMutation = useChangeEvacueeZone();
 	const confirmRoomMutation = useConfirmRoom();
@@ -71,6 +82,17 @@
 			.sort((a, b) => (b.screened_at ?? b.created_at).localeCompare(a.screened_at ?? a.created_at));
 		return list[0] ?? null;
 	});
+	/** โรคประจำตัว — `chronic_disease` codes shown by label, free text as stored (CR-186). */
+	const chronicDiseaseLabels = $derived.by((): string[] => {
+		if (!evacuee) return [];
+		const medical = medicalQuery.data ?? null;
+		const items = chronicDiseaseQuery.data?.items ?? [];
+		// Dedupe after mapping: legacy data may hold both `diabetes` and "เบาหวาน".
+		return [
+			...new Set((medical?.conditions ?? []).map((c) => formatMasterLabelByCode(c, items) || c))
+		];
+	});
+
 	const SPECIAL_NEED_LABELS: Record<string, string> = {
 		wheelchair: 'ใช้วีลแชร์',
 		bedridden: 'ผู้ป่วยติดเตียง',
@@ -90,6 +112,29 @@
 		if (masterItem) return formatMasterLabel(masterItem, 'th');
 		return SPECIAL_NEED_LABELS[need] ?? need;
 	}
+
+	// CR-192: Station 3 `start` when staff open someone who is still waiting to be zoned. The
+	// boolean flips only when that state changes, so the check-in itself never re-opens a visit;
+	// the repository skips a reopen / refresh while a start is still live.
+	const awaitingZoning = $derived(
+		!!evacuee &&
+			!screeningsQuery.isPending &&
+			!shelterQuery.isPending &&
+			classifyZoningQueueTab(evacuee, {
+				enableMedicalScreening: enableMedical,
+				hasScreening: screenedIds.has(evacuee._id)
+			}) === 'pending'
+	);
+	$effect(() => {
+		const id = evacueeId;
+		if (!awaitingZoning) return;
+		untrack(() => {
+			void startStaffStationVisit(id, 3, {
+				shelterCode: getShelterCode(),
+				createdBy: authStore.user?.name ?? 'unknown'
+			});
+		});
+	});
 
 	const isAwaitingConfirm = $derived(!!evacuee && isPendingZoneArrivalConfirmation(evacuee));
 	// Already checked in (active / room_confirmed): the zone action is a zone_change, never a check-in
@@ -330,7 +375,7 @@
 		</Card.Root>
 	{:else}
 		<Card.Root class="border-border p-5 shadow-sm">
-			<div class="mb-4 space-y-2">
+			<div class="mb-2 space-y-2">
 				<div class="flex flex-wrap items-center gap-2">
 					<p class="text-lg font-bold">{formatPersonName(evacuee)}</p>
 					{#if isAwaitingConfirm}
@@ -371,35 +416,47 @@
 						</li>
 					{/each}
 				</ol>
-				<div class="flex flex-wrap items-center gap-2">
-					{#if latestScreening?.symptoms && latestScreening.symptoms.length > 0}
-						<Badge
-							variant="outline"
-							class="border-red-500/40 bg-red-500/15 text-red-800 dark:text-red-200"
-						>
-							เฝ้าระวัง EWAR ({latestScreening.symptoms.length} อาการ)
-						</Badge>
-					{/if}
-					{#if latestScreening?.track === 'fast_track'}
-						<Badge
-							variant="outline"
-							class="border-blue-500/40 bg-blue-500/15 text-blue-800 dark:text-blue-200"
-						>
-							Fast Track
-						</Badge>
-					{/if}
-					{#if isolationDefault}
-						<span class="text-xs text-amber-700 dark:text-amber-300"
-							>— แนะนำกักตัว (ไม่รวมครัวเรือนโดยปริยาย)</span
-						>
-					{/if}
-				</div>
+				{#if (latestScreening?.symptoms?.length ?? 0) > 0 || latestScreening?.track === 'fast_track' || isolationDefault}
+					<div class="flex flex-wrap items-center gap-2">
+						{#if latestScreening?.symptoms && latestScreening.symptoms.length > 0}
+							<Badge
+								variant="outline"
+								class="border-red-500/40 bg-red-500/15 text-red-800 dark:text-red-200"
+							>
+								เฝ้าระวัง EWAR ({latestScreening.symptoms.length} อาการ)
+							</Badge>
+						{/if}
+						{#if latestScreening?.track === 'fast_track'}
+							<Badge
+								variant="outline"
+								class="border-blue-500/40 bg-blue-500/15 text-blue-800 dark:text-blue-200"
+							>
+								Fast Track
+							</Badge>
+						{/if}
+						{#if isolationDefault}
+							<span class="text-xs text-amber-700 dark:text-amber-300"
+								>— แนะนำกักตัว (ไม่รวมครัวเรือนโดยปริยาย)</span
+							>
+						{/if}
+					</div>
+				{/if}
 				{#if evacuee.vulnerable_groups && evacuee.vulnerable_groups.length > 0}
 					<div class="flex flex-wrap items-center gap-1.5 pt-1">
 						<span class="text-xs font-medium text-muted-foreground">กลุ่มเปราะบาง:</span>
 						{#each evacuee.vulnerable_groups as group (group)}
 							<Badge variant="outline" class="border-primary/30 bg-primary/10 text-primary">
 								{getSpecialNeedLabel(group)}
+							</Badge>
+						{/each}
+					</div>
+				{/if}
+				{#if chronicDiseaseLabels.length > 0}
+					<div class="flex flex-wrap items-center gap-1.5 pt-1">
+						<span class="text-xs font-medium text-muted-foreground">โรคประจำตัว:</span>
+						{#each chronicDiseaseLabels as label (label)}
+							<Badge variant="outline" class="border-slate-300 bg-slate-50 text-slate-800">
+								{label}
 							</Badge>
 						{/each}
 					</div>
@@ -495,15 +552,17 @@
 					role="alert"
 					class="mb-4 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-900 dark:text-amber-100"
 				>
-					<p class="font-semibold">ยังไม่ผ่านคัดกรองแพทย์ — จัดโซนไม่ได้</p>
-					<p class="mt-0.5 text-xs">ศูนย์นี้เปิดคัดกรองแพทย์ ให้ส่งไปสถานี 2 ก่อน แล้วจึงจัดโซน</p>
+					<p class="font-semibold">ยังไม่ผ่านคัดกรองผู้เข้าพัก — จัดโซนไม่ได้</p>
+					<p class="mt-0.5 text-xs">
+						ศูนย์นี้เปิดคัดกรองผู้เข้าพัก ให้ส่งไปสถานี 2 ก่อน แล้วจึงจัดโซน
+					</p>
 					<Button
 						class="mt-2"
 						size="sm"
 						variant="outline"
 						href={resolve(`/onsite/medical-screening/${evacuee._id}`)}
 					>
-						ไปคัดกรองแพทย์ (สถานี 2)
+						ไปคัดกรองผู้เข้าพัก (สถานี 2)
 					</Button>
 				</div>
 			{/if}
@@ -531,7 +590,7 @@
 									? 'ย้ายสมาชิกครัวเรือนที่พักอยู่ด้วย'
 									: 'จัดโซนสมาชิกครัวเรือนที่รอจัดด้วย'}
 							</p>
-							<p class="text-2xs text-muted-foreground">
+							<p class="text-xs text-muted-foreground">
 								เลือกเฉพาะคน — คนละโซนได้เมื่อจำเป็น (เช่น กักตัว)
 							</p>
 							{#each companionCandidates as member (member._id)}
@@ -543,7 +602,7 @@
 									/>
 									<div class="min-w-0 flex-1">
 										<p class="text-sm font-medium">{formatPersonName(member)}</p>
-										<p class="text-2xs text-muted-foreground">
+										<p class="text-xs text-muted-foreground">
 											{member.current_stay.status}
 											{#if member.current_stay.zone}
 												· {zoneLabel(member.current_stay.zone, shelterZones)}{/if}
@@ -555,9 +614,11 @@
 					{/if}
 				{/if}
 
-				<div class="mt-6 flex flex-wrap gap-2">
+				<div
+					class="mt-6 flex flex-col gap-2 border-t border-slate-200/80 pt-4 sm:flex-row sm:flex-wrap sm:items-center"
+				>
 					{#if canConfirmArrival}
-						<Button onclick={handleConfirmArrival} disabled={submitting}>
+						<Button class="w-full sm:w-auto" onclick={handleConfirmArrival} disabled={submitting}>
 							{#if submitting}
 								<Loader2 class="mr-2 size-4 animate-spin" />
 							{/if}
@@ -566,6 +627,7 @@
 						{#if evacuee.household_id}
 							<Button
 								variant="secondary"
+								class="w-full sm:w-auto"
 								onclick={handleConfirmHouseholdArrival}
 								disabled={submitting}
 							>
@@ -576,6 +638,7 @@
 					{#if showZoneEditor}
 						<Button
 							variant={isAwaitingConfirm ? 'outline' : 'default'}
+							class="w-full sm:w-auto"
 							onclick={handleSubmit}
 							disabled={submitting || !canSubmitZone}
 						>
@@ -587,6 +650,7 @@
 					{:else}
 						<Button
 							variant="outline"
+							class="w-full sm:w-auto"
 							onclick={() => (rezoneOpenFor = evacueeId)}
 							disabled={submitting}
 						>

@@ -1,6 +1,5 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
-import process from 'node:process';
 import {
 	expect,
 	type APIRequestContext,
@@ -15,10 +14,10 @@ import {
 	couchLogin,
 	couchReq,
 	seedSecurityQuestion,
+	SA_ROLES,
 	type TestUser
 } from './couch';
 import { bangkokToday } from '../../src/lib/utils/date';
-import { IS_REMOTE, RATE_LIMIT_ENFORCED } from './e2e-env';
 import { injectSession, routeBrowserCouchThroughApp } from './login';
 import { publicShelter, teardownShelter, waitForProjection } from './public-cleanup';
 import { createShelterViaUi, pinActiveShelter, setRecaptcha } from './staff-ui';
@@ -64,43 +63,6 @@ export type PublicShelter = { code: string; name: string; needs: PublicNeed[] };
 export type Staff = TestUser & { session: string };
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
-// ─── Rate limits ───────────────────────────────────────────────────────────────
-
-/**
- * Sliding-window pacer for the BFF's per-IP limiters (`src/lib/server/security/rate-limiter.ts`).
- * They only exempt loopback under `vite dev`, so a remote target (staging) — or a local
- * `vite preview` with `DONATION_E2E_PACE=1` — would answer 429 RATE_LIMITED after the 3rd
- * booking in a minute. On `pnpm dev` it is a no-op, and so is it when the target runs with
- * `RATE_LIMIT=false` (CR-160): the booking limiters are bypassed there, so pacing would only
- * slow the run down.
- */
-class Pacer {
-	private hits: number[] = [];
-	constructor(
-		private readonly limit: number,
-		private readonly windowMs = 61_000
-	) {}
-
-	async acquire(n = 1): Promise<void> {
-		if (!RATE_LIMIT_ENFORCED || !(IS_REMOTE || process.env.DONATION_E2E_PACE === '1')) return;
-		for (;;) {
-			const now = Date.now();
-			this.hits = this.hits.filter((t) => now - t < this.windowMs);
-			if (this.hits.length + n <= this.limit) {
-				for (let i = 0; i < n; i++) this.hits.push(now);
-				return;
-			}
-			const expiring = this.hits[this.hits.length + n - this.limit - 1];
-			await sleep(Math.max(expiring + this.windowMs - now, 250) + 250);
-		}
-	}
-}
-
-/** `donationIpLimiter`: creating a booking — 3 per minute per IP. */
-export const bookingPacer = new Pacer(3);
-/** `donationEditLimiter`: edit / courier no. / cancel — 10 per minute per IP. */
-const editPacer = new Pacer(9);
 
 // ─── Per-run ledger ────────────────────────────────────────────────────────────
 
@@ -255,6 +217,20 @@ export async function createWarehouseStaff(
 	return { ...user, session: await couchLogin(user.name, user.password) };
 }
 
+/** A system admin — no shelter of their own, so `openBackOffice` needs `workingShelter`. */
+export async function createSystemAdmin(ledger: RunLedger, tag: string): Promise<Staff> {
+	const user: TestUser = {
+		name: `dn_${tag}_${RUN_ID}`,
+		password: 'Password1!',
+		roles: SA_ROLES,
+		display_name: `Donation E2E ${tag}`
+	};
+	ledger.add('staff', user.name);
+	await createCouchUser(user);
+	await seedSecurityQuestion(user.name);
+	return { ...user, session: await couchLogin(user.name, user.password) };
+}
+
 export type DeliveryMode =
 	| { kind: 'self'; slot?: RegExp }
 	| { kind: 'parcel'; trackingNo?: string }
@@ -289,22 +265,34 @@ export async function catalogItem(name: string): Promise<{ id: string; unit: str
 	return { id: doc._id, unit: doc.base_unit };
 }
 
-/** Public needs board → `shelter`'s card → the line for `itemName` (as the board prints it). */
-export async function openNeed(page: Page, shelter: Pick<PublicShelter, 'name'>, itemName: string) {
+/** Public needs board → `shelter`'s card, opened. */
+export async function openShelter(page: Page, shelter: Pick<PublicShelter, 'name'>) {
 	await page.goto('/donations');
 	await expect(
 		page.getByRole('heading', { name: /ของที่ศูนย์พักพิง\s*ต้องการตอนนี้/ })
 	).toBeVisible();
 	await cardWith(page, shelter.name, 'ดูรายละเอียดและบริจาค').click();
+}
+
+/** Public needs board → `shelter`'s card → the line for `itemName` (as the board prints it). */
+export async function openNeed(page: Page, shelter: Pick<PublicShelter, 'name'>, itemName: string) {
+	await openShelter(page, shelter);
 	await cardWith(page, itemName, 'บริจาครายการนี้').click();
 }
 
+/** An item the donor types in themselves ("บริจาคสิ่งของอื่นๆ") instead of picking a need card. */
+export type UnsolicitedItem = { itemName: string; unitLabel: string };
+
 export type BookingOptions = {
 	shelter: Pick<PublicShelter, 'code' | 'name'>;
-	need: Pick<PublicNeed, 'name'>;
+	/** The need card to book against — or `unsolicited` to type the item in yourself. */
+	need?: Pick<PublicNeed, 'name'>;
+	unsolicited?: UnsolicitedItem;
 	donorName: string;
 	phone: string;
 	mode?: DeliveryMode;
+	/** How many units to declare — 1 unless a test needs more. */
+	qty?: number;
 	/** Every accepted booking is recorded here for `teardownRun`. */
 	ledger: RunLedger;
 };
@@ -315,26 +303,37 @@ export type BookingResponse = Partial<Booking> & {
 };
 
 /**
- * Walk the public wizard up to — not past — "ยืนยันการจองคิวบริจาค", qty 1.
+ * Walk the public wizard up to — not past — "ยืนยันการจองคิวบริจาค" (qty 1 unless `opts.qty`).
  * Returns `submit`, which presses it and hands back the BFF's answer unasserted, so
- * two donors can be brought to the button first and made to press it together (the
- * caller then paces both itself: `submit({ paced: false })` after `bookingPacer.acquire(2)`).
+ * two donors can be brought to the button first and made to press it together.
  */
 export async function fillBooking(
 	page: Page,
 	opts: BookingOptions
-): Promise<{ submit: (o?: { paced?: boolean }) => Promise<BookingResponse> }> {
-	const { shelter, need, donorName, phone } = opts;
+): Promise<{ submit: () => Promise<BookingResponse> }> {
+	const { shelter, need, unsolicited, donorName, phone } = opts;
 	const mode = opts.mode ?? { kind: 'self' };
 
-	await openNeed(page, shelter, need.name);
+	if (unsolicited) {
+		await openShelter(page, shelter);
+		await page.getByRole('button', { name: 'บริจาคสิ่งของอื่นๆ' }).click();
+	} else {
+		if (!need) throw new Error('fillBooking needs either `need` or `unsolicited`');
+		await openNeed(page, shelter, need.name);
+	}
 
-	// Step 2 — donor + item. Name/unit come from the need; only the qty is ours.
+	// Step 2 — donor + item. A need card brings its own name/unit; a typed item does not.
 	await expect(page.getByRole('heading', { name: 'ส่วนที่ 1: ข้อมูลผู้บริจาค' })).toBeVisible();
 	await page.locator('#donor-name').fill(donorName);
 	await page.locator('#donor-phone').fill(phone);
-	await expect(page.getByRole('textbox', { name: 'ประเภทสิ่งของ' })).toHaveValue(need.name);
-	await page.getByRole('spinbutton', { name: 'ปริมาณ' }).fill('1');
+	if (unsolicited) {
+		await page.getByRole('textbox', { name: 'ประเภทสิ่งของ' }).fill(unsolicited.itemName);
+		await page.getByRole('button', { name: /^หน่วย/ }).click();
+		await page.getByRole('option', { name: unsolicited.unitLabel, exact: true }).click();
+	} else {
+		await expect(page.getByRole('textbox', { name: 'ประเภทสิ่งของ' })).toHaveValue(need!.name);
+	}
+	await page.getByRole('spinbutton', { name: 'ปริมาณ' }).fill(String(opts.qty ?? 1));
 	await page.getByRole('button', { name: 'ถัดไป: เลือกจุดส่งมอบ' }).click();
 
 	// Step 3 — logistics. The destination is locked to the card's shelter.
@@ -369,8 +368,7 @@ export async function fillBooking(
 	await expect(button).toBeEnabled();
 
 	return {
-		submit: async ({ paced = true } = {}) => {
-			if (paced) await bookingPacer.acquire();
+		submit: async () => {
 			const posted = page.waitForResponse(
 				(r) => r.url().endsWith('/api/public/v1/donations') && r.request().method() === 'POST'
 			);
@@ -388,20 +386,66 @@ export async function fillBooking(
 	};
 }
 
-/** Walk the public wizard for `need` at `shelter` with qty 1; asserts the ticket. */
+/**
+ * A booking of two lines — the campaign `need` and one typed-in line — posted to the BFF
+ * the way the wizard does. The wizard books one line at a time, and per-line review
+ * (CR-174) and per-line refusal at the counter (CR-172) need two. Parcel, so no slot.
+ */
+export async function bookMixedViaApi(
+	request: APIRequestContext,
+	opts: {
+		shelter: Pick<PublicShelter, 'code'>;
+		need: Pick<PublicNeed, 'item_id' | 'name'>;
+		needUnit: string;
+		typedItem: string;
+		donorName: string;
+		phone: string;
+		ledger: RunLedger;
+	}
+): Promise<Booking> {
+	const res = await request.post('/api/public/v1/donations', {
+		data: {
+			shelter_code: opts.shelter.code,
+			donor: { name: opts.donorName, phone: opts.phone },
+			items: [
+				{ item_id: opts.need.item_id, free_text: opts.need.name, qty: 1, unit: opts.needUnit },
+				{ free_text: opts.typedItem, category: 'other', qty: 2, unit: 'piece', condition: 'new' }
+			],
+			logistics: { delivery_method: 'parcel' }
+		}
+	});
+	const body = (await res.json()) as BookingResponse;
+	expect(body.success, `mixed booking POST failed: ${JSON.stringify(body)}`).toBe(true);
+	const { bookingRef, trackingToken } = body as Booking;
+	opts.ledger.add('bookings', {
+		token: trackingToken,
+		ref: bookingRef,
+		shelter: opts.shelter.code
+	});
+	return { bookingRef, trackingToken };
+}
+
+/** Walk the public wizard for `need` at `shelter` (qty 1 unless `opts.qty`); asserts the ticket. */
 export async function bookAsDonor(page: Page, opts: BookingOptions): Promise<Booking> {
 	const { submit } = await fillBooking(page, opts);
 	const body = await submit();
 	// Under `vite preview` (not dev) with no reCAPTCHA keys the BFF fails closed with
 	// SERVER_MISCONFIGURED — run against `pnpm dev` locally (PLAYWRIGHT_TEST_BASE_URL=
-	// http://localhost:5173). RATE_LIMITED is the BFF's 3 bookings/min/IP (paced here on a
-	// remote target) or FastAPI's 30 req/min/IP on every donation route: wait a minute
-	// between back-to-back local runs.
+	// http://localhost:5173). RATE_LIMITED is nginx's per-IP limit on the donation routes: wait
+	// a minute between back-to-back runs.
 	expect(body.success, `booking POST failed: ${JSON.stringify(body)}`).toBe(true);
 	const { bookingRef, trackingToken } = body as Booking;
 
-	// Step 4 — every public booking opens as pending_review (CR-052 §1.4).
-	await expect(page.getByRole('heading', { name: 'ส่งรายการรอเจ้าหน้าที่ตรวจสอบ' })).toBeVisible();
+	// Step 4 — CR-174: a booking of campaign lines is approved at once and its ticket
+	// carries the QR (AC-1); a typed-in line waits for staff review.
+	if (opts.unsolicited) {
+		await expect(
+			page.getByRole('heading', { name: 'ส่งรายการรอเจ้าหน้าที่ตรวจสอบ' })
+		).toBeVisible();
+	} else {
+		await expect(page.getByRole('heading', { name: 'สำเร็จ! ตั๋วบริจาคของคุณ' })).toBeVisible();
+		await expect(page.getByTestId('ticket-qr')).toBeVisible();
+	}
 	await expect(page.getByText(bookingRef).first()).toBeVisible();
 	return { bookingRef, trackingToken };
 }
@@ -416,16 +460,17 @@ const routedPages = new WeakSet<Page>();
  * `undefined` to a code after the shelter list loads. Unpinned, that remount lands after the
  * tab is visible and resets the sub-tab / detaches forms the test is already filling in.
  */
-export async function openBackOffice(page: Page, staff: Staff) {
+export async function openBackOffice(page: Page, staff: Staff, workingShelter?: string) {
 	if (!routedPages.has(page)) {
 		routedPages.add(page);
 		await routeBrowserCouchThroughApp(page);
 	}
 	await injectSession(page, staff, staff.session);
-	const shelterCode = staff.roles.find((r) => r.startsWith('shelter:'))?.slice('shelter:'.length);
+	const shelterCode =
+		workingShelter ?? staff.roles.find((r) => r.startsWith('shelter:'))?.slice('shelter:'.length);
 	if (shelterCode) await pinActiveShelter(page, shelterCode);
 	await page.goto('/back-office/stock-donations');
-	await expect(page.getByRole('tab', { name: /รอการประเมิน/ })).toBeVisible({ timeout: 15_000 });
+	await expect(page.getByRole('tab', { name: /รายการของบริจาค/ })).toBeVisible({ timeout: 15_000 });
 }
 
 /**
@@ -436,30 +481,73 @@ export async function openPendingRow(page: Page, bookingRef: string) {
 	const row = page.getByRole('row').filter({ hasText: bookingRef });
 	await expect(async () => {
 		await page.reload();
-		await page.getByRole('tab', { name: /รอการประเมิน/ }).click();
+		await page.getByRole('tab', { name: /รายการของบริจาค/ }).click();
+		await page.getByRole('button', { name: /^รอประเมิน/ }).click();
 		await expect(row).toBeVisible({ timeout: 3_000 });
 	}).toPass({ timeout: 30_000 });
 	await row.getByRole('button', { name: 'จัดการ' }).click();
 	await expect(page.getByRole('heading', { name: new RegExp(`^${bookingRef} - `) })).toBeVisible();
 }
 
-/** Approve from the pending tab and wait for CouchDB to flip to `verifying`. */
+/**
+ * Accept every line waiting for review (CR-174 — one decision per pending line) and wait
+ * for CouchDB to flip to `verifying`. Only a booking with a typed-in line is in the queue.
+ */
 export async function approvePending(page: Page, shelterCode: string, bookingRef: string) {
 	await openPendingRow(page, bookingRef);
 	await page.getByRole('textbox', { name: /Internal Review Memo/ }).fill(`e2e ${RUN_ID}`);
-	await page.getByRole('button', { name: 'อนุมัติรับ (Generate QR)' }).click();
-	await expect(page.getByText(`อนุมัติคำขอ ${bookingRef} เข้าสู่การตรวจรับแล้ว`)).toBeVisible();
+	// Anchored — "ไม่รับรายการนี้" contains the same words, and each half carries a hint.
+	const keep = page.getByRole('button', { name: /^รับรายการนี้/ });
+	for (const button of await keep.all()) await button.click();
+	await page.getByRole('button', { name: 'บันทึกผลการประเมิน' }).click();
+	await expect(page.getByText(`บันทึกผลการประเมิน ${bookingRef} แล้ว`)).toBeVisible();
+	await expectReadyForDropoff(shelterCode, bookingRef);
+}
+
+/**
+ * A booking of campaign lines skips the review queue (CR-174 AC-1): it reaches CouchDB
+ * already `verifying`, its lines approved by the campaign rule.
+ */
+export async function expectReadyForDropoff(shelterCode: string, bookingRef: string) {
 	await expect
-		.poll(async () => (await findDonation(shelterCode, bookingRef))?.status)
+		.poll(async () => (await findDonation(shelterCode, bookingRef))?.status, { timeout: 30_000 })
 		.toBe('verifying');
+}
+
+/**
+ * Reject the open booking through the reject dialog (CR-172): pick the preset whose
+ * label matches `reason`, add `note`, confirm. The confirm stays disabled until the
+ * reason is complete, which every caller relies on. `noteRequired` ("อื่นๆ") also checks
+ * that the preset alone is not enough (AC-4) and the note is marked required.
+ */
+export async function rejectInDialog(
+	page: Page,
+	reason: RegExp,
+	note?: string,
+	{ noteRequired = false }: { noteRequired?: boolean } = {}
+) {
+	await page.getByRole('button', { name: 'ปฏิเสธคำขอ' }).click();
+	const dialog = page.getByRole('dialog', { name: 'ปฏิเสธใบบริจาค' });
+	const confirm = dialog.getByRole('button', { name: 'ยืนยันปฏิเสธ' });
+	await expect(confirm).toBeDisabled();
+	await dialog.getByRole('radio', { name: reason }).click();
+	const noteBox = dialog.getByRole('textbox', { name: /รายละเอียดเพิ่มเติม/ });
+	if (noteRequired) {
+		await expect(noteBox).toHaveAttribute('aria-required', 'true');
+		await expect(confirm).toBeDisabled();
+	}
+	if (note) await noteBox.fill(note);
+	await confirm.click();
+	await expect(dialog).toBeHidden();
 }
 
 /** Open a booking in the scan station by typing its ref. */
 export async function openInScanStation(page: Page, bookingRef: string) {
 	await page.reload();
-	// The active tab is kept in `?tab=` and survives the reload, so coming from the
-	// pending queue the scan station has to be picked explicitly.
-	await page.getByRole('tab', { name: /สแกนรับของเข้าคลัง/ }).click();
+	// The active tab is kept in `?tab=` and survives the reload, so the list is picked
+	// explicitly; the scanner sits at its top right (#617).
+	await page.getByRole('tab', { name: /รายการของบริจาค/ }).click();
+	await page.getByRole('button', { name: 'สแกนรับเข้าคลัง' }).click();
 	await page.getByRole('textbox', { name: 'รหัสการจอง' }).fill(bookingRef);
 	await page.getByRole('button', { name: 'ค้นหา' }).click();
 	await expect(
@@ -603,11 +691,9 @@ export type TornDown = ReturnType<RunLedger['read']>;
 async function cancelOpenBookings(request: APIRequestContext, bookings: LedgerBooking[]) {
 	for (const b of bookings) {
 		for (let attempt = 0; attempt < 6; attempt++) {
-			await editPacer.acquire();
 			const res = await request.delete(`/api/public/v1/donations/${b.token}`);
-			// 409: inbound has the row but CouchDB does not show it yet. 429: a limiter.
+			// 409: inbound has the row but CouchDB does not show it yet.
 			if (res.status() === 409) await sleep(3_000);
-			else if (res.status() === 429) await sleep(61_000);
 			else break;
 		}
 	}
@@ -690,6 +776,8 @@ export async function expectRunGone(request: APIRequestContext, run: TornDown) {
 			(await couchReq('GET', `/_users/org.couchdb.user:${encodeURIComponent(name)}`)).status
 		).toBe(404);
 	}
+	// FastAPI caps donation routes at 30/min per IP and the BFF does not forward the caller's
+	// IP yet (#458), so a busy run can see 429 here. Poll past one full 60 s window.
 	for (const b of run.bookings) {
 		await expect
 			.poll(
@@ -697,7 +785,7 @@ export async function expectRunGone(request: APIRequestContext, run: TornDown) {
 					const res = await request.get(`/api/public/v1/donations/${b.token}`);
 					return ((await res.json()) as { donation?: { status?: string } }).donation?.status;
 				},
-				{ timeout: 30_000, intervals: [2_000, 3_000] }
+				{ timeout: 75_000, intervals: [2_000, 3_000, 5_000] }
 			)
 			.toEqual(expect.stringMatching(new RegExp(`^(${RELEASED_STATUSES.join('|')})$`)));
 	}

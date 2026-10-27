@@ -25,6 +25,7 @@ import { authStore } from '$lib/stores/auth.svelte';
 import { useMasterData } from '$lib/features/master-data';
 import { bangkokDateString } from '../domain/duty-window';
 import { computeHubMetrics } from '../domain/hub-metrics';
+import { parseVolunteerScanCode } from '../domain/scan-code';
 import {
 	controlledSkillValues,
 	skillOptionsFromMaster,
@@ -43,7 +44,8 @@ import type {
 	JobApplicationFilter,
 	JobFilter,
 	ShiftAssignmentFilter,
-	VolunteerFilter
+	VolunteerFilter,
+	VolunteerRepository
 } from '../data/volunteer.repository';
 
 /** Calendar date "today" is evaluated against, in **Asia/Bangkok** — the same
@@ -163,6 +165,34 @@ export const useJobApplicationByToken = (
 export const findVolunteerByTrackingToken = (token: string): Promise<Volunteer | null> =>
 	volunteerRepository().getByTrackingToken(token);
 
+/**
+ * Resolve any volunteer credential a scanner can hand over — the QR on a digital pass /
+ * role card (pass URL or bare `TKT-VOL-…`), a `volunteer:…` id, or a printed `V-{NNN}` code.
+ * `null` when the scan is not a volunteer credential, matches no volunteer, or carries a
+ * `V-{NNN}` code shared by more than one volunteer. Pair with `parseVolunteerScanCode` to
+ * route a mixed scanner (e.g. the distribution desk) before calling it.
+ */
+export async function lookupVolunteerByScanCode(
+	raw: string,
+	repo: Pick<VolunteerRepository, 'get' | 'list' | 'getByTrackingToken'> = volunteerRepository()
+): Promise<Volunteer | null> {
+	const parsed = parseVolunteerScanCode(raw);
+	if (!parsed) return null;
+	switch (parsed.kind) {
+		case 'id':
+			return repo.get(parsed.id);
+		case 'code': {
+			// `volunteer_code` has no unique index (volunteer-code.ts F14), so an ambiguous code
+			// resolves to nobody rather than to whichever duplicate happens to come first.
+			const all = await repo.list();
+			const hits = all.filter((v) => v.volunteer_code.toUpperCase() === parsed.code);
+			return hits.length === 1 ? hits[0] : null;
+		}
+		case 'token':
+			return repo.getByTrackingToken(parsed.token);
+	}
+}
+
 export const useShiftAssignments = (filter?: ShiftAssignmentFilter) =>
 	createQuery(() => ({
 		queryKey: volunteerKeys.shiftAssignmentsList(filter),
@@ -190,10 +220,15 @@ export const useTodayAttendance = (date: () => string = todayDateString) =>
  * pick changes instead of showing the active shelter's roster — CR-096 §2.4. Omit it and the
  * list follows the active shelter as every other caller expects.
  */
-export const useVolunteers = (filter?: VolunteerFilter, shelterCode?: () => string | undefined) =>
+export const useVolunteers = (
+	filter?: VolunteerFilter,
+	shelterCode?: () => string | undefined,
+	enabled: () => boolean = () => true
+) =>
 	createQuery(() => ({
 		queryKey: volunteerKeys.volunteersList(filter, shelterCode?.()),
-		queryFn: () => volunteerRepositoryFor(shelterCode?.()).list(filter)
+		queryFn: () => volunteerRepositoryFor(shelterCode?.()).list(filter),
+		enabled: enabled()
 	}));
 
 export const useVolunteer = (id: () => string, enabled: () => boolean = () => true) =>
@@ -314,8 +349,8 @@ export const useCreateJobApplication = (queryClient: QueryClient) =>
  * SM reviews a `pending_review` application. `confirmed` consumes one job
  * slot (`job.slots_remaining -> slots_confirmed`); either decision moves the
  * application out of `pending_review`, changing the hub metrics
- * `pendingApproval` counter. Quota-changing — invalidate applications, jobs,
- * and hub metrics.
+ * `pendingApproval` counter, and approving creates the shift assignment.
+ * Quota-changing — invalidate applications, jobs, shift assignments, and hub metrics.
  */
 export const useReviewApplication = (queryClient: QueryClient) =>
 	createMutation(() => ({
@@ -331,6 +366,7 @@ export const useReviewApplication = (queryClient: QueryClient) =>
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: volunteerKeys.jobApplicationsAll() });
 			queryClient.invalidateQueries({ queryKey: volunteerKeys.jobsAll() });
+			queryClient.invalidateQueries({ queryKey: volunteerKeys.shiftAssignmentsAll() });
 			queryClient.invalidateQueries({ queryKey: volunteerKeys.hubMetrics() });
 		}
 	}));

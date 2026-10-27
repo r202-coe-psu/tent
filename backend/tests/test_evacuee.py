@@ -1,9 +1,11 @@
 """Tests for evacuee public search endpoint."""
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
+import pytest
 from httpx import AsyncClient
 from pymongo import AsyncMongoClient
+from tent_model.api_key import ApiKey
 
 from apiapp.core.config import Settings
 from apiapp.modules.evacuee.use_case import map_public_status
@@ -12,8 +14,11 @@ from apiapp.utils.masking import (
     mask_last_name,
     name_key,
     national_id_hash,
+    passport_hash,
     phone_hash,
+    sha256_hex,
 )
+from apiapp.utils.ulid import new_ulid
 
 
 def test_map_public_status_includes_arriving_and_room_confirmed():
@@ -479,33 +484,6 @@ async def test_evacuee_search_writes_search_audit(
     assert audit.synced_to_couch is False
 
 
-async def test_evacuee_search_rate_limited(client: AsyncClient, auth_headers: dict[str, str]):
-    from apiapp.modules.evacuee import router as evacuee_router
-
-    evacuee_router._request_log.clear()
-    original_max = evacuee_router.RATE_LIMIT_MAX_REQUESTS
-    evacuee_router.RATE_LIMIT_MAX_REQUESTS = 3
-    try:
-        headers = {**auth_headers, "X-Real-IP": "198.51.100.7"}
-        for _ in range(3):
-            ok = await client.post(
-                "/public/v1/occupants",
-                json={"q": "0811111111"},
-                headers=headers,
-            )
-            assert ok.status_code in (200, 422)
-        limited = await client.post(
-            "/public/v1/occupants",
-            json={"q": "0811111111"},
-            headers=headers,
-        )
-        assert limited.status_code == 429
-        assert limited.json()["errors"][0]["error"]["code"] == "RATE_LIMITED"
-    finally:
-        evacuee_router.RATE_LIMIT_MAX_REQUESTS = original_max
-        evacuee_router._request_log.clear()
-
-
 async def test_evacuee_search_returns_shelter_address_and_resolves_zone_name(
     client: AsyncClient,
     db_client: AsyncMongoClient,
@@ -775,3 +753,198 @@ async def test_evacuee_name_search_breaks_first_name_ties_by_id(
     expected = [f"สมศรี ใจ{index:02d}" for index in range(1, 11)]
     assert await _search_names(client, auth_headers, "สมศรี") == expected
     assert await _search_names(client, auth_headers, "สมศรี ใจดี") == expected
+
+
+# ─── ID search is sorted too (#736 decision 5, CR-166 "sort every case") ───────────────────
+#
+# National-ID / passport / phone searches used to return Mongo's natural order, so which 10 of
+# 12 matches survived the cap depended on insertion order. The shared use case now sorts every
+# branch by (`first_name_key`, `_id`): affects /public/v1/occupants and /external/v1/occupants.
+
+_ID_QUERIES = {
+    "national_id": ("3900100244192", "national_id_hash", national_id_hash),
+    "passport": ("AA1234567", "passport_hash", passport_hash),
+    "phone": ("0812345678", "phone_hash", phone_hash),
+}
+_EXTERNAL_API_KEY = "tsk_evacuee_sort_test_key_1234567890"
+
+
+@pytest.fixture(params=["/public/v1/occupants", "/external/v1/occupants"])
+async def search_endpoint(
+    request: pytest.FixtureRequest, auth_headers: dict[str, str]
+) -> tuple[str, dict[str, str]]:
+    """Every endpoint that runs `EvacueeUseCase.search`: public BFF and legacy keyed plane."""
+    if request.param.startswith("/public/"):
+        return request.param, auth_headers
+    await ApiKey(
+        id=new_ulid(),
+        name="Sort test consumer",
+        owner="test",
+        key_prefix=_EXTERNAL_API_KEY[:8],
+        key_hash=sha256_hex(_EXTERNAL_API_KEY),
+        expires_at=datetime.now(UTC) + timedelta(days=30),
+        created_by="admin",
+        created_at=datetime.now(UTC),
+    ).insert()
+    return request.param, {"X-API-Key": _EXTERNAL_API_KEY}
+
+
+async def _insert_twelve_matches(
+    db_client: AsyncMongoClient,
+    settings: Settings,
+    kind: str,
+    *,
+    same_first_name: bool,
+) -> None:
+    """12 people sharing one ID hash, inserted in REVERSE order (natural order = 12 … 1)."""
+    _, field, hasher = _ID_QUERIES[kind]
+    query = _ID_QUERIES[kind][0]
+    now = datetime.now(UTC)
+    for index in range(12, 0, -1):
+        await _insert_person(
+            db_client,
+            settings,
+            {
+                "_id": f"evacuee:{index:02d}",
+                "shelter_code": "SH001",
+                "first_name": "สมศรี" if same_first_name else f"ทดสอบ{index:02d}",
+                # Distinct display surname per row so the response order is observable.
+                "last_name_masked": f"ใจ{index:02d}",
+                field: hasher(query),
+                "search_excluded": False,
+                "status": "active",
+                "updated_at": now,
+            },
+        )
+
+
+async def _names(
+    client: AsyncClient, endpoint: tuple[str, dict[str, str]], query: str
+) -> list[str]:
+    url, headers = endpoint
+    response = await client.post(url, json={"q": query}, headers=headers)
+    assert response.status_code == 200, (url, response.text)
+    return [result["name"] for result in response.json()["results"]]
+
+
+@pytest.mark.parametrize("kind", list(_ID_QUERIES))
+async def test_id_search_returns_the_first_ten_by_first_name_key(
+    client: AsyncClient,
+    db_client: AsyncMongoClient,
+    settings: Settings,
+    search_endpoint: tuple[str, dict[str, str]],
+    kind: str,
+):
+    """12 matches: the 10 returned are the first ten by first name, whatever the insert order."""
+    await _insert_twelve_matches(db_client, settings, kind, same_first_name=False)
+
+    expected = [f"ทดสอบ{index:02d} ใจ{index:02d}" for index in range(1, 11)]
+    assert await _names(client, search_endpoint, _ID_QUERIES[kind][0]) == expected
+
+
+@pytest.mark.parametrize("kind", list(_ID_QUERIES))
+async def test_id_search_breaks_first_name_ties_by_id(
+    client: AsyncClient,
+    db_client: AsyncMongoClient,
+    settings: Settings,
+    search_endpoint: tuple[str, dict[str, str]],
+    kind: str,
+):
+    """Same first name for everyone: `_id` decides which 10 of 12 survive the cap."""
+    await _insert_twelve_matches(db_client, settings, kind, same_first_name=True)
+
+    expected = [f"สมศรี ใจ{index:02d}" for index in range(1, 11)]
+    assert await _names(client, search_endpoint, _ID_QUERIES[kind][0]) == expected
+
+
+async def test_public_search_still_returns_cancelled_people_and_family_members(
+    client: AsyncClient,
+    db_client: AsyncMongoClient,
+    settings: Settings,
+    search_endpoint: tuple[str, dict[str, str]],
+):
+    """Regression (#736 decision 3/4): EXT-012 drops `cancelled` + family at ITS layer only.
+
+    The shared use case behind /public/v1/occupants and /external/v1/occupants keeps reporting
+    a cancelled stay as `cancelled` (CR-099) and keeps the household members (CR-080).
+    """
+    phone = "0833333333"
+    now = datetime.now(UTC)
+    await _insert_shelter(
+        db_client,
+        settings,
+        {
+            "_id": "SH001",
+            "shelter_code": "SH001",
+            "name": "ศูนย์ทดสอบ",
+            "status": "open",
+            "capacity": 100,
+            "updated_at": now,
+        },
+    )
+    for doc_id, first_name, stay_status in [
+        ("evacuee:cancelled-parent", "พ่อ", "cancelled"),
+        ("evacuee:cancelled-child", "ลูก", "cancelled"),
+    ]:
+        await _insert_person(
+            db_client,
+            settings,
+            {
+                "_id": doc_id,
+                "shelter_code": "SH001",
+                "first_name": first_name,
+                "last_name_masked": mask_last_name("ใจดี"),
+                "phone_hash": phone_hash(phone) if first_name == "พ่อ" else None,
+                "household_id": "household:cancelled",
+                "search_excluded": False,
+                "status": stay_status,
+                "updated_at": now,
+            },
+        )
+
+    path, headers = search_endpoint
+    response = await client.post(path, json={"q": phone}, headers=headers)
+    assert response.status_code == 200
+    body = response.json()
+    assert body["count"] == 1
+    assert body["results"][0]["status"] == "cancelled"
+    members = body["results"][0]["family_members"]
+    assert [m["name"] for m in members] == [f"ลูก {mask_last_name('ใจดี')}"]
+    assert members[0]["status"] == "cancelled"
+
+
+async def test_basic_consent_person_leaves_occupant_search(
+    client: AsyncClient,
+    db_client: AsyncMongoClient,
+    settings: Settings,
+    auth_headers: dict[str, str],
+):
+    """PDPA FR-40 — the worker deletes a basic-mode person's projection (worker
+    `test_project_evacuee_basic_consent_deletes_projection`); search then skips them."""
+    phone = "0877777777"
+    now = datetime.now(UTC)
+    for suffix, first_name in (("visible", "เห็น"), ("basic", "พื้นฐาน")):
+        await _insert_person(
+            db_client,
+            settings,
+            {
+                "_id": f"evacuee:{suffix}",
+                "shelter_code": "SH001",
+                "first_name": first_name,
+                "last_name_masked": mask_last_name("ใจดี"),
+                "phone_hash": phone_hash(phone),
+                "search_excluded": False,
+                "status": "active",
+                "updated_at": now,
+            },
+        )
+    before = await client.post("/public/v1/occupants", json={"q": phone}, headers=auth_headers)
+    assert before.json()["count"] == 2
+
+    db_name = settings.DATABASE_URI.rsplit("/", 1)[-1]
+    await db_client[db_name]["public_persons"].delete_one({"_id": "evacuee:basic"})
+
+    after = await client.post("/public/v1/occupants", json={"q": phone}, headers=auth_headers)
+    assert after.status_code == 200
+    assert after.json()["count"] == 1
+    assert [r["name"].split()[0] for r in after.json()["results"]] == ["เห็น"]

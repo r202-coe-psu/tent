@@ -13,10 +13,6 @@ import {
 	reprintKioskLabels
 } from '$lib/features/kiosk/server/kiosk-reprint.server';
 import { KioskLookupUnavailableError } from '$lib/features/kiosk/server/kiosk-check-in.server';
-import {
-	kioskReprintDeviceLimiter,
-	kioskReprintVerifyFailureLimiter
-} from '$lib/server/security/rate-limiter';
 import { findMasterByCode } from '$lib/server/shelters.admin';
 
 vi.mock('$lib/server/shelters.admin', () => ({ findMasterByCode: vi.fn() }));
@@ -50,7 +46,7 @@ const members = [
 	{
 		evacuee_id: primaryId,
 		qr_payload: primaryId,
-		label: { name: 'สมชาย ใจดี', phone: '0812345678' }
+		label: { name: 'สมชาย ใจดี', phone: '0812345678', zone: null, stations_passed: 1 }
 	}
 ];
 const validBody = {
@@ -74,17 +70,14 @@ function request(body: unknown, deviceId = 'reprint-device-1'): RequestEvent {
 	} as unknown as RequestEvent;
 }
 
-const ulidFor = (n: number) => `evacuee:01ARZ3NDEKTSV4RRFFQ69G${String(n).padStart(4, '0')}`;
 const send = (body: unknown, deviceId?: string) => POST(request(body, deviceId));
-let nonce = 0;
 
 describe('POST /api/v1/kiosk/reprint', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
-		nonce += 1;
 		mockAuthenticate.mockImplementation(async (deviceId) => {
 			if (!deviceId) throw new ScannerAuthError();
-			return { registry_id: `${deviceId}-${nonce}`, shelter_code: 'SH001' } as never;
+			return { registry_id: deviceId, shelter_code: 'SH001' } as never;
 		});
 		vi.mocked(scannerServerRepository.updateDeviceLastSeen).mockResolvedValue(undefined);
 		mockReprint.mockResolvedValue(members);
@@ -133,7 +126,9 @@ describe('POST /api/v1/kiosk/reprint', () => {
 		expect(response.status).toBe(200);
 		expect(response.headers.get('cache-control')).toBe('no-store');
 		expect(await response.json()).toEqual({ shelter_code: 'SH001', members });
-		expect(mockReprint).toHaveBeenCalledWith('SH001', validBody);
+		expect(mockReprint).toHaveBeenCalledWith('SH001', validBody, {
+			verifyStaffPin: expect.any(Function)
+		});
 	});
 
 	it('answers 404 KIOSK_REPRINT_NOT_FOUND', async () => {
@@ -143,50 +138,18 @@ describe('POST /api/v1/kiosk/reprint', () => {
 		expect((await response.json()).error.code).toBe('KIOSK_REPRINT_NOT_FOUND');
 	});
 
-	it('answers 403 KIOSK_REPRINT_UNVERIFIABLE without spending the verify budget', async () => {
-		const spy = vi.spyOn(kioskReprintVerifyFailureLimiter, 'check');
+	it('answers 403 KIOSK_REPRINT_UNVERIFIABLE', async () => {
 		mockReprint.mockRejectedValueOnce(new KioskReprintUnverifiableError());
 		const response = await send(validBody);
 		expect(response.status).toBe(403);
 		expect((await response.json()).error.code).toBe('KIOSK_REPRINT_UNVERIFIABLE');
-		expect(spy).not.toHaveBeenCalled();
 	});
 
-	it('answers 403 KIOSK_REPRINT_VERIFY_FAILED, then 429 after five failures for that primary', async () => {
-		const target = ulidFor(nonce);
-		const body = { ...validBody, primary_evacuee_id: target, evacuee_ids: [target] };
-		mockReprint.mockRejectedValue(new KioskReprintVerifyFailedError());
-		for (let attempt = 0; attempt < 5; attempt += 1) {
-			const response = await send(body, `verify-device-${attempt}`);
-			expect(response.status).toBe(403);
-			expect((await response.json()).error.code).toBe('KIOSK_REPRINT_VERIFY_FAILED');
-		}
-		mockReprint.mockResolvedValue(members);
-		const blocked = await send(body, 'verify-device-other');
-		expect(blocked.status).toBe(429);
-		expect((await blocked.json()).error.code).toBe('KIOSK_RATE_LIMITED');
-		expect(blocked.headers.get('retry-after')).toBeTruthy();
-		expect(blocked.headers.get('cache-control')).toBe('no-store');
-	});
-
-	it('does not spend the verify budget on successful reprints', async () => {
-		const target = ulidFor(nonce + 5000);
-		for (let attempt = 0; attempt < 8; attempt += 1) {
-			const response = await send(
-				{ ...validBody, primary_evacuee_id: target, evacuee_ids: [target] },
-				`ok-device-${attempt}`
-			);
-			expect(response.status).toBe(200);
-		}
-	});
-
-	it('rate limits a device', async () => {
-		const spy = vi.spyOn(kioskReprintDeviceLimiter, 'check').mockReturnValueOnce(false);
+	it('answers 403 KIOSK_REPRINT_VERIFY_FAILED on a wrong last-4', async () => {
+		mockReprint.mockRejectedValueOnce(new KioskReprintVerifyFailedError());
 		const response = await send(validBody);
-		expect(response.status).toBe(429);
-		expect((await response.json()).error.code).toBe('KIOSK_RATE_LIMITED');
-		expect(mockReprint).not.toHaveBeenCalled();
-		spy.mockRestore();
+		expect(response.status).toBe(403);
+		expect((await response.json()).error.code).toBe('KIOSK_REPRINT_VERIFY_FAILED');
 	});
 
 	it('answers 503 DEPENDENCY_UNAVAILABLE when CouchDB is down', async () => {

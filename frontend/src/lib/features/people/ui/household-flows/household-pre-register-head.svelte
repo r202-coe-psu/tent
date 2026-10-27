@@ -13,6 +13,7 @@
 	import { zod4 } from 'sveltekit-superforms/adapters';
 	import {
 		householdPreRegisterEvacueeSchema,
+		withoutBookingRef,
 		currentBEYear,
 		minBirthYearBE,
 		MAX_AGE_YEARS,
@@ -145,7 +146,7 @@
 				toast.error('กรุณากรอกข้อมูลให้ถูกต้องและครบถ้วน');
 				return;
 			}
-			onNext(form.data);
+			onNext(withoutBookingRef(form.data));
 		}
 	});
 
@@ -157,7 +158,7 @@
 		initialized = true;
 		$formData = {
 			...$formData,
-			...initialData,
+			...withoutBookingRef(initialData),
 			birth_year: typeof initialData.birth_year === 'number' ? initialData.birth_year : undefined,
 			person_id: {
 				cardType: initialData.person_id?.cardType ?? 'national_id',

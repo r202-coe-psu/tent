@@ -8,19 +8,33 @@
 	import Loader from '@lucide/svelte/icons/loader';
 	import AlertCircle from '@lucide/svelte/icons/alert-circle';
 	import Building2 from '@lucide/svelte/icons/building-2';
+	import HandHeart from '@lucide/svelte/icons/hand-heart';
 	import { useSearchEvacuees, lookupEvacueeByScanCode, type Evacuee } from '$lib/features/people';
+	import {
+		lookupVolunteerByScanCode,
+		useVolunteers,
+		type Volunteer
+	} from '$lib/features/volunteers';
 	import CameraCodeScannerDialog from '$lib/components/camera-code-scanner-dialog.svelte';
+	import { createReadGuard } from '$lib/components/camera-code-scanner-state';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import type { FrontlineRecipientSelection } from '../model/frontline-handover';
 	import { deriveRecipientMenuTags } from '../../domain/food-supplies';
 	import { formatDistributionError } from '../model/distribution-error';
+	import {
+		resolveScannedRecipient,
+		searchVolunteers,
+		toVolunteerSelection
+	} from '../model/recipient-scan';
 
 	interface Props {
 		value?: FrontlineRecipientSelection | null;
 		disabled?: boolean;
 		/** Offer the "บุคคลภายนอก" (anonymous outside person) option. Off for loan returns. */
 		allowOutside?: boolean;
+		/** Accept volunteer QR cards and list volunteers in the name search. */
+		allowVolunteer?: boolean;
 		onselect?: (recipient: FrontlineRecipientSelection | null) => void;
 	}
 
@@ -28,10 +42,11 @@
 		value = $bindable(null),
 		disabled = false,
 		allowOutside = true,
+		allowVolunteer = true,
 		onselect
 	}: Props = $props();
 
-	/** Evacuee QR cards plus the 1D codes a handheld scanner or printed label may carry. */
+	/** Evacuee and volunteer QR cards plus the 1D codes a handheld scanner or printed label may carry. */
 	const SCAN_FORMATS = [Html5QrcodeSupportedFormats.QR_CODE, Html5QrcodeSupportedFormats.CODE_128];
 
 	const queryClient = useQueryClient();
@@ -43,6 +58,8 @@
 	let outsideNotes = $state('');
 	/** Whether the current pick came from the scanner — `next()` reopens it only then. */
 	let pickedByScan = false;
+	/** Drops a lookup that settles after the scanner was closed. */
+	const lookupGuard = createReadGuard();
 
 	const searchEnabled = $derived(!value && searchTerm.trim().length >= 2);
 	const evacueeSearchQuery = useSearchEvacuees(
@@ -53,7 +70,26 @@
 	const searchResults = $derived((evacueeSearchQuery.data as Evacuee[] | undefined) ?? []);
 	// A disabled query stays `isPending` forever (TanStack v5), so gate the spinner on the
 	// search being enabled; `isPending` (not `isFetching`) keeps results visible on refetch.
-	const isSearching = $derived(searchEnabled && evacueeSearchQuery.isPending);
+
+	// Active volunteers are few per shelter: fetch once, filter client-side (as the check-in desk
+	// does). Not fetched at all where a caller turns volunteers off.
+	const volunteersQuery = useVolunteers({ status: 'active' }, undefined, () => allowVolunteer);
+	// A disabled volunteer query is `isPending` forever too — gate it the same way.
+	const isSearching = $derived(
+		searchEnabled && (evacueeSearchQuery.isPending || (allowVolunteer && volunteersQuery.isPending))
+	);
+	const volunteerSearchFailed = $derived(
+		allowVolunteer && searchEnabled && volunteersQuery.isError
+	);
+	const volunteerResults = $derived<Volunteer[]>(
+		allowVolunteer && searchEnabled ? searchVolunteers(volunteersQuery.data ?? [], searchTerm) : []
+	);
+	const hasNoResults = $derived(
+		searchEnabled &&
+			!volunteerSearchFailed &&
+			searchResults.length === 0 &&
+			volunteerResults.length === 0
+	);
 
 	function choose(selection: FrontlineRecipientSelection | null) {
 		value = selection;
@@ -75,21 +111,43 @@
 		});
 	}
 
+	function selectVolunteer(volunteer: Volunteer, viaScan: boolean) {
+		pickedByScan = viaScan;
+		searchTerm = '';
+		scanError = null;
+		choose(toVolunteerSelection(volunteer));
+	}
+
 	async function handleScan(code: string) {
+		if (isLookingUp) return;
 		isLookingUp = true;
 		scanError = null;
+		const isLatest = lookupGuard.begin();
 		try {
-			const found = await lookupEvacueeByScanCode(queryClient, code);
-			if (found) {
-				selectEvacuee(found, true);
-			} else {
-				scanError = `ไม่พบผู้ประสบภัยจากรหัส "${code}" ลองสแกนใหม่หรือค้นหาด้วยชื่อ`;
-			}
+			const result = await resolveScannedRecipient(
+				code,
+				{ allowVolunteer },
+				{
+					lookupEvacuee: (c) => lookupEvacueeByScanCode(queryClient, c),
+					lookupVolunteer: (c) => lookupVolunteerByScanCode(c)
+				}
+			);
+			if (!isLatest()) return;
+			if (result.kind === 'evacuee') selectEvacuee(result.evacuee, true);
+			else if (result.kind === 'volunteer') selectVolunteer(result.volunteer, true);
+			else scanError = result.message;
 		} catch (err) {
+			if (!isLatest()) return;
 			scanError = formatDistributionError(err, 'เกิดข้อผิดพลาดในการค้นหา กรุณาลองใหม่อีกครั้ง');
 		} finally {
-			isLookingUp = false;
+			if (isLatest()) isLookingUp = false;
 		}
+	}
+
+	/** Scanner closed mid-lookup: discard the pending result and free the scan button. */
+	function cancelLookup() {
+		lookupGuard.cancel();
+		isLookingUp = false;
 	}
 
 	function outsideSelection(): FrontlineRecipientSelection {
@@ -145,19 +203,21 @@
 		<!-- Selected recipient -->
 		<div
 			class="flex items-center justify-between gap-3 rounded-lg border px-3 py-3 {value.recipientType ===
-			'evacuee'
-				? 'border-emerald-200 bg-emerald-50/60'
-				: 'border-slate-200 bg-slate-50'}"
+			'outside'
+				? 'border-slate-200 bg-slate-50'
+				: 'border-emerald-200 bg-emerald-50/60'}"
 		>
 			<div class="flex min-w-0 items-center gap-3">
 				<div
 					class="flex size-10 shrink-0 items-center justify-center rounded-full {value.recipientType ===
-					'evacuee'
-						? 'bg-emerald-100 text-emerald-800'
-						: 'bg-slate-200 text-slate-700'}"
+					'outside'
+						? 'bg-slate-200 text-slate-700'
+						: 'bg-emerald-100 text-emerald-800'}"
 				>
 					{#if value.recipientType === 'evacuee'}
 						<User class="size-5" aria-hidden="true" />
+					{:else if value.recipientType === 'volunteer'}
+						<HandHeart class="size-5" aria-hidden="true" />
 					{:else}
 						<Building2 class="size-5" aria-hidden="true" />
 					{/if}
@@ -170,6 +230,9 @@
 							{#if value.stayInfo}<span>{value.stayInfo}</span>{/if}
 							{#if value.phone}<span>โทร {value.phone}</span>{/if}
 							<span class="text-xs text-slate-400">{value.recipientId}</span>
+						{:else if value.recipientType === 'volunteer'}
+							<span>จิตอาสา{value.volunteerCode ? ` · ${value.volunteerCode}` : ''}</span>
+							{#if value.phone}<span>โทร {value.phone}</span>{/if}
 						{:else}
 							<span>บุคคลภายนอก{value.notes ? ` · ${value.notes}` : ''}</span>
 						{/if}
@@ -259,16 +322,33 @@
 			/>
 		</div>
 
+		{#if volunteerSearchFailed}
+			<div
+				class="flex items-center justify-between gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800"
+				role="alert"
+			>
+				<span>โหลดรายชื่อจิตอาสาไม่สำเร็จ</span>
+				<Button
+					type="button"
+					variant="outline"
+					onclick={() => volunteersQuery.refetch()}
+					class="min-h-11 text-sm font-semibold"
+				>
+					ลองใหม่
+				</Button>
+			</div>
+		{/if}
+
 		{#if isSearching}
 			<div class="flex items-center justify-center gap-2 py-3 text-sm text-slate-500">
 				<Loader class="size-4 animate-spin text-sky-600" aria-hidden="true" />
 				<span>กำลังค้นหา...</span>
 			</div>
-		{:else if searchEnabled && searchResults.length === 0}
+		{:else if hasNoResults}
 			<p class="rounded-lg bg-slate-50 py-3 text-center text-sm text-slate-500">
-				ไม่พบผู้ประสบภัยที่ตรงกับคำค้นหา
+				ไม่พบผู้ประสบภัย{allowVolunteer ? 'หรือจิตอาสา' : ''}ที่ตรงกับคำค้นหา
 			</p>
-		{:else if searchResults.length > 0}
+		{:else if searchResults.length > 0 || volunteerResults.length > 0}
 			<div class="max-h-60 space-y-1 overflow-y-auto rounded-lg border border-slate-200/80 p-1">
 				{#each searchResults as evacuee (evacuee._id)}
 					<button
@@ -286,6 +366,24 @@
 						<span class="text-xs text-slate-500">
 							{#if evacuee.current_stay?.zone}โซน {evacuee.current_stay.zone} ·
 							{/if}{evacuee.phone ?? evacuee._id}
+						</span>
+					</button>
+				{/each}
+				{#each volunteerResults as volunteer (volunteer._id)}
+					<button
+						type="button"
+						onclick={() => selectVolunteer(volunteer, false)}
+						class="flex min-h-11 w-full flex-col justify-center rounded-lg px-3 py-2 text-left hover:bg-sky-50 focus-visible:bg-sky-50 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:outline-none"
+					>
+						<span class="text-sm font-semibold text-slate-900">
+							{volunteer.first_name}
+							{volunteer.last_name}
+							{#if volunteer.nickname}
+								<span class="font-normal text-slate-500">({volunteer.nickname})</span>
+							{/if}
+						</span>
+						<span class="text-xs text-slate-500">
+							จิตอาสา · {volunteer.volunteer_code}{volunteer.phone ? ` · ${volunteer.phone}` : ''}
 						</span>
 					</button>
 				{/each}
@@ -310,8 +408,12 @@
 <CameraCodeScannerDialog
 	bind:open={scannerOpen}
 	title="สแกน QR ผู้รับ"
-	hint="เล็งกล้องไปที่ QR บนบัตรผู้ประสบภัย หรือพิมพ์ / ยิงรหัสด้วยเครื่องสแกน"
+	hint={allowVolunteer
+		? 'เล็งกล้องไปที่ QR บนบัตรผู้ประสบภัยหรือบัตรจิตอาสา หรือพิมพ์ / ยิงรหัสด้วยเครื่องสแกน'
+		: 'เล็งกล้องไปที่ QR บนบัตรผู้ประสบภัย หรือพิมพ์ / ยิงรหัสด้วยเครื่องสแกน'}
 	formats={SCAN_FORMATS}
 	manualInputMode="text"
+	busy={isLookingUp}
 	onScan={handleScan}
+	oncancel={cancelLookup}
 />

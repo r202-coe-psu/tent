@@ -10,24 +10,27 @@ import {
 	type VolunteerInput,
 	type VolunteerStatus
 } from '../domain/volunteer.schema';
-import { trackingTokenHashFromPayload } from '$lib/features/volunteer-portal/domain/volunteer';
+import {
+	formatMintedTicketToken,
+	trackingTokenHashFromPayload,
+	TRACKING_TOKEN_RANDOM_BYTES
+} from '$lib/features/volunteer-portal/domain/volunteer';
 import { nextVolunteerCode } from '../domain/volunteer-code';
+import { normalizePhone } from '../domain/phone';
 import type { VerificationStatus } from '../domain/verification';
 import type { VolunteerFilter, VolunteerRepository } from './volunteer.repository';
 
-function normalizePhone(value: string): string {
-	const digits = value.replace(/[\s\-()]/g, '');
-	if (digits.startsWith('+66')) return `0${digits.slice(3)}`;
-	if (digits.startsWith('66') && digits.length >= 11) return `0${digits.slice(2)}`;
-	return digits;
+/** `phone_hash` for a stored phone; null when the phone is missing or blank. */
+async function phoneHashOf(phone: string | null | undefined): Promise<string | null> {
+	const normalized = phone ? normalizePhone(phone) : '';
+	return normalized ? sha256Hex(normalized) : null;
 }
 
 /** Mint the permanent role-card secret without ever persisting its plaintext. */
 function mintTrackingToken(): string {
-	const bytes = new Uint8Array(16);
-	crypto.getRandomValues(bytes);
-	const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
-	return `TKT-VOL-${hex.toUpperCase()}`;
+	return formatMintedTicketToken(
+		crypto.getRandomValues(new Uint8Array(TRACKING_TOKEN_RANDOM_BYTES))
+	);
 }
 
 /**
@@ -108,11 +111,10 @@ export class VolunteerRemoteRepository implements VolunteerRepository {
 		const existing = await this.repo.allByType('volunteer', isVolunteer);
 		const volunteer_code = nextVolunteerCode(existing.map((v) => v.volunteer_code));
 		const doc = makeVolunteer(input, ctx, { volunteer_code, status: fields?.status });
-		const phoneHash = doc.phone ? await sha256Hex(normalizePhone(doc.phone)) : null;
 		const trackingToken = input.source === 'public_apply' ? null : mintTrackingToken();
 		return this.save({
 			...doc,
-			phone_hash: phoneHash,
+			phone_hash: await phoneHashOf(doc.phone),
 			tracking_token_hash: trackingToken ? await sha256Hex(trackingToken) : null
 		});
 	}
@@ -120,7 +122,9 @@ export class VolunteerRemoteRepository implements VolunteerRepository {
 	async update(volunteer: Volunteer): Promise<Volunteer> {
 		const latest = await this.repo.get<Volunteer>(volunteer._id);
 		if (!latest) throw new Error(`ไม่พบข้อมูลอาสาสมัคร: ${volunteer._id}`);
-		return this.save(touch({ ...volunteer, _rev: latest._rev }));
+		return this.save(
+			touch({ ...volunteer, phone_hash: await phoneHashOf(volunteer.phone), _rev: latest._rev })
+		);
 	}
 
 	async deactivate(id: string): Promise<Volunteer> {

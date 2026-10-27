@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 
 from fastapi import APIRouter, Depends, Query
 
@@ -24,6 +25,13 @@ async def list_locations(
     include_inactive: bool = Query(
         default=False, description="Include soft-deleted (is_active=false) locations"
     ),
+    accepts_booking: Literal["true", "false"] | None = Query(
+        default=None,
+        description=(
+            "Filter by the accepts_booking rule (EXT-008): true = bookable, false = not bookable."
+            " Only the lowercase strings `true` / `false` are accepted; anything else is 422."
+        ),
+    ),
     page: int = Query(default=1, ge=1, description="Page number"),
     limit: int = Query(default=50, ge=1, le=200, description="Items per page"),
     use_case: ThirdPartyLocationsUseCase = Depends(get_thirdparty_locations_use_case),  # noqa: B008
@@ -32,6 +40,7 @@ async def list_locations(
         status_filter=status,
         updated_since=updated_since,
         include_inactive=include_inactive,
+        accepts_booking_filter=None if accepts_booking is None else accepts_booking == "true",
         page=page,
         limit=limit,
     )

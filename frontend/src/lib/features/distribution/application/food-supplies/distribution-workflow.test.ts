@@ -17,6 +17,7 @@ import type {
 	RecordClearInput,
 	RequisitionTicketRepository
 } from '../../data/food-supplies';
+import { DistributionDataIntegrityError } from './errors';
 import {
 	recordFoodDistribution,
 	recordSuppliesDistribution,
@@ -119,13 +120,26 @@ class InMemoryLogRepository implements DistributionLogRepository {
 		return this.logs.get(logId) ?? null;
 	}
 
+	async getMany(ids: readonly string[]) {
+		const items = ids.flatMap((id) => this.logs.get(id) ?? []);
+		return { items, skipped: [] };
+	}
+
+	/** Malformed docs `listWithSkipped` reports as matching the filter (the repo does the matching). */
+	skipped: { _id: string; type: string; reason: string }[] = [];
+
 	async list(filter?: DistributionLogListFilter): Promise<DistributionLog[]> {
-		return Array.from(this.logs.values()).filter((l) => {
+		return (await this.listWithSkipped(filter)).items;
+	}
+
+	async listWithSkipped(filter?: DistributionLogListFilter) {
+		const items = Array.from(this.logs.values()).filter((l) => {
 			if (filter?.ticket_id && l.ticket_id !== filter.ticket_id) return false;
 			if (filter?.item_id && l.item_id !== filter.item_id) return false;
 			if (filter?.recipient_id && l.recipient_id !== filter.recipient_id) return false;
 			return true;
 		});
+		return { items, skipped: this.skipped };
 	}
 
 	async mutateLogCAS(
@@ -281,6 +295,115 @@ describe('distribution-workflow', () => {
 		).rejects.toThrow(/Insufficient in-hand quantity/);
 	});
 
+	describe('malformed distribution logs (fail closed)', () => {
+		const BAD = {
+			_id: 'distribution_log:01JBAD00000000000000000001',
+			type: 'distribution_log',
+			reason: 'x'
+		};
+		const makeTicket = () =>
+			ticketRepo.create(
+				{
+					ticket_no: 'TKT-FOOD-0009',
+					requisition_type: 'food',
+					meal: 'lunch',
+					source_location: 'warehouse:main',
+					destination_location: 'point:a',
+					items: [
+						{
+							item_id: 'item:curry',
+							item_name: 'Curry',
+							type_class: 'CONSUMABLE',
+							returnable: false,
+							requested_qty: '10',
+							allocated_qty: '10'
+						}
+					]
+				},
+				POS_CTX
+			);
+
+		it('refuses to issue when a malformed log matches the ticket item, naming its id', async () => {
+			const ticket = await makeTicket();
+			logRepo.skipped = [BAD];
+			const attempt = recordFoodDistribution(
+				ticket._id,
+				{ item_id: 'item:curry', qty: '1', recipient_type: 'outside' },
+				POS_CTX,
+				{ ticketRepo, logRepo }
+			);
+			await expect(attempt).rejects.toBeInstanceOf(DistributionDataIntegrityError);
+			await expect(attempt).rejects.toMatchObject({ docIds: [BAD._id] });
+			expect(logRepo.logs.size).toBe(0);
+		});
+
+		it('refuses supplies issuance when a malformed log matches the ticket item', async () => {
+			const ticket = await ticketRepo.create(
+				{
+					ticket_no: 'TKT-SUP-0009',
+					requisition_type: 'supplies',
+					source_location: 'warehouse:main',
+					destination_location: 'point:a',
+					items: [
+						{
+							item_id: 'item:soap',
+							item_name: 'Soap',
+							type_class: 'CONSUMABLE',
+							returnable: false,
+							requested_qty: '10',
+							allocated_qty: '10'
+						}
+					]
+				},
+				POS_CTX
+			);
+			logRepo.skipped = [BAD];
+			await expect(
+				recordSuppliesDistribution(
+					ticket._id,
+					{ item_id: 'item:soap', qty: '1', recipient_type: 'outside' },
+					POS_CTX,
+					{ ticketRepo, logRepo }
+				)
+			).rejects.toBeInstanceOf(DistributionDataIntegrityError);
+		});
+
+		it('does not block when no malformed log matches (unrelated docs are filtered by the repo)', async () => {
+			const ticket = await makeTicket();
+			logRepo.skipped = [];
+			const log = await recordFoodDistribution(
+				ticket._id,
+				{ item_id: 'item:curry', qty: '1', recipient_type: 'outside' },
+				POS_CTX,
+				{ ticketRepo, logRepo }
+			);
+			expect(log.status).toBe('fulfilled');
+		});
+
+		it('refuses the duplicate-meal check when a malformed log of the recipient exists', async () => {
+			const ticket = await makeTicket();
+			// Capacity check passes (nothing skipped for the ticket item); only the recipient read skips.
+			const original = logRepo.listWithSkipped.bind(logRepo);
+			logRepo.listWithSkipped = async (filter) => {
+				const found = await original(filter);
+				return filter?.recipient_id ? { ...found, skipped: [BAD] } : { ...found, skipped: [] };
+			};
+			await expect(
+				recordFoodDistribution(
+					ticket._id,
+					{
+						item_id: 'item:curry',
+						qty: '1',
+						recipient_type: 'evacuee',
+						recipient_id: 'evacuee:01JEVACUEE0000000000000009'
+					},
+					POS_CTX,
+					{ ticketRepo, logRepo }
+				)
+			).rejects.toBeInstanceOf(DistributionDataIntegrityError);
+		});
+	});
+
 	it('detects duplicate meal for recipient and requires override', async () => {
 		const ticket = await ticketRepo.create(
 			{
@@ -346,6 +469,47 @@ describe('distribution-workflow', () => {
 			{ ticketRepo, logRepo }
 		);
 		expect(overrideLog.is_override).toBe(true);
+	});
+
+	it('logs a volunteer recipient by id and blocks their repeat meal (#650)', async () => {
+		const ticket = await ticketRepo.create(
+			{
+				ticket_no: 'TKT-FOOD-0650',
+				requisition_type: 'food',
+				meal: 'lunch',
+				source_location: 'warehouse:main',
+				destination_location: 'point:a',
+				items: [
+					{
+						item_id: 'item:curry',
+						item_name: 'Curry',
+						type_class: 'CONSUMABLE',
+						returnable: false,
+						requested_qty: '10',
+						allocated_qty: '10'
+					}
+				]
+			},
+			POS_CTX
+		);
+		const volunteerInput = {
+			item_id: 'item:curry',
+			qty: '1',
+			recipient_type: 'volunteer' as const,
+			recipient_id: 'volunteer:01JVOLUNTEER000000000000001',
+			menu_check: { recipient_tags: null, menu: { dietary: [], age_group: 'ALL' } }
+		};
+
+		const log = await recordFoodDistribution(ticket._id, volunteerInput, POS_CTX, {
+			ticketRepo,
+			logRepo
+		});
+		expect(log.recipient_type).toBe('volunteer');
+		expect(log.recipient_id).toBe('volunteer:01JVOLUNTEER000000000000001');
+
+		await expect(
+			recordFoodDistribution(ticket._id, volunteerInput, POS_CTX, { ticketRepo, logRepo })
+		).rejects.toThrow(/already received a meal/);
 	});
 
 	it('scopes food entitlement to the Thailand calendar day and ignores voided logs', async () => {
@@ -613,7 +777,7 @@ describe('distribution-workflow', () => {
 					ticket._id,
 					{
 						...evacueeInput,
-						menu_check: { recipient_tags: ['ELDERLY'], menu: { dietary: ['HALAL'] } }
+						menu_check: { recipient_tags: ['ELDERLY'], menu: { age_group: 'INFANT' } }
 					},
 					POS_CTX,
 					{ ticketRepo, logRepo }
@@ -649,8 +813,8 @@ describe('distribution-workflow', () => {
 				{
 					...evacueeInput,
 					is_override: true,
-					override_reason: 'Only halal boxes left',
-					menu_check: { recipient_tags: ['ELDERLY'], menu: { dietary: ['HALAL'] } }
+					override_reason: 'Only infant boxes left',
+					menu_check: { recipient_tags: ['ELDERLY'], menu: { age_group: 'INFANT' } }
 				},
 				POS_CTX,
 				{ ticketRepo, logRepo }
@@ -663,7 +827,8 @@ describe('distribution-workflow', () => {
 		it.each([
 			['a general (untagged) menu', ['ELDERLY'], { dietary: [], age_group: 'ALL' }],
 			['a general menu for an untagged recipient', null, {}],
-			['a matching tag', ['HALAL', 'ELDERLY'], { dietary: ['HALAL'] }]
+			['a matching tag', ['HALAL', 'ELDERLY'], { age_group: 'ELDERLY' }],
+			['a HALAL menu for a non-muslim (#801)', ['ELDERLY'], { dietary: ['HALAL'] }]
 		] as const)('records %s without override', async (_label, recipientTags, menu) => {
 			const ticket = await createFoodTicket('item:halal_box');
 

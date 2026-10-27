@@ -1,9 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 import Users from '@lucide/svelte/icons/users';
 import {
+	activeNavHref,
 	backofficeNavbarGroups,
 	canSeeNavNode,
 	isGroup,
+	navLeafHrefs,
 	type BackofficeNavbarNode,
 	type NavVisibilityContext
 } from './static';
@@ -124,15 +126,15 @@ describe('real backofficeNavbarGroups — visible leaves per role (regression gu
 	};
 
 	const everyoneSees = [
-		'จัดการผู้ประสบภัย',
+		'จัดการผู้เข้าพัก',
 		'จัดการอาสาสมัคร',
-		'การส่งต่อผู้ประสบภัย',
+		'การส่งต่อผู้เข้าพัก',
 		'การประเมินความพร้อมศูนย์',
 		'การประเมินประจำวัน',
 		'คลัง',
 		'บริจาค',
 		'จัดการเบิกจ่ายพัสดุและอาหาร',
-		'โรงครัวและเสบียงอาหาร',
+		'เบิกวัตถุดิบครัว',
 		'ครัวกลางและอาหาร',
 		'รายงานความโปร่งใส',
 		'รายงานสรุปหลังเหตุการณ์',
@@ -140,24 +142,32 @@ describe('real backofficeNavbarGroups — visible leaves per role (regression gu
 		'จัดการผู้ใช้งานและสิทธิ์',
 		'ข้อมูลหลัก',
 		'คลังสินค้า',
-		'5. พารามิเตอร์',
-		'7. โลจิสติกส์ & GIS'
+		'พารามิเตอร์',
+		'โลจิสติกส์ & GIS'
 	];
+	const incidentLog = 'บันทึกเหตุการณ์ประจำวัน';
+	const withIncidents = (labels: string[]): string[] => {
+		const at = labels.indexOf('ครัวกลางและอาหาร') + 1;
+		return [...labels.slice(0, at), incidentLog, ...labels.slice(at)];
+	};
 	const scannerDevices = 'จัดการอุปกรณ์';
+	const bannerManagement = 'จัดการแบนเนอร์';
 	const afterUsers = everyoneSees.indexOf('จัดการผู้ใช้งานและสิทธิ์') + 1;
 	const withScanners = [
 		...everyoneSees.slice(0, afterUsers),
 		scannerDevices,
+		bannerManagement,
 		...everyoneSees.slice(afterUsers)
 	];
+	const withScannersAndIncidents = withIncidents(withScanners);
 
 	it('system_admin sees every leaf', () => {
-		expect(visibleLeafLabels(ctx(['system_admin']))).toEqual(withScanners);
+		expect(visibleLeafLabels(ctx(['system_admin']))).toEqual(withScannersAndIncidents);
 	});
 
 	it('the shelter_manager of the active shelter sees every leaf', () => {
 		const roles = ['shelter:SH001', 'SH001:shelter_manager'];
-		expect(visibleLeafLabels(ctx(roles, 'SH001'))).toEqual(withScanners);
+		expect(visibleLeafLabels(ctx(roles, 'SH001'))).toEqual(withScannersAndIncidents);
 	});
 
 	it('registration_staff does not see the kiosk device management', () => {
@@ -165,17 +175,27 @@ describe('real backofficeNavbarGroups — visible leaves per role (regression gu
 		const labels = visibleLeafLabels(ctx(roles, 'SH001'));
 		expect(labels).toEqual(everyoneSees);
 		expect(labels).not.toContain(scannerDevices);
+		expect(labels).not.toContain(bannerManagement);
 		expect(labels).not.toContain('จัดการ Kiosk');
 	});
 
 	it('a manager of another shelter keeps the kiosk devices', () => {
 		const roles = ['shelter:SH002', 'SH002:shelter_manager'];
-		expect(visibleLeafLabels(ctx(roles, 'SH001'))).toEqual(withScanners);
+		expect(visibleLeafLabels(ctx(roles, 'SH001'))).toEqual(withScannersAndIncidents);
 	});
 
-	it('kiosk_staff-only sees the kiosk device management and nothing else (AC-SBO-21)', () => {
+	it('incident log is visible to system_admin, security_officer and shelter_manager only', () => {
+		const sees = (roles: string[]) => visibleLeafLabels(ctx(roles, 'SH001')).includes(incidentLog);
+		expect(sees(['system_admin'])).toBe(true);
+		expect(sees(['shelter:SH001', 'SH001:security_officer'])).toBe(true);
+		expect(sees(['shelter:SH001', 'SH001:shelter_manager'])).toBe(true);
+		expect(sees(['shelter:SH001', 'SH001:kitchen_staff'])).toBe(false);
+		expect(sees(['shelter:SH001', 'SH001:registration_staff'])).toBe(false);
+	});
+
+	it('kiosk_staff-only sees the kiosk device and banner management, nothing else (AC-SBO-21, FR-KBR-22)', () => {
 		const roles = ['shelter:SH001', 'SH001:kiosk_staff'];
-		expect(visibleLeafLabels(ctx(roles, 'SH001'))).toEqual([scannerDevices]);
+		expect(visibleLeafLabels(ctx(roles, 'SH001'))).toEqual([scannerDevices, bannerManagement]);
 		const kioskGroup = backofficeNavbarGroups
 			.flatMap((g) => g.items)
 			.find((n) => n.label === 'จัดการ Kiosk');
@@ -185,5 +205,71 @@ describe('real backofficeNavbarGroups — visible leaves per role (regression gu
 	it('kiosk_staff with another capability in the shelter keeps the other menus too', () => {
 		const roles = ['shelter:SH001', 'SH001:kiosk_staff', 'SH001:registration_staff'];
 		expect(visibleLeafLabels(ctx(roles, 'SH001'))).toEqual(withScanners);
+	});
+});
+
+describe('activeNavHref — longest path-segment match (FR-KBR-24, draft CR kiosk-banner-design-revision)', () => {
+	const hrefs = ['/back-office/kiosks', '/back-office/kiosks/banners', '/back-office/users'];
+
+	it('picks the nested item on its own page and sub-pages', () => {
+		expect(activeNavHref('/back-office/kiosks/banners', hrefs)).toBe('/back-office/kiosks/banners');
+		expect(activeNavHref('/back-office/kiosks/banners/new', hrefs)).toBe(
+			'/back-office/kiosks/banners'
+		);
+		expect(activeNavHref('/back-office/kiosks/banners/compact', hrefs)).toBe(
+			'/back-office/kiosks/banners'
+		);
+	});
+
+	it('picks the parent item when the path is not under the nested one', () => {
+		expect(activeNavHref('/back-office/kiosks', hrefs)).toBe('/back-office/kiosks');
+		expect(activeNavHref('/back-office/kiosks/KSK-001', hrefs)).toBe('/back-office/kiosks');
+	});
+
+	it('is order independent', () => {
+		expect(activeNavHref('/back-office/kiosks/banners', [...hrefs].reverse())).toBe(
+			'/back-office/kiosks/banners'
+		);
+	});
+
+	it('matches whole path segments only', () => {
+		expect(activeNavHref('/back-office/kiosks-x', hrefs)).toBeNull();
+		expect(activeNavHref('/back-office/kiosks/bannersX', hrefs)).toBe('/back-office/kiosks');
+	});
+
+	it('ignores a trailing slash on the path', () => {
+		expect(activeNavHref('/back-office/kiosks/banners/', hrefs)).toBe(
+			'/back-office/kiosks/banners'
+		);
+	});
+
+	it('returns null when nothing matches', () => {
+		expect(activeNavHref('/portal', hrefs)).toBeNull();
+		expect(activeNavHref('/back-office/kiosks', [])).toBeNull();
+	});
+});
+
+describe('kiosk banner management nav child (FR-KBR-22)', () => {
+	const kioskChildren = () => {
+		const group = backofficeNavbarGroups
+			.flatMap((g) => g.items)
+			.find((n) => n.label === 'จัดการ Kiosk');
+		return group && isGroup(group) ? group.children : [];
+	};
+
+	it('sits right after the device management and links to the banner list', () => {
+		const children = kioskChildren();
+		expect(children.map((c) => c.label)).toEqual(['จัดการอุปกรณ์', 'จัดการแบนเนอร์']);
+		expect(children[1].href).toBe('/back-office/kiosks/banners');
+	});
+});
+
+describe('navLeafHrefs', () => {
+	it('collects every leaf href of the real nav, skipping null hrefs and group parents', () => {
+		const hrefs = navLeafHrefs(backofficeNavbarGroups);
+		expect(hrefs).toContain('/back-office/kiosks');
+		expect(hrefs).toContain('/back-office/distribution');
+		expect(hrefs).not.toContain(null);
+		expect(hrefs.every((h) => typeof h === 'string')).toBe(true);
 	});
 });

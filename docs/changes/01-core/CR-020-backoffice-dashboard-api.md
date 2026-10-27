@@ -31,8 +31,8 @@ affects:
 
 API (แบ่งเป็น 3 เส้นทางย่อยภายใต้ `/api/back-office/shelter/[code]/dashboard/`) จะต้องส่งคืนสถิติเหล่านี้ (โดยดึงจาก CouchDB Views):
 
-1. **สถิติการลงทะเบียน:** จำนวนคนลงทะเบียนรายวัน
-2. **สถานะผู้อพยพ:**
+1. **สถิติการลงทะเบียน:** จำนวนคนลงทะเบียนรายวัน — ช่วงวันที่และตัวเลือกช่วง ดู [CR-170](CR-170-evacuee-dashboard-range-and-stay-counts.md)
+2. **สถานะผู้อพยพ:** (การนับ `arriving` / `room_confirmed` ดู [CR-170](CR-170-evacuee-dashboard-range-and-stay-counts.md))
    - ผู้อพยพทั้งหมด (Total)
    - ผู้อพยพที่ยังอยู่ (Currently Present / Checked-in)
    - ผู้อพยพที่ออกไปแล้ว (Checked-out)

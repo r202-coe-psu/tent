@@ -286,7 +286,7 @@
 
 	function goToShelterDetails(shelter: ShelterNeeds) {
 		donationStore.selectedShelterForNeeds = shelter.code;
-		donationStore.activeTab = 'shelter-details';
+		donationStore.goToStep('shelter-details');
 	}
 
 	function donateSingleNeed(shelter: ShelterNeeds, need: Need) {
@@ -314,7 +314,7 @@
 				image: need.image || ''
 			}
 		];
-		donationStore.activeTab = 'form';
+		donationStore.goToStep('form');
 		if (donationStore.reachedStep < 2) donationStore.reachedStep = 2;
 	}
 
@@ -336,7 +336,7 @@
 				image: ''
 			}
 		];
-		donationStore.activeTab = 'form';
+		donationStore.goToStep('form');
 		if (donationStore.reachedStep < 2) donationStore.reachedStep = 2;
 	}
 </script>
@@ -354,7 +354,7 @@
 				<button
 					type="button"
 					onclick={() => {
-						donationStore.activeTab = 'needs';
+						donationStore.goToStep('needs');
 					}}
 					class="-ml-2 shrink-0 cursor-pointer rounded-xl p-2 text-white/80 transition hover:bg-white/10 hover:text-white"
 					aria-label={t.backToShelterList}

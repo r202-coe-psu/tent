@@ -52,6 +52,7 @@ export {
 	receiveDonation,
 	expireDonation,
 	canTransitionDonation,
+	DONATION_SCHEMA_V,
 	stockBalance,
 	openNeeds,
 	calculateReserved,
@@ -71,7 +72,6 @@ export {
 	isDonation,
 	isDonationCampaign,
 	isDonationSlot,
-	mapNeedItemHeuristic,
 	publicItemAggregate,
 	type StockLedgerInput,
 	type ReceiveInput,
@@ -88,6 +88,9 @@ export {
 	projectStockLotBalances,
 	sortStockLotsByConsumptionOrder,
 	StockLotIntegrityError,
+	LotWriteOffError,
+	projectLotsByItem,
+	TransferForbiddenError,
 	adjustInputSchema,
 	createAdjustEntry,
 	adjustReasonSchema,
@@ -166,6 +169,7 @@ export {
 	lotStorageKey,
 	lotLocationFields,
 	storageLotFields,
+	isStoragePointChosen,
 	type StoragePointRef
 } from './domain/lot-storage';
 
@@ -232,6 +236,11 @@ export {
 	filterStockFormItems,
 	type StockFormItem
 } from './domain/stock-form-items';
+export {
+	isOutOfStock,
+	sortInStockFirstByName,
+	partitionInStockFirst
+} from './domain/stock-availability-sort';
 export type { NeedItem } from './application/need-item.types';
 
 // UI components

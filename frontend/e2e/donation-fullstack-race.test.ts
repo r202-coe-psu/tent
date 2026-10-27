@@ -6,7 +6,6 @@ import {
 	RUN_ID,
 	RunLedger,
 	addSlotViaUi,
-	bookingPacer,
 	boardLineFor,
 	createCampaignViaUi,
 	createWarehouseStaff,
@@ -33,8 +32,7 @@ import {
  * shelter (README §4).
  *
  * Needs `docker compose up -d` (CouchDB, Mongo, worker, FastAPI) and a seeded catalog
- * (`pnpm seed`). Locally use the dev server — only it skips reCAPTCHA keys / the BFF's
- * per-IP rate limits (on `vite preview` also set DONATION_E2E_PACE=1):
+ * (`pnpm seed`). Locally use the dev server — only it skips reCAPTCHA keys:
  *   PLAYWRIGHT_TEST_BASE_URL=http://localhost:5173 \
  *     pnpm exec playwright test e2e/donation-fullstack-race.test.ts
  * On a writable remote target (`E2E_BASE_URL` + `ALLOW_REMOTE_WRITES=true`, i.e. staging)
@@ -52,9 +50,7 @@ import {
  * campaigns and slots go with its database) and the staff user; the last test (Z)
  * asserts nothing is left. Residue the test side cannot remove: the Mongo intake-buffer /
  * `public_donations` rows of the winning bookings (retention purges them on its TTL) and
- * the closed `public_shelters` row (dropped by the worker within minutes). Every attempt
- * counts against the BFF's 3 bookings/min/IP, so the three races pace themselves on a
- * remote target and the suite takes several minutes there.
+ * the closed `public_shelters` row (dropped by the worker within minutes).
  */
 
 // Open need with room for both donors of the two slot races — the fight is over the
@@ -133,10 +129,7 @@ test.describe('Donation full-stack: booking races', { tag: ['@critical', '@donat
 				fillBooking(pages[0], { ...make('A'), ledger }),
 				fillBooking(pages[1], { ...make('B'), ledger })
 			]);
-			// Both presses count against the BFF's per-IP limit: make room for the pair, then
-			// fire them together (a paced submit each would serialise them).
-			await bookingPacer.acquire(2);
-			return await Promise.all(donors.map((d) => d.submit({ paced: false })));
+			return await Promise.all(donors.map((d) => d.submit()));
 		} finally {
 			await Promise.all(contexts.map((c) => c.close()));
 		}

@@ -5,6 +5,7 @@ import {
 	persistQty,
 	parseQty,
 	qtyGt,
+	qtyStrNonNegativeSchema,
 	qtyStrCoercePositiveSchema,
 	qtyStrCoerceNonNegativeSchema
 } from '$lib/utils/qty';
@@ -163,39 +164,46 @@ export function updateTicketRequestedItems(
 }
 
 /**
- * One-click approve (CR-143 — supersedes CR-141 §2.2's 3-role split for
- * `requisition_type: 'kitchen'` only). Auto-allocates every line to its full
- * `requested_qty`, then jumps straight `PENDING_PICK` → `COMPLETED` — the
- * combined effect of `approveTicket` + `markTicketDispatched` + `receiveTicket`,
- * performed by one actor in one step. Stock-ledger deduction for the newly
- * allocated qty still happens at the data layer (mirrors `dispatchTicket`'s
- * balance check), not here — this function only shapes the doc.
+ * Approve in one write: applies the warehouse's allocation drafts (itemId → qty_str) then
+ * PENDING_PICK → READY_FOR_DISPATCH. Lines missing from the map keep their saved
+ * allocated_qty, or fall back to requested_qty when still '0'.
  */
-export function oneStepApproveTicket(
+export function approveTicketWithAllocations(
 	ticket: RequisitionTicket,
+	allocations: Record<string, string>,
 	ctx: AuthorContext
 ): RequisitionTicket {
 	if (ticket.status !== 'PENDING_PICK') {
-		throw new Error(`oneStepApproveTicket: cannot approve — ticket is ${ticket.status}`);
+		throw new Error(`approveTicketWithAllocations: cannot approve — ticket is ${ticket.status}`);
 	}
-	const items = ticket.items.map((i) => ({ ...i, allocated_qty: i.requested_qty }));
-	return {
-		...touch(ticket),
-		items,
-		status: 'COMPLETED',
-		approved_by: ctx.createdBy,
-		dispatched_by: ctx.createdBy,
-		received_by: ctx.createdBy
-	};
+	let next = ticket;
+	for (const item of ticket.items) {
+		const qty =
+			allocations[item.item_id] ??
+			(item.allocated_qty === '0' ? item.requested_qty : item.allocated_qty);
+		next = allocateTicketItem(next, item.item_id, qty);
+	}
+	for (const itemId of Object.keys(allocations)) {
+		if (!ticket.items.some((i) => i.item_id === itemId)) {
+			throw new Error(`approveTicketWithAllocations: item "${itemId}" not found on ticket`);
+		}
+	}
+	return approveTicket(next, ctx);
 }
 
-/** shelter_manager/system_admin approves — PENDING_PICK → READY_FOR_DISPATCH (AC-TKT-03). */
+/** warehouse_staff/shelter_manager/system_admin approves — PENDING_PICK → READY_FOR_DISPATCH (AC-TKT-03). */
 export function approveTicket(ticket: RequisitionTicket, ctx: AuthorContext): RequisitionTicket {
 	if (ticket.status !== 'PENDING_PICK') {
 		throw new Error(`approveTicket: cannot approve — ticket is ${ticket.status}`);
 	}
-	if (ticket.items.some((i) => !qtyGt(i.allocated_qty, 0))) {
-		throw new Error('approveTicket: every item must have allocated_qty > 0 before approval');
+	// A line may be 0 ("ไม่มีให้") but at least one line must be allocated.
+	for (const i of ticket.items) {
+		if (!qtyStrNonNegativeSchema.safeParse(i.allocated_qty).success) {
+			throw new Error(`approveTicket: invalid allocated_qty "${i.allocated_qty}"`);
+		}
+	}
+	if (!ticket.items.some((i) => qtyGt(i.allocated_qty, 0))) {
+		throw new Error('approveTicket: at least one item must have allocated_qty > 0 before approval');
 	}
 	return { ...touch(ticket), status: 'READY_FOR_DISPATCH', approved_by: ctx.createdBy };
 }

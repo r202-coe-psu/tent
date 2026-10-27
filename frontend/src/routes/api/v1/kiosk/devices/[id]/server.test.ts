@@ -196,9 +196,19 @@ describe('PATCH /api/v1/kiosk/devices/[id]', () => {
 			status: 'inactive',
 			last_seen_at: null,
 			staff_pin_set: false,
-			staff_pin_is_default: false
+			staff_pin_is_default: false,
+			banner_group_id: null,
+			screen_type: 'compact'
 		});
 		expect(JSON.stringify(data)).not.toContain('secret_hash');
+	});
+
+	it('persists screen_type=portrait and returns it in the summary', async () => {
+		mockUpdate.mockResolvedValueOnce(persisted('SH001', { screen_type: 'portrait' }));
+		const response = await patch({ screen_type: 'portrait' });
+		expect(response.status).toBe(200);
+		expect(mockUpdate).toHaveBeenCalledWith(DOC_ID, { screen_type: 'portrait' }, 'sa-user');
+		expect(await response.json()).toMatchObject({ device_id: DEVICE_ID, screen_type: 'portrait' });
 	});
 
 	it('returns 401 for anonymous and 403 for registration staff without touching the device', async () => {
@@ -253,6 +263,9 @@ describe('PATCH /api/v1/kiosk/devices/[id]', () => {
 		['device id change', { device_id: 'other-01' }],
 		['PIN metadata', { staff_pin_set: true }],
 		['blank name', { name: ' ' }],
+		['banner_enabled (retired)', { banner_enabled: false }],
+		['banner_group_id (assigned from the group side)', { banner_group_id: 'kiosk_banner_group:a' }],
+		['unknown screen_type', { screen_type: 'wide' }],
 		['not an object', 'not json']
 	])('returns 400 for a %s body before reading the device', async (_label, body) => {
 		const response = await patch(body);

@@ -33,5 +33,6 @@
 	id={data.id ?? ''}
 	isEdit={data.mode === 'edit'}
 	basePath={resolve('/portal')}
+	editBasePath={resolve('/back-office/shelters')}
 	siteKind={data.siteKind}
 />

@@ -1,7 +1,9 @@
 """Project shelter evacuee docs → shelter_occupants (EXT-007, ADR 0002 §6).
 
 Extracts and masks occupant data for authorized partner read plane with PDPA compliance.
-Only active evacuees (current_stay.status == 'active') are projected.
+Only active evacuees (current_stay.status == 'active') are projected, and never one
+with `privacy.search_excluded` (opt-out / basic consent, #791) — they still count in
+the EXT-005 occupancy aggregates.
 """
 
 from __future__ import annotations
@@ -90,13 +92,18 @@ def project_shelter_occupant(
 ) -> dict[str, Any] | None:
     """Projects an active evacuee doc to a ShelterOccupant payload.
 
-    Returns None if the doc is not an active evacuee.
+    Returns None if the doc is not an active evacuee or is search-excluded;
+    `refresh_shelter_occupants` then purges any existing row for it.
     """
     if doc.get("type") != "evacuee":
         return None
 
     doc_id = str(doc.get("_id") or "")
     if not doc_id:
+        return None
+
+    privacy = doc.get("privacy") or {}
+    if privacy.get("search_excluded") is True:
         return None
 
     current_stay = doc.get("current_stay") or {}

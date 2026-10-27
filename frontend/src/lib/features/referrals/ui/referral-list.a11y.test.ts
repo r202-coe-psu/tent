@@ -180,6 +180,6 @@ describe('referral-list names come from evacuee_summary (F-04, F-06)', () => {
 		const html = (r: Referral) => render(ReferralList, { props: { referrals: [r] } }).body;
 		expect(html(withSummary)).toContain('สมชาย ใจดี');
 		expect(html(mononym)).toMatch(/มะลิ(?! )/);
-		expect(html(legacy)).toContain('ไม่พบชื่อผู้ประสบภัย');
+		expect(html(legacy)).toContain('ไม่พบชื่อผู้เข้าพัก');
 	});
 });

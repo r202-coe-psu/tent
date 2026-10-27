@@ -23,7 +23,19 @@ async def _fetch_docs_by_prefix(
     return docs
 
 
-async def _load_catalog_map(couch: CouchClient) -> dict[str, dict[str, str]]:
+def _item_master_entry(doc: dict[str, Any], doc_id: str) -> dict[str, str]:
+    return {
+        "name": str(doc.get("name") or doc_id),
+        "category": str(doc.get("category") or "other"),
+        # `base_unit` is authoritative; `unit` is the CR-013 transition field
+        # kept for docs written before it existed.
+        "unit": str(doc.get("base_unit") or doc.get("unit") or "unit"),
+    }
+
+
+async def _load_catalog_map(
+    couch: CouchClient, shelter_database: str
+) -> dict[str, dict[str, str]]:
     """Both catalog generations, keyed by exact ``_id``.
 
     ``item_master`` replaced ``supply_item`` (schema.md §4.2) and the migration has not
@@ -34,29 +46,36 @@ async def _load_catalog_map(couch: CouchClient) -> dict[str, dict[str, str]]:
 
     Keyed by exact id, never merged by name: the projection has to resolve whichever id
     the campaign actually carries.
+
+    A shelter creates its own items in ``shelter_{code}``, not in ``catalog``, so those
+    are read too and win over a central doc with the same id — the same precedence as
+    ``listItemMasters`` and ``worker.mongo.stock._load_catalog``. Reading ``catalog``
+    alone left a need for a shelter-made item showing its raw id on the donor board.
     """
     item_map: dict[str, dict[str, str]] = {}
-    if not await couch.database_exists("catalog"):
-        return item_map
-    async for doc in couch.iter_all_docs("catalog"):
-        doc_id = doc.get("_id")
-        if not doc_id:
+    if await couch.database_exists("catalog"):
+        async for doc in couch.iter_all_docs("catalog"):
+            doc_id = doc.get("_id")
+            if not doc_id:
+                continue
+            doc_type = doc.get("type")
+            if doc_type == "supply_item":
+                item_map[str(doc_id)] = {
+                    "name": str(doc.get("name") or doc_id),
+                    "category": str(doc.get("category") or "other"),
+                    "unit": str(doc.get("unit") or "unit"),
+                }
+            elif doc_type == "item_master" and not doc.get("deactivated"):
+                item_map[str(doc_id)] = _item_master_entry(doc, str(doc_id))
+
+    for doc in await _fetch_docs_by_prefix(couch, shelter_database, "item_master:"):
+        if doc.get("type") != "item_master":
             continue
-        doc_type = doc.get("type")
-        if doc_type == "supply_item":
-            item_map[str(doc_id)] = {
-                "name": str(doc.get("name") or doc_id),
-                "category": str(doc.get("category") or "other"),
-                "unit": str(doc.get("unit") or "unit"),
-            }
-        elif doc_type == "item_master" and not doc.get("deactivated"):
-            item_map[str(doc_id)] = {
-                "name": str(doc.get("name") or doc_id),
-                "category": str(doc.get("category") or "other"),
-                # `base_unit` is authoritative; `unit` is the CR-013 transition field
-                # kept for docs written before it existed.
-                "unit": str(doc.get("base_unit") or doc.get("unit") or "unit"),
-            }
+        doc_id = str(doc["_id"])
+        if doc.get("deactivated"):
+            item_map.pop(doc_id, None)
+        else:
+            item_map[doc_id] = _item_master_entry(doc, doc_id)
     return item_map
 
 
@@ -96,7 +115,7 @@ async def project_needs_for_shelter(
         for doc in await _fetch_docs_by_prefix(couch, database, "stock_ledger:")
         if doc.get("type") == "stock_ledger"
     ]
-    catalog = await _load_catalog_map(couch)
+    catalog = await _load_catalog_map(couch, database)
 
     # Highest urgency any open campaign attaches to the item. `qty_target` is NOT
     # accumulated here — `need_breakdown` below already sums it, and does so skipping

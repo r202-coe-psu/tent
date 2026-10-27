@@ -32,8 +32,9 @@ import { sha256Hex } from '$lib/db/hash';
  * (T-16-1.1). Shelter-scoped: staff see only their own shelter, SA sees every shelter.
  *
  * Rows are redacted the same way the scan station's `ScanDonationView` is: no
- * `tracking_token_hash`, no `phone_hash`, no `_rev`. Donor `phone` is included —
- * warehouse staff need it to chase a late delivery.
+ * `tracking_token_hash`, no `phone_hash`. Donor `phone` is included — warehouse staff
+ * need it to chase a late delivery. `rev` goes back with a review decision, so one made
+ * on a booking the donor has since edited is refused (CR-174).
  */
 function toPendingRow(d: PublicDonationDoc): PendingDonationRow {
 	const items = d.items ?? [];
@@ -42,6 +43,7 @@ function toPendingRow(d: PublicDonationDoc): PendingDonationRow {
 	const isUnsolicited = items.length === 0 || items.some((it) => !it.item_id);
 
 	return {
+		rev: d._rev,
 		booking_ref: d.booking_ref,
 		donation_id: d._id,
 		shelter_code: d.shelter_code,
@@ -57,8 +59,12 @@ function toPendingRow(d: PublicDonationDoc): PendingDonationRow {
 			qty: it.qty,
 			unit: it.unit,
 			condition: it.condition,
-			note: it.note
+			note: it.note,
+			review_status: it.review_status,
+			review_reason: it.review_reason ?? null,
+			reserved_qty: it.reserved_qty
 		})),
+		campaign_id: d.campaign_id ?? null,
 		declared_at: d.declared_at,
 		eta: d.logistics?.eta,
 		slot: d.logistics?.slot,
@@ -170,7 +176,7 @@ export const POST: RequestHandler = async ({ request }) => {
 			}))
 		);
 		try {
-			await assertCountedAgainstCatalog(counted);
+			await assertCountedAgainstCatalog(counted, shelterDb(shelterCode));
 		} catch (e) {
 			return json(
 				{

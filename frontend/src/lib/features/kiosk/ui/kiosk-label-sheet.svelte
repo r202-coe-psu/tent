@@ -5,7 +5,10 @@
 		qrSrc: string | undefined;
 		qrSizeMm: number | undefined;
 		name: string;
-		phone: string | null | undefined;
+		/** Current zone name; missing or null leaves a dotted line to write the zone on. */
+		zone?: string | null;
+		/** Intake stations passed: this many checklist boxes are ticked. */
+		checkedCount?: number;
 	};
 </script>
 
@@ -19,7 +22,8 @@
 		KIOSK_LABEL_OFFSET_X_MM,
 		KIOSK_LABEL_PADDING_MM,
 		kioskLabelPageCss,
-		kioskQrBoxMm
+		kioskQrBoxMm,
+		labelZoneLine
 	} from '../domain/print-label';
 
 	interface Props {
@@ -57,11 +61,11 @@
 		{#each labels as label (label.key)}
 			<div class="wristband" style:--qr-size="{label.qrSizeMm ?? kioskQrBoxMm()}mm">
 				<QrIdCard
-					variant="label"
 					src={label.qrSrc}
 					alt="QR ประจำตัวสำหรับใช้ภายในศูนย์"
 					name={label.name}
-					phone={label.phone}
+					zone={labelZoneLine(label.zone)}
+					checkedCount={label.checkedCount}
 					footer={KIOSK_LABEL_LINK}
 					checklist={KIOSK_LABEL_CHECKLIST}
 				/>

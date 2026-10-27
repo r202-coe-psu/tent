@@ -10,11 +10,19 @@ import { lookupZipcode } from '$lib/server/thailand-location';
 import { adminFetch } from '$lib/server/couch-admin';
 import { shelterDbName } from '$lib/server/shelter-access-design';
 import { createHash } from 'node:crypto';
+import { makeDocId } from '$lib/db/model';
+import {
+	consentDecisionSchemaFor,
+	resolveRegistrationConsent,
+	type ConsentDecision,
+	type EvacueeConsent
+} from '$lib/features/consent/server';
 import { kioskPhotoPayloadSchema, type KioskPhotoPayload } from '../domain/kiosk-photo';
 import { normalizeKioskPhone, phoneVariants } from '../domain/phone';
 import { walkInAddressKey, walkInRoadsCompatible } from '../domain/walk-in-address';
 import { refreshHouseholdStatus } from './kiosk-check-in.server';
 import { deleteKioskCardImage, putKioskCardImage } from './kiosk-photo.server';
+import { writeKioskStationLogs } from './kiosk-station-log.server';
 import { z } from 'zod';
 
 export { decodeKioskPhoto, KioskPhotoValidationError } from './kiosk-photo.server';
@@ -31,14 +39,33 @@ const kioskWalkInPhoneSchema = z
 		return phone;
 	});
 
+const CONSENT_FRESH_MS = 10 * 60 * 1000;
+
+const isFreshKioskConsent = (decision: { given_at: string }) =>
+	Math.abs(Date.now() - Date.parse(decision.given_at)) <= CONSENT_FRESH_MS;
+
+/**
+ * The body carries a well-formed kiosk decision given more than 10 minutes ago: the visitor has to
+ * decide again, since resending the same decision can never pass. A decision dated ahead is a
+ * kiosk clock problem that deciding again would not fix, so it stays a plain invalid body.
+ */
+export function isStaleKioskConsent(body: unknown): boolean {
+	if (typeof body !== 'object' || body === null || !('consent' in body)) return false;
+	const decision = consentDecisionSchemaFor('kiosk').safeParse(body.consent);
+	return decision.success && Date.now() - Date.parse(decision.data.given_at) > CONSENT_FRESH_MS;
+}
+
 const kioskWalkInConsentFields = {
 	phone: kioskWalkInPhoneSchema,
-	consented: z.literal(true),
-	consented_at: z
-		.string()
-		.datetime({ offset: true })
-		.refine((timestamp) => Math.abs(Date.now() - Date.parse(timestamp)) <= 10 * 60 * 1000)
+	consent: consentDecisionSchemaFor('kiosk').refine(isFreshKioskConsent),
+	consented_at: z.string().datetime({ offset: true }),
+	// CR-192: when the card was read / ThaiD verified (ISO) — only the Station 1 `start` time. The
+	// server clamps it; a malformed value is dropped rather than failing the registration.
+	started_at: z.string().max(40).optional().catch(undefined)
 };
+
+const hasMatchingConsentTime = (input: { consent: { given_at: string }; consented_at: string }) =>
+	Date.parse(input.consented_at) === Date.parse(input.consent.given_at);
 
 /** The card read from the chip; `source` may be left out (kiosk clients from before ThaiD walk-in). */
 const kioskCardWalkInInputSchema = z
@@ -48,7 +75,8 @@ const kioskCardWalkInInputSchema = z
 		photo: kioskPhotoPayloadSchema.nullable().default(null),
 		...kioskWalkInConsentFields
 	})
-	.strict();
+	.strict()
+	.refine(hasMatchingConsentTime);
 
 /** ThaiD carries only the verified session id; the identity stays on the server, and no photo. */
 const kioskThaidWalkInInputSchema = z
@@ -57,7 +85,8 @@ const kioskThaidWalkInInputSchema = z
 		session_id: z.string().regex(/^[0-9a-f]{32}$/),
 		...kioskWalkInConsentFields
 	})
-	.strict();
+	.strict()
+	.refine(hasMatchingConsentTime);
 
 export const kioskWalkInRegistrationInputSchema = z.union([
 	kioskCardWalkInInputSchema,
@@ -224,8 +253,8 @@ const ADDRESS_PAGE_SIZE = 200;
 
 /**
  * The household a kiosk created earlier for this card address (`addressKey`; roads must not
- * conflict), when it is still open and its head is the kiosk walk-in who made it; the oldest one
- * if several qualify.
+ * conflict), when it is still open and its head is an evacuee whose card shows that address,
+ * whatever channel registered them; the oldest one if several qualify.
  * Staff-made households, and ones whose head changed, are never joined.
  */
 async function findJoinableKioskHousehold(
@@ -243,7 +272,6 @@ async function findJoinableKioskHousehold(
 				selector: {
 					type: 'evacuee',
 					shelter_code: shelterCode,
-					registered_via: 'kiosk',
 					'card_snapshot.address_no': cardSnapshot.address_no
 				},
 				fields: ['_id', 'household_id', 'card_snapshot'],
@@ -301,6 +329,8 @@ async function deleteKioskHousehold(dbName: string, householdId: string): Promis
 	const saved = await adminFetch<{ _rev?: string }>(path);
 	if (saved?._rev) await adminFetch(`${path}?rev=${saved._rev}`, { method: 'DELETE' });
 }
+
+export type KioskEvacuee = Evacuee & { consent: EvacueeConsent };
 
 /** The kiosk that took the registration, as written into the snapshot and `created_by`. */
 export type KioskWalkInDevice = { shelterCode: string; deviceId: string; stationName: string };
@@ -384,17 +414,31 @@ async function writeKioskWalkIn(
 	device: KioskWalkInDevice,
 	cardSnapshot: CardSnapshot,
 	photo: KioskPhotoPayload | null,
+	decision: ConsentDecision,
 	phone: string | null,
 	joinHouseholdId: string | null
-): Promise<Evacuee> {
+): Promise<KioskEvacuee> {
 	const { shelterCode, deviceId } = device;
 	const image = photo ? await putKioskCardImage(dbName, shelterCode, deviceId, photo) : null;
 	const ctx = { shelterCode, createdBy: `scanner:${deviceId}` };
-	const unlinked = createKioskEvacueeFromCard(cardSnapshot, ctx, image?.id, phone);
+	const evacueeId = makeDocId('evacuee');
+	const consent = resolveRegistrationConsent(
+		decision,
+		[{ key: 'self', alreadyConsented: false, evacueeId }],
+		{ channel: 'kiosk', recordedBy: null }
+	).get('self')!;
+	const unlinked = createKioskEvacueeFromCard(
+		cardSnapshot,
+		ctx,
+		consent,
+		image?.id,
+		phone,
+		evacueeId
+	);
 	const household = joinHouseholdId
 		? null
 		: createKioskWalkInHousehold(unlinked, cardSnapshot, ctx);
-	const evacuee: Evacuee = { ...unlinked, household_id: household?._id ?? joinHouseholdId! };
+	const evacuee: KioskEvacuee = { ...unlinked, household_id: household?._id ?? joinHouseholdId! };
 	if (household) {
 		try {
 			await adminFetch(`/${dbName}/${encodeURIComponent(household._id)}`, {
@@ -423,13 +467,31 @@ async function writeKioskWalkIn(
 /**
  * Create one new kiosk walk-in record after consent; existing records are never reused.
  * The snapshot comes from the chip (with its photo) or from ThaiD (never a photo).
+ *
+ * CR-192: once the record is committed (and the locks are released) the Station 1 kiosk
+ * `start` + `complete` are appended, best-effort. `startedAt` is the card-read time the kiosk
+ * sent; it is clamped server-side.
  */
 export async function registerKioskWalkInSnapshot(
 	device: KioskWalkInDevice,
 	cardSnapshot: CardSnapshot,
 	photo: KioskPhotoPayload | null,
+	decision: ConsentDecision,
+	phone: string | null,
+	startedAt?: string
+): Promise<KioskEvacuee> {
+	const evacuee = await registerKioskWalkInLocked(device, cardSnapshot, photo, decision, phone);
+	await writeKioskStationLogs(device.shelterCode, device.deviceId, [evacuee._id], startedAt);
+	return evacuee;
+}
+
+async function registerKioskWalkInLocked(
+	device: KioskWalkInDevice,
+	cardSnapshot: CardSnapshot,
+	photo: KioskPhotoPayload | null,
+	decision: ConsentDecision,
 	phone: string | null
-): Promise<Evacuee> {
+): Promise<KioskEvacuee> {
 	const { shelterCode } = device;
 	const citizenId = cardSnapshot.citizen_id;
 	const dbName = shelterDbName(shelterCode);
@@ -477,7 +539,15 @@ export async function registerKioskWalkInSnapshot(
 			const joinHouseholdId = addressKey
 				? await findJoinableKioskHousehold(dbName, shelterCode, cardSnapshot, addressKey)
 				: null;
-			return await writeKioskWalkIn(dbName, device, cardSnapshot, photo, phone, joinHouseholdId);
+			return await writeKioskWalkIn(
+				dbName,
+				device,
+				cardSnapshot,
+				photo,
+				decision,
+				phone,
+				joinHouseholdId
+			);
 		} finally {
 			if (addressLockId && addressLockRev) {
 				await releaseKioskRegistrationLock(dbName, addressLockId, addressLockRev);
@@ -495,15 +565,18 @@ export function registerKioskWalkIn(
 	stationName: string,
 	cardInput: KioskWalkInCardInput,
 	photo: KioskPhotoPayload | null,
-	consentedAt: string,
-	phone: string | null = null
-): Promise<Evacuee> {
+	decision: ConsentDecision,
+	phone: string | null = null,
+	startedAt?: string
+): Promise<KioskEvacuee> {
 	const device = { shelterCode, deviceId, stationName };
 	return registerKioskWalkInSnapshot(
 		device,
-		kioskCardSnapshotFromCard(cardInput, consentedAt, device),
+		kioskCardSnapshotFromCard(cardInput, decision.given_at, device),
 		photo,
-		phone
+		decision,
+		phone,
+		startedAt
 	);
 }
 
@@ -511,13 +584,16 @@ export function registerKioskWalkIn(
 export function registerKioskThaidWalkIn(
 	device: KioskWalkInDevice,
 	citizen: { pid: string; profile?: ThaiDAutofillProfile },
-	consentedAt: string,
-	phone: string | null
-): Promise<Evacuee> {
+	decision: ConsentDecision,
+	phone: string | null,
+	startedAt?: string
+): Promise<KioskEvacuee> {
 	return registerKioskWalkInSnapshot(
 		device,
-		kioskCardSnapshotFromThaid(citizen.pid, citizen.profile, consentedAt, device),
+		kioskCardSnapshotFromThaid(citizen.pid, citizen.profile, decision.given_at, device),
 		null,
-		phone
+		decision,
+		phone,
+		startedAt
 	);
 }

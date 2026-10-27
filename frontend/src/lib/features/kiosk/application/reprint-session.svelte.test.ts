@@ -42,8 +42,16 @@ const HOUSEHOLD: KioskLookupResponse = {
 const REPRINT_RESULT: KioskReprintResult = {
 	shelter_code: 'SH001',
 	members: [
-		{ evacuee_id: 'EV1', qr_payload: 'qr-1', label: { name: 'สมชาย ใจดี', phone: '0812345678' } },
-		{ evacuee_id: 'EV2', qr_payload: 'qr-2', label: { name: 'สมหญิง ใจดี', phone: '0812345678' } }
+		{
+			evacuee_id: 'EV1',
+			qr_payload: 'qr-1',
+			label: { name: 'สมชาย ใจดี', phone: '0812345678', zone: null, stations_passed: 1 }
+		},
+		{
+			evacuee_id: 'EV2',
+			qr_payload: 'qr-2',
+			label: { name: 'สมหญิง ใจดี', phone: '0812345678', zone: null, stations_passed: 1 }
+		}
 	]
 };
 
@@ -60,6 +68,7 @@ function setup(overrides: Partial<FakeDeps> = {}) {
 async function toVerify(session: ReprintSession) {
 	session.phone = '0812345678';
 	await session.submitPhone();
+	session.toggleAll();
 	session.continueToVerify();
 }
 
@@ -75,7 +84,7 @@ describe('ReprintSession phone step', () => {
 		expect(session.step).toBe('phone');
 	});
 
-	it('looks the phone up and preselects every selectable member', async () => {
+	it('looks the phone up with nobody ticked yet, so the visitor picks who to print', async () => {
 		const { deps, session } = setup();
 		session.phone = '0812345678';
 
@@ -84,8 +93,8 @@ describe('ReprintSession phone step', () => {
 		expect(deps.lookup).toHaveBeenCalledWith({ source: 'phone', phone: '0812345678' });
 		expect(session.step).toBe('members');
 		expect(session.members.map((m) => m.evacuee_id)).toEqual(['EV1', 'EV2', 'EV3']);
-		expect(session.selectedIds).toEqual(['EV1', 'EV2']);
-		expect(session.canContinue).toBe(true);
+		expect(session.selectedIds).toEqual([]);
+		expect(session.canContinue).toBe(false);
 		expect(session.blocked).toBe(false);
 	});
 
@@ -93,6 +102,7 @@ describe('ReprintSession phone step', () => {
 		const { session } = setup();
 		session.phone = '0812345678';
 		await session.submitPhone();
+		session.toggleAll();
 
 		session.toggleMember('EV2');
 		expect(session.selectedIds).toEqual(['EV1']);
@@ -113,9 +123,9 @@ describe('ReprintSession phone step', () => {
 		await session.submitPhone();
 
 		session.toggleAll();
-		expect(session.selectedIds).toEqual([]);
-		session.toggleAll();
 		expect(session.selectedIds).toEqual(['EV1', 'EV2']);
+		session.toggleAll();
+		expect(session.selectedIds).toEqual([]);
 	});
 
 	it('blocks when nobody has been registered yet, with a way back', async () => {
@@ -259,7 +269,7 @@ describe('ReprintSession candidates', () => {
 			primary_evacuee_id: 'EV1'
 		});
 		expect(session.step).toBe('members');
-		expect(session.selectedIds).toEqual(['EV1', 'EV2']);
+		expect(session.selectedIds).toEqual([]);
 	});
 
 	it('goes back from members to the household list, then to the phone', async () => {
@@ -469,5 +479,138 @@ describe('ReprintSession printing', () => {
 		expect(session.selectedIds).toEqual([]);
 		expect(session.printable).toEqual([]);
 		expect(session.error).toBe('');
+	});
+});
+
+async function toStaffPin(session: ReprintSession) {
+	await toVerify(session);
+	session.openStaffPin();
+}
+
+describe('ReprintSession staff PIN', () => {
+	it('lets staff confirm with the kiosk PIN instead of the last four digits, then prints', async () => {
+		const { deps, session } = setup();
+		await toStaffPin(session);
+		expect(session.step).toBe('staff_pin');
+
+		const result = await session.verifyStaffPin('2468');
+
+		expect(result).toEqual({ kind: 'verified' });
+		expect(deps.reprint).toHaveBeenCalledWith({
+			phone: '0812345678',
+			primary_evacuee_id: 'EV1',
+			staff_pin: '2468',
+			evacuee_ids: ['EV1', 'EV2']
+		});
+		expect(deps.print).not.toHaveBeenCalled();
+
+		await session.onStaffPinVerified();
+
+		expect(deps.print).toHaveBeenCalledWith(REPRINT_RESULT.members);
+		expect(session.step).toBe('done');
+		expect(session.printedCount).toBe(2);
+	});
+
+	it('reports a wrong PIN as wrong, prints nothing and stays on the PIN step', async () => {
+		const reprint = vi
+			.fn<ReprintSessionDeps['reprint']>()
+			.mockRejectedValue(new KioskRequestError('x', 401, 'KIOSK_REPRINT_STAFF_PIN_INVALID'));
+		const { deps, session } = setup({ reprint });
+		await toStaffPin(session);
+
+		const result = await session.verifyStaffPin('0000');
+		await session.onStaffPinVerified();
+
+		expect(result).toEqual({ kind: 'wrong' });
+		expect(session.step).toBe('staff_pin');
+		expect(deps.print).not.toHaveBeenCalled();
+		expect(session.busy).toBe(false);
+	});
+
+	it('reports a kiosk without a PIN as not_set', async () => {
+		const reprint = vi
+			.fn<ReprintSessionDeps['reprint']>()
+			.mockRejectedValue(new KioskRequestError('x', 409, 'staff_pin_not_set'));
+		const { deps, session } = setup({ reprint });
+		await toStaffPin(session);
+
+		const result = await session.verifyStaffPin('2468');
+
+		expect(result).toEqual({ kind: 'not_set' });
+		expect(session.step).toBe('staff_pin');
+		expect(deps.print).not.toHaveBeenCalled();
+	});
+
+	it('goes back to the phone step with the not-found message when the household is gone', async () => {
+		const reprint = vi
+			.fn<ReprintSessionDeps['reprint']>()
+			.mockRejectedValue(new KioskRequestError('x', 404, 'KIOSK_REPRINT_NOT_FOUND'));
+		const { session } = setup({ reprint });
+		await toStaffPin(session);
+
+		const result = await session.verifyStaffPin('2468');
+
+		expect(result).toEqual({ kind: 'error' });
+		expect(session.step).toBe('phone');
+		expect(session.error).toBe('ไม่พบข้อมูลที่ลงทะเบียนด้วยเบอร์นี้');
+		expect(session.members).toEqual([]);
+	});
+
+	it('returns to the last-four-digits step when the PIN panel is cancelled', async () => {
+		const { session } = setup();
+		await toStaffPin(session);
+
+		session.cancelStaffPin();
+
+		expect(session.step).toBe('verify');
+		expect(session.idLast4).toBe('');
+	});
+
+	it.each([
+		['a full queue', new KioskRequestError('x', 429, 'RATE_LIMITED')],
+		['an unavailable dependency', new KioskRequestError('x', 503, 'DEPENDENCY_UNAVAILABLE')],
+		['a network failure', new Error('boom')]
+	])('reports %s as error and stays on the PIN step', async (_name, failure) => {
+		const reprint = vi.fn<ReprintSessionDeps['reprint']>().mockRejectedValue(failure);
+		const { deps, session } = setup({ reprint });
+		await toStaffPin(session);
+
+		const result = await session.verifyStaffPin('2468');
+
+		expect(result).toEqual({ kind: 'error' });
+		expect(session.step).toBe('staff_pin');
+		expect(deps.print).not.toHaveBeenCalled();
+	});
+
+	it('goes back from the PIN step to the last four digits', async () => {
+		const { session } = setup();
+		await toStaffPin(session);
+
+		session.back();
+
+		expect(session.step).toBe('verify');
+	});
+
+	it('ignores an answer that arrives after the visit was reset', async () => {
+		let answer: (result: KioskReprintResult) => void = () => {};
+		const reprint = vi.fn<ReprintSessionDeps['reprint']>().mockImplementation(
+			() =>
+				new Promise((resolve) => {
+					answer = resolve;
+				})
+		);
+		const { deps, session } = setup({ reprint });
+		await toStaffPin(session);
+
+		const verifying = session.verifyStaffPin('2468');
+		session.reset();
+		answer(REPRINT_RESULT);
+		const result = await verifying;
+		await session.onStaffPinVerified();
+
+		expect(result).toEqual({ kind: 'error' });
+		expect(session.step).toBe('phone');
+		expect(session.printable).toEqual([]);
+		expect(deps.print).not.toHaveBeenCalled();
 	});
 });

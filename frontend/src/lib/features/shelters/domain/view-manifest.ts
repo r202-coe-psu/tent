@@ -34,7 +34,11 @@ export type ShelterViewManifest = {
  * its own on the server.
  */
 export const SHELTER_VIEW_MANIFEST: ShelterViewManifest = {
-	version: 2,
+	// v3 (CR-170): demographics_by_age / demographics_by_country also count room_confirmed.
+	// v4 (CR-170 amend): registrations_by_date_status also emits the `preregister` series.
+	// v5 (CR-192): adds the station_logs_by_station view (station_log start/complete events).
+	// v6 (#658): bulk_return_pool_item_totals (entry / move / void).
+	version: 6,
 	designName: 'app',
 	views: SHELTER_DASHBOARD_VIEWS.views
 };

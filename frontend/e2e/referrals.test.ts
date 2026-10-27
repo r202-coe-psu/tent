@@ -187,11 +187,11 @@ test.describe('Referrals — mocked UI contracts', { tag: ['@regression', '@back
 		await page.goto('/back-office/referrals');
 
 		await page.getByRole('link', { name: /สร้างรายการส่งต่อ/ }).click();
-		await expect(page.getByText('สร้างรายการส่งต่อผู้ประสบภัย')).toBeVisible();
+		await expect(page.getByText('สร้างรายการส่งต่อผู้เข้าพัก')).toBeVisible();
 
 		for (const name of [/^ส่งข้อมูล$/, /^บันทึกร่าง$/]) {
 			await page.getByRole('button', { name }).click();
-			await expect(page.getByText('กรุณาเลือกผู้ประสบภัยอย่างน้อย 1 คน').first()).toBeVisible();
+			await expect(page.getByText('กรุณาเลือกผู้เข้าพักอย่างน้อย 1 คน').first()).toBeVisible();
 		}
 		expect(store.writes).toEqual([]);
 	});
@@ -280,7 +280,7 @@ test.describe('Referrals — mocked UI contracts', { tag: ['@regression', '@back
 		const dialog = page.getByRole('alertdialog');
 		await expect(dialog.getByText('ยืนยันการยกเลิกร่าง')).toBeVisible();
 		await expect(dialog.getByText('จำนวน 1 รายการ')).toBeVisible();
-		await expect(dialog.getByText('ผู้ประสบภัย: สมชาย ทดสอบ')).toBeVisible();
+		await expect(dialog.getByText('ผู้เข้าพัก: สมชาย ทดสอบ')).toBeVisible();
 		await dialog.getByRole('button', { name: 'ยกเลิก', exact: true }).click();
 		await expect(dialog).toHaveCount(0);
 		expect(store.patches).toHaveLength(0);
@@ -331,7 +331,7 @@ test.describe('Referrals — mocked UI contracts', { tag: ['@regression', '@back
 		await page.getByTestId('btn-close-referral').click();
 		const dialog = page.getByRole('alertdialog');
 		await expect(dialog.getByText('จำนวน 1 รายการ')).toBeVisible();
-		await expect(dialog.getByText('ผู้ประสบภัย: สมชาย ทดสอบ')).toBeVisible();
+		await expect(dialog.getByText('ผู้เข้าพัก: สมชาย ทดสอบ')).toBeVisible();
 
 		for (const name of ['ยกเลิก', 'ปิดรายการ']) {
 			const button = dialog.getByRole('button', { name, exact: true });
@@ -727,7 +727,7 @@ test.describe('Referrals — mocked UI contracts', { tag: ['@regression', '@back
 			.click();
 		const dialog = page.getByRole('alertdialog');
 		await expect(dialog.getByText('จำนวน 1 รายการ')).toBeVisible();
-		await expect(dialog.getByText('ผู้ประสบภัย: สมศรี ทดสอบ')).toBeVisible();
+		await expect(dialog.getByText('ผู้เข้าพัก: สมศรี ทดสอบ')).toBeVisible();
 		await dialog.getByRole('button', { name: 'ส่งตัว 1 รายการ' }).click();
 		await expect(page.getByText('ส่งตัวสำเร็จ 1 รายการ')).toBeVisible();
 		expect(store.bulkCalls).toEqual([{ ids: ['referral:s1'], to: 'sent' }]);
@@ -903,7 +903,7 @@ test.describe(
 			await injectSession(page, SM1, sessions[SM1.name]);
 			await page.goto('/back-office/referrals');
 			await page.getByRole('link', { name: /สร้างรายการส่งต่อ/ }).click();
-			await expect(page.getByText('สร้างรายการส่งต่อผู้ประสบภัย')).toBeVisible();
+			await expect(page.getByText('สร้างรายการส่งต่อผู้เข้าพัก')).toBeVisible();
 			await page.getByRole('button', { name: /ย้ายศูนย์พักพิง/ }).click();
 			await expect(page.getByText('ศูนย์พักพิงปลายทาง')).toBeVisible();
 			await page.getByPlaceholder('เลือกศูนย์พักพิงปลายทาง...').click();
@@ -913,7 +913,7 @@ test.describe(
 			await expect(row).toBeVisible();
 			await row.click();
 			await page
-				.getByPlaceholder('ระบุรายละเอียดเหตุผลความจำเป็นในการส่งต่อผู้ประสบภัย')
+				.getByPlaceholder('ระบุรายละเอียดเหตุผลความจำเป็นในการส่งต่อผู้เข้าพัก')
 				.fill('ศูนย์เต็ม');
 			await page.getByRole('button', { name: 'ส่งข้อมูล' }).click();
 			// #549: sending asks for confirmation first.
@@ -1111,7 +1111,7 @@ test.describe(
 
 					// Submit buttons stay in view while the end of the form is still off-screen.
 					// Scroll the form's first field to the top: the end of the form is still far below.
-					await page.getByLabel('ค้นหาผู้ประสบภัย').evaluate((el) => {
+					await page.getByLabel('ค้นหาผู้เข้าพัก').evaluate((el) => {
 						const top = el.getBoundingClientRect().top + window.scrollY - 8;
 						window.scrollTo({ top, behavior: 'instant' });
 					});

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from decimal import Decimal
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -38,6 +38,7 @@ def _patches():
         patch(
             "worker.couch.bootstrap.refresh_shelter_occupants", new_callable=AsyncMock
         ),
+        patch("worker.quota.settle.settle_shelved_quota", new_callable=AsyncMock),
     )
 
 
@@ -63,7 +64,7 @@ async def test_bootstrap_seeds_need_counters_for_existing_campaigns():
         ]
     )
 
-    cp, person, donation, need, needs_for, occ, stock, occs = _patches()
+    cp, person, donation, need, needs_for, occ, stock, occs, settle = _patches()
     with (
         cp,
         person,
@@ -73,6 +74,7 @@ async def test_bootstrap_seeds_need_counters_for_existing_campaigns():
         occ,
         stock,
         occs,
+        settle,
         patch(
             "worker.couch.bootstrap.apply_need_counters", new_callable=AsyncMock
         ) as counters,
@@ -99,7 +101,7 @@ async def test_bootstrap_does_not_seed_counters_for_a_closed_campaign():
         ]
     )
 
-    cp, person, donation, need, needs_for, occ, stock, occs = _patches()
+    cp, person, donation, need, needs_for, occ, stock, occs, settle = _patches()
     with (
         cp,
         person,
@@ -109,6 +111,7 @@ async def test_bootstrap_does_not_seed_counters_for_a_closed_campaign():
         occ,
         stock,
         occs,
+        settle,
         patch(
             "worker.couch.bootstrap.apply_need_counters", new_callable=AsyncMock
         ) as counters,
@@ -116,3 +119,37 @@ async def test_bootstrap_does_not_seed_counters_for_a_closed_campaign():
         await bootstrap_database(couch, "shelter_sh001")
 
     assert counters.await_args.args[0] == []
+
+
+@pytest.mark.asyncio
+async def test_bootstrap_settles_quota_after_the_shelf_balance():
+    """Counters written before settle_shelved_quota existed count received goods in
+    reserved_qty AND on_hand_qty. An idle shelter gets no change event to fix that,
+    so the bootstrap (re-run on deploy via PROJECTION_VERSION) has to."""
+    couch = _couch([])
+
+    cp, person, donation, need, needs_for, occ, stock, occs, settle = _patches()
+    with (
+        cp,
+        person,
+        donation,
+        need,
+        needs_for,
+        occ,
+        stock,
+        occs,
+        settle as settled,
+        patch(
+            "worker.couch.bootstrap.refresh_on_hand", new_callable=AsyncMock
+        ) as on_hand,
+    ):
+        steps = MagicMock()
+        steps.attach_mock(on_hand, "refresh_on_hand")
+        steps.attach_mock(settled, "settle_shelved_quota")
+        await bootstrap_database(couch, "shelter_sh001")
+
+    assert [c[0] for c in steps.mock_calls] == [
+        "refresh_on_hand",
+        "settle_shelved_quota",
+    ]
+    assert settled.await_args.args == (couch, "SH001")

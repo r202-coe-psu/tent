@@ -55,9 +55,7 @@ describe('TestPrint', () => {
 		expect(prepareQrImage).toHaveBeenCalledExactlyOnceWith('KIOSK-TEST-PRINT');
 		expect(printLabels).toHaveBeenCalledOnce();
 		const [labels] = printLabels.mock.calls[0];
-		expect(labels).toEqual([
-			{ qrSrc: 'data:image/png;base64,QR', name: 'ทดสอบการพิมพ์', phone: null }
-		]);
+		expect(labels).toEqual([{ qrSrc: 'data:image/png;base64,QR', name: 'ทดสอบการพิมพ์' }]);
 		expect(testPrint.phase).toBe('done');
 	});
 

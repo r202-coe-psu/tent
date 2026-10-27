@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { POST } from './+server';
-import { loginCaptchaIpLimiter } from '$lib/server/security/rate-limiter';
 
 type PostEvent = Parameters<typeof POST>[0];
 
@@ -20,14 +19,6 @@ vi.mock('$lib/server/security/captcha', () => ({
 vi.mock('$lib/server/couch-admin', () => ({
 	adminRaw
 }));
-
-vi.mock('$lib/server/security/rate-limiter', async (importOriginal) => {
-	const actual = await importOriginal<typeof import('$lib/server/security/rate-limiter')>();
-	return {
-		...actual,
-		loginCaptchaIpLimiter: { check: vi.fn(() => true) }
-	};
-});
 
 vi.mock('$env/dynamic/private', () => ({
 	env: {
@@ -63,7 +54,6 @@ describe('POST /api/v1/auth/captcha/verify', () => {
 			status: 200,
 			data: { _id: 'config:app', type: 'config', recaptcha_enabled: true }
 		});
-		vi.mocked(loginCaptchaIpLimiter.check).mockReturnValue(true);
 	});
 
 	it('returns ok when token verifies with action login', async () => {
@@ -85,14 +75,6 @@ describe('POST /api/v1/auth/captcha/verify', () => {
 		const res = await POST(makeEvent({ captchaToken: 'bad' }));
 		expect(res.status).toBe(403);
 		await expect(res.json()).resolves.toEqual({ ok: false, error: 'CAPTCHA_FAILED' });
-	});
-
-	it('returns RATE_LIMITED when IP budget exhausted', async () => {
-		vi.mocked(loginCaptchaIpLimiter.check).mockReturnValue(false);
-		const res = await POST(makeEvent({ captchaToken: 'tok-1' }));
-		expect(res.status).toBe(429);
-		await expect(res.json()).resolves.toEqual({ ok: false, error: 'RATE_LIMITED' });
-		expect(verifyToken).not.toHaveBeenCalled();
 	});
 
 	it('skips verification when config:app.recaptcha_enabled is false', async () => {

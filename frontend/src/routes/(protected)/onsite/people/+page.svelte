@@ -165,11 +165,14 @@
 			</a>
 			<div>
 				<div class="flex items-center gap-2">
-					<ClipboardList class="size-6 text-[#0A2647]" />
+					<ClipboardList class="size-6 text-station-1" />
 					<h1 class="text-2xl font-bold tracking-tight text-slate-900 md:text-3xl">
 						ทะเบียนผู้ประสบภัย
 					</h1>
-					<Badge variant="outline" class="border-blue-200 bg-blue-50 font-semibold text-blue-900">
+					<Badge
+						variant="outline"
+						class="border-station-1-border bg-station-1-subtle font-semibold text-station-1-text"
+					>
 						Station 1
 					</Badge>
 				</div>

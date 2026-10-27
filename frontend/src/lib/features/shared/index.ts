@@ -28,6 +28,23 @@ export {
 	type SystemBanner
 } from './domain/app-config';
 
+export {
+	DEFAULT_KIOSK_SCREEN_TYPE,
+	KIOSK_SCREENS,
+	KIOSK_SCREEN_TYPES,
+	kioskScreenTypeSchema,
+	screenTypeOf,
+	type KioskScreenType
+} from './domain/kiosk-screen';
+
+export {
+	IN_SHELTER_STATUSES,
+	countInShelter,
+	inShelterFromStatusCounts,
+	isInShelterStayStatus,
+	type InShelterStatus
+} from './domain/in-shelter';
+
 export { fetchAppConfig, updateAppConfig, type AppConfigResponse } from './data/app-config.api';
 export { fetchSystemBanner } from './data/system-banner.api';
 export { systemBannerKeys, useSystemBanner } from './application/system-banner-queries';
@@ -36,3 +53,4 @@ export { default as RecaptchaSettings } from './ui/recaptcha-settings.svelte';
 export { default as ThaidSettings } from './ui/thaid-settings.svelte';
 export { default as PasswordLoginSettings } from './ui/password-login-settings.svelte';
 export { default as SystemBannerSettings } from './ui/system-banner-settings.svelte';
+export { default as KioskScreenPicker } from './ui/kiosk-screen-picker.svelte';

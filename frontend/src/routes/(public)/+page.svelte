@@ -11,28 +11,29 @@
 	import ChevronLeft from '@lucide/svelte/icons/chevron-left';
 	import Inbox from '@lucide/svelte/icons/inbox';
 	import Info from '@lucide/svelte/icons/info';
-	import Construction from '@lucide/svelte/icons/construction';
+	import TriangleAlert from '@lucide/svelte/icons/triangle-alert';
+	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
 	import ClipboardPen from '@lucide/svelte/icons/clipboard-pen';
 
-	import * as Dialog from '$lib/components/ui/dialog';
-	import { Button } from '$lib/components/ui/button';
 	import * as Accordion from '$lib/components/ui/accordion/index.js';
 	import PublicDonationCard from '$lib/components/public-donation-card.svelte';
 	import PublicVolunteerCard from '$lib/components/public-volunteer-card.svelte';
 	import PublicNotificationMenu from '$lib/components/public-notification-menu.svelte';
 	import { FamilySearchModal } from '$lib/features/public-portal';
+	import { summarizeUrgentVolunteerNeed, useVolunteerJobs } from '$lib/features/volunteer-portal';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { getTranslation } from '$lib/utils/i18n';
-	import { PUBLIC_PORTAL_HOME_I18N } from '$lib/constants/i18n';
+	import { PUBLIC_HOME_I18N, PUBLIC_PORTAL_HOME_I18N } from '$lib/constants/i18n';
 
 	let { data }: { data: PageData } = $props();
 
 	const t = $derived(getTranslation(PUBLIC_PORTAL_HOME_I18N, langState.current));
+	/** `sysError` / `sysErrorDesc` — shown when the needs or shelters list failed to load (#740). */
+	const homeT = $derived(getTranslation(PUBLIC_HOME_I18N, langState.current));
 	const isEn = $derived(langState.current === 'en');
 
 	let searchQuery = $state('');
 	let searchOpen = $state(false);
-	let devModalOpen = $state(false);
 
 	let donationScrollContainer = $state<HTMLElement | null>(null);
 	let volunteerScrollContainer = $state<HTMLElement | null>(null);
@@ -182,9 +183,19 @@
 
 	const urgentDonations = $derived(liveDonationCards);
 
-	// 3. Urgent Volunteers Data (Real data only - empty until API/jobs dispatched)
+	// 3. Urgent Volunteers — open jobs staff flagged urgent, from the public board's BFF (#709).
+	const volunteerJobs = useVolunteerJobs(undefined, undefined, {
+		staleTime: 60_000,
+		refetchOnWindowFocus: false
+	});
+	/** `null` while loading or when the board cannot be read: the card shows "—", not 0. */
+	const urgentNeed = $derived(
+		volunteerJobs.data ? summarizeUrgentVolunteerNeed(volunteerJobs.data) : null
+	);
+
 	type VolunteerItem = {
 		id: string;
+		shelterCode: string;
 		name: string;
 		status: string;
 		location: string;
@@ -193,9 +204,26 @@
 		deficitText: string;
 	};
 
-	const urgentVolunteers = $derived<VolunteerItem[]>([]);
-	const volunteersNeeded = $derived(0);
-	const volunteersActive = $derived(0);
+	const urgentVolunteers = $derived<VolunteerItem[]>(
+		(urgentNeed?.shelters ?? []).map((shelter) => {
+			const geo = sheltersGeoMap.get(shelter.shelter_code);
+			return {
+				id: shelter.shelter_code,
+				shelterCode: shelter.shelter_code,
+				name: shelter.shelter_name,
+				status: t.criticalBadge,
+				location: geo
+					? t.locationText(geo.subdistrict, geo.district, geo.province)
+					: t.defaultLocation,
+				missions: shelter.job_titles,
+				volunteerPercent:
+					shelter.quota > 0
+						? Math.min(100, Math.round((shelter.enrolled / shelter.quota) * 100))
+						: 0,
+				deficitText: t.volunteerDeficitText(shelter.needed)
+			};
+		})
+	);
 
 	// 4. FAQs from API / CMS (Real data only)
 	const faqList = $derived(
@@ -320,6 +348,19 @@
 
 	<!-- 2. Main Body Container -->
 	<main class="mx-auto max-w-7xl space-y-12 px-4 py-8 sm:space-y-14 sm:px-6 lg:px-8">
+		{#if data.listsLoadFailed}
+			<!-- The lists below fall back to empty; without this an outage would read as "no needs". -->
+			<div
+				role="alert"
+				class="flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-red-900 shadow-2xs sm:p-5"
+			>
+				<TriangleAlert class="mt-0.5 h-5 w-5 shrink-0 text-red-600" aria-hidden="true" />
+				<div class="space-y-0.5">
+					<p class="text-sm font-bold sm:text-base">{homeT.sysError}</p>
+					<p class="text-sm">{homeT.sysErrorDesc}</p>
+				</div>
+			</div>
+		{/if}
 		<!-- KPI Summary Metrics (3 Cards) -->
 		<section class="grid grid-cols-1 gap-4 sm:grid-cols-3">
 			<!-- Card 1: 6 ศูนย์ -->
@@ -347,7 +388,7 @@
 				class="flex items-center gap-4 rounded-2xl border border-domain-donation-border bg-domain-donation-subtle/40 p-4.5 shadow-2xs sm:p-5"
 			>
 				<div
-					class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-domain-donation text-white shadow-xs"
+					class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-domain-donation-strong text-white shadow-xs"
 				>
 					<Package class="h-6 w-6" />
 				</div>
@@ -383,10 +424,12 @@
 				<div class="space-y-0.5">
 					<div class="flex flex-wrap items-baseline gap-1.5">
 						<span class="text-xl font-extrabold text-slate-900 tabular-nums sm:text-2xl">
-							{t.volunteersNeededText(volunteersNeeded)}
+							{urgentNeed ? t.volunteersNeededText(urgentNeed.needed) : t.volunteersNeededUnknown}
 						</span>
 						<span class="text-xs font-bold text-domain-volunteer-strong sm:text-sm">
-							({t.volunteersActiveText(volunteersActive)})
+							({urgentNeed
+								? t.volunteersActiveText(urgentNeed.enrolled)
+								: t.volunteersActiveUnknown})
 						</span>
 					</div>
 					<div class="text-xs font-medium text-slate-500">{t.volunteersDesc}</div>
@@ -517,14 +560,13 @@
 				<!-- Action Controls & Carousel Nav -->
 				<div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-2.5">
 					<div class="grid grid-cols-2 gap-2 sm:flex sm:items-center sm:gap-2.5">
-						<button
-							type="button"
-							onclick={() => (devModalOpen = true)}
+						<a
+							href={resolve('/volunteers/jobs')}
 							class="flex cursor-pointer items-center justify-center gap-1 rounded-xl bg-domain-volunteer-strong px-3 py-2 text-center text-xs font-bold whitespace-nowrap text-white shadow-xs transition-colors hover:bg-domain-volunteer-text sm:inline-flex sm:px-5 sm:py-2.5 sm:text-sm"
 						>
-							<span>{t.allMissionsBtn}</span>
+							<span>{t.allVolunteerJobsBtn}</span>
 							<span aria-hidden="true">➔</span>
-						</button>
+						</a>
 					</div>
 					{#if urgentVolunteers.length > 1}
 						<div class="mx-1 hidden h-6 w-px bg-slate-300 sm:block"></div>
@@ -554,7 +596,28 @@
 			<!-- Divider line -->
 			<div class="my-1.5 border-b border-slate-200 sm:mt-2 sm:mb-4"></div>
 
-			{#if urgentVolunteers.length > 0}
+			{#if volunteerJobs.isPending}
+				<!-- Still loading: hold the space, so "no urgent missions" never flashes first. -->
+				<div
+					class="flex gap-3 overflow-hidden px-1 py-1 sm:gap-6 sm:px-0 sm:py-2"
+					aria-hidden="true"
+				>
+					{#each [0, 1] as placeholder (placeholder)}
+						<Skeleton
+							class="h-64 w-[86%] max-w-[340px] min-w-[270px] shrink-0 rounded-[22px] sm:h-80 sm:w-[420px] sm:max-w-none sm:rounded-[28px] md:w-[460px]"
+						/>
+					{/each}
+				</div>
+			{:else if volunteerJobs.isError}
+				<!-- The board could not be read: say so, as the "—" on the KPI card above does. -->
+				<div
+					role="alert"
+					class="flex items-start gap-3 rounded-2xl border border-slate-300 bg-white p-5 text-slate-700 shadow-2xs sm:rounded-3xl sm:p-6"
+				>
+					<TriangleAlert class="mt-0.5 h-5 w-5 shrink-0 text-amber-600" aria-hidden="true" />
+					<p class="text-sm font-medium sm:text-base">{t.volunteersLoadErrorTitle}</p>
+				</div>
+			{:else if urgentVolunteers.length > 0}
 				<!-- Cards Container -->
 				<div
 					bind:this={volunteerScrollContainer}
@@ -578,13 +641,12 @@
 						{t.volunteersEmptyTitle}
 					</h3>
 					<div class="mt-5 flex flex-wrap items-center justify-center gap-3">
-						<button
-							type="button"
-							onclick={() => (devModalOpen = true)}
+						<a
+							href={resolve('/volunteers/jobs')}
 							class="inline-flex cursor-pointer items-center gap-1.5 rounded-xl bg-domain-volunteer-strong px-4 py-2.5 text-xs font-bold text-white shadow-xs transition-colors hover:bg-domain-volunteer-text sm:text-sm"
 						>
-							<span>{t.allMissionsBtn}</span>
-						</button>
+							<span>{t.allVolunteerJobsBtn}</span>
+						</a>
 					</div>
 				</div>
 			{/if}
@@ -657,32 +719,3 @@
 <FamilySearchModal bind:open={searchOpen} />
 
 <PublicNotificationMenu variant="floating" announcements={data.announcements} />
-
-<Dialog.Root bind:open={devModalOpen}>
-	<Dialog.Content class="max-w-md rounded-2xl p-6 sm:p-7">
-		<div class="flex flex-col items-center text-center">
-			<div
-				class="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-amber-200/80 bg-amber-50 text-amber-600 sm:h-16 sm:w-16"
-			>
-				<Construction class="h-7 w-7 sm:h-8 sm:w-8" />
-			</div>
-			<Dialog.Header class="text-center">
-				<Dialog.Title class="text-center text-lg font-bold text-slate-900 sm:text-xl">
-					{t.devModalTitle}
-				</Dialog.Title>
-				<Dialog.Description class="mt-2 text-center text-sm text-slate-500">
-					{t.devModalDesc}
-				</Dialog.Description>
-			</Dialog.Header>
-			<div class="mt-6 flex w-full justify-center">
-				<Button
-					type="button"
-					onclick={() => (devModalOpen = false)}
-					class="min-w-[120px] rounded-xl bg-slate-900 text-white hover:bg-slate-800"
-				>
-					{t.devModalClose}
-				</Button>
-			</div>
-		</div>
-	</Dialog.Content>
-</Dialog.Root>

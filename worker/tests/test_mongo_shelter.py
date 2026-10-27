@@ -124,6 +124,59 @@ async def test_refresh_occupancy_writes_total_and_breakdown(db: None) -> None:
     )
 
 
+async def test_refresh_occupancy_counts_every_stay_status_including_search_excluded(
+    db: None,
+) -> None:
+    """PDPA D8: `occupancy_by_status` counts evacuees the person projection drops."""
+    await PublicShelter(
+        id="SH912",
+        shelter_code="SH912",
+        name="ศูนย์ทดสอบ occupancy_by_status",
+        status="open",
+        is_active=True,
+        capacity=100,
+        updated_at=datetime.now(UTC),
+    ).insert()
+
+    async def _docs(_database: str):
+        for doc in (
+            {
+                "_id": "evacuee:1",
+                "type": "evacuee",
+                "current_stay": {"status": "active"},
+            },
+            {
+                "_id": "evacuee:2",
+                "type": "evacuee",
+                "privacy": {"search_excluded": True},
+                "current_stay": {"status": "room_confirmed"},
+            },
+            {
+                "_id": "evacuee:3",
+                "type": "evacuee",
+                "privacy": {"search_excluded": True},
+                "current_stay": {"status": "pre_registered"},
+            },
+        ):
+            yield doc
+
+    couch = AsyncMock()
+    couch.database_exists = AsyncMock(return_value=True)
+    couch.iter_all_docs = _docs
+
+    assert await refresh_occupancy(couch, "SH912") is True
+
+    reloaded = await PublicShelter.get("SH912")
+    assert reloaded is not None
+    assert reloaded.occupancy_by_status == {
+        "active": 1,
+        "room_confirmed": 1,
+        "pre_registered": 1,
+    }
+    # EXT-005 semantics unchanged: `active` only.
+    assert reloaded.occupancy_total == 1
+
+
 async def test_refresh_occupancy_no_op_when_shelter_row_missing(db: None) -> None:
     couch = AsyncMock()
     assert await refresh_occupancy(couch, "SH-DOES-NOT-EXIST") is False
@@ -145,3 +198,38 @@ async def test_refresh_occupancy_no_op_when_shelter_database_missing(db: None) -
     couch.database_exists = AsyncMock(return_value=False)
 
     assert await refresh_occupancy(couch, "SH911") is False
+
+
+async def test_delete_jobs_for_shelter_drops_only_that_shelters_postings(
+    db: None,
+) -> None:
+    """Cancelled shelter (draft-shelter-cancelled-status.md): its postings leave the
+    volunteer board; another shelter's stay."""
+    from tent_model.public_job import PublicJob
+
+    from worker.mongo.job import delete_jobs_for_shelter
+
+    collection = PublicJob.get_pymongo_collection()
+    await collection.insert_one({"_id": "gone", "shelter_code": "SH910"})
+    await collection.insert_one({"_id": "kept", "shelter_code": "SH911"})
+
+    await delete_jobs_for_shelter("SH910")
+
+    assert [row["_id"] async for row in collection.find({})] == ["kept"]
+
+
+async def test_is_shelter_projected(db: None) -> None:
+    from worker.mongo.shelter import is_shelter_projected
+
+    await PublicShelter(
+        id="SH920",
+        shelter_code="SH920",
+        name="ศูนย์ที่เปิด",
+        status="open",
+        is_active=True,
+        capacity=10,
+        updated_at=datetime.now(UTC),
+    ).insert()
+
+    assert await is_shelter_projected("SH920") is True
+    assert await is_shelter_projected("SH921") is False

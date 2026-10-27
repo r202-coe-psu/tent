@@ -1,14 +1,14 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { requireShelterScopeOrSA, serviceError } from '$lib/server/couch-admin';
-import { noStore, searchHouseholds } from '$lib/server/system-overview';
+import { serviceError } from '$lib/server/couch-admin';
+import { noStore, requireOverviewSA, searchHouseholds } from '$lib/server/system-overview';
 
 export const prerender = false;
 
 export const GET: RequestHandler = async ({ request, url, fetch }) => {
 	try {
 		const cookie = request.headers.get('cookie');
-		await requireShelterScopeOrSA(cookie);
+		await requireOverviewSA(cookie);
 
 		const scopeRaw = url.searchParams.get('scope');
 		const scope = scopeRaw === 'shelter' ? 'shelter' : 'universal';

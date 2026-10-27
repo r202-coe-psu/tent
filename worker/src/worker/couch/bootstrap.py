@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import UTC, datetime
 from typing import Any
 
 from worker.couch.checkpoint import (
@@ -23,6 +24,7 @@ from worker.mongo import (
     apply_shelter,
     apply_shift_assignment,
     apply_volunteer,
+    delete_jobs_for_shelter,
     delete_needs_for_shelter,
     delete_occupants_for_shelter,
     delete_persons_for_shelter,
@@ -30,6 +32,7 @@ from worker.mongo import (
     refresh_occupancy,
     refresh_shelter_occupants,
     refresh_shelter_stock,
+    sync_booking_stay,
 )
 from worker.mongo.on_hand import refresh_on_hand
 from worker.projection_version import PROJECTION_VERSION
@@ -80,6 +83,8 @@ async def bootstrap_database(couch: CouchClient, database: str) -> None:
                     await delete_occupants_for_shelter(code)
                     await delete_needs_for_shelter(code)
                     await delete_stocks_for_shelter(code)
+                    # Cancelled shelter: its postings leave the volunteer board too.
+                    await delete_jobs_for_shelter(code)
             elif doc_type == "announcement":
                 from worker.mongo.announcement import apply_announcement
                 from worker.projectors.announcement import project_announcement
@@ -110,6 +115,7 @@ async def bootstrap_database(couch: CouchClient, database: str) -> None:
                 doc, shelter_code=shelter_code, household=household
             )
             await apply_person(action, payload)
+            await sync_booking_stay(doc)
         elif doc_type == "donation":
             action, payload = project_donation(doc, shelter_code=shelter_code)
             await apply_donation(action, payload)
@@ -154,6 +160,14 @@ async def bootstrap_database(couch: CouchClient, database: str) -> None:
     # never arrive as change events, and a counter left at on_hand_qty 0 enforces the
     # bare target instead of what is genuinely still needed.
     await refresh_on_hand(couch, shelter_code)
+    # …and reserved_qty has to stop holding what that ledger already put on the shelf.
+    # Counters written before settle_shelved_quota existed carry received goods in
+    # both terms; no change event will revisit an idle shelter to fix them.
+    # Imported here: worker.quota's package init pulls in expiry, which imports this
+    # module back for list_all_shelter_codes.
+    from worker.quota.settle import settle_shelved_quota
+
+    await settle_shelved_quota(couch, shelter_code, now=datetime.now(UTC))
     # EXT-005/006/007: occupancy first — shelter_stocks' reorder_threshold calc reads it.
     await refresh_occupancy(couch, shelter_code)
     await refresh_shelter_stock(couch, shelter_code)  # EXT-004/006
@@ -205,8 +219,15 @@ async def bootstrap_all(couch: CouchClient) -> None:
     """
     logger.info("Starting bootstrap scan (projection version %s)", PROJECTION_VERSION)
     await bootstrap_database(couch, REGISTRY_DB)
-    for code in await list_open_shelter_codes(couch):
+    open_codes = await list_open_shelter_codes(couch)
+    for code in open_codes:
         await bootstrap_database(couch, shelter_db_name(code))
+    # Closed shelters have no `_changes` listener, but EXT-005/007 still serve their
+    # rows — recompute those so a projector change (e.g. #791) reaches them too.
+    for code in await list_all_shelter_codes(couch):
+        if code not in open_codes:
+            await refresh_occupancy(couch, code)
+            await refresh_shelter_occupants(couch, code)
     await save_projection_version(PROJECTION_VERSION)
     logger.info("Bootstrap finished (projection version %s stored)", PROJECTION_VERSION)
 

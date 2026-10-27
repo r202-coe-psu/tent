@@ -18,7 +18,7 @@ import {
 
 describe('getEvacueeSelectionError', () => {
 	it('returns the Thai required-selection message when no evacuee is selected', () => {
-		expect(getEvacueeSelectionError([])).toBe('กรุณาเลือกผู้ประสบภัยอย่างน้อย 1 คน');
+		expect(getEvacueeSelectionError([])).toBe('กรุณาเลือกผู้เข้าพักอย่างน้อย 1 คน');
 	});
 
 	it('returns undefined when at least one evacuee is selected', () => {
@@ -42,7 +42,7 @@ describe('resolveEvacueeName', () => {
 
 	it('returns the shared fallback text when no source has a name', () => {
 		expect(resolveEvacueeName()).toBe(EVACUEE_NAME_FALLBACK);
-		expect(resolveEvacueeName(undefined, undefined)).toBe('ไม่พบชื่อผู้ประสบภัย');
+		expect(resolveEvacueeName(undefined, undefined)).toBe('ไม่พบชื่อผู้เข้าพัก');
 	});
 });
 

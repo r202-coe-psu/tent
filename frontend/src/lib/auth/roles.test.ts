@@ -6,6 +6,7 @@ import {
 	canAccessDistributionDesk,
 	canAccessMedicalScreening,
 	canAccessVolunteerBackoffice,
+	canAccessIncidents,
 	canAccessZoning,
 	canManageInShelters,
 	hasCapabilityAnywhere,
@@ -230,6 +231,18 @@ describe('roles kernel', () => {
 		expect(canAccessZoning(['shelter:SH001', 'medical_staff'])).toBe(false);
 		expect(canAccessZoning(['shelter:SH001', 'kitchen_staff'])).toBe(false);
 		expect(canAccessZoning([])).toBe(false);
+	});
+
+	it('canAccessIncidents allows system_admin, security_officer, shelter_manager only', () => {
+		expect(canAccessIncidents(['system_admin'], 'SH001')).toBe(true);
+		expect(canAccessIncidents(['shelter:SH001', 'SH001:security_officer'], 'SH001')).toBe(true);
+		expect(canAccessIncidents(['shelter:SH001', 'SH001:shelter_manager'], 'SH001')).toBe(true);
+		expect(canAccessIncidents(['shelter:SH001', 'security_officer'], 'SH001')).toBe(true);
+		expect(canAccessIncidents(['shelter:SH001', 'SH001:kitchen_staff'], 'SH001')).toBe(false);
+		expect(canAccessIncidents(['shelter:SH001', 'SH001:registration_staff'])).toBe(false);
+		expect(canAccessIncidents(['shelter:SH001', 'SH001:security_officer'])).toBe(true);
+		expect(canAccessIncidents(['shelter:SH002', 'SH002:security_officer'], 'SH001')).toBe(false);
+		expect(canAccessIncidents([])).toBe(false);
 	});
 
 	it('isStaffOnly accepts staff capabilities but rejects manager/system_admin', () => {

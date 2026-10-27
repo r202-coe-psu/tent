@@ -17,7 +17,8 @@ const NOW = '2026-07-24T04:00:00.000Z';
 function activeEvacuee() {
 	const e = createEvacuee(
 		{ first_name: 'สมชาย', last_name: 'ใจดี', gender: 'male', phone: '0812345678' },
-		ctx
+		ctx,
+		null
 	);
 	const checkIn = createMovement(
 		{ evacuee_id: e._id, action: 'check_in', zone: 'A', occurred_at: NOW },

@@ -83,6 +83,6 @@ describe('referral-confirm-dialog markup', () => {
 			props: props({ names: [], count: 0 })
 		});
 
-		expect(body).not.toContain('ผู้ประสบภัย:');
+		expect(body).not.toContain('ผู้เข้าพัก:');
 	});
 });

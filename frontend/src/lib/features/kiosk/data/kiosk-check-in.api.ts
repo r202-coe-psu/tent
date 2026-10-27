@@ -1,3 +1,4 @@
+import type { ConsentDecision, ConsentMode } from '$lib/features/consent';
 import type { KioskPhotoPayload } from '../domain/kiosk-photo';
 
 export type GateInput =
@@ -57,21 +58,26 @@ export interface KioskCheckInBatchResult extends KioskCheckInResult {
 	retryable_evacuee_ids: string[];
 }
 
-/** What the register endpoint returns: the new record plus what the kiosk prints (QR + label). */
 export interface KioskRegistrationResult {
 	evacuee_id: string;
 	qr_payload: string;
 	label: { name: string; phone: string | null };
+	consent_ref: string;
+	consent_mode: ConsentMode;
 }
 
-function postKioskRegistration(body: Record<string, unknown>): Promise<KioskRegistrationResult> {
+/** The decision travels with `consented_at` (= `given_at`); the server rejects a mismatch. */
+function postKioskRegistration(
+	body: Record<string, unknown>,
+	consent: ConsentDecision
+): Promise<KioskRegistrationResult> {
 	return requestWithTimeout(
 		'/api/v1/kiosk/register',
 		{
 			method: 'POST',
 			headers: { 'content-type': 'application/json' },
 			cache: 'no-store',
-			body: JSON.stringify({ ...body, consented: true })
+			body: JSON.stringify({ ...body, consent, consented_at: consent.given_at })
 		},
 		async (response) => {
 			if (!response.ok) throw await requestError(response);
@@ -84,44 +90,61 @@ function postKioskRegistration(body: Record<string, unknown>): Promise<KioskRegi
 export async function registerKioskWalkIn(
 	card: unknown,
 	photo: KioskPhotoPayload | null,
-	consentedAt: string,
-	phone: string | null = null
+	consent: ConsentDecision,
+	phone: string | null = null,
+	/** When the card was read (ISO) — the Station 1 `start` time (CR-192). */
+	startedAt?: string | null
 ): Promise<KioskRegistrationResult> {
-	return postKioskRegistration({
-		source: 'smart-card',
-		card,
-		photo,
-		phone,
-		consented_at: consentedAt
-	});
+	return postKioskRegistration(
+		{
+			source: 'smart-card',
+			card,
+			photo,
+			phone,
+			...(startedAt ? { started_at: startedAt } : {})
+		},
+		consent
+	);
 }
 
 /** ThaiD walk-in: only the verified session id goes out; the server holds who it is. */
 export async function registerKioskThaidWalkIn(
 	sessionId: string,
-	consentedAt: string,
-	phone: string | null
+	consent: ConsentDecision,
+	phone: string | null,
+	/** When the ThaiD scan was verified (ISO) — the Station 1 `start` time (CR-192). */
+	startedAt?: string | null
 ): Promise<KioskRegistrationResult> {
-	return postKioskRegistration({
-		source: 'thaid',
-		session_id: sessionId,
-		phone,
-		consented_at: consentedAt
-	});
+	return postKioskRegistration(
+		{
+			source: 'thaid',
+			session_id: sessionId,
+			phone,
+			...(startedAt ? { started_at: startedAt } : {})
+		},
+		consent
+	);
 }
 
-/** What the reprint endpoint needs: the phone, who owns it, their id's last four, the members. */
-export interface KioskReprintInput {
+/**
+ * What the reprint endpoint needs: the phone, who owns it, the members, and one proof that the
+ * visitor may print: the last four digits of the owner's citizen id (`id_last4`) or a staff PIN of
+ * this kiosk (`staff_pin`). Exactly one of the two goes out.
+ */
+export type KioskReprintInput = {
 	phone: string;
 	primary_evacuee_id: string;
-	id_last4: string;
 	evacuee_ids: string[];
-}
+} & ({ id_last4: string } | { staff_pin: string });
 
 export interface KioskReprintMember {
 	evacuee_id: string;
 	qr_payload: string;
-	label: { name: string; phone: string | null };
+	/**
+	 * `zone` is the member's current zone (short name, else full name), or null before one is
+	 * assigned; `stations_passed` (0–3) is how many checklist boxes the label ticks.
+	 */
+	label: { name: string; phone: string | null; zone: string | null; stations_passed: number };
 }
 
 export interface KioskReprintResult {
@@ -131,7 +154,9 @@ export interface KioskReprintResult {
 
 /**
  * Labels of the phone owner's checked-in household after the visitor typed the last four digits
- * of the owner's citizen id. Read-only on the server; 403 `KIOSK_REPRINT_VERIFY_FAILED` on a miss.
+ * of the owner's citizen id, or staff typed this kiosk's PIN. Read-only on the server. A miss is
+ * 403 `KIOSK_REPRINT_VERIFY_FAILED` (last four) or 401 `KIOSK_REPRINT_STAFF_PIN_INVALID` (PIN);
+ * a kiosk with no PIN set answers 409 `staff_pin_not_set`.
  */
 export function reprintKioskLabels(
 	input: KioskReprintInput,
@@ -172,7 +197,7 @@ export class KioskPartialCheckInError extends Error {
 	}
 }
 
-async function requestError(response: Response): Promise<KioskRequestError> {
+export async function requestError(response: Response): Promise<KioskRequestError> {
 	const body = (await response.json().catch((error: unknown) => {
 		if (error instanceof Error && error.name === 'AbortError') throw error;
 		return null;
@@ -215,7 +240,7 @@ function withTimeout(
 	};
 }
 
-async function requestWithTimeout<T>(
+export async function requestWithTimeout<T>(
 	input: RequestInfo | URL,
 	init: RequestInit,
 	consume: (response: Response) => Promise<T>,
@@ -283,7 +308,12 @@ export type KioskCheckInPhotoOptions =
 export async function checkInSelectedMembers(
 	primaryEvacueeId: string,
 	evacueeIds: string[],
-	options: { signal?: AbortSignal; batchLimit?: number } & KioskCheckInPhotoOptions = {}
+	options: {
+		signal?: AbortSignal;
+		batchLimit?: number;
+		/** When the visitor was looked up (ISO) — the Station 1 `start` time (CR-192). */
+		lookupAt?: string;
+	} & KioskCheckInPhotoOptions = {}
 ): Promise<KioskCheckInBatchResult> {
 	const batchLimit = Math.min(20, Math.max(1, options.batchLimit ?? 20));
 	// The primary goes first, so the batch carrying the card photo / ThaiD session is sent (and
@@ -327,6 +357,7 @@ export async function checkInSelectedMembers(
 					body: JSON.stringify({
 						primary_evacuee_id: primaryEvacueeId,
 						evacuee_ids: batch,
+						...(options.lookupAt ? { lookup_at: options.lookupAt } : {}),
 						...photoFields
 					})
 				},

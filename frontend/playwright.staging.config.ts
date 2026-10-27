@@ -35,20 +35,27 @@ if (!/^https:\/\/[^\s/]+\/?$/.test(stagingURL)) {
  * `IS_REMOTE` directly (a live critical need would invite real donations) and
  * stays `test.skip` regardless of `ALLOW_REMOTE_WRITES`.
  *
+ * `partner-api.test.ts` (tag `@partner-api`) follows the same rule: its `@smoke` auth-gate tests
+ * run on any target, its `@critical` group provisions its own `E2E partner …` shelter and
+ * client, tears them down in a zero-leak Z test and needs `E2E_FASTAPI_URL` for `/external/*`
+ * (e2e/README.md §8). It should stay under ~3 minutes of the budget below.
+ *
  * The donation suites (`donation-fullstack*.test.ts`, `stock-donations.test.ts`; tag
  * `@donation`) follow the same rule: own `E2E Donation …` shelter, ledger teardown, a
  * zero-leak Z test. They flip the global reCAPTCHA switch off for their run and restore
- * it in afterAll, and pace their bookings to the BFF's 3/min/IP limiter, so the three
+ * it in afterAll, so the three
  * full-stack files add an estimated 10-15 minutes to a writable run (see e2e/README.md §9.C).
  */
 export default defineConfig({
 	testDir: './e2e',
 	testMatch: [
 		'back-office-evacuee-management.test.ts',
+		'daily-sop-role-assessment.test.ts',
 		'donation-fullstack-admin.test.ts',
 		'donation-fullstack-race.test.ts',
 		'donation-fullstack.test.ts',
 		'onsite-stations-flow.test.ts',
+		'partner-api.test.ts',
 		'public-home-flow.test.ts',
 		'public-portal.test.ts',
 		'public-pre-register-flow.test.ts',

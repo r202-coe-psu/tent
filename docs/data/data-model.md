@@ -132,7 +132,7 @@ device app  ⇄ WAN ⇄  central (CouchDB)
 | `job_application` | state machine | ใบสมัครงานอาสา (`pending_review→confirmed|rejected|cancelled`, tracking_token) — v2 CR-041 + CR-094 |
 | `shift_assignment` | mutable (LWW) | ตารางเวร + duty_window + เช็คอิน/เช็คเอาต์หน้างาน (QR หรือ manual override) + dispatch — v3 CR-094, บังคับ Time-Bound Write Access ที่ CouchDB (role grant ตามกะ) |
 | `volunteer_transfer` | state machine | คำขอโอนย้ายอาสาข้ามศูนย์ (`pending→accepted|rejected`) — doc ใหม่ CR-094 §3.5, accepted แล้วอัปเดต `volunteer.current_shelter_code` |
-| `shelter_report` | state machine | รายงานในศูนย์ (`kind`: grievance \| incident) — [CR-040](../changes/08-E-reports/CR-040-shelter-case-grievance-reframe.md) |
+| `shelter_incident` | state machine (ห้ามลบ) | บันทึกเหตุการณ์ประจำวันในศูนย์ — staff ทุกคนเปิดได้ · timeline append-only · แทน `shelter_report` — [CR-155](../changes/08-E-reports/CR-155-shelter-incident-log.md) |
 | `referral` | state machine | ส่งต่อหน่วยงานนอก/ข้ามศูนย์: `draft→sent→accepted|rejected→closed`, `draft→closed` (CR-048), `sent→closed` ถอนคำขอ (CR-167) (จัดเก็บที่ `central_ops` — ดู schema.md §5.4) |
 | `referral_close_job` / `referral_close_lock` | job + lock | ปิด referral ทั้งศูนย์ด้วย worker (CR-168): job doc เดียว + cursor, lock ต่อศูนย์ — `schema.md` §5.4.1–5.4.2 · ประมวลผลโดย service `referral-worker` (Node, image เดียวกับ frontend) แยกจาก Python `sync-worker` และ `import-worker` · ไม่ใช้ Redis · Python projection ไม่ consume doc type นี้ |
 | `audit` | **append-only** | การกระทำสำคัญ (override duplicate-hint, แก้ retroactive, export, ลบ) |

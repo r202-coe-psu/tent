@@ -39,8 +39,7 @@ import {
  * `E2E Donation admin …` shelter (README §4), driven through the back-office screens.
  *
  * Needs `docker compose up -d` (CouchDB, Mongo, worker, FastAPI) and a seeded catalog
- * (`pnpm seed`). Locally use the dev server — only it skips reCAPTCHA keys / the BFF's
- * per-IP rate limits (on `vite preview` also set DONATION_E2E_PACE=1):
+ * (`pnpm seed`). Locally use the dev server — only it skips reCAPTCHA keys:
  *   PLAYWRIGHT_TEST_BASE_URL=http://localhost:5173 \
  *     pnpm exec playwright test e2e/donation-fullstack-admin.test.ts
  * On a writable remote target (`E2E_BASE_URL` + `ALLOW_REMOTE_WRITES=true`, i.e. staging)
@@ -134,6 +133,12 @@ test.describe('Donation full-stack: back office', { tag: ['@critical', '@donatio
 			const row = page.getByRole('row').filter({ hasText: CAMPAIGN_ITEM });
 			await expect(row).toBeVisible();
 			await expect(row).toContainText('40 กระป๋อง');
+			// Every figure carries its unit, and what donors can still book has its own
+			// column (#689): จองแล้ว · ในคลัง · เป้าหมาย · คงเหลือรับได้.
+			const cells = row.getByRole('cell');
+			await expect(cells.nth(1)).toHaveText(/^\s*0\s*กระป๋อง\s*$/);
+			await expect(cells.nth(2)).toHaveText(/^\s*0\s*กระป๋อง\s*$/);
+			await expect(cells.nth(4)).toHaveText(/^\s*40\s*กระป๋อง\s*$/);
 
 			// The default level on the form is critical; the board reads the stored level.
 			await expect.poll(async () => (await boardLine(request))?.urgency, SYNC).toBe('critical');
@@ -176,6 +181,8 @@ test.describe('Donation full-stack: back office', { tag: ['@critical', '@donatio
 			await expect
 				.poll(async () => (await boardLine(request))?.status ?? 'gone', SYNC)
 				.not.toBe('open');
+			// A need closed by hand takes nothing more, whatever is left of its target.
+			await expect(cells.nth(4)).toHaveText(/^\s*0\s*กระป๋อง\s*$/);
 
 			// ── Reopen: no reason asked ─────────────────────────────────────────────
 			await row.getByRole('button', { name: 'เปิดรับบริจาค (Restore)' }).click();
@@ -231,9 +238,11 @@ test.describe('Donation full-stack: back office', { tag: ['@critical', '@donatio
 		 * while bits-ui is still mounting the dialog (zoom/fade-in) can lose the typed value, so
 		 * the save then sends nothing.
 		 */
-		async function openEditDialog(page: Page, row: Locator, from: string) {
+		async function openEditDialog(page: Page, row: Locator) {
 			await row.getByRole('button', { name: 'แก้ไข' }).click();
-			const dialog = page.getByRole('dialog', { name: new RegExp(`^แก้ไขช่วง ${from}`) });
+			// Not pinned to the start time: saving clears the dialog's `editing`, which rewrites its
+			// title, so a title-specific name would stop matching and `toBeHidden` would pass vacuously.
+			const dialog = page.getByRole('dialog', { name: /^แก้ไขช่วง/ });
 			await expect(dialog).toBeVisible();
 			await dialog.evaluate((el) =>
 				Promise.all(el.getAnimations({ subtree: true }).map((a) => a.finished))
@@ -342,7 +351,7 @@ test.describe('Donation full-stack: back office', { tag: ['@critical', '@donatio
 			const endMin = h * 60 + m + 15;
 			const newTo = `${String(Math.floor(endMin / 60)).padStart(2, '0')}:${String(endMin % 60).padStart(2, '0')}`;
 			const note = `ประตู 2 (e2e ${RUN_ID})`;
-			const dialog = await openEditDialog(page, original, CAPPED.from);
+			const dialog = await openEditDialog(page, original);
 			const to = dialog.locator('#edit-slot-to');
 			await to.fill(newTo);
 			await expect(to).toHaveValue(newTo);
@@ -361,7 +370,7 @@ test.describe('Donation full-stack: back office', { tag: ['@critical', '@donatio
 			await expect(edited).toContainText('ประตู 2');
 
 			// Lift the ceiling again from the same dialog.
-			const reopened = await openEditDialog(page, edited, CAPPED.from);
+			const reopened = await openEditDialog(page, edited);
 			const ceiling = reopened.locator('#edit-slot-capacity');
 			await ceiling.fill('');
 			await expect(ceiling).toHaveValue('');
@@ -480,10 +489,14 @@ test.describe('Donation full-stack: back office', { tag: ['@critical', '@donatio
 				.getByRole('textbox', { name: 'ชื่อผู้บริจาค/ผู้ติดต่อ *' })
 				.fill(`E2E Walk-in ${RUN_ID}`);
 			await page.getByRole('textbox', { name: 'เบอร์โทรศัพท์ (ถ้ามี)' }).fill('0801234567');
-			await page.getByRole('button', { name: /^เลือกประเภทสิ่งของ/ }).click();
+			// Searchable item picker (#638): type part of the name, then pick the row.
+			const itemPicker = page.getByRole('combobox', { name: /^เลือกประเภทสิ่งของ/ });
+			// Thai text is inserted without key events, so open the list with ArrowDown first.
+			await itemPicker.click();
+			await itemPicker.press('ArrowDown');
+			await itemPicker.pressSequentially('สบู่');
 			await page.getByRole('option', { name: /^สบู่ก้อน/ }).click();
 			await page.getByRole('textbox', { name: 'จำนวนที่รับจริง *' }).fill('3');
-			await page.getByRole('textbox', { name: 'โซนจัดเก็บ (ถ้ามี)' }).fill('A-1');
 			// สบู่ก้อน carries `shelf_life_days`, so the walk-in will not save without an expiry.
 			await fillExpiry(page.getByRole('textbox', { name: 'วันหมดอายุ' }));
 

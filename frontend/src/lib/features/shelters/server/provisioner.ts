@@ -5,6 +5,8 @@ import { adminRaw, ServiceError } from '$lib/server/couch-admin';
 import { CENTRAL_WRITE_POLICY_DESIGN, hasWritePolicy } from '$lib/server/central-db-security';
 import {
 	SHELTER_REGISTRY_DB,
+	deployBulkReturnEntryMangoIndexes,
+	deployDailySopRoleMangoIndexes,
 	deployPeopleMangoIndexes,
 	deployRegistryDesign,
 	deployReferralMangoIndexes,
@@ -391,6 +393,12 @@ async function provisionShelterUnlocked(
 	await assertActive?.();
 	await deployRequisitionTicketMangoIndexes(db);
 	steps.push({ step: 'requisition-ticket-mango', status: 200 });
+	await assertActive?.();
+	await deployBulkReturnEntryMangoIndexes(db);
+	steps.push({ step: 'bulk-return-entry-mango', status: 200 });
+	await assertActive?.();
+	await deployDailySopRoleMangoIndexes(db);
+	steps.push({ step: 'daily-sop-role-mango', status: 200 });
 
 	await assertActive?.();
 	const registry = await adminRaw(`/${SHELTER_REGISTRY_DB}`, 'PUT');

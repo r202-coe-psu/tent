@@ -24,14 +24,27 @@ export function startDistributionLiveQuery(queryClient: QueryClient): SubscribeD
 			return [
 				[...distributionKeys.shelter(shelterCode), 'logs'],
 				[...distributionKeys.shelter(shelterCode), 'log'],
-				[...distributionKeys.shelter(shelterCode), 'shift_reconciliation']
+				[...distributionKeys.shelter(shelterCode), 'shift_reconciliation'],
+				distributionKeys.returnerOutstandingLoansAll(shelterCode),
+				distributionKeys.bulkPoolClosedLoanRefsAll(shelterCode),
+				distributionKeys.bulkPoolAppliedLoanRefsAll(shelterCode),
+				// The pool overview derives closed-loan warnings from the loans.
+				distributionKeys.bulkPoolsV3All(shelterCode)
 			];
 		}
 		if (type === 'bulk_return_pool') {
 			return [
 				[...distributionKeys.shelter(shelterCode), 'bulk_pools'],
-				[...distributionKeys.shelter(shelterCode), 'bulk_pool']
+				[...distributionKeys.shelter(shelterCode), 'bulk_pool'],
+				distributionKeys.bulkPoolsV3All(shelterCode)
 			];
+		}
+		if (
+			type === 'bulk_return_entry' ||
+			type === 'bulk_return_entry_move' ||
+			type === 'bulk_return_entry_void'
+		) {
+			return [distributionKeys.bulkPoolsV3All(shelterCode)];
 		}
 		if (type === 'bulk_return_claim') {
 			return [

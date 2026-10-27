@@ -2,6 +2,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as couchAdmin from './couch-admin';
 import {
 	createUser,
+	createOrMergeUser,
+	updateUser,
 	resetUserPasswordByAdmin,
 	getCurrentUserProfile,
 	getSecurityQuestionChallenge,
@@ -20,7 +22,8 @@ import {
 	findUserByGoogleSubject,
 	updateOwnProfile,
 	resolveLoginName,
-	findUserNameByPhone
+	findUserNameByPhone,
+	listShelterStaffDirectory
 } from './user-service';
 import type { CouchUserDoc } from './user-service';
 import { hashSecurityAnswer } from './security-questions';
@@ -173,6 +176,37 @@ describe('user-service', () => {
 				roles: ['shelter:SH001', 'registration_staff']
 			})
 		).rejects.toMatchObject({ code: 'CONFLICT' });
+	});
+
+	it('stores a shared 9-digit landline as a contact phone only', async () => {
+		for (const name of ['vol_a', 'vol_b']) {
+			await createUser({
+				name,
+				password: 'Password123!',
+				display_name: name,
+				personnel_type: 'volunteer',
+				phone: '022222222',
+				roles: ['shelter:SH001', 'registration_staff']
+			});
+		}
+
+		expect(fakeUsersDb['org.couchdb.user:vol_a'].phone).toBe('022222222');
+		expect(fakeUsersDb['org.couchdb.user:vol_b'].phone).toBe('022222222');
+		await expect(resolveLoginName('022222222')).resolves.toBe('022222222');
+		await expect(findUserNameByPhone('022222222')).resolves.toBeNull();
+	});
+
+	it.each(['02222222', '12345678901', 'ไม่มี'])('rejects contact phone %s', async (phone) => {
+		await expect(
+			createUser({
+				name: 'staff_d',
+				password: 'Password123!',
+				display_name: 'D',
+				personnel_type: 'staff',
+				phone,
+				roles: ['shelter:SH001', 'registration_staff']
+			})
+		).rejects.toMatchObject({ code: 'VALIDATION' });
 	});
 
 	it('resolveLoginName returns username for matching phone', async () => {
@@ -599,6 +633,51 @@ describe('user-service', () => {
 		});
 	});
 
+	describe('listShelterStaffDirectory (incident handover, IL-P5)', () => {
+		const put = (name: string, extra: Partial<FakeUserDoc>) => {
+			fakeUsersDb[`org.couchdb.user:${name}`] = {
+				_id: `org.couchdb.user:${name}`,
+				_rev: '1-a',
+				name,
+				type: 'user',
+				roles: [],
+				...extra
+			} as FakeUserDoc;
+		};
+
+		it('returns active staff with a capability in the shelter, excluding volunteers', async () => {
+			put('staff_a', { roles: ['shelter:SH001', 'SH001:kitchen_staff'], display_name: 'ก' });
+			put('legacy_b', { roles: ['shelter:SH001', 'registration_staff'] });
+			put('vol_c', {
+				roles: ['shelter:SH001', 'SH001:registration_staff'],
+				personnel_type: 'volunteer'
+			});
+			put('scope_only', { roles: ['shelter:SH001'] });
+			put('inactive', { roles: ['shelter:SH001', 'SH001:medical_staff'], active: false });
+			put('other', { roles: ['shelter:SH002', 'SH002:kitchen_staff'] });
+
+			const names = (await listShelterStaffDirectory('SH001')).map((s) => s.name).sort();
+			expect(names).toEqual(['legacy_b', 'staff_a']);
+		});
+
+		it('filters by capabilities when given, default stays unfiltered', async () => {
+			put('sec', { roles: ['shelter:SH001', 'SH001:security_officer'] });
+			put('mgr', { roles: ['shelter:SH001', 'SH001:shelter_manager'] });
+			put('kit', { roles: ['shelter:SH001', 'SH001:kitchen_staff'] });
+			put('sec_other', { roles: ['shelter:SH002', 'SH002:security_officer'] });
+
+			const names = (
+				await listShelterStaffDirectory('SH001', {
+					capabilities: ['security_officer', 'shelter_manager']
+				})
+			)
+				.map((s) => s.name)
+				.sort();
+			expect(names).toEqual(['mgr', 'sec']);
+			expect(await listShelterStaffDirectory('SH001')).toHaveLength(3);
+		});
+	});
+
 	describe('updateOwnProfile', () => {
 		function seedProfileUser(name: string) {
 			fakeUsersDb[`org.couchdb.user:${name}`] = {
@@ -682,6 +761,134 @@ describe('user-service', () => {
 			await expect(updateOwnProfile('missing-user', { display_name: 'x' })).rejects.toMatchObject({
 				code: 'VALIDATION'
 			});
+		});
+	});
+
+	describe('updateUser shelter scope (#672)', () => {
+		const sm = {
+			name: 'sm01',
+			roles: ['shelter:SH001', 'shelter_manager'],
+			isSA: false,
+			shelterCode: 'SH001'
+		};
+		const sa = { name: 'sa01', roles: ['system_admin'], isSA: true, shelterCode: null };
+		const key = (n: string) => `org.couchdb.user:${n}`;
+
+		async function seed(name: string, roles: string[]) {
+			await createUser({
+				name,
+				password: 'Password123!',
+				display_name: name,
+				personnel_type: 'staff',
+				phone: name,
+				roles
+			});
+		}
+
+		it('forbids an SM from changing password/active/contact of a user outside the shelter', async () => {
+			await seed('0820000001', ['shelter:SH002', 'registration_staff']);
+			const before = structuredClone(fakeUsersDb[key('0820000001')]);
+			for (const input of [
+				{ password: 'NewPassword123!' },
+				{ active: false },
+				{ phone: '0899999999' },
+				{ email: 'x@example.com' },
+				{ display_name: 'hijacked' },
+				{ must_change_password: true }
+			]) {
+				await expect(updateUser('0820000001', input, sm)).rejects.toMatchObject({
+					code: 'FORBIDDEN'
+				});
+			}
+			expect(fakeUsersDb[key('0820000001')]).toEqual(before);
+		});
+
+		it('forbids an SM from editing an SM of another shelter', async () => {
+			await seed('0820000002', ['shelter:SH002', 'shelter_manager']);
+			await expect(
+				updateUser('0820000002', { password: 'NewPassword123!' }, sm)
+			).rejects.toMatchObject({ code: 'FORBIDDEN' });
+			await expect(updateUser('0820000002', { active: false }, sm)).rejects.toMatchObject({
+				code: 'FORBIDDEN'
+			});
+		});
+
+		it('rejects a mixed roles + other-field request on an outside user without applying roles', async () => {
+			await seed('0820000003', ['shelter:SH002', 'registration_staff']);
+			await expect(
+				updateUser(
+					'0820000003',
+					{ roles: ['shelter:SH001', 'registration_staff'], password: 'NewPassword123!' },
+					sm
+				)
+			).rejects.toMatchObject({ code: 'FORBIDDEN' });
+			expect(fakeUsersDb[key('0820000003')].roles).toEqual(['shelter:SH002', 'registration_staff']);
+		});
+
+		it('still lets an SM add an outside staff into the shelter via roles only', async () => {
+			await seed('0820000004', ['shelter:SH002', 'registration_staff']);
+			await updateUser('0820000004', { roles: ['shelter:SH001', 'triage_staff'] }, sm);
+			const roles = fakeUsersDb[key('0820000004')].roles;
+			expect(roles).toContain('shelter:SH001');
+			expect(roles).toContain('shelter:SH002');
+		});
+
+		it('lets an SM edit fields of a user inside the shelter', async () => {
+			await seed('0820000005', ['shelter:SH001', 'registration_staff']);
+			await updateUser(
+				'0820000005',
+				{ display_name: 'renamed', active: false, email: 'in@example.com' },
+				sm
+			);
+			const doc = fakeUsersDb[key('0820000005')];
+			expect(doc.display_name).toBe('renamed');
+			expect(doc.active).toBe(false);
+			expect(doc.email).toBe('in@example.com');
+		});
+
+		it('leaves SA unrestricted', async () => {
+			await seed('0820000006', ['shelter:SH002', 'registration_staff']);
+			await updateUser('0820000006', { active: false, phone: '0877777777' }, sa);
+			const doc = fakeUsersDb[key('0820000006')];
+			expect(doc.active).toBe(false);
+			expect(doc.phone).toBe('0877777777');
+		});
+
+		it('merges an existing user from another shelter via createOrMergeUser', async () => {
+			await seed('0820000007', ['shelter:SH002', 'registration_staff']);
+			const result = await createOrMergeUser(
+				{
+					name: '0820000007',
+					password: 'Password123!',
+					display_name: 'Existing Staff',
+					personnel_type: 'staff',
+					roles: ['shelter:SH001', 'triage_staff']
+				},
+				sm
+			);
+			expect(result.merged).toBe(true);
+			const doc = fakeUsersDb[key('0820000007')];
+			expect(doc.roles).toContain('shelter:SH001');
+			expect(doc.roles).toContain('shelter:SH002');
+			expect(doc.display_name).toBe('0820000007');
+		});
+
+		it('merges an existing user in the same shelter via createOrMergeUser without overwriting profile', async () => {
+			await seed('0820000008', ['shelter:SH001', 'registration_staff']);
+			const result = await createOrMergeUser(
+				{
+					name: '0820000008',
+					password: 'Password123!',
+					display_name: 'Attempted Overwrite',
+					personnel_type: 'staff',
+					roles: ['shelter:SH001', 'triage_staff']
+				},
+				sm
+			);
+			expect(result.merged).toBe(true);
+			const doc = fakeUsersDb[key('0820000008')];
+			expect(doc.roles).toContain('shelter:SH001');
+			expect(doc.display_name).toBe('0820000008');
 		});
 	});
 });

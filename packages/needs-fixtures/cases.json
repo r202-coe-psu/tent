@@ -90,6 +90,24 @@
 			"expected_per_campaign": { "c1": { "item:rice": 400 } }
 		},
 		{
+			"name": "a batch receipt interrupted half way owes only the rest",
+			"why": "CR-143 FR-B7/B9: 40 of the 100 are on the shelf already (on_hand); only the other 60 are still owed. Counting all 100 would take the 40 off twice.",
+			"campaigns": [{ "_id": "c1", "needs": [{ "item_id": "item:rice", "qty_target": "500" }] }],
+			"donations": [
+				{
+					"_id": "donation:1",
+					"campaign_id": "c1",
+					"status": "verifying",
+					"items": [{ "item_id": "item:rice", "qty": "100" }]
+				}
+			],
+			"stock_ledgers": [
+				{ "item_id": "item:rice", "qty": "40", "reason": "donation", "ref_id": "donation:1" }
+			],
+			"expected_remaining": { "item:rice": 400 },
+			"expected_per_campaign": { "c1": { "item:rice": 400 } }
+		},
+		{
 			"name": "distributing stock back out reopens the need",
 			"why": "T-22 'เปิดรับใหม่อัตโนมัติ' — an issue is a negative ledger row.",
 			"campaigns": [{ "_id": "c1", "needs": [{ "item_id": "item:rice", "qty_target": "500" }] }],
@@ -195,6 +213,38 @@
 			],
 			"expected_remaining": { "item:rice": 0, "item:water": 1000 },
 			"expected_per_campaign": { "c1": { "item:rice": 0, "item:water": 1000 } }
+		},
+		{
+			"name": "a donation with no campaign is owed to no campaign",
+			"why": "A booking made without a campaign_id belongs to none. The back-office board counted it under every campaign asking for the item, so 'จองแล้ว' ran ahead of what donors had booked (#689).",
+			"campaigns": [{ "_id": "c1", "needs": [{ "item_id": "item:rice", "qty_target": "100" }] }],
+			"donations": [
+				{
+					"_id": "d1",
+					"campaign_id": null,
+					"status": "declared",
+					"items": [{ "item_id": "item:rice", "qty": "30" }]
+				}
+			],
+			"stock_ledgers": [],
+			"expected_remaining": { "item:rice": 100 },
+			"expected_per_campaign": { "c1": { "item:rice": 100 } }
+		},
+		{
+			"name": "free text is not guessed into an item",
+			"why": "A typed-in line has no item_id until staff map it at intake. Guessing one from the text ('ข้าวสาร' → item:rice) bound bookings to an item the donor never picked; no copy may do it (#689).",
+			"campaigns": [{ "_id": "c1", "needs": [{ "item_id": "item:rice", "qty_target": "100" }] }],
+			"donations": [
+				{
+					"_id": "d1",
+					"campaign_id": "c1",
+					"status": "declared",
+					"items": [{ "free_text": "ข้าวสาร", "qty": "30" }]
+				}
+			],
+			"stock_ledgers": [],
+			"expected_remaining": { "item:rice": 100 },
+			"expected_per_campaign": { "c1": { "item:rice": 100 } }
 		}
 	]
 }

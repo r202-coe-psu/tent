@@ -95,7 +95,7 @@
 		}
 
 		if (validationErrors.length === 0) {
-			donationStore.activeTab = 'time';
+			donationStore.goToStep('time');
 			if (donationStore.reachedStep < 3) donationStore.reachedStep = 3;
 		} else {
 			toast.error(t.valToastError);
@@ -207,6 +207,28 @@
 
 					<div class="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
 						<div>
+							<label class="mb-1 block text-xs font-bold text-slate-600" for="name-{item.id}">
+								{t.itemNameLabel}
+							</label>
+							{#if donationStore.flowMode === 'solicited'}
+								<input
+									type="text"
+									id="name-{item.id}"
+									readonly
+									value={item.name}
+									class="w-full cursor-not-allowed rounded-xl border-2 border-transparent bg-slate-100 p-3 font-medium text-slate-500 outline-hidden"
+								/>
+							{:else}
+								<input
+									type="text"
+									id="name-{item.id}"
+									placeholder={t.itemNamePlaceholder}
+									bind:value={item.name}
+									class="w-full rounded-xl border-2 border-slate-200 bg-white p-3 font-medium text-slate-800 outline-hidden transition-colors focus:border-domain-donation-strong"
+								/>
+							{/if}
+						</div>
+						<div>
 							<label class="mb-1 block text-xs font-bold text-slate-600" for="category-{item.id}">
 								{t.categoryLabel}
 							</label>
@@ -233,28 +255,6 @@
 										{/each}
 									</Select.Content>
 								</Select.Root>
-							{/if}
-						</div>
-						<div>
-							<label class="mb-1 block text-xs font-bold text-slate-600" for="name-{item.id}">
-								{t.itemNameLabel}
-							</label>
-							{#if donationStore.flowMode === 'solicited'}
-								<input
-									type="text"
-									id="name-{item.id}"
-									readonly
-									value={item.name}
-									class="w-full cursor-not-allowed rounded-xl border-2 border-transparent bg-slate-100 p-3 font-medium text-slate-500 outline-hidden"
-								/>
-							{:else}
-								<input
-									type="text"
-									id="name-{item.id}"
-									placeholder={t.itemNamePlaceholder}
-									bind:value={item.name}
-									class="w-full rounded-xl border-2 border-slate-200 bg-white p-3 font-medium text-slate-800 outline-hidden transition-colors focus:border-domain-donation-strong"
-								/>
 							{/if}
 						</div>
 					</div>

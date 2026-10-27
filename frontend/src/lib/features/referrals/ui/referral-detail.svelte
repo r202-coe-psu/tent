@@ -184,7 +184,7 @@
 			class="rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-100"
 			role="status"
 		>
-			คำขอย้ายเข้าจากศูนย์ <span class="font-semibold tabular-nums">{referral.shelter_code}</span> — ตอบรับแล้วระบบจะย้ายผู้ประสบภัยเข้าศูนย์นี้
+			คำขอย้ายเข้าจากศูนย์ <span class="font-semibold tabular-nums">{referral.shelter_code}</span> — ตอบรับแล้วระบบจะย้ายผู้เข้าพักเข้าศูนย์นี้
 			(occupancy สองฝั่งจะอัปเดตหลังตอบรับเท่านั้น)
 		</div>
 	{/if}
@@ -205,7 +205,7 @@
 			<div class="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
 				<div>
 					<Card.Title class="flex items-center gap-2 text-xl font-bold">
-						รายละเอียดใบส่งตัวผู้ประสบภัย
+						รายละเอียดใบส่งตัวผู้เข้าพัก
 					</Card.Title>
 					<p class="mt-1 text-xs text-muted-foreground">ID: {referral._id}</p>
 				</div>
@@ -232,20 +232,20 @@
 			<!-- Section 1: Evacuee Info -->
 			<div class="space-y-3">
 				<h3 class="text-sm font-semibold tracking-wider text-foreground uppercase">
-					ผู้ประสบภัยที่ส่งตัว
+					ผู้เข้าพักที่ส่งตัว
 				</h3>
 				<div class="rounded-lg border border-border/60 bg-muted/40 p-4">
 					<div class="grid grid-cols-1 gap-4 text-sm md:grid-cols-2">
 						{#if referral.evacuee_summary}
 							<div>
-								<p class="text-xs text-muted-foreground">ชื่อ-นามสกุล ผู้ประสบภัย</p>
+								<p class="text-xs text-muted-foreground">ชื่อ-นามสกุล ผู้เข้าพัก</p>
 								<p class="mt-0.5 text-base font-semibold text-foreground">
 									{formatEvacueeFullName(referral.evacuee_summary)}
 								</p>
 							</div>
 						{/if}
 						<div>
-							<p class="text-xs text-muted-foreground">รหัสผู้ประสบภัย (Evacuee ID)</p>
+							<p class="text-xs text-muted-foreground">รหัสผู้เข้าพัก (Evacuee ID)</p>
 							<p class="mt-0.5 font-medium tabular-nums">{referral.evacuee_id}</p>
 						</div>
 					</div>

@@ -6,6 +6,7 @@ import {
 	formatMenuTags,
 	getItemCapacitySummary,
 	getRecipientValidationErrorMessage,
+	isIdentifiedRecipient,
 	type FrontlineRecipientSelection
 } from './frontline-handover';
 import type { DistributionLog, TicketItem } from '../../domain/food-supplies';
@@ -24,6 +25,22 @@ describe('frontline-handover model helpers', () => {
 		label: 'บุคคลภายนอก (ไม่ระบุตัวตน)'
 	};
 
+	const volunteerRecipient: FrontlineRecipientSelection = {
+		recipientType: 'volunteer',
+		recipientId: 'volunteer:01J00000000000000000000001',
+		label: 'สมหญิง อาสา',
+		volunteerCode: 'V-001'
+	};
+
+	describe('isIdentifiedRecipient', () => {
+		it('names evacuees and volunteers but not outside people', () => {
+			expect(isIdentifiedRecipient(evacueeRecipient)).toBe(true);
+			expect(isIdentifiedRecipient(volunteerRecipient)).toBe(true);
+			expect(isIdentifiedRecipient(outsideRecipient)).toBe(false);
+			expect(isIdentifiedRecipient(null)).toBe(false);
+		});
+	});
+
 	describe('canRecipientReceiveItem', () => {
 		it('allows evacuee to receive both consumable and returnable items', () => {
 			expect(canRecipientReceiveItem(evacueeRecipient, false)).toBe(true);
@@ -36,6 +53,11 @@ describe('frontline-handover model helpers', () => {
 
 		it('strictly forbids outside recipient from receiving returnable loan items', () => {
 			expect(canRecipientReceiveItem(outsideRecipient, true)).toBe(false);
+		});
+
+		it('lets a volunteer receive consumables and borrow returnable items (FR-LON-01)', () => {
+			expect(canRecipientReceiveItem(volunteerRecipient, false)).toBe(true);
+			expect(canRecipientReceiveItem(volunteerRecipient, true)).toBe(true);
 		});
 
 		it('forbids null recipient', () => {
@@ -54,6 +76,11 @@ describe('frontline-handover model helpers', () => {
 			expect(msg).toContain('สิ่งของประเภท');
 			expect(msg).toContain('ต้องคืน');
 			expect(msg).toContain('ไม่สามารถแจกให้บุคคลภายนอกได้');
+		});
+
+		it('returns null when a volunteer borrows a returnable item (FR-LON-01)', () => {
+			expect(getRecipientValidationErrorMessage(volunteerRecipient, false)).toBeNull();
+			expect(getRecipientValidationErrorMessage(volunteerRecipient, true)).toBeNull();
 		});
 
 		it('returns error message when recipient is not selected', () => {
@@ -168,6 +195,16 @@ describe('frontline-handover model helpers', () => {
 			expect(res.priorLog).toBeNull();
 		});
 
+		it('detects a volunteer repeat meal the same way', () => {
+			const volunteerLog: DistributionLog = {
+				...priorLog,
+				recipient_type: 'volunteer',
+				recipient_id: volunteerRecipient.recipientId
+			};
+			const res = checkDuplicateMealAdvisory([volunteerLog], 'lunch', '2026-09-20T06:00:00.000Z');
+			expect(res.isDuplicate).toBe(true);
+		});
+
 		it('returns isDuplicate false when logs are empty or targetMeal undefined', () => {
 			expect(checkDuplicateMealAdvisory([], 'lunch').isDuplicate).toBe(false);
 			expect(checkDuplicateMealAdvisory([priorLog], undefined).isDuplicate).toBe(false);
@@ -175,28 +212,43 @@ describe('frontline-handover model helpers', () => {
 	});
 
 	describe('checkMenuMatchAdvisory', () => {
+		const infantMenu = { dietary: [], age_group: 'INFANT' };
 		const halalMenu = { dietary: ['HALAL'], age_group: 'ALL' };
 		const generalMenu = { dietary: [], age_group: 'ALL' };
 
 		it('flags a tagged menu for an evacuee without a shared tag', () => {
-			expect(checkMenuMatchAdvisory({ ...evacueeRecipient, menuTags: [] }, halalMenu)).toEqual({
+			expect(checkMenuMatchAdvisory({ ...evacueeRecipient, menuTags: [] }, infantMenu)).toEqual({
 				isMismatch: true,
-				menuTags: ['HALAL']
+				menuTags: ['INFANT']
 			});
 		});
 
 		it('passes an evacuee that shares a tag with the menu', () => {
-			const muslim = { ...evacueeRecipient, menuTags: ['HALAL' as const] };
-			expect(checkMenuMatchAdvisory(muslim, halalMenu).isMismatch).toBe(false);
+			const infant = { ...evacueeRecipient, menuTags: ['INFANT' as const] };
+			expect(checkMenuMatchAdvisory(infant, infantMenu).isMismatch).toBe(false);
+		});
+
+		it('passes anyone on a HALAL menu (#801)', () => {
+			expect(checkMenuMatchAdvisory({ ...evacueeRecipient, menuTags: [] }, halalMenu)).toEqual({
+				isMismatch: false,
+				menuTags: []
+			});
+			expect(checkMenuMatchAdvisory(outsideRecipient, halalMenu).isMismatch).toBe(false);
+			expect(checkMenuMatchAdvisory(volunteerRecipient, halalMenu).isMismatch).toBe(false);
 		});
 
 		it('flags tagged menus but not general ones for outside recipients', () => {
-			expect(checkMenuMatchAdvisory(outsideRecipient, halalMenu).isMismatch).toBe(true);
+			expect(checkMenuMatchAdvisory(outsideRecipient, infantMenu).isMismatch).toBe(true);
 			expect(checkMenuMatchAdvisory(outsideRecipient, generalMenu).isMismatch).toBe(false);
 		});
 
+		it('treats a volunteer as untagged: general menus pass, tagged menus flag', () => {
+			expect(checkMenuMatchAdvisory(volunteerRecipient, generalMenu).isMismatch).toBe(false);
+			expect(checkMenuMatchAdvisory(volunteerRecipient, infantMenu).isMismatch).toBe(true);
+		});
+
 		it('stays silent without a recipient or a known menu', () => {
-			expect(checkMenuMatchAdvisory(null, halalMenu).isMismatch).toBe(false);
+			expect(checkMenuMatchAdvisory(null, infantMenu).isMismatch).toBe(false);
 			expect(checkMenuMatchAdvisory(evacueeRecipient, undefined).isMismatch).toBe(false);
 		});
 

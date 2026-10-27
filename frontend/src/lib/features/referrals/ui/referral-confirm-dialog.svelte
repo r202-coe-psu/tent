@@ -70,7 +70,7 @@
 					>จำนวน <span class="font-semibold tabular-nums">{count}</span> รายการ</span
 				>
 				{#if namesLine}
-					<span class="block">ผู้ประสบภัย: {namesLine}</span>
+					<span class="block">ผู้เข้าพัก: {namesLine}</span>
 				{/if}
 				{#if description}
 					<span class="block">{description}</span>
