@@ -16,6 +16,7 @@ import { adminRaw, ServiceError } from './couch-admin';
 import { buildSecurityMutationLock, type SecurityMutationLock } from './security-mutation-lock';
 import {
 	buildValidateDocUpdate,
+	BULK_RETURN_ENTRY_MANGO_INDEXES,
 	DAILY_SOP_ROLE_MANGO_INDEX,
 	PEOPLE_MANGO_INDEXES,
 	REFERRAL_MANGO_INDEXES,
@@ -39,6 +40,7 @@ import {
 import { deployShelterViewsFn } from '$lib/features/shelters/server/deploy';
 
 export {
+	BULK_RETURN_ENTRY_MANGO_INDEXES,
 	DAILY_SOP_ROLE_MANGO_INDEX,
 	KIOSK_LOOKUP_MANGO_INDEXES,
 	PEOPLE_MANGO_INDEXES,
@@ -501,6 +503,23 @@ export async function deployKioskLookupMangoIndexes(db: string): Promise<void> {
  */
 export async function deployRequisitionTicketMangoIndexes(db: string): Promise<void> {
 	for (const def of REQUISITION_TICKET_MANGO_INDEXES) {
+		const res = await adminRaw(`/${db}/_index`, 'POST', def);
+		if (res.status >= 400) {
+			const detail = (res.data as { reason?: string; error?: string } | null) ?? {};
+			throw new ServiceError(
+				'INTERNAL',
+				`Mango index ${def.name} deploy failed (${res.status}): ${detail.reason ?? detail.error ?? 'unknown'}`
+			);
+		}
+	}
+}
+
+/**
+ * Idempotent deploy of the bulk_return_entry `(type, pool_id)` Mango index (#658).
+ * CouchDB returns 200 when an identical named index already exists.
+ */
+export async function deployBulkReturnEntryMangoIndexes(db: string): Promise<void> {
+	for (const def of BULK_RETURN_ENTRY_MANGO_INDEXES) {
 		const res = await adminRaw(`/${db}/_index`, 'POST', def);
 		if (res.status >= 400) {
 			const detail = (res.data as { reason?: string; error?: string } | null) ?? {};

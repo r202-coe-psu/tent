@@ -7,11 +7,17 @@ import { SECURITY_QUESTION_IDS } from '$lib/auth/security-questions';
 export const personnelTypeSchema = z.enum(['staff', 'volunteer']);
 export type PersonnelType = z.infer<typeof personnelTypeSchema>;
 
-/** 10-digit mobile phone number (08xxxxxxxx, 09xxxxxxxx, 06xxxxxxxx) */
+/** 10-digit mobile phone number (08xxxxxxxx, 09xxxxxxxx, 06xxxxxxxx) — the only phone that signs in. */
 export const phoneSchema = z
 	.string()
 	.trim()
 	.regex(/^0[0-9]{9}$/, 'เบอร์โทรศัพท์ต้องเป็นตัวเลข 10 หลักขึ้นต้นด้วย 0');
+
+/** Contact phone on an account: a mobile (10 digits) or a landline (9 digits, e.g. 02xxxxxxx). */
+export const contactPhoneSchema = z
+	.string()
+	.trim()
+	.regex(/^0[0-9]{8,9}$/, 'เบอร์โทรศัพท์ต้องเป็นตัวเลข 9–10 หลักขึ้นต้นด้วย 0');
 
 /** Username: allows phone number or alphanumeric (letters, digits, _, -, .) */
 export const usernameSchema = z
@@ -56,8 +62,8 @@ const userProfileFields = {
 	personnel_type: personnelTypeSchema.default('staff'),
 	organization: z.string().trim().optional(),
 	position: z.string().trim().optional(),
-	/** Optional contact phone — may also be used as an alternate login identifier. */
-	phone: z.union([phoneSchema, z.literal('')]).optional(),
+	/** Optional contact phone — a 10-digit mobile also works as an alternate login identifier. */
+	phone: z.union([contactPhoneSchema, z.literal('')]).optional(),
 	email: z.string().trim().email('รูปแบบอีเมลไม่ถูกต้อง').or(z.literal('')).optional(),
 	notes: z.string().trim().optional(),
 	/** System admin exclusive — mutually exclusive with assignments. */

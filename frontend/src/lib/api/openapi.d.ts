@@ -136,6 +136,30 @@ export interface paths {
 		patch?: never;
 		trace?: never;
 	};
+	'/public/v1/donations/lookup-by-phone': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/**
+		 * Lookup Donations By Phone
+		 * @description Phone number alone → every booking of it still in the buffer (CR-173).
+		 *
+		 *     Full access: each item carries its ``tracking_token``. Guarding against number
+		 *     enumeration is the BFF's captcha plus nginx's rate limit (CR-188); this logs every call
+		 *     and alerts on volume without refusing any. The BFF sends the donor's IP as ``X-Real-IP``.
+		 */
+		post: operations['lookup_donations_by_phone_public_v1_donations_lookup_by_phone_post'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
 	'/public/v1/donations/{tracking_token}': {
 		parameters: {
 			query?: never;
@@ -749,6 +773,66 @@ export interface paths {
 		 * @description Service-to-service Residence match — ids + landmark/housing_type only (no member PII).
 		 */
 		post: operations['match_unassigned_residence_public_v1_unassigned_registrations_residence_match_post'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/public/v1/unassigned-registrations/kiosk-lookup': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/**
+		 * Kiosk Lookup Unassigned Registration
+		 * @description Service-to-service kiosk lookup — whole family of one registration, no contact PII.
+		 */
+		post: operations['kiosk_lookup_unassigned_registration_public_v1_unassigned_registrations_kiosk_lookup_post'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/public/v1/unassigned-registrations/{registration_id}/kiosk-claim/prepare': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/**
+		 * Kiosk Prepare Unassigned Claim
+		 * @description Kiosk claim step 1 — mark members claimed and return Couch docs for the BFF to write.
+		 */
+		post: operations['kiosk_prepare_unassigned_claim_public_v1_unassigned_registrations__registration_id__kiosk_claim_prepare_post'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/public/v1/unassigned-registrations/{registration_id}/kiosk-claim/revert': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/**
+		 * Kiosk Revert Unassigned Claim
+		 * @description Kiosk claim rollback — reopen members this kiosk marked when the Couch write failed.
+		 */
+		post: operations['kiosk_revert_unassigned_claim_public_v1_unassigned_registrations__registration_id__kiosk_claim_revert_post'];
 		delete?: never;
 		options?: never;
 		head?: never;
@@ -1746,6 +1830,59 @@ export interface components {
 			status: string;
 			/** Auto Approved Lines */
 			auto_approved_lines?: number[];
+		};
+		/**
+		 * DonationPhoneLookupItem
+		 * @description One booking of the number — enough to tell them apart and open the full ticket.
+		 */
+		DonationPhoneLookupItem: {
+			/** Tracking Token */
+			tracking_token: string;
+			/** Booking Ref */
+			booking_ref: string;
+			/** Status */
+			status: string;
+			/** Shelter Code */
+			shelter_code: string;
+			/** Shelter Name */
+			shelter_name?: string | null;
+			/** Delivery Method */
+			delivery_method?: string | null;
+			slot?: components['schemas']['DonationPhoneLookupSlot'] | null;
+			/** Item Count */
+			item_count: number;
+			/** Created At */
+			created_at: string;
+		};
+		/**
+		 * DonationPhoneLookupRequest
+		 * @description CR-173 FR-1 — the phone travels in the body only, never in the URL.
+		 */
+		DonationPhoneLookupRequest: {
+			/** Phone */
+			phone: string;
+		};
+		/**
+		 * DonationPhoneLookupResponse
+		 * @description Same shape whether the number has bookings or not (CR-173 FR-5).
+		 */
+		DonationPhoneLookupResponse: {
+			/**
+			 * Success
+			 * @default true
+			 */
+			success: boolean;
+			/** Items */
+			items?: components['schemas']['DonationPhoneLookupItem'][];
+		};
+		/** DonationPhoneLookupSlot */
+		DonationPhoneLookupSlot: {
+			/** Date */
+			date?: string | null;
+			/** From */
+			from?: string | null;
+			/** To */
+			to?: string | null;
 		};
 		/**
 		 * DonationTrackSearchRequest
@@ -3623,6 +3760,113 @@ export interface components {
 			};
 		};
 		/**
+		 * UnassignedKioskImage
+		 * @description Couch image doc + base64 attachment bytes (the BFF writes them to Couch).
+		 */
+		UnassignedKioskImage: {
+			/** Doc */
+			doc: {
+				[key: string]: unknown;
+			};
+			/** Full B64 */
+			full_b64: string;
+			/** Thumb B64 */
+			thumb_b64: string;
+			/** Content Type */
+			content_type: string;
+		};
+		/**
+		 * UnassignedKioskLookupRequest
+		 * @description Kiosk lookup key — exactly one of registration, citizen or evacuee id.
+		 */
+		UnassignedKioskLookupRequest: {
+			/** Registration Id */
+			registration_id?: string | null;
+			/** Citizen Id */
+			citizen_id?: string | null;
+			/** Evacuee Id */
+			evacuee_id?: string | null;
+		};
+		/** UnassignedKioskLookupResponse */
+		UnassignedKioskLookupResponse: {
+			/** Registration Id */
+			registration_id: string;
+			/** Reserved Household Id */
+			reserved_household_id: string;
+			/** Members */
+			members: components['schemas']['UnassignedKioskMember'][];
+		};
+		/**
+		 * UnassignedKioskMember
+		 * @description Kiosk family row — unmasked name (the BFF masks); no phone / person id / photo.
+		 */
+		UnassignedKioskMember: {
+			/** Reserved Evacuee Id */
+			reserved_evacuee_id: string;
+			/** First Name */
+			first_name: string;
+			/** Last Name */
+			last_name: string;
+			/** Gender */
+			gender: ('male' | 'female' | 'other') | null;
+			/** Age */
+			age: number | null;
+			/** Status */
+			status: string;
+			/** Claimed Shelter Code */
+			claimed_shelter_code: string | null;
+			/** Matched */
+			matched: boolean;
+		};
+		/**
+		 * UnassignedKioskPrepareRequest
+		 * @description Kiosk claim prepare — mark members, return Couch docs for the BFF to write.
+		 */
+		UnassignedKioskPrepareRequest: {
+			/** Shelter Code */
+			shelter_code: string;
+			/** Device Id */
+			device_id: string;
+			/** Member Ids */
+			member_ids: string[];
+			/** Required Person Id */
+			required_person_id?: string | null;
+		};
+		/** UnassignedKioskPrepareResponse */
+		UnassignedKioskPrepareResponse: {
+			/** Registration Id */
+			registration_id: string;
+			/** Shelter Code */
+			shelter_code: string;
+			/** Household */
+			household: {
+				[key: string]: unknown;
+			};
+			/** Evacuees */
+			evacuees: {
+				[key: string]: unknown;
+			}[];
+			/** Images */
+			images: components['schemas']['UnassignedKioskImage'][];
+		};
+		/**
+		 * UnassignedKioskRevertRequest
+		 * @description Kiosk claim revert — give back members this kiosk marked when the Couch write failed.
+		 */
+		UnassignedKioskRevertRequest: {
+			/** Shelter Code */
+			shelter_code: string;
+			/** Device Id */
+			device_id: string;
+			/** Member Ids */
+			member_ids: string[];
+		};
+		/** UnassignedKioskRevertResponse */
+		UnassignedKioskRevertResponse: {
+			/** Reverted */
+			reverted: string[];
+		};
+		/**
 		 * UnassignedPhotoUploadResponse
 		 * @description Response from POST /public/v1/unassigned-registrations/photos.
 		 */
@@ -4478,6 +4722,39 @@ export interface operations {
 				};
 				content: {
 					'application/json': components['schemas']['DonationTrackSearchResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	lookup_donations_by_phone_public_v1_donations_lookup_by_phone_post: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody: {
+			content: {
+				'application/json': components['schemas']['DonationPhoneLookupRequest'];
+			};
+		};
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['DonationPhoneLookupResponse'];
 				};
 			};
 			/** @description Validation Error */
@@ -5889,6 +6166,109 @@ export interface operations {
 				};
 				content: {
 					'application/json': components['schemas']['UnassignedResidenceMatchResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	kiosk_lookup_unassigned_registration_public_v1_unassigned_registrations_kiosk_lookup_post: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody: {
+			content: {
+				'application/json': components['schemas']['UnassignedKioskLookupRequest'];
+			};
+		};
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['UnassignedKioskLookupResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	kiosk_prepare_unassigned_claim_public_v1_unassigned_registrations__registration_id__kiosk_claim_prepare_post: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path: {
+				registration_id: string;
+			};
+			cookie?: never;
+		};
+		requestBody: {
+			content: {
+				'application/json': components['schemas']['UnassignedKioskPrepareRequest'];
+			};
+		};
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['UnassignedKioskPrepareResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	kiosk_revert_unassigned_claim_public_v1_unassigned_registrations__registration_id__kiosk_claim_revert_post: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path: {
+				registration_id: string;
+			};
+			cookie?: never;
+		};
+		requestBody: {
+			content: {
+				'application/json': components['schemas']['UnassignedKioskRevertRequest'];
+			};
+		};
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['UnassignedKioskRevertResponse'];
 				};
 			};
 			/** @description Validation Error */

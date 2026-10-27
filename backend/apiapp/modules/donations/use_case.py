@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import logging
 import secrets
+import threading
+import time
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from typing import Any
@@ -20,7 +22,7 @@ from tent_model.donation_slot_counter_ops import release_slot, reserve_slot, slo
 from tent_model.public_donation import DeclaredItem, PublicDonation
 from tent_model.public_shelter import PublicShelter
 
-from ...utils.masking import normalize_phone, sha256_hex
+from ...utils.masking import normalize_phone, phone_hash, sha256_hex
 from ...utils.ulid import new_ulid
 from .review import REVIEW_FIELDS, review_edited_booking, review_new_booking
 from .schemas import (
@@ -30,6 +32,9 @@ from .schemas import (
     DonationCreateResponse,
     DonationItemInput,
     DonationItemsPatchResponse,
+    DonationPhoneLookupItem,
+    DonationPhoneLookupResponse,
+    DonationPhoneLookupSlot,
     DonationTrackingResponse,
     DonationTrackSearchResponse,
 )
@@ -59,6 +64,95 @@ DEFAULT_RESERVATION_TTL_HOURS = 72
 #: sends the booking back to ``pending_review``) or add a courier number. Mirrors
 #: ``isDonorEditable`` on the BFF; the two gate the same routes.
 DONOR_EDITABLE_STATUSES = frozenset({"declared", "pending_review", "verifying"})
+
+
+#: The most bookings one phone lookup returns. A donor has a handful at most; the cap only
+#: bounds what a single call can hand out.
+_PHONE_LOOKUP_LIMIT = 50
+
+#: Alert thresholds for phone lookups from one source (CR-173 FR-9). They sit where a person
+#: has no reason to be: sustained searching, or many different numbers. The BFF's captcha
+#: and nginx's rate limit (CR-188) do the refusing; this only reports.
+_LOOKUP_ALERT_WINDOW_SECONDS = 600
+_LOOKUP_ALERT_MAX_LOOKUPS = 20
+_LOOKUP_ALERT_MAX_PHONES = 5
+
+
+class _PhoneLookupWatch:
+    """Per-source tally of phone lookups, for the "searching a lot" alert (CR-173 FR-9).
+
+    In-process like every limiter here — each replica alerts on what it sees. It never
+    refuses a request.
+    """
+
+    def __init__(self) -> None:
+        self._seen: dict[str, list[tuple[float, str]]] = {}
+        self._alerted_at: dict[str, float] = {}
+        self._swept_at = time.monotonic()
+        self._lock = threading.Lock()
+
+    def record(self, source: str, hashed: str) -> tuple[int, int]:
+        """Count this lookup; return (lookups, distinct numbers) in the window."""
+        now = time.monotonic()
+        with self._lock:
+            self._sweep(now)
+            recent = [
+                (ts, h)
+                for ts, h in self._seen.get(source, ())
+                if now - ts < _LOOKUP_ALERT_WINDOW_SECONDS
+            ]
+            recent.append((now, hashed))
+            self._seen[source] = recent
+            return len(recent), len({h for _, h in recent})
+
+    def claim_alert(self, source: str) -> bool:
+        """True once per window per source, so a flood raises one alert, not one per lookup."""
+        now = time.monotonic()
+        with self._lock:
+            last = self._alerted_at.get(source)
+            if last is not None and now - last < _LOOKUP_ALERT_WINDOW_SECONDS:
+                return False
+            self._alerted_at[source] = now
+            return True
+
+    def _sweep(self, now: float) -> None:
+        """Forget sources that went quiet, so the table does not grow with every IP ever seen."""
+        if now - self._swept_at < _LOOKUP_ALERT_WINDOW_SECONDS:
+            return
+        self._swept_at = now
+        self._seen = {
+            source: hits
+            for source, hits in self._seen.items()
+            if hits and now - hits[-1][0] < _LOOKUP_ALERT_WINDOW_SECONDS
+        }
+        self._alerted_at = {
+            source: at
+            for source, at in self._alerted_at.items()
+            if now - at < _LOOKUP_ALERT_WINDOW_SECONDS
+        }
+
+    def clear(self) -> None:
+        with self._lock:
+            self._seen.clear()
+            self._alerted_at.clear()
+
+
+phone_lookup_watch = _PhoneLookupWatch()
+
+
+def _utc(value: datetime) -> datetime:
+    """Mongo hands datetimes back naive (UTC, no offset); without one a browser reads the
+    ISO string as local time and the donor sees a booking time hours off."""
+    return value if value.tzinfo else value.replace(tzinfo=UTC)
+
+
+def _lookup_slot(logistics: dict[str, Any] | None) -> DonationPhoneLookupSlot | None:
+    slot = (logistics or {}).get("slot")
+    if not isinstance(slot, dict):
+        return None
+    return DonationPhoneLookupSlot.model_validate(
+        {key: slot.get(key) for key in ("date", "from", "to")}
+    )
 
 
 def reservation_expiry(now: datetime, ttl_hours: int | None) -> datetime:
@@ -522,6 +616,7 @@ class DonationsUseCase:
                     id=donation_id,
                     shelter_code=payload.shelter_code.upper(),
                     donor=DonorBuffer(**payload.donor.model_dump()),
+                    donor_phone_hash=phone_hash(payload.donor.phone),
                     items_declared=items_declared,
                     logistics=payload.logistics,
                     slot_counter_id=held_slot,
@@ -661,6 +756,86 @@ class DonationsUseCase:
             tracking_token=buffer.tracking_token,
             booking_ref=buffer.booking_ref,
         )
+
+    async def lookup_by_phone(self, phone: str, source: str) -> DonationPhoneLookupResponse:
+        """Every booking of one phone number still in the intake buffer (CR-173).
+
+        The buffer is the only place the plaintext ``tracking_token`` lives, so it is the
+        only place a lookup can hand back full access from; a booking past its TTL has
+        been purged and is out of reach by design (FR-3, AC-7). Status comes from the
+        projection where there is one, because staff move a booking on in CouchDB and the
+        buffer row does not follow.
+
+        A miss answers exactly like a hit with nothing in it (FR-5), and every call is
+        logged by hash, never by number (FR-9).
+        """
+        hashed = phone_hash(phone)
+        if not hashed or not any(c.isdigit() for c in normalize_phone(phone)):
+            return DonationPhoneLookupResponse()
+
+        now = datetime.now(UTC)
+        buffers = (
+            await DonationBuffer.find(
+                DonationBuffer.donor_phone_hash == hashed,
+                DonationBuffer.expires_at > now,
+            )
+            .sort(-DonationBuffer.created_at)
+            .limit(_PHONE_LOOKUP_LIMIT)
+            .to_list()
+        )
+
+        token_hashes = [b.tracking_token_hash for b in buffers]
+        projected = {
+            d.tracking_token_hash: d
+            for d in await PublicDonation.find(
+                {"tracking_token_hash": {"$in": token_hashes}}
+            ).to_list()
+        }
+        shelter_codes = sorted({b.shelter_code for b in buffers})
+        shelter_names = {
+            s.shelter_code: s.name
+            for s in await PublicShelter.find({"shelter_code": {"$in": shelter_codes}}).to_list()
+        }
+
+        items: list[DonationPhoneLookupItem] = []
+        for buffer in buffers:
+            donation = projected.get(buffer.tracking_token_hash)
+            logistics = buffer.logistics or {}
+            items.append(
+                DonationPhoneLookupItem(
+                    tracking_token=buffer.tracking_token,
+                    booking_ref=buffer.booking_ref,
+                    status=donation.status if donation else buffer.status,
+                    shelter_code=buffer.shelter_code,
+                    shelter_name=shelter_names.get(buffer.shelter_code),
+                    delivery_method=logistics.get("delivery_method"),
+                    slot=_lookup_slot(logistics),
+                    item_count=(
+                        len(donation.items_declared) if donation else len(buffer.items_declared)
+                    ),
+                    created_at=_utc(buffer.created_at).isoformat(),
+                )
+            )
+
+        lookups, phones = phone_lookup_watch.record(source, hashed)
+        logger.info(
+            "donation phone lookup source=%s phone_hash=%s results=%d",
+            source,
+            hashed,
+            len(items),
+        )
+        if (
+            lookups > _LOOKUP_ALERT_MAX_LOOKUPS or phones > _LOOKUP_ALERT_MAX_PHONES
+        ) and phone_lookup_watch.claim_alert(source):
+            logger.warning(
+                "donation phone lookup volume high source=%s lookups=%d phones=%d window=%ds",
+                source,
+                lookups,
+                phones,
+                _LOOKUP_ALERT_WINDOW_SECONDS,
+            )
+
+        return DonationPhoneLookupResponse(items=items)
 
     async def update_courier_tracking(
         self, tracking_token: str, courier_tracking_no: str
