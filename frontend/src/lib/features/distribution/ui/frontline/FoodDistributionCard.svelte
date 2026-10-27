@@ -36,7 +36,12 @@
 		type FrontlineRecipientSelection
 	} from '../model/frontline-handover';
 	import { formatDistributionError } from '../model/distribution-error';
-	import { HANDOVER_DEFAULT_QTY, isHandoverDraft, type DeskDrafts } from '../model/desk-draft';
+	import {
+		HANDOVER_DEFAULT_QTY,
+		isHandoverDraft,
+		isOutsideNotesDraft,
+		type DeskDrafts
+	} from '../model/desk-draft';
 	import { getMealPeriodLabel } from '../model/ticket-status';
 	import RecipientSearchPicker from '../common/RecipientSearchPicker.svelte';
 	import QtyStepper from '../common/QtyStepper.svelte';
@@ -79,12 +84,16 @@
 	let topUpDialogOpen = $state(false);
 	let picker = $state<ReturnType<typeof RecipientSearchPicker>>();
 
+	// Notes the last handover recorded for the walk-in the picker keeps selected.
+	let recordedOutsideNotes: string | undefined;
+
 	// The outside recipient's notes live in the picker but reach the card through the selection.
 	$effect(() =>
 		drafts?.track(
 			() =>
 				isHandoverDraft({ qtyInput, notesInput }) ||
-				(recipientSelection?.recipientType === 'outside' && Boolean(recipientSelection.notes))
+				(recipientSelection?.recipientType === 'outside' &&
+					isOutsideNotesDraft(recipientSelection.notes, recordedOutsideNotes))
 		)
 	);
 
@@ -330,6 +339,8 @@
 			warningModalOpen = false;
 			qtyInput = HANDOVER_DEFAULT_QTY;
 			notesInput = '';
+			recordedOutsideNotes =
+				recipientSelection?.recipientType === 'outside' ? recipientSelection.notes : undefined;
 			picker?.next();
 		} catch (err) {
 			localSubmitError = formatDistributionError(
@@ -345,7 +356,7 @@
 	}
 </script>
 
-<div class="space-y-5 rounded-2xl border border-slate-200/80 bg-white p-6 shadow-xs">
+<div class="space-y-5 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs sm:p-6">
 	<!-- Ticket & Meal Period Header -->
 	<div
 		class="flex flex-col gap-3 border-b border-slate-100 pb-4 sm:flex-row sm:items-center sm:justify-between"
@@ -402,7 +413,9 @@
 						: 'border-slate-200 bg-white hover:border-slate-300'}"
 				>
 					<div class="min-w-0 flex-1">
-						<p class="truncate text-base font-bold text-slate-900">{item.item_name}</p>
+						<p class="line-clamp-2 text-base font-bold break-words text-slate-900">
+							{item.item_name}
+						</p>
 						<p class="text-xs text-slate-500">
 							จัดสรร: <strong class="text-slate-700">{summary.allocatedQty}</strong> | แจกแล้ว:
 							<strong class="text-slate-700">{summary.distributedQty}</strong>

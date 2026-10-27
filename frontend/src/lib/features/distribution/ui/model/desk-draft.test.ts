@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DeskDrafts, isHandoverDraft, isReturnedQtyDraft } from './desk-draft';
+import { DeskDrafts, isHandoverDraft, isOutsideNotesDraft, isReturnedQtyDraft } from './desk-draft';
 
 describe('isHandoverDraft', () => {
 	it('is clean at the defaults the form resets to', () => {
@@ -11,6 +11,18 @@ describe('isHandoverDraft', () => {
 		expect(isHandoverDraft({ qtyInput: '2', notesInput: '' })).toBe(true);
 		expect(isHandoverDraft({ qtyInput: '', notesInput: '' })).toBe(true);
 		expect(isHandoverDraft({ qtyInput: '1', notesInput: 'รับแทน' })).toBe(true);
+	});
+});
+
+describe('isOutsideNotesDraft', () => {
+	it('is a draft while typed walk-in notes have not been recorded', () => {
+		expect(isOutsideNotesDraft('ญาติผู้ป่วย', undefined)).toBe(true);
+		expect(isOutsideNotesDraft('ญาติผู้ป่วย', 'คนขับรถ')).toBe(true);
+	});
+
+	it('is clean without notes, or once a handover recorded the same notes', () => {
+		expect(isOutsideNotesDraft(undefined, undefined)).toBe(false);
+		expect(isOutsideNotesDraft('ญาติผู้ป่วย', 'ญาติผู้ป่วย')).toBe(false);
 	});
 });
 

@@ -43,6 +43,7 @@
 		STEP_TITLES,
 		modePendingCount,
 		needsCloseOutAction,
+		isDeskMode,
 		resolveInitialMode,
 		stepAfterModeSwitch,
 		stepLabel,
@@ -94,7 +95,11 @@
 	// does not warn that only the initial value is captured.
 	let mode = $state<DeskMode>(
 		(function () {
-			return resolveInitialMode(page.url.searchParams.get('mode'), readStoredDeskMode());
+			const urlMode = page.url.searchParams.get('mode');
+			const initial = resolveInitialMode(urlMode, readStoredDeskMode());
+			// FR-DFS-06: a deep link (e.g. a supplies QR) is also the mode this device last used.
+			if (isDeskMode(urlMode)) storeDeskMode(urlMode);
+			return initial;
 		})()
 	);
 	let activeTab = $state<StationTab>(
@@ -399,7 +404,7 @@
 	</header>
 
 	<!-- Lands with the tab strip just under the sticky shelter header, detail right below it -->
-	<div bind:this={contentEl} class="-mt-6 h-0 scroll-mt-10" aria-hidden="true"></div>
+	<div bind:this={contentEl} class="-mt-6 flow-root h-0 scroll-mt-10" aria-hidden="true"></div>
 
 	<!-- Mode switch: food and supplies work never share a screen -->
 	<div
@@ -430,34 +435,35 @@
 		{/each}
 	</div>
 
-	<!-- Station Tabs: the steps of the current mode -->
+	<!-- Station Tabs: the steps of the current mode; every step stays visible on a phone -->
 	<div
-		class="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:-mx-6 sm:px-6 lg:mx-0 lg:grid lg:gap-3 lg:overflow-visible lg:px-0 lg:pb-0 {steps.length ===
-		3
+		class="grid grid-cols-2 gap-2 lg:gap-3 {steps.length === 3
 			? 'lg:grid-cols-3'
 			: 'lg:grid-cols-4'}"
 	>
-		{#each steps as tab (tab)}
+		{#each steps as tab, i (tab)}
 			{@const meta = TAB_STYLE[tab]}
 			{@const badge = tabBadges[tab]}
 			{@const isActive = activeTab === tab}
 			<button
 				type="button"
 				onclick={() => selectTab(tab)}
-				class="flex shrink-0 items-center justify-between gap-2 rounded-xl border p-2.5 text-left transition-all lg:p-3.5 {isActive
-					? meta.active
-					: 'border-slate-200 bg-white hover:border-slate-300'}"
+				aria-pressed={isActive}
+				class="flex min-h-14 min-w-0 flex-wrap items-center justify-between gap-2 rounded-xl border p-2.5 text-left transition-all focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:outline-none lg:p-3.5 {i ===
+					steps.length - 1 && steps.length % 2 === 1
+					? 'col-span-2 lg:col-span-1'
+					: ''} {isActive ? meta.active : 'border-slate-200 bg-white hover:border-slate-300'}"
 			>
-				<div class="flex items-center gap-2 lg:gap-3">
+				<div class="flex min-w-0 items-center gap-2 lg:gap-3">
 					<div
-						class="flex h-9 w-9 items-center justify-center rounded-lg {isActive
+						class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg {isActive
 							? meta.icon
 							: 'bg-slate-100 text-slate-600'}"
 					>
 						<meta.Icon class="h-4 w-4" />
 					</div>
-					<div>
-						<p class="text-xs font-bold whitespace-nowrap text-slate-900 lg:whitespace-normal">
+					<div class="min-w-0">
+						<p class="text-sm leading-snug font-bold text-slate-900 lg:text-xs">
 							{stepLabel(mode, tab)}
 						</p>
 						<p class="hidden text-2xs text-slate-500 lg:block">{STEP_TITLES[tab].subtitle}</p>
@@ -645,7 +651,7 @@
 						class="flex flex-col gap-2 rounded-xl border border-slate-200/80 bg-white p-3 shadow-2xs sm:flex-row sm:items-center"
 					>
 						{#if foodDayOptions.length > 2}
-							<div class="flex shrink-0 items-center gap-2">
+							<div class="flex flex-col gap-2 sm:shrink-0 sm:flex-row sm:items-center">
 								<label for="food-day-select" class="shrink-0 text-xs font-bold text-slate-700">
 									วันที่ให้บริการ:
 								</label>
@@ -653,7 +659,7 @@
 									<Select.Trigger
 										id="food-day-select"
 										aria-label="เลือกวันที่ให้บริการ"
-										class="h-9 w-40 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-900 shadow-2xs focus-visible:ring-2 focus-visible:ring-amber-500"
+										class="h-11 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-900 shadow-2xs focus-visible:ring-2 focus-visible:ring-amber-500 sm:h-9 sm:w-40"
 									>
 										<span class="truncate">
 											{foodDayOptions.find((o) => o.value === foodDay)?.label ?? 'ทุกวัน'}
@@ -681,7 +687,7 @@
 									<Select.Trigger
 										id="food-ticket-select"
 										aria-label="เลือกตั๋วอาหารที่ใช้งาน"
-										class="h-9 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-900 shadow-2xs focus-visible:ring-2 focus-visible:ring-amber-500"
+										class="h-11 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-900 shadow-2xs focus-visible:ring-2 focus-visible:ring-amber-500 sm:h-9"
 									>
 										<span class="truncate">
 											{#if activeFoodTicket}
@@ -740,7 +746,7 @@
 				<!-- Supplies Ticket Selector Bar -->
 				{#if distributingSuppliesTickets.length > 1}
 					<div
-						class="flex items-center gap-2 rounded-xl border border-slate-200/80 bg-white p-3 shadow-2xs"
+						class="flex flex-col gap-2 rounded-xl border border-slate-200/80 bg-white p-3 shadow-2xs sm:flex-row sm:items-center"
 					>
 						<label for="supplies-ticket-select" class="shrink-0 text-xs font-bold text-slate-700">
 							เลือกตั๋วพัสดุที่ใช้งาน:
@@ -755,7 +761,7 @@
 								<Select.Trigger
 									id="supplies-ticket-select"
 									aria-label="เลือกตั๋วพัสดุที่ใช้งาน"
-									class="h-9 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-900 shadow-2xs focus-visible:ring-2 focus-visible:ring-indigo-500"
+									class="h-11 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-900 shadow-2xs focus-visible:ring-2 focus-visible:ring-indigo-500 sm:h-9"
 								>
 									<span class="truncate">
 										{#if activeSuppliesTicket}

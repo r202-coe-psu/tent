@@ -11,6 +11,17 @@ export function isHandoverDraft(form: { qtyInput: string; notesInput: string }):
 	return form.qtyInput.trim() !== HANDOVER_DEFAULT_QTY || form.notesInput.trim() !== '';
 }
 
+/**
+ * Walk-in notes are a draft until a handover records them. The picker keeps the walk-in after
+ * each handover, so notes equal to the last recorded ones are not unsaved input.
+ */
+export function isOutsideNotesDraft(
+	notes: string | undefined,
+	recordedNotes: string | undefined
+): boolean {
+	return Boolean(notes) && notes !== recordedNotes;
+}
+
 /** The close-out form is a draft once any returned quantity differs from its prefilled value. */
 export function isReturnedQtyDraft(
 	initial: Readonly<Record<string, string>>,
