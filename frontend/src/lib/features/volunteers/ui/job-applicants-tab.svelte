@@ -87,6 +87,7 @@
 	const ATTENDANCE_OPTIONS: { value: ApplicantAttendanceFilter; label: string }[] = [
 		{ value: 'all', label: 'ทุกสถานะการเข้างาน' },
 		{ value: 'not_checked_in', label: 'ยังไม่เช็คอิน' },
+		{ value: 'awaiting_confirmation', label: 'รอยืนยันการเข้างาน' },
 		{ value: 'working', label: 'กำลังปฏิบัติงาน' },
 		{ value: 'completed', label: 'เสร็จสิ้น' }
 	];
@@ -111,7 +112,12 @@
 	});
 	const filtersActive = $derived(hasActiveApplicantFilters(filters));
 	const view = $derived(
-		filterApplicantBoard(board, filters, { assignments, volunteers: volunteerById, today })
+		filterApplicantBoard(board, filters, {
+			assignments,
+			volunteers: volunteerById,
+			today,
+			now: new Date()
+		})
 	);
 	const viewPendingShifts = $derived(view.pending.reduce((n, g) => n + g.applications.length, 0));
 

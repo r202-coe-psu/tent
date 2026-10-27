@@ -100,7 +100,8 @@ const assignments = [
 ];
 
 const board = buildApplicantBoard({ jobId: JOB, applications, assignments, volunteers });
-const ctx = { assignments, volunteers, today: TODAY };
+// 12:00 Bangkok on TODAY: no fixture shift has ended yet.
+const ctx = { assignments, volunteers, today: TODAY, now: new Date('2026-08-10T05:00:00.000Z') };
 
 function run(patch: Partial<ApplicantFilters>) {
 	const result = filterApplicantBoard(board, { ...EMPTY_APPLICANT_FILTERS, ...patch }, ctx);
@@ -187,6 +188,25 @@ describe('filterApplicantBoard', () => {
 		expect(run({ attendance: 'working' })).toEqual({ pending: [], history: [app(3)] });
 		expect(run({ attendance: 'not_checked_in' })).toEqual({ pending: [], history: [asg(5)] });
 		expect(run({ attendance: 'completed' })).toEqual({ pending: [], history: [asg(6)] });
+	});
+
+	it('moves an assigned shift ended 30+ minutes ago to awaiting confirmation (#885)', () => {
+		const ended = assignment(5, {
+			duty_window: { start_ts: '2026-08-10T01:00:00.000Z', end_ts: '2026-08-10T09:00:00.000Z' }
+		});
+		const withEnded = [assignments[0], ended, assignments[2]];
+		const b = buildApplicantBoard({ jobId: JOB, applications, assignments: withEnded, volunteers });
+		const at = (iso: string, attendance: ApplicantFilters['attendance']) =>
+			filterApplicantBoard(
+				b,
+				{ ...EMPTY_APPLICANT_FILTERS, attendance },
+				{ ...ctx, assignments: withEnded, now: new Date(iso) }
+			).history.map((e) => e.key);
+
+		expect(at('2026-08-10T09:29:59.000Z', 'awaiting_confirmation')).toEqual([]);
+		expect(at('2026-08-10T09:29:59.000Z', 'not_checked_in')).toEqual([asg(5)]);
+		expect(at('2026-08-10T09:30:00.000Z', 'awaiting_confirmation')).toEqual([asg(5)]);
+		expect(at('2026-08-10T09:30:00.000Z', 'not_checked_in')).toEqual([]);
 	});
 
 	it('combines filters with AND', () => {

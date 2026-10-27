@@ -6,15 +6,16 @@
  * board) never move with the filters.
  */
 
-import { applicantAttendance } from './applicant-attendance';
+import { applicantAttendance, awaitingAttendanceConfirmation } from './applicant-attendance';
 import type { ApplicantBoard, ApplicantHistoryEntry } from './applicant-board';
 import type { ApplicantGroup } from './applicant-queue';
 import type { JobApplication } from './job-application.schema';
-import type { ShiftAssignment, ShiftAssignmentStatus } from './shift-assignment.schema';
+import type { ShiftAssignment } from './shift-assignment.schema';
 import type { Volunteer } from './volunteer.schema';
 
 export type ApplicantStatusFilter = 'all' | 'pending' | 'confirmed' | 'declined' | 'staff';
-export type ApplicantAttendanceFilter = 'all' | 'not_checked_in' | 'working' | 'completed';
+export type ApplicantAttendanceFilter =
+	'all' | 'not_checked_in' | 'awaiting_confirmation' | 'working' | 'completed';
 
 /** A resolved shift/date choice: `id` is matched when both sides have one, else `date`. */
 export interface ApplicantShiftCriterion {
@@ -50,6 +51,8 @@ export interface ApplicantFilterContext {
 	volunteers: ReadonlyMap<string, Volunteer>;
 	/** `YYYY-MM-DD` in Asia/Bangkok. */
 	today: string;
+	/** Decides which ended shifts await attendance confirmation (#885). */
+	now: Date;
 }
 
 export interface FilteredApplicantBoard {
@@ -83,11 +86,13 @@ function matchesShift(
 	return criterion.id && shiftId ? criterion.id === shiftId : criterion.date === date;
 }
 
-function bucketOf(status: ShiftAssignmentStatus): ApplicantAttendanceFilter | null {
-	switch (status) {
+function bucketOf(assignment: ShiftAssignment, now: Date): ApplicantAttendanceFilter | null {
+	switch (assignment.status) {
 		case 'assigned':
 		case 'standby':
-			return 'not_checked_in';
+			return awaitingAttendanceConfirmation(assignment, now)
+				? 'awaiting_confirmation'
+				: 'not_checked_in';
 		case 'checked_in':
 			return 'working';
 		case 'completed':
@@ -133,9 +138,9 @@ function historyAttendance(
 	entry: ApplicantHistoryEntry,
 	ctx: ApplicantFilterContext
 ): ApplicantAttendanceFilter | null {
-	if (entry.kind === 'staff') return bucketOf(entry.assignment.status);
+	if (entry.kind === 'staff') return bucketOf(entry.assignment, ctx.now);
 	const state = applicantAttendance(entry.application, ctx.assignments, true, ctx.today);
-	return state.kind === 'none' ? null : bucketOf(state.assignment.status);
+	return state.kind === 'none' ? null : bucketOf(state.assignment, ctx.now);
 }
 
 export function filterApplicantBoard(
