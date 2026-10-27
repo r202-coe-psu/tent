@@ -51,6 +51,7 @@
 		type StationTab
 	} from '../model/desk-mode';
 	import { readStoredDeskMode, storeDeskMode } from '../model/desk-mode-storage';
+	import { DeskDrafts } from '../model/desk-draft';
 	import {
 		filterTicketsByServiceDay,
 		resolveServiceDay,
@@ -64,6 +65,7 @@
 	import TicketStatusBadge from '../common/TicketStatusBadge.svelte';
 	import { formatDistributionError } from '../model/distribution-error';
 	import * as Select from '$lib/components/ui/select/index.js';
+	import * as AlertDialog from '$lib/components/ui/alert-dialog/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 
 	interface Props {
@@ -115,8 +117,21 @@
 		contentEl?.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth', block: 'start' });
 	}
 
+	const drafts = new DeskDrafts();
+	// FR-DFS-05: a switch unmounts the step's form, so typed input waits on this confirm.
+	let pendingMode = $state<DeskMode | null>(null);
+
 	function selectMode(next: DeskMode) {
 		if (next === mode) return;
+		if (drafts.hasDraft()) {
+			pendingMode = next;
+			return;
+		}
+		switchMode(next);
+	}
+
+	function switchMode(next: DeskMode) {
+		pendingMode = null;
 		mode = next;
 		activeTab = stepAfterModeSwitch(activeTab, next);
 		storeDeskMode(next);
@@ -687,7 +702,11 @@
 				{/if}
 
 				{#if activeFoodTicket}
-					<FoodDistributionCard ticket={activeFoodTicket} shelterCode={currentShelterCode} />
+					<FoodDistributionCard
+						ticket={activeFoodTicket}
+						shelterCode={currentShelterCode}
+						{drafts}
+					/>
 					<DistributionHistory ticket={activeFoodTicket} shelterCode={currentShelterCode} />
 				{/if}
 			{/if}
@@ -759,6 +778,7 @@
 					<SuppliesDistributionCard
 						ticket={activeSuppliesTicket}
 						shelterCode={currentShelterCode}
+						{drafts}
 					/>
 					<DistributionHistory ticket={activeSuppliesTicket} shelterCode={currentShelterCode} />
 				{/if}
@@ -871,8 +891,33 @@
 					shelterCode={currentShelterCode}
 					onShiftClosed={(t) => (pickedReconciliationTicketId = t._id)}
 					onReturnsSubmitted={(t) => (pickedReconciliationTicketId = t._id)}
+					{drafts}
 				/>
 			{/if}
 		</div>
 	{/if}
+
+	<AlertDialog.Root
+		open={pendingMode !== null}
+		onOpenChange={(open) => {
+			if (!open) pendingMode = null;
+		}}
+	>
+		<AlertDialog.Content class="max-w-md">
+			<AlertDialog.Header>
+				<AlertDialog.Title>
+					สลับไปโหมด{pendingMode ? DESK_MODES[pendingMode].label : ''}?
+				</AlertDialog.Title>
+				<AlertDialog.Description>
+					ยังมีข้อมูลที่กรอกไว้แต่ยังไม่ได้บันทึก ถ้าสลับโหมด ข้อมูลนี้จะหายไป
+				</AlertDialog.Description>
+			</AlertDialog.Header>
+			<AlertDialog.Footer>
+				<AlertDialog.Cancel>อยู่โหมดเดิม</AlertDialog.Cancel>
+				<AlertDialog.Action onclick={() => pendingMode && switchMode(pendingMode)}>
+					สลับโหมด
+				</AlertDialog.Action>
+			</AlertDialog.Footer>
+		</AlertDialog.Content>
+	</AlertDialog.Root>
 </div>

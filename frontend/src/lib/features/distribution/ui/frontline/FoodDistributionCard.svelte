@@ -35,6 +35,7 @@
 		type FrontlineRecipientSelection
 	} from '../model/frontline-handover';
 	import { formatDistributionError } from '../model/distribution-error';
+	import { HANDOVER_DEFAULT_QTY, isHandoverDraft, type DeskDrafts } from '../model/desk-draft';
 	import { getMealPeriodLabel } from '../model/ticket-status';
 	import RecipientSearchPicker from '../common/RecipientSearchPicker.svelte';
 	import QtyStepper from '../common/QtyStepper.svelte';
@@ -44,9 +45,11 @@
 	interface Props {
 		ticket: RequisitionTicket;
 		shelterCode?: string;
+		/** FR-DFS-05 — the page asks before a mode switch drops typed input. */
+		drafts?: DeskDrafts;
 	}
 
-	let { ticket, shelterCode }: Props = $props();
+	let { ticket, shelterCode, drafts }: Props = $props();
 
 	const recordFoodMutation = useRecordFoodDistribution();
 
@@ -67,13 +70,22 @@
 	// Item the user picked; the effective selection falls back to the first ticket item whenever
 	// the pick is empty or no longer on the ticket (e.g. parent switches active ticket).
 	let pickedItemId = $state('');
-	let qtyInput = $state('1');
+	let qtyInput = $state(HANDOVER_DEFAULT_QTY);
 	let recipientSelection = $state<FrontlineRecipientSelection | null>(null);
 	let notesInput = $state('');
 	let warningModalOpen = $state(false);
 	let localSubmitError = $state<string | null>(null);
 	let topUpDialogOpen = $state(false);
 	let picker = $state<ReturnType<typeof RecipientSearchPicker>>();
+
+	// The outside recipient's notes live in the picker but reach the card through the selection.
+	$effect(() =>
+		drafts?.track(
+			() =>
+				isHandoverDraft({ qtyInput, notesInput }) ||
+				(recipientSelection?.recipientType === 'outside' && Boolean(recipientSelection.notes))
+		)
+	);
 
 	function handleQtyBlur() {
 		const raw = qtyInput.trim();
@@ -313,7 +325,7 @@
 			toast.success(`บันทึกแจกอาหารสำเร็จ: ${selectedItem.item_name} จำนวน ${qtyRes.value} ชุด`);
 			// Reset for the next person; a scanned recipient reopens the scanner.
 			warningModalOpen = false;
-			qtyInput = '1';
+			qtyInput = HANDOVER_DEFAULT_QTY;
 			notesInput = '';
 			picker?.next();
 		} catch (err) {

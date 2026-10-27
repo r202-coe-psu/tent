@@ -525,7 +525,7 @@ test.describe('Tab 2 — ready-meal handover (plan §4.4)', { tag: DESK_TAGS }, 
 			}
 		);
 		await desk.chooseRecipientBySearch(recipient);
-		const banner = desk.alert('ตรวจเมนูและประวัติการรับอาหารไม่สำเร็จ');
+		const banner = desk.alert('ตรวจเมนู ประวัติการรับอาหาร และการแพ้ไม่สำเร็จ');
 		await expect(banner).toBeVisible({ timeout: 20_000 });
 		await expect(desk.foodSubmit()).toBeDisabled();
 
@@ -535,6 +535,36 @@ test.describe('Tab 2 — ready-meal handover (plan §4.4)', { tag: DESK_TAGS }, 
 		await desk.foodSubmit().click();
 		await expect(desk.toast(/บันทึกแจกอาหารสำเร็จ/)).toBeVisible();
 		await expectTicketLogs(ticket, item, 1, 'Handover after preflight retry');
+	});
+
+	// CR-200 FR-DFS-05: a mode switch drops the step's form, so typed input asks first.
+	test('T2-14 switching mode with a typed quantity asks first; cancelling keeps the input', async ({
+		page,
+		scenarioAs
+	}) => {
+		const scenario = await scenarioAs('food_mode_draft');
+		const { desk, item, recipient } = await foodSetup(page, scenario);
+		const qty = page.locator('#food-qty-input');
+
+		await desk.itemButton(item.name).click();
+		await desk.chooseRecipientBySearch(recipient);
+		await desk.fillFoodQty('2');
+		await desk.modeButton('supplies').click();
+		const confirm = page.getByRole('alertdialog', { name: /สลับไปโหมดสิ่งของ/ });
+		await expect(confirm).toBeVisible();
+		await confirm.getByRole('button', { name: 'อยู่โหมดเดิม' }).click();
+		await expect(confirm).toBeHidden();
+		await expect(desk.modeButton('food')).toHaveAttribute('aria-pressed', 'true');
+		await expect(qty).toHaveValue('2');
+
+		await desk.modeButton('supplies').click();
+		await confirm.getByRole('button', { name: 'สลับโหมด' }).click();
+		await expect(desk.modeButton('supplies')).toHaveAttribute('aria-pressed', 'true');
+
+		// Back at the defaults there is nothing to lose, so the switch is immediate.
+		await desk.modeButton('food').click();
+		await expect(desk.modeButton('food')).toHaveAttribute('aria-pressed', 'true');
+		await expect(confirm).toHaveCount(0);
 	});
 });
 

@@ -29,6 +29,7 @@
 		validateShiftCloseForm
 	} from '../model/shift-reconciliation';
 	import { formatDistributionError } from '../model/distribution-error';
+	import { isReturnedQtyDraft, type DeskDrafts } from '../model/desk-draft';
 	import { getTicketStatusLabel } from '../model/ticket-status';
 	import { summarizeTicketLoans } from '../model/loan-return';
 	import { qtyGt } from '$lib/utils/qty';
@@ -41,9 +42,11 @@
 		shelterCode: string;
 		onShiftClosed?: (ticket: RequisitionTicket) => void;
 		onReturnsSubmitted?: (ticket: RequisitionTicket) => void;
+		/** FR-DFS-05 — the page asks before a mode switch drops edited returned quantities. */
+		drafts?: DeskDrafts;
 	}
 
-	let { ticket, shelterCode, onShiftClosed, onReturnsSubmitted }: Props = $props();
+	let { ticket, shelterCode, onShiftClosed, onReturnsSubmitted, drafts }: Props = $props();
 
 	// Session authority
 	const authContext = $derived.by(() => {
@@ -69,6 +72,8 @@
 	// Form state for returned quantities, keyed by item_id
 	let returnedInputs = $state<Record<string, string>>({});
 	let initializedForTicketId = $state<string | null>(null);
+	// The prefilled values, kept so a refetch cannot make an untouched form look edited.
+	let initialReturned: Record<string, string> = {};
 	let submitError = $state<string | null>(null);
 
 	function handleReturnedQtyBlur(itemId: string) {
@@ -85,6 +90,7 @@
 		if (data && ticket && ticket._id !== initializedForTicketId) {
 			if (ticket.status === 'DISTRIBUTING') {
 				returnedInputs = initializeReturnedQuantities(data.summaries);
+				initialReturned = { ...returnedInputs };
 				initializedForTicketId = ticket._id;
 				submitError = null;
 			}
@@ -92,6 +98,13 @@
 	});
 
 	const summaries = $derived(reconciliationQuery.data?.summaries ?? []);
+
+	$effect(() =>
+		drafts?.track(
+			() => ticket?.status === 'DISTRIBUTING' && isReturnedQtyDraft(initialReturned, returnedInputs)
+		)
+	);
+
 	const validation = $derived(validateShiftCloseForm(summaries, returnedInputs));
 	const preview = $derived(computeShiftClosePreview(summaries, returnedInputs));
 
