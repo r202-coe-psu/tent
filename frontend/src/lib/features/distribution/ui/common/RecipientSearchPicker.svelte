@@ -16,6 +16,7 @@
 		type Volunteer
 	} from '$lib/features/volunteers';
 	import CameraCodeScannerDialog from '$lib/components/camera-code-scanner-dialog.svelte';
+	import { createReadGuard } from '$lib/components/camera-code-scanner-state';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import type { FrontlineRecipientSelection } from '../model/frontline-handover';
@@ -57,6 +58,8 @@
 	let outsideNotes = $state('');
 	/** Whether the current pick came from the scanner — `next()` reopens it only then. */
 	let pickedByScan = false;
+	/** Drops a lookup that settles after the scanner was closed. */
+	const lookupGuard = createReadGuard();
 
 	const searchEnabled = $derived(!value && searchTerm.trim().length >= 2);
 	const evacueeSearchQuery = useSearchEvacuees(
@@ -119,6 +122,7 @@
 		if (isLookingUp) return;
 		isLookingUp = true;
 		scanError = null;
+		const isLatest = lookupGuard.begin();
 		try {
 			const result = await resolveScannedRecipient(
 				code,
@@ -128,14 +132,22 @@
 					lookupVolunteer: (c) => lookupVolunteerByScanCode(c)
 				}
 			);
+			if (!isLatest()) return;
 			if (result.kind === 'evacuee') selectEvacuee(result.evacuee, true);
 			else if (result.kind === 'volunteer') selectVolunteer(result.volunteer, true);
 			else scanError = result.message;
 		} catch (err) {
+			if (!isLatest()) return;
 			scanError = formatDistributionError(err, 'เกิดข้อผิดพลาดในการค้นหา กรุณาลองใหม่อีกครั้ง');
 		} finally {
-			isLookingUp = false;
+			if (isLatest()) isLookingUp = false;
 		}
+	}
+
+	/** Scanner closed mid-lookup: discard the pending result and free the scan button. */
+	function cancelLookup() {
+		lookupGuard.cancel();
+		isLookingUp = false;
 	}
 
 	function outsideSelection(): FrontlineRecipientSelection {
@@ -403,4 +415,5 @@
 	manualInputMode="text"
 	busy={isLookingUp}
 	onScan={handleScan}
+	oncancel={cancelLookup}
 />

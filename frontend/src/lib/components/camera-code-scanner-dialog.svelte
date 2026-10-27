@@ -7,7 +7,7 @@
 	import Keyboard from '@lucide/svelte/icons/keyboard';
 	import type { Html5QrcodeSupportedFormats } from 'html5-qrcode';
 	import CameraCodeScanner from './camera-code-scanner.svelte';
-	import { acceptRead, scannerPhase } from './camera-code-scanner-state';
+	import { acceptRead, createReadGuard, scannerPhase } from './camera-code-scanner-state';
 
 	let {
 		open = $bindable(false),
@@ -16,7 +16,8 @@
 		formats,
 		manualInputMode = 'numeric',
 		busy,
-		onScan
+		onScan,
+		oncancel
 	}: {
 		open?: boolean;
 		title?: string;
@@ -32,11 +33,14 @@
 		busy?: boolean;
 		/** Receives a camera read or a typed code; without `busy` the dialog closes first. */
 		onScan: (code: string) => void | Promise<unknown>;
+		/** Called when the user closes the dialog while busy; the caller should drop the pending read. */
+		oncancel?: () => void;
 	} = $props();
 
 	let manualCode = $state('');
 
 	const phase = $derived(scannerPhase(busy ?? false));
+	const readGuard = createReadGuard();
 
 	async function deliver(code: string) {
 		const clean = acceptRead(phase, code);
@@ -47,15 +51,28 @@
 			onScan(clean);
 			return;
 		}
+		const isLatest = readGuard.begin();
 		try {
 			await onScan(clean);
 		} finally {
-			open = false;
+			// A cancelled read must not close a dialog the user has since reopened.
+			if (isLatest()) open = false;
 		}
+	}
+
+	/** The user closed the dialog: drop any read in flight and tell the caller if it was busy. */
+	function handleUserClose() {
+		readGuard.cancel();
+		if (phase === 'busy') oncancel?.();
+	}
+
+	function cancelButton() {
+		open = false;
+		handleUserClose();
 	}
 </script>
 
-<Dialog.Root bind:open>
+<Dialog.Root bind:open onOpenChange={(next) => !next && handleUserClose()}>
 	<Dialog.Content class="flex w-full max-w-md flex-col gap-5 rounded-2xl p-6">
 		<Dialog.Header class="pr-6 text-left">
 			<Dialog.Title class="flex items-center gap-2 text-lg font-bold text-slate-900">
@@ -105,7 +122,7 @@
 		</form>
 
 		<div class="flex justify-end border-t border-slate-200/80 pt-3">
-			<Button type="button" variant="outline" class="min-h-11" onclick={() => (open = false)}>
+			<Button type="button" variant="outline" class="min-h-11" onclick={cancelButton}>
 				ยกเลิก
 			</Button>
 		</div>
