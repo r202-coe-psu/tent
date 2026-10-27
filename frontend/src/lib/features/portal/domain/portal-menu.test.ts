@@ -45,6 +45,7 @@ const ORDER = [
 	'security',
 	'facility',
 	'management',
+	'pr',
 	'central'
 ];
 
@@ -119,6 +120,10 @@ describe('filterPortalMenu — shelter manager', () => {
 			'referrals',
 			'back-office'
 		]);
+	});
+
+	it('sees the PR department with the kiosk banners', () => {
+		expect(itemIds(dept(menu(sm, ON), 'pr'))).toEqual(['kiosk-banners']);
 	});
 
 	it('also has Station 2 gated by the shelter flag', () => {
@@ -250,6 +255,21 @@ describe('filterPortalMenu — single-department roles', () => {
 		expect(menu(staff('kiosk_staff', 'SH002'))).toEqual([]);
 	});
 
+	it('pr_staff sees only the kiosk banners in the PR department', () => {
+		const views = menu(staff('pr_staff'));
+		expect(deptIds(views)).toEqual(['pr']);
+		expect(itemIds(views[0])).toEqual(['kiosk-banners']);
+	});
+
+	it('pr_staff of another shelter does not see it', () => {
+		expect(menu(staff('pr_staff', 'SH002'))).toEqual([]);
+	});
+
+	it('kiosk_staff and registration_staff do not see the PR department', () => {
+		expect(deptIds(menu(staff('kiosk_staff')))).not.toContain('pr');
+		expect(deptIds(menu(staff('registration_staff')))).not.toContain('pr');
+	});
+
 	it('warehouse_staff is treated as supply_coordinator', () => {
 		expect(menu(staff('warehouse_staff'))).toEqual(menu(staff('supply_coordinator')));
 	});
@@ -370,6 +390,7 @@ describe('portal department colours', () => {
 			security: 'security',
 			facility: 'facility',
 			management: 'admin',
+			pr: 'volunteer',
 			central: 'admin'
 		});
 	});

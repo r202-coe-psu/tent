@@ -33,6 +33,7 @@ export type PortalDepartmentId =
 	| 'security'
 	| 'facility'
 	| 'management'
+	| 'pr'
 	| 'central';
 
 export type PortalIconKey =
@@ -48,6 +49,7 @@ export type PortalIconKey =
 	| 'heart-pulse'
 	| 'house'
 	| 'map-pin'
+	| 'megaphone'
 	| 'monitor'
 	| 'monitor-smartphone'
 	| 'package'
@@ -75,7 +77,8 @@ export type PortalCapability =
 	| 'security_officer'
 	| 'facility_staff'
 	| 'distribution_staff'
-	| 'kiosk_staff';
+	| 'kiosk_staff'
+	| 'pr_staff';
 
 /**
  * Per-shelter feature availability. `null` = not known yet (shelter still loading): items that
@@ -145,6 +148,7 @@ const SO = 'security_officer';
 const FAC = 'facility_staff';
 const DST = 'distribution_staff';
 const KIO = 'kiosk_staff';
+const PR = 'pr_staff';
 
 export const PORTAL_DEPARTMENTS: readonly PortalDepartment[] = [
 	{
@@ -432,6 +436,26 @@ export const PORTAL_DEPARTMENTS: readonly PortalDepartment[] = [
 				href: '/back-office',
 				scope: 'shelter',
 				roles: []
+			}
+		]
+	},
+	{
+		id: 'pr',
+		label: 'ฝ่ายประชาสัมพันธ์',
+		desc: 'ข่าวสารและประชาสัมพันธ์บนตู้ Kiosk ของศูนย์',
+		// Shares the volunteer family (community outreach, steel blue): every other family is taken
+		// by a department, and it is not a status colour.
+		domain: 'volunteer',
+		icon: 'megaphone',
+		items: [
+			{
+				id: 'kiosk-banners',
+				label: 'ข่าวสารบน Kiosk',
+				desc: 'จัดการแบนเนอร์ประชาสัมพันธ์บนตู้ Kiosk',
+				icon: 'megaphone',
+				href: '/back-office/kiosks/banners',
+				scope: 'shelter',
+				roles: [PR]
 			}
 		]
 	},
