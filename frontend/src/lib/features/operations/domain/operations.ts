@@ -1393,11 +1393,16 @@ export const disputeInfoSchema = z.object({
 });
 export type DisputeInfoInput = z.input<typeof disputeInfoSchema>;
 
+/** Most transfer ids one list request may name — keeps the BFF query string short (#811). */
+export const TRANSFER_IDS_PER_REQUEST = 50;
+
 export const transferFilterSchema = z.object({
 	status: transferStatusSchema.optional(),
 	limit: z.number().int().positive().max(1000).default(50),
 	skip: z.number().int().nonnegative().default(0),
-	sort: z.enum(['created_at_desc', 'created_at_asc']).default('created_at_desc')
+	sort: z.enum(['created_at_desc', 'created_at_asc']).default('created_at_desc'),
+	/** Read exactly these transfers (ledger ref labels, #811) — `limit` does not cap them. */
+	ids: z.array(z.string().min(1)).min(1).max(TRANSFER_IDS_PER_REQUEST).optional()
 });
 export type TransferFilter = z.input<typeof transferFilterSchema>;
 

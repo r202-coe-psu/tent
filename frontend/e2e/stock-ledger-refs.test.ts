@@ -38,15 +38,44 @@ const transferId = `stock_transfer:${ulid()}`;
 const missingTransferId = `stock_transfer:${ulid()}`;
 const sentRowId = `stock_ledger:${ulid()}`;
 const orphanRowId = `stock_ledger:${ulid()}`;
+// Older than a full page (50) of newer transfers, so the latest-50 list would miss it.
+const oldTransferId = `stock_transfer:${ulid()}`;
+const oldRowId = `stock_ledger:${ulid()}`;
+const newerTransferIds = Array.from({ length: 50 }, () => `stock_transfer:${ulid()}`);
 
 const seeded: Array<[db: string, id: string]> = [
 	[CATALOG_DB, itemId],
 	[CENTRAL_DB, transferId],
+	[CENTRAL_DB, oldTransferId],
+	...newerTransferIds.map((id): [string, string] => [CENTRAL_DB, id]),
 	[SHELTER_DB, sentRowId],
-	[SHELTER_DB, orphanRowId]
+	[SHELTER_DB, orphanRowId],
+	[SHELTER_DB, oldRowId]
 ];
 
 let session = '';
+
+function shippedTransfer(id: string, toShelter: string, at: string) {
+	return {
+		_id: id,
+		type: 'stock_transfer',
+		schema_v: 2,
+		shelter_code: 'SH001',
+		created_at: at,
+		updated_at: at,
+		created_by: WH_STAFF.name,
+		from_shelter: 'SH001',
+		to_shelter: toShelter,
+		items: [{ item_id: itemId, qty: '3', unit: 'piece' }],
+		status: 'shipped',
+		timeline: {
+			requested: { at, by: WH_STAFF.name },
+			shipped: { at, by: WH_STAFF.name }
+		},
+		driver_name: 'E2E Driver',
+		vehicle_plate: 'E2E 1234'
+	};
+}
 
 function transferOutRow(id: string, refId: string, qty: string, at: string) {
 	return {
@@ -95,26 +124,14 @@ test.describe('Stock ledger ref labels (#811)', () => {
 			dietary: [],
 			returnable: false
 		});
-		await putDocument(CENTRAL_DB, {
-			_id: transferId,
-			type: 'stock_transfer',
-			schema_v: 2,
-			shelter_code: 'SH001',
-			created_at: now,
-			updated_at: now,
-			created_by: WH_STAFF.name,
-			from_shelter: 'SH001',
-			to_shelter: 'SH002',
-			items: [{ item_id: itemId, qty: '3', unit: 'piece' }],
-			status: 'shipped',
-			timeline: {
-				requested: { at: now, by: WH_STAFF.name },
-				shipped: { at: now, by: WH_STAFF.name }
-			},
-			driver_name: 'E2E Driver',
-			vehicle_plate: 'E2E 1234'
-		});
+		await putDocument(CENTRAL_DB, shippedTransfer(transferId, 'SH002', now));
+		const longAgo = '2020-01-01T00:00:00.000Z';
+		await putDocument(CENTRAL_DB, shippedTransfer(oldTransferId, 'SH003', longAgo));
+		await Promise.all(
+			newerTransferIds.map((id) => putDocument(CENTRAL_DB, shippedTransfer(id, 'SH002', now)))
+		);
 		await putDocument(SHELTER_DB, transferOutRow(sentRowId, transferId, '-3', now));
+		await putDocument(SHELTER_DB, transferOutRow(oldRowId, oldTransferId, '-3', now));
 		// Points at a transfer that is not in `central_ops`: keeps the short ref.
 		await putDocument(SHELTER_DB, transferOutRow(orphanRowId, missingTransferId, '-1', now));
 	});
@@ -142,7 +159,7 @@ test.describe('Stock ledger ref labels (#811)', () => {
 		if (errors.length > 0) throw new AggregateError(errors, 'E2E teardown left documents behind');
 	});
 
-	test('a transfer row names its shelters; a missing transfer keeps the short ref', async ({
+	test('transfer rows name their shelters, even past the latest 50; a missing one keeps the short ref', async ({
 		page
 	}) => {
 		await routeBrowserCouchThroughApp(page);
@@ -154,10 +171,13 @@ test.describe('Stock ledger ref labels (#811)', () => {
 
 		expect((await transfersRead).status()).toBe(200);
 		const table = page.locator('table');
-		await expect(table.getByRole('row').filter({ hasText: itemName })).toHaveCount(2, {
+		await expect(table.getByRole('row').filter({ hasText: itemName })).toHaveCount(3, {
 			timeout: 10_000
 		});
 		await expect(table.getByRole('row').filter({ hasText: 'โอนย้าย SH001 → SH002' })).toHaveCount(
+			1
+		);
+		await expect(table.getByRole('row').filter({ hasText: 'โอนย้าย SH001 → SH003' })).toHaveCount(
 			1
 		);
 		await expect(

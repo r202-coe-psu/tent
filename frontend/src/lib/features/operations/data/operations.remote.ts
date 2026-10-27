@@ -21,6 +21,7 @@ import {
 	isDonationSlot,
 	isStockTransfer,
 	TransferForbiddenError,
+	TRANSFER_IDS_PER_REQUEST,
 	isTransferDestination,
 	stockBalance,
 	createReceiveEntry,
@@ -193,19 +194,27 @@ export class OperationsRemoteRepository implements OperationsRepository {
 
 	async listLedgerRefDocs(refIds: readonly string[]): Promise<LedgerRefDoc[]> {
 		// `stock_transfer` lives in `central_ops`, not this shelter's DB (see the transfer methods
-		// below), so those ids come from the transfer BFF. An account it refuses keeps the short ref.
-		const transferIds = new Set(refIds.filter((id) => id.startsWith('stock_transfer:')));
-		const shelterIds = refIds.filter((id) => !transferIds.has(id));
+		// below), so those ids come from the transfer BFF — by id, since a ref can point at a
+		// transfer older than any page of the list. An account it refuses keeps the short ref.
+		const transferIds = refIds.filter((id) => id.startsWith('stock_transfer:'));
+		const shelterIds = refIds.filter((id) => !id.startsWith('stock_transfer:'));
 		const [shelterDocs, transfers] = await Promise.all([
 			allDocsByIds(this.dbName, shelterIds, isLedgerRefDoc),
-			transferIds.size === 0
-				? []
-				: this.listTransfers().catch((e: unknown) => {
-						if (e instanceof TransferForbiddenError) return [];
-						throw e;
-					})
+			this.listTransfersByIds(transferIds).catch((e: unknown) => {
+				if (e instanceof TransferForbiddenError) return [];
+				throw e;
+			})
 		]);
-		return [...shelterDocs, ...transfers.filter((t) => transferIds.has(t._id))];
+		return [...shelterDocs, ...transfers];
+	}
+
+	private async listTransfersByIds(ids: readonly string[]): Promise<StockTransfer[]> {
+		const batches: string[][] = [];
+		for (let i = 0; i < ids.length; i += TRANSFER_IDS_PER_REQUEST) {
+			batches.push(ids.slice(i, i + TRANSFER_IDS_PER_REQUEST));
+		}
+		const lists = await Promise.all(batches.map((batch) => this.listTransfers({ ids: batch })));
+		return lists.flat();
 	}
 
 	async getBalance(): Promise<Map<string, string>> {
@@ -1196,6 +1205,7 @@ export class OperationsRemoteRepository implements OperationsRepository {
 	async listTransfers(filter?: TransferFilter): Promise<StockTransfer[]> {
 		const qs = new URLSearchParams({ shelter_code: getShelterCode() });
 		if (filter?.status) qs.append('status', filter.status);
+		for (const id of filter?.ids ?? []) qs.append('id', id);
 		const res = await fetch(`/api/back-office/transfer?${qs}`, {
 			credentials: 'include',
 			headers: { Accept: 'application/json' }
