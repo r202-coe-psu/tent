@@ -31,6 +31,8 @@
 	import { langState } from '$lib/states/i18n.svelte';
 	import { useSupplyItems } from '$lib/features/supply';
 	import { useStockBalance } from '$lib/features/operations';
+	import { isCount } from '../domain/count-input';
+	import { CountInputGuard } from './count-input-guard.svelte';
 
 	// Edit draft if plan present; create if absent.
 	let {
@@ -192,6 +194,22 @@
 		infant
 	});
 
+	const guard = new CountInputGuard();
+	const COUNT_ERROR = 'ต้องเป็นตัวเลขตั้งแต่ 0 ขึ้นไป';
+	const totalError = $derived(isCount(total, 1) ? null : 'ต้องมากกว่า 0');
+	const subCountErrors = $derived({
+		halal: isCount(halal, 0) ? null : COUNT_ERROR,
+		softFood: isCount(softFood, 0) ? null : COUNT_ERROR,
+		infant: isCount(infant, 0) ? null : COUNT_ERROR
+	});
+	// An empty per-person box counts as 0 and the row is skipped; a negative value is an error.
+	const isQtyValid = (qty: number | null) => isCount(qty ?? 0, 0);
+	const numbersValid = $derived(
+		totalError === null &&
+			Object.values(subCountErrors).every((e) => e === null) &&
+			customRows.every((row) => isQtyValid(row.qtyPerPerson))
+	);
+
 	// Validate sub-counts do not exceed total.
 	const subCountsValid = $derived(halal <= total && softFood <= total && infant <= total);
 
@@ -292,6 +310,15 @@
 	}
 </script>
 
+{#snippet fieldError(id: string, message: string | null)}
+	{#if guard.messages[id]}
+		<p id="{id}-blocked" role="alert" class="text-xs text-destructive">{guard.messages[id]}</p>
+	{/if}
+	{#if message}
+		<p id="{id}-error" role="alert" class="text-xs text-destructive">{message}</p>
+	{/if}
+{/snippet}
+
 <Dialog.Root bind:open>
 	<Dialog.Content class="max-h-[90dvh] overflow-y-auto p-4 sm:max-w-2xl sm:p-6">
 		<Dialog.Header>
@@ -380,11 +407,18 @@
 									</select>
 									<div class="flex items-center gap-2">
 										<Input
+											id="mp-qty-{i}"
 											type="number"
 											min="0"
 											step="any"
 											class="min-h-11 w-full sm:min-h-9 sm:w-28"
 											placeholder="ต่อคน"
+											aria-label="ปริมาณต่อคน"
+											aria-invalid={!isQtyValid(row.qtyPerPerson)}
+											aria-describedby={isQtyValid(row.qtyPerPerson)
+												? undefined
+												: `mp-qty-${i}-error`}
+											{@attach guard.attach(`mp-qty-${i}`)}
 											bind:value={row.qtyPerPerson}
 										/>
 										<Button
@@ -400,6 +434,10 @@
 										</Button>
 									</div>
 								</div>
+								{@render fieldError(
+									`mp-qty-${i}`,
+									isQtyValid(row.qtyPerPerson) ? null : COUNT_ERROR
+								)}
 								{#if row.itemId && !currentUnresolved}
 									<p class="pl-0.5 text-xs text-muted-foreground">
 										ยอดคลังสแตนบาย ณ ศูนย์: <span class="font-medium text-foreground"
@@ -470,7 +508,17 @@
 
 			<div class="space-y-1.5">
 				<Label for="mp-total">จำนวนผู้พักพิงทั้งหมด (คน)</Label>
-				<Input id="mp-total" type="number" min="1" bind:value={total} required />
+				<Input
+					id="mp-total"
+					type="number"
+					min="1"
+					bind:value={total}
+					required
+					aria-invalid={totalError !== null}
+					aria-describedby={totalError ? 'mp-total-error' : undefined}
+					{@attach guard.attach('mp-total')}
+				/>
+				{@render fieldError('mp-total', totalError)}
 			</div>
 
 			<div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -482,7 +530,11 @@
 						min="0"
 						class="min-h-11 sm:min-h-9"
 						bind:value={halal}
+						aria-invalid={subCountErrors.halal !== null}
+						aria-describedby={subCountErrors.halal ? 'mp-halal-error' : undefined}
+						{@attach guard.attach('mp-halal')}
 					/>
+					{@render fieldError('mp-halal', subCountErrors.halal)}
 				</div>
 				<div class="space-y-1.5">
 					<Label for="mp-soft" class="text-xs">อาหารอ่อน</Label>
@@ -492,7 +544,11 @@
 						min="0"
 						class="min-h-11 sm:min-h-9"
 						bind:value={softFood}
+						aria-invalid={subCountErrors.softFood !== null}
+						aria-describedby={subCountErrors.softFood ? 'mp-soft-error' : undefined}
+						{@attach guard.attach('mp-soft')}
 					/>
+					{@render fieldError('mp-soft', subCountErrors.softFood)}
 				</div>
 				<div class="space-y-1.5">
 					<Label for="mp-infant" class="text-xs">ทารก</Label>
@@ -502,7 +558,11 @@
 						min="0"
 						class="min-h-11 sm:min-h-9"
 						bind:value={infant}
+						aria-invalid={subCountErrors.infant !== null}
+						aria-describedby={subCountErrors.infant ? 'mp-infant-error' : undefined}
+						{@attach guard.attach('mp-infant')}
 					/>
+					{@render fieldError('mp-infant', subCountErrors.infant)}
 				</div>
 			</div>
 
@@ -596,6 +656,7 @@
 					disabled={createCalc.isPending ||
 						updateCalc.isPending ||
 						total <= 0 ||
+						!numbersValid ||
 						!sopProfile.data ||
 						!subCountsValid ||
 						!overrideReasonValid ||
