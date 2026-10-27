@@ -5,6 +5,7 @@
 	import Trash2 from '@lucide/svelte/icons/trash-2';
 	import ArrowRight from '@lucide/svelte/icons/arrow-right';
 	import AlertCircle from '@lucide/svelte/icons/alert-circle';
+	import { tick } from 'svelte';
 	import { toast } from 'svelte-sonner';
 	import * as Select from '$lib/components/ui/select';
 	import { getDonationStore } from '../../../routes/(public)/donations/donation.svelte';
@@ -94,11 +95,16 @@
 			});
 		}
 
+		const firstBadAmount = donationStore.items.find((item) => !item.amount || item.amount <= 0);
+
 		if (validationErrors.length === 0) {
 			donationStore.goToStep('time');
 			if (donationStore.reachedStep < 3) donationStore.reachedStep = 3;
 		} else {
 			toast.error(t.valToastError);
+			if (firstBadAmount) {
+				void tick().then(() => document.getElementById(`amount-${firstBadAmount.id}`)?.focus());
+			}
 		}
 	}
 </script>
@@ -271,6 +277,19 @@
 								bind:value={item.amount}
 								class="w-full rounded-xl border-2 border-slate-200 bg-white p-3 font-bold text-slate-800 outline-hidden transition-colors focus:border-domain-donation-strong"
 							/>
+							{#if item.needQty}
+								<p
+									class="mt-1 text-xs font-medium text-slate-500"
+									data-testid="need-shortage-{item.id}"
+								>
+									{t.needShortage
+										.replace('{qty}', String(item.needQty))
+										.replace(
+											'{unit}',
+											formatUnit(item.unit_code ?? item.unit, units, langState.current)
+										)}
+								</p>
+							{/if}
 						</div>
 						<div class="col-span-1">
 							<label class="mb-1 block text-xs font-bold text-slate-600" for="unit-{item.id}">

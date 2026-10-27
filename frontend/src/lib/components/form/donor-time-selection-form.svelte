@@ -20,13 +20,13 @@
 	import { toast } from 'svelte-sonner';
 	import { onMount } from 'svelte';
 	import {
-		donationPayloadUnit,
 		publicDonationErrorMessage,
 		slotModeForDelivery,
 		useDonationSlots
 	} from '$lib/features/donations';
 	import { formatUnit, useUnitsOfMeasure } from '$lib/features/catalog';
 	import { getDonationStore } from '../../../routes/(public)/donations/donation.svelte';
+	import { buildDonationItemsPayload } from '../../../routes/(public)/donations/donation-payload';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { getTranslation } from '$lib/utils/i18n';
 	import { bangkokToday, DISPLAY_TIME_ZONE } from '$lib/utils/date';
@@ -210,18 +210,7 @@
 						line_id: donationStore.donorLine || undefined,
 						email: donationStore.donorEmail || undefined
 					},
-					items:
-						donationStore.items.length > 0
-							? donationStore.items.map((it) => ({
-									item_id: it.item_id || undefined,
-									free_text: it.name || t.unspecified,
-									category: it.category || undefined,
-									qty: it.amount || 1,
-									unit: donationPayloadUnit(it, t.defaultItemUnit),
-									condition: it.condition || undefined,
-									note: it.remark || undefined
-								}))
-							: [{ free_text: t.generalItemsFallback, qty: 1, unit: t.defaultItemUnit }],
+					items: buildDonationItemsPayload(donationStore.items, t),
 					logistics: logistics,
 					...(token ? { captchaToken: token } : {})
 				})
