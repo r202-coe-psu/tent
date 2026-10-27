@@ -1,5 +1,6 @@
 import Decimal from 'decimal.js';
 import { persistQty, qtyGte, qtyLte, roundQty, subQty } from '$lib/utils/qty';
+import { resolveCategoryId, systemCategoryId } from '$lib/features/catalog';
 import type { Recipe, ItemMaster } from '$lib/features/catalog';
 import type { SupplyItem } from '$lib/features/supply';
 import type {
@@ -535,4 +536,14 @@ export function getActiveTagsFromSession(session?: MealSession | null): TargetGr
 	if (!session?.target_headcount) return ['regular'];
 	const active = TARGET_GROUP_TAGS.filter((tag) => (session.target_headcount[tag] || 0) > 0);
 	return active.length > 0 ? active : ['regular'];
+}
+
+/** item master ที่เลือกเป็นวัตถุดิบทำอาหารได้: หมวดอาหาร (id หรือชื่อเดิม) และยังใช้งานอยู่ */
+export function selectableFoodIngredients<
+	T extends Pick<ItemMaster, 'category' | 'deactivated' | 'merged_into'>
+>(masters: readonly T[] | undefined): T[] {
+	const food = systemCategoryId('FOOD');
+	return (masters ?? []).filter(
+		(m) => !m.deactivated && !m.merged_into && resolveCategoryId(m.category, []) === food
+	);
 }
