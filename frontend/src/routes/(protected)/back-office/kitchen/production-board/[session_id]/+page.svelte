@@ -16,6 +16,9 @@
 		mealServiceReceiptOutcome,
 		sumHeadcountByTags,
 		getActiveTagsFromSession,
+		CountInputGuard,
+		isCount,
+		isPositiveQty,
 		TARGET_GROUP_LABELS,
 		MEAL_PERIOD_LABELS,
 		type TargetGroupTag
@@ -196,11 +199,17 @@
 		if (mode === 'custom' && selectedRecipeId) {
 			selectedRecipeId = '';
 			isIngredientsManuallyEdited = false;
-			ingredientsList = calculateRecipeIngredients('', allocatedTarget);
+			ingredientsList = calculateRecipeIngredients('', scalingTarget);
 		}
 	}
 	let menuLabel = $state('');
 	let allocatedTarget = $state(50);
+	const guard = new CountInputGuard();
+	const targetValid = $derived(isCount(allocatedTarget, 1));
+	const TARGET_ERROR = 'จำนวนจานต้องมากกว่า 0';
+	const QTY_ERROR = 'จำนวนต้องมากกว่า 0';
+	// Portions fed to the recipe scaler: never negative, never NaN.
+	const scalingTarget = $derived(targetValid ? allocatedTarget : 0);
 	let targetTags = $state<TargetGroupTag[]>(['regular']);
 	let isEveryone = $state(false);
 
@@ -265,7 +274,7 @@
 				isIngredientsManuallyEdited = true;
 			} else {
 				isIngredientsManuallyEdited = false;
-				ingredientsList = calculateRecipeIngredients(selectedRecipeId, allocatedTarget);
+				ingredientsList = calculateRecipeIngredients(selectedRecipeId, scalingTarget);
 			}
 		} else if (!activePlanId && lastLoadedPlanId !== null) {
 			lastLoadedPlanId = null;
@@ -277,7 +286,7 @@
 			selectedRecipeId = '';
 			recipeMode = 'bom';
 			isIngredientsManuallyEdited = false;
-			ingredientsList = calculateRecipeIngredients('', allocatedTarget);
+			ingredientsList = calculateRecipeIngredients('', scalingTarget);
 			showAddIngredient = false;
 		}
 	});
@@ -322,7 +331,7 @@
 			menuLabel = chosen.label;
 		}
 		isIngredientsManuallyEdited = false;
-		ingredientsList = calculateRecipeIngredients(target.value, allocatedTarget);
+		ingredientsList = calculateRecipeIngredients(target.value, scalingTarget);
 	}
 
 	interface IngredientRow {
@@ -339,6 +348,8 @@
 	let newItemId = $state('');
 	let newQty = $state('1');
 	let newUnit = $state('');
+	const newQtyValid = $derived(isPositiveQty(newQty));
+	const ingredientsValid = $derived(ingredientsList.every((ing) => isPositiveQty(ing.needed)));
 
 	function calculateRecipeIngredients(recipeId: string, portions: number): IngredientRow[] {
 		const recipe = (recipes.data ?? []).find((r) => r._id === recipeId);
@@ -374,7 +385,7 @@
 
 	function resetIngredientsToRecipe() {
 		isIngredientsManuallyEdited = false;
-		ingredientsList = calculateRecipeIngredients(selectedRecipeId, allocatedTarget);
+		ingredientsList = calculateRecipeIngredients(selectedRecipeId, scalingTarget);
 		showAddIngredient = false;
 		toast.info('คืนค่าวัตถุดิบตามสูตรและจำนวนจานเรียบร้อยแล้ว');
 	}
@@ -434,8 +445,8 @@
 	// Submit Stage A ➔ Create Requisition
 	async function handleCreateRequisition() {
 		if (!session) return;
-		if (allocatedTarget <= 0) {
-			toast.error('กรุณาระบุจำนวนจานเป้าหมาย');
+		if (!targetValid) {
+			toast.error('กรุณาระบุจำนวนจานเป้าหมายให้มากกว่า 0');
 			return;
 		}
 		if (targetTags.length === 0) {
@@ -521,8 +532,8 @@
 			toast.error('แก้ไขไม่ได้ — คลังเริ่มดำเนินการกับตั๋วนี้แล้ว');
 			return;
 		}
-		if (allocatedTarget <= 0) {
-			toast.error('กรุณาระบุจำนวนจานเป้าหมาย');
+		if (!targetValid) {
+			toast.error('กรุณาระบุจำนวนจานเป้าหมายให้มากกว่า 0');
 			return;
 		}
 		if (targetTags.length === 0) {
@@ -603,6 +614,17 @@
 	let serviceNotes = $state('');
 	let cookingStarted = $state(false);
 
+	const SERVICE_FIELD_ERROR = 'ต้องเป็นตัวเลขตั้งแต่ 0 ขึ้นไป';
+	// Outside-volunteer and outside-evacuee counts treat an empty box as 0.
+	const serviceFieldErrors = $derived({
+		yieldActual: isCount(yieldActualPortions, 0) ? null : SERVICE_FIELD_ERROR,
+		served: isCount(servedInShelter, 0) ? null : SERVICE_FIELD_ERROR,
+		waste: isCount(wastePortions, 0) ? null : SERVICE_FIELD_ERROR,
+		extVolunteers: isCount(extVolunteers ?? 0, 0) ? null : SERVICE_FIELD_ERROR,
+		extOutside: isCount(extOutside ?? 0, 0) ? null : SERVICE_FIELD_ERROR
+	});
+	const serviceFormValid = $derived(Object.values(serviceFieldErrors).every((e) => e === null));
+
 	// Init stage C defaults from activeService or allocatedTarget
 	$effect(() => {
 		if (shownStage === 'C') {
@@ -676,8 +698,8 @@
 
 	async function handleRecordService() {
 		if (!session || !activePlanId) return;
-		if (yieldActualPortions < 0) {
-			toast.error('กรุณาระบุจำนวนจานที่ปรุงได้จริง');
+		if (!serviceFormValid) {
+			toast.error('กรุณาตรวจสอบจำนวนผลผลิตและการแจกจ่าย — ต้องเป็นตัวเลขตั้งแต่ 0 ขึ้นไป');
 			return;
 		}
 
@@ -732,6 +754,15 @@
 <svelte:head>
 	<title>กระดานการผลิตอาหาร · SmartShelter</title>
 </svelte:head>
+
+{#snippet fieldError(id: string, message: string | null)}
+	{#if guard.messages[id]}
+		<p id="{id}-blocked" role="alert" class="mt-1 text-xs text-destructive">{guard.messages[id]}</p>
+	{/if}
+	{#if message}
+		<p id="{id}-error" role="alert" class="mt-1 text-xs text-destructive">{message}</p>
+	{/if}
+{/snippet}
 
 <div class="flex-1 space-y-4 overflow-auto p-4">
 	<!-- Header Banner -->
@@ -919,8 +950,12 @@
 							type="number"
 							min="1"
 							bind:value={allocatedTarget}
+							aria-invalid={!targetValid}
+							aria-describedby={targetValid ? undefined : 'allocated-target-error'}
+							{@attach guard.attach('allocated-target')}
 							class="mt-1 text-xs font-bold"
 						/>
+						{@render fieldError('allocated-target', targetValid ? null : TARGET_ERROR)}
 					</div>
 
 					<!-- Target Group Selection -->
@@ -1037,12 +1072,22 @@
 													oninput={() => {
 														isIngredientsManuallyEdited = true;
 													}}
+													aria-label="จำนวน {ing.name}"
+													aria-invalid={!isPositiveQty(ing.needed)}
+													aria-describedby={isPositiveQty(ing.needed)
+														? undefined
+														: `ing-qty-${idx}-error`}
+													{@attach guard.attach(`ing-qty-${idx}`)}
 													class="h-8 w-24 [appearance:textfield] text-right text-sm font-semibold tabular-nums [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
 												/>
 												<span class="w-16 truncate text-left text-xs text-muted-foreground"
 													>{unitLabel(ing.unit)}</span
 												>
 											</div>
+											{@render fieldError(
+												`ing-qty-${idx}`,
+												isPositiveQty(ing.needed) ? null : QTY_ERROR
+											)}
 										</Table.Cell>
 										<Table.Cell class="text-right text-slate-700 tabular-nums">
 											{onHand}
@@ -1099,15 +1144,22 @@
 									/>
 								</div>
 								<div class="sm:col-span-3">
-									<Label class="text-2xs text-muted-foreground">จำนวน</Label>
+									<Label for="new-ingredient-qty" class="text-2xs text-muted-foreground"
+										>จำนวน</Label
+									>
 									<Input
+										id="new-ingredient-qty"
 										type="number"
 										step="any"
 										min="0.01"
 										bind:value={newQty}
 										placeholder="0"
+										aria-invalid={!newQtyValid}
+										aria-describedby={newQtyValid ? undefined : 'new-ingredient-qty-error'}
+										{@attach guard.attach('new-ingredient-qty')}
 										class="mt-1 h-8 text-xs font-bold"
 									/>
+									{@render fieldError('new-ingredient-qty', newQtyValid ? null : QTY_ERROR)}
 								</div>
 								<div class="sm:col-span-3">
 									<Label class="text-2xs text-muted-foreground">หน่วย</Label>
@@ -1137,7 +1189,7 @@
 									size="sm"
 									class="h-7 gap-1 text-xs"
 									onclick={confirmAddIngredient}
-									disabled={!newItemId || !newQty || Number(newQty) <= 0}
+									disabled={!newItemId || !newQtyValid}
 								>
 									<Plus class="h-3 w-3" />
 									เพิ่มวัตถุดิบนี้
@@ -1174,7 +1226,10 @@
 				<Button
 					class="w-full gap-2 font-semibold shadow-sm"
 					onclick={handleCreateRequisition}
-					disabled={createMealPlanMutation.isPending || createTicketMutation.isPending}
+					disabled={createMealPlanMutation.isPending ||
+						createTicketMutation.isPending ||
+						!targetValid ||
+						!ingredientsValid}
 				>
 					<Sparkles class="h-4 w-4" />
 					{createMealPlanMutation.isPending || createTicketMutation.isPending
@@ -1188,7 +1243,9 @@
 					class="w-full gap-2 font-semibold shadow-sm"
 					onclick={handleSaveEdits}
 					disabled={updateTicketItemsMutation.isPending ||
-						updateConfirmedMealPlanMutation.isPending}
+						updateConfirmedMealPlanMutation.isPending ||
+						!targetValid ||
+						!ingredientsValid}
 				>
 					<Check class="h-4 w-4" />
 					{updateTicketItemsMutation.isPending || updateConfirmedMealPlanMutation.isPending
@@ -1454,32 +1511,72 @@
 
 						<div class="grid grid-cols-2 gap-3 sm:grid-cols-3">
 							<div>
-								<Label class="text-xs font-semibold">จำนวนจานปรุงได้จริง</Label>
+								<Label for="service-yield" class="text-xs font-semibold">จำนวนจานปรุงได้จริง</Label>
 								<Input
+									id="service-yield"
 									type="number"
 									min="0"
 									bind:value={yieldActualPortions}
+									aria-invalid={!!serviceFieldErrors.yieldActual}
+									{@attach guard.attach('service-yield')}
 									class="mt-1 text-xs font-bold"
 								/>
+								{@render fieldError('service-yield', serviceFieldErrors.yieldActual)}
 							</div>
 							<div>
-								<Label class="text-xs">แจกจ่ายในศูนย์</Label>
-								<Input type="number" min="0" bind:value={servedInShelter} class="mt-1 text-xs" />
+								<Label for="service-served" class="text-xs">แจกจ่ายในศูนย์</Label>
+								<Input
+									id="service-served"
+									type="number"
+									min="0"
+									bind:value={servedInShelter}
+									aria-invalid={!!serviceFieldErrors.served}
+									{@attach guard.attach('service-served')}
+									class="mt-1 text-xs"
+								/>
+								{@render fieldError('service-served', serviceFieldErrors.served)}
 							</div>
 							<div>
-								<Label class="text-xs">อาหารเหลือทิ้ง</Label>
-								<Input type="number" min="0" bind:value={wastePortions} class="mt-1 text-xs" />
+								<Label for="service-waste" class="text-xs">อาหารเหลือทิ้ง</Label>
+								<Input
+									id="service-waste"
+									type="number"
+									min="0"
+									bind:value={wastePortions}
+									aria-invalid={!!serviceFieldErrors.waste}
+									{@attach guard.attach('service-waste')}
+									class="mt-1 text-xs"
+								/>
+								{@render fieldError('service-waste', serviceFieldErrors.waste)}
 							</div>
 						</div>
 
 						<div class="grid grid-cols-2 gap-3">
 							<div>
-								<Label class="text-xs">แจกอาสาสมัคร/เจ้าหน้าที่</Label>
-								<Input type="number" min="0" bind:value={extVolunteers} class="mt-1 text-xs" />
+								<Label for="service-ext-volunteers" class="text-xs">แจกอาสาสมัคร/เจ้าหน้าที่</Label>
+								<Input
+									id="service-ext-volunteers"
+									type="number"
+									min="0"
+									bind:value={extVolunteers}
+									aria-invalid={!!serviceFieldErrors.extVolunteers}
+									{@attach guard.attach('service-ext-volunteers')}
+									class="mt-1 text-xs"
+								/>
+								{@render fieldError('service-ext-volunteers', serviceFieldErrors.extVolunteers)}
 							</div>
 							<div>
-								<Label class="text-xs">แจกผู้พักพิงภายนอก</Label>
-								<Input type="number" min="0" bind:value={extOutside} class="mt-1 text-xs" />
+								<Label for="service-ext-outside" class="text-xs">แจกผู้พักพิงภายนอก</Label>
+								<Input
+									id="service-ext-outside"
+									type="number"
+									min="0"
+									bind:value={extOutside}
+									aria-invalid={!!serviceFieldErrors.extOutside}
+									{@attach guard.attach('service-ext-outside')}
+									class="mt-1 text-xs"
+								/>
+								{@render fieldError('service-ext-outside', serviceFieldErrors.extOutside)}
 							</div>
 						</div>
 
@@ -1513,7 +1610,7 @@
 								<Button
 									class="gap-1.5 bg-primary shadow-sm"
 									onclick={handleRecordService}
-									disabled={recordServiceMutation.isPending || !cookingStarted}
+									disabled={recordServiceMutation.isPending || !cookingStarted || !serviceFormValid}
 									title={!cookingStarted ? 'กดเริ่มปรุงอาหารก่อน' : undefined}
 								>
 									<Check class="h-4 w-4" />
