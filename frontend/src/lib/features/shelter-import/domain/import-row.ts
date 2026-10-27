@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { createShelterSchema } from '$lib/features/shelters/server';
+import { createShelterSchema, DEFAULT_SITE_KIND } from '$lib/features/shelters/server';
 import { foodDistributionPointSchema, petPolicySchema, zoneSchema } from '$lib/features/shelters';
 import { ulid } from '$lib/db/ulid';
 import {
@@ -22,7 +22,6 @@ import {
 	PET_POLICY_CHOICES,
 	POWER_SOURCE_CHOICES,
 	PROJECT_LEVEL_CHOICES,
-	SITE_KIND_CHOICES,
 	WATER_SOURCE_CHOICES,
 	FOOD_DISTRIBUTION_PATH_TO_HEADER,
 	ZONE_STATUS_CHOICES,
@@ -147,23 +146,30 @@ export function buildUpdatePayload(
 export interface MasterLookup {
 	byLabel: Map<string, string>;
 	codes: Set<string>;
+	/** The list's `is_default` item, used when the cell is left empty. */
+	defaultCode: string | null;
 }
 
 export type Lookups = Record<MasterColumn, MasterLookup>;
 
 /** Build a {@link MasterLookup} from a master_data items array. Pure. */
-export function buildMasterLookup(items: readonly { code: string; label: string }[]): MasterLookup {
+export function buildMasterLookup(
+	items: readonly { code: string; label: string; label_en?: string; is_default?: boolean }[]
+): MasterLookup {
 	const byLabel = new Map<string, string>();
 	const codes = new Set<string>();
+	let defaultCode: string | null = null;
 	for (const it of items) {
 		byLabel.set(it.label.trim(), it.code);
+		if (it.label_en?.trim()) byLabel.set(it.label_en.trim(), it.code);
 		codes.add(it.code);
+		if (it.is_default) defaultCode = it.code;
 	}
-	return { byLabel, codes };
+	return { byLabel, codes, defaultCode };
 }
 
 function emptyLookup(): MasterLookup {
-	return { byLabel: new Map(), codes: new Set() };
+	return { byLabel: new Map(), codes: new Set(), defaultCode: null };
 }
 
 /** An empty lookup set — for tests / when master data is unavailable. */
@@ -552,7 +558,10 @@ export function validateRow(
 
 	// -- sheet 1: identity, address, people --
 	const status = resolveEnum(raw, H.operation_status, OPERATION_STATUS_CHOICES, sink);
-	const siteKind = resolveEnum(raw, H.site_kind, SITE_KIND_CHOICES, sink) ?? 'evacuation_center';
+	const siteKind =
+		resolveMaster(raw, H.site_kind, lookups.site_kind, sink) ??
+		lookups.site_kind.defaultCode ??
+		DEFAULT_SITE_KIND;
 	const level = resolveEnum(raw, H.project_level, PROJECT_LEVEL_CHOICES, sink);
 	const areaType = resolveEnum(raw, H.area_type, AREA_TYPE_CHOICES, sink);
 	const shelterType = resolveMaster(raw, H.shelter_type, lookups.shelter_type, sink);

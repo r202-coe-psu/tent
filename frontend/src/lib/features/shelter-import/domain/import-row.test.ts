@@ -20,6 +20,15 @@ function lookups(): Lookups {
 		shelter_type: buildMasterLookup([
 			{ code: 'school', label: 'โรงเรียน' },
 			{ code: 'temple', label: 'วัด (ศาสนสถาน)' }
+		]),
+		site_kind: buildMasterLookup([
+			{
+				code: 'evacuation_center',
+				label: 'ศูนย์อพยพ',
+				label_en: 'Evacuation Center',
+				is_default: true
+			},
+			{ code: 'host_house', label: 'บ้านพี่เลี้ยง', label_en: 'Host House' }
 		])
 	};
 }
@@ -72,6 +81,36 @@ describe('validateRow — happy path', () => {
 
 		const byCode = validateRow(baseRow({ [H.shelter_type]: 'temple' }), 1, lookups());
 		expect(byCode.shelter?.shelter_type).toBe('temple');
+	});
+
+	it.each([
+		['label_th', 'บ้านพี่เลี้ยง', 'host_house'],
+		['label_en', 'Host House', 'host_house'],
+		['code', 'host_house', 'host_house'],
+		['empty cell (is_default)', '', 'evacuation_center']
+	])('resolves ชนิดสถานที่ from %s', (_name, cell, expected) => {
+		const r = validateRow(baseRow({ [H.site_kind]: cell }), 1, lookups());
+		expect(r.ok).toBe(true);
+		expect(r.shelter?.site_kind).toBe(expected);
+	});
+
+	it('falls back to evacuation_center on an empty ชนิดสถานที่ when the list has no default', () => {
+		const r = validateRow(baseRow(), 1, emptyLookups());
+		expect(r.shelter?.site_kind).toBe('evacuation_center');
+	});
+
+	it('flags a ชนิดสถานที่ that is not an active master item', () => {
+		const withoutHostHouse: Lookups = {
+			...lookups(),
+			site_kind: buildMasterLookup([{ code: 'evacuation_center', label: 'ศูนย์อพยพ' }])
+		};
+		const unknown = validateRow(baseRow({ [H.site_kind]: 'โรงพยาบาลสนาม' }), 1, lookups());
+		expect(unknown.ok).toBe(false);
+		expect(unknown.errors.find((e) => e.column === H.site_kind)?.message).toContain('ไม่พบ');
+
+		// an inactive item is absent from the lookup, so its label and code both fail
+		const inactive = validateRow(baseRow({ [H.site_kind]: 'host_house' }), 1, withoutHostHouse);
+		expect(inactive.ok).toBe(false);
 	});
 
 	it('leaves the app-only fields unset — they are not in the workbook', () => {

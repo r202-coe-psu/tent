@@ -11,7 +11,7 @@
 	import Activity from '@lucide/svelte/icons/activity';
 	import X from '@lucide/svelte/icons/x';
 	import { toast } from 'svelte-sonner';
-	import { useMasterData, formatMasterLabel } from '$lib/features/master-data';
+	import { useMasterData, formatMasterLabel, type MasterDataItem } from '$lib/features/master-data';
 	import { listShelters, sheltersKeys } from '$lib/features/shelters';
 	import {
 		buildMasterLookup,
@@ -52,14 +52,25 @@
 	const resolvedBasePath = $derived(basePath ?? resolve('/system-management/shelters'));
 
 	const shelterTypeQuery = useMasterData(() => 'shelter_type');
+	const siteKindQuery = useMasterData(() => 'site_kind');
 
-	const activeItems = $derived<Record<MasterColumn, { code: string; label: string }[]>>({
-		shelter_type: (shelterTypeQuery.data?.items ?? [])
+	type ActiveItem = { code: string; label: string; label_en: string; is_default: boolean };
+	const activeOf = (items: readonly MasterDataItem[] | undefined): ActiveItem[] =>
+		(items ?? [])
 			.filter((i) => i.status === 'active')
-			.map((i) => ({ code: i.code, label: formatMasterLabel(i, 'th') }))
+			.map((i) => ({
+				code: i.code,
+				label: formatMasterLabel(i, 'th'),
+				label_en: i.label_en,
+				is_default: i.is_default
+			}));
+
+	const activeItems = $derived<Record<MasterColumn, ActiveItem[]>>({
+		shelter_type: activeOf(shelterTypeQuery.data?.items),
+		site_kind: activeOf(siteKindQuery.data?.items)
 	});
 
-	const masterDataLoading = $derived(shelterTypeQuery.isLoading);
+	const masterDataLoading = $derived(shelterTypeQuery.isLoading || siteKindQuery.isLoading);
 
 	const lookups = $derived(
 		Object.fromEntries(MASTER_COLUMNS.map((t) => [t, buildMasterLookup(activeItems[t])])) as Lookups
