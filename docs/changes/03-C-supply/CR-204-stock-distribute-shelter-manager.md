@@ -1,10 +1,12 @@
 ---
-id: draft
+id: CR-204 # renumbered from draft-stock-distribute-shelter-manager
 title: เบิกจ่ายพัสดุตรงจากคลัง — ให้ shelter_manager เบิกได้, supply_coordinator ยังเบิกไม่ได้ (แก้เพิ่ม CR-156 §H)
-status: proposed
+status: approved
 date: 2026-10-27
 requested_by: Dev Team B PR #869 review (Fishcanwalk) + AC ของ GitHub #837
-decided_by: project owner
+decided_by: kong
+decision_date: 2026-10-27
+updated: 2026-10-27 # approved (kong)
 layer: volatile
 amends: CR-156 (§H FR-H1)
 affects:
@@ -17,7 +19,7 @@ affects:
   - frontend/src/lib/auth/roles.test.ts, frontend/src/lib/server/shelter-access-design.test.ts, frontend/e2e/stock-inventory.test.ts
 ---
 
-# draft-stock-distribute-shelter-manager — สิทธิ์เบิกจ่ายพัสดุตรงจากคลัง
+# CR-204 — สิทธิ์เบิกจ่ายพัสดุตรงจากคลัง
 
 > **สรุป (TL;DR):**
 >
@@ -43,7 +45,7 @@ affects:
 | FR-5 | `validate_doc_update` ของ `stock_ledger` แถว `reason: 'distribute'`: `ref_id` ขึ้นต้น `requisition_ticket:direct-` อนุญาตเฉพาะ `warehouse_staff`, `shelter_manager` (และ SA / `_admin`) — role อื่นถูกปฏิเสธด้วย `Only warehouse staff, shelter manager, or system admin can write direct distribute stock ledger`. `requisition_ticket:{ulid}` (ใบเบิก CR-121) ยังรับ WS/SC/SM; `distribution_batch:` ยังเป็น warehouse-only |
 | FR-6 | UI gate และ VDU ใช้ชุดสิทธิ์เดียวกัน (WS/SM/SA): UI ใช้ `canDistributeStock(roles, shelterCode)` ใน `$lib/auth/roles` เพียงจุดเดียว                                                                                                                                                                                                                                                                                           |
 | FR-7 | Release: redeploy `_design/access` (`pnpm redeploy:access --write --confirm`) บนทุก shelter DB **ก่อนหรือพร้อม** deploy frontend; ถ้า frontend ขึ้นก่อน SM จะได้ 403 ตอนจองล็อต                                                                                                                                                                                                                                               |
-| FR-8 | `role-permission-matrix.md` §3 แยกแถวตาม §3 ของ CR นี้ (แก้แล้ว 2026-10-27 ก่อน approve — ดู Decision log); ถ้า CR ถูก reject หรือแก้ ต้องปรับ matrix ตาม                                                                                                                                                                                                                                                                     |
+| FR-8 | `role-permission-matrix.md` §3 แยกแถวตาม §3 ของ CR นี้ (แก้แล้ว 2026-10-27 — ดู Decision log); ถ้า CR ถูก reject หรือแก้ ต้องปรับ matrix ตาม                                                                                                                                                                                                                                                                     |
 
 ### ผลต่อ CR-156 (บันทึกที่นี่ ไม่แก้ CR-156)
 
@@ -103,3 +105,4 @@ N/A — ไม่เปลี่ยนรูป doc ที่ persist. VDU ต�
 - 2026-10-27 — PR #869 review (Fishcanwalk): ให้ `shelter_manager` เบิกจ่ายได้ตาม AC #837 → proposed
 - 2026-10-27 — บังคับ FR-1 ที่ VDU ด้วย (FR-5) ไม่ใช่เฉพาะ UI
 - 2026-10-27 — แก้ `role-permission-matrix.md` §3 ทันที ไม่รอ approve (FR-8): ตาม PR #869 review (Fishcanwalk) ที่ให้ `shelter_manager` เบิกจ่ายได้ตาม AC #837 — แถว Inventory & Supply เดิมรวม "ตัดจ่ายพัสดุ" ไว้กับ SC = scope ซึ่งขัดกับ CR-156 FR-H1 และโค้ด จึงแยกแถว Stock Distribution (SA ✓, SM scope, SC = เฉพาะ `warehouse_staff`)
+- 2026-10-27 — approved (kong): รันเลข CR-204 ย้ายเข้า `03-C-supply/`; การแก้ role matrix ก่อน approve ถือว่ายืนยันแล้ว
