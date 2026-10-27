@@ -260,11 +260,12 @@
 		}
 		if (preflightLoading || preflightError) return;
 
-		// Duplicate meal, menu mismatch or allergen conflict: open the override modal (reason required)
+		// Duplicate meal, menu mismatch, allergen conflict or unlisted allergy: open the override modal (reason required)
 		if (
 			duplicatePreflight.isDuplicate ||
 			menuPreflight.isMismatch ||
-			allergenPreflight.conflicts.length > 0
+			allergenPreflight.conflicts.length > 0 ||
+			allergenPreflight.recipientFreeText.length > 0
 		) {
 			warningModalOpen = true;
 			return;
@@ -316,7 +317,8 @@
 						recipientSelection.recipientType === 'evacuee'
 							? {
 									recipient_allergy_codes: allergenPreflight.recipientCodes,
-									menu_allergen_codes: allergenPreflight.menuCodes
+									menu_allergen_codes: allergenPreflight.menuCodes,
+									recipient_allergy_free_text: allergenPreflight.recipientFreeText
 								}
 							: undefined
 				},
@@ -459,20 +461,27 @@
 
 	{#if recipientSelection}
 		<!-- Recipient allergies (#607 FR-MRM-09) -->
-		{#if recipientAllergyLabel || allergenPreflight.recipientFreeText.length > 0}
+		{#if recipientAllergyLabel}
 			<div class="flex flex-wrap items-center gap-2 text-sm">
-				{#if recipientAllergyLabel}
-					<span
-						class="rounded-full border border-red-300 bg-red-50 px-3 py-1 font-bold text-red-800"
-					>
-						แพ้: {recipientAllergyLabel}
-					</span>
-				{/if}
-				{#if allergenPreflight.recipientFreeText.length > 0}
-					<span class="text-slate-700">
-						มีประวัติแพ้: {allergenPreflight.recipientFreeText.join(', ')}
-					</span>
-				{/if}
+				<span class="rounded-full border border-red-300 bg-red-50 px-3 py-1 font-bold text-red-800">
+					แพ้: {recipientAllergyLabel}
+				</span>
+			</div>
+		{/if}
+
+		<!-- Unlisted (free-text) allergies force an override on every menu (CR-191 FR-MRM-11) -->
+		{#if allergenPreflight.recipientFreeText.length > 0}
+			<div
+				class="flex items-start gap-2.5 rounded-xl border border-amber-200 bg-amber-50 p-3.5 text-sm text-amber-950"
+				role="alert"
+			>
+				<AlertTriangle class="mt-0.5 size-4 shrink-0 text-amber-600" aria-hidden="true" />
+				<div>
+					<p class="font-bold">
+						มีประวัติแพ้ (ไม่อยู่ในรายการ): {allergenPreflight.recipientFreeText.join(', ')}
+					</p>
+					<p class="mt-0.5 text-xs text-amber-800">ถ้ากดแจกต่อ ระบบจะขอเหตุผลก่อนบันทึก</p>
+				</div>
 			</div>
 		{/if}
 
@@ -641,6 +650,7 @@
 		repeat={duplicatePreflight}
 		{menuMismatchLabel}
 		{allergenConflictLabel}
+		allergyFreeTextLabel={allergenPreflight.recipientFreeText.join(', ')}
 		menuName={selectedItem?.item_name}
 		onconfirm={handleOverrideConfirm}
 		oncancel={() => (warningModalOpen = false)}

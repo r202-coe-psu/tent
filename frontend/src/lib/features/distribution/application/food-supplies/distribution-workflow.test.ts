@@ -820,6 +820,67 @@ describe('distribution-workflow', () => {
 			expect(log.is_override).toBeFalsy();
 			expect(log.allergen_conflicts).toBeUndefined();
 		});
+
+		describe('unlisted (free-text) allergies (CR-191 FR-MRM-11)', () => {
+			const soy = {
+				recipient_allergy_codes: [],
+				menu_allergen_codes: [],
+				recipient_allergy_free_text: ['ถั่วเหลือง']
+			};
+
+			it('rejects without override and writes nothing, even on a menu with no allergens', async () => {
+				const ticket = await createFoodTicket('item:fried_rice');
+
+				await expect(
+					recordFoodDistribution(ticket._id, { ...evacueeInput, allergen_check: soy }, POS_CTX, {
+						ticketRepo,
+						logRepo
+					})
+				).rejects.toThrow(/unlisted allergies \(ถั่วเหลือง\)\. Override required/);
+				expect(logRepo.logs.size).toBe(0);
+			});
+
+			it('prefixes the override reason and keeps allergen_conflicts empty', async () => {
+				const ticket = await createFoodTicket('item:fried_rice');
+
+				const log = await recordFoodDistribution(
+					ticket._id,
+					{
+						...evacueeInput,
+						is_override: true,
+						override_reason: 'ตรวจกับผู้รับแล้ว',
+						allergen_check: soy
+					},
+					POS_CTX,
+					{ ticketRepo, logRepo }
+				);
+
+				expect(log.is_override).toBe(true);
+				expect(log.override_reason).toBe('แพ้ (ไม่อยู่ในรายการ): ถั่วเหลือง — ตรวจกับผู้รับแล้ว');
+				expect(log.allergen_conflicts).toBeUndefined();
+			});
+
+			it('records codes and prefixes the reason when a code conflict is also present', async () => {
+				const ticket = await createFoodTicket('item:fried_rice');
+
+				const log = await recordFoodDistribution(
+					ticket._id,
+					{
+						...evacueeInput,
+						is_override: true,
+						override_reason: 'รับไปให้ลูก',
+						allergen_check: { ...egg, recipient_allergy_free_text: ['ถั่วเหลือง', 'ลาเท็กซ์'] }
+					},
+					POS_CTX,
+					{ ticketRepo, logRepo }
+				);
+
+				expect(log.allergen_conflicts).toEqual(['egg']);
+				expect(log.override_reason).toBe(
+					'แพ้ (ไม่อยู่ในรายการ): ถั่วเหลือง, ลาเท็กซ์ — รับไปให้ลูก'
+				);
+			});
+		});
 	});
 
 	describe('menu ↔ recipient check (FR-MRM-04)', () => {

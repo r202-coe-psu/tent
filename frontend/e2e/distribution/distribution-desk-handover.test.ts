@@ -390,13 +390,14 @@ test.describe('Tab 2 — ready-meal handover (plan §4.4)', { tag: DESK_TAGS }, 
 		expect(logs[0]).toMatchObject({ recipient_id: recipient.recipientId, is_override: false });
 	});
 
-	// #607: free-text allergens are never matched; the desk shows both sides for staff to compare.
-	test('T2-5c free-text allergens on the menu are shown, not matched', async ({
+	// #607 / CR-191 FR-MRM-11: free-text allergens are never matched, but a free-text allergy on the
+	// recipient forces an override on every menu; the text is kept in the override reason.
+	test('T2-5c a free-text recipient allergy needs an override and is kept in the reason', async ({
 		page,
 		scenarioAs
 	}) => {
 		const scenario = await scenarioAs('food_allergen_free_text');
-		const { desk, item } = await foodSetup(page, scenario, {
+		const { desk, item, ticket } = await foodSetup(page, scenario, {
 			item: { allergens: ['ถั่วเหลือง'] }
 		});
 		const allergic = await seedRecipient(
@@ -410,9 +411,23 @@ test.describe('Tab 2 — ready-meal handover (plan §4.4)', { tag: DESK_TAGS }, 
 
 		await desk.itemButton(item.name).click();
 		await desk.chooseRecipientBySearch(allergic);
-		await expect(page.getByText('มีประวัติแพ้: ถั่วเหลือง')).toBeVisible();
+		await expect(page.getByText('มีประวัติแพ้ (ไม่อยู่ในรายการ): ถั่วเหลือง')).toBeVisible();
 		await expect(page.getByText(/เมนูระบุ: ถั่วเหลือง/)).toBeVisible();
 		await expect(desk.alert(/ผู้รับแพ้/)).toHaveCount(0);
+
+		await desk.foodSubmit().click();
+		await expect(desk.overrideDialog()).toHaveAccessibleName(
+			'แจ้งเตือน: ผู้รับมีประวัติแพ้ที่ไม่อยู่ในรายการ'
+		);
+		await desk.confirmOverride('ตรวจกับผู้รับแล้ว');
+		await expect(desk.toast(/บันทึกแจกอาหารสำเร็จ/)).toBeVisible();
+
+		const [log] = await expectTicketLogs(ticket, item, 1, 'Free-text allergy override');
+		expect(log).toMatchObject({
+			is_override: true,
+			override_reason: 'แพ้ (ไม่อยู่ในรายการ): ถั่วเหลือง — ตรวจกับผู้รับแล้ว'
+		});
+		expect(log.allergen_conflicts).toBeUndefined();
 	});
 
 	// D-E3: an expired lot is advisory only today — the handover goes out and the log is stamped.

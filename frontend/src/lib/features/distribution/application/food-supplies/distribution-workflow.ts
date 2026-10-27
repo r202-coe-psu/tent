@@ -8,6 +8,7 @@ import {
 	isLotExpired,
 	matchRecipientToMenu,
 	findAllergenConflicts,
+	withFreeTextAllergyReason,
 	type DistributionLog,
 	type DistributionRecipientType,
 	type MenuTagSource,
@@ -63,6 +64,8 @@ export interface FoodDistributionInput {
 	allergen_check?: {
 		recipient_allergy_codes: readonly string[];
 		menu_allergen_codes: readonly string[];
+		/** Unlisted (free-text) allergies, never matched: any value forces an override (FR-MRM-11). */
+		recipient_allergy_free_text?: readonly string[];
 	};
 }
 
@@ -208,6 +211,15 @@ export async function recordFoodDistribution(
 		);
 	}
 
+	// Unlisted (free-text) allergies (CR-191 FR-MRM-11): never matched, so every menu needs an
+	// override; the text goes into the reason rather than a new log field.
+	const allergyFreeText = input.allergen_check?.recipient_allergy_free_text ?? [];
+	if (allergyFreeText.length > 0 && !input.is_override) {
+		throw new WorkflowValidationError(
+			`Recipient has unlisted allergies (${allergyFreeText.join(', ')}). Override required.`
+		);
+	}
+
 	// Food safety window (CR-121 FR-DST-03; CR-159 FR-MQW-06 B): the
 	// dispatched lot's expiry. Advisory — expired food may still go out, stamped on the log.
 	// Injected deps without a ledgerReader skip the lot lookup (callers own every dependency).
@@ -244,7 +256,10 @@ export async function recordFoodDistribution(
 			is_returnable: false,
 			status: 'fulfilled',
 			is_override: input.is_override ?? false,
-			override_reason: input.override_reason,
+			override_reason:
+				input.override_reason === undefined
+					? undefined
+					: withFreeTextAllergyReason(allergyFreeText, input.override_reason),
 			...(allergenConflicts.length > 0 ? { allergen_conflicts: allergenConflicts } : {}),
 			is_expired_warning: isExpiredWarning,
 			notes: input.notes

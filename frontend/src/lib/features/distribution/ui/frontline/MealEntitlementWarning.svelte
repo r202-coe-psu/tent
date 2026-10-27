@@ -19,6 +19,8 @@
 		menuMismatchLabel?: string | null;
 		/** Allergens in the menu that the recipient is allergic to (#607), as Thai labels. */
 		allergenConflictLabel?: string | null;
+		/** Recipient's unlisted (free-text) allergies, comma-joined (CR-191 FR-MRM-11). */
+		allergyFreeTextLabel?: string | null;
 		menuName?: string;
 		onconfirm: (reason: string) => void;
 		oncancel: () => void;
@@ -31,6 +33,7 @@
 		repeat,
 		menuMismatchLabel = null,
 		allergenConflictLabel = null,
+		allergyFreeTextLabel = null,
 		menuName,
 		onconfirm,
 		oncancel
@@ -42,19 +45,26 @@
 
 	const isDuplicate = $derived(repeat.isDuplicate);
 	const warningCount = $derived(
-		[isDuplicate, !!menuMismatchLabel, !!allergenConflictLabel].filter(Boolean).length
+		[isDuplicate, !!menuMismatchLabel, !!allergenConflictLabel, !!allergyFreeTextLabel].filter(
+			Boolean
+		).length
 	);
+	// Code conflict and free text are both allergy warnings — they share one title and placeholder
+	const hasAllergyWarning = $derived(!!allergenConflictLabel || !!allergyFreeTextLabel);
+	const onlyAllergyWarnings = $derived(hasAllergyWarning && !isDuplicate && !menuMismatchLabel);
 	const title = $derived(
 		warningCount > 1
 			? 'แจ้งเตือน: ต้องยืนยันกรณีพิเศษ'
 			: allergenConflictLabel
 				? 'แจ้งเตือน: ผู้รับแพ้อาหารในเมนูนี้'
-				: menuMismatchLabel
-					? 'แจ้งเตือน: เมนูไม่ตรงกลุ่มผู้รับ'
-					: 'แจ้งเตือน: ได้รับอาหารมื้อนี้แล้ว'
+				: allergyFreeTextLabel
+					? 'แจ้งเตือน: ผู้รับมีประวัติแพ้ที่ไม่อยู่ในรายการ'
+					: menuMismatchLabel
+						? 'แจ้งเตือน: เมนูไม่ตรงกลุ่มผู้รับ'
+						: 'แจ้งเตือน: ได้รับอาหารมื้อนี้แล้ว'
 	);
 	const reasonPlaceholder = $derived(
-		warningCount === 1 && allergenConflictLabel
+		onlyAllergyWarnings
 			? 'เช่น ผู้รับยืนยันว่าแพ้เล็กน้อยและจะแยกส่วนที่แพ้ออกเอง, ไม่มีเมนูอื่นเหลือแล้ว...'
 			: 'เช่น มาขอรับแทนสมาชิกในครอบครัวที่ป่วยติดเตียง, อาหารเดิมหกเสียหาย...'
 	);
@@ -155,6 +165,18 @@
 						<strong>{menuName ?? 'เมนูนี้'}</strong> มี
 						<strong class="text-red-800">{allergenConflictLabel}</strong>
 						— <strong>{recipientLabel}</strong> แพ้
+					</p>
+				</div>
+			{/if}
+
+			{#if allergyFreeTextLabel}
+				<div
+					class="rounded-xl border border-amber-200/80 bg-amber-50/60 p-3 text-xs text-amber-950"
+				>
+					<p>
+						<strong>{recipientLabel}</strong> มีประวัติแพ้ (ไม่อยู่ในรายการ):
+						<strong class="text-amber-800">{allergyFreeTextLabel}</strong>
+						— ตรวจกับผู้รับก่อนแจก
 					</p>
 				</div>
 			{/if}
