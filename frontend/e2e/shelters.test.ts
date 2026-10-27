@@ -213,6 +213,7 @@ test.describe('Shelter Form — Create', () => {
 		await page.goto('http://localhost:4173/back-office/shelters/create');
 
 		await expect(page.getByRole('heading', { name: new RegExp(BASIC_INFO_HEADING) })).toBeVisible();
+		await expect(page.getByText('ประเภทอาคาร', { exact: true })).toBeVisible();
 		await page.getByLabel('ชื่อศูนย์พักพิง').fill('ศูนย์พักพิงทดสอบ E2E');
 
 		await sectionNav(page, CAPACITY_HEADING).click();
