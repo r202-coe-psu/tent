@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildApplicantBoard } from './applicant-board';
+import { buildApplicantBoard, historyBreakdown } from './applicant-board';
 import type { JobApplication } from './job-application.schema';
 import type { ShiftAssignment } from './shift-assignment.schema';
 import type { Volunteer } from './volunteer.schema';
@@ -238,5 +238,20 @@ describe('buildApplicantBoard', () => {
 		expect(b.pending[0].applications).toHaveLength(2);
 		expect(b.history).toEqual([]);
 		expect(b.counts).toMatchObject({ people: 1, pending: 2 });
+	});
+});
+
+describe('historyBreakdown', () => {
+	it('splits history rows into approved, declined/cancelled and staff-assigned', () => {
+		const facets = ['confirmed', 'confirmed', 'rejected', 'cancelled', 'staff_assigned'] as const;
+		expect(historyBreakdown(facets.map((facet) => ({ facet })))).toEqual({
+			confirmed: 2,
+			declined: 2,
+			staffAssigned: 1
+		});
+	});
+
+	it('is all zero for an empty history', () => {
+		expect(historyBreakdown([])).toEqual({ confirmed: 0, declined: 0, staffAssigned: 0 });
 	});
 });

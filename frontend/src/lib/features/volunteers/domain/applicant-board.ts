@@ -176,3 +176,20 @@ export function buildApplicantBoard(input: {
 		}
 	};
 }
+
+/** Per-facet totals for the history heading, so its shift count reads as a sum (#849). */
+export function historyBreakdown(history: readonly Pick<ApplicantHistoryEntry, 'facet'>[]): {
+	confirmed: number;
+	declined: number;
+	staffAssigned: number;
+} {
+	let confirmed = 0;
+	let declined = 0;
+	let staffAssigned = 0;
+	for (const entry of history) {
+		if (entry.facet === 'confirmed') confirmed++;
+		else if (entry.facet === 'staff_assigned') staffAssigned++;
+		else declined++;
+	}
+	return { confirmed, declined, staffAssigned };
+}

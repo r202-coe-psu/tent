@@ -28,7 +28,7 @@
 	import JobApplicantRow from './job-applicant-row.svelte';
 	import JobApplicantReviewDialog from './job-applicant-review-dialog.svelte';
 	import StaffAssignmentRow from './staff-assignment-row.svelte';
-	import { buildApplicantBoard } from '../domain/applicant-board';
+	import { buildApplicantBoard, historyBreakdown } from '../domain/applicant-board';
 	import {
 		EMPTY_APPLICANT_FILTERS,
 		filterApplicantBoard,
@@ -120,6 +120,7 @@
 		})
 	);
 	const viewPendingShifts = $derived(view.pending.reduce((n, g) => n + g.applications.length, 0));
+	const viewHistory = $derived(historyBreakdown(view.history));
 
 	function clearFilters() {
 		statusFilter = EMPTY_APPLICANT_FILTERS.status;
@@ -379,13 +380,12 @@
 
 			{#if view.history.length > 0}
 				<div class="mt-6 border-t border-border pt-4">
-					<div class="flex items-center justify-between gap-3">
-						<h4 class="text-xs font-bold text-foreground">
-							ประวัติการพิจารณา ({view.history.length} กะ)
-						</h4>
-						<span class="text-2xs text-muted-foreground"
-							>รวมอนุมัติ ปฏิเสธ ไม่สะดวก และมอบหมายโดยเจ้าหน้าที่</span
-						>
+					<div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+						<h4 class="text-xs font-bold text-foreground">ประวัติ ({view.history.length} กะ)</h4>
+						<span class="text-2xs text-muted-foreground">
+							อนุมัติ {viewHistory.confirmed} · ปฏิเสธ/ยกเลิก {viewHistory.declined} · มอบหมายโดยเจ้าหน้าที่
+							{viewHistory.staffAssigned}
+						</span>
 					</div>
 					<ul class="mt-3 space-y-3">
 						{#each view.history as entry (entry.key)}
