@@ -78,10 +78,10 @@ export const REGISTRY_SHELTERS = [
 		common_areas: {
 			central_kitchen: true,
 			parking_capacity: 50,
-			// CR-139 storage points. Fixed ids so reseeding keeps lot.storage_point_id references valid.
+			// CR-139 storage points, CR-199 `types[]` shape. Fixed ids keep lot.storage_point_id valid on reseed.
 			sub_storage: [
-				{ id: '01JSH001STRG00000000000001', name: 'คลังทั่วไป อาคาร 1', type: 'general' },
-				{ id: '01JSH001STRG00000000000002', name: 'คลังอาหารแห้ง', type: 'food_dry' }
+				{ id: '01JSH001STRG00000000000001', name: 'คลังทั่วไป อาคาร 1', types: ['general'] },
+				{ id: '01JSH001STRG00000000000002', name: 'คลังอาหารแห้ง', types: ['food_dry'] }
 			]
 		},
 		key_personnel: {
@@ -289,7 +289,10 @@ async function deployRegistryDesign(): Promise<void> {
 
 type SeedStoragePoint = { id: string };
 
-/** Keeps storage points added through the shelter form; adds seed points whose id is missing. */
+/**
+ * Keeps storage points added through the shelter form; adds seed points whose id is missing.
+ * A seed point deleted in the form comes back on the next reseed (fixed ids).
+ */
 function mergeSubStorage(
 	current: unknown,
 	seeded: readonly SeedStoragePoint[]
