@@ -8,7 +8,7 @@ from tent_model.public_person import PublicPerson
 from tent_model.public_shelter import PublicShelter
 
 from ...utils.shelter_booking import accepts_pre_registration
-from .schemas import ShelterDetailResponse, ShelterItem, ShelterListResponse, SiteKind
+from .schemas import ShelterDetailResponse, ShelterItem, ShelterListResponse
 
 # Public occupancy triple (CR-112). `occupancy` response key = Forecast.
 # Kitchen/SOP and partner head-counts stay `active`-only (CR-022 / Q48) and
@@ -42,7 +42,7 @@ class ShelterUseCase:
         district: str | None = None,
         subdistrict: str | None = None,
         status: str | None = None,
-        site_kind: SiteKind | None = None,
+        site_kind: str | None = None,
         lat: float | None = None,
         lng: float | None = None,
         radius_km: float | None = None,
