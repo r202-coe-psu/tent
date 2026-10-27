@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { qtyStrCoercePositiveSchema } from '$lib/utils/qty';
+import { isRealCalendarDate } from '$lib/features/operations/server';
 
 /**
  * Redacted back-office donation queue row (T-16) — shared between the
@@ -82,7 +83,14 @@ export const walkInIntakeInputSchema = z.object({
 				unit: z.string().trim().min(1),
 				lot: z
 					.object({
-						expiry: z.string().trim().optional(),
+						expiry: z
+							.string()
+							.trim()
+							.refine(
+								(v) => v === '' || isRealCalendarDate(v),
+								'วันหมดอายุต้องเป็นวันที่จริงในรูปแบบ YYYY-MM-DD'
+							)
+							.optional(),
 						storage_zone: z.string().trim().max(100).optional(),
 						// → shelter sub_storage[].id (draft-shelter-storage-points); kept, not stripped
 						storage_point_id: z.string().trim().min(1).optional()

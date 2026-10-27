@@ -229,6 +229,17 @@ describe('expired lots (FR-A4, AC-A4)', () => {
 		expect(isLotExpired(lot('a'), NOW)).toBe(false);
 	});
 
+	it('a bare-date expiry is usable all of its Bangkok day and expired from midnight (CR-195)', () => {
+		const today = { lot: { expiry: '2026-10-23' }, received_at: '2026-10-01T00:00:00Z' };
+		const morning = Date.parse('2026-10-23T07:30:00+07:00');
+		const nextDay = Date.parse('2026-10-24T00:00:00+07:00');
+		expect(isLotExpired(today, morning)).toBe(false);
+		expect(scoreLot(today, undefined, morning).isExpired).toBe(false);
+		expect(scoreLot(today, undefined, morning).daysLeft).toBeCloseTo(16.5 / 24);
+		expect(isLotExpired(today, nextDay)).toBe(true);
+		expect(scoreLot(today, undefined, nextDay).isExpired).toBe(true);
+	});
+
 	it('ranks an expired lot after every usable lot', () => {
 		const ranked = rankLotsForIssue(
 			[
