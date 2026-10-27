@@ -39,6 +39,8 @@ export interface PendingDonationRow {
 	/** Campaign the booking was made against — tells an automatic approval from a person's (FR-8). */
 	campaign_id?: string | null;
 	declared_at?: string;
+	/** Set on a received donation (#821). */
+	received_at?: string | null;
 	eta?: string;
 	slot?: { date: string; from: string; to: string };
 	delivery_method?: string;

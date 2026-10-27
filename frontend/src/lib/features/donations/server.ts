@@ -11,6 +11,12 @@ export type { PublicDonationDoc, ScanDonationView } from './domain/public-donati
 export { walkInIntakeInputSchema } from './domain/back-office';
 export type { PendingDonationRow } from './domain/back-office';
 export {
+	buildReceivedFindBody,
+	isAllowedDonationStatus,
+	RECEIVED_BOOKMARK_MAX_LENGTH,
+	RECEIVED_PAGE_SIZE
+} from './domain/donation-queue';
+export {
 	createDonationRedirect,
 	donationRedirectInputSchema,
 	isDonationRedirect
