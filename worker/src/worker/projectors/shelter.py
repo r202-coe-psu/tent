@@ -14,7 +14,6 @@ CLOSED_STATUSES = frozenset({"closed"})
 # public plane — unlike `closed`, which stays listed as a closed location
 # (docs/changes/draft-shelter-cancelled-status.md).
 CANCELLED_STATUSES = frozenset({"cancelled"})
-SITE_KINDS = frozenset({"evacuation_center", "host_house"})
 
 
 def resolve_operation_status(doc: dict[str, Any]) -> str | None:
@@ -55,7 +54,9 @@ def map_public_shelter_status(doc: dict[str, Any]) -> str:
 
 def resolve_site_kind(doc: dict[str, Any]) -> str:
     site_kind = doc.get("site_kind")
-    return site_kind if site_kind in SITE_KINDS else "evacuation_center"
+    return (
+        site_kind if isinstance(site_kind, str) and site_kind else "evacuation_center"
+    )
 
 
 def backfill_capacity(doc: dict[str, Any]) -> int:
