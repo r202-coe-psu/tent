@@ -6,6 +6,7 @@ export { default as MealServiceForm } from './ui/meal-service-form.svelte';
 export { default as MealServiceSummary } from './ui/meal-service-summary.svelte';
 export { default as MealSessionList } from './ui/MealSessionList.svelte';
 export { default as YieldReceiptLines } from './ui/yield-receipt-lines.svelte';
+export { CountInputGuard } from './ui/count-input-guard.svelte';
 
 // Domain — meal calculation and requisition
 export {
@@ -58,6 +59,9 @@ export type {
 	YieldReceiptInput,
 	YieldReceiptLineInput
 } from './domain/kitchen-yield-receipt';
+
+// Domain — numeric form input validity
+export { isCount, isPositiveQty } from './domain/count-input';
 
 // Domain — plan vs actual variance
 export {
