@@ -194,6 +194,29 @@ async function fetchAllUserDocs(): Promise<CouchUserDoc[]> {
 	return rows.filter((r) => r.id.startsWith(USER_PREFIX) && r.doc).map((r) => r.doc);
 }
 
+/**
+ * `display_name` per user name for the given names (CR-192 Amendment 2 rank). Names with no
+ * user doc or no display name are left out — callers fall back to the name itself. Returns
+ * nothing else from the user doc.
+ */
+export async function getDisplayNames(names: readonly string[]): Promise<Map<string, string>> {
+	const out = new Map<string, string>();
+	const unique = [...new Set(names)].filter(Boolean);
+	if (unique.length === 0) return out;
+	const res = await adminRaw('/_users/_all_docs?include_docs=true', 'POST', {
+		keys: unique.map((n) => `${USER_PREFIX}${n}`)
+	});
+	if (res.status >= 400) throw serviceErrorFromCouch('read display names', res.status, res.data);
+	const rows = (res.data as { rows?: { doc?: CouchUserDoc | null }[] })?.rows ?? [];
+	for (const row of rows) {
+		const doc = row.doc;
+		if (doc?.name && typeof doc.display_name === 'string' && doc.display_name.trim()) {
+			out.set(doc.name, doc.display_name.trim());
+		}
+	}
+	return out;
+}
+
 async function countAppSystemAdmins(): Promise<number> {
 	const docs = await fetchAllUserDocs();
 	return docs.filter((d) => isAppSystemAdmin(d.roles ?? [])).length;

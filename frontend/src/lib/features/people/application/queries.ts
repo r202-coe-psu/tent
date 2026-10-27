@@ -33,10 +33,12 @@ import type {
 } from '../domain/people';
 import type {
 	FamilyReportInPayload,
+	RegistrationConsent,
 	UnifiedRegistrationChannel,
 	UnifiedRegistrationInput
 } from '../domain/unified-registration';
 import { canCancelHold } from '$lib/auth/roles';
+import { withStationLogWarning } from './station-log';
 import { authStore } from '$lib/stores/auth.svelte';
 import { extractScanLookupToken, toCouchEvacueeId } from '../domain/scan-lookup';
 
@@ -215,7 +217,9 @@ export const useCheckInEvacuee = () => {
 	const qc = useQueryClient();
 	return createMutation(() => ({
 		mutationFn: ({ evacuee, ctx, zone }: { evacuee: Evacuee; ctx: AuthorContext; zone: string }) =>
-			peopleRepository().checkInEvacuee(evacuee, ctx, zone),
+			withStationLogWarning((stationLog) =>
+				peopleRepository().checkInEvacuee(evacuee, ctx, zone, stationLog)
+			),
 		// onSettled: the evacuee doc may be saved even when the household refresh then 409s
 		onSettled: (_updated, _err, { evacuee }) => {
 			qc.invalidateQueries({ queryKey: [...peopleKeys.all, 'evacuees'] });
@@ -445,13 +449,30 @@ export const useCreateFamilyRegistration = () => {
 			input,
 			ctx,
 			channel = 'onsite',
-			ids
+			ids,
+			consent = null,
+			stationStartedAt
 		}: {
 			input: UnifiedRegistrationInput;
 			ctx: AuthorContext;
 			channel?: UnifiedRegistrationChannel;
 			ids?: UlidReservation;
-		}) => peopleRepository().createFamilyRegistration(input, ctx, channel, ids),
+			consent?: RegistrationConsent | null;
+			/** Station 1 walk-in form-open time (ISO) — turns on the station_log start + complete. */
+			stationStartedAt?: string;
+		}) =>
+			withStationLogWarning(
+				(stationLog) =>
+					peopleRepository().createFamilyRegistration(
+						input,
+						ctx,
+						channel,
+						ids,
+						consent,
+						stationLog
+					),
+				{ startedAt: stationStartedAt }
+			),
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: peopleKeys.evacuees() });
 			queryClient.invalidateQueries({ queryKey: peopleKeys.households() });
@@ -464,8 +485,17 @@ export const useCreateFamilyRegistration = () => {
 export const useSubmitFamilyReportIn = () => {
 	const queryClient = useQueryClient();
 	return createMutation(() => ({
-		mutationFn: (payload: FamilyReportInPayload) =>
-			peopleRepository().submitFamilyReportIn(payload),
+		mutationFn: ({
+			stationStartedAt,
+			...payload
+		}: FamilyReportInPayload & {
+			/** Station 1 report-in form-open time (ISO) — turns on the station_log start + complete. */
+			stationStartedAt?: string;
+		}) =>
+			withStationLogWarning(
+				(stationLog) => peopleRepository().submitFamilyReportIn(payload, stationLog),
+				{ startedAt: stationStartedAt }
+			),
 		onSuccess: (result) => {
 			queryClient.invalidateQueries({ queryKey: peopleKeys.evacuees() });
 			queryClient.invalidateQueries({ queryKey: peopleKeys.households() });
@@ -580,7 +610,10 @@ export const useRecordMedicalScreening = () => {
 				special_needs?: string[];
 			};
 			ctx: AuthorContext;
-		}) => peopleRepository().recordMedicalScreening(input, ctx),
+		}) =>
+			withStationLogWarning((stationLog) =>
+				peopleRepository().recordMedicalScreening(input, ctx, stationLog)
+			),
 		onSuccess: (_data, variables) => {
 			queryClient.invalidateQueries({ queryKey: [...peopleKeys.all, 'pending-screening'] });
 			queryClient.invalidateQueries({ queryKey: ['pendingScreening'] });

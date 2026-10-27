@@ -239,7 +239,28 @@ export interface DonationItem {
 	category?: string;
 	condition?: string;
 	note?: string;
+	/**
+	 * Per-line review (CR-174 FR-1 · schema_v 7): a line the shelter asked for in its
+	 * campaign is `approved` at booking time, a typed-in one waits as `pending`. Absent on
+	 * docs before schema_v 7 — those are reviewed as a whole, by `status`.
+	 */
+	review_status?: 'approved' | 'pending' | 'rejected';
+	review_reason_code?: string | null;
+	review_reason?: string | null;
+	/**
+	 * What the campaign counter holds for this line's item (CR-080) — stamped by FastAPI
+	 * only when the counter really took it, so it is also how an automatic approval
+	 * (FR-2) is told from a person's (FR-8).
+	 */
+	reserved_qty?: string;
 }
+
+/**
+ * `schema_v` every donation writer stamps — the walk-in factory here, the donor edit
+ * route, and `worker/inbound/donations.py`. 7 = CR-174 `items[].review_status`
+ * (6 CR-172 `reject_reason`, 5 CR-087 `redirect_to_shelter_code`, 4 CR-080 `revisions[]`).
+ */
+export const DONATION_SCHEMA_V = 7;
 
 export interface Donor {
 	name: string;
@@ -293,8 +314,18 @@ export interface Donation extends BaseDoc {
 			free_text?: string;
 			qty: string;
 			unit?: string;
+			/** Staff turned this line away at the counter — no ledger row, qty `'0'` (CR-172 FR-10). */
+			rejected?: boolean;
+			reject_reason?: string;
+			reject_reason_code?: string;
 		}>;
 	} | null;
+	/**
+	 * Why the booking was turned away, as the donor reads it on the tracking page.
+	 * Written only with `status: 'rejected'` (CR-172 FR-1, FR-2 · schema_v 6).
+	 */
+	reject_reason?: string | null;
+	reject_reason_code?: string | null;
 	/**
 	 * Destination shelter this request was handed to (CR-087). Set
 	 * only alongside `status: 'redirected'`; the ticket the destination actually
@@ -560,7 +591,27 @@ function stockLedgerInputSchemaWith(
 }
 
 export const stockLedgerInputSchema = stockLedgerInputSchemaWith(checkRefId);
-export type StockLedgerInput = z.input<typeof stockLedgerInputSchema>;
+type StockLedgerInputBase = Omit<
+	z.input<typeof stockLedgerInputBaseSchema>,
+	'reason' | 'adjust_reason' | 'note'
+>;
+
+/**
+ * Compile-time mirror of CR-143 FR-C1/C2, discriminated on `reason`: an adjust row must
+ * carry `adjust_reason` (`note` optional), every other row must carry neither. The Zod
+ * `superRefine` above stays as the runtime guard for data that never passed through TypeScript.
+ */
+export type StockLedgerInput =
+	| (StockLedgerInputBase & {
+			reason: 'adjust';
+			adjust_reason: AdjustReason;
+			note?: string;
+	  })
+	| (StockLedgerInputBase & {
+			reason: Exclude<LedgerReason, 'adjust'>;
+			adjust_reason?: never;
+			note?: never;
+	  });
 
 const legacyFlow2StockLedgerInputSchema = stockLedgerInputSchemaWith(checkLegacyFlow2RefId);
 
@@ -734,24 +785,21 @@ export function createReceiveEntry(
 	id?: string
 ): StockLedger {
 	const d = receiveInputSchema.parse(input);
-	return createStockLedger(
-		{
-			item_id: d.item_id,
-			qty: d.qty,
-			unit: d.unit,
-			reason: REASON_BY_RECEIVE_SOURCE[d.source],
-			ref_id: d.ref_id,
-			// A hand-keyed receipt is booked as an adjust (CR-143 §C needs a reason on those):
-			// stock that turned up, so `found` (CR-156 FR-C7); the form offers no picker (FR-C8).
-			...(REASON_BY_RECEIVE_SOURCE[d.source] === 'adjust'
-				? { adjust_reason: 'found' as const }
-				: {}),
-			lot: d.lot,
-			occurred_at: d.occurred_at
-		},
-		ctx,
-		id
-	);
+	const common = {
+		item_id: d.item_id,
+		qty: d.qty,
+		unit: d.unit,
+		ref_id: d.ref_id,
+		lot: d.lot,
+		occurred_at: d.occurred_at
+	};
+	const reason = REASON_BY_RECEIVE_SOURCE[d.source];
+	// A hand-keyed receipt is booked as an adjust (CR-143 §C needs a reason on those):
+	// stock that turned up, so `found` (CR-156 FR-C7); the form offers no picker (FR-C8).
+	if (reason === 'adjust') {
+		return createStockLedger({ ...common, reason, adjust_reason: 'found' }, ctx, id);
+	}
+	return createStockLedger({ ...common, reason }, ctx, id);
 }
 
 export const distributeInputSchema = z.object({
@@ -837,9 +885,26 @@ export const adjustInputSchema = z
 		adjust_reason: manualAdjustReasonSchema,
 		note: z.string().trim().max(ADJUST_NOTE_MAX_LENGTH).optional(),
 		lot: stockLotSchema.optional(),
+		/**
+		 * The physical lot a write-off comes out of (#569). Only on a negative adjust: a
+		 * positive row always becomes a new lot of its own (see `createStockLedger`).
+		 */
+		lot_ref: z
+			.string()
+			.regex(/^stock_ledger:.+/, 'lot_ref must reference an inbound stock ledger')
+			.optional(),
 		occurred_at: z.string().optional()
 	})
-	.superRefine((d, ctx) => checkOtherNote(d.adjust_reason, d.note, ctx));
+	.superRefine((d, ctx) => {
+		checkOtherNote(d.adjust_reason, d.note, ctx);
+		if (d.lot_ref && !qtyGt('0', persistQty(d.qty))) {
+			ctx.addIssue({
+				code: 'custom',
+				path: ['lot_ref'],
+				message: 'lot_ref is only for a negative adjustment; added stock becomes a new lot'
+			});
+		}
+	});
 export type AdjustInput = z.input<typeof adjustInputSchema>;
 
 /** `id` pins the row's `_id` (see {@link createStockLedger}) — the cycle count derives it per lot. */
@@ -859,6 +924,7 @@ export function createAdjustEntry(
 			adjust_reason: d.adjust_reason,
 			note: d.note,
 			lot: d.lot,
+			...(d.lot_ref ? { lot_ref: d.lot_ref } : {}),
 			occurred_at: d.occurred_at
 		},
 		ctx,
@@ -1004,6 +1070,97 @@ export function projectStockLotBalances(ledger: readonly StockLedger[]): StockLo
 	return [...balances.values()].sort((a, b) => a.lot_ref.localeCompare(b.lot_ref));
 }
 
+/**
+ * Per-lot balances of every item, from the same projection the stock table uses (#569):
+ * `lot_ref` rows hit their own lot, older outbound rows are replayed in the legacy order.
+ *
+ * Projected one item at a time — lots never cross items, so the result is the same as one
+ * whole-ledger pass, but one item with an impossible history only drops that item, named in
+ * `brokenItemIds`, instead of the whole page or count.
+ */
+export function projectLotsByItem(ledger: readonly StockLedger[]): {
+	lots: StockLotBalance[];
+	brokenItemIds: string[];
+} {
+	const byItem = new Map<string, StockLedger[]>();
+	for (const entry of ledger) {
+		const rows = byItem.get(entry.item_id);
+		if (rows) rows.push(entry);
+		else byItem.set(entry.item_id, [entry]);
+	}
+	const lots: StockLotBalance[] = [];
+	const brokenItemIds: string[] = [];
+	for (const [itemId, rows] of byItem) {
+		try {
+			lots.push(...projectStockLotBalances(rows));
+		} catch (error) {
+			if (!(error instanceof StockLotIntegrityError)) throw error;
+			brokenItemIds.push(itemId);
+		}
+	}
+	return { lots, brokenItemIds };
+}
+
+/**
+ * A write-off that names its lot must fit in that lot (#569): an adjust or a count shortfall
+ * carrying `lot_ref` is replayed against that one lot, so checking it against the item's total
+ * would let it overdraw the lot and leave the item's history impossible to replay — for good,
+ * the ledger being append-only. `entries` are the rows about to be written; rows without a
+ * `lot_ref`, or adding stock, are not checked here. Several rows on one lot are summed.
+ */
+export function assertLotWriteOffsFit(
+	ledger: readonly StockLedger[],
+	entries: readonly Pick<StockLedger, 'item_id' | 'unit' | 'qty' | 'lot_ref'>[]
+): void {
+	const wanted = new Map<string, { item_id: string; unit: string; qty: string }>();
+	for (const entry of entries) {
+		if (!entry.lot_ref || !qtyGt('0', entry.qty)) continue;
+		const prior = wanted.get(entry.lot_ref);
+		if (prior && (prior.item_id !== entry.item_id || prior.unit !== entry.unit)) {
+			throw new LotWriteOffError(`ล็อต ${entry.lot_ref} ถูกอ้างด้วยสินค้าหรือหน่วยต่างกัน`);
+		}
+		wanted.set(entry.lot_ref, {
+			item_id: entry.item_id,
+			unit: entry.unit,
+			qty: addQty(prior?.qty ?? '0', qtyAbs(entry.qty))
+		});
+	}
+	if (wanted.size === 0) return;
+
+	const itemIds = new Set([...wanted.values()].map((w) => w.item_id));
+	let projected: StockLotBalance[];
+	try {
+		projected = projectStockLotBalances(ledger.filter((row) => itemIds.has(row.item_id)));
+	} catch (error) {
+		if (!(error instanceof StockLotIntegrityError)) throw error;
+		throw new LotWriteOffError(
+			'ประวัติคลังของสินค้านี้คำนวณยอดรายล็อตไม่ได้ — กรุณาแจ้งผู้ดูแลระบบ'
+		);
+	}
+	const lots = new Map(projected.map((lot) => [lot.lot_ref, lot]));
+	for (const [lotRef, want] of wanted) {
+		const lot = lots.get(lotRef);
+		if (!lot || lot.item_id !== want.item_id || lot.unit !== want.unit) {
+			throw new LotWriteOffError(
+				'ไม่พบล็อตที่เลือกในคลังของสินค้านี้แล้ว — ข้อมูลอาจเปลี่ยนไป กรุณาโหลดใหม่แล้วเลือกล็อตอีกครั้ง'
+			);
+		}
+		if (!qtyGte(lot.qty, want.qty)) {
+			throw new LotWriteOffError(
+				`ล็อตที่เลือกคงเหลือ ${persistQty(lot.qty)} ${lot.unit} ไม่พอตัด ${want.qty} ${want.unit} — ยอดอาจเปลี่ยนไปแล้ว กรุณาโหลดใหม่`
+			);
+		}
+	}
+}
+
+/** A lot-bound write-off that does not fit its lot (`assertLotWriteOffsFit`). */
+export class LotWriteOffError extends Error {
+	constructor(message: string) {
+		super(message);
+		this.name = 'LotWriteOffError';
+	}
+}
+
 // ---------------------------------------------------------------- donation
 
 const donationItemSchema = z
@@ -1051,10 +1208,9 @@ export function createWalkInDonation(input: WalkInDonationInput, ctx: AuthorCont
 	).toISOString();
 	return makeDoc(
 		'donation',
-		// 5 since CR-087 added redirect_to_shelter_code (4 was CR-080's revisions[]). A
-		// walk-in has neither yet, but the version has to say which shape a reader should
-		// expect — and the public writer (worker/inbound/donations.py) stamps the same.
-		5,
+		// A walk-in has none of the later fields yet, but the version has to say which
+		// shape a reader should expect — and the public writer stamps the same.
+		DONATION_SCHEMA_V,
 		{
 			channel: 'walk_in' as const,
 			donor: d.donor,
@@ -1095,7 +1251,9 @@ const DONATION_TRANSITIONS: Record<DonationStatus, DonationStatus[]> = {
 	//     already writes this for every outstanding status (`quota/expiry.py`,
 	//     `EXPIRABLE_STATUSES`), so leaving it out here made the two implementations
 	//     disagree about a transition that happens nightly.
-	verifying: ['received', 'redirected', 'rejected', 'expired', 'cancelled'],
+	//   · `pending_review` — the donor edits a booking that already has its QR and adds
+	//     a line that needs review (CR-174 FR-21): the QR waits until staff decide.
+	verifying: ['received', 'pending_review', 'redirected', 'rejected', 'expired', 'cancelled'],
 	received: [],
 	redirected: [],
 	rejected: [],
@@ -1677,6 +1835,18 @@ export const isTransferDestination = (d: unknown): d is TransferDestination =>
 	typeof d === 'object' &&
 	typeof (d as { code?: unknown }).code === 'string' &&
 	typeof (d as { name?: unknown }).name === 'string';
+
+/**
+ * The transfer API refused this account (HTTP 403) — the tab must say so rather than show an
+ * empty list (#571). Carries no `status` on purpose: the app's query client treats an error
+ * with `status` 401/403 as a session problem, and this is a permission answer, not an expiry.
+ */
+export class TransferForbiddenError extends Error {
+	constructor(message = 'Not allowed to read transfers') {
+		super(message);
+		this.name = 'TransferForbiddenError';
+	}
+}
 
 /**
  * Determines the donation cut-off status (T-22 Cut-off Rule).
