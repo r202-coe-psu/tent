@@ -145,10 +145,27 @@ export {
 	type MasterHousingItem
 } from './domain/housing-type-ui';
 
+export { startStaffStationVisit } from './application/station-log';
+
+export {
+	STATION_LOG_STALE_WINDOW_MS,
+	STATION_LOG_WRITE_WARNING,
+	STATION_NUMBERS,
+	createStationLog,
+	hasOpenStationStart,
+	stationLogInputSchema,
+	type StationLog,
+	type StationLogInput,
+	type StationLogAction,
+	type StationLogChannel,
+	type StationNumber
+} from './domain/station-log';
+
 export {
 	nextQueueLabel,
 	classifyZoningQueueTab,
 	classifyScreeningQueueTab,
+	countStationQueues,
 	nextScreeningQueueEvacuee,
 	recommendZoneKind,
 	pickRecommendedZone,
@@ -163,6 +180,7 @@ export {
 	sortByZoningQueueSince,
 	formatQueueWait,
 	type NextQueueLabel,
+	type StationQueueCounts,
 	type ZoningQueueTab,
 	type ScreeningQueueTab,
 	type ZoningRecommendKind,
@@ -258,7 +276,9 @@ export {
 	type FamilyRegistrationPlan,
 	type FamilyRegistrationMode,
 	type FamilyReportInPayload,
-	type MemberPhotoUploadMode
+	type MemberPhotoUploadMode,
+	type RegistrationConsent,
+	type RegistrationConsentConfig
 } from './domain/unified-registration';
 
 export {
@@ -355,6 +375,7 @@ export { default as HouseholdForm } from './ui/household-form/household-form.sve
 export { default as HouseholdFormPage } from './ui/household-form/household-form-page.svelte';
 export { default as HouseholdPostArrival } from './ui/household-flows/household-post-arrival.svelte';
 export { default as EvacueeWristbandSuccess } from './ui/registration/evacuee-wristband-success.svelte';
+export { default as RegistrationConsentResult } from './ui/registration/registration-consent-result.svelte';
 export {
 	default as FamilyBatchPrint,
 	type IntakeNextStation

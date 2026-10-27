@@ -6,8 +6,9 @@ import {
 	rolesFromAssignments,
 	shelterScopeRole
 } from '$lib/auth/roles';
-import { createUser, listUsers } from '$lib/features/users';
+import { contactPhoneSchema, createUser, listUsers, phoneSchema } from '$lib/features/users';
 import { volunteerRepositoryFor } from '../data/volunteer.remote';
+import { normalizePhone } from '../domain/phone';
 import type { Volunteer } from '../domain/volunteer.schema';
 
 export const volunteerAccessSchema = z.object({
@@ -16,15 +17,40 @@ export const volunteerAccessSchema = z.object({
 	role: z.enum(STAFF_CAPABILITIES)
 });
 
+/**
+ * The volunteer's phone as the account sees it (users `contactPhoneSchema` / `phoneSchema`):
+ * `contact` is stored on the account (mobile or 9-digit landline); only a mobile is also a
+ * `login` phone, so only a mobile may serve as the forced first-login password.
+ */
+export function accountPhones(value: string | null | undefined): {
+	contact: string | null;
+	login: string | null;
+} {
+	const normalized = normalizePhone(value ?? '');
+	return {
+		contact: contactPhoneSchema.safeParse(normalized).success ? normalized : null,
+		login: phoneSchema.safeParse(normalized).success ? normalized : null
+	};
+}
+
+/** First reason `password` fails the account policy (user form rules), else `null`. */
+export function volunteerPasswordError(password: string, loginPhone: string | null): string | null {
+	const value = password.trim();
+	if (loginPhone !== null && value === loginPhone) return null;
+	const result = passwordSchema.safeParse(value);
+	return result.success ? null : (result.error.issues[0]?.message ?? 'รหัสผ่านไม่ถูกต้อง');
+}
+
 /** Create credentials first, then link the latest profile; an exact existing link is retryable. */
 export async function grantVolunteerAccess(
 	volunteer: Volunteer,
 	input: z.infer<typeof volunteerAccessSchema>
 ): Promise<{ created: boolean }> {
 	const { email, password, role } = volunteerAccessSchema.parse(input);
-	const isPhoneBootstrapPassword =
-		password === (volunteer.phone?.trim() ?? '') && /^0\d{9}$/.test(password);
-	if (!isPhoneBootstrapPassword) passwordSchema.parse(password);
+	const loginPhone = accountPhones(volunteer.phone).login;
+	const isPhoneBootstrapPassword = loginPhone !== null && password === loginPhone;
+	const passwordError = volunteerPasswordError(password, loginPhone);
+	if (passwordError) throw new Error(passwordError);
 	const repository = volunteerRepositoryFor(volunteer.shelter_code);
 	const profile = await repository.get(volunteer._id);
 	if (!profile) throw new Error('ไม่พบข้อมูลอาสาสมัคร กรุณาโหลดข้อมูลใหม่');
@@ -68,7 +94,7 @@ export async function grantVolunteerAccess(
 			roles: rolesFromAssignments([{ shelter_code: volunteer.shelter_code, capabilities: [role] }]),
 			personnel_type: 'volunteer',
 			organization: profile.organization ?? null,
-			phone: profile.phone,
+			phone: accountPhones(profile.phone).contact,
 			email,
 			volunteer_id: volunteer._id,
 			must_change_password: isPhoneBootstrapPassword

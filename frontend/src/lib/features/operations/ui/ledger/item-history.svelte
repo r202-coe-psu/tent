@@ -9,7 +9,8 @@
 	import ArrowUpRight from '@lucide/svelte/icons/arrow-up-right';
 	import { qtyGt } from '$lib/utils/qty';
 	import { formatThaiDateTime, formatThaiShortDate } from '$lib/utils/date';
-	import { ADJUST_REASON_LABELS, REASON_LABELS } from './ledger-view';
+	import { resolve } from '$app/paths';
+	import { ADJUST_REASON_LABELS, REASON_LABELS, ledgerRefHref } from './ledger-view';
 	import { resolveAdjustReason } from '../../domain/operations';
 	import { lotStorageName } from '../../domain/lot-storage';
 	import { useStoragePoints } from '../../application/use-storage-points.svelte';
@@ -150,7 +151,14 @@
 												⌛ หมดอายุ: {formatThaiShortDate(entry.lot.expiry)}
 											</span>
 										{/if}
-										{#if entry.ref_id}
+										{#if entry.ref_id && ledgerRefHref(entry.ref_id)}
+											<a
+												href={resolve(ledgerRefHref(entry.ref_id) as '/')}
+												title="เปิดกองรับคืน"
+												class="w-fit rounded border border-border/80 bg-muted/80 px-1.5 py-0.5 font-mono text-2xs text-foreground/80 underline underline-offset-2"
+												>Ref: {entry.ref_id}</a
+											>
+										{:else if entry.ref_id}
 											<span
 												class="w-fit rounded border border-border/80 bg-muted/80 px-1.5 py-0.5 font-mono text-2xs text-foreground/80"
 												>Ref: {entry.ref_id}</span

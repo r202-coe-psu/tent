@@ -9,6 +9,7 @@ import {
 	KioskRegistrationBlockedError,
 	KioskPhotoValidationError,
 	decodeKioskPhoto,
+	isStaleKioskConsent,
 	kioskWalkInRegistrationInputSchema,
 	registerKioskThaidWalkIn,
 	registerKioskWalkIn
@@ -52,6 +53,17 @@ export const POST: RequestHandler = async ({ request }) => {
 		);
 		const body = await request.json().catch(() => null);
 		const parsed = kioskWalkInRegistrationInputSchema.safeParse(body);
+		if (!parsed.success && isStaleKioskConsent(body)) {
+			return json(
+				{
+					error: {
+						code: 'KIOSK_CONSENT_EXPIRED',
+						message: 'การยินยอมหมดเวลาแล้ว กรุณากดยินยอมอีกครั้ง'
+					}
+				},
+				{ status: 400, headers: noStoreHeaders }
+			);
+		}
 		if (!parsed.success) {
 			return json(
 				{
@@ -116,7 +128,13 @@ export const POST: RequestHandler = async ({ request }) => {
 			const citizen = consumeKioskSession(input.session_id, principal.registry_id);
 			if (!citizen) return thaidSessionInvalid();
 			try {
-				evacuee = await registerKioskThaidWalkIn(device, citizen, input.consented_at, input.phone);
+				evacuee = await registerKioskThaidWalkIn(
+					device,
+					citizen,
+					input.consent,
+					input.phone,
+					input.started_at
+				);
 			} catch (error) {
 				// Nothing was written: give the scan back so the kiosk can retry. A record that already
 				// exists will not go away, so that session stays used.
@@ -132,8 +150,9 @@ export const POST: RequestHandler = async ({ request }) => {
 				principal.station_name,
 				input.card,
 				input.photo,
-				input.consented_at,
-				input.phone
+				input.consent,
+				input.phone,
+				input.started_at
 			);
 		}
 		await scannerServerRepository.updateDeviceLastSeen(principal.registry_id).catch(() => {});
@@ -143,7 +162,9 @@ export const POST: RequestHandler = async ({ request }) => {
 				status: 'created',
 				evacuee_id: evacuee._id,
 				qr_payload: evacuee._id,
-				label: toLabelIdentity(evacuee)
+				label: toLabelIdentity(evacuee),
+				consent_ref: evacuee.consent.ref,
+				consent_mode: evacuee.consent.mode
 			},
 			{ headers: noStoreHeaders }
 		);

@@ -194,6 +194,29 @@ async function fetchAllUserDocs(): Promise<CouchUserDoc[]> {
 	return rows.filter((r) => r.id.startsWith(USER_PREFIX) && r.doc).map((r) => r.doc);
 }
 
+/**
+ * `display_name` per user name for the given names (CR-192 Amendment 2 rank). Names with no
+ * user doc or no display name are left out — callers fall back to the name itself. Returns
+ * nothing else from the user doc.
+ */
+export async function getDisplayNames(names: readonly string[]): Promise<Map<string, string>> {
+	const out = new Map<string, string>();
+	const unique = [...new Set(names)].filter(Boolean);
+	if (unique.length === 0) return out;
+	const res = await adminRaw('/_users/_all_docs?include_docs=true', 'POST', {
+		keys: unique.map((n) => `${USER_PREFIX}${n}`)
+	});
+	if (res.status >= 400) throw serviceErrorFromCouch('read display names', res.status, res.data);
+	const rows = (res.data as { rows?: { doc?: CouchUserDoc | null }[] })?.rows ?? [];
+	for (const row of rows) {
+		const doc = row.doc;
+		if (doc?.name && typeof doc.display_name === 'string' && doc.display_name.trim()) {
+			out.set(doc.name, doc.display_name.trim());
+		}
+	}
+	return out;
+}
+
 async function countAppSystemAdmins(): Promise<number> {
 	const docs = await fetchAllUserDocs();
 	return docs.filter((d) => isAppSystemAdmin(d.roles ?? [])).length;
@@ -220,6 +243,8 @@ async function readUserDoc(name: string, action: string): Promise<CouchUserDoc> 
 }
 
 const PHONE_LOGIN_RE = /^0\d{9}$/;
+/** A mobile (10 digits) or a landline (9 digits) — users `contactPhoneSchema`. */
+const CONTACT_PHONE_RE = /^0\d{8,9}$/;
 
 function normalizePhone(value: string | null | undefined): string | null {
 	if (value == null) return null;
@@ -228,8 +253,9 @@ function normalizePhone(value: string | null | undefined): string | null {
 }
 
 /**
- * When phone is set it must be unique across `_users.phone` and must not collide
- * with another account's CouchDB `name` (so alternate login stays unambiguous).
+ * A set phone must be a mobile or a landline. A mobile signs in (`resolveLoginName`), so it must
+ * be unique across `_users.phone` and must not collide with another account's CouchDB `name`.
+ * A landline is contact-only and may be shared (one household number for several volunteers).
  */
 async function assertPhoneAvailable(
 	phone: string | null,
@@ -237,9 +263,10 @@ async function assertPhoneAvailable(
 ): Promise<string | null> {
 	const normalized = normalizePhone(phone);
 	if (!normalized) return null;
-	if (!PHONE_LOGIN_RE.test(normalized)) {
-		throw new ServiceError('VALIDATION', 'เบอร์โทรศัพท์ต้องเป็นตัวเลข 10 หลักขึ้นต้นด้วย 0');
+	if (!CONTACT_PHONE_RE.test(normalized)) {
+		throw new ServiceError('VALIDATION', 'เบอร์โทรศัพท์ต้องเป็นตัวเลข 9–10 หลักขึ้นต้นด้วย 0');
 	}
+	if (!PHONE_LOGIN_RE.test(normalized)) return normalized;
 
 	const docs = await fetchAllUserDocs();
 	for (const doc of docs) {

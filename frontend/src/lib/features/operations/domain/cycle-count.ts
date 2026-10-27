@@ -1,4 +1,4 @@
-import { addQty, qtyGt, subQty, qtyIsZero } from '$lib/utils/qty';
+import { qtyGt, subQty, qtyIsZero, persistQty } from '$lib/utils/qty';
 import type { AuthorContext } from '$lib/db/model';
 import { deriveDeterministicLedgerId } from './deterministic-ledger-id';
 import {
@@ -10,6 +10,7 @@ import {
 import {
 	ADJUST_NOTE_MAX_LENGTH,
 	createAdjustEntry,
+	projectLotsByItem,
 	type StockLedger,
 	type StockLot
 } from './operations';
@@ -27,14 +28,18 @@ const CYCLE_COUNT_NAMESPACE = 'cycle_count';
 
 /** A lot as it stood when the count started: what the counter compares the shelf against. */
 export interface CycleCountLot {
-	/** Stable identity inside one count: storage group + expiry. */
+	/** Stable identity inside one count: the physical lot's `lot_ref`. */
 	lot_key: string;
+	/** The physical lot (its inbound row's `_id`) — a short count is written against it. */
+	lot_ref: string;
 	item_id: string;
 	unit: string;
 	/** Storage group key ({@link lotStorageKey}); `''` = unspecified / main store. */
 	storage_key: string;
-	/** Location + expiry exactly as the lot's rows carry them, so the adjust lands in the same lot. */
+	/** Location + expiry of the lot's inbound row, carried onto a surplus so it lands beside it. */
 	lot: StockLot;
+	/** When the lot came in — tells apart two lots of one item at the same place and expiry. */
+	received_at: string;
 	/** System balance at the moment the count started (frozen for the whole walk). */
 	system_qty: string;
 }
@@ -52,38 +57,32 @@ export interface StorageGroup {
 	lots: CycleCountLot[];
 }
 
-/** Identity of a lot inside a count — same grouping the adjust form uses. */
-export function cycleCountLotKey(lot: StockLot | null | undefined): string {
-	return `${lotStorageKey(lot)}||${lot?.expiry ?? ''}`;
-}
-
 /**
- * Lots that still hold stock, grouped from the ledger by item + location + expiry.
- * A lot at zero (or below) is not on the shelf, so there is nothing to walk past;
- * stock found where the system has none is recorded through the adjust form (`found`).
+ * Lots that still hold stock — one entry per physical lot, at the balance the stock table
+ * shows (#569). A lot at zero is not on the shelf, so there is nothing to walk past; stock
+ * found where the system has none is recorded through the adjust form (`found`).
  */
-export function buildCycleCountLots(ledger: readonly StockLedger[]): CycleCountLot[] {
-	const lots = new Map<string, CycleCountLot>();
-	for (const entry of ledger) {
-		const key = `${entry.item_id}::${cycleCountLotKey(entry.lot)}`;
-		const current = lots.get(key);
-		if (current) {
-			current.system_qty = addQty(current.system_qty, entry.qty);
-			continue;
-		}
-		lots.set(key, {
-			lot_key: cycleCountLotKey(entry.lot),
-			item_id: entry.item_id,
-			unit: entry.unit,
-			storage_key: lotStorageKey(entry.lot),
+export function buildCycleCountLots(ledger: readonly StockLedger[]): {
+	lots: CycleCountLot[];
+	brokenItemIds: string[];
+} {
+	const { lots: projected, brokenItemIds } = projectLotsByItem(ledger);
+	const lots = projected
+		.filter((lot) => qtyGt(lot.qty, 0))
+		.map((lot) => ({
+			lot_key: lot.lot_ref,
+			lot_ref: lot.lot_ref,
+			item_id: lot.item_id,
+			unit: lot.unit,
+			storage_key: lotStorageKey(lot.lot),
 			lot: {
-				...lotLocationFields(entry.lot),
-				...(entry.lot?.expiry ? { expiry: entry.lot.expiry } : {})
+				...lotLocationFields(lot.lot),
+				...(lot.lot?.expiry ? { expiry: lot.lot.expiry } : {})
 			},
-			system_qty: entry.qty
-		});
-	}
-	return [...lots.values()].filter((l) => qtyGt(l.system_qty, 0));
+			received_at: lot.received_at,
+			system_qty: persistQty(lot.qty)
+		}));
+	return { lots, brokenItemIds };
 }
 
 /** Storage points that hold stock, in the order the counter would walk them (main store first). */
@@ -170,6 +169,8 @@ export function summarizeCycleCount(entries: readonly CycleCountEntry[]): CycleC
 /** One lot that will be written: the signed delta that turns the system qty into the count. */
 export interface CycleCountLine {
 	lot_key: string;
+	/** The counted lot; a short line is written against it (`lot_ref`). */
+	lot_ref: string;
 	item_id: string;
 	unit: string;
 	lot: StockLot;
@@ -197,6 +198,7 @@ export function planCycleCount(
 		if (variance === null || qtyIsZero(variance)) continue;
 		lines.push({
 			lot_key: entry.lot_key,
+			lot_ref: entry.lot_ref,
 			item_id: entry.item_id,
 			unit: entry.unit,
 			lot: entry.lot,
@@ -224,7 +226,14 @@ export function deriveCycleCountLineId(
 	return deriveDeterministicLedgerId(CYCLE_COUNT_NAMESPACE, countId, itemId, lotKey);
 }
 
-/** The `adjust` rows for a plan: `count_mismatch`, ids index-aligned with `submission.lines`. */
+/**
+ * The `adjust` rows for a plan: `count_mismatch`, ids index-aligned with `submission.lines`.
+ *
+ * A short line takes the stock off the counted lot (`lot_ref`) — without it the row would be
+ * replayed against whichever lot comes first and could hit stock already taken (#569). A
+ * surplus is new stock: the ledger makes every positive row its own lot, so it carries the
+ * counted lot's location and expiry instead of its `lot_ref`.
+ */
 export function createCycleCountEntries(
 	submission: CycleCountSubmission,
 	ctx: AuthorContext,
@@ -242,6 +251,7 @@ export function createCycleCountEntries(
 				adjust_reason: 'count_mismatch',
 				...(submission.note ? { note: submission.note } : {}),
 				lot: line.lot,
+				...(qtyGt('0', line.qty) ? { lot_ref: line.lot_ref } : {}),
 				ref_id: null
 			},
 			ctx,

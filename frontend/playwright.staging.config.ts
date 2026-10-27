@@ -50,6 +50,7 @@ export default defineConfig({
 	testDir: './e2e',
 	testMatch: [
 		'back-office-evacuee-management.test.ts',
+		'daily-sop-role-assessment.test.ts',
 		'donation-fullstack-admin.test.ts',
 		'donation-fullstack-race.test.ts',
 		'donation-fullstack.test.ts',

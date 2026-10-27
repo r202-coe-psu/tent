@@ -22,6 +22,8 @@ import {
 	STAFF_SH001_ROLES,
 	SM_SH001_ROLES
 } from './helpers/couch';
+import { acceptFullConsent } from './helpers/consent';
+import { CONSENT_COPY } from '../src/lib/features/consent/domain/consent-notice.i18n';
 import { injectSession, clearSession } from './helpers/login';
 import { mockCouchRoutes, SHELTER_DB } from './helpers/mock-couch';
 
@@ -319,12 +321,39 @@ test.describe('Phase 2 intake pipeline (#252)', { tag: ['@onsite', '@regression'
 			customPet: true
 		});
 
+		await acceptFullConsent(page);
 		await page.getByRole('button', { name: 'บันทึกลงทะเบียนทั้งครอบครัว' }).last().click();
 
 		await expect(page.getByRole('heading', { name: 'ลงทะเบียนสำเร็จ' })).toBeVisible({
 			timeout: 20_000
 		});
 		await expect(page.getByText('2 คน', { exact: true })).toBeVisible();
+	});
+
+	test('walk-in registration without the main consent cannot be saved', async ({ page }) => {
+		await setupPage(page, STAFF, staffSession);
+		await page.goto('/onsite/people/new');
+		await expect(page.getByRole('heading', { name: 'ลงทะเบียนครอบครัว' })).toBeVisible({
+			timeout: 15_000
+		});
+
+		await fillMinimalUnifiedRegistration(page, { firstName: 'พื้นฐาน', lastName: 'ครอบครัว' });
+
+		const mainConsent = page.getByRole('checkbox', { name: CONSENT_COPY.main.short });
+		await expect(mainConsent).not.toBeChecked();
+		await expect(page.getByText(CONSENT_COPY.needMain)).toBeVisible();
+		await expect(
+			page.getByRole('button', { name: 'บันทึกลงทะเบียนทั้งครอบครัว' }).last()
+		).toBeDisabled();
+
+		await page.getByRole('button', { name: CONSENT_COPY.acceptAll }).click();
+		await expect(mainConsent).toBeChecked();
+		await page.getByRole('button', { name: 'บันทึกลงทะเบียนทั้งครอบครัว' }).last().click();
+
+		await expect(page.getByRole('heading', { name: 'ลงทะเบียนสำเร็จ' })).toBeVisible({
+			timeout: 20_000
+		});
+		await expect(page.getByText(CONSENT_COPY.result.title)).toBeVisible();
 	});
 
 	// ── Seam 2: Unassigned Registration claim → Report-in ─────────────────────

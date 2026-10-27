@@ -241,7 +241,7 @@
 				onclick={() => goto(resolve('/back-office/households/new'))}
 			>
 				<Plus class="h-3.5 w-3.5" />
-				จัดกลุ่มผู้ประสบภัยเป็นครัวเรือน
+				จัดกลุ่มผู้เข้าพักเป็นครัวเรือน
 			</Button>
 		</div>
 	</div>

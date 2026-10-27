@@ -22,14 +22,19 @@ import {
 	type Household,
 	type UnifiedRegistrationInput
 } from '$lib/features/people/server';
+import { bindConsent } from '$lib/features/consent/server';
+import { ulid } from '$lib/db/ulid';
+import { makeDocId } from '$lib/db/model';
 import { adminRaw } from '$lib/server/couch-admin';
 import { bulkAsPublicWriter, rollbackAsPublicWriter } from '$lib/server/couch-public-writer';
 import { shelterDbName } from '$lib/server/shelter-access-design';
+import { planPublicConsent, type PublicConsentBody } from './domain/public-consent';
 
 export interface ExecutePublicFamilyRegistrationOptions {
 	shelterCode: string;
 	createdBy?: string;
 	originShelterCode?: string;
+	consent: PublicConsentBody;
 }
 
 export interface PublicFamilyRegistrationResult {
@@ -77,6 +82,21 @@ export async function executePublicFamilyRegistration(
 		createdBy: options.createdBy ?? 'public'
 	};
 	const dbName = shelterDbName(options.shelterCode);
+	const consentPlans = planPublicConsent(options.consent);
+	if (consentPlans.length !== plan.memberInputs.length) {
+		throw new Error('consent does not cover every member');
+	}
+	const memberUlids = plan.memberInputs.map(() => ulid());
+	const registrantId = makeDocId('evacuee', memberUlids[0]);
+	const mintEvacuees = (householdId: string) =>
+		plan.memberInputs.map((memberInput, i) =>
+			createEvacuee(
+				{ ...memberInput, household_id: householdId },
+				ctx,
+				bindConsent(consentPlans[i], registrantId),
+				memberUlids[i]
+			)
+		);
 
 	if (plan.mode === 'join') {
 		const targetId = plan.targetHouseholdId;
@@ -136,9 +156,7 @@ export async function executePublicFamilyRegistration(
 			);
 		}
 
-		const evacuees = plan.memberInputs.map((memberInput) =>
-			createEvacuee({ ...memberInput, household_id: effectiveTargetId }, ctx)
-		);
+		const evacuees = mintEvacuees(effectiveTargetId);
 		if (evacuees.length === 0) {
 			throw new Error('ต้องมีสมาชิกอย่างน้อย 1 คน');
 		}
@@ -194,9 +212,7 @@ export async function executePublicFamilyRegistration(
 
 	// 1. Mint household and evacuees in memory using pure domain factories
 	const household = createHousehold(plan.householdInput, ctx);
-	const evacuees = plan.memberInputs.map((memberInput) =>
-		createEvacuee({ ...memberInput, household_id: household._id }, ctx)
-	);
+	const evacuees = mintEvacuees(household._id);
 
 	if (evacuees.length === 0) {
 		throw new Error('ต้องมีสมาชิกอย่างน้อย 1 คน');

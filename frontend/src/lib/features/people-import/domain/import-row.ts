@@ -20,6 +20,7 @@ import {
 	type EnumChoice
 } from './columns';
 import { findInFileDuplicates, personDuplicateKey } from './duplicates';
+import { resolveMasterCode, type MasterLabelFields } from '$lib/features/master-data/domain';
 
 /**
  * Pure mapping + validation for one workbook entry → a household create payload
@@ -103,6 +104,8 @@ export interface RowValidation {
 	/** present when `ok` — the parsed, ready-to-write payload. */
 	payload?: HouseholdImportPayload;
 	errors: RowFieldError[];
+	/** Non-blocking notes, e.g. values kept as free text (CR-186 FR-9). */
+	warnings: RowFieldError[];
 }
 
 /** label → code map + the set of valid codes, for one master_data list. */
@@ -111,7 +114,13 @@ export interface MasterLookup {
 	codes: Set<string>;
 }
 
-export type Lookups = Record<string, MasterLookup>;
+/**
+ * Active master items behind master-backed free-text columns, keyed by column
+ * path (CR-186). Missing or empty → values are stored as typed, no warning.
+ */
+export interface Lookups {
+	medical_conditions?: readonly MasterLabelFields[];
+}
 
 /** Build a {@link MasterLookup} from a master_data items array. Pure. */
 export function buildMasterLookup(items: readonly { code: string; label: string }[]): MasterLookup {
@@ -328,7 +337,36 @@ function resolveVehicles(raw: RawRow, sink: ErrorSink) {
  * 10-digit phone once the object exists, so a partially filled contact is
  * reported here rather than silently dropped.
  */
-function readPerson(raw: RawRow, sink: ErrorSink): EvacueeInput {
+/**
+ * Map a multi-value cell onto master codes (CR-186 FR-9): a value matching an
+ * active item's code or label becomes its code; the rest stay free text and are
+ * reported through `warn` (non-blocking). Duplicates after mapping are dropped.
+ */
+function resolveMasterValues(
+	values: readonly string[],
+	items: readonly MasterLabelFields[] | undefined,
+	header: string,
+	warn: ErrorSink
+): string[] {
+	if (!items?.length) return [...values];
+	const resolved: string[] = [];
+	const freeText: string[] = [];
+	for (const value of values) {
+		const token = resolveMasterCode(value, items);
+		if (!token || resolved.includes(token)) continue;
+		resolved.push(token);
+		if (!items.some((i) => i.code === token)) freeText.push(token);
+	}
+	if (freeText.length) {
+		warn.push(
+			header,
+			`${freeText.map((v) => `"${v}"`).join(', ')} ไม่ตรงรายการ — จะเก็บเป็นข้อความ`
+		);
+	}
+	return resolved;
+}
+
+function readPerson(raw: RawRow, sink: ErrorSink, lookups: Lookups, warn: ErrorSink): EvacueeInput {
 	const emergencyName = cell(raw, H.emergency_name);
 	const emergencyPhone = resolvePhone(raw, H.emergency_phone, sink);
 	const emergencyRelation = cell(raw, H.emergency_relation);
@@ -358,7 +396,12 @@ function readPerson(raw: RawRow, sink: ErrorSink): EvacueeInput {
 		country: strOrUndef(cell(raw, H.country)) ?? 'THAILAND',
 		religion: resolveEnum(raw, H.religion, RELIGION_CHOICES, sink) ?? 'buddhist',
 		special_needs: resolveMultiEnum(raw, H.special_needs, SPECIAL_NEED_CHOICES, sink),
-		medical_conditions: splitMulti(cell(raw, H.medical_conditions)),
+		medical_conditions: resolveMasterValues(
+			splitMulti(cell(raw, H.medical_conditions)),
+			lookups.medical_conditions,
+			H.medical_conditions,
+			warn
+		),
 		medical_medications: splitMulti(cell(raw, H.medical_medications)),
 		medical_allergies: splitMulti(cell(raw, H.medical_allergies)),
 		...(cell(raw, H.medical_note) ? { medical_note: cell(raw, H.medical_note) } : {}),
@@ -403,15 +446,22 @@ function fullName(person: EvacueeInput): string {
 
 // ===== members (N:1 sheet) =====
 
-function validateMembers(rows: readonly RawSheetRow[]): {
+function validateMembers(
+	rows: readonly RawSheetRow[],
+	lookups: Lookups
+): {
 	members: MemberPayload[];
 	errors: RowFieldError[];
+	warnings: RowFieldError[];
 } {
 	const members: MemberPayload[] = [];
 	const errors: RowFieldError[] = [];
+	const warnings: RowFieldError[] = [];
 	for (const row of rows) {
 		const sink = createSink(MEMBER_SHEET_NAME, row.line);
-		const person = readPerson(row.cells, sink);
+		const warn = createSink(MEMBER_SHEET_NAME, row.line);
+		const person = readPerson(row.cells, sink, lookups, warn);
+		warnings.push(...warn.errors);
 		const ok = validatePerson(person, sink, MEMBER_PATH_TO_HEADER);
 		if (ok && sink.errors.length === 0) {
 			members.push({ line: row.line, evacuee: person, duplicateKey: personDuplicateKey(person) });
@@ -419,7 +469,7 @@ function validateMembers(rows: readonly RawSheetRow[]): {
 			errors.push(...sink.errors);
 		}
 	}
-	return { members, errors };
+	return { members, errors, warnings };
 }
 
 // ===== one household =====
@@ -427,11 +477,12 @@ function validateMembers(rows: readonly RawSheetRow[]): {
 export function validateRow(
 	raw: RawRow,
 	row: number,
-	_lookups: Lookups,
+	lookups: Lookups,
 	memberRows: readonly RawSheetRow[] = []
 ): RowValidation {
 	const sink = createSink(null);
-	const head = readPerson(raw, sink);
+	const warn = createSink(null);
+	const head = readPerson(raw, sink, lookups, warn);
 	const headOk = validatePerson(head, sink, PATH_TO_HEADER);
 	const headName = fullName(head) || null;
 
@@ -473,8 +524,13 @@ export function validateRow(
 		}
 	}
 
-	const { members, errors: memberErrors } = validateMembers(memberRows);
+	const {
+		members,
+		errors: memberErrors,
+		warnings: memberWarnings
+	} = validateMembers(memberRows, lookups);
 	const errors = [...sink.errors, ...memberErrors];
+	const warnings = [...warn.errors, ...memberWarnings];
 
 	if (errors.length === 0 && headOk && parsedHousehold.success) {
 		return {
@@ -489,7 +545,8 @@ export function validateRow(
 				headDuplicateKey: personDuplicateKey(head),
 				members
 			},
-			errors: []
+			errors: [],
+			warnings
 		};
 	}
 	return {
@@ -498,7 +555,8 @@ export function validateRow(
 		headName,
 		memberCount: members.length,
 		ok: false,
-		errors
+		errors,
+		warnings
 	};
 }
 

@@ -16,7 +16,13 @@ import {
 	CapacityExceededError,
 	StockIntegrityError,
 	InsufficientPoolQuotaError,
-	ConcurrencyCollisionError
+	ConcurrencyCollisionError,
+	BulkReturnPoolNameTakenError,
+	BulkReturnPoolStateError,
+	BulkReturnPoolLockTimeoutError,
+	BulkReturnPoolNotEmptyError,
+	BulkReturnPoolEmptyError,
+	DistributionDataIntegrityError
 } from '../../application/food-supplies/errors';
 import { ZodError } from 'zod';
 
@@ -49,17 +55,73 @@ function isUserFacingMessage(msg: string): boolean {
 }
 
 /**
+ * `validate_doc_update` reasons are English and written for developers ("Only warehouse
+ * staff, … can approve requisition_tickets"), so staff get a Thai sentence for the kind of
+ * refusal instead of the raw reason.
+ */
+function describePolicyReason(reason: string | undefined): string {
+	const text = reason ?? '';
+	if (/^Only .+ can /i.test(text)) {
+		return 'บัญชีนี้ไม่มีสิทธิ์ทำรายการนี้ หากต้องทำรายการนี้ กรุณาติดต่อผู้จัดการศูนย์หรือผู้ดูแลระบบ';
+	}
+	if (/must match the current actor/i.test(text)) {
+		return 'ข้อมูลผู้ทำรายการไม่ตรงกับบัญชีที่เข้าสู่ระบบ กรุณาออกจากระบบแล้วเข้าใหม่ จากนั้นลองอีกครั้ง';
+	}
+	if (/Illegal .* transition|Same-status/i.test(text)) {
+		return 'สถานะของใบเบิกจ่ายเปลี่ยนไปแล้ว กรุณาโหลดข้อมูลล่าสุดแล้วลองใหม่';
+	}
+	return 'ระบบปฏิเสธการบันทึกเอกสารตามนโยบายความปลอดภัย';
+}
+
+/**
  * Formats an unknown error into a safe, human-friendly user message.
  * Strictly prevents exposure of CouchDB internals, VDU logic, stack traces, and database identifiers,
  * while preserving safe typed domain/application validation and workflow messages.
  */
 export function formatDistributionError(
 	err: unknown,
-	fallbackMessage = 'เกิดข้อผิดพลาดในการทำรายการ กรุณาลองใหม่อีกครั้ง'
+	fallbackMessage = 'เกิดข้อผิดพลาดในการทำรายการ กรุณาลองใหม่อีกครั้ง',
+	options?: { poolContext?: 'intake' | 'manage' }
 ): string {
 	if (!err) return fallbackMessage;
 
 	// 1. Distribution Workflow Typed Errors
+	// Bulk return pool v3 errors first: NameTaken extends WorkflowValidationError, and these
+	// workflow messages are developer-facing English, so they always map to fixed Thai copy.
+	if (err instanceof BulkReturnPoolNameTakenError) {
+		return 'มีกองที่เปิดรับอยู่ใช้ชื่อนี้แล้ว กรุณาตั้งชื่ออื่น';
+	}
+	if (err instanceof BulkReturnPoolStateError) {
+		if (err.reason === 'closed') {
+			return (options?.poolContext ?? 'manage') === 'intake'
+				? 'กองนี้ปิดรับของแล้ว กรุณาเลือกกองอื่น'
+				: 'กองนี้ไม่ได้เปิดรับแล้ว (ส่งเข้าคลัง ตรวจรับ หรือยกเลิกไปแล้ว) จึงทำรายการนี้ไม่ได้ กรุณารีเฟรชเพื่อดูสถานะล่าสุด';
+		}
+		if (err.reason === 'source_closed') {
+			return 'ย้ายรายการนี้ไม่ได้ เพราะกองที่รายการอยู่ถูกส่งเข้าคลังแล้ว และรายการนี้นับรวมในยอดที่ส่งแล้ว กรุณารีเฟรชเพื่อดูสถานะล่าสุด';
+		}
+		if (err.reason === 'not_submitted') {
+			return 'กองนี้ยังไม่ได้ส่งเข้าคลัง จึงยังตรวจรับไม่ได้ กรุณารีเฟรชเพื่อดูสถานะล่าสุด';
+		}
+		if (err.reason === 'conflict') {
+			return 'กองนี้ถูกตรวจรับไปแล้วด้วยยอดที่ต่างจากที่ส่งมา กรุณารีเฟรชแล้วลองใหม่อีกครั้ง';
+		}
+		return 'กองนี้ไม่ได้อยู่ในสถานะเปิดรับ หรือกำลังถูกดำเนินการอยู่ จึงทำรายการนี้ไม่ได้ กรุณารีเฟรชแล้วตรวจสอบสถานะล่าสุด';
+	}
+	if (err instanceof BulkReturnPoolLockTimeoutError) {
+		return 'กองนี้กำลังถูกส่งเข้าคลังอยู่ ระบบยังยืนยันรายการไม่ได้ กรุณารอสักครู่แล้วกดบันทึกอีกครั้ง';
+	}
+	if (err instanceof BulkReturnPoolNotEmptyError) {
+		return 'ยกเลิกกองไม่ได้ เพราะยังมีรายการอยู่ในกอง กรุณาย้ายของออกให้หมดก่อน';
+	}
+	if (err instanceof BulkReturnPoolEmptyError) {
+		return 'กองนี้ไม่มีรายการ จึงเก็บเข้าคลังไม่ได้ กรุณายกเลิกกองแทน';
+	}
+	if (err instanceof DistributionDataIntegrityError) {
+		const ids = err.docIds.filter(Boolean).join(', ');
+		return `พบเอกสารที่ข้อมูลไม่ถูกต้อง (${ids || `${err.docIds.length} รายการ`}) — ติดต่อผู้ดูแลระบบก่อนทำรายการต่อ`;
+	}
+
 	if (err instanceof WorkflowValidationError || err instanceof ReservationSemanticMismatchError) {
 		if (err.message && isUserFacingMessage(err.message) && !isUnsafeRawMessage(err.message)) {
 			return err.message;
@@ -98,10 +160,10 @@ export function formatDistributionError(
 
 	if (err instanceof CouchDocumentPolicyError) {
 		const reason = err.reason || err.message;
-		if (reason && !isUnsafeRawMessage(reason)) {
+		if (reason && isUserFacingMessage(reason) && !isUnsafeRawMessage(reason)) {
 			return `ระบบปฏิเสธเอกสาร: ${reason}`;
 		}
-		return 'ระบบปฏิเสธการบันทึกเอกสารตามนโยบายความปลอดภัย';
+		return describePolicyReason(reason);
 	}
 
 	if (err instanceof AuthError || isPouchError(err, 401) || isPouchError(err, 403)) {

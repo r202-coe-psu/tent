@@ -169,13 +169,10 @@ test.describe('Public landing: smoke extras', { tag: ['@public', '@smoke'] }, ()
 		await expect(page).toHaveURL(/\/donations\/track$/);
 	});
 
-	test('volunteer missions show the under-development notice', async ({ page }) => {
+	test('all volunteer jobs button opens the job board', async ({ page }) => {
 		await page.goto('/');
-		await page.getByRole('button', { name: 'ดูงานอาสาสมัครทั้งหมด' }).first().click();
-
-		await expect(page.getByRole('dialog', { name: 'ระบบอยู่ระหว่างการพัฒนา' })).toBeVisible();
-		await page.getByRole('button', { name: 'รับทราบ' }).click();
-		await expect(page.getByRole('dialog', { name: 'ระบบอยู่ระหว่างการพัฒนา' })).toBeHidden();
+		await page.getByRole('link', { name: 'ดูงานอาสาสมัครทั้งหมด' }).first().click();
+		await expect(page).toHaveURL(/\/volunteers\/jobs$/);
 	});
 
 	test('switches the page between Thai and English', async ({ page }) => {

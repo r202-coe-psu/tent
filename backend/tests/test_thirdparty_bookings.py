@@ -1306,6 +1306,37 @@ async def test_cancel_written_after_check_in_is_409(client: AsyncClient) -> None
     assert await _log_statuses() == ["denied_booking_not_cancellable"]
 
 
+async def _set_row_stay(row_id: str, status: str) -> None:
+    """What the worker writes for a booked evacuee (`sync_booking_stay`, PDPA D8)."""
+    await ExternalBooking.get_pymongo_collection().update_one(
+        {"_id": row_id}, {"$set": {"stay_status": status}}
+    )
+
+
+async def test_cancel_search_excluded_after_check_in_is_409(client: AsyncClient) -> None:
+    """PDPA D8: a search-excluded person has no `public_persons` row; the booking row's
+    `stay_status` still shows the check-in, so the cancel is refused (not 200)."""
+    await _booking(state="written", evacuee_id="evacuee:01JHIDDEN")
+    await _set_row_stay("BK-TEST0001", "active")
+    response = await client.post(_cancel_url(), headers=GRANTED)
+    assert response.status_code == 409
+    assert response.json()["code"] == "booking_not_cancellable"
+    booking = await ExternalBooking.get("BK-TEST0001")
+    assert booking is not None and booking.cancel_requested is False
+    assert await _log_statuses() == ["denied_booking_not_cancellable"]
+
+
+async def test_cancel_search_excluded_pre_registered_requests_cancel(
+    client: AsyncClient,
+) -> None:
+    await _booking(state="written", evacuee_id="evacuee:01JHIDDEN")
+    await _set_row_stay("BK-TEST0001", "pre_registered")
+    response = await client.post(_cancel_url(), headers=GRANTED)
+    assert response.status_code == 200
+    booking = await ExternalBooking.get("BK-TEST0001")
+    assert booking is not None and booking.cancel_requested is True
+
+
 async def test_cancel_by_other_client_is_404(client: AsyncClient) -> None:
     await _booking(state="pending")
     response = await client.post(_cancel_url(), headers=OTHER_CLIENT)
@@ -1685,6 +1716,26 @@ async def test_cancel_group_check_in_after_flagging_reverts_our_flags(
     # 409 never keeps a flag: our 2a flag is reverted and its token cleared (CR-169 FR-40).
     assert (after[1]["cancel_reason"], after[1]["cancel_flag_token"]) == (None, None)
     assert await _log_statuses() == ["denied_booking_not_cancellable"]
+
+
+async def test_cancel_group_search_excluded_check_in_after_flagging_reverts_our_flags(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """PDPA D8: the stay re-read after flagging also sees a search-excluded check-in."""
+    await _group(3, ["pending", "written", "pending"])
+    await _set_row_stay("BP-BK-GROUP001-1", "pre_registered")
+    before = await _rows("BK-GROUP001")
+    _around_update_many(
+        monkeypatch,
+        when=lambda flt: flt.get("cancel_requested") is False,
+        after=lambda: _set_row_stay("BP-BK-GROUP001-1", "active"),
+    )
+    response = await client.post(_cancel_url("BK-GROUP001"), json={"reason": "r"}, headers=GRANTED)
+    assert response.status_code == 409
+    assert response.json()["code"] == "booking_not_cancellable"
+    after = await _rows("BK-GROUP001")
+    assert _snapshot(after) == _snapshot(before)
+    assert after[1]["cancel_requested"] is False
 
 
 async def test_cancel_group_conflict_with_failing_revert_keeps_409(
