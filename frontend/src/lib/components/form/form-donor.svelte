@@ -13,6 +13,7 @@
 	import { FALLBACK_UNIT_DEFINITIONS, formatUnit, useUnitsOfMeasure } from '$lib/features/catalog';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { getTranslation } from '$lib/utils/i18n';
+	import { qtyStrCoercePositiveSchema } from '$lib/utils/qty';
 	import { PUBLIC_DONATIONS_I18N } from '$lib/constants/i18n';
 
 	const donationStore = getDonationStore();
@@ -62,6 +63,12 @@
 
 	let validationErrors = $state<string[]>([]);
 
+	// The schema the BFF validates `items[].qty` with (Decimal, 4 dp, > 0) — so 0.00001 is
+	// caught here instead of as a 422 at submit (#822, CR-038).
+	function isPositiveAmount(amount: unknown): boolean {
+		return qtyStrCoercePositiveSchema.safeParse(amount).success;
+	}
+
 	function handleNext() {
 		validationErrors = [];
 
@@ -86,7 +93,7 @@
 				if (!item.name || !item.name.trim()) {
 					validationErrors.push(t.valItemName.replace('{index}', String(index + 1)));
 				}
-				if (!item.amount || item.amount <= 0) {
+				if (!isPositiveAmount(item.amount)) {
 					validationErrors.push(t.valItemAmount.replace('{index}', String(index + 1)));
 				}
 				if (!item.unit || !item.unit.trim()) {
@@ -95,7 +102,7 @@
 			});
 		}
 
-		const firstBadAmount = donationStore.items.find((item) => !item.amount || item.amount <= 0);
+		const firstBadAmount = donationStore.items.find((item) => !isPositiveAmount(item.amount));
 
 		if (validationErrors.length === 0) {
 			donationStore.goToStep('time');

@@ -56,17 +56,21 @@ afterEach(() => {
 });
 
 describe('form-donor quantity (#822)', () => {
-	it.each([0, -2, null as unknown as number])('blocks next when amount is %s', async (amount) => {
-		store.items[0].amount = amount;
-		render();
-		clickNext();
-		await tick();
-		expect(document.body.textContent).toContain(amountMsg(1));
-		expect(store.activeTab).toBe('form');
-		expect(store.reachedStep).toBe(2);
-		expect(toastError).toHaveBeenCalled();
-		expect(store.items[0].amount).toBe(amount);
-	});
+	// 0.00001 / 0.00004 round to 0 at qty scale (4 dp) — the BFF would 422 them.
+	it.each([0, -2, null as unknown as number, 0.00001, 0.00004])(
+		'blocks next when amount is %s',
+		async (amount) => {
+			store.items[0].amount = amount;
+			render();
+			clickNext();
+			await tick();
+			expect(document.body.textContent).toContain(amountMsg(1));
+			expect(store.activeTab).toBe('form');
+			expect(store.reachedStep).toBe(2);
+			expect(toastError).toHaveBeenCalled();
+			expect(store.items[0].amount).toBe(amount);
+		}
+	);
 
 	it('reports only the invalid item and focuses its input', async () => {
 		store.items = [
@@ -92,7 +96,8 @@ describe('form-donor quantity (#822)', () => {
 		expect(document.activeElement?.id ?? '').not.toContain('amount-');
 	});
 
-	it.each([5, 0.5])('advances with amount %s', (amount) => {
+	// 0.30000000000000004 = 0.1 + 0.2; 0.00005 rounds up to 0.0001 — both are > 0 after rounding.
+	it.each([5, 0.5, 0.1 + 0.2, 0.00005])('advances with amount %s', (amount) => {
 		store.items[0].amount = amount;
 		render();
 		clickNext();
