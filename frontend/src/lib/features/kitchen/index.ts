@@ -73,7 +73,7 @@ export {
 	deriveSessionHeadcountFromOccupancy,
 	SOFT_FOOD_NEEDS
 } from './domain/occupancy';
-export type { OccupantView } from './domain/occupancy';
+export type { OccupantView, ShelterPeopleCounts } from './domain/occupancy';
 
 // Domain — documents
 export type {
@@ -149,7 +149,7 @@ export {
 	useDeleteMealSession,
 	useMealPlans,
 	useOccupancyHeadcount,
-	useActiveEvacueeDietCounts,
+	useShelterMealHeadcount,
 	useCreateMealPlan,
 	useCreateMealPlanCalc,
 	useConfirmMealPlan,
