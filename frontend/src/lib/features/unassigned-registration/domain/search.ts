@@ -4,6 +4,7 @@
  */
 
 import { z } from 'zod';
+import { evacueeConsentSchema } from '$lib/features/consent/server';
 import { CR112_VULNERABLE_GROUP_ACTIVE, formatMasterLabel } from '$lib/features/master-data';
 import { formatThaiDateTime } from '$lib/utils/date';
 
@@ -61,7 +62,10 @@ export const openMemberHitSchema = z.object({
 	emergency_contact: emergencyContactHitSchema.nullable().optional(),
 	photo: z.string().nullable().optional(),
 	birth_year: z.number().int().nullable().optional(),
-	age: z.number().int().nullable().optional()
+	age: z.number().int().nullable().optional(),
+	/** Consent given on the public form; absent for members queued before it (FR-44). */
+	consent: evacueeConsentSchema.nullable().optional(),
+	search_excluded: z.boolean().optional()
 });
 
 export const openPetHitSchema = z.object({

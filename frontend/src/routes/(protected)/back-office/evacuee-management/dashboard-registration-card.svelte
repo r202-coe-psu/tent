@@ -8,16 +8,27 @@
 	import { Skeleton } from '$lib/components/ui/skeleton';
 	import {
 		useDashboardRegistrations,
-		registrationRangeParams,
-		DEFAULT_REGISTRATION_RANGE_PRESET,
 		REGISTRATION_RANGE_PRESETS,
 		type RegistrationRangePreset
 	} from '$lib/features/dashboard';
 	import { bangkokToday, formatThaiShortDate } from '$lib/utils/date';
 	import DashboardRegistrationChart from './dashboard-registration-chart.svelte';
 
-	// Range state lives here, so the parent's {#key shelterCode} resets it per shelter (CR-170 FR-7).
-	let { shelterCode }: { shelterCode: string } = $props();
+	// The range state is owned by the dashboard tab and shared with the station-times section
+	// (CR-192 FR-STL-24); this card renders its controls. The tab is keyed per shelter, so the
+	// range resets when the shelter changes (CR-170 FR-7).
+	let {
+		shelterCode,
+		preset = $bindable(),
+		customRange = $bindable(),
+		params
+	}: {
+		shelterCode: string;
+		preset: RegistrationRangePreset;
+		customRange: { from: string; to: string } | undefined;
+		/** The `from` / `to` query params for the selected range. */
+		params: { from?: string; to?: string };
+	} = $props();
 
 	const PRESET_LABELS: Record<RegistrationRangePreset, string> = {
 		'7d': '7 วันล่าสุด',
@@ -27,13 +38,7 @@
 		custom: 'กำหนดเอง'
 	};
 
-	const today = bangkokToday();
-	const maxValue = parseDate(today);
-
-	let preset = $state<RegistrationRangePreset>(DEFAULT_REGISTRATION_RANGE_PRESET);
-	let customRange = $state<{ from: string; to: string } | undefined>();
-
-	const params = $derived(registrationRangeParams(preset, today, customRange));
+	const maxValue = parseDate(bangkokToday());
 
 	const registrationsQuery = useDashboardRegistrations(
 		() => shelterCode,

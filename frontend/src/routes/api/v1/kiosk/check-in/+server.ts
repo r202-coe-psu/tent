@@ -6,6 +6,10 @@ import {
 	isKioskThaidCheckInAllowed,
 	kioskCheckInInputSchema,
 	KioskThaidIdentityMismatchError,
+	KioskUnassignedClaimConflictError,
+	KioskUnassignedClaimFailedError,
+	KioskUnassignedPersonMismatchError,
+	KioskUnassignedUnavailableError,
 	saveKioskCheckInCardPhoto
 } from '$lib/features/kiosk/server';
 import {
@@ -83,7 +87,11 @@ export const POST: RequestHandler = async ({ request }) => {
 					principal.shelter_code,
 					parsed.data.primary_evacuee_id,
 					parsed.data.evacuee_ids,
-					{ requiredPrimaryCitizenId: citizen.pid }
+					{
+						requiredPrimaryCitizenId: citizen.pid,
+						deviceId: principal.device_id,
+						lookupAt: parsed.data.lookup_at
+					}
 				);
 			} catch (error) {
 				if (error instanceof KioskThaidIdentityMismatchError) return thaidSessionInvalid();
@@ -98,7 +106,14 @@ export const POST: RequestHandler = async ({ request }) => {
 			result = await checkInSelectedMembers(
 				principal.shelter_code,
 				parsed.data.primary_evacuee_id,
-				parsed.data.evacuee_ids
+				parsed.data.evacuee_ids,
+				{
+					deviceId: principal.device_id,
+					lookupAt: parsed.data.lookup_at,
+					...(parsed.data.source === 'smart-card' && parsed.data.citizen_id
+						? { claimPersonId: parsed.data.citizen_id }
+						: {})
+				}
 			);
 		}
 		const { photo, citizen_id: citizenId } = parsed.data;
@@ -131,6 +146,47 @@ export const POST: RequestHandler = async ({ request }) => {
 						code: DEPENDENCY_UNAVAILABLE,
 						message: 'บริการตรวจสอบเครื่อง kiosk ไม่พร้อมใช้งาน'
 					}
+				},
+				{ status: 503, headers: noStoreHeaders }
+			);
+		}
+		if (error instanceof KioskUnassignedClaimConflictError) {
+			return json(
+				{
+					error: {
+						code: 'KIOSK_CLAIM_CONFLICT',
+						message: 'มีสมาชิกถูกรับเข้าศูนย์อื่นแล้วหรือถูกยกเลิก กรุณาติดต่อเจ้าหน้าที่'
+					}
+				},
+				{ status: 409, headers: noStoreHeaders }
+			);
+		}
+		if (error instanceof KioskUnassignedPersonMismatchError) {
+			return json(
+				{
+					error: {
+						code: 'KIOSK_CLAIM_PERSON_MISMATCH',
+						message: 'บัตรนี้ไม่ตรงกับผู้ลงทะเบียน กรุณาติดต่อเจ้าหน้าที่'
+					}
+				},
+				{ status: 409, headers: noStoreHeaders }
+			);
+		}
+		if (error instanceof KioskUnassignedUnavailableError) {
+			return json(
+				{
+					error: {
+						code: 'KIOSK_QUEUE_UNAVAILABLE',
+						message: 'ระบบคิวกลางไม่พร้อม กรุณาติดต่อเจ้าหน้าที่'
+					}
+				},
+				{ status: 503, headers: noStoreHeaders }
+			);
+		}
+		if (error instanceof KioskUnassignedClaimFailedError) {
+			return json(
+				{
+					error: { code: 'KIOSK_CLAIM_FAILED', message: 'รับเข้าศูนย์ไม่สำเร็จ กรุณาลองอีกครั้ง' }
 				},
 				{ status: 503, headers: noStoreHeaders }
 			);
