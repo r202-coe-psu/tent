@@ -4,6 +4,7 @@
 	import User from '@lucide/svelte/icons/user';
 	import Phone from '@lucide/svelte/icons/phone';
 	import Mail from '@lucide/svelte/icons/mail';
+	import Eye from '@lucide/svelte/icons/eye';
 	import Info from '@lucide/svelte/icons/info';
 	import FileText from '@lucide/svelte/icons/file-text';
 	import Truck from '@lucide/svelte/icons/truck';
@@ -19,6 +20,9 @@
 	import {
 		donationActionRef,
 		donationRefLabel,
+		maskDonorEmail,
+		maskDonorName,
+		maskDonorPhone,
 		PUBLIC_DONATION_CATEGORIES,
 		RejectDonationDialog,
 		RejectReasonFields,
@@ -39,6 +43,7 @@
 	let {
 		request,
 		saving = false,
+		readonly = false,
 		onBack,
 		onApprove,
 		onReject,
@@ -46,6 +51,8 @@
 	}: {
 		request: PendingDonationRow;
 		saving?: boolean;
+		/** A received donation (#821): shows the booking and donor, offers no decision. */
+		readonly?: boolean;
 		onBack: () => void;
 		/** `lines` decides every pending line of a per-line reviewed booking (CR-174). */
 		onApprove: (bookingRef: string, memo: string, lines?: LineReviewDecision[]) => void;
@@ -56,6 +63,11 @@
 	// A walk-in has no `booking_ref`; the doc id is what addresses it (see
 	// `donationActionRef`). Bailing out on a missing ref left those donations stuck.
 	const actionRef = $derived(donationActionRef(request));
+
+	// Received donations (#821) mask the donor contact until staff ask for it; the review
+	// queue keeps showing it in full, since reviewers call donors as part of the decision.
+	let contactRevealed = $state(false);
+	const showContact = $derived(!readonly || contactRevealed);
 
 	let memo = $state('');
 	let actionPanel = $state<'none' | 'redirect'>('none');
@@ -239,7 +251,9 @@
 				<ClipboardCheck class="h-5 w-5" />
 			</div>
 			<h2 class="text-base font-bold text-white md:text-lg">
-				{donationRefLabel(request)} - พิจารณาคำขอรับบริจาค (Pending Review)
+				{donationRefLabel(request)} - {readonly
+					? 'รายละเอียดการรับบริจาค'
+					: 'พิจารณาคำขอรับบริจาค (Pending Review)'}
 			</h2>
 		</div>
 	</div>
@@ -260,12 +274,18 @@
 					</span>
 					<div class="min-w-0 space-y-1.5">
 						<p class="text-lg font-bold break-words text-slate-900">
-							{request.donor_name || 'ไม่ระบุชื่อ'}
+							{showContact
+								? request.donor_name || 'ไม่ระบุชื่อ'
+								: maskDonorName(request.donor_name)}
 						</p>
 						<p class="flex items-center gap-2 text-base text-slate-700">
 							<Phone class="size-4 shrink-0 text-slate-400" aria-hidden="true" />
 							<span class="sr-only">เบอร์โทร</span>
-							{#if request.donor_phone}
+							{#if request.donor_phone && !showContact}
+								<span class="font-semibold text-slate-700 tabular-nums">
+									{maskDonorPhone(request.donor_phone)}
+								</span>
+							{:else if request.donor_phone}
 								<a
 									href="tel:{request.donor_phone}"
 									class="font-semibold text-sky-800 tabular-nums underline-offset-2 hover:underline"
@@ -280,8 +300,20 @@
 							<p class="flex items-center gap-2 text-sm break-all text-slate-600">
 								<Mail class="size-4 shrink-0 text-slate-400" aria-hidden="true" />
 								<span class="sr-only">อีเมล</span>
-								{request.donor_email}
+								{showContact ? request.donor_email : maskDonorEmail(request.donor_email)}
 							</p>
+						{/if}
+						{#if !showContact}
+							<!-- Received donations (#821): full contact only on request, not on sight. -->
+							<Button
+								type="button"
+								variant="outline"
+								class="min-h-11"
+								onclick={() => (contactRevealed = true)}
+							>
+								<Eye class="size-4" aria-hidden="true" />
+								แสดงข้อมูลติดต่อ
+							</Button>
 						{/if}
 					</div>
 				</div>
@@ -393,7 +425,7 @@
 										</span>
 									</p>
 								</div>
-								{#if item.review_status === 'pending'}
+								{#if !readonly && item.review_status === 'pending'}
 									{@const draft = drafts[idx]}
 									<div class="w-full space-y-3 border-t border-slate-100 pt-4">
 										<LineDecisionToggle
@@ -476,45 +508,48 @@
 		</div>
 
 		<!-- Staff Review Memo Textarea -->
-		<div class="space-y-2">
-			<Label for="internal-review-memo" class="text-sm font-semibold text-slate-700">
-				บันทึกความเห็นของเจ้าหน้าที่ประจำศูนย์ (Internal Review Memo)
-			</Label>
-			<Textarea
-				id="internal-review-memo"
-				rows={3}
-				placeholder="เขียนวิเคราะห์ความจุคลัง หรือข้อตกลงพิเศษในการรับของ เช่น โซนตู้แช่สำรองไฟ ฯลฯ"
-				bind:value={memo}
-				class="rounded-xl p-3.5 text-base"
-			/>
-		</div>
+		{#if !readonly}
+			<div class="space-y-2">
+				<Label for="internal-review-memo" class="text-sm font-semibold text-slate-700">
+					บันทึกความเห็นของเจ้าหน้าที่ประจำศูนย์ (Internal Review Memo)
+				</Label>
+				<Textarea
+					id="internal-review-memo"
+					rows={3}
+					placeholder="เขียนวิเคราะห์ความจุคลัง หรือข้อตกลงพิเศษในการรับของ เช่น โซนตู้แช่สำรองไฟ ฯลฯ"
+					bind:value={memo}
+					class="rounded-xl p-3.5 text-base"
+				/>
+			</div>
+		{/if}
 	</div>
 
 	<!-- Bottom Action Bar Footer -->
-	<div
-		class="flex flex-col-reverse items-stretch justify-between gap-3 border-t border-border/60 bg-muted/5 p-4 sm:flex-row sm:items-center md:px-8"
-	>
-		<div class="flex flex-wrap items-center gap-2.5">
-			<!-- Approve Button -->
-			<Button
-				type="button"
-				onclick={submitReview}
-				disabled={saving || (lineReview && !reviewComplete)}
-				aria-describedby={lineReview && !reviewComplete ? 'review-incomplete-hint' : undefined}
-				class="h-10 gap-1.5 rounded-xl px-5 text-xs font-bold text-white shadow-xs {rejectsAll
-					? 'bg-red-600 hover:bg-red-700'
-					: 'bg-emerald-600 hover:bg-emerald-700'}"
-			>
-				<Check class="h-4 w-4" />
-				{saving ? 'กำลังดำเนินการ...' : approveLabel}
-			</Button>
-			{#if lineReview && !reviewComplete}
-				<p id="review-incomplete-hint" class="text-xs text-muted-foreground">
-					{REVIEW_INCOMPLETE}
-				</p>
-			{/if}
+	{#if !readonly}
+		<div
+			class="flex flex-col-reverse items-stretch justify-between gap-3 border-t border-border/60 bg-muted/5 p-4 sm:flex-row sm:items-center md:px-8"
+		>
+			<div class="flex flex-wrap items-center gap-2.5">
+				<!-- Approve Button -->
+				<Button
+					type="button"
+					onclick={submitReview}
+					disabled={saving || (lineReview && !reviewComplete)}
+					aria-describedby={lineReview && !reviewComplete ? 'review-incomplete-hint' : undefined}
+					class="h-10 gap-1.5 rounded-xl px-5 text-xs font-bold text-white shadow-xs {rejectsAll
+						? 'bg-red-600 hover:bg-red-700'
+						: 'bg-emerald-600 hover:bg-emerald-700'}"
+				>
+					<Check class="h-4 w-4" />
+					{saving ? 'กำลังดำเนินการ...' : approveLabel}
+				</Button>
+				{#if lineReview && !reviewComplete}
+					<p id="review-incomplete-hint" class="text-xs text-muted-foreground">
+						{REVIEW_INCOMPLETE}
+					</p>
+				{/if}
 
-			<!--
+				<!--
 			Redirect ("ประสานงานส่งต่อ") is hidden for now: the centre does not hand donations
 			off to another shelter yet, so offering the action would promise a workflow that
 			has no receiving end. The panel below, `handleConfirmRedirect` and the
@@ -531,22 +566,23 @@
 				ประสานงานส่งต่อ
 			</Button>
 			-->
-		</div>
+			</div>
 
-		<!-- Reject Button -->
-		<Button
-			variant="outline"
-			type="button"
-			onclick={() => (rejectOpen = true)}
-			disabled={saving}
-			class="h-10 rounded-xl border-rose-200 bg-rose-50/70 px-5 text-xs font-bold text-rose-600 hover:bg-rose-100 hover:text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/20 dark:hover:bg-rose-900/40"
-		>
-			ปฏิเสธคำขอ
-		</Button>
-	</div>
+			<!-- Reject Button -->
+			<Button
+				variant="outline"
+				type="button"
+				onclick={() => (rejectOpen = true)}
+				disabled={saving}
+				class="h-10 rounded-xl border-rose-200 bg-rose-50/70 px-5 text-xs font-bold text-rose-600 hover:bg-rose-100 hover:text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/20 dark:hover:bg-rose-900/40"
+			>
+				ปฏิเสธคำขอ
+			</Button>
+		</div>
+	{/if}
 
 	<!-- Expandable Reroute / Redirect Section (Screenshot 4) -->
-	{#if actionPanel === 'redirect'}
+	{#if !readonly && actionPanel === 'redirect'}
 		<div
 			class="animate-in border-t border-border/60 bg-muted/10 p-6 fade-in slide-in-from-top-2 md:p-8"
 		>
@@ -607,9 +643,11 @@
 	{/if}
 </div>
 
-<RejectDonationDialog
-	bind:open={rejectOpen}
-	bookingRef={request.booking_ref || actionRef || undefined}
-	pending={saving}
-	onconfirm={handleConfirmReject}
-/>
+{#if !readonly}
+	<RejectDonationDialog
+		bind:open={rejectOpen}
+		bookingRef={request.booking_ref || actionRef || undefined}
+		pending={saving}
+		onconfirm={handleConfirmReject}
+	/>
+{/if}
