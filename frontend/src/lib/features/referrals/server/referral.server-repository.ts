@@ -6,6 +6,7 @@ import {
 	isReferral,
 	type Referral,
 	type ReferralFilter,
+	type ReferralPage,
 	referralFilterSchema,
 	type ReferralInput,
 	type ReferralStatus,
@@ -13,7 +14,7 @@ import {
 	buildReferralBody,
 	referralSchema
 } from '../domain/referral.schema';
-import { applyTransition } from '../domain/referral.transitions';
+import { applyTransition, canTransition } from '../domain/referral.transitions';
 import {
 	assertActorMayTransition,
 	ReferralAuthorizationError
@@ -23,6 +24,7 @@ import {
 	buildDestinationIntakeDocs,
 	CapacityTransferError
 } from '../domain/referral.capacity-transfer';
+import { referralBatchBucketBounds, referralBatchKey } from '../domain/referral.batch-group';
 import type { ReferralRepository } from '../data/referral.repository';
 
 const HTTP_OK = 200;
@@ -43,6 +45,7 @@ export class CouchDbReferralError extends Error {
 
 interface MangoFindResponse {
 	docs: Record<string, unknown>[];
+	bookmark?: string;
 	warning?: string;
 }
 
@@ -64,7 +67,8 @@ async function ensureCentralDb() {
 	}
 }
 
-export class CouchDbReferralServerRepository implements ReferralRepository {
+/** Server side owns the per-item path; the bulk call is `bulkTransition()` in ./referral.bulk-transition. */
+export class CouchDbReferralServerRepository implements Omit<ReferralRepository, 'bulkTransition'> {
 	constructor(
 		private readonly dbName: string,
 		private readonly contextShelterCode: string
@@ -269,11 +273,32 @@ export class CouchDbReferralServerRepository implements ReferralRepository {
 	}
 
 	async list(filter?: ReferralFilter): Promise<Referral[]> {
+		return (await this.listPage(filter)).items;
+	}
+
+	/**
+	 * One page of referrals. With `direction`, the selector targets a single shelter field and the
+	 * sort covers every field of the `(type, <shelter field>, created_at)` index so Mango uses it
+	 * directly. Without `direction`, falls back to the `$or` selector (evacuee lookups).
+	 * Pages by `bookmark` (never `skip`); `hasMore` counts raw docs before malformed ones are dropped.
+	 */
+	async listPage(filter?: ReferralFilter): Promise<ReferralPage> {
 		const parsed = referralFilterSchema.parse(filter ?? {});
-		const selector: Record<string, unknown> = {
-			type: 'referral',
-			$or: [{ shelter_code: this.contextShelterCode }, { to_shelter_code: this.contextShelterCode }]
-		};
+		const selector: Record<string, unknown> = { type: 'referral' };
+		const dir = parsed.sort === 'created_at_asc' ? 'asc' : 'desc';
+		let sort: Record<string, string>[];
+
+		if (parsed.direction) {
+			const field = parsed.direction === 'outgoing' ? 'shelter_code' : 'to_shelter_code';
+			selector[field] = this.contextShelterCode;
+			sort = [{ type: dir }, { [field]: dir }, { created_at: dir }];
+		} else {
+			selector.$or = [
+				{ shelter_code: this.contextShelterCode },
+				{ to_shelter_code: this.contextShelterCode }
+			];
+			sort = [{ type: dir }, { created_at: dir }];
+		}
 
 		if (parsed.status) {
 			selector.status = parsed.status;
@@ -282,17 +307,12 @@ export class CouchDbReferralServerRepository implements ReferralRepository {
 			selector.evacuee_id = parsed.evacuee_id;
 		}
 
-		const sort =
-			parsed.sort === 'created_at_asc'
-				? [{ type: 'asc' }, { created_at: 'asc' }]
-				: [{ type: 'desc' }, { created_at: 'desc' }];
-
-		const body: Record<string, unknown> = {
-			selector,
-			limit: parsed.limit,
-			skip: parsed.skip,
-			sort
-		};
+		const body: Record<string, unknown> = { selector, limit: parsed.limit, sort };
+		if (parsed.bookmark) {
+			body.bookmark = parsed.bookmark;
+		} else if (parsed.skip) {
+			body.skip = parsed.skip;
+		}
 
 		const { status, data } = await this.couchPost<MangoFindResponse>(this.dbName, '/_find', body);
 
@@ -300,7 +320,62 @@ export class CouchDbReferralServerRepository implements ReferralRepository {
 			throw new CouchDbReferralError(`CouchDB _find query failed`, status, data);
 		}
 
-		return (data.docs || []).filter((d): d is Referral => isReferral(d));
+		const rawDocs = data.docs || [];
+		return {
+			items: rawDocs.filter((d): d is Referral => isReferral(d)),
+			bookmark: data.bookmark ?? null,
+			hasMore: rawDocs.length === parsed.limit
+		};
+	}
+
+	/** Docs per `_find` request while reading a batch bucket. */
+	static readonly BATCH_LIMIT = 200;
+	/** Sanity cap on pages per batch read; exceeding it throws instead of returning a partial batch. */
+	static readonly BATCH_MAX_PAGES = 50;
+
+	/**
+	 * Members of the batch `anchor` belongs to, oldest first. A batch is defined by its creator's
+	 * side, so the selector always uses the anchor's `shelter_code` (every sibling shares it and
+	 * `to_shelter_code`; the caller is authorized on the anchor by the route). Reads the whole
+	 * 2-minute bucket on the `(type, shelter_code, created_at)` index, paging by `bookmark`, then
+	 * keeps docs whose `referralBatchKey` matches.
+	 */
+	async getBatchFor(anchor: Referral): Promise<Referral[]> {
+		const { start, end } = referralBatchBucketBounds(anchor.created_at);
+		const key = referralBatchKey(anchor);
+		const limit = CouchDbReferralServerRepository.BATCH_LIMIT;
+		const members: Referral[] = [];
+		let bookmark: string | undefined;
+
+		for (let page = 0; page < CouchDbReferralServerRepository.BATCH_MAX_PAGES; page++) {
+			const body: Record<string, unknown> = {
+				selector: {
+					type: 'referral',
+					shelter_code: anchor.shelter_code,
+					created_at: { $gte: start, $lt: end }
+				},
+				sort: [{ type: 'asc' }, { shelter_code: 'asc' }, { created_at: 'asc' }],
+				limit
+			};
+			if (bookmark) body.bookmark = bookmark;
+
+			const { status, data } = await this.couchPost<MangoFindResponse>(this.dbName, '/_find', body);
+			if (status !== HTTP_OK) {
+				throw new CouchDbReferralError(`CouchDB _find query failed`, status, data);
+			}
+			const docs = data.docs || [];
+			for (const d of docs) {
+				if (isReferral(d) && referralBatchKey(d) === key) members.push(d);
+			}
+			if (docs.length < limit) return members;
+			bookmark = data.bookmark;
+		}
+		throw new CouchDbReferralError('Referral batch exceeds the page cap', 500);
+	}
+
+	async getBatch(id: string): Promise<Referral[]> {
+		const anchor = await this.get(id);
+		return anchor ? this.getBatchFor(anchor) : [];
 	}
 
 	async hasActiveReferral(evacueeId: string): Promise<boolean> {
@@ -339,7 +414,7 @@ export class CouchDbReferralServerRepository implements ReferralRepository {
 		evacueeSummary?: EvacueeSummary
 	): Promise<Referral> {
 		const body = buildReferralBody(input, evacueeSummary);
-		const rawDoc = makeDoc('referral', 1, body, ctx);
+		const rawDoc = makeDoc('referral', 2, body, ctx);
 
 		const doc = referralSchema.parse(rawDoc);
 
@@ -379,6 +454,12 @@ export class CouchDbReferralServerRepository implements ReferralRepository {
 				throw new CouchDbReferralError(e.message, HTTP_FORBIDDEN);
 			}
 			throw e;
+		}
+
+		// Check the state matrix before any cross-DB transfer. Otherwise a stale or concurrent
+		// accept (latest already rejected/accepted) would move the evacuee before failing.
+		if (!canTransition(latest.status, to)) {
+			throw new CouchDbReferralError('Invalid referral transition', 422);
 		}
 
 		const nowIso = new Date().toISOString();

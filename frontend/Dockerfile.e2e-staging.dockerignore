@@ -4,6 +4,7 @@
 !pnpm-workspace.yaml
 !playwright.staging.config.ts
 !playwright.prod.config.ts
+!tsconfig.json
 !e2e/
 !e2e/**
 !src/

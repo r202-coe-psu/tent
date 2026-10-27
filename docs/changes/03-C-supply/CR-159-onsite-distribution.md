@@ -44,7 +44,7 @@ affects:
 | --- | --- | --- |
 | [A. ขอบเขตหน้าจอ + role](#a-ขอบเขตหน้าจอ--role) | FR-DDS-01..07 | FR-DDS-05, 07 |
 | [B. กติกาแจกอาหารปรุงสุก](#b-กติกาแจกอาหารปรุงสุก) | FR-MQW-01..06 | — (เคาะแล้ว 2026-10-10) |
-| [C. จับคู่ผู้รับ↔เมนู](#c-จับคู่ผู้รับเมนู) | FR-MRM-00..10 | — (เคาะแล้ว 2026-10-10; FR-MRM-06..10 เพิ่มโดย CR-191, 2026-10-25) |
+| [C. จับคู่ผู้รับ↔เมนู](#c-จับคู่ผู้รับเมนู) | FR-MRM-00..11 | — (เคาะแล้ว 2026-10-10; FR-MRM-06..10 เพิ่มโดย CR-191, 2026-10-25; FR-MRM-11 decision sync 2026-10-27) |
 | [D. ปิด CR-109](#d-ปิด-cr-109-เป็น-superseded-โดย-cr-121) | FR-CRS-01..04 | — (FR-CRS-04 ส่งต่อ TL) |
 
 ---
@@ -152,8 +152,9 @@ affects:
 - **FR-MRM-06** — ([CR-191](CR-191-allergen-warning-at-distribution.md)) ผู้รับ `evacuee`: ดึง `medical.allergies` ของผู้รับตอนเลือกผู้รับ; ผู้รับ `volunteer` / `outside` ไม่มีข้อมูลสุขภาพ → **ข้ามการเช็ค**
 - **FR-MRM-07** — ([CR-191](CR-191-allergen-warning-at-distribution.md)) สารที่ชน = `resolve(medical.allergies) ∩ resolve(item.allergens)` โดย `resolve` map ข้อความเป็น code ของ master `allergy` (item `active`) แล้วเทียบเฉพาะ **code**; free text ไม่ match อัตโนมัติ
 - **FR-MRM-08** — ([CR-191](CR-191-allergen-warning-at-distribution.md)) ชนกัน → แสดงคำเตือน "‹เมนู› มี ‹สาร› — ผู้รับแพ้" และ **ต้อง override + เหตุผล** จึงแจกได้ (เตือน + override ได้ — ไม่ห้ามแจกเด็ดขาด); ใช้ modal override เดียวกับ FR-MRM-04 / รับซ้ำ; workflow ปฏิเสธถ้าชนแต่ไม่ override
-- **FR-MRM-09** — ([CR-191](CR-191-allergen-warning-at-distribution.md)) การแสดงผลบนการ์ดผู้รับ: อาการแพ้ที่เป็น code → badge แดง "แพ้: ‹label›"; อาการแพ้เป็น free text → "มีประวัติแพ้: ‹ข้อความ›" (ไม่ match); ผู้รับมีอาการแพ้แต่เมนูไม่ระบุสารก่อแพ้ → "เมนูนี้ไม่ระบุสารก่อแพ้" (แจ้งเฉยๆ ไม่ต้อง override)
+- **FR-MRM-09** — ([CR-191](CR-191-allergen-warning-at-distribution.md)) การแสดงผลบนการ์ดผู้รับ: อาการแพ้ที่เป็น code → badge แดง "แพ้: ‹label›"; อาการแพ้เป็น free text → "มีประวัติแพ้: ‹ข้อความ›" (ไม่ match; ต้อง override ตาม FR-MRM-11); ผู้รับมีอาการแพ้แต่เมนูไม่ระบุสารก่อแพ้ → "เมนูนี้ไม่ระบุสารก่อแพ้" (แจ้งเฉยๆ ไม่ต้อง override)
 - **FR-MRM-10** — ([CR-191](CR-191-allergen-warning-at-distribution.md)) ข้อมูลสุขภาพของผู้รับหรือ master `allergy` ยังโหลดไม่เสร็จ/โหลดไม่สำเร็จ → ปุ่มยืนยันแจกถูกล็อก (fail closed) เหมือน preflight ของ FR-MRM-04
+- **FR-MRM-11** — ([CR-191](CR-191-allergen-warning-at-distribution.md), decision sync 2026-10-27) ผู้รับ `evacuee` ที่มี `medical.allergies` เป็น free text อย่างน้อย 1 ค่า → แสดงคำเตือน "มีประวัติแพ้ (ไม่อยู่ในรายการ): ‹ข้อความ›" และ **ต้อง override + เหตุผล ทุกครั้ง ไม่ว่าเมนูใด** (ใช้ modal เดียวกับ FR-MRM-08); ระบบเติมข้อความแพ้นำหน้า `override_reason` รูปแบบ `แพ้ (ไม่อยู่ในรายการ): ‹ข้อความ, …› — ‹เหตุผลที่กรอก›`; **ไม่เพิ่ม field** ใน `distribution_log` (`allergen_conflicts` ยังเก็บเฉพาะ code); workflow ปฏิเสธถ้ามี free text แต่ไม่ override
 
 ### Acceptance
 - ผู้รับ `religion='muslim'` เลือกเมนู `dietary:['HALAL']` → ไม่ต้อง override
@@ -162,7 +163,7 @@ affects:
 - เมนู VEGAN → ทุกผู้รับแจกได้โดยไม่ต้อง override
 - เมนูทั่วไป → ทุก `recipient_type` แจกได้โดยไม่เตือน
 - unit test ครอบทุกแถวของตาราง FR-MRM-01
-- FR-MRM-06..10: ดู Acceptance ของ [CR-191](CR-191-allergen-warning-at-distribution.md)
+- FR-MRM-06..11: ดู Acceptance ของ [CR-191](CR-191-allergen-warning-at-distribution.md)
 
 ---
 
@@ -237,3 +238,4 @@ affects:
 - 2026-10-11 — การจำกัดหน้านี้เป็นระดับหน้าเท่านั้น (ตามข้อเสนอที่ยืนยันแล้ว) ไม่แก้กฎระดับระบบ WH/SC ยังทำงานคลังได้ตามเดิม
 - 2026-10-25 — CR-191 (approved โดย kong) เพิ่ม FR-MRM-06..10 (เตือนสารก่อแพ้ตอนแจกอาหาร) และข้อยกเว้น `allergen_conflicts` ใน FR-MRM-05
 - 2026-10-26 — #801: เมนู `HALAL` ไม่ต้อง override — แท็ก HALAL บนเมนูไม่นับเหมือน VEGAN (FR-MRM-01/03) เพราะคนทั่วไปกินอาหารฮาลาลได้และการเตือนถี่ทำให้คำเตือนเรื่องอายุถูกมองข้าม; คำเตือนเมนูตามอายุ (INFANT/CHILD/ELDERLY) คงเดิม. เคาะโดย Kong (แจ้งผ่าน Pikcolo)
+- 2026-10-27 — decision sync (kong, review PR #844): เพิ่ม FR-MRM-11 — ผู้รับที่มีประวัติแพ้ free text ต้อง override + เหตุผลทุกเมนู; ข้อความแพ้เติมนำหน้า `override_reason` (ไม่เพิ่ม field)

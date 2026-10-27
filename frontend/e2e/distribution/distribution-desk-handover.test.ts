@@ -333,20 +333,20 @@ test.describe('Tab 2 — ready-meal handover (plan §4.4)', { tag: DESK_TAGS }, 
 		await expect(page.getByText('กรณีพิเศษ', { exact: true })).toBeVisible();
 	});
 
-	test('T2-5 a menu outside the recipient group needs an override; a matching recipient does not', async ({
+	test('T2-5 a menu outside the recipient age group needs an override; a matching recipient does not', async ({
 		page,
 		scenarioAs
 	}) => {
 		const scenario = await scenarioAs('food_menu_match');
 		const { desk, item, ticket, recipient } = await foodSetup(page, scenario, {
-			item: { dietary: ['HALAL'] }
+			item: { ageGroup: 'ELDERLY' }
 		});
-		const muslim = await seedRecipient(scenario, `Halal${scenario.namespace.slice(-6)}`, 'Match', {
-			religion: 'muslim'
+		const elder = await seedRecipient(scenario, `Elder${scenario.namespace.slice(-6)}`, 'Match', {
+			birthYear: new Date().getFullYear() + 543 - 70
 		});
 
 		await desk.itemButton(item.name).click();
-		await desk.chooseRecipientBySearch(muslim);
+		await desk.chooseRecipientBySearch(elder);
 		await expect(desk.alert('เมนูนี้ไม่ตรงกลุ่มผู้รับ')).toHaveCount(0);
 		await desk.foodSubmit().click();
 		await expect(desk.overrideDialog()).toHaveCount(0);
@@ -356,16 +356,77 @@ test.describe('Tab 2 — ready-meal handover (plan §4.4)', { tag: DESK_TAGS }, 
 		await expect(desk.alert('เมนูนี้ไม่ตรงกลุ่มผู้รับ')).toBeVisible();
 		await desk.foodSubmit().click();
 		await expect(desk.overrideDialog()).toHaveAccessibleName('แจ้งเตือน: เมนูไม่ตรงกลุ่มผู้รับ');
-		await desk.confirmOverride('ผู้รับยืนยันรับเมนูฮาลาล');
+		await desk.confirmOverride('รับแทนผู้สูงอายุในครอบครัว');
 
 		const logs = await expectTicketLogs(ticket, item, 2, 'Menu-match handovers');
-		expect(logs.find((l) => l.recipient_id === muslim.recipientId)).toMatchObject({
+		expect(logs.find((l) => l.recipient_id === elder.recipientId)).toMatchObject({
 			is_override: false
 		});
 		expect(logs.find((l) => l.recipient_id === recipient.recipientId)).toMatchObject({
 			is_override: true,
-			override_reason: 'ผู้รับยืนยันรับเมนูฮาลาล'
+			override_reason: 'รับแทนผู้สูงอายุในครอบครัว'
 		});
+	});
+
+	// #801: HALAL never restricts — a non-muslim recipient takes a HALAL menu with no warning.
+	test('T2-5b a HALAL menu hands out to a non-muslim recipient without an override', async ({
+		page,
+		scenarioAs
+	}) => {
+		const scenario = await scenarioAs('food_menu_halal');
+		const { desk, item, ticket, recipient } = await foodSetup(page, scenario, {
+			item: { dietary: ['HALAL'] }
+		});
+
+		await desk.itemButton(item.name).click();
+		await desk.chooseRecipientBySearch(recipient);
+		await expect(desk.alert('เมนูนี้ไม่ตรงกลุ่มผู้รับ')).toHaveCount(0);
+		await desk.foodSubmit().click();
+		await expect(desk.overrideDialog()).toHaveCount(0);
+		await expect(desk.toast(/บันทึกแจกอาหารสำเร็จ/)).toBeVisible();
+
+		const logs = await expectTicketLogs(ticket, item, 1, 'HALAL handover');
+		expect(logs[0]).toMatchObject({ recipient_id: recipient.recipientId, is_override: false });
+	});
+
+	// #607 / CR-191 FR-MRM-11: free-text allergens are never matched, but a free-text allergy on the
+	// recipient forces an override on every menu; the text is kept in the override reason.
+	test('T2-5c a free-text recipient allergy needs an override and is kept in the reason', async ({
+		page,
+		scenarioAs
+	}) => {
+		const scenario = await scenarioAs('food_allergen_free_text');
+		const { desk, item, ticket } = await foodSetup(page, scenario, {
+			item: { allergens: ['ถั่วเหลือง'] }
+		});
+		const allergic = await seedRecipient(
+			scenario,
+			`Allergy${scenario.namespace.slice(-6)}`,
+			'Soy',
+			{
+				allergies: ['ถั่วเหลือง']
+			}
+		);
+
+		await desk.itemButton(item.name).click();
+		await desk.chooseRecipientBySearch(allergic);
+		await expect(page.getByText('มีประวัติแพ้ (ไม่อยู่ในรายการ): ถั่วเหลือง')).toBeVisible();
+		await expect(page.getByText(/เมนูระบุ: ถั่วเหลือง/)).toBeVisible();
+		await expect(desk.alert(/ผู้รับแพ้/)).toHaveCount(0);
+
+		await desk.foodSubmit().click();
+		await expect(desk.overrideDialog()).toHaveAccessibleName(
+			'แจ้งเตือน: ผู้รับมีประวัติแพ้ที่ไม่อยู่ในรายการ'
+		);
+		await desk.confirmOverride('ตรวจกับผู้รับแล้ว');
+		await expect(desk.toast(/บันทึกแจกอาหารสำเร็จ/)).toBeVisible();
+
+		const [log] = await expectTicketLogs(ticket, item, 1, 'Free-text allergy override');
+		expect(log).toMatchObject({
+			is_override: true,
+			override_reason: 'แพ้ (ไม่อยู่ในรายการ): ถั่วเหลือง — ตรวจกับผู้รับแล้ว'
+		});
+		expect(log.allergen_conflicts).toBeUndefined();
 	});
 
 	// D-E3: an expired lot is advisory only today — the handover goes out and the log is stamped.
@@ -524,7 +585,7 @@ test.describe('Tab 2 — ready-meal handover (plan §4.4)', { tag: DESK_TAGS }, 
 			}
 		);
 		await desk.chooseRecipientBySearch(recipient);
-		const banner = desk.alert('ตรวจเมนูและประวัติการรับอาหารไม่สำเร็จ');
+		const banner = desk.alert('ตรวจเมนู ประวัติการรับอาหาร และการแพ้ไม่สำเร็จ');
 		await expect(banner).toBeVisible({ timeout: 20_000 });
 		await expect(desk.foodSubmit()).toBeDisabled();
 

@@ -202,6 +202,96 @@ describe('SHELTER_DASHBOARD_VIEWS Map Functions', () => {
 			});
 		});
 	});
+
+	describe('bulk_return_pool_item_totals', () => {
+		const view = SHELTER_DASHBOARD_VIEWS.views.bulk_return_pool_item_totals;
+		const mapFn = createMapFn(view.map);
+		const P1 = 'bulk_return_pool:01J00000000000000000000001';
+		const P2 = 'bulk_return_pool:01J00000000000000000000002';
+		const E1 = 'bulk_return_entry:01J00000000000000000000003';
+
+		it('uses the built-in _sum reduce', () => {
+			expect(view.reduce).toBe('_sum');
+		});
+
+		it('ignores other doc types', () => {
+			mapFn({ type: 'bulk_return_pool', _id: P1 }, mockEmit);
+			expect(emitted).toHaveLength(0);
+		});
+
+		it('emits [qty, 1] keyed by [pool, item, entry] for an entry', () => {
+			mapFn(
+				{ type: 'bulk_return_entry', _id: E1, pool_id: P1, item_id: 'item:cot', qty: '3' },
+				mockEmit
+			);
+			expect(emitted).toEqual([{ key: [P1, 'item:cot', E1], value: [3, 1] }]);
+		});
+
+		it('emits a negative row for the source pool and a positive row for the target on a move', () => {
+			mapFn(
+				{
+					type: 'bulk_return_entry_move',
+					_id: `bulk_return_entry_move:01J00000000000000000000003:0001`,
+					entry_id: E1,
+					from_pool_id: P1,
+					to_pool_id: P2,
+					item_id: 'item:cot',
+					qty: '3'
+				},
+				mockEmit
+			);
+			expect(emitted).toEqual([
+				{ key: [P1, 'item:cot', E1], value: [-3, -1] },
+				{ key: [P2, 'item:cot', E1], value: [3, 1] }
+			]);
+		});
+
+		it('emits a negative row for the resolved pool on a void so the entry nets out', () => {
+			mapFn(
+				{
+					type: 'bulk_return_entry_void',
+					_id: 'bulk_return_entry_void:01J00000000000000000000003',
+					entry_id: E1,
+					pool_id: P1,
+					item_id: 'item:cot',
+					qty: '3'
+				},
+				mockEmit
+			);
+			expect(emitted).toEqual([{ key: [P1, 'item:cot', E1], value: [-3, -1] }]);
+		});
+
+		it('nets an entry and its void to zero under the same key', () => {
+			mapFn(
+				{ type: 'bulk_return_entry', _id: E1, pool_id: P1, item_id: 'item:cot', qty: '3' },
+				mockEmit
+			);
+			mapFn(
+				{
+					type: 'bulk_return_entry_void',
+					_id: 'bulk_return_entry_void:01J00000000000000000000003',
+					entry_id: E1,
+					pool_id: P1,
+					item_id: 'item:cot',
+					qty: '3'
+				},
+				mockEmit
+			);
+			const total = emitted.reduce(
+				(sum, row) => {
+					const [qty, count] = row.value as [number, number];
+					return [sum[0] + qty, sum[1] + count];
+				},
+				[0, 0]
+			);
+			expect(emitted.map((row) => row.key)).toEqual([
+				[P1, 'item:cot', E1],
+				[P1, 'item:cot', E1]
+			]);
+			expect(total).toEqual([0, 0]);
+		});
+	});
+
 	describe('station_logs_by_station (CR-192)', () => {
 		const mapFn = createMapFn(SHELTER_DASHBOARD_VIEWS.views.station_logs_by_station.map);
 		const log = (over: Record<string, unknown> = {}) => ({
