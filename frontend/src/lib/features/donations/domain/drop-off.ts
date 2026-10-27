@@ -29,16 +29,21 @@ export type DropOffPoint = {
 	geo: DropOffGeo | null;
 };
 
+/** FastAPI fills a missing shelter address with this placeholder instead of omitting it. */
+const UNSPECIFIED = 'unspecified';
+
 function cleanText(value: string | null | undefined): string | null {
 	const trimmed = value?.trim();
-	return trimmed ? trimmed : null;
+	return trimmed && trimmed !== UNSPECIFIED ? trimmed : null;
 }
 
+/** (0,0) is what an unset location projects to, not a real shelter, so it gets no map link. */
 function cleanGeo(geo: DropOffGeo | null | undefined): DropOffGeo | null {
 	if (!geo) return null;
-	return Number.isFinite(geo.lat) && Number.isFinite(geo.lng)
-		? { lat: geo.lat, lng: geo.lng }
-		: null;
+	const { lat, lng } = geo;
+	const inRange =
+		Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180;
+	return inRange && !(lat === 0 && lng === 0) ? { lat, lng } : null;
 }
 
 /** Shelters have no drop-off points yet (#812), so every booking goes to the main point. */

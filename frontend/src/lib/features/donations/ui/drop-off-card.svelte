@@ -6,10 +6,11 @@
 	import { PUBLIC_DONATIONS_I18N } from '$lib/constants/i18n';
 	import { dropOffDirectionsUrl, type DropOffPoint } from '../domain/drop-off';
 
-	let { point }: { point: DropOffPoint } = $props();
+	/** `directions={false}` keeps the destination on record but drops the call to travel there. */
+	let { point, directions = true }: { point: DropOffPoint; directions?: boolean } = $props();
 
 	const t = $derived(getTranslation(PUBLIC_DONATIONS_I18N, langState.current));
-	const directionsHref = $derived(dropOffDirectionsUrl(point));
+	const directionsHref = $derived(directions ? dropOffDirectionsUrl(point) : null);
 </script>
 
 <div data-testid="drop-off-card">

@@ -544,7 +544,7 @@ test.describe('Donor wizard layout and step scrolling (#619, #620)', TAGS, () =>
 test.describe('Track page shows the drop-off shelter and directions (#590)', TAGS, () => {
 	const TOKEN = 'TX-SH001-DROPOFF';
 
-	function mockTrack(page: Page, deliveryMethod: string) {
+	function mockTrack(page: Page, deliveryMethod: string, status = 'declared') {
 		return page.route(`**/api/public/v1/donations/${TOKEN}`, (route) =>
 			route.fulfill({
 				status: 200,
@@ -552,7 +552,7 @@ test.describe('Track page shows the drop-off shelter and directions (#590)', TAG
 				body: JSON.stringify({
 					success: true,
 					donation: {
-						status: 'declared',
+						status,
 						booking_ref: 'DN-590001',
 						shelter_code: 'SH001',
 						donor: { name: 'ผู้บริจาคใจบุญ', phone_masked: '***-***-5678' },
@@ -586,6 +586,29 @@ test.describe('Track page shows the drop-off shelter and directions (#590)', TAG
 		await expect(navigate).toHaveAttribute('href', DIRECTIONS_HREF);
 		await expect(navigate).toHaveAttribute('target', '_blank');
 	});
+
+	// `redirected` matters most: the donor now goes to another shelter, not this one.
+	for (const status of ['cancelled', 'redirected']) {
+		test(`keeps the shelter but drops directions once the booking is ${status}`, async ({
+			page
+		}) => {
+			await mockTrack(page, 'self_dropoff', status);
+			await page.route('**/api/public/v1/shelters/SH001', (route) =>
+				route.fulfill({
+					status: 200,
+					contentType: 'application/json',
+					body: JSON.stringify({ shelter: SHELTER_DETAIL })
+				})
+			);
+
+			await page.goto(`/donations/track/${TOKEN}`);
+
+			const card = page.getByTestId('drop-off-card');
+			await expect(card.getByText(SHELTER_DETAIL.name)).toBeVisible();
+			await expect(card.getByText(SHELTER_DETAIL.address)).toBeVisible();
+			await expect(page.getByRole('link', { name: 'นำทางด้วย Google Maps' })).toHaveCount(0);
+		});
+	}
 
 	test('keeps the shelter code and breaks nothing when the shelter lookup 404s', async ({
 		page
