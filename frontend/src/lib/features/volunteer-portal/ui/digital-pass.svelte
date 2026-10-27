@@ -396,7 +396,7 @@
 						{t.cancelModalCancelBtn}
 					</AlertDialog.Cancel>
 					<AlertDialog.Action
-						class="rounded-xl bg-destructive text-xs font-semibold text-white hover:bg-destructive/90"
+						class="rounded-xl bg-destructive text-xs font-semibold text-destructive-foreground hover:bg-destructive/90"
 						disabled={cancel.isPending}
 						onclick={(e) => {
 							e.preventDefault();
