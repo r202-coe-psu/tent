@@ -3,6 +3,7 @@
 	import UtensilsCrossed from '@lucide/svelte/icons/utensils-crossed';
 	import AlertTriangle from '@lucide/svelte/icons/alert-triangle';
 	import AlertCircle from '@lucide/svelte/icons/alert-circle';
+	import Info from '@lucide/svelte/icons/info';
 	import Clock from '@lucide/svelte/icons/clock';
 	import CheckCircle2 from '@lucide/svelte/icons/check-circle-2';
 	import Loader from '@lucide/svelte/icons/loader';
@@ -493,6 +494,14 @@
 			<p class="flex items-center gap-2 text-sm text-slate-600">
 				<AlertCircle class="size-4 shrink-0" aria-hidden="true" />
 				<span>เมนูนี้ไม่ระบุสารก่อแพ้ — ตรวจสอบกับครัวก่อนแจก</span>
+			</p>
+		{/if}
+
+		<!-- Free-text menu allergens are not matched; show them so staff can compare by eye -->
+		{#if (recipientAllergyLabel || allergenPreflight.recipientFreeText.length > 0) && allergenPreflight.menuFreeText.length > 0}
+			<p class="flex items-center gap-2 text-sm text-slate-700">
+				<Info class="size-4 shrink-0" aria-hidden="true" />
+				<span>เมนูระบุ: {allergenPreflight.menuFreeText.join(', ')} — ระบบไม่ได้เทียบให้</span>
 			</p>
 		{/if}
 

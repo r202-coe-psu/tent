@@ -352,7 +352,19 @@ describe('frontline-handover model helpers', () => {
 				allergyItems
 			);
 			expect(result.recipientFreeText).toEqual(['เพนิซิลลิน']);
+			expect(result.menuFreeText).toEqual(['เพนิซิลลิน']);
 			expect(result.conflicts).toEqual([]);
+		});
+
+		it('keeps menu free text apart from the codes it matches', () => {
+			const result = checkAllergenAdvisory(
+				evacueeRecipient,
+				['egg'],
+				['ไข่', 'ถั่วเหลือง'],
+				allergyItems
+			);
+			expect(result.menuCodes).toEqual(['egg']);
+			expect(result.menuFreeText).toEqual(['ถั่วเหลือง']);
 		});
 
 		it('notes a menu with no allergens listed when the recipient has allergies', () => {

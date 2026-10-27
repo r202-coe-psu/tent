@@ -191,6 +191,8 @@ export interface AllergenAdvisory {
 	recipientFreeText: string[];
 	/** Menu allergens that are master codes. */
 	menuCodes: string[];
+	/** Menu allergens kept as free text: shown for staff to compare, never matched. */
+	menuFreeText: string[];
 	/** Codes the recipient is allergic to that the menu contains (FR-MRM-07). */
 	conflicts: string[];
 	/** The recipient has allergies but the menu lists no allergens (FR-MRM-09). */
@@ -201,6 +203,7 @@ const NO_ALLERGEN_ADVISORY: AllergenAdvisory = {
 	recipientCodes: [],
 	recipientFreeText: [],
 	menuCodes: [],
+	menuFreeText: [],
 	conflicts: [],
 	menuUnspecified: false
 };
@@ -220,11 +223,13 @@ export function checkAllergenAdvisory(
 	const codes = new Set(allergyItems.map((item) => item.code));
 	const recipientValues = resolveMasterCodes(recipientAllergies ?? [], allergyItems);
 	const recipientCodes = recipientValues.filter((v) => codes.has(v));
-	const menuCodes = resolveMasterCodes(menuAllergens, allergyItems).filter((v) => codes.has(v));
+	const menuValues = resolveMasterCodes(menuAllergens, allergyItems);
+	const menuCodes = menuValues.filter((v) => codes.has(v));
 	return {
 		recipientCodes,
 		recipientFreeText: recipientValues.filter((v) => !codes.has(v)),
 		menuCodes,
+		menuFreeText: menuValues.filter((v) => !codes.has(v)),
 		conflicts: findAllergenConflicts(recipientCodes, menuCodes),
 		menuUnspecified: recipientValues.length > 0 && menuAllergens.length === 0
 	};
