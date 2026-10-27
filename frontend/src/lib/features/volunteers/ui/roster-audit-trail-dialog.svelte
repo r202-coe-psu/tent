@@ -28,6 +28,7 @@
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
+	import { describeCheckEvent } from '../domain/check-event-source';
 	import type { ShiftAssignment } from '../domain/shift-assignment.schema';
 	import type { Volunteer } from '../domain/volunteer.schema';
 
@@ -39,7 +40,8 @@
 		volunteerName: string;
 		actorLine: string;
 		noteLine: string;
-		isManual: boolean;
+		sourceLabel: string;
+		group: 'self' | 'staff' | 'unknown';
 	};
 
 	let {
@@ -64,33 +66,43 @@
 		for (const a of assignments) {
 			const name = volunteerName(a.volunteer_id);
 			if (a.check_in_at) {
-				const manual = a.check_in_method === 'manual_override';
+				const d = describeCheckEvent({
+					kind: 'check_in',
+					method: a.check_in_method,
+					by: a.check_in_by,
+					reason: a.check_in_reason,
+					volunteerName: name
+				});
 				rows.push({
 					key: `${a._id}-in`,
 					kind: 'check_in',
 					ts: a.check_in_at,
 					volunteerId: a.volunteer_id,
 					volunteerName: name,
-					actorLine: manual
-						? `${a.check_in_by ?? 'จนท.'} (เช็คอินแทนหน้างาน)`
-						: `${name} (สแกน QR ด้วยตนเอง)`,
-					noteLine: manual ? (a.check_in_reason ?? '—') : 'ตรงเวลากะทำงาน',
-					isManual: manual
+					actorLine: d.actorLine,
+					noteLine: d.noteLine,
+					sourceLabel: d.sourceLabel,
+					group: d.group
 				});
 			}
 			if (a.check_out_at) {
-				const manualOut = a.check_out_method === 'manual_override';
+				const d = describeCheckEvent({
+					kind: 'check_out',
+					method: a.check_out_method,
+					by: a.check_out_by,
+					reason: a.check_out_reason,
+					volunteerName: name
+				});
 				rows.push({
 					key: `${a._id}-out`,
 					kind: 'check_out',
 					ts: a.check_out_at,
 					volunteerId: a.volunteer_id,
 					volunteerName: name,
-					actorLine: manualOut
-						? `${a.check_out_by ?? 'จนท.'} (เช็คเอาต์แทนหน้างาน)`
-						: `${a.check_out_by ?? name} (สแกน QR)`,
-					noteLine: manualOut ? (a.check_out_reason ?? '—') : 'ปฏิบัติงานเสร็จสิ้น / ออกจากศูนย์',
-					isManual: manualOut
+					actorLine: d.actorLine,
+					noteLine: d.noteLine,
+					sourceLabel: d.sourceLabel,
+					group: d.group
 				});
 			}
 		}
@@ -103,7 +115,7 @@
 	});
 
 	let volunteerFilter = $state('');
-	let sourceFilter = $state<'all' | 'self' | 'manual'>('all');
+	let sourceFilter = $state<'all' | 'self' | 'staff'>('all');
 
 	// Jump straight to one volunteer's history when opened from a roster row's
 	// history icon (`roster-row.svelte`) — same "preset on open" pattern used
@@ -122,8 +134,7 @@
 	const filteredEvents = $derived.by(() => {
 		let list = events;
 		if (volunteerFilter) list = list.filter((e) => e.volunteerId === volunteerFilter);
-		if (sourceFilter === 'self') list = list.filter((e) => !e.isManual);
-		else if (sourceFilter === 'manual') list = list.filter((e) => e.isManual);
+		if (sourceFilter !== 'all') list = list.filter((e) => e.group === sourceFilter);
 		return list;
 	});
 
@@ -140,7 +151,8 @@
 				ประวัติการเช็คอินและการตรวจสอบ (Check-In Audit Trail)
 			</Dialog.Title>
 			<p class="mt-1 text-xs text-muted-foreground">
-				บันทึกย้อนหลังการลงเวลาเข้า-ออก แยกชัดเจนระหว่างจิตอาสาทำรายการเองและเจ้าหน้าที่เช็คอินแทน
+				บันทึกย้อนหลังการลงเวลาเข้า-ออก แยกชัดเจนระหว่างจิตอาสาทำรายการเองและเจ้าหน้าที่ดำเนินการให้
+				(สแกน QR / เช็คอินแทน)
 			</p>
 		</div>
 
@@ -179,16 +191,16 @@
 					onclick={() => (sourceFilter = 'self')}
 				>
 					<Smartphone class="h-3.5 w-3.5" />
-					เช็คอินเอง
+					จิตอาสาทำเอง
 				</Button>
 				<Button
 					size="sm"
-					variant={sourceFilter === 'manual' ? 'default' : 'ghost'}
+					variant={sourceFilter === 'staff' ? 'default' : 'ghost'}
 					class="gap-1.5"
-					onclick={() => (sourceFilter = 'manual')}
+					onclick={() => (sourceFilter = 'staff')}
 				>
 					<UserCog class="h-3.5 w-3.5" />
-					จนท. บันทึกแทน
+					จนท. ดำเนินการ
 				</Button>
 			</div>
 		</div>
@@ -220,13 +232,12 @@
 							<span
 								class="inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-[11px] font-medium text-muted-foreground"
 							>
-								{#if event.isManual}
-									<UserCog class="h-3 w-3" />
-									จนท. {event.kind === 'check_in' ? 'เช็คอินแทน' : 'เช็คเอาต์แทน'} (Source)
-								{:else}
+								{#if event.group === 'self'}
 									<Smartphone class="h-3 w-3" />
-									{event.kind === 'check_in' ? 'จัดอาสาเช็คอินเอง' : 'จัดอาสาเช็คเอาต์เอง'} (Source)
+								{:else if event.group === 'staff'}
+									<UserCog class="h-3 w-3" />
 								{/if}
+								{event.sourceLabel} (Source)
 							</span>
 							<span class="text-sm font-bold text-foreground">{event.volunteerName}</span>
 							<span class="ml-auto text-[11px] text-muted-foreground">{formatTs(event.ts)}</span>
