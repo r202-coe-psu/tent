@@ -1,17 +1,12 @@
 from datetime import UTC, datetime
 from types import SimpleNamespace
 
-import pytest
 from tent_model.volunteer_application_buffer import (
     ApplicantBuffer,
     SelectedShiftBuffer,
 )
 
-from worker.inbound.volunteer_applications import (
-    _application_doc,
-    _volunteer_doc,
-    is_volunteer_mobile,
-)
+from worker.inbound.volunteer_applications import _application_doc, _volunteer_doc
 
 
 def _application(**overrides: object) -> SimpleNamespace:
@@ -63,19 +58,3 @@ def test_application_keeps_its_own_token_and_identity() -> None:
     assert doc["volunteer_id"] == "volunteer:01VOL"
     assert doc["tracking_token_hash"] == "token-hash"
     assert doc["status"] == "pending_review"
-
-
-@pytest.mark.parametrize(
-    ("phone", "expected"),
-    [
-        ("0812345678", True),
-        ("081-234-5678", True),
-        ("+66812345678", True),
-        ("022222222", False),
-        ("02-222-2222", False),
-        ("ไม่มี", False),
-        ("", False),
-    ],
-)
-def test_volunteer_phone_must_be_a_ten_digit_mobile(phone: str, expected: bool) -> None:
-    assert is_volunteer_mobile(phone) is expected

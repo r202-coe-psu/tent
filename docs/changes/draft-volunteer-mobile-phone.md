@@ -14,7 +14,6 @@ affects:
   - frontend/src/lib/features/volunteer-portal/domain/volunteer.ts (`phoneField`)
   - frontend/src/lib/features/volunteers/ui/public-quick-apply-modal.svelte
   - frontend/src/routes/api/public/v1/volunteer/apply/+server.ts, apply/preflight/+server.ts
-  - worker/src/worker/inbound/volunteer_applications.py
 ---
 
 # draft-volunteer-mobile-phone — เบอร์จิตอาสาต้องเป็นมือถือ 10 หลัก
@@ -56,7 +55,7 @@ affects:
   - เว้นว่างได้ เก็บเป็น `phone: null`, `phone_hash: null`
   - ถ้ากรอกต้องผ่าน FR-1
   - แก้เบอร์แล้วคำนวณ `phone_hash` ใหม่
-- **FR-7:** worker inbound (`volunteer_applications.py`) ใช้กฎเดียวกับ FR-1
+- **FR-7:** worker inbound (`volunteer_applications.py`) ไม่ตรวจรูปแบบเบอร์ BFF ตาม FR-4 เป็นด่านตรวจเดียว worker ต้องไม่ทิ้งใบสมัครเอง (ตอนนี้ไม่มีอะไรเขียน buffer นี้แล้ว)
 
 ### FR — ข้อมูลเดิมและการออกสิทธิ์
 
@@ -90,7 +89,7 @@ affects:
 ## Impact
 
 - **code:** ตาม `affects:` ข้างบน (#951)
-- **test:** unit test ของ schema เบอร์จิตอาสา, ฟอร์ม walk-in และแก้ไข, BFF apply/preflight, `volunteer-access` และ worker inbound
+- **test:** unit test ของ schema เบอร์จิตอาสา, ฟอร์ม walk-in และแก้ไข, BFF apply/preflight และ `volunteer-access`
   - test เดิมของ #877 ที่ออกสิทธิ์ให้เบอร์ 9 หลักได้ เปลี่ยนเป็นคาดว่าถูกปฏิเสธ
 - **ข้อมูลเดิม:** จิตอาสาเบอร์ 9 หลักเปิด Digital Pass ด้วยเบอร์ไม่ได้จนกว่าเจ้าหน้าที่จะแก้เบอร์ แต่ยังเปิดด้วยลิงก์ตั๋วได้
 - **โปรไฟล์ซ้ำ:** คนที่เคยลงเบอร์บ้านแล้วสมัครใหม่ด้วยมือถือ จะได้โปรไฟล์ใหม่ เพราะ `phone_hash` ต่างกัน วิธีแก้คือให้เจ้าหน้าที่แก้เบอร์ในโปรไฟล์เดิมก่อน (เกี่ยวกับ #694)
