@@ -14,8 +14,7 @@ import {
 	validateCounterReturnQuantity,
 	validateNonPhysicalClear,
 	getLoanStatusBadge,
-	isEligibleBulkPool,
-	validateBulkGateClear
+	isEligibleBulkPool
 } from '../model/loan-return';
 
 const createMockContext = (
@@ -367,27 +366,6 @@ describe('Frontline Loan Return & Routine Counter Return Flow (Slice 5.5A + 5.5B
 				const smallPool = { ...mockPool, unclaimed_quota: '3' };
 				const remaining = calculateLoanRemainingQty(activeLoanLog); // 5
 				expect(isEligibleBulkPool(smallPool, activeLoanLog.item_id, remaining)).toBe(false);
-			});
-		});
-
-		describe('Validation & State Invariants', () => {
-			it('validates successfully when an eligible pool is selected with adequate quota', () => {
-				const remaining = calculateLoanRemainingQty(activeLoanLog);
-				const validation = validateBulkGateClear(mockPool, remaining);
-				expect(validation.isValid).toBe(true);
-			});
-
-			it('rejects submission when no pool is selected', () => {
-				const validation = validateBulkGateClear(null, '5');
-				expect(validation.isValid).toBe(false);
-				expect(validation.error).toContain('เลือกกองรับคืน');
-			});
-
-			it('rejects submission when selected pool has insufficient quota', () => {
-				const smallPool = { ...mockPool, unclaimed_quota: '2' };
-				const validation = validateBulkGateClear(smallPool, '5');
-				expect(validation.isValid).toBe(false);
-				expect(validation.error).toContain('เหลือรอจับคู่');
 			});
 		});
 

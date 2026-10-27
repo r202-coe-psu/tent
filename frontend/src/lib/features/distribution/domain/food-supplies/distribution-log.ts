@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { type AuthorContext, type BaseDoc, makeDoc, now } from '$lib/db/model';
-import { addQty, parseQty, qtyGt, qtyLte, subQty } from '$lib/utils/qty';
+import { addQty, parseQty, qtyGt, qtyIsZero, qtyLte, subQty } from '$lib/utils/qty';
 import {
 	bulkReturnPoolIdSchema,
 	distributionLogIdSchema,
@@ -13,7 +13,15 @@ import {
 	requisitionTicketIdSchema,
 	thailandCalendarDay
 } from './shared';
+import { bulkReturnEntryIdSchema } from './bulk-return-entry';
 import type { TicketItem } from './requisition-ticket';
+
+/**
+ * schema_v 1: legacy. schema_v 2 (#658): adds `applied_bulk_entry_ids` for the v3 bulk return path.
+ * A v1 doc is lazily upgraded to 2 the first time the bulk path writes the field; never 2 -> 1.
+ */
+export const DISTRIBUTION_LOG_SCHEMA_V = 2;
+const distributionLogSchemaVSchema = z.union([z.literal(1), z.literal(2)]);
 
 export const distributionRecipientTypeSchema = z.enum(['evacuee', 'volunteer', 'outside']);
 export type DistributionRecipientType = z.infer<typeof distributionRecipientTypeSchema>;
@@ -50,7 +58,11 @@ const distributionLogFields = {
 	qty_returned: nonNegativeWholeQtySchema.optional(),
 	condition_on_return: returnConditionSchema.optional(),
 	clear_reason: loanClearReasonSchema.optional(),
+	// Legacy bulk path: existing values stay readable and are carried unchanged; the v3 path never
+	// writes it.
 	bulk_pool_id: bulkReturnPoolIdSchema.optional(),
+	// v3 bulk path (schema_v 2 only): ids of the bulk_return_entry docs applied to this loan.
+	applied_bulk_entry_ids: z.array(bulkReturnEntryIdSchema).optional(),
 	returned_at: z.string().datetime().optional(),
 	returned_by: z.string().min(1).optional(),
 	is_override: z.boolean(),
@@ -66,9 +78,26 @@ const distributionLogFields = {
 };
 
 function validateDistributionLog(
-	log: z.infer<z.ZodObject<typeof distributionLogFields>>,
+	log: z.infer<z.ZodObject<typeof distributionLogFields>> & { schema_v?: 1 | 2 },
 	ctx: z.RefinementCtx
 ): void {
+	const appliedIds = log.applied_bulk_entry_ids;
+	if (appliedIds !== undefined) {
+		if (log.schema_v === 1) {
+			ctx.addIssue({
+				code: 'custom',
+				path: ['applied_bulk_entry_ids'],
+				message: 'applied_bulk_entry_ids requires schema_v 2'
+			});
+		}
+		if (new Set(appliedIds).size !== appliedIds.length) {
+			ctx.addIssue({
+				code: 'custom',
+				path: ['applied_bulk_entry_ids'],
+				message: 'applied_bulk_entry_ids must not contain duplicates'
+			});
+		}
+	}
 	const recipientId = log.recipient_id;
 	if (log.recipient_type === 'evacuee' && (!recipientId || !recipientId.startsWith('evacuee:'))) {
 		ctx.addIssue({
@@ -133,7 +162,8 @@ function validateDistributionLog(
 			log.returned_at != null ||
 			log.returned_by != null ||
 			log.clear_reason != null ||
-			log.bulk_pool_id != null)
+			log.bulk_pool_id != null ||
+			(log.applied_bulk_entry_ids?.length ?? 0) > 0)
 	) {
 		ctx.addIssue({
 			code: 'custom',
@@ -190,11 +220,15 @@ function validateDistributionLog(
 			message: 'Lost or waived loans require notes'
 		});
 	}
-	if (log.clear_reason === 'bulk_dropoff' && !log.bulk_pool_id) {
+	if (
+		log.clear_reason === 'bulk_dropoff' &&
+		!log.bulk_pool_id &&
+		log.applied_bulk_entry_ids === undefined
+	) {
 		ctx.addIssue({
 			code: 'custom',
 			path: ['bulk_pool_id'],
-			message: 'bulk_dropoff requires bulk_pool_id'
+			message: 'bulk_dropoff requires bulk_pool_id or applied_bulk_entry_ids'
 		});
 	}
 	if (log.allergen_conflicts?.length && !log.is_override) {
@@ -218,6 +252,7 @@ export const distributionLogDocSchema = z
 		_id: distributionLogIdSchema,
 		type: z.literal('distribution_log'),
 		...foodSuppliesBaseDocShape,
+		schema_v: distributionLogSchemaVSchema,
 		...distributionLogFields
 	})
 	.superRefine(validateDistributionLog);
@@ -264,7 +299,7 @@ export function createDistributionLog(
 	return distributionLogDocSchema.parse(
 		makeDoc(
 			'distribution_log',
-			1,
+			DISTRIBUTION_LOG_SCHEMA_V,
 			{
 				...parsed,
 				status: parsed.is_returnable ? 'active' : 'fulfilled',
@@ -280,7 +315,6 @@ export function createDistributionLog(
 const IMMUTABLE_LOG_ISSUANCE_FIELDS = [
 	'_id',
 	'type',
-	'schema_v',
 	'ticket_id',
 	'item_id',
 	'qty',
@@ -294,11 +328,15 @@ const IMMUTABLE_LOG_ISSUANCE_FIELDS = [
 	'created_by'
 ] as const;
 
-/** DistributionLog is durable audit history: issuance facts cannot be rewritten. */
+/**
+ * DistributionLog is durable audit history: issuance facts cannot be rewritten. schema_v may stay
+ * equal or upgrade 1 -> 2 (lazy upgrade by the v3 bulk path), never downgrade.
+ */
 export function assertDistributionLogIssuanceImmutable(
 	previous: DistributionLog,
 	next: DistributionLog
 ): void {
+	assertSchemaVNotDowngraded(previous, next);
 	for (const field of IMMUTABLE_LOG_ISSUANCE_FIELDS) {
 		if (previous[field] !== next[field]) {
 			throw new Error(`distribution_log.${field} is immutable after issuance`);
@@ -328,12 +366,109 @@ export function assertDistributionLogCanBeVoided(log: DistributionLog): void {
 		log.returned_at != null ||
 		log.returned_by != null ||
 		log.clear_reason != null ||
-		log.bulk_pool_id != null
+		log.bulk_pool_id != null ||
+		(log.applied_bulk_entry_ids?.length ?? 0) > 0
 	) {
 		throw new Error(
 			`Cannot void distribution log ${log._id} after return or clear activity has begun`
 		);
 	}
+}
+
+/** The v3 bulk path may only upgrade the doc 1 -> 2; it never downgrades. */
+function assertSchemaVNotDowngraded(previous: DistributionLog, next: DistributionLog): void {
+	const prev = previous.schema_v;
+	const nxt = next.schema_v;
+	if (prev !== nxt && !(prev === 1 && nxt === 2)) {
+		throw new Error('distribution_log.schema_v may only stay equal or upgrade 1 -> 2');
+	}
+}
+
+export interface BulkEntryRef {
+	entry_id: string;
+	qty: string;
+}
+
+/**
+ * Pure v3 bulk APPLY: records one `bulk_return_entry` against a loan. Idempotent — when `entry_id`
+ * is already in applied_bulk_entry_ids the log is returned unchanged (same reference). Throws when
+ * the loan is not returnable / not active|partially_returned, or `qty` exceeds the outstanding
+ * (qty - qty_returned). Upgrades schema_v to 2; carries any legacy bulk_pool_id unchanged and never
+ * writes one.
+ */
+export function applyBulkEntryToLog(
+	log: DistributionLog,
+	ref: BulkEntryRef,
+	actor: string,
+	at: string
+): DistributionLog {
+	bulkReturnEntryIdSchema.parse(ref.entry_id);
+	const applied = log.applied_bulk_entry_ids ?? [];
+	if (applied.includes(ref.entry_id)) return log;
+	if (!log.is_returnable || !['active', 'partially_returned'].includes(log.status)) {
+		throw new Error(
+			`Cannot apply bulk entry to distribution log ${log._id} (status: '${log.status}')`
+		);
+	}
+	const qty = positiveWholeQtySchema.parse(ref.qty);
+	const nextReturned = addQty(log.qty_returned ?? '0', qty);
+	if (qtyGt(nextReturned, log.qty)) {
+		throw new Error(`Bulk entry qty ${qty} exceeds outstanding qty on ${log._id}`);
+	}
+	const next = distributionLogDocSchema.parse({
+		...log,
+		schema_v: DISTRIBUTION_LOG_SCHEMA_V,
+		status: parseQty(nextReturned).eq(log.qty) ? 'returned' : 'partially_returned',
+		qty_returned: nextReturned,
+		clear_reason: 'bulk_dropoff',
+		applied_bulk_entry_ids: [...applied, ref.entry_id],
+		returned_at: at,
+		returned_by: actor,
+		updated_at: at
+	}) as DistributionLog;
+	assertDistributionLogIssuanceImmutable(log, next);
+	return next;
+}
+
+/**
+ * Pure v3 bulk REVERT (entry void): removes one applied entry from a loan. Idempotent — when
+ * `entry_id` is not in applied_bulk_entry_ids the log is returned unchanged. Throws when the loan
+ * is not partially_returned|returned or `qty` exceeds qty_returned. Status becomes `active` (with
+ * qty_returned '0', clear_reason/returned_* left set) when nothing remains returned, otherwise
+ * `partially_returned`. Upgrades schema_v to 2; never writes bulk_pool_id.
+ */
+export function revertBulkEntryFromLog(
+	log: DistributionLog,
+	ref: BulkEntryRef,
+	actor: string,
+	at: string
+): DistributionLog {
+	const applied = log.applied_bulk_entry_ids ?? [];
+	if (!applied.includes(ref.entry_id)) return log;
+	if (!['partially_returned', 'returned'].includes(log.status)) {
+		throw new Error(
+			`Cannot revert bulk entry from distribution log ${log._id} (status: '${log.status}')`
+		);
+	}
+	const qty = positiveWholeQtySchema.parse(ref.qty);
+	const returned = log.qty_returned ?? '0';
+	if (qtyGt(qty, returned)) {
+		throw new Error(`Bulk entry qty ${qty} exceeds qty_returned on ${log._id}`);
+	}
+	const nextReturned = subQty(returned, qty);
+	const next = distributionLogDocSchema.parse({
+		...log,
+		schema_v: DISTRIBUTION_LOG_SCHEMA_V,
+		status: qtyIsZero(nextReturned) ? 'active' : 'partially_returned',
+		qty_returned: nextReturned,
+		clear_reason: 'bulk_dropoff',
+		applied_bulk_entry_ids: applied.filter((id) => id !== ref.entry_id),
+		returned_at: at,
+		returned_by: actor,
+		updated_at: at
+	}) as DistributionLog;
+	assertDistributionLogIssuanceImmutable(log, next);
+	return next;
 }
 
 /**

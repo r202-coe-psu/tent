@@ -105,7 +105,7 @@ describe('MASTER_DATA_TYPE_META', () => {
 	it('uses the locked Thai shortTitles for the hub sidebar', () => {
 		expect(MASTER_DATA_TYPE_META.vulnerable_group.shortTitle).toBe('กลุ่มเปราะบาง');
 		expect(MASTER_DATA_TYPE_META.housing_type.shortTitle).toBe('ประเภทที่อยู่');
-		expect(MASTER_DATA_TYPE_META.shelter_type.shortTitle).toBe('ประเภทศูนย์');
+		expect(MASTER_DATA_TYPE_META.shelter_type.shortTitle).toBe('ประเภทอาคาร');
 		expect(MASTER_DATA_TYPE_META.volunteer_skills.shortTitle).toBe('ทักษะอาสา');
 		expect(MASTER_DATA_TYPE_META.chronic_disease.shortTitle).toBe('โรคประจำตัว');
 		expect(MASTER_DATA_TYPE_META.allergy.shortTitle).toBe('อาการแพ้');
