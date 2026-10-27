@@ -41,6 +41,8 @@ export class DonationStore {
 
 	deliveryMethod = $state<'self_dropoff' | 'parcel' | 'shelter_pickup'>('self_dropoff');
 	vehicleType = $state<'motorcycle' | 'car' | 'pickup' | 'truck' | undefined>(undefined);
+	/** Optional plate for a self drop-off. Kept when the donor switches method, never sent then. */
+	vehiclePlate = $state('');
 	slotDate = $state('');
 	slotTime = $state('');
 	shelterCode = $state('');
@@ -113,6 +115,7 @@ export class DonationStore {
 		this.donorEmail = '';
 		this.deliveryMethod = 'self_dropoff';
 		this.vehicleType = undefined;
+		this.vehiclePlate = '';
 		this.slotDate = '';
 		this.slotTime = '';
 		this.shelterCode = '';

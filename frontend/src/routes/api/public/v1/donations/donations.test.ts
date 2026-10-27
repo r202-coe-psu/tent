@@ -962,4 +962,55 @@ describe('POST /api/public/v1/donations', () => {
 			expect(res.body.success).toBe(true);
 		});
 	});
+
+	describe('vehicle plate', () => {
+		function mockCouch() {
+			vi.mocked(adminRaw).mockImplementation((path: string, method: string) => {
+				if (method === 'GET' && path.includes('donation_campaign:')) {
+					return Promise.resolve({ status: 200, data: { rows: [] } });
+				}
+				if (method === 'GET' && path.includes('donation:')) {
+					return Promise.resolve({ status: 200, data: { rows: [] } });
+				}
+				return Promise.resolve({ status: 404, data: {} });
+			});
+		}
+
+		async function submit(logistics: Record<string, unknown>) {
+			mockCouch();
+			mockFastapiCreate();
+			return POST({
+				request: { json: () => Promise.resolve({ ...validPayload, logistics }) },
+				getClientAddress: () => '127.0.0.1'
+			} as unknown as PostEvent);
+		}
+
+		const forwardedLogistics = () => {
+			const [, init] = vi.mocked(fetch).mock.calls[0]!;
+			return JSON.parse(String((init as RequestInit).body)).logistics;
+		};
+
+		it('forwards a trimmed plate to FastAPI for a self drop-off', async () => {
+			const response = await submit({
+				delivery_method: 'self_dropoff',
+				vehicle: 'motorcycle',
+				vehicle_plate: '  กข 1234 กรุงเทพมหานคร '
+			});
+			expect(response.status).toBe(200);
+			expect(forwardedLogistics().vehicle_plate).toBe('กข 1234 กรุงเทพมหานคร');
+		});
+
+		it('omits a blank plate', async () => {
+			await submit({ delivery_method: 'self_dropoff', vehicle: 'car', vehicle_plate: '   ' });
+			expect(forwardedLogistics()).not.toHaveProperty('vehicle_plate');
+		});
+
+		it('rejects a plate on shelter_pickup with 422', async () => {
+			const response = await submit({
+				delivery_method: 'shelter_pickup',
+				vehicle_plate: 'กข 1234'
+			});
+			expect(response.status).toBe(422);
+		});
+	});
 });

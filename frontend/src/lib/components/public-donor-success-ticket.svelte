@@ -179,6 +179,13 @@
 				</div>
 			</div>
 
+			{#if donationStore.deliveryMethod === 'self_dropoff' && donationStore.vehiclePlate.trim()}
+				<div>
+					<div class="mb-1 text-xs font-bold text-slate-500">{t.vehiclePlateTicketLabel}</div>
+					<div class="text-sm font-bold text-slate-800">{donationStore.vehiclePlate.trim()}</div>
+				</div>
+			{/if}
+
 			<div class="grid grid-cols-2 gap-4">
 				<div>
 					<div class="mb-1 flex items-center gap-1 text-xs font-bold text-slate-500">

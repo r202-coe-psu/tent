@@ -32,6 +32,7 @@
 	import { bangkokToday, DISPLAY_TIME_ZONE } from '$lib/utils/date';
 	import { PUBLIC_DONATIONS_I18N } from '$lib/constants/i18n';
 	import { fetchRecaptchaEnabled } from '$lib/api/recaptcha-status';
+	import { VEHICLE_PLATE_MAX } from '$lib/features/donations';
 	import { ensureRecaptchaLoaded } from '$lib/api/recaptcha-script';
 
 	const donationStore = getDonationStore();
@@ -187,6 +188,8 @@
 
 		if (donationStore.deliveryMethod === 'self_dropoff') {
 			logistics.vehicle = donationStore.vehicleType;
+			const plate = donationStore.vehiclePlate.trim();
+			if (plate) logistics.vehicle_plate = plate;
 			logistics.slot = { date: slotDateStr, from: fromTime, to: toTime };
 		} else if (donationStore.deliveryMethod === 'shelter_pickup') {
 			logistics.slot = { date: slotDateStr, from: fromTime, to: toTime };
@@ -405,6 +408,17 @@
 							{/if}
 						</button>
 					{/each}
+				</div>
+				<div class="space-y-2">
+					<label class="block text-sm font-bold text-slate-800" for="vehicle-plate">
+						{t.vehiclePlateLabel}
+					</label>
+					<Input
+						id="vehicle-plate"
+						bind:value={donationStore.vehiclePlate}
+						maxlength={VEHICLE_PLATE_MAX}
+						placeholder={t.vehiclePlatePlaceholder}
+					/>
 				</div>
 			</div>
 		{/if}
