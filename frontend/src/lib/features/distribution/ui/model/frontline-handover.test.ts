@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
 	canRecipientReceiveItem,
+	checkAllergenAdvisory,
 	checkDuplicateMealAdvisory,
+	formatAllergyCodes,
 	checkMenuMatchAdvisory,
 	formatMenuTags,
 	getItemCapacitySummary,
@@ -212,38 +214,140 @@ describe('frontline-handover model helpers', () => {
 	});
 
 	describe('checkMenuMatchAdvisory', () => {
+		const infantMenu = { dietary: [], age_group: 'INFANT' };
 		const halalMenu = { dietary: ['HALAL'], age_group: 'ALL' };
 		const generalMenu = { dietary: [], age_group: 'ALL' };
 
 		it('flags a tagged menu for an evacuee without a shared tag', () => {
-			expect(checkMenuMatchAdvisory({ ...evacueeRecipient, menuTags: [] }, halalMenu)).toEqual({
+			expect(checkMenuMatchAdvisory({ ...evacueeRecipient, menuTags: [] }, infantMenu)).toEqual({
 				isMismatch: true,
-				menuTags: ['HALAL']
+				menuTags: ['INFANT']
 			});
 		});
 
 		it('passes an evacuee that shares a tag with the menu', () => {
-			const muslim = { ...evacueeRecipient, menuTags: ['HALAL' as const] };
-			expect(checkMenuMatchAdvisory(muslim, halalMenu).isMismatch).toBe(false);
+			const infant = { ...evacueeRecipient, menuTags: ['INFANT' as const] };
+			expect(checkMenuMatchAdvisory(infant, infantMenu).isMismatch).toBe(false);
+		});
+
+		it('passes anyone on a HALAL menu (#801)', () => {
+			expect(checkMenuMatchAdvisory({ ...evacueeRecipient, menuTags: [] }, halalMenu)).toEqual({
+				isMismatch: false,
+				menuTags: []
+			});
+			expect(checkMenuMatchAdvisory(outsideRecipient, halalMenu).isMismatch).toBe(false);
+			expect(checkMenuMatchAdvisory(volunteerRecipient, halalMenu).isMismatch).toBe(false);
 		});
 
 		it('flags tagged menus but not general ones for outside recipients', () => {
-			expect(checkMenuMatchAdvisory(outsideRecipient, halalMenu).isMismatch).toBe(true);
+			expect(checkMenuMatchAdvisory(outsideRecipient, infantMenu).isMismatch).toBe(true);
 			expect(checkMenuMatchAdvisory(outsideRecipient, generalMenu).isMismatch).toBe(false);
 		});
 
 		it('treats a volunteer as untagged: general menus pass, tagged menus flag', () => {
 			expect(checkMenuMatchAdvisory(volunteerRecipient, generalMenu).isMismatch).toBe(false);
-			expect(checkMenuMatchAdvisory(volunteerRecipient, halalMenu).isMismatch).toBe(true);
+			expect(checkMenuMatchAdvisory(volunteerRecipient, infantMenu).isMismatch).toBe(true);
 		});
 
 		it('stays silent without a recipient or a known menu', () => {
-			expect(checkMenuMatchAdvisory(null, halalMenu).isMismatch).toBe(false);
+			expect(checkMenuMatchAdvisory(null, infantMenu).isMismatch).toBe(false);
 			expect(checkMenuMatchAdvisory(evacueeRecipient, undefined).isMismatch).toBe(false);
 		});
 
 		it('formats tags as Thai labels', () => {
 			expect(formatMenuTags(['HALAL', 'ELDERLY'])).toBe('ฮาลาล, ผู้สูงอายุ');
+		});
+	});
+	describe('checkAllergenAdvisory (#607)', () => {
+		const allergyItems = [
+			{
+				code: 'seafood',
+				label_th: 'อาหารทะเล',
+				label_en: 'Seafood',
+				is_default: false,
+				status: 'active' as const
+			},
+			{
+				code: 'egg',
+				label_th: 'ไข่',
+				label_en: 'Egg',
+				is_default: false,
+				status: 'active' as const
+			},
+			{
+				code: 'wheat',
+				label_th: 'แป้งสาลี',
+				label_en: 'Wheat',
+				is_default: false,
+				status: 'active' as const
+			}
+		];
+
+		it('flags the codes the recipient is allergic to (นางบีแพ้ไข่ — ข้าวผัดกุ้ง)', () => {
+			const result = checkAllergenAdvisory(
+				evacueeRecipient,
+				['egg'],
+				['seafood', 'egg'],
+				allergyItems
+			);
+			expect(result.conflicts).toEqual(['egg']);
+			expect(formatAllergyCodes(result.conflicts, allergyItems)).toBe('ไข่');
+		});
+
+		it('passes a menu without the recipient allergens (ข้าวมันไก่)', () => {
+			const result = checkAllergenAdvisory(evacueeRecipient, ['egg'], ['wheat'], allergyItems);
+			expect(result.conflicts).toEqual([]);
+			expect(result.menuUnspecified).toBe(false);
+		});
+
+		it('maps legacy labels on both sides to codes before matching', () => {
+			const result = checkAllergenAdvisory(
+				evacueeRecipient,
+				['ไข่'],
+				['อาหารทะเล', 'ไข่'],
+				allergyItems
+			);
+			expect(result.conflicts).toEqual(['egg']);
+		});
+
+		it('shows free-text allergies without matching them', () => {
+			const result = checkAllergenAdvisory(
+				evacueeRecipient,
+				['เพนิซิลลิน'],
+				['เพนิซิลลิน'],
+				allergyItems
+			);
+			expect(result.recipientFreeText).toEqual(['เพนิซิลลิน']);
+			expect(result.menuFreeText).toEqual(['เพนิซิลลิน']);
+			expect(result.conflicts).toEqual([]);
+		});
+
+		it('keeps menu free text apart from the codes it matches', () => {
+			const result = checkAllergenAdvisory(
+				evacueeRecipient,
+				['egg'],
+				['ไข่', 'ถั่วเหลือง'],
+				allergyItems
+			);
+			expect(result.menuCodes).toEqual(['egg']);
+			expect(result.menuFreeText).toEqual(['ถั่วเหลือง']);
+		});
+
+		it('notes a menu with no allergens listed when the recipient has allergies', () => {
+			expect(
+				checkAllergenAdvisory(evacueeRecipient, ['egg'], [], allergyItems).menuUnspecified
+			).toBe(true);
+			expect(checkAllergenAdvisory(evacueeRecipient, [], [], allergyItems).menuUnspecified).toBe(
+				false
+			);
+		});
+
+		it('skips volunteers and outside recipients', () => {
+			for (const recipient of [volunteerRecipient, outsideRecipient, null]) {
+				expect(checkAllergenAdvisory(recipient, ['egg'], ['egg'], allergyItems).conflicts).toEqual(
+					[]
+				);
+			}
 		});
 	});
 });

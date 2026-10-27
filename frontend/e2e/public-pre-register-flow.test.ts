@@ -343,7 +343,10 @@ test.describe('Pre-register: render contract (R)', { tag: ['@pre-register', '@sm
 		await expect(page.getByRole('heading', { name: 'สมาชิกในครอบครัว', level: 2 })).toBeVisible();
 		await expect(page.getByRole('heading', { name: 'สัตว์เลี้ยง', level: 2 })).toBeVisible();
 		await expect(
-			page.getByRole('heading', { name: 'เงื่อนไขการใช้งานระบบลงทะเบียนล่วงหน้า', level: 4 })
+			page.getByRole('heading', { name: 'ข้อตกลงและความยินยอม', level: 3 })
+		).toBeVisible();
+		await expect(
+			page.getByRole('heading', { name: 'ต้องรับทราบก่อนส่งข้อมูล', level: 4 })
 		).toBeVisible();
 		await expect(page.getByRole('checkbox', { name: DISCLAIMER_LABEL })).toBeVisible();
 
@@ -1550,12 +1553,16 @@ test.describe(
 			await fillBase(page, { consent: false });
 			await openPets(page);
 			await page.getByRole('button', { name: 'เพิ่มสุนัข' }).click();
-			await submitButton(page).click();
+			await acceptFullConsent(page);
+			// FR-22: the safety acknowledgement now gates the button instead of a toast after submit
 			await expect(
-				page.locator('[data-sonner-toast]').filter({
-					hasText: 'กรุณากดยืนยันการรับทราบเงื่อนไขและมาตรการด้านความปลอดภัยของศูนย์พักพิง'
-				})
+				page.getByText('กรุณากดยืนยันการรับทราบเงื่อนไขและมาตรการด้านความปลอดภัยของศูนย์พักพิง')
 			).toBeVisible();
+			await expect(submitButton(page)).toBeDisabled();
+			await page
+				.getByRole('checkbox', { name: /รับทราบและจะปฏิบัติตามกฎความปลอดภัยของศูนย์/ })
+				.check();
+			await expect(submitButton(page)).toBeEnabled();
 			expect(health.registrationWrites).toEqual([]);
 		});
 

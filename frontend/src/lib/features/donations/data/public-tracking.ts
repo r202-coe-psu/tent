@@ -4,7 +4,26 @@
  * FastAPI `/public/v1/donations/{token}` requires EXTERNAL_API_SECRET — the browser
  * must not call it with publicClient. Same pattern as POST/PATCH in the donate wizard.
  */
-import { toDonationTrackView, type DonationTrackView } from '../domain/tracking';
+import {
+	toDonationTrackView,
+	type DonationLookupItem,
+	type DonationTrackView
+} from '../domain/tracking';
+
+export type DonationLookupErrorCode =
+	'CAPTCHA_REQUIRED' | 'CAPTCHA_FAILED' | 'INVALID_PHONE' | 'RATE_LIMITED';
+
+/**
+ * A phone lookup the BFF refused, by code — the page words it in the donor's language.
+ * `CAPTCHA_REQUIRED` came without a token (the caller gets one and asks again);
+ * `CAPTCHA_FAILED` came with one that did not verify (CR-173 FR-8).
+ */
+export class DonationLookupError extends Error {
+	constructor(readonly code: DonationLookupErrorCode) {
+		super(code);
+		this.name = 'DonationLookupError';
+	}
+}
 
 /** The shelter has started taking this booking's goods into stock (BFF 409). */
 const GOODS_IN_STOCK_MESSAGE =
@@ -66,6 +85,36 @@ export async function searchDonationTracking(input: {
 	const bookingRef = (body as { bookingRef?: string }).bookingRef;
 	if (!trackingToken) throw new Error('ไม่พบรายการบริจาคสำหรับรหัสนี้');
 	return { trackingToken, bookingRef: bookingRef ?? input.bookingRef };
+}
+
+/**
+ * Every booking of a phone number that is still in the system (CR-173). The phone goes in
+ * the body — never the URL (FR-1). A number with no bookings resolves to `[]`.
+ */
+export async function lookupDonationsByPhone(input: {
+	phone: string;
+	captchaToken?: string;
+}): Promise<DonationLookupItem[]> {
+	const res = await fetch('/api/public/v1/donations/lookup-by-phone', {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({
+			phone: input.phone.trim(),
+			...(input.captchaToken ? { captcha_token: input.captchaToken } : {})
+		})
+	});
+	const body = await res.json().catch(() => ({}));
+	if (!res.ok) {
+		const error = (body as { error?: string }).error;
+		if (error === 'CAPTCHA_REQUIRED' || error === 'CAPTCHA_FAILED') {
+			throw new DonationLookupError(error);
+		}
+		if (res.status === 422) throw new DonationLookupError('INVALID_PHONE');
+		if (res.status === 429) throw new DonationLookupError('RATE_LIMITED');
+		throw new Error(unwrapError(body, 'ไม่สามารถค้นหารายการบริจาคได้'));
+	}
+	const items = (body as { items?: DonationLookupItem[] }).items;
+	return Array.isArray(items) ? items : [];
 }
 
 export async function updateCourierTracking(
