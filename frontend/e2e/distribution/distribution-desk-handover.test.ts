@@ -334,20 +334,20 @@ test.describe('Tab 2 — ready-meal handover (plan §4.4)', { tag: DESK_TAGS }, 
 		await expect(page.getByText('กรณีพิเศษ', { exact: true })).toBeVisible();
 	});
 
-	test('T2-5 a menu outside the recipient group needs an override; a matching recipient does not', async ({
+	test('T2-5 a menu outside the recipient age group needs an override; a matching recipient does not', async ({
 		page,
 		scenarioAs
 	}) => {
 		const scenario = await scenarioAs('food_menu_match');
 		const { desk, item, ticket, recipient } = await foodSetup(page, scenario, {
-			item: { dietary: ['HALAL'] }
+			item: { ageGroup: 'ELDERLY' }
 		});
-		const muslim = await seedRecipient(scenario, `Halal${scenario.namespace.slice(-6)}`, 'Match', {
-			religion: 'muslim'
+		const elder = await seedRecipient(scenario, `Elder${scenario.namespace.slice(-6)}`, 'Match', {
+			birthYear: new Date().getFullYear() + 543 - 70
 		});
 
 		await desk.itemButton(item.name).click();
-		await desk.chooseRecipientBySearch(muslim);
+		await desk.chooseRecipientBySearch(elder);
 		await expect(desk.alert('เมนูนี้ไม่ตรงกลุ่มผู้รับ')).toHaveCount(0);
 		await desk.foodSubmit().click();
 		await expect(desk.overrideDialog()).toHaveCount(0);
@@ -357,16 +357,37 @@ test.describe('Tab 2 — ready-meal handover (plan §4.4)', { tag: DESK_TAGS }, 
 		await expect(desk.alert('เมนูนี้ไม่ตรงกลุ่มผู้รับ')).toBeVisible();
 		await desk.foodSubmit().click();
 		await expect(desk.overrideDialog()).toHaveAccessibleName('แจ้งเตือน: เมนูไม่ตรงกลุ่มผู้รับ');
-		await desk.confirmOverride('ผู้รับยืนยันรับเมนูฮาลาล');
+		await desk.confirmOverride('รับแทนผู้สูงอายุในครอบครัว');
 
 		const logs = await expectTicketLogs(ticket, item, 2, 'Menu-match handovers');
-		expect(logs.find((l) => l.recipient_id === muslim.recipientId)).toMatchObject({
+		expect(logs.find((l) => l.recipient_id === elder.recipientId)).toMatchObject({
 			is_override: false
 		});
 		expect(logs.find((l) => l.recipient_id === recipient.recipientId)).toMatchObject({
 			is_override: true,
-			override_reason: 'ผู้รับยืนยันรับเมนูฮาลาล'
+			override_reason: 'รับแทนผู้สูงอายุในครอบครัว'
 		});
+	});
+
+	// #801: HALAL never restricts — a non-muslim recipient takes a HALAL menu with no warning.
+	test('T2-5b a HALAL menu hands out to a non-muslim recipient without an override', async ({
+		page,
+		scenarioAs
+	}) => {
+		const scenario = await scenarioAs('food_menu_halal');
+		const { desk, item, ticket, recipient } = await foodSetup(page, scenario, {
+			item: { dietary: ['HALAL'] }
+		});
+
+		await desk.itemButton(item.name).click();
+		await desk.chooseRecipientBySearch(recipient);
+		await expect(desk.alert('เมนูนี้ไม่ตรงกลุ่มผู้รับ')).toHaveCount(0);
+		await desk.foodSubmit().click();
+		await expect(desk.overrideDialog()).toHaveCount(0);
+		await expect(desk.toast(/บันทึกแจกอาหารสำเร็จ/)).toBeVisible();
+
+		const logs = await expectTicketLogs(ticket, item, 1, 'HALAL handover');
+		expect(logs[0]).toMatchObject({ recipient_id: recipient.recipientId, is_override: false });
 	});
 
 	// #607: free-text allergens are never matched; the desk shows both sides for staff to compare.

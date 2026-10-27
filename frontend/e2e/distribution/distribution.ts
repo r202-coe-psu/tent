@@ -335,8 +335,10 @@ export interface SeedItemOptions {
 	stockQty: string;
 	returnable: boolean;
 	typeClass: 'CONSUMABLE' | 'DURABLE';
-	/** Menu tags read by the desk's menu-match check (e.g. `['HALAL']`). */
+	/** Dietary tags on the menu; since #801 none of them restrict who may take it. */
 	dietary?: string[];
+	/** Age group the menu targets — the desk's menu-match check reads it (FR-MRM-01). */
+	ageGroup?: 'INFANT' | 'CHILD' | 'ELDERLY';
 	/** ISO expiry on the physical lot — the desk's ready-meal safety clock reads it. */
 	lotExpiry?: string;
 	/** `allergy` master codes or free text the menu lists (#607). */
@@ -369,6 +371,7 @@ export async function seedItemWithStock(
 		type_class: options.typeClass,
 		deactivated: false,
 		dietary: options.dietary ?? [],
+		...(options.ageGroup ? { age_group: options.ageGroup } : {}),
 		...(options.allergens ? { allergens: options.allergens } : {}),
 		returnable: options.returnable
 	});
@@ -402,8 +405,10 @@ export async function seedItemWithStock(
 }
 
 export interface SeedRecipientOptions {
-	/** `muslim` gives the HALAL menu tag; anything else does not. */
+	/** Free text on the evacuee; since #801 it no longer affects menu matching. */
 	religion?: string;
+	/** Thai Buddhist birth year — sets the recipient's CR-130 age bucket for menu matching. */
+	birthYear?: number;
 	phone?: string;
 	/** Seeds a `medical` doc with these allergies (`allergy` codes or free text, #607). */
 	allergies?: string[];
@@ -433,6 +438,7 @@ export async function seedRecipient(
 		person_id: { cardType: 'anonymous', number: `ANON-${ulid()}` },
 		country: 'THAILAND',
 		religion: options.religion ?? 'buddhist',
+		...(options.birthYear ? { birth_year: options.birthYear } : {}),
 		vulnerable_groups: [],
 		special_needs: [],
 		household_id: null,
