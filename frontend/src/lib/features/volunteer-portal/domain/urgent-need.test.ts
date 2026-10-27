@@ -77,4 +77,40 @@ describe('summarizeUrgentVolunteerNeed', () => {
 		// A full urgent job still counts its people as "มีแล้ว".
 		expect(summary.enrolled).toBe(4 * 3 + 10);
 	});
+	describe('shifts that have ended (#972)', () => {
+		const now = new Date('2026-10-28T20:00:00+07:00');
+		const shift = (id: string, date: string, remaining: number, confirmed: number) => ({
+			shift_id: id,
+			date,
+			end_date: date,
+			start_time: '08:00',
+			end_time: '16:00',
+			station: null,
+			quota: remaining + confirmed,
+			slots_confirmed: confirmed,
+			slots_remaining: remaining
+		});
+
+		it('counts only the shifts still open', () => {
+			const summary = summarizeUrgentVolunteerNeed(
+				[
+					job({
+						job_id: 'mixed',
+						shifts: [shift('past', '2026-10-27', 5, 1), shift('next', '2026-10-29', 3, 2)]
+					})
+				],
+				now
+			);
+			expect(summary).toMatchObject({ needed: 3, enrolled: 2 });
+			expect(summary.shelters[0]).toMatchObject({ needed: 3, enrolled: 2, quota: 5 });
+		});
+
+		it('drops a job whose shifts have all ended', () => {
+			const summary = summarizeUrgentVolunteerNeed(
+				[job({ job_id: 'over', shifts: [shift('past', '2026-10-27', 5, 1)] })],
+				now
+			);
+			expect(summary).toEqual({ needed: 0, enrolled: 0, shelters: [] });
+		});
+	});
 });

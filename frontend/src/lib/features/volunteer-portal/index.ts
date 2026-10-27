@@ -32,6 +32,8 @@ export {
 	volunteerApplySchema,
 	volunteerProfileUpdateSchema
 } from './domain/volunteer';
+export { hasOpenShift, isShiftOpen, openJobsFirst, openShifts } from './domain/shift-closing';
+export type { ClosableShift } from './domain/shift-closing';
 export type {
 	DispatchRespondInput,
 	DispatchStatus,

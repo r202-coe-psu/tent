@@ -7,6 +7,7 @@
  */
 import { z } from 'zod';
 import { isValidThaiNationalId } from '$lib/utils/thai-id';
+import { hasOpenShift } from './shift-closing';
 
 /** CR-092 §4 ticket statuses. `rejected` is deliberately absent — see the module notes. */
 export const TICKET_STATUSES = ['confirmed', 'pending_review', 'cancelled'] as const;
@@ -222,9 +223,17 @@ export type PublicJobFilter = {
 	skill?: string;
 };
 
-/** A card can be applied to only while the projection still shows a free seat. */
-export function isJobApplicable(job: PublicJob): boolean {
-	return job.slots_remaining > 0 && job.status !== 'closed' && job.status !== 'cancelled';
+/**
+ * A card can be applied to only while the projection still shows a free seat and a shift
+ * that has not ended (#972).
+ */
+export function isJobApplicable(job: PublicJob, now: Date = new Date()): boolean {
+	return (
+		job.slots_remaining > 0 &&
+		job.status !== 'closed' &&
+		job.status !== 'cancelled' &&
+		hasOpenShift(job, now)
+	);
 }
 
 export const ticketFindSchema = z.object({ phone: phoneField });
