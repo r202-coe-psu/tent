@@ -2,7 +2,7 @@
 title: "Program — Site kind, occupancy health, booking channels, triage"
 status: active
 created: 2026-08-13
-updated: 2026-09-09
+updated: 2026-10-27
 owner: PM (John) / เจ้าของโครงการ
 audience: developer + team lead assignment
 note: >
@@ -11,13 +11,14 @@ note: >
   CR-112 supersedes D-BOOK-OCC occupancy numerator toward Forecast triple.
   CR ชุด = CR-066 (index, approved สไลซ์ล็อก) + CR-067..CR-071 approved (067 P1 / 071 slice A)
   + CR-072/CR-073 proposed.
+  CR-198 approved 2026-10-26: `site_kind` เป็น master code (global-only) แทน enum 2 ค่า.
 ---
 
 # Program — ชนิดสถานที่ · สุขภาพความจุ · ช่องจอง · คัดกรอง
 
 ## สรุป (TL;DR)
 
-- รวม **ศูนย์อพยพ** กับ **บ้านพี่เลี้ยง** ใน doc `shelter` เดิม ด้วย field `site_kind` (`evacuation_center` | `host_house`) — ไม่สร้าง doc type ใหม่ (ตัดกับ [CR-014](../changes/01-core/CR-014-design-v5-alignment.md) slice `host_house` แยก — **superseded สำหรับเรื่องนี้**)
+- รวม **ศูนย์อพยพ** กับ **บ้านพี่เลี้ยง** ใน doc `shelter` เดิม ด้วย field `site_kind` (`evacuation_center` | `host_house`; ตั้งแต่ [CR-198](../changes/01-core/CR-198-shelter-site-kind-master-data.md) เป็น code จาก master `site_kind` ที่ SA เพิ่มได้) — ไม่สร้าง doc type ใหม่ (ตัดกับ [CR-014](../changes/01-core/CR-014-design-v5-alignment.md) slice `host_house` แยก — **superseded สำหรับเรื่องนี้**)
 - บ้านพี่เลี้ยงอยู่บนหน้ารายการศูนย์เดิม + กรอง `site_kind` — **ถอด** nav/route `/portal/system-management/host-houses` (D-HOST-NAV **B′**)
 - Public map ใช้ **ไอคอนคนละชุด** ตาม `site_kind`; สีหมุดตาม **occupancy health 5 สี** (derived จาก occupancy/capacity; `operation_status` override ได้ตาม D-STANDBY / D-HEALTH-VS-STATUS)
 - ช่องเข้าพักใหม่: จองผ่านเว็บ (`registered_via=web`) + import คน + inbound API (`api`) — ตามสถานะด้วย QR หรือ `official_code` + เบอร์โทร (D-BOOK-TOKEN=A); ยืนยันที่ประตูด้วย QR scan ที่มีอยู่แล้ว (T-51)
@@ -36,7 +37,7 @@ note: >
 
 | ID | หัวข้อ | ค่าที่ล็อก | กระทบ |
 | --- | --- | --- | --- |
-| **D-SITE-MODEL** | โมเดลบ้านพี่เลี้ยง | **A** — field `site_kind` บน `shelter` เดิม: `evacuation_center` \| `host_house`. Doc ไม่มี field อ่านเป็น `evacuation_center`. `shelter_type` คงเป็นประเภทอาคาร. **ห้าม** ใช้ `project_level=community` เป็นบ้านพี่เลี้ยง. CR-014 slice `host_house` doc type **superseded สำหรับเรื่องนี้** (GBV / thermal / house_damage ไม่ถูกแตะ) | CR-067, T-66 |
+| **D-SITE-MODEL** | โมเดลบ้านพี่เลี้ยง | **A** — field `site_kind` บน `shelter` เดิม: `evacuation_center` \| `host_house`. Doc ไม่มี field อ่านเป็น `evacuation_center`. `shelter_type` คงเป็นประเภทอาคาร. **ห้าม** ใช้ `project_level=community` เป็นบ้านพี่เลี้ยง. CR-014 slice `host_house` doc type **superseded สำหรับเรื่องนี้** (GBV / thermal / house_damage ไม่ถูกแตะ). **หมายเหตุ ([CR-198](../changes/01-core/CR-198-shelter-site-kind-master-data.md)):** ค่า `site_kind` ย้ายจาก enum 2 ค่าเป็น code ของ master `site_kind` (global-only) — code เดิม 2 ตัวเป็น seed, SA เพิ่มประเภทได้; พฤติกรรมเฉพาะ `host_house` (ไอคอน, D-SPHERE-CAP) คงเดิม | CR-067, T-66, CR-198 |
 | **D-HOST-NAV** | นำทางบ้านพี่เลี้ยง | **B′** (ไม่ใช่ A และไม่ใช่ B เดิม) — **ถอด** nav/route `/portal/system-management/host-houses`. บ้านอยู่บนหน้ารายการศูนย์เดิม + กรอง `site_kind`. สร้างตาม filter: กรอง `host_house` → default `host_house`; กรอง `evacuation_center` → `evacuation_center`; แท็บ «ทั้งหมด» → ผู้ใช้ต้องเลือกชนิดก่อนบันทึก | T-66 |
 | **D-HEALTH-PCT** | เกณฑ์ % สี occupancy health | เทา = ปิด (ไม่ใช่ %). ฟ้า &lt;60%. เหลือง 60–89% (90% เป็นแดง ไม่ใช่เหลือง). แดง 90–100%. แดงเข้ม &gt;100%. สูตร derived `occupancy/capacity` — **ไม่ persist**. `capacity=0` → «ไม่มีข้อมูลความจุ» ห้ามหารศูนย์. **ตัวเศษ occupancy:** Wave 1 เคยระบุ stay `active` อย่างเดียว; **Wave 3 D-BOOK-OCC=C ทับ** เป็น `active` + `pre_registered` (ดู §P3) | CR-069, T-69 |
 | **D-TRACK-METHOD** | วิธี track ชุดนี้ | **CR ไฟล์ + Notion** (Policy §6 ตัวเลือก 3) | ทั้งโปรแกรม |
@@ -143,7 +144,7 @@ flowchart TD
 
 ### P1 — ชนิดสถานที่
 
-- **FR-57** — `shelter` ต้องมี `site_kind` enum(`evacuation_center`,`host_house`) required; doc เดิมไม่มี field → อ่านเป็น `evacuation_center`
+- **FR-57** — `shelter` ต้องมี `site_kind` enum(`evacuation_center`,`host_house`) required; doc เดิมไม่มี field → อ่านเป็น `evacuation_center` — **แก้โดย [CR-198](../changes/01-core/CR-198-shelter-site-kind-master-data.md):** `str` code ของ master `site_kind` ที่ `active` ตอนเขียน
 - **FR-58** — `shelter_type` คงเป็นประเภทอาคาร (master_data); **ห้าม** ใช้ `project_level=community` เป็นตัวแทนบ้านพี่เลี้ยง
 - **FR-59** — ฟอร์มสร้าง/แก้ศูนย์มีตัวเลือกชนิดสถานที่ และ persist `site_kind`
 - **FR-60** — รายการศูนย์กรอง/แยกตาม `site_kind` ได้
@@ -297,3 +298,4 @@ Health **ไม่ persist**. ประเมินตามลำดับ (sta
 - 2026-08-13 — **T-72 ล็อก** โดยเจ้าของโครงการ (ไม่ใช่ Wave 4): **T-72 initial stay=A** (ทุกแถว `pre_registered`; นับ occupancy ตาม D-BOOK-OCC=C; เป็น `active` ที่ประตู/staff เท่านั้น — ห้ามเลือกต่อแถวในไฟล์) · **T-72 import permission=RS+SA+SM** (เจ้าของขยายจาก proposed SM+SA). T-72 ไม่รอ stay/permission แล้ว — รอ approve CR-071 + T-48. **ไม่ mark CR เป็น approved. ไม่ bump schema.md.**
 - 2026-08-13 — **approved** โดยเจ้าของโครงการ (IMPS): Wave 1–3 + T-72. Wave 4 **จอดรอบ CR ถัดไป** (D-SOP-LITE, D-HOST-STAFF, D-SPHERE-CAP, D-INBOUND-PLANE, D-TRIAGE-RULES, D-TRIAGE-FIELD, D-ONE-PLATFORM). CR-072 / CR-073 คง `proposed`. **ไม่ bump schema.md ในรอบนี้.**
 - Wave 4 จอดรอบ CR ถัดไป: ห้ามเดา SOP / triage / ONE PLATFORM.
+- 2026-10-26 — **[CR-198](../changes/01-core/CR-198-shelter-site-kind-master-data.md) approved** (#836): `site_kind` เป็น code จาก master global-only แทน enum 2 ค่า; D-SITE-MODEL=A คงเดิม (field เดิม, code เดิม, ไม่ bump `schema_v`).
