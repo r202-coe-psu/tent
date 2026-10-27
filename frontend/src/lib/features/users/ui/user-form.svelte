@@ -18,8 +18,10 @@
 		SHELTER_MANAGER,
 		roleDisplayLabel,
 		assignmentsFromRoles,
-		capabilitiesForShelter
+		capabilitiesForShelter,
+		compoundCapabilityRole
 	} from '$lib/auth/roles';
+	import { grantExpiryLabel, grantFor } from '$lib/auth/role-grants';
 	import {
 		createUserSchema,
 		editUserSchema,
@@ -429,6 +431,14 @@
 		$formData.capabilities = Array.from(current);
 	}
 
+	/** Make a coordinator-granted role permanent ("ไม่มีวันหมด"); saved as `permanent_roles`. */
+	function setPermanent(key: string, checked: boolean) {
+		const keys = new SvelteSet($formData.permanent_roles ?? []);
+		if (checked) keys.add(key);
+		else keys.delete(key);
+		$formData.permanent_roles = [...keys];
+	}
+
 	function isRoleChecked(roleId: string): boolean {
 		return (($formData.capabilities ?? []) as string[]).includes(roleId);
 	}
@@ -456,6 +466,30 @@
 		return shelterItems.filter((s) => !used.has(s.value));
 	});
 </script>
+
+{#snippet grantNote(shelterCode: string | null, roleId: string)}
+	{@const grant = shelterCode ? grantFor(user?.role_grants, shelterCode, roleId) : null}
+	{#if grant}
+		{@const key = compoundCapabilityRole(grant.shelter_code, grant.role)}
+		{@const permanent = ($formData.permanent_roles ?? []).includes(key)}
+		<div
+			class="col-span-full -mt-0.5 mb-1 ml-8 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs"
+		>
+			<span class={permanent ? 'text-muted-foreground line-through' : 'font-medium text-amber-700'}>
+				{grantExpiryLabel(grant)}
+			</span>
+			<label class="flex cursor-pointer items-center gap-1.5 text-slate-700">
+				<input
+					type="checkbox"
+					class="size-3.5 shrink-0 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+					checked={permanent}
+					onchange={(e) => setPermanent(key, e.currentTarget.checked)}
+				/>
+				ไม่มีวันหมด
+			</label>
+		</div>
+	{/if}
+{/snippet}
 
 {#snippet roleInfoButton(description: string, ariaLabel: string)}
 	<Popover.Root>
@@ -937,6 +971,9 @@
 												`รายละเอียด${roleDisplayLabel(role.id)}`
 											)}
 										</div>
+										{#if isAssignmentRoleChecked(index, role.id)}
+											{@render grantNote(assignment.shelter_code, role.id)}
+										{/if}
 									{/each}
 								</div>
 							{/if}
@@ -1054,6 +1091,9 @@
 											`รายละเอียด${roleDisplayLabel(role.id)}`
 										)}
 									</div>
+									{#if isRoleChecked(role.id)}
+										{@render grantNote(boundShelterCode, role.id)}
+									{/if}
 								{/each}
 							</div>
 						{/if}

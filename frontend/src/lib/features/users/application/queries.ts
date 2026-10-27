@@ -60,6 +60,7 @@ export const useUpdateUser = () => {
 			active?: boolean;
 			must_change_password?: boolean;
 			affiliation_tags?: string[];
+			permanent_roles?: string[];
 		}) => {
 			const { name, ...rest } = input;
 			return updateUser(name, rest);

@@ -77,7 +77,9 @@ const userProfileFields = {
 	shelter_id: shelterCodeSchema.optional(),
 	volunteer_id: z.string().optional(),
 	duty_window: dutyWindowSchema.optional(),
-	affiliation_tags: z.array(z.string()).optional()
+	affiliation_tags: z.array(z.string()).optional(),
+	/** Compound roles (`SHxxx:<role>`) made permanent in the form: their coordinator grant is removed. */
+	permanent_roles: z.array(z.string()).optional()
 };
 
 function refineUserForm(

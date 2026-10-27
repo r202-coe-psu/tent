@@ -69,3 +69,38 @@ describe('UserForm role picker labels (#807)', () => {
 		expect(body).not.toContain('ผู้ดูแลระบบส่วนกลาง (System Admin)');
 	});
 });
+
+describe('UserForm coordinator grants (#955)', () => {
+	const volunteer = {
+		name: 'vol@example.com',
+		roles: ['shelter:SH001', 'SH001:kitchen_staff', 'SH001:facility_staff'],
+		personnel_type: 'volunteer' as const,
+		role_grants: [
+			{
+				shelter_code: 'SH001',
+				role: 'kitchen_staff',
+				expires_at: '2026-10-30T16:59:59.999Z',
+				granted_by: 'staff03',
+				granted_at: '2026-10-28T01:30:00.000Z'
+			}
+		]
+	};
+	const renderEdit = (user: typeof volunteer) =>
+		render(UserForm, {
+			props: { user, onsubmit: () => {}, lockedShelterCode: 'SH001' }
+		}).body;
+
+	it('shows the expiry and the "ไม่มีวันหมด" option only for the granted role', () => {
+		const body = renderEdit(volunteer);
+
+		expect(body).toContain('หมดอายุสิ้นวันที่ 30/10/2569');
+		expect(body.match(/ไม่มีวันหมด/g)).toHaveLength(1);
+	});
+
+	it('shows nothing for an account without grants', () => {
+		const body = renderEdit({ ...volunteer, role_grants: [] });
+
+		expect(body).not.toContain('หมดอายุสิ้นวันที่');
+		expect(body).not.toContain('ไม่มีวันหมด');
+	});
+});
