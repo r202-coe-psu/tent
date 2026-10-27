@@ -38,6 +38,7 @@
 		type PublicShelterCardModel
 	} from '$lib/features/public-portal';
 	import { Button } from '$lib/components/ui/button';
+	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
 	import { getTranslation } from '$lib/utils/i18n';
 	import { PUBLIC_SHELTERS_I18N, PUBLIC_SHELTER_CARD_I18N } from '$lib/constants/i18n';
 	import { langState } from '$lib/states/i18n.svelte';
@@ -289,17 +290,23 @@
 			iconClass="border-success shadow-success/15 text-success"
 		/>
 
-		{#each siteKindStatTiles as tile (tile.code)}
-			<PublicShelterMetricCard
-				title={siteKindLabel(tile.code, siteKindsQuery.data, langState.current)}
-				value={tile.count}
-				unit={t.locationsUnit}
-				icon={isHostHouseKind(tile.code) ? House : Tent}
-				iconClass={isHostHouseKind(tile.code)
-					? 'border-sky-300 shadow-sky-300/15 text-sky-700'
-					: 'border-primary shadow-primary/15 text-primary'}
-			/>
-		{/each}
+		<!-- Wait for the kind list so the tiles appear together instead of popping in one by one. -->
+		{#if siteKindsQuery.isPending}
+			<Skeleton class="h-24 rounded-2xl sm:h-28" />
+			<Skeleton class="h-24 rounded-2xl sm:h-28" />
+		{:else}
+			{#each siteKindStatTiles as tile (tile.code)}
+				<PublicShelterMetricCard
+					title={siteKindLabel(tile.code, siteKindsQuery.data, langState.current)}
+					value={tile.count}
+					unit={t.locationsUnit}
+					icon={isHostHouseKind(tile.code) ? House : Tent}
+					iconClass={isHostHouseKind(tile.code)
+						? 'border-sky-300 shadow-sky-300/15 text-sky-700'
+						: 'border-primary shadow-primary/15 text-primary'}
+				/>
+			{/each}
+		{/if}
 	</div>
 
 	<!-- Map Container (Always visible on Desktop; on Mobile visible when mobileViewMode === 'map') -->
