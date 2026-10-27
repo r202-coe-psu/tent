@@ -257,10 +257,10 @@ export interface DonationItem {
 
 /**
  * `schema_v` every donation writer stamps — the walk-in factory here, the donor edit
- * route, and `worker/inbound/donations.py`. 7 = CR-174 `items[].review_status`
- * (6 CR-172 `reject_reason`, 5 CR-087 `redirect_to_shelter_code`, 4 CR-080 `revisions[]`).
+ * route, and `worker/inbound/donations.py`. 8 = draft-donation-vehicle-plate `logistics.vehicle_plate`,
+ * 7 = CR-174 `items[].review_status` (6 CR-172 `reject_reason`, 5 CR-087 `redirect_to_shelter_code`, 4 CR-080 `revisions[]`).
  */
-export const DONATION_SCHEMA_V = 7;
+export const DONATION_SCHEMA_V = 8;
 
 export interface Donor {
 	name: string;
@@ -274,6 +274,7 @@ export interface Donor {
 export interface DonationLogistics {
 	delivery_method: 'self_dropoff' | 'parcel' | 'shelter_pickup';
 	vehicle?: 'motorcycle' | 'car' | 'pickup' | 'truck';
+	vehicle_plate?: string;
 	slot?: {
 		date: string;
 		from: string;
