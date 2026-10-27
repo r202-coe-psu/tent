@@ -164,4 +164,14 @@ describe('buildDonationMap', () => {
 		const { onMap } = buildDonationMap([needsEntry('SH001')], [publicShelter('SH001')], null);
 		expect(onMap[0].points).toEqual([]);
 	});
+
+	it('still places a shelter with no needs when it is locked (the form map)', () => {
+		const { onMap } = buildDonationMap(
+			[{ code: 'SH001', name: 'ศูนย์ SH001', needs: [] }],
+			[publicShelter('SH001')],
+			'SH001'
+		);
+		expect(onMap).toHaveLength(1);
+		expect(onMap[0]).toMatchObject({ code: 'SH001', needs: [], geo: { lat: 7.0, lng: 100.4 } });
+	});
 });

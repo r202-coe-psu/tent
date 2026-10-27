@@ -8,6 +8,7 @@
 	import PackagePlus from '@lucide/svelte/icons/package-plus';
 	import ClipboardList from '@lucide/svelte/icons/clipboard-list';
 	import MapPin from '@lucide/svelte/icons/map-pin';
+	import { DonationNeedsMap } from '$lib/features/public-portal';
 	import { getDonationStore } from '../../routes/(public)/donations/donation.svelte';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { ulid } from '$lib/db/ulid';
@@ -52,6 +53,7 @@
 	let search = $state('');
 	let filterType = $state('all');
 	let isSearchFocused = $state(false);
+	let mapSelectedCode = $state<string | null>(null);
 
 	const suggestions = $derived.by(() => {
 		const q = search.trim().toLowerCase();
@@ -258,6 +260,15 @@
 				return 0;
 			});
 	});
+
+	// Searching or filtering can drop the shelter whose card is open under the map.
+	$effect(() => {
+		if (mapSelectedCode && !filteredShelters.some((s) => s.code === mapSelectedCode)) {
+			mapSelectedCode = null;
+		}
+	});
+
+	const URGENCY_RANK = { critical: 0, high: 1, normal: 2 } as const;
 
 	/**
 	 * ระดับความเร่งด่วนที่ใช้แสดงผล — ยึดค่าที่เจ้าหน้าที่ตั้งไว้เป็นหลัก
@@ -696,6 +707,84 @@
 				{t.filterNormal}
 			</button>
 		</div>
+
+		{#if !isLoading && !loadError && filteredShelters.length > 0}
+			<div class="mb-6">
+				<DonationNeedsMap
+					shelters={filteredShelters}
+					selectedCode={mapSelectedCode}
+					onSelect={(code) => (mapSelectedCode = code)}
+				>
+					{#snippet card(mapShelter)}
+						{@const shelter = filteredShelters.find((s) => s.code === mapShelter.code)}
+						{#if shelter}
+							{@const openNeeds = shelter.needs
+								.filter((n) => n.status !== 'closed')
+								.sort((a, b) => URGENCY_RANK[needUrgency(a)] - URGENCY_RANK[needUrgency(b)])}
+							<div
+								class="space-y-3 rounded-2xl border-2 border-slate-200 bg-white p-4 pr-12 text-left"
+								aria-live="polite"
+							>
+								<div>
+									<h3 class="text-base font-bold text-slate-900">{shelter.name}</h3>
+									{#if mapShelter.areaLabel}
+										<p class="mt-0.5 flex items-center gap-1 text-xs font-medium text-slate-500">
+											<MapPin class="h-3 w-3 shrink-0" />
+											{mapShelter.areaLabel}
+										</p>
+									{/if}
+								</div>
+								{#if openNeeds.length === 0}
+									<p class="text-sm text-slate-500">{t.noUrgentItems}</p>
+								{:else}
+									<ul class="space-y-2">
+										{#each openNeeds.slice(0, 3) as need, i (need.item_id || i)}
+											<li class="flex items-center justify-between gap-3">
+												<span class="min-w-0 text-sm text-slate-700">
+													<span class="block truncate font-bold">
+														{formatItemName(need.raw_name || need.name || need.item_id)}
+													</span>
+													<span class="text-xs text-slate-500">
+														{need.qty_needed > 0
+															? t.openForMore
+																	.replace('{qty}', String(need.qty_needed))
+																	.replace('{unit}', formatUnit(need.unit))
+															: t.openFor}
+													</span>
+												</span>
+												<button
+													type="button"
+													onclick={() => donateSingleNeed(shelter, need)}
+													class="min-h-[44px] shrink-0 cursor-pointer rounded-xl bg-domain-donation-strong px-4 text-xs font-bold text-white shadow-xs transition-colors hover:bg-domain-donation-text"
+												>
+													{t.donateThisItem}
+												</button>
+											</li>
+										{/each}
+									</ul>
+								{/if}
+								<div class="flex flex-col gap-2 sm:flex-row">
+									<button
+										type="button"
+										onclick={() => goToShelterDetails(shelter)}
+										class="min-h-[44px] flex-1 cursor-pointer rounded-xl border-2 border-slate-200 px-4 text-xs font-bold text-slate-700 transition-colors hover:bg-slate-50"
+									>
+										{t.viewAllNeedsBtn}
+									</button>
+									<button
+										type="button"
+										onclick={() => donateOtherItems(shelter)}
+										class="min-h-[44px] flex-1 cursor-pointer rounded-xl border-2 border-slate-200 px-4 text-xs font-bold text-slate-700 transition-colors hover:bg-slate-50"
+									>
+										{t.donateOtherBtn}
+									</button>
+								</div>
+							</div>
+						{/if}
+					{/snippet}
+				</DonationNeedsMap>
+			</div>
+		{/if}
 
 		<!-- Feed Grid -->
 		{#if isLoading}

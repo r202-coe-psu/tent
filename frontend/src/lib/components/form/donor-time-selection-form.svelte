@@ -1,7 +1,6 @@
 <script lang="ts">
 	import MapPin from '@lucide/svelte/icons/map-pin';
 	import CalendarIcon from '@lucide/svelte/icons/calendar';
-	import Lock from '@lucide/svelte/icons/lock';
 	import Navigation from '@lucide/svelte/icons/navigation';
 	import Package from '@lucide/svelte/icons/package';
 	import CircleCheckBig from '@lucide/svelte/icons/circle-check-big';
@@ -17,7 +16,6 @@
 	import { Popover, PopoverContent, PopoverTrigger } from '$lib/components/ui/popover';
 	import { today, type DateValue } from '@internationalized/date';
 	import { toast } from 'svelte-sonner';
-	import { onMount } from 'svelte';
 	import {
 		donationPayloadUnit,
 		publicDonationErrorMessage,
@@ -25,7 +23,7 @@
 		useDonationSlots
 	} from '$lib/features/donations';
 	import { formatUnit, useUnitsOfMeasure } from '$lib/features/catalog';
-	import { DonationShelterPicker, type DonationNeedsEntry } from '$lib/features/public-portal';
+	import { DropOffShelterMap } from '$lib/features/public-portal';
 	import { getDonationStore } from '../../../routes/(public)/donations/donation.svelte';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { getTranslation } from '$lib/utils/i18n';
@@ -43,8 +41,6 @@
 	// "Today" is the shelter's calendar day (Asia/Bangkok), not the donor device's: the BFF
 	// refuses `date < bangkokToday()`, so a device clock behind Bangkok must not send yesterday.
 	let selectedDate = $state<DateValue>(today(DISPLAY_TIME_ZONE));
-	let needsEntries = $state<DonationNeedsEntry[]>([]);
-	let needsLoading = $state(true);
 	let isItemsModalOpen = $state(false);
 
 	const selectedDateStr = $derived(selectedDate ? selectedDate.toString() : '');
@@ -79,26 +75,6 @@
 			donationStore.slotTime = '';
 		}
 	});
-
-	onMount(async () => {
-		try {
-			const res = await fetch('/api/public/v1/needs');
-			if (res.ok) {
-				const data = await res.json();
-				if (Array.isArray(data)) needsEntries = data as DonationNeedsEntry[];
-			}
-		} catch {
-			toast.error(t.errorLoadingShelters);
-		} finally {
-			needsLoading = false;
-		}
-	});
-
-	function pickShelter(code: string, name: string) {
-		donationStore.shelterCode = code;
-		donationStore.selectedShelter = code;
-		donationStore.selectedShelterName = name;
-	}
 
 	function handleConfirmBookingRequest() {
 		donationStore.errorMessage = '';
@@ -430,33 +406,33 @@
 
 		<!-- 2. เลือกศูนย์ -->
 		<div class="space-y-6 rounded-2xl border border-slate-200 bg-slate-50 p-5">
-			<div>
-				<span
-					id="shelter-picker-label"
-					class="mb-3 block flex items-center gap-2 text-sm font-bold text-slate-800"
-				>
+			<div class="space-y-3" data-testid="drop-off-shelter">
+				<span class="block flex items-center gap-2 text-sm font-bold text-slate-800">
 					<MapPin class="h-4 w-4 text-slate-500" />
-					{t.selectShelterLabel}
-					<span class="text-red-500">*</span>
-					{#if donationStore.shelterLocked}
-						<span
-							class="ml-2 inline-flex items-center gap-1 rounded-md bg-slate-200/60 px-2 py-0.5 text-xs font-semibold text-slate-600"
-						>
-							<Lock class="h-3 w-3" />
-							{t.shelterLockedBadge}
-						</span>
-					{/if}
+					{t.dropOffShelterLabel}
 				</span>
 
-				<DonationShelterPicker
-					needs={needsEntries}
-					selectedCode={donationStore.shelterCode}
-					lockedCode={donationStore.shelterLocked ? donationStore.shelterCode : null}
-					loading={needsLoading}
-					labelledBy="shelter-picker-label"
-					unitLabel={(unit) => formatUnit(unit, units, langState.current)}
-					onSelect={pickShelter}
-				/>
+				{#if hasShelter}
+					<p class="text-base font-bold text-slate-900" data-testid="drop-off-shelter-name">
+						{donationStore.selectedShelterName || donationStore.shelterCode}
+					</p>
+					<DropOffShelterMap
+						shelterCode={donationStore.shelterCode}
+						shelterName={donationStore.selectedShelterName}
+					/>
+				{:else}
+					<div class="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4">
+						<p class="text-sm font-bold text-slate-700">{t.dropOffNoShelter}</p>
+						<Button
+							type="button"
+							variant="outline"
+							class="h-11 self-start"
+							onclick={() => donationStore.goToStep('needs')}
+						>
+							{t.dropOffBackToNeeds}
+						</Button>
+					</div>
+				{/if}
 			</div>
 
 			<!-- 3. เลือกเวลา -->
