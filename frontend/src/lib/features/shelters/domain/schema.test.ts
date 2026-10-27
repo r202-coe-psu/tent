@@ -15,6 +15,8 @@ import {
 	isShelterBookable,
 	isShelterCancelled,
 	operationStatusSchema,
+	validateSiteKindChange,
+	DEFAULT_SITE_KIND,
 	SHELTER_MASTER_SCHEMA_V,
 	type ShelterMasterV2
 } from './schema';
@@ -143,11 +145,13 @@ describe('shelterSchema', () => {
 		expect(result.success).toBe(false);
 	});
 
-	it('accepts host_house and rejects unknown site kinds', () => {
-		expect(shelterSchema.parse({ ...validShelterInput, site_kind: 'host_house' }).site_kind).toBe(
-			'host_house'
-		);
-		expect(() => shelterSchema.parse({ ...validShelterInput, site_kind: 'host' })).toThrow();
+	it('accepts any well-formed master code and rejects malformed site kinds', () => {
+		for (const site_kind of ['host_house', 'field_hospital']) {
+			expect(shelterSchema.parse({ ...validShelterInput, site_kind }).site_kind).toBe(site_kind);
+		}
+		for (const site_kind of ['', 'Host House', 'host-house', 'ศูนย์อพยพ']) {
+			expect(() => shelterSchema.parse({ ...validShelterInput, site_kind })).toThrow();
+		}
 	});
 
 	it('rejects empty name', () => {
@@ -1216,5 +1220,39 @@ describe('CR-199 — migrate v7 → v8 sub_storage type → types[]', () => {
 		const m = migrateShelterV2ToCurrent(v7doc);
 		const keys = (m.common_areas?.sub_storage ?? []).flatMap((p) => p.types);
 		expect(keys).toEqual(['medical_supplies', 'food_dry']);
+	});
+});
+
+describe('CR-198 — validateSiteKindChange', () => {
+	const items = [
+		{ code: 'evacuation_center', status: 'active' as const },
+		{ code: 'host_house' },
+		{ code: 'field_hospital', status: 'inactive' as const }
+	];
+
+	it('accepts a new shelter whose kind is an active item (missing status counts as active)', () => {
+		expect(validateSiteKindChange('evacuation_center', items)).toBeNull();
+		expect(validateSiteKindChange('host_house', items)).toBeNull();
+	});
+
+	it('accepts an unchanged kind even when its item was deactivated since (FR-8)', () => {
+		expect(validateSiteKindChange('field_hospital', items, 'field_hospital')).toBeNull();
+	});
+
+	it('rejects a kind changed to an inactive item, naming the field', () => {
+		expect(validateSiteKindChange('field_hospital', items, 'host_house')).toContain('ประเภทศูนย์');
+	});
+
+	it('rejects a kind that is not in the master', () => {
+		expect(validateSiteKindChange('unknown_kind', items, 'host_house')).toContain('ประเภทศูนย์');
+		expect(validateSiteKindChange('unknown_kind', items)).not.toBeNull();
+	});
+
+	it('rejects every new kind when the master doc is missing', () => {
+		expect(validateSiteKindChange(DEFAULT_SITE_KIND, [])).not.toBeNull();
+	});
+
+	it('still accepts an unchanged kind when the master doc is missing', () => {
+		expect(validateSiteKindChange(DEFAULT_SITE_KIND, [], DEFAULT_SITE_KIND)).toBeNull();
 	});
 });
