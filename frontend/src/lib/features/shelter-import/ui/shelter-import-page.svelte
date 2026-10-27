@@ -33,6 +33,7 @@
 		type DuplicateMatch,
 		type ExistingShelter
 	} from '../domain/duplicates';
+	import { applySiteKindRule } from '../domain/site-kind-rule';
 	import { buildShelterTemplateBlob, type TemplateMasters } from '../data/template';
 	import { parseShelterWorkbook } from '../data/parse';
 	import {
@@ -54,27 +55,39 @@
 	const shelterTypeQuery = useMasterData(() => 'shelter_type');
 	const siteKindQuery = useMasterData(() => 'site_kind');
 
-	type ActiveItem = { code: string; label: string; label_en: string; is_default: boolean };
-	const activeOf = (items: readonly MasterDataItem[] | undefined): ActiveItem[] =>
-		(items ?? [])
-			.filter((i) => i.status === 'active')
-			.map((i) => ({
-				code: i.code,
-				label: formatMasterLabel(i, 'th'),
-				label_en: i.label_en,
-				is_default: i.is_default
-			}));
+	type LabelledItem = {
+		code: string;
+		label: string;
+		label_en: string;
+		is_default: boolean;
+		status: MasterDataItem['status'];
+	};
+	const itemsOf = (items: readonly MasterDataItem[] | undefined): LabelledItem[] =>
+		(items ?? []).map((i) => ({
+			code: i.code,
+			label: formatMasterLabel(i, 'th'),
+			label_en: i.label_en,
+			is_default: i.is_default,
+			status: i.status
+		}));
 
-	const activeItems = $derived<Record<MasterColumn, ActiveItem[]>>({
-		shelter_type: activeOf(shelterTypeQuery.data?.items),
-		site_kind: activeOf(siteKindQuery.data?.items)
+	const allItems = $derived<Record<MasterColumn, LabelledItem[]>>({
+		shelter_type: itemsOf(shelterTypeQuery.data?.items),
+		site_kind: itemsOf(siteKindQuery.data?.items)
+	});
+	// The template dropdown only offers active items.
+	const activeItems = $derived<Record<MasterColumn, LabelledItem[]>>({
+		shelter_type: allItems.shelter_type.filter((i) => i.status === 'active'),
+		site_kind: allItems.site_kind.filter((i) => i.status === 'active')
 	});
 
 	const masterDataLoading = $derived(shelterTypeQuery.isLoading || siteKindQuery.isLoading);
 
-	const lookups = $derived(
-		Object.fromEntries(MASTER_COLUMNS.map((t) => [t, buildMasterLookup(activeItems[t])])) as Lookups
-	);
+	// site_kind keeps inactive items so an update of a shelter that already stores one passes (CR-198 FR-8).
+	const lookups = $derived<Lookups>({
+		shelter_type: buildMasterLookup(activeItems.shelter_type),
+		site_kind: buildMasterLookup(allItems.site_kind)
+	});
 
 	let workbook = $state<ParsedWorkbook>({
 		shelters: [],
@@ -85,8 +98,21 @@
 	let filename = $state('');
 	let parsing = $state(false);
 
-	const validations = $derived<RowValidation[]>(
+	let duplicateAction = $state<DuplicateAction>('skip');
+	let existingShelters = $state<ExistingShelter[]>([]);
+	let duplicateCheckReady = $state(false);
+	let duplicateCheckLoading = $state(false);
+
+	const baseValidations = $derived<RowValidation[]>(
 		workbook.shelters.length ? validateWorkbook(workbook, lookups) : []
+	);
+	const duplicates = $derived(
+		workbook.shelters.length
+			? findExistingDuplicates(baseValidations, existingShelters)
+			: new Map<number, DuplicateMatch>()
+	);
+	const validations = $derived(
+		applySiteKindRule(baseValidations, duplicates, lookups.site_kind.inactiveCodes, duplicateAction)
 	);
 	const validCount = $derived(validations.filter((v) => v.ok).length);
 	const errorCount = $derived(validations.length - validCount);
@@ -96,19 +122,8 @@
 	);
 	const zoneCount = $derived(workbook.zones.length);
 	const foodPointCount = $derived(workbook.foodDistributionPoints.length);
-
-	let existingShelters = $state<ExistingShelter[]>([]);
-	let duplicateCheckReady = $state(false);
-	let duplicateCheckLoading = $state(false);
-	const duplicates = $derived(
-		workbook.shelters.length
-			? findExistingDuplicates(validations, existingShelters)
-			: new Map<number, DuplicateMatch>()
-	);
 	const dupCount = $derived(validations.filter((v) => v.ok && duplicates.has(v.row)).length);
 	const newCount = $derived(validCount - dupCount);
-
-	let duplicateAction = $state<DuplicateAction>('skip');
 
 	const importMutation = useImportShelters();
 	const retryMutation = useRetryImportJob();
@@ -151,7 +166,11 @@
 		duplicateCheckReady = false;
 		try {
 			const shelters = await listShelters({ cache: 'no-store' });
-			existingShelters = shelters.map((s) => ({ code: s.code, name: s.name }));
+			existingShelters = shelters.map((s) => ({
+				code: s.code,
+				name: s.name,
+				site_kind: s.site_kind
+			}));
 			duplicateCheckReady = true;
 			return existingShelters;
 		} catch {

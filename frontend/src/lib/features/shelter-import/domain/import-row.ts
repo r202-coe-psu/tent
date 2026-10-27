@@ -146,7 +146,9 @@ export function buildUpdatePayload(
 export interface MasterLookup {
 	byLabel: Map<string, string>;
 	codes: Set<string>;
-	/** The list's `is_default` item, used when the cell is left empty. */
+	/** Codes in `codes` whose item is `inactive` — resolvable, but not freely assignable. */
+	inactiveCodes: Set<string>;
+	/** The list's active `is_default` item, used when the cell is left empty. */
 	defaultCode: string | null;
 }
 
@@ -154,22 +156,30 @@ export type Lookups = Record<MasterColumn, MasterLookup>;
 
 /** Build a {@link MasterLookup} from a master_data items array. Pure. */
 export function buildMasterLookup(
-	items: readonly { code: string; label: string; label_en?: string; is_default?: boolean }[]
+	items: readonly {
+		code: string;
+		label: string;
+		label_en?: string;
+		is_default?: boolean;
+		status?: 'active' | 'inactive';
+	}[]
 ): MasterLookup {
 	const byLabel = new Map<string, string>();
 	const codes = new Set<string>();
+	const inactiveCodes = new Set<string>();
 	let defaultCode: string | null = null;
 	for (const it of items) {
 		byLabel.set(it.label.trim(), it.code);
 		if (it.label_en?.trim()) byLabel.set(it.label_en.trim(), it.code);
 		codes.add(it.code);
-		if (it.is_default) defaultCode = it.code;
+		if (it.status === 'inactive') inactiveCodes.add(it.code);
+		else if (it.is_default) defaultCode = it.code;
 	}
-	return { byLabel, codes, defaultCode };
+	return { byLabel, codes, inactiveCodes, defaultCode };
 }
 
 function emptyLookup(): MasterLookup {
-	return { byLabel: new Map(), codes: new Set(), defaultCode: null };
+	return { byLabel: new Map(), codes: new Set(), inactiveCodes: new Set(), defaultCode: null };
 }
 
 /** An empty lookup set — for tests / when master data is unavailable. */
