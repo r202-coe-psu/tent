@@ -2,6 +2,7 @@
 	import * as Table from '$lib/components/ui/table/index.js';
 	import GroupTag from './group-tag.svelte';
 	import { qtyGt } from '$lib/utils/qty';
+	import { resolve } from '$app/paths';
 	import type { LedgerRow } from './ledger-view';
 
 	let { row }: { row: LedgerRow } = $props();
@@ -22,7 +23,17 @@
 		<span class="font-medium text-slate-500">{row.unit}</span>
 	</Table.Cell>
 	<Table.Cell class="max-w-64 px-4 py-3 break-words whitespace-normal text-slate-800">
-		{row.detail || '—'}
+		{#if row.refHref}
+			<a
+				href={resolve(row.refHref as '/')}
+				title="เปิดกองรับคืน"
+				class="underline underline-offset-2 hover:text-slate-950"
+			>
+				{row.detail}
+			</a>
+		{:else}
+			{row.detail || '—'}
+		{/if}
 	</Table.Cell>
 	<Table.Cell class="px-4 py-3 text-slate-600">
 		{[row.lotNo, row.storage].filter(Boolean).join(' · ') || '—'}

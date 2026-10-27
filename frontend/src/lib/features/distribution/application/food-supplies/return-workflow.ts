@@ -51,6 +51,7 @@ import {
 	StockIntegrityError,
 	WorkflowValidationError
 } from './errors';
+import { assertCentralWriteAuthority } from './central-write-authority';
 import { assertLedgerReplayBase } from './ledger-replay';
 import { assertPositiveIntegerQty } from './validation';
 import { resolveCanonicalItemUnits, type CanonicalUnitCatalogRepository } from './canonical-unit';
@@ -227,16 +228,7 @@ function resolveDependencies(
 	};
 }
 
-export function assertCentralWriteAuthority(endpoint?: {
-	active: string;
-	isWritable: boolean;
-}): void {
-	if (!endpoint || endpoint.active !== 'central' || !endpoint.isWritable) {
-		throw new WorkflowValidationError(
-			'Authoritative central connectivity is required for loan resolution mutations; edge or disconnected endpoint is not authoritative'
-		);
-	}
-}
+export { assertCentralWriteAuthority };
 
 /**
  * Authoritatively acquires the shared mutual-exclusion reservation for a return operation.
