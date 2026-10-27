@@ -9,6 +9,7 @@ import type {
 	PublicShelterListResponse
 } from '../domain/types';
 import type { MasterLabelOption } from '../domain/master-labels';
+import type { SiteKindOption } from '../domain/site-kind';
 import { classifyPublicApiError, type PublicApiErrorKind } from '../domain/search-error';
 
 const SEARCH_FALLBACK = 'เกิดข้อผิดพลาดในการค้นหา';
@@ -121,6 +122,21 @@ export async function fetchShelterTypeLabels(
 			shelterTypes?: MasterLabelOption[];
 		} | null;
 		return body?.types ?? body?.shelterTypes ?? [];
+	} catch {
+		return [];
+	}
+}
+
+/**
+ * Bilingual options for `master_data:site_kind` (public field `site_kind`),
+ * every status included — see the BFF for why `inactive` items are kept.
+ */
+export async function fetchSiteKinds(fetchFn: typeof fetch = fetch): Promise<SiteKindOption[]> {
+	try {
+		const response = await fetchFn('/api/public/v1/config/site-kinds');
+		if (!response.ok) return [];
+		const body = (await response.json().catch(() => null)) as { types?: SiteKindOption[] } | null;
+		return body?.types ?? [];
 	} catch {
 		return [];
 	}

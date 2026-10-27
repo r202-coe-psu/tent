@@ -2,6 +2,7 @@ import { createMutation, createQuery } from '@tanstack/svelte-query';
 import {
 	familySearch,
 	fetchShelterTypeLabels,
+	fetchSiteKinds,
 	fetchVulnerableGroupLabels,
 	listPublicShelters
 } from '../data/public-api';
@@ -15,7 +16,8 @@ export const publicPortalKeys = {
 		[...publicPortalKeys.all, 'shelters', params] as const,
 	familySearch: (query: string) => [...publicPortalKeys.all, 'occupants', query] as const,
 	vulnerableGroupLabels: () => [...publicPortalKeys.all, 'vulnerable-group-labels'] as const,
-	shelterTypeLabels: () => [...publicPortalKeys.all, 'shelter-type-labels'] as const
+	shelterTypeLabels: () => [...publicPortalKeys.all, 'shelter-type-labels'] as const,
+	siteKinds: () => [...publicPortalKeys.all, 'site-kinds'] as const
 };
 
 export function usePublicShelters(params: () => ListPublicSheltersParams) {
@@ -45,6 +47,15 @@ export function useShelterTypeLabels() {
 	return createQuery(() => ({
 		queryKey: publicPortalKeys.shelterTypeLabels(),
 		queryFn: () => fetchShelterTypeLabels(),
+		staleTime: LABEL_STALE_MS
+	}));
+}
+
+/** Bilingual site-kind options (all statuses) — label with `siteKindLabel`, filter with `activeSiteKinds`. */
+export function useSiteKinds() {
+	return createQuery(() => ({
+		queryKey: publicPortalKeys.siteKinds(),
+		queryFn: () => fetchSiteKinds(),
 		staleTime: LABEL_STALE_MS
 	}));
 }

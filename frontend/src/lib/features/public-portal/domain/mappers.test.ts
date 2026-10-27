@@ -64,6 +64,23 @@ describe('toPublicShelterCard', () => {
 		expect(card.site_kind).toBe('host_house');
 	});
 
+	it('keeps a master site_kind code the app has no special handling for', () => {
+		const card = toPublicShelterCard({
+			code: 'SH003',
+			name: 'โรงพยาบาลสนาม',
+			status: 'open',
+			capacity: 30,
+			site_kind: 'field_hospital'
+		});
+		expect(card.site_kind).toBe('field_hospital');
+	});
+
+	it('reads a missing or blank site_kind as evacuation_center', () => {
+		const base = { code: 'SH004', name: 'ไม่มีชนิด', status: 'open', capacity: 5 };
+		expect(toPublicShelterCard(base).site_kind).toBe('evacuation_center');
+		expect(toPublicShelterCard({ ...base, site_kind: '' }).site_kind).toBe('evacuation_center');
+	});
+
 	it('handles null, undefined, or empty shelter item gracefully without throwing', () => {
 		const emptyCard = toPublicShelterCard(null);
 		expect(emptyCard.id).toBe('ศูนย์พักพิง');
