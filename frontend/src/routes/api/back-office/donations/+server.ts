@@ -1,4 +1,4 @@
-import { json } from '@sveltejs/kit';
+import { error, json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import {
 	assertCountedAgainstCatalog,
@@ -9,8 +9,12 @@ import {
 	toCountedItems
 } from '$lib/server/donation-intake';
 import { fetchDocs } from '$lib/server/donation-docs';
-import { adminRaw } from '$lib/server/couch-admin';
+import { adminRaw, type Caller } from '$lib/server/couch-admin';
 import {
+	buildReceivedFindBody,
+	isAllowedDonationStatus,
+	RECEIVED_BOOKMARK_MAX_LENGTH,
+	RECEIVED_PAGE_SIZE,
 	walkInIntakeInputSchema,
 	type PublicDonationDoc,
 	type PendingDonationRow
@@ -66,6 +70,7 @@ function toPendingRow(d: PublicDonationDoc): PendingDonationRow {
 		})),
 		campaign_id: d.campaign_id ?? null,
 		declared_at: d.declared_at,
+		received_at: d.received_at ?? null,
 		eta: d.logistics?.eta,
 		slot: d.logistics?.slot,
 		delivery_method: d.logistics?.delivery_method,
@@ -76,10 +81,66 @@ function toPendingRow(d: PublicDonationDoc): PendingDonationRow {
 	};
 }
 
+/**
+ * One page of received donations of ONE shelter (#821, owner decision A1): the cursor is a
+ * CouchDB bookmark, which cannot span databases. Bounded read — the `_find` is pinned to
+ * the received index (`allow_fallback: false`), so a database without it answers 503
+ * instead of being scanned. End of data is `docs.length < limit`, never a null bookmark.
+ */
+async function receivedPage(caller: Caller, url: URL): Promise<Response> {
+	const requested = url.searchParams.get('shelter')?.trim() || null;
+	const bookmark = url.searchParams.get('bookmark');
+	if (bookmark !== null && (bookmark === '' || bookmark.length > RECEIVED_BOOKMARK_MAX_LENGTH)) {
+		return json({ success: false, error: 'Invalid bookmark' }, { status: 400 });
+	}
+
+	let code: string | null;
+	if (caller.isSA) {
+		if (!requested) {
+			return json({ success: false, error: 'shelter is required' }, { status: 400 });
+		}
+		// The code lands in a CouchDB path with admin credentials: only a registered shelter
+		// is allowed through (`x/../../_users` is not one).
+		if (!(await listShelterCodes()).includes(requested)) {
+			return json({ success: false, error: 'Unknown shelter' }, { status: 404 });
+		}
+		code = requested;
+	} else {
+		if (!caller.shelterCode) throw error(403, 'No shelter scope');
+		if (requested && requested !== caller.shelterCode) throw error(403, 'Forbidden');
+		code = caller.shelterCode;
+	}
+
+	const res = await adminRaw(`/${shelterDb(code)}/_find`, 'POST', buildReceivedFindBody(bookmark));
+	if (res.status === 404) {
+		return json({ success: true, donations: [], bookmark: null, has_more: false });
+	}
+	if (res.status >= 400) {
+		const detail = (res.data as { error?: string } | null) ?? {};
+		if (res.status === 400 && detail.error === 'no_usable_index') {
+			return json({ success: false, error: 'DONATION_INDEX_UNAVAILABLE' }, { status: 503 });
+		}
+		return json({ success: false, error: 'Could not read donations' }, { status: 502 });
+	}
+	const body = (res.data as { docs?: PublicDonationDoc[]; bookmark?: string } | null) ?? {};
+	const docs = (body.docs ?? []).filter((d) => d?.type === 'donation' && d.status === 'received');
+	const hasMore = (body.docs ?? []).length === RECEIVED_PAGE_SIZE;
+	return json({
+		success: true,
+		donations: docs.map(toPendingRow),
+		bookmark: hasMore ? (body.bookmark ?? null) : null,
+		has_more: hasMore
+	});
+}
+
 export const GET: RequestHandler = async ({ request, url }) => {
 	try {
 		const caller = await authorizeWarehouse(request.headers.get('cookie'));
 		const status = url.searchParams.get('status') ?? 'declared';
+		if (!isAllowedDonationStatus(status)) {
+			return json({ success: false, error: 'Invalid status' }, { status: 400 });
+		}
+		if (status === 'received') return await receivedPage(caller, url);
 
 		// Scope first, then read: a non-SA caller never reaches another shelter's db.
 		const codes = caller.isSA
