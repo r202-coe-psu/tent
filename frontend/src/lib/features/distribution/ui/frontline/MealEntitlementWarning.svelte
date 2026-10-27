@@ -10,13 +10,18 @@
 
 	interface Props {
 		open: boolean;
-		meal: MealPeriod;
+		meal?: MealPeriod;
 		recipientLabel: string;
 		/** Recipient already got this meal period today. */
 		isDuplicate: boolean;
 		priorDistributedAt?: string;
 		/** Groups the menu targets when the recipient is not in any of them (menu matching). */
 		menuMismatchLabel?: string | null;
+		/** Allergens in the menu that the recipient is allergic to (#607), as Thai labels. */
+		allergenConflictLabel?: string | null;
+		/** Recipient's unlisted (free-text) allergies, comma-joined (CR-191 FR-MRM-11). */
+		allergyFreeTextLabel?: string | null;
+		menuName?: string;
 		onconfirm: (reason: string) => void;
 		oncancel: () => void;
 	}
@@ -28,6 +33,9 @@
 		isDuplicate,
 		priorDistributedAt,
 		menuMismatchLabel = null,
+		allergenConflictLabel = null,
+		allergyFreeTextLabel = null,
+		menuName,
 		onconfirm,
 		oncancel
 	}: Props = $props();
@@ -36,12 +44,29 @@
 	let overrideReason = $state('');
 	let error = $state<string | null>(null);
 
+	const warningCount = $derived(
+		[isDuplicate, !!menuMismatchLabel, !!allergenConflictLabel, !!allergyFreeTextLabel].filter(
+			Boolean
+		).length
+	);
+	// Code conflict and free text are both allergy warnings — they share one title and placeholder
+	const hasAllergyWarning = $derived(!!allergenConflictLabel || !!allergyFreeTextLabel);
+	const onlyAllergyWarnings = $derived(hasAllergyWarning && !isDuplicate && !menuMismatchLabel);
 	const title = $derived(
-		isDuplicate && menuMismatchLabel
+		warningCount > 1
 			? 'แจ้งเตือน: ต้องยืนยันกรณีพิเศษ'
-			: menuMismatchLabel
-				? 'แจ้งเตือน: เมนูไม่ตรงกลุ่มผู้รับ'
-				: 'แจ้งเตือน: ได้รับอาหารมื้อนี้แล้ว'
+			: allergenConflictLabel
+				? 'แจ้งเตือน: ผู้รับแพ้อาหารในเมนูนี้'
+				: allergyFreeTextLabel
+					? 'แจ้งเตือน: ผู้รับมีประวัติแพ้ที่ไม่อยู่ในรายการ'
+					: menuMismatchLabel
+						? 'แจ้งเตือน: เมนูไม่ตรงกลุ่มผู้รับ'
+						: 'แจ้งเตือน: ได้รับอาหารมื้อนี้แล้ว'
+	);
+	const reasonPlaceholder = $derived(
+		onlyAllergyWarnings
+			? 'เช่น ผู้รับยืนยันว่าแพ้เล็กน้อยและจะแยกส่วนที่แพ้ออกเอง, ไม่มีเมนูอื่นเหลือแล้ว...'
+			: 'เช่น มาขอรับแทนสมาชิกในครอบครัวที่ป่วยติดเตียง, อาหารเดิมหกเสียหาย...'
 	);
 
 	function handleConfirm() {
@@ -114,7 +139,7 @@
 
 		<!-- Warning Body -->
 		<div class="space-y-3">
-			{#if isDuplicate}
+			{#if isDuplicate && meal}
 				<div
 					class="rounded-xl border border-amber-200/80 bg-amber-50/60 p-3 text-xs text-amber-950"
 				>
@@ -127,6 +152,28 @@
 							(เวลาที่รับล่าสุด: {formatThaiTime(priorDistributedAt)} น.)
 						</p>
 					{/if}
+				</div>
+			{/if}
+
+			{#if allergenConflictLabel}
+				<div class="rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-950">
+					<p>
+						<strong>{menuName ?? 'เมนูนี้'}</strong> มี
+						<strong class="text-red-800">{allergenConflictLabel}</strong>
+						— <strong>{recipientLabel}</strong> แพ้
+					</p>
+				</div>
+			{/if}
+
+			{#if allergyFreeTextLabel}
+				<div
+					class="rounded-xl border border-amber-200/80 bg-amber-50/60 p-3 text-xs text-amber-950"
+				>
+					<p>
+						<strong>{recipientLabel}</strong> มีประวัติแพ้ (ไม่อยู่ในรายการ):
+						<strong class="text-amber-800">{allergyFreeTextLabel}</strong>
+						— ตรวจกับผู้รับก่อนแจก
+					</p>
 				</div>
 			{/if}
 
@@ -166,7 +213,7 @@
 						id="override-reason-input"
 						bind:value={overrideReason}
 						rows={2}
-						placeholder="เช่น มาขอรับแทนสมาชิกในครอบครัวที่ป่วยติดเตียง, อาหารเดิมหกเสียหาย..."
+						placeholder={reasonPlaceholder}
 						class="w-full text-xs shadow-2xs placeholder:text-slate-400"
 					/>
 				</div>
