@@ -1,7 +1,9 @@
 import { createMutation, createQuery, useQueryClient } from '@tanstack/svelte-query';
+import { fetchDonationQueue } from '../data/back-office-queue';
 import {
 	cancelDonation,
 	fetchDonationTracking,
+	lookupDonationsByPhone,
 	searchDonationTracking,
 	updateCourierTracking,
 	updateDonationItems,
@@ -28,6 +30,13 @@ export function useDonationTracking(token: () => string) {
 export function useDonationTrackSearch() {
 	return createMutation(() => ({
 		mutationFn: (input: { bookingRef: string; phone: string }) => searchDonationTracking(input)
+	}));
+}
+
+/** Phone number alone → the bookings of it (CR-173). A mutation: it is a POST, never cached. */
+export function useDonationPhoneLookup() {
+	return createMutation(() => ({
+		mutationFn: (input: { phone: string; captchaToken?: string }) => lookupDonationsByPhone(input)
 	}));
 }
 
@@ -102,5 +111,17 @@ export function useDonationSlots(
 		// is then handed a stale snapshot that never refreshes. Track every prop (the slot
 		// picker reads isLoading / isError only once a shelter is chosen).
 		notifyOnChangeProps: 'all'
+	}));
+}
+
+export const donationQueueKeys = {
+	all: ['donations', 'back-office-queue'] as const
+};
+
+/** The back-office "รายการของบริจาค" list (#617) — review and drop-off in one query. */
+export function useDonationQueue() {
+	return createQuery(() => ({
+		queryKey: donationQueueKeys.all,
+		queryFn: fetchDonationQueue
 	}));
 }

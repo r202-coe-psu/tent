@@ -14,6 +14,8 @@ export interface NeedItem {
 		reserved: string;
 		onHand: string;
 		target: string;
+		/** What donors can still book: 0 once the need is cut off. */
+		remaining: string;
 		unit: string;
 		isCutOff: boolean;
 		isManualClosed: boolean;

@@ -17,6 +17,7 @@
 	import { langState } from '$lib/states/i18n.svelte';
 	import { getTranslation } from '$lib/utils/i18n';
 	import { PUBLIC_DONATIONS_I18N } from '$lib/constants/i18n';
+	import { generateQrDataUrl } from '$lib/utils/qrcode';
 
 	const donationStore = getDonationStore();
 	const unitsQuery = useUnitsOfMeasure();
@@ -30,30 +31,14 @@
 	let isItemsModalOpen = $state(false);
 	let isCopied = $state(false);
 
-	// CR-052 §2.6: hand the ref + phone to the track page so it can search on arrival.
-	const trackHref = $derived.by(() => {
-		const base = resolve('/donations/track');
-		const parts: string[] = [];
-		if (donationStore.bookingRef) parts.push(`ref=${encodeURIComponent(donationStore.bookingRef)}`);
-		if (donationStore.donorPhone)
-			parts.push(`phone=${encodeURIComponent(donationStore.donorPhone)}`);
-		return parts.length ? `${base}?${parts.join('&')}` : base;
-	});
-
 	/**
-	 * EVERY public booking opens in `pending_review` — CR-052 §1.4 (Task #52) removed
-	 * the path that issued a check-in QR straight away, and FastAPI stamps the status
-	 * server-side (`INITIAL_DONATION_STATUS`). So this ticket always shows the waiting
-	 * state and never a QR.
-	 *
-	 * It used to guess with a client-side rule (`shelter_pickup`, total > 500,
-	 * unsolicited, or a line with no `item_id`) — so a small booking made from a needs
-	 * card got a QR at once while its doc sat in `pending_review`, and the donor arrived
-	 * holding a pass no one had approved. That rule WAS the §1.4 violation, and it is
-	 * why the ticket and the tracking page disagreed.
-	 *
-	 * The pass itself comes from the tracking page once staff approve.
+	 * FastAPI decides the status, line by line (CR-174): a booking made only of lines the
+	 * shelter asked for in its campaign opens in `verifying` and gets its check-in QR here
+	 * at once (FR-16); one with a typed-in line opens in `pending_review` and the donor
+	 * gets the QR on the tracking page once staff approve it. The ticket never guesses —
+	 * a client-side rule once handed out passes no one had approved.
 	 */
+	const approved = $derived(donationStore.bookingStatus === 'verifying');
 
 	async function saveCourier() {
 		if (!donationStore.trackingToken) return;
@@ -110,13 +95,17 @@
 		<div
 			class="relative z-10 mx-auto mb-2 flex h-16 w-16 items-center justify-center rounded-full bg-white/20 backdrop-blur-xs"
 		>
-			<Clock class="h-8 w-8 animate-pulse text-white" />
+			{#if approved}
+				<ShieldCheck class="h-8 w-8 text-white" />
+			{:else}
+				<Clock class="h-8 w-8 animate-pulse text-white" />
+			{/if}
 		</div>
 		<h3 class="relative z-10 text-2xl font-bold">
-			{t.pendingReviewTitle}
+			{approved ? t.successTitle : t.pendingReviewTitle}
 		</h3>
 		<p class="relative z-10 text-xs leading-relaxed font-medium text-white/80">
-			{t.pendingReviewDesc}
+			{approved ? t.successDesc : t.pendingReviewDesc}
 		</p>
 
 		<!-- Decorative background circles -->
@@ -140,17 +129,33 @@
 
 		<div class="mt-4 mb-6 border-b-2 border-dashed border-slate-200 pb-6">
 			<div class="mx-auto mb-4 w-fit rounded-2xl border border-slate-200 bg-white p-4 shadow-2xs">
-				<!-- Where the QR used to be. There is no check-in pass yet: staff have to
-				     review the request first (CR-052 §1.4) — the donor gets it on the
-				     tracking page once approved. -->
-				<div
-					class="flex h-[180px] w-[180px] items-center justify-center rounded-xl border-2 border-amber-200/50 bg-amber-50"
-				>
-					<div class="flex flex-col items-center gap-2 text-center text-amber-600">
-						<Clock class="h-10 w-10 animate-pulse" />
-						<span class="text-sm font-bold">{t.pendingWarehouse}</span>
+				{#if approved && donationStore.trackingToken}
+					{#await generateQrDataUrl(donationStore.trackingToken, { margin: 1, width: 256 })}
+						<div class="h-[180px] w-[180px] animate-pulse rounded-xl bg-slate-100"></div>
+					{:then url}
+						<img
+							src={url}
+							alt="QR Code for {donationStore.bookingRef || donationStore.trackingToken}"
+							class="h-[180px] w-[180px] rounded-xl"
+							data-testid="ticket-qr"
+						/>
+					{:catch}
+						<div class="flex h-[180px] w-[180px] items-center justify-center text-sm text-red-600">
+							{t.qrError}
+						</div>
+					{/await}
+				{:else}
+					<!-- No check-in pass yet: a line still waits for staff review — the donor
+					     gets it on the tracking page once approved. -->
+					<div
+						class="flex h-[180px] w-[180px] items-center justify-center rounded-xl border-2 border-amber-200/50 bg-amber-50"
+					>
+						<div class="flex flex-col items-center gap-2 text-center text-amber-600">
+							<Clock class="h-10 w-10 animate-pulse" />
+							<span class="text-sm font-bold">{t.pendingWarehouse}</span>
+						</div>
 					</div>
-				</div>
+				{/if}
 			</div>
 
 			<div class="mb-1 text-2xs font-bold tracking-[0.2em] text-slate-400">{t.refIdLabel}</div>
@@ -193,8 +198,8 @@
 						<ShieldCheck class="h-3.5 w-3.5" />
 						{t.queueStatus}
 					</div>
-					<div class="text-sm font-bold text-amber-600">
-						{t.statusPendingReview}
+					<div class="text-sm font-bold {approved ? 'text-emerald-700' : 'text-amber-600'}">
+						{approved ? t.statusApprovedAwaitingDropoff : t.statusPendingReview}
 					</div>
 				</div>
 
@@ -290,8 +295,14 @@
 				</div>
 			</div>
 
+			<!-- Straight to this booking's ticket by its token: the phone never goes in a URL
+			     (CR-173 FR-12). Without a token there is nothing to open, so the search page. -->
 			<a
-				href={trackHref}
+				href={resolve(
+					donationStore.trackingToken
+						? `/donations/track/${encodeURIComponent(donationStore.trackingToken)}`
+						: '/donations/track'
+				)}
 				class="flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-xl bg-domain-donation-strong py-3 text-xs font-bold text-white shadow-xs transition-all duration-200 hover:bg-domain-donation-text"
 			>
 				<Search class="h-3.5 w-3.5" />

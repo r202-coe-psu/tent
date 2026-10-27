@@ -8,6 +8,7 @@
 	import CheckCircle2 from '@lucide/svelte/icons/check-circle-2';
 	import XCircle from '@lucide/svelte/icons/x-circle';
 	import Archive from '@lucide/svelte/icons/archive';
+	import Undo2 from '@lucide/svelte/icons/undo-2';
 	import Ban from '@lucide/svelte/icons/ban';
 	import Send from '@lucide/svelte/icons/send';
 	import Clock from '@lucide/svelte/icons/clock';
@@ -23,12 +24,16 @@
 	import { useTransitionReferral } from '../application/queries';
 	import { getShelterCode } from '$lib/db/shelter';
 	import RedactionBanner from './redaction-banner.svelte';
+	import ReferralConfirmDialog from './referral-confirm-dialog.svelte';
 	import {
+		formatEvacueeFullName,
 		formatReferralDate as formatDate,
+		getClosedSubLabel,
 		getKindLabel,
 		getStatusLabel,
 		getUrgencyLabel,
-		getUrgencyStyle
+		getUrgencyStyle,
+		resolveEvacueeName
 	} from './referral.ui-helpers';
 
 	let { referral }: { referral: Referral } = $props();
@@ -37,7 +42,22 @@
 	const transitionMutation = useTransitionReferral(queryClient);
 
 	let responseReasonInput = $state('');
-	let showReasonPrompt = $state<'accepted' | 'rejected' | null>(null);
+	let showReasonPrompt = $state<'accepted' | 'rejected' | 'withdraw' | null>(null);
+	let transitionInFlight = $state(false);
+	const isTransitionBusy = $derived(transitionMutation.isPending || transitionInFlight);
+
+	type ConfirmRequest = {
+		title: string;
+		description?: string;
+		names: string[];
+		count: number;
+		confirmLabel: string;
+		destructive?: boolean;
+		run: () => Promise<unknown>;
+	};
+	let confirmOpen = $state(false);
+	let confirmRequest = $state.raw<ConfirmRequest | null>(null);
+	const subjectNames = $derived([resolveEvacueeName(referral.evacuee_summary)]);
 
 	const actorShelter = $derived(getShelterCode());
 	const canRespond = $derived(canActorRespond(referral, actorShelter));
@@ -56,24 +76,100 @@
 			(referral.referral_type !== 'capacity' || isOutgoingCapacityReferral(referral, actorShelter))
 	);
 
+	// CR-167: `sent → closed` is a withdraw (source only), shown as its own button + reason prompt.
+	const canWithdraw = $derived(canClose && referral.status === 'sent');
+	const closedSubLabel = $derived(
+		getClosedSubLabel(referral, isIncoming ? 'destination' : 'source')
+	);
+	const promptLabel = $derived(
+		showReasonPrompt === 'accepted'
+			? 'ตอบรับ'
+			: showReasonPrompt === 'rejected'
+				? 'ปฏิเสธ'
+				: 'ถอนคำขอ'
+	);
+
 	async function handleTransition(to: ReferralStatus, label: string, reason?: string) {
-		await toast.promise(transitionMutation.mutateAsync({ id: referral._id, to, reason }), {
+		// Synchronous guard: TanStack's isPending reaches the DOM only after a batched flush,
+		// so a second click in the same tick would otherwise send a second request.
+		if (transitionMutation.isPending || transitionInFlight) return;
+		transitionInFlight = true;
+		const mutation = transitionMutation.mutateAsync({ id: referral._id, to, reason });
+		// toast.promise returns void; it does not wait for the mutation, so await `mutation` directly.
+		void toast.promise(mutation, {
 			loading: `กำลังเปลี่ยนสถานะเป็น "${label}"...`,
 			success: `เปลี่ยนสถานะเป็น "${label}" สำเร็จ`,
 			error: (err) => (err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการเปลี่ยนสถานะ')
 		});
-		showReasonPrompt = null;
-		responseReasonInput = '';
+		try {
+			await mutation;
+		} catch {
+			// toast.promise already surfaced the error
+		} finally {
+			transitionInFlight = false;
+			showReasonPrompt = null;
+			responseReasonInput = '';
+		}
 	}
 
-	function triggerActionWithReason(to: 'accepted' | 'rejected') {
+	function triggerActionWithReason(to: 'accepted' | 'rejected' | 'withdraw') {
 		showReasonPrompt = to;
 	}
 
-	async function submitWithReason() {
+	function askConfirm(request: ConfirmRequest) {
+		confirmRequest = request;
+		confirmOpen = true;
+	}
+
+	function confirmSend() {
+		askConfirm({
+			title: 'ยืนยันการส่งตัว',
+			names: subjectNames,
+			count: 1,
+			confirmLabel: 'ส่งตัว',
+			run: () => handleTransition('sent', 'ส่งตัว')
+		});
+	}
+
+	function confirmCancelDraft() {
+		askConfirm({
+			title: 'ยืนยันการยกเลิกร่าง',
+			names: subjectNames,
+			count: 1,
+			confirmLabel: 'ยกเลิกร่าง',
+			destructive: true,
+			run: () => handleTransition('closed', 'ยกเลิกร่าง')
+		});
+	}
+
+	function confirmClose() {
+		askConfirm({
+			title: 'ยืนยันการปิดรายการ',
+			names: subjectNames,
+			count: 1,
+			confirmLabel: 'ปิดรายการ',
+			destructive: true,
+			run: () => handleTransition('closed', 'ปิดรายการ')
+		});
+	}
+
+	function submitWithReason() {
 		if (!showReasonPrompt) return;
-		const label = showReasonPrompt === 'accepted' ? 'ตอบรับ' : 'ปฏิเสธ';
-		await handleTransition(showReasonPrompt, label, responseReasonInput.trim());
+		const prompt = showReasonPrompt;
+		const to: ReferralStatus = prompt === 'withdraw' ? 'closed' : prompt;
+		const label = promptLabel;
+		const reason = responseReasonInput.trim();
+		askConfirm({
+			title: `ยืนยันการ${label}`,
+			description: reason
+				? `เหตุผลนี้จะใช้กับ 1 รายการ: ${reason}`
+				: 'ไม่ได้ระบุเหตุผล จะใช้กับ 1 รายการ',
+			names: subjectNames,
+			count: 1,
+			confirmLabel: prompt === 'withdraw' ? label : `ยืนยัน${label}`,
+			destructive: prompt !== 'accepted',
+			run: () => handleTransition(to, label, reason)
+		});
 	}
 </script>
 
@@ -88,7 +184,7 @@
 			class="rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-100"
 			role="status"
 		>
-			คำขอย้ายเข้าจากศูนย์ <span class="font-mono font-semibold">{referral.shelter_code}</span> — ตอบรับแล้วระบบจะย้ายผู้เข้าพักเข้าศูนย์นี้
+			คำขอย้ายเข้าจากศูนย์ <span class="font-semibold tabular-nums">{referral.shelter_code}</span> — ตอบรับแล้วระบบจะย้ายผู้เข้าพักเข้าศูนย์นี้
 			(occupancy สองฝั่งจะอัปเดตหลังตอบรับเท่านั้น)
 		</div>
 	{/if}
@@ -99,12 +195,12 @@
 			role="status"
 		>
 			รอศูนย์ปลายทาง
-			<span class="font-mono font-semibold">{referral.to_shelter_code}</span>
+			<span class="font-semibold tabular-nums">{referral.to_shelter_code}</span>
 			ตอบรับหรือปฏิเสธ — การย้ายศูนย์จะเกิดขึ้นเมื่อปลายทางกดตอบรับเท่านั้น
 		</div>
 	{/if}
 
-	<Card.Root class="border border-border/80 shadow-md">
+	<Card.Root class="border border-border/80 shadow-2xs">
 		<Card.Header class="border-b border-border/60 bg-muted/30 pb-4">
 			<div class="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
 				<div>
@@ -123,6 +219,11 @@
 					<Badge variant="outline" class="font-semibold">
 						{getStatusLabel(referral.status, { verbose: true })}
 					</Badge>
+					{#if closedSubLabel}
+						<Badge variant="secondary" class="font-medium" data-testid="closed-sub-label">
+							{closedSubLabel}
+						</Badge>
+					{/if}
 				</div>
 			</div>
 		</Card.Header>
@@ -139,14 +240,13 @@
 							<div>
 								<p class="text-xs text-muted-foreground">ชื่อ-นามสกุล ผู้เข้าพัก</p>
 								<p class="mt-0.5 text-base font-semibold text-foreground">
-									{referral.evacuee_summary.first_name}
-									{referral.evacuee_summary.last_name}
+									{formatEvacueeFullName(referral.evacuee_summary)}
 								</p>
 							</div>
 						{/if}
 						<div>
 							<p class="text-xs text-muted-foreground">รหัสผู้เข้าพัก (Evacuee ID)</p>
-							<p class="mt-0.5 font-mono font-medium">{referral.evacuee_id}</p>
+							<p class="mt-0.5 font-medium tabular-nums">{referral.evacuee_id}</p>
 						</div>
 					</div>
 				</div>
@@ -161,7 +261,7 @@
 					{#if referral.referral_type === 'capacity' || referral.to_shelter_code}
 						<div>
 							<p class="text-xs text-muted-foreground">ศูนย์พักพิงปลายทาง (Target Shelter)</p>
-							<p class="mt-0.5 font-mono font-semibold text-primary">
+							<p class="mt-0.5 font-semibold text-primary tabular-nums">
 								{referral.to_shelter_code || '-'}
 							</p>
 						</div>
@@ -238,7 +338,11 @@
 			{#if showReasonPrompt}
 				<div class="space-y-3 rounded-lg border border-primary/40 bg-primary/5 p-4">
 					<h4 class="text-sm font-semibold text-foreground">
-						ระบุเหตุผลการ{showReasonPrompt === 'accepted' ? 'ตอบรับ' : 'ปฏิเสธ'} (Response Reason)
+						{#if showReasonPrompt === 'withdraw'}
+							ระบุเหตุผลการถอนคำขอ (ไม่บังคับ)
+						{:else}
+							ระบุเหตุผลการ{promptLabel} (Response Reason)
+						{/if}
 					</h4>
 					<Input
 						type="text"
@@ -253,8 +357,9 @@
 							size="sm"
 							variant={showReasonPrompt === 'accepted' ? 'default' : 'destructive'}
 							onclick={submitWithReason}
+							disabled={isTransitionBusy}
 						>
-							ยืนยันการ{showReasonPrompt === 'accepted' ? 'ตอบรับ' : 'ปฏิเสธ'}
+							ยืนยันการ{promptLabel}
 						</Button>
 					</div>
 				</div>
@@ -341,6 +446,14 @@
 									<User class="h-3 w-3" /> By: {referral.timeline.closed.by}
 								</span>
 							</div>
+							{#if referral.close_reason}
+								<p
+									class="mt-1 text-xs whitespace-pre-wrap text-slate-700 dark:text-slate-300"
+									data-testid="close-reason"
+								>
+									เหตุผล: {referral.close_reason}
+								</p>
+							{/if}
 						</div>
 					{/if}
 				</div>
@@ -356,7 +469,8 @@
 					size="sm"
 					variant="default"
 					class="gap-1.5"
-					onclick={() => handleTransition('sent', 'ส่งตัว')}
+					onclick={confirmSend}
+					disabled={isTransitionBusy}
 				>
 					<Send class="h-4 w-4" />
 					ส่งออกข้อมูล (Send)
@@ -368,6 +482,7 @@
 					size="sm"
 					class="gap-1.5 bg-emerald-600 text-white hover:bg-emerald-700"
 					onclick={() => triggerActionWithReason('accepted')}
+					disabled={isTransitionBusy}
 				>
 					<CheckCircle2 class="h-4 w-4" />
 					ตอบรับการส่งต่อ (Accept)
@@ -380,19 +495,33 @@
 					variant="outline"
 					class="gap-1.5 border-rose-300 text-rose-600 hover:bg-rose-50"
 					onclick={() => triggerActionWithReason('rejected')}
+					disabled={isTransitionBusy}
 				>
 					<XCircle class="h-4 w-4" />
 					ปฏิเสธรับการส่งต่อ (Reject)
 				</Button>
 			{/if}
 
-			{#if canClose}
+			{#if canWithdraw}
+				<Button
+					size="sm"
+					variant="outline"
+					class="gap-1.5 border-rose-300 text-rose-700 hover:bg-rose-50"
+					data-testid="btn-withdraw-referral"
+					onclick={() => triggerActionWithReason('withdraw')}
+					disabled={isTransitionBusy}
+				>
+					<Undo2 class="h-4 w-4" />
+					ถอนคำขอ
+				</Button>
+			{:else if canClose}
 				{#if referral.status === 'draft'}
 					<Button
 						size="sm"
 						variant="outline"
 						class="gap-1.5 border-rose-300 text-rose-700 hover:bg-rose-50"
-						onclick={() => handleTransition('closed', 'ยกเลิกร่าง')}
+						onclick={confirmCancelDraft}
+						disabled={isTransitionBusy}
 					>
 						<Ban class="h-4 w-4" />
 						ยกเลิกร่าง
@@ -403,9 +532,8 @@
 						variant="outline"
 						class="gap-1.5 border-slate-300 text-slate-700 hover:bg-slate-50"
 						data-testid="btn-close-referral"
-						onclick={() => {
-							handleTransition('closed', 'ปิดรายการ');
-						}}
+						disabled={isTransitionBusy}
+						onclick={confirmClose}
 					>
 						<Archive class="h-4 w-4" />
 						ปิดรายการ (Close)
@@ -414,4 +542,15 @@
 			{/if}
 		</Card.Footer>
 	</Card.Root>
+	<ReferralConfirmDialog
+		bind:open={confirmOpen}
+		title={confirmRequest?.title ?? ''}
+		description={confirmRequest?.description}
+		names={confirmRequest?.names ?? []}
+		count={confirmRequest?.count ?? 0}
+		confirmLabel={confirmRequest?.confirmLabel ?? ''}
+		destructive={confirmRequest?.destructive}
+		pending={isTransitionBusy}
+		onConfirm={() => confirmRequest?.run()}
+	/>
 </div>

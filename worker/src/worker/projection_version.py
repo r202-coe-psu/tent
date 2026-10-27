@@ -19,4 +19,13 @@ read-side FastAPI changes). Never decrement it. Bumping costs one full bootstrap
 per deploy, so batch related projector changes into one bump per release when possible.
 """
 
-PROJECTION_VERSION: int = 7
+#: 6 — CR-185 (``public_jobs.is_urgent``, #709).
+#: 7 — CR-172 (``public_donations.reject_reason`` / ``reject_reason_code``) and CR-174
+#: (``public_donations.items_declared[].review_status`` / ``review_reason_code`` /
+#: ``review_reason``). Both shipped unreleased on one branch, so one bump covers both.
+#: 8 — #791 (``shelter_occupants`` drops ``privacy.search_excluded`` evacuees).
+#: 9 — PDPA D8 (decision sync 2026-10-26): ``public_shelters.occupancy_by_status`` (counts
+#: search-excluded evacuees too) and ``external_bookings.stay_status`` for booked evacuees.
+#: 10 — CR-183: bootstrap also scans closed shelters still in their retention window
+#: (persons only), restoring the ``public_persons`` the old retention deleted on close.
+PROJECTION_VERSION: int = 10

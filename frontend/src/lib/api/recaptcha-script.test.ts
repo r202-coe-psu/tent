@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ensureRecaptchaLoaded, recaptchaScriptSrc } from './recaptcha-script';
+import { ensureRecaptchaLoaded, executeRecaptcha, recaptchaScriptSrc } from './recaptcha-script';
 
 const KEY = 'site-key';
 const SRC = recaptchaScriptSrc(KEY);
@@ -107,5 +107,36 @@ describe('ensureRecaptchaLoaded', () => {
 		expect(tags()).toHaveLength(1);
 		tags()[0].dispatchEvent(new Event('error'));
 		expect(await second).toBe(false);
+	});
+});
+
+describe('executeRecaptcha', () => {
+	afterEach(() => {
+		delete window.grecaptcha;
+		delete window.__captchaToken;
+	});
+
+	it('prefers the token e2e injected', async () => {
+		window.__captchaToken = 'e2e-token';
+		expect(await executeRecaptcha(KEY, 'donation_lookup')).toBe('e2e-token');
+	});
+
+	it('runs the enterprise client for the action', async () => {
+		const execute = vi.fn().mockResolvedValue('enterprise-token');
+		window.grecaptcha = { enterprise: { ready: (cb) => void cb(), execute } };
+
+		expect(await executeRecaptcha(KEY, 'donation_lookup')).toBe('enterprise-token');
+		expect(execute).toHaveBeenCalledWith(KEY, { action: 'donation_lookup' });
+	});
+
+	it('resolves null when execute throws', async () => {
+		window.grecaptcha = {
+			enterprise: { ready: (cb) => void cb(), execute: vi.fn().mockRejectedValue(new Error('x')) }
+		};
+		expect(await executeRecaptcha(KEY, 'donation_lookup')).toBeNull();
+	});
+
+	it('resolves null without a site key', async () => {
+		expect(await executeRecaptcha('', 'donation_lookup')).toBeNull();
 	});
 });

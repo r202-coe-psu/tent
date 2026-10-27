@@ -400,11 +400,16 @@ async def test_process_evacuee_change_refreshes_occupancy():
         patch(
             "worker.couch.processor.refresh_shelter_occupants", new_callable=AsyncMock
         ) as refresh_occ,
+        patch(
+            "worker.couch.processor.sync_booking_stay", new_callable=AsyncMock
+        ) as sync_stay,
     ):
         await process_change(couch, "shelter_sh001", change)
 
     refresh.assert_awaited_once_with(couch, "SH001")
     refresh_occ.assert_awaited_once_with(couch, "SH001")
+    # PDPA D8: EXT-009 reads the stay from the booking row when the person is not projected.
+    sync_stay.assert_awaited_once_with(change["doc"])
 
 
 @pytest.mark.asyncio

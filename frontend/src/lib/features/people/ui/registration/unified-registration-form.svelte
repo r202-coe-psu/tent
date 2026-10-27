@@ -25,6 +25,11 @@
 		type ResidenceMatchChip
 	} from '$lib/features/public-register/data/public-register.api';
 	import { Input } from '$lib/components/ui/input/index.js';
+	import {
+		ConsentBlock,
+		ConsentBlockState,
+		type ConsentAcknowledgement
+	} from '$lib/features/consent';
 	import HouseholdAddressFields from '../forms/household-address-fields.svelte';
 	import UnifiedRegistrationSection from './unified-registration-section.svelte';
 	import UnifiedRegistrationStickyNav from './unified-registration-sticky-nav.svelte';
@@ -51,9 +56,12 @@
 	} from './unified-registration-pets';
 	import {
 		blankUnifiedMember,
+		memberFormKey,
 		membersMissingPhoneChoice,
 		unifiedRegistrationInputSchema,
 		type MemberPhotoUploadMode,
+		type RegistrationConsent,
+		type RegistrationConsentConfig,
 		type UnifiedMemberWithMeta,
 		type UnifiedRegistrationChannel,
 		type UnifiedRegistrationInput,
@@ -63,6 +71,7 @@
 		collectMemberRuleIssues,
 		dormFieldsFor,
 		formatPersonName,
+		hasMedicalInput,
 		type HousingType,
 		type HouseholdVehicle,
 		type PetGroup
@@ -130,6 +139,8 @@
 		joinResetKey = 0,
 		/** Shelter codes that accept public pre-registration (fallback when chip lacks the flag). */
 		bookableShelterCodes = [],
+		consent,
+		consentAcknowledgement,
 		children
 	}: {
 		channel?: UnifiedRegistrationChannel;
@@ -153,12 +164,25 @@
 		initialThaidProfile?: ThaiDAutofillProfile | null;
 		onsubmit: (
 			input: UnifiedRegistrationInput,
-			meta?: { reportingInMembers: UnifiedMemberWithMeta[]; allMembers: UnifiedMemberWithMeta[] }
+			meta?: {
+				reportingInMembers: UnifiedMemberWithMeta[];
+				allMembers: UnifiedMemberWithMeta[];
+				consent: RegistrationConsent | null;
+			}
 		) => Promise<void> | void;
 		onselectshelter?: (shelterCode: string, shelterName?: string) => void;
 		onDirtyChange?: (dirty: boolean) => void;
 		joinResetKey?: number;
 		bookableShelterCodes?: string[];
+		/** Shows the PDPA consent block at the end of the form; its confirm is this form's submit. */
+		consent?: RegistrationConsentConfig;
+		/**
+		 * Pre-register group A (FR-22), built from the current household: rendered inside the consent
+		 * block and required for submit. Return undefined when nothing needs acknowledging.
+		 */
+		consentAcknowledgement?: (
+			household: UnifiedRegistrationInput['household']
+		) => ConsentAcknowledgement | undefined;
 		children?: import('svelte').Snippet<[{ household: UnifiedRegistrationInput['household'] }]>;
 	} = $props();
 
@@ -239,6 +263,8 @@
 			return initialMembers.map((m) => ({
 				...blankUnifiedMember(),
 				...m,
+				// Deterministic for loaded people: a refetch rebuilding `members` keeps guardian picks.
+				form_key: m.form_key ?? m._id ?? blankUnifiedMember().form_key,
 				// Keep defined — Svelte 5 rejects bind:x={undefined} when $bindable has a fallback.
 				religion_other: m.religion_other ?? null,
 				disability_other_detail: m.disability_other_detail ?? null,
@@ -249,10 +275,43 @@
 	}
 
 	let members = $state<UnifiedMemberWithMeta[]>(untrack(() => buildInitialMembers()));
+
+	const consentBlock = untrack(() =>
+		consent
+			? new ConsentBlockState({
+					channel: consent.channel,
+					staff: consent.staff,
+					initialSearchVisible: consent.initialSearchVisible
+				})
+			: null
+	);
+	/** FR-41: the block is for members without consent, including ones added during report-in. */
+	const consentActive = $derived(
+		consentBlock !== null &&
+			members.some((m) => !consent?.consentedKeys?.includes(memberFormKey(m)))
+	);
+	const consentHasMedicalInput = $derived(members.some(hasMedicalInput));
 	let household = $state<UnifiedRegistrationInput['household']>(
 		untrack(() => buildInitialHousehold())
 	);
 	let assetDescription = $state(untrack(() => initialHousehold?.assets?.description ?? ''));
+	/** What `children` and the acknowledgement see: vehicles/assets only where the form shows them. */
+	const visibleHousehold = $derived({
+		...household,
+		vehicles: showVehiclesAssets ? (household.vehicles ?? []) : [],
+		assets:
+			showVehiclesAssets && assetDescription.trim()
+				? { description: assetDescription.trim(), image_url: null }
+				: null
+	});
+	const acknowledgement = $derived(consentAcknowledgement?.(visibleHousehold));
+	/** FR-11/FR-22: C1 (and the pre-register acknowledgement) must be ticked to submit. */
+	const consentBlocksSubmit = $derived(
+		consentActive &&
+			(!consentBlock!.canConfirm || (acknowledgement !== undefined && !acknowledgement.checked))
+	);
+	const consentNeedId = $props.id();
+	const effectiveSubmitDisabled = $derived(submitDisabled || readOnly || consentBlocksSubmit);
 	/** Errors reported by the last failed submit; `null` until the first submit. */
 	let submittedEntries = $state.raw<RegistrationErrorEntry[] | null>(null);
 	/** Bumped on every failed submit — collapsed sections holding an error re-open on it. */
@@ -1354,8 +1413,12 @@
 		if (!focusFirstInvalid()) scrollToSection('members');
 	}
 
-	async function handleSubmit(e: Event) {
+	function handleSubmit(e: Event) {
 		e.preventDefault();
+		void submit();
+	}
+
+	async function submit() {
 		if (pending || readOnly) return;
 
 		household.pets = syncPetsToHousehold(petItems);
@@ -1375,14 +1438,25 @@
 
 		submittedEntries = null;
 		firstErrorMember = null;
-		// Only now: a blank phone that passed validation is saved as "no phone".
-		for (const m of members) {
-			if (!m.phone?.trim()) m.phone = null;
-		}
 		try {
+			let registrationConsent: RegistrationConsent | null = null;
+			if (consentActive && consentBlock) {
+				const gate = consentBlock.confirm();
+				if (gate.kind !== 'decided') return;
+				registrationConsent = {
+					decision: gate.decision,
+					memberKeys: members.map(memberFormKey),
+					recordedBy: consentBlock.staff?.userId ?? null
+				};
+			}
+			// Only now: a blank phone that passed validation is saved as "no phone".
+			for (const m of members) {
+				if (!m.phone?.trim()) m.phone = null;
+			}
 			await onsubmit(parsed.data as UnifiedRegistrationInput, {
 				reportingInMembers: members.filter((m) => m.reporting_in),
-				allMembers: members
+				allMembers: members,
+				consent: registrationConsent
 			});
 			clearDirty();
 		} catch {
@@ -1533,7 +1607,7 @@
 				{showVehiclesAssets}
 				{activeSection}
 				{pending}
-				submitDisabled={submitDisabled || readOnly}
+				submitDisabled={effectiveSubmitDisabled}
 				submitLabel={effectiveSubmitLabel}
 				submittingLabel={t.submitting}
 				existingHeadName={summaryExistingHeadName}
@@ -1945,17 +2019,18 @@
 
 			{#if children}
 				<div class="pt-2">
-					{@render children({
-						household: {
-							...household,
-							vehicles: showVehiclesAssets ? (household.vehicles ?? []) : [],
-							assets:
-								showVehiclesAssets && assetDescription.trim()
-									? { description: assetDescription.trim(), image_url: null }
-									: null
-						}
-					})}
+					{@render children({ household: visibleHousehold })}
 				</div>
+			{/if}
+
+			{#if consentActive && consentBlock}
+				<ConsentBlock
+					block={consentBlock}
+					hasMedicalInput={consentHasMedicalInput}
+					disabled={fieldsLocked}
+					{acknowledgement}
+					needId={consentNeedId}
+				/>
 			{/if}
 
 			<div class="unified-reg-bottom-chrome {isVirtualKeyboardOpen ? 'max-sm:hidden' : ''}">
@@ -1987,7 +2062,8 @@
 							<div class="min-w-0 flex-1">
 								<UnifiedRegistrationSubmitBar
 									{pending}
-									{submitDisabled}
+									submitDisabled={effectiveSubmitDisabled}
+									describedBy={consentBlocksSubmit ? consentNeedId : undefined}
 									label={effectiveSubmitLabel}
 									submittingLabel={t.submitting}
 									align={submitAlign}
@@ -2017,7 +2093,7 @@
 							{showVehiclesAssets}
 							{activeSection}
 							{pending}
-							submitDisabled={submitDisabled || readOnly}
+							submitDisabled={effectiveSubmitDisabled}
 							submitLabel={effectiveSubmitLabel}
 							submittingLabel={t.submitting}
 							showSubmit={false}

@@ -21,10 +21,18 @@ class DonationBuffer(Document):
 	id: str = Field(alias="_id")
 	shelter_code: str
 	donor: DonorBuffer
+	# sha256 of normalize_phone(donor.phone) — the key the donor looks their bookings up
+	# by when they have lost the booking ref (CR-173). None on rows written before it.
+	donor_phone_hash: str | None = None
 	# each item may carry "reserved_qty" (qty_str) = amount actually locked into
 	# DonationNeedCounter.reserved_qty for that item (CR-045) — only present for
 	# items with both campaign_id + item_id; absent for free-text/no-campaign items,
 	# which bypass the counter entirely. cancel()/expire() release exactly this amount.
+	# CR-174: each item also carries "review_status" (approved | pending | rejected),
+	# computed by FastAPI at create/edit — approved iff the line holds a reservation in the
+	# campaign — plus "review_reason_code"/"review_reason" on a rejected line. Inbound
+	# copies the list to CouchDB whole, so the fields arrive there unchanged. ``status``
+	# below is read off these lines (pending_review | verifying | rejected).
 	items_declared: list[dict[str, Any]] = Field(default_factory=list)
 	logistics: dict[str, Any] | None = None
 	# ``DonationSlotCounter`` id this booking holds a place in — set only when the window
@@ -50,4 +58,5 @@ class DonationBuffer(Document):
 			IndexModel([("synced_to_couch", 1)]),
 			IndexModel([("tracking_token_hash", 1)], unique=True),
 			IndexModel([("booking_ref", 1)], unique=True),
+			IndexModel([("donor_phone_hash", 1), ("created_at", -1)]),
 		]

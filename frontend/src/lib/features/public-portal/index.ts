@@ -71,7 +71,31 @@ export {
 	type FaqItem
 } from './domain/config';
 export { DEFAULT_PUBLIC_PORTAL_CONFIG } from './domain/config.fixture';
+export {
+	FOOTER_LOGO_IMAGE_MAX_BYTES,
+	FOOTER_LOGO_MAX,
+	FOOTER_LOGO_TOO_LARGE_MESSAGE,
+	validateFooterLogoFile,
+	appendFooterLogo,
+	canAddFooterLogo,
+	footerLogoAttachmentName,
+	footerLogoImageUrl,
+	footerLogoInputSchema,
+	footerLogoSchema,
+	moveFooterLogo,
+	parseFooterLogos,
+	publishedFooterLogos,
+	removeFooterLogo,
+	replaceFooterLogo,
+	sortFooterLogos,
+	type FooterLogo,
+	type FooterLogoDirection,
+	type FooterLogoInput,
+	type FooterLogoRecord,
+	type PublicFooterLogo
+} from './domain/footer-logo';
 export { default as PublicPortalConfigForm } from './ui/public-portal-config-form.svelte';
+export { default as FooterLogosSection } from './ui/footer-logos-section.svelte';
 export {
 	requestUserPosition,
 	canRequestGeolocation,

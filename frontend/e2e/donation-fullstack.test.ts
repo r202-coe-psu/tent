@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type APIRequestContext, type Page } from '@playwright/test';
 import { CAN_WRITE, READ_ONLY_REASON } from './helpers/e2e-env';
 import { clearSession } from './helpers/login';
 import {
@@ -6,6 +6,8 @@ import {
 	BOARD_SYNC,
 	RunLedger,
 	approvePending,
+	bookMixedViaApi,
+	expectReadyForDropoff,
 	bookAsDonor,
 	boardLineFor,
 	catalogItem,
@@ -18,6 +20,7 @@ import {
 	ledgerRowsFor,
 	openBackOffice,
 	openInScanStation,
+	rejectInDialog,
 	openPendingRow,
 	provisionShelter,
 	reloadUntilVisible,
@@ -56,6 +59,15 @@ const NEED_ITEM = 'ยาสีฟัน';
 const SHELVED_ITEM = 'แปรงสีฟัน';
 
 const ledger = new RunLedger('donation-fullstack');
+
+/**
+ * A mobile number of this run's own (`08` + 8 digits), so a phone lookup only ever finds
+ * this run's bookings. `n` keeps two in one run apart.
+ */
+function runPhone(n: number): string {
+	const seed = (parseInt(RUN_ID.slice(0, 8), 36) + n) % 100_000_000;
+	return `08${String(seed).padStart(8, '0')}`;
+}
 let shelter: PublicShelter;
 let need: PublicNeed;
 let ws: Staff;
@@ -96,7 +108,9 @@ test.describe('Donation full-stack: donor and staff', { tag: ['@critical', '@don
 	});
 
 	test.describe('staff review', () => {
-		test('approve → donor sees QR → receive into stock → donor sees received', async ({ page }) => {
+		test('campaign booking skips review → donor sees QR → receive into stock → donor sees received (CR-174 AC-1)', async ({
+			page
+		}) => {
 			const phone = '0812345678';
 			const { bookingRef, trackingToken } = await bookAsDonor(page, {
 				shelter,
@@ -106,22 +120,42 @@ test.describe('Donation full-stack: donor and staff', { tag: ['@critical', '@don
 				phone
 			});
 
-			await openBackOffice(page, ws);
-			await approvePending(page, shelter.code, bookingRef);
+			await expectReadyForDropoff(shelter.code, bookingRef);
+			const booked = await findDonation(shelter.code, bookingRef);
+			expect((booked.items as { review_status?: string }[]).map((i) => i.review_status)).toEqual([
+				'approved'
+			]);
 
-			// Approved = the donor's ticket QR goes live; nothing to cancel any more.
+			// The QR is live from the start, and the donor can still hand it back (FR-20).
 			await clearSession(page);
 			await page.goto(`/donations/track/${trackingToken}`);
 			await expect(page.getByRole('img', { name: `QR Code for ${bookingRef}` })).toBeVisible();
-			await expect(page.getByRole('button', { name: 'ยกเลิกการจองนี้' })).toHaveCount(0);
+			await expect(page.getByRole('button', { name: 'ยกเลิกการจองนี้' })).toBeVisible();
+			await expect(page.getByText('อนุมัติแล้ว / รอนำส่ง')).toBeVisible();
 
 			// ── Scan station: count it in ───────────────────────────────────────────
+			// #617 — the old scan-tab link lands on the one list, filtered to drop-off, with
+			// the status in Thai; opening the row goes straight to the counter.
 			await openBackOffice(page, ws);
-			await openInScanStation(page, bookingRef);
+			await page.goto('/back-office/stock-donations?tab=scan');
+			await expect(page.getByRole('tab', { name: /รายการของบริจาค/ })).toHaveAttribute(
+				'aria-selected',
+				'true'
+			);
+			await expect(page.getByRole('button', { name: /^รอมาส่ง/ })).toHaveAttribute(
+				'aria-pressed',
+				'true'
+			);
+			const listRow = page.getByRole('row').filter({ hasText: bookingRef });
+			await expect(listRow).toContainText('กำลังตรวจรับที่ศูนย์');
+			await listRow.getByRole('button', { name: 'จัดการ' }).click();
+			await expect(
+				page.getByRole('heading', { name: `${bookingRef} - ตรวจรับพัสดุบริจาค` })
+			).toBeVisible();
 			const confirm = page.getByRole('button', { name: 'ยืนยันรับเข้าคลัง' });
 			await expect(confirm).toBeDisabled();
 			await expect(page.getByRole('textbox', { name: 'จำนวนรับจริง *' })).toHaveValue('1');
-			await page.getByRole('checkbox', { name: 'ผ่านการตรวจสอบแล้ว' }).check();
+			await page.getByRole('button', { name: /^ผ่านการตรวจสอบแล้ว/ }).click();
 			// The run's own shelter has no storage points, so the line goes to the main
 			// store without a pick (CR-139 N1).
 			await expect(page.getByRole('button', { name: /^สถานที่จัดเก็บ/ })).toContainText('คลังหลัก');
@@ -148,7 +182,10 @@ test.describe('Donation full-stack: donor and staff', { tag: ['@critical', '@don
 
 			// ── Public: the donor looks it up by ref + phone ────────────────────────
 			await clearSession(page);
-			await page.goto(`/donations/track?ref=${bookingRef}&phone=${phone}`);
+			await page.goto('/donations/track');
+			await page.locator('#phone-field').fill(phone);
+			await page.locator('#booking-ref-field').fill(bookingRef);
+			await page.getByRole('button', { name: 'ติดตามสถานะ' }).click();
 			await expect(page).toHaveURL(/\/donations\/track\/TX-/);
 			await expect(page.getByRole('heading', { name: bookingRef })).toBeVisible();
 			await reloadUntilVisible(
@@ -158,10 +195,55 @@ test.describe('Donation full-stack: donor and staff', { tag: ['@critical', '@don
 			await expect(page.getByRole('button', { name: 'แก้ไขรายการที่จะบริจาค' })).toHaveCount(0);
 		});
 
-		test('reject from the pending queue → donor sees it rejected', async ({ page }) => {
+		test('counted less than declared → staff see the gap, the donor only sees it received (decision sync 2026-10-22)', async ({
+			page
+		}) => {
 			const { bookingRef, trackingToken } = await bookAsDonor(page, {
 				shelter,
 				need,
+				ledger,
+				donorName: `E2E นับได้ครึ่งเดียว ${RUN_ID}`,
+				phone: '0812345690',
+				qty: 2
+			});
+			await expectReadyForDropoff(shelter.code, bookingRef);
+
+			await openBackOffice(page, ws);
+			await openInScanStation(page, bookingRef);
+			await page.getByRole('textbox', { name: 'จำนวนรับจริง *' }).fill('1');
+			// Staff still see the gap at the counter (CR-156 FR-I1).
+			await expect(page.getByText(/น้อยกว่าที่แจ้ง\s*1/)).toBeVisible();
+			await page.getByRole('button', { name: /^ผ่านการตรวจสอบแล้ว/ }).click();
+			await fillExpiry(page.getByRole('textbox', { name: 'วันหมดอายุ' }));
+			const received = page.waitForResponse(
+				(r) =>
+					r.url().endsWith(`/api/back-office/donations/${bookingRef}`) &&
+					r.request().method() === 'POST'
+			);
+			await page.getByRole('button', { name: 'ยืนยันรับเข้าคลัง' }).click();
+			expect((await received).ok()).toBe(true);
+
+			// The shortfall is still recorded — only the donor's page stops showing it.
+			const donation = await findDonation(shelter.code, bookingRef);
+			expect(donation.status).toBe('received');
+			expect((donation.received_summary as { shortfalls?: unknown[] }).shortfalls).toEqual([
+				expect.objectContaining({ item_id: need.item_id, short: '1' })
+			]);
+
+			await clearSession(page);
+			await page.goto(`/donations/track/${trackingToken}`);
+			await reloadUntilVisible(
+				page,
+				page.getByRole('heading', { name: 'ศูนย์รับของเรียบร้อยแล้ว' })
+			);
+			await expect(page.getByText(/ไม่ครบ|ขาด \d/)).toHaveCount(0);
+		});
+
+		test('reject from the pending queue → donor sees it rejected', async ({ page }) => {
+			// Only a typed-in line waits in the queue (CR-174).
+			const { bookingRef, trackingToken } = await bookAsDonor(page, {
+				shelter,
+				unsolicited: { itemName: `ผ้าห่มเก่า ${RUN_ID}`, unitLabel: 'กล่อง' },
 				ledger,
 				donorName: `E2E ปฏิเสธ ${RUN_ID}`,
 				phone: '0898765432'
@@ -169,11 +251,8 @@ test.describe('Donation full-stack: donor and staff', { tag: ['@critical', '@don
 
 			await openBackOffice(page, ws);
 			await openPendingRow(page, bookingRef);
-			await page.getByRole('button', { name: 'ปฏิเสธคำขอ' }).click();
-			const confirmReject = page.getByRole('button', { name: 'ยืนยันการปฏิเสธคำขอ' });
-			await expect(confirmReject).toBeDisabled();
-			await page.locator('#reject-reason-input').fill(`คลังเต็ม (e2e ${RUN_ID})`);
-			await confirmReject.click();
+			// "อื่นๆ" reads as the detail alone — the exact text the donor must see (CR-172 AC-1).
+			await rejectInDialog(page, /^อื่นๆ$/, `คลังเต็ม (e2e ${RUN_ID})`, { noteRequired: true });
 			await expect(page.getByText(`ปฏิเสธคำขอ ${bookingRef} เรียบร้อยแล้ว`)).toBeVisible();
 			await expect(page.getByRole('row').filter({ hasText: bookingRef })).toHaveCount(0);
 
@@ -184,7 +263,9 @@ test.describe('Donation full-stack: donor and staff', { tag: ['@critical', '@don
 			await clearSession(page);
 			await page.goto(`/donations/track/${trackingToken}`);
 			await expect(page.getByRole('heading', { name: bookingRef })).toBeVisible();
-			await expect(page.getByText('ปฏิเสธ').first()).toBeVisible();
+			await expect(page.getByTestId('donation-reject-reason')).toContainText(
+				`คลังเต็ม (e2e ${RUN_ID})`
+			);
 			await expect(page.getByRole('button', { name: 'ยกเลิกการจองนี้' })).toHaveCount(0);
 		});
 
@@ -200,23 +281,294 @@ test.describe('Donation full-stack: donor and staff', { tag: ['@critical', '@don
 			});
 
 			await openBackOffice(page, ws);
-			await approvePending(page, shelter.code, bookingRef);
+			await expectReadyForDropoff(shelter.code, bookingRef);
 			await openInScanStation(page, bookingRef);
 
-			await page.getByRole('button', { name: 'ปฏิเสธคำขอ' }).click();
-			const confirmReject = page.getByRole('button', { name: 'ยืนยันการปฏิเสธคำขอ' });
-			await expect(confirmReject).toBeDisabled();
-			await page
-				.getByPlaceholder('เช่น พื้นที่จัดเก็บไม่เพียงพอ, งดรับเสื้อผ้าชั่วคราว...')
-				.fill(`ของเสียหาย (e2e ${RUN_ID})`);
-			await confirmReject.click();
+			await rejectInDialog(page, /ชำรุดเสียหาย/, `กล่องเปียก (e2e ${RUN_ID})`);
 
 			await expect
 				.poll(async () => (await findDonation(shelter.code, bookingRef))?.status)
 				.toBe('rejected');
 			const donation = await findDonation(shelter.code, bookingRef);
+			expect(donation).toMatchObject({
+				reject_reason: `ชำรุดเสียหาย — กล่องเปียก (e2e ${RUN_ID})`,
+				reject_reason_code: 'damaged'
+			});
 			expect(await ledgerRowsFor(shelter.code, donation._id as string)).toEqual([]);
 		});
+
+		test('turning every line away at the counter rejects the booking with the line reason (CR-172 AC-3)', async ({
+			page
+		}) => {
+			const { bookingRef, trackingToken } = await bookAsDonor(page, {
+				shelter,
+				need,
+				ledger,
+				donorName: `E2E ไม่รับรายการ ${RUN_ID}`,
+				phone: '0823456790'
+			});
+
+			await openBackOffice(page, ws);
+			await expectReadyForDropoff(shelter.code, bookingRef);
+			await openInScanStation(page, bookingRef);
+
+			await page.getByRole('button', { name: /^ไม่รับรายการนี้/ }).click();
+			const confirm = page.getByRole('button', { name: 'ปฏิเสธทั้งใบ' });
+			await expect(confirm).toBeDisabled();
+			await page.getByRole('radio', { name: /^หมดอายุ$/ }).click();
+			await expect(page.getByTestId('line-0-reject-preview')).toHaveText('หมดอายุ');
+			await confirm.click();
+
+			await expect
+				.poll(async () => (await findDonation(shelter.code, bookingRef))?.status)
+				.toBe('rejected');
+			const donation = await findDonation(shelter.code, bookingRef);
+			expect(donation).toMatchObject({ reject_reason: 'หมดอายุ', reject_reason_code: 'expired' });
+			expect(await ledgerRowsFor(shelter.code, donation._id as string)).toEqual([]);
+
+			await clearSession(page);
+			await page.goto(`/donations/track/${trackingToken}`);
+			await expect(page.getByTestId('donation-reject-reason')).toContainText('หมดอายุ');
+			await expect(page.getByText('ไม่รับ', { exact: true })).toBeVisible();
+		});
+	});
+
+	/** Book campaign line + typed line, then wait for CouchDB to hold it in review. */
+	async function bookMixed(
+		request: APIRequestContext,
+		typedItem: string,
+		donorName: string,
+		phone: string
+	) {
+		const needItem = await catalogItem(NEED_ITEM);
+		const booking = await bookMixedViaApi(request, {
+			shelter,
+			need,
+			needUnit: needItem.unit,
+			typedItem,
+			donorName,
+			phone,
+			ledger
+		});
+		// Campaign line approved by the rule, typed line waiting (CR-174 AC-2).
+		await expect
+			.poll(async () => (await findDonation(shelter.code, booking.bookingRef))?.status, {
+				timeout: 30_000
+			})
+			.toBe('pending_review');
+		return booking;
+	}
+
+	/** Count the campaign line in and confirm a receipt that keeps one line and refuses one. */
+	async function receiveCampaignLineOnly(page: Page) {
+		await page
+			.getByRole('group', { name: `ผลการตรวจรับ ${need.name}` })
+			.getByRole('button', { name: /^ผ่านการตรวจสอบแล้ว/ })
+			.click();
+		await fillExpiry(page.getByRole('textbox', { name: 'วันหมดอายุ' }));
+		await page.getByRole('button', { name: 'รับ 1 รายการ · ไม่รับ 1 รายการ' }).click();
+	}
+
+	test('mixed booking: review refuses the typed line, the campaign line is received, the donor reads why (CR-174 AC-2, AC-3)', async ({
+		page,
+		request
+	}) => {
+		const typed = `ผ้าห่มมือสอง ${RUN_ID}`;
+		const { bookingRef, trackingToken } = await bookMixed(
+			request,
+			typed,
+			`E2E ใบผสมประเมิน ${RUN_ID}`,
+			'0823456791'
+		);
+
+		await openBackOffice(page, ws);
+		await openPendingRow(page, bookingRef);
+		// The campaign line is shown, not decided (FR-8); only the typed line takes a decision.
+		await expect(page.getByText('อยู่ในแคมเปญ · อนุมัติอัตโนมัติ')).toBeVisible();
+		await page.getByRole('button', { name: /^ไม่รับรายการนี้/ }).click();
+		await page.getByRole('radio', { name: /ชำรุดเสียหาย/ }).click();
+		await page
+			.getByRole('textbox', { name: /รายละเอียดเพิ่มเติม/ })
+			.fill(`ขาดเป็นรู (e2e ${RUN_ID})`);
+		await page.getByRole('button', { name: 'บันทึกผลการประเมิน' }).click();
+		// One line still approved: the booking goes to drop-off, not rejected (AC-3).
+		await expectReadyForDropoff(shelter.code, bookingRef);
+		const reviewed = await findDonation(shelter.code, bookingRef);
+		expect((reviewed.items as { review_status?: string }[]).map((i) => i.review_status)).toEqual([
+			'approved',
+			'rejected'
+		]);
+
+		// The counter shows the refusal as settled and receives only the campaign line.
+		await openBackOffice(page, ws);
+		await openInScanStation(page, bookingRef);
+		await expect(page.getByText('ไม่รับตั้งแต่ตอนประเมิน')).toBeVisible();
+		await receiveCampaignLineOnly(page);
+		await expect
+			.poll(async () => (await findDonation(shelter.code, bookingRef))?.status)
+			.toBe('received');
+		const received = await findDonation(shelter.code, bookingRef);
+		expect(await ledgerRowsFor(shelter.code, received._id as string)).toHaveLength(1);
+
+		await clearSession(page);
+		await page.goto(`/donations/track/${trackingToken}`);
+		await expect(page.getByText('ไม่รับ', { exact: true })).toBeVisible();
+		await expect(page.getByText(`ชำรุดเสียหาย — ขาดเป็นรู (e2e ${RUN_ID})`)).toBeVisible();
+		await expect(page.getByText(/รับไม่ครบ/)).toHaveCount(0);
+	});
+
+	test('mixed booking: the counter turns one line away and receives the other (CR-172 AC-2)', async ({
+		page,
+		request
+	}) => {
+		const typed = `หมอนเก่า ${RUN_ID}`;
+		const { bookingRef, trackingToken } = await bookMixed(
+			request,
+			typed,
+			`E2E ใบผสมหน้างาน ${RUN_ID}`,
+			'0823456792'
+		);
+		await openBackOffice(page, ws);
+		await approvePending(page, shelter.code, bookingRef);
+
+		await openBackOffice(page, ws);
+		await openInScanStation(page, bookingRef);
+		await page
+			.getByRole('group', { name: `ผลการตรวจรับ ${typed}` })
+			.getByRole('button', { name: /^ไม่รับรายการนี้/ })
+			.click();
+		await page.getByRole('radio', { name: /^หมดอายุ$/ }).click();
+		await receiveCampaignLineOnly(page);
+
+		await expect
+			.poll(async () => (await findDonation(shelter.code, bookingRef))?.status)
+			.toBe('received');
+		const received = await findDonation(shelter.code, bookingRef);
+		expect(await ledgerRowsFor(shelter.code, received._id as string)).toHaveLength(1);
+		// "ไม่รับ" is not "ขาด" (FR-13).
+		expect((received.received_summary as { shortfalls?: unknown[] }).shortfalls).toEqual([]);
+
+		await clearSession(page);
+		await page.goto(`/donations/track/${trackingToken}`);
+		await expect(page.getByText('ไม่รับ', { exact: true })).toBeVisible();
+		await expect(page.getByText('หมดอายุ', { exact: true })).toBeVisible();
+		await expect(page.getByText(/รับไม่ครบ/)).toHaveCount(0);
+	});
+
+	test('mixed booking: review waits for a reason on every refusal, and a later donor edit keeps it (CR-172 AC-4, CR-174 FR-18a, FR-24)', async ({
+		page,
+		request
+	}) => {
+		const typed = `ผ้าปูที่นอน ${RUN_ID}`;
+		const note = `ไม่ใช่ของที่ศูนย์ต้องการ (e2e ${RUN_ID})`;
+		const { bookingRef, trackingToken } = await bookMixed(
+			request,
+			typed,
+			`E2E ใบผสมแก้ภายหลัง ${RUN_ID}`,
+			'0823456793'
+		);
+
+		await openBackOffice(page, ws);
+		await openPendingRow(page, bookingRef);
+		const save = page.getByRole('button', { name: 'บันทึกผลการประเมิน' });
+		const hint = page.getByText('ตัดสินรายการที่รอประเมินให้ครบ และใส่เหตุผลของรายการที่ไม่รับ');
+		// Undecided, refused with no reason, "อื่นๆ" with no detail: none of them saves.
+		await expect(save).toBeDisabled();
+		await expect(hint).toBeVisible();
+		await page.getByRole('button', { name: /^ไม่รับรายการนี้/ }).click();
+		await expect(save).toBeDisabled();
+		await page.getByRole('radio', { name: /^อื่นๆ$/ }).click();
+		const noteBox = page.getByRole('textbox', { name: /รายละเอียดเพิ่มเติม/ });
+		await expect(noteBox).toHaveAttribute('aria-required', 'true');
+		await expect(save).toBeDisabled();
+		await noteBox.fill(note);
+		await expect(hint).toBeHidden();
+		await save.click();
+		await expectReadyForDropoff(shelter.code, bookingRef);
+
+		// The donor raises the campaign line only. The edit form sends back no category or
+		// condition; the refused line must still match itself and keep the refusal, and the
+		// booking its QR (full-branch review B1).
+		await clearSession(page);
+		await page.goto(`/donations/track/${trackingToken}`);
+		await page.getByRole('button', { name: 'แก้ไขรายการที่จะบริจาค' }).click();
+		const dialog = page.getByRole('dialog', { name: 'แก้ไขรายการที่จะบริจาค' });
+		await expect(dialog.getByText(/^ใบนี้ได้ QR แล้ว/)).toBeVisible();
+		await dialog.getByRole('spinbutton', { name: 'จำนวน' }).first().fill('2');
+		const saved = page.waitForResponse((r) =>
+			r.url().includes(`/api/public/v1/donations/${trackingToken}/items`)
+		);
+		await dialog.getByRole('button', { name: 'บันทึกการแก้ไข' }).click();
+		const res = await saved;
+		expect(res.ok(), `edit items failed: ${await res.text()}`).toBe(true);
+		await expect(dialog).toBeHidden();
+
+		const edited = await findDonation(shelter.code, bookingRef);
+		const items = edited.items as Record<string, unknown>[];
+		expect(edited.status).toBe('verifying');
+		expect(items.map((i) => Number(i.qty))).toEqual([2, 2]);
+		expect(items.map((i) => i.review_status)).toEqual(['approved', 'rejected']);
+		expect(items[1]).toMatchObject({ category: 'other', condition: 'new', review_reason: note });
+		await expect(page.getByText('รอประเมิน', { exact: true })).toHaveCount(0);
+	});
+
+	test('donor cancels a booking still under review → no line reads as awaiting review', async ({
+		page,
+		request
+	}) => {
+		const typed = `ตะเกียง ${RUN_ID}`;
+		const { bookingRef, trackingToken } = await bookMixed(
+			request,
+			typed,
+			`E2E ยกเลิกระหว่างประเมิน ${RUN_ID}`,
+			'0823456794'
+		);
+
+		await page.goto(`/donations/track/${trackingToken}`);
+		const pendingBadge = page.getByText('รอประเมิน', { exact: true });
+		await reloadUntilVisible(page, pendingBadge);
+		await page.getByRole('button', { name: 'ยกเลิกการจองนี้' }).click();
+		await page
+			.getByRole('alertdialog', { name: 'ยกเลิกการจองบริจาคนี้?' })
+			.getByRole('button', { name: 'ยืนยันยกเลิกการจอง' })
+			.click();
+		await expect
+			.poll(async () => (await findDonation(shelter.code, bookingRef))?.status)
+			.toBe('cancelled');
+
+		// The line keeps `review_status: pending` on file; the page must not show it as live.
+		await page.reload();
+		await expect(page.getByText(typed)).toBeVisible();
+		await expect(pendingBadge).toHaveCount(0);
+	});
+
+	test('refusing every line of a typed-only booking turns the save red and rejects it (CR-174 FR-6)', async ({
+		page
+	}) => {
+		const { bookingRef, trackingToken } = await bookAsDonor(page, {
+			shelter,
+			unsolicited: { itemName: `เตารีดเก่า ${RUN_ID}`, unitLabel: 'กล่อง' },
+			ledger,
+			donorName: `E2E ไม่รับทุกรายการ ${RUN_ID}`,
+			phone: '0823456795'
+		});
+
+		await openBackOffice(page, ws);
+		await openPendingRow(page, bookingRef);
+		await page.getByRole('button', { name: /^ไม่รับรายการนี้/ }).click();
+		await page.getByRole('radio', { name: /ชำรุดเสียหาย/ }).click();
+		const rejectAll = page.getByRole('button', { name: 'ปฏิเสธทั้งใบ' });
+		await expect(rejectAll).toBeEnabled();
+		await expect(rejectAll).toHaveClass(/bg-red-600/);
+		await rejectAll.click();
+		await expect
+			.poll(async () => (await findDonation(shelter.code, bookingRef))?.status)
+			.toBe('rejected');
+
+		await clearSession(page);
+		await page.goto(`/donations/track/${trackingToken}`);
+		await expect(page.getByTestId('donation-reject-reason')).toContainText('ชำรุดเสียหาย');
+		await expect(page.getByText('รอประเมิน', { exact: true })).toHaveCount(0);
 	});
 
 	test('typed-in item in another unit maps to a stock item and is received in its own unit (#623, #636, #638)', async ({
@@ -269,7 +621,7 @@ test.describe('Donation full-stack: donor and staff', { tag: ['@critical', '@don
 		await fillExpiry(page.getByRole('textbox', { name: 'วันหมดอายุ' }));
 		// Boxes against pieces do not compare, so no "more/less than declared" badge.
 		await expect(page.getByText(/(มากกว่า|น้อยกว่า)ที่แจ้ง/)).toHaveCount(0);
-		await page.getByRole('checkbox', { name: 'ผ่านการตรวจสอบแล้ว' }).check();
+		await page.getByRole('button', { name: /^ผ่านการตรวจสอบแล้ว/ }).click();
 		const confirm = page.getByRole('button', { name: 'ยืนยันรับเข้าคลัง' });
 		await expect(confirm).toBeEnabled();
 
@@ -337,10 +689,10 @@ test.describe('Donation full-stack: donor and staff', { tag: ['@critical', '@don
 			phone: '0867770001'
 		});
 		await openBackOffice(page, ws);
-		await approvePending(page, shelter.code, first.bookingRef);
+		await expectReadyForDropoff(shelter.code, first.bookingRef);
 		await openBackOffice(page, ws);
 		await openInScanStation(page, first.bookingRef);
-		await page.getByRole('checkbox', { name: 'ผ่านการตรวจสอบแล้ว' }).check();
+		await page.getByRole('button', { name: /^ผ่านการตรวจสอบแล้ว/ }).click();
 		// No storage points on the run's own shelter: the line goes to the main store.
 		await expect(page.getByRole('button', { name: /^สถานที่จัดเก็บ/ })).toContainText('คลังหลัก');
 		const confirm = page.getByRole('button', { name: 'ยืนยันรับเข้าคลัง' });
@@ -398,7 +750,7 @@ test.describe('Donation full-stack: donor and staff', { tag: ['@critical', '@don
 			phone: '0867770021'
 		});
 		await openBackOffice(page, ws);
-		await approvePending(page, shelter.code, bookingRef);
+		await expectReadyForDropoff(shelter.code, bookingRef);
 
 		await openBackOffice(page, admin, 'SH001');
 		await openInScanStation(page, bookingRef);
@@ -412,11 +764,7 @@ test.describe('Donation full-stack: donor and staff', { tag: ['@critical', '@don
 		await expect(page.getByText('ใบนี้จองส่งไปศูนย์')).toHaveCount(0);
 		// Working in the booking's shelter, the actions are back — and closing the booking
 		// here keeps the run's teardown, which wants every booking finished, satisfied.
-		await page.getByRole('button', { name: 'ปฏิเสธคำขอ' }).click();
-		await page
-			.getByPlaceholder('เช่น พื้นที่จัดเก็บไม่เพียงพอ, งดรับเสื้อผ้าชั่วคราว...')
-			.fill(`ส่งผิดศูนย์ (e2e ${RUN_ID})`);
-		await page.getByRole('button', { name: 'ยืนยันการปฏิเสธคำขอ' }).click();
+		await rejectInDialog(page, /^อื่นๆ$/, `ส่งผิดศูนย์ (e2e ${RUN_ID})`);
 		await expect
 			.poll(async () => (await findDonation(shelter.code, bookingRef))?.status)
 			.toBe('rejected');
@@ -439,6 +787,93 @@ test.describe('Donation full-stack: donor and staff', { tag: ['@critical', '@don
 
 			await expect(page.locator('[data-sonner-toast]').first()).toBeVisible();
 			await expect(page).toHaveURL(/\/donations\/track\/?(\?.*)?$/);
+		});
+
+		// CR-173 — the phone number alone. A number of this run's own, so bookings other runs
+		// left in the intake buffer (it keeps them for the TTL) cannot join the list.
+		test('lookup by phone alone lists every booking of the number and opens each', async ({
+			page
+		}) => {
+			const phone = runPhone(1);
+			const first = await bookAsDonor(page, {
+				shelter,
+				need,
+				ledger,
+				donorName: `E2E ค้นด้วยเบอร์ 1 ${RUN_ID}`,
+				phone
+			});
+			// The ticket opens this booking by its token — no phone in the link (FR-12).
+			const ticketLink = page.getByRole('link', { name: 'ตรวจสอบสถานะการบริจาคของฉัน' });
+			await expect(ticketLink).toHaveAttribute('href', `/donations/track/${first.trackingToken}`);
+			const second = await bookAsDonor(page, {
+				shelter,
+				need,
+				ledger,
+				donorName: `E2E ค้นด้วยเบอร์ 2 ${RUN_ID}`,
+				phone
+			});
+
+			await page.goto('/donations/track');
+			await page.locator('#phone-field').fill(phone);
+			const looked = page.waitForRequest((r) => r.url().includes('/lookup-by-phone'));
+			await page.getByRole('button', { name: 'ติดตามสถานะ' }).click();
+			const request = await looked;
+			// The number travels in the body, never in the URL (FR-1, AC-5).
+			expect(request.method()).toBe('POST');
+			expect(request.url()).not.toContain(phone);
+			expect(request.postDataJSON()).toEqual({ phone });
+
+			const results = page.getByRole('list').filter({ hasText: first.bookingRef });
+			const rows = results.getByRole('listitem');
+			await expect(rows).toHaveCount(2);
+			// Newest first (FR-3).
+			await expect(rows.nth(0)).toContainText(second.bookingRef);
+			await expect(rows.nth(1)).toContainText(first.bookingRef);
+			await expect(page).toHaveURL(/\/donations\/track\/?$/);
+
+			// Full access from the list (FR-4): the older booking opens and can be cancelled.
+			await rows.nth(1).getByRole('link').click();
+			await expect(page).toHaveURL(`/donations/track/${first.trackingToken}`);
+			await expect(page.getByRole('heading', { name: first.bookingRef })).toBeVisible();
+			await page.getByRole('button', { name: 'ยกเลิกการจองนี้' }).click();
+			await page
+				.getByRole('alertdialog', { name: 'ยกเลิกการจองบริจาคนี้?' })
+				.getByRole('button', { name: 'ยืนยันยกเลิกการจอง' })
+				.click();
+			await expect
+				.poll(async () => (await findDonation(shelter.code, first.bookingRef))?.status)
+				.toBe('cancelled');
+
+			// The other one opens from the list too, and is still the donor's to edit.
+			await page.goto('/donations/track');
+			await page.locator('#phone-field').fill(phone);
+			await page.getByRole('button', { name: 'ติดตามสถานะ' }).click();
+			await page
+				.getByRole('listitem')
+				.filter({ hasText: second.bookingRef })
+				.getByRole('link')
+				.click();
+			await expect(page).toHaveURL(`/donations/track/${second.trackingToken}`);
+			await expect(page.getByRole('button', { name: 'แก้ไขรายการที่จะบริจาค' })).toBeVisible();
+		});
+
+		test('lookup by a phone with no bookings shows an empty list', async ({ page }) => {
+			await page.goto('/donations/track');
+			await page.locator('#phone-field').fill(runPhone(2));
+			await page.getByRole('button', { name: 'ติดตามสถานะ' }).click();
+
+			await expect(page.getByText('ไม่พบการจองของเบอร์นี้')).toBeVisible();
+			await expect(page.getByText('0 รายการ')).toBeVisible();
+		});
+
+		test('an old ?ref&phone link fills the form but does not search or keep the phone', async ({
+			page
+		}) => {
+			await page.goto('/donations/track?ref=DN-100001&phone=0812345678');
+
+			await expect(page.locator('#phone-field')).toHaveValue('0812345678');
+			await expect(page.locator('#booking-ref-field')).toHaveValue('DN-100001');
+			await expect(page).toHaveURL(/\/donations\/track$/);
 		});
 
 		test('donor edits the quantity → the change is recorded as a revision', async ({ page }) => {
@@ -500,7 +935,7 @@ test.describe('Donation full-stack: donor and staff', { tag: ['@critical', '@don
 				.toBe('cancelled');
 
 			await openBackOffice(page, ws);
-			await page.getByRole('tab', { name: /รอการประเมิน/ }).click();
+			await page.getByRole('tab', { name: /รายการของบริจาค/ }).click();
 			await expect(page.getByRole('table')).toBeVisible();
 			await expect(page.getByRole('row').filter({ hasText: bookingRef })).toHaveCount(0);
 		});

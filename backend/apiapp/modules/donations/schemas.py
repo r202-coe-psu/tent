@@ -56,6 +56,9 @@ class DonationCreateResponse(BaseModel):
     success: bool = True
     tracking_token: str
     booking_ref: str
+    #: The status the booking opened in (CR-174 FR-15): ``verifying`` when every line is
+    #: in the campaign and the QR is good at once, else ``pending_review``.
+    status: str
 
 
 class DonationTrackingResponse(BaseModel):
@@ -71,6 +74,12 @@ class DonationItemsPatchRequest(BaseModel):
     #: The whole basket the donor wants, not a delta — dropping a line means leaving it
     #: out. The service works out the difference against what is already reserved.
     items: list[DonationItemInput]
+    #: CR-174 FR-18 — the CouchDB document's ``items`` and ``status`` as the BFF read them
+    #: before the edit. Staff review lines in CouchDB, which this service cannot read, so
+    #: without these an untouched line could not keep a staff decision. Omitted (e.g. the
+    #: booking has not reached CouchDB yet) → the service uses its own copies.
+    current_items: list[dict[str, Any]] | None = None
+    current_status: str | None = None
 
 
 class DonationItemsPatchResponse(BaseModel):
@@ -84,6 +93,13 @@ class DonationItemsPatchResponse(BaseModel):
     items: list[dict[str, Any]] = Field(default_factory=list)
     #: The entry just appended, for the BFF to add to the CouchDB document's log.
     revision: dict[str, Any] = Field(default_factory=dict)
+    #: The booking status after the edit, read off the re-reviewed lines (CR-174 FR-18b).
+    #: The BFF writes it onto the CouchDB document with ``items``.
+    status: str
+    #: Index into ``items`` of every line this edit approved automatically (CR-174 FR-26)
+    #: — a line that kept an approval it already had is not listed. The BFF writes the
+    #: ``approved_by: system`` audit for exactly these.
+    auto_approved_lines: list[int] = Field(default_factory=list)
 
 
 class DonationCourierPatchResponse(BaseModel):
@@ -102,6 +118,41 @@ class DonationTrackSearchResponse(BaseModel):
     success: bool = True
     tracking_token: str
     booking_ref: str
+
+
+class DonationPhoneLookupRequest(BaseModel):
+    """CR-173 FR-1 — the phone travels in the body only, never in the URL."""
+
+    phone: str = Field(min_length=1, max_length=32)
+
+
+class DonationPhoneLookupSlot(BaseModel):
+    date: str | None = None
+    from_: str | None = Field(default=None, alias="from")
+    to: str | None = None
+
+    model_config = {"populate_by_name": True}
+
+
+class DonationPhoneLookupItem(BaseModel):
+    """One booking of the number — enough to tell them apart and open the full ticket."""
+
+    tracking_token: str
+    booking_ref: str
+    status: str
+    shelter_code: str
+    shelter_name: str | None = None
+    delivery_method: str | None = None
+    slot: DonationPhoneLookupSlot | None = None
+    item_count: int
+    created_at: str
+
+
+class DonationPhoneLookupResponse(BaseModel):
+    """Same shape whether the number has bookings or not (CR-173 FR-5)."""
+
+    success: bool = True
+    items: list[DonationPhoneLookupItem] = Field(default_factory=list)
 
 
 class DonationCancelResponse(BaseModel):

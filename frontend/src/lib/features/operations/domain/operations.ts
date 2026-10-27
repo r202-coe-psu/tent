@@ -239,7 +239,28 @@ export interface DonationItem {
 	category?: string;
 	condition?: string;
 	note?: string;
+	/**
+	 * Per-line review (CR-174 FR-1 · schema_v 7): a line the shelter asked for in its
+	 * campaign is `approved` at booking time, a typed-in one waits as `pending`. Absent on
+	 * docs before schema_v 7 — those are reviewed as a whole, by `status`.
+	 */
+	review_status?: 'approved' | 'pending' | 'rejected';
+	review_reason_code?: string | null;
+	review_reason?: string | null;
+	/**
+	 * What the campaign counter holds for this line's item (CR-080) — stamped by FastAPI
+	 * only when the counter really took it, so it is also how an automatic approval
+	 * (FR-2) is told from a person's (FR-8).
+	 */
+	reserved_qty?: string;
 }
+
+/**
+ * `schema_v` every donation writer stamps — the walk-in factory here, the donor edit
+ * route, and `worker/inbound/donations.py`. 7 = CR-174 `items[].review_status`
+ * (6 CR-172 `reject_reason`, 5 CR-087 `redirect_to_shelter_code`, 4 CR-080 `revisions[]`).
+ */
+export const DONATION_SCHEMA_V = 7;
 
 export interface Donor {
 	name: string;
@@ -293,8 +314,18 @@ export interface Donation extends BaseDoc {
 			free_text?: string;
 			qty: string;
 			unit?: string;
+			/** Staff turned this line away at the counter — no ledger row, qty `'0'` (CR-172 FR-10). */
+			rejected?: boolean;
+			reject_reason?: string;
+			reject_reason_code?: string;
 		}>;
 	} | null;
+	/**
+	 * Why the booking was turned away, as the donor reads it on the tracking page.
+	 * Written only with `status: 'rejected'` (CR-172 FR-1, FR-2 · schema_v 6).
+	 */
+	reject_reason?: string | null;
+	reject_reason_code?: string | null;
 	/**
 	 * Destination shelter this request was handed to (CR-087). Set
 	 * only alongside `status: 'redirected'`; the ticket the destination actually
@@ -560,7 +591,27 @@ function stockLedgerInputSchemaWith(
 }
 
 export const stockLedgerInputSchema = stockLedgerInputSchemaWith(checkRefId);
-export type StockLedgerInput = z.input<typeof stockLedgerInputSchema>;
+type StockLedgerInputBase = Omit<
+	z.input<typeof stockLedgerInputBaseSchema>,
+	'reason' | 'adjust_reason' | 'note'
+>;
+
+/**
+ * Compile-time mirror of CR-143 FR-C1/C2, discriminated on `reason`: an adjust row must
+ * carry `adjust_reason` (`note` optional), every other row must carry neither. The Zod
+ * `superRefine` above stays as the runtime guard for data that never passed through TypeScript.
+ */
+export type StockLedgerInput =
+	| (StockLedgerInputBase & {
+			reason: 'adjust';
+			adjust_reason: AdjustReason;
+			note?: string;
+	  })
+	| (StockLedgerInputBase & {
+			reason: Exclude<LedgerReason, 'adjust'>;
+			adjust_reason?: never;
+			note?: never;
+	  });
 
 const legacyFlow2StockLedgerInputSchema = stockLedgerInputSchemaWith(checkLegacyFlow2RefId);
 
@@ -734,24 +785,21 @@ export function createReceiveEntry(
 	id?: string
 ): StockLedger {
 	const d = receiveInputSchema.parse(input);
-	return createStockLedger(
-		{
-			item_id: d.item_id,
-			qty: d.qty,
-			unit: d.unit,
-			reason: REASON_BY_RECEIVE_SOURCE[d.source],
-			ref_id: d.ref_id,
-			// A hand-keyed receipt is booked as an adjust (CR-143 §C needs a reason on those):
-			// stock that turned up, so `found` (CR-156 FR-C7); the form offers no picker (FR-C8).
-			...(REASON_BY_RECEIVE_SOURCE[d.source] === 'adjust'
-				? { adjust_reason: 'found' as const }
-				: {}),
-			lot: d.lot,
-			occurred_at: d.occurred_at
-		},
-		ctx,
-		id
-	);
+	const common = {
+		item_id: d.item_id,
+		qty: d.qty,
+		unit: d.unit,
+		ref_id: d.ref_id,
+		lot: d.lot,
+		occurred_at: d.occurred_at
+	};
+	const reason = REASON_BY_RECEIVE_SOURCE[d.source];
+	// A hand-keyed receipt is booked as an adjust (CR-143 §C needs a reason on those):
+	// stock that turned up, so `found` (CR-156 FR-C7); the form offers no picker (FR-C8).
+	if (reason === 'adjust') {
+		return createStockLedger({ ...common, reason, adjust_reason: 'found' }, ctx, id);
+	}
+	return createStockLedger({ ...common, reason }, ctx, id);
 }
 
 export const distributeInputSchema = z.object({
@@ -1027,13 +1075,13 @@ export function projectStockLotBalances(ledger: readonly StockLedger[]): StockLo
  * `lot_ref` rows hit their own lot, older outbound rows are replayed in the legacy order.
  *
  * Projected one item at a time — lots never cross items, so the result is the same as one
- * whole-ledger pass, but one item with an impossible history only drops that item
- * (`onIntegrityError`) instead of the whole page or count.
+ * whole-ledger pass, but one item with an impossible history only drops that item, named in
+ * `brokenItemIds`, instead of the whole page or count.
  */
-export function projectLotsByItem(
-	ledger: readonly StockLedger[],
-	onIntegrityError?: (itemId: string, error: StockLotIntegrityError) => void
-): StockLotBalance[] {
+export function projectLotsByItem(ledger: readonly StockLedger[]): {
+	lots: StockLotBalance[];
+	brokenItemIds: string[];
+} {
 	const byItem = new Map<string, StockLedger[]>();
 	for (const entry of ledger) {
 		const rows = byItem.get(entry.item_id);
@@ -1041,15 +1089,16 @@ export function projectLotsByItem(
 		else byItem.set(entry.item_id, [entry]);
 	}
 	const lots: StockLotBalance[] = [];
+	const brokenItemIds: string[] = [];
 	for (const [itemId, rows] of byItem) {
 		try {
 			lots.push(...projectStockLotBalances(rows));
 		} catch (error) {
 			if (!(error instanceof StockLotIntegrityError)) throw error;
-			onIntegrityError?.(itemId, error);
+			brokenItemIds.push(itemId);
 		}
 	}
-	return lots;
+	return { lots, brokenItemIds };
 }
 
 /**
@@ -1079,12 +1128,16 @@ export function assertLotWriteOffsFit(
 	if (wanted.size === 0) return;
 
 	const itemIds = new Set([...wanted.values()].map((w) => w.item_id));
-	const lots = new Map(
-		projectStockLotBalances(ledger.filter((row) => itemIds.has(row.item_id))).map((lot) => [
-			lot.lot_ref,
-			lot
-		])
-	);
+	let projected: StockLotBalance[];
+	try {
+		projected = projectStockLotBalances(ledger.filter((row) => itemIds.has(row.item_id)));
+	} catch (error) {
+		if (!(error instanceof StockLotIntegrityError)) throw error;
+		throw new LotWriteOffError(
+			'ประวัติคลังของสินค้านี้คำนวณยอดรายล็อตไม่ได้ — กรุณาแจ้งผู้ดูแลระบบ'
+		);
+	}
+	const lots = new Map(projected.map((lot) => [lot.lot_ref, lot]));
 	for (const [lotRef, want] of wanted) {
 		const lot = lots.get(lotRef);
 		if (!lot || lot.item_id !== want.item_id || lot.unit !== want.unit) {
@@ -1155,10 +1208,9 @@ export function createWalkInDonation(input: WalkInDonationInput, ctx: AuthorCont
 	).toISOString();
 	return makeDoc(
 		'donation',
-		// 5 since CR-087 added redirect_to_shelter_code (4 was CR-080's revisions[]). A
-		// walk-in has neither yet, but the version has to say which shape a reader should
-		// expect — and the public writer (worker/inbound/donations.py) stamps the same.
-		5,
+		// A walk-in has none of the later fields yet, but the version has to say which
+		// shape a reader should expect — and the public writer stamps the same.
+		DONATION_SCHEMA_V,
 		{
 			channel: 'walk_in' as const,
 			donor: d.donor,
@@ -1199,7 +1251,9 @@ const DONATION_TRANSITIONS: Record<DonationStatus, DonationStatus[]> = {
 	//     already writes this for every outstanding status (`quota/expiry.py`,
 	//     `EXPIRABLE_STATUSES`), so leaving it out here made the two implementations
 	//     disagree about a transition that happens nightly.
-	verifying: ['received', 'redirected', 'rejected', 'expired', 'cancelled'],
+	//   · `pending_review` — the donor edits a booking that already has its QR and adds
+	//     a line that needs review (CR-174 FR-21): the QR waits until staff decide.
+	verifying: ['received', 'pending_review', 'redirected', 'rejected', 'expired', 'cancelled'],
 	received: [],
 	redirected: [],
 	rejected: [],
@@ -1655,6 +1709,17 @@ export function keyableDonations(donations: Donation[], stockLedgers: StockLedge
 	);
 }
 
+/**
+ * Goods still owed to the shelter, per item: outstanding donations plus `received`
+ * ones the ledger has not recorded, minus what a batch receipt already recorded.
+ *
+ * With `campaignId`, only that campaign's donations count — a donation with no
+ * `campaign_id` belongs to none, and a line with no `item_id` (free text) to no item.
+ * Both used to be attributed anyway (every campaign; an item guessed from the text),
+ * so the back-office board showed one booking under every campaign asking for the
+ * item while the public board and the quota counter counted it nowhere (#689). Now
+ * the three copies of the T-22 rule agree — see `packages/needs-fixtures`.
+ */
 export function calculateReserved(
 	donations: Donation[],
 	stockLedgers: StockLedger[],
@@ -1665,16 +1730,14 @@ export function calculateReserved(
 
 	const reserved = new Map<string, string>();
 	for (const don of donations) {
-		if (campaignId && don.campaign_id && don.campaign_id !== campaignId) continue;
+		if (campaignId && don.campaign_id !== campaignId) continue;
 		const isUnkeyedReceived = don.status === 'received' && !keyed.has(don._id);
 		if (!isDonationOutstanding(don.status) && !isUnkeyedReceived) continue;
 
 		const declared = new Map<string, string>();
 		for (const item of don.items ?? []) {
-			const itemId =
-				item.item_id || (item.free_text ? mapNeedItemHeuristic(item.free_text) : undefined);
-			if (!itemId) continue;
-			declared.set(itemId, addQty(declared.get(itemId) ?? '0', item.qty));
+			if (!item.item_id) continue;
+			declared.set(item.item_id, addQty(declared.get(item.item_id) ?? '0', item.qty));
 		}
 
 		// FR-B9: a donation part-way through a batch receipt already has some of its
@@ -1730,7 +1793,9 @@ export function deriveNeedAvailability(
 			qty_target: need.qty_target,
 			qty_on_hand: currentOnHand,
 			qty_reserved: currentReserved,
-			qty_remaining: remaining,
+			// What the board offers a donor: nothing once the need is cut off (met, or
+			// closed by hand), the same zero `computeNeeds` folds a closed need into.
+			qty_remaining: isCutOff ? '0' : remaining,
 			is_cut_off: isCutOff,
 			status: need.status ?? 'open',
 			unit: need.unit
@@ -2049,24 +2114,4 @@ export function publicItemAggregate(
 	}
 
 	return { campaignCount, totalTarget };
-}
-
-/**
- * Maps a Thai item name heuristic to a slugged itemId.
- */
-export function mapNeedItemHeuristic(name: string): string {
-	const lowerName = name.toLowerCase();
-	if (lowerName.includes('ข้าว')) return 'item:rice';
-	if (lowerName.includes('น้ำ')) return 'item:water';
-	if (lowerName.includes('พารา') || lowerName.includes('ยา')) return 'item:paracetamol';
-	if (lowerName.includes('สบู่')) return 'item:soap';
-	if (lowerName.includes('ห่ม')) return 'item:blanket';
-	if (lowerName.includes('ไข่')) return 'item:egg';
-
-	const slug = name
-		.trim()
-		.toLowerCase()
-		.replace(/[^a-z0-9\u0e00-\u0e7f]+/g, '-')
-		.replace(/^-+|-+$/g, '');
-	return `item:${slug || 'custom'}`;
 }

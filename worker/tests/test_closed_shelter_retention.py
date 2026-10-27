@@ -442,6 +442,16 @@ async def test_bootstrap_all_scans_closed_shelters_for_persons_only() -> None:
             bs, "list_listened_shelters", new_callable=AsyncMock, return_value=listened
         ),
         patch.object(bs, "save_projection_version", new_callable=AsyncMock),
+        patch.object(
+            bs,
+            "list_all_shelter_codes",
+            new_callable=AsyncMock,
+            return_value=["SH001", "SH002", "SH003", "SH004"],
+        ),
+        patch.object(bs, "refresh_occupancy", new_callable=AsyncMock) as occupancy,
+        patch.object(
+            bs, "refresh_shelter_occupants", new_callable=AsyncMock
+        ) as occupants,
     ):
         couch = AsyncMock()
         await bs.bootstrap_all(couch)
@@ -451,6 +461,12 @@ async def test_bootstrap_all_scans_closed_shelters_for_persons_only() -> None:
         call(couch, "shelter_sh001", persons_only=False),
         call(couch, "shelter_sh002", persons_only=True),
     ]
+    assert occupancy.await_args_list == [
+        call(couch, "SH002"),
+        call(couch, "SH003"),
+        call(couch, "SH004"),
+    ]
+    occupants.assert_not_awaited()
 
 
 async def test_bootstrap_persons_only_skips_operational_docs() -> None:

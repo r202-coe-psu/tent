@@ -8,8 +8,9 @@
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { useEvacuees } from '$lib/features/people';
+	import { useMasterData } from '$lib/features/master-data';
 	import {
-		emptyLookups,
+		type Lookups,
 		orphanMemberRows,
 		validateWorkbook,
 		type ParsedWorkbook,
@@ -29,8 +30,13 @@
 
 	const shelterCode = $derived(getShelterCode());
 
-	/** CR-137: zone/community are free text — no master lookups. */
-	const lookups = emptyLookups();
+	// CR-186 FR-9/FR-10: โรคประจำตัว maps onto the active global `chronic_disease`
+	// items; zone/community stay free text (CR-137).
+	const chronicDiseaseQuery = useMasterData(() => 'chronic_disease');
+	const activeChronicDiseases = $derived(
+		(chronicDiseaseQuery.data?.items ?? []).filter((i) => i.status === 'active')
+	);
+	const lookups = $derived<Lookups>({ medical_conditions: activeChronicDiseases });
 
 	let workbook = $state<ParsedWorkbook>({ households: [], members: [] });
 	let filename = $state('');
@@ -41,6 +47,10 @@
 	);
 	const validCount = $derived(validations.filter((v) => v.ok).length);
 	const errorCount = $derived(validations.length - validCount);
+	/** Values that will be stored as free text — a note, never a blocker (FR-9). */
+	const freeTextWarnings = $derived(
+		validations.flatMap((v) => v.warnings.map((w) => ({ ...w, row: v.row })))
+	);
 	const orphanMembers = $derived(workbook.households.length ? orphanMemberRows(workbook) : []);
 	const memberCount = $derived(workbook.members.length);
 
@@ -70,7 +80,9 @@
 	const importMutation = useImportPeople();
 
 	function templateMasters(): TemplateMasters {
-		return {};
+		return {
+			medical_conditions: activeChronicDiseases.map((i) => ({ value: i.code, label: i.label_th }))
+		};
 	}
 
 	function download(blob: Blob, name: string) {
@@ -256,6 +268,22 @@
 								{:else}
 									{dup.members.map((m) => m.name).join(', ')}
 								{/if}
+							</li>
+						{/each}
+					</ul>
+				</div>
+			{/if}
+			{#if freeTextWarnings.length > 0}
+				<div class="mb-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
+					<p class="text-sm text-amber-700">
+						บางค่าในคอลัมน์โรคประจำตัวไม่ตรงรายการมาตรฐาน — นำเข้าได้
+						แต่จะเก็บเป็นข้อความตามที่พิมพ์
+					</p>
+					<ul class="mt-2 space-y-1 text-sm text-amber-700">
+						{#each freeTextWarnings as w (`${w.row}:${w.line ?? 'head'}`)}
+							<li>
+								แถวที่ {w.row}{w.line !== undefined ? ` (ชีต "${w.sheet}" แถวที่ ${w.line})` : ''}:
+								{w.message}
 							</li>
 						{/each}
 					</ul>

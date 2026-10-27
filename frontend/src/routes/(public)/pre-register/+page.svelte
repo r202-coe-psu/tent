@@ -138,9 +138,7 @@
 				class="relative inline-flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-xl px-2 py-2 text-sm font-semibold whitespace-nowrap transition-all sm:flex-none sm:gap-2 sm:px-4 {activeTab ===
 				'history'
 					? 'bg-card text-foreground shadow-xs ring-1 ring-border/50'
-					: 'text-muted-foreground hover:text-foreground'} {storedTicketsCount > 0
-					? 'ticket-tab-glow font-bold text-foreground ring-2 ring-primary/60'
-					: ''}"
+					: 'text-muted-foreground hover:text-foreground'}"
 				onclick={() => {
 					activeTab = 'history';
 					// no sync here: TicketHistory mounts with the tab and syncs itself — a second
@@ -152,7 +150,7 @@
 				<span>{t.tabHistory}</span>
 				{#if storedTicketsCount > 0}
 					<span
-						class="flex size-5 animate-pulse items-center justify-center rounded-full bg-primary text-2xs font-bold text-primary-foreground"
+						class="flex min-w-5 animate-pulse items-center justify-center rounded-full bg-primary px-1.5 py-0.5 text-xs font-bold text-primary-foreground"
 					>
 						{storedTicketsCount}
 					</span>
@@ -235,23 +233,3 @@
 		</div>
 	{/if}
 </PublicPageShell>
-
-<style>
-	@keyframes ticketTabGlow {
-		0%,
-		100% {
-			box-shadow:
-				0 0 0 2px color-mix(in srgb, var(--primary) 40%, transparent),
-				0 0 10px color-mix(in srgb, var(--primary) 30%, transparent);
-		}
-		50% {
-			box-shadow:
-				0 0 0 3px color-mix(in srgb, var(--primary) 85%, transparent),
-				0 0 20px color-mix(in srgb, var(--primary) 60%, transparent);
-		}
-	}
-
-	.ticket-tab-glow {
-		animation: ticketTabGlow 2s ease-in-out infinite;
-	}
-</style>

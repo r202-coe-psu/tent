@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import { render } from 'svelte/server';
 import {
 	PersonalInfoFields,
@@ -12,6 +12,25 @@ import {
 	ZoneSelectionFields
 } from './index.js';
 import { languageStore } from '$lib/stores/language.svelte';
+import { MasterTagInput } from '$lib/features/master-data';
+
+const MOCK_MASTER_ITEMS: Record<string, { code: string; label_th: string; label_en: string }[]> = {
+	chronic_disease: [{ code: 'diabetes', label_th: 'เบาหวาน', label_en: 'Diabetes' }],
+	allergy: [{ code: 'egg', label_th: 'ไข่', label_en: 'Egg' }]
+};
+
+vi.mock('$lib/features/master-data', async (importOriginal) => ({
+	...(await importOriginal<typeof import('$lib/features/master-data')>()),
+	useMasterData: (type: () => string) => ({
+		data: {
+			items: (MOCK_MASTER_ITEMS[type()] ?? []).map((i) => ({
+				...i,
+				is_default: false,
+				status: 'active'
+			}))
+		}
+	})
+}));
 
 describe('Shared Form Sub-components for Evacuee Intake and Profile (Issue #205)', () => {
 	afterEach(() => {
@@ -428,6 +447,34 @@ describe('Shared Form Sub-components for Evacuee Intake and Profile (Issue #205)
 		});
 	});
 
+	describe('Master Tag Input (master-tag-input.svelte, #649)', () => {
+		const items = [
+			{
+				code: 'asthma',
+				label_th: 'หอบหืด',
+				label_en: 'Asthma',
+				is_default: false,
+				status: 'active' as const
+			}
+		];
+
+		it('shows master codes by label and free text as-is', () => {
+			const result = render(MasterTagInput, {
+				props: { id: 'tags', value: ['asthma', 'โรคเกาต์'], items }
+			});
+			expect(result.body).toContain('หอบหืด');
+			expect(result.body).toContain('ลบ หอบหืด');
+			expect(result.body).toContain('ลบ โรคเกาต์');
+			expect(result.body).not.toContain('>asthma<');
+		});
+
+		it('renders no tag list when empty', () => {
+			const result = render(MasterTagInput, { props: { id: 'tags', value: [], items } });
+			expect(result.body).not.toContain('รายการที่เลือก');
+			expect(result.body).toContain('id="tags"');
+		});
+	});
+
 	describe('Health Medical Fields (health-medical-fields.svelte)', () => {
 		it('renders care-track radios, medical history, and general symptoms without triage or blood group (CR-106)', () => {
 			const result = render(HealthMedicalFields, {
@@ -454,6 +501,25 @@ describe('Shared Form Sub-components for Evacuee Intake and Profile (Issue #205)
 			expect(result.body).not.toContain('หมู่เลือด');
 			expect(result.body).not.toContain('Triage');
 			expect(result.body).not.toContain('สถานะการส่งต่อ');
+		});
+
+		it('renders โรคประจำตัว as master tags: legacy labels resolve, free text stays (#649)', () => {
+			const result = render(HealthMedicalFields, {
+				props: { conditions: 'เบาหวาน, โรคเกาต์', idPrefix: 'med' }
+			});
+			expect(result.body).toContain('id="med-conditions"');
+			expect(result.body).toContain('ลบ เบาหวาน');
+			expect(result.body).toContain('ลบ โรคเกาต์');
+		});
+
+		it('renders ประวัติการแพ้ as allergy master tags: legacy labels resolve, free text stays (#648)', () => {
+			const result = render(HealthMedicalFields, {
+				props: { allergies: 'ไข่, เพนิซิลลิน', idPrefix: 'med' }
+			});
+			expect(result.body).toContain('id="med-allergies"');
+			expect(result.body).toContain('ลบ ไข่');
+			expect(result.body).toContain('ลบ เพนิซิลลิน');
+			expect(result.body).not.toContain('ลบ egg');
 		});
 
 		it('hides general symptoms when showGeneralSymptoms is false', () => {

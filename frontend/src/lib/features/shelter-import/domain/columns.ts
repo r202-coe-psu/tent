@@ -108,12 +108,25 @@ export const COMMUNICATION_CHOICES: EnumChoice<CommunicationChannel>[] = [
 	{ value: 'vhf_radio', label: 'วิทยุสื่อสาร VHF (Analog/Local)' }
 ];
 
+// CR-199: 4 → 7 choices (keys retained; `medical_supplies` label
+// changed "เวชภัณฑ์" → "ยา")
 export const SUB_STORAGE_TYPE_CHOICES: EnumChoice<SubStorageType>[] = [
 	{ value: 'general', label: 'ทั่วไป' },
+	{ value: 'baby_food', label: 'อาหารเด็ก' },
 	{ value: 'food_dry', label: 'อาหารแห้ง' },
-	{ value: 'drinking_water', label: 'น้ำดื่ม' },
-	{ value: 'medical_supplies', label: 'เวชภัณฑ์' }
+	{ value: 'cooked_food', label: 'อาหารปรุงสุก' },
+	{ value: 'food_cold', label: 'อาหารแช่เย็น/แข็ง' },
+	{ value: 'medical_supplies', label: 'ยา' },
+	{ value: 'drinking_water', label: 'น้ำดื่ม' }
 ];
+
+/**
+ * Retired labels still accepted on import, so workbooks filled before the label change
+ * (CR-199) keep loading.
+ */
+export const SUB_STORAGE_TYPE_LEGACY_LABELS: ReadonlyMap<string, SubStorageType> = new Map([
+	['เวชภัณฑ์', 'medical_supplies']
+]);
 
 export const ZONE_TYPE_CHOICES: EnumChoice<ZoneType>[] = [
 	{ value: 'general', label: 'ทั่วไป' },
@@ -222,7 +235,7 @@ export const H = {
 	name: 'ชื่อศูนย์พักพิง',
 	site_kind: 'ชนิดสถานที่',
 	operation_status: 'สถานะ',
-	shelter_type: 'ประเภทศูนย์พักพิง',
+	shelter_type: 'ประเภทอาคาร',
 	project_level: 'ระดับโครงการ',
 	area_type: 'สถานะพื้นที่อาคาร',
 	capacity: 'ความจุสูงสุด (คน)',
@@ -347,10 +360,19 @@ export function isTextColumn(kind: ColumnKind): boolean {
  * No Thai header ends in "*", so the strip is unambiguous. Workbooks from the
  * earlier template — which carried the asterisk in its own narrow column —
  * normalize that cell to '' and it is ignored like any unknown column.
+ *
+ * Renamed headers in workbooks downloaded before the rename resolve to their
+ * current name through {@link LEGACY_HEADERS}.
  */
 export function normalizeHeader(text: string): string {
-	return text.replace(/\s*\*+\s*$/, '').trim();
+	const header = text.replace(/\s*\*+\s*$/, '').trim();
+	return Object.hasOwn(LEGACY_HEADERS, header) ? LEGACY_HEADERS[header] : header;
 }
+
+/** Retired header text → current header, so old templates keep importing. */
+const LEGACY_HEADERS: Readonly<Record<string, string>> = {
+	ประเภทศูนย์พักพิง: H.shelter_type
+};
 
 /**
  * master_data lists the importer resolves.
@@ -463,7 +485,7 @@ const SHEET_MAIN: SheetDef = {
 			required: false,
 			masterType: 'shelter_type',
 			path: 'shelter_type',
-			hint: 'เลือกจากรายการประเภทศูนย์พักพิง'
+			hint: 'เลือกจากรายการประเภทอาคาร'
 		},
 		{
 			header: H.project_level,
@@ -713,7 +735,7 @@ const SHEET_FACILITIES: SheetDef = {
 			header: H.sub_storage,
 			kind: 'string',
 			required: false,
-			hint: `รายการคลังย่อย รูปแบบ ชื่อ${FIELD_SEPARATOR}ประเภท${FIELD_SEPARATOR}พื้นที่ คั่นแต่ละรายการด้วย "${MULTI_SEPARATOR}" เช่น คลังหน้าอาคาร${FIELD_SEPARATOR}อาหารแห้ง${FIELD_SEPARATOR}20 ${MULTI_SEPARATOR} คลังยา${FIELD_SEPARATOR}เวชภัณฑ์${FIELD_SEPARATOR}8`
+			hint: `รายการคลังย่อย รูปแบบ ชื่อ${FIELD_SEPARATOR}ประเภท${FIELD_SEPARATOR}พื้นที่ คั่นแต่ละรายการด้วย "${MULTI_SEPARATOR}" เช่น คลังหน้าอาคาร${FIELD_SEPARATOR}อาหารแห้ง${FIELD_SEPARATOR}20 ${MULTI_SEPARATOR} คลังยา${FIELD_SEPARATOR}ยา${FIELD_SEPARATOR}8`
 		}
 	]
 };

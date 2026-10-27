@@ -60,6 +60,15 @@ export function createInMemoryRepository(): Repository {
 								}
 							} else if (op === '$eq') {
 								if (val !== opVal) return false;
+							} else if (op === '$gte' || op === '$gt' || op === '$lte' || op === '$lt') {
+								// Range operators (Mango) — enough for ISO-string / number fields.
+								if (typeof val !== typeof opVal || val == null) return false;
+								const v = val as string | number;
+								const o = opVal as string | number;
+								if (op === '$gte' && !(v >= o)) return false;
+								if (op === '$gt' && !(v > o)) return false;
+								if (op === '$lte' && !(v <= o)) return false;
+								if (op === '$lt' && !(v < o)) return false;
 							} else {
 								if (val !== cond) return false;
 							}

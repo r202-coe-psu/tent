@@ -35,6 +35,7 @@ from worker.mongo import (
     refresh_occupancy,
     refresh_shelter_occupants,
     refresh_shelter_stock,
+    sync_booking_stay,
 )
 from worker.mongo.on_hand import refresh_on_hand
 from worker.projection_version import PROJECTION_VERSION
@@ -133,6 +134,7 @@ async def bootstrap_database(
                     doc, shelter_code=shelter_code, household=household
                 )
                 await apply_person(action, payload)
+                await sync_booking_stay(doc)
         await save_checkpoint(database, seq)
         logger.info("Bootstrap complete for %s, persons only (seq=%s)", database, seq)
         return
@@ -146,6 +148,7 @@ async def bootstrap_database(
                 doc, shelter_code=shelter_code, household=household
             )
             await apply_person(action, payload)
+            await sync_booking_stay(doc)
         elif doc_type == "donation":
             action, payload = project_donation(doc, shelter_code=shelter_code)
             await apply_donation(action, payload)
@@ -268,7 +271,8 @@ async def bootstrap_all(couch: CouchClient) -> None:
     """
     logger.info("Starting bootstrap scan (projection version %s)", PROJECTION_VERSION)
     await bootstrap_database(couch, REGISTRY_DB)
-    for code, phase in (await list_listened_shelters(couch)).items():
+    listened = await list_listened_shelters(couch)
+    for code, phase in listened.items():
         if not phase.is_bootstrapped:
             continue
         await bootstrap_database(
@@ -276,6 +280,12 @@ async def bootstrap_all(couch: CouchClient) -> None:
             shelter_db_name(code),
             persons_only=phase is RetentionPhase.CLOSED_WITHIN_RETENTION,
         )
+    # Shelters without a full scan still serve EXT-005 counts — recompute those so a
+    # projector change (e.g. #791, PDPA D8) reaches them too. Not their occupant list:
+    # a closed shelter has none (CR-183 FR-4).
+    for code in await list_all_shelter_codes(couch):
+        if listened.get(code) is not RetentionPhase.OPEN:
+            await refresh_occupancy(couch, code)
     await save_projection_version(PROJECTION_VERSION)
     logger.info("Bootstrap finished (projection version %s stored)", PROJECTION_VERSION)
 

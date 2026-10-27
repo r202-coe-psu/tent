@@ -2,7 +2,7 @@
 title: "Full-System Role Permission Matrix (R2-R4 & V10)"
 status: approved
 created: 2026-06-04
-updated: 2026-10-20 # CR-153 Daily SOP rows; CR-155 amend incident log เฉพาะ SA/SM/SO; 2026-10-18 CR-165 kiosk_staff แทน banner_staff (11th role) + CR-162 path `/back-office/kiosks/banners`; 2026-10-11 CR-162 banner_staff; เดิม: CR-093 (Compound Roles) & CR-104 (Volunteer Backoffice, 10-Role Taxonomy, Health Policy); decision sync 2026-10-10; CR-155 shelter_incident แทน shelter_report
+updated: 2026-10-27 # CR-204 แยกแถว Stock Distribution (WS/SM เบิกจ่าย, SC ไม่ได้); 2026-10-20 CR-153 Daily SOP rows; CR-155 amend incident log เฉพาะ SA/SM/SO; 2026-10-18 CR-165 kiosk_staff แทน banner_staff (11th role) + CR-162 path `/back-office/kiosks/banners`; 2026-10-11 CR-162 banner_staff; เดิม: CR-093 (Compound Roles) & CR-104 (Volunteer Backoffice, 10-Role Taxonomy, Health Policy); decision sync 2026-10-10; CR-155 shelter_incident แทน shelter_report
 note: decision sync 2026-10-10 — VC may access /back-office/volunteers (job board/shifts), REG may access Station 2 medical screening; portal groups menus by department (ฝ่าย): ทะเบียน(REG; TRG/MED เห็นเฉพาะ Station 2), ครัว(KS), พัสดุและคลัง(SC, warehouse_staff alias), อาสาสมัคร(VC), รักษาความปลอดภัย(SO), อาคารสถานที่(FAC), บริหารศูนย์(SM), ส่วนกลาง(SA)
 closes: K-12 (A1 RBAC phase-blocker)
 affects:
@@ -12,6 +12,7 @@ affects:
   - docs/changes/14-kiosk/CR-162-kiosk-banner.md
   - docs/changes/14-kiosk/CR-165-kiosk-management-back-office.md
   - docs/changes/07-B-sop/CR-153-daily-sop-role-assessments.md
+  - docs/changes/03-C-supply/CR-204-stock-distribute-shelter-manager.md
 ---
 
 # Full-System Role Permission Matrix (R2-R4 & V10)
@@ -100,16 +101,24 @@ affects:
 | **Health Flags (Read)**                                                                     | ดูข้อมูลโรค/อาการคัดกรองเพื่อเตรียมงาน                                                                                                                                                     |  ✓  | scope | scope | scope | scope | scope | scope | scope | scope | scope |
 | **Meal Planning & Service**                                                                 | แผนอาหาร, บันทึกแจกจ่ายมื้ออาหาร                                                                                                                                                           |  ✓  | scope |   —   |   —   |   —   | scope |   —   |   —   |   —   |   —   |
 | **Kitchen Requisition**                                                                     | เบิกวัตถุดิบทำอาหารตัดสต็อก                                                                                                                                                                |  ✓  | scope |   —   |   —   |   —   | scope | scope |   —   |   —   |   —   |
-| **Inventory & Supply**                                                                      | รับของบริจาค, ตัดจ่ายพัสดุ, สต็อก                                                                                                                                                          |  ✓  | scope |   —   |   —   |   —   |   —   | scope |   —   |   —   |   —   |
+| **Inventory & Supply**                                                                      | รับของบริจาค, สต็อก                                                                                                                                                                        |  ✓  | scope |   —   |   —   |   —   |   —   | scope |   —   |   —   |   —   |
+| **Stock Distribution**      | เบิกจ่ายพัสดุออกจากคลังโดยตรง (ตัดจ่าย)                                                                                                                                                    |  ✓  | scope |   —   |   —   |   —   |   —   |  WS   |   —   |   —   |   —   |
 | **Volunteer Job Board**                                                                     | สร้างประกาศภารกิจงานอาสา, จัดกะ                                                                                                                                                            |  ✓  | scope |   —   |   —   |   —   |   —   |   —   | scope |   —   |   —   |
 | **Volunteer Check-in**                                                                      | รับรายงานตัวอาสาหน้างาน (POS/Kiosk)                                                                                                                                                        |  ✓  | scope | scope |   —   |   —   |   —   |   —   | scope |   —   |   —   |
 | **Shelter Incident Log** ([CR-155](../changes/08-E-reports/CR-155-shelter-incident-log.md)) | เฉพาะ SA/SM/SO (incident staff) เข้าเมนู/route · เปิดบันทึก + เพิ่มบันทึกสังเกตการณ์ · เปลี่ยนสถานะ/ส่งต่อ/ปิด = เจ้าของเคสหรือ SM · ยกเลิก = SM · ลบไม่ได้ทุก role · role อื่นไม่มีสิทธิ์ |  ✓  | scope |   —   |   —   |   —   |   —   |   —   |   —   | scope |   —   |
 | **Zoning & Facilities**                                                                     | จัดการโซน, เต็นท์, ทรัพย์สินอาคาร                                                                                                                                                          |  ✓  | scope |   —   |   —   |   —   |   —   |   —   |   —   |   —   | scope |
-| **Daily SOP (Read)**                                                                        | ดูผลประเมินรายวันทุก Role                                                                                                                                                                  |  ✓  | scope | scope | scope | scope | scope | scope | scope | scope | scope |
+| **Daily SOP (UI visibility)**                                                               | หน้า Daily SOP แสดงเฉพาะ Role ที่ประเมินได้ (frontend เท่านั้น)                                                                                                                            |  ✓  | scope |  own  |  own  |  own  |  own  |  own  |  own  |  own  |  own  |
+| **Daily SOP (CouchDB read)**                                                                | อ่านเอกสารทุก Role ในฐาน shelter ตาม `_security` (ข้อจำกัดที่ทราบ)                                                                                                                         |  ✓  | scope | scope | scope | scope | scope | scope | scope | scope | scope |
 | **Daily SOP (Write)**                                                                       | บันทึกแบบประเมินของวันนี้                                                                                                                                                                  |  ✓  | scope |  own  |  own  |  own  |  own  |  own  |  own  |  own  |  own  |
 | **User Management**                                                                         | สร้าง/แก้ไขผู้ใช้ประจำศูนย์ตน                                                                                                                                                              |  ✓  | scope |   —   |   —   |   —   |   —   |   —   |   —   |   —   |   —   |
 
+> **CR-204 (2026-10-27, approved)** — แถว Stock Distribution: `WS` ในคอลัมน์ SC = เฉพาะ `{code}:warehouse_staff`; `supply_coordinator` ดูสต็อกและรับเข้าได้แต่เบิกจ่ายไม่ได้ (คง [CR-156](../changes/03-C-supply/CR-156-stock-redesign-amendment.md) §H FR-H1); SM ของศูนย์เบิกจ่ายได้ (GitHub #837)
+
+> **CR-153 (2026-10-24)** — แยกสิทธิ์อ่าน Daily SOP เป็น UI visibility (`own`; SM/SA เห็นครบ 9 Role) กับ CouchDB read (shelter-wide ตาม `_security`); การจำกัดเป็นการแสดงผลใน UI เท่านั้น ไม่ใช่ access control.
+>
 > **CR-153 (2026-10-20)** — เพิ่มแถว Daily SOP จดสิทธิ์ที่ CR-153 กำหนดไว้แล้ว ไม่เพิ่มสิทธิ์ใหม่. `own` = เฉพาะ Role ของตนในศูนย์ตน (SC รวม `warehouse_staff`); `scope` ในแถว Write = ทุก Role ในศูนย์ตน (SM); SA ทุกศูนย์; เขียนได้เฉพาะวันนี้ตามเวลา Asia/Bangkok
+>
+> **CR-153 amendment (2026-10-24)** — แถว Read เปลี่ยนเป็น UI-visibility: `own` = UI แสดงเฉพาะ Role ของตน (SC รวม `warehouse_staff`); SM `scope` และ SA เห็นครบ 9 Role. การอ่านเอกสารระดับ DB (CouchDB `_security`) ยังเป็นทั้งศูนย์สำหรับสมาชิก shelter — ไม่ใช่ access control; notes/observations จึงยังห้ามมีข้อมูลส่วนบุคคล
 
 ---
 

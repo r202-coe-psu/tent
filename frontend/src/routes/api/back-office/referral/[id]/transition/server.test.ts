@@ -178,4 +178,29 @@ describe('PATCH /api/back-office/referral/[id]/transition', () => {
 		expect(data.error).toContain('Conflict: transition failed');
 		expect(mockTransition).toHaveBeenCalledTimes(3);
 	});
+
+	it('409 retry that re-reads a non-sent referral returns 422 instead of retrying again', async () => {
+		vi.mocked(requireShelterScopeOrSA).mockResolvedValue({
+			name: 'sm_user',
+			roles: ['shelter_manager', 'shelter:SH002'],
+			isSA: false,
+			shelterCode: 'SH002'
+		});
+
+		// Attempt 1 loses the referral write (409). The repo re-reads on attempt 2, sees the
+		// latest status is no longer `sent`, and rejects the transition before any transfer.
+		mockTransition
+			.mockRejectedValueOnce({ status: 409, message: 'Conflict' })
+			.mockRejectedValueOnce(
+				Object.assign(new Error('Invalid referral transition'), { status: 422 })
+			);
+
+		const event = createMockEvent('referral:1', { to: 'accepted' });
+		const res = await PATCH(event);
+
+		expect(res.status).toBe(422);
+		const data = await res.json();
+		expect(data.error).toBe('Invalid referral transition');
+		expect(mockTransition).toHaveBeenCalledTimes(2);
+	});
 });

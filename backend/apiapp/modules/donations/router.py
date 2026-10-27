@@ -5,6 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Request, Response, status
 
 from ...core.security import verify_external_secret
+from ...utils.request_meta import client_ip
 from .schemas import (
     DonationCancelResponse,
     DonationCourierPatchRequest,
@@ -13,6 +14,8 @@ from .schemas import (
     DonationCreateResponse,
     DonationItemsPatchRequest,
     DonationItemsPatchResponse,
+    DonationPhoneLookupRequest,
+    DonationPhoneLookupResponse,
     DonationTrackingResponse,
     DonationTrackSearchRequest,
     DonationTrackSearchResponse,
@@ -52,6 +55,27 @@ async def track_search_donation(
     """Resolve booking_ref (DN-…) + phone → tracking_token (CR-052 §2.6)."""
     response.headers["Cache-Control"] = "no-store"
     return await use_case.track_search(payload.booking_ref, payload.phone)
+
+
+@router.post(
+    "/lookup-by-phone",
+    response_model=DonationPhoneLookupResponse,
+    dependencies=[Depends(verify_external_secret)],
+)
+async def lookup_donations_by_phone(
+    request: Request,
+    response: Response,
+    payload: DonationPhoneLookupRequest,
+    use_case: DonationsUseCase = Depends(get_donations_use_case),  # noqa: B008
+) -> DonationPhoneLookupResponse:
+    """Phone number alone → every booking of it still in the buffer (CR-173).
+
+    Full access: each item carries its ``tracking_token``. Guarding against number
+    enumeration is the BFF's captcha plus nginx's rate limit (CR-188); this logs every call
+    and alerts on volume without refusing any. The BFF sends the donor's IP as ``X-Real-IP``.
+    """
+    response.headers["Cache-Control"] = "no-store"
+    return await use_case.lookup_by_phone(payload.phone, client_ip(request))
 
 
 @router.get(
@@ -105,7 +129,12 @@ async def patch_donation_items(
     409 when the target is full.
     """
     response.headers["Cache-Control"] = "no-store"
-    return await use_case.update_items(tracking_token, payload.items)
+    return await use_case.update_items(
+        tracking_token,
+        payload.items,
+        current_items=payload.current_items,
+        current_status=payload.current_status,
+    )
 
 
 @router.delete(
