@@ -368,6 +368,31 @@ test.describe('Tab 2 — ready-meal handover (plan §4.4)', { tag: DESK_TAGS }, 
 		});
 	});
 
+	// #607: free-text allergens are never matched; the desk shows both sides for staff to compare.
+	test('T2-5c free-text allergens on the menu are shown, not matched', async ({
+		page,
+		scenarioAs
+	}) => {
+		const scenario = await scenarioAs('food_allergen_free_text');
+		const { desk, item } = await foodSetup(page, scenario, {
+			item: { allergens: ['ถั่วเหลือง'] }
+		});
+		const allergic = await seedRecipient(
+			scenario,
+			`Allergy${scenario.namespace.slice(-6)}`,
+			'Soy',
+			{
+				allergies: ['ถั่วเหลือง']
+			}
+		);
+
+		await desk.itemButton(item.name).click();
+		await desk.chooseRecipientBySearch(allergic);
+		await expect(page.getByText('มีประวัติแพ้: ถั่วเหลือง')).toBeVisible();
+		await expect(page.getByText(/เมนูระบุ: ถั่วเหลือง/)).toBeVisible();
+		await expect(desk.alert(/ผู้รับแพ้/)).toHaveCount(0);
+	});
+
 	// D-E3: an expired lot is advisory only today — the handover goes out and the log is stamped.
 	test('T2-6 an expired lot warns but still hands out, stamping the log', async ({
 		page,
