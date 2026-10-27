@@ -25,6 +25,7 @@ from worker.mongo import (
     delete_occupants_for_shelter,
     delete_persons_for_shelter,
     delete_stocks_for_shelter,
+    is_person_projected,
     projected_shelter_status,
     refresh_occupancy,
     refresh_shelter_occupants,
@@ -83,7 +84,12 @@ async def _process_closed_shelter_change(
 ) -> None:
     """A closed shelter stays searchable, so only its persons follow CouchDB — an
     opt-out or check-out after closing must still reach the public plane (CR-183 FR-10).
-    Everything operational was dropped on close and must not come back."""
+    Everything operational was dropped on close and must not come back.
+
+    Persons are only updated or removed here, never added: a replay from an old
+    checkpoint (a closed shelter without ``closed_at`` is tailed but never bootstrapped)
+    or a change landing just after the retention deadline would otherwise re-publish
+    someone retention already deleted."""
     doc_id = change.get("id")
     if change.get("deleted"):
         if doc_id:
@@ -99,7 +105,8 @@ async def _process_closed_shelter_change(
     action, payload = project_evacuee(
         doc, shelter_code=shelter_code, household=household
     )
-    await apply_person(action, payload)
+    if action != "upsert" or (payload and await is_person_projected(payload["_id"])):
+        await apply_person(action, payload)
     await sync_booking_stay(doc)
 
 

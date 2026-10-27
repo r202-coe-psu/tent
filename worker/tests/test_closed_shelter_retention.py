@@ -365,6 +365,49 @@ async def test_opt_out_in_a_closed_shelter_without_closed_at_removes_the_person(
     assert await PublicPerson.get("evacuee:p8") is None
 
 
+def _evacuee_change(person_id: str, stay_status: str) -> dict:
+    return {
+        "seq": 6,
+        "id": person_id,
+        "doc": {
+            "_id": person_id,
+            "type": "evacuee",
+            "first_name": "สมชาย",
+            "last_name": "ใจดี",
+            "current_stay": {"status": stay_status},
+        },
+    }
+
+
+@pytest.mark.parametrize("closed_at", [None, CLOSED_AT])
+async def test_closed_shelter_change_never_republishes_a_removed_person(
+    db: None, closed_at: datetime | None
+) -> None:
+    """A replay from an old checkpoint must not undo the retention delete."""
+    await _insert_shelter("SH960", "closed", closed_at=closed_at)
+
+    with patch("worker.couch.processor.save_checkpoint", new_callable=AsyncMock):
+        await process_change(
+            AsyncMock(), "shelter_sh960", _evacuee_change("evacuee:gone", "checked_out")
+        )
+
+    assert await PublicPerson.get("evacuee:gone") is None
+
+
+async def test_closed_shelter_change_updates_a_person_still_published(db: None) -> None:
+    await _insert_shelter("SH961", "closed", closed_at=None)
+    await _insert_person("SH961", "evacuee:p9")
+
+    with patch("worker.couch.processor.save_checkpoint", new_callable=AsyncMock):
+        await process_change(
+            AsyncMock(), "shelter_sh961", _evacuee_change("evacuee:p9", "checked_out")
+        )
+
+    person = await PublicPerson.get("evacuee:p9")
+    assert person is not None
+    assert person.status == "checked_out"
+
+
 async def test_closed_shelter_ignores_operational_changes(db: None) -> None:
     await _insert_shelter("SH957", "closed", closed_at=CLOSED_AT)
     change = {

@@ -19,6 +19,7 @@ from worker.mongo.on_hand import refresh_on_hand
 from worker.mongo.person import (
     apply_person,
     delete_persons_for_shelter,
+    is_person_projected,
     sync_booking_stay,
 )
 from worker.mongo.registry import resolve_shelter_code_for_registry_delete
@@ -56,6 +57,7 @@ __all__ = [
     "delete_occupants_for_shelter",
     "delete_persons_for_shelter",
     "delete_stocks_for_shelter",
+    "is_person_projected",
     "projected_shelter_status",
     "refresh_occupancy",
     "refresh_on_hand",

@@ -69,6 +69,15 @@ describe('PATCH /api/back-office/shelter/[code]', () => {
 		expect(updateMock).not.toHaveBeenCalled();
 	});
 
+	it('patches only the fields the client sent, not schema defaults', async () => {
+		await callPATCH('SH001', { name: 'ศูนย์ใหม่' });
+		const mutator = updateMock.mock.calls[0][1] as (c: unknown) => {
+			patch: Record<string, unknown>;
+		};
+		const { patch } = mutator({ operation_status: 'closed' });
+		expect(patch).toEqual({ name: 'ศูนย์ใหม่', updated_at: '2026-01-01T00:00:00.000Z' });
+	});
+
 	it('leaves closed_at to updateMaster, even when the client sends one', async () => {
 		await callPATCH('SH001', { operation_status: 'closed' });
 		const mutator = updateMock.mock.calls[0][1] as (c: unknown) => {
