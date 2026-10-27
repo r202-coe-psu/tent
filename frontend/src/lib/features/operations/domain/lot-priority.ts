@@ -195,3 +195,27 @@ export function lotPriorityReason(
 	}
 	return inStock ?? 'เพิ่งรับเข้า';
 }
+
+const EXPIRY_DATE_FORMAT = new Intl.DateTimeFormat('th-TH', {
+	day: 'numeric',
+	month: 'short',
+	year: 'numeric',
+	timeZone: 'Asia/Bangkok'
+});
+
+/** The lot's expiry for a summary line: the date when recorded, else what shelf life leaves. */
+export function lotExpiryLabel(
+	lot: Pick<StockLotBalance, 'received_at' | 'lot'>,
+	item: LotPriorityItem | undefined,
+	now: number
+): string {
+	const s = scoreLot(lot, item, now);
+	if (s.isExpired) return 'หมดอายุแล้ว';
+	const daysLeft = Math.ceil(s.daysLeft);
+	if (s.daysLeftSource === 'expiry') {
+		const date = EXPIRY_DATE_FORMAT.format(new Date(parseMs(lot.lot?.expiry)));
+		return `หมดอายุ ${date} (อีก ${daysLeft} วัน)`;
+	}
+	if (s.daysLeftSource === 'shelf_life') return `อายุเก็บรักษาเหลือ ${daysLeft} วัน`;
+	return 'ไม่ระบุวันหมดอายุ';
+}

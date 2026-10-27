@@ -17,7 +17,6 @@ import type {
 	DonationSlot,
 	CampaignInput,
 	ReceiveInput,
-	DistributeInput,
 	AdjustInput,
 	TransferInput,
 	TransferFilter,
@@ -34,7 +33,8 @@ import type { DonationBatchLine } from '../domain/donation-batch';
 import type { CycleCountSubmission } from '../domain/cycle-count';
 import { countPendingTransfers } from '../domain/transfer-pending';
 import { retryUnlessForbidden } from './transfer-retry';
-import { distributeAcrossLots, type DistributeAcrossLotsArgs } from './distribute-across-lots';
+import { distributeBatch } from './distribute-batch';
+import type { BatchLinePlan } from '../domain/distribute-batch';
 
 /**
  * Keys for data read out of ONE shelter's database carry that shelter's code, like
@@ -298,34 +298,26 @@ export const useApplyCycleCount = () => {
 };
 
 /**
- * Mutation hook to distribute outbound stock, persist the ledger entry, and invalidate caches.
+ * Mutation hook to issue several items under one `ref_id` (#837): one `distributeAcrossLots`
+ * per line, no rollback. Resolves with per-line outcomes when a row fails — read
+ * `result.outcomes` / `.complete`. The caches are refetched before it resolves, even on a
+ * partial run (earlier rows already landed), so the retry plans from fresh balances.
  */
-export const useDistributeStock = () => {
+export const useDistributeBatch = () => {
 	const queryClient = useQueryClient();
 	return createMutation(() => ({
-		mutationFn: ({ input, ctx }: { input: DistributeInput; ctx: AuthorContext }) =>
-			operationsRepository().distributeStock(input, ctx),
-		onSuccess: () => {
-			// Eagerly invalidate — live query will also fire, but this ensures instant update
-			queryClient.invalidateQueries({ queryKey: operationsKeys.all });
-		}
-	}));
-};
-
-/**
- * Mutation hook to issue one request across several lots (CR-143 FR-A7–A9): one
- * `distributeStock` per planned lot, one shared `ref_id`, no rollback. Resolves
- * with the partial result when a row fails — read `result.complete` / `.failure`.
- * Caches are invalidated either way, since earlier rows may already have landed.
- */
-export const useDistributeAcrossLots = () => {
-	const queryClient = useQueryClient();
-	return createMutation(() => ({
-		mutationFn: ({ plan, ctx }: { plan: DistributeAcrossLotsArgs; ctx: AuthorContext }) =>
-			distributeAcrossLots(operationsRepository(), plan, ctx),
-		onSettled: () => {
-			queryClient.invalidateQueries({ queryKey: operationsKeys.all });
-		}
+		mutationFn: ({
+			lines,
+			ref_id,
+			note,
+			ctx
+		}: {
+			lines: readonly BatchLinePlan[];
+			ref_id: string;
+			note: string;
+			ctx: AuthorContext;
+		}) => distributeBatch(operationsRepository(), lines, ref_id, note, ctx),
+		onSettled: () => queryClient.invalidateQueries({ queryKey: operationsKeys.all })
 	}));
 };
 
