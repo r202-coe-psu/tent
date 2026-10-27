@@ -102,7 +102,7 @@
 						{@const btnTitle = offline
 							? 'เซสชันหมดอายุ — เข้าสู่ระบบใหม่เพื่อบันทึก'
 							: action.kind === 'distribute' && !canDistribute
-								? 'ต้องมีสิทธิ์เจ้าหน้าที่คลัง (warehouse_staff) จึงจะเบิกจ่ายได้'
+								? 'ต้องมีสิทธิ์เจ้าหน้าที่คลัง (warehouse_staff) หรือผู้จัดการศูนย์ (shelter_manager) จึงจะเบิกจ่ายได้'
 								: undefined}
 						<Button
 							type="button"

@@ -13,7 +13,7 @@
 	import { useSupplyItems, useThresholdOverrides } from '$lib/features/supply';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { authStore } from '$lib/stores/auth.svelte';
-	import { hasCapabilityInShelter, WAREHOUSE_STAFF } from '$lib/auth/roles';
+	import { canDistributeStock } from '$lib/auth/roles';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { qtyGt, subQty } from '$lib/utils/qty';
 	import { ulid } from '$lib/db/ulid';
@@ -65,7 +65,7 @@
 	// Session expired (`needsReauth`): every save button is off until the user signs in again.
 	const offline = $derived(authStore.needsReauth);
 	const roles = $derived(authStore.user?.roles ?? []);
-	const canDistribute = $derived(hasCapabilityInShelter(roles, getShelterCode(), WAREHOUSE_STAFF));
+	const canDistribute = $derived(canDistributeStock(roles, getShelterCode()));
 
 	const stockItems = useStockFormItems(() => getShelterCode());
 	const unitsQuery = useUnitsOfMeasure();
@@ -321,7 +321,10 @@
 				role="alert"
 			>
 				<AlertTriangle class="h-4 w-4 shrink-0 text-red-600" aria-hidden="true" />
-				<span>ต้องมีสิทธิ์เจ้าหน้าที่คลัง (warehouse_staff) จึงจะเบิกจ่ายได้</span>
+				<span
+					>ต้องมีสิทธิ์เจ้าหน้าที่คลัง (warehouse_staff) หรือผู้จัดการศูนย์ (shelter_manager)
+					จึงจะเบิกจ่ายได้</span
+				>
 			</div>
 		{/if}
 

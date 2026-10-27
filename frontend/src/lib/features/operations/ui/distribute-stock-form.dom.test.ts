@@ -74,7 +74,7 @@ vi.mock('$lib/features/supply', () => ({
 }));
 vi.mock('$lib/auth/roles', async (importOriginal) => ({
 	...(await importOriginal<typeof import('$lib/auth/roles')>()),
-	hasCapabilityInShelter: () => true
+	canDistributeStock: () => true
 }));
 vi.mock('$lib/db/shelter', () => ({ getShelterCode: () => 'SH001' }));
 vi.mock('$app/navigation', () => ({

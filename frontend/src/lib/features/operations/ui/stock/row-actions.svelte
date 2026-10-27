@@ -21,7 +21,7 @@
 	} = $props();
 
 	const DISTRIBUTE_FORBIDDEN_HINT =
-		'ต้องมีสิทธิ์เจ้าหน้าที่คลัง (warehouse_staff) จึงจะเบิกจ่ายได้';
+		'ต้องมีสิทธิ์เจ้าหน้าที่คลัง (warehouse_staff) หรือผู้จัดการศูนย์ (shelter_manager) จึงจะเบิกจ่ายได้';
 </script>
 
 <!-- stopPropagation: the table row is itself clickable (opens the item). -->
