@@ -1,10 +1,10 @@
 ---
-id: draft
+id: CR-203
 title: Kiosk — role pr_staff (เจ้าหน้าที่ประชาสัมพันธ์) จัดการข่าวสารบนตู้ Kiosk ของศูนย์
-status: proposed
+status: approved
 date: 2026-10-27
 requested_by: ทีม kiosk (issue #930)
-decided_by: project owner
+decided_by: Soravit Sukkarn (Team Lead)
 layer: volatile
 affects:
   - docs/prd/role-permission-matrix.md §1.1 (บทบาทที่ 12 + คอลัมน์ PR แถว Kiosk Device / Banner / Banner Group)
@@ -21,7 +21,7 @@ affects:
   - tests: roles / guards / navbar / portal unit · banner + group + devices + reveal + staff-pin server tests (session `prA`) · e2e/kiosk-pr-staff.test.ts
 ---
 
-# draft-pr-staff-role — role `pr_staff` สำหรับข่าวสารบนตู้ Kiosk
+# CR-203 — role `pr_staff` สำหรับข่าวสารบนตู้ Kiosk
 
 > **สรุป (TL;DR):**
 >
@@ -96,7 +96,7 @@ affects:
 
 ## Impact
 
-- **Docs (แก้ตามข้อเสนอนี้แล้ว — mark "ข้อเสนอ, ยังไม่ approved"):** role-permission-matrix §1.1 · schema.md §6 · api-contract.md §2.2 / §2.3 / §2.3.1
+- **Docs:** role-permission-matrix §1.1 · schema.md §6 · api-contract.md §2.2 / §2.3 / §2.3.1 (เตรียมพร้อม merge บน `feat/pr-staff-role`)
 - **Code + tests:** ดู `affects:` — implement แล้วบน branch `feat/pr-staff-role`
 - **Out of scope:** ประกาศส่วนกลาง (`announcement`) และ system banner · สิทธิ์ SM / `kiosk_staff` เดิม · หน้าใหม่สำหรับดูเครื่อง
 
@@ -106,4 +106,5 @@ N/A — เพิ่ม role string เท่านั้น ไม่เปล�
 
 ## Decision log
 
-- 2026-10-27 — proposed (ทีม kiosk, issue #930) · implement ล่วงหน้าบน `feat/pr-staff-role` รอ PO approve
+- 2026-10-27 — approved โดย Soravit Sukkarn (Team Lead) · รันเลข CR-203
+- 2026-10-27 — proposed (ทีม kiosk, issue #930) · implement ล่วงหน้าบน `feat/pr-staff-role`
