@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import binascii
+import concurrent.futures
 import json
 import logging
 import os
@@ -55,6 +56,11 @@ KIOSK_HARDWARE_PATH = "/api/v1/kiosk/hardware"
 # never delay /hardware, which every page waits on to choose camera or reader.
 KIOSK_HOST_INFO_PATH = "/api/v1/kiosk/host-info"
 HOST_INFO_TIMEOUT_S = 2.0
+# Own single worker so a host-info lookup stuck on DNS never takes a default-executor thread that
+# the card reader, printer and face check need; extra requests queue behind it and time out.
+_HOST_INFO_EXECUTOR = concurrent.futures.ThreadPoolExecutor(
+    max_workers=1, thread_name_prefix="host-info"
+)
 # Face check (see app/face): the page sends camera frames here and gets only a verdict or a hint
 # back. Answered locally - the server never sees a frame or an embedding. The one image that leaves
 # is the chip photo of a check-in whose face matched: handed to the page once with the verdict, so
@@ -437,10 +443,11 @@ class ScannerClientManager:
         """Tell the kiosk page this machine's hostname and LAN IPs. The lookup may block on DNS, so
         it runs off the event loop and gives up after HOST_INFO_TIMEOUT_S with empty info.
         wait_for cannot cancel the thread: a lookup stuck on DNS keeps its worker until the OS
-        resolver gives up. The page asks only when staff submit the info PIN, so few can pile up."""
+        resolver gives up, so it runs on _HOST_INFO_EXECUTOR and never starves the hardware."""
         try:
             info = await asyncio.wait_for(
-                asyncio.to_thread(self._host_info), timeout=HOST_INFO_TIMEOUT_S
+                asyncio.get_running_loop().run_in_executor(_HOST_INFO_EXECUTOR, self._host_info),
+                timeout=HOST_INFO_TIMEOUT_S,
             )
         except Exception:
             info = {"hostname": None, "ips": []}
