@@ -17,12 +17,17 @@ vi.mock('$lib/server/shelters.admin', () => ({ findMasterByCode: vi.fn() }));
 vi.mock('$lib/server/kiosk-banners/kiosk-banner-group.server', () => ({ readGroupDoc: vi.fn() }));
 
 import { POST } from './+server';
+import { POST as verifyPost } from '../staff-pin/verify/+server';
 import type { RequestEvent } from './$types';
 import { scannerServerRepository } from '$lib/features/kiosk-devices/server';
 import { hashScannerSecret } from '$lib/server/scanners/device-credentials';
 import { readGroupDoc } from '$lib/server/kiosk-banners/kiosk-banner-group.server';
 import { findMasterByCode } from '$lib/server/shelters.admin';
-import { staffPinSecretStore, type StaffPinSecret } from '$lib/server/scanners/staff-pin-store';
+import {
+	staffPinSecretStore,
+	StaffPinUnavailableError,
+	type StaffPinSecret
+} from '$lib/server/scanners/staff-pin-store';
 import { STAFF_PIN_WRONG_DELAY_MS } from '$lib/server/scanners/staff-pin-throttle';
 
 const SECRET = 'sk_scan_test_secret';
@@ -209,5 +214,28 @@ describe('POST /api/v1/kiosk/device-info', () => {
 		const logged = info.mock.calls.flat().join(' ');
 		expect(logged).toContain('result=ok');
 		expect(logged).not.toContain('result=error');
+	});
+	it('shares the wrong-PIN queue with staff-pin/verify: a full queue answers verify 429', async () => {
+		const first = POST(request({ pin: '111112' }));
+		const second = POST(request({ pin: '111113' }));
+		const verify = await verifyPost(request({ pin: '111114' }) as never);
+
+		expect(verify.status).toBe(429);
+		expect((await verify.json()).error.code).toBe('RATE_LIMITED');
+
+		await vi.advanceTimersByTimeAsync(STAFF_PIN_WRONG_DELAY_MS * 2);
+		expect((await first).status).toBe(401);
+		expect((await second).status).toBe(401);
+	});
+
+	it('fails closed with 503 DEPENDENCY_UNAVAILABLE when the PIN store is unreachable', async () => {
+		mockSecret.mockRejectedValueOnce(new StaffPinUnavailableError());
+		const response = await POST(request({ pin: '482913' }));
+
+		expect(response.status).toBe(503);
+		const body = await response.json();
+		expect(body.error.code).toBe('DEPENDENCY_UNAVAILABLE');
+		expect(Object.keys(body)).toEqual(['error']);
+		expect(response.headers.get('cache-control')).toBe('no-store');
 	});
 });
