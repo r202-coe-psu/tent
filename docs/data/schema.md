@@ -1268,89 +1268,254 @@ delta ที่อ้าง `requisition_ticket:{ulid}`.
 - **`kitchen_requisition` เดิม:** หยุดสร้างใหม่หลัง cutover — เอกสารเก่ายังอ่านได้ (deprecated,
   read-only; ดู §2.6) และแสดงรวม (union) กับ `requisition_ticket` ใหม่ในหน้าประวัติ
 
-### 2.30 `distribution_log` — `distribution_log:{ulid}` · **schema_v 1** (CR-121)
+### 2.30 `distribution_log` — `distribution_log:{ulid}` · **schema_v 2** (CR-121, CR-193)
 
 บันทึกการแจกหรือการยืมรายครั้งจาก `requisition_ticket` และรวม use case เดิมของ
 `meal_distribution`. เป็น permanent distribution log; การสแกนหน้างานเพิ่มเอกสารใหม่นี้และ
 ไม่แก้ `requisition_ticket` เพื่อหลีกเลี่ยง CouchDB conflict. ปริมาณทุกค่าต้องเป็น `qty_str`.
 
-| Field                               | ชนิด                                                                                | req | หมายเหตุ                                                                                                                                                                                                                                    |
-| ----------------------------------- | ----------------------------------------------------------------------------------- | --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ticket_id`                         | str                                                                                 | req | อ้าง `requisition_ticket:{ulid}`                                                                                                                                                                                                            |
-| `item_id`                           | str                                                                                 | req | อ้าง `item_master:{sku\|ulid}`                                                                                                                                                                                                              |
-| `meal_service_id` / `recipe_id`     | str / str                                                                           | opt | อ้างผลผลิต/สูตรเมื่อเป็นอาหารปรุงสำเร็จ                                                                                                                                                                                                     |
-| `qty`                               | qty_str>0                                                                           | req | จำนวนที่แจกหรือยืม                                                                                                                                                                                                                          |
-| `recipient_type`                    | enum(`evacuee`,`volunteer`,`outside`)                                               | req | ประเภทผู้รับ                                                                                                                                                                                                                                |
-| `recipient_id`                      | str\|null                                                                           | opt | `evacuee:{ulid}` หรือ `volunteer:{ulid}` ตามประเภท                                                                                                                                                                                          |
-| `household_id`                      | str                                                                                 | opt | ครัวเรือนของผู้รับ                                                                                                                                                                                                                          |
-| `meal`                              | enum(`breakfast`,`lunch`,`dinner`,`snack`)                                          | opt | มื้อที่ใช้ตรวจโควตา                                                                                                                                                                                                                         |
-| `is_returnable`                     | bool                                                                                | req | `true` = ของยืมคืน, `false` = แจกขาด                                                                                                                                                                                                        |
-| `status`                            | enum(`fulfilled`,`active`,`partially_returned`,`returned`,`lost`,`waived`,`voided`) | req | ของแจกเริ่ม `fulfilled`; ของยืมเริ่ม `active`                                                                                                                                                                                               |
-| `qty_returned`                      | qty_str≥0                                                                           | opt | จำนวนที่รับคืนจริง                                                                                                                                                                                                                          |
-| `condition_on_return`               | enum(`READY`,`MAINTENANCE`,`BROKEN`)                                                | opt | สภาพของคืน                                                                                                                                                                                                                                  |
-| `clear_reason`                      | enum(`routine`,`bulk_dropoff`,`waived`,`lost`)                                      | opt | เหตุผลการปิดภาระยืม                                                                                                                                                                                                                         |
-| `bulk_pool_id`                      | str                                                                                 | opt | pool คืนของกองรวม; ต้องมีเมื่อ `clear_reason=bulk_dropoff`                                                                                                                                                                                  |
-| `returned_at` / `returned_by`       | ts / str                                                                            | opt | audit การคืน                                                                                                                                                                                                                                |
-| `is_override`                       | bool                                                                                | req | ใช้เมื่ออนุมัติแจกซ้ำ/ข้ามข้อจำกัด                                                                                                                                                                                                          |
-| `override_reason`                   | str                                                                                 | opt | เหตุผล override                                                                                                                                                                                                                             |
-| `allergen_conflicts`                | [str]                                                                               | opt | master `allergy` code ที่ผู้รับแพ้และเมนูมี ณ เวลาแจก ([CR-191](../changes/03-C-supply/CR-191-allergen-warning-at-distribution.md)); เขียนเฉพาะเมื่อมีสารชน และต้องมี `is_override: true` + `override_reason`; additive ไม่ bump `schema_v` |
-| `is_expired_warning`                | bool                                                                                | opt | `true` เมื่ออาหารเกิน 4 ชั่วโมง (soft-warning audit)                                                                                                                                                                                        |
-| `distributed_at` / `distributed_by` | ts / str                                                                            | req | เวลาและผู้บันทึกการแจก                                                                                                                                                                                                                      |
-| `voided_at` / `voided_by`           | ts\|null / str\|null                                                                | opt | ยกเลิกโดยไม่ลบเอกสาร                                                                                                                                                                                                                        |
-| `notes`                             | str                                                                                 | opt | หมายเหตุ                                                                                                                                                                                                                                    |
+| Field | ชนิด | req | หมายเหตุ |
+| --- | --- | --- | --- |
+| `ticket_id` | str | req | อ้าง `requisition_ticket:{ulid}` |
+| `item_id` | str | req | อ้าง `item_master:{sku\|ulid}` |
+| `meal_service_id` / `recipe_id` | str / str | opt | อ้างผลผลิต/สูตรเมื่อเป็นอาหารปรุงสำเร็จ |
+| `qty` | qty_str>0 | req | จำนวนที่แจกหรือยืม |
+| `recipient_type` | enum(`evacuee`,`volunteer`,`outside`) | req | ประเภทผู้รับ |
+| `recipient_id` | str\|null | opt | `evacuee:{ulid}` หรือ `volunteer:{ulid}` ตามประเภท |
+| `household_id` | str | opt | ครัวเรือนของผู้รับ |
+| `meal` | enum(`breakfast`,`lunch`,`dinner`,`snack`) | opt | มื้อที่ใช้ตรวจโควตา |
+| `is_returnable` | bool | req | `true` = ของยืมคืน, `false` = แจกขาด |
+| `status` | enum(`fulfilled`,`active`,`partially_returned`,`returned`,`lost`,`waived`,`voided`) | req | ของแจกเริ่ม `fulfilled`; ของยืมเริ่ม `active` |
+| `qty_returned` | qty_str≥0 | opt | จำนวนที่รับคืนจริง |
+| `condition_on_return` | enum(`READY`,`MAINTENANCE`,`BROKEN`) | opt | สภาพของคืน |
+| `clear_reason` | enum(`routine`,`bulk_dropoff`,`waived`,`lost`) | opt | เหตุผลการปิดภาระยืม |
+| `bulk_pool_id` | str | opt | **legacy อ่านอย่างเดียว:** pool v1/v2 เดิม (CR-134); v3 ไม่เขียน field นี้ แต่ค่าที่มีอยู่ต้องคงเดิมทุกครั้งที่แก้ (#661 เก็บกวาด) |
+| `applied_bulk_entry_ids` | [str] | opt (เฉพาะ schema_v 2) | `bulk_return_entry:{ulid}` ที่ปลดภาระ loan นี้แล้ว (ไม่ซ้ำ) — marker ให้ replay แบบ idempotent; ต้องไม่มีบน schema_v 1. `clear_reason=bulk_dropoff` ต้องมี `bulk_pool_id` (legacy) หรือ `applied_bulk_entry_ids` อย่างใดอย่างหนึ่ง |
+| `returned_at` / `returned_by` | ts / str | opt | audit การคืน |
+| `is_override` | bool | req | ใช้เมื่ออนุมัติแจกซ้ำ/ข้ามข้อจำกัด |
+| `override_reason` | str | opt | เหตุผล override |
+| `allergen_conflicts` | [str] | opt | master `allergy` code ที่ผู้รับแพ้และเมนูมี ณ เวลาแจก ([CR-191](../changes/03-C-supply/CR-191-allergen-warning-at-distribution.md)); เขียนเฉพาะเมื่อมีสารชน และต้องมี `is_override: true` + `override_reason`; additive ไม่ bump `schema_v` |
+| `is_expired_warning` | bool | opt | `true` เมื่ออาหารเกิน 4 ชั่วโมง (soft-warning audit) |
+| `distributed_at` / `distributed_by` | ts / str | req | เวลาและผู้บันทึกการแจก |
+| `voided_at` / `voided_by` | ts\|null / str\|null | opt | ยกเลิกโดยไม่ลบเอกสาร |
+| `notes` | str | opt | หมายเหตุ |
 
 **Invariants:** `is_returnable=false` ต้องจบเป็น `fulfilled` หรือ `voided`; `is_returnable=true`
 ต้องใช้สถานะการคืน/การสูญหายตาม lifecycle. การคืนของยืมลง `stock_ledger` เพียงครั้งเดียว
 เมื่อรับของจริงที่เคาน์เตอร์หรือรับกองรวม (`reason='receive'`); การ clear ที่ checkout ไม่เขียน
 ledger ซ้ำ. การ void ทำได้เฉพาะ issuance ที่ยังไม่เริ่มคืนหรือ clear (`fulfilled` หรือ `active` ที่ไม่มี
-`qty_returned>0`, return audit, `clear_reason`, หรือ `bulk_pool_id`); ห้ามใช้ void ลบประวัติ loan ที่
-ได้รับคืน, clear, lost, waived หรือ bulk drop-off แล้ว. `bulk_pool_id` จำกัดการ clear ตาม
-`unclaimed_quota` ของกองรวมนั้น.
+`qty_returned>0`, return audit, `clear_reason`, `bulk_pool_id`, หรือ `applied_bulk_entry_ids` ที่ไม่ว่าง); ห้ามใช้ void ลบประวัติ loan ที่
+ได้รับคืน, clear, lost, waived หรือ bulk drop-off แล้ว. `bulk_pool_id` (legacy) จำกัดการ clear ตาม
+`unclaimed_quota` ของกองรวม v1/v2 นั้น.
 
-### 2.31 `bulk_return_pool` — `bulk_return_pool:{ulid}` · **schema_v 2** (CR-121, CR-134)
+**schema_v 2 (CR-193, #658):** เพิ่ม `applied_bulk_entry_ids`. VDU รับ schema_v 1 หรือ 2 ตอนสร้างและแก้;
+ตอนแก้ `schema_v` คงเดิมหรือ 1 → 2 ได้ ห้าม 2 → 1. เอกสาร v1 ยังใช้ได้ต่อไป — **upgrade แบบ lazy เป็น v2 ตอน path bulk v3 เขียน
+`applied_bulk_entry_ids` ครั้งแรก; ไม่มี backfill.** การสร้าง log ใหม่เขียน schema_v 2.
 
-> **schema_v 2** (CR-134) — เพิ่ม `claim_ids: [str]` เก็บรายการ Full Claim Document ID (`bulk_return_claim:{distributionLogUlid}`) ที่ตัดโควตาพูลนี้สำเร็จเพื่อเป็น durable identity สำหรับ Crash Recovery ข้ามเอกสาร; บังคับตัดโควตาพร้อม append `claim_ids` แบบ Atomic ภายใต้ Pool CAS; ห้ามลด schema_v กลับเป็น 1; รองรับ In-place Lazy Upgrade สำหรับพูล active v1.
-> **schema_v 1** (CR-121) — โครงสร้างเริ่มต้น (aggregate quota).
+path bulk v3 (ฝั่ง loan ของ entry; เขียน entry ก่อน แล้วค่อยแก้ log; ไม่เขียน `bulk_pool_id` และคง `bulk_pool_id` เดิมไว้):
 
-เอกสารควบคุมโควตารับคืนพัสดุคงทนแบบกองรวม (Hybrid Auto-Pool Guard) ใน `shelter_{shelter_code}`
-สำหรับกรณีประชาชนนำของยืมมาคืนรวมกัน หรือทีมงานกวาดเก็บพื้นที่เข้ามายังคลังกลาง. คลังสินค้าตรวจนับ
-ของจริงเข้าสต็อก (`stock_ledger` `reason='receive'`) และเปิด Pool นี้ขึ้นมาเพื่อเป็นโควตาให้ด่าน Check-out
-กดปลดภาระผู้ยืมแบบ 1-Click Resolve (`clear_reason='bulk_dropoff'`) โดยไม่สร้างรายการสต็อกซ้ำซ้อน.
+| Path | เงื่อนไข | ผลต่อ log |
+| --- | --- | --- |
+| apply (entry ปลดภาระ) | status เดิม `active`/`partially_returned`; `clear_reason='bulk_dropoff'` | `applied_bulk_entry_ids` = เดิม + id ใหม่ **ตัวเดียว**; `qty_returned` เพิ่มขึ้นจริง (จำนวนเต็ม) และ ≤ `qty`; status ใหม่ = `returned` เมื่อ `qty_returned = qty` ไม่เช่นนั้น `partially_returned`; `returned_at`/`returned_by` (= ผู้เขียน) |
+| revert (void entry เปิด loan กลับ) | status เดิม `partially_returned`/`returned` และ `applied_bulk_entry_ids` เดิมมี id ที่ถอด | `applied_bulk_entry_ids` = เดิม − id **ตัวเดียว**; `qty_returned` ลดลงจริง (≥ 0); status ใหม่ = `active` เมื่อ `qty_returned = 0` ไม่เช่นนั้น `partially_returned`; `clear_reason` คง `bulk_dropoff`; `returned_at`/`returned_by` (= ผู้เขียน) อัปเดต |
 
-| Field                     | ชนิด                                | req | หมายเหตุ                                                                                                                                           |
-| ------------------------- | ----------------------------------- | --- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `item_id`                 | str                                 | req | อ้าง `item_master:{sku                                                                                                                             | ulid}` (พัสดุคงทน/ครุภัณฑ์) |
-| `stock_ledger_id`         | str                                 | req | อ้าง `stock_ledger:{ulid}` แถวที่รับของกองรวมเข้าสต็อกคลังจริง                                                                                     |
-| `ticket_id`               | str                                 | opt | อ้าง `requisition_ticket:{ulid}` ที่นำส่งของคืน (ถ้ามี)                                                                                            |
-| `shift_id`                | str                                 | opt | รหัสกะหรือรอบเวลาที่เปิด Pool                                                                                                                      |
-| `total_received_qty`      | qty_str>0                           | req | จำนวนของจริงที่คลังตรวจรับเข้ากองรวม                                                                                                               |
-| `claimed_qty`             | qty_str≥0                           | req | จำนวนที่ด่าน Check-out กดเคลียร์ตัดสิทธิ์ไปแล้ว; default `"0"`                                                                                     |
-| `unclaimed_quota`         | qty_str≥0                           | req | โควตาคงเหลือที่ยังกดเคลียร์ได้ (`total_received_qty - claimed_qty`)                                                                                |
-| `claim_ids`               | [str]                               | req | รายการ Full Claim Document ID (`bulk_return_claim:{distributionLogUlid}`) ที่ตัดโควตาพูลนี้สำเร็จ; v2 initialize เป็น `[]`; ห้ามมี ID ซ้ำ (CR-134) |
-| `status`                  | enum(`ACTIVE`,`EXHAUSTED`,`CLOSED`) | req | `ACTIVE` (ยังมีโควตา), `EXHAUSTED` (โควตาหมดแล้ว), `CLOSED` (ปิดกะกระทบยอดแล้ว)                                                                    |
-| `closed_at` / `closed_by` | ts / str                            | opt | เวลาและผู้ปิด Pool เมื่อสิ้นสุดกะ                                                                                                                  |
-| `notes`                   | str                                 | opt | หมายเหตุ                                                                                                                                           |
+Role ของทั้งสอง path: `warehouse_staff`, `supply_coordinator`, `shelter_manager`, `distribution_staff`. path bulk แบบ legacy
+(`returned` + `bulk_pool_id` โดย `distribution_staff`/`shelter_manager` ที่ด่านจ่าย) และกติกา `distribution_log` อื่นไม่เปลี่ยน; `applied_bulk_entry_ids`
+ต้องไม่เปลี่ยนในทุก transition ที่ไม่ใช่ path ข้างต้น. apply/revert ซ้ำด้วย id เดิมต้องเป็น no-op ฝั่ง domain (idempotent).
 
-**Concurrency & Invariants:**
+### 2.31 `bulk_return_pool` — `bulk_return_pool:{ulid}` · **schema_v 3** (CR-121, CR-134, CR-193)
 
-1. **Optimistic Concurrency Control (OCC) & Atomicity:** การตัดโควตาที่ด่าน Check-out ต้องส่ง `_rev` ล่าสุดของเอกสาร. ตัวนับ (`claimed_qty`, `unclaimed_quota`, `status`) และ `claim_ids` ต้องเปลี่ยนแปลงพร้อมกันใน CouchDB document update เดียวกันภายใต้ Pool CAS. หากเกิด HTTP 409 Conflict Client ต้องดึงเอกสารล่าสุดมาตรวจสอบว่า `claimId` ปรากฏใน `claim_ids` แล้วหรือไม่ (Replay Recovery) หากยังไม่ปรากฏต้องตรวจว่า `unclaimed_quota > 0` ก่อน retry
-2. **Claim ID Rules:** จัดเก็บ Full Claim Document ID (`bulk_return_claim:{distributionLogUlid}`) เสมอ; ห้ามมี Claim ID ซ้ำซ้อนใน array `claim_ids`; ห้าม downgrade `schema_v` จาก 2 เป็น 1
-3. **Hard-quota Guard:** ห้ามตัดโควตาเมื่อ `unclaimed_quota <= 0`; ระบบล็อกปุ่มสำหรับเจ้าหน้าที่ทั่วไป ต้องใช้ `shelter_manager` Override หรือปรับเป็น `lost`/`waived`
-4. **Status Lifecycle:** `ACTIVE` → `EXHAUSTED` (เมื่อ `unclaimed_quota == 0`); หรือเปลี่ยนเป็น `CLOSED` โดยตรงเมื่อปิดกะและกระทบยอดเสร็จสิ้น (รองรับทั้ง `ACTIVE → CLOSED` และ `ACTIVE → EXHAUSTED → CLOSED`)
-5. **Audit Reconciliation:** ยอดสูญหายของกะ = `total_received_qty - claimed_qty` ณ เวลาปิด Pool
+> **schema_v 3** (CR-193, 2026-10-22, #658) — shape ใหม่: pool เป็น header กองรวม
+> (`name`, `status OPEN|SUBMITTED|RECEIVED|CANCELLED`, `lock?`, snapshot ตอน submit, ผลตรวจรับตอน receive); ของที่รับคืนบันทึกเป็น
+> `bulk_return_entry` (§2.31.1), การย้ายเป็น `bulk_return_entry_move` (§2.31.2) และการยกเลิก entry เป็น `bulk_return_entry_void` (§2.31.3)
+> แบบ append-only; ไม่มี aggregate quota/`claim_ids`/`return_ticket_id`. **v3 ยังไม่ปล่อย** — shape ของ pool/entry/move
+> เปลี่ยนก่อนปล่อยครั้งแรก จึงไม่ bump `schema_v` (pool 3, entry 1, move 1).
+> **schema_v 1 / 2 — frozen** ตอน deploy: อ่านได้อย่างเดียว VDU ปฏิเสธทุก update และการสร้างใหม่; **ไม่ migrate**; ลบใน #661 (cleanup).
+> ผลคือ flow เดิม (สร้าง pool v2 / claim quota ตาม CR-134) ใช้ไม่ได้หลัง deploy — #658/#659/#660 จึง merge และ redeploy พร้อมกัน.
+> ห้ามลด `schema_v` ของ pool v3.
 
-**Migration & Document Compatibility (schema_v 1 → 2):**
+เอกสารกองรวมตอนรับของคืน ใน `shelter_{shelter_code}` — เปิดกองไว้ก่อน (ยังไม่รู้ยอด/รายการ) แล้วบันทึกของที่รับคืนเป็น entry
+เข้ากอง ผูก loan ที่ปิด/ลดยอดผ่าน `loan_refs[]` แล้ว submit ให้คลังตรวจรับที่กองนั้นเอง (ไม่มีตั๋วคืนแยก) ผลตรวจรับ
+(ยอดรับจริง / ส่วนต่าง / เหตุผล) เก็บบน pool.
+การสร้าง pool และ entry **ไม่เขียน `stock_ledger`** และ submit ก็ไม่เขียน — เขียนตอน `SUBMITTED → RECEIVED` ด้วยยอดรับจริง (#660; ดู "Receive และ `stock_ledger`" ท้ายหัวข้อนี้).
 
-- **Historical CLOSED v1:** พูลประวัติศาสตร์ที่ปิดรอบไปแล้ว (`status='CLOSED'`) และมี `schema_v: 1` ยังคงอ่านได้ตามปกติโดยไม่ต้องเขียนทับหรือรัน Migration Script
-- **ACTIVE v1 (In-place Lazy Upgrade):** พูล v1 ที่เปิดใช้งานอยู่หน้างานก่อน Deploy ระบบใหม่ ได้รับอนุญาตให้เข้าร่วมกระบวนการตัดโควตาได้ โดยการตัดโควตาครั้งแรกที่สำเร็จผ่าน CAS จะทำ Lazy Upgrade เป็น `schema_v: 2` ทันทีในคำสั่งเขียนเดียวกัน:
-  - `schema_v: 1 → 2`
-  - `claim_ids: [claimId]`
-  - `claimed_qty += claim.claimed_qty`
-  - `unclaimed_quota -= claim.claimed_qty`
-  - `status: 'EXHAUSTED'` หากโควตาหมด
-    ทั้งหมดสำเร็จพร้อมกันใน CouchDB Single Document Update เดียวกัน ไม่ต้องใช้ Migration Script
+| Field | ชนิด | req | หมายเหตุ |
+| --- | --- | --- | --- |
+| `name` | str (trim, 1–80 ตัวอักษร) | req | ชื่อกอง. **ไม่ซ้ำในกลุ่ม pool `OPEN` ของศูนย์ — advisory** (UI ตรวจตอนสร้าง/เปลี่ยนชื่อ; เทียบแบบ normalize NFC, trim, ยุบช่องว่าง, ตัวพิมพ์เล็ก; DB บังคับไม่ได้) |
+| `location_storage_point_id` / `location_storage_zone` | str / str (trim, ≤100) | opt (คู่: มีทั้งคู่หรือไม่มีทั้งคู่) | จุดเก็บของกอง: `location_storage_point_id` = `shelter.common_areas.sub_storage[].id` (CR-139), `location_storage_zone` = ชื่อ point ณ เวลาบันทึก (snapshot แบบ `stock_ledger.lot` v5). แทน `location` free text ที่ถูกถอด. แก้ได้ตอน `OPEN` เท่านั้น และ frozen ตั้งแต่การเขียน transition ที่ออกจาก `OPEN` |
+| `status` | enum(`OPEN`,`SUBMITTED`,`RECEIVED`,`CANCELLED`) | req | สร้างเป็น `OPEN`; transition forward-only: `OPEN → SUBMITTED`, `SUBMITTED → RECEIVED`, `OPEN → CANCELLED`; อย่างอื่นปฏิเสธ (รวม `SUBMITTED → OPEN`, `SUBMITTED → CANCELLED`, และทุกการออกจาก `RECEIVED`/`CANCELLED`) |
+| `lock` | object\|null | opt | `{ op: 'SUBMIT'\|'CANCEL', op_id: ULID, locked_at: ts, locked_by: str }`; ตั้งได้เฉพาะตอน `OPEN`; ต้องเป็น `null`/ไม่มี เมื่อสถานะอื่น. `locked_by` ต้องเป็นผู้เขียน |
+| `items_summary` | [{`item_id`: str, `qty`: qty_str>0}] | req เมื่อ `SUBMITTED`/`RECEIVED`; ไม่มีตอน `OPEN`/`CANCELLED` | snapshot ยอดต่อ `item_id` ตอน submit — **ต้องไม่ว่าง**, `item_id` ไม่ซ้ำ; immutable เมื่อเขียนแล้ว |
+| `entry_ids` | [str] | req เมื่อ `SUBMITTED`/`RECEIVED`; ไม่มีตอน `OPEN`/`CANCELLED` | snapshot `bulk_return_entry:{ulid}` ที่อยู่ในกองและยังไม่ถูก void ตอน submit — **ต้องไม่ว่าง ไม่ซ้ำ**; ใช้เป็น fence ตรวจ entry ที่มาช้า; immutable |
+| `submitted_at` / `submitted_by` | ts / str | req เมื่อ `SUBMITTED`/`RECEIVED`; ไม่มีตอน `OPEN`/`CANCELLED` | `submitted_by` ต้องเป็นผู้เขียน; immutable เมื่อเขียนแล้ว |
+| `cancelled_at` / `cancelled_by` | ts / str | req เมื่อ `CANCELLED`; ไม่มีสถานะอื่น | `cancelled_by` ต้องเป็นผู้เขียน. pool ที่ยกเลิกต้องไม่มี `items_summary`/`entry_ids`/audit ของ submit/ผลรับ/`lock` |
+| `received_at` / `received_by` | ts / str | req เมื่อ `RECEIVED`; ไม่มีสถานะอื่น | เขียนครั้งเดียว immutable; `received_by` ต้องเป็นผู้เขียน |
+| `received_storage_point_id` / `received_storage_zone` | str / str | opt (คู่ เหมือน `location_*`) | จุดเก็บที่เลือกตอนรับ (`received_storage_zone` = ชื่อ point ณ เวลาบันทึก) — แถว `stock_ledger` ของ #660 ลงที่จุดนี้. ศูนย์ที่มี storage point: UI บังคับเลือก (แบบรับของเข้าคลัง CR-139); ไม่มี → ไม่ใส่คู่นี้ = "คลังหลัก". เป็นกติกาฝั่ง UI — workflow/VDU รับกรณีไม่มีคู่ได้ |
+| `received_items` | [{`item_id`, `expected_qty`, `received_qty`, `discrepancy_reason?`, `discrepancy_note?`}] | req เมื่อ `RECEIVED`; ไม่มีสถานะอื่น | ผลตรวจรับ **หนึ่งแถวต่อ `item_id` ใน `items_summary` พอดี** (ไม่ขาด ไม่เกิน ไม่ซ้ำ). `expected_qty` (qty_str>0) ต้องเท่ายอดใน `items_summary`; `received_qty` (จำนวนเต็ม ≥0) ≤ `expected_qty`. ถ้า `received_qty = expected_qty` ห้ามมี `discrepancy_reason`/`discrepancy_note`; ถ้า `<` ต้องมี `discrepancy_reason` ∈ `damaged`\|`missing`\|`miscount`\|`other` และ `discrepancy_note` (non-empty) บังคับเมื่อเป็น `other` (ใส่ได้ถ้าเหตุผลอื่น) |
+| `notes` | str | opt | หมายเหตุ |
+
+ไม่มี field: `item_id`, `stock_ledger_id`, `total_received_qty`, `claimed_qty`, `unclaimed_quota`, `claim_ids`, `ticket_id`, `shift_id`,
+`closed_at/by` (ของ v2), `return_ticket_id`, `location` (free text เดิมของ draft). envelope: `shelter_code`, `created_at`, `created_by`, `updated_at`, `_rev`.
+
+**Invariants:**
+
+1. **Immutable หลังสร้าง:** `_id`, `type`, `schema_v`, `shelter_code`, `created_at`, `created_by`. `name`/`location_*` แก้ได้ตอน `OPEN` เท่านั้น และ
+   frozen ตั้งแต่ pool ออกจาก `OPEN` (`SUBMITTED`/`CANCELLED`/`RECEIVED`) รวมถึงการเขียน transition เอง; `notes` แก้ได้ทุก status;
+   ทุก field ที่เขียนตอน/หลัง freeze (snapshot, `cancelled_*`, `received_*`) immutable
+2. **เพิ่ม entry / ย้าย / void entry ได้เฉพาะเมื่อ pool `OPEN` และไม่มี `lock`** (`canAppendToPool`, `canVoidEntry`) — advisory (VDU อ่านเอกสารอื่นไม่ได้).
+   **entry ที่อยู่ใน `entry_ids` ของ pool ที่ไม่ใช่ `OPEN` ถูกตรึงกับ pool นั้นถาวร** (CR-193 ข้อ 33): void / move doc ที่เขียนภายหลัง (จาก race หรือ writer นอกแอป)
+   ไม่มีผลตอนอ่านและถูกแจ้งเป็น snapshot conflict (ดู "Lock protocol" ข้อ 5)
+3. **Role:** ทุกการเขียน pool (สร้าง, แก้ `name`/`location_*`/`notes`, ตั้ง/ล้าง lock, `OPEN → SUBMITTED`, `SUBMITTED → RECEIVED`, `OPEN → CANCELLED`) ทำได้เฉพาะ
+   `warehouse_staff`, `supply_coordinator`, `shelter_manager` (ตัวช่วย role ของ VDU ให้ `system_admin` ทุกความสามารถอยู่แล้ว ไม่มี special case เพิ่ม — รอ project owner ยืนยัน);
+   เขียน entry/move/void เพิ่ม `distribution_staff`. `created_by`/`submitted_by`/`received_by`/`cancelled_by`/`lock.locked_by` ต้องตรงผู้เขียนเมื่อเขียนใหม่
+4. **Submit (`OPEN → SUBMITTED`):** เขียน `items_summary` + `entry_ids` + `submitted_at/by` และล้าง `lock` ใน update เดียว. **pool ว่างเปล่า submit ไม่ได้** —
+   VDU ปฏิเสธ `items_summary` หรือ `entry_ids` ว่าง; ถ้าไม่ต้องการกองให้ยกเลิก. ลำดับใน workflow (#660): ตั้ง lock `SUBMIT` ผ่าน CAS ก่อน
+   (lock `SUBMIT` ของ op เดียวกัน = replay, lock ของ op อื่น = ชน) → fold entry/move/void เป็น `items_summary` ต่อ `item_id` + `entry_ids` →
+   ถ้าจำนวน entry สุทธิเป็น 0 ให้ปล่อย lock แล้วปฏิเสธ (แจ้งผู้ใช้ให้ยกเลิกกองแทน); pool ที่ `SUBMITTED` อยู่แล้วคืนค่าเดิม. submit **ไม่เขียน `stock_ledger`**.
+   entry ที่เข้ามาหลังตั้ง lock และไม่อยู่ใน snapshot (ตัดสินจากสถานะสุดท้ายของ pool — CR-193 ข้อ 32) — เป็น "ค้าง" ต้องย้ายไป pool `OPEN` อื่น
+5. **Cancel (`OPEN → CANCELLED`):** เขียน `cancelled_at/by` ไม่ลบเอกสาร (VDU ยังห้ามลบ pool ทุกกรณี). **"ยกเลิกได้เฉพาะเมื่อกองว่าง" เป็น advisory ระดับ
+   domain/application** (VDU นับ entry ไม่ได้): `isPoolEmpty` (fold จาก entry/move/void) + fence `lock.op='CANCEL'` ใน workflow #659. หน้ารายการกองซ่อน `CANCELLED` โดยปริยาย
+6. **Receive (`SUBMITTED → RECEIVED`):** เขียน `received_*` ครั้งเดียว; VDU ตรวจ `received_items` ทั้งหมดได้เพราะ `items_summary` อยู่เอกสารเดียวกัน.
+   role `warehouse_staff`/`supply_coordinator`/`shelter_manager`; แถว `received_items` หนึ่งแถวต่อ item ใน `items_summary`, `received_qty` จำนวนเต็ม 0..`expected_qty`,
+   เหตุผลส่วนต่างใส่เฉพาะแถวที่ยอดไม่ตรง (`other` ต้องมี note) — รายละเอียดการเขียน `stock_ledger` ดู "Receive และ `stock_ledger`" ด้านล่าง
+7. **ยอดต่อ item** คำนวณจาก entry + move + void (§2.31.2 view `bulk_return_pool_item_totals`) ไม่เก็บเป็น counter บน pool
+
+**ตารางบังคับ — VDU กับ advisory:**
+
+| กติกา | VDU | Advisory (domain/application) |
+| --- | --- | --- |
+| transition forward-only, role, ผู้เขียน, ความสมบูรณ์ของ snapshot/ผลรับ, submit ไม่ว่าง, `name` 1–80 | บังคับ | — |
+| ยกเลิกได้เฉพาะเมื่อกองว่าง | ไม่ได้ | `isPoolEmpty` + lock `CANCEL` |
+| void entry ได้เฉพาะตอน pool `OPEN` และ `pool_id` ของ void = pool ปัจจุบันของ entry | ไม่ได้ | `canVoidEntry` + fold ตรวจสอดคล้อง |
+| entry ที่ void แล้วย้ายไม่ได้ | ไม่ได้ | fold / `canMoveEntry` |
+| `name` ไม่ซ้ำในกลุ่ม pool `OPEN` | ไม่ได้ | `isPoolNameTakenAmongOpen` (UI) |
+| entry ที่มาช้า (ไม่อยู่ใน `entry_ids` ของ pool ที่ไม่ใช่ `OPEN`) | ไม่ได้ | `findLateEntries` / `isLateEntry` |
+| fence รอ `lock` แล้วตัดสินจากสถานะสุดท้ายของ pool (CR-193 ข้อ 32) | ไม่ได้ | `settlePoolFence` |
+| void / move ของ entry ที่ snapshot นับไว้ไม่มีผล ไม่ว่าเกิดจาก race หรือ writer นอกแอป (ข้อ 33) | ไม่ได้ (อ่าน pool ไม่ได้) | `buildSnapshotPins` + fence pool ต้นทาง |
+| ซ่อมยอดยืมที่ไม่ถูกตัดของ pool ที่ส่งแล้ว (ข้อ 34) | ไม่ได้ | `findMissedLoanRefs` + `applyMissedBulkReturnLoanRefs` |
+
+**Lock protocol (advisory):**
+
+1. ผู้จะ submit/cancel ตั้ง `lock` (`op` = `SUBMIT` หรือ `CANCEL`) ผ่าน CAS (`_rev`) บน pool — แพ้ CAS = มีผู้อื่นถือ lock
+2. อ่าน view `bulk_return_pool_item_totals` (group_level 1 = จำนวน entry / ว่าง, 2 = ต่อ item)
+3. snapshot → submit: เขียน `items_summary` + `entry_ids` + `status='SUBMITTED'` + ล้าง `lock`; cancel: ตรวจว่างแล้วเขียน `status='CANCELLED'` + `cancelled_*` + ล้าง `lock`
+4. ผู้เขียน entry/move/void ต้องตรวจ `canAppendToPool` ก่อนเขียน และ **อ่าน pool ซ้ำหลังเขียน ก่อนอัปเดต loan** (`settlePoolFence`, แบบ `fenceReturnReservation`) —
+   ถ้า pool มี `lock` ให้อ่านซ้ำแบบ backoff (50 → 100 → 200 → 400 → 800 → 1000 ms แล้วซ้ำ 1000 ms) รวมไม่เกิน 8 วินาที แล้วตัดสินจากสถานะสุดท้าย (CR-193 ข้อ 32):
+   - pool `OPEN` และไม่มี `lock` → ตัด loan ตาม `loan_refs` ตามปกติ
+   - pool ปิดแล้ว (`SUBMITTED`/`RECEIVED`) และ `entry_ids` มี entry นี้ → นับในกองแล้ว ไม่ใช่รายการค้าง ตัด loan ตามปกติ (idempotent ผ่าน `applied_bulk_entry_ids`)
+   - pool ปิดแล้ว (หรือไม่พบ / `CANCELLED`) และ `entry_ids` ไม่มี entry นี้ → "ค้าง" ไม่แตะ loan; ให้ย้ายไป pool `OPEN` อื่น (move ปกติ — move จะตัด loan ตาม `loan_refs` ให้ถ้า pool ปลายทางยัง `OPEN` และไม่มี `lock`, §2.31.2)
+   - `lock` ไม่หายภายใน 8 วินาที → error ให้ลองใหม่ (`BulkReturnPoolLockTimeoutError`) entry ที่เขียนแล้วคงอยู่ ลองซ้ำด้วย operation ULID เดิมได้
+5. **entry ถูกตรึงกับ pool ที่ snapshot นับไว้ (ข้อ 33):** entry id ใน `entry_ids` ของ pool ที่ไม่ใช่ `OPEN` เป็นของ pool นั้นถาวร (ถ้าอยู่ในสอง pool ยึดตัวที่ `submitted_at` เก่าสุด —
+   `buildSnapshotPins`); void / move ที่ลงหลังจากนั้นไม่มีผลตอน fold (ไม่เปิด loan กลับ ไม่ย้าย ไม่นับที่ pool ปลายทาง) และถูกแจ้งเป็น snapshot conflict (`findSnapshotConflicts`,
+   `snapshot_conflict: true` ในผลของ void/move) ให้ staff ตรวจของจริงกับคลัง. void / move เขียนอ่าน pool ต้นทางซ้ำด้วย fence ข้อ 4 ก่อนทำต่อ; ทางเขียนที่อ่าน pool ที่ event อ้างถึงไม่ได้ต้องหยุด
+6. **ซ่อมยอดยืมที่ไม่ถูกตัด (ข้อ 34):** ถ้า fence หมดเวลาหลังเขียน entry แล้ว pool ถูกส่งโดยนับ entry ไว้ แต่ `loan_refs` ไม่เคยถูกตัด — ผู้ที่เขียน entry ได้
+   (`warehouse_staff`, `supply_coordinator`, `shelter_manager`, `distribution_staff`) ใช้ `applyMissedBulkReturnLoanRefs({ entry_id, pool_id })` ตัดเฉพาะ `loan_refs` ที่วางไว้ของ entry นั้น
+   (ไม่จัดสรรใหม่; กติกาข้าม ref ตามข้อ 15; idempotent ผ่าน `applied_bulk_entry_ids`) ทำได้เฉพาะ pool `SUBMITTED`/`RECEIVED` ที่ `entry_ids` มี entry นั้น;
+   `listBulkReturnPoolMissedLoanRefs` / `findMissedLoanRefs` หา ref ที่ loan ยังรับได้แต่ยังไม่ถูก apply. ช่องแข่งอื่นที่เหลือตรวจพบภายหลังได้จาก snapshot `entry_ids` และส่วนต่างตอนตรวจรับ
+
+**Receive และ `stock_ledger` (#660):**
+
+1. **ลำดับเขียน:** CAS pool เป็น `RECEIVED` ให้สำเร็จ**ก่อน** (จุด serialize เดียว) แล้วจึง derive แถว `stock_ledger` จาก `received_items` ที่ commit แล้วเท่านั้น
+2. **Replay:** รับซ้ำด้วยข้อมูลเดิม (หรือ retry หลังล้มระหว่างสองขั้น) = ตรวจซ้ำและสร้างแถว ledger ที่ขาดอยู่; pool ที่ `RECEIVED` แล้วแต่ข้อมูลรับต่างจากเดิมถูกปฏิเสธ
+3. **แถว `stock_ledger`:** หนึ่งแถวต่อ item ที่ `received_qty > 0` (item ที่รับ 0 ไม่มีแถว); `reason: 'receive'`, `ref_id: bulk_return_pool:{ulid}`,
+   `qty` = `received_qty`, `occurred_at` = `received_at` ของ pool, `lot` = `{ note: 'bulk_return_pool', storage_point_id?, storage_zone? }`
+   (field จุดเก็บของ lot v5 มาจาก `received_storage_*`), `lot_ref` = `_id` ของแถวเอง (lot ขาเข้าใหม่)
+4. **`_id` deterministic:** `stock_ledger:` + 26 ตัวอักษร Crockford base32 จาก SHA-256 ของ `bulk_return_receive:{poolId}:{itemId}`
+   (`deriveDeterministicLedgerId('bulk_return_receive', poolId, itemId)`)
+5. **Put-if-absent:** แถวเดิมที่เหมือนกันทุกประการ = replay; แถวเดิมที่ขัดแย้ง = integrity error (fail closed)
+6. VDU ของ `stock_ledger` รับแถวนี้จาก `warehouse_staff`/`supply_coordinator`/`shelter_manager` อยู่แล้ว (`distribution_staff` ไม่ได้ — ข้อยกเว้นของ role นี้ใช้เฉพาะ `ref_id` แบบ `distribution_log`) — ไม่แก้ VDU
+
+**Legacy schema_v 1 / 2 (frozen — อ่านอย่างเดียว, ลบใน #661):** fields `item_id`, `stock_ledger_id`, `ticket_id?`, `shift_id?`,
+`total_received_qty`, `claimed_qty`, `unclaimed_quota`, `claim_ids` (v2 เท่านั้น; CR-134), `status` (`ACTIVE`|`EXHAUSTED`|`CLOSED`),
+`closed_at/by?`, `notes?` — เป็นโควตา aggregate ต่อ item ที่ตัดผ่าน `bulk_return_claim` (§2.32). ไม่มี migration และไม่มี lazy upgrade v1 → v2 ต่อไป.
+
+#### 2.31.1 `bulk_return_entry` — `bulk_return_entry:{ulid}` · **schema_v 1** · append-only
+
+บันทึกการรับของคืนเข้ากองหนึ่งครั้ง. `{ulid}` = ULID ของ operation ของผู้เรียก (deterministic → สร้างซ้ำแล้วชน 409 = idempotent).
+**ไม่แก้ ไม่ลบ** (VDU: มี `oldDoc` → ปฏิเสธ; `_deleted` → ปฏิเสธ). การย้ายกองทำผ่าน move doc (§2.31.2) ไม่แก้ entry.
+
+| Field | ชนิด | req | หมายเหตุ |
+| --- | --- | --- | --- |
+| `pool_id` | str | req | `bulk_return_pool:{ulid}` — pool ที่ entry **ถูกบันทึกเข้าครั้งแรก** (pool ปัจจุบัน = fold ด้วย move) |
+| `item_id` | str | req | อ้าง `item_master:{sku\|ulid}`; รับเฉพาะ item ที่ catalog `returnable === true` (ไม่ดู `type_class`, ไม่ปฏิเสธ `deactivated`) — predicate `isBulkReturnEligibleItem`; ปฏิเสธตอนเขียนใน workflow เพิ่ม entry ของ #659 (VDU ไม่บังคับ; ดู CR-193 Amends) |
+| `qty` | qty_str>0 | req | `positiveWholeQtySchema` เดียวกับ food-supplies — จำนวนเต็มบวกเท่านั้น (ยืนยันตามแบบแผนเดิม — CR-193 Amends) |
+| `returner_type` | enum(`evacuee`,`volunteer`,`unspecified`) | req | ประเภทผู้คืน (แบบ `recipient_type`) |
+| `returner_id` | str\|null | req | `evacuee` → ขึ้นต้น `evacuee:`; `volunteer` → ขึ้นต้น `volunteer:`; `unspecified` → ต้องเป็น `null` (เขียน `null` ไว้ชัดเจน) และ `loan_refs` ต้องว่าง |
+| `loan_refs` | [{`distribution_log_id`: str, `qty`: qty_str>0}] | req (ว่างได้) | loan ที่ปิด/ลดยอดจากการคืนนี้; `distribution_log_id` = `distribution_log:{ulid}` ไม่ซ้ำใน array |
+| `recorded_at` / `recorded_by` | ts / str | req | เวลาและผู้บันทึก (ใช้ `created_at`/`created_by` ของ envelope หากเป็นค่าเดียวกัน) |
+| `notes` | str | opt | หมายเหตุ |
+
+**Invariants:** `sum(loan_refs.qty) ≤ qty` (ผูก loan เกินของที่รับไม่ได้; ส่วนที่ไม่ผูก loan ได้); ผู้คืนที่ไม่มี loan ค้างบันทึกได้
+(`loan_refs` ว่าง — UI เตือน); ไม่เก็บ `condition_on_return` (ของเสียหายบันทึกเป็นเหตุผลส่วนต่างตอนตรวจรับ §2.31);
+void entry ทำด้วย event doc แยก (§2.31.3) ไม่แก้ entry.
+Role เขียน: `warehouse_staff`, `supply_coordinator`, `shelter_manager`, `distribution_staff`; `created_by` ต้องเป็นผู้เขียน.
+ลำดับเขียนของ workflow (#659): **entry ก่อน แล้วค่อย `distribution_log`** โดยใช้ marker `applied_bulk_entry_ids` ฝั่ง loan (§2.30) ทำให้ replay ซ้ำไม่นับซ้ำ.
+
+#### 2.31.2 `bulk_return_entry_move` — `bulk_return_entry_move:{entryUlid}:{seq}` · **schema_v 1** · append-only
+
+เหตุการณ์ย้าย entry ทั้งก้อนระหว่าง pool (ย้ายบางส่วนของ qty ไม่รองรับ).
+หลังเขียน move doc workflow อ่าน pool ปลายทางซ้ำ: ถ้ายัง `OPEN` และไม่มี `lock` (หลังรอ `lock` หายและตัดสินจากสถานะสุดท้ายตาม §2.31 "Lock protocol" ข้อ 4) ให้ apply `loan_refs` ของ entry ที่ยังไม่อยู่ใน `applied_bulk_entry_ids`
+ของ loan ลง `distribution_log` (idempotent — ref ที่ apply แล้วเป็น no-op; loan ที่ปิด/ไม่พบ หรือยอดค้าง < `ref.qty` ข้าม ref นั้นตาม CR-193 ข้อ 15);
+ถ้า pool ปลายทางไม่รับต่อแล้ว ให้รายงานว่ามาช้าและไม่แตะ `distribution_log`; ก่อนนั้นอ่าน pool **ต้นทาง**ซ้ำ — ถ้า snapshot ของ pool ต้นทางนับ entry นี้ไว้แล้ว การย้ายไม่มีผล (ไม่แตะ pool ปลายทางและ loan, `snapshot_conflict`; ข้อ 33).
+`{entryUlid}` = ULID ของ `bulk_return_entry`, `{seq}` = ลำดับการย้ายของ entry นั้น เริ่ม 1 และ zero-pad 4 หลัก (`0001`) ให้เรียงตาม `_id`.
+`_id` deterministic: คำสั่งย้ายครั้งที่ n ของ entry เดียวกันสองคำสั่งพร้อมกันเขียน `_id` เดียวกัน → **ตัวที่สองชน 409 ไม่นับซ้ำ**.
+**ไม่แก้ ไม่ลบ** (VDU).
+
+| Field | ชนิด | req | หมายเหตุ |
+| --- | --- | --- | --- |
+| `entry_id` | str | req | `bulk_return_entry:{ulid}` — ต้องตรงกับ `{entryUlid}` ใน `_id` |
+| `seq` | int ≥1 | req | ต้องตรงกับ `{seq}` ใน `_id` |
+| `from_pool_id` / `to_pool_id` | str / str | req | `bulk_return_pool:{ulid}`; ต้องต่างกัน |
+| `item_id` / `qty` | str / qty_str>0 | req | คัดลอกจาก entry (whole-entry move) เพื่อให้ view `_sum` ทำงาน |
+| `moved_at` / `moved_by` | ts / str | req | เวลาและผู้ย้าย (ใช้ `created_at`/`created_by` ของ envelope หากเป็นค่าเดียวกัน) |
+| `notes` | str | opt | หมายเหตุ |
+
+**Invariants / enforcement boundary:** VDU ตรวจเฉพาะ id/field ภายในเอกสาร (`entry_id`/`seq` ตรง `_id`, from ≠ to, append-only).
+**VDU ตรวจไม่ได้** ว่า `from_pool_id` = pool ปัจจุบันของ entry หรือ pool ต้นทาง/ปลายทางยัง `OPEN` — ตรวจที่ domain/workflow โดย fold
+(`resolveEntryPool`: seq ต่อเนื่องจาก 1, `moves[0].from_pool_id = entry.pool_id`, `moves[n].from_pool_id = moves[n-1].to_pool_id`,
+`item_id`/`qty` ตรง entry) + advisory `canAppendToPool`. Role เขียน: เหมือน entry (`warehouse_staff`, `supply_coordinator`,
+`shelter_manager`, `distribution_staff`) และ `created_by` ต้องเป็นผู้เขียน. **entry ที่ถูก void แล้วย้ายไม่ได้** — ตรวจที่ domain/fold (VDU อ่าน void doc ไม่ได้).
+
+#### 2.31.3 `bulk_return_entry_void` — `bulk_return_entry_void:{entryUlid}` · **schema_v 1** · append-only
+
+เหตุการณ์ยกเลิก entry รายการเดียว (void) — ใช้เมื่อบันทึกผิด; เขียนได้เฉพาะตอน pool ปัจจุบันของ entry เป็น `OPEN`.
+`_id` deterministic ต่อ entry → entry หนึ่ง void ได้ครั้งเดียว (ครั้งที่สองชน 409). **ไม่แก้ ไม่ลบ** (VDU). ผู้ void/เวลา = `created_by`/`created_at` ของ envelope.
+
+| Field | ชนิด | req | หมายเหตุ |
+| --- | --- | --- | --- |
+| `entry_id` | str | req | `bulk_return_entry:{ulid}` — ต้องตรงกับ `{entryUlid}` ใน `_id` |
+| `pool_id` | str | req | `bulk_return_pool:{ulid}` — pool ที่ entry อยู่ ณ เวลา void |
+| `item_id` / `qty` | str / qty_str>0 | req | คัดลอกจาก entry เพื่อให้ view `_sum` หักยอดได้โดยไม่ต้อง join |
+| `notes` | str | opt | เหตุผล/หมายเหตุ |
+
+**ผลฝั่ง loan:** void **เปิด loan กลับ** — application (#659) ทำ path revert ของ `distribution_log` (§2.30) ต่อทุก `loan_refs` ของ entry
+(ลด `qty_returned`, ถอด id ออกจาก `applied_bulk_entry_ids`). Role เขียน: `warehouse_staff`, `supply_coordinator`, `shelter_manager`, `distribution_staff`.
+**VDU ตรวจเฉพาะภายในเอกสาร** (`entry_id` ตรง `_id`, append-only, role, `created_by`); "เฉพาะตอน pool `OPEN`" และ "`pool_id` = pool ปัจจุบันของ entry" เป็น advisory; void ที่ลงหลัง entry ถูกนับใน `entry_ids` ของ pool ที่ส่งแล้วไม่มีผล ไม่เปิด loan กลับ (ข้อ 33);
+(`canVoidEntry` + fold: void ซ้ำ, `item_id`/`qty` ไม่ตรง entry, `pool_id` ไม่ตรง pool ที่ fold ได้ — ซึ่งดักการย้ายหลัง void ด้วย).
+
+**Index & view (shelter DB):**
+
+- Mango index `(type, pool_id)` สำหรับ `bulk_return_entry` (list entry ต่อ pool) และ `(type, to_pool_id)` สำหรับ
+  `bulk_return_entry_move` (หา entry ที่ย้ายเข้า pool) — ใช้อ่านแบบจำกัดขอบเขตต่อ pool: entry ที่สร้างใน pool ∪ entry ที่ถูกย้ายเข้า pool
+  แล้วอ่าน move chain + void ของ entry เหล่านั้นครบ เพื่อ fold หา pool ปัจจุบัน (ไม่ต้อง scan ทั้ง shelter)
+- view `_design/app` `bulk_return_pool_item_totals` (reduce `_sum`; value = `[qty, count]`):
+  entry → `emit([pool_id, item_id, entry_id], [qty, 1])`; move → `emit([from_pool_id, item_id, entry_id], [-qty, -1])` และ
+  `emit([to_pool_id, item_id, entry_id], [qty, 1])`; **void → `emit([pool_id, item_id, entry_id], [-qty, -1])` (หักยอด entry ที่ void ออก)**.
+  `group_level=1` = ยอด/จำนวน entry ต่อ pool (count 0 = ว่าง), `2` = ต่อ item,
+  `3` = ต่อ entry (net 1 = อยู่ใน pool, 0 = ย้ายออกหรือ void). `qty` ใน map = `parseFloat` ของ qty string — ใช้ตรวจ/แสดงผลเบื้องต้น;
+  `items_summary` ตอน submit คำนวณด้วย decimal helper ของ repo (เรียงตาม `item_id`)
+
+**Migration & Document Compatibility:** pool/entry/move ไม่ bump `schema_v` (v3 ยังไม่ปล่อย). pool v1/v2 frozen ตอน deploy
+(อ่านอย่างเดียว) แล้วถูกลบใน #661 พร้อม `bulk_return_claim`, `bulk_pool_id` เดิมบน `distribution_log` และ claim ที่ค้าง; `distribution_log` v1 → v2
+แบบ lazy (§2.30). ต้อง redeploy `_design/access` + `_design/app` (เวอร์ชัน 6) + index บน shelter ที่ provision แล้ว (`scripts/redeploy-access.ts`;
+provisioner ครอบคลุม shelter ใหม่). flow เดิม (สร้าง pool v2 / claim) ถูก VDU ปฏิเสธหลัง redeploy — #658/#659/#660 จึงต้อง merge และ deploy พร้อมกัน
+(ดู CR-193 § Rollout).
 
 ### 2.32 `bulk_return_claim` — `bulk_return_claim:{distributionLogUlid}` · **schema_v 1** (CR-134)
+
+> **Legacy — frozen** โดย CR-193 approved (2026-10-25, #658): flow claim โควตาของ pool v2 ถูกแทนด้วย
+> `bulk_return_entry` + `loan_refs[]` (§2.31.1) — ไม่สร้าง claim ใหม่ และ pool v1/v2 ที่ claim อ้างถึงถูก freeze ตอน deploy;
+> เอกสารชนิดนี้จะถูกลบใน #661 (cleanup). หัวข้อนี้คงไว้เพื่ออ้างอิงจนกว่า #661 จะเสร็จ.
 
 เอกสารประสานงานความคงทนและฟื้นฟูการเคลียร์ของยืมแบบกองรวม (Bulk Return Claim Coordination & Crash Recovery) ใน `shelter_{shelter_code}`
 สร้างขึ้นเพื่อเป็น Durable Coordination Record รับประกัน Idempotency และ Crash Recovery ข้ามเอกสารระหว่าง `bulk_return_pool` (§2.31)
@@ -1490,7 +1655,9 @@ COMMITTED → RESERVED  (reinitialize รอบใหม่บน distribution_l
 `stock_ledger` (§2.1) ยังคงเป็น physical stock source of truth แบบ append-only. สำหรับ flow ใหม่
 `requisition_ticket` เป็นต้นเหตุของ outbound `requisition`/`distribute` และ `distribution_log`
 เป็นต้นเหตุของการรับคืนแบบ `receive`; `meal_service` เป็นต้นเหตุของการรับผลผลิต. การรับคืนของยืมแบบกองรวม
-ใช้ `bulk_return_pool` (§2.31) ควบคุมโควตาการปลดภาระโดยผูกกับ `stock_ledger` แถวตรวจรับจริงเพียงครั้งเดียว:
+ใช้ `bulk_return_pool` (§2.31). **pool v3 ไม่ใช้ scheme ด้านล่างนี้** — แถว `receive` เขียนตอน `SUBMITTED → RECEIVED` ต่อ item ด้วย `_id`
+deterministic จาก `bulk_return_receive:{poolId}:{itemId}` และ pool ไม่มี `stock_ledger_id` (ดู §2.31 "Receive และ `stock_ledger`").
+ย่อหน้าถัดไปใช้กับ pool legacy v1/v2 (frozen) เท่านั้น: pool ควบคุมโควตาการปลดภาระโดยผูกกับ `stock_ledger` แถวตรวจรับจริงเพียงครั้งเดียว:
 ผู้เรียกสร้าง `operationUlid` ที่เสถียรก่อนเขียน แล้วใช้ suffix เดียวกันกับ `bulk_return_pool:{operationUlid}` และ
 `stock_ledger:{operationUlid}`; แถว receipt ใช้ `reason='receive'`, `ref_id=bulk_return_pool:{operationUlid}` และ Pool
 อ้างกลับผ่าน `stock_ledger_id=stock_ledger:{operationUlid}`. การ retry ต้องใช้ `operationUlid` เดิมและตรวจความเท่ากันของ
@@ -2676,12 +2843,12 @@ CouchDB `_users` DB ไม่ใช่ operational doc ธรรมดา — �
 
 ## 7. Index & view สรุปต่อ db (deploy ใน `_design/app` ตอน provisioning)
 
-| DB            | Mango indexes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | Views (map/reduce)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `shelter_*`   | evacuee kiosk lookup: (type, phone), (type, person_id.number), (type, household_id), (type, card_snapshot.address_no) · movement: (evacuee_id, occurred_at) · screening: (evacuee_id, screened_at) · `station_log`: (evacuee_id, station, occurred_at) — CR-192 · stock_ledger: (item_id, occurred_at) · `fuel_cylinder`: (item_master_id, cylinder_code) · `gas_ledger`: (cylinder_id, occurred_at) · `requisition_ticket`: (status, requisition_type, ticket_no) · `distribution_log`: (ticket_id, item_id, recipient_id, status), (recipient_id, status) · `bulk_return_pool`: (item_id, status) · donation: status, tracking_token_hash, booking_ref, campaign_id, (logistics.slot.date) · donation_slot: (date), (date, from) · medical: evacuee_id · shift_assignment: (job_id, shift_id), (volunteer_id, status), (status) · volunteer: (phone), (phone_hash), (tracking_token_hash), (status), (personnel_type), (checked_in) · job: (status), (tier, status) · job_application: (job_id, status), (tracking_token) · sop_override: (active) · food_sphere_standard: (target_segment, req_group_id, effective_date) · requirement_group: (name) · replenishment_policy: (scope_type, target_id) | `occupancy` (count evacuees by stay status) · `demographics_by_age` (count in-shelter evacuees — `active` + `room_confirmed`, CR-170 — by birth year; dynamic age-bucket in API) · `demographics_by_country` (count in-shelter evacuees by country) · `registrations_by_date_status` (count check-in/out movements by date + `preregister`: evacuees with `registered_via` ∈ web/kiosk/api, not cancelled, by `created_at` date — CR-170 amend) · `station_logs_by_station` (raw `station_log` events, no reduce — key `[YYYY-MM-DD(+07) ของ occurred_at, station, channel, evacuee_id]` → `{action, occurred_at, actor}` (`actor` = `device_id` for kiosk, `created_by` for staff — CR-192 amendment 2); BFF pairs start/complete and ranks per actor — CR-192, view manifest v5) · `stock_balance` (client Decimal sum qty_str by item; CR-038) · `gas_balance` (client Decimal sum gas_ledger.qty_kg by active cylinder) · `latest_screening` · `meals_served` (sum by date+meal) · `needs_open` · `slot_availability` |
-| `registry`    | shelter: status · shelter: code (unique) · location_district: (province_id) · location_subdistrict: (district_id) · kiosk_banner: (type, shelter_code) — index เดียวกันนี้ใช้กับ `kiosk_banner_group` ด้วย (selector `type` + `shelter_code` · ไม่เพิ่ม index ใหม่ — 2026-10-21)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | —                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| `catalog`     | item_master: (category, distribution_type, type_class) · item_category: (system_key, is_protected) · recipe: (deactivated) · sop_profile: active · food_sphere_standard: (target_segment, req_group_id, effective_date) · requirement_group: (name) · replenishment_policy: (scope_type, target_id)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | —                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| `central_ops` | export_job: (status, requested_by) · search_audit: occurred_at                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | —                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| DB | Mango indexes | Views (map/reduce) |
+| --- | --- | --- |
+| `shelter_*` | evacuee kiosk lookup: (type, phone), (type, person_id.number), (type, household_id), (type, card_snapshot.address_no) · movement: (evacuee_id, occurred_at) · screening: (evacuee_id, screened_at) · `station_log`: (evacuee_id, station, occurred_at) — CR-192 · stock_ledger: (item_id, occurred_at) · `fuel_cylinder`: (item_master_id, cylinder_code) · `gas_ledger`: (cylinder_id, occurred_at) · `requisition_ticket`: (status, requisition_type, ticket_no) · `distribution_log`: (ticket_id, item_id, recipient_id, status), (recipient_id, status) · `bulk_return_pool`: (item_id, status) (legacy v1/v2 — frozen) · `bulk_return_entry`: (type, pool_id) · `bulk_return_entry_move`: (type, to_pool_id) (CR-193) · donation: status, tracking_token_hash, booking_ref, campaign_id, (logistics.slot.date) · donation_slot: (date), (date, from) · medical: evacuee_id · shift_assignment: (job_id, shift_id), (volunteer_id, status), (status) · volunteer: (phone), (phone_hash), (tracking_token_hash), (status), (personnel_type), (checked_in) · job: (status), (tier, status) · job_application: (job_id, status), (tracking_token) · sop_override: (active) · food_sphere_standard: (target_segment, req_group_id, effective_date) · requirement_group: (name) · replenishment_policy: (scope_type, target_id) | `occupancy` (count evacuees by stay status) · `demographics_by_age` (count in-shelter evacuees — `active` + `room_confirmed`, CR-170 — by birth year; dynamic age-bucket in API) · `demographics_by_country` (count in-shelter evacuees by country) · `registrations_by_date_status` (count check-in/out movements by date + `preregister`: evacuees with `registered_via` ∈ web/kiosk/api, not cancelled, by `created_at` date — CR-170 amend) · `station_logs_by_station` (raw `station_log` events, no reduce — key `[YYYY-MM-DD(+07) ของ occurred_at, station, channel, evacuee_id]` → `{action, occurred_at, actor}` (`actor` = `device_id` for kiosk, `created_by` for staff — CR-192 amendment 2); BFF pairs start/complete and ranks per actor — CR-192, view manifest v5) · `stock_balance` (client Decimal sum qty_str by item; CR-038) · `gas_balance` (client Decimal sum gas_ledger.qty_kg by active cylinder) · `latest_screening` · `meals_served` (sum by date+meal) · `needs_open` · `slot_availability` · `bulk_return_pool_item_totals` (`_sum` — [qty, count] ต่อ pool/item/entry จาก entry + move และหักยอด void; `_design/app` เวอร์ชัน 6 — v4 เป็นของ CR-170 amend, v5 ของ CR-192; CR-193, §2.31.3) |
+| `registry` | shelter: status · shelter: code (unique) · location_district: (province_id) · location_subdistrict: (district_id) · kiosk_banner: (type, shelter_code) — index เดียวกันนี้ใช้กับ `kiosk_banner_group` ด้วย (selector `type` + `shelter_code` · ไม่เพิ่ม index ใหม่ — 2026-10-21) | — |
+| `catalog` | item_master: (category, distribution_type, type_class) · item_category: (system_key, is_protected) · recipe: (deactivated) · sop_profile: active · food_sphere_standard: (target_segment, req_group_id, effective_date) · requirement_group: (name) · replenishment_policy: (scope_type, target_id) | — |
+| `central_ops` | export_job: (status, requested_by) · search_audit: occurred_at | — |
 
 ## 8. Validation rules (สรุปที่ `validate_doc_update` ต้องบังคับ)
 
@@ -2707,6 +2874,8 @@ CR-059 ไม่เพิ่ม Central→Edge fallback หรือ local write
 16. `bulk_return_claim` (schema_v 1) อยู่ใน whitelist ของ `shelter_*`; เอกสารประสานงาน 1 ฉบับต่อ 1 `distribution_log` (`_id: bulk_return_claim:{distributionLogUlid}`); ฟิลด์ `_id`, `type`, `schema_v`, `shelter_code`, `distribution_log_id`, `item_id`, `created_at`, `created_by` เป็น immutable ถาวร; ฟิลด์ `operation_id`, `bulk_pool_id`, `claimed_qty` เป็น attempt-scoped immutable (ห้ามเปลี่ยนระหว่าง attempt, อนุญาตให้เขียนทับได้เฉพาะในการเปลี่ยนผ่าน `ABORTED` → `CLAIM_INTENT` ผ่าน CAS เท่านั้น); transition อนุญาตเฉพาะ `CLAIM_INTENT` → `POOL_CLAIMED` → `COMPLETE`, `CLAIM_INTENT` → `ABORTED`, และ `ABORTED` → `CLAIM_INTENT` (CAS re-initialization); ห้ามเปลี่ยนเป็น `ABORTED` เมื่อเข้าสู่ `POOL_CLAIMED` หรือ `COMPLETE` แล้ว; การเขียนสร้างหรือเปลี่ยนสถานะกระทำได้โดยบทบาทที่ได้รับอนุญาตหน้างาน (`registration_staff`, `warehouse_staff`, `supply_coordinator`, `shelter_manager`, `system_admin`)
 17. `loan_return_reservation` (schema_v 1) อยู่ใน whitelist ของ `shelter_*`; เอกสารประสานงาน 1 ฉบับต่อ 1 `distribution_log` (`_id: loan_return_reservation:{distributionLogUlid}`); ฟิลด์ `_id`, `type`, `schema_v`, `shelter_code`, `distribution_log_id`, `created_at`, `created_by` เป็น immutable ถาวร; ฟิลด์ `operation_id`, `mode`, `operation_by`, `qty_returned`, `return_condition`, `bulk_pool_id`, `claimed_qty`, `clear_reason` เป็น attempt-scoped immutable (เปลี่ยนได้เฉพาะตอน reinitialize `ABORTED`/`COMMITTED` → `RESERVED`); transition อนุญาตเฉพาะ `RESERVED` → `FENCED` → `COMMITTED`, `RESERVED` → `ABORTED`, `ABORTED` → `RESERVED`, และ `COMMITTED` → `RESERVED`; **`FENCED` → `ABORTED` ถูกปฏิเสธเด็ดขาดทุกกรณี**; ห้ามลบเอกสารนี้เด็ดขาด; Mode-specific RBAC บังคับทุก transition ตามตารางใน §2.33; abort จากสถานะ `RESERVED` อนุญาตเฉพาะเจ้าของสิทธิ์เดิม (`operation_by`/`created_by`) หรือ `shelter_manager`/`system_admin`
 18. `shelter_incident` (schema_v 1) อยู่ใน whitelist ของ `shelter_*`; create/update ตาม §2.10 (เขียนโดย incident staff = SA หรือ SO/SM ของศูนย์ · ต่อท้าย timeline ทีละหนึ่ง entry ที่ `actor_id` = ผู้เขียน · ยกเลิกได้เฉพาะ SM) และ **ห้ามลบทุก role** รวม `system_admin` (CR-155)
+19. `bulk_return_pool` schema_v 3, `bulk_return_entry`, `bulk_return_entry_move`, `bulk_return_entry_void` (CR-193, §2.31) อยู่ใน whitelist ของ `shelter_*`; pool v1/v2 frozen (ปฏิเสธการสร้างและแก้ ข้อ 15 ใช้กับเอกสารเดิมที่อ่านอย่างเดียวเท่านั้น). pool v3: ห้ามลบ; transition forward-only `OPEN → SUBMITTED`, `SUBMITTED → RECEIVED`, `OPEN → CANCELLED`; เขียนได้เฉพาะ `warehouse_staff`, `supply_coordinator`, `shelter_manager`; `name` 1–80 ตัวอักษร; `lock.op` ∈ `SUBMIT`\|`CANCEL` ตั้งได้ตอน `OPEN` เท่านั้น; submit ต้องมี `items_summary`/`entry_ids` ไม่ว่าง; cancel ต้องมี `cancelled_at/by` และไม่มี snapshot/ผลรับ; receive ต้องมี `received_items` ครบทุก `item_id` ใน `items_summary` พร้อมกติกาส่วนต่าง/เหตุผล; field ที่เขียนหลัง freeze immutable. entry/move/void เป็น append-only เขียนโดย role ข้างต้นเพิ่ม `distribution_staff` และ `created_by` ตรงผู้เขียน; `returner_type=unspecified` ต้อง `returner_id=null` และ `loan_refs` ว่าง. กติกาข้ามเอกสาร (ยกเลิกเฉพาะตอนว่าง, void เฉพาะตอน pool `OPEN` และ `pool_id` ตรง, void แล้วย้ายไม่ได้, ชื่อไม่ซ้ำ, entry ที่มาช้า, fence ตัดสินจากสถานะสุดท้าย, entry ถูกตรึงกับ pool ที่ snapshot นับไว้ — CR-193 ข้อ 32–33) เป็น advisory ฝั่ง domain/application
+20. `distribution_log` schema_v 1 หรือ 2 (§2.30): ตอนแก้ `schema_v` คงเดิมหรือ 1 → 2 เท่านั้น; `applied_bulk_entry_ids` มีได้เฉพาะ v2 และเปลี่ยนได้เฉพาะ path apply (เพิ่ม 1 id) / revert (ถอด 1 id) ของ bulk v3 โดย role `warehouse_staff`, `supply_coordinator`, `shelter_manager`, `distribution_staff`; `bulk_pool_id` เดิมต้องคงที่; void ไม่ได้เมื่อ `applied_bulk_entry_ids` ไม่ว่าง
 
 ---
 

@@ -17,6 +17,8 @@
 		onViewTicket?: (ticket: RequisitionTicket) => void;
 		sortDirection?: TicketSortDirection;
 		onToggleSort?: () => void;
+		/** When this value changes (e.g. a serialized filter state) the table returns to page 1. */
+		resetKey?: string;
 	}
 
 	let {
@@ -24,20 +26,21 @@
 		pageSize = 10,
 		onViewTicket,
 		sortDirection = 'desc',
-		onToggleSort
+		onToggleSort,
+		resetKey = ''
 	}: Props = $props();
 
-	let currentPage = $state(1);
+	// Writable derived: back to page 1 whenever `resetKey` changes; paging assigns it directly.
+	let pickedPage = $derived.by(() => {
+		void resetKey;
+		return 1;
+	});
 
 	const totalItems = $derived(tickets.length);
 	const totalPages = $derived(Math.max(1, Math.ceil(totalItems / pageSize)));
 
-	// If page exceeds totalPages due to filtering, adjust
-	$effect(() => {
-		if (currentPage > totalPages) {
-			currentPage = 1;
-		}
-	});
+	// If the picked page no longer exists (fewer rows after filtering), show page 1.
+	const currentPage = $derived(pickedPage > totalPages ? 1 : pickedPage);
 
 	const paginatedTickets = $derived.by(() => {
 		const start = (currentPage - 1) * pageSize;
@@ -186,7 +189,11 @@
 				จากทั้งหมด <span class="font-semibold text-slate-800 tabular-nums">{totalItems}</span> รายการ
 			</div>
 
-			<PaginationControls bind:page={currentPage} count={totalItems} perPage={pageSize} />
+			<PaginationControls
+				bind:page={() => currentPage, (next) => (pickedPage = next)}
+				count={totalItems}
+				perPage={pageSize}
+			/>
 		</div>
 	{/if}
 </div>

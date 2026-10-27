@@ -6,6 +6,7 @@ import { shelterCodeSchema, now } from '$lib/db/model';
 import { ulid } from '$lib/db/ulid';
 import { deployShelterViewsFn } from '$lib/features/shelters/server/deploy';
 import {
+	BULK_RETURN_ENTRY_MANGO_INDEXES,
 	buildValidateDocUpdate,
 	DAILY_SOP_ROLE_MANGO_INDEX,
 	PEOPLE_MANGO_INDEXES,
@@ -425,6 +426,7 @@ async function deployMangoIndexes(db: string): Promise<void> {
 		...TRANSFER_LEDGER_MANGO_INDEXES,
 		...PEOPLE_MANGO_INDEXES,
 		...REQUISITION_TICKET_MANGO_INDEXES,
+		...BULK_RETURN_ENTRY_MANGO_INDEXES,
 		DAILY_SOP_ROLE_MANGO_INDEX
 	];
 	for (const def of defs) {
