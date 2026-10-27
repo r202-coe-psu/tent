@@ -32,6 +32,80 @@ describe('donationPreDeclarationInputSchema', () => {
 		expect(result.success).toBe(false);
 	});
 
+	describe('logistics.vehicle_plate', () => {
+		const withLogistics = (logistics: Record<string, unknown>) =>
+			donationPreDeclarationInputSchema.safeParse({ ...baseValid, logistics });
+
+		it('accepts a plate on self_dropoff, including a motorcycle', () => {
+			const car = withLogistics({
+				delivery_method: 'self_dropoff',
+				vehicle: 'car',
+				vehicle_plate: 'กข 1234'
+			});
+			expect(car.success && car.data.logistics.vehicle_plate).toBe('กข 1234');
+			expect(
+				withLogistics({
+					delivery_method: 'self_dropoff',
+					vehicle: 'motorcycle',
+					vehicle_plate: '1กก 9999 เชียงใหม่'
+				}).success
+			).toBe(true);
+		});
+
+		it('allows exactly 40 characters and rejects 41', () => {
+			const ok = withLogistics({
+				delivery_method: 'self_dropoff',
+				vehicle: 'car',
+				vehicle_plate: 'ก'.repeat(40)
+			});
+			expect(ok.success).toBe(true);
+			const tooLong = withLogistics({
+				delivery_method: 'self_dropoff',
+				vehicle: 'car',
+				vehicle_plate: 'ก'.repeat(41)
+			});
+			expect(tooLong.success).toBe(false);
+			if (!tooLong.success) {
+				expect(tooLong.error.issues[0]).toMatchObject({
+					message: 'ทะเบียนรถยาวเกินไป',
+					path: ['logistics', 'vehicle_plate']
+				});
+			}
+		});
+
+		it('trims, and a blank plate is omitted rather than rejected', () => {
+			const trimmed = withLogistics({
+				delivery_method: 'self_dropoff',
+				vehicle: 'car',
+				vehicle_plate: '  กข 1234  '
+			});
+			expect(trimmed.success && trimmed.data.logistics.vehicle_plate).toBe('กข 1234');
+			const blank = withLogistics({
+				delivery_method: 'self_dropoff',
+				vehicle: 'car',
+				vehicle_plate: '   '
+			});
+			expect(blank.success && JSON.stringify(blank.data.logistics)).not.toContain('vehicle_plate');
+		});
+
+		it('rejects a plate on parcel and on shelter_pickup', () => {
+			for (const delivery_method of ['parcel', 'shelter_pickup']) {
+				const r = withLogistics({ delivery_method, vehicle_plate: 'กข 1234' });
+				expect(r.success).toBe(false);
+				if (!r.success) {
+					expect(r.error.issues[0]!.path).toEqual(['logistics', 'vehicle_plate']);
+				}
+			}
+		});
+
+		it('keeps the existing vehicle rule: allowed on shelter_pickup, still refused on parcel', () => {
+			expect(withLogistics({ delivery_method: 'shelter_pickup', vehicle: 'truck' }).success).toBe(
+				true
+			);
+			expect(withLogistics({ delivery_method: 'parcel', vehicle: 'car' }).success).toBe(false);
+		});
+	});
+
 	it('passes validation without captchaToken (BFF enforces when enabled)', () => {
 		const noCaptcha = { ...baseValid };
 		delete (noCaptcha as Partial<typeof baseValid>).captchaToken;

@@ -35,6 +35,7 @@ export interface DonationPreDeclaration extends BaseDoc {
 	logistics?: {
 		delivery_method: 'self_dropoff' | 'parcel' | 'shelter_pickup';
 		vehicle?: 'motorcycle' | 'car' | 'pickup' | 'truck';
+		vehicle_plate?: string; // draft-donation-vehicle-plate — self_dropoff only, donor PII
 		slot?: { date: string; from: string; to: string };
 		eta?: string;
 		courier_tracking_no?: string | null;
@@ -42,6 +43,9 @@ export interface DonationPreDeclaration extends BaseDoc {
 	};
 	booking_ref?: string;
 }
+
+/** draft-donation-vehicle-plate — free text, so a donor can type the province in the same field. */
+export const VEHICLE_PLATE_MAX = 40;
 
 export const donationPreDeclarationInputSchema = z.object({
 	shelter_code: z.string().regex(/^[A-Za-z0-9_-]{1,20}$/, 'Invalid shelter code.'),
@@ -71,6 +75,13 @@ export const donationPreDeclarationInputSchema = z.object({
 		.object({
 			delivery_method: z.enum(['self_dropoff', 'parcel', 'shelter_pickup']),
 			vehicle: z.enum(['motorcycle', 'car', 'pickup', 'truck']).optional(),
+			// Blank after trim = not sent (draft-donation-vehicle-plate FR-1).
+			vehicle_plate: z
+				.string()
+				.trim()
+				.max(VEHICLE_PLATE_MAX, 'ทะเบียนรถยาวเกินไป')
+				.optional()
+				.transform((v) => v || undefined),
 			// The donor's window is re-checked against the shelter's published slot by the
 			// BFF, but only well-formed input may reach that lookup: `date` and `from` are
 			// interpolated into a CouchDB doc id, and `to` is compared against the doc.
@@ -95,6 +106,11 @@ export const donationPreDeclarationInputSchema = z.object({
 		.refine((l) => !(l.delivery_method === 'parcel' && l.vehicle), {
 			message: 'vehicle is only allowed for self_dropoff or shelter_pickup',
 			path: ['vehicle']
+		})
+		// draft-donation-vehicle-plate: the shelter's own vehicle collects a pickup, so a plate only fits self_dropoff.
+		.refine((l) => !(l.delivery_method !== 'self_dropoff' && l.vehicle_plate), {
+			message: 'vehicle_plate is only allowed for self_dropoff',
+			path: ['vehicle_plate']
 		}),
 	captchaToken: z.string().min(1).optional()
 });

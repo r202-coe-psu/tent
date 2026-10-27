@@ -19,6 +19,7 @@ export interface PublicDonationDoc extends Omit<Donation, 'donor'> {
 	logistics?: {
 		delivery_method: 'self_dropoff' | 'parcel' | 'shelter_pickup';
 		vehicle?: 'motorcycle' | 'car' | 'pickup' | 'truck';
+		vehicle_plate?: string;
 		slot?: { date: string; from: string; to: string };
 		eta?: string;
 		courier_tracking_no?: string | null;

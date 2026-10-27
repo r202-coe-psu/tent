@@ -109,6 +109,7 @@ export {
 // Domain — input schemas + factories + transitions + guards
 export {
 	donationPreDeclarationInputSchema,
+	VEHICLE_PLATE_MAX,
 	isDonationPreDeclaration,
 	donorCategoryFromCatalog,
 	PUBLIC_DONATION_CATEGORIES
