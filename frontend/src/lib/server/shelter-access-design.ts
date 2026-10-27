@@ -73,6 +73,20 @@ export const DAILY_SOP_ROLE_MANGO_INDEX = {
 	type: 'json' as const
 };
 
+/**
+ * Index behind the back-office "รับแล้ว" list (#821): received donations, newest first,
+ * `_id` as the tie-breaker. The route queries with `allow_fallback: false`, so a shelter
+ * DB without this index answers 503 instead of being scanned.
+ */
+export const DONATION_RECEIVED_MANGO_INDEX = {
+	index: {
+		fields: [{ type: 'desc' }, { status: 'desc' }, { received_at: 'desc' }, { _id: 'desc' }]
+	},
+	ddoc: 'donation-received-list',
+	name: 'donation-received-by-received-at',
+	type: 'json' as const
+};
+
 const DAILY_SOP_ROLE_VDU_CONTRACT = JSON.stringify({
 	version: DAILY_SOP_ROLE_QUESTION_VERSION,
 	roles: DAILY_SOP_ROLES.map((role) => ({

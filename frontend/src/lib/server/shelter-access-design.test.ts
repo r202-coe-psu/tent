@@ -1,5 +1,6 @@
 import { afterEach, describe, it, expect, vi } from 'vitest';
 import { SOP_RATIO_KEYS, SOP_RATIO_KIND } from '$lib/features/sop-ratios/server';
+import { buildReceivedFindBody } from '$lib/features/donations/server';
 import {
 	DAILY_SOP_ROLES,
 	canAssessRole,
@@ -17,6 +18,7 @@ import { planPublicConsent } from '$lib/features/public-register/server';
 import {
 	buildValidateDocUpdate,
 	DAILY_SOP_ROLE_MANGO_INDEX,
+	DONATION_RECEIVED_MANGO_INDEX,
 	KIOSK_LOOKUP_MANGO_INDEXES,
 	KIOSK_LOOKUP_WARMUP_SELECTORS,
 	PEOPLE_MANGO_INDEXES,
@@ -316,7 +318,8 @@ describe('buildValidateDocUpdate', () => {
 			TRANSFER_LEDGER_MANGO_INDEXES,
 			PEOPLE_MANGO_INDEXES,
 			REQUISITION_TICKET_MANGO_INDEXES,
-			[DAILY_SOP_ROLE_MANGO_INDEX]
+			[DAILY_SOP_ROLE_MANGO_INDEX],
+			[DONATION_RECEIVED_MANGO_INDEX]
 		];
 		const byName = new Map<string, string>();
 		for (const { name, index } of lists.flat()) {
@@ -324,6 +327,24 @@ describe('buildValidateDocUpdate', () => {
 			expect(byName.get(name) ?? definition, name).toBe(definition);
 			byName.set(name, definition);
 		}
+	});
+
+	it('defines the received-donations index the "รับแล้ว" list queries (#821)', () => {
+		expect(DONATION_RECEIVED_MANGO_INDEX).toEqual({
+			index: {
+				fields: [{ type: 'desc' }, { status: 'desc' }, { received_at: 'desc' }, { _id: 'desc' }]
+			},
+			ddoc: 'donation-received-list',
+			name: 'donation-received-by-received-at',
+			type: 'json'
+		});
+		// The route's use_index must name exactly what is deployed.
+		const body = buildReceivedFindBody();
+		expect(body.use_index).toEqual([
+			`_design/${DONATION_RECEIVED_MANGO_INDEX.ddoc}`,
+			DONATION_RECEIVED_MANGO_INDEX.name
+		]);
+		expect(body.sort).toEqual(DONATION_RECEIVED_MANGO_INDEX.index.fields);
 	});
 
 	it('keeps referral indexes separate and unchanged', () => {
