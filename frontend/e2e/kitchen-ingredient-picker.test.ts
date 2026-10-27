@@ -42,6 +42,8 @@ const KITCHEN: TestUser = {
 const ownedIds = new Set<string>();
 const contexts: BrowserContext[] = [];
 let session = '';
+let recipeId = '';
+let sessionId = '';
 
 function isOwned(doc: CouchDocument): boolean {
 	return ownedIds.has(doc._id) || doc.created_by === KITCHEN.name;
@@ -84,8 +86,6 @@ const NON_FOOD = `E2E น้ำยาล้างจาน ${RUN}`;
 const RECIPE = `E2E สูตรทดสอบวัตถุดิบ ${RUN}`;
 const SESSION_NAME = `E2E มื้อทดสอบวัตถุดิบ ${RUN}`;
 
-let sessionId = '';
-
 async function seedFixtures(): Promise<void> {
 	const activeFood = itemMaster(ACTIVE_FOOD, FOOD);
 	const nonFood = itemMaster(NON_FOOD, 'item_category:wash');
@@ -98,7 +98,7 @@ async function seedFixtures(): Promise<void> {
 	];
 	for (const doc of docs) await putDocument(SHELTER_DB, doc);
 
-	await putDocument(SHELTER_DB, {
+	const recipe = {
 		...envelope('recipe', 4),
 		label: RECIPE,
 		standard_portions: '1',
@@ -107,7 +107,9 @@ async function seedFixtures(): Promise<void> {
 			{ item_master_id: activeFood._id, quantity: '0.1', uom: 'kg' },
 			{ item_master_id: nonFood._id, quantity: '0.01', uom: 'kg' }
 		]
-	});
+	};
+	await putDocument(SHELTER_DB, recipe);
+	recipeId = recipe._id;
 
 	const sessionDoc = {
 		...envelope('meal_session', 1),
@@ -195,10 +197,10 @@ test.describe(
 			await page.goto(`/back-office/kitchen/production-board/${encodeURIComponent(sessionId)}`);
 
 			const recipeSelect = page.locator('select').filter({ hasText: '-- เลือกสูตรอาหาร (BOM) --' });
-			await expect(recipeSelect.locator('option', { hasText: RECIPE })).toHaveCount(1, {
+			await expect(recipeSelect.locator(`option[value="${recipeId}"]`)).toHaveCount(1, {
 				timeout: 20_000
 			});
-			await recipeSelect.selectOption({ label: `${RECIPE} (สูตรฐาน 1 จาน)` });
+			await recipeSelect.selectOption(recipeId);
 
 			const batchTable = page.getByRole('table').filter({ hasText: ACTIVE_FOOD });
 			await expect(batchTable.getByRole('cell', { name: ACTIVE_FOOD, exact: true })).toBeVisible();
