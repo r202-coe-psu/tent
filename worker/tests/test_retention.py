@@ -110,6 +110,34 @@ async def test_purge_releases_quota_for_timed_out_declared_buffer(db: None) -> N
     assert await DonationBuffer.get("donation:01TESTEXPIRED0000000001") is None
 
 
+async def test_purge_removes_the_vehicle_plate_with_the_buffer(db: None) -> None:
+    # the plate lives only in `logistics`; the buffer is purged whole.
+    now = datetime.now(UTC)
+    await DonationBuffer(
+        id="donation:01TESTPLATE00000000001",
+        shelter_code="SH001",
+        donor=DonorBuffer(name="Plate Donor", phone="0810000002"),
+        items_declared=[],
+        logistics={
+            "delivery_method": "self_dropoff",
+            "vehicle": "car",
+            "vehicle_plate": "กข 1234",
+        },
+        campaign_id=None,
+        booking_ref="DN-600002",
+        tracking_token="TX-SH001-PLATE0001",
+        tracking_token_hash="hash-plate-001",
+        status="received",
+        synced_to_couch=True,
+        created_at=now - timedelta(hours=80),
+        expires_at=now - timedelta(hours=8),
+    ).insert()
+
+    await purge_expired_buffers("test-run-plate")
+
+    assert await DonationBuffer.get("donation:01TESTPLATE00000000001") is None
+
+
 async def test_purge_does_not_release_quota_for_received_buffer(db: None) -> None:
     """A buffer that was actually received keeps its quota consumed even after its
     Mongo staging row ages out and gets garbage-collected."""

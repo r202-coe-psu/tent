@@ -154,6 +154,39 @@ async def test_create_donation_rejects_closed_shelter(
     assert response.json()["errors"][0]["error"] == "SHELTER_CLOSED"
 
 
+async def test_create_donation_passes_logistics_vehicle_plate_through(
+    client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    # logistics is a free-form dict — the plate is stored and read back as sent.
+    logistics = {
+        "delivery_method": "self_dropoff",
+        "vehicle": "car",
+        "vehicle_plate": "กข 1234 กรุงเทพมหานคร",
+    }
+    response = await client.post(
+        "/public/v1/donations",
+        headers=auth_headers,
+        json={
+            "shelter_code": "SH001",
+            "donor": {"name": "Donor", "phone": "0812345678"},
+            "items": [{"free_text": "น้ำดื่ม", "qty": 2, "unit": "pack"}],
+            "logistics": logistics,
+        },
+    )
+    assert response.status_code == 201
+    token = response.json()["tracking_token"]
+
+    buffer = await DonationBuffer.find_one(DonationBuffer.tracking_token_hash == sha256_hex(token))
+    assert buffer is not None
+    assert buffer.logistics == logistics
+
+    track = await client.get(f"/public/v1/donations/{token}", headers=auth_headers)
+    assert track.status_code == 200
+    # FastAPI hands the block to the BFF whole; stripping the plate from the donor-facing
+    # tracking response is the BFF allowlist's job.
+    assert track.json()["donation"]["logistics"] == logistics
+
+
 async def test_get_tracking_falls_back_to_buffer(
     client: AsyncClient, auth_headers: dict[str, str]
 ) -> None:
