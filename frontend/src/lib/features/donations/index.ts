@@ -51,6 +51,7 @@ export {
 	canCancelDonation,
 	canEditCourierTracking,
 	isTerminalDonationStatus,
+	closedAtIntakeMessage,
 	rejectedLineReasons
 } from './domain/tracking';
 // Domain — back-office booking list (#617)

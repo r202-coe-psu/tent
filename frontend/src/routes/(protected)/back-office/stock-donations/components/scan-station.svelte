@@ -46,7 +46,8 @@
 		type DonationRejectReasonCode,
 		type RejectDonationInput,
 		type ScanDonationView,
-		DonationPhotoStrip
+		DonationPhotoStrip,
+		closedAtIntakeMessage
 	} from '$lib/features/donations';
 	import { useSupplyItems } from '$lib/features/supply';
 	import {
@@ -548,7 +549,15 @@
 			}
 			const data = await res.json();
 			if (data.success && data.donation) {
-				donationDoc = data.donation as ScanDonationView;
+				const found = data.donation as ScanDonationView;
+				const closed = closedAtIntakeMessage(found.booking_ref || query.trim(), found.status);
+				if (closed) {
+					toast.error(closed);
+					scanState = 'idle';
+					if (fromList) onClose?.();
+					return;
+				}
+				donationDoc = found;
 				bookingRef = donationDoc?.booking_ref || '';
 				actionRef = donationDoc?.booking_ref || query.trim();
 				donorName = donationDoc?.donor?.name || 'ไม่ระบุชื่อ';
