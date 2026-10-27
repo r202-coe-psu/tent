@@ -21,6 +21,9 @@ class DonationBuffer(Document):
 	id: str = Field(alias="_id")
 	shelter_code: str
 	donor: DonorBuffer
+	# sha256 of normalize_phone(donor.phone) — the key the donor looks their bookings up
+	# by when they have lost the booking ref (CR-173). None on rows written before it.
+	donor_phone_hash: str | None = None
 	# each item may carry "reserved_qty" (qty_str) = amount actually locked into
 	# DonationNeedCounter.reserved_qty for that item (CR-045) — only present for
 	# items with both campaign_id + item_id; absent for free-text/no-campaign items,
@@ -55,4 +58,5 @@ class DonationBuffer(Document):
 			IndexModel([("synced_to_couch", 1)]),
 			IndexModel([("tracking_token_hash", 1)], unique=True),
 			IndexModel([("booking_ref", 1)], unique=True),
+			IndexModel([("donor_phone_hash", 1), ("created_at", -1)]),
 		]
