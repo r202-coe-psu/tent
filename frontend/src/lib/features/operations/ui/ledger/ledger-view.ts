@@ -78,6 +78,22 @@ export interface LedgerRow {
 	storage: string;
 	createdBy: string;
 	refId: string;
+	/** Deep link to the source document, when one exists (bulk return pool receives). */
+	refHref?: string;
+}
+
+const BULK_RETURN_POOL_REF_PREFIX = 'bulk_return_pool:';
+
+/**
+ * Link target for a ledger `ref_id` that points at a bulk return pool, else `undefined`.
+ * Mirrors `bulkReturnPoolHref` of the distribution feature; inlined here because this module is
+ * pure and must not import the distribution barrel (UI components, import cycle risk).
+ */
+export function ledgerRefHref(refId: string | null | undefined): string | undefined {
+	if (!refId || !refId.startsWith(BULK_RETURN_POOL_REF_PREFIX)) return undefined;
+	const poolId = refId.slice(BULK_RETURN_POOL_REF_PREFIX.length);
+	if (!poolId) return undefined;
+	return `/back-office/distribution?view=bulk_pools&pool=${encodeURIComponent(poolId)}`;
 }
 
 /** Name resolvers the row builder needs; kept as functions so this module stays pure. */
@@ -113,6 +129,8 @@ export function toLedgerRow(entry: StockLedger, lookup: LedgerLookup): LedgerRow
 		? [adjustReasonLabel, entry.note?.trim()].filter(Boolean).join(' · ')
 		: '';
 	const lot = entry.lot && isOut ? { ...entry.lot, note: undefined } : entry.lot;
+	// Only when the row's detail text is the ref id itself (adjust / destination win otherwise).
+	const refHref = adjustDetail || destination ? undefined : ledgerRefHref(entry.ref_id);
 	return {
 		id: entry._id,
 		occurredAt: entry.occurred_at,
@@ -130,7 +148,8 @@ export function toLedgerRow(entry: StockLedger, lookup: LedgerLookup): LedgerRow
 		lotNo: entry.lot?.lot_no ?? '',
 		storage: lotStorageName(lot, lookup.points) ?? '',
 		createdBy: entry.created_by,
-		refId: entry.ref_id ?? ''
+		refId: entry.ref_id ?? '',
+		...(refHref ? { refHref } : {})
 	};
 }
 

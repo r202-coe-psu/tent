@@ -18,7 +18,12 @@ import {
 	type RequisitionTicketRepository
 } from '../../data/food-supplies';
 import { assertCanPerformFrontlineDistribution, assertCanReceiveWarehouseReturns } from './auth';
-import { StockIntegrityError, TicketStateError, WorkflowValidationError } from './errors';
+import {
+	assertNoSkippedDocs,
+	StockIntegrityError,
+	TicketStateError,
+	WorkflowValidationError
+} from './errors';
 import { assertLedgerReplayBase } from './ledger-replay';
 import { resolveCanonicalItemUnits, type CanonicalUnitCatalogRepository } from './canonical-unit';
 
@@ -107,7 +112,9 @@ export async function calculateShiftReconciliation(
 		throw new TicketStateError(`Ticket ${ticketId} not found`);
 	}
 
-	const allLogs = await logRepo.list({ ticket_id: ticketId });
+	// Fail closed: a skipped malformed log of this ticket would silently understate the totals.
+	const { items: allLogs, skipped } = await logRepo.listWithSkipped({ ticket_id: ticketId });
+	assertNoSkippedDocs(skipped, 'shift reconciliation');
 	const activeLogs = allLogs.filter((l) => l.status !== 'voided');
 
 	let hasLeftoverOrReturns = false;

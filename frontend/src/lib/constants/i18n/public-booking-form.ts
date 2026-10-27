@@ -154,12 +154,7 @@ export const PUBLIC_BOOKING_FORM_I18N = {
 		submitting: 'กำลังบันทึกข้อมูล…',
 		submitConfirm: 'ยืนยันการลงทะเบียน',
 		submitOnsite: 'บันทึกลงทะเบียนทั้งครอบครัว',
-		unassignedDisclaimerTitle: 'เงื่อนไขการใช้งานระบบลงทะเบียนล่วงหน้า',
-		unassignedDisclaimerBody:
-			'ข้อมูลที่ท่านกรอกจะถูกเก็บในคิวกลางของระบบจนกว่าเจ้าหน้าที่ศูนย์พักพิงจะยืนยันการลงทะเบียน',
-		unassignedDisclaimerAckPrefix: 'ข้าพเจ้ารับทราบ',
-		unassignedDisclaimerAckLink: 'ข้อตกลงการใช้งาน',
-		unassignedDisclaimerAckSuffix: ' และยินยอมให้เก็บข้อมูลตามที่ระบุเพื่อการลงทะเบียนล่วงหน้า',
+		unassignedDisclaimerAck: 'เข้าใจว่าข้อมูลจะรอในคิวจนกว่าเจ้าหน้าที่ศูนย์จะยืนยัน',
 		unassignedDisclaimerRequired: 'กรุณายืนยันการรับทราบเงื่อนไขการใช้งานระบบก่อนส่งข้อมูล',
 		capacityAvailable: (available: number, capacity: number, unit: string) =>
 			`ว่าง ${available} / ${capacity} ${unit}`,
@@ -183,8 +178,7 @@ export const PUBLIC_BOOKING_FORM_I18N = {
 		shelterChangedToast: (name: string) => `เปลี่ยนศูนย์พักพิงเป็น "${name}" เรียบร้อยแล้ว`,
 		submitRegistration: 'ยืนยันการลงทะเบียน',
 		shelterSafetyTitle: 'เงื่อนไขและมาตรการความปลอดภัยของศูนย์พักพิง',
-		shelterSafetyAck:
-			'ข้าพเจ้ารับทราบและยินยอมปฏิบัติตามเงื่อนไขและมาตรการด้านความปลอดภัยของศูนย์พักพิงทุกประการ',
+		shelterSafetyAck: 'รับทราบและจะปฏิบัติตามกฎความปลอดภัยของศูนย์',
 		chooseShelterTitle: 'กรุณาเลือกศูนย์พักพิง',
 		chooseShelterDesc:
 			'เลือกศูนย์พักพิงที่ท่านต้องการเข้าพัก หรือเลือก "ไม่ระบุศูนย์พักพิง" เพื่อดำเนินการลงทะเบียน',
@@ -672,13 +666,8 @@ export const PUBLIC_BOOKING_FORM_I18N = {
 		submitting: 'Saving...',
 		submitConfirm: 'Confirm Registration',
 		submitOnsite: 'Save family registration',
-		unassignedDisclaimerTitle: 'System pre-registration terms',
-		unassignedDisclaimerBody:
-			'Your information is stored in the central queue until shelter staff confirms your registration.',
-		unassignedDisclaimerAckPrefix: 'I acknowledge the ',
-		unassignedDisclaimerAckLink: 'Terms of Use',
-		unassignedDisclaimerAckSuffix:
-			' and consent to storing this information for advance registration.',
+		unassignedDisclaimerAck:
+			'I understand my information waits in the queue until shelter staff confirm it.',
 		unassignedDisclaimerRequired: 'Please acknowledge the system terms before submitting.',
 		capacityAvailable: (available: number, capacity: number, unit: string) =>
 			`${available} / ${capacity} ${unit} free`,
@@ -701,8 +690,7 @@ export const PUBLIC_BOOKING_FORM_I18N = {
 		shelterChangedToast: (name: string) => `Shelter changed to "${name}"`,
 		submitRegistration: 'Submit registration',
 		shelterSafetyTitle: 'Shelter conditions and safety rules',
-		shelterSafetyAck:
-			"I acknowledge and agree to follow all of the shelter's conditions and safety rules.",
+		shelterSafetyAck: "I acknowledge and will follow the shelter's safety rules.",
 		chooseShelterTitle: 'Please choose a shelter',
 		chooseShelterDesc:
 			'Choose the shelter you want to stay at, or choose "No shelter selected" to continue registering.',

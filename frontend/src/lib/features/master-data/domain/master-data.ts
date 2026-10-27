@@ -81,7 +81,7 @@ export function isGlobalOnlyMasterType(type: MasterDataType): boolean {
 export const MASTER_DATA_TYPE_LABELS: Record<MasterDataType, string> = {
 	vulnerable_group: 'ประเภทกลุ่มเปราะบาง (Vulnerable Group)',
 	housing_type: 'ประเภทที่อยู่อาศัย (Housing Type)',
-	shelter_type: 'ประเภทศูนย์พักพิง (Shelter Type)',
+	shelter_type: 'ประเภทอาคาร (Building Type)',
 	volunteer_skills: 'ทักษะมาตรฐานจิตอาสา (Volunteer Skills)',
 	chronic_disease: 'โรคประจำตัว (Chronic Disease)',
 	allergy: 'อาการแพ้ (Allergy)'
@@ -113,8 +113,8 @@ export const MASTER_DATA_TYPE_META: Record<MasterDataType, MasterDataTypeMeta> =
 		]
 	},
 	shelter_type: {
-		shortTitle: 'ประเภทศูนย์',
-		title: 'ประเภทศูนย์พักพิง',
+		shortTitle: 'ประเภทอาคาร',
+		title: 'ประเภทอาคาร',
 		description: 'ประเภทอาคาร/สถานที่ของศูนย์ ที่ใช้ตอนตั้งค่าและแสดงผลศูนย์',
 		affectedForms: ['ฟอร์มข้อมูลศูนย์', 'นำเข้าศูนย์', 'รายการ/โปรไฟล์ศูนย์']
 	},

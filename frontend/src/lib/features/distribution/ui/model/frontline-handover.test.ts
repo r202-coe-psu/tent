@@ -212,33 +212,43 @@ describe('frontline-handover model helpers', () => {
 	});
 
 	describe('checkMenuMatchAdvisory', () => {
+		const infantMenu = { dietary: [], age_group: 'INFANT' };
 		const halalMenu = { dietary: ['HALAL'], age_group: 'ALL' };
 		const generalMenu = { dietary: [], age_group: 'ALL' };
 
 		it('flags a tagged menu for an evacuee without a shared tag', () => {
-			expect(checkMenuMatchAdvisory({ ...evacueeRecipient, menuTags: [] }, halalMenu)).toEqual({
+			expect(checkMenuMatchAdvisory({ ...evacueeRecipient, menuTags: [] }, infantMenu)).toEqual({
 				isMismatch: true,
-				menuTags: ['HALAL']
+				menuTags: ['INFANT']
 			});
 		});
 
 		it('passes an evacuee that shares a tag with the menu', () => {
-			const muslim = { ...evacueeRecipient, menuTags: ['HALAL' as const] };
-			expect(checkMenuMatchAdvisory(muslim, halalMenu).isMismatch).toBe(false);
+			const infant = { ...evacueeRecipient, menuTags: ['INFANT' as const] };
+			expect(checkMenuMatchAdvisory(infant, infantMenu).isMismatch).toBe(false);
+		});
+
+		it('passes anyone on a HALAL menu (#801)', () => {
+			expect(checkMenuMatchAdvisory({ ...evacueeRecipient, menuTags: [] }, halalMenu)).toEqual({
+				isMismatch: false,
+				menuTags: []
+			});
+			expect(checkMenuMatchAdvisory(outsideRecipient, halalMenu).isMismatch).toBe(false);
+			expect(checkMenuMatchAdvisory(volunteerRecipient, halalMenu).isMismatch).toBe(false);
 		});
 
 		it('flags tagged menus but not general ones for outside recipients', () => {
-			expect(checkMenuMatchAdvisory(outsideRecipient, halalMenu).isMismatch).toBe(true);
+			expect(checkMenuMatchAdvisory(outsideRecipient, infantMenu).isMismatch).toBe(true);
 			expect(checkMenuMatchAdvisory(outsideRecipient, generalMenu).isMismatch).toBe(false);
 		});
 
 		it('treats a volunteer as untagged: general menus pass, tagged menus flag', () => {
 			expect(checkMenuMatchAdvisory(volunteerRecipient, generalMenu).isMismatch).toBe(false);
-			expect(checkMenuMatchAdvisory(volunteerRecipient, halalMenu).isMismatch).toBe(true);
+			expect(checkMenuMatchAdvisory(volunteerRecipient, infantMenu).isMismatch).toBe(true);
 		});
 
 		it('stays silent without a recipient or a known menu', () => {
-			expect(checkMenuMatchAdvisory(null, halalMenu).isMismatch).toBe(false);
+			expect(checkMenuMatchAdvisory(null, infantMenu).isMismatch).toBe(false);
 			expect(checkMenuMatchAdvisory(evacueeRecipient, undefined).isMismatch).toBe(false);
 		});
 

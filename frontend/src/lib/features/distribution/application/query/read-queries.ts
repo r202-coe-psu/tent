@@ -20,6 +20,16 @@ import { calculateShiftReconciliation } from '../food-supplies/reconciliation-wo
 import { resolveDispatchedLotExpiry } from '../food-supplies/lot-expiry';
 import { operationsRepository } from '$lib/features/operations';
 import { getReturnOperationState } from '../food-supplies/return-workflow';
+import {
+	getBulkReturnPoolOverview,
+	getBulkReturnPoolTimeline,
+	listBulkReturnPoolAppliedLoanRefs,
+	listBulkReturnPoolClosedLoanRefs,
+	listReturnerOutstandingLoans,
+	listBulkReturnSkippedDocs,
+	type BulkReturnPoolOverviewQuery
+} from '../food-supplies/bulk-return-pool-v3-read';
+import { listBulkReturnPoolMissedLoanRefs } from '../food-supplies/bulk-return-pool-v3-missed-loans';
 import type {
 	RequisitionTicketListFilter,
 	DistributionLogListFilter,
@@ -146,6 +156,164 @@ export const useBulkReturnPool = (
 		return {
 			queryKey: distributionKeys.bulkPool(shelterCode, id),
 			queryFn: () => bulkReturnPoolRepository(shelterCode).get(id),
+			enabled: isEnabled
+		};
+	});
+
+/** Reads the v3 bulk return pool overview (pools with entries, item totals, late entries). */
+export const useBulkReturnPoolOverview = (
+	options?: MaybeGetter<BulkReturnPoolOverviewQuery | undefined>,
+	shelterCodeGetter?: MaybeGetter<string | undefined>,
+	enabled: MaybeGetter<boolean> = true
+) =>
+	createQuery(() => {
+		const shelterCode = resolveShelterCode(toValue(shelterCodeGetter));
+		const resolvedOptions = toValue(options);
+		const isEnabled = Boolean(toValue(enabled) && shelterCode);
+		return {
+			queryKey: distributionKeys.bulkPoolsV3(shelterCode, resolvedOptions),
+			queryFn: () => {
+				const ctx = resolveAuthenticatedAuthorContext(shelterCode);
+				return getBulkReturnPoolOverview(resolvedOptions ?? {}, ctx);
+			},
+			enabled: isEnabled
+		};
+	});
+
+/**
+ * Reads the loan-drift warning refs of a pool: refs of its live entries whose loan was closed /
+ * has too little outstanding / is missing, so they were not applied (derived at read time).
+ */
+export const useBulkReturnPoolClosedLoanRefs = (
+	poolId: MaybeGetter<string | null | undefined>,
+	shelterCodeGetter?: MaybeGetter<string | undefined>,
+	enabled: MaybeGetter<boolean> = true
+) =>
+	createQuery(() => {
+		const id = toValue(poolId);
+		const shelterCode = resolveShelterCode(toValue(shelterCodeGetter));
+		const isEnabled = Boolean(toValue(enabled) && shelterCode && id);
+		return {
+			queryKey: distributionKeys.bulkPoolClosedLoanRefs(shelterCode, id ?? ''),
+			queryFn: () => {
+				const ctx = resolveAuthenticatedAuthorContext(shelterCode);
+				return listBulkReturnPoolClosedLoanRefs(id!, ctx);
+			},
+			enabled: isEnabled
+		};
+	});
+
+/**
+ * Reads the refs of a SUBMITTED / RECEIVED pool's snapshot entries that were planned but never
+ * applied to a loan that can still take them (fence timeout); empty for an OPEN pool.
+ */
+export const useBulkReturnPoolMissedLoanRefs = (
+	poolId: MaybeGetter<string | null | undefined>,
+	shelterCodeGetter?: MaybeGetter<string | undefined>,
+	enabled: MaybeGetter<boolean> = true
+) =>
+	createQuery(() => {
+		const id = toValue(poolId);
+		const shelterCode = resolveShelterCode(toValue(shelterCodeGetter));
+		const isEnabled = Boolean(toValue(enabled) && shelterCode && id);
+		return {
+			queryKey: distributionKeys.bulkPoolMissedLoanRefs(shelterCode, id ?? ''),
+			queryFn: () => {
+				const ctx = resolveAuthenticatedAuthorContext(shelterCode);
+				return listBulkReturnPoolMissedLoanRefs(id!, ctx);
+			},
+			enabled: isEnabled
+		};
+	});
+
+/**
+ * Reads the refs of a pool's live entries that are actually applied on their loan
+ * (`applied_bulk_entry_ids`); derived at read time.
+ */
+export const useBulkReturnPoolAppliedLoanRefs = (
+	poolId: MaybeGetter<string | null | undefined>,
+	shelterCodeGetter?: MaybeGetter<string | undefined>,
+	enabled: MaybeGetter<boolean> = true
+) =>
+	createQuery(() => {
+		const id = toValue(poolId);
+		const shelterCode = resolveShelterCode(toValue(shelterCodeGetter));
+		const isEnabled = Boolean(toValue(enabled) && shelterCode && id);
+		return {
+			queryKey: distributionKeys.bulkPoolAppliedLoanRefs(shelterCode, id ?? ''),
+			queryFn: () => {
+				const ctx = resolveAuthenticatedAuthorContext(shelterCode);
+				return listBulkReturnPoolAppliedLoanRefs(id!, ctx);
+			},
+			enabled: isEnabled
+		};
+	});
+
+/** Reads the chronological timeline of one bulk return pool (events + skipped docs). */
+export const useBulkReturnPoolTimeline = (
+	poolId: MaybeGetter<string | null | undefined>,
+	shelterCodeGetter?: MaybeGetter<string | undefined>,
+	enabled: MaybeGetter<boolean> = true
+) =>
+	createQuery(() => {
+		const id = toValue(poolId);
+		const shelterCode = resolveShelterCode(toValue(shelterCodeGetter));
+		const isEnabled = Boolean(toValue(enabled) && shelterCode && id);
+		return {
+			queryKey: distributionKeys.bulkPoolTimeline(shelterCode, id ?? ''),
+			queryFn: () => {
+				const ctx = resolveAuthenticatedAuthorContext(shelterCode);
+				return getBulkReturnPoolTimeline(id!, ctx);
+			},
+			enabled: isEnabled
+		};
+	});
+
+/** Reads the outstanding returnable loans of an evacuee/volunteer returner (all items, oldest first). */
+export const useReturnerOutstandingLoans = (
+	returnerId: MaybeGetter<string | null | undefined>,
+	shelterCodeGetter?: MaybeGetter<string | undefined>,
+	enabled: MaybeGetter<boolean> = true
+) =>
+	createQuery(() => {
+		const id = toValue(returnerId);
+		const shelterCode = resolveShelterCode(toValue(shelterCodeGetter));
+		const isEnabled = Boolean(
+			toValue(enabled) &&
+			shelterCode &&
+			id &&
+			(id.startsWith('evacuee:') || id.startsWith('volunteer:'))
+		);
+		return {
+			queryKey: distributionKeys.returnerOutstandingLoans(shelterCode, id ?? ''),
+			queryFn: () => {
+				const ctx = resolveAuthenticatedAuthorContext(shelterCode);
+				return listReturnerOutstandingLoans(id!, ctx);
+			},
+			enabled: isEnabled
+		};
+	});
+
+/**
+ * Reads the malformed docs the bulk return reads (pool overview, and with `returnerId` that
+ * returner's loans) left out, so the UI can warn that the list is incomplete.
+ */
+export const useBulkReturnSkippedDocs = (
+	returnerId?: MaybeGetter<string | null | undefined>,
+	shelterCodeGetter?: MaybeGetter<string | undefined>,
+	enabled: MaybeGetter<boolean> = true
+) =>
+	createQuery(() => {
+		const id = toValue(returnerId) || undefined;
+		const shelterCode = resolveShelterCode(toValue(shelterCodeGetter));
+		const validReturner = !id || id.startsWith('evacuee:') || id.startsWith('volunteer:');
+		const isEnabled = Boolean(toValue(enabled) && shelterCode && validReturner);
+		return {
+			queryKey: distributionKeys.bulkReturnSkippedDocs(shelterCode, id),
+			queryFn: () => {
+				const ctx = resolveAuthenticatedAuthorContext(shelterCode);
+				return listBulkReturnSkippedDocs({ returnerId: id }, ctx);
+			},
 			enabled: isEnabled
 		};
 	});
