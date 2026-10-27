@@ -72,7 +72,6 @@ export {
 	isDonation,
 	isDonationCampaign,
 	isDonationSlot,
-	mapNeedItemHeuristic,
 	publicItemAggregate,
 	type StockLedgerInput,
 	type ReceiveInput,

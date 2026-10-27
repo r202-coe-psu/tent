@@ -1,4 +1,4 @@
-import { listStoragePoints, useShelter } from '$lib/features/shelters';
+import { listStoragePoints, subStorageTypeLabels, useShelter } from '$lib/features/shelters';
 import type { StoragePointRef } from '../domain/lot-storage';
 
 /**
@@ -10,7 +10,11 @@ import type { StoragePointRef } from '../domain/lot-storage';
 export function useStoragePoints(shelterCode: () => string) {
 	const shelterQuery = useShelter(shelterCode);
 	const points = $derived<StoragePointRef[]>(
-		listStoragePoints(shelterQuery.data).map((p) => ({ id: p.id, name: p.name.trim() }))
+		listStoragePoints(shelterQuery.data).map((p) => ({
+			id: p.id,
+			name: p.name.trim(),
+			typeLabels: subStorageTypeLabels(p.types ?? [])
+		}))
 	);
 	return {
 		get points() {

@@ -277,29 +277,61 @@ describe('commonAreasSchema', () => {
 
 	it('rejects empty sub_storage name', () => {
 		expect(() =>
-			commonAreasSchema.parse({ sub_storage: [{ id: 's1', name: '', type: 'general' }] })
+			commonAreasSchema.parse({ sub_storage: [{ id: 's1', name: '', types: ['general'] }] })
 		).toThrow();
 	});
 
-	it('accepts sub_storage items', () => {
+	it('accepts sub_storage items (CR-199 types[])', () => {
+		const c = commonAreasSchema.parse({
+			sub_storage: [{ id: 's1', name: 'อาหารแห้ง', types: ['food_dry', 'drinking_water'] }]
+		});
+		expect(c.sub_storage?.[0]?.types).toEqual(['food_dry', 'drinking_water']);
+	});
+
+	it('accepts legacy single `type` and migrates it to `types` (CR-199 read-time fallback)', () => {
 		const c = commonAreasSchema.parse({
 			sub_storage: [{ id: 's1', name: 'อาหารแห้ง', type: 'food_dry' }]
 		});
-		expect(c.sub_storage?.[0]?.type).toBe('food_dry');
+		expect(c.sub_storage?.[0]?.types).toEqual(['food_dry']);
+		expect((c.sub_storage?.[0] as Record<string, unknown>).type).toBeUndefined();
 	});
 });
 
 describe('subStorageItemSchema', () => {
 	it('rejects empty name', () => {
-		expect(() => subStorageItemSchema.parse({ id: 's1', name: '', type: 'general' })).toThrow();
+		expect(() => subStorageItemSchema.parse({ id: 's1', name: '', types: ['general'] })).toThrow();
 	});
 
 	it('requires a non-empty id (schema_v 7 — ledger lots reference it)', () => {
-		expect(() => subStorageItemSchema.parse({ name: 'คลังยา', type: 'general' })).toThrow();
+		expect(() => subStorageItemSchema.parse({ name: 'คลังยา', types: ['general'] })).toThrow();
 		expect(() =>
-			subStorageItemSchema.parse({ id: '  ', name: 'คลังยา', type: 'general' })
+			subStorageItemSchema.parse({ id: '  ', name: 'คลังยา', types: ['general'] })
 		).toThrow();
-		expect(subStorageItemSchema.parse({ id: 's1', name: 'คลังยา', type: 'general' }).id).toBe('s1');
+		expect(subStorageItemSchema.parse({ id: 's1', name: 'คลังยา', types: ['general'] }).id).toBe(
+			's1'
+		);
+	});
+
+	it('requires at least one type (CR-199)', () => {
+		expect(() => subStorageItemSchema.parse({ id: 's1', name: 'คลังยา', types: [] })).toThrow();
+	});
+
+	it('accepts multiple types per storage point (CR-199)', () => {
+		const parsed = subStorageItemSchema.parse({
+			id: 's1',
+			name: 'ห้องเก็บของกลาง',
+			types: ['food_dry', 'drinking_water', 'medical_supplies']
+		});
+		expect(parsed.types).toEqual(['food_dry', 'drinking_water', 'medical_supplies']);
+	});
+
+	it('migrates a legacy single `type` to `types: [type]`', () => {
+		const parsed = subStorageItemSchema.parse({
+			id: 's1',
+			name: 'คลังยา',
+			type: 'medical_supplies'
+		});
+		expect(parsed.types).toEqual(['medical_supplies']);
 	});
 });
 
@@ -433,7 +465,7 @@ describe('createShelterSchema / updateShelterSchema', () => {
 				central_kitchen: true,
 				helipad: false,
 				parking_capacity: 30,
-				sub_storage: [{ id: 's1', name: 'อาหารแห้ง', type: 'food_dry' }]
+				sub_storage: [{ id: 's1', name: 'อาหารแห้ง', types: ['food_dry'] }]
 			},
 			zones: [{ code: 'Z1', name: 'โซน A', capacity: 100, type: 'general' }]
 		});
@@ -931,7 +963,7 @@ describe('CR-023 — migrate v3 → v4 default-fill', () => {
 		expect(m.risk?.secondary_muster_point).toBeNull();
 		expect(m.zones?.[0].area_m2).toBeNull();
 		expect(m.common_areas?.sub_storage).toEqual([
-			{ id: 'legacy-0', name: 'S', type: 'general', area_m2: null }
+			{ id: 'legacy-0', name: 'S', types: ['general'], area_m2: null }
 		]);
 	});
 });
@@ -1102,9 +1134,9 @@ describe('draft-shelter-storage-points — migrate v6 → v7 sub_storage id back
 		updated_at: '2024-01-01T00:00:00Z'
 	} as unknown as ShelterMasterV2;
 
-	it('bumps a v6 doc to v7 and fills only the missing ids with legacy-<index>', () => {
+	it('bumps a v6 doc to current and fills only the missing ids with legacy-<index>', () => {
 		const m = migrateShelterV2ToCurrent(v6doc);
-		expect(m.schema_v).toBe(7);
+		expect(m.schema_v).toBe(SHELTER_MASTER_SCHEMA_V);
 		expect(m.common_areas?.sub_storage?.map((p) => p.id)).toEqual([
 			'01J0000000000000000000000A',
 			'legacy-1'
@@ -1134,5 +1166,55 @@ describe('draft-shelter-storage-points — migrate v6 → v7 sub_storage id back
 		const m = migrateShelterV2ToCurrent(bare);
 		expect(m.schema_v).toBe(SHELTER_MASTER_SCHEMA_V);
 		expect(m.common_areas).toBeUndefined();
+	});
+});
+
+describe('CR-199 — migrate v7 → v8 sub_storage type → types[]', () => {
+	const v7doc = {
+		_id: 'shelter:x',
+		type: 'shelter' as const,
+		schema_v: 7,
+		code: 'SH001',
+		name: 'X',
+		site_kind: 'evacuation_center' as const,
+		operation_status: 'standby' as const,
+		capacity: 10,
+		zones: [],
+		food_distribution_points: [],
+		common_areas: {
+			sub_storage: [
+				{ id: 's1', name: 'คลังยา', type: 'medical_supplies', area_m2: null },
+				{ id: 's2', name: 'ห้องเก็บของกลาง', type: 'food_dry' }
+			]
+		},
+		created_at: '2024-01-01T00:00:00Z',
+		updated_at: '2024-01-01T00:00:00Z'
+	} as unknown as ShelterMasterV2;
+
+	it('bumps a v7 doc to current and derives `types: [type]` deterministically', () => {
+		const m = migrateShelterV2ToCurrent(v7doc);
+		expect(m.schema_v).toBe(SHELTER_MASTER_SCHEMA_V);
+		expect(m.common_areas?.sub_storage).toEqual([
+			{ id: 's1', name: 'คลังยา', types: ['medical_supplies'], area_m2: null },
+			{ id: 's2', name: 'ห้องเก็บของกลาง', types: ['food_dry'] }
+		]);
+	});
+
+	it('back-fills a doc already stamped current that still carries legacy `type`', () => {
+		const stamped = { ...v7doc, schema_v: SHELTER_MASTER_SCHEMA_V } as unknown as ShelterMasterV2;
+		const m = migrateShelterV2ToCurrent(stamped);
+		expect(m).not.toBe(stamped);
+		expect(m.common_areas?.sub_storage?.[0]?.types).toEqual(['medical_supplies']);
+	});
+
+	it('returns the same object once every item already carries `types` (nothing to write)', () => {
+		const first = migrateShelterV2ToCurrent(v7doc);
+		expect(migrateShelterV2ToCurrent(first)).toBe(first);
+	});
+
+	it('is a no-op key remap — the 4 pre-existing enum keys are unchanged', () => {
+		const m = migrateShelterV2ToCurrent(v7doc);
+		const keys = (m.common_areas?.sub_storage ?? []).flatMap((p) => p.types);
+		expect(keys).toEqual(['medical_supplies', 'food_dry']);
 	});
 });

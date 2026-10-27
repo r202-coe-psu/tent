@@ -21,6 +21,20 @@ describe('normalizeHeader', () => {
 		expect(normalizeHeader('จังหวัด')).toBe('จังหวัด');
 	});
 
+	it('reads the retired shelter-type header as the current ประเภทอาคาร column', () => {
+		expect(normalizeHeader('ประเภทศูนย์พักพิง')).toBe('ประเภทอาคาร');
+		expect(normalizeHeader('ประเภทศูนย์พักพิง *')).toBe('ประเภทอาคาร');
+	});
+
+	it('keeps the current shelter-type header as is, with or without the marker', () => {
+		expect(normalizeHeader('ประเภทอาคาร')).toBe('ประเภทอาคาร');
+		expect(normalizeHeader('ประเภทอาคาร *')).toBe('ประเภทอาคาร');
+	});
+
+	it('does not mistake Object.prototype keys for retired headers', () => {
+		expect(normalizeHeader('constructor')).toBe('constructor');
+	});
+
 	it('reduces a standalone marker cell to an empty (ignored) header', () => {
 		expect(normalizeHeader('*')).toBe('');
 	});

@@ -25,7 +25,7 @@ type Case = {
 	name: string;
 	why: string;
 	campaigns: { _id: string; needs: CampaignNeed[] }[];
-	donations: { _id: string; campaign_id: string; status: string; items: unknown[] }[];
+	donations: { _id: string; campaign_id: string | null; status: string; items: unknown[] }[];
 	stock_ledgers: { item_id: string; qty: string; reason: string; ref_id: string | null }[];
 	expected_remaining: Record<string, number>;
 	expected_per_campaign: Record<string, Record<string, number>>;
@@ -93,12 +93,9 @@ describe('T-22 remaining-need parity', () => {
 
 		it('matches the back-office board, which is the reference for this rule', () => {
 			// deriveNeedAvailability got the warehouse term first (CR-034); the donation
-			// side is the copy that fell behind. Compare what each side would actually
-			// offer a donor, not the raw fields: the back-office keeps qty_remaining at
-			// face value and carries a separate is_cut_off flag (openNeeds drops those
-			// rows), while this side folds the cut-off into a zero. Same answer, different
-			// shape. Ours clamps for the comparison since negatives never reach a donor.
-			// Cases stay in the common domain — see the fixtures README.
+			// side is the copy that fell behind. Both sides report a closed need as 0
+			// remaining (#689). Ours clamps for the comparison since negatives never
+			// reach a donor.
 			const campaigns = asCampaigns(testCase);
 			const donations = asDonations(testCase);
 			const ledgers = asLedgers(testCase);
@@ -107,7 +104,7 @@ describe('T-22 remaining-need parity', () => {
 			for (const campaign of campaigns) {
 				for (const availability of deriveNeedAvailability(campaign, donations, ledgers)) {
 					const ours = Number(campaignRemaining.get(campaign._id)?.get(availability.item_id));
-					const theirs = availability.is_cut_off ? 0 : Number(availability.qty_remaining);
+					const theirs = Number(availability.qty_remaining);
 					expect(Math.max(0, ours)).toBe(theirs);
 				}
 			}
