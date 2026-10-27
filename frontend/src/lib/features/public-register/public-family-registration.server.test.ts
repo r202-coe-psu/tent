@@ -217,7 +217,7 @@ describe('executePublicFamilyRegistration (#254)', () => {
 	it('writes each member’s consent bound to the registrant (FR-42)', async () => {
 		const result = await executePublicFamilyRegistration(sampleInput(), {
 			shelterCode: 'SH001',
-			consent: webConsentBody(2, { guardian_for: ['m1'] })
+			consent: webConsentBody(2)
 		});
 
 		const [head, child] = result.evacuees;
@@ -233,18 +233,21 @@ describe('executePublicFamilyRegistration (#254)', () => {
 			given_by: 'self',
 			giver_evacuee_id: null
 		});
-		expect(child.consent).toMatchObject({ given_by: 'guardian', giver_evacuee_id: head._id });
+		expect(child.consent).toMatchObject({
+			given_by: 'household_member',
+			giver_evacuee_id: head._id
+		});
 		expect(head.privacy.search_excluded).toBe(false);
 	});
 
-	it('hides basic-mode members from search (FR-31)', async () => {
+	it('hides members from search when C3 is unticked (FR-30)', async () => {
 		const result = await executePublicFamilyRegistration(sampleInput(), {
 			shelterCode: 'SH001',
-			consent: webConsentBody(2, { mode: 'basic' })
+			consent: webConsentBody(2, { health: false, search_visible: false })
 		});
 
 		for (const evacuee of result.evacuees) {
-			expect(evacuee.consent).toMatchObject({ mode: 'basic', health: false, channel: 'web' });
+			expect(evacuee.consent).toMatchObject({ mode: 'full', health: false, channel: 'web' });
 			expect(evacuee.privacy.search_excluded).toBe(true);
 		}
 	});
