@@ -13,6 +13,7 @@
 	import NeedsBoardAdmin from '$lib/components/needs-board-admin.svelte';
 	import PendingReviewBoard from '$lib/components/pending-review-board.svelte';
 	import PendingReviewDetail from '$lib/components/pending-review-detail.svelte';
+	import ReceivedDonationsList from './components/received-donations-list.svelte';
 	import ScanStation from './components/scan-station.svelte';
 	import CreateCampaignForm from './components/create-campaign-form.svelte';
 	import EditCampaignForm from './components/edit-campaign-form.svelte';
@@ -20,6 +21,7 @@
 	import DonationSlotsManager from './components/donation-slots-manager.svelte';
 	import { useDonationNeedsBoard, type NeedItem } from '$lib/features/operations';
 	import { useQueryClient } from '@tanstack/svelte-query';
+	import { resolveShelterCode } from '$lib/db/shelter';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import User from '@lucide/svelte/icons/user';
 	import {
@@ -29,6 +31,7 @@
 		parseQueueFilter,
 		queueGroupOf,
 		useDonationQueue,
+		useReceivedDonations,
 		type DonationQueueFilter,
 		type LineReviewDecision,
 		type PendingDonationRow,
@@ -96,6 +99,13 @@
 	const pendingCount = $derived(
 		queueRows.filter((row) => queueGroupOf(row.status) === 'pending').length
 	);
+	// "รับแล้ว" (#821) — fetched only while that filter is open, for the shelter the page
+	// works in. Never part of `queueRows`, so "ทั้งหมด" and the badge stay the open queue.
+	const receivedQuery = useReceivedDonations(
+		() => resolveShelterCode() ?? '',
+		() => activeSubTab === 'list' && queueFilter === 'received'
+	);
+	const receivedRows = $derived(receivedQuery.data?.pages.flatMap((p) => p.donations) ?? []);
 	const refreshQueue = () => queryClient.invalidateQueries({ queryKey: donationQueueKeys.all });
 
 	/** What the list tab shows: the list, a booking under review, or the counter. */
@@ -104,6 +114,10 @@
 	let pendingActionSaving = $state(false);
 
 	function openRow(row: PendingDonationRow) {
+		if (row.status === 'received') {
+			selectedPendingRequest = row;
+			return;
+		}
 		if (queueGroupOf(row.status) === 'pending') {
 			selectedPendingRequest = row;
 			return;
@@ -322,6 +336,7 @@
 				<PendingReviewDetail
 					request={selectedPendingRequest}
 					saving={pendingActionSaving}
+					readonly={selectedPendingRequest.status === 'received'}
 					onBack={() => (selectedPendingRequest = null)}
 					onApprove={handleApprovePending}
 					onReject={handleRejectPending}
@@ -336,6 +351,18 @@
 					bind:filter={() => queueFilter, setQueueFilter}
 					onViewDetails={openRow}
 				>
+					{#snippet received()}
+						<ReceivedDonationsList
+							rows={receivedRows}
+							loading={receivedQuery.isPending}
+							error={receivedQuery.error?.message ?? null}
+							hasMore={receivedQuery.hasNextPage}
+							loadingMore={receivedQuery.isFetchingNextPage}
+							onLoadMore={() => receivedQuery.fetchNextPage()}
+							onRetry={() => receivedQuery.refetch()}
+							onViewDetails={openRow}
+						/>
+					{/snippet}
 					{#snippet actions()}
 						<Button
 							type="button"
