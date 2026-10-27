@@ -2561,7 +2561,7 @@ closed   → (terminal)
 ## 6. DB `_users` (CouchDB system DB — central-managed)
 
 CouchDB `_users` DB ไม่ใช่ operational doc ธรรมดา — ไม่มี common envelope; managed ผ่าน `/api/v1/users`
-(ห่อ CouchDB admin API, central เท่านั้น) เอกสารนี้ระบุเฉพาะ field ที่โครงการ extend เพิ่มเข้า `_users` doc ตาม **CR-093 / CR-104 / CR-105 (Compound Scoped Roles, Profile Metadata, Security Questions, and Passphrase Reset)** และ **CR-124 (Staff Google step-up MFA)**
+(ห่อ CouchDB admin API, central เท่านั้น) เอกสารนี้ระบุเฉพาะ field ที่โครงการ extend เพิ่มเข้า `_users` doc ตาม **CR-093 / CR-104 / CR-105 (Compound Scoped Roles, Profile Metadata, Security Questions, and Passphrase Reset)**, **CR-124 (Staff Google step-up MFA)** และ **CR-193 (Account Contact Phone Accepts Landline)**
 
 | Field | ชนิด | req | หมายเหตุ |
 | --- | --- | --- | --- |
@@ -2572,7 +2572,7 @@ CouchDB `_users` DB ไม่ใช่ operational doc ธรรมดา — �
 | `personnel_type` | enum(`staff`,`volunteer`) | req | แยกประเภท: `'staff'` (เจ้าหน้าที่ประจำ) หรือ `'volunteer'` (อาสาช่วยงานระบบ Staff-Capable ที่ได้รับสิทธิ์) |
 | `organization` | str\|null | opt | หน่วยงานต้นสังกัด — optional สำหรับทั้ง staff และ volunteer |
 | `position` | str\|null | opt | ตำแหน่งหน้าที่ / วิชาชีพ (เช่น พยาบาลวิชาชีพ, เจ้าหน้าที่ป้องกันฯ) |
-| `phone` | str\|null | opt | เบอร์โทรศัพท์ติดต่อ 10 หลัก — optional; ถ้ามีค่าใช้เป็น alternate login identifier ได้ (unique ข้ามบัญชี; ห้ามชน `name` ของบัญชีอื่น) |
+| `phone` | str\|null | opt | มือถือ 10 หลักหรือเบอร์บ้าน 9 หลัก — optional; เฉพาะมือถือใช้เป็น alternate login identifier ได้ (unique ข้ามบัญชี; ห้ามชน `name` ของบัญชีอื่น) ส่วนเบอร์บ้านใช้ร่วมกันได้หลายบัญชี (CR-193) |
 | `email` | str\|null | opt | อีเมลติดต่อ |
 | `notes` | str\|null | opt | หมายเหตุเพิ่มเติม |
 | `volunteer_id` | str\|null | opt | ลิงก์สองทางไปยัง `volunteer:{ulid}` |

@@ -43,7 +43,7 @@ affects:
   - `personnel_type`: `'staff'` (เจ้าหน้าที่ประจำ) หรือ `'volunteer'` (อาสาสมัครช่วยงานระบบ)
   - `organization`: หน่วยงานต้นสังกัด (**Required** สำหรับ staff, **Optional** สำหรับ volunteer)
   - `position`: ตำแหน่ง/หน้าที่/วิชาชีพ (Optional)
-  - `phone`: เบอร์โทรศัพท์ติดต่อ (Required 10 หลัก)
+  - `phone`: เบอร์โทรศัพท์ติดต่อ (Required 10 หลัก — ขยายให้รับเบอร์บ้าน 9 หลักได้ตาม [CR-193](CR-193-account-contact-phone.md))
   - `email`: อีเมลติดต่อ (Optional)
   - `notes`: หมายเหตุเพิ่มเติม (Optional)
   - `duty_window`: กำหนดช่วงเวลาปฏิบัติหน้าที่ `{ start_ts: ISO, end_ts: ISO }` สำหรับอาสาสมัคร

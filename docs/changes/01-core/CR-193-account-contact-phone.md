@@ -1,10 +1,11 @@
 ---
-id: draft
+id: CR-193
 title: บัญชีผู้ใช้เก็บเบอร์บ้าน 9 หลักเป็นเบอร์ติดต่อได้ (login ด้วยเบอร์ยังเป็นมือถือ 10 หลักเท่านั้น)
-status: proposed
+status: approved
 date: 2026-10-27
 requested_by: PM (แชทกับผู้รับงาน 2026-10-26) + review ของ @Jackyzaz ใน PR #890 (changes requested 2026-10-26)
-decided_by: project owner
+decided_by: Soravit Sukkarn (Team Lead)
+decision_date: 2026-10-27
 layer: volatile
 affects:
   - docs/data/schema.md §`_users` แถว `phone`
@@ -16,7 +17,7 @@ affects:
   - ไม่ bump `schema_v` (`_users.phone` เป็น `str|null` อยู่แล้ว)
 ---
 
-# draft-account-contact-phone — บัญชีผู้ใช้เก็บเบอร์บ้าน 9 หลักได้
+# CR-193 — บัญชีผู้ใช้เก็บเบอร์บ้าน 9 หลักได้
 
 > **สรุป (TL;DR):**
 >
@@ -59,4 +60,5 @@ affects:
 ## Decision log
 
 - 2026-10-26 — PM ขอให้บันทึกเบอร์ลงบัญชี และ @Jackyzaz ขอใน review ของ PR #890
-- 2026-10-27 — proposed ใน PR #890 รอ project owner approve
+- 2026-10-27 — proposed ใน PR #890
+- 2026-10-27 — approved โดย Soravit Sukkarn (Team Lead) เป็น CR-193
