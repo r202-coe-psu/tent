@@ -174,10 +174,27 @@ describe('public consent on the unassigned path (FR-42)', () => {
 		expect(parsed.success).toBe(false);
 	});
 
-	it('rejects the registrant as a guardian-for member', () => {
+	it('rejects any guardian-for member (D21)', () => {
 		const parsed = publicUnassignedRegistrationRequestSchema.safeParse({
 			...sampleUnified(),
-			...webConsentBody(1, { guardian_for: ['m0'] })
+			...webConsentBody(2, { guardian_for: ['m1'] })
+		});
+		expect(parsed.success).toBe(false);
+	});
+
+	it('rejects a basic-mode decision (D17)', () => {
+		const body = webConsentBody(1);
+		const parsed = publicUnassignedRegistrationRequestSchema.safeParse({
+			...sampleUnified(),
+			consent: {
+				mode: 'basic',
+				guardian_for: [],
+				verbal: false,
+				ref: body.consent.ref,
+				given_at: body.consent.given_at,
+				notice_version: body.consent.notice_version
+			},
+			consent_member_keys: body.consent_member_keys
 		});
 		expect(parsed.success).toBe(false);
 	});
@@ -186,20 +203,20 @@ describe('public consent on the unassigned path (FR-42)', () => {
 		const input = sampleUnified();
 		input.members.push({ ...input.members[0]!, first_name: 'ลูก', phone: null, photo: null });
 		const payload = toUnassignedRegistrationPayload(input, {
-			consent: webConsentBody(2, { mode: 'basic', guardian_for: ['m1'] })
+			consent: webConsentBody(2)
 		});
 		expect(payload.members.map((m) => m.consent)).toEqual([
 			{
-				mode: 'basic',
-				health: false,
+				mode: 'full',
+				health: true,
 				ref: 'CS-7K3QZ9MD',
 				given_at: '2026-10-25T03:15:00.000Z',
 				notice_version: '2026-10-25',
 				given_by: 'self'
 			},
-			expect.objectContaining({ given_by: 'guardian' })
+			expect.objectContaining({ given_by: 'household_member' })
 		]);
-		expect(payload.members.map((m) => m.search_excluded)).toEqual([true, true]);
+		expect(payload.members.map((m) => m.search_excluded)).toEqual([false, false]);
 	});
 
 	it('keeps full-mode members searchable unless search was unticked', () => {

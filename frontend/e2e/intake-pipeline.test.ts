@@ -330,9 +330,7 @@ test.describe('Phase 2 intake pipeline (#252)', { tag: ['@onsite', '@regression'
 		await expect(page.getByText('2 คน', { exact: true })).toBeVisible();
 	});
 
-	test('walk-in registration without the main consent opens the basic notice and saves as basic', async ({
-		page
-	}) => {
+	test('walk-in registration without the main consent cannot be saved', async ({ page }) => {
 		await setupPage(page, STAFF, staffSession);
 		await page.goto('/onsite/people/new');
 		await expect(page.getByRole('heading', { name: 'ลงทะเบียนครอบครัว' })).toBeVisible({
@@ -341,19 +339,21 @@ test.describe('Phase 2 intake pipeline (#252)', { tag: ['@onsite', '@regression'
 
 		await fillMinimalUnifiedRegistration(page, { firstName: 'พื้นฐาน', lastName: 'ครอบครัว' });
 
-		const mainConsent = page.getByRole('checkbox', { name: CONSENT_COPY.main.text });
+		const mainConsent = page.getByRole('checkbox', { name: CONSENT_COPY.main.short });
 		await expect(mainConsent).not.toBeChecked();
+		await expect(page.getByText(CONSENT_COPY.needMain)).toBeVisible();
+		await expect(
+			page.getByRole('button', { name: 'บันทึกลงทะเบียนทั้งครอบครัว' }).last()
+		).toBeDisabled();
+
+		await page.getByRole('button', { name: CONSENT_COPY.acceptAll }).click();
+		await expect(mainConsent).toBeChecked();
 		await page.getByRole('button', { name: 'บันทึกลงทะเบียนทั้งครอบครัว' }).last().click();
-
-		await expect(page.getByText(CONSENT_COPY.basicNotice.title)).toBeVisible();
-		await expect(page.getByRole('heading', { name: 'ลงทะเบียนสำเร็จ' })).toHaveCount(0);
-
-		await page.getByRole('button', { name: CONSENT_COPY.basicNotice.confirmBasic }).click();
 
 		await expect(page.getByRole('heading', { name: 'ลงทะเบียนสำเร็จ' })).toBeVisible({
 			timeout: 20_000
 		});
-		await expect(page.getByText(CONSENT_COPY.result.titleBasic)).toBeVisible();
+		await expect(page.getByText(CONSENT_COPY.result.title)).toBeVisible();
 	});
 
 	// ── Seam 2: Unassigned Registration claim → Report-in ─────────────────────
