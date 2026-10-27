@@ -4,6 +4,7 @@ const env = vi.hoisted(() => ({ SHELTER_IMPORT_WORKER_TOKEN: 'worker-secret' }))
 const requireSystemAdminMock = vi.hoisted(() => vi.fn());
 const createImportJobMock = vi.hoisted(() => vi.fn());
 const safeParseMock = vi.hoisted(() => vi.fn());
+const readMasterDocMock = vi.hoisted(() => vi.fn());
 
 vi.mock('$env/dynamic/private', () => ({ env }));
 vi.mock('$lib/server/couch-admin', () => ({
@@ -14,9 +15,12 @@ vi.mock('$lib/server/couch-admin', () => ({
 			headers: { 'content-type': 'application/json' }
 		})
 }));
-vi.mock('$lib/features/shelters/server', () => ({
-	createShelterSchema: { safeParse: safeParseMock }
+vi.mock('$lib/features/shelters/server', async () => ({
+	createShelterSchema: { safeParse: safeParseMock },
+	validateSiteKindChange: (await import('$lib/features/shelters/domain/schema'))
+		.validateSiteKindChange
 }));
+vi.mock('$lib/server/master-data-server', () => ({ readMasterDoc: readMasterDocMock }));
 vi.mock('$lib/features/shelter-import/server/job-store', () => ({
 	MAX_IMPORT_ROWS: 1000,
 	createImportJob: createImportJobMock
@@ -47,8 +51,14 @@ beforeEach(() => {
 	createImportJobMock.mockReset().mockResolvedValue({ _id: 'shelter_import_job:key-hash' });
 	safeParseMock.mockReset().mockImplementation((value) => ({
 		success: true,
-		data: { ...value, name: 'validated name' }
+		data: { site_kind: 'evacuation_center', ...value, name: 'validated name' }
 	}));
+	readMasterDocMock.mockReset().mockResolvedValue({
+		items: [
+			{ code: 'evacuation_center', status: 'active' },
+			{ code: 'field_hospital', status: 'inactive' }
+		]
+	});
 });
 
 describe('POST /api/back-office/shelter-import/jobs', () => {
@@ -79,7 +89,7 @@ describe('POST /api/back-office/shelter-import/jobs', () => {
 				expect.objectContaining({
 					row: 1,
 					name: 'validated name',
-					input: { name: 'validated name', capacity: 100 },
+					input: { site_kind: 'evacuation_center', name: 'validated name', capacity: 100 },
 					valid: true
 				})
 			]
@@ -109,6 +119,29 @@ describe('POST /api/back-office/shelter-import/jobs', () => {
 
 		expect(response.status).toBe(202);
 		expect(requireSystemAdminMock).toHaveBeenCalledWith('session=admin');
+	});
+
+	it.each([
+		['not in the master', 'made_up_kind'],
+		['inactive in the master', 'field_hospital']
+	])('rejects a row whose site_kind is %s (CR-198 FR-7)', async (_label, siteKind) => {
+		const response = await POST({
+			request: request(
+				JSON.stringify({
+					filename: 'shelters.xlsx',
+					duplicate_action: 'skip',
+					rows: [{ row: 1, name: 'ศูนย์ A', shelter: { name: 'ศูนย์ A', site_kind: siteKind } }]
+				})
+			)
+		} as unknown as Parameters<typeof POST>[0]);
+
+		expect(response.status).toBe(202);
+		const [{ rows }] = createImportJobMock.mock.calls[0];
+		expect(rows[0]).toMatchObject({
+			valid: false,
+			errors: [expect.objectContaining({ column: 'site_kind' })]
+		});
+		expect(rows[0].input).toBeUndefined();
 	});
 
 	it('returns 422 for malformed JSON instead of a generic server error', async () => {

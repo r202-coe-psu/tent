@@ -3,7 +3,8 @@ import { z } from 'zod';
 import { env } from '$env/dynamic/private';
 import type { RequestHandler } from './$types';
 import { requireSystemAdmin, serviceError } from '$lib/server/couch-admin';
-import { createShelterSchema } from '$lib/features/shelters/server';
+import { createShelterSchema, validateSiteKindChange } from '$lib/features/shelters/server';
+import { readMasterDoc } from '$lib/server/master-data-server';
 import {
 	createImportJob,
 	MAX_IMPORT_ROWS,
@@ -110,9 +111,15 @@ export const POST: RequestHandler = async ({ request }) => {
 			);
 		}
 		const body = parsedBody;
+		// CR-198 FR-7: the client resolves site_kind too, but this is the trust boundary.
+		const siteKindItems = (await readMasterDoc('site_kind'))?.items ?? [];
 		const rows = body.rows.map((row) => {
 			const parsed = row.shelter === undefined ? null : createShelterSchema.safeParse(row.shelter);
 			const errors: ImportItemError[] = [];
+			if (parsed?.success) {
+				const siteKindError = validateSiteKindChange(parsed.data.site_kind, siteKindItems);
+				if (siteKindError) errors.push({ column: 'site_kind', message: siteKindError });
+			}
 			const clientValidationFailed = (row.errors?.length ?? 0) > 0;
 			if (!parsed || !parsed.success) {
 				if (parsed && !parsed.success) {
