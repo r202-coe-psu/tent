@@ -154,6 +154,15 @@ describe('shelterSchema', () => {
 		}
 	});
 
+	it('asks to pick a site kind, once, when it is empty', () => {
+		const result = shelterSchema.safeParse({ ...validShelterInput, site_kind: '' });
+		expect(result.success).toBe(false);
+		const messages = result.error?.issues
+			.filter((i) => i.path[0] === 'site_kind')
+			.map((i) => i.message);
+		expect(messages).toEqual(['กรุณาเลือกประเภทศูนย์']);
+	});
+
 	it('rejects empty name', () => {
 		expect(() => shelterSchema.parse({ ...validShelterInput, name: '  ' })).toThrow();
 	});

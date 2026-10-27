@@ -18,7 +18,7 @@ export type OperationStatus = z.infer<typeof operationStatusSchema>;
 // `master_data:site_kind`; the schema checks the format only, activeness is `validateSiteKindChange`.
 export const siteKindSchema = z
 	.string()
-	.min(1, 'กรุณาเลือกประเภทศูนย์')
+	.min(1, { message: 'กรุณาเลือกประเภทศูนย์', abort: true })
 	.regex(/^[a-z0-9_]+$/, 'ประเภทศูนย์ไม่ถูกต้อง');
 export type SiteKind = z.infer<typeof siteKindSchema>;
 
