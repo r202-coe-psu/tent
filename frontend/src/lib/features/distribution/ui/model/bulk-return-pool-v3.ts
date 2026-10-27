@@ -34,6 +34,8 @@ export const CLOSED_LOAN_WARNING_TEXT =
 	'ยอดยืมใบนี้ถูกปิดไปก่อนที่ของจะเข้ากอง — โปรดตรวจสอบว่าปิดถูกต้องหรือไม่';
 export const MISSING_LOAN_WARNING_TEXT =
 	'ไม่พบรายการยืมที่อ้างถึง จึงไม่ได้ตัดยอดยืม — โปรดตรวจสอบว่ารายการยืมถูกต้องหรือไม่';
+/** Per-card badge (and banner reference) when the batched loan read failed for a pool. */
+export const LOAN_REFS_UNKNOWN_LABEL = 'ตรวจยอดยืมไม่ได้';
 export const CLOSED_LOAN_WARNING_TESTID = 'bulk-return-entry-closed-loan-warning';
 /** CR-193 §33: a void / move written after the submit snapshot had no effect. */
 export const SNAPSHOT_CONFLICT_WARNING =
@@ -267,6 +269,11 @@ export function filterPoolRows(
 			}
 			return a.pool._id < b.pool._id ? 1 : a.pool._id > b.pool._id ? -1 : 0;
 		});
+}
+
+/** True when any overview row could not check its loan refs (the batched loan read failed). */
+export function anyLoanRefsUnavailable(rows: readonly BulkReturnPoolOverviewRow[]): boolean {
+	return rows.some((row) => row.loan_refs_unavailable);
 }
 
 export type BulkReturnPoolBoardViewState = 'loading' | 'error' | 'empty' | 'search_empty' | 'ready';

@@ -56,6 +56,12 @@ export interface BulkReturnPoolOverviewRow {
 	 * overview read enriches it (one batched loan read).
 	 */
 	closed_loan_refs: ClosedBulkReturnLoanRef[];
+	/**
+	 * True when the overview's batched loan read failed and this row has live entries with loan refs,
+	 * so `closed_loan_refs` is unknown (left empty) rather than verified clean. The pure builder
+	 * always sets `false`.
+	 */
+	loan_refs_unavailable: boolean;
 }
 
 export interface BulkReturnPoolOverviewOptions {
@@ -102,7 +108,8 @@ export function buildBulkReturnPoolOverview(
 				late_entries: late.filter((r) => r.pool_id === pool._id),
 				is_empty: live.length === 0,
 				unresolved_refs: unresolved.filter((ref) => ref.pool_ids.includes(pool._id)),
-				closed_loan_refs: []
+				closed_loan_refs: [],
+				loan_refs_unavailable: false
 			};
 		});
 }

@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { isUlid } from '$lib/db/ulid';
+import type { BulkReturnPoolOverviewRow } from '../domain/food-supplies';
 
 type MutationDefinition = {
 	mutationFn: (variables: unknown) => Promise<unknown>;
@@ -564,6 +565,15 @@ describe('Phase 5 Slice 5.0 — Distribution TanStack Query Layer', () => {
 
 			useBulkReturnPoolOverview(undefined, undefined, false);
 			expect(tracker.lastCreatedQuery?.enabled).toBe(false);
+		});
+
+		it('useBulkReturnPoolOverview passes a degraded overview through without throwing', async () => {
+			const degraded = [
+				{ closed_loan_refs: [], loan_refs_unavailable: true }
+			] satisfies Partial<BulkReturnPoolOverviewRow>[];
+			mockWorkflowCalls.getBulkReturnPoolOverview.mockResolvedValueOnce(degraded);
+			useBulkReturnPoolOverview(() => ({}));
+			await expect(tracker.lastCreatedQuery?.queryFn()).resolves.toEqual(degraded);
 		});
 
 		it('useReturnerOutstandingLoans is enabled only for an evacuee:/volunteer: id', async () => {

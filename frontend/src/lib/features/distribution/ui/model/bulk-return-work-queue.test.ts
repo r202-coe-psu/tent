@@ -23,6 +23,7 @@ function row(
 		unresolved?: number;
 		closed?: number;
 		conflicts?: number;
+		loanUnavailable?: boolean;
 	} = {}
 ): BulkReturnPoolOverviewRow {
 	return {
@@ -40,6 +41,7 @@ function row(
 		is_empty: true,
 		unresolved_refs: Array.from({ length: opts.unresolved ?? 0 }),
 		closed_loan_refs: Array.from({ length: opts.closed ?? 0 }),
+		loan_refs_unavailable: opts.loanUnavailable ?? false,
 		snapshot_conflicts: Array.from({ length: opts.conflicts ?? 0 }, (_, i) => ({
 			entry_id: `e${i}`,
 			kind: 'void'
@@ -91,6 +93,11 @@ describe('flaggedPools', () => {
 		expect(rowNeedsAttention(row('ok', 'SUBMITTED'))).toBe(false);
 		const out = flaggedPools([row('c', 'SUBMITTED', { conflicts: 2 })]);
 		expect(out[0].reasons).toEqual([{ reason: 'snapshot_conflict', count: 2 }]);
+	});
+
+	it('does not flag a pool only because its loan refs could not be checked (CR-193 item 23)', () => {
+		expect(rowNeedsAttention(row('d', 'OPEN', { loanUnavailable: true }))).toBe(false);
+		expect(flaggedPools([row('d', 'OPEN', { loanUnavailable: true })])).toEqual([]);
 	});
 
 	it('sorts by most reasons, then oldest created_at', () => {

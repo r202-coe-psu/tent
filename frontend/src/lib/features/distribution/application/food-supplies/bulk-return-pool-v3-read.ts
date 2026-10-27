@@ -13,6 +13,7 @@ import {
 	findClosedBulkReturnLoanRefs
 } from '../../domain/food-supplies';
 import type { SkippedDoc } from '../../data/food-supplies';
+import { CannotConnectError, NetworkError } from '$lib/utils/errors';
 import { WorkflowValidationError } from './errors';
 import {
 	loadLivePoolEntriesWithLoans,
@@ -31,7 +32,11 @@ export interface BulkReturnPoolOverviewQuery {
 	includeCancelled?: boolean;
 }
 
-/** Pool list read model: per-pool entries, per-item totals, late entries, emptiness. */
+/**
+ * Pool list read model: per-pool entries, per-item totals, late entries, emptiness. A batched loan
+ * read that fails with a transport failure does not fail the overview: rows with loan refs get
+ * `loan_refs_unavailable: true`.
+ */
 export async function getBulkReturnPoolOverview(
 	options: BulkReturnPoolOverviewQuery,
 	ctx: AuthorContext,
@@ -55,9 +60,20 @@ export async function getBulkReturnPoolOverview(
 		)
 	];
 	if (loanIds.length === 0) return rows;
-	// Skipped (malformed) loan docs are left out here, so they count as missing; never throw on read.
-	const { items } = await logRepo.getMany(loanIds);
-	const found = new Map(items.map((loan) => [loan._id, loan]));
+	// Malformed loan docs are skipped, so they count as missing. On degrade closed_loan_refs stays
+	// empty. Only transport errors (CannotConnectError/NetworkError) degrade; others still throw.
+	// NetworkError is defensive: couch-db withRetry normally converts it to CannotConnectError.
+	const loans = await logRepo.getMany(loanIds).catch((err: unknown) => {
+		if (!(err instanceof CannotConnectError || err instanceof NetworkError)) throw err;
+		return null;
+	});
+	if (!loans) {
+		return rows.map((row, i) => ({
+			...row,
+			loan_refs_unavailable: liveByRow[i].some((entry) => entry.loan_refs.length > 0)
+		}));
+	}
+	const found = new Map(loans.items.map((loan) => [loan._id, loan]));
 	const loansById = new Map<string, DistributionLog | null>(
 		loanIds.map((id) => [id, found.get(id) ?? null])
 	);
