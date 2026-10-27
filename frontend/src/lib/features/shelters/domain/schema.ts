@@ -16,10 +16,16 @@ export type OperationStatus = z.infer<typeof operationStatusSchema>;
 
 // CR-067 / CR-198: one registry document is one site of a kind. The kind is a code of the global
 // `master_data:site_kind`; the schema checks the format only, activeness is `validateSiteKindChange`.
-export const siteKindSchema = z.string().regex(/^[a-z0-9_]+$/, 'ประเภทศูนย์ไม่ถูกต้อง');
+export const siteKindSchema = z
+	.string()
+	.min(1, 'กรุณาเลือกประเภทศูนย์')
+	.regex(/^[a-z0-9_]+$/, 'ประเภทศูนย์ไม่ถูกต้อง');
 export type SiteKind = z.infer<typeof siteKindSchema>;
 
-/** Seed default, and what a doc without `site_kind` reads as (CR-067). */
+/**
+ * Seed default, and what a doc without `site_kind` reads as (CR-067).
+ * Mirrored in public-portal `domain/site-kind.ts`.
+ */
 export const DEFAULT_SITE_KIND = 'evacuation_center';
 /** The one kind that keeps kind-specific behaviour (CR-198 out of scope: new codes act as a plain centre). */
 export const HOST_HOUSE_SITE_KIND = 'host_house';

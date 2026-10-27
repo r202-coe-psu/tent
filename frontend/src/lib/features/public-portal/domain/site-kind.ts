@@ -4,6 +4,7 @@ import type { MasterLabelOption } from './master-labels';
 /** One `master_data:site_kind` item as served by `/api/public/v1/config/site-kinds`. */
 export type SiteKindOption = MasterLabelOption & { status?: string };
 
+// Mirrors the shelters domain constants; importing that barrel here breaks tests that mock it.
 export const DEFAULT_SITE_KIND = 'evacuation_center';
 export const HOST_HOUSE_SITE_KIND = 'host_house';
 
@@ -50,6 +51,16 @@ export function activeSiteKinds(
 /** Only `host_house` has its own pin; every other code uses the shelter pin (CR-198 FR-17). */
 export function isHostHouseKind(code: string | null | undefined): boolean {
 	return normalizeSiteKind(code) === HOST_HOUSE_SITE_KIND;
+}
+
+/**
+ * The one active non-host kind the shelter pin stands for, or `null` when it stands for several
+ * (the legend then reads "other kinds" instead of naming just one of them).
+ */
+export function shelterPinKind(kinds: readonly SiteKindOption[] | null | undefined): string | null {
+	const others = activeSiteKinds(kinds).filter((k) => !isHostHouseKind(k.code));
+	if (others.length === 0) return DEFAULT_SITE_KIND;
+	return others.length === 1 ? others[0].code : null;
 }
 
 export function countBySiteKind(
