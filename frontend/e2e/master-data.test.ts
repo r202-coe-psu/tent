@@ -8,8 +8,8 @@
  *
  * Coverage:
  * [Guard]     non-manager is redirected away from the page
- * [Hub]       sidebar shows all 6 types; type query selects the panel
- * [Scope]     global-only chronic_disease / allergy are read-only in back-office (CR-186, CR-187)
+ * [Hub]       sidebar shows all 7 types; type query selects the panel
+ * [Scope]     global-only chronic_disease / allergy / site_kind are read-only in back-office (CR-186, CR-187)
  * [CRUD]      add → edit round-trips through the mocked BFF
  * [Redirect]  legacy URLs land on the hub with the correct `?type=`
  */
@@ -35,7 +35,8 @@ const SHORT_TITLES: Record<string, string> = {
 	shelter_type: 'ประเภทอาคาร',
 	volunteer_skills: 'ทักษะอาสา',
 	chronic_disease: 'โรคประจำตัว',
-	allergy: 'อาการแพ้'
+	allergy: 'อาการแพ้',
+	site_kind: 'ประเภทศูนย์'
 };
 
 type MockItem = {
@@ -166,7 +167,7 @@ test.describe('Master Data hub', () => {
 		await expect(page).toHaveURL(`${BASE}/portal`, { timeout: 8000 });
 	});
 
-	test('renders the hub with all 6 type sidebar entries', async ({ page }) => {
+	test('renders the hub with all 7 type sidebar entries', async ({ page }) => {
 		await injectSession(page, SA, sessions[SA.name]);
 		await mockMasterData(page, {
 			vulnerable_group: [],
@@ -174,7 +175,8 @@ test.describe('Master Data hub', () => {
 			shelter_type: [],
 			volunteer_skills: [],
 			chronic_disease: [],
-			allergy: []
+			allergy: [],
+			site_kind: []
 		});
 		await page.goto(`${BASE}${HUB_PATH}`);
 
