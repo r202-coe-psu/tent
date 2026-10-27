@@ -9,6 +9,7 @@ import {
 	toMealPlanMap,
 	sumHeadcountByTags,
 	getActiveTagsFromSession,
+	selectableFoodIngredients,
 	RICE_RECIPE_ID,
 	RECIPE_TO_STOCK_ITEM,
 	type ResolvedItemMaster
@@ -513,5 +514,31 @@ describe('getActiveTagsFromSession', () => {
 			target_headcount: { total: 0, halal: 0, infant: 0, soft_food: 0, regular: 0, volunteer: 0 }
 		} as MealSession;
 		expect(getActiveTagsFromSession(emptySession)).toEqual(['regular']);
+	});
+});
+
+describe('selectableFoodIngredients', () => {
+	it('keeps only active food item masters', () => {
+		const masters = [
+			{ _id: 'item_master:rice', category: 'item_category:food' },
+			{ _id: 'item_master:egg', category: 'อาหารและวัตถุดิบ' },
+			{ _id: 'item_master:soap', category: 'item_category:wash' },
+			{ _id: 'item_master:paracetamol', category: 'item_category:medical' },
+			{ _id: 'item_master:nocat' },
+			{ _id: 'item_master:old-oil', category: 'item_category:food', deactivated: true },
+			{
+				_id: 'item_master:dup-rice',
+				category: 'item_category:food',
+				merged_into: 'item_master:rice'
+			}
+		];
+		expect(selectableFoodIngredients(masters).map((m) => m._id)).toEqual([
+			'item_master:rice',
+			'item_master:egg'
+		]);
+	});
+
+	it('returns an empty list when masters are not loaded', () => {
+		expect(selectableFoodIngredients(undefined)).toEqual([]);
 	});
 });
