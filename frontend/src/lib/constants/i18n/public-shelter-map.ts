@@ -16,8 +16,6 @@ export const PUBLIC_SHELTER_MAP_I18N = {
 		placePin: 'วางหมุดค้นหา',
 		placingPin: 'คลิกบนแผนที่เพื่อวางหมุด',
 		cancelPlacePin: 'ยกเลิก',
-		evacCenter: 'ศูนย์อพยพ',
-		hostHouse: 'บ้านพี่เลี้ยง',
 		preRegister: 'ลงทะเบียนล่วงหน้า',
 		viewDetails: 'ดูรายละเอียด',
 		shelterClosed: 'ศูนย์ปิดแล้ว'
@@ -39,8 +37,6 @@ export const PUBLIC_SHELTER_MAP_I18N = {
 		placePin: 'Place search pin',
 		placingPin: 'Click the map to place a pin',
 		cancelPlacePin: 'Cancel',
-		evacCenter: 'Evacuation Center',
-		hostHouse: 'Host House',
 		preRegister: 'Pre-register',
 		viewDetails: 'View Details',
 		shelterClosed: 'Shelter Closed'

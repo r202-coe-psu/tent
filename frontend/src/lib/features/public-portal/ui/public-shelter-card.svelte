@@ -13,7 +13,12 @@
 
 	import type { PublicShelterCardModel } from '../domain/types';
 	import { resolveMasterLabel, shelterTypeLabel, toLabelMap } from '../domain/master-labels';
-	import { useShelterTypeLabelMap, useVulnerableGroupLabelMap } from '../application/queries';
+	import {
+		useShelterTypeLabelMap,
+		useSiteKinds,
+		useVulnerableGroupLabelMap
+	} from '../application/queries';
+	import { siteKindLabel } from '../domain/site-kind';
 
 	import { getTranslation } from '$lib/utils/i18n';
 	import { PUBLIC_SHELTER_CARD_I18N } from '$lib/constants/i18n';
@@ -52,6 +57,7 @@
 
 	const shelterTypeLabelsQuery = useShelterTypeLabelMap();
 	const vulnerableGroupLabelsQuery = useVulnerableGroupLabelMap();
+	const siteKindsQuery = useSiteKinds();
 	const shelterTypeLabels = $derived(toLabelMap(shelterTypeLabelsQuery.data, langState.current));
 	const vulnerableGroupLabels = $derived(
 		toLabelMap(vulnerableGroupLabelsQuery.data, langState.current)
@@ -170,7 +176,7 @@
 				</div>
 			{/if}
 			<div class="mt-0.5 text-xs font-semibold text-primary">
-				{shelter.site_kind === 'host_house' ? t.hostHouse : t.evacCenter}
+				{siteKindLabel(shelter.site_kind, siteKindsQuery.data, langState.current)}
 			</div>
 		</div>
 		<span

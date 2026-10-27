@@ -28,6 +28,8 @@
 	import { PUBLIC_FILTER_PANEL_I18N } from '$lib/constants/i18n';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { shelterTypeLabel } from '../domain/master-labels';
+	import { activeSiteKinds, siteKindLabel } from '../domain/site-kind';
+	import { useSiteKinds } from '../application/queries';
 
 	interface Filters {
 		search?: string;
@@ -35,7 +37,7 @@
 		district?: string;
 		subdistrict?: string;
 		type?: string;
-		site_kind?: 'evacuation_center' | 'host_house';
+		site_kind?: string;
 		distance?: string;
 		user_lat?: string | number;
 		user_lng?: string | number;
@@ -88,6 +90,8 @@
 	let selectedDistrict = $state<string>('');
 	let selectedSubdistrict = $state<string>('');
 	let selectedSiteKind = $state<string>('');
+	const siteKindsQuery = useSiteKinds();
+	const activeKinds = $derived(activeSiteKinds(siteKindsQuery.data));
 	let selectedType = $state<string>('');
 	let distanceValue = $state<string>('5');
 	/** Draft for the custom km field (may differ from distanceValue while typing). */
@@ -535,8 +539,16 @@
 						</Select.Trigger>
 						<Select.Content>
 							<Select.Item value="">{t.siteKindAll}</Select.Item>
-							<Select.Item value="evacuation_center">{t.siteKindEvacCenter}</Select.Item>
-							<Select.Item value="host_house">{t.siteKindHostHouse}</Select.Item>
+							{#each activeKinds as kind (kind.code)}
+								<Select.Item value={kind.code}>
+									{siteKindLabel(kind.code, siteKindsQuery.data, langState.current)}
+								</Select.Item>
+							{/each}
+							{#if selectedSiteKind && !activeKinds.some((k) => k.code === selectedSiteKind)}
+								<Select.Item value={selectedSiteKind}>
+									{siteKindLabel(selectedSiteKind, siteKindsQuery.data, langState.current)}
+								</Select.Item>
+							{/if}
 						</Select.Content>
 					</Select.Root>
 				</div>
