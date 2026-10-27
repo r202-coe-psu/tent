@@ -47,6 +47,7 @@
 		clampPage,
 		filterRows,
 		hiddenCatalogCount,
+		locationOptions,
 		pageSlice,
 		sortRows,
 		visibleRows,
@@ -237,23 +238,23 @@
 	const lotsByItem = $derived(projected.byItem);
 
 	/**
-	 * Location filter options from the lots still on the shelf, keyed by `lotStorageKey` so a
-	 * renamed storage point stays one option (draft-shelter-storage-points). Lots, not raw rows:
-	 * an empty lot is not a place to filter by, and an outbound or return row's `lot.note` may
-	 * hold a distribution destination ("อาคารยิมเนเซียม 1"), which is no place in the store (#569).
+	 * Location filter options, keyed by `lotStorageKey` so a renamed storage point stays one option
+	 * (draft-shelter-storage-points). Configured points plus lots still on the shelf, not raw rows:
+	 * an empty lot is not a place to filter by, and an outbound or return row's `lot.note` may hold
+	 * a distribution destination ("อาคารยิมเนเซียม 1"), which is no place in the store (#569).
 	 */
-	const uniqueLocations = $derived.by(() => {
-		const locations = new SvelteMap<string, string>();
-		for (const lots of lotsByItem.values()) {
-			for (const lot of lots) {
-				if (!qtyGt(lot.qty, 0)) continue;
-				const key = lotStorageKey(lot.lot);
-				const name = lotStorageName(lot.lot, storagePoints.points);
-				if (key && name && !locations.has(key)) locations.set(key, name);
-			}
-		}
-		return Array.from(locations, ([value, label]) => ({ value, label }));
-	});
+	const uniqueLocations = $derived(
+		locationOptions(
+			storagePoints.points,
+			Array.from(lotsByItem.values())
+				.flat()
+				.filter((lot) => qtyGt(lot.qty, 0))
+				.map((lot) => ({
+					key: lotStorageKey(lot.lot),
+					name: lotStorageName(lot.lot, storagePoints.points)
+				}))
+		)
+	);
 
 	/** Shelf life / storage type per item, for the lot order shown in the detail panel. */
 	const lotPriorityItems = $derived(toLotPriorityItems(itemMastersQuery.data ?? []));

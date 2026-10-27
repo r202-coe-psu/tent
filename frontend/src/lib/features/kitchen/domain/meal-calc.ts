@@ -332,75 +332,179 @@ export function expandTargetTags(tags: readonly string[]): TargetGroupTag[] {
 	return Array.from(tagSet);
 }
 
+/** Short labels for joining several groups into one row (full labels already contain "/"). */
+export const TARGET_GROUP_SHORT_LABELS: Record<TargetGroupTag, string> = {
+	halal: 'ฮาลาล',
+	infant: 'เด็ก',
+	soft_food: 'ผู้ป่วย',
+	regular: 'ทั่วไป',
+	volunteer: 'จนท.'
+};
+
+// Restricted diets first: their food can feed broader groups, never the reverse.
+const GROUP_FILL_ORDER: readonly TargetGroupTag[] = [
+	'infant',
+	'soft_food',
+	'halal',
+	'volunteer',
+	'regular'
+];
+
 export interface GroupProgressItem {
 	tag: TargetGroupTag;
 	label: string;
 	target: number;
-	actualYield: number;
+	/** Plates allocated to this group by priority fill — never double-counted across groups. */
+	received: number;
+	shortfall: number;
+	hasTarget: boolean;
 	isCompleted: boolean;
 }
 
 export interface SessionGroupProgress {
 	groups: Record<TargetGroupTag, GroupProgressItem>;
+	activeTags: TargetGroupTag[];
+	noTargetTags: TargetGroupTag[];
 	completedCount: number;
 	totalCount: number;
 	isAllCompleted: boolean;
+	totalTarget: number;
+	totalProduced: number;
+	surplus: number;
 	summaryText: string;
 }
 
+interface PlateBatch {
+	tags: readonly TargetGroupTag[];
+	portions: number;
+}
+
 /**
- * Computes 5-group target completion progress for a meal session based on plan actual yields.
+ * Allocates plates group by group in GROUP_FILL_ORDER (CR-201 R3). Each unit of need is served by
+ * an augmenting path: a menu with spare plates, or a menu moved over from a group that another
+ * menu can refill. Filled groups never lose plates, and the result ignores menu input order.
+ */
+function allocateGroupPlates(
+	batches: readonly PlateBatch[],
+	target: Record<TargetGroupTag, number>
+): { received: Record<TargetGroupTag, number>; surplus: number } {
+	const flow = batches.map(() => ({}) as Partial<Record<TargetGroupTag, number>>);
+	const spare = batches.map((b) => b.portions);
+	const received = {} as Record<TargetGroupTag, number>;
+	for (const tag of TARGET_GROUP_TAGS) received[tag] = 0;
+
+	for (const goal of GROUP_FILL_ORDER) {
+		while (received[goal] < target[goal]) {
+			// BFS over groups; moved[h] = menu that can shift its plates from h to `from`
+			const moved = new Map<TargetGroupTag, { from: TargetGroupTag; menu: number }>();
+			const visited = new Set<TargetGroupTag>([goal]);
+			const queue: TargetGroupTag[] = [goal];
+			let end: { group: TargetGroupTag; menu: number } | null = null;
+
+			for (let q = 0; q < queue.length && !end; q++) {
+				const group = queue[q];
+				const menus = batches.flatMap((b, m) => (b.tags.includes(group) ? [m] : []));
+				const source = menus.find((m) => spare[m] > 0);
+				if (source !== undefined) {
+					end = { group, menu: source };
+					break;
+				}
+				for (const m of menus) {
+					for (const h of GROUP_FILL_ORDER) {
+						if (visited.has(h) || (flow[m][h] ?? 0) <= 0) continue;
+						visited.add(h);
+						moved.set(h, { from: group, menu: m });
+						queue.push(h);
+					}
+				}
+			}
+			if (!end) break;
+
+			let amount = Math.min(spare[end.menu], target[goal] - received[goal]);
+			for (let cur = end.group; cur !== goal;) {
+				const step = moved.get(cur)!;
+				amount = Math.min(amount, flow[step.menu][cur] ?? 0);
+				cur = step.from;
+			}
+
+			spare[end.menu] -= amount;
+			flow[end.menu][end.group] = (flow[end.menu][end.group] ?? 0) + amount;
+			for (let cur = end.group; cur !== goal;) {
+				const step = moved.get(cur)!;
+				flow[step.menu][cur] = (flow[step.menu][cur] ?? 0) - amount;
+				flow[step.menu][step.from] = (flow[step.menu][step.from] ?? 0) + amount;
+				cur = step.from;
+			}
+			received[goal] += amount;
+		}
+	}
+
+	return { received, surplus: spare.reduce((sum, n) => sum + n, 0) };
+}
+
+/**
+ * Computes per-group plate progress for a meal session by priority fill: groups are filled in
+ * GROUP_FILL_ORDER, each only from menus tagged for it, re-routing plates between menus so that
+ * partially overlapping tags still fill as many groups as possible; leftover is surplus.
  */
 export function computeSessionGroupProgress(
 	session: MealSession,
 	plans: readonly MealPlan[],
 	services: readonly MealService[]
 ): SessionGroupProgress {
-	const sessionPlans = plans.filter((p) => p.meal_session_id === session._id);
-	const groupYields: Record<TargetGroupTag, number> = {
-		halal: 0,
-		infant: 0,
-		soft_food: 0,
-		regular: 0,
-		volunteer: 0
-	};
+	const target = {} as Record<TargetGroupTag, number>;
+	for (const tag of TARGET_GROUP_TAGS) target[tag] = session.target_headcount[tag] ?? 0;
 
-	for (const plan of sessionPlans) {
-		const service = services.find((s) => s.meal_plan_id === plan._id);
-		const portions = service ? (service.actual_yield ?? service.served ?? 0) : 0;
-		if (portions > 0) {
-			const expanded = expandTargetTags(plan.target_tags ?? []);
-			for (const tag of expanded) {
-				groupYields[tag] += portions;
-			}
-		}
-	}
+	const entries = plans
+		.filter((p) => p.meal_session_id === session._id)
+		.map((plan) => {
+			const service = services.find((s) => s.meal_plan_id === plan._id);
+			const portions = service ? (service.actual_yield ?? service.served ?? 0) : 0;
+			const tags = expandTargetTags(plan.target_tags ?? []);
+			return { tags: tags.length > 0 ? tags : (['regular'] as TargetGroupTag[]), portions };
+		})
+		.filter((e) => e.portions > 0);
+
+	const totalProduced = entries.reduce((sum, e) => sum + e.portions, 0);
+	const { received, surplus } = allocateGroupPlates(entries, target);
 
 	const groups = {} as Record<TargetGroupTag, GroupProgressItem>;
+	const activeTags: TargetGroupTag[] = [];
+	const noTargetTags: TargetGroupTag[] = [];
 	let completedCount = 0;
+	let totalTarget = 0;
 
 	for (const tag of TARGET_GROUP_TAGS) {
 		const target = session.target_headcount[tag] ?? 0;
-		const actualYield = groupYields[tag] ?? 0;
-		const isCompleted = actualYield >= target;
-		if (isCompleted) {
-			completedCount++;
-		}
+		const hasTarget = target > 0;
+		const isCompleted = hasTarget && received[tag] >= target;
+		if (hasTarget) activeTags.push(tag);
+		else noTargetTags.push(tag);
+		if (isCompleted) completedCount++;
+		totalTarget += target;
 		groups[tag] = {
 			tag,
 			label: TARGET_GROUP_LABELS[tag],
 			target,
-			actualYield,
+			received: received[tag],
+			shortfall: Math.max(0, target - received[tag]),
+			hasTarget,
 			isCompleted
 		};
 	}
 
+	const totalCount = activeTags.length;
 	return {
 		groups,
+		activeTags,
+		noTargetTags,
 		completedCount,
-		totalCount: 5,
-		isAllCompleted: completedCount === 5,
-		summaryText: `${completedCount}/5 กลุ่ม`
+		totalCount,
+		isAllCompleted: totalCount > 0 && completedCount === totalCount,
+		totalTarget,
+		totalProduced,
+		surplus,
+		summaryText: totalCount === 0 ? 'ไม่มีเป้าหมาย' : `${completedCount}/${totalCount} กลุ่มครบ`
 	};
 }
 
