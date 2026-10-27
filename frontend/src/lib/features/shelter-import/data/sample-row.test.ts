@@ -38,12 +38,12 @@ function toFoodPointRows(points: Record<string, string | number>[]): RawSheetRow
 }
 
 describe('buildSampleWorkbook', () => {
-	it('leaves ประเภทศูนย์พักพิง empty when no shelter_type master data exists', () => {
+	it('leaves ประเภทอาคาร empty when no shelter_type master data exists', () => {
 		const sample = buildSampleWorkbook(emptyMasters());
 		expect(sample.shelter[H.shelter_type]).toBeUndefined();
 	});
 
-	it('fills ประเภทศูนย์พักพิง with the first shelter_type label when master data exists', () => {
+	it('fills ประเภทอาคาร with the first shelter_type label when master data exists', () => {
 		const sample = buildSampleWorkbook(mastersWithShelterType());
 		expect(sample.shelter[H.shelter_type]).toBe('โรงเรียน');
 	});

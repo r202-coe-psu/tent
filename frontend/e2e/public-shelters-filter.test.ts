@@ -59,6 +59,7 @@ test.describe(
 			await expect(page.getByRole('heading', { name: 'ค้นหาและตัวกรอง' })).toBeVisible();
 			await expect(page.getByRole('textbox', { name: 'ค้นหา' })).toBeVisible();
 			await expect(page.getByRole('button', { name: 'ชนิดสถานที่' })).toBeVisible();
+			await expect(page.getByRole('button', { name: 'ประเภทอาคาร' })).toBeVisible();
 			await expect(page.getByRole('button', { name: '5 กม' })).toBeVisible();
 		});
 	}
