@@ -15,7 +15,7 @@ affects:
   - frontend/src/lib/features/operations/domain/operations.ts · worker/src/worker/inbound/donations.py (`DONATION_SCHEMA_V`)
   - frontend/src/lib/components (`form/donor-time-selection-form.svelte`, `public-donor-success-ticket.svelte`, `pending-review-detail.svelte`) · `routes/(public)/donations/donation.svelte.ts`
   - frontend/src/routes/api/back-office/donations/+server.ts · `routes/(protected)/back-office/stock-donations/components/scan-station.svelte`
-  - dependency: PR `fix/donation-tracking-pii` (allowlist ของ tracking response) · `draft-donation-donor-pii-retention` (retention ของ PII ผู้บริจาค)
+  - frontend/src/routes/api/public/v1/donations/[tracking_token]/+server.ts (tracking response — เกี่ยวข้อง #927)
 why: จุดรับของ/รปภ. ต้องตรวจรถที่มาส่งของ แต่ฟอร์มปัจจุบันเก็บแค่ประเภทรถ (GitHub #823)
 migration: field ใหม่ optional — doc เดิมไม่ต้อง backfill; reader feature-detect ไม่ branch ตาม `schema_v`
 ---
@@ -27,7 +27,7 @@ migration: field ใหม่ optional — doc เดิมไม่ต้อง
 - **เปลี่ยน:** เพิ่ม `donation.logistics.vehicle_plate` (ไม่บังคับ, free text ช่องเดียว ≤ 40) เฉพาะ `self_dropoff` ทุกประเภทรถ · แสดงบนตั๋วและ back-office (สแกน, รอประเมิน) · **ไม่**แสดงหน้าติดตาม
 - **เพื่อ:** จุดรับของ/รปภ. ตรวจรถคันที่มาส่งได้
 - **dev ต้อง build:** zod + type + ช่องในฟอร์ม + ตั๋ว + 2 หน้า back-office · `DONATION_SCHEMA_V` 7 → 8 (frontend + worker)
-- **กระทบ:** schema.md §2.3 · ทะเบียนเป็น PII ผู้บริจาค · ต้อง merge หลัง allowlist ของ tracking response (`fix/donation-tracking-pii`) · FastAPI / Mongo / openapi ไม่ต้องแก้
+- **กระทบ:** schema.md §2.3 · ทะเบียนเป็น PII ผู้บริจาค · ทะเบียนต้องไม่อยู่ใน response ของ API ติดตามใบ · FastAPI / Mongo / openapi ไม่ต้องแก้
 
 ## Requirements
 
@@ -48,10 +48,10 @@ migration: field ใหม่ optional — doc เดิมไม่ต้อง
 - **FR-3d** — doc ที่ไม่มีทะเบียนแสดงเหมือนเดิม ไม่มีข้อความ "ไม่ระบุ" ใหม่
 
 **หน้าติดตาม (dependency)**
-- **FR-4** — PR ของ CR นี้ merge **หลัง** allowlist ของ tracking response จาก PR `fix/donation-tracking-pii` อยู่บน `develop` (allowlist `logistics` = `delivery_method`, `vehicle`, `slot`, `eta`, `courier_tracking_no`, `pickup_address`) · CR นี้ไม่เขียน allowlist เอง · ห้ามเพิ่ม `vehicle_plate` เข้า allowlist
+- **FR-4** — response ของ API ติดตามใบ (`GET /api/public/v1/donations/{tracking_token}`) ต้องไม่มี `vehicle_plate` · `logistics` ที่ส่งกลับมีได้เฉพาะ `delivery_method`, `vehicle`, `slot`, `eta`, `courier_tracking_no`, `pickup_address` · ปัจจุบัน `develop` ส่ง `logistics` ทั้งก้อน (ปัญหาเดียวกับ #927)
 
 **PII และ schema version**
-- **FR-5** — `vehicle_plate` เป็น PII ผู้บริจาค อยู่ใต้ retention ของ `draft-donation-donor-pii-retention` (CR นี้ไม่กำหนด retention เอง) · CR retention ต้องรวม field นี้
+- **FR-5** — `vehicle_plate` เป็น PII ผู้บริจาค อยู่ใต้ retention เดียวกับ PII ผู้บริจาคอื่น (ชื่อ, เบอร์, LINE, อีเมล) · CR นี้ไม่กำหนด retention เอง
 - **FR-6** — `donation.schema_v` 7 → 8 · `DONATION_SCHEMA_V` frontend = worker = 8 · reader feature-detect field ห้าม branch ตาม `schema_v`
 
 ## Change (before → after)
@@ -61,7 +61,7 @@ migration: field ใหม่ optional — doc เดิมไม่ต้อง
 | ข้อมูลรถใน `logistics` | `vehicle` (ประเภทรถ) | `vehicle` + `vehicle_plate?` (เฉพาะ `self_dropoff`) |
 | ฟอร์ม "นำมาส่งด้วยตนเอง" | เลือกประเภทรถ | + ช่อง "ทะเบียนรถ (ถ้ามี)" |
 | ตั๋ว / back-office | ไม่แสดงรถ (ตั๋ว) · ประเภทรถ (back-office) | + ทะเบียนรถ |
-| หน้าติดตาม | — | ไม่แสดงทะเบียน (allowlist) |
+| API ติดตามใบ | ส่ง `logistics` ทั้งก้อน | ไม่มีทะเบียน (FR-4) |
 | `donation.schema_v` | 7 | 8 |
 
 ## Acceptance
@@ -71,17 +71,17 @@ migration: field ใหม่ optional — doc เดิมไม่ต้อง
 - **AC-3** — `parcel` หรือ `shelter_pickup` พร้อมทะเบียน → ปฏิเสธ
 - **AC-4** — whitespace ล้วน → omit ไม่ปฏิเสธ
 - **AC-5** — สลับวิธีส่งจาก `self_dropoff` → payload ไม่มีทะเบียน · สลับกลับ → ช่องยังมีค่าเดิม
-- **AC-6** — response ของ tracking BFF ไม่มี `vehicle_plate` และยังมีทุก field ใน allowlist (ทั้งแหล่ง CouchDB และ FastAPI fallback)
+- **AC-6** — response ของ API ติดตามใบไม่มี `vehicle_plate` และยังมี field `logistics` ตาม FR-4 (ทั้งแหล่ง CouchDB และ FastAPI fallback)
 - **AC-7** — ผู้ที่ไม่ใช่บทบาทคลังเรียก back-office GET → 403
 - **AC-8** — doc v7 (ไม่มีทะเบียน) และ v8 (มีทะเบียน) แสดงถูกในทุก reader (ตั๋ว, สแกน, รอประเมิน, ติดตาม)
 - **AC-9** — `DONATION_SCHEMA_V` ของ frontend และ worker = 8
 
 ## Impact
 
-- **Gate:** implement ได้เมื่อ CR approve · merge ได้เมื่อ allowlist (FR-4) อยู่บน `develop` แล้ว · ไม่ต้องรอ `draft-donation-donor-pii-retention` merge
+- **Gate:** implement ได้เมื่อ CR approve · merge ได้เมื่อ FR-4 เป็นจริงบน `develop`
 - **ไม่ต้องแก้:** FastAPI (`logistics: dict[str, Any]`), `DonationBuffer`, openapi types, worker inbound (copy `logistics` ทั้งก้อน — แก้แค่ `DONATION_SCHEMA_V`), projector `public_donations` (ไม่ project `logistics`), CouchDB VDU
 - **ทะเบียนอยู่ที่ไหน:** Mongo `DonationBuffer` (ชั่วคราว, purge ทั้งแถวหลัง sync) · CouchDB `donation` (ตาม retention CR) · back-office BFF (`authorizeWarehouse`) · backup (ตาม retention CR) · **ไม่อยู่**ใน `PublicDonation`, tracking response, audit, log
-- **mixed-version:** worker v7 + frontend ใหม่ → doc มีทะเบียนแต่ stamp 7 (อ่านได้เพราะ reader ไม่ดู `schema_v`) · worker v8 + frontend เก่า → stamp 8 ไม่มีทะเบียน · rollback frontend ไม่ทำทะเบียนหาย (`Math.max` ไม่ลด `schema_v`) · version ก่อน `fix/donation-tracking-pii` ห้ามเป็น rollback target เมื่อมี doc ที่มีทะเบียน
+- **mixed-version:** worker v7 + frontend ใหม่ → doc มีทะเบียนแต่ stamp 7 (อ่านได้เพราะ reader ไม่ดู `schema_v`) · worker v8 + frontend เก่า → stamp 8 ไม่มีทะเบียน · rollback frontend ไม่ทำทะเบียนหาย (`Math.max` ไม่ลด `schema_v`) · เมื่อมี doc ที่มีทะเบียนแล้ว ห้าม rollback ไปเวอร์ชันที่ API ติดตามใบยังส่ง `logistics` ทั้งก้อน
 
 ## Migration
 
@@ -95,8 +95,8 @@ migration: field ใหม่ optional — doc เดิมไม่ต้อง
 - ประเภทรถอย่างเดียวระบุรถคันจริงไม่ได้
 - ไม่บังคับ — บางรายไม่มีทะเบียนหรือไม่ต้องการให้ข้อมูล
 - ไม่รวม `shelter_pickup` — รถที่ไปรับเป็นรถของศูนย์
-- ทะเบียนระบุตัวบุคคลได้ → กันจากหน้าสาธารณะด้วย allowlist และผูกกับ retention เดียวกับ PII ผู้บริจาคอื่น (ชื่อ, เบอร์, LINE, อีเมล)
-- ตัดทิ้ง: บังคับกรอก · แสดงบนหน้าติดตาม · สองช่อง (ทะเบียน + dropdown จังหวัด 77) · สามช่องมี validation · ช่องเดียว ≤ 20 · flag `config:app` ให้ SA เปิดปิด + endpoint `donation-settings` (เกินขอบเขต #823 — PII ผู้บริจาคอื่นเก็บโดยไม่มี flag และการรั่วทางหน้าติดตามปิดด้วย allowlist แล้ว)
+- ทะเบียนระบุตัวบุคคลได้ → กันจาก API ติดตามใบ (FR-4) และผูกกับ retention เดียวกับ PII ผู้บริจาคอื่น (ชื่อ, เบอร์, LINE, อีเมล)
+- ตัดทิ้ง: บังคับกรอก · แสดงบนหน้าติดตาม · สองช่อง (ทะเบียน + dropdown จังหวัด 77) · สามช่องมี validation · ช่องเดียว ≤ 20 · flag `config:app` ให้ SA เปิดปิด + endpoint `donation-settings` (เกินขอบเขต #823 — PII ผู้บริจาคอื่นเก็บโดยไม่มี flag และการรั่วทางหน้าติดตามกันด้วย FR-4)
 
 ## Decision log
 
@@ -105,6 +105,5 @@ migration: field ใหม่ optional — doc เดิมไม่ต้อง
 - 2026-10-26 — owner: `donation.schema_v` 7 → 8
 - 2026-10-26 — owner: ตั๋วแสดงทะเบียนอย่างเดียว ไม่แสดงประเภทรถ
 - 2026-10-26 — owner: คง allowance เดิมของ `vehicle` กับ `shelter_pickup`; `vehicle_plate` ห้ามทั้ง `shelter_pickup` และ `parcel`
-- 2026-10-26 — owner: allowlist ของ tracking response ทำใน PR แยก `fix/donation-tracking-pii`; CR นี้ขึ้นกับ PR นั้น
 - 2026-10-27 — owner: ช่องเดียว free text trim ≤ 40 ว่าง = omit
-- 2026-10-27 — ลดขอบเขตให้ตรง #823: ตัด flag `config:app.donation_vehicle_plate_enabled` และ endpoint `donation-settings` · merge หลัง allowlist แทนการคุมด้วย flag
+- 2026-10-27 — ลดขอบเขตให้ตรง #823: ตัด flag `config:app.donation_vehicle_plate_enabled` และ endpoint `donation-settings` · กันทะเบียนจาก API ติดตามใบ (FR-4) แทนการคุมด้วย flag
