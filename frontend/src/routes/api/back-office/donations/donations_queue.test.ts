@@ -176,4 +176,44 @@ describe('GET /api/back-office/donations (pending intake queue)', () => {
 
 		expect(response.status).toBe(403);
 	});
+
+	it('maps logistics.vehicle_plate: v8 doc → value, v7 doc → null', async () => {
+		const v8 = {
+			...sh001[0]!.doc,
+			_id: 'donation:v8',
+			booking_ref: 'DN-000008',
+			schema_v: 8,
+			logistics: {
+				delivery_method: 'self_dropoff',
+				vehicle: 'car',
+				vehicle_plate: 'กข 1234 กรุงเทพมหานคร',
+				eta: '2026-07-21T09:00:00.000Z'
+			}
+		};
+		const v7 = { ...sh001[1]!.doc, schema_v: 7 };
+		vi.mocked(adminRaw).mockImplementation((path: string, method: string) => {
+			if (method === 'GET' && path.includes('/registry/')) {
+				return Promise.resolve({
+					status: 200,
+					data: { rows: [{ id: 'shelter:SH001', doc: { code: 'SH001' } }] }
+				});
+			}
+			if (method === 'GET' && path.includes('/shelter_sh001/')) {
+				return Promise.resolve({ status: 200, data: { rows: [{ doc: v8 }, { doc: v7 }] } });
+			}
+			return Promise.resolve({ status: 404, data: {} });
+		});
+
+		const data = await (await GET(event())).json();
+		const byRef = Object.fromEntries(
+			data.donations.map((d: { booking_ref: string; vehicle_plate: string | null }) => [
+				d.booking_ref,
+				d.vehicle_plate
+			])
+		);
+		expect(byRef['DN-000008']).toBe('กข 1234 กรุงเทพมหานคร');
+		expect(byRef['DN-000001']).toBeNull();
+		// the existing columns are untouched
+		expect(data.donations[0]).toMatchObject({ vehicle: 'car', delivery_method: 'self_dropoff' });
+	});
 });

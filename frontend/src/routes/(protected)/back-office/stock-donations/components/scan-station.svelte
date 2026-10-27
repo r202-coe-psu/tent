@@ -1135,6 +1135,9 @@
 									<div>
 										<dt class="text-xs text-slate-500">วิธีส่ง / ยานพาหนะ</dt>
 										<dd class="font-semibold text-slate-900">{vehicleLabel}</dd>
+										{#if donationDoc?.logistics?.vehicle_plate}
+											<dd class="text-slate-500">ทะเบียน {donationDoc.logistics.vehicle_plate}</dd>
+										{/if}
 									</div>
 								</div>
 								<div class="flex gap-2.5">
