@@ -1,5 +1,4 @@
 <script lang="ts">
-	import Camera from '@lucide/svelte/icons/camera';
 	import ImagePlus from '@lucide/svelte/icons/image-plus';
 	import LoaderCircle from '@lucide/svelte/icons/loader-circle';
 	import ShieldAlert from '@lucide/svelte/icons/shield-alert';
@@ -119,36 +118,20 @@
 	{#if photos.budget.full}
 		<p class="text-sm font-semibold text-slate-600">{t.photoFull}</p>
 	{:else}
-		<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-			<div>
-				<input
-					id="donor-photo-gallery"
-					type="file"
-					accept="image/*"
-					multiple
-					class="peer sr-only"
-					data-testid="donor-photo-input"
-					onchange={onPick}
-				/>
-				<label for="donor-photo-gallery" class={pickerClass}>
-					<ImagePlus class="size-5" aria-hidden="true" />
-					{t.photoAddBtn}
-				</label>
-			</div>
-			<div>
-				<input
-					id="donor-photo-camera"
-					type="file"
-					accept="image/*"
-					capture="environment"
-					class="peer sr-only"
-					onchange={onPick}
-				/>
-				<label for="donor-photo-camera" class={pickerClass}>
-					<Camera class="size-5" aria-hidden="true" />
-					{t.photoTakeBtn}
-				</label>
-			</div>
+		<div>
+			<input
+				id="donor-photo-gallery"
+				type="file"
+				accept="image/*"
+				multiple
+				class="peer sr-only"
+				data-testid="donor-photo-input"
+				onchange={onPick}
+			/>
+			<label for="donor-photo-gallery" class={pickerClass}>
+				<ImagePlus class="size-5" aria-hidden="true" />
+				{t.photoAddBtn}
+			</label>
 		</div>
 	{/if}
 </section>

@@ -378,7 +378,6 @@ export const PUBLIC_DONATIONS_I18N = {
 		photoPrivacyWarning:
 			'รูปอาจติดข้อมูลส่วนตัว เช่น หน้าคน ทะเบียนรถ หรือบ้านเลขที่ กรุณาถ่ายเฉพาะตัวของ',
 		photoAddBtn: 'เลือกรูป',
-		photoTakeBtn: 'ถ่ายรูป',
 		photoUsage: 'ใช้ไปแล้ว {used} / 10 MB',
 		photoCount: '{count} / 30 รูป',
 		photoFull: 'แนบรูปครบแล้ว',
@@ -771,7 +770,6 @@ export const PUBLIC_DONATIONS_I18N = {
 		photoPrivacyWarning:
 			'Photos may show personal details such as faces, licence plates or house numbers. Please photograph the items only.',
 		photoAddBtn: 'Choose photos',
-		photoTakeBtn: 'Take a photo',
 		photoUsage: 'Used {used} / 10 MB',
 		photoCount: '{count} / 30 photos',
 		photoFull: 'Photo limit reached',

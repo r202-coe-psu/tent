@@ -344,7 +344,7 @@
               <strong>รูปของที่จะบริจาค</strong> (ไม่บังคับ · ทั้งใบ ไม่ผูกรายการ ·
               <a href="../changes/04-donation/CR-175-donation-donor-photos.md">CR-175 donor photos</a>) —
               มีเฉพาะโหมด "บริจาคของอื่น ๆ" (พิมพ์เอง) ไม่มีในโหมดเลือกจากความต้องการ ·
-              ปุ่ม "เลือกรูป" (หลายรูป) และ "ถ่ายรูป" (<code>capture="environment"</code>) ·
+              ปุ่ม "เลือกรูป" (หลายรูป · บนมือถือเลือกถ่ายจากกล้องได้ในตัวเลือกของเครื่อง) ·
               ต้นฉบับ ≤ 20MB ต่อรูป · ย่อในเครื่องเป็น WEBP ด้านยาว 1600px คุณภาพ 0.8 + thumb 200px
               (browser ที่ encode WEBP ไม่ได้ใช้ JPEG) แล้วอัปทันทีผ่าน
               <code>POST /api/public/v1/donations/photos</code> · แถบ "ใช้ไปแล้ว X / 10 MB" และ "N / 30 รูป" ·
@@ -686,7 +686,7 @@
                 </tr>
                 <tr>
                   <td><code>POST /api/public/v1/donations/photos</code> (BFF-only)</td>
-                  <td>เลือก/ถ่ายรูปในฟอร์มโหมดพิมพ์เอง (ขั้น 2) — ทีละรูป</td>
+                  <td>เลือกรูปในฟอร์มโหมดพิมพ์เอง (ขั้น 2) — ทีละรูป</td>
                   <td>ไม่ต้อง login (rate limit nginx <code>public_write</code>)</td>
                   <td>
                     toast ต่อรูปแล้วตัดรูปนั้นออก; <code>PHOTO_NOT_IMAGE</code> / <code>PHOTO_TOO_LARGE</code> /
