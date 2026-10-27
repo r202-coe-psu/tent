@@ -140,21 +140,16 @@ describe('registerKioskWalkIn', () => {
 		expect(saved.privacy.search_excluded).toBe(false);
 	});
 
-	it('excludes a basic registration from search and keeps health off', async () => {
+	it('excludes the evacuee from search when search visibility is declined', async () => {
 		const db = fakeShelterDb();
-		const basic: ConsentDecision = {
-			mode: 'basic',
-			guardian_for: [],
-			verbal: false,
-			...mintConsentStamp()
-		};
-		await registerKioskWalkIn('SH001', 'KIOSK-01', 'โต๊ะ 1', card, null, basic);
+		const hidden: ConsentDecision = { ...decision, search_visible: false };
+		await registerKioskWalkIn('SH001', 'KIOSK-01', 'โต๊ะ 1', card, null, hidden);
 		const [saved] = db.ofType<{
 			consent: { mode: string; health: boolean };
 			privacy: { search_excluded: boolean };
 		}>('evacuee');
 
-		expect(saved.consent).toMatchObject({ mode: 'basic', health: false });
+		expect(saved.consent).toMatchObject({ mode: 'full', health: false });
 		expect(saved.privacy.search_excluded).toBe(true);
 	});
 

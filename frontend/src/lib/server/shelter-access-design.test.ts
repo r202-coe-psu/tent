@@ -1261,10 +1261,12 @@ describe('buildValidateDocUpdate', () => {
 			);
 		});
 
-		it('accepts a basic-mode public pre-register evacuee from the roleless public writer', () => {
+		it('accepts a full-mode public pre-register evacuee from the roleless public writer', () => {
 			const [plan] = planPublicConsent({
 				consent: {
-					mode: 'basic',
+					mode: 'full',
+					health: true,
+					search_visible: true,
 					guardian_for: [],
 					verbal: false,
 					ref: 'CS-7K3QZ9MD',
