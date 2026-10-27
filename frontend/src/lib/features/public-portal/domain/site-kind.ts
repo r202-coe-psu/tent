@@ -1,11 +1,11 @@
 import { formatMasterLabel } from '$lib/features/master-data';
-import { DEFAULT_SITE_KIND, HOST_HOUSE_SITE_KIND } from '$lib/features/shelters';
 import type { MasterLabelOption } from './master-labels';
 
 /** One `master_data:site_kind` item as served by `/api/public/v1/config/site-kinds`. */
 export type SiteKindOption = MasterLabelOption & { status?: string };
 
-export { DEFAULT_SITE_KIND, HOST_HOUSE_SITE_KIND };
+export const DEFAULT_SITE_KIND = 'evacuation_center';
+export const HOST_HOUSE_SITE_KIND = 'host_house';
 
 /**
  * Labels for the two seeded codes, used only while the site-kinds list has not
