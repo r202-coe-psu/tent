@@ -8,6 +8,10 @@ vi.mock('$lib/server/security/captcha', () => ({
 		verifyToken = vi.fn();
 	}
 }));
+// `fastapiServiceHeaders` reads the donor IP off the current request.
+vi.mock('$app/server', () => ({
+	getRequestEvent: () => ({ getClientAddress: () => '203.0.113.5' })
+}));
 vi.mock('$env/dynamic/private', () => ({
 	env: {
 		FASTAPI_INTERNAL_URL: 'http://localhost:9000',

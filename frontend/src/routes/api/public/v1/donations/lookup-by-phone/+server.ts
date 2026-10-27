@@ -49,8 +49,9 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
 	try {
 		const res = await fetch(`${fastapiBaseUrl()}/public/v1/donations/lookup-by-phone`, {
 			method: 'POST',
-			// FastAPI logs and alerts per source (FR-9); without this every lookup is the BFF's.
-			headers: fastapiServiceHeaders({ 'Content-Type': 'application/json', 'X-Real-IP': ip }),
+			// The service headers carry the donor IP as X-Real-IP: FastAPI logs and alerts per
+			// source (FR-9), and without it every lookup would be the BFF's.
+			headers: fastapiServiceHeaders({ 'Content-Type': 'application/json' }),
 			body: JSON.stringify({ phone })
 		});
 		if (!res.ok) {
