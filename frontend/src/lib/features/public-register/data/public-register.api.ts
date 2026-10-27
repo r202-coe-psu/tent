@@ -13,6 +13,7 @@ import type { UnifiedRegistrationInput } from '$lib/features/people';
 import type { PublicBookingInput, PublicBookingLookupInput } from '../domain/booking';
 import { NETWORK_ERROR_MESSAGE, publicBookingErrorMessage } from '../domain/booking';
 import { unassignedRegistrationErrorMessage } from '../domain/unassigned-registration';
+import type { PublicConsentBody } from '../domain/public-consent';
 
 export interface BookingTicketResponse {
 	success: true;
@@ -24,11 +25,12 @@ export interface BookingTicketResponse {
 	booked_at: string;
 }
 
-export type PublicUnifiedBookingPayload = UnifiedRegistrationInput & {
-	shelter_code: string;
-	captchaToken?: string;
-	disclaimerAcknowledged?: boolean;
-};
+export type PublicUnifiedBookingPayload = UnifiedRegistrationInput &
+	PublicConsentBody & {
+		shelter_code: string;
+		captchaToken?: string;
+		disclaimerAcknowledged?: boolean;
+	};
 
 /** BFF error with machine-readable `code` for join-clear / field mapping. */
 export class PublicApiError extends Error {
@@ -131,10 +133,11 @@ export async function lookupBooking(
 export type UnassignedRegistrationResponse =
 	components['schemas']['UnassignedRegistrationCreateResponse'];
 
-export type PublicUnassignedRegistrationPayload = UnifiedRegistrationInput & {
-	captchaToken?: string;
-	disclaimerAcknowledged?: boolean;
-};
+export type PublicUnassignedRegistrationPayload = UnifiedRegistrationInput &
+	PublicConsentBody & {
+		captchaToken?: string;
+		disclaimerAcknowledged?: boolean;
+	};
 
 async function unassignedRegistrationError(res: Response): Promise<PublicApiError> {
 	const body = (await res.json().catch(() => null)) as ErrorEnvelope | null;

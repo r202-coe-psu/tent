@@ -5,6 +5,8 @@ import {
 	expiryLabel,
 	filterRows,
 	hiddenCatalogCount,
+	locationOptions,
+	MAIN_STORE_LOCATION,
 	pageSlice,
 	sortRows,
 	statusBadges,
@@ -103,6 +105,54 @@ describe('filterRows', () => {
 		const b = row({ _id: 'b', category: 'food', storageKeys: ['sp:2', 'sp:1'] });
 		expect(filterRows([a, b], { ...NO_FILTER, cat: 'water' }).map((r) => r._id)).toEqual(['a']);
 		expect(filterRows([a, b], { ...NO_FILTER, loc: 'sp:1' }).map((r) => r._id)).toEqual(['a', 'b']);
+	});
+
+	it('maps the main-store token to unspecified lots', () => {
+		const a = row({ _id: 'a', storageKeys: [''] });
+		const b = row({ _id: 'b', storageKeys: ['id:1'] });
+		expect(
+			filterRows([a, b], { ...NO_FILTER, loc: MAIN_STORE_LOCATION }).map((r) => r._id)
+		).toEqual(['a']);
+	});
+});
+
+describe('locationOptions', () => {
+	it('offers configured points even before any stock was received', () => {
+		expect(locationOptions([{ id: '1', name: 'ห้อง 3' }], [])).toEqual([
+			{ value: 'id:1', label: 'ห้อง 3' },
+			{ value: MAIN_STORE_LOCATION, label: 'คลังหลัก' }
+		]);
+	});
+
+	it('adds ledger-only locations after the points, skipping duplicates and unspecified', () => {
+		const options = locationOptions(
+			[{ id: '1', name: 'ห้อง 3' }],
+			[
+				{ key: 'id:1', name: 'ชื่อเก่า' },
+				{ key: 'name:โกดัง', name: 'โกดัง' },
+				{ key: 'id:9', name: 'จุดที่ลบแล้ว' },
+				{ key: '', name: null }
+			]
+		);
+		expect(options.map((o) => o.value)).toEqual([
+			'id:1',
+			'name:โกดัง',
+			'id:9',
+			MAIN_STORE_LOCATION
+		]);
+		expect(options[0].label).toBe('ห้อง 3');
+	});
+
+	it("adds what a configured point can hold as the option's hint (#647 AC3)", () => {
+		const options = locationOptions(
+			[{ id: '1', name: 'ห้อง 3', typeLabels: ['อาหารแห้ง', 'น้ำดื่ม'] }],
+			[{ key: 'name:โกดัง', name: 'โกดัง' }]
+		);
+		expect(options).toEqual([
+			{ value: 'id:1', label: 'ห้อง 3', hint: 'อาหารแห้ง, น้ำดื่ม' },
+			{ value: 'name:โกดัง', label: 'โกดัง' },
+			{ value: MAIN_STORE_LOCATION, label: 'คลังหลัก' }
+		]);
 	});
 });
 

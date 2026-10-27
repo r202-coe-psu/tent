@@ -11,16 +11,21 @@
 	import * as Card from '$lib/components/ui/card';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
+	import { ConsentSummary, initialSearchVisible } from '$lib/features/consent';
 	import {
 		FamilyBatchPrint,
+		RegistrationConsentResult,
 		RegistrationSaveErrorAlert,
 		UnifiedRegistrationForm,
 		peopleRepository,
 		useHousehold,
 		useSubmitFamilyReportIn,
 		buildSaveFailureReport,
+		formatPersonName,
 		type Evacuee,
 		type Household,
+		type RegistrationConsent,
+		type RegistrationConsentConfig,
 		type SaveFailureReport,
 		type UnifiedRegistrationInput,
 		type UnifiedMemberWithMeta
@@ -61,8 +66,34 @@
 
 	const claimMutation = useClaimUnassignedRegistration();
 	const submitReportIn = useSubmitFamilyReportIn();
+	// CR-192: when the report-in form was opened — the Station 1 `start` time (plain const: not reactive).
+	const formOpenedAt = new Date().toISOString();
 
-	let completed = $state<{ household: Household; members: Evacuee[] } | null>(null);
+	const staff = $derived(
+		authStore.user
+			? { name: authStore.user.display_name || authStore.user.name, userId: authStore.user.name }
+			: null
+	);
+	/** FR-41: members who consented on the public form keep it and get a read-only summary. */
+	const consentedMembers = $derived(
+		openMembers.flatMap((member) => (member.consent ? [{ member, consent: member.consent }] : []))
+	);
+	const consentConfig = $derived<RegistrationConsentConfig>({
+		channel: 'staff',
+		staff,
+		consentedKeys: consentedMembers.map(({ member }) => member.reserved_evacuee_id),
+		initialSearchVisible: initialSearchVisible(
+			openMembers
+				.filter((m) => !m.consent)
+				.map((m) => ({ search_excluded: m.search_excluded ?? false }))
+		)
+	});
+
+	let completed = $state<{
+		household: Household;
+		members: Evacuee[];
+		consentRef: string | null;
+	} | null>(null);
 	let saveError = $state<SaveFailureReport | null>(null);
 	let isDirty = $state(false);
 	let isNavigatingAfterSave = $state(false);
@@ -95,9 +126,14 @@
 
 	async function handleConfirm(
 		input: UnifiedRegistrationInput,
-		meta?: { reportingInMembers: UnifiedMemberWithMeta[]; allMembers: UnifiedMemberWithMeta[] }
+		meta?: {
+			reportingInMembers: UnifiedMemberWithMeta[];
+			allMembers: UnifiedMemberWithMeta[];
+			consent: RegistrationConsent | null;
+		}
 	) {
 		saveError = null;
+		const consent = meta?.consent ?? null;
 		try {
 			if (!claimedHouseholdId) {
 				const claimResult = await claimMutation.mutateAsync(claimPayload());
@@ -119,11 +155,13 @@
 				ctx: {
 					shelterCode: data.shelterCode ?? getShelterCode(),
 					createdBy: authStore.user?.name ?? 'unknown'
-				}
+				},
+				consent,
+				stationStartedAt: formOpenedAt
 			});
 			isDirty = false;
 			isNavigatingAfterSave = true;
-			completed = result;
+			completed = { ...result, consentRef: consent?.decision.ref ?? null };
 			toast.success(`รับเข้าศูนย์สำเร็จ ${result.members.length} คน`);
 		} catch (err) {
 			saveError = !claimedHouseholdId
@@ -174,6 +212,13 @@
 
 <div class="mx-auto w-full max-w-6xl px-4 py-4 md:px-6 md:py-6 xl:max-w-7xl">
 	{#if completed}
+		{#if completed.consentRef}
+			<RegistrationConsentResult
+				members={completed.members}
+				consentRef={completed.consentRef}
+				{staff}
+			/>
+		{/if}
 		<FamilyBatchPrint
 			household={completed.household}
 			members={completed.members}
@@ -282,6 +327,17 @@
 					</ul>
 				</Card.Root>
 			{/if}
+			{#if consentedMembers.length > 0}
+				<div class="mb-4 grid gap-3 md:grid-cols-2">
+					{#each consentedMembers as { member, consent } (member.reserved_evacuee_id)}
+						<ConsentSummary
+							{consent}
+							searchExcluded={member.search_excluded ?? false}
+							heading={formatPersonName(member)}
+						/>
+					{/each}
+				</div>
+			{/if}
 			<UnifiedRegistrationForm
 				mode="report-in"
 				channel="onsite"
@@ -289,6 +345,7 @@
 				shelterCode={data.shelterCode ?? getShelterCode()}
 				{initialHousehold}
 				{initialMembers}
+				consent={consentConfig}
 				pending={claimMutation.isPending || submitReportIn.isPending}
 				onsubmit={handleConfirm}
 				onDirtyChange={(dirty) => (isDirty = dirty)}

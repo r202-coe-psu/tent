@@ -40,11 +40,14 @@
 	import StockFilters from './stock/stock-filters.svelte';
 	import StockRow from './stock/stock-row.svelte';
 	import StockCard from './stock/stock-card.svelte';
+	import DisabledReason from './stock/disabled-reason.svelte';
+	import { DISTRIBUTE_FORBIDDEN_HINT, OFFLINE_HINT } from './stock/hints';
 	import {
 		attentionCounts,
 		clampPage,
 		filterRows,
 		hiddenCatalogCount,
+		locationOptions,
 		pageSlice,
 		sortRows,
 		visibleRows,
@@ -98,8 +101,6 @@
 	const isSA = $derived(isSystemAdmin(roles));
 	const currentShelter = $derived(getShelterCode());
 	const canDistribute = $derived(canDistributeStock(roles, currentShelter));
-	const DISTRIBUTE_FORBIDDEN_HINT =
-		'ต้องมีสิทธิ์เจ้าหน้าที่คลัง (warehouse_staff) หรือผู้จัดการศูนย์ (shelter_manager) จึงจะเบิกจ่ายได้';
 	let showOverall = $state(false);
 
 	const sheltersQuery = useShelters();
@@ -231,30 +232,29 @@
 	 * named below, instead of every item's lots vanishing (#569).
 	 */
 	const projected = $derived.by(() => {
-		const broken: string[] = [];
-		const lots = projectLotsByItem(ledger, (itemId) => broken.push(itemId));
-		return { byItem: groupLotsByItem(lots), broken };
+		const { lots, brokenItemIds } = projectLotsByItem(ledger);
+		return { byItem: groupLotsByItem(lots), brokenItemIds };
 	});
 	const lotsByItem = $derived(projected.byItem);
 
 	/**
-	 * Location filter options from the lots still on the shelf, keyed by `lotStorageKey` so a
-	 * renamed storage point stays one option (draft-shelter-storage-points). Lots, not raw rows:
-	 * an empty lot is not a place to filter by, and an outbound or return row's `lot.note` may
-	 * hold a distribution destination ("อาคารยิมเนเซียม 1"), which is no place in the store (#569).
+	 * Location filter options, keyed by `lotStorageKey` so a renamed storage point stays one option
+	 * (draft-shelter-storage-points). Configured points plus lots still on the shelf, not raw rows:
+	 * an empty lot is not a place to filter by, and an outbound or return row's `lot.note` may hold
+	 * a distribution destination ("อาคารยิมเนเซียม 1"), which is no place in the store (#569).
 	 */
-	const uniqueLocations = $derived.by(() => {
-		const locations = new SvelteMap<string, string>();
-		for (const lots of lotsByItem.values()) {
-			for (const lot of lots) {
-				if (!qtyGt(lot.qty, 0)) continue;
-				const key = lotStorageKey(lot.lot);
-				const name = lotStorageName(lot.lot, storagePoints.points);
-				if (key && name && !locations.has(key)) locations.set(key, name);
-			}
-		}
-		return Array.from(locations, ([value, label]) => ({ value, label }));
-	});
+	const uniqueLocations = $derived(
+		locationOptions(
+			storagePoints.points,
+			Array.from(lotsByItem.values())
+				.flat()
+				.filter((lot) => qtyGt(lot.qty, 0))
+				.map((lot) => ({
+					key: lotStorageKey(lot.lot),
+					name: lotStorageName(lot.lot, storagePoints.points)
+				}))
+		)
+	);
 
 	/** Shelf life / storage type per item, for the lot order shown in the detail panel. */
 	const lotPriorityItems = $derived(toLotPriorityItems(itemMastersQuery.data ?? []));
@@ -312,7 +312,7 @@
 	});
 
 	const brokenItemNames = $derived(
-		projected.broken.map((id) => items.find((item) => item._id === id)?.name ?? id)
+		projected.brokenItemIds.map((id) => items.find((item) => item._id === id)?.name ?? id)
 	);
 
 	/** "Ever stocked" = at least one ledger row at this shelter; the rest are catalog-only. */
@@ -378,7 +378,9 @@
 
 	// Session expired (`needsReauth`): reading still works, every write button is off.
 	const offline = $derived(authStore.needsReauth);
-	const OFFLINE_HINT = 'เซสชันหมดอายุ — เข้าสู่ระบบใหม่เพื่อบันทึก';
+	const distributeDisabledReason = $derived(
+		offline ? OFFLINE_HINT : !canDistribute ? DISTRIBUTE_FORBIDDEN_HINT : undefined
+	);
 
 	function clearFilters() {
 		updateUrl({ q: '', cat: 'all', loc: 'all', status: 'all' });
@@ -405,17 +407,18 @@
 					<ArrowDownToLine class="h-4 w-4" aria-hidden="true" />
 					รับเข้า
 				</Button>
-				<Button
-					type="button"
-					variant="outline"
-					class="min-h-11 gap-2 rounded-lg border-slate-300 px-4 text-sm font-semibold text-slate-800 shadow-2xs"
-					disabled={offline || !canDistribute}
-					title={offline ? OFFLINE_HINT : !canDistribute ? DISTRIBUTE_FORBIDDEN_HINT : undefined}
-					onclick={() => openQuickAction('distribute')}
-				>
-					<ArrowUpFromLine class="h-4 w-4" aria-hidden="true" />
-					เบิกจ่าย
-				</Button>
+				<DisabledReason reason={distributeDisabledReason}>
+					<Button
+						type="button"
+						variant="outline"
+						class="min-h-11 gap-2 rounded-lg border-slate-300 px-4 text-sm font-semibold text-slate-800 shadow-2xs"
+						disabled={offline || !canDistribute}
+						onclick={() => openQuickAction('distribute')}
+					>
+						<ArrowUpFromLine class="h-4 w-4" aria-hidden="true" />
+						เบิกจ่าย
+					</Button>
+				</DisabledReason>
 				<Button
 					type="button"
 					variant="outline"
@@ -627,16 +630,17 @@
 	>
 		รับเข้า
 	</Button>
-	<Button
-		type="button"
-		variant="outline"
-		class="min-h-12 rounded-lg border-slate-300 text-sm font-semibold text-slate-800"
-		disabled={offline || !canDistribute}
-		title={offline ? OFFLINE_HINT : !canDistribute ? DISTRIBUTE_FORBIDDEN_HINT : undefined}
-		onclick={() => openQuickAction('distribute')}
-	>
-		เบิกจ่าย
-	</Button>
+	<DisabledReason reason={distributeDisabledReason}>
+		<Button
+			type="button"
+			variant="outline"
+			class="min-h-12 rounded-lg border-slate-300 text-sm font-semibold text-slate-800"
+			disabled={offline || !canDistribute}
+			onclick={() => openQuickAction('distribute')}
+		>
+			เบิกจ่าย
+		</Button>
+	</DisabledReason>
 	<Button
 		type="button"
 		variant="outline"

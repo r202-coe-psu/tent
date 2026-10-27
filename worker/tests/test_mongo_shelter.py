@@ -124,6 +124,59 @@ async def test_refresh_occupancy_writes_total_and_breakdown(db: None) -> None:
     )
 
 
+async def test_refresh_occupancy_counts_every_stay_status_including_search_excluded(
+    db: None,
+) -> None:
+    """PDPA D8: `occupancy_by_status` counts evacuees the person projection drops."""
+    await PublicShelter(
+        id="SH912",
+        shelter_code="SH912",
+        name="ศูนย์ทดสอบ occupancy_by_status",
+        status="open",
+        is_active=True,
+        capacity=100,
+        updated_at=datetime.now(UTC),
+    ).insert()
+
+    async def _docs(_database: str):
+        for doc in (
+            {
+                "_id": "evacuee:1",
+                "type": "evacuee",
+                "current_stay": {"status": "active"},
+            },
+            {
+                "_id": "evacuee:2",
+                "type": "evacuee",
+                "privacy": {"search_excluded": True},
+                "current_stay": {"status": "room_confirmed"},
+            },
+            {
+                "_id": "evacuee:3",
+                "type": "evacuee",
+                "privacy": {"search_excluded": True},
+                "current_stay": {"status": "pre_registered"},
+            },
+        ):
+            yield doc
+
+    couch = AsyncMock()
+    couch.database_exists = AsyncMock(return_value=True)
+    couch.iter_all_docs = _docs
+
+    assert await refresh_occupancy(couch, "SH912") is True
+
+    reloaded = await PublicShelter.get("SH912")
+    assert reloaded is not None
+    assert reloaded.occupancy_by_status == {
+        "active": 1,
+        "room_confirmed": 1,
+        "pre_registered": 1,
+    }
+    # EXT-005 semantics unchanged: `active` only.
+    assert reloaded.occupancy_total == 1
+
+
 async def test_refresh_occupancy_no_op_when_shelter_row_missing(db: None) -> None:
     couch = AsyncMock()
     assert await refresh_occupancy(couch, "SH-DOES-NOT-EXIST") is False

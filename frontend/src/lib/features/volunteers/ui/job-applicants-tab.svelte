@@ -1,8 +1,9 @@
 <script lang="ts">
 	/**
 	 * Job detail — Tab 3 "ผู้สมัคร (Applicants & Queue)" (01-tab-job-board.md
-	 * §01.5, approved mockup 2026-08-30): four summary tiles over one card
-	 * holding the applicant list.
+	 * §01.5, approved mockup 2026-08-30): summary tiles over one card holding the
+	 * applicant list. Volunteers staff assigned directly (no application) are listed in the
+	 * history beside the decided applications (`buildApplicantBoard`).
 	 *
 	 * Approving is the moment a job slot is consumed — the whole write path
 	 * (`JobApplicationRepository#review` → `JobRepository#confirmSlot`, with the
@@ -10,53 +11,59 @@
 	 * the data layer; this screen is the queue that drives it.
 	 *
 	 * Every list is read from an UNFILTERED query and narrowed here with
-	 * `partitionApplicantQueue`. `useJobApplications(filter)` takes its filter
+	 * `buildApplicantBoard`. `useJobApplications(filter)` takes its filter
 	 * once at setup, so a `{ jobId }` filter would freeze to whichever job was
 	 * rendered first (SvelteKit reuses this component across `[id]`
 	 * navigations) — and sharing the unfiltered cache entry with the tab badge
-	 * means the badge and this list can never disagree.
+	 * means the badge and this list can never disagree. Shift assignments (for the
+	 * per-shift check-in action) are read the same unfiltered way.
 	 */
 	import Users from '@lucide/svelte/icons/users';
 	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
 	import JobApplicantRow from './job-applicant-row.svelte';
 	import JobApplicantReviewDialog from './job-applicant-review-dialog.svelte';
-	import { groupApplicationsByApplicant, partitionApplicantQueue } from '../domain/applicant-queue';
+	import StaffAssignmentRow from './staff-assignment-row.svelte';
+	import { buildApplicantBoard } from '../domain/applicant-board';
 	import type { Job } from '../domain/job.schema';
 	import type { JobApplication } from '../domain/job-application.schema';
-	import { useJobApplications, useSkillOptions, useVolunteers } from '../application/queries';
+	import {
+		todayDateString,
+		useJobApplications,
+		useShiftAssignments,
+		useSkillOptions,
+		useVolunteers
+	} from '../application/queries';
 
 	let { job }: { job: Job } = $props();
 
 	const applicationsQuery = useJobApplications();
 	const volunteersQuery = useVolunteers();
+	const assignmentsQuery = useShiftAssignments();
 	const skillCatalog = useSkillOptions();
 
-	const loading = $derived(applicationsQuery.isPending);
-	const queue = $derived(partitionApplicantQueue(applicationsQuery.data ?? [], job._id));
-	/** Pending applications, one card per applicant with all their shifts (#716). */
-	const pendingGroups = $derived(groupApplicationsByApplicant(queue.pending));
-
-	/** `volunteer_id` → `volunteer_code`, so a linked application shows its roster code. */
-	const codeByVolunteerId = $derived(
-		new Map((volunteersQuery.data ?? []).map((v) => [v._id, v.volunteer_code]))
+	const loading = $derived(
+		applicationsQuery.isPending || assignmentsQuery.isPending || volunteersQuery.isPending
 	);
+	const assignments = $derived(assignmentsQuery.data ?? []);
+	const today = $derived(todayDateString());
 	const volunteerById = $derived(new Map((volunteersQuery.data ?? []).map((v) => [v._id, v])));
-
-	// People are counted once however many shifts they applied for; the other tiles count
-	// applications, which are one per shift (#716).
-	const counts = $derived({
-		total: groupApplicationsByApplicant([...queue.pending, ...queue.reviewed]).length,
-		pending: queue.pending.length,
-		confirmed: queue.reviewed.filter((a) => a.status === 'confirmed').length,
-		declined: queue.reviewed.filter((a) => a.status === 'rejected' || a.status === 'cancelled')
-			.length
-	});
+	const board = $derived(
+		buildApplicantBoard({
+			jobId: job._id,
+			applications: applicationsQuery.data ?? [],
+			assignments,
+			volunteers: volunteerById
+		})
+	);
+	// People are counted once however many shifts they applied for or were assigned to; the
+	// other tiles count shifts (#716).
+	const counts = $derived(board.counts);
 
 	const tiles = $derived([
 		{
 			key: 'total',
 			label: 'ผู้สมัครทั้งหมด',
-			value: counts.total,
+			value: counts.people,
 			unit: 'คน',
 			tone: 'border-border bg-card'
 		},
@@ -80,6 +87,13 @@
 			value: counts.declined,
 			unit: 'กะ',
 			tone: 'border-rose-200 bg-rose-50/70'
+		},
+		{
+			key: 'staff',
+			label: 'มอบหมายโดยเจ้าหน้าที่',
+			value: counts.staffAssigned,
+			unit: 'กะ',
+			tone: 'border-sky-200 bg-sky-50/70'
 		}
 	]);
 
@@ -98,6 +112,18 @@
 		return index === -1 ? null : `กะย่อย #${index + 1}`;
 	}
 
+	function volunteerFor(application: JobApplication) {
+		return application.volunteer_id ? (volunteerById.get(application.volunteer_id) ?? null) : null;
+	}
+
+	/** The job's sub-shift a staff assignment points at, or `null` for a legacy/deleted one. */
+	function staffShiftFor(shiftId: string | null) {
+		const index = shiftId ? job.shifts.findIndex((s) => s.id === shiftId) : -1;
+		if (index === -1) return null;
+		const { start_time, end_time } = job.shifts[index];
+		return { label: `กะย่อย #${index + 1}`, start_time, end_time };
+	}
+
 	let reviewOpen = $state(false);
 	let reviewTargets = $state<JobApplication[]>([]);
 	let reviewDecision = $state<'confirmed' | 'rejected'>('confirmed');
@@ -112,7 +138,7 @@
 </script>
 
 <div class="space-y-4">
-	<div class="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
+	<div class="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
 		{#each tiles as tile (tile.key)}
 			<div class={['rounded-2xl border p-3.5', tile.tone]}>
 				<p class="text-xs font-medium text-muted-foreground">{tile.label}</p>
@@ -134,7 +160,7 @@
 				<Skeleton class="h-32 w-full rounded-xl" />
 				<Skeleton class="h-32 w-full rounded-xl" />
 			</div>
-		{:else if counts.total === 0}
+		{:else if counts.people === 0}
 			<div
 				class="mt-3 flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border py-14 text-center text-muted-foreground"
 			>
@@ -146,52 +172,58 @@
 				</p>
 			</div>
 		{:else}
-			{#if queue.pending.length > 0}
+			{#if board.pending.length > 0}
 				<div class="mt-4 flex items-center justify-between gap-3">
 					<h4 class="text-xs font-bold text-foreground">
-						รอพิจารณา ({pendingGroups.length} คน · {queue.pending.length} กะ)
+						รอพิจารณา ({board.pending.length} คน · {counts.pending} กะ)
 					</h4>
 					<span class="text-2xs text-muted-foreground">เรียงตามวันที่สมัคร</span>
 				</div>
 				<ul class="mt-3 space-y-3">
-					{#each pendingGroups as group (group.key)}
-						{@const volunteerId = group.applications[0].volunteer_id}
+					{#each board.pending as group (group.key)}
+						{@const volunteer = volunteerFor(group.applications[0])}
 						<JobApplicantRow
 							applications={group.applications}
-							volunteer={volunteerId ? (volunteerById.get(volunteerId) ?? null) : null}
-							volunteerCode={volunteerId ? (codeByVolunteerId.get(volunteerId) ?? null) : null}
+							{volunteer}
+							volunteerCode={volunteer?.volunteer_code ?? null}
 							shiftLabelOf={shiftLabelFor}
 							requiredSkills={job.skills_required ?? []}
 							skillOptions={skillCatalog.options}
+							{assignments}
+							{today}
 							onreview={openReview}
 						/>
 					{/each}
 				</ul>
 			{/if}
 
-			{#if queue.reviewed.length > 0}
+			{#if board.history.length > 0}
 				<div class="mt-6 border-t border-border pt-4">
 					<div class="flex items-center justify-between gap-3">
 						<h4 class="text-xs font-bold text-foreground">
-							ประวัติการพิจารณา ({queue.reviewed.length} กะ)
+							ประวัติการพิจารณา ({board.history.length} กะ)
 						</h4>
-						<span class="text-2xs text-muted-foreground">รวมอนุมัติ ปฏิเสธ และไม่สะดวก</span>
+						<span class="text-2xs text-muted-foreground"
+							>รวมอนุมัติ ปฏิเสธ ไม่สะดวก และมอบหมายโดยเจ้าหน้าที่</span
+						>
 					</div>
 					<ul class="mt-3 space-y-3">
-						{#each queue.reviewed as application (application._id)}
-							<JobApplicantRow
-								applications={[application]}
-								volunteer={application.volunteer_id
-									? (volunteerById.get(application.volunteer_id) ?? null)
-									: null}
-								volunteerCode={application.volunteer_id
-									? (codeByVolunteerId.get(application.volunteer_id) ?? null)
-									: null}
-								shiftLabelOf={shiftLabelFor}
-								requiredSkills={job.skills_required ?? []}
-								skillOptions={skillCatalog.options}
-								onreview={openReview}
-							/>
+						{#each board.history as entry (entry.key)}
+							{#if entry.kind === 'staff'}
+								<StaffAssignmentRow {entry} shift={staffShiftFor(entry.shiftId)} {today} />
+							{:else}
+								<JobApplicantRow
+									applications={[entry.application]}
+									volunteer={entry.volunteer}
+									volunteerCode={entry.person.code}
+									shiftLabelOf={shiftLabelFor}
+									requiredSkills={job.skills_required ?? []}
+									skillOptions={skillCatalog.options}
+									{assignments}
+									{today}
+									onreview={openReview}
+								/>
+							{/if}
 						{/each}
 					</ul>
 				</div>

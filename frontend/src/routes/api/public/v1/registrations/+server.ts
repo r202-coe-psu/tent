@@ -8,6 +8,7 @@ import {
 	isForecastCapacityExceeded,
 	publicBookingInputSchema,
 	executePublicFamilyRegistration,
+	publicConsentBodySchema,
 	PublicRegistrationWriteError
 } from '$lib/features/public-register/server';
 import {
@@ -49,6 +50,16 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
 			{ status: 422, headers: noStore }
 		);
 	}
+
+	// FR-42: both payload shapes carry the PDPA block's decision.
+	const consentParsed = publicConsentBodySchema.safeParse(payload);
+	if (!consentParsed.success) {
+		return json(
+			{ success: false, error: 'INVALID_INPUT', details: consentParsed.error.flatten() },
+			{ status: 422, headers: noStore }
+		);
+	}
+	const { consent, consent_member_keys } = consentParsed.data;
 
 	let shelterCode: string;
 	let phone: string;
@@ -262,7 +273,8 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
 		writeResult = await executePublicFamilyRegistration(resolvedInput, {
 			shelterCode,
 			createdBy: 'public',
-			originShelterCode
+			originShelterCode,
+			consent: { consent, consent_member_keys }
 		});
 	} catch (err) {
 		if (err instanceof PublicRegistrationWriteError && err.message === 'JOIN_TARGET_NOT_FOUND') {
