@@ -32,6 +32,8 @@
 		open?: boolean;
 		log: DistributionLog | null;
 		itemName?: string;
+		/** Readable loan line with the ticket number (the card knows the ticket, the dialog does not). */
+		reference?: string;
 		shelterCode?: string;
 		canReturnStock?: boolean;
 		onsuccess?: (updatedLog: DistributionLog) => void;
@@ -42,6 +44,7 @@
 		open = $bindable(false),
 		log,
 		itemName = '',
+		reference = '',
 		shelterCode,
 		canReturnStock = true,
 		onsuccess,
@@ -275,7 +278,7 @@
 							ตรวจรับคืนพัสดุเข้าคลัง
 						</Dialog.Title>
 						<Dialog.Description class="text-xs text-slate-500">
-							{itemName || log.item_id} · {loanReferenceLine(formatLoanReference(log))}
+							{itemName || log.item_id} · {reference || loanReferenceLine(formatLoanReference(log))}
 						</Dialog.Description>
 					</div>
 				</div>

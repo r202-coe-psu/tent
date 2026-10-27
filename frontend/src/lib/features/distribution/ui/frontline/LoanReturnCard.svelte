@@ -401,6 +401,7 @@
 	bind:open={returnDialogOpen}
 	log={selectedLogForReturn}
 	itemName={selectedLogForReturn ? resolveItemName(selectedLogForReturn) : ''}
+	reference={selectedLogForReturn ? loanReferenceLine(loanReference(selectedLogForReturn)) : ''}
 	{shelterCode}
 	{canReturnStock}
 	onclose={() => {
@@ -413,6 +414,7 @@
 	bind:open={clearDialogOpen}
 	log={selectedLogForClear}
 	itemName={selectedLogForClear ? resolveItemName(selectedLogForClear) : ''}
+	reference={selectedLogForClear ? loanReferenceLine(loanReference(selectedLogForClear)) : ''}
 	{shelterCode}
 	canClearLoan={canFrontline}
 	onclose={() => {

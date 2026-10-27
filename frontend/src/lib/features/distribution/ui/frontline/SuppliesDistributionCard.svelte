@@ -186,14 +186,14 @@
 	<div
 		class="flex flex-col gap-3 border-b border-slate-100 pb-4 sm:flex-row sm:items-center sm:justify-between"
 	>
-		<div class="flex items-center gap-3">
+		<div class="flex min-w-0 items-center gap-3">
 			<div
-				class="flex h-11 w-11 items-center justify-center rounded-xl border border-indigo-200 bg-indigo-50 text-indigo-700 shadow-2xs"
+				class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-indigo-200 bg-indigo-50 text-indigo-700 shadow-2xs"
 			>
 				<Package class="h-6 w-6" />
 			</div>
-			<div>
-				<div class="flex items-center gap-2">
+			<div class="min-w-0">
+				<div class="flex flex-wrap items-center gap-2">
 					<span class="font-mono text-xs font-bold text-slate-500">{ticket.ticket_no}</span>
 					<span
 						class="rounded-full border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-2xs font-bold text-indigo-900"
@@ -201,7 +201,7 @@
 						พัสดุและอุปกรณ์บรรเทาทุกข์
 					</span>
 				</div>
-				<h3 class="text-base font-bold text-slate-900">
+				<h3 class="text-base font-bold break-words text-slate-900">
 					สถานีจ่ายพัสดุ & ยืม-คืน · จุดบริการ {ticket.destination_location}
 				</h3>
 			</div>
