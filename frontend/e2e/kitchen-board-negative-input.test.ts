@@ -408,7 +408,7 @@ test.describe(
 			await openBoard(page);
 			const add = page.getByRole('button', { name: ADD_INGREDIENT });
 			const errors = page.getByRole('alert').filter({ hasText: QTY_ERROR });
-			const qty = page.locator('input[type="number"][min="0.01"]');
+			const qty = page.locator('input[type="number"][placeholder="0"]');
 
 			await expect(page.getByRole('button', { name: 'เพิ่มวัตถุดิบ', exact: true })).toBeVisible({
 				timeout: 20_000

@@ -1150,7 +1150,7 @@
 										id="new-ingredient-qty"
 										type="number"
 										step="any"
-										min="0.01"
+										min="0"
 										bind:value={newQty}
 										placeholder="0"
 										aria-invalid={!newQtyValid}
