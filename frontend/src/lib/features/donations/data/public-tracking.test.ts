@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
 	cancelDonation,
+	DonationLookupError,
+	lookupDonationsByPhone,
 	updateCourierTracking,
 	updateDonationItems,
 	type DonationItemEdit
@@ -117,5 +119,57 @@ describe('goods already in stock', () => {
 		await expect(
 			updateDonationItems('tok', [{ free_text: 'ผ้าห่ม', qty: '1', unit: 'piece' }])
 		).rejects.toThrow('ศูนย์เริ่มรับของของใบนี้เข้าคลังแล้ว');
+	});
+});
+
+describe('lookupDonationsByPhone', () => {
+	const item = {
+		tracking_token: 'TX-SH001-ABC',
+		booking_ref: 'DN-100001',
+		status: 'pending_review',
+		shelter_code: 'SH001',
+		item_count: 1,
+		created_at: '2026-10-19T10:00:00+00:00'
+	};
+
+	it('POSTs the phone in the body, never the URL (CR-173 FR-1)', async () => {
+		const fetchMock = mockFetch(200, { success: true, items: [item] });
+
+		expect(await lookupDonationsByPhone({ phone: ' 0812345678 ' })).toEqual([item]);
+
+		const [url, init] = fetchMock.mock.calls[0];
+		expect(url).toBe('/api/public/v1/donations/lookup-by-phone');
+		expect(init.method).toBe('POST');
+		expect(JSON.parse(init.body)).toEqual({ phone: '0812345678' });
+	});
+
+	it('sends the captcha token when it has one', async () => {
+		const fetchMock = mockFetch(200, { success: true, items: [] });
+
+		await lookupDonationsByPhone({ phone: '0812345678', captchaToken: 'tok' });
+
+		expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({
+			phone: '0812345678',
+			captcha_token: 'tok'
+		});
+	});
+
+	it('resolves an empty list for a number with no bookings', async () => {
+		mockFetch(200, { success: true, items: [] });
+		expect(await lookupDonationsByPhone({ phone: '0899999999' })).toEqual([]);
+	});
+
+	it.each([
+		[403, 'CAPTCHA_REQUIRED', 'CAPTCHA_REQUIRED'],
+		[403, 'CAPTCHA_FAILED', 'CAPTCHA_FAILED'],
+		[422, 'INVALID_PHONE', 'INVALID_PHONE'],
+		[429, 'RATE_LIMITED', 'RATE_LIMITED']
+	])('rejects a %i %s by its code, for the page to word', async (status, error, code) => {
+		mockFetch(status, { success: false, error });
+
+		const err = await lookupDonationsByPhone({ phone: '0812345678' }).catch((e) => e);
+
+		expect(err).toBeInstanceOf(DonationLookupError);
+		expect(err.code).toBe(code);
 	});
 });

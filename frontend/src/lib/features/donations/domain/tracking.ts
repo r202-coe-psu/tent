@@ -1,5 +1,6 @@
 /** Public donation ticket view — capability-URL lookup via tracking token (DN-6). */
 
+import type { components } from '$lib/api/openapi';
 import { formatThaiDateTime } from '$lib/utils/date';
 
 export type DonationTrackStatus =
@@ -83,6 +84,33 @@ export type DonationTrackView = {
 	/** Donor edits so far (CR-080) — the page shows the count, not the entries. */
 	revisions: Array<Record<string, unknown>>;
 };
+
+/** One booking of a phone number, as `lookup-by-phone` lists it (CR-173 FR-4). */
+export type DonationLookupItem = components['schemas']['DonationPhoneLookupItem'];
+
+/** When the donor is due — the booked window, in the ticket's own format. */
+export function lookupItemSchedule(item: DonationLookupItem, locale: 'th' | 'en' = 'th'): string {
+	const slot = item.slot;
+	return formatTrackSchedule(
+		{
+			delivery_method: item.delivery_method ?? undefined,
+			slot: slot
+				? {
+						date: slot.date ?? undefined,
+						from: slot.from ?? undefined,
+						to: slot.to ?? undefined
+					}
+				: null
+		},
+		locale
+	);
+}
+
+/** `xxx-xxx-1234` — the number shown back to whoever typed it, not echoed in full. */
+export function maskLookupPhone(phone: string): string {
+	const digits = phone.replace(/\D/g, '');
+	return digits.length < 4 ? 'xxx-xxx-xxxx' : `xxx-xxx-${digits.slice(-4)}`;
+}
 
 const STATUS_LABELS: Record<string, { th: string; en: string }> = {
 	declared: { th: 'จองคิวบริจาคแล้ว', en: 'Donation Reserved' },

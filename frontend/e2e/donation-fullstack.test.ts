@@ -66,6 +66,15 @@ const DONOR_PHOTOS = ['donation-photo-1.jpg', 'donation-photo-2.jpg'].map((name)
 );
 
 const ledger = new RunLedger('donation-fullstack');
+
+/**
+ * A mobile number of this run's own (`08` + 8 digits), so a phone lookup only ever finds
+ * this run's bookings. `n` keeps two in one run apart.
+ */
+function runPhone(n: number): string {
+	const seed = (parseInt(RUN_ID.slice(0, 8), 36) + n) % 100_000_000;
+	return `08${String(seed).padStart(8, '0')}`;
+}
 let shelter: PublicShelter;
 let need: PublicNeed;
 let ws: Staff;
@@ -180,7 +189,10 @@ test.describe('Donation full-stack: donor and staff', { tag: ['@critical', '@don
 
 			// ── Public: the donor looks it up by ref + phone ────────────────────────
 			await clearSession(page);
-			await page.goto(`/donations/track?ref=${bookingRef}&phone=${phone}`);
+			await page.goto('/donations/track');
+			await page.locator('#phone-field').fill(phone);
+			await page.locator('#booking-ref-field').fill(bookingRef);
+			await page.getByRole('button', { name: 'ติดตามสถานะ' }).click();
 			await expect(page).toHaveURL(/\/donations\/track\/TX-/);
 			await expect(page.getByRole('heading', { name: bookingRef })).toBeVisible();
 			await reloadUntilVisible(
@@ -842,6 +854,93 @@ test.describe('Donation full-stack: donor and staff', { tag: ['@critical', '@don
 
 			await expect(page.locator('[data-sonner-toast]').first()).toBeVisible();
 			await expect(page).toHaveURL(/\/donations\/track\/?(\?.*)?$/);
+		});
+
+		// CR-173 — the phone number alone. A number of this run's own, so bookings other runs
+		// left in the intake buffer (it keeps them for the TTL) cannot join the list.
+		test('lookup by phone alone lists every booking of the number and opens each', async ({
+			page
+		}) => {
+			const phone = runPhone(1);
+			const first = await bookAsDonor(page, {
+				shelter,
+				need,
+				ledger,
+				donorName: `E2E ค้นด้วยเบอร์ 1 ${RUN_ID}`,
+				phone
+			});
+			// The ticket opens this booking by its token — no phone in the link (FR-12).
+			const ticketLink = page.getByRole('link', { name: 'ตรวจสอบสถานะการบริจาคของฉัน' });
+			await expect(ticketLink).toHaveAttribute('href', `/donations/track/${first.trackingToken}`);
+			const second = await bookAsDonor(page, {
+				shelter,
+				need,
+				ledger,
+				donorName: `E2E ค้นด้วยเบอร์ 2 ${RUN_ID}`,
+				phone
+			});
+
+			await page.goto('/donations/track');
+			await page.locator('#phone-field').fill(phone);
+			const looked = page.waitForRequest((r) => r.url().includes('/lookup-by-phone'));
+			await page.getByRole('button', { name: 'ติดตามสถานะ' }).click();
+			const request = await looked;
+			// The number travels in the body, never in the URL (FR-1, AC-5).
+			expect(request.method()).toBe('POST');
+			expect(request.url()).not.toContain(phone);
+			expect(request.postDataJSON()).toEqual({ phone });
+
+			const results = page.getByRole('list').filter({ hasText: first.bookingRef });
+			const rows = results.getByRole('listitem');
+			await expect(rows).toHaveCount(2);
+			// Newest first (FR-3).
+			await expect(rows.nth(0)).toContainText(second.bookingRef);
+			await expect(rows.nth(1)).toContainText(first.bookingRef);
+			await expect(page).toHaveURL(/\/donations\/track\/?$/);
+
+			// Full access from the list (FR-4): the older booking opens and can be cancelled.
+			await rows.nth(1).getByRole('link').click();
+			await expect(page).toHaveURL(`/donations/track/${first.trackingToken}`);
+			await expect(page.getByRole('heading', { name: first.bookingRef })).toBeVisible();
+			await page.getByRole('button', { name: 'ยกเลิกการจองนี้' }).click();
+			await page
+				.getByRole('alertdialog', { name: 'ยกเลิกการจองบริจาคนี้?' })
+				.getByRole('button', { name: 'ยืนยันยกเลิกการจอง' })
+				.click();
+			await expect
+				.poll(async () => (await findDonation(shelter.code, first.bookingRef))?.status)
+				.toBe('cancelled');
+
+			// The other one opens from the list too, edit button in place (CR-196 FR-LK-4).
+			await page.goto('/donations/track');
+			await page.locator('#phone-field').fill(phone);
+			await page.getByRole('button', { name: 'ติดตามสถานะ' }).click();
+			await page
+				.getByRole('listitem')
+				.filter({ hasText: second.bookingRef })
+				.getByRole('link')
+				.click();
+			await expect(page).toHaveURL(`/donations/track/${second.trackingToken}`);
+			await expect(page.getByRole('button', { name: 'แก้ไขรายการที่จะบริจาค' })).toBeVisible();
+		});
+
+		test('lookup by a phone with no bookings shows an empty list', async ({ page }) => {
+			await page.goto('/donations/track');
+			await page.locator('#phone-field').fill(runPhone(2));
+			await page.getByRole('button', { name: 'ติดตามสถานะ' }).click();
+
+			await expect(page.getByText('ไม่พบการจองของเบอร์นี้')).toBeVisible();
+			await expect(page.getByText('0 รายการ')).toBeVisible();
+		});
+
+		test('an old ?ref&phone link fills the form but does not search or keep the phone', async ({
+			page
+		}) => {
+			await page.goto('/donations/track?ref=DN-100001&phone=0812345678');
+
+			await expect(page.locator('#phone-field')).toHaveValue('0812345678');
+			await expect(page.locator('#booking-ref-field')).toHaveValue('DN-100001');
+			await expect(page).toHaveURL(/\/donations\/track$/);
 		});
 
 		// A typed-in item waits for review, so nothing is decided and the booking is still the

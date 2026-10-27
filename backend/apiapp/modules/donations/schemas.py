@@ -127,6 +127,41 @@ class DonationTrackSearchResponse(BaseModel):
     booking_ref: str
 
 
+class DonationPhoneLookupRequest(BaseModel):
+    """CR-173 FR-1 — the phone travels in the body only, never in the URL."""
+
+    phone: str = Field(min_length=1, max_length=32)
+
+
+class DonationPhoneLookupSlot(BaseModel):
+    date: str | None = None
+    from_: str | None = Field(default=None, alias="from")
+    to: str | None = None
+
+    model_config = {"populate_by_name": True}
+
+
+class DonationPhoneLookupItem(BaseModel):
+    """One booking of the number — enough to tell them apart and open the full ticket."""
+
+    tracking_token: str
+    booking_ref: str
+    status: str
+    shelter_code: str
+    shelter_name: str | None = None
+    delivery_method: str | None = None
+    slot: DonationPhoneLookupSlot | None = None
+    item_count: int
+    created_at: str
+
+
+class DonationPhoneLookupResponse(BaseModel):
+    """Same shape whether the number has bookings or not (CR-173 FR-5)."""
+
+    success: bool = True
+    items: list[DonationPhoneLookupItem] = Field(default_factory=list)
+
+
 class DonationCancelResponse(BaseModel):
     success: bool = True
     message: str = "Donation cancelled successfully"

@@ -17,7 +17,7 @@ from worker.inbound.donation_photos import (
     photos_settled,
     photos_to_keep,
 )
-from worker.masking import sha256_hex, shelter_db_name
+from worker.masking import phone_hash, shelter_db_name
 from worker.timeutil import iso_utc
 
 logger = logging.getLogger(__name__)
@@ -165,7 +165,9 @@ async def _persist_donation(couch: CouchClient, donation: DonationBuffer) -> boo
         "donor": {
             "name": donation.donor.name,
             "phone": donation.donor.phone,
-            "phone_hash": sha256_hex(donation.donor.phone),
+            # Of the normalized number (CR-173 FR-13), as the backend hashes it —
+            # `081-234-5678` and `+66812345678` must land on the same hash.
+            "phone_hash": phone_hash(donation.donor.phone),
             "line_id": donation.donor.line_id,
             "email": donation.donor.email,
         },
