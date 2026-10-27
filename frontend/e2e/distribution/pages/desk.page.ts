@@ -48,8 +48,13 @@ export class DeskPage {
 	/** Restrict tabs 2/3/5 to one distribution point (the scenario's own). */
 	async selectPoint(point: string): Promise<void> {
 		const trigger = this.page.getByLabel('เลือกจุดแจก');
-		await trigger.click();
-		await this.page.getByRole('option', { name: point, exact: true }).click();
+		// Open with the keyboard: a mouse click's pointerup can land on an option of the list
+		// before bits-ui positions it (long point lists in a full run) and select that option.
+		await trigger.focus();
+		await trigger.press('Enter');
+		const listbox = this.page.getByRole('listbox');
+		await expect(listbox).toBeVisible();
+		await listbox.getByRole('option', { name: point, exact: true }).click();
 		await expect(trigger).toContainText(point);
 	}
 
