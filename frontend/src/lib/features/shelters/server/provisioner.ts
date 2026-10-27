@@ -6,6 +6,7 @@ import { CENTRAL_WRITE_POLICY_DESIGN, hasWritePolicy } from '$lib/server/central
 import {
 	SHELTER_REGISTRY_DB,
 	deployDailySopRoleMangoIndexes,
+	deployDonationReceivedMangoIndex,
 	deployPeopleMangoIndexes,
 	deployRegistryDesign,
 	deployReferralMangoIndexes,
@@ -395,6 +396,9 @@ async function provisionShelterUnlocked(
 	await assertActive?.();
 	await deployDailySopRoleMangoIndexes(db);
 	steps.push({ step: 'daily-sop-role-mango', status: 200 });
+	await assertActive?.();
+	await deployDonationReceivedMangoIndex(db);
+	steps.push({ step: 'donation-received-mango', status: 200 });
 
 	await assertActive?.();
 	const registry = await adminRaw(`/${SHELTER_REGISTRY_DB}`, 'PUT');

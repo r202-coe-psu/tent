@@ -17,6 +17,7 @@ import { buildSecurityMutationLock, type SecurityMutationLock } from './security
 import {
 	buildValidateDocUpdate,
 	DAILY_SOP_ROLE_MANGO_INDEX,
+	DONATION_RECEIVED_MANGO_INDEX,
 	PEOPLE_MANGO_INDEXES,
 	REFERRAL_MANGO_INDEXES,
 	KIOSK_LOOKUP_MANGO_INDEXES,
@@ -40,6 +41,7 @@ import { deployShelterViewsFn } from '$lib/features/shelters/server/deploy';
 
 export {
 	DAILY_SOP_ROLE_MANGO_INDEX,
+	DONATION_RECEIVED_MANGO_INDEX,
 	KIOSK_LOOKUP_MANGO_INDEXES,
 	PEOPLE_MANGO_INDEXES,
 	REFERRAL_MANGO_INDEXES,
@@ -556,6 +558,18 @@ export async function deployDailySopRoleMangoIndexes(db: string): Promise<void> 
 		throw new ServiceError(
 			'INTERNAL',
 			`Mango index ${DAILY_SOP_ROLE_MANGO_INDEX.name} deploy failed (${res.status}): ${detail.reason ?? detail.error ?? 'unknown'}`
+		);
+	}
+}
+
+/** Idempotent deploy of the back-office received-donations list index (#821). */
+export async function deployDonationReceivedMangoIndex(db: string): Promise<void> {
+	const res = await adminRaw(`/${db}/_index`, 'POST', DONATION_RECEIVED_MANGO_INDEX);
+	if (res.status >= 400) {
+		const detail = (res.data as { reason?: string; error?: string } | null) ?? {};
+		throw new ServiceError(
+			'INTERNAL',
+			`Mango index ${DONATION_RECEIVED_MANGO_INDEX.name} deploy failed (${res.status}): ${detail.reason ?? detail.error ?? 'unknown'}`
 		);
 	}
 }
