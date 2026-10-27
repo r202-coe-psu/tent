@@ -39,16 +39,6 @@ function full(overrides: Record<string, unknown> = {}): ConsentDecision {
 	} as ConsentDecision;
 }
 
-function basic(overrides: Record<string, unknown> = {}): ConsentDecision {
-	return {
-		mode: 'basic',
-		guardian_for: [],
-		verbal: false,
-		...stamp,
-		...overrides
-	} as ConsentDecision;
-}
-
 const family: ConsentMember[] = [
 	{ key: 'reg', alreadyConsented: false },
 	{ key: 'kid1', alreadyConsented: false },
@@ -72,21 +62,25 @@ function byKey<T extends { key: string }>(items: readonly T[]) {
 	return Object.fromEntries(items.map((item) => [item.key, item]));
 }
 
-describe('basic mode (FR-11, FR-31)', () => {
-	it('records every member as no health, no search, no medical', () => {
-		for (const p of plan(basic())) {
-			expect(p.consent.mode).toBe('basic');
-			expect(p.consent.health).toBe(false);
-			expect(p.searchExcluded).toBe(true);
-			expect(p.medicalAllowed).toBe(false);
+describe('new decisions are full only (FR-36, D21)', () => {
+	it('rejects a basic decision on every channel', () => {
+		const basic = { mode: 'basic', guardian_for: [], verbal: false, ...stamp };
+		for (const channel of ['staff', 'web', 'kiosk'] as const) {
+			expect(consentDecisionSchemaFor(channel).safeParse(basic).success).toBe(false);
 		}
 	});
 
-	it('cannot carry health or search choices at all', () => {
-		const schema = consentDecisionSchemaFor('staff');
-		expect(schema.safeParse(basic()).success).toBe(true);
-		expect(schema.safeParse(basic({ health: true })).success).toBe(false);
-		expect(schema.safeParse(basic({ search_visible: true })).success).toBe(false);
+	it('still reads a stored basic consent', () => {
+		const stored = {
+			mode: 'basic',
+			health: false,
+			...stamp,
+			given_by: 'self',
+			giver_evacuee_id: null,
+			recorded_verbally_by: null,
+			channel: 'staff'
+		};
+		expect(evacueeConsentSchema.safeParse(stored).success).toBe(true);
 	});
 });
 
@@ -106,16 +100,16 @@ describe('full mode (FR-30, FR-32)', () => {
 });
 
 describe('who gave consent (FR-33)', () => {
-	it('maps registrant to self, picked members to guardian and the rest to household_member', () => {
-		const plans = byKey(plan(full({ guardian_for: ['kid1', 'kid2'] })));
+	it('maps the registrant to self and everyone else, children included, to household_member (D17)', () => {
+		const plans = byKey(plan(full()));
 		expect(plans.reg.consent.given_by).toBe('self');
-		expect(plans.kid1.consent.given_by).toBe('guardian');
-		expect(plans.kid2.consent.given_by).toBe('guardian');
+		expect(plans.kid1.consent.given_by).toBe('household_member');
+		expect(plans.kid2.consent.given_by).toBe('household_member');
 		expect(plans.adult.consent.given_by).toBe('household_member');
 	});
 
 	it('gives every member the same ref, timestamp and notice version', () => {
-		const consents = plan(full({ guardian_for: ['kid1'] })).map((p) => p.consent);
+		const consents = plan(full()).map((p) => p.consent);
 		expect(new Set(consents.map((c) => c.ref)).size).toBe(1);
 		expect(new Set(consents.map((c) => c.given_at)).size).toBe(1);
 		expect(consents.every((c) => c.notice_version === CONSENT_NOTICE_VERSION)).toBe(true);
@@ -123,7 +117,7 @@ describe('who gave consent (FR-33)', () => {
 
 	it('binds the registrant evacuee id as giver for everyone but the registrant', () => {
 		const writes = resolveRegistrationConsent(
-			full({ guardian_for: ['kid1'] }),
+			full(),
 			family.map((m) => ({ ...m, evacueeId: `evacuee:${m.key}` })),
 			{ channel: 'staff', recordedBy: null }
 		);
@@ -133,10 +127,10 @@ describe('who gave consent (FR-33)', () => {
 	});
 
 	it('produces only consents the persisted schema accepts', () => {
-		const decisions = [basic(), full(), full({ health: false, search_visible: false })];
+		const decisions = [full(), full({ health: false, search_visible: false })];
 		for (const decision of decisions) {
 			const writes = resolveRegistrationConsent(
-				{ ...decision, guardian_for: ['kid1'] },
+				decision,
 				family.map((m) => ({ ...m, evacueeId: `evacuee:${m.key}` })),
 				{ channel: 'web', recordedBy: null }
 			);
@@ -151,9 +145,12 @@ describe('who gave consent (FR-33)', () => {
 		expect(bindConsent(self, 'evacuee:reg').consent.giver_evacuee_id).toBeNull();
 	});
 
-	it('rejects a guardian key that is not a member or is the registrant', () => {
-		expect(() => plan(full({ guardian_for: ['ghost'] }))).toThrow();
-		expect(() => plan(full({ guardian_for: ['reg'] }))).toThrow();
+	it('rejects guardian picks on every channel (D17)', () => {
+		for (const channel of ['staff', 'web', 'kiosk'] as const) {
+			expect(
+				consentDecisionSchemaFor(channel).safeParse(full({ guardian_for: ['kid1'] })).success
+			).toBe(false);
+		}
 	});
 });
 
@@ -206,16 +203,6 @@ describe('verbal recording per channel', () => {
 		}
 	});
 
-	it('refuses guardian picks on kiosk but not on web or staff', () => {
-		const decision = full({ guardian_for: ['kid1'] });
-		expect(() => plan(decision, { channel: 'kiosk' })).toThrow();
-		expect(consentDecisionSchemaFor('kiosk').safeParse(decision).success).toBe(false);
-		for (const channel of ['web', 'staff'] as const) {
-			expect(consentDecisionSchemaFor(channel).safeParse(decision).success).toBe(true);
-			expect(() => plan(decision, { channel })).not.toThrow();
-		}
-	});
-
 	it('stamps the channel it was recorded on', () => {
 		for (const channel of ['staff', 'web'] as const) {
 			expect(plan(full(), { channel }).every((p) => p.consent.channel === channel)).toBe(true);
@@ -226,9 +213,9 @@ describe('verbal recording per channel', () => {
 
 	it('exposes the caps the surfaces share', () => {
 		expect(SURFACE_CAPS).toEqual({
-			staff: { guardian: true, verbal: true },
-			web: { guardian: true, verbal: false },
-			kiosk: { guardian: false, verbal: false }
+			staff: { verbal: true },
+			web: { verbal: false },
+			kiosk: { verbal: false }
 		});
 	});
 });
@@ -302,7 +289,7 @@ describe('summarizeConsent (spec §5)', () => {
 
 	it('lists the base rows for a full consent', () => {
 		const summary = summarizeConsent(consentOf(), false);
-		expect(summary.title).toBe(CONSENT_COPY.result.titleFull);
+		expect(summary.title).toBe(CONSENT_COPY.result.title);
 		expect(summary.footer).toBe(CONSENT_COPY.result.withdrawNote);
 		expect(summary.rows.map((r) => r.key)).toEqual([
 			'mode',
@@ -321,9 +308,9 @@ describe('summarizeConsent (spec §5)', () => {
 		expect(rows.ref).toMatchObject({ value: 'CS-7K3QZ9MD', mono: true });
 	});
 
-	it('reports basic mode with everything declined', () => {
+	it('reports a stored basic consent with everything declined', () => {
 		const summary = summarizeConsent(consentOf({ mode: 'basic', health: false }), true);
-		expect(summary.title).toBe(CONSENT_COPY.result.titleBasic);
+		expect(summary.title).toBe(CONSENT_COPY.result.title);
 		const rows = byKey(summary.rows);
 		expect(rows.mode.value).toBe(CONSENT_COPY.summary.modeBasic);
 		expect(rows.general.consented).toBe(false);
@@ -336,19 +323,14 @@ describe('summarizeConsent (spec §5)', () => {
 		expect(byKey(summarizeConsent(consentOf(), false).rows).search.consented).toBe(true);
 	});
 
-	it('shows guardian and staff rows only when there is something to show', () => {
+	it('shows the staff row only for a verbal consent', () => {
 		const verbal = consentOf({ recorded_verbally_by: 'USR-0427' });
 		const summary = summarizeConsent(verbal, false, {
-			guardianNames: ['ด.ญ.ปิยดา', 'ด.ช.ภูมิ'],
 			staff: { name: 'สมชาย', userId: 'USR-0427' }
 		});
-		const rows = byKey(summary.rows);
-		expect(rows.guardian.value).toBe('ด.ญ.ปิยดา, ด.ช.ภูมิ');
-		expect(rows.verbal.value).toBe('สมชาย (USR-0427)');
+		expect(byKey(summary.rows).verbal.value).toBe('สมชาย (USR-0427)');
 		expect(byKey(summarizeConsent(verbal, false).rows).verbal.value).toBe('USR-0427');
-		expect(
-			summarizeConsent(consentOf(), false, { guardianNames: [] }).rows.map((r) => r.key)
-		).not.toContain('guardian');
+		expect(summarizeConsent(consentOf(), false).rows.map((r) => r.key)).not.toContain('verbal');
 	});
 });
 
@@ -445,8 +427,8 @@ describe('consentVduClause (FR-34)', () => {
 
 	it('accepts everything the policy and backfill produce', () => {
 		const members = family.map((m) => ({ ...m, evacueeId: `evacuee:${m.key}` }));
-		for (const decision of [basic(), full(), full({ health: false, search_visible: false })]) {
-			const writes = resolveRegistrationConsent({ ...decision, guardian_for: ['kid1'] }, members, {
+		for (const decision of [full(), full({ health: false, search_visible: false })]) {
+			const writes = resolveRegistrationConsent(decision, members, {
 				channel: 'web',
 				recordedBy: null
 			});
