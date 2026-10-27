@@ -81,7 +81,7 @@
 		{ value: 'all', label: 'ทุกสถานะการพิจารณา' },
 		{ value: 'pending', label: 'รอพิจารณา' },
 		{ value: 'confirmed', label: 'อนุมัติแล้ว' },
-		{ value: 'declined', label: 'ปฏิเสธ/ไม่สะดวก' },
+		{ value: 'declined', label: 'ปฏิเสธ/ยกเลิก' },
 		{ value: 'staff', label: 'มอบหมายโดยเจ้าหน้าที่' }
 	];
 	const ATTENDANCE_OPTIONS: { value: ApplicantAttendanceFilter; label: string }[] = [
@@ -159,7 +159,7 @@
 		{
 			key: 'declined',
 			status: 'declined' as ApplicantStatusFilter,
-			label: '✕ ปฏิเสธ/ไม่สะดวก',
+			label: '✕ ปฏิเสธ/ยกเลิก',
 			value: counts.declined,
 			unit: 'กะ',
 			tone: 'border-rose-200 bg-rose-50/70'

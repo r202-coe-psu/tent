@@ -108,11 +108,13 @@ describe('buildApplicantBoard', () => {
 		expect(b.counts).toMatchObject({ declined: 1, staffAssigned: 1, people: 1 });
 	});
 
-	it('lists a cancelled direct assignment without counting it', () => {
+	it('lists a cancelled direct assignment as cancelled, not staff-assigned (#849)', () => {
 		const cancelled = assignment({ status: 'cancelled' });
 		const b = board({ assignments: [cancelled] });
 		expect(staffRows(b).map((e) => e.key)).toEqual([cancelled._id]);
+		expect(staffRows(b)[0].facet).toBe('cancelled');
 		expect(b.counts.staffAssigned).toBe(0);
+		expect(b.counts.declined).toBe(1);
 		expect(b.counts.people).toBe(1);
 	});
 

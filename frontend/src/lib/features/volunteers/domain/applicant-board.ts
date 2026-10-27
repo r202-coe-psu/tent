@@ -125,7 +125,9 @@ function staffEntry(
 		assignment,
 		key: assignment._id,
 		decidedAt: assignment.created_at,
-		facet: 'staff_assigned',
+		// A cancelled direct assignment is no longer "assigned": count and filter it with the
+		// declined/cancelled rows so the tile, the status filter and the heading agree (#849).
+		facet: assignment.status === 'cancelled' ? 'cancelled' : 'staff_assigned',
 		personKey: assignment.volunteer_id,
 		volunteer,
 		person: volunteer
@@ -170,8 +172,9 @@ export function buildApplicantBoard(input: {
 			people: people.size,
 			pending: queue.pending.length,
 			confirmed: queue.reviewed.filter((a) => a.status === 'confirmed').length,
-			declined: queue.reviewed.filter((a) => a.status === 'rejected' || a.status === 'cancelled')
-				.length,
+			declined:
+				queue.reviewed.filter((a) => a.status === 'rejected' || a.status === 'cancelled').length +
+				staff.filter((a) => a.status === 'cancelled').length,
 			staffAssigned: staff.filter((a) => a.status !== 'cancelled').length
 		}
 	};

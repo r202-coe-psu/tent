@@ -209,6 +209,26 @@ describe('filterApplicantBoard', () => {
 		expect(at('2026-08-10T09:30:00.000Z', 'not_checked_in')).toEqual([]);
 	});
 
+	it('files a cancelled direct assignment under declined, not staff (#849)', () => {
+		const withCancelled = [
+			...assignments,
+			assignment(5, { _id: 'shift_assignment:5c', status: 'cancelled' })
+		];
+		const b = buildApplicantBoard({
+			jobId: JOB,
+			applications,
+			assignments: withCancelled,
+			volunteers
+		});
+		const keys = (status: ApplicantFilters['status']) =>
+			filterApplicantBoard(b, { ...EMPTY_APPLICANT_FILTERS, status }, ctx).history.map(
+				(e) => e.key
+			);
+		expect(keys('staff')).not.toContain('shift_assignment:5c');
+		expect(keys('declined')).toContain('shift_assignment:5c');
+		expect(b.counts.staffAssigned).toBe(keys('staff').length);
+	});
+
 	it('combines filters with AND', () => {
 		expect(run({ status: 'staff', shift: { id: null, date: TODAY } })).toEqual({
 			pending: [],
