@@ -136,6 +136,30 @@ export interface paths {
 		patch?: never;
 		trace?: never;
 	};
+	'/public/v1/donations/lookup-by-phone': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/**
+		 * Lookup Donations By Phone
+		 * @description Phone number alone → every booking of it still in the buffer (CR-173).
+		 *
+		 *     Full access: each item carries its ``tracking_token``. Guarding against number
+		 *     enumeration is the BFF's captcha plus nginx's rate limit (CR-188); this logs every call
+		 *     and alerts on volume without refusing any. The BFF sends the donor's IP as ``X-Real-IP``.
+		 */
+		post: operations['lookup_donations_by_phone_public_v1_donations_lookup_by_phone_post'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
 	'/public/v1/donations/{tracking_token}': {
 		parameters: {
 			query?: never;
@@ -1808,6 +1832,59 @@ export interface components {
 			status: string;
 			/** Auto Approved Lines */
 			auto_approved_lines?: number[];
+		};
+		/**
+		 * DonationPhoneLookupItem
+		 * @description One booking of the number — enough to tell them apart and open the full ticket.
+		 */
+		DonationPhoneLookupItem: {
+			/** Tracking Token */
+			tracking_token: string;
+			/** Booking Ref */
+			booking_ref: string;
+			/** Status */
+			status: string;
+			/** Shelter Code */
+			shelter_code: string;
+			/** Shelter Name */
+			shelter_name?: string | null;
+			/** Delivery Method */
+			delivery_method?: string | null;
+			slot?: components['schemas']['DonationPhoneLookupSlot'] | null;
+			/** Item Count */
+			item_count: number;
+			/** Created At */
+			created_at: string;
+		};
+		/**
+		 * DonationPhoneLookupRequest
+		 * @description CR-173 FR-1 — the phone travels in the body only, never in the URL.
+		 */
+		DonationPhoneLookupRequest: {
+			/** Phone */
+			phone: string;
+		};
+		/**
+		 * DonationPhoneLookupResponse
+		 * @description Same shape whether the number has bookings or not (CR-173 FR-5).
+		 */
+		DonationPhoneLookupResponse: {
+			/**
+			 * Success
+			 * @default true
+			 */
+			success: boolean;
+			/** Items */
+			items?: components['schemas']['DonationPhoneLookupItem'][];
+		};
+		/** DonationPhoneLookupSlot */
+		DonationPhoneLookupSlot: {
+			/** Date */
+			date?: string | null;
+			/** From */
+			from?: string | null;
+			/** To */
+			to?: string | null;
 		};
 		/**
 		 * DonationTrackSearchRequest
@@ -4647,6 +4724,39 @@ export interface operations {
 				};
 				content: {
 					'application/json': components['schemas']['DonationTrackSearchResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	lookup_donations_by_phone_public_v1_donations_lookup_by_phone_post: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody: {
+			content: {
+				'application/json': components['schemas']['DonationPhoneLookupRequest'];
+			};
+		};
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['DonationPhoneLookupResponse'];
 				};
 			};
 			/** @description Validation Error */

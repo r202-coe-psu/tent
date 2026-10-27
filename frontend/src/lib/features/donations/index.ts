@@ -39,7 +39,8 @@ export type {
 	DonationTrackStatus,
 	DonationTrackItem,
 	DonationTrackLogistics,
-	DonationTrackDonor
+	DonationTrackDonor,
+	DonationLookupItem
 } from './domain/tracking';
 export {
 	toDonationTrackView,
@@ -51,6 +52,8 @@ export {
 	canCancelDonation,
 	canEditCourierTracking,
 	isTerminalDonationStatus,
+	lookupItemSchedule,
+	maskLookupPhone,
 	rejectedLineReasons
 } from './domain/tracking';
 // Domain — back-office booking list (#617)
@@ -122,7 +125,10 @@ export { fetchDonationSlots } from './data/public-slots';
 export {
 	cancelDonation,
 	fetchDonationTracking,
+	lookupDonationsByPhone,
 	searchDonationTracking,
+	DonationLookupError,
+	type DonationLookupErrorCode,
 	updateCourierTracking,
 	updateDonationItems,
 	type DonationItemEdit
@@ -134,6 +140,7 @@ export {
 	useCancelDonation,
 	useDonationTracking,
 	useDonationTrackSearch,
+	useDonationPhoneLookup,
 	useUpdateCourierTracking,
 	useUpdateDonationItems,
 	donationQueueKeys,

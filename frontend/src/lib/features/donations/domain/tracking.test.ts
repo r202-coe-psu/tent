@@ -5,8 +5,11 @@ import {
 	donationStatusLabel,
 	formatTrackSchedule,
 	isTerminalDonationStatus,
+	lookupItemSchedule,
+	maskLookupPhone,
 	rejectedLineReasons,
-	toDonationTrackView
+	toDonationTrackView,
+	type DonationLookupItem
 } from './tracking';
 
 describe('toDonationTrackView', () => {
@@ -140,6 +143,35 @@ describe('isTerminalDonationStatus', () => {
 		for (const status of ['received', 'rejected', 'redirected', 'expired', 'cancelled']) {
 			expect(isTerminalDonationStatus(status)).toBe(true);
 		}
+	});
+});
+
+describe('lookupItemSchedule', () => {
+	const base: DonationLookupItem = {
+		tracking_token: 'TX-SH001-ABC',
+		booking_ref: 'DN-100001',
+		status: 'pending_review',
+		shelter_code: 'SH001',
+		item_count: 1,
+		created_at: '2026-10-19T10:00:00+00:00'
+	};
+
+	it('shows the booked window like the ticket does', () => {
+		expect(
+			lookupItemSchedule({ ...base, slot: { date: '2026-10-20', from: '09:00', to: '12:00' } })
+		).toBe('2026-10-20 (09:00 - 12:00)');
+	});
+
+	it('shows a dash without a window', () => {
+		expect(lookupItemSchedule({ ...base, slot: null })).toBe('-');
+		expect(lookupItemSchedule({ ...base, slot: { date: null, from: null, to: null } })).toBe('-');
+	});
+});
+
+describe('maskLookupPhone', () => {
+	it('keeps only the last four digits', () => {
+		expect(maskLookupPhone('081-234-5678')).toBe('xxx-xxx-5678');
+		expect(maskLookupPhone('12')).toBe('xxx-xxx-xxxx');
 	});
 });
 
