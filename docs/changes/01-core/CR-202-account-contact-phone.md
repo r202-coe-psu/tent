@@ -1,5 +1,5 @@
 ---
-id: CR-193
+id: CR-202
 title: บัญชีผู้ใช้เก็บเบอร์บ้าน 9 หลักเป็นเบอร์ติดต่อได้ (login ด้วยเบอร์ยังเป็นมือถือ 10 หลักเท่านั้น)
 status: approved
 date: 2026-10-27
@@ -7,6 +7,7 @@ requested_by: PM (แชทกับผู้รับงาน 2026-10-26) + re
 decided_by: Soravit Sukkarn (Team Lead)
 decision_date: 2026-10-27
 layer: volatile
+note: renumbered จาก CR-193 เป็น CR-202 (2026-10-27) เพื่อไม่ให้ชนกับ CR-193 bulk-return-pool-redesign
 affects:
   - docs/data/schema.md §`_users` แถว `phone`
   - docs/changes/01-core/CR-105-user-form-redesign-security-questions-and-passphrase-reset.md (เบอร์ติดต่อ 10 หลัก)
@@ -17,7 +18,7 @@ affects:
   - ไม่ bump `schema_v` (`_users.phone` เป็น `str|null` อยู่แล้ว)
 ---
 
-# CR-193 — บัญชีผู้ใช้เก็บเบอร์บ้าน 9 หลักได้
+# CR-202 — บัญชีผู้ใช้เก็บเบอร์บ้าน 9 หลักได้
 
 > **สรุป (TL;DR):**
 >
@@ -61,4 +62,4 @@ affects:
 
 - 2026-10-26 — PM ขอให้บันทึกเบอร์ลงบัญชี และ @Jackyzaz ขอใน review ของ PR #890
 - 2026-10-27 — proposed ใน PR #890
-- 2026-10-27 — approved โดย Soravit Sukkarn (Team Lead) เป็น CR-193
+- 2026-10-27 — approved โดย Soravit Sukkarn (Team Lead) เป็น CR-193 แล้วเปลี่ยนเลขเป็น CR-202
