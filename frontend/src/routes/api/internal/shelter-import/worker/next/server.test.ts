@@ -16,8 +16,14 @@ const acquireNameLockMock = vi.hoisted(() => vi.fn());
 const isNameLockHeldMock = vi.hoisted(() => vi.fn());
 const releaseNameLockMock = vi.hoisted(() => vi.fn());
 const buildUpdatePayloadMock = vi.hoisted(() => vi.fn());
+const readMasterDocMock = vi.hoisted(() => vi.fn());
 
 vi.mock('$env/dynamic/private', () => ({ env }));
+vi.mock('$lib/server/master-data-server', () => ({ readMasterDoc: readMasterDocMock }));
+vi.mock('$lib/features/shelters/server', async () => ({
+	validateSiteKindChange: (await import('$lib/features/shelters/domain/schema'))
+		.validateSiteKindChange
+}));
 vi.mock('$lib/features/shelter-import', () => ({
 	buildUpdatePayload: buildUpdatePayloadMock
 }));
@@ -49,7 +55,8 @@ vi.mock('$lib/server/shelter-name-lock', () => ({
 
 import { POST } from './+server';
 
-const input = { name: 'ศูนย์ A', capacity: 100 } as never;
+const input = { name: 'ศูนย์ A', capacity: 100, site_kind: 'evacuation_center' } as never;
+const inactiveInput = { ...(input as object), site_kind: 'field_hospital' } as never;
 
 function job(status: 'queued' | 'running' = 'queued') {
 	return {
@@ -101,6 +108,12 @@ beforeEach(() => {
 	findByNameMock.mockReset().mockResolvedValue(null);
 	updateMasterMock.mockReset();
 	buildUpdatePayloadMock.mockReset();
+	readMasterDocMock.mockReset().mockResolvedValue({
+		items: [
+			{ code: 'evacuation_center', status: 'active' },
+			{ code: 'field_hospital', status: 'inactive' }
+		]
+	});
 	allocateCodeMock.mockReset().mockResolvedValue('SH001');
 	provisionMock
 		.mockReset()
@@ -170,6 +183,99 @@ describe('POST /api/internal/shelter-import/worker/next', () => {
 			expect.objectContaining({ assertActive: expect.any(Function) })
 		);
 		expect(provisionMock).not.toHaveBeenCalled();
+	});
+
+	describe('site_kind (CR-198 FR-7/FR-8)', () => {
+		const validationError = (message: unknown) =>
+			expect.objectContaining({
+				status: 'validation_error',
+				errors: [{ column: 'site_kind', message }],
+				lease_until: undefined,
+				worker_id: undefined,
+				claim_token: undefined
+			});
+
+		function updateRunsMutatorOn(stored: Record<string, unknown>) {
+			listJobsMock.mockResolvedValue([{ ...job(), duplicate_action: 'update' }]);
+			findByNameMock.mockResolvedValue({ code: 'SH009', name: 'ศูนย์ A' });
+			buildUpdatePayloadMock.mockReturnValue({ capacity: 250 });
+			updateMasterMock.mockImplementation(async (_code, mutator) => {
+				await mutator(stored);
+			});
+		}
+
+		it('rejects creating a shelter of an inactive kind without allocating a code or retrying', async () => {
+			claimMock.mockResolvedValue(item({ input: inactiveInput }));
+
+			await call();
+
+			expect(allocateCodeMock).not.toHaveBeenCalled();
+			expect(provisionMock).not.toHaveBeenCalled();
+			expect(updateItemMock).toHaveBeenCalledTimes(1);
+			expect(updateItemMock).toHaveBeenCalledWith(
+				expect.anything(),
+				validationError(expect.stringContaining('field_hospital'))
+			);
+			expect(updateItemMock.mock.calls[0][1]).not.toHaveProperty('dead_lettered_at');
+		});
+
+		it('rejects creating a shelter of a kind missing from the master', async () => {
+			claimMock.mockResolvedValue(item({ input: { ...(input as object), site_kind: 'made_up' } }));
+
+			await call();
+
+			expect(provisionMock).not.toHaveBeenCalled();
+			expect(updateItemMock).toHaveBeenCalledWith(
+				expect.anything(),
+				validationError(expect.stringContaining('made_up'))
+			);
+		});
+
+		it('updates a shelter that already stores the inactive kind', async () => {
+			claimMock.mockResolvedValue(item({ input: inactiveInput }));
+			updateRunsMutatorOn({ site_kind: 'field_hospital' });
+
+			await call();
+
+			expect(buildUpdatePayloadMock).toHaveBeenCalled();
+			expect(updateItemMock).toHaveBeenCalledWith(
+				expect.anything(),
+				expect.objectContaining({ status: 'updated', code: 'SH009' })
+			);
+		});
+
+		it('rejects moving a shelter onto an inactive kind it does not store', async () => {
+			claimMock.mockResolvedValue(item({ input: inactiveInput }));
+			updateRunsMutatorOn({ site_kind: 'evacuation_center' });
+
+			await call();
+
+			expect(buildUpdatePayloadMock).not.toHaveBeenCalled();
+			expect(updateItemMock).toHaveBeenCalledWith(
+				expect.anything(),
+				validationError(expect.stringContaining('field_hospital'))
+			);
+		});
+
+		it('skips a duplicate without checking its kind', async () => {
+			claimMock.mockResolvedValue(item({ input: inactiveInput }));
+			findByNameMock.mockResolvedValue({ code: 'SH009', name: 'ศูนย์ A' });
+
+			await call();
+
+			expect(updateItemMock).toHaveBeenCalledWith(
+				expect.anything(),
+				expect.objectContaining({ status: 'skipped', code: 'SH009' })
+			);
+		});
+
+		it('does not recheck the kind when resuming a partial provision', async () => {
+			claimMock.mockResolvedValue(item({ input: inactiveInput, code: 'SH007' }));
+
+			await call();
+
+			expect(provisionMock).toHaveBeenCalledWith(inactiveInput, 'SH007', expect.any(Object));
+		});
 	});
 
 	it('continues to the next job when an older job has only an active lease', async () => {
