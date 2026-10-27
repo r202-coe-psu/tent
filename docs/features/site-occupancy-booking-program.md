@@ -38,7 +38,7 @@ note: >
 | ID | หัวข้อ | ค่าที่ล็อก | กระทบ |
 | --- | --- | --- | --- |
 | **D-SITE-MODEL** | โมเดลบ้านพี่เลี้ยง | **A** — field `site_kind` บน `shelter` เดิม: `evacuation_center` \| `host_house`. Doc ไม่มี field อ่านเป็น `evacuation_center`. `shelter_type` คงเป็นประเภทอาคาร. **ห้าม** ใช้ `project_level=community` เป็นบ้านพี่เลี้ยง. CR-014 slice `host_house` doc type **superseded สำหรับเรื่องนี้** (GBV / thermal / house_damage ไม่ถูกแตะ). **หมายเหตุ ([CR-198](../changes/01-core/CR-198-shelter-site-kind-master-data.md)):** ค่า `site_kind` ย้ายจาก enum 2 ค่าเป็น code ของ master `site_kind` (global-only) — code เดิม 2 ตัวเป็น seed, SA เพิ่มประเภทได้; พฤติกรรมเฉพาะ `host_house` (ไอคอน, D-SPHERE-CAP) คงเดิม | CR-067, T-66, CR-198 |
-| **D-HOST-NAV** | นำทางบ้านพี่เลี้ยง | **B′** (ไม่ใช่ A และไม่ใช่ B เดิม) — **ถอด** nav/route `/portal/system-management/host-houses`. บ้านอยู่บนหน้ารายการศูนย์เดิม + กรอง `site_kind`. สร้างตาม filter: กรอง `host_house` → default `host_house`; กรอง `evacuation_center` → `evacuation_center`; แท็บ «ทั้งหมด» → ผู้ใช้ต้องเลือกชนิดก่อนบันทึก | T-66 |
+| **D-HOST-NAV** | นำทางบ้านพี่เลี้ยง | **B′** (ไม่ใช่ A และไม่ใช่ B เดิม) — **ถอด** nav/route `/portal/system-management/host-houses`. บ้านอยู่บนหน้ารายการศูนย์เดิม + กรอง `site_kind`. สร้างตาม filter: กรอง `host_house` → default `host_house`; กรอง `evacuation_center` → `evacuation_center`; แท็บ «ทั้งหมด» → ~~ผู้ใช้ต้องเลือกชนิดก่อนบันทึก~~ ใช้ item `is_default` ของ `master_data:site_kind` (CR-198 FR-11) | T-66 |
 | **D-HEALTH-PCT** | เกณฑ์ % สี occupancy health | เทา = ปิด (ไม่ใช่ %). ฟ้า &lt;60%. เหลือง 60–89% (90% เป็นแดง ไม่ใช่เหลือง). แดง 90–100%. แดงเข้ม &gt;100%. สูตร derived `occupancy/capacity` — **ไม่ persist**. `capacity=0` → «ไม่มีข้อมูลความจุ» ห้ามหารศูนย์. **ตัวเศษ occupancy:** Wave 1 เคยระบุ stay `active` อย่างเดียว; **Wave 3 D-BOOK-OCC=C ทับ** เป็น `active` + `pre_registered` (ดู §P3) | CR-069, T-69 |
 | **D-TRACK-METHOD** | วิธี track ชุดนี้ | **CR ไฟล์ + Notion** (Policy §6 ตัวเลือก 3) | ทั้งโปรแกรม |
 
@@ -148,7 +148,7 @@ flowchart TD
 - **FR-58** — `shelter_type` คงเป็นประเภทอาคาร (master_data); **ห้าม** ใช้ `project_level=community` เป็นตัวแทนบ้านพี่เลี้ยง
 - **FR-59** — ฟอร์มสร้าง/แก้ศูนย์มีตัวเลือกชนิดสถานที่ และ persist `site_kind`
 - **FR-60** — รายการศูนย์กรอง/แยกตาม `site_kind` ได้
-- **FR-61** — **ถอด** หน้า `/portal/system-management/host-houses` (D-HOST-NAV **B′**). บ้านพี่เลี้ยงอยู่บนหน้ารายการศูนย์เดิม กรอง `site_kind`. สร้างตาม filter: กรอง `host_house` → default `host_house`; กรอง `evacuation_center` → `evacuation_center`; แท็บ «ทั้งหมด» → ผู้ใช้ต้องเลือกชนิดก่อนบันทึก
+- **FR-61** — **ถอด** หน้า `/portal/system-management/host-houses` (D-HOST-NAV **B′**). บ้านพี่เลี้ยงอยู่บนหน้ารายการศูนย์เดิม กรอง `site_kind`. สร้างตาม filter: กรอง `host_house` → default `host_house`; กรอง `evacuation_center` → `evacuation_center`; แท็บ «ทั้งหมด» → ~~ผู้ใช้ต้องเลือกชนิดก่อนบันทึก~~ ใช้ item `is_default` ของ `master_data:site_kind` (CR-198 FR-11)
 - **FR-62** — public map ใช้ไอคอนคนละชุดสำหรับ `evacuation_center` vs `host_house` (ไม่ใช้ emoji จากสตริง `shelter_type` เป็นตัวแยกชนิด)
 - **FR-63** — P1 **ห้าม** ลดชุดฟิลด์บังคับของบ้านพี่เลี้ยง และ **ห้าม** คำนวณ Sphere capacity อัตโนมัติ (อยู่ T-76)
 
