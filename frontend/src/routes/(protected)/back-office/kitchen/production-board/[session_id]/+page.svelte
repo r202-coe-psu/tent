@@ -16,6 +16,7 @@
 		mealServiceReceiptOutcome,
 		sumHeadcountByTags,
 		getActiveTagsFromSession,
+		selectableCookingIngredients,
 		TARGET_GROUP_LABELS,
 		MEAL_PERIOD_LABELS,
 		type TargetGroupTag
@@ -385,7 +386,7 @@
 	}
 
 	const ingredientComboItems = $derived(
-		(itemMasters.data ?? []).map((item) => ({
+		selectableCookingIngredients(itemMasters.data).map((item) => ({
 			value: item._id,
 			label: `${item.name} (${unitLabel(item.base_unit)})`,
 			keywords: [item.name]

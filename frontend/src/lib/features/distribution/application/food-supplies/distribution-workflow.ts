@@ -7,6 +7,8 @@ import {
 	isDuplicateMealDistributionLog,
 	isLotExpired,
 	matchRecipientToMenu,
+	findAllergenConflicts,
+	withFreeTextAllergyReason,
 	type DistributionLog,
 	type DistributionRecipientType,
 	type MenuTagSource,
@@ -55,6 +57,16 @@ export interface FoodDistributionInput {
 	 * neither this workflow nor the VDU can derive it: callers that omit it skip the check.
 	 */
 	menu_check?: { recipient_tags: readonly MenuTargetTag[] | null; menu: MenuTagSource };
+	/**
+	 * Recipient allergies ↔ menu allergens (#607 FR-MRM-07/08), both as master `allergy` codes
+	 * with free text already dropped. Only `evacuee` recipients carry it; omitted = no check.
+	 */
+	allergen_check?: {
+		recipient_allergy_codes: readonly string[];
+		menu_allergen_codes: readonly string[];
+		/** Unlisted (free-text) allergies, never matched: any value forces an override (FR-MRM-11). */
+		recipient_allergy_free_text?: readonly string[];
+	};
 }
 
 export interface SuppliesDistributionInput {
@@ -185,6 +197,29 @@ export async function recordFoodDistribution(
 		}
 	}
 
+	// Recipient allergy ↔ menu allergens (#607 FR-MRM-08): a conflict needs an override, and the
+	// conflicting codes are kept on the log so an allergy override can be told apart.
+	const allergenConflicts = input.allergen_check
+		? findAllergenConflicts(
+				input.allergen_check.recipient_allergy_codes,
+				input.allergen_check.menu_allergen_codes
+			)
+		: [];
+	if (allergenConflicts.length > 0 && !input.is_override) {
+		throw new WorkflowValidationError(
+			`Menu ${input.item_id} contains allergens the recipient is allergic to (${allergenConflicts.join(', ')}). Override required.`
+		);
+	}
+
+	// Unlisted (free-text) allergies (CR-191 FR-MRM-11): never matched, so every menu needs an
+	// override; the text goes into the reason rather than a new log field.
+	const allergyFreeText = input.allergen_check?.recipient_allergy_free_text ?? [];
+	if (allergyFreeText.length > 0 && !input.is_override) {
+		throw new WorkflowValidationError(
+			`Recipient has unlisted allergies (${allergyFreeText.join(', ')}). Override required.`
+		);
+	}
+
 	// Food safety window (CR-121 FR-DST-03; CR-159 FR-MQW-06 B): the
 	// dispatched lot's expiry. Advisory — expired food may still go out, stamped on the log.
 	// Injected deps without a ledgerReader skip the lot lookup (callers own every dependency).
@@ -221,7 +256,11 @@ export async function recordFoodDistribution(
 			is_returnable: false,
 			status: 'fulfilled',
 			is_override: input.is_override ?? false,
-			override_reason: input.override_reason,
+			override_reason:
+				input.override_reason === undefined
+					? undefined
+					: withFreeTextAllergyReason(allergyFreeText, input.override_reason),
+			...(allergenConflicts.length > 0 ? { allergen_conflicts: allergenConflicts } : {}),
 			is_expired_warning: isExpiredWarning,
 			notes: input.notes
 		},

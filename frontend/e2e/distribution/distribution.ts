@@ -340,6 +340,8 @@ export interface SeedItemOptions {
 	ageGroup?: 'INFANT' | 'CHILD' | 'ELDERLY';
 	/** ISO expiry on the physical lot — the desk's ready-meal safety clock reads it. */
 	lotExpiry?: string;
+	/** `allergy` master codes or free text the menu lists (#607). */
+	allergens?: string[];
 }
 
 /** Seed a canonical item master and a real inbound physical lot. */
@@ -369,6 +371,7 @@ export async function seedItemWithStock(
 		deactivated: false,
 		dietary: options.dietary ?? [],
 		...(options.ageGroup ? { age_group: options.ageGroup } : {}),
+		...(options.allergens ? { allergens: options.allergens } : {}),
 		returnable: options.returnable
 	});
 	scenario.catalogIds.add(itemId);
@@ -406,6 +409,8 @@ export interface SeedRecipientOptions {
 	/** Thai Buddhist birth year — sets the recipient's CR-130 age bucket for menu matching. */
 	birthYear?: number;
 	phone?: string;
+	/** Seeds a `medical` doc with these allergies (`allergy` codes or free text, #607). */
+	allergies?: string[];
 }
 
 /** Seed a valid, active evacuee for the recipient picker. */
@@ -440,6 +445,20 @@ export async function seedRecipient(
 		privacy: { search_excluded: false },
 		registered_via: 'staff'
 	});
+	if (options.allergies) {
+		await putDocument(shelterDb(), {
+			_id: `medical:${ulid()}`,
+			type: 'medical',
+			schema_v: 1,
+			shelter_code: shelterCode(),
+			created_at: now,
+			updated_at: now,
+			created_by: scenario.user.name,
+			evacuee_id: recipientId,
+			allergies: options.allergies,
+			track: 'normal'
+		});
+	}
 	return { recipientId, firstName, lastName };
 }
 
