@@ -271,6 +271,10 @@ export const PUBLIC_DONATIONS_I18N = {
 		lookupBookedAt: 'จองเมื่อ',
 		lookupOpenTicket: 'เปิดตั๋ว',
 		lookupCaptchaUnavailable: 'โหลดระบบยืนยันตัวตนไม่ได้ กรุณารีเฟรชหน้าแล้วลองใหม่',
+		lookupErrCaptchaRequired: 'กรุณายืนยันว่าไม่ใช่โปรแกรมอัตโนมัติก่อนค้นหาต่อ',
+		lookupErrCaptchaFailed: 'ยืนยันตัวตนไม่ผ่าน กรุณาลองใหม่อีกครั้ง',
+		lookupErrInvalidPhone: 'กรุณาระบุเบอร์โทรให้ถูกต้อง (เช่น 0812345678)',
+		lookupErrRateLimited: 'คุณค้นหาบ่อยเกินไป กรุณารอสักครู่',
 		whyPhoneTitle: 'ค้นด้วยเบอร์โทรเห็นอะไรบ้าง?',
 		whyPhoneDesc1:
 			'ผลการค้นแสดงการจองทุกใบของเบอร์นี้ที่ยังอยู่ในระบบ และเปิดดู แก้ไข หรือยกเลิกได้ — อย่าให้ผู้อื่นใช้เบอร์ของคุณค้นหา',
@@ -656,6 +660,10 @@ export const PUBLIC_DONATIONS_I18N = {
 		lookupOpenTicket: 'Open ticket',
 		lookupCaptchaUnavailable:
 			'Could not load the verification check. Refresh the page and try again.',
+		lookupErrCaptchaRequired: 'Please confirm you are not a bot before searching again',
+		lookupErrCaptchaFailed: 'Verification failed. Please try again.',
+		lookupErrInvalidPhone: 'Please enter a valid phone number (e.g. 0812345678)',
+		lookupErrRateLimited: 'You are searching too often. Please wait a moment.',
 		whyPhoneTitle: 'What does a phone search show?',
 		whyPhoneDesc1:
 			'It lists every booking of this number still in the system, and each can be viewed, edited or cancelled — do not let others search with your number.',

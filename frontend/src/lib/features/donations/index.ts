@@ -122,7 +122,8 @@ export {
 	fetchDonationTracking,
 	lookupDonationsByPhone,
 	searchDonationTracking,
-	DonationLookupCaptchaError,
+	DonationLookupError,
+	type DonationLookupErrorCode,
 	updateCourierTracking,
 	updateDonationItems,
 	type DonationItemEdit

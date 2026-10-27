@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
 	cancelDonation,
-	DonationLookupCaptchaError,
+	DonationLookupError,
 	lookupDonationsByPhone,
 	updateCourierTracking,
 	updateDonationItems,
@@ -155,23 +155,17 @@ describe('lookupDonationsByPhone', () => {
 		expect(await lookupDonationsByPhone({ phone: '0899999999' })).toEqual([]);
 	});
 
-	it('tells a captcha demand apart from a failed captcha', async () => {
-		mockFetch(403, { success: false, error: 'CAPTCHA_REQUIRED' });
-		const required = await lookupDonationsByPhone({ phone: '0812345678' }).catch((e) => e);
-		expect(required).toBeInstanceOf(DonationLookupCaptchaError);
-		expect(required.failed).toBe(false);
+	it.each([
+		[403, 'CAPTCHA_REQUIRED', 'CAPTCHA_REQUIRED'],
+		[403, 'CAPTCHA_FAILED', 'CAPTCHA_FAILED'],
+		[422, 'INVALID_PHONE', 'INVALID_PHONE'],
+		[429, 'RATE_LIMITED', 'RATE_LIMITED']
+	])('rejects a %i %s by its code, for the page to word', async (status, error, code) => {
+		mockFetch(status, { success: false, error });
 
-		mockFetch(403, { success: false, error: 'CAPTCHA_FAILED' });
-		const failed = await lookupDonationsByPhone({ phone: '0812345678' }).catch((e) => e);
-		expect(failed).toBeInstanceOf(DonationLookupCaptchaError);
-		expect(failed.failed).toBe(true);
-	});
+		const err = await lookupDonationsByPhone({ phone: '0812345678' }).catch((e) => e);
 
-	it('maps 429 and 422 to donor-facing copy', async () => {
-		mockFetch(429, { success: false, error: 'RATE_LIMITED' });
-		await expect(lookupDonationsByPhone({ phone: '0812345678' })).rejects.toThrow('บ่อยเกินไป');
-
-		mockFetch(422, { success: false, error: 'INVALID_PHONE' });
-		await expect(lookupDonationsByPhone({ phone: '12' })).rejects.toThrow('เบอร์โทร');
+		expect(err).toBeInstanceOf(DonationLookupError);
+		expect(err.code).toBe(code);
 	});
 });

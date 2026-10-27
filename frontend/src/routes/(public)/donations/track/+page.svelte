@@ -14,7 +14,8 @@
 	import { Label } from '$lib/components/ui/label/index.js';
 	import { toast } from 'svelte-sonner';
 	import {
-		DonationLookupCaptchaError,
+		DonationLookupError,
+		type DonationLookupErrorCode,
 		donationStatusLabel,
 		formatTrackTimestamp,
 		isTerminalDonationStatus,
@@ -84,8 +85,21 @@
 			lookup = { phone, items: await lookupWithCaptcha(phone) };
 		} catch (err) {
 			lookup = null;
-			toast.error(err instanceof Error ? err.message : t.searchFailed);
+			toast.error(lookupErrorMessage(err));
 		}
+	}
+
+	function lookupErrorMessage(err: unknown): string {
+		if (err instanceof DonationLookupError) {
+			const messages: Record<DonationLookupErrorCode, string> = {
+				CAPTCHA_REQUIRED: t.lookupErrCaptchaRequired,
+				CAPTCHA_FAILED: t.lookupErrCaptchaFailed,
+				INVALID_PHONE: t.lookupErrInvalidPhone,
+				RATE_LIMITED: t.lookupErrRateLimited
+			};
+			return messages[err.code];
+		}
+		return err instanceof Error ? err.message : t.searchFailed;
 	}
 
 	/**
@@ -98,7 +112,8 @@
 		try {
 			return await phoneLookup.mutateAsync({ phone, captchaToken });
 		} catch (err) {
-			if (!(err instanceof DonationLookupCaptchaError) || err.failed || captchaToken) throw err;
+			const demanded = err instanceof DonationLookupError && err.code === 'CAPTCHA_REQUIRED';
+			if (!demanded || captchaToken) throw err;
 			return await phoneLookup.mutateAsync({ phone, captchaToken: await freshCaptchaToken() });
 		}
 	}
@@ -182,92 +197,95 @@
 			</Button>
 		</form>
 
-		{#if lookup}
-			<section class="mt-8 space-y-3 border-t border-border/60 pt-6" aria-live="polite">
-				<div class="flex items-baseline justify-between gap-3">
-					<h2 class="text-base font-bold text-slate-900">
-						{t.lookupResultsTitle.replace('{phone}', maskLookupPhone(lookup.phone))}
-					</h2>
-					<span class="text-sm text-slate-500 tabular-nums">
-						{t.lookupResultsCount.replace('{count}', String(lookup.items.length))}
-					</span>
-				</div>
-
-				{#if lookup.items.length === 0}
-					<div
-						class="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 text-slate-700"
-					>
-						<Inbox class="mt-0.5 h-5 w-5 shrink-0 text-slate-500" />
-						<div>
-							<p class="text-sm font-semibold text-slate-900">{t.lookupEmptyTitle}</p>
-							<p class="mt-1 text-sm text-slate-600">{t.lookupEmptyDesc}</p>
-						</div>
+		<!-- Always rendered: a live region added together with its content is not announced. -->
+		<div aria-live="polite">
+			{#if lookup}
+				<section class="mt-8 space-y-3 border-t border-border/60 pt-6">
+					<div class="flex items-baseline justify-between gap-3">
+						<h2 class="text-base font-bold text-slate-900">
+							{t.lookupResultsTitle.replace('{phone}', maskLookupPhone(lookup.phone))}
+						</h2>
+						<span class="text-sm text-slate-500 tabular-nums">
+							{t.lookupResultsCount.replace('{count}', String(lookup.items.length))}
+						</span>
 					</div>
-				{:else}
-					<ul class="space-y-3">
-						{#each lookup.items as item (item.tracking_token)}
-							<li>
-								<a
-									href={resolve(`/donations/track/${encodeURIComponent(item.tracking_token)}`)}
-									class="group flex min-h-11 items-center gap-4 rounded-xl border border-slate-200/80 bg-white p-4 shadow-2xs transition-colors hover:border-domain-donation-border hover:bg-domain-donation-subtle focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none sm:p-5"
-								>
-									<div class="min-w-0 flex-1 space-y-2">
-										<div class="flex flex-wrap items-center gap-2">
-											<span class="text-base font-bold text-slate-900 tabular-nums">
-												{item.booking_ref}
-											</span>
-											<span
-												class={[
-													'rounded-full border px-2.5 py-0.5 text-xs font-semibold',
-													isTerminalDonationStatus(item.status)
-														? 'border-slate-200 bg-slate-100 text-slate-700'
-														: 'border-sky-200 bg-sky-50 text-sky-900'
-												]}
-											>
-												{donationStatusLabel(item.status, locale)}
-											</span>
-										</div>
-										<dl class="grid grid-cols-1 gap-x-6 gap-y-1 text-sm sm:grid-cols-2">
-											<div class="flex gap-2">
-												<dt class="text-slate-500">{t.lookupShelterLabel}</dt>
-												<dd class="truncate font-medium text-slate-800">
-													{item.shelter_name ?? item.shelter_code}
-												</dd>
-											</div>
-											<div class="flex gap-2">
-												<dt class="text-slate-500">{t.lookupScheduleLabel}</dt>
-												<dd class="font-medium text-slate-800 tabular-nums">
-													{lookupItemSchedule(item, locale)}
-												</dd>
-											</div>
-											<div class="flex gap-2">
-												<dt class="text-slate-500">{t.lookupItemsLabel}</dt>
-												<dd class="font-medium text-slate-800 tabular-nums">
-													{t.lookupItemsCount.replace('{count}', String(item.item_count))}
-												</dd>
-											</div>
-											<div class="flex gap-2">
-												<dt class="text-slate-500">{t.lookupBookedAt}</dt>
-												<dd class="font-medium text-slate-800 tabular-nums">
-													{formatTrackTimestamp(item.created_at, locale)}
-												</dd>
-											</div>
-										</dl>
-									</div>
-									<span
-										class="inline-flex shrink-0 items-center gap-1 text-sm font-semibold text-domain-donation-text"
+
+					{#if lookup.items.length === 0}
+						<div
+							class="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 text-slate-700"
+						>
+							<Inbox class="mt-0.5 h-5 w-5 shrink-0 text-slate-500" />
+							<div>
+								<p class="text-sm font-semibold text-slate-900">{t.lookupEmptyTitle}</p>
+								<p class="mt-1 text-sm text-slate-600">{t.lookupEmptyDesc}</p>
+							</div>
+						</div>
+					{:else}
+						<ul class="space-y-3">
+							{#each lookup.items as item (item.tracking_token)}
+								<li>
+									<a
+										href={resolve(`/donations/track/${encodeURIComponent(item.tracking_token)}`)}
+										class="group flex min-h-11 items-center gap-4 rounded-xl border border-slate-200/80 bg-white p-4 shadow-2xs transition-colors hover:border-domain-donation-border hover:bg-domain-donation-subtle focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none sm:p-5"
 									>
-										<span class="hidden sm:inline">{t.lookupOpenTicket}</span>
-										<ChevronRight class="h-4 w-4" />
-										<span class="sr-only sm:hidden">{t.lookupOpenTicket}</span>
-									</span>
-								</a>
-							</li>
-						{/each}
-					</ul>
-				{/if}
-			</section>
-		{/if}
+										<div class="min-w-0 flex-1 space-y-2">
+											<div class="flex flex-wrap items-center gap-2">
+												<span class="text-base font-bold text-slate-900 tabular-nums">
+													{item.booking_ref}
+												</span>
+												<span
+													class={[
+														'rounded-full border px-2.5 py-0.5 text-xs font-semibold',
+														isTerminalDonationStatus(item.status)
+															? 'border-slate-200 bg-slate-100 text-slate-700'
+															: 'border-sky-200 bg-sky-50 text-sky-900'
+													]}
+												>
+													{donationStatusLabel(item.status, locale)}
+												</span>
+											</div>
+											<dl class="grid grid-cols-1 gap-x-6 gap-y-1 text-sm sm:grid-cols-2">
+												<div class="flex gap-2">
+													<dt class="text-slate-500">{t.lookupShelterLabel}</dt>
+													<dd class="truncate font-medium text-slate-800">
+														{item.shelter_name ?? item.shelter_code}
+													</dd>
+												</div>
+												<div class="flex gap-2">
+													<dt class="text-slate-500">{t.lookupScheduleLabel}</dt>
+													<dd class="font-medium text-slate-800 tabular-nums">
+														{lookupItemSchedule(item, locale)}
+													</dd>
+												</div>
+												<div class="flex gap-2">
+													<dt class="text-slate-500">{t.lookupItemsLabel}</dt>
+													<dd class="font-medium text-slate-800 tabular-nums">
+														{t.lookupItemsCount.replace('{count}', String(item.item_count))}
+													</dd>
+												</div>
+												<div class="flex gap-2">
+													<dt class="text-slate-500">{t.lookupBookedAt}</dt>
+													<dd class="font-medium text-slate-800 tabular-nums">
+														{formatTrackTimestamp(item.created_at, locale)}
+													</dd>
+												</div>
+											</dl>
+										</div>
+										<span
+											class="inline-flex shrink-0 items-center gap-1 text-sm font-semibold text-domain-donation-text"
+										>
+											<span class="hidden sm:inline">{t.lookupOpenTicket}</span>
+											<ChevronRight class="h-4 w-4" />
+											<span class="sr-only sm:hidden">{t.lookupOpenTicket}</span>
+										</span>
+									</a>
+								</li>
+							{/each}
+						</ul>
+					{/if}
+				</section>
+			{/if}
+		</div>
 
 		<div class="mt-8 space-y-3 border-t border-border/60 pt-6">
 			<div class="flex items-start gap-2.5 text-xs leading-relaxed text-muted-foreground">
