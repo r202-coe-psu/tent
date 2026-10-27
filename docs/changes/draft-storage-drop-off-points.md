@@ -15,6 +15,7 @@ affects:
   - frontend/src/lib/features/shelters (domain/schema.ts `subStorageItemSchema` + migrate v8 → v9, domain/storage-points.ts, ui/storage-points-section.svelte, ui/shelter-form-validation.ts)
   - frontend/src/lib/features/shelter-import/domain/import-row.ts
   - frontend/src/lib/features/donations (domain/drop-off.ts — ต่อยอด `resolveDropOffPoint` / `DropOffPoint` จาก #926)
+  - frontend/src/lib/features/public-portal (domain/donation-map.ts `pointsByShelter`, ui/donation-shelter-picker.svelte — จาก #814 · FR-DP-18)
   - packages/tent-model/src/tent_model/public_shelter.py (`DonationPoint`, `PublicShelter.donation_points`)
   - worker/src/worker/projectors/shelter.py · worker/src/worker/projection_version.py
   - backend/apiapp/modules/shelter (schemas.py `ShelterDetail`, use_case.py) · backend/tests/test_shelter.py
@@ -76,6 +77,9 @@ migration: >
 - **FR-DP-15** — FastAPI อ่าน `donation_points` จาก field ที่ worker project ไว้เท่านั้น · ห้ามอ่าน `raw_data.common_areas.sub_storage` (raw_data มีจุดที่ไม่ได้ติ๊กด้วย)
 - **FR-DP-16** — ฝั่ง public frontend: ศูนย์ที่ `donation_points` ว่าง → ใช้ "จุดหลัก" 1 จุด ชื่อ = ชื่อศูนย์ พิกัด = `geo` ของศูนย์ · ไม่บันทึกจุดหลักลง CouchDB หรือ Mongo
 - **FR-DP-17** — ศูนย์ที่มีจุดติ๊กอย่างน้อย 1 จุด → ผู้บริจาคเลือกได้เฉพาะจุดที่ติ๊ก ตำแหน่งศูนย์ไม่ใช่ตัวเลือก (ดู D-3)
+- **FR-DP-18** — แผนที่เลือกศูนย์ในฟอร์มบริจาค (#814) แสดงหมุดศูนย์จาก list `GET /public/v1/shelters` · หมุดจุดรับบริจาคแสดง**เฉพาะศูนย์ที่ผู้บริจาคเลือกหรือถูกล็อกไว้** โดยอ่าน `donation_points` จาก detail ของศูนย์นั้น 1 request · ไม่ยิง detail ทุกศูนย์เพื่อวาดหมุดจุดของทุกศูนย์พร้อมกัน
+  - ศูนย์ที่ `donation_points` ว่าง → ไม่วาดหมุดจุดเพิ่ม (หมุดศูนย์คือจุดหลักอยู่แล้ว ตาม FR-DP-16)
+  - การเลือกจุดให้แต่ละรายการอยู่ใน CR ของ #813 (`draft-donation-multi-drop-off`) ไม่อยู่ใน CR นี้
 
 ## Change (before → after)
 
@@ -131,6 +135,7 @@ CR นี้ไม่เพิ่มกติกาฝั่งใบจอง �
 - **AC-9** — ติ๊กแล้วกรอก lat = 0, lng = 0 ในช่องตัวเลข → บันทึกไม่ผ่าน และ error อยู่ที่แถวนั้น
 - **AC-10** — doc ศูนย์ schema_v 7 ที่จุดเก็บยังมี `type` เดี่ยว → อ่านแล้วได้ schema_v 9, `types[]` และค่าเริ่มต้นของ 4 field ใหม่ครบ
 - **AC-11** — `GET /public/v1/shelters` (list) ไม่มี `donation_points` · `GET /public/v1/shelters/{code}` มี
+- **AC-12** — ฟอร์มบริจาค: ศูนย์ A มี 2 จุดติ๊ก ศูนย์ B ไม่มี · ก่อนเลือกศูนย์ แผนที่มีแค่หมุดศูนย์ A และ B · เลือกศูนย์ A → มีหมุดจุดของ A เพิ่ม 2 หมุด และมี request detail ของ A เท่านั้น · เลือกศูนย์ B → ไม่มีหมุดจุดเพิ่ม
 
 ## Impact
 
@@ -145,6 +150,7 @@ CR นี้ไม่เพิ่มกติกาฝั่งใบจอง �
   - เพิ่ม `listDropOffPoints(shelter)` คืน `DropOffPoint[]` (FR-DP-16, FR-DP-17): map `id` → `pointId`, `location_note` → `note`, `geo` ผ่าน `cleanGeo` ตัวเดิม · `donation_points` ว่าง → `[resolveDropOffPoint(shelter)]` (จุดหลัก `pointId = null`)
   - `DropOffShelterSource` เพิ่ม `donation_points?`
   - ถ้า #926 ยังไม่ merge ตอน implement ให้ต่อจาก branch ของ #926
+- **frontend `public-portal`** (แผนที่ของ #814 · FR-DP-18): `donation-shelter-picker.svelte` อ่าน detail ของศูนย์ที่เลือกหรือล็อก แล้วส่ง `listDropOffPoints` ของศูนย์นั้นเข้า `pointsByShelter` ของ `buildDonationMap` (มีช่องรับไว้แล้วบน branch ของ #814)
 - **tent-model**: `DonationPoint` + `PublicShelter.donation_points: list[DonationPoint] = []`
 - **worker**: `project_shelter()` สร้าง `donation_points` ตาม FR-DP-11 – FR-DP-13 · bump `PROJECTION_VERSION`
 - **backend**: `ShelterDetail` เพิ่ม `donation_points` (`ShelterItem` ไม่เปลี่ยน) · `use_case.py` อ่านตาม FR-DP-15
@@ -189,3 +195,4 @@ Soravit Sukkarn (Team Lead) ตัดสิน D-1..D-4 ใน review ของ 
   - ระบุผลต่อใบจองเมื่อจุดถูกแก้ ลบ หรือเลิกติ๊ก (อ้าง CR ของ #813)
   - ตัด `created` ออกจาก frontmatter ตาม `_template.md`
   - ไม่จำกัดพิกัดให้อยู่ใกล้ศูนย์ เพราะศูนย์บางแห่งยังไม่มี `geo` และไม่มีระยะที่ตกลงกันไว้
+- 2026-10-27 — เพิ่ม FR-DP-18 / AC-12: แผนที่ของ #814 แสดงหมุดจุดเฉพาะศูนย์ที่เลือกหรือล็อก อ่านจาก detail — ผลจากการตัด `donation_points` ออกจาก list
