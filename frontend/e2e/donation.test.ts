@@ -22,7 +22,7 @@ const NEEDS_BODY = [
 	}
 ];
 
-/** `GET /api/public/v1/shelters` — what the step-3 map needs to place SH001. */
+/** `GET /api/public/v1/shelters` — what the board map and the step-3 map need to place SH001. */
 async function mockShelters(page: Page, status = 200) {
 	await page.route('**/api/public/v1/shelters*', async (route) => {
 		await route.fulfill({
@@ -54,8 +54,8 @@ async function mockShelters(page: Page, status = 200) {
 	});
 }
 
-/** Needs board → pick the rice need (locks SH001) → donor form → step 3. */
-async function openShelterStep(page: Page, sheltersStatus = 200) {
+/** Mock the board, the shelters list and the slots, then open `/donations`. */
+async function openBoard(page: Page, sheltersStatus = 200) {
 	await page.route('**/api/public/v1/needs', (route) =>
 		route.fulfill({
 			status: 200,
@@ -72,8 +72,9 @@ async function openShelterStep(page: Page, sheltersStatus = 200) {
 		})
 	);
 	await page.goto('/donations');
-	await page.getByRole('button', { name: 'ดูรายละเอียดและบริจาค' }).first().click();
-	await page.getByRole('button', { name: 'บริจาครายการนี้' }).first().click();
+}
+
+async function fillDonorStep(page: Page) {
 	await page.locator('#donor-name').fill('ผู้บริจาคใจบุญ');
 	await page.locator('#donor-phone').fill('0899999999');
 	await page.getByRole('button', { name: 'ถัดไป: เลือกจุดส่งมอบ' }).click();
@@ -82,65 +83,89 @@ async function openShelterStep(page: Page, sheltersStatus = 200) {
 	).toBeVisible();
 }
 
-/**
- * Step 3 shows the destination on a map with the shelter list under it. A need card
- * locks the destination, which is the only way into step 3 today, so the open
- * (unlocked) picker is covered by `donation-shelter-picker.dom.test.ts` instead.
- */
-test.describe('Donation form shelter map (#814)', TAGS, () => {
-	test('shows the locked shelter on the map, with its card and the list under it', async ({
+/** Needs board → pick the rice need from the shelter card (locks SH001) → donor form → step 3. */
+async function openShelterStep(page: Page, sheltersStatus = 200) {
+	await openBoard(page, sheltersStatus);
+	await page.getByRole('button', { name: 'ดูรายละเอียดและบริจาค' }).first().click();
+	await page.getByRole('button', { name: 'บริจาครายการนี้' }).first().click();
+	await fillDonorStep(page);
+}
+
+test.describe('Needs board shelter map (#814)', TAGS, () => {
+	test('tapping a pin opens the shelter card under the map and donating locks that shelter', async ({
 		page
 	}) => {
-		await openShelterStep(page);
+		await openBoard(page);
 
 		await expect(page.locator('.maplibregl-canvas').first()).toBeVisible({ timeout: 15_000 });
-		await expect(page.getByTestId('shelter-marker-SH001')).toBeVisible({ timeout: 15_000 });
+		await page.getByTestId('shelter-marker-SH001').click({ timeout: 15_000 });
 
-		const card = page.getByTestId('donation-shelter-card');
+		const card = page.getByTestId('donation-needs-map-card');
 		await expect(card).toContainText(SH001_NAME);
 		await expect(card).toContainText('ข้าวสาร');
-		await expect(card).toContainText('เลือกศูนย์นี้แล้ว');
+		await expect(card.getByRole('button', { name: 'ดูความต้องการทั้งหมด' })).toBeVisible();
+		await expect(card.getByRole('button', { name: 'บริจาคสิ่งของอื่นๆ' })).toBeVisible();
 
-		const radios = page.getByRole('radio');
-		await expect(radios).toHaveCount(1);
-		await expect(radios.first()).toBeChecked();
-		await expect(radios.first()).toBeDisabled();
+		await card.getByRole('button', { name: 'บริจาครายการนี้' }).first().click();
+		await expect(page.locator('#donor-name')).toBeVisible();
+		await fillDonorStep(page);
+		await expect(page.getByTestId('drop-off-shelter-name')).toHaveText(SH001_NAME);
 	});
 
-	test('a tap on the pin keeps the locked shelter', async ({ page }) => {
-		await openShelterStep(page);
-		await page.getByTestId('shelter-marker-SH001').click({ timeout: 15_000 });
-		await expect(page.getByTestId('donation-shelter-card')).toContainText('เลือกศูนย์นี้แล้ว');
-		await expect(page.getByRole('radio').first()).toBeChecked();
-	});
+	test('without the shelters list there is no map, but the board still books', async ({ page }) => {
+		await openBoard(page, 503);
 
-	test('without the shelters list there is no map, but the list and the booking still work', async ({
-		page
-	}) => {
-		await openShelterStep(page, 503);
+		await expect(page.getByText('แผนที่ใช้ไม่ได้ในตอนนี้')).toBeVisible({ timeout: 15_000 });
+		await expect(page.getByTestId('donation-needs-map')).toHaveCount(0);
 
-		await expect(page.getByText('แผนที่ใช้งานไม่ได้ในตอนนี้')).toBeVisible({ timeout: 15_000 });
-		await expect(page.getByTestId('donation-shelter-map')).toHaveCount(0);
-		await expect(page.getByRole('radio').first()).toBeChecked();
-		await expect(page.getByText(SH001_NAME).first()).toBeVisible();
+		await page.getByRole('button', { name: 'ดูรายละเอียดและบริจาค' }).first().click();
+		await page.getByRole('button', { name: 'บริจาครายการนี้' }).first().click();
+		await expect(page.locator('#donor-name')).toBeVisible();
 	});
 
 	test('on a 390px phone the map fits the screen and the card sits under it', async ({ page }) => {
 		await page.setViewportSize({ width: 390, height: 844 });
-		await openShelterStep(page);
+		await openBoard(page);
 
-		const map = page.getByTestId('donation-shelter-map');
+		const map = page.getByTestId('donation-needs-map');
 		await expect(map).toBeVisible({ timeout: 15_000 });
-		await expect(page.getByTestId('donation-shelter-card')).toBeVisible();
+		await page.getByTestId('shelter-marker-SH001').click({ timeout: 15_000 });
+		const card = page.getByTestId('donation-needs-map-card');
+		await expect(card).toBeVisible();
 
 		const mapBox = await map.boundingBox();
-		const cardBox = await page.getByTestId('donation-shelter-card').boundingBox();
+		const cardBox = await card.boundingBox();
 		expect(mapBox && mapBox.x >= 0 && mapBox.x + mapBox.width <= 390).toBe(true);
 		expect(mapBox && cardBox && cardBox.y >= mapBox.y + mapBox.height).toBe(true);
 		const overflow = await page.evaluate(
 			() => document.documentElement.scrollWidth - document.documentElement.clientWidth
 		);
 		expect(overflow).toBeLessThanOrEqual(0);
+	});
+});
+
+/**
+ * Every way into step 3 locks the shelter chosen on step 1, so step 3 only shows it:
+ * the name read-only and a small map, with no shelter dropdown.
+ */
+test.describe('Donation form drop-off shelter (#814)', TAGS, () => {
+	test('shows the locked shelter read-only with its pin and no shelter dropdown', async ({
+		page
+	}) => {
+		await openShelterStep(page);
+
+		await expect(page.locator('#shelter-select')).toHaveCount(0);
+		await expect(page.getByTestId('drop-off-shelter-name')).toHaveText(SH001_NAME);
+		await expect(page.getByTestId('drop-off-shelter-map')).toBeVisible({ timeout: 15_000 });
+		await expect(page.getByTestId('shelter-marker-SH001')).toBeVisible({ timeout: 15_000 });
+	});
+
+	test('without the shelters list the name stays and the map is dropped', async ({ page }) => {
+		await openShelterStep(page, 503);
+
+		await expect(page.getByTestId('drop-off-shelter-name')).toHaveText(SH001_NAME);
+		await expect(page.getByTestId('drop-off-shelter-map')).toHaveCount(0);
+		await expect(page.locator('#shelter-select')).toHaveCount(0);
 	});
 });
 
@@ -229,8 +254,9 @@ test.describe('Public Donation & Queue Booking Wizard (T-60)', TAGS, () => {
 			page.getByRole('heading', { name: 'ส่วนที่ 3: ข้อมูลการจัดส่ง โลจิสติกส์' })
 		).toBeVisible();
 
-		// Assert shelter is locked to SH001
-		await expect(page.getByText('ล็อกตามความต้องการที่เลือก')).toBeVisible();
+		// The shelter picked on step 1 is shown read-only; there is no dropdown to change it.
+		await expect(page.getByTestId('drop-off-shelter-name')).toBeVisible();
+		await expect(page.locator('#shelter-select')).toHaveCount(0);
 
 		// Choose delivery method (Button grid)
 		await page.getByRole('button', { name: 'ส่งผ่านขนส่งพัสดุ' }).click();
