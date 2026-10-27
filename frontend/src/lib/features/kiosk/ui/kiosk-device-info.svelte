@@ -124,6 +124,8 @@
 		if (event.key === 'Tab') return trapTab(event);
 		if (event.key !== 'Escape') return;
 		event.preventDefault();
+		// Same as the close button: the panel stays open until a test print finishes.
+		if (testPrint.busy) return;
 		session.close();
 	}
 </script>
