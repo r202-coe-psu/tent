@@ -17,6 +17,7 @@
 	} from '$lib/features/volunteer-portal/domain/volunteer';
 	import type { PortalActivity } from '$lib/features/volunteer-portal/domain/schedule-view';
 	import { findBookingConflict } from '$lib/features/volunteer-portal/domain/booking-overlap';
+	import { openJobsFirst, openShifts } from '$lib/features/volunteer-portal/domain/shift-closing';
 	import { shiftDutyWindow } from '$lib/features/volunteers/domain/duty-window';
 	import { languageStore } from '$lib/stores/language.svelte';
 	import { jobsI18n } from '$lib/features/volunteers/i18n/jobs.i18n';
@@ -61,6 +62,8 @@
 		shelter_code?: string;
 		description: string;
 		shifts: DisplayShift[];
+		/** Every shift has ended, so the card stays on the board but cannot be applied to (#972). */
+		closed: boolean;
 		tags: { label: string; variant: 'success' | 'warning' | 'outline' }[];
 		skills: { value: string; label: string }[];
 		skills_required?: string[];
@@ -269,7 +272,8 @@
 
 	const displayedJobs = $derived.by<DisplayJobCard[]>(() => {
 		if (rawJobs && rawJobs.length > 0) {
-			return rawJobs.map((job: RawPublicJob) => {
+			const now = new Date();
+			const cards = rawJobs.map((job: RawPublicJob) => {
 				const jobId = job.job_id || job._id || '';
 				const cleanJobId = jobId.replace(/^job:/, '');
 				const shelterName =
@@ -282,8 +286,12 @@
 					(job.skills_required?.some((s: string) => isControlledSkill(s)) ?? false);
 
 				let shifts: DisplayShift[];
+				let closed = false;
 				if (job.shifts && job.shifts.length > 0) {
-					shifts = job.shifts.map((s: RawPublicJobShift, idx: number) => {
+					const stillOpen = openShifts(job.shifts, now);
+					closed = stillOpen.length === 0;
+					// A closed job keeps its ended shifts so the card still says what it was.
+					shifts = (closed ? job.shifts : stillOpen).map((s: RawPublicJobShift, idx: number) => {
 						const st = s.start_time || '08:00';
 						const et = s.end_time || '16:00';
 						const shiftConfirmed =
@@ -364,7 +372,9 @@
 
 				const tags: { label: string; variant: 'success' | 'warning' | 'outline' }[] = [];
 
-				if (job.status === 'open') {
+				if (closed) {
+					tags.push({ label: t.tagClosed, variant: 'outline' });
+				} else if (job.status === 'open') {
 					tags.push({ label: t.tagOpen, variant: 'success' });
 				} else if (job.status === 'almost_full') {
 					tags.push({ label: t.tagNearFull, variant: 'warning' });
@@ -384,6 +394,7 @@
 					shelter_code: job.shelter_code,
 					description: job.description || t.defaultJobDesc,
 					shifts,
+					closed,
 					tags,
 					skills,
 					skills_required: job.skills_required,
@@ -391,6 +402,7 @@
 					isControlled
 				};
 			});
+			return openJobsFirst(cards, (card) => !card.closed);
 		}
 
 		return [];
@@ -493,13 +505,16 @@
 			}
 
 			if (selectedFilter === 'open') {
-				return j.shifts.some((s) => s.quota - s.confirmed > 0);
+				return !j.closed && j.shifts.some((s) => s.quota - s.confirmed > 0);
 			}
 			if (selectedFilter === 'near_full') {
-				return j.shifts.some((s) => {
-					const rem = s.quota - s.confirmed;
-					return rem > 0 && rem <= 2;
-				});
+				return (
+					!j.closed &&
+					j.shifts.some((s) => {
+						const rem = s.quota - s.confirmed;
+						return rem > 0 && rem <= 2;
+					})
+				);
 			}
 			if (selectedFilter === 'controlled') {
 				return j.isControlled;

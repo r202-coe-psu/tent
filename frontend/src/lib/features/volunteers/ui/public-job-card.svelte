@@ -38,6 +38,7 @@
 			shelter: string;
 			description: string;
 			shifts: JobShift[];
+			closed?: boolean;
 			tags: JobTag[];
 			skills: { value: string; label: string }[];
 			isControlled: boolean;
@@ -217,12 +218,13 @@
 			{#each sortedShifts as shift, index (shift.id)}
 				{@const remaining = Math.max(0, shift.quota - shift.confirmed)}
 				{@const isFull = remaining <= 0}
+				{@const isClosed = job.closed === true}
 				{@const isBlocked = Boolean(shift.conflict)}
 				{@const applicants = Math.max(shift.applicants_count ?? 0, shift.confirmed)}
 				<div
 					class={[
 						'rounded-2xl border p-4 shadow-xs transition-colors',
-						isFull || isBlocked
+						isFull || isBlocked || isClosed
 							? 'border-border/60 bg-muted/10 opacity-90'
 							: 'border-border bg-card hover:border-primary/30',
 						!showAllShifts && index >= SHOWN_WIDE && 'hidden',
@@ -235,7 +237,12 @@
 								class="text-base font-bold {isFull ? 'text-muted-foreground' : 'text-foreground'}"
 								>{shift.date}</span
 							>
-							{#if isBlocked}
+							{#if isClosed}
+								<span
+									class="rounded-md border border-border/60 bg-muted px-2 py-0.5 text-xs font-bold text-muted-foreground"
+									>{t.tagClosed}</span
+								>
+							{:else if isBlocked}
 								<span
 									class="rounded-md border border-amber-300 bg-amber-50 px-2 py-0.5 text-xs font-bold text-amber-800"
 									>เวลาชน</span
@@ -304,13 +311,16 @@
 
 					<button
 						onclick={() => onApply(job.id, shift.id)}
-						disabled={isFull || isBlocked}
+						disabled={isFull || isBlocked || isClosed}
 						class="flex w-full items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-bold shadow-xs transition-all {isFull ||
-						isBlocked
+						isBlocked ||
+						isClosed
 							? 'cursor-not-allowed border border-border/80 bg-muted text-muted-foreground opacity-70 select-none'
 							: 'cursor-pointer bg-primary text-white hover:bg-primary/90 active:scale-[0.98]'}"
 					>
-						{#if isBlocked}
+						{#if isClosed}
+							{t.tagClosed}
+						{:else if isBlocked}
 							เวลาชนกับกะนี้
 						{:else if isFull}
 							{t.shiftFull}
