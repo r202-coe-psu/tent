@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { groupApplicationsByApplicant, partitionApplicantQueue } from './applicant-queue';
+import {
+	groupApplicationsByApplicant,
+	isHeldForInactiveProfile,
+	partitionApplicantQueue
+} from './applicant-queue';
 import type { JobApplication } from './job-application.schema';
 
 function app(overrides: Partial<JobApplication> & { _id: string }): JobApplication {
@@ -141,5 +145,21 @@ describe('groupApplicationsByApplicant', () => {
 		];
 		groupApplicationsByApplicant(input);
 		expect(input.map((a) => a._id)).toEqual(['late', 'early']);
+	});
+});
+
+describe('isHeldForInactiveProfile', () => {
+	it('flags a pending application whose volunteer is inactive', () => {
+		expect(isHeldForInactiveProfile({ status: 'pending_review' }, { status: 'inactive' })).toBe(
+			true
+		);
+	});
+
+	it('ignores active, missing, and already decided cases', () => {
+		expect(isHeldForInactiveProfile({ status: 'pending_review' }, { status: 'active' })).toBe(
+			false
+		);
+		expect(isHeldForInactiveProfile({ status: 'pending_review' }, null)).toBe(false);
+		expect(isHeldForInactiveProfile({ status: 'confirmed' }, { status: 'inactive' })).toBe(false);
 	});
 });

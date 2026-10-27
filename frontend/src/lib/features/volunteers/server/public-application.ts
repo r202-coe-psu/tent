@@ -72,6 +72,7 @@ type CouchJobShift = {
 type CouchVolunteer = {
 	_id: string;
 	_rev?: string;
+	status?: string;
 	phone_hash?: string;
 	first_name?: string;
 	last_name?: string;
@@ -585,9 +586,11 @@ export async function applyPublicVolunteerApplication(
 	const existing = volunteers[0];
 	const volunteerId = existing?._id ?? `volunteer:${ulid().toLowerCase()}`;
 	const reviewProfile = options.reviewAsNewApplicant ? undefined : existing;
-	const status = needsReview(job, skills, controlled, reviewProfile)
-		? 'pending_review'
-		: 'confirmed';
+	// Staff deactivated this profile (#882): keep it, do not reactivate it, and let staff decide.
+	const status =
+		existing?.status === 'inactive' || needsReview(job, skills, controlled, reviewProfile)
+			? 'pending_review'
+			: 'confirmed';
 	const selectedShiftId = verifiedShiftId;
 	const duplicate = await findAsPublicWriter(
 		dbName,
