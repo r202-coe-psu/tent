@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
 	import CameraOff from '@lucide/svelte/icons/camera-off';
+	import Loader from '@lucide/svelte/icons/loader-circle';
+	import { acceptRead, scannerPhase } from './camera-code-scanner-state';
 
 	const RETAIL_FORMATS = [
 		Html5QrcodeSupportedFormats.EAN_13,
@@ -14,14 +16,19 @@
 	let {
 		onScan,
 		formats = RETAIL_FORMATS,
-		disabled = false
+		disabled = false,
+		busy = false
 	}: {
 		/** Called once per distinct read, after the duplicate cooldown. */
 		onScan: (code: string) => void;
 		/** Symbologies to decode; 1D retail codes by default. Include `QR_CODE` for QR labels. */
 		formats?: Html5QrcodeSupportedFormats[];
 		disabled?: boolean;
+		/** True while the caller resolves the last read; shows progress and ignores further reads. */
+		busy?: boolean;
 	} = $props();
+
+	const phase = $derived(scannerPhase(busy));
 
 	// html5-qrcode binds to an element id, and several scanners may share a page.
 	const uid = $props.id();
@@ -54,7 +61,7 @@
 					}
 				},
 				(decodedText) => {
-					const code = decodedText.trim();
+					const code = acceptRead(phase, decodedText);
 					if (!code || disabled) return;
 
 					const now = Date.now();
@@ -111,6 +118,15 @@
 				class="absolute right-0 bottom-0 h-6 w-6 rounded-br-md border-r-4 border-b-4 border-white/80"
 			></div>
 		</div>
+		{#if phase === 'busy'}
+			<div
+				class="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-slate-950/75 text-white"
+				role="status"
+			>
+				<Loader class="size-8 animate-spin" aria-hidden="true" />
+				<p class="text-sm font-semibold">อ่าน QR แล้ว กำลังค้นหา…</p>
+			</div>
+		{/if}
 	{:else}
 		<div class="flex flex-col items-center gap-2 p-6 text-center" role="alert">
 			<CameraOff class="size-10 text-red-400" aria-hidden="true" />

@@ -8,6 +8,7 @@
 	import type { StockSort } from './stock-view';
 
 	type Option = { value: string; label: string };
+	type LocationOption = Option & { hint?: string };
 
 	let {
 		q,
@@ -28,7 +29,7 @@
 		/** "ทั้งแคตตาล็อก": include items this shelter never received. */
 		all: boolean;
 		categories: Option[];
-		locations: Option[];
+		locations: LocationOption[];
 		/** System admins can sum every shelter's stock. */
 		showOverall?: boolean;
 		canShowOverall?: boolean;
@@ -116,7 +117,14 @@
 		<Select.Content>
 			<Select.Item value="all" label="ทุกจุด">ทุกจุด</Select.Item>
 			{#each locations as option (option.value)}
-				<Select.Item value={option.value} label={option.label}>{option.label}</Select.Item>
+				<Select.Item value={option.value} label={option.label}>
+					<span class="flex min-w-0 flex-col">
+						<span class="truncate">{option.label}</span>
+						{#if option.hint}
+							<span class="truncate text-xs text-muted-foreground">{option.hint}</span>
+						{/if}
+					</span>
+				</Select.Item>
 			{/each}
 		</Select.Content>
 	</Select.Root>

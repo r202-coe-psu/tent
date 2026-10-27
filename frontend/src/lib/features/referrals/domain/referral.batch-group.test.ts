@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { groupReferralsForList, referralBatchKey } from './referral.batch-group';
+import {
+	groupReferralsForList,
+	referralBatchBucketBounds,
+	referralBatchKey
+} from './referral.batch-group';
 import type { Referral } from './referral.schema';
 
 function makeReferral(
@@ -95,5 +99,21 @@ describe('groupReferralsForList', () => {
 		const [group] = groupReferralsForList(refs);
 		expect(group!.count).toBe(2);
 		expect(group!.sharedStatus).toBeNull();
+	});
+});
+
+describe('referralBatchBucketBounds', () => {
+	it('returns the 2-minute [start, end) window containing the timestamp', () => {
+		expect(referralBatchBucketBounds('2026-07-24T10:03:10.000Z')).toEqual({
+			start: '2026-07-24T10:02:00.000Z',
+			end: '2026-07-24T10:04:00.000Z'
+		});
+	});
+
+	it('agrees with referralBatchKey: same bucket iff same key time part', () => {
+		const at = (iso: string) => makeReferral({ _id: 'r', evacuee_id: 'e', created_at: iso });
+		const { start, end } = referralBatchBucketBounds('2026-07-24T10:03:10.000Z');
+		expect(referralBatchKey(at(start))).toBe(referralBatchKey(at('2026-07-24T10:03:59.999Z')));
+		expect(referralBatchKey(at(start))).not.toBe(referralBatchKey(at(end)));
 	});
 });

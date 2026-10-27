@@ -334,10 +334,14 @@ export interface SeedItemOptions {
 	stockQty: string;
 	returnable: boolean;
 	typeClass: 'CONSUMABLE' | 'DURABLE';
-	/** Menu tags read by the desk's menu-match check (e.g. `['HALAL']`). */
+	/** Dietary tags on the menu; since #801 none of them restrict who may take it. */
 	dietary?: string[];
+	/** Age group the menu targets — the desk's menu-match check reads it (FR-MRM-01). */
+	ageGroup?: 'INFANT' | 'CHILD' | 'ELDERLY';
 	/** ISO expiry on the physical lot — the desk's ready-meal safety clock reads it. */
 	lotExpiry?: string;
+	/** `allergy` master codes or free text the menu lists (#607). */
+	allergens?: string[];
 }
 
 /** Seed a canonical item master and a real inbound physical lot. */
@@ -366,6 +370,8 @@ export async function seedItemWithStock(
 		type_class: options.typeClass,
 		deactivated: false,
 		dietary: options.dietary ?? [],
+		...(options.ageGroup ? { age_group: options.ageGroup } : {}),
+		...(options.allergens ? { allergens: options.allergens } : {}),
 		returnable: options.returnable
 	});
 	scenario.catalogIds.add(itemId);
@@ -398,9 +404,13 @@ export async function seedItemWithStock(
 }
 
 export interface SeedRecipientOptions {
-	/** `muslim` gives the HALAL menu tag; anything else does not. */
+	/** Free text on the evacuee; since #801 it no longer affects menu matching. */
 	religion?: string;
+	/** Thai Buddhist birth year — sets the recipient's CR-130 age bucket for menu matching. */
+	birthYear?: number;
 	phone?: string;
+	/** Seeds a `medical` doc with these allergies (`allergy` codes or free text, #607). */
+	allergies?: string[];
 }
 
 /** Seed a valid, active evacuee for the recipient picker. */
@@ -427,6 +437,7 @@ export async function seedRecipient(
 		person_id: { cardType: 'anonymous', number: `ANON-${ulid()}` },
 		country: 'THAILAND',
 		religion: options.religion ?? 'buddhist',
+		...(options.birthYear ? { birth_year: options.birthYear } : {}),
 		vulnerable_groups: [],
 		special_needs: [],
 		household_id: null,
@@ -434,6 +445,20 @@ export async function seedRecipient(
 		privacy: { search_excluded: false },
 		registered_via: 'staff'
 	});
+	if (options.allergies) {
+		await putDocument(shelterDb(), {
+			_id: `medical:${ulid()}`,
+			type: 'medical',
+			schema_v: 1,
+			shelter_code: shelterCode(),
+			created_at: now,
+			updated_at: now,
+			created_by: scenario.user.name,
+			evacuee_id: recipientId,
+			allergies: options.allergies,
+			track: 'normal'
+		});
+	}
 	return { recipientId, firstName, lastName };
 }
 

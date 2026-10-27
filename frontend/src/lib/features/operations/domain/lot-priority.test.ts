@@ -5,6 +5,7 @@ import {
 	W_AGE,
 	W_EXPIRY,
 	isLotExpired,
+	lotExpiryLabel,
 	lotPriorityReason,
 	rankLotsForIssue,
 	scoreLot,
@@ -346,5 +347,23 @@ describe('lot past its shelf life (FR-A4a-c, AC-A7, AC-A8)', () => {
 		expect(scoreLot(l, SHELF, NOW).isUrgent).toBe(true);
 		expect(lotPriorityReason(l, SHELF, NOW)).toContain('(เร่งด่วน)');
 		expect(lotPriorityReason(l, SHELF, NOW)).not.toContain('เกินอายุ');
+	});
+});
+
+describe('lotExpiryLabel', () => {
+	it('shows the recorded expiry date (Thai, Buddhist year) and the days left', () => {
+		const label = lotExpiryLabel(lot('a', { expiresInDays: 10 }), DRY, NOW);
+		expect(label).toBe('หมดอายุ 12 ต.ค. 2569 (อีก 10 วัน)');
+	});
+
+	it('falls back to what shelf life leaves when no expiry was recorded', () => {
+		expect(lotExpiryLabel(lot('a', { ageDays: 2 }), { shelf_life_days: 30 }, NOW)).toBe(
+			'อายุเก็บรักษาเหลือ 28 วัน'
+		);
+	});
+
+	it('says expired, or that there is no expiry at all', () => {
+		expect(lotExpiryLabel(lot('a', { expiresInDays: -1 }), DRY, NOW)).toBe('หมดอายุแล้ว');
+		expect(lotExpiryLabel(lot('a'), DRY, NOW)).toBe('ไม่ระบุวันหมดอายุ');
 	});
 });
