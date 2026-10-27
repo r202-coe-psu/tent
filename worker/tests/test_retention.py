@@ -160,13 +160,21 @@ async def test_purge_does_not_release_quota_for_received_buffer(db: None) -> Non
 async def test_retention_cycle_runs_the_reservation_ttl_sweep(db: None) -> None:
     """The TTL sweep must stay wired into the loop — it has no other scheduler."""
     couch = AsyncMock()
-    with patch(
-        "worker.retention.job.expire_declared_donations", new_callable=AsyncMock
-    ) as sweep:
+    with (
+        patch(
+            "worker.retention.job.expire_declared_donations", new_callable=AsyncMock
+        ) as sweep,
+        patch(
+            "worker.retention.job.expire_role_grants", new_callable=AsyncMock
+        ) as grants,
+    ):
         await run_retention_once(couch)
 
     sweep.assert_awaited_once()
     assert sweep.await_args.args[0] is couch
+    # Coordinator role grants (#955) lapse on the same cycle.
+    grants.assert_awaited_once()
+    assert grants.await_args.args[0] is couch
 
 
 async def test_retention_cycle_skips_the_sweep_without_a_couch_client(db: None) -> None:

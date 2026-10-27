@@ -23,6 +23,7 @@ from tent_model import (
 from worker.couch.client import CouchClient
 from worker.donation_status import is_donation_outstanding
 from worker.quota.expiry import expire_declared_donations
+from worker.role_grants import expire_role_grants
 
 logger = logging.getLogger(__name__)
 
@@ -220,6 +221,8 @@ async def run_retention_once(couch: CouchClient | None = None) -> None:
         # second means a crash in between leaves the doc "declared", and the next cycle
         # retries the release harmlessly thanks to the underflow guard.
         await expire_declared_donations(couch, now=datetime.now(UTC))
+        # Coordinator-granted staff roles (#955) lapse on the same cycle.
+        await expire_role_grants(couch, now=datetime.now(UTC))
     logger.info("Retention job %s complete", job_run_id)
 
 
