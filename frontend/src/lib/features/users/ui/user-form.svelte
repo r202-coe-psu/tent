@@ -7,6 +7,7 @@
 	import * as AlertDialog from '$lib/components/ui/alert-dialog/index.js';
 	import * as Popover from '$lib/components/ui/popover/index.js';
 	import { defaults, setError, superForm } from 'sveltekit-superforms';
+	import { toast } from 'svelte-sonner';
 	import { zod4 } from 'sveltekit-superforms/adapters';
 	import {
 		SA_GRANTABLE_CAPABILITIES,
@@ -205,14 +206,14 @@
 					});
 					if (!editing) reset();
 				} catch (err) {
-					setError(
-						form,
+					const message =
 						err instanceof Error
 							? err.message
 							: editing
 								? 'ไม่สามารถบันทึกข้อมูลผู้ใช้งานได้'
-								: 'ไม่สามารถสร้างผู้ใช้งานได้'
-					);
+								: 'ไม่สามารถสร้างผู้ใช้งานได้';
+					setError(form, message);
+					toast.error(message);
 				}
 			}
 		}
