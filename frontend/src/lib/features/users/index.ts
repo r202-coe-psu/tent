@@ -3,6 +3,8 @@ export {
 	editUserSchema,
 	capabilitySchema,
 	shelterAssignmentSchema,
+	phoneSchema,
+	contactPhoneSchema,
 	type CreateUserInput,
 	type EditUserInput,
 	type UserFormInput,

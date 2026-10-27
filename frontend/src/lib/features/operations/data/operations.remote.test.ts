@@ -1237,7 +1237,7 @@ describe('OperationsRemoteRepository.mergeItems (CR-143 §F)', () => {
 		await receive('item_master:A', '6', '2027-01-01', '2026-10-02T01:00:00.000Z');
 	});
 
-	it('AC-F1 — moves both lots, deactivates the source and stamps item_master schema_v 5', async () => {
+	it('AC-F1 — moves both lots, deactivates the source and stamps the current item_master schema_v', async () => {
 		const result = await repo.mergeItems(
 			{ sourceId: 'item_master:A', targetId: 'item_master:B', roles: MANAGER },
 			ctx
@@ -1255,7 +1255,7 @@ describe('OperationsRemoteRepository.mergeItems (CR-143 §F)', () => {
 		expect(stored).toMatchObject({
 			merged_into: 'item_master:B',
 			deactivated: true,
-			schema_v: 5
+			schema_v: 6
 		});
 		// the destination is untouched
 		expect(
