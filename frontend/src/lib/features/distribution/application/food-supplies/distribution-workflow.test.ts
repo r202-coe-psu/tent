@@ -838,7 +838,7 @@ describe('distribution-workflow', () => {
 					ticket._id,
 					{
 						...evacueeInput,
-						menu_check: { recipient_tags: ['ELDERLY'], menu: { dietary: ['HALAL'] } }
+						menu_check: { recipient_tags: ['ELDERLY'], menu: { age_group: 'INFANT' } }
 					},
 					POS_CTX,
 					{ ticketRepo, logRepo }
@@ -874,8 +874,8 @@ describe('distribution-workflow', () => {
 				{
 					...evacueeInput,
 					is_override: true,
-					override_reason: 'Only halal boxes left',
-					menu_check: { recipient_tags: ['ELDERLY'], menu: { dietary: ['HALAL'] } }
+					override_reason: 'Only infant boxes left',
+					menu_check: { recipient_tags: ['ELDERLY'], menu: { age_group: 'INFANT' } }
 				},
 				POS_CTX,
 				{ ticketRepo, logRepo }
@@ -888,7 +888,8 @@ describe('distribution-workflow', () => {
 		it.each([
 			['a general (untagged) menu', ['ELDERLY'], { dietary: [], age_group: 'ALL' }],
 			['a general menu for an untagged recipient', null, {}],
-			['a matching tag', ['HALAL', 'ELDERLY'], { dietary: ['HALAL'] }]
+			['a matching tag', ['HALAL', 'ELDERLY'], { age_group: 'ELDERLY' }],
+			['a HALAL menu for a non-muslim (#801)', ['ELDERLY'], { dietary: ['HALAL'] }]
 		] as const)('records %s without override', async (_label, recipientTags, menu) => {
 			const ticket = await createFoodTicket('item:halal_box');
 
