@@ -260,26 +260,32 @@ describe('validateRow — communications as three boolean columns', () => {
 describe('validateRow — sub storage list', () => {
 	it('parses ชื่อ:ประเภท:พื้นที่ items', () => {
 		const r = validateRow(
-			baseRow({ [H.sub_storage]: 'คลังหน้าอาคาร:อาหารแห้ง:20 | คลังยา:เวชภัณฑ์' }),
+			baseRow({ [H.sub_storage]: 'คลังหน้าอาคาร:อาหารแห้ง:20 | คลังยา:ยา' }),
 			1,
 			emptyLookups()
 		);
 		expect(r.ok).toBe(true);
 		expect(r.shelter?.common_areas.sub_storage).toEqual([
-			{ id: expect.any(String), name: 'คลังหน้าอาคาร', type: 'food_dry', area_m2: 20 },
-			{ id: expect.any(String), name: 'คลังยา', type: 'medical_supplies', area_m2: null }
+			{ id: expect.any(String), name: 'คลังหน้าอาคาร', types: ['food_dry'], area_m2: 20 },
+			{ id: expect.any(String), name: 'คลังยา', types: ['medical_supplies'], area_m2: null }
 		]);
 	});
 
 	it('mints a distinct id per storage point (ledger lots reference it)', () => {
 		const r = validateRow(
-			baseRow({ [H.sub_storage]: 'คลังหน้าอาคาร:อาหารแห้ง:20 | คลังยา:เวชภัณฑ์' }),
+			baseRow({ [H.sub_storage]: 'คลังหน้าอาคาร:อาหารแห้ง:20 | คลังยา:ยา' }),
 			1,
 			emptyLookups()
 		);
 		const ids = (r.shelter?.common_areas.sub_storage ?? []).map((p) => p.id);
 		expect(ids.every((id) => id.length > 0)).toBe(true);
 		expect(new Set(ids).size).toBe(2);
+	});
+
+	it('still accepts the retired label "เวชภัณฑ์" for medical supplies (CR-199)', () => {
+		const r = validateRow(baseRow({ [H.sub_storage]: 'คลังยา:เวชภัณฑ์' }), 1, emptyLookups());
+		expect(r.ok).toBe(true);
+		expect(r.shelter?.common_areas.sub_storage?.[0].types).toEqual(['medical_supplies']);
 	});
 
 	it('rejects an unknown storage type', () => {

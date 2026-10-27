@@ -22,7 +22,12 @@ import {
 	type RequisitionTicketRepository
 } from '../../data/food-supplies';
 import { assertCanPerformFrontlineDistribution } from './auth';
-import { CapacityExceededError, TicketStateError, WorkflowValidationError } from './errors';
+import {
+	assertNoSkippedDocs,
+	CapacityExceededError,
+	TicketStateError,
+	WorkflowValidationError
+} from './errors';
 import { assertPositiveIntegerQty } from './validation';
 import { resolveDispatchedLotExpiry, type LedgerEntryReader } from './lot-expiry';
 
@@ -121,7 +126,12 @@ async function assertSufficientInHandCapacity(
 	targetItem: TicketItem,
 	requestedQty: string
 ): Promise<void> {
-	const existingLogs = await logRepo.list({ ticket_id: ticketId, item_id: targetItem.item_id });
+	// Fail closed: a skipped malformed log of this ticket item could be an issuance we cannot count.
+	const { items: existingLogs, skipped } = await logRepo.listWithSkipped({
+		ticket_id: ticketId,
+		item_id: targetItem.item_id
+	});
+	assertNoSkippedDocs(skipped, 'in-hand quantity');
 	const inHand = calculateInHandQtyForTicketItem(ticketId, targetItem, existingLogs);
 
 	if (!qtyGte(inHand, requestedQty)) {
@@ -156,7 +166,11 @@ export async function recordFoodDistribution(
 
 	// Food duplicate check (advisory query per CR-121 FR-DST-02)
 	if (input.recipient_id && ticket.meal) {
-		const recentRecipientLogs = await logRepo.list({ recipient_id: input.recipient_id });
+		// Fail closed: a skipped malformed log of this recipient could be the earlier meal.
+		const { items: recentRecipientLogs, skipped } = await logRepo.listWithSkipped({
+			recipient_id: input.recipient_id
+		});
+		assertNoSkippedDocs(skipped, 'duplicate meal check');
 		const duplicate = recentRecipientLogs.some((l) =>
 			isDuplicateMealDistributionLog(l, ticket.meal!)
 		);

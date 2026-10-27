@@ -1,7 +1,8 @@
-import type {
-	RequisitionTicket,
-	RequisitionTicketStatus,
-	RequisitionType
+import {
+	thailandCalendarDay,
+	type RequisitionTicket,
+	type RequisitionTicketStatus,
+	type RequisitionType
 } from '../../domain/food-supplies';
 
 export type TicketWorkflowGroupId =
@@ -124,6 +125,53 @@ export interface TicketFilterOptions {
 	destination?: string | 'all';
 	requisitionType?: RequisitionType | 'all';
 	search?: string;
+	/** Multi-select statuses; empty/undefined = no filter. */
+	statuses?: readonly RequisitionTicketStatus[];
+	/** Inclusive `YYYY-MM-DD` lower bound on `created_at` (Thailand calendar day). */
+	createdFrom?: string;
+	/** Inclusive `YYYY-MM-DD` upper bound on `created_at` (Thailand calendar day). */
+	createdTo?: string;
+}
+
+/** Statuses where the warehouse side must act next. */
+export const WAREHOUSE_FOLLOW_UP_STATUSES: readonly RequisitionTicketStatus[] = [
+	'PENDING_PICK',
+	'READY_FOR_DISPATCH',
+	'RETURN_PENDING_RECEIPT',
+	'RETURN_COMPLETED'
+];
+
+/** Statuses where the frontline side must act next. */
+export const FRONTLINE_FOLLOW_UP_STATUSES: readonly RequisitionTicketStatus[] = ['IN_TRANSIT'];
+
+/**
+ * Statuses that need follow-up from the current user, by role capability.
+ * Empty when the user has neither capability.
+ */
+export function followUpStatusesFor(caps: {
+	canWarehouse: boolean;
+	canFrontline: boolean;
+}): RequisitionTicketStatus[] {
+	const out: RequisitionTicketStatus[] = [];
+	if (caps.canWarehouse) out.push(...WAREHOUSE_FOLLOW_UP_STATUSES);
+	if (caps.canFrontline) out.push(...FRONTLINE_FOLLOW_UP_STATUSES);
+	return out;
+}
+
+/** Statuses selectable while `groupId` is active (all statuses for `all`). */
+export function statusesForGroup(
+	groupId: TicketWorkflowGroupId
+): readonly RequisitionTicketStatus[] {
+	return (WORKFLOW_GROUP_MAP[groupId] ?? WORKFLOW_GROUP_MAP.all).statuses;
+}
+
+/** Drops selected statuses that are not part of `groupId`. */
+export function constrainStatusesToGroup(
+	statuses: readonly RequisitionTicketStatus[],
+	groupId: TicketWorkflowGroupId
+): RequisitionTicketStatus[] {
+	const allowed = statusesForGroup(groupId);
+	return statuses.filter((s) => allowed.includes(s));
 }
 
 /**
@@ -149,6 +197,20 @@ export function filterRequisitionTickets(
 			if (ticket.status !== filters.detailedStatus) {
 				return false;
 			}
+		}
+
+		// 2b. Multi-select statuses
+		if (filters.statuses && filters.statuses.length > 0) {
+			if (!filters.statuses.includes(ticket.status)) {
+				return false;
+			}
+		}
+
+		// 2c. Created date range (inclusive, Thailand calendar day)
+		if (filters.createdFrom || filters.createdTo) {
+			const day = thailandCalendarDay(ticket.created_at);
+			if (filters.createdFrom && day < filters.createdFrom) return false;
+			if (filters.createdTo && day > filters.createdTo) return false;
 		}
 
 		// 3. Requisition type filter (food, supplies, kitchen, transfer)

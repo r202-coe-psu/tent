@@ -17,7 +17,8 @@
 	import { useItemMasters } from '$lib/features/catalog';
 	import {
 		canReturnLoanPhysical,
-		canPerformFrontlineDistribution
+		canPerformFrontlineDistribution,
+		canWriteBulkReturnEntry
 	} from '../../application/food-supplies/auth';
 	import type { DistributionLog } from '../../domain/food-supplies';
 	import RecipientSearchPicker from '../common/RecipientSearchPicker.svelte';
@@ -33,7 +34,7 @@
 	import { RETURN_ACTION_HELP } from '../model/bulk-return-copy';
 	import CounterReturnDialog from './CounterReturnDialog.svelte';
 	import NonPhysicalClearDialog from './NonPhysicalClearDialog.svelte';
-	import BulkGateClearDialog from './BulkGateClearDialog.svelte';
+	import AddBulkReturnEntriesDialog from '../bulk-return/AddBulkReturnEntriesDialog.svelte';
 	import { Button } from '$lib/components/ui/button/index.js';
 
 	interface Props {
@@ -53,6 +54,7 @@
 
 	const canFrontline = $derived(authContext ? canPerformFrontlineDistribution(authContext) : false);
 	const canReturnStock = $derived(authContext ? canReturnLoanPhysical(authContext) : false);
+	const canWriteBulkEntry = $derived(authContext ? canWriteBulkReturnEntry(authContext) : false);
 
 	// State
 	let recipientSelection = $state<FrontlineRecipientSelection | null>(null);
@@ -62,8 +64,8 @@
 	let selectedLogForClear = $state<DistributionLog | null>(null);
 	let clearDialogOpen = $state(false);
 
-	let selectedLogForBulkClear = $state<DistributionLog | null>(null);
-	let bulkClearDialogOpen = $state(false);
+	let bulkEntryItemId = $state<string | undefined>(undefined);
+	let bulkEntryDialogOpen = $state(false);
 
 	let showHistory = $state(false);
 
@@ -113,9 +115,9 @@
 		clearDialogOpen = true;
 	}
 
-	function handleOpenBulkClear(log: DistributionLog) {
-		selectedLogForBulkClear = log;
-		bulkClearDialogOpen = true;
+	function handleOpenBulkEntry(log: DistributionLog) {
+		bulkEntryItemId = log.item_id;
+		bulkEntryDialogOpen = true;
 	}
 </script>
 
@@ -306,20 +308,21 @@
 								<p class="mt-1 px-1 text-2xs text-slate-500">{RETURN_ACTION_HELP.nonPhysical}</p>
 							</div>
 
-							<!-- Tertiary: CR-134 Bulk Gate Clearance -->
-							<div>
-								<Button
-									type="button"
-									variant="outline"
-									onclick={() => handleOpenBulkClear(loan)}
-									disabled={!canFrontline}
-									class="h-auto w-full rounded-xl border-purple-200 bg-purple-50 py-2 text-xs font-bold text-purple-800 hover:border-purple-300 hover:bg-purple-100 hover:text-purple-800"
-								>
-									<Archive class="h-3.5 w-3.5 text-purple-600" />
-									<span>จับคู่กับกองรับคืน</span>
-								</Button>
-								<p class="mt-1 px-1 text-2xs text-slate-500">{RETURN_ACTION_HELP.bulk}</p>
-							</div>
+							<!-- Tertiary: drop the item into a bulk return pool (#659) -->
+							{#if canWriteBulkEntry}
+								<div>
+									<Button
+										type="button"
+										variant="outline"
+										onclick={() => handleOpenBulkEntry(loan)}
+										class="h-auto min-h-11 w-full rounded-xl border-purple-200 bg-purple-50 py-2 text-xs font-bold text-purple-800 hover:border-purple-300 hover:bg-purple-100 hover:text-purple-800"
+									>
+										<Archive class="h-3.5 w-3.5 text-purple-600" />
+										<span>คืนเข้ากองรับคืน</span>
+									</Button>
+									<p class="mt-1 px-1 text-2xs text-slate-500">{RETURN_ACTION_HELP.bulk}</p>
+								</div>
+							{/if}
 						</div>
 					</div>
 				{/each}
@@ -417,14 +420,12 @@
 	}}
 />
 
-<!-- Bulk Gate Clearance Modal Dialog (Slice 5.5D) -->
-<BulkGateClearDialog
-	bind:open={bulkClearDialogOpen}
-	log={selectedLogForBulkClear}
-	itemName={selectedLogForBulkClear ? resolveItemName(selectedLogForBulkClear) : ''}
-	{shelterCode}
-	canClearLoan={canFrontline}
-	onclose={() => {
-		selectedLogForBulkClear = null;
-	}}
-/>
+<!-- Add to bulk return pool (#659): prefilled with the selected returner and the loan's item -->
+{#if canWriteBulkEntry}
+	<AddBulkReturnEntriesDialog
+		bind:open={bulkEntryDialogOpen}
+		{shelterCode}
+		initialReturner={recipientSelection}
+		initialItemId={bulkEntryItemId}
+	/>
+{/if}

@@ -10,7 +10,6 @@ import {
 	NON_PHYSICAL_CLEAR_REASON_OPTIONS,
 	getLoanStatusBadge,
 	isEligibleBulkPool,
-	validateBulkGateClear,
 	validateBulkForwardRecovery,
 	resolveCounterRecoveryHydration,
 	resolveNonPhysicalRecoveryHydration,
@@ -321,47 +320,6 @@ describe('loan-return model helpers', () => {
 			expect(isEligibleBulkPool({ ...basePool, unclaimed_quota: '0' }, 'item_master:blanket')).toBe(
 				false
 			);
-		});
-	});
-
-	describe('validateBulkGateClear', () => {
-		const activePool = {
-			status: 'ACTIVE',
-			unclaimed_quota: '5'
-		};
-
-		it('validates successfully when pool is selected, ACTIVE, and quota >= required', () => {
-			expect(validateBulkGateClear(activePool, '3').isValid).toBe(true);
-			expect(validateBulkGateClear(activePool, '5').isValid).toBe(true);
-		});
-
-		it('rejects when no pool is selected', () => {
-			const res = validateBulkGateClear(null, '3');
-			expect(res.isValid).toBe(false);
-			expect(res.error).toContain('เลือกกองรับคืน');
-		});
-
-		it('rejects when selected pool is not ACTIVE', () => {
-			const res = validateBulkGateClear({ status: 'EXHAUSTED', unclaimed_quota: '0' }, '3');
-			expect(res.isValid).toBe(false);
-			expect(res.error).toContain('ไม่พร้อมใช้งาน');
-		});
-
-		it('rejects when selected pool has zero quota', () => {
-			const res = validateBulkGateClear({ status: 'ACTIVE', unclaimed_quota: '0' }, '3');
-			expect(res.isValid).toBe(false);
-			expect(res.error).toContain('ไม่มีของเหลือรอจับคู่');
-		});
-
-		it('rejects when requiredQty exceeds unclaimed_quota', () => {
-			const res = validateBulkGateClear(activePool, '6');
-			expect(res.isValid).toBe(false);
-			expect(res.error).toContain('เหลือรอจับคู่');
-		});
-
-		it('never uses the allocation-sounding word "โควตาไม่พอ" in validation copy', () => {
-			const res = validateBulkGateClear(activePool, '6');
-			expect(res.error).not.toContain('โควตาไม่พอ');
 		});
 	});
 

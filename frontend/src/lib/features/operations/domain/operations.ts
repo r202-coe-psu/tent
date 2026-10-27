@@ -1075,13 +1075,13 @@ export function projectStockLotBalances(ledger: readonly StockLedger[]): StockLo
  * `lot_ref` rows hit their own lot, older outbound rows are replayed in the legacy order.
  *
  * Projected one item at a time — lots never cross items, so the result is the same as one
- * whole-ledger pass, but one item with an impossible history only drops that item
- * (`onIntegrityError`) instead of the whole page or count.
+ * whole-ledger pass, but one item with an impossible history only drops that item, named in
+ * `brokenItemIds`, instead of the whole page or count.
  */
-export function projectLotsByItem(
-	ledger: readonly StockLedger[],
-	onIntegrityError?: (itemId: string, error: StockLotIntegrityError) => void
-): StockLotBalance[] {
+export function projectLotsByItem(ledger: readonly StockLedger[]): {
+	lots: StockLotBalance[];
+	brokenItemIds: string[];
+} {
 	const byItem = new Map<string, StockLedger[]>();
 	for (const entry of ledger) {
 		const rows = byItem.get(entry.item_id);
@@ -1089,15 +1089,16 @@ export function projectLotsByItem(
 		else byItem.set(entry.item_id, [entry]);
 	}
 	const lots: StockLotBalance[] = [];
+	const brokenItemIds: string[] = [];
 	for (const [itemId, rows] of byItem) {
 		try {
 			lots.push(...projectStockLotBalances(rows));
 		} catch (error) {
 			if (!(error instanceof StockLotIntegrityError)) throw error;
-			onIntegrityError?.(itemId, error);
+			brokenItemIds.push(itemId);
 		}
 	}
-	return lots;
+	return { lots, brokenItemIds };
 }
 
 /**
@@ -1127,12 +1128,16 @@ export function assertLotWriteOffsFit(
 	if (wanted.size === 0) return;
 
 	const itemIds = new Set([...wanted.values()].map((w) => w.item_id));
-	const lots = new Map(
-		projectStockLotBalances(ledger.filter((row) => itemIds.has(row.item_id))).map((lot) => [
-			lot.lot_ref,
-			lot
-		])
-	);
+	let projected: StockLotBalance[];
+	try {
+		projected = projectStockLotBalances(ledger.filter((row) => itemIds.has(row.item_id)));
+	} catch (error) {
+		if (!(error instanceof StockLotIntegrityError)) throw error;
+		throw new LotWriteOffError(
+			'ประวัติคลังของสินค้านี้คำนวณยอดรายล็อตไม่ได้ — กรุณาแจ้งผู้ดูแลระบบ'
+		);
+	}
+	const lots = new Map(projected.map((lot) => [lot.lot_ref, lot]));
 	for (const [lotRef, want] of wanted) {
 		const lot = lots.get(lotRef);
 		if (!lot || lot.item_id !== want.item_id || lot.unit !== want.unit) {

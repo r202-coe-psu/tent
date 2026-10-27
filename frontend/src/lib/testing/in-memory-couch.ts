@@ -44,36 +44,71 @@ export function createInMemoryCouch() {
 		revCounters.clear();
 	}
 
+	const putDoc = async <T extends { _id: string; _rev?: string }>(
+		_dbName: string,
+		doc: T
+	): Promise<T> => {
+		const existing = store.get(doc._id);
+		if (existing && (!doc._rev || doc._rev !== existing._rev)) {
+			throw new ConflictError(`Conflict on doc ${doc._id}`);
+		}
+		const saved = clone(doc) as T & { _rev: string };
+		saved._rev = nextRev(doc._id);
+		store.set(doc._id, saved as InMemoryDoc);
+		return saved;
+	};
+
 	const couchDbModule = {
 		ConflictError,
 		getDoc: async <T extends { _id: string }>(_dbName: string, id: string): Promise<T | null> => {
 			const doc = store.get(id);
 			return doc ? clone(doc as unknown as T) : null;
 		},
-		putDoc: async <T extends { _id: string; _rev?: string }>(
-			_dbName: string,
-			doc: T
-		): Promise<T> => {
-			const existing = store.get(doc._id);
-			if (existing && (!doc._rev || doc._rev !== existing._rev)) {
-				throw new ConflictError(`Conflict on doc ${doc._id}`);
-			}
-			const saved = clone(doc) as T & { _rev: string };
-			saved._rev = nextRev(doc._id);
-			store.set(doc._id, saved as InMemoryDoc);
-			return saved;
-		},
+		putDoc,
+		// This stand-in already throws ConflictError on a create over an existing doc.
+		putDocStrict: putDoc,
 		allDocsByType: async <T extends { _id: string; type: string }>(
 			_dbName: string,
-			type: string
+			type: string,
+			guard?: (d: unknown) => d is T
 		): Promise<T[]> => {
 			const results: T[] = [];
 			for (const [id, doc] of store.entries()) {
-				if (id.startsWith(`${type}:`) && doc.type === type) {
-					results.push(clone(doc as unknown as T));
+				// Like the real helper this is an id-prefix scan filtered by `guard`; without a guard
+				// the doc's own `type` must equal the prefix.
+				if (id.startsWith(`${type}:`) && (guard || doc.type === type)) {
+					const copy = clone(doc as unknown as T);
+					if (!guard || guard(copy)) results.push(copy);
 				}
 			}
 			return results;
+		},
+		allDocsByIds: async <T>(
+			_dbName: string,
+			ids: readonly string[],
+			guard: (d: unknown) => d is T
+		): Promise<T[]> => {
+			const results: T[] = [];
+			for (const id of ids) {
+				const doc = store.get(id);
+				if (!doc) continue;
+				const copy = clone(doc);
+				if (guard(copy)) results.push(copy);
+			}
+			return results;
+		},
+		// Equality-only selectors; `limit` defaults to 25 and `bookmark` is the next row offset, like
+		// CouchDB (docs are served in `_id` order, as an index on [type, field] would).
+		findDocsPage: async <T>(
+			_dbName: string,
+			query: { selector: Record<string, unknown>; limit?: number; bookmark?: string }
+		): Promise<{ docs: T[]; bookmark: string | null }> => {
+			const matches = [...store.values()]
+				.filter((doc) => Object.entries(query.selector).every(([k, v]) => doc[k] === v))
+				.sort((a, b) => (a._id < b._id ? -1 : a._id > b._id ? 1 : 0));
+			const offset = query.bookmark ? Number(query.bookmark) : 0;
+			const docs = matches.slice(offset, offset + (query.limit ?? 25)).map((d) => clone(d) as T);
+			return { docs, bookmark: String(offset + docs.length) };
 		}
 	};
 
