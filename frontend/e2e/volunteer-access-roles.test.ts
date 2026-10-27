@@ -11,6 +11,10 @@
  *     `rolesFromAssignments` (the roles the dialog writes). Per role: `/portal` shows only its
  *     department, allowed URLs load, forbidden URLs bounce back to `/portal`.
  *
+ * A third group (#955, #879 item 2) pins the limits of a `volunteer_coordinator` granting access:
+ * own shelter, four roles, verified identity, a required expiry within 7 days, and the account
+ * shape (`role_grants`). Expiry revocation by the worker is covered by worker unit tests.
+ *
  * The table records the REAL guard behaviour. Where a role description promises more than the
  * guard allows, the row lists a `gap`: the description expectation is a `test.fixme` and the
  * real behaviour stays pinned. Permissions are not changed here (a change needs a CR).
@@ -335,13 +339,180 @@ test.describe('Volunteer access: every staff role', { tag: TAGS }, () => {
 		});
 		expect(res.status).toBe(403);
 	});
+});
 
-	test.fixme('volunteer_coordinator issues limited system access to volunteers (#879 item 2, built in #955)', async ({
+/** Asia/Bangkok calendar date `daysAhead` days from now, as `YYYY-MM-DD`. */
+function bangkokDate(daysAhead: number): string {
+	const today = new Intl.DateTimeFormat('en-CA', {
+		timeZone: 'Asia/Bangkok',
+		year: 'numeric',
+		month: '2-digit',
+		day: '2-digit'
+	}).format(new Date());
+	const [y, m, d] = today.split('-').map(Number);
+	return new Date(Date.UTC(y, m - 1, d + daysAhead)).toISOString().slice(0, 10);
+}
+
+test.describe('Volunteer access: coordinator limits (#955)', { tag: TAGS }, () => {
+	test.describe.configure({ mode: 'serial' });
+
+	const coordinator: TestUser = {
+		name: `e2e_vaccess_${RUN_ID}_coord`,
+		password: PASSWORD,
+		roles: rolesFromAssignments([
+			{ shelter_code: SHELTER, capabilities: ['volunteer_coordinator'] }
+		]),
+		display_name: 'E2E Access Coordinator'
+	};
+	const verifiedId = `volunteer:E2EV${RUN_ID.toUpperCase()}`;
+	const unverifiedId = `volunteer:E2EU${RUN_ID.toUpperCase()}`;
+	const grantEmail = `e2e-vaccess-${RUN_ID}-grant@example.com`;
+	const now = new Date().toISOString();
+
+	const volunteerDoc = (id: string, verified: boolean, name: string) => ({
+		_id: id,
+		type: 'volunteer',
+		schema_v: 4,
+		shelter_code: SHELTER,
+		created_at: now,
+		updated_at: now,
+		created_by: coordinator.name,
+		first_name: name,
+		last_name: 'ทดสอบสิทธิ์',
+		phone: null,
+		email: null,
+		skills: [],
+		status: 'active',
+		user_name: null,
+		checked_in: false,
+		volunteer_code: `E2E-${name}`,
+		identity_verified: verified,
+		identity_verification: { status: verified ? 'verified' : 'pending' },
+		source: 'staff_entry',
+		personnel_type: 'volunteer'
+	});
+
+	function grantRequest(over: Record<string, unknown> = {}) {
+		return fetch(`${appBaseUrl()}/api/v1/volunteer-access`, {
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/json',
+				Cookie: `AuthSession=${sessions.get(coordinator.name)}`
+			},
+			body: JSON.stringify({
+				shelter_code: SHELTER,
+				volunteer_id: verifiedId,
+				email: grantEmail,
+				password: PASSWORD,
+				role: 'distribution_staff',
+				expires_on: bangkokDate(3),
+				...over
+			})
+		});
+	}
+
+	test.beforeAll(async () => {
+		await createStaffAccount(coordinator);
+		await putDocument(SHELTER_DB, volunteerDoc(verifiedId, true, `E2EV${RUN_ID}`));
+		await putDocument(SHELTER_DB, volunteerDoc(unverifiedId, false, `E2EU${RUN_ID}`));
+	});
+
+	test.afterAll(async () => {
+		await deleteCouchUser(grantEmail);
+		await deleteCouchUser(coordinator.name);
+		for (const id of [verifiedId, unverifiedId]) {
+			const doc = await getDocument(SHELTER_DB, id);
+			if (doc) await deleteDocument(SHELTER_DB, doc);
+		}
+	});
+
+	test('the people tab offers a grant dialog with a required, empty expiry field', async ({
 		browser
 	}) => {
-		const page = await openAs(browser, roleUser('volunteer_coordinator'));
+		const page = await openAs(browser, coordinator);
 		await page.goto('/back-office/volunteers?tab=people');
-		await expect(page.getByRole('button', { name: 'ออกสิทธิ์ใช้งานระบบ' }).first()).toBeVisible();
+		await page.getByPlaceholder('ค้นหาชื่อ นามสกุล เบอร์โทร, รหัส...').fill(`E2EV${RUN_ID}`);
+		await page.getByRole('button', { name: 'ออกสิทธิ์ใช้งานระบบ' }).click();
+
+		const expiry = page.getByRole('dialog').getByLabel(/วันหมดอายุของสิทธิ์/);
+		await expect(expiry).toBeVisible();
+		await expect(expiry).toHaveValue('');
+		await expect(expiry).toHaveAttribute('min', bangkokDate(0));
+		await expect(expiry).toHaveAttribute('max', bangkokDate(7));
+
+		await page.getByRole('dialog').getByLabel('อีเมลสำหรับเข้าสู่ระบบ').fill(grantEmail);
+		await page
+			.getByRole('dialog')
+			.getByLabel(/รหัสผ่านสำหรับบัญชีใหม่/)
+			.fill(PASSWORD);
+		await page.getByRole('dialog').getByRole('button', { name: 'บันทึกและออกสิทธิ์ใหม่' }).click();
+		await expect(page.getByText('กรุณาเลือกวันหมดอายุ')).toBeVisible();
+		expect(
+			await getDocument('_users', `org.couchdb.user:${grantEmail}`),
+			'nothing created'
+		).toBeNull();
 		await page.context().close();
 	});
+
+	test('grants distribution_staff for 3 days: scoped roles plus one role_grants entry', async () => {
+		const res = await grantRequest();
+		expect(res.status).toBe(200);
+
+		const doc = await getDocument('_users', `org.couchdb.user:${grantEmail}`);
+		expect(doc?.roles).toEqual([`shelter:${SHELTER}`, `${SHELTER}:distribution_staff`]);
+		expect(doc?.personnel_type).toBe('volunteer');
+		expect(doc?.volunteer_id).toBe(verifiedId);
+		const grants = doc?.role_grants as Record<string, string>[];
+		expect(grants).toHaveLength(1);
+		expect(grants[0]).toMatchObject({
+			shelter_code: SHELTER,
+			role: 'distribution_staff',
+			granted_by: coordinator.name
+		});
+		// End of the chosen Bangkok day, 23:59:59.999 +07:00.
+		expect(grants[0].expires_at).toBe(
+			new Date(`${bangkokDate(3)}T23:59:59.999+07:00`).toISOString()
+		);
+		expect(grants[0].granted_at).toBeTruthy();
+	});
+
+	test('a re-grant adds the role and renews without touching the password', async () => {
+		const res = await grantRequest({ role: 'kitchen_staff', password: 'Another-Pass9!' });
+		expect(res.status).toBe(200);
+
+		const doc = await getDocument('_users', `org.couchdb.user:${grantEmail}`);
+		expect(doc?.roles).toEqual([
+			`shelter:${SHELTER}`,
+			`${SHELTER}:distribution_staff`,
+			`${SHELTER}:kitchen_staff`
+		]);
+		expect(doc?.role_grants as unknown[]).toHaveLength(2);
+		await expect(couchLogin(grantEmail, PASSWORD), 'password unchanged').resolves.toBeTruthy();
+
+		await expect(grantRequest({ expires_on: bangkokDate(7) })).resolves.toMatchObject({
+			status: 200
+		});
+		const renewed = await getDocument('_users', `org.couchdb.user:${grantEmail}`);
+		expect(renewed?.role_grants as unknown[], 'renewed, not duplicated').toHaveLength(2);
+	});
+
+	for (const [label, over, status] of [
+		['a role outside the four (medical_staff)', { role: 'medical_staff' }, 403],
+		['a role above the four (shelter_manager)', { role: 'shelter_manager' }, 403],
+		['another shelter', { shelter_code: 'SH002' }, 403],
+		['an expiry more than 7 days away', { expires_on: bangkokDate(8) }, 422],
+		['an expiry in the past', { expires_on: bangkokDate(-1) }, 422],
+		['no expiry', { expires_on: undefined }, 422],
+		['a volunteer who is not verified', { volunteer_id: unverifiedId }, 403]
+	] as const) {
+		test(`refuses ${label}`, async () => {
+			const email = `e2e-vaccess-${RUN_ID}-refused@example.com`;
+			const res = await grantRequest({ ...over, email });
+			expect(res.status).toBe(status);
+			expect(
+				await getDocument('_users', `org.couchdb.user:${email}`),
+				'no account is created'
+			).toBeNull();
+		});
+	}
 });

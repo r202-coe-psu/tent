@@ -3,7 +3,7 @@ import * as couchAdmin from './couch-admin';
 import { grantCoordinatorRole, updateUser, type CouchUserDoc } from './user-service';
 import type { RoleGrant } from '$lib/auth/role-grants';
 
-type FakeUserDoc = CouchUserDoc & { password?: string };
+type FakeUserDoc = CouchUserDoc & { password?: string; derived_key?: string };
 
 const key = (name: string) => `org.couchdb.user:${encodeURIComponent(name)}`;
 const EMAIL = 'vol@example.com';
