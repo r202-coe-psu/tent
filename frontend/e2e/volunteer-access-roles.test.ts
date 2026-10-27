@@ -81,13 +81,8 @@ export const ROLE_ACCESS: RoleAccess[] = [
 		portalDepartments: ['registration'],
 		needsMedicalScreening: true,
 		allowed: ['/onsite/medical-screening'],
-		forbidden: ['/back-office/kitchen', '/back-office/referrals'],
-		gaps: [
-			{
-				url: '/back-office/referrals',
-				reason: 'description says medical staff refer patients to hospitals; the page is SM/SA only'
-			}
-		]
+		// #879 item 1: referrals stay manager-only; the description was fixed instead (#954).
+		forbidden: ['/back-office/kitchen', '/back-office/referrals']
 	},
 	{
 		role: 'kitchen_staff',
@@ -341,7 +336,7 @@ test.describe('Volunteer access: every staff role', { tag: TAGS }, () => {
 		expect(res.status).toBe(403);
 	});
 
-	test.fixme('volunteer_coordinator issues system access to volunteers (GAP: role description says so; only SM/SA can)', async ({
+	test.fixme('volunteer_coordinator issues limited system access to volunteers (#879 item 2, built in #955)', async ({
 		browser
 	}) => {
 		const page = await openAs(browser, roleUser('volunteer_coordinator'));
