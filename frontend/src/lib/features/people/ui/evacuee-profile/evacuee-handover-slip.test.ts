@@ -71,7 +71,7 @@ describe('EvacueeHandoverSlipModal (Station 1 Handover QR Slip)', () => {
 		expect(result.body).toContain('/onsite/medical-screening/evacuee:test-123');
 	});
 
-	it('provides a Print action and a Done / Next Registration action', () => {
+	it('provides a Print action and a neutral close action by default', () => {
 		const result = render(EvacueeHandoverSlipModal, {
 			props: {
 				show: true,
@@ -80,10 +80,23 @@ describe('EvacueeHandoverSlipModal (Station 1 Handover QR Slip)', () => {
 			}
 		});
 
-		// Done / Next Registration button label
-		expect(result.body).toMatch(/เสร็จสิ้น|ถัดไป|Done|Next Registration/i);
+		expect(result.body).toMatch(/ปิด|Close/i);
+		expect(result.body).not.toMatch(/ถัดไป|Next Registration/i);
 		// Print button label
 		expect(result.body).toMatch(/พิมพ์|Print/i);
+	});
+
+	it('lets the caller override the close label for the registration flow', () => {
+		const result = render(EvacueeHandoverSlipModal, {
+			props: {
+				show: true,
+				evacuee: mockEvacuee,
+				closeLabel: 'เสร็จสิ้น / ลงทะเบียนคนถัดไป',
+				onClose: () => {}
+			}
+		});
+
+		expect(result.body).toMatch(/เสร็จสิ้น|ถัดไป/);
 	});
 
 	it('does not render modal content when show is false', () => {

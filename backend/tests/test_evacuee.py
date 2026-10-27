@@ -21,17 +21,6 @@ from apiapp.utils.masking import (
 from apiapp.utils.ulid import new_ulid
 
 
-@pytest.fixture(autouse=True)
-def _reset_search_rate_limit():
-    """The search rate limiter is a process-wide sliding window (30 / 60 s per IP) shared by
-    /public/v1/occupants and /external/v1/occupants — clear it so test count never trips it."""
-    from apiapp.modules.evacuee import router as evacuee_router
-
-    evacuee_router._request_log.clear()
-    yield
-    evacuee_router._request_log.clear()
-
-
 def test_map_public_status_includes_arriving_and_room_confirmed():
     """CR-112 — public search allow-list includes Report-in and Zone Arrival."""
     assert map_public_status("arriving") == "arriving"
@@ -495,33 +484,6 @@ async def test_evacuee_search_writes_search_audit(
     assert audit.synced_to_couch is False
 
 
-async def test_evacuee_search_rate_limited(client: AsyncClient, auth_headers: dict[str, str]):
-    from apiapp.modules.evacuee import router as evacuee_router
-
-    evacuee_router._request_log.clear()
-    original_max = evacuee_router.RATE_LIMIT_MAX_REQUESTS
-    evacuee_router.RATE_LIMIT_MAX_REQUESTS = 3
-    try:
-        headers = {**auth_headers, "X-Real-IP": "198.51.100.7"}
-        for _ in range(3):
-            ok = await client.post(
-                "/public/v1/occupants",
-                json={"q": "0811111111"},
-                headers=headers,
-            )
-            assert ok.status_code in (200, 422)
-        limited = await client.post(
-            "/public/v1/occupants",
-            json={"q": "0811111111"},
-            headers=headers,
-        )
-        assert limited.status_code == 429
-        assert limited.json()["errors"][0]["error"]["code"] == "RATE_LIMITED"
-    finally:
-        evacuee_router.RATE_LIMIT_MAX_REQUESTS = original_max
-        evacuee_router._request_log.clear()
-
-
 async def test_evacuee_search_returns_shelter_address_and_resolves_zone_name(
     client: AsyncClient,
     db_client: AsyncMongoClient,
@@ -949,3 +911,40 @@ async def test_public_search_still_returns_cancelled_people_and_family_members(
     members = body["results"][0]["family_members"]
     assert [m["name"] for m in members] == [f"ลูก {mask_last_name('ใจดี')}"]
     assert members[0]["status"] == "cancelled"
+
+
+async def test_basic_consent_person_leaves_occupant_search(
+    client: AsyncClient,
+    db_client: AsyncMongoClient,
+    settings: Settings,
+    auth_headers: dict[str, str],
+):
+    """PDPA FR-40 — the worker deletes a basic-mode person's projection (worker
+    `test_project_evacuee_basic_consent_deletes_projection`); search then skips them."""
+    phone = "0877777777"
+    now = datetime.now(UTC)
+    for suffix, first_name in (("visible", "เห็น"), ("basic", "พื้นฐาน")):
+        await _insert_person(
+            db_client,
+            settings,
+            {
+                "_id": f"evacuee:{suffix}",
+                "shelter_code": "SH001",
+                "first_name": first_name,
+                "last_name_masked": mask_last_name("ใจดี"),
+                "phone_hash": phone_hash(phone),
+                "search_excluded": False,
+                "status": "active",
+                "updated_at": now,
+            },
+        )
+    before = await client.post("/public/v1/occupants", json={"q": phone}, headers=auth_headers)
+    assert before.json()["count"] == 2
+
+    db_name = settings.DATABASE_URI.rsplit("/", 1)[-1]
+    await db_client[db_name]["public_persons"].delete_one({"_id": "evacuee:basic"})
+
+    after = await client.post("/public/v1/occupants", json={"q": phone}, headers=auth_headers)
+    assert after.status_code == 200
+    assert after.json()["count"] == 1
+    assert [r["name"].split()[0] for r in after.json()["results"]] == ["เห็น"]

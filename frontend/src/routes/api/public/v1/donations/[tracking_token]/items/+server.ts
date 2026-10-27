@@ -1,5 +1,4 @@
 import { json } from '@sveltejs/kit';
-import { donationEditLimiter } from '$lib/server/security/rate-limiter';
 import { adminRaw } from '$lib/server/couch-admin';
 import { putAsPublicWriter } from '$lib/server/couch-public-writer';
 import { sha256Hex } from '$lib/db/hash';
@@ -11,27 +10,22 @@ import {
 	pickCampaignForItems
 } from '$lib/features/donations/server';
 import type { DonationRevision, PublicDonationDoc } from '$lib/features/donations';
-import { fetchDocs } from '$lib/server/donation-docs';
+import {
+	CouchReadError,
+	fetchDocsStrict,
+	findByTokenHash,
+	GOODS_IN_STOCK_ERROR,
+	hasKeyedDonationStock
+} from '$lib/server/donation-docs';
 import type { DonationCampaign, StockLedger } from '$lib/features/operations';
+import { DONATION_SCHEMA_V } from '$lib/features/operations/server';
+import { createAuditEntry } from '$lib/features/shared';
 
 function shelterDbFromToken(token: string): string | null {
 	const match = token.match(/^TX-([A-Z0-9]+)-/);
 	if (!match) return null;
 	const code = match[1] === 'DON' ? 'SH001' : match[1];
 	return `shelter_${code.toLowerCase()}`;
-}
-
-async function findByTokenHash(shelterDb: string, hash: string): Promise<PublicDonationDoc | null> {
-	const res = await adminRaw(
-		`/${shelterDb}/_all_docs?include_docs=true&startkey="donation:"&endkey="donation:￰"`,
-		'GET'
-	);
-	if (res.status >= 400) return null;
-	const rows = (res.data as { rows?: { doc: PublicDonationDoc }[] })?.rows ?? [];
-	for (const r of rows) {
-		if (r.doc && r.doc.type === 'donation' && r.doc.tracking_token_hash === hash) return r.doc;
-	}
-	return null;
 }
 
 /**
@@ -49,7 +43,7 @@ async function findByTokenHash(shelterDb: string, hash: string): Promise<PublicD
  * succeeded, the counter is briefly ahead of the document — `donation-quota
  * recalculate` recomputes from CouchDB and settles it (CR-061).
  */
-export const PATCH = async ({ params, request, getClientAddress }) => {
+export const PATCH = async ({ params, request }) => {
 	try {
 		const { tracking_token } = params;
 		if (!tracking_token) {
@@ -59,11 +53,6 @@ export const PATCH = async ({ params, request, getClientAddress }) => {
 		const payload = await request.json();
 		if (!Array.isArray(payload.items) || payload.items.length === 0) {
 			return json({ success: false, error: 'items is required' }, { status: 400 });
-		}
-
-		const ip = getClientAddress();
-		if (!donationEditLimiter.check(ip)) {
-			return json({ success: false, error: 'RATE_LIMITED' }, { status: 429 });
 		}
 
 		const shelterDb = shelterDbFromToken(tracking_token);
@@ -82,6 +71,10 @@ export const PATCH = async ({ params, request, getClientAddress }) => {
 				{ status: 400 }
 			);
 		}
+		// Goods already keyed: moving lines would re-number them under the stock rows.
+		if (latestDoc && (await hasKeyedDonationStock(shelterDb, latestDoc._id))) {
+			return json(GOODS_IN_STOCK_ERROR, { status: 409 });
+		}
 
 		// Restore any item_id the client dropped before anything is measured or moved.
 		// FastAPI does the same repair, but only after this check has already run — a bare
@@ -96,15 +89,17 @@ export const PATCH = async ({ params, request, getClientAddress }) => {
 		// about the warehouse — a booking was raised to 100 against a 100-piece target the
 		// shelter already held 80 of. Skipped before the donation reaches CouchDB, a window
 		// of one inbound poll, because until then there is no record to measure against.
+		// Strict reads: an unreadable ledger is not an empty one — that read as headroom and
+		// let the edit past the target. A failed read answers 503 before any quota moves.
 		if (latestDoc?.campaign_id) {
 			const [campaigns, donations, stockLedgers] = await Promise.all([
-				fetchDocs<DonationCampaign>(shelterDb, 'donation_campaign:').then((docs) =>
+				fetchDocsStrict<DonationCampaign>(shelterDb, 'donation_campaign:').then((docs) =>
 					docs.filter((c) => c && c.type === 'donation_campaign' && c.status === 'open')
 				),
-				fetchDocs<PublicDonationDoc>(shelterDb, 'donation:').then((docs) =>
+				fetchDocsStrict<PublicDonationDoc>(shelterDb, 'donation:').then((docs) =>
 					docs.filter((d) => d && d.type === 'donation')
 				),
-				fetchDocs<StockLedger>(shelterDb, 'stock_ledger:').then((docs) =>
+				fetchDocsStrict<StockLedger>(shelterDb, 'stock_ledger:').then((docs) =>
 					docs.filter((l) => l && l.type === 'stock_ledger')
 				)
 			]);
@@ -126,7 +121,14 @@ export const PATCH = async ({ params, request, getClientAddress }) => {
 			{
 				method: 'PATCH',
 				headers: fastapiServiceHeaders({ 'Content-Type': 'application/json' }),
-				body: JSON.stringify({ items: resolvedItems })
+				// CR-174 FR-18 — staff decide lines in CouchDB, which FastAPI cannot read: send
+				// the booking as it is now so a line nobody touched keeps its decision.
+				body: JSON.stringify({
+					items: resolvedItems,
+					...(latestDoc
+						? { current_items: latestDoc.items ?? [], current_status: latestDoc.status }
+						: {})
+				})
 			}
 		);
 		const apiBody = await apiRes.json().catch(() => ({}));
@@ -142,10 +144,14 @@ export const PATCH = async ({ params, request, getClientAddress }) => {
 			);
 		}
 
-		const { items, revision, revisions } = apiBody as {
-			items: NonNullable<PublicDonationDoc['items_declared']>;
+		const { items, revision, revisions, status, auto_approved_lines } = apiBody as {
+			items: NonNullable<PublicDonationDoc['items']>;
 			revision: DonationRevision;
 			revisions: number;
+			/** The booking's status after the lines were re-reviewed (FR-18b). */
+			status?: PublicDonationDoc['status'];
+			/** Lines approved by the campaign rule in this edit (FR-26). */
+			auto_approved_lines?: number[];
 		};
 
 		// Still only in the buffer — inbound will carry the new items and the log across.
@@ -155,7 +161,8 @@ export const PATCH = async ({ params, request, getClientAddress }) => {
 
 		latestDoc.items = items;
 		latestDoc.revisions = [...(latestDoc.revisions ?? []), revision];
-		latestDoc.schema_v = 4;
+		if (status) latestDoc.status = status;
+		latestDoc.schema_v = Math.max(latestDoc.schema_v ?? 0, DONATION_SCHEMA_V);
 		latestDoc.updated_at = new Date().toISOString();
 
 		let writeRes: { status: number; data: unknown };
@@ -180,8 +187,45 @@ export const PATCH = async ({ params, request, getClientAddress }) => {
 			return json({ success: false, error: 'Database update failed' }, { status: 500 });
 		}
 
-		return json({ success: true, message: 'Donation items updated', revisions });
+		// FR-26 — the lines the campaign rule approved in this edit get the same audit the
+		// worker writes at booking time. After the PUT: no audit for an edit that did not land.
+		if (auto_approved_lines && auto_approved_lines.length > 0) {
+			const audit = createAuditEntry(
+				{
+					action: 'manual_adjust',
+					target_type: 'donation',
+					target_id: latestDoc._id,
+					reason: `อนุมัติรายการในแคมเปญอัตโนมัติหลังผู้บริจาคแก้รายการ (${latestDoc.booking_ref ?? latestDoc._id})`,
+					context: {
+						booking_ref: latestDoc.booking_ref ?? null,
+						approved_by: 'system',
+						rule: 'campaign_line',
+						lines: auto_approved_lines
+					}
+				},
+				{ shelterCode: latestDoc.shelter_code, createdBy: 'system' }
+			);
+			// The edit has landed: a lost audit is logged, never turned into an error the
+			// donor retries — a retry would move the quota at FastAPI a second time.
+			try {
+				const auditRes = await adminRaw(`/${shelterDb}/_bulk_docs`, 'POST', { docs: [audit] });
+				// `_bulk_docs` answers 201 with a refused row inside.
+				const refused =
+					Array.isArray(auditRes.data) &&
+					auditRes.data.some((row) => typeof row === 'object' && row !== null && 'error' in row);
+				if (auditRes.status >= 400 || refused)
+					console.error('donation auto-approve audit failed', auditRes.data);
+			} catch (e) {
+				console.error('donation auto-approve audit failed', e);
+			}
+		}
+
+		return json({ success: true, message: 'Donation items updated', revisions, status });
 	} catch (e) {
+		if (e instanceof CouchReadError) {
+			console.error(e);
+			return json({ success: false, error: 'DONATION_UNAVAILABLE' }, { status: 503 });
+		}
 		console.error(e);
 		return json({ success: false, error: 'Internal Server Error' }, { status: 500 });
 	}

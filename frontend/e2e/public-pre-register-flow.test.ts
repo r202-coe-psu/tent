@@ -112,12 +112,12 @@ import {
 	type Locator,
 	type Page
 } from '@playwright/test';
+import { acceptFullConsent } from './helpers/consent';
 import { bootstrapAdminSession, couchReq } from './helpers/couch';
 import {
 	CAN_WRITE as TARGET_CAN_WRITE,
 	IS_REMOTE,
 	LOCAL_RUN_ID as RUN_ID,
-	RATE_LIMIT_ENFORCED,
 	READ_ONLY_REASON as TARGET_READ_ONLY_REASON
 } from './helpers/e2e-env';
 import { injectSession, routeBrowserCouchThroughApp } from './helpers/login';
@@ -711,6 +711,7 @@ async function fillBase(
 		...o.member
 	});
 	if (o.consent !== false) await acceptDisclaimer(page);
+	await acceptFullConsent(page);
 }
 
 /** The error sits in a `p.text-destructive` inside one of the field's own wrappers. */
@@ -1785,49 +1786,13 @@ function storedTicketCodes(page: Page): Promise<string[]> {
 	}, TICKET_STORAGE_KEY);
 }
 
-/**
- * The ticket-status BFF and the form's instant duplicate check (`check-duplicate`, fired when a
- * member's national ID / phone is complete) share one budget: 10 requests per sliding minute per
- * IP (`registerLookupIpLimiter`). Every real request to either that this file makes is
- * timestamped in `statusHits`, so a test that is about to spend `needed` more waits only until
- * enough older hits have left the window — instead of tripping a 429 (both fire from the page,
- * so the budget cannot be raised from the test). Timestamps are taken on the response, i.e.
- * never earlier than the server's own.
- */
-const LOOKUP_BUDGET_PATHS = [
-	'/api/public/v1/registrations/status',
-	'/api/public/v1/registrations/check-duplicate'
-];
-const STATUS_LIMIT = 10;
-const STATUS_WINDOW_MS = 61_000;
-const statusHits: number[] = [];
-async function waitForStatusBudget(needed: number): Promise<void> {
-	// Nothing to wait for when the target's limiters are off (RATE_LIMIT=false).
-	if (!RATE_LIMIT_ENFORCED) return;
-	for (;;) {
-		const now = Date.now();
-		while (statusHits.length > 0 && now - statusHits[0] >= STATUS_WINDOW_MS) statusHits.shift();
-		if (statusHits.length + needed <= STATUS_LIMIT) return;
-		await new Promise((r) => setTimeout(r, statusHits[0] + STATUS_WINDOW_MS - now));
-	}
-}
-
 interface StatusCall {
 	status: number;
 	body: Record<string, unknown> | null;
 }
 
-/** Count every lookup-budget request `page` makes into `statusHits`. */
-function countLookupBudget(page: Page): void {
-	page.on('response', (res) => {
-		const { pathname } = new URL(res.url());
-		if (LOOKUP_BUDGET_PATHS.includes(pathname)) statusHits.push(Date.now());
-	});
-}
-
-/** Record the ticket-status BFF responses the page receives (and count its budget). */
+/** Record the ticket-status BFF responses the page receives. */
 function recordStatusCalls(page: Page): StatusCall[] {
-	countLookupBudget(page);
 	const calls: StatusCall[] = [];
 	page.on('response', async (res) => {
 		if (new URL(res.url()).pathname !== '/api/public/v1/registrations/status') return;
@@ -1838,6 +1803,7 @@ function recordStatusCalls(page: Page): StatusCall[] {
 
 /** Click the confirm button and return the registration POST's response. */
 async function submitAndWait(page: Page, endpoint: 'unassigned-registrations' | 'registrations') {
+	await acceptFullConsent(page);
 	const [response] = await Promise.all([
 		page.waitForResponse(
 			(r) =>
@@ -2010,11 +1976,9 @@ test.describe(
 		});
 
 		test('W3 the status BFF reports the real ticket as still open, never as not found', async () => {
-			// page.request fires no page 'response' events — count these two by hand
 			const res = await page.request.post('/api/public/v1/registrations/status', {
 				data: { code: queueId }
 			});
-			statusHits.push(Date.now());
 			expect(res.status()).toBe(200);
 			const body = (await res.json()) as Record<string, unknown>;
 			expect(body).toMatchObject({ success: true, verified: false, status: 'open' });
@@ -2024,15 +1988,11 @@ test.describe(
 			const missing = await page.request.post('/api/public/v1/registrations/status', {
 				data: { code: '01ZZZZZZZZZZZZZZZZZZZZZZZZ' }
 			});
-			statusHits.push(Date.now());
 			expect(await missing.json()).toMatchObject({ verified: false, notFound: true });
 		});
 
 		test('W4 the same identity cannot enter the queue twice', async () => {
-			test.setTimeout(150_000); // may first wait out the lookup budget W1–W3 spent
 			health.problems.length = 0; // the 409 below logs a console error on purpose
-			// the mount sync of W1's ticket + the duplicate checks of the head's ID and phone
-			await waitForStatusBudget(4);
 			await page.goto(PRE_REGISTER_PATH);
 			await expect(page.locator('#address-no')).toBeVisible({ timeout: 20_000 });
 			await fillAddress(page);
@@ -2202,9 +2162,7 @@ test.describe(
 				return row?.status === 'open' && row.accepts_pre_registration === true;
 			});
 
-			// citizen: a fresh browser, no staff session — the form's duplicate checks (ID + phone)
-			// and the reload below come out of the same lookup budget W4 just spent
-			await waitForStatusBudget(4);
+			// citizen: a fresh browser, no staff session
 			context = await browser.newContext();
 			page = await context.newPage();
 			health = watchPage(page);
@@ -2242,8 +2200,6 @@ test.describe(
 			await expect.poll(() => storedTicketCodes(page)).toContain(ticketCode);
 
 			// reload → the ticket is still in "my registrations" and still pending
-			// the reload's mount sync + the history tab's own sync, one ticket each
-			await waitForStatusBudget(2);
 			statusCalls.length = 0;
 			await page.reload();
 			await page.getByRole('button', { name: /ใบลงทะเบียนของฉัน/ }).click();

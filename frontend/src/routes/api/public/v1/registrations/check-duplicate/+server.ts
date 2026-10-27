@@ -2,7 +2,6 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { z } from 'zod';
 import { isShelterCancelled, resolveOperationStatus } from '$lib/features/shelters/server';
-import { registerLookupIpLimiter } from '$lib/server/security/rate-limiter';
 import { listShelterMasters } from '$lib/server/shelters.admin';
 import { findConflictingHold } from '$lib/features/public-register/booking-gate.server';
 import { unassignedRegistrationRemote } from '$lib/features/unassigned-registration';
@@ -23,17 +22,12 @@ const checkDuplicateSchema = z
 /**
  * POST /api/public/v1/registrations/check-duplicate
  *
- * Rate-limited public duplicate check for citizen pre-registration.
+ * Public duplicate check for citizen pre-registration.
  * Privacy & PDPA Guarantees:
  * - NEVER returns evacuee names, addresses, stay details, or shelter names.
  * - Only returns boolean `{ success: true, duplicate: boolean, field: 'national_id' | 'phone' | null }`.
  */
-export const POST: RequestHandler = async ({ request, getClientAddress }) => {
-	const ip = getClientAddress();
-	if (!registerLookupIpLimiter.check(ip)) {
-		return json({ success: false, error: 'RATE_LIMITED' }, { status: 429, headers: noStore });
-	}
-
+export const POST: RequestHandler = async ({ request }) => {
 	const payload = await request.json().catch(() => null);
 	const parsed = checkDuplicateSchema.safeParse(payload);
 	if (!parsed.success) {

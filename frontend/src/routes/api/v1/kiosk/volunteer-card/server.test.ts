@@ -11,7 +11,6 @@ import {
 	resolveKioskVolunteerCard
 } from '$lib/features/kiosk/server/kiosk-volunteer-card.server';
 import { KioskLookupUnavailableError } from '$lib/features/kiosk/server/kiosk-check-in.server';
-import { kioskVolunteerCardDeviceLimiter } from '$lib/server/security/rate-limiter';
 import { findMasterByCode } from '$lib/server/shelters.admin';
 
 vi.mock('$lib/server/shelters.admin', () => ({ findMasterByCode: vi.fn() }));
@@ -56,7 +55,6 @@ function request(body: unknown, deviceId = 'vol-card-device-1'): RequestEvent {
 	} as unknown as RequestEvent;
 }
 
-// The per-phone limiter is shared module state, so tests that reach it use their own number.
 const uniquePhone = () => `09${String(10_000_000 + nonce).padStart(8, '0')}`;
 const send = (body: unknown, deviceId?: string) => POST(request(body, deviceId));
 let nonce = 0;
@@ -126,30 +124,6 @@ describe('POST /api/v1/kiosk/volunteer-card', () => {
 				message: 'ไม่พบข้อมูลจิตอาสาที่ใช้เบอร์นี้ในศูนย์นี้ กรุณาติดต่อเจ้าหน้าที่'
 			}
 		});
-	});
-
-	it('rate limits a device', async () => {
-		const spy = vi.spyOn(kioskVolunteerCardDeviceLimiter, 'check').mockReturnValueOnce(false);
-		const response = await send({ phone: uniquePhone() });
-		expect(response.status).toBe(429);
-		expect((await response.json()).error.code).toBe('KIOSK_RATE_LIMITED');
-		expect(response.headers.get('retry-after')).toBe('60');
-		expect(response.headers.get('cache-control')).toBe('no-store');
-		expect(mockResolve).not.toHaveBeenCalled();
-		spy.mockRestore();
-	});
-
-	it('limits one phone to three requests across devices', async () => {
-		const phone = uniquePhone();
-		for (let device = 0; device < 3; device += 1) {
-			const response = await send({ phone }, `phone-limit-device-${device}`);
-			expect(response.status).toBe(200);
-		}
-		const blocked = await send({ phone }, 'phone-limit-device-3');
-		expect(blocked.status).toBe(429);
-		expect((await blocked.json()).error.code).toBe('KIOSK_RATE_LIMITED');
-		expect(blocked.headers.get('retry-after')).toBe('60');
-		expect(mockResolve).toHaveBeenCalledTimes(3);
 	});
 
 	it('answers 503 DEPENDENCY_UNAVAILABLE when CouchDB is down', async () => {

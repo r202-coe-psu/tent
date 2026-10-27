@@ -38,6 +38,7 @@ describe('AC-C1 — adjusting without a reason is a validation error', () => {
 	});
 
 	it('rejects createStockLedger reason=adjust without adjust_reason (FR-C2)', () => {
+		// @ts-expect-error -- the type forbids it too; the runtime guard covers untyped data
 		expect(() => createStockLedger({ ...adjust, reason: 'adjust' }, ctx)).toThrow();
 	});
 
@@ -105,6 +106,7 @@ describe('AC-C2 — adjust_reason / note belong to adjust rows only', () => {
 		expect(stockLedgerInputSchema.safeParse({ ...input, adjust_reason: 'lost' }).success).toBe(
 			false
 		);
+		// @ts-expect-error -- the type forbids it too; the runtime guard covers untyped data
 		expect(() => createStockLedger({ ...input, adjust_reason: 'lost' }, ctx)).toThrow();
 	});
 
@@ -123,6 +125,7 @@ describe('AC-C2 — adjust_reason / note belong to adjust rows only', () => {
 					reason: 'distribute',
 					ref_id: 'distribution_batch:01J',
 					lot_ref: 'stock_ledger:01J',
+					// @ts-expect-error -- the type forbids it too; the runtime guard covers untyped data
 					adjust_reason: 'lost'
 				},
 				ctx
@@ -313,5 +316,33 @@ describe('FR-C4 / AC-C3 — readers accept schema_v <= 5 rows', () => {
 		expect(() => calculateReserved([], mixed)).not.toThrow();
 		const lots = projectStockLotBalances(mixed);
 		expect(lots.reduce((sum, lot) => addQty(sum, lot.qty), '0')).toBe('35');
+	});
+});
+
+describe('createAdjustEntry lot_ref (#569)', () => {
+	const LOT = 'stock_ledger:01JLOT0000000000000000000A';
+
+	it('writes a write-off against the lot it comes out of', () => {
+		const entry = createAdjustEntry(
+			{ ...adjust, qty: '-1', adjust_reason: 'damaged', lot_ref: LOT },
+			ctx
+		);
+		expect(entry.lot_ref).toBe(LOT);
+		expect(entry.qty).toBe('-1');
+	});
+
+	it('refuses a lot_ref on added stock — a positive row is always a new lot', () => {
+		expect(() =>
+			createAdjustEntry({ ...adjust, qty: '2', adjust_reason: 'found', lot_ref: LOT }, ctx)
+		).toThrow(/negative/);
+	});
+
+	it('refuses a lot_ref that is not a stock ledger id', () => {
+		expect(() =>
+			createAdjustEntry(
+				{ ...adjust, qty: '-1', adjust_reason: 'damaged', lot_ref: 'lot:somewhere' },
+				ctx
+			)
+		).toThrow();
 	});
 });

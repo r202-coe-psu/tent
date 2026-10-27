@@ -1879,6 +1879,127 @@
 				"security": [{ "HTTPBearer": [] }]
 			}
 		},
+		"/public/v1/unassigned-registrations/kiosk-lookup": {
+			"post": {
+				"tags": ["Unassigned Registrations"],
+				"summary": "Kiosk Lookup Unassigned Registration",
+				"description": "Service-to-service kiosk lookup — whole family of one registration, no contact PII.",
+				"operationId": "kiosk_lookup_unassigned_registration_public_v1_unassigned_registrations_kiosk_lookup_post",
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": { "$ref": "#/components/schemas/UnassignedKioskLookupRequest" }
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/UnassignedKioskLookupResponse" }
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+							}
+						}
+					}
+				},
+				"security": [{ "HTTPBearer": [] }]
+			}
+		},
+		"/public/v1/unassigned-registrations/{registration_id}/kiosk-claim/prepare": {
+			"post": {
+				"tags": ["Unassigned Registrations"],
+				"summary": "Kiosk Prepare Unassigned Claim",
+				"description": "Kiosk claim step 1 — mark members claimed and return Couch docs for the BFF to write.",
+				"operationId": "kiosk_prepare_unassigned_claim_public_v1_unassigned_registrations__registration_id__kiosk_claim_prepare_post",
+				"security": [{ "HTTPBearer": [] }],
+				"parameters": [
+					{
+						"name": "registration_id",
+						"in": "path",
+						"required": true,
+						"schema": { "type": "string", "title": "Registration Id" }
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": { "$ref": "#/components/schemas/UnassignedKioskPrepareRequest" }
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/UnassignedKioskPrepareResponse" }
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+							}
+						}
+					}
+				}
+			}
+		},
+		"/public/v1/unassigned-registrations/{registration_id}/kiosk-claim/revert": {
+			"post": {
+				"tags": ["Unassigned Registrations"],
+				"summary": "Kiosk Revert Unassigned Claim",
+				"description": "Kiosk claim rollback — reopen members this kiosk marked when the Couch write failed.",
+				"operationId": "kiosk_revert_unassigned_claim_public_v1_unassigned_registrations__registration_id__kiosk_claim_revert_post",
+				"security": [{ "HTTPBearer": [] }],
+				"parameters": [
+					{
+						"name": "registration_id",
+						"in": "path",
+						"required": true,
+						"schema": { "type": "string", "title": "Registration Id" }
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": { "$ref": "#/components/schemas/UnassignedKioskRevertRequest" }
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/UnassignedKioskRevertResponse" }
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+							}
+						}
+					}
+				}
+			}
+		},
 		"/public/v1/unassigned-registrations/{registration_id}/status": {
 			"get": {
 				"tags": ["Unassigned Registrations"],
@@ -2887,6 +3008,63 @@
 				"required": ["key"],
 				"title": "ApiKeyRevokeResponse"
 			},
+			"BasicEvacueeConsent": {
+				"properties": {
+					"mode": { "type": "string", "const": "basic", "title": "Mode" },
+					"health": { "type": "boolean", "const": false, "title": "Health" },
+					"ref": { "type": "string", "pattern": "^CS-[0-9A-HJKMNP-TV-Z]{8}$", "title": "Ref" },
+					"given_at": { "type": "string", "title": "Given At" },
+					"notice_version": { "type": "string", "minLength": 1, "title": "Notice Version" },
+					"given_by": {
+						"type": "string",
+						"enum": ["self", "guardian", "household_member", "backfill"],
+						"title": "Given By"
+					},
+					"giver_evacuee_id": {
+						"anyOf": [{ "type": "string", "pattern": "^evacuee:" }, { "type": "null" }],
+						"title": "Giver Evacuee Id"
+					},
+					"recorded_verbally_by": {
+						"anyOf": [{ "type": "string", "minLength": 1 }, { "type": "null" }],
+						"title": "Recorded Verbally By"
+					},
+					"channel": {
+						"type": "string",
+						"enum": ["staff", "kiosk", "web", "backfill"],
+						"title": "Channel"
+					}
+				},
+				"type": "object",
+				"required": [
+					"mode",
+					"health",
+					"ref",
+					"given_at",
+					"notice_version",
+					"given_by",
+					"giver_evacuee_id",
+					"recorded_verbally_by",
+					"channel"
+				],
+				"title": "BasicEvacueeConsent"
+			},
+			"BasicWebConsentGrant": {
+				"properties": {
+					"mode": { "type": "string", "const": "basic", "title": "Mode" },
+					"health": { "type": "boolean", "const": false, "title": "Health" },
+					"ref": { "type": "string", "pattern": "^CS-[0-9A-HJKMNP-TV-Z]{8}$", "title": "Ref" },
+					"given_at": { "type": "string", "title": "Given At" },
+					"notice_version": { "type": "string", "minLength": 1, "title": "Notice Version" },
+					"given_by": {
+						"type": "string",
+						"enum": ["self", "guardian", "household_member"],
+						"title": "Given By"
+					}
+				},
+				"type": "object",
+				"required": ["mode", "health", "ref", "given_at", "notice_version", "given_by"],
+				"title": "BasicWebConsentGrant"
+			},
 			"Body_upload_unassigned_photo_public_v1_unassigned_registrations_photos_post": {
 				"properties": {
 					"full": {
@@ -3306,10 +3484,11 @@
 				"properties": {
 					"success": { "type": "boolean", "title": "Success", "default": true },
 					"tracking_token": { "type": "string", "title": "Tracking Token" },
-					"booking_ref": { "type": "string", "title": "Booking Ref" }
+					"booking_ref": { "type": "string", "title": "Booking Ref" },
+					"status": { "type": "string", "title": "Status" }
 				},
 				"type": "object",
-				"required": ["tracking_token", "booking_ref"],
+				"required": ["tracking_token", "booking_ref", "status"],
 				"title": "DonationCreateResponse"
 			},
 			"DonationItemInput": {
@@ -3341,6 +3520,17 @@
 						"items": { "$ref": "#/components/schemas/DonationItemInput" },
 						"type": "array",
 						"title": "Items"
+					},
+					"current_items": {
+						"anyOf": [
+							{ "items": { "additionalProperties": true, "type": "object" }, "type": "array" },
+							{ "type": "null" }
+						],
+						"title": "Current Items"
+					},
+					"current_status": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Current Status"
 					}
 				},
 				"type": "object",
@@ -3357,9 +3547,16 @@
 						"type": "array",
 						"title": "Items"
 					},
-					"revision": { "additionalProperties": true, "type": "object", "title": "Revision" }
+					"revision": { "additionalProperties": true, "type": "object", "title": "Revision" },
+					"status": { "type": "string", "title": "Status" },
+					"auto_approved_lines": {
+						"items": { "type": "integer" },
+						"type": "array",
+						"title": "Auto Approved Lines"
+					}
 				},
 				"type": "object",
+				"required": ["status"],
 				"title": "DonationItemsPatchResponse"
 			},
 			"DonationTrackSearchRequest": {
@@ -3450,6 +3647,63 @@
 				"type": "object",
 				"required": ["question", "answer"],
 				"title": "FaqItem"
+			},
+			"FullEvacueeConsent": {
+				"properties": {
+					"mode": { "type": "string", "const": "full", "title": "Mode" },
+					"health": { "type": "boolean", "title": "Health" },
+					"ref": { "type": "string", "pattern": "^CS-[0-9A-HJKMNP-TV-Z]{8}$", "title": "Ref" },
+					"given_at": { "type": "string", "title": "Given At" },
+					"notice_version": { "type": "string", "minLength": 1, "title": "Notice Version" },
+					"given_by": {
+						"type": "string",
+						"enum": ["self", "guardian", "household_member", "backfill"],
+						"title": "Given By"
+					},
+					"giver_evacuee_id": {
+						"anyOf": [{ "type": "string", "pattern": "^evacuee:" }, { "type": "null" }],
+						"title": "Giver Evacuee Id"
+					},
+					"recorded_verbally_by": {
+						"anyOf": [{ "type": "string", "minLength": 1 }, { "type": "null" }],
+						"title": "Recorded Verbally By"
+					},
+					"channel": {
+						"type": "string",
+						"enum": ["staff", "kiosk", "web", "backfill"],
+						"title": "Channel"
+					}
+				},
+				"type": "object",
+				"required": [
+					"mode",
+					"health",
+					"ref",
+					"given_at",
+					"notice_version",
+					"given_by",
+					"giver_evacuee_id",
+					"recorded_verbally_by",
+					"channel"
+				],
+				"title": "FullEvacueeConsent"
+			},
+			"FullWebConsentGrant": {
+				"properties": {
+					"mode": { "type": "string", "const": "full", "title": "Mode" },
+					"health": { "type": "boolean", "title": "Health" },
+					"ref": { "type": "string", "pattern": "^CS-[0-9A-HJKMNP-TV-Z]{8}$", "title": "Ref" },
+					"given_at": { "type": "string", "title": "Given At" },
+					"notice_version": { "type": "string", "minLength": 1, "title": "Notice Version" },
+					"given_by": {
+						"type": "string",
+						"enum": ["self", "guardian", "household_member"],
+						"title": "Given By"
+					}
+				},
+				"type": "object",
+				"required": ["mode", "health", "ref", "given_at", "notice_version", "given_by"],
+				"title": "FullWebConsentGrant"
 			},
 			"GeoJsonPoint": {
 				"properties": {
@@ -3993,10 +4247,25 @@
 					"emergency_contact": {
 						"anyOf": [{ "$ref": "#/components/schemas/EmergencyContactInput" }, { "type": "null" }]
 					},
-					"photo": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Photo" }
+					"photo": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Photo" },
+					"consent": {
+						"oneOf": [
+							{ "$ref": "#/components/schemas/FullWebConsentGrant" },
+							{ "$ref": "#/components/schemas/BasicWebConsentGrant" }
+						],
+						"title": "Consent",
+						"discriminator": {
+							"propertyName": "mode",
+							"mapping": {
+								"basic": "#/components/schemas/BasicWebConsentGrant",
+								"full": "#/components/schemas/FullWebConsentGrant"
+							}
+						}
+					},
+					"search_excluded": { "type": "boolean", "title": "Search Excluded" }
 				},
 				"type": "object",
-				"required": ["first_name", "gender"],
+				"required": ["first_name", "gender", "consent", "search_excluded"],
 				"title": "MemberInput"
 			},
 			"NeedItemResponse": {
@@ -4156,7 +4425,27 @@
 						"anyOf": [{ "type": "integer" }, { "type": "null" }],
 						"title": "Birth Year"
 					},
-					"age": { "anyOf": [{ "type": "integer" }, { "type": "null" }], "title": "Age" }
+					"age": { "anyOf": [{ "type": "integer" }, { "type": "null" }], "title": "Age" },
+					"consent": {
+						"anyOf": [
+							{
+								"oneOf": [
+									{ "$ref": "#/components/schemas/FullEvacueeConsent" },
+									{ "$ref": "#/components/schemas/BasicEvacueeConsent" }
+								],
+								"discriminator": {
+									"propertyName": "mode",
+									"mapping": {
+										"basic": "#/components/schemas/BasicEvacueeConsent",
+										"full": "#/components/schemas/FullEvacueeConsent"
+									}
+								}
+							},
+							{ "type": "null" }
+						],
+						"title": "Consent"
+					},
+					"search_excluded": { "type": "boolean", "title": "Search Excluded", "default": false }
 				},
 				"type": "object",
 				"required": ["reserved_evacuee_id", "first_name", "last_name", "country"],
@@ -4394,6 +4683,7 @@
 					"slots_remaining": { "type": "integer", "title": "Slots Remaining" },
 					"applicants_count": { "type": "integer", "title": "Applicants Count", "default": 0 },
 					"status": { "type": "string", "title": "Status" },
+					"is_urgent": { "type": "boolean", "title": "Is Urgent", "default": false },
 					"requires_review": { "type": "boolean", "title": "Requires Review", "default": false }
 				},
 				"type": "object",
@@ -5344,6 +5634,151 @@
 				"type": "object",
 				"required": ["summary", "last_updated"],
 				"title": "TransparencySummaryResponse"
+			},
+			"UnassignedKioskImage": {
+				"properties": {
+					"doc": { "additionalProperties": true, "type": "object", "title": "Doc" },
+					"full_b64": { "type": "string", "title": "Full B64" },
+					"thumb_b64": { "type": "string", "title": "Thumb B64" },
+					"content_type": { "type": "string", "title": "Content Type" }
+				},
+				"type": "object",
+				"required": ["doc", "full_b64", "thumb_b64", "content_type"],
+				"title": "UnassignedKioskImage",
+				"description": "Couch image doc + base64 attachment bytes (the BFF writes them to Couch)."
+			},
+			"UnassignedKioskLookupRequest": {
+				"properties": {
+					"registration_id": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Registration Id"
+					},
+					"citizen_id": {
+						"anyOf": [{ "type": "string", "pattern": "^\\d{13}$" }, { "type": "null" }],
+						"title": "Citizen Id"
+					},
+					"evacuee_id": {
+						"anyOf": [{ "type": "string", "pattern": "^evacuee:\\S+$" }, { "type": "null" }],
+						"title": "Evacuee Id"
+					}
+				},
+				"type": "object",
+				"title": "UnassignedKioskLookupRequest",
+				"description": "Kiosk lookup key — exactly one of registration, citizen or evacuee id."
+			},
+			"UnassignedKioskLookupResponse": {
+				"properties": {
+					"registration_id": { "type": "string", "title": "Registration Id" },
+					"reserved_household_id": { "type": "string", "title": "Reserved Household Id" },
+					"members": {
+						"items": { "$ref": "#/components/schemas/UnassignedKioskMember" },
+						"type": "array",
+						"title": "Members"
+					}
+				},
+				"type": "object",
+				"required": ["registration_id", "reserved_household_id", "members"],
+				"title": "UnassignedKioskLookupResponse"
+			},
+			"UnassignedKioskMember": {
+				"properties": {
+					"reserved_evacuee_id": { "type": "string", "title": "Reserved Evacuee Id" },
+					"first_name": { "type": "string", "title": "First Name" },
+					"last_name": { "type": "string", "title": "Last Name" },
+					"gender": {
+						"anyOf": [
+							{ "type": "string", "enum": ["male", "female", "other"] },
+							{ "type": "null" }
+						],
+						"title": "Gender"
+					},
+					"age": { "anyOf": [{ "type": "integer" }, { "type": "null" }], "title": "Age" },
+					"status": { "type": "string", "title": "Status" },
+					"claimed_shelter_code": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Claimed Shelter Code"
+					},
+					"matched": { "type": "boolean", "title": "Matched" }
+				},
+				"type": "object",
+				"required": [
+					"reserved_evacuee_id",
+					"first_name",
+					"last_name",
+					"gender",
+					"age",
+					"status",
+					"claimed_shelter_code",
+					"matched"
+				],
+				"title": "UnassignedKioskMember",
+				"description": "Kiosk family row — unmasked name (the BFF masks); no phone / person id / photo."
+			},
+			"UnassignedKioskPrepareRequest": {
+				"properties": {
+					"shelter_code": { "type": "string", "minLength": 1, "title": "Shelter Code" },
+					"device_id": { "type": "string", "minLength": 1, "title": "Device Id" },
+					"member_ids": {
+						"items": { "type": "string" },
+						"type": "array",
+						"maxItems": 20,
+						"minItems": 1,
+						"title": "Member Ids"
+					},
+					"required_person_id": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Required Person Id"
+					}
+				},
+				"type": "object",
+				"required": ["shelter_code", "device_id", "member_ids"],
+				"title": "UnassignedKioskPrepareRequest",
+				"description": "Kiosk claim prepare — mark members, return Couch docs for the BFF to write."
+			},
+			"UnassignedKioskPrepareResponse": {
+				"properties": {
+					"registration_id": { "type": "string", "title": "Registration Id" },
+					"shelter_code": { "type": "string", "title": "Shelter Code" },
+					"household": { "additionalProperties": true, "type": "object", "title": "Household" },
+					"evacuees": {
+						"items": { "additionalProperties": true, "type": "object" },
+						"type": "array",
+						"title": "Evacuees"
+					},
+					"images": {
+						"items": { "$ref": "#/components/schemas/UnassignedKioskImage" },
+						"type": "array",
+						"title": "Images"
+					}
+				},
+				"type": "object",
+				"required": ["registration_id", "shelter_code", "household", "evacuees", "images"],
+				"title": "UnassignedKioskPrepareResponse"
+			},
+			"UnassignedKioskRevertRequest": {
+				"properties": {
+					"shelter_code": { "type": "string", "minLength": 1, "title": "Shelter Code" },
+					"device_id": { "type": "string", "minLength": 1, "title": "Device Id" },
+					"member_ids": {
+						"items": { "type": "string" },
+						"type": "array",
+						"maxItems": 20,
+						"minItems": 1,
+						"title": "Member Ids"
+					}
+				},
+				"type": "object",
+				"required": ["shelter_code", "device_id", "member_ids"],
+				"title": "UnassignedKioskRevertRequest",
+				"description": "Kiosk claim revert — give back members this kiosk marked when the Couch write failed."
+			},
+			"UnassignedKioskRevertResponse": {
+				"properties": {
+					"reverted": { "items": { "type": "string" }, "type": "array", "title": "Reverted" }
+				},
+				"type": "object",
+				"required": ["reverted"],
+				"title": "UnassignedKioskRevertResponse"
 			},
 			"UnassignedPhotoUploadResponse": {
 				"properties": {

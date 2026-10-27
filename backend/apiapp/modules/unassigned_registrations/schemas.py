@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
+from tent_model.evacuee_consent import EvacueeConsent, WebConsentGrant
 from tent_model.public_shelter import GeoPoint
 
 # CR-148 — household animal cap (count per row and total per household).
@@ -67,6 +68,9 @@ class MemberInput(BaseModel):
     emergency_contact: EmergencyContactInput | None = None
     # GridFS ref `gfs:{oid}` from POST …/photos (#255).
     photo: str | None = None
+    # PDPA consent as the BFF planned it for this member; the use case binds giver + channel.
+    consent: WebConsentGrant
+    search_excluded: bool
 
     @field_validator("first_name", "last_name", "country", mode="before")
     @classmethod
@@ -98,6 +102,13 @@ class MemberInput(BaseModel):
             return self
         if not contact.name and not contact.phone and not contact.relation:
             self.emergency_contact = None
+        return self
+
+    @model_validator(mode="after")
+    def _basic_consent_hides_from_search(self) -> MemberInput:
+        """FR-31 — the claim's Couch VDU rejects a basic-mode evacuee that is searchable."""
+        if self.consent.mode == "basic" and not self.search_excluded:
+            raise ValueError("basic consent requires search_excluded")
         return self
 
     @model_validator(mode="after")
@@ -359,6 +370,9 @@ class OpenMemberHit(BaseModel):
     photo: str | None = None
     birth_year: int | None = None
     age: int | None = None
+    # FR-41: report-in asks consent only from members queued without it.
+    consent: EvacueeConsent | None = None
+    search_excluded: bool = False
 
 
 class UnassignedRegistrationSearchHit(BaseModel):
@@ -433,6 +447,78 @@ class UnassignedRegistrationStatusResponse(BaseModel):
     members_total: int
     members_claimed: int
     claimed: bool
+
+
+class UnassignedKioskLookupRequest(BaseModel):
+    """Kiosk lookup key — exactly one of registration, citizen or evacuee id."""
+
+    registration_id: str | None = None
+    citizen_id: str | None = Field(default=None, pattern=r"^\d{13}$")
+    evacuee_id: str | None = Field(default=None, pattern=r"^evacuee:\S+$")
+
+    @model_validator(mode="after")
+    def _require_exactly_one_key(self) -> UnassignedKioskLookupRequest:
+        keys = (self.registration_id, self.citizen_id, self.evacuee_id)
+        if sum(key is not None for key in keys) != 1:
+            raise ValueError("exactly one of registration_id, citizen_id, evacuee_id is required")
+        return self
+
+
+class UnassignedKioskMember(BaseModel):
+    """Kiosk family row — unmasked name (the BFF masks); no phone / person id / photo."""
+
+    reserved_evacuee_id: str
+    first_name: str
+    last_name: str
+    gender: Literal["male", "female", "other"] | None
+    age: int | None
+    status: str
+    claimed_shelter_code: str | None
+    matched: bool
+
+
+class UnassignedKioskLookupResponse(BaseModel):
+    registration_id: str
+    reserved_household_id: str
+    members: list[UnassignedKioskMember]
+
+
+class UnassignedKioskPrepareRequest(BaseModel):
+    """Kiosk claim prepare — mark members, return Couch docs for the BFF to write."""
+
+    shelter_code: str = Field(min_length=1)
+    device_id: str = Field(min_length=1)
+    member_ids: list[str] = Field(min_length=1, max_length=20)
+    required_person_id: str | None = None
+
+
+class UnassignedKioskImage(BaseModel):
+    """Couch image doc + base64 attachment bytes (the BFF writes them to Couch)."""
+
+    doc: dict
+    full_b64: str
+    thumb_b64: str
+    content_type: str
+
+
+class UnassignedKioskPrepareResponse(BaseModel):
+    registration_id: str
+    shelter_code: str
+    household: dict
+    evacuees: list[dict]
+    images: list[UnassignedKioskImage]
+
+
+class UnassignedKioskRevertRequest(BaseModel):
+    """Kiosk claim revert — give back members this kiosk marked when the Couch write failed."""
+
+    shelter_code: str = Field(min_length=1)
+    device_id: str = Field(min_length=1)
+    member_ids: list[str] = Field(min_length=1, max_length=20)
+
+
+class UnassignedKioskRevertResponse(BaseModel):
+    reverted: list[str]
 
 
 class UnassignedRegistrationStatsResponse(BaseModel):

@@ -452,6 +452,13 @@
               เพื่อ <strong>แปะลงกล่อง/ถุงของบริจาค</strong>. donor แนะนำให้เก็บลิงก์
               tracking ไว้ดูสถานะ (declared → received / expired)
             </li>
+            <li>
+              <strong>QR ทันทีหรือรอประเมิน (CR-174, 2026-10-21)</strong> — ทุกรายการเป็นของในแคมเปญ
+              (จองโควต้าได้) → ใบเริ่มที่ <code>verifying</code> ตั๋วแสดง QR ทันที · มีรายการที่พิมพ์เอง /
+              นอกแคมเปญ → ใบเริ่มที่ <code>pending_review</code> ตั๋วแสดงข้อความรอเจ้าหน้าที่ตรวจสอบ
+              (FR-15/FR-16 — ตั๋วอ่าน <code>status</code> จาก response ของ
+              <code>POST /public/v1/donations</code>)
+            </li>
             <li>ลิงก์ <strong>"กลับสู่หน้าหลัก"</strong></li>
           </ul>
           <h3>หน้า Ticket เปิด/แก้ไขภายหลัง — <code>/donate/track/{tracking_token}</code> (DN-6)</h3>
@@ -575,6 +582,39 @@
                   <td>
                     <span class="badge badge-success badge-sm">OK</span>
                     เห็นเฉพาะของตน (declared / received / expired)
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    เหตุผลที่ศูนย์ไม่รับ (CR-172, 2026-10-21) — ทั้งใบ + รายบรรทัด
+                  </td>
+                  <td>
+                    <code>reject_reason</code> / <code>reject_reason_code</code> ·
+                    <code>received_summary.items[].rejected</code> /
+                    <code>reject_reason</code> / <code>reject_reason_code</code>
+                  </td>
+                  <td>
+                    <span class="badge badge-success badge-sm">OK</span>
+                    ข้อความที่เจ้าหน้าที่เขียนให้ผู้บริจาคอ่าน (label ภาษาไทยของ code + รายละเอียด,
+                    ≤ 500) — ช่องเดียว ไม่มีบันทึกภายในแยก; modal ปฏิเสธมี preview +
+                    คำเตือนห้ามใส่ข้อมูลส่วนตัว (CR-172 FR-7); <code>audit</code> ไม่ถูกเปิด;
+                    ใบก่อน schema_v 6 ได้ <code>null</code> → ไม่แสดงกล่องเหตุผล
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    สถานะรายการ (CR-174, 2026-10-21) — ประเมินทีละรายการ
+                  </td>
+                  <td>
+                    <code>items[].review_status</code> /
+                    <code>review_reason_code</code> / <code>review_reason</code>
+                  </td>
+                  <td>
+                    <span class="badge badge-success badge-sm">OK</span>
+                    หน้าติดตามแสดงต่อรายการ: "อนุมัติแล้ว / รอนำส่ง" (<code>approved</code>) ·
+                    "รอประเมิน" (<code>pending</code>) · "ไม่รับ" + เหตุผล (<code>rejected</code>) — FR-17;
+                    ใบ <code>rejected</code> ทั้งใบแสดงเหตุผลระดับใบ (CR-172); ใบก่อน schema_v 7 ไม่มี
+                    field → แสดงสถานะระดับใบตามเดิม
                   </td>
                 </tr>
               </tbody>
@@ -761,6 +801,14 @@ Error : { "error": { "code": "LOCKED" } }          // ถ้า status = receive
                   <td>
                     <code>/donate/track/{token}</code>: สถานะ declaration + ฟอร์มแก้
                     เลข tracking ขนส่ง (DN-6); ถ้า <code>received</code> แล้ว → read-only
+                    · <code>rejected</code> → กล่อง "เหตุผลจากศูนย์พักพิง" ใต้ป้ายสถานะ;
+                    <code>received</code> ที่มีบรรทัดไม่รับ → ป้าย "ไม่รับ" + เหตุผลรายบรรทัด
+                    (CR-172 FR-15/FR-16) · ไม่แสดงยอดขาด/"รับไม่ครบ" ให้ผู้บริจาค
+                    (decision sync 2026-10-22 — ยกเลิก CR-156 FR-I3)
+                    · ยกเลิก / แก้รายการ / ใส่เลขพัสดุได้เมื่อสถานะเป็น <code>declared</code>,
+                    <code>pending_review</code> หรือ <code>verifying</code> (CR-174 FR-20..FR-23); ใบ
+                    <code>verifying</code> เตือนก่อนบันทึกว่าถ้ามีรายการที่ต้องประเมิน QR จะใช้ไม่ได้จนกว่า
+                    เจ้าหน้าที่ประเมินเสร็จ (FR-24)
                   </td>
                 </tr>
                 <tr>

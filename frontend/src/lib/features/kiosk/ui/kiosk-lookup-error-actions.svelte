@@ -9,6 +9,8 @@
 		lookupErrorCode: string | null;
 		isPhoneGate: boolean;
 		isThaidGate?: boolean;
+		/** Card / ThaiD miss that the kiosk may not register (`can_register: false`): only staff can help. */
+		walkInClosed?: boolean;
 		isLookingUp: boolean;
 		retryAfterSeconds: number;
 		homeUrl: string;
@@ -23,6 +25,7 @@
 		lookupErrorCode,
 		isPhoneGate,
 		isThaidGate = false,
+		walkInClosed = false,
 		isLookingUp,
 		retryAfterSeconds,
 		homeUrl,
@@ -44,7 +47,7 @@
 	const isThaidLookupMiss = $derived(
 		isThaidGate && lookupErrorCode === 'PRE_REGISTRATION_NOT_FOUND'
 	);
-	const backIsPrimary = $derived(isMethodDisabled || isThaidLookupMiss);
+	const backIsPrimary = $derived(isMethodDisabled || isThaidLookupMiss || walkInClosed);
 </script>
 
 <!-- Rendered in a KioskNoticePanel's actions: the panel stacks and sizes them. -->

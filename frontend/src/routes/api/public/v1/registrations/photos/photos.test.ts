@@ -1,14 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { POST } from './+server';
-import { registerIpLimiter } from '$lib/server/security/rate-limiter';
 import { findMasterByCode } from '$lib/server/shelters.admin';
 import { savePublicBookingImage } from '$lib/features/public-register/save-public-booking-image.server';
 
 type PostEvent = Parameters<typeof POST>[0];
-
-vi.mock('$lib/server/security/rate-limiter', () => ({
-	registerIpLimiter: { check: vi.fn(() => true) }
-}));
 
 vi.mock('$lib/server/shelters.admin', () => ({
 	findMasterByCode: vi.fn()
@@ -58,8 +53,6 @@ function photoForm(over: Record<string, string> = {}): FormData {
 
 describe('POST /api/public/v1/registrations/photos', () => {
 	beforeEach(() => {
-		vi.mocked(registerIpLimiter.check).mockReset();
-		vi.mocked(registerIpLimiter.check).mockReturnValue(true);
 		vi.mocked(findMasterByCode).mockReset();
 		vi.mocked(findMasterByCode).mockResolvedValue({ code: 'SH001', status: 'open' } as never);
 		vi.mocked(savePublicBookingImage).mockReset();
@@ -106,12 +99,5 @@ describe('POST /api/public/v1/registrations/photos', () => {
 		const res = await POST(event(photoForm()));
 		expect(res.status).toBe(422);
 		expect(await res.json()).toMatchObject({ error: 'SHELTER_CLOSED' });
-	});
-
-	it('429 when rate limited', async () => {
-		vi.mocked(registerIpLimiter.check).mockReturnValue(false);
-		const res = await POST(event(photoForm()));
-		expect(res.status).toBe(429);
-		expect(await res.json()).toMatchObject({ error: 'RATE_LIMITED' });
 	});
 });

@@ -202,6 +202,10 @@ export const PUBLIC_PORTAL_HOME_I18N = {
 		volunteersNeededText: (count: number) => `ต้องการอีก ${count.toLocaleString()} คน`,
 		volunteersActiveText: (count: number) => `มีแล้ว ${count.toLocaleString()} คน`,
 		volunteersDesc: 'จิตอาสาสำหรับงานอาสาสมัครเร่งด่วน',
+		/** Shown while the jobs load or when they cannot be read — never a misleading 0 (#709). */
+		volunteersNeededUnknown: 'ต้องการอีก — คน',
+		volunteersActiveUnknown: 'มีแล้ว — คน',
+		volunteerDeficitText: (count: number) => `ขาดอีก ${count.toLocaleString()} คน`,
 
 		// Urgent Donations
 		urgentDonationsTitle: 'รับบริจาคด่วน',
@@ -225,7 +229,7 @@ export const PUBLIC_PORTAL_HOME_I18N = {
 		// Volunteers
 		volunteersTitle: 'จิตอาสา',
 		volunteersSubtitle: 'ร่วมเป็นกำลังสำคัญช่วยเหลือผู้ประสบภัย',
-		allMissionsBtn: 'ดูงานอาสาสมัครทั้งหมด',
+		allVolunteerJobsBtn: 'ดูงานอาสาสมัครทั้งหมด',
 		urgentRolesNeededLabel: 'งานอาสาสมัครที่เปิดรับ:',
 		enrolledLabel: 'มีอาสาแล้ว',
 		needMorePrefix: 'ต้องการอีก',
@@ -233,6 +237,7 @@ export const PUBLIC_PORTAL_HOME_I18N = {
 		needMoreSuffix: 'คน',
 		volunteerBtn: 'ร่วมเป็นจิตอาสา',
 		volunteersEmptyTitle: 'ขณะนี้ยังไม่มีงานอาสาสมัครที่เปิดรับสมัครเร่งด่วน',
+		volunteersLoadErrorTitle: 'โหลดงานอาสาสมัครเร่งด่วนไม่ได้ในขณะนี้ กรุณาลองใหม่ภายหลัง',
 		volunteersEmptyDesc:
 			'กำลังพลจิตอาสาในแต่ละจุดมีจำนวนเพียงพอสำหรับการปฏิบัติงานในปัจจุบัน ท่านสามารถลงทะเบียนความพร้อมล่วงหน้าเพื่อรับการแจ้งเตือนทันทีเมื่อมีงานอาสาสมัครใหม่',
 		preRegisterVolunteerBtn: 'ลงทะเบียนจิตอาสาล่วงหน้า',
@@ -251,12 +256,6 @@ export const PUBLIC_PORTAL_HOME_I18N = {
 		deficitOnly: (need: string) => `ขาดอีก ${need}`,
 		goalReached: 'ได้รับครบตามเป้าหมายแล้ว',
 		itemsDeficitText: (need: string) => `ขาดอีก ${need} ชิ้น`,
-
-		// Feature-under-development dialog
-		devModalTitle: 'ระบบอยู่ระหว่างการพัฒนา',
-		devModalDesc:
-			'ระบบดูงานอาสาสมัครและการประสานงานจิตอาสากำลังอยู่ระหว่างการพัฒนา ขออภัยในความไม่สะดวก และขอขอบคุณที่ให้ความสนใจ',
-		devModalClose: 'รับทราบ',
 
 		// Floating button
 		emergencyAlertsBtn: 'แจ้งเตือนภัย'
@@ -286,7 +285,10 @@ export const PUBLIC_PORTAL_HOME_I18N = {
 		volunteersActiveSuffix: 'enrolled',
 		volunteersNeededText: (count: number) => `${count.toLocaleString()} Needed`,
 		volunteersActiveText: (count: number) => `${count.toLocaleString()} enrolled`,
-		volunteersDesc: 'Urgent mission volunteers',
+		volunteersDesc: 'Volunteers for urgent volunteer jobs',
+		volunteersNeededUnknown: '— Needed',
+		volunteersActiveUnknown: '— enrolled',
+		volunteerDeficitText: (count: number) => `Need ${count.toLocaleString()} more`,
 
 		// Urgent Donations
 		urgentDonationsTitle: 'Urgent Donation Needs',
@@ -310,16 +312,17 @@ export const PUBLIC_PORTAL_HOME_I18N = {
 		// Volunteers
 		volunteersTitle: 'Volunteers',
 		volunteersSubtitle: 'Be a vital force in disaster relief.',
-		allMissionsBtn: 'All Missions',
+		allVolunteerJobsBtn: 'All Volunteer Jobs',
 		urgentRolesNeededLabel: 'Urgent volunteer roles needed:',
 		enrolledLabel: 'Enrolled',
 		needMorePrefix: 'Need',
 		needMoreMiddle: 'more of',
 		needMoreSuffix: 'volunteers',
 		volunteerBtn: 'Volunteer',
-		volunteersEmptyTitle: 'No urgent volunteer missions at this time',
+		volunteersEmptyTitle: 'No urgent volunteer jobs at this time',
+		volunteersLoadErrorTitle: 'Urgent volunteer jobs could not be loaded. Please try again later.',
 		volunteersEmptyDesc:
-			'Volunteer teams at all points currently have sufficient personnel. You can pre-register to receive alerts when new missions open.',
+			'Volunteer teams at all points currently have sufficient personnel. You can pre-register to receive alerts when new volunteer jobs open.',
 		preRegisterVolunteerBtn: 'Pre-register as Volunteer',
 
 		// FAQ
@@ -335,12 +338,6 @@ export const PUBLIC_PORTAL_HOME_I18N = {
 		deficitOnly: (need: string) => `Need ${need} more pcs`,
 		goalReached: 'Goal reached',
 		itemsDeficitText: (need: string) => `${need} pcs lacking`,
-
-		// Feature-under-development dialog
-		devModalTitle: 'Feature Under Development',
-		devModalDesc:
-			'The volunteer missions coordination system is currently under active development. Thank you for your interest and support!',
-		devModalClose: 'Close',
 
 		// Floating button
 		emergencyAlertsBtn: 'Emergency Alerts'

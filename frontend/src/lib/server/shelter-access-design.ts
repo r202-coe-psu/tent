@@ -12,6 +12,7 @@ import {
 	DAILY_SOP_ROLE_QUESTION_VERSION,
 	DAILY_SOP_ROLE_QUESTIONS
 } from '$lib/features/daily-sop/server';
+import { consentVduClause } from '$lib/features/consent/server';
 
 /** Database name for a shelter's own per-shelter CouchDB. */
 export function shelterDbName(code: string): string {
@@ -78,6 +79,7 @@ const DAILY_SOP_ROLE_VDU_CONTRACT = JSON.stringify({
 		code: role.code,
 		key: role.key,
 		label: role.label,
+		capabilities: [...role.capabilities],
 		questions: DAILY_SOP_ROLE_QUESTIONS.filter((question) => question.role === role.code).map(
 			(question) => ({
 				id: question.id,
@@ -177,6 +179,13 @@ export const PEOPLE_MANGO_INDEXES = [
 		index: { fields: ['type', 'evacuee_id'] },
 		name: 'people-type-evacuee-idx',
 		type: 'json' as const
+	},
+	{
+		// CR-192 FR-STL-13: finds the live `start` of an (evacuee_id, station) pair so a staff
+		// page reopen / refresh does not write a duplicate station_log `start`.
+		index: { fields: ['type', 'evacuee_id', 'station', 'occurred_at'] },
+		name: 'station-log-type-evacuee-station-idx',
+		type: 'json' as const
 	}
 ];
 
@@ -249,8 +258,8 @@ export const TICKET_DISTRIBUTION_MANGO_INDEXES = [
  * integrity rules of T-16:
  *
  *  - **append-only** `stock_ledger` / `audit` / `movement` / `screening` /
- *    `people_import_log` — reject any update or delete of an existing doc
- *    (schema.md §1.4–1.5, §1.7, §6.2). A wrong ledger entry is corrected by writing
+ *    `people_import_log` / `station_log` — reject any update or delete of an existing doc
+ *    (schema.md §1.4–1.5, §1.7–1.8, §6.2). A wrong ledger entry is corrected by writing
  *    a new offsetting entry, never by editing history.
  *  - **forward-only** `donation.status` — `received` may not fall back to `declared`
  *    (schema.md §2.3 state machine).
@@ -276,6 +285,7 @@ export function buildValidateDocUpdate(code: string): string {
       newDoc.type !== 'daily_sop_role_assessment') {
     throw { forbidden: 'Daily SOP role assessment type cannot change' };
   }
+${consentVduClause()}
   if (isCouchAdmin && !isRoleAssessmentWrite) return;
   if (newDoc.type === 'unit_of_measure' || (oldDoc && oldDoc.type === 'unit_of_measure')) {
     throw { forbidden: 'unit_of_measure is central-only' };
@@ -373,9 +383,10 @@ export function buildValidateDocUpdate(code: string): string {
   }
 
   // schema.md §1.4 movement, §1.5 screening, §1.7 people_import_log, §2.6 kitchen_requisition,
-  // §2.7 meal_service, §6.2 stock_ledger / audit, CR-059 Phase 3B distribution_issue
+  // §2.7 meal_service, §6.2 stock_ledger / audit, CR-059 Phase 3B distribution_issue,
+  // §1.8 station_log (CR-192)
   var appendOnly = [
-    'stock_ledger', 'audit', 'movement', 'screening', 'people_import_log',
+    'stock_ledger', 'audit', 'movement', 'screening', 'people_import_log', 'station_log',
     'meal_service', 'meal_service_receipt',
     'distribution_issue', 'distribution_issue_idempotency'
   ];
@@ -462,7 +473,7 @@ export function buildValidateDocUpdate(code: string): string {
   // directly to any shelter's jobs via the Job Board instead.
   var allowed = [
     'evacuee', 'household', 'medical', 'screening', 'movement', 'image',
-    'people_import_log',
+    'people_import_log', 'station_log',
     'donation', 'donation_campaign', 'stock_ledger', 'donation_slot', 'donation_redirect',
     'audit', 'daily_calc', 'simulation', 'referral',
     'meal_session', 'kitchen_counter',
@@ -945,7 +956,7 @@ export function buildValidateDocUpdate(code: string): string {
           Array.isArray(control.measured_values) ||
           !nonEmpty(control.checked_by) || !validTimestamp(control.checked_at) ||
           (typeof control.checked_by_name !== 'undefined' && !nonEmpty(control.checked_by_name))) return false;
-      if ((control.status === 'Fail' || control.status === 'Pending') && !control.notes.trim()) return false;
+      if (control.status === 'Pending' && !control.notes.trim()) return false;
       if (question.metric === null) {
         return control.question === question.text && control.metric_spec === null &&
           exactKeys(control.measured_values, []);
@@ -1021,9 +1032,10 @@ export function buildValidateDocUpdate(code: string): string {
     if (!isCouchAdmin && newDoc.assessment_date !== currentBangkokDate) {
       throw { forbidden: 'Daily SOP role assessments can only be saved for the current Bangkok date' };
     }
-    var allowedOwner = role.code === 'SC'
-      ? hasCapability('supply_coordinator') || hasCapability('warehouse_staff')
-      : hasCapability(role.key);
+    var allowedOwner = false;
+    for (var capabilityIndex = 0; capabilityIndex < role.capabilities.length; capabilityIndex++) {
+      if (hasCapability(role.capabilities[capabilityIndex])) allowedOwner = true;
+    }
     if (!isCouchAdmin && userCtx.roles.indexOf('system_admin') === -1 &&
         !hasCapability('shelter_manager') && !allowedOwner) {
       throw { forbidden: 'Daily SOP role assessment requires the role owner or shelter manager' };

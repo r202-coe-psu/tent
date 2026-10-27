@@ -7,9 +7,11 @@
 	 * job — one per shift. A pending card with several shifts gets "อนุมัติทุกกะ" plus an
 	 * approve / reject pair on every shift; a single shift keeps the two large buttons.
 	 *
-	 * Purely presentational — the decision itself is taken by the parent tab
-	 * through `useReviewApplication`; this row only reports which button was
-	 * pressed, and for which applications.
+	 * The approve / reject decision is taken by the parent tab through
+	 * `useReviewApplication`; this row only reports which button was pressed, and for
+	 * which applications. Once an application is approved, its shift row also carries the
+	 * attendance action (`applicantAttendance`) so staff can check the volunteer in or out
+	 * without leaving this tab.
 	 *
 	 * The applicant's national ID is masked (`maskNationalId`) exactly as the
 	 * evacuee screens mask theirs — an approval queue is not a reason to show a
@@ -30,7 +32,9 @@
 	import { maskNationalId } from '$lib/features/people';
 	import { formatThaiShortDate } from '$lib/utils/date';
 	import { SvelteMap } from 'svelte/reactivity';
+	import { applicantAttendance } from '../domain/applicant-attendance';
 	import { APPLICATION_STATUS_META } from '../domain/applicant-queue';
+	import ShiftAttendanceAction from './shift-attendance-action.svelte';
 	import { resolveSkillOption, type SkillOption } from '../domain/skill-catalog';
 	import { checkRequiredSkills } from '../domain/required-skills';
 	import {
@@ -38,6 +42,7 @@
 		outstandingReviewReasons,
 		type JobApplication
 	} from '../domain/job-application.schema';
+	import type { ShiftAssignment } from '../domain/shift-assignment.schema';
 	import type { Volunteer } from '../domain/volunteer.schema';
 	import {
 		identityVerificationStatus,
@@ -52,6 +57,8 @@
 		shiftLabelOf,
 		skillOptions = [],
 		requiredSkills = [],
+		assignments,
+		today,
 		onreview
 	}: {
 		/** One applicant's applications for this job, in shift order; never empty. */
@@ -72,6 +79,10 @@
 		skillOptions?: readonly SkillOption[];
 		/** `job.skills_required` — to warn when a certificate skill the job asks for is missing. */
 		requiredSkills?: readonly string[];
+		/** Every shift assignment of the shelter; each approved shift row finds its own. */
+		assignments: readonly ShiftAssignment[];
+		/** `YYYY-MM-DD` in Asia/Bangkok — only a shift dated today can be checked in. */
+		today: string;
 		onreview: (applications: JobApplication[], decision: 'confirmed' | 'rejected') => void;
 	} = $props();
 
@@ -121,6 +132,8 @@
 			)
 		})
 	);
+
+	const identityVerified = $derived(volunteer?.identity_verified ?? false);
 </script>
 
 <li class="space-y-2.5 rounded-xl border border-border bg-muted/40 p-3.5">
@@ -233,6 +246,7 @@
 			{@const shift = application.selected_shift}
 			{@const shiftLabel = shiftLabelOf(application)}
 			{@const shiftPending = application.status === 'pending_review'}
+			{@const attendance = applicantAttendance(application, assignments, identityVerified, today)}
 			<li
 				class={[
 					'flex flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2 text-xs',
@@ -265,6 +279,12 @@
 							กะนี้ถูกลบออกจากงานแล้ว
 						</span>
 					{/if}
+					<ShiftAttendanceAction
+						{attendance}
+						{volunteer}
+						personName={fullName}
+						shiftLabel="{shift.date} · {shift.start_time} - {shift.end_time} น."
+					/>
 					{#if several && shiftPending}
 						<Button
 							size="sm"
