@@ -538,12 +538,15 @@ export function getActiveTagsFromSession(session?: MealSession | null): TargetGr
 	return active.length > 0 ? active : ['regular'];
 }
 
-/** item master ที่เลือกเป็นวัตถุดิบทำอาหารได้: หมวดอาหาร (id หรือชื่อเดิม) และยังใช้งานอยู่ */
-export function selectableFoodIngredients<
+const COOKING_CATEGORY_IDS = new Set([systemCategoryId('FOOD'), systemCategoryId('WATER')]);
+
+/** item master ที่เลือกเป็นวัตถุดิบทำอาหารได้: หมวดอาหารหรือน้ำดื่ม (id หรือชื่อเดิม) และยังใช้งานอยู่ */
+export function selectableCookingIngredients<
 	T extends Pick<ItemMaster, 'category' | 'deactivated' | 'merged_into'>
 >(masters: readonly T[] | undefined): T[] {
-	const food = systemCategoryId('FOOD');
-	return (masters ?? []).filter(
-		(m) => !m.deactivated && !m.merged_into && resolveCategoryId(m.category, []) === food
-	);
+	return (masters ?? []).filter((m) => {
+		if (m.deactivated || m.merged_into) return false;
+		const category = resolveCategoryId(m.category, []);
+		return category !== undefined && COOKING_CATEGORY_IDS.has(category);
+	});
 }

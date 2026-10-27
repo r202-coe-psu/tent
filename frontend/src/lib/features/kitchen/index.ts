@@ -21,7 +21,7 @@ export {
 	toMealPlanMap,
 	sumHeadcountByTags,
 	getActiveTagsFromSession,
-	selectableFoodIngredients,
+	selectableCookingIngredients,
 	TARGET_GROUP_TAGS,
 	TARGET_GROUP_LABELS,
 	TARGET_GROUP_SHORT_LABELS,

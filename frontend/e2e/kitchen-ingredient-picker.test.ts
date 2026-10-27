@@ -1,7 +1,7 @@
 /**
- * Production board ingredient picker lists food only (#804) against the real local CouchDB.
+ * Production board ingredient picker lists food and drinking water only (#804) against the real local CouchDB.
  *
- * "เลือกวัตถุดิบ" must offer active food item masters and nothing else, while an ingredient that is
+ * "เลือกวัตถุดิบ" must offer active food and drinking-water item masters and nothing else, while an ingredient that is
  * already in a recipe keeps its name in the batch table even when it is not food.
  *
  * Fixtures: SH001-local item masters and one recipe in shelter_sh001 (never the central catalog),
@@ -29,6 +29,7 @@ import { injectSession } from './helpers/login';
 const SHELTER_DB = 'shelter_sh001';
 const CATALOG_DB = 'catalog';
 const FOOD = 'item_category:food';
+const WATER = 'item_category:water';
 const RUN = `${LOCAL_RUN_ID}${ulid().slice(-4).toLowerCase()}`;
 const TODAY = new Date().toISOString().slice(0, 10);
 
@@ -80,6 +81,8 @@ function itemMaster(name: string, category: string, extra: Record<string, unknow
 
 const ACTIVE_FOOD = `E2E ผักทดสอบ ${RUN}`;
 const LEGACY_FOOD = `E2E ถั่วชื่อหมวดเดิม ${RUN}`;
+const ACTIVE_WATER = `E2E น้ำดื่มทดสอบ ${RUN}`;
+const FORMULA = `E2E นมผงทดสอบ ${RUN}`;
 const DEACTIVATED_FOOD = `E2E น้ำมันเลิกใช้ ${RUN}`;
 const MERGED_FOOD = `E2E ข้าวซ้ำ ${RUN}`;
 const NON_FOOD = `E2E น้ำยาล้างจาน ${RUN}`;
@@ -93,6 +96,8 @@ async function seedFixtures(): Promise<void> {
 		activeFood,
 		nonFood,
 		itemMaster(LEGACY_FOOD, 'อาหารและวัตถุดิบ'),
+		itemMaster(ACTIVE_WATER, WATER),
+		itemMaster(FORMULA, 'item_category:special_care'),
 		itemMaster(DEACTIVATED_FOOD, FOOD, { deactivated: true }),
 		itemMaster(MERGED_FOOD, FOOD, { merged_into: activeFood._id })
 	];
@@ -144,7 +149,7 @@ async function cleanupOwnedDocuments(): Promise<void> {
 }
 
 test.describe(
-	'Kitchen — production board ingredient picker lists food only (#804)',
+	'Kitchen — production board ingredient picker lists food and drinking water only (#804)',
 	{ tag: ['@critical', '@kitchen'] },
 	() => {
 		test.skip(!CAN_WRITE, READ_ONLY_REASON);
@@ -172,7 +177,7 @@ test.describe(
 			expect(leftovers, 'zero-leak: no documents from this run remain').toEqual([]);
 		});
 
-		test('picker offers active food only; a non-food recipe ingredient keeps its row', async ({
+		test('picker offers active food and water only; a non-food recipe ingredient keeps its row', async ({
 			browser
 		}) => {
 			const seededNonFood = (await allDocuments(CATALOG_DB))
@@ -182,7 +187,8 @@ test.describe(
 						!d.shelter_code &&
 						typeof d.category === 'string' &&
 						d.category.startsWith('item_category:') &&
-						d.category !== FOOD
+						d.category !== FOOD &&
+						d.category !== WATER
 				)
 				.map((d) => String(d.name));
 			expect(seededNonFood.length, 'central catalog has non-food masters to leak').toBeGreaterThan(
@@ -215,6 +221,8 @@ test.describe(
 				label.trim().replace(/\s*\([^)]*\)$/, '')
 			);
 			expect(names, 'legacy Thai category name still counts as food').toContain(LEGACY_FOOD);
+			expect(names, 'drinking water is offered').toContain(ACTIVE_WATER);
+			expect(names, 'special-care item (infant formula) is hidden').not.toContain(FORMULA);
 			expect(names, 'deactivated food is hidden').not.toContain(DEACTIVATED_FOOD);
 			expect(names, 'merged food is hidden').not.toContain(MERGED_FOOD);
 			expect(names, 'shelter-local non-food is hidden').not.toContain(NON_FOOD);
