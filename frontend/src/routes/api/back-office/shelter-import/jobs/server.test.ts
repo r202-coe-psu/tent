@@ -15,10 +15,8 @@ vi.mock('$lib/server/couch-admin', () => ({
 			headers: { 'content-type': 'application/json' }
 		})
 }));
-vi.mock('$lib/features/shelters/server', async () => ({
-	createShelterSchema: { safeParse: safeParseMock },
-	validateSiteKindChange: (await import('$lib/features/shelters/domain/schema'))
-		.validateSiteKindChange
+vi.mock('$lib/features/shelters/server', () => ({
+	createShelterSchema: { safeParse: safeParseMock }
 }));
 vi.mock('$lib/server/master-data-server', () => ({ readMasterDoc: readMasterDocMock }));
 vi.mock('$lib/features/shelter-import/server/job-store', () => ({
@@ -121,11 +119,8 @@ describe('POST /api/back-office/shelter-import/jobs', () => {
 		expect(requireSystemAdminMock).toHaveBeenCalledWith('session=admin');
 	});
 
-	it.each([
-		['not in the master', 'made_up_kind'],
-		['inactive in the master', 'field_hospital']
-	])('rejects a row whose site_kind is %s (CR-198 FR-7)', async (_label, siteKind) => {
-		const response = await POST({
+	async function postSiteKind(siteKind: string) {
+		await POST({
 			request: request(
 				JSON.stringify({
 					filename: 'shelters.xlsx',
@@ -134,14 +129,23 @@ describe('POST /api/back-office/shelter-import/jobs', () => {
 				})
 			)
 		} as unknown as Parameters<typeof POST>[0]);
+		return createImportJobMock.mock.calls[0][0].rows[0];
+	}
 
-		expect(response.status).toBe(202);
-		const [{ rows }] = createImportJobMock.mock.calls[0];
-		expect(rows[0]).toMatchObject({
+	it('rejects a row whose site_kind is not in the master (CR-198 FR-7)', async () => {
+		const row = await postSiteKind('made_up_kind');
+		expect(row).toMatchObject({
 			valid: false,
 			errors: [expect.objectContaining({ column: 'site_kind' })]
 		});
-		expect(rows[0].input).toBeUndefined();
+		expect(row.input).toBeUndefined();
+	});
+
+	it('lets an inactive site_kind through for the worker to judge against the stored shelter (FR-8)', async () => {
+		const row = await postSiteKind('field_hospital');
+		expect(row.valid).toBe(true);
+		expect(row.errors).toBeUndefined();
+		expect(row.input).toMatchObject({ site_kind: 'field_hospital' });
 	});
 
 	it('returns 422 for malformed JSON instead of a generic server error', async () => {
