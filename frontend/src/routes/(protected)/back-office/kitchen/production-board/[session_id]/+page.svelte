@@ -15,6 +15,7 @@
 		useMealServiceReceipts,
 		mealServiceReceiptOutcome,
 		sumHeadcountByTags,
+		scaleRecipeIngredientQty,
 		getActiveTagsFromSession,
 		TARGET_GROUP_LABELS,
 		MEAL_PERIOD_LABELS,
@@ -47,7 +48,7 @@
 	import { Label } from '$lib/components/ui/label';
 	import { Textarea } from '$lib/components/ui/textarea';
 	import { toast } from 'svelte-sonner';
-	import { qtyGt } from '$lib/utils/qty';
+	import { addQty, qtyGt, qtyLte } from '$lib/utils/qty';
 	import { formatThaiDateTime, formatThaiShortDate } from '$lib/utils/date';
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import ChefHat from '@lucide/svelte/icons/chef-hat';
@@ -346,17 +347,12 @@
 			return [];
 		}
 
-		// Scale ingredients
-		const baseServings = Math.max(parseFloat(recipe.standard_portions) || 1, 1);
-		const factor = portions / baseServings;
-
 		return (recipe.ingredients ?? []).map((ing) => {
 			const itemMaster = (itemMasters.data ?? []).find((m) => m._id === ing.item_master_id);
-			const scaledQty = Math.round(Number(ing.quantity || 0) * factor * 100) / 100;
 			return {
 				item_id: ing.item_master_id,
 				name: itemMaster?.name || ing.item_master_id,
-				needed: String(scaledQty),
+				needed: scaleRecipeIngredientQty(ing.quantity, recipe.standard_portions, portions),
 				unit: ing.uom || itemMaster?.base_unit || 'kg'
 			};
 		});
@@ -408,9 +404,9 @@
 		const master = (itemMasters.data ?? []).find((m) => m._id === newItemId);
 		const existingIndex = ingredientsList.findIndex((it) => it.item_id === newItemId);
 		if (existingIndex >= 0) {
-			const current = Number(ingredientsList[existingIndex].needed) || 0;
-			ingredientsList[existingIndex].needed = String(
-				Math.round((current + Number(newQty)) * 100) / 100
+			ingredientsList[existingIndex].needed = addQty(
+				ingredientsList[existingIndex].needed || '0',
+				newQty
 			);
 		} else {
 			ingredientsList = [
@@ -446,7 +442,9 @@
 			toast.error('กรุณาระบุวัตถุดิบอย่างน้อย 1 รายการ');
 			return;
 		}
-		const hasInvalidQty = ingredientsList.some((ing) => Number(ing.needed) <= 0);
+		const hasInvalidQty = ingredientsList.some(
+			(ing) => ing.needed == null || ing.needed === '' || qtyLte(ing.needed, 0)
+		);
 		if (hasInvalidQty) {
 			toast.error('กรุณาระบุจำนวนวัตถุดิบให้มากกว่า 0 ทุกรายการ');
 			return;
@@ -533,7 +531,9 @@
 			toast.error('กรุณาระบุวัตถุดิบอย่างน้อย 1 รายการ');
 			return;
 		}
-		const hasInvalidQty = ingredientsList.some((ing) => Number(ing.needed) <= 0);
+		const hasInvalidQty = ingredientsList.some(
+			(ing) => ing.needed == null || ing.needed === '' || qtyLte(ing.needed, 0)
+		);
 		if (hasInvalidQty) {
 			toast.error('กรุณาระบุจำนวนวัตถุดิบให้มากกว่า 0 ทุกรายการ');
 			return;
@@ -1022,7 +1022,8 @@
 								{/if}
 								{#each ingredientsList as ing, idx (ing.item_id + '_' + idx)}
 									{@const onHand = stock.data?.get(ing.item_id) ?? '0'}
-									{@const isShort = qtyGt(ing.needed, onHand)}
+									{@const isShort =
+										ing.needed != null && ing.needed !== '' && qtyGt(ing.needed, onHand)}
 									<Table.Row>
 										<Table.Cell class="font-medium">
 											{ing.name}
