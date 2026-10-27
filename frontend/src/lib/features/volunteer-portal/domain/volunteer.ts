@@ -7,6 +7,7 @@
  */
 import { z } from 'zod';
 import { isValidThaiNationalId } from '$lib/utils/thai-id';
+import { volunteerMobileSchema } from '$lib/utils/volunteer-phone';
 
 /** CR-092 §4 ticket statuses. `rejected` is deliberately absent — see the module notes. */
 export const TICKET_STATUSES = ['confirmed', 'pending_review', 'cancelled'] as const;
@@ -138,13 +139,8 @@ export type TicketSummary = {
 	end_time?: string;
 };
 
-/** Thai mobile numbers, tolerant of the separators people actually type. */
-const phoneField = z
-	.string()
-	.trim()
-	.min(1, 'กรุณากรอกเบอร์โทรศัพท์')
-	.transform((value) => value.replace(/[\s-()]/g, ''))
-	.refine((value) => /^0\d{8,9}$/.test(value), 'เบอร์โทรศัพท์ไม่ถูกต้อง');
+/** Volunteer mobile (10 digits, #951), tolerant of the separators people actually type. */
+const phoneField = z.string().trim().min(1, 'กรุณากรอกเบอร์โทรศัพท์').pipe(volunteerMobileSchema);
 
 /**
  * Optional on purpose. CR-092 lists the 13-digit ID as a main field, but a volunteer

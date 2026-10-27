@@ -30,6 +30,7 @@
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Badge } from '$lib/components/ui/badge/index.js';
+	import { isVolunteerMobile } from '../domain/phone';
 	import * as Table from '$lib/components/ui/table/index.js';
 	import * as AlertDialog from '$lib/components/ui/alert-dialog/index.js';
 	import VolunteerManageDialog from './volunteer-manage-dialog.svelte';
@@ -196,6 +197,14 @@
 						<Phone class="h-3.5 w-3.5" />
 						{volunteer.phone}
 					</p>
+					{#if !isVolunteerMobile(volunteer.phone)}
+						<Badge
+							variant="outline"
+							class="gap-1 border-amber-300 bg-amber-50 text-[11px] text-amber-800"
+						>
+							เบอร์ไม่ใช่มือถือ 10 หลัก
+						</Badge>
+					{/if}
 				{/if}
 			</div>
 		</div>

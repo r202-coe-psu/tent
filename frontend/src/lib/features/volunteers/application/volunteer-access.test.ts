@@ -9,22 +9,20 @@ const mocks = vi.hoisted(() => ({
 	update: vi.fn(),
 	repositoryFor: vi.fn()
 }));
-vi.mock('$lib/features/users', async () => {
-	const { phoneSchema, contactPhoneSchema } = await vi.importActual<Record<string, unknown>>(
-		'$lib/features/users/domain/schema'
-	);
-	return {
-		createUser: mocks.createUser,
-		listUsers: mocks.listUsers,
-		phoneSchema,
-		contactPhoneSchema
-	};
-});
+vi.mock('$lib/features/users', () => ({
+	createUser: mocks.createUser,
+	listUsers: mocks.listUsers
+}));
 vi.mock('../data/volunteer.remote', () => ({
 	volunteerRepositoryFor: mocks.repositoryFor
 }));
 
-import { accountPhones, grantVolunteerAccess, volunteerPasswordError } from './volunteer-access';
+import {
+	accountPhone,
+	grantVolunteerAccess,
+	hasInvalidAccessPhone,
+	volunteerPasswordError
+} from './volunteer-access';
 
 const volunteer: Volunteer = {
 	_id: 'volunteer:one',
@@ -70,20 +68,33 @@ beforeEach(() => {
 	mocks.update.mockImplementation(async (profile) => profile);
 });
 
-describe('accountPhones', () => {
+describe('accountPhone', () => {
 	it.each([
-		['0887887878', '0887887878', '0887887878'],
-		['088-788 7878', '0887887878', '0887887878'],
-		['+66887887878', '0887887878', '0887887878'],
-		['022222222', '022222222', null],
-		['02-222-2222', '022222222', null],
-		['02222222', null, null],
-		['ไม่มี', null, null],
-		['', null, null],
-		[null, null, null],
-		[undefined, null, null]
-	])('maps %s to contact %s and login %s', (input, contact, login) => {
-		expect(accountPhones(input)).toEqual({ contact, login });
+		['0887887878', '0887887878'],
+		['088-788 7878', '0887887878'],
+		['+66887887878', '0887887878'],
+		['022222222', null],
+		['ไม่มี', null],
+		['', null],
+		[null, null],
+		[undefined, null]
+	])('maps %s to %s', (input, expected) => {
+		expect(accountPhone(input)).toBe(expected);
+	});
+});
+
+describe('hasInvalidAccessPhone', () => {
+	it.each([
+		['022222222', true],
+		['02-222-2222', true],
+		['ไม่มี', true],
+		['0887887878', false],
+		['+66887887878', false],
+		['', false],
+		['  ', false],
+		[null, false]
+	])('%s -> %s', (input, expected) => {
+		expect(hasInvalidAccessPhone(input)).toBe(expected);
 	});
 });
 
@@ -153,8 +164,6 @@ describe('grantVolunteerAccess', () => {
 	});
 
 	it.each([
-		['9-digit landline', '022222222', '022222222'],
-		['dashed landline', '02-222-2222', '022222222'],
 		['empty', '', null],
 		['dashed mobile', '088-788 7878', '0887887878']
 	])('sends the account phone for a %s profile phone', async (_label, phone, expected) => {
@@ -166,22 +175,26 @@ describe('grantVolunteerAccess', () => {
 		expect(mocks.update).toHaveBeenCalledWith(expect.objectContaining({ phone }));
 	});
 
-	it('does not treat a 9-digit phone as a bootstrap password', async () => {
-		const landline = { ...volunteer, phone: '022222222' };
-		mocks.get.mockImplementation(async () => ({ ...landline }));
-		await expect(
-			grantVolunteerAccess(landline, { ...input, password: '022222222' })
-		).rejects.toThrow();
-		expect(mocks.createUser).not.toHaveBeenCalled();
+	it('grants a volunteer with no phone an account with phone null', async () => {
+		const noPhone = { ...volunteer, phone: null };
+		mocks.get.mockImplementation(async () => ({ ...noPhone }));
+		await expect(grantVolunteerAccess(noPhone, input)).resolves.toEqual({ created: true });
+		expect(mocks.createUser).toHaveBeenCalledWith(
+			expect.objectContaining({ phone: null, email: input.email, must_change_password: false })
+		);
 	});
 
-	it('retries linking an existing account of a landline volunteer', async () => {
-		const landline = { ...volunteer, phone: '022222222' };
-		mocks.get.mockImplementation(async () => ({ ...landline }));
-		mocks.listUsers.mockResolvedValue([account]);
-		await expect(grantVolunteerAccess(landline, input)).resolves.toEqual({ created: false });
-		expect(mocks.createUser).not.toHaveBeenCalled();
-	});
+	it.each(['022222222', '02-222-2222', 'ไม่มี'])(
+		'refuses to grant access while the profile phone is "%s"',
+		async (phone) => {
+			const bad = { ...volunteer, phone };
+			mocks.get.mockImplementation(async () => ({ ...bad }));
+			mocks.listUsers.mockResolvedValue([account]);
+			await expect(grantVolunteerAccess(bad, input)).rejects.toThrow(/แก้เบอร์ในโปรไฟล์/);
+			expect(mocks.createUser).not.toHaveBeenCalled();
+			expect(mocks.update).not.toHaveBeenCalled();
+		}
+	);
 
 	it.each([
 		{ ...input, email: 'bad' },

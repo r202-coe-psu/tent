@@ -2,6 +2,7 @@ import { json } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
 import type { RequestHandler } from './$types';
 import { z } from 'zod';
+import { volunteerMobileSchema } from '$lib/utils/volunteer-phone';
 import { ReCaptchaProvider } from '$lib/server/security/captcha';
 import { verifyRecaptchaOrSkip } from '$lib/server/security/recaptcha-gate';
 import {
@@ -18,12 +19,7 @@ const applySchema = z.object({
 	applicant: z.object({
 		first_name: z.string().trim().min(1, 'กรุณาระบุชื่อ'),
 		last_name: z.string().trim().min(1, 'กรุณาระบุนามสกุล'),
-		phone: z
-			.string()
-			.trim()
-			.min(1, 'กรุณาระบุเบอร์โทรศัพท์')
-			.transform((value) => value.replace(/\D/g, ''))
-			.pipe(z.string().regex(/^0\d{8,9}$/, 'เบอร์โทรศัพท์ไม่ถูกต้อง (เช่น 0812345678)')),
+		phone: z.string().trim().min(1, 'กรุณาระบุเบอร์โทรศัพท์').pipe(volunteerMobileSchema),
 		email: z.string().email().nullable().optional(),
 		skills: z.array(z.string().trim().min(1)).default([])
 	}),

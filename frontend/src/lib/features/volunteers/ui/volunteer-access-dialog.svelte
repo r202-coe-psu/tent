@@ -18,8 +18,10 @@
 	import { volunteerKeys } from '../application/queries';
 	import { errorMessage } from '$lib/utils/errors';
 	import {
-		accountPhones,
+		VOLUNTEER_ACCESS_PHONE_MESSAGE,
+		accountPhone,
 		grantVolunteerAccess,
+		hasInvalidAccessPhone,
 		volunteerAccessSchema,
 		volunteerPasswordError
 	} from '../application/volunteer-access';
@@ -38,8 +40,8 @@
 	const queryClient = useQueryClient();
 	let pending = $state(false);
 
-	const phones = $derived(accountPhones(volunteer.phone));
-	const loginPhone = $derived(phones.login);
+	const loginPhone = $derived(accountPhone(volunteer.phone));
+	const phoneBlocksAccess = $derived(hasInvalidAccessPhone(volunteer.phone));
 	const fullName = $derived(`${volunteer.first_name} ${volunteer.last_name}`.trim());
 
 	let email = $state('');
@@ -65,6 +67,10 @@
 
 	async function submit() {
 		if (pending) return;
+		if (phoneBlocksAccess) {
+			toast.error(VOLUNTEER_ACCESS_PHONE_MESSAGE);
+			return;
+		}
 		const parsed = volunteerAccessSchema.safeParse({ email, password, role });
 		if (!parsed.success) {
 			toast.error(parsed.error.issues[0]?.message ?? 'กรุณาตรวจสอบข้อมูล');
@@ -109,6 +115,14 @@
 		</div>
 
 		<div class="max-h-[70vh] space-y-5 overflow-y-auto px-6 py-5">
+			{#if phoneBlocksAccess}
+				<p
+					role="alert"
+					class="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm font-medium text-amber-900"
+				>
+					{VOLUNTEER_ACCESS_PHONE_MESSAGE}
+				</p>
+			{/if}
 			<div
 				class="space-y-3 rounded-xl border border-domain-volunteer-border bg-domain-volunteer-subtle p-3"
 			>
@@ -254,11 +268,10 @@
 						</p>
 					{:else}
 						<p class="text-[11px] text-muted-foreground">
-							{phones.contact
-								? 'เบอร์โทรศัพท์ของอาสาสมัครไม่ใช่มือถือ 10 หลัก จะบันทึกลงบัญชีเป็นเบอร์ติดต่อ แต่ใช้เข้าสู่ระบบหรือเป็นรหัสผ่านเริ่มต้นไม่ได้'
-								: 'อาสาสมัครไม่มีเบอร์มือถือ 10 หลัก จึงใช้เบอร์เป็นรหัสผ่านเริ่มต้นไม่ได้'}
-							กรุณาตั้งรหัสผ่านเองหรือกด "สร้างรหัส" (อย่างน้อย 10 ตัวอักษร พร้อมตัวพิมพ์ใหญ่ ตัวพิมพ์เล็ก
-							ตัวเลข และอักขระพิเศษ) บัญชีนี้ใช้อีเมลเข้าสู่ระบบเท่านั้น และเมื่อเข้าสู่ระบบครั้งแรกจะต้องตั้งรหัสผ่านใหม่และคำถามความปลอดภัยเหมือนบัญชีอื่น
+							อาสาสมัครไม่มีเบอร์โทรศัพท์ จึงใช้เบอร์เป็นรหัสผ่านเริ่มต้นไม่ได้ และบัญชีจะไม่มีเบอร์
+							กรุณาตั้งรหัสผ่านเองหรือกด "สร้างรหัส" (อย่างน้อย 10 ตัวอักษร พร้อมตัวพิมพ์ใหญ่
+							ตัวพิมพ์เล็ก ตัวเลข และอักขระพิเศษ) บัญชีนี้ใช้อีเมลเข้าสู่ระบบเท่านั้น
+							และเมื่อเข้าสู่ระบบครั้งแรกจะต้องตั้งรหัสผ่านใหม่และคำถามความปลอดภัยเหมือนบัญชีอื่น
 						</p>
 					{/if}
 					<p class="text-[11px] text-muted-foreground">
@@ -276,7 +289,7 @@
 			<Button
 				type="button"
 				class="gap-1.5 bg-domain-volunteer-strong text-white hover:bg-domain-volunteer-text"
-				disabled={pending}
+				disabled={pending || phoneBlocksAccess}
 				onclick={submit}
 			>
 				{#if pending}

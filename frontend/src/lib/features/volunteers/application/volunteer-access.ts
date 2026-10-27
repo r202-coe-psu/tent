@@ -1,9 +1,9 @@
 import { z } from 'zod';
 import { passwordSchema } from '$lib/auth/password-schema';
 import { STAFF_CAPABILITIES, shelterScopeRole } from '$lib/auth/roles';
-import { contactPhoneSchema, createUser, listUsers, phoneSchema } from '$lib/features/users';
+import { createUser, listUsers } from '$lib/features/users';
 import { volunteerRepositoryFor } from '../data/volunteer.remote';
-import { normalizePhone } from '../domain/phone';
+import { isVolunteerMobile, normalizePhone } from '../domain/phone';
 import type { Volunteer } from '../domain/volunteer.schema';
 
 export const volunteerAccessSchema = z.object({
@@ -12,20 +12,22 @@ export const volunteerAccessSchema = z.object({
 	role: z.enum(STAFF_CAPABILITIES)
 });
 
+/** Thrown/shown when the profile phone is filled but not a 10-digit mobile (#951). */
+export const VOLUNTEER_ACCESS_PHONE_MESSAGE =
+	'เบอร์โทรศัพท์ในโปรไฟล์ไม่ใช่มือถือ 10 หลัก กรุณาแก้เบอร์ในโปรไฟล์ก่อนออกสิทธิ์';
+
+/** True when a filled phone is not a mobile and so blocks granting access. */
+export function hasInvalidAccessPhone(value: string | null | undefined): boolean {
+	return !!value?.trim() && !isVolunteerMobile(value);
+}
+
 /**
- * The volunteer's phone as the account sees it (users `contactPhoneSchema` / `phoneSchema`):
- * `contact` is stored on the account (mobile or 9-digit landline); only a mobile is also a
- * `login` phone, so only a mobile may serve as the forced first-login password.
+ * The volunteer's mobile as the account sees it: stored as the account phone and usable as
+ * the forced first-login password. `null` for a volunteer with no phone (email login only).
  */
-export function accountPhones(value: string | null | undefined): {
-	contact: string | null;
-	login: string | null;
-} {
+export function accountPhone(value: string | null | undefined): string | null {
 	const normalized = normalizePhone(value ?? '');
-	return {
-		contact: contactPhoneSchema.safeParse(normalized).success ? normalized : null,
-		login: phoneSchema.safeParse(normalized).success ? normalized : null
-	};
+	return isVolunteerMobile(normalized) ? normalized : null;
 }
 
 /** First reason `password` fails the account policy (user form rules), else `null`. */
@@ -42,13 +44,15 @@ export async function grantVolunteerAccess(
 	input: z.infer<typeof volunteerAccessSchema>
 ): Promise<{ created: boolean }> {
 	const { email, password, role } = volunteerAccessSchema.parse(input);
-	const loginPhone = accountPhones(volunteer.phone).login;
+	if (hasInvalidAccessPhone(volunteer.phone)) throw new Error(VOLUNTEER_ACCESS_PHONE_MESSAGE);
+	const loginPhone = accountPhone(volunteer.phone);
 	const isPhoneBootstrapPassword = loginPhone !== null && password === loginPhone;
 	const passwordError = volunteerPasswordError(password, loginPhone);
 	if (passwordError) throw new Error(passwordError);
 	const repository = volunteerRepositoryFor(volunteer.shelter_code);
 	const profile = await repository.get(volunteer._id);
 	if (!profile) throw new Error('ไม่พบข้อมูลอาสาสมัคร กรุณาโหลดข้อมูลใหม่');
+	if (hasInvalidAccessPhone(profile.phone)) throw new Error(VOLUNTEER_ACCESS_PHONE_MESSAGE);
 	const scope = shelterScopeRole(volunteer.shelter_code);
 	const users = await listUsers();
 	const existing = users.find((user) => user.name === email);
@@ -88,7 +92,7 @@ export async function grantVolunteerAccess(
 			roles: [scope, role],
 			personnel_type: 'volunteer',
 			organization: profile.organization ?? null,
-			phone: accountPhones(profile.phone).contact,
+			phone: accountPhone(profile.phone),
 			email,
 			volunteer_id: volunteer._id,
 			must_change_password: isPhoneBootstrapPassword

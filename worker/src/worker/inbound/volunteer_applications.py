@@ -17,6 +17,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import logging
+import re
 from datetime import UTC, datetime, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -32,6 +33,19 @@ logger = logging.getLogger(__name__)
 #: Matches the donation loop. The applicant is already looking at their ticket by now —
 #: this only decides how soon the shelter's own screens see them.
 POLL_INTERVAL_SECONDS = 3
+
+
+_VOLUNTEER_MOBILE = re.compile(r"^0\d{9}$")
+
+
+def is_volunteer_mobile(phone: str) -> bool:
+    """Volunteer phone rule (#951): normalised ``^0\\d{9}$``, same as the BFF."""
+    digits = re.sub(r"[\s\-()]", "", phone)
+    if digits.startswith("+66"):
+        digits = f"0{digits[3:]}"
+    elif digits.startswith("66") and len(digits) >= 11:
+        digits = f"0{digits[2:]}"
+    return _VOLUNTEER_MOBILE.fullmatch(digits) is not None
 
 
 def _iso(value: datetime) -> str:
@@ -251,6 +265,16 @@ def _shift_assignment_doc(
 async def _persist_application(
     couch: CouchClient, application: VolunteerApplicationBuffer
 ) -> bool:
+    if not is_volunteer_mobile(application.applicant.phone):
+        # Not retryable: the BFF rejects these, so a row like this predates the rule.
+        application.sync_error = "INVALID_PHONE"
+        application.synced_to_couch = True
+        await application.save()
+        logger.warning(
+            "Volunteer application %s has a non-mobile phone", application.id
+        )
+        return True
+
     database = shelter_db_name(application.shelter_code)
     if not await couch.database_exists(database):
         logger.warning(

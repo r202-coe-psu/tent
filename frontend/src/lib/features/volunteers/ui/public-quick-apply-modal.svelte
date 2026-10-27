@@ -19,6 +19,7 @@
 	import { isCaptchaKeyConfigured } from '$lib/features/public-register';
 	import { languageStore } from '$lib/stores/language.svelte';
 	import { jobsI18n } from '$lib/features/volunteers/i18n/jobs.i18n';
+	import { isVolunteerMobile } from '$lib/utils/volunteer-phone';
 	import {
 		ApplyFailedError,
 		apiErrorCopy,
@@ -516,17 +517,14 @@
 			showSubmitError(t.errLastName);
 			return;
 		}
-		if (!cleanApplicantPhone()) {
-			showSubmitError(t.errPhone);
-			return;
-		}
-		if (
-			isPortalApplicant &&
-			applicantCredential &&
-			'token' in applicantCredential &&
-			!/^0\d{8,9}$/.test(cleanApplicantPhone())
-		) {
-			showSubmitError('กรุณากรอกเบอร์โทรศัพท์ที่ใช้สมัครเดิมเพื่อสมัครงานอาสาสมัครจาก portal');
+		if (!isVolunteerMobile(cleanApplicantPhone())) {
+			const needsOriginalPhone =
+				isPortalApplicant && applicantCredential && 'token' in applicantCredential;
+			showSubmitError(
+				needsOriginalPhone
+					? 'กรุณากรอกเบอร์โทรศัพท์ที่ใช้สมัครเดิมเพื่อสมัครงานอาสาสมัครจาก portal'
+					: t.errPhone
+			);
 			return;
 		}
 		errorMessage = null;

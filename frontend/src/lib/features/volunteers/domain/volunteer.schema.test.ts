@@ -1,9 +1,11 @@
 import { describe, it, expect } from 'vitest';
+import { VOLUNTEER_PHONE_MESSAGE } from '$lib/utils/volunteer-phone';
 import {
 	volunteerSchema,
 	isVolunteer,
 	makeVolunteer,
 	nationalIdSchema,
+	walkInVolunteerFormSchema,
 	type VolunteerInput
 } from './volunteer.schema';
 
@@ -217,5 +219,40 @@ describe('makeVolunteer', () => {
 		expect(() =>
 			makeVolunteer({ ...baseInput, national_id: 'garbage' }, ctx, { volunteer_code: 'V-005' })
 		).toThrow();
+	});
+});
+
+describe('volunteer phone rule (#951)', () => {
+	const make = (phone: string | null | undefined) =>
+		makeVolunteer({ ...baseInput, phone }, ctx, { volunteer_code: 'V-010' });
+
+	it('normalises a dashed mobile and stores 0812345678', () => {
+		expect(make('081-234-5678').phone).toBe('0812345678');
+		expect(make('+66812345678').phone).toBe('0812345678');
+	});
+
+	it.each(['', '   ', null, undefined])('stores %j as null', (phone) => {
+		expect(make(phone).phone).toBeNull();
+	});
+
+	it.each(['022222222', '02-222-2222', 'ไม่มี', '-', '081234567'])(
+		'rejects %s with the mobile message',
+		(phone) => {
+			expect(() => make(phone)).toThrow('เบอร์มือถือต้องเป็นตัวเลข 10 หลักขึ้นต้นด้วย 0');
+		}
+	);
+});
+
+describe('walkInVolunteerFormSchema phone', () => {
+	const form = { first_name: 'ก', last_name: 'ข', email: '', national_id: '' };
+
+	it.each(['', '081-234-5678', '0812345678'])('accepts %j', (phone) => {
+		expect(walkInVolunteerFormSchema.safeParse({ ...form, phone }).success).toBe(true);
+	});
+
+	it.each(['022222222', 'ไม่มี', '-'])('rejects %j', (phone) => {
+		const result = walkInVolunteerFormSchema.safeParse({ ...form, phone });
+		expect(result.success).toBe(false);
+		if (!result.success) expect(result.error.issues[0]?.message).toBe(VOLUNTEER_PHONE_MESSAGE);
 	});
 });
