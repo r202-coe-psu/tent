@@ -4,6 +4,7 @@ import {
 	countBySiteKind,
 	isHostHouseKind,
 	normalizeSiteKind,
+	shelterPinKind,
 	siteKindLabel,
 	siteKindTiles,
 	type SiteKindOption
@@ -80,6 +81,22 @@ describe('isHostHouseKind / normalizeSiteKind', () => {
 		expect(normalizeSiteKind(undefined)).toBe('evacuation_center');
 		expect(normalizeSiteKind('')).toBe('evacuation_center');
 		expect(normalizeSiteKind('field_hospital')).toBe('field_hospital');
+	});
+});
+
+describe('shelterPinKind', () => {
+	it('names the only active non-host kind', () => {
+		expect(shelterPinKind(KINDS.filter((k) => k.code !== 'field_hospital'))).toBe(
+			'evacuation_center'
+		);
+	});
+
+	it('returns null when the shelter pin covers several kinds', () => {
+		expect(shelterPinKind(KINDS)).toBeNull();
+	});
+
+	it('falls back to the default kind before the list loads', () => {
+		expect(shelterPinKind(undefined)).toBe('evacuation_center');
 	});
 });
 

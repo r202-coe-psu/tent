@@ -271,7 +271,7 @@
 	<div
 		class="{mobileViewMode === 'map'
 			? 'hidden lg:grid'
-			: 'grid'} grid-cols-2 gap-3 sm:gap-4 md:grid-cols-4 lg:gap-6"
+			: 'grid'} grid-cols-2 gap-3 sm:gap-4 md:grid-cols-[repeat(auto-fit,minmax(10rem,1fr))] lg:gap-6"
 	>
 		<PublicShelterMetricCard
 			title={t.totalShelters}

@@ -14,9 +14,9 @@
 	import { shelterTypeLabel, toLabelMap } from '../domain/master-labels';
 	import { useShelterTypeLabelMap, useSiteKinds } from '../application/queries';
 	import {
-		DEFAULT_SITE_KIND,
 		HOST_HOUSE_SITE_KIND,
 		isHostHouseKind,
+		shelterPinKind,
 		siteKindLabel
 	} from '../domain/site-kind';
 	import { DEFAULT_MAP_STYLE, DEFAULT_MAP_CENTER, DEFAULT_MAP_ZOOM } from '$lib/constants/maps';
@@ -91,6 +91,7 @@
 	const shelterTypeLabelsQuery = useShelterTypeLabelMap();
 	const shelterTypeLabels = $derived(toLabelMap(shelterTypeLabelsQuery.data, langState.current));
 	const siteKindsQuery = useSiteKinds();
+	const shelterPinLegendKind = $derived(shelterPinKind(siteKindsQuery.data));
 
 	const SEARCH_RADIUS_SOURCE = 'search-radius';
 	const SEARCH_RADIUS_FILL = 'search-radius-fill';
@@ -678,7 +679,9 @@
 					stroke-linejoin="round"
 				/>
 			</svg>
-			<span class="text-muted-foreground">{getSiteKindText(DEFAULT_SITE_KIND)}</span>
+			<span class="text-muted-foreground"
+				>{shelterPinLegendKind ? getSiteKindText(shelterPinLegendKind) : t.otherSiteKinds}</span
+			>
 		</div>
 		<div class="flex items-center gap-1.5">
 			<svg
