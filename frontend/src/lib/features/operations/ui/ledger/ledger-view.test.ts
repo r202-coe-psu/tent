@@ -5,6 +5,7 @@ import {
 	dayHeading,
 	filterLedger,
 	groupByDay,
+	ledgerRefHref,
 	ledgerToCsv,
 	LEDGER_CSV_HEADER,
 	summarizeRows,
@@ -103,6 +104,35 @@ describe('toLedgerRow', () => {
 				.refHref
 		).toBeUndefined();
 		expect(toLedgerRow(entry({ reason: 'receive', qty: '5' }), lookup).refHref).toBeUndefined();
+	});
+
+	it('adds no link for a non-receive entry carrying a pool ref (CR-193 §29)', () => {
+		const row = toLedgerRow(
+			entry({ reason: 'transfer_in', qty: '5', ref_id: 'bulk_return_pool:01ABC' }),
+			lookup
+		);
+		expect(row.detail).toBe('bulk_return_pool:01ABC');
+		expect(row.refHref).toBeUndefined();
+	});
+});
+
+describe('ledgerRefHref', () => {
+	it('links a receive entry with a pool ref', () => {
+		expect(ledgerRefHref('receive', 'bulk_return_pool:01ABC')).toBe(
+			'/back-office/distribution?view=bulk_pools&pool=01ABC'
+		);
+	});
+
+	it('returns undefined for non-receive reasons even with a pool ref', () => {
+		expect(ledgerRefHref('transfer_in', 'bulk_return_pool:01ABC')).toBeUndefined();
+		expect(ledgerRefHref('distribute', 'bulk_return_pool:01ABC')).toBeUndefined();
+		expect(ledgerRefHref('distribution_return', 'bulk_return_pool:01ABC')).toBeUndefined();
+	});
+
+	it('returns undefined for a receive with a missing, bare or other ref', () => {
+		expect(ledgerRefHref('receive', null)).toBeUndefined();
+		expect(ledgerRefHref('receive', 'bulk_return_pool:')).toBeUndefined();
+		expect(ledgerRefHref('receive', 'donation:DN-1')).toBeUndefined();
 	});
 });
 

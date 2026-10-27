@@ -86,10 +86,16 @@ const BULK_RETURN_POOL_REF_PREFIX = 'bulk_return_pool:';
 
 /**
  * Link target for a ledger `ref_id` that points at a bulk return pool, else `undefined`.
+ * Receive-only (CR-193 §29): only `receive` rows link to a pool, even if another reason's writer
+ * later uses the `bulk_return_pool:` prefix.
  * Mirrors `bulkReturnPoolHref` of the distribution feature; inlined here because this module is
  * pure and must not import the distribution barrel (UI components, import cycle risk).
  */
-export function ledgerRefHref(refId: string | null | undefined): string | undefined {
+export function ledgerRefHref(
+	reason: LedgerReason,
+	refId: string | null | undefined
+): string | undefined {
+	if (reason !== 'receive') return undefined;
 	if (!refId || !refId.startsWith(BULK_RETURN_POOL_REF_PREFIX)) return undefined;
 	const poolId = refId.slice(BULK_RETURN_POOL_REF_PREFIX.length);
 	if (!poolId) return undefined;
@@ -130,7 +136,8 @@ export function toLedgerRow(entry: StockLedger, lookup: LedgerLookup): LedgerRow
 		: '';
 	const lot = entry.lot && isOut ? { ...entry.lot, note: undefined } : entry.lot;
 	// Only when the row's detail text is the ref id itself (adjust / destination win otherwise).
-	const refHref = adjustDetail || destination ? undefined : ledgerRefHref(entry.ref_id);
+	const refHref =
+		adjustDetail || destination ? undefined : ledgerRefHref(entry.reason, entry.ref_id);
 	return {
 		id: entry._id,
 		occurredAt: entry.occurred_at,
