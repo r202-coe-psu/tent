@@ -129,8 +129,9 @@ export const test = base.extend<DistributionFixtures, DistributionWorkerFixtures
 			writeFileSync(path, [`final url: ${page.url()}`, ...failedCalls].join('\n'));
 			await testInfo.attach('failed-calls', { path, contentType: 'text/plain' });
 		}
-		await clearSession(page).catch(() => undefined);
+		// Unroute first: a long-poll `_changes` still in flight must not reach a disposed context.
 		await page.unrouteAll({ behavior: 'ignoreErrors' });
+		await clearSession(page).catch(() => undefined);
 		const failures: unknown[] = [];
 		for (const scenario of created) {
 			try {

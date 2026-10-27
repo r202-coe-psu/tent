@@ -186,51 +186,18 @@ export class BulkReturnPoolBoard {
 	}
 
 	/**
-	 * After a mutation done from inside the sheet: the open sheet follows the live overview row, so
-	 * just wait on it (no close / reopen). If the sheet is not open (a flow that closed it), wait for
-	 * the card to show the new state and open the sheet from it.
-	 *
-	 * While the sheet is open the board cards sit behind the modal and are not in the accessibility
-	 * tree, so card locators are only used on the fallback path.
+	 * After a mutation done from inside the sheet: the open sheet must follow the live overview row
+	 * (GAP BRP-F10), so it is asserted still open — never closed and reopened, which would hide a
+	 * stale sheet.
 	 *
 	 * @param poolName name the sheet shows now (the NEW name after a rename)
-	 * @param options.entryCount fallback path only: wait for the card to show this entry count (best
-	 *   effort; the sheet has no count, the spec assertions after are the proof)
-	 * @param options.status wait for the sheet (or the card, on the fallback path) to show this status
+	 * @param options.status the sheet must show this status
 	 */
-	async expectDetail(
-		poolName: string,
-		options: { entryCount?: number; status?: PoolStatus } = {}
-	): Promise<Locator> {
+	async expectDetail(poolName: string, options: { status?: PoolStatus } = {}): Promise<Locator> {
 		const detail = this.detail(poolName);
-		await detail.waitFor({ state: 'visible', timeout: 3_000 }).catch(() => undefined);
-		if (await detail.isVisible()) {
-			await expect(detail).toBeVisible();
-			if (options.status) await expect(detail).toContainText(POOL_COPY.status[options.status]);
-			return detail;
-		}
-		await expect(this.card(poolName)).toBeVisible();
-		if (options.status) await this.expectCardStatus(poolName, options.status);
-		if (options.entryCount !== undefined) {
-			await expect(this.card(poolName))
-				.toContainText(new RegExp(`(?<!\\d)${options.entryCount}\\s*รายการ`), { timeout: 5_000 })
-				.catch(() => undefined);
-		}
-		return this.openDetail(poolName);
-	}
-
-	/**
-	 * Entry count printed on a pool's board card, read from the DOM even while the sheet hides the
-	 * card from the accessibility tree. `undefined` when it cannot be read.
-	 */
-	private async cardEntryCount(poolName: string): Promise<number | undefined> {
-		const card = this.page
-			.locator(`ul > li > button${NOT_IN_WORK_QUEUE}`)
-			.filter({ hasText: poolName })
-			.first();
-		const text = (await card.textContent({ timeout: 2_000 }).catch(() => null)) ?? '';
-		const match = /(\d+)\s*รายการ/.exec(text);
-		return match ? Number(match[1]) : undefined;
+		await expect(detail).toBeVisible();
+		if (options.status) await expect(detail).toContainText(POOL_COPY.status[options.status]);
+		return detail;
 	}
 
 	/** A button of the detail sheet by exact accessible name. */
@@ -392,14 +359,10 @@ export class BulkReturnPoolBoard {
 
 	/** Add from the open sheet; it follows the live row, so the new rows show without a reopen. */
 	async addFromDetail(poolName: string, options: AddEntriesOptions): Promise<void> {
-		const before = await this.cardEntryCount(poolName);
 		const dialog = await this.startAddFromDetail(poolName);
 		await this.fillAddDialog(dialog, options);
 		await this.saveAddDialog(dialog);
-		const intoThisPool = (options.pool ?? poolName) === poolName;
-		await this.expectDetail(poolName, {
-			entryCount: before !== undefined && intoThisPool ? before + options.lines.length : undefined
-		});
+		await this.expectDetail(poolName);
 	}
 
 	async addFromLoanCard(itemName: string, options: AddEntriesOptions): Promise<void> {
@@ -416,7 +379,6 @@ export class BulkReturnPoolBoard {
 
 	/** Move the `index`-th entry of `itemName` from the open detail sheet to `toPool`. */
 	async moveEntry(poolName: string, itemName: string, toPool: string, index = 0): Promise<void> {
-		const before = await this.cardEntryCount(poolName);
 		await this.entryRow(poolName, itemName, index)
 			.getByRole('button', { name: POOL_COPY.move })
 			.click();
@@ -426,9 +388,7 @@ export class BulkReturnPoolBoard {
 		await dialog.getByRole('button', { name: POOL_COPY.moveConfirm, exact: true }).click();
 		await expect(this.toast(/ย้ายรายการไปกอง/)).toBeVisible();
 		await expect(dialog).toBeHidden();
-		await this.expectDetail(poolName, {
-			entryCount: before !== undefined ? before - 1 : undefined
-		});
+		await this.expectDetail(poolName);
 	}
 
 	voidDialog(): Locator {
@@ -437,7 +397,6 @@ export class BulkReturnPoolBoard {
 
 	/** Void the `index`-th entry of `itemName` (append-only void doc; reopens its loans). */
 	async voidEntry(poolName: string, itemName: string, index = 0): Promise<void> {
-		const before = await this.cardEntryCount(poolName);
 		await this.entryRow(poolName, itemName, index)
 			.getByRole('button', { name: POOL_COPY.voidEntry })
 			.click();
@@ -446,9 +405,7 @@ export class BulkReturnPoolBoard {
 		await dialog.getByRole('button', { name: POOL_COPY.voidConfirm }).click();
 		await expect(this.toast('ยกเลิกรายการแล้ว')).toBeVisible();
 		await expect(dialog).toBeHidden();
-		await this.expectDetail(poolName, {
-			entryCount: before !== undefined ? before - 1 : undefined
-		});
+		await this.expectDetail(poolName);
 	}
 
 	// ── Cancel / submit / receive ────────────────────────────────────────────────────────────

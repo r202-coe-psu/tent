@@ -631,9 +631,11 @@ test.describe('Bulk return pool v3 — lifecycle (BRP-F)', { tag: DESK_TAGS }, (
 		const created = poolName(scenario, 'F10new');
 		const nameA = poolName(scenario, 'F10-A');
 		const nameB = poolName(scenario, 'F10-B');
+		const renamed = poolName(scenario, 'F10-A2');
 		const poolA = await seedOpenPool(scenario, { name: nameA });
 		await seedOpenPool(scenario, { name: nameB });
 		const item = await seedReturnableItem(scenario, 'f10');
+		const other = await seedReturnableItem(scenario, 'f10b');
 		await seedEntry(scenario, poolA, { item, qty: '1', returner: 'unspecified' });
 		const board = new BulkReturnPoolBoard(page);
 
@@ -658,6 +660,29 @@ test.describe('Bulk return pool v3 — lifecycle (BRP-F)', { tag: DESK_TAGS }, (
 		await move.getByRole('button', { name: POOL_COPY.moveConfirm, exact: true }).click();
 		await expect(move).toBeHidden();
 		await expect(detail).toContainText(POOL_COPY.noEntries);
+
+		// Add, void, rename and submit from the same open sheet: each result shows in place.
+		await board.addFromDetail(nameA, {
+			returner: 'unspecified',
+			lines: [
+				{ item, qty: '1' },
+				{ item: other, qty: '1' }
+			]
+		});
+		await expect(board.entryRow(nameA, item.name)).toBeVisible();
+		await expect(board.entryRow(nameA, other.name)).toBeVisible();
+
+		await board.voidEntry(nameA, other.name);
+		await expect(board.entryRow(nameA, other.name)).toHaveCount(0);
+		await expect(board.entryRow(nameA, item.name)).toBeVisible();
+
+		await board.editHeader(nameA, { name: renamed });
+		await expect(board.detail(nameA)).toHaveCount(0);
+		await expect(board.entryRow(renamed, item.name)).toBeVisible();
+
+		await board.submitPool(renamed);
+		await expect(board.action(renamed, POOL_COPY.receive)).toBeVisible();
+		await expect(board.action(renamed, POOL_COPY.submit)).toHaveCount(0);
 	});
 
 	// Loan drift between allocation and apply (decided, was open point b of PR #768): the entry is
