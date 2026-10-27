@@ -24,6 +24,8 @@ const LOT_NOTE_SYSTEM_VALUES: ReadonlySet<string> = new Set([
 export interface StoragePointRef {
 	id: string;
 	name: string;
+	/** Thai labels of what the point can hold, in enum order — shown in the picker. */
+	typeLabels?: readonly string[];
 }
 
 type LotLike = StockLot | null | undefined;

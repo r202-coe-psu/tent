@@ -34,7 +34,7 @@ export const PUBLIC_TERM_I18N = {
 			{
 				id: 'rights',
 				title: 'สิทธิของเจ้าของข้อมูลส่วนบุคคล',
-				body: 'ผู้ใช้บริการมีสิทธิตามพระราชบัญญัติคุ้มครองข้อมูลส่วนบุคคล พ.ศ. 2562 ได้แก่ สิทธิขอดู ขอแก้ไข ขอลบ ขอให้ระงับการใช้ คัดค้านการใช้ และถอนความยินยอมได้ทุกเมื่อ โดยไม่มีค่าใช้จ่ายและไม่ต้องระบุเหตุผล ใช้สิทธิได้ที่จุดลงทะเบียนของศูนย์พักพิง หรือทางอีเมล Thanathip.l@psu.ac.th การถอนความยินยอมไม่กระทบการใช้ข้อมูลที่ทำไปแล้วโดยชอบด้วยกฎหมาย และไม่มีผลต่อสิทธิในการเข้าพักในศูนย์และการได้รับความช่วยเหลือขั้นพื้นฐาน ได้แก่ ที่พัก อาหาร และน้ำดื่ม'
+				body: 'ผู้ใช้บริการมีสิทธิตามพระราชบัญญัติคุ้มครองข้อมูลส่วนบุคคล พ.ศ. 2562 ได้แก่ สิทธิขอดู ขอแก้ไข ขอลบ ขอให้ระงับการใช้ คัดค้านการใช้ และถอนความยินยอมได้ทุกเมื่อ โดยไม่มีค่าใช้จ่ายและไม่ต้องระบุเหตุผล ใช้สิทธิได้ที่จุดลงทะเบียนของศูนย์พักพิง หรือทางอีเมล Thanathip.l@psu.ac.th การถอนความยินยอมไม่กระทบการใช้ข้อมูลที่ทำไปแล้วโดยชอบด้วยกฎหมาย'
 			},
 			{
 				id: 'disclaimer',
@@ -86,7 +86,7 @@ export const PUBLIC_TERM_I18N = {
 			{
 				id: 'rights',
 				title: 'Rights of Data Subjects',
-				body: 'You have the rights granted under the Personal Data Protection Act B.E. 2562 (2019): to see, correct, or delete your data, to ask the University to restrict or stop using it, and to withdraw consent, at any time, free of charge and without giving a reason. You can use these rights at the shelter registration desk or by email at Thanathip.l@psu.ac.th. Withdrawing consent does not affect use of your data that was lawfully carried out before, and does not affect your right to stay at the shelter or to receive basic assistance such as shelter, food, and drinking water.'
+				body: 'You have the rights granted under the Personal Data Protection Act B.E. 2562 (2019): to see, correct, or delete your data, to ask the University to restrict or stop using it, and to withdraw consent, at any time, free of charge and without giving a reason. You can use these rights at the shelter registration desk or by email at Thanathip.l@psu.ac.th. Withdrawing consent does not affect use of your data that was lawfully carried out before.'
 			},
 			{
 				id: 'disclaimer',

@@ -114,7 +114,7 @@
 									</span>
 								{/if}
 
-								<!-- Shelter Type (ประเภทสถานที่) -->
+								<!-- Building Type (ประเภทอาคาร) -->
 								<div
 									class="text-xs font-medium {shelter.shelter_type
 										? 'text-slate-800'

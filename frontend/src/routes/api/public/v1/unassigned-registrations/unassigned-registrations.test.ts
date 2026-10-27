@@ -233,6 +233,17 @@ describe('POST /api/public/v1/unassigned-registrations', () => {
 		expect(upstream.members[0].search_excluded).toBe(true);
 	});
 
+	it.each([
+		['a basic-mode decision', { mode: 'basic' }],
+		['a guardian-for decision', { guardian_for: ['m0'] }]
+	])('422s %s without forwarding it', async (_name, decision) => {
+		const fetchMock = vi.fn();
+		vi.stubGlobal('fetch', fetchMock);
+		const res = await POST(event({ ...VALID_BODY, ...webConsentBody(1, decision) }));
+		expect(res.status).toBe(422);
+		expect(fetchMock).not.toHaveBeenCalled();
+	});
+
 	it('rejects invalid input', async () => {
 		const res = await POST(event({ ...VALID_BODY, members: [] }));
 		expect(res.status).toBe(422);

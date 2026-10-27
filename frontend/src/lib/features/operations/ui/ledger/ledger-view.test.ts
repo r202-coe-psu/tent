@@ -86,6 +86,24 @@ describe('toLedgerRow', () => {
 		const row = toLedgerRow(entry({ reason: 'adjust', qty: '1', occurred_at: 'bad' }), lookup);
 		expect(row.dayKey).toBe('');
 	});
+
+	it('links a bulk return pool ref to the pool detail', () => {
+		const row = toLedgerRow(
+			entry({ reason: 'receive', qty: '5', ref_id: 'bulk_return_pool:01ABC' }),
+			lookup
+		);
+		expect(row.detail).toBe('bulk_return_pool:01ABC');
+		expect(row.refHref).toBe('/back-office/distribution?view=bulk_pools&pool=01ABC');
+	});
+
+	it('adds no link for other refs, a bare prefix, or a missing ref', () => {
+		expect(toLedgerRow(receive, lookup).refHref).toBeUndefined();
+		expect(
+			toLedgerRow(entry({ reason: 'receive', qty: '5', ref_id: 'bulk_return_pool:' }), lookup)
+				.refHref
+		).toBeUndefined();
+		expect(toLedgerRow(entry({ reason: 'receive', qty: '5' }), lookup).refHref).toBeUndefined();
+	});
 });
 
 describe('buildLedgerRows', () => {
