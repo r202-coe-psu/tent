@@ -524,7 +524,7 @@ test.describe('Tab 2 — ready-meal handover (plan §4.4)', { tag: DESK_TAGS }, 
 			}
 		);
 		await desk.chooseRecipientBySearch(recipient);
-		const banner = desk.alert('ตรวจเมนูและประวัติการรับอาหารไม่สำเร็จ');
+		const banner = desk.alert('ตรวจเมนู ประวัติการรับอาหาร และการแพ้ไม่สำเร็จ');
 		await expect(banner).toBeVisible({ timeout: 20_000 });
 		await expect(desk.foodSubmit()).toBeDisabled();
 
