@@ -220,17 +220,57 @@ export async function warmShelterIndexes(code: string): Promise<void> {
 	}
 }
 
+/** Registry master document (`type: 'shelter'`) of `code`, or `undefined` when it is gone. */
+async function findShelterMaster(code: string): Promise<CouchDocument | undefined> {
+	const byCode = await couchReq(
+		'GET',
+		`/registry/_design/app/_view/by_code?key=${encodeURIComponent(JSON.stringify(code))}&include_docs=true`
+	);
+	return (byCode.data as { rows?: { doc?: CouchDocument }[] } | null)?.rows?.[0]?.doc;
+}
+
+/** A shelter storage point (CR-139): `common_areas.sub_storage[]` on the registry master. */
+export interface StoragePointSeed {
+	id: string;
+	name: string;
+	type?: 'general' | 'food_dry' | 'drinking_water' | 'medical_supplies';
+}
+
+/**
+ * Write `common_areas.sub_storage` onto the run's own `E2E Distribution …` registry master
+ * (admin API). Refuses any other shelter, so a typo can never touch SH001–SH004.
+ */
+export async function setShelterStoragePoints(
+	code: string,
+	points: readonly StoragePointSeed[]
+): Promise<void> {
+	const master = await findShelterMaster(code);
+	if (!master) throw new Error(`registry has no shelter ${code}`);
+	if (!String(master.name ?? '').startsWith(DISTRIBUTION_SHELTER_PREFIX)) {
+		throw new Error(`Refusing to edit non-E2E shelter ${code} ("${String(master.name)}")`);
+	}
+	const commonAreas = (master.common_areas ?? {}) as Record<string, unknown>;
+	await putDocument('registry', {
+		...master,
+		common_areas: {
+			...commonAreas,
+			sub_storage: points.map((point) => ({
+				id: point.id,
+				name: point.name,
+				type: point.type ?? 'general'
+			}))
+		},
+		updated_at: new Date().toISOString()
+	});
+}
+
 /**
  * Remove the run's shelter: close it, delete its registry master and database, and
  * take `shelter:{code}` back out of the central DBs' `_security`. Refuses any
  * shelter that is not an `E2E Distribution …` one.
  */
 export async function teardownDistributionShelter(code: string): Promise<void> {
-	const byCode = await couchReq(
-		'GET',
-		`/registry/_design/app/_view/by_code?key=${encodeURIComponent(JSON.stringify(code))}&include_docs=true`
-	);
-	const master = (byCode.data as { rows?: { doc?: CouchDocument }[] } | null)?.rows?.[0]?.doc;
+	const master = await findShelterMaster(code);
 	if (master) {
 		if (!String(master.name ?? '').startsWith(DISTRIBUTION_SHELTER_PREFIX)) {
 			throw new Error(`Refusing to tear down non-E2E shelter ${code} ("${String(master.name)}")`);
@@ -340,6 +380,8 @@ export interface SeedItemOptions {
 	ageGroup?: 'INFANT' | 'CHILD' | 'ELDERLY';
 	/** ISO expiry on the physical lot — the desk's ready-meal safety clock reads it. */
 	lotExpiry?: string;
+	/** `allergy` master codes or free text the menu lists (#607). */
+	allergens?: string[];
 }
 
 /** Seed a canonical item master and a real inbound physical lot. */
@@ -369,6 +411,7 @@ export async function seedItemWithStock(
 		deactivated: false,
 		dietary: options.dietary ?? [],
 		...(options.ageGroup ? { age_group: options.ageGroup } : {}),
+		...(options.allergens ? { allergens: options.allergens } : {}),
 		returnable: options.returnable
 	});
 	scenario.catalogIds.add(itemId);
@@ -406,6 +449,8 @@ export interface SeedRecipientOptions {
 	/** Thai Buddhist birth year — sets the recipient's CR-130 age bucket for menu matching. */
 	birthYear?: number;
 	phone?: string;
+	/** Seeds a `medical` doc with these allergies (`allergy` codes or free text, #607). */
+	allergies?: string[];
 }
 
 /** Seed a valid, active evacuee for the recipient picker. */
@@ -440,6 +485,20 @@ export async function seedRecipient(
 		privacy: { search_excluded: false },
 		registered_via: 'staff'
 	});
+	if (options.allergies) {
+		await putDocument(shelterDb(), {
+			_id: `medical:${ulid()}`,
+			type: 'medical',
+			schema_v: 1,
+			shelter_code: shelterCode(),
+			created_at: now,
+			updated_at: now,
+			created_by: scenario.user.name,
+			evacuee_id: recipientId,
+			allergies: options.allergies,
+			track: 'normal'
+		});
+	}
 	return { recipientId, firstName, lastName };
 }
 
@@ -637,50 +696,6 @@ export async function seedDistributionLog(
 		distributed_by: scenario.user.name
 	});
 	return logId;
-}
-
-/** A counted bulk drop-off (back-office only in the app) waiting to be matched to loans. */
-export async function seedBulkReturnPool(
-	scenario: DistributionScenario,
-	item: SeededItem,
-	qty: string
-): Promise<string> {
-	const poolId = `bulk_return_pool:${ulid()}`;
-	const receiptId = `stock_ledger:${ulid()}`;
-	const now = new Date().toISOString();
-	await putDocument(shelterDb(), {
-		_id: receiptId,
-		type: 'stock_ledger',
-		schema_v: 6,
-		shelter_code: shelterCode(),
-		created_at: now,
-		updated_at: now,
-		created_by: scenario.user.name,
-		item_id: item.itemId,
-		qty,
-		unit: 'piece',
-		reason: 'receive',
-		ref_id: poolId,
-		lot_ref: receiptId,
-		occurred_at: now
-	});
-	await putDocument(shelterDb(), {
-		_id: poolId,
-		type: 'bulk_return_pool',
-		schema_v: 2,
-		shelter_code: shelterCode(),
-		created_at: now,
-		updated_at: now,
-		created_by: scenario.user.name,
-		item_id: item.itemId,
-		stock_ledger_id: receiptId,
-		total_received_qty: qty,
-		claimed_qty: '0',
-		unclaimed_quota: qty,
-		claim_ids: [],
-		status: 'ACTIVE'
-	});
-	return poolId;
 }
 
 /** CouchDB request made as an application user (cookie session) — the VDU applies. */
