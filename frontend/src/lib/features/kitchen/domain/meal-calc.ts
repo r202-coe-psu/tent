@@ -142,6 +142,19 @@ export function calculateMealIngredientsFromRecipe(
 	};
 }
 
+/**
+ * Scales one recipe ingredient quantity (`qty_str`) to a portion count, returned as a qty string
+ * (4 dp, ROUND_HALF_UP). A recipe base under 1 portion is treated as 1.
+ */
+export function scaleRecipeIngredientQty(
+	quantity: string,
+	standardPortions: string,
+	portions: number
+): string {
+	const base = Decimal.max(new Decimal(standardPortions || 1), 1);
+	return persistQty(new Decimal(quantity || 0).mul(portions).div(base));
+}
+
 export interface CustomIngredientInput {
 	item_id: string; // Stock supply item ID
 	unit: string;

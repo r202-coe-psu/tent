@@ -11,6 +11,7 @@ export { default as YieldReceiptLines } from './ui/yield-receipt-lines.svelte';
 export {
 	calculateMealIngredients,
 	calculateMealIngredientsFromRecipe,
+	scaleRecipeIngredientQty,
 	calculateMealIngredientsFromCustom,
 	resolveItemMasterStock,
 	toRequisitionInput,
