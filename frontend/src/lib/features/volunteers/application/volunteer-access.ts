@@ -3,7 +3,8 @@ import { passwordSchema } from '$lib/auth/password-schema';
 import { STAFF_CAPABILITIES, shelterScopeRole } from '$lib/auth/roles';
 import { createUser, listUsers } from '$lib/features/users';
 import { volunteerRepositoryFor } from '../data/volunteer.remote';
-import { isVolunteerMobile, normalizePhone } from '../domain/phone';
+import { normalizeThaiPhone } from '$lib/db/model';
+import { isVolunteerMobile } from '../domain/phone';
 import type { Volunteer } from '../domain/volunteer.schema';
 
 export const volunteerAccessSchema = z.object({
@@ -26,7 +27,7 @@ export function hasInvalidAccessPhone(value: string | null | undefined): boolean
  * the forced first-login password. `null` for a volunteer with no phone (email login only).
  */
 export function accountPhone(value: string | null | undefined): string | null {
-	const normalized = normalizePhone(value ?? '');
+	const normalized = normalizeThaiPhone(value ?? '');
 	return isVolunteerMobile(normalized) ? normalized : null;
 }
 

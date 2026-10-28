@@ -1,8 +1,8 @@
 import { randomBytes } from 'node:crypto';
 import { sha256Hex } from '$lib/db/hash';
 import { ulid } from '$lib/db/ulid';
+import { normalizeThaiPhone } from '$lib/db/model';
 import { nextVolunteerCode } from '../domain/volunteer-code';
-import { normalizePhone } from '../domain/phone';
 import { DEFAULT_CONTROLLED_SKILLS } from '../domain/skills';
 import { resolveSkillLabel, skillOptionsFromMaster } from '../domain/skill-catalog';
 import {
@@ -502,7 +502,7 @@ export async function preflightPublicVolunteerApplication(
 	// A multi-shift request (#716) sends no shift here: each shift is judged at apply time,
 	// where one that fails is reported without stopping the others.
 	if (input.shift_id || input.shift_date) selectedShift(job, input);
-	const hash = await sha256Hex(normalizePhone(input.phone));
+	const hash = await sha256Hex(normalizeThaiPhone(input.phone));
 	const volunteers = await matchingVolunteers(shelterDbName(shelterCode), hash);
 	if (volunteers.length === 0) {
 		return { match: 'no_match', message: 'ไม่พบ Volunteer profile เดิม สามารถสมัครใหม่ได้' };
@@ -580,7 +580,7 @@ export async function applyPublicVolunteerApplication(
 	const skills = [...new Set(input.skills.map((skill) => skill.trim()).filter(Boolean))];
 
 	const controlled = await controlledSkills(shelterCode);
-	const phoneHash = await sha256Hex(normalizePhone(input.phone));
+	const phoneHash = await sha256Hex(normalizeThaiPhone(input.phone));
 	const volunteers = await matchingVolunteers(dbName, phoneHash);
 	if (volunteers.length > 1) throw new PublicApplicationError('AMBIGUOUS_VOLUNTEER', 409);
 	const existing = volunteers[0];
@@ -660,7 +660,7 @@ export async function applyPublicVolunteerApplication(
 	const volunteer = existing
 		? {
 				...existing,
-				phone: normalizePhone(input.phone),
+				phone: normalizeThaiPhone(input.phone),
 				phone_hash: phoneHash,
 				skills: [
 					...new Map(
@@ -727,7 +727,7 @@ export async function applyPublicVolunteerApplication(
 		applicant: {
 			first_name: input.first_name,
 			last_name: input.last_name,
-			phone: normalizePhone(input.phone),
+			phone: normalizeThaiPhone(input.phone),
 			phone_hash: phoneHash,
 			national_id: input.national_id || null,
 			national_id_hash: input.national_id ? await sha256Hex(input.national_id) : null,
@@ -837,7 +837,7 @@ export async function applyPublicVolunteerApplicationToShifts(
 		throw new PublicApplicationError('JOB_NOT_FOUND', 404);
 	}
 	if (job.status !== 'open') throw new PublicApplicationError('JOB_NOT_OPEN', 409);
-	const phoneHash = await sha256Hex(normalizePhone(input.phone));
+	const phoneHash = await sha256Hex(normalizeThaiPhone(input.phone));
 	const newApplicant =
 		(await matchingVolunteers(shelterDbName(shelterCode), phoneHash)).length === 0;
 

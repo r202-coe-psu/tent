@@ -1,5 +1,4 @@
 export {
-	normalizePhone,
 	isVolunteerMobile,
 	volunteerMobileSchema,
 	optionalVolunteerMobileSchema,

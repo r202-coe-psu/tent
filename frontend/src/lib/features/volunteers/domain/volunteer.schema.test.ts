@@ -238,7 +238,7 @@ describe('volunteer phone rule (#951)', () => {
 	it.each(['022222222', '02-222-2222', 'ไม่มี', '-', '081234567'])(
 		'rejects %s with the mobile message',
 		(phone) => {
-			expect(() => make(phone)).toThrow('เบอร์มือถือต้องเป็นตัวเลข 10 หลักขึ้นต้นด้วย 0');
+			expect(() => make(phone)).toThrow('เบอร์โทรต้องเป็นตัวเลข 10 หลัก ขึ้นต้นด้วย 0');
 		}
 	);
 });
