@@ -8,8 +8,9 @@ import type {
 	BulkReturnPoolV3
 } from '../../domain/food-supplies';
 import { compoundCapabilityRole } from '$lib/auth/roles';
+import { LOAN_REFS_UNKNOWN_LABEL } from '../model/bulk-return-pool-v3';
 import { WORK_QUEUE_COPY } from '../model/bulk-return-work-queue';
-import { myPoolPointKey } from '../model/my-pool-point-storage';
+import { MY_POOL_POINT_UNSPECIFIED, myPoolPointKey } from '../model/my-pool-point-storage';
 import BulkReturnPoolBoard from './BulkReturnPoolBoard.svelte';
 
 type EntryRow = BulkReturnPoolOverviewRow['entries'][number];
@@ -36,6 +37,7 @@ const state = vi.hoisted(() => ({
 	evacuees: [] as unknown[],
 	skippedDocs: [] as unknown[],
 	storagePoints: [] as { id: string; name: string }[],
+	storagePointsLoaded: true,
 	// Props the board passed to the (mocked) detail sheet; read lazily, they are getter-backed.
 	detailProps: null as { row?: BulkReturnPoolOverviewRow | null } | null
 }));
@@ -65,7 +67,14 @@ vi.mock('$lib/features/people', () => ({
 }));
 vi.mock('$lib/features/volunteers', () => ({ useVolunteers: () => ({ data: [] }) }));
 vi.mock('$lib/features/operations', () => ({
-	useStoragePoints: () => ({ points: state.storagePoints })
+	useStoragePoints: () => ({
+		get points() {
+			return state.storagePoints;
+		},
+		get isLoaded() {
+			return state.storagePointsLoaded;
+		}
+	})
 }));
 vi.mock('$lib/db/shelter', () => ({ getShelterCode: () => 'SH001' }));
 vi.mock('$app/navigation', () => ({ goto: vi.fn() }));
@@ -127,7 +136,12 @@ const resolved = (entry: BulkReturnEntry): EntryRow => ({
 
 function makeRow(
 	pool: BulkReturnPoolV3,
-	opts: { items?: ItemRow[]; entries?: EntryRow[]; late?: EntryRow[] } = {}
+	opts: {
+		items?: ItemRow[];
+		entries?: EntryRow[];
+		late?: EntryRow[];
+		loanRefsUnavailable?: boolean;
+	} = {}
 ): BulkReturnPoolOverviewRow {
 	const entries = opts.entries ?? [];
 	return {
@@ -139,6 +153,7 @@ function makeRow(
 		snapshot_conflicts: [],
 		unresolved_refs: [],
 		closed_loan_refs: [],
+		loan_refs_unavailable: opts.loanRefsUnavailable ?? false,
 		is_empty: entries.length === 0
 	};
 }
@@ -276,6 +291,7 @@ beforeEach(() => {
 	state.evacuees = [];
 	state.skippedDocs = [];
 	state.storagePoints = [];
+	state.storagePointsLoaded = true;
 	state.detailProps = null;
 	authorContextCalls.mockClear();
 	localStorage.clear();
@@ -607,5 +623,72 @@ describe('BulkReturnPoolBoard role wiring of the work queues', () => {
 
 		expect(onSelectedPoolChange).toHaveBeenCalledWith('bulk_return_pool:a');
 		expect(state.detailProps?.row?.pool._id).toBe('bulk_return_pool:a');
+	});
+
+	describe('remembered my-point that no longer exists', () => {
+		const myPointText = () => queryByTestId('bulk-return-queue-my-point')?.textContent ?? '';
+
+		it('resets a deleted point to the placeholder and clears the stored value', async () => {
+			localStorage.setItem(myPoolPointKey('SH001'), 'sp:gone');
+			state.storagePoints = [{ id: 'sp:1', name: 'คลังหลัก' }];
+			state.authContext = withCapability('distribution_staff');
+			await render();
+
+			expect(myPointText()).toContain(WORK_QUEUE_COPY.myPointPlaceholder);
+			expect(myPointText()).toContain(WORK_QUEUE_COPY.myPointHint);
+			expect(myPointText()).not.toContain('sp:gone');
+			expect(localStorage.getItem(myPoolPointKey('SH001'))).toBeNull();
+		});
+
+		it('keeps the stored value while the storage points are not loaded', async () => {
+			localStorage.setItem(myPoolPointKey('SH001'), 'sp:gone');
+			state.storagePointsLoaded = false;
+			state.authContext = withCapability('distribution_staff');
+			await render();
+
+			expect(localStorage.getItem(myPoolPointKey('SH001'))).toBe('sp:gone');
+		});
+
+		it('keeps the unspecified choice even though it is not a listed point', async () => {
+			localStorage.setItem(myPoolPointKey('SH001'), MY_POOL_POINT_UNSPECIFIED);
+			state.storagePoints = [{ id: 'sp:1', name: 'คลังหลัก' }];
+			state.authContext = withCapability('distribution_staff');
+			await render();
+
+			expect(myPointText()).toContain(WORK_QUEUE_COPY.myPointUnspecified);
+			expect(localStorage.getItem(myPoolPointKey('SH001'))).toBe(MY_POOL_POINT_UNSPECIFIED);
+		});
+	});
+});
+
+describe('BulkReturnPoolBoard loan refs unavailable', () => {
+	it('flags a pool whose loan refs could not be read, with banner, badge and attention filter', async () => {
+		await render({
+			data: [
+				makeRow(makePool('a', { name: 'กองผ้าห่ม', status: 'OPEN' }), {
+					loanRefsUnavailable: true
+				}),
+				makeRow(makePool('b', { name: 'กองปกติ', status: 'OPEN' }))
+			]
+		});
+
+		const flagged = document.body.querySelector('section[aria-labelledby="bulk-queue-flagged"]');
+		expect(flagged?.textContent).toContain('กองผ้าห่ม');
+		expect(flagged?.textContent).toContain(LOAN_REFS_UNKNOWN_LABEL);
+		expect(flagged?.textContent).not.toContain('กองปกติ');
+		expect(queryByTestId('bulk-return-board-loan-read-failed')).not.toBeNull();
+		expect(
+			cardByName('กองผ้าห่ม').querySelector('[data-testid="bulk-return-card-loan-unknown-hint"]')
+		).not.toBeNull();
+
+		await clickSwitch('bulk-pool-needs-attention');
+
+		expect(cardNames()).toEqual(['กองผ้าห่ม']);
+	});
+
+	it('shows no loan-read banner when every row read its loans', async () => {
+		await render();
+
+		expect(queryByTestId('bulk-return-board-loan-read-failed')).toBeNull();
 	});
 });

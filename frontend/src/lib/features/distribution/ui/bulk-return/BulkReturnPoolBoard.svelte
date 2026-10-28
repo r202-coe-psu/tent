@@ -63,7 +63,12 @@
 		type PoolStatusFilter
 	} from '../model/bulk-return-pool-v3';
 	import { workQueuesFor } from '../model/bulk-return-work-queue';
-	import { readMyPoolPoint, writeMyPoolPoint } from '../model/my-pool-point-storage';
+	import {
+		clearMyPoolPoint,
+		readMyPoolPoint,
+		resolveMyPoolPoint,
+		writeMyPoolPoint
+	} from '../model/my-pool-point-storage';
 	import { useStoragePoints } from '$lib/features/operations';
 	import * as Select from '$lib/components/ui/select/index.js';
 	import BulkReturnPoolWorkQueue from './BulkReturnPoolWorkQueue.svelte';
@@ -147,10 +152,19 @@
 	// Per-device "my point" for the distribution staff queue; re-read when the shelter changes.
 	// The hook has no enable switch, so it always loads (the shelter doc is shared and cached).
 	const storagePoints = useStoragePoints(() => activeShelterCode ?? '');
-	let myPoint = $derived<string | null>(readMyPoolPoint(activeShelterCode));
+	let storedMyPoint = $derived<string | null>(readMyPoolPoint(activeShelterCode));
+	// A remembered point that was deleted resolves to null (placeholder) once the list is loaded.
+	const myPoint = $derived(
+		resolveMyPoolPoint(storedMyPoint, storagePoints.points, storagePoints.isLoaded)
+	);
+
+	// External side effect only (no state writes): forget the deleted point in localStorage.
+	$effect(() => {
+		if (storedMyPoint !== null && myPoint === null) clearMyPoolPoint(activeShelterCode);
+	});
 
 	function handleMyPointChange(value: string) {
-		myPoint = value;
+		storedMyPoint = value;
 		writeMyPoolPoint(activeShelterCode, value);
 	}
 

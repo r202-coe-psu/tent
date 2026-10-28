@@ -18,7 +18,13 @@ const SHELTER = 'SH1';
 function row(
 	id: string,
 	status: BulkReturnPoolV3Status,
-	opts: { point?: string; submitted_at?: string; late?: number; entry_count?: number } = {}
+	opts: {
+		point?: string;
+		submitted_at?: string;
+		late?: number;
+		entry_count?: number;
+		loanRefsUnavailable?: boolean;
+	} = {}
 ): BulkReturnPoolOverviewRow {
 	return {
 		pool: {
@@ -40,6 +46,7 @@ function row(
 		is_empty: (opts.entry_count ?? 0) === 0,
 		unresolved_refs: [],
 		closed_loan_refs: [],
+		loan_refs_unavailable: opts.loanRefsUnavailable ?? false,
 		snapshot_conflicts: []
 	};
 }
@@ -171,6 +178,16 @@ describe('BulkReturnPoolWorkQueue', () => {
 			expect(onOpenPool).toHaveBeenCalledWith('f1');
 		});
 
+		it('flags a pool whose loan refs could not be read with the loan-unknown reason', async () => {
+			await render({
+				queues: ['flagged'],
+				rows: [row('lu', 'OPEN', { entry_count: 1, loanRefsUnavailable: true })]
+			});
+			expect(poolNamesIn('bulk-queue-flagged')).toEqual(['pool-lu']);
+			const btn = buttonsIn(document.body).find((b) => b.textContent?.includes('pool-lu'));
+			expect(normalize(btn?.textContent)).toContain(WORK_QUEUE_COPY.reasonLabels.loan_unknown);
+		});
+
 		it('shows empty-state copy when nothing qualifies', async () => {
 			await render({ queues: ['waiting_receive', 'flagged'], rows: [row('x', 'OPEN')] });
 			expect(text()).toContain(WORK_QUEUE_COPY.waitingEmpty);
@@ -223,8 +240,9 @@ describe('BulkReturnPoolWorkQueue', () => {
 			expect(buttonsIn(section!).some((b) => b.textContent?.includes('pool-nopoint'))).toBe(true);
 		});
 
-		// The label shown for a deleted saved point is intentionally not asserted: the behavior is
-		// undecided (known gap from the PR #768 review; open question for the project owner).
+		// Owner decision: a deleted saved point resets to the placeholder. The board resolves it to
+		// null before passing it down (covered by the board DOM test and the resolveMyPoolPoint unit
+		// tests), so this component-level case only checks that a stale id still renders safely.
 		it.each([
 			['points list without the saved point', POINTS],
 			['empty points list', []]
