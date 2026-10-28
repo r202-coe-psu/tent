@@ -127,6 +127,7 @@
 		submitAlign = 'right',
 		stickyTopOffset,
 		includeVehiclesAssets,
+		showPetsSummary = true,
 		enableUnassignedPhoto = false,
 		allowHouseholdJoin = false,
 		shelterCode = '',
@@ -156,6 +157,7 @@
 		submitAlign?: 'right' | 'center';
 		stickyTopOffset?: string;
 		includeVehiclesAssets?: boolean;
+		showPetsSummary?: boolean;
 		enableUnassignedPhoto?: boolean;
 		/** Report-in flows with no household must explicitly join or create. */
 		allowHouseholdJoin?: boolean;
@@ -1614,6 +1616,7 @@
 				existingMemberCount={summaryExistingMemberCount}
 				existingPets={selectedMatchChip?.pets ?? []}
 				newPets={petItems}
+				showPets={showPetsSummary}
 				onNavigate={(id) => scrollToSection(id as FormSectionId)}
 			/>
 		</aside>

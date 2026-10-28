@@ -387,6 +387,7 @@
 				mode="report-in"
 				channel="onsite"
 				includeVehiclesAssets={true}
+				showPetsSummary={false}
 				shelterCode={data.shelterCode ?? getShelterCode()}
 				{initialHousehold}
 				{initialMembers}

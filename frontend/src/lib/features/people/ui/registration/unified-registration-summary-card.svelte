@@ -41,6 +41,7 @@
 		existingMemberCount = null,
 		existingPets = [],
 		newPets = [],
+		showPets = true,
 		onNavigate
 	}: {
 		shelterName?: string;
@@ -59,6 +60,7 @@
 		existingMemberCount?: number | null;
 		existingPets?: Array<{ species: string; name?: string; count?: number }>;
 		newPets?: Array<{ species: string; name?: string; customSpecies?: string }>;
+		showPets?: boolean;
 		onNavigate: (sectionId: string) => void;
 	} = $props();
 
@@ -247,17 +249,19 @@
 
 		<!-- 4. Pets & Assets Info -->
 		<div class="space-y-1.5 border-b border-border/50 pb-3.5">
-			<div class="flex items-center justify-between gap-2">
-				<span class="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
-					<PawPrint class="size-3.5 text-primary" />
-					<span>{t.summaryPets}</span>
-				</span>
-				<span class="text-xs font-medium text-foreground">
-					{petCount > 0 ? `${petCount} ${t.summaryPetUnit}`.trim() : t.summaryNone}
-				</span>
-			</div>
+			{#if showPets}
+				<div class="flex items-center justify-between gap-2">
+					<span class="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
+						<PawPrint class="size-3.5 text-primary" />
+						<span>{t.summaryPets}</span>
+					</span>
+					<span class="text-xs font-medium text-foreground">
+						{petCount > 0 ? `${petCount} ${t.summaryPetUnit}`.trim() : t.summaryNone}
+					</span>
+				</div>
+			{/if}
 
-			{#if existingPets.length > 0 || newPets.length > 0}
+			{#if showPets && (existingPets.length > 0 || newPets.length > 0)}
 				<div class="flex flex-wrap gap-1.5">
 					{#each existingPets as pet, i (`existing-${pet.species}-${pet.name ?? ''}-${i}`)}
 						<span
