@@ -31,6 +31,7 @@
 		type UnifiedMemberWithMeta
 	} from '$lib/features/people';
 	import {
+		claimedPetSummaries,
 		formatOpenPetLabel,
 		petsLeftBehind,
 		totalPetCount,
@@ -58,6 +59,7 @@
 	);
 	const leftBehindPets = $derived(petsLeftBehind(review?.open_pets ?? [], selectedPetIds));
 	const leftBehindCount = $derived(totalPetCount(leftBehindPets));
+	const claimedPets = $derived(claimedPetSummaries(openPets));
 
 	/** No member ticked at all — pets-only claim (FR-PUF-16), no Report-in step. */
 	const isPetsOnly = $derived(data.memberIds.length === 0);
@@ -387,7 +389,7 @@
 				mode="report-in"
 				channel="onsite"
 				includeVehiclesAssets={true}
-				showPetsSummary={false}
+				{claimedPets}
 				shelterCode={data.shelterCode ?? getShelterCode()}
 				{initialHousehold}
 				{initialMembers}

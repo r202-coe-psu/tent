@@ -127,7 +127,7 @@
 		submitAlign = 'right',
 		stickyTopOffset,
 		includeVehiclesAssets,
-		showPetsSummary = true,
+		claimedPets = [],
 		enableUnassignedPhoto = false,
 		allowHouseholdJoin = false,
 		shelterCode = '',
@@ -157,7 +157,7 @@
 		submitAlign?: 'right' | 'center';
 		stickyTopOffset?: string;
 		includeVehiclesAssets?: boolean;
-		showPetsSummary?: boolean;
+		claimedPets?: Array<{ species: string; name?: string; count?: number; details?: string }>;
 		enableUnassignedPhoto?: boolean;
 		/** Report-in flows with no household must explicitly join or create. */
 		allowHouseholdJoin?: boolean;
@@ -363,6 +363,7 @@
 
 	/** Currently selected match chip from public residence match (for address prefill & pets). */
 	let selectedMatchChip = $state<ResidenceMatchChip | null>(null);
+	const readOnlyPets = $derived(selectedMatchChip ? (selectedMatchChip.pets ?? []) : claimedPets);
 	/**
 	 * Durable existing-member count for join UI (header badges / summary).
 	 * Captured at confirm time so it survives chip list refreshes / optional field loss.
@@ -1614,9 +1615,8 @@
 				submittingLabel={t.submitting}
 				existingHeadName={summaryExistingHeadName}
 				existingMemberCount={summaryExistingMemberCount}
-				existingPets={selectedMatchChip?.pets ?? []}
+				existingPets={readOnlyPets}
 				newPets={petItems}
-				showPets={showPetsSummary}
 				onNavigate={(id) => scrollToSection(id as FormSectionId)}
 			/>
 		</aside>
@@ -1999,7 +1999,7 @@
 				{channel}
 				{enableUnassignedPhoto}
 				{shelterCode}
-				existingPets={selectedMatchChip?.pets ?? []}
+				existingPets={readOnlyPets}
 				petErrors={visibleErrors.pets}
 				{validationSeq}
 				onsync={onPetsSynced}
@@ -2102,7 +2102,7 @@
 							showSubmit={false}
 							existingHeadName={summaryExistingHeadName}
 							existingMemberCount={summaryExistingMemberCount}
-							existingPets={selectedMatchChip?.pets ?? []}
+							existingPets={readOnlyPets}
 							newPets={petItems}
 							onNavigate={(id) => {
 								mobileSummaryOpen = false;

@@ -4,6 +4,7 @@ import {
 	CLAIM_FLOW_STATUS_GUIDANCE,
 	UNASSIGNED_QUEUE_BADGE_LABEL,
 	UNASSIGNED_QUEUE_BADGE_SHORT,
+	claimedPetSummaries,
 	formatClaimCreatedAt,
 	formatOpenMemberCardType,
 	formatOpenMemberDemographicsLine,
@@ -185,5 +186,54 @@ describe('totalPetCount', () => {
 
 	it('is zero for an empty list', () => {
 		expect(totalPetCount([])).toBe(0);
+	});
+});
+
+describe('claimedPetSummaries', () => {
+	const pet = (over: Partial<OpenPetHit> = {}): OpenPetHit => ({
+		pet_id: 'pet:a',
+		status: 'open',
+		species: 'dog',
+		count: 1,
+		...over
+	});
+
+	it('keeps the species and the count so the form can show what claim will write', () => {
+		expect(claimedPetSummaries([pet({ species: 'cat', count: 3 })])).toEqual([
+			{ species: 'cat', count: 3 }
+		]);
+	});
+
+	it('carries the registrant notes through as details', () => {
+		expect(claimedPetSummaries([pet({ notes: 'ชื่อ หมาดำ' })])).toEqual([
+			{ species: 'dog', count: 1, details: 'ชื่อ หมาดำ' }
+		]);
+	});
+
+	it('mentions the cage next to the notes', () => {
+		expect(claimedPetSummaries([pet({ notes: 'ชื่อ หมาดำ', has_cage: true })])[0].details).toBe(
+			'ชื่อ หมาดำ · มีกรง'
+		);
+	});
+
+	it('mentions the cage on its own when there are no notes', () => {
+		expect(claimedPetSummaries([pet({ has_cage: true })])[0].details).toBe('มีกรง');
+	});
+
+	it('leaves details off when there is nothing to say', () => {
+		expect(claimedPetSummaries([pet({ notes: '   ' })])[0]).not.toHaveProperty('details');
+	});
+
+	it('maps every open pet, in order', () => {
+		const rows = claimedPetSummaries([
+			pet({ pet_id: 'pet:a' }),
+			pet({ pet_id: 'pet:b', species: 'other' })
+		]);
+
+		expect(rows.map((row) => row.species)).toEqual(['dog', 'other']);
+	});
+
+	it('is empty when no pet was ticked', () => {
+		expect(claimedPetSummaries([])).toEqual([]);
 	});
 });

@@ -120,20 +120,11 @@ describe('UnifiedRegistrationSummaryCard', () => {
 			expect(body).toMatch(/2\s*(<!---->)?\s*ตัว/);
 		});
 
-		it('drops the count row and the chips where pets are claimed outside this form', () => {
-			const body = renderCard({
-				existingPets: [{ species: 'dog', count: 2 }],
-				showPets: false
-			});
+		it('names the pets a claim is bringing in so the row never reads empty', () => {
+			const body = renderCard({ existingPets: [{ species: 'dog', count: 1 }] });
 
-			expect(body).not.toMatch(/สัตว์เลี้ยง[\s\S]{0,160}ตัว/);
-			expect(body).not.toContain('สุนัข');
-		});
-
-		it('still offers the shortcut to the pets step when the row is hidden', () => {
-			const body = renderCard({ showPets: false });
-
-			expect(body).toContain('สัตว์เลี้ยง');
+			expect(body).toContain('สุนัข');
+			expect(body).not.toMatch(/สัตว์เลี้ยง[\s\S]{0,200}ไม่มี/);
 		});
 
 		it('adds newly entered pets to the same total', () => {

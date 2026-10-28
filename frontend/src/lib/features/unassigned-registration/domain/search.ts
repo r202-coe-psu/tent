@@ -81,6 +81,13 @@ export const openPetHitSchema = z.object({
 export type PersonIdHit = z.infer<typeof personIdHitSchema>;
 export type OpenMemberHit = z.infer<typeof openMemberHitSchema>;
 export type OpenPetHit = z.infer<typeof openPetHitSchema>;
+
+export type ClaimedPetSummary = {
+	species: string;
+	count: number;
+	details?: string;
+};
+
 export type OpenMemberStatus = OpenMemberHit['status'];
 
 const CARD_TYPE_LABELS: Record<PersonIdHit['cardType'], string> = {
@@ -166,6 +173,17 @@ export function petsLeftBehind(
 
 export function totalPetCount(pets: readonly OpenPetHit[]): number {
 	return pets.reduce((sum, pet) => sum + pet.count, 0);
+}
+
+export function claimedPetSummaries(pets: readonly OpenPetHit[]): ClaimedPetSummary[] {
+	return pets.map((pet) => {
+		const details = [pet.notes?.trim(), pet.has_cage ? 'มีกรง' : '']
+			.filter((part): part is string => Boolean(part))
+			.join(' · ');
+		return details
+			? { species: pet.species, count: pet.count, details }
+			: { species: pet.species, count: pet.count };
+	});
 }
 
 /** Thai-locale date+time for claim registration header. */
