@@ -123,6 +123,9 @@ export function formatDistributionError(
 			if (err.reason === 'closed') {
 				return 'กองนี้ถูกยกเลิกแล้ว จึงไม่มียอดยืมให้เปิดกลับ';
 			}
+			if (err.reason === 'not_found') {
+				return 'ไม่พบกองนี้ กรุณารีเฟรชเพื่อดูสถานะล่าสุด';
+			}
 		}
 		if (err.reason === 'closed') {
 			return (options?.poolContext ?? 'manage') === 'intake'

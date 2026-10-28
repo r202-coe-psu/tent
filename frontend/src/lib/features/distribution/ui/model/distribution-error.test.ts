@@ -133,6 +133,14 @@ describe('formatDistributionError', () => {
 			);
 		});
 
+		it('maps a missing pool to not-found copy only in the reopen context', () => {
+			const missing = new BulkReturnPoolStateError('Bulk return pool x was not found', 'not_found');
+			expect(formatDistributionError(missing, undefined, { poolContext: 'reopen' })).toBe(
+				'ไม่พบกองนี้ กรุณารีเฟรชเพื่อดูสถานะล่าสุด'
+			);
+			expect(formatDistributionError(missing)).toContain('กองนี้ไม่ได้อยู่ในสถานะเปิดรับ');
+		});
+
 		it('leaves the other contexts unchanged for the same state errors', () => {
 			const open = new BulkReturnPoolStateError('Pool x is still OPEN', 'not_submitted');
 			const cancelled = new BulkReturnPoolStateError('Pool x is CANCELLED', 'closed');

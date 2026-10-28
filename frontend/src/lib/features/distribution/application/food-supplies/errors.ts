@@ -93,7 +93,9 @@ export class BulkReturnPoolStateError extends WorkflowError {
  * Why a loan reopen (CR-193 §35) was refused: `reason_required` = blank reason, `entry_not_found` =
  * no such entry, `not_in_snapshot` = the entry is not in the submitted pool snapshot (late entry),
  * `no_applied_loan` = nothing was cut or it was already reverted, `loan_not_revertable` = an applied
- * loan moved on (lost / waived / ...) and can no longer be reverted.
+ * loan moved on (lost / waived / ...) and can no longer be reverted, or a `returned` /
+ * `partially_returned` loan whose `qty_returned` is below the ref qty (see
+ * `isBulkReturnRefRevertable`).
  */
 export type BulkReturnLoanReopenRejection =
 	| 'reason_required'
