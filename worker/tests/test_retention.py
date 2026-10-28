@@ -4,6 +4,7 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from unittest.mock import AsyncMock, patch
 
+import pytest
 from tent_model import (
     DonationBuffer,
     DonationNeedCounter,
@@ -175,6 +176,53 @@ async def test_retention_cycle_runs_the_reservation_ttl_sweep(db: None) -> None:
     # Coordinator role grants (#955) lapse on the same cycle.
     grants.assert_awaited_once()
     assert grants.await_args.args[0] is couch
+
+
+@pytest.mark.parametrize(
+    "failing", ["reconcile_closed_shelters", "purge_expired_buffers"]
+)
+async def test_role_grant_sweep_runs_when_a_mongo_step_fails(failing: str) -> None:
+    """Coordinator access must end on time even while Mongo is down (#955 FR-12)."""
+    couch = AsyncMock()
+    steps = {
+        "reconcile_closed_shelters": AsyncMock(),
+        "purge_expired_buffers": AsyncMock(),
+    }
+    steps[failing].side_effect = RuntimeError("mongo down")
+    donations = AsyncMock()
+    grants = AsyncMock()
+    with (
+        patch.multiple(
+            "worker.retention.job",
+            **steps,
+            expire_declared_donations=donations,
+            expire_role_grants=grants,
+        ),
+        pytest.raises(RuntimeError, match="mongo down"),
+    ):
+        await run_retention_once(couch)
+
+    grants.assert_awaited_once()
+    assert grants.await_args.args[0] is couch
+    # The donation TTL is Mongo-backed and stays behind the failed step, as before.
+    donations.assert_not_awaited()
+
+
+async def test_a_failing_role_grant_sweep_does_not_stop_the_cycle(db: None) -> None:
+    couch = AsyncMock()
+    with (
+        patch(
+            "worker.retention.job.expire_declared_donations", new_callable=AsyncMock
+        ) as donations,
+        patch(
+            "worker.retention.job.expire_role_grants",
+            new_callable=AsyncMock,
+            side_effect=RuntimeError("couch down"),
+        ),
+    ):
+        await run_retention_once(couch)
+
+    donations.assert_awaited_once()
 
 
 async def test_retention_cycle_skips_the_sweep_without_a_couch_client(db: None) -> None:
