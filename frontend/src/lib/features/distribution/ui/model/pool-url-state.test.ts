@@ -108,6 +108,18 @@ describe('mergeOnsitePoolParam', () => {
 		const out = mergeOnsitePoolParam(new URLSearchParams('tab=returns&pool=x&y=2'), null);
 		expect(out.toString()).toBe('tab=returns&y=2');
 	});
+
+	it('keeps the returns tab when closing a pool opened without a tab', () => {
+		expect(mergeOnsitePoolParam(new URLSearchParams('pool=x'), null).toString()).toBe(
+			'tab=returns'
+		);
+	});
+
+	it('forces tab=returns when closing from another tab value', () => {
+		expect(mergeOnsitePoolParam(new URLSearchParams('tab=food&pool=x'), null).toString()).toBe(
+			'tab=returns'
+		);
+	});
 });
 
 describe('deskFallbackForBackOfficeParams', () => {

@@ -17,6 +17,9 @@
 
 	// Replace the query string (other params preserved); skipped when nothing changed.
 	function replaceQuery(next: URLSearchParams) {
+		// The desk can call this after an `await` (e.g. receive flow); if the user already
+		// navigated elsewhere, merging into that page's params and goto would yank them back.
+		if (page.url.pathname !== resolve(ONSITE_DISTRIBUTION_PATH)) return;
 		const qs = next.toString();
 		if (qs === page.url.searchParams.toString()) return;
 		const href: OnsiteDistributionHref = qs

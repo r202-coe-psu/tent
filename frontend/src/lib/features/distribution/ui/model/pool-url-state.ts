@@ -84,18 +84,19 @@ export function mergeOnsiteTabParam(base: URLSearchParams, tab: FrontlineTab): U
 	return out;
 }
 
-/** `base` with the desk `pool` param set (and `tab=returns`) or removed; other keys are kept. */
+/**
+ * `base` with the desk `pool` param set or removed; other keys are kept. `tab=returns` is always
+ * set (pools only open/close from the returns tab) so closing a pool opened via `?pool=` alone
+ * does not drop the tab and bounce the desk to `receive`.
+ */
 export function mergeOnsitePoolParam(
 	base: URLSearchParams,
 	poolId: string | null
 ): URLSearchParams {
 	const out = new URLSearchParams(base);
-	if (poolId) {
-		out.set('tab', 'returns');
-		out.set('pool', poolId);
-	} else {
-		out.delete('pool');
-	}
+	out.set('tab', 'returns');
+	if (poolId) out.set('pool', poolId);
+	else out.delete('pool');
 	return out;
 }
 
