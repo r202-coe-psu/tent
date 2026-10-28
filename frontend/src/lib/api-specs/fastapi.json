@@ -3723,7 +3723,14 @@
 				"properties": {
 					"name": { "type": "string", "title": "Name" },
 					"status": { "type": "string", "title": "Status" },
-					"shelter_name": { "type": "string", "title": "Shelter Name" }
+					"shelter_name": { "type": "string", "title": "Shelter Name" },
+					"shelter_status": {
+						"anyOf": [
+							{ "type": "string", "enum": ["open", "closed", "full", "standby"] },
+							{ "type": "null" }
+						],
+						"title": "Shelter Status"
+					}
 				},
 				"type": "object",
 				"required": ["name", "status", "shelter_name"],
@@ -5031,13 +5038,12 @@
 						"anyOf": [{ "type": "string", "format": "date-time" }, { "type": "null" }],
 						"title": "Checked In At"
 					},
-					"care_zone": {
-						"anyOf": [{ "type": "string" }, { "type": "null" }],
-						"title": "Care Zone"
-					},
-					"zone_name": {
-						"anyOf": [{ "type": "string" }, { "type": "null" }],
-						"title": "Zone Name"
+					"shelter_status": {
+						"anyOf": [
+							{ "type": "string", "enum": ["open", "closed", "full", "standby"] },
+							{ "type": "null" }
+						],
+						"title": "Shelter Status"
 					},
 					"family_members": {
 						"items": { "$ref": "#/components/schemas/FamilyMember" },
