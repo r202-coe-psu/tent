@@ -353,6 +353,7 @@ UI ตรวจรับ (`features/distribution/ui/model/warehouse-return.ts`) 
   - ข้อ 6 — ตามที่เสนอ (อนุมัติพร้อม CR ทั้งฉบับ)
   - ข้อ 7 — คงสิทธิ์ `distribution_batch:` ไว้ที่ warehouse_staff / system_admin
 - 2026-10-28 — FR-RTN-17 ขยายให้ครอบ `distributionReturnInputSchema` (`createDistributionReturnEntry`) ด้วย — จาก PR review #993; ไม่เปลี่ยนพฤติกรรมที่ approve (kong)
+- 2026-10-28 — stable-core review ส่วน VDU (`_design/access` role gate + `ref_id` ของ `distribution_return`, FR-RTN-19..22) โดย kong ใน PR #993 — review บน GitHub ที่ลงไว้เป็น comment "Deleted" เป็นการลงผิด ไม่ใช่ผล review
 
 ## Out of scope
 
