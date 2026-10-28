@@ -169,8 +169,25 @@ test.describe('Donation form drop-off shelter (#814)', TAGS, () => {
 	});
 });
 
+/** Public shelter detail as the BFF returns it for GET /api/public/v1/shelters/{code}. */
+const SHELTER_DETAIL = {
+	id: 'SH001',
+	name: 'ศูนย์พักพิง เทศบาลนครหาดใหญ่ (โรงเรียนเทศบาล 2)',
+	address: '99 ถ.เพชรเกษม ต.หาดใหญ่ อ.หาดใหญ่ จ.สงขลา',
+	geo: { lat: 7.0086, lng: 100.4747 }
+};
+const DIRECTIONS_HREF = 'https://www.google.com/maps/dir/?api=1&destination=7.0086,100.4747';
+
 test.describe('Public Donation & Queue Booking Wizard (T-60)', TAGS, () => {
 	test('successfully performs the entire 4-step wizard donation flow', async ({ page }) => {
+		await page.route('**/api/public/v1/shelters/SH001', (route) =>
+			route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ shelter: SHELTER_DETAIL })
+			})
+		);
+
 		// 1. Mock API GET /api/public/v1/needs
 		await page.route('**/api/public/v1/needs', async (route) => {
 			await route.fulfill({
@@ -296,6 +313,11 @@ test.describe('Public Donation & Queue Booking Wizard (T-60)', TAGS, () => {
 		await expect(
 			page.getByText('ศูนย์พักพิง เทศบาลนครหาดใหญ่ (โรงเรียนเทศบาล 2)').first()
 		).toBeVisible();
+		await expect(page.getByText(SHELTER_DETAIL.address)).toBeVisible();
+		// The map button is a real link to the shelter, not a toast.
+		const navigate = page.getByRole('link', { name: 'นำทางด้วย Google Maps' });
+		await expect(navigate).toHaveAttribute('href', DIRECTIONS_HREF);
+		await expect(navigate).toHaveAttribute('target', '_blank');
 
 		// Mock PATCH for courier tracking update
 		await page.route('**/api/public/v1/donations/TX-SH001-E2ETEST', async (route) => {
@@ -686,5 +708,116 @@ test.describe('Donor wizard layout and step scrolling (#619, #620)', TAGS, () =>
 
 		await expect(page.getByRole('heading', { name: 'ส่วนที่ 1: ข้อมูลผู้บริจาค' })).toBeVisible();
 		await expect.poll(() => scrollY(page)).toBe(0);
+	});
+});
+
+/** #590: the track page tells the donor which shelter to go to and how to get there. */
+test.describe('Track page shows the drop-off shelter and directions (#590)', TAGS, () => {
+	const TOKEN = 'TX-SH001-DROPOFF';
+
+	function mockTrack(page: Page, deliveryMethod: string, status = 'declared') {
+		return page.route(`**/api/public/v1/donations/${TOKEN}`, (route) =>
+			route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({
+					success: true,
+					donation: {
+						status,
+						booking_ref: 'DN-590001',
+						shelter_code: 'SH001',
+						donor: { name: 'ผู้บริจาคใจบุญ', phone_masked: '***-***-5678' },
+						items: [{ item_name: 'ข้าวสาร', qty: 5, unit: 'kg' }],
+						logistics: { delivery_method: deliveryMethod },
+						received_summary: null,
+						updated_at: '2026-08-21T03:00:00Z',
+						expires_at: '2026-08-24T03:00:00Z'
+					}
+				})
+			})
+		);
+	}
+
+	test('shows shelter name, address and a directions link to its coordinates', async ({ page }) => {
+		await mockTrack(page, 'self_dropoff');
+		await page.route('**/api/public/v1/shelters/SH001', (route) =>
+			route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ shelter: SHELTER_DETAIL })
+			})
+		);
+
+		await page.goto(`/donations/track/${TOKEN}`);
+
+		const card = page.getByTestId('drop-off-card');
+		await expect(card.getByText(SHELTER_DETAIL.name)).toBeVisible();
+		await expect(card.getByText(SHELTER_DETAIL.address)).toBeVisible();
+		const navigate = card.getByRole('link', { name: 'นำทางด้วย Google Maps' });
+		await expect(navigate).toHaveAttribute('href', DIRECTIONS_HREF);
+		await expect(navigate).toHaveAttribute('target', '_blank');
+	});
+
+	// `redirected` matters most: the donor now goes to another shelter, not this one.
+	for (const status of ['cancelled', 'redirected']) {
+		test(`keeps the shelter but drops directions once the booking is ${status}`, async ({
+			page
+		}) => {
+			await mockTrack(page, 'self_dropoff', status);
+			await page.route('**/api/public/v1/shelters/SH001', (route) =>
+				route.fulfill({
+					status: 200,
+					contentType: 'application/json',
+					body: JSON.stringify({ shelter: SHELTER_DETAIL })
+				})
+			);
+
+			await page.goto(`/donations/track/${TOKEN}`);
+
+			const card = page.getByTestId('drop-off-card');
+			await expect(card.getByText(SHELTER_DETAIL.name)).toBeVisible();
+			await expect(card.getByText(SHELTER_DETAIL.address)).toBeVisible();
+			await expect(page.getByRole('link', { name: 'นำทางด้วย Google Maps' })).toHaveCount(0);
+		});
+	}
+
+	test('keeps the shelter code and breaks nothing when the shelter lookup 404s', async ({
+		page
+	}) => {
+		await mockTrack(page, 'parcel');
+		await page.route('**/api/public/v1/shelters/SH001', (route) =>
+			route.fulfill({
+				status: 404,
+				contentType: 'application/json',
+				body: JSON.stringify({ error: 'Shelter not found' })
+			})
+		);
+
+		await page.goto(`/donations/track/${TOKEN}`);
+
+		await expect(page.getByRole('heading', { name: 'DN-590001' })).toBeVisible();
+		await expect(page.getByText('SH001', { exact: true })).toBeVisible();
+		await expect(page.getByTestId('drop-off-card')).toHaveCount(0);
+		await expect(page.getByRole('link', { name: 'นำทางด้วย Google Maps' })).toHaveCount(0);
+	});
+
+	test('does not look up a destination when the shelter collects the goods', async ({ page }) => {
+		let shelterRequests = 0;
+		await mockTrack(page, 'shelter_pickup');
+		await page.route('**/api/public/v1/shelters/SH001', (route) => {
+			shelterRequests += 1;
+			return route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ shelter: SHELTER_DETAIL })
+			});
+		});
+
+		await page.goto(`/donations/track/${TOKEN}`);
+
+		await expect(page.getByRole('heading', { name: 'DN-590001' })).toBeVisible();
+		await expect(page.getByText('SH001', { exact: true })).toBeVisible();
+		await expect(page.getByRole('link', { name: 'นำทางด้วย Google Maps' })).toHaveCount(0);
+		expect(shelterRequests).toBe(0);
 	});
 });

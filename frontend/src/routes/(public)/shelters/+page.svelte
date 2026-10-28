@@ -35,6 +35,7 @@
 	} from '$lib/features/public-portal';
 	import { Button } from '$lib/components/ui/button';
 	import { getTranslation } from '$lib/utils/i18n';
+	import { directionsUrl } from '$lib/utils/maps';
 	import { PUBLIC_SHELTERS_I18N, PUBLIC_SHELTER_CARD_I18N } from '$lib/constants/i18n';
 	import { langState } from '$lib/states/i18n.svelte';
 
@@ -505,7 +506,7 @@
 						</Button>
 						{#if selectedShelter.geo?.lat != null && selectedShelter.geo?.lng != null}
 							<Button
-								href={`https://www.google.com/maps/dir/?api=1&destination=${selectedShelter.geo.lat},${selectedShelter.geo.lng}`}
+								href={directionsUrl(selectedShelter.geo)}
 								target="_blank"
 								rel="noopener noreferrer"
 								size="sm"

@@ -53,6 +53,7 @@ export type { PublicApiErrorKind } from './domain/search-error';
 export {
 	familySearch,
 	PublicApiError,
+	getPublicShelter,
 	listPublicShelters,
 	fetchShelterTypes,
 	type ShelterTypeOption
@@ -60,6 +61,7 @@ export {
 export {
 	publicPortalKeys,
 	useFamilySearchMutation,
+	usePublicShelter,
 	usePublicShelters,
 	useShelterTypeLabels,
 	useShelterTypeLabelMap,

@@ -40,6 +40,7 @@ export {
 	transferInputSchema,
 	transferStatusSchema,
 	transferFilterSchema,
+	TRANSFER_IDS_PER_REQUEST,
 	receivedItemSchema,
 	nextLotNos,
 	lotDateStamp,
