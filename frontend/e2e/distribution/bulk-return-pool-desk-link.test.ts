@@ -53,6 +53,22 @@ test.describe('Bulk return pool — desk link for DST (#921)', { tag: DESK_TAGS 
 		await expect.poll(deskUrl).toEqual(['/onsite/distribution', 'supplies', 'returns', null]);
 		await expect(board.heading()).toBeVisible();
 
+		// Browser Back restores the desk from `page.state.deskSearch`: a pool the user closed must stay
+		// closed, not reopen from the stale `pool` param of the entry the link first landed on.
+		// Client-side navigation away (the desk renders no in-app link): SvelteKit's router intercepts
+		// the anchor click, so Back below is a router popstate, not a fresh document load.
+		await page.evaluate(() => {
+			const a = document.createElement('a');
+			a.href = '/portal';
+			document.body.append(a);
+			a.click();
+		});
+		await expect.poll(() => new URL(page.url()).pathname).toBe('/portal');
+		await page.goBack();
+		await expect.poll(deskUrl).toEqual(['/onsite/distribution', 'supplies', 'returns', null]);
+		await expect(board.heading()).toBeVisible();
+		await expect(board.detail(name)).toBeHidden();
+
 		// Leaving returns for another step of the same mode keeps the mode and carries no `pool`. The
 		// detail is a modal dialog, so the tab buttons are only reachable once it is closed (above).
 		const desk = new DeskPage(page);

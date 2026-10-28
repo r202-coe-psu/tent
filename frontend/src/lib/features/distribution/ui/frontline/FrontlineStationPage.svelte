@@ -124,7 +124,8 @@
 
 	// FR-DFS-06: a deep link (e.g. a supplies QR or pool link) is also the mode this device last used.
 	$effect(() => {
-		if (isDeskMode(initialMode)) storeDeskMode(initialMode);
+		// Reads `link` so it also re-runs when the same link is followed again (`linkKey` bump).
+		if (isDeskMode(initialMode)) storeDeskMode(link.mode);
 	});
 
 	// One URL model: `?mode=&tab=[&pool=]`, always written whole. Shallow, so a goto does not
@@ -132,7 +133,9 @@
 	// away (a late board callback or awaited receive must not overwrite another page's URL).
 	function writeUrl() {
 		if (page.url.pathname !== resolve(ONSITE_DISTRIBUTION_PATH)) return;
-		replaceState(resolve(onsiteDeskHref({ mode, tab: activeTab, pool: selectedPoolId })), {});
+		const href = onsiteDeskHref({ mode, tab: activeTab, pool: selectedPoolId });
+		// The query is kept in `page.state`: history restores it on Back, while `page.url` stays stale.
+		replaceState(resolve(href), { deskSearch: href.slice(href.indexOf('?') + 1) });
 	}
 
 	const steps = $derived(DESK_MODES[mode].steps);

@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushSync, mount, tick, unmount } from 'svelte';
 import { SvelteMap } from 'svelte/reactivity';
 import FrontlineStationPage from './FrontlineStationPage.svelte';
+import { parseOnsiteDistributionParams } from '../model/pool-url-state';
 
 type BoardProps = {
 	shelterCode?: string;
@@ -206,6 +207,41 @@ describe('frontline station returns tab wiring (#921)', () => {
 		expect(board.props?.initialPoolId).toBe('p1');
 	});
 
+	it('following the same supplies link again stores supplies after a local switch to food', async () => {
+		const state = new SvelteMap<string, unknown>([['linkKey', 0]]);
+		await render({
+			initialMode: 'supplies',
+			initialTab: 'receive',
+			get linkKey() {
+				return state.get('linkKey');
+			}
+		});
+
+		click(modeButton('อาหาร'));
+		expect(localStorage.getItem(MODE_STORAGE_KEY)).toBe('food');
+
+		state.set('linkKey', 1);
+		flushSync();
+
+		expect(modeButton('สิ่งของ').getAttribute('aria-pressed')).toBe('true');
+		expect(localStorage.getItem(MODE_STORAGE_KEY)).toBe('supplies');
+	});
+
+	it('props parsed from a restored deskSearch open no pool', async () => {
+		// Route level: Back restores `page.state.deskSearch`, which the route parses into these props.
+		const restored = parseOnsiteDistributionParams(
+			new URLSearchParams('mode=supplies&tab=returns')
+		);
+		await render({
+			initialMode: restored.mode,
+			initialTab: restored.tab ?? 'receive',
+			initialPoolId: restored.pool
+		});
+
+		expect(boardMarker()).not.toBeNull();
+		expect(board.props?.initialPoolId).toBeNull();
+	});
+
 	it('does not render the board outside the returns tab', async () => {
 		await render({ initialTab: 'receive' });
 
@@ -223,7 +259,7 @@ describe('frontline station URL writes', () => {
 		expect(lastUrl()).toBe('/onsite/distribution?mode=supplies&tab=supplies');
 		expect(nav.replaceState).toHaveBeenLastCalledWith(
 			'/onsite/distribution?mode=supplies&tab=supplies',
-			{}
+			{ deskSearch: 'mode=supplies&tab=supplies' }
 		);
 		expect(boardMarker()).toBeNull();
 	});
