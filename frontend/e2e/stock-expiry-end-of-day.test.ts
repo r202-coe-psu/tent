@@ -388,7 +388,7 @@ test.describe(
 			await expect(plan).toContainText('ข้าม 1 ล็อตที่หมดอายุแล้ว');
 
 			await page.getByRole('button', { name: 'เลือกล็อตเอง' }).click();
-			const lotTrigger = page.getByRole('button', { name: /^ล็อต \*/ });
+			const lotTrigger = page.getByRole('button', { name: 'ล็อต', exact: true });
 			await expect(lotTrigger, 'manual mode preselects the today lot').toContainText('คงเหลือ 10');
 
 			await page.getByRole('button', { name: 'อื่นๆ...' }).click();
