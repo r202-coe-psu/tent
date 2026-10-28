@@ -33,9 +33,8 @@
 	import { canReopenBulkReturnLoan } from '../../application/food-supplies/auth';
 	import { formatDistributionError } from '../model/distribution-error';
 	import {
-		REOPEN_LOAN_ACTION,
 		REOPEN_LOAN_DONE_NOTE,
-		canShowReopenLoan,
+		reopenLoanAction,
 		reopenedEntryIds,
 		CLOSED_LOAN_WARNING_TESTID,
 		MISSED_LOAN_ACTION,
@@ -70,6 +69,7 @@
 	} from '../model/bulk-return-pool-v3';
 	import { ticketHref } from '../model/pool-url-state';
 	import { liveSummaryRows, submittedSummaryRows } from '../model/bulk-return-lifecycle';
+	import BulkReturnEntryReopenAction from './BulkReturnEntryReopenAction.svelte';
 	import BulkReturnPoolReceiveRecord from './BulkReturnPoolReceiveRecord.svelte';
 	import BulkReturnPoolTimeline from './BulkReturnPoolTimeline.svelte';
 	import EditBulkReturnPoolHeaderDialog from './EditBulkReturnPoolHeaderDialog.svelte';
@@ -416,6 +416,13 @@
 						<ul class="space-y-3">
 							{#each entries as live (live.entry._id)}
 								{@const entry = live.entry}
+								{@const reopenAction = reopenLoanAction({
+									pool,
+									entryId: entry._id,
+									appliedRefs: appliedRefsByEntry.get(entry._id) ?? [],
+									canReopen,
+									reopened: reopenedIds.has(entry._id)
+								})}
 								{@const item = resolveItemDisplay(entry.item_id, catalog)}
 								{@const closedRefs = closedRefsByEntry.get(entry._id) ?? []}
 								{@const missedRefs = missedRefsByEntry.get(entry._id) ?? []}
@@ -539,19 +546,11 @@
 										</div>
 									{/if}
 
-									{#if canShowReopenLoan( { pool, entryId: entry._id, appliedRefCount: appliedRefsByEntry.get(entry._id)?.length ?? 0, canReopen } )}
-										<div class="flex flex-col gap-2 pt-1 sm:flex-row sm:justify-end">
-											<Button
-												type="button"
-												variant="outline"
-												onclick={() => (reopenEntry = entry)}
-												class="min-h-11 w-full gap-2 border-red-200 text-red-800 hover:bg-red-50 sm:w-auto"
-											>
-												<Undo2 class="h-4 w-4" aria-hidden="true" />
-												{REOPEN_LOAN_ACTION}
-											</Button>
-										</div>
-									{/if}
+									<BulkReturnEntryReopenAction
+										showButton={reopenAction.showButton}
+										blockedNotice={reopenAction.blockedNotice}
+										onReopen={() => (reopenEntry = entry)}
+									/>
 
 									{#if canWriteEntry}
 										{@const showMove = canMoveEntry(row, entry._id)}

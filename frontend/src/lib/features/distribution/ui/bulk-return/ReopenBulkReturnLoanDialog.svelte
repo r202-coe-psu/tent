@@ -67,7 +67,7 @@
 			open = false;
 			onClose();
 		} catch (err) {
-			const message = formatDistributionError(err, REOPEN_LOAN_ERROR);
+			const message = formatDistributionError(err, REOPEN_LOAN_ERROR, { poolContext: 'reopen' });
 			submitError = message;
 			toast.error(message);
 		}

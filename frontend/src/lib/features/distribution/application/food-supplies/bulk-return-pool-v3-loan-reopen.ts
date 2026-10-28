@@ -1,6 +1,5 @@
 import type { AuthorContext } from '$lib/db/model';
 import { ConflictError } from '$lib/utils/errors';
-import { qtyGt } from '$lib/utils/qty';
 import type {
 	BulkReturnEntryLoanRef,
 	BulkReturnLoanReopen,
@@ -10,11 +9,12 @@ import {
 	canReopenEntryLoans,
 	createBulkReturnLoanReopen,
 	deriveLoanReopenId,
+	isBulkReturnRefRevertable,
 	resolveBulkReturnEntries
 } from '../../domain/food-supplies';
 import { assertCanReopenBulkReturnLoan } from './auth';
 import { assertCentralWriteAuthority } from './central-write-authority';
-import { assertNoSkippedDocs, BulkReturnPoolStateError, WorkflowValidationError } from './errors';
+import { assertNoSkippedDocs, BulkReturnLoanReopenError, BulkReturnPoolStateError } from './errors';
 import {
 	loadSnapshotPinsForWrite,
 	requirePool,
@@ -42,12 +42,6 @@ export interface ReopenBulkReturnEntryLoansResult {
 	loansSkipped: { distribution_log_id: string; reason: 'not_revertable' }[];
 }
 
-/** True when `revertBulkEntryFromLog` would accept this loan / ref (it throws otherwise). */
-function isRevertable(loan: DistributionLog, ref: BulkReturnEntryLoanRef): boolean {
-	if (loan.status !== 'partially_returned' && loan.status !== 'returned') return false;
-	return !qtyGt(ref.qty, loan.qty_returned ?? '0');
-}
-
 /**
  * Reopens the loans a bulk return entry of a SUBMITTED / RECEIVED pool closed (staff took the
  * returner's drop-off back after the pool was submitted). Writes one append-only
@@ -64,13 +58,20 @@ export async function reopenBulkReturnEntryLoans(
 	assertCanReopenBulkReturnLoan(ctx);
 
 	const reason = input.reason.trim();
-	if (!reason) throw new WorkflowValidationError('A reason is required to reopen a loan');
+	if (!reason) {
+		throw new BulkReturnLoanReopenError('A reason is required to reopen a loan', 'reason_required');
+	}
 
 	const events = await eventRepo.listForEntry(input.entry_id);
 	// Fail closed: a skipped doc of this entry's chain would hide its move / void state.
 	assertNoSkippedDocs(events.skipped, `bulk return entry ${input.entry_id}`);
 	const entry = events.entries.find((e) => e._id === input.entry_id);
-	if (!entry) throw new WorkflowValidationError(`bulk_return_entry ${input.entry_id} not found`);
+	if (!entry) {
+		throw new BulkReturnLoanReopenError(
+			`bulk_return_entry ${input.entry_id} not found`,
+			'entry_not_found'
+		);
+	}
 
 	const pins = await loadSnapshotPinsForWrite(poolRepo, events);
 	const resolved = resolveBulkReturnEntries(events.entries, events.moves, events.voids, pins).find(
@@ -86,7 +87,10 @@ export async function reopenBulkReturnEntryLoans(
 				pool.status === 'OPEN' ? 'not_submitted' : 'closed'
 			);
 		}
-		throw new WorkflowValidationError(`Entry ${entry._id} is not in the ${pool._id} snapshot`);
+		throw new BulkReturnLoanReopenError(
+			`Entry ${entry._id} is not in the ${pool._id} snapshot`,
+			'not_in_snapshot'
+		);
 	}
 
 	// Loans are read BEFORE the reopen doc: a loan already reverted by a concurrent call implies
@@ -103,17 +107,20 @@ export async function reopenBulkReturnEntryLoans(
 
 	if (!reopen) {
 		if (applied.length === 0) {
-			throw new WorkflowValidationError(
-				`Entry ${entry._id} has no applied loan to reopen (nothing was cut or it was already reverted)`
+			throw new BulkReturnLoanReopenError(
+				`Entry ${entry._id} has no applied loan to reopen (nothing was cut or it was already reverted)`,
+				'no_applied_loan'
 			);
 		}
 		// Pre-check BEFORE writing: a later revert of an unrevertable loan would throw and wedge
 		// the operation with the doc already written.
 		for (const loan of applied) {
 			const ref = refById.get(loan._id) as BulkReturnEntryLoanRef;
-			if (!isRevertable(loan, ref)) {
-				throw new WorkflowValidationError(
-					`Loan ${loan._id} cannot be reopened (status: ${loan.status}); resolve it first`
+			if (!isBulkReturnRefRevertable(loan, ref)) {
+				throw new BulkReturnLoanReopenError(
+					`Loan ${loan._id} cannot be reopened (status: ${loan.status}); resolve it first`,
+					'loan_not_revertable',
+					loan.status
 				);
 			}
 		}
@@ -144,7 +151,7 @@ export async function reopenBulkReturnEntryLoans(
 			if (
 				current &&
 				(current.applied_bulk_entry_ids ?? []).includes(entry._id) &&
-				!isRevertable(current, ref)
+				!isBulkReturnRefRevertable(current, ref)
 			) {
 				loansSkipped.push({ distribution_log_id: loanId, reason: 'not_revertable' });
 				continue;

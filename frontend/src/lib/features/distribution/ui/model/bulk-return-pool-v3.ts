@@ -12,6 +12,7 @@ import {
 	type BulkReturnPoolV3Status
 } from '../../domain/food-supplies';
 import type { UpdateBulkReturnPoolHeaderPatch } from '../../application/food-supplies/bulk-return-pool-v3-lifecycle';
+import { BULK_RETURN_REOPEN_BLOCKED_COPY } from './bulk-return-copy';
 
 /**
  * #659 — pure view-model helpers for the bulk return pool v3 board (list / detail / dialogs).
@@ -399,18 +400,42 @@ export function canVoidEntry(row: BulkReturnPoolRow): boolean {
 }
 
 /**
- * CR-193 §35: "reopen loans" is offered on an entry of a closed pool (SUBMITTED / RECEIVED, entry in
- * the snapshot) that still has applied loan refs, to a role allowed to do it.
+ * CR-193 §35: "reopen loans" on an entry of a closed pool (SUBMITTED / RECEIVED, entry in the
+ * snapshot) that has applied loan refs, for a role allowed to do it.
+ * - `showButton`: every applied ref is still revertable (independent of `reopened`).
+ * - `blockedNotice`: why the button is NOT offered where it otherwise would be (some applied loan
+ *   was closed or moved on, so the workflow pre-check would reject the whole entry). Null when the
+ *   entry is not a reopen candidate, the button shows, or the entry was already reopened.
  */
-export function canShowReopenLoan(args: {
+export function reopenLoanAction(args: {
 	pool: Pick<BulkReturnPoolV3, 'status' | 'entry_ids'>;
 	entryId: string;
-	appliedRefCount: number;
+	appliedRefs: readonly Pick<AppliedBulkReturnLoanRef, 'revertable' | 'loan_status'>[];
 	canReopen: boolean;
-}): boolean {
-	return (
-		args.canReopen && args.appliedRefCount >= 1 && canReopenEntryLoans(args.pool, args.entryId)
-	);
+	reopened: boolean;
+}): { showButton: boolean; blockedNotice: string | null } {
+	const none = { showButton: false, blockedNotice: null };
+	if (!args.canReopen || args.appliedRefs.length === 0) return none;
+	if (!canReopenEntryLoans(args.pool, args.entryId)) return none;
+	const blocked = args.appliedRefs.filter((ref) => !ref.revertable);
+	if (blocked.length === 0) return { showButton: true, blockedNotice: null };
+	if (args.reopened) return none;
+
+	const total = args.appliedRefs.length;
+	const lost = blocked.filter((ref) => ref.loan_status === 'lost').length;
+	const waived = blocked.filter((ref) => ref.loan_status === 'waived').length;
+	const copy = BULK_RETURN_REOPEN_BLOCKED_COPY;
+	const closed = lost + waived;
+	if (closed === 0) {
+		const blockedNotice =
+			blocked.length === total ? copy.allChanged : copy.someChanged(blocked.length, total);
+		return { showButton: false, blockedNotice };
+	}
+	const label =
+		lost > 0 && waived > 0 ? copy.labels.both : lost > 0 ? copy.labels.lost : copy.labels.waived;
+	const blockedNotice =
+		blocked.length === total ? copy.allClosed(label) : copy.someClosed(closed, total, label);
+	return { showButton: false, blockedNotice };
 }
 
 /** Entry ids that have a `loan_reopened` timeline event. */

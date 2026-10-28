@@ -177,6 +177,7 @@ export {
 	assessBulkReturnRefOnLoan,
 	findClosedBulkReturnLoanRefs,
 	findAppliedBulkReturnLoanRefs,
+	isBulkReturnRefRevertable,
 	findMissedLoanRefs,
 	type MissedBulkReturnLoanRef,
 	type BulkReturnLoanDriftReason,

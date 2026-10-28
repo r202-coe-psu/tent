@@ -37,6 +37,7 @@ import {
 	listBulkReturnPoolMissedLoanRefs
 } from './bulk-return-pool-v3-missed-loans';
 import {
+	BulkReturnLoanReopenError,
 	BulkReturnPoolStateError,
 	WorkflowAuthorizationError,
 	WorkflowValidationError
@@ -131,9 +132,13 @@ describe('bulk return pool v3 — reopen the loans of an entry (CR-193 §35)', (
 	it('rejects a blank reason and writes nothing', async () => {
 		const { entry } = await closedPoolWithAppliedLoan(81);
 
-		await expect(
-			reopenBulkReturnEntryLoans({ entry_id: entry._id, reason: '   ' }, sm, deps)
-		).rejects.toBeInstanceOf(WorkflowValidationError);
+		const err = await reopenBulkReturnEntryLoans(
+			{ entry_id: entry._id, reason: '   ' },
+			sm,
+			deps
+		).catch((e: unknown) => e);
+		expect(err).toBeInstanceOf(BulkReturnLoanReopenError);
+		expect((err as BulkReturnLoanReopenError).reason).toBe('reason_required');
 
 		expect(reopenKeys()).toEqual([]);
 		expect((await logRepo.get(loanId(81)))?.applied_bulk_entry_ids).toEqual([entry._id]);
@@ -183,9 +188,13 @@ describe('bulk return pool v3 — reopen the loans of an entry (CR-193 §35)', (
 		);
 		expect(pool.entry_ids ?? []).not.toContain(late._id);
 
-		await expect(
-			reopenBulkReturnEntryLoans({ entry_id: late._id, reason: 'x' }, sm, deps)
-		).rejects.toThrow(/snapshot/);
+		const err = await reopenBulkReturnEntryLoans(
+			{ entry_id: late._id, reason: 'x' },
+			sm,
+			deps
+		).catch((e: unknown) => e);
+		expect(err).toBeInstanceOf(BulkReturnLoanReopenError);
+		expect((err as BulkReturnLoanReopenError).reason).toBe('not_in_snapshot');
 		expect(reopenKeys()).toEqual([]);
 	});
 
@@ -195,26 +204,39 @@ describe('bulk return pool v3 — reopen the loans of an entry (CR-193 §35)', (
 		await submitBulkReturnPool(pool._id, nextOp(), mgr, deps);
 		const entry = (await eventRepo.listForPool(pool._id)).entries[0];
 
-		await expect(
-			reopenBulkReturnEntryLoans({ entry_id: entry._id, reason: 'x' }, sm, deps)
-		).rejects.toThrow(/no applied loan/);
+		const err = await reopenBulkReturnEntryLoans(
+			{ entry_id: entry._id, reason: 'x' },
+			sm,
+			deps
+		).catch((e: unknown) => e);
+		expect(err).toBeInstanceOf(BulkReturnLoanReopenError);
+		expect((err as BulkReturnLoanReopenError).reason).toBe('no_applied_loan');
 		expect(reopenKeys()).toEqual([]);
 	});
 
-	it('rejects BEFORE writing when an applied loan was meanwhile cleared as lost', async () => {
-		const { entry } = await closedPoolWithAppliedLoan(86);
-		await logRepo.recordClear(
-			loanId(86),
-			{ clear_reason: 'lost', notes: 'lost in the flood' },
-			mgr
-		);
+	it.each(['lost', 'waived'] as const)(
+		'rejects BEFORE writing when an applied loan was meanwhile cleared as %s',
+		async (clearReason) => {
+			const no = clearReason === 'lost' ? 86 : 92;
+			const { entry } = await closedPoolWithAppliedLoan(no);
+			await logRepo.recordClear(
+				loanId(no),
+				{ clear_reason: clearReason, notes: 'closed at the desk' },
+				mgr
+			);
 
-		await expect(
-			reopenBulkReturnEntryLoans({ entry_id: entry._id, reason: 'x' }, sm, deps)
-		).rejects.toThrow(/cannot be reopened/);
+			const err = await reopenBulkReturnEntryLoans(
+				{ entry_id: entry._id, reason: 'x' },
+				sm,
+				deps
+			).catch((e: unknown) => e);
 
-		expect(reopenKeys()).toEqual([]);
-	});
+			expect(err).toBeInstanceOf(BulkReturnLoanReopenError);
+			expect(err).toMatchObject({ reason: 'loan_not_revertable', loanStatus: clearReason });
+			expect((err as Error).message).toMatch(/cannot be reopened/);
+			expect(reopenKeys()).toEqual([]);
+		}
+	);
 
 	it('is idempotent: a second call replays and reverts nothing more', async () => {
 		const { entry } = await closedPoolWithAppliedLoan(87);
@@ -309,8 +331,12 @@ describe('bulk return pool v3 — reopen the loans of an entry (CR-193 §35)', (
 	});
 
 	it('does not reopen an unknown entry', async () => {
-		await expect(
-			reopenBulkReturnEntryLoans({ entry_id: `bulk_return_entry:${U(995)}`, reason: 'x' }, sm, deps)
-		).rejects.toBeInstanceOf(WorkflowValidationError);
+		const err = await reopenBulkReturnEntryLoans(
+			{ entry_id: `bulk_return_entry:${U(995)}`, reason: 'x' },
+			sm,
+			deps
+		).catch((e: unknown) => e);
+		expect(err).toBeInstanceOf(BulkReturnLoanReopenError);
+		expect((err as BulkReturnLoanReopenError).reason).toBe('entry_not_found');
 	});
 });
