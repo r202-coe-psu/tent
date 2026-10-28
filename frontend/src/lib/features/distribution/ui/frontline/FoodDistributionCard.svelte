@@ -8,6 +8,7 @@
 	import CheckCircle2 from '@lucide/svelte/icons/check-circle-2';
 	import Loader from '@lucide/svelte/icons/loader';
 	import { qtyGte } from '$lib/utils/qty';
+	import { formatThaiTime } from '$lib/utils/date';
 	import { validatePositiveQuantity } from '../model/ticket-quantity';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
@@ -31,9 +32,16 @@
 		formatMenuTags,
 		getItemCapacitySummary,
 		isIdentifiedRecipient,
+		NO_MEAL_REPEAT,
 		type FrontlineRecipientSelection
 	} from '../model/frontline-handover';
 	import { formatDistributionError } from '../model/distribution-error';
+	import {
+		HANDOVER_DEFAULT_QTY,
+		isHandoverDraft,
+		isOutsideNotesDraft,
+		type DeskDrafts
+	} from '../model/desk-draft';
 	import { getMealPeriodLabel } from '../model/ticket-status';
 	import RecipientSearchPicker from '../common/RecipientSearchPicker.svelte';
 	import QtyStepper from '../common/QtyStepper.svelte';
@@ -43,9 +51,11 @@
 	interface Props {
 		ticket: RequisitionTicket;
 		shelterCode?: string;
+		/** FR-DFS-05 — the page asks before a mode switch drops typed input. */
+		drafts?: DeskDrafts;
 	}
 
-	let { ticket, shelterCode }: Props = $props();
+	let { ticket, shelterCode, drafts }: Props = $props();
 
 	const recordFoodMutation = useRecordFoodDistribution();
 
@@ -66,13 +76,26 @@
 	// Item the user picked; the effective selection falls back to the first ticket item whenever
 	// the pick is empty or no longer on the ticket (e.g. parent switches active ticket).
 	let pickedItemId = $state('');
-	let qtyInput = $state('1');
+	let qtyInput = $state(HANDOVER_DEFAULT_QTY);
 	let recipientSelection = $state<FrontlineRecipientSelection | null>(null);
 	let notesInput = $state('');
 	let warningModalOpen = $state(false);
 	let localSubmitError = $state<string | null>(null);
 	let topUpDialogOpen = $state(false);
 	let picker = $state<ReturnType<typeof RecipientSearchPicker>>();
+
+	// Notes the last handover recorded for the walk-in the picker keeps selected.
+	let recordedOutsideNotes: string | undefined;
+
+	// The outside recipient's notes live in the picker but reach the card through the selection.
+	$effect(() =>
+		drafts?.track(
+			() =>
+				isHandoverDraft({ qtyInput, notesInput }) ||
+				(recipientSelection?.recipientType === 'outside' &&
+					isOutsideNotesDraft(recipientSelection.notes, recordedOutsideNotes))
+		)
+	);
 
 	function handleQtyBlur() {
 		const raw = qtyInput.trim();
@@ -118,7 +141,7 @@
 	const duplicatePreflight = $derived(
 		isIdentifiedRecipient(recipientSelection)
 			? checkDuplicateMealAdvisory(recipientLogs, ticket.meal)
-			: { isDuplicate: false, priorLog: null }
+			: NO_MEAL_REPEAT
 	);
 
 	// Advisory menu matching (CR-159 §C FR-MRM-04): menu tags come from
@@ -314,8 +337,10 @@
 			toast.success(`บันทึกแจกอาหารสำเร็จ: ${selectedItem.item_name} จำนวน ${qtyRes.value} ชุด`);
 			// Reset for the next person; a scanned recipient reopens the scanner.
 			warningModalOpen = false;
-			qtyInput = '1';
+			qtyInput = HANDOVER_DEFAULT_QTY;
 			notesInput = '';
+			recordedOutsideNotes =
+				recipientSelection?.recipientType === 'outside' ? recipientSelection.notes : undefined;
 			picker?.next();
 		} catch (err) {
 			localSubmitError = formatDistributionError(
@@ -331,19 +356,19 @@
 	}
 </script>
 
-<div class="space-y-5 rounded-2xl border border-slate-200/80 bg-white p-6 shadow-xs">
+<div class="space-y-5 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs sm:p-6">
 	<!-- Ticket & Meal Period Header -->
 	<div
 		class="flex flex-col gap-3 border-b border-slate-100 pb-4 sm:flex-row sm:items-center sm:justify-between"
 	>
-		<div class="flex items-center gap-3">
+		<div class="flex min-w-0 items-center gap-3">
 			<div
-				class="flex h-11 w-11 items-center justify-center rounded-xl border border-amber-200 bg-amber-50 text-amber-700 shadow-2xs"
+				class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-amber-200 bg-amber-50 text-amber-700 shadow-2xs"
 			>
 				<UtensilsCrossed class="h-6 w-6" />
 			</div>
-			<div>
-				<div class="flex items-center gap-2">
+			<div class="min-w-0">
+				<div class="flex flex-wrap items-center gap-2">
 					<span class="font-mono text-xs font-bold text-slate-500">{ticket.ticket_no}</span>
 					<span
 						class="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-2xs font-bold text-amber-900"
@@ -358,7 +383,7 @@
 						</span>
 					{/if}
 				</div>
-				<h3 class="text-base font-bold text-slate-900">
+				<h3 class="text-base font-bold break-words text-slate-900">
 					สถานีแจกจ่ายอาหาร · จุดบริการ {ticket.destination_location}
 				</h3>
 			</div>
@@ -388,7 +413,9 @@
 						: 'border-slate-200 bg-white hover:border-slate-300'}"
 				>
 					<div class="min-w-0 flex-1">
-						<p class="truncate text-base font-bold text-slate-900">{item.item_name}</p>
+						<p class="line-clamp-2 text-base font-bold break-words text-slate-900">
+							{item.item_name}
+						</p>
 						<p class="text-xs text-slate-500">
 							จัดสรร: <strong class="text-slate-700">{summary.allocatedQty}</strong> | แจกแล้ว:
 							<strong class="text-slate-700">{summary.distributedQty}</strong>
@@ -508,9 +535,14 @@
 			>
 				<AlertTriangle class="mt-0.5 size-4 shrink-0 text-amber-600" aria-hidden="true" />
 				<div>
-					<p class="font-bold">คนนี้รับอาหารมื้อนี้ไปแล้ววันนี้</p>
+					<p class="font-bold">
+						รับมื้อนี้ไปแล้ว {duplicatePreflight.visits} ครั้ง รวม {duplicatePreflight.boxes} กล่อง
+						{#if duplicatePreflight.lastDistributedAt}
+							· ล่าสุด {formatThaiTime(duplicatePreflight.lastDistributedAt)}
+						{/if}
+					</p>
 					<p class="mt-0.5 text-xs text-amber-800">
-						มื้อ{ticket.meal ? getMealPeriodLabel(ticket.meal) : ''} · ถ้ากดแจกต่อ ระบบจะขอเหตุผลก่อนบันทึก
+						มื้อ{ticket.meal ? getMealPeriodLabel(ticket.meal) : ''} วันนี้ · ถ้ากดแจกต่อ ระบบจะขอเหตุผลก่อนบันทึก
 					</p>
 				</div>
 			</div>
@@ -561,7 +593,8 @@
 		<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
 			<QtyStepper
 				id="food-qty-input"
-				label="จำนวนที่แจก"
+				label="จำนวนกล่อง"
+				hint="แจกหลายกล่องให้คนเดียวได้ เช่น รับแทนครอบครัว"
 				unit="ชุด"
 				bind:value={qtyInput}
 				max={capacitySummary.inHandQty}
@@ -627,8 +660,7 @@
 		open={warningModalOpen}
 		meal={ticket.meal}
 		recipientLabel={recipientSelection.label}
-		isDuplicate={duplicatePreflight.isDuplicate}
-		priorDistributedAt={duplicatePreflight.priorLog?.distributed_at}
+		repeat={duplicatePreflight}
 		{menuMismatchLabel}
 		{allergenConflictLabel}
 		allergyFreeTextLabel={allergenPreflight.recipientFreeText.join(', ')}
