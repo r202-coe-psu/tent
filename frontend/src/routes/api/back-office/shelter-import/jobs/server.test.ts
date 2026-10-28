@@ -111,6 +111,30 @@ describe('POST /api/back-office/shelter-import/jobs', () => {
 		expect(requireSystemAdminMock).toHaveBeenCalledWith('session=admin');
 	});
 
+	it('rejects a closed shelter row even when the client sent no row errors (CR-183 FR-23)', async () => {
+		const response = await POST({
+			request: request(
+				JSON.stringify({
+					filename: 'shelters.xlsx',
+					duplicate_action: 'skip',
+					rows: [
+						{
+							row: 1,
+							name: 'ศูนย์ปิด',
+							shelter: { name: 'ศูนย์ปิด', capacity: 100, operation_status: 'closed' }
+						}
+					]
+				})
+			)
+		} as unknown as Parameters<typeof POST>[0]);
+
+		expect(response.status).toBe(202);
+		const [{ rows }] = createImportJobMock.mock.calls[0];
+		expect(rows[0]).toMatchObject({ valid: false });
+		expect(rows[0].input).toBeUndefined();
+		expect(rows[0].errors).toContainEqual(expect.objectContaining({ column: 'operation_status' }));
+	});
+
 	it('returns 422 for malformed JSON instead of a generic server error', async () => {
 		const response = await POST({
 			request: request('{not-json}')

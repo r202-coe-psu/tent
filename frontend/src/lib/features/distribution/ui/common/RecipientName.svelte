@@ -23,9 +23,10 @@
 </script>
 
 {#if recipientType === 'outside'}
-	บุคคลภายนอก
-{:else if recipientType === 'volunteer'}
-	{volunteer ? `จิตอาสา ${volunteer.first_name} ${volunteer.last_name}` : 'จิตอาสา'}
+	<span class="text-slate-500">ไม่ระบุตัวตน</span>
+{:else if volunteer}
+	{volunteer.first_name}
+	{volunteer.last_name}
 {:else if evacuee}
 	{evacuee.first_name}
 	{evacuee.last_name}
