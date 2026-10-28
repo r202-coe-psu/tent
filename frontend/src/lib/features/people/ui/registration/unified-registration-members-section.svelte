@@ -194,9 +194,9 @@
 	}
 
 	function handleMemberScanned(profile: ThaiDAutofillProfile) {
-		if (targetMemberIndex === null || !members[targetMemberIndex]) return;
-		members[targetMemberIndex] = applyThaidProfileToMember(members[targetMemberIndex], profile);
-		members = [...members];
+		const target = targetMemberIndex;
+		if (target === null || !members[target]) return;
+		members = members.map((m, i) => (i === target ? applyThaidProfileToMember(m, profile) : m));
 		onDirty?.();
 		toast.success(t.thaidFetchedToast(`${profile.first_name} ${profile.last_name}`));
 	}
