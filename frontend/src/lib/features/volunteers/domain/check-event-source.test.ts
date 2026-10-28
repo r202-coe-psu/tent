@@ -12,7 +12,9 @@ describe('describeCheckEvent', () => {
 			expect(d.source).toBe('self');
 			expect(d.group).toBe('self');
 			expect(d.sourceLabel).toBe(isIn ? 'จิตอาสาเช็คอินเอง' : 'จิตอาสาเช็คเอาต์เอง');
-			expect(d.actorLine).toContain('คีตศิลป์ คงสี');
+			expect(d.actorLine).toBe(
+				isIn ? 'คีตศิลป์ คงสี (เช็คอินด้วยตนเอง)' : 'คีตศิลป์ คงสี (เช็คเอาต์ด้วยตนเอง)'
+			);
 		});
 
 		it('qr → staff member (by) scanned, never the volunteer', () => {
@@ -50,9 +52,10 @@ describe('describeCheckEvent', () => {
 			);
 		});
 
-		it('portal with a recorded by uses by', () => {
-			const d = describeCheckEvent({ ...base, kind, method: 'portal', by: 'V-007' });
-			expect(d.actorLine).toContain('V-007');
+		it('portal never shows the volunteer_portal system marker', () => {
+			const d = describeCheckEvent({ ...base, kind, method: 'portal', by: 'volunteer_portal' });
+			expect(d.actorLine).not.toContain('volunteer_portal');
+			expect(d.actorLine).toContain('คีตศิลป์ คงสี');
 		});
 
 		it('legacy: no method → unknown, no guessing', () => {

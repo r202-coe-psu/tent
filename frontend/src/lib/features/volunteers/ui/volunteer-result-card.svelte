@@ -25,6 +25,7 @@
 	import { resolve } from '$app/paths';
 	import { useSkillOptions } from '../application/queries';
 	import { resolveSkillOption, type SkillOption } from '../domain/skill-catalog';
+	import { describeCheckEvent } from '../domain/check-event-source';
 	import type { Volunteer } from '../domain/volunteer.schema';
 	import type { ShiftAssignment, ShiftAssignmentStatus } from '../domain/shift-assignment.schema';
 	import type { Job } from '../domain/job.schema';
@@ -261,9 +262,12 @@
 							<span class="font-bold"
 								>เช็คอินเข้างานแล้วเมื่อ: {formatTime(assignment.check_in_at)} น.</span
 							><br />
-							{assignment.check_in_method === 'manual_override'
-								? `บันทึกแทนโดย จนท. (${assignment.check_in_by ?? 'ไม่ระบุ'})`
-								: 'สแกนรายงานตัวเข้ากะด้วยตนเอง (Self-Service QR)'}
+							{describeCheckEvent({
+								kind: 'check_in',
+								method: assignment.check_in_method,
+								by: assignment.check_in_by,
+								volunteerName: volunteer ? fullName(volunteer) : ''
+							}).actorLine}
 						</p>
 					</div>
 				{:else if assignment.status === 'completed' && assignment.check_out_at}
@@ -273,9 +277,12 @@
 							<span class="font-bold"
 								>เช็คเอาต์ออกงานแล้วเมื่อ: {formatTime(assignment.check_out_at)} น.</span
 							><br />
-							{assignment.check_out_method === 'manual_override'
-								? `บันทึกแทนโดย จนท. (${assignment.check_out_by ?? 'ไม่ระบุ'})`
-								: `ดำเนินการโดย ${assignment.check_out_by ?? 'ไม่ระบุ'}`}
+							{describeCheckEvent({
+								kind: 'check_out',
+								method: assignment.check_out_method,
+								by: assignment.check_out_by,
+								volunteerName: volunteer ? fullName(volunteer) : ''
+							}).actorLine}
 						</p>
 					</div>
 				{:else if blockedByDispatch}

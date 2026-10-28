@@ -35,9 +35,9 @@ function sourceOf(method: CheckInMethod | null | undefined): CheckEventSource {
 }
 
 /**
- * Pure method → audit-trail wording. The actor is `by` whenever it has a
- * value; the volunteer's own name is used only when they acted themselves
- * (`portal`) and no `by` was recorded.
+ * Pure method → audit-trail wording. Staff rows show `by` (the staff member);
+ * a `portal` row always shows the volunteer, because its `by` is the system
+ * marker `volunteer_portal`, not a person.
  */
 export function describeCheckEvent(input: CheckEventInput): CheckEventDescription {
 	const { kind, by, volunteerName } = input;
@@ -52,7 +52,7 @@ export function describeCheckEvent(input: CheckEventInput): CheckEventDescriptio
 			return {
 				source,
 				sourceLabel: isIn ? 'จิตอาสาเช็คอินเอง' : 'จิตอาสาเช็คเอาต์เอง',
-				actorLine: `${actor ?? volunteerName} (จิตอาสาทำรายการเอง)`,
+				actorLine: `${volunteerName} (${isIn ? 'เช็คอินด้วยตนเอง' : 'เช็คเอาต์ด้วยตนเอง'})`,
 				noteLine: defaultNote,
 				group: 'self'
 			};
