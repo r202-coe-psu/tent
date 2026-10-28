@@ -181,6 +181,13 @@ describe('Physical Lot Projection & FEFO Ordering (Slice 5.3)', () => {
 		expect(getItemLotBalances(undefined, 'item:meal')).toEqual([]);
 	});
 
+	it('treats a bare-date expiry as usable through the whole Bangkok day (CR-195)', () => {
+		const at = (iso: string) => new Date(iso);
+		expect(isLotDateExpired('2026-10-23', at('2026-10-23T07:30:00+07:00'))).toBe(false);
+		expect(isLotDateExpired('2026-10-23', at('2026-10-23T23:59:59+07:00'))).toBe(false);
+		expect(isLotDateExpired('2026-10-23', at('2026-10-24T00:00:00+07:00'))).toBe(true);
+	});
+
 	it('flags expired lots accurately based on reference time', () => {
 		expect(isLotDateExpired('2026-05-01', refDate)).toBe(true);
 		expect(isLotDateExpired('2026-07-01', refDate)).toBe(false);
