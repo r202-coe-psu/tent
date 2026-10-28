@@ -163,7 +163,9 @@
 </svelte:head>
 
 <div class="space-y-2">
-	<div class="relative h-[480px] w-full overflow-hidden rounded-lg border border-input">
+	<div
+		class="relative h-[300px] w-full overflow-hidden rounded-lg border border-input sm:h-[480px]"
+	>
 		<div bind:this={mapElement} class="absolute inset-0 h-full w-full"></div>
 	</div>
 	<!-- Accessible manual entry — keyboard/screen-reader alternative to the map pin. -->

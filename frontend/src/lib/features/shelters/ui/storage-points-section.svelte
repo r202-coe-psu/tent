@@ -302,7 +302,7 @@
 		if (!open) closePinDialog();
 	}}
 >
-	<Dialog.Content class="sm:max-w-2xl">
+	<Dialog.Content class="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-2xl">
 		<Dialog.Header>
 			<Dialog.Title>ปักหมุดจุดรับบริจาค</Dialog.Title>
 			<Dialog.Description>
