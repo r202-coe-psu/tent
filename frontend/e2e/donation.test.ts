@@ -105,6 +105,9 @@ test.describe('Needs board shelter map (#814)', TAGS, () => {
 		await expect(card).toContainText('ข้าวสาร');
 		await expect(card.getByRole('button', { name: 'ดูความต้องการทั้งหมด' })).toBeVisible();
 		await expect(card.getByRole('button', { name: 'บริจาคสิ่งของอื่นๆ' })).toBeVisible();
+		const navigate = card.getByRole('link', { name: 'นำทางด้วย Google Maps' });
+		await expect(navigate).toHaveAttribute('href', DIRECTIONS_HREF);
+		await expect(navigate).toHaveAttribute('target', '_blank');
 
 		await card.getByRole('button', { name: 'บริจาครายการนี้' }).first().click();
 		await expect(page.locator('#donor-name')).toBeVisible();

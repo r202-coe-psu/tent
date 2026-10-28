@@ -8,11 +8,14 @@
 	import PackagePlus from '@lucide/svelte/icons/package-plus';
 	import ClipboardList from '@lucide/svelte/icons/clipboard-list';
 	import MapPin from '@lucide/svelte/icons/map-pin';
+	import Navigation from '@lucide/svelte/icons/navigation';
+	import { Button } from '$lib/components/ui/button';
 	import { DonationNeedsMap } from '$lib/features/public-portal';
 	import { getDonationStore } from '../../routes/(public)/donations/donation.svelte';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { ulid } from '$lib/db/ulid';
 	import { getTranslation } from '$lib/utils/i18n';
+	import { directionsUrl } from '$lib/utils/maps';
 	import { PUBLIC_DONATIONS_I18N } from '$lib/constants/i18n';
 	import { donorCategoryFromCatalog } from '$lib/features/donations';
 	import { formatUnit as formatUnitCatalog, useUnitsOfMeasure } from '$lib/features/catalog';
@@ -732,6 +735,18 @@
 											<MapPin class="h-3 w-3 shrink-0" />
 											{mapShelter.areaLabel}
 										</p>
+									{/if}
+									{#if mapShelter.geo}
+										<Button
+											href={directionsUrl(mapShelter.geo)}
+											target="_blank"
+											rel="noopener noreferrer"
+											variant="outline"
+											class="mt-2 min-h-[44px] rounded-xl border-2 border-slate-200 px-3 text-xs font-bold text-slate-700 hover:bg-slate-50"
+										>
+											<Navigation class="h-3.5 w-3.5 shrink-0" />
+											{t.navigateGoogleMaps}
+										</Button>
 									{/if}
 								</div>
 								{#if openNeeds.length === 0}
