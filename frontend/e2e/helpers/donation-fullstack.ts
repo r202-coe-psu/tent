@@ -691,15 +691,32 @@ export type TornDown = ReturnType<RunLedger['read']>;
  * through the BFF). That hands the need's reserved quantity and the queue place back —
  * Mongo counters that no shelter delete would ever release. Terminal bookings (received,
  * rejected, already cancelled) answer 400 and are left as they are.
+ *
+ * A booking is only done once its DELETE answers 400: a 200 is asked again in the next
+ * round, because the sync worker can write its stale Mongo status back over a fresh
+ * cancel (the booking then reads `verifying` again). 409 means inbound has the row but
+ * CouchDB does not show it yet, or a concurrent write won. Anything else, or a booking
+ * still open after the last round, throws with the last status and body.
  */
 async function cancelOpenBookings(request: APIRequestContext, bookings: LedgerBooking[]) {
-	for (const b of bookings) {
-		for (let attempt = 0; attempt < 6; attempt++) {
+	let open = bookings.map((b) => ({ b, last: 'not asked' }));
+	for (let round = 0; round < 6 && open.length > 0; round++) {
+		if (round > 0) await sleep(3_000);
+		const next: typeof open = [];
+		for (const { b } of open) {
 			const res = await request.delete(`/api/public/v1/donations/${b.token}`);
-			// 409: inbound has the row but CouchDB does not show it yet.
-			if (res.status() === 409) await sleep(3_000);
-			else break;
+			const last = `${res.status()} ${await res.text()}`;
+			if (res.status() === 400) continue;
+			if (res.status() !== 200 && res.status() !== 409) {
+				throw new Error(`cancel of ${b.ref} failed: ${last}`);
+			}
+			next.push({ b, last });
 		}
+		open = next;
+	}
+	if (open.length > 0) {
+		const left = open.map(({ b, last }) => `${b.ref} (${last})`).join('; ');
+		throw new Error(`still open after 6 cancel rounds: ${left}`);
 	}
 }
 
