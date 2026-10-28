@@ -42,10 +42,7 @@
 	import ThaidActionButton from './thaid-action-button.svelte';
 	import ThaidMemberScanDialog from './thaid-member-scan-dialog.svelte';
 	import type { ThaiDAutofillProfile } from '../../domain/thaid-profile';
-	import {
-		applyThaidAddressToHousehold,
-		applyThaidProfileToMember
-	} from '../../domain/thaid-autofill';
+	import { applyThaidToHead, canScanThaidForHead } from '../../domain/thaid-autofill';
 	import { fetchThaidRegistrationStatus } from '$lib/api/thaid-status';
 	import { readRegistrationStickyTopPx } from './registration-sticky-offset';
 	import { firstInvalidField, focusTargetFor } from './registration-focus';
@@ -1176,16 +1173,14 @@
 
 	/** ThaiD autofill: head member (index 0) + residence; joining a family keeps its residence. */
 	function handleThaiDAutofill(profile: ThaiDAutofillProfile) {
-		if (members[0]) {
-			members[0] = applyThaidProfileToMember(members[0], profile);
-			members = [...members]; // trigger reactivity
-		}
-
+		const next = applyThaidToHead({ members, household, hasJoinSelection }, profile);
+		members = next.members;
 		// Reassign the object to trigger the reactive cascading selects
-		if (!hasJoinSelection) household = applyThaidAddressToHousehold(household, profile.address);
+		household = next.household;
 
 		markDirty();
-		toast.success(t.thaidHeadFetchedToast(`${profile.first_name} ${profile.last_name}`));
+		const head = members[0];
+		toast.success(t.thaidHeadFetchedToast((head && formatPersonName(head)) || t.thaidScanHead));
 	}
 
 	$effect(() => {
@@ -1625,8 +1620,9 @@
 				description={t.sectionAddressDesc}
 				icon={Home}
 			>
-				<!-- ThaiD: public redirects to ThaiD; onsite scans a QR without leaving the page -->
-				{#if thaidEnabled}
+				<!-- ThaiD: public redirects to ThaiD; onsite scans a QR without leaving the page;
+						no head scan on onsite report-in (would overwrite the existing head) -->
+				{#if thaidEnabled && canScanThaidForHead({ channel, mode })}
 					<ThaidActionButton
 						shelterCode={shelterCode || (enableUnassignedPhoto ? 'unassigned' : '')}
 						disabled={fieldsLocked}
@@ -1635,7 +1631,7 @@
 					{#if channel !== 'public'}
 						<ThaidMemberScanDialog
 							bind:open={headScanOpen}
-							memberLabel={t.thaidScanMemberN(1)}
+							memberLabel={t.thaidScanHead}
 							onscanned={handleThaiDAutofill}
 						/>
 					{/if}

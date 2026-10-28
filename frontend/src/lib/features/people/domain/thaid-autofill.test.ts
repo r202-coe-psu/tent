@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import type { ThaiDAutofillProfile } from './thaid-profile';
 import { blankUnifiedMember } from './unified-registration';
-import { applyThaidAddressToHousehold, applyThaidProfileToMember } from './thaid-autofill';
+import {
+	applyThaidAddressToHousehold,
+	applyThaidProfileToMember,
+	applyThaidToHead,
+	canScanThaidForHead
+} from './thaid-autofill';
 
 function profile(overrides: Partial<ThaiDAutofillProfile> = {}): ThaiDAutofillProfile {
 	return {
@@ -94,4 +99,91 @@ describe('applyThaidAddressToHousehold', () => {
 			postal_code: '90110'
 		});
 	});
+});
+
+describe('applyThaidToHead', () => {
+	const thaidAddress = {
+		address_no: '12/3',
+		village_no: '4',
+		subdistrict: 'คอหงส์',
+		district: 'หาดใหญ่',
+		province: 'สงขลา',
+		postal_code: '90110'
+	};
+	const joinedHousehold = {
+		housing_type: 'owned_house' as const,
+		address_no: '99',
+		village_no: '7',
+		subdistrict: 'บางกล่ำ',
+		district: 'บางกล่ำ',
+		province: 'สงขลา',
+		postal_code: '90110'
+	};
+
+	it('fills the head from ThaiD but keeps the joined household address when joining an existing household', () => {
+		const next = applyThaidToHead(
+			{
+				members: [blankUnifiedMember()],
+				household: { ...joinedHousehold, province: 'ปัตตานี' },
+				hasJoinSelection: true
+			},
+			profile({ address: thaidAddress })
+		);
+
+		expect(next.members[0].first_name).toBe('สมชาย');
+		expect(next.household.address_no).toBe('99');
+		expect(next.household.subdistrict).toBe('บางกล่ำ');
+		expect(next.household.province).toBe('ปัตตานี');
+	});
+
+	it('fills the household address from ThaiD when not joining an existing household', () => {
+		const next = applyThaidToHead(
+			{
+				members: [blankUnifiedMember()],
+				household: { ...joinedHousehold, address_no: '', village_no: '' },
+				hasJoinSelection: false
+			},
+			profile({ address: thaidAddress })
+		);
+
+		expect(next.members[0].first_name).toBe('สมชาย');
+		expect(next.household.address_no).toBe('12/3');
+		expect(next.household.village_no).toBe('4');
+		expect(next.household.subdistrict).toBe('คอหงส์');
+		expect(next.household.district).toBe('หาดใหญ่');
+		expect(next.household.province).toBe('สงขลา');
+		expect(next.household.postal_code).toBe('90110');
+	});
+
+	it('leaves other members untouched', () => {
+		const second = { ...blankUnifiedMember(), first_name: 'สมหญิง', last_name: 'ใจงาม' };
+
+		const next = applyThaidToHead(
+			{
+				members: [blankUnifiedMember(), second],
+				household: joinedHousehold,
+				hasJoinSelection: false
+			},
+			profile({ address: thaidAddress })
+		);
+
+		expect(next.members).toHaveLength(2);
+		expect(next.members[0].first_name).toBe('สมชาย');
+		expect(next.members[1].first_name).toBe('สมหญิง');
+		expect(next.members[1].last_name).toBe('ใจงาม');
+	});
+});
+
+describe('canScanThaidForHead', () => {
+	it.each([
+		{ channel: 'onsite', mode: 'create', expected: true },
+		{ channel: 'onsite', mode: 'report-in', expected: false },
+		{ channel: 'public', mode: 'create', expected: true },
+		{ channel: 'public', mode: 'report-in', expected: true }
+	] as const)(
+		'channel=$channel mode=$mode -> $expected (never lets onsite report-in overwrite an existing head)',
+		({ channel, mode, expected }) => {
+			expect(canScanThaidForHead({ channel, mode })).toBe(expected);
+		}
+	);
 });
