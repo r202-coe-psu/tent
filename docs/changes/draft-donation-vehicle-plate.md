@@ -3,9 +3,9 @@ id: draft
 title: "ทะเบียนรถ (ไม่บังคับ) ตอนผู้บริจาคนำของมาส่งเอง — `logistics.vehicle_plate`"
 status: proposed
 date: 2026-10-26
-updated: 2026-10-27
+updated: 2026-10-28
 requested_by: "GitHub #823 (roleplay 23/10/69 feedback)"
-decided_by: "owner"
+decided_by: "Jackyzaz"
 layer: volatile
 affects:
   - docs/data/schema.md §2.3 `donation` — field ใหม่ `logistics.vehicle_plate`; migration note
@@ -100,10 +100,13 @@ migration: field ใหม่ optional — doc เดิมไม่ต้อง
 
 ## Decision log
 
-- 2026-10-26 — owner: field `logistics.vehicle_plate`; ไม่บังคับ; เฉพาะ `self_dropoff`; รถทุกประเภทรวมมอเตอร์ไซค์
-- 2026-10-26 — owner: ทะเบียนเป็น PII ผู้บริจาค อยู่ใต้ retention policy (CR แยก)
-- 2026-10-26 — owner: `donation.schema_v` 7 → 8
-- 2026-10-26 — owner: ตั๋วแสดงทะเบียนอย่างเดียว ไม่แสดงประเภทรถ
-- 2026-10-26 — owner: คง allowance เดิมของ `vehicle` กับ `shelter_pickup`; `vehicle_plate` ห้ามทั้ง `shelter_pickup` และ `parcel`
-- 2026-10-27 — owner: ช่องเดียว free text trim ≤ 40 ว่าง = omit
-- 2026-10-27 — ลดขอบเขตให้ตรง #823: ตัด flag `config:app.donation_vehicle_plate_enabled` และ endpoint `donation-settings` · กันทะเบียนจาก API ติดตามใบ (FR-4) แทนการคุมด้วย flag
+- 2026-10-26 — proposed (Team D): field `logistics.vehicle_plate`; ไม่บังคับ; เฉพาะ `self_dropoff`; รถทุกประเภทรวมมอเตอร์ไซค์
+- 2026-10-26 — proposed (Team D): ทะเบียนเป็น PII ผู้บริจาค อยู่ใต้ retention policy (CR แยก)
+- 2026-10-26 — proposed (Team D): `donation.schema_v` 7 → 8
+- 2026-10-26 — proposed (Team D): ตั๋วแสดงทะเบียนอย่างเดียว ไม่แสดงประเภทรถ
+- 2026-10-26 — proposed (Team D): คง allowance เดิมของ `vehicle` กับ `shelter_pickup`; `vehicle_plate` ห้ามทั้ง `shelter_pickup` และ `parcel`
+- 2026-10-27 — proposed (Team D): ช่องเดียว free text trim ≤ 40 ว่าง = omit
+- 2026-10-27 — proposed (Team D): ลดขอบเขตให้ตรง #823: ตัด flag `config:app.donation_vehicle_plate_enabled` และ endpoint `donation-settings` · กันทะเบียนจาก API ติดตามใบ (FR-4) แทนการคุมด้วย flag
+- 2026-10-28 — Jackyzaz (PR #962): ช่องทะเบียนไม่บังคับ · free text ช่องเดียว ≤ 40 ตัวอักษร (FR-1) — อนุมัติ
+- 2026-10-28 — Jackyzaz (PR #962): ถามทะเบียนเฉพาะ `self_dropoff` ไม่ถามตอน `shelter_pickup` / `parcel` (FR-1a, FR-2) — อนุมัติ
+- 2026-10-28 — Jackyzaz (PR #962): ทะเบียนเห็นได้เฉพาะเจ้าหน้าที่คลังในหน้าหลังบ้าน (สแกนรับของ, รอประเมิน) และตั๋วหลังจองเสร็จ (ให้ผู้บริจาคแคปเก็บไว้) · **ห้าม**แสดงหรือส่งทางหน้าติดตามสถานะ / API ติดตามใบ (FR-3a–FR-3c, FR-4) — อนุมัติ
