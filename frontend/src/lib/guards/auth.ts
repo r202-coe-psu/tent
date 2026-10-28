@@ -180,7 +180,11 @@ export async function requireWarehouseAccess(
 	}
 }
 
-/** Distribution Desk href (optional query) a route may offer as the warehouse-guard fallback. */
+/**
+ * Distribution Desk href (optional query) a route may offer as the warehouse-guard fallback.
+ * Must match `OnsiteDistributionHref` in distribution `ui/model/pool-url-state.ts` (the guard does
+ * not import the feature).
+ */
 export type DeskFallbackHref = '/onsite/distribution' | `/onsite/distribution?${string}`;
 
 /**

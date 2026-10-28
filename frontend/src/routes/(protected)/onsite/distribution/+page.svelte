@@ -4,7 +4,9 @@
 		mergeOnsitePoolParam,
 		mergeOnsiteTabParam,
 		parseOnsiteDistributionParams,
-		type FrontlineTab
+		ONSITE_DISTRIBUTION_PATH,
+		type FrontlineTab,
+		type OnsiteDistributionHref
 	} from '$lib/features/distribution';
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
@@ -17,13 +19,10 @@
 	function replaceQuery(next: URLSearchParams) {
 		const qs = next.toString();
 		if (qs === page.url.searchParams.toString()) return;
-		void goto(
-			resolve(
-				`/onsite/distribution${qs ? `?${qs}` : ''}` as
-					'/onsite/distribution' | `/onsite/distribution?${string}`
-			),
-			{ replaceState: true, keepFocus: true, noScroll: true }
-		);
+		const href: OnsiteDistributionHref = qs
+			? `${ONSITE_DISTRIBUTION_PATH}?${qs}`
+			: ONSITE_DISTRIBUTION_PATH;
+		void goto(resolve(href), { replaceState: true, keepFocus: true, noScroll: true });
 	}
 
 	// Keep `pool` in the URL on select / close.

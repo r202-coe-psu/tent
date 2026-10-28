@@ -43,7 +43,10 @@ export function bulkReturnPoolHref(poolId: string): string {
 /** Distribution Desk (Station 4) page — the pool link target for staff without back-office access. */
 export const ONSITE_DISTRIBUTION_PATH = '/onsite/distribution';
 
-/** Desk href with an optional query string (typed so route code can pass it to `resolve`). */
+/**
+ * Desk href with an optional query string (typed so route code can pass it to `resolve`).
+ * Must match `DeskFallbackHref` in `$lib/guards/auth.ts` (the guard does not import the feature).
+ */
 export type OnsiteDistributionHref =
 	typeof ONSITE_DISTRIBUTION_PATH | `${typeof ONSITE_DISTRIBUTION_PATH}?${string}`;
 

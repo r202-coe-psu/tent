@@ -425,7 +425,9 @@ export {
 	mergeOnsitePoolParam,
 	mergeOnsiteTabParam,
 	parseOnsiteDistributionParams,
-	type FrontlineTab
+	ONSITE_DISTRIBUTION_PATH,
+	type FrontlineTab,
+	type OnsiteDistributionHref
 } from './ui/model/pool-url-state';
 
 export {
