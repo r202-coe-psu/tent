@@ -1,10 +1,12 @@
 ---
-id: draft
+id: CR-207 # renumbered from draft-applicant-tab-filters-and-counts
 title: แท็บผู้สมัคร — ตัวกรอง, สถานะ "รอยืนยันการเข้างาน" (แสดงผลอย่างเดียว) และการนับกะที่มอบหมายแล้วถูกยกเลิก
-status: proposed
+status: approved
 date: 2026-10-28
+updated: 2026-10-28 # approved (Soravit Sukkarn, Team Lead)
 requested_by: "#849 (ผู้รับงาน @Mhapong) + review ของ @Jackyzaz ใน PR #968 (ขอ doc amend)"
-decided_by: project owner
+decided_by: Soravit Sukkarn (Team Lead)
+decision_date: 2026-10-28
 layer: volatile
 affects:
   - docs/changes/06-A-volunteer/CR-180-volunteer-multi-shift-apply.md (ตาราง "ฝั่งเจ้าหน้าที่" แถว "ประวัติการพิจารณา")
@@ -15,7 +17,7 @@ affects:
   - ไม่เปลี่ยน schema / ไม่ bump `schema_v` (คำนวณตอนแสดงผลทั้งหมด)
 ---
 
-# draft-applicant-tab-filters-and-counts — ตัวกรองและการนับในแท็บผู้สมัคร
+# CR-207 — ตัวกรองและการนับในแท็บผู้สมัคร
 
 > **สรุป (TL;DR):**
 >
@@ -58,7 +60,7 @@ affects:
 
 | แถว               | ก่อน (คอลัมน์ "หลัง") | หลัง                                                                                                   |
 | ----------------- | --------------------- | ------------------------------------------------------------------------------------------------------ |
-| ประวัติการพิจารณา | คงเดิม                | หัวข้อเป็น "ประวัติ (n กะ)" พร้อมตัวเลขแยก อนุมัติ / ปฏิเสธ-ยกเลิก / มอบหมายโดยเจ้าหน้าที่ (draft นี้) |
+| ประวัติการพิจารณา | คงเดิม                | หัวข้อเป็น "ประวัติ (n กะ)" พร้อมตัวเลขแยก อนุมัติ / ปฏิเสธ-ยกเลิก / มอบหมายโดยเจ้าหน้าที่ (CR-207) |
 
 ## Acceptance
 
@@ -79,6 +81,10 @@ affects:
 
 ไม่มี
 
+## ข้อตกลง
+
+Soravit Sukkarn (Team Lead) approve CR นี้วันที่ 2026-10-28 ตามที่เสนอใน PR #998 (doc amend ของ PR #968) พร้อมข้อตัดสินใน Decision log (D2 และ "รอยืนยันการเข้างาน" คำนวณจาก `now` แบบ live)
+
 ## Decision log
 
 - 2026-10-26 — @net-lynx ตอบ #885: ขั้นที่ 1 "รอยืนยันการเข้างาน" ใช้เกณฑ์ 30 นาที ไม่รวม flex
@@ -86,3 +92,4 @@ affects:
 - 2026-10-28 — proposed ใน PR #998 (doc amend ของ PR #968) ตาม review ของ @Jackyzaz
 - 2026-10-28 — Soravit Sukkarn (Team Lead) ตัดสินใน PR #998: ใบ `confirmed` ที่กะถูกยกเลิกยังนับ "อนุมัติ" (D2) และ "รอยืนยันการเข้างาน" คำนวณจาก `now` แบบ live tick ทุกนาที (D3) · Team Lead จัดการ `decided_by` เอง (D1)
 - **ลำดับ merge:** merge PR นี้ก่อนหรือพร้อม PR #968
+- 2026-10-28 — approved by Soravit Sukkarn (Team Lead) · รันเลข CR-207 (renumbered from draft-applicant-tab-filters-and-counts) ย้ายเข้า `06-A-volunteer/`
