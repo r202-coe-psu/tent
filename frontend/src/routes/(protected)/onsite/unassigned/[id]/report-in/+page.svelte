@@ -6,6 +6,7 @@
 	import ClipboardList from '@lucide/svelte/icons/clipboard-list';
 	import AlertTriangle from '@lucide/svelte/icons/alert-triangle';
 	import PawPrint from '@lucide/svelte/icons/paw-print';
+	import Undo2 from '@lucide/svelte/icons/undo-2';
 	import { Button } from '$lib/components/ui/button';
 	import { Badge } from '$lib/components/ui/badge';
 	import * as Card from '$lib/components/ui/card';
@@ -221,6 +222,19 @@
 	</button>
 {/snippet}
 
+{#snippet claimAllUndo()}
+	{#if claimEveryOpenPet && !claimedHouseholdId && data.petIds.length < (review?.open_pets ?? []).length}
+		<button
+			type="button"
+			onclick={() => (claimEveryOpenPet = false)}
+			class="mt-3 inline-flex min-h-11 cursor-pointer items-center gap-1.5 text-xs font-medium text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline"
+		>
+			<Undo2 class="size-3.5" aria-hidden="true" />
+			เลือกเฉพาะสัตว์เลี้ยงที่ติ๊กมาตอนแรก
+		</button>
+	{/if}
+{/snippet}
+
 {#snippet leftBehindWarning()}
 	{#if leftBehindPets.length > 0}
 		<div class="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-4 shadow-2xs" role="status">
@@ -228,11 +242,14 @@
 				<AlertTriangle class="mt-0.5 size-5 shrink-0 text-amber-600" aria-hidden="true" />
 				<div class="min-w-0 flex-1">
 					<h2 class="text-sm font-bold text-amber-900">
-						ยังมีสัตว์เลี้ยง {leftBehindCount} ตัวที่ไม่ได้เลือก
+						{claimedHouseholdId
+							? `สัตว์เลี้ยง ${leftBehindCount} ตัวยังค้างอยู่ในคิวกลาง`
+							: `ยังมีสัตว์เลี้ยง ${leftBehindCount} ตัวที่ไม่ได้เลือก`}
 					</h2>
 					<p class="mt-1 text-xs text-amber-900">
-						ถ้ารับเข้าศูนย์ตอนนี้ สัตว์เลี้ยงด้านล่างจะค้างอยู่ในคิวกลาง
-						และจะไม่ปรากฏในข้อมูลครัวเรือนที่สถานี 1
+						{claimedHouseholdId
+							? 'รับเข้าศูนย์ไปแล้วโดยไม่มีสัตว์เลี้ยงด้านล่าง — กดยืนยันซ้ำจะไม่รับเข้าให้อีก ต้องกลับไปที่คิวทะเบียนแล้วรับเข้าแยกอีกครั้ง'
+							: 'ถ้ารับเข้าศูนย์ตอนนี้ สัตว์เลี้ยงด้านล่างจะค้างอยู่ในคิวกลาง และจะไม่ปรากฏในข้อมูลครัวเรือนที่สถานี 1'}
 					</p>
 					<ul class="mt-2 space-y-1">
 						{#each leftBehindPets as pet (pet.pet_id)}
@@ -241,14 +258,16 @@
 							</li>
 						{/each}
 					</ul>
-					<Button
-						variant="outline"
-						class="mt-3 min-h-11 w-full border-amber-300 bg-white text-amber-900 hover:bg-amber-100 sm:w-auto"
-						onclick={() => (claimEveryOpenPet = true)}
-					>
-						<PawPrint class="size-4" aria-hidden="true" />
-						เพิ่มสัตว์เลี้ยงที่เหลือเข้ารายการนี้
-					</Button>
+					{#if !claimedHouseholdId}
+						<Button
+							variant="outline"
+							class="mt-3 min-h-11 w-full border-amber-300 bg-white text-amber-900 hover:bg-amber-100 sm:w-auto"
+							onclick={() => (claimEveryOpenPet = true)}
+						>
+							<PawPrint class="size-4" aria-hidden="true" />
+							เพิ่มสัตว์เลี้ยงที่เหลือเข้ารายการนี้
+						</Button>
+					{/if}
 				</div>
 			</div>
 		</div>
@@ -352,6 +371,7 @@
 						</li>
 					{/each}
 				</ul>
+				{@render claimAllUndo()}
 				<Button class="mt-4 w-full" disabled={isConfirmingPetsOnly} onclick={handleConfirmPetsOnly}>
 					{isConfirmingPetsOnly ? 'กำลังรับเข้าศูนย์...' : 'ยืนยันรับเข้าศูนย์'}
 				</Button>
@@ -372,6 +392,7 @@
 							</li>
 						{/each}
 					</ul>
+					{@render claimAllUndo()}
 				</Card.Root>
 			{/if}
 			{#if consentedMembers.length > 0}
