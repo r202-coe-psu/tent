@@ -107,11 +107,13 @@
 	const canFrontline = $derived(authContext ? canPerformFrontlineDistribution(authContext) : false);
 
 	// The link (props) sets mode / tab / pool; user actions override them locally. The URL is then
-	// written whole from this state (`writeUrl`); the shallow write does not touch `page.url`, so
-	// the props stay as the link had them until a real navigation changes them.
+	// written whole from this state (`writeUrl`). The props follow the route's parse of
+	// `page.state.deskSearch` (else `page.url`), so they track the desk's own writes; a real
+	// navigation clears `page.state`, so the link's URL applies again.
 	// `?mode=` beats the remembered mode (FR-DFS-07); the stored read is not a dependency.
 	// One link object: any prop or `linkKey` change makes a fresh one, so mode, tab and pool are
-	// re-applied together (a local write overrides until the next link).
+	// re-applied together. `linkKey` re-derives it on a real navigation even when the parsed values
+	// are unchanged. Local state and the written URL agree, since every local change writes the URL.
 	const link = $derived.by(() => {
 		void linkKey;
 		const m = resolveInitialMode(initialMode, untrack(readStoredDeskMode));

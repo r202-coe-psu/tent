@@ -14,8 +14,9 @@
 		)
 	);
 
-	// Shallow `replaceState` leaves `page.url` stale, so following the same link again changes no
-	// prop. This counter bumps on real navigations only (not on shallow writes) to re-apply it.
+	// A real navigation to the same link can produce the same parsed values as the desk's last
+	// write, so no prop changes. This counter bumps on real navigations only (`afterNavigate` skips
+	// shallow writes and `enter`), which forces the link to re-apply.
 	let linkKey = $state(0);
 	afterNavigate((nav) => {
 		if (nav.type !== 'enter') linkKey++;
