@@ -120,9 +120,10 @@ throw เพราะ `reason` ไม่ตรง → ไม่ลง stock ซ�
 **ยอดจ่ายออกต่อ lot** = `|Σ qty|` ของแถว `distribute` **ทุกแถว** ที่ `ref_id` = ตั๋ว และ `item_id` = ชนิดนั้น (รวมแถวจาก
 `dispatchTicket` และ `amendActiveTicket`) จัดกลุ่มตาม `lot_ref`.
 
-**lot ที่ระบุได้** = มีแถวต้นทางของ lot: แถว `qty` > 0 ที่ `reason` ≠ `distribution_return` และ `(lot_ref ?? _id)` = `lot_ref` นั้น
-(แถวแรกตาม `occurred_at`, `_id` — แถวเดียวกับที่ `projectStockLotBalances` ใช้ตั้ง metadata ของ lot). metadata ของ lot = `lot` ของแถวนั้น,
-`received_at` = `occurred_at` ของแถวนั้น. แถว `distribute` ที่ไม่มี `lot_ref` หรือ `lot_ref` ไม่มีแถวต้นทาง → กลุ่ม**ระบุ lot ไม่ได้** (§1.1).
+**lot ที่ระบุได้** = มีแถวต้นทางของ lot: แถว `qty` > 0 ที่ `reason` ≠ `distribution_return`, `(lot_ref ?? _id)` = `lot_ref` นั้น
+และ `item_id` / `unit` ตรงกับชนิดที่คืน (แถวแรกตาม `occurred_at`, `_id` — แถวเดียวกับที่ `projectStockLotBalances` ใช้ตั้ง metadata ของ lot).
+metadata ของ lot = `lot` ของแถวนั้น, `received_at` = `occurred_at` ของแถวนั้น. แถว `distribute` ที่ไม่มี `lot_ref`, `lot_ref` ไม่มีแถวต้นทาง
+หรือแถวต้นทางเป็นคนละชนิด/หน่วย (`amendActiveTicket` รับ `lot_ref` ใด ๆ ที่ขึ้นต้น `stock_ledger:` โดยไม่ตรวจชนิด) → กลุ่ม**ระบุ lot ไม่ได้** (§1.1).
 
 **วันหมดอายุของ lot (เวลาสัมบูรณ์ ms)** — คำนวณจาก metadata ของ lot ต้นทาง และ `shelf_life_days` ของ
 `item_master` (อ่านผ่าน `catalog.listItemMasters` → `toLotPriorityItems` แบบเดียวกับ `dispatchTicket`):
@@ -189,7 +190,8 @@ throw เพราะ `reason` ไม่ตรง → ไม่ลง stock ซ�
 
 - **FR-RTN-01** — ระบบต้องอ่านแถว `stock_ledger` `reason: 'distribute'` ทุกแถวที่ `ref_id` = ตั๋ว แล้วคำนวณยอดจ่ายออกต่อ (ชนิด, `lot_ref`) ตาม §2
 - **FR-RTN-02** — ระบบต้องหา lot ต้นทางและ metadata จากแถวต้นทางของ lot ตาม §2 (ไม่ใช้ `brokenItemIds` ของ `projectLotsByItem` ตัดสิน);
-  `lot_ref` ที่ไม่มีแถวต้นทาง และแถว `distribute` ที่ไม่มี `lot_ref` เข้ากลุ่มระบุ lot ไม่ได้ (§1.1) — ห้าม throw เพราะเหตุนี้
+  `lot_ref` ที่ไม่มีแถวต้นทาง, แถวต้นทางที่ `item_id` / `unit` ไม่ตรงกับชนิดที่คืน และแถว `distribute` ที่ไม่มี `lot_ref` เข้ากลุ่มระบุ lot ไม่ได้
+  (§1.1) — ห้าม throw เพราะเหตุนี้ และห้ามเขียน `distribution_return` อ้าง lot ของชนิดอื่น
 - **FR-RTN-03** — ระบบต้องแบ่งยอดที่คลังนับได้ของแต่ละชนิดไปตาม lot และกลุ่มระบุ lot ไม่ได้ ตามกติกา §2
 - **FR-RTN-04** — เพิ่มจาก guard เดิม (ยอดนับได้ ≤ `allocated_qty − distributed_qty`): ถ้ายอดที่นับได้ของชนิดใด > ผลรวมยอดจ่ายออก
   ทุกกลุ่ม (ระบุ lot ได้ + ไม่ได้) ของชนิดนั้น ระบบต้อง throw `StockIntegrityError` และไม่เขียน ledger ใดของตั๋วนั้น
@@ -254,7 +256,8 @@ throw เพราะ `reason` ไม่ตรง → ไม่ลง stock ซ�
 - [ ] lot ที่รับคืนยังมี `expiry`, `produced_at`, `storage_point_id`/`storage_zone`, `lot_no` เดิม; probe กรณี A และ B ให้ผล
       ตาม lot เดิม (`isUrgent`, `isLotExpired`, `earliestExpiry` มีป้ายบนตารางสต็อก)
 - [ ] ตั๋วที่มี top-up แบบไม่ระบุ lot (`lot_ref = stock_ledger:{amendmentId}`) ตรวจรับคืนได้และถึง `RETURN_COMPLETED`; ชนิดที่ projection
-      พังจากตั๋วอื่นไม่บล็อกการตรวจรับ · ยอดที่นับได้เกินยอดจ่ายออกรวม → `StockIntegrityError` และไม่มีแถว ledger ถูกเขียน
+      พังจากตั๋วอื่นไม่บล็อกการตรวจรับ · แถว `distribute` ที่อ้าง lot ของชนิดอื่นนับเป็นกลุ่มระบุ lot ไม่ได้ (ไม่เขียน `distribution_return`
+      ข้ามชนิด) · ยอดที่นับได้เกินยอดจ่ายออกรวม → `StockIntegrityError` และไม่มีแถว ledger ถูกเขียน
 - [ ] replay: กดตรวจรับซ้ำไม่เกิดแถวซ้ำ · เขียนไปได้บางแถวแล้ว retry → เขียนเฉพาะแถวที่ขาดและได้ชุดเท่า E · แถวที่มีแต่ `qty`/`lot_ref`
       ไม่ตรง หรือมีแถวเกิน → `StockIntegrityError` · ชนิดเดียวมีทั้ง `receive` แบบเดิมและ `distribution_return` → `StockIntegrityError` ·
       completed replay ที่ขาดแถว → `StockIntegrityError`
