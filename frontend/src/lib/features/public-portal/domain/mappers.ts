@@ -12,6 +12,11 @@ export function toUiShelterStatus(status: string | null | undefined): string {
 	return status.toUpperCase();
 }
 
+/** CR-183: a closed shelter keeps its people searchable for the retention window. */
+export function isShelterClosed(item: Pick<FamilySearchResult, 'shelter_status'>): boolean {
+	return item.shelter_status === 'closed';
+}
+
 /**
  * `id` is the shelter `code`, falling back to the display name for the
  * defensive null/`{}` cases the tests cover. It used to try `(item as any).id`

@@ -5,7 +5,7 @@
 		useMealServices,
 		useMealServiceReceipts,
 		useKitchenRequisitions,
-		useActiveEvacueeDietCounts,
+		useShelterMealHeadcount,
 		useCreateMealSession,
 		useDeleteMealSession,
 		computeSessionGroupProgress,
@@ -15,6 +15,7 @@
 		MEAL_PERIOD_LABELS,
 		MEAL_VARIANCE_STATUS_LABELS,
 		TARGET_GROUP_LABELS,
+		TARGET_GROUP_SHORT_LABELS,
 		type MealSession,
 		type MealPlan,
 		type MealPeriod,
@@ -68,7 +69,7 @@
 	const services = useMealServices();
 	const serviceReceipts = useMealServiceReceipts();
 	const requisitions = useKitchenRequisitions();
-	const dietCounts = useActiveEvacueeDietCounts();
+	const mealHeadcount = useShelterMealHeadcount();
 	const tickets = useTickets();
 
 	// Per meal_plan_id: the most relevant requisition_ticket (CR-141 write path — the legacy
@@ -181,6 +182,13 @@
 	let countRegular = $state(0);
 	let countVolunteer = $state(0);
 
+	const shelterPeople = $derived(mealHeadcount.data?.people);
+	const shelterPeopleCards = $derived([
+		{ key: 'evacuees', label: 'ผู้อพยพ', count: shelterPeople?.evacuees },
+		{ key: 'staff', label: 'เจ้าหน้าที่', count: shelterPeople?.staff },
+		{ key: 'volunteers', label: 'อาสาสมัคร', count: shelterPeople?.volunteers }
+	]);
+
 	const formTotal = $derived(
 		Number(countHalal || 0) +
 			Number(countInfant || 0) +
@@ -190,7 +198,7 @@
 	);
 
 	function openCreateDialog() {
-		const counts = dietCounts.data;
+		const counts = mealHeadcount.data?.headcount;
 		if (counts) {
 			countHalal = counts.halal;
 			countInfant = counts.infant;
@@ -328,8 +336,6 @@
 			return s.name.toLowerCase().includes(q) || s.date.includes(q);
 		});
 	});
-
-	const groupKeys: TargetGroupTag[] = ['halal', 'infant', 'soft_food', 'regular', 'volunteer'];
 
 	let expandedSessionIds = $state<string[]>([]);
 	let initializedSessions = $state(false);
@@ -536,14 +542,17 @@
 
 									<!-- Group Completion Badge -->
 									<span
-										class="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-bold {progress.isAllCompleted
-											? 'bg-green-100 text-green-800'
-											: 'bg-amber-100 text-amber-800'}"
+										class="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-bold {progress.totalCount ===
+										0
+											? 'bg-slate-100 text-slate-600'
+											: progress.isAllCompleted
+												? 'bg-green-100 text-green-800'
+												: 'bg-amber-100 text-amber-800'}"
 									>
-										{#if !progress.isAllCompleted}
+										{#if progress.totalCount > 0 && !progress.isAllCompleted}
 											<AlertTriangle class="h-3.5 w-3.5" />
 										{/if}
-										{progress.summaryText}ครบ
+										{progress.summaryText}
 									</span>
 
 									<!-- Status Badge -->
@@ -591,7 +600,7 @@
 									<div>
 										<div class="mb-2 flex items-center justify-between">
 											<span class="text-xs font-semibold text-muted-foreground">
-												เป้าหมาย 5 กลุ่มความต้องการ (รวม {session.target_headcount.total} จาน)
+												เป้าหมายตามกลุ่มความต้องการ (รวม {progress.totalTarget} จาน)
 											</span>
 										</div>
 
@@ -601,10 +610,10 @@
 													<Table.Row class="bg-muted/30 text-sm">
 														<Table.Head class="px-4 py-2 font-semibold">กลุ่มเป้าหมาย</Table.Head>
 														<Table.Head class="px-3 py-2 text-right font-semibold">
-															จำนวนเป้าหมาย (คน)
+															เป้าหมาย (จาน)
 														</Table.Head>
 														<Table.Head class="px-3 py-2 text-right font-semibold">
-															ทำแล้ว (จาน)
+															ได้รับ (จาน)
 														</Table.Head>
 														<Table.Head class="px-3 py-2 text-center font-semibold"
 															>สถานะ</Table.Head
@@ -612,15 +621,17 @@
 													</Table.Row>
 												</Table.Header>
 												<Table.Body>
-													{#each groupKeys as groupKey (groupKey)}
-														{@const item = progress.groups[groupKey]}
+													{#each progress.activeTags as tag (tag)}
+														{@const item = progress.groups[tag]}
 														<Table.Row class="text-xs">
 															<Table.Cell class="px-4 py-2 font-semibold">
-																{TARGET_GROUP_LABELS[groupKey]}
+																{TARGET_GROUP_LABELS[tag]}
 															</Table.Cell>
-															<Table.Cell class="px-3 py-2 text-right">{item.target}</Table.Cell>
-															<Table.Cell class="px-3 py-2 text-right font-semibold">
-																{item.actualYield}
+															<Table.Cell class="px-3 py-2 text-right tabular-nums"
+																>{item.target}</Table.Cell
+															>
+															<Table.Cell class="px-3 py-2 text-right font-semibold tabular-nums">
+																{item.received}
 															</Table.Cell>
 															<Table.Cell class="px-3 py-2 text-center">
 																<span
@@ -630,15 +641,50 @@
 																>
 																	{#if item.isCompleted}
 																		<CheckCircle2 class="h-3 w-3" />
-																		ครบแล้ว
+																		ครบ
 																	{:else}
 																		<Clock class="h-3 w-3" />
-																		ยังไม่ครบ
+																		ขาด <span class="tabular-nums">{item.shortfall}</span>
 																	{/if}
 																</span>
 															</Table.Cell>
 														</Table.Row>
 													{/each}
+													{#if progress.noTargetTags.length > 0}
+														<Table.Row class="text-xs text-muted-foreground">
+															<Table.Cell class="px-4 py-2 font-semibold">
+																{progress.noTargetTags
+																	.map((tag) => TARGET_GROUP_SHORT_LABELS[tag])
+																	.join(' / ')}
+															</Table.Cell>
+															<Table.Cell class="px-3 py-2 text-right tabular-nums">0</Table.Cell>
+															<Table.Cell class="px-3 py-2 text-right">—</Table.Cell>
+															<Table.Cell class="px-3 py-2 text-center">
+																<span
+																	class="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600"
+																>
+																	ไม่มีเป้าหมาย
+																</span>
+															</Table.Cell>
+														</Table.Row>
+													{/if}
+													<Table.Row class="bg-muted/20 text-xs font-bold">
+														<Table.Cell class="px-4 py-2">รวม</Table.Cell>
+														<Table.Cell class="px-3 py-2 text-right tabular-nums">
+															{progress.totalTarget}
+														</Table.Cell>
+														<Table.Cell class="px-3 py-2 text-right tabular-nums">
+															{progress.totalProduced}
+															{#if progress.surplus > 0}
+																<span class="font-semibold text-muted-foreground">
+																	· เกิน {progress.surplus}</span
+																>
+															{/if}
+														</Table.Cell>
+														<Table.Cell class="px-3 py-2 text-center">
+															{progress.summaryText}
+														</Table.Cell>
+													</Table.Row>
 												</Table.Body>
 											</Table.Root>
 										</div>
@@ -952,7 +998,7 @@
 
 <!-- Create Meal Session Modal -->
 <Dialog.Root bind:open={createDialogOpen}>
-	<Dialog.Content class="sm:max-w-xl">
+	<Dialog.Content class="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-xl">
 		<Dialog.Header>
 			<Dialog.Title class="text-base font-bold text-foreground sm:text-lg"
 				>สร้างรอบมื้ออาหารใหม่</Dialog.Title
@@ -962,7 +1008,7 @@
 			</Dialog.Description>
 		</Dialog.Header>
 
-		<div class="space-y-4 py-2">
+		<div class="min-w-0 space-y-4 py-2">
 			<div>
 				<Label for="session-name" class="text-xs font-medium">ชื่อรอบมื้ออาหาร</Label>
 				<Input id="session-name" bind:value={formName} class="mt-1.5 h-9 text-sm" />
@@ -988,6 +1034,21 @@
 						</Select.Content>
 					</Select.Root>
 				</div>
+			</div>
+
+			<div class="flex gap-2.5 overflow-x-auto" data-testid="shelter-people-counts">
+				{#each shelterPeopleCards as card (card.key)}
+					<div
+						class="min-w-32 shrink-0 grow rounded-lg border bg-background p-2.5 shadow-2xs"
+						data-testid="shelter-people-{card.key}"
+					>
+						<div class="text-xs font-medium text-muted-foreground">{card.label}</div>
+						<div class="mt-0.5 text-base font-bold text-foreground tabular-nums">
+							{card.count ?? '–'}
+							<span class="text-xs font-medium text-muted-foreground">คน</span>
+						</div>
+					</div>
+				{/each}
 			</div>
 
 			<!-- 5-Group Target Headcount Inputs -->

@@ -13,11 +13,8 @@
 	import Info from '@lucide/svelte/icons/info';
 	import TriangleAlert from '@lucide/svelte/icons/triangle-alert';
 	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
-	import Construction from '@lucide/svelte/icons/construction';
 	import ClipboardPen from '@lucide/svelte/icons/clipboard-pen';
 
-	import * as Dialog from '$lib/components/ui/dialog';
-	import { Button } from '$lib/components/ui/button';
 	import * as Accordion from '$lib/components/ui/accordion/index.js';
 	import PublicDonationCard from '$lib/components/public-donation-card.svelte';
 	import PublicVolunteerCard from '$lib/components/public-volunteer-card.svelte';
@@ -37,7 +34,6 @@
 
 	let searchQuery = $state('');
 	let searchOpen = $state(false);
-	let devModalOpen = $state(false);
 
 	let donationScrollContainer = $state<HTMLElement | null>(null);
 	let volunteerScrollContainer = $state<HTMLElement | null>(null);
@@ -564,14 +560,13 @@
 				<!-- Action Controls & Carousel Nav -->
 				<div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-2.5">
 					<div class="grid grid-cols-2 gap-2 sm:flex sm:items-center sm:gap-2.5">
-						<button
-							type="button"
-							onclick={() => (devModalOpen = true)}
+						<a
+							href={resolve('/volunteers/jobs')}
 							class="flex cursor-pointer items-center justify-center gap-1 rounded-xl bg-domain-volunteer-strong px-3 py-2 text-center text-xs font-bold whitespace-nowrap text-white shadow-xs transition-colors hover:bg-domain-volunteer-text sm:inline-flex sm:px-5 sm:py-2.5 sm:text-sm"
 						>
-							<span>{t.allMissionsBtn}</span>
+							<span>{t.allVolunteerJobsBtn}</span>
 							<span aria-hidden="true">➔</span>
-						</button>
+						</a>
 					</div>
 					{#if urgentVolunteers.length > 1}
 						<div class="mx-1 hidden h-6 w-px bg-slate-300 sm:block"></div>
@@ -646,13 +641,12 @@
 						{t.volunteersEmptyTitle}
 					</h3>
 					<div class="mt-5 flex flex-wrap items-center justify-center gap-3">
-						<button
-							type="button"
-							onclick={() => (devModalOpen = true)}
+						<a
+							href={resolve('/volunteers/jobs')}
 							class="inline-flex cursor-pointer items-center gap-1.5 rounded-xl bg-domain-volunteer-strong px-4 py-2.5 text-xs font-bold text-white shadow-xs transition-colors hover:bg-domain-volunteer-text sm:text-sm"
 						>
-							<span>{t.allMissionsBtn}</span>
-						</button>
+							<span>{t.allVolunteerJobsBtn}</span>
+						</a>
 					</div>
 				</div>
 			{/if}
@@ -725,32 +719,3 @@
 <FamilySearchModal bind:open={searchOpen} />
 
 <PublicNotificationMenu variant="floating" announcements={data.announcements} />
-
-<Dialog.Root bind:open={devModalOpen}>
-	<Dialog.Content class="max-w-md rounded-2xl p-6 sm:p-7">
-		<div class="flex flex-col items-center text-center">
-			<div
-				class="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-amber-200/80 bg-amber-50 text-amber-600 sm:h-16 sm:w-16"
-			>
-				<Construction class="h-7 w-7 sm:h-8 sm:w-8" />
-			</div>
-			<Dialog.Header class="text-center">
-				<Dialog.Title class="text-center text-lg font-bold text-slate-900 sm:text-xl">
-					{t.devModalTitle}
-				</Dialog.Title>
-				<Dialog.Description class="mt-2 text-center text-sm text-slate-500">
-					{t.devModalDesc}
-				</Dialog.Description>
-			</Dialog.Header>
-			<div class="mt-6 flex w-full justify-center">
-				<Button
-					type="button"
-					onclick={() => (devModalOpen = false)}
-					class="min-w-[120px] rounded-xl bg-slate-900 text-white hover:bg-slate-800"
-				>
-					{t.devModalClose}
-				</Button>
-			</div>
-		</div>
-	</Dialog.Content>
-</Dialog.Root>

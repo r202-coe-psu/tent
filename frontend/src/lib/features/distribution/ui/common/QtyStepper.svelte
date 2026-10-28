@@ -13,16 +13,21 @@
 		max: string;
 		id: string;
 		label: string;
+		/** Helper line under the label. */
+		hint?: string;
 		/** Unit shown after the field, e.g. `ชุด`. */
 		unit?: string;
 		disabled?: boolean;
 	}
 
-	let { value = $bindable(), max, id, label, unit, disabled = false }: Props = $props();
+	let { value = $bindable(), max, id, label, hint, unit, disabled = false }: Props = $props();
 </script>
 
 <div class="space-y-1.5">
 	<Label for={id} class="text-sm font-semibold text-slate-700">{label}</Label>
+	{#if hint}
+		<p class="text-xs text-slate-500">{hint}</p>
+	{/if}
 	<div class="flex items-center gap-2">
 		<Button
 			type="button"

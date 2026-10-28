@@ -53,8 +53,8 @@ describe('validateRow — happy path', () => {
 		expect(byLabel.shelter?.operation_status).toBe('active');
 		expect(byLabel.shelter?.area_type).toBe('indoor');
 
-		const byCode = validateRow(baseRow({ [H.operation_status]: 'closed' }), 1, emptyLookups());
-		expect(byCode.shelter?.operation_status).toBe('closed');
+		const byCode = validateRow(baseRow({ [H.operation_status]: 'standby' }), 1, emptyLookups());
+		expect(byCode.shelter?.operation_status).toBe('standby');
 
 		const byBase = validateRow(baseRow({ [H.project_level]: 'ระดับชุมชน' }), 1, emptyLookups());
 		expect(byBase.shelter?.project_level).toBe('community');
@@ -100,6 +100,29 @@ describe('validateRow — errors', () => {
 		const r = validateRow(baseRow({ [H.operation_status]: 'ไม่รู้จัก' }), 1, emptyLookups());
 		expect(r.ok).toBe(false);
 		expect(r.errors[0].column).toBe(H.operation_status);
+	});
+
+	it.each(['closed', 'ปิดศูนย์ (Closed)', 'ปิดศูนย์'])(
+		'rejects operation_status %s with a per-row error and no payload (CR-183 FR-23)',
+		(value) => {
+			const r = validateRow(baseRow({ [H.operation_status]: value }), 4, emptyLookups());
+			expect(r.ok).toBe(false);
+			expect(r.shelter).toBeUndefined();
+			expect(r.errors).toEqual([
+				expect.objectContaining({
+					column: H.operation_status,
+					message: expect.stringContaining('ปิดศูนย์')
+				})
+			]);
+		}
+	);
+
+	it('rejects only the closed row in a workbook', () => {
+		const rows = validateRows(
+			[baseRow(), baseRow({ [H.operation_status]: 'closed' })],
+			emptyLookups()
+		);
+		expect(rows.map((r) => r.ok)).toEqual([true, false]);
 	});
 
 	it('rejects an unknown master-data label', () => {
@@ -260,26 +283,32 @@ describe('validateRow — communications as three boolean columns', () => {
 describe('validateRow — sub storage list', () => {
 	it('parses ชื่อ:ประเภท:พื้นที่ items', () => {
 		const r = validateRow(
-			baseRow({ [H.sub_storage]: 'คลังหน้าอาคาร:อาหารแห้ง:20 | คลังยา:เวชภัณฑ์' }),
+			baseRow({ [H.sub_storage]: 'คลังหน้าอาคาร:อาหารแห้ง:20 | คลังยา:ยา' }),
 			1,
 			emptyLookups()
 		);
 		expect(r.ok).toBe(true);
 		expect(r.shelter?.common_areas.sub_storage).toEqual([
-			{ id: expect.any(String), name: 'คลังหน้าอาคาร', type: 'food_dry', area_m2: 20 },
-			{ id: expect.any(String), name: 'คลังยา', type: 'medical_supplies', area_m2: null }
+			{ id: expect.any(String), name: 'คลังหน้าอาคาร', types: ['food_dry'], area_m2: 20 },
+			{ id: expect.any(String), name: 'คลังยา', types: ['medical_supplies'], area_m2: null }
 		]);
 	});
 
 	it('mints a distinct id per storage point (ledger lots reference it)', () => {
 		const r = validateRow(
-			baseRow({ [H.sub_storage]: 'คลังหน้าอาคาร:อาหารแห้ง:20 | คลังยา:เวชภัณฑ์' }),
+			baseRow({ [H.sub_storage]: 'คลังหน้าอาคาร:อาหารแห้ง:20 | คลังยา:ยา' }),
 			1,
 			emptyLookups()
 		);
 		const ids = (r.shelter?.common_areas.sub_storage ?? []).map((p) => p.id);
 		expect(ids.every((id) => id.length > 0)).toBe(true);
 		expect(new Set(ids).size).toBe(2);
+	});
+
+	it('still accepts the retired label "เวชภัณฑ์" for medical supplies (CR-199)', () => {
+		const r = validateRow(baseRow({ [H.sub_storage]: 'คลังยา:เวชภัณฑ์' }), 1, emptyLookups());
+		expect(r.ok).toBe(true);
+		expect(r.shelter?.common_areas.sub_storage?.[0].types).toEqual(['medical_supplies']);
 	});
 
 	it('rejects an unknown storage type', () => {

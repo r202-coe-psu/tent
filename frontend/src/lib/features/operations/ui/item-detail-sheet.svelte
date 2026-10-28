@@ -177,6 +177,9 @@
 													{lot.storageName}
 												{/if}
 											</p>
+											{#if lot.storageTypes}
+												<p class="mt-0.5 text-xs text-slate-500">เก็บได้: {lot.storageTypes}</p>
+											{/if}
 											{#if lot.clockLine}
 												<p class="mt-0.5 text-xs text-slate-500">{lot.clockLine}</p>
 											{/if}

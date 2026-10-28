@@ -23,6 +23,7 @@ export {
 	getActiveTagsFromSession,
 	TARGET_GROUP_TAGS,
 	TARGET_GROUP_LABELS,
+	TARGET_GROUP_SHORT_LABELS,
 	RICE_RECIPE_ID,
 	RECIPE_TO_STOCK_ITEM,
 	RECIPE_LABELS,
@@ -43,6 +44,9 @@ export type {
 
 // Application — receive-stock form draft (survives the "create new item" detour)
 export { saveYieldDraft, loadYieldDraft, clearYieldDraft } from './application/yield-draft';
+
+// Application — production board ingredient picker (food and drinking water only)
+export { selectableCookingIngredients } from './application/cooking-ingredients';
 
 // Domain — warehouse receipt of cooked food into stock
 export {
@@ -72,7 +76,7 @@ export {
 	deriveSessionHeadcountFromOccupancy,
 	SOFT_FOOD_NEEDS
 } from './domain/occupancy';
-export type { OccupantView } from './domain/occupancy';
+export type { OccupantView, ShelterPeopleCounts } from './domain/occupancy';
 
 // Domain — documents
 export type {
@@ -148,7 +152,7 @@ export {
 	useDeleteMealSession,
 	useMealPlans,
 	useOccupancyHeadcount,
-	useActiveEvacueeDietCounts,
+	useShelterMealHeadcount,
 	useCreateMealPlan,
 	useCreateMealPlanCalc,
 	useConfirmMealPlan,

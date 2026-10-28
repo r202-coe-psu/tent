@@ -157,7 +157,7 @@ describe('Referral Domain', () => {
 		describe('canTransition combinations', () => {
 			const expectedTransitions: Record<ReferralStatus, ReferralStatus[]> = {
 				draft: ['sent', 'closed'],
-				sent: ['accepted', 'rejected'],
+				sent: ['accepted', 'rejected', 'closed'],
 				accepted: ['closed'],
 				rejected: ['closed'],
 				closed: []
@@ -170,6 +170,33 @@ describe('Referral Domain', () => {
 						expect(canTransition(from, to)).toBe(shouldAllow);
 					});
 				});
+			});
+		});
+
+		describe('backward transitions stay rejected (CR-167)', () => {
+			const backward: [ReferralStatus, ReferralStatus][] = [
+				['sent', 'draft'],
+				['accepted', 'draft'],
+				['accepted', 'sent'],
+				['accepted', 'rejected'],
+				['rejected', 'draft'],
+				['rejected', 'sent'],
+				['rejected', 'accepted'],
+				['closed', 'draft'],
+				['closed', 'sent'],
+				['closed', 'accepted'],
+				['closed', 'rejected']
+			];
+			it.each(backward)('%s → %s is rejected by canTransition and applyTransition', (from, to) => {
+				expect(canTransition(from, to)).toBe(false);
+				expect(() =>
+					applyTransition(
+						mockReferral({ status: from }),
+						to,
+						'Manager A',
+						'2026-07-11T05:10:00.000Z'
+					)
+				).toThrow(/Invalid referral transition/);
 			});
 		});
 
@@ -227,6 +254,20 @@ describe('Referral Domain', () => {
 				expect(updated.timeline.sent).toBeUndefined();
 			});
 
+			it('should apply sent → closed (withdraw — CR-167) and keep timeline.sent', () => {
+				const sentStamp = { at: '2026-07-11T05:10:00.000Z', by: 'Manager A' };
+				const doc = mockReferral({ status: 'sent', timeline: { sent: sentStamp } });
+				const nowIso = '2026-07-11T05:25:00.000Z';
+				const updated = applyTransition(doc, 'closed', 'Manager A', nowIso, 'ส่งผิดศูนย์');
+
+				expect(updated.status).toBe('closed');
+				expect(updated.timeline.closed).toEqual({ at: nowIso, by: 'Manager A' });
+				expect(updated.timeline.sent).toEqual(sentStamp);
+				expect(updated.timeline.responded).toBeUndefined();
+				expect(updated.close_reason).toBe('ส่งผิดศูนย์');
+				expect(updated.response_reason).toBeUndefined();
+			});
+
 			it('should apply accepted → closed', () => {
 				const doc = mockReferral({
 					status: 'accepted',
@@ -242,6 +283,72 @@ describe('Referral Domain', () => {
 				expect(updated.timeline.closed).toEqual({ at: nowIso, by: 'Manager A' });
 			});
 
+			it('closed with a reason writes close_reason and leaves response_reason untouched', () => {
+				const doc = mockReferral({
+					status: 'accepted',
+					response_reason: 'Bed space confirmed',
+					timeline: {
+						sent: { at: '2026-07-11T05:10:00.000Z', by: 'Manager A' },
+						responded: { at: '2026-07-11T05:20:00.000Z', by: 'Hospital Staff B' }
+					}
+				});
+				const updated = applyTransition(
+					doc,
+					'closed',
+					'Manager A',
+					'2026-07-11T05:30:00.000Z',
+					'ปิดงาน'
+				);
+
+				expect(updated.close_reason).toBe('ปิดงาน');
+				expect(updated.response_reason).toBe('Bed space confirmed');
+			});
+
+			it('closed without a reason writes no close_reason and keeps the schema_v', () => {
+				const doc = mockReferral({ status: 'draft', schema_v: 1 });
+				const updated = applyTransition(doc, 'closed', 'Manager A', '2026-07-11T05:15:00.000Z');
+
+				expect(updated.close_reason).toBeUndefined();
+				expect(updated.schema_v).toBe(1);
+			});
+
+			it('lifts a v1 doc to schema_v 2 when close_reason is written', () => {
+				const doc = mockReferral({ status: 'draft', schema_v: 1 });
+				const updated = applyTransition(
+					doc,
+					'closed',
+					'Manager A',
+					'2026-07-11T05:15:00.000Z',
+					'ส่งผิดคน'
+				);
+
+				expect(updated.schema_v).toBe(2);
+				expect(isReferral(updated)).toBe(true);
+			});
+
+			it('does not write close_reason on non-closed transitions', () => {
+				const sent = applyTransition(
+					mockReferral({ status: 'draft' }),
+					'sent',
+					'Manager A',
+					'2026-07-11T05:10:00.000Z',
+					'x'
+				);
+				expect(sent.close_reason).toBeUndefined();
+				expect(sent.response_reason).toBeUndefined();
+				expect(sent.schema_v).toBe(1);
+
+				const accepted = applyTransition(
+					mockReferral({ status: 'sent' }),
+					'accepted',
+					'B',
+					'2026-07-11T05:20:00.000Z',
+					'ok'
+				);
+				expect(accepted.response_reason).toBe('ok');
+				expect(accepted.close_reason).toBeUndefined();
+			});
+
 			it('should throw on invalid transition', () => {
 				const doc = mockReferral({ status: 'draft' });
 				expect(() =>
@@ -253,7 +360,7 @@ describe('Referral Domain', () => {
 		describe('allowedTransitions list helper', () => {
 			it('should return correct options list', () => {
 				expect(allowedTransitions('draft')).toEqual(['sent', 'closed']);
-				expect(allowedTransitions('sent')).toEqual(['accepted', 'rejected']);
+				expect(allowedTransitions('sent')).toEqual(['accepted', 'rejected', 'closed']);
 				expect(allowedTransitions('closed')).toEqual([]);
 			});
 		});

@@ -47,16 +47,6 @@
 	let isItemsModalOpen = $state(false);
 	let isCopied = $state(false);
 
-	// CR-052 §2.6: hand the ref + phone to the track page so it can search on arrival.
-	const trackHref = $derived.by(() => {
-		const base = resolve('/donations/track');
-		const parts: string[] = [];
-		if (donationStore.bookingRef) parts.push(`ref=${encodeURIComponent(donationStore.bookingRef)}`);
-		if (donationStore.donorPhone)
-			parts.push(`phone=${encodeURIComponent(donationStore.donorPhone)}`);
-		return parts.length ? `${base}?${parts.join('&')}` : base;
-	});
-
 	/**
 	 * FastAPI decides the status, line by line (CR-174): a booking made only of lines the
 	 * shelter asked for in its campaign opens in `verifying` and gets its check-in QR here
@@ -327,8 +317,14 @@
 				</div>
 			</div>
 
+			<!-- Straight to this booking's ticket by its token: the phone never goes in a URL
+			     (CR-173 FR-12). Without a token there is nothing to open, so the search page. -->
 			<a
-				href={trackHref}
+				href={resolve(
+					donationStore.trackingToken
+						? `/donations/track/${encodeURIComponent(donationStore.trackingToken)}`
+						: '/donations/track'
+				)}
 				class="flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-xl bg-domain-donation-strong py-3 text-xs font-bold text-white shadow-xs transition-all duration-200 hover:bg-domain-donation-text"
 			>
 				<Search class="h-3.5 w-3.5" />
