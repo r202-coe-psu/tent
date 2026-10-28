@@ -110,26 +110,57 @@ describe('BulkReturnPoolWorkQueue', () => {
 	});
 
 	describe('queues per role', () => {
-		const roleQueues = (capability: string) =>
+		const roleQueues = (...capabilities: string[]) =>
 			workQueuesFor({
-				roles: [`shelter:${SHELTER}`, compoundCapabilityRole(SHELTER, capability)],
+				roles: [
+					`shelter:${SHELTER}`,
+					...capabilities.map((c) => compoundCapabilityRole(SHELTER, c))
+				],
 				shelterCode: SHELTER
 			});
+		const myPointSelect = () => document.body.querySelector('#bulk-queue-my-point-select');
 
-		it('shelter_manager sees waiting + flagged, not my point', async () => {
-			await render({ queues: roleQueues('shelter_manager') });
+		function expectAllThreeQueues() {
 			expect(waitingHeading()).not.toBeNull();
 			expect(flaggedHeading()).not.toBeNull();
-			expect(myPointHeading()).toBeNull();
-			expect(myPointSection()).toBeNull();
+			expect(myPointSection()).not.toBeNull();
+			expect(normalize(myPointHeading()?.textContent)).toContain(WORK_QUEUE_COPY.myPointTitle);
+			expect(myPointSelect()).not.toBeNull();
+		}
+
+		it('shelter_manager sees all three queues including my point', async () => {
+			await render({ queues: roleQueues('shelter_manager'), points: POINTS, myPoint: null });
+			expectAllThreeQueues();
 		});
 
-		it('system_admin sees waiting + flagged, not my point', async () => {
-			await render({ queues: workQueuesFor({ roles: ['system_admin'], shelterCode: SHELTER }) });
+		it('system_admin sees all three queues including my point', async () => {
+			await render({
+				queues: workQueuesFor({ roles: ['system_admin'], shelterCode: SHELTER }),
+				points: POINTS,
+				myPoint: null
+			});
+			expectAllThreeQueues();
+		});
+
+		it('shelter_manager + distribution_staff sees all three queues with the picker', async () => {
+			await render({
+				queues: roleQueues('shelter_manager', 'distribution_staff'),
+				points: POINTS,
+				myPoint: null
+			});
+			expectAllThreeQueues();
+		});
+
+		it('warehouse_staff + distribution_staff sees waiting + my point, not flagged', async () => {
+			await render({
+				queues: roleQueues('warehouse_staff', 'distribution_staff'),
+				points: POINTS,
+				myPoint: null
+			});
 			expect(waitingHeading()).not.toBeNull();
-			expect(flaggedHeading()).not.toBeNull();
-			expect(myPointHeading()).toBeNull();
-			expect(myPointSection()).toBeNull();
+			expect(flaggedHeading()).toBeNull();
+			expect(myPointSection()).not.toBeNull();
+			expect(myPointSelect()).not.toBeNull();
 		});
 
 		it('warehouse_staff sees only the waiting queue', async () => {

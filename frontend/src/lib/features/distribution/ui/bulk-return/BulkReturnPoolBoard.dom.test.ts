@@ -12,7 +12,10 @@ import { LOAN_REFS_UNKNOWN_LABEL } from '../model/bulk-return-pool-v3';
 import { WORK_QUEUE_COPY } from '../model/bulk-return-work-queue';
 import { MY_POOL_POINT_UNSPECIFIED, myPoolPointKey } from '../model/my-pool-point-storage';
 import BulkReturnPoolBoard from './BulkReturnPoolBoard.svelte';
-import { resetStoragePointsMock, storagePointsMock } from './storage-points.fixture.svelte';
+import {
+	resetStoragePointsMock,
+	storagePointsMock
+} from '../__fixtures__/storage-points.fixture.svelte';
 
 type EntryRow = BulkReturnPoolOverviewRow['entries'][number];
 type ItemRow = BulkReturnPoolOverviewRow['items'][number];
@@ -202,10 +205,10 @@ function sampleRows(): BulkReturnPoolOverviewRow[] {
 
 const ADMIN = { shelterCode: 'SH001', createdBy: 'staff', roles: ['system_admin'] };
 const NO_ROLE = { shelterCode: 'SH001', createdBy: 'staff', roles: [] };
-const withCapability = (capability: string) => ({
+const withCapability = (...capabilities: string[]) => ({
 	shelterCode: 'SH001',
 	createdBy: 'staff',
-	roles: ['shelter:SH001', compoundCapabilityRole('SH001', capability)]
+	roles: ['shelter:SH001', ...capabilities.map((c) => compoundCapabilityRole('SH001', c))]
 });
 
 let instance: ReturnType<typeof mount> | null = null;
@@ -577,11 +580,45 @@ describe('BulkReturnPoolBoard role wiring of the work queues', () => {
 	// The flagged title equals the "needs attention" switch label, so match the queue heading.
 	const flaggedHeading = () => document.body.querySelector('#bulk-queue-flagged');
 
-	it('gives an admin the waiting and flagged queues', async () => {
+	const myPointSelect = () => document.body.querySelector('#bulk-queue-my-point-select');
+
+	it('gives an admin all three queues including the my-point picker', async () => {
 		await render();
 
 		expect(waitingHeading()?.textContent).toContain(WORK_QUEUE_COPY.waitingTitle);
 		expect(flaggedHeading()?.textContent).toContain(WORK_QUEUE_COPY.flaggedTitle);
+		expect(queryByTestId('bulk-return-queue-my-point')).not.toBeNull();
+		expect(myPointSelect()).not.toBeNull();
+	});
+
+	it('gives a shelter manager all three queues', async () => {
+		state.authContext = withCapability('shelter_manager');
+		await render();
+
+		expect(waitingHeading()).not.toBeNull();
+		expect(flaggedHeading()).not.toBeNull();
+		expect(queryByTestId('bulk-return-queue-my-point')).not.toBeNull();
+		expect(myPointSelect()).not.toBeNull();
+	});
+
+	it('gives a shelter manager who is also distribution staff all three queues and the picker', async () => {
+		state.authContext = withCapability('shelter_manager', 'distribution_staff');
+		await render();
+
+		expect(waitingHeading()).not.toBeNull();
+		expect(flaggedHeading()).not.toBeNull();
+		expect(queryByTestId('bulk-return-queue-my-point')).not.toBeNull();
+		expect(myPointSelect()).not.toBeNull();
+	});
+
+	it('gives warehouse + distribution staff waiting and my-point, not flagged', async () => {
+		state.authContext = withCapability('warehouse_staff', 'distribution_staff');
+		await render();
+
+		expect(waitingHeading()).not.toBeNull();
+		expect(flaggedHeading()).toBeNull();
+		expect(queryByTestId('bulk-return-queue-my-point')).not.toBeNull();
+		expect(myPointSelect()).not.toBeNull();
 	});
 
 	it('gives warehouse staff the waiting queue only', async () => {
@@ -604,7 +641,7 @@ describe('BulkReturnPoolBoard role wiring of the work queues', () => {
 	});
 
 	it('wires the stored my-point selection into the my-point queue', async () => {
-		// The board reads the stored point once at mount, so seed it before render.
+		// The board reads the stored point when it derives the shelter, so seed it before render.
 		localStorage.setItem(myPoolPointKey('SH001'), 'sp:1');
 		storagePointsMock.points = [{ id: 'sp:1', name: 'คลังหลัก' }];
 		state.authContext = withCapability('distribution_staff');
