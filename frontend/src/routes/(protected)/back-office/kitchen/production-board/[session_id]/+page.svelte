@@ -234,8 +234,10 @@
 	// Pre-fill form when activePlan changes
 	let lastLoadedPlanId = $state<string | null>(null);
 
+	// Waits for tickets: prefilling from the recipe first would let "บันทึกการแก้ไข"
+	// overwrite the ticket's saved requested_qty.
 	$effect(() => {
-		if (activePlan && activePlan._id !== lastLoadedPlanId) {
+		if (activePlan && tickets.isSuccess && activePlan._id !== lastLoadedPlanId) {
 			lastLoadedPlanId = activePlan._id;
 			menuLabel = activePlan.label ?? '';
 			allocatedTarget = activePlan.allocated_target ?? activePlan.headcount?.total ?? 50;
@@ -250,11 +252,8 @@
 			selectedRecipeId = planRecipeId && planRecipeId !== 'recipe:custom' ? planRecipeId : '';
 			recipeMode = selectedRecipeId ? 'bom' : 'custom';
 			cookingStarted = !!activePlan.cooking_started_at;
-			const ticketForPlan = (tickets.data ?? []).find(
-				(t) => t.meal_plan_id === activePlan._id && t.status !== 'CANCELLED'
-			);
-			if (ticketForPlan?.items && ticketForPlan.items.length > 0) {
-				ingredientsList = ticketForPlan.items.map((it) => {
+			if (activeTicket?.items && activeTicket.items.length > 0) {
+				ingredientsList = activeTicket.items.map((it) => {
 					const master = (itemMasters.data ?? []).find((m) => m._id === it.item_id);
 					return {
 						item_id: it.item_id,
@@ -397,7 +396,7 @@
 	}
 
 	function confirmAddIngredient() {
-		if (!newItemId || !newQty || Number(newQty) <= 0) {
+		if (!newItemId || newQty == null || newQty === '' || qtyLte(newQty, 0)) {
 			toast.error('กรุณาระบุวัตถุดิบและจำนวนที่ถูกต้อง');
 			return;
 		}
@@ -1138,7 +1137,7 @@
 									size="sm"
 									class="h-7 gap-1 text-xs"
 									onclick={confirmAddIngredient}
-									disabled={!newItemId || !newQty || Number(newQty) <= 0}
+									disabled={!newItemId || newQty == null || newQty === '' || qtyLte(newQty, 0)}
 								>
 									<Plus class="h-3 w-3" />
 									เพิ่มวัตถุดิบนี้
