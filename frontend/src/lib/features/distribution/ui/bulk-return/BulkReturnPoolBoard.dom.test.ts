@@ -186,7 +186,7 @@ function sampleRows(): BulkReturnPoolOverviewRow[] {
 
 const ADMIN = { shelterCode: 'SH001', createdBy: 'staff', roles: ['system_admin'] };
 const NO_ROLE = { shelterCode: 'SH001', createdBy: 'staff', roles: [] };
-const withCapability = (capability: Parameters<typeof compoundCapabilityRole>[1]) => ({
+const withCapability = (capability: string) => ({
 	shelterCode: 'SH001',
 	createdBy: 'staff',
 	roles: ['shelter:SH001', compoundCapabilityRole('SH001', capability)]
