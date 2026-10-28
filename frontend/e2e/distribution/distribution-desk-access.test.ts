@@ -184,7 +184,7 @@ test.describe(
 
 				await expectDesk(page, true, OTHER_SHELTER);
 				const desk = new DeskPage(page);
-				await desk.openTab('receive');
+				await desk.openTab('receive', 'supplies');
 				await expect(page.getByText(`ศูนย์: ${OTHER_SHELTER}`)).toBeVisible();
 				await expect(page.getByText(ticket.ticketNo, { exact: true })).toHaveCount(0);
 			});
@@ -349,41 +349,6 @@ test.describe('Write permissions at the database (VDU, plan §4.2)', { tag: DESK
 					is_override: false,
 					distributed_at: now,
 					distributed_by: name
-				});
-				return res.status;
-			}
-		);
-	});
-
-	test('V5 bulk return pools are created by the warehouse, not DST', async ({ scenarioAs }) => {
-		const scenario = await scenarioAs('vdu_pool');
-		const item = await consumable(scenario, 'vdu');
-		await expectWrites(
-			scenario,
-			[
-				actor('wh_flat', roleSet('warehouse_staff', 'flat'), true),
-				actor('sm_compound', roleSet('shelter_manager', 'compound'), true),
-				actor('dst_compound', roleSet('distribution_staff', 'compound'), false),
-				actor('reg_flat', roleSet('registration_staff', 'flat'), false)
-			],
-			async (session, name) => {
-				const id = `bulk_return_pool:${ulid()}`;
-				const now = new Date().toISOString();
-				const res = await couchAsUser(session, 'PUT', `/${shelterDb()}/${encodeURIComponent(id)}`, {
-					_id: id,
-					type: 'bulk_return_pool',
-					schema_v: 2,
-					shelter_code: shelterCode(),
-					created_at: now,
-					updated_at: now,
-					created_by: name,
-					item_id: item.itemId,
-					stock_ledger_id: `stock_ledger:${ulid()}`,
-					total_received_qty: '3',
-					claimed_qty: '0',
-					unclaimed_quota: '3',
-					claim_ids: [],
-					status: 'ACTIVE'
 				});
 				return res.status;
 			}

@@ -12,6 +12,12 @@
 	import { Button } from '$lib/components/ui/button';
 	import { resolve } from '$app/paths';
 	import { formatUnit, useUnitsOfMeasure } from '$lib/features/catalog';
+	import {
+		dropOffDirectionsUrl,
+		needsDropOffDestination,
+		resolveDropOffPoint
+	} from '$lib/features/donations';
+	import { usePublicShelter } from '$lib/features/public-portal';
 	import { getDonationStore } from '../../routes/(public)/donations/donation.svelte';
 	import { toast } from 'svelte-sonner';
 	import { langState } from '$lib/states/i18n.svelte';
@@ -24,22 +30,21 @@
 	const units = $derived(unitsQuery.data ?? []);
 	const t = $derived(getTranslation(PUBLIC_DONATIONS_I18N, langState.current));
 
+	// Same gate as the track page: `shelter_pickup` has no destination to look up. Skipping or
+	// failing the lookup falls back to the name/code the donor picked, with no map link.
+	const wantsDestination = $derived(needsDropOffDestination(donationStore.deliveryMethod));
+	const shelterQuery = usePublicShelter(() =>
+		wantsDestination ? donationStore.shelterCode : null
+	);
+	const dropOffPoint = $derived(shelterQuery.data ? resolveDropOffPoint(shelterQuery.data) : null);
+	const directionsHref = $derived(dropOffPoint ? dropOffDirectionsUrl(dropOffPoint) : null);
+
 	let courierTracking = $state('');
 	let savingCourier = $state(false);
 	let courierSaved = $state(false);
 	let courierError = $state('');
 	let isItemsModalOpen = $state(false);
 	let isCopied = $state(false);
-
-	// CR-052 §2.6: hand the ref + phone to the track page so it can search on arrival.
-	const trackHref = $derived.by(() => {
-		const base = resolve('/donations/track');
-		const parts: string[] = [];
-		if (donationStore.bookingRef) parts.push(`ref=${encodeURIComponent(donationStore.bookingRef)}`);
-		if (donationStore.donorPhone)
-			parts.push(`phone=${encodeURIComponent(donationStore.donorPhone)}`);
-		return parts.length ? `${base}?${parts.join('&')}` : base;
-	});
 
 	/**
 	 * FastAPI decides the status, line by line (CR-174): a booking made only of lines the
@@ -185,8 +190,14 @@
 					{t.destShelter}
 				</div>
 				<div class="text-base font-bold text-slate-800">
-					{donationStore.selectedShelterName || donationStore.shelterCode || t.centralShelter}
+					{dropOffPoint?.shelterName ||
+						donationStore.selectedShelterName ||
+						donationStore.shelterCode ||
+						t.centralShelter}
 				</div>
+				{#if dropOffPoint?.address}
+					<div class="mt-0.5 text-xs font-medium text-slate-500">{dropOffPoint.address}</div>
+				{/if}
 			</div>
 
 			<div class="grid grid-cols-2 gap-4">
@@ -305,8 +316,14 @@
 				</div>
 			</div>
 
+			<!-- Straight to this booking's ticket by its token: the phone never goes in a URL
+			     (CR-173 FR-12). Without a token there is nothing to open, so the search page. -->
 			<a
-				href={trackHref}
+				href={resolve(
+					donationStore.trackingToken
+						? `/donations/track/${encodeURIComponent(donationStore.trackingToken)}`
+						: '/donations/track'
+				)}
 				class="flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-xl bg-domain-donation-strong py-3 text-xs font-bold text-white shadow-xs transition-all duration-200 hover:bg-domain-donation-text"
 			>
 				<Search class="h-3.5 w-3.5" />
@@ -345,14 +362,17 @@
 			</div>
 		{/if}
 
-		<button
-			type="button"
-			onclick={() => toast.success(t.openingMapsToast)}
-			class="mt-6 flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-slate-950 py-4 text-sm font-bold text-white shadow-md transition-colors hover:bg-slate-800"
-		>
-			<Navigation class="h-4.5 w-4.5" />
-			{t.navigateGoogleMaps}
-		</button>
+		{#if directionsHref}
+			<a
+				href={directionsHref}
+				target="_blank"
+				rel="noopener noreferrer"
+				class="mt-6 flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-slate-950 py-4 text-sm font-bold text-white shadow-md transition-colors hover:bg-slate-800"
+			>
+				<Navigation class="h-4.5 w-4.5" />
+				{t.navigateGoogleMaps}
+			</a>
+		{/if}
 
 		<button
 			type="button"

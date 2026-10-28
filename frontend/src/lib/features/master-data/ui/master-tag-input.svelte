@@ -6,14 +6,10 @@
 	import * as Popover from '$lib/components/ui/popover/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { cn } from '$lib/utils/shadcn.js';
-	import {
-		formatMasterLabelByCode,
-		resolveMasterCode,
-		type MasterDataItem
-	} from '$lib/features/master-data';
+	import { formatMasterLabelByCode, resolveMasterCode, type MasterDataItem } from '../domain.js';
 
 	/**
-	 * Tag autocomplete over a master list (#649): pick items by `code`, or add
+	 * Tag autocomplete over a master list (#649; shared with catalog allergens, #607): pick items by `code`, or add
 	 * off-list free text. `value` holds codes and free-text entries side by side.
 	 */
 	let {

@@ -1,7 +1,13 @@
-import { qtyGt } from '$lib/utils/qty';
+import { addQty, qtyGt } from '$lib/utils/qty';
+import {
+	formatMasterLabelByCode,
+	resolveMasterCodes,
+	type MasterDataItem
+} from '$lib/features/master-data';
 import {
 	calculateDistributedQtyForTicketItem,
 	calculateInHandQtyForTicketItem,
+	findAllergenConflicts,
 	isDuplicateMealDistributionLog,
 	matchRecipientToMenu,
 	type DistributionLog,
@@ -106,27 +112,49 @@ export function getRecipientValidationErrorMessage(
 	return null;
 }
 
+/** Today's same-meal handovers already recorded for one recipient. */
+export interface MealRepeatSummary {
+	isDuplicate: boolean;
+	/** Number of handovers (logs), not boxes. */
+	visits: number;
+	/** Sum of `qty` over those handovers. */
+	boxes: string;
+	/** Latest `distributed_at` — the input is oldest-first, so this is not the array tail by contract. */
+	lastDistributedAt?: string;
+	/** Every handover time, oldest first. */
+	distributedAt: string[];
+}
+
+export const NO_MEAL_REPEAT: MealRepeatSummary = {
+	isDuplicate: false,
+	visits: 0,
+	boxes: '0',
+	distributedAt: []
+};
+
 /**
- * Advisory check to determine if the recipient has already received a meal of the same period today.
+ * Advisory summary of what the recipient already received for this meal today (FR-DDS).
  * Reuses the single-source-of-truth domain predicate `isDuplicateMealDistributionLog`.
  */
 export function checkDuplicateMealAdvisory(
 	recipientLogs: readonly DistributionLog[] | undefined,
 	targetMeal: MealPeriod | undefined,
 	referenceIsoOrDate: string | Date = new Date().toISOString()
-): { isDuplicate: boolean; priorLog: DistributionLog | null } {
-	if (!recipientLogs || recipientLogs.length === 0 || !targetMeal) {
-		return { isDuplicate: false, priorLog: null };
-	}
+): MealRepeatSummary {
+	if (!recipientLogs || recipientLogs.length === 0 || !targetMeal) return NO_MEAL_REPEAT;
 
-	const priorLog =
-		recipientLogs.find((log) =>
-			isDuplicateMealDistributionLog(log, targetMeal, referenceIsoOrDate)
-		) ?? null;
+	const matches = recipientLogs.filter((log) =>
+		isDuplicateMealDistributionLog(log, targetMeal, referenceIsoOrDate)
+	);
+	if (matches.length === 0) return NO_MEAL_REPEAT;
 
+	const distributedAt = matches.map((log) => log.distributed_at).sort();
 	return {
-		isDuplicate: Boolean(priorLog),
-		priorLog
+		isDuplicate: true,
+		visits: matches.length,
+		boxes: matches.reduce((sum, log) => addQty(sum, log.qty), '0'),
+		lastDistributedAt: distributedAt[distributedAt.length - 1],
+		distributedAt
 	};
 }
 
@@ -154,4 +182,63 @@ export function checkMenuMatchAdvisory(
 	const recipientTags = recipient.recipientType === 'evacuee' ? (recipient.menuTags ?? []) : null;
 	const { matches, menuTags } = matchRecipientToMenu(recipientTags, menu);
 	return { isMismatch: !matches, menuTags };
+}
+
+export interface AllergenAdvisory {
+	/** Recipient allergies that are master `allergy` codes — the only ones matched. */
+	recipientCodes: string[];
+	/** Recipient allergies kept as free text (legacy or off-list): shown, never matched. */
+	recipientFreeText: string[];
+	/** Menu allergens that are master codes. */
+	menuCodes: string[];
+	/** Menu allergens kept as free text: shown for staff to compare, never matched. */
+	menuFreeText: string[];
+	/** Codes the recipient is allergic to that the menu contains (FR-MRM-07). */
+	conflicts: string[];
+	/** The recipient has allergies but the menu lists no allergens (FR-MRM-09). */
+	menuUnspecified: boolean;
+}
+
+const NO_ALLERGEN_ADVISORY: AllergenAdvisory = {
+	recipientCodes: [],
+	recipientFreeText: [],
+	menuCodes: [],
+	menuFreeText: [],
+	conflicts: [],
+	menuUnspecified: false
+};
+
+/**
+ * Advisory allergy check for the selected menu (#607 FR-MRM-06..09). Only `evacuee` recipients
+ * carry health data; volunteers and outside people skip it. Labels that match an active
+ * `allergy` item become its code on both sides; anything else stays free text and is not matched.
+ */
+export function checkAllergenAdvisory(
+	recipient: FrontlineRecipientSelection | null,
+	recipientAllergies: readonly string[] | null | undefined,
+	menuAllergens: readonly string[],
+	allergyItems: readonly MasterDataItem[]
+): AllergenAdvisory {
+	if (recipient?.recipientType !== 'evacuee') return NO_ALLERGEN_ADVISORY;
+	const codes = new Set(allergyItems.map((item) => item.code));
+	const recipientValues = resolveMasterCodes(recipientAllergies ?? [], allergyItems);
+	const recipientCodes = recipientValues.filter((v) => codes.has(v));
+	const menuValues = resolveMasterCodes(menuAllergens, allergyItems);
+	const menuCodes = menuValues.filter((v) => codes.has(v));
+	return {
+		recipientCodes,
+		recipientFreeText: recipientValues.filter((v) => !codes.has(v)),
+		menuCodes,
+		menuFreeText: menuValues.filter((v) => !codes.has(v)),
+		conflicts: findAllergenConflicts(recipientCodes, menuCodes),
+		menuUnspecified: recipientValues.length > 0 && menuAllergens.length === 0
+	};
+}
+
+/** Thai labels for `allergy` codes, e.g. `['seafood', 'egg']` → `อาหารทะเล, ไข่`. */
+export function formatAllergyCodes(
+	codes: readonly string[],
+	allergyItems: readonly MasterDataItem[]
+): string {
+	return codes.map((code) => formatMasterLabelByCode(code, allergyItems) || code).join(', ');
 }

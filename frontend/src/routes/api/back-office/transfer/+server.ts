@@ -3,13 +3,18 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { authorizeTransfer, resolveShelterCode, handleEndpointError } from './_auth';
 import { TransferServerRepository } from '$lib/features/operations/data/transfer.server-repository';
-import { transferInputSchema, transferStatusSchema } from '$lib/features/operations/server';
+import {
+	transferInputSchema,
+	transferStatusSchema,
+	TRANSFER_IDS_PER_REQUEST
+} from '$lib/features/operations/server';
 
 export const prerender = false;
 
 /**
  * GET /api/back-office/transfer
- * List transfers for a shelter (source or destination), filter by status.
+ * List transfers for a shelter (source or destination), filter by status. Repeated `id` params
+ * read exactly those transfers (ledger ref labels, #811), still scoped to the shelter.
  */
 export const GET: RequestHandler = async ({ request, url }) => {
 	try {
@@ -19,9 +24,13 @@ export const GET: RequestHandler = async ({ request, url }) => {
 		const statusParam = url.searchParams.get('status') || undefined;
 		const statusParsed = statusParam ? transferStatusSchema.safeParse(statusParam) : undefined;
 		const status = statusParsed?.success ? statusParsed.data : undefined;
+		const ids = url.searchParams.getAll('id').filter(Boolean);
+		if (ids.length > TRANSFER_IDS_PER_REQUEST) {
+			return json({ error: `At most ${TRANSFER_IDS_PER_REQUEST} id params` }, { status: 400 });
+		}
 
 		const repo = new TransferServerRepository('central_ops', shelterCode);
-		const list = await repo.list({ status });
+		const list = await repo.list(ids.length > 0 ? { status, ids } : { status });
 
 		return json(list);
 	} catch (e: unknown) {
