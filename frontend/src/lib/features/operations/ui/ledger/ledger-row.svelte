@@ -22,7 +22,7 @@
 		{incoming ? '+' : ''}{row.qty}
 		<span class="font-medium text-slate-500">{row.unit}</span>
 	</Table.Cell>
-	<Table.Cell class="max-w-64 px-4 py-3 break-words whitespace-normal text-slate-800">
+	<Table.Cell class="max-w-64 px-4 py-3 [overflow-wrap:anywhere] whitespace-normal text-slate-800">
 		{#if row.refHref}
 			<a
 				href={resolve(row.refHref as '/')}
@@ -35,7 +35,7 @@
 			{row.detail || '—'}
 		{/if}
 	</Table.Cell>
-	<Table.Cell class="px-4 py-3 text-slate-600">
+	<Table.Cell class="max-w-64 px-4 py-3 [overflow-wrap:anywhere] whitespace-normal text-slate-600">
 		{[row.lotNo, row.storage].filter(Boolean).join(' · ') || '—'}
 	</Table.Cell>
 	<Table.Cell class="px-4 py-3 text-slate-600">{row.createdBy}</Table.Cell>
