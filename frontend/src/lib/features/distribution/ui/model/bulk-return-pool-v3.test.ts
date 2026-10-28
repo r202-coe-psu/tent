@@ -862,9 +862,13 @@ describe('reopenLoanAction', () => {
 		expect(act([ok], { reopened: true })).toEqual({ showButton: true, blockedNotice: null });
 	});
 
-	it('has no notice for a reopened entry that still has an unrevertable ref', () => {
-		expect(act([ok, lost], { reopened: true })).toEqual(HIDDEN);
+	it('offers the replay for a reopened entry with a revertable ref left, never a notice', () => {
+		expect(act([ok, lost], { reopened: true })).toEqual({ showButton: true, blockedNotice: null });
+	});
+
+	it('hides a reopened entry with no revertable ref left', () => {
 		expect(act([active], { reopened: true })).toEqual(HIDDEN);
+		expect(act([lost], { reopened: true })).toEqual(HIDDEN);
 	});
 
 	it('explains an entry whose applied loans are all lost', () => {
@@ -894,10 +898,10 @@ describe('reopenLoanAction', () => {
 		expect(notice([ok, active])).toBe('เปิดยอดยืมกลับไม่ได้ ยอดยืม 1 จาก 2 รายการเปลี่ยนไปแล้ว');
 	});
 
-	it('names the lost / waived label when mixed with another status', () => {
-		expect(notice([lost, active])).toBe('เปิดยอดยืมกลับไม่ได้ ยอดยืมถูกปิดเป็นสูญหายแล้ว');
+	it('uses the generic changed copy with the full blocked count when mixed with another status', () => {
+		expect(notice([lost, active])).toBe('เปิดยอดยืมกลับไม่ได้ ยอดยืมเปลี่ยนไปแล้ว');
 		expect(notice([ok, lost, active])).toBe(
-			'เปิดยอดยืมกลับไม่ได้ ยอดยืม 1 จาก 3 รายการถูกปิดเป็นสูญหายแล้ว'
+			'เปิดยอดยืมกลับไม่ได้ ยอดยืม 2 จาก 3 รายการเปลี่ยนไปแล้ว'
 		);
 	});
 

@@ -402,10 +402,13 @@ export function canVoidEntry(row: BulkReturnPoolRow): boolean {
 /**
  * CR-193 §35: "reopen loans" on an entry of a closed pool (SUBMITTED / RECEIVED, entry in the
  * snapshot) that has applied loan refs, for a role allowed to do it.
- * - `showButton`: every applied ref is still revertable (independent of `reopened`).
+ * - `showButton`: every applied ref is still revertable. For an already reopened entry (replay path,
+ *   no pre-check) it is offered while at least one applied ref is still revertable.
  * - `blockedNotice`: why the button is NOT offered where it otherwise would be (some applied loan
  *   was closed or moved on, so the workflow pre-check would reject the whole entry). Null when the
- *   entry is not a reopen candidate, the button shows, or the entry was already reopened.
+ *   entry is not a reopen candidate, the button shows, or the entry was already reopened. The
+ *   lost/waived-specific copy is used only when every blocked ref is lost or waived; otherwise the
+ *   generic "changed" copy counts all blocked refs.
  */
 export function reopenLoanAction(args: {
 	pool: Pick<BulkReturnPoolV3, 'status' | 'entry_ids'>;
@@ -419,14 +422,18 @@ export function reopenLoanAction(args: {
 	if (!canReopenEntryLoans(args.pool, args.entryId)) return none;
 	const blocked = args.appliedRefs.filter((ref) => !ref.revertable);
 	if (blocked.length === 0) return { showButton: true, blockedNotice: null };
-	if (args.reopened) return none;
-
 	const total = args.appliedRefs.length;
+	if (args.reopened) {
+		// Replay path: the workflow skips the pre-check and not-revertable loans, and still reverts
+		// the revertable ones, so offer it while any applied ref remains revertable (never a notice).
+		return { showButton: blocked.length < total, blockedNotice: null };
+	}
+
 	const lost = blocked.filter((ref) => ref.loan_status === 'lost').length;
 	const waived = blocked.filter((ref) => ref.loan_status === 'waived').length;
 	const copy = BULK_RETURN_REOPEN_BLOCKED_COPY;
 	const closed = lost + waived;
-	if (closed === 0) {
+	if (closed < blocked.length) {
 		const blockedNotice =
 			blocked.length === total ? copy.allChanged : copy.someChanged(blocked.length, total);
 		return { showButton: false, blockedNotice };
