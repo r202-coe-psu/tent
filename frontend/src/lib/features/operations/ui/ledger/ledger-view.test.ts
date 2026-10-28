@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import type { StockLedger } from '../../domain/operations';
+import { REF_PREFIX_BY_REASON, type StockLedger } from '../../domain/operations';
 import {
+	BULK_RETURN_POOL_REF_PREFIX,
 	buildLedgerRows,
 	dayHeading,
 	filterLedger,
@@ -127,6 +128,17 @@ describe('ledgerRefHref', () => {
 		expect(ledgerRefHref('transfer_in', 'bulk_return_pool:01ABC')).toBeUndefined();
 		expect(ledgerRefHref('distribute', 'bulk_return_pool:01ABC')).toBeUndefined();
 		expect(ledgerRefHref('distribution_return', 'bulk_return_pool:01ABC')).toBeUndefined();
+		expect(ledgerRefHref('adjust', 'bulk_return_pool:01ABC')).toBeUndefined();
+	});
+
+	it('stays in sync with REF_PREFIX_BY_REASON: only receive accepts the pool prefix', () => {
+		for (const [reason, rule] of Object.entries(REF_PREFIX_BY_REASON)) {
+			const rules = Array.isArray(rule) ? rule : [rule];
+			expect(
+				rules.includes(BULK_RETURN_POOL_REF_PREFIX),
+				`${reason}: REF_PREFIX_BY_REASON changed — update ledgerRefHref's reason gate`
+			).toBe(reason === 'receive');
+		}
 	});
 
 	it('returns undefined for a receive with a missing, bare or other ref', () => {

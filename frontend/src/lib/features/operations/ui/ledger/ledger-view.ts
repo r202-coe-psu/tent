@@ -82,12 +82,12 @@ export interface LedgerRow {
 	refHref?: string;
 }
 
-const BULK_RETURN_POOL_REF_PREFIX = 'bulk_return_pool:';
+export const BULK_RETURN_POOL_REF_PREFIX = 'bulk_return_pool:';
 
 /**
  * Link target for a ledger `ref_id` that points at a bulk return pool, else `undefined`.
- * Receive-only (CR-193 §29): only `receive` rows link to a pool, even if another reason's writer
- * later uses the `bulk_return_pool:` prefix.
+ * Receive-only: the `reason` gate is a render-side guard that mirrors `REF_PREFIX_BY_REASON.receive`
+ * (CR-193 §29), the write-side rule that allows this prefix for `receive` only.
  * Mirrors `bulkReturnPoolHref` of the distribution feature; inlined here because this module is
  * pure and must not import the distribution barrel (UI components, import cycle risk).
  */
