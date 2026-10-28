@@ -1,4 +1,5 @@
-import { hasOpenShift, openShifts } from './shift-closing';
+// Deep import: the volunteers barrel re-exports UI that imports the portal domain (cycle).
+import { hasOpenShift, openShifts } from '$lib/features/volunteers/domain/shift-closing';
 import type { PublicJob } from './volunteer';
 
 /** One shelter's urgent jobs that still need people — one card on the home page. */

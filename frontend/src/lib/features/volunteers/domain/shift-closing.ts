@@ -1,5 +1,5 @@
-import { bangkokDateString, shiftDutyWindow } from '$lib/features/volunteers/domain/duty-window';
-import { defaultShiftEndDate } from '$lib/features/volunteers/domain/shift-batch';
+import { bangkokDateString, shiftDutyWindow } from './duty-window';
+import { defaultShiftEndDate } from './shift-batch';
 
 /** The part of a job shift that decides when public applications stop (#972). */
 export type ClosableShift = {

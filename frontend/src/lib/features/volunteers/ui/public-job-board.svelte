@@ -17,7 +17,7 @@
 	} from '$lib/features/volunteer-portal/domain/volunteer';
 	import type { PortalActivity } from '$lib/features/volunteer-portal/domain/schedule-view';
 	import { findBookingConflict } from '$lib/features/volunteer-portal/domain/booking-overlap';
-	import { openJobsFirst, openShifts } from '$lib/features/volunteer-portal/domain/shift-closing';
+	import { openJobsFirst, openShifts } from '../domain/shift-closing';
 	import { shiftDutyWindow } from '$lib/features/volunteers/domain/duty-window';
 	import { languageStore } from '$lib/stores/language.svelte';
 	import { jobsI18n } from '$lib/features/volunteers/i18n/jobs.i18n';

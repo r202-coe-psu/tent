@@ -7,7 +7,8 @@
  */
 import { z } from 'zod';
 import { isValidThaiNationalId } from '$lib/utils/thai-id';
-import { hasOpenShift } from './shift-closing';
+// Deep import: the volunteers barrel re-exports UI that imports this domain (cycle).
+import { hasOpenShift } from '$lib/features/volunteers/domain/shift-closing';
 
 /** CR-092 §4 ticket statuses. `rejected` is deliberately absent — see the module notes. */
 export const TICKET_STATUSES = ['confirmed', 'pending_review', 'cancelled'] as const;

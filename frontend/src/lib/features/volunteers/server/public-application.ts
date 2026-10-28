@@ -29,7 +29,7 @@ import {
 import { shiftDutyWindow } from '../domain/duty-window';
 import { shiftKindFor } from '../domain/assign-roster';
 import { defaultShiftEndDate } from '../domain/shift-batch';
-import { isShiftOpen } from '$lib/features/volunteer-portal/domain/shift-closing';
+import { isShiftOpen } from '../domain/shift-closing';
 import {
 	windowsOverlap,
 	type BookingWindow
