@@ -133,18 +133,34 @@ async function expectOnHand(page: Page, item: string, qty: number): Promise<void
 }
 
 type LedgerRow = {
+	_id?: string;
 	qty: string;
 	reason: string;
 	adjust_reason?: string;
 	lot?: { expiry?: string };
 };
 
-async function ledgerRows(selector: Record<string, unknown>): Promise<LedgerRow[]> {
+async function findLedger(selector: Record<string, unknown>): Promise<LedgerRow[]> {
 	const res = await couchReq('POST', `/${shelterDb()}/_find`, {
 		selector: { type: 'stock_ledger', ...selector },
-		limit: 100
+		limit: 1000
 	});
 	return ((res.data as { docs?: LedgerRow[] } | null)?.docs ?? []) as LedgerRow[];
+}
+
+/**
+ * The `shelter` fixture is worker-scoped, so earlier specs on this worker leave ledger rows in the
+ * same shelter DB. `ledgerBaseline` holds the ids present before this suite writes anything;
+ * `ledgerRows` skips them so assertions only see rows this suite wrote.
+ */
+let ledgerBaseline = new Set<string>();
+
+async function snapshotLedger(): Promise<void> {
+	ledgerBaseline = new Set((await findLedger({})).map((r) => r._id ?? ''));
+}
+
+async function ledgerRows(selector: Record<string, unknown>): Promise<LedgerRow[]> {
+	return (await findLedger(selector)).filter((r) => !ledgerBaseline.has(r._id ?? ''));
 }
 
 async function countDocs(type: string): Promise<number> {
@@ -178,6 +194,7 @@ test.describe(
 		}) => {
 			test.setTimeout(180_000);
 			await warehouseStaff(scenarioAs, shelter.code);
+			await snapshotLedger();
 			await openSupply(page, RECEIVE_AT);
 
 			const sheet = await openMovement(page, 'รับเข้า', 'รับเข้า');
