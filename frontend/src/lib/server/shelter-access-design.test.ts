@@ -1852,6 +1852,42 @@ describe('buildValidateDocUpdate', () => {
 			expect(() => compile()(distLedger, null, WAREHOUSE)).not.toThrow();
 		});
 
+		describe('direct issue (requisition_ticket:direct-…, #837)', () => {
+			const SUPPLY_COORD: UserCtx = { name: 'sc', roles: ['shelter:SH001', 'supply_coordinator'] };
+			const directLedger = () =>
+				ledger({
+					qty: '-10',
+					reason: 'distribute',
+					ref_id: 'requisition_ticket:direct-01J',
+					lot_ref: 'stock_ledger:01J'
+				});
+
+			it.each([
+				['warehouse_staff', WAREHOUSE],
+				['shelter_manager', MANAGER],
+				['system_admin', ADMIN]
+			])('allows a direct distribute row from %s', (_role, userCtx) => {
+				expect(() => compile()(directLedger(), null, userCtx)).not.toThrow();
+			});
+
+			it('rejects a direct distribute row from supply_coordinator', () => {
+				expectForbidden(
+					() => compile()(directLedger(), null, SUPPLY_COORD),
+					/Only warehouse staff, shelter manager, or system admin can write direct distribute stock ledger/
+				);
+			});
+
+			it('still lets supply_coordinator write a requisition ticket distribute row (CR-121)', () => {
+				const ticketLedger = ledger({
+					qty: '-10',
+					reason: 'distribute',
+					ref_id: 'requisition_ticket:01J',
+					lot_ref: 'stock_ledger:01J'
+				});
+				expect(() => compile()(ticketLedger, null, SUPPLY_COORD)).not.toThrow();
+			});
+		});
+
 		it.each([
 			['warehouse_staff', WAREHOUSE],
 			['system_admin', { name: 'admin', roles: ['system_admin'] }]
@@ -2588,12 +2624,20 @@ describe('buildValidateDocUpdate', () => {
 		it('rejects stock_lot_reservation mutation from non-warehouse staff', () => {
 			expectForbidden(
 				() => compile()(resDoc(), null, REGISTRATION),
-				/Only warehouse staff or system admin can manage stock lot reservations/
+				/Only warehouse staff, shelter manager, or system admin can manage stock lot reservations/
+			);
+			expectForbidden(
+				() => compile()(resDoc(), null, SUPPLY_COORDINATOR),
+				/Only warehouse staff, shelter manager, or system admin can manage stock lot reservations/
 			);
 		});
 
 		it('allows warehouse_staff to manage stock_lot_reservation', () => {
 			expect(() => compile()(resDoc(), null, WAREHOUSE)).not.toThrow();
+		});
+
+		it('allows shelter_manager to manage stock_lot_reservation (direct issue, #837)', () => {
+			expect(() => compile()(resDoc(), null, MANAGER)).not.toThrow();
 		});
 
 		it('rejects malformed reservation claims and non-authorized pending request edits', () => {

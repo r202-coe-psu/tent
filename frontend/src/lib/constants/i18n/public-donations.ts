@@ -245,7 +245,6 @@ export const PUBLIC_DONATIONS_I18N = {
 		navigateGoogleMaps: 'นำทางด้วย Google Maps',
 		backToHomeBtn: 'กลับสู่หน้าหลัก',
 		backToHome: 'กลับสู่หน้าหลัก',
-		openingMapsToast: 'กำลังเปิดแผนที่เพื่อนำทางไปยังศูนย์พักพิง',
 
 		// Track Search Page
 		trackPageTitle: 'ติดตามสถานะของบริจาค — Smart Shelter',
@@ -652,7 +651,6 @@ export const PUBLIC_DONATIONS_I18N = {
 		navigateGoogleMaps: 'Navigate with Google Maps',
 		backToHomeBtn: 'Back to Home',
 		backToHome: 'Back to Home',
-		openingMapsToast: 'Opening map navigation to shelter...',
 
 		// Track Search Page
 		trackPageTitle: 'Track Donation Status — Smart Shelter',

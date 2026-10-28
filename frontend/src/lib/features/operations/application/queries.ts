@@ -1,6 +1,7 @@
 import {
 	createMutation,
 	createQuery,
+	keepPreviousData,
 	useQueryClient,
 	type QueryClient
 } from '@tanstack/svelte-query';
@@ -17,7 +18,6 @@ import type {
 	DonationSlot,
 	CampaignInput,
 	ReceiveInput,
-	DistributeInput,
 	AdjustInput,
 	TransferInput,
 	TransferFilter,
@@ -33,8 +33,11 @@ import type { MergeItemsInput } from '../domain/item-merge';
 import type { DonationBatchLine } from '../domain/donation-batch';
 import type { CycleCountSubmission } from '../domain/cycle-count';
 import { countPendingTransfers } from '../domain/transfer-pending';
+import { labelledLedgerRefIds, ledgerRefLabels } from '../domain/ledger-ref';
+import { digestRefIds, resolveLedgerRefLabels, type LedgerRefLabels } from './ledger-ref-labels';
 import { retryUnlessForbidden } from './transfer-retry';
-import { distributeAcrossLots, type DistributeAcrossLotsArgs } from './distribute-across-lots';
+import { distributeBatch } from './distribute-batch';
+import type { BatchLinePlan } from '../domain/distribute-batch';
 
 /**
  * Keys for data read out of ONE shelter's database carry that shelter's code, like
@@ -50,6 +53,8 @@ export const operationsKeys = {
 	donations: () => [...operationsKeys.all, 'donations', getShelterCode()] as const,
 	ledger: () => [...operationsKeys.all, 'ledger'] as const,
 	byItem: (id: string) => [...operationsKeys.ledger(), id] as const,
+	ledgerRefs: () => [...operationsKeys.all, 'ledgerRefs', getShelterCode()] as const,
+	ledgerRefsFor: (idsDigest: string) => [...operationsKeys.ledgerRefs(), idsDigest] as const,
 	balance: () => [...operationsKeys.all, 'balance', getShelterCode()] as const,
 	donationSlots: () => [...operationsKeys.all, 'donationSlots', getShelterCode()] as const,
 	transfers: () => [...operationsKeys.all, 'transfers'] as const,
@@ -159,6 +164,32 @@ export const useLedgerByItem = (itemId: () => string | undefined) =>
 		queryFn: () => operationsRepository().listLedgerByItem(itemId() ?? ''),
 		enabled: !!itemId()
 	}));
+
+/**
+ * Readable labels for ledger `ref_id`s (#811); ids without one fall back to `shortLedgerRef`.
+ * Keyed on a digest of the ids, and ids an earlier key already resolved come from the cache.
+ */
+export const useLedgerRefLabels = (refIds: () => readonly string[]) => {
+	const queryClient = useQueryClient();
+	return createQuery(() => {
+		const ids = labelledLedgerRefIds(refIds());
+		const shelterKey = operationsKeys.ledgerRefs();
+		return {
+			queryKey: operationsKeys.ledgerRefsFor(digestRefIds(ids)),
+			queryFn: () =>
+				resolveLedgerRefLabels(
+					ids,
+					queryClient
+						.getQueriesData<LedgerRefLabels>({ queryKey: shelterKey })
+						.map(([, labels]) => labels),
+					async (missing) =>
+						ledgerRefLabels(await operationsRepository().listLedgerRefDocs(missing))
+				),
+			enabled: ids.length > 0,
+			placeholderData: keepPreviousData
+		};
+	});
+};
 
 export const useStockBalance = () =>
 	createQuery(() => ({
@@ -298,34 +329,26 @@ export const useApplyCycleCount = () => {
 };
 
 /**
- * Mutation hook to distribute outbound stock, persist the ledger entry, and invalidate caches.
+ * Mutation hook to issue several items under one `ref_id` (#837): one `distributeAcrossLots`
+ * per line, no rollback. Resolves with per-line outcomes when a row fails — read
+ * `result.outcomes` / `.complete`. The caches are refetched before it resolves, even on a
+ * partial run (earlier rows already landed), so the retry plans from fresh balances.
  */
-export const useDistributeStock = () => {
+export const useDistributeBatch = () => {
 	const queryClient = useQueryClient();
 	return createMutation(() => ({
-		mutationFn: ({ input, ctx }: { input: DistributeInput; ctx: AuthorContext }) =>
-			operationsRepository().distributeStock(input, ctx),
-		onSuccess: () => {
-			// Eagerly invalidate — live query will also fire, but this ensures instant update
-			queryClient.invalidateQueries({ queryKey: operationsKeys.all });
-		}
-	}));
-};
-
-/**
- * Mutation hook to issue one request across several lots (CR-143 FR-A7–A9): one
- * `distributeStock` per planned lot, one shared `ref_id`, no rollback. Resolves
- * with the partial result when a row fails — read `result.complete` / `.failure`.
- * Caches are invalidated either way, since earlier rows may already have landed.
- */
-export const useDistributeAcrossLots = () => {
-	const queryClient = useQueryClient();
-	return createMutation(() => ({
-		mutationFn: ({ plan, ctx }: { plan: DistributeAcrossLotsArgs; ctx: AuthorContext }) =>
-			distributeAcrossLots(operationsRepository(), plan, ctx),
-		onSettled: () => {
-			queryClient.invalidateQueries({ queryKey: operationsKeys.all });
-		}
+		mutationFn: ({
+			lines,
+			ref_id,
+			note,
+			ctx
+		}: {
+			lines: readonly BatchLinePlan[];
+			ref_id: string;
+			note: string;
+			ctx: AuthorContext;
+		}) => distributeBatch(operationsRepository(), lines, ref_id, note, ctx),
+		onSettled: () => queryClient.invalidateQueries({ queryKey: operationsKeys.all })
 	}));
 };
 

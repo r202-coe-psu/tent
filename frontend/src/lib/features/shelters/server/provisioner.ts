@@ -1,4 +1,5 @@
 import { ulid } from '$lib/db/ulid';
+import { nextClosedAt } from '../domain/closed-at';
 import { SHELTER_MASTER_SCHEMA_V, type Shelter, type ShelterMaster } from '../domain/schema';
 import { SHELTER_CAPABILITIES, shelterScopeRole } from '$lib/auth/roles';
 import { adminRaw, ServiceError } from '$lib/server/couch-admin';
@@ -432,6 +433,7 @@ async function provisionShelterUnlocked(
 			schema_v: SHELTER_MASTER_SCHEMA_V,
 			code,
 			...input,
+			closed_at: nextClosedAt(null, input.operation_status, undefined, ts),
 			created_at: ts,
 			updated_at: ts
 		};

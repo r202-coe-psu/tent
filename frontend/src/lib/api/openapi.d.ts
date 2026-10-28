@@ -1968,6 +1968,8 @@ export interface components {
 			status: string;
 			/** Shelter Name */
 			shelter_name: string;
+			/** Shelter Status */
+			shelter_status?: ('open' | 'closed' | 'full' | 'standby') | null;
 		};
 		/** FaqItem */
 		FaqItem: {
@@ -3161,10 +3163,8 @@ export interface components {
 			origin_address?: string | null;
 			/** Checked In At */
 			checked_in_at?: string | null;
-			/** Care Zone */
-			care_zone?: string | null;
-			/** Zone Name */
-			zone_name?: string | null;
+			/** Shelter Status */
+			shelter_status?: ('open' | 'closed' | 'full' | 'standby') | null;
 			/** Family Members */
 			family_members?: components['schemas']['FamilyMember'][];
 		};

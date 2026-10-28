@@ -11,6 +11,7 @@ import pytest
 from worker.couch import bootstrap as bs
 from worker.couch import checkpoint as cp
 from worker.projection_version import PROJECTION_VERSION
+from worker.projectors.shelter import RetentionPhase
 
 
 class FakeStore:
@@ -58,9 +59,9 @@ def scan():
         patch.object(bs, "bootstrap_database", new_callable=AsyncMock) as db,
         patch.object(
             bs,
-            "list_open_shelter_codes",
+            "list_listened_shelters",
             new_callable=AsyncMock,
-            return_value=["SH001"],
+            return_value={"SH001": RetentionPhase.OPEN},
         ),
         patch.object(
             bs, "list_all_shelter_codes", new_callable=AsyncMock, return_value=["SH001"]
@@ -265,8 +266,9 @@ async def test_bootstrap_checkpoint_uses_seq_read_before_the_scan():
 
 
 async def test_bootstrap_refreshes_closed_shelter_projections(make_store, scan):
-    """#791: closed shelters get no `_changes` listener, so the deploy bootstrap is the
-    only thing that re-applies projector changes to their EXT-005/007 rows."""
+    """#791: a shelter without a full scan still serves EXT-005 counts, so the deploy
+    bootstrap re-applies projector changes to them. Its occupant list is not rebuilt:
+    a closed shelter has none (CR-183 FR-4)."""
     make_store(version=PROJECTION_VERSION - 1)
     couch = AsyncMock()
 
@@ -286,4 +288,4 @@ async def test_bootstrap_refreshes_closed_shelter_projections(make_store, scan):
 
     assert scan.await_count == 2  # registry + open SH001 only
     occupancy.assert_awaited_once_with(couch, "SH002")
-    occupants.assert_awaited_once_with(couch, "SH002")
+    occupants.assert_not_awaited()

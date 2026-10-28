@@ -2,7 +2,7 @@
 title: "Task Breakdown — Platform/Core"
 status: active
 created: 2026-06-05
-updated: 2026-07-16
+updated: 2026-10-25
 module: core
 note: decision-synced 2026-07-15 — CR-033 remote-first; CR-005 public-tier redaction (T-01) + donation schema_v2/donation_slot (T-02) + public read-model (T-35)
 ---
@@ -120,8 +120,11 @@ note: decision-synced 2026-07-15 — CR-033 remote-first; CR-005 public-tier red
 
 - RoPA ครอบทุก processing activity ของระบบ ผ่าน review ผู้รับผิดชอบ PDPA ของโครงการ
 - Retention policy ต่อประเภทข้อมูลกำหนดชัด + กลไกลบ/anonymize อัตโนมัติทำงานจริง (test ได้) — รวม cleanup ของ submission/temp artifacts ตาม FR-17 (remote-first continuity baseline, [CR-033](../changes/01-core/CR-033-remote-first-architecture-program-index.md); **ไม่มี offline local Pouch store ให้ cleanup**) ที่ FR-55 กำหนด
+- Job purge/anonymize ฝั่ง CouchDB ใช้นาฬิกา `shelter.closed_at` + **2 ปี** สำหรับ `evacuee`/`household`/`medical` (`medical` purge ก่อน) และ `closed_at` + 3 เดือนสำหรับ donor PII ใน `donation` ([CR-194](../changes/01-core/CR-194-public-person-data-retention.md)); RoPA ระบุทั้งสองระยะ + ระยะ public search ตาม CR-183
 - Consent flows (ลงทะเบียน, family search T-40, donor, volunteer) สอดคล้องเอกสารและ audit ได้
 - เอกสารชุดนี้อยู่ใน handover package (T-44)
+
+> **Cross-ref:** [CR-183](../changes/11-famsearch/CR-183-closed-shelter-search-retention.md) — retention ของ public plane (MongoDB) สำหรับศูนย์ปิด: คง `public_persons` ไว้จนครบ `closed_at` + `retention_months_after_close` แล้วลบพร้อม audit (data-model §7). RoPA ต้องครอบ PII exposure ช่วงนี้; purge/anonymize ฝั่ง CouchDB (2 ปีหลังปิดศูนย์ — คนละนาฬิกากับ public plane) ยังเป็นขอบเขตของ T-43.
 
 ### T-44 — Cross-module UAT + production hardening + handover package (FR-56)
 
