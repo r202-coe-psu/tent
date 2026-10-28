@@ -176,6 +176,17 @@ export function canManageScanners(roles: readonly string[], shelterCode: string)
 	return canManageInShelters(roles, [shelterCode], SCANNER_MANAGER_CAPABILITIES);
 }
 
+/** Capabilities that may issue stock out of the warehouse directly (#837). */
+export const STOCK_DISTRIBUTOR_CAPABILITIES = [WAREHOUSE_STAFF, SHELTER_MANAGER] as const;
+
+/**
+ * True when the user may directly distribute stock in `shelterCode` (SA, or its warehouse_staff /
+ * shelter_manager). `supply_coordinator` views stock but does not issue it.
+ */
+export function canDistributeStock(roles: readonly string[], shelterCode: string): boolean {
+	return canManageInShelters(roles, [shelterCode], STOCK_DISTRIBUTOR_CAPABILITIES);
+}
+
 /**
  * True when `kiosk_staff` is the user's only capability in `shelterCode` (every shelter when
  * null) — such a user sees nothing in back-office but the kiosk pages (FR-SBO-29).

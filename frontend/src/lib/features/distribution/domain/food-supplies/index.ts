@@ -32,9 +32,13 @@ export {
 	loanClearReasonSchema,
 	distributionLogInputSchema,
 	distributionLogDocSchema,
+	DISTRIBUTION_LOG_SCHEMA_V,
 	createDistributionLog,
 	assertDistributionLogIssuanceImmutable,
 	assertDistributionLogCanBeVoided,
+	applyBulkEntryToLog,
+	revertBulkEntryFromLog,
+	type BulkEntryRef,
 	isDuplicateMealDistributionLog,
 	calculateDistributedQtyForTicketItem,
 	calculateInHandQtyForTicketItem,
@@ -55,6 +59,133 @@ export {
 	type BulkReturnPoolInput,
 	type BulkReturnPool
 } from './bulk-return-pool';
+
+export {
+	BULK_RETURN_POOL_V3_SCHEMA_V,
+	bulkReturnPoolV3StatusSchema,
+	bulkReturnPoolLockOpSchema,
+	bulkReturnPoolLockSchema,
+	bulkReturnPoolItemSummaryRowSchema,
+	bulkReturnPoolDiscrepancyReasonSchema,
+	bulkReturnPoolReceivedItemSchema,
+	bulkReturnPoolV3InputSchema,
+	bulkReturnPoolV3DocSchema,
+	createBulkReturnPoolV3,
+	canAppendToPool,
+	normalizePoolName,
+	isPoolNameTakenAmongOpen,
+	assertPoolTransition,
+	submitBulkReturnPoolV3,
+	cancelBulkReturnPoolV3,
+	receiveBulkReturnPoolV3,
+	buildBulkReturnReceivedItems,
+	BulkReturnReceiveInputError,
+	type BulkReturnReceivedRowInput,
+	type BulkReturnPoolV3Status,
+	type BulkReturnPoolLock,
+	type BulkReturnPoolItemSummaryRow,
+	type BulkReturnPoolDiscrepancyReason,
+	type BulkReturnPoolReceivedItem,
+	type BulkReturnPoolV3Input,
+	type BulkReturnPoolV3,
+	type SubmitBulkReturnPoolV3Input,
+	type ReceiveBulkReturnPoolV3Input
+} from './bulk-return-pool-v3';
+
+export {
+	BULK_RETURN_ENTRY_SCHEMA_V,
+	bulkReturnEntryIdSchema,
+	bulkReturnEntryLoanRefSchema,
+	bulkReturnEntryReturnerTypeSchema,
+	bulkReturnEntryReturnerIdSchema,
+	bulkReturnEntryInputSchema,
+	bulkReturnEntryDocSchema,
+	createBulkReturnEntry,
+	isBulkReturnEligibleItem,
+	type BulkReturnEntryLoanRef,
+	type BulkReturnEntryReturnerType,
+	type BulkReturnEntryInput,
+	type BulkReturnEntry
+} from './bulk-return-entry';
+
+export {
+	BULK_RETURN_ENTRY_MOVE_SCHEMA_V,
+	BULK_RETURN_ENTRY_MOVE_SEQ_WIDTH,
+	BULK_RETURN_ENTRY_MOVE_MAX_SEQ,
+	bulkReturnEntryMoveIdSchema,
+	bulkReturnEntryMoveInputSchema,
+	bulkReturnEntryMoveDocSchema,
+	deriveEntryMoveId,
+	createBulkReturnEntryMove,
+	resolveEntryPool,
+	foldEntryMoves,
+	type EntryMoveFold,
+	canMoveEntry,
+	assertEntryCanBeMoved,
+	type BulkReturnEntryMoveInput,
+	type BulkReturnEntryMove
+} from './bulk-return-entry-move';
+
+export {
+	BULK_RETURN_ENTRY_VOID_SCHEMA_V,
+	bulkReturnEntryVoidIdSchema,
+	bulkReturnEntryVoidInputSchema,
+	bulkReturnEntryVoidDocSchema,
+	deriveEntryVoidId,
+	createBulkReturnEntryVoid,
+	canVoidEntry,
+	type BulkReturnEntryVoidInput,
+	type BulkReturnEntryVoid
+} from './bulk-return-entry-void';
+
+export {
+	resolveBulkReturnEntries,
+	summarizePoolItems,
+	isPoolEmpty,
+	poolSnapshotEntryIds,
+	isLateEntry,
+	findLateEntries,
+	findUnresolvedBulkReturnRefs,
+	buildSnapshotPins,
+	findSnapshotConflicts,
+	type SnapshotConflictKind,
+	type SnapshotPins,
+	type ResolvedBulkReturnEntry,
+	type UnresolvedBulkReturnRef
+} from './bulk-return-pool-summary';
+
+export {
+	selectOutstandingLoans,
+	allocateBulkReturnToLoans,
+	type AllocatableLoan
+} from './bulk-return-loan-allocation';
+
+export {
+	assessBulkReturnRefOnLoan,
+	findClosedBulkReturnLoanRefs,
+	findAppliedBulkReturnLoanRefs,
+	findMissedLoanRefs,
+	type MissedBulkReturnLoanRef,
+	type BulkReturnLoanDriftReason,
+	type BulkReturnRefLoan,
+	type BulkReturnRefAssessment,
+	type ClosedBulkReturnLoanRef,
+	type AppliedBulkReturnLoanRef
+} from './bulk-return-loan-drift';
+
+export {
+	buildBulkReturnPoolOverview,
+	type BulkReturnEventSet,
+	type BulkReturnPoolOverviewRow,
+	type BulkReturnPoolOverviewOptions
+} from './bulk-return-pool-overview';
+
+export {
+	buildPoolTimeline,
+	type PoolTimelineEvent,
+	type PoolTimelineEventKind,
+	type PoolTimelineEventSet
+} from './bulk-return-pool-timeline';
 
 export {
 	bulkReturnClaimStatusSchema,
@@ -117,6 +248,8 @@ export {
 	type MenuTagSource,
 	type MenuMatchResult
 } from './menu-matching';
+
+export { findAllergenConflicts, withFreeTextAllergyReason } from './allergen-matching';
 
 export {
 	validateDispatchLotAllocations,

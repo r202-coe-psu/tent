@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tick } from 'svelte';
 	import { toast } from 'svelte-sonner';
 	import Truck from '@lucide/svelte/icons/truck';
 	import UtensilsCrossed from '@lucide/svelte/icons/utensils-crossed';
@@ -10,7 +11,9 @@
 	import RotateCcw from '@lucide/svelte/icons/rotate-ccw';
 	import AlertCircle from '@lucide/svelte/icons/alert-circle';
 	import RefreshCw from '@lucide/svelte/icons/refresh-cw';
+	import { replaceState } from '$app/navigation';
 	import { resolve } from '$app/paths';
+	import { page } from '$app/state';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
 	import {
@@ -35,6 +38,22 @@
 	} from '../model/distribution-point';
 	import { filterDeskTickets } from '../model/ticket-filters';
 	import {
+		DESK_MODES,
+		DESK_MODE_IDS,
+		STEP_TITLES,
+		modePendingCount,
+		needsCloseOutAction,
+		isDeskMode,
+		resolveInitialMode,
+		stepAfterModeSwitch,
+		stepLabel,
+		ticketsForMode,
+		type DeskMode,
+		type StationTab
+	} from '../model/desk-mode';
+	import { readStoredDeskMode, storeDeskMode } from '../model/desk-mode-storage';
+	import { DeskDrafts } from '../model/desk-draft';
+	import {
 		filterTicketsByServiceDay,
 		resolveServiceDay,
 		serviceDayOptions
@@ -43,14 +62,16 @@
 	import DistributionHistory from '../common/DistributionHistory.svelte';
 	import SuppliesDistributionCard from './SuppliesDistributionCard.svelte';
 	import LoanReturnCard from './LoanReturnCard.svelte';
+	import BulkReturnPoolBoard from '../bulk-return/BulkReturnPoolBoard.svelte';
 	import ShiftReconciliationCard from './ShiftReconciliationCard.svelte';
 	import TicketStatusBadge from '../common/TicketStatusBadge.svelte';
 	import { formatDistributionError } from '../model/distribution-error';
 	import * as Select from '$lib/components/ui/select/index.js';
+	import * as AlertDialog from '$lib/components/ui/alert-dialog/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 
 	interface Props {
-		initialTab?: 'receive' | 'food' | 'supplies' | 'returns' | 'reconciliation';
+		initialTab?: StationTab;
 	}
 
 	let { initialTab = 'receive' }: Props = $props();
@@ -69,21 +90,83 @@
 
 	const canFrontline = $derived(authContext ? canPerformFrontlineDistribution(authContext) : false);
 
-	// activeTab is intentionally set once from the initialTab prop; user navigation controls it
-	// after mount. A closure breaks the Svelte reactivity chain so Svelte does not warn that
-	// only the initial prop value is captured.
-	let activeTab = $state<'receive' | 'food' | 'supplies' | 'returns' | 'reconciliation'>(
+	// Mode and tab are intentionally set once from the URL / stored mode / initialTab prop; user
+	// navigation controls them after mount. A closure breaks the Svelte reactivity chain so Svelte
+	// does not warn that only the initial value is captured.
+	let mode = $state<DeskMode>(
 		(function () {
-			return initialTab;
+			const urlMode = page.url.searchParams.get('mode');
+			const initial = resolveInitialMode(urlMode, readStoredDeskMode());
+			// FR-DFS-06: a deep link (e.g. a supplies QR) is also the mode this device last used.
+			if (isDeskMode(urlMode)) storeDeskMode(urlMode);
+			return initial;
 		})()
 	);
+	let activeTab = $state<StationTab>(
+		(function () {
+			return stepAfterModeSwitch(initialTab, mode);
+		})()
+	);
+
+	const steps = $derived(DESK_MODES[mode].steps);
+
+	let contentEl = $state<HTMLElement | null>(null);
+
+	// Phone only: the tab strip and selectors sit above the detail, so bring it into view after a
+	// user action. Called from handlers (never an effect) so initial load does not scroll.
+	async function scrollToContent() {
+		if (typeof window === 'undefined' || !window.matchMedia('(max-width: 1023.98px)').matches) {
+			return;
+		}
+		await tick();
+		const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+		contentEl?.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth', block: 'start' });
+	}
+
+	const drafts = new DeskDrafts();
+	// FR-DFS-05: a switch unmounts the step's form, so typed input waits on this confirm.
+	let pendingMode = $state<DeskMode | null>(null);
+
+	function selectMode(next: DeskMode) {
+		if (next === mode) return;
+		if (drafts.hasDraft()) {
+			pendingMode = next;
+			return;
+		}
+		switchMode(next);
+	}
+
+	function switchMode(next: DeskMode) {
+		pendingMode = null;
+		mode = next;
+		activeTab = stepAfterModeSwitch(activeTab, next);
+		storeDeskMode(next);
+		// Shallow URL update: a goto re-runs navigation and cancels the scroll below.
+		replaceState(resolve(`/onsite/distribution?mode=${next}` as '/onsite/distribution'), {});
+		void scrollToContent();
+	}
+
+	function selectTab(tab: StationTab) {
+		activeTab = tab;
+		void scrollToContent();
+	}
+
+	function pickTicket(set: (id: string) => void) {
+		return (id: string) => {
+			set(id);
+			void scrollToContent();
+		};
+	}
 
 	// Fetch tickets for frontline station
 	const ticketsQuery = useRequisitionTickets(undefined, () => currentShelterCode);
 	const allTickets = $derived(filterDeskTickets(ticketsQuery.data ?? []));
 
+	// Every step sees only the current mode's tickets (food and supplies never mix).
+	const modeTickets = $derived(ticketsForMode(allTickets, mode));
+
 	// Categorize tickets by frontline workflow relevance
-	const inTransitTickets = $derived(allTickets.filter((t) => t.status === 'IN_TRANSIT'));
+	const inTransitTickets = $derived(modeTickets.filter((t) => t.status === 'IN_TRANSIT'));
 
 	// Desk tickets before the point filter. Tab badges count these, so a point picked on one tab
 	// never hides work from the badges shown while the filter itself is out of sight.
@@ -96,7 +179,7 @@
 	// DISTRIBUTING or post-distribution tickets needing close or submit, ordered by workflow
 	// progress so unfinished tickets surface first and COMPLETED ones sink to the bottom.
 	const allReconciliationTickets = $derived(
-		allTickets
+		modeTickets
 			.filter(
 				(t) =>
 					t.status === 'DISTRIBUTING' ||
@@ -164,12 +247,63 @@
 	// RETURN_PENDING_RECEIPT (waiting on the warehouse, not frontline), and COMPLETED.
 	// Counted before the point filter — it feeds a tab badge.
 	const reconciliationPendingActionCount = $derived(
-		allReconciliationTickets.filter(
-			(t) => t.status === 'SHIFT_CLOSED' || t.status === 'RETURN_COMPLETED'
-		).length
+		allReconciliationTickets.filter(needsCloseOutAction).length
 	);
 
 	let pickedReconciliationTicketId = $state<string>('');
+
+	const TAB_STYLE: Record<
+		StationTab,
+		{ Icon: typeof Truck; active: string; icon: string; badge: string }
+	> = {
+		receive: {
+			Icon: Truck,
+			active: 'border-sky-500 bg-sky-50/50 shadow-xs ring-2 ring-sky-500/20',
+			icon: 'bg-sky-600 text-white',
+			badge: 'bg-blue-100 text-blue-900'
+		},
+		food: {
+			Icon: UtensilsCrossed,
+			active: 'border-amber-500 bg-amber-50/50 shadow-xs ring-2 ring-amber-500/20',
+			icon: 'bg-amber-600 text-white',
+			badge: 'bg-amber-100 text-amber-900'
+		},
+		supplies: {
+			Icon: Package,
+			active: 'border-indigo-500 bg-indigo-50/50 shadow-xs ring-2 ring-indigo-500/20',
+			icon: 'bg-indigo-600 text-white',
+			badge: 'bg-indigo-100 text-indigo-900'
+		},
+		returns: {
+			Icon: RotateCcw,
+			active: 'border-emerald-500 bg-emerald-50/50 shadow-xs ring-2 ring-emerald-500/20',
+			icon: 'bg-emerald-600 text-white',
+			badge: ''
+		},
+		reconciliation: {
+			Icon: Lock,
+			active: 'border-teal-500 bg-teal-50/50 shadow-xs ring-2 ring-teal-500/20',
+			icon: 'bg-teal-600 text-white',
+			badge: 'bg-amber-100 text-amber-900'
+		}
+	};
+
+	const tabBadges = $derived<Record<StationTab, { text: string; pulse?: boolean } | null>>({
+		receive:
+			inTransitTickets.length > 0
+				? { text: `รอรับ ${inTransitTickets.length}`, pulse: true }
+				: null,
+		food: allDistributingFood.length > 0 ? { text: `เปิดแจก ${allDistributingFood.length}` } : null,
+		supplies:
+			allDistributingSupplies.length > 0
+				? { text: `เปิดแจก ${allDistributingSupplies.length}` }
+				: null,
+		returns: null,
+		reconciliation:
+			reconciliationPendingActionCount > 0
+				? { text: `รอดำเนินการ ${reconciliationPendingActionCount}` }
+				: null
+	});
 
 	// Falls back to the ticket open on the food tab, then the supplies tab, then the first one.
 	const selectedReconciliationTicketId = $derived(
@@ -208,9 +342,11 @@
 				activeTab = 'food';
 				pickedFoodDay = ticketServiceDay(ticket);
 				pickedFoodTicketId = ticket._id;
+				void scrollToContent();
 			} else if (ticket.requisition_type === 'supplies') {
 				activeTab = 'supplies';
 				pickedSuppliesTicketId = ticket._id;
+				void scrollToContent();
 			}
 		} catch (err) {
 			toast.error(formatDistributionError(err, 'ไม่สามารถตรวจรับสินค้าได้ กรุณาลองใหม่อีกครั้ง'));
@@ -220,7 +356,10 @@
 	}
 </script>
 
-<div class="mx-auto w-full max-w-6xl space-y-6 px-4 py-6 sm:px-6 sm:py-8">
+<!-- Phone: tall enough that the scroll anchor can reach the top while a tab is still loading -->
+<div
+	class="mx-auto w-full max-w-6xl space-y-6 px-4 py-6 max-lg:min-h-[calc(100dvh+18rem)] sm:px-6 sm:py-8"
+>
 	<!-- Back Navigation -->
 	<div>
 		<Button
@@ -245,9 +384,6 @@
 				<h1 class="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
 					จุดแจกจ่ายพัสดุและอาหาร
 				</h1>
-				<p class="text-xs font-semibold tracking-wider text-slate-500 uppercase sm:text-sm">
-					Distribution Desk (Station 4)
-				</p>
 			</div>
 		</div>
 
@@ -267,149 +403,83 @@
 		</div>
 	</header>
 
-	<!-- Station Tabs (Operational modes) -->
-	<div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
-		<!-- Tab 1: Receive Cargo -->
-		<button
-			type="button"
-			onclick={() => (activeTab = 'receive')}
-			class="flex items-center justify-between rounded-xl border p-3.5 text-left transition-all {activeTab ===
-			'receive'
-				? 'border-sky-500 bg-sky-50/50 shadow-xs ring-2 ring-sky-500/20'
-				: 'border-slate-200 bg-white hover:border-slate-300'}"
-		>
-			<div class="flex items-center gap-3">
-				<div
-					class="flex h-9 w-9 items-center justify-center rounded-lg {activeTab === 'receive'
-						? 'bg-sky-600 text-white'
-						: 'bg-slate-100 text-slate-600'}"
-				>
-					<Truck class="h-4 w-4" />
-				</div>
-				<div>
-					<p class="text-xs font-bold text-slate-900">1. รับของถึงจุดแจก</p>
-					<p class="text-2xs text-slate-500">Confirm Cargo Arrival</p>
-				</div>
-			</div>
-			{#if inTransitTickets.length > 0}
-				<span
-					class="animate-pulse rounded-full bg-blue-100 px-2 py-0.5 text-2xs font-bold text-blue-900"
-				>
-					รอรับ {inTransitTickets.length}
-				</span>
-			{/if}
-		</button>
+	<!-- Lands with the tab strip just under the sticky shelter header, detail right below it -->
+	<div bind:this={contentEl} class="-mt-6 flow-root h-0 scroll-mt-10" aria-hidden="true"></div>
 
-		<!-- Tab 2: Food Handover -->
-		<button
-			type="button"
-			onclick={() => (activeTab = 'food')}
-			class="flex items-center justify-between rounded-xl border p-3.5 text-left transition-all {activeTab ===
-			'food'
-				? 'border-amber-500 bg-amber-50/50 shadow-xs ring-2 ring-amber-500/20'
-				: 'border-slate-200 bg-white hover:border-slate-300'}"
-		>
-			<div class="flex items-center gap-3">
-				<div
-					class="flex h-9 w-9 items-center justify-center rounded-lg {activeTab === 'food'
-						? 'bg-amber-600 text-white'
-						: 'bg-slate-100 text-slate-600'}"
-				>
-					<UtensilsCrossed class="h-4 w-4" />
-				</div>
-				<div>
-					<p class="text-xs font-bold text-slate-900">2. แจกอาหารปรุงสุก</p>
-					<p class="text-2xs text-slate-500">Ready Meal Handover</p>
-				</div>
-			</div>
-			{#if allDistributingFood.length > 0}
-				<span class="rounded-full bg-amber-100 px-2 py-0.5 text-2xs font-bold text-amber-900">
-					เปิดแจก {allDistributingFood.length}
-				</span>
-			{/if}
-		</button>
+	<!-- Mode switch: food and supplies work never share a screen -->
+	<div
+		role="group"
+		aria-label="โหมดงานของโต๊ะแจก"
+		class="grid grid-cols-2 gap-1 rounded-xl border border-slate-200 bg-slate-100/70 p-1 sm:max-w-sm"
+	>
+		{#each DESK_MODE_IDS as id (id)}
+			{@const isActive = mode === id}
+			{@const pending = isActive ? 0 : modePendingCount(allTickets, id)}
+			<button
+				type="button"
+				aria-pressed={isActive}
+				onclick={() => selectMode(id)}
+				class="flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-bold transition-all {isActive
+					? 'bg-white text-slate-900 shadow-xs ring-1 ring-slate-200'
+					: 'text-slate-600 hover:bg-white/60'}"
+			>
+				{DESK_MODES[id].label}
+				{#if pending > 0}
+					<span
+						class="rounded-full bg-amber-100 px-2 py-0.5 text-2xs font-bold whitespace-nowrap text-amber-900"
+					>
+						มีงาน {pending}
+					</span>
+				{/if}
+			</button>
+		{/each}
+	</div>
 
-		<!-- Tab 3: Supplies & Loans -->
-		<button
-			type="button"
-			onclick={() => (activeTab = 'supplies')}
-			class="flex items-center justify-between rounded-xl border p-3.5 text-left transition-all {activeTab ===
-			'supplies'
-				? 'border-indigo-500 bg-indigo-50/50 shadow-xs ring-2 ring-indigo-500/20'
-				: 'border-slate-200 bg-white hover:border-slate-300'}"
-		>
-			<div class="flex items-center gap-3">
-				<div
-					class="flex h-9 w-9 items-center justify-center rounded-lg {activeTab === 'supplies'
-						? 'bg-indigo-600 text-white'
-						: 'bg-slate-100 text-slate-600'}"
-				>
-					<Package class="h-4 w-4" />
+	<!-- Station Tabs: the steps of the current mode; every step stays visible on a phone -->
+	<div
+		class="grid grid-cols-2 gap-2 lg:gap-3 {steps.length === 3
+			? 'lg:grid-cols-3'
+			: 'lg:grid-cols-4'}"
+	>
+		{#each steps as tab, i (tab)}
+			{@const meta = TAB_STYLE[tab]}
+			{@const badge = tabBadges[tab]}
+			{@const isActive = activeTab === tab}
+			<button
+				type="button"
+				onclick={() => selectTab(tab)}
+				aria-pressed={isActive}
+				class="flex min-h-14 min-w-0 flex-wrap items-center justify-between gap-2 rounded-xl border p-2.5 text-left transition-all focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:outline-none lg:p-3.5 {i ===
+					steps.length - 1 && steps.length % 2 === 1
+					? 'col-span-2 lg:col-span-1'
+					: ''} {isActive ? meta.active : 'border-slate-200 bg-white hover:border-slate-300'}"
+			>
+				<div class="flex min-w-0 items-center gap-2 lg:gap-3">
+					<div
+						class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg {isActive
+							? meta.icon
+							: 'bg-slate-100 text-slate-600'}"
+					>
+						<meta.Icon class="h-4 w-4" />
+					</div>
+					<div class="min-w-0">
+						<p class="text-sm leading-snug font-bold text-slate-900 lg:text-xs">
+							{stepLabel(mode, tab)}
+						</p>
+						<p class="hidden text-2xs text-slate-500 lg:block">{STEP_TITLES[tab].subtitle}</p>
+					</div>
 				</div>
-				<div>
-					<p class="text-xs font-bold text-slate-900">3. จ่ายพัสดุ & ยืม-คืน</p>
-					<p class="text-2xs text-slate-500">Supplies & Loans</p>
-				</div>
-			</div>
-			{#if allDistributingSupplies.length > 0}
-				<span class="rounded-full bg-indigo-100 px-2 py-0.5 text-2xs font-bold text-indigo-900">
-					เปิดแจก {allDistributingSupplies.length}
-				</span>
-			{/if}
-		</button>
-
-		<!-- Tab 4: Return Loans -->
-		<button
-			type="button"
-			onclick={() => (activeTab = 'returns')}
-			class="flex items-center justify-between rounded-xl border p-3.5 text-left transition-all {activeTab ===
-			'returns'
-				? 'border-emerald-500 bg-emerald-50/50 shadow-xs ring-2 ring-emerald-500/20'
-				: 'border-slate-200 bg-white hover:border-slate-300'}"
-		>
-			<div class="flex items-center gap-3">
-				<div
-					class="flex h-9 w-9 items-center justify-center rounded-lg {activeTab === 'returns'
-						? 'bg-emerald-600 text-white'
-						: 'bg-slate-100 text-slate-600'}"
-				>
-					<RotateCcw class="h-4 w-4" />
-				</div>
-				<div>
-					<p class="text-xs font-bold text-slate-900">4. รับคืนสิ่งของ</p>
-					<p class="text-2xs text-slate-500">Loan Return Counter</p>
-				</div>
-			</div>
-		</button>
-
-		<!-- Tab 5: Shift Close & Returns -->
-		<button
-			type="button"
-			onclick={() => (activeTab = 'reconciliation')}
-			class="flex items-center justify-between rounded-xl border p-3.5 text-left transition-all {activeTab ===
-			'reconciliation'
-				? 'border-teal-500 bg-teal-50/50 shadow-xs ring-2 ring-teal-500/20'
-				: 'border-slate-200 bg-white hover:border-slate-300'}"
-		>
-			<div class="flex items-center gap-3">
-				<div
-					class="flex h-9 w-9 items-center justify-center rounded-lg {activeTab === 'reconciliation'
-						? 'bg-teal-600 text-white'
-						: 'bg-slate-100 text-slate-600'}"
-				>
-					<Lock class="h-4 w-4" />
-				</div>
-				<div>
-					<p class="text-xs font-bold text-slate-900">5. ปิดรอบ & คืนของ</p>
-					<p class="text-2xs text-slate-500">Shift Close & Returns</p>
-				</div>
-			</div>
-			{#if reconciliationPendingActionCount > 0}
-				<span class="rounded-full bg-amber-100 px-2 py-0.5 text-2xs font-bold text-amber-900">
-					รอดำเนินการ {reconciliationPendingActionCount}
-				</span>
-			{/if}
-		</button>
+				{#if badge}
+					<span
+						class="shrink-0 rounded-full px-2 py-0.5 text-2xs font-bold whitespace-nowrap {meta.badge} {badge.pulse
+							? 'animate-pulse'
+							: ''}"
+					>
+						{badge.text}
+					</span>
+				{/if}
+			</button>
+		{/each}
 	</div>
 
 	<!-- Distribution point filter (food / supplies / close-out tabs) -->
@@ -562,11 +632,11 @@
 					<p class="mt-1 max-w-md text-xs text-slate-500">
 						ตั๋วอาหารต้องได้รับการตรวจรับเข้าจุดแจกจ่ายก่อน จึงจะสามารถแจกจ่ายให้ผู้ประสบภัยได้
 					</p>
-					{#if inTransitTickets.some((t) => t.requisition_type === 'food')}
+					{#if inTransitTickets.length > 0}
 						<Button
 							type="button"
 							variant="outline"
-							onclick={() => (activeTab = 'receive')}
+							onclick={() => selectTab('receive')}
 							class="mt-4 h-auto rounded-xl border-sky-300 bg-sky-50 px-4 py-2 text-xs font-semibold text-sky-800 hover:bg-sky-100 hover:text-sky-800"
 						>
 							<Truck class="h-3.5 w-3.5" />
@@ -581,7 +651,7 @@
 						class="flex flex-col gap-2 rounded-xl border border-slate-200/80 bg-white p-3 shadow-2xs sm:flex-row sm:items-center"
 					>
 						{#if foodDayOptions.length > 2}
-							<div class="flex shrink-0 items-center gap-2">
+							<div class="flex flex-col gap-2 sm:shrink-0 sm:flex-row sm:items-center">
 								<label for="food-day-select" class="shrink-0 text-xs font-bold text-slate-700">
 									วันที่ให้บริการ:
 								</label>
@@ -589,7 +659,7 @@
 									<Select.Trigger
 										id="food-day-select"
 										aria-label="เลือกวันที่ให้บริการ"
-										class="h-9 w-40 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-900 shadow-2xs focus-visible:ring-2 focus-visible:ring-amber-500"
+										class="h-11 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-900 shadow-2xs focus-visible:ring-2 focus-visible:ring-amber-500 sm:h-9 sm:w-40"
 									>
 										<span class="truncate">
 											{foodDayOptions.find((o) => o.value === foodDay)?.label ?? 'ทุกวัน'}
@@ -610,12 +680,14 @@
 							<div class="min-w-0 flex-1">
 								<Select.Root
 									type="single"
-									bind:value={() => selectedFoodTicketId, (v) => (pickedFoodTicketId = v)}
+									bind:value={
+										() => selectedFoodTicketId, pickTicket((v) => (pickedFoodTicketId = v))
+									}
 								>
 									<Select.Trigger
 										id="food-ticket-select"
 										aria-label="เลือกตั๋วอาหารที่ใช้งาน"
-										class="h-9 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-900 shadow-2xs focus-visible:ring-2 focus-visible:ring-amber-500"
+										class="h-11 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-900 shadow-2xs focus-visible:ring-2 focus-visible:ring-amber-500 sm:h-9"
 									>
 										<span class="truncate">
 											{#if activeFoodTicket}
@@ -637,7 +709,11 @@
 				{/if}
 
 				{#if activeFoodTicket}
-					<FoodDistributionCard ticket={activeFoodTicket} shelterCode={currentShelterCode} />
+					<FoodDistributionCard
+						ticket={activeFoodTicket}
+						shelterCode={currentShelterCode}
+						{drafts}
+					/>
 					<DistributionHistory ticket={activeFoodTicket} shelterCode={currentShelterCode} />
 				{/if}
 			{/if}
@@ -654,11 +730,11 @@
 					<p class="mt-1 max-w-md text-xs text-slate-500">
 						ตั๋วพัสดุต้องได้รับการตรวจรับเข้าจุดแจกจ่ายก่อน จึงจะสามารถแจกจ่ายหรือให้ยืมได้
 					</p>
-					{#if inTransitTickets.some((t) => t.requisition_type === 'supplies')}
+					{#if inTransitTickets.length > 0}
 						<Button
 							type="button"
 							variant="outline"
-							onclick={() => (activeTab = 'receive')}
+							onclick={() => selectTab('receive')}
 							class="mt-4 h-auto rounded-xl border-sky-300 bg-sky-50 px-4 py-2 text-xs font-semibold text-sky-800 hover:bg-sky-100 hover:text-sky-800"
 						>
 							<Truck class="h-3.5 w-3.5" />
@@ -670,7 +746,7 @@
 				<!-- Supplies Ticket Selector Bar -->
 				{#if distributingSuppliesTickets.length > 1}
 					<div
-						class="flex items-center gap-2 rounded-xl border border-slate-200/80 bg-white p-3 shadow-2xs"
+						class="flex flex-col gap-2 rounded-xl border border-slate-200/80 bg-white p-3 shadow-2xs sm:flex-row sm:items-center"
 					>
 						<label for="supplies-ticket-select" class="shrink-0 text-xs font-bold text-slate-700">
 							เลือกตั๋วพัสดุที่ใช้งาน:
@@ -678,12 +754,14 @@
 						<div class="min-w-0 flex-1">
 							<Select.Root
 								type="single"
-								bind:value={() => selectedSuppliesTicketId, (v) => (pickedSuppliesTicketId = v)}
+								bind:value={
+									() => selectedSuppliesTicketId, pickTicket((v) => (pickedSuppliesTicketId = v))
+								}
 							>
 								<Select.Trigger
 									id="supplies-ticket-select"
 									aria-label="เลือกตั๋วพัสดุที่ใช้งาน"
-									class="h-9 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-900 shadow-2xs focus-visible:ring-2 focus-visible:ring-indigo-500"
+									class="h-11 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-900 shadow-2xs focus-visible:ring-2 focus-visible:ring-indigo-500 sm:h-9"
 								>
 									<span class="truncate">
 										{#if activeSuppliesTicket}
@@ -707,6 +785,7 @@
 					<SuppliesDistributionCard
 						ticket={activeSuppliesTicket}
 						shelterCode={currentShelterCode}
+						{drafts}
 					/>
 					<DistributionHistory ticket={activeSuppliesTicket} shelterCode={currentShelterCode} />
 				{/if}
@@ -714,7 +793,12 @@
 		</div>
 	{:else if activeTab === 'returns'}
 		<!-- TAB 4: Loan Return Surface (Slice 5.5A + 5.5B) -->
-		<LoanReturnCard shelterCode={currentShelterCode} />
+		<div class="space-y-6">
+			<LoanReturnCard shelterCode={currentShelterCode} />
+			<!-- Bulk return pools (#659): the desk adds / moves / voids entries; open / edit / cancel stay
+				 hidden (canManage). -->
+			<BulkReturnPoolBoard shelterCode={currentShelterCode ?? undefined} />
+		</div>
 	{:else if activeTab === 'reconciliation'}
 		<!-- TAB 5: Shift Reconciliation & Close Surface -->
 		<div class="space-y-4">
@@ -734,7 +818,7 @@
 				<!-- Reconciliation Ticket Selector Bar -->
 				{#if reconciliationEligibleTickets.length > 1}
 					<div
-						class="flex items-center gap-2 rounded-xl border border-slate-200/80 bg-white p-3 shadow-2xs"
+						class="flex flex-col items-stretch gap-2 rounded-xl border border-slate-200/80 bg-white p-3 shadow-2xs sm:flex-row sm:items-center"
 					>
 						<label
 							for="reconciliation-ticket-select"
@@ -746,7 +830,8 @@
 							<Select.Root
 								type="single"
 								bind:value={
-									() => selectedReconciliationTicketId, (v) => (pickedReconciliationTicketId = v)
+									() => selectedReconciliationTicketId,
+									pickTicket((v) => (pickedReconciliationTicketId = v))
 								}
 							>
 								<Select.Trigger
@@ -784,9 +869,16 @@
 										>
 											<div class="flex w-full min-w-0 flex-col gap-0.5 text-left">
 												<span class="flex items-center justify-between gap-2">
-													<span class="truncate font-mono text-xs font-bold text-slate-900"
-														>{t.ticket_no}</span
-													>
+													<span class="flex min-w-0 items-center gap-1.5">
+														<span class="truncate font-mono text-xs font-bold text-slate-900"
+															>{t.ticket_no}</span
+														>
+														<span
+															class="shrink-0 rounded-full border border-slate-200 bg-slate-50 px-1.5 text-2xs font-bold text-slate-600"
+														>
+															{t.requisition_type === 'food' ? 'อาหาร' : 'สิ่งของ'}
+														</span>
+													</span>
 													<TicketStatusBadge status={t.status} class="shrink-0" />
 												</span>
 												<span class="truncate text-xs text-slate-500">
@@ -811,8 +903,33 @@
 					shelterCode={currentShelterCode}
 					onShiftClosed={(t) => (pickedReconciliationTicketId = t._id)}
 					onReturnsSubmitted={(t) => (pickedReconciliationTicketId = t._id)}
+					{drafts}
 				/>
 			{/if}
 		</div>
 	{/if}
+
+	<AlertDialog.Root
+		open={pendingMode !== null}
+		onOpenChange={(open) => {
+			if (!open) pendingMode = null;
+		}}
+	>
+		<AlertDialog.Content class="max-w-md">
+			<AlertDialog.Header>
+				<AlertDialog.Title>
+					สลับไปโหมด{pendingMode ? DESK_MODES[pendingMode].label : ''}?
+				</AlertDialog.Title>
+				<AlertDialog.Description>
+					ยังมีข้อมูลที่กรอกไว้แต่ยังไม่ได้บันทึก ถ้าสลับโหมด ข้อมูลนี้จะหายไป
+				</AlertDialog.Description>
+			</AlertDialog.Header>
+			<AlertDialog.Footer>
+				<AlertDialog.Cancel>อยู่โหมดเดิม</AlertDialog.Cancel>
+				<AlertDialog.Action onclick={() => pendingMode && switchMode(pendingMode)}>
+					สลับโหมด
+				</AlertDialog.Action>
+			</AlertDialog.Footer>
+		</AlertDialog.Content>
+	</AlertDialog.Root>
 </div>

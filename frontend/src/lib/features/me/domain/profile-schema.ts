@@ -6,7 +6,7 @@ export const ownProfileSchema = z.object({
 	phone: z
 		.string()
 		.trim()
-		.regex(/^$|^0[0-9]{9}$/, 'เบอร์โทรศัพท์ต้องเป็นตัวเลข 10 หลักขึ้นต้นด้วย 0'),
+		.regex(/^$|^0[0-9]{8,9}$/, 'เบอร์โทรศัพท์ต้องเป็นตัวเลข 9–10 หลักขึ้นต้นด้วย 0'),
 	email: z.string().trim().email('รูปแบบอีเมลไม่ถูกต้อง').or(z.literal('')),
 	organization: z.string().trim(),
 	position: z.string().trim()

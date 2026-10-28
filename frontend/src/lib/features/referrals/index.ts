@@ -3,16 +3,19 @@ export * from './domain/referral.transitions';
 export * from './domain/referral.authorization';
 export * from './domain/referral.redaction';
 export * from './domain/referral.batch-group';
+export * from './domain/referral.bulk-actions';
 export * from './application/queries';
 export * from './ui/referral.ui-helpers';
 export * from './data/referral.remote';
 export type {
 	ReferralBatchFailure,
 	ReferralBatchResult,
+	ReferralBulkTransitionResult,
 	ReferralSubmitIntent
 } from './data/referral.repository';
 
 export { default as ReferralCreateForm } from './ui/referral-create-form.svelte';
+export { default as ReferralBackLink } from './ui/referral-back-link.svelte';
 export { default as ReferralList } from './ui/referral-list.svelte';
 export { default as ReferralDetail } from './ui/referral-detail.svelte';
 export { default as ReferralBatchCards } from './ui/referral-batch-cards.svelte';

@@ -23,7 +23,7 @@ import {
 } from '../domain/incident.operations';
 import type { IncidentActor } from '../domain/incident.policy';
 import { incidentRepository } from '../data/incident.remote';
-import { listShelterStaff } from '../data/staff-directory.api';
+import { listShelterStaff } from '$lib/features/users';
 
 export const incidentKeys = {
 	all: ['incidents'] as const,

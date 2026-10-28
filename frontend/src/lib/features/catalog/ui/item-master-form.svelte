@@ -15,6 +15,8 @@
 		resolveCategoryId,
 		catalogOrigin,
 		expiryRequirementHint,
+		itemAllergens,
+		upgradeItemMasterShape,
 		type ItemMaster,
 		type ItemMasterInput,
 		type TypeClass
@@ -32,6 +34,7 @@
 		useItemCategories,
 		useUnitsOfMeasure
 	} from '../application/queries';
+	import { MasterTagInput, resolveMasterCodes, useMasterData } from '$lib/features/master-data';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { toast } from 'svelte-sonner';
@@ -77,6 +80,12 @@
 	const allItemsQuery = useItemMasters(() => shelterCode ?? null);
 	const createMutation = useCreateItemMaster();
 	const updateMutation = useUpdateItemMaster();
+	// #607 — สารก่อภูมิแพ้ picks from the global `allergy` master (CR-187).
+	const allergyQuery = useMasterData(
+		() => 'allergy',
+		() => ({ scope: 'global' })
+	);
+	const allergyItems = $derived(allergyQuery.data?.items ?? []);
 
 	const TYPE_CLASS_OPTIONS: { value: TypeClass; label: string }[] = [
 		{ value: 'CONSUMABLE', label: 'วัสดุสิ้นเปลือง' },
@@ -143,7 +152,7 @@
 				type_class: 'CONSUMABLE' as TypeClass,
 				shelf_life_days: undefined,
 				storage_type: 'DRY',
-				allergens: '',
+				allergens: [] as string[],
 				target_gender: 'ALL',
 				age_group: 'ALL',
 				dietary: [] as ('HALAL' | 'VEGAN')[],
@@ -212,7 +221,8 @@
 					} else {
 						submitData.shelf_life_days = validated.data.shelf_life_days;
 						submitData.storage_type = validated.data.storage_type;
-						submitData.allergens = validated.data.allergens || undefined;
+						// #607 — labels typed or kept from a pre-v6 string become `allergy` codes.
+						submitData.allergens = resolveMasterCodes(validated.data.allergens, allergyItems);
 						submitData.target_gender = validated.data.target_gender;
 						submitData.age_group = validated.data.age_group;
 						submitData.dietary = validated.data.dietary;
@@ -272,12 +282,12 @@
 					if (basePath.includes('back-office') && !itemMasterQuery.data.shelter_code) {
 						const { _rev, ...itemData } = itemMasterQuery.data;
 						void _rev;
-						const overrideDoc = {
+						const overrideDoc = upgradeItemMasterShape({
 							...itemData,
 							...submitData,
 							shelter_code: shelterCode,
 							override: true
-						};
+						} as ItemMaster);
 						updateMutation.mutate(overrideDoc, {
 							onSuccess: (saved) => {
 								toast.success(`ปรับแต่งรายการ ${validated.data.name} สำหรับศูนย์นี้สำเร็จ`);
@@ -286,10 +296,10 @@
 							onError: (err: Error) => toast.error(err.message)
 						});
 					} else {
-						const updatedDoc: ItemMaster = {
+						const updatedDoc = upgradeItemMasterShape({
 							...itemMasterQuery.data,
 							...submitData
-						};
+						} as ItemMaster);
 						updateMutation.mutate(updatedDoc, {
 							onSuccess: (saved) => {
 								toast.success(`ปรับปรุงข้อมูล ${validated.data.name} สำเร็จ`);
@@ -348,7 +358,7 @@
 			$formData.type_class = item.type_class || 'CONSUMABLE';
 			$formData.shelf_life_days = item.shelf_life_days;
 			$formData.storage_type = item.storage_type || 'DRY';
-			$formData.allergens = item.allergens || '';
+			$formData.allergens = itemAllergens(item);
 			$formData.target_gender = item.target_gender || 'ALL';
 			$formData.age_group = item.age_group || 'ALL';
 			$formData.dietary = item.dietary || [];
@@ -1032,11 +1042,12 @@
 										<Form.Control>
 											{#snippet children({ props })}
 												<Form.Label class="text-sm font-semibold">สารก่อภูมิแพ้</Form.Label>
-												<Input
-													{...props}
+												<MasterTagInput
+													id={props.id}
 													bind:value={$formData.allergens}
-													placeholder="เช่น ถั่ว, นม"
-													class="h-11 sm:h-10"
+													items={allergyItems}
+													placeholder="เลือกหรือพิมพ์ เช่น นม, ถั่ว"
+													searchPlaceholder="ค้นหาสารก่อภูมิแพ้..."
 												/>
 											{/snippet}
 										</Form.Control>

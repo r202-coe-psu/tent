@@ -1,6 +1,9 @@
 <script lang="ts">
 	import Loader2 from '@lucide/svelte/icons/loader-2';
+	import RotateCw from '@lucide/svelte/icons/rotate-cw';
 	import Search from '@lucide/svelte/icons/search';
+	import TriangleAlert from '@lucide/svelte/icons/triangle-alert';
+	import { Button } from '$lib/components/ui/button/index.js';
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import * as Table from '$lib/components/ui/table/index.js';
@@ -8,6 +11,7 @@
 	import { useShelter } from '$lib/features/shelters';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
+	import { formatEvacueeFullName } from './referral.ui-helpers';
 
 	let {
 		selectedIds = $bindable<string[]>([]),
@@ -69,14 +73,15 @@
 	}
 
 	function rowLabel(evacuee: Evacuee): string {
-		return `${evacuee.first_name} ${evacuee.last_name}`;
+		return formatEvacueeFullName(evacuee);
 	}
 </script>
 
 <div class="space-y-3">
 	<div class="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
 		<div class="space-y-1">
-			<span class="text-sm font-semibold text-foreground">2. เลือกผู้เข้าพักที่ต้องการส่งต่อ *</span
+			<span class="text-sm font-semibold text-foreground"
+				>2. เลือกผู้เข้าพักที่ต้องการส่งต่อ <span class="text-red-600">*</span></span
 			>
 			<p class="text-xs text-muted-foreground">แสดงเฉพาะผู้ที่พักพิงอยู่ในศูนย์ (active stay)</p>
 		</div>
@@ -90,7 +95,7 @@
 			type="search"
 			placeholder="ค้นหาชื่อ หรือเบอร์โทร..."
 			bind:value={searchTerm}
-			class="pl-9 {errorMessage ? 'border-destructive' : ''}"
+			class="h-11 pl-9 md:h-9 {errorMessage ? 'border-destructive' : ''}"
 			aria-label="ค้นหาผู้เข้าพัก"
 		/>
 		<div class="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-muted-foreground">
@@ -108,6 +113,23 @@
 				<Loader2 class="h-6 w-6 animate-spin text-primary" />
 				<span class="text-sm">กำลังโหลดรายชื่อผู้เข้าพัก...</span>
 			</div>
+		{:else if evacueesQuery.isError}
+			<div
+				role="alert"
+				class="flex flex-col items-center justify-center gap-3 px-4 py-10 text-center"
+			>
+				<TriangleAlert class="h-6 w-6 text-red-600" />
+				<p class="text-sm font-medium text-foreground">โหลดรายชื่อผู้เข้าพักไม่สำเร็จ</p>
+				<Button
+					variant="outline"
+					size="sm"
+					onclick={() => evacueesQuery.refetch()}
+					class="h-11 gap-2 md:h-7"
+				>
+					<RotateCw class="h-4 w-4" />
+					ลองใหม่
+				</Button>
+			</div>
 		{:else if filteredEvacuees.length === 0}
 			<div class="px-4 py-10 text-center text-sm text-muted-foreground">
 				{#if activeEvacuees.length === 0}
@@ -121,8 +143,12 @@
 				<Table.Root>
 					<Table.Header class="sticky top-0 z-10 bg-muted/80 backdrop-blur-sm">
 						<Table.Row>
-							<Table.Head class="w-12">
+							<Table.Head
+								class="h-11 w-12 cursor-pointer"
+								onclick={() => toggleSelectAll(!allFilteredSelected)}
+							>
 								<Checkbox
+									onclick={(e) => e.stopPropagation()}
 									checked={allFilteredSelected}
 									indeterminate={someFilteredSelected}
 									onCheckedChange={toggleSelectAll}
@@ -137,11 +163,14 @@
 					<Table.Body>
 						{#each filteredEvacuees as evacuee (evacuee._id)}
 							<Table.Row
-								class="cursor-pointer {isSelected(evacuee._id) ? 'bg-primary/5' : ''}"
+								class="h-11 cursor-pointer md:h-auto {isSelected(evacuee._id)
+									? 'bg-primary/5'
+									: ''}"
 								onclick={() => toggleId(evacuee._id, !isSelected(evacuee._id))}
 							>
-								<Table.Cell onclick={(e) => e.stopPropagation()}>
+								<Table.Cell>
 									<Checkbox
+										onclick={(e) => e.stopPropagation()}
 										checked={isSelected(evacuee._id)}
 										onCheckedChange={(v) => toggleId(evacuee._id, v)}
 										aria-label={`เลือก ${rowLabel(evacuee)}`}
@@ -151,7 +180,7 @@
 								<Table.Cell class="hidden text-muted-foreground sm:table-cell">
 									{evacuee.phone ?? '—'}
 								</Table.Cell>
-								<Table.Cell class="hidden font-mono text-xs text-muted-foreground md:table-cell">
+								<Table.Cell class="hidden text-xs text-muted-foreground tabular-nums md:table-cell">
 									{zoneLabel(evacuee.current_stay?.zone, shelterZones)}
 								</Table.Cell>
 							</Table.Row>
