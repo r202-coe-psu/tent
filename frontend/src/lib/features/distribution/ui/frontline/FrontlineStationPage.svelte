@@ -50,11 +50,24 @@
 	import * as Select from '$lib/components/ui/select/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 
+	import type { FrontlineTab } from '../model/pool-url-state';
+
 	interface Props {
-		initialTab?: 'receive' | 'food' | 'supplies' | 'returns' | 'reconciliation';
+		initialTab?: FrontlineTab;
+		/** Bulk return pool to open on the returns tab (deep link). */
+		initialPoolId?: string | null;
+		/** Called when the open pool changes (select / close), e.g. to sync the URL. */
+		onSelectedPoolChange?: (poolId: string | null) => void;
+		/** Called when the user switches tab, e.g. to sync the URL. */
+		onTabChange?: (tab: FrontlineTab) => void;
 	}
 
-	let { initialTab = 'receive' }: Props = $props();
+	let {
+		initialTab = 'receive',
+		initialPoolId = null,
+		onSelectedPoolChange,
+		onTabChange
+	}: Props = $props();
 
 	const currentShelterCode = $derived(shelterStore.selectedShelterCode ?? getShelterCode());
 
@@ -70,14 +83,13 @@
 
 	const canFrontline = $derived(authContext ? canPerformFrontlineDistribution(authContext) : false);
 
-	// activeTab is intentionally set once from the initialTab prop; user navigation controls it
-	// after mount. A closure breaks the Svelte reactivity chain so Svelte does not warn that
-	// only the initial prop value is captured.
-	let activeTab = $state<'receive' | 'food' | 'supplies' | 'returns' | 'reconciliation'>(
-		(function () {
-			return initialTab;
-		})()
-	);
+	// Follows the initialTab prop (e.g. same-route navigation) and can be overridden locally.
+	let activeTab = $derived<FrontlineTab>(initialTab);
+
+	function selectTab(tab: FrontlineTab) {
+		activeTab = tab;
+		onTabChange?.(tab);
+	}
 
 	// Fetch tickets for frontline station
 	const ticketsQuery = useRequisitionTickets(undefined, () => currentShelterCode);
@@ -206,11 +218,11 @@
 			pickedPoint = null;
 			// If received food, switch tab to food; if supplies, switch to supplies
 			if (ticket.requisition_type === 'food') {
-				activeTab = 'food';
+				selectTab('food');
 				pickedFoodDay = ticketServiceDay(ticket);
 				pickedFoodTicketId = ticket._id;
 			} else if (ticket.requisition_type === 'supplies') {
-				activeTab = 'supplies';
+				selectTab('supplies');
 				pickedSuppliesTicketId = ticket._id;
 			}
 		} catch (err) {
@@ -273,7 +285,7 @@
 		<!-- Tab 1: Receive Cargo -->
 		<button
 			type="button"
-			onclick={() => (activeTab = 'receive')}
+			onclick={() => selectTab('receive')}
 			class="flex items-center justify-between rounded-xl border p-3.5 text-left transition-all {activeTab ===
 			'receive'
 				? 'border-sky-500 bg-sky-50/50 shadow-xs ring-2 ring-sky-500/20'
@@ -304,7 +316,7 @@
 		<!-- Tab 2: Food Handover -->
 		<button
 			type="button"
-			onclick={() => (activeTab = 'food')}
+			onclick={() => selectTab('food')}
 			class="flex items-center justify-between rounded-xl border p-3.5 text-left transition-all {activeTab ===
 			'food'
 				? 'border-amber-500 bg-amber-50/50 shadow-xs ring-2 ring-amber-500/20'
@@ -333,7 +345,7 @@
 		<!-- Tab 3: Supplies & Loans -->
 		<button
 			type="button"
-			onclick={() => (activeTab = 'supplies')}
+			onclick={() => selectTab('supplies')}
 			class="flex items-center justify-between rounded-xl border p-3.5 text-left transition-all {activeTab ===
 			'supplies'
 				? 'border-indigo-500 bg-indigo-50/50 shadow-xs ring-2 ring-indigo-500/20'
@@ -362,7 +374,7 @@
 		<!-- Tab 4: Return Loans -->
 		<button
 			type="button"
-			onclick={() => (activeTab = 'returns')}
+			onclick={() => selectTab('returns')}
 			class="flex items-center justify-between rounded-xl border p-3.5 text-left transition-all {activeTab ===
 			'returns'
 				? 'border-emerald-500 bg-emerald-50/50 shadow-xs ring-2 ring-emerald-500/20'
@@ -386,7 +398,7 @@
 		<!-- Tab 5: Shift Close & Returns -->
 		<button
 			type="button"
-			onclick={() => (activeTab = 'reconciliation')}
+			onclick={() => selectTab('reconciliation')}
 			class="flex items-center justify-between rounded-xl border p-3.5 text-left transition-all {activeTab ===
 			'reconciliation'
 				? 'border-teal-500 bg-teal-50/50 shadow-xs ring-2 ring-teal-500/20'
@@ -567,7 +579,7 @@
 						<Button
 							type="button"
 							variant="outline"
-							onclick={() => (activeTab = 'receive')}
+							onclick={() => selectTab('receive')}
 							class="mt-4 h-auto rounded-xl border-sky-300 bg-sky-50 px-4 py-2 text-xs font-semibold text-sky-800 hover:bg-sky-100 hover:text-sky-800"
 						>
 							<Truck class="h-3.5 w-3.5" />
@@ -659,7 +671,7 @@
 						<Button
 							type="button"
 							variant="outline"
-							onclick={() => (activeTab = 'receive')}
+							onclick={() => selectTab('receive')}
 							class="mt-4 h-auto rounded-xl border-sky-300 bg-sky-50 px-4 py-2 text-xs font-semibold text-sky-800 hover:bg-sky-100 hover:text-sky-800"
 						>
 							<Truck class="h-3.5 w-3.5" />
@@ -719,7 +731,11 @@
 			<LoanReturnCard shelterCode={currentShelterCode} />
 			<!-- Bulk return pools (#659): the desk adds / moves / voids entries; open / edit / cancel stay
 				 hidden (canManage). -->
-			<BulkReturnPoolBoard shelterCode={currentShelterCode ?? undefined} />
+			<BulkReturnPoolBoard
+				shelterCode={currentShelterCode ?? undefined}
+				{initialPoolId}
+				{onSelectedPoolChange}
+			/>
 		</div>
 	{:else if activeTab === 'reconciliation'}
 		<!-- TAB 5: Shift Reconciliation & Close Surface -->

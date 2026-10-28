@@ -1,10 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import type { StockLedger } from '../../domain/operations';
+import {
+	BULK_RETURN_POOL_REF_PREFIX,
+	REF_PREFIX_BY_REASON,
+	type LedgerReason,
+	type StockLedger
+} from '../../domain/operations';
 import {
 	buildLedgerRows,
 	dayHeading,
 	filterLedger,
 	groupByDay,
+	ledgerRefHref,
 	ledgerToCsv,
 	LEDGER_CSV_HEADER,
 	summarizeRows,
@@ -103,6 +109,48 @@ describe('toLedgerRow', () => {
 				.refHref
 		).toBeUndefined();
 		expect(toLedgerRow(entry({ reason: 'receive', qty: '5' }), lookup).refHref).toBeUndefined();
+	});
+
+	it('adds no link for a non-receive entry carrying a pool ref (CR-193 §29)', () => {
+		const row = toLedgerRow(
+			entry({ reason: 'transfer_in', qty: '5', ref_id: 'bulk_return_pool:01ABC' }),
+			lookup
+		);
+		expect(row.detail).toBe('bulk_return_pool:01ABC');
+		expect(row.refHref).toBeUndefined();
+	});
+});
+
+describe('ledgerRefHref', () => {
+	it('links a receive entry with a pool ref', () => {
+		expect(ledgerRefHref('receive', 'bulk_return_pool:01ABC')).toBe(
+			'/back-office/distribution?view=bulk_pools&pool=01ABC'
+		);
+	});
+
+	it('returns undefined for non-receive reasons even with a pool ref', () => {
+		const reasons = (Object.keys(REF_PREFIX_BY_REASON) as LedgerReason[]).filter(
+			(reason) => reason !== 'receive'
+		);
+		for (const reason of reasons) {
+			expect(ledgerRefHref(reason, 'bulk_return_pool:01ABC'), reason).toBeUndefined();
+		}
+	});
+
+	it('stays in sync with REF_PREFIX_BY_REASON: only receive accepts the pool prefix', () => {
+		for (const [reason, rule] of Object.entries(REF_PREFIX_BY_REASON)) {
+			const rules = Array.isArray(rule) ? rule : [rule];
+			expect(
+				rules.includes(BULK_RETURN_POOL_REF_PREFIX),
+				`${reason}: REF_PREFIX_BY_REASON changed — re-check ledgerRefHref's reason gate`
+			).toBe(reason === 'receive');
+		}
+	});
+
+	it('returns undefined for a receive with a missing, bare or other ref', () => {
+		expect(ledgerRefHref('receive', null)).toBeUndefined();
+		expect(ledgerRefHref('receive', 'bulk_return_pool:')).toBeUndefined();
+		expect(ledgerRefHref('receive', 'donation:DN-1')).toBeUndefined();
 	});
 });
 
