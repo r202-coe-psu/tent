@@ -22,7 +22,14 @@ from ...utils.masking import (
 )
 from ...utils.search_query import ParsedSearchQuery, SearchQueryKind, parse_search_query
 from ...utils.ulid import new_ulid
-from .schemas import FamilyMember, SearchResponse, SearchResult, ShelterStatus
+from .schemas import (
+    ExternalSearchResponse,
+    ExternalSearchResult,
+    FamilyMember,
+    SearchResponse,
+    SearchResult,
+    ShelterStatus,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -120,8 +127,37 @@ def _extract_shelter_address(shelter: PublicShelter | None) -> str | None:
     return None
 
 
+def _resolve_zone_name(shelter: PublicShelter | None, care_zone: str | None) -> str | None:
+    """Partner-facing zone label (`/external/v1/occupants`, EXT-012); never on the public search."""
+    if not care_zone:
+        return None
+    if not shelter or not shelter.raw_data:
+        return care_zone
+    zones = shelter.raw_data.get("zones") or []
+    for z in zones:
+        if isinstance(z, dict):
+            if z.get("code") == care_zone:
+                return z.get("name") or care_zone
+            if z.get("name") == care_zone:
+                return z.get("name")
+    return care_zone
+
+
 class EvacueeUseCase:
     async def search(self, raw_query: str, *, client_ip: str = "unknown") -> SearchResponse:
+        persons = await self._find_and_audit(raw_query, client_ip=client_ip)
+        results = await self.build_results(persons)
+        return SearchResponse(results=results, count=len(results), as_of=datetime.now(UTC))
+
+    async def search_external(
+        self, raw_query: str, *, client_ip: str = "unknown"
+    ) -> ExternalSearchResponse:
+        """`/external/v1/occupants`: the public search plus `care_zone` / `zone_name`."""
+        persons = await self._find_and_audit(raw_query, client_ip=client_ip)
+        results = await self.build_external_results(persons)
+        return ExternalSearchResponse(results=results, count=len(results), as_of=datetime.now(UTC))
+
+    async def _find_and_audit(self, raw_query: str, *, client_ip: str) -> list[PublicPerson]:
         parsed = parse_search_query(raw_query)
         if parsed is None:
             raise HTTPException(
@@ -135,19 +171,12 @@ class EvacueeUseCase:
             )
 
         persons = await self.find_persons(parsed)
-        results = await self.build_results(persons)
-
         await self._write_search_audit(
             parsed=parsed,
             client_ip=client_ip,
-            result_count=len(results),
+            result_count=len(persons),
         )
-
-        return SearchResponse(
-            results=results,
-            count=len(results),
-            as_of=datetime.now(UTC),
-        )
+        return persons
 
     async def build_results(
         self, persons: list[PublicPerson], *, include_family: bool = True
@@ -164,6 +193,23 @@ class EvacueeUseCase:
             )
             for person in persons
         ]
+
+    async def build_external_results(
+        self, persons: list[PublicPerson], *, include_family: bool = True
+    ) -> list[ExternalSearchResult]:
+        """`build_results` plus the resolved zone, for partner endpoints only."""
+        shelters = await self._load_shelters({person.shelter_code for person in persons})
+        results = []
+        for person in persons:
+            shelter = shelters.get(person.shelter_code)
+            result = await self._to_result(person, shelter, include_family=include_family)
+            zone_name = _resolve_zone_name(shelter, person.care_zone)
+            results.append(
+                ExternalSearchResult(
+                    **result.model_dump(), care_zone=zone_name, zone_name=zone_name
+                )
+            )
+        return results
 
     async def _write_search_audit(
         self,
