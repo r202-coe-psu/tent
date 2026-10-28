@@ -142,7 +142,8 @@
 
 	const queues = $derived(authContext ? workQueuesFor(authContext) : []);
 
-	// Per-device "my point" for the distribution staff queue; re-read when the shelter changes.
+	// Per-device "my point" for the my-point queue (SA/SM and distribution staff); re-read when the
+	// shelter changes.
 	// The hook has no enable switch, so it always loads (the shelter doc is shared and cached).
 	const storagePoints = useStoragePoints(() => activeShelterCode ?? '');
 	let myPoint = $derived<string | null>(readMyPoolPoint(activeShelterCode));
