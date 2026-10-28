@@ -1,10 +1,12 @@
 ---
-id: draft
+id: CR-208 # renumbered from draft-lot-return-warehouse
 title: ของเหลือจากรอบแจกคืนเข้า lot เดิม (`distribution_return` อ้าง `requisition_ticket`) แทนการเปิด lot ใหม่
-status: proposed
+status: approved
 date: 2026-10-28
+updated: 2026-10-28 # approved (kong)
 requested_by: Dev Team B · issue #888 (Fishcanwalk, 2026-10-25)
-decided_by: project owner (ทางแก้และกติกาแบ่งยอดเลือกโดย kong ใน #888 เมื่อ 2026-10-25 · ข้อที่ตีความเพิ่มจาก #888 ดู Decision log · รอ approve CR)
+decided_by: kong
+decision_date: 2026-10-28
 layer: stable # แตะ `_design/access` VDU (role gate + ref_id ของ stock_ledger) ต้อง review ก่อน
 amends:
   - CR-121 AC-DST-06.1 (แถว ledger ที่ตรวจรับของเหลือคืน)
@@ -23,7 +25,7 @@ affects:
   - frontend/src/lib/features/operations/domain (test ของ `createStockLedger` / `REF_PREFIX_BY_REASON`)
 ---
 
-# draft-lot-return-warehouse — ของเหลือจากรอบแจกคืนเข้า lot เดิม
+# CR-208 — ของเหลือจากรอบแจกคืนเข้า lot เดิม
 
 > **สรุป (TL;DR):**
 >
@@ -246,7 +248,7 @@ metadata ของ lot = `lot` ของแถวนั้น, `received_at` = `
 
 ## Acceptance
 
-- [ ] CR ได้รับการ approve (stable core — ผ่าน review VDU) รวมข้อที่ตีความเพิ่มจาก #888 ใน Decision log
+- [x] CR ได้รับการ approve (stable core — ผ่าน review VDU) รวมข้อที่ตีความเพิ่มจาก #888 ใน Decision log
 - [ ] ตรวจรับของเหลือคืนแล้ว ledger ใหม่เป็น `distribution_return` ที่ `lot_ref` ชี้ lot ต้นทาง; จำนวน lot ใน `projectStockLotBalances` ไม่เพิ่ม
       (ยกเว้นยอดที่ระบุ lot ไม่ได้)
 - [ ] test ตัวอย่างนม: นับได้ 3 → A 3 แถวเดียว · นับได้ 8 → A 6 + B 2 · นับได้ 11 (มี top-up 2) → A 6 + B 4 + `receive` 1 ·
@@ -330,7 +332,7 @@ UI ตรวจรับ (`features/distribution/ui/model/warehouse-return.ts`) 
   - หมดอายุช้าสุดก่อน — ถ้าเจ้าหน้าที่หยิบสลับลำดับ ของใกล้หมดอายุจะถูกบันทึกเป็นวันหมดอายุที่ไกลกว่าจริง
   - ให้คลังนับแยกตาม lot ตอนตรวจรับ — แม่นกว่า แต่ต้องแก้ UI ตรวจรับ และต้องมีเลข lot / วันหมดอายุบนของ
 - 2026-10-28 — proposed (Dev Team B)
-- 2026-10-28 — **ตีความ / เพิ่มจาก #888 โดย Dev Team B — รอ owner approve ทีละข้อ:**
+- 2026-10-28 — **ตีความ / เพิ่มจาก #888 โดย Dev Team B** (เคาะทุกข้อด้านล่าง 2026-10-28):
   1. lot ที่ไม่ทราบวันหมดอายุอยู่หลัง lot ที่ทราบ และไม่ใช้ HORIZON (#888 เขียน "วิธีเดียวกับ `scoreLot`" ซึ่งใช้ HORIZON) —
      เหตุผล: HORIZON ขึ้นกับ `now` ทำให้ replay ได้ผลต่างกัน และไม่ใช่ข้อมูลจริงของ lot (CR-143 FR-A3a); ตรงกับ `compareLotConsumptionOrder` เดิมที่ไม่มี expiry ไปท้าย
   2. ยอดที่ระบุ lot ต้นทางไม่ได้ลง `receive` lot ใหม่ (§1.1) แทน fail closed — เหตุผล: top-up ไม่ส่ง `lot_ref` ทำให้ projection ของชนิดพังถาวร
@@ -341,6 +343,13 @@ UI ตรวจรับ (`features/distribution/ui/model/warehouse-return.ts`) 
   6. แก้ขอบเขต CR-143 §A ใน schema.md ให้การรับคืนจากตั๋วใช้ลำดับ §2 แทน `rankLotsForIssue`
   7. VDU คงสิทธิ์ `distribution_return` อ้าง `distribution_batch:` ไว้ที่ warehouse_staff / system_admin (#888 ให้ "ปรับสิทธิ์ให้ตรงกับ `auth.ts`") —
      เปิดเพิ่มเฉพาะ `requisition_ticket:` ซึ่งเป็น flow ที่ #888 แก้ เพื่อไม่ขยายสิทธิ์ของ flow `distribution_batch` เดิมโดยไม่จำเป็น
+- 2026-10-28 — **approved (kong)** — เคาะข้อตีความด้านบน:
+  - ข้อ 1, 2 — ตามที่เสนอ
+  - ข้อ 3 — คง id เดิมของแถวแรก (ระบบยังไม่ใช้งานจริง ผลกับ client รุ่นเก่าจำกัดที่เครื่อง dev/test)
+  - ข้อ 4 — ตามที่เสนอ (เบิกตรงจากหน้าคลังไม่มีขั้นรับคืน)
+  - ข้อ 5 — ตามที่เสนอ (ของคืนแสดงในกลุ่ม "รับเข้า")
+  - ข้อ 6 — ตามที่เสนอ (อนุมัติพร้อม CR ทั้งฉบับ)
+  - ข้อ 7 — คงสิทธิ์ `distribution_batch:` ไว้ที่ warehouse_staff / system_admin
 
 ## Out of scope
 
@@ -348,4 +357,3 @@ UI ตรวจรับ (`features/distribution/ui/model/warehouse-return.ts`) 
 - แก้ `amendActiveTicket` ที่ตั้ง `lot_ref = stock_ledger:${amendmentId}` เมื่อไม่ระบุ lot — แยก issue; CR นี้รองรับแถวแบบนี้ด้วย §1.1
   (ยอดส่วนนั้นเปิด lot ใหม่แบบเดิม)
 - แก้ข้อมูลของแถว `receive` เดิมที่เปิด lot ใหม่ไปแล้ว
-- Rename draft → `CR-NNN-…` + แถวใน `_index.md` จนกว่า owner อนุมัติเลข
