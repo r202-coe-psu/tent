@@ -35,6 +35,7 @@ function match(selector: Record<string, unknown>) {
 	});
 }
 
+import { findAsPublicWriter, putAsPublicWriter } from '$lib/server/couch-public-writer';
 import { cancelTicket, isTicketCancellable, TicketCancelError } from './public-ticket';
 
 const NOW = new Date('2026-10-27T03:00:00Z'); // 10:00 Bangkok
@@ -119,6 +120,64 @@ describe('cancelTicket', () => {
 		await cancelTicket('APPTOKEN', NOW);
 		expect(get('job_application:a1').status).toBe('cancelled');
 		expect(get('job:j1')).toMatchObject({ slots_confirmed: 1, slots_remaining: 0, status: 'full' });
+	});
+
+	it('a failed quota release is a retryable 502 and never double-releases', async () => {
+		const realPut = vi.mocked(putAsPublicWriter).getMockImplementation()!;
+		vi.mocked(putAsPublicWriter).mockImplementation(async (d, id, doc) =>
+			id === 'job:j1' ? { status: 500, data: null } : realPut(d, id, doc)
+		);
+		try {
+			await expect(cancelTicket('APPTOKEN', NOW)).rejects.toMatchObject({
+				code: 'WRITE_FAILED',
+				httpStatus: 502
+			});
+		} finally {
+			vi.mocked(putAsPublicWriter).mockImplementation(realPut);
+		}
+		expect(get('job_application:a1').status).toBe('confirmed');
+		await cancelTicket('APPTOKEN', NOW);
+		expect(get('job_application:a1').status).toBe('cancelled');
+		// The assignment was already cancelled by the failed attempt: no second release.
+		expect(get('job:j1')).toMatchObject({ slots_confirmed: 1, slots_remaining: 0 });
+	});
+
+	it('a failed assignment lookup is 502 and writes nothing', async () => {
+		vi.mocked(findAsPublicWriter).mockResolvedValueOnce({ status: 500, data: null } as never);
+		vi.mocked(putAsPublicWriter).mockClear();
+		await expect(cancelTicket('APPTOKEN', NOW)).rejects.toMatchObject({
+			code: 'WRITE_FAILED',
+			httpStatus: 502
+		});
+		expect(putAsPublicWriter).not.toHaveBeenCalled();
+		expect(get('job_application:a1').status).toBe('confirmed');
+	});
+
+	it('the volunteer token follows the earliest cancellable application', async () => {
+		const addApp = (id: string, status: string, date: string) =>
+			db.docs.set(`job_application:${id}`, {
+				_id: `job_application:${id}`,
+				type: 'job_application',
+				job_id: 'job:j1',
+				shift_id: 'shift:s1',
+				volunteer_id: 'volunteer:v1',
+				status,
+				selected_shift: { shift_id: 'shift:s1', date, start_time: '08:00', end_time: '12:00' }
+			});
+		db.docs.delete('job_application:a1');
+		db.docs.delete('shift_assignment:x1');
+		addApp('old-cancelled', 'cancelled', '2026-10-10');
+		addApp('old-confirmed', 'confirmed', '2026-10-12');
+		addApp('later', 'confirmed', '2026-10-30');
+		addApp('soon', 'confirmed', '2026-10-28');
+
+		await cancelTicket('VOLTOKEN', NOW);
+		expect(get('job_application:soon').status).toBe('cancelled');
+		expect(get('job_application:later').status).toBe('confirmed');
+		expect(get('job_application:old-confirmed').status).toBe('confirmed');
+
+		await cancelTicket('VOLTOKEN', NOW);
+		expect(get('job_application:later').status).toBe('cancelled');
 	});
 
 	it('404 for an unknown token', async () => {
