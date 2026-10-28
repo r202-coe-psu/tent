@@ -340,7 +340,8 @@ export async function fillBooking(
 	await expect(
 		page.getByRole('heading', { name: 'ส่วนที่ 3: ข้อมูลการจัดส่ง โลจิสติกส์' })
 	).toBeVisible();
-	await expect(page.getByText('ล็อกตามความต้องการที่เลือก')).toBeVisible();
+	// #814: step 3 shows the locked shelter read-only (no dropdown, no "locked" badge).
+	await expect(page.getByTestId('drop-off-shelter-name')).toHaveText(shelter.name);
 	const button = page.getByRole('button', { name: 'ยืนยันการจองคิวบริจาค' });
 
 	if (mode.kind === 'self') {
